@@ -11,8 +11,14 @@ import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Input, FormField } from "@/components/ui/Form";
 import { AlertBanner } from "@/components/ui/AlertBanner";
-import { updateData, addAuditEntry, syncCooperativaWithCloud } from "@/services/dataStore";
+import { updateData, addAuditEntry, syncCooperativaWithCloud, getData } from "@/services/dataStore";
 import { fetchCooperativaByCnpjFromCloud } from "@/services/cooperativaCloudService";
+import { resolveCooperativaCnpj } from "@/services/notaPedidoCloudService";
+import {
+  pushCooperativaProfileToCloud,
+  pushOperacionalToCloud,
+  syncAllCooperativaFromCloud,
+} from "@/services/cooperativaSyncCloudService";
 import { ensureMensalidadesDoMes } from "@/services/mensalidadeService";
 import { isDiretoriaRole } from "@/permissions";
 import type { Cooperativa, MensalidadeConfig } from "@/types";
@@ -58,6 +64,15 @@ export default function MeuPerfilPage() {
       });
     }
   }, [cooperativa]);
+
+  useEffect(() => {
+    if (!cooperativa || !user) return;
+    void (async () => {
+      const cnpj = await resolveCooperativaCnpj(getData(), coopId, user);
+      if (cnpj) await syncAllCooperativaFromCloud(cnpj);
+    })();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cooperativa?.id, user?.id]);
 
   useEffect(() => {
     if (!cooperativa) return;
@@ -151,6 +166,15 @@ export default function MeuPerfilPage() {
       const withMens = ensureMensalidadesDoMes(updated);
       return withMens ?? updated;
     });
+    void (async () => {
+      const d = getData();
+      const cnpj = await resolveCooperativaCnpj(d, coopId, user);
+      const coop = d.cooperativas.find((c) => c.id === coopId);
+      if (cnpj && coop) {
+        await pushCooperativaProfileToCloud(coop);
+        await pushOperacionalToCloud(cnpj, d, coopId);
+      }
+    })();
     setSaved(true);
     setTimeout(() => setSaved(false), 3000);
   };

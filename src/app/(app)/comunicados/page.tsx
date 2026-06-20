@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { Plus, Pin, Repeat, Pause, Play, Trash2 } from "lucide-react";
 import { useAppData } from "@/hooks/useAppData";
 import { usePermissions } from "@/hooks/usePermissions";
@@ -10,7 +10,9 @@ import { Button } from "@/components/ui/Button";
 import { Input, Select, Textarea, FormField } from "@/components/ui/Form";
 import { Card } from "@/components/ui/Card";
 import { AlertBanner } from "@/components/ui/AlertBanner";
-import { updateData, generateId, addAuditEntry } from "@/services/dataStore";
+import { updateData, generateId, addAuditEntry, getData } from "@/services/dataStore";
+import { resolveCooperativaCnpj } from "@/services/notaPedidoCloudService";
+import { pushOperacionalToCloud, syncAllCooperativaFromCloud } from "@/services/cooperativaSyncCloudService";
 import { getComunicadosParaExibicao } from "@/services/comunicadoService";
 import { formatDate } from "@/utils/format";
 import type { Comunicado, ComunicadoCategoria } from "@/types";
@@ -30,6 +32,24 @@ export default function ComunicadosPage() {
   const [categoriaFilter, setCategoriaFilter] = useState("");
   const [modalOpen, setModalOpen] = useState(false);
   const [form, setForm] = useState<Partial<Comunicado>>({});
+
+  useEffect(() => {
+    if (!data || !coopId || !user) return;
+    void (async () => {
+      const cnpj = await resolveCooperativaCnpj(data, coopId, user);
+      if (cnpj) await syncAllCooperativaFromCloud(cnpj);
+    })();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [coopId, user?.id]);
+
+  const pushOperacional = () => {
+    void (async () => {
+      if (!user || !coopId) return;
+      const d = getData();
+      const cnpj = await resolveCooperativaCnpj(d, coopId, user);
+      if (cnpj) await pushOperacionalToCloud(cnpj, d, coopId);
+    })();
+  };
 
   const comunicadosExibicao = useMemo(() => {
     if (!data) return [];
@@ -80,6 +100,7 @@ export default function ComunicadosPage() {
       return addAuditEntry(updated, { entityType: "comunicado", entityId: newC.id, action: "criar", userId: user.id, userName: user.name });
     });
     setModalOpen(false);
+    pushOperacional();
   };
 
   const toggleAtivo = (c: Comunicado) => {
@@ -90,6 +111,7 @@ export default function ComunicadosPage() {
         x.id === c.id ? { ...x, ativo: x.ativo === false ? true : false } : x
       ),
     }));
+    pushOperacional();
   };
 
   const handleDelete = (c: Comunicado) => {
@@ -98,6 +120,7 @@ export default function ComunicadosPage() {
       ...d,
       comunicados: d.comunicados.filter((x) => x.id !== c.id),
     }));
+    pushOperacional();
   };
 
   if (!data) return null;

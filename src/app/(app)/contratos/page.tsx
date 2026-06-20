@@ -9,7 +9,9 @@ import { PageHeader, Modal } from "@/components/ui/Table";
 import { AlertBanner } from "@/components/ui/AlertBanner";
 import { Button } from "@/components/ui/Button";
 import { Input, Select, FormField } from "@/components/ui/Form";
-import { updateData, generateId, addAuditEntry } from "@/services/dataStore";
+import { updateData, generateId, addAuditEntry, getData } from "@/services/dataStore";
+import { resolveCooperativaCnpj } from "@/services/notaPedidoCloudService";
+import { pushContratosToCloud, syncAllCooperativaFromCloud } from "@/services/cooperativaSyncCloudService";
 import { formatCurrency } from "@/utils/format";
 import { UNIDADES_MEDIDA, type ProdutoUnidade } from "@/utils/unidades";
 import { sortPorOrdemLancamento } from "@/utils/produtos";
@@ -68,6 +70,24 @@ export default function ContratosPage() {
     setItemForms((prev) => ({ ...prev, [instId]: { ...getItemForm(instId), ...patch } }));
   };
 
+  useEffect(() => {
+    if (!data || !coopId || !user) return;
+    void (async () => {
+      const cnpj = await resolveCooperativaCnpj(data, coopId, user);
+      if (cnpj) await syncAllCooperativaFromCloud(cnpj);
+    })();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [coopId, user?.id]);
+
+  const pushContratos = () => {
+    void (async () => {
+      if (!user || !coopId) return;
+      const d = getData();
+      const cnpj = await resolveCooperativaCnpj(d, coopId, user);
+      if (cnpj) await pushContratosToCloud(cnpj, d, coopId);
+    })();
+  };
+
   const handleNovaInstituicao = () => {
     if (!nomeInst.trim() || !user || !coopId) return;
     const now = new Date().toISOString();
@@ -95,6 +115,7 @@ export default function ContratosPage() {
     setTipoInst("PNAE");
     setNovaInstModal(false);
     setExpandedId(null);
+    pushContratos();
   };
 
   const handleAddItem = (inst: Instituicao) => {
@@ -123,6 +144,7 @@ export default function ContratosPage() {
     }));
     setItemForm(inst.id, { nome: "", unidade: "kg", preco: "" });
     requestAnimationFrame(() => nomeItemInputRef.current[inst.id]?.focus());
+    pushContratos();
   };
 
   const handleRemoveItem = (p: ProdutoInstituicao) => {
@@ -133,6 +155,7 @@ export default function ContratosPage() {
         x.id === p.id ? { ...x, ativo: false, updatedAt: new Date().toISOString() } : x
       ),
     }));
+    pushContratos();
   };
 
   if (!data) return null;

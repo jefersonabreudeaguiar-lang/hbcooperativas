@@ -18,8 +18,13 @@ import {
   agregarItensFichaMes,
 } from "@/services/notaPedidoService";
 import { listCooperadosComFichaNoMes, getCooperadoNomeResolvido, resolverCooperadoParaPagamento } from "@/services/cooperadoCloudService";
-import { syncNotasPedidoFromCloud, resolveCooperativaCnpj } from "@/services/notaPedidoCloudService";
-import { syncCooperadosFromCloud } from "@/services/cooperadoCloudService";
+import { resolveCooperativaCnpj } from "@/services/notaPedidoCloudService";
+import {
+  syncAllCooperativaFromCloud,
+  pushOperacionalToCloud,
+  pushNotasPagasToCloud,
+} from "@/services/cooperativaSyncCloudService";
+import { pushCooperadoToCloud } from "@/services/cooperadoCloudService";
 import { PageHeader, FilterBar, Modal } from "@/components/ui/Table";
 import { Select, FormField, Input, Textarea } from "@/components/ui/Form";
 import { Card } from "@/components/ui/Card";
@@ -125,10 +130,7 @@ export default function FichaCorridaPage() {
     void (async () => {
       const cid = coopId ?? getUserCooperativaId(user, data);
       const cnpj = await resolveCooperativaCnpj(data, cid, user);
-      if (cnpj) {
-        await syncCooperadosFromCloud(cnpj);
-        await syncNotasPedidoFromCloud(cnpj);
-      }
+      if (cnpj) await syncAllCooperativaFromCloud(cnpj);
     })();
     const id = setInterval(() => {
       void (async () => {
@@ -136,10 +138,7 @@ export default function FichaCorridaPage() {
         if (!d) return;
         const cid = coopId ?? getUserCooperativaId(user, d);
         const cnpj = await resolveCooperativaCnpj(d, cid, user);
-        if (cnpj) {
-          await syncCooperadosFromCloud(cnpj);
-          await syncNotasPedidoFromCloud(cnpj);
-        }
+        if (cnpj) await syncAllCooperativaFromCloud(cnpj);
       })();
     }, 12000);
     return () => clearInterval(id);
@@ -220,6 +219,11 @@ export default function FichaCorridaPage() {
         }
       )
     );
+    void (async () => {
+      const d = getData();
+      const cnpj = await resolveCooperativaCnpj(d, coopId, user);
+      if (cnpj) await pushOperacionalToCloud(cnpj, d, coopId);
+    })();
   }, [user, data, cooperadoSelecionadoId, coopId, isCooperado, mensalidadeInput, descontoAvulsoInput, descontoAvulsoMotivo, mesFilter]);
 
   const toggleCotaPaga = () => {
@@ -274,12 +278,19 @@ export default function FichaCorridaPage() {
         userId: user.id, userName: user.name, changes: `PIX inválido: ${motivoPix.trim()}`,
       });
     });
+    void (async () => {
+      const d = getData();
+      const cnpj = await resolveCooperativaCnpj(d, coopId, user);
+      const coop = d.cooperados.find((c) => c.id === cooperadoSelecionado.id);
+      if (cnpj && coop) await pushCooperadoToCloud(cnpj, coop);
+    })();
     setPixInvalidoOpen(false);
     setMotivoPix("");
   };
 
   const handleConfirmarPagamento = () => {
     if (!cooperadoSelecionado || !user || totalPendente <= 0) return;
+    const resumo = getResumoPagamentoCooperado(data!, cooperadoSelecionado.id, mesFilter);
     salvarAjustesFicha();
     updateData((d) =>
       addAuditEntry(registrarPagamentoCooperado(d, cooperadoSelecionado.id, mesFilter, user.name), {
@@ -287,6 +298,13 @@ export default function FichaCorridaPage() {
         userId: user.id, userName: user.name, changes: `Pagamento: ${formatCurrency(totalPendente)}`,
       })
     );
+    void (async () => {
+      const d = getData();
+      const cnpj = await resolveCooperativaCnpj(d, coopId, user);
+      if (!cnpj) return;
+      await pushOperacionalToCloud(cnpj, d, coopId);
+      await pushNotasPagasToCloud(cnpj, resumo.notaPedidoIds, d);
+    })();
     setConfirmPagamento(false);
     setPagoMsg(`Pagamento registrado! ${nomeCooperado.split(" ")[0]} foi notificado(a).`);
   };
@@ -302,6 +320,11 @@ export default function FichaCorridaPage() {
         userId: user.id, userName: user.name, changes: "Cooperado confirmou pagamento com assinatura",
       });
     });
+    void (async () => {
+      const d = getData();
+      const cnpj = await resolveCooperativaCnpj(d, coopId, user);
+      if (cnpj) await pushOperacionalToCloud(cnpj, d, coopId);
+    })();
     setAssinaturaModal(false);
     setAssinatura(null);
   };

@@ -28,12 +28,12 @@ import {
   getCooperativaCnpj,
   patchNotaPedidoInCloud,
   pushNotasPedidoToCloud,
-  syncNotasPedidoFromCloud,
   deleteNotaPedidoFromCloud,
   ensureNotaComFoto,
   resolveCooperativaCnpj,
 } from "@/services/notaPedidoCloudService";
-import { listCooperadosDaCooperativa, syncCooperadosFromCloud, pushCooperadoToCloud, resolverCooperadoIdCanonico, getCooperadoNomeResolvido } from "@/services/cooperadoCloudService";
+import { listCooperadosDaCooperativa, pushCooperadoToCloud, resolverCooperadoIdCanonico, getCooperadoNomeResolvido } from "@/services/cooperadoCloudService";
+import { pushOperacionalToCloud, syncAllCooperativaFromCloud } from "@/services/cooperativaSyncCloudService";
 import { ensureContratoPnaePadrao, getContratoLabel, getContratosEntrega } from "@/utils/contratosEntrega";
 import { cn, formatCurrency, formatDate, formatMesReferencia, getCurrentMesReferencia } from "@/utils/format";
 import { labelUnidade } from "@/utils/unidades";
@@ -298,16 +298,14 @@ export default function NotasPedidoContent() {
     void (async () => {
       const cnpj = await resolveCooperativaCnpj(data, coopId, user);
       if (!cnpj) return;
-      await syncCooperadosFromCloud(cnpj);
-      await syncNotasPedidoFromCloud(cnpj);
+      await syncAllCooperativaFromCloud(cnpj);
     })();
     if (isCooperado) return;
     const id = setInterval(() => {
       void (async () => {
         const cnpj = await resolveCooperativaCnpj(data, coopId, user);
         if (!cnpj) return;
-        await syncCooperadosFromCloud(cnpj);
-        await syncNotasPedidoFromCloud(cnpj);
+        await syncAllCooperativaFromCloud(cnpj);
       })();
     }, 12000);
     return () => clearInterval(id);
@@ -418,6 +416,9 @@ export default function NotasPedidoContent() {
     const local = inst?.localEntrega ?? inst?.endereco ?? "";
     const now = new Date().toISOString();
     const mes = getCurrentMesReferencia();
+    let cloudCooperadoId: string | undefined;
+    let cloudCooperadoNome: string | undefined;
+    let cloudNotaId: string | undefined;
 
     updateData((d) => {
       let cooperados = d.cooperados;
@@ -445,6 +446,8 @@ export default function NotasPedidoContent() {
         };
         cooperados = [...cooperados, novo];
         cooperadoId = novo.id;
+        cloudCooperadoId = novo.id;
+        cloudCooperadoNome = novo.nomeCompleto;
       }
 
       const baseNota: NotaPedido = {
@@ -476,6 +479,10 @@ export default function NotasPedidoContent() {
         avulsoItens.map((i) => ({ ...i, valorBruto: 0 })),
         d.config.descontoPadraoCooperativa
       );
+      cloudNotaId = nota.id;
+      if (!cloudCooperadoNome) {
+        cloudCooperadoNome = cooperados.find((c) => c.id === cooperadoId)?.nomeCompleto;
+      }
 
       if (coopId && avulsoInstId) setInstituicaoPadraoId(coopId, avulsoInstId);
 
@@ -506,6 +513,19 @@ export default function NotasPedidoContent() {
         }
       );
     });
+
+    void (async () => {
+      const d = getData();
+      const cnpj = await resolveCooperativaCnpj(d, coopId, user);
+      if (!cnpj) return;
+      if (cloudCooperadoId) {
+        const coop = d.cooperados.find((c) => c.id === cloudCooperadoId);
+        if (coop) await pushCooperadoToCloud(cnpj, coop);
+      }
+      const nota = cloudNotaId ? d.notasPedido.find((n) => n.id === cloudNotaId) : undefined;
+      if (nota) await pushNotasPedidoToCloud(cnpj, [nota], cloudCooperadoNome);
+      await pushOperacionalToCloud(cnpj, d, coopId);
+    })();
 
     setAvulsoModal(false);
     setLancadoMsg(`Entrega avulsa registrada! ${formatCurrency(avulsoTotais.liquido)} na ficha do cooperado.`);

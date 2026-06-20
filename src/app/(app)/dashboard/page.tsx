@@ -13,8 +13,8 @@ import { AlertBanner } from "@/components/ui/AlertBanner";
 import { OnboardingChecklist } from "@/components/cooperado/OnboardingChecklist";
 import { getCooperadoStats, getAdminStats } from "@/services/dashboardService";
 import { getTotalAPagarCooperado } from "@/services/notaPedidoService";
-import { syncNotasPedidoFromCloud, resolveCooperativaCnpj } from "@/services/notaPedidoCloudService";
-import { syncCooperadosFromCloud } from "@/services/cooperadoCloudService";
+import { resolveCooperativaCnpj } from "@/services/notaPedidoCloudService";
+import { syncAllCooperativaFromCloud } from "@/services/cooperativaSyncCloudService";
 import { notaPertenceCooperado } from "@/services/cooperadoCloudService";
 import { getData } from "@/services/dataStore";
 import { notaPertenceCooperativa } from "@/utils/fotoEntrega";
@@ -34,20 +34,14 @@ function CooperadoDashboard() {
     if (!data || !user?.cooperadoId) return;
     void (async () => {
       const cnpj = await resolveCooperativaCnpj(data, coopId, user);
-      if (cnpj) {
-        await syncCooperadosFromCloud(cnpj);
-        await syncNotasPedidoFromCloud(cnpj);
-      }
+      if (cnpj) await syncAllCooperativaFromCloud(cnpj);
     })();
     const id = setInterval(() => {
       void (async () => {
         const d = getData();
         if (!d || !user) return;
         const cnpj = await resolveCooperativaCnpj(d, coopId, user);
-        if (cnpj) {
-          await syncCooperadosFromCloud(cnpj);
-          await syncNotasPedidoFromCloud(cnpj);
-        }
+        if (cnpj) await syncAllCooperativaFromCloud(cnpj);
       })();
     }, 12000);
     return () => clearInterval(id);
@@ -165,18 +159,12 @@ function AdminDashboard() {
     if (!data || !coopId || !user) return;
     void (async () => {
       const cnpj = await resolveCooperativaCnpj(data, coopId, user);
-      if (cnpj) {
-        await syncCooperadosFromCloud(cnpj);
-        await syncNotasPedidoFromCloud(cnpj);
-      }
+      if (cnpj) await syncAllCooperativaFromCloud(cnpj);
     })();
     const id = setInterval(() => {
       void (async () => {
         const cnpj = await resolveCooperativaCnpj(data, coopId, user);
-        if (cnpj) {
-          await syncCooperadosFromCloud(cnpj);
-          await syncNotasPedidoFromCloud(cnpj);
-        }
+        if (cnpj) await syncAllCooperativaFromCloud(cnpj);
       })();
     }, 12000);
     return () => clearInterval(id);

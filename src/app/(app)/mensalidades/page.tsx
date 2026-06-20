@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { QrCode, Copy, CheckCircle2, Info, AlertCircle } from "lucide-react";
 import { useAppData } from "@/hooks/useAppData";
 import { usePermissions } from "@/hooks/usePermissions";
@@ -13,7 +13,9 @@ import { StatusBadge } from "@/components/ui/StatusBadge";
 import { Card } from "@/components/ui/Card";
 import { AlertBanner } from "@/components/ui/AlertBanner";
 import { PixQrModal } from "@/components/pix/PixQrModal";
-import { updateData, addAuditEntry } from "@/services/dataStore";
+import { updateData, addAuditEntry, getData } from "@/services/dataStore";
+import { resolveCooperativaCnpj } from "@/services/notaPedidoCloudService";
+import { pushOperacionalToCloud, syncAllCooperativaFromCloud } from "@/services/cooperativaSyncCloudService";
 import {
   getChavePixMensalidadeCooperativa,
   cooperadoInformouPagamentoMensalidade,
@@ -43,6 +45,24 @@ export default function MensalidadesPage() {
   const coopId = user && data ? getUserCooperativaId(user, data) : undefined;
   const cooperativa = coopId ? data?.cooperativas.find((c) => c.id === coopId) : undefined;
   const chavePixCoop = coopId && data ? getChavePixMensalidadeCooperativa(data, coopId) : null;
+
+  useEffect(() => {
+    if (!data || !coopId || !user) return;
+    void (async () => {
+      const cnpj = await resolveCooperativaCnpj(data, coopId, user);
+      if (cnpj) await syncAllCooperativaFromCloud(cnpj);
+    })();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [coopId, user?.id]);
+
+  const pushOperacional = () => {
+    void (async () => {
+      if (!user || !coopId) return;
+      const d = getData();
+      const cnpj = await resolveCooperativaCnpj(d, coopId, user);
+      if (cnpj) await pushOperacionalToCloud(cnpj, d, coopId);
+    })();
+  };
 
   const mensalidades = useMemo(() => {
     if (!data) return [];
@@ -106,6 +126,7 @@ export default function MensalidadesPage() {
         changes: "Cooperado informou pagamento via PIX",
       });
     });
+    pushOperacional();
   };
 
   const handleConfirmar = (m: Mensalidade) => {
@@ -122,6 +143,7 @@ export default function MensalidadesPage() {
         changes: "Pagamento PIX confirmado",
       });
     });
+    pushOperacional();
   };
 
   if (!data) return null;
