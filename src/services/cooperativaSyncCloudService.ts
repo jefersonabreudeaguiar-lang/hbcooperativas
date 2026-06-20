@@ -1,4 +1,4 @@
-import type { AppData, Cooperativa } from "@/types";
+import type { AppData, Cooperativa, Instituicao, ProdutoInstituicao } from "@/types";
 import { normalizeCnpj } from "@/utils/cooperativa";
 import type { ContratosSyncPayload, OperacionalSyncPayload } from "@/lib/supabase/cooperativaSyncStorage";
 import { getData, saveDataSafe } from "@/services/dataStore";
@@ -52,6 +52,42 @@ function buildOperacionalPayload(data: AppData, coopId: string): OperacionalSync
   };
 }
 
+function normalizeInstNome(nome: string): string {
+  return nome.trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+}
+
+/** Une instituições com o mesmo nome e remapeia produtos para o id canônico. */
+function reconcileInstituicoesProdutos(
+  instituicoes: Instituicao[],
+  produtos: ProdutoInstituicao[]
+): { instituicoes: Instituicao[]; produtos: ProdutoInstituicao[] } {
+  const instIdRemap = new Map<string, string>();
+  const byName = new Map<string, Instituicao>();
+  const produtosAtivos = (instId: string) =>
+    produtos.filter((p) => p.instituicaoId === instId && p.ativo).length;
+
+  for (const inst of instituicoes) {
+    const key = normalizeInstNome(inst.nome);
+    const existing = byName.get(key);
+    if (!existing) {
+      byName.set(key, inst);
+      continue;
+    }
+    const keep = produtosAtivos(inst.id) > produtosAtivos(existing.id) ? inst : existing;
+    const drop = keep.id === inst.id ? existing : inst;
+    instIdRemap.set(drop.id, keep.id);
+    byName.set(key, keep);
+  }
+
+  const finalInst = [...byName.values()];
+  const finalProd = produtos.map((p) => ({
+    ...p,
+    instituicaoId: instIdRemap.get(p.instituicaoId) ?? p.instituicaoId,
+  }));
+
+  return { instituicoes: finalInst, produtos: finalProd };
+}
+
 export function mergeContratosIntoData(data: AppData, cloud: ContratosSyncPayload, coopId: string): AppData {
   const localInst = data.instituicoes.filter((i) => i.cooperativaId !== coopId);
   const localProd = data.produtosInstituicao.filter((p) => p.cooperativaId !== coopId);
@@ -60,13 +96,20 @@ export function mergeContratosIntoData(data: AppData, cloud: ContratosSyncPayloa
   const cloudInst = cloud.instituicoes.map((i) => ({ ...i, cooperativaId: coopId }));
   const cloudProd = cloud.produtosInstituicao.map((p) => ({ ...p, cooperativaId: coopId }));
 
+  const mergedInst = mergeArrayByNewer(
+    data.instituicoes.filter((i) => i.cooperativaId === coopId),
+    cloudInst
+  );
+  const mergedProd = mergeArrayByNewer(
+    data.produtosInstituicao.filter((p) => p.cooperativaId === coopId),
+    cloudProd
+  );
+  const reconciled = reconcileInstituicoesProdutos(mergedInst, mergedProd);
+
   return {
     ...data,
-    instituicoes: [...localInst, ...mergeArrayByNewer(data.instituicoes.filter((i) => i.cooperativaId === coopId), cloudInst)],
-    produtosInstituicao: [
-      ...localProd,
-      ...mergeArrayByNewer(data.produtosInstituicao.filter((p) => p.cooperativaId === coopId), cloudProd),
-    ],
+    instituicoes: [...localInst, ...reconciled.instituicoes],
+    produtosInstituicao: [...localProd, ...reconciled.produtos],
   };
 }
 
@@ -150,7 +193,16 @@ export async function pushContratosToCloud(cnpj: string, data?: AppData, coopId?
   const cid = coopId ?? resolveCoopId(d, digits);
   if (!cid) return;
 
-  const payload = buildContratosPayload(d, cid);
+  // Mescla com a nuvem antes de enviar — evita apagar preços cadastrados pelo responsável.
+  let merged = d;
+  const bundle = await fetchSyncBundle(digits);
+  if (bundle?.contratos) {
+    merged = mergeContratosIntoData(d, bundle.contratos, cid);
+    saveDataSafe(merged);
+  }
+
+  const payload = buildContratosPayload(merged, cid);
+  payload.updatedAt = new Date().toISOString();
   try {
     await fetch("/api/cooperativa-sync", {
       method: "POST",
