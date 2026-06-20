@@ -12,6 +12,8 @@ export const emptyInitialData: AppData = {
   produtosInstituicao: [],
   notasPedido: [],
   fichaCorrida: [],
+  pagamentosCooperado: [],
+  arquivosMensais: [],
   mensalidades: [],
   cotas: [],
   entregas: [],

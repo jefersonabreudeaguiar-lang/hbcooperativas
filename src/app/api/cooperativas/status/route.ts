@@ -1,14 +1,24 @@
 import { NextResponse } from "next/server";
 import { getSupabaseAdmin, isSupabaseConfigured } from "@/lib/supabase/admin";
-import { getSupabasePublic, isSupabasePublicConfigured } from "@/lib/supabase/public";
 import { isCooperativasTableMissing } from "@/lib/supabase/errors";
 
 export async function GET() {
-  if (!isSupabaseConfigured() && !isSupabasePublicConfigured()) {
-    return NextResponse.json({ status: "not_configured" });
+  if (!process.env.NEXT_PUBLIC_SUPABASE_URL) {
+    return NextResponse.json({
+      status: "not_configured",
+      message: "Configure NEXT_PUBLIC_SUPABASE_URL (Vercel → Settings → Environment Variables).",
+    });
   }
 
-  const client = getSupabaseAdmin() ?? getSupabasePublic();
+  if (!isSupabaseConfigured()) {
+    return NextResponse.json({
+      status: "not_configured",
+      message:
+        "Falta SUPABASE_SERVICE_ROLE_KEY. Cadastro de responsável exige a chave secreta do Supabase (não a publishable).",
+    });
+  }
+
+  const client = getSupabaseAdmin();
   if (!client) {
     return NextResponse.json({ status: "error", message: "Cliente Supabase indisponível." });
   }

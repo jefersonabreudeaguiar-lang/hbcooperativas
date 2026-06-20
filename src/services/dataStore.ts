@@ -3,7 +3,7 @@
 import type { AppData, AuditAction, User, Cooperado, Cooperativa } from "@/types";
 import { emptyInitialData, DEMO_ENTITY_IDS, DEMO_EMAILS, DEMO_CNPJ } from "@/mock/data";
 import { findCooperativaByCnpj, getCooperativaById, getUserCooperativaId, normalizeCnpj } from "@/utils/cooperativa";
-import { ensureMensalidadesDoMes, atualizarStatusMensalidades } from "@/services/mensalidadeService";
+import { ensureMensalidadesDoMes, ensureMensalidadeCooperado, atualizarStatusMensalidades } from "@/services/mensalidadeService";
 import {
   fetchCooperativaByCnpjFromCloud,
   registerCooperativaInCloud,
@@ -98,7 +98,7 @@ function migrateData(raw: Partial<AppData> & Record<string, unknown>): AppData {
   const cooperados = (base.cooperados ?? []).map((c) => ({
     ...c,
     cooperativaId: c.cooperativaId ?? cooperativas[0]?.id ?? "",
-    pixValido: c.pixValido ?? true,
+    pixValido: c.chavePix?.trim() ? (c.pixValido ?? true) : false,
   }));
 
   const merged: AppData = {
@@ -120,6 +120,8 @@ function migrateData(raw: Partial<AppData> & Record<string, unknown>): AppData {
     produtosInstituicao: base.produtosInstituicao ?? [],
     notasPedido: base.notasPedido ?? [],
     fichaCorrida: base.fichaCorrida ?? [],
+    pagamentosCooperado: base.pagamentosCooperado ?? [],
+    arquivosMensais: base.arquivosMensais ?? [],
     mensalidades: base.mensalidades ?? [],
     cotas: base.cotas ?? [],
     entregas: base.entregas ?? [],
@@ -476,7 +478,8 @@ export async function registerCooperado(input: RegisterCooperadoInput): Promise<
     endereco: "",
     comunidade: input.comunidade?.trim() ?? "",
     cafDap: "",
-    chavePix: email,
+    chavePix: "",
+    pixValido: false,
     banco: "",
     agencia: "",
     conta: "",
@@ -499,7 +502,6 @@ export async function registerCooperado(input: RegisterCooperadoInput): Promise<
   };
 
   const { password: _, ...safeUser } = newUser;
-  persistSession(safeUser);
 
   updateData((d) => {
     let updated = {
@@ -507,7 +509,7 @@ export async function registerCooperado(input: RegisterCooperadoInput): Promise<
       cooperados: [...d.cooperados, cooperado],
       users: [...d.users, newUser],
     };
-    return addAuditEntry(updated, {
+    updated = addAuditEntry(updated, {
       entityType: "cooperado",
       entityId: cooperadoId,
       action: "criar",
@@ -515,7 +517,11 @@ export async function registerCooperado(input: RegisterCooperadoInput): Promise<
       userName: nome,
       changes: "Auto-cadastro pelo portal",
     });
+    const withMens = ensureMensalidadeCooperado(updated, cooperadoId);
+    return withMens ?? updated;
   });
+
+  persistSession(safeUser);
 
   return { success: true, user: safeUser };
 }
@@ -572,9 +578,7 @@ export async function registerCooperativa(input: RegisterCooperativaInput): Prom
   if (!cloudResult.success) {
     return {
       success: false,
-      error: cloudResult.offline
-        ? "Nuvem indisponível. Verifique o Supabase e tente novamente."
-        : cloudResult.error,
+      error: cloudResult.error || "Nuvem indisponível. Verifique o Supabase e tente novamente.",
     };
   }
 

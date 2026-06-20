@@ -5,15 +5,22 @@ import { useRouter } from "next/navigation";
 import { useAuth } from "@/modules/auth/AuthProvider";
 
 /** Redireciona usuários já autenticados (login/cadastro). */
-export function GuestRoute({ children }: { children: React.ReactNode }) {
+export function GuestRoute({
+  children,
+  authenticatedRedirect = "/dashboard",
+}: {
+  children: React.ReactNode;
+  /** false = não redireciona (ex.: cadastro cooperado → PIX) */
+  authenticatedRedirect?: string | false;
+}) {
   const { user, loading } = useAuth();
   const router = useRouter();
 
   useEffect(() => {
-    if (!loading && user) {
-      router.replace("/dashboard");
+    if (!loading && user && authenticatedRedirect) {
+      router.replace(authenticatedRedirect);
     }
-  }, [user, loading, router]);
+  }, [user, loading, router, authenticatedRedirect]);
 
   if (loading) {
     return (

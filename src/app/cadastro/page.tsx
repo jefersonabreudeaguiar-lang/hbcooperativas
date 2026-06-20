@@ -47,6 +47,7 @@ export default function CadastroPage() {
   const [loading, setLoading] = useState(false);
   const [validandoCnpj, setValidandoCnpj] = useState(false);
   const [cloudStatus, setCloudStatus] = useState<CloudStatus | null>(null);
+  const [cloudMessage, setCloudMessage] = useState<string | null>(null);
   const [lookupError, setLookupError] = useState<string | null>(null);
   const { register, registerCooperativa } = useAuth();
   const router = useRouter();
@@ -57,7 +58,10 @@ export default function CadastroPage() {
   }, [aba]);
 
   useEffect(() => {
-    fetchCloudStatus().then(({ status }) => setCloudStatus(status));
+    fetchCloudStatus().then(({ status, message }) => {
+      setCloudStatus(status);
+      setCloudMessage(message ?? null);
+    });
   }, []);
 
   const revalidarCnpjCooperativa = useCallback(async () => {
@@ -122,7 +126,7 @@ export default function CadastroPage() {
     setLoading(false);
 
     if (result.success) {
-      router.push("/meu-cadastro?novo=1");
+      router.replace("/meu-cadastro?novo=1");
     } else {
       setError(result.error ?? "Não foi possível concluir o cadastro.");
     }
@@ -183,7 +187,7 @@ export default function CadastroPage() {
       };
 
   return (
-    <GuestRoute>
+    <GuestRoute authenticatedRedirect={false}>
       <div className="min-h-screen flex">
         <div className="hidden lg:flex lg:w-1/2 bg-green-900 text-white flex-col justify-center px-12 relative overflow-hidden">
           <div className="absolute inset-0 opacity-10">
@@ -437,7 +441,17 @@ export default function CadastroPage() {
                       </div>
 
                       <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg text-xs text-amber-900">
-                        {cloudStatus === "migration_pending" ? (
+                        {cloudStatus === "not_configured" ? (
+                          <>
+                            <p className="font-medium">Supabase não configurado neste servidor</p>
+                            <p className="mt-1">
+                              {cloudMessage ??
+                                "Configure NEXT_PUBLIC_SUPABASE_URL, NEXT_PUBLIC_SUPABASE_ANON_KEY e SUPABASE_SERVICE_ROLE_KEY."}
+                              {" "}
+                              Na Vercel: Settings → Environment Variables → Redeploy.
+                            </p>
+                          </>
+                        ) : cloudStatus === "migration_pending" ? (
                           <>
                             Antes de cadastrar, crie a tabela no Supabase (SQL Editor → arquivo{" "}
                             <strong>supabase/migrations/20260320120000_cooperativas.sql</strong>).

@@ -49,7 +49,7 @@ export const PERMISSIONS: PermissionMatrix = {
     dashboard: VIEW_ONLY,
     cooperativas: ["view", "create", "edit", "export"],
     cooperados: VIEW_ONLY,
-    mensalidades: VIEW_ONLY,
+    mensalidades: ["view", "edit", "export"],
     cotas: VIEW_ONLY,
     instituicoes: ALL_CRUD,
     notas_pedido: ["view", "create", "edit", "approve", "export"],
@@ -61,6 +61,7 @@ export const PERMISSIONS: PermissionMatrix = {
   cooperado: {
     dashboard: VIEW_ONLY,
     instituicoes: VIEW_ONLY,
+    mensalidades: VIEW_ONLY,
     notas_pedido: ["view", "create", "edit"],
     ficha_corrida: VIEW_ONLY,
     comunicados: VIEW_ONLY,
@@ -88,6 +89,7 @@ const COOPERADO_MENU: { href: string; label: string; resource: Resource }[] = [
   { href: "/notas-pedido", label: "Minhas entregas", resource: "notas_pedido" },
   { href: "/precos", label: "Preços", resource: "instituicoes" },
   { href: "/ficha-corrida", label: "Quanto vou receber", resource: "ficha_corrida" },
+  { href: "/mensalidades", label: "Mensalidades", resource: "mensalidades" },
   { href: "/meu-cadastro", label: "Meu cadastro", resource: "dashboard" },
   { href: "/comunicados", label: "Avisos", resource: "comunicados" },
 ];
@@ -119,7 +121,7 @@ export function getMenuItems(role: UserRole): { href: string; label: string; res
 
   const source = role === "presidente"
     ? DIRETORIA_MENU.filter((i) =>
-        ["/dashboard", "/notas-pedido", "/ficha-corrida", "/contratos", "/meu-perfil", "/comunicados", "/relatorios", "/fechamento-mensal"].includes(i.href)
+        ["/dashboard", "/notas-pedido", "/ficha-corrida", "/contratos", "/meu-perfil", "/mensalidades", "/comunicados", "/relatorios", "/fechamento-mensal"].includes(i.href)
         && can(role, i.resource, "view")
       )
     : DIRETORIA_MENU;
@@ -134,7 +136,7 @@ export function getCooperadoExtraItems(): { href: string; label: string }[] {
 
 export function getMobileNavItems(role: UserRole): { href: string; label: string; resource: Resource }[] {
   if (role === "cooperado") {
-    return COOPERADO_MENU.filter((i) => ["/dashboard", "/notas-pedido", "/precos", "/ficha-corrida"].includes(i.href));
+    return COOPERADO_MENU.filter((i) => ["/dashboard", "/notas-pedido", "/precos", "/ficha-corrida", "/mensalidades"].includes(i.href));
   }
   const presidenteItems: { href: string; label: string; resource: Resource }[] = [
     { href: "/dashboard", label: "Início", resource: "dashboard" },

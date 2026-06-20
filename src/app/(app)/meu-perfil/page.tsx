@@ -13,6 +13,7 @@ import { Input, FormField } from "@/components/ui/Form";
 import { AlertBanner } from "@/components/ui/AlertBanner";
 import { updateData, addAuditEntry, syncCooperativaWithCloud } from "@/services/dataStore";
 import { fetchCooperativaByCnpjFromCloud } from "@/services/cooperativaCloudService";
+import { ensureMensalidadesDoMes } from "@/services/mensalidadeService";
 import { isDiretoriaRole } from "@/permissions";
 import type { Cooperativa, MensalidadeConfig } from "@/types";
 
@@ -115,7 +116,7 @@ export default function MeuPerfilPage() {
     if (!user || !coopId || !form.nome) return;
     const now = new Date().toISOString();
     updateData((d) => {
-      const updated = {
+      let updated = {
         ...d,
         cooperativas: d.cooperativas.map((c) =>
           c.id === coopId
@@ -131,13 +132,15 @@ export default function MeuPerfilPage() {
                   valorPadrao: Number(mensCfg.valorPadrao) || 0,
                   diaVencimento: Math.min(28, Math.max(1, mensCfg.diaVencimento || 10)),
                   diaLembrete: Math.min(28, Math.max(1, mensCfg.diaLembrete ?? 1)),
+                  gerarAutomaticamente:
+                    mensCfg.gerarAutomaticamente ?? (Number(mensCfg.valorPadrao) > 0),
                 },
                 updatedAt: now,
               }
             : c
         ),
       };
-      return addAuditEntry(updated, {
+      updated = addAuditEntry(updated, {
         entityType: "cooperativa",
         entityId: coopId,
         action: "editar",
@@ -145,6 +148,8 @@ export default function MeuPerfilPage() {
         userName: user.name,
         changes: "Perfil da cooperativa atualizado",
       });
+      const withMens = ensureMensalidadesDoMes(updated);
+      return withMens ?? updated;
     });
     setSaved(true);
     setTimeout(() => setSaved(false), 3000);

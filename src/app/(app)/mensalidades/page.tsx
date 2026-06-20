@@ -1,166 +1,338 @@
 "use client";
 
 import { useState, useMemo } from "react";
-import { Plus } from "lucide-react";
+import { QrCode, Copy, CheckCircle2, Info, AlertCircle } from "lucide-react";
 import { useAppData } from "@/hooks/useAppData";
 import { usePermissions } from "@/hooks/usePermissions";
-import { PageHeader, DataTable, FilterBar, Modal } from "@/components/ui/Table";
+import { getUserCooperativaId } from "@/utils/cooperativa";
+import { formatCnpj } from "@/utils/cooperativa";
+import { PageHeader, DataTable, FilterBar } from "@/components/ui/Table";
 import { Button } from "@/components/ui/Button";
-import { Input, Select, FormField } from "@/components/ui/Form";
+import { Select, FormField } from "@/components/ui/Form";
 import { StatusBadge } from "@/components/ui/StatusBadge";
-import { updateData, generateId, addAuditEntry } from "@/services/dataStore";
-import { formatCurrency, formatDate, formatMesReferencia } from "@/utils/format";
+import { Card } from "@/components/ui/Card";
+import { AlertBanner } from "@/components/ui/AlertBanner";
+import { PixQrModal } from "@/components/pix/PixQrModal";
+import { updateData, addAuditEntry } from "@/services/dataStore";
+import {
+  getChavePixMensalidadeCooperativa,
+  cooperadoInformouPagamentoMensalidade,
+  confirmarPagamentoMensalidade,
+  mensalidadePodePagarComPix,
+  mensalidadeAguardandoConfirmacao,
+} from "@/services/mensalidadeService";
+import { formatCurrency, formatDate, formatMesReferencia, getCurrentMesReferencia } from "@/utils/format";
 import { getCooperadoNome } from "@/utils/calculations";
 import type { Mensalidade } from "@/types";
+
+const INFO_COOPERADO =
+  "As mensalidades são geradas automaticamente todo mês. Pague via PIX para o CNPJ da cooperativa. Depois toque em Paguei — a mensalidade só aparece como paga após a diretoria confirmar no extrato bancário.";
+
+const INFO_RESPONSAVEL =
+  "Configure valor e dia de vencimento em Perfil da cooperativa. Todo mês o sistema gera a cobrança para cada cooperado ativo. Quando o cooperado informar que pagou, confira o PIX recebido e confirme aqui.";
 
 export default function MensalidadesPage() {
   const data = useAppData();
   const { check, user, isCooperado, cooperadoId } = usePermissions();
   const [statusFilter, setStatusFilter] = useState("");
-  const [mesFilter, setMesFilter] = useState("");
-  const [modalOpen, setModalOpen] = useState(false);
-  const [editing, setEditing] = useState<Mensalidade | null>(null);
-  const [form, setForm] = useState<Partial<Mensalidade>>({});
+  const [mesFilter, setMesFilter] = useState(getCurrentMesReferencia());
+  const [pixModalOpen, setPixModalOpen] = useState(false);
+  const [mensalidadePix, setMensalidadePix] = useState<Mensalidade | null>(null);
+  const [copiedCnpj, setCopiedCnpj] = useState(false);
+
+  const coopId = user && data ? getUserCooperativaId(user, data) : undefined;
+  const cooperativa = coopId ? data?.cooperativas.find((c) => c.id === coopId) : undefined;
+  const chavePixCoop = coopId && data ? getChavePixMensalidadeCooperativa(data, coopId) : null;
 
   const mensalidades = useMemo(() => {
     if (!data) return [];
-    return data.mensalidades.filter((m) => {
-      if (isCooperado && cooperadoId && m.cooperadoId !== cooperadoId) return false;
-      if (statusFilter && m.status !== statusFilter) return false;
-      if (mesFilter && m.mesReferencia !== mesFilter) return false;
-      return true;
-    });
-  }, [data, statusFilter, mesFilter, isCooperado, cooperadoId]);
+    return data.mensalidades
+      .filter((m) => {
+        const c = data.cooperados.find((x) => x.id === m.cooperadoId);
+        if (coopId && c?.cooperativaId !== coopId) return false;
+        if (isCooperado && cooperadoId && m.cooperadoId !== cooperadoId) return false;
+        if (statusFilter && m.status !== statusFilter) return false;
+        if (mesFilter && m.mesReferencia !== mesFilter) return false;
+        return true;
+      })
+      .sort((a, b) => b.mesReferencia.localeCompare(a.mesReferencia) || a.vencimento.localeCompare(b.vencimento));
+  }, [data, statusFilter, mesFilter, isCooperado, cooperadoId, coopId]);
+
+  const aguardandoConfirmacao = useMemo(
+    () => mensalidades.filter((m) => m.status === "aguardando_confirmacao"),
+    [mensalidades]
+  );
 
   const meses = useMemo(() => {
-    if (!data) return [];
-    return [...new Set(data.mensalidades.map((m) => m.mesReferencia))].sort().reverse();
+    if (!data) return [getCurrentMesReferencia()];
+    const set = new Set(data.mensalidades.map((m) => m.mesReferencia));
+    set.add(getCurrentMesReferencia());
+    return [...set].sort().reverse();
   }, [data]);
 
-  const openNew = () => {
-    setEditing(null);
-    setForm({ status: "pendente", valor: 50 });
-    setModalOpen(true);
+  const resumoCooperado = useMemo(() => {
+    if (!isCooperado) return null;
+    return {
+      pagas: mensalidades.filter((m) => m.status === "paga").length,
+      vencidas: mensalidades.filter((m) => m.status === "atrasada").length,
+      pendentes: mensalidades.filter((m) => m.status === "pendente").length,
+      aguardando: mensalidades.filter((m) => m.status === "aguardando_confirmacao").length,
+    };
+  }, [mensalidades, isCooperado]);
+
+  const abrirPix = (m: Mensalidade) => {
+    setMensalidadePix(m);
+    setPixModalOpen(true);
   };
 
-  const openEdit = (m: Mensalidade) => {
-    setEditing(m);
-    setForm({ ...m });
-    setModalOpen(true);
+  const copiarCnpjPix = async () => {
+    if (!chavePixCoop) return;
+    await navigator.clipboard.writeText(chavePixCoop);
+    setCopiedCnpj(true);
+    setTimeout(() => setCopiedCnpj(false), 2000);
   };
 
-  const handleSave = () => {
-    if (!form.cooperadoId || !form.mesReferencia || !user) return;
-    const now = new Date().toISOString();
+  const handlePaguei = (m: Mensalidade) => {
+    if (!user) return;
     updateData((d) => {
-      let updated = { ...d };
-      if (editing) {
-        updated.mensalidades = d.mensalidades.map((m) =>
-          m.id === editing.id ? { ...m, ...form, updatedAt: now } as Mensalidade : m
-        );
-        updated = addAuditEntry(updated, { entityType: "mensalidade", entityId: editing.id, action: "editar", userId: user.id, userName: user.name });
-      } else {
-        const newM: Mensalidade = {
-          id: generateId("m"),
-          cooperadoId: form.cooperadoId!,
-          mesReferencia: form.mesReferencia!,
-          valor: form.valor ?? 50,
-          vencimento: form.vencimento ?? "",
-          status: form.status ?? "pendente",
-          dataPagamento: form.dataPagamento,
-          formaPagamento: form.formaPagamento,
-          observacao: form.observacao,
-          createdAt: now,
-          updatedAt: now,
-        };
-        updated.mensalidades = [...d.mensalidades, newM];
-        updated = addAuditEntry(updated, { entityType: "mensalidade", entityId: newM.id, action: "criar", userId: user.id, userName: user.name });
-      }
-      return updated;
+      const next = cooperadoInformouPagamentoMensalidade(d, m.id);
+      if (!next) return d;
+      return addAuditEntry(next, {
+        entityType: "mensalidade",
+        entityId: m.id,
+        action: "editar",
+        userId: user.id,
+        userName: user.name,
+        changes: "Cooperado informou pagamento via PIX",
+      });
     });
-    setModalOpen(false);
   };
 
-  const handleDelete = (m: Mensalidade) => {
-    if (!confirm("Excluir esta mensalidade?") || !user) return;
+  const handleConfirmar = (m: Mensalidade) => {
+    if (!user) return;
     updateData((d) => {
-      let updated = { ...d, mensalidades: d.mensalidades.filter((x) => x.id !== m.id) };
-      return addAuditEntry(updated, { entityType: "mensalidade", entityId: m.id, action: "excluir", userId: user.id, userName: user.name });
+      const next = confirmarPagamentoMensalidade(d, m.id, user.name);
+      if (!next) return d;
+      return addAuditEntry(next, {
+        entityType: "mensalidade",
+        entityId: m.id,
+        action: "aprovar",
+        userId: user.id,
+        userName: user.name,
+        changes: "Pagamento PIX confirmado",
+      });
     });
   };
 
   if (!data) return null;
 
+  const cfgOk = cooperativa?.mensalidadeConfig?.gerarAutomaticamente && (cooperativa.mensalidadeConfig.valorPadrao ?? 0) > 0;
+
   return (
     <div>
       <PageHeader
         title="Mensalidades"
-        subtitle="Controle mensal de mensalidades dos cooperados"
-        action={check("mensalidades", "create") && (
-          <Button onClick={openNew}><Plus size={18} /> Nova Mensalidade</Button>
-        )}
+        subtitle={isCooperado ? "Suas cobranças mensais da cooperativa" : "Cobranças geradas automaticamente para os cooperados"}
       />
 
+      <AlertBanner variant="info" className="mb-6">
+        <Info size={18} className="inline mr-1 shrink-0" />
+        {isCooperado ? INFO_COOPERADO : INFO_RESPONSAVEL}
+      </AlertBanner>
+
+      {!isCooperado && !cfgOk && (
+        <AlertBanner variant="warning" title="Geração automática não configurada" className="mb-6">
+          Em <strong>Perfil da cooperativa</strong>, informe o valor, o dia de vencimento e marque{" "}
+          <strong>Gerar mensalidades automaticamente</strong>.
+        </AlertBanner>
+      )}
+
+      {isCooperado && chavePixCoop && cooperativa && (
+        <Card className="mb-6 border-green-200 bg-green-50/40">
+          <p className="text-sm font-medium text-gray-900">PIX da cooperativa (CNPJ)</p>
+          <p className="text-xs text-gray-600 mt-1">Use esta chave para pagar qualquer mensalidade</p>
+          <div className="mt-3 flex flex-wrap items-center gap-2">
+            <code className="bg-white px-3 py-2 rounded-lg text-sm border">{formatCnpj(chavePixCoop)}</code>
+            <Button variant="secondary" size="sm" onClick={copiarCnpjPix}>
+              <Copy size={16} /> {copiedCnpj ? "Copiado!" : "Copiar PIX (CNPJ)"}
+            </Button>
+          </div>
+        </Card>
+      )}
+
+      {isCooperado && resumoCooperado && (
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
+          {[
+            { label: "Pagas", value: resumoCooperado.pagas, color: "text-green-700" },
+            { label: "Pendentes", value: resumoCooperado.pendentes, color: "text-yellow-700" },
+            { label: "Vencidas", value: resumoCooperado.vencidas, color: "text-red-700" },
+            { label: "Aguardando", value: resumoCooperado.aguardando, color: "text-blue-700" },
+          ].map((s) => (
+            <div key={s.label} className="bg-white border rounded-xl p-4 text-center">
+              <p className={`text-2xl font-bold ${s.color}`}>{s.value}</p>
+              <p className="text-xs text-gray-500 mt-1">{s.label}</p>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {!isCooperado && aguardandoConfirmacao.length > 0 && (
+        <Card title={`Aguardando confirmação (${aguardandoConfirmacao.length})`} className="mb-6 border-blue-200">
+          <p className="text-sm text-gray-600 mb-4">
+            Cooperados informaram pagamento. Confira no extrato bancário e confirme abaixo.
+          </p>
+          <div className="space-y-3">
+            {aguardandoConfirmacao.map((m) => (
+              <div key={m.id} className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-4 bg-blue-50 rounded-xl border border-blue-100">
+                <div>
+                  <p className="font-medium">{getCooperadoNome(data.cooperados, m.cooperadoId)}</p>
+                  <p className="text-sm text-gray-600">
+                    {formatMesReferencia(m.mesReferencia)} · {formatCurrency(m.valor)} · informado em{" "}
+                    {m.informadoPagamentoEm ? formatDate(m.informadoPagamentoEm.split("T")[0]) : "—"}
+                  </p>
+                </div>
+                {check("mensalidades", "edit") && (
+                  <Button onClick={() => handleConfirmar(m)}>
+                    <CheckCircle2 size={18} /> Confirmar pagamento
+                  </Button>
+                )}
+              </div>
+            ))}
+          </div>
+        </Card>
+      )}
+
       <FilterBar>
-        <Select value={mesFilter} onChange={(e) => setMesFilter(e.target.value)} className="max-w-[200px]">
-          <option value="">Todos os meses</option>
-          {meses.map((m) => <option key={m} value={m}>{formatMesReferencia(m)}</option>)}
-        </Select>
-        <Select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className="max-w-[180px]">
-          <option value="">Todos os status</option>
-          <option value="paga">Paga</option>
-          <option value="pendente">Pendente</option>
-          <option value="atrasada">Atrasada</option>
-          <option value="parcelada">Parcelada</option>
-        </Select>
+        <FormField label="Mês">
+          <Select value={mesFilter} onChange={(e) => setMesFilter(e.target.value)} className="min-w-[180px]">
+            {meses.map((m) => (
+              <option key={m} value={m}>{formatMesReferencia(m)}</option>
+            ))}
+          </Select>
+        </FormField>
+        <FormField label="Status">
+          <Select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className="min-w-[200px]">
+            <option value="">Todos</option>
+            <option value="pendente">Pendente</option>
+            <option value="atrasada">Vencida</option>
+            <option value="aguardando_confirmacao">Aguardando confirmação</option>
+            <option value="paga">Paga</option>
+          </Select>
+        </FormField>
       </FilterBar>
 
       <DataTable
         data={mensalidades}
         keyField="id"
+        emptyMessage={
+          cfgOk || isCooperado
+            ? "Nenhuma mensalidade neste período."
+            : "Configure a geração automática no Perfil da cooperativa."
+        }
+        mobileCard={(m) => (
+          <MensalidadeCard
+            m={m}
+            data={data}
+            isCooperado={isCooperado}
+            canConfirm={check("mensalidades", "edit")}
+            onPix={() => abrirPix(m)}
+            onPaguei={() => handlePaguei(m)}
+            onConfirmar={() => handleConfirmar(m)}
+          />
+        )}
         columns={[
-          { key: "cooperado", label: "Cooperado", render: (m) => getCooperadoNome(data.cooperados, m.cooperadoId) },
-          { key: "mesReferencia", label: "Mês", render: (m) => formatMesReferencia(m.mesReferencia) },
+          ...(!isCooperado
+            ? [{ key: "coop", label: "Cooperado", render: (m: Mensalidade) => getCooperadoNome(data.cooperados, m.cooperadoId) }]
+            : []),
+          { key: "mes", label: "Mês", render: (m) => formatMesReferencia(m.mesReferencia) },
           { key: "valor", label: "Valor", render: (m) => formatCurrency(m.valor) },
           { key: "vencimento", label: "Vencimento", render: (m) => formatDate(m.vencimento) },
           { key: "status", label: "Status", render: (m) => <StatusBadge status={m.status} /> },
-          { key: "dataPagamento", label: "Pagamento", render: (m) => m.dataPagamento ? formatDate(m.dataPagamento) : "-" },
+          {
+            key: "acoes",
+            label: "Ações",
+            render: (m) => (
+              <div className="flex flex-wrap gap-2">
+                {isCooperado && mensalidadePodePagarComPix(m) && (
+                  <>
+                    <Button size="sm" onClick={() => abrirPix(m)}><QrCode size={14} /> Pagar PIX</Button>
+                    <Button size="sm" variant="secondary" onClick={() => handlePaguei(m)}>Paguei</Button>
+                  </>
+                )}
+                {isCooperado && mensalidadeAguardandoConfirmacao(m) && (
+                  <span className="text-xs text-blue-700 flex items-center gap-1">
+                    <AlertCircle size={14} /> Aguardando confirmação da diretoria
+                  </span>
+                )}
+                {!isCooperado && m.status === "aguardando_confirmacao" && check("mensalidades", "edit") && (
+                  <Button size="sm" onClick={() => handleConfirmar(m)}>Confirmar</Button>
+                )}
+              </div>
+            ),
+          },
         ]}
-        onEdit={check("mensalidades", "edit") ? openEdit : undefined}
-        onDelete={check("mensalidades", "delete") ? handleDelete : undefined}
       />
 
-      <Modal open={modalOpen} onClose={() => setModalOpen(false)} title={editing ? "Editar Mensalidade" : "Nova Mensalidade"}>
-        <div className="space-y-4">
-          {!isCooperado && (
-            <FormField label="Cooperado" required>
-              <Select value={form.cooperadoId ?? ""} onChange={(e) => setForm({ ...form, cooperadoId: e.target.value })}>
-                <option value="">Selecione...</option>
-                {data.cooperados.filter((c) => c.status === "ativo").map((c) => (
-                  <option key={c.id} value={c.id}>{c.nomeCompleto}</option>
-                ))}
-              </Select>
-            </FormField>
-          )}
-          <FormField label="Mês de Referência" required><Input type="month" value={form.mesReferencia ?? ""} onChange={(e) => setForm({ ...form, mesReferencia: e.target.value })} /></FormField>
-          <FormField label="Valor" required><Input type="number" step="0.01" value={form.valor ?? ""} onChange={(e) => setForm({ ...form, valor: parseFloat(e.target.value) })} /></FormField>
-          <FormField label="Vencimento"><Input type="date" value={form.vencimento ?? ""} onChange={(e) => setForm({ ...form, vencimento: e.target.value })} /></FormField>
-          <FormField label="Status">
-            <Select value={form.status ?? "pendente"} onChange={(e) => setForm({ ...form, status: e.target.value as Mensalidade["status"] })}>
-              <option value="pendente">Pendente</option>
-              <option value="paga">Paga</option>
-              <option value="atrasada">Atrasada</option>
-              <option value="parcelada">Parcelada</option>
-            </Select>
-          </FormField>
-          <FormField label="Data Pagamento"><Input type="date" value={form.dataPagamento ?? ""} onChange={(e) => setForm({ ...form, dataPagamento: e.target.value })} /></FormField>
-          <FormField label="Forma de Pagamento"><Input value={form.formaPagamento ?? ""} onChange={(e) => setForm({ ...form, formaPagamento: e.target.value })} /></FormField>
+      {mensalidadePix && chavePixCoop && cooperativa && (
+        <PixQrModal
+          open={pixModalOpen}
+          onClose={() => { setPixModalOpen(false); setMensalidadePix(null); }}
+          chavePix={chavePixCoop}
+          nome={cooperativa.nome}
+          valor={mensalidadePix.valor}
+        />
+      )}
+    </div>
+  );
+}
+
+function MensalidadeCard({
+  m,
+  data,
+  isCooperado,
+  canConfirm,
+  onPix,
+  onPaguei,
+  onConfirmar,
+}: {
+  m: Mensalidade;
+  data: NonNullable<ReturnType<typeof useAppData>>;
+  isCooperado: boolean;
+  canConfirm: boolean;
+  onPix: () => void;
+  onPaguei: () => void;
+  onConfirmar: () => void;
+}) {
+  return (
+    <div className="bg-white border rounded-xl p-4">
+      {!isCooperado && (
+        <p className="font-medium text-sm">{getCooperadoNome(data.cooperados, m.cooperadoId)}</p>
+      )}
+      <div className="flex items-center justify-between mt-1">
+        <p className="text-sm text-gray-600">{formatMesReferencia(m.mesReferencia)}</p>
+        <StatusBadge status={m.status} />
+      </div>
+      <p className="text-lg font-bold text-gray-900 mt-2">{formatCurrency(m.valor)}</p>
+      <p className="text-xs text-gray-500">Vence {formatDate(m.vencimento)}</p>
+      {m.status === "paga" && m.dataPagamento && (
+        <p className="text-xs text-green-700 mt-1">Paga em {formatDate(m.dataPagamento)}</p>
+      )}
+      {isCooperado && mensalidadePodePagarComPix(m) && (
+        <div className="flex gap-2 mt-3">
+          <Button size="sm" className="flex-1" onClick={onPix}><QrCode size={14} /> Pagar PIX</Button>
+          <Button size="sm" variant="secondary" className="flex-1" onClick={onPaguei}>Paguei</Button>
         </div>
-        <div className="flex justify-end gap-2 mt-6">
-          <Button variant="secondary" onClick={() => setModalOpen(false)}>Cancelar</Button>
-          <Button onClick={handleSave}>Salvar</Button>
-        </div>
-      </Modal>
+      )}
+      {isCooperado && mensalidadeAguardandoConfirmacao(m) && (
+        <p className="text-xs text-blue-700 mt-3 flex items-center gap-1">
+          <AlertCircle size={14} /> Pendente — aguardando confirmação da diretoria
+        </p>
+      )}
+      {!isCooperado && m.status === "aguardando_confirmacao" && canConfirm && (
+        <Button size="sm" className="mt-3 w-full" onClick={onConfirmar}>
+          <CheckCircle2 size={14} /> Confirmar pagamento
+        </Button>
+      )}
     </div>
   );
 }

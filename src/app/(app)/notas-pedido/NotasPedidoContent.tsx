@@ -22,6 +22,7 @@ import {
   gerarNumeroNota,
   buildFichaFromNota,
   aplicarItensNaNota,
+  upsertArquivoMensal,
 } from "@/services/notaPedidoService";
 import { formatCurrency, formatDate, formatMesReferencia, getCurrentMesReferencia } from "@/utils/format";
 import { labelUnidade } from "@/utils/unidades";
@@ -91,7 +92,6 @@ export default function NotasPedidoContent() {
   const [rejectModal, setRejectModal] = useState(false);
   const [viewModal, setViewModal] = useState(false);
   const [successMsg, setSuccessMsg] = useState("");
-  const [conferirStep, setConferirStep] = useState(1);
   const [lancadoMsg, setLancadoMsg] = useState("");
 
   const [formErrors, setFormErrors] = useState<{ foto?: string; escolaAvulsa?: string }>({});
@@ -105,6 +105,7 @@ export default function NotasPedidoContent() {
 
   const [selectedNota, setSelectedNota] = useState<NotaPedido | null>(null);
   const [conferenciaItens, setConferenciaItens] = useState<ItemForm[]>([]);
+  const [conferenciaDescontoPct, setConferenciaDescontoPct] = useState(5);
   const [conferenciaInstId, setConferenciaInstId] = useState("");
   const [conferenciaLocal, setConferenciaLocal] = useState("");
   const [conferenciaAssinatura, setConferenciaAssinatura] = useState("");
@@ -217,13 +218,13 @@ export default function NotasPedidoContent() {
   }, [avulsoItens, data]);
 
   const conferenciaTotais = useMemo(() => {
-    if (!data) return { liquido: 0 };
+    if (!data) return { liquido: 0, bruto: 0, desconto: 0 };
     const r = calcularItensNota(
       conferenciaItens.map((i) => ({ ...i, valorBruto: i.quantidade * i.precoUnitario })),
-      data.config.descontoPadraoCooperativa
+      conferenciaDescontoPct
     );
     return { liquido: r.valorLiquido, bruto: r.valorBruto, desconto: r.valorDesconto };
-  }, [conferenciaItens, data]);
+  }, [conferenciaItens, conferenciaDescontoPct, data]);
 
   const openAnexar = (notaRejeitada?: NotaPedido) => {
     setFormErrors({});
@@ -448,9 +449,9 @@ export default function NotasPedidoContent() {
       ? resolverInstituicaoConferencia(coopId, instituicoes, nota.instituicaoId)
       : nota.instituicaoId;
     setConferenciaInstId(instId);
+    setConferenciaDescontoPct(data?.config.descontoPadraoCooperativa ?? 5);
     setAlterarInstConferencia(false);
     setConferenciaAssinatura(nota.assinaturaRecebedor ?? "");
-    setConferirStep(1);
     setConferirErrors({});
     setConferirModal(true);
   };
@@ -472,7 +473,6 @@ export default function NotasPedidoContent() {
     if (conferenciaTotais.liquido <= 0) errors.itens = "Informe a quantidade de pelo menos um produto.";
     if (Object.keys(errors).length) {
       setConferirErrors(errors);
-      setConferirStep(2);
       return;
     }
 
@@ -488,7 +488,7 @@ export default function NotasPedidoContent() {
           dataAssinatura: now.split("T")[0],
         },
         conferenciaItens.map((i) => ({ ...i, valorBruto: 0 })),
-        d.config.descontoPadraoCooperativa
+        conferenciaDescontoPct
       );
       const notaAtualizada: NotaPedido = {
         ...base,
@@ -497,11 +497,15 @@ export default function NotasPedidoContent() {
         dataConferencia: now.split("T")[0],
       };
       const ficha = buildFichaFromNota(notaAtualizada, d, user.name);
+      const arquivosMensais = upsertArquivoMensal(d, notaAtualizada.cooperadoId, notaAtualizada.cooperativaId, notaAtualizada.mesReferencia, {
+        notaPedidoIds: [notaAtualizada.id],
+      });
       return addAuditEntry(
         {
           ...d,
           notasPedido: d.notasPedido.map((n) => (n.id === selectedNota.id ? notaAtualizada : n)),
           fichaCorrida: [...d.fichaCorrida, ficha],
+          arquivosMensais,
         },
         { entityType: "nota_pedido", entityId: selectedNota.id, action: "aprovar", userId: user.id, userName: user.name }
       );
@@ -906,113 +910,102 @@ export default function NotasPedidoContent() {
             <Button variant="danger" onClick={() => { setMotivoRejeicao(""); setRejectModal(true); }}>
               <XCircle size={18} /> Pedir correção
             </Button>
-            <div className="flex gap-2">
-              {conferirStep > 1 && <Button variant="secondary" onClick={() => setConferirStep(1)}>Voltar</Button>}
-              {conferirStep < 2 ? (
-                <Button onClick={() => setConferirStep(2)}>Próximo: produtos</Button>
-              ) : (
-                <Button onClick={handleLancarNota}><CheckCircle size={18} /> Aprovar e registrar</Button>
-              )}
-            </div>
+            <Button size="lg" onClick={handleLancarNota}><CheckCircle size={18} /> Aprovar e lançar na ficha</Button>
           </div>
         ) : undefined}
       >
         {selectedNota && (
-          <>
-            <div className="flex gap-2 mb-4">
-              {[1, 2].map((s) => (
-                <span key={s} className={`text-xs px-3 py-1 rounded-full ${conferirStep === s ? "bg-green-700 text-white" : "bg-gray-100 text-gray-600"}`}>
-                  {s === 1 ? "1. Ver foto" : "2. Produtos"}
-                </span>
-              ))}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <div className="space-y-3">
+              <p className="text-xs font-semibold text-gray-500 uppercase">Foto do pedido</p>
+              {selectedNota.fotoPedido ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={selectedNota.fotoPedido} alt="Pedido" className="w-full max-h-[55vh] object-contain rounded-xl border bg-gray-50 sticky top-0" />
+              ) : (
+                <p className="text-gray-500 text-center py-12 border rounded-xl">Sem foto</p>
+              )}
+              <p className="text-sm">
+                <strong>{getCooperadoNome(data.cooperados, selectedNota.cooperadoId)}</strong> · {formatDate(selectedNota.dataEntrega)}
+              </p>
+              <p className="text-sm text-gray-600">Escola: {getEscolaNotaLabel(selectedNota, data.instituicoes)}</p>
             </div>
-            {conferirStep === 1 ? (
-              <div>
-                {selectedNota.fotoPedido ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img src={selectedNota.fotoPedido} alt="Pedido" className="w-full max-h-[50vh] object-contain rounded-xl border bg-gray-50" />
-                ) : (
-                  <p className="text-gray-500 text-center py-12">Sem foto</p>
-                )}
-                <p className="mt-3 text-sm">
-                  <strong>{getCooperadoNome(data.cooperados, selectedNota.cooperadoId)}</strong> · {formatDate(selectedNota.dataEntrega)}
-                </p>
-                <p className="text-sm text-gray-600 mt-1">
-                  Escola: {getEscolaNotaLabel(selectedNota, data.instituicoes)}
-                </p>
-              </div>
-            ) : (
-              <div className="space-y-4">
-                <div className="rounded-xl border border-green-200 bg-green-50/50 p-4">
-                  <div className="flex items-start justify-between gap-3">
-                    <div>
-                      <p className="text-xs text-gray-500 uppercase tracking-wide">Instituição</p>
-                      {!alterarInstConferencia ? (
-                        <>
-                          <p className="font-semibold text-gray-900 mt-1">{conferenciaInstNome || "—"}</p>
-                          <p className="text-xs text-gray-500 mt-1">
-                            Itens e preços unitários carregados do contrato desta escola.
-                          </p>
-                        </>
-                      ) : (
-                        <div className="mt-2">
-                          <FormField label="Escolher outra instituição">
-                            <Select
-                              value={conferenciaInstId}
-                              onChange={(e) => handleConferenciaInstChange(e.target.value)}
-                            >
-                              {instituicoes.map((i) => (
-                                <option key={i.id} value={i.id}>{i.nome}</option>
-                              ))}
-                            </Select>
-                          </FormField>
-                        </div>
-                      )}
-                    </div>
-                    {!alterarInstConferencia && instituicoes.length > 1 && (
-                      <Button
-                        type="button"
-                        variant="secondary"
-                        size="sm"
-                        onClick={() => setAlterarInstConferencia(true)}
-                      >
-                        <Pencil size={14} /> Trocar
-                      </Button>
+
+            <div className="space-y-4">
+              <p className="text-xs font-semibold text-gray-500 uppercase">Lançamento na ficha</p>
+              <div className="rounded-xl border border-green-200 bg-green-50/50 p-4">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <p className="text-xs text-gray-500 uppercase tracking-wide">Instituição</p>
+                    {!alterarInstConferencia ? (
+                      <>
+                        <p className="font-semibold text-gray-900 mt-1">{conferenciaInstNome || "—"}</p>
+                        <p className="text-xs text-gray-500 mt-1">Itens e preços do contrato</p>
+                      </>
+                    ) : (
+                      <div className="mt-2">
+                        <FormField label="Escolher outra instituição">
+                          <Select value={conferenciaInstId} onChange={(e) => handleConferenciaInstChange(e.target.value)}>
+                            {instituicoes.map((i) => (
+                              <option key={i.id} value={i.id}>{i.nome}</option>
+                            ))}
+                          </Select>
+                        </FormField>
+                      </div>
                     )}
                   </div>
-                  {conferenciaLocal && (
-                    <p className="text-xs text-gray-500 mt-2">Local: {conferenciaLocal}</p>
+                  {!alterarInstConferencia && instituicoes.length > 1 && (
+                    <Button type="button" variant="secondary" size="sm" onClick={() => setAlterarInstConferencia(true)}>
+                      <Pencil size={14} /> Trocar
+                    </Button>
                   )}
                 </div>
-                <FormField label="Quem assinou na escola?" required error={conferirErrors.assinatura}>
-                  <Input value={conferenciaAssinatura} onChange={(e) => setConferenciaAssinatura(e.target.value)} placeholder="Nome de quem recebeu" />
-                </FormField>
-                {conferenciaItens.length === 0 ? (
-                  <AlertBanner variant="warning">
-                    Esta instituição ainda não tem produtos cadastrados.{" "}
-                    <Link href="/contratos" className="font-semibold underline">Cadastrar em Contratos</Link>
-                  </AlertBanner>
-                ) : (
-                  <>
-                    {conferirErrors.itens && <p className="text-sm text-red-600">{conferirErrors.itens}</p>}
-                    <p className="text-sm text-gray-600">Informe apenas as quantidades — os preços já vêm do contrato:</p>
-                    <div className="space-y-3">
-                      {conferenciaItens.map((item, idx) => (
-                        <div key={item.produtoInstituicaoId} className="flex items-center gap-3 p-3 bg-gray-50 rounded-xl">
-                          <div className="flex-1 min-w-0">
-                            <p className="font-medium text-sm">{item.produtoNome}</p>
-                            <p className="text-xs text-gray-500">{formatCurrency(item.precoUnitario)} / {labelUnidade(item.unidade)}</p>
-                          </div>
-                          <Input type="number" min={0} step="0.01" className="w-24 text-center text-lg" value={item.quantidade || ""} onChange={(e) => updateConferenciaQty(idx, parseFloat(e.target.value) || 0)} />
-                        </div>
-                      ))}
-                    </div>
-                    <p className="text-right text-lg font-bold text-green-700">Total: {formatCurrency(conferenciaTotais.liquido)}</p>
-                  </>
-                )}
               </div>
-            )}
-          </>
+
+              <FormField label="Desconto cooperativa (%)" hint="Percentual descontado da cooperativa nesta entrega">
+                <Input
+                  type="number"
+                  min={0}
+                  max={100}
+                  step="0.5"
+                  value={conferenciaDescontoPct}
+                  onChange={(e) => setConferenciaDescontoPct(parseFloat(e.target.value) || 0)}
+                  className="max-w-[120px]"
+                />
+              </FormField>
+
+              <FormField label="Quem assinou na escola?" required error={conferirErrors.assinatura}>
+                <Input value={conferenciaAssinatura} onChange={(e) => setConferenciaAssinatura(e.target.value)} placeholder="Nome de quem recebeu" />
+              </FormField>
+
+              {conferenciaItens.length === 0 ? (
+                <AlertBanner variant="warning">
+                  Esta instituição ainda não tem produtos.{" "}
+                  <Link href="/contratos" className="font-semibold underline">Cadastrar em Contratos</Link>
+                </AlertBanner>
+              ) : (
+                <>
+                  {conferirErrors.itens && <p className="text-sm text-red-600">{conferirErrors.itens}</p>}
+                  <p className="text-sm text-gray-600">Quantidades entregues:</p>
+                  <div className="space-y-2 max-h-52 overflow-y-auto">
+                    {conferenciaItens.map((item, idx) => (
+                      <div key={item.produtoInstituicaoId} className="flex items-center gap-3 p-3 bg-gray-50 rounded-xl">
+                        <div className="flex-1 min-w-0">
+                          <p className="font-medium text-sm">{item.produtoNome}</p>
+                          <p className="text-xs text-gray-500">{formatCurrency(item.precoUnitario)} / {labelUnidade(item.unidade)}</p>
+                        </div>
+                        <Input type="number" min={0} step="0.01" className="w-24 text-center" value={item.quantidade || ""} onChange={(e) => updateConferenciaQty(idx, parseFloat(e.target.value) || 0)} />
+                      </div>
+                    ))}
+                  </div>
+                  <div className="rounded-xl bg-gray-50 p-3 text-sm space-y-1">
+                    <div className="flex justify-between"><span>Bruto</span><span>{formatCurrency(conferenciaTotais.bruto)}</span></div>
+                    <div className="flex justify-between text-amber-700"><span>Desconto ({conferenciaDescontoPct}%)</span><span>- {formatCurrency(conferenciaTotais.desconto)}</span></div>
+                    <div className="flex justify-between font-bold text-green-700 text-base pt-1 border-t"><span>Total a receber</span><span>{formatCurrency(conferenciaTotais.liquido)}</span></div>
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
         )}
       </Modal>
 

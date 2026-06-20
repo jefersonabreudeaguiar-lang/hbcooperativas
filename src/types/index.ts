@@ -99,11 +99,13 @@ export interface Mensalidade {
   mesReferencia: string;
   valor: number;
   vencimento: string;
-  status: "paga" | "pendente" | "atrasada" | "parcelada";
+  status: "paga" | "pendente" | "atrasada" | "parcelada" | "aguardando_confirmacao";
   dataPagamento?: string;
   formaPagamento?: string;
   observacao?: string;
   comprovante?: string;
+  /** Cooperado informou que pagou — aguarda confirmação da diretoria. */
+  informadoPagamentoEm?: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -196,6 +198,12 @@ export interface NotaPedido {
   updatedAt: string;
 }
 
+export interface FichaCorridaDesconto {
+  tipo: "cooperativa" | "mensalidade" | "cota" | "manual";
+  motivo: string;
+  valor: number;
+}
+
 export interface FichaCorrida {
   id: string;
   cooperativaId: string;
@@ -211,7 +219,42 @@ export interface FichaCorrida {
   dataLancamento: string;
   dataPagamentoPrevista?: string;
   responsavelConferencia?: string;
+  itens?: NotaPedidoItem[];
+  percentualDescontoCooperativa?: number;
+  descontosDetalhe?: FichaCorridaDesconto[];
   createdAt: string;
+}
+
+/** Pagamento mensal registrado pela diretoria — aguarda confirmação do cooperado. */
+export interface PagamentoCooperadoRegistro {
+  id: string;
+  cooperativaId: string;
+  cooperadoId: string;
+  mesReferencia: string;
+  valorBruto: number;
+  descontoCooperativa: number;
+  descontosExtras: FichaCorridaDesconto[];
+  valorLiquido: number;
+  fichaIds: string[];
+  notaPedidoIds: string[];
+  status: "aguardando_confirmacao" | "confirmado";
+  pagoPor: string;
+  pagoEm: string;
+  assinaturaCooperado?: string;
+  assinadoEm?: string;
+  reciboHtml?: string;
+  createdAt: string;
+}
+
+/** Pasta mensal por cooperado — fotos e recibos arquivados. */
+export interface ArquivoMensalCooperado {
+  id: string;
+  cooperativaId: string;
+  cooperadoId: string;
+  mesReferencia: string;
+  notaPedidoIds: string[];
+  pagamentoIds: string[];
+  updatedAt: string;
 }
 
 export interface Instituicao {
@@ -301,6 +344,8 @@ export interface FinanceiroMensal {
 export interface Comunicado {
   id: string;
   cooperativaId?: string;
+  /** Quando definido, só este cooperado vê o aviso. */
+  cooperadoId?: string;
   titulo: string;
   descricao: string;
   data: string;
@@ -375,6 +420,8 @@ export interface AppData {
   produtosInstituicao: ProdutoInstituicao[];
   notasPedido: NotaPedido[];
   fichaCorrida: FichaCorrida[];
+  pagamentosCooperado: PagamentoCooperadoRegistro[];
+  arquivosMensais: ArquivoMensalCooperado[];
   entregas: Entrega[];
   descontos: Desconto[];
   pagamentos: Pagamento[];

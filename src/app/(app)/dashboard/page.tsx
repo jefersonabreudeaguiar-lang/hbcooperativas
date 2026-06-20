@@ -33,7 +33,7 @@ function CooperadoDashboard() {
   const rejeitadas = data.notasPedido.filter((n) => n.cooperadoId === user.cooperadoId && n.status === "rejeitada");
   const emAnalise = entregasMes.filter((n) => n.status === "aguardando_conferencia").length;
   const coopId = getUserCooperativaId(user, data);
-  const comunicados = coopId ? getComunicadosCooperado(data, coopId).slice(0, 3) : [];
+  const comunicados = coopId ? getComunicadosCooperado(data, coopId, user.cooperadoId).slice(0, 3) : [];
 
   return (
     <div className="space-y-6 max-w-3xl">

@@ -72,6 +72,10 @@ export default function MeuCadastroContent() {
       });
     });
     setSaved(true);
+    if (isNovo) {
+      router.replace("/notas-pedido?anexar=1");
+      return;
+    }
     setTimeout(() => setSaved(false), 3000);
   };
 

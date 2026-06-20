@@ -111,6 +111,13 @@ export function getComunicadosParaExibicao(
   });
 }
 
-export function getComunicadosCooperado(data: AppData, cooperativaId: string): ComunicadoExibicao[] {
-  return getComunicadosParaExibicao(data, cooperativaId).filter((c) => c.visivelParaTodos);
+export function getComunicadosCooperado(
+  data: AppData,
+  cooperativaId: string,
+  cooperadoId?: string
+): ComunicadoExibicao[] {
+  return getComunicadosParaExibicao(data, cooperativaId).filter((c) => {
+    if (c.cooperadoId) return c.cooperadoId === cooperadoId;
+    return c.visivelParaTodos;
+  });
 }

@@ -87,7 +87,12 @@ export async function registerCooperativaInCloud(
     const json = await res.json().catch(() => ({}));
 
     if (res.status === 503) {
-      return { success: false, error: "Nuvem não configurada.", offline: true };
+      const msg =
+        (json.error as string | undefined) ??
+        (json.migrationPending
+          ? "Crie a tabela cooperativas no Supabase (SQL Editor)."
+          : "Nuvem não configurada. Verifique as variáveis do Supabase.");
+      return { success: false, error: msg, offline: true };
     }
 
     if (res.status === 409) {
