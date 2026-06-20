@@ -14,7 +14,7 @@ const STYLES: Record<Variant, { box: string; icon: typeof Info }> = {
 interface AlertBannerProps {
   variant?: Variant;
   title?: string;
-  children: ReactNode;
+  children?: ReactNode;
   action?: ReactNode;
   onDismiss?: () => void;
   className?: string;
@@ -26,8 +26,10 @@ export function AlertBanner({ variant = "info", title, children, action, onDismi
     <div className={cn("p-4 border rounded-xl flex items-start gap-3", STYLES[variant].box, className)}>
       <Icon size={22} className="shrink-0 mt-0.5" />
       <div className="flex-1 min-w-0">
-        {title && <p className="font-semibold mb-1">{title}</p>}
-        <div className="text-sm leading-relaxed">{children}</div>
+        {title && <p className={cn("font-semibold", children != null && children !== false && "mb-1")}>{title}</p>}
+        {children != null && children !== false && (
+          <div className="text-sm leading-relaxed">{children}</div>
+        )}
         {action && <div className="mt-3">{action}</div>}
       </div>
       {onDismiss && (

@@ -1186,7 +1186,7 @@ export default function NotasPedidoContent() {
             {n.status === "rejeitada" && n.motivoRejeicao && (
               <p className="text-xs text-red-600 mt-1 line-clamp-2">{n.motivoRejeicao}</p>
             )}
-            {n.valorLiquido > 0 && (
+            {!isCooperado && n.valorLiquido > 0 && (
               <p className="text-sm font-semibold text-green-700 mt-1">{formatCurrency(n.valorLiquido)}</p>
             )}
           </div>
@@ -1881,18 +1881,24 @@ export default function NotasPedidoContent() {
         {selectedNota && (
           <div className="space-y-4">
             <NotaStatusBadge status={selectedNota.status} />
+            {isCooperado && (selectedNota.status === "conferida" || selectedNota.status === "pago") ? (
+              <p className="text-sm text-gray-600">Entrega aprovada.</p>
+            ) : (
+              <>
             {selectedNota.lancamentoDireto && (
               <p className="text-sm text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
                 Lançamento avulso pela cooperativa, sem foto de nota.
               </p>
             )}
-            <p className="text-sm"><strong>Cooperado:</strong> {getCooperadoNome(data.cooperados, selectedNota.cooperadoId)}</p>
+            {!isCooperado && (
+              <p className="text-sm"><strong>Cooperado:</strong> {getCooperadoNome(data.cooperados, selectedNota.cooperadoId)}</p>
+            )}
             <p className="text-sm"><strong>Escola:</strong> {getEscolaNotaLabel(selectedNota, data.instituicoes)}</p>
             <p className="text-sm"><strong>Data:</strong> {formatDate(selectedNota.dataEntrega)}</p>
             {selectedNota.assinaturaRecebedor && (
               <p className="text-sm"><strong>Assinatura:</strong> {selectedNota.assinaturaRecebedor}</p>
             )}
-            {selectedNota.itens.length > 0 && (
+            {!isCooperado && selectedNota.itens.length > 0 && (
               <ul className="text-sm space-y-1 border rounded-lg p-3 bg-gray-50">
                 {selectedNota.itens.map((item) => (
                   <li key={item.produtoInstituicaoId} className="flex justify-between gap-2">
@@ -1902,8 +1908,10 @@ export default function NotasPedidoContent() {
                 ))}
               </ul>
             )}
-            {selectedNota.valorLiquido > 0 && (
+            {!isCooperado && selectedNota.valorLiquido > 0 && (
               <p className="text-right font-bold text-green-700">{formatCurrency(selectedNota.valorLiquido)}</p>
+            )}
+              </>
             )}
             {selectedNota.motivoRejeicao && (
               <AlertBanner variant="error" title="Motivo da correção">{selectedNota.motivoRejeicao}</AlertBanner>

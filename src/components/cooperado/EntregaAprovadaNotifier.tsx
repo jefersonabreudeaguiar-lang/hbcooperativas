@@ -4,22 +4,16 @@ import { useEffect, useRef, useState, useCallback } from "react";
 import { useAppData } from "@/hooks/useAppData";
 import { usePermissions } from "@/hooks/usePermissions";
 import { subscribe } from "@/services/dataStore";
-import { formatCurrency } from "@/utils/format";
 import {
   notificarEntregaAprovada,
   prepararAudioNotificacao,
   solicitarPermissaoNotificacao,
 } from "@/utils/notifications";
 import { AlertBanner } from "@/components/ui/AlertBanner";
-import { Button } from "@/components/ui/Button";
-import Link from "next/link";
 import type { NotaPedidoStatus } from "@/types";
 
 interface AprovacaoAlert {
   id: string;
-  escola: string;
-  valor: string;
-  numeroNota: string;
 }
 
 export function EntregaAprovadaNotifier() {
@@ -53,21 +47,9 @@ export function EntregaAprovadaNotifier() {
 
       if (!acabouDeAprovar) return;
 
-      const escola = data.instituicoes.find((i) => i.id === nota.instituicaoId)?.nome ?? "Escola";
-      const valor = formatCurrency(nota.valorLiquido);
+      notificarEntregaAprovada();
 
-      notificarEntregaAprovada({
-        escola,
-        valor,
-        numeroNota: nota.numeroNota,
-      });
-
-      setAlerta({
-        id: nota.id,
-        escola,
-        valor,
-        numeroNota: nota.numeroNota,
-      });
+      setAlerta({ id: nota.id });
     });
   }, [data, isCooperado, cooperadoId]);
 
@@ -102,15 +84,7 @@ export function EntregaAprovadaNotifier() {
         variant="success"
         title="Entrega aprovada!"
         onDismiss={() => setAlerta(null)}
-      >
-        <p>
-          Sua entrega em <strong>{alerta.escola}</strong> foi conferida.
-          Valor lançado: <strong>{alerta.valor}</strong> (nota {alerta.numeroNota}).
-        </p>
-        <Link href="/ficha-corrida">
-          <Button size="sm" className="mt-3">Ver quanto vou receber</Button>
-        </Link>
-      </AlertBanner>
+      />
     </div>
   );
 }

@@ -72,19 +72,10 @@ export function notificacaoNavegador(titulo: string, corpo: string): void {
   }
 }
 
-export interface NotificacaoEntregaOptions {
-  escola: string;
-  valor: string;
-  numeroNota: string;
-}
-
-export function notificarEntregaAprovada(opts: NotificacaoEntregaOptions): void {
+export function notificarEntregaAprovada(): void {
   vibrarAprovacao();
   tocarSomAprovacao();
-  notificacaoNavegador(
-    "Entrega aprovada!",
-    `${opts.escola} — ${opts.valor} (nota ${opts.numeroNota})`
-  );
+  notificacaoNavegador("Entrega aprovada!", "Sua entrega foi conferida pela cooperativa.");
 }
 
 /** Chame após interação do usuário para desbloquear áudio no celular. */
