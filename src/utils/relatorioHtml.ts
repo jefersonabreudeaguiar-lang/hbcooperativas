@@ -2,8 +2,8 @@ import type { AppData, FechamentoMensal } from "@/types";
 import { PLATFORM_NAME } from "@/utils/constants";
 import { formatCnpj } from "@/utils/cooperativa";
 import { formatCurrency, formatDate, formatMesReferencia } from "@/utils/format";
-import type { FechamentoCalculado, ResumoFinanceiroMes } from "@/services/relatorioService";
-import { calcularFechamentoMensalLive, getResumoFinanceiroMes } from "@/services/relatorioService";
+import type { FechamentoCalculado, RelatorioEntregasPorItens, ResumoFinanceiroMes } from "@/services/relatorioService";
+import { calcularFechamentoMensalLive, getRelatorioEntregasPorItensInstituicao, getResumoFinanceiroMes } from "@/services/relatorioService";
 
 const DOC_STYLES = `
   * { box-sizing: border-box; }
@@ -26,7 +26,12 @@ const DOC_STYLES = `
   .status-aprovado { background: #dcfce7; color: #166534; }
   .status-revisado { background: #fef9c3; color: #854d0e; }
   .status-rascunho { background: #f3f4f6; color: #374151; }
-  .footer { margin-top: 40px; padding-top: 16px; border-top: 1px solid #e5e7eb; font-family: system-ui, sans-serif; font-size: 11px; color: #6b7280; }
+  .destinatario { font-family: system-ui, sans-serif; background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 8px; padding: 16px 18px; margin: 20px 0 24px; }
+  .destinatario .rotulo { font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; color: #166534; font-weight: 700; margin-bottom: 8px; }
+  .destinatario .nome { font-size: 1.05rem; font-weight: 700; color: #14532d; }
+  .destinatario .detalhe { font-size: 13px; color: #374151; margin-top: 4px; }
+  .carta { font-family: system-ui, sans-serif; font-size: 14px; color: #374151; line-height: 1.6; margin: 0 0 20px; }
+  tfoot td { background: #ecfdf5; font-weight: 700; }
   .assinatura { margin-top: 48px; display: grid; grid-template-columns: 1fr 1fr; gap: 40px; }
   .assinatura-linha { border-top: 1px solid #111; padding-top: 6px; font-family: system-ui, sans-serif; font-size: 12px; text-align: center; }
   @media print {
@@ -44,24 +49,45 @@ function escapeHtml(s: string): string {
     .replace(/"/g, "&quot;");
 }
 
-function cooperativaHeader(data: AppData, titulo: string, mesReferencia: string): string {
-  const coop = data.cooperativas[0];
+function resolveCooperativa(data: AppData, cooperativaId?: string) {
+  if (cooperativaId) {
+    return data.cooperativas.find((c) => c.id === cooperativaId) ?? data.cooperativas[0];
+  }
+  return data.cooperativas[0];
+}
+
+function cooperativaHeader(
+  data: AppData,
+  titulo: string,
+  mesReferencia: string,
+  cooperativaId?: string
+): string {
+  const coop = resolveCooperativa(data, cooperativaId);
   const nome = coop?.nome ?? PLATFORM_NAME;
   const cnpj = coop?.cnpj ? formatCnpj(coop.cnpj) : "";
   const endereco = coop?.endereco ?? "";
+  const telefone = coop?.telefone ?? "";
+  const email = coop?.email ?? "";
   return `
     <div class="header">
       <h1>${escapeHtml(nome)}</h1>
       <div class="meta">
         ${cnpj ? `CNPJ: ${escapeHtml(cnpj)}<br/>` : ""}
         ${endereco ? `${escapeHtml(endereco)}<br/>` : ""}
-        ${escapeHtml(PLATFORM_NAME)}
+        ${telefone ? `Tel.: ${escapeHtml(telefone)}<br/>` : ""}
+        ${email ? `${escapeHtml(email)}<br/>` : ""}
       </div>
       <div class="periodo">${escapeHtml(titulo)} · ${escapeHtml(formatMesReferencia(mesReferencia))}</div>
     </div>`;
 }
 
-function documentoShell(titulo: string, body: string, data: AppData, mesReferencia: string): string {
+function documentoShell(
+  titulo: string,
+  body: string,
+  data: AppData,
+  mesReferencia: string,
+  cooperativaId?: string
+): string {
   const gerado = formatDate(new Date().toISOString().split("T")[0]);
   return `<!DOCTYPE html>
 <html lang="pt-BR">
@@ -72,11 +98,11 @@ function documentoShell(titulo: string, body: string, data: AppData, mesReferenc
   <style>${DOC_STYLES}</style>
 </head>
 <body>
-  ${cooperativaHeader(data, titulo, mesReferencia)}
+  ${cooperativaHeader(data, titulo, mesReferencia, cooperativaId)}
   ${body}
   <div class="footer">
     Documento gerado em ${gerado} · ${escapeHtml(PLATFORM_NAME)}<br/>
-    Uso interno da cooperativa — conferir valores antes de arquivar.
+    Uso interno da cooperativa — conferir valores antes de arquivar ou encaminhar.
   </div>
   <script class="no-print">window.onload=function(){/* opcional: window.print() */}</script>
 </body>
@@ -178,6 +204,97 @@ export function gerarRelatorioFechamentoHtml(
   return documentoShell("Fechamento mensal", body, data, mesReferencia);
 }
 
+export function gerarRelatorioEntregasPorItensHtml(
+  data: AppData,
+  mesReferencia: string,
+  instituicaoId: string,
+  cooperativaId?: string
+): string {
+  const rel = getRelatorioEntregasPorItensInstituicao(mesReferencia, instituicaoId, data);
+  const coop = resolveCooperativa(data, cooperativaId);
+  const inst = rel.instituicao;
+  const localEntrega = inst?.localEntrega?.trim() || inst?.endereco?.trim() || "";
+  const responsavelInst = inst?.responsavel?.trim() || "";
+  const hoje = formatDate(new Date().toISOString().split("T")[0]);
+
+  const linhasItens = rel.itens
+    .map(
+      (item, idx) =>
+        `<tr>
+          <td class="num">${idx + 1}</td>
+          <td>${escapeHtml(item.produtoNome)}</td>
+          <td>${escapeHtml(item.unidade)}</td>
+          <td class="num">${item.quantidade.toLocaleString("pt-BR", { minimumFractionDigits: 0, maximumFractionDigits: 2 })}</td>
+          <td class="num">${formatCurrency(item.precoUnitario)}</td>
+          <td class="num">${formatCurrency(item.valorTotal)}</td>
+        </tr>`
+    )
+    .join("");
+
+  const body = `
+    <div class="destinatario">
+      <div class="rotulo">Destinatário</div>
+      <div class="nome">${escapeHtml(rel.instituicaoNome)}</div>
+      ${localEntrega ? `<div class="detalhe">${escapeHtml(localEntrega)}</div>` : ""}
+      ${responsavelInst ? `<div class="detalhe">A/C ${escapeHtml(responsavelInst)}</div>` : ""}
+      ${inst?.cnpj ? `<div class="detalhe">CNPJ: ${escapeHtml(formatCnpj(inst.cnpj))}</div>` : ""}
+    </div>
+
+    <p class="carta">
+      ${responsavelInst ? `Prezado(a) Senhor(a) <strong>${escapeHtml(responsavelInst)}</strong>,` : "Prezado(a) Senhor(a),"}
+      <br/><br/>
+      A <strong>${escapeHtml(coop?.nome ?? PLATFORM_NAME)}</strong> apresenta o resumo consolidado das entregas
+      realizadas no mês de <strong>${escapeHtml(formatMesReferencia(mesReferencia))}</strong>,
+      referentes ao contrato de fornecimento com <strong>${escapeHtml(rel.instituicaoNome)}</strong>.
+      ${rel.quantidadeEntregas > 0 ? ` Foram registradas <strong>${rel.quantidadeEntregas}</strong> entrega(s) conferida(s) no período.` : ""}
+    </p>
+
+    <h2>Resumo por item</h2>
+    <table>
+      <thead>
+        <tr>
+          <th class="num">#</th>
+          <th>Item / Produto</th>
+          <th>Unidade</th>
+          <th class="num">Quantidade total</th>
+          <th class="num">Valor unitário</th>
+          <th class="num">Valor total</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${linhasItens || `<tr><td colspan="6">Nenhum item conferido neste mês para esta instituição.</td></tr>`}
+      </tbody>
+      <tfoot>
+        <tr>
+          <td colspan="5">Total geral das entregas (bruto)</td>
+          <td class="num">${formatCurrency(rel.totalBruto)}</td>
+        </tr>
+      </tfoot>
+    </table>
+
+    <p class="carta" style="margin-top:24px;">
+      Este documento consolida as quantidades e valores unitários praticados nas entregas conferidas.
+      Permanecemos à disposição para esclarecimentos.
+    </p>
+
+    <p class="carta" style="margin-top:32px;">
+      ${escapeHtml(coop?.endereco ?? coop?.nome ?? PLATFORM_NAME)}, ${hoje}.
+    </p>
+
+    <div class="assinatura">
+      <div><div class="assinatura-linha">${escapeHtml(coop?.nome ?? PLATFORM_NAME)}</div></div>
+      <div><div class="assinatura-linha">Responsável / Presidente</div></div>
+    </div>`;
+
+  return documentoShell(
+    `Entregas — ${rel.instituicaoNome}`,
+    body,
+    data,
+    mesReferencia,
+    cooperativaId
+  );
+}
+
 export function gerarRelatorioFinanceiroHtml(data: AppData, mesReferencia: string, tituloRelatorio: string): string {
   const r = getResumoFinanceiroMes(mesReferencia, data);
   const calc = calcularFechamentoMensalLive(mesReferencia, data);
@@ -230,8 +347,16 @@ export function imprimirDocumentoHtml(html: string): void {
   w.document.close();
 }
 
-export function nomeArquivoRelatorio(tipo: string, mesReferencia: string): string {
-  return `relatorio-${tipo}-${mesReferencia}.html`;
+export function nomeArquivoRelatorio(tipo: string, mesReferencia: string, sufixo?: string): string {
+  const extra = sufixo
+    ? `-${sufixo
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "")
+        .replace(/[^a-zA-Z0-9]+/g, "-")
+        .replace(/^-|-$/g, "")
+        .slice(0, 40)}`
+    : "";
+  return `relatorio-${tipo}-${mesReferencia}${extra}.html`;
 }
 
 export type { ResumoFinanceiroMes, FechamentoCalculado };

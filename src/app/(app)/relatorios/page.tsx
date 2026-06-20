@@ -14,6 +14,7 @@ import { NotaStatusBadge } from "@/components/ui/NotaStatusBadge";
 import {
   getRelatorioResumoFinanceiro,
   getRelatorioEntregasPorInstituicao,
+  getRelatorioEntregasPorItens,
   getRelatorioPNAE,
   getRelatorioPagarCooperado,
   listMesesComLancamentos,
@@ -25,12 +26,14 @@ import { resolveCooperativaCnpj } from "@/services/notaPedidoCloudService";
 import { getData } from "@/services/dataStore";
 import {
   baixarDocumentoHtml,
+  gerarRelatorioEntregasPorItensHtml,
   gerarRelatorioFinanceiroHtml,
   imprimirDocumentoHtml,
   nomeArquivoRelatorio,
 } from "@/utils/relatorioHtml";
 import { formatCurrency, formatDate, formatMesReferencia, getCurrentMesReferencia } from "@/utils/format";
 import { getCooperadoNome } from "@/utils/calculations";
+import { labelUnidade } from "@/utils/unidades";
 
 const RELATORIOS = [
   { id: "resumo_financeiro", label: "Resumo Financeiro Mensal" },
@@ -38,6 +41,7 @@ const RELATORIOS = [
   { id: "mensalidades_abertas", label: "Mensalidades em Aberto" },
   { id: "cotas_abertas", label: "Cotas em Aberto" },
   { id: "entregas_instituicao", label: "Entregas por Instituição" },
+  { id: "entregas_por_itens", label: "Entregas por Item (mensal)" },
   { id: "vendas_pnae", label: "Vendas ao PNAE" },
   { id: "descontos_aplicados", label: "Descontos Aplicados" },
   { id: "saldo_mensal", label: "Saldo Mensal da Cooperativa" },
@@ -74,7 +78,39 @@ export default function RelatoriosPage() {
     return listMesesComLancamentos(data);
   }, [data]);
 
+  const instituicoesCoop = useMemo(() => {
+    if (!data) return [];
+    return data.instituicoes.filter((i) => !coopId || i.cooperativaId === coopId);
+  }, [data, coopId]);
+
+  const instituicaoSelecionadaId = instituicaoId || instituicoesCoop[0]?.id || "";
+
   const tituloRelatorio = RELATORIOS.find((r) => r.id === tipo)?.label ?? "Relatório";
+
+  const resolveInstituicaoId = () => {
+    if (tipo === "entregas_instituicao" || tipo === "entregas_por_itens") {
+      return instituicaoSelecionadaId;
+    }
+    return "";
+  };
+
+  const gerarHtmlDocumento = () => {
+    if (!data) return "";
+    if (tipo === "entregas_por_itens") {
+      const inst = resolveInstituicaoId();
+      if (!inst) return "";
+      return gerarRelatorioEntregasPorItensHtml(data, mes, inst, coopId);
+    }
+    return gerarRelatorioFinanceiroHtml(data, mes, tituloRelatorio);
+  };
+
+  const nomeDocumento = () => {
+    if (tipo === "entregas_por_itens") {
+      const inst = data?.instituicoes.find((i) => i.id === instituicaoSelecionadaId);
+      return nomeArquivoRelatorio(tipo, mes, inst?.nome);
+    }
+    return nomeArquivoRelatorio(tipo, mes);
+  };
 
   const handleExportCsv = () => {
     if (!data) return;
@@ -127,7 +163,7 @@ export default function RelatoriosPage() {
         ]);
         break;
       case "entregas_instituicao": {
-        const inst = instituicaoId || data.instituicoes[0]?.id;
+        const inst = instituicaoSelecionadaId;
         if (!inst) break;
         const r = getRelatorioEntregasPorInstituicao(inst, mes, data);
         headers = ["Data", "Cooperado", "Nota", "Bruto", "Líquido", "Status"];
@@ -139,6 +175,23 @@ export default function RelatoriosPage() {
           String(n.valorLiquido),
           n.status,
         ]);
+        break;
+      }
+      case "entregas_por_itens": {
+        const inst = instituicaoSelecionadaId;
+        if (!inst) break;
+        const r = getRelatorioEntregasPorItens(inst, mes, data);
+        headers = ["Item", "Unidade", "Quantidade total", "Valor unitário", "Valor total"];
+        rows = r.itens.map((item) => [
+          item.produtoNome,
+          item.unidade,
+          String(item.quantidade),
+          String(item.precoUnitario),
+          String(item.valorTotal),
+        ]);
+        if (rows.length > 0) {
+          rows.push(["", "", "", "TOTAL GERAL", String(r.totalBruto)]);
+        }
         break;
       }
       case "vendas_pnae": {
@@ -192,14 +245,14 @@ export default function RelatoriosPage() {
   };
 
   const handleExportDocumento = () => {
-    if (!data) return;
-    const html = gerarRelatorioFinanceiroHtml(data, mes, tituloRelatorio);
-    baixarDocumentoHtml(html, nomeArquivoRelatorio(tipo, mes));
+    const html = gerarHtmlDocumento();
+    if (!html) return;
+    baixarDocumentoHtml(html, nomeDocumento());
   };
 
   const handlePrint = () => {
-    if (!data) return;
-    const html = gerarRelatorioFinanceiroHtml(data, mes, tituloRelatorio);
+    const html = gerarHtmlDocumento();
+    if (!html) return;
     imprimirDocumentoHtml(html);
   };
 
@@ -268,8 +321,8 @@ export default function RelatoriosPage() {
         );
       }
       case "entregas_instituicao": {
-        const inst = instituicaoId || data.instituicoes[0]?.id;
-        if (!inst) return <p className="text-gray-500">Selecione uma instituição.</p>;
+        const inst = instituicaoSelecionadaId;
+        if (!inst) return <p className="text-gray-500">Cadastre uma instituição em Contratos.</p>;
         const r = getRelatorioEntregasPorInstituicao(inst, mes, data);
         return (
           <>
@@ -288,6 +341,59 @@ export default function RelatoriosPage() {
                 { key: "status", label: "Status", render: (n) => <NotaStatusBadge status={n.status} /> },
               ]}
             />
+          </>
+        );
+      }
+      case "entregas_por_itens": {
+        const inst = instituicaoSelecionadaId;
+        if (!inst) return <p className="text-gray-500">Cadastre uma instituição em Contratos.</p>;
+        const r = getRelatorioEntregasPorItens(inst, mes, data);
+        return (
+          <>
+            <div className="mb-4 rounded-xl border border-green-200 bg-green-50/60 p-4">
+              <p className="text-sm font-semibold text-green-900">{r.instituicaoNome}</p>
+              <p className="text-xs text-green-800 mt-1">
+                {formatMesReferencia(mes)} · {r.quantidadeEntregas} entrega(s) conferida(s)
+              </p>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
+              <StatCard title="Itens distintos" value={String(r.itens.length)} />
+              <StatCard title="Total geral (bruto)" value={formatCurrency(r.totalBruto)} variant="success" />
+            </div>
+            <DataTable
+              data={r.itens.map((item, idx) => ({
+                ...item,
+                id: item.produtoInstituicaoId || `${item.produtoNome}-${idx}`,
+              }))}
+              keyField="id"
+              emptyMessage="Nenhum item conferido neste mês para esta instituição."
+              columns={[
+                { key: "produto", label: "Item", render: (item) => item.produtoNome },
+                {
+                  key: "unidade",
+                  label: "Unidade",
+                  render: (item) => labelUnidade(item.unidade) || item.unidade,
+                },
+                {
+                  key: "quantidade",
+                  label: "Quantidade total",
+                  render: (item) =>
+                    `${item.quantidade.toLocaleString("pt-BR", { maximumFractionDigits: 2 })} ${item.unidade}`,
+                },
+                { key: "preco", label: "Valor unitário", render: (item) => formatCurrency(item.precoUnitario) },
+                { key: "total", label: "Valor total", render: (item) => formatCurrency(item.valorTotal) },
+              ]}
+            />
+            {r.itens.length > 0 && (
+              <div className="mt-4 flex justify-end border-t border-gray-200 pt-4">
+                <p className="text-lg font-bold text-green-800">
+                  Total final: {formatCurrency(r.totalBruto)}
+                </p>
+              </div>
+            )}
+            <p className="text-xs text-gray-500 mt-4">
+              Use <strong>Documento</strong> para baixar o relatório formal endereçado à instituição.
+            </p>
           </>
         );
       }
@@ -393,16 +499,16 @@ export default function RelatoriosPage() {
             ))}
           </Select>
         </FormField>
-        {tipo === "entregas_instituicao" && (
-          <FormField label="Instituição">
-            <Select value={instituicaoId} onChange={(e) => setInstituicaoId(e.target.value)} className="min-w-[250px]">
+        {tipo === "entregas_instituicao" || tipo === "entregas_por_itens" ? (
+          <FormField label="Instituição de entrega">
+            <Select value={instituicaoSelecionadaId} onChange={(e) => setInstituicaoId(e.target.value)} className="min-w-[250px]">
               <option value="">Selecione...</option>
-              {data.instituicoes.map((i) => (
+              {instituicoesCoop.map((i) => (
                 <option key={i.id} value={i.id}>{i.nome}</option>
               ))}
             </Select>
           </FormField>
-        )}
+        ) : null}
         {tipo === "pagar_cooperado" && (
           <FormField label="Cooperado">
             <Select value={cooperadoId} onChange={(e) => setCooperadoId(e.target.value)} className="min-w-[200px]">

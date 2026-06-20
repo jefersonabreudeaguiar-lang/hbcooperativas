@@ -1,5 +1,5 @@
-import type { AppData, Cooperado, FechamentoMensal, NotaPedido } from "@/types";
-import { getCooperadoNome, sumBy } from "@/utils/calculations";
+import type { AppData, Cooperado, FechamentoMensal, Instituicao, NotaPedido } from "@/types";
+import { getCooperadoNome, round2, sumBy } from "@/utils/calculations";
 import { getCurrentMesReferencia } from "@/utils/format";
 import { getTotalAPagarCooperado } from "@/services/notaPedidoService";
 
@@ -49,6 +49,25 @@ export interface LinhaInstituicaoFechamento {
   entregas: number;
   valorBruto: number;
   valorLiquido: number;
+}
+
+export interface LinhaItemEntregaRelatorio {
+  produtoInstituicaoId: string;
+  produtoNome: string;
+  unidade: string;
+  precoUnitario: number;
+  quantidade: number;
+  valorTotal: number;
+}
+
+export interface RelatorioEntregasPorItens {
+  mesReferencia: string;
+  instituicao: Instituicao | undefined;
+  instituicaoNome: string;
+  itens: LinhaItemEntregaRelatorio[];
+  quantidadeEntregas: number;
+  totalBruto: number;
+  totalLiquido: number;
 }
 
 function notasDoMes(data: AppData, mes: string): NotaPedido[] {
@@ -232,6 +251,56 @@ export function getRelatorioPNAELive(mesReferencia: string, data: AppData) {
     entregas,
     totalBruto: sumBy(entregas, (n) => n.valorBruto),
     totalLiquido: sumBy(entregas, (n) => n.valorLiquido),
+  };
+}
+
+/** Consolida quantidades e valores por item das entregas conferidas de uma instituição no mês. */
+export function getRelatorioEntregasPorItensInstituicao(
+  mesReferencia: string,
+  instituicaoId: string,
+  data: AppData
+): RelatorioEntregasPorItens {
+  const inst = data.instituicoes.find((i) => i.id === instituicaoId);
+  const notas = notasConferidasOuPagas(data, mesReferencia).filter((n) => n.instituicaoId === instituicaoId);
+
+  const map = new Map<string, LinhaItemEntregaRelatorio>();
+  for (const nota of notas) {
+    for (const item of nota.itens ?? []) {
+      if (item.quantidade <= 0) continue;
+      const key =
+        item.produtoInstituicaoId ||
+        `${item.produtoNome.trim().toLowerCase()}::${item.unidade}::${item.precoUnitario}`;
+      const valor = round2(item.quantidade * item.precoUnitario);
+      const cur = map.get(key);
+      if (cur) {
+        cur.quantidade = round2(cur.quantidade + item.quantidade);
+        cur.valorTotal = round2(cur.valorTotal + valor);
+      } else {
+        map.set(key, {
+          produtoInstituicaoId: item.produtoInstituicaoId,
+          produtoNome: item.produtoNome,
+          unidade: item.unidade,
+          precoUnitario: item.precoUnitario,
+          quantidade: item.quantidade,
+          valorTotal: valor,
+        });
+      }
+    }
+  }
+
+  const itens = [...map.values()].sort((a, b) =>
+    a.produtoNome.localeCompare(b.produtoNome, "pt-BR")
+  );
+  const totalItens = round2(itens.reduce((s, i) => s + i.valorTotal, 0));
+
+  return {
+    mesReferencia,
+    instituicao: inst,
+    instituicaoNome: inst?.nome ?? "Instituição",
+    itens,
+    quantidadeEntregas: notas.length,
+    totalBruto: totalItens > 0 ? totalItens : sumBy(notas, (n) => n.valorBruto),
+    totalLiquido: sumBy(notas, (n) => n.valorLiquido),
   };
 }
 

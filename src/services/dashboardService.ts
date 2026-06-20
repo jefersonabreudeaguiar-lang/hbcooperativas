@@ -7,6 +7,7 @@ import {
   calcularFechamentoMensalLive,
   fechamentoToPartial,
   getRelatorioEntregasInstituicaoLive,
+  getRelatorioEntregasPorItensInstituicao,
   getRelatorioPagarCooperado,
   getRelatorioPNAELive,
   getResumoFinanceiroMes,
@@ -182,6 +183,15 @@ export function getRelatorioEntregasPorInstituicao(instituicaoId: string, mesRef
 export function getRelatorioPNAE(mesReferencia: string, data?: AppData) {
   const d = data ?? getData();
   return getRelatorioPNAELive(mesReferencia, d);
+}
+
+export function getRelatorioEntregasPorItens(
+  instituicaoId: string,
+  mesReferencia: string,
+  data?: AppData
+) {
+  const d = data ?? getData();
+  return getRelatorioEntregasPorItensInstituicao(mesReferencia, instituicaoId, d);
 }
 
 export { listMesesComLancamentos, getRelatorioPagarCooperado, calcularFechamentoMensalLive };
