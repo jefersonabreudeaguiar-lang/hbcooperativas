@@ -3,6 +3,15 @@ import { getData } from "@/services/dataStore";
 import { sumBy } from "@/utils/calculations";
 import { getCurrentMesReferencia } from "@/utils/format";
 import { getTotalAPagarCooperado, getTotalRecebidoCooperado } from "@/services/notaPedidoService";
+import {
+  calcularFechamentoMensalLive,
+  fechamentoToPartial,
+  getRelatorioEntregasInstituicaoLive,
+  getRelatorioPagarCooperado,
+  getRelatorioPNAELive,
+  getResumoFinanceiroMes,
+  listMesesComLancamentos,
+} from "@/services/relatorioService";
 
 export interface CooperadoDashboardStats {
   valorAReceber: number;
@@ -98,8 +107,16 @@ export function getAdminStats(data?: AppData): AdminDashboardStats {
   const mes = getCurrentMesReferencia();
   const ano = mes.split("-")[0];
 
-  const entregasMes = filterByMes(d.entregas, (e) => e.dataEntrega, mes);
-  const entregasAno = filterByAno(d.entregas, (e) => e.dataEntrega, ano);
+  const entregasMes = filterByMes(
+    d.notasPedido.filter((n) => n.status === "conferida" || n.status === "pago"),
+    (n) => n.dataEntrega,
+    mes
+  );
+  const entregasAno = filterByAno(
+    d.notasPedido.filter((n) => n.status === "conferida" || n.status === "pago"),
+    (n) => n.dataEntrega,
+    ano
+  );
 
   const financeiroMes = d.financeiro.find((f) => f.mesReferencia === mes);
 
@@ -127,39 +144,21 @@ export function getAdminStats(data?: AppData): AdminDashboardStats {
 
 export function calcularFechamentoMensal(mesReferencia: string, data?: AppData): Partial<FechamentoMensal> {
   const d = data ?? getData();
-  const entregas = d.entregas.filter((e) => e.dataEntrega.startsWith(mesReferencia));
-  const pagamentos = d.pagamentos.filter((p) => p.dataPrevista.startsWith(mesReferencia));
-  const mensalidades = d.mensalidades.filter((m) => m.mesReferencia === mesReferencia && m.status === "paga");
-  const cotas = d.cotas.flatMap((c) =>
-    c.historicoPagamentos.filter((hp) => hp.data.startsWith(mesReferencia)).map((hp) => hp)
-  );
-  const descontos = d.descontos.filter((dc) => dc.data.startsWith(mesReferencia));
-  const financeiro = d.financeiro.find((f) => f.mesReferencia === mesReferencia);
-
-  return {
-    mesReferencia,
-    totalVendas: sumBy(entregas, (e) => e.valorBruto),
-    totalPagamentos: sumBy(pagamentos.filter((p) => p.status === "pago"), (p) => p.valorLiquido),
-    totalMensalidades: sumBy(mensalidades, (m) => m.valor),
-    totalCotas: sumBy(cotas, (c) => c.valor),
-    totalDescontos: sumBy(descontos, (dc) => dc.valorDescontado),
-    saldoCooperativa: financeiro?.saldoFinal ?? 0,
-  };
+  return fechamentoToPartial(calcularFechamentoMensalLive(mesReferencia, d));
 }
 
 export function getRelatorioResumoFinanceiro(mesReferencia: string, data?: AppData) {
   const d = data ?? getData();
-  const financeiro = d.financeiro.find((f) => f.mesReferencia === mesReferencia);
-  const entregas = d.entregas.filter((e) => e.dataEntrega.startsWith(mesReferencia));
-  const pagamentos = d.pagamentos.filter((p) => p.dataPrevista.startsWith(mesReferencia));
-
+  const r = getResumoFinanceiroMes(mesReferencia, d);
+  const pagamentosMes = d.pagamentosCooperado.filter((p) => p.mesReferencia === mesReferencia);
   return {
     mesReferencia,
-    financeiro,
-    totalVendas: sumBy(entregas, (e) => e.valorBruto),
-    totalLiquido: sumBy(entregas, (e) => e.valorLiquido),
-    pagamentosPendentes: pagamentos.filter((p) => p.status !== "pago"),
-    pagamentosRealizados: pagamentos.filter((p) => p.status === "pago"),
+    financeiro: d.financeiro.find((f) => f.mesReferencia === mesReferencia),
+    totalVendas: r.totalVendasBruto,
+    totalLiquido: r.totalVendasLiquido,
+    pagamentosPendentes: pagamentosMes.filter((p) => p.status === "aguardando_confirmacao"),
+    pagamentosRealizados: pagamentosMes.filter((p) => p.status === "confirmado"),
+    resumo: r,
   };
 }
 
@@ -175,28 +174,17 @@ export function getRelatorioPorCooperado(cooperadoId: string, data?: AppData) {
   };
 }
 
-export function getRelatorioEntregasPorInstituicao(instituicaoId: string, data?: AppData) {
+export function getRelatorioEntregasPorInstituicao(instituicaoId: string, mesReferencia: string, data?: AppData) {
   const d = data ?? getData();
-  const entregas = d.entregas.filter((e) => e.instituicaoId === instituicaoId);
-  return {
-    instituicao: d.instituicoes.find((i) => i.id === instituicaoId),
-    entregas,
-    totalBruto: sumBy(entregas, (e) => e.valorBruto),
-    totalLiquido: sumBy(entregas, (e) => e.valorLiquido),
-  };
+  return getRelatorioEntregasInstituicaoLive(mesReferencia, instituicaoId, d);
 }
 
-export function getRelatorioPNAE(data?: AppData) {
+export function getRelatorioPNAE(mesReferencia: string, data?: AppData) {
   const d = data ?? getData();
-  const instPNAE = d.instituicoes.filter((i) => i.tipo === "PNAE");
-  const entregas = d.entregas.filter((e) => instPNAE.some((i) => i.id === e.instituicaoId));
-  return {
-    instituicoes: instPNAE,
-    entregas,
-    totalBruto: sumBy(entregas, (e) => e.valorBruto),
-    totalLiquido: sumBy(entregas, (e) => e.valorLiquido),
-  };
+  return getRelatorioPNAELive(mesReferencia, d);
 }
+
+export { listMesesComLancamentos, getRelatorioPagarCooperado, calcularFechamentoMensalLive };
 
 export function getFinanceiroResumoCooperado(data?: AppData): Pick<FinanceiroMensal, "saldoFinal" | "entradas" | "saidas" | "dataAtualizacao"> | null {
   const d = data ?? getData();

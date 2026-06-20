@@ -1,19 +1,36 @@
 "use client";
 
-import { useState, useMemo } from "react";
-import { Download } from "lucide-react";
+import { useState, useMemo, useEffect } from "react";
+import { Download, Printer, FileText } from "lucide-react";
 import { useAppData } from "@/hooks/useAppData";
+import { usePermissions } from "@/hooks/usePermissions";
+import { getUserCooperativaId } from "@/utils/cooperativa";
 import { PageHeader, FilterBar, DataTable } from "@/components/ui/Table";
 import { Button } from "@/components/ui/Button";
 import { Select, FormField } from "@/components/ui/Form";
 import { Card, StatCard } from "@/components/ui/Card";
 import { StatusBadge } from "@/components/ui/StatusBadge";
+import { NotaStatusBadge } from "@/components/ui/NotaStatusBadge";
 import {
-  getRelatorioResumoFinanceiro, getRelatorioPorCooperado, getRelatorioEntregasPorInstituicao,
-  getRelatorioPNAE, exportToCSV, downloadCSV,
+  getRelatorioResumoFinanceiro,
+  getRelatorioEntregasPorInstituicao,
+  getRelatorioPNAE,
+  getRelatorioPagarCooperado,
+  listMesesComLancamentos,
+  exportToCSV,
+  downloadCSV,
 } from "@/services/dashboardService";
+import { syncAllCooperativaFromCloud } from "@/services/cooperativaSyncCloudService";
+import { resolveCooperativaCnpj } from "@/services/notaPedidoCloudService";
+import { getData } from "@/services/dataStore";
+import {
+  baixarDocumentoHtml,
+  gerarRelatorioFinanceiroHtml,
+  imprimirDocumentoHtml,
+  nomeArquivoRelatorio,
+} from "@/utils/relatorioHtml";
 import { formatCurrency, formatDate, formatMesReferencia, getCurrentMesReferencia } from "@/utils/format";
-import { getCooperadoNome, sumBy } from "@/utils/calculations";
+import { getCooperadoNome } from "@/utils/calculations";
 
 const RELATORIOS = [
   { id: "resumo_financeiro", label: "Resumo Financeiro Mensal" },
@@ -28,51 +45,162 @@ const RELATORIOS = [
 
 export default function RelatoriosPage() {
   const data = useAppData();
+  const { user } = usePermissions();
+  const coopId = user && data ? getUserCooperativaId(user, data) : undefined;
   const [tipo, setTipo] = useState("resumo_financeiro");
   const [mes, setMes] = useState(getCurrentMesReferencia());
   const [cooperadoId, setCooperadoId] = useState("");
   const [instituicaoId, setInstituicaoId] = useState("");
 
+  useEffect(() => {
+    if (!data || !coopId || !user) return;
+    void (async () => {
+      const cnpj = await resolveCooperativaCnpj(data, coopId, user);
+      if (cnpj) await syncAllCooperativaFromCloud(cnpj);
+    })();
+    const id = setInterval(() => {
+      void (async () => {
+        const d = getData();
+        const cnpj = await resolveCooperativaCnpj(d, coopId, user);
+        if (cnpj) await syncAllCooperativaFromCloud(cnpj);
+      })();
+    }, 12000);
+    return () => clearInterval(id);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [coopId, user?.id]);
+
   const meses = useMemo(() => {
-    if (!data) return [];
-    const all = new Set([
-      ...data.financeiro.map((f) => f.mesReferencia),
-      ...data.entregas.map((e) => e.dataEntrega.slice(0, 7)),
-      ...data.mensalidades.map((m) => m.mesReferencia),
-    ]);
-    return [...all].sort().reverse();
+    if (!data) return [getCurrentMesReferencia()];
+    return listMesesComLancamentos(data);
   }, [data]);
 
-  const handleExport = () => {
+  const tituloRelatorio = RELATORIOS.find((r) => r.id === tipo)?.label ?? "Relatório";
+
+  const handleExportCsv = () => {
     if (!data) return;
     let headers: string[] = [];
     let rows: string[][] = [];
 
     switch (tipo) {
+      case "resumo_financeiro": {
+        const r = getRelatorioResumoFinanceiro(mes, data);
+        headers = ["Indicador", "Valor"];
+        rows = [
+          ["Entregas conferidas", String(r.resumo.totalEntregas)],
+          ["Vendas bruto", String(r.totalVendas)],
+          ["Vendas líquido", String(r.totalLiquido)],
+          ["A pagar cooperados", String(r.resumo.valoresAPagar)],
+          ["Pagamentos realizados", String(r.resumo.pagamentosRealizados)],
+          ["Aguardando conferência", String(r.resumo.entregasAguardando)],
+        ];
+        break;
+      }
+      case "pagar_cooperado": {
+        headers = ["Cooperado", "Entregas", "Valor a pagar"];
+        rows = getRelatorioPagarCooperado(mes, data, cooperadoId || undefined).map((x) => [
+          x.cooperado,
+          String(x.entregas),
+          String(x.total),
+        ]);
+        break;
+      }
       case "mensalidades_abertas":
         headers = ["Cooperado", "Mês", "Valor", "Vencimento", "Status"];
-        rows = data.mensalidades.filter((m) => m.status !== "paga").map((m) => [
-          getCooperadoNome(data.cooperados, m.cooperadoId), m.mesReferencia, String(m.valor), m.vencimento, m.status,
-        ]);
+        rows = data.mensalidades
+          .filter((m) => m.status !== "paga" && (!mes || m.mesReferencia === mes))
+          .map((m) => [
+            getCooperadoNome(data.cooperados, m.cooperadoId),
+            m.mesReferencia,
+            String(m.valor),
+            m.vencimento,
+            m.status,
+          ]);
         break;
       case "cotas_abertas":
         headers = ["Cooperado", "Tipo", "Parcelas", "Valor Parcela", "Status"];
         rows = data.cotas.filter((c) => c.status !== "quitada").map((c) => [
-          getCooperadoNome(data.cooperados, c.cooperadoId), c.tipo, `${c.parcelasPagas}/${c.quantidadeParcelas}`, String(c.valorParcela), c.status,
+          getCooperadoNome(data.cooperados, c.cooperadoId),
+          c.tipo,
+          `${c.parcelasPagas}/${c.quantidadeParcelas}`,
+          String(c.valorParcela),
+          c.status,
         ]);
         break;
+      case "entregas_instituicao": {
+        const inst = instituicaoId || data.instituicoes[0]?.id;
+        if (!inst) break;
+        const r = getRelatorioEntregasPorInstituicao(inst, mes, data);
+        headers = ["Data", "Cooperado", "Nota", "Bruto", "Líquido", "Status"];
+        rows = r.entregas.map((n) => [
+          n.dataEntrega,
+          getCooperadoNome(data.cooperados, n.cooperadoId),
+          n.numeroNota,
+          String(n.valorBruto),
+          String(n.valorLiquido),
+          n.status,
+        ]);
+        break;
+      }
+      case "vendas_pnae": {
+        const r = getRelatorioPNAE(mes, data);
+        headers = ["Data", "Cooperado", "Nota", "Bruto", "Status"];
+        rows = r.entregas.map((n) => [
+          n.dataEntrega,
+          getCooperadoNome(data.cooperados, n.cooperadoId),
+          n.numeroNota,
+          String(n.valorBruto),
+          n.status,
+        ]);
+        break;
+      }
       case "descontos_aplicados":
         headers = ["Data", "Cooperado", "Tipo", "Motivo", "Valor Descontado"];
-        rows = data.descontos.map((d) => [
-          d.data, getCooperadoNome(data.cooperados, d.cooperadoId), d.tipo, d.motivo, String(d.valorDescontado),
-        ]);
+        rows = data.descontos
+          .filter((d) => !mes || d.data.startsWith(mes))
+          .map((d) => [
+            d.data,
+            getCooperadoNome(data.cooperados, d.cooperadoId),
+            d.tipo,
+            d.motivo,
+            String(d.valorDescontado),
+          ]);
         break;
+      case "saldo_mensal": {
+        const fin = data.financeiro.find((f) => f.mesReferencia === mes);
+        const r = getRelatorioResumoFinanceiro(mes, data);
+        headers = ["Campo", "Valor"];
+        rows = fin
+          ? [
+              ["Saldo inicial", String(fin.saldoInicial)],
+              ["Entradas", String(fin.entradas)],
+              ["Saídas", String(fin.saidas)],
+              ["Saldo final", String(fin.saldoFinal)],
+            ]
+          : [
+              ["Vendas líquidas (calculado)", String(r.totalLiquido)],
+              ["Pagamentos realizados", String(r.resumo.pagamentosRealizados)],
+              ["Mensalidades recebidas", String(r.resumo.mensalidadesRecebidas)],
+            ];
+        break;
+      }
       default:
-        headers = ["Relatório", "Valor"];
+        headers = ["Relatório", "Mês"];
         rows = [[tipo, mes]];
     }
 
     downloadCSV(`relatorio_${tipo}_${mes}.csv`, exportToCSV(headers, rows));
+  };
+
+  const handleExportDocumento = () => {
+    if (!data) return;
+    const html = gerarRelatorioFinanceiroHtml(data, mes, tituloRelatorio);
+    baixarDocumentoHtml(html, nomeArquivoRelatorio(tipo, mes));
+  };
+
+  const handlePrint = () => {
+    if (!data) return;
+    const html = gerarRelatorioFinanceiroHtml(data, mes, tituloRelatorio);
+    imprimirDocumentoHtml(html);
   };
 
   if (!data) return null;
@@ -82,101 +210,140 @@ export default function RelatoriosPage() {
       case "resumo_financeiro": {
         const r = getRelatorioResumoFinanceiro(mes, data);
         return (
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            <StatCard title="Total Vendas" value={formatCurrency(r.totalVendas)} />
-            <StatCard title="Total Líquido" value={formatCurrency(r.totalLiquido)} variant="success" />
-            <StatCard title="Pagamentos Pendentes" value={String(r.pagamentosPendentes.length)} variant="warning" />
+          <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
+            <StatCard title="Entregas conferidas" value={String(r.resumo.totalEntregas)} />
+            <StatCard title="Vendas (bruto)" value={formatCurrency(r.totalVendas)} />
+            <StatCard title="Vendas (líquido)" value={formatCurrency(r.totalLiquido)} variant="success" />
+            <StatCard title="A pagar cooperados" value={formatCurrency(r.resumo.valoresAPagar)} variant="warning" />
+            <StatCard title="Pagamentos realizados" value={formatCurrency(r.resumo.pagamentosRealizados)} variant="success" />
+            <StatCard title="Aguardando conferência" value={String(r.resumo.entregasAguardando)} />
           </div>
         );
       }
       case "pagar_cooperado": {
-        const pendentes = data.pagamentos.filter((p) => p.status === "pendente" || p.status === "parcial");
-        const porCooperado = data.cooperados.map((c) => ({
-          cooperado: c.nomeCompleto,
-          total: sumBy(pendentes.filter((p) => p.cooperadoId === c.id), (p) => p.valorLiquido),
-        })).filter((x) => x.total > 0);
+        const porCooperado = getRelatorioPagarCooperado(mes, data, cooperadoId || undefined);
         return (
-          <DataTable data={porCooperado} keyField="cooperado" columns={[
-            { key: "cooperado", label: "Cooperado" },
-            { key: "total", label: "Valor a Pagar", render: (r) => formatCurrency(r.total) },
-          ]} />
+          <DataTable
+            data={porCooperado}
+            keyField="cooperado"
+            columns={[
+              { key: "cooperado", label: "Cooperado" },
+              { key: "entregas", label: "Entregas" },
+              { key: "total", label: "Valor a Pagar", render: (r) => formatCurrency(r.total) },
+            ]}
+            emptyMessage="Nenhum valor a pagar neste mês."
+          />
         );
       }
       case "mensalidades_abertas": {
-        const items = data.mensalidades.filter((m) => m.status !== "paga");
+        const items = data.mensalidades.filter((m) => m.status !== "paga" && m.mesReferencia === mes);
         return (
-          <DataTable data={items} keyField="id" columns={[
-            { key: "cooperado", label: "Cooperado", render: (m) => getCooperadoNome(data.cooperados, m.cooperadoId) },
-            { key: "mes", label: "Mês", render: (m) => formatMesReferencia(m.mesReferencia) },
-            { key: "valor", label: "Valor", render: (m) => formatCurrency(m.valor) },
-            { key: "vencimento", label: "Vencimento", render: (m) => formatDate(m.vencimento) },
-            { key: "status", label: "Status", render: (m) => <StatusBadge status={m.status} /> },
-          ]} />
+          <DataTable
+            data={items}
+            keyField="id"
+            columns={[
+              { key: "cooperado", label: "Cooperado", render: (m) => getCooperadoNome(data.cooperados, m.cooperadoId) },
+              { key: "mes", label: "Mês", render: (m) => formatMesReferencia(m.mesReferencia) },
+              { key: "valor", label: "Valor", render: (m) => formatCurrency(m.valor) },
+              { key: "vencimento", label: "Vencimento", render: (m) => formatDate(m.vencimento) },
+              { key: "status", label: "Status", render: (m) => <StatusBadge status={m.status} /> },
+            ]}
+          />
         );
       }
       case "cotas_abertas": {
         const items = data.cotas.filter((c) => c.status !== "quitada");
         return (
-          <DataTable data={items} keyField="id" columns={[
-            { key: "cooperado", label: "Cooperado", render: (c) => getCooperadoNome(data.cooperados, c.cooperadoId) },
-            { key: "tipo", label: "Tipo" },
-            { key: "parcelas", label: "Parcelas", render: (c) => `${c.parcelasPagas}/${c.quantidadeParcelas}` },
-            { key: "valorParcela", label: "Valor Parcela", render: (c) => formatCurrency(c.valorParcela) },
-            { key: "status", label: "Status", render: (c) => <StatusBadge status={c.status} /> },
-          ]} />
+          <DataTable
+            data={items}
+            keyField="id"
+            columns={[
+              { key: "cooperado", label: "Cooperado", render: (c) => getCooperadoNome(data.cooperados, c.cooperadoId) },
+              { key: "tipo", label: "Tipo" },
+              { key: "parcelas", label: "Parcelas", render: (c) => `${c.parcelasPagas}/${c.quantidadeParcelas}` },
+              { key: "valorParcela", label: "Valor Parcela", render: (c) => formatCurrency(c.valorParcela) },
+              { key: "status", label: "Status", render: (c) => <StatusBadge status={c.status} /> },
+            ]}
+          />
         );
       }
       case "entregas_instituicao": {
         const inst = instituicaoId || data.instituicoes[0]?.id;
         if (!inst) return <p className="text-gray-500">Selecione uma instituição.</p>;
-        const r = getRelatorioEntregasPorInstituicao(inst, data);
+        const r = getRelatorioEntregasPorInstituicao(inst, mes, data);
         return (
           <>
             <div className="grid grid-cols-2 gap-4 mb-4">
               <StatCard title="Total Bruto" value={formatCurrency(r.totalBruto)} />
               <StatCard title="Total Líquido" value={formatCurrency(r.totalLiquido)} variant="success" />
             </div>
-            <DataTable data={r.entregas} keyField="id" columns={[
-              { key: "data", label: "Data", render: (e) => formatDate(e.dataEntrega) },
-              { key: "cooperado", label: "Cooperado", render: (e) => getCooperadoNome(data.cooperados, e.cooperadoId) },
-              { key: "produto", label: "Produto" },
-              { key: "valorBruto", label: "Bruto", render: (e) => formatCurrency(e.valorBruto) },
-              { key: "status", label: "Status", render: (e) => <StatusBadge status={e.status} /> },
-            ]} />
+            <DataTable
+              data={r.entregas}
+              keyField="id"
+              columns={[
+                { key: "data", label: "Data", render: (n) => formatDate(n.dataEntrega) },
+                { key: "cooperado", label: "Cooperado", render: (n) => getCooperadoNome(data.cooperados, n.cooperadoId) },
+                { key: "nota", label: "Nota", render: (n) => n.numeroNota },
+                { key: "valorBruto", label: "Bruto", render: (n) => formatCurrency(n.valorBruto) },
+                { key: "status", label: "Status", render: (n) => <NotaStatusBadge status={n.status} /> },
+              ]}
+            />
           </>
         );
       }
       case "vendas_pnae": {
-        const r = getRelatorioPNAE(data);
+        const r = getRelatorioPNAE(mes, data);
         return (
           <>
             <div className="grid grid-cols-2 gap-4 mb-4">
               <StatCard title="Total PNAE" value={formatCurrency(r.totalBruto)} variant="gold" />
               <StatCard title="Líquido PNAE" value={formatCurrency(r.totalLiquido)} variant="success" />
             </div>
-            <DataTable data={r.entregas} keyField="id" columns={[
-              { key: "data", label: "Data", render: (e) => formatDate(e.dataEntrega) },
-              { key: "cooperado", label: "Cooperado", render: (e) => getCooperadoNome(data.cooperados, e.cooperadoId) },
-              { key: "produto", label: "Produto" },
-              { key: "valorBruto", label: "Bruto", render: (e) => formatCurrency(e.valorBruto) },
-            ]} />
+            <DataTable
+              data={r.entregas}
+              keyField="id"
+              columns={[
+                { key: "data", label: "Data", render: (n) => formatDate(n.dataEntrega) },
+                { key: "cooperado", label: "Cooperado", render: (n) => getCooperadoNome(data.cooperados, n.cooperadoId) },
+                { key: "nota", label: "Nota", render: (n) => n.numeroNota },
+                { key: "valorBruto", label: "Bruto", render: (n) => formatCurrency(n.valorBruto) },
+              ]}
+            />
           </>
         );
       }
       case "descontos_aplicados": {
+        const items = data.descontos.filter((d) => d.data.startsWith(mes));
         return (
-          <DataTable data={data.descontos} keyField="id" columns={[
-            { key: "data", label: "Data", render: (d) => formatDate(d.data) },
-            { key: "cooperado", label: "Cooperado", render: (d) => getCooperadoNome(data.cooperados, d.cooperadoId) },
-            { key: "tipo", label: "Tipo" },
-            { key: "motivo", label: "Motivo" },
-            { key: "valorDescontado", label: "Descontado", render: (d) => formatCurrency(d.valorDescontado) },
-          ]} />
+          <DataTable
+            data={items}
+            keyField="id"
+            columns={[
+              { key: "data", label: "Data", render: (d) => formatDate(d.data) },
+              { key: "cooperado", label: "Cooperado", render: (d) => getCooperadoNome(data.cooperados, d.cooperadoId) },
+              { key: "tipo", label: "Tipo" },
+              { key: "motivo", label: "Motivo" },
+              { key: "valorDescontado", label: "Descontado", render: (d) => formatCurrency(d.valorDescontado) },
+            ]}
+          />
         );
       }
       case "saldo_mensal": {
         const fin = data.financeiro.find((f) => f.mesReferencia === mes);
-        if (!fin) return <Card><p className="text-gray-500">Sem dados para {formatMesReferencia(mes)}</p></Card>;
+        const r = getRelatorioResumoFinanceiro(mes, data);
+        if (!fin) {
+          return (
+            <div className="space-y-4">
+              <p className="text-sm text-gray-600">Saldo manual não cadastrado — valores calculados dos lançamentos:</p>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <StatCard title="Vendas líquidas" value={formatCurrency(r.totalLiquido)} variant="success" />
+                <StatCard title="Pagamentos realizados" value={formatCurrency(r.resumo.pagamentosRealizados)} />
+                <StatCard title="Mensalidades recebidas" value={formatCurrency(r.resumo.mensalidadesRecebidas)} />
+                <StatCard title="A pagar" value={formatCurrency(r.resumo.valoresAPagar)} variant="warning" />
+              </div>
+            </div>
+          );
+        }
         return (
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <StatCard title="Saldo Inicial" value={formatCurrency(fin.saldoInicial)} />
@@ -195,34 +362,54 @@ export default function RelatoriosPage() {
     <div>
       <PageHeader
         title="Relatórios"
-        subtitle="Relatórios filtráveis da cooperativa"
-        action={<Button variant="secondary" onClick={handleExport}><Download size={18} /> Exportar CSV</Button>}
+        subtitle="Atualizados automaticamente conforme entregas, ficha corrida e pagamentos"
+        action={
+          <div className="flex flex-wrap gap-2">
+            <Button variant="secondary" size="sm" onClick={handleExportCsv}>
+              <Download size={16} /> CSV
+            </Button>
+            <Button variant="secondary" size="sm" onClick={handleExportDocumento}>
+              <FileText size={16} /> Documento
+            </Button>
+            <Button size="sm" onClick={handlePrint}>
+              <Printer size={16} /> Imprimir
+            </Button>
+          </div>
+        }
       />
 
       <FilterBar>
         <FormField label="Tipo de Relatório">
           <Select value={tipo} onChange={(e) => setTipo(e.target.value)} className="min-w-[250px]">
-            {RELATORIOS.map((r) => <option key={r.id} value={r.id}>{r.label}</option>)}
+            {RELATORIOS.map((r) => (
+              <option key={r.id} value={r.id}>{r.label}</option>
+            ))}
           </Select>
         </FormField>
         <FormField label="Mês">
           <Select value={mes} onChange={(e) => setMes(e.target.value)} className="min-w-[180px]">
-            {meses.map((m) => <option key={m} value={m}>{formatMesReferencia(m)}</option>)}
+            {meses.map((m) => (
+              <option key={m} value={m}>{formatMesReferencia(m)}</option>
+            ))}
           </Select>
         </FormField>
         {tipo === "entregas_instituicao" && (
           <FormField label="Instituição">
             <Select value={instituicaoId} onChange={(e) => setInstituicaoId(e.target.value)} className="min-w-[250px]">
               <option value="">Selecione...</option>
-              {data.instituicoes.map((i) => <option key={i.id} value={i.id}>{i.nome}</option>)}
+              {data.instituicoes.map((i) => (
+                <option key={i.id} value={i.id}>{i.nome}</option>
+              ))}
             </Select>
           </FormField>
         )}
-        {cooperadoId !== undefined && tipo === "pagar_cooperado" && (
+        {tipo === "pagar_cooperado" && (
           <FormField label="Cooperado">
             <Select value={cooperadoId} onChange={(e) => setCooperadoId(e.target.value)} className="min-w-[200px]">
               <option value="">Todos</option>
-              {data.cooperados.map((c) => <option key={c.id} value={c.id}>{c.nomeCompleto}</option>)}
+              {data.cooperados.map((c) => (
+                <option key={c.id} value={c.id}>{c.nomeCompleto}</option>
+              ))}
             </Select>
           </FormField>
         )}

@@ -149,6 +149,7 @@ export default function NotasPedidoContent() {
   const [ultimaNotaEnviadaIds, setUltimaNotaEnviadaIds] = useState<string[]>([]);
   const [excluirNotaTarget, setExcluirNotaTarget] = useState<NotaPedido | null>(null);
   const [excluindo, setExcluindo] = useState(false);
+  const [mesFilterCooperado, setMesFilterCooperado] = useState("");
 
   const coopId = user && data ? getUserCooperativaId(user, data) : undefined;
   const ANEXAR_DRAFT_KEY = coopId ? `hb_anexar_draft_${coopId}` : "";
@@ -245,6 +246,32 @@ export default function NotasPedidoContent() {
       })
       .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
   }, [data, coopId, isCooperado, cooperadoId, filtroCooperadoId, statusFilter, abaConferenciaKey]);
+
+  const mesesComEntregas = useMemo(() => {
+    if (!isCooperado) return [];
+    const set = new Set(notas.map((n) => n.mesReferencia));
+    set.add(getCurrentMesReferencia());
+    return [...set].sort().reverse();
+  }, [notas, isCooperado]);
+
+  const notasCooperadoFiltradas = useMemo(() => {
+    if (!isCooperado || !mesFilterCooperado) return notas;
+    return notas.filter((n) => n.mesReferencia === mesFilterCooperado);
+  }, [notas, isCooperado, mesFilterCooperado]);
+
+  const notasPorMes = useMemo(() => {
+    if (!isCooperado) return [];
+    const map = new Map<string, NotaPedido[]>();
+    for (const n of notasCooperadoFiltradas) {
+      const mes = n.mesReferencia || getCurrentMesReferencia();
+      const list = map.get(mes) ?? [];
+      list.push(n);
+      map.set(mes, list);
+    }
+    return [...map.entries()]
+      .sort((a, b) => b[0].localeCompare(a[0]))
+      .map(([mes, items]) => ({ mes, items }));
+  }, [notasCooperadoFiltradas, isCooperado]);
 
 
   const pendentesTodas = useMemo(() => {
@@ -1143,8 +1170,6 @@ export default function NotasPedidoContent() {
     limparRascunhoAnexar();
   };
 
-  const mesAtual = getCurrentMesReferencia();
-
   if (!data) {
     return <div className="flex justify-center py-20"><div className="w-8 h-8 border-4 border-green-600 border-t-transparent rounded-full animate-spin" /></div>;
   }
@@ -1354,12 +1379,26 @@ export default function NotasPedidoContent() {
 
       {isCooperado && (
         <p className="text-sm text-gray-600 mb-4">
-          Entregas de {formatMesReferencia(mesAtual)} — tire uma foto por pedido. Imagens repetidas são rejeitadas.{" "}
+          Suas entregas estão organizadas por mês. Tire uma foto por pedido — imagens repetidas são rejeitadas.{" "}
           <Link href="/ficha-corrida" className="text-green-700 font-medium">Quanto vou receber</Link>.
         </p>
       )}
 
       <FilterBar>
+        {isCooperado && (
+          <FormField label="Mês">
+            <Select
+              value={mesFilterCooperado}
+              onChange={(e) => setMesFilterCooperado(e.target.value)}
+              className="min-w-[200px]"
+            >
+              <option value="">Todos os meses</option>
+              {mesesComEntregas.map((m) => (
+                <option key={m} value={m}>{formatMesReferencia(m)}</option>
+              ))}
+            </Select>
+          </FormField>
+        )}
         {!isCooperado && cooperadosCoop.length > 0 && pendentesTodas.length === 0 && (
           <FormField label="Cooperado">
             <Select value={filtroCooperadoId} onChange={(e) => setFiltroCooperadoId(e.target.value)} className="min-w-[200px]">
@@ -1381,15 +1420,48 @@ export default function NotasPedidoContent() {
         </FormField>
       </FilterBar>
 
+      {isCooperado ? (
+        notasCooperadoFiltradas.length === 0 ? (
+          <div className="text-center py-12 text-gray-500 bg-white rounded-2xl border">
+            <Camera size={40} className="mx-auto mb-3 text-gray-300" />
+            <p className="font-medium">
+              {mesFilterCooperado
+                ? `Nenhuma entrega em ${formatMesReferencia(mesFilterCooperado)}`
+                : "Nenhuma entrega ainda"}
+            </p>
+            <p className="text-sm mt-1">Toque em Enviar foto para registrar uma entrega.</p>
+          </div>
+        ) : (
+          <div className="space-y-8">
+            {notasPorMes.map(({ mes, items }) => (
+              <section key={mes}>
+                <div className="flex items-center justify-between gap-2 mb-3 sticky top-16 lg:top-0 z-10 bg-gray-50/95 backdrop-blur py-2 -mx-1 px-1">
+                  <h2 className="text-sm font-bold text-green-800">
+                    {formatMesReferencia(mes)}
+                  </h2>
+                  <span className="text-xs font-medium text-green-700 bg-green-100 px-2.5 py-1 rounded-full">
+                    {items.length} entrega{items.length !== 1 ? "s" : ""}
+                  </span>
+                </div>
+                <div className="space-y-3">
+                  {items.map((n) => (
+                    <div key={n.id}>{renderMobileCard(n)}</div>
+                  ))}
+                </div>
+              </section>
+            ))}
+          </div>
+        )
+      ) : (
       <DataTable
         data={notas}
         keyField="id"
         mobileCard={renderMobileCard}
-        emptyMessage={isCooperado ? "Nenhuma entrega ainda. Toque em \"Enviar foto\" para registrar." : "Nenhuma entrega registrada."}
+        emptyMessage="Nenhuma entrega registrada."
         columns={[
           { key: "numero", label: "Nota", render: (n) => n.numeroNota },
           { key: "data", label: "Data", render: (n) => formatDate(n.dataEntrega) },
-          ...(!isCooperado ? [{ key: "coop", label: "Cooperado", render: (n: NotaPedido) => getCooperadoNome(data.cooperados, n.cooperadoId) }] : []),
+          { key: "coop", label: "Cooperado", render: (n: NotaPedido) => getCooperadoNome(data.cooperados, n.cooperadoId) },
           { key: "escola", label: "Escola", render: (n) => getEscolaNotaLabel(n, data.instituicoes) },
           {
             key: "tipo",
@@ -1399,9 +1471,10 @@ export default function NotasPedidoContent() {
           { key: "valor", label: "Valor", render: (n) => (n.valorLiquido > 0 ? formatCurrency(n.valorLiquido) : "—") },
           { key: "status", label: "Status", render: (n) => <NotaStatusBadge status={n.status} /> },
         ]}
-        onView={isCooperado ? openView : (n) => (n.status === "aguardando_conferencia" ? void openConferir(n) : openView(n))}
-        viewLabel={isCooperado ? "Ver" : "Conferir"}
+        onView={(n) => (n.status === "aguardando_conferencia" ? void openConferir(n) : openView(n))}
+        viewLabel="Conferir"
       />
+      )}
 
       {isCooperado && (
         <div className="fixed bottom-20 right-4 z-30 sm:hidden">
