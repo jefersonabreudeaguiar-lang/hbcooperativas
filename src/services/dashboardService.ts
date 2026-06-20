@@ -1,0 +1,228 @@
+import type { AppData, FechamentoMensal, FinanceiroMensal } from "@/types";
+import { getData } from "@/services/dataStore";
+import { sumBy } from "@/utils/calculations";
+import { getCurrentMesReferencia } from "@/utils/format";
+import { getTotalAPagarCooperado, getTotalRecebidoCooperado } from "@/services/notaPedidoService";
+
+export interface CooperadoDashboardStats {
+  valorAReceber: number;
+  valorRecebido: number;
+  valorPendente: number;
+  mensalidadesAbertas: number;
+  cotasPendentes: number;
+  descontosAplicados: number;
+  totalEntregueMes: number;
+  totalVendidoAno: number;
+  statusFinanceiro: "em_dia" | "pendente" | "com_debito";
+}
+
+export interface AdminDashboardStats {
+  totalVendidoMes: number;
+  totalVendidoAno: number;
+  valoresAPagar: number;
+  valoresPagos: number;
+  saldoCooperativa: number;
+  mensalidadesRecebidas: number;
+  cotasRecebidas: number;
+  debitosAbertos: number;
+  cooperadosAtivos: number;
+  entregasPendentes: number;
+  pagamentosPendentes: number;
+}
+
+function filterByMes<T>(items: T[], getter: (item: T) => string, mes: string): T[] {
+  return items.filter((item) => getter(item).startsWith(mes));
+}
+
+function filterByAno<T>(items: T[], getter: (item: T) => string, ano: string): T[] {
+  return items.filter((item) => getter(item).startsWith(ano));
+}
+
+export function getCooperadoStats(cooperadoId: string, data?: AppData): CooperadoDashboardStats {
+  const d = data ?? getData();
+  const mes = getCurrentMesReferencia();
+  const ano = mes.split("-")[0];
+
+  const pagamentos = d.pagamentos.filter((p) => p.cooperadoId === cooperadoId);
+  const mensalidades = d.mensalidades.filter((m) => m.cooperadoId === cooperadoId);
+  const cotas = d.cotas.filter((c) => c.cooperadoId === cooperadoId);
+  const entregas = d.entregas.filter((e) => e.cooperadoId === cooperadoId);
+  const descontos = d.descontos.filter((dc) => dc.cooperadoId === cooperadoId);
+
+  const valorAReceber = getTotalAPagarCooperado(d, cooperadoId, mes);
+  const valorRecebido = getTotalRecebidoCooperado(d, cooperadoId, mes);
+  const valorPendente = valorAReceber;
+
+  const mensalidadesAbertas = mensalidades.filter(
+    (m) => m.status === "pendente" || m.status === "atrasada" || m.status === "parcelada"
+  ).length;
+
+  const cotasPendentes = cotas.filter(
+    (c) => c.status !== "quitada"
+  ).length;
+
+  const descontosAplicados = sumBy(descontos, (dc) => dc.valorDescontado);
+
+  const totalEntregueMes = sumBy(
+    filterByMes(d.notasPedido.filter((n) => n.cooperadoId === cooperadoId && n.status === "conferida"), (n) => n.dataEntrega, mes),
+    (n) => n.valorBruto
+  );
+
+  const totalVendidoAno = sumBy(
+    filterByAno(d.notasPedido.filter((n) => n.cooperadoId === cooperadoId && (n.status === "conferida" || n.status === "pago")), (n) => n.dataEntrega, ano),
+    (n) => n.valorBruto
+  );
+
+  const temAtrasada = mensalidades.some((m) => m.status === "atrasada") || cotas.some((c) => c.status === "atrasada");
+  const temPendente = mensalidades.some((m) => m.status === "pendente" || m.status === "parcelada") || cotas.some((c) => c.status !== "quitada");
+
+  let statusFinanceiro: "em_dia" | "pendente" | "com_debito" = "em_dia";
+  if (temAtrasada) statusFinanceiro = "com_debito";
+  else if (temPendente) statusFinanceiro = "pendente";
+
+  return {
+    valorAReceber,
+    valorRecebido,
+    valorPendente,
+    mensalidadesAbertas,
+    cotasPendentes,
+    descontosAplicados,
+    totalEntregueMes,
+    totalVendidoAno,
+    statusFinanceiro,
+  };
+}
+
+export function getAdminStats(data?: AppData): AdminDashboardStats {
+  const d = data ?? getData();
+  const mes = getCurrentMesReferencia();
+  const ano = mes.split("-")[0];
+
+  const entregasMes = filterByMes(d.entregas, (e) => e.dataEntrega, mes);
+  const entregasAno = filterByAno(d.entregas, (e) => e.dataEntrega, ano);
+
+  const financeiroMes = d.financeiro.find((f) => f.mesReferencia === mes);
+
+  const pagamentosPendentes = d.fichaCorrida.filter((f) => f.status === "pendente");
+  const pagamentosPagos = d.fichaCorrida.filter((f) => f.status === "pago");
+  const notasAguardando = d.notasPedido.filter((n) => n.status === "aguardando_conferencia");
+
+  const mensalidadesAbertas = d.mensalidades.filter((m) => m.status === "pendente" || m.status === "atrasada");
+  const cotasAbertas = d.cotas.filter((c) => c.status !== "quitada");
+
+  return {
+    totalVendidoMes: sumBy(entregasMes, (e) => e.valorBruto),
+    totalVendidoAno: sumBy(entregasAno, (e) => e.valorBruto),
+    valoresAPagar: sumBy(pagamentosPendentes, (f) => f.valorLiquido),
+    valoresPagos: sumBy(pagamentosPagos, (f) => f.valorLiquido),
+    saldoCooperativa: financeiroMes?.saldoFinal ?? 0,
+    mensalidadesRecebidas: financeiroMes?.mensalidadesRecebidas ?? 0,
+    cotasRecebidas: financeiroMes?.cotasRecebidas ?? 0,
+    debitosAbertos: sumBy(mensalidadesAbertas, (m) => m.valor) + sumBy(cotasAbertas, (c) => c.valorParcela * c.parcelasPendentes),
+    cooperadosAtivos: d.cooperados.filter((c) => c.status === "ativo").length,
+    entregasPendentes: notasAguardando.length,
+    pagamentosPendentes: pagamentosPendentes.length,
+  };
+}
+
+export function calcularFechamentoMensal(mesReferencia: string, data?: AppData): Partial<FechamentoMensal> {
+  const d = data ?? getData();
+  const entregas = d.entregas.filter((e) => e.dataEntrega.startsWith(mesReferencia));
+  const pagamentos = d.pagamentos.filter((p) => p.dataPrevista.startsWith(mesReferencia));
+  const mensalidades = d.mensalidades.filter((m) => m.mesReferencia === mesReferencia && m.status === "paga");
+  const cotas = d.cotas.flatMap((c) =>
+    c.historicoPagamentos.filter((hp) => hp.data.startsWith(mesReferencia)).map((hp) => hp)
+  );
+  const descontos = d.descontos.filter((dc) => dc.data.startsWith(mesReferencia));
+  const financeiro = d.financeiro.find((f) => f.mesReferencia === mesReferencia);
+
+  return {
+    mesReferencia,
+    totalVendas: sumBy(entregas, (e) => e.valorBruto),
+    totalPagamentos: sumBy(pagamentos.filter((p) => p.status === "pago"), (p) => p.valorLiquido),
+    totalMensalidades: sumBy(mensalidades, (m) => m.valor),
+    totalCotas: sumBy(cotas, (c) => c.valor),
+    totalDescontos: sumBy(descontos, (dc) => dc.valorDescontado),
+    saldoCooperativa: financeiro?.saldoFinal ?? 0,
+  };
+}
+
+export function getRelatorioResumoFinanceiro(mesReferencia: string, data?: AppData) {
+  const d = data ?? getData();
+  const financeiro = d.financeiro.find((f) => f.mesReferencia === mesReferencia);
+  const entregas = d.entregas.filter((e) => e.dataEntrega.startsWith(mesReferencia));
+  const pagamentos = d.pagamentos.filter((p) => p.dataPrevista.startsWith(mesReferencia));
+
+  return {
+    mesReferencia,
+    financeiro,
+    totalVendas: sumBy(entregas, (e) => e.valorBruto),
+    totalLiquido: sumBy(entregas, (e) => e.valorLiquido),
+    pagamentosPendentes: pagamentos.filter((p) => p.status !== "pago"),
+    pagamentosRealizados: pagamentos.filter((p) => p.status === "pago"),
+  };
+}
+
+export function getRelatorioPorCooperado(cooperadoId: string, data?: AppData) {
+  const d = data ?? getData();
+  return {
+    cooperado: d.cooperados.find((c) => c.id === cooperadoId),
+    entregas: d.entregas.filter((e) => e.cooperadoId === cooperadoId),
+    pagamentos: d.pagamentos.filter((p) => p.cooperadoId === cooperadoId),
+    mensalidades: d.mensalidades.filter((m) => m.cooperadoId === cooperadoId),
+    cotas: d.cotas.filter((c) => c.cooperadoId === cooperadoId),
+    descontos: d.descontos.filter((dc) => dc.cooperadoId === cooperadoId),
+  };
+}
+
+export function getRelatorioEntregasPorInstituicao(instituicaoId: string, data?: AppData) {
+  const d = data ?? getData();
+  const entregas = d.entregas.filter((e) => e.instituicaoId === instituicaoId);
+  return {
+    instituicao: d.instituicoes.find((i) => i.id === instituicaoId),
+    entregas,
+    totalBruto: sumBy(entregas, (e) => e.valorBruto),
+    totalLiquido: sumBy(entregas, (e) => e.valorLiquido),
+  };
+}
+
+export function getRelatorioPNAE(data?: AppData) {
+  const d = data ?? getData();
+  const instPNAE = d.instituicoes.filter((i) => i.tipo === "PNAE");
+  const entregas = d.entregas.filter((e) => instPNAE.some((i) => i.id === e.instituicaoId));
+  return {
+    instituicoes: instPNAE,
+    entregas,
+    totalBruto: sumBy(entregas, (e) => e.valorBruto),
+    totalLiquido: sumBy(entregas, (e) => e.valorLiquido),
+  };
+}
+
+export function getFinanceiroResumoCooperado(data?: AppData): Pick<FinanceiroMensal, "saldoFinal" | "entradas" | "saidas" | "dataAtualizacao"> | null {
+  const d = data ?? getData();
+  const mes = getCurrentMesReferencia();
+  const fin = d.financeiro.find((f) => f.mesReferencia === mes);
+  if (!fin) return null;
+  return {
+    saldoFinal: fin.saldoFinal,
+    entradas: fin.entradas,
+    saidas: fin.saidas,
+    dataAtualizacao: fin.dataAtualizacao,
+  };
+}
+
+export function exportToCSV(headers: string[], rows: string[][]): string {
+  const escape = (val: string) => `"${val.replace(/"/g, '""')}"`;
+  const lines = [headers.map(escape).join(","), ...rows.map((row) => row.map(escape).join(","))];
+  return lines.join("\n");
+}
+
+export function downloadCSV(filename: string, content: string): void {
+  const blob = new Blob(["\uFEFF" + content], { type: "text/csv;charset=utf-8;" });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  link.click();
+  URL.revokeObjectURL(url);
+}

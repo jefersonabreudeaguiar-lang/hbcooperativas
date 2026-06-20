@@ -1,36 +1,63 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# HB Cooperativas
 
-## Getting Started
+Plataforma web para gestão de cooperativas de agricultura familiar. Portal do Cooperado e Painel Administrativo com controle de entregas, PNAE, pagamentos, mensalidades, cotas e relatórios financeiros.
 
-First, run the development server:
+**HB Cooperativas** é o nome da plataforma. O nome de cada cooperativa aparece dinamicamente conforme o cadastro vinculado ao CNPJ.
+
+## Tecnologias
+
+- **Next.js 16** (App Router)
+- **TypeScript**
+- **Tailwind CSS**
+- Dados mockados com **localStorage**
+
+## Como Executar
 
 ```bash
+cd coopeagriplla-gestao
+npm install
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Acesse: [http://localhost:3000](http://localhost:3000)
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+No celular (mesma Wi‑Fi): `http://SEU-IP:3000` (ex.: `http://192.168.1.7:3000`)
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## Site grátis na internet (Vercel)
 
-## Learn More
+Para cooperados acessarem de qualquer lugar (4G/Wi‑Fi), publique na Vercel (plano gratuito):
 
-To learn more about Next.js, take a look at the following resources:
+→ Guia completo: **[DEPLOY.md](./DEPLOY.md)**
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+Resumo: conta em [vercel.com](https://vercel.com) → importar projeto → configurar as 3 variáveis do Supabase → deploy.
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## Fluxo de Cadastro
 
-## Deploy on Vercel
+1. **Responsável** acessa **/cadastro** → aba **Sou Responsável** → cadastra CNPJ, nome da cooperativa e cria conta de acesso
+2. **Cooperado** acessa **/cadastro** → aba **Sou Cooperado** → informa o **CNPJ da cooperativa**
+3. Se o CNPJ existir, o **nome da cooperativa aparece** automaticamente
+4. Cooperado completa e-mail, senha e dados pessoais e entra no portal
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+## Contas de Demonstração
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+| Perfil        | E-mail                          | Senha    |
+|---------------|---------------------------------|----------|
+| Administrador | admin@hbcooperativa.org.br      | admin123 |
+| Tesoureiro    | tesoureiro@hbcooperativa.org.br | tes123   |
+| Presidente    | presidente@hbcooperativa.org.br | pres123  |
+| Cooperado     | jose.silva@email.com            | coop123  |
+
+**CNPJ de teste para cadastro de cooperado:** `12.345.678/0001-90`  
+(Cooperativa Agrícola Familiar Primavera)
+
+## Sessão Persistente
+
+Após login ou cadastro, o usuário permanece logado até clicar em **Sair**.
+
+## Resetar Dados Mock
+
+```javascript
+localStorage.removeItem('coopeagriplla_data');
+localStorage.removeItem('coopeagriplla_session');
+location.reload();
+```
