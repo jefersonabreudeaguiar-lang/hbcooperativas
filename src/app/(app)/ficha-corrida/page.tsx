@@ -33,8 +33,9 @@ import { AlertBanner } from "@/components/ui/AlertBanner";
 import { PixQrModal } from "@/components/pix/PixQrModal";
 import { ConfirmDialog, PromptDialog } from "@/components/ui/ConfirmDialog";
 import { SignaturePad } from "@/components/ui/SignaturePad";
+import { ReciboResumoView } from "@/components/ficha/ReciboResumoView";
 import { cooperadoPrecisaCadastrarPix } from "@/utils/pix";
-import { baixarReciboHtml } from "@/utils/recibo";
+import { baixarReciboHtml, resumoReciboFromPagamento, nomeArquivoRecibo } from "@/utils/recibo";
 import { updateData, addAuditEntry, getData } from "@/services/dataStore";
 import { formatCurrency, formatDate, formatMesReferencia, getCurrentMesReferencia } from "@/utils/format";
 import type { PagamentoCooperadoRegistro } from "@/types";
@@ -116,6 +117,7 @@ export default function FichaCorridaPage() {
   const [motivoPix, setMotivoPix] = useState("");
   const [pagoMsg, setPagoMsg] = useState("");
   const [assinaturaModal, setAssinaturaModal] = useState(false);
+  const [reciboSucessoOpen, setReciboSucessoOpen] = useState(false);
   const [assinatura, setAssinatura] = useState<string | null>(null);
   const [pagamentoConfirmado, setPagamentoConfirmado] = useState<PagamentoCooperadoRegistro | null>(null);
 
@@ -262,6 +264,11 @@ export default function FichaCorridaPage() {
     );
   }, [data, cooperadoSelecionadoId, mesFilter]);
 
+  const resumoReciboPagamento = useMemo(() => {
+    if (!pagamentoAguardando) return null;
+    return resumoReciboFromPagamento(pagamentoAguardando, resumoItensMes);
+  }, [pagamentoAguardando, resumoItensMes]);
+
   const handlePixInvalido = () => {
     if (!cooperadoSelecionado || !user || !motivoPix.trim()) return;
     updateData((d) => {
@@ -327,6 +334,15 @@ export default function FichaCorridaPage() {
     })();
     setAssinaturaModal(false);
     setAssinatura(null);
+    setReciboSucessoOpen(true);
+  };
+
+  const reciboAtual = pagamentoConfirmado ?? pagamentoConfirmadoMes;
+
+  const baixarReciboAtual = () => {
+    const pg = reciboAtual;
+    if (!pg?.reciboHtml) return;
+    baixarReciboHtml(pg.reciboHtml, nomeArquivoRecibo(pg.mesReferencia, nomeCooperado || "cooperado"));
   };
 
   if (!data) return null;
@@ -349,10 +365,9 @@ export default function FichaCorridaPage() {
 
       {isCooperado && pagamentoAguardando && (
         <AlertBanner variant="success" title="Pagamento realizado pela cooperativa" className="mb-4">
-          Valor: <strong>{formatCurrency(pagamentoAguardando.valorLiquido)}</strong>. Confirme tocando em{" "}
-          <strong>PAGO</strong> e assine o recibo.
+          Valor: <strong>{formatCurrency(pagamentoAguardando.valorLiquido)}</strong>. Confira o recibo abaixo e confirme o recebimento assinando.
           <Button className="mt-3 w-full sm:w-auto" size="lg" onClick={() => setAssinaturaModal(true)}>
-            <CheckCircle2 size={18} /> PAGO — assinar recibo
+            <CheckCircle2 size={18} /> Confirmar recebimento
           </Button>
         </AlertBanner>
       )}
@@ -545,17 +560,28 @@ export default function FichaCorridaPage() {
         </AlertBanner>
       )}
 
-      {(pagamentoConfirmadoMes || pagamentoConfirmado) && (
-        <Card title="Comprovante de recebimento" className="mb-6">
-          <p className="text-sm text-gray-600 mb-3">Recibo assinado · {formatMesReferencia(mesFilter)}</p>
-          <Button
-            onClick={() => {
-              const pg = pagamentoConfirmado ?? pagamentoConfirmadoMes;
-              if (pg?.reciboHtml) baixarReciboHtml(pg.reciboHtml, `recibo-${mesFilter}.html`);
-            }}
-          >
-            <FileDown size={18} /> Baixar comprovante
-          </Button>
+      {reciboAtual && (
+        <Card title="Recibo assinado" className="mb-6">
+          <p className="text-sm text-gray-600 mb-3">
+            Recebimento confirmado · {formatMesReferencia(mesFilter)}
+            {reciboAtual.assinadoEm ? ` · ${formatDate(reciboAtual.assinadoEm.split("T")[0])}` : ""}
+          </p>
+          {reciboAtual.assinaturaCooperado && (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={reciboAtual.assinaturaCooperado}
+              alt="Assinatura do cooperado"
+              className="h-16 object-contain border-b-2 border-gray-800 mb-4 max-w-xs"
+            />
+          )}
+          <div className="flex flex-col sm:flex-row gap-2">
+            <Button onClick={baixarReciboAtual} size="lg" className="w-full sm:w-auto">
+              <FileDown size={18} /> Baixar recibo assinado
+            </Button>
+            {!isCooperado && (
+              <p className="text-xs text-gray-500 self-center">Arquivado na ficha do cooperado.</p>
+            )}
+          </div>
         </Card>
       )}
 
@@ -591,13 +617,49 @@ export default function FichaCorridaPage() {
         size="md"
         footer={
           <Button size="lg" className="w-full" disabled={!assinatura} onClick={handleEnviarAssinatura}>
-            <PenLine size={18} /> Enviar assinatura
+            <PenLine size={18} /> Confirmar assinatura e enviar recibo
           </Button>
         }
       >
-        <div className="bg-white rounded-xl p-2">
-          <p className="text-center text-gray-700 font-medium mb-4">Assine aqui para confirmar que recebeu o pagamento</p>
-          <SignaturePad onChange={setAssinatura} />
+        <div className="space-y-5">
+          <p className="text-sm text-gray-600">
+            Confira se os valores abaixo estão corretos. Em seguida, assine para confirmar que recebeu o pagamento.
+          </p>
+          {resumoReciboPagamento && pagamentoAguardando && (
+            <ReciboResumoView
+              resumo={resumoReciboPagamento}
+              mesReferencia={pagamentoAguardando.mesReferencia}
+              compact
+            />
+          )}
+          <div className="bg-green-50 border border-green-200 rounded-xl p-3">
+            <p className="text-center text-green-900 font-semibold mb-3">Assinatura do cooperado</p>
+            <SignaturePad onChange={setAssinatura} />
+          </div>
+        </div>
+      </Modal>
+
+      <Modal
+        open={reciboSucessoOpen}
+        onClose={() => setReciboSucessoOpen(false)}
+        title="Recebimento confirmado!"
+        size="sm"
+        footer={
+          <div className="flex flex-col gap-2 w-full">
+            <Button size="lg" className="w-full" onClick={() => { baixarReciboAtual(); setReciboSucessoOpen(false); }}>
+              <FileDown size={18} /> Baixar recibo assinado
+            </Button>
+            <Button variant="secondary" className="w-full" onClick={() => setReciboSucessoOpen(false)}>
+              Fechar
+            </Button>
+          </div>
+        }
+      >
+        <div className="text-center py-2">
+          <CheckCircle2 size={48} className="mx-auto text-green-600 mb-3" />
+          <p className="text-gray-700">
+            Sua assinatura foi registrada. O recibo foi enviado para a ficha na cooperativa e você pode baixá-lo agora.
+          </p>
         </div>
       </Modal>
     </div>

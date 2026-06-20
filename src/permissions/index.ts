@@ -94,6 +94,13 @@ const COOPERADO_MENU: { href: string; label: string; resource: Resource }[] = [
   { href: "/comunicados", label: "Avisos", resource: "comunicados" },
 ];
 
+/** Menu do cooperado no drawer mobile (sem repetir a barra inferior). */
+const COOPERADO_DRAWER_MENU: { href: string; label: string; resource: Resource }[] = [
+  { href: "/dashboard", label: "Início", resource: "dashboard" },
+  { href: "/meu-cadastro", label: "Meu cadastro", resource: "dashboard" },
+  { href: "/comunicados", label: "Avisos", resource: "comunicados" },
+];
+
 const DIRETORIA_MENU: { href: string; label: string; resource: Resource }[] = [
   { href: "/dashboard", label: "Início", resource: "dashboard" },
   { href: "/notas-pedido", label: "Conferir entregas", resource: "notas_pedido" },
@@ -127,6 +134,14 @@ export function getMenuItems(role: UserRole): { href: string; label: string; res
     : DIRETORIA_MENU;
 
   return source.filter((item) => can(role, item.resource, "view"));
+}
+
+/** Menu lateral mobile do cooperado — só cadastro e avisos (o restante fica na barra inferior). */
+export function getCooperadoDrawerMenuItems(role: UserRole): { href: string; label: string; resource: Resource }[] {
+  if (role !== "cooperado") return getMenuItems(role);
+  return COOPERADO_DRAWER_MENU.filter(
+    (item) => can(role, item.resource, "view") || item.href === "/meu-cadastro"
+  );
 }
 
 /** @deprecated Use getMenuItems — kept for compatibility */

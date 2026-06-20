@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, useEffect } from "react";
 import { Search, Tag } from "lucide-react";
 import { useAppData } from "@/hooks/useAppData";
 import { usePermissions } from "@/hooks/usePermissions";
@@ -11,6 +11,16 @@ import { formatCurrency } from "@/utils/format";
 import { labelUnidade } from "@/utils/unidades";
 import { sortPorOrdemLancamento } from "@/utils/produtos";
 import { cn } from "@/utils/format";
+import { resolveCooperativaCnpj } from "@/services/notaPedidoCloudService";
+import { syncAllCooperativaFromCloud } from "@/services/cooperativaSyncCloudService";
+import { getData } from "@/services/dataStore";
+
+function instituicaoTemProdutos(
+  instId: string,
+  produtos: { instituicaoId: string; ativo: boolean }[]
+): boolean {
+  return produtos.some((p) => p.instituicaoId === instId && p.ativo);
+}
 
 export default function PrecosPage() {
   const data = useAppData();
@@ -19,22 +29,53 @@ export default function PrecosPage() {
   const [instSelecionada, setInstSelecionada] = useState<string>("");
   const [busca, setBusca] = useState("");
 
+  useEffect(() => {
+    if (!data || !coopId || !user) return;
+    void (async () => {
+      const cnpj = await resolveCooperativaCnpj(data, coopId, user);
+      if (cnpj) await syncAllCooperativaFromCloud(cnpj);
+    })();
+    const id = setInterval(() => {
+      void (async () => {
+        const d = getData();
+        const cnpj = await resolveCooperativaCnpj(d, coopId, user);
+        if (cnpj) await syncAllCooperativaFromCloud(cnpj);
+      })();
+    }, 12000);
+    return () => clearInterval(id);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [coopId, user?.id]);
+
   const instituicoes = useMemo(() => {
     if (!data || !coopId) return [];
     return data.instituicoes.filter((i) => i.cooperativaId === coopId);
   }, [data, coopId]);
 
-  const instAtiva = instSelecionada || instituicoes[0]?.id || "";
+  const produtosDaCoop = useMemo(() => {
+    if (!data || !coopId) return [];
+    const instIds = new Set(instituicoes.map((i) => i.id));
+    return data.produtosInstituicao.filter(
+      (p) => p.ativo && (instIds.has(p.instituicaoId) || p.cooperativaId === coopId)
+    );
+  }, [data, coopId, instituicoes]);
+
+  const instAtiva = useMemo(() => {
+    if (instSelecionada && instituicoes.some((i) => i.id === instSelecionada)) {
+      return instSelecionada;
+    }
+    const comItens = instituicoes.find((i) => instituicaoTemProdutos(i.id, produtosDaCoop));
+    return comItens?.id ?? instituicoes[0]?.id ?? "";
+  }, [instSelecionada, instituicoes, produtosDaCoop]);
 
   const produtos = useMemo(() => {
-    if (!data || !instAtiva) return [];
+    if (!instAtiva) return [];
     const q = busca.trim().toLowerCase();
     return sortPorOrdemLancamento(
-      data.produtosInstituicao
-        .filter((p) => p.instituicaoId === instAtiva && p.ativo && p.cooperativaId === coopId)
+      produtosDaCoop
+        .filter((p) => p.instituicaoId === instAtiva)
         .filter((p) => !q || p.nome.toLowerCase().includes(q))
     );
-  }, [data, instAtiva, coopId, busca]);
+  }, [instAtiva, produtosDaCoop, busca]);
 
   if (!data) return null;
 
@@ -54,21 +95,25 @@ export default function PrecosPage() {
       ) : (
         <>
           <div className="flex gap-2 overflow-x-auto pb-2 mb-4 -mx-1 px-1 scrollbar-hide">
-            {instituicoes.map((inst) => (
-              <button
-                key={inst.id}
-                type="button"
-                onClick={() => setInstSelecionada(inst.id)}
-                className={cn(
-                  "shrink-0 px-4 py-2.5 rounded-xl text-sm font-medium border transition-colors",
-                  instAtiva === inst.id
-                    ? "bg-green-700 text-white border-green-700"
-                    : "bg-white text-gray-700 border-gray-200 hover:border-green-300"
-                )}
-              >
-                {inst.nome}
-              </button>
-            ))}
+            {instituicoes.map((inst) => {
+              const temItens = instituicaoTemProdutos(inst.id, produtosDaCoop);
+              return (
+                <button
+                  key={inst.id}
+                  type="button"
+                  onClick={() => setInstSelecionada(inst.id)}
+                  className={cn(
+                    "shrink-0 px-4 py-2.5 rounded-xl text-sm font-medium border transition-colors",
+                    instAtiva === inst.id
+                      ? "bg-green-700 text-white border-green-700"
+                      : "bg-white text-gray-700 border-gray-200 hover:border-green-300",
+                    !temItens && instAtiva !== inst.id && "opacity-60"
+                  )}
+                >
+                  {inst.nome}
+                </button>
+              );
+            })}
           </div>
 
           <div className="relative mb-4">
@@ -82,7 +127,11 @@ export default function PrecosPage() {
           </div>
 
           {produtos.length === 0 ? (
-            <p className="text-center text-gray-500 py-8">Nenhum item encontrado nesta instituição.</p>
+            <p className="text-center text-gray-500 py-8">
+              {produtosDaCoop.length === 0
+                ? "Aguardando sincronização dos preços com a cooperativa…"
+                : "Nenhum item nesta instituição. Escolha outro contrato acima."}
+            </p>
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               {produtos.map((p) => (

@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useEffect, useCallback } from "react";
+import { useRef, useEffect, useCallback, useState } from "react";
 import { Button } from "@/components/ui/Button";
 
 interface SignaturePadProps {
@@ -11,6 +11,7 @@ interface SignaturePadProps {
 export function SignaturePad({ onChange, className = "" }: SignaturePadProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const drawing = useRef(false);
+  const [vazio, setVazio] = useState(true);
 
   const getCtx = () => canvasRef.current?.getContext("2d") ?? null;
 
@@ -44,6 +45,7 @@ export function SignaturePad({ onChange, className = "" }: SignaturePadProps) {
   const emit = () => {
     const canvas = canvasRef.current;
     if (!canvas) return;
+    setVazio(false);
     onChange(canvas.toDataURL("image/png"));
   };
 
@@ -77,20 +79,29 @@ export function SignaturePad({ onChange, className = "" }: SignaturePadProps) {
     const ctx = getCtx();
     if (!canvas || !ctx) return;
     ctx.clearRect(0, 0, canvas.width, canvas.height);
+    setVazio(true);
     onChange(null);
   };
 
   return (
     <div className={className}>
-      <canvas
-        ref={canvasRef}
-        className="w-full h-40 bg-white border-2 border-dashed border-gray-300 rounded-xl touch-none cursor-crosshair"
-        onPointerDown={start}
-        onPointerMove={move}
-        onPointerUp={end}
-        onPointerLeave={end}
-      />
-      <Button type="button" variant="secondary" size="sm" className="mt-2" onClick={limpar}>
+      <div className="relative">
+        <canvas
+          ref={canvasRef}
+          className="w-full h-44 bg-white border-2 border-dashed border-green-400 rounded-xl touch-none cursor-crosshair"
+          onPointerDown={start}
+          onPointerMove={move}
+          onPointerUp={end}
+          onPointerLeave={end}
+        />
+        {vazio && (
+          <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
+            <span className="text-green-600/70 text-lg font-semibold tracking-wide">Assine aqui</span>
+          </div>
+        )}
+      </div>
+      <p className="text-xs text-gray-500 mt-2 text-center">Use o dedo ou caneta para assinar na área acima</p>
+      <Button type="button" variant="secondary" size="sm" className="mt-2 w-full" onClick={limpar}>
         Limpar assinatura
       </Button>
     </div>

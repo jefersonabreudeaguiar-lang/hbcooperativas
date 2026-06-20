@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
-import { Wallet, FileText, Camera, CreditCard } from "lucide-react";
+import { Wallet, FileText, Camera, CreditCard, FileDown, PenLine } from "lucide-react";
 import { useAppData } from "@/hooks/useAppData";
 import { Card } from "@/components/ui/Card";
 import { StatusBadge } from "@/components/ui/StatusBadge";
@@ -18,6 +18,7 @@ import {
 } from "@/services/notaPedidoService";
 import { fichaPertenceCooperado, notaPertenceCooperado } from "@/services/cooperadoCloudService";
 import { formatCurrency, formatDate, formatMesReferencia, formatCPFCNPJ, formatPhone, getCurrentMesReferencia } from "@/utils/format";
+import { baixarReciboHtml, nomeArquivoRecibo } from "@/utils/recibo";
 import type { Cooperado } from "@/types";
 
 function getEscolaLabel(nota: { instituicaoId: string; escolaAvulsaNome?: string }, instituicoes: { id: string; nome: string }[]) {
@@ -51,6 +52,12 @@ export function CooperadoFichaPanel({ cooperado }: { cooperado: Cooperado }) {
     if (!data) return { itens: [], entregas: 0, valorBruto: 0 };
     return agregarItensFichaMes(data, cooperado.id, mesFilter, cooperado.cooperativaId);
   }, [data, cooperado.id, cooperado.cooperativaId, mesFilter]);
+  const pagamentosMes = useMemo(
+    () => resumo?.pagamentos.filter((p) => p.mesReferencia === mesFilter) ?? [],
+    [resumo, mesFilter]
+  );
+  const pagamentoConfirmadoMes = pagamentosMes.find((p) => p.status === "confirmado");
+
   const mesMensalidades = useMemo(
     () => resumo?.mensalidades.filter((m) => m.mesReferencia === mesFilter) ?? [],
     [resumo, mesFilter]
@@ -233,15 +240,67 @@ export function CooperadoFichaPanel({ cooperado }: { cooperado: Cooperado }) {
         </Card>
       )}
 
-      {resumo.pagamentos.filter((p) => p.mesReferencia === mesFilter).length > 0 && (
+      {pagamentoConfirmadoMes && (
+        <Card title={`Recibo assinado · ${formatMesReferencia(mesFilter)}`}>
+          <div className="flex flex-col sm:flex-row gap-4 sm:items-start">
+            <div className="flex-1">
+              <p className="text-sm text-gray-600 mb-2">
+                Confirmado em {pagamentoConfirmadoMes.assinadoEm ? formatDate(pagamentoConfirmadoMes.assinadoEm.split("T")[0]) : formatDate(pagamentoConfirmadoMes.pagoEm.split("T")[0])}
+                {" · "}{formatCurrency(pagamentoConfirmadoMes.valorLiquido)}
+              </p>
+              {pagamentoConfirmadoMes.assinaturaCooperado && (
+                <div className="inline-block border border-gray-200 rounded-xl p-2 bg-gray-50">
+                  <p className="text-xs text-gray-500 mb-1 flex items-center gap-1"><PenLine size={12} /> Assinatura do cooperado</p>
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={pagamentoConfirmadoMes.assinaturaCooperado}
+                    alt="Assinatura"
+                    className="h-14 object-contain"
+                  />
+                </div>
+              )}
+            </div>
+            {pagamentoConfirmadoMes.reciboHtml && (
+              <Button
+                size="lg"
+                className="shrink-0"
+                onClick={() =>
+                  baixarReciboHtml(
+                    pagamentoConfirmadoMes.reciboHtml!,
+                    nomeArquivoRecibo(mesFilter, cooperado.nomeCompleto)
+                  )
+                }
+              >
+                <FileDown size={18} /> Baixar recibo
+              </Button>
+            )}
+          </div>
+        </Card>
+      )}
+
+      {pagamentosMes.length > 0 && (
         <Card title="Pagamentos registrados">
-          {resumo.pagamentos.filter((p) => p.mesReferencia === mesFilter).map((p) => (
-            <div key={p.id} className="flex items-center gap-2 p-3 border rounded-xl text-sm mb-2">
-              <CreditCard size={18} className="text-green-600" />
-              <div>
-                <p className="font-medium">{formatCurrency(p.valorLiquido)}</p>
-                <p className="text-xs text-gray-500">{p.status === "confirmado" ? "Confirmado pelo cooperado" : "Aguardando confirmação"} · {formatDate(p.pagoEm.split("T")[0])}</p>
+          {pagamentosMes.map((p) => (
+            <div key={p.id} className="flex items-center justify-between gap-3 p-3 border rounded-xl text-sm mb-2 last:mb-0">
+              <div className="flex items-center gap-2 min-w-0">
+                <CreditCard size={18} className="text-green-600 shrink-0" />
+                <div className="min-w-0">
+                  <p className="font-medium">{formatCurrency(p.valorLiquido)}</p>
+                  <p className="text-xs text-gray-500 truncate">
+                    {p.status === "confirmado" ? "Confirmado com assinatura" : "Aguardando confirmação do cooperado"}
+                    {" · "}{formatDate(p.pagoEm.split("T")[0])}
+                  </p>
+                </div>
               </div>
+              {p.status === "confirmado" && p.reciboHtml && (
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  onClick={() => baixarReciboHtml(p.reciboHtml!, nomeArquivoRecibo(p.mesReferencia, cooperado.nomeCompleto))}
+                >
+                  <FileDown size={14} /> Recibo
+                </Button>
+              )}
             </div>
           ))}
         </Card>

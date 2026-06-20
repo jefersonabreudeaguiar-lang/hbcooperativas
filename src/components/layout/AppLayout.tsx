@@ -10,7 +10,7 @@ import {
 import { useState } from "react";
 import { useAuth } from "@/modules/auth/AuthProvider";
 import { useAppData } from "@/hooks/useAppData";
-import { getMenuItems, getMobileNavItems, ROLE_LABELS } from "@/permissions";
+import { getMenuItems, getMobileNavItems, getCooperadoDrawerMenuItems, ROLE_LABELS } from "@/permissions";
 import { getUserCooperativaNome } from "@/utils/cooperativa";
 import { PLATFORM_NAME, PLATFORM_TAGLINE } from "@/utils/constants";
 import { cn } from "@/utils/format";
@@ -47,8 +47,17 @@ const ICONS: Record<string, React.ReactNode> = {
   fechamento: <CalendarCheck size={20} />,
 };
 
-function navIcon(href: string, resource: Resource) {
-  return ICONS[href] ?? ICONS[resource] ?? <LayoutDashboard size={20} />;
+function navIcon(href: string, resource: Resource, size = 20) {
+  const icon = ICONS[href] ?? ICONS[resource] ?? <LayoutDashboard size={size} />;
+  if (size === 20) return icon;
+  const IconComponent =
+    href === "/dashboard" || resource === "dashboard" ? LayoutDashboard :
+    href === "/notas-pedido" || resource === "notas_pedido" ? ClipboardList :
+    href === "/precos" || resource === "instituicoes" ? Tag :
+    href === "/ficha-corrida" || resource === "ficha_corrida" ? Receipt :
+    href === "/mensalidades" || resource === "mensalidades" ? CreditCard :
+    LayoutDashboard;
+  return <IconComponent size={size} />;
 }
 
 function BrandHeader({ compact = false }: { compact?: boolean }) {
@@ -76,7 +85,9 @@ export function Sidebar({ mobile = false, onClose }: { mobile?: boolean; onClose
   const { user, logout } = useAuth();
   if (!user) return null;
 
-  const menuItems = getMenuItems(user.role);
+  const menuItems = mobile && user.role === "cooperado"
+    ? getCooperadoDrawerMenuItems(user.role)
+    : getMenuItems(user.role);
 
   return (
     <aside className={cn(
@@ -156,20 +167,45 @@ export function MobileNav() {
         </div>
       )}
 
-      <nav className="lg:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 z-40 flex safe-area-pb">
+      <nav className="lg:hidden fixed bottom-0 left-0 right-0 z-40 flex safe-area-pb bg-white border-t-2 border-green-200 shadow-[0_-6px_24px_rgba(0,0,0,0.12)]">
         {mobileItems.map((item) => {
           const active = pathname === item.href || (item.href !== "/dashboard" && pathname.startsWith(item.href));
+          const isCooperadoNav = user.role === "cooperado";
           return (
             <Link
               key={item.href}
               href={item.href}
               className={cn(
-                "flex-1 flex flex-col items-center py-2 text-[10px] sm:text-xs gap-0.5 min-w-0 px-1",
-                active ? "text-green-700" : "text-gray-500"
+                "flex-1 flex flex-col items-center justify-center min-w-0 px-0.5 transition-colors",
+                isCooperadoNav ? "min-h-[72px] py-2 gap-1" : "py-2 text-[10px] sm:text-xs gap-0.5",
+                active
+                  ? isCooperadoNav
+                    ? "text-green-800 bg-green-50"
+                    : "text-green-700"
+                  : isCooperadoNav
+                    ? "text-gray-700"
+                    : "text-gray-500"
               )}
             >
-              <span className={active ? "text-green-700" : "text-gray-400"}>{navIcon(item.href, item.resource)}</span>
-              <span className="truncate w-full text-center leading-tight">{item.label}</span>
+              <span
+                className={cn(
+                  "flex items-center justify-center rounded-xl transition-colors",
+                  isCooperadoNav && "w-11 h-11",
+                  active && isCooperadoNav ? "bg-green-700 text-white" : active ? "text-green-700" : isCooperadoNav ? "text-green-700" : "text-gray-400"
+                )}
+              >
+                {navIcon(item.href, item.resource, isCooperadoNav ? 24 : 20)}
+              </span>
+              <span
+                className={cn(
+                  "truncate w-full text-center leading-tight",
+                  isCooperadoNav
+                    ? cn("text-[11px] sm:text-xs px-0.5", active ? "font-bold text-green-900" : "font-semibold")
+                    : ""
+                )}
+              >
+                {item.label}
+              </span>
             </Link>
           );
         })}
@@ -184,7 +220,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       <Sidebar />
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
         <MobileNav />
-        <main className="flex-1 overflow-y-auto p-4 lg:p-6 pb-24 lg:pb-6">
+        <main className="flex-1 overflow-y-auto p-4 lg:p-6 pb-28 lg:pb-6">
           {children}
         </main>
       </div>

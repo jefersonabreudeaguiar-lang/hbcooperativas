@@ -55,8 +55,10 @@ function buildOperacionalPayload(data: AppData, coopId: string): OperacionalSync
 export function mergeContratosIntoData(data: AppData, cloud: ContratosSyncPayload, coopId: string): AppData {
   const localInst = data.instituicoes.filter((i) => i.cooperativaId !== coopId);
   const localProd = data.produtosInstituicao.filter((p) => p.cooperativaId !== coopId);
-  const cloudInst = cloud.instituicoes.filter((i) => i.cooperativaId === coopId);
-  const cloudProd = cloud.produtosInstituicao.filter((p) => p.cooperativaId === coopId);
+
+  // Remapeia para o coopId local — aparelhos diferentes usam IDs distintos para a mesma cooperativa.
+  const cloudInst = cloud.instituicoes.map((i) => ({ ...i, cooperativaId: coopId }));
+  const cloudProd = cloud.produtosInstituicao.map((p) => ({ ...p, cooperativaId: coopId }));
 
   return {
     ...data,
@@ -71,6 +73,10 @@ export function mergeContratosIntoData(data: AppData, cloud: ContratosSyncPayloa
 export function mergeOperacionalIntoData(data: AppData, cloud: OperacionalSyncPayload, coopId: string): AppData {
   const cooperadoIds = new Set(data.cooperados.filter((c) => c.cooperativaId === coopId).map((c) => c.id));
 
+  const cloudArquivos = cloud.arquivosMensais.map((a) => ({ ...a, cooperativaId: coopId }));
+  const cloudPagamentos = cloud.pagamentosCooperado.map((p) => ({ ...p, cooperativaId: coopId }));
+  const cloudComunicados = cloud.comunicados.map((c) => ({ ...c, cooperativaId: coopId }));
+
   const filterCoop = <T extends { cooperativaId?: string; cooperadoId?: string }>(
     items: T[],
     isCoop: (i: T) => boolean
@@ -82,21 +88,21 @@ export function mergeOperacionalIntoData(data: AppData, cloud: OperacionalSyncPa
       ...filterCoop(data.arquivosMensais, (a) => a.cooperativaId === coopId),
       ...mergeArrayByNewer(
         data.arquivosMensais.filter((a) => a.cooperativaId === coopId),
-        cloud.arquivosMensais.filter((a) => a.cooperativaId === coopId)
+        cloudArquivos
       ),
     ],
     pagamentosCooperado: [
       ...filterCoop(data.pagamentosCooperado, (p) => p.cooperativaId === coopId),
       ...mergeArrayByNewer(
         data.pagamentosCooperado.filter((p) => p.cooperativaId === coopId),
-        cloud.pagamentosCooperado.filter((p) => p.cooperativaId === coopId)
+        cloudPagamentos
       ),
     ],
     comunicados: [
       ...filterCoop(data.comunicados, (c) => c.cooperativaId === coopId),
       ...mergeArrayByNewer(
         data.comunicados.filter((c) => c.cooperativaId === coopId),
-        cloud.comunicados.filter((c) => c.cooperativaId === coopId)
+        cloudComunicados
       ),
     ],
     mensalidades: [

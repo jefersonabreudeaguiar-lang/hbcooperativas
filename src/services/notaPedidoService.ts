@@ -10,7 +10,7 @@ import type {
 } from "@/types";
 import { fichaPertenceCooperado } from "@/services/cooperadoCloudService";
 import { round2 } from "@/utils/calculations";
-import { gerarReciboHtml } from "@/utils/recibo";
+import { gerarReciboHtml, resumoReciboFromPagamento } from "@/utils/recibo";
 
 export interface ItemResumoFichaMes {
   produtoInstituicaoId: string;
@@ -442,7 +442,7 @@ export function registrarPagamentoCooperado(
     cooperativaId: coopId,
     cooperadoId,
     titulo: "Pagamento realizado",
-    descricao: `A cooperativa registrou o pagamento de ${resumo.valorLiquido.toFixed(2).replace(".", ",")} referente a ${mesReferencia}. Toque em PAGO na ficha para confirmar e assinar o recibo.`,
+    descricao: `A cooperativa registrou o pagamento de ${resumo.valorLiquido.toFixed(2).replace(".", ",")} referente a ${mesReferencia}. Abra Quanto vou receber, confirme o recebimento e assine o recibo.`,
     data: now.split("T")[0],
     responsavel,
     categoria: "financeiro",
@@ -481,17 +481,20 @@ export function confirmarPagamentoCooperado(
     assinaturaCooperado: assinaturaDataUrl,
     assinadoEm: now,
     status: "confirmado" as const,
+    updatedAt: now,
   };
+  const itensMes = agregarItensFichaMes(data, pagamento.cooperadoId, pagamento.mesReferencia, pagamento.cooperativaId);
+  const resumoRecibo = resumoReciboFromPagamento(draft, itensMes);
   const reciboHtml = gerarReciboHtml(
-    data,
     draft,
     cooperado,
-    data.cooperativas.find((c) => c.id === pagamento.cooperativaId)?.nome ?? "Cooperativa"
+    data.cooperativas.find((c) => c.id === pagamento.cooperativaId)?.nome ?? "Cooperativa",
+    resumoRecibo
   );
 
   const pagamentosCooperado = data.pagamentosCooperado.map((p) =>
     p.id === pagamentoId
-      ? { ...draft, reciboHtml, status: "confirmado" as const }
+      ? { ...draft, reciboHtml, status: "confirmado" as const, updatedAt: now }
       : p
   );
 

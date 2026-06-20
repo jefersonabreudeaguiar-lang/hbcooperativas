@@ -256,6 +256,7 @@ export interface PagamentoCooperadoRegistro {
   assinadoEm?: string;
   reciboHtml?: string;
   createdAt: string;
+  updatedAt?: string;
 }
 
 /** Pasta mensal por cooperado — fotos e recibos arquivados. */
