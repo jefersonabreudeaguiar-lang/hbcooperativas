@@ -574,13 +574,35 @@ export default function FichaCorridaPage() {
             {!isCooperado && nomeCooperado && (
               <p className="text-green-100 text-sm mt-2">{nomeCooperado}</p>
             )}
-            {resumo && totalEntregas > 0 && (
+            {resumo && (resumo.valorBruto > 0 || totalPendente > 0) && (
               <div className="mt-4 text-sm text-green-100 space-y-1 border-t border-green-600/40 pt-3">
-                <div className="flex justify-between"><span>Entregas</span><span>{formatCurrency(totalEntregas)}</span></div>
+                <div className="flex justify-between">
+                  <span>Valor bruto das entregas</span>
+                  <span>{formatCurrency(resumo.valorBruto)}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span>
+                    Desconto cooperativa
+                    {data.config.descontoPadraoCooperativa > 0 && (
+                      <span className="opacity-80"> ({data.config.descontoPadraoCooperativa}%)</span>
+                    )}
+                  </span>
+                  <span>- {formatCurrency(resumo.descontoCooperativa)}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span>Entregas líquidas</span>
+                  <span>{formatCurrency(totalEntregas)}</span>
+                </div>
                 {resumo.descontosExtras.map((d, i) => (
-                  <div key={i} className="flex justify-between"><span>{d.motivo}</span><span>- {formatCurrency(d.valor)}</span></div>
+                  <div key={i} className="flex justify-between">
+                    <span>{d.motivo}</span>
+                    <span>- {formatCurrency(d.valor)}</span>
+                  </div>
                 ))}
-                <div className="flex justify-between font-semibold text-white pt-1"><span>Total líquido</span><span>{formatCurrency(totalPendente)}</span></div>
+                <div className="flex justify-between font-semibold text-white pt-1 border-t border-green-600/30 mt-1">
+                  <span>{isCooperado ? "Total a receber" : "Total líquido a pagar"}</span>
+                  <span>{formatCurrency(isCooperado && pagamentoAguardando ? pagamentoAguardando.valorLiquido : totalPendente)}</span>
+                </div>
               </div>
             )}
           </div>
