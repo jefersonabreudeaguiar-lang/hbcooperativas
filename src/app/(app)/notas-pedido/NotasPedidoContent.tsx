@@ -4,7 +4,7 @@ import { useState, useMemo, useEffect, useRef } from "react";
 import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import {
-  Camera, CheckCircle, FileText, XCircle, RefreshCw, ChevronRight, Eye, Building2, Pencil, UserPlus, X, ImagePlus,
+  Camera, CheckCircle, FileText, XCircle, RefreshCw, ChevronRight, Eye, Building2, Pencil, UserPlus, X, ImagePlus, Trash2, FileSignature,
 } from "lucide-react";
 import { useAppData } from "@/hooks/useAppData";
 import { usePermissions } from "@/hooks/usePermissions";
@@ -14,7 +14,7 @@ import { Button } from "@/components/ui/Button";
 import { Input, Select, FormField, Textarea } from "@/components/ui/Form";
 import { NotaStatusBadge } from "@/components/ui/NotaStatusBadge";
 import { AlertBanner } from "@/components/ui/AlertBanner";
-import { PromptDialog } from "@/components/ui/ConfirmDialog";
+import { PromptDialog, ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { Card } from "@/components/ui/Card";
 import { updateData, updateDataSafe, generateId, addAuditEntry } from "@/services/dataStore";
 import {
@@ -29,9 +29,11 @@ import {
   patchNotaPedidoInCloud,
   pushNotasPedidoToCloud,
   syncNotasPedidoFromCloud,
+  deleteNotaPedidoFromCloud,
   ensureNotaComFoto,
   resolveCooperativaCnpj,
 } from "@/services/notaPedidoCloudService";
+import { ensureContratoPnaePadrao, getContratoLabel, getContratosEntrega } from "@/utils/contratosEntrega";
 import { formatCurrency, formatDate, formatMesReferencia, getCurrentMesReferencia } from "@/utils/format";
 import { labelUnidade } from "@/utils/unidades";
 import { sortPorOrdemLancamento } from "@/utils/produtos";
@@ -139,6 +141,9 @@ export default function NotasPedidoContent() {
   const [avulsoErrors, setAvulsoErrors] = useState<{ cooperado?: string; instituicao?: string; assinatura?: string; itens?: string }>({});
 
   const [filtroCooperadoId, setFiltroCooperadoId] = useState("");
+  const [contratoInstId, setContratoInstId] = useState("");
+  const [excluirNotaTarget, setExcluirNotaTarget] = useState<NotaPedido | null>(null);
+  const [excluindo, setExcluindo] = useState(false);
 
   const coopId = user && data ? getUserCooperativaId(user, data) : undefined;
 
@@ -169,6 +174,11 @@ export default function NotasPedidoContent() {
   const instituicoes = useMemo(() => {
     if (!data || !coopId) return [];
     return data.instituicoes.filter((i) => i.cooperativaId === coopId);
+  }, [data, coopId]);
+
+  const contratosEntrega = useMemo(() => {
+    if (!data || !coopId) return [];
+    return getContratosEntrega(data, coopId);
   }, [data, coopId]);
 
   useEffect(() => {
@@ -277,6 +287,20 @@ export default function NotasPedidoContent() {
     setFotosSessao([]);
     setFotoDuplicadaMsg("");
     setObservacoes(notaRejeitada?.observacoes ?? "");
+
+    if (data && coopId && user) {
+      const ensured = ensureContratoPnaePadrao(data, coopId);
+      if (ensured.criou) {
+        updateData(() => ensured.data);
+      }
+      const contratoId =
+        notaRejeitada?.instituicaoId ||
+        ensured.instituicaoId ||
+        getContratosEntrega(ensured.data, coopId)[0]?.id ||
+        "";
+      setContratoInstId(contratoId);
+    }
+
     setAnexarModal(true);
   };
 
@@ -460,6 +484,7 @@ export default function NotasPedidoContent() {
       errors.escolaAvulsa = "Informe o nome da escola.";
     }
     if (fotosSessao.length === 0) errors.foto = "Tire ou escolha pelo menos uma foto do pedido assinado.";
+    if (!contratoInstId) errors.foto = errors.foto ?? "Selecione o contrato da entrega.";
     if (Object.keys(errors).length) {
       setFormErrors(errors);
       return;
@@ -484,14 +509,17 @@ export default function NotasPedidoContent() {
       return;
     }
 
+    const inst = data.instituicoes.find((i) => i.id === contratoInstId);
+    const localEntrega = inst?.localEntrega ?? inst?.endereco ?? local;
+
     const buildNotasCompletas = (d: AppData): NotaPedido[] => {
       if (reenviarNotaId) {
         const base = d.notasPedido.find((n) => n.id === reenviarNotaId);
         if (!base) return [];
         return [{
           ...base,
-          instituicaoId: "",
-          localEntrega: local,
+          instituicaoId: contratoInstId,
+          localEntrega,
           escolaAvulsaNome: escolaAvulsa,
           fotoPedido: fotosSessao[0],
           fotoEnviadaEm: now,
@@ -514,10 +542,10 @@ export default function NotasPedidoContent() {
           id: generateId("np"),
           cooperativaId: coopId,
           cooperadoId: cid,
-          instituicaoId: "",
+          instituicaoId: contratoInstId,
           numeroNota: gerarNumeroNota({ ...d, notasPedido: notas }, coopId),
           dataEntrega: now.split("T")[0],
-          localEntrega: local,
+          localEntrega,
           escolaAvulsaNome: escolaAvulsa,
           itens: [],
           valorBruto: 0,
@@ -747,6 +775,43 @@ export default function NotasPedidoContent() {
     setTimeout(() => setLancadoMsg(""), 5000);
   };
 
+  const handleExcluirPendente = async () => {
+    if (!excluirNotaTarget || !user || !data || !coopId) return;
+    if (excluirNotaTarget.cooperadoId !== (cooperadoId ?? user.cooperadoId)) return;
+    if (excluirNotaTarget.status !== "aguardando_conferencia") return;
+
+    setExcluindo(true);
+    const cnpj = await resolveCooperativaCnpj(data, coopId, user);
+    if (cnpj) {
+      const del = await deleteNotaPedidoFromCloud(cnpj, excluirNotaTarget.id);
+      if (!del.ok) {
+        setExcluindo(false);
+        setErroEnvio(del.error ?? "Não foi possível excluir na nuvem.");
+        setExcluirNotaTarget(null);
+        return;
+      }
+    }
+
+    updateData((d) =>
+      addAuditEntry(
+        { ...d, notasPedido: d.notasPedido.filter((n) => n.id !== excluirNotaTarget.id) },
+        {
+          entityType: "nota_pedido",
+          entityId: excluirNotaTarget.id,
+          action: "excluir",
+          userId: user.id,
+          userName: user.name,
+          changes: "Entrega pendente excluída pelo cooperado",
+        }
+      )
+    );
+
+    setExcluindo(false);
+    setExcluirNotaTarget(null);
+    setViewModal(false);
+    setSuccessMsg("Entrega excluída. O responsável não verá mais esta foto.");
+  };
+
   const mesAtual = getCurrentMesReferencia();
 
   if (!data) {
@@ -792,6 +857,16 @@ export default function NotasPedidoContent() {
         {isCooperado && n.status === "rejeitada" && (
           <Button size="sm" className="w-full mt-3" variant="secondary" onClick={(e) => { e.stopPropagation(); openAnexar(n); }}>
             <RefreshCw size={16} /> Enviar de novo
+          </Button>
+        )}
+        {isCooperado && n.status === "aguardando_conferencia" && (
+          <Button
+            size="sm"
+            className="w-full mt-3"
+            variant="danger"
+            onClick={(e) => { e.stopPropagation(); setExcluirNotaTarget(n); }}
+          >
+            <Trash2 size={16} /> Excluir pendente
           </Button>
         )}
       </button>
@@ -997,6 +1072,31 @@ export default function NotasPedidoContent() {
               {fotoDuplicadaMsg}
             </AlertBanner>
           )}
+
+          <FormField label="Contrato" hint="A entrega será conferida e lançada neste contrato.">
+            {contratosEntrega.length <= 1 ? (
+              <div className="rounded-xl border border-green-300 bg-green-50 px-4 py-3 flex items-start gap-3">
+                <FileSignature size={22} className="text-green-700 shrink-0 mt-0.5" />
+                <div>
+                  <p className="font-semibold text-green-900">
+                    {contratosEntrega[0] ? getContratoLabel(contratosEntrega[0]) : "PNAE - MERENDA ESCOLAR"}
+                  </p>
+                  <p className="text-xs text-green-700 mt-1">
+                    Contrato padrão — o responsável pode cadastrar outros em Contratos.
+                  </p>
+                </div>
+              </div>
+            ) : (
+              <Select
+                value={contratoInstId}
+                onChange={(e) => setContratoInstId(e.target.value)}
+              >
+                {contratosEntrega.map((c) => (
+                  <option key={c.id} value={c.id}>{getContratoLabel(c)}</option>
+                ))}
+              </Select>
+            )}
+          </FormField>
 
           <FormField label={reenviarNotaId ? "Nova foto" : "Adicionar foto do pedido"} required error={formErrors.foto} hint="Mostre o pedido inteiro com a assinatura de quem recebeu.">
             <label className={`flex flex-col items-center gap-2 p-8 border-2 border-dashed border-green-400 rounded-2xl bg-green-50/50 ${processandoFoto || enviando ? "opacity-60 pointer-events-none" : "cursor-pointer active:bg-green-100"}`}>
@@ -1348,9 +1448,25 @@ export default function NotasPedidoContent() {
                 <RefreshCw size={18} /> Enviar de novo
               </Button>
             )}
+            {isCooperado && selectedNota.status === "aguardando_conferencia" && (
+              <Button className="w-full" variant="danger" onClick={() => setExcluirNotaTarget(selectedNota)}>
+                <Trash2 size={18} /> Excluir entrega pendente
+              </Button>
+            )}
           </div>
         )}
       </Modal>
+
+      <ConfirmDialog
+        open={Boolean(excluirNotaTarget)}
+        onClose={() => !excluindo && setExcluirNotaTarget(null)}
+        title="Excluir entrega pendente?"
+        message="A foto será removida da sua lista e também desaparece para o responsável. Esta ação não pode ser desfeita."
+        confirmLabel="Sim, excluir"
+        variant="danger"
+        loading={excluindo}
+        onConfirm={() => void handleExcluirPendente()}
+      />
     </div>
   );
 }

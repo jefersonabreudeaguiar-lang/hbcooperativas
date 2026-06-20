@@ -13,7 +13,8 @@ import { updateData, generateId, addAuditEntry } from "@/services/dataStore";
 import { formatCurrency } from "@/utils/format";
 import { UNIDADES_MEDIDA, type ProdutoUnidade } from "@/utils/unidades";
 import { sortPorOrdemLancamento } from "@/utils/produtos";
-import type { Instituicao, ProdutoInstituicao } from "@/types";
+import type { Instituicao, InstituicaoTipo, ProdutoInstituicao } from "@/types";
+import { CONTRATO_PNAE_PADRAO_NOME } from "@/utils/contratosEntrega";
 
 export default function ContratosPage() {
   const data = useAppData();
@@ -22,6 +23,7 @@ export default function ContratosPage() {
 
   const [novaInstModal, setNovaInstModal] = useState(false);
   const [nomeInst, setNomeInst] = useState("");
+  const [tipoInst, setTipoInst] = useState<InstituicaoTipo>("PNAE");
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [itemForms, setItemForms] = useState<Record<string, { nome: string; unidade: ProdutoUnidade; preco: string }>>({});
   const listasItensRef = useRef<Record<string, HTMLDivElement | null>>({});
@@ -74,7 +76,7 @@ export default function ContratosPage() {
         id: generateId("i"),
         cooperativaId: coopId,
         nome: nomeInst.trim(),
-        tipo: "escola",
+        tipo: tipoInst,
         cnpj: "",
         responsavel: "",
         telefone: "",
@@ -90,6 +92,7 @@ export default function ContratosPage() {
       );
     });
     setNomeInst("");
+    setTipoInst("PNAE");
     setNovaInstModal(false);
     setExpandedId(null);
   };
@@ -162,7 +165,9 @@ export default function ContratosPage() {
           <p className="text-gray-600 font-medium">Nenhuma instituição cadastrada</p>
           <p className="text-sm text-gray-500 mt-1 mb-4">Comece cadastrando escolas ou compradores do contrato.</p>
           {check("instituicoes", "create") && (
-            <Button onClick={() => setNovaInstModal(true)}><Plus size={18} /> Nova instituição</Button>
+            <Button onClick={() => { setTipoInst("PNAE"); setNomeInst(CONTRATO_PNAE_PADRAO_NOME); setNovaInstModal(true); }}>
+              <Plus size={18} /> Novo contrato
+            </Button>
           )}
         </div>
       ) : (
@@ -269,15 +274,36 @@ export default function ContratosPage() {
         </div>
       )}
 
-      <Modal open={novaInstModal} onClose={() => setNovaInstModal(false)} title="Nova instituição" size="sm">
-        <FormField label="Nome da escola ou comprador" required hint="Ex: EMEF Prof. Maria Silva, Prefeitura...">
-          <Input
-            value={nomeInst}
-            onChange={(e) => setNomeInst(e.target.value)}
-            placeholder="Nome da instituição"
-            autoFocus
-          />
-        </FormField>
+      <Modal open={novaInstModal} onClose={() => setNovaInstModal(false)} title="Novo contrato" size="sm">
+        <div className="space-y-4">
+          <FormField label="Tipo de contrato" required>
+            <Select
+              value={tipoInst}
+              onChange={(e) => {
+                const t = e.target.value as InstituicaoTipo;
+                setTipoInst(t);
+                if (t === "PNAE" && !nomeInst.trim()) {
+                  setNomeInst(CONTRATO_PNAE_PADRAO_NOME);
+                }
+              }}
+            >
+              <option value="PNAE">PNAE — Merenda escolar</option>
+              <option value="escola">Escola</option>
+              <option value="prefeitura">Prefeitura</option>
+              <option value="associacao">Associação</option>
+              <option value="mercado">Mercado</option>
+              <option value="outro">Outro</option>
+            </Select>
+          </FormField>
+          <FormField label="Nome do contrato" required hint="Ex: PNAE - MERENDA ESCOLAR, EMEF Prof. Maria Silva...">
+            <Input
+              value={nomeInst}
+              onChange={(e) => setNomeInst(e.target.value)}
+              placeholder={tipoInst === "PNAE" ? CONTRATO_PNAE_PADRAO_NOME : "Nome do contrato"}
+              autoFocus
+            />
+          </FormField>
+        </div>
         <div className="flex justify-end gap-2 mt-6">
           <Button variant="secondary" onClick={() => setNovaInstModal(false)}>Cancelar</Button>
           <Button onClick={handleNovaInstituicao} disabled={!nomeInst.trim()}>Salvar</Button>

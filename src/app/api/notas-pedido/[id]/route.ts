@@ -3,7 +3,7 @@ import { getSupabaseAdmin, isSupabaseConfigured } from "@/lib/supabase/admin";
 import { isNotasPedidoTableMissing } from "@/lib/supabase/errors";
 import { normalizeCnpj } from "@/utils/cooperativa";
 import type { NotaPedido } from "@/types";
-import { fetchNotaFromStorage, uploadNotaToStorage } from "@/lib/supabase/notasStorage";
+import { fetchNotaFromStorage, uploadNotaToStorage, deleteNotaFromStorage, deleteNotaFromTable } from "@/lib/supabase/notasStorage";
 
 export async function GET(
   request: Request,
@@ -92,6 +92,40 @@ export async function PATCH(
   const uploaded = await uploadNotaToStorage(supabase, cnpj, nota);
   if (!uploaded.ok) {
     return NextResponse.json({ error: uploaded.error }, { status: 500 });
+  }
+
+  return NextResponse.json({ success: true, source: "storage" });
+}
+
+export async function DELETE(
+  request: Request,
+  context: { params: Promise<{ id: string }> }
+) {
+  if (!isSupabaseConfigured()) {
+    return NextResponse.json({ error: "Nuvem não configurada." }, { status: 503 });
+  }
+
+  const { id } = await context.params;
+  const { searchParams } = new URL(request.url);
+  const cnpj = normalizeCnpj(searchParams.get("cnpj") ?? "");
+  if (cnpj.length !== 14) {
+    return NextResponse.json({ error: "CNPJ inválido." }, { status: 400 });
+  }
+
+  const supabase = getSupabaseAdmin();
+  if (!supabase) {
+    return NextResponse.json({ error: "Cliente indisponível." }, { status: 503 });
+  }
+
+  const tableDel = await deleteNotaFromTable(supabase, cnpj, id);
+  if (tableDel.ok) {
+    await deleteNotaFromStorage(supabase, cnpj, id);
+    return NextResponse.json({ success: true });
+  }
+
+  const storageDel = await deleteNotaFromStorage(supabase, cnpj, id);
+  if (!storageDel.ok) {
+    return NextResponse.json({ error: storageDel.error }, { status: 500 });
   }
 
   return NextResponse.json({ success: true, source: "storage" });

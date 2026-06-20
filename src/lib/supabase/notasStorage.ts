@@ -138,3 +138,38 @@ export async function upsertNotasInTable(
   }
   return { ok: true };
 }
+
+export async function deleteNotaFromStorage(
+  supabase: SupabaseClient,
+  cnpj: string,
+  notaId: string
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  await ensureEntregasBucket(supabase);
+  const { error } = await supabase.storage.from(BUCKET).remove([storagePath(cnpj, notaId)]);
+  if (error) {
+    console.error("[notas-storage/delete]", error.message);
+    return { ok: false, error: "Erro ao excluir entrega na nuvem." };
+  }
+  return { ok: true };
+}
+
+export async function deleteNotaFromTable(
+  supabase: SupabaseClient,
+  cnpj: string,
+  notaId: string
+): Promise<{ ok: true } | { ok: false; tableMissing: boolean }> {
+  const { error } = await supabase
+    .from("notas_pedido")
+    .delete()
+    .eq("id", notaId)
+    .eq("cooperativa_cnpj", cnpj);
+
+  if (error) {
+    if (isNotasPedidoTableMissing(error)) {
+      return { ok: false, tableMissing: true };
+    }
+    console.error("[notas-pedido/delete]", error.message);
+    return { ok: false, tableMissing: false };
+  }
+  return { ok: true };
+}

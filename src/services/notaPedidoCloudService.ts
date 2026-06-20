@@ -1,6 +1,7 @@
 import type { AppData, NotaPedido, User } from "@/types";
 import { normalizeCnpj } from "@/utils/cooperativa";
 import { fetchCooperativaByCnpjFromCloud } from "@/services/cooperativaCloudService";
+import { getNotaCooperativaCnpj } from "@/utils/fotoEntrega";
 import { getData, saveDataSafe } from "@/services/dataStore";
 
 function mapRowToNota(row: unknown): NotaPedido | null {
@@ -54,7 +55,24 @@ export function mergeCloudNotasIntoData(
   cloudNotas: NotaPedido[],
   cnpj: string
 ): AppData {
-  if (cloudNotas.length === 0) return data;
+  if (cloudNotas.length === 0) {
+    const digits = normalizeCnpj(cnpj);
+    let removed = false;
+    const notasPedido = data.notasPedido.filter((n) => {
+      if (n.status !== "aguardando_conferencia") return true;
+      const notaCnpj = getNotaCooperativaCnpj(data, n);
+      if (notaCnpj !== digits) return true;
+      if (n.fotoNaNuvem || n.cooperativaCnpj) {
+        removed = true;
+        return false;
+      }
+      return true;
+    });
+    return removed ? { ...data, notasPedido } : data;
+  }
+
+  const digits = normalizeCnpj(cnpj);
+  const cloudIds = new Set(cloudNotas.map((n) => n.id));
   const byId = new Map(data.notasPedido.map((n) => [n.id, n]));
   let changed = false;
 
@@ -63,6 +81,16 @@ export function mergeCloudNotasIntoData(
     const local = byId.get(cn.id);
     if (!local || new Date(cn.updatedAt).getTime() >= new Date(local.updatedAt).getTime()) {
       byId.set(cn.id, cn);
+      changed = true;
+    }
+  }
+
+  for (const [id, n] of [...byId.entries()]) {
+    if (n.status !== "aguardando_conferencia") continue;
+    const notaCnpj = getNotaCooperativaCnpj(data, n);
+    if (notaCnpj !== digits) continue;
+    if ((n.fotoNaNuvem || n.cooperativaCnpj) && !cloudIds.has(id)) {
+      byId.delete(id);
       changed = true;
     }
   }
@@ -169,6 +197,28 @@ export async function pushNotasPedidoToCloud(
     return { ok: true };
   } catch {
     return { ok: false, offline: true, error: "Sem conexão com o servidor." };
+  }
+}
+
+export async function deleteNotaPedidoFromCloud(
+  cnpj: string,
+  notaId: string
+): Promise<{ ok: boolean; error?: string }> {
+  const digits = normalizeCnpj(cnpj);
+  if (digits.length !== 14) return { ok: false, error: "CNPJ inválido." };
+
+  try {
+    const res = await fetch(
+      `/api/notas-pedido/${encodeURIComponent(notaId)}?cnpj=${digits}`,
+      { method: "DELETE" }
+    );
+    const json = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      return { ok: false, error: (json.error as string) ?? "Erro ao excluir na nuvem." };
+    }
+    return { ok: true };
+  } catch {
+    return { ok: false, error: "Sem conexão com o servidor." };
   }
 }
 
