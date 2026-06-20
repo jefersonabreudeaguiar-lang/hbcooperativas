@@ -3,6 +3,7 @@ import { normalizeCnpj } from "@/utils/cooperativa";
 import { fetchCooperativaByCnpjFromCloud } from "@/services/cooperativaCloudService";
 import { getNotaCooperativaCnpj } from "@/utils/fotoEntrega";
 import { getData, saveDataSafe } from "@/services/dataStore";
+import { reconciliarFichaFromNotasConferidas } from "@/services/notaPedidoService";
 
 const STATUS_RANK: Record<NotaPedido["status"], number> = {
   rascunho: 0,
@@ -280,11 +281,13 @@ export async function patchNotaPedidoInCloud(
 
 export async function syncNotasPedidoFromCloud(cnpj: string): Promise<number> {
   const cloudNotas = await fetchNotasPedidoFromCloud(cnpj);
-  if (cloudNotas.length === 0) return 0;
   const current = getData();
-  const merged = mergeCloudNotasIntoData(current, cloudNotas, cnpj);
-  if (merged === current) return 0;
-  saveDataSafe(merged);
+  const merged =
+    cloudNotas.length > 0 ? mergeCloudNotasIntoData(current, cloudNotas, cnpj) : current;
+  const reconciled = reconciliarFichaFromNotasConferidas(merged);
+  if (reconciled !== current) {
+    saveDataSafe(reconciled);
+  }
   return cloudNotas.filter((n) => n.status === "aguardando_conferencia").length;
 }
 

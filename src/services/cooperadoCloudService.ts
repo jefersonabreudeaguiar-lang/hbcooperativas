@@ -1,4 +1,4 @@
-import type { AppData, Cooperado } from "@/types";
+import type { AppData, Cooperado, FichaCorrida } from "@/types";
 import { normalizeCnpj } from "@/utils/cooperativa";
 import { notaPertenceCooperativa } from "@/utils/fotoEntrega";
 import { getData, saveDataSafe } from "@/services/dataStore";
@@ -267,4 +267,61 @@ export function listCooperadosComFichaNoMes(
   }
 
   return result.sort((a, b) => a.nomeCompleto.localeCompare(b.nomeCompleto, "pt-BR"));
+}
+
+/** Verifica se um lançamento da ficha pertence ao cooperado (mesmo com IDs diferentes entre aparelhos). */
+export function fichaPertenceCooperado(
+  data: AppData,
+  ficha: FichaCorrida,
+  cooperadoId: string,
+  cooperativaId?: string
+): boolean {
+  if (!cooperadoId) return false;
+  if (ficha.cooperadoId === cooperadoId) return true;
+
+  const alvo = resolverCooperadoIdCanonico(data, cooperadoId, cooperativaId);
+  const dono = resolverCooperadoIdCanonico(
+    data,
+    ficha.cooperadoId,
+    cooperativaId,
+    ficha.cooperadoNomeSnapshot
+  );
+  if (alvo === dono) return true;
+
+  const nomeAlvo = nomeNormalizado(getCooperadoNomeResolvido(data, cooperadoId, cooperativaId));
+  const nomeDono = nomeNormalizado(
+    ficha.cooperadoNomeSnapshot?.trim() || getCooperadoNomeResolvido(data, ficha.cooperadoId, cooperativaId)
+  );
+  if (nomeAlvo.length > 1 && nomeAlvo === nomeDono) return true;
+
+  const nota = data.notasPedido.find((n) => n.id === ficha.notaPedidoId);
+  if (nota) {
+    if (nota.cooperadoId === cooperadoId) return true;
+    const notaDono = resolverCooperadoIdCanonico(
+      data,
+      nota.cooperadoId,
+      cooperativaId,
+      nota.cooperadoNomeSnapshot
+    );
+    if (notaDono === alvo) return true;
+  }
+
+  return false;
+}
+
+export function notaPertenceCooperado(
+  data: AppData,
+  nota: { cooperadoId: string; cooperadoNomeSnapshot?: string },
+  cooperadoId: string,
+  cooperativaId?: string
+): boolean {
+  if (nota.cooperadoId === cooperadoId) return true;
+  const alvo = resolverCooperadoIdCanonico(data, cooperadoId, cooperativaId);
+  const dono = resolverCooperadoIdCanonico(data, nota.cooperadoId, cooperativaId, nota.cooperadoNomeSnapshot);
+  if (alvo === dono) return true;
+  const nomeAlvo = nomeNormalizado(getCooperadoNomeResolvido(data, cooperadoId, cooperativaId));
+  const nomeDono = nomeNormalizado(
+    nota.cooperadoNomeSnapshot?.trim() || getCooperadoNomeResolvido(data, nota.cooperadoId, cooperativaId)
+  );
+  return nomeAlvo.length > 1 && nomeAlvo === nomeDono;
 }

@@ -16,7 +16,8 @@ import {
   getArquivoMensalCooperado,
   upsertArquivoMensal,
 } from "@/services/notaPedidoService";
-import { listCooperadosComFichaNoMes, getCooperadoNomeResolvido } from "@/services/cooperadoCloudService";
+import { listCooperadosComFichaNoMes, getCooperadoNomeResolvido, fichaPertenceCooperado } from "@/services/cooperadoCloudService";
+import { syncNotasPedidoFromCloud, resolveCooperativaCnpj } from "@/services/notaPedidoCloudService";
 import { PageHeader, FilterBar, Modal } from "@/components/ui/Table";
 import { Select, FormField, Input, Textarea } from "@/components/ui/Form";
 import { Card } from "@/components/ui/Card";
@@ -27,7 +28,7 @@ import { ConfirmDialog, PromptDialog } from "@/components/ui/ConfirmDialog";
 import { SignaturePad } from "@/components/ui/SignaturePad";
 import { cooperadoPrecisaCadastrarPix } from "@/utils/pix";
 import { baixarReciboHtml } from "@/utils/recibo";
-import { updateData, addAuditEntry } from "@/services/dataStore";
+import { updateData, addAuditEntry, getData } from "@/services/dataStore";
 import { formatCurrency, formatDate, formatMesReferencia, getCurrentMesReferencia } from "@/utils/format";
 import type { FichaCorrida, PagamentoCooperadoRegistro } from "@/types";
 
@@ -99,6 +100,26 @@ export default function FichaCorridaPage() {
 
   const coopId = user && data ? getUserCooperativaId(user, data) : undefined;
 
+  useEffect(() => {
+    if (!data || !user) return;
+    void (async () => {
+      const cid = coopId ?? getUserCooperativaId(user, data);
+      const cnpj = await resolveCooperativaCnpj(data, cid, user);
+      if (cnpj) await syncNotasPedidoFromCloud(cnpj);
+    })();
+    const id = setInterval(() => {
+      void (async () => {
+        const d = getData();
+        if (!d) return;
+        const cid = coopId ?? getUserCooperativaId(user, d);
+        const cnpj = await resolveCooperativaCnpj(d, cid, user);
+        if (cnpj) await syncNotasPedidoFromCloud(cnpj);
+      })();
+    }, 12000);
+    return () => clearInterval(id);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.id, coopId]);
+
   const meses = useMemo(() => {
     if (!data) return [getCurrentMesReferencia()];
     const set = new Set(data.fichaCorrida.map((f) => f.mesReferencia));
@@ -131,7 +152,7 @@ export default function FichaCorridaPage() {
     return data.fichaCorrida
       .filter((f) => {
         if (coopId && f.cooperativaId !== coopId) return false;
-        if (f.cooperadoId !== cooperadoSelecionadoId) return false;
+        if (!fichaPertenceCooperado(data, f, cooperadoSelecionadoId, coopId)) return false;
         if (mesFilter && f.mesReferencia !== mesFilter) return false;
         return true;
       })

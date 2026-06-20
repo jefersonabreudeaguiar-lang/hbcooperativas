@@ -12,6 +12,7 @@ import {
   syncCooperativaToCloud,
 } from "@/services/cooperativaCloudService";
 import { pushCooperadoToCloud } from "@/services/cooperadoCloudService";
+import { reconciliarFichaFromNotasConferidas } from "@/services/notaPedidoService";
 
 const STORAGE_KEY = "coopeagriplla_data";
 const SESSION_KEY = "coopeagriplla_session";
@@ -55,6 +56,18 @@ function stripDemoData(data: AppData): AppData {
     (c) => !DEMO_ENTITY_IDS.has(c.id) && (!c.cooperativaId || coopIds.has(c.cooperativaId))
   );
   const cooperadoIds = new Set(cooperados.map((c) => c.id));
+  for (const n of data.notasPedido ?? []) {
+    if (n.cooperadoId) cooperadoIds.add(n.cooperadoId);
+  }
+  for (const f of data.fichaCorrida ?? []) {
+    if (f.cooperadoId) cooperadoIds.add(f.cooperadoId);
+  }
+  for (const a of data.arquivosMensais ?? []) {
+    if (a.cooperadoId) cooperadoIds.add(a.cooperadoId);
+  }
+  for (const p of data.pagamentosCooperado ?? []) {
+    if (p.cooperadoId) cooperadoIds.add(p.cooperadoId);
+  }
   const users = data.users.filter(
     (u) => !DEMO_ENTITY_IDS.has(u.id) && !DEMO_EMAILS.has(u.email.toLowerCase())
   );
@@ -157,6 +170,7 @@ function migrateData(raw: Partial<AppData> & Record<string, unknown>): AppData {
 
 function runAutomaticTasks(data: AppData): AppData {
   let current = compactarFotosNoArmazenamento(data);
+  current = reconciliarFichaFromNotasConferidas(current);
   const afterMensalidades = ensureMensalidadesDoMes(current);
   if (afterMensalidades) current = afterMensalidades;
   const afterStatus = atualizarStatusMensalidades(current);

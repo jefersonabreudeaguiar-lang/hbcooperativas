@@ -15,6 +15,7 @@ import {
   getMensalidadeFixaMes,
   getArquivoMensalCooperado,
 } from "@/services/notaPedidoService";
+import { fichaPertenceCooperado, notaPertenceCooperado } from "@/services/cooperadoCloudService";
 import { formatCurrency, formatDate, formatMesReferencia, formatCPFCNPJ, formatPhone, getCurrentMesReferencia } from "@/utils/format";
 import type { Cooperado } from "@/types";
 
@@ -29,8 +30,8 @@ export function CooperadoFichaPanel({ cooperado }: { cooperado: Cooperado }) {
 
   const resumo = useMemo(() => {
     if (!data) return null;
-    const notas = data.notasPedido.filter((n) => n.cooperadoId === cooperado.id);
-    const ficha = data.fichaCorrida.filter((f) => f.cooperadoId === cooperado.id);
+    const notas = data.notasPedido.filter((n) => notaPertenceCooperado(data, n, cooperado.id, cooperado.cooperativaId));
+    const ficha = data.fichaCorrida.filter((f) => fichaPertenceCooperado(data, f, cooperado.id, cooperado.cooperativaId));
     const mensalidades = data.mensalidades.filter((m) => m.cooperadoId === cooperado.id);
     const pagamentos = data.pagamentosCooperado.filter((p) => p.cooperadoId === cooperado.id);
     const meses = [...new Set([...notas.map((n) => n.mesReferencia), ...ficha.map((f) => f.mesReferencia), getCurrentMesReferencia()])].sort().reverse();

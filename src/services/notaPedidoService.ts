@@ -8,6 +8,7 @@ import type {
   ArquivoMensalCooperado,
   Comunicado,
 } from "@/types";
+import { fichaPertenceCooperado } from "@/services/cooperadoCloudService";
 import { round2 } from "@/utils/calculations";
 import { gerarReciboHtml } from "@/utils/recibo";
 
@@ -208,9 +209,48 @@ function getUltimoDiaMes(mesReferencia: string): string {
   return `${mesReferencia}-${String(lastDay).padStart(2, "0")}`;
 }
 
+/** Cria lançamentos na ficha a partir de notas já conferidas (sincronizadas da nuvem). */
+export function reconciliarFichaFromNotasConferidas(data: AppData): AppData {
+  const fichaNotaIds = new Set(data.fichaCorrida.map((f) => f.notaPedidoId));
+  let changed = false;
+  let fichaCorrida = [...data.fichaCorrida];
+  let arquivosMensais = data.arquivosMensais;
+
+  const notasOrdenadas = [...data.notasPedido].sort(
+    (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
+  );
+
+  for (const nota of notasOrdenadas) {
+    if (nota.status !== "conferida" && nota.status !== "pago") continue;
+    if (fichaNotaIds.has(nota.id)) continue;
+    if (nota.valorLiquido <= 0 && (nota.itens ?? []).every((i) => i.quantidade <= 0)) continue;
+
+    const ctx = { ...data, fichaCorrida, arquivosMensais };
+    const ficha = buildFichaFromNota(
+      nota,
+      ctx,
+      nota.conferidaPor ?? "Cooperativa",
+      nota.cooperadoNomeSnapshot
+    );
+    if (nota.status === "pago") {
+      ficha.status = "pago";
+    }
+    fichaCorrida = [...fichaCorrida, ficha];
+    fichaNotaIds.add(nota.id);
+    arquivosMensais = upsertArquivoMensal(ctx, nota.cooperadoId, nota.cooperativaId, nota.mesReferencia, {
+      notaPedidoIds: [nota.id],
+    });
+    changed = true;
+  }
+
+  if (!changed) return data;
+  return { ...data, fichaCorrida, arquivosMensais };
+}
+
 export function getTotalAPagarCooperado(data: AppData, cooperadoId: string, mesReferencia?: string): number {
+  const coopId = data.cooperados.find((c) => c.id === cooperadoId)?.cooperativaId;
   const entries = data.fichaCorrida.filter((f) => {
-    if (f.cooperadoId !== cooperadoId || f.status !== "pendente") return false;
+    if (!fichaPertenceCooperado(data, f, cooperadoId, coopId) || f.status !== "pendente") return false;
     if (mesReferencia && f.mesReferencia !== mesReferencia) return false;
     return true;
   });
@@ -230,15 +270,18 @@ export function getResumoPagamentoCooperado(
   fichaIds: string[];
   notaPedidoIds: string[];
 } {
+  const coopId = data.cooperados.find((c) => c.id === cooperadoId)?.cooperativaId;
   const fichas = data.fichaCorrida.filter(
-    (f) => f.cooperadoId === cooperadoId && f.mesReferencia === mesReferencia && f.status === "pendente"
+    (f) =>
+      fichaPertenceCooperado(data, f, cooperadoId, coopId) &&
+      f.mesReferencia === mesReferencia &&
+      f.status === "pendente"
   );
   const valorBruto = round2(fichas.reduce((s, f) => s + f.valorBruto, 0));
   const descontoCooperativa = round2(fichas.reduce((s, f) => s + f.descontos, 0));
   const valorEntregas = round2(fichas.reduce((s, f) => s + f.valorLiquido, 0));
-  const coop = data.cooperados.find((c) => c.id === cooperadoId);
-  const coopId = coop?.cooperativaId ?? fichas[0]?.cooperativaId;
-  const mensalidadeFixa = getMensalidadeFixaMes(data, cooperadoId, mesReferencia, coopId);
+  const coopIdResolved = coopId ?? fichas[0]?.cooperativaId;
+  const mensalidadeFixa = getMensalidadeFixaMes(data, cooperadoId, mesReferencia, coopIdResolved);
   const arquivo = getArquivoMensalCooperado(data, cooperadoId, mesReferencia);
   const descontosExtras: FichaCorridaDesconto[] = [];
   if (mensalidadeFixa > 0) {
@@ -269,8 +312,9 @@ export function getResumoPagamentoCooperado(
 }
 
 export function getTotalRecebidoCooperado(data: AppData, cooperadoId: string, mesReferencia?: string): number {
+  const coopId = data.cooperados.find((c) => c.id === cooperadoId)?.cooperativaId;
   const entries = data.fichaCorrida.filter((f) => {
-    if (f.cooperadoId !== cooperadoId || f.status !== "pago") return false;
+    if (!fichaPertenceCooperado(data, f, cooperadoId, coopId) || f.status !== "pago") return false;
     if (mesReferencia && f.mesReferencia !== mesReferencia) return false;
     return true;
   });

@@ -14,6 +14,8 @@ import { OnboardingChecklist } from "@/components/cooperado/OnboardingChecklist"
 import { getCooperadoStats, getAdminStats } from "@/services/dashboardService";
 import { getTotalAPagarCooperado } from "@/services/notaPedidoService";
 import { syncNotasPedidoFromCloud, resolveCooperativaCnpj } from "@/services/notaPedidoCloudService";
+import { notaPertenceCooperado } from "@/services/cooperadoCloudService";
+import { getData } from "@/services/dataStore";
 import { notaPertenceCooperativa } from "@/utils/fotoEntrega";
 import { getComunicadosCooperado } from "@/services/comunicadoService";
 import { cooperadoPrecisaCadastrarPix } from "@/utils/pix";
@@ -25,18 +27,42 @@ function CooperadoDashboard() {
   const { user } = useAuth();
   const data = useAppData();
   const router = useRouter();
+  const coopId = user && data ? getUserCooperativaId(user, data) : undefined;
+
+  useEffect(() => {
+    if (!data || !user?.cooperadoId) return;
+    void (async () => {
+      const cnpj = await resolveCooperativaCnpj(data, coopId, user);
+      if (cnpj) await syncNotasPedidoFromCloud(cnpj);
+    })();
+    const id = setInterval(() => {
+      void (async () => {
+        const d = getData();
+        if (!d || !user) return;
+        const cnpj = await resolveCooperativaCnpj(d, coopId, user);
+        if (cnpj) await syncNotasPedidoFromCloud(cnpj);
+      })();
+    }, 12000);
+    return () => clearInterval(id);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.cooperadoId, coopId]);
+
   if (!data || !user?.cooperadoId) return null;
 
+  const cooperadoId = user.cooperadoId;
   const mes = getCurrentMesReferencia();
-  const cooperado = data.cooperados.find((c) => c.id === user.cooperadoId);
+  const cooperado = data.cooperados.find((c) => c.id === cooperadoId);
   const coopNome = getUserCooperativaNome(user, data);
-  const valorMesFicha = getTotalAPagarCooperado(data, user.cooperadoId, mes);
+  const valorMesFicha = getTotalAPagarCooperado(data, cooperadoId, mes);
   const precisaPix = cooperado ? cooperadoPrecisaCadastrarPix(cooperado.chavePix, cooperado.pixValido) : false;
-  const entregasMes = data.notasPedido.filter((n) => n.cooperadoId === user.cooperadoId && n.mesReferencia === mes);
-  const rejeitadas = data.notasPedido.filter((n) => n.cooperadoId === user.cooperadoId && n.status === "rejeitada");
+  const entregasMes = data.notasPedido.filter(
+    (n) => notaPertenceCooperado(data, n, cooperadoId, coopId) && n.mesReferencia === mes
+  );
+  const rejeitadas = data.notasPedido.filter(
+    (n) => notaPertenceCooperado(data, n, cooperadoId, coopId) && n.status === "rejeitada"
+  );
   const emAnalise = entregasMes.filter((n) => n.status === "aguardando_conferencia").length;
-  const coopId = getUserCooperativaId(user, data);
-  const comunicados = coopId ? getComunicadosCooperado(data, coopId, user.cooperadoId).slice(0, 3) : [];
+  const comunicados = coopId ? getComunicadosCooperado(data, coopId, cooperadoId).slice(0, 3) : [];
 
   return (
     <div className="space-y-6 max-w-3xl">
