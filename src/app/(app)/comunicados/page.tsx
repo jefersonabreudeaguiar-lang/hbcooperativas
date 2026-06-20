@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo } from "react";
 import { Plus, Pin, Repeat, Pause, Play, Trash2, RefreshCw, Send, Pencil } from "lucide-react";
 import { useAppData } from "@/hooks/useAppData";
 import { usePermissions } from "@/hooks/usePermissions";
@@ -12,7 +12,7 @@ import { Card } from "@/components/ui/Card";
 import { AlertBanner } from "@/components/ui/AlertBanner";
 import { updateData, generateId, addAuditEntry, getData } from "@/services/dataStore";
 import { resolveCooperativaCnpj } from "@/services/notaPedidoCloudService";
-import { pushOperacionalToCloud, syncAllCooperativaFromCloud } from "@/services/cooperativaSyncCloudService";
+import { pushOperacionalToCloud } from "@/services/cooperativaSyncCloudService";
 import { getComunicadosParaExibicao, getComunicadosCooperado } from "@/services/comunicadoService";
 import { formatDate } from "@/utils/format";
 import type { Comunicado, ComunicadoCategoria } from "@/types";
@@ -48,15 +48,6 @@ export default function ComunicadosPage() {
   const [alteracoesPendentes, setAlteracoesPendentes] = useState(false);
   const [publicando, setPublicando] = useState(false);
   const [msgPublicacao, setMsgPublicacao] = useState("");
-
-  useEffect(() => {
-    if (!data || !coopId || !user) return;
-    void (async () => {
-      const cnpj = await resolveCooperativaCnpj(data, coopId, user);
-      if (cnpj) await syncAllCooperativaFromCloud(cnpj);
-    })();
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [coopId, user?.id]);
 
   const comunicadosExibicao = useMemo(() => {
     if (!data || !coopId) return [];

@@ -17,7 +17,6 @@ import { resolveCooperativaCnpj } from "@/services/notaPedidoCloudService";
 import {
   pushCooperativaProfileToCloud,
   pushOperacionalToCloud,
-  syncAllCooperativaFromCloud,
 } from "@/services/cooperativaSyncCloudService";
 import { ensureMensalidadesDoMes } from "@/services/mensalidadeService";
 import { isDiretoriaRole } from "@/permissions";
@@ -64,15 +63,6 @@ export default function MeuPerfilPage() {
       });
     }
   }, [cooperativa]);
-
-  useEffect(() => {
-    if (!cooperativa || !user) return;
-    void (async () => {
-      const cnpj = await resolveCooperativaCnpj(getData(), coopId, user);
-      if (cnpj) await syncAllCooperativaFromCloud(cnpj);
-    })();
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [cooperativa?.id, user?.id]);
 
   useEffect(() => {
     if (!cooperativa) return;

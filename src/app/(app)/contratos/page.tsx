@@ -12,7 +12,7 @@ import { Button } from "@/components/ui/Button";
 import { Input, Select, FormField } from "@/components/ui/Form";
 import { updateData, generateId, addAuditEntry, getData } from "@/services/dataStore";
 import { resolveCooperativaCnpj } from "@/services/notaPedidoCloudService";
-import { pushContratosToCloud, syncAllCooperativaFromCloud, publicarCatalogoContratos } from "@/services/cooperativaSyncCloudService";
+import { pushContratosToCloud, publicarCatalogoContratos } from "@/services/cooperativaSyncCloudService";
 import { contarItensCatalogo } from "@/services/catalogoContratosService";
 import { formatCurrency } from "@/utils/format";
 import { UNIDADES_MEDIDA, type ProdutoUnidade } from "@/utils/unidades";
@@ -80,7 +80,6 @@ export default function ContratosPage() {
     void (async () => {
       const cnpj = await resolveCooperativaCnpj(data, coopId, user);
       if (!cnpj) return;
-      await syncAllCooperativaFromCloud(cnpj);
       const d = getData();
       if (contarItensCatalogo(d, coopId) > 0) {
         await publicarCatalogoContratos(cnpj, d, coopId);

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo } from "react";
 import { CheckCircle, Lock, FileCheck, Download, Printer, FileText } from "lucide-react";
 import { useAppData } from "@/hooks/useAppData";
 import { usePermissions } from "@/hooks/usePermissions";
@@ -9,11 +9,9 @@ import { PageHeader, DataTable } from "@/components/ui/Table";
 import { Button } from "@/components/ui/Button";
 import { Card, StatCard } from "@/components/ui/Card";
 import { StatusBadge } from "@/components/ui/StatusBadge";
-import { updateData, addAuditEntry, getData } from "@/services/dataStore";
+import { updateData, addAuditEntry } from "@/services/dataStore";
 import { calcularFechamentoMensal, listMesesComLancamentos } from "@/services/dashboardService";
 import { calcularFechamentoMensalLive } from "@/services/relatorioService";
-import { syncAllCooperativaFromCloud } from "@/services/cooperativaSyncCloudService";
-import { resolveCooperativaCnpj } from "@/services/notaPedidoCloudService";
 import {
   baixarDocumentoHtml,
   gerarRelatorioFechamentoHtml,
@@ -28,23 +26,6 @@ export default function FechamentoMensalPage() {
   const { check, user } = usePermissions();
   const coopId = user && data ? getUserCooperativaId(user, data) : undefined;
   const [selectedMes, setSelectedMes] = useState(getCurrentMesReferencia());
-
-  useEffect(() => {
-    if (!data || !coopId || !user) return;
-    void (async () => {
-      const cnpj = await resolveCooperativaCnpj(data, coopId, user);
-      if (cnpj) await syncAllCooperativaFromCloud(cnpj);
-    })();
-    const id = setInterval(() => {
-      void (async () => {
-        const d = getData();
-        const cnpj = await resolveCooperativaCnpj(d, coopId, user);
-        if (cnpj) await syncAllCooperativaFromCloud(cnpj);
-      })();
-    }, 12000);
-    return () => clearInterval(id);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [coopId, user?.id]);
 
   const meses = useMemo(() => {
     if (!data) return [getCurrentMesReferencia()];

@@ -16,7 +16,7 @@ import { AlertBanner } from "@/components/ui/AlertBanner";
 import { PixQrModal } from "@/components/pix/PixQrModal";
 import { updateData, addAuditEntry, getData } from "@/services/dataStore";
 import { resolveCooperativaCnpj } from "@/services/notaPedidoCloudService";
-import { pushOperacionalToCloud, syncAllCooperativaFromCloud } from "@/services/cooperativaSyncCloudService";
+import { pushOperacionalToCloud } from "@/services/cooperativaSyncCloudService";
 import {
   getChavePixMensalidadeCooperativa,
   cooperadoInformouPagamentoMensalidade,
@@ -67,23 +67,6 @@ function MensalidadesContent() {
   const coopId = user && data ? getUserCooperativaId(user, data) : undefined;
   const cooperativa = coopId ? data?.cooperativas.find((c) => c.id === coopId) : undefined;
   const chavePixCoop = coopId && data ? getChavePixMensalidadeCooperativa(data, coopId) : null;
-
-  useEffect(() => {
-    if (!data || !coopId || !user) return;
-    void (async () => {
-      const cnpj = await resolveCooperativaCnpj(data, coopId, user);
-      if (cnpj) await syncAllCooperativaFromCloud(cnpj);
-    })();
-    const id = setInterval(() => {
-      void (async () => {
-        const d = getData();
-        const cnpj = await resolveCooperativaCnpj(d, coopId, user);
-        if (cnpj) await syncAllCooperativaFromCloud(cnpj);
-      })();
-    }, 12000);
-    return () => clearInterval(id);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [coopId, user?.id]);
 
   const pushOperacional = () => {
     void (async () => {

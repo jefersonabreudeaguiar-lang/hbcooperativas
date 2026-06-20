@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo } from "react";
 import { Download, Printer, FileText } from "lucide-react";
 import { useAppData } from "@/hooks/useAppData";
 import { usePermissions } from "@/hooks/usePermissions";
@@ -21,9 +21,6 @@ import {
   exportToCSV,
   downloadCSV,
 } from "@/services/dashboardService";
-import { syncAllCooperativaFromCloud } from "@/services/cooperativaSyncCloudService";
-import { resolveCooperativaCnpj } from "@/services/notaPedidoCloudService";
-import { getData } from "@/services/dataStore";
 import {
   baixarDocumentoHtml,
   gerarRelatorioEntregasPorItensHtml,
@@ -55,23 +52,6 @@ export default function RelatoriosPage() {
   const [mes, setMes] = useState(getCurrentMesReferencia());
   const [cooperadoId, setCooperadoId] = useState("");
   const [instituicaoId, setInstituicaoId] = useState("");
-
-  useEffect(() => {
-    if (!data || !coopId || !user) return;
-    void (async () => {
-      const cnpj = await resolveCooperativaCnpj(data, coopId, user);
-      if (cnpj) await syncAllCooperativaFromCloud(cnpj);
-    })();
-    const id = setInterval(() => {
-      void (async () => {
-        const d = getData();
-        const cnpj = await resolveCooperativaCnpj(d, coopId, user);
-        if (cnpj) await syncAllCooperativaFromCloud(cnpj);
-      })();
-    }, 12000);
-    return () => clearInterval(id);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [coopId, user?.id]);
 
   const meses = useMemo(() => {
     if (!data) return [getCurrentMesReferencia()];

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo } from "react";
 import { Plus } from "lucide-react";
 import { useAppData } from "@/hooks/useAppData";
 import { usePermissions } from "@/hooks/usePermissions";
@@ -10,7 +10,7 @@ import { Button } from "@/components/ui/Button";
 import { Input, Select, FormField } from "@/components/ui/Form";
 import { updateData, generateId, addAuditEntry, getData } from "@/services/dataStore";
 import { resolveCooperativaCnpj } from "@/services/notaPedidoCloudService";
-import { pushOperacionalToCloud, syncAllCooperativaFromCloud } from "@/services/cooperativaSyncCloudService";
+import { pushOperacionalToCloud } from "@/services/cooperativaSyncCloudService";
 import { TIPO_DESCONTO_LABELS } from "@/services/descontosService";
 import { formatCurrency, formatDate } from "@/utils/format";
 import { getCooperadoNome } from "@/utils/calculations";
@@ -24,23 +24,6 @@ export default function DescontosPage() {
   const [form, setForm] = useState<Partial<Desconto>>({});
 
   const coopId = user && data ? getUserCooperativaId(user, data) : undefined;
-
-  useEffect(() => {
-    if (!data || !coopId || !user) return;
-    void (async () => {
-      const cnpj = await resolveCooperativaCnpj(data, coopId, user);
-      if (cnpj) await syncAllCooperativaFromCloud(cnpj);
-    })();
-    const id = setInterval(() => {
-      void (async () => {
-        const d = getData();
-        const cnpj = await resolveCooperativaCnpj(d, coopId, user);
-        if (cnpj) await syncAllCooperativaFromCloud(cnpj);
-      })();
-    }, 12000);
-    return () => clearInterval(id);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [coopId, user?.id]);
 
   const pushOperacional = () => {
     void (async () => {

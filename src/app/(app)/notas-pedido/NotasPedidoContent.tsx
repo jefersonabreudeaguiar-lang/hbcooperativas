@@ -33,7 +33,7 @@ import {
   resolveCooperativaCnpj,
 } from "@/services/notaPedidoCloudService";
 import { listCooperadosDaCooperativa, pushCooperadoToCloud, resolverCooperadoIdCanonico, getCooperadoNomeResolvido } from "@/services/cooperadoCloudService";
-import { pushOperacionalToCloud, syncAllCooperativaFromCloud } from "@/services/cooperativaSyncCloudService";
+import { pushOperacionalToCloud } from "@/services/cooperativaSyncCloudService";
 import { getProdutosContrato } from "@/services/catalogoContratosService";
 import { listarResumosMensaisEntregas } from "@/services/cooperadoEntregasService";
 import { CooperadoEntregasPorMes } from "@/components/cooperado/CooperadoEntregasPorMes";
@@ -156,6 +156,7 @@ export default function NotasPedidoContent() {
 
   const anexarParamHandledRef = useRef(false);
   const fotoProcessandoRef = useRef(false);
+  const lancandoRef = useRef(false);
 
   const coopId = user && data ? getUserCooperativaId(user, data) : undefined;
   const ANEXAR_DRAFT_KEY = coopId ? `hb_anexar_draft_${coopId}` : "";
@@ -463,24 +464,6 @@ export default function NotasPedidoContent() {
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [anexarModal, data, coopId, reenviarNotaId]);
-
-  useEffect(() => {
-    if (!data || !coopId || !user) return;
-    void (async () => {
-      const cnpj = await resolveCooperativaCnpj(data, coopId, user);
-      if (!cnpj) return;
-      await syncAllCooperativaFromCloud(cnpj);
-    })();
-    const id = setInterval(() => {
-      void (async () => {
-        const cnpj = await resolveCooperativaCnpj(data, coopId, user);
-        if (!cnpj) return;
-        await syncAllCooperativaFromCloud(cnpj);
-      })();
-    }, 12000);
-    return () => clearInterval(id);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [coopId, isCooperado, user?.id]);
 
   useEffect(() => {
     if (!data || !instituicaoId) return;
@@ -895,10 +878,13 @@ export default function NotasPedidoContent() {
     let saved = updateDataSafe(persistir);
 
     if (!saved.ok) {
+      const idsNovos = new Set(notasLocais.map((n) => n.id));
       saved = updateDataSafe((d) => {
         const base = compactarFotosNoArmazenamento({
           ...d,
-          notasPedido: d.notasPedido.map((n) => ({ ...n, fotoPedido: undefined })),
+          notasPedido: d.notasPedido.map((n) =>
+            idsNovos.has(n.id) ? { ...n, fotoPedido: undefined } : n
+          ),
         });
         return persistir(base);
       });
@@ -999,8 +985,12 @@ export default function NotasPedidoContent() {
     }
   };
 
-  const openView = (nota: NotaPedido) => {
-    setSelectedNota(nota);
+  const openView = async (nota: NotaPedido) => {
+    let notaComFoto = nota;
+    if (!nota.fotoPedido && data && coopId) {
+      notaComFoto = await ensureNotaComFoto(data, nota, coopId);
+    }
+    setSelectedNota(notaComFoto);
     setViewModal(true);
   };
 
@@ -1010,7 +1000,7 @@ export default function NotasPedidoContent() {
   };
 
   const handleLancarNota = () => {
-    if (!user || !data || !selectedNota) return;
+    if (lancandoRef.current || !user || !data || !selectedNota) return;
     const errors: typeof conferirErrors = {};
     if (!conferenciaCooperadoId) errors.itens = "Escolha o cooperado dono desta nota.";
     if (conferenciaTotais.liquido <= 0) errors.itens = errors.itens ?? "Informe a quantidade de pelo menos um produto.";
@@ -1019,6 +1009,7 @@ export default function NotasPedidoContent() {
       return;
     }
 
+    lancandoRef.current = true;
     let notaAtualizada: NotaPedido | null = null;
 
     updateData((d) => {
@@ -1055,6 +1046,14 @@ export default function NotasPedidoContent() {
         conferidaPor: user.name,
         dataConferencia: now.split("T")[0],
       };
+      const notasPedido = d.notasPedido.map((n) => (n.id === selectedNota.id ? notaAtualizada! : n));
+      const jaNaFicha = d.fichaCorrida.some((f) => f.notaPedidoId === selectedNota.id);
+      if (jaNaFicha) {
+        return addAuditEntry(
+          { ...d, notasPedido },
+          { entityType: "nota_pedido", entityId: selectedNota.id, action: "aprovar", userId: user.id, userName: user.name }
+        );
+      }
       const ficha = buildFichaFromNota(notaAtualizada, d, user.name, nomeCoop);
       const arquivosMensais = upsertArquivoMensal(d, notaAtualizada.cooperadoId, notaAtualizada.cooperativaId, notaAtualizada.mesReferencia, {
         notaPedidoIds: [notaAtualizada.id],
@@ -1062,7 +1061,7 @@ export default function NotasPedidoContent() {
       return addAuditEntry(
         {
           ...d,
-          notasPedido: d.notasPedido.map((n) => (n.id === selectedNota.id ? notaAtualizada! : n)),
+          notasPedido,
           fichaCorrida: [...d.fichaCorrida, ficha],
           arquivosMensais,
         },
@@ -1072,12 +1071,18 @@ export default function NotasPedidoContent() {
 
     if (notaAtualizada && coopId) {
       void (async () => {
-        const d = getData();
-        const cnpj = await resolveCooperativaCnpj(d, coopId, user);
-        if (!cnpj) return;
-        await patchNotaPedidoInCloud(cnpj, notaAtualizada!);
-        await pushOperacionalToCloud(cnpj, d, coopId);
+        try {
+          const d = getData();
+          const cnpj = await resolveCooperativaCnpj(d, coopId, user);
+          if (!cnpj) return;
+          await patchNotaPedidoInCloud(cnpj, notaAtualizada!);
+          await pushOperacionalToCloud(cnpj, d, coopId);
+        } finally {
+          lancandoRef.current = false;
+        }
       })();
+    } else {
+      lancandoRef.current = false;
     }
 
     const notaId = selectedNota.id;

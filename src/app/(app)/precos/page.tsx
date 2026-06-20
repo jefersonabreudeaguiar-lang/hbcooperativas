@@ -45,8 +45,6 @@ export default function PrecosPage() {
   useEffect(() => {
     if (!data || !coopId || !user) return;
     void runSync();
-    const id = setInterval(() => void runSync(), 12000);
-    return () => clearInterval(id);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [coopId, user?.id]);
 

@@ -21,7 +21,6 @@ import {
 import { listCooperadosComFichaNoMes, getCooperadoNomeResolvido, resolverCooperadoParaPagamento } from "@/services/cooperadoCloudService";
 import { resolveCooperativaCnpj } from "@/services/notaPedidoCloudService";
 import {
-  syncAllCooperativaFromCloud,
   pushOperacionalToCloud,
   pushNotasPagasToCloud,
 } from "@/services/cooperativaSyncCloudService";
@@ -139,26 +138,6 @@ export default function FichaCorridaPage() {
     if (!isCooperado || !cooperadoId || !data) return;
     setMesFilter(getMesQuantoVouReceber(data, cooperadoId, coopId));
   }, [isCooperado, cooperadoId, data, coopId]);
-
-  useEffect(() => {
-    if (!data || !user) return;
-    void (async () => {
-      const cid = coopId ?? getUserCooperativaId(user, data);
-      const cnpj = await resolveCooperativaCnpj(data, cid, user);
-      if (cnpj) await syncAllCooperativaFromCloud(cnpj);
-    })();
-    const id = setInterval(() => {
-      void (async () => {
-        const d = getData();
-        if (!d) return;
-        const cid = coopId ?? getUserCooperativaId(user, d);
-        const cnpj = await resolveCooperativaCnpj(d, cid, user);
-        if (cnpj) await syncAllCooperativaFromCloud(cnpj);
-      })();
-    }, 12000);
-    return () => clearInterval(id);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user?.id, coopId]);
 
   const meses = useMemo(() => {
     if (!data) return [getCurrentMesReferencia()];
@@ -319,15 +298,34 @@ export default function FichaCorridaPage() {
   };
 
   const handleConfirmarPagamento = () => {
-    if (!cooperadoSelecionado || !user || totalPendente <= 0) return;
-    const resumo = getResumoPagamentoCooperado(data!, cooperadoSelecionado.id, mesFilter);
-    salvarAjustesFicha();
-    updateData((d) =>
-      addAuditEntry(registrarPagamentoCooperado(d, cooperadoSelecionado.id, mesFilter, user.name), {
+    if (!cooperadoSelecionado || !user || !data || !coopId || totalPendente <= 0) return;
+    const resumo = getResumoPagamentoCooperado(data, cooperadoSelecionado.id, mesFilter);
+    const mensalidadeFixa = parseFloat(mensalidadeInput.replace(",", ".")) || 0;
+    const descontoAvulso = parseFloat(descontoAvulsoInput.replace(",", ".")) || 0;
+    updateData((d) => {
+      const comAjustes = addAuditEntry(
+        {
+          ...d,
+          arquivosMensais: upsertArquivoMensal(d, cooperadoSelecionado.id, coopId, mesFilter, {
+            mensalidadeFixa,
+            descontoAvulso,
+            descontoAvulsoMotivo: descontoAvulsoMotivo.trim() || undefined,
+          }),
+        },
+        {
+          entityType: "ficha_corrida",
+          entityId: cooperadoSelecionado.id,
+          action: "editar",
+          userId: user.id,
+          userName: user.name,
+          changes: "Ajustes de mensalidade e desconto avulso na ficha",
+        }
+      );
+      return addAuditEntry(registrarPagamentoCooperado(comAjustes, cooperadoSelecionado.id, mesFilter, user.name), {
         entityType: "ficha_corrida", entityId: cooperadoSelecionado.id, action: "aprovar",
         userId: user.id, userName: user.name, changes: `Pagamento: ${formatCurrency(totalPendente)}`,
-      })
-    );
+      });
+    });
     void (async () => {
       const d = getData();
       const cnpj = await resolveCooperativaCnpj(d, coopId, user);

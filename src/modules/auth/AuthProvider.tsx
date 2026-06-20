@@ -36,14 +36,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (!user || loading) return;
     ensureCooperativaInCloudForUser(user).catch(() => {});
-  }, [user, loading]);
+  }, [user?.id, loading]);
 
   const login = (email: string, password: string) => {
     const result = doLogin(email, password);
     if (result) {
       const { password: _, ...safeUser } = result;
       setUser(safeUser);
-      ensureCooperativaInCloudForUser(safeUser).catch(() => {});
       return true;
     }
     return false;

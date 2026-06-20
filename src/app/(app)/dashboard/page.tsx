@@ -1,7 +1,6 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useAppData } from "@/hooks/useAppData";
 import { useAuth } from "@/modules/auth/AuthProvider";
@@ -16,10 +15,7 @@ import {
   cooperadoTemValorPendente,
   getValorQuantoVouReceber,
 } from "@/services/cooperadoEntregasService";
-import { resolveCooperativaCnpj } from "@/services/notaPedidoCloudService";
-import { syncAllCooperativaFromCloud } from "@/services/cooperativaSyncCloudService";
 import { notaPertenceCooperado } from "@/services/cooperadoCloudService";
-import { getData } from "@/services/dataStore";
 import { notaPertenceCooperativa } from "@/utils/fotoEntrega";
 import { getComunicadosCooperado } from "@/services/comunicadoService";
 import { cooperadoPrecisaCadastrarPix } from "@/utils/pix";
@@ -32,24 +28,6 @@ function CooperadoDashboard() {
   const data = useAppData();
   const router = useRouter();
   const coopId = user && data ? getUserCooperativaId(user, data) : undefined;
-
-  useEffect(() => {
-    if (!data || !user?.cooperadoId) return;
-    void (async () => {
-      const cnpj = await resolveCooperativaCnpj(data, coopId, user);
-      if (cnpj) await syncAllCooperativaFromCloud(cnpj);
-    })();
-    const id = setInterval(() => {
-      void (async () => {
-        const d = getData();
-        if (!d || !user) return;
-        const cnpj = await resolveCooperativaCnpj(d, coopId, user);
-        if (cnpj) await syncAllCooperativaFromCloud(cnpj);
-      })();
-    }, 12000);
-    return () => clearInterval(id);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user?.cooperadoId, coopId]);
 
   if (!data || !user?.cooperadoId) return null;
 
@@ -183,22 +161,6 @@ function AdminDashboard() {
   const data = useAppData();
   const { user } = useAuth();
   const coopId = user && data ? getUserCooperativaId(user, data) : undefined;
-
-  useEffect(() => {
-    if (!data || !coopId || !user) return;
-    void (async () => {
-      const cnpj = await resolveCooperativaCnpj(data, coopId, user);
-      if (cnpj) await syncAllCooperativaFromCloud(cnpj);
-    })();
-    const id = setInterval(() => {
-      void (async () => {
-        const cnpj = await resolveCooperativaCnpj(data, coopId, user);
-        if (cnpj) await syncAllCooperativaFromCloud(cnpj);
-      })();
-    }, 12000);
-    return () => clearInterval(id);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [coopId, user?.id]);
 
   if (!data || !user) return null;
 
