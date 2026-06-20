@@ -229,26 +229,35 @@ async function fetchSyncBundle(cnpj: string): Promise<{
   }
 }
 
-export async function pushContratosToCloud(cnpj: string, data?: AppData, coopId?: string): Promise<void> {
+export async function pushContratosToCloud(
+  cnpj: string,
+  data?: AppData,
+  coopId?: string,
+  options?: { localOnly?: boolean }
+): Promise<void> {
   const digits = normalizeCnpj(cnpj);
   if (digits.length !== 14) return;
   const d = data ?? getData();
   const cid = coopId ?? resolveCoopId(d, digits);
   if (!cid) return;
 
-  // Mescla com a nuvem antes de enviar — evita apagar preços cadastrados pelo responsável.
   let merged = d;
-  const bundle = await fetchSyncBundle(digits);
-  if (bundle?.contratos) {
-    merged = mergeContratosIntoData(d, bundle.contratos, cid);
-    saveDataSafe(merged);
+  let bundle: Awaited<ReturnType<typeof fetchSyncBundle>> | null = null;
+  if (!options?.localOnly) {
+    bundle = await fetchSyncBundle(digits);
+    if (bundle?.contratos) {
+      merged = mergeContratosIntoData(d, bundle.contratos, cid);
+      saveDataSafe(merged);
+    }
   }
 
   const payload = buildContratosPayload(merged, cid);
-  const localItensAtivos = payload.produtosInstituicao.filter((p) => p.ativo && p.precoUnitario > 0).length;
-  const cloudItensAtivos =
-    bundle?.contratos?.produtosInstituicao.filter((p) => p.ativo && p.precoUnitario > 0).length ?? 0;
-  if (localItensAtivos === 0 && cloudItensAtivos > 0) return;
+  if (!options?.localOnly) {
+    const localItensAtivos = payload.produtosInstituicao.filter((p) => p.ativo && p.precoUnitario > 0).length;
+    const cloudItensAtivos =
+      bundle?.contratos?.produtosInstituicao.filter((p) => p.ativo && p.precoUnitario > 0).length ?? 0;
+    if (localItensAtivos === 0 && cloudItensAtivos > 0) return;
+  }
 
   payload.updatedAt = new Date().toISOString();
   try {

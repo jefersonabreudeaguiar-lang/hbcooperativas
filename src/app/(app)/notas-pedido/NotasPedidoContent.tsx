@@ -1,7 +1,7 @@
 "use client";
 
-import { useState, useMemo, useEffect, useRef } from "react";
-import { useSearchParams } from "next/navigation";
+import { useState, useMemo, useEffect, useRef, useCallback } from "react";
+import { useSearchParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import {
   Camera, CheckCircle, FileText, XCircle, RefreshCw, ChevronRight, Eye, Building2, Pencil, UserPlus, X, ImagePlus, Trash2, FileSignature,
@@ -98,6 +98,7 @@ export default function NotasPedidoContent() {
   const data = useAppData();
   const { check, user, isCooperado, cooperadoId } = usePermissions();
   const searchParams = useSearchParams();
+  const router = useRouter();
 
   const [statusFilter, setStatusFilter] = useState("");
   const filtroResponsavelIniciado = useRef(false);
@@ -150,12 +151,28 @@ export default function NotasPedidoContent() {
   const [ultimaNotaEnviadaIds, setUltimaNotaEnviadaIds] = useState<string[]>([]);
   const [excluirNotaTarget, setExcluirNotaTarget] = useState<NotaPedido | null>(null);
   const [excluindo, setExcluindo] = useState(false);
+  const [rascunhoFotosPendente, setRascunhoFotosPendente] = useState<string[]>([]);
+  const [rascunhoContratoId, setRascunhoContratoId] = useState("");
+
+  const anexarParamHandledRef = useRef(false);
+  const fotoProcessandoRef = useRef(false);
 
   const coopId = user && data ? getUserCooperativaId(user, data) : undefined;
   const ANEXAR_DRAFT_KEY = coopId ? `hb_anexar_draft_${coopId}` : "";
 
+  const limparRascunhoAnexar = useCallback(() => {
+    if (!ANEXAR_DRAFT_KEY || typeof window === "undefined") return;
+    sessionStorage.removeItem(ANEXAR_DRAFT_KEY);
+    setRascunhoFotosPendente([]);
+    setRascunhoContratoId("");
+  }, [ANEXAR_DRAFT_KEY]);
+
   const salvarRascunhoAnexar = (fotos: string[], contratoId: string) => {
     if (!ANEXAR_DRAFT_KEY || typeof window === "undefined") return;
+    if (fotos.length === 0) {
+      limparRascunhoAnexar();
+      return;
+    }
     try {
       sessionStorage.setItem(
         ANEXAR_DRAFT_KEY,
@@ -166,23 +183,34 @@ export default function NotasPedidoContent() {
     }
   };
 
-  const limparRascunhoAnexar = () => {
-    if (!ANEXAR_DRAFT_KEY || typeof window === "undefined") return;
-    sessionStorage.removeItem(ANEXAR_DRAFT_KEY);
-  };
-
   const fecharAnexarModal = (force = false) => {
     if (!force && (enviando || processandoFoto)) return;
-    if (!force && fotosSessao.length > 0 && !anexarSucesso) {
-      if (!confirm("Descartar as fotos desta sessão?")) return;
+
+    if (force) {
+      setAnexarModal(false);
+      setAnexarSucesso(false);
+      setFotosSessao([]);
+      setFotoDuplicadaMsg("");
+      setErroEnvio("");
+      setFormErrors({});
+      limparRascunhoAnexar();
+      return;
     }
+
+    if (fotosSessao.length > 0 && !anexarSucesso) {
+      setRascunhoFotosPendente(fotosSessao);
+      if (contratoInstId) setRascunhoContratoId(contratoInstId);
+      salvarRascunhoAnexar(fotosSessao, contratoInstId);
+    } else if (fotosSessao.length === 0) {
+      limparRascunhoAnexar();
+    }
+
     setAnexarModal(false);
     setAnexarSucesso(false);
     setFotosSessao([]);
     setFotoDuplicadaMsg("");
     setErroEnvio("");
     setFormErrors({});
-    limparRascunhoAnexar();
   };
 
   useEffect(() => {
@@ -191,19 +219,67 @@ export default function NotasPedidoContent() {
       const raw = sessionStorage.getItem(ANEXAR_DRAFT_KEY);
       if (!raw) return;
       const draft = JSON.parse(raw) as { fotos?: string[]; contratoId?: string; savedAt?: number };
-      if (!draft.fotos?.length) return;
+      if (!draft.fotos?.length) {
+        sessionStorage.removeItem(ANEXAR_DRAFT_KEY);
+        return;
+      }
       if (draft.savedAt && Date.now() - draft.savedAt > 30 * 60 * 1000) {
         sessionStorage.removeItem(ANEXAR_DRAFT_KEY);
         return;
       }
-      setFotosSessao(draft.fotos);
-      if (draft.contratoId) setContratoInstId(draft.contratoId);
-      setAnexarModal(true);
+      setRascunhoFotosPendente(draft.fotos);
+      if (draft.contratoId) setRascunhoContratoId(draft.contratoId);
     } catch {
       sessionStorage.removeItem(ANEXAR_DRAFT_KEY);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ANEXAR_DRAFT_KEY]);
+
+  const continuarRascunhoFotos = () => {
+    if (rascunhoFotosPendente.length === 0) return;
+    setFormErrors({});
+    setErroEnvio("");
+    setAnexarSucesso(false);
+    setReenviarNotaId(null);
+    setFotosSessao(rascunhoFotosPendente);
+    setFotoDuplicadaMsg("");
+    if (rascunhoContratoId) {
+      setContratoInstId(rascunhoContratoId);
+      if (coopId) setInstituicaoPadraoId(coopId, rascunhoContratoId);
+    }
+    setRascunhoFotosPendente([]);
+    setAnexarModal(true);
+  };
+
+  const openAnexar = (notaRejeitada?: NotaPedido) => {
+    if (!notaRejeitada && rascunhoFotosPendente.length > 0) {
+      continuarRascunhoFotos();
+      return;
+    }
+
+    setFormErrors({});
+    setErroEnvio("");
+    setAnexarSucesso(false);
+    setReenviarNotaId(notaRejeitada?.id ?? null);
+    setInstituicaoId(notaRejeitada?.instituicaoId ?? "");
+    setUsarEscolaAvulsa(Boolean(notaRejeitada?.escolaAvulsaNome?.trim()));
+    setEscolaAvulsaNome(notaRejeitada?.escolaAvulsaNome ?? "");
+    setFotosSessao([]);
+    setFotoDuplicadaMsg("");
+    setObservacoes(notaRejeitada?.observacoes ?? "");
+    if (!notaRejeitada) {
+      limparRascunhoAnexar();
+    }
+
+    if (data && coopId) {
+      const resolved = resolverContratoEntrega(data, coopId, notaRejeitada?.instituicaoId);
+      if (resolved.criou) updateData(() => resolved.data);
+      setContratoInstId(resolved.instituicaoId);
+      if (resolved.instituicaoId) setInstituicaoPadraoId(coopId, resolved.instituicaoId);
+    }
+
+    setAnexarModal(true);
+  };
 
   const cooperadosCoop = useMemo(() => {
     if (!data || !coopId) return [];
@@ -366,7 +442,10 @@ export default function NotasPedidoContent() {
   };
 
   useEffect(() => {
-    if (searchParams.get("anexar") === "1" && isCooperado && data) openAnexar();
+    if (searchParams.get("anexar") !== "1" || !isCooperado || !data || anexarParamHandledRef.current) return;
+    anexarParamHandledRef.current = true;
+    openAnexar();
+    router.replace("/notas-pedido", { scroll: false });
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchParams, isCooperado, data]);
 
@@ -434,28 +513,6 @@ export default function NotasPedidoContent() {
     );
     return { liquido: r.valorLiquido, bruto: r.valorBruto, desconto: r.valorDesconto };
   }, [conferenciaItens, conferenciaDescontoPct, data]);
-
-  const openAnexar = (notaRejeitada?: NotaPedido) => {
-    setFormErrors({});
-    setErroEnvio("");
-    setAnexarSucesso(false);
-    setReenviarNotaId(notaRejeitada?.id ?? null);
-    setInstituicaoId(notaRejeitada?.instituicaoId ?? "");
-    setUsarEscolaAvulsa(Boolean(notaRejeitada?.escolaAvulsaNome?.trim()));
-    setEscolaAvulsaNome(notaRejeitada?.escolaAvulsaNome ?? "");
-    setFotosSessao([]);
-    setFotoDuplicadaMsg("");
-    setObservacoes(notaRejeitada?.observacoes ?? "");
-
-    if (data && coopId) {
-      const resolved = resolverContratoEntrega(data, coopId, notaRejeitada?.instituicaoId);
-      if (resolved.criou) updateData(() => resolved.data);
-      setContratoInstId(resolved.instituicaoId);
-      if (resolved.instituicaoId) setInstituicaoPadraoId(coopId, resolved.instituicaoId);
-    }
-
-    setAnexarModal(true);
-  };
 
   const openLancarAvulso = (preCooperadoId?: string) => {
     const instId = instituicaoPadraoId || instituicoes[0]?.id || "";
@@ -620,8 +677,10 @@ export default function NotasPedidoContent() {
 
   const handleFoto = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (!file || !data || !cooperadoId) return;
+    if (fotoInputRef.current) fotoInputRef.current.value = "";
+    if (!file || !data || !cooperadoId || fotoProcessandoRef.current || processandoFoto || enviando) return;
 
+    fotoProcessandoRef.current = true;
     setProcessandoFoto(true);
     setFotoDuplicadaMsg("");
     try {
@@ -641,8 +700,8 @@ export default function NotasPedidoContent() {
     } catch {
       setErroEnvio("Não foi possível processar a foto. Tente outra imagem.");
     } finally {
+      fotoProcessandoRef.current = false;
       setProcessandoFoto(false);
-      if (fotoInputRef.current) fotoInputRef.current.value = "";
     }
   };
 
@@ -657,7 +716,7 @@ export default function NotasPedidoContent() {
   };
 
   const handleAnexarEntrega = async () => {
-    if (!data || !user || !coopId) return;
+    if (!data || !user || !coopId || enviando || processandoFoto) return;
     const cid = cooperadoId ?? user.cooperadoId;
     if (!cid) {
       setErroEnvio("Conta sem vínculo de cooperado. Faça login novamente ou fale com a cooperativa.");
@@ -853,6 +912,8 @@ export default function NotasPedidoContent() {
 
     setEnviando(false);
     limparRascunhoAnexar();
+    setFotosSessao([]);
+    setFotoDuplicadaMsg("");
     const ids = notasLocais.map((n) => n.id);
     setUltimaNotaEnviadaIds(ids);
     if (isCooperado) setStatusFilter("aguardando_conferencia");
@@ -1251,6 +1312,21 @@ export default function NotasPedidoContent() {
       )}
       {lancadoMsg && (
         <AlertBanner variant="success" className="mt-4" onDismiss={() => setLancadoMsg("")}>{lancadoMsg}</AlertBanner>
+      )}
+
+      {isCooperado && rascunhoFotosPendente.length > 0 && !anexarModal && (
+        <AlertBanner variant="warning" className="mb-4" title="Fotos não enviadas">
+          Você tem {rascunhoFotosPendente.length}{" "}
+          {rascunhoFotosPendente.length === 1 ? "foto salva" : "fotos salvas"} de uma sessão anterior.
+          <div className="flex flex-wrap gap-2 mt-3">
+            <Button size="sm" onClick={continuarRascunhoFotos}>
+              Continuar envio
+            </Button>
+            <Button size="sm" variant="secondary" onClick={limparRascunhoAnexar}>
+              Descartar fotos
+            </Button>
+          </div>
+        </AlertBanner>
       )}
 
       {!isCooperado && instituicoes.length > 0 && (

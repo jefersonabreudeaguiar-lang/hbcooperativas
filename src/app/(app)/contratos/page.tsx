@@ -7,6 +7,7 @@ import { usePermissions } from "@/hooks/usePermissions";
 import { getUserCooperativaId } from "@/utils/cooperativa";
 import { PageHeader, Modal } from "@/components/ui/Table";
 import { AlertBanner } from "@/components/ui/AlertBanner";
+import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { Button } from "@/components/ui/Button";
 import { Input, Select, FormField } from "@/components/ui/Form";
 import { updateData, generateId, addAuditEntry, getData } from "@/services/dataStore";
@@ -33,6 +34,8 @@ export default function ContratosPage() {
   const nomeItemInputRef = useRef<Record<string, HTMLInputElement | null>>({});
   const itensCountRef = useRef(0);
   const [publicando, setPublicando] = useState(false);
+  const [excluirContrato, setExcluirContrato] = useState<Instituicao | null>(null);
+  const [excluindo, setExcluindo] = useState(false);
 
   const instituicoes = useMemo(() => {
     if (!data) return [];
@@ -177,6 +180,39 @@ export default function ContratosPage() {
     pushContratos();
   };
 
+  const entregasDoContrato = useMemo(() => {
+    if (!excluirContrato || !data) return 0;
+    return data.notasPedido.filter((n) => n.instituicaoId === excluirContrato.id).length;
+  }, [excluirContrato, data]);
+
+  const handleExcluirContrato = async () => {
+    if (!excluirContrato || !user || !coopId) return;
+    setExcluindo(true);
+    try {
+      updateData((d) => {
+        const updated = {
+          ...d,
+          instituicoes: d.instituicoes.filter((i) => i.id !== excluirContrato.id),
+          produtosInstituicao: d.produtosInstituicao.filter((p) => p.instituicaoId !== excluirContrato.id),
+        };
+        return addAuditEntry(updated, {
+          entityType: "instituicao",
+          entityId: excluirContrato.id,
+          action: "excluir",
+          userId: user.id,
+          userName: user.name,
+        });
+      });
+      if (expandedId === excluirContrato.id) setExpandedId(null);
+      const d = getData();
+      const cnpj = await resolveCooperativaCnpj(d, coopId, user);
+      if (cnpj) await pushContratosToCloud(cnpj, d, coopId, { localOnly: true });
+    } finally {
+      setExcluindo(false);
+      setExcluirContrato(null);
+    }
+  };
+
   if (!data) return null;
 
   const semItens = instituicoes.filter((i) => (produtosPorInst.get(i.id)?.length ?? 0) === 0);
@@ -229,23 +265,36 @@ export default function ContratosPage() {
 
             return (
               <div key={inst.id} className="bg-white border border-gray-200 rounded-2xl overflow-hidden shadow-sm">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setExpandedId(open ? null : inst.id);
-                    if (!open) itensCountRef.current = itens.length;
-                  }}
-                  className="w-full flex items-center gap-3 p-4 text-left hover:bg-gray-50 transition-colors"
-                >
-                  <div className="w-10 h-10 rounded-xl bg-green-100 flex items-center justify-center shrink-0">
-                    <Building2 size={20} className="text-green-700" />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="font-semibold text-gray-900 truncate">{inst.nome}</p>
-                    <p className="text-xs text-gray-500">{itens.length} item(ns) cadastrado(s)</p>
-                  </div>
-                  {open ? <ChevronUp size={20} className="text-gray-400" /> : <ChevronDown size={20} className="text-gray-400" />}
-                </button>
+                <div className="flex items-center gap-1">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setExpandedId(open ? null : inst.id);
+                      if (!open) itensCountRef.current = itens.length;
+                    }}
+                    className="flex-1 flex items-center gap-3 p-4 text-left hover:bg-gray-50 transition-colors min-w-0"
+                  >
+                    <div className="w-10 h-10 rounded-xl bg-green-100 flex items-center justify-center shrink-0">
+                      <Building2 size={20} className="text-green-700" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="font-semibold text-gray-900 truncate">{inst.nome}</p>
+                      <p className="text-xs text-gray-500">{itens.length} item(ns) cadastrado(s)</p>
+                    </div>
+                    {open ? <ChevronUp size={20} className="text-gray-400 shrink-0" /> : <ChevronDown size={20} className="text-gray-400 shrink-0" />}
+                  </button>
+                  {check("instituicoes", "delete") && (
+                    <button
+                      type="button"
+                      onClick={() => setExcluirContrato(inst)}
+                      className="p-3 mr-2 text-red-500 hover:bg-red-50 rounded-xl shrink-0"
+                      title="Excluir contrato"
+                      aria-label={`Excluir contrato ${inst.nome}`}
+                    >
+                      <Trash2 size={18} />
+                    </button>
+                  )}
+                </div>
 
                 {open && (
                   <div className="border-t border-gray-100 flex flex-col">
@@ -359,6 +408,23 @@ export default function ContratosPage() {
           <Button onClick={handleNovaInstituicao} disabled={!nomeInst.trim()}>Salvar</Button>
         </div>
       </Modal>
+
+      <ConfirmDialog
+        open={Boolean(excluirContrato)}
+        onClose={() => !excluindo && setExcluirContrato(null)}
+        onConfirm={() => void handleExcluirContrato()}
+        title="Excluir contrato?"
+        message={
+          excluirContrato
+            ? entregasDoContrato > 0
+              ? `Excluir "${excluirContrato.nome}"? Todos os itens serão removidos. ${entregasDoContrato} entrega(s) antiga(s) permanecem no histórico, mas novas entregas não poderão usar este contrato.`
+              : `Excluir "${excluirContrato.nome}"? Todos os itens cadastrados neste contrato serão removidos.`
+            : ""
+        }
+        confirmLabel="Sim, excluir"
+        variant="danger"
+        loading={excluindo}
+      />
     </div>
   );
 }
