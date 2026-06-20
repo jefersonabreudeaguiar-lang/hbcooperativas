@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useAppData } from "@/hooks/useAppData";
 import { useAuth } from "@/modules/auth/AuthProvider";
@@ -12,6 +13,7 @@ import { AlertBanner } from "@/components/ui/AlertBanner";
 import { OnboardingChecklist } from "@/components/cooperado/OnboardingChecklist";
 import { getCooperadoStats, getAdminStats } from "@/services/dashboardService";
 import { getTotalAPagarCooperado } from "@/services/notaPedidoService";
+import { syncNotasPedidoFromCloud, getCooperativaCnpj } from "@/services/notaPedidoCloudService";
 import { getComunicadosCooperado } from "@/services/comunicadoService";
 import { cooperadoPrecisaCadastrarPix } from "@/utils/pix";
 import { formatCurrency, formatDate, formatMesReferencia, getCurrentMesReferencia } from "@/utils/format";
@@ -123,11 +125,23 @@ function CooperadoDashboard() {
 function AdminDashboard() {
   const data = useAppData();
   const { user } = useAuth();
+  const coopId = user && data ? getUserCooperativaId(user, data) : undefined;
+
+  useEffect(() => {
+    if (!data || !coopId) return;
+    const cnpj = getCooperativaCnpj(data, coopId);
+    if (!cnpj) return;
+    void syncNotasPedidoFromCloud(cnpj);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [coopId]);
+
   if (!data || !user) return null;
 
   const stats = getAdminStats(data);
   const coopNome = getUserCooperativaNome(user, data);
-  const pendentes = data.notasPedido.filter((n) => n.status === "aguardando_conferencia").length;
+  const pendentes = data.notasPedido.filter(
+    (n) => n.status === "aguardando_conferencia" && (!coopId || n.cooperativaId === coopId)
+  ).length;
 
   return (
     <div className="space-y-6">

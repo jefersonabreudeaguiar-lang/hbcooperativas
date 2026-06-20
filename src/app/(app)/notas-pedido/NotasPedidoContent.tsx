@@ -16,7 +16,7 @@ import { NotaStatusBadge } from "@/components/ui/NotaStatusBadge";
 import { AlertBanner } from "@/components/ui/AlertBanner";
 import { PromptDialog } from "@/components/ui/ConfirmDialog";
 import { Card } from "@/components/ui/Card";
-import { updateData, generateId, addAuditEntry } from "@/services/dataStore";
+import { updateData, updateDataSafe, generateId, addAuditEntry } from "@/services/dataStore";
 import {
   calcularItensNota,
   gerarNumeroNota,
@@ -24,6 +24,12 @@ import {
   aplicarItensNaNota,
   upsertArquivoMensal,
 } from "@/services/notaPedidoService";
+import {
+  getCooperativaCnpj,
+  patchNotaPedidoInCloud,
+  pushNotasPedidoToCloud,
+  syncNotasPedidoFromCloud,
+} from "@/services/notaPedidoCloudService";
 import { formatCurrency, formatDate, formatMesReferencia, getCurrentMesReferencia } from "@/utils/format";
 import { labelUnidade } from "@/utils/unidades";
 import { sortPorOrdemLancamento } from "@/utils/produtos";
@@ -33,7 +39,7 @@ import {
   resolverInstituicaoConferencia,
 } from "@/utils/instituicaoPreferida";
 import { getCooperadoNome } from "@/utils/calculations";
-import { isFotoDuplicada } from "@/utils/fotoEntrega";
+import { isFotoDuplicada, compressFotoFile } from "@/utils/fotoEntrega";
 import type { NotaPedido, NotaPedidoItem, Cooperado } from "@/types";
 
 const NOVO_AVULSO = "__novo__";
@@ -102,6 +108,9 @@ export default function NotasPedidoContent() {
   const [localEntrega, setLocalEntrega] = useState("");
   const [fotosSessao, setFotosSessao] = useState<string[]>([]);
   const [fotoDuplicadaMsg, setFotoDuplicadaMsg] = useState("");
+  const [processandoFoto, setProcessandoFoto] = useState(false);
+  const [enviando, setEnviando] = useState(false);
+  const [erroEnvio, setErroEnvio] = useState("");
   const [observacoes, setObservacoes] = useState("");
   const [reenviarNotaId, setReenviarNotaId] = useState<string | null>(null);
   const fotoInputRef = useRef<HTMLInputElement>(null);
@@ -197,6 +206,14 @@ export default function NotasPedidoContent() {
   }, [searchParams, isCooperado]);
 
   useEffect(() => {
+    if (!data || !coopId) return;
+    const cnpj = getCooperativaCnpj(data, coopId);
+    if (!cnpj) return;
+    void syncNotasPedidoFromCloud(cnpj);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [coopId]);
+
+  useEffect(() => {
     if (!data || !instituicaoId) return;
     const inst = data.instituicoes.find((i) => i.id === instituicaoId);
     setLocalEntrega(inst?.localEntrega ?? inst?.endereco ?? "");
@@ -240,6 +257,7 @@ export default function NotasPedidoContent() {
 
   const openAnexar = (notaRejeitada?: NotaPedido) => {
     setFormErrors({});
+    setErroEnvio("");
     setReenviarNotaId(notaRejeitada?.id ?? null);
     setInstituicaoId(notaRejeitada?.instituicaoId ?? "");
     setUsarEscolaAvulsa(Boolean(notaRejeitada?.escolaAvulsaNome?.trim()));
@@ -384,13 +402,14 @@ export default function NotasPedidoContent() {
     setTimeout(() => setLancadoMsg(""), 6000);
   };
 
-  const handleFoto = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFoto = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file || !data || !cooperadoId) return;
 
-    const reader = new FileReader();
-    reader.onload = () => {
-      const dataUrl = reader.result as string;
+    setProcessandoFoto(true);
+    setFotoDuplicadaMsg("");
+    try {
+      const dataUrl = await compressFotoFile(file);
       const notasCooperado = data.notasPedido.filter((n) => n.cooperadoId === cooperadoId);
 
       setFotosSessao((prev) => {
@@ -398,15 +417,16 @@ export default function NotasPedidoContent() {
           setFotoDuplicadaMsg("Imagem repetida — esta foto já foi adicionada ou já foi enviada antes.");
           return prev;
         }
-        setFotoDuplicadaMsg("");
-        setFormErrors((e) => ({ ...e, foto: undefined }));
+        setFormErrors((err) => ({ ...err, foto: undefined }));
         if (reenviarNotaId) return [dataUrl];
         return [...prev, dataUrl];
       });
-
+    } catch {
+      setErroEnvio("Não foi possível processar a foto. Tente outra imagem.");
+    } finally {
+      setProcessandoFoto(false);
       if (fotoInputRef.current) fotoInputRef.current.value = "";
-    };
-    reader.readAsDataURL(file);
+    }
   };
 
   const removerFotoSessao = (idx: number) => {
@@ -415,8 +435,14 @@ export default function NotasPedidoContent() {
     setFormErrors((prev) => ({ ...prev, foto: undefined }));
   };
 
-  const handleAnexarEntrega = () => {
-    if (!data || !user || !coopId || !cooperadoId) return;
+  const handleAnexarEntrega = async () => {
+    if (!data || !user || !coopId) return;
+    const cid = cooperadoId ?? user.cooperadoId;
+    if (!cid) {
+      setErroEnvio("Conta sem vínculo de cooperado. Faça login novamente ou fale com a cooperativa.");
+      return;
+    }
+
     const errors: typeof formErrors = {};
     if (usarEscolaAvulsa && !escolaAvulsaNome.trim()) {
       errors.escolaAvulsa = "Informe o nome da escola.";
@@ -429,32 +455,39 @@ export default function NotasPedidoContent() {
 
     const escolaAvulsa = usarEscolaAvulsa ? escolaAvulsaNome.trim() : undefined;
     const local = escolaAvulsa ?? "";
-
     const now = new Date().toISOString();
     const mes = getCurrentMesReferencia();
+    const cooperadoNome = getCooperadoNome(data.cooperados, cid);
+    const qtdFotos = fotosSessao.length;
+    let notasCriadas: NotaPedido[] = [];
 
-    updateData((d) => {
+    setEnviando(true);
+    setErroEnvio("");
+
+    const saved = updateDataSafe((d) => {
       if (reenviarNotaId) {
         const foto = fotosSessao[0];
-        const updated = d.notasPedido.map((n) =>
-          n.id === reenviarNotaId
-            ? {
-                ...n,
-                instituicaoId: "",
-                localEntrega: local,
-                escolaAvulsaNome: escolaAvulsa,
-                fotoPedido: foto,
-                fotoEnviadaEm: now,
-                observacoes,
-                status: "aguardando_conferencia" as const,
-                motivoRejeicao: undefined,
-                rejeitadaPor: undefined,
-                dataRejeicao: undefined,
-                reenviadaEm: now,
-                updatedAt: now,
-              }
-            : n
-        );
+        const notaAtualizada = d.notasPedido.find((n) => n.id === reenviarNotaId);
+        if (!notaAtualizada) return d;
+
+        const updatedNota: NotaPedido = {
+          ...notaAtualizada,
+          instituicaoId: "",
+          localEntrega: local,
+          escolaAvulsaNome: escolaAvulsa,
+          fotoPedido: foto,
+          fotoEnviadaEm: now,
+          observacoes,
+          status: "aguardando_conferencia",
+          motivoRejeicao: undefined,
+          rejeitadaPor: undefined,
+          dataRejeicao: undefined,
+          reenviadaEm: now,
+          updatedAt: now,
+        };
+        notasCriadas = [updatedNota];
+
+        const updated = d.notasPedido.map((n) => (n.id === reenviarNotaId ? updatedNota : n));
         return addAuditEntry({ ...d, notasPedido: updated }, {
           entityType: "nota_pedido", entityId: reenviarNotaId, action: "editar",
           userId: user.id, userName: user.name, changes: "Entrega reenviada",
@@ -462,11 +495,12 @@ export default function NotasPedidoContent() {
       }
 
       let notas = [...d.notasPedido];
+      const criadas: NotaPedido[] = [];
       for (const foto of fotosSessao) {
         const nota: NotaPedido = {
           id: generateId("np"),
           cooperativaId: coopId,
-          cooperadoId: cooperadoId,
+          cooperadoId: cid,
           instituicaoId: "",
           numeroNota: gerarNumeroNota({ ...d, notasPedido: notas }, coopId),
           dataEntrega: now.split("T")[0],
@@ -486,7 +520,9 @@ export default function NotasPedidoContent() {
           updatedAt: now,
         };
         notas = [...notas, nota];
+        criadas.push(nota);
       }
+      notasCriadas = criadas;
 
       const lastId = notas[notas.length - 1]?.id;
       return addAuditEntry({ ...d, notasPedido: notas }, {
@@ -495,16 +531,33 @@ export default function NotasPedidoContent() {
         action: "criar",
         userId: user.id,
         userName: user.name,
-        changes: `${fotosSessao.length} entrega(s) com foto`,
+        changes: `${qtdFotos} entrega(s) com foto`,
       });
     });
 
+    if (!saved.ok) {
+      setEnviando(false);
+      setErroEnvio(saved.error);
+      return;
+    }
+
+    const cnpj = getCooperativaCnpj(data, coopId);
+    if (cnpj) {
+      const cloud = await pushNotasPedidoToCloud(cnpj, notasCriadas, cooperadoNome);
+      if (!cloud.ok && !cloud.offline) {
+        setEnviando(false);
+        setErroEnvio(cloud.error ?? "Erro ao enviar para o responsável.");
+        return;
+      }
+    }
+
+    setEnviando(false);
     setAnexarModal(false);
     setFotosSessao([]);
     setSuccessMsg(
-      fotosSessao.length === 1
-        ? "Pronto! Aguarde enquanto a cooperativa analisa sua entrega."
-        : `${fotosSessao.length} fotos enviadas! A cooperativa vai analisar cada uma.`
+      qtdFotos === 1
+        ? "Enviado! O responsável vai conferir e lançar o valor na sua ficha."
+        : `${qtdFotos} fotos enviadas! O responsável vai conferir cada uma e lançar na ficha.`
     );
   };
 
@@ -543,6 +596,8 @@ export default function NotasPedidoContent() {
       return;
     }
 
+    let notaAtualizada: NotaPedido | null = null;
+
     updateData((d) => {
       const now = new Date().toISOString();
       if (coopId && conferenciaInstId) setInstituicaoPadraoId(coopId, conferenciaInstId);
@@ -558,7 +613,7 @@ export default function NotasPedidoContent() {
         conferenciaItens.map((i) => ({ ...i, valorBruto: 0 })),
         conferenciaDescontoPct
       );
-      const notaAtualizada: NotaPedido = {
+      notaAtualizada = {
         ...base,
         status: "conferida",
         conferidaPor: user.name,
@@ -571,13 +626,18 @@ export default function NotasPedidoContent() {
       return addAuditEntry(
         {
           ...d,
-          notasPedido: d.notasPedido.map((n) => (n.id === selectedNota.id ? notaAtualizada : n)),
+          notasPedido: d.notasPedido.map((n) => (n.id === selectedNota.id ? notaAtualizada! : n)),
           fichaCorrida: [...d.fichaCorrida, ficha],
           arquivosMensais,
         },
         { entityType: "nota_pedido", entityId: selectedNota.id, action: "aprovar", userId: user.id, userName: user.name }
       );
     });
+
+    if (notaAtualizada && coopId) {
+      const cnpj = getCooperativaCnpj(data, coopId);
+      if (cnpj) void patchNotaPedidoInCloud(cnpj, notaAtualizada);
+    }
 
     setConferirModal(false);
     const coopNome = getCooperadoNome(data.cooperados, conferenciaCooperadoId);
@@ -588,8 +648,10 @@ export default function NotasPedidoContent() {
   const handleRejeitarNota = () => {
     if (!user || !selectedNota || !motivoRejeicao.trim()) return;
     const now = new Date().toISOString();
+    let notaAtualizada: NotaPedido | null = null;
+
     updateData((d) => {
-      const notaAtualizada: NotaPedido = {
+      notaAtualizada = {
         ...selectedNota,
         status: "rejeitada",
         rejeitadaPor: user.name,
@@ -598,10 +660,15 @@ export default function NotasPedidoContent() {
         updatedAt: now,
       };
       return addAuditEntry(
-        { ...d, notasPedido: d.notasPedido.map((n) => (n.id === selectedNota.id ? notaAtualizada : n)) },
+        { ...d, notasPedido: d.notasPedido.map((n) => (n.id === selectedNota.id ? notaAtualizada! : n)) },
         { entityType: "nota_pedido", entityId: selectedNota.id, action: "editar", userId: user.id, userName: user.name }
       );
     });
+
+    if (notaAtualizada && coopId && data) {
+      const cnpj = getCooperativaCnpj(data, coopId);
+      if (cnpj) void patchNotaPedidoInCloud(cnpj, notaAtualizada);
+    }
     setRejectModal(false);
     setConferirModal(false);
     setMotivoRejeicao("");
@@ -803,17 +870,22 @@ export default function NotasPedidoContent() {
         </Button>
       )}
 
-      <Modal open={anexarModal} onClose={() => { setAnexarModal(false); setFotosSessao([]); setFotoDuplicadaMsg(""); }} title={reenviarNotaId ? "Enviar de novo" : "Enviar foto da entrega"} size="md"
+      <Modal open={anexarModal} onClose={() => { if (enviando) return; setAnexarModal(false); setFotosSessao([]); setFotoDuplicadaMsg(""); setErroEnvio(""); }} title={reenviarNotaId ? "Enviar de novo" : "Enviar foto da entrega"} size="md"
         footer={
           <div className="flex flex-col-reverse sm:flex-row justify-end gap-2">
-            <Button variant="secondary" onClick={() => setAnexarModal(false)}>Cancelar</Button>
-            <Button size="lg" onClick={handleAnexarEntrega} disabled={fotosSessao.length === 0}>
-              <FileText size={18} /> {fotosSessao.length > 0 ? `Enviar ${fotosSessao.length} foto(s)` : "Enviar para a cooperativa"}
+            <Button type="button" variant="secondary" disabled={enviando} onClick={() => setAnexarModal(false)}>Cancelar</Button>
+            <Button type="button" size="lg" onClick={() => void handleAnexarEntrega()} disabled={fotosSessao.length === 0 || enviando || processandoFoto}>
+              <FileText size={18} /> {enviando ? "Enviando..." : fotosSessao.length > 0 ? `Enviar ${fotosSessao.length} foto(s)` : "Enviar para a cooperativa"}
             </Button>
           </div>
         }
       >
         <div className="space-y-4">
+          {erroEnvio && (
+            <AlertBanner variant="error" onDismiss={() => setErroEnvio("")}>
+              {erroEnvio}
+            </AlertBanner>
+          )}
           <p className="text-sm text-gray-600">
             {reenviarNotaId
               ? "Tire uma nova foto do pedido corrigido."
@@ -856,12 +928,12 @@ export default function NotasPedidoContent() {
           )}
 
           <FormField label={reenviarNotaId ? "Nova foto" : "Adicionar foto do pedido"} required error={formErrors.foto} hint="Mostre o pedido inteiro com a assinatura de quem recebeu.">
-            <label className="flex flex-col items-center gap-2 p-8 border-2 border-dashed border-green-400 rounded-2xl cursor-pointer bg-green-50/50 active:bg-green-100">
+            <label className={`flex flex-col items-center gap-2 p-8 border-2 border-dashed border-green-400 rounded-2xl bg-green-50/50 ${processandoFoto || enviando ? "opacity-60 pointer-events-none" : "cursor-pointer active:bg-green-100"}`}>
               <Camera size={48} className="text-green-700" />
               <span className="text-base font-semibold text-green-800">
-                {fotosSessao.length === 0 ? "Tirar foto agora" : "Tirar outra foto"}
+                {processandoFoto ? "Processando foto..." : fotosSessao.length === 0 ? "Tirar foto agora" : "Tirar outra foto"}
               </span>
-              <input ref={fotoInputRef} type="file" accept="image/*" capture="environment" className="hidden" onChange={handleFoto} />
+              <input ref={fotoInputRef} type="file" accept="image/*" capture="environment" className="hidden" onChange={(e) => void handleFoto(e)} disabled={processandoFoto || enviando} />
             </label>
           </FormField>
 

@@ -188,10 +188,28 @@ function loadData(forceReload = false): AppData {
 }
 
 function saveData(data: AppData): void {
-  if (typeof window === "undefined") return;
-  memoryCache = data;
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
-  notify();
+  const result = saveDataSafe(data);
+  if (!result.ok) throw new Error(result.error);
+}
+
+export function saveDataSafe(data: AppData): { ok: true } | { ok: false; error: string } {
+  if (typeof window === "undefined") return { ok: true };
+  try {
+    memoryCache = data;
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+    notify();
+    return { ok: true };
+  } catch (e) {
+    const quota =
+      e instanceof DOMException &&
+      (e.name === "QuotaExceededError" || e.code === 22 || e.code === 1014);
+    return {
+      ok: false,
+      error: quota
+        ? "Memória do navegador cheia. Envie menos fotos por vez ou remova entregas antigas."
+        : "Não foi possível salvar os dados. Tente novamente.",
+    };
+  }
 }
 
 export function getData(): AppData {
@@ -211,10 +229,19 @@ export function refreshData(): AppData {
 }
 
 export function updateData(updater: (data: AppData) => AppData): AppData {
+  const result = updateDataSafe(updater);
+  if (!result.ok) throw new Error(result.error);
+  return result.data;
+}
+
+export function updateDataSafe(
+  updater: (data: AppData) => AppData
+): { ok: true; data: AppData } | { ok: false; error: string } {
   const current = loadData();
   const updated = updater(current);
-  saveData(updated);
-  return updated;
+  const saved = saveDataSafe(updated);
+  if (!saved.ok) return saved;
+  return { ok: true, data: updated };
 }
 
 export function generateId(prefix: string): string {
