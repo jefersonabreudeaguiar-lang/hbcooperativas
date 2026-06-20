@@ -12,6 +12,58 @@ import { fichaPertenceCooperado } from "@/services/cooperadoCloudService";
 import { round2 } from "@/utils/calculations";
 import { gerarReciboHtml } from "@/utils/recibo";
 
+export interface ItemResumoFichaMes {
+  produtoInstituicaoId: string;
+  produtoNome: string;
+  unidade: string;
+  precoUnitario: number;
+  quantidade: number;
+  valorBruto: number;
+}
+
+/** Soma itens de todas as entregas do cooperado no mês (ficha corrida consolidada). */
+export function agregarItensFichaMes(
+  data: AppData,
+  cooperadoId: string,
+  mesReferencia: string,
+  cooperativaId?: string
+): { itens: ItemResumoFichaMes[]; entregas: number; valorBruto: number } {
+  const fichas = data.fichaCorrida.filter(
+    (f) =>
+      fichaPertenceCooperado(data, f, cooperadoId, cooperativaId) &&
+      f.mesReferencia === mesReferencia
+  );
+
+  const map = new Map<string, ItemResumoFichaMes>();
+  for (const ficha of fichas) {
+    for (const item of ficha.itens ?? []) {
+      if (item.quantidade <= 0) continue;
+      const key = item.produtoInstituicaoId;
+      const existente = map.get(key);
+      if (existente) {
+        existente.quantidade = round2(existente.quantidade + item.quantidade);
+        existente.valorBruto = round2(existente.valorBruto + item.valorBruto);
+      } else {
+        map.set(key, {
+          produtoInstituicaoId: item.produtoInstituicaoId,
+          produtoNome: item.produtoNome,
+          unidade: item.unidade,
+          precoUnitario: item.precoUnitario,
+          quantidade: item.quantidade,
+          valorBruto: item.valorBruto,
+        });
+      }
+    }
+  }
+
+  const itens = [...map.values()].sort((a, b) =>
+    a.produtoNome.localeCompare(b.produtoNome, "pt-BR")
+  );
+  const valorBruto = round2(itens.reduce((s, i) => s + i.valorBruto, 0));
+
+  return { itens, entregas: fichas.length, valorBruto };
+}
+
 export function calcularItensNota(
   itens: NotaPedidoItem[],
   percentualDesconto: number

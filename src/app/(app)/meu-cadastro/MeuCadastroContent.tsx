@@ -14,8 +14,10 @@ import { Button } from "@/components/ui/Button";
 import { Input, FormField } from "@/components/ui/Form";
 import { AlertBanner } from "@/components/ui/AlertBanner";
 import { updateData, addAuditEntry } from "@/services/dataStore";
+import { pushCooperadoToCloud } from "@/services/cooperadoCloudService";
+import { resolveCooperativaCnpj } from "@/services/notaPedidoCloudService";
 import { formatCPFCNPJ, formatPhone } from "@/utils/format";
-import { getUserCooperativaNome } from "@/utils/cooperativa";
+import { getUserCooperativaId, getUserCooperativaNome } from "@/utils/cooperativa";
 import { cooperadoPrecisaCadastrarPix } from "@/utils/pix";
 
 export default function MeuCadastroContent() {
@@ -46,7 +48,7 @@ export default function MeuCadastroContent() {
 
   const precisaPix = cooperadoPrecisaCadastrarPix(cooperado.chavePix, cooperado.pixValido);
 
-  const handleSavePix = () => {
+  const handleSavePix = async () => {
     if (!chavePix.trim()) {
       setPixError("Informe sua chave PIX.");
       return;
@@ -57,13 +59,20 @@ export default function MeuCadastroContent() {
     }
     if (!user) return;
     setPixError("");
+    const now = new Date().toISOString();
+    const cooperadoAtualizado: typeof cooperado = {
+      ...cooperado,
+      chavePix: chavePix.trim(),
+      pixValido: true,
+      pixInvalidoMotivo: undefined,
+      updatedAt: now,
+    };
+
     updateData((d) => {
       const updated = {
         ...d,
         cooperados: d.cooperados.map((c) =>
-          c.id === cooperado.id
-            ? { ...c, chavePix: chavePix.trim(), pixValido: true, pixInvalidoMotivo: undefined, updatedAt: new Date().toISOString() }
-            : c
+          c.id === cooperado.id ? cooperadoAtualizado : c
         ),
       };
       return addAuditEntry(updated, {
@@ -71,6 +80,11 @@ export default function MeuCadastroContent() {
         userId: user.id, userName: user.name, changes: "PIX atualizado",
       });
     });
+
+    const coopId = getUserCooperativaId(user, data);
+    const cnpj = await resolveCooperativaCnpj(data, coopId, user);
+    if (cnpj) void pushCooperadoToCloud(cnpj, cooperadoAtualizado, user.email);
+
     setSaved(true);
     if (isNovo) {
       router.replace("/notas-pedido?anexar=1");

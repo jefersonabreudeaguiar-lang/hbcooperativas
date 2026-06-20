@@ -15,9 +15,11 @@ import {
   getStatusCotaCooperado,
   getArquivoMensalCooperado,
   upsertArquivoMensal,
+  agregarItensFichaMes,
 } from "@/services/notaPedidoService";
-import { listCooperadosComFichaNoMes, getCooperadoNomeResolvido, fichaPertenceCooperado } from "@/services/cooperadoCloudService";
+import { listCooperadosComFichaNoMes, getCooperadoNomeResolvido, resolverCooperadoParaPagamento } from "@/services/cooperadoCloudService";
 import { syncNotasPedidoFromCloud, resolveCooperativaCnpj } from "@/services/notaPedidoCloudService";
+import { syncCooperadosFromCloud } from "@/services/cooperadoCloudService";
 import { PageHeader, FilterBar, Modal } from "@/components/ui/Table";
 import { Select, FormField, Input, Textarea } from "@/components/ui/Form";
 import { Card } from "@/components/ui/Card";
@@ -30,41 +32,59 @@ import { cooperadoPrecisaCadastrarPix } from "@/utils/pix";
 import { baixarReciboHtml } from "@/utils/recibo";
 import { updateData, addAuditEntry, getData } from "@/services/dataStore";
 import { formatCurrency, formatDate, formatMesReferencia, getCurrentMesReferencia } from "@/utils/format";
-import type { FichaCorrida, PagamentoCooperadoRegistro } from "@/types";
+import type { PagamentoCooperadoRegistro } from "@/types";
 
-function DetalheLancamento({ ficha }: { ficha: FichaCorrida }) {
+function TabelaResumoItens({
+  itens,
+  entregas,
+}: {
+  itens: ReturnType<typeof agregarItensFichaMes>["itens"];
+  entregas: number;
+}) {
+  if (itens.length === 0) {
+    return (
+      <p className="text-sm text-gray-500">
+        Nenhuma entrega conferida neste mês ainda.
+      </p>
+    );
+  }
+
   return (
-    <div className="mt-3 border border-gray-200 rounded-xl overflow-hidden text-sm">
-      <table className="w-full">
-        <thead className="bg-gray-50 border-b">
-          <tr>
-            <th className="text-left px-3 py-2 font-semibold text-gray-700">Item</th>
-            <th className="text-right px-3 py-2 font-semibold text-gray-700">Qtd</th>
-            <th className="text-right px-3 py-2 font-semibold text-gray-700">Valor</th>
-          </tr>
-        </thead>
-        <tbody className="divide-y divide-gray-100">
-          {(ficha.itens ?? []).map((i) => (
-            <tr key={i.produtoInstituicaoId}>
-              <td className="px-3 py-2">{i.produtoNome}</td>
-              <td className="px-3 py-2 text-right">{i.quantidade} {i.unidade}</td>
-              <td className="px-3 py-2 text-right">{formatCurrency(i.valorBruto)}</td>
+    <div>
+      <p className="text-sm text-gray-600 mb-3">
+        {entregas} entrega{entregas !== 1 ? "s" : ""} no mês · totais consolidados por item
+      </p>
+      <div className="border border-gray-200 rounded-xl overflow-hidden">
+        <table className="w-full text-sm">
+          <thead className="bg-green-700 text-white">
+            <tr>
+              <th className="text-left px-4 py-2.5 font-semibold">Item</th>
+              <th className="text-right px-4 py-2.5 font-semibold w-28">Quantidade</th>
+              <th className="text-right px-4 py-2.5 font-semibold w-32">Valor</th>
             </tr>
-          ))}
-        </tbody>
-      </table>
-      <div className="bg-gray-50 px-3 py-2 space-y-1 text-xs border-t">
-        <div className="flex justify-between"><span>Bruto</span><span>{formatCurrency(ficha.valorBruto)}</span></div>
-        {ficha.percentualDescontoCooperativa != null && ficha.descontos > 0 && (
-          <div className="flex justify-between text-amber-700">
-            <span>Desconto cooperativa ({ficha.percentualDescontoCooperativa}%)</span>
-            <span>- {formatCurrency(ficha.descontos)}</span>
-          </div>
-        )}
-        <div className="flex justify-between font-semibold text-green-700 pt-1 border-t border-gray-200">
-          <span>Líquido desta entrega</span>
-          <span>{formatCurrency(ficha.valorLiquido)}</span>
-        </div>
+          </thead>
+          <tbody className="divide-y divide-gray-100">
+            {itens.map((i) => (
+              <tr key={i.produtoInstituicaoId} className="hover:bg-green-50/40">
+                <td className="px-4 py-2.5 font-medium text-gray-900">{i.produtoNome}</td>
+                <td className="px-4 py-2.5 text-right text-gray-700">
+                  {i.quantidade} {i.unidade}
+                </td>
+                <td className="px-4 py-2.5 text-right font-medium">{formatCurrency(i.valorBruto)}</td>
+              </tr>
+            ))}
+          </tbody>
+          <tfoot className="bg-gray-50 border-t border-gray-200">
+            <tr>
+              <td className="px-4 py-2.5 font-semibold text-gray-800" colSpan={2}>
+                Total bruto dos itens
+              </td>
+              <td className="px-4 py-2.5 text-right font-bold text-gray-900">
+                {formatCurrency(itens.reduce((s, i) => s + i.valorBruto, 0))}
+              </td>
+            </tr>
+          </tfoot>
+        </table>
       </div>
     </div>
   );
@@ -105,7 +125,10 @@ export default function FichaCorridaPage() {
     void (async () => {
       const cid = coopId ?? getUserCooperativaId(user, data);
       const cnpj = await resolveCooperativaCnpj(data, cid, user);
-      if (cnpj) await syncNotasPedidoFromCloud(cnpj);
+      if (cnpj) {
+        await syncCooperadosFromCloud(cnpj);
+        await syncNotasPedidoFromCloud(cnpj);
+      }
     })();
     const id = setInterval(() => {
       void (async () => {
@@ -113,7 +136,10 @@ export default function FichaCorridaPage() {
         if (!d) return;
         const cid = coopId ?? getUserCooperativaId(user, d);
         const cnpj = await resolveCooperativaCnpj(d, cid, user);
-        if (cnpj) await syncNotasPedidoFromCloud(cnpj);
+        if (cnpj) {
+          await syncCooperadosFromCloud(cnpj);
+          await syncNotasPedidoFromCloud(cnpj);
+        }
       })();
     }, 12000);
     return () => clearInterval(id);
@@ -137,27 +163,16 @@ export default function FichaCorridaPage() {
   const cooperadoSelecionado = useMemo(() => {
     if (!data || !cooperadoSelecionadoId) return undefined;
     return (
+      resolverCooperadoParaPagamento(data, cooperadoSelecionadoId, coopId) ??
       data.cooperados.find((c) => c.id === cooperadoSelecionadoId) ??
       cooperadosComFicha.find((c) => c.id === cooperadoSelecionadoId)
     );
-  }, [data, cooperadoSelecionadoId, cooperadosComFicha]);
+  }, [data, cooperadoSelecionadoId, cooperadosComFicha, coopId]);
 
   const nomeCooperado = useMemo(() => {
     if (!data || !cooperadoSelecionadoId) return "";
     return getCooperadoNomeResolvido(data, cooperadoSelecionadoId, coopId);
   }, [data, cooperadoSelecionadoId, coopId]);
-
-  const lancamentos = useMemo(() => {
-    if (!data || !cooperadoSelecionadoId) return [];
-    return data.fichaCorrida
-      .filter((f) => {
-        if (coopId && f.cooperativaId !== coopId) return false;
-        if (!fichaPertenceCooperado(data, f, cooperadoSelecionadoId, coopId)) return false;
-        if (mesFilter && f.mesReferencia !== mesFilter) return false;
-        return true;
-      })
-      .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
-  }, [data, coopId, cooperadoSelecionadoId, mesFilter]);
 
   const arquivoMes = useMemo(() => {
     if (!data || !cooperadoSelecionadoId) return undefined;
@@ -217,6 +232,11 @@ export default function FichaCorridaPage() {
       }),
     }));
   };
+
+  const resumoItensMes = useMemo(() => {
+    if (!data || !cooperadoSelecionadoId) return { itens: [], entregas: 0, valorBruto: 0 };
+    return agregarItensFichaMes(data, cooperadoSelecionadoId, mesFilter, coopId);
+  }, [data, cooperadoSelecionadoId, mesFilter, coopId]);
 
   const resumo = useMemo(() => {
     if (!data || !cooperadoSelecionadoId) return null;
@@ -297,8 +317,8 @@ export default function FichaCorridaPage() {
         title={isCooperado ? "Minha ficha corrida" : "Ficha corrida dos cooperados"}
         subtitle={
           isCooperado
-            ? "Entregas conferidas, descontos e pagamento do mês"
-            : "Cada cooperado com fotos lançadas tem ficha própria; em Pagar fica só o resumo e o PIX"
+            ? "Resumo de todas as entregas do mês, item a item"
+            : "Total consolidado das entregas por cooperado; em Pagar fica só o valor e o PIX"
         }
       />
 
@@ -435,31 +455,8 @@ export default function FichaCorridaPage() {
             )}
           </Card>
 
-          <Card title="Lançamentos das entregas" className="mb-6">
-            {lancamentos.length === 0 ? (
-              <p className="text-sm text-gray-500">Nenhum lançamento neste mês. As fotos conferidas aparecem aqui, uma ficha por entrega.</p>
-            ) : (
-              <div className="space-y-4">
-                {lancamentos.map((f) => (
-                  <div key={f.id} className="border rounded-xl p-4">
-                    <div className="flex flex-wrap justify-between gap-2">
-                      <div>
-                        <p className="font-semibold text-gray-900">{f.descricao}</p>
-                        <p className="text-xs text-gray-500 mt-0.5">
-                          {formatDate(f.dataLancamento)}
-                          {f.responsavelConferencia ? ` · Conferido por ${f.responsavelConferencia}` : ""}
-                        </p>
-                      </div>
-                      <div className="text-right">
-                        <p className="text-lg font-bold text-green-700">{formatCurrency(f.valorLiquido)}</p>
-                        <p className="text-xs text-gray-500">{f.status === "pago" ? "Pago" : "Aguardando pagamento"}</p>
-                      </div>
-                    </div>
-                    <DetalheLancamento ficha={f} />
-                  </div>
-                ))}
-              </div>
-            )}
+          <Card title={`Resumo das entregas · ${formatMesReferencia(mesFilter)}`} className="mb-6">
+            <TabelaResumoItens itens={resumoItensMes.itens} entregas={resumoItensMes.entregas} />
           </Card>
         </>
       )}

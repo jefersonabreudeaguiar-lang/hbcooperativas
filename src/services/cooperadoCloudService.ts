@@ -49,13 +49,34 @@ export function mergeCloudCooperadosIntoData(
 
     const apply = (index: number, keepId: boolean) => {
       const id = keepId ? cooperados[index].id : cn.id;
-      const merged = {
-        ...cooperados[index],
+      const local = cooperados[index];
+      const localTime = new Date(local.updatedAt).getTime();
+      const cloudTime = new Date(cn.updatedAt).getTime();
+      const cloudMaisRecente = cloudTime >= localTime;
+      const localPix = local.chavePix?.trim() ?? "";
+      const cloudPix = cn.chavePix?.trim() ?? "";
+
+      let chavePix = cloudMaisRecente ? cloudPix || localPix : localPix || cloudPix;
+      let pixValido = cloudMaisRecente ? cn.pixValido ?? local.pixValido : local.pixValido ?? cn.pixValido;
+      let pixInvalidoMotivo = cloudMaisRecente ? cn.pixInvalidoMotivo ?? local.pixInvalidoMotivo : local.pixInvalidoMotivo ?? cn.pixInvalidoMotivo;
+
+      if (chavePix) {
+        pixValido = pixValido ?? true;
+        if (pixValido) pixInvalidoMotivo = undefined;
+      }
+
+      const merged: Cooperado = {
+        ...local,
         ...cn,
         id,
         cooperativaId: coop.id,
+        chavePix,
+        pixValido,
+        pixInvalidoMotivo,
+        updatedAt: cloudMaisRecente ? cn.updatedAt : local.updatedAt,
       };
-      if (new Date(merged.updatedAt).getTime() >= new Date(cooperados[index].updatedAt).getTime()) {
+
+      if (cloudMaisRecente || merged.chavePix !== local.chavePix || merged.pixValido !== local.pixValido) {
         cooperados[index] = merged;
         changed = true;
       }
@@ -164,6 +185,27 @@ export function listCooperadosDaCooperativa(data: AppData, cooperativaId?: strin
   return [...base, ...extras].sort((a, b) =>
     a.nomeCompleto.localeCompare(b.nomeCompleto, "pt-BR")
   );
+}
+
+/** Retorna o cadastro do cooperado com PIX (unifica IDs entre aparelhos). */
+export function resolverCooperadoParaPagamento(
+  data: AppData,
+  cooperadoId: string,
+  cooperativaId?: string
+): Cooperado | undefined {
+  const canonico = resolverCooperadoIdCanonico(data, cooperadoId, cooperativaId);
+  const candidatos = data.cooperados.filter(
+    (c) =>
+      (!cooperativaId || c.cooperativaId === cooperativaId) &&
+      (c.id === canonico ||
+        c.id === cooperadoId ||
+        resolverCooperadoIdCanonico(data, c.id, cooperativaId) === canonico)
+  );
+
+  const comPix = candidatos.find((c) => c.chavePix?.trim());
+  if (comPix) return comPix;
+
+  return candidatos.find((c) => c.id === canonico) ?? candidatos[0];
 }
 
 /** Unifica ID local quando o cooperado veio de outro aparelho (nome/CPF). */

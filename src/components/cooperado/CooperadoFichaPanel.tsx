@@ -14,6 +14,7 @@ import {
   getStatusCotaCooperado,
   getMensalidadeFixaMes,
   getArquivoMensalCooperado,
+  agregarItensFichaMes,
 } from "@/services/notaPedidoService";
 import { fichaPertenceCooperado, notaPertenceCooperado } from "@/services/cooperadoCloudService";
 import { formatCurrency, formatDate, formatMesReferencia, formatCPFCNPJ, formatPhone, getCurrentMesReferencia } from "@/utils/format";
@@ -46,6 +47,10 @@ export function CooperadoFichaPanel({ cooperado }: { cooperado: Cooperado }) {
     () => resumo?.ficha.filter((f) => f.mesReferencia === mesFilter) ?? [],
     [resumo, mesFilter]
   );
+  const resumoItensMes = useMemo(() => {
+    if (!data) return { itens: [], entregas: 0, valorBruto: 0 };
+    return agregarItensFichaMes(data, cooperado.id, mesFilter, cooperado.cooperativaId);
+  }, [data, cooperado.id, cooperado.cooperativaId, mesFilter]);
   const mesMensalidades = useMemo(
     () => resumo?.mensalidades.filter((m) => m.mesReferencia === mesFilter) ?? [],
     [resumo, mesFilter]
@@ -145,26 +150,52 @@ export function CooperadoFichaPanel({ cooperado }: { cooperado: Cooperado }) {
         )}
       </Card>
 
-      <Card title="Ficha corrida — lançamentos">
+      <Card title={`Ficha corrida · ${formatMesReferencia(mesFilter)}`}>
         {mensalidadeMes > 0 && (
           <p className="text-sm text-gray-600 mb-3">Mensalidade do mês: <strong>{formatCurrency(mensalidadeMes)}</strong></p>
         )}
         {(arquivo?.descontoAvulso ?? 0) > 0 && (
           <p className="text-sm text-red-600 mb-3">Desconto avulso: - {formatCurrency(arquivo!.descontoAvulso!)}</p>
         )}
-        {mesFicha.length === 0 ? (
-          <p className="text-sm text-gray-500">Nenhum lançamento neste mês.</p>
+        {resumoItensMes.itens.length === 0 ? (
+          <p className="text-sm text-gray-500">Nenhuma entrega conferida neste mês.</p>
         ) : (
-          <div className="space-y-2">
-            {mesFicha.map((f) => (
-              <div key={f.id} className="flex justify-between items-start p-3 bg-gray-50 rounded-xl text-sm">
-                <div>
-                  <p className="font-medium">{f.descricao}</p>
-                  <p className="text-xs text-gray-500">{formatDate(f.dataLancamento)} · {f.status === "pago" ? "Pago" : "Pendente"}</p>
-                </div>
-                <p className="font-bold text-green-700">{formatCurrency(f.valorLiquido)}</p>
-              </div>
-            ))}
+          <div>
+            <p className="text-sm text-gray-600 mb-3">
+              {resumoItensMes.entregas} entrega{resumoItensMes.entregas !== 1 ? "s" : ""} · totais por item
+            </p>
+            <div className="border rounded-xl overflow-hidden text-sm">
+              <table className="w-full">
+                <thead className="bg-green-700 text-white">
+                  <tr>
+                    <th className="text-left px-3 py-2 font-semibold">Item</th>
+                    <th className="text-right px-3 py-2 font-semibold">Qtd</th>
+                    <th className="text-right px-3 py-2 font-semibold">Valor</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100">
+                  {resumoItensMes.itens.map((i) => (
+                    <tr key={i.produtoInstituicaoId}>
+                      <td className="px-3 py-2 font-medium">{i.produtoNome}</td>
+                      <td className="px-3 py-2 text-right">{i.quantidade} {i.unidade}</td>
+                      <td className="px-3 py-2 text-right">{formatCurrency(i.valorBruto)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+                <tfoot className="bg-gray-50 border-t">
+                  <tr>
+                    <td className="px-3 py-2 font-semibold" colSpan={2}>Total bruto</td>
+                    <td className="px-3 py-2 text-right font-bold">{formatCurrency(resumoItensMes.valorBruto)}</td>
+                  </tr>
+                </tfoot>
+              </table>
+            </div>
+            {mesFicha.some((f) => f.status === "pendente") && (
+              <p className="text-sm text-amber-700 mt-3">Aguardando pagamento da cooperativa.</p>
+            )}
+            {mesFicha.length > 0 && mesFicha.every((f) => f.status === "pago") && (
+              <p className="text-sm text-green-700 mt-3">Pagamento registrado neste mês.</p>
+            )}
           </div>
         )}
       </Card>
