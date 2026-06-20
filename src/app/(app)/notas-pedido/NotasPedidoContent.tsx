@@ -127,6 +127,7 @@ export default function NotasPedidoContent() {
   const [conferenciaDescontoPct, setConferenciaDescontoPct] = useState(5);
   const [conferenciaInstId, setConferenciaInstId] = useState("");
   const [conferenciaLocal, setConferenciaLocal] = useState("");
+  const [conferenciaEscolaAvulsa, setConferenciaEscolaAvulsa] = useState("");
   const [motivoRejeicao, setMotivoRejeicao] = useState("");
   const [conferirErrors, setConferirErrors] = useState<{ itens?: string }>({});
   const [instituicaoPadraoId, setInstituicaoPadraoIdState] = useState("");
@@ -750,6 +751,7 @@ export default function NotasPedidoContent() {
         ? agruparPendentesPorCooperado(data, [nota], coopId)[0]?.cooperadoId ?? nota.cooperadoId
         : nota.cooperadoId;
     setConferenciaCooperadoId(coopDonoId);
+    setConferenciaEscolaAvulsa(nota.escolaAvulsaNome?.trim() ?? "");
     setAlterarInstConferencia(false);
     setConferirErrors({});
     if (!isCooperado && data) {
@@ -830,6 +832,7 @@ export default function NotasPedidoContent() {
           cooperadoId: conferenciaCooperadoId,
           instituicaoId: conferenciaInstId,
           localEntrega: conferenciaLocal,
+          escolaAvulsaNome: conferenciaEscolaAvulsa.trim() || selectedNota.escolaAvulsaNome,
           assinaturaRecebedor: selectedNota.assinaturaRecebedor?.trim() || "Assinatura na nota",
           dataAssinatura: selectedNota.dataAssinatura || selectedNota.dataEntrega,
         },
@@ -923,7 +926,12 @@ export default function NotasPedidoContent() {
   const handleExcluirPendente = async () => {
     if (!excluirNotaTarget || !user || !data || !coopId) return;
     if (excluirNotaTarget.cooperadoId !== (cooperadoId ?? user.cooperadoId)) return;
-    if (excluirNotaTarget.status !== "aguardando_conferencia") return;
+    if (
+      excluirNotaTarget.status !== "aguardando_conferencia" &&
+      excluirNotaTarget.status !== "rejeitada"
+    ) {
+      return;
+    }
 
     setExcluindo(true);
     const cnpj = await resolveCooperativaCnpj(data, coopId, user);
@@ -937,6 +945,8 @@ export default function NotasPedidoContent() {
       }
     }
 
+    const eraRejeitada = excluirNotaTarget.status === "rejeitada";
+
     updateData((d) =>
       addAuditEntry(
         { ...d, notasPedido: d.notasPedido.filter((n) => n.id !== excluirNotaTarget.id) },
@@ -946,7 +956,9 @@ export default function NotasPedidoContent() {
           action: "excluir",
           userId: user.id,
           userName: user.name,
-          changes: "Entrega pendente excluída pelo cooperado",
+          changes: eraRejeitada
+            ? "Entrega devolvida para correção excluída pelo cooperado"
+            : "Entrega pendente excluída pelo cooperado",
         }
       )
     );
@@ -954,7 +966,11 @@ export default function NotasPedidoContent() {
     setExcluindo(false);
     setExcluirNotaTarget(null);
     setViewModal(false);
-    setSuccessMsg("Entrega excluída. O responsável não verá mais esta foto.");
+    setSuccessMsg(
+      eraRejeitada
+        ? "Entrega excluída. Você pode enviar uma nova foto quando quiser."
+        : "Entrega excluída. O responsável não verá mais esta foto."
+    );
   };
 
   const mesAtual = getCurrentMesReferencia();
@@ -1000,9 +1016,19 @@ export default function NotasPedidoContent() {
           <ChevronRight size={18} className="text-gray-300 shrink-0 self-center" />
         </div>
         {isCooperado && n.status === "rejeitada" && (
-          <Button size="sm" className="w-full mt-3" variant="secondary" onClick={(e) => { e.stopPropagation(); openAnexar(n); }}>
-            <RefreshCw size={16} /> Enviar de novo
-          </Button>
+          <div className="flex flex-col gap-2 mt-3">
+            <Button size="sm" className="w-full" variant="secondary" onClick={(e) => { e.stopPropagation(); openAnexar(n); }}>
+              <RefreshCw size={16} /> Enviar de novo
+            </Button>
+            <Button
+              size="sm"
+              className="w-full"
+              variant="danger"
+              onClick={(e) => { e.stopPropagation(); setExcluirNotaTarget(n); }}
+            >
+              <Trash2 size={16} /> Excluir
+            </Button>
+          </div>
         )}
         {isCooperado && n.status === "aguardando_conferencia" && (
           <Button
@@ -1471,7 +1497,7 @@ export default function NotasPedidoContent() {
         </div>
       </Modal>
 
-      <Modal open={conferirModal} onClose={() => setConferirModal(false)} title="Conferir entrega" size="xl"
+      <Modal open={conferirModal} onClose={() => setConferirModal(false)} title="Conferir entrega" size="full"
         footer={selectedNota?.status === "aguardando_conferencia" && check("notas_pedido", "approve") ? (
           <div className="flex flex-col sm:flex-row gap-2 justify-between">
             <Button variant="danger" onClick={() => { setMotivoRejeicao(""); setRejectModal(true); }}>
@@ -1482,26 +1508,30 @@ export default function NotasPedidoContent() {
         ) : undefined}
       >
         {selectedNota && (
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            <div className="space-y-3">
-              <p className="text-xs font-semibold text-gray-500 uppercase">Foto do pedido</p>
-              {selectedNota.fotoPedido ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img src={selectedNota.fotoPedido} alt="Pedido" className="w-full max-h-[55vh] object-contain rounded-xl border bg-gray-50 sticky top-0" />
-              ) : selectedNota.fotoNaNuvem ? (
-                <p className="text-gray-500 text-center py-12 border rounded-xl">Carregando foto da nuvem...</p>
-              ) : (
-                <p className="text-gray-500 text-center py-12 border rounded-xl">Sem foto</p>
-              )}
-              <p className="text-sm">
-                <strong>{getCooperadoNome(data.cooperados, selectedNota.cooperadoId)}</strong> · {formatDate(selectedNota.dataEntrega)}
-              </p>
-              <p className="text-sm text-gray-600">Escola: {getEscolaNotaLabel(selectedNota, data.instituicoes)}</p>
+          <div className="flex flex-col lg:flex-row min-h-[calc(100dvh-8.5rem)]">
+            <div className="lg:w-[48%] xl:w-1/2 bg-gray-900 flex flex-col shrink-0 lg:min-h-[calc(100dvh-8.5rem)]">
+              <div className="flex-1 flex items-center justify-center p-4 min-h-[40vh] lg:min-h-0">
+                {selectedNota.fotoPedido ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={selectedNota.fotoPedido}
+                    alt="Pedido"
+                    className="max-w-full max-h-[70vh] lg:max-h-[calc(100dvh-12rem)] object-contain"
+                  />
+                ) : selectedNota.fotoNaNuvem ? (
+                  <p className="text-gray-400 text-center py-12">Carregando foto da nuvem...</p>
+                ) : (
+                  <p className="text-gray-400 text-center py-12">Sem foto</p>
+                )}
+              </div>
+              <div className="shrink-0 px-4 py-3 bg-black/40 text-white text-sm space-y-0.5">
+                <p><strong>{getCooperadoNome(data.cooperados, selectedNota.cooperadoId)}</strong> · {formatDate(selectedNota.dataEntrega)}</p>
+                <p className="text-white/80">{getEscolaNotaLabel(selectedNota, data.instituicoes)} · {selectedNota.numeroNota}</p>
+              </div>
             </div>
 
-            <div className="space-y-4">
-              <p className="text-xs font-semibold text-gray-500 uppercase">Lançamento na ficha</p>
-          <FormField label="Cooperado dono desta nota" required hint="Todos os cooperados cadastrados no CNPJ da cooperativa">
+            <div className="flex-1 overflow-y-auto p-4 lg:p-6 space-y-4 bg-gray-50">
+              <FormField label="Cooperado" required hint="Quem receberá o valor na ficha">
                 <Select value={conferenciaCooperadoId} onChange={(e) => setConferenciaCooperadoId(e.target.value)}>
                   <option value="">Selecione...</option>
                   {cooperadosCoop.map((c) => (
@@ -1513,24 +1543,19 @@ export default function NotasPedidoContent() {
                 )}
               </FormField>
 
-              <div className="rounded-xl border border-green-200 bg-green-50/50 p-4">
+              <div className="rounded-xl border border-green-200 bg-white p-4">
                 <div className="flex items-start justify-between gap-3">
                   <div>
-                    <p className="text-xs text-gray-500 uppercase tracking-wide">Instituição</p>
+                    <p className="text-xs text-gray-500 uppercase tracking-wide">Contrato / instituição</p>
                     {!alterarInstConferencia ? (
-                      <>
-                        <p className="font-semibold text-gray-900 mt-1">{conferenciaInstNome || "—"}</p>
-                        <p className="text-xs text-gray-500 mt-1">Itens e preços do contrato</p>
-                      </>
+                      <p className="font-semibold text-gray-900 mt-1">{conferenciaInstNome || "—"}</p>
                     ) : (
                       <div className="mt-2">
-                        <FormField label="Escolher outra instituição">
-                          <Select value={conferenciaInstId} onChange={(e) => handleConferenciaInstChange(e.target.value)}>
-                            {instituicoes.map((i) => (
-                              <option key={i.id} value={i.id}>{i.nome}</option>
-                            ))}
-                          </Select>
-                        </FormField>
+                        <Select value={conferenciaInstId} onChange={(e) => handleConferenciaInstChange(e.target.value)}>
+                          {instituicoes.map((i) => (
+                            <option key={i.id} value={i.id}>{i.nome}</option>
+                          ))}
+                        </Select>
                       </div>
                     )}
                   </div>
@@ -1542,7 +1567,17 @@ export default function NotasPedidoContent() {
                 </div>
               </div>
 
-              <FormField label="Desconto cooperativa (%)" hint="Percentual descontado da cooperativa nesta entrega">
+              {(selectedNota.escolaAvulsaNome || !selectedNota.instituicaoId) && (
+                <FormField label="Nome da escola (avulso)" hint="Quando a entrega não está no contrato cadastrado">
+                  <Input
+                    value={conferenciaEscolaAvulsa}
+                    onChange={(e) => setConferenciaEscolaAvulsa(e.target.value)}
+                    placeholder="Digite o nome da escola"
+                  />
+                </FormField>
+              )}
+
+              <FormField label="Desconto cooperativa (%)">
                 <Input
                   type="number"
                   min={0}
@@ -1556,30 +1591,51 @@ export default function NotasPedidoContent() {
 
               {conferenciaItens.length === 0 ? (
                 <AlertBanner variant="warning">
-                  Esta instituição ainda não tem produtos.{" "}
+                  Este contrato ainda não tem itens.{" "}
                   <Link href="/contratos" className="font-semibold underline">Cadastrar em Contratos</Link>
                 </AlertBanner>
               ) : (
-                <>
-                  {conferirErrors.itens && <p className="text-sm text-red-600">{conferirErrors.itens}</p>}
-                  <p className="text-sm text-gray-600">Quantidades entregues:</p>
-                  <div className="space-y-2 max-h-52 overflow-y-auto">
-                    {conferenciaItens.map((item, idx) => (
-                      <div key={item.produtoInstituicaoId} className="flex items-center gap-3 p-3 bg-gray-50 rounded-xl">
-                        <div className="flex-1 min-w-0">
-                          <p className="font-medium text-sm">{item.produtoNome}</p>
-                          <p className="text-xs text-gray-500">{formatCurrency(item.precoUnitario)} / {labelUnidade(item.unidade)}</p>
-                        </div>
-                        <Input type="number" min={0} step="0.01" className="w-24 text-center" value={item.quantidade || ""} onChange={(e) => updateConferenciaQty(idx, parseFloat(e.target.value) || 0)} />
-                      </div>
-                    ))}
+                <div className="border border-gray-200 rounded-xl overflow-hidden bg-white shadow-sm">
+                  <div className="bg-green-700 text-white px-4 py-3">
+                    <p className="font-semibold">{conferenciaInstNome || "Contrato"}</p>
+                    <p className="text-green-100 text-xs mt-0.5">Confira a foto ao lado e informe as quantidades entregues</p>
                   </div>
-                  <div className="rounded-xl bg-gray-50 p-3 text-sm space-y-1">
-                    <div className="flex justify-between"><span>Bruto</span><span>{formatCurrency(conferenciaTotais.bruto)}</span></div>
+                  {conferirErrors.itens && (
+                    <p className="text-sm text-red-600 px-4 pt-3">{conferirErrors.itens}</p>
+                  )}
+                  <div className="overflow-x-auto max-h-[min(50vh,420px)] overflow-y-auto">
+                    <table className="w-full text-sm">
+                      <thead className="bg-gray-50 border-b border-gray-200 sticky top-0 z-10">
+                        <tr>
+                          <th className="text-left px-4 py-2.5 font-semibold text-gray-700">Item</th>
+                          <th className="text-right px-4 py-2.5 font-semibold text-gray-700 w-32">Quantidade</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-100">
+                        {conferenciaItens.map((item, idx) => (
+                          <tr key={item.produtoInstituicaoId} className="hover:bg-green-50/40">
+                            <td className="px-4 py-2.5 font-medium text-gray-900">{item.produtoNome}</td>
+                            <td className="px-4 py-2.5">
+                              <Input
+                                type="number"
+                                min={0}
+                                step="0.01"
+                                className="w-full max-w-[7rem] ml-auto text-center"
+                                value={item.quantidade || ""}
+                                onChange={(e) => updateConferenciaQty(idx, parseFloat(e.target.value) || 0)}
+                              />
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                  <div className="border-t border-gray-200 bg-gray-50 px-4 py-3 text-sm space-y-1">
+                    <div className="flex justify-between"><span>Total bruto</span><span>{formatCurrency(conferenciaTotais.bruto)}</span></div>
                     <div className="flex justify-between text-amber-700"><span>Desconto ({conferenciaDescontoPct}%)</span><span>- {formatCurrency(conferenciaTotais.desconto)}</span></div>
-                    <div className="flex justify-between font-bold text-green-700 text-base pt-1 border-t"><span>Total a receber</span><span>{formatCurrency(conferenciaTotais.liquido)}</span></div>
+                    <div className="flex justify-between font-bold text-green-700 text-base pt-1 border-t border-gray-200"><span>A receber</span><span>{formatCurrency(conferenciaTotais.liquido)}</span></div>
                   </div>
-                </>
+                </div>
               )}
             </div>
           </div>
@@ -1634,10 +1690,15 @@ export default function NotasPedidoContent() {
               // eslint-disable-next-line @next/next/no-img-element
               <img src={selectedNota.fotoPedido ?? getFotoExibicaoNota(selectedNota)} alt="Pedido" className="w-full rounded-xl border" />
             )}
-            {selectedNota.status === "rejeitada" && (
-              <Button className="w-full" onClick={() => { setViewModal(false); openAnexar(selectedNota); }}>
-                <RefreshCw size={18} /> Enviar de novo
-              </Button>
+            {isCooperado && selectedNota.status === "rejeitada" && (
+              <div className="flex flex-col gap-2">
+                <Button className="w-full" onClick={() => { setViewModal(false); openAnexar(selectedNota); }}>
+                  <RefreshCw size={18} /> Enviar de novo
+                </Button>
+                <Button className="w-full" variant="danger" onClick={() => setExcluirNotaTarget(selectedNota)}>
+                  <Trash2 size={18} /> Excluir entrega
+                </Button>
+              </div>
             )}
             {isCooperado && selectedNota.status === "aguardando_conferencia" && (
               <Button className="w-full" variant="danger" onClick={() => setExcluirNotaTarget(selectedNota)}>
@@ -1651,8 +1712,16 @@ export default function NotasPedidoContent() {
       <ConfirmDialog
         open={Boolean(excluirNotaTarget)}
         onClose={() => !excluindo && setExcluirNotaTarget(null)}
-        title="Excluir entrega pendente?"
-        message="A foto será removida da sua lista e também desaparece para o responsável. Esta ação não pode ser desfeita."
+        title={
+          excluirNotaTarget?.status === "rejeitada"
+            ? "Excluir entrega devolvida?"
+            : "Excluir entrega pendente?"
+        }
+        message={
+          excluirNotaTarget?.status === "rejeitada"
+            ? "A entrega com pedido de correção será removida da sua lista e também some para o responsável. Você poderá enviar uma nova foto depois."
+            : "A foto será removida da sua lista e também desaparece para o responsável. Esta ação não pode ser desfeita."
+        }
         confirmLabel="Sim, excluir"
         variant="danger"
         loading={excluindo}
