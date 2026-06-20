@@ -6,6 +6,7 @@ import type {
   PagamentoCooperadoRegistro,
   Comunicado,
   Mensalidade,
+  Desconto,
 } from "@/types";
 
 const BUCKET = "hb-cooperativa-sync";
@@ -22,6 +23,7 @@ export interface OperacionalSyncPayload {
   pagamentosCooperado: PagamentoCooperadoRegistro[];
   comunicados: Comunicado[];
   mensalidades: Mensalidade[];
+  descontos: Desconto[];
   config: { descontoPadraoCooperativa: number };
 }
 

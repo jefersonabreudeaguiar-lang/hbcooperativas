@@ -2,14 +2,17 @@
 
 import { formatCurrency, formatMesReferencia } from "@/utils/format";
 import type { ReciboResumoInput } from "@/utils/recibo";
+import { ResumoDescontosMes } from "@/components/ficha/ResumoDescontosMes";
 
 export function ReciboResumoView({
   resumo,
   mesReferencia,
+  descontoPadraoPct = 0,
   compact = false,
 }: {
   resumo: ReciboResumoInput;
   mesReferencia: string;
+  descontoPadraoPct?: number;
   compact?: boolean;
 }) {
   return (
@@ -45,32 +48,15 @@ export function ReciboResumoView({
         <p className="text-sm text-gray-500">Entregas do período</p>
       )}
 
-      <div className="rounded-xl bg-gray-50 p-4 text-sm space-y-1 border">
-        <div className="flex justify-between">
-          <span>Total entregas (bruto)</span>
-          <span>{formatCurrency(resumo.valorBruto)}</span>
-        </div>
-        {resumo.descontoCooperativa > 0 && (
-          <div className="flex justify-between text-amber-700">
-            <span>Desconto cooperativa</span>
-            <span>- {formatCurrency(resumo.descontoCooperativa)}</span>
-          </div>
-        )}
-        <div className="flex justify-between">
-          <span>Entregas líquidas</span>
-          <span>{formatCurrency(resumo.valorEntregas)}</span>
-        </div>
-        {resumo.descontosExtras.map((d, i) => (
-          <div key={i} className="flex justify-between text-red-600">
-            <span>{d.motivo}</span>
-            <span>- {formatCurrency(d.valor)}</span>
-          </div>
-        ))}
-        <div className="flex justify-between font-bold text-green-700 text-base pt-2 border-t border-gray-200">
-          <span>Total recebido</span>
-          <span>{formatCurrency(resumo.valorLiquido)}</span>
-        </div>
-      </div>
+      <ResumoDescontosMes
+        valorBruto={resumo.valorBruto}
+        descontoCooperativa={resumo.descontoCooperativa}
+        descontoPadraoPct={descontoPadraoPct}
+        valorEntregas={resumo.valorEntregas}
+        descontosExtras={resumo.descontosExtras}
+        totalLiquido={resumo.valorLiquido}
+        rotuloTotal="Total recebido"
+      />
     </div>
   );
 }

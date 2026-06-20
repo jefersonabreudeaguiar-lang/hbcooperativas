@@ -40,6 +40,8 @@ import { PixQrModal } from "@/components/pix/PixQrModal";
 import { ConfirmDialog, PromptDialog } from "@/components/ui/ConfirmDialog";
 import { SignaturePad } from "@/components/ui/SignaturePad";
 import { ReciboResumoView } from "@/components/ficha/ReciboResumoView";
+import { ResumoDescontosMes } from "@/components/ficha/ResumoDescontosMes";
+import { descontosDoCooperadoNoMes, TIPO_DESCONTO_LABELS } from "@/services/descontosService";
 import { cooperadoPrecisaCadastrarPix } from "@/utils/pix";
 import { baixarReciboHtml, resumoReciboFromPagamento, nomeArquivoRecibo } from "@/utils/recibo";
 import { updateData, addAuditEntry, getData } from "@/services/dataStore";
@@ -280,6 +282,11 @@ export default function FichaCorridaPage() {
     );
   }, [data, cooperadoSelecionadoId, mesFilter]);
 
+  const descontosRegistradosMes = useMemo(() => {
+    if (!data || !cooperadoSelecionadoId) return [];
+    return descontosDoCooperadoNoMes(data, cooperadoSelecionadoId, mesFilter);
+  }, [data, cooperadoSelecionadoId, mesFilter]);
+
   const resumoReciboPagamento = useMemo(() => {
     if (!pagamentoAguardando) return null;
     return resumoReciboFromPagamento(pagamentoAguardando, resumoItensMes);
@@ -494,7 +501,7 @@ export default function FichaCorridaPage() {
               )}
             </div>
 
-            {!isCooperado && check("ficha_corrida", "edit") ? (
+            {!isCooperado && check("ficha_corrida", "edit") && (
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
                 <FormField label="Mensalidade fixa (desconto de todos)" hint="Valor descontado no pagamento do mês">
                   <Input
@@ -528,32 +535,37 @@ export default function FichaCorridaPage() {
                 </FormField>
                 </div>
               </div>
-            ) : (
-              <div className="text-sm text-gray-600 space-y-1 mb-4">
-                {mensalidadePadrao > 0 && (
-                  <p>Mensalidade do mês: <strong>{formatCurrency(mensalidadePadrao)}</strong></p>
-                )}
-                {(arquivoMes?.descontoAvulso ?? 0) > 0 && (
-                  <p>Desconto avulso: <strong>- {formatCurrency(arquivoMes!.descontoAvulso!)}</strong>
-                    {arquivoMes?.descontoAvulsoMotivo ? ` (${arquivoMes.descontoAvulsoMotivo})` : ""}
-                  </p>
-                )}
-              </div>
             )}
 
             {resumo && (
-              <div className="rounded-xl bg-gray-50 p-4 text-sm space-y-1 border">
-                <div className="flex justify-between"><span>Total entregas (bruto)</span><span>{formatCurrency(resumo.valorBruto)}</span></div>
-                {resumo.descontoCooperativa > 0 && (
-                  <div className="flex justify-between text-amber-700"><span>Desconto cooperativa</span><span>- {formatCurrency(resumo.descontoCooperativa)}</span></div>
-                )}
-                <div className="flex justify-between"><span>Entregas líquidas</span><span>{formatCurrency(totalEntregas)}</span></div>
-                {resumo.descontosExtras.map((d, i) => (
-                  <div key={i} className="flex justify-between text-red-600"><span>{d.motivo}</span><span>- {formatCurrency(d.valor)}</span></div>
-                ))}
-                <div className="flex justify-between font-bold text-green-700 text-base pt-2 border-t border-gray-200">
-                  <span>A receber</span><span>{formatCurrency(totalPendente)}</span>
-                </div>
+              <ResumoDescontosMes
+                valorBruto={resumo.valorBruto}
+                descontoCooperativa={resumo.descontoCooperativa}
+                descontoPadraoPct={data.config.descontoPadraoCooperativa}
+                valorEntregas={totalEntregas}
+                descontosExtras={resumo.descontosExtras}
+                totalLiquido={totalPendente}
+                rotuloTotal={isCooperado ? "A receber" : "Total a pagar"}
+              />
+            )}
+
+            {descontosRegistradosMes.length > 0 && (
+              <div className="rounded-xl border border-amber-200 bg-amber-50/50 p-4 text-sm space-y-2 mb-4">
+                <p className="font-semibold text-amber-900">Descontos registrados no mês</p>
+                <ul className="divide-y divide-amber-100">
+                  {descontosRegistradosMes.map((d) => (
+                    <li key={d.id} className="py-2 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1">
+                      <div>
+                        <p className="font-medium text-gray-900">{TIPO_DESCONTO_LABELS[d.tipo] ?? d.tipo}</p>
+                        <p className="text-xs text-gray-600">{d.motivo}</p>
+                      </div>
+                      <div className="text-right shrink-0">
+                        <p className="text-xs text-gray-500">Bruto {formatCurrency(d.valorBruto)}</p>
+                        <p className="font-semibold text-red-700">- {formatCurrency(d.valorDescontado)}</p>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
               </div>
             )}
           </Card>
@@ -575,35 +587,18 @@ export default function FichaCorridaPage() {
               <p className="text-green-100 text-sm mt-2">{nomeCooperado}</p>
             )}
             {resumo && (resumo.valorBruto > 0 || totalPendente > 0) && (
-              <div className="mt-4 text-sm text-green-100 space-y-1 border-t border-green-600/40 pt-3">
-                <div className="flex justify-between">
-                  <span>Valor bruto das entregas</span>
-                  <span>{formatCurrency(resumo.valorBruto)}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span>
-                    Desconto cooperativa
-                    {data.config.descontoPadraoCooperativa > 0 && (
-                      <span className="opacity-80"> ({data.config.descontoPadraoCooperativa}%)</span>
-                    )}
-                  </span>
-                  <span>- {formatCurrency(resumo.descontoCooperativa)}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span>Entregas líquidas</span>
-                  <span>{formatCurrency(totalEntregas)}</span>
-                </div>
-                {resumo.descontosExtras.map((d, i) => (
-                  <div key={i} className="flex justify-between">
-                    <span>{d.motivo}</span>
-                    <span>- {formatCurrency(d.valor)}</span>
-                  </div>
-                ))}
-                <div className="flex justify-between font-semibold text-white pt-1 border-t border-green-600/30 mt-1">
-                  <span>{isCooperado ? "Total a receber" : "Total líquido a pagar"}</span>
-                  <span>{formatCurrency(isCooperado && pagamentoAguardando ? pagamentoAguardando.valorLiquido : totalPendente)}</span>
-                </div>
-              </div>
+              <ResumoDescontosMes
+                valorBruto={resumo.valorBruto}
+                descontoCooperativa={resumo.descontoCooperativa}
+                descontoPadraoPct={data.config.descontoPadraoCooperativa}
+                valorEntregas={totalEntregas}
+                descontosExtras={resumo.descontosExtras}
+                totalLiquido={
+                  isCooperado && pagamentoAguardando ? pagamentoAguardando.valorLiquido : totalPendente
+                }
+                rotuloTotal={isCooperado ? "Total a receber" : "Total líquido a pagar"}
+                tema="escuro"
+              />
             )}
           </div>
 
@@ -716,6 +711,7 @@ export default function FichaCorridaPage() {
             <ReciboResumoView
               resumo={resumoReciboPagamento}
               mesReferencia={pagamentoAguardando.mesReferencia}
+              descontoPadraoPct={data.config.descontoPadraoCooperativa}
               compact
             />
           )}

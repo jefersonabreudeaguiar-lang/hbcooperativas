@@ -1,23 +1,20 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { Plus } from "lucide-react";
 import { useAppData } from "@/hooks/useAppData";
 import { usePermissions } from "@/hooks/usePermissions";
+import { getUserCooperativaId } from "@/utils/cooperativa";
 import { PageHeader, DataTable, FilterBar, Modal } from "@/components/ui/Table";
 import { Button } from "@/components/ui/Button";
 import { Input, Select, FormField } from "@/components/ui/Form";
-import { updateData, generateId, addAuditEntry } from "@/services/dataStore";
+import { updateData, generateId, addAuditEntry, getData } from "@/services/dataStore";
+import { resolveCooperativaCnpj } from "@/services/notaPedidoCloudService";
+import { pushOperacionalToCloud, syncAllCooperativaFromCloud } from "@/services/cooperativaSyncCloudService";
+import { TIPO_DESCONTO_LABELS } from "@/services/descontosService";
 import { formatCurrency, formatDate } from "@/utils/format";
 import { getCooperadoNome } from "@/utils/calculations";
 import type { Desconto } from "@/types";
-
-const TIPO_LABELS: Record<string, string> = {
-  cooperativa_padrao: "Desconto Padrão",
-  mensalidade_aberta: "Mensalidade em Aberto",
-  cota_aberta: "Cota em Aberto",
-  manual: "Manual Autorizado",
-};
 
 export default function DescontosPage() {
   const data = useAppData();
@@ -25,6 +22,34 @@ export default function DescontosPage() {
   const [tipoFilter, setTipoFilter] = useState("");
   const [modalOpen, setModalOpen] = useState(false);
   const [form, setForm] = useState<Partial<Desconto>>({});
+
+  const coopId = user && data ? getUserCooperativaId(user, data) : undefined;
+
+  useEffect(() => {
+    if (!data || !coopId || !user) return;
+    void (async () => {
+      const cnpj = await resolveCooperativaCnpj(data, coopId, user);
+      if (cnpj) await syncAllCooperativaFromCloud(cnpj);
+    })();
+    const id = setInterval(() => {
+      void (async () => {
+        const d = getData();
+        const cnpj = await resolveCooperativaCnpj(d, coopId, user);
+        if (cnpj) await syncAllCooperativaFromCloud(cnpj);
+      })();
+    }, 12000);
+    return () => clearInterval(id);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [coopId, user?.id]);
+
+  const pushOperacional = () => {
+    void (async () => {
+      if (!user || !coopId) return;
+      const d = getData();
+      const cnpj = await resolveCooperativaCnpj(d, coopId, user);
+      if (cnpj) await pushOperacionalToCloud(cnpj, d, coopId);
+    })();
+  };
 
   const descontos = useMemo(() => {
     if (!data) return [];
@@ -61,16 +86,34 @@ export default function DescontosPage() {
       let updated = { ...d, descontos: [...d.descontos, newD] };
       return addAuditEntry(updated, { entityType: "desconto", entityId: newD.id, action: "criar", userId: user.id, userName: user.name });
     });
+    pushOperacional();
     setModalOpen(false);
   };
 
   if (!data) return null;
 
+  const columns = [
+    { key: "data", label: "Data", render: (d: Desconto) => formatDate(d.data) },
+    ...(!isCooperado
+      ? [{ key: "cooperado", label: "Cooperado", render: (d: Desconto) => getCooperadoNome(data.cooperados, d.cooperadoId) }]
+      : []),
+    { key: "tipo", label: "Tipo", render: (d: Desconto) => TIPO_DESCONTO_LABELS[d.tipo] ?? d.tipo },
+    { key: "motivo", label: "Motivo" },
+    { key: "valorBruto", label: "Bruto", render: (d: Desconto) => formatCurrency(d.valorBruto) },
+    { key: "valorDescontado", label: "Descontado", render: (d: Desconto) => formatCurrency(d.valorDescontado) },
+    { key: "valorLiquido", label: "Líquido", render: (d: Desconto) => formatCurrency(d.valorLiquido) },
+    { key: "responsavel", label: "Responsável" },
+  ];
+
   return (
     <div>
       <PageHeader
-        title="Descontos da Cooperativa"
-        subtitle={`Desconto padrão: ${data.config.descontoPadraoCooperativa}%`}
+        title={isCooperado ? "Meus descontos" : "Descontos da Cooperativa"}
+        subtitle={
+          isCooperado
+            ? `Descontos lançados pela cooperativa · padrão ${data.config.descontoPadraoCooperativa}%`
+            : `Desconto padrão: ${data.config.descontoPadraoCooperativa}%`
+        }
         action={check("descontos", "create") && (
           <Button onClick={openNew}><Plus size={18} /> Desconto Manual</Button>
         )}
@@ -79,24 +122,11 @@ export default function DescontosPage() {
       <FilterBar>
         <Select value={tipoFilter} onChange={(e) => setTipoFilter(e.target.value)} className="max-w-[220px]">
           <option value="">Todos os tipos</option>
-          {Object.entries(TIPO_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+          {Object.entries(TIPO_DESCONTO_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
         </Select>
       </FilterBar>
 
-      <DataTable
-        data={descontos}
-        keyField="id"
-        columns={[
-          { key: "data", label: "Data", render: (d) => formatDate(d.data) },
-          { key: "cooperado", label: "Cooperado", render: (d) => getCooperadoNome(data.cooperados, d.cooperadoId) },
-          { key: "tipo", label: "Tipo", render: (d) => TIPO_LABELS[d.tipo] ?? d.tipo },
-          { key: "motivo", label: "Motivo" },
-          { key: "valorBruto", label: "Bruto", render: (d) => formatCurrency(d.valorBruto) },
-          { key: "valorDescontado", label: "Descontado", render: (d) => formatCurrency(d.valorDescontado) },
-          { key: "valorLiquido", label: "Líquido", render: (d) => formatCurrency(d.valorLiquido) },
-          { key: "responsavel", label: "Responsável" },
-        ]}
-      />
+      <DataTable data={descontos} keyField="id" columns={columns} />
 
       <Modal open={modalOpen} onClose={() => setModalOpen(false)} title="Desconto Manual">
         <div className="space-y-4">

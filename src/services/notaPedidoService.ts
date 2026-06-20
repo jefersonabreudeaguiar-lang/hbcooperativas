@@ -489,7 +489,8 @@ export function confirmarPagamentoCooperado(
     draft,
     cooperado,
     data.cooperativas.find((c) => c.id === pagamento.cooperativaId)?.nome ?? "Cooperativa",
-    resumoRecibo
+    resumoRecibo,
+    data.config.descontoPadraoCooperativa
   );
 
   const pagamentosCooperado = data.pagamentosCooperado.map((p) =>

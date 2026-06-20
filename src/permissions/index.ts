@@ -64,6 +64,7 @@ export const PERMISSIONS: PermissionMatrix = {
     mensalidades: VIEW_ONLY,
     notas_pedido: ["view", "create", "edit"],
     ficha_corrida: VIEW_ONLY,
+    descontos: VIEW_ONLY,
     comunicados: VIEW_ONLY,
   },
 };

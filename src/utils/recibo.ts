@@ -32,7 +32,8 @@ export function gerarReciboHtml(
   pagamento: PagamentoCooperadoRegistro,
   cooperado: Cooperado,
   cooperativaNome: string,
-  resumo: ReciboResumoInput
+  resumo: ReciboResumoInput,
+  descontoPadraoPct = 0
 ): string {
   const linhasItens = resumo.itens
     .map(
@@ -96,7 +97,7 @@ export function gerarReciboHtml(
   <h2>Resumo financeiro</h2>
   <div class="resumo-box">
     <div><span>Total entregas (bruto)</span><span>${formatCurrency(resumo.valorBruto)}</span></div>
-    ${resumo.descontoCooperativa > 0 ? `<div><span>Desconto cooperativa</span><span style="color:#b45309">- ${formatCurrency(resumo.descontoCooperativa)}</span></div>` : ""}
+    <div><span>Desconto cooperativa${descontoPadraoPct > 0 ? ` (${descontoPadraoPct}%)` : ""}</span><span style="color:#b45309">- ${formatCurrency(resumo.descontoCooperativa)}</span></div>
     <div><span>Entregas líquidas</span><span>${formatCurrency(resumo.valorEntregas)}</span></div>
     ${descontosExtrasHtml}
     <div class="total"><span>Total recebido</span><span>${formatCurrency(resumo.valorLiquido)}</span></div>

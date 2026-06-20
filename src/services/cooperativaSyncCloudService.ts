@@ -1,4 +1,4 @@
-import type { AppData, Cooperativa, Instituicao, ProdutoInstituicao } from "@/types";
+import type { AppData, Cooperativa, Instituicao, ProdutoInstituicao, Desconto } from "@/types";
 import { normalizeCnpj } from "@/utils/cooperativa";
 import type { ContratosSyncPayload, OperacionalSyncPayload } from "@/lib/supabase/cooperativaSyncStorage";
 import { getData, saveDataSafe } from "@/services/dataStore";
@@ -48,6 +48,7 @@ function buildOperacionalPayload(data: AppData, coopId: string): OperacionalSync
     pagamentosCooperado: data.pagamentosCooperado.filter((p) => p.cooperativaId === coopId),
     comunicados: data.comunicados.filter((c) => c.cooperativaId === coopId),
     mensalidades: data.mensalidades.filter((m) => cooperadoIds.has(m.cooperadoId)),
+    descontos: data.descontos.filter((d) => cooperadoIds.has(d.cooperadoId)),
     config: { ...data.config },
   };
 }
@@ -153,6 +154,7 @@ export function mergeOperacionalIntoData(data: AppData, cloud: OperacionalSyncPa
   const cloudArquivos = cloud.arquivosMensais.map((a) => ({ ...a, cooperativaId: coopId }));
   const cloudPagamentos = cloud.pagamentosCooperado.map((p) => ({ ...p, cooperativaId: coopId }));
   const cloudComunicados = cloud.comunicados.map((c) => ({ ...c, cooperativaId: coopId }));
+  const cloudDescontos = (cloud.descontos ?? []).filter((d) => cooperadoIds.has(d.cooperadoId));
 
   const filterCoop = <T extends { cooperativaId?: string; cooperadoId?: string }>(
     items: T[],
@@ -187,6 +189,13 @@ export function mergeOperacionalIntoData(data: AppData, cloud: OperacionalSyncPa
       ...mergeArrayByNewer(
         data.mensalidades.filter((m) => cooperadoIds.has(m.cooperadoId)),
         cloud.mensalidades.filter((m) => cooperadoIds.has(m.cooperadoId))
+      ),
+    ],
+    descontos: [
+      ...data.descontos.filter((d) => !cooperadoIds.has(d.cooperadoId)),
+      ...mergeArrayByNewer(
+        data.descontos.filter((d) => cooperadoIds.has(d.cooperadoId)),
+        cloudDescontos
       ),
     ],
   };
