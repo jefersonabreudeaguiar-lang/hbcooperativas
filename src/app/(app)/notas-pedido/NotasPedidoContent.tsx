@@ -33,6 +33,7 @@ import {
   ensureNotaComFoto,
   resolveCooperativaCnpj,
 } from "@/services/notaPedidoCloudService";
+import { listCooperadosDaCooperativa, syncCooperadosFromCloud, pushCooperadoToCloud } from "@/services/cooperadoCloudService";
 import { ensureContratoPnaePadrao, getContratoLabel, getContratosEntrega } from "@/utils/contratosEntrega";
 import { cn, formatCurrency, formatDate, formatMesReferencia, getCurrentMesReferencia } from "@/utils/format";
 import { labelUnidade } from "@/utils/unidades";
@@ -151,7 +152,7 @@ export default function NotasPedidoContent() {
 
   const cooperadosCoop = useMemo(() => {
     if (!data || !coopId) return [];
-    return data.cooperados.filter((c) => c.cooperativaId === coopId && c.status === "ativo");
+    return listCooperadosDaCooperativa(data, coopId);
   }, [data, coopId]);
 
   useEffect(() => {
@@ -292,13 +293,16 @@ export default function NotasPedidoContent() {
     void (async () => {
       const cnpj = await resolveCooperativaCnpj(data, coopId, user);
       if (!cnpj) return;
+      await syncCooperadosFromCloud(cnpj);
       await syncNotasPedidoFromCloud(cnpj);
     })();
     if (isCooperado) return;
     const id = setInterval(() => {
       void (async () => {
         const cnpj = await resolveCooperativaCnpj(data, coopId, user);
-        if (cnpj) await syncNotasPedidoFromCloud(cnpj);
+        if (!cnpj) return;
+        await syncCooperadosFromCloud(cnpj);
+        await syncNotasPedidoFromCloud(cnpj);
       })();
     }, 12000);
     return () => clearInterval(id);
@@ -579,6 +583,11 @@ export default function NotasPedidoContent() {
       return;
     }
 
+    const cooperadoRecord = data.cooperados.find((c) => c.id === cid);
+    if (cooperadoRecord) {
+      void pushCooperadoToCloud(cnpj, { ...cooperadoRecord, updatedAt: now }, user.email);
+    }
+
     const inst = data.instituicoes.find((i) => i.id === contratoInstId);
     const localEntrega = inst?.localEntrega ?? inst?.endereco ?? local;
 
@@ -737,7 +746,11 @@ export default function NotasPedidoContent() {
       : nota.instituicaoId;
     setConferenciaInstId(instId);
     setConferenciaDescontoPct(data?.config.descontoPadraoCooperativa ?? 5);
-    setConferenciaCooperadoId(nota.cooperadoId);
+    const coopDonoId =
+      data && coopId
+        ? agruparPendentesPorCooperado(data, [nota], coopId)[0]?.cooperadoId ?? nota.cooperadoId
+        : nota.cooperadoId;
+    setConferenciaCooperadoId(coopDonoId);
     setAlterarInstConferencia(false);
     setConferenciaAssinatura(nota.assinaturaRecebedor ?? "");
     setConferirErrors({});
@@ -1491,13 +1504,16 @@ export default function NotasPedidoContent() {
 
             <div className="space-y-4">
               <p className="text-xs font-semibold text-gray-500 uppercase">Lançamento na ficha</p>
-          <FormField label="Cooperado dono desta nota" required hint="Escolha quem receberá o valor na ficha pessoal">
+          <FormField label="Cooperado dono desta nota" required hint="Todos os cooperados cadastrados no CNPJ da cooperativa">
                 <Select value={conferenciaCooperadoId} onChange={(e) => setConferenciaCooperadoId(e.target.value)}>
                   <option value="">Selecione...</option>
                   {cooperadosCoop.map((c) => (
                     <option key={c.id} value={c.id}>{c.nomeCompleto}{c.avulso ? " (avulso)" : ""}</option>
                   ))}
                 </Select>
+                {cooperadosCoop.length === 0 && (
+                  <p className="text-xs text-amber-700 mt-1">Carregando cooperados da nuvem…</p>
+                )}
               </FormField>
 
               <div className="rounded-xl border border-green-200 bg-green-50/50 p-4">

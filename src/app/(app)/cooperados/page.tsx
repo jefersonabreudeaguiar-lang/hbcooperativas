@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Plus, ShoppingCart, UserCircle } from "lucide-react";
@@ -12,7 +12,8 @@ import { Input, Select, Textarea, FormField } from "@/components/ui/Form";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import { updateData, generateId, addAuditEntry } from "@/services/dataStore";
 import { formatCPFCNPJ, formatPhone } from "@/utils/format";
-import { getUserCooperativaId } from "@/utils/cooperativa";
+import { getUserCooperativaId, normalizeCnpj } from "@/utils/cooperativa";
+import { pushCooperadoToCloud, syncCooperadosFromCloud } from "@/services/cooperadoCloudService";
 import type { Cooperado, CooperadoStatus } from "@/types";
 
 export default function CooperadosPage() {
@@ -36,6 +37,14 @@ export default function CooperadosPage() {
     });
   }, [data, search, statusFilter, user]);
 
+  useEffect(() => {
+    if (!data || !user) return;
+    const coopId = getUserCooperativaId(user, data);
+    const coop = data.cooperativas.find((c) => c.id === coopId);
+    const cnpj = normalizeCnpj(coop?.cnpj ?? user.cooperativaCnpj ?? "");
+    if (cnpj.length === 14) void syncCooperadosFromCloud(cnpj);
+  }, [data, user?.id]);
+
   const openNew = () => {
     setEditing(null);
     const coopId = user && data ? getUserCooperativaId(user, data) : undefined;
@@ -54,18 +63,20 @@ export default function CooperadosPage() {
     if (!form.avulso && !form.cpfCnpj) return;
     const now = new Date().toISOString();
     const produtos = typeof form.produtos === "string" ? (form.produtos as string).split(",").map((p) => p.trim()) : form.produtos ?? [];
+    let savedCooperado: Cooperado | null = null;
 
     updateData((d) => {
       let updated = { ...d };
       if (editing) {
+        savedCooperado = { ...editing, ...form, produtos, updatedAt: now } as Cooperado;
         updated.cooperados = d.cooperados.map((c) =>
-          c.id === editing.id ? { ...c, ...form, produtos, updatedAt: now } as Cooperado : c
+          c.id === editing.id ? savedCooperado! : c
         );
         updated = addAuditEntry(updated, { entityType: "cooperado", entityId: editing.id, action: "editar", userId: user.id, userName: user.name });
       } else {
         const coopId = form.cooperativaId ?? getUserCooperativaId(user, d);
         if (!coopId) return d;
-        const newCoop: Cooperado = {
+        savedCooperado = {
           id: generateId("c"),
           cooperativaId: coopId,
           nomeCompleto: form.nomeCompleto!,
@@ -85,11 +96,19 @@ export default function CooperadosPage() {
           createdAt: now,
           updatedAt: now,
         };
-        updated.cooperados = [...d.cooperados, newCoop];
-        updated = addAuditEntry(updated, { entityType: "cooperado", entityId: newCoop.id, action: "criar", userId: user.id, userName: user.name });
+        updated.cooperados = [...d.cooperados, savedCooperado];
+        updated = addAuditEntry(updated, { entityType: "cooperado", entityId: savedCooperado.id, action: "criar", userId: user.id, userName: user.name });
       }
       return updated;
     });
+
+    if (savedCooperado && data && user) {
+      const coopId = getUserCooperativaId(user, data);
+      const coop = data.cooperativas.find((c) => c.id === coopId);
+      const cnpj = normalizeCnpj(coop?.cnpj ?? user.cooperativaCnpj ?? "");
+      if (cnpj.length === 14) void pushCooperadoToCloud(cnpj, savedCooperado);
+    }
+
     setModalOpen(false);
   };
 

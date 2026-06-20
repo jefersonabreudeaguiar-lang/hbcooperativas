@@ -11,6 +11,7 @@ import {
   mergeCooperativaIntoData,
   syncCooperativaToCloud,
 } from "@/services/cooperativaCloudService";
+import { pushCooperadoToCloud } from "@/services/cooperadoCloudService";
 
 const STORAGE_KEY = "coopeagriplla_data";
 const SESSION_KEY = "coopeagriplla_session";
@@ -563,6 +564,8 @@ export async function registerCooperado(input: RegisterCooperadoInput): Promise<
   });
 
   persistSession(safeUser);
+
+  void pushCooperadoToCloud(cnpjCoop, cooperado, email);
 
   return { success: true, user: safeUser };
 }
