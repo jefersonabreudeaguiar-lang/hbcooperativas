@@ -1,5 +1,6 @@
 import type { AppData, Instituicao } from "@/types";
 import { generateId } from "@/services/dataStore";
+import { getInstituicaoPadraoId } from "@/utils/instituicaoPreferida";
 
 export const CONTRATO_PNAE_PADRAO_NOME = "PNAE - MERENDA ESCOLAR";
 
@@ -47,4 +48,27 @@ export function ensureContratoPnaePadrao(data: AppData, cooperativaId: string): 
     instituicaoId: nova.id,
     criou: true,
   };
+}
+
+/** Escolhe o contrato da entrega: nota rejeitada → padrão salvo → PNAE → primeiro da lista → cria PNAE. */
+export function resolverContratoEntrega(
+  data: AppData,
+  cooperativaId: string,
+  preferId?: string
+): { data: AppData; instituicaoId: string; criou: boolean } {
+  const ensured = ensureContratoPnaePadrao(data, cooperativaId);
+  const contratos = getContratosEntrega(ensured.data, cooperativaId);
+  const padrao = getInstituicaoPadraoId(cooperativaId);
+
+  const pick = (id?: string) =>
+    id && contratos.some((c) => c.id === id) ? id : undefined;
+
+  const instituicaoId =
+    pick(preferId) ??
+    pick(padrao ?? undefined) ??
+    contratos.find((c) => c.tipo === "PNAE")?.id ??
+    contratos[0]?.id ??
+    ensured.instituicaoId;
+
+  return { ...ensured, instituicaoId };
 }

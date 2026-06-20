@@ -33,8 +33,8 @@ import {
   resolveCooperativaCnpj,
 } from "@/services/notaPedidoCloudService";
 import { listCooperadosDaCooperativa, pushCooperadoToCloud, resolverCooperadoIdCanonico, getCooperadoNomeResolvido } from "@/services/cooperadoCloudService";
-import { pushOperacionalToCloud, syncAllCooperativaFromCloud } from "@/services/cooperativaSyncCloudService";
-import { ensureContratoPnaePadrao, getContratoLabel, getContratosEntrega } from "@/utils/contratosEntrega";
+import { pushOperacionalToCloud, pushContratosToCloud, syncAllCooperativaFromCloud } from "@/services/cooperativaSyncCloudService";
+import { getContratoLabel, getContratosEntrega, resolverContratoEntrega } from "@/utils/contratosEntrega";
 import { cn, formatCurrency, formatDate, formatMesReferencia, getCurrentMesReferencia } from "@/utils/format";
 import { labelUnidade } from "@/utils/unidades";
 import { sortPorOrdemLancamento } from "@/utils/produtos";
@@ -107,7 +107,7 @@ export default function NotasPedidoContent() {
   const [successMsg, setSuccessMsg] = useState("");
   const [lancadoMsg, setLancadoMsg] = useState("");
 
-  const [formErrors, setFormErrors] = useState<{ foto?: string; escolaAvulsa?: string }>({});
+  const [formErrors, setFormErrors] = useState<{ foto?: string; escolaAvulsa?: string; contrato?: string }>({});
   const [usarEscolaAvulsa, setUsarEscolaAvulsa] = useState(false);
   const [escolaAvulsaNome, setEscolaAvulsaNome] = useState("");
   const [instituicaoId, setInstituicaoId] = useState("");
@@ -263,6 +263,11 @@ export default function NotasPedidoContent() {
     }
   }, [coopId, isCooperado, instituicoes]);
 
+  const contratoSelecionado = useMemo(() => {
+    if (!data || !contratoInstId) return contratosEntrega[0];
+    return contratosEntrega.find((c) => c.id === contratoInstId) ?? contratosEntrega[0];
+  }, [data, contratoInstId, contratosEntrega]);
+
   const instituicaoPadraoNome = useMemo(() => {
     return instituicoes.find((i) => i.id === instituicaoPadraoId)?.nome ?? "";
   }, [instituicoes, instituicaoPadraoId]);
@@ -289,9 +294,31 @@ export default function NotasPedidoContent() {
   };
 
   useEffect(() => {
-    if (searchParams.get("anexar") === "1" && isCooperado) openAnexar();
+    if (searchParams.get("anexar") === "1" && isCooperado && data) openAnexar();
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [searchParams, isCooperado]);
+  }, [searchParams, isCooperado, data]);
+
+  useEffect(() => {
+    if (!anexarModal || !data || !coopId) return;
+    const preferId =
+      reenviarNotaId
+        ? data.notasPedido.find((n) => n.id === reenviarNotaId)?.instituicaoId
+        : contratoInstId || undefined;
+    const resolved = resolverContratoEntrega(data, coopId, preferId);
+    if (resolved.criou) {
+      updateData(() => resolved.data);
+      void (async () => {
+        if (!user) return;
+        const cnpj = await resolveCooperativaCnpj(resolved.data, coopId, user);
+        if (cnpj) await pushContratosToCloud(cnpj, resolved.data, coopId);
+      })();
+    }
+    if (resolved.instituicaoId && resolved.instituicaoId !== contratoInstId) {
+      setContratoInstId(resolved.instituicaoId);
+      setInstituicaoPadraoId(coopId, resolved.instituicaoId);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [anexarModal, data, coopId, reenviarNotaId]);
 
   useEffect(() => {
     if (!data || !coopId || !user) return;
@@ -355,17 +382,19 @@ export default function NotasPedidoContent() {
     setFotoDuplicadaMsg("");
     setObservacoes(notaRejeitada?.observacoes ?? "");
 
-    if (data && coopId && user) {
-      const ensured = ensureContratoPnaePadrao(data, coopId);
-      if (ensured.criou) {
-        updateData(() => ensured.data);
+    if (data && coopId) {
+      const resolved = resolverContratoEntrega(data, coopId, notaRejeitada?.instituicaoId);
+      if (resolved.criou) {
+        updateData(() => resolved.data);
+        if (user) {
+          void (async () => {
+            const cnpj = await resolveCooperativaCnpj(resolved.data, coopId, user);
+            if (cnpj) await pushContratosToCloud(cnpj, resolved.data, coopId);
+          })();
+        }
       }
-      const contratoId =
-        notaRejeitada?.instituicaoId ||
-        ensured.instituicaoId ||
-        getContratosEntrega(ensured.data, coopId)[0]?.id ||
-        "";
-      setContratoInstId(contratoId);
+      setContratoInstId(resolved.instituicaoId);
+      if (resolved.instituicaoId) setInstituicaoPadraoId(coopId, resolved.instituicaoId);
     }
 
     setAnexarModal(true);
@@ -573,12 +602,27 @@ export default function NotasPedidoContent() {
       return;
     }
 
+    const preferId = reenviarNotaId
+      ? data.notasPedido.find((n) => n.id === reenviarNotaId)?.instituicaoId
+      : contratoInstId || undefined;
+    const resolved = resolverContratoEntrega(data, coopId, preferId);
+    let workingData = data;
+    if (resolved.criou) {
+      updateData(() => resolved.data);
+      workingData = resolved.data;
+    }
+    const contratoId = resolved.instituicaoId;
+    if (contratoId && contratoId !== contratoInstId) {
+      setContratoInstId(contratoId);
+      setInstituicaoPadraoId(coopId, contratoId);
+    }
+
     const errors: typeof formErrors = {};
     if (usarEscolaAvulsa && !escolaAvulsaNome.trim()) {
       errors.escolaAvulsa = "Informe o nome da escola.";
     }
     if (fotosSessao.length === 0) errors.foto = "Tire ou escolha pelo menos uma foto do pedido assinado.";
-    if (!contratoInstId) errors.foto = errors.foto ?? "Selecione o contrato da entrega.";
+    if (!contratoId) errors.contrato = "Contrato da entrega não encontrado. Aguarde a sincronização ou fale com a cooperativa.";
     if (Object.keys(errors).length) {
       setFormErrors(errors);
       return;
@@ -588,13 +632,13 @@ export default function NotasPedidoContent() {
     const local = escolaAvulsa ?? "";
     const now = new Date().toISOString();
     const mes = getCurrentMesReferencia();
-    const cooperadoNome = getCooperadoNome(data.cooperados, cid);
+    const cooperadoNome = getCooperadoNome(workingData.cooperados, cid);
     const qtdFotos = fotosSessao.length;
 
     setEnviando(true);
     setErroEnvio("");
 
-    const cnpj = await resolveCooperativaCnpj(data, coopId, user);
+    const cnpj = await resolveCooperativaCnpj(workingData, coopId, user);
     if (!cnpj) {
       setEnviando(false);
       setErroEnvio(
@@ -603,12 +647,16 @@ export default function NotasPedidoContent() {
       return;
     }
 
-    const cooperadoRecord = data.cooperados.find((c) => c.id === cid);
+    if (resolved.criou) {
+      await pushContratosToCloud(cnpj, workingData, coopId);
+    }
+
+    const cooperadoRecord = workingData.cooperados.find((c) => c.id === cid);
     if (cooperadoRecord) {
       void pushCooperadoToCloud(cnpj, { ...cooperadoRecord, updatedAt: now }, user.email);
     }
 
-    const inst = data.instituicoes.find((i) => i.id === contratoInstId);
+    const inst = workingData.instituicoes.find((i) => i.id === contratoId);
     const localEntrega = inst?.localEntrega ?? inst?.endereco ?? local;
 
     const buildNotasCompletas = (d: AppData): NotaPedido[] => {
@@ -617,7 +665,7 @@ export default function NotasPedidoContent() {
         if (!base) return [];
         return [{
           ...base,
-          instituicaoId: contratoInstId,
+          instituicaoId: contratoId,
           localEntrega,
           escolaAvulsaNome: escolaAvulsa,
           fotoPedido: fotosSessao[0],
@@ -641,7 +689,7 @@ export default function NotasPedidoContent() {
           id: generateId("np"),
           cooperativaId: coopId,
           cooperadoId: cid,
-          instituicaoId: contratoInstId,
+          instituicaoId: contratoId,
           numeroNota: gerarNumeroNota({ ...d, notasPedido: notas }, coopId),
           dataEntrega: now.split("T")[0],
           localEntrega,
@@ -667,7 +715,7 @@ export default function NotasPedidoContent() {
       return criadas;
     };
 
-    const notasCompletas = buildNotasCompletas(data);
+    const notasCompletas = buildNotasCompletas(workingData);
     if (notasCompletas.length === 0) {
       setEnviando(false);
       setErroEnvio("Não foi possível preparar o envio. Tente novamente.");
@@ -1331,23 +1379,29 @@ export default function NotasPedidoContent() {
             </AlertBanner>
           )}
 
-          <FormField label="Contrato" hint="A entrega será conferida e lançada neste contrato.">
+          <FormField label="Contrato" required error={formErrors.contrato} hint="A entrega será conferida e lançada neste contrato.">
             {contratosEntrega.length <= 1 ? (
               <div className="rounded-xl border border-green-300 bg-green-50 px-4 py-3 flex items-start gap-3">
                 <FileSignature size={22} className="text-green-700 shrink-0 mt-0.5" />
                 <div>
                   <p className="font-semibold text-green-900">
-                    {contratosEntrega[0] ? getContratoLabel(contratosEntrega[0]) : "PNAE - MERENDA ESCOLAR"}
+                    {contratoSelecionado
+                      ? getContratoLabel(contratoSelecionado)
+                      : "PNAE - MERENDA ESCOLAR"}
                   </p>
                   <p className="text-xs text-green-700 mt-1">
-                    Contrato padrão — o responsável pode cadastrar outros em Contratos.
+                    Contrato selecionado automaticamente — o responsável pode cadastrar outros em Contratos.
                   </p>
                 </div>
               </div>
             ) : (
               <Select
                 value={contratoInstId}
-                onChange={(e) => setContratoInstId(e.target.value)}
+                onChange={(e) => {
+                  setContratoInstId(e.target.value);
+                  if (coopId && e.target.value) setInstituicaoPadraoId(coopId, e.target.value);
+                  setFormErrors((prev) => ({ ...prev, contrato: undefined }));
+                }}
               >
                 {contratosEntrega.map((c) => (
                   <option key={c.id} value={c.id}>{getContratoLabel(c)}</option>
