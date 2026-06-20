@@ -13,7 +13,7 @@ import { AlertBanner } from "@/components/ui/AlertBanner";
 import { updateData, generateId, addAuditEntry, getData } from "@/services/dataStore";
 import { resolveCooperativaCnpj } from "@/services/notaPedidoCloudService";
 import { pushOperacionalToCloud, syncAllCooperativaFromCloud } from "@/services/cooperativaSyncCloudService";
-import { getComunicadosParaExibicao } from "@/services/comunicadoService";
+import { getComunicadosParaExibicao, getComunicadosCooperado } from "@/services/comunicadoService";
 import { formatDate } from "@/utils/format";
 import type { Comunicado, ComunicadoCategoria } from "@/types";
 
@@ -39,7 +39,7 @@ const FORM_VAZIO = (): Partial<Comunicado> => ({
 
 export default function ComunicadosPage() {
   const data = useAppData();
-  const { check, user } = usePermissions();
+  const { check, user, isCooperado, cooperadoId } = usePermissions();
   const coopId = user && data ? getUserCooperativaId(user, data) : undefined;
   const [categoriaFilter, setCategoriaFilter] = useState("");
   const [modalOpen, setModalOpen] = useState(false);
@@ -59,11 +59,12 @@ export default function ComunicadosPage() {
   }, [coopId, user?.id]);
 
   const comunicadosExibicao = useMemo(() => {
-    if (!data) return [];
-    return getComunicadosParaExibicao(data, coopId, { incluirInativos: check("comunicados", "create") }).filter(
-      (c) => !categoriaFilter || c.categoria === categoriaFilter
-    );
-  }, [data, coopId, categoriaFilter, check]);
+    if (!data || !coopId) return [];
+    const base = isCooperado
+      ? getComunicadosCooperado(data, coopId, cooperadoId ?? user?.cooperadoId)
+      : getComunicadosParaExibicao(data, coopId, { incluirInativos: check("comunicados", "create") });
+    return base.filter((c) => !categoriaFilter || c.categoria === categoriaFilter);
+  }, [data, coopId, categoriaFilter, check, isCooperado, cooperadoId, user?.cooperadoId]);
 
   const templatesRecorrentes = useMemo(() => {
     if (!data || !coopId) return [];
@@ -318,6 +319,13 @@ export default function ComunicadosPage() {
             </Button>
           </div>
         </Card>
+      )}
+
+      {canManage && (
+        <AlertBanner variant="info" className="mb-4">
+          Os avisos salvos aqui serão enviados para <strong>todos os cooperados</strong> da cooperativa após tocar em
+          &quot;Enviar aos cooperados&quot;. Avisos automáticos de pagamento continuam indo só para quem recebeu.
+        </AlertBanner>
       )}
 
       {canManage && (

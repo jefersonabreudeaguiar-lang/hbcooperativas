@@ -111,13 +111,23 @@ export function getComunicadosParaExibicao(
   });
 }
 
+/** Aviso geral da cooperativa (não direcionado a um cooperado específico). */
+export function comunicadoParaTodosCooperados(c: Comunicado): boolean {
+  return !c.cooperadoId && c.visivelParaTodos !== false;
+}
+
+/** Quem pode ver este aviso no aparelho do cooperado. */
+export function comunicadoVisivelParaCooperado(c: Comunicado, cooperadoId?: string): boolean {
+  if (c.cooperadoId) return Boolean(cooperadoId && c.cooperadoId === cooperadoId);
+  return c.visivelParaTodos !== false;
+}
+
 export function getComunicadosCooperado(
   data: AppData,
   cooperativaId: string,
   cooperadoId?: string
 ): ComunicadoExibicao[] {
-  return getComunicadosParaExibicao(data, cooperativaId).filter((c) => {
-    if (c.cooperadoId) return c.cooperadoId === cooperadoId;
-    return c.visivelParaTodos;
-  });
+  return getComunicadosParaExibicao(data, cooperativaId).filter((c) =>
+    comunicadoVisivelParaCooperado(c, cooperadoId)
+  );
 }
