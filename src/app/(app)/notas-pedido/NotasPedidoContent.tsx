@@ -105,6 +105,7 @@ export default function NotasPedidoContent() {
 
   const [selectedNota, setSelectedNota] = useState<NotaPedido | null>(null);
   const [conferenciaItens, setConferenciaItens] = useState<ItemForm[]>([]);
+  const [conferenciaCooperadoId, setConferenciaCooperadoId] = useState("");
   const [conferenciaDescontoPct, setConferenciaDescontoPct] = useState(5);
   const [conferenciaInstId, setConferenciaInstId] = useState("");
   const [conferenciaLocal, setConferenciaLocal] = useState("");
@@ -123,7 +124,19 @@ export default function NotasPedidoContent() {
   const [avulsoItens, setAvulsoItens] = useState<ItemForm[]>([]);
   const [avulsoErrors, setAvulsoErrors] = useState<{ cooperado?: string; instituicao?: string; assinatura?: string; itens?: string }>({});
 
+  const [filtroCooperadoId, setFiltroCooperadoId] = useState("");
+
   const coopId = user && data ? getUserCooperativaId(user, data) : undefined;
+
+  const cooperadosCoop = useMemo(() => {
+    if (!data || !coopId) return [];
+    return data.cooperados.filter((c) => c.cooperativaId === coopId && c.status === "ativo");
+  }, [data, coopId]);
+
+  useEffect(() => {
+    const cid = searchParams.get("cooperado");
+    if (cid && !isCooperado) setFiltroCooperadoId(cid);
+  }, [searchParams, isCooperado]);
 
   const notas = useMemo(() => {
     if (!data) return [];
@@ -131,21 +144,17 @@ export default function NotasPedidoContent() {
       .filter((n) => {
         if (coopId && n.cooperativaId !== coopId) return false;
         if (isCooperado && cooperadoId && n.cooperadoId !== cooperadoId) return false;
+        if (!isCooperado && filtroCooperadoId && n.cooperadoId !== filtroCooperadoId) return false;
         if (statusFilter && n.status !== statusFilter) return false;
         return true;
       })
       .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-  }, [data, coopId, isCooperado, cooperadoId, statusFilter]);
+  }, [data, coopId, isCooperado, cooperadoId, filtroCooperadoId, statusFilter]);
 
   const pendentesAnalise = useMemo(() => notas.filter((n) => n.status === "aguardando_conferencia"), [notas]);
   const instituicoes = useMemo(() => {
     if (!data || !coopId) return [];
     return data.instituicoes.filter((i) => i.cooperativaId === coopId);
-  }, [data, coopId]);
-
-  const cooperadosAvulso = useMemo(() => {
-    if (!data || !coopId) return [];
-    return data.cooperados.filter((c) => c.cooperativaId === coopId && c.status === "ativo" && c.avulso);
   }, [data, coopId]);
 
   useEffect(() => {
@@ -237,9 +246,13 @@ export default function NotasPedidoContent() {
     setAnexarModal(true);
   };
 
-  const openLancarAvulso = () => {
+  const openLancarAvulso = (preCooperadoId?: string) => {
     const instId = instituicaoPadraoId || instituicoes[0]?.id || "";
-    setAvulsoCooperadoId(cooperadosAvulso[0]?.id ?? NOVO_AVULSO);
+    const defaultCoop =
+      preCooperadoId && cooperadosCoop.some((c) => c.id === preCooperadoId)
+        ? preCooperadoId
+        : cooperadosCoop[0]?.id ?? NOVO_AVULSO;
+    setAvulsoCooperadoId(defaultCoop);
     setAvulsoNovoNome("");
     setAvulsoInstId(instId);
     setAvulsoDataEntrega(new Date().toISOString().split("T")[0]);
@@ -247,6 +260,13 @@ export default function NotasPedidoContent() {
     setAvulsoErrors({});
     setAvulsoModal(true);
   };
+
+  useEffect(() => {
+    if (searchParams.get("lancar") === "1" && !isCooperado && check("notas_pedido", "create")) {
+      openLancarAvulso(searchParams.get("cooperado") ?? undefined);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams, isCooperado]);
 
   const updateAvulsoQty = (idx: number, qty: number) => {
     setAvulsoItens((prev) => prev.map((item, i) => (i === idx ? { ...item, quantidade: qty } : item)));
@@ -256,9 +276,9 @@ export default function NotasPedidoContent() {
   const handleLancarAvulso = () => {
     if (!user || !data || !coopId) return;
     const errors: typeof avulsoErrors = {};
-    const usarNovo = avulsoCooperadoId === NOVO_AVULSO || cooperadosAvulso.length === 0;
-    if (usarNovo && !avulsoNovoNome.trim()) errors.cooperado = "Informe o nome do cooperado avulso.";
-    if (!usarNovo && !avulsoCooperadoId) errors.cooperado = "Escolha o cooperado avulso.";
+    const usarNovo = avulsoCooperadoId === NOVO_AVULSO;
+    if (usarNovo && !avulsoNovoNome.trim()) errors.cooperado = "Informe o nome do cooperado.";
+    if (!usarNovo && !avulsoCooperadoId) errors.cooperado = "Escolha o cooperado.";
     if (!avulsoInstId) errors.instituicao = "Escolha a instituição.";
     if (!avulsoAssinatura.trim()) errors.assinatura = "Informe quem assinou na escola.";
     if (avulsoTotais.liquido <= 0) errors.itens = "Informe a quantidade de pelo menos um produto.";
@@ -333,12 +353,16 @@ export default function NotasPedidoContent() {
       if (coopId && avulsoInstId) setInstituicaoPadraoId(coopId, avulsoInstId);
 
       const ficha = buildFichaFromNota(nota, { ...d, cooperados }, user.name);
+      const arquivosMensais = upsertArquivoMensal({ ...d, cooperados }, cooperadoId, coopId, mes, {
+        notaPedidoIds: [nota.id],
+      });
       return addAuditEntry(
         {
           ...d,
           cooperados,
           notasPedido: [...d.notasPedido, nota],
           fichaCorrida: [...d.fichaCorrida, ficha],
+          arquivosMensais,
         },
         {
           entityType: "nota_pedido",
@@ -450,6 +474,7 @@ export default function NotasPedidoContent() {
       : nota.instituicaoId;
     setConferenciaInstId(instId);
     setConferenciaDescontoPct(data?.config.descontoPadraoCooperativa ?? 5);
+    setConferenciaCooperadoId(nota.cooperadoId);
     setAlterarInstConferencia(false);
     setConferenciaAssinatura(nota.assinaturaRecebedor ?? "");
     setConferirErrors({});
@@ -469,8 +494,9 @@ export default function NotasPedidoContent() {
   const handleLancarNota = () => {
     if (!user || !data || !selectedNota) return;
     const errors: typeof conferirErrors = {};
+    if (!conferenciaCooperadoId) errors.itens = "Escolha o cooperado dono desta nota.";
     if (!conferenciaAssinatura.trim()) errors.assinatura = "Informe quem assinou na escola.";
-    if (conferenciaTotais.liquido <= 0) errors.itens = "Informe a quantidade de pelo menos um produto.";
+    if (conferenciaTotais.liquido <= 0) errors.itens = errors.itens ?? "Informe a quantidade de pelo menos um produto.";
     if (Object.keys(errors).length) {
       setConferirErrors(errors);
       return;
@@ -482,6 +508,7 @@ export default function NotasPedidoContent() {
       const base = aplicarItensNaNota(
         {
           ...selectedNota,
+          cooperadoId: conferenciaCooperadoId,
           instituicaoId: conferenciaInstId,
           localEntrega: conferenciaLocal,
           assinaturaRecebedor: conferenciaAssinatura,
@@ -512,7 +539,8 @@ export default function NotasPedidoContent() {
     });
 
     setConferirModal(false);
-    setLancadoMsg(`Nota aprovada! ${formatCurrency(conferenciaTotais.liquido)} lançado na ficha do cooperado.`);
+    const coopNome = getCooperadoNome(data.cooperados, conferenciaCooperadoId);
+    setLancadoMsg(`Nota aprovada! ${formatCurrency(conferenciaTotais.liquido)} na ficha de ${coopNome.split(" ")[0]}.`);
     setTimeout(() => setLancadoMsg(""), 6000);
   };
 
@@ -601,8 +629,8 @@ export default function NotasPedidoContent() {
             <Camera size={18} /> Enviar foto
           </Button>
         ) : check("notas_pedido", "create") ? (
-          <Button size="lg" onClick={openLancarAvulso}>
-            <UserPlus size={18} /> Lançar avulso
+          <Button size="lg" onClick={() => openLancarAvulso()}>
+            <UserPlus size={18} /> Lançar entrega
           </Button>
         ) : undefined}
       />
@@ -685,6 +713,16 @@ export default function NotasPedidoContent() {
       )}
 
       <FilterBar>
+        {!isCooperado && cooperadosCoop.length > 0 && (
+          <FormField label="Cooperado">
+            <Select value={filtroCooperadoId} onChange={(e) => setFiltroCooperadoId(e.target.value)} className="min-w-[200px]">
+              <option value="">Todos</option>
+              {cooperadosCoop.map((c) => (
+                <option key={c.id} value={c.id}>{c.nomeCompleto}</option>
+              ))}
+            </Select>
+          </FormField>
+        )}
         <FormField label="Filtrar">
           <Select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
             <option value="">Todas</option>
@@ -803,27 +841,20 @@ export default function NotasPedidoContent() {
             Para cooperados que não usam o app. Lance produtos e valores direto, sem foto de nota.
           </p>
 
-          <FormField label="Cooperado avulso" required error={avulsoErrors.cooperado}>
-            {cooperadosAvulso.length > 0 ? (
-              <Select
-                value={avulsoCooperadoId}
-                onChange={(e) => {
-                  setAvulsoCooperadoId(e.target.value);
-                  setAvulsoErrors((p) => ({ ...p, cooperado: undefined }));
-                }}
-              >
-                {cooperadosAvulso.map((c) => (
-                  <option key={c.id} value={c.id}>{c.nomeCompleto}</option>
-                ))}
-                <option value={NOVO_AVULSO}>+ Informar outro nome...</option>
-              </Select>
-            ) : (
-              <p className="text-xs text-gray-500 mb-2">
-                Nenhum avulso cadastrado — informe o nome abaixo ou cadastre em{" "}
-                <Link href="/cooperados" className="text-green-700 font-medium underline">Cooperados</Link>.
-              </p>
-            )}
-            {(avulsoCooperadoId === NOVO_AVULSO || cooperadosAvulso.length === 0) && (
+          <FormField label="Cooperado" required error={avulsoErrors.cooperado} hint="Entrega vai para a ficha deste cooperado">
+            <Select
+              value={avulsoCooperadoId}
+              onChange={(e) => {
+                setAvulsoCooperadoId(e.target.value);
+                setAvulsoErrors((p) => ({ ...p, cooperado: undefined }));
+              }}
+            >
+              {cooperadosCoop.map((c) => (
+                <option key={c.id} value={c.id}>{c.nomeCompleto}{c.avulso ? " (avulso)" : ""}</option>
+              ))}
+              <option value={NOVO_AVULSO}>+ Cadastrar nome avulso...</option>
+            </Select>
+            {avulsoCooperadoId === NOVO_AVULSO && (
               <Input
                 className="mt-2"
                 value={avulsoNovoNome}
@@ -932,6 +963,15 @@ export default function NotasPedidoContent() {
 
             <div className="space-y-4">
               <p className="text-xs font-semibold text-gray-500 uppercase">Lançamento na ficha</p>
+          <FormField label="Cooperado dono desta nota" required hint="Escolha quem receberá o valor na ficha pessoal">
+                <Select value={conferenciaCooperadoId} onChange={(e) => setConferenciaCooperadoId(e.target.value)}>
+                  <option value="">Selecione...</option>
+                  {cooperadosCoop.map((c) => (
+                    <option key={c.id} value={c.id}>{c.nomeCompleto}{c.avulso ? " (avulso)" : ""}</option>
+                  ))}
+                </Select>
+              </FormField>
+
               <div className="rounded-xl border border-green-200 bg-green-50/50 p-4">
                 <div className="flex items-start justify-between gap-3">
                   <div>

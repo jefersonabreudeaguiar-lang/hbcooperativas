@@ -2,7 +2,8 @@
 
 import { useState, useMemo } from "react";
 import Link from "next/link";
-import { Plus, ShoppingCart } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { Plus, ShoppingCart, UserCircle } from "lucide-react";
 import { useAppData } from "@/hooks/useAppData";
 import { usePermissions } from "@/hooks/usePermissions";
 import { PageHeader, DataTable, FilterBar, Modal } from "@/components/ui/Table";
@@ -17,6 +18,7 @@ import type { Cooperado, CooperadoStatus } from "@/types";
 export default function CooperadosPage() {
   const data = useAppData();
   const { check, user } = usePermissions();
+  const router = useRouter();
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
   const [modalOpen, setModalOpen] = useState(false);
@@ -105,7 +107,7 @@ export default function CooperadosPage() {
     <div>
       <PageHeader
         title="Cooperados"
-        subtitle="Cadastro e gestão de cooperados"
+        subtitle="Todos os cooperados cadastrados no CNPJ da cooperativa — abra a ficha para ver entregas e lançamentos"
         action={check("cooperados", "create") && (
           <Button onClick={openNew}><Plus size={18} /> Novo Cooperado</Button>
         )}
@@ -135,16 +137,27 @@ export default function CooperadosPage() {
           { key: "produtos", label: "Produtos", render: (c) => c.produtos.join(", ") },
           { key: "status", label: "Status", render: (c) => <StatusBadge status={c.status} /> },
           {
+            key: "ficha",
+            label: "Ficha",
+            render: (c) => (
+              <Link href={`/cooperados/${c.id}`} className="inline-flex items-center gap-1 text-sm text-green-700 hover:text-green-800 font-medium">
+                <UserCircle size={16} /> Ver ficha
+              </Link>
+            ),
+          },
+          {
             key: "venda",
-            label: "Vendas",
+            label: "Lançar",
             render: (c) =>
               check("notas_pedido", "create") ? (
-                <Link href="/notas-pedido" className="inline-flex items-center gap-1 text-sm text-green-700 hover:text-green-800 font-medium">
-                  <ShoppingCart size={16} /> Ver entregas
+                <Link href={`/notas-pedido?cooperado=${c.id}&lancar=1`} className="inline-flex items-center gap-1 text-sm text-green-700 hover:text-green-800 font-medium">
+                  <ShoppingCart size={16} /> Lançar nota
                 </Link>
               ) : null,
           },
         ]}
+        onView={(c) => router.push(`/cooperados/${c.id}`)}
+        viewLabel="Ficha"
         onEdit={check("cooperados", "edit") ? openEdit : undefined}
         onDelete={check("cooperados", "delete") ? handleDelete : undefined}
       />

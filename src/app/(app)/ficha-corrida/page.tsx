@@ -1,6 +1,8 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, useEffect } from "react";
+import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { QrCode, XCircle, Wallet, CheckCircle2, FileDown, PenLine } from "lucide-react";
 import { useAppData } from "@/hooks/useAppData";
 import { usePermissions } from "@/hooks/usePermissions";
@@ -55,8 +57,16 @@ function DetalheLancamento({ ficha }: { ficha: FichaCorrida }) {
 export default function FichaCorridaPage() {
   const data = useAppData();
   const { user, isCooperado, cooperadoId, check } = usePermissions();
-  const [mesFilter, setMesFilter] = useState(getCurrentMesReferencia());
-  const [cooperadoFilter, setCooperadoFilter] = useState("");
+  const searchParams = useSearchParams();
+  const [mesFilter, setMesFilter] = useState(searchParams.get("mes") ?? getCurrentMesReferencia());
+  const [cooperadoFilter, setCooperadoFilter] = useState(searchParams.get("cooperado") ?? "");
+
+  useEffect(() => {
+    const c = searchParams.get("cooperado");
+    const m = searchParams.get("mes");
+    if (c && !isCooperado) setCooperadoFilter(c);
+    if (m) setMesFilter(m);
+  }, [searchParams, isCooperado]);
   const [pixModalOpen, setPixModalOpen] = useState(false);
   const [confirmPagamento, setConfirmPagamento] = useState(false);
   const [pixInvalidoOpen, setPixInvalidoOpen] = useState(false);
@@ -235,6 +245,11 @@ export default function FichaCorridaPage() {
 
       {!isCooperado && cooperadoSelecionado && (
         <Card title={`Pagamento — ${cooperadoSelecionado.nomeCompleto.split(" ")[0]}`} className="mb-6">
+          <p className="text-sm text-gray-600 mb-3">
+            <Link href={`/cooperados/${cooperadoSelecionado.id}`} className="text-green-700 font-medium hover:underline">
+              Abrir ficha completa do cooperado →
+            </Link>
+          </p>
           <div className="space-y-4">
             <div className="flex items-center gap-2 text-sm">
               <Wallet size={18} className="text-gray-500" />

@@ -121,7 +121,7 @@ export function getMenuItems(role: UserRole): { href: string; label: string; res
 
   const source = role === "presidente"
     ? DIRETORIA_MENU.filter((i) =>
-        ["/dashboard", "/notas-pedido", "/ficha-corrida", "/contratos", "/meu-perfil", "/mensalidades", "/comunicados", "/relatorios", "/fechamento-mensal"].includes(i.href)
+        ["/dashboard", "/notas-pedido", "/ficha-corrida", "/contratos", "/meu-perfil", "/cooperados", "/mensalidades", "/comunicados", "/relatorios", "/fechamento-mensal"].includes(i.href)
         && can(role, i.resource, "view")
       )
     : DIRETORIA_MENU;
@@ -142,6 +142,7 @@ export function getMobileNavItems(role: UserRole): { href: string; label: string
     { href: "/dashboard", label: "Início", resource: "dashboard" },
     { href: "/notas-pedido", label: "Conferir", resource: "notas_pedido" },
     { href: "/ficha-corrida", label: "Pagar", resource: "ficha_corrida" },
+    { href: "/cooperados", label: "Cooperados", resource: "cooperados" },
     { href: "/contratos", label: "Contratos", resource: "instituicoes" },
     { href: "/meu-perfil", label: "Perfil", resource: "cooperativas" },
   ];
