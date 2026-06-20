@@ -14,9 +14,19 @@ interface PixQrModalProps {
   chavePix: string;
   nome: string;
   valor: number;
+  hintAposPagamento?: string;
+  onEnviarComprovante?: () => void;
 }
 
-export function PixQrModal({ open, onClose, chavePix, nome, valor }: PixQrModalProps) {
+export function PixQrModal({
+  open,
+  onClose,
+  chavePix,
+  nome,
+  valor,
+  hintAposPagamento,
+  onEnviarComprovante,
+}: PixQrModalProps) {
   const [qrUrl, setQrUrl] = useState("");
   const [copied, setCopied] = useState(false);
   const [copiedChave, setCopiedChave] = useState(false);
@@ -64,6 +74,15 @@ export function PixQrModal({ open, onClose, chavePix, nome, valor }: PixQrModalP
         <Button variant="secondary" className="w-full" onClick={copyPayload}>
           <Copy size={16} /> {copied ? "Código copiado!" : "Copiar PIX copia e cola"}
         </Button>
+
+        {hintAposPagamento && (
+          <p className="text-xs text-gray-600 text-center px-2">{hintAposPagamento}</p>
+        )}
+        {onEnviarComprovante && (
+          <Button className="w-full" onClick={onEnviarComprovante}>
+            Enviar comprovante
+          </Button>
+        )}
       </div>
     </Modal>
   );

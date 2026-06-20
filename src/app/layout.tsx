@@ -11,6 +11,9 @@ const geist = Geist({
 export const metadata: Metadata = {
   title: "HB Cooperativas — Gestão de Cooperativas",
   description: "Plataforma HB Cooperativas — Portal do Cooperado e Painel Administrativo",
+  manifest: "/manifest.webmanifest",
+  appleWebApp: { capable: true, title: "HB Cooperativas" },
+  themeColor: "#15803d",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

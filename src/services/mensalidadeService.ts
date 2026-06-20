@@ -117,10 +117,18 @@ export function atualizarStatusMensalidades(data: AppData): AppData | null {
 /** Cooperado informou que pagou via PIX — aguarda confirmação. */
 export function cooperadoInformouPagamentoMensalidade(
   data: AppData,
-  mensalidadeId: string
+  mensalidadeId: string,
+  comprovante?: string
 ): AppData | null {
   const m = data.mensalidades.find((x) => x.id === mensalidadeId);
-  if (!m || (m.status !== "pendente" && m.status !== "atrasada")) return null;
+  if (!m) return null;
+
+  const podeInformar =
+    m.status === "pendente" ||
+    m.status === "atrasada" ||
+    (m.status === "aguardando_confirmacao" && comprovante && !m.comprovante);
+
+  if (!podeInformar) return null;
 
   const now = new Date().toISOString();
   return {
@@ -130,8 +138,9 @@ export function cooperadoInformouPagamentoMensalidade(
         ? {
             ...x,
             status: "aguardando_confirmacao" as const,
-            informadoPagamentoEm: now,
+            informadoPagamentoEm: x.informadoPagamentoEm ?? now,
             formaPagamento: "PIX",
+            comprovante: comprovante ?? x.comprovante,
             updatedAt: now,
           }
         : x

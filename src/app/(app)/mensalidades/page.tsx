@@ -1,12 +1,13 @@
 "use client";
 
-import { useState, useMemo, useEffect } from "react";
-import { QrCode, Copy, CheckCircle2, Info, AlertCircle } from "lucide-react";
+import { Suspense, useState, useMemo, useEffect, useRef } from "react";
+import { useSearchParams } from "next/navigation";
+import { QrCode, Copy, CheckCircle2, Info, AlertCircle, Paperclip, ImagePlus, Eye } from "lucide-react";
 import { useAppData } from "@/hooks/useAppData";
 import { usePermissions } from "@/hooks/usePermissions";
 import { getUserCooperativaId } from "@/utils/cooperativa";
 import { formatCnpj } from "@/utils/cooperativa";
-import { PageHeader, DataTable, FilterBar } from "@/components/ui/Table";
+import { PageHeader, DataTable, FilterBar, Modal } from "@/components/ui/Table";
 import { Button } from "@/components/ui/Button";
 import { Select, FormField } from "@/components/ui/Form";
 import { StatusBadge } from "@/components/ui/StatusBadge";
@@ -23,24 +24,45 @@ import {
   mensalidadePodePagarComPix,
   mensalidadeAguardandoConfirmacao,
 } from "@/services/mensalidadeService";
+import { compressDataUrl, compressFotoFile } from "@/utils/fotoEntrega";
 import { formatCurrency, formatDate, formatMesReferencia, getCurrentMesReferencia } from "@/utils/format";
 import { getCooperadoNome } from "@/utils/calculations";
 import type { Mensalidade } from "@/types";
 
+const SHARE_KEY = "hb_comprovante_mensalidade_share";
+
 const INFO_COOPERADO =
-  "As mensalidades são geradas automaticamente todo mês. Pague via PIX para o CNPJ da cooperativa. Depois toque em Paguei — a mensalidade só aparece como paga após a diretoria confirmar no extrato bancário.";
+  "Pague via PIX para o CNPJ da cooperativa. Depois compartilhe o comprovante do banco para este app (Compartilhar → HB Cooperativas) ou toque em Enviar comprovante. A diretoria confirma ao ver o PIX no extrato.";
 
 const INFO_RESPONSAVEL =
-  "Configure valor e dia de vencimento em Perfil da cooperativa. Todo mês o sistema gera a cobrança para cada cooperado ativo. Quando o cooperado informar que pagou, confira o PIX recebido e confirme aqui.";
+  "Quando o cooperado enviar o comprovante, ele aparece aqui para você conferir no extrato e confirmar o pagamento.";
 
 export default function MensalidadesPage() {
+  return (
+    <Suspense fallback={<div className="flex justify-center py-20"><div className="w-8 h-8 border-4 border-green-600 border-t-transparent rounded-full animate-spin" /></div>}>
+      <MensalidadesContent />
+    </Suspense>
+  );
+}
+
+function MensalidadesContent() {
   const data = useAppData();
+  const searchParams = useSearchParams();
   const { check, user, isCooperado, cooperadoId } = usePermissions();
   const [statusFilter, setStatusFilter] = useState("");
   const [mesFilter, setMesFilter] = useState(getCurrentMesReferencia());
   const [pixModalOpen, setPixModalOpen] = useState(false);
   const [mensalidadePix, setMensalidadePix] = useState<Mensalidade | null>(null);
   const [copiedCnpj, setCopiedCnpj] = useState(false);
+  const [comprovanteModalOpen, setComprovanteModalOpen] = useState(false);
+  const [comprovanteMensalidadeId, setComprovanteMensalidadeId] = useState("");
+  const [comprovantePreview, setComprovantePreview] = useState<string | null>(null);
+  const [comprovanteEnviando, setComprovanteEnviando] = useState(false);
+  const [comprovanteMsg, setComprovanteMsg] = useState("");
+  const [comprovanteErro, setComprovanteErro] = useState("");
+  const [verComprovante, setVerComprovante] = useState<Mensalidade | null>(null);
+  const comprovanteInputRef = useRef<HTMLInputElement>(null);
+  const shareHandledRef = useRef(false);
 
   const coopId = user && data ? getUserCooperativaId(user, data) : undefined;
   const cooperativa = coopId ? data?.cooperativas.find((c) => c.id === coopId) : undefined;
@@ -52,6 +74,14 @@ export default function MensalidadesPage() {
       const cnpj = await resolveCooperativaCnpj(data, coopId, user);
       if (cnpj) await syncAllCooperativaFromCloud(cnpj);
     })();
+    const id = setInterval(() => {
+      void (async () => {
+        const d = getData();
+        const cnpj = await resolveCooperativaCnpj(d, coopId, user);
+        if (cnpj) await syncAllCooperativaFromCloud(cnpj);
+      })();
+    }, 12000);
+    return () => clearInterval(id);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [coopId, user?.id]);
 
@@ -78,9 +108,24 @@ export default function MensalidadesPage() {
       .sort((a, b) => b.mesReferencia.localeCompare(a.mesReferencia) || a.vencimento.localeCompare(b.vencimento));
   }, [data, statusFilter, mesFilter, isCooperado, cooperadoId, coopId]);
 
-  const aguardandoConfirmacao = useMemo(
-    () => mensalidades.filter((m) => m.status === "aguardando_confirmacao"),
+  const mensalidadesPagaveis = useMemo(
+    () => mensalidades.filter((m) => mensalidadePodePagarComPix(m)),
     [mensalidades]
+  );
+
+  const aguardandoConfirmacao = useMemo(
+    () => {
+      if (!data) return [];
+      return data.mensalidades
+        .filter((m) => {
+          const c = data.cooperados.find((x) => x.id === m.cooperadoId);
+          if (coopId && c?.cooperativaId !== coopId) return false;
+          if (isCooperado && cooperadoId && m.cooperadoId !== cooperadoId) return false;
+          return m.status === "aguardando_confirmacao";
+        })
+        .sort((a, b) => b.mesReferencia.localeCompare(a.mesReferencia));
+    },
+    [data, coopId, isCooperado, cooperadoId]
   );
 
   const meses = useMemo(() => {
@@ -105,6 +150,49 @@ export default function MensalidadesPage() {
     setPixModalOpen(true);
   };
 
+  const abrirComprovante = (m?: Mensalidade, preview?: string | null) => {
+    setComprovanteErro("");
+    setComprovanteMsg("");
+    setComprovantePreview(preview ?? null);
+    const alvo =
+      m?.id ??
+      mensalidadesPagaveis[0]?.id ??
+      mensalidades.find((x) => x.mesReferencia === mesFilter)?.id ??
+      "";
+    setComprovanteMensalidadeId(alvo);
+    setComprovanteModalOpen(true);
+  };
+
+  useEffect(() => {
+    if (!isCooperado || shareHandledRef.current) return;
+    if (searchParams.get("comprovante") !== "1") return;
+    shareHandledRef.current = true;
+
+    const erro = searchParams.get("erro");
+    if (erro === "sem-arquivo") setComprovanteErro("Nenhuma imagem recebida. Tire print do comprovante e compartilhe de novo.");
+    else if (erro === "arquivo-grande") setComprovanteErro("Arquivo muito grande. Use print da tela ou envie pelo botão Enviar comprovante.");
+    else if (erro) setComprovanteErro("Não foi possível ler o comprovante compartilhado. Tente enviar manualmente.");
+
+    const raw = typeof window !== "undefined" ? sessionStorage.getItem(SHARE_KEY) : null;
+    if (raw) {
+      try {
+        const parsed = JSON.parse(raw) as { dataUrl?: string };
+        sessionStorage.removeItem(SHARE_KEY);
+        if (parsed.dataUrl) {
+          void compressDataUrl(parsed.dataUrl, 960, 0.65).then((compressed) => {
+            abrirComprovante(undefined, compressed);
+          });
+          return;
+        }
+      } catch {
+        sessionStorage.removeItem(SHARE_KEY);
+      }
+    }
+
+    abrirComprovante();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isCooperado, searchParams]);
+
   const copiarCnpjPix = async () => {
     if (!chavePixCoop) return;
     await navigator.clipboard.writeText(chavePixCoop);
@@ -112,21 +200,51 @@ export default function MensalidadesPage() {
     setTimeout(() => setCopiedCnpj(false), 2000);
   };
 
-  const handlePaguei = (m: Mensalidade) => {
-    if (!user) return;
+  const handleArquivoComprovante = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    try {
+      const dataUrl = file.type === "application/pdf"
+        ? await readPdfAsDataUrl(file)
+        : await compressFotoFile(file);
+      setComprovantePreview(dataUrl);
+      setComprovanteErro("");
+    } catch {
+      setComprovanteErro("Não foi possível ler o arquivo. Tente outra imagem.");
+    } finally {
+      if (comprovanteInputRef.current) comprovanteInputRef.current.value = "";
+    }
+  };
+
+  const handleEnviarComprovante = () => {
+    if (!user || !comprovanteMensalidadeId || !comprovantePreview) {
+      setComprovanteErro("Escolha a mensalidade e anexe o comprovante do PIX.");
+      return;
+    }
+
+    setComprovanteEnviando(true);
+    setComprovanteErro("");
+
     updateData((d) => {
-      const next = cooperadoInformouPagamentoMensalidade(d, m.id);
+      const next = cooperadoInformouPagamentoMensalidade(d, comprovanteMensalidadeId, comprovantePreview);
       if (!next) return d;
       return addAuditEntry(next, {
         entityType: "mensalidade",
-        entityId: m.id,
+        entityId: comprovanteMensalidadeId,
         action: "editar",
         userId: user.id,
         userName: user.name,
-        changes: "Cooperado informou pagamento via PIX",
+        changes: "Comprovante PIX enviado para a cooperativa",
       });
     });
+
     pushOperacional();
+    setComprovanteEnviando(false);
+    setComprovanteModalOpen(false);
+    setComprovantePreview(null);
+    setStatusFilter("aguardando_confirmacao");
+    setComprovanteMsg("Comprovante enviado! A diretoria vai conferir e confirmar o pagamento.");
+    setTimeout(() => setComprovanteMsg(""), 8000);
   };
 
   const handleConfirmar = (m: Mensalidade) => {
@@ -161,6 +279,18 @@ export default function MensalidadesPage() {
         <Info size={18} className="inline mr-1 shrink-0" />
         {isCooperado ? INFO_COOPERADO : INFO_RESPONSAVEL}
       </AlertBanner>
+
+      {comprovanteMsg && (
+        <AlertBanner variant="success" title="Comprovante enviado" className="mb-6" onDismiss={() => setComprovanteMsg("")}>
+          {comprovanteMsg}
+        </AlertBanner>
+      )}
+
+      {comprovanteErro && !comprovanteModalOpen && (
+        <AlertBanner variant="error" className="mb-6" onDismiss={() => setComprovanteErro("")}>
+          {comprovanteErro}
+        </AlertBanner>
+      )}
 
       {!isCooperado && !cfgOk && (
         <AlertBanner variant="warning" title="Geração automática não configurada" className="mb-6">
@@ -201,20 +331,40 @@ export default function MensalidadesPage() {
       {!isCooperado && aguardandoConfirmacao.length > 0 && (
         <Card title={`Aguardando confirmação (${aguardandoConfirmacao.length})`} className="mb-6 border-blue-200">
           <p className="text-sm text-gray-600 mb-4">
-            Cooperados informaram pagamento. Confira no extrato bancário e confirme abaixo.
+            Cooperados enviaram comprovante ou informaram pagamento. Confira no extrato bancário.
           </p>
           <div className="space-y-3">
             {aguardandoConfirmacao.map((m) => (
-              <div key={m.id} className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-4 bg-blue-50 rounded-xl border border-blue-100">
-                <div>
+              <div key={m.id} className="flex flex-col sm:flex-row sm:items-start justify-between gap-3 p-4 bg-blue-50 rounded-xl border border-blue-100">
+                <div className="flex-1 min-w-0">
                   <p className="font-medium">{getCooperadoNome(data.cooperados, m.cooperadoId)}</p>
                   <p className="text-sm text-gray-600">
                     {formatMesReferencia(m.mesReferencia)} · {formatCurrency(m.valor)} · informado em{" "}
                     {m.informadoPagamentoEm ? formatDate(m.informadoPagamentoEm.split("T")[0]) : "—"}
                   </p>
+                  {m.comprovante && (
+                    <div className="mt-3">
+                      {m.comprovante.startsWith("data:image") ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img
+                          src={m.comprovante}
+                          alt="Comprovante PIX"
+                          className="max-h-36 rounded-lg border border-blue-200 cursor-pointer"
+                          onClick={() => setVerComprovante(m)}
+                        />
+                      ) : (
+                        <Button size="sm" variant="secondary" onClick={() => setVerComprovante(m)}>
+                          <Eye size={16} /> Ver comprovante
+                        </Button>
+                      )}
+                    </div>
+                  )}
+                  {!m.comprovante && (
+                    <p className="text-xs text-amber-700 mt-2">Sem comprovante anexado — cooperado informou pagamento.</p>
+                  )}
                 </div>
                 {check("mensalidades", "edit") && (
-                  <Button onClick={() => handleConfirmar(m)}>
+                  <Button className="shrink-0" onClick={() => handleConfirmar(m)}>
                     <CheckCircle2 size={18} /> Confirmar pagamento
                   </Button>
                 )}
@@ -258,7 +408,7 @@ export default function MensalidadesPage() {
             isCooperado={isCooperado}
             canConfirm={check("mensalidades", "edit")}
             onPix={() => abrirPix(m)}
-            onPaguei={() => handlePaguei(m)}
+            onComprovante={() => abrirComprovante(m)}
             onConfirmar={() => handleConfirmar(m)}
           />
         )}
@@ -278,7 +428,9 @@ export default function MensalidadesPage() {
                 {isCooperado && mensalidadePodePagarComPix(m) && (
                   <>
                     <Button size="sm" onClick={() => abrirPix(m)}><QrCode size={14} /> Pagar PIX</Button>
-                    <Button size="sm" variant="secondary" onClick={() => handlePaguei(m)}>Paguei</Button>
+                    <Button size="sm" variant="secondary" onClick={() => abrirComprovante(m)}>
+                      <Paperclip size={14} /> Enviar comprovante
+                    </Button>
                   </>
                 )}
                 {isCooperado && mensalidadeAguardandoConfirmacao(m) && (
@@ -286,8 +438,17 @@ export default function MensalidadesPage() {
                     <AlertCircle size={14} /> Aguardando confirmação da diretoria
                   </span>
                 )}
-                {!isCooperado && m.status === "aguardando_confirmacao" && check("mensalidades", "edit") && (
-                  <Button size="sm" onClick={() => handleConfirmar(m)}>Confirmar</Button>
+                {!isCooperado && m.status === "aguardando_confirmacao" && (
+                  <>
+                    {m.comprovante && (
+                      <Button size="sm" variant="secondary" onClick={() => setVerComprovante(m)}>
+                        <Eye size={14} /> Comprovante
+                      </Button>
+                    )}
+                    {check("mensalidades", "edit") && (
+                      <Button size="sm" onClick={() => handleConfirmar(m)}>Confirmar</Button>
+                    )}
+                  </>
                 )}
               </div>
             ),
@@ -302,10 +463,110 @@ export default function MensalidadesPage() {
           chavePix={chavePixCoop}
           nome={cooperativa.nome}
           valor={mensalidadePix.valor}
+          hintAposPagamento="Depois de pagar, compartilhe o comprovante do banco para HB Cooperativas ou toque em Enviar comprovante."
+          onEnviarComprovante={() => {
+            const m = mensalidadePix;
+            setPixModalOpen(false);
+            setMensalidadePix(null);
+            if (m) abrirComprovante(m);
+          }}
         />
       )}
+
+      <Modal
+        open={comprovanteModalOpen}
+        onClose={() => { if (!comprovanteEnviando) { setComprovanteModalOpen(false); setComprovantePreview(null); } }}
+        title="Enviar comprovante PIX"
+        size="md"
+        footer={
+          <div className="flex flex-col-reverse sm:flex-row justify-end gap-2">
+            <Button variant="secondary" disabled={comprovanteEnviando} onClick={() => setComprovanteModalOpen(false)}>
+              Cancelar
+            </Button>
+            <Button
+              size="lg"
+              disabled={!comprovantePreview || !comprovanteMensalidadeId || comprovanteEnviando}
+              onClick={handleEnviarComprovante}
+            >
+              {comprovanteEnviando ? "Enviando..." : "Enviar para a cooperativa"}
+            </Button>
+          </div>
+        }
+      >
+        <div className="space-y-4">
+          {comprovanteErro && (
+            <AlertBanner variant="error" onDismiss={() => setComprovanteErro("")}>{comprovanteErro}</AlertBanner>
+          )}
+          <p className="text-sm text-gray-600">
+            Anexe o print ou PDF do comprovante do PIX. A diretoria recebe na fila de confirmação.
+          </p>
+          <FormField label="Mensalidade" required>
+            <Select
+              value={comprovanteMensalidadeId}
+              onChange={(e) => setComprovanteMensalidadeId(e.target.value)}
+            >
+              <option value="">Escolha...</option>
+              {mensalidadesPagaveis.map((m) => (
+                <option key={m.id} value={m.id}>
+                  {formatMesReferencia(m.mesReferencia)} — {formatCurrency(m.valor)}
+                </option>
+              ))}
+            </Select>
+          </FormField>
+          <FormField label="Comprovante" required>
+            <input
+              ref={comprovanteInputRef}
+              type="file"
+              accept="image/*,application/pdf"
+              className="hidden"
+              onChange={(e) => void handleArquivoComprovante(e)}
+            />
+            {comprovantePreview ? (
+              <div className="space-y-2">
+                {comprovantePreview.startsWith("data:image") ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={comprovantePreview} alt="Comprovante" className="w-full max-h-64 object-contain rounded-xl border" />
+                ) : (
+                  <p className="text-sm text-gray-600 p-4 bg-gray-50 rounded-xl border">PDF anexado</p>
+                )}
+                <Button variant="secondary" size="sm" onClick={() => comprovanteInputRef.current?.click()}>
+                  Trocar arquivo
+                </Button>
+              </div>
+            ) : (
+              <label
+                className="flex flex-col items-center gap-2 p-8 border-2 border-dashed border-green-400 rounded-2xl bg-green-50/50 cursor-pointer"
+                onClick={() => comprovanteInputRef.current?.click()}
+              >
+                <ImagePlus size={40} className="text-green-700" />
+                <span className="text-sm font-medium text-green-800">Toque para anexar comprovante</span>
+              </label>
+            )}
+          </FormField>
+        </div>
+      </Modal>
+
+      <Modal open={Boolean(verComprovante)} onClose={() => setVerComprovante(null)} title="Comprovante PIX" size="md">
+        {verComprovante?.comprovante && (
+          verComprovante.comprovante.startsWith("data:image") ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={verComprovante.comprovante} alt="Comprovante" className="w-full rounded-xl border" />
+          ) : (
+            <iframe src={verComprovante.comprovante} title="Comprovante PDF" className="w-full h-[70vh] rounded-xl border" />
+          )
+        )}
+      </Modal>
     </div>
   );
+}
+
+async function readPdfAsDataUrl(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result));
+    reader.onerror = () => reject(new Error("read failed"));
+    reader.readAsDataURL(file);
+  });
 }
 
 function MensalidadeCard({
@@ -314,7 +575,7 @@ function MensalidadeCard({
   isCooperado,
   canConfirm,
   onPix,
-  onPaguei,
+  onComprovante,
   onConfirmar,
 }: {
   m: Mensalidade;
@@ -322,7 +583,7 @@ function MensalidadeCard({
   isCooperado: boolean;
   canConfirm: boolean;
   onPix: () => void;
-  onPaguei: () => void;
+  onComprovante: () => void;
   onConfirmar: () => void;
 }) {
   return (
@@ -340,9 +601,11 @@ function MensalidadeCard({
         <p className="text-xs text-green-700 mt-1">Paga em {formatDate(m.dataPagamento)}</p>
       )}
       {isCooperado && mensalidadePodePagarComPix(m) && (
-        <div className="flex gap-2 mt-3">
-          <Button size="sm" className="flex-1" onClick={onPix}><QrCode size={14} /> Pagar PIX</Button>
-          <Button size="sm" variant="secondary" className="flex-1" onClick={onPaguei}>Paguei</Button>
+        <div className="flex flex-col gap-2 mt-3">
+          <Button size="sm" className="w-full" onClick={onPix}><QrCode size={14} /> Pagar PIX</Button>
+          <Button size="sm" variant="secondary" className="w-full" onClick={onComprovante}>
+            <Paperclip size={14} /> Enviar comprovante
+          </Button>
         </div>
       )}
       {isCooperado && mensalidadeAguardandoConfirmacao(m) && (
@@ -350,10 +613,18 @@ function MensalidadeCard({
           <AlertCircle size={14} /> Pendente — aguardando confirmação da diretoria
         </p>
       )}
-      {!isCooperado && m.status === "aguardando_confirmacao" && canConfirm && (
-        <Button size="sm" className="mt-3 w-full" onClick={onConfirmar}>
-          <CheckCircle2 size={14} /> Confirmar pagamento
-        </Button>
+      {!isCooperado && m.status === "aguardando_confirmacao" && (
+        <div className="flex flex-col gap-2 mt-3">
+          {m.comprovante && m.comprovante.startsWith("data:image") && (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={m.comprovante} alt="Comprovante" className="max-h-28 rounded-lg border object-contain" />
+          )}
+          {canConfirm && (
+            <Button size="sm" className="w-full" onClick={onConfirmar}>
+              <CheckCircle2 size={14} /> Confirmar pagamento
+            </Button>
+          )}
+        </div>
       )}
     </div>
   );
