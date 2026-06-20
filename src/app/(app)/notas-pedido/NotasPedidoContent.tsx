@@ -1,10 +1,10 @@
 "use client";
 
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo, useEffect, useRef } from "react";
 import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import {
-  Camera, CheckCircle, FileText, XCircle, RefreshCw, ChevronRight, Eye, Building2, Pencil, UserPlus,
+  Camera, CheckCircle, FileText, XCircle, RefreshCw, ChevronRight, Eye, Building2, Pencil, UserPlus, X, ImagePlus,
 } from "lucide-react";
 import { useAppData } from "@/hooks/useAppData";
 import { usePermissions } from "@/hooks/usePermissions";
@@ -33,6 +33,7 @@ import {
   resolverInstituicaoConferencia,
 } from "@/utils/instituicaoPreferida";
 import { getCooperadoNome } from "@/utils/calculations";
+import { isFotoDuplicada } from "@/utils/fotoEntrega";
 import type { NotaPedido, NotaPedidoItem, Cooperado } from "@/types";
 
 const NOVO_AVULSO = "__novo__";
@@ -99,9 +100,11 @@ export default function NotasPedidoContent() {
   const [escolaAvulsaNome, setEscolaAvulsaNome] = useState("");
   const [instituicaoId, setInstituicaoId] = useState("");
   const [localEntrega, setLocalEntrega] = useState("");
-  const [fotoPedido, setFotoPedido] = useState("");
+  const [fotosSessao, setFotosSessao] = useState<string[]>([]);
+  const [fotoDuplicadaMsg, setFotoDuplicadaMsg] = useState("");
   const [observacoes, setObservacoes] = useState("");
   const [reenviarNotaId, setReenviarNotaId] = useState<string | null>(null);
+  const fotoInputRef = useRef<HTMLInputElement>(null);
 
   const [selectedNota, setSelectedNota] = useState<NotaPedido | null>(null);
   const [conferenciaItens, setConferenciaItens] = useState<ItemForm[]>([]);
@@ -241,7 +244,8 @@ export default function NotasPedidoContent() {
     setInstituicaoId(notaRejeitada?.instituicaoId ?? "");
     setUsarEscolaAvulsa(Boolean(notaRejeitada?.escolaAvulsaNome?.trim()));
     setEscolaAvulsaNome(notaRejeitada?.escolaAvulsaNome ?? "");
-    setFotoPedido("");
+    setFotosSessao([]);
+    setFotoDuplicadaMsg("");
     setObservacoes(notaRejeitada?.observacoes ?? "");
     setAnexarModal(true);
   };
@@ -382,13 +386,33 @@ export default function NotasPedidoContent() {
 
   const handleFoto = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (!file) return;
+    if (!file || !data || !cooperadoId) return;
+
     const reader = new FileReader();
     reader.onload = () => {
-      setFotoPedido(reader.result as string);
-      setFormErrors((prev) => ({ ...prev, foto: undefined }));
+      const dataUrl = reader.result as string;
+      const notasCooperado = data.notasPedido.filter((n) => n.cooperadoId === cooperadoId);
+
+      setFotosSessao((prev) => {
+        if (isFotoDuplicada(dataUrl, prev, notasCooperado)) {
+          setFotoDuplicadaMsg("Imagem repetida — esta foto já foi adicionada ou já foi enviada antes.");
+          return prev;
+        }
+        setFotoDuplicadaMsg("");
+        setFormErrors((e) => ({ ...e, foto: undefined }));
+        if (reenviarNotaId) return [dataUrl];
+        return [...prev, dataUrl];
+      });
+
+      if (fotoInputRef.current) fotoInputRef.current.value = "";
     };
     reader.readAsDataURL(file);
+  };
+
+  const removerFotoSessao = (idx: number) => {
+    setFotosSessao((prev) => prev.filter((_, i) => i !== idx));
+    setFotoDuplicadaMsg("");
+    setFormErrors((prev) => ({ ...prev, foto: undefined }));
   };
 
   const handleAnexarEntrega = () => {
@@ -397,7 +421,7 @@ export default function NotasPedidoContent() {
     if (usarEscolaAvulsa && !escolaAvulsaNome.trim()) {
       errors.escolaAvulsa = "Informe o nome da escola.";
     }
-    if (!fotoPedido) errors.foto = "Tire ou escolha a foto do pedido assinado.";
+    if (fotosSessao.length === 0) errors.foto = "Tire ou escolha pelo menos uma foto do pedido assinado.";
     if (Object.keys(errors).length) {
       setFormErrors(errors);
       return;
@@ -411,6 +435,7 @@ export default function NotasPedidoContent() {
 
     updateData((d) => {
       if (reenviarNotaId) {
+        const foto = fotosSessao[0];
         const updated = d.notasPedido.map((n) =>
           n.id === reenviarNotaId
             ? {
@@ -418,7 +443,7 @@ export default function NotasPedidoContent() {
                 instituicaoId: "",
                 localEntrega: local,
                 escolaAvulsaNome: escolaAvulsa,
-                fotoPedido,
+                fotoPedido: foto,
                 fotoEnviadaEm: now,
                 observacoes,
                 status: "aguardando_conferencia" as const,
@@ -435,36 +460,52 @@ export default function NotasPedidoContent() {
           userId: user.id, userName: user.name, changes: "Entrega reenviada",
         });
       }
-      const nota: NotaPedido = {
-        id: generateId("np"),
-        cooperativaId: coopId,
-        cooperadoId: cooperadoId,
-        instituicaoId: "",
-        numeroNota: gerarNumeroNota(d, coopId),
-        dataEntrega: now.split("T")[0],
-        localEntrega: local,
-        escolaAvulsaNome: escolaAvulsa,
-        itens: [],
-        valorBruto: 0,
-        percentualDescontoCooperativa: d.config.descontoPadraoCooperativa,
-        valorDesconto: 0,
-        valorLiquido: 0,
-        status: "aguardando_conferencia",
-        fotoPedido,
-        fotoEnviadaEm: now,
-        mesReferencia: mes,
-        observacoes,
-        createdAt: now,
-        updatedAt: now,
-      };
-      return addAuditEntry({ ...d, notasPedido: [...d.notasPedido, nota] }, {
-        entityType: "nota_pedido", entityId: nota.id, action: "criar",
-        userId: user.id, userName: user.name,
+
+      let notas = [...d.notasPedido];
+      for (const foto of fotosSessao) {
+        const nota: NotaPedido = {
+          id: generateId("np"),
+          cooperativaId: coopId,
+          cooperadoId: cooperadoId,
+          instituicaoId: "",
+          numeroNota: gerarNumeroNota({ ...d, notasPedido: notas }, coopId),
+          dataEntrega: now.split("T")[0],
+          localEntrega: local,
+          escolaAvulsaNome: escolaAvulsa,
+          itens: [],
+          valorBruto: 0,
+          percentualDescontoCooperativa: d.config.descontoPadraoCooperativa,
+          valorDesconto: 0,
+          valorLiquido: 0,
+          status: "aguardando_conferencia",
+          fotoPedido: foto,
+          fotoEnviadaEm: now,
+          mesReferencia: mes,
+          observacoes,
+          createdAt: now,
+          updatedAt: now,
+        };
+        notas = [...notas, nota];
+      }
+
+      const lastId = notas[notas.length - 1]?.id;
+      return addAuditEntry({ ...d, notasPedido: notas }, {
+        entityType: "nota_pedido",
+        entityId: lastId ?? "",
+        action: "criar",
+        userId: user.id,
+        userName: user.name,
+        changes: `${fotosSessao.length} entrega(s) com foto`,
       });
     });
 
     setAnexarModal(false);
-    setSuccessMsg("Pronto! Aguarde enquanto a cooperativa analisa sua entrega.");
+    setFotosSessao([]);
+    setSuccessMsg(
+      fotosSessao.length === 1
+        ? "Pronto! Aguarde enquanto a cooperativa analisa sua entrega."
+        : `${fotosSessao.length} fotos enviadas! A cooperativa vai analisar cada uma.`
+    );
   };
 
   const openConferir = (nota: NotaPedido) => {
@@ -707,7 +748,7 @@ export default function NotasPedidoContent() {
 
       {isCooperado && (
         <p className="text-sm text-gray-600 mb-4">
-          Entregas de {formatMesReferencia(mesAtual)} — após aprovação, veja valores em{" "}
+          Entregas de {formatMesReferencia(mesAtual)} — tire uma foto por pedido. Imagens repetidas são rejeitadas.{" "}
           <Link href="/ficha-corrida" className="text-green-700 font-medium">Quanto vou receber</Link>.
         </p>
       )}
@@ -762,29 +803,89 @@ export default function NotasPedidoContent() {
         </Button>
       )}
 
-      <Modal open={anexarModal} onClose={() => setAnexarModal(false)} title={reenviarNotaId ? "Enviar de novo" : "Enviar foto da entrega"} size="md"
+      <Modal open={anexarModal} onClose={() => { setAnexarModal(false); setFotosSessao([]); setFotoDuplicadaMsg(""); }} title={reenviarNotaId ? "Enviar de novo" : "Enviar foto da entrega"} size="md"
         footer={
           <div className="flex flex-col-reverse sm:flex-row justify-end gap-2">
             <Button variant="secondary" onClick={() => setAnexarModal(false)}>Cancelar</Button>
-            <Button size="lg" onClick={handleAnexarEntrega}><FileText size={18} /> Enviar para a cooperativa</Button>
+            <Button size="lg" onClick={handleAnexarEntrega} disabled={fotosSessao.length === 0}>
+              <FileText size={18} /> {fotosSessao.length > 0 ? `Enviar ${fotosSessao.length} foto(s)` : "Enviar para a cooperativa"}
+            </Button>
           </div>
         }
       >
         <div className="space-y-4">
           <p className="text-sm text-gray-600">
-            A escola aparece na foto do pedido. A cooperativa confere pelo documento — não precisa escolher aqui.
+            {reenviarNotaId
+              ? "Tire uma nova foto do pedido corrigido."
+              : "Tire uma foto de cada pedido. Cada foto vira uma entrega separada para a cooperativa analisar."}
           </p>
-          <FormField label="Foto do pedido assinado" required error={formErrors.foto} hint="Mostre o pedido inteiro com a assinatura de quem recebeu.">
+
+          {!reenviarNotaId && (
+            <div className="rounded-xl border border-green-200 bg-green-50/60 p-4">
+              <div className="flex items-center justify-between gap-2 mb-2">
+                <span className="text-sm font-semibold text-green-900 flex items-center gap-2">
+                  <ImagePlus size={18} />
+                  {fotosSessao.length === 0
+                    ? "Nenhuma imagem ainda"
+                    : `${fotosSessao.length} ${fotosSessao.length === 1 ? "imagem adicionada" : "imagens adicionadas"}`}
+                </span>
+                {fotosSessao.length > 0 && (
+                  <span className="text-xs font-bold text-green-800 bg-green-200 px-2 py-0.5 rounded-full">
+                    +{fotosSessao.length}
+                  </span>
+                )}
+              </div>
+              <div className="h-3 bg-green-100 rounded-full overflow-hidden">
+                <div
+                  className="h-full bg-green-600 rounded-full transition-all duration-500 ease-out"
+                  style={{ width: `${Math.min(100, Math.max(fotosSessao.length * 12, fotosSessao.length > 0 ? 12 : 0))}%` }}
+                />
+              </div>
+              <p className="text-xs text-green-800 mt-2">
+                {fotosSessao.length === 0
+                  ? "O indicador cresce a cada foto nova."
+                  : "Continue tirando fotos ou toque em Enviar quando terminar."}
+              </p>
+            </div>
+          )}
+
+          {fotoDuplicadaMsg && (
+            <AlertBanner variant="error" onDismiss={() => setFotoDuplicadaMsg("")}>
+              {fotoDuplicadaMsg}
+            </AlertBanner>
+          )}
+
+          <FormField label={reenviarNotaId ? "Nova foto" : "Adicionar foto do pedido"} required error={formErrors.foto} hint="Mostre o pedido inteiro com a assinatura de quem recebeu.">
             <label className="flex flex-col items-center gap-2 p-8 border-2 border-dashed border-green-400 rounded-2xl cursor-pointer bg-green-50/50 active:bg-green-100">
               <Camera size={48} className="text-green-700" />
-              <span className="text-base font-semibold text-green-800">Tirar foto agora</span>
-              <input type="file" accept="image/*" capture="environment" className="hidden" onChange={handleFoto} />
+              <span className="text-base font-semibold text-green-800">
+                {fotosSessao.length === 0 ? "Tirar foto agora" : "Tirar outra foto"}
+              </span>
+              <input ref={fotoInputRef} type="file" accept="image/*" capture="environment" className="hidden" onChange={handleFoto} />
             </label>
-            {fotoPedido && (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img src={fotoPedido} alt="Preview" className="mt-3 w-full max-h-56 object-contain rounded-xl border" />
-            )}
           </FormField>
+
+          {fotosSessao.length > 0 && (
+            <div className="grid grid-cols-3 gap-2">
+              {fotosSessao.map((foto, idx) => (
+                <div key={idx} className="relative group">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src={foto} alt={`Foto ${idx + 1}`} className="w-full h-24 object-cover rounded-lg border-2 border-green-200" />
+                  <span className="absolute top-1 left-1 bg-green-700 text-white text-xs font-bold w-6 h-6 rounded-full flex items-center justify-center">
+                    {idx + 1}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => removerFotoSessao(idx)}
+                    className="absolute top-1 right-1 bg-red-600 text-white rounded-full p-1 opacity-90 hover:opacity-100"
+                    aria-label="Remover foto"
+                  >
+                    <X size={14} />
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
           <div className="border border-gray-200 rounded-xl p-4 space-y-3">
             <label className="flex items-start gap-3 cursor-pointer">
               <input
