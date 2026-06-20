@@ -281,6 +281,11 @@ export default function NotasPedidoContent() {
     setAlterarInstConferencia(false);
     if (coopId && instId) setInstituicaoPadraoId(coopId, instId);
     setInstituicaoPadraoIdState(instId);
+    if (data && instId) {
+      const inst = data.instituicoes.find((i) => i.id === instId);
+      setConferenciaLocal(inst?.localEntrega ?? inst?.endereco ?? "");
+      setConferenciaItens(loadItensFromInstituicao(data, instId));
+    }
   };
 
   useEffect(() => {
@@ -314,16 +319,6 @@ export default function NotasPedidoContent() {
     const inst = data.instituicoes.find((i) => i.id === instituicaoId);
     setLocalEntrega(inst?.localEntrega ?? inst?.endereco ?? "");
   }, [instituicaoId, data]);
-
-  useEffect(() => {
-    if (!data || !conferenciaInstId) {
-      setConferenciaItens([]);
-      return;
-    }
-    const inst = data.instituicoes.find((i) => i.id === conferenciaInstId);
-    setConferenciaLocal(inst?.localEntrega ?? inst?.endereco ?? "");
-    setConferenciaItens(loadItensFromInstituicao(data, conferenciaInstId, selectedNota?.itens));
-  }, [conferenciaInstId, data, selectedNota]);
 
   useEffect(() => {
     if (!data || !avulsoInstId) {
@@ -745,6 +740,14 @@ export default function NotasPedidoContent() {
       ? resolverInstituicaoConferencia(coopId, instituicoes, nota.instituicaoId)
       : nota.instituicaoId;
     setConferenciaInstId(instId);
+    if (data && instId) {
+      const inst = data.instituicoes.find((i) => i.id === instId);
+      setConferenciaLocal(inst?.localEntrega ?? inst?.endereco ?? "");
+      setConferenciaItens(loadItensFromInstituicao(data, instId, nota.itens));
+    } else {
+      setConferenciaItens([]);
+      setConferenciaLocal("");
+    }
     setConferenciaDescontoPct(data?.config.descontoPadraoCooperativa ?? 5);
     const coopDonoId =
       data && coopId
@@ -1621,8 +1624,16 @@ export default function NotasPedidoContent() {
                                 min={0}
                                 step="0.01"
                                 className="w-full max-w-[7rem] ml-auto text-center"
-                                value={item.quantidade || ""}
-                                onChange={(e) => updateConferenciaQty(idx, parseFloat(e.target.value) || 0)}
+                                value={item.quantidade === 0 ? "" : item.quantidade}
+                                onChange={(e) => {
+                                  const raw = e.target.value;
+                                  if (raw === "" || raw === ".") {
+                                    updateConferenciaQty(idx, 0);
+                                    return;
+                                  }
+                                  const qty = parseFloat(raw);
+                                  if (!Number.isNaN(qty)) updateConferenciaQty(idx, qty);
+                                }}
                               />
                             </td>
                           </tr>
