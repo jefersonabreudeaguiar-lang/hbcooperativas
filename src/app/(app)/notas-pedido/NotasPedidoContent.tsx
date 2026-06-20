@@ -16,7 +16,7 @@ import { NotaStatusBadge } from "@/components/ui/NotaStatusBadge";
 import { AlertBanner } from "@/components/ui/AlertBanner";
 import { PromptDialog, ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { Card } from "@/components/ui/Card";
-import { updateData, updateDataSafe, generateId, addAuditEntry } from "@/services/dataStore";
+import { updateData, updateDataSafe, generateId, addAuditEntry, getData } from "@/services/dataStore";
 import {
   calcularItensNota,
   gerarNumeroNota,
@@ -34,7 +34,7 @@ import {
   resolveCooperativaCnpj,
 } from "@/services/notaPedidoCloudService";
 import { ensureContratoPnaePadrao, getContratoLabel, getContratosEntrega } from "@/utils/contratosEntrega";
-import { formatCurrency, formatDate, formatMesReferencia, getCurrentMesReferencia } from "@/utils/format";
+import { cn, formatCurrency, formatDate, formatMesReferencia, getCurrentMesReferencia } from "@/utils/format";
 import { labelUnidade } from "@/utils/unidades";
 import { sortPorOrdemLancamento } from "@/utils/produtos";
 import {
@@ -98,6 +98,7 @@ export default function NotasPedidoContent() {
   const searchParams = useSearchParams();
 
   const [statusFilter, setStatusFilter] = useState("");
+  const filtroResponsavelIniciado = useRef(false);
   const [anexarModal, setAnexarModal] = useState(false);
   const [conferirModal, setConferirModal] = useState(false);
   const [rejectModal, setRejectModal] = useState(false);
@@ -141,6 +142,7 @@ export default function NotasPedidoContent() {
   const [avulsoErrors, setAvulsoErrors] = useState<{ cooperado?: string; instituicao?: string; assinatura?: string; itens?: string }>({});
 
   const [filtroCooperadoId, setFiltroCooperadoId] = useState("");
+  const [abaConferenciaCoopId, setAbaConferenciaCoopId] = useState("");
   const [contratoInstId, setContratoInstId] = useState("");
   const [excluirNotaTarget, setExcluirNotaTarget] = useState<NotaPedido | null>(null);
   const [excluindo, setExcluindo] = useState(false);
@@ -154,8 +156,18 @@ export default function NotasPedidoContent() {
 
   useEffect(() => {
     const cid = searchParams.get("cooperado");
-    if (cid && !isCooperado) setFiltroCooperadoId(cid);
+    if (cid && !isCooperado) {
+      setFiltroCooperadoId(cid);
+      setAbaConferenciaCoopId(cid);
+    }
   }, [searchParams, isCooperado]);
+
+  useEffect(() => {
+    if (!isCooperado && !filtroResponsavelIniciado.current) {
+      setStatusFilter("aguardando_conferencia");
+      filtroResponsavelIniciado.current = true;
+    }
+  }, [isCooperado]);
 
   const notas = useMemo(() => {
     if (!data) return [];
@@ -170,7 +182,61 @@ export default function NotasPedidoContent() {
       .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
   }, [data, coopId, isCooperado, cooperadoId, filtroCooperadoId, statusFilter]);
 
-  const pendentesAnalise = useMemo(() => notas.filter((n) => n.status === "aguardando_conferencia"), [notas]);
+
+  const pendentesTodas = useMemo(() => {
+    if (!data || isCooperado) return [];
+    return data.notasPedido
+      .filter((n) => {
+        if (coopId && !notaPertenceCooperativa(data, n, coopId)) return false;
+        return n.status === "aguardando_conferencia";
+      })
+      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+  }, [data, coopId, isCooperado]);
+
+  const pendentesPorCooperado = useMemo(() => {
+    if (!data) return [];
+    const grupos = new Map<string, NotaPedido[]>();
+    for (const nota of pendentesTodas) {
+      const lista = grupos.get(nota.cooperadoId) ?? [];
+      lista.push(nota);
+      grupos.set(nota.cooperadoId, lista);
+    }
+    return [...grupos.entries()]
+      .map(([cooperadoId, lista]) => ({
+        cooperadoId,
+        nome: getCooperadoNome(data.cooperados, cooperadoId),
+        notas: lista,
+      }))
+      .sort((a, b) => a.nome.localeCompare(b.nome, "pt-BR"));
+  }, [data, pendentesTodas]);
+
+  const pendentesAbaAtiva = useMemo(() => {
+    if (!abaConferenciaCoopId) return [];
+    return pendentesPorCooperado.find((g) => g.cooperadoId === abaConferenciaCoopId)?.notas ?? [];
+  }, [pendentesPorCooperado, abaConferenciaCoopId]);
+
+  useEffect(() => {
+    if (isCooperado || pendentesPorCooperado.length === 0) return;
+    const abaValida = pendentesPorCooperado.some((g) => g.cooperadoId === abaConferenciaCoopId);
+    if (!abaValida) {
+      const proxima = pendentesPorCooperado[0].cooperadoId;
+      setAbaConferenciaCoopId(proxima);
+      setFiltroCooperadoId(proxima);
+    }
+  }, [pendentesPorCooperado, abaConferenciaCoopId, isCooperado]);
+
+  useEffect(() => {
+    if (isCooperado || !filtroCooperadoId) return;
+    if (pendentesPorCooperado.some((g) => g.cooperadoId === filtroCooperadoId)) {
+      setAbaConferenciaCoopId(filtroCooperadoId);
+    }
+  }, [filtroCooperadoId, pendentesPorCooperado, isCooperado]);
+
+  const selecionarAbaConferencia = (cooperadoId: string) => {
+    setAbaConferenciaCoopId(cooperadoId);
+    setFiltroCooperadoId(cooperadoId);
+  };
+
   const instituicoes = useMemo(() => {
     if (!data || !coopId) return [];
     return data.instituicoes.filter((i) => i.cooperativaId === coopId);
@@ -671,7 +737,48 @@ export default function NotasPedidoContent() {
     setAlterarInstConferencia(false);
     setConferenciaAssinatura(nota.assinaturaRecebedor ?? "");
     setConferirErrors({});
+    if (!isCooperado) {
+      setAbaConferenciaCoopId(nota.cooperadoId);
+      setFiltroCooperadoId(nota.cooperadoId);
+    }
     setConferirModal(true);
+  };
+
+  const listarPendentesConferencia = (
+    d: AppData,
+    coopIdLocal: string,
+    cooperadoFiltro?: string,
+    excludeId?: string
+  ) =>
+    d.notasPedido
+      .filter((n) => {
+        if (n.status !== "aguardando_conferencia") return false;
+        if (excludeId && n.id === excludeId) return false;
+        if (!notaPertenceCooperativa(d, n, coopIdLocal)) return false;
+        if (cooperadoFiltro && n.cooperadoId !== cooperadoFiltro) return false;
+        return true;
+      })
+      .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+
+  const contarPendentesConferencia = (d: AppData, coopIdLocal: string) =>
+    listarPendentesConferencia(d, coopIdLocal).length;
+
+  const continuarFilaConferencia = (cooperadoId: string, notaConcluidaId: string) => {
+    if (!coopId) return;
+    const d = getData();
+    if (!d) return;
+
+    const mesmaAba = listarPendentesConferencia(d, coopId, cooperadoId, notaConcluidaId);
+    if (mesmaAba.length > 0) {
+      void openConferir(mesmaAba[0]);
+      return;
+    }
+
+    const outras = listarPendentesConferencia(d, coopId, undefined, notaConcluidaId);
+    if (outras.length > 0) {
+      selecionarAbaConferencia(outras[0].cooperadoId);
+      void openConferir(outras[0]);
+    }
   };
 
   const openView = (nota: NotaPedido) => {
@@ -738,10 +845,20 @@ export default function NotasPedidoContent() {
       if (cnpj) void patchNotaPedidoInCloud(cnpj, notaAtualizada);
     }
 
-    setConferirModal(false);
+    const notaId = selectedNota.id;
+    const coopAtual = selectedNota.cooperadoId;
     const coopNome = getCooperadoNome(data.cooperados, conferenciaCooperadoId);
-    setLancadoMsg(`Nota aprovada! ${formatCurrency(conferenciaTotais.liquido)} na ficha de ${coopNome.split(" ")[0]}.`);
+    const pendentesRestantes = coopId ? contarPendentesConferencia(getData(), coopId) : 0;
+
+    setConferirModal(false);
+    setSelectedNota(null);
+    setLancadoMsg(
+      pendentesRestantes > 0
+        ? `Nota aprovada! ${formatCurrency(conferenciaTotais.liquido)} na ficha de ${coopNome.split(" ")[0]}. Faltam ${pendentesRestantes} na fila.`
+        : `Nota aprovada! ${formatCurrency(conferenciaTotais.liquido)} na ficha de ${coopNome.split(" ")[0]}. Fila concluída!`
+    );
     setTimeout(() => setLancadoMsg(""), 6000);
+    continuarFilaConferencia(coopAtual, notaId);
   };
 
   const handleRejeitarNota = () => {
@@ -768,11 +885,22 @@ export default function NotasPedidoContent() {
       const cnpj = getCooperativaCnpj(data, coopId);
       if (cnpj) void patchNotaPedidoInCloud(cnpj, notaAtualizada);
     }
+
+    const notaId = selectedNota.id;
+    const coopAtual = selectedNota.cooperadoId;
+    const pendentesRestantes = coopId ? contarPendentesConferencia(getData(), coopId) : 0;
+
     setRejectModal(false);
     setConferirModal(false);
+    setSelectedNota(null);
     setMotivoRejeicao("");
-    setLancadoMsg("Pedido de correção enviado ao cooperado.");
+    setLancadoMsg(
+      pendentesRestantes > 0
+        ? `Correção enviada ao cooperado. Faltam ${pendentesRestantes} na fila.`
+        : "Correção enviada ao cooperado. Fila concluída!"
+    );
     setTimeout(() => setLancadoMsg(""), 5000);
+    continuarFilaConferencia(coopAtual, notaId);
   };
 
   const handleExcluirPendente = async () => {
@@ -874,14 +1002,16 @@ export default function NotasPedidoContent() {
   };
 
   return (
-    <div className="relative pb-20 lg:pb-0">
+    <div className="relative pb-20 sm:pb-0">
       <PageHeader
         title={isCooperado ? "Minhas entregas" : "Conferir entregas"}
         subtitle={isCooperado ? "Envie uma foto para cada entrega na escola" : "Analise fotos, lance produtos ou registre entregas avulsas sem nota"}
         action={isCooperado ? (
-          <Button size="lg" onClick={() => openAnexar()} className="hidden sm:inline-flex">
-            <Camera size={18} /> Enviar foto
-          </Button>
+          <div className="hidden sm:block">
+            <Button size="lg" onClick={() => openAnexar()}>
+              <Camera size={18} /> Enviar foto
+            </Button>
+          </div>
         ) : check("notas_pedido", "create") ? (
           <Button size="lg" onClick={() => openLancarAvulso()}>
             <UserPlus size={18} /> Lançar entrega
@@ -939,19 +1069,64 @@ export default function NotasPedidoContent() {
         </AlertBanner>
       )}
 
-      {!isCooperado && pendentesAnalise.length > 0 && (
+      {!isCooperado && pendentesTodas.length > 0 && (
         <div className="mb-6">
-          <h2 className="text-sm font-semibold text-gray-700 mb-3">Toque para conferir ({pendentesAnalise.length})</h2>
+          <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-2 mb-3">
+            <div>
+              <h2 className="text-sm font-semibold text-gray-700">Fila para conferir ({pendentesTodas.length})</h2>
+              <p className="text-xs text-gray-500 mt-0.5">Cada cooperado tem sua própria aba — as fotos nunca se misturam.</p>
+            </div>
+            {pendentesAbaAtiva.length > 0 && (
+              <p className="text-xs font-medium text-amber-800">
+                {pendentesAbaAtiva.length} foto(s) de {getCooperadoNome(data.cooperados, abaConferenciaCoopId)}
+              </p>
+            )}
+          </div>
+
+          {pendentesPorCooperado.length > 1 && (
+            <div className="flex gap-2 overflow-x-auto pb-2 mb-3 -mx-1 px-1">
+              {pendentesPorCooperado.map((grupo) => (
+                <button
+                  key={grupo.cooperadoId}
+                  type="button"
+                  onClick={() => selecionarAbaConferencia(grupo.cooperadoId)}
+                  className={cn(
+                    "shrink-0 inline-flex items-center gap-2 px-4 py-2 rounded-full text-sm font-medium border transition-colors",
+                    abaConferenciaCoopId === grupo.cooperadoId
+                      ? "bg-amber-500 text-white border-amber-500 shadow-sm"
+                      : "bg-white text-gray-700 border-gray-300 hover:border-amber-400"
+                  )}
+                >
+                  {grupo.nome}
+                  <span
+                    className={cn(
+                      "min-w-[1.25rem] h-5 px-1.5 rounded-full text-xs font-bold inline-flex items-center justify-center",
+                      abaConferenciaCoopId === grupo.cooperadoId ? "bg-white/25 text-white" : "bg-amber-100 text-amber-800"
+                    )}
+                  >
+                    {grupo.notas.length}
+                  </span>
+                </button>
+              ))}
+            </div>
+          )}
+
+          {pendentesPorCooperado.length === 1 && (
+            <p className="text-sm font-medium text-gray-800 mb-3">
+              Cooperado: {pendentesPorCooperado[0].nome}
+            </p>
+          )}
+
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-            {pendentesAnalise.map((n) => (
+            {pendentesAbaAtiva.map((n) => (
               <button key={n.id} type="button" onClick={() => openConferir(n)} className="text-left border-2 border-amber-300 bg-amber-50 rounded-xl overflow-hidden hover:border-amber-500">
                 {getFotoExibicaoNota(n) && (
                   // eslint-disable-next-line @next/next/no-img-element
                   <img src={getFotoExibicaoNota(n)} alt="" className="w-full h-36 object-cover" />
                 )}
                 <div className="p-3">
-                  <p className="font-medium text-sm">{getCooperadoNome(data.cooperados, n.cooperadoId)}</p>
-                  <p className="text-xs text-gray-600">{getEscolaNotaLabel(n, data.instituicoes)}</p>
+                  <p className="font-medium text-sm">{formatDate(n.dataEntrega)} · {n.numeroNota}</p>
+                  <p className="text-xs text-gray-600 mt-0.5">{getEscolaNotaLabel(n, data.instituicoes)}</p>
                 </div>
               </button>
             ))}
@@ -1011,9 +1186,11 @@ export default function NotasPedidoContent() {
       />
 
       {isCooperado && (
-        <Button size="lg" className="fixed bottom-20 right-4 sm:hidden shadow-lg z-30 rounded-full px-5" onClick={() => openAnexar()}>
-          <Camera size={20} /> Enviar foto
-        </Button>
+        <div className="fixed bottom-20 right-4 z-30 sm:hidden">
+          <Button size="lg" className="shadow-lg rounded-full px-5" onClick={() => openAnexar()}>
+            <Camera size={20} /> Enviar foto
+          </Button>
+        </div>
       )}
 
       <Modal open={anexarModal} onClose={() => { if (enviando) return; setAnexarModal(false); setFotosSessao([]); setFotoDuplicadaMsg(""); setErroEnvio(""); }} title={reenviarNotaId ? "Enviar de novo" : "Enviar foto da entrega"} size="md"

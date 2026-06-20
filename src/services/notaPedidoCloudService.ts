@@ -4,6 +4,32 @@ import { fetchCooperativaByCnpjFromCloud } from "@/services/cooperativaCloudServ
 import { getNotaCooperativaCnpj } from "@/utils/fotoEntrega";
 import { getData, saveDataSafe } from "@/services/dataStore";
 
+const STATUS_RANK: Record<NotaPedido["status"], number> = {
+  rascunho: 0,
+  aguardando_conferencia: 0,
+  rejeitada: 1,
+  entregue: 2,
+  conferida: 2,
+  pago: 3,
+  cancelado: 3,
+};
+
+/** Evita que sync da nuvem recoloque na fila uma entrega já baixada localmente. */
+function shouldApplyCloudNota(local: NotaPedido | undefined, cloud: NotaPedido): boolean {
+  if (!local) return true;
+
+  const localRank = STATUS_RANK[local.status] ?? 0;
+  const cloudRank = STATUS_RANK[cloud.status] ?? 0;
+  if (cloudRank < localRank) return false;
+
+  const cloudTime = new Date(cloud.updatedAt).getTime();
+  const localTime = new Date(local.updatedAt).getTime();
+  if (cloudTime > localTime) return true;
+  if (cloudTime < localTime) return false;
+
+  return cloudRank >= localRank;
+}
+
 function mapRowToNota(row: unknown): NotaPedido | null {
   if (!row || typeof row !== "object") return null;
   const r = row as Record<string, unknown>;
@@ -79,7 +105,7 @@ export function mergeCloudNotasIntoData(
   for (const raw of cloudNotas) {
     const cn = normalizeCloudNotaForLocal(data, raw, cnpj);
     const local = byId.get(cn.id);
-    if (!local || new Date(cn.updatedAt).getTime() >= new Date(local.updatedAt).getTime()) {
+    if (shouldApplyCloudNota(local, cn)) {
       byId.set(cn.id, cn);
       changed = true;
     }
