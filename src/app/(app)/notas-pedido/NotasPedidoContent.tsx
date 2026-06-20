@@ -30,6 +30,7 @@ import {
   pushNotasPedidoToCloud,
   syncNotasPedidoFromCloud,
   ensureNotaComFoto,
+  resolveCooperativaCnpj,
 } from "@/services/notaPedidoCloudService";
 import { formatCurrency, formatDate, formatMesReferencia, getCurrentMesReferencia } from "@/utils/format";
 import { labelUnidade } from "@/utils/unidades";
@@ -207,17 +208,22 @@ export default function NotasPedidoContent() {
   }, [searchParams, isCooperado]);
 
   useEffect(() => {
-    if (!data || !coopId) return;
-    const cnpj = getCooperativaCnpj(data, coopId);
-    if (!cnpj) return;
-    void syncNotasPedidoFromCloud(cnpj);
+    if (!data || !coopId || !user) return;
+    void (async () => {
+      const cnpj = await resolveCooperativaCnpj(data, coopId, user);
+      if (!cnpj) return;
+      await syncNotasPedidoFromCloud(cnpj);
+    })();
     if (isCooperado) return;
     const id = setInterval(() => {
-      void syncNotasPedidoFromCloud(cnpj);
-    }, 15000);
+      void (async () => {
+        const cnpj = await resolveCooperativaCnpj(data, coopId, user);
+        if (cnpj) await syncNotasPedidoFromCloud(cnpj);
+      })();
+    }, 12000);
     return () => clearInterval(id);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [coopId, isCooperado]);
+  }, [coopId, isCooperado, user?.id]);
 
   useEffect(() => {
     if (!data || !instituicaoId) return;
@@ -465,10 +471,18 @@ export default function NotasPedidoContent() {
     const mes = getCurrentMesReferencia();
     const cooperadoNome = getCooperadoNome(data.cooperados, cid);
     const qtdFotos = fotosSessao.length;
-    const cnpj = getCooperativaCnpj(data, coopId);
 
     setEnviando(true);
     setErroEnvio("");
+
+    const cnpj = await resolveCooperativaCnpj(data, coopId, user);
+    if (!cnpj) {
+      setEnviando(false);
+      setErroEnvio(
+        "CNPJ da cooperativa não encontrado. Faça logout e login de novo, ou peça ao responsável para conferir o cadastro."
+      );
+      return;
+    }
 
     const buildNotasCompletas = (d: AppData): NotaPedido[] => {
       if (reenviarNotaId) {
@@ -534,22 +548,18 @@ export default function NotasPedidoContent() {
     }
 
     let cloudOk = false;
-    if (cnpj) {
-      const cloud = await pushNotasPedidoToCloud(cnpj, notasCompletas, cooperadoNome);
-      if (cloud.ok) {
-        cloudOk = true;
-      } else if (cloud.migrationPending) {
-        setEnviando(false);
-        setErroEnvio(
-          "A nuvem ainda não está pronta. Peça ao responsável para criar a tabela notas_pedido no Supabase (SQL Editor) e tente de novo."
-        );
-        return;
-      } else if (!cloud.offline) {
-        setEnviando(false);
-        setErroEnvio(cloud.error ?? "Erro ao enviar para o responsável.");
-        return;
-      }
+    const cloud = await pushNotasPedidoToCloud(cnpj, notasCompletas, cooperadoNome);
+    if (!cloud.ok) {
+      setEnviando(false);
+      setErroEnvio(
+        cloud.error ??
+          (cloud.offline
+            ? "Sem conexão com o servidor. Verifique a internet e tente novamente."
+            : "Não foi possível enviar ao responsável.")
+      );
+      return;
     }
+    cloudOk = true;
 
     const miniaturas = await Promise.all(
       notasCompletas.map((n) => (n.fotoPedido ? makeFotoThumbnail(n.fotoPedido) : Promise.resolve(undefined)))
@@ -612,13 +622,9 @@ export default function NotasPedidoContent() {
     setAnexarModal(false);
     setFotosSessao([]);
     setSuccessMsg(
-      cloudOk
-        ? qtdFotos === 1
-          ? "Enviado! O responsável já pode conferir e lançar na sua ficha."
-          : `${qtdFotos} fotos enviadas! O responsável vai conferir cada uma na fila de entregas.`
-        : qtdFotos === 1
-          ? "Salvo neste aparelho. Conecte à internet para o responsável receber."
-          : `${qtdFotos} fotos salvas neste aparelho. Conecte à internet para o responsável receber.`
+      qtdFotos === 1
+        ? "Enviado! O responsável já pode conferir e lançar na sua ficha."
+        : `${qtdFotos} fotos enviadas! O responsável vê na fila Conferir entregas.`
     );
   };
 

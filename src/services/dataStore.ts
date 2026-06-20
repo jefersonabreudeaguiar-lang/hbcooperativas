@@ -113,6 +113,18 @@ function migrateData(raw: Partial<AppData> & Record<string, unknown>): AppData {
       cooperativaId: u.cooperativaId ?? (u.cooperadoId
         ? cooperados.find((c) => c.id === u.cooperadoId)?.cooperativaId
         : cooperativas[0]?.id),
+      cooperativaCnpj:
+        u.cooperativaCnpj ??
+        (() => {
+          const cid =
+            u.cooperativaId ??
+            (u.cooperadoId
+              ? cooperados.find((c) => c.id === u.cooperadoId)?.cooperativaId
+              : cooperativas[0]?.id);
+          const coop = cooperativas.find((c) => c.id === cid);
+          const digits = normalizeCnpj(coop?.cnpj ?? "");
+          return digits.length === 14 ? digits : undefined;
+        })(),
     })),
     instituicoes: (base.instituicoes ?? []).map((i) => ({
       ...i,
@@ -526,6 +538,7 @@ export async function registerCooperado(input: RegisterCooperadoInput): Promise<
     role: "cooperado",
     cooperadoId,
     cooperativaId: cooperativa.id,
+    cooperativaCnpj: cnpjCoop,
     active: true,
   };
 
@@ -627,6 +640,7 @@ export async function registerCooperativa(input: RegisterCooperativaInput): Prom
     name: responsavel,
     role: "presidente",
     cooperativaId,
+    cooperativaCnpj: cnpj,
     active: true,
   };
 

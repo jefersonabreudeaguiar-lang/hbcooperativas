@@ -13,7 +13,7 @@ import { AlertBanner } from "@/components/ui/AlertBanner";
 import { OnboardingChecklist } from "@/components/cooperado/OnboardingChecklist";
 import { getCooperadoStats, getAdminStats } from "@/services/dashboardService";
 import { getTotalAPagarCooperado } from "@/services/notaPedidoService";
-import { syncNotasPedidoFromCloud, getCooperativaCnpj } from "@/services/notaPedidoCloudService";
+import { syncNotasPedidoFromCloud, resolveCooperativaCnpj } from "@/services/notaPedidoCloudService";
 import { notaPertenceCooperativa } from "@/utils/fotoEntrega";
 import { getComunicadosCooperado } from "@/services/comunicadoService";
 import { cooperadoPrecisaCadastrarPix } from "@/utils/pix";
@@ -129,16 +129,20 @@ function AdminDashboard() {
   const coopId = user && data ? getUserCooperativaId(user, data) : undefined;
 
   useEffect(() => {
-    if (!data || !coopId) return;
-    const cnpj = getCooperativaCnpj(data, coopId);
-    if (!cnpj) return;
-    void syncNotasPedidoFromCloud(cnpj);
+    if (!data || !coopId || !user) return;
+    void (async () => {
+      const cnpj = await resolveCooperativaCnpj(data, coopId, user);
+      if (cnpj) await syncNotasPedidoFromCloud(cnpj);
+    })();
     const id = setInterval(() => {
-      void syncNotasPedidoFromCloud(cnpj);
-    }, 15000);
+      void (async () => {
+        const cnpj = await resolveCooperativaCnpj(data, coopId, user);
+        if (cnpj) await syncNotasPedidoFromCloud(cnpj);
+      })();
+    }, 12000);
     return () => clearInterval(id);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [coopId]);
+  }, [coopId, user?.id]);
 
   if (!data || !user) return null;
 

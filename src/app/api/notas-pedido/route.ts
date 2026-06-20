@@ -1,13 +1,13 @@
 import { NextResponse } from "next/server";
 import { getSupabaseAdmin, isSupabaseConfigured } from "@/lib/supabase/admin";
-import { isNotasPedidoTableMissing } from "@/lib/supabase/errors";
 import { normalizeCnpj } from "@/utils/cooperativa";
 import type { NotaPedido } from "@/types";
-
-function mapRow(row: Record<string, unknown>) {
-  const payload = row.payload as NotaPedido;
-  return payload;
-}
+import {
+  fetchNotasFromStorage,
+  fetchNotasFromTable,
+  uploadNotaToStorage,
+  upsertNotasInTable,
+} from "@/lib/supabase/notasStorage";
 
 export async function GET(request: Request) {
   if (!isSupabaseConfigured()) {
@@ -25,27 +25,19 @@ export async function GET(request: Request) {
     return NextResponse.json({ notas: [], configured: false });
   }
 
-  const { data, error } = await supabase
-    .from("notas_pedido")
-    .select("payload, updated_at")
-    .eq("cooperativa_cnpj", cnpj)
-    .order("updated_at", { ascending: false });
-
-  if (error) {
-    if (isNotasPedidoTableMissing(error)) {
-      return NextResponse.json({ notas: [], migrationPending: true });
-    }
-    console.error("[notas-pedido/list]", error.message);
-    return NextResponse.json({ error: "Erro ao buscar entregas." }, { status: 500 });
+  const fromTable = await fetchNotasFromTable(supabase, cnpj);
+  if (!fromTable.tableMissing && fromTable.notas.length > 0) {
+    return NextResponse.json({ notas: fromTable.notas, source: "table" });
   }
 
-  return NextResponse.json({ notas: (data ?? []).map(mapRow) });
+  const fromStorage = await fetchNotasFromStorage(supabase, cnpj);
+  return NextResponse.json({ notas: fromStorage, source: "storage" });
 }
 
 export async function POST(request: Request) {
   if (!isSupabaseConfigured()) {
     return NextResponse.json(
-      { error: "Nuvem não configurada. Entrega salva só neste aparelho.", configured: false },
+      { error: "Nuvem não configurada.", configured: false },
       { status: 503 }
     );
   }
@@ -71,33 +63,20 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Cliente Supabase indisponível." }, { status: 503 });
   }
 
-  const rows = notas.map((nota) => ({
-    id: nota.id,
-    cooperativa_cnpj: cnpj,
-    cooperado_id: nota.cooperadoId,
-    cooperado_nome: cooperadoNome || nota.cooperadoId,
-    status: nota.status,
-    mes_referencia: nota.mesReferencia,
-    payload: nota,
-    updated_at: nota.updatedAt,
-    created_at: nota.createdAt,
-  }));
-
-  const { error } = await supabase.from("notas_pedido").upsert(rows, { onConflict: "id" });
-
-  if (error) {
-    if (isNotasPedidoTableMissing(error)) {
-      return NextResponse.json(
-        {
-          error: "Crie a tabela notas_pedido no Supabase (SQL Editor).",
-          migrationPending: true,
-        },
-        { status: 503 }
-      );
-    }
-    console.error("[notas-pedido/push]", error.message);
-    return NextResponse.json({ error: "Erro ao salvar entregas na nuvem." }, { status: 500 });
+  const tableResult = await upsertNotasInTable(supabase, cnpj, notas, cooperadoNome);
+  if (tableResult.ok) {
+    return NextResponse.json({ success: true, count: notas.length, source: "table" }, { status: 201 });
   }
 
-  return NextResponse.json({ success: true, count: rows.length }, { status: 201 });
+  for (const nota of notas) {
+    const uploaded = await uploadNotaToStorage(supabase, cnpj, nota, cooperadoNome);
+    if (!uploaded.ok) {
+      return NextResponse.json({ error: uploaded.error }, { status: 500 });
+    }
+  }
+
+  return NextResponse.json(
+    { success: true, count: notas.length, source: "storage" },
+    { status: 201 }
+  );
 }

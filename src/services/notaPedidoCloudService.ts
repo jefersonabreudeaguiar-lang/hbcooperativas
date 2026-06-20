@@ -1,5 +1,6 @@
-import type { AppData, NotaPedido } from "@/types";
+import type { AppData, NotaPedido, User } from "@/types";
 import { normalizeCnpj } from "@/utils/cooperativa";
+import { fetchCooperativaByCnpjFromCloud } from "@/services/cooperativaCloudService";
 import { getData, saveDataSafe } from "@/services/dataStore";
 
 function mapRowToNota(row: unknown): NotaPedido | null {
@@ -78,7 +79,6 @@ export async function fetchNotasPedidoFromCloud(cnpj: string): Promise<NotaPedid
     const res = await fetch(`/api/notas-pedido?cnpj=${digits}`, { cache: "no-store" });
     if (!res.ok) return [];
     const json = await res.json().catch(() => ({}));
-    if (json.migrationPending) return [];
     return ((json.notas ?? []) as unknown[])
       .map(mapRowToNota)
       .filter((n): n is NotaPedido => Boolean(n));
@@ -108,30 +108,64 @@ export async function fetchNotaPedidoFromCloud(
   }
 }
 
+export function getCooperativaCnpj(data: AppData, cooperativaId?: string): string | undefined {
+  if (!cooperativaId) return undefined;
+  const coop = data.cooperativas.find((c) => c.id === cooperativaId);
+  const cnpj = normalizeCnpj(coop?.cnpj ?? "");
+  return cnpj.length === 14 ? cnpj : undefined;
+}
+
+/** Resolve CNPJ local, do usuário ou da nuvem — essencial para cooperado e responsável em aparelhos diferentes. */
+export async function resolveCooperativaCnpj(
+  data: AppData,
+  cooperativaId?: string,
+  user?: Pick<User, "cooperativaCnpj" | "cooperativaId"> | null
+): Promise<string | undefined> {
+  const fromCoop = getCooperativaCnpj(data, cooperativaId ?? user?.cooperativaId);
+  if (fromCoop) return fromCoop;
+
+  const fromUser = normalizeCnpj(user?.cooperativaCnpj ?? "");
+  if (fromUser.length === 14) return fromUser;
+
+  const coop = data.cooperativas.find((c) => c.id === (cooperativaId ?? user?.cooperativaId));
+  const guess = normalizeCnpj(coop?.cnpj ?? "");
+  if (guess.length === 14) return guess;
+
+  if (fromUser.length === 14) {
+    const cloud = await fetchCooperativaByCnpjFromCloud(fromUser);
+    if (cloud) return normalizeCnpj(cloud.cnpj);
+  }
+
+  return undefined;
+}
+
 export async function pushNotasPedidoToCloud(
   cnpj: string,
   notas: NotaPedido[],
   cooperadoNome?: string
-): Promise<{ ok: boolean; offline?: boolean; migrationPending?: boolean; error?: string }> {
+): Promise<{ ok: boolean; offline?: boolean; error?: string }> {
   const digits = normalizeCnpj(cnpj);
   if (digits.length !== 14 || notas.length === 0) return { ok: true };
 
   try {
-    const res = await fetch("/api/notas-pedido", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ cnpj: digits, notas, cooperadoNome }),
-    });
-    const json = await res.json().catch(() => ({}));
-    if (res.status === 503) {
-      return {
-        ok: false,
-        offline: true,
-        migrationPending: Boolean(json.migrationPending),
-        error: json.error as string | undefined,
-      };
+    for (const nota of notas) {
+      const res = await fetch("/api/notas-pedido", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ cnpj: digits, notas: [nota], cooperadoNome }),
+      });
+      const json = await res.json().catch(() => ({}));
+      if (res.status === 503) {
+        return {
+          ok: false,
+          offline: true,
+          error: (json.error as string) ?? "Nuvem indisponível.",
+        };
+      }
+      if (!res.ok) {
+        return { ok: false, error: (json.error as string) ?? "Erro ao enviar para a cooperativa." };
+      }
     }
-    if (!res.ok) return { ok: false, error: (json.error as string) ?? "Erro ao enviar para a cooperativa." };
     return { ok: true };
   } catch {
     return { ok: false, offline: true, error: "Sem conexão com o servidor." };
@@ -164,13 +198,6 @@ export async function syncNotasPedidoFromCloud(cnpj: string): Promise<number> {
   if (merged === current) return 0;
   saveDataSafe(merged);
   return cloudNotas.filter((n) => n.status === "aguardando_conferencia").length;
-}
-
-export function getCooperativaCnpj(data: AppData, cooperativaId?: string): string | undefined {
-  if (!cooperativaId) return undefined;
-  const coop = data.cooperativas.find((c) => c.id === cooperativaId);
-  const cnpj = normalizeCnpj(coop?.cnpj ?? "");
-  return cnpj.length === 14 ? cnpj : undefined;
 }
 
 export async function ensureNotaComFoto(

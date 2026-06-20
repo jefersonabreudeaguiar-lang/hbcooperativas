@@ -66,6 +66,8 @@ export interface User {
   role: UserRole;
   cooperadoId?: string;
   cooperativaId?: string;
+  /** CNPJ informado no cadastro — garante envio à nuvem mesmo se ID local divergir. */
+  cooperativaCnpj?: string;
   active: boolean;
 }
 

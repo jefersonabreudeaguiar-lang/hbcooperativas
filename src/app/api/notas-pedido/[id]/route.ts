@@ -3,6 +3,7 @@ import { getSupabaseAdmin, isSupabaseConfigured } from "@/lib/supabase/admin";
 import { isNotasPedidoTableMissing } from "@/lib/supabase/errors";
 import { normalizeCnpj } from "@/utils/cooperativa";
 import type { NotaPedido } from "@/types";
+import { fetchNotaFromStorage, uploadNotaToStorage } from "@/lib/supabase/notasStorage";
 
 export async function GET(
   request: Request,
@@ -31,15 +32,17 @@ export async function GET(
     .eq("cooperativa_cnpj", cnpj)
     .maybeSingle();
 
-  if (error) {
-    if (isNotasPedidoTableMissing(error)) {
-      return NextResponse.json({ nota: null, migrationPending: true });
-    }
-    return NextResponse.json({ error: "Erro ao buscar entrega." }, { status: 500 });
+  if (!error && data?.payload) {
+    const nota = data.payload as NotaPedido;
+    if (nota?.id) return NextResponse.json({ nota });
   }
 
-  const nota = data?.payload as NotaPedido | undefined;
-  return NextResponse.json({ nota: nota?.id ? nota : null });
+  if (error && !isNotasPedidoTableMissing(error)) {
+    console.error("[notas-pedido/get]", error.message);
+  }
+
+  const nota = await fetchNotaFromStorage(supabase, cnpj, id);
+  return NextResponse.json({ nota });
 }
 
 export async function PATCH(
@@ -78,13 +81,18 @@ export async function PATCH(
     .eq("id", id)
     .eq("cooperativa_cnpj", cnpj);
 
-  if (error) {
-    if (isNotasPedidoTableMissing(error)) {
-      return NextResponse.json({ migrationPending: true }, { status: 503 });
-    }
-    console.error("[notas-pedido/patch]", error.message);
-    return NextResponse.json({ error: "Erro ao atualizar entrega." }, { status: 500 });
+  if (!error) {
+    return NextResponse.json({ success: true, source: "table" });
   }
 
-  return NextResponse.json({ success: true });
+  if (!isNotasPedidoTableMissing(error)) {
+    console.error("[notas-pedido/patch]", error.message);
+  }
+
+  const uploaded = await uploadNotaToStorage(supabase, cnpj, nota);
+  if (!uploaded.ok) {
+    return NextResponse.json({ error: uploaded.error }, { status: 500 });
+  }
+
+  return NextResponse.json({ success: true, source: "storage" });
 }
