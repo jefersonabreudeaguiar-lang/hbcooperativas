@@ -5,6 +5,7 @@ import type { NotaPedido } from "@/types";
 import {
   fetchNotasFromStorage,
   fetchNotasFromTable,
+  mergeNotasSources,
   uploadNotaToStorage,
   upsertNotasInTable,
 } from "@/lib/supabase/notasStorage";
@@ -25,12 +26,16 @@ export async function GET(request: Request) {
     return NextResponse.json({ notas: [], configured: false });
   }
 
-  const fromTable = await fetchNotasFromTable(supabase, cnpj);
-  if (!fromTable.tableMissing && fromTable.notas.length > 0) {
-    return NextResponse.json({ notas: fromTable.notas, source: "table" });
+  const [fromTable, fromStorage] = await Promise.all([
+    fetchNotasFromTable(supabase, cnpj),
+    fetchNotasFromStorage(supabase, cnpj),
+  ]);
+
+  if (!fromTable.tableMissing) {
+    const notas = mergeNotasSources(fromTable.notas, fromStorage);
+    return NextResponse.json({ notas, source: "merged" });
   }
 
-  const fromStorage = await fetchNotasFromStorage(supabase, cnpj);
   return NextResponse.json({ notas: fromStorage, source: "storage" });
 }
 
@@ -65,6 +70,9 @@ export async function POST(request: Request) {
 
   const tableResult = await upsertNotasInTable(supabase, cnpj, notas, cooperadoNome);
   if (tableResult.ok) {
+    for (const nota of notas) {
+      await uploadNotaToStorage(supabase, cnpj, nota, cooperadoNome);
+    }
     return NextResponse.json({ success: true, count: notas.length, source: "table" }, { status: 201 });
   }
 

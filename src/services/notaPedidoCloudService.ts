@@ -129,6 +129,8 @@ export function mergeCloudNotasIntoData(
     const notaCnpj = getNotaCooperativaCnpj(data, n);
     if (notaCnpj !== digits) continue;
     if ((n.fotoNaNuvem || n.cooperativaCnpj) && !cloudIds.has(id)) {
+      const ageMs = Date.now() - new Date(n.updatedAt).getTime();
+      if (ageMs < 3 * 60 * 1000) continue;
       byId.delete(id);
       changed = true;
     }

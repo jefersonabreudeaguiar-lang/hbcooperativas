@@ -145,10 +145,64 @@ export default function NotasPedidoContent() {
   const [filtroCooperadoId, setFiltroCooperadoId] = useState("");
   const [abaConferenciaKey, setAbaConferenciaKey] = useState("");
   const [contratoInstId, setContratoInstId] = useState("");
+  const [anexarSucesso, setAnexarSucesso] = useState(false);
+  const [ultimaNotaEnviadaIds, setUltimaNotaEnviadaIds] = useState<string[]>([]);
   const [excluirNotaTarget, setExcluirNotaTarget] = useState<NotaPedido | null>(null);
   const [excluindo, setExcluindo] = useState(false);
 
   const coopId = user && data ? getUserCooperativaId(user, data) : undefined;
+  const ANEXAR_DRAFT_KEY = coopId ? `hb_anexar_draft_${coopId}` : "";
+
+  const salvarRascunhoAnexar = (fotos: string[], contratoId: string) => {
+    if (!ANEXAR_DRAFT_KEY || typeof window === "undefined") return;
+    try {
+      sessionStorage.setItem(
+        ANEXAR_DRAFT_KEY,
+        JSON.stringify({ fotos, contratoId, savedAt: Date.now() })
+      );
+    } catch {
+      /* quota */
+    }
+  };
+
+  const limparRascunhoAnexar = () => {
+    if (!ANEXAR_DRAFT_KEY || typeof window === "undefined") return;
+    sessionStorage.removeItem(ANEXAR_DRAFT_KEY);
+  };
+
+  const fecharAnexarModal = (force = false) => {
+    if (!force && (enviando || processandoFoto)) return;
+    if (!force && fotosSessao.length > 0 && !anexarSucesso) {
+      if (!confirm("Descartar as fotos desta sessão?")) return;
+    }
+    setAnexarModal(false);
+    setAnexarSucesso(false);
+    setFotosSessao([]);
+    setFotoDuplicadaMsg("");
+    setErroEnvio("");
+    setFormErrors({});
+    limparRascunhoAnexar();
+  };
+
+  useEffect(() => {
+    if (!ANEXAR_DRAFT_KEY || typeof window === "undefined") return;
+    try {
+      const raw = sessionStorage.getItem(ANEXAR_DRAFT_KEY);
+      if (!raw) return;
+      const draft = JSON.parse(raw) as { fotos?: string[]; contratoId?: string; savedAt?: number };
+      if (!draft.fotos?.length) return;
+      if (draft.savedAt && Date.now() - draft.savedAt > 30 * 60 * 1000) {
+        sessionStorage.removeItem(ANEXAR_DRAFT_KEY);
+        return;
+      }
+      setFotosSessao(draft.fotos);
+      if (draft.contratoId) setContratoInstId(draft.contratoId);
+      setAnexarModal(true);
+    } catch {
+      sessionStorage.removeItem(ANEXAR_DRAFT_KEY);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ANEXAR_DRAFT_KEY]);
 
   const cooperadosCoop = useMemo(() => {
     if (!data || !coopId) return [];
@@ -374,6 +428,7 @@ export default function NotasPedidoContent() {
   const openAnexar = (notaRejeitada?: NotaPedido) => {
     setFormErrors({});
     setErroEnvio("");
+    setAnexarSucesso(false);
     setReenviarNotaId(notaRejeitada?.id ?? null);
     setInstituicaoId(notaRejeitada?.instituicaoId ?? "");
     setUsarEscolaAvulsa(Boolean(notaRejeitada?.escolaAvulsaNome?.trim()));
@@ -577,8 +632,9 @@ export default function NotasPedidoContent() {
           return prev;
         }
         setFormErrors((err) => ({ ...err, foto: undefined }));
-        if (reenviarNotaId) return [dataUrl];
-        return [...prev, dataUrl];
+        const next = reenviarNotaId ? [dataUrl] : [...prev, dataUrl];
+        salvarRascunhoAnexar(next, contratoInstId);
+        return next;
       });
     } catch {
       setErroEnvio("Não foi possível processar a foto. Tente outra imagem.");
@@ -589,7 +645,11 @@ export default function NotasPedidoContent() {
   };
 
   const removerFotoSessao = (idx: number) => {
-    setFotosSessao((prev) => prev.filter((_, i) => i !== idx));
+    setFotosSessao((prev) => {
+      const next = prev.filter((_, i) => i !== idx);
+      salvarRascunhoAnexar(next, contratoInstId);
+      return next;
+    });
     setFotoDuplicadaMsg("");
     setFormErrors((prev) => ({ ...prev, foto: undefined }));
   };
@@ -794,12 +854,15 @@ export default function NotasPedidoContent() {
     }
 
     setEnviando(false);
-    setAnexarModal(false);
-    setFotosSessao([]);
+    limparRascunhoAnexar();
+    const ids = notasLocais.map((n) => n.id);
+    setUltimaNotaEnviadaIds(ids);
+    if (isCooperado) setStatusFilter("aguardando_conferencia");
+    setAnexarSucesso(true);
     setSuccessMsg(
       qtdFotos === 1
-        ? "Enviado! O responsável já pode conferir e lançar na sua ficha."
-        : `${qtdFotos} fotos enviadas! O responsável vê na fila Conferir entregas.`
+        ? "Enviado! Aparece abaixo como Em análise — o responsável já pode conferir."
+        : `${qtdFotos} fotos enviadas! Aparecem abaixo como Em análise.`
     );
   };
 
@@ -1061,6 +1124,25 @@ export default function NotasPedidoContent() {
     );
   };
 
+  const concluirEnvioFoto = () => {
+    const firstId = ultimaNotaEnviadaIds[0];
+    fecharAnexarModal(true);
+    if (firstId) {
+      requestAnimationFrame(() => {
+        document.getElementById(`nota-enviada-${firstId}`)?.scrollIntoView({ behavior: "smooth", block: "center" });
+      });
+    }
+  };
+
+  const enviarOutraFoto = () => {
+    setAnexarSucesso(false);
+    setFotosSessao([]);
+    setFotoDuplicadaMsg("");
+    setErroEnvio("");
+    setFormErrors({});
+    limparRascunhoAnexar();
+  };
+
   const mesAtual = getCurrentMesReferencia();
 
   if (!data) {
@@ -1069,11 +1151,18 @@ export default function NotasPedidoContent() {
 
   const renderMobileCard = (n: NotaPedido) => {
     const escola = getEscolaNotaLabel(n, data.instituicoes);
+    const recémEnviada = ultimaNotaEnviadaIds.includes(n.id);
     return (
       <button
         type="button"
+        id={recémEnviada ? `nota-enviada-${n.id}` : undefined}
         onClick={() => (isCooperado ? openView(n) : n.status === "aguardando_conferencia" ? void openConferir(n) : openView(n))}
-        className="w-full text-left bg-white border border-gray-200 rounded-xl p-4 hover:border-green-300 transition-colors"
+        className={cn(
+          "w-full text-left bg-white border rounded-xl p-4 transition-colors",
+          recémEnviada
+            ? "border-green-500 ring-2 ring-green-200 shadow-sm"
+            : "border-gray-200 hover:border-green-300"
+        )}
       >
         <div className="flex gap-3">
           {getFotoExibicaoNota(n) ? (
@@ -1322,17 +1411,46 @@ export default function NotasPedidoContent() {
         </div>
       )}
 
-      <Modal open={anexarModal} onClose={() => { if (enviando) return; setAnexarModal(false); setFotosSessao([]); setFotoDuplicadaMsg(""); setErroEnvio(""); }} title={reenviarNotaId ? "Enviar de novo" : "Enviar foto da entrega"} size="md"
+      <Modal
+        open={anexarModal}
+        onClose={() => fecharAnexarModal()}
+        title={anexarSucesso ? "Foto enviada!" : reenviarNotaId ? "Enviar de novo" : "Enviar foto da entrega"}
+        size="md"
         footer={
-          <div className="flex flex-col-reverse sm:flex-row justify-end gap-2">
-            <Button type="button" variant="secondary" disabled={enviando} onClick={() => setAnexarModal(false)}>Cancelar</Button>
-            <Button type="button" size="lg" onClick={() => void handleAnexarEntrega()} disabled={fotosSessao.length === 0 || enviando || processandoFoto}>
-              <FileText size={18} /> {enviando ? "Enviando..." : fotosSessao.length > 0 ? `Enviar ${fotosSessao.length} foto(s)` : "Enviar para a cooperativa"}
-            </Button>
-          </div>
+          anexarSucesso ? (
+            <div className="flex flex-col-reverse sm:flex-row justify-end gap-2">
+              <Button type="button" variant="secondary" onClick={enviarOutraFoto}>
+                Enviar outra foto
+              </Button>
+              <Button type="button" size="lg" onClick={concluirEnvioFoto}>
+                <CheckCircle size={18} /> Ver minhas entregas
+              </Button>
+            </div>
+          ) : (
+            <div className="flex flex-col-reverse sm:flex-row justify-end gap-2">
+              <Button type="button" variant="secondary" disabled={enviando} onClick={() => fecharAnexarModal()}>
+                Cancelar
+              </Button>
+              <Button
+                type="button"
+                size="lg"
+                onClick={() => void handleAnexarEntrega()}
+                disabled={fotosSessao.length === 0 || enviando || processandoFoto}
+              >
+                <FileText size={18} />{" "}
+                {enviando ? "Enviando..." : fotosSessao.length > 0 ? `Enviar ${fotosSessao.length} foto(s)` : "Enviar para a cooperativa"}
+              </Button>
+            </div>
+          )
         }
       >
         <div className="space-y-4">
+          {anexarSucesso ? (
+            <AlertBanner variant="success" title="Entrega registrada">
+              {successMsg || "Sua foto foi enviada para a cooperativa. Ela aparece na lista como Em análise."}
+            </AlertBanner>
+          ) : (
+            <>
           {erroEnvio && (
             <AlertBanner variant="error" onDismiss={() => setErroEnvio("")}>
               {erroEnvio}
@@ -1475,6 +1593,8 @@ export default function NotasPedidoContent() {
               </FormField>
             )}
           </div>
+            </>
+          )}
         </div>
       </Modal>
 

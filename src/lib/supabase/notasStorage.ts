@@ -87,6 +87,28 @@ export async function fetchNotaFromStorage(
 }
 
 /** Tabela SQL (legado) — usada se existir. */
+/** Une notas da tabela SQL e do storage, mantendo a versão mais recente por id. */
+export function mergeNotasSources(tableNotas: NotaPedido[], storageNotas: NotaPedido[]): NotaPedido[] {
+  const byId = new Map<string, NotaPedido>();
+  for (const nota of tableNotas) {
+    if (nota?.id) byId.set(nota.id, nota);
+  }
+  for (const nota of storageNotas) {
+    if (!nota?.id) continue;
+    const cur = byId.get(nota.id);
+    if (!cur) {
+      byId.set(nota.id, nota);
+      continue;
+    }
+    const curTime = new Date(cur.updatedAt).getTime();
+    const nextTime = new Date(nota.updatedAt).getTime();
+    if (nextTime >= curTime) byId.set(nota.id, nota);
+  }
+  return [...byId.values()].sort(
+    (a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
+  );
+}
+
 export async function fetchNotasFromTable(
   supabase: SupabaseClient,
   cnpj: string
