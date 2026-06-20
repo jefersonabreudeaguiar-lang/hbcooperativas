@@ -127,9 +127,8 @@ export default function NotasPedidoContent() {
   const [conferenciaDescontoPct, setConferenciaDescontoPct] = useState(5);
   const [conferenciaInstId, setConferenciaInstId] = useState("");
   const [conferenciaLocal, setConferenciaLocal] = useState("");
-  const [conferenciaAssinatura, setConferenciaAssinatura] = useState("");
   const [motivoRejeicao, setMotivoRejeicao] = useState("");
-  const [conferirErrors, setConferirErrors] = useState<{ assinatura?: string; itens?: string }>({});
+  const [conferirErrors, setConferirErrors] = useState<{ itens?: string }>({});
   const [instituicaoPadraoId, setInstituicaoPadraoIdState] = useState("");
   const [alterarInstConferencia, setAlterarInstConferencia] = useState(false);
 
@@ -752,7 +751,6 @@ export default function NotasPedidoContent() {
         : nota.cooperadoId;
     setConferenciaCooperadoId(coopDonoId);
     setAlterarInstConferencia(false);
-    setConferenciaAssinatura(nota.assinaturaRecebedor ?? "");
     setConferirErrors({});
     if (!isCooperado && data) {
       const chave = getChaveGrupoConferencia(nota, data);
@@ -815,7 +813,6 @@ export default function NotasPedidoContent() {
     if (!user || !data || !selectedNota) return;
     const errors: typeof conferirErrors = {};
     if (!conferenciaCooperadoId) errors.itens = "Escolha o cooperado dono desta nota.";
-    if (!conferenciaAssinatura.trim()) errors.assinatura = "Informe quem assinou na escola.";
     if (conferenciaTotais.liquido <= 0) errors.itens = errors.itens ?? "Informe a quantidade de pelo menos um produto.";
     if (Object.keys(errors).length) {
       setConferirErrors(errors);
@@ -833,8 +830,8 @@ export default function NotasPedidoContent() {
           cooperadoId: conferenciaCooperadoId,
           instituicaoId: conferenciaInstId,
           localEntrega: conferenciaLocal,
-          assinaturaRecebedor: conferenciaAssinatura,
-          dataAssinatura: now.split("T")[0],
+          assinaturaRecebedor: selectedNota.assinaturaRecebedor?.trim() || "Assinatura na nota",
+          dataAssinatura: selectedNota.dataAssinatura || selectedNota.dataEntrega,
         },
         conferenciaItens.map((i) => ({ ...i, valorBruto: 0 })),
         conferenciaDescontoPct
@@ -1555,10 +1552,6 @@ export default function NotasPedidoContent() {
                   onChange={(e) => setConferenciaDescontoPct(parseFloat(e.target.value) || 0)}
                   className="max-w-[120px]"
                 />
-              </FormField>
-
-              <FormField label="Quem assinou na escola?" required error={conferirErrors.assinatura}>
-                <Input value={conferenciaAssinatura} onChange={(e) => setConferenciaAssinatura(e.target.value)} placeholder="Nome de quem recebeu" />
               </FormField>
 
               {conferenciaItens.length === 0 ? (
