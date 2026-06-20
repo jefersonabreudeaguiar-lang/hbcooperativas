@@ -3,6 +3,7 @@
 import type { AppData, AuditAction, User, Cooperado, Cooperativa } from "@/types";
 import { emptyInitialData, DEMO_ENTITY_IDS, DEMO_EMAILS, DEMO_CNPJ } from "@/mock/data";
 import { findCooperativaByCnpj, getCooperativaById, getUserCooperativaId, normalizeCnpj } from "@/utils/cooperativa";
+import { compactarFotosNoArmazenamento } from "@/utils/fotoEntrega";
 import { ensureMensalidadesDoMes, ensureMensalidadeCooperado, atualizarStatusMensalidades } from "@/services/mensalidadeService";
 import {
   fetchCooperativaByCnpjFromCloud,
@@ -142,7 +143,7 @@ function migrateData(raw: Partial<AppData> & Record<string, unknown>): AppData {
 }
 
 function runAutomaticTasks(data: AppData): AppData {
-  let current = data;
+  let current = compactarFotosNoArmazenamento(data);
   const afterMensalidades = ensureMensalidadesDoMes(current);
   if (afterMensalidades) current = afterMensalidades;
   const afterStatus = atualizarStatusMensalidades(current);

@@ -29,6 +29,7 @@ import {
   patchNotaPedidoInCloud,
   pushNotasPedidoToCloud,
   syncNotasPedidoFromCloud,
+  ensureNotaComFoto,
 } from "@/services/notaPedidoCloudService";
 import { formatCurrency, formatDate, formatMesReferencia, getCurrentMesReferencia } from "@/utils/format";
 import { labelUnidade } from "@/utils/unidades";
@@ -39,8 +40,8 @@ import {
   resolverInstituicaoConferencia,
 } from "@/utils/instituicaoPreferida";
 import { getCooperadoNome } from "@/utils/calculations";
-import { isFotoDuplicada, compressFotoFile } from "@/utils/fotoEntrega";
-import type { NotaPedido, NotaPedidoItem, Cooperado } from "@/types";
+import { isFotoDuplicada, compressFotoFile, makeFotoThumbnail, getFotoExibicaoNota, notaPertenceCooperativa, compactarFotosNoArmazenamento } from "@/utils/fotoEntrega";
+import type { NotaPedido, NotaPedidoItem, Cooperado, AppData } from "@/types";
 
 const NOVO_AVULSO = "__novo__";
 
@@ -154,7 +155,7 @@ export default function NotasPedidoContent() {
     if (!data) return [];
     return data.notasPedido
       .filter((n) => {
-        if (coopId && n.cooperativaId !== coopId) return false;
+        if (coopId && !notaPertenceCooperativa(data, n, coopId)) return false;
         if (isCooperado && cooperadoId && n.cooperadoId !== cooperadoId) return false;
         if (!isCooperado && filtroCooperadoId && n.cooperadoId !== filtroCooperadoId) return false;
         if (statusFilter && n.status !== statusFilter) return false;
@@ -210,8 +211,13 @@ export default function NotasPedidoContent() {
     const cnpj = getCooperativaCnpj(data, coopId);
     if (!cnpj) return;
     void syncNotasPedidoFromCloud(cnpj);
+    if (isCooperado) return;
+    const id = setInterval(() => {
+      void syncNotasPedidoFromCloud(cnpj);
+    }, 15000);
+    return () => clearInterval(id);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [coopId]);
+  }, [coopId, isCooperado]);
 
   useEffect(() => {
     if (!data || !instituicaoId) return;
@@ -459,23 +465,21 @@ export default function NotasPedidoContent() {
     const mes = getCurrentMesReferencia();
     const cooperadoNome = getCooperadoNome(data.cooperados, cid);
     const qtdFotos = fotosSessao.length;
-    let notasCriadas: NotaPedido[] = [];
+    const cnpj = getCooperativaCnpj(data, coopId);
 
     setEnviando(true);
     setErroEnvio("");
 
-    const saved = updateDataSafe((d) => {
+    const buildNotasCompletas = (d: AppData): NotaPedido[] => {
       if (reenviarNotaId) {
-        const foto = fotosSessao[0];
-        const notaAtualizada = d.notasPedido.find((n) => n.id === reenviarNotaId);
-        if (!notaAtualizada) return d;
-
-        const updatedNota: NotaPedido = {
-          ...notaAtualizada,
+        const base = d.notasPedido.find((n) => n.id === reenviarNotaId);
+        if (!base) return [];
+        return [{
+          ...base,
           instituicaoId: "",
           localEntrega: local,
           escolaAvulsaNome: escolaAvulsa,
-          fotoPedido: foto,
+          fotoPedido: fotosSessao[0],
           fotoEnviadaEm: now,
           observacoes,
           status: "aguardando_conferencia",
@@ -484,14 +488,9 @@ export default function NotasPedidoContent() {
           dataRejeicao: undefined,
           reenviadaEm: now,
           updatedAt: now,
-        };
-        notasCriadas = [updatedNota];
-
-        const updated = d.notasPedido.map((n) => (n.id === reenviarNotaId ? updatedNota : n));
-        return addAuditEntry({ ...d, notasPedido: updated }, {
-          entityType: "nota_pedido", entityId: reenviarNotaId, action: "editar",
-          userId: user.id, userName: user.name, changes: "Entrega reenviada",
-        });
+          cooperativaCnpj: cnpj,
+          cooperadoNomeSnapshot: cooperadoNome,
+        }];
       }
 
       let notas = [...d.notasPedido];
@@ -516,16 +515,72 @@ export default function NotasPedidoContent() {
           fotoEnviadaEm: now,
           mesReferencia: mes,
           observacoes,
+          cooperativaCnpj: cnpj,
+          cooperadoNomeSnapshot: cooperadoNome,
           createdAt: now,
           updatedAt: now,
         };
         notas = [...notas, nota];
         criadas.push(nota);
       }
-      notasCriadas = criadas;
+      return criadas;
+    };
 
-      const lastId = notas[notas.length - 1]?.id;
-      return addAuditEntry({ ...d, notasPedido: notas }, {
+    const notasCompletas = buildNotasCompletas(data);
+    if (notasCompletas.length === 0) {
+      setEnviando(false);
+      setErroEnvio("Não foi possível preparar o envio. Tente novamente.");
+      return;
+    }
+
+    let cloudOk = false;
+    if (cnpj) {
+      const cloud = await pushNotasPedidoToCloud(cnpj, notasCompletas, cooperadoNome);
+      if (cloud.ok) {
+        cloudOk = true;
+      } else if (cloud.migrationPending) {
+        setEnviando(false);
+        setErroEnvio(
+          "A nuvem ainda não está pronta. Peça ao responsável para criar a tabela notas_pedido no Supabase (SQL Editor) e tente de novo."
+        );
+        return;
+      } else if (!cloud.offline) {
+        setEnviando(false);
+        setErroEnvio(cloud.error ?? "Erro ao enviar para o responsável.");
+        return;
+      }
+    }
+
+    const miniaturas = await Promise.all(
+      notasCompletas.map((n) => (n.fotoPedido ? makeFotoThumbnail(n.fotoPedido) : Promise.resolve(undefined)))
+    );
+
+    const notasLocais = notasCompletas.map((n, i) => ({
+      ...n,
+      fotoNaNuvem: cloudOk,
+      fotoPedidoMiniatura: miniaturas[i],
+      fotoPedido: cloudOk ? undefined : n.fotoPedido,
+    }));
+
+    const persistir = (d: AppData) => {
+      const base = compactarFotosNoArmazenamento(d);
+
+      if (reenviarNotaId) {
+        const local = notasLocais[0];
+        const updated = base.notasPedido.map((n) => (n.id === reenviarNotaId ? local : n));
+        return addAuditEntry({ ...base, notasPedido: updated }, {
+          entityType: "nota_pedido",
+          entityId: reenviarNotaId,
+          action: "editar",
+          userId: user.id,
+          userName: user.name,
+          changes: "Entrega reenviada",
+        });
+      }
+
+      const notas = [...base.notasPedido, ...notasLocais];
+      const lastId = notasLocais[notasLocais.length - 1]?.id;
+      return addAuditEntry({ ...base, notasPedido: notas }, {
         entityType: "nota_pedido",
         entityId: lastId ?? "",
         action: "criar",
@@ -533,7 +588,19 @@ export default function NotasPedidoContent() {
         userName: user.name,
         changes: `${qtdFotos} entrega(s) com foto`,
       });
-    });
+    };
+
+    let saved = updateDataSafe(persistir);
+
+    if (!saved.ok) {
+      saved = updateDataSafe((d) => {
+        const base = compactarFotosNoArmazenamento({
+          ...d,
+          notasPedido: d.notasPedido.map((n) => ({ ...n, fotoPedido: undefined })),
+        });
+        return persistir(base);
+      });
+    }
 
     if (!saved.ok) {
       setEnviando(false);
@@ -541,28 +608,26 @@ export default function NotasPedidoContent() {
       return;
     }
 
-    const cnpj = getCooperativaCnpj(data, coopId);
-    if (cnpj) {
-      const cloud = await pushNotasPedidoToCloud(cnpj, notasCriadas, cooperadoNome);
-      if (!cloud.ok && !cloud.offline) {
-        setEnviando(false);
-        setErroEnvio(cloud.error ?? "Erro ao enviar para o responsável.");
-        return;
-      }
-    }
-
     setEnviando(false);
     setAnexarModal(false);
     setFotosSessao([]);
     setSuccessMsg(
-      qtdFotos === 1
-        ? "Enviado! O responsável vai conferir e lançar o valor na sua ficha."
-        : `${qtdFotos} fotos enviadas! O responsável vai conferir cada uma e lançar na ficha.`
+      cloudOk
+        ? qtdFotos === 1
+          ? "Enviado! O responsável já pode conferir e lançar na sua ficha."
+          : `${qtdFotos} fotos enviadas! O responsável vai conferir cada uma na fila de entregas.`
+        : qtdFotos === 1
+          ? "Salvo neste aparelho. Conecte à internet para o responsável receber."
+          : `${qtdFotos} fotos salvas neste aparelho. Conecte à internet para o responsável receber.`
     );
   };
 
-  const openConferir = (nota: NotaPedido) => {
-    setSelectedNota(nota);
+  const openConferir = async (nota: NotaPedido) => {
+    let notaComFoto = nota;
+    if (!nota.fotoPedido && data && coopId) {
+      notaComFoto = await ensureNotaComFoto(data, nota, coopId);
+    }
+    setSelectedNota(notaComFoto);
     const instId = coopId
       ? resolverInstituicaoConferencia(coopId, instituicoes, nota.instituicaoId)
       : nota.instituicaoId;
@@ -687,13 +752,13 @@ export default function NotasPedidoContent() {
     return (
       <button
         type="button"
-        onClick={() => (isCooperado ? openView(n) : n.status === "aguardando_conferencia" ? openConferir(n) : openView(n))}
+        onClick={() => (isCooperado ? openView(n) : n.status === "aguardando_conferencia" ? void openConferir(n) : openView(n))}
         className="w-full text-left bg-white border border-gray-200 rounded-xl p-4 hover:border-green-300 transition-colors"
       >
         <div className="flex gap-3">
-          {n.fotoPedido ? (
+          {getFotoExibicaoNota(n) ? (
             // eslint-disable-next-line @next/next/no-img-element
-            <img src={n.fotoPedido} alt="" className="w-16 h-16 rounded-lg object-cover shrink-0" />
+            <img src={getFotoExibicaoNota(n)} alt="" className="w-16 h-16 rounded-lg object-cover shrink-0" />
           ) : (
             <div className="w-16 h-16 rounded-lg bg-gray-100 shrink-0 flex items-center justify-center text-gray-400">
               {n.lancamentoDireto ? <FileText size={20} /> : <Camera size={20} />}
@@ -799,9 +864,9 @@ export default function NotasPedidoContent() {
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
             {pendentesAnalise.map((n) => (
               <button key={n.id} type="button" onClick={() => openConferir(n)} className="text-left border-2 border-amber-300 bg-amber-50 rounded-xl overflow-hidden hover:border-amber-500">
-                {n.fotoPedido && (
+                {getFotoExibicaoNota(n) && (
                   // eslint-disable-next-line @next/next/no-img-element
-                  <img src={n.fotoPedido} alt="" className="w-full h-36 object-cover" />
+                  <img src={getFotoExibicaoNota(n)} alt="" className="w-full h-36 object-cover" />
                 )}
                 <div className="p-3">
                   <p className="font-medium text-sm">{getCooperadoNome(data.cooperados, n.cooperadoId)}</p>
@@ -860,7 +925,7 @@ export default function NotasPedidoContent() {
           { key: "valor", label: "Valor", render: (n) => (n.valorLiquido > 0 ? formatCurrency(n.valorLiquido) : "—") },
           { key: "status", label: "Status", render: (n) => <NotaStatusBadge status={n.status} /> },
         ]}
-        onView={isCooperado ? openView : (n) => (n.status === "aguardando_conferencia" ? openConferir(n) : openView(n))}
+        onView={isCooperado ? openView : (n) => (n.status === "aguardando_conferencia" ? void openConferir(n) : openView(n))}
         viewLabel={isCooperado ? "Ver" : "Conferir"}
       />
 
@@ -1125,6 +1190,8 @@ export default function NotasPedidoContent() {
               {selectedNota.fotoPedido ? (
                 // eslint-disable-next-line @next/next/no-img-element
                 <img src={selectedNota.fotoPedido} alt="Pedido" className="w-full max-h-[55vh] object-contain rounded-xl border bg-gray-50 sticky top-0" />
+              ) : selectedNota.fotoNaNuvem ? (
+                <p className="text-gray-500 text-center py-12 border rounded-xl">Carregando foto da nuvem...</p>
               ) : (
                 <p className="text-gray-500 text-center py-12 border rounded-xl">Sem foto</p>
               )}
@@ -1266,9 +1333,9 @@ export default function NotasPedidoContent() {
             {selectedNota.motivoRejeicao && (
               <AlertBanner variant="error" title="Motivo da correção">{selectedNota.motivoRejeicao}</AlertBanner>
             )}
-            {selectedNota.fotoPedido && (
+            {(selectedNota.fotoPedido || getFotoExibicaoNota(selectedNota)) && (
               // eslint-disable-next-line @next/next/no-img-element
-              <img src={selectedNota.fotoPedido} alt="Pedido" className="w-full rounded-xl border" />
+              <img src={selectedNota.fotoPedido ?? getFotoExibicaoNota(selectedNota)} alt="Pedido" className="w-full rounded-xl border" />
             )}
             {selectedNota.status === "rejeitada" && (
               <Button className="w-full" onClick={() => { setViewModal(false); openAnexar(selectedNota); }}>

@@ -181,6 +181,14 @@ export interface NotaPedido {
   assinaturaRecebedor?: string;
   dataAssinatura?: string;
   fotoPedido?: string;
+  /** Miniatura leve — lista no aparelho do cooperado após envio à nuvem. */
+  fotoPedidoMiniatura?: string;
+  /** Foto completa está no Supabase (não duplicar no navegador). */
+  fotoNaNuvem?: boolean;
+  /** CNPJ da cooperativa — identifica entregas entre aparelhos diferentes. */
+  cooperativaCnpj?: string;
+  /** Nome do cooperado no envio — ajuda o responsável a vincular a ficha. */
+  cooperadoNomeSnapshot?: string;
   fotoEnviadaEm?: string;
   /** Lançada pela cooperativa, sem foto de nota (cooperado avulso). */
   lancamentoDireto?: boolean;

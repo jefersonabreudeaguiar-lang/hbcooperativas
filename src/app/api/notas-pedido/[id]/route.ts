@@ -4,6 +4,44 @@ import { isNotasPedidoTableMissing } from "@/lib/supabase/errors";
 import { normalizeCnpj } from "@/utils/cooperativa";
 import type { NotaPedido } from "@/types";
 
+export async function GET(
+  request: Request,
+  context: { params: Promise<{ id: string }> }
+) {
+  if (!isSupabaseConfigured()) {
+    return NextResponse.json({ nota: null, configured: false });
+  }
+
+  const { id } = await context.params;
+  const { searchParams } = new URL(request.url);
+  const cnpj = normalizeCnpj(searchParams.get("cnpj") ?? "");
+  if (cnpj.length !== 14) {
+    return NextResponse.json({ error: "CNPJ inválido." }, { status: 400 });
+  }
+
+  const supabase = getSupabaseAdmin();
+  if (!supabase) {
+    return NextResponse.json({ nota: null, configured: false });
+  }
+
+  const { data, error } = await supabase
+    .from("notas_pedido")
+    .select("payload")
+    .eq("id", id)
+    .eq("cooperativa_cnpj", cnpj)
+    .maybeSingle();
+
+  if (error) {
+    if (isNotasPedidoTableMissing(error)) {
+      return NextResponse.json({ nota: null, migrationPending: true });
+    }
+    return NextResponse.json({ error: "Erro ao buscar entrega." }, { status: 500 });
+  }
+
+  const nota = data?.payload as NotaPedido | undefined;
+  return NextResponse.json({ nota: nota?.id ? nota : null });
+}
+
 export async function PATCH(
   request: Request,
   context: { params: Promise<{ id: string }> }

@@ -14,6 +14,7 @@ import { OnboardingChecklist } from "@/components/cooperado/OnboardingChecklist"
 import { getCooperadoStats, getAdminStats } from "@/services/dashboardService";
 import { getTotalAPagarCooperado } from "@/services/notaPedidoService";
 import { syncNotasPedidoFromCloud, getCooperativaCnpj } from "@/services/notaPedidoCloudService";
+import { notaPertenceCooperativa } from "@/utils/fotoEntrega";
 import { getComunicadosCooperado } from "@/services/comunicadoService";
 import { cooperadoPrecisaCadastrarPix } from "@/utils/pix";
 import { formatCurrency, formatDate, formatMesReferencia, getCurrentMesReferencia } from "@/utils/format";
@@ -132,6 +133,10 @@ function AdminDashboard() {
     const cnpj = getCooperativaCnpj(data, coopId);
     if (!cnpj) return;
     void syncNotasPedidoFromCloud(cnpj);
+    const id = setInterval(() => {
+      void syncNotasPedidoFromCloud(cnpj);
+    }, 15000);
+    return () => clearInterval(id);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [coopId]);
 
@@ -140,7 +145,7 @@ function AdminDashboard() {
   const stats = getAdminStats(data);
   const coopNome = getUserCooperativaNome(user, data);
   const pendentes = data.notasPedido.filter(
-    (n) => n.status === "aguardando_conferencia" && (!coopId || n.cooperativaId === coopId)
+    (n) => n.status === "aguardando_conferencia" && notaPertenceCooperativa(data, n, coopId)
   ).length;
 
   return (
