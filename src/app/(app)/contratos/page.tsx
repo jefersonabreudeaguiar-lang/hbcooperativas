@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState, useRef, useEffect } from "react";
-import { Plus, ChevronDown, ChevronUp, Package, Building2, Trash2 } from "lucide-react";
+import { Plus, ChevronDown, ChevronUp, Package, Building2, Trash2, RefreshCw } from "lucide-react";
 import { useAppData } from "@/hooks/useAppData";
 import { usePermissions } from "@/hooks/usePermissions";
 import { getUserCooperativaId } from "@/utils/cooperativa";
@@ -11,7 +11,8 @@ import { Button } from "@/components/ui/Button";
 import { Input, Select, FormField } from "@/components/ui/Form";
 import { updateData, generateId, addAuditEntry, getData } from "@/services/dataStore";
 import { resolveCooperativaCnpj } from "@/services/notaPedidoCloudService";
-import { pushContratosToCloud, syncAllCooperativaFromCloud } from "@/services/cooperativaSyncCloudService";
+import { pushContratosToCloud, syncAllCooperativaFromCloud, publicarCatalogoContratos } from "@/services/cooperativaSyncCloudService";
+import { contarItensCatalogo } from "@/services/catalogoContratosService";
 import { formatCurrency } from "@/utils/format";
 import { UNIDADES_MEDIDA, type ProdutoUnidade } from "@/utils/unidades";
 import { sortPorOrdemLancamento } from "@/utils/produtos";
@@ -31,6 +32,7 @@ export default function ContratosPage() {
   const listasItensRef = useRef<Record<string, HTMLDivElement | null>>({});
   const nomeItemInputRef = useRef<Record<string, HTMLInputElement | null>>({});
   const itensCountRef = useRef(0);
+  const [publicando, setPublicando] = useState(false);
 
   const instituicoes = useMemo(() => {
     if (!data) return [];
@@ -74,19 +76,36 @@ export default function ContratosPage() {
     if (!data || !coopId || !user) return;
     void (async () => {
       const cnpj = await resolveCooperativaCnpj(data, coopId, user);
-      if (cnpj) await syncAllCooperativaFromCloud(cnpj);
+      if (!cnpj) return;
+      await syncAllCooperativaFromCloud(cnpj);
+      const d = getData();
+      if (contarItensCatalogo(d, coopId) > 0) {
+        await publicarCatalogoContratos(cnpj, d, coopId);
+      }
     })();
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [coopId, user?.id]);
 
-  const pushContratos = () => {
-    void (async () => {
-      if (!user || !coopId) return;
+  const pushContratos = async () => {
+    if (!user || !coopId) return;
+    const d = getData();
+    const cnpj = await resolveCooperativaCnpj(d, coopId, user);
+    if (cnpj) await pushContratosToCloud(cnpj, d, coopId);
+  };
+
+  const handlePublicarPrecos = async () => {
+    if (!user || !coopId) return;
+    setPublicando(true);
+    try {
       const d = getData();
       const cnpj = await resolveCooperativaCnpj(d, coopId, user);
-      if (cnpj) await pushContratosToCloud(cnpj, d, coopId);
-    })();
+      if (cnpj) await publicarCatalogoContratos(cnpj, d, coopId);
+    } finally {
+      setPublicando(false);
+    }
   };
+
+  const totalItensCatalogo = data && coopId ? contarItensCatalogo(data, coopId) : 0;
 
   const handleNovaInstituicao = () => {
     if (!nomeInst.trim() || !user || !coopId) return;
@@ -169,9 +188,17 @@ export default function ContratosPage() {
         subtitle="Cadastre as instituições e os itens com preço de cada contrato"
         action={
           check("instituicoes", "create") && (
-            <Button onClick={() => setNovaInstModal(true)}>
-              <Plus size={18} /> Nova instituição
-            </Button>
+            <div className="flex flex-wrap gap-2 justify-end">
+              {totalItensCatalogo > 0 && (
+                <Button variant="secondary" onClick={() => void handlePublicarPrecos()} disabled={publicando}>
+                  <RefreshCw size={16} className={publicando ? "animate-spin" : ""} />
+                  {publicando ? "Enviando…" : `Enviar preços (${totalItensCatalogo})`}
+                </Button>
+              )}
+              <Button onClick={() => setNovaInstModal(true)}>
+                <Plus size={18} /> Nova instituição
+              </Button>
+            </div>
           )
         }
       />

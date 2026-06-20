@@ -12,7 +12,10 @@ import { Button } from "@/components/ui/Button";
 import { AlertBanner } from "@/components/ui/AlertBanner";
 import { OnboardingChecklist } from "@/components/cooperado/OnboardingChecklist";
 import { getCooperadoStats, getAdminStats } from "@/services/dashboardService";
-import { getTotalAPagarCooperado } from "@/services/notaPedidoService";
+import {
+  cooperadoTemValorPendente,
+  getValorQuantoVouReceber,
+} from "@/services/cooperadoEntregasService";
 import { resolveCooperativaCnpj } from "@/services/notaPedidoCloudService";
 import { syncAllCooperativaFromCloud } from "@/services/cooperativaSyncCloudService";
 import { notaPertenceCooperado } from "@/services/cooperadoCloudService";
@@ -22,7 +25,7 @@ import { getComunicadosCooperado } from "@/services/comunicadoService";
 import { cooperadoPrecisaCadastrarPix } from "@/utils/pix";
 import { formatCurrency, formatDate, formatMesReferencia, getCurrentMesReferencia } from "@/utils/format";
 import { getUserCooperativaId, getUserCooperativaNome } from "@/utils/cooperativa";
-import { Camera, Wallet, ClipboardList, Megaphone, Pin, Users, AlertCircle, Tag } from "lucide-react";
+import { Camera, Wallet, ClipboardList, Megaphone, Pin, Users, AlertCircle, Tag, CheckCircle2, History } from "lucide-react";
 
 function CooperadoDashboard() {
   const { user } = useAuth();
@@ -54,7 +57,12 @@ function CooperadoDashboard() {
   const mes = getCurrentMesReferencia();
   const cooperado = data.cooperados.find((c) => c.id === cooperadoId);
   const coopNome = getUserCooperativaNome(user, data);
-  const valorMesFicha = getTotalAPagarCooperado(data, cooperadoId, mes);
+  const temPendencia = cooperadoTemValorPendente(data, cooperadoId, coopId);
+  const { mes: mesPendente, valor: valorPendente, aguardandoAssinatura } = getValorQuantoVouReceber(
+    data,
+    cooperadoId,
+    coopId
+  );
   const precisaPix = cooperado ? cooperadoPrecisaCadastrarPix(cooperado.chavePix, cooperado.pixValido) : false;
   const entregasMes = data.notasPedido.filter(
     (n) => notaPertenceCooperado(data, n, cooperadoId, coopId) && n.mesReferencia === mes
@@ -87,15 +95,36 @@ function CooperadoDashboard() {
         </AlertBanner>
       )}
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-        <div className="bg-gradient-to-br from-amber-500 to-amber-600 text-white rounded-2xl p-6 shadow-sm">
-          <Wallet size={28} className="mb-3 opacity-90" />
-          <p className="text-amber-100 text-sm">A receber este mês</p>
-          <p className="text-3xl font-bold mt-1">{formatCurrency(valorMesFicha)}</p>
-          <Link href="/ficha-corrida" className="inline-block mt-4 text-sm font-medium bg-white/20 hover:bg-white/30 px-4 py-2 rounded-lg">
-            Ver detalhes
-          </Link>
-        </div>
+      <div className={`grid grid-cols-1 gap-4 ${temPendencia ? "sm:grid-cols-2" : ""}`}>
+        {temPendencia ? (
+          <div className="bg-gradient-to-br from-amber-500 to-amber-600 text-white rounded-2xl p-6 shadow-sm">
+            <Wallet size={28} className="mb-3 opacity-90" />
+            <p className="text-amber-100 text-sm">
+              {aguardandoAssinatura ? "Confirme o recebimento" : "A receber"} · {formatMesReferencia(mesPendente)}
+            </p>
+            <p className="text-3xl font-bold mt-1">{formatCurrency(valorPendente)}</p>
+            <Link href="/ficha-corrida" className="inline-block mt-4 text-sm font-medium bg-white/20 hover:bg-white/30 px-4 py-2 rounded-lg">
+              {aguardandoAssinatura ? "Assinar recibo" : "Ver detalhes"}
+            </Link>
+          </div>
+        ) : (
+          <div className="bg-white border-2 border-emerald-200 rounded-2xl p-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+            <div className="flex items-start gap-3">
+              <CheckCircle2 size={28} className="text-emerald-600 shrink-0" />
+              <div>
+                <p className="font-semibold text-gray-900">Nenhum valor pendente</p>
+                <p className="text-sm text-gray-500 mt-1">
+                  Pagamentos confirmados ficam no histórico de Minhas entregas, mês a mês.
+                </p>
+              </div>
+            </div>
+            <Link href="/notas-pedido">
+              <Button variant="secondary">
+                <History size={18} /> Ver entregas
+              </Button>
+            </Link>
+          </div>
+        )}
 
         <div className="bg-white border-2 border-green-200 rounded-2xl p-6 flex flex-col justify-between">
           <div>

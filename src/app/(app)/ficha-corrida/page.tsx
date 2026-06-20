@@ -1,8 +1,9 @@
 "use client";
 
+import Link from "next/link";
 import { useMemo, useState, useEffect, useCallback } from "react";
 import { useSearchParams } from "next/navigation";
-import { QrCode, XCircle, Wallet, CheckCircle2, FileDown, PenLine, BookOpen, CreditCard } from "lucide-react";
+import { QrCode, XCircle, Wallet, CheckCircle2, FileDown, PenLine, BookOpen, CreditCard, History } from "lucide-react";
 import { useAppData } from "@/hooks/useAppData";
 import { usePermissions } from "@/hooks/usePermissions";
 import { getUserCooperativaId } from "@/utils/cooperativa";
@@ -25,6 +26,11 @@ import {
   pushNotasPagasToCloud,
 } from "@/services/cooperativaSyncCloudService";
 import { pushCooperadoToCloud } from "@/services/cooperadoCloudService";
+import {
+  cooperadoMesQuitado,
+  cooperadoTemValorPendente,
+  getMesQuantoVouReceber,
+} from "@/services/cooperadoEntregasService";
 import { PageHeader, FilterBar, Modal } from "@/components/ui/Table";
 import { Select, FormField, Input, Textarea } from "@/components/ui/Form";
 import { Card } from "@/components/ui/Card";
@@ -126,6 +132,11 @@ export default function FichaCorridaPage() {
   const [descontoAvulsoMotivo, setDescontoAvulsoMotivo] = useState("");
 
   const coopId = user && data ? getUserCooperativaId(user, data) : undefined;
+
+  useEffect(() => {
+    if (!isCooperado || !cooperadoId || !data) return;
+    setMesFilter(getMesQuantoVouReceber(data, cooperadoId, coopId));
+  }, [isCooperado, cooperadoId, data, coopId]);
 
   useEffect(() => {
     if (!data || !user) return;
@@ -237,6 +248,11 @@ export default function FichaCorridaPage() {
         cotaIngressoPaga: novo,
       }),
     }));
+    void (async () => {
+      const d = getData();
+      const cnpj = await resolveCooperativaCnpj(d, coopId, user);
+      if (cnpj) await pushOperacionalToCloud(cnpj, d, coopId);
+    })();
   };
 
   const resumoItensMes = useMemo(() => {
@@ -337,7 +353,18 @@ export default function FichaCorridaPage() {
     setReciboSucessoOpen(true);
   };
 
-  const reciboAtual = pagamentoConfirmado ?? pagamentoConfirmadoMes;
+  const reciboAtual =
+    isCooperado && cooperadoId && data && cooperadoMesQuitado(data, cooperadoId, mesFilter)
+      ? undefined
+      : pagamentoConfirmado ?? pagamentoConfirmadoMes;
+
+  const mesQuitadoCooperado =
+    isCooperado && cooperadoId && data ? cooperadoMesQuitado(data, cooperadoId, mesFilter) : false;
+  const exibirQuantoVouReceber =
+    !isCooperado ||
+    (!!data &&
+      !!cooperadoId &&
+      (!!pagamentoAguardando || cooperadoTemValorPendente(data, cooperadoId, coopId)));
 
   const baixarReciboAtual = () => {
     const pg = reciboAtual;
@@ -353,10 +380,10 @@ export default function FichaCorridaPage() {
   return (
     <div>
       <PageHeader
-        title={isCooperado ? "Minha ficha corrida" : "Ficha corrida dos cooperados"}
+        title={isCooperado ? "Quanto vou receber" : "Ficha corrida dos cooperados"}
         subtitle={
           isCooperado
-            ? "Resumo de todas as entregas do mês, item a item"
+            ? "Valores do mês em aberto — após o pagamento, consulte o histórico em Minhas entregas"
             : "Total consolidado das entregas por cooperado; em Pagar fica só o valor e o PIX"
         }
       />
@@ -383,12 +410,50 @@ export default function FichaCorridaPage() {
             </Select>
           </FormField>
         )}
-        <FormField label="Mês">
-          <Select value={mesFilter} onChange={(e) => setMesFilter(e.target.value)} className="min-w-[180px]">
-            {meses.map((m) => <option key={m} value={m}>{formatMesReferencia(m)}</option>)}
-          </Select>
-        </FormField>
+        {isCooperado ? (
+          <div className="flex items-center gap-2 py-1">
+            <span className="text-sm text-gray-600">Mês em aberto:</span>
+            <span className="text-sm font-bold text-green-800 bg-green-100 px-3 py-1.5 rounded-full">
+              {formatMesReferencia(mesFilter)}
+            </span>
+          </div>
+        ) : (
+          <FormField label="Mês">
+            <Select value={mesFilter} onChange={(e) => setMesFilter(e.target.value)} className="min-w-[180px]">
+              {meses.map((m) => <option key={m} value={m}>{formatMesReferencia(m)}</option>)}
+            </Select>
+          </FormField>
+        )}
       </FilterBar>
+
+      {isCooperado && mesQuitadoCooperado && !pagamentoAguardando && (
+        <div className="text-center py-14 px-6 bg-white rounded-2xl border border-emerald-200 mb-6">
+          <CheckCircle2 size={52} className="mx-auto text-emerald-600 mb-4" />
+          <h2 className="text-xl font-bold text-gray-900">Pagamento confirmado</h2>
+          <p className="text-gray-600 mt-2 max-w-md mx-auto">
+            O mês de {formatMesReferencia(mesFilter)} já foi quitado. Fotos, totais e recibo ficam em{" "}
+            <strong>Minhas entregas</strong>, organizados por mês.
+          </p>
+          <Link href="/notas-pedido" className="inline-block mt-6">
+            <Button size="lg">
+              <History size={18} /> Ver minhas entregas
+            </Button>
+          </Link>
+        </div>
+      )}
+
+      {isCooperado && !exibirQuantoVouReceber && !mesQuitadoCooperado && (
+        <div className="text-center py-14 px-6 bg-white rounded-2xl border border-dashed border-gray-300 mb-6">
+          <Wallet size={48} className="mx-auto text-gray-300 mb-4" />
+          <h2 className="text-lg font-semibold text-gray-800">Nada a receber agora</h2>
+          <p className="text-sm text-gray-500 mt-2">
+            Quando a cooperativa aprovar suas entregas, os valores aparecem aqui automaticamente.
+          </p>
+          <Link href="/notas-pedido" className="inline-block mt-4">
+            <Button variant="secondary">Ver minhas entregas</Button>
+          </Link>
+        </div>
+      )}
 
       {!isCooperado && (
         <div className="flex gap-2 mb-6 border-b border-gray-200">
@@ -409,9 +474,9 @@ export default function FichaCorridaPage() {
         </div>
       )}
 
-      {cooperadoSelecionadoId && (isCooperado || aba === "ficha") && (
+      {cooperadoSelecionadoId && (isCooperado || aba === "ficha") && exibirQuantoVouReceber && (
         <>
-          <Card title={isCooperado ? "Meus dados do mês" : `Ficha — ${nomeCooperado}`} className="mb-6">
+          <Card title={isCooperado ? `Resumo · ${formatMesReferencia(mesFilter)}` : `Ficha — ${nomeCooperado}`} className="mb-6">
             <div className="flex flex-wrap items-center gap-3 mb-4">
               {statusCota === "paga" ? (
                 <span className="inline-flex items-center gap-1 text-sm font-medium text-green-700 bg-green-50 px-3 py-1 rounded-full">
@@ -499,7 +564,7 @@ export default function FichaCorridaPage() {
         </>
       )}
 
-      {cooperadoSelecionadoId && mostrarPagar && (
+      {cooperadoSelecionadoId && mostrarPagar && exibirQuantoVouReceber && (
         <>
           <div className="bg-gradient-to-br from-green-700 to-green-800 text-white rounded-2xl p-6 mb-6 shadow-sm">
             <p className="text-green-100 text-sm">{isCooperado ? "Total a receber" : "Valor a pagar"} · {formatMesReferencia(mesFilter)}</p>

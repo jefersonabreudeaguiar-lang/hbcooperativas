@@ -33,11 +33,13 @@ import {
   resolveCooperativaCnpj,
 } from "@/services/notaPedidoCloudService";
 import { listCooperadosDaCooperativa, pushCooperadoToCloud, resolverCooperadoIdCanonico, getCooperadoNomeResolvido } from "@/services/cooperadoCloudService";
-import { pushOperacionalToCloud, pushContratosToCloud, syncAllCooperativaFromCloud } from "@/services/cooperativaSyncCloudService";
+import { pushOperacionalToCloud, syncAllCooperativaFromCloud } from "@/services/cooperativaSyncCloudService";
+import { getProdutosContrato } from "@/services/catalogoContratosService";
+import { listarResumosMensaisEntregas } from "@/services/cooperadoEntregasService";
+import { CooperadoEntregasPorMes } from "@/components/cooperado/CooperadoEntregasPorMes";
 import { getContratoLabel, getContratosEntrega, resolverContratoEntrega } from "@/utils/contratosEntrega";
 import { cn, formatCurrency, formatDate, formatMesReferencia, getCurrentMesReferencia } from "@/utils/format";
 import { labelUnidade } from "@/utils/unidades";
-import { sortPorOrdemLancamento } from "@/utils/produtos";
 import {
   getInstituicaoPadraoId,
   setInstituicaoPadraoId,
@@ -77,11 +79,10 @@ function getEscolaNotaLabel(
 function loadItensFromInstituicao(
   data: NonNullable<ReturnType<typeof useAppData>>,
   instituicaoId: string,
+  cooperativaId?: string,
   existing?: NotaPedidoItem[]
 ): ItemForm[] {
-  return sortPorOrdemLancamento(
-    data.produtosInstituicao.filter((p) => p.instituicaoId === instituicaoId && p.ativo)
-  ).map((p) => {
+  return getProdutosContrato(data, instituicaoId, cooperativaId).map((p) => {
       const prev = existing?.find((i) => i.produtoInstituicaoId === p.id);
       return {
         produtoInstituicaoId: p.id,
@@ -149,7 +150,6 @@ export default function NotasPedidoContent() {
   const [ultimaNotaEnviadaIds, setUltimaNotaEnviadaIds] = useState<string[]>([]);
   const [excluirNotaTarget, setExcluirNotaTarget] = useState<NotaPedido | null>(null);
   const [excluindo, setExcluindo] = useState(false);
-  const [mesFilterCooperado, setMesFilterCooperado] = useState("");
 
   const coopId = user && data ? getUserCooperativaId(user, data) : undefined;
   const ANEXAR_DRAFT_KEY = coopId ? `hb_anexar_draft_${coopId}` : "";
@@ -247,31 +247,22 @@ export default function NotasPedidoContent() {
       .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
   }, [data, coopId, isCooperado, cooperadoId, filtroCooperadoId, statusFilter, abaConferenciaKey]);
 
-  const mesesComEntregas = useMemo(() => {
-    if (!isCooperado) return [];
-    const set = new Set(notas.map((n) => n.mesReferencia));
-    set.add(getCurrentMesReferencia());
-    return [...set].sort().reverse();
-  }, [notas, isCooperado]);
+  const resumosMensaisCooperado = useMemo(() => {
+    if (!isCooperado || !data || !cooperadoId) return [];
+    const base = listarResumosMensaisEntregas(data, cooperadoId, coopId);
+    if (!statusFilter) return base;
+    return base
+      .map((r) => ({
+        ...r,
+        notas: r.notas.filter((n) => n.status === statusFilter),
+      }))
+      .filter((r) => r.notas.length > 0);
+  }, [data, cooperadoId, coopId, isCooperado, statusFilter]);
 
-  const notasCooperadoFiltradas = useMemo(() => {
-    if (!isCooperado || !mesFilterCooperado) return notas;
-    return notas.filter((n) => n.mesReferencia === mesFilterCooperado);
-  }, [notas, isCooperado, mesFilterCooperado]);
-
-  const notasPorMes = useMemo(() => {
-    if (!isCooperado) return [];
-    const map = new Map<string, NotaPedido[]>();
-    for (const n of notasCooperadoFiltradas) {
-      const mes = n.mesReferencia || getCurrentMesReferencia();
-      const list = map.get(mes) ?? [];
-      list.push(n);
-      map.set(mes, list);
-    }
-    return [...map.entries()]
-      .sort((a, b) => b[0].localeCompare(a[0]))
-      .map(([mes, items]) => ({ mes, items }));
-  }, [notasCooperadoFiltradas, isCooperado]);
+  const nomeCooperadoExibicao = useMemo(() => {
+    if (!data || !cooperadoId) return user?.name ?? "Cooperado";
+    return data.cooperados.find((c) => c.id === cooperadoId)?.nomeCompleto ?? user?.name ?? "Cooperado";
+  }, [data, cooperadoId, user?.name]);
 
 
   const pendentesTodas = useMemo(() => {
@@ -370,7 +361,7 @@ export default function NotasPedidoContent() {
     if (data && instId) {
       const inst = data.instituicoes.find((i) => i.id === instId);
       setConferenciaLocal(inst?.localEntrega ?? inst?.endereco ?? "");
-      setConferenciaItens(loadItensFromInstituicao(data, instId));
+      setConferenciaItens(loadItensFromInstituicao(data, instId, coopId));
     }
   };
 
@@ -386,14 +377,7 @@ export default function NotasPedidoContent() {
         ? data.notasPedido.find((n) => n.id === reenviarNotaId)?.instituicaoId
         : contratoInstId || undefined;
     const resolved = resolverContratoEntrega(data, coopId, preferId);
-    if (resolved.criou) {
-      updateData(() => resolved.data);
-      void (async () => {
-        if (!user) return;
-        const cnpj = await resolveCooperativaCnpj(resolved.data, coopId, user);
-        if (cnpj) await pushContratosToCloud(cnpj, resolved.data, coopId);
-      })();
-    }
+    if (resolved.criou) updateData(() => resolved.data);
     if (resolved.instituicaoId && resolved.instituicaoId !== contratoInstId) {
       setContratoInstId(resolved.instituicaoId);
       setInstituicaoPadraoId(coopId, resolved.instituicaoId);
@@ -408,7 +392,6 @@ export default function NotasPedidoContent() {
       if (!cnpj) return;
       await syncAllCooperativaFromCloud(cnpj);
     })();
-    if (isCooperado) return;
     const id = setInterval(() => {
       void (async () => {
         const cnpj = await resolveCooperativaCnpj(data, coopId, user);
@@ -431,8 +414,8 @@ export default function NotasPedidoContent() {
       setAvulsoItens([]);
       return;
     }
-    setAvulsoItens(loadItensFromInstituicao(data, avulsoInstId));
-  }, [avulsoInstId, data]);
+    setAvulsoItens(loadItensFromInstituicao(data, avulsoInstId, coopId));
+  }, [avulsoInstId, data, coopId]);
 
   const avulsoTotais = useMemo(() => {
     if (!data) return { liquido: 0 };
@@ -466,15 +449,7 @@ export default function NotasPedidoContent() {
 
     if (data && coopId) {
       const resolved = resolverContratoEntrega(data, coopId, notaRejeitada?.instituicaoId);
-      if (resolved.criou) {
-        updateData(() => resolved.data);
-        if (user) {
-          void (async () => {
-            const cnpj = await resolveCooperativaCnpj(resolved.data, coopId, user);
-            if (cnpj) await pushContratosToCloud(cnpj, resolved.data, coopId);
-          })();
-        }
-      }
+      if (resolved.criou) updateData(() => resolved.data);
       setContratoInstId(resolved.instituicaoId);
       if (resolved.instituicaoId) setInstituicaoPadraoId(coopId, resolved.instituicaoId);
     }
@@ -734,10 +709,6 @@ export default function NotasPedidoContent() {
       return;
     }
 
-    if (resolved.criou) {
-      await pushContratosToCloud(cnpj, workingData, coopId);
-    }
-
     const cooperadoRecord = workingData.cooperados.find((c) => c.id === cid);
     if (cooperadoRecord) {
       void pushCooperadoToCloud(cnpj, { ...cooperadoRecord, updatedAt: now }, user.email);
@@ -906,7 +877,7 @@ export default function NotasPedidoContent() {
     if (data && instId) {
       const inst = data.instituicoes.find((i) => i.id === instId);
       setConferenciaLocal(inst?.localEntrega ?? inst?.endereco ?? "");
-      setConferenciaItens(loadItensFromInstituicao(data, instId, nota.itens));
+      setConferenciaItens(loadItensFromInstituicao(data, instId, coopId, nota.itens));
     } else {
       setConferenciaItens([]);
       setConferenciaLocal("");
@@ -1039,8 +1010,13 @@ export default function NotasPedidoContent() {
     });
 
     if (notaAtualizada && coopId) {
-      const cnpj = getCooperativaCnpj(data, coopId);
-      if (cnpj) void patchNotaPedidoInCloud(cnpj, notaAtualizada);
+      void (async () => {
+        const d = getData();
+        const cnpj = await resolveCooperativaCnpj(d, coopId, user);
+        if (!cnpj) return;
+        await patchNotaPedidoInCloud(cnpj, notaAtualizada!);
+        await pushOperacionalToCloud(cnpj, d, coopId);
+      })();
     }
 
     const notaId = selectedNota.id;
@@ -1250,7 +1226,11 @@ export default function NotasPedidoContent() {
     <div className="relative pb-20 sm:pb-0">
       <PageHeader
         title={isCooperado ? "Minhas entregas" : "Conferir entregas"}
-        subtitle={isCooperado ? "Envie uma foto para cada entrega na escola" : "Analise fotos, lance produtos ou registre entregas avulsas sem nota"}
+        subtitle={
+          isCooperado
+            ? "Histórico por mês com fotos e totais recebidos"
+            : "Analise fotos, lance produtos ou registre entregas avulsas sem nota"
+        }
         action={isCooperado ? (
           <div className="hidden sm:block">
             <Button size="lg" onClick={() => openAnexar()}>
@@ -1379,23 +1359,20 @@ export default function NotasPedidoContent() {
 
       {isCooperado && (
         <p className="text-sm text-gray-600 mb-4">
-          Suas entregas estão organizadas por mês. Tire uma foto por pedido — imagens repetidas são rejeitadas.{" "}
-          <Link href="/ficha-corrida" className="text-green-700 font-medium">Quanto vou receber</Link>.
+          Cada mês mostra o resumo financeiro e as fotos das entregas. Valores pendentes ficam em{" "}
+          <Link href="/ficha-corrida" className="text-green-700 font-semibold">Quanto vou receber</Link>.
         </p>
       )}
 
       <FilterBar>
         {isCooperado && (
-          <FormField label="Mês">
-            <Select
-              value={mesFilterCooperado}
-              onChange={(e) => setMesFilterCooperado(e.target.value)}
-              className="min-w-[200px]"
-            >
-              <option value="">Todos os meses</option>
-              {mesesComEntregas.map((m) => (
-                <option key={m} value={m}>{formatMesReferencia(m)}</option>
-              ))}
+          <FormField label="Filtrar fotos">
+            <Select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className="min-w-[200px]">
+              <option value="">Todas as entregas</option>
+              <option value="aguardando_conferencia">Em análise</option>
+              <option value="rejeitada">Precisa corrigir</option>
+              <option value="conferida">Aprovadas</option>
+              <option value="pago">Pagas</option>
             </Select>
           </FormField>
         )}
@@ -1409,6 +1386,7 @@ export default function NotasPedidoContent() {
             </Select>
           </FormField>
         )}
+        {!isCooperado && (
         <FormField label="Filtrar">
           <Select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
             <option value="">Todas</option>
@@ -1418,39 +1396,26 @@ export default function NotasPedidoContent() {
             <option value="pago">Pagas</option>
           </Select>
         </FormField>
+        )}
       </FilterBar>
 
       {isCooperado ? (
-        notasCooperadoFiltradas.length === 0 ? (
+        statusFilter && resumosMensaisCooperado.length === 0 ? (
           <div className="text-center py-12 text-gray-500 bg-white rounded-2xl border">
             <Camera size={40} className="mx-auto mb-3 text-gray-300" />
-            <p className="font-medium">
-              {mesFilterCooperado
-                ? `Nenhuma entrega em ${formatMesReferencia(mesFilterCooperado)}`
-                : "Nenhuma entrega ainda"}
-            </p>
-            <p className="text-sm mt-1">Toque em Enviar foto para registrar uma entrega.</p>
+            <p className="font-medium">Nenhuma entrega com este filtro</p>
+            <p className="text-sm mt-1">Toque em &quot;Todas as entregas&quot; para ver o histórico completo.</p>
           </div>
         ) : (
-          <div className="space-y-8">
-            {notasPorMes.map(({ mes, items }) => (
-              <section key={mes}>
-                <div className="flex items-center justify-between gap-2 mb-3 sticky top-16 lg:top-0 z-10 bg-gray-50/95 backdrop-blur py-2 -mx-1 px-1">
-                  <h2 className="text-sm font-bold text-green-800">
-                    {formatMesReferencia(mes)}
-                  </h2>
-                  <span className="text-xs font-medium text-green-700 bg-green-100 px-2.5 py-1 rounded-full">
-                    {items.length} entrega{items.length !== 1 ? "s" : ""}
-                  </span>
-                </div>
-                <div className="space-y-3">
-                  {items.map((n) => (
-                    <div key={n.id}>{renderMobileCard(n)}</div>
-                  ))}
-                </div>
-              </section>
-            ))}
-          </div>
+          <CooperadoEntregasPorMes
+            resumos={resumosMensaisCooperado}
+            nomeCooperado={nomeCooperadoExibicao}
+            ultimaNotaEnviadaIds={ultimaNotaEnviadaIds}
+            onVerNota={openView}
+            onReenviar={openAnexar}
+            onExcluir={(n) => setExcluirNotaTarget(n)}
+            getEscolaLabel={(n) => getEscolaNotaLabel(n, data.instituicoes)}
+          />
         )
       ) : (
       <DataTable
@@ -1955,7 +1920,21 @@ export default function NotasPedidoContent() {
           <div className="space-y-4">
             <NotaStatusBadge status={selectedNota.status} />
             {isCooperado && (selectedNota.status === "conferida" || selectedNota.status === "pago") ? (
-              <p className="text-sm text-gray-600">Entrega aprovada.</p>
+              <div className="space-y-3">
+                <p className="text-sm text-gray-600">
+                  Entrega aprovada · {formatMesReferencia(selectedNota.mesReferencia)}
+                </p>
+                <p className="text-sm"><strong>Escola:</strong> {getEscolaNotaLabel(selectedNota, data.instituicoes)}</p>
+                <p className="text-sm"><strong>Data:</strong> {formatDate(selectedNota.dataEntrega)}</p>
+                {selectedNota.valorLiquido > 0 && (
+                  <p className="text-2xl font-bold text-green-700">{formatCurrency(selectedNota.valorLiquido)}</p>
+                )}
+                {selectedNota.status === "pago" && (
+                  <p className="text-sm text-emerald-700 font-medium inline-flex items-center gap-1">
+                    <CheckCircle size={16} /> Pagamento confirmado
+                  </p>
+                )}
+              </div>
             ) : (
               <>
             {selectedNota.lancamentoDireto && (

@@ -14,14 +14,12 @@ import { sortPorOrdemLancamento } from "@/utils/produtos";
 import { cn } from "@/utils/format";
 import { resolveCooperativaCnpj } from "@/services/notaPedidoCloudService";
 import { syncAllCooperativaFromCloud } from "@/services/cooperativaSyncCloudService";
+import {
+  getInstituicoesCatalogo,
+  getTodosProdutosCatalogo,
+  contarItensCatalogo,
+} from "@/services/catalogoContratosService";
 import { getData } from "@/services/dataStore";
-
-function instituicaoTemProdutos(
-  instId: string,
-  produtos: { instituicaoId: string; ativo: boolean }[]
-): boolean {
-  return produtos.some((p) => p.instituicaoId === instId && p.ativo);
-}
 
 export default function PrecosPage() {
   const data = useAppData();
@@ -54,16 +52,13 @@ export default function PrecosPage() {
 
   const instituicoes = useMemo(() => {
     if (!data || !coopId) return [];
-    return data.instituicoes.filter((i) => i.cooperativaId === coopId);
+    return getInstituicoesCatalogo(data, coopId);
   }, [data, coopId]);
 
   const produtosDaCoop = useMemo(() => {
     if (!data || !coopId) return [];
-    const instIds = new Set(instituicoes.map((i) => i.id));
-    return data.produtosInstituicao.filter(
-      (p) => p.ativo && (instIds.has(p.instituicaoId) || p.cooperativaId === coopId)
-    );
-  }, [data, coopId, instituicoes]);
+    return getTodosProdutosCatalogo(data, coopId);
+  }, [data, coopId]);
 
   const instMap = useMemo(() => new Map(instituicoes.map((i) => [i.id, i.nome])), [instituicoes]);
 
@@ -80,7 +75,10 @@ export default function PrecosPage() {
 
   if (!data) return null;
 
-  const instComItens = instituicoes.filter((i) => instituicaoTemProdutos(i.id, produtosDaCoop));
+  const instComItens = instituicoes.filter((i) =>
+    produtosDaCoop.some((p) => p.instituicaoId === i.id)
+  );
+  const totalItens = contarItensCatalogo(data, coopId);
 
   return (
     <div className="max-w-2xl mx-auto">
@@ -116,7 +114,7 @@ export default function PrecosPage() {
                     : "bg-white text-gray-700 border-gray-200 hover:border-green-300"
                 )}
               >
-                Todos ({produtosDaCoop.length})
+                Todos ({totalItens})
               </button>
               {instituicoes.map((inst) => {
                 const qtd = produtosDaCoop.filter((p) => p.instituicaoId === inst.id).length;
