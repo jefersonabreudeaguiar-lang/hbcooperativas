@@ -43,7 +43,7 @@ import {
   resolverInstituicaoConferencia,
 } from "@/utils/instituicaoPreferida";
 import { getCooperadoNome } from "@/utils/calculations";
-import { isFotoDuplicada, compressFotoFile, makeFotoThumbnail, getFotoExibicaoNota, notaPertenceCooperativa, compactarFotosNoArmazenamento } from "@/utils/fotoEntrega";
+import { isFotoDuplicada, compressFotoFile, makeFotoThumbnail, getFotoExibicaoNota, notaPertenceCooperativa, compactarFotosNoArmazenamento, agruparPendentesPorCooperado, getChaveGrupoConferencia, notaPertenceGrupoConferencia } from "@/utils/fotoEntrega";
 import type { NotaPedido, NotaPedidoItem, Cooperado, AppData } from "@/types";
 
 const NOVO_AVULSO = "__novo__";
@@ -142,7 +142,7 @@ export default function NotasPedidoContent() {
   const [avulsoErrors, setAvulsoErrors] = useState<{ cooperado?: string; instituicao?: string; assinatura?: string; itens?: string }>({});
 
   const [filtroCooperadoId, setFiltroCooperadoId] = useState("");
-  const [abaConferenciaCoopId, setAbaConferenciaCoopId] = useState("");
+  const [abaConferenciaKey, setAbaConferenciaKey] = useState("");
   const [contratoInstId, setContratoInstId] = useState("");
   const [excluirNotaTarget, setExcluirNotaTarget] = useState<NotaPedido | null>(null);
   const [excluindo, setExcluindo] = useState(false);
@@ -158,7 +158,7 @@ export default function NotasPedidoContent() {
     const cid = searchParams.get("cooperado");
     if (cid && !isCooperado) {
       setFiltroCooperadoId(cid);
-      setAbaConferenciaCoopId(cid);
+      setAbaConferenciaKey(`id:${cid}`);
     }
   }, [searchParams, isCooperado]);
 
@@ -175,12 +175,21 @@ export default function NotasPedidoContent() {
       .filter((n) => {
         if (coopId && !notaPertenceCooperativa(data, n, coopId)) return false;
         if (isCooperado && cooperadoId && n.cooperadoId !== cooperadoId) return false;
-        if (!isCooperado && filtroCooperadoId && n.cooperadoId !== filtroCooperadoId) return false;
+        if (
+          !isCooperado &&
+          abaConferenciaKey &&
+          statusFilter === "aguardando_conferencia" &&
+          !notaPertenceGrupoConferencia(n, data, abaConferenciaKey)
+        ) {
+          return false;
+        } else if (!isCooperado && filtroCooperadoId && n.cooperadoId !== filtroCooperadoId) {
+          return false;
+        }
         if (statusFilter && n.status !== statusFilter) return false;
         return true;
       })
       .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-  }, [data, coopId, isCooperado, cooperadoId, filtroCooperadoId, statusFilter]);
+  }, [data, coopId, isCooperado, cooperadoId, filtroCooperadoId, statusFilter, abaConferenciaKey]);
 
 
   const pendentesTodas = useMemo(() => {
@@ -195,46 +204,41 @@ export default function NotasPedidoContent() {
 
   const pendentesPorCooperado = useMemo(() => {
     if (!data) return [];
-    const grupos = new Map<string, NotaPedido[]>();
-    for (const nota of pendentesTodas) {
-      const lista = grupos.get(nota.cooperadoId) ?? [];
-      lista.push(nota);
-      grupos.set(nota.cooperadoId, lista);
-    }
-    return [...grupos.entries()]
-      .map(([cooperadoId, lista]) => ({
-        cooperadoId,
-        nome: getCooperadoNome(data.cooperados, cooperadoId),
-        notas: lista,
-      }))
-      .sort((a, b) => a.nome.localeCompare(b.nome, "pt-BR"));
-  }, [data, pendentesTodas]);
+    return agruparPendentesPorCooperado(data, pendentesTodas, coopId);
+  }, [data, pendentesTodas, coopId]);
 
   const pendentesAbaAtiva = useMemo(() => {
-    if (!abaConferenciaCoopId) return [];
-    return pendentesPorCooperado.find((g) => g.cooperadoId === abaConferenciaCoopId)?.notas ?? [];
-  }, [pendentesPorCooperado, abaConferenciaCoopId]);
+    if (!abaConferenciaKey) return [];
+    return pendentesPorCooperado.find((g) => g.chave === abaConferenciaKey)?.notas ?? [];
+  }, [pendentesPorCooperado, abaConferenciaKey]);
+
+  const grupoAbaAtiva = useMemo(
+    () => pendentesPorCooperado.find((g) => g.chave === abaConferenciaKey),
+    [pendentesPorCooperado, abaConferenciaKey]
+  );
 
   useEffect(() => {
     if (isCooperado || pendentesPorCooperado.length === 0) return;
-    const abaValida = pendentesPorCooperado.some((g) => g.cooperadoId === abaConferenciaCoopId);
+    const abaValida = pendentesPorCooperado.some((g) => g.chave === abaConferenciaKey);
     if (!abaValida) {
-      const proxima = pendentesPorCooperado[0].cooperadoId;
-      setAbaConferenciaCoopId(proxima);
-      setFiltroCooperadoId(proxima);
+      const proxima = pendentesPorCooperado[0];
+      setAbaConferenciaKey(proxima.chave);
+      setFiltroCooperadoId(proxima.cooperadoId);
     }
-  }, [pendentesPorCooperado, abaConferenciaCoopId, isCooperado]);
+  }, [pendentesPorCooperado, abaConferenciaKey, isCooperado]);
 
   useEffect(() => {
     if (isCooperado || !filtroCooperadoId) return;
-    if (pendentesPorCooperado.some((g) => g.cooperadoId === filtroCooperadoId)) {
-      setAbaConferenciaCoopId(filtroCooperadoId);
-    }
+    const grupo = pendentesPorCooperado.find((g) => g.cooperadoId === filtroCooperadoId);
+    if (grupo) setAbaConferenciaKey(grupo.chave);
   }, [filtroCooperadoId, pendentesPorCooperado, isCooperado]);
 
-  const selecionarAbaConferencia = (cooperadoId: string) => {
-    setAbaConferenciaCoopId(cooperadoId);
-    setFiltroCooperadoId(cooperadoId);
+  const selecionarAbaConferencia = (grupo: (typeof pendentesPorCooperado)[number]) => {
+    setAbaConferenciaKey(grupo.chave);
+    setFiltroCooperadoId(grupo.cooperadoId);
+    if (statusFilter !== "aguardando_conferencia") {
+      setStatusFilter("aguardando_conferencia");
+    }
   };
 
   const instituicoes = useMemo(() => {
@@ -737,9 +741,11 @@ export default function NotasPedidoContent() {
     setAlterarInstConferencia(false);
     setConferenciaAssinatura(nota.assinaturaRecebedor ?? "");
     setConferirErrors({});
-    if (!isCooperado) {
-      setAbaConferenciaCoopId(nota.cooperadoId);
-      setFiltroCooperadoId(nota.cooperadoId);
+    if (!isCooperado && data) {
+      const chave = getChaveGrupoConferencia(nota, data);
+      const grupo = agruparPendentesPorCooperado(data, [nota], coopId)[0];
+      setAbaConferenciaKey(chave);
+      if (grupo?.cooperadoId) setFiltroCooperadoId(grupo.cooperadoId);
     }
     setConferirModal(true);
   };
@@ -747,7 +753,7 @@ export default function NotasPedidoContent() {
   const listarPendentesConferencia = (
     d: AppData,
     coopIdLocal: string,
-    cooperadoFiltro?: string,
+    chaveGrupo?: string,
     excludeId?: string
   ) =>
     d.notasPedido
@@ -755,7 +761,7 @@ export default function NotasPedidoContent() {
         if (n.status !== "aguardando_conferencia") return false;
         if (excludeId && n.id === excludeId) return false;
         if (!notaPertenceCooperativa(d, n, coopIdLocal)) return false;
-        if (cooperadoFiltro && n.cooperadoId !== cooperadoFiltro) return false;
+        if (chaveGrupo && getChaveGrupoConferencia(n, d) !== chaveGrupo) return false;
         return true;
       })
       .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
@@ -763,12 +769,12 @@ export default function NotasPedidoContent() {
   const contarPendentesConferencia = (d: AppData, coopIdLocal: string) =>
     listarPendentesConferencia(d, coopIdLocal).length;
 
-  const continuarFilaConferencia = (cooperadoId: string, notaConcluidaId: string) => {
+  const continuarFilaConferencia = (chaveGrupo: string, notaConcluidaId: string) => {
     if (!coopId) return;
     const d = getData();
     if (!d) return;
 
-    const mesmaAba = listarPendentesConferencia(d, coopId, cooperadoId, notaConcluidaId);
+    const mesmaAba = listarPendentesConferencia(d, coopId, chaveGrupo, notaConcluidaId);
     if (mesmaAba.length > 0) {
       void openConferir(mesmaAba[0]);
       return;
@@ -776,7 +782,8 @@ export default function NotasPedidoContent() {
 
     const outras = listarPendentesConferencia(d, coopId, undefined, notaConcluidaId);
     if (outras.length > 0) {
-      selecionarAbaConferencia(outras[0].cooperadoId);
+      const proximoGrupo = agruparPendentesPorCooperado(d, outras, coopId)[0];
+      if (proximoGrupo) selecionarAbaConferencia(proximoGrupo);
       void openConferir(outras[0]);
     }
   };
@@ -846,7 +853,7 @@ export default function NotasPedidoContent() {
     }
 
     const notaId = selectedNota.id;
-    const coopAtual = selectedNota.cooperadoId;
+    const chaveAtual = getChaveGrupoConferencia(selectedNota, data);
     const coopNome = getCooperadoNome(data.cooperados, conferenciaCooperadoId);
     const pendentesRestantes = coopId ? contarPendentesConferencia(getData(), coopId) : 0;
 
@@ -858,11 +865,11 @@ export default function NotasPedidoContent() {
         : `Nota aprovada! ${formatCurrency(conferenciaTotais.liquido)} na ficha de ${coopNome.split(" ")[0]}. Fila concluída!`
     );
     setTimeout(() => setLancadoMsg(""), 6000);
-    continuarFilaConferencia(coopAtual, notaId);
+    continuarFilaConferencia(chaveAtual, notaId);
   };
 
   const handleRejeitarNota = () => {
-    if (!user || !selectedNota || !motivoRejeicao.trim()) return;
+    if (!user || !data || !selectedNota || !motivoRejeicao.trim()) return;
     const now = new Date().toISOString();
     let notaAtualizada: NotaPedido | null = null;
 
@@ -887,7 +894,7 @@ export default function NotasPedidoContent() {
     }
 
     const notaId = selectedNota.id;
-    const coopAtual = selectedNota.cooperadoId;
+    const chaveAtual = getChaveGrupoConferencia(selectedNota, data);
     const pendentesRestantes = coopId ? contarPendentesConferencia(getData(), coopId) : 0;
 
     setRejectModal(false);
@@ -900,7 +907,7 @@ export default function NotasPedidoContent() {
         : "Correção enviada ao cooperado. Fila concluída!"
     );
     setTimeout(() => setLancadoMsg(""), 5000);
-    continuarFilaConferencia(coopAtual, notaId);
+    continuarFilaConferencia(chaveAtual, notaId);
   };
 
   const handleExcluirPendente = async () => {
@@ -1074,48 +1081,46 @@ export default function NotasPedidoContent() {
           <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-2 mb-3">
             <div>
               <h2 className="text-sm font-semibold text-gray-700">Fila para conferir ({pendentesTodas.length})</h2>
-              <p className="text-xs text-gray-500 mt-0.5">Cada cooperado tem sua própria aba — as fotos nunca se misturam.</p>
+              <p className="text-xs text-gray-500 mt-0.5">Selecione o cooperado na aba — cada um vê só as próprias fotos.</p>
             </div>
-            {pendentesAbaAtiva.length > 0 && (
+            {grupoAbaAtiva && (
               <p className="text-xs font-medium text-amber-800">
-                {pendentesAbaAtiva.length} foto(s) de {getCooperadoNome(data.cooperados, abaConferenciaCoopId)}
+                {pendentesAbaAtiva.length} foto(s) de {grupoAbaAtiva.nome}
               </p>
             )}
           </div>
 
-          {pendentesPorCooperado.length > 1 && (
-            <div className="flex gap-2 overflow-x-auto pb-2 mb-3 -mx-1 px-1">
-              {pendentesPorCooperado.map((grupo) => (
-                <button
-                  key={grupo.cooperadoId}
-                  type="button"
-                  onClick={() => selecionarAbaConferencia(grupo.cooperadoId)}
+          <div
+            role="tablist"
+            aria-label="Cooperados com entregas pendentes"
+            className="flex gap-2 overflow-x-auto pb-2 mb-4 border-b border-gray-200 -mx-1 px-1"
+          >
+            {pendentesPorCooperado.map((grupo) => (
+              <button
+                key={grupo.chave}
+                type="button"
+                role="tab"
+                aria-selected={abaConferenciaKey === grupo.chave}
+                onClick={() => selecionarAbaConferencia(grupo)}
+                className={cn(
+                  "shrink-0 inline-flex items-center gap-2 px-4 py-2.5 rounded-t-lg text-sm font-semibold border border-b-0 transition-colors",
+                  abaConferenciaKey === grupo.chave
+                    ? "bg-amber-500 text-white border-amber-500 shadow-sm"
+                    : "bg-gray-50 text-gray-700 border-gray-300 hover:bg-amber-50 hover:border-amber-300"
+                )}
+              >
+                {grupo.nome}
+                <span
                   className={cn(
-                    "shrink-0 inline-flex items-center gap-2 px-4 py-2 rounded-full text-sm font-medium border transition-colors",
-                    abaConferenciaCoopId === grupo.cooperadoId
-                      ? "bg-amber-500 text-white border-amber-500 shadow-sm"
-                      : "bg-white text-gray-700 border-gray-300 hover:border-amber-400"
+                    "min-w-[1.25rem] h-5 px-1.5 rounded-full text-xs font-bold inline-flex items-center justify-center",
+                    abaConferenciaKey === grupo.chave ? "bg-white/25 text-white" : "bg-amber-100 text-amber-800"
                   )}
                 >
-                  {grupo.nome}
-                  <span
-                    className={cn(
-                      "min-w-[1.25rem] h-5 px-1.5 rounded-full text-xs font-bold inline-flex items-center justify-center",
-                      abaConferenciaCoopId === grupo.cooperadoId ? "bg-white/25 text-white" : "bg-amber-100 text-amber-800"
-                    )}
-                  >
-                    {grupo.notas.length}
-                  </span>
-                </button>
-              ))}
-            </div>
-          )}
-
-          {pendentesPorCooperado.length === 1 && (
-            <p className="text-sm font-medium text-gray-800 mb-3">
-              Cooperado: {pendentesPorCooperado[0].nome}
-            </p>
-          )}
+                  {grupo.notas.length}
+                </span>
+              </button>
+            ))}
+          </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
             {pendentesAbaAtiva.map((n) => (
@@ -1142,7 +1147,7 @@ export default function NotasPedidoContent() {
       )}
 
       <FilterBar>
-        {!isCooperado && cooperadosCoop.length > 0 && (
+        {!isCooperado && cooperadosCoop.length > 0 && pendentesTodas.length === 0 && (
           <FormField label="Cooperado">
             <Select value={filtroCooperadoId} onChange={(e) => setFiltroCooperadoId(e.target.value)} className="min-w-[200px]">
               <option value="">Todos</option>

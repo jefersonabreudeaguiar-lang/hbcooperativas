@@ -54,9 +54,17 @@ export function normalizeCloudNotaForLocal(
   }
 
   let cooperadoId = nota.cooperadoId;
+  let cooperadoNomeSnapshot = nota.cooperadoNomeSnapshot;
   const existeLocal = data.cooperados.some(
     (c) => c.id === cooperadoId && c.cooperativaId === coop.id
   );
+
+  const localPorId = data.cooperados.find(
+    (c) => c.id === cooperadoId && c.cooperativaId === coop.id
+  );
+  if (localPorId) {
+    cooperadoNomeSnapshot = cooperadoNomeSnapshot ?? localPorId.nomeCompleto;
+  }
 
   if (!existeLocal && nota.cooperadoNomeSnapshot) {
     const nome = nota.cooperadoNomeSnapshot.trim().toLowerCase();
@@ -65,13 +73,17 @@ export function normalizeCloudNotaForLocal(
         c.cooperativaId === coop.id &&
         c.nomeCompleto.trim().toLowerCase() === nome
     );
-    if (match) cooperadoId = match.id;
+    if (match) {
+      cooperadoId = match.id;
+      cooperadoNomeSnapshot = match.nomeCompleto;
+    }
   }
 
   return {
     ...nota,
     cooperativaId: coop.id,
     cooperadoId,
+    cooperadoNomeSnapshot,
     cooperativaCnpj: digits,
   };
 }

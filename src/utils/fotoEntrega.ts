@@ -77,6 +77,90 @@ export function notaPertenceCooperativa(data: AppData, nota: NotaPedido, coopId?
   return Boolean(notaCnpj && normalizeCnpj(notaCnpj) === normalizeCnpj(cnpjLocal));
 }
 
+export interface GrupoConferenciaEntrega {
+  chave: string;
+  cooperadoId: string;
+  nome: string;
+  notas: NotaPedido[];
+}
+
+function normalizeNomeGrupo(nome: string): string {
+  return nome.trim().toLowerCase().replace(/\s+/g, " ");
+}
+
+/** Agrupa entregas pendentes pelo cooperado (nome salvo na nuvem ou cadastro local). */
+export function getChaveGrupoConferencia(nota: NotaPedido, data: AppData): string {
+  const snapshot = nota.cooperadoNomeSnapshot?.trim();
+  if (snapshot) return `nome:${normalizeNomeGrupo(snapshot)}`;
+
+  const local = data.cooperados.find((c) => c.id === nota.cooperadoId);
+  if (local) return `id:${local.id}`;
+
+  return `id:${nota.cooperadoId}`;
+}
+
+export function getNomeGrupoConferencia(notas: NotaPedido[], data: AppData): string {
+  const first = notas[0];
+  if (!first) return "Cooperado";
+  const snapshot = first.cooperadoNomeSnapshot?.trim();
+  if (snapshot) return snapshot;
+  const nome = data.cooperados.find((c) => c.id === first.cooperadoId)?.nomeCompleto;
+  return nome ?? "Cooperado";
+}
+
+export function resolverCooperadoIdDoGrupo(
+  notas: NotaPedido[],
+  data: AppData,
+  cooperativaId?: string
+): string {
+  for (const nota of notas) {
+    const c = data.cooperados.find(
+      (x) => x.id === nota.cooperadoId && (!cooperativaId || x.cooperativaId === cooperativaId)
+    );
+    if (c) return c.id;
+  }
+  const snapshot = notas[0]?.cooperadoNomeSnapshot?.trim().toLowerCase();
+  if (snapshot && cooperativaId) {
+    const c = data.cooperados.find(
+      (x) =>
+        x.cooperativaId === cooperativaId &&
+        x.nomeCompleto.trim().toLowerCase() === snapshot
+    );
+    if (c) return c.id;
+  }
+  return notas[0]?.cooperadoId ?? "";
+}
+
+export function agruparPendentesPorCooperado(
+  data: AppData,
+  pendentes: NotaPedido[],
+  cooperativaId?: string
+): GrupoConferenciaEntrega[] {
+  const map = new Map<string, NotaPedido[]>();
+  for (const nota of pendentes) {
+    const chave = getChaveGrupoConferencia(nota, data);
+    const lista = map.get(chave) ?? [];
+    lista.push(nota);
+    map.set(chave, lista);
+  }
+  return [...map.entries()]
+    .map(([chave, notas]) => ({
+      chave,
+      cooperadoId: resolverCooperadoIdDoGrupo(notas, data, cooperativaId),
+      nome: getNomeGrupoConferencia(notas, data),
+      notas,
+    }))
+    .sort((a, b) => a.nome.localeCompare(b.nome, "pt-BR"));
+}
+
+export function notaPertenceGrupoConferencia(
+  nota: NotaPedido,
+  data: AppData,
+  chave: string
+): boolean {
+  return getChaveGrupoConferencia(nota, data) === chave;
+}
+
 /** Remove fotos grandes já enviadas ou arquivadas — libera espaço no navegador. */
 export function compactarFotosNoArmazenamento(data: AppData): AppData {
   let changed = false;
