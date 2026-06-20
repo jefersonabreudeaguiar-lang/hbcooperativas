@@ -93,6 +93,13 @@ export function sumBy<T>(items: T[], getter: (item: T) => number): number {
   return round2(items.reduce((sum, item) => sum + getter(item), 0));
 }
 
-export function getCooperadoNome(cooperados: Cooperado[], id: string): string {
-  return cooperados.find((c) => c.id === id)?.nomeCompleto ?? "Desconhecido";
+export function getCooperadoNome(
+  cooperados: Cooperado[],
+  id: string,
+  fallbackNome?: string
+): string {
+  const found = cooperados.find((c) => c.id === id);
+  if (found?.nomeCompleto?.trim()) return found.nomeCompleto;
+  if (fallbackNome?.trim()) return fallbackNome.trim();
+  return "Desconhecido";
 }

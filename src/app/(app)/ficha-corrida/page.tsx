@@ -1,21 +1,24 @@
 "use client";
 
-import { useMemo, useState, useEffect } from "react";
-import Link from "next/link";
+import { useMemo, useState, useEffect, useCallback } from "react";
 import { useSearchParams } from "next/navigation";
-import { QrCode, XCircle, Wallet, CheckCircle2, FileDown, PenLine } from "lucide-react";
+import { QrCode, XCircle, Wallet, CheckCircle2, FileDown, PenLine, BookOpen, CreditCard } from "lucide-react";
 import { useAppData } from "@/hooks/useAppData";
 import { usePermissions } from "@/hooks/usePermissions";
 import { getUserCooperativaId } from "@/utils/cooperativa";
 import {
-  getTotalAPagarCooperado,
   getResumoPagamentoCooperado,
   registrarPagamentoCooperado,
   confirmarPagamentoCooperado,
   getPagamentoAguardandoCooperado,
+  getMensalidadeFixaMes,
+  getStatusCotaCooperado,
+  getArquivoMensalCooperado,
+  upsertArquivoMensal,
 } from "@/services/notaPedidoService";
-import { PageHeader, DataTable, FilterBar, Modal } from "@/components/ui/Table";
-import { Select, FormField } from "@/components/ui/Form";
+import { listCooperadosComFichaNoMes, getCooperadoNomeResolvido } from "@/services/cooperadoCloudService";
+import { PageHeader, FilterBar, Modal } from "@/components/ui/Table";
+import { Select, FormField, Input, Textarea } from "@/components/ui/Form";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { AlertBanner } from "@/components/ui/AlertBanner";
@@ -26,30 +29,42 @@ import { cooperadoPrecisaCadastrarPix } from "@/utils/pix";
 import { baixarReciboHtml } from "@/utils/recibo";
 import { updateData, addAuditEntry } from "@/services/dataStore";
 import { formatCurrency, formatDate, formatMesReferencia, getCurrentMesReferencia } from "@/utils/format";
-import { getCooperadoNome } from "@/utils/calculations";
 import type { FichaCorrida, PagamentoCooperadoRegistro } from "@/types";
 
 function DetalheLancamento({ ficha }: { ficha: FichaCorrida }) {
   return (
-    <div className="mt-2 pt-2 border-t border-gray-100 text-xs text-gray-600 space-y-1">
-      {(ficha.itens ?? []).map((i) => (
-        <div key={i.produtoInstituicaoId} className="flex justify-between gap-2">
-          <span>{i.produtoNome} · {i.quantidade} {i.unidade}</span>
-          <span>{formatCurrency(i.valorBruto)}</span>
+    <div className="mt-3 border border-gray-200 rounded-xl overflow-hidden text-sm">
+      <table className="w-full">
+        <thead className="bg-gray-50 border-b">
+          <tr>
+            <th className="text-left px-3 py-2 font-semibold text-gray-700">Item</th>
+            <th className="text-right px-3 py-2 font-semibold text-gray-700">Qtd</th>
+            <th className="text-right px-3 py-2 font-semibold text-gray-700">Valor</th>
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-gray-100">
+          {(ficha.itens ?? []).map((i) => (
+            <tr key={i.produtoInstituicaoId}>
+              <td className="px-3 py-2">{i.produtoNome}</td>
+              <td className="px-3 py-2 text-right">{i.quantidade} {i.unidade}</td>
+              <td className="px-3 py-2 text-right">{formatCurrency(i.valorBruto)}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      <div className="bg-gray-50 px-3 py-2 space-y-1 text-xs border-t">
+        <div className="flex justify-between"><span>Bruto</span><span>{formatCurrency(ficha.valorBruto)}</span></div>
+        {ficha.percentualDescontoCooperativa != null && ficha.descontos > 0 && (
+          <div className="flex justify-between text-amber-700">
+            <span>Desconto cooperativa ({ficha.percentualDescontoCooperativa}%)</span>
+            <span>- {formatCurrency(ficha.descontos)}</span>
+          </div>
+        )}
+        <div className="flex justify-between font-semibold text-green-700 pt-1 border-t border-gray-200">
+          <span>Líquido desta entrega</span>
+          <span>{formatCurrency(ficha.valorLiquido)}</span>
         </div>
-      ))}
-      {ficha.percentualDescontoCooperativa != null && ficha.descontos > 0 && (
-        <div className="flex justify-between text-amber-700">
-          <span>Desconto cooperativa ({ficha.percentualDescontoCooperativa}%)</span>
-          <span>- {formatCurrency(ficha.descontos)}</span>
-        </div>
-      )}
-      {(ficha.descontosDetalhe ?? []).map((d, idx) => (
-        <div key={idx} className="flex justify-between text-red-600">
-          <span>{d.motivo}</span>
-          <span>- {formatCurrency(d.valor)}</span>
-        </div>
-      ))}
+      </div>
     </div>
   );
 }
@@ -60,6 +75,7 @@ export default function FichaCorridaPage() {
   const searchParams = useSearchParams();
   const [mesFilter, setMesFilter] = useState(searchParams.get("mes") ?? getCurrentMesReferencia());
   const [cooperadoFilter, setCooperadoFilter] = useState(searchParams.get("cooperado") ?? "");
+  const [aba, setAba] = useState<"ficha" | "pagar">("ficha");
 
   useEffect(() => {
     const c = searchParams.get("cooperado");
@@ -67,6 +83,7 @@ export default function FichaCorridaPage() {
     if (c && !isCooperado) setCooperadoFilter(c);
     if (m) setMesFilter(m);
   }, [searchParams, isCooperado]);
+
   const [pixModalOpen, setPixModalOpen] = useState(false);
   const [confirmPagamento, setConfirmPagamento] = useState(false);
   const [pixInvalidoOpen, setPixInvalidoOpen] = useState(false);
@@ -75,6 +92,10 @@ export default function FichaCorridaPage() {
   const [assinaturaModal, setAssinaturaModal] = useState(false);
   const [assinatura, setAssinatura] = useState<string | null>(null);
   const [pagamentoConfirmado, setPagamentoConfirmado] = useState<PagamentoCooperadoRegistro | null>(null);
+
+  const [mensalidadeInput, setMensalidadeInput] = useState("");
+  const [descontoAvulsoInput, setDescontoAvulsoInput] = useState("");
+  const [descontoAvulsoMotivo, setDescontoAvulsoMotivo] = useState("");
 
   const coopId = user && data ? getUserCooperativaId(user, data) : undefined;
 
@@ -85,36 +106,101 @@ export default function FichaCorridaPage() {
     return [...set].sort().reverse();
   }, [data]);
 
-  const cooperados = useMemo(() => {
+  const cooperadosComFicha = useMemo(() => {
     if (!data || !coopId) return [];
-    return data.cooperados.filter((c) => c.cooperativaId === coopId && c.status === "ativo");
-  }, [data, coopId]);
+    return listCooperadosComFichaNoMes(data, coopId, mesFilter);
+  }, [data, coopId, mesFilter]);
+
+  const cooperadoSelecionadoId = isCooperado ? cooperadoId : cooperadoFilter;
 
   const cooperadoSelecionado = useMemo(() => {
-    if (!data) return undefined;
-    const id = isCooperado ? cooperadoId : cooperadoFilter;
-    return id ? data.cooperados.find((c) => c.id === id) : undefined;
-  }, [data, isCooperado, cooperadoId, cooperadoFilter]);
+    if (!data || !cooperadoSelecionadoId) return undefined;
+    return (
+      data.cooperados.find((c) => c.id === cooperadoSelecionadoId) ??
+      cooperadosComFicha.find((c) => c.id === cooperadoSelecionadoId)
+    );
+  }, [data, cooperadoSelecionadoId, cooperadosComFicha]);
+
+  const nomeCooperado = useMemo(() => {
+    if (!data || !cooperadoSelecionadoId) return "";
+    return getCooperadoNomeResolvido(data, cooperadoSelecionadoId, coopId);
+  }, [data, cooperadoSelecionadoId, coopId]);
 
   const lancamentos = useMemo(() => {
-    if (!data) return [];
+    if (!data || !cooperadoSelecionadoId) return [];
     return data.fichaCorrida
       .filter((f) => {
         if (coopId && f.cooperativaId !== coopId) return false;
-        if (isCooperado && cooperadoId && f.cooperadoId !== cooperadoId) return false;
-        if (cooperadoFilter && f.cooperadoId !== cooperadoFilter) return false;
+        if (f.cooperadoId !== cooperadoSelecionadoId) return false;
         if (mesFilter && f.mesReferencia !== mesFilter) return false;
         return true;
       })
       .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
-  }, [data, coopId, isCooperado, cooperadoId, cooperadoFilter, mesFilter]);
+  }, [data, coopId, cooperadoSelecionadoId, mesFilter]);
+
+  const arquivoMes = useMemo(() => {
+    if (!data || !cooperadoSelecionadoId) return undefined;
+    return getArquivoMensalCooperado(data, cooperadoSelecionadoId, mesFilter);
+  }, [data, cooperadoSelecionadoId, mesFilter]);
+
+  const mensalidadePadrao = useMemo(() => {
+    if (!data || !cooperadoSelecionadoId) return 0;
+    return getMensalidadeFixaMes(data, cooperadoSelecionadoId, mesFilter, coopId);
+  }, [data, cooperadoSelecionadoId, mesFilter, coopId]);
+
+  const statusCota = useMemo(() => {
+    if (!data || !cooperadoSelecionadoId) return "sem_cota" as const;
+    return getStatusCotaCooperado(data, cooperadoSelecionadoId, mesFilter);
+  }, [data, cooperadoSelecionadoId, mesFilter]);
+
+  useEffect(() => {
+    if (!cooperadoSelecionadoId) return;
+    setMensalidadeInput(String(mensalidadePadrao || ""));
+    setDescontoAvulsoInput(String(arquivoMes?.descontoAvulso ?? ""));
+    setDescontoAvulsoMotivo(arquivoMes?.descontoAvulsoMotivo ?? "");
+  }, [cooperadoSelecionadoId, mesFilter, mensalidadePadrao, arquivoMes]);
+
+  const salvarAjustesFicha = useCallback(() => {
+    if (!user || !data || !cooperadoSelecionadoId || !coopId || isCooperado) return;
+    const mensalidadeFixa = parseFloat(mensalidadeInput.replace(",", ".")) || 0;
+    const descontoAvulso = parseFloat(descontoAvulsoInput.replace(",", ".")) || 0;
+    updateData((d) =>
+      addAuditEntry(
+        {
+          ...d,
+          arquivosMensais: upsertArquivoMensal(d, cooperadoSelecionadoId, coopId, mesFilter, {
+            mensalidadeFixa,
+            descontoAvulso,
+            descontoAvulsoMotivo: descontoAvulsoMotivo.trim() || undefined,
+          }),
+        },
+        {
+          entityType: "ficha_corrida",
+          entityId: cooperadoSelecionadoId,
+          action: "editar",
+          userId: user.id,
+          userName: user.name,
+          changes: "Ajustes de mensalidade e desconto avulso na ficha",
+        }
+      )
+    );
+  }, [user, data, cooperadoSelecionadoId, coopId, isCooperado, mensalidadeInput, descontoAvulsoInput, descontoAvulsoMotivo, mesFilter]);
+
+  const toggleCotaPaga = () => {
+    if (!user || !cooperadoSelecionadoId || !coopId || isCooperado) return;
+    const novo = !arquivoMes?.cotaIngressoPaga;
+    updateData((d) => ({
+      ...d,
+      arquivosMensais: upsertArquivoMensal(d, cooperadoSelecionadoId, coopId, mesFilter, {
+        cotaIngressoPaga: novo,
+      }),
+    }));
+  };
 
   const resumo = useMemo(() => {
-    if (!data) return null;
-    const cid = isCooperado ? cooperadoId : cooperadoFilter;
-    if (!cid) return null;
-    return getResumoPagamentoCooperado(data, cid, mesFilter);
-  }, [data, isCooperado, cooperadoId, cooperadoFilter, mesFilter]);
+    if (!data || !cooperadoSelecionadoId) return null;
+    return getResumoPagamentoCooperado(data, cooperadoSelecionadoId, mesFilter);
+  }, [data, cooperadoSelecionadoId, mesFilter, arquivoMes?.descontoAvulso, arquivoMes?.mensalidadeFixa]);
 
   const totalPendente = resumo?.valorLiquido ?? 0;
   const totalEntregas = resumo?.valorEntregas ?? 0;
@@ -125,20 +211,11 @@ export default function FichaCorridaPage() {
   }, [data, cooperadoId, mesFilter]);
 
   const pagamentoConfirmadoMes = useMemo(() => {
-    if (!data) return undefined;
-    const cid = isCooperado ? cooperadoId : cooperadoFilter;
-    if (!cid) return undefined;
+    if (!data || !cooperadoSelecionadoId) return undefined;
     return data.pagamentosCooperado.find(
-      (p) => p.cooperadoId === cid && p.mesReferencia === mesFilter && p.status === "confirmado"
+      (p) => p.cooperadoId === cooperadoSelecionadoId && p.mesReferencia === mesFilter && p.status === "confirmado"
     );
-  }, [data, isCooperado, cooperadoId, cooperadoFilter, mesFilter]);
-
-  const arquivoMes = useMemo(() => {
-    if (!data) return undefined;
-    const cid = isCooperado ? cooperadoId : cooperadoFilter;
-    if (!cid) return undefined;
-    return data.arquivosMensais.find((a) => a.cooperadoId === cid && a.mesReferencia === mesFilter);
-  }, [data, isCooperado, cooperadoId, cooperadoFilter, mesFilter]);
+  }, [data, cooperadoSelecionadoId, mesFilter]);
 
   const handlePixInvalido = () => {
     if (!cooperadoSelecionado || !user || !motivoPix.trim()) return;
@@ -162,6 +239,7 @@ export default function FichaCorridaPage() {
 
   const handleConfirmarPagamento = () => {
     if (!cooperadoSelecionado || !user || totalPendente <= 0) return;
+    salvarAjustesFicha();
     updateData((d) =>
       addAuditEntry(registrarPagamentoCooperado(d, cooperadoSelecionado.id, mesFilter, user.name), {
         entityType: "ficha_corrida", entityId: cooperadoSelecionado.id, action: "aprovar",
@@ -169,7 +247,7 @@ export default function FichaCorridaPage() {
       })
     );
     setConfirmPagamento(false);
-    setPagoMsg(`Pagamento registrado! ${cooperadoSelecionado.nomeCompleto.split(" ")[0]} foi notificado(a).`);
+    setPagoMsg(`Pagamento registrado! ${nomeCooperado.split(" ")[0]} foi notificado(a).`);
   };
 
   const handleEnviarAssinatura = () => {
@@ -190,12 +268,17 @@ export default function FichaCorridaPage() {
   if (!data) return null;
 
   const pixOk = cooperadoSelecionado && !cooperadoPrecisaCadastrarPix(cooperadoSelecionado.chavePix, cooperadoSelecionado.pixValido);
+  const mostrarPagar = isCooperado || aba === "pagar";
 
   return (
     <div>
       <PageHeader
-        title={isCooperado ? "Minha ficha" : "Ficha dos cooperados"}
-        subtitle={isCooperado ? "Entregas, descontos e pagamentos do mês" : "Conferir entregas, pagar e arquivar por cooperado"}
+        title={isCooperado ? "Minha ficha corrida" : "Ficha corrida dos cooperados"}
+        subtitle={
+          isCooperado
+            ? "Entregas conferidas, descontos e pagamento do mês"
+            : "Cada cooperado com fotos lançadas tem ficha própria; em Pagar fica só o resumo e o PIX"
+        }
       />
 
       {pagoMsg && <AlertBanner variant="success" className="mb-4" onDismiss={() => setPagoMsg("")}>{pagoMsg}</AlertBanner>}
@@ -210,29 +293,14 @@ export default function FichaCorridaPage() {
         </AlertBanner>
       )}
 
-      <div className="bg-gradient-to-br from-green-700 to-green-800 text-white rounded-2xl p-6 mb-6 shadow-sm">
-        <p className="text-green-100 text-sm">{isCooperado ? "Total a receber" : "Valor a pagar"} · {formatMesReferencia(mesFilter)}</p>
-        <p className="text-4xl font-bold mt-2">{formatCurrency(isCooperado && pagamentoAguardando ? pagamentoAguardando.valorLiquido : totalPendente)}</p>
-        {resumo && totalEntregas > 0 && (
-          <div className="mt-4 text-sm text-green-100 space-y-1 border-t border-green-600/40 pt-3">
-            <div className="flex justify-between"><span>Entregas (bruto)</span><span>{formatCurrency(resumo.valorBruto)}</span></div>
-            {resumo.descontoCooperativa > 0 && (
-              <div className="flex justify-between"><span>Desconto cooperativa</span><span>- {formatCurrency(resumo.descontoCooperativa)}</span></div>
-            )}
-            {resumo.descontosExtras.map((d, i) => (
-              <div key={i} className="flex justify-between"><span>{d.motivo}</span><span>- {formatCurrency(d.valor)}</span></div>
-            ))}
-            <div className="flex justify-between font-semibold text-white pt-1"><span>Total líquido</span><span>{formatCurrency(totalPendente)}</span></div>
-          </div>
-        )}
-      </div>
-
       <FilterBar>
         {!isCooperado && (
           <FormField label="Cooperado">
             <Select value={cooperadoFilter} onChange={(e) => setCooperadoFilter(e.target.value)} className="min-w-[220px]">
               <option value="">Escolha o cooperado...</option>
-              {cooperados.map((c) => <option key={c.id} value={c.id}>{c.nomeCompleto}</option>)}
+              {cooperadosComFicha.map((c) => (
+                <option key={c.id} value={c.id}>{getCooperadoNomeResolvido(data, c.id, coopId)}</option>
+              ))}
             </Select>
           </FormField>
         )}
@@ -243,48 +311,202 @@ export default function FichaCorridaPage() {
         </FormField>
       </FilterBar>
 
-      {!isCooperado && cooperadoSelecionado && (
-        <Card title={`Pagamento — ${cooperadoSelecionado.nomeCompleto.split(" ")[0]}`} className="mb-6">
-          <p className="text-sm text-gray-600 mb-3">
-            <Link href={`/cooperados/${cooperadoSelecionado.id}`} className="text-green-700 font-medium hover:underline">
-              Abrir ficha completa do cooperado →
-            </Link>
-          </p>
-          <div className="space-y-4">
-            <div className="flex items-center gap-2 text-sm">
-              <Wallet size={18} className="text-gray-500" />
-              <span>Chave PIX:</span>
-              {cooperadoSelecionado.chavePix ? (
-                <code className="bg-gray-100 px-2 py-1 rounded text-xs break-all">{cooperadoSelecionado.chavePix}</code>
+      {!isCooperado && (
+        <div className="flex gap-2 mb-6 border-b border-gray-200">
+          <button
+            type="button"
+            onClick={() => setAba("ficha")}
+            className={`px-4 py-2.5 text-sm font-medium border-b-2 -mb-px flex items-center gap-2 ${aba === "ficha" ? "border-green-600 text-green-700" : "border-transparent text-gray-500 hover:text-gray-700"}`}
+          >
+            <BookOpen size={16} /> Ficha corrida
+          </button>
+          <button
+            type="button"
+            onClick={() => setAba("pagar")}
+            className={`px-4 py-2.5 text-sm font-medium border-b-2 -mb-px flex items-center gap-2 ${aba === "pagar" ? "border-green-600 text-green-700" : "border-transparent text-gray-500 hover:text-gray-700"}`}
+          >
+            <CreditCard size={16} /> Pagar cooperado
+          </button>
+        </div>
+      )}
+
+      {cooperadoSelecionadoId && (isCooperado || aba === "ficha") && (
+        <>
+          <Card title={isCooperado ? "Meus dados do mês" : `Ficha — ${nomeCooperado}`} className="mb-6">
+            <div className="flex flex-wrap items-center gap-3 mb-4">
+              {statusCota === "paga" ? (
+                <span className="inline-flex items-center gap-1 text-sm font-medium text-green-700 bg-green-50 px-3 py-1 rounded-full">
+                  <CheckCircle2 size={14} /> Cota paga
+                </span>
               ) : (
-                <span className="text-red-600 font-medium">Não cadastrada</span>
+                <span className="inline-flex items-center gap-1 text-sm font-bold text-red-600 bg-red-50 px-3 py-1 rounded-full border border-red-200">
+                  Cota não paga
+                </span>
+              )}
+              {!isCooperado && check("ficha_corrida", "edit") && statusCota !== "paga" && (
+                <Button size="sm" variant="secondary" onClick={toggleCotaPaga}>
+                  Confirmar cota paga
+                </Button>
               )}
             </div>
-            {check("ficha_corrida", "edit") && (
-              <div className="flex flex-col gap-3">
-                <Button onClick={() => setPixModalOpen(true)} disabled={!pixOk || totalPendente <= 0} size="lg" className="w-full">
-                  <QrCode size={20} /> Gerar QR Code PIX
-                </Button>
-                <Button
-                  size="lg"
-                  className="w-full bg-green-600 hover:bg-green-700 text-white"
-                  onClick={() => setConfirmPagamento(true)}
-                  disabled={totalPendente <= 0}
-                >
-                  <CheckCircle2 size={20} /> Pagamento realizado
-                </Button>
-                <Button variant="secondary" onClick={() => { setMotivoPix("Chave PIX não encontrada ou incorreta."); setPixInvalidoOpen(true); }}>
-                  <XCircle size={18} /> Chave PIX com problema
-                </Button>
+
+            {!isCooperado && check("ficha_corrida", "edit") ? (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
+                <FormField label="Mensalidade fixa (desconto de todos)" hint="Valor descontado no pagamento do mês">
+                  <Input
+                    type="number"
+                    min={0}
+                    step="0.01"
+                    value={mensalidadeInput}
+                    onChange={(e) => setMensalidadeInput(e.target.value)}
+                    onBlur={salvarAjustesFicha}
+                  />
+                </FormField>
+                <FormField label="Desconto avulso (R$)">
+                  <Input
+                    type="number"
+                    min={0}
+                    step="0.01"
+                    value={descontoAvulsoInput}
+                    onChange={(e) => setDescontoAvulsoInput(e.target.value)}
+                    onBlur={salvarAjustesFicha}
+                  />
+                </FormField>
+                <div className="sm:col-span-2">
+                <FormField label="Motivo do desconto avulso">
+                  <Textarea
+                    value={descontoAvulsoMotivo}
+                    onChange={(e) => setDescontoAvulsoMotivo(e.target.value)}
+                    onBlur={salvarAjustesFicha}
+                    placeholder="Ex.: ajuste de entrega anterior"
+                    rows={2}
+                  />
+                </FormField>
+                </div>
+              </div>
+            ) : (
+              <div className="text-sm text-gray-600 space-y-1 mb-4">
+                {mensalidadePadrao > 0 && (
+                  <p>Mensalidade do mês: <strong>{formatCurrency(mensalidadePadrao)}</strong></p>
+                )}
+                {(arquivoMes?.descontoAvulso ?? 0) > 0 && (
+                  <p>Desconto avulso: <strong>- {formatCurrency(arquivoMes!.descontoAvulso!)}</strong>
+                    {arquivoMes?.descontoAvulsoMotivo ? ` (${arquivoMes.descontoAvulsoMotivo})` : ""}
+                  </p>
+                )}
+              </div>
+            )}
+
+            {resumo && (
+              <div className="rounded-xl bg-gray-50 p-4 text-sm space-y-1 border">
+                <div className="flex justify-between"><span>Total entregas (bruto)</span><span>{formatCurrency(resumo.valorBruto)}</span></div>
+                {resumo.descontoCooperativa > 0 && (
+                  <div className="flex justify-between text-amber-700"><span>Desconto cooperativa</span><span>- {formatCurrency(resumo.descontoCooperativa)}</span></div>
+                )}
+                <div className="flex justify-between"><span>Entregas líquidas</span><span>{formatCurrency(totalEntregas)}</span></div>
+                {resumo.descontosExtras.map((d, i) => (
+                  <div key={i} className="flex justify-between text-red-600"><span>{d.motivo}</span><span>- {formatCurrency(d.valor)}</span></div>
+                ))}
+                <div className="flex justify-between font-bold text-green-700 text-base pt-2 border-t border-gray-200">
+                  <span>A receber</span><span>{formatCurrency(totalPendente)}</span>
+                </div>
+              </div>
+            )}
+          </Card>
+
+          <Card title="Lançamentos das entregas" className="mb-6">
+            {lancamentos.length === 0 ? (
+              <p className="text-sm text-gray-500">Nenhum lançamento neste mês. As fotos conferidas aparecem aqui, uma ficha por entrega.</p>
+            ) : (
+              <div className="space-y-4">
+                {lancamentos.map((f) => (
+                  <div key={f.id} className="border rounded-xl p-4">
+                    <div className="flex flex-wrap justify-between gap-2">
+                      <div>
+                        <p className="font-semibold text-gray-900">{f.descricao}</p>
+                        <p className="text-xs text-gray-500 mt-0.5">
+                          {formatDate(f.dataLancamento)}
+                          {f.responsavelConferencia ? ` · Conferido por ${f.responsavelConferencia}` : ""}
+                        </p>
+                      </div>
+                      <div className="text-right">
+                        <p className="text-lg font-bold text-green-700">{formatCurrency(f.valorLiquido)}</p>
+                        <p className="text-xs text-gray-500">{f.status === "pago" ? "Pago" : "Aguardando pagamento"}</p>
+                      </div>
+                    </div>
+                    <DetalheLancamento ficha={f} />
+                  </div>
+                ))}
+              </div>
+            )}
+          </Card>
+        </>
+      )}
+
+      {cooperadoSelecionadoId && mostrarPagar && (
+        <>
+          <div className="bg-gradient-to-br from-green-700 to-green-800 text-white rounded-2xl p-6 mb-6 shadow-sm">
+            <p className="text-green-100 text-sm">{isCooperado ? "Total a receber" : "Valor a pagar"} · {formatMesReferencia(mesFilter)}</p>
+            <p className="text-3xl sm:text-4xl font-bold mt-2">
+              {formatCurrency(isCooperado && pagamentoAguardando ? pagamentoAguardando.valorLiquido : totalPendente)}
+            </p>
+            {!isCooperado && nomeCooperado && (
+              <p className="text-green-100 text-sm mt-2">{nomeCooperado}</p>
+            )}
+            {resumo && totalEntregas > 0 && (
+              <div className="mt-4 text-sm text-green-100 space-y-1 border-t border-green-600/40 pt-3">
+                <div className="flex justify-between"><span>Entregas</span><span>{formatCurrency(totalEntregas)}</span></div>
+                {resumo.descontosExtras.map((d, i) => (
+                  <div key={i} className="flex justify-between"><span>{d.motivo}</span><span>- {formatCurrency(d.valor)}</span></div>
+                ))}
+                <div className="flex justify-between font-semibold text-white pt-1"><span>Total líquido</span><span>{formatCurrency(totalPendente)}</span></div>
               </div>
             )}
           </div>
-        </Card>
+
+          {!isCooperado && cooperadoSelecionado && check("ficha_corrida", "edit") && (
+            <Card title={`Pagamento — ${nomeCooperado.split(" ")[0]}`} className="mb-6">
+              <div className="space-y-4">
+                <div className="flex items-center gap-2 text-sm">
+                  <Wallet size={18} className="text-gray-500" />
+                  <span>Chave PIX:</span>
+                  {cooperadoSelecionado.chavePix ? (
+                    <code className="bg-gray-100 px-2 py-1 rounded text-xs break-all">{cooperadoSelecionado.chavePix}</code>
+                  ) : (
+                    <span className="text-red-600 font-medium">Não cadastrada</span>
+                  )}
+                </div>
+                <div className="flex flex-col gap-3">
+                  <Button onClick={() => { salvarAjustesFicha(); setPixModalOpen(true); }} disabled={!pixOk || totalPendente <= 0} size="lg" className="w-full">
+                    <QrCode size={20} /> Gerar QR Code PIX
+                  </Button>
+                  <Button
+                    size="lg"
+                    className="w-full bg-green-600 hover:bg-green-700 text-white"
+                    onClick={() => setConfirmPagamento(true)}
+                    disabled={totalPendente <= 0}
+                  >
+                    <CheckCircle2 size={20} /> Pagamento realizado
+                  </Button>
+                  <Button variant="secondary" onClick={() => { setMotivoPix("Chave PIX não encontrada ou incorreta."); setPixInvalidoOpen(true); }}>
+                    <XCircle size={18} /> Chave PIX com problema
+                  </Button>
+                </div>
+              </div>
+            </Card>
+          )}
+        </>
+      )}
+
+      {!cooperadoSelecionadoId && !isCooperado && (
+        <AlertBanner variant="info" className="mb-6">
+          Escolha um cooperado que já tenha entregas lançadas neste mês para ver a ficha corrida ou pagar.
+        </AlertBanner>
       )}
 
       {(pagamentoConfirmadoMes || pagamentoConfirmado) && (
         <Card title="Comprovante de recebimento" className="mb-6">
-          <p className="text-sm text-gray-600 mb-3">Recibo assinado e arquivado na pasta de {formatMesReferencia(mesFilter)}.</p>
+          <p className="text-sm text-gray-600 mb-3">Recibo assinado · {formatMesReferencia(mesFilter)}</p>
           <Button
             onClick={() => {
               const pg = pagamentoConfirmado ?? pagamentoConfirmadoMes;
@@ -296,59 +518,8 @@ export default function FichaCorridaPage() {
         </Card>
       )}
 
-      {!isCooperado && arquivoMes && arquivoMes.notaPedidoIds.length > 0 && (
-        <Card title={`Arquivo ${formatMesReferencia(mesFilter)}`} className="mb-6">
-          <p className="text-sm text-gray-600 mb-3">
-            {arquivoMes.notaPedidoIds.length} entrega(s) · {arquivoMes.pagamentoIds.length} recibo(s) arquivados
-          </p>
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-            {arquivoMes.notaPedidoIds.map((nid) => {
-              const nota = data.notasPedido.find((n) => n.id === nid);
-              if (!nota?.fotoPedido) return null;
-              return (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img key={nid} src={nota.fotoPedido} alt="" className="w-full h-24 object-cover rounded-lg border" />
-              );
-            })}
-          </div>
-        </Card>
-      )}
-
-      <Card title="Histórico — ficha corrida">
-        <DataTable
-          data={lancamentos}
-          keyField="id"
-          emptyMessage="Nenhum lançamento neste mês."
-          mobileCard={(f) => (
-            <div className="bg-white border rounded-xl p-4">
-              <p className="font-medium text-sm">{f.descricao}</p>
-              <p className="text-xs text-gray-500 mt-1">{formatDate(f.dataLancamento)}</p>
-              <DetalheLancamento ficha={f} />
-              <p className="text-lg font-bold text-green-700 mt-2">{formatCurrency(f.valorLiquido)}</p>
-              <span className="text-xs text-gray-500">{f.status === "pago" ? "Pago" : "Aguardando pagamento"}</span>
-            </div>
-          )}
-          columns={[
-            { key: "data", label: "Data", render: (f) => formatDate(f.dataLancamento) },
-            ...(!isCooperado ? [{ key: "coop", label: "Cooperado", render: (f: FichaCorrida) => getCooperadoNome(data.cooperados, f.cooperadoId) }] : []),
-            {
-              key: "descricao",
-              label: "Entrega / itens",
-              render: (f) => (
-                <div>
-                  <p>{f.descricao}</p>
-                  <DetalheLancamento ficha={f} />
-                </div>
-              ),
-            },
-            { key: "valor", label: "A receber", render: (f) => formatCurrency(f.valorLiquido) },
-            { key: "status", label: "Situação", render: (f) => (f.status === "pago" ? "Pago" : "Pendente") },
-          ]}
-        />
-      </Card>
-
       {cooperadoSelecionado && pixOk && (
-        <PixQrModal open={pixModalOpen} onClose={() => setPixModalOpen(false)} chavePix={cooperadoSelecionado.chavePix} nome={cooperadoSelecionado.nomeCompleto} valor={totalPendente} />
+        <PixQrModal open={pixModalOpen} onClose={() => setPixModalOpen(false)} chavePix={cooperadoSelecionado.chavePix} nome={nomeCooperado} valor={totalPendente} />
       )}
 
       <ConfirmDialog
@@ -356,7 +527,7 @@ export default function FichaCorridaPage() {
         onClose={() => setConfirmPagamento(false)}
         onConfirm={handleConfirmarPagamento}
         title="Confirmar pagamento"
-        message={`Registrar pagamento de ${formatCurrency(totalPendente)} para ${cooperadoSelecionado?.nomeCompleto}? O cooperado receberá aviso para assinar o recibo.`}
+        message={`Registrar pagamento de ${formatCurrency(totalPendente)} para ${nomeCooperado}? O cooperado receberá aviso para assinar o recibo.`}
         confirmLabel="Sim, pagamento realizado"
       />
 

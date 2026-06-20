@@ -9,7 +9,12 @@ import { StatusBadge } from "@/components/ui/StatusBadge";
 import { NotaStatusBadge } from "@/components/ui/NotaStatusBadge";
 import { Button } from "@/components/ui/Button";
 import { Select, FormField } from "@/components/ui/Form";
-import { getTotalAPagarCooperado } from "@/services/notaPedidoService";
+import {
+  getTotalAPagarCooperado,
+  getStatusCotaCooperado,
+  getMensalidadeFixaMes,
+  getArquivoMensalCooperado,
+} from "@/services/notaPedidoService";
 import { formatCurrency, formatDate, formatMesReferencia, formatCPFCNPJ, formatPhone, getCurrentMesReferencia } from "@/utils/format";
 import type { Cooperado } from "@/types";
 
@@ -48,7 +53,9 @@ export function CooperadoFichaPanel({ cooperado }: { cooperado: Cooperado }) {
   if (!data || !resumo) return null;
 
   const totalPendente = getTotalAPagarCooperado(data, cooperado.id, mesFilter);
-  const arquivo = data.arquivosMensais.find((a) => a.cooperadoId === cooperado.id && a.mesReferencia === mesFilter);
+  const arquivo = getArquivoMensalCooperado(data, cooperado.id, mesFilter);
+  const statusCota = getStatusCotaCooperado(data, cooperado.id, mesFilter);
+  const mensalidadeMes = getMensalidadeFixaMes(data, cooperado.id, mesFilter, cooperado.cooperativaId);
 
   return (
     <div className="space-y-6">
@@ -76,6 +83,13 @@ export function CooperadoFichaPanel({ cooperado }: { cooperado: Cooperado }) {
       </FormField>
 
       <Card title="Dados do cooperado">
+        <div className="flex flex-wrap items-center gap-2 mb-3">
+          {statusCota === "paga" ? (
+            <span className="text-xs font-medium text-green-700 bg-green-50 px-2 py-1 rounded-full">Cota paga</span>
+          ) : (
+            <span className="text-xs font-bold text-red-600 bg-red-50 px-2 py-1 rounded-full border border-red-200">Cota não paga</span>
+          )}
+        </div>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
           <div><span className="text-gray-500">CPF/CNPJ:</span> {cooperado.cpfCnpj ? formatCPFCNPJ(cooperado.cpfCnpj) : "—"}</div>
           <div><span className="text-gray-500">Telefone:</span> {formatPhone(cooperado.telefone) || "—"}</div>
@@ -86,7 +100,7 @@ export function CooperadoFichaPanel({ cooperado }: { cooperado: Cooperado }) {
         </div>
         <div className="flex flex-wrap gap-2 mt-4">
           <Link href={`/ficha-corrida?cooperado=${cooperado.id}&mes=${mesFilter}`}>
-            <Button variant="secondary" size="sm"><Wallet size={16} /> Pagar / ficha</Button>
+            <Button variant="secondary" size="sm"><Wallet size={16} /> Ficha corrida / pagar</Button>
           </Link>
           <Link href={`/notas-pedido?cooperado=${cooperado.id}`}>
             <Button variant="secondary" size="sm"><FileText size={16} /> Entregas</Button>
@@ -131,6 +145,12 @@ export function CooperadoFichaPanel({ cooperado }: { cooperado: Cooperado }) {
       </Card>
 
       <Card title="Ficha corrida — lançamentos">
+        {mensalidadeMes > 0 && (
+          <p className="text-sm text-gray-600 mb-3">Mensalidade do mês: <strong>{formatCurrency(mensalidadeMes)}</strong></p>
+        )}
+        {(arquivo?.descontoAvulso ?? 0) > 0 && (
+          <p className="text-sm text-red-600 mb-3">Desconto avulso: - {formatCurrency(arquivo!.descontoAvulso!)}</p>
+        )}
         {mesFicha.length === 0 ? (
           <p className="text-sm text-gray-500">Nenhum lançamento neste mês.</p>
         ) : (

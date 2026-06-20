@@ -218,6 +218,8 @@ export interface FichaCorrida {
   id: string;
   cooperativaId: string;
   cooperadoId: string;
+  /** Nome no momento do lançamento — evita “Desconhecido” entre aparelhos. */
+  cooperadoNomeSnapshot?: string;
   notaPedidoId: string;
   descricao: string;
   valorBruto: number;
@@ -264,6 +266,12 @@ export interface ArquivoMensalCooperado {
   mesReferencia: string;
   notaPedidoIds: string[];
   pagamentoIds: string[];
+  /** Mensalidade fixa descontada neste mês (padrão da cooperativa se omitido). */
+  mensalidadeFixa?: number;
+  descontoAvulso?: number;
+  descontoAvulsoMotivo?: string;
+  /** Responsável confirma pagamento da cota de ingresso. */
+  cotaIngressoPaga?: boolean;
   updatedAt: string;
 }
 

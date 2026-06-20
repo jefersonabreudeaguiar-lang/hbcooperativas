@@ -33,7 +33,7 @@ import {
   ensureNotaComFoto,
   resolveCooperativaCnpj,
 } from "@/services/notaPedidoCloudService";
-import { listCooperadosDaCooperativa, syncCooperadosFromCloud, pushCooperadoToCloud } from "@/services/cooperadoCloudService";
+import { listCooperadosDaCooperativa, syncCooperadosFromCloud, pushCooperadoToCloud, resolverCooperadoIdCanonico, getCooperadoNomeResolvido } from "@/services/cooperadoCloudService";
 import { ensureContratoPnaePadrao, getContratoLabel, getContratosEntrega } from "@/utils/contratosEntrega";
 import { cn, formatCurrency, formatDate, formatMesReferencia, getCurrentMesReferencia } from "@/utils/format";
 import { labelUnidade } from "@/utils/unidades";
@@ -479,7 +479,12 @@ export default function NotasPedidoContent() {
 
       if (coopId && avulsoInstId) setInstituicaoPadraoId(coopId, avulsoInstId);
 
-      const ficha = buildFichaFromNota(nota, { ...d, cooperados }, user.name);
+      const ficha = buildFichaFromNota(
+        nota,
+        { ...d, cooperados },
+        user.name,
+        cooperados.find((c) => c.id === cooperadoId)?.nomeCompleto
+      );
       const arquivosMensais = upsertArquivoMensal({ ...d, cooperados }, cooperadoId, coopId, mes, {
         notaPedidoIds: [nota.id],
       });
@@ -829,10 +834,22 @@ export default function NotasPedidoContent() {
     updateData((d) => {
       const now = new Date().toISOString();
       if (coopId && conferenciaInstId) setInstituicaoPadraoId(coopId, conferenciaInstId);
+      const coopSel = cooperadosCoop.find((c) => c.id === conferenciaCooperadoId);
+      const nomeCoop =
+        coopSel?.nomeCompleto?.trim() ||
+        selectedNota.cooperadoNomeSnapshot?.trim() ||
+        getCooperadoNomeResolvido(d, conferenciaCooperadoId, coopId);
+      const cooperadoIdCanonico = resolverCooperadoIdCanonico(
+        d,
+        conferenciaCooperadoId,
+        coopId,
+        nomeCoop
+      );
       const base = aplicarItensNaNota(
         {
           ...selectedNota,
-          cooperadoId: conferenciaCooperadoId,
+          cooperadoId: cooperadoIdCanonico,
+          cooperadoNomeSnapshot: nomeCoop,
           instituicaoId: conferenciaInstId,
           localEntrega: conferenciaLocal,
           escolaAvulsaNome: conferenciaEscolaAvulsa.trim() || selectedNota.escolaAvulsaNome,
@@ -848,7 +865,7 @@ export default function NotasPedidoContent() {
         conferidaPor: user.name,
         dataConferencia: now.split("T")[0],
       };
-      const ficha = buildFichaFromNota(notaAtualizada, d, user.name);
+      const ficha = buildFichaFromNota(notaAtualizada, d, user.name, nomeCoop);
       const arquivosMensais = upsertArquivoMensal(d, notaAtualizada.cooperadoId, notaAtualizada.cooperativaId, notaAtualizada.mesReferencia, {
         notaPedidoIds: [notaAtualizada.id],
       });
@@ -870,7 +887,7 @@ export default function NotasPedidoContent() {
 
     const notaId = selectedNota.id;
     const chaveAtual = getChaveGrupoConferencia(selectedNota, data);
-    const coopNome = getCooperadoNome(data.cooperados, conferenciaCooperadoId);
+    const coopNome = getCooperadoNomeResolvido(getData() ?? data, conferenciaCooperadoId, coopId);
     const pendentesRestantes = coopId ? contarPendentesConferencia(getData(), coopId) : 0;
 
     setConferirModal(false);

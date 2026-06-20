@@ -165,3 +165,106 @@ export function listCooperadosDaCooperativa(data: AppData, cooperativaId?: strin
     a.nomeCompleto.localeCompare(b.nomeCompleto, "pt-BR")
   );
 }
+
+/** Unifica ID local quando o cooperado veio de outro aparelho (nome/CPF). */
+export function resolverCooperadoIdCanonico(
+  data: AppData,
+  cooperadoId: string,
+  cooperativaId?: string,
+  nomeFallback?: string
+): string {
+  const direct = data.cooperados.find(
+    (c) => c.id === cooperadoId && (!cooperativaId || c.cooperativaId === cooperativaId)
+  );
+  if (direct) return direct.id;
+
+  const nome = nomeFallback?.trim().toLowerCase();
+  if (nome && cooperativaId) {
+    const byName = data.cooperados.find(
+      (c) =>
+        c.cooperativaId === cooperativaId &&
+        nomeNormalizado(c.nomeCompleto) === nomeNormalizado(nomeFallback!)
+    );
+    if (byName) return byName.id;
+  }
+
+  const nota = data.notasPedido.find(
+    (n) =>
+      n.cooperadoId === cooperadoId &&
+      n.cooperadoNomeSnapshot?.trim() &&
+      (!cooperativaId || notaPertenceCooperativa(data, n, cooperativaId))
+  );
+  if (nota?.cooperadoNomeSnapshot && cooperativaId) {
+    const bySnapshot = data.cooperados.find(
+      (c) =>
+        c.cooperativaId === cooperativaId &&
+        nomeNormalizado(c.nomeCompleto) === nomeNormalizado(nota.cooperadoNomeSnapshot!)
+    );
+    if (bySnapshot) return bySnapshot.id;
+  }
+
+  return cooperadoId;
+}
+
+export function getCooperadoNomeResolvido(
+  data: AppData,
+  cooperadoId: string,
+  cooperativaId?: string
+): string {
+  const canonico = resolverCooperadoIdCanonico(data, cooperadoId, cooperativaId);
+  const coop = data.cooperados.find((c) => c.id === canonico);
+  if (coop?.nomeCompleto?.trim()) return coop.nomeCompleto;
+
+  const ficha = data.fichaCorrida.find((f) => f.cooperadoId === cooperadoId);
+  if (ficha?.cooperadoNomeSnapshot?.trim()) return ficha.cooperadoNomeSnapshot.trim();
+
+  const nota = data.notasPedido.find((n) => n.cooperadoId === cooperadoId);
+  if (nota?.cooperadoNomeSnapshot?.trim()) return nota.cooperadoNomeSnapshot.trim();
+
+  return "Desconhecido";
+}
+
+/** Cooperados com lançamentos na ficha no mês (+ cadastro local/nuvem). */
+export function listCooperadosComFichaNoMes(
+  data: AppData,
+  cooperativaId: string,
+  mesReferencia: string
+): Cooperado[] {
+  const ids = new Set(
+    data.fichaCorrida
+      .filter((f) => f.cooperativaId === cooperativaId && f.mesReferencia === mesReferencia)
+      .map((f) => f.cooperadoId)
+  );
+  const base = listCooperadosDaCooperativa(data, cooperativaId);
+  const byId = new Map(base.map((c) => [c.id, c]));
+  const result: Cooperado[] = [];
+
+  for (const id of ids) {
+    if (byId.has(id)) {
+      result.push(byId.get(id)!);
+      continue;
+    }
+    const nome = getCooperadoNomeResolvido(data, id, cooperativaId);
+    result.push({
+      id,
+      cooperativaId,
+      nomeCompleto: nome,
+      cpfCnpj: "",
+      telefone: "",
+      endereco: "",
+      comunidade: "",
+      cafDap: "",
+      chavePix: "",
+      banco: "",
+      agencia: "",
+      conta: "",
+      status: "ativo",
+      produtos: [],
+      observacoes: "Vinculado pela ficha corrida.",
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    });
+  }
+
+  return result.sort((a, b) => a.nomeCompleto.localeCompare(b.nomeCompleto, "pt-BR"));
+}

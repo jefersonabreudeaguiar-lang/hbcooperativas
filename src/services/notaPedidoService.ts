@@ -67,7 +67,12 @@ export function upsertArquivoMensal(
   cooperadoId: string,
   cooperativaId: string,
   mesReferencia: string,
-  patch: Partial<Pick<ArquivoMensalCooperado, "notaPedidoIds" | "pagamentoIds">>
+  patch: Partial<
+    Pick<
+      ArquivoMensalCooperado,
+      "notaPedidoIds" | "pagamentoIds" | "mensalidadeFixa" | "descontoAvulso" | "descontoAvulsoMotivo" | "cotaIngressoPaga"
+    >
+  >
 ): ArquivoMensalCooperado[] {
   const now = new Date().toISOString();
   const idx = data.arquivosMensais.findIndex(
@@ -81,6 +86,10 @@ export function upsertArquivoMensal(
       mesReferencia,
       notaPedidoIds: patch.notaPedidoIds ?? [],
       pagamentoIds: patch.pagamentoIds ?? [],
+      mensalidadeFixa: patch.mensalidadeFixa,
+      descontoAvulso: patch.descontoAvulso,
+      descontoAvulsoMotivo: patch.descontoAvulsoMotivo,
+      cotaIngressoPaga: patch.cotaIngressoPaga,
       updatedAt: now,
     };
     return [...data.arquivosMensais, novo];
@@ -94,6 +103,10 @@ export function upsertArquivoMensal(
     pagamentoIds: patch.pagamentoIds
       ? [...new Set([...cur.pagamentoIds, ...patch.pagamentoIds])]
       : cur.pagamentoIds,
+    mensalidadeFixa: patch.mensalidadeFixa !== undefined ? patch.mensalidadeFixa : cur.mensalidadeFixa,
+    descontoAvulso: patch.descontoAvulso !== undefined ? patch.descontoAvulso : cur.descontoAvulso,
+    descontoAvulsoMotivo: patch.descontoAvulsoMotivo !== undefined ? patch.descontoAvulsoMotivo : cur.descontoAvulsoMotivo,
+    cotaIngressoPaga: patch.cotaIngressoPaga !== undefined ? patch.cotaIngressoPaga : cur.cotaIngressoPaga,
     updatedAt: now,
   };
   const next = [...data.arquivosMensais];
@@ -101,10 +114,56 @@ export function upsertArquivoMensal(
   return next;
 }
 
+export function getArquivoMensalCooperado(
+  data: AppData,
+  cooperadoId: string,
+  mesReferencia: string
+): ArquivoMensalCooperado | undefined {
+  return data.arquivosMensais.find((a) => a.cooperadoId === cooperadoId && a.mesReferencia === mesReferencia);
+}
+
+export function getMensalidadeFixaMes(
+  data: AppData,
+  cooperadoId: string,
+  mesReferencia: string,
+  cooperativaId?: string
+): number {
+  const arquivo = getArquivoMensalCooperado(data, cooperadoId, mesReferencia);
+  if (arquivo?.mensalidadeFixa != null && arquivo.mensalidadeFixa >= 0) {
+    return arquivo.mensalidadeFixa;
+  }
+  const pendente = data.mensalidades.find(
+    (m) =>
+      m.cooperadoId === cooperadoId &&
+      m.mesReferencia === mesReferencia &&
+      (m.status === "pendente" || m.status === "atrasada")
+  );
+  if (pendente) return pendente.valor;
+  const coop = cooperativaId
+    ? data.cooperativas.find((c) => c.id === cooperativaId)
+    : data.cooperados.find((c) => c.id === cooperadoId)
+      ? data.cooperativas.find((c) => c.id === data.cooperados.find((x) => x.id === cooperadoId)!.cooperativaId)
+      : undefined;
+  return coop?.mensalidadeConfig?.valorPadrao ?? 0;
+}
+
+export type StatusCotaCooperado = "paga" | "nao_paga" | "sem_cota";
+
+export function getStatusCotaCooperado(data: AppData, cooperadoId: string, mesReferencia: string): StatusCotaCooperado {
+  const arquivo = getArquivoMensalCooperado(data, cooperadoId, mesReferencia);
+  if (arquivo?.cotaIngressoPaga) return "paga";
+
+  const cotas = data.cotas.filter((c) => c.cooperadoId === cooperadoId);
+  if (cotas.length === 0) return "nao_paga";
+  if (cotas.every((c) => c.status === "quitada")) return "paga";
+  return "nao_paga";
+}
+
 export function buildFichaFromNota(
   nota: NotaPedido,
   data: AppData,
-  responsavel: string
+  responsavel: string,
+  cooperadoNome?: string
 ): FichaCorrida {
   const saldoAnterior = getSaldoAnteriorFicha(data, nota.cooperadoId, nota.mesReferencia, nota.id);
   const inst = data.instituicoes.find((i) => i.id === nota.instituicaoId);
@@ -121,6 +180,10 @@ export function buildFichaFromNota(
     id: `fc_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
     cooperativaId: nota.cooperativaId,
     cooperadoId: nota.cooperadoId,
+    cooperadoNomeSnapshot:
+      cooperadoNome?.trim() ||
+      nota.cooperadoNomeSnapshot?.trim() ||
+      data.cooperados.find((c) => c.id === nota.cooperadoId)?.nomeCompleto,
     notaPedidoId: nota.id,
     descricao: `Nota ${nota.numeroNota} — ${escola}`,
     valorBruto: nota.valorBruto,
@@ -173,7 +236,25 @@ export function getResumoPagamentoCooperado(
   const valorBruto = round2(fichas.reduce((s, f) => s + f.valorBruto, 0));
   const descontoCooperativa = round2(fichas.reduce((s, f) => s + f.descontos, 0));
   const valorEntregas = round2(fichas.reduce((s, f) => s + f.valorLiquido, 0));
-  const descontosExtras = getMensalidadesPendentesMes(data, cooperadoId, mesReferencia);
+  const coop = data.cooperados.find((c) => c.id === cooperadoId);
+  const coopId = coop?.cooperativaId ?? fichas[0]?.cooperativaId;
+  const mensalidadeFixa = getMensalidadeFixaMes(data, cooperadoId, mesReferencia, coopId);
+  const arquivo = getArquivoMensalCooperado(data, cooperadoId, mesReferencia);
+  const descontosExtras: FichaCorridaDesconto[] = [];
+  if (mensalidadeFixa > 0) {
+    descontosExtras.push({
+      tipo: "mensalidade",
+      motivo: `Mensalidade ${mesReferencia}`,
+      valor: mensalidadeFixa,
+    });
+  }
+  if (arquivo?.descontoAvulso && arquivo.descontoAvulso > 0) {
+    descontosExtras.push({
+      tipo: "manual",
+      motivo: arquivo.descontoAvulsoMotivo?.trim() || "Desconto avulso",
+      valor: arquivo.descontoAvulso,
+    });
+  }
   const totalExtras = round2(descontosExtras.reduce((s, d) => s + d.valor, 0));
   const valorLiquido = round2(Math.max(0, valorEntregas - totalExtras));
   return {
