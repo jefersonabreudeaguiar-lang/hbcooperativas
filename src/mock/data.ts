@@ -49,6 +49,7 @@ export const DEMO_ENTITY_IDS = new Set([
 export const DEMO_EMAILS = new Set([
   "admin@hbcooperativa.org.br",
   "tesoureiro@hbcooperativa.org.br",
+  "responsavel@hbcooperativa.org.br",
   "presidente@hbcooperativa.org.br",
   "jose.silva@email.com",
   "ana.santos@email.com",

@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useAppData } from "@/hooks/useAppData";
 import { useAuth } from "@/modules/auth/AuthProvider";
-import { isAdminRole } from "@/permissions";
+import { isDiretoriaRole } from "@/permissions";
 import { StatCard } from "@/components/ui/Card";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
@@ -221,7 +221,7 @@ export default function DashboardPage() {
   const { user } = useAuth();
   if (!user) return null;
 
-  if (isAdminRole(user.role) || user.role === "presidente") {
+  if (isDiretoriaRole(user.role)) {
     return <AdminDashboard />;
   }
 

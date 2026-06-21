@@ -1,6 +1,6 @@
 // Tipos centrais — plataforma HB Cooperativas
 
-export type UserRole = "admin" | "tesoureiro" | "presidente" | "cooperado";
+export type UserRole = "admin" | "tesoureiro" | "responsavel" | "cooperado";
 
 export type CooperativaStatus = "ativa" | "inativa";
 

@@ -206,7 +206,7 @@ export function gerarRelatorioFechamentoHtml(
 
     <div class="assinatura">
       <div><div class="assinatura-linha">Responsável pela revisão</div></div>
-      <div><div class="assinatura-linha">Presidente / Tesoureiro</div></div>
+      <div><div class="assinatura-linha">Tesoureiro</div></div>
     </div>`;
 
   return documentoShell("Fechamento mensal", body, data, mesReferencia);
@@ -315,7 +315,7 @@ export function gerarRelatorioEntregasPorItensHtml(
 
     <div class="assinatura">
       <div><div class="assinatura-linha">${escapeHtml(coop?.nome ?? PLATFORM_NAME)}</div></div>
-      <div><div class="assinatura-linha">Responsável / Presidente</div></div>
+      <div><div class="assinatura-linha">Responsável</div></div>
     </div>`;
 
   return documentoShell(

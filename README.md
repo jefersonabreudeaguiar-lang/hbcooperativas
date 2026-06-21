@@ -44,7 +44,7 @@ Resumo: conta em [vercel.com](https://vercel.com) → importar projeto → confi
 |---------------|---------------------------------|----------|
 | Administrador | admin@hbcooperativa.org.br      | admin123 |
 | Tesoureiro    | tesoureiro@hbcooperativa.org.br | tes123   |
-| Presidente    | presidente@hbcooperativa.org.br | pres123  |
+| Responsável   | responsavel@hbcooperativa.org.br | pres123  |
 | Cooperado     | jose.silva@email.com            | coop123  |
 
 **CNPJ de teste para cadastro de cooperado:** `12.345.678/0001-90`  

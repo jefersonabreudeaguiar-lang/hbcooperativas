@@ -45,7 +45,7 @@ export const PERMISSIONS: PermissionMatrix = {
     relatorios: VIEW_EXPORT,
     fechamento: ["view", "create", "edit", "export"],
   },
-  presidente: {
+  responsavel: {
     dashboard: VIEW_ONLY,
     cooperativas: ["view", "create", "edit", "export"],
     cooperados: VIEW_ONLY,
@@ -81,8 +81,12 @@ export function isAdminRole(role: UserRole): boolean {
   return role === "admin" || role === "tesoureiro";
 }
 
+export function isResponsavelRole(role: UserRole): boolean {
+  return role === "responsavel";
+}
+
 export function isDiretoriaRole(role: UserRole): boolean {
-  return role === "presidente" || isAdminRole(role);
+  return isResponsavelRole(role) || isAdminRole(role);
 }
 
 const COOPERADO_MENU: { href: string; label: string; resource: Resource }[] = [
@@ -127,7 +131,7 @@ export function getMenuItems(role: UserRole): { href: string; label: string; res
     return COOPERADO_MENU.filter((item) => can(role, item.resource, "view") || item.href === "/meu-cadastro");
   }
 
-  const source = role === "presidente"
+  const source = role === "responsavel"
     ? DIRETORIA_MENU.filter((i) =>
         ["/dashboard", "/notas-pedido", "/ficha-corrida", "/contratos", "/meu-perfil", "/cooperados", "/mensalidades", "/comunicados", "/relatorios", "/fechamento-mensal"].includes(i.href)
         && can(role, i.resource, "view")
@@ -154,7 +158,7 @@ export function getMobileNavItems(role: UserRole): { href: string; label: string
   if (role === "cooperado") {
     return COOPERADO_MENU.filter((i) => ["/dashboard", "/notas-pedido", "/precos", "/ficha-corrida", "/mensalidades"].includes(i.href));
   }
-  const presidenteItems: { href: string; label: string; resource: Resource }[] = [
+  const responsavelItems: { href: string; label: string; resource: Resource }[] = [
     { href: "/dashboard", label: "Início", resource: "dashboard" },
     { href: "/notas-pedido", label: "Conferir", resource: "notas_pedido" },
     { href: "/ficha-corrida", label: "Pagar", resource: "ficha_corrida" },
@@ -162,8 +166,8 @@ export function getMobileNavItems(role: UserRole): { href: string; label: string
     { href: "/contratos", label: "Contratos", resource: "instituicoes" },
     { href: "/meu-perfil", label: "Perfil", resource: "cooperativas" },
   ];
-  if (role === "presidente") {
-    return presidenteItems.filter((i) => can(role, i.resource, "view"));
+  if (role === "responsavel") {
+    return responsavelItems.filter((i) => can(role, i.resource, "view"));
   }
   const adminItems: { href: string; label: string; resource: Resource }[] = [
     { href: "/dashboard", label: "Início", resource: "dashboard" },
@@ -178,6 +182,6 @@ export function getMobileNavItems(role: UserRole): { href: string; label: string
 export const ROLE_LABELS: Record<UserRole, string> = {
   admin: "Administrador",
   tesoureiro: "Tesoureiro",
-  presidente: "Presidente / Responsável",
+  responsavel: "Responsável",
   cooperado: "Cooperado",
 };

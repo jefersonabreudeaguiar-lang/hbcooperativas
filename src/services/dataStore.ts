@@ -124,6 +124,7 @@ function migrateData(raw: Partial<AppData> & Record<string, unknown>): AppData {
     cooperados,
     users: (base.users ?? []).map((u) => ({
       ...u,
+      role: (u.role as string) === "presidente" ? "responsavel" : u.role,
       cooperativaId: u.cooperativaId ?? (u.cooperadoId
         ? cooperados.find((c) => c.id === u.cooperadoId)?.cooperativaId
         : cooperativas[0]?.id),
@@ -453,7 +454,7 @@ export async function syncCooperativaWithCloud(
 /** Garante que a cooperativa da diretoria exista na nuvem (ex.: cadastro antigo só local). */
 export async function ensureCooperativaInCloudForUser(user: Omit<User, "password">): Promise<void> {
   const isDiretoria =
-    user.role === "presidente" || user.role === "admin" || user.role === "tesoureiro";
+    user.role === "responsavel" || user.role === "admin" || user.role === "tesoureiro";
   if (!isDiretoria) return;
 
   const data = loadData();
@@ -614,7 +615,7 @@ export async function registerCooperativa(input: RegisterCooperativaInput): Prom
   const data = loadData();
   if (data.users.some((u) => u.email.toLowerCase() === email)) {
     const existing = data.users.find((u) => u.email.toLowerCase() === email);
-    if (existing?.role === "presidente" || existing?.role === "admin" || existing?.role === "tesoureiro") {
+    if (existing?.role === "responsavel" || existing?.role === "admin" || existing?.role === "tesoureiro") {
       return {
         success: false,
         error:
@@ -655,7 +656,7 @@ export async function registerCooperativa(input: RegisterCooperativaInput): Prom
     email,
     password: input.password,
     name: responsavel,
-    role: "presidente",
+    role: "responsavel",
     cooperativaId,
     cooperativaCnpj: cnpj,
     active: true,

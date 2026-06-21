@@ -4,7 +4,7 @@ import { useState } from "react";
 import { Plus } from "lucide-react";
 import { useAppData } from "@/hooks/useAppData";
 import { usePermissions } from "@/hooks/usePermissions";
-import { isAdminRole } from "@/permissions";
+import { isDiretoriaRole } from "@/permissions";
 import { PageHeader, Modal } from "@/components/ui/Table";
 import { Button } from "@/components/ui/Button";
 import { Input, Textarea, FormField } from "@/components/ui/Form";
@@ -25,7 +25,7 @@ export default function FinanceiroPage() {
 
   const mes = getCurrentMesReferencia();
   const financeiro = data.financeiro.find((f) => f.mesReferencia === mes);
-  const isAdmin = isAdminRole(user.role) || user.role === "presidente";
+  const isAdmin = isDiretoriaRole(user.role);
 
   const openEdit = () => {
     setForm(financeiro ?? { mesReferencia: mes, saldoInicial: 0, entradas: 0, saidas: 0 });

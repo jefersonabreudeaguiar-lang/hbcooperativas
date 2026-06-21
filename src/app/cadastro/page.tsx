@@ -183,7 +183,7 @@ export default function CadastroPage() {
       }
     : {
         titulo: "Cadastre sua cooperativa",
-        texto: "Responsável pela diretoria: registre o CNPJ e os dados da cooperativa. Depois disso, os cooperados poderão se vincular pelo CNPJ.",
+        texto: "Responsável: registre o CNPJ e os dados da cooperativa. Depois disso, os cooperados poderão se vincular pelo CNPJ.",
       };
 
   return (
@@ -390,7 +390,7 @@ export default function CadastroPage() {
                 ) : (
                   <>
                     <h2 className="text-xl font-bold text-gray-900 mb-1">Cadastro da cooperativa</h2>
-                    <p className="text-sm text-gray-500 mb-6">Diretoria — registre a cooperativa no sistema</p>
+                    <p className="text-sm text-gray-500 mb-6">Responsável — registre a cooperativa no sistema</p>
 
                     <form onSubmit={handleResponsavelSubmit} className="space-y-4">
                       <div>
@@ -403,7 +403,7 @@ export default function CadastroPage() {
                       </div>
                       <div>
                         <Label htmlFor="nomeResponsavel">Nome do Responsável</Label>
-                        <Input id="nomeResponsavel" value={nomeResponsavel} onChange={(e) => setNomeResponsavel(e.target.value)} placeholder="Presidente ou diretor" required />
+                        <Input id="nomeResponsavel" value={nomeResponsavel} onChange={(e) => setNomeResponsavel(e.target.value)} placeholder="Nome do responsável" required />
                       </div>
                       <div>
                         <Label htmlFor="emailResp">E-mail de acesso</Label>
