@@ -4,7 +4,7 @@ import { useState, useMemo, useEffect, useRef, useCallback } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import {
-  Camera, CheckCircle, FileText, XCircle, RefreshCw, ChevronRight, Eye, Building2, Pencil, UserPlus, X, ImagePlus, Trash2, FileSignature,
+  Camera, CheckCircle, FileText, XCircle, RefreshCw, ChevronRight, Eye, Building2, Pencil, UserPlus, X, ImagePlus, Trash2, FileSignature, BookOpen, Package,
 } from "lucide-react";
 import { useAppData } from "@/hooks/useAppData";
 import { usePermissions } from "@/hooks/usePermissions";
@@ -37,6 +37,7 @@ import { pushOperacionalToCloud } from "@/services/cooperativaSyncCloudService";
 import { getProdutosContrato } from "@/services/catalogoContratosService";
 import { listarResumosMensaisEntregas } from "@/services/cooperadoEntregasService";
 import { CooperadoEntregasPorMes } from "@/components/cooperado/CooperadoEntregasPorMes";
+import { CooperadoMinhaFichaTab } from "@/components/cooperado/CooperadoMinhaFichaTab";
 import { getContratoLabel, getContratosEntrega, resolverContratoEntrega } from "@/utils/contratosEntrega";
 import { cn, formatCurrency, formatDate, formatMesReferencia, getCurrentMesReferencia } from "@/utils/format";
 import { labelUnidade } from "@/utils/unidades";
@@ -146,6 +147,7 @@ export default function NotasPedidoContent() {
 
   const [filtroCooperadoId, setFiltroCooperadoId] = useState("");
   const [abaConferenciaKey, setAbaConferenciaKey] = useState("");
+  const [abaCooperado, setAbaCooperado] = useState<"entregas" | "ficha">("entregas");
   const [contratoInstId, setContratoInstId] = useState("");
   const [anexarSucesso, setAnexarSucesso] = useState(false);
   const [ultimaNotaEnviadaIds, setUltimaNotaEnviadaIds] = useState<string[]>([]);
@@ -335,6 +337,11 @@ export default function NotasPedidoContent() {
       }))
       .filter((r) => r.notas.length > 0);
   }, [data, cooperadoId, coopId, isCooperado, statusFilter]);
+
+  const resumosFichaCooperado = useMemo(() => {
+    if (!isCooperado || !data || !cooperadoId) return [];
+    return listarResumosMensaisEntregas(data, cooperadoId, coopId);
+  }, [data, cooperadoId, coopId, isCooperado]);
 
   const nomeCooperadoExibicao = useMemo(() => {
     if (!data || !cooperadoId) return user?.name ?? "Cooperado";
@@ -1196,6 +1203,7 @@ export default function NotasPedidoContent() {
   const concluirEnvioFoto = () => {
     const firstId = ultimaNotaEnviadaIds[0];
     fecharAnexarModal(true);
+    setAbaCooperado("entregas");
     if (firstId) {
       requestAnimationFrame(() => {
         document.getElementById(`nota-enviada-${firstId}`)?.scrollIntoView({ behavior: "smooth", block: "center" });
@@ -1294,7 +1302,9 @@ export default function NotasPedidoContent() {
         title={isCooperado ? "Minhas entregas" : "Conferir entregas"}
         subtitle={
           isCooperado
-            ? "Histórico por mês com fotos e totais recebidos"
+            ? abaCooperado === "ficha"
+              ? "Extrato financeiro mensal com valores recebidos e detalhamento de cada entrega"
+              : "Entregas numeradas por mês — toque em cada uma para ver a foto"
             : "Analise fotos, lance produtos ou registre entregas avulsas sem nota"
         }
         action={isCooperado ? (
@@ -1440,14 +1450,55 @@ export default function NotasPedidoContent() {
 
       {isCooperado && (
         <p className="text-sm text-gray-600 mb-4">
-          Cada mês mostra o resumo financeiro e as fotos das entregas. Valores pendentes ficam em{" "}
-          <Link href="/ficha-corrida" className="text-green-700 font-semibold">Quanto vou receber</Link>.
+          {abaCooperado === "entregas" ? (
+            <>
+              Cada mês lista Entrega 1, 2, 3… Toque na entrega para abrir a foto. Valores consolidados ficam em{" "}
+              <button type="button" onClick={() => setAbaCooperado("ficha")} className="text-green-700 font-semibold underline">
+                Minha ficha
+              </button>
+              .
+            </>
+          ) : (
+            <>
+              Resumo financeiro por mês. Valores em aberto também em{" "}
+              <Link href="/ficha-corrida" className="text-green-700 font-semibold">Quanto vou receber</Link>.
+            </>
+          )}
         </p>
       )}
 
+      {isCooperado && (
+        <div className="flex gap-2 mb-6 border-b border-gray-200">
+          <button
+            type="button"
+            onClick={() => setAbaCooperado("entregas")}
+            className={cn(
+              "px-4 py-2.5 text-sm font-medium border-b-2 -mb-px flex items-center gap-2",
+              abaCooperado === "entregas"
+                ? "border-green-600 text-green-700"
+                : "border-transparent text-gray-500 hover:text-gray-700"
+            )}
+          >
+            <Package size={16} /> Minhas entregas
+          </button>
+          <button
+            type="button"
+            onClick={() => setAbaCooperado("ficha")}
+            className={cn(
+              "px-4 py-2.5 text-sm font-medium border-b-2 -mb-px flex items-center gap-2",
+              abaCooperado === "ficha"
+                ? "border-green-600 text-green-700"
+                : "border-transparent text-gray-500 hover:text-gray-700"
+            )}
+          >
+            <BookOpen size={16} /> Minha ficha
+          </button>
+        </div>
+      )}
+
       <FilterBar>
-        {isCooperado && (
-          <FormField label="Filtrar fotos">
+        {isCooperado && abaCooperado === "entregas" && (
+          <FormField label="Filtrar entregas">
             <Select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className="min-w-[200px]">
               <option value="">Todas as entregas</option>
               <option value="aguardando_conferencia">Em análise</option>
@@ -1481,7 +1532,15 @@ export default function NotasPedidoContent() {
       </FilterBar>
 
       {isCooperado ? (
-        statusFilter && resumosMensaisCooperado.length === 0 ? (
+        abaCooperado === "ficha" ? (
+          <CooperadoMinhaFichaTab
+            cooperadoId={cooperadoId!}
+            cooperativaId={coopId}
+            nomeCooperado={nomeCooperadoExibicao}
+            resumos={resumosFichaCooperado}
+            getEscolaLabel={(n) => getEscolaNotaLabel(n, data.instituicoes)}
+          />
+        ) : statusFilter && resumosMensaisCooperado.length === 0 ? (
           <div className="text-center py-12 text-gray-500 bg-white rounded-2xl border">
             <Camera size={40} className="mx-auto mb-3 text-gray-300" />
             <p className="font-medium">Nenhuma entrega com este filtro</p>
@@ -1492,7 +1551,6 @@ export default function NotasPedidoContent() {
             resumos={resumosMensaisCooperado}
             nomeCooperado={nomeCooperadoExibicao}
             ultimaNotaEnviadaIds={ultimaNotaEnviadaIds}
-            onVerNota={openView}
             onReenviar={openAnexar}
             onExcluir={(n) => setExcluirNotaTarget(n)}
             getEscolaLabel={(n) => getEscolaNotaLabel(n, data.instituicoes)}

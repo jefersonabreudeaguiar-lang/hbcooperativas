@@ -12,7 +12,7 @@ import {
   syncCooperativaToCloud,
 } from "@/services/cooperativaCloudService";
 import { pushCooperadoToCloud } from "@/services/cooperadoCloudService";
-import { reconciliarFichaFromNotasConferidas } from "@/services/notaPedidoService";
+import { reconciliarFichaFromNotasConferidas, ajustesFichaMesId } from "@/services/notaPedidoService";
 
 const STORAGE_KEY = "coopeagriplla_data";
 const SESSION_KEY = "coopeagriplla_session";
@@ -93,6 +93,9 @@ function stripDemoData(data: AppData): AppData {
       (e) => !DEMO_ENTITY_IDS.has(e.id) && cooperadoIds.has(e.cooperadoId)
     ),
     descontos: filterByCooperado(data.descontos ?? []),
+    valoresAvulsosReceber: filterByCooperado(data.valoresAvulsosReceber ?? []).filter(
+      (v) => !v.cooperativaId || coopIds.has(v.cooperativaId)
+    ),
     pagamentos: filterByCooperado(data.pagamentos ?? []),
     financeiro: (data.financeiro ?? []).filter((f) => !DEMO_ENTITY_IDS.has(f.id)),
     comunicados: (data.comunicados ?? []).filter((c) => !DEMO_ENTITY_IDS.has(c.id)),
@@ -100,7 +103,36 @@ function stripDemoData(data: AppData): AppData {
     veiculos: filterByCooperado(data.veiculos ?? []),
     fechamentos: (data.fechamentos ?? []).filter((f) => !DEMO_ENTITY_IDS.has(f.id)),
     auditLog: (data.auditLog ?? []).filter((a) => !DEMO_ENTITY_IDS.has(a.id)),
+    ajustesFichaMes: (data.ajustesFichaMes ?? []).filter(
+      (a) => !DEMO_ENTITY_IDS.has(a.id) && coopIds.has(a.cooperativaId)
+    ),
   };
+}
+
+function migrateAjustesFichaMes(data: AppData): AppData {
+  const existing = data.ajustesFichaMes ?? [];
+  if (existing.length > 0) return { ...data, ajustesFichaMes: existing };
+
+  const byKey = new Map<string, (typeof existing)[number]>();
+  for (const a of data.arquivosMensais ?? []) {
+    if (!a.cooperativaId) continue;
+    if (a.mensalidadeFixa == null && a.descontoAvulso == null && !a.descontoAvulsoMotivo?.trim()) continue;
+    const id = ajustesFichaMesId(a.cooperativaId, a.mesReferencia);
+    const prev = byKey.get(id);
+    if (!prev || new Date(a.updatedAt).getTime() > new Date(prev.updatedAt).getTime()) {
+      byKey.set(id, {
+        id,
+        cooperativaId: a.cooperativaId,
+        mesReferencia: a.mesReferencia,
+        mensalidadeFixa: a.mensalidadeFixa ?? 0,
+        descontoAvulso: a.descontoAvulso ?? 0,
+        descontoAvulsoMotivo: a.descontoAvulsoMotivo,
+        updatedAt: a.updatedAt,
+      });
+    }
+  }
+
+  return { ...data, ajustesFichaMes: [...existing, ...byKey.values()] };
 }
 
 function migrateData(raw: Partial<AppData> & Record<string, unknown>): AppData {
@@ -150,10 +182,12 @@ function migrateData(raw: Partial<AppData> & Record<string, unknown>): AppData {
     fichaCorrida: base.fichaCorrida ?? [],
     pagamentosCooperado: base.pagamentosCooperado ?? [],
     arquivosMensais: base.arquivosMensais ?? [],
+    ajustesFichaMes: base.ajustesFichaMes ?? [],
     mensalidades: base.mensalidades ?? [],
     cotas: base.cotas ?? [],
     entregas: base.entregas ?? [],
     descontos: base.descontos ?? [],
+    valoresAvulsosReceber: base.valoresAvulsosReceber ?? [],
     pagamentos: base.pagamentos ?? [],
     financeiro: base.financeiro ?? [],
     comunicados: (base.comunicados ?? []).map((c) => ({
@@ -166,7 +200,7 @@ function migrateData(raw: Partial<AppData> & Record<string, unknown>): AppData {
     auditLog: base.auditLog ?? [],
   };
 
-  return stripDemoData(merged);
+  return stripDemoData(migrateAjustesFichaMes(merged));
 }
 
 function runAutomaticTasks(data: AppData): AppData {

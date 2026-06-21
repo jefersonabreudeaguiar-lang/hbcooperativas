@@ -43,10 +43,12 @@ export function gerarReciboHtml(
     .join("");
 
   const descontosExtrasHtml = resumo.descontosExtras
-    .map(
-      (d) =>
-        `<div><span>${d.motivo}</span><span style="color:#dc2626">- ${formatCurrency(d.valor)}</span></div>`
-    )
+    .map((d) => {
+      const credito = d.tipo === "credito_avulso";
+      const sinal = credito ? "+ " : "- ";
+      const cor = credito ? "#15803d" : "#dc2626";
+      return `<div><span>${d.motivo}</span><span style="color:${cor}">${sinal}${formatCurrency(d.valor)}</span></div>`;
+    })
     .join("");
 
   const assinatura = pagamento.assinaturaCooperado

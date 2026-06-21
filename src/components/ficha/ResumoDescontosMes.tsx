@@ -5,8 +5,13 @@ import type { FichaCorridaDesconto } from "@/types";
 
 function labelDescontoExtra(d: FichaCorridaDesconto): string {
   if (d.tipo === "mensalidade") return "Mensalidade";
+  if (d.tipo === "credito_avulso") return d.motivo.trim() || "Valor avulso a receber";
   if (d.tipo === "manual" && d.motivo.trim().toLowerCase() === "desconto avulso") return "Desconto avulso";
   return d.motivo;
+}
+
+function isCredito(d: FichaCorridaDesconto): boolean {
+  return d.tipo === "credito_avulso";
 }
 
 interface ResumoDescontosMesProps {
@@ -58,9 +63,20 @@ export function ResumoDescontosMes({
         <span>{formatCurrency(valorEntregas)}</span>
       </div>
       {descontosExtras.map((d, i) => (
-        <div key={i} className={`flex justify-between ${escuro ? "" : "text-red-600"}`}>
+        <div
+          key={i}
+          className={`flex justify-between ${
+            isCredito(d)
+              ? escuro
+                ? "text-green-200"
+                : "text-green-700"
+              : escuro
+                ? ""
+                : "text-red-600"
+          }`}
+        >
           <span>{labelDescontoExtra(d)}</span>
-          <span>- {formatCurrency(d.valor)}</span>
+          <span>{isCredito(d) ? "+ " : "- "}{formatCurrency(d.valor)}</span>
         </div>
       ))}
       <div

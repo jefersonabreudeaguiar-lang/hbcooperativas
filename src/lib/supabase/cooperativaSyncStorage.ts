@@ -3,10 +3,12 @@ import type {
   Instituicao,
   ProdutoInstituicao,
   ArquivoMensalCooperado,
+  AjustesFichaMesCooperativa,
   PagamentoCooperadoRegistro,
   Comunicado,
   Mensalidade,
   Desconto,
+  ValorAvulsoReceber,
 } from "@/types";
 
 const BUCKET = "hb-cooperativa-sync";
@@ -20,10 +22,12 @@ export interface ContratosSyncPayload {
 export interface OperacionalSyncPayload {
   updatedAt: string;
   arquivosMensais: ArquivoMensalCooperado[];
+  ajustesFichaMes?: AjustesFichaMesCooperativa[];
   pagamentosCooperado: PagamentoCooperadoRegistro[];
   comunicados: Comunicado[];
   mensalidades: Mensalidade[];
   descontos: Desconto[];
+  valoresAvulsosReceber?: ValorAvulsoReceber[];
   config: { descontoPadraoCooperativa: number };
 }
 

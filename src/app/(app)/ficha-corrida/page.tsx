@@ -19,6 +19,7 @@ import {
   upsertArquivoMensal,
   getAjustesCompartilhadosFichaMes,
   aplicarAjustesFichaMesTodosCooperados,
+  upsertAjustesFichaMesCooperativa,
   agregarItensFichaMes,
 } from "@/services/notaPedidoService";
 import { listCooperadosComFichaNoMes, getCooperadoNomeResolvido, resolverCooperadoParaPagamento } from "@/services/cooperadoCloudService";
@@ -31,6 +32,7 @@ import { pushCooperadoToCloud } from "@/services/cooperadoCloudService";
 import {
   cooperadoMesQuitado,
   cooperadoTemValorPendente,
+  cooperadoPendentePagamentoResponsavel,
   getMesQuantoVouReceber,
 } from "@/services/cooperadoEntregasService";
 import { PageHeader, FilterBar, Modal } from "@/components/ui/Table";
@@ -43,7 +45,12 @@ import { ConfirmDialog, PromptDialog } from "@/components/ui/ConfirmDialog";
 import { SignaturePad } from "@/components/ui/SignaturePad";
 import { ReciboResumoView } from "@/components/ficha/ReciboResumoView";
 import { ResumoDescontosMes } from "@/components/ficha/ResumoDescontosMes";
+import { ValoresAvulsosReceberPanel } from "@/components/ficha/ValoresAvulsosReceberPanel";
 import { descontosDoCooperadoNoMes, TIPO_DESCONTO_LABELS } from "@/services/descontosService";
+import {
+  criarValorAvulsoReceber,
+  cancelarValorAvulsoReceber,
+} from "@/services/valoresAvulsosReceberService";
 import { cooperadoPrecisaCadastrarPix } from "@/utils/pix";
 import { baixarReciboHtml, resumoReciboFromPagamento, nomeArquivoRecibo } from "@/utils/recibo";
 import { updateData, addAuditEntry, getData } from "@/services/dataStore";
@@ -134,6 +141,9 @@ export default function FichaCorridaPage() {
   const [mensalidadeInput, setMensalidadeInput] = useState("");
   const [descontoAvulsoInput, setDescontoAvulsoInput] = useState("");
   const [descontoAvulsoMotivo, setDescontoAvulsoMotivo] = useState("");
+  const [avulsoReceberMotivo, setAvulsoReceberMotivo] = useState("");
+  const [avulsoReceberValor, setAvulsoReceberValor] = useState("");
+  const [avulsoReceberData, setAvulsoReceberData] = useState(() => new Date().toISOString().split("T")[0]);
 
   const coopId = user && data ? getUserCooperativaId(user, data) : undefined;
 
@@ -153,6 +163,22 @@ export default function FichaCorridaPage() {
     if (!data || !coopId) return [];
     return listCooperadosComFichaNoMes(data, coopId, mesFilter);
   }, [data, coopId, mesFilter]);
+
+  const cooperadosParaPagar = useMemo(() => {
+    if (!data || !coopId) return [];
+    return cooperadosComFicha.filter((c) =>
+      cooperadoPendentePagamentoResponsavel(data, c.id, mesFilter, coopId)
+    );
+  }, [data, coopId, mesFilter, cooperadosComFicha]);
+
+  const cooperadosNoSelect = !isCooperado && aba === "pagar" ? cooperadosParaPagar : cooperadosComFicha;
+
+  useEffect(() => {
+    if (isCooperado || aba !== "pagar" || !cooperadoFilter || !data || !coopId) return;
+    if (!cooperadoPendentePagamentoResponsavel(data, cooperadoFilter, mesFilter, coopId)) {
+      setCooperadoFilter("");
+    }
+  }, [isCooperado, aba, cooperadoFilter, data, coopId, mesFilter]);
 
   const cooperadoSelecionadoId = isCooperado ? cooperadoId : cooperadoFilter;
 
@@ -227,11 +253,13 @@ export default function FichaCorridaPage() {
       descontoAvulso,
       descontoAvulsoMotivo: descontoAvulsoMotivo.trim() || undefined,
     };
-    updateData((d) =>
-      addAuditEntry(
+    updateData((d) => {
+      const ajustesFichaMes = upsertAjustesFichaMesCooperativa(d, coopId, mesFilter, patch);
+      return addAuditEntry(
         {
           ...d,
-          arquivosMensais: aplicarAjustesFichaMesTodosCooperados(d, coopId, mesFilter, patch),
+          ajustesFichaMes,
+          arquivosMensais: aplicarAjustesFichaMesTodosCooperados({ ...d, ajustesFichaMes }, coopId, mesFilter, patch),
         },
         {
           entityType: "ficha_corrida",
@@ -241,14 +269,71 @@ export default function FichaCorridaPage() {
           userName: user.name,
           changes: `Mensalidade e desconto avulso de ${formatMesReferencia(mesFilter)} aplicados a todos os cooperados`,
         }
-      )
-    );
+      );
+    });
     void (async () => {
       const d = getData();
       const cnpj = await resolveCooperativaCnpj(d, coopId, user);
       if (cnpj) await pushOperacionalToCloud(cnpj, d, coopId);
     })();
   }, [user, data, coopId, isCooperado, mensalidadeInput, descontoAvulsoInput, descontoAvulsoMotivo, mesFilter]);
+
+  const pushOperacional = useCallback(() => {
+    void (async () => {
+      if (!user || !coopId) return;
+      const d = getData();
+      const cnpj = await resolveCooperativaCnpj(d, coopId, user);
+      if (cnpj) await pushOperacionalToCloud(cnpj, d, coopId);
+    })();
+  }, [user, coopId]);
+
+  const handleLancarAvulsoReceber = useCallback(
+    (params: { motivo: string; valor: number; dataLancamento: string }) => {
+      if (!user || !coopId || !cooperadoSelecionadoId || isCooperado) return;
+      updateData((d) => {
+        const next = criarValorAvulsoReceber(d, {
+          cooperativaId: coopId,
+          cooperadoId: cooperadoSelecionadoId,
+          mesReferencia: mesFilter,
+          motivo: params.motivo,
+          valor: params.valor,
+          responsavel: user.name,
+          dataLancamento: params.dataLancamento,
+        });
+        return addAuditEntry(next, {
+          entityType: "ficha_corrida",
+          entityId: cooperadoSelecionadoId,
+          action: "criar",
+          userId: user.id,
+          userName: user.name,
+          changes: `Valor avulso a receber: ${formatCurrency(params.valor)} · ${params.motivo}`,
+        });
+      });
+      setAvulsoReceberMotivo("");
+      setAvulsoReceberValor("");
+      setAvulsoReceberData(new Date().toISOString().split("T")[0]);
+      pushOperacional();
+    },
+    [user, coopId, cooperadoSelecionadoId, isCooperado, mesFilter, pushOperacional]
+  );
+
+  const handleRemoverAvulsoReceber = useCallback(
+    (id: string) => {
+      if (!user || isCooperado) return;
+      updateData((d) =>
+        addAuditEntry(cancelarValorAvulsoReceber(d, id), {
+          entityType: "ficha_corrida",
+          entityId: id,
+          action: "excluir",
+          userId: user.id,
+          userName: user.name,
+          changes: "Valor avulso a receber removido",
+        })
+      );
+      pushOperacional();
+    },
+    [user, isCooperado, pushOperacional]
+  );
 
   const toggleCotaPaga = () => {
     if (!user || !cooperadoSelecionadoId || !coopId || isCooperado) return;
@@ -287,16 +372,21 @@ export default function FichaCorridaPage() {
       cooperadoSelecionadoId,
       mesFilter,
       coopId,
-      isCooperado ? undefined : resumoAjustes
+      isCooperado ? ajustesCompartilhadosMes : resumoAjustes
     );
-  }, [data, cooperadoSelecionadoId, mesFilter, coopId, resumoAjustes, isCooperado]);
+  }, [data, cooperadoSelecionadoId, mesFilter, coopId, resumoAjustes, isCooperado, ajustesCompartilhadosMes]);
 
   const totalPendente = resumo?.valorLiquido ?? 0;
 
   const pagamentoAguardando = useMemo(() => {
-    if (!data || !cooperadoId) return undefined;
-    return getPagamentoAguardandoCooperado(data, cooperadoId, mesFilter);
-  }, [data, cooperadoId, mesFilter]);
+    if (!data || !cooperadoSelecionadoId) return undefined;
+    return getPagamentoAguardandoCooperado(data, cooperadoSelecionadoId, mesFilter);
+  }, [data, cooperadoSelecionadoId, mesFilter]);
+
+  const pendentePagamentoResponsavel = useMemo(() => {
+    if (!data || !cooperadoSelecionadoId) return false;
+    return cooperadoPendentePagamentoResponsavel(data, cooperadoSelecionadoId, mesFilter, coopId);
+  }, [data, cooperadoSelecionadoId, mesFilter, coopId]);
 
   const pagamentoConfirmadoMes = useMemo(() => {
     if (!data || !cooperadoSelecionadoId) return undefined;
@@ -352,10 +442,12 @@ export default function FichaCorridaPage() {
     };
     const resumo = getResumoPagamentoCooperado(data, cooperadoSelecionado.id, mesFilter, coopId, patch);
     updateData((d) => {
+      const ajustesFichaMes = upsertAjustesFichaMesCooperativa(d, coopId, mesFilter, patch);
       const comAjustes = addAuditEntry(
         {
           ...d,
-          arquivosMensais: aplicarAjustesFichaMesTodosCooperados(d, coopId, mesFilter, patch),
+          ajustesFichaMes,
+          arquivosMensais: aplicarAjustesFichaMesTodosCooperados({ ...d, ajustesFichaMes }, coopId, mesFilter, patch),
         },
         {
           entityType: "ficha_corrida",
@@ -379,7 +471,9 @@ export default function FichaCorridaPage() {
       await pushNotasPagasToCloud(cnpj, resumo.notaPedidoIds, d);
     })();
     setConfirmPagamento(false);
-    setPagoMsg(`Pagamento registrado! ${nomeCooperado.split(" ")[0]} foi notificado(a).`);
+    setCooperadoFilter("");
+    setAba("ficha");
+    setPagoMsg(`Pagamento registrado! ${nomeCooperado.split(" ")[0]} foi notificado(a). Consulte a ficha corrida para acompanhar a assinatura.`);
   };
 
   const handleEnviarAssinatura = () => {
@@ -453,8 +547,10 @@ export default function FichaCorridaPage() {
         {!isCooperado && (
           <FormField label="Cooperado">
             <Select value={cooperadoFilter} onChange={(e) => setCooperadoFilter(e.target.value)} className="min-w-[220px]">
-              <option value="">Escolha o cooperado...</option>
-              {cooperadosComFicha.map((c) => (
+              <option value="">
+                {aba === "pagar" ? "Escolha quem pagar..." : "Escolha o cooperado..."}
+              </option>
+              {cooperadosNoSelect.map((c) => (
                 <option key={c.id} value={c.id}>{getCooperadoNomeResolvido(data, c.id, coopId)}</option>
               ))}
             </Select>
@@ -520,8 +616,33 @@ export default function FichaCorridaPage() {
             className={`px-4 py-2.5 text-sm font-medium border-b-2 -mb-px flex items-center gap-2 ${aba === "pagar" ? "border-green-600 text-green-700" : "border-transparent text-gray-500 hover:text-gray-700"}`}
           >
             <CreditCard size={16} /> Pagar cooperado
+            {cooperadosParaPagar.length > 0 && (
+              <span className="bg-amber-500 text-white text-xs font-bold px-1.5 py-0.5 rounded-full">
+                {cooperadosParaPagar.length}
+              </span>
+            )}
           </button>
         </div>
+      )}
+
+      {!isCooperado && aba === "pagar" && cooperadosParaPagar.length === 0 && (
+        <AlertBanner variant="success" className="mb-6" title="Nenhum pagamento pendente">
+          Todos os cooperados com valor neste mês já tiveram pagamento registrado. Acompanhe assinaturas e histórico na aba{" "}
+          <strong>Ficha corrida</strong>.
+        </AlertBanner>
+      )}
+
+      {!isCooperado && aba === "ficha" && cooperadoSelecionadoId && pagamentoAguardando && (
+        <AlertBanner variant="info" className="mb-6" title="Pagamento registrado">
+          {formatCurrency(pagamentoAguardando.valorLiquido)} · aguardando {nomeCooperado.split(" ")[0]} confirmar recebimento e assinar o recibo.
+        </AlertBanner>
+      )}
+
+      {!isCooperado && aba === "ficha" && cooperadoSelecionadoId && pagamentoConfirmadoMes && !pagamentoAguardando && (
+        <AlertBanner variant="success" className="mb-6" title="Pagamento confirmado">
+          Recibo assinado por {nomeCooperado.split(" ")[0]} em{" "}
+          {pagamentoConfirmadoMes.assinadoEm ? formatDate(pagamentoConfirmadoMes.assinadoEm.split("T")[0]) : formatMesReferencia(mesFilter)}.
+        </AlertBanner>
       )}
 
       {cooperadoSelecionadoId && (isCooperado || aba === "ficha") && exibirQuantoVouReceber && (
@@ -611,7 +732,35 @@ export default function FichaCorridaPage() {
                   />
                 </FormField>
                 </div>
+                <div className="sm:col-span-2">
+                  <Button type="button" variant="secondary" onClick={salvarAjustesFicha}>
+                    Salvar mensalidade e desconto avulso
+                  </Button>
+                </div>
               </div>
+            )}
+
+            {cooperadoSelecionadoId && (
+              <ValoresAvulsosReceberPanel
+                cooperadoId={cooperadoSelecionadoId}
+                cooperativaId={coopId}
+                mesReferencia={mesFilter}
+                modo={isCooperado ? "cooperado" : "responsavel"}
+                onLancar={!isCooperado && check("ficha_corrida", "edit") ? handleLancarAvulsoReceber : undefined}
+                onRemover={!isCooperado && check("ficha_corrida", "edit") ? handleRemoverAvulsoReceber : undefined}
+                lancamentoForm={
+                  !isCooperado && check("ficha_corrida", "edit")
+                    ? {
+                        motivo: avulsoReceberMotivo,
+                        valor: avulsoReceberValor,
+                        data: avulsoReceberData,
+                        onMotivo: setAvulsoReceberMotivo,
+                        onValor: setAvulsoReceberValor,
+                        onData: setAvulsoReceberData,
+                      }
+                    : undefined
+                }
+              />
             )}
 
             {resumo && (
@@ -653,7 +802,7 @@ export default function FichaCorridaPage() {
         </>
       )}
 
-      {cooperadoSelecionadoId && mostrarPagar && exibirQuantoVouReceber && (
+      {cooperadoSelecionadoId && mostrarPagar && exibirQuantoVouReceber && (isCooperado || pendentePagamentoResponsavel) && (
         <>
           <div className="bg-gradient-to-br from-green-700 to-green-800 text-white rounded-2xl p-6 mb-6 shadow-sm">
             <p className="text-green-100 text-sm">{isCooperado ? "Total a receber" : "Valor a pagar"} · {formatMesReferencia(mesFilter)}</p>
@@ -713,7 +862,9 @@ export default function FichaCorridaPage() {
 
       {!cooperadoSelecionadoId && !isCooperado && (
         <AlertBanner variant="info" className="mb-6">
-          Escolha um cooperado que já tenha entregas lançadas neste mês para ver a ficha corrida ou pagar.
+          {aba === "pagar"
+            ? "Escolha um cooperado com valor pendente de pagamento neste mês."
+            : "Escolha um cooperado que já tenha entregas lançadas neste mês para ver a ficha corrida ou pagar."}
         </AlertBanner>
       )}
 

@@ -11,6 +11,7 @@ import { Button } from "@/components/ui/Button";
 import { AlertBanner } from "@/components/ui/AlertBanner";
 import { OnboardingChecklist } from "@/components/cooperado/OnboardingChecklist";
 import { MensalidadeStatusBanner } from "@/components/cooperado/MensalidadeStatusBanner";
+import { ValoresAvulsosDashboardCard } from "@/components/ficha/ValoresAvulsosReceberPanel";
 import { getCooperadoStats, getAdminStats } from "@/services/dashboardService";
 import {
   cooperadoTemValorPendente,
@@ -60,6 +61,8 @@ function CooperadoDashboard() {
       </div>
 
       <MensalidadeStatusBanner cooperadoId={cooperadoId} />
+
+      <ValoresAvulsosDashboardCard cooperadoId={cooperadoId} cooperativaId={coopId} />
 
       <OnboardingChecklist pixOk={!precisaPix} />
 

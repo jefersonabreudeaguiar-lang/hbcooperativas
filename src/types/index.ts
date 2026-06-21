@@ -209,9 +209,25 @@ export interface NotaPedido {
 }
 
 export interface FichaCorridaDesconto {
-  tipo: "cooperativa" | "mensalidade" | "cota" | "manual";
+  tipo: "cooperativa" | "mensalidade" | "cota" | "manual" | "credito_avulso";
   motivo: string;
   valor: number;
+}
+
+/** Valor extra a receber, lançado pela cooperativa para cooperado específico. */
+export interface ValorAvulsoReceber {
+  id: string;
+  cooperativaId: string;
+  cooperadoId: string;
+  mesReferencia: string;
+  motivo: string;
+  valor: number;
+  status: "pendente" | "pago";
+  responsavel: string;
+  dataLancamento: string;
+  dataPagamento?: string;
+  createdAt: string;
+  updatedAt: string;
 }
 
 export interface FichaCorrida {
@@ -257,6 +273,17 @@ export interface PagamentoCooperadoRegistro {
   reciboHtml?: string;
   createdAt: string;
   updatedAt?: string;
+}
+
+/** Mensalidade e desconto avulso do mês — único por cooperativa, vale para todos os cooperados. */
+export interface AjustesFichaMesCooperativa {
+  id: string;
+  cooperativaId: string;
+  mesReferencia: string;
+  mensalidadeFixa: number;
+  descontoAvulso: number;
+  descontoAvulsoMotivo?: string;
+  updatedAt: string;
 }
 
 /** Pasta mensal por cooperado — fotos e recibos arquivados. */
@@ -441,8 +468,10 @@ export interface AppData {
   fichaCorrida: FichaCorrida[];
   pagamentosCooperado: PagamentoCooperadoRegistro[];
   arquivosMensais: ArquivoMensalCooperado[];
+  ajustesFichaMes: AjustesFichaMesCooperativa[];
   entregas: Entrega[];
   descontos: Desconto[];
+  valoresAvulsosReceber: ValorAvulsoReceber[];
   pagamentos: Pagamento[];
   financeiro: FinanceiroMensal[];
   comunicados: Comunicado[];
