@@ -424,6 +424,34 @@ export function getResumoPagamentoCooperado(
   };
 }
 
+export type ResumoPagamentoCooperado = ReturnType<typeof getResumoPagamentoCooperado>;
+
+function resumoFromPagamento(pagamento: PagamentoCooperadoRegistro): ResumoPagamentoCooperado {
+  return {
+    valorBruto: pagamento.valorBruto,
+    descontoCooperativa: pagamento.descontoCooperativa,
+    descontosExtras: pagamento.descontosExtras,
+    valorEntregas: round2(pagamento.valorBruto - pagamento.descontoCooperativa),
+    valorLiquido: pagamento.valorLiquido,
+    fichaIds: pagamento.fichaIds,
+    notaPedidoIds: pagamento.notaPedidoIds,
+  };
+}
+
+/** Resumo para exibição — usa snapshot do pagamento quando a ficha já foi quitada pela cooperativa. */
+export function getResumoPagamentoExibicao(
+  data: AppData,
+  cooperadoId: string,
+  mesReferencia: string,
+  cooperativaId?: string,
+  ajustes?: AjustesResumoPagamento
+): ResumoPagamentoCooperado {
+  const pagamento = getPagamentoAguardandoCooperado(data, cooperadoId, mesReferencia);
+  if (pagamento) return resumoFromPagamento(pagamento);
+  const coopId = cooperativaId ?? data.cooperados.find((c) => c.id === cooperadoId)?.cooperativaId;
+  return getResumoPagamentoCooperado(data, cooperadoId, mesReferencia, coopId, ajustes);
+}
+
 export function getTotalRecebidoCooperado(data: AppData, cooperadoId: string, mesReferencia?: string): number {
   const coopId = data.cooperados.find((c) => c.id === cooperadoId)?.cooperativaId;
   const entries = data.fichaCorrida.filter((f) => {

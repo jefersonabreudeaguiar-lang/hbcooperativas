@@ -3,6 +3,12 @@
 import { formatCurrency } from "@/utils/format";
 import type { FichaCorridaDesconto } from "@/types";
 
+function labelDescontoExtra(d: FichaCorridaDesconto): string {
+  if (d.tipo === "mensalidade") return "Mensalidade";
+  if (d.tipo === "manual" && d.motivo.trim().toLowerCase() === "desconto avulso") return "Desconto avulso";
+  return d.motivo;
+}
+
 interface ResumoDescontosMesProps {
   valorBruto: number;
   descontoCooperativa: number;
@@ -53,7 +59,7 @@ export function ResumoDescontosMes({
       </div>
       {descontosExtras.map((d, i) => (
         <div key={i} className={`flex justify-between ${escuro ? "" : "text-red-600"}`}>
-          <span>{d.motivo}</span>
+          <span>{labelDescontoExtra(d)}</span>
           <span>- {formatCurrency(d.valor)}</span>
         </div>
       ))}

@@ -2,7 +2,7 @@ import type { AppData, NotaPedido, PagamentoCooperadoRegistro } from "@/types";
 import { notaPertenceCooperado, resolverCooperadoIdCanonico } from "@/services/cooperadoCloudService";
 import {
   getPagamentoAguardandoCooperado,
-  getResumoPagamentoCooperado,
+  getResumoPagamentoExibicao,
   getTotalAPagarCooperado,
 } from "@/services/notaPedidoService";
 import { getCurrentMesReferencia } from "@/utils/format";
@@ -106,7 +106,7 @@ export function getValorQuantoVouReceber(
   if (aguardando) {
     return { mes, valor: aguardando.valorLiquido, aguardandoAssinatura: true };
   }
-  const resumo = getResumoPagamentoCooperado(data, cooperadoId, mes, cooperativaId);
+  const resumo = getResumoPagamentoExibicao(data, cooperadoId, mes, cooperativaId);
   return { mes, valor: resumo.valorLiquido, aguardandoAssinatura: false };
 }
 
@@ -121,7 +121,7 @@ export function getResumoMesEntregasCooperado(
   );
   const pagamentoConfirmado = getPagamentoConfirmadoMes(data, cooperadoId, mesReferencia);
   const pagamentoAguardando = getPagamentoAguardandoCooperado(data, cooperadoId, mesReferencia);
-  const valorAReceber = getResumoPagamentoCooperado(
+  const valorAReceber = getResumoPagamentoExibicao(
     data,
     cooperadoId,
     mesReferencia,

@@ -251,39 +251,6 @@ export function gerarRelatorioEntregasPorItensHtml(
     )
     .join("");
 
-  const blocosCooperados = rel.porCooperado
-    .map((coop) => {
-      const linhas = coop.itens
-        .map(
-          (item) =>
-            `<tr>
-              <td>${escapeHtml(item.produtoNome)}</td>
-              <td>${escapeHtml(item.unidade)}</td>
-              <td class="num">${item.quantidade.toLocaleString("pt-BR", { minimumFractionDigits: 0, maximumFractionDigits: 2 })}</td>
-              <td class="num">${formatCurrency(item.valorTotal)}</td>
-            </tr>`
-        )
-        .join("");
-      return `
-        <div class="coop-bloco">
-          <h3>${escapeHtml(coop.cooperadoNome)} — ${coop.quantidadeEntregas} entrega(s) · ${formatCurrency(coop.totalBruto)}</h3>
-          <table>
-            <thead>
-              <tr>
-                <th>Item</th>
-                <th>Unidade</th>
-                <th class="num">Quantidade</th>
-                <th class="num">Valor</th>
-              </tr>
-            </thead>
-            <tbody>
-              ${linhas || `<tr><td colspan="4">Sem itens registrados.</td></tr>`}
-            </tbody>
-          </table>
-        </div>`;
-    })
-    .join("");
-
   const body = `
     <div class="destinatario">
       <div class="rotulo">Destinatário</div>
@@ -299,7 +266,7 @@ export function gerarRelatorioEntregasPorItensHtml(
       A <strong>${escapeHtml(coop?.nome ?? PLATFORM_NAME)}</strong> apresenta o resumo consolidado das entregas
       realizadas no mês de <strong>${escapeHtml(formatMesReferencia(mesReferencia))}</strong>,
       referentes ao contrato de fornecimento com <strong>${escapeHtml(rel.instituicaoNome)}</strong>.
-      ${rel.quantidadeEntregas > 0 ? ` Foram registradas <strong>${rel.quantidadeEntregas}</strong> entrega(s) conferida(s) no período, somando a produção de <strong>${rel.porCooperado.length}</strong> cooperado(s).` : ""}
+      ${rel.quantidadeEntregas > 0 ? ` Foram registradas <strong>${rel.quantidadeEntregas}</strong> entrega(s) conferida(s) no período.` : ""}
     </p>
 
     <div class="resumo-itens-box">
@@ -336,14 +303,6 @@ export function gerarRelatorioEntregasPorItensHtml(
         </tr>
       </tfoot>
     </table>
-
-    ${
-      rel.porCooperado.length > 0
-        ? `<h2>Detalhamento por cooperado</h2>
-           <p class="carta">Contribuição de cada cooperado no mês, item a item.</p>
-           ${blocosCooperados}`
-        : ""
-    }
 
     <p class="carta" style="margin-top:24px;">
       Este documento consolida as quantidades e valores unitários praticados nas entregas conferidas.

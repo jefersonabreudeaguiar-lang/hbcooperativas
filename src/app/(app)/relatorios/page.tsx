@@ -161,35 +161,16 @@ export default function RelatoriosPage() {
         const inst = instituicaoSelecionadaId;
         if (!inst) break;
         const r = getRelatorioEntregasPorItens(inst, mes, data, coopId);
-        headers = ["Seção", "Item", "Unidade", "Quantidade total", "Valor unitário médio", "Valor total"];
-        rows = [
-          ["RESUMO CONSOLIDADO — TODOS OS COOPERADOS", "", "", "", "", ""],
-          ...r.itens.map((item) => [
-            "Consolidado",
-            item.produtoNome,
-            item.unidade,
-            String(item.quantidade),
-            String(item.precoUnitario),
-            String(item.valorTotal),
-          ]),
-          ["", "", "", "", "TOTAL GERAL", String(r.totalBruto)],
-        ];
-        if (r.porCooperado.length > 0) {
-          rows.push(["", "", "", "", "", ""]);
-          rows.push(["DETALHAMENTO POR COOPERADO", "", "", "", "", ""]);
-          for (const coop of r.porCooperado) {
-            rows.push([coop.cooperadoNome, "", "", "", "", String(coop.totalBruto)]);
-            for (const item of coop.itens) {
-              rows.push([
-                coop.cooperadoNome,
-                item.produtoNome,
-                item.unidade,
-                String(item.quantidade),
-                String(item.precoUnitario),
-                String(item.valorTotal),
-              ]);
-            }
-          }
+        headers = ["Item", "Unidade", "Quantidade total", "Valor unitário médio", "Valor total"];
+        rows = r.itens.map((item) => [
+          item.produtoNome,
+          item.unidade,
+          String(item.quantidade),
+          String(item.precoUnitario),
+          String(item.valorTotal),
+        ]);
+        if (rows.length > 0) {
+          rows.push(["", "", "", "TOTAL GERAL", String(r.totalBruto)]);
         }
         break;
       }
@@ -352,7 +333,7 @@ export default function RelatoriosPage() {
             <div className="mb-4 rounded-xl border border-green-200 bg-green-50/60 p-4">
               <p className="text-sm font-semibold text-green-900">{r.instituicaoNome}</p>
               <p className="text-xs text-green-800 mt-1">
-                {formatMesReferencia(mes)} · {r.quantidadeEntregas} entrega(s) · {r.porCooperado.length} cooperado(s)
+                {formatMesReferencia(mes)} · {r.quantidadeEntregas} entrega(s) conferida(s)
               </p>
             </div>
 
@@ -416,43 +397,8 @@ export default function RelatoriosPage() {
               ]}
             />
 
-            {r.porCooperado.length > 0 && (
-              <div className="mt-8 space-y-6">
-                <h3 className="text-sm font-bold uppercase tracking-wide text-gray-700">
-                  Detalhamento por cooperado
-                </h3>
-                {r.porCooperado.map((coop) => (
-                  <div key={coop.cooperadoId} className="rounded-lg border border-gray-200 p-4">
-                    <p className="font-semibold text-gray-900 mb-2">
-                      {coop.cooperadoNome}
-                      <span className="text-sm font-normal text-gray-500 ml-2">
-                        · {coop.quantidadeEntregas} entrega(s) · {formatCurrency(coop.totalBruto)}
-                      </span>
-                    </p>
-                    <DataTable
-                      data={coop.itens.map((item, idx) => ({
-                        ...item,
-                        id: `${coop.cooperadoId}-${item.produtoInstituicaoId || idx}`,
-                      }))}
-                      keyField="id"
-                      columns={[
-                        { key: "produto", label: "Item", render: (item) => item.produtoNome },
-                        {
-                          key: "qtd",
-                          label: "Quantidade",
-                          render: (item) =>
-                            `${item.quantidade.toLocaleString("pt-BR", { maximumFractionDigits: 2 })} ${item.unidade}`,
-                        },
-                        { key: "total", label: "Valor", render: (item) => formatCurrency(item.valorTotal) },
-                      ]}
-                    />
-                  </div>
-                ))}
-              </div>
-            )}
-
             <p className="text-xs text-gray-500 mt-4">
-              Use <strong>Documento</strong> para baixar o relatório formal com o resumo consolidado e detalhamento por cooperado.
+              Use <strong>Documento</strong> para baixar o relatório formal com o resumo consolidado por item.
             </p>
           </>
         );

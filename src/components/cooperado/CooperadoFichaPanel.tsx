@@ -10,7 +10,7 @@ import { NotaStatusBadge } from "@/components/ui/NotaStatusBadge";
 import { Button } from "@/components/ui/Button";
 import { Select, FormField } from "@/components/ui/Form";
 import {
-  getResumoPagamentoCooperado,
+  getResumoPagamentoExibicao,
   getStatusCotaCooperado,
   getMensalidadeFixaMes,
   getArquivoMensalCooperado,
@@ -66,7 +66,7 @@ export function CooperadoFichaPanel({ cooperado }: { cooperado: Cooperado }) {
 
   if (!data || !resumo) return null;
 
-  const resumoPagamento = getResumoPagamentoCooperado(
+  const resumoPagamento = getResumoPagamentoExibicao(
     data,
     cooperado.id,
     mesFilter,

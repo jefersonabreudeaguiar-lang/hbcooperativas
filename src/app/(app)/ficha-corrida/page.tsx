@@ -9,6 +9,7 @@ import { usePermissions } from "@/hooks/usePermissions";
 import { getUserCooperativaId } from "@/utils/cooperativa";
 import {
   getResumoPagamentoCooperado,
+  getResumoPagamentoExibicao,
   registrarPagamentoCooperado,
   confirmarPagamentoCooperado,
   getPagamentoAguardandoCooperado,
@@ -252,17 +253,16 @@ export default function FichaCorridaPage() {
 
   const resumo = useMemo(() => {
     if (!data || !cooperadoSelecionadoId) return null;
-    return getResumoPagamentoCooperado(
+    return getResumoPagamentoExibicao(
       data,
       cooperadoSelecionadoId,
       mesFilter,
       coopId,
-      resumoAjustes
+      isCooperado ? undefined : resumoAjustes
     );
-  }, [data, cooperadoSelecionadoId, mesFilter, coopId, resumoAjustes]);
+  }, [data, cooperadoSelecionadoId, mesFilter, coopId, resumoAjustes, isCooperado]);
 
   const totalPendente = resumo?.valorLiquido ?? 0;
-  const totalEntregas = resumo?.valorEntregas ?? 0;
 
   const pagamentoAguardando = useMemo(() => {
     if (!data || !cooperadoId) return undefined;
@@ -518,6 +518,26 @@ export default function FichaCorridaPage() {
               )}
             </div>
 
+            {isCooperado && (mensalidadePadrao > 0 || (arquivoMes?.descontoAvulso ?? 0) > 0) && (
+              <div className="rounded-xl border border-blue-200 bg-blue-50/60 p-4 text-sm space-y-2 mb-4">
+                <p className="font-semibold text-blue-900">Descontos aplicados pela cooperativa</p>
+                {mensalidadePadrao > 0 && (
+                  <div className="flex justify-between text-gray-800">
+                    <span>Mensalidade</span>
+                    <span className="font-medium text-red-700">- {formatCurrency(mensalidadePadrao)}</span>
+                  </div>
+                )}
+                {(arquivoMes?.descontoAvulso ?? 0) > 0 && (
+                  <div className="flex justify-between text-gray-800 gap-3">
+                    <span>{arquivoMes?.descontoAvulsoMotivo?.trim() || "Desconto avulso"}</span>
+                    <span className="font-medium text-red-700 shrink-0">
+                      - {formatCurrency(arquivoMes!.descontoAvulso!)}
+                    </span>
+                  </div>
+                )}
+              </div>
+            )}
+
             {!isCooperado && check("ficha_corrida", "edit") && (
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
                 <FormField label="Mensalidade fixa (desconto de todos)" hint="Valor descontado no pagamento do mês">
@@ -559,7 +579,7 @@ export default function FichaCorridaPage() {
                 valorBruto={resumo.valorBruto}
                 descontoCooperativa={resumo.descontoCooperativa}
                 descontoPadraoPct={data.config.descontoPadraoCooperativa}
-                valorEntregas={totalEntregas}
+                valorEntregas={resumo.valorEntregas}
                 descontosExtras={resumo.descontosExtras}
                 totalLiquido={totalPendente}
                 rotuloTotal={isCooperado ? "A receber" : "Total a pagar"}
@@ -598,21 +618,19 @@ export default function FichaCorridaPage() {
           <div className="bg-gradient-to-br from-green-700 to-green-800 text-white rounded-2xl p-6 mb-6 shadow-sm">
             <p className="text-green-100 text-sm">{isCooperado ? "Total a receber" : "Valor a pagar"} · {formatMesReferencia(mesFilter)}</p>
             <p className="text-3xl sm:text-4xl font-bold mt-2">
-              {formatCurrency(isCooperado && pagamentoAguardando ? pagamentoAguardando.valorLiquido : totalPendente)}
+              {formatCurrency(totalPendente)}
             </p>
             {!isCooperado && nomeCooperado && (
               <p className="text-green-100 text-sm mt-2">{nomeCooperado}</p>
             )}
-            {resumo && (resumo.valorBruto > 0 || totalPendente > 0) && (
+            {resumo && (resumo.valorBruto > 0 || totalPendente > 0 || resumo.descontosExtras.length > 0) && (
               <ResumoDescontosMes
                 valorBruto={resumo.valorBruto}
                 descontoCooperativa={resumo.descontoCooperativa}
                 descontoPadraoPct={data.config.descontoPadraoCooperativa}
-                valorEntregas={totalEntregas}
+                valorEntregas={resumo.valorEntregas}
                 descontosExtras={resumo.descontosExtras}
-                totalLiquido={
-                  isCooperado && pagamentoAguardando ? pagamentoAguardando.valorLiquido : totalPendente
-                }
+                totalLiquido={totalPendente}
                 rotuloTotal={isCooperado ? "Total a receber" : "Total líquido a pagar"}
                 tema="escuro"
               />
