@@ -37,53 +37,48 @@ function rotuloSemana(indice: number, mesReferencia: string): string {
   return `Semana ${indice} · ${String(inicio).padStart(2, "0")} a ${String(fim).padStart(2, "0")} de ${mesLabel}`;
 }
 
-/** Agrupa notas antigas (1 foto = 1 nota) pelo mesmo horário de envio. */
+function chaveAgrupamentoEntrega(nota: NotaPedido): string {
+  const semana = indiceSemanaNoMes(nota.dataEntrega);
+  return `${nota.mesReferencia}|${semana}|${nota.dataEntrega}`;
+}
+
+/** Agrupa notas pela mesma data de lançamento dentro da semana (vários envios no mesmo dia = 1 entrega). */
 export function agruparNotasEmEntregas(notas: NotaPedido[]): EntregaCooperadoView[] {
   const sorted = ordenarNotasMesCronologico(notas);
-  const entregas: EntregaCooperadoView[] = [];
+  const grupos = new Map<string, EntregaCooperadoView>();
 
   for (const nota of sorted) {
+    const chave = chaveAgrupamentoEntrega(nota);
     const fotos = getFotosExibicaoNota(nota);
-    const usaLote = (nota.fotosPedido?.length ?? 0) > 0;
+    const existente = grupos.get(chave);
 
-    if (usaLote) {
-      entregas.push({
-        id: nota.id,
-        notas: [nota],
-        fotos,
-        dataEntrega: nota.dataEntrega,
-        mesReferencia: nota.mesReferencia,
-        numeroNoMes: 0,
-        qtdFotos: fotos.length,
-      });
+    if (existente) {
+      existente.notas.push(nota);
+      existente.fotos.push(...fotos);
+      existente.qtdFotos = existente.fotos.length;
       continue;
     }
 
-    const ultima = entregas[entregas.length - 1];
-    const mesmoEnvio =
-      ultima &&
-      ultima.notas.length > 0 &&
-      !(ultima.notas[0].fotosPedido?.length ?? 0) &&
-      ultima.notas[0].createdAt === nota.createdAt;
-
-    if (mesmoEnvio) {
-      ultima.notas.push(nota);
-      ultima.fotos.push(...fotos);
-      ultima.qtdFotos = ultima.fotos.length;
-    } else {
-      entregas.push({
-        id: nota.id,
-        notas: [nota],
-        fotos,
-        dataEntrega: nota.dataEntrega,
-        mesReferencia: nota.mesReferencia,
-        numeroNoMes: 0,
-        qtdFotos: fotos.length,
-      });
-    }
+    grupos.set(chave, {
+      id: nota.id,
+      notas: [nota],
+      fotos: [...fotos],
+      dataEntrega: nota.dataEntrega,
+      mesReferencia: nota.mesReferencia,
+      numeroNoMes: 0,
+      qtdFotos: fotos.length,
+    });
   }
 
-  return entregas.map((e, i) => ({ ...e, numeroNoMes: i + 1 }));
+  return [...grupos.values()]
+    .sort((a, b) => {
+      const porData = a.dataEntrega.localeCompare(b.dataEntrega);
+      if (porData !== 0) return porData;
+      return (
+        new Date(a.notas[0].createdAt).getTime() - new Date(b.notas[0].createdAt).getTime()
+      );
+    })
+    .map((e, i) => ({ ...e, numeroNoMes: i + 1 }));
 }
 
 export function agruparEntregasPorSemanaNoMes(
