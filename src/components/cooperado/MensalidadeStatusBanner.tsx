@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { CalendarCheck, Clock, CheckCircle2 } from "lucide-react";
+import { Clock } from "lucide-react";
 import { useAppData } from "@/hooks/useAppData";
 import { getResumoMensalidadesCooperado } from "@/services/mensalidadeService";
 import { AlertBanner } from "@/components/ui/AlertBanner";
@@ -69,24 +69,5 @@ export function MensalidadeStatusBanner({ cooperadoId }: { cooperadoId: string }
     );
   }
 
-  return (
-    <div className="bg-emerald-50 border border-emerald-200 rounded-2xl p-5 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-      <div className="flex items-start gap-3">
-        <CheckCircle2 size={24} className="text-emerald-600 shrink-0 mt-0.5" />
-        <div>
-          <p className="font-semibold text-emerald-900">Mensalidades em dia</p>
-          <p className="text-sm text-emerald-800 mt-1">
-            {mesAtual?.status === "paga"
-              ? `${formatMesReferencia(mesAtual.mesReferencia)} já está quitada.`
-              : "Nenhuma mensalidade pendente ou atrasada no momento."}
-          </p>
-        </div>
-      </div>
-      <Link href="/mensalidades">
-        <Button size="sm" variant="secondary">
-          <CalendarCheck size={16} /> Histórico
-        </Button>
-      </Link>
-    </div>
-  );
+  return null;
 }

@@ -23,6 +23,9 @@ import type { ResumoMesEntregasCooperado } from "@/services/cooperadoEntregasSer
 import {
   agruparEntregasPorSemanaNoMes,
   agruparNotasEmEntregas,
+  itensConsolidadosEntrega,
+  statusEntregaCooperado,
+  valoresEntregaCooperado,
 } from "@/services/entregaCooperadoService";
 import {
   totalValoresAvulsosPendentes,
@@ -175,8 +178,9 @@ function MesFichaAccordion({
                     <div className="space-y-2">
                       {semana.entregas.map((entrega) => {
                         const nota = entrega.notas[0];
-                        const valor = entrega.notas.reduce((s, n) => s + n.valorLiquido, 0);
-                        const itens = entrega.notas.flatMap((n) => n.itens ?? []);
+                        const valores = valoresEntregaCooperado(entrega, data, cooperadoId);
+                        const itens = itensConsolidadosEntrega(entrega);
+                        const status = statusEntregaCooperado(entrega);
                         return (
                           <div key={entrega.id} className="rounded-xl border border-gray-200 bg-white p-4">
                             <div className="flex flex-wrap items-start justify-between gap-2">
@@ -190,16 +194,16 @@ function MesFichaAccordion({
                                 </p>
                               </div>
                               <div className="flex items-center gap-2">
-                                <NotaStatusBadge status={nota.status} />
-                                {valor > 0 && (
-                                  <span className="text-sm font-bold text-green-700">{formatCurrency(valor)}</span>
+                                <NotaStatusBadge status={status} />
+                                {valores.temValorAprovado && valores.valorLiquido > 0 && (
+                                  <span className="text-sm font-bold text-green-700">{formatCurrency(valores.valorLiquido)}</span>
                                 )}
                               </div>
                             </div>
                             {itens.length > 0 && (
                               <ul className="mt-3 pt-3 border-t border-gray-100 text-sm space-y-1">
                                 {itens.map((item) => (
-                                  <li key={`${nota.id}-${item.produtoInstituicaoId}`} className="flex justify-between gap-2 text-gray-700">
+                                  <li key={item.produtoInstituicaoId} className="flex justify-between gap-2 text-gray-700">
                                     <span>
                                       {item.produtoNome} · {item.quantidade} {item.unidade}
                                     </span>
@@ -208,6 +212,24 @@ function MesFichaAccordion({
                                     )}
                                   </li>
                                 ))}
+                                {valores.temValorAprovado && (
+                                  <li className="flex justify-between gap-2 text-gray-700 pt-2 border-t border-gray-100">
+                                    <span className="font-medium">Total bruto</span>
+                                    <span className="font-medium shrink-0">{formatCurrency(valores.valorBruto)}</span>
+                                  </li>
+                                )}
+                                {valores.valorDesconto > 0 && (
+                                  <li className="flex justify-between gap-2 text-amber-700">
+                                    <span>Desconto cooperativa</span>
+                                    <span className="shrink-0">- {formatCurrency(valores.valorDesconto)}</span>
+                                  </li>
+                                )}
+                                {valores.temValorAprovado && (
+                                  <li className="flex justify-between gap-2 font-bold text-green-700 pt-1">
+                                    <span>Total líquido</span>
+                                    <span className="shrink-0">{formatCurrency(valores.valorLiquido)}</span>
+                                  </li>
+                                )}
                               </ul>
                             )}
                           </div>

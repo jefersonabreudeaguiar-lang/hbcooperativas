@@ -203,10 +203,9 @@ export function ValoresAvulsosDashboardCard({
   const pendentes = valoresAvulsosDoCooperado(data, cooperadoId, cooperativaId).filter(
     (v) => v.status === "pendente"
   );
-  const historico = valoresAvulsosHistoricoCooperado(data, cooperadoId, cooperativaId, 8);
   const totalPendente = totalValoresAvulsosPendentes(data, cooperadoId, undefined, cooperativaId);
 
-  if (pendentes.length === 0 && historico.length === 0) return null;
+  if (pendentes.length === 0) return null;
 
   return (
     <div className="bg-white border border-gray-200 rounded-2xl overflow-hidden">
@@ -232,22 +231,6 @@ export function ValoresAvulsosDashboardCard({
             </li>
           ))}
         </ul>
-      )}
-
-      {historico.length > 0 && (
-        <div className="px-5 py-3 bg-gray-50 border-t border-gray-100">
-          <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2 flex items-center gap-1">
-            <History size={12} /> Histórico
-          </p>
-          <ul className="space-y-2">
-            {historico.slice(0, 5).map((v) => (
-              <li key={v.id} className="flex justify-between gap-2 text-xs text-gray-600">
-                <span className="truncate">{v.motivo}</span>
-                <span className="shrink-0">{formatCurrency(v.valor)}</span>
-              </li>
-            ))}
-          </ul>
-        </div>
       )}
 
       <div className="px-5 py-3 border-t border-gray-100">

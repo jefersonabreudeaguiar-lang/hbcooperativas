@@ -12,7 +12,7 @@ import { AlertBanner } from "@/components/ui/AlertBanner";
 import { OnboardingChecklist } from "@/components/cooperado/OnboardingChecklist";
 import { MensalidadeStatusBanner } from "@/components/cooperado/MensalidadeStatusBanner";
 import { ValoresAvulsosDashboardCard } from "@/components/ficha/ValoresAvulsosReceberPanel";
-import { getCooperadoStats, getAdminStats } from "@/services/dashboardService";
+import { getAdminStats } from "@/services/dashboardService";
 import {
   cooperadoTemValorPendente,
   getValorQuantoVouReceber,
@@ -23,7 +23,7 @@ import { getComunicadosCooperado } from "@/services/comunicadoService";
 import { cooperadoPrecisaCadastrarPix } from "@/utils/pix";
 import { formatCurrency, formatDate, formatMesReferencia, getCurrentMesReferencia } from "@/utils/format";
 import { getUserCooperativaId, getUserCooperativaNome } from "@/utils/cooperativa";
-import { Camera, Wallet, ClipboardList, Megaphone, Pin, Users, AlertCircle, Tag, CheckCircle2, History } from "lucide-react";
+import { Camera, Wallet, ClipboardList, Megaphone, Pin, Users, AlertCircle } from "lucide-react";
 
 function CooperadoDashboard() {
   const { user } = useAuth();
@@ -66,6 +66,10 @@ function CooperadoDashboard() {
 
       <OnboardingChecklist pixOk={!precisaPix} />
 
+      {(rejeitadas.length > 0 || emAnalise > 0 || temPendencia || precisaPix) && (
+        <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">Pendências</p>
+      )}
+
       {rejeitadas.length > 0 && (
         <AlertBanner variant="error" title="Entrega precisa de correção">
           Você tem {rejeitadas.length} entrega(s) que a cooperativa pediu para corrigir.{" "}
@@ -80,7 +84,7 @@ function CooperadoDashboard() {
       )}
 
       <div className={`grid grid-cols-1 gap-4 ${temPendencia ? "sm:grid-cols-2" : ""}`}>
-        {temPendencia ? (
+        {temPendencia && (
           <div className="bg-gradient-to-br from-amber-500 to-amber-600 text-white rounded-2xl p-6 shadow-sm">
             <Wallet size={28} className="mb-3 opacity-90" />
             <p className="text-amber-100 text-sm">
@@ -91,26 +95,9 @@ function CooperadoDashboard() {
               {aguardandoAssinatura ? "Assinar recibo" : "Ver detalhes"}
             </Link>
           </div>
-        ) : (
-          <div className="bg-white border-2 border-emerald-200 rounded-2xl p-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-            <div className="flex items-start gap-3">
-              <CheckCircle2 size={28} className="text-emerald-600 shrink-0" />
-              <div>
-                <p className="font-semibold text-gray-900">Nenhum valor pendente</p>
-                <p className="text-sm text-gray-500 mt-1">
-                  Pagamentos confirmados ficam no histórico de Minhas entregas, mês a mês.
-                </p>
-              </div>
-            </div>
-            <Link href="/notas-pedido">
-              <Button variant="secondary">
-                <History size={18} /> Ver entregas
-              </Button>
-            </Link>
-          </div>
         )}
 
-        <div className="bg-white border-2 border-green-200 rounded-2xl p-6 flex flex-col justify-between">
+        <div className={`bg-white border-2 border-green-200 rounded-2xl p-6 flex flex-col justify-between ${!temPendencia ? "sm:max-w-md" : ""}`}>
           <div>
             <Camera size={28} className="text-green-700 mb-3" />
             <p className="font-semibold text-gray-900">Registrar entrega na escola</p>
@@ -122,30 +109,10 @@ function CooperadoDashboard() {
         </div>
       </div>
 
-      <div className="bg-white border border-gray-200 rounded-2xl p-5 flex items-center justify-between gap-4">
-        <div className="flex items-start gap-3">
-          <Tag size={24} className="text-green-700 shrink-0 mt-0.5" />
-          <div>
-            <p className="font-semibold text-gray-900">Preços dos itens</p>
-            <p className="text-sm text-gray-500 mt-0.5">Veja quanto vale cada produto por escola.</p>
-          </div>
-        </div>
-        <Link href="/precos">
-          <Button variant="secondary">Consultar</Button>
-        </Link>
-      </div>
-
-      {precisaPix && (
-        <AlertBanner variant="warning" title="Cadastre onde quer receber">
-          {cooperado?.pixInvalidoMotivo ?? "Informe sua chave PIX (CPF, celular ou e-mail) para receber o pagamento."}
-          <Link href="/meu-cadastro">
-            <Button size="sm" className="mt-3">Cadastrar PIX</Button>
-          </Link>
-        </AlertBanner>
-      )}
-
       {comunicados.length > 0 && (
-        <Card title="Avisos da cooperativa">
+        <>
+          <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">Avisos</p>
+          <Card title="Avisos da cooperativa">
           <div className="space-y-3">
             {comunicados.map((c) => (
               <div key={c.id} className="flex items-start gap-3 p-3 rounded-lg border border-gray-100">
@@ -158,6 +125,7 @@ function CooperadoDashboard() {
             ))}
           </div>
         </Card>
+        </>
       )}
     </div>
   );
@@ -192,9 +160,8 @@ function AdminDashboard() {
         </AlertBanner>
       )}
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
         <StatCard title="A pagar aos cooperados" value={formatCurrency(stats.valoresAPagar)} icon={<Wallet size={24} />} variant="warning" />
-        <StatCard title="Já pagos" value={formatCurrency(stats.valoresPagos)} icon={<Wallet size={24} />} variant="success" />
         <StatCard title="Entregas p/ conferir" value={String(stats.entregasPendentes)} icon={<ClipboardList size={24} />} variant="gold" />
         <StatCard title="Cooperados ativos" value={String(stats.cooperadosAtivos)} icon={<Users size={24} />} />
       </div>

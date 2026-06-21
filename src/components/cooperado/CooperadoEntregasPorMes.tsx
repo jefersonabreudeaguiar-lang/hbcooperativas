@@ -15,13 +15,17 @@ import {
   Trash2,
   Wallet,
 } from "lucide-react";
-import type { NotaPedido } from "@/types";
+import type { AppData, NotaPedido } from "@/types";
 import type { ResumoMesEntregasCooperado } from "@/services/cooperadoEntregasService";
 import {
   agruparEntregasPorSemanaNoMes,
   agruparNotasEmEntregas,
+  itensConsolidadosEntrega,
+  statusEntregaCooperado,
+  valoresEntregaCooperado,
   type EntregaCooperadoView,
 } from "@/services/entregaCooperadoService";
+import { useAppData } from "@/hooks/useAppData";
 import { NotaStatusBadge } from "@/components/ui/NotaStatusBadge";
 import { Button } from "@/components/ui/Button";
 import { formatCurrency, formatDate, formatMesReferencia } from "@/utils/format";
@@ -39,18 +43,6 @@ interface CooperadoEntregasPorMesProps {
 
 function notaPrincipal(entrega: EntregaCooperadoView): NotaPedido {
   return entrega.notas[0];
-}
-
-function valorEntrega(entrega: EntregaCooperadoView): number {
-  return entrega.notas.reduce((s, n) => s + n.valorLiquido, 0);
-}
-
-function statusEntrega(entrega: EntregaCooperadoView): NotaPedido["status"] {
-  const n = entrega.notas[0];
-  if (entrega.notas.some((x) => x.status === "rejeitada")) return "rejeitada";
-  if (entrega.notas.every((x) => x.status === "pago")) return "pago";
-  if (entrega.notas.some((x) => x.status === "conferida")) return "conferida";
-  return n.status;
 }
 
 function ResumoMesCard({
@@ -150,6 +142,8 @@ function EntregaSemanaItem({
   onToggle,
   onReenviar,
   onExcluir,
+  data,
+  cooperadoId,
 }: {
   entrega: EntregaCooperadoView;
   escola: string;
@@ -158,10 +152,13 @@ function EntregaSemanaItem({
   onToggle: () => void;
   onReenviar: () => void;
   onExcluir: () => void;
+  data: AppData | null;
+  cooperadoId: string;
 }) {
   const nota = notaPrincipal(entrega);
-  const status = statusEntrega(entrega);
-  const valor = valorEntrega(entrega);
+  const status = statusEntregaCooperado(entrega);
+  const valores = valoresEntregaCooperado(entrega, data ?? undefined, cooperadoId);
+  const itens = itensConsolidadosEntrega(entrega);
 
   return (
     <div
@@ -206,7 +203,9 @@ function EntregaSemanaItem({
         </div>
         <div className="flex flex-col items-end gap-1.5 shrink-0">
           <NotaStatusBadge status={status} />
-          {valor > 0 && <span className="text-sm font-bold text-green-700">{formatCurrency(valor)}</span>}
+          {valores.temValorAprovado && valores.valorBruto > 0 && (
+            <span className="text-sm font-bold text-green-700">{formatCurrency(valores.valorBruto)}</span>
+          )}
           {expandida ? <ChevronDown size={18} className="text-gray-400" /> : <ChevronRight size={18} className="text-gray-400" />}
         </div>
       </button>
@@ -243,25 +242,41 @@ function EntregaSemanaItem({
             </div>
           </div>
 
-          {entrega.notas.flatMap((n) => n.itens ?? []).length > 0 && (
+          {itens.length > 0 && (
             <div className="rounded-xl border border-gray-200 bg-white overflow-hidden">
               <p className="text-xs font-semibold uppercase tracking-wide text-gray-500 px-3 py-2 bg-gray-50 border-b">
                 Itens conferidos
               </p>
               <ul className="divide-y divide-gray-100 text-sm">
-                {entrega.notas.flatMap((n) =>
-                  (n.itens ?? []).map((item) => (
-                    <li key={`${n.id}-${item.produtoInstituicaoId}`} className="flex justify-between gap-2 px-3 py-2">
-                      <span className="text-gray-800">
-                        {item.produtoNome} · {item.quantidade} {item.unidade}
-                      </span>
-                      {item.valorBruto > 0 && (
-                        <span className="font-medium text-gray-900 shrink-0">{formatCurrency(item.valorBruto)}</span>
-                      )}
-                    </li>
-                  ))
-                )}
+                {itens.map((item) => (
+                  <li key={item.produtoInstituicaoId} className="flex justify-between gap-2 px-3 py-2">
+                    <span className="text-gray-800">
+                      {item.produtoNome} · {item.quantidade} {item.unidade}
+                    </span>
+                    {item.valorBruto > 0 && (
+                      <span className="font-medium text-gray-900 shrink-0">{formatCurrency(item.valorBruto)}</span>
+                    )}
+                  </li>
+                ))}
               </ul>
+              {valores.temValorAprovado && (
+                <div className="border-t border-gray-100 px-3 py-2 space-y-1 text-sm bg-gray-50/80">
+                  <div className="flex justify-between text-gray-700">
+                    <span>Total bruto</span>
+                    <span>{formatCurrency(valores.valorBruto)}</span>
+                  </div>
+                  {valores.valorDesconto > 0 && (
+                    <div className="flex justify-between text-amber-700">
+                      <span>Desconto cooperativa</span>
+                      <span>- {formatCurrency(valores.valorDesconto)}</span>
+                    </div>
+                  )}
+                  <div className="flex justify-between font-bold text-green-700 pt-1 border-t border-gray-200">
+                    <span>Total líquido</span>
+                    <span>{formatCurrency(valores.valorLiquido)}</span>
+                  </div>
+                </div>
+              )}
             </div>
           )}
 
@@ -300,6 +315,7 @@ export function CooperadoEntregasPorMes({
   onExcluir,
   getEscolaLabel,
 }: CooperadoEntregasPorMesProps) {
+  const data = useAppData();
   const [expandidaId, setExpandidaId] = useState<string | null>(null);
 
   useEffect(() => {
@@ -340,6 +356,7 @@ export function CooperadoEntregasPorMes({
                     <div className="space-y-3">
                       {semana.entregas.map((entrega) => {
                         const nota = notaPrincipal(entrega);
+                        const cooperadoId = nota.cooperadoId;
                         return (
                           <EntregaSemanaItem
                             key={entrega.id}
@@ -350,6 +367,8 @@ export function CooperadoEntregasPorMes({
                             onToggle={() => setExpandidaId((cur) => (cur === entrega.id ? null : entrega.id))}
                             onReenviar={() => onReenviar(nota)}
                             onExcluir={() => onExcluir(nota)}
+                            data={data}
+                            cooperadoId={cooperadoId}
                           />
                         );
                       })}

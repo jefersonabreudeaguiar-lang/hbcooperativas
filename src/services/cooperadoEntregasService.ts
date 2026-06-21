@@ -177,6 +177,31 @@ export function getResumoMesEntregasCooperado(
   };
 }
 
+export function listarMesesPagosCooperado(
+  data: AppData,
+  cooperadoId: string,
+  cooperativaId?: string
+): string[] {
+  const coopId = cooperativaId ?? data.cooperados.find((c) => c.id === cooperadoId)?.cooperativaId;
+  const canonico = resolverCooperadoIdCanonico(data, cooperadoId, coopId);
+  const meses = new Set<string>();
+
+  for (const p of data.pagamentosCooperado) {
+    if (p.status !== "confirmado") continue;
+    const pCanon = resolverCooperadoIdCanonico(data, p.cooperadoId, coopId ?? p.cooperativaId);
+    if (
+      p.cooperadoId !== cooperadoId &&
+      p.cooperadoId !== canonico &&
+      pCanon !== canonico
+    ) {
+      continue;
+    }
+    meses.add(p.mesReferencia);
+  }
+
+  return [...meses].sort((a, b) => b.localeCompare(a));
+}
+
 export function listarResumosMensaisEntregas(
   data: AppData,
   cooperadoId: string,

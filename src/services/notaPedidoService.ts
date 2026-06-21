@@ -562,7 +562,7 @@ export function getResumoPagamentoCooperado(
 
 export type ResumoPagamentoCooperado = ReturnType<typeof getResumoPagamentoCooperado>;
 
-function resumoFromPagamento(pagamento: PagamentoCooperadoRegistro): ResumoPagamentoCooperado {
+export function resumoFromPagamento(pagamento: PagamentoCooperadoRegistro): ResumoPagamentoCooperado {
   return {
     valorBruto: pagamento.valorBruto,
     descontoCooperativa: pagamento.descontoCooperativa,
