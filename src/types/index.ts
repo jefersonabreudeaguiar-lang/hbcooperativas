@@ -183,8 +183,11 @@ export interface NotaPedido {
   assinaturaRecebedor?: string;
   dataAssinatura?: string;
   fotoPedido?: string;
+  /** Todas as fotos de um único envio (uma entrega). */
+  fotosPedido?: string[];
   /** Miniatura leve — lista no aparelho do cooperado após envio à nuvem. */
   fotoPedidoMiniatura?: string;
+  fotosPedidoMiniaturas?: string[];
   /** Foto completa está no Supabase (não duplicar no navegador). */
   fotoNaNuvem?: boolean;
   /** CNPJ da cooperativa — identifica entregas entre aparelhos diferentes. */

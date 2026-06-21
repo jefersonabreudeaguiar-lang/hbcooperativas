@@ -47,7 +47,7 @@ import {
   resolverInstituicaoConferencia,
 } from "@/utils/instituicaoPreferida";
 import { getCooperadoNome } from "@/utils/calculations";
-import { isFotoDuplicada, compressFotoFile, makeFotoThumbnail, getFotoExibicaoNota, notaPertenceCooperativa, compactarFotosNoArmazenamento, agruparPendentesPorCooperado, getChaveGrupoConferencia, notaPertenceGrupoConferencia } from "@/utils/fotoEntrega";
+import { isFotoDuplicada, compressFotoFile, makeFotoThumbnail, getFotoExibicaoNota, getFotosExibicaoNota, notaPertenceCooperativa, compactarFotosNoArmazenamento, agruparPendentesPorCooperado, getChaveGrupoConferencia, notaPertenceGrupoConferencia } from "@/utils/fotoEntrega";
 import type { NotaPedido, NotaPedidoItem, Cooperado, AppData } from "@/types";
 
 const NOVO_AVULSO = "__novo__";
@@ -776,6 +776,7 @@ export default function NotasPedidoContent() {
           localEntrega,
           escolaAvulsaNome: escolaAvulsa,
           fotoPedido: fotosSessao[0],
+          fotosPedido: [...fotosSessao],
           fotoEnviadaEm: now,
           observacoes,
           status: "aguardando_conferencia",
@@ -789,37 +790,32 @@ export default function NotasPedidoContent() {
         }];
       }
 
-      let notas = [...d.notasPedido];
-      const criadas: NotaPedido[] = [];
-      for (const foto of fotosSessao) {
-        const nota: NotaPedido = {
-          id: generateId("np"),
-          cooperativaId: coopId,
-          cooperadoId: cid,
-          instituicaoId: contratoId,
-          numeroNota: gerarNumeroNota({ ...d, notasPedido: notas }, coopId),
-          dataEntrega: now.split("T")[0],
-          localEntrega,
-          escolaAvulsaNome: escolaAvulsa,
-          itens: [],
-          valorBruto: 0,
-          percentualDescontoCooperativa: d.config.descontoPadraoCooperativa,
-          valorDesconto: 0,
-          valorLiquido: 0,
-          status: "aguardando_conferencia",
-          fotoPedido: foto,
-          fotoEnviadaEm: now,
-          mesReferencia: mes,
-          observacoes,
-          cooperativaCnpj: cnpj,
-          cooperadoNomeSnapshot: cooperadoNome,
-          createdAt: now,
-          updatedAt: now,
-        };
-        notas = [...notas, nota];
-        criadas.push(nota);
-      }
-      return criadas;
+      const nota: NotaPedido = {
+        id: generateId("np"),
+        cooperativaId: coopId,
+        cooperadoId: cid,
+        instituicaoId: contratoId,
+        numeroNota: gerarNumeroNota(workingData, coopId),
+        dataEntrega: now.split("T")[0],
+        localEntrega,
+        escolaAvulsaNome: escolaAvulsa,
+        itens: [],
+        valorBruto: 0,
+        percentualDescontoCooperativa: workingData.config.descontoPadraoCooperativa,
+        valorDesconto: 0,
+        valorLiquido: 0,
+        status: "aguardando_conferencia",
+        fotoPedido: fotosSessao[0],
+        fotosPedido: [...fotosSessao],
+        fotoEnviadaEm: now,
+        mesReferencia: mes,
+        observacoes,
+        cooperativaCnpj: cnpj,
+        cooperadoNomeSnapshot: cooperadoNome,
+        createdAt: now,
+        updatedAt: now,
+      };
+      return [nota];
     };
 
     const notasCompletas = buildNotasCompletas(workingData);
@@ -844,14 +840,16 @@ export default function NotasPedidoContent() {
     cloudOk = true;
 
     const miniaturas = await Promise.all(
-      notasCompletas.map((n) => (n.fotoPedido ? makeFotoThumbnail(n.fotoPedido) : Promise.resolve(undefined)))
+      fotosSessao.map((f) => makeFotoThumbnail(f))
     );
 
-    const notasLocais = notasCompletas.map((n, i) => ({
+    const notasLocais = notasCompletas.map((n) => ({
       ...n,
       fotoNaNuvem: cloudOk,
-      fotoPedidoMiniatura: miniaturas[i],
+      fotosPedidoMiniaturas: miniaturas,
+      fotoPedidoMiniatura: miniaturas[0],
       fotoPedido: cloudOk ? undefined : n.fotoPedido,
+      fotosPedido: cloudOk ? undefined : n.fotosPedido,
     }));
 
     const persistir = (d: AppData) => {
@@ -878,7 +876,7 @@ export default function NotasPedidoContent() {
         action: "criar",
         userId: user.id,
         userName: user.name,
-        changes: `${qtdFotos} entrega(s) com foto`,
+        changes: qtdFotos > 1 ? `1 entrega com ${qtdFotos} fotos` : "1 entrega com foto",
       });
     };
 
@@ -890,7 +888,9 @@ export default function NotasPedidoContent() {
         const base = compactarFotosNoArmazenamento({
           ...d,
           notasPedido: d.notasPedido.map((n) =>
-            idsNovos.has(n.id) ? { ...n, fotoPedido: undefined } : n
+            idsNovos.has(n.id)
+              ? { ...n, fotoPedido: undefined, fotosPedido: undefined }
+              : n
           ),
         });
         return persistir(base);
@@ -913,14 +913,14 @@ export default function NotasPedidoContent() {
     setAnexarSucesso(true);
     setSuccessMsg(
       qtdFotos === 1
-        ? "Enviado! Aparece abaixo como Em análise — o responsável já pode conferir."
-        : `${qtdFotos} fotos enviadas! Aparecem abaixo como Em análise.`
+        ? "Entrega enviada! Aparece abaixo como Em análise — o responsável já pode conferir."
+        : `Entrega enviada com ${qtdFotos} fotos! Aparece abaixo como Em análise.`
     );
   };
 
   const openConferir = async (nota: NotaPedido) => {
     let notaComFoto = nota;
-    if (!nota.fotoPedido && data && coopId) {
+    if (getFotosExibicaoNota(nota).length === 0 && data && coopId) {
       notaComFoto = await ensureNotaComFoto(data, nota, coopId);
     }
     setSelectedNota(notaComFoto);
@@ -994,7 +994,7 @@ export default function NotasPedidoContent() {
 
   const openView = async (nota: NotaPedido) => {
     let notaComFoto = nota;
-    if (!nota.fotoPedido && data && coopId) {
+    if (getFotosExibicaoNota(nota).length === 0 && data && coopId) {
       notaComFoto = await ensureNotaComFoto(data, nota, coopId);
     }
     setSelectedNota(notaComFoto);
@@ -1304,7 +1304,7 @@ export default function NotasPedidoContent() {
           isCooperado
             ? abaCooperado === "ficha"
               ? "Extrato financeiro mensal com valores recebidos e detalhamento de cada entrega"
-              : "Entregas numeradas por mês — toque em cada uma para ver a foto"
+              : "Entregas numeradas por mês e semana — toque em cada uma para ver as fotos"
             : "Analise fotos, lance produtos ou registre entregas avulsas sem nota"
         }
         action={isCooperado ? (
@@ -1615,7 +1615,7 @@ export default function NotasPedidoContent() {
                 disabled={fotosSessao.length === 0 || enviando || processandoFoto}
               >
                 <FileText size={18} />{" "}
-                {enviando ? "Enviando..." : fotosSessao.length > 0 ? `Enviar ${fotosSessao.length} foto(s)` : "Enviar para a cooperativa"}
+                {enviando ? "Enviando..." : fotosSessao.length > 0 ? `Enviar entrega${fotosSessao.length > 1 ? ` (${fotosSessao.length} fotos)` : ""}` : "Enviar para a cooperativa"}
               </Button>
             </div>
           )
@@ -1635,8 +1635,8 @@ export default function NotasPedidoContent() {
           )}
           <p className="text-sm text-gray-600">
             {reenviarNotaId
-              ? "Tire uma nova foto do pedido corrigido."
-              : "Tire uma foto de cada pedido. Cada foto vira uma entrega separada para a cooperativa analisar."}
+              ? "Tire novas fotos do pedido corrigido."
+              : "Cada envio conta como uma entrega. Você pode incluir várias fotos do mesmo pedido antes de enviar."}
           </p>
 
           {!reenviarNotaId && (
@@ -1662,8 +1662,8 @@ export default function NotasPedidoContent() {
               </div>
               <p className="text-xs text-green-800 mt-2">
                 {fotosSessao.length === 0
-                  ? "O indicador cresce a cada foto nova."
-                  : "Continue tirando fotos ou toque em Enviar quando terminar."}
+                  ? "Adicione as fotos deste envio."
+                  : "Continue adicionando fotos ou toque em Enviar entrega quando terminar."}
               </p>
             </div>
           )}
@@ -1901,19 +1901,29 @@ export default function NotasPedidoContent() {
         {selectedNota && (
           <div className="flex flex-col lg:flex-row min-h-[calc(100dvh-8.5rem)]">
             <div className="lg:w-[48%] xl:w-1/2 bg-gray-900 flex flex-col shrink-0 lg:min-h-[calc(100dvh-8.5rem)]">
-              <div className="flex-1 flex items-center justify-center p-4 min-h-[40vh] lg:min-h-0">
-                {selectedNota.fotoPedido ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img
-                    src={selectedNota.fotoPedido}
-                    alt="Pedido"
-                    className="max-w-full max-h-[70vh] lg:max-h-[calc(100dvh-12rem)] object-contain"
-                  />
-                ) : selectedNota.fotoNaNuvem ? (
-                  <p className="text-gray-400 text-center py-12">Carregando foto da nuvem...</p>
-                ) : (
-                  <p className="text-gray-400 text-center py-12">Sem foto</p>
-                )}
+              <div className="flex-1 flex items-center justify-center p-4 min-h-[40vh] lg:min-h-0 overflow-y-auto">
+                {(() => {
+                  const fotos = getFotosExibicaoNota(selectedNota);
+                  if (fotos.length > 0) {
+                    return (
+                      <div className={cn("w-full space-y-3", fotos.length > 1 && "max-h-[70vh] lg:max-h-[calc(100dvh-12rem)]")}>
+                        {fotos.map((foto, i) => (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img
+                            key={i}
+                            src={foto}
+                            alt={`Pedido ${i + 1}`}
+                            className="max-w-full max-h-[70vh] lg:max-h-[calc(100dvh-12rem)] object-contain mx-auto"
+                          />
+                        ))}
+                      </div>
+                    );
+                  }
+                  if (selectedNota.fotoNaNuvem) {
+                    return <p className="text-gray-400 text-center py-12">Carregando fotos da nuvem...</p>;
+                  }
+                  return <p className="text-gray-400 text-center py-12">Sem foto</p>;
+                })()}
               </div>
               <div className="shrink-0 px-4 py-3 bg-black/40 text-white text-sm space-y-0.5">
                 <p><strong>{getCooperadoNome(data.cooperados, selectedNota.cooperadoId)}</strong> · {formatDate(selectedNota.dataEntrega)}</p>
@@ -2107,9 +2117,13 @@ export default function NotasPedidoContent() {
             {selectedNota.motivoRejeicao && (
               <AlertBanner variant="error" title="Motivo da correção">{selectedNota.motivoRejeicao}</AlertBanner>
             )}
-            {(selectedNota.fotoPedido || getFotoExibicaoNota(selectedNota)) && (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img src={selectedNota.fotoPedido ?? getFotoExibicaoNota(selectedNota)} alt="Pedido" className="w-full rounded-xl border" />
+            {getFotosExibicaoNota(selectedNota).length > 0 && (
+              <div className={cn("grid gap-2", getFotosExibicaoNota(selectedNota).length > 1 ? "grid-cols-1 sm:grid-cols-2" : "grid-cols-1")}>
+                {getFotosExibicaoNota(selectedNota).map((foto, i) => (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img key={i} src={foto} alt={`Pedido ${i + 1}`} className="w-full rounded-xl border" />
+                ))}
+              </div>
             )}
             {isCooperado && selectedNota.status === "rejeitada" && (
               <div className="flex flex-col gap-2">

@@ -7,6 +7,7 @@ import {
   ChevronDown,
   ChevronRight,
   FileDown,
+  Package,
   PenLine,
   Wallet,
 } from "lucide-react";
@@ -19,6 +20,10 @@ import {
   getResumoPagamentoExibicao,
 } from "@/services/notaPedidoService";
 import type { ResumoMesEntregasCooperado } from "@/services/cooperadoEntregasService";
+import {
+  agruparEntregasPorSemanaNoMes,
+  agruparNotasEmEntregas,
+} from "@/services/entregaCooperadoService";
 import {
   totalValoresAvulsosPendentes,
   valoresAvulsosDoCooperado,
@@ -152,49 +157,69 @@ function MesFichaAccordion({
             </p>
           )}
 
-          {resumo.notas.length > 0 && (
+          {resumo.notas.length > 0 && (() => {
+            const entregas = agruparNotasEmEntregas(resumo.notas);
+            const semanas = agruparEntregasPorSemanaNoMes(entregas, resumo.mesReferencia);
+            return (
             <div>
               <p className="text-xs font-semibold uppercase tracking-wide text-gray-500 mb-3">
-                Entregas do mês (detalhadas)
+                Entregas do mês · {entregas.length} {entregas.length === 1 ? "entrega" : "entregas"}
               </p>
-              <div className="space-y-2">
-                {resumo.notas.map((nota, idx) => (
-                  <div key={nota.id} className="rounded-xl border border-gray-200 bg-white p-4">
-                    <div className="flex flex-wrap items-start justify-between gap-2">
-                      <div>
-                        <p className="font-semibold text-gray-900">
-                          Entrega {idx + 1} · {getEscolaLabel(nota)}
-                        </p>
-                        <p className="text-xs text-gray-500 mt-0.5">
-                          {formatDate(nota.dataEntrega)} · {nota.numeroNota}
-                        </p>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <NotaStatusBadge status={nota.status} />
-                        {nota.valorLiquido > 0 && (
-                          <span className="text-sm font-bold text-green-700">{formatCurrency(nota.valorLiquido)}</span>
-                        )}
-                      </div>
-                    </div>
-                    {(nota.itens ?? []).length > 0 && (
-                      <ul className="mt-3 pt-3 border-t border-gray-100 text-sm space-y-1">
-                        {nota.itens.map((item) => (
-                          <li key={item.produtoInstituicaoId} className="flex justify-between gap-2 text-gray-700">
-                            <span>
-                              {item.produtoNome} · {item.quantidade} {item.unidade}
-                            </span>
-                            {item.valorBruto > 0 && (
-                              <span className="font-medium shrink-0">{formatCurrency(item.valorBruto)}</span>
+              <div className="space-y-4">
+                {semanas.map((semana) => (
+                  <div key={`${resumo.mesReferencia}-s${semana.indice}`}>
+                    <p className="text-xs font-bold uppercase tracking-wide text-green-800 bg-green-50 border border-green-100 rounded-lg px-3 py-2 mb-2 inline-flex items-center gap-2">
+                      <Package size={14} />
+                      {semana.rotulo}
+                    </p>
+                    <div className="space-y-2">
+                      {semana.entregas.map((entrega) => {
+                        const nota = entrega.notas[0];
+                        const valor = entrega.notas.reduce((s, n) => s + n.valorLiquido, 0);
+                        const itens = entrega.notas.flatMap((n) => n.itens ?? []);
+                        return (
+                          <div key={entrega.id} className="rounded-xl border border-gray-200 bg-white p-4">
+                            <div className="flex flex-wrap items-start justify-between gap-2">
+                              <div>
+                                <p className="font-semibold text-gray-900">
+                                  Entrega {entrega.numeroNoMes} · {getEscolaLabel(nota)}
+                                </p>
+                                <p className="text-xs text-gray-500 mt-0.5">
+                                  {formatDate(entrega.dataEntrega)} · {nota.numeroNota}
+                                  {entrega.qtdFotos > 0 && ` · ${entrega.qtdFotos} foto${entrega.qtdFotos !== 1 ? "s" : ""}`}
+                                </p>
+                              </div>
+                              <div className="flex items-center gap-2">
+                                <NotaStatusBadge status={nota.status} />
+                                {valor > 0 && (
+                                  <span className="text-sm font-bold text-green-700">{formatCurrency(valor)}</span>
+                                )}
+                              </div>
+                            </div>
+                            {itens.length > 0 && (
+                              <ul className="mt-3 pt-3 border-t border-gray-100 text-sm space-y-1">
+                                {itens.map((item) => (
+                                  <li key={`${nota.id}-${item.produtoInstituicaoId}`} className="flex justify-between gap-2 text-gray-700">
+                                    <span>
+                                      {item.produtoNome} · {item.quantidade} {item.unidade}
+                                    </span>
+                                    {item.valorBruto > 0 && (
+                                      <span className="font-medium shrink-0">{formatCurrency(item.valorBruto)}</span>
+                                    )}
+                                  </li>
+                                ))}
+                              </ul>
                             )}
-                          </li>
-                        ))}
-                      </ul>
-                    )}
+                          </div>
+                        );
+                      })}
+                    </div>
                   </div>
                 ))}
               </div>
             </div>
-          )}
+            );
+          })()}
 
           {itensMes.itens.length > 0 && (
             <div>

@@ -55,7 +55,22 @@ function readFileAsDataUrl(file: File): Promise<string> {
 }
 
 export function getFotoExibicaoNota(nota: NotaPedido): string | undefined {
-  return nota.fotoPedido ?? nota.fotoPedidoMiniatura;
+  if (nota.fotoPedido) return nota.fotoPedido;
+  if (nota.fotosPedido?.length) return nota.fotosPedido[0];
+  if (nota.fotoPedidoMiniatura) return nota.fotoPedidoMiniatura;
+  if (nota.fotosPedidoMiniaturas?.length) return nota.fotosPedidoMiniaturas[0];
+  return undefined;
+}
+
+export function getFotosExibicaoNota(nota: NotaPedido): string[] {
+  if (nota.fotosPedido?.length) {
+    return nota.fotosPedido
+      .map((f, i) => f ?? nota.fotosPedidoMiniaturas?.[i])
+      .filter((f): f is string => !!f);
+  }
+  if (nota.fotosPedidoMiniaturas?.length) return nota.fotosPedidoMiniaturas;
+  const single = getFotoExibicaoNota(nota);
+  return single ? [single] : [];
 }
 
 export function getNotaCooperativaCnpj(data: AppData, nota: NotaPedido): string | undefined {
@@ -166,13 +181,13 @@ export function compactarFotosNoArmazenamento(data: AppData): AppData {
   let changed = false;
   const notasPedido = data.notasPedido.map((n) => {
     const arquivada = n.status === "conferida" || n.status === "pago" || n.status === "rejeitada";
-    if (arquivada && n.fotoPedido) {
+    if (arquivada && (n.fotoPedido || n.fotosPedido?.length)) {
       changed = true;
-      return { ...n, fotoPedido: undefined };
+      return { ...n, fotoPedido: undefined, fotosPedido: undefined };
     }
-    if (n.fotoNaNuvem && n.fotoPedido) {
+    if (n.fotoNaNuvem && (n.fotoPedido || n.fotosPedido?.length)) {
       changed = true;
-      return { ...n, fotoPedido: undefined };
+      return { ...n, fotoPedido: undefined, fotosPedido: undefined };
     }
     return n;
   });
@@ -187,8 +202,7 @@ export function isFotoDuplicada(
 ): boolean {
   if (fotosSessao.includes(dataUrl)) return true;
   return notasCooperado.some((n) => {
-    const ref = getFotoExibicaoNota(n) ?? n.fotoPedido;
-    return ref === dataUrl;
+    return getFotosExibicaoNota(n).includes(dataUrl);
   });
 }
 

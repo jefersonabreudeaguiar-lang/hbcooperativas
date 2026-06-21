@@ -9,6 +9,7 @@ import {
   ChevronRight,
   Clock,
   FileDown,
+  Images,
   Package,
   RefreshCw,
   Trash2,
@@ -16,11 +17,15 @@ import {
 } from "lucide-react";
 import type { NotaPedido } from "@/types";
 import type { ResumoMesEntregasCooperado } from "@/services/cooperadoEntregasService";
+import {
+  agruparEntregasPorSemanaNoMes,
+  agruparNotasEmEntregas,
+  type EntregaCooperadoView,
+} from "@/services/entregaCooperadoService";
 import { NotaStatusBadge } from "@/components/ui/NotaStatusBadge";
 import { Button } from "@/components/ui/Button";
 import { formatCurrency, formatDate, formatMesReferencia } from "@/utils/format";
 import { cn } from "@/utils/format";
-import { getFotoExibicaoNota } from "@/utils/fotoEntrega";
 import { baixarReciboHtml, nomeArquivoRecibo } from "@/utils/recibo";
 
 interface CooperadoEntregasPorMesProps {
@@ -32,12 +37,30 @@ interface CooperadoEntregasPorMesProps {
   getEscolaLabel: (nota: NotaPedido) => string;
 }
 
+function notaPrincipal(entrega: EntregaCooperadoView): NotaPedido {
+  return entrega.notas[0];
+}
+
+function valorEntrega(entrega: EntregaCooperadoView): number {
+  return entrega.notas.reduce((s, n) => s + n.valorLiquido, 0);
+}
+
+function statusEntrega(entrega: EntregaCooperadoView): NotaPedido["status"] {
+  const n = entrega.notas[0];
+  if (entrega.notas.some((x) => x.status === "rejeitada")) return "rejeitada";
+  if (entrega.notas.every((x) => x.status === "pago")) return "pago";
+  if (entrega.notas.some((x) => x.status === "conferida")) return "conferida";
+  return n.status;
+}
+
 function ResumoMesCard({
   resumo,
   nomeCooperado,
+  qtdEntregas,
 }: {
   resumo: ResumoMesEntregasCooperado;
   nomeCooperado: string;
+  qtdEntregas: number;
 }) {
   const quitado = resumo.pagamentoConfirmado != null;
   const aguardandoPix = resumo.pagamentoAguardando != null;
@@ -60,8 +83,7 @@ function ResumoMesCard({
           <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">Mês</p>
           <p className="text-lg font-bold text-gray-900 mt-0.5">{formatMesReferencia(resumo.mesReferencia)}</p>
           <p className="text-sm text-gray-600 mt-1">
-            {resumo.quantidadeEntregas}{" "}
-            {resumo.quantidadeEntregas === 1 ? "entrega registrada" : "entregas registradas"}
+            {qtdEntregas} {qtdEntregas === 1 ? "entrega" : "entregas"} no mês
           </p>
         </div>
         <div className="text-right space-y-1">
@@ -120,9 +142,8 @@ function ResumoMesCard({
   );
 }
 
-function EntregaMesItem({
-  numero,
-  nota,
+function EntregaSemanaItem({
+  entrega,
   escola,
   expandida,
   recémEnviada,
@@ -130,8 +151,7 @@ function EntregaMesItem({
   onReenviar,
   onExcluir,
 }: {
-  numero: number;
-  nota: NotaPedido;
+  entrega: EntregaCooperadoView;
   escola: string;
   expandida: boolean;
   recémEnviada: boolean;
@@ -139,11 +159,13 @@ function EntregaMesItem({
   onReenviar: () => void;
   onExcluir: () => void;
 }) {
-  const foto = getFotoExibicaoNota(nota);
+  const nota = notaPrincipal(entrega);
+  const status = statusEntrega(entrega);
+  const valor = valorEntrega(entrega);
 
   return (
     <div
-      id={recémEnviada ? `nota-enviada-${nota.id}` : undefined}
+      id={recémEnviada ? `nota-enviada-${entrega.id}` : undefined}
       className={cn(
         "rounded-2xl border overflow-hidden bg-white transition-shadow",
         expandida ? "border-green-400 shadow-md ring-1 ring-green-200" : "border-gray-200",
@@ -161,11 +183,11 @@ function EntregaMesItem({
             expandida ? "bg-green-700 text-white" : "bg-gray-100 text-gray-700"
           )}
         >
-          {numero}
+          {entrega.numeroNoMes}
         </div>
         <div className="flex-1 min-w-0">
           <p className="font-semibold text-gray-900">
-            Entrega {numero}
+            Entrega {entrega.numeroNoMes}
             {recémEnviada && (
               <span className="ml-2 text-xs font-medium text-green-700 bg-green-100 px-2 py-0.5 rounded-full">
                 Nova
@@ -173,30 +195,40 @@ function EntregaMesItem({
             )}
           </p>
           <p className="text-sm text-gray-600 truncate mt-0.5">{escola}</p>
-          <p className="text-xs text-gray-500 mt-0.5">{formatDate(nota.dataEntrega)}</p>
+          <p className="text-xs text-gray-500 mt-0.5 flex items-center gap-1.5 flex-wrap">
+            <span>{formatDate(entrega.dataEntrega)}</span>
+            {entrega.qtdFotos > 0 && (
+              <span className="inline-flex items-center gap-0.5 text-gray-400">
+                <Images size={12} /> {entrega.qtdFotos} foto{entrega.qtdFotos !== 1 ? "s" : ""}
+              </span>
+            )}
+          </p>
         </div>
         <div className="flex flex-col items-end gap-1.5 shrink-0">
-          <NotaStatusBadge status={nota.status} />
-          {nota.valorLiquido > 0 && (
-            <span className="text-sm font-bold text-green-700">{formatCurrency(nota.valorLiquido)}</span>
-          )}
-          {expandida ? (
-            <ChevronDown size={18} className="text-gray-400" />
-          ) : (
-            <ChevronRight size={18} className="text-gray-400" />
-          )}
+          <NotaStatusBadge status={status} />
+          {valor > 0 && <span className="text-sm font-bold text-green-700">{formatCurrency(valor)}</span>}
+          {expandida ? <ChevronDown size={18} className="text-gray-400" /> : <ChevronRight size={18} className="text-gray-400" />}
         </div>
       </button>
 
       {expandida && (
         <div className="border-t border-gray-100 px-4 pb-4 pt-3 space-y-4 bg-gray-50/50">
-          {foto ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img src={foto} alt={`Foto da entrega ${numero}`} className="w-full rounded-xl border border-gray-200 object-cover max-h-80" />
+          {entrega.fotos.length > 0 ? (
+            <div className={cn("grid gap-2", entrega.fotos.length > 1 ? "grid-cols-1 sm:grid-cols-2" : "grid-cols-1")}>
+              {entrega.fotos.map((foto, i) => (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  key={i}
+                  src={foto}
+                  alt={`Foto ${i + 1} da entrega ${entrega.numeroNoMes}`}
+                  className="w-full rounded-xl border border-gray-200 object-cover max-h-72"
+                />
+              ))}
+            </div>
           ) : (
             <div className="w-full aspect-[4/3] max-h-48 rounded-xl bg-gray-100 flex flex-col items-center justify-center text-gray-400 border border-dashed">
               <Camera size={32} />
-              <p className="text-xs mt-2">{nota.lancamentoDireto ? "Entrega avulsa sem foto" : "Sem foto anexada"}</p>
+              <p className="text-xs mt-2">{nota.lancamentoDireto ? "Entrega avulsa sem foto" : "Fotos na nuvem"}</p>
             </div>
           )}
 
@@ -211,22 +243,24 @@ function EntregaMesItem({
             </div>
           </div>
 
-          {(nota.itens ?? []).length > 0 && (
+          {entrega.notas.flatMap((n) => n.itens ?? []).length > 0 && (
             <div className="rounded-xl border border-gray-200 bg-white overflow-hidden">
               <p className="text-xs font-semibold uppercase tracking-wide text-gray-500 px-3 py-2 bg-gray-50 border-b">
                 Itens conferidos
               </p>
               <ul className="divide-y divide-gray-100 text-sm">
-                {nota.itens.map((item) => (
-                  <li key={item.produtoInstituicaoId} className="flex justify-between gap-2 px-3 py-2">
-                    <span className="text-gray-800">
-                      {item.produtoNome} · {item.quantidade} {item.unidade}
-                    </span>
-                    {item.valorBruto > 0 && (
-                      <span className="font-medium text-gray-900 shrink-0">{formatCurrency(item.valorBruto)}</span>
-                    )}
-                  </li>
-                ))}
+                {entrega.notas.flatMap((n) =>
+                  (n.itens ?? []).map((item) => (
+                    <li key={`${n.id}-${item.produtoInstituicaoId}`} className="flex justify-between gap-2 px-3 py-2">
+                      <span className="text-gray-800">
+                        {item.produtoNome} · {item.quantidade} {item.unidade}
+                      </span>
+                      {item.valorBruto > 0 && (
+                        <span className="font-medium text-gray-900 shrink-0">{formatCurrency(item.valorBruto)}</span>
+                      )}
+                    </li>
+                  ))
+                )}
               </ul>
             </div>
           )}
@@ -237,7 +271,7 @@ function EntregaMesItem({
             </p>
           )}
 
-          {nota.status === "rejeitada" && (
+          {status === "rejeitada" && (
             <div className="flex flex-col sm:flex-row gap-2">
               <Button size="sm" variant="secondary" className="flex-1" onClick={onReenviar}>
                 <RefreshCw size={16} /> Enviar de novo
@@ -247,7 +281,7 @@ function EntregaMesItem({
               </Button>
             </div>
           )}
-          {nota.status === "aguardando_conferencia" && (
+          {status === "aguardando_conferencia" && (
             <Button size="sm" variant="danger" className="w-full" onClick={onExcluir}>
               <Trash2 size={16} /> Excluir pendente
             </Button>
@@ -279,7 +313,7 @@ export function CooperadoEntregasPorMes({
         <Camera size={48} className="mx-auto mb-4 text-gray-300" />
         <p className="font-semibold text-gray-800">Nenhuma entrega registrada</p>
         <p className="text-sm mt-2 max-w-xs mx-auto">
-          Tire foto do pedido assinado na escola. Cada foto vira uma entrega numerada no mês.
+          Cada vez que você enviar fotos para a cooperativa conta como uma entrega — mesmo com várias fotos no mesmo envio.
         </p>
       </div>
     );
@@ -287,51 +321,60 @@ export function CooperadoEntregasPorMes({
 
   return (
     <div className="space-y-10">
-      {resumos.map((resumo) => (
-        <section key={resumo.mesReferencia} id={`mes-${resumo.mesReferencia}`}>
-          <ResumoMesCard resumo={resumo} nomeCooperado={nomeCooperado} />
+      {resumos.map((resumo) => {
+        const entregas = agruparNotasEmEntregas(resumo.notas);
+        const semanas = agruparEntregasPorSemanaNoMes(entregas, resumo.mesReferencia);
 
-          {resumo.notas.length > 0 && (
-            <>
-              <div className="flex items-center gap-2 mb-3 px-1">
-                <Package size={16} className="text-gray-500" />
-                <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">
-                  Entregas do mês · toque para ver a foto
-                </p>
-              </div>
-              <div className="space-y-3">
-                {resumo.notas.map((nota, idx) => (
-                  <EntregaMesItem
-                    key={nota.id}
-                    numero={idx + 1}
-                    nota={nota}
-                    escola={getEscolaLabel(nota)}
-                    expandida={expandidaId === nota.id}
-                    recémEnviada={ultimaNotaEnviadaIds.includes(nota.id)}
-                    onToggle={() => setExpandidaId((cur) => (cur === nota.id ? null : nota.id))}
-                    onReenviar={() => onReenviar(nota)}
-                    onExcluir={() => onExcluir(nota)}
-                  />
+        return (
+          <section key={resumo.mesReferencia} id={`mes-${resumo.mesReferencia}`}>
+            <ResumoMesCard resumo={resumo} nomeCooperado={nomeCooperado} qtdEntregas={entregas.length} />
+
+            {entregas.length > 0 && (
+              <div className="space-y-6">
+                {semanas.map((semana) => (
+                  <div key={`${resumo.mesReferencia}-s${semana.indice}`}>
+                    <p className="text-xs font-bold uppercase tracking-wide text-green-800 bg-green-50 border border-green-100 rounded-lg px-3 py-2 mb-3 inline-flex items-center gap-2">
+                      <Package size={14} />
+                      {semana.rotulo}
+                    </p>
+                    <div className="space-y-3">
+                      {semana.entregas.map((entrega) => {
+                        const nota = notaPrincipal(entrega);
+                        return (
+                          <EntregaSemanaItem
+                            key={entrega.id}
+                            entrega={entrega}
+                            escola={getEscolaLabel(nota)}
+                            expandida={expandidaId === entrega.id}
+                            recémEnviada={ultimaNotaEnviadaIds.includes(entrega.id)}
+                            onToggle={() => setExpandidaId((cur) => (cur === entrega.id ? null : entrega.id))}
+                            onReenviar={() => onReenviar(nota)}
+                            onExcluir={() => onExcluir(nota)}
+                          />
+                        );
+                      })}
+                    </div>
+                  </div>
                 ))}
               </div>
-            </>
-          )}
+            )}
 
-          {!resumo.pagamentoConfirmado && resumo.valorAReceber > 0 && (
-            <div className="mt-4 rounded-xl bg-gray-50 border border-gray-200 px-4 py-3 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
-              <p className="text-sm text-gray-600">
-                Totais aprovados deste mês estão em <strong>Minha ficha</strong> e em{" "}
-                <strong>Quanto vou receber</strong>.
-              </p>
-              <Link href="/ficha-corrida">
-                <Button size="sm" variant="secondary">
-                  <Wallet size={16} /> Quanto vou receber
-                </Button>
-              </Link>
-            </div>
-          )}
-        </section>
-      ))}
+            {!resumo.pagamentoConfirmado && resumo.valorAReceber > 0 && (
+              <div className="mt-4 rounded-xl bg-gray-50 border border-gray-200 px-4 py-3 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+                <p className="text-sm text-gray-600">
+                  Totais aprovados deste mês estão em <strong>Minha ficha</strong> e em{" "}
+                  <strong>Quanto vou receber</strong>.
+                </p>
+                <Link href="/ficha-corrida">
+                  <Button size="sm" variant="secondary">
+                    <Wallet size={16} /> Quanto vou receber
+                  </Button>
+                </Link>
+              </div>
+            )}
+          </section>
+        );
+      })}
     </div>
   );
 }

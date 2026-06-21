@@ -1,7 +1,7 @@
 import type { AppData, NotaPedido, User } from "@/types";
 import { normalizeCnpj } from "@/utils/cooperativa";
 import { fetchCooperativaByCnpjFromCloud } from "@/services/cooperativaCloudService";
-import { getNotaCooperativaCnpj } from "@/utils/fotoEntrega";
+import { getNotaCooperativaCnpj, getFotosExibicaoNota } from "@/utils/fotoEntrega";
 import { getData, saveDataSafe } from "@/services/dataStore";
 import { reconciliarFichaFromNotasConferidas } from "@/services/notaPedidoService";
 
@@ -298,10 +298,18 @@ export async function ensureNotaComFoto(
   nota: NotaPedido,
   coopId?: string
 ): Promise<NotaPedido> {
-  if (nota.fotoPedido) return nota;
+  if (getFotosExibicaoNota(nota).length > 0) return nota;
   const cnpj = getCooperativaCnpj(data, coopId ?? nota.cooperativaId);
   if (!cnpj) return nota;
   const cloud = await fetchNotaPedidoFromCloud(cnpj, nota.id);
+  if (cloud?.fotosPedido?.length) {
+    return {
+      ...nota,
+      fotosPedido: cloud.fotosPedido,
+      fotoPedido: cloud.fotoPedido ?? cloud.fotosPedido[0],
+      fotoNaNuvem: true,
+    };
+  }
   if (cloud?.fotoPedido) {
     return { ...nota, fotoPedido: cloud.fotoPedido, fotoNaNuvem: true };
   }
