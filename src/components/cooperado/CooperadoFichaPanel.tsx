@@ -14,6 +14,7 @@ import {
   getStatusCotaCooperado,
   getMensalidadeFixaMes,
   getArquivoMensalCooperado,
+  getAjustesCompartilhadosFichaMes,
   agregarItensFichaMes,
 } from "@/services/notaPedidoService";
 import { ResumoDescontosMes } from "@/components/ficha/ResumoDescontosMes";
@@ -74,8 +75,17 @@ export function CooperadoFichaPanel({ cooperado }: { cooperado: Cooperado }) {
   );
   const totalPendente = resumoPagamento.valorLiquido;
   const arquivo = getArquivoMensalCooperado(data, cooperado.id, mesFilter, cooperado.cooperativaId);
+  const ajustesCompartilhados = getAjustesCompartilhadosFichaMes(
+    data,
+    cooperado.cooperativaId,
+    mesFilter
+  );
   const statusCota = getStatusCotaCooperado(data, cooperado.id, mesFilter);
   const mensalidadeMes = getMensalidadeFixaMes(data, cooperado.id, mesFilter, cooperado.cooperativaId);
+  const descontoAvulsoMes =
+    arquivo?.descontoAvulso ?? ajustesCompartilhados?.descontoAvulso ?? 0;
+  const descontoAvulsoMotivoMes =
+    arquivo?.descontoAvulsoMotivo ?? ajustesCompartilhados?.descontoAvulsoMotivo;
 
   return (
     <div className="space-y-6">
@@ -180,8 +190,10 @@ export function CooperadoFichaPanel({ cooperado }: { cooperado: Cooperado }) {
         {mensalidadeMes > 0 && (
           <p className="text-sm text-gray-600 mb-3">Mensalidade do mês: <strong>{formatCurrency(mensalidadeMes)}</strong></p>
         )}
-        {(arquivo?.descontoAvulso ?? 0) > 0 && (
-          <p className="text-sm text-red-600 mb-3">Desconto avulso: - {formatCurrency(arquivo!.descontoAvulso!)}</p>
+        {(descontoAvulsoMes ?? 0) > 0 && (
+          <p className="text-sm text-red-600 mb-3">
+            {descontoAvulsoMotivoMes?.trim() || "Desconto avulso"}: - {formatCurrency(descontoAvulsoMes!)}
+          </p>
         )}
         {resumoItensMes.itens.length === 0 ? (
           <p className="text-sm text-gray-500">Nenhuma entrega conferida neste mês.</p>

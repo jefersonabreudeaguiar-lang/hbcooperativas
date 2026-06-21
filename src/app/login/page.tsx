@@ -7,6 +7,7 @@ import { Leaf, Eye, EyeOff } from "lucide-react";
 import { useAuth } from "@/modules/auth/AuthProvider";
 import { GuestRoute } from "@/components/auth/GuestRoute";
 import { Button } from "@/components/ui/Button";
+import { AppIcon } from "@/components/ui/AppIcon";
 import { Input, Label } from "@/components/ui/Form";
 
 import { PLATFORM_NAME, PLATFORM_TAGLINE } from "@/utils/constants";
@@ -40,10 +41,8 @@ export default function LoginPage() {
           <div className="absolute bottom-20 right-10 w-96 h-96 rounded-full bg-green-400 blur-3xl" />
         </div>
         <div className="relative z-10">
-          <div className="flex items-center gap-4 mb-8">
-            <div className="w-16 h-16 rounded-2xl bg-amber-500 flex items-center justify-center">
-              <Leaf size={36} />
-            </div>
+          <div className="flex items-center gap-5 mb-8">
+            <AppIcon size="2xl" priority />
             <div>
               <h1 className="text-3xl font-bold">{PLATFORM_NAME}</h1>
               <p className="text-green-300 text-lg">{PLATFORM_TAGLINE}</p>
@@ -65,10 +64,8 @@ export default function LoginPage() {
 
       <div className="flex-1 flex items-center justify-center p-6 bg-gray-50">
         <div className="w-full max-w-md">
-          <div className="lg:hidden flex items-center gap-3 mb-8 justify-center">
-            <div className="w-12 h-12 rounded-xl bg-green-700 flex items-center justify-center">
-              <Leaf size={24} className="text-white" />
-            </div>
+          <div className="lg:hidden flex items-center gap-4 mb-8 justify-center">
+            <AppIcon size="xl" priority />
             <div>
               <h1 className="text-xl font-bold text-gray-900">{PLATFORM_NAME}</h1>
               <p className="text-sm text-gray-500">{PLATFORM_TAGLINE}</p>

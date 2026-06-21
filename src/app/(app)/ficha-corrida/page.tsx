@@ -17,6 +17,8 @@ import {
   getStatusCotaCooperado,
   getArquivoMensalCooperado,
   upsertArquivoMensal,
+  getAjustesCompartilhadosFichaMes,
+  aplicarAjustesFichaMesTodosCooperados,
   agregarItensFichaMes,
 } from "@/services/notaPedidoService";
 import { listCooperadosComFichaNoMes, getCooperadoNomeResolvido, resolverCooperadoParaPagamento } from "@/services/cooperadoCloudService";
@@ -173,6 +175,11 @@ export default function FichaCorridaPage() {
     return getArquivoMensalCooperado(data, cooperadoSelecionadoId, mesFilter, coopId);
   }, [data, cooperadoSelecionadoId, mesFilter, coopId]);
 
+  const ajustesCompartilhadosMes = useMemo(() => {
+    if (!data || !coopId) return undefined;
+    return getAjustesCompartilhadosFichaMes(data, coopId, mesFilter);
+  }, [data, coopId, mesFilter]);
+
   const mensalidadePadrao = useMemo(() => {
     if (!data || !cooperadoSelecionadoId) return 0;
     return getMensalidadeFixaMes(data, cooperadoSelecionadoId, mesFilter, coopId);
@@ -184,33 +191,55 @@ export default function FichaCorridaPage() {
   }, [data, cooperadoSelecionadoId, mesFilter]);
 
   useEffect(() => {
-    if (!cooperadoSelecionadoId) return;
-    setMensalidadeInput(String(mensalidadePadrao || ""));
-    setDescontoAvulsoInput(String(arquivoMes?.descontoAvulso ?? ""));
-    setDescontoAvulsoMotivo(arquivoMes?.descontoAvulsoMotivo ?? "");
-  }, [cooperadoSelecionadoId, mesFilter, mensalidadePadrao, arquivoMes]);
+    if (!coopId || !data) return;
+    if (isCooperado) {
+      if (!cooperadoSelecionadoId) return;
+      setMensalidadeInput(String(mensalidadePadrao || ""));
+      setDescontoAvulsoInput(String(arquivoMes?.descontoAvulso ?? ajustesCompartilhadosMes?.descontoAvulso ?? ""));
+      setDescontoAvulsoMotivo(arquivoMes?.descontoAvulsoMotivo ?? ajustesCompartilhadosMes?.descontoAvulsoMotivo ?? "");
+      return;
+    }
+    const mensalidade =
+      ajustesCompartilhadosMes?.mensalidadeFixa ??
+      (cooperadoSelecionadoId
+        ? getMensalidadeFixaMes(data, cooperadoSelecionadoId, mesFilter, coopId)
+        : data.cooperativas.find((c) => c.id === coopId)?.mensalidadeConfig?.valorPadrao ?? 0);
+    setMensalidadeInput(String(mensalidade ?? ""));
+    setDescontoAvulsoInput(String(ajustesCompartilhadosMes?.descontoAvulso ?? ""));
+    setDescontoAvulsoMotivo(ajustesCompartilhadosMes?.descontoAvulsoMotivo ?? "");
+  }, [
+    isCooperado,
+    cooperadoSelecionadoId,
+    mesFilter,
+    mensalidadePadrao,
+    arquivoMes,
+    ajustesCompartilhadosMes,
+    coopId,
+    data,
+  ]);
 
   const salvarAjustesFicha = useCallback(() => {
-    if (!user || !data || !cooperadoSelecionadoId || !coopId || isCooperado) return;
+    if (!user || !data || !coopId || isCooperado) return;
     const mensalidadeFixa = parseFloat(mensalidadeInput.replace(",", ".")) || 0;
     const descontoAvulso = parseFloat(descontoAvulsoInput.replace(",", ".")) || 0;
+    const patch = {
+      mensalidadeFixa,
+      descontoAvulso,
+      descontoAvulsoMotivo: descontoAvulsoMotivo.trim() || undefined,
+    };
     updateData((d) =>
       addAuditEntry(
         {
           ...d,
-          arquivosMensais: upsertArquivoMensal(d, cooperadoSelecionadoId, coopId, mesFilter, {
-            mensalidadeFixa,
-            descontoAvulso,
-            descontoAvulsoMotivo: descontoAvulsoMotivo.trim() || undefined,
-          }),
+          arquivosMensais: aplicarAjustesFichaMesTodosCooperados(d, coopId, mesFilter, patch),
         },
         {
           entityType: "ficha_corrida",
-          entityId: cooperadoSelecionadoId,
+          entityId: coopId,
           action: "editar",
           userId: user.id,
           userName: user.name,
-          changes: "Ajustes de mensalidade e desconto avulso na ficha",
+          changes: `Mensalidade e desconto avulso de ${formatMesReferencia(mesFilter)} aplicados a todos os cooperados`,
         }
       )
     );
@@ -219,7 +248,7 @@ export default function FichaCorridaPage() {
       const cnpj = await resolveCooperativaCnpj(d, coopId, user);
       if (cnpj) await pushOperacionalToCloud(cnpj, d, coopId);
     })();
-  }, [user, data, cooperadoSelecionadoId, coopId, isCooperado, mensalidadeInput, descontoAvulsoInput, descontoAvulsoMotivo, mesFilter]);
+  }, [user, data, coopId, isCooperado, mensalidadeInput, descontoAvulsoInput, descontoAvulsoMotivo, mesFilter]);
 
   const toggleCotaPaga = () => {
     if (!user || !cooperadoSelecionadoId || !coopId || isCooperado) return;
@@ -316,20 +345,17 @@ export default function FichaCorridaPage() {
     if (!cooperadoSelecionado || !user || !data || !coopId || totalPendente <= 0) return;
     const mensalidadeFixa = parseFloat(mensalidadeInput.replace(",", ".")) || 0;
     const descontoAvulso = parseFloat(descontoAvulsoInput.replace(",", ".")) || 0;
-    const resumo = getResumoPagamentoCooperado(data, cooperadoSelecionado.id, mesFilter, coopId, {
+    const patch = {
       mensalidadeFixa,
       descontoAvulso,
       descontoAvulsoMotivo: descontoAvulsoMotivo.trim() || undefined,
-    });
+    };
+    const resumo = getResumoPagamentoCooperado(data, cooperadoSelecionado.id, mesFilter, coopId, patch);
     updateData((d) => {
       const comAjustes = addAuditEntry(
         {
           ...d,
-          arquivosMensais: upsertArquivoMensal(d, cooperadoSelecionado.id, coopId, mesFilter, {
-            mensalidadeFixa,
-            descontoAvulso,
-            descontoAvulsoMotivo: descontoAvulsoMotivo.trim() || undefined,
-          }),
+          arquivosMensais: aplicarAjustesFichaMesTodosCooperados(d, coopId, mesFilter, patch),
         },
         {
           entityType: "ficha_corrida",
@@ -337,7 +363,7 @@ export default function FichaCorridaPage() {
           action: "editar",
           userId: user.id,
           userName: user.name,
-          changes: "Ajustes de mensalidade e desconto avulso na ficha",
+          changes: `Mensalidade e desconto avulso aplicados a todos os cooperados · ${formatMesReferencia(mesFilter)}`,
         }
       );
       return addAuditEntry(registrarPagamentoCooperado(comAjustes, cooperadoSelecionado.id, mesFilter, user.name), {
@@ -518,7 +544,7 @@ export default function FichaCorridaPage() {
               )}
             </div>
 
-            {isCooperado && (mensalidadePadrao > 0 || (arquivoMes?.descontoAvulso ?? 0) > 0) && (
+            {isCooperado && (mensalidadePadrao > 0 || (arquivoMes?.descontoAvulso ?? ajustesCompartilhadosMes?.descontoAvulso ?? 0) > 0) && (
               <div className="rounded-xl border border-blue-200 bg-blue-50/60 p-4 text-sm space-y-2 mb-4">
                 <p className="font-semibold text-blue-900">Descontos aplicados pela cooperativa</p>
                 {mensalidadePadrao > 0 && (
@@ -527,11 +553,18 @@ export default function FichaCorridaPage() {
                     <span className="font-medium text-red-700">- {formatCurrency(mensalidadePadrao)}</span>
                   </div>
                 )}
-                {(arquivoMes?.descontoAvulso ?? 0) > 0 && (
+                {(arquivoMes?.descontoAvulso ?? ajustesCompartilhadosMes?.descontoAvulso ?? 0) > 0 && (
                   <div className="flex justify-between text-gray-800 gap-3">
-                    <span>{arquivoMes?.descontoAvulsoMotivo?.trim() || "Desconto avulso"}</span>
+                    <span>
+                      {arquivoMes?.descontoAvulsoMotivo?.trim() ||
+                        ajustesCompartilhadosMes?.descontoAvulsoMotivo?.trim() ||
+                        "Desconto avulso"}
+                    </span>
                     <span className="font-medium text-red-700 shrink-0">
-                      - {formatCurrency(arquivoMes!.descontoAvulso!)}
+                      -{" "}
+                      {formatCurrency(
+                        arquivoMes?.descontoAvulso ?? ajustesCompartilhadosMes?.descontoAvulso ?? 0
+                      )}
                     </span>
                   </div>
                 )}
@@ -539,8 +572,15 @@ export default function FichaCorridaPage() {
             )}
 
             {!isCooperado && check("ficha_corrida", "edit") && (
+              <div className="rounded-xl border border-amber-200 bg-amber-50/70 px-4 py-3 text-sm text-amber-900 mb-4">
+                Mensalidade e desconto avulso valem para <strong>todos os cooperados</strong> em{" "}
+                {formatMesReferencia(mesFilter)}.
+              </div>
+            )}
+
+            {!isCooperado && check("ficha_corrida", "edit") && (
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
-                <FormField label="Mensalidade fixa (desconto de todos)" hint="Valor descontado no pagamento do mês">
+                <FormField label="Mensalidade fixa (todos os cooperados)" hint="Descontada no pagamento de cada cooperado neste mês">
                   <Input
                     type="number"
                     min={0}
@@ -550,7 +590,7 @@ export default function FichaCorridaPage() {
                     onBlur={salvarAjustesFicha}
                   />
                 </FormField>
-                <FormField label="Desconto avulso (R$)">
+                <FormField label="Desconto avulso (todos os cooperados)">
                   <Input
                     type="number"
                     min={0}

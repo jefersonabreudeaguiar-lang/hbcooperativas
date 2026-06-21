@@ -64,7 +64,7 @@ export function notificacaoNavegador(titulo: string, corpo: string): void {
   try {
     new Notification(titulo, {
       body: corpo,
-      icon: "/favicon.ico",
+      icon: "/icons/icon-192.png",
       tag: "entrega-aprovada",
     });
   } catch {

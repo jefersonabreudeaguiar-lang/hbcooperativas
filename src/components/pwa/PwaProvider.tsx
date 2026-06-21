@@ -1,8 +1,9 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Download, X } from "lucide-react";
+import { X } from "lucide-react";
 import { Button } from "@/components/ui/Button";
+import { AppIcon } from "@/components/ui/AppIcon";
 
 const DISMISS_KEY = "hb-coop-pwa-install-dismissed";
 
@@ -73,9 +74,7 @@ export function PwaProvider() {
     <div className="fixed bottom-20 lg:bottom-6 left-4 right-4 z-50 max-w-md mx-auto">
       <div className="bg-green-900 text-white rounded-2xl shadow-xl border border-green-700 p-4">
         <div className="flex items-start gap-3">
-          <div className="w-11 h-11 rounded-xl bg-amber-500 flex items-center justify-center shrink-0">
-            <Download size={22} className="text-white" />
-          </div>
+          <AppIcon size="lg" />
           <div className="flex-1 min-w-0">
             <p className="font-semibold leading-tight">Instalar HB Cooperativas</p>
             <p className="text-sm text-green-100 mt-1">

@@ -8,7 +8,11 @@ import type {
   ArquivoMensalCooperado,
   Comunicado,
 } from "@/types";
-import { fichaPertenceCooperado, resolverCooperadoIdCanonico } from "@/services/cooperadoCloudService";
+import {
+  fichaPertenceCooperado,
+  listCooperadosDaCooperativa,
+  resolverCooperadoIdCanonico,
+} from "@/services/cooperadoCloudService";
 import { descontosDoCooperadoNoMes } from "@/services/descontosService";
 import { round2 } from "@/utils/calculations";
 import { gerarReciboHtml, resumoReciboFromPagamento } from "@/utils/recibo";
@@ -138,6 +142,59 @@ export interface AjustesResumoPagamento {
   descontoAvulsoMotivo?: string;
 }
 
+/** Ajustes de mensalidade/desconto avulso definidos pelo responsável para o mês (valem para todos). */
+export function getAjustesCompartilhadosFichaMes(
+  data: AppData,
+  cooperativaId: string,
+  mesReferencia: string
+): AjustesResumoPagamento | undefined {
+  const candidatos = data.arquivosMensais
+    .filter(
+      (a) =>
+        a.cooperativaId === cooperativaId &&
+        a.mesReferencia === mesReferencia &&
+        (a.mensalidadeFixa != null || a.descontoAvulso != null || !!a.descontoAvulsoMotivo?.trim())
+    )
+    .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
+
+  const ref = candidatos[0];
+  if (!ref) return undefined;
+
+  return {
+    mensalidadeFixa: ref.mensalidadeFixa,
+    descontoAvulso: ref.descontoAvulso,
+    descontoAvulsoMotivo: ref.descontoAvulsoMotivo,
+  };
+}
+
+/** Propaga mensalidade e desconto avulso do mês para todos os cooperados da cooperativa. */
+export function aplicarAjustesFichaMesTodosCooperados(
+  data: AppData,
+  cooperativaId: string,
+  mesReferencia: string,
+  patch: AjustesResumoPagamento
+): ArquivoMensalCooperado[] {
+  const cooperados = listCooperadosDaCooperativa(data, cooperativaId);
+  let arquivos = data.arquivosMensais;
+  const ctxBase = { ...data };
+
+  for (const cooperado of cooperados) {
+    arquivos = upsertArquivoMensal(
+      { ...ctxBase, arquivosMensais: arquivos },
+      cooperado.id,
+      cooperativaId,
+      mesReferencia,
+      {
+        mensalidadeFixa: patch.mensalidadeFixa,
+        descontoAvulso: patch.descontoAvulso,
+        descontoAvulsoMotivo: patch.descontoAvulsoMotivo,
+      }
+    );
+  }
+
+  return arquivos;
+}
+
 export function upsertArquivoMensal(
   data: AppData,
   cooperadoId: string,
@@ -206,9 +263,15 @@ export function getMensalidadeFixaMes(
   mesReferencia: string,
   cooperativaId?: string
 ): number {
-  const arquivo = getArquivoMensalCooperado(data, cooperadoId, mesReferencia, cooperativaId);
+  const coopId =
+    cooperativaId ?? data.cooperados.find((c) => c.id === cooperadoId)?.cooperativaId;
+  const arquivo = getArquivoMensalCooperado(data, cooperadoId, mesReferencia, coopId);
   if (arquivo?.mensalidadeFixa != null && arquivo.mensalidadeFixa >= 0) {
     return arquivo.mensalidadeFixa;
+  }
+  const compartilhado = coopId ? getAjustesCompartilhadosFichaMes(data, coopId, mesReferencia) : undefined;
+  if (compartilhado?.mensalidadeFixa != null && compartilhado.mensalidadeFixa >= 0) {
+    return compartilhado.mensalidadeFixa;
   }
   const pendente = data.mensalidades.find(
     (m) =>
@@ -217,11 +280,7 @@ export function getMensalidadeFixaMes(
       (m.status === "pendente" || m.status === "atrasada")
   );
   if (pendente) return pendente.valor;
-  const coop = cooperativaId
-    ? data.cooperativas.find((c) => c.id === cooperativaId)
-    : data.cooperados.find((c) => c.id === cooperadoId)
-      ? data.cooperativas.find((c) => c.id === data.cooperados.find((x) => x.id === cooperadoId)!.cooperativaId)
-      : undefined;
+  const coop = coopId ? data.cooperativas.find((c) => c.id === coopId) : undefined;
   return coop?.mensalidadeConfig?.valorPadrao ?? 0;
 }
 
@@ -378,16 +437,22 @@ export function getResumoPagamentoCooperado(
   const valorEntregas = round2(fichas.reduce((s, f) => s + f.valorLiquido, 0));
   const coopIdResolved = coopId ?? fichas[0]?.cooperativaId;
   const arquivo = getArquivoMensalCooperado(data, cooperadoCanonico, mesReferencia, coopIdResolved);
+  const compartilhado =
+    coopIdResolved != null
+      ? getAjustesCompartilhadosFichaMes(data, coopIdResolved, mesReferencia)
+      : undefined;
   const mensalidadeFixa =
     ajustes?.mensalidadeFixa !== undefined
       ? ajustes.mensalidadeFixa
       : getMensalidadeFixaMes(data, cooperadoCanonico, mesReferencia, coopIdResolved);
   const descontoAvulso =
-    ajustes?.descontoAvulso !== undefined ? ajustes.descontoAvulso : arquivo?.descontoAvulso ?? 0;
+    ajustes?.descontoAvulso !== undefined
+      ? ajustes.descontoAvulso
+      : arquivo?.descontoAvulso ?? compartilhado?.descontoAvulso ?? 0;
   const descontoAvulsoMotivo =
     ajustes?.descontoAvulsoMotivo !== undefined
       ? ajustes.descontoAvulsoMotivo
-      : arquivo?.descontoAvulsoMotivo;
+      : arquivo?.descontoAvulsoMotivo ?? compartilhado?.descontoAvulsoMotivo;
   const descontosExtras: FichaCorridaDesconto[] = [];
   if (mensalidadeFixa > 0) {
     descontosExtras.push({

@@ -5,7 +5,7 @@ import { usePathname } from "next/navigation";
 import {
   LayoutDashboard, Users, CreditCard, PieChart, Truck, Wallet,
   Percent, Building2, Landmark, Megaphone, MapPin, Car, FileText,
-  CalendarCheck, LogOut, Menu, X, Leaf, Building, ClipboardList, Receipt, User, Tag,
+  CalendarCheck, LogOut, Menu, X, Building, ClipboardList, Receipt, User, Tag,
 } from "lucide-react";
 import { useState } from "react";
 import { useAuth } from "@/modules/auth/AuthProvider";
@@ -13,6 +13,7 @@ import { useAppData } from "@/hooks/useAppData";
 import { getMenuItems, getMobileNavItems, getCooperadoDrawerMenuItems, ROLE_LABELS } from "@/permissions";
 import { getUserCooperativaNome } from "@/utils/cooperativa";
 import { PLATFORM_NAME, PLATFORM_TAGLINE } from "@/utils/constants";
+import { AppIcon } from "@/components/ui/AppIcon";
 import { cn } from "@/utils/format";
 import type { Resource } from "@/types";
 
@@ -67,9 +68,7 @@ function BrandHeader({ compact = false }: { compact?: boolean }) {
 
   return (
     <div className="flex items-center gap-3">
-      <div className={cn("rounded-full bg-amber-500 flex items-center justify-center shrink-0", compact ? "w-8 h-8" : "w-10 h-10")}>
-        <Leaf size={compact ? 16 : 22} className="text-white" />
-      </div>
+      <AppIcon size={compact ? "sm" : "md"} />
       <div className="min-w-0">
         <p className={cn("font-bold leading-tight truncate", compact ? "text-sm" : "text-sm")}>{PLATFORM_NAME}</p>
         <p className="text-xs text-green-300 truncate">

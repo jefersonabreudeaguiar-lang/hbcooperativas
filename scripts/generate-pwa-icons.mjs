@@ -11,6 +11,7 @@ const outDir = path.join(root, "public", "icons");
 const svg = fs.readFileSync(svgPath);
 
 const sizes = [
+  { name: "icon-32.png", size: 32 },
   { name: "icon-180.png", size: 180 },
   { name: "icon-192.png", size: 192 },
   { name: "icon-512.png", size: 512 },
@@ -27,7 +28,7 @@ for (const { name, size, maskable } of sizes) {
         channels: 4,
         background: { r: 20, g: 83, b: 45, alpha: 1 },
       },
-    }).composite([{ input: await sharp(svg).resize(Math.round(size * 0.72)).png().toBuffer(), gravity: "center" }]);
+    }).composite([{ input: await sharp(svg).resize(Math.round(size * 0.82)).png().toBuffer(), gravity: "center" }]);
   }
   await pipeline.png().toFile(path.join(outDir, name));
   console.log(`Generated ${name}`);
