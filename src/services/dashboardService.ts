@@ -188,10 +188,11 @@ export function getRelatorioPNAE(mesReferencia: string, data?: AppData) {
 export function getRelatorioEntregasPorItens(
   instituicaoId: string,
   mesReferencia: string,
-  data?: AppData
+  data?: AppData,
+  cooperativaId?: string
 ) {
   const d = data ?? getData();
-  return getRelatorioEntregasPorItensInstituicao(mesReferencia, instituicaoId, d);
+  return getRelatorioEntregasPorItensInstituicao(mesReferencia, instituicaoId, d, cooperativaId);
 }
 
 export { listMesesComLancamentos, getRelatorioPagarCooperado, calcularFechamentoMensalLive };

@@ -60,11 +60,22 @@ export interface LinhaItemEntregaRelatorio {
   valorTotal: number;
 }
 
+export interface LinhaCooperadoItensRelatorio {
+  cooperadoId: string;
+  cooperadoNome: string;
+  quantidadeEntregas: number;
+  itens: LinhaItemEntregaRelatorio[];
+  totalBruto: number;
+}
+
 export interface RelatorioEntregasPorItens {
   mesReferencia: string;
   instituicao: Instituicao | undefined;
   instituicaoNome: string;
+  /** Totais consolidados de cada item, somando todos os cooperados do mês. */
   itens: LinhaItemEntregaRelatorio[];
+  /** Detalhamento item a item por cooperado. */
+  porCooperado: LinhaCooperadoItensRelatorio[];
   quantidadeEntregas: number;
   totalBruto: number;
   totalLiquido: number;
@@ -254,27 +265,28 @@ export function getRelatorioPNAELive(mesReferencia: string, data: AppData) {
   };
 }
 
-/** Consolida quantidades e valores por item das entregas conferidas de uma instituição no mês. */
-export function getRelatorioEntregasPorItensInstituicao(
-  mesReferencia: string,
-  instituicaoId: string,
-  data: AppData
-): RelatorioEntregasPorItens {
-  const inst = data.instituicoes.find((i) => i.id === instituicaoId);
-  const notas = notasConferidasOuPagas(data, mesReferencia).filter((n) => n.instituicaoId === instituicaoId);
+function chaveItemRelatorio(item: {
+  produtoInstituicaoId?: string;
+  produtoNome: string;
+  unidade: string;
+}): string {
+  if (item.produtoInstituicaoId) return `id:${item.produtoInstituicaoId}`;
+  return `nome:${item.produtoNome.trim().toLowerCase()}::${item.unidade.trim().toLowerCase()}`;
+}
 
+function agregarItensDasNotas(notas: NotaPedido[]): LinhaItemEntregaRelatorio[] {
   const map = new Map<string, LinhaItemEntregaRelatorio>();
   for (const nota of notas) {
     for (const item of nota.itens ?? []) {
       if (item.quantidade <= 0) continue;
-      const key =
-        item.produtoInstituicaoId ||
-        `${item.produtoNome.trim().toLowerCase()}::${item.unidade}::${item.precoUnitario}`;
+      const key = chaveItemRelatorio(item);
       const valor = round2(item.quantidade * item.precoUnitario);
       const cur = map.get(key);
       if (cur) {
         cur.quantidade = round2(cur.quantidade + item.quantidade);
         cur.valorTotal = round2(cur.valorTotal + valor);
+        cur.precoUnitario =
+          cur.quantidade > 0 ? round2(cur.valorTotal / cur.quantidade) : cur.precoUnitario;
       } else {
         map.set(key, {
           produtoInstituicaoId: item.produtoInstituicaoId,
@@ -287,10 +299,45 @@ export function getRelatorioEntregasPorItensInstituicao(
       }
     }
   }
+  return [...map.values()].sort((a, b) => a.produtoNome.localeCompare(b.produtoNome, "pt-BR"));
+}
 
-  const itens = [...map.values()].sort((a, b) =>
-    a.produtoNome.localeCompare(b.produtoNome, "pt-BR")
+/** Consolida quantidades e valores por item das entregas conferidas de uma instituição no mês. */
+export function getRelatorioEntregasPorItensInstituicao(
+  mesReferencia: string,
+  instituicaoId: string,
+  data: AppData,
+  cooperativaId?: string
+): RelatorioEntregasPorItens {
+  const inst = data.instituicoes.find((i) => i.id === instituicaoId);
+  const notas = notasConferidasOuPagas(data, mesReferencia).filter(
+    (n) =>
+      n.instituicaoId === instituicaoId &&
+      (!cooperativaId || n.cooperativaId === cooperativaId)
   );
+
+  const itens = agregarItensDasNotas(notas);
+
+  const porCooperadoMap = new Map<string, NotaPedido[]>();
+  for (const nota of notas) {
+    const list = porCooperadoMap.get(nota.cooperadoId) ?? [];
+    list.push(nota);
+    porCooperadoMap.set(nota.cooperadoId, list);
+  }
+
+  const porCooperado: LinhaCooperadoItensRelatorio[] = [...porCooperadoMap.entries()]
+    .map(([cooperadoId, notasCoop]) => {
+      const itensCoop = agregarItensDasNotas(notasCoop);
+      return {
+        cooperadoId,
+        cooperadoNome: getCooperadoNomeSafe(data, cooperadoId),
+        quantidadeEntregas: notasCoop.length,
+        itens: itensCoop,
+        totalBruto: round2(itensCoop.reduce((s, i) => s + i.valorTotal, 0)),
+      };
+    })
+    .sort((a, b) => a.cooperadoNome.localeCompare(b.cooperadoNome, "pt-BR"));
+
   const totalItens = round2(itens.reduce((s, i) => s + i.valorTotal, 0));
 
   return {
@@ -298,6 +345,7 @@ export function getRelatorioEntregasPorItensInstituicao(
     instituicao: inst,
     instituicaoNome: inst?.nome ?? "Instituição",
     itens,
+    porCooperado,
     quantidadeEntregas: notas.length,
     totalBruto: totalItens > 0 ? totalItens : sumBy(notas, (n) => n.valorBruto),
     totalLiquido: sumBy(notas, (n) => n.valorLiquido),

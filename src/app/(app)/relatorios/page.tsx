@@ -160,17 +160,36 @@ export default function RelatoriosPage() {
       case "entregas_por_itens": {
         const inst = instituicaoSelecionadaId;
         if (!inst) break;
-        const r = getRelatorioEntregasPorItens(inst, mes, data);
-        headers = ["Item", "Unidade", "Quantidade total", "Valor unitário", "Valor total"];
-        rows = r.itens.map((item) => [
-          item.produtoNome,
-          item.unidade,
-          String(item.quantidade),
-          String(item.precoUnitario),
-          String(item.valorTotal),
-        ]);
-        if (rows.length > 0) {
-          rows.push(["", "", "", "TOTAL GERAL", String(r.totalBruto)]);
+        const r = getRelatorioEntregasPorItens(inst, mes, data, coopId);
+        headers = ["Seção", "Item", "Unidade", "Quantidade total", "Valor unitário médio", "Valor total"];
+        rows = [
+          ["RESUMO CONSOLIDADO — TODOS OS COOPERADOS", "", "", "", "", ""],
+          ...r.itens.map((item) => [
+            "Consolidado",
+            item.produtoNome,
+            item.unidade,
+            String(item.quantidade),
+            String(item.precoUnitario),
+            String(item.valorTotal),
+          ]),
+          ["", "", "", "", "TOTAL GERAL", String(r.totalBruto)],
+        ];
+        if (r.porCooperado.length > 0) {
+          rows.push(["", "", "", "", "", ""]);
+          rows.push(["DETALHAMENTO POR COOPERADO", "", "", "", "", ""]);
+          for (const coop of r.porCooperado) {
+            rows.push([coop.cooperadoNome, "", "", "", "", String(coop.totalBruto)]);
+            for (const item of coop.itens) {
+              rows.push([
+                coop.cooperadoNome,
+                item.produtoNome,
+                item.unidade,
+                String(item.quantidade),
+                String(item.precoUnitario),
+                String(item.valorTotal),
+              ]);
+            }
+          }
         }
         break;
       }
@@ -327,15 +346,47 @@ export default function RelatoriosPage() {
       case "entregas_por_itens": {
         const inst = instituicaoSelecionadaId;
         if (!inst) return <p className="text-gray-500">Cadastre uma instituição em Contratos.</p>;
-        const r = getRelatorioEntregasPorItens(inst, mes, data);
+        const r = getRelatorioEntregasPorItens(inst, mes, data, coopId);
         return (
           <>
             <div className="mb-4 rounded-xl border border-green-200 bg-green-50/60 p-4">
               <p className="text-sm font-semibold text-green-900">{r.instituicaoNome}</p>
               <p className="text-xs text-green-800 mt-1">
-                {formatMesReferencia(mes)} · {r.quantidadeEntregas} entrega(s) conferida(s)
+                {formatMesReferencia(mes)} · {r.quantidadeEntregas} entrega(s) · {r.porCooperado.length} cooperado(s)
               </p>
             </div>
+
+            <div className="mb-6 rounded-xl border border-emerald-300 bg-white p-4 shadow-sm">
+              <h3 className="text-sm font-bold uppercase tracking-wide text-emerald-800 mb-3">
+                Resumo consolidado do mês — total por item (todos os cooperados)
+              </h3>
+              {r.itens.length === 0 ? (
+                <p className="text-sm text-gray-500">Nenhum item conferido neste mês.</p>
+              ) : (
+                <ul className="space-y-2">
+                  {r.itens.map((item) => (
+                    <li
+                      key={item.produtoInstituicaoId || `${item.produtoNome}-${item.unidade}`}
+                      className="flex flex-wrap items-baseline justify-between gap-2 border-b border-emerald-50 pb-2 last:border-0"
+                    >
+                      <span className="font-semibold text-gray-900">{item.produtoNome}</span>
+                      <span className="text-sm text-emerald-900">
+                        {item.quantidade.toLocaleString("pt-BR", { maximumFractionDigits: 2 })}{" "}
+                        {labelUnidade(item.unidade) || item.unidade}
+                        <span className="text-gray-500 mx-2">·</span>
+                        {formatCurrency(item.valorTotal)}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+              {r.itens.length > 0 && (
+                <p className="mt-4 text-right text-lg font-bold text-green-800">
+                  Total geral: {formatCurrency(r.totalBruto)}
+                </p>
+              )}
+            </div>
+
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
               <StatCard title="Itens distintos" value={String(r.itens.length)} />
               <StatCard title="Total geral (bruto)" value={formatCurrency(r.totalBruto)} variant="success" />
@@ -360,19 +411,48 @@ export default function RelatoriosPage() {
                   render: (item) =>
                     `${item.quantidade.toLocaleString("pt-BR", { maximumFractionDigits: 2 })} ${item.unidade}`,
                 },
-                { key: "preco", label: "Valor unitário", render: (item) => formatCurrency(item.precoUnitario) },
+                { key: "preco", label: "Preço médio", render: (item) => formatCurrency(item.precoUnitario) },
                 { key: "total", label: "Valor total", render: (item) => formatCurrency(item.valorTotal) },
               ]}
             />
-            {r.itens.length > 0 && (
-              <div className="mt-4 flex justify-end border-t border-gray-200 pt-4">
-                <p className="text-lg font-bold text-green-800">
-                  Total final: {formatCurrency(r.totalBruto)}
-                </p>
+
+            {r.porCooperado.length > 0 && (
+              <div className="mt-8 space-y-6">
+                <h3 className="text-sm font-bold uppercase tracking-wide text-gray-700">
+                  Detalhamento por cooperado
+                </h3>
+                {r.porCooperado.map((coop) => (
+                  <div key={coop.cooperadoId} className="rounded-lg border border-gray-200 p-4">
+                    <p className="font-semibold text-gray-900 mb-2">
+                      {coop.cooperadoNome}
+                      <span className="text-sm font-normal text-gray-500 ml-2">
+                        · {coop.quantidadeEntregas} entrega(s) · {formatCurrency(coop.totalBruto)}
+                      </span>
+                    </p>
+                    <DataTable
+                      data={coop.itens.map((item, idx) => ({
+                        ...item,
+                        id: `${coop.cooperadoId}-${item.produtoInstituicaoId || idx}`,
+                      }))}
+                      keyField="id"
+                      columns={[
+                        { key: "produto", label: "Item", render: (item) => item.produtoNome },
+                        {
+                          key: "qtd",
+                          label: "Quantidade",
+                          render: (item) =>
+                            `${item.quantidade.toLocaleString("pt-BR", { maximumFractionDigits: 2 })} ${item.unidade}`,
+                        },
+                        { key: "total", label: "Valor", render: (item) => formatCurrency(item.valorTotal) },
+                      ]}
+                    />
+                  </div>
+                ))}
               </div>
             )}
+
             <p className="text-xs text-gray-500 mt-4">
-              Use <strong>Documento</strong> para baixar o relatório formal endereçado à instituição.
+              Use <strong>Documento</strong> para baixar o relatório formal com o resumo consolidado e detalhamento por cooperado.
             </p>
           </>
         );

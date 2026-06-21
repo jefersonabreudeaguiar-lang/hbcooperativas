@@ -32,6 +32,14 @@ const DOC_STYLES = `
   .destinatario .detalhe { font-size: 13px; color: #374151; margin-top: 4px; }
   .carta { font-family: system-ui, sans-serif; font-size: 14px; color: #374151; line-height: 1.6; margin: 0 0 20px; }
   tfoot td { background: #ecfdf5; font-weight: 700; }
+  .resumo-itens-box { font-family: system-ui, sans-serif; background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 8px; padding: 16px 18px; margin: 16px 0 24px; }
+  .resumo-itens-box .titulo { font-size: 12px; text-transform: uppercase; letter-spacing: 0.06em; color: #166534; font-weight: 700; margin-bottom: 12px; }
+  .resumo-itens-list { margin: 0; padding: 0; list-style: none; }
+  .resumo-itens-list li { padding: 6px 0; border-bottom: 1px solid #dcfce7; font-size: 14px; color: #14532d; }
+  .resumo-itens-list li:last-child { border-bottom: none; }
+  .resumo-itens-list .qtd { font-weight: 700; }
+  .coop-bloco { margin-top: 20px; page-break-inside: avoid; }
+  .coop-bloco h3 { font-family: system-ui, sans-serif; font-size: 14px; color: #374151; margin: 0 0 8px; font-weight: 700; }
   .assinatura { margin-top: 48px; display: grid; grid-template-columns: 1fr 1fr; gap: 40px; }
   .assinatura-linha { border-top: 1px solid #111; padding-top: 6px; font-family: system-ui, sans-serif; font-size: 12px; text-align: center; }
   @media print {
@@ -204,13 +212,18 @@ export function gerarRelatorioFechamentoHtml(
   return documentoShell("Fechamento mensal", body, data, mesReferencia);
 }
 
+function formatQuantidadeItem(quantidade: number, unidade: string): string {
+  const q = quantidade.toLocaleString("pt-BR", { minimumFractionDigits: 0, maximumFractionDigits: 2 });
+  return unidade ? `${q} ${unidade}` : q;
+}
+
 export function gerarRelatorioEntregasPorItensHtml(
   data: AppData,
   mesReferencia: string,
   instituicaoId: string,
   cooperativaId?: string
 ): string {
-  const rel = getRelatorioEntregasPorItensInstituicao(mesReferencia, instituicaoId, data);
+  const rel = getRelatorioEntregasPorItensInstituicao(mesReferencia, instituicaoId, data, cooperativaId);
   const coop = resolveCooperativa(data, cooperativaId);
   const inst = rel.instituicao;
   const localEntrega = inst?.localEntrega?.trim() || inst?.endereco?.trim() || "";
@@ -231,6 +244,46 @@ export function gerarRelatorioEntregasPorItensHtml(
     )
     .join("");
 
+  const resumoConsolidadoLista = rel.itens
+    .map(
+      (item) =>
+        `<li><strong>${escapeHtml(item.produtoNome)}</strong>: <span class="qtd">${escapeHtml(formatQuantidadeItem(item.quantidade, item.unidade))}</span> — ${formatCurrency(item.valorTotal)}</li>`
+    )
+    .join("");
+
+  const blocosCooperados = rel.porCooperado
+    .map((coop) => {
+      const linhas = coop.itens
+        .map(
+          (item) =>
+            `<tr>
+              <td>${escapeHtml(item.produtoNome)}</td>
+              <td>${escapeHtml(item.unidade)}</td>
+              <td class="num">${item.quantidade.toLocaleString("pt-BR", { minimumFractionDigits: 0, maximumFractionDigits: 2 })}</td>
+              <td class="num">${formatCurrency(item.valorTotal)}</td>
+            </tr>`
+        )
+        .join("");
+      return `
+        <div class="coop-bloco">
+          <h3>${escapeHtml(coop.cooperadoNome)} — ${coop.quantidadeEntregas} entrega(s) · ${formatCurrency(coop.totalBruto)}</h3>
+          <table>
+            <thead>
+              <tr>
+                <th>Item</th>
+                <th>Unidade</th>
+                <th class="num">Quantidade</th>
+                <th class="num">Valor</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${linhas || `<tr><td colspan="4">Sem itens registrados.</td></tr>`}
+            </tbody>
+          </table>
+        </div>`;
+    })
+    .join("");
+
   const body = `
     <div class="destinatario">
       <div class="rotulo">Destinatário</div>
@@ -246,10 +299,22 @@ export function gerarRelatorioEntregasPorItensHtml(
       A <strong>${escapeHtml(coop?.nome ?? PLATFORM_NAME)}</strong> apresenta o resumo consolidado das entregas
       realizadas no mês de <strong>${escapeHtml(formatMesReferencia(mesReferencia))}</strong>,
       referentes ao contrato de fornecimento com <strong>${escapeHtml(rel.instituicaoNome)}</strong>.
-      ${rel.quantidadeEntregas > 0 ? ` Foram registradas <strong>${rel.quantidadeEntregas}</strong> entrega(s) conferida(s) no período.` : ""}
+      ${rel.quantidadeEntregas > 0 ? ` Foram registradas <strong>${rel.quantidadeEntregas}</strong> entrega(s) conferida(s) no período, somando a produção de <strong>${rel.porCooperado.length}</strong> cooperado(s).` : ""}
     </p>
 
-    <h2>Resumo por item</h2>
+    <div class="resumo-itens-box">
+      <div class="titulo">Resumo consolidado do mês — total vendido por item (todos os cooperados)</div>
+      ${
+        rel.itens.length > 0
+          ? `<ul class="resumo-itens-list">${resumoConsolidadoLista}</ul>
+             <p class="carta" style="margin:12px 0 0;font-size:13px;">
+               <strong>Total geral:</strong> ${formatCurrency(rel.totalBruto)} · ${rel.itens.length} item(ns) distinto(s)
+             </p>`
+          : `<p class="carta" style="margin:0;">Nenhum item conferido neste mês para esta instituição.</p>`
+      }
+    </div>
+
+    <h2>Resumo por item (detalhado)</h2>
     <table>
       <thead>
         <tr>
@@ -271,6 +336,14 @@ export function gerarRelatorioEntregasPorItensHtml(
         </tr>
       </tfoot>
     </table>
+
+    ${
+      rel.porCooperado.length > 0
+        ? `<h2>Detalhamento por cooperado</h2>
+           <p class="carta">Contribuição de cada cooperado no mês, item a item.</p>
+           ${blocosCooperados}`
+        : ""
+    }
 
     <p class="carta" style="margin-top:24px;">
       Este documento consolida as quantidades e valores unitários praticados nas entregas conferidas.
