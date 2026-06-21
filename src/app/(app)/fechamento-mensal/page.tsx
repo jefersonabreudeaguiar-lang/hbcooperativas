@@ -13,7 +13,7 @@ import { updateData, addAuditEntry } from "@/services/dataStore";
 import { calcularFechamentoMensal, listMesesComLancamentos } from "@/services/dashboardService";
 import { calcularFechamentoMensalLive } from "@/services/relatorioService";
 import {
-  baixarDocumentoHtml,
+  baixarDocumento,
   gerarRelatorioFechamentoHtml,
   imprimirDocumentoHtml,
   nomeArquivoRelatorio,
@@ -41,7 +41,7 @@ export default function FechamentoMensalPage() {
 
   const exportarDocumento = () => {
     const html = gerarRelatorioFechamentoHtml(data, selectedMes, fechamento);
-    baixarDocumentoHtml(html, nomeArquivoRelatorio("fechamento", selectedMes));
+    void baixarDocumento(html, nomeArquivoRelatorio("fechamento", selectedMes));
   };
 
   const imprimir = () => {
@@ -130,7 +130,7 @@ export default function FechamentoMensalPage() {
           check("fechamento", "export") ? (
             <div className="flex flex-wrap gap-2">
               <Button variant="secondary" size="sm" onClick={exportarDocumento}>
-                <Download size={16} /> Documento
+                <Download size={16} /> PDF
               </Button>
               <Button size="sm" onClick={imprimir}>
                 <Printer size={16} /> Imprimir

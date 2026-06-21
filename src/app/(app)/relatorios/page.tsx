@@ -22,7 +22,7 @@ import {
   downloadCSV,
 } from "@/services/dashboardService";
 import {
-  baixarDocumentoHtml,
+  baixarDocumento,
   gerarRelatorioEntregasPorItensHtml,
   gerarRelatorioFinanceiroHtml,
   imprimirDocumentoHtml,
@@ -227,7 +227,7 @@ export default function RelatoriosPage() {
   const handleExportDocumento = () => {
     const html = gerarHtmlDocumento();
     if (!html) return;
-    baixarDocumentoHtml(html, nomeDocumento());
+    void baixarDocumento(html, nomeDocumento());
   };
 
   const handlePrint = () => {
@@ -398,7 +398,7 @@ export default function RelatoriosPage() {
             />
 
             <p className="text-xs text-gray-500 mt-4">
-              Use <strong>Documento</strong> para baixar o relatório formal com o resumo consolidado por item.
+              Use <strong>PDF</strong> para baixar o relatório formal com o resumo consolidado por item.
             </p>
           </>
         );
@@ -481,7 +481,7 @@ export default function RelatoriosPage() {
               <Download size={16} /> CSV
             </Button>
             <Button variant="secondary" size="sm" onClick={handleExportDocumento}>
-              <FileText size={16} /> Documento
+              <FileText size={16} /> PDF
             </Button>
             <Button size="sm" onClick={handlePrint}>
               <Printer size={16} /> Imprimir

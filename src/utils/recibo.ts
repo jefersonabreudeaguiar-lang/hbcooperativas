@@ -1,6 +1,7 @@
 import type { Cooperado, PagamentoCooperadoRegistro } from "@/types";
 import type { ItemResumoFichaMes } from "@/services/notaPedidoService";
 import { formatCurrency, formatDate, formatMesReferencia } from "@/utils/format";
+import { baixarHtmlComoPdf } from "@/utils/downloadPdf";
 
 export interface ReciboResumoInput {
   itens: ItemResumoFichaMes[];
@@ -113,15 +114,12 @@ export function gerarReciboHtml(
 </html>`;
 }
 
-export function baixarReciboHtml(html: string, nomeArquivo: string) {
-  const blob = new Blob([html], { type: "text/html;charset=utf-8" });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = nomeArquivo.endsWith(".html") ? nomeArquivo : `${nomeArquivo}.html`;
-  a.click();
-  URL.revokeObjectURL(url);
+export async function baixarRecibo(html: string, nomeArquivo: string): Promise<void> {
+  await baixarHtmlComoPdf(html, nomeArquivo);
 }
+
+/** @deprecated Use baixarRecibo */
+export const baixarReciboHtml = baixarRecibo;
 
 export function nomeArquivoRecibo(mesReferencia: string, cooperadoNome: string): string {
   const slug = cooperadoNome
@@ -130,5 +128,5 @@ export function nomeArquivoRecibo(mesReferencia: string, cooperadoNome: string):
     .replace(/[^a-zA-Z0-9]+/g, "-")
     .replace(/^-|-$/g, "")
     .slice(0, 40);
-  return `recibo-${mesReferencia}-${slug || "cooperado"}.html`;
+  return `recibo-${mesReferencia}-${slug || "cooperado"}.pdf`;
 }

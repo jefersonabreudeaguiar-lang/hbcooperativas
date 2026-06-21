@@ -26,7 +26,7 @@ import { NotaStatusBadge } from "@/components/ui/NotaStatusBadge";
 import { Button } from "@/components/ui/Button";
 import { formatCurrency, formatDate, formatMesReferencia } from "@/utils/format";
 import { cn } from "@/utils/format";
-import { baixarReciboHtml, nomeArquivoRecibo } from "@/utils/recibo";
+import { baixarRecibo, nomeArquivoRecibo } from "@/utils/recibo";
 
 interface CooperadoEntregasPorMesProps {
   resumos: ResumoMesEntregasCooperado[];
@@ -129,7 +129,7 @@ function ResumoMesCard({
           variant="secondary"
           className="mt-3"
           onClick={() =>
-            baixarReciboHtml(
+            void baixarRecibo(
               resumo.pagamentoConfirmado!.reciboHtml!,
               nomeArquivoRecibo(resumo.mesReferencia, nomeCooperado)
             )

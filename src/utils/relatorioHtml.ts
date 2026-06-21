@@ -4,6 +4,7 @@ import { formatCnpj } from "@/utils/cooperativa";
 import { formatCurrency, formatDate, formatMesReferencia } from "@/utils/format";
 import type { FechamentoCalculado, RelatorioEntregasPorItens, ResumoFinanceiroMes } from "@/services/relatorioService";
 import { calcularFechamentoMensalLive, getRelatorioEntregasPorItensInstituicao, getResumoFinanceiroMes } from "@/services/relatorioService";
+import { baixarHtmlComoPdf } from "@/utils/downloadPdf";
 
 const DOC_STYLES = `
   * { box-sizing: border-box; }
@@ -359,20 +360,17 @@ export function gerarRelatorioFinanceiroHtml(data: AppData, mesReferencia: strin
   return documentoShell(tituloRelatorio, body, data, mesReferencia);
 }
 
-export function baixarDocumentoHtml(html: string, nomeArquivo: string): void {
-  const blob = new Blob([html], { type: "text/html;charset=utf-8" });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = nomeArquivo.endsWith(".html") ? nomeArquivo : `${nomeArquivo}.html`;
-  a.click();
-  URL.revokeObjectURL(url);
+export async function baixarDocumento(html: string, nomeArquivo: string): Promise<void> {
+  await baixarHtmlComoPdf(html, nomeArquivo);
 }
+
+/** @deprecated Use baixarDocumento */
+export const baixarDocumentoHtml = baixarDocumento;
 
 export function imprimirDocumentoHtml(html: string): void {
   const w = window.open("", "_blank");
   if (!w) {
-    baixarDocumentoHtml(html, "relatorio.html");
+    void baixarDocumento(html, "relatorio.pdf");
     return;
   }
   w.document.write(html.replace(/window.onload=function\(\)\{[^}]*\}/, "window.onload=function(){window.print();}"));
@@ -388,7 +386,7 @@ export function nomeArquivoRelatorio(tipo: string, mesReferencia: string, sufixo
         .replace(/^-|-$/g, "")
         .slice(0, 40)}`
     : "";
-  return `relatorio-${tipo}-${mesReferencia}${extra}.html`;
+  return `relatorio-${tipo}-${mesReferencia}${extra}.pdf`;
 }
 
 export type { ResumoFinanceiroMes, FechamentoCalculado };

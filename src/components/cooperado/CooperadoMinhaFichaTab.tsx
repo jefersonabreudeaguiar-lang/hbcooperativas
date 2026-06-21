@@ -30,7 +30,7 @@ import {
 } from "@/services/valoresAvulsosReceberService";
 import { formatCurrency, formatDate, formatMesReferencia } from "@/utils/format";
 import { cn } from "@/utils/format";
-import { baixarReciboHtml, nomeArquivoRecibo } from "@/utils/recibo";
+import { baixarRecibo, nomeArquivoRecibo } from "@/utils/recibo";
 
 interface CooperadoMinhaFichaTabProps {
   cooperadoId: string;
@@ -265,7 +265,7 @@ function MesFichaAccordion({
                 size="sm"
                 variant="secondary"
                 onClick={() =>
-                  baixarReciboHtml(
+                  void baixarRecibo(
                     resumo.pagamentoConfirmado!.reciboHtml!,
                     nomeArquivoRecibo(resumo.mesReferencia, nomeCooperado)
                   )

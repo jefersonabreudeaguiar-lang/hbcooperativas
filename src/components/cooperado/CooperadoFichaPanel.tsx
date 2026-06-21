@@ -20,7 +20,7 @@ import {
 import { ResumoDescontosMes } from "@/components/ficha/ResumoDescontosMes";
 import { fichaPertenceCooperado, notaPertenceCooperado } from "@/services/cooperadoCloudService";
 import { formatCurrency, formatDate, formatMesReferencia, formatCPFCNPJ, formatPhone, getCurrentMesReferencia } from "@/utils/format";
-import { baixarReciboHtml, nomeArquivoRecibo } from "@/utils/recibo";
+import { baixarRecibo, nomeArquivoRecibo } from "@/utils/recibo";
 import type { Cooperado } from "@/types";
 
 function getEscolaLabel(nota: { instituicaoId: string; escolaAvulsaNome?: string }, instituicoes: { id: string; nome: string }[]) {
@@ -296,7 +296,7 @@ export function CooperadoFichaPanel({ cooperado }: { cooperado: Cooperado }) {
                 size="lg"
                 className="shrink-0"
                 onClick={() =>
-                  baixarReciboHtml(
+                  void baixarRecibo(
                     pagamentoConfirmadoMes.reciboHtml!,
                     nomeArquivoRecibo(mesFilter, cooperado.nomeCompleto)
                   )
@@ -327,7 +327,7 @@ export function CooperadoFichaPanel({ cooperado }: { cooperado: Cooperado }) {
                 <Button
                   size="sm"
                   variant="secondary"
-                  onClick={() => baixarReciboHtml(p.reciboHtml!, nomeArquivoRecibo(p.mesReferencia, cooperado.nomeCompleto))}
+                  onClick={() => void baixarRecibo(p.reciboHtml!, nomeArquivoRecibo(p.mesReferencia, cooperado.nomeCompleto))}
                 >
                   <FileDown size={14} /> Recibo
                 </Button>

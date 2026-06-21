@@ -52,7 +52,7 @@ import {
   cancelarValorAvulsoReceber,
 } from "@/services/valoresAvulsosReceberService";
 import { cooperadoPrecisaCadastrarPix } from "@/utils/pix";
-import { baixarReciboHtml, resumoReciboFromPagamento, nomeArquivoRecibo } from "@/utils/recibo";
+import { baixarRecibo, resumoReciboFromPagamento, nomeArquivoRecibo } from "@/utils/recibo";
 import { updateData, addAuditEntry, getData } from "@/services/dataStore";
 import { formatCurrency, formatDate, formatMesReferencia, getCurrentMesReferencia } from "@/utils/format";
 import type { PagamentoCooperadoRegistro } from "@/types";
@@ -513,7 +513,7 @@ export default function FichaCorridaPage() {
   const baixarReciboAtual = () => {
     const pg = reciboAtual;
     if (!pg?.reciboHtml) return;
-    baixarReciboHtml(pg.reciboHtml, nomeArquivoRecibo(pg.mesReferencia, nomeCooperado || "cooperado"));
+    void baixarRecibo(pg.reciboHtml, nomeArquivoRecibo(pg.mesReferencia, nomeCooperado || "cooperado"));
   };
 
   if (!data) return null;
