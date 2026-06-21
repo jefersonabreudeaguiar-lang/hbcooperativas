@@ -169,8 +169,8 @@ export default function FichaCorridaPage() {
 
   const arquivoMes = useMemo(() => {
     if (!data || !cooperadoSelecionadoId) return undefined;
-    return getArquivoMensalCooperado(data, cooperadoSelecionadoId, mesFilter);
-  }, [data, cooperadoSelecionadoId, mesFilter]);
+    return getArquivoMensalCooperado(data, cooperadoSelecionadoId, mesFilter, coopId);
+  }, [data, cooperadoSelecionadoId, mesFilter, coopId]);
 
   const mensalidadePadrao = useMemo(() => {
     if (!data || !cooperadoSelecionadoId) return 0;
@@ -241,10 +241,25 @@ export default function FichaCorridaPage() {
     return agregarItensFichaMes(data, cooperadoSelecionadoId, mesFilter, coopId);
   }, [data, cooperadoSelecionadoId, mesFilter, coopId]);
 
+  const resumoAjustes = useMemo(() => {
+    if (isCooperado) return undefined;
+    return {
+      mensalidadeFixa: parseFloat(mensalidadeInput.replace(",", ".")) || 0,
+      descontoAvulso: parseFloat(descontoAvulsoInput.replace(",", ".")) || 0,
+      descontoAvulsoMotivo: descontoAvulsoMotivo.trim() || undefined,
+    };
+  }, [isCooperado, mensalidadeInput, descontoAvulsoInput, descontoAvulsoMotivo]);
+
   const resumo = useMemo(() => {
     if (!data || !cooperadoSelecionadoId) return null;
-    return getResumoPagamentoCooperado(data, cooperadoSelecionadoId, mesFilter);
-  }, [data, cooperadoSelecionadoId, mesFilter, arquivoMes?.descontoAvulso, arquivoMes?.mensalidadeFixa]);
+    return getResumoPagamentoCooperado(
+      data,
+      cooperadoSelecionadoId,
+      mesFilter,
+      coopId,
+      resumoAjustes
+    );
+  }, [data, cooperadoSelecionadoId, mesFilter, coopId, resumoAjustes]);
 
   const totalPendente = resumo?.valorLiquido ?? 0;
   const totalEntregas = resumo?.valorEntregas ?? 0;
@@ -299,9 +314,13 @@ export default function FichaCorridaPage() {
 
   const handleConfirmarPagamento = () => {
     if (!cooperadoSelecionado || !user || !data || !coopId || totalPendente <= 0) return;
-    const resumo = getResumoPagamentoCooperado(data, cooperadoSelecionado.id, mesFilter);
     const mensalidadeFixa = parseFloat(mensalidadeInput.replace(",", ".")) || 0;
     const descontoAvulso = parseFloat(descontoAvulsoInput.replace(",", ".")) || 0;
+    const resumo = getResumoPagamentoCooperado(data, cooperadoSelecionado.id, mesFilter, coopId, {
+      mensalidadeFixa,
+      descontoAvulso,
+      descontoAvulsoMotivo: descontoAvulsoMotivo.trim() || undefined,
+    });
     updateData((d) => {
       const comAjustes = addAuditEntry(
         {

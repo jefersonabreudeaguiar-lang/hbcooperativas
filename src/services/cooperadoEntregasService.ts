@@ -1,5 +1,5 @@
 import type { AppData, NotaPedido, PagamentoCooperadoRegistro } from "@/types";
-import { notaPertenceCooperado } from "@/services/cooperadoCloudService";
+import { notaPertenceCooperado, resolverCooperadoIdCanonico } from "@/services/cooperadoCloudService";
 import {
   getPagamentoAguardandoCooperado,
   getResumoPagamentoCooperado,
@@ -45,9 +45,13 @@ export function getPagamentoConfirmadoMes(
   cooperadoId: string,
   mesReferencia: string
 ): PagamentoCooperadoRegistro | undefined {
+  const coopId = data.cooperados.find((c) => c.id === cooperadoId)?.cooperativaId;
+  const canonico = resolverCooperadoIdCanonico(data, cooperadoId, coopId);
   return data.pagamentosCooperado.find(
     (p) =>
-      p.cooperadoId === cooperadoId &&
+      (p.cooperadoId === cooperadoId ||
+        p.cooperadoId === canonico ||
+        resolverCooperadoIdCanonico(data, p.cooperadoId, coopId ?? p.cooperativaId) === canonico) &&
       p.mesReferencia === mesReferencia &&
       p.status === "confirmado"
   );
@@ -102,7 +106,7 @@ export function getValorQuantoVouReceber(
   if (aguardando) {
     return { mes, valor: aguardando.valorLiquido, aguardandoAssinatura: true };
   }
-  const resumo = getResumoPagamentoCooperado(data, cooperadoId, mes);
+  const resumo = getResumoPagamentoCooperado(data, cooperadoId, mes, cooperativaId);
   return { mes, valor: resumo.valorLiquido, aguardandoAssinatura: false };
 }
 
@@ -117,7 +121,12 @@ export function getResumoMesEntregasCooperado(
   );
   const pagamentoConfirmado = getPagamentoConfirmadoMes(data, cooperadoId, mesReferencia);
   const pagamentoAguardando = getPagamentoAguardandoCooperado(data, cooperadoId, mesReferencia);
-  const valorAReceber = getTotalAPagarCooperado(data, cooperadoId, mesReferencia);
+  const valorAReceber = getResumoPagamentoCooperado(
+    data,
+    cooperadoId,
+    mesReferencia,
+    cooperativaId
+  ).valorLiquido;
   const valorRecebido = pagamentoConfirmado?.valorLiquido ?? 0;
 
   return {

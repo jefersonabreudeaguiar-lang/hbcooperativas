@@ -66,9 +66,14 @@ export function CooperadoFichaPanel({ cooperado }: { cooperado: Cooperado }) {
 
   if (!data || !resumo) return null;
 
-  const resumoPagamento = getResumoPagamentoCooperado(data, cooperado.id, mesFilter);
+  const resumoPagamento = getResumoPagamentoCooperado(
+    data,
+    cooperado.id,
+    mesFilter,
+    cooperado.cooperativaId
+  );
   const totalPendente = resumoPagamento.valorLiquido;
-  const arquivo = getArquivoMensalCooperado(data, cooperado.id, mesFilter);
+  const arquivo = getArquivoMensalCooperado(data, cooperado.id, mesFilter, cooperado.cooperativaId);
   const statusCota = getStatusCotaCooperado(data, cooperado.id, mesFilter);
   const mensalidadeMes = getMensalidadeFixaMes(data, cooperado.id, mesFilter, cooperado.cooperativaId);
 

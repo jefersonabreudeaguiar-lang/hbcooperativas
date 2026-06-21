@@ -58,8 +58,9 @@ export function getCooperadoStats(cooperadoId: string, data?: AppData): Cooperad
   const cotas = d.cotas.filter((c) => c.cooperadoId === cooperadoId);
   const entregas = d.entregas.filter((e) => e.cooperadoId === cooperadoId);
   const descontos = d.descontos.filter((dc) => dc.cooperadoId === cooperadoId);
+  const coopId = d.cooperados.find((c) => c.id === cooperadoId)?.cooperativaId;
 
-  const valorAReceber = getTotalAPagarCooperado(d, cooperadoId, mes);
+  const valorAReceber = getTotalAPagarCooperado(d, cooperadoId, mes, coopId);
   const valorRecebido = getTotalRecebidoCooperado(d, cooperadoId, mes);
   const valorPendente = valorAReceber;
 
