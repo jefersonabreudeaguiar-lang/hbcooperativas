@@ -10,6 +10,7 @@ import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { AlertBanner } from "@/components/ui/AlertBanner";
 import { OnboardingChecklist } from "@/components/cooperado/OnboardingChecklist";
+import { MensalidadeStatusBanner } from "@/components/cooperado/MensalidadeStatusBanner";
 import { getCooperadoStats, getAdminStats } from "@/services/dashboardService";
 import {
   cooperadoTemValorPendente,
@@ -57,6 +58,8 @@ function CooperadoDashboard() {
         <h1 className="text-2xl font-bold text-gray-900">Olá, {cooperado?.nomeCompleto.split(" ")[0]}!</h1>
         <p className="text-sm text-gray-500 mt-1">{coopNome} · {formatMesReferencia(mes)}</p>
       </div>
+
+      <MensalidadeStatusBanner cooperadoId={cooperadoId} />
 
       <OnboardingChecklist pixOk={!precisaPix} />
 

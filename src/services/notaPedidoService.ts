@@ -300,13 +300,23 @@ export function reconciliarFichaFromNotasConferidas(data: AppData): AppData {
 }
 
 export function getTotalAPagarCooperado(data: AppData, cooperadoId: string, mesReferencia?: string): number {
+  if (mesReferencia) {
+    return getResumoPagamentoCooperado(data, cooperadoId, mesReferencia).valorLiquido;
+  }
   const coopId = data.cooperados.find((c) => c.id === cooperadoId)?.cooperativaId;
-  const entries = data.fichaCorrida.filter((f) => {
-    if (!fichaPertenceCooperado(data, f, cooperadoId, coopId) || f.status !== "pendente") return false;
-    if (mesReferencia && f.mesReferencia !== mesReferencia) return false;
-    return true;
-  });
-  return round2(entries.reduce((s, f) => s + f.valorLiquido, 0));
+  const meses = [
+    ...new Set(
+      data.fichaCorrida
+        .filter(
+          (f) =>
+            fichaPertenceCooperado(data, f, cooperadoId, coopId) && f.status === "pendente"
+        )
+        .map((f) => f.mesReferencia)
+    ),
+  ];
+  return round2(
+    meses.reduce((s, mes) => s + getResumoPagamentoCooperado(data, cooperadoId, mes).valorLiquido, 0)
+  );
 }
 
 export function getResumoPagamentoCooperado(

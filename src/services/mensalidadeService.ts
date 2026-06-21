@@ -185,3 +185,76 @@ export function mensalidadePodePagarComPix(m: Mensalidade): boolean {
 export function mensalidadeAguardandoConfirmacao(m: Mensalidade): boolean {
   return m.status === "aguardando_confirmacao";
 }
+
+export type SituacaoMensalidadesCooperado =
+  | "em_dia"
+  | "pendente"
+  | "atrasada"
+  | "aguardando_confirmacao";
+
+export interface ResumoMensalidadesCooperado {
+  situacao: SituacaoMensalidadesCooperado | "sem_mensalidade";
+  mensalidadeMesAtual?: Mensalidade;
+  qtdAtrasadas: number;
+  qtdAguardandoConfirmacao: number;
+  valorEmAberto: number;
+}
+
+function statusEfetivoMensalidade(m: Mensalidade, hoje: string): Mensalidade["status"] {
+  if (m.status === "pendente" && m.vencimento && m.vencimento < hoje) return "atrasada";
+  return m.status;
+}
+
+/** Resumo para exibir no início do painel do cooperado. */
+export function getResumoMensalidadesCooperado(
+  data: AppData,
+  cooperadoId: string
+): ResumoMensalidadesCooperado {
+  const hoje = new Date().toISOString().split("T")[0];
+  const mesAtual = getCurrentMesReferencia();
+  const todas = data.mensalidades
+    .filter((m) => m.cooperadoId === cooperadoId)
+    .sort((a, b) => b.mesReferencia.localeCompare(a.mesReferencia));
+
+  if (todas.length === 0) {
+    return {
+      situacao: "sem_mensalidade",
+      qtdAtrasadas: 0,
+      qtdAguardandoConfirmacao: 0,
+      valorEmAberto: 0,
+    };
+  }
+
+  const mensalidadeMesAtual = todas.find((m) => m.mesReferencia === mesAtual);
+  const qtdAtrasadas = todas.filter((m) => statusEfetivoMensalidade(m, hoje) === "atrasada").length;
+  const qtdAguardandoConfirmacao = todas.filter((m) => m.status === "aguardando_confirmacao").length;
+  const abertas = todas.filter((m) => {
+    const st = statusEfetivoMensalidade(m, hoje);
+    return st === "pendente" || st === "atrasada" || st === "aguardando_confirmacao" || st === "parcelada";
+  });
+  const valorEmAberto = abertas.reduce((s, m) => s + m.valor, 0);
+
+  let situacao: SituacaoMensalidadesCooperado | "sem_mensalidade" = "em_dia";
+  if (qtdAtrasadas > 0) {
+    situacao = "atrasada";
+  } else if (qtdAguardandoConfirmacao > 0) {
+    situacao = "aguardando_confirmacao";
+  } else if (mensalidadeMesAtual) {
+    const st = statusEfetivoMensalidade(mensalidadeMesAtual, hoje);
+    if (st === "paga") situacao = "em_dia";
+    else if (st === "pendente") situacao = "pendente";
+    else situacao = "em_dia";
+  } else if (abertas.length > 0) {
+    situacao = "pendente";
+  } else {
+    situacao = "em_dia";
+  }
+
+  return {
+    situacao,
+    mensalidadeMesAtual,
+    qtdAtrasadas,
+    qtdAguardandoConfirmacao,
+    valorEmAberto,
+  };
+}

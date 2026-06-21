@@ -10,12 +10,13 @@ import { NotaStatusBadge } from "@/components/ui/NotaStatusBadge";
 import { Button } from "@/components/ui/Button";
 import { Select, FormField } from "@/components/ui/Form";
 import {
-  getTotalAPagarCooperado,
+  getResumoPagamentoCooperado,
   getStatusCotaCooperado,
   getMensalidadeFixaMes,
   getArquivoMensalCooperado,
   agregarItensFichaMes,
 } from "@/services/notaPedidoService";
+import { ResumoDescontosMes } from "@/components/ficha/ResumoDescontosMes";
 import { fichaPertenceCooperado, notaPertenceCooperado } from "@/services/cooperadoCloudService";
 import { formatCurrency, formatDate, formatMesReferencia, formatCPFCNPJ, formatPhone, getCurrentMesReferencia } from "@/utils/format";
 import { baixarReciboHtml, nomeArquivoRecibo } from "@/utils/recibo";
@@ -65,7 +66,8 @@ export function CooperadoFichaPanel({ cooperado }: { cooperado: Cooperado }) {
 
   if (!data || !resumo) return null;
 
-  const totalPendente = getTotalAPagarCooperado(data, cooperado.id, mesFilter);
+  const resumoPagamento = getResumoPagamentoCooperado(data, cooperado.id, mesFilter);
+  const totalPendente = resumoPagamento.valorLiquido;
   const arquivo = getArquivoMensalCooperado(data, cooperado.id, mesFilter);
   const statusCota = getStatusCotaCooperado(data, cooperado.id, mesFilter);
   const mensalidadeMes = getMensalidadeFixaMes(data, cooperado.id, mesFilter, cooperado.cooperativaId);
@@ -73,9 +75,21 @@ export function CooperadoFichaPanel({ cooperado }: { cooperado: Cooperado }) {
   return (
     <div className="space-y-6">
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <div className="bg-green-700 text-white rounded-2xl p-5">
+        <div className="bg-green-700 text-white rounded-2xl p-5 sm:col-span-3">
           <p className="text-green-100 text-sm">A receber · {formatMesReferencia(mesFilter)}</p>
           <p className="text-3xl font-bold mt-1">{formatCurrency(totalPendente)}</p>
+          {(resumoPagamento.valorBruto > 0 || totalPendente > 0) && (
+            <ResumoDescontosMes
+              valorBruto={resumoPagamento.valorBruto}
+              descontoCooperativa={resumoPagamento.descontoCooperativa}
+              descontoPadraoPct={data.config.descontoPadraoCooperativa}
+              valorEntregas={resumoPagamento.valorEntregas}
+              descontosExtras={resumoPagamento.descontosExtras}
+              totalLiquido={totalPendente}
+              rotuloTotal="Total a receber"
+              tema="escuro"
+            />
+          )}
         </div>
         <div className="bg-white border rounded-2xl p-5">
           <p className="text-gray-500 text-sm">Entregas no mês</p>

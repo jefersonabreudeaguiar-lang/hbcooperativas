@@ -77,8 +77,6 @@ export function getMesQuantoVouReceber(
     if (cooperadoMesQuitado(data, cooperadoId, mes)) continue;
     if (getPagamentoAguardandoCooperado(data, cooperadoId, mes)) return mes;
     if (getTotalAPagarCooperado(data, cooperadoId, mes) > 0) return mes;
-    const resumo = getResumoPagamentoCooperado(data, cooperadoId, mes);
-    if (resumo.valorLiquido > 0) return mes;
   }
 
   return mesAtual;
@@ -91,9 +89,7 @@ export function cooperadoTemValorPendente(
 ): boolean {
   const mes = getMesQuantoVouReceber(data, cooperadoId, cooperativaId);
   if (getPagamentoAguardandoCooperado(data, cooperadoId, mes)) return true;
-  if (getTotalAPagarCooperado(data, cooperadoId, mes) > 0) return true;
-  const resumo = getResumoPagamentoCooperado(data, cooperadoId, mes);
-  return resumo.valorLiquido > 0 && !cooperadoMesQuitado(data, cooperadoId, mes);
+  return getTotalAPagarCooperado(data, cooperadoId, mes) > 0 && !cooperadoMesQuitado(data, cooperadoId, mes);
 }
 
 export function getValorQuantoVouReceber(
