@@ -734,13 +734,13 @@ async function validarSenhaCadastroCooperado(
   if (!senha) {
     return {
       ok: false,
-      error: "Esta cooperativa exige a senha de cadastro. Solicite à diretoria.",
+      error: "Esta cooperativa exige a senha de acesso ao cadastro. Solicite à diretoria.",
     };
   }
 
   if (cooperativa.senhaCadastroCooperado?.trim()) {
     if (senha !== cooperativa.senhaCadastroCooperado.trim()) {
-      return { ok: false, error: "Senha da cooperativa incorreta." };
+      return { ok: false, error: "Senha de acesso ao cadastro incorreta." };
     }
     return { ok: true };
   }

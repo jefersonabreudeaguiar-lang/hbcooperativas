@@ -201,7 +201,7 @@ export default function MeuPerfilPage() {
         action: "editar",
         userId: user.id,
         userName: user.name,
-        changes: "Senha de cadastro de cooperados removida — cadastro livre pelo CNPJ",
+        changes: "Senha de acesso ao cadastro removida — cadastro livre pelo CNPJ",
       });
       return updated;
     });
@@ -292,22 +292,23 @@ export default function MeuPerfilPage() {
         )}
       </Card>
 
-      <Card title="Cadastro de cooperados no portal" className="mb-6">
+      <Card title="Senha de acesso ao cadastro (CNPJ)" className="mb-6">
         <p className="text-sm text-gray-500 mb-4">
-          Opcional: exija uma senha para que apenas cooperados autorizados criem conta informando o CNPJ.
+          Opcional: defina uma senha que o cooperado deve informar ao criar a conta informando o CNPJ.
+          Não confundir com a senha pessoal de login do cooperado.
         </p>
         {senhaCadastroAtiva ? (
           <p className="text-sm text-green-800 bg-green-50 border border-green-200 rounded-lg px-3 py-2 mb-4">
-            Cadastro restrito por senha — cooperados precisam informar a senha ao se cadastrar.
+            Senha de acesso ao cadastro ativa — o cooperado precisa informá-la junto com o CNPJ.
           </p>
         ) : (
           <p className="text-sm text-gray-600 bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 mb-4">
-            Cadastro livre — qualquer pessoa com o CNPJ pode criar conta no portal.
+            Sem senha de acesso — qualquer pessoa com o CNPJ pode criar conta no portal.
           </p>
         )}
         <FormField
-          label="Senha para cooperados se cadastrarem"
-          hint="Deixe em branco e salve, ou use Remover senha, para voltar ao cadastro livre."
+          label="Senha de acesso ao cadastro"
+          hint="Repasse esta senha aos cooperados autorizados. Deixe em branco ou use Remover para cadastro livre."
         >
           <div className="relative">
             <Input
@@ -333,11 +334,11 @@ export default function MeuPerfilPage() {
         {canEdit && (
           <div className="mt-4 flex flex-wrap gap-2">
             <Button variant="secondary" onClick={handleSave}>
-              <Save size={18} /> {saved ? "Salvo!" : "Salvar senha de cadastro"}
+              <Save size={18} /> {saved ? "Salvo!" : "Salvar senha de acesso"}
             </Button>
             {senhaCadastroAtiva && (
               <Button variant="danger" onClick={handleRemoverSenhaCadastro}>
-                <Trash2 size={18} /> Remover senha de cadastro
+                <Trash2 size={18} /> Remover senha de acesso
               </Button>
             )}
           </div>
