@@ -173,6 +173,11 @@ function migrateData(raw: Partial<AppData> & Record<string, unknown>): AppData {
           const digits = normalizeCnpj(coop?.cnpj ?? "");
           return digits.length === 14 ? digits : undefined;
         })(),
+      modoAcesso: u.modoAcesso ?? "total",
+      funcao: u.funcao,
+      responsavelPrincipal: u.responsavelPrincipal,
+      permissoesExtras: u.permissoesExtras,
+      permissoesNegadas: u.permissoesNegadas,
     })),
     instituicoes: (base.instituicoes ?? []).map((i) => ({
       ...i,
@@ -201,7 +206,37 @@ function migrateData(raw: Partial<AppData> & Record<string, unknown>): AppData {
     auditLog: base.auditLog ?? [],
   };
 
-  return stripDemoData(migrateAjustesFichaMes(merged));
+  return stripDemoData(migrateAjustesFichaMes(migrateResponsavelPrincipal(merged)));
+}
+
+function migrateResponsavelPrincipal(data: AppData): AppData {
+  const principalPorCoop = new Map<string, string>();
+  for (const u of data.users) {
+    if (u.role !== "responsavel" || !u.cooperativaId) continue;
+    if (u.responsavelPrincipal) {
+      principalPorCoop.set(u.cooperativaId, u.id);
+    }
+  }
+
+  const users = data.users.map((u) => {
+    if (u.role !== "responsavel" || !u.cooperativaId) return u;
+    let responsavelPrincipal = u.responsavelPrincipal;
+    if (responsavelPrincipal === undefined) {
+      const existing = principalPorCoop.get(u.cooperativaId);
+      if (!existing) {
+        responsavelPrincipal = true;
+        principalPorCoop.set(u.cooperativaId, u.id);
+      } else {
+        responsavelPrincipal = u.id === existing;
+      }
+    }
+    const funcao =
+      u.funcao ??
+      (responsavelPrincipal ? "Responsável principal" : "Responsável");
+    return { ...u, responsavelPrincipal, funcao, modoAcesso: u.modoAcesso ?? "total" };
+  });
+
+  return { ...data, users };
 }
 
 function runAutomaticTasks(data: AppData): AppData {
@@ -712,6 +747,9 @@ export async function registerCooperativa(input: RegisterCooperativaInput): Prom
     cooperativaId,
     cooperativaCnpj: cnpj,
     active: true,
+    funcao: "Responsável principal",
+    responsavelPrincipal: true,
+    modoAcesso: "total",
   };
 
   const { password: __, ...safeUser } = newUser;

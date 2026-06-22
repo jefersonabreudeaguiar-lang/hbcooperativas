@@ -1,4 +1,4 @@
-import type { Action, Resource, UserRole } from "@/types";
+import type { Action, ModoAcesso, Resource, User, UserRole } from "@/types";
 
 type PermissionMatrix = Record<UserRole, Partial<Record<Resource, Action[]>>>;
 
@@ -69,12 +69,100 @@ export const PERMISSIONS: PermissionMatrix = {
   },
 };
 
+export type PermissionSubject = Pick<
+  User,
+  "role" | "modoAcesso" | "permissoesExtras" | "permissoesNegadas" | "responsavelPrincipal"
+>;
+
+export interface ModuloAcesso {
+  resource: Resource;
+  label: string;
+  href?: string;
+  actions: Action[];
+}
+
+/** Módulos que o responsável principal pode liberar ou restringir. */
+export const MODULOS_ACESSO: ModuloAcesso[] = [
+  { resource: "dashboard", label: "Início", href: "/dashboard", actions: VIEW_ONLY },
+  { resource: "notas_pedido", label: "Conferir entregas", href: "/notas-pedido", actions: ["view", "create", "edit", "approve", "export"] },
+  { resource: "ficha_corrida", label: "Pagar cooperados", href: "/ficha-corrida", actions: ["view", "edit", "export"] },
+  { resource: "instituicoes", label: "Contratos", href: "/contratos", actions: ALL_CRUD },
+  { resource: "cooperados", label: "Cooperados", href: "/cooperados", actions: ["view", "create", "edit", "delete", "export"] },
+  { resource: "mensalidades", label: "Mensalidades", href: "/mensalidades", actions: ["view", "edit", "export"] },
+  { resource: "comunicados", label: "Comunicados", href: "/comunicados", actions: VIEW_ONLY },
+  { resource: "relatorios", label: "Relatórios", href: "/relatorios", actions: VIEW_EXPORT },
+  { resource: "fechamento", label: "Fechamento mensal", href: "/fechamento-mensal", actions: ["view", "approve", "export"] },
+  { resource: "cooperativas", label: "Perfil da cooperativa", href: "/meu-perfil", actions: ["view", "create", "edit", "export"] },
+];
+
+export const PRESET_RELATORIOS: Resource[] = ["dashboard", "relatorios", "fechamento"];
+
 export function can(role: UserRole, resource: Resource, action: Action): boolean {
   const rolePerms = PERMISSIONS[role];
   if (!rolePerms) return false;
   const resourcePerms = rolePerms[resource];
   if (!resourcePerms) return false;
   return resourcePerms.includes(action);
+}
+
+export function canUser(user: PermissionSubject, resource: Resource, action: Action): boolean {
+  if (user.modoAcesso === "parcial") {
+    const extras = user.permissoesExtras?.[resource];
+    return extras?.includes(action) ?? false;
+  }
+
+  if (!can(user.role, resource, action)) return false;
+  const denied = user.permissoesNegadas?.[resource];
+  if (denied?.includes(action)) return false;
+  return true;
+}
+
+export function resourcesFromModulos(modulos: Resource[]): Partial<Record<Resource, Action[]>> {
+  const map: Partial<Record<Resource, Action[]>> = {};
+  for (const mod of MODULOS_ACESSO) {
+    if (modulos.includes(mod.resource)) map[mod.resource] = [...mod.actions];
+  }
+  return map;
+}
+
+export function negarModulos(role: UserRole, modulosNegados: Resource[]): Partial<Record<Resource, Action[]>> {
+  const map: Partial<Record<Resource, Action[]>> = {};
+  for (const mod of MODULOS_ACESSO) {
+    if (!modulosNegados.includes(mod.resource)) continue;
+    const allowed = PERMISSIONS[role]?.[mod.resource] ?? mod.actions;
+    map[mod.resource] = [...allowed];
+  }
+  return map;
+}
+
+export function modulosLiberados(user: PermissionSubject): Resource[] {
+  if (user.modoAcesso === "parcial") {
+    return Object.keys(user.permissoesExtras ?? {}) as Resource[];
+  }
+  return MODULOS_ACESSO.filter((mod) => {
+    const denied = user.permissoesNegadas?.[mod.resource];
+    const allowed = PERMISSIONS[user.role]?.[mod.resource] ?? mod.actions;
+    if (!allowed.length) return false;
+    return !denied || denied.length < allowed.length;
+  }).map((m) => m.resource);
+}
+
+export function modulosRestritos(user: PermissionSubject): Resource[] {
+  if (user.modoAcesso !== "total") return [];
+  return MODULOS_ACESSO.filter((mod) => {
+    const denied = user.permissoesNegadas?.[mod.resource];
+    const allowed = PERMISSIONS[user.role]?.[mod.resource] ?? [];
+    return denied && denied.length >= allowed.length && allowed.length > 0;
+  }).map((m) => m.resource);
+}
+
+export function canGerenciarEquipe(user: Pick<User, "role" | "responsavelPrincipal">): boolean {
+  if (user.role === "admin" || user.role === "tesoureiro") return true;
+  return user.role === "responsavel" && user.responsavelPrincipal === true;
+}
+
+export function getUserFuncaoLabel(user: Pick<User, "role" | "funcao">): string {
+  return user.funcao?.trim() || ROLE_LABELS[user.role];
 }
 
 export function isAdminRole(role: UserRole): boolean {
@@ -99,7 +187,6 @@ const COOPERADO_MENU: { href: string; label: string; resource: Resource }[] = [
   { href: "/comunicados", label: "Avisos", resource: "comunicados" },
 ];
 
-/** Menu do cooperado no drawer mobile (sem repetir a barra inferior). */
 const COOPERADO_DRAWER_MENU: { href: string; label: string; resource: Resource }[] = [
   { href: "/dashboard", label: "Início", resource: "dashboard" },
   { href: "/meu-cadastro", label: "Meu cadastro", resource: "dashboard" },
@@ -126,38 +213,55 @@ const DIRETORIA_MENU: { href: string; label: string; resource: Resource }[] = [
   { href: "/fechamento-mensal", label: "Fechamento mensal", resource: "fechamento" },
 ];
 
-export function getMenuItems(role: UserRole): { href: string; label: string; resource: Resource }[] {
-  if (role === "cooperado") {
-    return COOPERADO_MENU.filter((item) => can(role, item.resource, "view") || item.href === "/meu-cadastro");
+const RESPONSAVEL_HREFS = [
+  "/dashboard",
+  "/notas-pedido",
+  "/ficha-corrida",
+  "/contratos",
+  "/meu-perfil",
+  "/cooperados",
+  "/mensalidades",
+  "/comunicados",
+  "/relatorios",
+  "/fechamento-mensal",
+];
+
+function filterMenuForUser(
+  items: { href: string; label: string; resource: Resource }[],
+  user: PermissionSubject
+) {
+  return items.filter((item) => canUser(user, item.resource, "view") || item.href === "/meu-cadastro");
+}
+
+export function getMenuItems(user: PermissionSubject): { href: string; label: string; resource: Resource }[] {
+  if (user.role === "cooperado") {
+    return filterMenuForUser(COOPERADO_MENU, user);
   }
 
-  const source = role === "responsavel"
-    ? DIRETORIA_MENU.filter((i) =>
-        ["/dashboard", "/notas-pedido", "/ficha-corrida", "/contratos", "/meu-perfil", "/cooperados", "/mensalidades", "/comunicados", "/relatorios", "/fechamento-mensal"].includes(i.href)
-        && can(role, i.resource, "view")
-      )
-    : DIRETORIA_MENU;
+  let source = DIRETORIA_MENU;
+  if (user.role === "responsavel") {
+    source = DIRETORIA_MENU.filter((i) => RESPONSAVEL_HREFS.includes(i.href));
+  }
 
-  return source.filter((item) => can(role, item.resource, "view"));
+  return filterMenuForUser(source, user);
 }
 
-/** Menu lateral mobile do cooperado — só cadastro e avisos (o restante fica na barra inferior). */
-export function getCooperadoDrawerMenuItems(role: UserRole): { href: string; label: string; resource: Resource }[] {
-  if (role !== "cooperado") return getMenuItems(role);
-  return COOPERADO_DRAWER_MENU.filter(
-    (item) => can(role, item.resource, "view") || item.href === "/meu-cadastro"
-  );
+export function getCooperadoDrawerMenuItems(user: PermissionSubject): { href: string; label: string; resource: Resource }[] {
+  if (user.role !== "cooperado") return getMenuItems(user);
+  return filterMenuForUser(COOPERADO_DRAWER_MENU, user);
 }
 
-/** @deprecated Use getMenuItems — kept for compatibility */
 export function getCooperadoExtraItems(): { href: string; label: string }[] {
   return [];
 }
 
-export function getMobileNavItems(role: UserRole): { href: string; label: string; resource: Resource }[] {
-  if (role === "cooperado") {
-    return COOPERADO_MENU.filter((i) => ["/dashboard", "/notas-pedido", "/precos", "/ficha-corrida", "/mensalidades"].includes(i.href));
+export function getMobileNavItems(user: PermissionSubject): { href: string; label: string; resource: Resource }[] {
+  if (user.role === "cooperado") {
+    return COOPERADO_MENU.filter((i) =>
+      ["/dashboard", "/notas-pedido", "/precos", "/ficha-corrida", "/mensalidades"].includes(i.href)
+    );
   }
+
   const responsavelItems: { href: string; label: string; resource: Resource }[] = [
     { href: "/dashboard", label: "Início", resource: "dashboard" },
     { href: "/notas-pedido", label: "Conferir", resource: "notas_pedido" },
@@ -165,10 +269,13 @@ export function getMobileNavItems(role: UserRole): { href: string; label: string
     { href: "/cooperados", label: "Cooperados", resource: "cooperados" },
     { href: "/contratos", label: "Contratos", resource: "instituicoes" },
     { href: "/meu-perfil", label: "Perfil", resource: "cooperativas" },
+    { href: "/relatorios", label: "Relatórios", resource: "relatorios" },
   ];
-  if (role === "responsavel") {
-    return responsavelItems.filter((i) => can(role, i.resource, "view"));
+
+  if (user.role === "responsavel") {
+    return filterMenuForUser(responsavelItems, user);
   }
+
   const adminItems: { href: string; label: string; resource: Resource }[] = [
     { href: "/dashboard", label: "Início", resource: "dashboard" },
     { href: "/notas-pedido", label: "Conferir", resource: "notas_pedido" },
@@ -176,7 +283,7 @@ export function getMobileNavItems(role: UserRole): { href: string; label: string
     { href: "/contratos", label: "Contratos", resource: "instituicoes" },
     { href: "/cooperados", label: "Cooperados", resource: "cooperados" },
   ];
-  return adminItems.filter((i) => can(role, i.resource, "view"));
+  return filterMenuForUser(adminItems, user);
 }
 
 export const ROLE_LABELS: Record<UserRole, string> = {
@@ -184,4 +291,9 @@ export const ROLE_LABELS: Record<UserRole, string> = {
   tesoureiro: "Tesoureiro",
   responsavel: "Responsável",
   cooperado: "Cooperado",
+};
+
+export const MODO_ACESSO_LABELS: Record<ModoAcesso, string> = {
+  total: "Acesso total (função padrão)",
+  parcial: "Acesso parcial (só o que liberar)",
 };

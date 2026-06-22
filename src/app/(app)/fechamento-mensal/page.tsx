@@ -18,6 +18,8 @@ import {
   imprimirDocumentoHtml,
   nomeArquivoRelatorio,
 } from "@/utils/relatorioHtml";
+import { ModalEmitirRelatorio } from "@/components/relatorios/ModalEmitirRelatorio";
+import type { EmissorRelatorio } from "@/types";
 import { formatCurrency, formatDate, formatMesReferencia, getCurrentMesReferencia } from "@/utils/format";
 import type { FechamentoMensal } from "@/types";
 
@@ -26,6 +28,7 @@ export default function FechamentoMensalPage() {
   const { check, user } = usePermissions();
   const coopId = user && data ? getUserCooperativaId(user, data) : undefined;
   const [selectedMes, setSelectedMes] = useState(getCurrentMesReferencia());
+  const [modalEmissao, setModalEmissao] = useState<"pdf" | "print" | null>(null);
 
   const meses = useMemo(() => {
     if (!data) return [getCurrentMesReferencia()];
@@ -39,14 +42,24 @@ export default function FechamentoMensalPage() {
   const calculo = calcularFechamentoMensal(selectedMes, data);
   const isBloqueado = fechamento?.bloqueado ?? false;
 
+  const emitirDocumento = (emissor: EmissorRelatorio) => {
+    const html = gerarRelatorioFechamentoHtml(data, selectedMes, fechamento, emissor);
+    if (modalEmissao === "print") {
+      imprimirDocumentoHtml(html);
+    } else {
+      void baixarDocumento(html, nomeArquivoRelatorio("fechamento", selectedMes));
+    }
+    setModalEmissao(null);
+  };
+
   const exportarDocumento = () => {
-    const html = gerarRelatorioFechamentoHtml(data, selectedMes, fechamento);
-    void baixarDocumento(html, nomeArquivoRelatorio("fechamento", selectedMes));
+    if (!check("fechamento", "export")) return;
+    setModalEmissao("pdf");
   };
 
   const imprimir = () => {
-    const html = gerarRelatorioFechamentoHtml(data, selectedMes, fechamento);
-    imprimirDocumentoHtml(html);
+    if (!check("fechamento", "export")) return;
+    setModalEmissao("print");
   };
 
   const handleRevisar = () => {
@@ -252,6 +265,14 @@ export default function FechamentoMensalPage() {
           emptyMessage="Nenhum registro de auditoria."
         />
       </Card>
+
+      <ModalEmitirRelatorio
+        open={modalEmissao !== null}
+        onClose={() => setModalEmissao(null)}
+        onConfirm={emitirDocumento}
+        user={user}
+        titulo={modalEmissao === "print" ? "Imprimir fechamento" : "Emitir PDF do fechamento"}
+      />
     </div>
   );
 }

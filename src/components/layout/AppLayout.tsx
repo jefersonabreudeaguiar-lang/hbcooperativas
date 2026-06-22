@@ -10,7 +10,7 @@ import {
 import { useState } from "react";
 import { useAuth } from "@/modules/auth/AuthProvider";
 import { useAppData } from "@/hooks/useAppData";
-import { getMenuItems, getMobileNavItems, getCooperadoDrawerMenuItems, ROLE_LABELS } from "@/permissions";
+import { getMenuItems, getMobileNavItems, getCooperadoDrawerMenuItems, getUserFuncaoLabel } from "@/permissions";
 import { getUserCooperativaNome } from "@/utils/cooperativa";
 import { PLATFORM_NAME, PLATFORM_TAGLINE } from "@/utils/constants";
 import { AppIcon } from "@/components/ui/AppIcon";
@@ -85,8 +85,8 @@ export function Sidebar({ mobile = false, onClose }: { mobile?: boolean; onClose
   if (!user) return null;
 
   const menuItems = mobile && user.role === "cooperado"
-    ? getCooperadoDrawerMenuItems(user.role)
-    : getMenuItems(user.role);
+    ? getCooperadoDrawerMenuItems(user)
+    : getMenuItems(user);
 
   return (
     <aside className={cn(
@@ -125,7 +125,7 @@ export function Sidebar({ mobile = false, onClose }: { mobile?: boolean; onClose
       <div className="p-4 border-t border-green-800">
         <div className="px-3 py-2 mb-2">
           <p className="text-sm font-medium truncate">{user.name}</p>
-          <p className="text-xs text-green-300">{ROLE_LABELS[user.role]}</p>
+          <p className="text-xs text-green-300">{getUserFuncaoLabel(user)}</p>
         </div>
         <button
           onClick={logout}
@@ -146,7 +146,7 @@ export function MobileNav() {
   const { user } = useAuth();
   if (!user) return null;
 
-  const mobileItems = getMobileNavItems(user.role);
+  const mobileItems = getMobileNavItems(user);
 
   return (
     <>

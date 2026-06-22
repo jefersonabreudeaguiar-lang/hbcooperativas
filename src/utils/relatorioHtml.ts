@@ -1,4 +1,4 @@
-import type { AppData, FechamentoMensal } from "@/types";
+import type { AppData, EmissorRelatorio, FechamentoMensal } from "@/types";
 import { PLATFORM_NAME } from "@/utils/constants";
 import { formatCnpj } from "@/utils/cooperativa";
 import { formatCurrency, formatDate, formatMesReferencia } from "@/utils/format";
@@ -43,6 +43,11 @@ const DOC_STYLES = `
   .coop-bloco h3 { font-family: system-ui, sans-serif; font-size: 14px; color: #374151; margin: 0 0 8px; font-weight: 700; }
   .assinatura { margin-top: 48px; display: grid; grid-template-columns: 1fr 1fr; gap: 40px; }
   .assinatura-linha { border-top: 1px solid #111; padding-top: 6px; font-family: system-ui, sans-serif; font-size: 12px; text-align: center; }
+  .assinatura-img { max-height: 72px; max-width: 220px; margin: 0 auto 8px; display: block; }
+  .emissor-box { font-family: system-ui, sans-serif; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 14px 16px; margin: 24px 0 8px; font-size: 13px; }
+  .emissor-box .rotulo { font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; color: #64748b; font-weight: 700; margin-bottom: 6px; }
+  .emissor-box .nome { font-weight: 700; color: #111; }
+  .emissor-box .detalhe { color: #475569; margin-top: 2px; }
   @media print {
     body { padding: 12mm; margin: 0; }
     .no-print { display: none !important; }
@@ -95,9 +100,11 @@ function documentoShell(
   body: string,
   data: AppData,
   mesReferencia: string,
-  cooperativaId?: string
+  cooperativaId?: string,
+  emissor?: EmissorRelatorio
 ): string {
   const gerado = formatDate(new Date().toISOString().split("T")[0]);
+  const emissorHtml = emissor ? blocoEmissorAssinatura(emissor) : "";
   return `<!DOCTYPE html>
 <html lang="pt-BR">
 <head>
@@ -109,6 +116,7 @@ function documentoShell(
 <body>
   ${cooperativaHeader(data, titulo, mesReferencia, cooperativaId)}
   ${body}
+  ${emissorHtml}
   <div class="footer">
     Documento gerado em ${gerado} · ${escapeHtml(PLATFORM_NAME)}<br/>
     Uso interno da cooperativa — conferir valores antes de arquivar ou encaminhar.
@@ -116,6 +124,29 @@ function documentoShell(
   <script class="no-print">window.onload=function(){/* opcional: window.print() */}</script>
 </body>
 </html>`;
+}
+
+function blocoEmissorAssinatura(emissor: EmissorRelatorio): string {
+  const dataEmissao = formatDate(emissor.emitidoEm.split("T")[0]);
+  const hora = new Date(emissor.emitidoEm).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
+  const assinaturaImg = emissor.assinaturaDataUrl
+    ? `<img class="assinatura-img" src="${emissor.assinaturaDataUrl}" alt="Assinatura" />`
+    : "";
+
+  return `
+    <div class="emissor-box">
+      <div class="rotulo">Responsável emissor</div>
+      <div class="nome">${escapeHtml(emissor.nome)}</div>
+      <div class="detalhe">${escapeHtml(emissor.funcao)}</div>
+      <div class="detalhe">Emitido em ${dataEmissao} às ${hora}</div>
+    </div>
+    <div class="assinatura">
+      <div>
+        ${assinaturaImg}
+        <div class="assinatura-linha">${escapeHtml(emissor.nome)}<br/>${escapeHtml(emissor.funcao)}</div>
+      </div>
+      <div><div class="assinatura-linha">Visto / conferência</div></div>
+    </div>`;
 }
 
 function statusLabel(status?: string): string {
@@ -137,7 +168,8 @@ function statusPagamentoLabel(s: string): string {
 export function gerarRelatorioFechamentoHtml(
   data: AppData,
   mesReferencia: string,
-  fechamento?: FechamentoMensal
+  fechamento?: FechamentoMensal,
+  emissor?: EmissorRelatorio
 ): string {
   const calc = calcularFechamentoMensalLive(mesReferencia, data);
 
@@ -203,14 +235,9 @@ export function gerarRelatorioFechamentoHtml(
         <th>Instituição</th><th class="num">Entregas</th><th class="num">Bruto</th><th class="num">Líquido</th>
       </tr></thead>
       <tbody>${linhasInst || `<tr><td colspan="4">Nenhuma entrega neste mês.</td></tr>`}</tbody>
-    </table>
+    </table>`;
 
-    <div class="assinatura">
-      <div><div class="assinatura-linha">Responsável pela revisão</div></div>
-      <div><div class="assinatura-linha">Tesoureiro</div></div>
-    </div>`;
-
-  return documentoShell("Fechamento mensal", body, data, mesReferencia);
+  return documentoShell("Fechamento mensal", body, data, mesReferencia, undefined, emissor);
 }
 
 function formatQuantidadeItem(quantidade: number, unidade: string): string {
@@ -222,7 +249,8 @@ export function gerarRelatorioEntregasPorItensHtml(
   data: AppData,
   mesReferencia: string,
   instituicaoId: string,
-  cooperativaId?: string
+  cooperativaId?: string,
+  emissor?: EmissorRelatorio
 ): string {
   const rel = getRelatorioEntregasPorItensInstituicao(mesReferencia, instituicaoId, data, cooperativaId);
   const coop = resolveCooperativa(data, cooperativaId);
@@ -312,23 +340,24 @@ export function gerarRelatorioEntregasPorItensHtml(
 
     <p class="carta" style="margin-top:32px;">
       ${escapeHtml(coop?.endereco ?? coop?.nome ?? PLATFORM_NAME)}, ${hoje}.
-    </p>
-
-    <div class="assinatura">
-      <div><div class="assinatura-linha">${escapeHtml(coop?.nome ?? PLATFORM_NAME)}</div></div>
-      <div><div class="assinatura-linha">Responsável</div></div>
-    </div>`;
+    </p>`;
 
   return documentoShell(
     `Entregas — ${rel.instituicaoNome}`,
     body,
     data,
     mesReferencia,
-    cooperativaId
+    cooperativaId,
+    emissor
   );
 }
 
-export function gerarRelatorioFinanceiroHtml(data: AppData, mesReferencia: string, tituloRelatorio: string): string {
+export function gerarRelatorioFinanceiroHtml(
+  data: AppData,
+  mesReferencia: string,
+  tituloRelatorio: string,
+  emissor?: EmissorRelatorio
+): string {
   const r = getResumoFinanceiroMes(mesReferencia, data);
   const calc = calcularFechamentoMensalLive(mesReferencia, data);
 
@@ -357,7 +386,7 @@ export function gerarRelatorioFinanceiroHtml(data: AppData, mesReferencia: strin
       <tfoot><tr><td colspan="2"><strong>Total</strong></td><td class="num"><strong>${formatCurrency(r.valoresAPagar)}</strong></td></tr></tfoot>
     </table>`;
 
-  return documentoShell(tituloRelatorio, body, data, mesReferencia);
+  return documentoShell(tituloRelatorio, body, data, mesReferencia, undefined, emissor);
 }
 
 export async function baixarDocumento(html: string, nomeArquivo: string): Promise<void> {

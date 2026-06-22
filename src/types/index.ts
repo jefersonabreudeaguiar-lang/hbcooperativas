@@ -2,6 +2,9 @@
 
 export type UserRole = "admin" | "tesoureiro" | "responsavel" | "cooperado";
 
+/** Total = perfil padrão da função; parcial = só o que estiver em permissoesExtras. */
+export type ModoAcesso = "total" | "parcial";
+
 export type CooperativaStatus = "ativa" | "inativa";
 
 export interface MensalidadeConfig {
@@ -69,6 +72,23 @@ export interface User {
   /** CNPJ informado no cadastro — garante envio à nuvem mesmo se ID local divergir. */
   cooperativaCnpj?: string;
   active: boolean;
+  /** Cargo/função exibida em relatórios e no perfil (ex.: Presidente, Tesoureiro). */
+  funcao?: string;
+  /** Conta principal criada no cadastro da cooperativa — pode gerenciar equipe. */
+  responsavelPrincipal?: boolean;
+  /** total = matriz da função; parcial = só permissoesExtras. */
+  modoAcesso?: ModoAcesso;
+  /** Acessos liberados quando modoAcesso = parcial. */
+  permissoesExtras?: Partial<Record<Resource, Action[]>>;
+  /** Restrições sobre a matriz padrão quando modoAcesso = total. */
+  permissoesNegadas?: Partial<Record<Resource, Action[]>>;
+}
+
+export interface EmissorRelatorio {
+  nome: string;
+  funcao: string;
+  emitidoEm: string;
+  assinaturaDataUrl?: string;
 }
 
 export interface Cooperado {

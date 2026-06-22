@@ -20,6 +20,7 @@ import {
 } from "@/services/cooperativaSyncCloudService";
 import { ensureMensalidadesDoMes } from "@/services/mensalidadeService";
 import { isDiretoriaRole } from "@/permissions";
+import { EquipeResponsaveisPanel } from "@/components/equipe/EquipeResponsaveisPanel";
 import type { Cooperativa, MensalidadeConfig } from "@/types";
 
 export default function MeuPerfilPage() {
@@ -250,6 +251,10 @@ export default function MeuPerfilPage() {
           </Button>
         )}
       </Card>
+
+      {coopId && (
+        <EquipeResponsaveisPanel cooperativaId={coopId} cooperativaCnpj={cooperativa.cnpj} />
+      )}
 
       <Card title="Mensalidade — configuração mensal">
         <p className="text-sm text-gray-500 mb-4">

@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import { Download, Printer, FileText } from "lucide-react";
 import { useAppData } from "@/hooks/useAppData";
 import { usePermissions } from "@/hooks/usePermissions";
@@ -28,6 +29,8 @@ import {
   imprimirDocumentoHtml,
   nomeArquivoRelatorio,
 } from "@/utils/relatorioHtml";
+import { ModalEmitirRelatorio } from "@/components/relatorios/ModalEmitirRelatorio";
+import type { EmissorRelatorio } from "@/types";
 import { formatCurrency, formatDate, formatMesReferencia, getCurrentMesReferencia } from "@/utils/format";
 import { getCooperadoNome } from "@/utils/calculations";
 import { labelUnidade } from "@/utils/unidades";
@@ -46,12 +49,20 @@ const RELATORIOS = [
 
 export default function RelatoriosPage() {
   const data = useAppData();
-  const { user } = usePermissions();
+  const { user, check } = usePermissions();
+  const router = useRouter();
   const coopId = user && data ? getUserCooperativaId(user, data) : undefined;
   const [tipo, setTipo] = useState("resumo_financeiro");
   const [mes, setMes] = useState(getCurrentMesReferencia());
   const [cooperadoId, setCooperadoId] = useState("");
   const [instituicaoId, setInstituicaoId] = useState("");
+  const [modalEmissao, setModalEmissao] = useState<"pdf" | "print" | null>(null);
+
+  useEffect(() => {
+    if (user && !check("relatorios", "view")) {
+      router.replace("/dashboard");
+    }
+  }, [user, router, check]);
 
   const meses = useMemo(() => {
     if (!data) return [getCurrentMesReferencia()];
@@ -74,14 +85,14 @@ export default function RelatoriosPage() {
     return "";
   };
 
-  const gerarHtmlDocumento = () => {
+  const gerarHtmlDocumento = (emissor?: EmissorRelatorio) => {
     if (!data) return "";
     if (tipo === "entregas_por_itens") {
       const inst = resolveInstituicaoId();
       if (!inst) return "";
-      return gerarRelatorioEntregasPorItensHtml(data, mes, inst, coopId);
+      return gerarRelatorioEntregasPorItensHtml(data, mes, inst, coopId, emissor);
     }
-    return gerarRelatorioFinanceiroHtml(data, mes, tituloRelatorio);
+    return gerarRelatorioFinanceiroHtml(data, mes, tituloRelatorio, emissor);
   };
 
   const nomeDocumento = () => {
@@ -224,19 +235,29 @@ export default function RelatoriosPage() {
     downloadCSV(`relatorio_${tipo}_${mes}.csv`, exportToCSV(headers, rows));
   };
 
-  const handleExportDocumento = () => {
-    const html = gerarHtmlDocumento();
+  const emitirDocumento = (emissor: EmissorRelatorio) => {
+    const html = gerarHtmlDocumento(emissor);
     if (!html) return;
-    void baixarDocumento(html, nomeDocumento());
+    if (modalEmissao === "print") {
+      imprimirDocumentoHtml(html);
+    } else {
+      void baixarDocumento(html, nomeDocumento());
+    }
+    setModalEmissao(null);
+  };
+
+  const handleExportDocumento = () => {
+    if (!check("relatorios", "export")) return;
+    setModalEmissao("pdf");
   };
 
   const handlePrint = () => {
-    const html = gerarHtmlDocumento();
-    if (!html) return;
-    imprimirDocumentoHtml(html);
+    if (!check("relatorios", "export")) return;
+    setModalEmissao("print");
   };
 
-  if (!data) return null;
+  if (!data || !user) return null;
+  if (!check("relatorios", "view")) return null;
 
   const renderRelatorio = () => {
     switch (tipo) {
@@ -528,6 +549,14 @@ export default function RelatoriosPage() {
       </FilterBar>
 
       <Card>{renderRelatorio()}</Card>
+
+      <ModalEmitirRelatorio
+        open={modalEmissao !== null}
+        onClose={() => setModalEmissao(null)}
+        onConfirm={emitirDocumento}
+        user={user}
+        titulo={modalEmissao === "print" ? "Imprimir relatório" : "Emitir PDF do relatório"}
+      />
     </div>
   );
 }

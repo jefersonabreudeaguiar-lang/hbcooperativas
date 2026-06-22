@@ -1,7 +1,7 @@
 "use client";
 
 import { useAuth } from "@/modules/auth/AuthProvider";
-import { can } from "@/permissions";
+import { canUser, canGerenciarEquipe, getUserFuncaoLabel } from "@/permissions";
 import type { Action, Resource } from "@/types";
 
 export function usePermissions() {
@@ -9,11 +9,13 @@ export function usePermissions() {
 
   const check = (resource: Resource, action: Action) => {
     if (!user) return false;
-    return can(user.role, resource, action);
+    return canUser(user, resource, action);
   };
 
   const isCooperado = user?.role === "cooperado";
   const cooperadoId = user?.cooperadoId;
+  const podeGerenciarEquipe = user ? canGerenciarEquipe(user) : false;
+  const funcaoLabel = user ? getUserFuncaoLabel(user) : "";
 
-  return { user, check, isCooperado, cooperadoId };
+  return { user, check, isCooperado, cooperadoId, podeGerenciarEquipe, funcaoLabel };
 }
