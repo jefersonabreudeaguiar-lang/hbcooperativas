@@ -1,9 +1,9 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { Save, CheckCircle2, Wallet } from "lucide-react";
+import { Save, CheckCircle2, Wallet, AlertCircle } from "lucide-react";
 import { useAppData } from "@/hooks/useAppData";
 import { useAuth } from "@/modules/auth/AuthProvider";
 import { useRouter } from "next/navigation";
@@ -15,8 +15,10 @@ import { Input, FormField } from "@/components/ui/Form";
 import { AlertBanner } from "@/components/ui/AlertBanner";
 import { updateData, addAuditEntry } from "@/services/dataStore";
 import { pushCooperadoToCloud } from "@/services/cooperadoCloudService";
+import { getMesQuantoVouReceber } from "@/services/cooperadoEntregasService";
+import { getStatusCotaCooperado } from "@/services/notaPedidoService";
 import { resolveCooperativaCnpj } from "@/services/notaPedidoCloudService";
-import { formatCPFCNPJ, formatPhone } from "@/utils/format";
+import { formatCPFCNPJ, formatPhone, formatMesReferencia, getCurrentMesReferencia } from "@/utils/format";
 import { getUserCooperativaId, getUserCooperativaNome } from "@/utils/cooperativa";
 import { cooperadoPrecisaCadastrarPix } from "@/utils/pix";
 
@@ -53,6 +55,19 @@ export default function MeuCadastroContent() {
 
     setChavePix(c.chavePix ?? "");
   }, [data, user?.cooperadoId]);
+
+  const coopId = user && data ? getUserCooperativaId(user, data) : undefined;
+  const cooperadoId = user?.cooperadoId;
+
+  const mesReferencia = useMemo(() => {
+    if (!data || !cooperadoId) return getCurrentMesReferencia();
+    return getMesQuantoVouReceber(data, cooperadoId, coopId);
+  }, [data, cooperadoId, coopId]);
+
+  const statusCota = useMemo(() => {
+    if (!data || !cooperadoId) return "nao_paga" as const;
+    return getStatusCotaCooperado(data, cooperadoId, mesReferencia);
+  }, [data, cooperadoId, mesReferencia]);
 
   if (!data || !user || user.role !== "cooperado" || !user.cooperadoId) return null;
 
@@ -111,6 +126,19 @@ export default function MeuCadastroContent() {
     <div className="max-w-2xl">
       <PageHeader title="Meu cadastro" subtitle="Seus dados e chave para receber pagamentos" />
 
+      {statusCota === "paga" ? (
+        <AlertBanner variant="success" className="mb-6" title="Cota paga">
+          <CheckCircle2 size={18} className="inline mr-1" />
+          Sua cota de ingresso está em dia · {formatMesReferencia(mesReferencia)}.
+        </AlertBanner>
+      ) : (
+        <AlertBanner variant="warning" className="mb-6" title="Cota pendente">
+          <AlertCircle size={18} className="inline mr-1" />
+          Sua cota de ingresso ainda não está quitada. Regularize com a cooperativa ou consulte em{" "}
+          <Link href="/cotas" className="font-semibold underline">Cotas</Link>.
+        </AlertBanner>
+      )}
+
       {(precisaPix || isNovo) && (
         <AlertBanner variant="warning" title="Informe onde quer receber" className="mb-6">
           {cooperado.pixInvalidoMotivo ?? "Cadastre sua chave PIX para a cooperativa poder pagar você."}
@@ -153,6 +181,18 @@ export default function MeuCadastroContent() {
             ["CPF/CNPJ", formatCPFCNPJ(cooperado.cpfCnpj)],
             ["Telefone", formatPhone(cooperado.telefone)],
             ["Comunidade", cooperado.comunidade],
+            [
+              "Cota de ingresso",
+              statusCota === "paga" ? (
+                <span className="inline-flex items-center gap-1 text-green-700 font-medium">
+                  <CheckCircle2 size={14} /> Paga
+                </span>
+              ) : (
+                <span className="inline-flex items-center gap-1 text-red-600 font-semibold">
+                  <AlertCircle size={14} /> Pendente
+                </span>
+              ),
+            ],
             ["Status", <StatusBadge key="s" status={cooperado.status} />],
           ].map(([label, value]) => (
             <div key={String(label)} className="py-2 border-b border-gray-100">
