@@ -3,6 +3,7 @@ import { getSupabaseAdmin, isSupabaseConfigured } from "@/lib/supabase/admin";
 import { getSupabasePublic, isSupabasePublicConfigured } from "@/lib/supabase/public";
 import { isCooperativasTableMissing } from "@/lib/supabase/errors";
 import { normalizeCnpj } from "@/utils/cooperativa";
+import { exigeSenhaCadastroCooperado, mensalidadeConfigSemSenhaCadastro } from "@/utils/cooperativaCadastro";
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
@@ -46,5 +47,12 @@ export async function GET(request: Request) {
     return NextResponse.json({ found: false }, { status: 404 });
   }
 
-  return NextResponse.json({ found: true, cooperativa: data });
+  const cfg = data.mensalidade_config as Record<string, unknown> | null;
+  const exigeSenha = exigeSenhaCadastroCooperado(undefined, cfg);
+  const cooperativaPublica = {
+    ...data,
+    mensalidade_config: mensalidadeConfigSemSenhaCadastro(cfg) ?? null,
+  };
+
+  return NextResponse.json({ found: true, cooperativa: cooperativaPublica, exigeSenhaCadastro: exigeSenha });
 }

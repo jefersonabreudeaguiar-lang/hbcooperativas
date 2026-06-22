@@ -8,12 +8,14 @@ import { ensureMensalidadesDoMes, ensureMensalidadeCooperado, atualizarStatusMen
 import { applyOperationalResetIfNeeded, clearOperationalData } from "@/services/operationalReset";
 import {
   fetchCooperativaByCnpjFromCloud,
-  registerCooperativaInCloud,
   mergeCooperativaIntoData,
+  registerCooperativaInCloud,
   syncCooperativaToCloud,
+  verifyCadastroSenhaCooperado,
 } from "@/services/cooperativaCloudService";
 import { pushCooperadoToCloud } from "@/services/cooperadoCloudService";
 import { reconciliarFichaFromNotasConferidas, ajustesFichaMesId } from "@/services/notaPedidoService";
+import { exigeSenhaCadastroCooperado } from "@/utils/cooperativaCadastro";
 
 const STORAGE_KEY = "coopeagriplla_data";
 const SESSION_KEY = "coopeagriplla_session";
@@ -464,6 +466,8 @@ export interface RegisterCooperadoInput {
   cpfCnpj?: string;
   telefone?: string;
   comunidade?: string;
+  /** Senha definida pela cooperativa para liberar o auto-cadastro. */
+  senhaCadastroCooperado?: string;
 }
 
 export type RegisterResult =
@@ -482,20 +486,43 @@ export function lookupCooperativaByCnpj(cnpj: string): Pick<Cooperativa, "id" | 
 /** Consulta local + nuvem; sincroniza cooperativa encontrada na nuvem para este dispositivo. */
 export async function lookupCooperativaByCnpjAsync(
   cnpj: string
-): Promise<Pick<Cooperativa, "id" | "nome" | "cnpj"> | null> {
+): Promise<(Pick<Cooperativa, "id" | "nome" | "cnpj"> & { exigeSenhaCadastro?: boolean }) | null> {
   const digits = normalizeCnpj(cnpj);
   const local = lookupCooperativaByCnpj(digits);
-  if (local) return local;
+  if (local) {
+    const data = loadData(true);
+    const coop = findCooperativaByCnpj(data, digits);
+    return {
+      ...local,
+      exigeSenhaCadastro: exigeSenhaCadastroCooperado(coop ?? undefined),
+    };
+  }
 
-  const cloud = await fetchCooperativaByCnpjFromCloud(digits);
-  if (!cloud) return null;
+  try {
+    const res = await fetch(`/api/cooperativas/lookup?cnpj=${digits}`, { cache: "no-store" });
+    if (res.status === 404) return null;
+    if (!res.ok) return null;
+    const json = await res.json();
+    if (!json.found || !json.cooperativa) return null;
 
-  updateData((d) => ({
-    ...d,
-    cooperativas: mergeCooperativaIntoData(d.cooperativas, cloud),
-  }));
+    const cloud = await fetchCooperativaByCnpjFromCloud(digits);
+    if (cloud) {
+      updateData((d) => ({
+        ...d,
+        cooperativas: mergeCooperativaIntoData(d.cooperativas, cloud),
+      }));
+    }
 
-  return { id: cloud.id, nome: cloud.nome, cnpj: cloud.cnpj };
+    const row = json.cooperativa as Record<string, unknown>;
+    return {
+      id: String(row.id),
+      nome: String(row.nome),
+      cnpj: normalizeCnpj(String(row.cnpj)),
+      exigeSenhaCadastro: Boolean(json.exigeSenhaCadastro),
+    };
+  } catch {
+    return null;
+  }
 }
 
 function remapCooperativaId(data: AppData, oldId: string, newId: string): AppData {
@@ -599,6 +626,15 @@ export async function registerCooperado(input: RegisterCooperadoInput): Promise<
     };
   }
 
+  const senhaGate = await validarSenhaCadastroCooperado(
+    cnpjCoop,
+    cooperativa,
+    input.senhaCadastroCooperado
+  );
+  if (!senhaGate.ok) {
+    return { success: false, error: senhaGate.error };
+  }
+
   if (data.users.some((u) => u.email.toLowerCase() === email)) {
     return { success: false, error: "Este e-mail já está cadastrado." };
   }
@@ -680,6 +716,40 @@ export interface RegisterCooperativaInput {
   password: string;
   telefone?: string;
   endereco?: string;
+  senhaCadastroCooperado?: string;
+}
+
+async function validarSenhaCadastroCooperado(
+  cnpj: string,
+  cooperativa: Cooperativa,
+  senhaInformada?: string
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const localExige = exigeSenhaCadastroCooperado(cooperativa);
+  const check = await verifyCadastroSenhaCooperado(cnpj, senhaInformada ?? "");
+  const exige = localExige || (check.configured && check.required);
+
+  if (!exige) return { ok: true };
+
+  const senha = senhaInformada?.trim() ?? "";
+  if (!senha) {
+    return {
+      ok: false,
+      error: "Esta cooperativa exige a senha de cadastro. Solicite à diretoria.",
+    };
+  }
+
+  if (cooperativa.senhaCadastroCooperado?.trim()) {
+    if (senha !== cooperativa.senhaCadastroCooperado.trim()) {
+      return { ok: false, error: "Senha da cooperativa incorreta." };
+    }
+    return { ok: true };
+  }
+
+  if (check.configured && check.required && !check.valid) {
+    return { ok: false, error: "Senha da cooperativa incorreta." };
+  }
+
+  return { ok: true };
 }
 
 /** Cadastro público da cooperativa pelo responsável (diretoria). */
@@ -719,6 +789,7 @@ export async function registerCooperativa(input: RegisterCooperativaInput): Prom
     email,
     telefone: input.telefone,
     endereco: input.endereco,
+    senhaCadastroCooperado: input.senhaCadastroCooperado?.trim() || undefined,
   });
 
   if (!cloudResult.success) {
@@ -729,7 +800,10 @@ export async function registerCooperativa(input: RegisterCooperativaInput): Prom
   }
 
   const now = new Date().toISOString();
-  const cooperativa = cloudResult.cooperativa;
+  const cooperativa = {
+    ...cloudResult.cooperativa,
+    senhaCadastroCooperado: input.senhaCadastroCooperado?.trim() || undefined,
+  };
   const cooperativaId = cooperativa.id;
 
   if (data.cooperativas.some((c) => normalizeCnpj(c.cnpj) === cnpj && c.id !== cooperativaId)) {

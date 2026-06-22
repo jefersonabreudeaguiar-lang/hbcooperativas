@@ -26,6 +26,8 @@ export default function CadastroPage() {
   const [cooperativaCnpj, setCooperativaCnpj] = useState("");
   const [cooperativaNome, setCooperativaNome] = useState<string | null>(null);
   const [cooperativaValida, setCooperativaValida] = useState<boolean | null>(null);
+  const [exigeSenhaCadastro, setExigeSenhaCadastro] = useState(false);
+  const [senhaCooperativa, setSenhaCooperativa] = useState("");
   const [cpfCnpj, setCpfCnpj] = useState("");
   const [telefone, setTelefone] = useState("");
   const [comunidade, setComunidade] = useState("");
@@ -41,6 +43,7 @@ export default function CadastroPage() {
   const [enderecoCoop, setEnderecoCoop] = useState("");
   const [passwordResp, setPasswordResp] = useState("");
   const [confirmPasswordResp, setConfirmPasswordResp] = useState("");
+  const [senhaCadastroCooperado, setSenhaCadastroCooperado] = useState("");
 
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState("");
@@ -70,6 +73,7 @@ export default function CadastroPage() {
     if (digits.length < 14) {
       setCooperativaNome(null);
       setCooperativaValida(digits.length === 0 ? null : false);
+      setExigeSenhaCadastro(false);
       return;
     }
     setValidandoCnpj(true);
@@ -79,9 +83,11 @@ export default function CadastroPage() {
       if (coop) {
         setCooperativaNome(coop.nome);
         setCooperativaValida(true);
+        setExigeSenhaCadastro(!!coop.exigeSenhaCadastro);
       } else {
         setCooperativaNome(null);
         setCooperativaValida(false);
+        setExigeSenhaCadastro(false);
         if (cloudStatus === "ok") {
           setLookupError("Este CNPJ ainda não foi cadastrado na nuvem. A diretoria precisa concluir o cadastro em Sou Responsável.");
         }
@@ -113,6 +119,10 @@ export default function CadastroPage() {
       setError("Informe o CNPJ de uma cooperativa já cadastrada pela diretoria.");
       return;
     }
+    if (exigeSenhaCadastro && !senhaCooperativa.trim()) {
+      setError("Informe a senha de cadastro fornecida pela cooperativa.");
+      return;
+    }
 
     setLoading(true);
     const result = await register({
@@ -123,6 +133,7 @@ export default function CadastroPage() {
       cpfCnpj,
       telefone,
       comunidade,
+      senhaCadastroCooperado: senhaCooperativa.trim() || undefined,
     });
     setLoading(false);
 
@@ -159,6 +170,7 @@ export default function CadastroPage() {
       password: passwordResp,
       telefone: telefoneCoop,
       endereco: enderecoCoop,
+      senhaCadastroCooperado: senhaCadastroCooperado.trim() || undefined,
     });
     setLoading(false);
 
@@ -334,6 +346,23 @@ export default function CadastroPage() {
                         )}
                       </div>
 
+                      {exigeSenhaCadastro && cooperativaValida && (
+                        <div>
+                          <Label htmlFor="senhaCooperativa">Senha de cadastro da cooperativa</Label>
+                          <Input
+                            id="senhaCooperativa"
+                            type="password"
+                            value={senhaCooperativa}
+                            onChange={(e) => setSenhaCooperativa(e.target.value)}
+                            placeholder="Fornecida pela diretoria"
+                            required
+                          />
+                          <p className="text-xs text-gray-500 mt-1">
+                            Somente cooperados autorizados conseguem se cadastrar com esta senha.
+                          </p>
+                        </div>
+                      )}
+
                       <div>
                         <Label htmlFor="nome">Nome completo</Label>
                         <Input id="nome" value={nomeCompleto} onChange={(e) => setNomeCompleto(e.target.value)} required />
@@ -417,7 +446,7 @@ export default function CadastroPage() {
                         </div>
                       </div>
                       <div>
-                        <Label htmlFor="passwordResp">Senha de acesso</Label>
+                        <Label htmlFor="passwordResp">Senha de acesso (sua conta)</Label>
                         <div className="relative">
                           <Input
                             id="passwordResp"
@@ -433,8 +462,21 @@ export default function CadastroPage() {
                         </div>
                       </div>
                       <div>
-                        <Label htmlFor="confirmPasswordResp">Confirmar senha</Label>
+                        <Label htmlFor="confirmPasswordResp">Confirmar senha de acesso</Label>
                         <Input id="confirmPasswordResp" type="password" value={confirmPasswordResp} onChange={(e) => setConfirmPasswordResp(e.target.value)} minLength={6} required />
+                      </div>
+                      <div>
+                        <Label htmlFor="senhaCadastroCooperado">Senha para cooperados se cadastrarem (opcional)</Label>
+                        <Input
+                          id="senhaCadastroCooperado"
+                          type="password"
+                          value={senhaCadastroCooperado}
+                          onChange={(e) => setSenhaCadastroCooperado(e.target.value)}
+                          placeholder="Deixe em branco para cadastro livre pelo CNPJ"
+                        />
+                        <p className="text-xs text-gray-500 mt-1">
+                          Se definir, o cooperado precisará informar esta senha ao criar a conta no portal.
+                        </p>
                       </div>
 
                       <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg text-xs text-amber-900">

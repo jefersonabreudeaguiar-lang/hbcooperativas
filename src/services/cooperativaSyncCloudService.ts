@@ -330,6 +330,7 @@ export async function pushCooperativaProfileToCloud(cooperativa: Cooperativa): P
         responsavel: cooperativa.responsavel,
         email: cooperativa.email,
         mensalidadeConfig: cooperativa.mensalidadeConfig,
+        senhaCadastroCooperado: cooperativa.senhaCadastroCooperado,
       }),
     });
   } catch {

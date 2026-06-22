@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getSupabaseAdmin, isSupabaseConfigured } from "@/lib/supabase/admin";
 import { normalizeCnpj } from "@/utils/cooperativa";
 import type { Cooperativa, MensalidadeConfig } from "@/types";
+import { cooperativaFromCloudRow, exigeSenhaCadastroCooperado, mensalidadeConfigComSenhaCadastro, mensalidadeConfigSemSenhaCadastro } from "@/utils/cooperativaCadastro";
 
 export async function PATCH(
   request: Request,
@@ -36,6 +37,22 @@ export async function PATCH(
   if (body.mensalidadeConfig != null) {
     patch.mensalidade_config = body.mensalidadeConfig as MensalidadeConfig;
   }
+  if (body.senhaCadastroCooperado !== undefined) {
+    const { data: atual } = await supabase
+      .from("cooperativas")
+      .select("mensalidade_config")
+      .eq("cnpj", cnpj)
+      .maybeSingle();
+    const atualCfg = (atual?.mensalidade_config as MensalidadeConfig | null) ?? undefined;
+    const mergedCfg =
+      body.mensalidadeConfig != null
+        ? (body.mensalidadeConfig as MensalidadeConfig)
+        : atualCfg;
+    patch.mensalidade_config = mensalidadeConfigComSenhaCadastro(
+      mergedCfg,
+      String(body.senhaCadastroCooperado ?? "").trim() || undefined
+    );
+  }
 
   if (Object.keys(patch).length === 0) {
     return NextResponse.json({ error: "Nada para atualizar." }, { status: 400 });
@@ -58,19 +75,7 @@ export async function PATCH(
   }
 
   const row = data as Record<string, unknown>;
-  const cooperativa: Cooperativa = {
-    id: String(row.id),
-    nome: String(row.nome),
-    cnpj: normalizeCnpj(String(row.cnpj)),
-    endereco: String(row.endereco ?? ""),
-    telefone: String(row.telefone ?? ""),
-    responsavel: String(row.responsavel ?? ""),
-    email: String(row.email ?? ""),
-    status: (row.status as Cooperativa["status"]) ?? "ativa",
-    mensalidadeConfig: (row.mensalidade_config as MensalidadeConfig | null) ?? undefined,
-    createdAt: String(row.created_at ?? new Date().toISOString()),
-    updatedAt: String(row.updated_at ?? new Date().toISOString()),
-  };
+  const cooperativa = cooperativaFromCloudRow(row);
 
   return NextResponse.json({ success: true, cooperativa });
 }

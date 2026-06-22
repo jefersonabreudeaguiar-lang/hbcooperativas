@@ -1,23 +1,12 @@
 import type { Cooperativa, MensalidadeConfig } from "@/types";
 import { normalizeCnpj } from "@/utils/cooperativa";
+import { cooperativaFromCloudRow, exigeSenhaCadastroCooperado, mensalidadeConfigComSenhaCadastro } from "@/utils/cooperativaCadastro";
 
 export type CloudCooperativa = Pick<Cooperativa, "id" | "nome" | "cnpj"> & Partial<Cooperativa>;
 
 function mapCloudRow(row: Record<string, unknown>): Cooperativa {
-  const mensalidadeRaw = row.mensalidade_config as MensalidadeConfig | null | undefined;
-  return {
-    id: String(row.id),
-    nome: String(row.nome),
-    cnpj: normalizeCnpj(String(row.cnpj)),
-    endereco: String(row.endereco ?? ""),
-    telefone: String(row.telefone ?? ""),
-    responsavel: String(row.responsavel ?? ""),
-    email: String(row.email ?? ""),
-    status: (row.status as Cooperativa["status"]) ?? "ativa",
-    mensalidadeConfig: mensalidadeRaw ?? undefined,
-    createdAt: String(row.created_at ?? new Date().toISOString()),
-    updatedAt: String(row.updated_at ?? new Date().toISOString()),
-  };
+  const coop = cooperativaFromCloudRow(row);
+  return { ...coop, cnpj: normalizeCnpj(coop.cnpj) };
 }
 
 export type CloudStatus = "ok" | "not_configured" | "migration_pending" | "error";
@@ -72,6 +61,32 @@ export interface RegisterCooperativaCloudInput {
   email: string;
   telefone?: string;
   endereco?: string;
+  senhaCadastroCooperado?: string;
+}
+
+export async function verifyCadastroSenhaCooperado(
+  cnpj: string,
+  senha: string
+): Promise<{ valid: boolean; configured: boolean; required: boolean }> {
+  const digits = normalizeCnpj(cnpj);
+  if (digits.length !== 14) return { valid: false, configured: true, required: false };
+
+  try {
+    const res = await fetch("/api/cooperativas/verify-cadastro-senha", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ cnpj: digits, senha }),
+    });
+    const json = await res.json().catch(() => ({}));
+    if (res.status === 503) return { valid: false, configured: false, required: false };
+    return {
+      valid: Boolean(json.valid),
+      configured: json.configured !== false,
+      required: Boolean(json.required),
+    };
+  } catch {
+    return { valid: false, configured: false, required: false };
+  }
 }
 
 export async function registerCooperativaInCloud(

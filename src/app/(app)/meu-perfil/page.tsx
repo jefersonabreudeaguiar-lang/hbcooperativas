@@ -141,6 +141,7 @@ export default function MeuPerfilPage() {
                   gerarAutomaticamente:
                     mensCfg.gerarAutomaticamente ?? (Number(mensCfg.valorPadrao) > 0),
                 },
+                senhaCadastroCooperado: form.senhaCadastroCooperado?.trim() || undefined,
                 updatedAt: now,
               }
             : c
@@ -248,6 +249,29 @@ export default function MeuPerfilPage() {
         {canEdit && (
           <Button className="mt-6" onClick={handleSave}>
             <Save size={18} /> {saved ? "Salvo!" : "Salvar alterações"}
+          </Button>
+        )}
+      </Card>
+
+      <Card title="Cadastro de cooperados no portal" className="mb-6">
+        <p className="text-sm text-gray-500 mb-4">
+          Opcional: exija uma senha para que apenas cooperados autorizados criem conta informando o CNPJ.
+        </p>
+        <FormField
+          label="Senha para cooperados se cadastrarem"
+          hint="Deixe em branco para permitir cadastro livre. Preencha para restringir."
+        >
+          <Input
+            type="password"
+            value={form.senhaCadastroCooperado ?? ""}
+            onChange={(e) => setForm({ ...form, senhaCadastroCooperado: e.target.value })}
+            disabled={!canEdit}
+            placeholder="Opcional"
+          />
+        </FormField>
+        {canEdit && (
+          <Button className="mt-4" variant="secondary" onClick={handleSave}>
+            <Save size={18} /> {saved ? "Salvo!" : "Salvar senha de cadastro"}
           </Button>
         )}
       </Card>

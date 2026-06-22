@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getSupabaseAdmin, isSupabaseConfigured } from "@/lib/supabase/admin";
 import { isCooperativasTableMissing } from "@/lib/supabase/errors";
 import { normalizeCnpj } from "@/utils/cooperativa";
+import { exigeSenhaCadastroCooperado, mensalidadeConfigComSenhaCadastro, mensalidadeConfigSemSenhaCadastro } from "@/utils/cooperativaCadastro";
 
 export async function POST(request: Request) {
   if (!isSupabaseConfigured()) {
@@ -22,6 +23,7 @@ export async function POST(request: Request) {
   const cnpj = normalizeCnpj(String(body.cnpj ?? ""));
   const telefone = String(body.telefone ?? "").trim();
   const endereco = String(body.endereco ?? "").trim();
+  const senhaCadastroCooperado = String(body.senhaCadastroCooperado ?? "").trim();
 
   if (!nome) return NextResponse.json({ error: "Informe o nome da cooperativa." }, { status: 400 });
   if (cnpj.length !== 14) return NextResponse.json({ error: "CNPJ inválido." }, { status: 400 });
@@ -55,8 +57,11 @@ export async function POST(request: Request) {
       telefone,
       endereco,
       status: "ativa",
+      mensalidade_config: senhaCadastroCooperado
+        ? mensalidadeConfigComSenhaCadastro(undefined, senhaCadastroCooperado)
+        : null,
     })
-    .select("id, nome, cnpj, endereco, telefone, responsavel, email, status, created_at, updated_at")
+    .select("id, nome, cnpj, endereco, telefone, responsavel, email, status, mensalidade_config, created_at, updated_at")
     .single();
 
   if (error) {

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { Save, CheckCircle2, Wallet } from "lucide-react";
@@ -30,6 +30,8 @@ export default function MeuCadastroContent() {
   const [chavePix, setChavePix] = useState("");
   const [saved, setSaved] = useState(false);
   const [pixError, setPixError] = useState("");
+  const pixDirtyRef = useRef(false);
+  const loadedForCooperadoRef = useRef<string | null>(null);
 
   useEffect(() => {
     if (user && (user.role !== "cooperado" || !user.cooperadoId)) router.replace("/dashboard");
@@ -38,7 +40,18 @@ export default function MeuCadastroContent() {
   useEffect(() => {
     if (!data || !user?.cooperadoId) return;
     const c = data.cooperados.find((x) => x.id === user.cooperadoId);
-    if (c) setChavePix(c.chavePix ?? "");
+    if (!c) return;
+
+    if (loadedForCooperadoRef.current !== user.cooperadoId) {
+      loadedForCooperadoRef.current = user.cooperadoId;
+      pixDirtyRef.current = false;
+      setChavePix(c.chavePix ?? "");
+      return;
+    }
+
+    if (pixDirtyRef.current) return;
+
+    setChavePix(c.chavePix ?? "");
   }, [data, user?.cooperadoId]);
 
   if (!data || !user || user.role !== "cooperado" || !user.cooperadoId) return null;
@@ -85,6 +98,7 @@ export default function MeuCadastroContent() {
     const cnpj = await resolveCooperativaCnpj(data, coopId, user);
     if (cnpj) void pushCooperadoToCloud(cnpj, cooperadoAtualizado, user.email);
 
+    pixDirtyRef.current = false;
     setSaved(true);
     if (isNovo) {
       router.replace("/notas-pedido?anexar=1");
@@ -116,7 +130,15 @@ export default function MeuCadastroContent() {
           error={pixError}
           hint="Pode ser CPF, celular (com DDD), e-mail ou chave aleatória do seu banco."
         >
-          <Input value={chavePix} onChange={(e) => { setChavePix(e.target.value); setPixError(""); }} placeholder="Ex: 11999998888 ou seu@email.com" />
+          <Input
+            value={chavePix}
+            onChange={(e) => {
+              pixDirtyRef.current = true;
+              setChavePix(e.target.value);
+              setPixError("");
+            }}
+            placeholder="Ex: 11999998888 ou seu@email.com"
+          />
         </FormField>
         <Button className="mt-4 w-full sm:w-auto" size="lg" onClick={handleSavePix}>
           <Save size={18} /> {saved ? "Salvo com sucesso!" : "Salvar minha chave PIX"}

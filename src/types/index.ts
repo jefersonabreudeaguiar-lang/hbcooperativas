@@ -17,6 +17,8 @@ export interface MensalidadeConfig {
   lembreteTexto?: string;
   /** Cria mensalidades pendentes para todos os cooperados ativos todo mês. */
   gerarAutomaticamente?: boolean;
+  /** Armazenado na nuvem — senha exigida no cadastro de cooperados (opcional). */
+  senhaCadastroCooperado?: string;
 }
 
 export interface Cooperativa {
@@ -29,6 +31,8 @@ export interface Cooperativa {
   email?: string;
   status: CooperativaStatus;
   mensalidadeConfig?: MensalidadeConfig;
+  /** Senha opcional que o cooperado deve informar no auto-cadastro pelo CNPJ. */
+  senhaCadastroCooperado?: string;
   createdAt: string;
   updatedAt: string;
 }
