@@ -83,7 +83,7 @@ export function PwaProvider() {
                 : "Adicione o app à tela inicial para abrir como atalho, sem precisar do navegador."}
             </p>
             {!iosHint && deferredPrompt && (
-              <Button size="sm" className="mt-3 bg-white text-green-900 hover:bg-green-50" onClick={install}>
+              <Button size="sm" variant="inverse" className="mt-3 font-semibold" onClick={install}>
                 Instalar app
               </Button>
             )}

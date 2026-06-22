@@ -2,7 +2,7 @@ import { cn } from "@/utils/format";
 import type { ButtonHTMLAttributes, ReactNode } from "react";
 
 interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
-  variant?: "primary" | "secondary" | "danger" | "ghost" | "gold";
+  variant?: "primary" | "secondary" | "danger" | "ghost" | "gold" | "inverse";
   size?: "sm" | "md" | "lg";
   children: ReactNode;
 }
@@ -13,6 +13,7 @@ const VARIANTS = {
   danger: "bg-red-600 hover:bg-red-700 text-white",
   ghost: "bg-transparent hover:bg-gray-100 text-gray-600",
   gold: "bg-amber-500 hover:bg-amber-600 text-white",
+  inverse: "bg-white hover:bg-green-50 text-green-900 border border-green-200",
 };
 
 const SIZES = {
