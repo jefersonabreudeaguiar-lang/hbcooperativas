@@ -195,3 +195,38 @@ export async function deleteNotaFromTable(
   }
   return { ok: true };
 }
+
+export async function deleteAllNotasForCnpj(
+  supabase: SupabaseClient,
+  cnpj: string
+): Promise<{ removed: number; tableMissing: boolean }> {
+  const digits = cnpj.replace(/\D/g, "");
+  let removed = 0;
+
+  await ensureEntregasBucket(supabase);
+  const { data: files } = await supabase.storage.from(BUCKET).list(digits, { limit: 1000 });
+  if (files?.length) {
+    const paths = files
+      .filter((file) => file.name.endsWith(".json"))
+      .map((file) => `${digits}/${file.name}`);
+    if (paths.length) {
+      const { error } = await supabase.storage.from(BUCKET).remove(paths);
+      if (!error) removed += paths.length;
+    }
+  }
+
+  const { error, count } = await supabase
+    .from("notas_pedido")
+    .delete({ count: "exact" })
+    .eq("cooperativa_cnpj", digits);
+
+  if (error) {
+    if (isNotasPedidoTableMissing(error)) {
+      return { removed, tableMissing: true };
+    }
+    console.error("[notas-pedido/delete-all]", error.message);
+    return { removed, tableMissing: false };
+  }
+
+  return { removed: removed + (count ?? 0), tableMissing: false };
+}

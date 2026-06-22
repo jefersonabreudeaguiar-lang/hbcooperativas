@@ -7,7 +7,8 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "generate:pwa-icons": "node scripts/generate-pwa-icons.mjs"
+    "generate:pwa-icons": "node scripts/generate-pwa-icons.mjs",
+    "reset:operacional": "node scripts/reset-operacional-cloud.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.108.2",
@@ -30,6 +31,7 @@
     "eslint-config-next": "16.2.9",
     "sharp": "^0.34.5",
     "tailwindcss": "^4",
-    "typescript": "^5"
+    "typescript": "^5",
+    "ws": "^8.21.0"
   }
 }

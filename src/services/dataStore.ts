@@ -5,6 +5,7 @@ import { emptyInitialData, DEMO_ENTITY_IDS, DEMO_EMAILS, DEMO_CNPJ } from "@/moc
 import { findCooperativaByCnpj, getCooperativaById, getUserCooperativaId, normalizeCnpj } from "@/utils/cooperativa";
 import { compactarFotosNoArmazenamento } from "@/utils/fotoEntrega";
 import { ensureMensalidadesDoMes, ensureMensalidadeCooperado, atualizarStatusMensalidades } from "@/services/mensalidadeService";
+import { applyOperationalResetIfNeeded, clearOperationalData } from "@/services/operationalReset";
 import {
   fetchCooperativaByCnpjFromCloud,
   registerCooperativaInCloud,
@@ -228,11 +229,18 @@ function loadData(forceReload = false): AppData {
 
   try {
     let data = migrateData(JSON.parse(stored));
+    const reset = applyOperationalResetIfNeeded(data);
+    data = reset.data;
 
     // Persiste limpeza de dados demo uma única vez
     if (!localStorage.getItem(DEMO_PURGED_KEY)) {
       saveData(data);
       localStorage.setItem(DEMO_PURGED_KEY, "1");
+      return data;
+    }
+
+    if (reset.changed) {
+      saveData(data);
       return data;
     }
 
@@ -283,6 +291,16 @@ export function resetData(): void {
   if (typeof window === "undefined") return;
   memoryCache = emptyInitialData;
   localStorage.setItem(STORAGE_KEY, JSON.stringify(emptyInitialData));
+  notify();
+}
+
+/** Zera lançamentos (entregas, fichas, pagamentos) mantendo cadastros e contratos. */
+export function resetOperationalData(): void {
+  if (typeof window === "undefined") return;
+  const current = loadData();
+  const cleared = clearOperationalData(current);
+  memoryCache = cleared;
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(cleared));
   notify();
 }
 
