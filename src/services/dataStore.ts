@@ -746,7 +746,7 @@ async function validarSenhaCadastroCooperado(
   }
 
   if (check.configured && check.required && !check.valid) {
-    return { ok: false, error: "Senha da cooperativa incorreta." };
+    return { ok: false, error: "Senha de acesso ao cadastro incorreta." };
   }
 
   return { ok: true };
