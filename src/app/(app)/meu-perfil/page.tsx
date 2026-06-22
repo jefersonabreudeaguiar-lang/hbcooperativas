@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Save, Building2 } from "lucide-react";
+import { Save, Building2, Eye, EyeOff, Trash2 } from "lucide-react";
 import { useAppData } from "@/hooks/useAppData";
 import { usePermissions } from "@/hooks/usePermissions";
 import { getUserCooperativaId, getCooperativaById, formatCnpj } from "@/utils/cooperativa";
@@ -21,6 +21,7 @@ import {
 import { ensureMensalidadesDoMes } from "@/services/mensalidadeService";
 import { isDiretoriaRole } from "@/permissions";
 import { EquipeResponsaveisPanel } from "@/components/equipe/EquipeResponsaveisPanel";
+import { exigeSenhaCadastroCooperado } from "@/utils/cooperativaCadastro";
 import type { Cooperativa, MensalidadeConfig } from "@/types";
 
 export default function MeuPerfilPage() {
@@ -40,6 +41,7 @@ export default function MeuPerfilPage() {
   const [cloudSynced, setCloudSynced] = useState<boolean | null>(null);
   const [cloudSyncError, setCloudSyncError] = useState("");
   const [cloudJustPublished, setCloudJustPublished] = useState(false);
+  const [showSenhaCadastro, setShowSenhaCadastro] = useState(false);
 
   const coopId = user && data ? getUserCooperativaId(user, data) : undefined;
   const cooperativa = data && coopId ? getCooperativaById(data, coopId) : undefined;
@@ -117,6 +119,19 @@ export default function MeuPerfilPage() {
   }
 
   const canEdit = check("cooperativas", "edit");
+  const senhaCadastroAtiva = exigeSenhaCadastroCooperado({
+    senhaCadastroCooperado: form.senhaCadastroCooperado ?? cooperativa.senhaCadastroCooperado,
+  });
+
+  const pushPerfilParaNuvem = async () => {
+    const d = getData();
+    const cnpj = await resolveCooperativaCnpj(d, coopId!, user!);
+    const coop = d.cooperativas.find((c) => c.id === coopId);
+    if (cnpj && coop) {
+      await pushCooperativaProfileToCloud(coop);
+      await pushOperacionalToCloud(cnpj, d, coopId!);
+    }
+  };
 
   const handleSave = () => {
     if (!user || !coopId || !form.nome) return;
@@ -158,15 +173,39 @@ export default function MeuPerfilPage() {
       const withMens = ensureMensalidadesDoMes(updated);
       return withMens ?? updated;
     });
-    void (async () => {
-      const d = getData();
-      const cnpj = await resolveCooperativaCnpj(d, coopId, user);
-      const coop = d.cooperativas.find((c) => c.id === coopId);
-      if (cnpj && coop) {
-        await pushCooperativaProfileToCloud(coop);
-        await pushOperacionalToCloud(cnpj, d, coopId);
-      }
-    })();
+    void pushPerfilParaNuvem();
+    setSaved(true);
+    setTimeout(() => setSaved(false), 3000);
+  };
+
+  const handleRemoverSenhaCadastro = () => {
+    if (!user || !coopId || !form.nome) return;
+    const now = new Date().toISOString();
+    setForm((f) => ({ ...f, senhaCadastroCooperado: undefined }));
+    updateData((d) => {
+      let updated = {
+        ...d,
+        cooperativas: d.cooperativas.map((c) =>
+          c.id === coopId
+            ? {
+                ...c,
+                senhaCadastroCooperado: undefined,
+                updatedAt: now,
+              }
+            : c
+        ),
+      };
+      updated = addAuditEntry(updated, {
+        entityType: "cooperativa",
+        entityId: coopId,
+        action: "editar",
+        userId: user.id,
+        userName: user.name,
+        changes: "Senha de cadastro de cooperados removida — cadastro livre pelo CNPJ",
+      });
+      return updated;
+    });
+    void pushPerfilParaNuvem();
     setSaved(true);
     setTimeout(() => setSaved(false), 3000);
   };
@@ -257,22 +296,51 @@ export default function MeuPerfilPage() {
         <p className="text-sm text-gray-500 mb-4">
           Opcional: exija uma senha para que apenas cooperados autorizados criem conta informando o CNPJ.
         </p>
+        {senhaCadastroAtiva ? (
+          <p className="text-sm text-green-800 bg-green-50 border border-green-200 rounded-lg px-3 py-2 mb-4">
+            Cadastro restrito por senha — cooperados precisam informar a senha ao se cadastrar.
+          </p>
+        ) : (
+          <p className="text-sm text-gray-600 bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 mb-4">
+            Cadastro livre — qualquer pessoa com o CNPJ pode criar conta no portal.
+          </p>
+        )}
         <FormField
           label="Senha para cooperados se cadastrarem"
-          hint="Deixe em branco para permitir cadastro livre. Preencha para restringir."
+          hint="Deixe em branco e salve, ou use Remover senha, para voltar ao cadastro livre."
         >
-          <Input
-            type="password"
-            value={form.senhaCadastroCooperado ?? ""}
-            onChange={(e) => setForm({ ...form, senhaCadastroCooperado: e.target.value })}
-            disabled={!canEdit}
-            placeholder="Opcional"
-          />
+          <div className="relative">
+            <Input
+              type={showSenhaCadastro ? "text" : "password"}
+              value={form.senhaCadastroCooperado ?? ""}
+              onChange={(e) => setForm({ ...form, senhaCadastroCooperado: e.target.value })}
+              disabled={!canEdit}
+              placeholder="Opcional"
+              className="pr-10"
+            />
+            {canEdit && (
+              <button
+                type="button"
+                onClick={() => setShowSenhaCadastro((v) => !v)}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                aria-label={showSenhaCadastro ? "Ocultar senha" : "Mostrar senha"}
+              >
+                {showSenhaCadastro ? <EyeOff size={18} /> : <Eye size={18} />}
+              </button>
+            )}
+          </div>
         </FormField>
         {canEdit && (
-          <Button className="mt-4" variant="secondary" onClick={handleSave}>
-            <Save size={18} /> {saved ? "Salvo!" : "Salvar senha de cadastro"}
-          </Button>
+          <div className="mt-4 flex flex-wrap gap-2">
+            <Button variant="secondary" onClick={handleSave}>
+              <Save size={18} /> {saved ? "Salvo!" : "Salvar senha de cadastro"}
+            </Button>
+            {senhaCadastroAtiva && (
+              <Button variant="danger" onClick={handleRemoverSenhaCadastro}>
+                <Trash2 size={18} /> Remover senha de cadastro
+              </Button>
+            )}
+          </div>
         )}
       </Card>
 
