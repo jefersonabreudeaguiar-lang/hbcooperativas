@@ -9,6 +9,7 @@ import {
   type ContratosSyncPayload,
   type OperacionalSyncPayload,
 } from "@/lib/supabase/cooperativaSyncStorage";
+import { deleteAllNotasForCnpj } from "@/lib/supabase/notasStorage";
 
 export async function GET(request: Request) {
   if (!isSupabaseConfigured()) {
@@ -62,7 +63,11 @@ export async function POST(request: Request) {
   }
 
   if (section === "operacional") {
-    const uploaded = await uploadOperacionalSync(supabase, cnpj, body.payload as OperacionalSyncPayload);
+    const payload = body.payload as OperacionalSyncPayload;
+    if (payload.fullReset === true) {
+      await deleteAllNotasForCnpj(supabase, cnpj);
+    }
+    const uploaded = await uploadOperacionalSync(supabase, cnpj, payload);
     if (!uploaded.ok) return NextResponse.json({ error: uploaded.error }, { status: 500 });
     return NextResponse.json({ success: true, section }, { status: 201 });
   }

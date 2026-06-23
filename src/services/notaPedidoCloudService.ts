@@ -4,6 +4,7 @@ import { fetchCooperativaByCnpjFromCloud } from "@/services/cooperativaCloudServ
 import { getNotaCooperativaCnpj, getFotosExibicaoNota } from "@/utils/fotoEntrega";
 import { getData, saveDataSafe } from "@/services/dataStore";
 import { reconciliarFichaFromNotasConferidas } from "@/services/notaPedidoService";
+import { needsOperationalResetCloudPush } from "@/services/operationalReset";
 
 const STATUS_RANK: Record<NotaPedido["status"], number> = {
   rascunho: 0,
@@ -282,6 +283,7 @@ export async function patchNotaPedidoInCloud(
 }
 
 export async function syncNotasPedidoFromCloud(cnpj: string): Promise<number> {
+  if (needsOperationalResetCloudPush()) return 0;
   const cloudNotas = await fetchNotasPedidoFromCloud(cnpj);
   const current = getData();
   const merged =

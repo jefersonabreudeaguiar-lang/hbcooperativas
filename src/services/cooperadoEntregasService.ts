@@ -24,6 +24,21 @@ export interface ResumoMesEntregasCooperado {
   pagamentoAguardando?: PagamentoCooperadoRegistro;
 }
 
+export function notaPendenteCooperado(status: NotaPedido["status"]): boolean {
+  return status === "aguardando_conferencia" || status === "rejeitada";
+}
+
+export function filtrarResumosEntregasPendentes(
+  resumos: ResumoMesEntregasCooperado[]
+): ResumoMesEntregasCooperado[] {
+  return resumos
+    .map((r) => ({
+      ...r,
+      notas: r.notas.filter((n) => notaPendenteCooperado(n.status)),
+    }))
+    .filter((r) => r.notas.length > 0);
+}
+
 function notasDoCooperado(data: AppData, cooperadoId: string, cooperativaId?: string): NotaPedido[] {
   return data.notasPedido
     .filter((n) => notaPertenceCooperado(data, n, cooperadoId, cooperativaId))

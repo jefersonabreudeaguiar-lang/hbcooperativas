@@ -23,6 +23,10 @@ export interface ContratosSyncPayload {
 
 export interface OperacionalSyncPayload {
   updatedAt: string;
+  /** Versão global de reset — dados anteriores são ignorados ao sincronizar. */
+  operationalResetVersion?: number;
+  /** Sinaliza limpeza total de notas e lançamentos na nuvem. */
+  fullReset?: boolean;
   arquivosMensais: ArquivoMensalCooperado[];
   ajustesFichaMes?: AjustesFichaMesCooperativa[];
   pagamentosCooperado: PagamentoCooperadoRegistro[];

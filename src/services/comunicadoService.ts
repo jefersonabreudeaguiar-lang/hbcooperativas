@@ -2,6 +2,7 @@ import type { AppData, Comunicado, Cooperado, Cooperativa, MensalidadeConfig } f
 import {
   isAvisoMensalidadeVenceAmanha,
   textoAvisoMensalidadeAmanha,
+  getResumoMensalidadesCooperado,
 } from "@/services/mensalidadeService";
 import { getCurrentMesReferencia } from "@/utils/format";
 
@@ -179,6 +180,23 @@ export function getComunicadosCooperado(
   return getComunicadosParaExibicao(data, cooperativaId).filter((c) =>
     comunicadoVisivelParaCooperado(c, cooperadoId, data)
   );
+}
+
+/** Mural do início do cooperado — só avisos que ainda exigem atenção. */
+export function getComunicadosMuralInicioCooperado(
+  data: AppData,
+  cooperativaId: string,
+  cooperadoId?: string
+): ComunicadoExibicao[] {
+  const resumoMens = cooperadoId ? getResumoMensalidadesCooperado(data, cooperadoId) : null;
+
+  return getComunicadosCooperado(data, cooperativaId, cooperadoId).filter((c) => {
+    if (!c.virtual) return true;
+    if (c.id.includes("mensalidade") && resumoMens) {
+      if (resumoMens.situacao === "em_dia" || resumoMens.situacao === "sem_mensalidade") return false;
+    }
+    return true;
+  });
 }
 
 export function cooperadoTemConteudoComunicado(c: Comunicado): boolean {

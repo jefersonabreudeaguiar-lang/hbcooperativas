@@ -44,6 +44,8 @@ export async function resetOperacionalSyncForCnpj(
   const existing = await fetchOperacionalSync(supabase, digits);
   const payload: OperacionalSyncPayload = {
     updatedAt: new Date().toISOString(),
+    operationalResetVersion: 2,
+    fullReset: true,
     arquivosMensais: [],
     ajustesFichaMes: [],
     pagamentosCooperado: [],
@@ -51,6 +53,8 @@ export async function resetOperacionalSyncForCnpj(
     mensalidades: [],
     descontos: [],
     valoresAvulsosReceber: [],
+    livroCaixa: [],
+    prestacoesContas: [],
     config: existing?.config ?? { descontoPadraoCooperativa: 5 },
   };
 

@@ -35,7 +35,7 @@ import {
 import { listCooperadosDaCooperativa, pushCooperadoToCloud, resolverCooperadoIdCanonico, getCooperadoNomeResolvido } from "@/services/cooperadoCloudService";
 import { pushOperacionalToCloud } from "@/services/cooperativaSyncCloudService";
 import { getProdutosContrato } from "@/services/catalogoContratosService";
-import { listarResumosMensaisEntregas } from "@/services/cooperadoEntregasService";
+import { listarResumosMensaisEntregas, filtrarResumosEntregasPendentes } from "@/services/cooperadoEntregasService";
 import { CooperadoEntregasPorMes } from "@/components/cooperado/CooperadoEntregasPorMes";
 import { CooperadoMinhaFichaTab } from "@/components/cooperado/CooperadoMinhaFichaTab";
 import { getContratoLabel, getContratosEntrega, resolverContratoEntrega } from "@/utils/contratosEntrega";
@@ -101,7 +101,7 @@ export default function NotasPedidoContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
 
-  const [statusFilter, setStatusFilter] = useState("");
+  const [statusFilter, setStatusFilter] = useState(isCooperado ? "pendentes" : "");
   const filtroResponsavelIniciado = useRef(false);
   const [anexarModal, setAnexarModal] = useState(false);
   const [conferirModal, setConferirModal] = useState(false);
@@ -329,6 +329,7 @@ export default function NotasPedidoContent() {
   const resumosMensaisCooperado = useMemo(() => {
     if (!isCooperado || !data || !cooperadoId) return [];
     const base = listarResumosMensaisEntregas(data, cooperadoId, coopId);
+    if (statusFilter === "pendentes") return filtrarResumosEntregasPendentes(base);
     if (!statusFilter) return base;
     return base
       .map((r) => ({
@@ -1500,7 +1501,8 @@ export default function NotasPedidoContent() {
         {isCooperado && abaCooperado === "entregas" && (
           <FormField label="Filtrar entregas">
             <Select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className="min-w-[200px]">
-              <option value="">Todas as entregas</option>
+              <option value="pendentes">Pendentes</option>
+              <option value="">Histórico completo</option>
               <option value="aguardando_conferencia">Em análise</option>
               <option value="rejeitada">Precisa corrigir</option>
               <option value="conferida">Aprovadas</option>
@@ -1543,8 +1545,14 @@ export default function NotasPedidoContent() {
         ) : statusFilter && resumosMensaisCooperado.length === 0 ? (
           <div className="text-center py-12 text-gray-500 bg-white rounded-2xl border">
             <Camera size={40} className="mx-auto mb-3 text-gray-300" />
-            <p className="font-medium">Nenhuma entrega com este filtro</p>
-            <p className="text-sm mt-1">Toque em &quot;Todas as entregas&quot; para ver o histórico completo.</p>
+            <p className="font-medium">
+              {statusFilter === "pendentes" ? "Nenhuma entrega pendente" : "Nenhuma entrega com este filtro"}
+            </p>
+            <p className="text-sm mt-1">
+              {statusFilter === "pendentes"
+                ? "Entregas aprovadas ou pagas ficam no histórico completo."
+                : "Toque em Histórico completo para ver todas as entregas."}
+            </p>
           </div>
         ) : (
           <CooperadoEntregasPorMes

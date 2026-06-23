@@ -19,7 +19,7 @@ import {
 } from "@/services/cooperadoEntregasService";
 import { notaPertenceCooperado } from "@/services/cooperadoCloudService";
 import { notaPertenceCooperativa } from "@/utils/fotoEntrega";
-import { getComunicadosCooperado } from "@/services/comunicadoService";
+import { getComunicadosMuralInicioCooperado } from "@/services/comunicadoService";
 import { MuralComunicados } from "@/components/comunicado/MuralComunicados";
 import { PrestacaoContasDashboardBanner } from "@/components/prestacao/PrestacaoContasDashboardBanner";
 import { cooperadoPrecisaCadastrarPix } from "@/utils/pix";
@@ -53,7 +53,7 @@ function CooperadoDashboard() {
     (n) => notaPertenceCooperado(data, n, cooperadoId, coopId) && n.status === "rejeitada"
   );
   const emAnalise = entregasMes.filter((n) => n.status === "aguardando_conferencia").length;
-  const comunicados = coopId ? getComunicadosCooperado(data, coopId, cooperadoId) : [];
+  const comunicados = coopId ? getComunicadosMuralInicioCooperado(data, coopId, cooperadoId) : [];
 
   return (
     <div className="space-y-6 max-w-3xl">
@@ -62,7 +62,7 @@ function CooperadoDashboard() {
         <p className="text-sm text-gray-500 mt-1">{coopNome} · {formatMesReferencia(mes)}</p>
       </div>
 
-      <MuralComunicados comunicados={comunicados} limite={5} />
+      <MuralComunicados comunicados={comunicados} limite={5} hideWhenEmpty />
 
       <PrestacaoContasDashboardBanner cooperadoId={cooperadoId} cooperativaId={coopId} />
 

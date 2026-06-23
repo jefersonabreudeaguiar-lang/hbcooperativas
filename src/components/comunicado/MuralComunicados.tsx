@@ -10,12 +10,14 @@ interface MuralComunicadosProps {
   comunicados: ComunicadoExibicao[];
   limite?: number;
   verTodosHref?: string;
+  hideWhenEmpty?: boolean;
 }
 
-export function MuralComunicados({ comunicados, limite, verTodosHref = "/comunicados" }: MuralComunicadosProps) {
+export function MuralComunicados({ comunicados, limite, verTodosHref = "/comunicados", hideWhenEmpty }: MuralComunicadosProps) {
   const lista = limite ? comunicados.slice(0, limite) : comunicados;
 
   if (lista.length === 0) {
+    if (hideWhenEmpty) return null;
     return (
       <Card title="Mural da cooperativa" className="border-dashed">
         <p className="text-sm text-gray-500 text-center py-6">Nenhum recado publicado no momento.</p>

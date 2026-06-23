@@ -6,6 +6,11 @@ import { syncCooperadosFromCloud } from "@/services/cooperadoCloudService";
 import { syncNotasPedidoFromCloud, patchNotaPedidoInCloud } from "@/services/notaPedidoCloudService";
 import { fetchCooperativaByCnpjFromCloud, mergeCooperativaIntoData } from "@/services/cooperativaCloudService";
 import { reconciliarFichaFromNotasConferidas } from "@/services/notaPedidoService";
+import {
+  OPERATIONAL_RESET_VERSION,
+  needsOperationalResetCloudPush,
+  markOperationalResetCloudDone,
+} from "@/services/operationalReset";
 
 type WithUpdatedAt = { id: string; updatedAt?: string; createdAt?: string };
 
@@ -44,6 +49,7 @@ function buildOperacionalPayload(data: AppData, coopId: string): OperacionalSync
   const cooperadoIds = new Set(data.cooperados.filter((c) => c.cooperativaId === coopId).map((c) => c.id));
   return {
     updatedAt: now,
+    operationalResetVersion: OPERATIONAL_RESET_VERSION,
     arquivosMensais: data.arquivosMensais.filter((a) => a.cooperativaId === coopId),
     ajustesFichaMes: (data.ajustesFichaMes ?? []).filter((a) => a.cooperativaId === coopId),
     pagamentosCooperado: data.pagamentosCooperado.filter((p) => p.cooperativaId === coopId),
@@ -55,6 +61,59 @@ function buildOperacionalPayload(data: AppData, coopId: string): OperacionalSync
     prestacoesContas: (data.prestacoesContas ?? []).filter((p) => p.cooperativaId === coopId),
     config: { ...data.config },
   };
+}
+
+function normalizeCloudOperacional(cloud: OperacionalSyncPayload): OperacionalSyncPayload {
+  if ((cloud.operationalResetVersion ?? 0) >= OPERATIONAL_RESET_VERSION) return cloud;
+  return {
+    ...cloud,
+    arquivosMensais: [],
+    ajustesFichaMes: [],
+    pagamentosCooperado: [],
+    mensalidades: [],
+    descontos: [],
+    valoresAvulsosReceber: [],
+    livroCaixa: [],
+    prestacoesContas: [],
+  };
+}
+
+function buildEmptyOperacionalResetPayload(data: AppData, coopId: string): OperacionalSyncPayload {
+  return {
+    updatedAt: new Date().toISOString(),
+    operationalResetVersion: OPERATIONAL_RESET_VERSION,
+    fullReset: true,
+    arquivosMensais: [],
+    ajustesFichaMes: [],
+    pagamentosCooperado: [],
+    comunicados: data.comunicados.filter((c) => c.cooperativaId === coopId),
+    mensalidades: [],
+    descontos: [],
+    valoresAvulsosReceber: [],
+    livroCaixa: [],
+    prestacoesContas: [],
+    config: { ...data.config },
+  };
+}
+
+export async function pushOperationalResetToCloud(cnpj: string, coopId?: string): Promise<void> {
+  const digits = normalizeCnpj(cnpj);
+  if (digits.length !== 14) return;
+  const d = getData();
+  const cid = coopId ?? resolveCoopId(d, digits);
+  if (!cid) return;
+
+  const payload = buildEmptyOperacionalResetPayload(d, cid);
+  try {
+    await fetch("/api/cooperativa-sync", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ cnpj: digits, section: "operacional", payload }),
+    });
+    markOperationalResetCloudDone();
+  } catch {
+    /* tenta de novo no próximo ciclo */
+  }
 }
 
 function normalizeInstNome(nome: string): string {
@@ -153,6 +212,7 @@ export function mergeContratosIntoData(data: AppData, cloud: ContratosSyncPayloa
 }
 
 export function mergeOperacionalIntoData(data: AppData, cloud: OperacionalSyncPayload, coopId: string): AppData {
+  cloud = normalizeCloudOperacional(cloud);
   const cooperadoIds = new Set(data.cooperados.filter((c) => c.cooperativaId === coopId).map((c) => c.id));
 
   const cloudArquivos = cloud.arquivosMensais.map((a) => ({ ...a, cooperativaId: coopId }));
@@ -310,6 +370,12 @@ export async function pushContratosToCloud(
 export async function pushOperacionalToCloud(cnpj: string, data?: AppData, coopId?: string): Promise<void> {
   const digits = normalizeCnpj(cnpj);
   if (digits.length !== 14) return;
+
+  if (needsOperationalResetCloudPush()) {
+    await pushOperationalResetToCloud(digits, coopId);
+    return;
+  }
+
   const d = data ?? getData();
   const cid = coopId ?? resolveCoopId(d, digits);
   if (!cid) return;
@@ -425,6 +491,11 @@ export async function syncAllCooperativaFromCloud(cnpj: string): Promise<void> {
 export async function syncCooperativaBidirectional(cnpj: string, coopId?: string): Promise<void> {
   const digits = normalizeCnpj(cnpj);
   if (digits.length !== 14) return;
+
+  if (needsOperationalResetCloudPush()) {
+    await pushOperationalResetToCloud(digits, coopId);
+    return;
+  }
 
   await syncAllCooperativaFromCloud(digits);
 
