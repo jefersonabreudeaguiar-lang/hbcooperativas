@@ -21,6 +21,7 @@ import { notaPertenceCooperado } from "@/services/cooperadoCloudService";
 import { notaPertenceCooperativa } from "@/utils/fotoEntrega";
 import { getComunicadosCooperado } from "@/services/comunicadoService";
 import { MuralComunicados } from "@/components/comunicado/MuralComunicados";
+import { PrestacaoContasDashboardBanner } from "@/components/prestacao/PrestacaoContasDashboardBanner";
 import { cooperadoPrecisaCadastrarPix } from "@/utils/pix";
 import { formatCurrency, formatMesReferencia, getCurrentMesReferencia } from "@/utils/format";
 import { getUserCooperativaId, getUserCooperativaNome } from "@/utils/cooperativa";
@@ -62,6 +63,8 @@ function CooperadoDashboard() {
       </div>
 
       <MuralComunicados comunicados={comunicados} limite={5} />
+
+      <PrestacaoContasDashboardBanner cooperadoId={cooperadoId} cooperativaId={coopId} />
 
       <MensalidadeStatusBanner cooperadoId={cooperadoId} />
 

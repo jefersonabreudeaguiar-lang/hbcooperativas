@@ -1,4 +1,8 @@
 import type { AppData, Comunicado, Cooperado, Cooperativa, MensalidadeConfig } from "@/types";
+import {
+  isAvisoMensalidadeVenceAmanha,
+  textoAvisoMensalidadeAmanha,
+} from "@/services/mensalidadeService";
 import { getCurrentMesReferencia } from "@/utils/format";
 
 export interface ComunicadoExibicao extends Comunicado {
@@ -52,7 +56,32 @@ function textoLembreteMensalidade(coop: Cooperativa, cfg: MensalidadeConfig): st
 
 function lembreteMensalidadeVirtual(coop: Cooperativa): ComunicadoExibicao | null {
   const cfg = coop.mensalidadeConfig;
-  if (!cfg?.lembreteAtivo || cfg.valorPadrao <= 0) return null;
+  if (!cfg || cfg.valorPadrao <= 0) return null;
+
+  if (isAvisoMensalidadeVenceAmanha(cfg)) {
+    const dia = Math.min(Math.max(cfg.diaVencimento || 10, 1), 28);
+    const assunto = cfg.lembreteTitulo?.trim() || "Mensalidade vence amanhã";
+    return {
+      id: `virtual_mensalidade_amanha_${coop.id}_${mesAtualRef()}`,
+      cooperativaId: coop.id,
+      assunto,
+      titulo: assunto,
+      descricao: textoAvisoMensalidadeAmanha(cfg),
+      data: dataHojeIso(),
+      responsavel: coop.responsavel ?? "Cooperativa",
+      categoria: "financeiro",
+      fixado: true,
+      visivelParaTodos: true,
+      recorrente: true,
+      diaDoMes: Math.max(1, dia - 1),
+      ativo: true,
+      createdAt: hoje().toISOString(),
+      virtual: true,
+      recorrenteLabel: `Automático · vence amanhã (dia ${dia})`,
+    };
+  }
+
+  if (!cfg.lembreteAtivo) return null;
   if (diaAtual() < (cfg.diaLembrete ?? 1)) return null;
 
   const assunto = cfg.lembreteTitulo?.trim() || "Vencimento da mensalidade";

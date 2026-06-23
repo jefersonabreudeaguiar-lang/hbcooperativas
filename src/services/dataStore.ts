@@ -105,6 +105,8 @@ function stripDemoData(data: AppData): AppData {
     propriedades: filterByCooperado(data.propriedades ?? []),
     veiculos: filterByCooperado(data.veiculos ?? []),
     fechamentos: (data.fechamentos ?? []).filter((f) => !DEMO_ENTITY_IDS.has(f.id)),
+    livroCaixa: filterByCoop(data.livroCaixa ?? []),
+    prestacoesContas: filterByCoop(data.prestacoesContas ?? []),
     auditLog: (data.auditLog ?? []).filter((a) => !DEMO_ENTITY_IDS.has(a.id)),
     ajustesFichaMes: (data.ajustesFichaMes ?? []).filter(
       (a) => !DEMO_ENTITY_IDS.has(a.id) && coopIds.has(a.cooperativaId)
@@ -205,6 +207,8 @@ function migrateData(raw: Partial<AppData> & Record<string, unknown>): AppData {
     propriedades: base.propriedades ?? [],
     veiculos: base.veiculos ?? [],
     fechamentos: base.fechamentos ?? [],
+    livroCaixa: base.livroCaixa ?? [],
+    prestacoesContas: base.prestacoesContas ?? [],
     auditLog: base.auditLog ?? [],
   };
 

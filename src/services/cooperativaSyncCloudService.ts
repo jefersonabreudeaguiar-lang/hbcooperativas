@@ -51,6 +51,8 @@ function buildOperacionalPayload(data: AppData, coopId: string): OperacionalSync
     mensalidades: data.mensalidades.filter((m) => cooperadoIds.has(m.cooperadoId)),
     descontos: data.descontos.filter((d) => cooperadoIds.has(d.cooperadoId)),
     valoresAvulsosReceber: (data.valoresAvulsosReceber ?? []).filter((v) => v.cooperativaId === coopId),
+    livroCaixa: (data.livroCaixa ?? []).filter((l) => l.cooperativaId === coopId),
+    prestacoesContas: (data.prestacoesContas ?? []).filter((p) => p.cooperativaId === coopId),
     config: { ...data.config },
   };
 }
@@ -159,6 +161,8 @@ export function mergeOperacionalIntoData(data: AppData, cloud: OperacionalSyncPa
   const cloudComunicados = cloud.comunicados.map((c) => ({ ...c, cooperativaId: coopId }));
   const cloudDescontos = (cloud.descontos ?? []).filter((d) => cooperadoIds.has(d.cooperadoId));
   const cloudAvulsos = (cloud.valoresAvulsosReceber ?? []).map((v) => ({ ...v, cooperativaId: coopId }));
+  const cloudLivro = (cloud.livroCaixa ?? []).map((l) => ({ ...l, cooperativaId: coopId }));
+  const cloudPrest = (cloud.prestacoesContas ?? []).map((p) => ({ ...p, cooperativaId: coopId }));
 
   const filterCoop = <T extends { cooperativaId?: string; cooperadoId?: string }>(
     items: T[],
@@ -214,6 +218,20 @@ export function mergeOperacionalIntoData(data: AppData, cloud: OperacionalSyncPa
       ...mergeArrayByNewer(
         (data.valoresAvulsosReceber ?? []).filter((v) => v.cooperativaId === coopId),
         cloudAvulsos
+      ),
+    ],
+    livroCaixa: [
+      ...filterCoop(data.livroCaixa ?? [], (l) => l.cooperativaId === coopId),
+      ...mergeArrayByNewer(
+        (data.livroCaixa ?? []).filter((l) => l.cooperativaId === coopId),
+        cloudLivro
+      ),
+    ],
+    prestacoesContas: [
+      ...filterCoop(data.prestacoesContas ?? [], (p) => p.cooperativaId === coopId),
+      ...mergeArrayByNewer(
+        (data.prestacoesContas ?? []).filter((p) => p.cooperativaId === coopId),
+        cloudPrest
       ),
     ],
   };

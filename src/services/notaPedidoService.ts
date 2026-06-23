@@ -18,6 +18,7 @@ import { descontosDoCooperadoNoMes } from "@/services/descontosService";
 import { valoresAvulsosPendentesMes, marcarValoresAvulsosPagosMes } from "@/services/valoresAvulsosReceberService";
 import { round2 } from "@/utils/calculations";
 import { gerarReciboHtml, resumoReciboFromPagamento } from "@/utils/recibo";
+import { lancarPagamentoCooperadoNoCaixa } from "@/services/livroCaixaService";
 
 export interface ItemResumoFichaMes {
   produtoInstituicaoId: string;
@@ -693,7 +694,7 @@ export function registrarPagamentoCooperado(
     }),
   };
 
-  return next;
+  return lancarPagamentoCooperadoNoCaixa(next, pagamento);
 }
 
 export function confirmarPagamentoCooperado(

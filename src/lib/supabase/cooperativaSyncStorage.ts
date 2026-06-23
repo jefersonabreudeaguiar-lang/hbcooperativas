@@ -9,6 +9,8 @@ import type {
   Mensalidade,
   Desconto,
   ValorAvulsoReceber,
+  LivroCaixaLancamento,
+  PrestacaoContas,
 } from "@/types";
 
 const BUCKET = "hb-cooperativa-sync";
@@ -28,6 +30,8 @@ export interface OperacionalSyncPayload {
   mensalidades: Mensalidade[];
   descontos: Desconto[];
   valoresAvulsosReceber?: ValorAvulsoReceber[];
+  livroCaixa?: LivroCaixaLancamento[];
+  prestacoesContas?: PrestacaoContas[];
   config: { descontoPadraoCooperativa: number };
 }
 

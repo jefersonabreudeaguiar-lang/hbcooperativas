@@ -17,6 +17,8 @@ export interface MensalidadeConfig {
   lembreteTexto?: string;
   /** Cria mensalidades pendentes para todos os cooperados ativos todo mês. */
   gerarAutomaticamente?: boolean;
+  /** Meses (YYYY-MM) em que a mensalidade será cobrada/descontada. */
+  mesesCobranca?: string[];
   /** Armazenado na nuvem — senha exigida no cadastro de cooperados (opcional). */
   senhaCadastroCooperado?: string;
 }
@@ -491,6 +493,69 @@ export interface FechamentoMensal {
   updatedAt: string;
 }
 
+export type LivroCaixaTipo = "credito" | "debito";
+
+export type LivroCaixaOrigem =
+  | "manual"
+  | "mensalidade"
+  | "pagamento_cooperado"
+  | "credito_avulso"
+  | "debito_avulso"
+  | "pnae"
+  | "prestacao_contas"
+  | "outro";
+
+export interface LivroCaixaLancamento {
+  id: string;
+  cooperativaId: string;
+  data: string;
+  mesReferencia: string;
+  tipo: LivroCaixaTipo;
+  valor: number;
+  historico: string;
+  origem: LivroCaixaOrigem;
+  /** Evita duplicar lançamento automático. */
+  origemId?: string;
+  categoria?: string;
+  responsavel?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type TipoRepassePrestacao = "despesa" | "emprestimo" | "ajuda_custo" | "diversos";
+
+export type PrestacaoContasStatus = "pendente" | "em_conferencia" | "conferida" | "parcial";
+
+export interface PrestacaoContasNota {
+  id: string;
+  fotoDataUrl?: string;
+  fotoMiniatura?: string;
+  valorNota?: number;
+  dataNota?: string;
+  localDespesa?: string;
+  conferido: boolean;
+  conferidoEm?: string;
+  enviadoEm: string;
+}
+
+export interface PrestacaoContas {
+  id: string;
+  cooperativaId: string;
+  cooperadoId: string;
+  cooperadoNomeSnapshot?: string;
+  tipoRepasse: TipoRepassePrestacao;
+  historico: string;
+  valorRepasse: number;
+  valorConferido: number;
+  status: PrestacaoContasStatus;
+  notas: PrestacaoContasNota[];
+  enviadoEm?: string;
+  responsavelId?: string;
+  responsavelNome?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface AppData {
   cooperativas: Cooperativa[];
   users: User[];
@@ -513,6 +578,8 @@ export interface AppData {
   propriedades: Propriedade[];
   veiculos: Veiculo[];
   fechamentos: FechamentoMensal[];
+  livroCaixa: LivroCaixaLancamento[];
+  prestacoesContas: PrestacaoContas[];
   auditLog: AuditEntry[];
   config: {
     descontoPadraoCooperativa: number;
@@ -536,6 +603,8 @@ export type Resource =
   | "notas_pedido"
   | "ficha_corrida"
   | "relatorios"
-  | "fechamento";
+  | "fechamento"
+  | "livro_caixa"
+  | "prestacao_contas";
 
 export type Action = "view" | "create" | "edit" | "delete" | "approve" | "export";

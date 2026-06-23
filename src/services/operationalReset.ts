@@ -22,6 +22,8 @@ export function clearOperationalData(data: AppData): AppData {
     pagamentos: [],
     financeiro: [],
     fechamentos: [],
+    livroCaixa: [],
+    prestacoesContas: [],
     auditLog: [],
   };
 }

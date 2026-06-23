@@ -25,6 +25,8 @@ export const PERMISSIONS: PermissionMatrix = {
     ficha_corrida: ALL_CRUD,
     relatorios: VIEW_EXPORT,
     fechamento: ["view", "create", "edit", "approve", "export"],
+    livro_caixa: ALL_CRUD,
+    prestacao_contas: ALL_CRUD,
   },
   tesoureiro: {
     dashboard: ALL_CRUD,
@@ -44,6 +46,8 @@ export const PERMISSIONS: PermissionMatrix = {
     ficha_corrida: ALL_CRUD,
     relatorios: VIEW_EXPORT,
     fechamento: ["view", "create", "edit", "export"],
+    livro_caixa: ALL_CRUD,
+    prestacao_contas: ALL_CRUD,
   },
   responsavel: {
     dashboard: VIEW_ONLY,
@@ -57,6 +61,8 @@ export const PERMISSIONS: PermissionMatrix = {
     comunicados: ["view", "create", "edit", "export"],
     relatorios: VIEW_EXPORT,
     fechamento: ["view", "approve", "export"],
+    livro_caixa: ["view", "create", "edit", "export"],
+    prestacao_contas: ["view", "create", "edit", "export"],
   },
   cooperado: {
     dashboard: VIEW_ONLY,
@@ -66,6 +72,7 @@ export const PERMISSIONS: PermissionMatrix = {
     ficha_corrida: VIEW_ONLY,
     descontos: VIEW_ONLY,
     comunicados: VIEW_ONLY,
+    prestacao_contas: ["view", "create", "edit"],
   },
 };
 
@@ -191,6 +198,7 @@ const COOPERADO_DRAWER_MENU: { href: string; label: string; resource: Resource }
   { href: "/dashboard", label: "Início", resource: "dashboard" },
   { href: "/meu-cadastro", label: "Meu cadastro", resource: "dashboard" },
   { href: "/comunicados", label: "Avisos", resource: "comunicados" },
+  { href: "/prestacao-contas", label: "Prestação de contas", resource: "prestacao_contas" },
 ];
 
 const DIRETORIA_MENU: { href: string; label: string; resource: Resource }[] = [
@@ -202,6 +210,8 @@ const DIRETORIA_MENU: { href: string; label: string; resource: Resource }[] = [
   { href: "/cooperados", label: "Cooperados", resource: "cooperados" },
   { href: "/mensalidades", label: "Mensalidades", resource: "mensalidades" },
   { href: "/cotas", label: "Cotas", resource: "cotas" },
+  { href: "/livro-caixa", label: "Livro caixa", resource: "livro_caixa" },
+  { href: "/prestacao-contas", label: "Prestação de contas", resource: "prestacao_contas" },
   { href: "/entregas", label: "Entregas (legado)", resource: "entregas" },
   { href: "/pagamentos", label: "Pagamentos (legado)", resource: "pagamentos" },
   { href: "/descontos", label: "Descontos", resource: "descontos" },
@@ -221,6 +231,8 @@ const RESPONSAVEL_HREFS = [
   "/meu-perfil",
   "/cooperados",
   "/mensalidades",
+  "/livro-caixa",
+  "/prestacao-contas",
   "/comunicados",
   "/relatorios",
   "/fechamento-mensal",

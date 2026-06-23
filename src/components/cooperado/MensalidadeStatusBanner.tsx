@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { Clock } from "lucide-react";
 import { useAppData } from "@/hooks/useAppData";
-import { getResumoMensalidadesCooperado } from "@/services/mensalidadeService";
+import { getResumoMensalidadesCooperado, isAvisoMensalidadeVenceAmanha, textoAvisoMensalidadeAmanha } from "@/services/mensalidadeService";
 import { AlertBanner } from "@/components/ui/AlertBanner";
 import { Button } from "@/components/ui/Button";
 import { formatCurrency, formatDate, formatMesReferencia } from "@/utils/format";
@@ -11,6 +11,22 @@ import { formatCurrency, formatDate, formatMesReferencia } from "@/utils/format"
 export function MensalidadeStatusBanner({ cooperadoId }: { cooperadoId: string }) {
   const data = useAppData();
   if (!data) return null;
+
+  const cooperado = data.cooperados.find((c) => c.id === cooperadoId);
+  const coop = cooperado ? data.cooperativas.find((c) => c.id === cooperado.cooperativaId) : undefined;
+  const cfg = coop?.mensalidadeConfig;
+
+  if (cfg && isAvisoMensalidadeVenceAmanha(cfg)) {
+    const dia = Math.min(Math.max(cfg.diaVencimento || 10, 1), 28);
+    return (
+      <AlertBanner variant="warning" title="Mensalidade vence amanhã">
+        {textoAvisoMensalidadeAmanha(cfg)}
+        <Link href="/mensalidades">
+          <Button size="sm" className="mt-3">Ver mensalidade · dia {dia}</Button>
+        </Link>
+      </AlertBanner>
+    );
+  }
 
   const resumo = getResumoMensalidadesCooperado(data, cooperadoId);
   if (resumo.situacao === "sem_mensalidade") return null;

@@ -6,6 +6,7 @@ import {
   LayoutDashboard, Users, CreditCard, PieChart, Truck, Wallet,
   Percent, Building2, Landmark, Megaphone, MapPin, Car, FileText,
   CalendarCheck, LogOut, Menu, X, Building, ClipboardList, Receipt, User, Tag,
+  BookOpen, FileCheck,
 } from "lucide-react";
 import { useState } from "react";
 import { useAuth } from "@/modules/auth/AuthProvider";
@@ -27,6 +28,8 @@ const ICONS: Record<string, React.ReactNode> = {
   "/contratos": <FileText size={20} />,
   "/meu-perfil": <Building size={20} />,
   "/comunicados": <Megaphone size={20} />,
+  "/livro-caixa": <BookOpen size={20} />,
+  "/prestacao-contas": <FileCheck size={20} />,
   "/cooperativas": <Building size={20} />,
   "/cooperados": <Users size={20} />,
   "/instituicoes": <Building2 size={20} />,
@@ -46,6 +49,8 @@ const ICONS: Record<string, React.ReactNode> = {
   veiculos: <Car size={20} />,
   relatorios: <FileText size={20} />,
   fechamento: <CalendarCheck size={20} />,
+  livro_caixa: <BookOpen size={20} />,
+  prestacao_contas: <FileCheck size={20} />,
 };
 
 function navIcon(href: string, resource: Resource, size = 20) {

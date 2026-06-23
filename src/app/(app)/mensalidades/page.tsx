@@ -23,11 +23,14 @@ import {
   confirmarPagamentoMensalidade,
   mensalidadePodePagarComPix,
   mensalidadeAguardandoConfirmacao,
+  isAvisoMensalidadeVenceAmanha,
+  textoAvisoMensalidadeAmanha,
 } from "@/services/mensalidadeService";
 import { compressDataUrl, compressFotoFile } from "@/utils/fotoEntrega";
 import { formatCurrency, formatDate, formatMesReferencia, getCurrentMesReferencia } from "@/utils/format";
 import { getCooperadoNome } from "@/utils/calculations";
 import type { Mensalidade } from "@/types";
+import { MensalidadeConfigPanel } from "@/components/mensalidade/MensalidadeConfigPanel";
 
 const SHARE_KEY = "hb_comprovante_mensalidade_share";
 
@@ -249,7 +252,10 @@ function MensalidadesContent() {
 
   if (!data) return null;
 
-  const cfgOk = cooperativa?.mensalidadeConfig?.gerarAutomaticamente && (cooperativa.mensalidadeConfig.valorPadrao ?? 0) > 0;
+  const cfgOk =
+    cooperativa?.mensalidadeConfig?.gerarAutomaticamente &&
+    (cooperativa.mensalidadeConfig.valorPadrao ?? 0) > 0 &&
+    (cooperativa.mensalidadeConfig.mesesCobranca?.length ?? 0) > 0;
 
   return (
     <div>
@@ -275,10 +281,24 @@ function MensalidadesContent() {
         </AlertBanner>
       )}
 
+      {isCooperado && cooperativa?.mensalidadeConfig && isAvisoMensalidadeVenceAmanha(cooperativa.mensalidadeConfig) && (
+        <AlertBanner variant="warning" title="Mensalidade vence amanhã" className="mb-6">
+          {textoAvisoMensalidadeAmanha(cooperativa.mensalidadeConfig)}
+        </AlertBanner>
+      )}
+
+      {!isCooperado && user && coopId && (
+        <MensalidadeConfigPanel
+          cooperativaId={coopId}
+          user={user}
+          canEdit={check("mensalidades", "edit")}
+        />
+      )}
+
       {!isCooperado && !cfgOk && (
-        <AlertBanner variant="warning" title="Geração automática não configurada" className="mb-6">
-          Em <strong>Perfil da cooperativa</strong>, informe o valor, o dia de vencimento e marque{" "}
-          <strong>Gerar mensalidades automaticamente</strong>.
+        <AlertBanner variant="warning" title="Configure a mensalidade fixa" className="mb-6">
+          Informe o <strong>valor fixo</strong>, o <strong>dia da mensalidade</strong> e marque os <strong>meses de cobrança</strong> no painel acima.
+          O valor será descontado automaticamente nos pagamentos dos cooperados.
         </AlertBanner>
       )}
 
@@ -382,7 +402,7 @@ function MensalidadesContent() {
         emptyMessage={
           cfgOk || isCooperado
             ? "Nenhuma mensalidade neste período."
-            : "Configure a geração automática no Perfil da cooperativa."
+            : "Configure o valor fixo e os meses de cobrança no painel acima."
         }
         mobileCard={(m) => (
           <MensalidadeCard

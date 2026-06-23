@@ -18,7 +18,7 @@ import {
   pushCooperativaProfileToCloud,
   pushOperacionalToCloud,
 } from "@/services/cooperativaSyncCloudService";
-import { ensureMensalidadesDoMes } from "@/services/mensalidadeService";
+import { ensureMensalidadesDoMes, aplicarConfigMensalidadeCooperativa } from "@/services/mensalidadeService";
 import { isDiretoriaRole } from "@/permissions";
 import { EquipeResponsaveisPanel } from "@/components/equipe/EquipeResponsaveisPanel";
 import { exigeSenhaCadastroCooperado } from "@/utils/cooperativaCadastro";
@@ -63,6 +63,7 @@ export default function MeuPerfilPage() {
         lembreteTitulo: cooperativa.mensalidadeConfig?.lembreteTitulo ?? "",
         lembreteTexto: cooperativa.mensalidadeConfig?.lembreteTexto ?? "",
         gerarAutomaticamente: cooperativa.mensalidadeConfig?.gerarAutomaticamente ?? false,
+        mesesCobranca: cooperativa.mensalidadeConfig?.mesesCobranca ?? [],
       });
     }
   }, [cooperativa]);
@@ -148,20 +149,21 @@ export default function MeuPerfilPage() {
                 telefone: form.telefone ?? "",
                 email: form.email ?? "",
                 responsavel: form.responsavel ?? c.responsavel,
-                mensalidadeConfig: {
-                  ...mensCfg,
-                  valorPadrao: Number(mensCfg.valorPadrao) || 0,
-                  diaVencimento: Math.min(28, Math.max(1, mensCfg.diaVencimento || 10)),
-                  diaLembrete: Math.min(28, Math.max(1, mensCfg.diaLembrete ?? 1)),
-                  gerarAutomaticamente:
-                    mensCfg.gerarAutomaticamente ?? (Number(mensCfg.valorPadrao) > 0),
-                },
                 senhaCadastroCooperado: form.senhaCadastroCooperado?.trim() || undefined,
                 updatedAt: now,
               }
             : c
         ),
       };
+      const cfgPatch: MensalidadeConfig = {
+        ...mensCfg,
+        valorPadrao: Number(mensCfg.valorPadrao) || 0,
+        diaVencimento: Math.min(28, Math.max(1, mensCfg.diaVencimento || 10)),
+        diaLembrete: Math.min(28, Math.max(1, mensCfg.diaLembrete ?? 1)),
+        gerarAutomaticamente: mensCfg.gerarAutomaticamente ?? (Number(mensCfg.valorPadrao) > 0),
+        mesesCobranca: mensCfg.mesesCobranca ?? [],
+      };
+      updated = aplicarConfigMensalidadeCooperativa(updated, coopId, cfgPatch);
       updated = addAuditEntry(updated, {
         entityType: "cooperativa",
         entityId: coopId,
@@ -351,7 +353,8 @@ export default function MeuPerfilPage() {
 
       <Card title="Mensalidade — configuração mensal">
         <p className="text-sm text-gray-500 mb-4">
-          Configure uma vez: o sistema lembra os cooperados todo mês e pode gerar as mensalidades automaticamente.
+          Para valor fixo, meses de cobrança (retroativo/atual/futuro) e dia da mensalidade, use a aba{" "}
+          <strong>Mensalidades</strong>. Aqui você pode ajustar lembretes extras.
         </p>
         <div className="space-y-4">
           <div className="grid grid-cols-2 gap-3">
