@@ -19,6 +19,8 @@ export interface MensalidadeConfig {
   gerarAutomaticamente?: boolean;
   /** Meses (YYYY-MM) em que a mensalidade será cobrada/descontada. */
   mesesCobranca?: string[];
+  /** ISO — última vez que o responsável salvou esta configuração. */
+  configSalvaEm?: string;
   /** Armazenado na nuvem — senha exigida no cadastro de cooperados (opcional). */
   senhaCadastroCooperado?: string;
 }

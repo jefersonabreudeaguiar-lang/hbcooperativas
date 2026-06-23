@@ -13,7 +13,7 @@ import { Input, Select, FormField } from "@/components/ui/Form";
 import { updateData, generateId, addAuditEntry, getData } from "@/services/dataStore";
 import { resolveCooperativaCnpj } from "@/services/notaPedidoCloudService";
 import { pushContratosToCloud, publicarCatalogoContratos } from "@/services/cooperativaSyncCloudService";
-import { contarItensCatalogo } from "@/services/catalogoContratosService";
+import { contarItensCatalogo, getInstituicoesCatalogo } from "@/services/catalogoContratosService";
 import { excluirInstituicaoContrato } from "@/services/instituicaoContratoService";
 import { formatCurrency } from "@/utils/format";
 import { UNIDADES_MEDIDA, type ProdutoUnidade } from "@/utils/unidades";
@@ -41,8 +41,8 @@ export default function ContratosPage() {
   const [subAba, setSubAba] = useState<"catalogo" | "cronogramas">("catalogo");
 
   const instituicoes = useMemo(() => {
-    if (!data) return [];
-    return data.instituicoes.filter((i) => !coopId || i.cooperativaId === coopId);
+    if (!data || !coopId) return [];
+    return getInstituicoesCatalogo(data, coopId);
   }, [data, coopId]);
 
   const produtosPorInst = useMemo(() => {
@@ -95,11 +95,11 @@ export default function ContratosPage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [coopId, user?.id]);
 
-  const pushContratos = async () => {
+  const pushContratos = async (dataOverride?: AppData) => {
     if (!user || !coopId) return;
-    const d = getData();
+    const d = dataOverride ?? getData();
     const cnpj = await resolveCooperativaCnpj(d, coopId, user);
-    if (cnpj) await pushContratosToCloud(cnpj, d, coopId);
+    if (cnpj) await pushContratosToCloud(cnpj, d, coopId, { authoritative: true });
   };
 
   const handlePublicarPrecos = async () => {
@@ -175,15 +175,19 @@ export default function ContratosPage() {
     pushContratos();
   };
 
-  const handleRemoveItem = (p: ProdutoInstituicao) => {
-    if (!user || !confirm(`Remover "${p.nome}"?`)) return;
-    updateData((d) => ({
-      ...d,
-      produtosInstituicao: d.produtosInstituicao.map((x) =>
-        x.id === p.id ? { ...x, ativo: false, updatedAt: new Date().toISOString() } : x
-      ),
-    }));
-    pushContratos();
+  const handleRemoveItem = async (p: ProdutoInstituicao) => {
+    if (!user || !coopId || !confirm(`Remover "${p.nome}"?`)) return;
+    let nextData: AppData | null = null;
+    updateData((d) => {
+      nextData = {
+        ...d,
+        produtosInstituicao: d.produtosInstituicao.map((x) =>
+          x.id === p.id ? { ...x, ativo: false, updatedAt: new Date().toISOString() } : x
+        ),
+      };
+      return nextData;
+    });
+    if (nextData) await pushContratos(nextData);
   };
 
   const entregasDoContrato = useMemo(() => {

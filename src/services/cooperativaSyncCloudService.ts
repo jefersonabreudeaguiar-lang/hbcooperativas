@@ -201,36 +201,61 @@ function reconcileInstituicoesProdutos(
 }
 
 function mergeCatalogProducts(local: ProdutoInstituicao[], cloud: ProdutoInstituicao[]): ProdutoInstituicao[] {
-  const byId = new Map<string, ProdutoInstituicao>();
-
-  for (const p of local) byId.set(p.id, p);
-
-  for (const p of cloud) {
-    const cur = byId.get(p.id);
-    if (!cur) {
-      byId.set(p.id, p);
-      continue;
-    }
-    const score = (x: ProdutoInstituicao) =>
-      x.ativo && x.precoUnitario > 0 ? 3 : x.ativo ? 2 : 1;
-    const sCloud = score(p);
-    const sLocal = score(cur);
-    if (sCloud > sLocal || (sCloud === sLocal && itemTime(p) >= itemTime(cur))) {
-      byId.set(p.id, p);
-    }
-  }
+  const merged = mergeArrayByNewer(local, cloud);
 
   const byNomeInst = new Map<string, ProdutoInstituicao>();
-  for (const p of byId.values()) {
+  for (const p of merged) {
     if (!p.ativo || p.precoUnitario <= 0) continue;
     const key = `${p.instituicaoId}::${normalizeInstNome(p.nome)}`;
     const cur = byNomeInst.get(key);
     if (!cur || itemTime(p) >= itemTime(cur)) byNomeInst.set(key, p);
   }
 
-  const merged = [...byId.values()];
-  const ativosComPreco = merged.filter((p) => p.ativo && p.precoUnitario > 0);
-  return ativosComPreco.length > 0 ? [...byNomeInst.values()] : merged;
+  const winningActiveIds = new Set([...byNomeInst.values()].map((p) => p.id));
+  const inactive = merged.filter((p) => !p.ativo || p.precoUnitario <= 0);
+  const activeWinners = merged.filter(
+    (p) => p.ativo && p.precoUnitario > 0 && winningActiveIds.has(p.id)
+  );
+
+  if (activeWinners.length === 0) return merged;
+  return [...inactive, ...activeWinners];
+}
+
+/** Cooperado só exibe o catálogo publicado pelo responsável na nuvem. */
+function alinharCatalogoComNuvem(
+  instituicoes: Instituicao[],
+  produtos: ProdutoInstituicao[],
+  cloudInst: Instituicao[],
+  cloudProd: ProdutoInstituicao[],
+  coopId: string
+): { instituicoes: Instituicao[]; produtos: ProdutoInstituicao[] } {
+  const cloudItensAtivos = cloudProd.filter((p) => p.ativo && p.precoUnitario > 0).length;
+  if (cloudInst.length === 0 && cloudItensAtivos === 0) {
+    return { instituicoes, produtos };
+  }
+
+  const cloudInstIds = new Set(cloudInst.map((i) => i.id));
+  const cloudActive = cloudProd.filter((p) => p.ativo && p.precoUnitario > 0);
+  const cloudProdIds = new Set(cloudActive.map((p) => p.id));
+  const cloudProdKeys = new Set(
+    cloudActive.map((p) => `${p.instituicaoId}::${normalizeInstNome(p.nome)}`)
+  );
+
+  const instituicoesAlinhadas = instituicoes.filter(
+    (i) => i.cooperativaId !== coopId || cloudInstIds.has(i.id)
+  );
+
+  const now = new Date().toISOString();
+  const produtosAlinhados = produtos.map((p) => {
+    if (p.cooperativaId !== coopId) return p;
+    if (!p.ativo || p.precoUnitario <= 0) return p;
+    if (cloudProdIds.has(p.id)) return p;
+    const key = `${p.instituicaoId}::${normalizeInstNome(p.nome)}`;
+    if (cloudProdKeys.has(key)) return p;
+    return { ...p, ativo: false, updatedAt: now };
+  });
+
+  return { instituicoes: instituicoesAlinhadas, produtos: produtosAlinhados };
 }
 
 export function mergeContratosIntoData(data: AppData, cloud: ContratosSyncPayload, coopId: string): AppData {
@@ -276,14 +301,21 @@ export function mergeContratosIntoData(data: AppData, cloud: ContratosSyncPayloa
       : mergeArrayByNewer(localProdCoop, cloudProd);
 
   const reconciled = reconcileInstituicoesProdutos(mergedInst, mergedProd);
+  const alinhado = alinharCatalogoComNuvem(
+    reconciled.instituicoes,
+    reconciled.produtos,
+    cloudInst,
+    cloudProd,
+    coopId
+  );
 
   const filterCoop = <T extends { cooperativaId?: string }>(items: T[]) =>
     items.filter((i) => i.cooperativaId !== coopId);
 
   return aplicarInstituicoesExcluidas({
     ...data,
-    instituicoes: [...localInst, ...reconciled.instituicoes],
-    produtosInstituicao: [...localProd, ...reconciled.produtos],
+    instituicoes: [...localInst, ...alinhado.instituicoes],
+    produtosInstituicao: [...localProd, ...alinhado.produtos],
     cronogramasContrato: [
       ...(data.cronogramasContrato ?? []).filter((c) => c.cooperativaId !== coopId),
       ...mergeArrayByNewer(localCronCoop, cloudCron),
@@ -551,7 +583,7 @@ export async function publicarCatalogoContratos(cnpj: string, data?: AppData, co
     (p) => p.cooperativaId === cid && p.ativo && p.precoUnitario > 0
   ).length;
   if (itens === 0) return false;
-  await pushContratosToCloud(digits, d, cid);
+  await pushContratosToCloud(digits, d, cid, { authoritative: true });
   return true;
 }
 
@@ -595,7 +627,11 @@ export async function syncAllCooperativaFromCloud(cnpj: string): Promise<void> {
  * Puxa da nuvem e envia alterações locais (operacional + catálogo quando houver itens).
  * Usado pelo sync global para manter responsável e cooperado sempre atualizados.
  */
-export async function syncCooperativaBidirectional(cnpj: string, coopId?: string): Promise<void> {
+export async function syncCooperativaBidirectional(
+  cnpj: string,
+  coopId?: string,
+  options?: { pushCatalog?: boolean }
+): Promise<void> {
   const digits = normalizeCnpj(cnpj);
   if (digits.length !== 14) return;
 
@@ -612,11 +648,13 @@ export async function syncCooperativaBidirectional(cnpj: string, coopId?: string
 
   await pushOperacionalToCloud(digits, d, cid);
 
-  const itensCatalogo = getData().produtosInstituicao.filter(
-    (p) => p.cooperativaId === cid && p.ativo && p.precoUnitario > 0
-  ).length;
-  if (itensCatalogo > 0) {
-    await pushContratosToCloud(digits, getData(), cid);
+  if (options?.pushCatalog) {
+    const itensCatalogo = getData().produtosInstituicao.filter(
+      (p) => p.cooperativaId === cid && p.ativo && p.precoUnitario > 0
+    ).length;
+    if (itensCatalogo > 0) {
+      await pushContratosToCloud(digits, getData(), cid, { authoritative: true });
+    }
   }
 }
 
@@ -627,7 +665,7 @@ export async function pushAllCooperativaToCloud(cnpj: string, data?: AppData, co
   const coop = cid ? d.cooperativas.find((c) => c.id === cid) : undefined;
 
   await Promise.all([
-    pushContratosToCloud(cnpj, d, cid),
+    pushContratosToCloud(cnpj, d, cid, { authoritative: true }),
     pushOperacionalToCloud(cnpj, d, cid),
     coop ? pushCooperativaProfileToCloud(coop) : Promise.resolve(),
   ]);

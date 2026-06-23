@@ -180,6 +180,7 @@ export function aplicarConfigMensalidadeCooperativa(
     gerarAutomaticamente: cfg.gerarAutomaticamente ?? valor > 0,
     mesesCobranca: meses,
     lembreteAtivo: cfg.lembreteAtivo ?? true,
+    configSalvaEm: now,
   };
 
   let next: AppData = {

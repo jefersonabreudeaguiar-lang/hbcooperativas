@@ -44,9 +44,10 @@ export function MensalidadeConfigPanel({ cooperativaId, user, canEdit }: Props) 
 
   const [valorPadrao, setValorPadrao] = useState("");
   const [diaVencimento, setDiaVencimento] = useState("10");
-  const [mesesMarcados, setMesesMarcados] = useState<string[]>([mesAtual]);
+  const [mesesMarcados, setMesesMarcados] = useState<string[]>([]);
   const [salvando, setSalvando] = useState(false);
   const [salvo, setSalvo] = useState(false);
+  const [editando, setEditando] = useState(false);
   const ultimoSyncRef = useRef("");
 
   const mesesOpcoes = useMemo(() => listMesesReferencia(mesAtual, 8, 8), [mesAtual]);
@@ -67,20 +68,30 @@ export function MensalidadeConfigPanel({ cooperativaId, user, canEdit }: Props) 
   }, [cooperativaId]);
 
   useEffect(() => {
+    if (editando) return;
     if (!configKey || configKey === ultimoSyncRef.current) return;
     ultimoSyncRef.current = configKey;
 
     const cfg = configSalva;
-    if (!cfg) return;
+    if (!cfg) {
+      setValorPadrao("");
+      setDiaVencimento("10");
+      setMesesMarcados([]);
+      return;
+    }
 
     setValorPadrao(cfg.valorPadrao > 0 ? String(cfg.valorPadrao) : "");
     setDiaVencimento(String(cfg.diaVencimento || 10));
-    const marcados = cfg.mesesCobranca?.length ? [...cfg.mesesCobranca].sort() : [mesAtual];
-    setMesesMarcados(marcados);
-  }, [configKey, configSalva, mesAtual]);
+    setMesesMarcados(cfg.mesesCobranca?.length ? [...cfg.mesesCobranca].sort() : []);
+  }, [configKey, configSalva, editando]);
+
+  const marcarEditando = () => {
+    if (canEdit) setEditando(true);
+  };
 
   const toggleMes = (mes: string) => {
     if (!canEdit) return;
+    marcarEditando();
     setMesesMarcados((prev) =>
       prev.includes(mes) ? prev.filter((m) => m !== mes) : [...prev, mes].sort()
     );
@@ -88,6 +99,7 @@ export function MensalidadeConfigPanel({ cooperativaId, user, canEdit }: Props) 
 
   const marcarGrupo = (tipo: "passado" | "atual" | "futuro" | "todos") => {
     if (!canEdit) return;
+    marcarEditando();
     if (tipo === "todos") {
       setMesesMarcados([...mesesOpcoes]);
       return;
@@ -124,19 +136,24 @@ export function MensalidadeConfigPanel({ cooperativaId, user, canEdit }: Props) 
     });
 
     ultimoSyncRef.current = snapshotConfig(cfg, mesAtual);
+    setEditando(false);
 
     try {
       const d = getData();
       const cnpj = await resolveCooperativaCnpj(d, cooperativaId);
       const coop = d.cooperativas.find((c) => c.id === cooperativaId);
       if (coop) await pushCooperativaProfileToCloud(coop);
-      if (cnpj) await pushOperacionalToCloud(cnpj, d, cooperativaId);
+      if (cnpj) await pushOperacionalToCloud(cnpj, d, cooperativaId, { authoritative: true });
     } finally {
       setSalvando(false);
       setSalvo(true);
       setTimeout(() => setSalvo(false), 3000);
     }
   };
+
+  const valorFixoSalvo = configSalva?.valorPadrao ?? 0;
+  const diaFixoSalvo = configSalva?.diaVencimento ?? 10;
+  const mesesFixosSalvos = configSalva?.mesesCobranca ?? [];
 
   if (!cooperativa) return null;
 
@@ -149,11 +166,21 @@ export function MensalidadeConfigPanel({ cooperativaId, user, canEdit }: Props) 
         <div>
           <h3 className="font-bold text-gray-900">Valor fixo da mensalidade</h3>
           <p className="text-sm text-gray-600 mt-1">
-            Este valor é descontado automaticamente no pagamento de todos os cooperados nos meses marcados.
-            Um dia antes do vencimento, todos recebem aviso no início do app.
+            Depois de salvar, o valor permanece fixo para todos os cooperados até você alterar aqui.
+            É descontado automaticamente nos pagamentos dos meses marcados.
           </p>
         </div>
       </div>
+
+      {valorFixoSalvo > 0 && !editando && (
+        <AlertBanner variant="success" className="mb-4" title="Mensalidade fixa em vigor">
+          <strong>{formatCurrency(valorFixoSalvo)}</strong> · vencimento dia {diaFixoSalvo}
+          {mesesFixosSalvos.length > 0 && (
+            <> · {mesesFixosSalvos.length} mês(es) de cobrança configurado(s)</>
+          )}
+          . Só muda quando você salvar uma nova configuração abaixo.
+        </AlertBanner>
+      )}
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <FormField label="Valor fixo (R$)" required>
@@ -162,7 +189,10 @@ export function MensalidadeConfigPanel({ cooperativaId, user, canEdit }: Props) 
             step="0.01"
             min={0}
             value={valorPadrao}
-            onChange={(e) => setValorPadrao(e.target.value)}
+            onChange={(e) => {
+              marcarEditando();
+              setValorPadrao(e.target.value);
+            }}
             disabled={!canEdit}
             placeholder="Ex: 50,00"
           />
@@ -173,7 +203,10 @@ export function MensalidadeConfigPanel({ cooperativaId, user, canEdit }: Props) 
             min={1}
             max={28}
             value={diaVencimento}
-            onChange={(e) => setDiaVencimento(e.target.value)}
+            onChange={(e) => {
+              marcarEditando();
+              setDiaVencimento(e.target.value);
+            }}
             disabled={!canEdit}
           />
         </FormField>

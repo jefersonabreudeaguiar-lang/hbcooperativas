@@ -143,6 +143,66 @@ export async function syncCooperativaToCloud(
   });
 }
 
+function scoreMensalidadeConfig(cfg?: MensalidadeConfig): number {
+  if (!cfg) return 0;
+  let score = 0;
+  if ((cfg.valorPadrao ?? 0) > 0) score += 10;
+  if ((cfg.mesesCobranca?.length ?? 0) > 0) score += 5;
+  if (cfg.gerarAutomaticamente) score += 1;
+  return score;
+}
+
+/** Mantém o valor fixo da mensalidade — não apaga config local com sync desatualizado. */
+export function mergeMensalidadeConfig(
+  local?: MensalidadeConfig,
+  cloud?: MensalidadeConfig,
+  localUpdatedAt?: string,
+  cloudUpdatedAt?: string
+): MensalidadeConfig | undefined {
+  if (!local && !cloud) return undefined;
+  if (!local) return cloud;
+  if (!cloud) return local;
+
+  const tLocal = Math.max(
+    localUpdatedAt ? new Date(localUpdatedAt).getTime() : 0,
+    local.configSalvaEm ? new Date(local.configSalvaEm).getTime() : 0
+  );
+  const tCloud = Math.max(
+    cloudUpdatedAt ? new Date(cloudUpdatedAt).getTime() : 0,
+    cloud.configSalvaEm ? new Date(cloud.configSalvaEm).getTime() : 0
+  );
+  const sLocal = scoreMensalidadeConfig(local);
+  const sCloud = scoreMensalidadeConfig(cloud);
+
+  let base: MensalidadeConfig;
+  if (sLocal > sCloud) base = local;
+  else if (sCloud > sLocal) base = cloud;
+  else if (tCloud > tLocal) base = cloud;
+  else if (tLocal > tCloud) base = local;
+  else base = (cloud.valorPadrao ?? 0) >= (local.valorPadrao ?? 0) ? cloud : local;
+
+  const meses =
+    (base.mesesCobranca?.length ?? 0) > 0
+      ? base.mesesCobranca
+      : (local.mesesCobranca?.length ?? 0) > 0
+        ? local.mesesCobranca
+        : cloud.mesesCobranca;
+
+  return {
+    ...base,
+    valorPadrao: base.valorPadrao ?? local.valorPadrao ?? cloud.valorPadrao ?? 0,
+    diaVencimento: base.diaVencimento ?? local.diaVencimento ?? cloud.diaVencimento ?? 10,
+    diaLembrete: base.diaLembrete ?? local.diaLembrete ?? cloud.diaLembrete,
+    lembreteAtivo: base.lembreteAtivo ?? local.lembreteAtivo ?? cloud.lembreteAtivo ?? true,
+    lembreteTitulo: base.lembreteTitulo ?? local.lembreteTitulo ?? cloud.lembreteTitulo,
+    lembreteTexto: base.lembreteTexto ?? local.lembreteTexto ?? cloud.lembreteTexto,
+    gerarAutomaticamente:
+      base.gerarAutomaticamente ?? local.gerarAutomaticamente ?? cloud.gerarAutomaticamente,
+    mesesCobranca: meses,
+    configSalvaEm: base.configSalvaEm ?? local.configSalvaEm ?? cloud.configSalvaEm,
+  };
+}
+
 /** Sincroniza cooperativa da nuvem para o armazenamento local. */
 export function mergeCooperativaIntoData(
   cooperativas: Cooperativa[],
@@ -152,8 +212,23 @@ export function mergeCooperativaIntoData(
     (c) => c.id === cloudCoop.id || normalizeCnpj(c.cnpj) === normalizeCnpj(cloudCoop.cnpj)
   );
   if (idx >= 0) {
+    const cur = cooperativas[idx];
+    const tLocal = cur.updatedAt ? new Date(cur.updatedAt).getTime() : 0;
+    const tCloud = cloudCoop.updatedAt ? new Date(cloudCoop.updatedAt).getTime() : 0;
+    const mensalidadeConfig = mergeMensalidadeConfig(
+      cur.mensalidadeConfig,
+      cloudCoop.mensalidadeConfig,
+      cur.updatedAt,
+      cloudCoop.updatedAt
+    );
     const next = [...cooperativas];
-    next[idx] = { ...next[idx], ...cloudCoop, updatedAt: cloudCoop.updatedAt };
+    next[idx] = {
+      ...cur,
+      ...cloudCoop,
+      mensalidadeConfig,
+      senhaCadastroCooperado: cloudCoop.senhaCadastroCooperado ?? cur.senhaCadastroCooperado,
+      updatedAt: tCloud > tLocal ? cloudCoop.updatedAt : cur.updatedAt,
+    };
     return next;
   }
   return [...cooperativas, cloudCoop];

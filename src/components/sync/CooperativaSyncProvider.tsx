@@ -10,6 +10,8 @@ import {
   syncCooperativaBidirectional,
 } from "@/services/cooperativaSyncCloudService";
 import { refreshCloudSession } from "@/lib/security/clientSession";
+import { isDiretoriaRole } from "@/permissions";
+import type { UserRole } from "@/types";
 
 /** Sincronização automática em todas as telas (cooperado e responsável). */
 export function CooperativaSyncProvider({ children }: { children: React.ReactNode }) {
@@ -25,7 +27,8 @@ export function CooperativaSyncProvider({ children }: { children: React.ReactNod
       const cnpj = await resolveCooperativaCnpj(data, coopId, user);
       if (cnpj) {
         await refreshCloudSession();
-        await syncCooperativaBidirectional(cnpj, coopId);
+        const pushCatalog = isDiretoriaRole(user.role as UserRole);
+        await syncCooperativaBidirectional(cnpj, coopId, { pushCatalog });
       }
     } finally {
       syncingRef.current = false;

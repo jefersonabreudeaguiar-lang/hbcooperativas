@@ -34,7 +34,7 @@ import {
 } from "@/services/notaPedidoCloudService";
 import { listCooperadosDaCooperativa, pushCooperadoToCloud, resolverCooperadoIdCanonico, getCooperadoNomeResolvido } from "@/services/cooperadoCloudService";
 import { pushOperacionalToCloud } from "@/services/cooperativaSyncCloudService";
-import { getProdutosContrato } from "@/services/catalogoContratosService";
+import { getInstituicoesCatalogo, getProdutosContrato } from "@/services/catalogoContratosService";
 import { listarResumosMensaisEntregas, filtrarResumosEntregasPendentes } from "@/services/cooperadoEntregasService";
 import { CooperadoEntregasPorMes } from "@/components/cooperado/CooperadoEntregasPorMes";
 import { CooperadoMinhaFichaTab } from "@/components/cooperado/CooperadoMinhaFichaTab";
@@ -412,7 +412,7 @@ export default function NotasPedidoContent() {
 
   const instituicoes = useMemo(() => {
     if (!data || !coopId) return [];
-    return data.instituicoes.filter((i) => i.cooperativaId === coopId);
+    return getInstituicoesCatalogo(data, coopId);
   }, [data, coopId]);
 
   const contratosEntrega = useMemo(() => {
