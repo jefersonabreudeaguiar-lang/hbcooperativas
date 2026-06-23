@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Calendar, Save, Wallet } from "lucide-react";
 import { useAppData } from "@/hooks/useAppData";
 import { Card } from "@/components/ui/Card";
@@ -14,7 +14,7 @@ import { aplicarConfigMensalidadeCooperativa } from "@/services/mensalidadeServi
 import {
   classificarMesReferencia,
   formatCurrency,
-  formatMesReferencia,
+  formatMesReferenciaCurto,
   getCurrentMesReferencia,
   listMesesReferencia,
 } from "@/utils/format";
@@ -24,6 +24,17 @@ interface Props {
   cooperativaId: string;
   user: Pick<User, "id" | "name">;
   canEdit: boolean;
+}
+
+function snapshotConfig(cfg: MensalidadeConfig | undefined, mesAtual: string): string {
+  if (!cfg) return "";
+  const meses = [...(cfg.mesesCobranca ?? [])].sort().join(",");
+  return JSON.stringify({
+    valorPadrao: cfg.valorPadrao,
+    diaVencimento: cfg.diaVencimento,
+    meses,
+    fallback: meses ? "" : mesAtual,
+  });
 }
 
 export function MensalidadeConfigPanel({ cooperativaId, user, canEdit }: Props) {
@@ -36,25 +47,47 @@ export function MensalidadeConfigPanel({ cooperativaId, user, canEdit }: Props) 
   const [mesesMarcados, setMesesMarcados] = useState<string[]>([mesAtual]);
   const [salvando, setSalvando] = useState(false);
   const [salvo, setSalvo] = useState(false);
+  const ultimoSyncRef = useRef("");
 
   const mesesOpcoes = useMemo(() => listMesesReferencia(mesAtual, 8, 8), [mesAtual]);
 
+  const configSalva = cooperativa?.mensalidadeConfig;
+  const configKey = useMemo(
+    () => snapshotConfig(configSalva, mesAtual),
+    [
+      configSalva?.valorPadrao,
+      configSalva?.diaVencimento,
+      configSalva?.mesesCobranca?.join(","),
+      mesAtual,
+    ]
+  );
+
   useEffect(() => {
-    const cfg = cooperativa?.mensalidadeConfig;
+    ultimoSyncRef.current = "";
+  }, [cooperativaId]);
+
+  useEffect(() => {
+    if (!configKey || configKey === ultimoSyncRef.current) return;
+    ultimoSyncRef.current = configKey;
+
+    const cfg = configSalva;
     if (!cfg) return;
+
     setValorPadrao(cfg.valorPadrao > 0 ? String(cfg.valorPadrao) : "");
     setDiaVencimento(String(cfg.diaVencimento || 10));
-    const marcados = cfg.mesesCobranca?.length ? cfg.mesesCobranca : [mesAtual];
+    const marcados = cfg.mesesCobranca?.length ? [...cfg.mesesCobranca].sort() : [mesAtual];
     setMesesMarcados(marcados);
-  }, [cooperativa?.mensalidadeConfig, mesAtual]);
+  }, [configKey, configSalva, mesAtual]);
 
   const toggleMes = (mes: string) => {
+    if (!canEdit) return;
     setMesesMarcados((prev) =>
       prev.includes(mes) ? prev.filter((m) => m !== mes) : [...prev, mes].sort()
     );
   };
 
   const marcarGrupo = (tipo: "passado" | "atual" | "futuro" | "todos") => {
+    if (!canEdit) return;
     if (tipo === "todos") {
       setMesesMarcados([...mesesOpcoes]);
       return;
@@ -68,13 +101,14 @@ export function MensalidadeConfigPanel({ cooperativaId, user, canEdit }: Props) 
     if (!Number.isFinite(valor) || valor <= 0 || mesesMarcados.length === 0) return;
 
     setSalvando(true);
+    const mesesOrdenados = [...mesesMarcados].sort();
     const cfg: MensalidadeConfig = {
       valorPadrao: valor,
       diaVencimento: Math.min(28, Math.max(1, parseInt(diaVencimento, 10) || 10)),
       lembreteAtivo: true,
       diaLembrete: Math.max(1, Math.min(28, (parseInt(diaVencimento, 10) || 10) - 1)),
       gerarAutomaticamente: true,
-      mesesCobranca: [...mesesMarcados].sort(),
+      mesesCobranca: mesesOrdenados,
     };
 
     updateData((d) => {
@@ -85,9 +119,11 @@ export function MensalidadeConfigPanel({ cooperativaId, user, canEdit }: Props) 
         action: "editar",
         userId: user.id,
         userName: user.name,
-        changes: `Config mensalidade · ${formatCurrency(valor)} · dia ${cfg.diaVencimento} · ${mesesMarcados.length} mês(es)`,
+        changes: `Config mensalidade · ${formatCurrency(valor)} · dia ${cfg.diaVencimento} · ${mesesOrdenados.length} mês(es)`,
       });
     });
+
+    ultimoSyncRef.current = snapshotConfig(cfg, mesAtual);
 
     try {
       const d = getData();
@@ -145,26 +181,31 @@ export function MensalidadeConfigPanel({ cooperativaId, user, canEdit }: Props) 
 
       <div className="mt-5">
         <div className="flex items-center gap-2 mb-2">
-          <Calendar size={18} className="text-gray-500" />
+          <Calendar size={16} className="text-gray-500" />
           <p className="text-sm font-semibold text-gray-900">Meses que serão cobrados</p>
+          {mesesMarcados.length > 0 && (
+            <span className="text-[10px] font-medium text-green-800 bg-green-100 px-2 py-0.5 rounded-full">
+              {mesesMarcados.length} marcado(s)
+            </span>
+          )}
         </div>
         <p className="text-xs text-gray-500 mb-3">
-          Marque meses retroativos, o mês atual ou futuros. A cobrança e o desconto nos pagamentos valem só nos meses selecionados.
+          Toque para marcar ou desmarcar. Depois clique em <strong>Salvar configuração</strong>.
         </p>
 
         {canEdit && (
-          <div className="flex flex-wrap gap-2 mb-3">
+          <div className="flex flex-wrap gap-1.5 mb-3">
             <Button type="button" size="sm" variant="secondary" onClick={() => marcarGrupo("passado")}>
               + Retroativos
             </Button>
             <Button type="button" size="sm" variant="secondary" onClick={() => marcarGrupo("atual")}>
-              Mês atual
+              Atual
             </Button>
             <Button type="button" size="sm" variant="secondary" onClick={() => marcarGrupo("futuro")}>
               + Futuros
             </Button>
             <Button type="button" size="sm" variant="ghost" onClick={() => marcarGrupo("todos")}>
-              Marcar todos
+              Todos
             </Button>
             <Button type="button" size="sm" variant="ghost" onClick={() => setMesesMarcados([])}>
               Limpar
@@ -172,26 +213,35 @@ export function MensalidadeConfigPanel({ cooperativaId, user, canEdit }: Props) 
           </div>
         )}
 
-        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
+        <div className="grid grid-cols-4 sm:grid-cols-6 md:grid-cols-8 lg:grid-cols-10 gap-1">
           {mesesOpcoes.map((mes) => {
             const tipo = classificarMesReferencia(mes, mesAtual);
             const ativo = mesesMarcados.includes(mes);
-            const tipoLabel =
-              tipo === "passado" ? "Retroativo" : tipo === "futuro" ? "Futuro" : "Atual";
             return (
               <button
                 key={mes}
                 type="button"
                 disabled={!canEdit}
                 onClick={() => toggleMes(mes)}
-                className={`text-left p-3 rounded-xl border text-sm transition-colors ${
+                title={
+                  tipo === "passado"
+                    ? "Mês retroativo"
+                    : tipo === "futuro"
+                      ? "Mês futuro"
+                      : "Mês atual"
+                }
+                aria-pressed={ativo}
+                className={`min-h-[2rem] px-1 py-1 rounded-md border text-center text-[10px] sm:text-[11px] leading-tight font-semibold transition-colors ${
                   ativo
-                    ? "border-green-600 bg-green-100 text-green-900"
-                    : "border-gray-200 bg-white text-gray-700 hover:border-green-300"
-                } ${!canEdit ? "opacity-70 cursor-default" : ""}`}
+                    ? "border-green-600 bg-green-600 text-white shadow-sm"
+                    : tipo === "atual"
+                      ? "border-green-300 bg-green-50/80 text-green-900 hover:border-green-500"
+                      : tipo === "passado"
+                        ? "border-amber-200 bg-amber-50/50 text-amber-900 hover:border-amber-400"
+                        : "border-sky-200 bg-sky-50/50 text-sky-900 hover:border-sky-400"
+                } ${!canEdit ? "opacity-70 cursor-default" : "cursor-pointer"}`}
               >
-                <span className="font-medium block">{formatMesReferencia(mes)}</span>
-                <span className="text-xs opacity-75">{tipoLabel}</span>
+                {formatMesReferenciaCurto(mes)}
               </button>
             );
           })}

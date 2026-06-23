@@ -28,6 +28,15 @@ export function formatMesReferencia(mes: string): string {
   return `${meses[parseInt(mesNum, 10) - 1]} ${ano}`;
 }
 
+/** Formato compacto para grade de seleção (ex.: Jan/26). */
+export function formatMesReferenciaCurto(mes: string): string {
+  const [ano, mesNum] = mes.split("-");
+  const abrev = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"];
+  const idx = parseInt(mesNum, 10) - 1;
+  if (idx < 0 || idx > 11 || !ano) return mes;
+  return `${abrev[idx]}/${ano.slice(-2)}`;
+}
+
 export function getCurrentMesReferencia(): string {
   const now = new Date();
   return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
