@@ -39,9 +39,15 @@ export function MuralComunicados({ comunicados, limite, verTodosHref = "/comunic
         )}
       </div>
       <div className="space-y-4">
-        {lista.map((c) => (
-          <ComunicadoCard key={c.id} comunicado={c} />
-        ))}
+        {lista.map((c) =>
+          c.href ? (
+            <Link key={c.id} href={c.href} className="block hover:opacity-95 transition-opacity">
+              <ComunicadoCard comunicado={c} />
+            </Link>
+          ) : (
+            <ComunicadoCard key={c.id} comunicado={c} />
+          )
+        )}
       </div>
       {verTodosHref && limite && comunicados.length > limite && (
         <Link

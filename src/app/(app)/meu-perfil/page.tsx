@@ -18,7 +18,8 @@ import {
   pushCooperativaProfileToCloud,
   pushOperacionalToCloud,
 } from "@/services/cooperativaSyncCloudService";
-import { ensureMensalidadesDoMes, aplicarConfigMensalidadeCooperativa } from "@/services/mensalidadeService";
+import { ensureMensalidadeCooperado, aplicarConfigMensalidadeCooperativa, mergeConfigMensalidadeCooperativa, getConfigMensalidadeCooperativa } from "@/services/mensalidadeService";
+import { formatCurrency } from "@/utils/format";
 import { isDiretoriaRole } from "@/permissions";
 import { EquipeResponsaveisPanel } from "@/components/equipe/EquipeResponsaveisPanel";
 import { exigeSenhaCadastroCooperado } from "@/utils/cooperativaCadastro";
@@ -53,20 +54,20 @@ export default function MeuPerfilPage() {
   }, [user, router]);
 
   useEffect(() => {
-    if (cooperativa) {
-      setForm({ ...cooperativa });
-      setMensCfg({
-        valorPadrao: cooperativa.mensalidadeConfig?.valorPadrao ?? 0,
-        diaVencimento: cooperativa.mensalidadeConfig?.diaVencimento ?? 10,
-        lembreteAtivo: cooperativa.mensalidadeConfig?.lembreteAtivo ?? false,
-        diaLembrete: cooperativa.mensalidadeConfig?.diaLembrete ?? 1,
-        lembreteTitulo: cooperativa.mensalidadeConfig?.lembreteTitulo ?? "",
-        lembreteTexto: cooperativa.mensalidadeConfig?.lembreteTexto ?? "",
-        gerarAutomaticamente: cooperativa.mensalidadeConfig?.gerarAutomaticamente ?? false,
-        mesesCobranca: cooperativa.mensalidadeConfig?.mesesCobranca ?? [],
-      });
-    }
-  }, [cooperativa]);
+    if (!cooperativa || !data) return;
+    setForm({ ...cooperativa });
+    const cfg = getConfigMensalidadeCooperativa(data, cooperativa.id);
+    setMensCfg({
+      valorPadrao: cfg?.valorPadrao ?? 0,
+      diaVencimento: cfg?.diaVencimento ?? 10,
+      lembreteAtivo: cfg?.lembreteAtivo ?? false,
+      diaLembrete: cfg?.diaLembrete ?? 1,
+      lembreteTitulo: cfg?.lembreteTitulo ?? "",
+      lembreteTexto: cfg?.lembreteTexto ?? "",
+      gerarAutomaticamente: cfg?.gerarAutomaticamente ?? false,
+      mesesCobranca: cfg?.mesesCobranca ?? [],
+    });
+  }, [cooperativa, data]);
 
   useEffect(() => {
     if (!cooperativa) return;
@@ -130,7 +131,7 @@ export default function MeuPerfilPage() {
     const coop = d.cooperativas.find((c) => c.id === coopId);
     if (cnpj && coop) {
       await pushCooperativaProfileToCloud(coop);
-      await pushOperacionalToCloud(cnpj, d, coopId!);
+      await pushOperacionalToCloud(cnpj, d, coopId!, { authoritative: true });
     }
   };
 
@@ -155,14 +156,10 @@ export default function MeuPerfilPage() {
             : c
         ),
       };
-      const cfgPatch: MensalidadeConfig = {
-        ...mensCfg,
-        valorPadrao: Number(mensCfg.valorPadrao) || 0,
-        diaVencimento: Math.min(28, Math.max(1, mensCfg.diaVencimento || 10)),
-        diaLembrete: Math.min(28, Math.max(1, mensCfg.diaLembrete ?? 1)),
-        gerarAutomaticamente: mensCfg.gerarAutomaticamente ?? (Number(mensCfg.valorPadrao) > 0),
-        mesesCobranca: mensCfg.mesesCobranca ?? [],
-      };
+      const cfgPatch = mergeConfigMensalidadeCooperativa(
+        d.cooperativas.find((c) => c.id === coopId)?.mensalidadeConfig,
+        { ...mensCfg, configSalvaEm: now }
+      );
       updated = aplicarConfigMensalidadeCooperativa(updated, coopId, cfgPatch);
       updated = addAuditEntry(updated, {
         entityType: "cooperativa",
@@ -170,10 +167,9 @@ export default function MeuPerfilPage() {
         action: "editar",
         userId: user.id,
         userName: user.name,
-        changes: "Perfil da cooperativa atualizado",
+        changes: "Perfil da cooperativa e mensalidade atualizados",
       });
-      const withMens = ensureMensalidadesDoMes(updated);
-      return withMens ?? updated;
+      return updated;
     });
     void pushPerfilParaNuvem();
     setSaved(true);
@@ -353,9 +349,18 @@ export default function MeuPerfilPage() {
 
       <Card title="Mensalidade — configuração mensal">
         <p className="text-sm text-gray-500 mb-4">
-          Para valor fixo, meses de cobrança (retroativo/atual/futuro) e dia da mensalidade, use a aba{" "}
-          <strong>Mensalidades</strong>. Aqui você pode ajustar lembretes extras.
+          O <strong>valor fixo</strong> e os <strong>meses de cobrança</strong> ficam sincronizados com a aba{" "}
+          <a href="/mensalidades" className="font-semibold text-green-700 underline">Mensalidades</a>.
+          Aqui você ajusta lembretes do mural e geração automática das cobranças.
         </p>
+        {(cooperativa.mensalidadeConfig?.valorPadrao ?? 0) > 0 && (
+          <p className="text-sm text-green-800 bg-green-50 border border-green-200 rounded-lg px-3 py-2 mb-4">
+            Valor fixo em vigor: <strong>{formatCurrency(cooperativa.mensalidadeConfig!.valorPadrao)}</strong>
+            {(cooperativa.mensalidadeConfig?.mesesCobranca?.length ?? 0) > 0 && (
+              <> · {(cooperativa.mensalidadeConfig!.mesesCobranca ?? []).length} mês(es) marcado(s) em Mensalidades</>
+            )}
+          </p>
+        )}
         <div className="space-y-4">
           <div className="grid grid-cols-2 gap-3">
             <FormField label="Valor padrão (R$)">

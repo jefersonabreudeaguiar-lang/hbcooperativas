@@ -39,6 +39,43 @@ export function isAvisoMensalidadeVenceAmanha(cfg: MensalidadeConfig | undefined
   return amanha.getDate() === diaVenc;
 }
 
+/** Une config salva (Mensalidades / Perfil) sem apagar campos do outro lugar. */
+export function mergeConfigMensalidadeCooperativa(
+  existing: MensalidadeConfig | undefined,
+  patch: MensalidadeConfig
+): MensalidadeConfig {
+  const valor = Number(patch.valorPadrao ?? existing?.valorPadrao) || 0;
+  const diaVencimento = Math.min(28, Math.max(1, patch.diaVencimento ?? existing?.diaVencimento ?? 10));
+  const mesesRaw = patch.mesesCobranca?.length
+    ? patch.mesesCobranca
+    : existing?.mesesCobranca ?? [];
+  const meses = [...mesesRaw].filter(Boolean).sort();
+
+  return {
+    ...existing,
+    ...patch,
+    valorPadrao: valor,
+    diaVencimento,
+    diaLembrete: Math.min(
+      28,
+      Math.max(1, patch.diaLembrete ?? existing?.diaLembrete ?? Math.max(1, diaVencimento - 1))
+    ),
+    gerarAutomaticamente: patch.gerarAutomaticamente ?? existing?.gerarAutomaticamente ?? valor > 0,
+    mesesCobranca: meses,
+    lembreteAtivo: patch.lembreteAtivo ?? existing?.lembreteAtivo ?? true,
+    lembreteTitulo: patch.lembreteTitulo ?? existing?.lembreteTitulo,
+    lembreteTexto: patch.lembreteTexto ?? existing?.lembreteTexto,
+    configSalvaEm: patch.configSalvaEm ?? existing?.configSalvaEm,
+  };
+}
+
+export function getConfigMensalidadeCooperativa(
+  data: AppData,
+  cooperativaId: string
+): MensalidadeConfig | undefined {
+  return data.cooperativas.find((c) => c.id === cooperativaId)?.mensalidadeConfig;
+}
+
 export function textoAvisoMensalidadeAmanha(cfg: MensalidadeConfig): string {
   const dia = Math.min(Math.max(cfg.diaVencimento || 10, 1), 28);
   const valor = cfg.valorPadrao.toFixed(2).replace(".", ",");
@@ -128,10 +165,26 @@ function gerarMensalidadesCooperativaMes(
     (c) => c.cooperativaId === cooperativaId && c.status === "ativo"
   );
   for (const cooperado of cooperados) {
-    const jaExiste = mensalidades.some(
+    const idx = mensalidades.findIndex(
       (m) => m.cooperadoId === cooperado.id && m.mesReferencia === mesReferencia
     );
-    if (jaExiste) continue;
+    if (idx >= 0) {
+      const m = mensalidades[idx];
+      if (
+        (m.status === "pendente" || m.status === "atrasada") &&
+        (m.valor !== cfg.valorPadrao ||
+          m.vencimento !== vencimentoDoMes(mesReferencia, cfg.diaVencimento))
+      ) {
+        mensalidades[idx] = {
+          ...m,
+          valor: cfg.valorPadrao,
+          vencimento: vencimentoDoMes(mesReferencia, cfg.diaVencimento),
+          updatedAt: now,
+        };
+        changed = true;
+      }
+      continue;
+    }
     mensalidades.push(
       criarMensalidade(cooperado.id, mesReferencia, cfg.valorPadrao, cfg.diaVencimento, now)
     );
@@ -169,19 +222,13 @@ export function aplicarConfigMensalidadeCooperativa(
   cfg: MensalidadeConfig
 ): AppData {
   const now = new Date().toISOString();
-  const valor = Number(cfg.valorPadrao) || 0;
-  const diaVencimento = Math.min(28, Math.max(1, cfg.diaVencimento || 10));
-  const meses = (cfg.mesesCobranca ?? []).filter(Boolean).sort();
-  const normalized: MensalidadeConfig = {
+  const existing = data.cooperativas.find((c) => c.id === cooperativaId)?.mensalidadeConfig;
+  const normalized = mergeConfigMensalidadeCooperativa(existing, {
     ...cfg,
-    valorPadrao: valor,
-    diaVencimento,
-    diaLembrete: Math.min(28, Math.max(1, cfg.diaLembrete ?? Math.max(1, diaVencimento - 1))),
-    gerarAutomaticamente: cfg.gerarAutomaticamente ?? valor > 0,
-    mesesCobranca: meses,
-    lembreteAtivo: cfg.lembreteAtivo ?? true,
     configSalvaEm: now,
-  };
+  });
+  const valor = normalized.valorPadrao;
+  const meses = normalized.mesesCobranca ?? [];
 
   let next: AppData = {
     ...data,
@@ -208,8 +255,20 @@ export function aplicarConfigMensalidadeCooperativa(
     }
   }
 
-  const withMens = ensureMensalidadesMeses(next, cooperativaId);
-  return withMens ?? next;
+  return sincronizarMensalidadeCooperativa(next, cooperativaId);
+}
+
+/** Gera/atualiza cobranças e alinha valores com a config da cooperativa. */
+export function sincronizarMensalidadeCooperativa(
+  data: AppData,
+  cooperativaId?: string
+): AppData {
+  let next = data;
+  const ensured = ensureMensalidadesMeses(next, cooperativaId);
+  if (ensured) next = ensured;
+  const status = atualizarStatusMensalidades(next);
+  if (status) next = status;
+  return next;
 }
 
 /** Marca mensalidades pendentes como atrasadas após o vencimento. */
@@ -328,6 +387,38 @@ export function getResumoMensalidadesCooperado(
     .sort((a, b) => b.mesReferencia.localeCompare(a.mesReferencia));
 
   if (todas.length === 0) {
+    const cooperado = data.cooperados.find((c) => c.id === cooperadoId);
+    const coop = cooperado
+      ? data.cooperativas.find((c) => c.id === cooperado.cooperativaId)
+      : undefined;
+    const cfg = coop?.mensalidadeConfig;
+    if (
+      cooperado?.status === "ativo" &&
+      cfg &&
+      cfg.valorPadrao > 0 &&
+      deveCobrarMensalidadeMes(cfg, mesAtual)
+    ) {
+      const vencimento = vencimentoDoMes(mesAtual, cfg.diaVencimento || 10);
+      const atrasada = vencimento < hoje;
+      const sintetica: Mensalidade = {
+        id: `cfg_${cooperadoId}_${mesAtual}`,
+        cooperadoId,
+        mesReferencia: mesAtual,
+        valor: cfg.valorPadrao,
+        vencimento,
+        status: atrasada ? "atrasada" : "pendente",
+        observacao: "Configuração da cooperativa",
+        createdAt: hoje,
+        updatedAt: hoje,
+      };
+      return {
+        situacao: atrasada ? "atrasada" : "pendente",
+        mensalidadeMesAtual: sintetica,
+        qtdAtrasadas: atrasada ? 1 : 0,
+        qtdAguardandoConfirmacao: 0,
+        valorEmAberto: cfg.valorPadrao,
+      };
+    }
     return {
       situacao: "sem_mensalidade",
       qtdAtrasadas: 0,

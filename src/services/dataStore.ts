@@ -4,7 +4,7 @@ import type { AppData, AuditAction, User, Cooperado, Cooperativa, PrestacaoConta
 import { emptyInitialData, DEMO_ENTITY_IDS, DEMO_EMAILS, DEMO_CNPJ } from "@/mock/data";
 import { findCooperativaByCnpj, getCooperativaById, getUserCooperativaId, normalizeCnpj } from "@/utils/cooperativa";
 import { compactarFotosNoArmazenamento } from "@/utils/fotoEntrega";
-import { ensureMensalidadesDoMes, ensureMensalidadeCooperado, atualizarStatusMensalidades } from "@/services/mensalidadeService";
+import { ensureMensalidadesDoMes, ensureMensalidadeCooperado, sincronizarMensalidadeCooperativa } from "@/services/mensalidadeService";
 import { applyOperationalResetIfNeeded, clearOperationalData } from "@/services/operationalReset";
 import {
   fetchCooperativaByCnpjFromCloud,
@@ -268,11 +268,7 @@ function migrateResponsavelPrincipal(data: AppData): AppData {
 function runAutomaticTasks(data: AppData): AppData {
   let current = compactarFotosNoArmazenamento(data);
   current = reconciliarFichaFromNotasConferidas(current);
-  const afterMensalidades = ensureMensalidadesDoMes(current);
-  if (afterMensalidades) current = afterMensalidades;
-  const afterStatus = atualizarStatusMensalidades(current);
-  if (afterStatus) current = afterStatus;
-  return current;
+  return sincronizarMensalidadeCooperativa(current);
 }
 
 function loadData(forceReload = false): AppData {

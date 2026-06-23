@@ -10,7 +10,7 @@ import { AlertBanner } from "@/components/ui/AlertBanner";
 import { updateData, addAuditEntry, getData } from "@/services/dataStore";
 import { resolveCooperativaCnpj } from "@/services/notaPedidoCloudService";
 import { pushCooperativaProfileToCloud, pushOperacionalToCloud } from "@/services/cooperativaSyncCloudService";
-import { aplicarConfigMensalidadeCooperativa } from "@/services/mensalidadeService";
+import { aplicarConfigMensalidadeCooperativa, mergeConfigMensalidadeCooperativa } from "@/services/mensalidadeService";
 import {
   classificarMesReferencia,
   formatCurrency,
@@ -114,14 +114,14 @@ export function MensalidadeConfigPanel({ cooperativaId, user, canEdit }: Props) 
 
     setSalvando(true);
     const mesesOrdenados = [...mesesMarcados].sort();
-    const cfg: MensalidadeConfig = {
+    const cfg: MensalidadeConfig = mergeConfigMensalidadeCooperativa(configSalva, {
       valorPadrao: valor,
       diaVencimento: Math.min(28, Math.max(1, parseInt(diaVencimento, 10) || 10)),
-      lembreteAtivo: true,
+      lembreteAtivo: configSalva?.lembreteAtivo ?? true,
       diaLembrete: Math.max(1, Math.min(28, (parseInt(diaVencimento, 10) || 10) - 1)),
       gerarAutomaticamente: true,
       mesesCobranca: mesesOrdenados,
-    };
+    });
 
     updateData((d) => {
       const next = aplicarConfigMensalidadeCooperativa(d, cooperativaId, cfg);

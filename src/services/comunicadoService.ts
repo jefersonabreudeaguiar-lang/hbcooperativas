@@ -3,12 +3,15 @@ import {
   isAvisoMensalidadeVenceAmanha,
   textoAvisoMensalidadeAmanha,
   getResumoMensalidadesCooperado,
+  type ResumoMensalidadesCooperado,
 } from "@/services/mensalidadeService";
-import { getCurrentMesReferencia } from "@/utils/format";
+import { formatCurrency, formatDate, formatMesReferencia, getCurrentMesReferencia } from "@/utils/format";
 
 export interface ComunicadoExibicao extends Comunicado {
   virtual?: boolean;
   recorrenteLabel?: string;
+  /** Link opcional no mural (ex.: mensalidade pendente → /mensalidades). */
+  href?: string;
 }
 
 function hoje(): Date {
@@ -106,6 +109,42 @@ function lembreteMensalidadeVirtual(coop: Cooperativa): ComunicadoExibicao | nul
   };
 }
 
+function mensalidadePendenteMuralVirtual(
+  coop: Cooperativa,
+  resumo: ResumoMensalidadesCooperado
+): ComunicadoExibicao {
+  const m = resumo.mensalidadeMesAtual;
+  const cfg = coop.mensalidadeConfig;
+  const mes = m?.mesReferencia ?? mesAtualRef();
+  const valor = m?.valor ?? cfg?.valorPadrao ?? 0;
+  const atrasada = resumo.situacao === "atrasada";
+  const assunto = atrasada ? "Mensalidade em atraso" : "Mensalidade pendente";
+  const partes = [`${formatMesReferencia(mes)} · ${formatCurrency(valor)}`];
+  if (m?.vencimento) partes.push(`vence em ${formatDate(m.vencimento)}`);
+  if (resumo.qtdAtrasadas > 1) {
+    partes.push(`${resumo.qtdAtrasadas} mensalidade(s) em aberto`);
+  }
+
+  return {
+    id: `virtual_mensalidade_pendente_${coop.id}_${mes}`,
+    cooperativaId: coop.id,
+    assunto,
+    titulo: assunto,
+    descricao: `${partes.join(" · ")}. Toque para pagar via PIX na aba Mensalidades.`,
+    data: dataHojeIso(),
+    responsavel: coop.responsavel ?? "Cooperativa",
+    categoria: "financeiro",
+    fixado: true,
+    visivelParaTodos: true,
+    recorrente: false,
+    ativo: true,
+    createdAt: hoje().toISOString(),
+    virtual: true,
+    recorrenteLabel: atrasada ? "Pendência · em atraso" : "Pendência · aguardando pagamento",
+    href: "/mensalidades",
+  };
+}
+
 /** Combina comunicados cadastrados + lembretes automáticos de mensalidade. */
 export function getComunicadosParaExibicao(
   data: AppData,
@@ -182,7 +221,7 @@ export function getComunicadosCooperado(
   );
 }
 
-/** Mural do início do cooperado — só avisos que ainda exigem atenção. */
+/** Mural do início do cooperado — avisos e mensalidade pendente sincronizados com a aba Mensalidades. */
 export function getComunicadosMuralInicioCooperado(
   data: AppData,
   cooperativaId: string,
@@ -194,11 +233,27 @@ export function getComunicadosMuralInicioCooperado(
     resumoMens.situacao === "em_dia" ||
     resumoMens.situacao === "sem_mensalidade" ||
     resumoMens.situacao === "aguardando_confirmacao";
+  const mensalidadePendente =
+    resumoMens?.situacao === "pendente" || resumoMens?.situacao === "atrasada";
+  const coop = data.cooperativas.find((c) => c.id === cooperativaId);
 
-  return getComunicadosCooperado(data, cooperativaId, cooperadoId).filter((c) => {
+  const lista = getComunicadosCooperado(data, cooperativaId, cooperadoId).filter((c) => {
+    if (c.virtual && c.id.startsWith("virtual_mensalidade_pendente_")) return false;
+    if (c.virtual && c.id.startsWith("virtual_mensalidade")) {
+      return !mensalidadeResolvida;
+    }
     if (c.virtual) return false;
     if (mensalidadeResolvida && c.categoria === "financeiro") return false;
     return true;
+  });
+
+  if (mensalidadePendente && resumoMens && coop) {
+    lista.unshift(mensalidadePendenteMuralVirtual(coop, resumoMens));
+  }
+
+  return lista.sort((a, b) => {
+    if (a.fixado !== b.fixado) return a.fixado ? -1 : 1;
+    return new Date(b.data).getTime() - new Date(a.data).getTime();
   });
 }
 

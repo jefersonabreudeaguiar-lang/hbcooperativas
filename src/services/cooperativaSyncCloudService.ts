@@ -6,6 +6,7 @@ import { syncCooperadosFromCloud } from "@/services/cooperadoCloudService";
 import { syncNotasPedidoFromCloud, patchNotaPedidoInCloud } from "@/services/notaPedidoCloudService";
 import { fetchCooperativaByCnpjFromCloud, mergeCooperativaIntoData } from "@/services/cooperativaCloudService";
 import { reconciliarFichaFromNotasConferidas } from "@/services/notaPedidoService";
+import { sincronizarMensalidadeCooperativa } from "@/services/mensalidadeService";
 import { aplicarPrestacoesContasExcluidas } from "@/services/prestacaoContasService";
 import { aplicarInstituicoesExcluidas } from "@/services/instituicaoContratoService";
 import {
@@ -429,7 +430,10 @@ export function mergeOperacionalIntoData(data: AppData, cloud: OperacionalSyncPa
     next = { ...next, config: { ...next.config, ...cloud.config } };
   }
 
-  return aplicarPrestacoesContasExcluidas(reconciliarFichaFromNotasConferidas(next));
+  return sincronizarMensalidadeCooperativa(
+    aplicarPrestacoesContasExcluidas(reconciliarFichaFromNotasConferidas(next)),
+    coopId
+  );
 }
 
 async function fetchSyncBundle(cnpj: string): Promise<{
@@ -603,8 +607,9 @@ export async function syncCooperativaProfileFromCloud(cnpj: string): Promise<boo
   if (!cloud) return false;
   const current = getData();
   const mergedCoops = mergeCooperativaIntoData(current.cooperativas, cloud);
-  if (mergedCoops === current.cooperativas) return false;
-  saveDataSafe({ ...current, cooperativas: mergedCoops });
+  const coopId = resolveCoopId(current, cnpj);
+  const next = sincronizarMensalidadeCooperativa({ ...current, cooperativas: mergedCoops }, coopId);
+  saveDataSafe(next);
   return true;
 }
 
