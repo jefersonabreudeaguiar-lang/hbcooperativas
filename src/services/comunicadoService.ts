@@ -120,7 +120,10 @@ function mensalidadePendenteMuralVirtual(
   const atrasada = resumo.situacao === "atrasada";
   const assunto = atrasada ? "Mensalidade em atraso" : "Mensalidade pendente";
   const partes = [`${formatMesReferencia(mes)} · ${formatCurrency(valor)}`];
-  if (m?.vencimento) partes.push(`vence em ${formatDate(m.vencimento)}`);
+  if (m?.vencimento) {
+    const venceu = atrasada || m.vencimento < dataHojeIso();
+    partes.push(venceu ? `venceu em ${formatDate(m.vencimento)}` : `vence em ${formatDate(m.vencimento)}`);
+  }
   if (resumo.qtdAtrasadas > 1) {
     partes.push(`${resumo.qtdAtrasadas} mensalidade(s) em aberto`);
   }
@@ -227,7 +230,9 @@ export function getComunicadosMuralInicioCooperado(
   cooperativaId: string,
   cooperadoId?: string
 ): ComunicadoExibicao[] {
-  const resumoMens = cooperadoId ? getResumoMensalidadesCooperado(data, cooperadoId) : null;
+  const resumoMens = cooperadoId
+    ? getResumoMensalidadesCooperado(data, cooperadoId, cooperativaId)
+    : null;
   const mensalidadeResolvida =
     !resumoMens ||
     resumoMens.situacao === "em_dia" ||

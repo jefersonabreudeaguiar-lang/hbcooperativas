@@ -25,12 +25,17 @@ import {
   mensalidadeAguardandoConfirmacao,
   isAvisoMensalidadeVenceAmanha,
   textoAvisoMensalidadeAmanha,
+  listarMensalidadesExibicaoCooperado,
+  listarMensalidadesCooperado,
+  statusEfetivoMensalidade,
+  mesesCobrancaEfetivos,
 } from "@/services/mensalidadeService";
 import { compressDataUrl, compressFotoFile } from "@/utils/fotoEntrega";
 import { formatCurrency, formatDate, formatMesReferencia, getCurrentMesReferencia } from "@/utils/format";
 import { getCooperadoNome } from "@/utils/calculations";
 import type { Mensalidade } from "@/types";
 import { MensalidadeConfigPanel } from "@/components/mensalidade/MensalidadeConfigPanel";
+import { MensalidadeStatusBanner } from "@/components/cooperado/MensalidadeStatusBanner";
 
 const SHARE_KEY = "hb_comprovante_mensalidade_share";
 
@@ -53,7 +58,7 @@ function MensalidadesContent() {
   const searchParams = useSearchParams();
   const { check, user, isCooperado, cooperadoId } = usePermissions();
   const [statusFilter, setStatusFilter] = useState("");
-  const [mesFilter, setMesFilter] = useState(getCurrentMesReferencia());
+  const [mesFilter, setMesFilter] = useState("");
   const [pixModalOpen, setPixModalOpen] = useState(false);
   const [mensalidadePix, setMensalidadePix] = useState<Mensalidade | null>(null);
   const [copiedCnpj, setCopiedCnpj] = useState(false);
@@ -82,12 +87,16 @@ function MensalidadesContent() {
 
   const mensalidades = useMemo(() => {
     if (!data) return [];
-    return data.mensalidades
+    const base = isCooperado && cooperadoId
+      ? listarMensalidadesExibicaoCooperado(data, cooperadoId, coopId)
+      : data.mensalidades.filter((m) => {
+          const c = data.cooperados.find((x) => x.id === m.cooperadoId);
+          return !coopId || c?.cooperativaId === coopId;
+        });
+
+    return base
       .filter((m) => {
-        const c = data.cooperados.find((x) => x.id === m.cooperadoId);
-        if (coopId && c?.cooperativaId !== coopId) return false;
-        if (isCooperado && cooperadoId && m.cooperadoId !== cooperadoId) return false;
-        if (statusFilter && m.status !== statusFilter) return false;
+        if (statusFilter && statusEfetivoMensalidade(m) !== statusFilter) return false;
         if (mesFilter && m.mesReferencia !== mesFilter) return false;
         return true;
       })
@@ -102,13 +111,14 @@ function MensalidadesContent() {
   const aguardandoConfirmacao = useMemo(
     () => {
       if (!data) return [];
-      return data.mensalidades
-        .filter((m) => {
-          const c = data.cooperados.find((x) => x.id === m.cooperadoId);
-          if (coopId && c?.cooperativaId !== coopId) return false;
-          if (isCooperado && cooperadoId && m.cooperadoId !== cooperadoId) return false;
-          return m.status === "aguardando_confirmacao";
-        })
+      const base = isCooperado && cooperadoId
+        ? listarMensalidadesCooperado(data, cooperadoId, coopId)
+        : data.mensalidades.filter((m) => {
+            const c = data.cooperados.find((x) => x.id === m.cooperadoId);
+            return !coopId || c?.cooperativaId === coopId;
+          });
+      return base
+        .filter((m) => m.status === "aguardando_confirmacao")
         .sort((a, b) => b.mesReferencia.localeCompare(a.mesReferencia));
     },
     [data, coopId, isCooperado, cooperadoId]
@@ -116,20 +126,31 @@ function MensalidadesContent() {
 
   const meses = useMemo(() => {
     if (!data) return [getCurrentMesReferencia()];
-    const set = new Set(data.mensalidades.map((m) => m.mesReferencia));
+    const set = new Set<string>();
+    const base = isCooperado && cooperadoId
+      ? listarMensalidadesExibicaoCooperado(data, cooperadoId, coopId)
+      : data.mensalidades.filter((m) => {
+          const c = data.cooperados.find((x) => x.id === m.cooperadoId);
+          return !coopId || c?.cooperativaId === coopId;
+        });
+    for (const m of base) set.add(m.mesReferencia);
+    if (cooperativa?.mensalidadeConfig) {
+      for (const mes of mesesCobrancaEfetivos(cooperativa.mensalidadeConfig)) set.add(mes);
+    }
     set.add(getCurrentMesReferencia());
     return [...set].sort().reverse();
-  }, [data]);
+  }, [data, isCooperado, cooperadoId, coopId, cooperativa?.mensalidadeConfig]);
 
   const resumoCooperado = useMemo(() => {
-    if (!isCooperado) return null;
+    if (!isCooperado || !cooperadoId || !data) return null;
+    const todas = listarMensalidadesExibicaoCooperado(data, cooperadoId, coopId);
     return {
-      pagas: mensalidades.filter((m) => m.status === "paga").length,
-      vencidas: mensalidades.filter((m) => m.status === "atrasada").length,
-      pendentes: mensalidades.filter((m) => m.status === "pendente").length,
-      aguardando: mensalidades.filter((m) => m.status === "aguardando_confirmacao").length,
+      pagas: todas.filter((m) => statusEfetivoMensalidade(m) === "paga").length,
+      vencidas: todas.filter((m) => statusEfetivoMensalidade(m) === "atrasada").length,
+      pendentes: todas.filter((m) => statusEfetivoMensalidade(m) === "pendente").length,
+      aguardando: todas.filter((m) => m.status === "aguardando_confirmacao").length,
     };
-  }, [mensalidades, isCooperado]);
+  }, [data, isCooperado, cooperadoId, coopId]);
 
   const abrirPix = (m: Mensalidade) => {
     setMensalidadePix(m);
@@ -302,6 +323,12 @@ function MensalidadesContent() {
         </AlertBanner>
       )}
 
+      {isCooperado && cooperadoId && (
+        <div className="mb-6">
+          <MensalidadeStatusBanner cooperadoId={cooperadoId} modo="geral" />
+        </div>
+      )}
+
       {isCooperado && chavePixCoop && cooperativa && (
         <Card className="mb-6 border-green-200 bg-green-50/40">
           <p className="text-sm font-medium text-gray-900">PIX da cooperativa (CNPJ)</p>
@@ -380,6 +407,7 @@ function MensalidadesContent() {
       <FilterBar>
         <FormField label="Mês">
           <Select value={mesFilter} onChange={(e) => setMesFilter(e.target.value)} className="min-w-[180px]">
+            <option value="">Todos os meses</option>
             {meses.map((m) => (
               <option key={m} value={m}>{formatMesReferencia(m)}</option>
             ))}
@@ -422,7 +450,7 @@ function MensalidadesContent() {
           { key: "mes", label: "Mês", render: (m) => formatMesReferencia(m.mesReferencia) },
           { key: "valor", label: "Valor", render: (m) => formatCurrency(m.valor) },
           { key: "vencimento", label: "Vencimento", render: (m) => formatDate(m.vencimento) },
-          { key: "status", label: "Status", render: (m) => <StatusBadge status={m.status} /> },
+          { key: "status", label: "Status", render: (m) => <StatusBadge status={statusEfetivoMensalidade(m)} /> },
           {
             key: "acoes",
             label: "Ações",
@@ -596,7 +624,7 @@ function MensalidadeCard({
       )}
       <div className="flex items-center justify-between mt-1">
         <p className="text-sm text-gray-600">{formatMesReferencia(m.mesReferencia)}</p>
-        <StatusBadge status={m.status} />
+        <StatusBadge status={statusEfetivoMensalidade(m)} />
       </div>
       <p className="text-lg font-bold text-gray-900 mt-2">{formatCurrency(m.valor)}</p>
       <p className="text-xs text-gray-500">Vence {formatDate(m.vencimento)}</p>

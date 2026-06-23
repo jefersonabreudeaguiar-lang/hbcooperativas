@@ -1,5 +1,6 @@
 import type { AppData, Mensalidade, MensalidadeConfig } from "@/types";
 import { lancarMensalidadeNoCaixa } from "@/services/livroCaixaService";
+import { resolverCooperadoIdCanonico } from "@/services/cooperadoCloudService";
 import {
   aplicarAjustesFichaMesTodosCooperados,
   upsertAjustesFichaMesCooperativa,
@@ -74,6 +75,148 @@ export function getConfigMensalidadeCooperativa(
   cooperativaId: string
 ): MensalidadeConfig | undefined {
   return data.cooperativas.find((c) => c.id === cooperativaId)?.mensalidadeConfig;
+}
+
+export function mensalidadePertenceCooperado(
+  data: AppData,
+  mensalidade: Mensalidade,
+  cooperadoId: string,
+  cooperativaId?: string
+): boolean {
+  if (mensalidade.cooperadoId === cooperadoId) return true;
+  const alvo = resolverCooperadoIdCanonico(data, cooperadoId, cooperativaId);
+  const dono = resolverCooperadoIdCanonico(data, mensalidade.cooperadoId, cooperativaId);
+  return alvo === dono;
+}
+
+export function listarMensalidadesCooperado(
+  data: AppData,
+  cooperadoId: string,
+  cooperativaId?: string
+): Mensalidade[] {
+  return data.mensalidades
+    .filter((m) => mensalidadePertenceCooperado(data, m, cooperadoId, cooperativaId))
+    .sort(
+      (a, b) =>
+        b.mesReferencia.localeCompare(a.mesReferencia) || a.vencimento.localeCompare(b.vencimento)
+    );
+}
+
+export function statusEfetivoMensalidade(m: Mensalidade, hoje?: string): Mensalidade["status"] {
+  const ref = hoje ?? new Date().toISOString().split("T")[0];
+  if (m.status === "pendente" && m.vencimento && m.vencimento < ref) return "atrasada";
+  return m.status;
+}
+
+function mensalidadeDestaqueResumo(
+  todas: Mensalidade[],
+  hoje: string,
+  mesAtual: string
+): Mensalidade | undefined {
+  const atrasadas = todas.filter((m) => statusEfetivoMensalidade(m, hoje) === "atrasada");
+  if (atrasadas.length > 0) return atrasadas[0];
+
+  const abertas = todas.filter((m) => {
+    const st = statusEfetivoMensalidade(m, hoje);
+    return st === "pendente" || st === "atrasada";
+  });
+  if (abertas.length > 0) return abertas[0];
+
+  return todas.find((m) => m.mesReferencia === mesAtual);
+}
+
+function resumoConfigSemRegistros(
+  data: AppData,
+  cooperadoId: string,
+  hoje: string,
+  mesAtual: string
+): ResumoMensalidadesCooperado | null {
+  const cooperado = data.cooperados.find((c) => c.id === cooperadoId);
+  const coop = cooperado
+    ? data.cooperativas.find((c) => c.id === cooperado.cooperativaId)
+    : undefined;
+  const cfg = coop?.mensalidadeConfig;
+  if (!cooperado || cooperado.status !== "ativo" || !cfg || cfg.valorPadrao <= 0) return null;
+
+  let meses = [...mesesCobrancaEfetivos(cfg)];
+  if (meses.length === 0) meses = [mesAtual];
+
+  meses.sort().reverse();
+  let destaque: Mensalidade | undefined;
+  let qtdAtrasadas = 0;
+  let valorEmAberto = 0;
+
+  for (const mes of meses) {
+    const vencimento = vencimentoDoMes(mes, cfg.diaVencimento || 10);
+    const atrasada = vencimento < hoje;
+    if (!atrasada && mes !== mesAtual) continue;
+
+    const sintetica: Mensalidade = {
+      id: `cfg_${cooperadoId}_${mes}`,
+      cooperadoId,
+      mesReferencia: mes,
+      valor: cfg.valorPadrao,
+      vencimento,
+      status: atrasada ? "atrasada" : "pendente",
+      observacao: "Configuração da cooperativa",
+      createdAt: hoje,
+      updatedAt: hoje,
+    };
+
+    if (atrasada) qtdAtrasadas += 1;
+    valorEmAberto += cfg.valorPadrao;
+    if (!destaque) destaque = sintetica;
+  }
+
+  if (!destaque) return null;
+
+  return {
+    situacao: qtdAtrasadas > 0 ? "atrasada" : "pendente",
+    mensalidadeMesAtual: destaque,
+    qtdAtrasadas,
+    qtdAguardandoConfirmacao: 0,
+    valorEmAberto,
+  };
+}
+
+/** Lista para a aba Mensalidades do cooperado (inclui cobranças sintéticas da config quando ainda não geradas). */
+export function listarMensalidadesExibicaoCooperado(
+  data: AppData,
+  cooperadoId: string,
+  cooperativaId?: string
+): Mensalidade[] {
+  const reais = listarMensalidadesCooperado(data, cooperadoId, cooperativaId);
+  if (reais.length > 0) return reais;
+
+  const hoje = new Date().toISOString().split("T")[0];
+  const cooperado = data.cooperados.find((c) => c.id === cooperadoId);
+  const coopId =
+    cooperativaId ?? cooperado?.cooperativaId;
+  const coop = coopId ? data.cooperativas.find((c) => c.id === coopId) : undefined;
+  const cfg = coop?.mensalidadeConfig;
+  if (!cooperado || cooperado.status !== "ativo" || !cfg || cfg.valorPadrao <= 0) return [];
+
+  let meses = [...mesesCobrancaEfetivos(cfg)];
+  if (meses.length === 0) meses = [getCurrentMesReferencia()];
+
+  return meses
+    .sort()
+    .reverse()
+    .map((mes) => {
+      const vencimento = vencimentoDoMes(mes, cfg.diaVencimento || 10);
+      const atrasada = vencimento < hoje;
+      return {
+        id: `cfg_${cooperadoId}_${mes}`,
+        cooperadoId,
+        mesReferencia: mes,
+        valor: cfg.valorPadrao,
+        vencimento,
+        status: atrasada ? "atrasada" : "pendente",
+        observacao: "Configuração da cooperativa",
+        createdAt: hoje,
+        updatedAt: hoje,
+      } satisfies Mensalidade;
+    });
 }
 
 export function textoAvisoMensalidadeAmanha(cfg: MensalidadeConfig): string {
@@ -202,9 +345,12 @@ export function ensureMensalidadesMeses(data: AppData, cooperativaId?: string): 
   for (const coop of data.cooperativas) {
     if (cooperativaId && coop.id !== cooperativaId) continue;
     const cfg = coop.mensalidadeConfig;
-    if (!cfg?.gerarAutomaticamente || cfg.valorPadrao <= 0) continue;
+    if (!cfg || cfg.valorPadrao <= 0) continue;
 
     const meses = mesesCobrancaEfetivos(cfg);
+    if (meses.length === 0) continue;
+    if (cfg.gerarAutomaticamente === false) continue;
+
     for (const mes of meses) {
       if (gerarMensalidadesCooperativaMes(data, coop.id, mes, cfg, mensalidades, now)) {
         changed = true;
@@ -349,7 +495,8 @@ export function confirmarPagamentoMensalidade(
 }
 
 export function mensalidadePodePagarComPix(m: Mensalidade): boolean {
-  return m.status === "pendente" || m.status === "atrasada";
+  const st = statusEfetivoMensalidade(m);
+  return st === "pendente" || st === "atrasada";
 }
 
 export function mensalidadeAguardandoConfirmacao(m: Mensalidade): boolean {
@@ -370,64 +517,30 @@ export interface ResumoMensalidadesCooperado {
   valorEmAberto: number;
 }
 
-function statusEfetivoMensalidade(m: Mensalidade, hoje: string): Mensalidade["status"] {
-  if (m.status === "pendente" && m.vencimento && m.vencimento < hoje) return "atrasada";
-  return m.status;
-}
-
 /** Resumo para exibir no início do painel do cooperado. */
 export function getResumoMensalidadesCooperado(
   data: AppData,
-  cooperadoId: string
+  cooperadoId: string,
+  cooperativaId?: string
 ): ResumoMensalidadesCooperado {
   const hoje = new Date().toISOString().split("T")[0];
   const mesAtual = getCurrentMesReferencia();
-  const todas = data.mensalidades
-    .filter((m) => m.cooperadoId === cooperadoId)
-    .sort((a, b) => b.mesReferencia.localeCompare(a.mesReferencia));
+  const coopId =
+    cooperativaId ?? data.cooperados.find((c) => c.id === cooperadoId)?.cooperativaId;
+  const todas = listarMensalidadesCooperado(data, cooperadoId, coopId);
 
   if (todas.length === 0) {
-    const cooperado = data.cooperados.find((c) => c.id === cooperadoId);
-    const coop = cooperado
-      ? data.cooperativas.find((c) => c.id === cooperado.cooperativaId)
-      : undefined;
-    const cfg = coop?.mensalidadeConfig;
-    if (
-      cooperado?.status === "ativo" &&
-      cfg &&
-      cfg.valorPadrao > 0 &&
-      deveCobrarMensalidadeMes(cfg, mesAtual)
-    ) {
-      const vencimento = vencimentoDoMes(mesAtual, cfg.diaVencimento || 10);
-      const atrasada = vencimento < hoje;
-      const sintetica: Mensalidade = {
-        id: `cfg_${cooperadoId}_${mesAtual}`,
-        cooperadoId,
-        mesReferencia: mesAtual,
-        valor: cfg.valorPadrao,
-        vencimento,
-        status: atrasada ? "atrasada" : "pendente",
-        observacao: "Configuração da cooperativa",
-        createdAt: hoje,
-        updatedAt: hoje,
-      };
-      return {
-        situacao: atrasada ? "atrasada" : "pendente",
-        mensalidadeMesAtual: sintetica,
-        qtdAtrasadas: atrasada ? 1 : 0,
+    return (
+      resumoConfigSemRegistros(data, cooperadoId, hoje, mesAtual) ?? {
+        situacao: "sem_mensalidade",
+        qtdAtrasadas: 0,
         qtdAguardandoConfirmacao: 0,
-        valorEmAberto: cfg.valorPadrao,
-      };
-    }
-    return {
-      situacao: "sem_mensalidade",
-      qtdAtrasadas: 0,
-      qtdAguardandoConfirmacao: 0,
-      valorEmAberto: 0,
-    };
+        valorEmAberto: 0,
+      }
+    );
   }
 
-  const mensalidadeMesAtual = todas.find((m) => m.mesReferencia === mesAtual);
+  const mensalidadeMesAtual = mensalidadeDestaqueResumo(todas, hoje, mesAtual);
   const qtdAtrasadas = todas.filter((m) => statusEfetivoMensalidade(m, hoje) === "atrasada").length;
   const qtdAguardandoConfirmacao = todas.filter((m) => m.status === "aguardando_confirmacao").length;
   const abertas = todas.filter((m) => {
@@ -445,6 +558,7 @@ export function getResumoMensalidadesCooperado(
     const st = statusEfetivoMensalidade(mensalidadeMesAtual, hoje);
     if (st === "paga") situacao = "em_dia";
     else if (st === "pendente") situacao = "pendente";
+    else if (st === "atrasada") situacao = "atrasada";
     else situacao = "em_dia";
   } else if (abertas.length > 0) {
     situacao = "pendente";

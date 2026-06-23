@@ -48,7 +48,7 @@ function CooperadoDashboard() {
   const notasPendentes = listarNotasPendentesCooperado(data, cooperadoId, coopId);
   const rejeitadas = notasPendentes.filter((n) => n.status === "rejeitada");
   const emAnalise = notasPendentes.filter((n) => n.status === "aguardando_conferencia").length;
-  const resumoMens = getResumoMensalidadesCooperado(data, cooperadoId);
+  const resumoMens = getResumoMensalidadesCooperado(data, cooperadoId, coopId);
   const mensalidadeAberta =
     resumoMens.situacao !== "em_dia" &&
     resumoMens.situacao !== "sem_mensalidade" &&

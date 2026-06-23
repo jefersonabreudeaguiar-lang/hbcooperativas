@@ -35,7 +35,7 @@ export function MensalidadeStatusBanner({
     );
   }
 
-  const resumo = getResumoMensalidadesCooperado(data, cooperadoId);
+  const resumo = getResumoMensalidadesCooperado(data, cooperadoId, cooperado?.cooperativaId);
   if (resumo.situacao === "sem_mensalidade" || resumo.situacao === "em_dia") return null;
 
   const mesAtual = resumo.mensalidadeMesAtual;

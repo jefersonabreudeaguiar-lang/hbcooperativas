@@ -79,6 +79,9 @@ function stripDemoData(data: AppData): AppData {
   for (const p of data.pagamentosCooperado ?? []) {
     if (p.cooperadoId) cooperadoIds.add(p.cooperadoId);
   }
+  for (const m of data.mensalidades ?? []) {
+    if (m.cooperadoId) cooperadoIds.add(m.cooperadoId);
+  }
   const users = data.users.filter(
     (u) => !DEMO_ENTITY_IDS.has(u.id) && !DEMO_EMAILS.has(u.email.toLowerCase())
   );
