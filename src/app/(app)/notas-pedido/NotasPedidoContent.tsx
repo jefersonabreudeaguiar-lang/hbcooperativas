@@ -95,6 +95,17 @@ function loadItensFromInstituicao(
     });
 }
 
+function qtyInputClassName(filled: boolean, extra?: string) {
+  return cn(
+    "min-h-[3.25rem] px-3 py-2 text-center text-2xl font-bold tabular-nums rounded-xl border-2 shadow-sm transition-colors",
+    "focus:outline-none focus:ring-4",
+    filled
+      ? "bg-green-50 border-green-500 text-green-900 placeholder:text-green-400 focus:border-green-600 focus:ring-green-200/80"
+      : "bg-amber-50 border-amber-500 text-gray-900 placeholder:text-amber-600 focus:border-amber-600 focus:ring-amber-200/80",
+    extra
+  );
+}
+
 export default function NotasPedidoContent() {
   const data = useAppData();
   const { check, user, isCooperado, cooperadoId } = usePermissions();
@@ -1871,22 +1882,42 @@ export default function NotasPedidoContent() {
           ) : (
             <>
               {avulsoErrors.itens && <p className="text-sm text-red-600">{avulsoErrors.itens}</p>}
-              <p className="text-sm text-gray-600">Quantidades — preços do contrato:</p>
+              <p className="text-sm font-semibold text-gray-800">
+                Quantidades entregues — preços do contrato
+              </p>
+              <p className="text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+                Toque nas caixas amarelas abaixo e informe a quantidade de cada item.
+              </p>
               <div className="space-y-3 max-h-64 overflow-y-auto">
                 {avulsoItens.map((item, idx) => (
-                  <div key={item.produtoInstituicaoId} className="flex items-center gap-3 p-3 bg-gray-50 rounded-xl">
+                  <div
+                    key={item.produtoInstituicaoId}
+                    className={cn(
+                      "flex items-center gap-3 p-3 rounded-xl border-2",
+                      item.quantidade > 0
+                        ? "bg-green-50/70 border-green-200"
+                        : "bg-white border-amber-200"
+                    )}
+                  >
                     <div className="flex-1 min-w-0">
-                      <p className="font-medium text-sm">{item.produtoNome}</p>
+                      <p className="font-medium text-sm text-gray-900">{item.produtoNome}</p>
                       <p className="text-xs text-gray-500">{formatCurrency(item.precoUnitario)} / {labelUnidade(item.unidade)}</p>
                     </div>
-                    <Input
-                      type="number"
-                      min={0}
-                      step="0.01"
-                      className="w-24 text-center text-lg"
-                      value={item.quantidade || ""}
-                      onChange={(e) => updateAvulsoQty(idx, parseFloat(e.target.value) || 0)}
-                    />
+                    <div className="shrink-0 text-center">
+                      <p className="text-[10px] font-bold uppercase tracking-wide text-amber-700 mb-1">Quantidade</p>
+                      <Input
+                        type="number"
+                        min={0}
+                        step="0.01"
+                        inputMode="decimal"
+                        aria-label={`Quantidade de ${item.produtoNome}`}
+                        placeholder="0"
+                        className={qtyInputClassName(item.quantidade > 0, "w-28")}
+                        value={item.quantidade || ""}
+                        onChange={(e) => updateAvulsoQty(idx, parseFloat(e.target.value) || 0)}
+                      />
+                      <p className="text-[10px] font-medium text-gray-600 mt-1">{labelUnidade(item.unidade)}</p>
+                    </div>
                   </div>
                 ))}
               </div>
@@ -2014,33 +2045,49 @@ export default function NotasPedidoContent() {
                   )}
                   <div className="overflow-x-auto max-h-[min(50vh,420px)] overflow-y-auto">
                     <table className="w-full text-sm">
-                      <thead className="bg-gray-50 border-b border-gray-200 sticky top-0 z-10">
+                      <thead className="bg-amber-50 border-b-2 border-amber-200 sticky top-0 z-10">
                         <tr>
                           <th className="text-left px-4 py-2.5 font-semibold text-gray-700">Item</th>
-                          <th className="text-right px-4 py-2.5 font-semibold text-gray-700 w-32">Quantidade</th>
+                          <th className="text-center px-4 py-2.5 font-bold text-amber-800 w-40">
+                            Quantidade
+                          </th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-gray-100">
                         {conferenciaItens.map((item, idx) => (
-                          <tr key={item.produtoInstituicaoId} className="hover:bg-green-50/40">
-                            <td className="px-4 py-2.5 font-medium text-gray-900">{item.produtoNome}</td>
-                            <td className="px-4 py-2.5">
-                              <Input
-                                type="number"
-                                min={0}
-                                step="0.01"
-                                className="w-full max-w-[7rem] ml-auto text-center"
-                                value={item.quantidade === 0 ? "" : item.quantidade}
-                                onChange={(e) => {
-                                  const raw = e.target.value;
-                                  if (raw === "" || raw === ".") {
-                                    updateConferenciaQty(idx, 0);
-                                    return;
-                                  }
-                                  const qty = parseFloat(raw);
-                                  if (!Number.isNaN(qty)) updateConferenciaQty(idx, qty);
-                                }}
-                              />
+                          <tr
+                            key={item.produtoInstituicaoId}
+                            className={cn(
+                              item.quantidade > 0 ? "bg-green-50/50" : "bg-amber-50/30 hover:bg-amber-50/60"
+                            )}
+                          >
+                            <td className="px-4 py-3 font-medium text-gray-900">{item.produtoNome}</td>
+                            <td className="px-4 py-3">
+                              <div className="mx-auto w-full max-w-[9rem] text-center">
+                                <p className="text-[10px] font-bold uppercase tracking-wide text-amber-700 mb-1">
+                                  Digite aqui
+                                </p>
+                                <Input
+                                  type="number"
+                                  min={0}
+                                  step="0.01"
+                                  inputMode="decimal"
+                                  aria-label={`Quantidade de ${item.produtoNome}`}
+                                  placeholder="0"
+                                  className={qtyInputClassName(item.quantidade > 0, "w-full")}
+                                  value={item.quantidade === 0 ? "" : item.quantidade}
+                                  onChange={(e) => {
+                                    const raw = e.target.value;
+                                    if (raw === "" || raw === ".") {
+                                      updateConferenciaQty(idx, 0);
+                                      return;
+                                    }
+                                    const qty = parseFloat(raw);
+                                    if (!Number.isNaN(qty)) updateConferenciaQty(idx, qty);
+                                  }}
+                                />
+                                <p className="text-[10px] font-medium text-gray-600 mt-1">{labelUnidade(item.unidade)}</p>
+                              </div>
                             </td>
                           </tr>
                         ))}
