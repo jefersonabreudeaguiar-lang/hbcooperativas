@@ -9,6 +9,7 @@ import {
   ChevronUp,
   FileCheck,
   Send,
+  Trash2,
   User,
 } from "lucide-react";
 import { useAppData } from "@/hooks/useAppData";
@@ -20,6 +21,7 @@ import { Button } from "@/components/ui/Button";
 import { Input, Select, Textarea, FormField } from "@/components/ui/Form";
 import { Card } from "@/components/ui/Card";
 import { AlertBanner } from "@/components/ui/AlertBanner";
+import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { updateData, addAuditEntry, generateId, getData } from "@/services/dataStore";
 import { resolveCooperativaCnpj } from "@/services/notaPedidoCloudService";
 import { pushOperacionalToCloud } from "@/services/cooperativaSyncCloudService";
@@ -28,6 +30,7 @@ import {
   atualizarNotaPrestacao,
   conferirNotaPrestacao,
   criarPrestacaoContas,
+  excluirPrestacaoContas,
   prestacoesAtivasCooperado,
   prestacoesCooperativa,
   prestacoesDoCooperado,
@@ -76,6 +79,10 @@ function ResponsavelView({ coopId, data }: { coopId: string; data: AppData }) {
   const [valorRepasse, setValorRepasse] = useState("");
   const [expandido, setExpandido] = useState<string | null>(null);
   const [publicando, setPublicando] = useState(false);
+  const [excluirPrestacaoTarget, setExcluirPrestacaoTarget] = useState<PrestacaoContas | null>(null);
+  const [excluindo, setExcluindo] = useState(false);
+
+  const podeExcluir = user ? canUser(user, "prestacao_contas", "delete") : false;
 
   const cooperados = useMemo(
     () =>
@@ -142,6 +149,29 @@ function ResponsavelView({ coopId, data }: { coopId: string; data: AppData }) {
         changes: "Nota conferida na prestação de contas",
       });
     });
+  };
+
+  const excluirPrestacao = () => {
+    if (!user || !excluirPrestacaoTarget) return;
+    setExcluindo(true);
+    try {
+      const alvo = excluirPrestacaoTarget;
+      updateData((d) => {
+        const next = excluirPrestacaoContas(d, alvo.id, coopId);
+        return addAuditEntry(next, {
+          entityType: "financeiro",
+          entityId: alvo.id,
+          action: "excluir",
+          userId: user.id,
+          userName: user.name,
+          changes: `Prestação de contas excluída · ${alvo.cooperadoNomeSnapshot ?? "Cooperado"} · ${formatCurrency(alvo.valorRepasse)} · ${alvo.historico}`,
+        });
+      });
+      if (expandido === alvo.id) setExpandido(null);
+      setExcluirPrestacaoTarget(null);
+    } finally {
+      setExcluindo(false);
+    }
   };
 
   const publicar = async () => {
@@ -333,6 +363,18 @@ function ResponsavelView({ coopId, data }: { coopId: string; data: AppData }) {
                           Todas as notas foram conferidas e o valor bate com o repasse.
                         </AlertBanner>
                       )}
+
+                      {podeExcluir && (
+                        <div className="pt-2 border-t border-gray-200">
+                          <Button
+                            variant="danger"
+                            className="w-full sm:w-auto"
+                            onClick={() => setExcluirPrestacaoTarget(p)}
+                          >
+                            <Trash2 size={16} /> Excluir prestação
+                          </Button>
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>
@@ -341,6 +383,29 @@ function ResponsavelView({ coopId, data }: { coopId: string; data: AppData }) {
           </div>
         )}
       </Card>
+
+      <ConfirmDialog
+        open={Boolean(excluirPrestacaoTarget)}
+        onClose={() => !excluindo && setExcluirPrestacaoTarget(null)}
+        onConfirm={excluirPrestacao}
+        title="Excluir prestação de contas?"
+        message={
+          excluirPrestacaoTarget
+            ? (() => {
+                const notas = (excluirPrestacaoTarget.notas ?? []).filter(
+                  (n) => n.fotoDataUrl || n.fotoMiniatura
+                ).length;
+                const base = `Excluir o repasse de ${formatCurrency(excluirPrestacaoTarget.valorRepasse)} para ${excluirPrestacaoTarget.cooperadoNomeSnapshot ?? "cooperado"} (${excluirPrestacaoTarget.historico})?`;
+                return notas > 0
+                  ? `${base} ${notas} nota(s) enviada(s) também serão removidas e o aviso some do início do cooperado.`
+                  : `${base} O cooperado deixará de ver este valor no início do app.`;
+              })()
+            : ""
+        }
+        confirmLabel="Sim, excluir"
+        variant="danger"
+        loading={excluindo}
+      />
     </div>
   );
 }

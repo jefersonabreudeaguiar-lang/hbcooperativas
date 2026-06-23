@@ -62,7 +62,7 @@ export const PERMISSIONS: PermissionMatrix = {
     relatorios: VIEW_EXPORT,
     fechamento: ["view", "approve", "export"],
     livro_caixa: ["view", "create", "edit", "export"],
-    prestacao_contas: ["view", "create", "edit", "export"],
+    prestacao_contas: ["view", "create", "edit", "delete", "export"],
   },
   cooperado: {
     dashboard: VIEW_ONLY,

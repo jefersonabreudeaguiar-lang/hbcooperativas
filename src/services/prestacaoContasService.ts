@@ -263,3 +263,16 @@ export function conferirNotaPrestacao(data: AppData, prestacaoId: string, notaId
 export function prestacaoPrincipalCooperado(data: AppData, cooperadoId: string, cooperativaId?: string): PrestacaoContas | undefined {
   return prestacoesAtivasCooperado(data, cooperadoId, cooperativaId)[0];
 }
+
+export function excluirPrestacaoContas(
+  data: AppData,
+  prestacaoId: string,
+  cooperativaId?: string
+): AppData {
+  return {
+    ...data,
+    prestacoesContas: (data.prestacoesContas ?? []).filter(
+      (p) => p.id !== prestacaoId || (cooperativaId != null && p.cooperativaId !== cooperativaId)
+    ),
+  };
+}
