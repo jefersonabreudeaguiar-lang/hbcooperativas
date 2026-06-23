@@ -1,6 +1,6 @@
 "use client";
 
-import type { AppData, AuditAction, User, Cooperado, Cooperativa } from "@/types";
+import type { AppData, AuditAction, User, Cooperado, Cooperativa, PrestacaoContas } from "@/types";
 import { emptyInitialData, DEMO_ENTITY_IDS, DEMO_EMAILS, DEMO_CNPJ } from "@/mock/data";
 import { findCooperativaByCnpj, getCooperativaById, getUserCooperativaId, normalizeCnpj } from "@/utils/cooperativa";
 import { compactarFotosNoArmazenamento } from "@/utils/fotoEntrega";
@@ -209,7 +209,9 @@ function migrateData(raw: Partial<AppData> & Record<string, unknown>): AppData {
     veiculos: base.veiculos ?? [],
     fechamentos: base.fechamentos ?? [],
     livroCaixa: base.livroCaixa ?? [],
-    prestacoesContas: (base.prestacoesContas ?? []).map(normalizarPrestacaoContas),
+    prestacoesContas: (base.prestacoesContas ?? [])
+      .filter((p): p is PrestacaoContas => Boolean(p && typeof p === "object"))
+      .map(normalizarPrestacaoContas),
     auditLog: base.auditLog ?? [],
   };
 

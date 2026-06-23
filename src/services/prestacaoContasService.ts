@@ -45,7 +45,26 @@ function prestacaoTime(p: PrestacaoContas, prefer: "updated" | "created"): numbe
 
 /** Garante campos obrigatórios após sync ou dados antigos. */
 export function normalizarPrestacaoContas(p: PrestacaoContas): PrestacaoContas {
+  if (!p || typeof p !== "object") {
+    const now = new Date().toISOString();
+    return {
+      id: `pc_invalid_${Date.now()}`,
+      cooperativaId: "",
+      cooperadoId: "",
+      tipoRepasse: "diversos",
+      historico: "Repasse",
+      valorRepasse: 0,
+      valorConferido: 0,
+      status: "pendente",
+      notas: [],
+      createdAt: now,
+      updatedAt: now,
+    };
+  }
+
   const now = new Date().toISOString();
+  const tipoRepasse =
+    p.tipoRepasse && p.tipoRepasse in TIPO_REPASSE_LABELS ? p.tipoRepasse : "diversos";
   const notas = (p.notas ?? []).map((n) => ({
     ...n,
     conferido: n.conferido ?? false,
@@ -53,6 +72,8 @@ export function normalizarPrestacaoContas(p: PrestacaoContas): PrestacaoContas {
   }));
   const base: PrestacaoContas = {
     ...p,
+    tipoRepasse,
+    historico: p.historico?.trim() || "Repasse",
     notas,
     valorRepasse: Number(p.valorRepasse) || 0,
     valorConferido: Number(p.valorConferido) || 0,

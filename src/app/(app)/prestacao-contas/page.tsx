@@ -36,7 +36,7 @@ import {
 } from "@/services/prestacaoContasService";
 import { compressFotoFile, makeFotoThumbnail } from "@/utils/fotoEntrega";
 import { formatCurrency, formatDate } from "@/utils/format";
-import type { PrestacaoContas, TipoRepassePrestacao } from "@/types";
+import type { PrestacaoContas, TipoRepassePrestacao, AppData } from "@/types";
 
 const STATUS_LABELS: Record<PrestacaoContas["status"], string> = {
   pendente: "Aguardando notas",
@@ -52,15 +52,21 @@ function StatusBadge({ status }: { status: PrestacaoContas["status"] }) {
     parcial: "bg-orange-100 text-orange-800",
     conferida: "bg-green-100 text-green-800",
   };
+  const label = STATUS_LABELS[status] ?? "Prestação";
+  const color = colors[status] ?? "bg-gray-100 text-gray-800";
   return (
-    <span className={`text-xs font-semibold px-2.5 py-1 rounded-full ${colors[status]}`}>
-      {STATUS_LABELS[status]}
+    <span className={`text-xs font-semibold px-2.5 py-1 rounded-full ${color}`}>
+      {label}
     </span>
   );
 }
 
-function ResponsavelView({ coopId }: { coopId: string }) {
-  const data = useAppData()!;
+function labelTipoRepasse(tipo: TipoRepassePrestacao | undefined): string {
+  if (tipo && TIPO_REPASSE_LABELS[tipo]) return TIPO_REPASSE_LABELS[tipo];
+  return "Repasse";
+}
+
+function ResponsavelView({ coopId, data }: { coopId: string; data: AppData }) {
   const { user } = usePermissions();
   const [cooperadoId, setCooperadoId] = useState("");
   const [tipoRepasse, setTipoRepasse] = useState<TipoRepassePrestacao>("despesa");
@@ -221,7 +227,7 @@ function ResponsavelView({ coopId }: { coopId: string }) {
                       </div>
                       <p className="text-sm text-gray-600 mt-1 truncate">{p.historico}</p>
                       <p className="text-xs text-gray-500 mt-1">
-                        {TIPO_REPASSE_LABELS[p.tipoRepasse]} · Repasse {formatCurrency(p.valorRepasse)}
+                        {labelTipoRepasse(p.tipoRepasse)} · Repasse {formatCurrency(p.valorRepasse)}
                         {p.valorConferido > 0 && ` · Conferido ${formatCurrency(p.valorConferido)}`}
                         {restante > 0 && p.valorConferido > 0 && (
                           <span className="text-amber-700 font-medium"> · Falta {formatCurrency(restante)}</span>
@@ -335,8 +341,15 @@ function ResponsavelView({ coopId }: { coopId: string }) {
   );
 }
 
-function CooperadoView({ cooperadoId, coopId }: { cooperadoId: string; coopId?: string }) {
-  const data = useAppData()!;
+function CooperadoView({
+  cooperadoId,
+  coopId,
+  data,
+}: {
+  cooperadoId: string;
+  coopId?: string;
+  data: AppData;
+}) {
   const { user } = usePermissions();
   const fileRef = useRef<HTMLInputElement>(null);
   const [prestacaoId, setPrestacaoId] = useState<string | null>(null);
@@ -425,7 +438,7 @@ function CooperadoView({ cooperadoId, coopId }: { cooperadoId: string; coopId?: 
                   : "Presta conta"}
               </span>
             </div>
-            <p className="text-sm text-violet-800">{TIPO_REPASSE_LABELS[selecionada.tipoRepasse]} · {selecionada.historico}</p>
+            <p className="text-sm text-violet-800">{labelTipoRepasse(selecionada.tipoRepasse)} · {selecionada.historico}</p>
             <div className="flex flex-wrap gap-4 mt-3 text-sm">
               <span>Repasse: <strong>{formatCurrency(selecionada.valorRepasse)}</strong></span>
               {selecionada.valorConferido > 0 && (
@@ -540,9 +553,9 @@ export default function PrestacaoContasPage() {
         }
       />
       {isDiretoria && coopId ? (
-        <ResponsavelView coopId={coopId} />
+        <ResponsavelView coopId={coopId} data={data} />
       ) : user.cooperadoId ? (
-        <CooperadoView cooperadoId={user.cooperadoId} coopId={coopId} />
+        <CooperadoView cooperadoId={user.cooperadoId} coopId={coopId} data={data} />
       ) : (
         <AlertBanner variant="warning" title="Acesso não configurado">
           Vincule este usuário a um cooperado ou perfil de responsável.
