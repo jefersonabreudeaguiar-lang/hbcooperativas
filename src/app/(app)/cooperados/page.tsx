@@ -91,6 +91,7 @@ export default function CooperadosPage() {
           conta: form.conta ?? "",
           status: (form.status as CooperadoStatus) ?? "ativo",
           avulso: form.avulso ?? false,
+          membroDiretoria: form.membroDiretoria ?? false,
           produtos,
           observacoes: form.observacoes ?? "",
           createdAt: now,
@@ -147,7 +148,11 @@ export default function CooperadosPage() {
         keyField="id"
         columns={[
           { key: "nomeCompleto", label: "Nome", render: (c) => (
-            <span>{c.nomeCompleto}{c.avulso ? <span className="ml-2 text-xs font-medium text-amber-700 bg-amber-100 px-1.5 py-0.5 rounded">Avulso</span> : null}</span>
+            <span>
+              {c.nomeCompleto}
+              {c.avulso ? <span className="ml-2 text-xs font-medium text-amber-700 bg-amber-100 px-1.5 py-0.5 rounded">Avulso</span> : null}
+              {c.membroDiretoria ? <span className="ml-2 text-xs font-medium text-purple-700 bg-purple-100 px-1.5 py-0.5 rounded">Diretoria</span> : null}
+            </span>
           ) },
           { key: "cpfCnpj", label: "CPF/CNPJ", render: (c) => (c.cpfCnpj ? formatCPFCNPJ(c.cpfCnpj) : "—") },
           { key: "comunidade", label: "Comunidade" },
@@ -203,6 +208,22 @@ export default function CooperadosPage() {
             </Select>
           </FormField>
           <FormField label="Produtos (separados por vírgula)"><Input value={Array.isArray(form.produtos) ? form.produtos.join(", ") : ""} onChange={(e) => setForm({ ...form, produtos: e.target.value.split(",").map((p) => p.trim()) })} /></FormField>
+          <div className="md:col-span-2">
+            <label className="flex items-start gap-3 p-3 border border-gray-200 rounded-lg cursor-pointer hover:bg-gray-50">
+              <input
+                type="checkbox"
+                checked={form.membroDiretoria ?? false}
+                onChange={(e) => setForm({ ...form, membroDiretoria: e.target.checked })}
+                className="mt-1 rounded border-gray-300 text-green-600 focus:ring-green-500"
+              />
+              <span>
+                <span className="block text-sm font-medium text-gray-900">Membro da diretoria</span>
+                <span className="block text-xs text-gray-500 mt-0.5">
+                  Recebe avisos exclusivos da diretoria enviados pela cooperativa.
+                </span>
+              </span>
+            </label>
+          </div>
           <div className="md:col-span-2">
             <label className="flex items-start gap-3 p-3 border border-gray-200 rounded-lg cursor-pointer hover:bg-gray-50">
               <input

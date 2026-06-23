@@ -113,6 +113,8 @@ export interface Cooperado {
   status: CooperadoStatus;
   /** Entregas lançadas pela cooperativa, sem app/foto de nota. */
   avulso?: boolean;
+  /** Cooperado integrante da diretoria — recebe avisos exclusivos. */
+  membroDiretoria?: boolean;
   produtos: string[];
   observacoes: string;
   createdAt: string;
@@ -419,13 +421,19 @@ export interface Comunicado {
   cooperativaId?: string;
   /** Quando definido, só este cooperado vê o aviso. */
   cooperadoId?: string;
+  /** Assunto do recado (exibido no mural). */
+  assunto?: string;
   titulo: string;
   descricao: string;
+  /** Áudio gravado pelo responsável (data URL webm). */
+  audioDataUrl?: string;
   data: string;
   responsavel: string;
   categoria: ComunicadoCategoria;
   fixado: boolean;
   visivelParaTodos: boolean;
+  /** Só cooperados marcados como diretoria veem este aviso. */
+  somenteDiretoria?: boolean;
   /** Repete automaticamente todo mês — não precisa publicar de novo. */
   recorrente?: boolean;
   /** Dia do mês (1–28) em que o aviso passa a aparecer. */

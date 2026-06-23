@@ -56,7 +56,7 @@ export async function solicitarPermissaoNotificacao(): Promise<boolean> {
   return result === "granted";
 }
 
-export function notificacaoNavegador(titulo: string, corpo: string): void {
+export function notificacaoNavegador(titulo: string, corpo: string, tag = "hb-cooperativas"): void {
   if (typeof window === "undefined" || !("Notification" in window)) return;
   if (Notification.permission !== "granted") return;
   if (document.visibilityState === "visible") return;
@@ -65,7 +65,7 @@ export function notificacaoNavegador(titulo: string, corpo: string): void {
     new Notification(titulo, {
       body: corpo,
       icon: "/icons/icon-192.png",
-      tag: "entrega-aprovada",
+      tag,
     });
   } catch {
     // ignore
@@ -75,7 +75,17 @@ export function notificacaoNavegador(titulo: string, corpo: string): void {
 export function notificarEntregaAprovada(): void {
   vibrarAprovacao();
   tocarSomAprovacao();
-  notificacaoNavegador("Entrega aprovada!", "Sua entrega foi conferida pela cooperativa.");
+  notificacaoNavegador("Entrega aprovada!", "Sua entrega foi conferida pela cooperativa.", "entrega-aprovada");
+}
+
+export function notificarNovoComunicado(assunto: string, preview?: string): void {
+  vibrarAprovacao();
+  tocarSomAprovacao();
+  notificacaoNavegador(
+    assunto || "Recado da cooperativa",
+    preview?.trim() || "Há um novo aviso no mural da cooperativa.",
+    "comunicado-cooperativa"
+  );
 }
 
 /** Chame após interação do usuário para desbloquear áudio no celular. */

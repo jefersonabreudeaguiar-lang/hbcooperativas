@@ -1,4 +1,4 @@
-import type { AppData, Comunicado, Cooperativa, MensalidadeConfig } from "@/types";
+import type { AppData, Comunicado, Cooperado, Cooperativa, MensalidadeConfig } from "@/types";
 import { getCurrentMesReferencia } from "@/utils/format";
 
 export interface ComunicadoExibicao extends Comunicado {
@@ -28,6 +28,10 @@ function pertenceCooperativa(c: Comunicado, cooperativaId?: string): boolean {
   return c.cooperativaId === cooperativaId;
 }
 
+export function getComunicadoAssunto(c: Pick<Comunicado, "assunto" | "titulo">): string {
+  return c.assunto?.trim() || c.titulo?.trim() || "Aviso";
+}
+
 /** Avisos recorrentes ficam visíveis a partir do dia configurado até o fim do mês. */
 export function avisoRecorrenteVisivelHoje(comunicado: Comunicado): boolean {
   if (!comunicado.recorrente) return true;
@@ -51,11 +55,12 @@ function lembreteMensalidadeVirtual(coop: Cooperativa): ComunicadoExibicao | nul
   if (!cfg?.lembreteAtivo || cfg.valorPadrao <= 0) return null;
   if (diaAtual() < (cfg.diaLembrete ?? 1)) return null;
 
-  const titulo = cfg.lembreteTitulo?.trim() || "Vencimento da mensalidade";
+  const assunto = cfg.lembreteTitulo?.trim() || "Vencimento da mensalidade";
   return {
     id: `virtual_mensalidade_${coop.id}_${mesAtualRef()}`,
     cooperativaId: coop.id,
-    titulo,
+    assunto,
+    titulo: assunto,
     descricao: textoLembreteMensalidade(coop, cfg),
     data: dataHojeIso(),
     responsavel: coop.responsavel ?? "Cooperativa",
@@ -116,9 +121,24 @@ export function comunicadoParaTodosCooperados(c: Comunicado): boolean {
   return !c.cooperadoId && c.visivelParaTodos !== false;
 }
 
+function cooperadoEhMembroDiretoria(data: AppData, cooperadoId?: string): boolean {
+  if (!cooperadoId) return false;
+  return Boolean(data.cooperados.find((c) => c.id === cooperadoId)?.membroDiretoria);
+}
+
 /** Quem pode ver este aviso no aparelho do cooperado. */
-export function comunicadoVisivelParaCooperado(c: Comunicado, cooperadoId?: string): boolean {
+export function comunicadoVisivelParaCooperado(
+  c: Comunicado,
+  cooperadoId: string | undefined,
+  data?: AppData
+): boolean {
   if (c.cooperadoId) return Boolean(cooperadoId && c.cooperadoId === cooperadoId);
+
+  if (c.somenteDiretoria) {
+    if (!data || !cooperadoId) return false;
+    return cooperadoEhMembroDiretoria(data, cooperadoId);
+  }
+
   return c.visivelParaTodos !== false;
 }
 
@@ -128,6 +148,10 @@ export function getComunicadosCooperado(
   cooperadoId?: string
 ): ComunicadoExibicao[] {
   return getComunicadosParaExibicao(data, cooperativaId).filter((c) =>
-    comunicadoVisivelParaCooperado(c, cooperadoId)
+    comunicadoVisivelParaCooperado(c, cooperadoId, data)
   );
+}
+
+export function cooperadoTemConteudoComunicado(c: Comunicado): boolean {
+  return Boolean(c.descricao?.trim() || c.audioDataUrl?.trim());
 }

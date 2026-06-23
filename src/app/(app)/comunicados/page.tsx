@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useMemo } from "react";
-import { Plus, Pin, Repeat, Pause, Play, Trash2, RefreshCw, Send, Pencil } from "lucide-react";
+import { Plus, Repeat, Pause, Play, Trash2, RefreshCw, Send, Pencil } from "lucide-react";
 import { useAppData } from "@/hooks/useAppData";
 import { usePermissions } from "@/hooks/usePermissions";
 import { getUserCooperativaId } from "@/utils/cooperativa";
@@ -13,8 +13,9 @@ import { AlertBanner } from "@/components/ui/AlertBanner";
 import { updateData, generateId, addAuditEntry, getData } from "@/services/dataStore";
 import { resolveCooperativaCnpj } from "@/services/notaPedidoCloudService";
 import { pushOperacionalToCloud } from "@/services/cooperativaSyncCloudService";
-import { getComunicadosParaExibicao, getComunicadosCooperado } from "@/services/comunicadoService";
-import { formatDate } from "@/utils/format";
+import { getComunicadosParaExibicao, getComunicadosCooperado, cooperadoTemConteudoComunicado } from "@/services/comunicadoService";
+import { AudioRecorder } from "@/components/comunicado/AudioRecorder";
+import { ComunicadoCard } from "@/components/comunicado/ComunicadoCard";
 import type { Comunicado, ComunicadoCategoria } from "@/types";
 
 const CATEGORIA_LABELS: Record<ComunicadoCategoria, string> = {
@@ -29,12 +30,15 @@ const FORM_VAZIO = (): Partial<Comunicado> => ({
   categoria: "aviso_geral",
   fixado: false,
   visivelParaTodos: true,
+  somenteDiretoria: false,
   recorrente: false,
   diaDoMes: 1,
   ativo: true,
   data: new Date().toISOString().split("T")[0],
+  assunto: "",
   titulo: "",
   descricao: "",
+  audioDataUrl: undefined,
 });
 
 export default function ComunicadosPage() {
@@ -74,12 +78,15 @@ export default function ComunicadosPage() {
   const openEdit = (c: Comunicado) => {
     setEditingId(c.id);
     setForm({
+      assunto: c.assunto ?? c.titulo,
       titulo: c.titulo,
       descricao: c.descricao,
+      audioDataUrl: c.audioDataUrl,
       data: c.data,
       categoria: c.categoria,
       fixado: c.fixado,
       visivelParaTodos: c.visivelParaTodos,
+      somenteDiretoria: c.somenteDiretoria ?? false,
       recorrente: c.recorrente ?? false,
       diaDoMes: c.diaDoMes ?? 1,
       ativo: c.ativo !== false,
@@ -88,7 +95,9 @@ export default function ComunicadosPage() {
   };
 
   const salvarComunicado = () => {
-    if (!form.titulo?.trim() || !form.descricao?.trim() || !user || !coopId) return;
+    const assunto = form.assunto?.trim() || form.titulo?.trim();
+    if (!assunto || !user || !coopId) return;
+    if (!cooperadoTemConteudoComunicado({ ...form, descricao: form.descricao ?? "", titulo: assunto } as Comunicado)) return;
 
     updateData((d) => {
       if (editingId) {
@@ -98,12 +107,15 @@ export default function ComunicadosPage() {
             x.id === editingId
               ? {
                   ...x,
-                  titulo: form.titulo!.trim(),
-                  descricao: form.descricao!.trim(),
+                  assunto,
+                  titulo: assunto,
+                  descricao: form.descricao?.trim() ?? "",
+                  audioDataUrl: form.audioDataUrl,
                   data: form.data ?? x.data,
                   categoria: (form.categoria as ComunicadoCategoria) ?? "aviso_geral",
                   fixado: form.fixado ?? false,
-                  visivelParaTodos: form.visivelParaTodos ?? true,
+                  visivelParaTodos: form.somenteDiretoria ? false : (form.visivelParaTodos ?? true),
+                  somenteDiretoria: form.somenteDiretoria ?? false,
                   recorrente: form.recorrente ?? false,
                   diaDoMes: form.recorrente ? Math.min(28, Math.max(1, form.diaDoMes ?? 1)) : undefined,
                   ativo: form.ativo !== false,
@@ -123,13 +135,16 @@ export default function ComunicadosPage() {
       const newC: Comunicado = {
         id: generateId("cm"),
         cooperativaId: coopId,
-        titulo: form.titulo!.trim(),
-        descricao: form.descricao!.trim(),
+        assunto,
+        titulo: assunto,
+        descricao: form.descricao?.trim() ?? "",
+        audioDataUrl: form.audioDataUrl,
         data: form.data ?? new Date().toISOString().split("T")[0],
         responsavel: user.name,
         categoria: (form.categoria as ComunicadoCategoria) ?? "aviso_geral",
         fixado: form.fixado ?? false,
-        visivelParaTodos: form.visivelParaTodos ?? true,
+        visivelParaTodos: form.somenteDiretoria ? false : (form.visivelParaTodos ?? true),
+        somenteDiretoria: form.somenteDiretoria ?? false,
         recorrente: form.recorrente ?? false,
         diaDoMes: form.recorrente ? Math.min(28, Math.max(1, form.diaDoMes ?? 1)) : undefined,
         ativo: true,
@@ -162,7 +177,7 @@ export default function ComunicadosPage() {
   };
 
   const handleDelete = (c: Comunicado) => {
-    if (!user || !confirm(`Remover o aviso "${c.titulo}"?`)) return;
+    if (!user || !confirm(`Remover o recado "${c.assunto ?? c.titulo}"?`)) return;
     updateData((d) => ({
       ...d,
       comunicados: d.comunicados.filter((x) => x.id !== c.id),
@@ -194,25 +209,40 @@ export default function ComunicadosPage() {
   if (!data) return null;
 
   const canManage = check("comunicados", "create");
-  const formValido = Boolean(form.titulo?.trim() && form.descricao?.trim());
+  const formValido = Boolean(
+    (form.assunto?.trim() || form.titulo?.trim()) &&
+      cooperadoTemConteudoComunicado({
+        ...form,
+        titulo: form.assunto?.trim() || form.titulo || "",
+        descricao: form.descricao ?? "",
+      } as Comunicado)
+  );
 
   const FormularioComunicado = ({ idPrefix = "" }: { idPrefix?: string }) => (
     <div className="space-y-4">
-      <FormField label="Título do aviso" required>
+      <FormField label="Assunto" required hint="Título curto que aparece no mural e na notificação">
         <Input
-          id={`${idPrefix}titulo`}
-          value={form.titulo ?? ""}
-          onChange={(e) => setForm({ ...form, titulo: e.target.value })}
+          id={`${idPrefix}assunto`}
+          value={form.assunto ?? form.titulo ?? ""}
+          onChange={(e) => setForm({ ...form, assunto: e.target.value, titulo: e.target.value })}
           placeholder="Ex: Reunião geral, prazo de entrega..."
         />
       </FormField>
-      <FormField label="Texto do aviso" required hint="Digite a mensagem que os cooperados devem ler">
+
+      <FormField label="Aviso em áudio" hint="Grave o recado ou digite o texto abaixo (pelo menos um dos dois)">
+        <AudioRecorder
+          value={form.audioDataUrl}
+          onChange={(audioDataUrl) => setForm({ ...form, audioDataUrl })}
+        />
+      </FormField>
+
+      <FormField label="Texto do aviso" hint="Opcional se você gravou áudio">
         <Textarea
           id={`${idPrefix}descricao`}
           value={form.descricao ?? ""}
           onChange={(e) => setForm({ ...form, descricao: e.target.value })}
           rows={6}
-          placeholder="Escreva aqui o comunicado completo para os cooperados..."
+          placeholder="Escreva aqui o comunicado para os cooperados..."
           className="min-h-[140px] text-base leading-relaxed"
         />
       </FormField>
@@ -236,8 +266,28 @@ export default function ComunicadosPage() {
       <div className="flex flex-col gap-2">
         <label className="flex items-center gap-2 text-sm">
           <input type="checkbox" checked={form.fixado ?? false} onChange={(e) => setForm({ ...form, fixado: e.target.checked })} className="rounded" />
-          Fixar no topo
+          Fixar no topo do mural
         </label>
+        <label className="flex items-center gap-2 text-sm">
+          <input
+            type="checkbox"
+            checked={form.somenteDiretoria ?? false}
+            onChange={(e) =>
+              setForm({
+                ...form,
+                somenteDiretoria: e.target.checked,
+                visivelParaTodos: e.target.checked ? false : form.visivelParaTodos,
+              })
+            }
+            className="rounded"
+          />
+          Enviar apenas para cooperados da diretoria
+        </label>
+        {!form.somenteDiretoria && (
+          <p className="text-xs text-gray-500 ml-6">
+            Marque cooperados como diretoria em Cooperados → editar ficha.
+          </p>
+        )}
         <label className="flex items-center gap-2 text-sm">
           <input type="checkbox" checked={form.recorrente ?? false} onChange={(e) => setForm({ ...form, recorrente: e.target.checked })} className="rounded" />
           Repetir automaticamente todo mês
@@ -263,8 +313,8 @@ export default function ComunicadosPage() {
         title="Comunicados"
         subtitle={
           canManage
-            ? "Digite os avisos e envie quando estiver pronto — os cooperados recebem na aba Avisos"
-            : "Avisos da cooperativa"
+            ? "Assunto, texto ou áudio — publique no mural do início dos cooperados"
+            : "Recados da cooperativa"
         }
         action={
           canManage && (
@@ -299,14 +349,14 @@ export default function ComunicadosPage() {
       )}
 
       {canManage && (
-        <Card title="Escrever aviso" className="mb-6">
+        <Card title="Novo recado" className="mb-6">
           <FormularioComunicado idPrefix="inline-" />
           <div className="flex flex-col-reverse sm:flex-row justify-end gap-2 mt-6">
-            <Button variant="secondary" onClick={limparFormulario} disabled={!form.titulo && !form.descricao}>
+            <Button variant="secondary" onClick={limparFormulario} disabled={!form.assunto && !form.descricao && !form.audioDataUrl}>
               Limpar
             </Button>
             <Button onClick={salvarComunicado} disabled={!formValido}>
-              <Plus size={18} /> Salvar aviso
+              <Plus size={18} /> Salvar recado
             </Button>
           </div>
         </Card>
@@ -314,8 +364,9 @@ export default function ComunicadosPage() {
 
       {canManage && (
         <AlertBanner variant="info" className="mb-4">
-          Os avisos salvos aqui serão enviados para <strong>todos os cooperados</strong> da cooperativa após tocar em
-          &quot;Enviar aos cooperados&quot;. Avisos automáticos de pagamento continuam indo só para quem recebeu.
+          Após salvar, toque em <strong>Enviar aos cooperados</strong>. O recado aparece no{" "}
+          <strong>mural do início</strong> e gera notificação no celular (com permissão).
+          {" "}Use <strong>apenas diretoria</strong> para avisos exclusivos — marque os cooperados em Cooperados.
         </AlertBanner>
       )}
 
@@ -364,23 +415,11 @@ export default function ComunicadosPage() {
 
       <div className="space-y-4">
         {comunicadosExibicao.map((c) => (
-          <Card key={c.id} className={c.fixado ? "border-amber-300 bg-amber-50/30" : ""}>
-            <div className="flex items-start gap-3">
-              {c.fixado && <Pin size={18} className="text-amber-500 shrink-0 mt-0.5" />}
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2 flex-wrap">
-                  <h3 className="font-semibold text-gray-900">{c.titulo}</h3>
-                  <span className="text-xs px-2 py-0.5 rounded-full bg-green-100 text-green-700">{CATEGORIA_LABELS[c.categoria]}</span>
-                  {(c.recorrente || c.virtual) && (
-                    <span className="text-xs px-2 py-0.5 rounded-full bg-blue-100 text-blue-700 flex items-center gap-1">
-                      <Repeat size={12} /> {c.recorrenteLabel ?? "Mensal"}
-                    </span>
-                  )}
-                </div>
-                <p className="text-sm text-gray-600 mt-2 leading-relaxed whitespace-pre-wrap">{c.descricao}</p>
-                <p className="text-xs text-gray-400 mt-3">{formatDate(c.data)} — {c.responsavel}</p>
-              </div>
-              {canManage && !c.virtual && (
+          <ComunicadoCard
+            key={c.id}
+            comunicado={c}
+            actions={
+              canManage && !c.virtual ? (
                 <div className="flex gap-1 shrink-0">
                   <button type="button" onClick={() => openEdit(c)} className="p-2 rounded-lg hover:bg-gray-100 text-gray-600" title="Editar">
                     <Pencil size={16} />
@@ -391,12 +430,12 @@ export default function ComunicadosPage() {
                     </button>
                   )}
                 </div>
-              )}
-            </div>
-          </Card>
+              ) : undefined
+            }
+          />
         ))}
         {comunicadosExibicao.length === 0 && (
-          <Card><p className="text-gray-500 text-center py-8">Nenhum aviso publicado ainda.</p></Card>
+          <Card><p className="text-gray-500 text-center py-8">Nenhum recado publicado ainda.</p></Card>
         )}
       </div>
 

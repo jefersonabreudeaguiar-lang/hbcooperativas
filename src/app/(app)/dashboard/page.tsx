@@ -20,10 +20,11 @@ import {
 import { notaPertenceCooperado } from "@/services/cooperadoCloudService";
 import { notaPertenceCooperativa } from "@/utils/fotoEntrega";
 import { getComunicadosCooperado } from "@/services/comunicadoService";
+import { MuralComunicados } from "@/components/comunicado/MuralComunicados";
 import { cooperadoPrecisaCadastrarPix } from "@/utils/pix";
-import { formatCurrency, formatDate, formatMesReferencia, getCurrentMesReferencia } from "@/utils/format";
+import { formatCurrency, formatMesReferencia, getCurrentMesReferencia } from "@/utils/format";
 import { getUserCooperativaId, getUserCooperativaNome } from "@/utils/cooperativa";
-import { Camera, Wallet, ClipboardList, Megaphone, Pin, Users, AlertCircle } from "lucide-react";
+import { Camera, Wallet, ClipboardList, Users, AlertCircle } from "lucide-react";
 
 function CooperadoDashboard() {
   const { user } = useAuth();
@@ -51,7 +52,7 @@ function CooperadoDashboard() {
     (n) => notaPertenceCooperado(data, n, cooperadoId, coopId) && n.status === "rejeitada"
   );
   const emAnalise = entregasMes.filter((n) => n.status === "aguardando_conferencia").length;
-  const comunicados = coopId ? getComunicadosCooperado(data, coopId, cooperadoId).slice(0, 3) : [];
+  const comunicados = coopId ? getComunicadosCooperado(data, coopId, cooperadoId) : [];
 
   return (
     <div className="space-y-6 max-w-3xl">
@@ -59,6 +60,8 @@ function CooperadoDashboard() {
         <h1 className="text-2xl font-bold text-gray-900">Olá, {cooperado?.nomeCompleto.split(" ")[0]}!</h1>
         <p className="text-sm text-gray-500 mt-1">{coopNome} · {formatMesReferencia(mes)}</p>
       </div>
+
+      <MuralComunicados comunicados={comunicados} limite={5} />
 
       <MensalidadeStatusBanner cooperadoId={cooperadoId} />
 
@@ -108,25 +111,6 @@ function CooperadoDashboard() {
           </Button>
         </div>
       </div>
-
-      {comunicados.length > 0 && (
-        <>
-          <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">Avisos</p>
-          <Card title="Avisos da cooperativa">
-          <div className="space-y-3">
-            {comunicados.map((c) => (
-              <div key={c.id} className="flex items-start gap-3 p-3 rounded-lg border border-gray-100">
-                {c.fixado ? <Pin size={16} className="text-amber-500 mt-0.5 shrink-0" /> : <Megaphone size={16} className="text-green-600 mt-0.5 shrink-0" />}
-                <div>
-                  <p className="font-medium text-sm text-gray-900">{c.titulo}</p>
-                  <p className="text-xs text-gray-500 mt-0.5">{formatDate(c.data)}</p>
-                </div>
-              </div>
-            ))}
-          </div>
-        </Card>
-        </>
-      )}
     </div>
   );
 }
