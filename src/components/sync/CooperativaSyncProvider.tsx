@@ -9,7 +9,9 @@ import {
   SYNC_INTERVAL_MS,
   syncCooperativaBidirectional,
 } from "@/services/cooperativaSyncCloudService";
-import { refreshCloudSession } from "@/lib/security/clientSession";
+import { pushCooperadoToCloud, resolverCooperadoIdCanonico } from "@/services/cooperadoCloudService";
+import { getData } from "@/services/dataStore";
+import { ensureAccessTokenForApi } from "@/lib/security/clientSession";
 import { isDiretoriaRole } from "@/permissions";
 import type { UserRole } from "@/types";
 
@@ -26,10 +28,19 @@ export function CooperativaSyncProvider({ children }: { children: React.ReactNod
     try {
       const cnpj = await resolveCooperativaCnpj(data, coopId, user);
       if (cnpj) {
-        await refreshCloudSession();
+        await ensureAccessTokenForApi();
         const pushCatalog = isDiretoriaRole(user.role as UserRole);
         const pushMensalidades = isDiretoriaRole(user.role as UserRole);
         await syncCooperativaBidirectional(cnpj, coopId, { pushCatalog, pushMensalidades });
+
+        if (user.role === "cooperado" && user.cooperadoId) {
+          const latest = getData();
+          const cooperadoCanonico = resolverCooperadoIdCanonico(latest, user.cooperadoId, coopId);
+          const registro = latest.cooperados.find((c) => c.id === cooperadoCanonico);
+          if (registro) {
+            await pushCooperadoToCloud(cnpj, registro, user.email);
+          }
+        }
       }
     } finally {
       syncingRef.current = false;

@@ -5,7 +5,7 @@ import { getNotaCooperativaCnpj, getFotosExibicaoNota } from "@/utils/fotoEntreg
 import { getData, saveDataSafe } from "@/services/dataStore";
 import { reconciliarFichaFromNotasConferidas } from "@/services/notaPedidoService";
 import { needsOperationalResetCloudPush } from "@/services/operationalReset";
-import { secureApiFetch } from "@/lib/security/clientSession";
+import { mensagemErroAuthApi, secureApiFetch } from "@/lib/security/clientSession";
 
 const STATUS_RANK: Record<NotaPedido["status"], number> = {
   rascunho: 0,
@@ -234,7 +234,10 @@ export async function pushNotasPedidoToCloud(
         };
       }
       if (!res.ok) {
-        return { ok: false, error: (json.error as string) ?? "Erro ao enviar para a cooperativa." };
+        return {
+          ok: false,
+          error: mensagemErroAuthApi(res.status, json.error as string | undefined),
+        };
       }
     }
     return { ok: true };

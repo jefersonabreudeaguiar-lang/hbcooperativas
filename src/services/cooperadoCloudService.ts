@@ -2,7 +2,7 @@ import type { AppData, Cooperado, FichaCorrida } from "@/types";
 import { normalizeCnpj } from "@/utils/cooperativa";
 import { notaPertenceCooperativa } from "@/utils/fotoEntrega";
 import { getData, saveDataSafe } from "@/services/dataStore";
-import { secureApiFetch } from "@/lib/security/clientSession";
+import { secureApiFetch, mensagemErroAuthApi } from "@/lib/security/clientSession";
 
 function cpfDigits(value: string): string {
   return value.replace(/\D/g, "");
@@ -169,18 +169,34 @@ export async function pushCooperadoToCloud(
   cnpj: string,
   cooperado: Cooperado,
   email?: string
-): Promise<void> {
+): Promise<{ ok: boolean; error?: string }> {
   const digits = normalizeCnpj(cnpj);
-  if (digits.length !== 14) return;
+  if (digits.length !== 14) {
+    return { ok: false, error: "CNPJ da cooperativa inválido." };
+  }
 
   try {
-    await secureApiFetch("/api/cooperados", {
+    const res = await secureApiFetch("/api/cooperados", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ cnpj: digits, cooperado, email }),
     });
+    const json = await res.json().catch(() => ({}));
+    if (res.status === 503) {
+      return {
+        ok: false,
+        error: (json.error as string) ?? "Nuvem indisponível.",
+      };
+    }
+    if (!res.ok) {
+      return {
+        ok: false,
+        error: mensagemErroAuthApi(res.status, json.error as string | undefined),
+      };
+    }
+    return { ok: true };
   } catch {
-    /* offline */
+    return { ok: false, error: "Sem conexão com o servidor." };
   }
 }
 

@@ -2,13 +2,22 @@ const TOKEN_KEY = "coopeagriplla_access_token";
 
 export function getAccessToken(): string | null {
   if (typeof window === "undefined") return null;
-  return sessionStorage.getItem(TOKEN_KEY);
+  let token = localStorage.getItem(TOKEN_KEY);
+  if (!token) {
+    token = sessionStorage.getItem(TOKEN_KEY);
+    if (token) {
+      localStorage.setItem(TOKEN_KEY, token);
+      sessionStorage.removeItem(TOKEN_KEY);
+    }
+  }
+  return token;
 }
 
 export function setAccessToken(token: string | null): void {
   if (typeof window === "undefined") return;
-  if (!token) sessionStorage.removeItem(TOKEN_KEY);
-  else sessionStorage.setItem(TOKEN_KEY, token);
+  sessionStorage.removeItem(TOKEN_KEY);
+  if (!token) localStorage.removeItem(TOKEN_KEY);
+  else localStorage.setItem(TOKEN_KEY, token);
 }
 
 export function clearAccessToken(): void {
@@ -81,6 +90,23 @@ export async function refreshCloudSession(): Promise<boolean> {
   } catch {
     return false;
   }
+}
+
+/** Garante token válido antes de chamadas protegidas (envio de fotos, sync). */
+export async function ensureAccessTokenForApi(): Promise<boolean> {
+  const token = getAccessToken();
+  if (!token) return false;
+  return refreshCloudSession();
+}
+
+export function mensagemErroAuthApi(status: number, error?: string): string {
+  if (status === 401 || error === "Autenticação necessária.") {
+    return "Sessão da nuvem expirada. Saia da conta e entre novamente com e-mail e senha para enviar fotos.";
+  }
+  if (status === 403) {
+    return "Sem permissão para esta cooperativa. Verifique o login ou fale com a diretoria.";
+  }
+  return error ?? "Erro ao comunicar com o servidor.";
 }
 
 export async function secureApiFetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {

@@ -445,7 +445,7 @@ export async function login(email: string, password: string): Promise<User | nul
   if (user && typeof window !== "undefined") {
     const { password: _, ...safeUser } = user;
     persistSession(safeUser);
-    void establishCloudSession(email, password, {
+    await establishCloudSession(email, password, {
       id: safeUser.id,
       email: safeUser.email,
       name: safeUser.name,
@@ -750,18 +750,30 @@ export async function registerCooperado(input: RegisterCooperadoInput): Promise<
 
   persistSession(safeUser);
 
-  void registerCloudUser({
+  const cloudProfile = {
     id: userId,
     email,
-    password: input.password,
     name: nome,
-    role: "cooperado",
+    role: "cooperado" as const,
     cooperativaId: cooperativa.id,
     cooperadoId,
     cooperativaCnpj: cnpjCoop,
+  };
+
+  const cloudUserOk = await registerCloudUser({
+    ...cloudProfile,
+    password: input.password,
   });
 
-  void pushCooperadoToCloud(cnpjCoop, cooperado, email);
+  if (!cloudUserOk) {
+    await establishCloudSession(email, input.password, cloudProfile);
+  }
+
+  let pushResult = await pushCooperadoToCloud(cnpjCoop, cooperado, email);
+  if (!pushResult.ok) {
+    await establishCloudSession(email, input.password, cloudProfile);
+    pushResult = await pushCooperadoToCloud(cnpjCoop, cooperado, email);
+  }
 
   return { success: true, user: safeUser };
 }
@@ -887,7 +899,7 @@ export async function registerCooperativa(input: RegisterCooperativaInput): Prom
   const { password: __, ...safeUser } = newUser;
   persistSession(safeUser);
 
-  void registerCloudUser({
+  await registerCloudUser({
     id: userId,
     email,
     password: input.password,

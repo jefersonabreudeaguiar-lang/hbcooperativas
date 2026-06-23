@@ -48,6 +48,7 @@ import {
   resolverInstituicaoConferencia,
 } from "@/utils/instituicaoPreferida";
 import { getCooperadoNome } from "@/utils/calculations";
+import { ensureAccessTokenForApi } from "@/lib/security/clientSession";
 import { isFotoDuplicada, compressFotoFile, makeFotoThumbnail, getFotoExibicaoNota, getFotosExibicaoNota, notaPertenceCooperativa, compactarFotosNoArmazenamento, agruparPendentesPorCooperado, getChaveGrupoConferencia, notaPertenceGrupoConferencia } from "@/utils/fotoEntrega";
 import type { NotaPedido, NotaPedidoItem, Cooperado, AppData } from "@/types";
 
@@ -288,6 +289,12 @@ export default function NotasPedidoContent() {
 
     let currentData = data ?? getData();
     if (isCooperado && user && coopId) {
+      const sessionOk = await ensureAccessTokenForApi();
+      if (!sessionOk) {
+        setErroEnvio("Sessão da nuvem expirada. Saia da conta e entre novamente com e-mail e senha.");
+        setAnexarModal(true);
+        return;
+      }
       const cnpj = await resolveCooperativaCnpj(currentData, coopId, user);
       if (cnpj) await syncContratosFromCloud(cnpj);
       currentData = getData();
@@ -791,6 +798,13 @@ export default function NotasPedidoContent() {
       setErroEnvio(
         "CNPJ da cooperativa não encontrado. Faça logout e login de novo, ou peça ao responsável para conferir o cadastro."
       );
+      return;
+    }
+
+    const sessionOk = await ensureAccessTokenForApi();
+    if (!sessionOk) {
+      setEnviando(false);
+      setErroEnvio("Sessão da nuvem expirada. Saia da conta e entre novamente com e-mail e senha para enviar fotos.");
       return;
     }
 
