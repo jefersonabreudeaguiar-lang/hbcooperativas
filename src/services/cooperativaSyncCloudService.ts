@@ -6,6 +6,7 @@ import { syncCooperadosFromCloud } from "@/services/cooperadoCloudService";
 import { syncNotasPedidoFromCloud, patchNotaPedidoInCloud } from "@/services/notaPedidoCloudService";
 import { fetchCooperativaByCnpjFromCloud, mergeCooperativaIntoData } from "@/services/cooperativaCloudService";
 import { reconciliarFichaFromNotasConferidas } from "@/services/notaPedidoService";
+import { aplicarPrestacoesContasExcluidas } from "@/services/prestacaoContasService";
 import {
   OPERATIONAL_RESET_VERSION,
   needsOperationalResetCloudPush,
@@ -336,7 +337,7 @@ export function mergeOperacionalIntoData(data: AppData, cloud: OperacionalSyncPa
     next = { ...next, config: { ...next.config, ...cloud.config } };
   }
 
-  return reconciliarFichaFromNotasConferidas(next);
+  return aplicarPrestacoesContasExcluidas(reconciliarFichaFromNotasConferidas(next));
 }
 
 async function fetchSyncBundle(cnpj: string): Promise<{
@@ -401,7 +402,12 @@ export async function pushContratosToCloud(
   }
 }
 
-export async function pushOperacionalToCloud(cnpj: string, data?: AppData, coopId?: string): Promise<void> {
+export async function pushOperacionalToCloud(
+  cnpj: string,
+  data?: AppData,
+  coopId?: string,
+  options?: { authoritative?: boolean }
+): Promise<void> {
   const digits = normalizeCnpj(cnpj);
   if (digits.length !== 14) return;
 
@@ -410,14 +416,18 @@ export async function pushOperacionalToCloud(cnpj: string, data?: AppData, coopI
     return;
   }
 
-  const d = data ?? getData();
+  const d = aplicarPrestacoesContasExcluidas(data ?? getData());
   const cid = coopId ?? resolveCoopId(d, digits);
   if (!cid) return;
 
   let merged = d;
-  const bundle = await fetchSyncBundle(digits);
-  if (bundle?.operacional) {
-    merged = mergeOperacionalIntoData(d, bundle.operacional, cid);
+  if (!options?.authoritative) {
+    const bundle = await fetchSyncBundle(digits);
+    if (bundle?.operacional) {
+      merged = mergeOperacionalIntoData(d, bundle.operacional, cid);
+      saveDataSafe(merged);
+    }
+  } else {
     saveDataSafe(merged);
   }
 

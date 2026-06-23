@@ -15,7 +15,7 @@ import {
 } from "@/services/cooperativaCloudService";
 import { pushCooperadoToCloud } from "@/services/cooperadoCloudService";
 import { reconciliarFichaFromNotasConferidas, ajustesFichaMesId } from "@/services/notaPedidoService";
-import { normalizarPrestacaoContas } from "@/services/prestacaoContasService";
+import { normalizarPrestacaoContas, aplicarPrestacoesContasExcluidas } from "@/services/prestacaoContasService";
 import { exigeSenhaCadastroCooperado } from "@/utils/cooperativaCadastro";
 
 const STORAGE_KEY = "coopeagriplla_data";
@@ -217,7 +217,9 @@ function migrateData(raw: Partial<AppData> & Record<string, unknown>): AppData {
     auditLog: base.auditLog ?? [],
   };
 
-  return stripDemoData(migrateAjustesFichaMes(migrateResponsavelPrincipal(merged)));
+  return stripDemoData(
+    migrateAjustesFichaMes(migrateResponsavelPrincipal(aplicarPrestacoesContasExcluidas(merged)))
+  );
 }
 
 function migrateResponsavelPrincipal(data: AppData): AppData {

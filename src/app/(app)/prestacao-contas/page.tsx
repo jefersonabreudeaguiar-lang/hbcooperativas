@@ -156,9 +156,9 @@ function ResponsavelView({ coopId, data }: { coopId: string; data: AppData }) {
     setExcluindo(true);
     try {
       const alvo = excluirPrestacaoTarget;
+      let nextData: AppData | null = null;
       updateData((d) => {
-        const next = excluirPrestacaoContas(d, alvo.id, coopId);
-        return addAuditEntry(next, {
+        nextData = addAuditEntry(excluirPrestacaoContas(d, alvo.id, coopId), {
           entityType: "financeiro",
           entityId: alvo.id,
           action: "excluir",
@@ -166,10 +166,12 @@ function ResponsavelView({ coopId, data }: { coopId: string; data: AppData }) {
           userName: user.name,
           changes: `Prestação de contas excluída · ${alvo.cooperadoNomeSnapshot ?? "Cooperado"} · ${formatCurrency(alvo.valorRepasse)} · ${alvo.historico}`,
         });
+        return nextData;
       });
-      const d = getData();
-      const cnpj = await resolveCooperativaCnpj(d, coopId, user);
-      if (cnpj) await pushOperacionalToCloud(cnpj, d, coopId);
+      if (nextData) {
+        const cnpj = await resolveCooperativaCnpj(nextData, coopId, user);
+        if (cnpj) await pushOperacionalToCloud(cnpj, nextData, coopId, { authoritative: true });
+      }
       if (expandido === alvo.id) setExpandido(null);
       setExcluirPrestacaoTarget(null);
     } finally {

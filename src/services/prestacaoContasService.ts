@@ -23,6 +23,15 @@ function idsPrestacoesExcluidas(data: AppData, cooperativaId?: string): Set<stri
   );
 }
 
+/** Remove da lista itens marcados como excluídos (sync e UI usam a mesma base). */
+export function aplicarPrestacoesContasExcluidas(data: AppData): AppData {
+  const excluidas = idsPrestacoesExcluidas(data);
+  if (excluidas.size === 0) return data;
+  const prestacoesContas = (data.prestacoesContas ?? []).filter((p) => !excluidas.has(p.id));
+  if (prestacoesContas.length === (data.prestacoesContas ?? []).length) return data;
+  return { ...data, prestacoesContas };
+}
+
 export function prestacoesDoCooperado(data: AppData, cooperadoId: string, cooperativaId?: string): PrestacaoContas[] {
   const excluidas = idsPrestacoesExcluidas(data, cooperativaId);
   return (data.prestacoesContas ?? [])
@@ -300,11 +309,11 @@ export function excluirPrestacaoContas(
     if (idx >= 0) excluidas[idx] = tombstone;
     else excluidas.push(tombstone);
   }
-  return {
+  return aplicarPrestacoesContasExcluidas({
     ...data,
     prestacoesContas: (data.prestacoesContas ?? []).filter(
       (p) => p.id !== prestacaoId || (cooperativaId != null && p.cooperativaId !== cooperativaId)
     ),
     prestacoesContasExcluidas: excluidas,
-  };
+  });
 }
