@@ -356,6 +356,21 @@ export function getStatusCotaCooperado(data: AppData, cooperadoId: string, mesRe
   return "nao_paga";
 }
 
+export function setCotaIngressoCooperado(
+  data: AppData,
+  cooperadoId: string,
+  cooperativaId: string,
+  mesReferencia: string,
+  paga: boolean
+): AppData {
+  return {
+    ...data,
+    arquivosMensais: upsertArquivoMensal(data, cooperadoId, cooperativaId, mesReferencia, {
+      cotaIngressoPaga: paga,
+    }),
+  };
+}
+
 export function buildFichaFromNota(
   nota: NotaPedido,
   data: AppData,

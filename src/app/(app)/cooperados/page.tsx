@@ -3,17 +3,20 @@
 import { useState, useMemo, useEffect } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Plus, ShoppingCart, UserCircle } from "lucide-react";
+import { Plus, ShoppingCart, UserCircle, Pencil } from "lucide-react";
 import { useAppData } from "@/hooks/useAppData";
 import { usePermissions } from "@/hooks/usePermissions";
 import { PageHeader, DataTable, FilterBar, Modal } from "@/components/ui/Table";
 import { Button } from "@/components/ui/Button";
 import { Input, Select, Textarea, FormField } from "@/components/ui/Form";
 import { StatusBadge } from "@/components/ui/StatusBadge";
-import { updateData, generateId, addAuditEntry } from "@/services/dataStore";
-import { formatCPFCNPJ, formatPhone } from "@/utils/format";
+import { updateData, generateId, addAuditEntry, getData } from "@/services/dataStore";
+import { formatCPFCNPJ, formatPhone, formatMesReferencia, getCurrentMesReferencia } from "@/utils/format";
 import { getUserCooperativaId, normalizeCnpj } from "@/utils/cooperativa";
 import { pushCooperadoToCloud, syncCooperadosFromCloud } from "@/services/cooperadoCloudService";
+import { pushOperacionalToCloud } from "@/services/cooperativaSyncCloudService";
+import { resolveCooperativaCnpj } from "@/services/notaPedidoCloudService";
+import { getStatusCotaCooperado, setCotaIngressoCooperado } from "@/services/notaPedidoService";
 import type { Cooperado, CooperadoStatus } from "@/types";
 
 export default function CooperadosPage() {
@@ -25,6 +28,8 @@ export default function CooperadosPage() {
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState<Cooperado | null>(null);
   const [form, setForm] = useState<Partial<Cooperado>>({});
+
+  const mesAtual = getCurrentMesReferencia();
 
   const cooperados = useMemo(() => {
     if (!data || !user) return [];
@@ -113,12 +118,24 @@ export default function CooperadosPage() {
     setModalOpen(false);
   };
 
-  const handleDelete = (c: Cooperado) => {
-    if (!confirm(`Excluir cooperado ${c.nomeCompleto}?`) || !user) return;
+  const handleCota = (c: Cooperado, paga: boolean) => {
+    if (!user) return;
     updateData((d) => {
-      let updated = { ...d, cooperados: d.cooperados.filter((co) => co.id !== c.id) };
-      return addAuditEntry(updated, { entityType: "cooperado", entityId: c.id, action: "excluir", userId: user.id, userName: user.name });
+      const next = setCotaIngressoCooperado(d, c.id, c.cooperativaId, mesAtual, paga);
+      return addAuditEntry(next, {
+        entityType: "cooperado",
+        entityId: c.id,
+        action: "editar",
+        userId: user.id,
+        userName: user.name,
+        changes: `Cota de ingresso · ${formatMesReferencia(mesAtual)} · ${paga ? "paga" : "não paga"}`,
+      });
     });
+    void (async () => {
+      const d = getData();
+      const cnpj = await resolveCooperativaCnpj(d, c.cooperativaId, user);
+      if (cnpj) await pushOperacionalToCloud(cnpj, d, c.cooperativaId);
+    })();
   };
 
   if (!data) return null;
@@ -148,10 +165,22 @@ export default function CooperadosPage() {
         keyField="id"
         columns={[
           { key: "nomeCompleto", label: "Nome", render: (c) => (
-            <span>
-              {c.nomeCompleto}
-              {c.avulso ? <span className="ml-2 text-xs font-medium text-amber-700 bg-amber-100 px-1.5 py-0.5 rounded">Avulso</span> : null}
-              {c.membroDiretoria ? <span className="ml-2 text-xs font-medium text-purple-700 bg-purple-100 px-1.5 py-0.5 rounded">Diretoria</span> : null}
+            <span className="inline-flex items-center gap-2 flex-wrap">
+              <span>
+                {c.nomeCompleto}
+                {c.avulso ? <span className="ml-2 text-xs font-medium text-amber-700 bg-amber-100 px-1.5 py-0.5 rounded">Avulso</span> : null}
+                {c.membroDiretoria ? <span className="ml-2 text-xs font-medium text-purple-700 bg-purple-100 px-1.5 py-0.5 rounded">Diretoria</span> : null}
+              </span>
+              {check("cooperados", "edit") && (
+                <button
+                  type="button"
+                  onClick={() => openEdit(c)}
+                  className="text-gray-400 hover:text-green-700 p-1 rounded"
+                  aria-label="Editar cooperado"
+                >
+                  <Pencil size={14} />
+                </button>
+              )}
             </span>
           ) },
           { key: "cpfCnpj", label: "CPF/CNPJ", render: (c) => (c.cpfCnpj ? formatCPFCNPJ(c.cpfCnpj) : "—") },
@@ -160,6 +189,46 @@ export default function CooperadosPage() {
           { key: "pix", label: "PIX", render: (c) => c.chavePix || "—" },
           { key: "produtos", label: "Produtos", render: (c) => c.produtos.join(", ") },
           { key: "status", label: "Status", render: (c) => <StatusBadge status={c.status} /> },
+          {
+            key: "cota",
+            label: "Cota",
+            render: (c) => {
+              const status = getStatusCotaCooperado(data, c.id, mesAtual);
+              const paga = status === "paga";
+              return (
+                <div className="space-y-2 min-w-[140px]">
+                  <span
+                    className={`inline-block text-xs font-semibold px-2 py-0.5 rounded-full ${
+                      paga ? "bg-green-100 text-green-800" : "bg-red-100 text-red-800"
+                    }`}
+                  >
+                    {paga ? "Paga" : "Não paga"}
+                  </span>
+                  {check("cooperados", "edit") && (
+                    <div className="flex gap-1">
+                      <Button
+                        size="sm"
+                        variant={paga ? "primary" : "secondary"}
+                        className="px-2 text-xs"
+                        onClick={() => handleCota(c, true)}
+                      >
+                        Paga
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant={!paga ? "primary" : "secondary"}
+                        className="px-2 text-xs"
+                        onClick={() => handleCota(c, false)}
+                      >
+                        Não paga
+                      </Button>
+                    </div>
+                  )}
+                  <p className="text-[10px] text-gray-400">{formatMesReferencia(mesAtual)}</p>
+                </div>
+              );
+            },
+          },
           {
             key: "ficha",
             label: "Ficha",
@@ -180,10 +249,6 @@ export default function CooperadosPage() {
               ) : null,
           },
         ]}
-        onView={(c) => router.push(`/cooperados/${c.id}`)}
-        viewLabel="Ficha"
-        onEdit={check("cooperados", "edit") ? openEdit : undefined}
-        onDelete={check("cooperados", "delete") ? handleDelete : undefined}
       />
 
       <Modal open={modalOpen} onClose={() => setModalOpen(false)} title={editing ? "Editar Cooperado" : "Novo Cooperado"} size="lg">
