@@ -1,13 +1,16 @@
 import type { AppData, Instituicao } from "@/types";
 import { generateId } from "@/services/dataStore";
+import {
+  getContratosEntregaValidos,
+  contratoValidoNoCatalogo,
+} from "@/services/catalogoContratosService";
 import { getInstituicaoPadraoId } from "@/utils/instituicaoPreferida";
-import { idsInstituicoesExcluidas } from "@/services/instituicaoContratoService";
 
 export const CONTRATO_PNAE_PADRAO_NOME = "PNAE - MERENDA ESCOLAR";
 
+/** Contratos válidos para envio de entrega — espelha o catálogo publicado pelo responsável. */
 export function getContratosEntrega(data: AppData, cooperativaId: string): Instituicao[] {
-  const excluidas = idsInstituicoesExcluidas(data, cooperativaId);
-  return data.instituicoes.filter((i) => i.cooperativaId === cooperativaId && !excluidas.has(i.id));
+  return getContratosEntregaValidos(data, cooperativaId);
 }
 
 export function getContratoLabel(inst: Instituicao): string {
@@ -17,13 +20,13 @@ export function getContratoLabel(inst: Instituicao): string {
   return inst.nome;
 }
 
-/** Garante ao menos o contrato PNAE padrão para o cooperado enviar entregas. */
+/** Garante ao menos o contrato PNAE padrão (somente responsável / cadastro inicial). */
 export function ensureContratoPnaePadrao(data: AppData, cooperativaId: string): {
   data: AppData;
   instituicaoId: string;
   criou: boolean;
 } {
-  const contratos = getContratosEntrega(data, cooperativaId);
+  const contratos = getContratosEntregaValidos(data, cooperativaId);
   if (contratos.length > 0) {
     const pnae = contratos.find((i) => i.tipo === "PNAE") ?? contratos[0];
     return { data, instituicaoId: pnae.id, criou: false };
@@ -52,25 +55,40 @@ export function ensureContratoPnaePadrao(data: AppData, cooperativaId: string): 
   };
 }
 
-/** Escolhe o contrato da entrega: nota rejeitada → padrão salvo → PNAE → primeiro da lista → cria PNAE. */
+/** Escolhe o contrato da entrega entre os publicados e válidos na nuvem. */
 export function resolverContratoEntrega(
   data: AppData,
   cooperativaId: string,
-  preferId?: string
+  preferId?: string,
+  options?: { criarPadraoSeVazio?: boolean }
 ): { data: AppData; instituicaoId: string; criou: boolean } {
-  const ensured = ensureContratoPnaePadrao(data, cooperativaId);
-  const contratos = getContratosEntrega(ensured.data, cooperativaId);
+  const criarPadrao = options?.criarPadraoSeVazio !== false;
+  let working = data;
+  let criou = false;
+
+  let contratos = getContratosEntregaValidos(working, cooperativaId);
+  if (contratos.length === 0 && criarPadrao) {
+    const ensured = ensureContratoPnaePadrao(working, cooperativaId);
+    working = ensured.data;
+    criou = ensured.criou;
+    contratos = getContratosEntregaValidos(working, cooperativaId);
+  }
+
+  if (contratos.length === 0) {
+    return { data: working, instituicaoId: "", criou };
+  }
+
   const padrao = getInstituicaoPadraoId(cooperativaId);
 
   const pick = (id?: string) =>
-    id && contratos.some((c) => c.id === id) ? id : undefined;
+    id && contratoValidoNoCatalogo(working, id, cooperativaId) ? id : undefined;
 
   const instituicaoId =
     pick(preferId) ??
     pick(padrao ?? undefined) ??
     contratos.find((c) => c.tipo === "PNAE")?.id ??
     contratos[0]?.id ??
-    ensured.instituicaoId;
+    "";
 
-  return { ...ensured, instituicaoId };
+  return { data: working, instituicaoId, criou };
 }

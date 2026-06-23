@@ -48,6 +48,21 @@ export function instituicaoTemItensCatalogo(
   return getProdutosContrato(data, instituicaoId, cooperativaId).length > 0;
 }
 
+/** Contratos publicados pelo responsável — instituição com ao menos 1 item ativo e preço > 0. */
+export function getContratosEntregaValidos(data: AppData, cooperativaId: string): Instituicao[] {
+  return getInstituicoesCatalogo(data, cooperativaId).filter((i) =>
+    instituicaoTemItensCatalogo(data, i.id, cooperativaId)
+  );
+}
+
+export function contratoValidoNoCatalogo(
+  data: AppData,
+  instituicaoId: string,
+  cooperativaId: string
+): boolean {
+  return getContratosEntregaValidos(data, cooperativaId).some((i) => i.id === instituicaoId);
+}
+
 export function contarItensCatalogo(data: AppData, cooperativaId?: string): number {
   return getTodosProdutosCatalogo(data, cooperativaId).length;
 }

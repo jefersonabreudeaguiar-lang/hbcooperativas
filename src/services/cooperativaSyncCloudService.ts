@@ -244,9 +244,14 @@ function alinharCatalogoComNuvem(
     cloudActive.map((p) => `${p.instituicaoId}::${normalizeInstNome(p.nome)}`)
   );
 
-  const instituicoesAlinhadas = instituicoes.filter(
-    (i) => i.cooperativaId !== coopId || cloudInstIds.has(i.id)
-  );
+  const cloudInstComItens = new Set(cloudActive.map((p) => p.instituicaoId));
+
+  const instituicoesAlinhadas = instituicoes.filter((i) => {
+    if (i.cooperativaId !== coopId) return true;
+    if (!cloudInstIds.has(i.id)) return false;
+    if (cloudItensAtivos > 0 && !cloudInstComItens.has(i.id)) return false;
+    return true;
+  });
 
   const now = new Date().toISOString();
   const produtosAlinhados = produtos.map((p) => {
@@ -312,12 +317,24 @@ export function mergeContratosIntoData(data: AppData, cloud: ContratosSyncPayloa
     coopId
   );
 
+  const instIdsValidos = new Set(
+    alinhado.produtos
+      .filter((p) => p.cooperativaId === coopId && p.ativo && p.precoUnitario > 0)
+      .map((p) => p.instituicaoId)
+  );
+  const instituicoesPublicadas =
+    cloudItensAtivos > 0
+      ? alinhado.instituicoes.filter(
+          (i) => i.cooperativaId !== coopId || instIdsValidos.has(i.id)
+        )
+      : alinhado.instituicoes;
+
   const filterCoop = <T extends { cooperativaId?: string }>(items: T[]) =>
     items.filter((i) => i.cooperativaId !== coopId);
 
   return aplicarInstituicoesExcluidas({
     ...data,
-    instituicoes: [...localInst, ...alinhado.instituicoes],
+    instituicoes: [...localInst, ...instituicoesPublicadas],
     produtosInstituicao: [...localProd, ...alinhado.produtos],
     cronogramasContrato: [
       ...(data.cronogramasContrato ?? []).filter((c) => c.cooperativaId !== coopId),

@@ -33,8 +33,8 @@ import {
   resolveCooperativaCnpj,
 } from "@/services/notaPedidoCloudService";
 import { listCooperadosDaCooperativa, pushCooperadoToCloud, resolverCooperadoIdCanonico, getCooperadoNomeResolvido } from "@/services/cooperadoCloudService";
-import { pushOperacionalToCloud } from "@/services/cooperativaSyncCloudService";
-import { getInstituicoesCatalogo, getProdutosContrato } from "@/services/catalogoContratosService";
+import { pushOperacionalToCloud, syncContratosFromCloud } from "@/services/cooperativaSyncCloudService";
+import { getProdutosContrato } from "@/services/catalogoContratosService";
 import { listarResumosMensaisEntregas, filtrarResumosEntregasPendentes } from "@/services/cooperadoEntregasService";
 import { CooperadoEntregasPorMes } from "@/components/cooperado/CooperadoEntregasPorMes";
 import { CooperadoMinhaFichaTab } from "@/components/cooperado/CooperadoMinhaFichaTab";
@@ -44,6 +44,7 @@ import { labelUnidade } from "@/utils/unidades";
 import {
   getInstituicaoPadraoId,
   setInstituicaoPadraoId,
+  clearInstituicaoPadraoId,
   resolverInstituicaoConferencia,
 } from "@/utils/instituicaoPreferida";
 import { getCooperadoNome } from "@/utils/calculations";
@@ -265,7 +266,7 @@ export default function NotasPedidoContent() {
     setAnexarModal(true);
   };
 
-  const openAnexar = (notaRejeitada?: NotaPedido) => {
+  const openAnexar = async (notaRejeitada?: NotaPedido) => {
     if (!notaRejeitada && rascunhoFotosPendente.length > 0) {
       continuarRascunhoFotos();
       return;
@@ -285,8 +286,20 @@ export default function NotasPedidoContent() {
       limparRascunhoAnexar();
     }
 
-    if (data && coopId) {
-      const resolved = resolverContratoEntrega(data, coopId, notaRejeitada?.instituicaoId);
+    let currentData = data ?? getData();
+    if (isCooperado && user && coopId) {
+      const cnpj = await resolveCooperativaCnpj(currentData, coopId, user);
+      if (cnpj) await syncContratosFromCloud(cnpj);
+      currentData = getData();
+    }
+
+    if (currentData && coopId) {
+      const resolved = resolverContratoEntrega(
+        currentData,
+        coopId,
+        notaRejeitada?.instituicaoId,
+        { criarPadraoSeVazio: !isCooperado }
+      );
       if (resolved.criou) updateData(() => resolved.data);
       setContratoInstId(resolved.instituicaoId);
       if (resolved.instituicaoId) setInstituicaoPadraoId(coopId, resolved.instituicaoId);
@@ -410,15 +423,12 @@ export default function NotasPedidoContent() {
     }
   };
 
-  const instituicoes = useMemo(() => {
-    if (!data || !coopId) return [];
-    return getInstituicoesCatalogo(data, coopId);
-  }, [data, coopId]);
-
   const contratosEntrega = useMemo(() => {
     if (!data || !coopId) return [];
     return getContratosEntrega(data, coopId);
   }, [data, coopId]);
+
+  const instituicoes = contratosEntrega;
 
   useEffect(() => {
     if (!coopId || isCooperado) return;
@@ -430,6 +440,16 @@ export default function NotasPedidoContent() {
       setInstituicaoPadraoId(coopId, instituicoes[0].id);
     }
   }, [coopId, isCooperado, instituicoes]);
+
+  useEffect(() => {
+    if (!coopId || contratosEntrega.length === 0) return;
+    const saved = getInstituicaoPadraoId(coopId);
+    if (saved && !contratosEntrega.some((c) => c.id === saved)) {
+      clearInstituicaoPadraoId(coopId);
+      if (instituicaoPadraoId === saved) setInstituicaoPadraoIdState("");
+      if (contratoInstId === saved) setContratoInstId("");
+    }
+  }, [coopId, contratosEntrega, instituicaoPadraoId, contratoInstId]);
 
   const contratoSelecionado = useMemo(() => {
     if (!data || !contratoInstId) return contratosEntrega[0];
@@ -475,14 +495,16 @@ export default function NotasPedidoContent() {
       reenviarNotaId
         ? data.notasPedido.find((n) => n.id === reenviarNotaId)?.instituicaoId
         : contratoInstId || undefined;
-    const resolved = resolverContratoEntrega(data, coopId, preferId);
+    const resolved = resolverContratoEntrega(data, coopId, preferId, {
+      criarPadraoSeVazio: !isCooperado,
+    });
     if (resolved.criou) updateData(() => resolved.data);
     if (resolved.instituicaoId && resolved.instituicaoId !== contratoInstId) {
       setContratoInstId(resolved.instituicaoId);
       setInstituicaoPadraoId(coopId, resolved.instituicaoId);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [anexarModal, data, coopId, reenviarNotaId]);
+  }, [anexarModal, data, coopId, reenviarNotaId, isCooperado]);
 
   useEffect(() => {
     if (!data || !instituicaoId) return;
@@ -728,7 +750,9 @@ export default function NotasPedidoContent() {
     const preferId = reenviarNotaId
       ? data.notasPedido.find((n) => n.id === reenviarNotaId)?.instituicaoId
       : contratoInstId || undefined;
-    const resolved = resolverContratoEntrega(data, coopId, preferId);
+    const resolved = resolverContratoEntrega(data, coopId, preferId, {
+      criarPadraoSeVazio: !isCooperado,
+    });
     let workingData = data;
     if (resolved.criou) {
       updateData(() => resolved.data);
@@ -1391,9 +1415,17 @@ export default function NotasPedidoContent() {
       )}
 
       {!isCooperado && instituicoes.length === 0 && (
-        <AlertBanner variant="warning" className="mb-6" title="Cadastre uma instituição primeiro">
-          Para lançar entregas com preços automáticos, cadastre escolas e itens em{" "}
-          <Link href="/contratos" className="font-semibold underline">Contratos</Link>.
+        <AlertBanner variant="warning" className="mb-6" title="Publique um contrato com itens e preços">
+          Para conferir entregas, cadastre o contrato em{" "}
+          <Link href="/contratos" className="font-semibold underline">Contratos</Link>{" "}
+          e defina ao menos um item ativo com preço em{" "}
+          <Link href="/precos" className="font-semibold underline">Preços</Link>.
+        </AlertBanner>
+      )}
+
+      {isCooperado && contratosEntrega.length === 0 && (
+        <AlertBanner variant="warning" className="mb-6" title="Aguardando contrato da cooperativa">
+          O responsável ainda não publicou um contrato com itens e preços. Aguarde a sincronização ou fale com a cooperativa.
         </AlertBanner>
       )}
 
@@ -1694,17 +1726,21 @@ export default function NotasPedidoContent() {
           )}
 
           <FormField label="Contrato" required error={formErrors.contrato} hint="A entrega será conferida e lançada neste contrato.">
-            {contratosEntrega.length <= 1 ? (
+            {contratosEntrega.length === 0 ? (
+              <AlertBanner variant="warning">
+                Nenhum contrato disponível. {isCooperado
+                  ? "Aguarde a sincronização com a cooperativa."
+                  : "Cadastre itens com preço em Contratos e Preços."}
+              </AlertBanner>
+            ) : contratosEntrega.length <= 1 ? (
               <div className="rounded-xl border border-green-300 bg-green-50 px-4 py-3 flex items-start gap-3">
                 <FileSignature size={22} className="text-green-700 shrink-0 mt-0.5" />
                 <div>
                   <p className="font-semibold text-green-900">
-                    {contratoSelecionado
-                      ? getContratoLabel(contratoSelecionado)
-                      : "PNAE - MERENDA ESCOLAR"}
+                    {contratoSelecionado ? getContratoLabel(contratoSelecionado) : "Contrato da cooperativa"}
                   </p>
                   <p className="text-xs text-green-700 mt-1">
-                    Contrato selecionado automaticamente — o responsável pode cadastrar outros em Contratos.
+                    Contrato publicado pelo responsável — selecionado automaticamente.
                   </p>
                 </div>
               </div>
