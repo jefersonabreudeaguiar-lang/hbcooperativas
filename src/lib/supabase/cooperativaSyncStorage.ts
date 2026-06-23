@@ -11,6 +11,7 @@ import type {
   ValorAvulsoReceber,
   LivroCaixaLancamento,
   PrestacaoContas,
+  PrestacaoContasExcluida,
 } from "@/types";
 
 const BUCKET = "hb-cooperativa-sync";
@@ -36,6 +37,7 @@ export interface OperacionalSyncPayload {
   valoresAvulsosReceber?: ValorAvulsoReceber[];
   livroCaixa?: LivroCaixaLancamento[];
   prestacoesContas?: PrestacaoContas[];
+  prestacoesContasExcluidas?: PrestacaoContasExcluida[];
   config: { descontoPadraoCooperativa: number };
 }
 

@@ -1,6 +1,7 @@
 import type {
   AppData,
   PrestacaoContas,
+  PrestacaoContasExcluida,
   PrestacaoContasNota,
   PrestacaoContasStatus,
   TipoRepassePrestacao,
@@ -14,9 +15,23 @@ export const TIPO_REPASSE_LABELS: Record<TipoRepassePrestacao, string> = {
   diversos: "Diversos",
 };
 
+function idsPrestacoesExcluidas(data: AppData, cooperativaId?: string): Set<string> {
+  return new Set(
+    (data.prestacoesContasExcluidas ?? [])
+      .filter((e) => !cooperativaId || e.cooperativaId === cooperativaId)
+      .map((e) => e.id)
+  );
+}
+
 export function prestacoesDoCooperado(data: AppData, cooperadoId: string, cooperativaId?: string): PrestacaoContas[] {
+  const excluidas = idsPrestacoesExcluidas(data, cooperativaId);
   return (data.prestacoesContas ?? [])
-    .filter((p) => p.cooperadoId === cooperadoId && (!cooperativaId || p.cooperativaId === cooperativaId))
+    .filter(
+      (p) =>
+        !excluidas.has(p.id) &&
+        p.cooperadoId === cooperadoId &&
+        (!cooperativaId || p.cooperativaId === cooperativaId)
+    )
     .map(normalizarPrestacaoContas)
     .sort((a, b) => prestacaoTime(b, "created") - prestacaoTime(a, "created"));
 }
@@ -26,8 +41,9 @@ export function prestacoesAtivasCooperado(data: AppData, cooperadoId: string, co
 }
 
 export function prestacoesCooperativa(data: AppData, cooperativaId: string): PrestacaoContas[] {
+  const excluidas = idsPrestacoesExcluidas(data, cooperativaId);
   return (data.prestacoesContas ?? [])
-    .filter((p) => p.cooperativaId === cooperativaId)
+    .filter((p) => p.cooperativaId === cooperativaId && !excluidas.has(p.id))
     .map(normalizarPrestacaoContas)
     .sort((a, b) => prestacaoTime(b, "updated") - prestacaoTime(a, "updated"));
 }
@@ -269,10 +285,26 @@ export function excluirPrestacaoContas(
   prestacaoId: string,
   cooperativaId?: string
 ): AppData {
+  const alvo = (data.prestacoesContas ?? []).find(
+    (p) => p.id === prestacaoId && (cooperativaId == null || p.cooperativaId === cooperativaId)
+  );
+  const now = new Date().toISOString();
+  const excluidas = [...(data.prestacoesContasExcluidas ?? [])];
+  if (alvo) {
+    const tombstone: PrestacaoContasExcluida = {
+      id: prestacaoId,
+      cooperativaId: alvo.cooperativaId,
+      deletedAt: now,
+    };
+    const idx = excluidas.findIndex((e) => e.id === prestacaoId);
+    if (idx >= 0) excluidas[idx] = tombstone;
+    else excluidas.push(tombstone);
+  }
   return {
     ...data,
     prestacoesContas: (data.prestacoesContas ?? []).filter(
       (p) => p.id !== prestacaoId || (cooperativaId != null && p.cooperativaId !== cooperativaId)
     ),
+    prestacoesContasExcluidas: excluidas,
   };
 }

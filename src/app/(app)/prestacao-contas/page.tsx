@@ -151,7 +151,7 @@ function ResponsavelView({ coopId, data }: { coopId: string; data: AppData }) {
     });
   };
 
-  const excluirPrestacao = () => {
+  const excluirPrestacao = async () => {
     if (!user || !excluirPrestacaoTarget) return;
     setExcluindo(true);
     try {
@@ -167,6 +167,9 @@ function ResponsavelView({ coopId, data }: { coopId: string; data: AppData }) {
           changes: `Prestação de contas excluída · ${alvo.cooperadoNomeSnapshot ?? "Cooperado"} · ${formatCurrency(alvo.valorRepasse)} · ${alvo.historico}`,
         });
       });
+      const d = getData();
+      const cnpj = await resolveCooperativaCnpj(d, coopId, user);
+      if (cnpj) await pushOperacionalToCloud(cnpj, d, coopId);
       if (expandido === alvo.id) setExpandido(null);
       setExcluirPrestacaoTarget(null);
     } finally {

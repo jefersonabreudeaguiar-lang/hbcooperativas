@@ -55,6 +55,7 @@ export async function resetOperacionalSyncForCnpj(
     valoresAvulsosReceber: [],
     livroCaixa: [],
     prestacoesContas: [],
+    prestacoesContasExcluidas: [],
     config: existing?.config ?? { descontoPadraoCooperativa: 5 },
   };
 

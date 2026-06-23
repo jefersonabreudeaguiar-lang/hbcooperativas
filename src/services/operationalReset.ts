@@ -40,6 +40,7 @@ export function clearOperationalData(data: AppData): AppData {
     fechamentos: [],
     livroCaixa: [],
     prestacoesContas: [],
+    prestacoesContasExcluidas: [],
     auditLog: [],
   };
 }
