@@ -21,7 +21,7 @@ export async function POST(request: Request) {
   }
 
   const secret = process.env.ADMIN_RESET_SECRET;
-  if (secret && String(body.secret ?? "") !== secret) {
+  if (!secret || String(body.secret ?? "") !== secret) {
     return NextResponse.json({ error: "Segredo inválido." }, { status: 403 });
   }
 

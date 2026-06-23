@@ -3,8 +3,13 @@ import { getSupabaseAdmin, isSupabaseConfigured } from "@/lib/supabase/admin";
 import { isCooperativasTableMissing } from "@/lib/supabase/errors";
 import { normalizeCnpj } from "@/utils/cooperativa";
 import { exigeSenhaCadastroCooperado, senhaCadastroFromConfig } from "@/utils/cooperativaCadastro";
+import { rateLimitAuth } from "@/lib/security/rateLimit";
 
 export async function POST(request: Request) {
+  if (!rateLimitAuth(request)) {
+    return NextResponse.json({ error: "Muitas tentativas." }, { status: 429 });
+  }
+
   if (!isSupabaseConfigured()) {
     return NextResponse.json({ configured: false, valid: false, required: false }, { status: 503 });
   }

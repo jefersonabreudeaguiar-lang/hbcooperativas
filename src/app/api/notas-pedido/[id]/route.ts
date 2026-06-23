@@ -4,6 +4,15 @@ import { isNotasPedidoTableMissing } from "@/lib/supabase/errors";
 import { normalizeCnpj } from "@/utils/cooperativa";
 import type { NotaPedido } from "@/types";
 import { fetchNotaFromStorage, uploadNotaToStorage, deleteNotaFromStorage, deleteNotaFromTable } from "@/lib/supabase/notasStorage";
+import { requireApiAuth, requireCooperativaAccess } from "@/lib/security/apiGuard";
+
+async function authorizeCoop(request: Request, cnpj: string) {
+  const auth = await requireApiAuth(request);
+  if (!auth.ok) return auth.response;
+  const denied = requireCooperativaAccess(auth.session, cnpj, auth.enforced);
+  if (denied) return denied;
+  return null;
+}
 
 export async function GET(
   request: Request,
@@ -19,6 +28,9 @@ export async function GET(
   if (cnpj.length !== 14) {
     return NextResponse.json({ error: "CNPJ inválido." }, { status: 400 });
   }
+
+  const blocked = await authorizeCoop(request, cnpj);
+  if (blocked) return blocked;
 
   const supabase = getSupabaseAdmin();
   if (!supabase) {
@@ -64,6 +76,9 @@ export async function PATCH(
   if (cnpj.length !== 14 || nota.id !== id) {
     return NextResponse.json({ error: "Dados inválidos." }, { status: 400 });
   }
+
+  const blocked = await authorizeCoop(request, cnpj);
+  if (blocked) return blocked;
 
   const supabase = getSupabaseAdmin();
   if (!supabase) {
@@ -111,6 +126,9 @@ export async function DELETE(
   if (cnpj.length !== 14) {
     return NextResponse.json({ error: "CNPJ inválido." }, { status: 400 });
   }
+
+  const blocked = await authorizeCoop(request, cnpj);
+  if (blocked) return blocked;
 
   const supabase = getSupabaseAdmin();
   if (!supabase) {

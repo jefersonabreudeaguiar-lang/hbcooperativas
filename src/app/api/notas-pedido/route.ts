@@ -9,17 +9,24 @@ import {
   uploadNotaToStorage,
   upsertNotasInTable,
 } from "@/lib/supabase/notasStorage";
+import { requireApiAuth, requireCooperativaAccess } from "@/lib/security/apiGuard";
 
 export async function GET(request: Request) {
   if (!isSupabaseConfigured()) {
     return NextResponse.json({ notas: [], configured: false });
   }
 
+  const auth = await requireApiAuth(request);
+  if (!auth.ok) return auth.response;
+
   const { searchParams } = new URL(request.url);
   const cnpj = normalizeCnpj(searchParams.get("cnpj") ?? "");
   if (cnpj.length !== 14) {
     return NextResponse.json({ error: "CNPJ inválido." }, { status: 400 });
   }
+
+  const denied = requireCooperativaAccess(auth.session, cnpj, auth.enforced);
+  if (denied) return denied;
 
   const supabase = getSupabaseAdmin();
   if (!supabase) {
@@ -47,6 +54,9 @@ export async function POST(request: Request) {
     );
   }
 
+  const auth = await requireApiAuth(request);
+  if (!auth.ok) return auth.response;
+
   const body = await request.json().catch(() => null);
   if (!body) {
     return NextResponse.json({ error: "Corpo inválido." }, { status: 400 });
@@ -59,6 +69,9 @@ export async function POST(request: Request) {
   if (cnpj.length !== 14) {
     return NextResponse.json({ error: "CNPJ inválido." }, { status: 400 });
   }
+
+  const denied = requireCooperativaAccess(auth.session, cnpj, auth.enforced);
+  if (denied) return denied;
   if (!Array.isArray(notas) || notas.length === 0) {
     return NextResponse.json({ error: "Nenhuma entrega informada." }, { status: 400 });
   }

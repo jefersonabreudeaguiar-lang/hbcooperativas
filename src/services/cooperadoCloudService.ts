@@ -2,6 +2,7 @@ import type { AppData, Cooperado, FichaCorrida } from "@/types";
 import { normalizeCnpj } from "@/utils/cooperativa";
 import { notaPertenceCooperativa } from "@/utils/fotoEntrega";
 import { getData, saveDataSafe } from "@/services/dataStore";
+import { secureApiFetch } from "@/lib/security/clientSession";
 
 function cpfDigits(value: string): string {
   return value.replace(/\D/g, "");
@@ -102,7 +103,7 @@ export async function fetchCooperadosFromCloud(cnpj: string): Promise<Cooperado[
   if (digits.length !== 14) return [];
 
   try {
-    const res = await fetch(`/api/cooperados?cnpj=${digits}`, { cache: "no-store" });
+    const res = await secureApiFetch(`/api/cooperados?cnpj=${digits}`, { cache: "no-store" });
     if (!res.ok) return [];
     const json = await res.json().catch(() => ({}));
     return (json.cooperados ?? []) as Cooperado[];
@@ -120,7 +121,7 @@ export async function pushCooperadoToCloud(
   if (digits.length !== 14) return;
 
   try {
-    await fetch("/api/cooperados", {
+    await secureApiFetch("/api/cooperados", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ cnpj: digits, cooperado, email }),

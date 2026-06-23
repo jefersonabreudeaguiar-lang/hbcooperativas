@@ -5,6 +5,7 @@ import { getNotaCooperativaCnpj, getFotosExibicaoNota } from "@/utils/fotoEntreg
 import { getData, saveDataSafe } from "@/services/dataStore";
 import { reconciliarFichaFromNotasConferidas } from "@/services/notaPedidoService";
 import { needsOperationalResetCloudPush } from "@/services/operationalReset";
+import { secureApiFetch } from "@/lib/security/clientSession";
 
 const STATUS_RANK: Record<NotaPedido["status"], number> = {
   rascunho: 0,
@@ -146,7 +147,7 @@ export async function fetchNotasPedidoFromCloud(cnpj: string): Promise<NotaPedid
   if (digits.length !== 14) return [];
 
   try {
-    const res = await fetch(`/api/notas-pedido?cnpj=${digits}`, { cache: "no-store" });
+    const res = await secureApiFetch(`/api/notas-pedido?cnpj=${digits}`, { cache: "no-store" });
     if (!res.ok) return [];
     const json = await res.json().catch(() => ({}));
     return ((json.notas ?? []) as unknown[])
@@ -165,7 +166,7 @@ export async function fetchNotaPedidoFromCloud(
   if (digits.length !== 14) return null;
 
   try {
-    const res = await fetch(
+    const res = await secureApiFetch(
       `/api/notas-pedido/${encodeURIComponent(notaId)}?cnpj=${digits}`,
       { cache: "no-store" }
     );
@@ -219,7 +220,7 @@ export async function pushNotasPedidoToCloud(
 
   try {
     for (const nota of notas) {
-      const res = await fetch("/api/notas-pedido", {
+      const res = await secureApiFetch("/api/notas-pedido", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ cnpj: digits, notas: [nota], cooperadoNome }),
@@ -250,7 +251,7 @@ export async function deleteNotaPedidoFromCloud(
   if (digits.length !== 14) return { ok: false, error: "CNPJ inválido." };
 
   try {
-    const res = await fetch(
+    const res = await secureApiFetch(
       `/api/notas-pedido/${encodeURIComponent(notaId)}?cnpj=${digits}`,
       { method: "DELETE" }
     );
@@ -272,7 +273,7 @@ export async function patchNotaPedidoInCloud(
   if (digits.length !== 14) return;
 
   try {
-    await fetch(`/api/notas-pedido/${encodeURIComponent(nota.id)}`, {
+    await secureApiFetch(`/api/notas-pedido/${encodeURIComponent(nota.id)}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ cnpj: digits, nota }),

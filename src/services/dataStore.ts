@@ -17,6 +17,12 @@ import { pushCooperadoToCloud } from "@/services/cooperadoCloudService";
 import { reconciliarFichaFromNotasConferidas, ajustesFichaMesId } from "@/services/notaPedidoService";
 import { normalizarPrestacaoContas, aplicarPrestacoesContasExcluidas } from "@/services/prestacaoContasService";
 import { exigeSenhaCadastroCooperado } from "@/utils/cooperativaCadastro";
+import { hashPassword, isPasswordHash, verifyPassword } from "@/lib/security/password";
+import {
+  clearAccessToken,
+  establishCloudSession,
+  registerCloudUser,
+} from "@/lib/security/clientSession";
 
 const STORAGE_KEY = "coopeagriplla_data";
 const SESSION_KEY = "coopeagriplla_session";
@@ -411,14 +417,37 @@ function persistSession(user: Omit<User, "password">): void {
 }
 
 // Auth
-export function login(email: string, password: string): User | null {
+export async function login(email: string, password: string): Promise<User | null> {
   const data = loadData();
   const user = data.users.find(
-    (u) => u.email.toLowerCase() === email.toLowerCase() && u.password === password && u.active
+    (u) => u.email.toLowerCase() === email.toLowerCase() && u.active
   );
+  if (!user) return null;
+
+  const valid = await verifyPassword(password, user.password);
+  if (!valid) return null;
+
+  if (!isPasswordHash(user.password)) {
+    const hash = await hashPassword(password);
+    updateData((d) => ({
+      ...d,
+      users: d.users.map((u) => (u.id === user.id ? { ...u, password: hash } : u)),
+    }));
+    user.password = hash;
+  }
+
   if (user && typeof window !== "undefined") {
     const { password: _, ...safeUser } = user;
     persistSession(safeUser);
+    void establishCloudSession(email, password, {
+      id: safeUser.id,
+      email: safeUser.email,
+      name: safeUser.name,
+      role: safeUser.role,
+      cooperativaId: safeUser.cooperativaId,
+      cooperadoId: safeUser.cooperadoId,
+      cooperativaCnpj: safeUser.cooperativaCnpj,
+    });
   }
   return user ?? null;
 }
@@ -427,6 +456,7 @@ export function logout(): void {
   if (typeof window !== "undefined") {
     localStorage.removeItem(SESSION_KEY);
     sessionStorage.removeItem(SESSION_KEY);
+    clearAccessToken();
     notify();
   }
 }
@@ -683,7 +713,7 @@ export async function registerCooperado(input: RegisterCooperadoInput): Promise<
   const newUser: User = {
     id: userId,
     email,
-    password: input.password,
+    password: await hashPassword(input.password),
     name: nome,
     role: "cooperado",
     cooperadoId,
@@ -713,6 +743,17 @@ export async function registerCooperado(input: RegisterCooperadoInput): Promise<
   });
 
   persistSession(safeUser);
+
+  void registerCloudUser({
+    id: userId,
+    email,
+    password: input.password,
+    name: nome,
+    role: "cooperado",
+    cooperativaId: cooperativa.id,
+    cooperadoId,
+    cooperativaCnpj: cnpjCoop,
+  });
 
   void pushCooperadoToCloud(cnpjCoop, cooperado, email);
 
@@ -826,7 +867,7 @@ export async function registerCooperativa(input: RegisterCooperativaInput): Prom
   const newUser: User = {
     id: userId,
     email,
-    password: input.password,
+    password: await hashPassword(input.password),
     name: responsavel,
     role: "responsavel",
     cooperativaId,
@@ -839,6 +880,16 @@ export async function registerCooperativa(input: RegisterCooperativaInput): Prom
 
   const { password: __, ...safeUser } = newUser;
   persistSession(safeUser);
+
+  void registerCloudUser({
+    id: userId,
+    email,
+    password: input.password,
+    name: responsavel,
+    role: "responsavel",
+    cooperativaId,
+    cooperativaCnpj: cnpj,
+  });
 
   updateData((d) => {
     let updated = {

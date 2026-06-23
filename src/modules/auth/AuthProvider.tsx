@@ -9,7 +9,7 @@ import type { RegisterCooperadoInput, RegisterCooperativaInput } from "@/service
 interface AuthContextType {
   user: Omit<User, "password"> | null;
   loading: boolean;
-  login: (email: string, password: string) => boolean;
+  login: (email: string, password: string) => Promise<boolean>;
   register: (input: RegisterCooperadoInput) => Promise<{ success: boolean; error?: string }>;
   registerCooperativa: (input: RegisterCooperativaInput) => Promise<{ success: boolean; error?: string }>;
   logout: () => void;
@@ -38,8 +38,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     ensureCooperativaInCloudForUser(user).catch(() => {});
   }, [user?.id, loading]);
 
-  const login = (email: string, password: string) => {
-    const result = doLogin(email, password);
+  const login = async (email: string, password: string) => {
+    const result = await doLogin(email, password);
     if (result) {
       const { password: _, ...safeUser } = result;
       setUser(safeUser);

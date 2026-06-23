@@ -9,6 +9,7 @@ import {
   SYNC_INTERVAL_MS,
   syncCooperativaBidirectional,
 } from "@/services/cooperativaSyncCloudService";
+import { refreshCloudSession } from "@/lib/security/clientSession";
 
 /** Sincronização automática em todas as telas (cooperado e responsável). */
 export function CooperativaSyncProvider({ children }: { children: React.ReactNode }) {
@@ -22,7 +23,10 @@ export function CooperativaSyncProvider({ children }: { children: React.ReactNod
     syncingRef.current = true;
     try {
       const cnpj = await resolveCooperativaCnpj(data, coopId, user);
-      if (cnpj) await syncCooperativaBidirectional(cnpj, coopId);
+      if (cnpj) {
+        await refreshCloudSession();
+        await syncCooperativaBidirectional(cnpj, coopId);
+      }
     } finally {
       syncingRef.current = false;
     }

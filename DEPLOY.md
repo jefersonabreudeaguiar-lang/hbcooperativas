@@ -39,10 +39,15 @@ No painel Vercel: **Project → Settings → Environment Variables**
 | `NEXT_PUBLIC_SUPABASE_URL` | `https://ifptyzikekrswippzmsf.supabase.co` |
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | chave publishable do Supabase |
 | `SUPABASE_SERVICE_ROLE_KEY` | chave secret do Supabase |
+| `AUTH_SECRET` | segredo longo (32+ chars) para JWT de sessão — **obrigatório em produção** |
+| `FIELD_ENCRYPTION_KEY` | opcional — chave 32+ chars para criptografar campos sensíveis na nuvem |
+| `ADMIN_RESET_SECRET` | segredo para reset operacional admin — **obrigatório em produção** |
 
 Copie as chaves em **Supabase → Project Settings → API** (mesmas do `.env.local`).
 
-Marque as três para **Production**, **Preview** e **Development**. Depois clique **Redeploy** no último deploy.
+Execute também a migration `supabase/migrations/20260620120000_app_users_security.sql` (tabela `app_users` + auditoria).
+
+Marque as variáveis para **Production**, **Preview** e **Development**. Depois clique **Redeploy** no último deploy.
 
 ## 4. Supabase
 

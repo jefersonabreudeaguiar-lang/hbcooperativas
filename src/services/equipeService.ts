@@ -2,6 +2,7 @@ import type { AppData, ModoAcesso, Resource, User } from "@/types";
 import { MODULOS_ACESSO, PRESET_RELATORIOS, negarModulos, resourcesFromModulos } from "@/permissions";
 import { generateId, addAuditEntry } from "@/services/dataStore";
 import { getUserCooperativaId } from "@/utils/cooperativa";
+import { hashPasswordSync } from "@/lib/security/password";
 
 type UsuarioActor = Pick<User, "id" | "name">;
 
@@ -95,7 +96,7 @@ export function criarMembroEquipe(
   const newUser: User = {
     id: generateId("u"),
     email,
-    password,
+    password: hashPasswordSync(password),
     name,
     role: "responsavel",
     cooperativaId,
@@ -169,7 +170,8 @@ export function aplicarAtualizacaoMembroEquipe(
       name: input.name?.trim() || u.name,
       funcao: input.funcao?.trim() || u.funcao,
       active: input.active ?? u.active,
-      password: input.password && input.password.length >= 6 ? input.password : u.password,
+      password:
+        input.password && input.password.length >= 6 ? hashPasswordSync(input.password) : u.password,
     };
   });
 

@@ -17,17 +17,23 @@ export default function LoginPage() {
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState("");
+  const [submitting, setSubmitting] = useState(false);
   const { login } = useAuth();
   const router = useRouter();
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
-    const success = login(email, password);
-    if (success) {
-      router.push("/dashboard");
-    } else {
-      setError("E-mail ou senha inválidos.");
+    setSubmitting(true);
+    try {
+      const success = await login(email, password);
+      if (success) {
+        router.push("/dashboard");
+      } else {
+        setError("E-mail ou senha inválidos.");
+      }
+    } finally {
+      setSubmitting(false);
     }
   };
 
@@ -113,8 +119,8 @@ export default function LoginPage() {
                 <p className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">{error}</p>
               )}
 
-              <Button type="submit" className="w-full" size="lg">
-                Entrar no Sistema
+              <Button type="submit" className="w-full" size="lg" disabled={submitting}>
+                {submitting ? "Entrando…" : "Entrar no Sistema"}
               </Button>
             </form>
 
