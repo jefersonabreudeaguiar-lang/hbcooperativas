@@ -1,12 +1,11 @@
 "use client";
 
 import Link from "next/link";
-import { Clock } from "lucide-react";
 import { useAppData } from "@/hooks/useAppData";
 import { getResumoMensalidadesCooperado, isAvisoMensalidadeVenceAmanha, textoAvisoMensalidadeAmanha } from "@/services/mensalidadeService";
 import { AlertBanner } from "@/components/ui/AlertBanner";
 import { Button } from "@/components/ui/Button";
-import { formatCurrency, formatDate, formatMesReferencia } from "@/utils/format";
+import { formatCurrency } from "@/utils/format";
 
 export function MensalidadeStatusBanner({
   cooperadoId,
@@ -38,8 +37,6 @@ export function MensalidadeStatusBanner({
   const resumo = getResumoMensalidadesCooperado(data, cooperadoId, cooperado?.cooperativaId);
   if (resumo.situacao === "sem_mensalidade" || resumo.situacao === "em_dia") return null;
 
-  const mesAtual = resumo.mensalidadeMesAtual;
-
   if (resumo.situacao === "aguardando_confirmacao") {
     if (modo === "inicio") return null;
     return (
@@ -68,28 +65,6 @@ export function MensalidadeStatusBanner({
           <Button size="sm" className="mt-3">Ver mensalidades</Button>
         </Link>
       </AlertBanner>
-    );
-  }
-
-  if (resumo.situacao === "pendente" && mesAtual) {
-    return (
-      <div className="bg-amber-50 border border-amber-200 rounded-2xl p-5 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <div className="flex items-start gap-3">
-          <Clock size={24} className="text-amber-600 shrink-0 mt-0.5" />
-          <div>
-            <p className="font-semibold text-amber-900">Mensalidade pendente</p>
-            <p className="text-sm text-amber-800 mt-1">
-              {formatMesReferencia(mesAtual.mesReferencia)} · {formatCurrency(mesAtual.valor)}
-              {mesAtual.vencimento && (
-                <> · vence em {formatDate(mesAtual.vencimento)}</>
-              )}
-            </p>
-          </div>
-        </div>
-        <Link href="/mensalidades">
-          <Button size="sm">Pagar mensalidade</Button>
-        </Link>
-      </div>
     );
   }
 

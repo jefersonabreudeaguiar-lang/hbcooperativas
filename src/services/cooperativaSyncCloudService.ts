@@ -6,7 +6,7 @@ import { syncCooperadosFromCloud, fetchCooperadosFromCloud } from "@/services/co
 import { syncNotasPedidoFromCloud, patchNotaPedidoInCloud } from "@/services/notaPedidoCloudService";
 import { fetchCooperativaByCnpjFromCloud, mergeCooperativaIntoData } from "@/services/cooperativaCloudService";
 import { reconciliarFichaFromNotasConferidas } from "@/services/notaPedidoService";
-import { sincronizarMensalidadeCooperativa, mensalidadeVisivelNoDispositivo, normalizarMensalidadeCooperadoLocal, mesclarMensalidadesPayloadNuvem, prepararMensalidadesCloud, reconciliarMensalidadesComCooperadosCloud } from "@/services/mensalidadeService";
+import { sincronizarMensalidadeCooperativa, mensalidadeVisivelNoDispositivo, normalizarMensalidadeCooperadoLocal, mesclarMensalidadesPayloadNuvem, prepararMensalidadesCloud, prepararMensalidadeCloud, reconciliarMensalidadesComCooperadosCloud, mensalidadeCloudEntraNoDispositivo } from "@/services/mensalidadeService";
 import { aplicarPrestacoesContasExcluidas } from "@/services/prestacaoContasService";
 import { aplicarInstituicoesExcluidas } from "@/services/instituicaoContratoService";
 import {
@@ -339,18 +339,12 @@ export function mergeOperacionalIntoData(
   cloud = normalizeCloudOperacional(cloud);
   const cooperadoIds = new Set(data.cooperados.filter((c) => c.cooperativaId === coopId).map((c) => c.id));
 
-  const cloudMensalidadesPrep = prepararMensalidadesCloud(
-    data,
-    cloud.mensalidades ?? [],
-    coopId,
-    cloudCooperados
-  );
   const mensalidadesLocaisVisiveis = data.mensalidades
     .filter((m) => mensalidadeVisivelNoDispositivo(data, m, coopId))
     .map((m) => normalizarMensalidadeCooperadoLocal(data, m, coopId));
-  const mensalidadesCloudVisiveis = cloudMensalidadesPrep.filter((m) =>
-    mensalidadeVisivelNoDispositivo(data, m, coopId)
-  );
+  const mensalidadesCloudVisiveis = (cloud.mensalidades ?? [])
+    .filter((raw) => mensalidadeCloudEntraNoDispositivo(data, raw, coopId, cloudCooperados))
+    .map((raw) => prepararMensalidadeCloud(data, raw, coopId, cloudCooperados));
 
   const cloudArquivos = cloud.arquivosMensais.map((a) => ({ ...a, cooperativaId: coopId }));
   const cloudAjustes = (cloud.ajustesFichaMes ?? []).map((a) => ({ ...a, cooperativaId: coopId }));

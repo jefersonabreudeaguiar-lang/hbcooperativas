@@ -117,12 +117,10 @@ function mensalidadePendenteMuralVirtual(
   const cfg = coop.mensalidadeConfig;
   const mes = m?.mesReferencia ?? mesAtualRef();
   const valor = m?.valor ?? cfg?.valorPadrao ?? 0;
-  const atrasada = resumo.situacao === "atrasada";
-  const assunto = atrasada ? "Mensalidade em atraso" : "Mensalidade pendente";
+  const assunto = "Mensalidade em atraso";
   const partes = [`${formatMesReferencia(mes)} · ${formatCurrency(valor)}`];
   if (m?.vencimento) {
-    const venceu = atrasada || m.vencimento < dataHojeIso();
-    partes.push(venceu ? `venceu em ${formatDate(m.vencimento)}` : `vence em ${formatDate(m.vencimento)}`);
+    partes.push(`venceu em ${formatDate(m.vencimento)}`);
   }
   if (resumo.qtdAtrasadas > 1) {
     partes.push(`${resumo.qtdAtrasadas} mensalidade(s) em aberto`);
@@ -143,7 +141,7 @@ function mensalidadePendenteMuralVirtual(
     ativo: true,
     createdAt: hoje().toISOString(),
     virtual: true,
-    recorrenteLabel: atrasada ? "Pendência · em atraso" : "Pendência · aguardando pagamento",
+    recorrenteLabel: "Pendência · em atraso",
     href: "/mensalidades",
   };
 }
@@ -238,8 +236,7 @@ export function getComunicadosMuralInicioCooperado(
     resumoMens.situacao === "em_dia" ||
     resumoMens.situacao === "sem_mensalidade" ||
     resumoMens.situacao === "aguardando_confirmacao";
-  const mensalidadePendente =
-    resumoMens?.situacao === "pendente" || resumoMens?.situacao === "atrasada";
+  const mensalidadePendente = resumoMens?.situacao === "atrasada";
   const coop = data.cooperativas.find((c) => c.id === cooperativaId);
 
   const lista = getComunicadosCooperado(data, cooperativaId, cooperadoId).filter((c) => {

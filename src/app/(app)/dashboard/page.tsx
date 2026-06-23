@@ -49,10 +49,7 @@ function CooperadoDashboard() {
   const rejeitadas = notasPendentes.filter((n) => n.status === "rejeitada");
   const emAnalise = notasPendentes.filter((n) => n.status === "aguardando_conferencia").length;
   const resumoMens = getResumoMensalidadesCooperado(data, cooperadoId, coopId);
-  const mensalidadeAberta =
-    resumoMens.situacao !== "em_dia" &&
-    resumoMens.situacao !== "sem_mensalidade" &&
-    resumoMens.situacao !== "aguardando_confirmacao";
+  const mensalidadeAberta = resumoMens.situacao === "atrasada";
   const prestacao = coopId ? prestacaoPrincipalCooperado(data, cooperadoId, coopId) : undefined;
   const prestacaoAberta = prestacao ? prestacaoExigeAtencaoCooperado(prestacao) : false;
   const avulsosAbertos = totalValoresAvulsosPendentes(data, cooperadoId, undefined, coopId) > 0;

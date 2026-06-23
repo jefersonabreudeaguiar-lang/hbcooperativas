@@ -28,6 +28,8 @@ import {
   listarMensalidadesExibicaoCooperado,
   listarMensalidadesCooperado,
   statusEfetivoMensalidade,
+  mensalidadeListagemVisivel,
+  mensalidadeCobrancaVisivel,
   mesesCobrancaEfetivos,
 } from "@/services/mensalidadeService";
 import { compressDataUrl, compressFotoFile } from "@/utils/fotoEntrega";
@@ -96,6 +98,7 @@ function MensalidadesContent() {
 
     return base
       .filter((m) => {
+        if (!statusFilter && !mensalidadeListagemVisivel(m)) return false;
         if (statusFilter && statusEfetivoMensalidade(m) !== statusFilter) return false;
         if (mesFilter && m.mesReferencia !== mesFilter) return false;
         return true;
@@ -145,9 +148,9 @@ function MensalidadesContent() {
     if (!isCooperado || !cooperadoId || !data) return null;
     const todas = listarMensalidadesExibicaoCooperado(data, cooperadoId, coopId);
     return {
-      pagas: todas.filter((m) => statusEfetivoMensalidade(m) === "paga").length,
-      vencidas: todas.filter((m) => statusEfetivoMensalidade(m) === "atrasada").length,
-      pendentes: todas.filter((m) => statusEfetivoMensalidade(m) === "pendente").length,
+      pagas: todas.filter((m) => m.status === "paga").length,
+      vencidas: todas.filter((m) => mensalidadeCobrancaVisivel(m) && statusEfetivoMensalidade(m) === "atrasada").length,
+      pendentes: 0,
       aguardando: todas.filter((m) => m.status === "aguardando_confirmacao").length,
     };
   }, [data, isCooperado, cooperadoId, coopId]);
@@ -343,12 +346,11 @@ function MensalidadesContent() {
       )}
 
       {isCooperado && resumoCooperado && (
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
+        <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 mb-6">
           {[
-            { label: "Pagas", value: resumoCooperado.pagas, color: "text-green-700" },
-            { label: "Pendentes", value: resumoCooperado.pendentes, color: "text-yellow-700" },
             { label: "Vencidas", value: resumoCooperado.vencidas, color: "text-red-700" },
             { label: "Aguardando", value: resumoCooperado.aguardando, color: "text-blue-700" },
+            { label: "Pagas", value: resumoCooperado.pagas, color: "text-green-700" },
           ].map((s) => (
             <div key={s.label} className="bg-white border rounded-xl p-4 text-center">
               <p className={`text-2xl font-bold ${s.color}`}>{s.value}</p>
@@ -416,7 +418,6 @@ function MensalidadesContent() {
         <FormField label="Status">
           <Select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className="min-w-[200px]">
             <option value="">Todos</option>
-            <option value="pendente">Pendente</option>
             <option value="atrasada">Vencida</option>
             <option value="aguardando_confirmacao">Aguardando confirmação</option>
             <option value="paga">Paga</option>
