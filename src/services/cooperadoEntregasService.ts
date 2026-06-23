@@ -28,6 +28,36 @@ export function notaPendenteCooperado(status: NotaPedido["status"]): boolean {
   return status === "aguardando_conferencia" || status === "rejeitada";
 }
 
+export function listarNotasPendentesCooperado(
+  data: AppData,
+  cooperadoId: string,
+  cooperativaId?: string
+): NotaPedido[] {
+  return notasDoCooperado(data, cooperadoId, cooperativaId).filter((n) =>
+    notaPendenteCooperado(n.status)
+  );
+}
+
+/** Valor a receber no início — oculta mês quitado ou sem valor pendente. */
+export function cooperadoExibirValorReceberInicio(
+  data: AppData,
+  cooperadoId: string,
+  cooperativaId?: string
+): { exibir: boolean; mes: string; valor: number; aguardandoAssinatura: boolean } {
+  const { mes, valor, aguardandoAssinatura } = getValorQuantoVouReceber(
+    data,
+    cooperadoId,
+    cooperativaId
+  );
+  if (aguardandoAssinatura) {
+    return { exibir: true, mes, valor, aguardandoAssinatura: true };
+  }
+  if (valor <= 0 || cooperadoMesQuitado(data, cooperadoId, mes)) {
+    return { exibir: false, mes, valor: 0, aguardandoAssinatura: false };
+  }
+  return { exibir: true, mes, valor, aguardandoAssinatura: false };
+}
+
 export function filtrarResumosEntregasPendentes(
   resumos: ResumoMesEntregasCooperado[]
 ): ResumoMesEntregasCooperado[] {

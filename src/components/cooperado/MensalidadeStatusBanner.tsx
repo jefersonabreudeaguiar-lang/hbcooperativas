@@ -8,7 +8,14 @@ import { AlertBanner } from "@/components/ui/AlertBanner";
 import { Button } from "@/components/ui/Button";
 import { formatCurrency, formatDate, formatMesReferencia } from "@/utils/format";
 
-export function MensalidadeStatusBanner({ cooperadoId }: { cooperadoId: string }) {
+export function MensalidadeStatusBanner({
+  cooperadoId,
+  modo = "geral",
+}: {
+  cooperadoId: string;
+  /** No início oculta mensalidade já paga (aguardando confirmação) ou em dia. */
+  modo?: "inicio" | "geral";
+}) {
   const data = useAppData();
   if (!data) return null;
 
@@ -29,9 +36,25 @@ export function MensalidadeStatusBanner({ cooperadoId }: { cooperadoId: string }
   }
 
   const resumo = getResumoMensalidadesCooperado(data, cooperadoId);
-  if (resumo.situacao === "sem_mensalidade") return null;
+  if (resumo.situacao === "sem_mensalidade" || resumo.situacao === "em_dia") return null;
 
   const mesAtual = resumo.mensalidadeMesAtual;
+
+  if (resumo.situacao === "aguardando_confirmacao") {
+    if (modo === "inicio") return null;
+    return (
+      <AlertBanner variant="info" title="Mensalidade aguardando confirmação">
+        Você informou o pagamento
+        {resumo.qtdAguardandoConfirmacao > 1
+          ? ` de ${resumo.qtdAguardandoConfirmacao} mensalidades`
+          : ""}
+        . A cooperativa está conferindo no extrato.
+        <Link href="/mensalidades">
+          <Button size="sm" variant="secondary" className="mt-3">Acompanhar</Button>
+        </Link>
+      </AlertBanner>
+    );
+  }
 
   if (resumo.situacao === "atrasada") {
     return (
@@ -43,21 +66,6 @@ export function MensalidadeStatusBanner({ cooperadoId }: { cooperadoId: string }
         Regularize o pagamento para evitar bloqueios.
         <Link href="/mensalidades">
           <Button size="sm" className="mt-3">Ver mensalidades</Button>
-        </Link>
-      </AlertBanner>
-    );
-  }
-
-  if (resumo.situacao === "aguardando_confirmacao") {
-    return (
-      <AlertBanner variant="info" title="Mensalidade aguardando confirmação">
-        Você informou o pagamento
-        {resumo.qtdAguardandoConfirmacao > 1
-          ? ` de ${resumo.qtdAguardandoConfirmacao} mensalidades`
-          : ""}
-        . A cooperativa está conferindo no extrato.
-        <Link href="/mensalidades">
-          <Button size="sm" variant="secondary" className="mt-3">Acompanhar</Button>
         </Link>
       </AlertBanner>
     );

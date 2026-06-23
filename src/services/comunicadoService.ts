@@ -189,12 +189,15 @@ export function getComunicadosMuralInicioCooperado(
   cooperadoId?: string
 ): ComunicadoExibicao[] {
   const resumoMens = cooperadoId ? getResumoMensalidadesCooperado(data, cooperadoId) : null;
+  const mensalidadeResolvida =
+    !resumoMens ||
+    resumoMens.situacao === "em_dia" ||
+    resumoMens.situacao === "sem_mensalidade" ||
+    resumoMens.situacao === "aguardando_confirmacao";
 
   return getComunicadosCooperado(data, cooperativaId, cooperadoId).filter((c) => {
-    if (!c.virtual) return true;
-    if (c.id.includes("mensalidade") && resumoMens) {
-      if (resumoMens.situacao === "em_dia" || resumoMens.situacao === "sem_mensalidade") return false;
-    }
+    if (c.virtual) return false;
+    if (mensalidadeResolvida && c.categoria === "financeiro") return false;
     return true;
   });
 }

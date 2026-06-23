@@ -14,12 +14,14 @@ import { MensalidadeStatusBanner } from "@/components/cooperado/MensalidadeStatu
 import { ValoresAvulsosDashboardCard } from "@/components/ficha/ValoresAvulsosReceberPanel";
 import { getAdminStats } from "@/services/dashboardService";
 import {
-  cooperadoTemValorPendente,
-  getValorQuantoVouReceber,
+  cooperadoExibirValorReceberInicio,
+  listarNotasPendentesCooperado,
 } from "@/services/cooperadoEntregasService";
-import { notaPertenceCooperado } from "@/services/cooperadoCloudService";
 import { notaPertenceCooperativa } from "@/utils/fotoEntrega";
 import { getComunicadosMuralInicioCooperado } from "@/services/comunicadoService";
+import { getResumoMensalidadesCooperado } from "@/services/mensalidadeService";
+import { prestacaoPrincipalCooperado, valorRestantePrestacao } from "@/services/prestacaoContasService";
+import { totalValoresAvulsosPendentes } from "@/services/valoresAvulsosReceberService";
 import { MuralComunicados } from "@/components/comunicado/MuralComunicados";
 import { PrestacaoContasDashboardBanner } from "@/components/prestacao/PrestacaoContasDashboardBanner";
 import { cooperadoPrecisaCadastrarPix } from "@/utils/pix";
@@ -39,21 +41,32 @@ function CooperadoDashboard() {
   const mes = getCurrentMesReferencia();
   const cooperado = data.cooperados.find((c) => c.id === cooperadoId);
   const coopNome = getUserCooperativaNome(user, data);
-  const temPendencia = cooperadoTemValorPendente(data, cooperadoId, coopId);
-  const { mes: mesPendente, valor: valorPendente, aguardandoAssinatura } = getValorQuantoVouReceber(
-    data,
-    cooperadoId,
-    coopId
-  );
+  const valorReceber = cooperadoExibirValorReceberInicio(data, cooperadoId, coopId);
   const precisaPix = cooperado ? cooperadoPrecisaCadastrarPix(cooperado.chavePix, cooperado.pixValido) : false;
-  const entregasMes = data.notasPedido.filter(
-    (n) => notaPertenceCooperado(data, n, cooperadoId, coopId) && n.mesReferencia === mes
+  const notasPendentes = listarNotasPendentesCooperado(data, cooperadoId, coopId);
+  const rejeitadas = notasPendentes.filter((n) => n.status === "rejeitada");
+  const emAnalise = notasPendentes.filter((n) => n.status === "aguardando_conferencia").length;
+  const resumoMens = getResumoMensalidadesCooperado(data, cooperadoId);
+  const mensalidadeAberta =
+    resumoMens.situacao !== "em_dia" &&
+    resumoMens.situacao !== "sem_mensalidade" &&
+    resumoMens.situacao !== "aguardando_confirmacao";
+  const prestacao = coopId ? prestacaoPrincipalCooperado(data, cooperadoId, coopId) : undefined;
+  const prestacaoAberta = Boolean(
+    prestacao &&
+      prestacao.status !== "conferida" &&
+      valorRestantePrestacao(prestacao) > 0
   );
-  const rejeitadas = data.notasPedido.filter(
-    (n) => notaPertenceCooperado(data, n, cooperadoId, coopId) && n.status === "rejeitada"
-  );
-  const emAnalise = entregasMes.filter((n) => n.status === "aguardando_conferencia").length;
+  const avulsosAbertos = totalValoresAvulsosPendentes(data, cooperadoId, undefined, coopId) > 0;
   const comunicados = coopId ? getComunicadosMuralInicioCooperado(data, coopId, cooperadoId) : [];
+  const temSecaoPendencias =
+    rejeitadas.length > 0 ||
+    emAnalise > 0 ||
+    valorReceber.exibir ||
+    precisaPix ||
+    mensalidadeAberta ||
+    prestacaoAberta ||
+    avulsosAbertos;
 
   return (
     <div className="space-y-6 max-w-3xl">
@@ -64,15 +77,21 @@ function CooperadoDashboard() {
 
       <MuralComunicados comunicados={comunicados} limite={5} hideWhenEmpty />
 
-      <PrestacaoContasDashboardBanner cooperadoId={cooperadoId} cooperativaId={coopId} />
+      {prestacaoAberta && (
+        <PrestacaoContasDashboardBanner cooperadoId={cooperadoId} cooperativaId={coopId} />
+      )}
 
-      <MensalidadeStatusBanner cooperadoId={cooperadoId} />
+      {mensalidadeAberta && (
+        <MensalidadeStatusBanner cooperadoId={cooperadoId} modo="inicio" />
+      )}
 
-      <ValoresAvulsosDashboardCard cooperadoId={cooperadoId} cooperativaId={coopId} />
+      {avulsosAbertos && (
+        <ValoresAvulsosDashboardCard cooperadoId={cooperadoId} cooperativaId={coopId} />
+      )}
 
       <OnboardingChecklist pixOk={!precisaPix} />
 
-      {(rejeitadas.length > 0 || emAnalise > 0 || temPendencia || precisaPix) && (
+      {temSecaoPendencias && (
         <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">Pendências</p>
       )}
 
@@ -89,21 +108,21 @@ function CooperadoDashboard() {
         </AlertBanner>
       )}
 
-      <div className={`grid grid-cols-1 gap-4 ${temPendencia ? "sm:grid-cols-2" : ""}`}>
-        {temPendencia && (
+      <div className={`grid grid-cols-1 gap-4 ${valorReceber.exibir ? "sm:grid-cols-2" : ""}`}>
+        {valorReceber.exibir && (
           <div className="bg-gradient-to-br from-amber-500 to-amber-600 text-white rounded-2xl p-6 shadow-sm">
             <Wallet size={28} className="mb-3 opacity-90" />
             <p className="text-amber-100 text-sm">
-              {aguardandoAssinatura ? "Confirme o recebimento" : "A receber"} · {formatMesReferencia(mesPendente)}
+              {valorReceber.aguardandoAssinatura ? "Confirme o recebimento" : "A receber"} · {formatMesReferencia(valorReceber.mes)}
             </p>
-            <p className="text-3xl font-bold mt-1">{formatCurrency(valorPendente)}</p>
+            <p className="text-3xl font-bold mt-1">{formatCurrency(valorReceber.valor)}</p>
             <Link href="/ficha-corrida" className="inline-block mt-4 text-sm font-medium bg-white/20 hover:bg-white/30 px-4 py-2 rounded-lg">
-              {aguardandoAssinatura ? "Assinar recibo" : "Ver detalhes"}
+              {valorReceber.aguardandoAssinatura ? "Assinar recibo" : "Ver detalhes"}
             </Link>
           </div>
         )}
 
-        <div className={`bg-white border-2 border-green-200 rounded-2xl p-6 flex flex-col justify-between ${!temPendencia ? "sm:max-w-md" : ""}`}>
+        <div className={`bg-white border-2 border-green-200 rounded-2xl p-6 flex flex-col justify-between ${!valorReceber.exibir ? "sm:max-w-md" : ""}`}>
           <div>
             <Camera size={28} className="text-green-700 mb-3" />
             <p className="font-semibold text-gray-900">Registrar entrega na escola</p>
