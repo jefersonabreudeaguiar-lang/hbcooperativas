@@ -6,6 +6,7 @@ import {
   encontrarCooperadoLocalEquivalente,
   mesmoCooperadoCadastro,
   nomeNormalizado,
+  cpfCooperadoDigits,
 } from "@/services/cooperadoCloudService";
 import {
   aplicarAjustesFichaMesTodosCooperados,
@@ -83,6 +84,82 @@ export function getConfigMensalidadeCooperativa(
   return data.cooperativas.find((c) => c.id === cooperativaId)?.mensalidadeConfig;
 }
 
+export function mensalidadeSnapshotMatchCooperado(
+  mensalidade: Pick<Mensalidade, "cooperadoNomeSnapshot" | "cooperadoCpfSnapshot">,
+  cooperado: Pick<Cooperado, "cpfCnpj" | "nomeCompleto">
+): boolean {
+  const snapCpf = cpfCooperadoDigits(mensalidade.cooperadoCpfSnapshot);
+  const alvoCpf = cpfCooperadoDigits(cooperado.cpfCnpj);
+  if (snapCpf.length >= 11 && snapCpf === alvoCpf) return true;
+  const snapNome = mensalidade.cooperadoNomeSnapshot?.trim();
+  if (snapNome && nomeNormalizado(snapNome) === nomeNormalizado(cooperado.nomeCompleto)) return true;
+  return false;
+}
+
+/** Resolve o cooperado local dono da cobrança (id da nuvem/responsável → id deste aparelho). */
+export function encontrarCooperadoLocalParaMensalidade(
+  data: AppData,
+  mensalidade: Mensalidade,
+  cooperativaId: string,
+  cloudCooperados: Cooperado[] = []
+): Cooperado | undefined {
+  const locais = data.cooperados.filter(
+    (c) => c.cooperativaId === cooperativaId && c.status !== "desligado"
+  );
+
+  const direct = locais.find((c) => c.id === mensalidade.cooperadoId);
+  if (direct) return direct;
+
+  const cloudRef = cloudCooperados.find((c) => c.id === mensalidade.cooperadoId);
+  if (cloudRef) {
+    const eq = encontrarCooperadoLocalEquivalente(data, cooperativaId, cloudRef);
+    if (eq) return eq;
+  }
+
+  if (mensalidade.cooperadoNomeSnapshot || mensalidade.cooperadoCpfSnapshot) {
+    const bySnap = locais.find((c) => mensalidadeSnapshotMatchCooperado(mensalidade, c));
+    if (bySnap) return bySnap;
+  }
+
+  if (cloudRef) {
+    return locais.find((c) => mesmoCooperadoCadastro(c, cloudRef));
+  }
+
+  return undefined;
+}
+
+export function enriquecerMensalidadeCooperadoSnapshot(
+  data: AppData,
+  mensalidade: Mensalidade,
+  cooperativaId: string,
+  cooperadoHint?: Cooperado
+): Mensalidade {
+  const dono =
+    cooperadoHint ??
+    data.cooperados.find(
+      (c) => c.id === mensalidade.cooperadoId && c.cooperativaId === cooperativaId
+    ) ??
+    encontrarCooperadoLocalParaMensalidade(data, mensalidade, cooperativaId);
+  if (!dono) return mensalidade;
+
+  const nome = dono.nomeCompleto.trim();
+  const cpf = dono.cpfCnpj?.trim() ?? "";
+  if (
+    mensalidade.cooperadoId === dono.id &&
+    mensalidade.cooperadoNomeSnapshot === nome &&
+    mensalidade.cooperadoCpfSnapshot === cpf
+  ) {
+    return mensalidade;
+  }
+
+  return {
+    ...mensalidade,
+    cooperadoId: dono.id,
+    cooperadoNomeSnapshot: nome || mensalidade.cooperadoNomeSnapshot,
+    cooperadoCpfSnapshot: cpf || mensalidade.cooperadoCpfSnapshot,
+  };
+}
+
 export function mensalidadePertenceCooperado(
   data: AppData,
   mensalidade: Mensalidade,
@@ -118,7 +195,14 @@ export function mensalidadePertenceCooperado(
   );
   if (nomeAlvo.length > 2 && nomeAlvo === nomeDono) return true;
 
-  return false;
+  if (mensalidadeSnapshotMatchCooperado(mensalidade, alvo)) return true;
+
+  const donoLocal = encontrarCooperadoLocalParaMensalidade(
+    data,
+    mensalidade,
+    cooperativaId ?? alvo.cooperativaId
+  );
+  return Boolean(donoLocal && donoLocal.id === alvo.id);
 }
 
 /** Alinha cobrança da nuvem (id do responsável) ao cooperado deste aparelho. */
@@ -128,14 +212,19 @@ export function prepararMensalidadeCloud(
   cooperativaId: string,
   cloudCooperados: Cooperado[] = []
 ): Mensalidade {
-  const cloudRef = cloudCooperados.find((c) => c.id === mensalidade.cooperadoId);
-  if (cloudRef) {
-    const local = encontrarCooperadoLocalEquivalente(data, cooperativaId, cloudRef);
-    if (local && local.id !== mensalidade.cooperadoId) {
-      return { ...mensalidade, cooperadoId: local.id };
-    }
+  const local = encontrarCooperadoLocalParaMensalidade(
+    data,
+    mensalidade,
+    cooperativaId,
+    cloudCooperados
+  );
+  let prep = mensalidade;
+  if (local && local.id !== mensalidade.cooperadoId) {
+    prep = { ...mensalidade, cooperadoId: local.id };
+  } else {
+    prep = normalizarMensalidadeCooperadoLocal(data, mensalidade, cooperativaId);
   }
-  return normalizarMensalidadeCooperadoLocal(data, mensalidade, cooperativaId);
+  return enriquecerMensalidadeCooperadoSnapshot(data, prep, cooperativaId, local);
 }
 
 /** Reescreve cooperadoId órfão usando cadastros da nuvem. */
@@ -309,13 +398,9 @@ export function mensalidadeCloudEntraNoDispositivo(
   cooperativaId: string,
   cloudCooperados: Cooperado[] = []
 ): boolean {
-  const prep = prepararMensalidadeCloud(data, mensalidade, cooperativaId, cloudCooperados);
-  if (mensalidadeVisivelNoDispositivo(data, prep, cooperativaId)) return true;
-
-  const cloudRef = cloudCooperados.find((c) => c.id === mensalidade.cooperadoId);
-  if (cloudRef && encontrarCooperadoLocalEquivalente(data, cooperativaId, cloudRef)) return true;
-
-  return false;
+  return Boolean(
+    encontrarCooperadoLocalParaMensalidade(data, mensalidade, cooperativaId, cloudCooperados)
+  );
 }
 
 function mensalidadeDestaqueResumo(
@@ -459,23 +544,29 @@ export function textoAvisoMensalidadeAmanha(cfg: MensalidadeConfig): string {
 }
 
 function criarMensalidade(
-  cooperadoId: string,
+  data: AppData,
+  cooperado: Cooperado,
   mes: string,
   valor: number,
   diaVencimento: number,
   now: string
 ): Mensalidade {
-  return {
-    id: newId("m"),
-    cooperadoId,
-    mesReferencia: mes,
-    valor,
-    vencimento: vencimentoDoMes(mes, diaVencimento),
-    status: "pendente",
-    observacao: "Gerada automaticamente",
-    createdAt: now,
-    updatedAt: now,
-  };
+  return enriquecerMensalidadeCooperadoSnapshot(
+    data,
+    {
+      id: newId("m"),
+      cooperadoId: cooperado.id,
+      mesReferencia: mes,
+      valor,
+      vencimento: vencimentoDoMes(mes, diaVencimento),
+      status: "pendente",
+      observacao: "Gerada automaticamente",
+      createdAt: now,
+      updatedAt: now,
+    },
+    cooperado.cooperativaId,
+    cooperado
+  );
 }
 
 /** Chave PIX da cooperativa para pagamento de mensalidade (CNPJ). */
@@ -511,7 +602,7 @@ export function ensureMensalidadeCooperado(data: AppData, cooperadoId: string): 
     ...data,
     mensalidades: [
       ...data.mensalidades,
-      criarMensalidade(cooperadoId, mes, cfg.valorPadrao, cfg.diaVencimento, now),
+      criarMensalidade(data, cooperado, mes, cfg.valorPadrao, cfg.diaVencimento, now),
     ],
   };
 }
@@ -556,7 +647,7 @@ function gerarMensalidadesCooperativaMes(
       continue;
     }
     mensalidades.push(
-      criarMensalidade(cooperado.id, mesReferencia, cfg.valorPadrao, cfg.diaVencimento, now)
+      criarMensalidade(data, cooperado, mesReferencia, cfg.valorPadrao, cfg.diaVencimento, now)
     );
     changed = true;
   }
@@ -760,13 +851,16 @@ export function getResumoMensalidadesCooperado(
   const mesAtual = getCurrentMesReferencia();
   const coopId =
     cooperativaId ?? data.cooperados.find((c) => c.id === cooperadoId)?.cooperativaId;
-  const todas = listarMensalidadesExibicaoCooperado(data, cooperadoId, coopId);
+  const cooperadoCanonico = coopId
+    ? resolverCooperadoIdCanonico(data, cooperadoId, coopId)
+    : cooperadoId;
+  const todas = listarMensalidadesExibicaoCooperado(data, cooperadoCanonico, coopId);
 
   const cobrancas = todas.filter((m) => mensalidadeCobrancaVisivel(m, hoje));
 
   if (cobrancas.length === 0 && todas.filter((m) => m.status === "paga").length === 0) {
     return (
-      resumoConfigSemRegistros(data, cooperadoId, hoje, mesAtual) ?? {
+      resumoConfigSemRegistros(data, cooperadoCanonico, hoje, mesAtual) ?? {
         situacao: "sem_mensalidade",
         qtdAtrasadas: 0,
         qtdAguardandoConfirmacao: 0,

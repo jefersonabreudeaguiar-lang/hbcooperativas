@@ -128,6 +128,9 @@ export interface Cooperado {
 export interface Mensalidade {
   id: string;
   cooperadoId: string;
+  /** CPF/nome no momento da cobrança — permite sync quando o id difere entre aparelhos. */
+  cooperadoNomeSnapshot?: string;
+  cooperadoCpfSnapshot?: string;
   mesReferencia: string;
   valor: number;
   vencimento: string;

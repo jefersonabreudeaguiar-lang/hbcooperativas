@@ -13,10 +13,10 @@ import { OnboardingChecklist } from "@/components/cooperado/OnboardingChecklist"
 import { MensalidadeStatusBanner } from "@/components/cooperado/MensalidadeStatusBanner";
 import { ValoresAvulsosDashboardCard } from "@/components/ficha/ValoresAvulsosReceberPanel";
 import { getAdminStats } from "@/services/dashboardService";
-import {
-  cooperadoExibirValorReceberInicio,
+import { cooperadoExibirValorReceberInicio,
   listarNotasPendentesCooperado,
 } from "@/services/cooperadoEntregasService";
+import { resolverCooperadoIdCanonico } from "@/services/cooperadoCloudService";
 import { notaPertenceCooperativa } from "@/utils/fotoEntrega";
 import { getComunicadosMuralInicioCooperado } from "@/services/comunicadoService";
 import { getResumoMensalidadesCooperado } from "@/services/mensalidadeService";
@@ -39,7 +39,7 @@ function CooperadoDashboard() {
 
   if (!data || !user?.cooperadoId) return null;
 
-  const cooperadoId = user.cooperadoId;
+  const cooperadoId = resolverCooperadoIdCanonico(data, user.cooperadoId, coopId);
   const mes = getCurrentMesReferencia();
   const cooperado = data.cooperados.find((c) => c.id === cooperadoId);
   const coopNome = getUserCooperativaNome(user, data);

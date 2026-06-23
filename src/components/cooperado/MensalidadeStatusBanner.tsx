@@ -22,6 +22,23 @@ export function MensalidadeStatusBanner({
   const coop = cooperado ? data.cooperativas.find((c) => c.id === cooperado.cooperativaId) : undefined;
   const cfg = coop?.mensalidadeConfig;
 
+  const resumo = getResumoMensalidadesCooperado(data, cooperadoId, cooperado?.cooperativaId);
+
+  if (resumo.situacao === "atrasada") {
+    return (
+      <AlertBanner variant="error" title="Mensalidade em atraso">
+        {resumo.qtdAtrasadas === 1
+          ? "Você tem 1 mensalidade atrasada"
+          : `Você tem ${resumo.qtdAtrasadas} mensalidades atrasadas`}
+        {resumo.valorEmAberto > 0 && ` · total em aberto: ${formatCurrency(resumo.valorEmAberto)}`}.
+        Regularize o pagamento para evitar bloqueios.
+        <Link href="/mensalidades">
+          <Button size="sm" className="mt-3">Ver mensalidades</Button>
+        </Link>
+      </AlertBanner>
+    );
+  }
+
   if (cfg && isAvisoMensalidadeVenceAmanha(cfg)) {
     const dia = Math.min(Math.max(cfg.diaVencimento || 10, 1), 28);
     return (
@@ -34,7 +51,6 @@ export function MensalidadeStatusBanner({
     );
   }
 
-  const resumo = getResumoMensalidadesCooperado(data, cooperadoId, cooperado?.cooperativaId);
   if (resumo.situacao === "sem_mensalidade" || resumo.situacao === "em_dia") return null;
 
   if (resumo.situacao === "aguardando_confirmacao") {
@@ -48,21 +64,6 @@ export function MensalidadeStatusBanner({
         . A cooperativa está conferindo no extrato.
         <Link href="/mensalidades">
           <Button size="sm" variant="secondary" className="mt-3">Acompanhar</Button>
-        </Link>
-      </AlertBanner>
-    );
-  }
-
-  if (resumo.situacao === "atrasada") {
-    return (
-      <AlertBanner variant="error" title="Mensalidade em atraso">
-        {resumo.qtdAtrasadas === 1
-          ? "Você tem 1 mensalidade atrasada"
-          : `Você tem ${resumo.qtdAtrasadas} mensalidades atrasadas`}
-        {resumo.valorEmAberto > 0 && ` · total em aberto: ${formatCurrency(resumo.valorEmAberto)}`}.
-        Regularize o pagamento para evitar bloqueios.
-        <Link href="/mensalidades">
-          <Button size="sm" className="mt-3">Ver mensalidades</Button>
         </Link>
       </AlertBanner>
     );
