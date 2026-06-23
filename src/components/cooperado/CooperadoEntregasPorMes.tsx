@@ -25,6 +25,7 @@ import {
   valoresEntregaCooperado,
   type EntregaCooperadoView,
 } from "@/services/entregaCooperadoService";
+import { textoInformativoDivisaoEntrega, nomesParticipantesDivisao } from "@/services/divisaoEntregaService";
 import { useAppData } from "@/hooks/useAppData";
 import { NotaStatusBadge } from "@/components/ui/NotaStatusBadge";
 import { Button } from "@/components/ui/Button";
@@ -192,6 +193,11 @@ function EntregaSemanaItem({
             )}
           </p>
           <p className="text-sm text-gray-600 truncate mt-0.5">{escola}</p>
+          {nota.divisaoEntrega && nota.divisaoEntrega.participantes.length > 1 && (
+            <p className="text-xs text-blue-800 mt-1 rounded-md bg-blue-50 border border-blue-100 px-2 py-1 inline-block">
+              {textoInformativoDivisaoEntrega(nota.divisaoEntrega)}
+            </p>
+          )}
           <p className="text-xs text-gray-500 mt-0.5 flex items-center gap-1.5 flex-wrap">
             <span>{formatDate(entrega.dataEntrega)}</span>
             {entrega.qtdFotos > 0 && (
@@ -277,6 +283,13 @@ function EntregaSemanaItem({
                   </div>
                 </div>
               )}
+            </div>
+          )}
+
+          {nota.divisaoEntrega && nota.divisaoEntrega.participantes.length > 1 && (
+            <div className="rounded-xl border border-blue-200 bg-blue-50/80 px-3 py-2 text-sm text-blue-900">
+              <p className="font-medium">{textoInformativoDivisaoEntrega(nota.divisaoEntrega)}</p>
+              <p className="text-xs text-blue-800 mt-1">{nomesParticipantesDivisao(nota.divisaoEntrega)}</p>
             </div>
           )}
 

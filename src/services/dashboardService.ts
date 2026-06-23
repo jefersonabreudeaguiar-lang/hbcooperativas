@@ -197,6 +197,7 @@ export function getRelatorioEntregasPorItens(
 }
 
 export { getRelatorioSobrasPerdas } from "@/services/sobrasPerdasService";
+export { getRelatorioAtingimentoCronograma } from "@/services/relatorioCronogramaService";
 
 export { listMesesComLancamentos, getRelatorioPagarCooperado, calcularFechamentoMensalLive };
 

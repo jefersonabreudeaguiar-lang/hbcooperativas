@@ -1,4 +1,5 @@
 import type { AppData, InstituicaoExcluida } from "@/types";
+import { removerCronogramasInstituicao } from "@/services/cronogramaContratoService";
 
 export function idsInstituicoesExcluidas(data: AppData, cooperativaId?: string): Set<string> {
   return new Set(
@@ -48,14 +49,19 @@ export function excluirInstituicaoContrato(
     else excluidas.push(tombstone);
   }
 
-  return aplicarInstituicoesExcluidas({
-    ...data,
-    instituicoes: data.instituicoes.filter(
-      (i) => i.id !== instituicaoId || (cooperativaId != null && i.cooperativaId !== cooperativaId)
-    ),
-    produtosInstituicao: data.produtosInstituicao.filter(
-      (p) => p.instituicaoId !== instituicaoId || (cooperativaId != null && p.cooperativaId !== cooperativaId)
-    ),
-    instituicoesExcluidas: excluidas,
-  });
+  return aplicarInstituicoesExcluidas(
+    removerCronogramasInstituicao(
+      {
+        ...data,
+        instituicoes: data.instituicoes.filter(
+          (i) => i.id !== instituicaoId || (cooperativaId != null && i.cooperativaId !== cooperativaId)
+        ),
+        produtosInstituicao: data.produtosInstituicao.filter(
+          (p) => p.instituicaoId !== instituicaoId || (cooperativaId != null && p.cooperativaId !== cooperativaId)
+        ),
+        instituicoesExcluidas: excluidas,
+      },
+      instituicaoId
+    )
+  );
 }

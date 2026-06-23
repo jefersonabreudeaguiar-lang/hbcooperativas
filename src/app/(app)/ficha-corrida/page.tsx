@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useMemo, useState, useEffect, useCallback } from "react";
 import { useSearchParams } from "next/navigation";
-import { QrCode, XCircle, Wallet, CheckCircle2, FileDown, PenLine, BookOpen, CreditCard, History } from "lucide-react";
+import { QrCode, XCircle, Wallet, CheckCircle2, FileDown, PenLine, BookOpen, CreditCard, History, Users } from "lucide-react";
 import { useAppData } from "@/hooks/useAppData";
 import { usePermissions } from "@/hooks/usePermissions";
 import { getUserCooperativaId } from "@/utils/cooperativa";
@@ -23,8 +23,8 @@ import {
   upsertAjustesFichaMesCooperativa,
   agregarItensFichaMes,
 } from "@/services/notaPedidoService";
-import { listCooperadosComFichaNoMes, getCooperadoNomeResolvido, resolverCooperadoParaPagamento } from "@/services/cooperadoCloudService";
-import { resolveCooperativaCnpj } from "@/services/notaPedidoCloudService";
+import { listCooperadosComFichaNoMes, getCooperadoNomeResolvido, resolverCooperadoParaPagamento, fichaPertenceCooperado, listCooperadosDaCooperativa } from "@/services/cooperadoCloudService";
+import { resolveCooperativaCnpj, patchNotaPedidoInCloud } from "@/services/notaPedidoCloudService";
 import {
   pushOperacionalToCloud,
   pushNotasPagasToCloud,
@@ -48,7 +48,13 @@ import { ConfirmDialog, PromptDialog } from "@/components/ui/ConfirmDialog";
 import { SignaturePad } from "@/components/ui/SignaturePad";
 import { ReciboResumoView } from "@/components/ficha/ReciboResumoView";
 import { ResumoDescontosMes } from "@/components/ficha/ResumoDescontosMes";
+import { DivisaoEntregaModal } from "@/components/ficha/DivisaoEntregaModal";
 import { ValoresAvulsosReceberPanel } from "@/components/ficha/ValoresAvulsosReceberPanel";
+import {
+  dividirEntregaEntreCooperados,
+  nomesParticipantesDivisao,
+  textoInformativoDivisaoEntrega,
+} from "@/services/divisaoEntregaService";
 import { descontosDoCooperadoNoMes, TIPO_DESCONTO_LABELS } from "@/services/descontosService";
 import {
   criarValorAvulsoReceber,
@@ -58,7 +64,7 @@ import { cooperadoPrecisaCadastrarPix } from "@/utils/pix";
 import { baixarRecibo, resumoReciboFromPagamento, nomeArquivoRecibo } from "@/utils/recibo";
 import { updateData, addAuditEntry, getData } from "@/services/dataStore";
 import { formatCurrency, formatDate, formatMesReferencia, getCurrentMesReferencia } from "@/utils/format";
-import type { PagamentoCooperadoRegistro } from "@/types";
+import type { PagamentoCooperadoRegistro, FichaCorrida, NotaPedido } from "@/types";
 
 function TabelaResumoItens({
   itens,
@@ -148,6 +154,9 @@ export default function FichaCorridaPage() {
   const [avulsoReceberMotivo, setAvulsoReceberMotivo] = useState("");
   const [avulsoReceberValor, setAvulsoReceberValor] = useState("");
   const [avulsoReceberData, setAvulsoReceberData] = useState(() => new Date().toISOString().split("T")[0]);
+  const [divisaoFicha, setDivisaoFicha] = useState<FichaCorrida | null>(null);
+  const [divisaoSelecionados, setDivisaoSelecionados] = useState<string[]>([]);
+  const [divisaoSalvando, setDivisaoSalvando] = useState(false);
 
   const coopId = user && data ? getUserCooperativaId(user, data) : undefined;
 
@@ -383,6 +392,26 @@ export default function FichaCorridaPage() {
     return agregarItensFichaMes(data, cooperadoSelecionadoId, mesAtivo, coopId);
   }, [data, cooperadoSelecionadoId, mesAtivo, coopId]);
 
+  const fichasPendentesMes = useMemo(() => {
+    if (!data || !cooperadoSelecionadoId) return [];
+    return data.fichaCorrida.filter(
+      (f) =>
+        fichaPertenceCooperado(data, f, cooperadoSelecionadoId, coopId) &&
+        f.mesReferencia === mesAtivo &&
+        f.status === "pendente"
+    );
+  }, [data, cooperadoSelecionadoId, mesAtivo, coopId]);
+
+  const cooperadosParaDivisao = useMemo(() => {
+    if (!data || !coopId || !cooperadoSelecionadoId) return [];
+    return listCooperadosDaCooperativa(data, coopId).filter((c) => c.id !== cooperadoSelecionadoId);
+  }, [data, coopId, cooperadoSelecionadoId]);
+
+  const notaDivisaoAtual = useMemo(() => {
+    if (!data || !divisaoFicha) return undefined;
+    return data.notasPedido.find((n) => n.id === divisaoFicha.notaPedidoId);
+  }, [data, divisaoFicha]);
+
   const resumoAjustes = useMemo(() => {
     if (isCooperado) return undefined;
     return {
@@ -473,6 +502,55 @@ export default function FichaCorridaPage() {
     })();
     setPixInvalidoOpen(false);
     setMotivoPix("");
+  };
+
+  const abrirDivisaoEntrega = (ficha: FichaCorrida) => {
+    const nota = data?.notasPedido.find((n) => n.id === ficha.notaPedidoId);
+    const divisao = ficha.divisaoEntrega ?? nota?.divisaoEntrega;
+    const origemId = divisao?.cooperadoOrigemId ?? ficha.cooperadoId;
+    const outros =
+      divisao?.participantes.filter((p) => p.cooperadoId !== origemId).map((p) => p.cooperadoId) ?? [];
+    setDivisaoSelecionados(outros);
+    setDivisaoFicha(ficha);
+  };
+
+  const toggleCooperadoDivisao = (cooperadoId: string) => {
+    setDivisaoSelecionados((prev) =>
+      prev.includes(cooperadoId) ? prev.filter((id) => id !== cooperadoId) : [...prev, cooperadoId]
+    );
+  };
+
+  const handleConfirmarDivisao = async () => {
+    if (!user || !coopId || !divisaoFicha || divisaoSelecionados.length === 0) return;
+    setDivisaoSalvando(true);
+    try {
+      let notaAtualizada: NotaPedido | undefined;
+      updateData((d) => {
+        const next = dividirEntregaEntreCooperados(
+          d,
+          divisaoFicha.notaPedidoId,
+          divisaoSelecionados,
+          coopId
+        );
+        notaAtualizada = next.notasPedido.find((n) => n.id === divisaoFicha.notaPedidoId);
+        return addAuditEntry(next, {
+          entityType: "ficha_corrida",
+          entityId: divisaoFicha.notaPedidoId,
+          action: "editar",
+          userId: user.id,
+          userName: user.name,
+          changes: `Entrega dividida entre ${1 + divisaoSelecionados.length} cooperados · ${divisaoFicha.descricao}`,
+        });
+      });
+      const d = getData();
+      const cnpj = await resolveCooperativaCnpj(d, coopId, user);
+      if (cnpj && notaAtualizada) await patchNotaPedidoInCloud(cnpj, notaAtualizada);
+      if (cnpj) await pushOperacionalToCloud(cnpj, d, coopId);
+      setDivisaoFicha(null);
+      setDivisaoSelecionados([]);
+    } finally {
+      setDivisaoSalvando(false);
+    }
   };
 
   const handleConfirmarPagamento = () => {
@@ -881,6 +959,22 @@ export default function FichaCorridaPage() {
 
           <Card title={`Resumo das entregas · ${formatMesReferencia(mesAtivo)}`} className="mb-6">
             <TabelaResumoItens itens={resumoItensMes.itens} entregas={resumoItensMes.entregas} />
+            {fichasPendentesMes.some((f) => f.divisaoEntrega && f.divisaoEntrega.participantes.length > 1) && (
+              <div className="mt-4 space-y-2">
+                {fichasPendentesMes
+                  .filter((f) => f.divisaoEntrega && f.divisaoEntrega.participantes.length > 1)
+                  .map((f) => (
+                    <div
+                      key={f.id}
+                      className="rounded-xl border border-blue-200 bg-blue-50/80 px-4 py-3 text-sm text-blue-900"
+                    >
+                      <p className="font-medium">{textoInformativoDivisaoEntrega(f.divisaoEntrega!)}</p>
+                      <p className="text-xs text-blue-800 mt-1">{f.descricao}</p>
+                      <p className="text-xs text-blue-700 mt-1">{nomesParticipantesDivisao(f.divisaoEntrega!)}</p>
+                    </div>
+                  ))}
+              </div>
+            )}
           </Card>
         </>
       )}
@@ -924,6 +1018,50 @@ export default function FichaCorridaPage() {
 
           {!isCooperado && cooperadoSelecionado && check("ficha_corrida", "edit") && (
             <Card title={`Pagamento — ${nomeCooperado.split(" ")[0]}`} className="mb-6">
+              {fichasPendentesMes.length > 0 && (
+                <div className="mb-6 pb-6 border-b border-gray-200">
+                  <p className="text-sm font-semibold text-gray-800 mb-3">Entregas pendentes de pagamento</p>
+                  <div className="space-y-3">
+                    {fichasPendentesMes.map((f) => {
+                      const divisao = f.divisaoEntrega;
+                      const dividida = divisao && divisao.participantes.length > 1;
+                      return (
+                        <div
+                          key={f.id}
+                          className="rounded-xl border border-gray-200 bg-gray-50/80 p-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3"
+                        >
+                          <div className="min-w-0">
+                            <p className="font-medium text-gray-900 truncate">{f.descricao}</p>
+                            <p className="text-sm text-green-700 font-semibold mt-0.5">
+                              {formatCurrency(f.valorLiquido)}
+                              {dividida && (
+                                <span className="text-gray-500 font-normal ml-1">
+                                  (parte de {divisao!.participantes.length})
+                                </span>
+                              )}
+                            </p>
+                            {dividida && (
+                              <p className="text-xs text-blue-800 mt-2 rounded-lg bg-blue-50 border border-blue-100 px-2 py-1.5">
+                                {textoInformativoDivisaoEntrega(divisao!)}
+                              </p>
+                            )}
+                          </div>
+                          <Button
+                            type="button"
+                            variant="secondary"
+                            size="sm"
+                            className="shrink-0"
+                            onClick={() => abrirDivisaoEntrega(f)}
+                          >
+                            <Users size={16} />
+                            {dividida ? "Alterar divisão" : "Dividir valor"}
+                          </Button>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
               <div className="space-y-4">
                 <div className="flex items-center gap-2 text-sm">
                   <Wallet size={18} className="text-gray-500" />
@@ -992,6 +1130,28 @@ export default function FichaCorridaPage() {
       {cooperadoSelecionado && pixOk && (
         <PixQrModal open={pixModalOpen} onClose={() => setPixModalOpen(false)} chavePix={cooperadoSelecionado.chavePix} nome={nomeCooperado} valor={totalPendente} />
       )}
+
+      <DivisaoEntregaModal
+        open={Boolean(divisaoFicha)}
+        onClose={() => {
+          if (divisaoSalvando) return;
+          setDivisaoFicha(null);
+          setDivisaoSelecionados([]);
+        }}
+        ficha={divisaoFicha}
+        cooperadoOrigemNome={
+          divisaoFicha?.divisaoEntrega?.cooperadoOrigemNome ??
+          notaDivisaoAtual?.cooperadoNomeSnapshot ??
+          nomeCooperado
+        }
+        valorLiquidoTotal={notaDivisaoAtual?.valorLiquido ?? divisaoFicha?.valorLiquido}
+        cooperadosDisponiveis={cooperadosParaDivisao}
+        selecionados={divisaoSelecionados}
+        onToggle={toggleCooperadoDivisao}
+        onConfirm={() => void handleConfirmarDivisao()}
+        salvando={divisaoSalvando}
+        divisaoAtual={divisaoFicha?.divisaoEntrega ?? notaDivisaoAtual?.divisaoEntrega}
+      />
 
       <ConfirmDialog
         open={confirmPagamento}

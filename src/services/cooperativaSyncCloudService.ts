@@ -80,6 +80,7 @@ function buildContratosPayload(data: AppData, coopId: string): ContratosSyncPayl
       (p) => p.cooperativaId === coopId && !excluidasIds.has(p.instituicaoId)
     ),
     instituicoesExcluidas: (data.instituicoesExcluidas ?? []).filter((e) => e.cooperativaId === coopId),
+    cronogramasContrato: (data.cronogramasContrato ?? []).filter((c) => c.cooperativaId === coopId),
   };
 }
 
@@ -257,6 +258,10 @@ export function mergeContratosIntoData(data: AppData, cloud: ContratosSyncPayloa
   const localProdCoop = data.produtosInstituicao.filter(
     (p) => p.cooperativaId === coopId && !excluidasIds.has(p.instituicaoId)
   );
+  const localCronCoop = (data.cronogramasContrato ?? []).filter((c) => c.cooperativaId === coopId);
+  const cloudCron = (cloud.cronogramasContrato ?? [])
+    .map((c) => ({ ...c, cooperativaId: coopId }))
+    .filter((c) => !excluidasIds.has(c.instituicaoId));
 
   const localInstIds = new Set(localInstCoop.map((i) => i.id));
   const cloudInstFiltered = cloudInst.filter((i) => {
@@ -279,6 +284,10 @@ export function mergeContratosIntoData(data: AppData, cloud: ContratosSyncPayloa
     ...data,
     instituicoes: [...localInst, ...reconciled.instituicoes],
     produtosInstituicao: [...localProd, ...reconciled.produtos],
+    cronogramasContrato: [
+      ...(data.cronogramasContrato ?? []).filter((c) => c.cooperativaId !== coopId),
+      ...mergeArrayByNewer(localCronCoop, cloudCron),
+    ],
     instituicoesExcluidas: [
       ...filterCoop(data.instituicoesExcluidas ?? []),
       ...mergedExcluidasCoop,

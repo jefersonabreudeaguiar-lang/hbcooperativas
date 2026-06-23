@@ -235,6 +235,8 @@ export interface NotaPedido {
   observacoes?: string;
   /** Nome informado pelo cooperado quando a escola não está no cadastro. */
   escolaAvulsaNome?: string;
+  /** Divisão do valor da entrega entre vários cooperados. */
+  divisaoEntrega?: DivisaoEntregaNota;
   createdAt: string;
   updatedAt: string;
 }
@@ -243,6 +245,20 @@ export interface FichaCorridaDesconto {
   tipo: "cooperativa" | "mensalidade" | "cota" | "manual" | "credito_avulso";
   motivo: string;
   valor: number;
+}
+
+/** Participante na divisão de uma entrega entre cooperados. */
+export interface DivisaoEntregaParticipante {
+  cooperadoId: string;
+  cooperadoNome: string;
+}
+
+/** Registro de divisão do valor de uma entrega entre cooperados. */
+export interface DivisaoEntregaNota {
+  cooperadoOrigemId: string;
+  cooperadoOrigemNome: string;
+  participantes: DivisaoEntregaParticipante[];
+  divididoEm: string;
 }
 
 /** Valor extra a receber, lançado pela cooperativa para cooperado específico. */
@@ -281,6 +297,7 @@ export interface FichaCorrida {
   itens?: NotaPedidoItem[];
   percentualDescontoCooperativa?: number;
   descontosDetalhe?: FichaCorridaDesconto[];
+  divisaoEntrega?: DivisaoEntregaNota;
   createdAt: string;
 }
 
@@ -345,6 +362,33 @@ export interface Instituicao {
   endereco: string;
   localEntrega?: string;
   totalComprado: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/** Item previsto no cronograma mensal do contrato. */
+export interface CronogramaContratoItem {
+  produtoInstituicaoId: string;
+  produtoNome: string;
+  unidade: string;
+  precoUnitario: number;
+  quantidadePrevista: number;
+  valorPrevisto: number;
+}
+
+/** Cronograma mensal recebido da contratante — define metas de entrega do mês. */
+export interface CronogramaContratoMensal {
+  id: string;
+  cooperativaId: string;
+  instituicaoId: string;
+  mesReferencia: string;
+  /** Anotação / referência do cronograma recebido no mês. */
+  anotacaoMes?: string;
+  fotos?: string[];
+  fotosMiniaturas?: string[];
+  itens: CronogramaContratoItem[];
+  valorLimiteEntrega: number;
+  lancadoPor?: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -578,6 +622,7 @@ export interface AppData {
   cotas: Cota[];
   instituicoes: Instituicao[];
   produtosInstituicao: ProdutoInstituicao[];
+  cronogramasContrato?: CronogramaContratoMensal[];
   notasPedido: NotaPedido[];
   fichaCorrida: FichaCorrida[];
   pagamentosCooperado: PagamentoCooperadoRegistro[];

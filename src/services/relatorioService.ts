@@ -96,6 +96,7 @@ export function listMesesComLancamentos(data: AppData): string[] {
   for (const p of data.pagamentosCooperado) set.add(p.mesReferencia);
   for (const m of data.mensalidades) set.add(m.mesReferencia);
   for (const f of data.fechamentos) set.add(f.mesReferencia);
+  for (const c of data.cronogramasContrato ?? []) set.add(c.mesReferencia);
   for (const f of data.financeiro) set.add(f.mesReferencia);
   set.add(getCurrentMesReferencia());
   return [...set].sort().reverse();

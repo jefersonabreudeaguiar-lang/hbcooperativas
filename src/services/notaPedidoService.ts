@@ -8,11 +8,13 @@ import type {
   ArquivoMensalCooperado,
   AjustesFichaMesCooperativa,
   Comunicado,
+  DivisaoEntregaNota,
 } from "@/types";
 import {
   fichaPertenceCooperado,
   listCooperadosDaCooperativa,
   resolverCooperadoIdCanonico,
+  getCooperadoNomeResolvido,
 } from "@/services/cooperadoCloudService";
 import { descontosDoCooperadoNoMes } from "@/services/descontosService";
 import { valoresAvulsosPendentesMes, marcarValoresAvulsosPagosMes } from "@/services/valoresAvulsosReceberService";
@@ -420,6 +422,148 @@ function getUltimoDiaMes(mesReferencia: string): string {
   return `${mesReferencia}-${String(lastDay).padStart(2, "0")}`;
 }
 
+function dividirValorEntrega(total: number, index: number, count: number): number {
+  if (count <= 1) return round2(total);
+  if (index === count - 1) {
+    const parte = round2(total / count);
+    return round2(total - parte * (count - 1));
+  }
+  return round2(total / count);
+}
+
+function dividirItensEntrega(itens: NotaPedidoItem[], index: number, count: number): NotaPedidoItem[] {
+  return itens
+    .map((item) => ({
+      ...item,
+      quantidade: dividirValorEntrega(item.quantidade, index, count),
+      valorBruto: dividirValorEntrega(item.valorBruto, index, count),
+    }))
+    .filter((i) => i.quantidade > 0);
+}
+
+/** Recria fichas da nota (1 ou N cooperados conforme divisaoEntrega). */
+export function rebuildFichasNota(data: AppData, nota: NotaPedido): AppData {
+  const without = data.fichaCorrida.filter((f) => f.notaPedidoId !== nota.id);
+  const responsavel = nota.conferidaPor ?? "Cooperativa";
+  const participantes = nota.divisaoEntrega?.participantes ?? [];
+
+  if (participantes.length <= 1) {
+    const ctx = { ...data, fichaCorrida: without };
+    const ficha = buildFichaFromNota(nota, ctx, responsavel, nota.cooperadoNomeSnapshot);
+    if (nota.status === "pago") ficha.status = "pago";
+    const fichaCorrida = [...without, ficha];
+    const arquivosMensais = upsertArquivoMensal(ctx, nota.cooperadoId, nota.cooperativaId, nota.mesReferencia, {
+      notaPedidoIds: [nota.id],
+    });
+    return { ...data, fichaCorrida, arquivosMensais };
+  }
+
+  const N = participantes.length;
+  let fichaCorrida = without;
+  const novasFichas: FichaCorrida[] = [];
+
+  for (let i = 0; i < N; i++) {
+    const p = participantes[i];
+    const ctx = { ...data, fichaCorrida: [...fichaCorrida, ...novasFichas] };
+    const notaParticipante: NotaPedido = {
+      ...nota,
+      cooperadoId: p.cooperadoId,
+      cooperadoNomeSnapshot: p.cooperadoNome,
+    };
+    const base = buildFichaFromNota(notaParticipante, ctx, responsavel, p.cooperadoNome);
+    const valorBruto = dividirValorEntrega(nota.valorBruto, i, N);
+    const descontos = dividirValorEntrega(nota.valorDesconto, i, N);
+    const valorLiquido = dividirValorEntrega(nota.valorLiquido, i, N);
+    const saldoAnterior = getSaldoAnteriorFicha(ctx, p.cooperadoId, nota.mesReferencia, nota.id);
+    const ficha: FichaCorrida = {
+      ...base,
+      valorBruto,
+      descontos,
+      valorLiquido,
+      itens: dividirItensEntrega(nota.itens ?? [], i, N),
+      descontosDetalhe: base.descontosDetalhe?.map((d) => ({
+        ...d,
+        valor: dividirValorEntrega(d.valor, i, N),
+      })),
+      saldoAcumulado: round2(saldoAnterior + valorLiquido),
+      divisaoEntrega: nota.divisaoEntrega,
+    };
+    if (nota.status === "pago") ficha.status = "pago";
+    novasFichas.push(ficha);
+  }
+
+  fichaCorrida = [...fichaCorrida, ...novasFichas];
+
+  let arquivosMensais = data.arquivosMensais;
+  for (const p of participantes) {
+    arquivosMensais = upsertArquivoMensal(
+      { ...data, fichaCorrida, arquivosMensais },
+      p.cooperadoId,
+      nota.cooperativaId,
+      nota.mesReferencia,
+      { notaPedidoIds: [nota.id] }
+    );
+  }
+
+  return { ...data, fichaCorrida, arquivosMensais };
+}
+
+export function dividirEntregaEntreCooperados(
+  data: AppData,
+  notaPedidoId: string,
+  outrosCooperadoIds: string[],
+  cooperativaId: string
+): AppData {
+  const nota = data.notasPedido.find((n) => n.id === notaPedidoId);
+  if (!nota || nota.cooperativaId !== cooperativaId) return data;
+  if (nota.status !== "conferida") return data;
+
+  const fichasNota = data.fichaCorrida.filter((f) => f.notaPedidoId === notaPedidoId);
+  if (fichasNota.some((f) => f.status === "pago")) return data;
+
+  const origemId = nota.cooperadoId;
+  const origemNome =
+    nota.cooperadoNomeSnapshot?.trim() ||
+    getCooperadoNomeResolvido(data, origemId, cooperativaId);
+
+  const ids = [
+    origemId,
+    ...outrosCooperadoIds.filter((id) => id !== origemId && data.cooperados.some((c) => c.id === id)),
+  ];
+  const uniqueIds = [...new Set(ids)];
+
+  if (uniqueIds.length < 2) {
+    const notaSemDivisao: NotaPedido = {
+      ...nota,
+      divisaoEntrega: undefined,
+      updatedAt: new Date().toISOString(),
+    };
+    const notasPedido = data.notasPedido.map((n) => (n.id === notaPedidoId ? notaSemDivisao : n));
+    return rebuildFichasNota({ ...data, notasPedido }, notaSemDivisao);
+  }
+
+  const participantes = uniqueIds.map((id) => ({
+    cooperadoId: id,
+    cooperadoNome: getCooperadoNomeResolvido(data, id, cooperativaId),
+  }));
+
+  const divisaoEntrega: DivisaoEntregaNota = {
+    cooperadoOrigemId: origemId,
+    cooperadoOrigemNome: origemNome,
+    participantes,
+    divididoEm: new Date().toISOString(),
+  };
+
+  const notaAtualizada: NotaPedido = {
+    ...nota,
+    divisaoEntrega,
+    updatedAt: new Date().toISOString(),
+  };
+
+  const notasPedido = data.notasPedido.map((n) => (n.id === notaPedidoId ? notaAtualizada : n));
+  return rebuildFichasNota({ ...data, notasPedido }, notaAtualizada);
+}
+
 /** Cria lançamentos na ficha a partir de notas já conferidas (sincronizadas da nuvem). */
 export function reconciliarFichaFromNotasConferidas(data: AppData): AppData {
   const fichaNotaIds = new Set(data.fichaCorrida.map((f) => f.notaPedidoId));
@@ -433,8 +577,23 @@ export function reconciliarFichaFromNotasConferidas(data: AppData): AppData {
 
   for (const nota of notasOrdenadas) {
     if (nota.status !== "conferida" && nota.status !== "pago") continue;
-    if (fichaNotaIds.has(nota.id)) continue;
     if (nota.valorLiquido <= 0 && (nota.itens ?? []).every((i) => i.quantidade <= 0)) continue;
+
+    const fichasExistentes = fichaCorrida.filter((f) => f.notaPedidoId === nota.id);
+    const qtdParticipantes = nota.divisaoEntrega?.participantes.length ?? 1;
+
+    if (nota.divisaoEntrega && qtdParticipantes > 1) {
+      if (fichasExistentes.length === qtdParticipantes) continue;
+      const ctx = { ...data, fichaCorrida, arquivosMensais };
+      const rebuilt = rebuildFichasNota(ctx, nota);
+      fichaCorrida = rebuilt.fichaCorrida;
+      arquivosMensais = rebuilt.arquivosMensais;
+      fichaNotaIds.add(nota.id);
+      changed = true;
+      continue;
+    }
+
+    if (fichaNotaIds.has(nota.id) || fichasExistentes.length > 0) continue;
 
     const ctx = { ...data, fichaCorrida, arquivosMensais };
     const ficha = buildFichaFromNota(

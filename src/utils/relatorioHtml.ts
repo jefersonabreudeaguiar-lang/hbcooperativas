@@ -5,6 +5,7 @@ import { formatCurrency, formatDate, formatMesReferencia } from "@/utils/format"
 import type { FechamentoCalculado, RelatorioEntregasPorItens, ResumoFinanceiroMes } from "@/services/relatorioService";
 import { calcularFechamentoMensalLive, getRelatorioEntregasPorItensInstituicao, getResumoFinanceiroMes } from "@/services/relatorioService";
 import { getRelatorioSobrasPerdas, type RelatorioSobrasPerdas } from "@/services/sobrasPerdasService";
+import { getRelatorioAtingimentoCronograma, type StatusAtingimentoItem } from "@/services/relatorioCronogramaService";
 import { baixarHtmlComoPdf } from "@/utils/downloadPdf";
 
 const DOC_STYLES = `
@@ -541,6 +542,159 @@ export function gerarRelatorioSobrasPerdasHtml(
 
   return documentoShell(
     "Relatório de Sobras e Perdas",
+    body,
+    data,
+    mesReferencia,
+    cooperativaId,
+    emissor
+  );
+}
+
+function rotuloStatusAtingimento(status: StatusAtingimentoItem): string {
+  switch (status) {
+    case "atingido":
+      return "Atingido";
+    case "parcial":
+      return "Parcial";
+    case "critico":
+      return "Crítico";
+    case "nao_entregue":
+      return "Não entregue";
+  }
+}
+
+function classeStatusAtingimento(status: StatusAtingimentoItem): string {
+  switch (status) {
+    case "atingido":
+      return "status-aprovado";
+    case "parcial":
+      return "status-revisado";
+    default:
+      return "status-rascunho";
+  }
+}
+
+export function gerarRelatorioAtingimentoCronogramaHtml(
+  data: AppData,
+  mesReferencia: string,
+  instituicaoId: string,
+  cooperativaId?: string,
+  emissor?: EmissorRelatorio
+): string {
+  const r = getRelatorioAtingimentoCronograma(data, instituicaoId, mesReferencia, cooperativaId);
+  const pct = r.percentualAtingimentoValor;
+  const pctClass = pct >= 100 ? "valor-positivo" : pct >= 70 ? "valor-sobra" : "valor-perda";
+
+  const linhasItens = r.itens
+    .map(
+      (i) => `<tr>
+        <td>${escapeHtml(i.produtoNome)}</td>
+        <td class="num">${i.quantidadePrevista.toLocaleString("pt-BR")} ${escapeHtml(i.unidade)}</td>
+        <td class="num">${i.quantidadeEntregue.toLocaleString("pt-BR")}</td>
+        <td class="num">${i.quantidadeFaltante.toLocaleString("pt-BR")}</td>
+        <td class="num">${formatCurrency(i.valorPrevisto)}</td>
+        <td class="num">${formatCurrency(i.valorEntregue)}</td>
+        <td class="num ${i.valorFaltante > 0 ? "valor-perda" : "valor-positivo"}">${formatCurrency(i.valorFaltante)}</td>
+        <td class="num"><strong>${i.percentualValor.toLocaleString("pt-BR")}%</strong></td>
+        <td><span class="status ${classeStatusAtingimento(i.status)}">${rotuloStatusAtingimento(i.status)}</span></td>
+      </tr>`
+    )
+    .join("");
+
+  const linhasCriticos =
+    r.itensCriticos.length > 0
+      ? `<ul>${r.itensCriticos
+          .map(
+            (i) =>
+              `<li><strong>${escapeHtml(i.produtoNome)}</strong> — ${i.percentualValor.toLocaleString("pt-BR")}% do valor previsto (${formatCurrency(i.valorFaltante)} em aberto)</li>`
+          )
+          .join("")}</ul>`
+      : "<p>Nenhum item crítico neste período.</p>";
+
+  const linhasCoop = r.porCooperado
+    .map(
+      (c) => `<tr>
+        <td>${escapeHtml(c.cooperadoNome)}</td>
+        <td class="num">${c.entregas}</td>
+        <td class="num">${formatCurrency(c.valorEntregue)}</td>
+        <td class="num">${c.percentualDoContrato.toLocaleString("pt-BR")}%</td>
+      </tr>`
+    )
+    .join("");
+
+  const avisoCronograma = r.cronograma
+    ? ""
+    : `<div class="box-transparencia box-perdas" style="margin-bottom:20px">
+        <div class="titulo">Cronograma não lançado</div>
+        <p style="font-size:13px;color:#78350f;margin:0">Não há meta cadastrada para este mês. Lance o cronograma em Contratos → Cronogramas para habilitar a comparação.</p>
+      </div>`;
+
+  const body = `
+    ${avisoCronograma}
+    <div class="destinatario">
+      <div class="rotulo">Contrato / Instituição contratante</div>
+      <div class="nome">${escapeHtml(r.instituicaoNome)}</div>
+      ${r.anotacaoMes ? `<div class="detalhe"><strong>Referência do mês:</strong> ${escapeHtml(r.anotacaoMes)}</div>` : ""}
+    </div>
+
+    <p class="carta">
+      Relatório de desempenho da cooperativa frente ao cronograma mensual recebido da contratante.
+      Compara o valor limite contratual com o total entregue por todos os cooperados no período,
+      destacando itens com dificuldade de atingimento e saldos pendentes.
+    </p>
+
+    <div class="resumo-grid">
+      <div class="resumo-card"><div class="label">Meta do contrato (limite)</div><div class="value">${formatCurrency(r.valorLimiteContrato)}</div></div>
+      <div class="resumo-card"><div class="label">Total entregue</div><div class="value">${formatCurrency(r.valorEntregueTotal)}</div></div>
+      <div class="resumo-card"><div class="label">Saldo a entregar</div><div class="value valor-perda">${formatCurrency(r.valorFaltante)}</div></div>
+      <div class="resumo-card"><div class="label">Atingimento global</div><div class="value ${pctClass}">${pct.toLocaleString("pt-BR")}%</div></div>
+    </div>
+
+    <div class="box-equacao">
+      <div class="titulo">Equação de atingimento</div>
+      <div class="linha"><span>Valor entregue</span><span>${formatCurrency(r.valorEntregueTotal)}</span></div>
+      <div class="linha"><span>Meta do cronograma</span><span>${formatCurrency(r.valorLimiteContrato)}</span></div>
+      <div class="linha"><span>Atingimento</span><span class="${pctClass}">${pct.toLocaleString("pt-BR")}% · ${r.quantidadeEntregas} entrega(s) conferida(s)</span></div>
+    </div>
+
+    <h2>Itens — previsto × entregue</h2>
+    <table>
+      <thead><tr>
+        <th>Item</th><th class="num">Previsto</th><th class="num">Entregue</th><th class="num">Falta (qtd)</th>
+        <th class="num">Valor previsto</th><th class="num">Valor entregue</th><th class="num">Falta (R$)</th>
+        <th class="num">%</th><th>Status</th>
+      </tr></thead>
+      <tbody>${linhasItens || `<tr><td colspan="9">Nenhum item no cronograma deste mês.</td></tr>`}</tbody>
+      <tfoot><tr>
+        <td colspan="4"><strong>Totais</strong></td>
+        <td class="num">${formatCurrency(r.valorLimiteContrato)}</td>
+        <td class="num">${formatCurrency(r.valorEntregueTotal)}</td>
+        <td class="num">${formatCurrency(r.valorFaltante)}</td>
+        <td class="num"><strong>${pct.toLocaleString("pt-BR")}%</strong></td>
+        <td></td>
+      </tr></tfoot>
+    </table>
+
+    <div class="box-transparencia box-perdas">
+      <div class="titulo">Itens com maior dificuldade de atingimento</div>
+      ${linhasCriticos}
+    </div>
+
+    <h2>Contribuição por cooperado</h2>
+    <table>
+      <thead><tr>
+        <th>Cooperado</th><th class="num">Entregas</th><th class="num">Valor entregue</th><th class="num">% da meta</th>
+      </tr></thead>
+      <tbody>${linhasCoop || `<tr><td colspan="4">Nenhuma entrega conferida neste mês.</td></tr>`}</tbody>
+    </table>
+
+    <p class="carta" style="margin-top:28px;">
+      Documento gerado para acompanhamento gerencial e prestação de contas à contratante.
+      Recomenda-se revisar os itens críticos e ajustar a logística de entregas antes do fechamento do mês.
+    </p>`;
+
+  return documentoShell(
+    "Relatório de Atingimento do Cronograma",
     body,
     data,
     mesReferencia,

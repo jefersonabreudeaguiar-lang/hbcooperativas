@@ -13,6 +13,7 @@ import type {
   PrestacaoContas,
   PrestacaoContasExcluida,
   InstituicaoExcluida,
+  CronogramaContratoMensal,
 } from "@/types";
 
 const BUCKET = "hb-cooperativa-sync";
@@ -22,6 +23,7 @@ export interface ContratosSyncPayload {
   instituicoes: Instituicao[];
   produtosInstituicao: ProdutoInstituicao[];
   instituicoesExcluidas?: InstituicaoExcluida[];
+  cronogramasContrato?: CronogramaContratoMensal[];
 }
 
 export interface OperacionalSyncPayload {

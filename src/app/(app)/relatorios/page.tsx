@@ -22,11 +22,13 @@ import {
   exportToCSV,
   downloadCSV,
   getRelatorioSobrasPerdas,
+  getRelatorioAtingimentoCronograma,
 } from "@/services/dashboardService";
 import {
   baixarDocumento,
   gerarRelatorioEntregasPorItensHtml,
   gerarRelatorioFinanceiroHtml,
+  gerarRelatorioAtingimentoCronogramaHtml,
   gerarRelatorioSobrasPerdasHtml,
   imprimirDocumentoHtml,
   nomeArquivoRelatorio,
@@ -44,6 +46,7 @@ const RELATORIOS = [
   { id: "cotas_abertas", label: "Cotas em Aberto" },
   { id: "entregas_instituicao", label: "Entregas por Instituição" },
   { id: "entregas_por_itens", label: "Entregas por Item (mensal)" },
+  { id: "atingimento_cronograma", label: "Atingimento do Cronograma (contrato)" },
   { id: "vendas_pnae", label: "Vendas ao PNAE" },
   { id: "descontos_aplicados", label: "Descontos Aplicados" },
   { id: "sobras_perdas", label: "Sobras e Perdas (transparência)" },
@@ -82,7 +85,11 @@ export default function RelatoriosPage() {
   const tituloRelatorio = RELATORIOS.find((r) => r.id === tipo)?.label ?? "Relatório";
 
   const resolveInstituicaoId = () => {
-    if (tipo === "entregas_instituicao" || tipo === "entregas_por_itens") {
+    if (
+      tipo === "entregas_instituicao" ||
+      tipo === "entregas_por_itens" ||
+      tipo === "atingimento_cronograma"
+    ) {
       return instituicaoSelecionadaId;
     }
     return "";
@@ -95,6 +102,11 @@ export default function RelatoriosPage() {
       if (!inst) return "";
       return gerarRelatorioEntregasPorItensHtml(data, mes, inst, coopId, emissor);
     }
+    if (tipo === "atingimento_cronograma") {
+      const inst = resolveInstituicaoId();
+      if (!inst) return "";
+      return gerarRelatorioAtingimentoCronogramaHtml(data, mes, inst, coopId, emissor);
+    }
     if (tipo === "sobras_perdas") {
       return gerarRelatorioSobrasPerdasHtml(data, mes, coopId, emissor);
     }
@@ -102,7 +114,7 @@ export default function RelatoriosPage() {
   };
 
   const nomeDocumento = () => {
-    if (tipo === "entregas_por_itens") {
+    if (tipo === "entregas_por_itens" || tipo === "atingimento_cronograma") {
       const inst = data?.instituicoes.find((i) => i.id === instituicaoSelecionadaId);
       return nomeArquivoRelatorio(tipo, mes, inst?.nome);
     }
@@ -188,6 +200,41 @@ export default function RelatoriosPage() {
         ]);
         if (rows.length > 0) {
           rows.push(["", "", "", "TOTAL GERAL", String(r.totalBruto)]);
+        }
+        break;
+      }
+      case "atingimento_cronograma": {
+        const inst = instituicaoSelecionadaId;
+        if (!inst) break;
+        const r = getRelatorioAtingimentoCronograma(data, inst, mes, coopId);
+        headers = [
+          "Item",
+          "Qtd prevista",
+          "Qtd entregue",
+          "Valor previsto",
+          "Valor entregue",
+          "Falta R$",
+          "Atingimento %",
+        ];
+        rows = r.itens.map((i) => [
+          i.produtoNome,
+          String(i.quantidadePrevista),
+          String(i.quantidadeEntregue),
+          String(i.valorPrevisto),
+          String(i.valorEntregue),
+          String(i.valorFaltante),
+          String(i.percentualValor),
+        ]);
+        if (rows.length > 0) {
+          rows.push([
+            "TOTAL",
+            "",
+            "",
+            String(r.valorLimiteContrato),
+            String(r.valorEntregueTotal),
+            String(r.valorFaltante),
+            String(r.percentualAtingimentoValor),
+          ]);
         }
         break;
       }
@@ -450,6 +497,108 @@ export default function RelatoriosPage() {
           </>
         );
       }
+      case "atingimento_cronograma": {
+        const inst = instituicaoSelecionadaId;
+        if (!inst) {
+          return (
+            <p className="text-sm text-gray-600">Selecione o contrato / instituição contratante para gerar o relatório.</p>
+          );
+        }
+        const r = getRelatorioAtingimentoCronograma(data, inst, mes, coopId);
+        if (!r.cronograma) {
+          return (
+            <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
+              <p className="font-semibold">Cronograma não lançado para {formatMesReferencia(mes)}</p>
+              <p className="mt-2">
+                Lance o cronograma em <strong>Contratos → Cronogramas</strong> antes de emitir este relatório.
+              </p>
+            </div>
+          );
+        }
+        const pct = r.percentualAtingimentoValor;
+        return (
+          <>
+            {r.anotacaoMes && (
+              <div className="mb-4 rounded-xl border border-blue-200 bg-blue-50/80 p-4 text-sm text-blue-900">
+                <p className="font-semibold">Referência do mês</p>
+                <p className="mt-1">{r.anotacaoMes}</p>
+              </div>
+            )}
+            <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4 mb-6">
+              <StatCard title="Meta do contrato" value={formatCurrency(r.valorLimiteContrato)} variant="gold" />
+              <StatCard title="Total entregue" value={formatCurrency(r.valorEntregueTotal)} variant="success" />
+              <StatCard title="Saldo a entregar" value={formatCurrency(r.valorFaltante)} variant="warning" />
+              <StatCard
+                title="Atingimento"
+                value={`${pct.toLocaleString("pt-BR")}%`}
+                variant={pct >= 100 ? "success" : pct >= 70 ? "gold" : "danger"}
+              />
+            </div>
+
+            {r.itensCriticos.length > 0 && (
+              <div className="mb-6 rounded-xl border border-red-200 bg-red-50/60 p-4">
+                <p className="text-sm font-semibold text-red-900 mb-2">Itens com maior dificuldade</p>
+                <ul className="text-sm text-red-800 space-y-1 list-disc pl-5">
+                  {r.itensCriticos.map((i) => (
+                    <li key={i.produtoInstituicaoId}>
+                      {i.produtoNome} — {i.percentualValor.toLocaleString("pt-BR")}% · faltam{" "}
+                      {formatCurrency(i.valorFaltante)}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+
+            <DataTable
+              data={r.itens.map((item, idx) => ({ ...item, id: item.produtoInstituicaoId || String(idx) }))}
+              keyField="id"
+              emptyMessage="Nenhum item no cronograma."
+              columns={[
+                { key: "produto", label: "Item", render: (i) => i.produtoNome },
+                {
+                  key: "previsto",
+                  label: "Previsto",
+                  render: (i) =>
+                    `${i.quantidadePrevista.toLocaleString("pt-BR")} ${labelUnidade(i.unidade) || i.unidade}`,
+                },
+                {
+                  key: "entregue",
+                  label: "Entregue",
+                  render: (i) => i.quantidadeEntregue.toLocaleString("pt-BR"),
+                },
+                { key: "valorPrev", label: "Valor meta", render: (i) => formatCurrency(i.valorPrevisto) },
+                { key: "valorEnt", label: "Valor entregue", render: (i) => formatCurrency(i.valorEntregue) },
+                {
+                  key: "pct",
+                  label: "Atingimento",
+                  render: (i) => `${i.percentualValor.toLocaleString("pt-BR")}%`,
+                },
+              ]}
+            />
+
+            <h3 className="text-sm font-bold uppercase tracking-wide text-gray-700 mb-2 mt-8">Por cooperado</h3>
+            <DataTable
+              data={r.porCooperado.map((c) => ({ ...c, id: c.cooperadoId }))}
+              keyField="id"
+              emptyMessage="Nenhuma entrega conferida."
+              columns={[
+                { key: "nome", label: "Cooperado", render: (c) => c.cooperadoNome },
+                { key: "entregas", label: "Entregas", render: (c) => String(c.entregas) },
+                { key: "valor", label: "Valor entregue", render: (c) => formatCurrency(c.valorEntregue) },
+                {
+                  key: "pct",
+                  label: "% da meta",
+                  render: (c) => `${c.percentualDoContrato.toLocaleString("pt-BR")}%`,
+                },
+              ]}
+            />
+
+            <p className="text-xs text-gray-500 mt-4">
+              Use <strong>PDF</strong> para o relatório formal de atingimento do cronograma contratual.
+            </p>
+          </>
+        );
+      }
       case "vendas_pnae": {
         const r = getRelatorioPNAE(mes, data);
         return (
@@ -649,8 +798,8 @@ export default function RelatoriosPage() {
             ))}
           </Select>
         </FormField>
-        {tipo === "entregas_instituicao" || tipo === "entregas_por_itens" ? (
-          <FormField label="Instituição de entrega">
+        {tipo === "entregas_instituicao" || tipo === "entregas_por_itens" || tipo === "atingimento_cronograma" ? (
+          <FormField label={tipo === "atingimento_cronograma" ? "Contrato / Instituição" : "Instituição de entrega"}>
             <Select value={instituicaoSelecionadaId} onChange={(e) => setInstituicaoId(e.target.value)} className="min-w-[250px]">
               <option value="">Selecione...</option>
               {instituicoesCoop.map((i) => (

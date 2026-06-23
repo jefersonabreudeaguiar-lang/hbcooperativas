@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState, useRef, useEffect } from "react";
-import { Plus, ChevronDown, ChevronUp, Package, Building2, Trash2, RefreshCw } from "lucide-react";
+import { Plus, ChevronDown, ChevronUp, Package, Building2, Trash2, RefreshCw, CalendarDays } from "lucide-react";
 import { useAppData } from "@/hooks/useAppData";
 import { usePermissions } from "@/hooks/usePermissions";
 import { getUserCooperativaId } from "@/utils/cooperativa";
@@ -20,6 +20,7 @@ import { UNIDADES_MEDIDA, type ProdutoUnidade } from "@/utils/unidades";
 import { sortPorOrdemLancamento } from "@/utils/produtos";
 import type { AppData, Instituicao, InstituicaoTipo, ProdutoInstituicao } from "@/types";
 import { CONTRATO_PNAE_PADRAO_NOME } from "@/utils/contratosEntrega";
+import { ContratosCronogramasPanel } from "@/components/contratos/ContratosCronogramasPanel";
 
 export default function ContratosPage() {
   const data = useAppData();
@@ -37,6 +38,7 @@ export default function ContratosPage() {
   const [publicando, setPublicando] = useState(false);
   const [excluirContrato, setExcluirContrato] = useState<Instituicao | null>(null);
   const [excluindo, setExcluindo] = useState(false);
+  const [subAba, setSubAba] = useState<"catalogo" | "cronogramas">("catalogo");
 
   const instituicoes = useMemo(() => {
     if (!data) return [];
@@ -56,6 +58,10 @@ export default function ContratosPage() {
     }
     return map;
   }, [data, instituicoes]);
+
+  useEffect(() => {
+    setSubAba("catalogo");
+  }, [expandedId]);
 
   useEffect(() => {
     if (!expandedId) return;
@@ -297,6 +303,44 @@ export default function ContratosPage() {
 
                 {open && (
                   <div className="border-t border-gray-100 flex flex-col">
+                    <div className="flex border-b border-gray-200 bg-gray-50/80">
+                      <button
+                        type="button"
+                        onClick={() => setSubAba("catalogo")}
+                        className={`flex-1 px-4 py-2.5 text-sm font-medium flex items-center justify-center gap-2 border-b-2 -mb-px ${
+                          subAba === "catalogo"
+                            ? "border-green-600 text-green-700 bg-white"
+                            : "border-transparent text-gray-500 hover:text-gray-700"
+                        }`}
+                      >
+                        <Package size={16} /> Catálogo
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setSubAba("cronogramas")}
+                        className={`flex-1 px-4 py-2.5 text-sm font-medium flex items-center justify-center gap-2 border-b-2 -mb-px ${
+                          subAba === "cronogramas"
+                            ? "border-green-600 text-green-700 bg-white"
+                            : "border-transparent text-gray-500 hover:text-gray-700"
+                        }`}
+                      >
+                        <CalendarDays size={16} /> Cronogramas
+                      </button>
+                    </div>
+
+                    {subAba === "cronogramas" ? (
+                      user && (
+                        <ContratosCronogramasPanel
+                          instituicao={inst}
+                          produtos={itens}
+                          coopId={coopId!}
+                          userId={user.id}
+                          userName={user.name}
+                          canEdit={check("instituicoes", "edit")}
+                        />
+                      )
+                    ) : (
+                      <>
                     <div
                       ref={(el) => { listasItensRef.current[inst.id] = el; }}
                       className="max-h-52 sm:max-h-64 overflow-y-auto px-4 overscroll-contain scroll-smooth"
@@ -363,6 +407,8 @@ export default function ContratosPage() {
                           <Plus size={16} /> Adicionar item
                         </Button>
                       </div>
+                    )}
+                      </>
                     )}
                   </div>
                 )}
