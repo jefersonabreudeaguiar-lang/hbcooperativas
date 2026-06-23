@@ -563,6 +563,13 @@ export interface PrestacaoContasExcluida {
   deletedAt: string;
 }
 
+/** Registro de exclusão — impede que a sincronização traga o contrato de volta. */
+export interface InstituicaoExcluida {
+  id: string;
+  cooperativaId: string;
+  deletedAt: string;
+}
+
 export interface AppData {
   cooperativas: Cooperativa[];
   users: User[];
@@ -588,6 +595,7 @@ export interface AppData {
   livroCaixa: LivroCaixaLancamento[];
   prestacoesContas: PrestacaoContas[];
   prestacoesContasExcluidas?: PrestacaoContasExcluida[];
+  instituicoesExcluidas?: InstituicaoExcluida[];
   auditLog: AuditEntry[];
   config: {
     descontoPadraoCooperativa: number;

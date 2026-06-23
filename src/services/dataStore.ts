@@ -16,6 +16,7 @@ import {
 import { pushCooperadoToCloud } from "@/services/cooperadoCloudService";
 import { reconciliarFichaFromNotasConferidas, ajustesFichaMesId } from "@/services/notaPedidoService";
 import { normalizarPrestacaoContas, aplicarPrestacoesContasExcluidas } from "@/services/prestacaoContasService";
+import { aplicarInstituicoesExcluidas } from "@/services/instituicaoContratoService";
 import { exigeSenhaCadastroCooperado } from "@/utils/cooperativaCadastro";
 import { hashPassword, isPasswordHash, verifyPassword } from "@/lib/security/password";
 import {
@@ -115,6 +116,7 @@ function stripDemoData(data: AppData): AppData {
     livroCaixa: filterByCoop(data.livroCaixa ?? []),
     prestacoesContas: filterByCoop(data.prestacoesContas ?? []),
     prestacoesContasExcluidas: filterByCoop(data.prestacoesContasExcluidas ?? []),
+    instituicoesExcluidas: filterByCoop(data.instituicoesExcluidas ?? []),
     auditLog: (data.auditLog ?? []).filter((a) => !DEMO_ENTITY_IDS.has(a.id)),
     ajustesFichaMes: (data.ajustesFichaMes ?? []).filter(
       (a) => !DEMO_ENTITY_IDS.has(a.id) && coopIds.has(a.cooperativaId)
@@ -220,11 +222,14 @@ function migrateData(raw: Partial<AppData> & Record<string, unknown>): AppData {
       .filter((p): p is PrestacaoContas => Boolean(p && typeof p === "object"))
       .map(normalizarPrestacaoContas),
     prestacoesContasExcluidas: base.prestacoesContasExcluidas ?? [],
+    instituicoesExcluidas: base.instituicoesExcluidas ?? [],
     auditLog: base.auditLog ?? [],
   };
 
   return stripDemoData(
-    migrateAjustesFichaMes(migrateResponsavelPrincipal(aplicarPrestacoesContasExcluidas(merged)))
+    migrateAjustesFichaMes(
+      migrateResponsavelPrincipal(aplicarInstituicoesExcluidas(aplicarPrestacoesContasExcluidas(merged)))
+    )
   );
 }
 

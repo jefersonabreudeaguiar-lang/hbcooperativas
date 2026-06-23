@@ -12,6 +12,7 @@ import type {
   LivroCaixaLancamento,
   PrestacaoContas,
   PrestacaoContasExcluida,
+  InstituicaoExcluida,
 } from "@/types";
 
 const BUCKET = "hb-cooperativa-sync";
@@ -20,6 +21,7 @@ export interface ContratosSyncPayload {
   updatedAt: string;
   instituicoes: Instituicao[];
   produtosInstituicao: ProdutoInstituicao[];
+  instituicoesExcluidas?: InstituicaoExcluida[];
 }
 
 export interface OperacionalSyncPayload {

@@ -14,10 +14,11 @@ import { updateData, generateId, addAuditEntry, getData } from "@/services/dataS
 import { resolveCooperativaCnpj } from "@/services/notaPedidoCloudService";
 import { pushContratosToCloud, publicarCatalogoContratos } from "@/services/cooperativaSyncCloudService";
 import { contarItensCatalogo } from "@/services/catalogoContratosService";
+import { excluirInstituicaoContrato } from "@/services/instituicaoContratoService";
 import { formatCurrency } from "@/utils/format";
 import { UNIDADES_MEDIDA, type ProdutoUnidade } from "@/utils/unidades";
 import { sortPorOrdemLancamento } from "@/utils/produtos";
-import type { Instituicao, InstituicaoTipo, ProdutoInstituicao } from "@/types";
+import type { AppData, Instituicao, InstituicaoTipo, ProdutoInstituicao } from "@/types";
 import { CONTRATO_PNAE_PADRAO_NOME } from "@/utils/contratosEntrega";
 
 export default function ContratosPage() {
@@ -188,27 +189,26 @@ export default function ContratosPage() {
     if (!excluirContrato || !user || !coopId) return;
     setExcluindo(true);
     try {
+      const alvo = excluirContrato;
+      let nextData: AppData | null = null;
       updateData((d) => {
-        const updated = {
-          ...d,
-          instituicoes: d.instituicoes.filter((i) => i.id !== excluirContrato.id),
-          produtosInstituicao: d.produtosInstituicao.filter((p) => p.instituicaoId !== excluirContrato.id),
-        };
-        return addAuditEntry(updated, {
+        nextData = addAuditEntry(excluirInstituicaoContrato(d, alvo.id, coopId), {
           entityType: "instituicao",
-          entityId: excluirContrato.id,
+          entityId: alvo.id,
           action: "excluir",
           userId: user.id,
           userName: user.name,
         });
+        return nextData;
       });
-      if (expandedId === excluirContrato.id) setExpandedId(null);
-      const d = getData();
-      const cnpj = await resolveCooperativaCnpj(d, coopId, user);
-      if (cnpj) await pushContratosToCloud(cnpj, d, coopId, { localOnly: true });
+      if (nextData) {
+        const cnpj = await resolveCooperativaCnpj(nextData, coopId, user);
+        if (cnpj) await pushContratosToCloud(cnpj, nextData, coopId, { authoritative: true });
+      }
+      if (expandedId === alvo.id) setExpandedId(null);
+      setExcluirContrato(null);
     } finally {
       setExcluindo(false);
-      setExcluirContrato(null);
     }
   };
 

@@ -1,8 +1,12 @@
 import type { AppData, Instituicao, ProdutoInstituicao } from "@/types";
 import { sortPorOrdemLancamento } from "@/utils/produtos";
+import { idsInstituicoesExcluidas } from "@/services/instituicaoContratoService";
 
 export function getInstituicoesCatalogo(data: AppData, cooperativaId?: string): Instituicao[] {
-  return data.instituicoes.filter((i) => !cooperativaId || i.cooperativaId === cooperativaId);
+  const excluidas = idsInstituicoesExcluidas(data, cooperativaId);
+  return data.instituicoes.filter(
+    (i) => !excluidas.has(i.id) && (!cooperativaId || i.cooperativaId === cooperativaId)
+  );
 }
 
 /** Produtos ativos do contrato — mesma lista que o responsável cadastrou. */

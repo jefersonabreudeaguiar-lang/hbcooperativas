@@ -1,4 +1,4 @@
-import type { AppData, Cooperativa, Instituicao, ProdutoInstituicao, Desconto, PrestacaoContasExcluida } from "@/types";
+import type { AppData, Cooperativa, Instituicao, ProdutoInstituicao, Desconto, PrestacaoContasExcluida, InstituicaoExcluida } from "@/types";
 import { normalizeCnpj } from "@/utils/cooperativa";
 import type { ContratosSyncPayload, OperacionalSyncPayload } from "@/lib/supabase/cooperativaSyncStorage";
 import { getData, saveDataSafe } from "@/services/dataStore";
@@ -7,6 +7,7 @@ import { syncNotasPedidoFromCloud, patchNotaPedidoInCloud } from "@/services/not
 import { fetchCooperativaByCnpjFromCloud, mergeCooperativaIntoData } from "@/services/cooperativaCloudService";
 import { reconciliarFichaFromNotasConferidas } from "@/services/notaPedidoService";
 import { aplicarPrestacoesContasExcluidas } from "@/services/prestacaoContasService";
+import { aplicarInstituicoesExcluidas } from "@/services/instituicaoContratoService";
 import {
   OPERATIONAL_RESET_VERSION,
   needsOperationalResetCloudPush,
@@ -47,6 +48,21 @@ function mergePrestacoesExcluidasByNewer(
   return [...map.values()];
 }
 
+function mergeInstituicoesExcluidasByNewer(
+  local: InstituicaoExcluida[],
+  cloud: InstituicaoExcluida[]
+): InstituicaoExcluida[] {
+  const map = new Map<string, InstituicaoExcluida>();
+  for (const item of local) map.set(item.id, item);
+  for (const item of cloud) {
+    const cur = map.get(item.id);
+    const tItem = new Date(item.deletedAt).getTime();
+    const tCur = cur ? new Date(cur.deletedAt).getTime() : 0;
+    if (!cur || tItem >= tCur) map.set(item.id, item);
+  }
+  return [...map.values()];
+}
+
 function resolveCoopId(data: AppData, cnpj: string): string | undefined {
   const digits = normalizeCnpj(cnpj);
   return data.cooperativas.find((c) => normalizeCnpj(c.cnpj) === digits)?.id;
@@ -54,10 +70,16 @@ function resolveCoopId(data: AppData, cnpj: string): string | undefined {
 
 function buildContratosPayload(data: AppData, coopId: string): ContratosSyncPayload {
   const now = new Date().toISOString();
+  const excluidasIds = new Set(
+    (data.instituicoesExcluidas ?? []).filter((e) => e.cooperativaId === coopId).map((e) => e.id)
+  );
   return {
     updatedAt: now,
-    instituicoes: data.instituicoes.filter((i) => i.cooperativaId === coopId),
-    produtosInstituicao: data.produtosInstituicao.filter((p) => p.cooperativaId === coopId),
+    instituicoes: data.instituicoes.filter((i) => i.cooperativaId === coopId && !excluidasIds.has(i.id)),
+    produtosInstituicao: data.produtosInstituicao.filter(
+      (p) => p.cooperativaId === coopId && !excluidasIds.has(p.instituicaoId)
+    ),
+    instituicoesExcluidas: (data.instituicoesExcluidas ?? []).filter((e) => e.cooperativaId === coopId),
   };
 }
 
@@ -211,17 +233,38 @@ function mergeCatalogProducts(local: ProdutoInstituicao[], cloud: ProdutoInstitu
 }
 
 export function mergeContratosIntoData(data: AppData, cloud: ContratosSyncPayload, coopId: string): AppData {
+  const cloudExcluidas = (cloud.instituicoesExcluidas ?? []).map((e) => ({ ...e, cooperativaId: coopId }));
+  const mergedExcluidasCoop = mergeInstituicoesExcluidasByNewer(
+    (data.instituicoesExcluidas ?? []).filter((e) => e.cooperativaId === coopId),
+    cloudExcluidas
+  );
+  const excluidasIds = new Set(mergedExcluidasCoop.map((e) => e.id));
+
   const localInst = data.instituicoes.filter((i) => i.cooperativaId !== coopId);
   const localProd = data.produtosInstituicao.filter((p) => p.cooperativaId !== coopId);
 
-  const cloudInst = cloud.instituicoes.map((i) => ({ ...i, cooperativaId: coopId }));
-  const cloudProd = cloud.produtosInstituicao.map((p) => ({ ...p, cooperativaId: coopId }));
+  const cloudInst = cloud.instituicoes
+    .map((i) => ({ ...i, cooperativaId: coopId }))
+    .filter((i) => !excluidasIds.has(i.id));
+  const cloudProd = cloud.produtosInstituicao
+    .map((p) => ({ ...p, cooperativaId: coopId }))
+    .filter((p) => !excluidasIds.has(p.instituicaoId));
   const cloudItensAtivos = cloudProd.filter((p) => p.ativo && p.precoUnitario > 0).length;
 
-  const localInstCoop = data.instituicoes.filter((i) => i.cooperativaId === coopId);
-  const localProdCoop = data.produtosInstituicao.filter((p) => p.cooperativaId === coopId);
+  const localInstCoop = data.instituicoes.filter(
+    (i) => i.cooperativaId === coopId && !excluidasIds.has(i.id)
+  );
+  const localProdCoop = data.produtosInstituicao.filter(
+    (p) => p.cooperativaId === coopId && !excluidasIds.has(p.instituicaoId)
+  );
 
-  const mergedInst = mergeArrayByNewer(localInstCoop, cloudInst);
+  const localInstIds = new Set(localInstCoop.map((i) => i.id));
+  const cloudInstFiltered = cloudInst.filter((i) => {
+    if (localInstIds.has(i.id)) return true;
+    return cloudProd.some((p) => p.instituicaoId === i.id && p.ativo && p.precoUnitario > 0);
+  });
+
+  const mergedInst = mergeArrayByNewer(localInstCoop, cloudInstFiltered);
   const mergedProd =
     cloudItensAtivos > 0
       ? mergeCatalogProducts(localProdCoop, cloudProd)
@@ -229,11 +272,18 @@ export function mergeContratosIntoData(data: AppData, cloud: ContratosSyncPayloa
 
   const reconciled = reconcileInstituicoesProdutos(mergedInst, mergedProd);
 
-  return {
+  const filterCoop = <T extends { cooperativaId?: string }>(items: T[]) =>
+    items.filter((i) => i.cooperativaId !== coopId);
+
+  return aplicarInstituicoesExcluidas({
     ...data,
     instituicoes: [...localInst, ...reconciled.instituicoes],
     produtosInstituicao: [...localProd, ...reconciled.produtos],
-  };
+    instituicoesExcluidas: [
+      ...filterCoop(data.instituicoesExcluidas ?? []),
+      ...mergedExcluidasCoop,
+    ],
+  });
 }
 
 export function mergeOperacionalIntoData(data: AppData, cloud: OperacionalSyncPayload, coopId: string): AppData {
@@ -365,26 +415,29 @@ export async function pushContratosToCloud(
   cnpj: string,
   data?: AppData,
   coopId?: string,
-  options?: { localOnly?: boolean }
+  options?: { localOnly?: boolean; authoritative?: boolean }
 ): Promise<void> {
   const digits = normalizeCnpj(cnpj);
   if (digits.length !== 14) return;
-  const d = data ?? getData();
+  const d = aplicarInstituicoesExcluidas(data ?? getData());
   const cid = coopId ?? resolveCoopId(d, digits);
   if (!cid) return;
 
   let merged = d;
   let bundle: Awaited<ReturnType<typeof fetchSyncBundle>> | null = null;
-  if (!options?.localOnly) {
+  const skipCloudMerge = options?.authoritative || options?.localOnly;
+  if (!skipCloudMerge) {
     bundle = await fetchSyncBundle(digits);
     if (bundle?.contratos) {
-      merged = mergeContratosIntoData(d, bundle.contratos, cid);
+      merged = aplicarInstituicoesExcluidas(mergeContratosIntoData(d, bundle.contratos, cid));
       saveDataSafe(merged);
     }
+  } else {
+    saveDataSafe(merged);
   }
 
   const payload = buildContratosPayload(merged, cid);
-  if (!options?.localOnly) {
+  if (!skipCloudMerge) {
     const localItensAtivos = payload.produtosInstituicao.filter((p) => p.ativo && p.precoUnitario > 0).length;
     const cloudItensAtivos =
       bundle?.contratos?.produtosInstituicao.filter((p) => p.ativo && p.precoUnitario > 0).length ?? 0;

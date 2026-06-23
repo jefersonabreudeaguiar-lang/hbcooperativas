@@ -1,11 +1,13 @@
 import type { AppData, Instituicao } from "@/types";
 import { generateId } from "@/services/dataStore";
 import { getInstituicaoPadraoId } from "@/utils/instituicaoPreferida";
+import { idsInstituicoesExcluidas } from "@/services/instituicaoContratoService";
 
 export const CONTRATO_PNAE_PADRAO_NOME = "PNAE - MERENDA ESCOLAR";
 
 export function getContratosEntrega(data: AppData, cooperativaId: string): Instituicao[] {
-  return data.instituicoes.filter((i) => i.cooperativaId === cooperativaId);
+  const excluidas = idsInstituicoesExcluidas(data, cooperativaId);
+  return data.instituicoes.filter((i) => i.cooperativaId === cooperativaId && !excluidas.has(i.id));
 }
 
 export function getContratoLabel(inst: Instituicao): string {
