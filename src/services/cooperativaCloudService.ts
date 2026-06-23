@@ -215,12 +215,18 @@ export function mergeCooperativaIntoData(
     const cur = cooperativas[idx];
     const tLocal = cur.updatedAt ? new Date(cur.updatedAt).getTime() : 0;
     const tCloud = cloudCoop.updatedAt ? new Date(cloudCoop.updatedAt).getTime() : 0;
-    const mensalidadeConfig = mergeMensalidadeConfig(
+    let mensalidadeConfig = mergeMensalidadeConfig(
       cur.mensalidadeConfig,
       cloudCoop.mensalidadeConfig,
       cur.updatedAt,
       cloudCoop.updatedAt
     );
+    if (
+      scoreMensalidadeConfig(cur.mensalidadeConfig) === 0 &&
+      scoreMensalidadeConfig(cloudCoop.mensalidadeConfig) > 0
+    ) {
+      mensalidadeConfig = cloudCoop.mensalidadeConfig;
+    }
     const next = [...cooperativas];
     next[idx] = {
       ...cur,

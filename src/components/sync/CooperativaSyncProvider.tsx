@@ -28,7 +28,8 @@ export function CooperativaSyncProvider({ children }: { children: React.ReactNod
       if (cnpj) {
         await refreshCloudSession();
         const pushCatalog = isDiretoriaRole(user.role as UserRole);
-        await syncCooperativaBidirectional(cnpj, coopId, { pushCatalog });
+        const pushMensalidades = isDiretoriaRole(user.role as UserRole);
+        await syncCooperativaBidirectional(cnpj, coopId, { pushCatalog, pushMensalidades });
       }
     } finally {
       syncingRef.current = false;

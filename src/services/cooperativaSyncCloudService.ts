@@ -1,12 +1,12 @@
-import type { AppData, Cooperativa, Instituicao, ProdutoInstituicao, Desconto, PrestacaoContasExcluida, InstituicaoExcluida } from "@/types";
+import type { AppData, Cooperativa, Cooperado, Instituicao, ProdutoInstituicao, Desconto, PrestacaoContasExcluida, InstituicaoExcluida } from "@/types";
 import { normalizeCnpj } from "@/utils/cooperativa";
 import type { ContratosSyncPayload, OperacionalSyncPayload } from "@/lib/supabase/cooperativaSyncStorage";
 import { getData, saveDataSafe } from "@/services/dataStore";
-import { syncCooperadosFromCloud } from "@/services/cooperadoCloudService";
+import { syncCooperadosFromCloud, fetchCooperadosFromCloud } from "@/services/cooperadoCloudService";
 import { syncNotasPedidoFromCloud, patchNotaPedidoInCloud } from "@/services/notaPedidoCloudService";
 import { fetchCooperativaByCnpjFromCloud, mergeCooperativaIntoData } from "@/services/cooperativaCloudService";
 import { reconciliarFichaFromNotasConferidas } from "@/services/notaPedidoService";
-import { sincronizarMensalidadeCooperativa, mensalidadeVisivelNoDispositivo, normalizarMensalidadeCooperadoLocal, mesclarMensalidadesPayloadNuvem } from "@/services/mensalidadeService";
+import { sincronizarMensalidadeCooperativa, mensalidadeVisivelNoDispositivo, normalizarMensalidadeCooperadoLocal, mesclarMensalidadesPayloadNuvem, prepararMensalidadesCloud, reconciliarMensalidadesComCooperadosCloud } from "@/services/mensalidadeService";
 import { aplicarPrestacoesContasExcluidas } from "@/services/prestacaoContasService";
 import { aplicarInstituicoesExcluidas } from "@/services/instituicaoContratoService";
 import {
@@ -330,9 +330,27 @@ export function mergeContratosIntoData(data: AppData, cloud: ContratosSyncPayloa
   });
 }
 
-export function mergeOperacionalIntoData(data: AppData, cloud: OperacionalSyncPayload, coopId: string): AppData {
+export function mergeOperacionalIntoData(
+  data: AppData,
+  cloud: OperacionalSyncPayload,
+  coopId: string,
+  cloudCooperados: Cooperado[] = []
+): AppData {
   cloud = normalizeCloudOperacional(cloud);
   const cooperadoIds = new Set(data.cooperados.filter((c) => c.cooperativaId === coopId).map((c) => c.id));
+
+  const cloudMensalidadesPrep = prepararMensalidadesCloud(
+    data,
+    cloud.mensalidades ?? [],
+    coopId,
+    cloudCooperados
+  );
+  const mensalidadesLocaisVisiveis = data.mensalidades
+    .filter((m) => mensalidadeVisivelNoDispositivo(data, m, coopId))
+    .map((m) => normalizarMensalidadeCooperadoLocal(data, m, coopId));
+  const mensalidadesCloudVisiveis = cloudMensalidadesPrep.filter((m) =>
+    mensalidadeVisivelNoDispositivo(data, m, coopId)
+  );
 
   const cloudArquivos = cloud.arquivosMensais.map((a) => ({ ...a, cooperativaId: coopId }));
   const cloudAjustes = (cloud.ajustesFichaMes ?? []).map((a) => ({ ...a, cooperativaId: coopId }));
@@ -390,14 +408,7 @@ export function mergeOperacionalIntoData(data: AppData, cloud: OperacionalSyncPa
     ],
     mensalidades: [
       ...data.mensalidades.filter((m) => !mensalidadeVisivelNoDispositivo(data, m, coopId)),
-      ...mergeArrayByNewer(
-        data.mensalidades
-          .filter((m) => mensalidadeVisivelNoDispositivo(data, m, coopId))
-          .map((m) => normalizarMensalidadeCooperadoLocal(data, m, coopId)),
-        (cloud.mensalidades ?? [])
-          .filter((m) => mensalidadeVisivelNoDispositivo(data, m, coopId))
-          .map((m) => normalizarMensalidadeCooperadoLocal(data, m, coopId))
-      ),
+      ...mergeArrayByNewer(mensalidadesLocaisVisiveis, mensalidadesCloudVisiveis),
     ],
     descontos: [
       ...data.descontos.filter((d) => !cooperadoIds.has(d.cooperadoId)),
@@ -435,6 +446,8 @@ export function mergeOperacionalIntoData(data: AppData, cloud: OperacionalSyncPa
   if (cloudConfigTime >= localConfigTime && cloud.config) {
     next = { ...next, config: { ...next.config, ...cloud.config } };
   }
+
+  next = reconciliarMensalidadesComCooperadosCloud(next, coopId, cloudCooperados);
 
   return sincronizarMensalidadeCooperativa(
     aplicarPrestacoesContasExcluidas(reconciliarFichaFromNotasConferidas(next)),
@@ -527,10 +540,12 @@ export async function pushOperacionalToCloud(
 
   let merged = d;
   let bundle: Awaited<ReturnType<typeof fetchSyncBundle>> | null = null;
+  let cloudCooperados: Cooperado[] = [];
   if (!options?.authoritative) {
     bundle = await fetchSyncBundle(digits);
+    cloudCooperados = await fetchCooperadosFromCloud(digits);
     if (bundle?.operacional) {
-      merged = mergeOperacionalIntoData(d, bundle.operacional, cid);
+      merged = mergeOperacionalIntoData(d, bundle.operacional, cid, cloudCooperados);
       saveDataSafe(merged);
     }
   } else {
@@ -538,12 +553,18 @@ export async function pushOperacionalToCloud(
   }
 
   const payload = buildOperacionalPayload(merged, cid);
-  if (bundle?.operacional?.mensalidades?.length) {
+  const cloudMensalidades = prepararMensalidadesCloud(
+    merged,
+    bundle?.operacional?.mensalidades ?? [],
+    cid,
+    cloudCooperados
+  );
+  if (bundle?.operacional) {
     payload.mensalidades = mesclarMensalidadesPayloadNuvem(
       merged,
       cid,
       payload.mensalidades,
-      bundle.operacional.mensalidades
+      cloudMensalidades
     );
   }
   payload.updatedAt = new Date().toISOString();
@@ -612,7 +633,8 @@ export async function syncOperacionalFromCloud(cnpj: string): Promise<boolean> {
   const current = getData();
   const coopId = resolveCoopId(current, cnpj);
   if (!coopId) return false;
-  const merged = mergeOperacionalIntoData(current, bundle.operacional, coopId);
+  const cloudCooperados = await fetchCooperadosFromCloud(cnpj);
+  const merged = mergeOperacionalIntoData(current, bundle.operacional, coopId, cloudCooperados);
   saveDataSafe(merged);
   return true;
 }
@@ -650,7 +672,7 @@ export async function syncAllCooperativaFromCloud(cnpj: string): Promise<void> {
 export async function syncCooperativaBidirectional(
   cnpj: string,
   coopId?: string,
-  options?: { pushCatalog?: boolean }
+  options?: { pushCatalog?: boolean; pushMensalidades?: boolean }
 ): Promise<void> {
   const digits = normalizeCnpj(cnpj);
   if (digits.length !== 14) return;
@@ -666,7 +688,9 @@ export async function syncCooperativaBidirectional(
   const cid = coopId ?? resolveCoopId(d, digits);
   if (!cid) return;
 
-  await pushOperacionalToCloud(digits, d, cid);
+  if (options?.pushMensalidades !== false) {
+    await pushOperacionalToCloud(digits, d, cid);
+  }
 
   if (options?.pushCatalog) {
     const itensCatalogo = getData().produtosInstituicao.filter(

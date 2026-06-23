@@ -1,6 +1,10 @@
-import type { AppData, Mensalidade, MensalidadeConfig } from "@/types";
+import type { AppData, Cooperado, Mensalidade, MensalidadeConfig } from "@/types";
 import { lancarMensalidadeNoCaixa } from "@/services/livroCaixaService";
-import { resolverCooperadoIdCanonico } from "@/services/cooperadoCloudService";
+import {
+  resolverCooperadoIdCanonico,
+  encontrarCooperadoLocalEquivalente,
+  mesmoCooperadoCadastro,
+} from "@/services/cooperadoCloudService";
 import {
   aplicarAjustesFichaMesTodosCooperados,
   upsertAjustesFichaMesCooperativa,
@@ -77,10 +81,6 @@ export function getConfigMensalidadeCooperativa(
   return data.cooperativas.find((c) => c.id === cooperativaId)?.mensalidadeConfig;
 }
 
-function cpfCooperadoDigits(cpfCnpj?: string): string {
-  return (cpfCnpj ?? "").replace(/\D/g, "");
-}
-
 export function mensalidadePertenceCooperado(
   data: AppData,
   mensalidade: Mensalidade,
@@ -88,23 +88,85 @@ export function mensalidadePertenceCooperado(
   cooperativaId?: string
 ): boolean {
   if (mensalidade.cooperadoId === cooperadoId) return true;
-  const alvo = resolverCooperadoIdCanonico(data, cooperadoId, cooperativaId);
-  const dono = resolverCooperadoIdCanonico(data, mensalidade.cooperadoId, cooperativaId);
-  if (alvo === dono) return true;
 
-  const cAlvo = data.cooperados.find(
-    (c) =>
-      (!cooperativaId || c.cooperativaId === cooperativaId) &&
-      (c.id === cooperadoId || c.id === alvo)
+  const coopCooperados = data.cooperados.filter(
+    (c) => !cooperativaId || c.cooperativaId === cooperativaId
   );
-  const cDono = data.cooperados.find(
-    (c) =>
-      (!cooperativaId || c.cooperativaId === cooperativaId) &&
-      (c.id === mensalidade.cooperadoId || c.id === dono)
+  const alvo =
+    coopCooperados.find((c) => c.id === cooperadoId) ??
+    coopCooperados.find(
+      (c) => c.id === resolverCooperadoIdCanonico(data, cooperadoId, cooperativaId)
+    );
+  if (!alvo) return false;
+
+  const donoDireto = coopCooperados.find((c) => c.id === mensalidade.cooperadoId);
+  if (donoDireto && mesmoCooperadoCadastro(alvo, donoDireto)) return true;
+
+  const donoCanonicoId = resolverCooperadoIdCanonico(
+    data,
+    mensalidade.cooperadoId,
+    cooperativaId
   );
-  const cpfAlvo = cpfCooperadoDigits(cAlvo?.cpfCnpj);
-  const cpfDono = cpfCooperadoDigits(cDono?.cpfCnpj);
-  return cpfAlvo.length >= 11 && cpfAlvo === cpfDono;
+  const donoResolvido = coopCooperados.find((c) => c.id === donoCanonicoId);
+  if (donoResolvido && mesmoCooperadoCadastro(alvo, donoResolvido)) return true;
+
+  return false;
+}
+
+/** Alinha cobrança da nuvem (id do responsável) ao cooperado deste aparelho. */
+export function prepararMensalidadeCloud(
+  data: AppData,
+  mensalidade: Mensalidade,
+  cooperativaId: string,
+  cloudCooperados: Cooperado[] = []
+): Mensalidade {
+  const cloudRef = cloudCooperados.find((c) => c.id === mensalidade.cooperadoId);
+  if (cloudRef) {
+    const local = encontrarCooperadoLocalEquivalente(data, cooperativaId, cloudRef);
+    if (local && local.id !== mensalidade.cooperadoId) {
+      return { ...mensalidade, cooperadoId: local.id };
+    }
+  }
+  return normalizarMensalidadeCooperadoLocal(data, mensalidade, cooperativaId);
+}
+
+/** Reescreve cooperadoId órfão usando cadastros da nuvem. */
+export function reconciliarMensalidadesComCooperadosCloud(
+  data: AppData,
+  cooperativaId: string,
+  cloudCooperados: Cooperado[]
+): AppData {
+  if (cloudCooperados.length === 0) return data;
+
+  let changed = false;
+  const mensalidades = data.mensalidades.map((m) => {
+    const localIds = new Set(
+      data.cooperados.filter((c) => c.cooperativaId === cooperativaId).map((c) => c.id)
+    );
+    if (localIds.has(m.cooperadoId)) return m;
+
+    const cloudRef = cloudCooperados.find((c) => c.id === m.cooperadoId);
+    if (!cloudRef) return m;
+
+    const local = encontrarCooperadoLocalEquivalente(data, cooperativaId, cloudRef);
+    if (!local || local.id === m.cooperadoId) return m;
+
+    changed = true;
+    return { ...m, cooperadoId: local.id, updatedAt: new Date().toISOString() };
+  });
+
+  return changed ? { ...data, mensalidades } : data;
+}
+
+export function prepararMensalidadesCloud(
+  data: AppData,
+  mensalidades: Mensalidade[],
+  cooperativaId: string,
+  cloudCooperados: Cooperado[] = []
+): Mensalidade[] {
+  return mensalidades.map((m) =>
+    prepararMensalidadeCloud(data, m, cooperativaId, cloudCooperados)
+  );
 }
 
 /** Mensalidade visível neste aparelho (qualquer cooperado cadastrado na cooperativa). */

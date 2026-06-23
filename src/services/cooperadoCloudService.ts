@@ -8,8 +8,53 @@ function cpfDigits(value: string): string {
   return value.replace(/\D/g, "");
 }
 
-function nomeNormalizado(nome: string): string {
+export function nomeNormalizado(nome: string): string {
   return nome.trim().toLowerCase().replace(/\s+/g, " ");
+}
+
+export function cpfCooperadoDigits(cpfCnpj?: string): string {
+  return (cpfCnpj ?? "").replace(/\D/g, "");
+}
+
+export function mesmoCooperadoCadastro(
+  a: Pick<Cooperado, "cpfCnpj" | "nomeCompleto">,
+  b: Pick<Cooperado, "cpfCnpj" | "nomeCompleto">
+): boolean {
+  const cpfA = cpfCooperadoDigits(a.cpfCnpj);
+  const cpfB = cpfCooperadoDigits(b.cpfCnpj);
+  if (cpfA.length >= 11 && cpfA === cpfB) return true;
+  return nomeNormalizado(a.nomeCompleto) === nomeNormalizado(b.nomeCompleto);
+}
+
+/** Encontra o cadastro local equivalente (mesmo CPF ou nome). */
+export function encontrarCooperadoLocalEquivalente(
+  data: AppData,
+  cooperativaId: string,
+  ref: Pick<Cooperado, "id" | "cpfCnpj" | "nomeCompleto">
+): Cooperado | undefined {
+  const direct = data.cooperados.find(
+    (c) => c.id === ref.id && c.cooperativaId === cooperativaId
+  );
+  if (direct) return direct;
+
+  return data.cooperados.find(
+    (c) => c.cooperativaId === cooperativaId && mesmoCooperadoCadastro(c, ref)
+  );
+}
+
+export function remapearMensalidadesCooperadoIds(
+  data: AppData,
+  idRemap: Map<string, string>
+): AppData {
+  if (idRemap.size === 0) return data;
+  let changed = false;
+  const mensalidades = data.mensalidades.map((m) => {
+    const novo = idRemap.get(m.cooperadoId);
+    if (!novo || novo === m.cooperadoId) return m;
+    changed = true;
+    return { ...m, cooperadoId: novo, updatedAt: new Date().toISOString() };
+  });
+  return changed ? { ...data, mensalidades } : data;
 }
 
 export function mergeCloudCooperadosIntoData(
@@ -25,6 +70,7 @@ export function mergeCloudCooperadosIntoData(
 
   let cooperados = [...data.cooperados];
   let changed = false;
+  const idRemap = new Map<string, string>();
 
   for (const raw of cloudCooperados) {
     const cn: Cooperado = {
@@ -50,6 +96,7 @@ export function mergeCloudCooperadosIntoData(
 
     const apply = (index: number, keepId: boolean) => {
       const id = keepId ? cooperados[index].id : cn.id;
+      if (keepId && cn.id !== id) idRemap.set(cn.id, id);
       const local = cooperados[index];
       const localTime = new Date(local.updatedAt).getTime();
       const cloudTime = new Date(cn.updatedAt).getTime();
@@ -95,7 +142,13 @@ export function mergeCloudCooperadosIntoData(
     }
   }
 
-  return changed ? { ...data, cooperados } : data;
+  if (!changed && idRemap.size === 0) return data;
+
+  let next: AppData = changed ? { ...data, cooperados } : data;
+  if (idRemap.size > 0) {
+    next = remapearMensalidadesCooperadoIds(next, idRemap);
+  }
+  return next;
 }
 
 export async function fetchCooperadosFromCloud(cnpj: string): Promise<Cooperado[]> {
