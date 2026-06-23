@@ -6,7 +6,7 @@ import { syncCooperadosFromCloud } from "@/services/cooperadoCloudService";
 import { syncNotasPedidoFromCloud, patchNotaPedidoInCloud } from "@/services/notaPedidoCloudService";
 import { fetchCooperativaByCnpjFromCloud, mergeCooperativaIntoData } from "@/services/cooperativaCloudService";
 import { reconciliarFichaFromNotasConferidas } from "@/services/notaPedidoService";
-import { sincronizarMensalidadeCooperativa } from "@/services/mensalidadeService";
+import { sincronizarMensalidadeCooperativa, mensalidadeVisivelNoDispositivo, normalizarMensalidadeCooperadoLocal, mesclarMensalidadesPayloadNuvem } from "@/services/mensalidadeService";
 import { aplicarPrestacoesContasExcluidas } from "@/services/prestacaoContasService";
 import { aplicarInstituicoesExcluidas } from "@/services/instituicaoContratoService";
 import {
@@ -98,7 +98,9 @@ function buildOperacionalPayload(data: AppData, coopId: string): OperacionalSync
     ajustesFichaMes: (data.ajustesFichaMes ?? []).filter((a) => a.cooperativaId === coopId),
     pagamentosCooperado: data.pagamentosCooperado.filter((p) => p.cooperativaId === coopId),
     comunicados: data.comunicados.filter((c) => c.cooperativaId === coopId),
-    mensalidades: data.mensalidades.filter((m) => cooperadoIds.has(m.cooperadoId)),
+    mensalidades: data.mensalidades
+      .filter((m) => mensalidadeVisivelNoDispositivo(data, m, coopId))
+      .map((m) => normalizarMensalidadeCooperadoLocal(data, m, coopId)),
     descontos: data.descontos.filter((d) => cooperadoIds.has(d.cooperadoId)),
     valoresAvulsosReceber: (data.valoresAvulsosReceber ?? []).filter((v) => v.cooperativaId === coopId),
     livroCaixa: (data.livroCaixa ?? []).filter((l) => l.cooperativaId === coopId),
@@ -387,10 +389,14 @@ export function mergeOperacionalIntoData(data: AppData, cloud: OperacionalSyncPa
       ),
     ],
     mensalidades: [
-      ...data.mensalidades.filter((m) => !cooperadoIds.has(m.cooperadoId)),
+      ...data.mensalidades.filter((m) => !mensalidadeVisivelNoDispositivo(data, m, coopId)),
       ...mergeArrayByNewer(
-        data.mensalidades.filter((m) => cooperadoIds.has(m.cooperadoId)),
-        cloud.mensalidades.filter((m) => cooperadoIds.has(m.cooperadoId))
+        data.mensalidades
+          .filter((m) => mensalidadeVisivelNoDispositivo(data, m, coopId))
+          .map((m) => normalizarMensalidadeCooperadoLocal(data, m, coopId)),
+        (cloud.mensalidades ?? [])
+          .filter((m) => mensalidadeVisivelNoDispositivo(data, m, coopId))
+          .map((m) => normalizarMensalidadeCooperadoLocal(data, m, coopId))
       ),
     ],
     descontos: [
@@ -520,8 +526,9 @@ export async function pushOperacionalToCloud(
   if (!cid) return;
 
   let merged = d;
+  let bundle: Awaited<ReturnType<typeof fetchSyncBundle>> | null = null;
   if (!options?.authoritative) {
-    const bundle = await fetchSyncBundle(digits);
+    bundle = await fetchSyncBundle(digits);
     if (bundle?.operacional) {
       merged = mergeOperacionalIntoData(d, bundle.operacional, cid);
       saveDataSafe(merged);
@@ -531,6 +538,14 @@ export async function pushOperacionalToCloud(
   }
 
   const payload = buildOperacionalPayload(merged, cid);
+  if (bundle?.operacional?.mensalidades?.length) {
+    payload.mensalidades = mesclarMensalidadesPayloadNuvem(
+      merged,
+      cid,
+      payload.mensalidades,
+      bundle.operacional.mensalidades
+    );
+  }
   payload.updatedAt = new Date().toISOString();
   try {
     await secureApiFetch("/api/cooperativa-sync", {

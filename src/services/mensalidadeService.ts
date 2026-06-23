@@ -77,6 +77,10 @@ export function getConfigMensalidadeCooperativa(
   return data.cooperativas.find((c) => c.id === cooperativaId)?.mensalidadeConfig;
 }
 
+function cpfCooperadoDigits(cpfCnpj?: string): string {
+  return (cpfCnpj ?? "").replace(/\D/g, "");
+}
+
 export function mensalidadePertenceCooperado(
   data: AppData,
   mensalidade: Mensalidade,
@@ -86,7 +90,83 @@ export function mensalidadePertenceCooperado(
   if (mensalidade.cooperadoId === cooperadoId) return true;
   const alvo = resolverCooperadoIdCanonico(data, cooperadoId, cooperativaId);
   const dono = resolverCooperadoIdCanonico(data, mensalidade.cooperadoId, cooperativaId);
-  return alvo === dono;
+  if (alvo === dono) return true;
+
+  const cAlvo = data.cooperados.find(
+    (c) =>
+      (!cooperativaId || c.cooperativaId === cooperativaId) &&
+      (c.id === cooperadoId || c.id === alvo)
+  );
+  const cDono = data.cooperados.find(
+    (c) =>
+      (!cooperativaId || c.cooperativaId === cooperativaId) &&
+      (c.id === mensalidade.cooperadoId || c.id === dono)
+  );
+  const cpfAlvo = cpfCooperadoDigits(cAlvo?.cpfCnpj);
+  const cpfDono = cpfCooperadoDigits(cDono?.cpfCnpj);
+  return cpfAlvo.length >= 11 && cpfAlvo === cpfDono;
+}
+
+/** Mensalidade visível neste aparelho (qualquer cooperado cadastrado na cooperativa). */
+export function mensalidadeVisivelNoDispositivo(
+  data: AppData,
+  mensalidade: Mensalidade,
+  cooperativaId: string
+): boolean {
+  return data.cooperados
+    .filter((c) => c.cooperativaId === cooperativaId)
+    .some((c) => mensalidadePertenceCooperado(data, mensalidade, c.id, cooperativaId));
+}
+
+/** Alinha cooperadoId da cobrança ao cadastro local (sync entre aparelhos). */
+export function normalizarMensalidadeCooperadoLocal(
+  data: AppData,
+  mensalidade: Mensalidade,
+  cooperativaId: string
+): Mensalidade {
+  const local = data.cooperados.find(
+    (c) =>
+      c.cooperativaId === cooperativaId &&
+      mensalidadePertenceCooperado(data, mensalidade, c.id, cooperativaId)
+  );
+  if (local && local.id !== mensalidade.cooperadoId) {
+    return { ...mensalidade, cooperadoId: local.id };
+  }
+  return mensalidade;
+}
+
+/** Evita que o cooperado apague na nuvem cobranças de outros ao sincronizar. */
+export function mesclarMensalidadesPayloadNuvem(
+  data: AppData,
+  cooperativaId: string,
+  payloadMensalidades: Mensalidade[],
+  cloudMensalidades: Mensalidade[]
+): Mensalidade[] {
+  const outros = cloudMensalidades.filter(
+    (m) => !mensalidadeVisivelNoDispositivo(data, m, cooperativaId)
+  );
+  const minhasNuvem = cloudMensalidades
+    .filter((m) => mensalidadeVisivelNoDispositivo(data, m, cooperativaId))
+    .map((m) => normalizarMensalidadeCooperadoLocal(data, m, cooperativaId));
+  const minhas = mergeArrayByNewer(payloadMensalidades, minhasNuvem);
+  return mergeArrayByNewer(outros, minhas);
+}
+
+function mergeArrayByNewer<T extends { id: string; updatedAt?: string; createdAt?: string }>(
+  local: T[],
+  cloud: T[]
+): T[] {
+  const map = new Map<string, T>();
+  const time = (item: T) => {
+    const t = item.updatedAt ?? item.createdAt;
+    return t ? new Date(t).getTime() : 0;
+  };
+  for (const item of local) map.set(item.id, item);
+  for (const item of cloud) {
+    const cur = map.get(item.id);
+    if (!cur || time(item) >= time(cur)) map.set(item.id, item);
+  }
+  return [...map.values()];
 }
 
 export function listarMensalidadesCooperado(
@@ -136,7 +216,7 @@ function resumoConfigSemRegistros(
     ? data.cooperativas.find((c) => c.id === cooperado.cooperativaId)
     : undefined;
   const cfg = coop?.mensalidadeConfig;
-  if (!cooperado || cooperado.status !== "ativo" || !cfg || cfg.valorPadrao <= 0) return null;
+  if (!cooperado || cooperado.status === "desligado" || !cfg || cfg.valorPadrao <= 0) return null;
 
   let meses = [...mesesCobrancaEfetivos(cfg)];
   if (meses.length === 0) meses = [mesAtual];
@@ -179,22 +259,17 @@ function resumoConfigSemRegistros(
   };
 }
 
-/** Lista para a aba Mensalidades do cooperado (inclui cobranças sintéticas da config quando ainda não geradas). */
-export function listarMensalidadesExibicaoCooperado(
+function mensalidadesSinteticasCooperado(
   data: AppData,
   cooperadoId: string,
   cooperativaId?: string
 ): Mensalidade[] {
-  const reais = listarMensalidadesCooperado(data, cooperadoId, cooperativaId);
-  if (reais.length > 0) return reais;
-
   const hoje = new Date().toISOString().split("T")[0];
   const cooperado = data.cooperados.find((c) => c.id === cooperadoId);
-  const coopId =
-    cooperativaId ?? cooperado?.cooperativaId;
+  const coopId = cooperativaId ?? cooperado?.cooperativaId;
   const coop = coopId ? data.cooperativas.find((c) => c.id === coopId) : undefined;
   const cfg = coop?.mensalidadeConfig;
-  if (!cooperado || cooperado.status !== "ativo" || !cfg || cfg.valorPadrao <= 0) return [];
+  if (!cooperado || cooperado.status === "desligado" || !cfg || cfg.valorPadrao <= 0) return [];
 
   let meses = [...mesesCobrancaEfetivos(cfg)];
   if (meses.length === 0) meses = [getCurrentMesReferencia()];
@@ -217,6 +292,31 @@ export function listarMensalidadesExibicaoCooperado(
         updatedAt: hoje,
       } satisfies Mensalidade;
     });
+}
+
+/** Lista para a aba Mensalidades do cooperado (inclui cobranças sintéticas da config quando ainda não geradas). */
+export function listarMensalidadesExibicaoCooperado(
+  data: AppData,
+  cooperadoId: string,
+  cooperativaId?: string
+): Mensalidade[] {
+  const coopId =
+    cooperativaId ?? data.cooperados.find((c) => c.id === cooperadoId)?.cooperativaId;
+  const reais = listarMensalidadesCooperado(data, cooperadoId, coopId).map((m) =>
+    coopId ? normalizarMensalidadeCooperadoLocal(data, m, coopId) : m
+  );
+  const sinteticas = mensalidadesSinteticasCooperado(data, cooperadoId, coopId);
+
+  const byMes = new Map<string, Mensalidade>();
+  for (const m of reais) byMes.set(m.mesReferencia, m);
+  for (const s of sinteticas) {
+    if (!byMes.has(s.mesReferencia)) byMes.set(s.mesReferencia, s);
+  }
+
+  return [...byMes.values()].sort(
+    (a, b) =>
+      b.mesReferencia.localeCompare(a.mesReferencia) || a.vencimento.localeCompare(b.vencimento)
+  );
 }
 
 export function textoAvisoMensalidadeAmanha(cfg: MensalidadeConfig): string {
@@ -527,7 +627,7 @@ export function getResumoMensalidadesCooperado(
   const mesAtual = getCurrentMesReferencia();
   const coopId =
     cooperativaId ?? data.cooperados.find((c) => c.id === cooperadoId)?.cooperativaId;
-  const todas = listarMensalidadesCooperado(data, cooperadoId, coopId);
+  const todas = listarMensalidadesExibicaoCooperado(data, cooperadoId, coopId);
 
   if (todas.length === 0) {
     return (

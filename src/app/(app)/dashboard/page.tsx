@@ -74,15 +74,9 @@ function CooperadoDashboard() {
         <p className="text-sm text-gray-500 mt-1">{coopNome} · {formatMesReferencia(mes)}</p>
       </div>
 
+      <MensalidadeStatusBanner cooperadoId={cooperadoId} modo="inicio" />
+
       <MuralComunicados comunicados={comunicados} limite={5} hideWhenEmpty />
-
-      {prestacaoAberta && (
-        <PrestacaoContasDashboardBanner data={data} cooperadoId={cooperadoId} cooperativaId={coopId} />
-      )}
-
-      {mensalidadeAberta && (
-        <MensalidadeStatusBanner cooperadoId={cooperadoId} modo="inicio" />
-      )}
 
       {avulsosAbertos && (
         <ValoresAvulsosDashboardCard cooperadoId={cooperadoId} cooperativaId={coopId} />
