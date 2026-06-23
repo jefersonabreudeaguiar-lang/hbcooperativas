@@ -196,6 +196,8 @@ export function getRelatorioEntregasPorItens(
   return getRelatorioEntregasPorItensInstituicao(mesReferencia, instituicaoId, d, cooperativaId);
 }
 
+export { getRelatorioSobrasPerdas } from "@/services/sobrasPerdasService";
+
 export { listMesesComLancamentos, getRelatorioPagarCooperado, calcularFechamentoMensalLive };
 
 export function getFinanceiroResumoCooperado(data?: AppData): Pick<FinanceiroMensal, "saldoFinal" | "entradas" | "saidas" | "dataAtualizacao"> | null {

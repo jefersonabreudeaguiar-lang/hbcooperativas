@@ -4,6 +4,7 @@ import { formatCnpj } from "@/utils/cooperativa";
 import { formatCurrency, formatDate, formatMesReferencia } from "@/utils/format";
 import type { FechamentoCalculado, RelatorioEntregasPorItens, ResumoFinanceiroMes } from "@/services/relatorioService";
 import { calcularFechamentoMensalLive, getRelatorioEntregasPorItensInstituicao, getResumoFinanceiroMes } from "@/services/relatorioService";
+import { getRelatorioSobrasPerdas, type RelatorioSobrasPerdas } from "@/services/sobrasPerdasService";
 import { baixarHtmlComoPdf } from "@/utils/downloadPdf";
 
 const DOC_STYLES = `
@@ -41,6 +42,18 @@ const DOC_STYLES = `
   .resumo-itens-list .qtd { font-weight: 700; }
   .coop-bloco { margin-top: 20px; page-break-inside: avoid; }
   .coop-bloco h3 { font-family: system-ui, sans-serif; font-size: 14px; color: #374151; margin: 0 0 8px; font-weight: 700; }
+  .box-transparencia { font-family: system-ui, sans-serif; background: #fffbeb; border: 1px solid #fcd34d; border-radius: 8px; padding: 16px 18px; margin: 20px 0; }
+  .box-transparencia .titulo { font-size: 12px; text-transform: uppercase; letter-spacing: 0.06em; color: #92400e; font-weight: 700; margin-bottom: 10px; }
+  .box-transparencia ul { margin: 0; padding-left: 18px; font-size: 13px; color: #78350f; line-height: 1.55; }
+  .box-perdas { border-left: 4px solid #dc2626; }
+  .box-sobras { border-left: 4px solid #d97706; }
+  .box-equacao { background: #f0fdf4; border: 1px solid #86efac; border-radius: 8px; padding: 16px 18px; margin: 20px 0; font-family: system-ui, sans-serif; }
+  .box-equacao .titulo { font-size: 12px; text-transform: uppercase; letter-spacing: 0.06em; color: #166534; font-weight: 700; margin-bottom: 10px; }
+  .box-equacao .linha { display: flex; justify-content: space-between; gap: 12px; padding: 4px 0; font-size: 14px; color: #14532d; border-bottom: 1px dashed #bbf7d0; }
+  .box-equacao .linha:last-child { border-bottom: none; font-weight: 700; font-size: 15px; padding-top: 8px; }
+  .valor-perda { color: #b91c1c; font-weight: 600; }
+  .valor-sobra { color: #b45309; font-weight: 600; }
+  .valor-positivo { color: #15803d; font-weight: 600; }
   .assinatura { margin-top: 48px; display: grid; grid-template-columns: 1fr 1fr; gap: 40px; }
   .assinatura-linha { border-top: 1px solid #111; padding-top: 6px; font-family: system-ui, sans-serif; font-size: 12px; text-align: center; }
   .assinatura-img { max-height: 72px; max-width: 220px; margin: 0 auto 8px; display: block; }
@@ -387,6 +400,153 @@ export function gerarRelatorioFinanceiroHtml(
     </table>`;
 
   return documentoShell(tituloRelatorio, body, data, mesReferencia, undefined, emissor);
+}
+
+function statusCooperadoSobrasLabel(s: string): string {
+  const map: Record<string, string> = {
+    pago: "Pago",
+    pendente: "A pagar",
+    aguardando_assinatura: "Aguardando assinatura",
+    sem_entrega: "Sem entrega",
+  };
+  return map[s] ?? s;
+}
+
+function blocoEquacaoTransparencia(eq: RelatorioSobrasPerdas["equacao"]): string {
+  return `
+    <div class="box-equacao">
+      <div class="titulo">Equação de transparência — apuração do mês</div>
+      <div class="linha"><span>Valor bruto das entregas conferidas</span><span class="num">${formatCurrency(eq.valorBrutoEntregas)}</span></div>
+      <div class="linha"><span>(−) Total de perdas e retenções</span><span class="num valor-perda">${formatCurrency(eq.totalPerdas)}</span></div>
+      <div class="linha"><span>(+) Créditos avulsos na apuração</span><span class="num valor-positivo">${formatCurrency(eq.totalCreditos)}</span></div>
+      <div class="linha"><span>(=) Valor líquido apurado</span><span class="num">${formatCurrency(eq.valorLiquidoApurado)}</span></div>
+      <div class="linha"><span>(−) Pagamentos confirmados</span><span class="num valor-positivo">${formatCurrency(eq.totalPagoConfirmado)}</span></div>
+      <div class="linha"><span>(=) Saldo a acertar (sobras)</span><span class="num valor-sobra">${formatCurrency(eq.totalSobrasAcertar)}</span></div>
+    </div>`;
+}
+
+export function gerarRelatorioSobrasPerdasHtml(
+  data: AppData,
+  mesReferencia: string,
+  cooperativaId?: string,
+  emissor?: EmissorRelatorio
+): string {
+  const rel = getRelatorioSobrasPerdas(mesReferencia, data, cooperativaId);
+  const eq = rel.equacao;
+
+  const linhasPerdas = rel.perdas
+    .map(
+      (p) =>
+        `<tr>
+          <td>${escapeHtml(p.categoria)}</td>
+          <td>${escapeHtml(p.descricao)}${p.quantidade != null ? ` <em>(${p.quantidade})</em>` : ""}</td>
+          <td class="num valor-perda">${formatCurrency(p.valor)}</td>
+        </tr>`
+    )
+    .join("");
+
+  const linhasSobras = rel.sobras
+    .map(
+      (s) =>
+        `<tr>
+          <td>${escapeHtml(s.categoria)}</td>
+          <td>${escapeHtml(s.descricao)}${s.quantidade != null ? ` <em>(${s.quantidade})</em>` : ""}</td>
+          <td class="num valor-sobra">${formatCurrency(s.valor)}</td>
+        </tr>`
+    )
+    .join("");
+
+  const linhasCoop = rel.linhasCooperado
+    .map((l) => {
+      const perdasDet = l.detalhePerdas
+        .filter((d) => d.valor !== 0)
+        .map((d) => `${escapeHtml(d.motivo)}: ${formatCurrency(Math.abs(d.valor))}${d.valor < 0 ? " (crédito)" : ""}`)
+        .join("; ");
+      return `<tr>
+        <td>${escapeHtml(l.cooperadoNome)}</td>
+        <td class="num">${l.entregasConferidas}</td>
+        <td class="num">${formatCurrency(l.valorBruto)}</td>
+        <td class="num valor-perda">${formatCurrency(l.taxaCooperativa + l.outrasPerdas)}</td>
+        <td class="num valor-positivo">${formatCurrency(l.creditosAvulsos)}</td>
+        <td class="num">${formatCurrency(l.valorLiquido)}</td>
+        <td class="num valor-positivo">${formatCurrency(l.valorPago)}</td>
+        <td class="num valor-sobra">${formatCurrency(l.sobraAcertar)}</td>
+        <td>${statusCooperadoSobrasLabel(l.statusPagamento)}</td>
+        <td style="font-size:11px;color:#555;">${perdasDet || "—"}</td>
+      </tr>`;
+    })
+    .join("");
+
+  const observacoes = rel.observacoesTransparencia
+    .map((o) => `<li>${escapeHtml(o)}</li>`)
+    .join("");
+
+  const body = `
+    <p class="carta">
+      Este relatório consolida <strong>perdas</strong> (retenções, taxas e descontos) e <strong>sobras</strong>
+      (saldos pendentes de acerto) referentes ao mês de <strong>${escapeHtml(formatMesReferencia(mesReferencia))}</strong>.
+      Destina-se à prestação de contas, conferência da diretoria e planejamento de acertos futuros com os cooperados.
+    </p>
+
+    <div class="resumo-grid">
+      <div class="resumo-card"><div class="label">Entregas conferidas</div><div class="value">${rel.entregasConferidas}</div></div>
+      <div class="resumo-card"><div class="label">Valor bruto</div><div class="value">${formatCurrency(eq.valorBrutoEntregas)}</div></div>
+      <div class="resumo-card"><div class="label">Total perdas</div><div class="value valor-perda">${formatCurrency(eq.totalPerdas)}</div></div>
+      <div class="resumo-card"><div class="label">Líquido apurado</div><div class="value">${formatCurrency(eq.valorLiquidoApurado)}</div></div>
+      <div class="resumo-card"><div class="label">Pago confirmado</div><div class="value valor-positivo">${formatCurrency(eq.totalPagoConfirmado)}</div></div>
+      <div class="resumo-card"><div class="label">Saldo a acertar</div><div class="value valor-sobra">${formatCurrency(eq.totalSobrasAcertar)}</div></div>
+    </div>
+
+    ${blocoEquacaoTransparencia(eq)}
+
+    <div class="box-transparencia">
+      <div class="titulo">Notas para transparência e acertos futuros</div>
+      <ul>${observacoes}</ul>
+    </div>
+
+    <h2>Perdas — retenções e descontos do mês</h2>
+    <table>
+      <thead><tr><th>Categoria</th><th>Descrição</th><th class="num">Valor</th></tr></thead>
+      <tbody>${linhasPerdas || `<tr><td colspan="3">Nenhuma perda registrada neste mês.</td></tr>`}</tbody>
+      <tfoot><tr><td colspan="2"><strong>Total de perdas</strong></td><td class="num valor-perda"><strong>${formatCurrency(eq.totalPerdas)}</strong></td></tr></tfoot>
+    </table>
+
+    <h2>Sobras — saldos pendentes de acerto</h2>
+    <table>
+      <thead><tr><th>Categoria</th><th>Descrição</th><th class="num">Valor</th></tr></thead>
+      <tbody>${linhasSobras || `<tr><td colspan="3">Nenhuma sobra pendente neste mês.</td></tr>`}</tbody>
+      <tfoot><tr><td colspan="2"><strong>Saldo a acertar (cooperados)</strong></td><td class="num valor-sobra"><strong>${formatCurrency(eq.totalSobrasAcertar)}</strong></td></tr></tfoot>
+    </table>
+
+    <p style="font-family:system-ui,sans-serif;font-size:13px;color:#555;margin-top:8px;">
+      ${rel.entregasAguardandoConferencia} entrega(s) aguardando conferência ·
+      ${rel.entregasRejeitadas} rejeitada(s) ·
+      ${formatCurrency(eq.totalAguardandoAssinatura)} aguardando assinatura de recibo
+    </p>
+
+    <h2>Detalhamento por cooperado</h2>
+    <table>
+      <thead><tr>
+        <th>Cooperado</th><th class="num">Entregas</th><th class="num">Bruto</th>
+        <th class="num">Perdas</th><th class="num">Créditos</th><th class="num">Líquido</th>
+        <th class="num">Pago</th><th class="num">A acertar</th><th>Situação</th><th>Detalhe</th>
+      </tr></thead>
+      <tbody>${linhasCoop || `<tr><td colspan="10">Nenhum lançamento neste mês.</td></tr>`}</tbody>
+    </table>
+
+    <p class="carta" style="margin-top:28px;">
+      Documento elaborado para garantir transparência na gestão da cooperativa. Recomenda-se arquivar junto ao
+      fechamento mensal e utilizar os saldos «a acertar» como base para os pagamentos e conferências do período seguinte.
+    </p>`;
+
+  return documentoShell(
+    "Relatório de Sobras e Perdas",
+    body,
+    data,
+    mesReferencia,
+    cooperativaId,
+    emissor
+  );
 }
 
 export async function baixarDocumento(html: string, nomeArquivo: string): Promise<void> {

@@ -21,11 +21,13 @@ import {
   listMesesComLancamentos,
   exportToCSV,
   downloadCSV,
+  getRelatorioSobrasPerdas,
 } from "@/services/dashboardService";
 import {
   baixarDocumento,
   gerarRelatorioEntregasPorItensHtml,
   gerarRelatorioFinanceiroHtml,
+  gerarRelatorioSobrasPerdasHtml,
   imprimirDocumentoHtml,
   nomeArquivoRelatorio,
 } from "@/utils/relatorioHtml";
@@ -44,6 +46,7 @@ const RELATORIOS = [
   { id: "entregas_por_itens", label: "Entregas por Item (mensal)" },
   { id: "vendas_pnae", label: "Vendas ao PNAE" },
   { id: "descontos_aplicados", label: "Descontos Aplicados" },
+  { id: "sobras_perdas", label: "Sobras e Perdas (transparência)" },
   { id: "saldo_mensal", label: "Saldo Mensal da Cooperativa" },
 ];
 
@@ -91,6 +94,9 @@ export default function RelatoriosPage() {
       const inst = resolveInstituicaoId();
       if (!inst) return "";
       return gerarRelatorioEntregasPorItensHtml(data, mes, inst, coopId, emissor);
+    }
+    if (tipo === "sobras_perdas") {
+      return gerarRelatorioSobrasPerdasHtml(data, mes, coopId, emissor);
     }
     return gerarRelatorioFinanceiroHtml(data, mes, tituloRelatorio, emissor);
   };
@@ -209,6 +215,26 @@ export default function RelatoriosPage() {
             String(d.valorDescontado),
           ]);
         break;
+      case "sobras_perdas": {
+        const r = getRelatorioSobrasPerdas(mes, data, coopId);
+        headers = ["Seção", "Categoria", "Descrição", "Valor", "Quantidade"];
+        rows = [
+          ...r.perdas.map((p) => ["Perda", p.categoria, p.descricao, String(p.valor), String(p.quantidade ?? "")]),
+          ...r.sobras.map((s) => ["Sobra", s.categoria, s.descricao, String(s.valor), String(s.quantidade ?? "")]),
+          ["Equação", "Bruto entregas", "", String(r.equacao.valorBrutoEntregas), ""],
+          ["Equação", "Total perdas", "", String(r.equacao.totalPerdas), ""],
+          ["Equação", "Líquido apurado", "", String(r.equacao.valorLiquidoApurado), ""],
+          ["Equação", "Saldo a acertar", "", String(r.equacao.totalSobrasAcertar), ""],
+          ...r.linhasCooperado.map((l) => [
+            "Cooperado",
+            l.cooperadoNome,
+            `${l.entregasConferidas} entrega(s) · ${l.statusPagamento}`,
+            String(l.sobraAcertar),
+            String(l.entregasConferidas),
+          ]),
+        ];
+        break;
+      }
       case "saldo_mensal": {
         const fin = data.financeiro.find((f) => f.mesReferencia === mes);
         const r = getRelatorioResumoFinanceiro(mes, data);
@@ -459,6 +485,103 @@ export default function RelatoriosPage() {
               { key: "valorDescontado", label: "Descontado", render: (d) => formatCurrency(d.valorDescontado) },
             ]}
           />
+        );
+      }
+      case "sobras_perdas": {
+        const r = getRelatorioSobrasPerdas(mes, data, coopId);
+        return (
+          <>
+            <div className="mb-4 rounded-xl border border-amber-200 bg-amber-50/60 p-4">
+              <p className="text-sm font-semibold text-amber-950">Relatório de transparência — acertos futuros</p>
+              <p className="text-xs text-amber-900 mt-1 leading-relaxed">
+                Perdas: retenções e descontos sobre entregas. Sobras: saldos pendentes de pagamento e conferência.
+                Use o PDF para arquivar e apresentar à diretoria ou assembleia.
+              </p>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4 mb-6">
+              <StatCard title="Valor bruto" value={formatCurrency(r.equacao.valorBrutoEntregas)} />
+              <StatCard title="Total perdas" value={formatCurrency(r.equacao.totalPerdas)} variant="danger" />
+              <StatCard title="Líquido apurado" value={formatCurrency(r.equacao.valorLiquidoApurado)} variant="success" />
+              <StatCard title="Pago confirmado" value={formatCurrency(r.equacao.totalPagoConfirmado)} variant="success" />
+              <StatCard title="Saldo a acertar" value={formatCurrency(r.equacao.totalSobrasAcertar)} variant="warning" />
+              <StatCard title="Entregas conferidas" value={String(r.entregasConferidas)} />
+            </div>
+
+            <div className="mb-6 rounded-xl border border-green-200 bg-green-50/50 p-4 font-mono text-sm text-green-900 space-y-1">
+              <p>Bruto − Perdas + Créditos = Líquido apurado</p>
+              <p>
+                {formatCurrency(r.equacao.valorBrutoEntregas)} − {formatCurrency(r.equacao.totalPerdas)} +{" "}
+                {formatCurrency(r.equacao.totalCreditos)} = {formatCurrency(r.equacao.valorLiquidoApurado)}
+              </p>
+              <p className="pt-2">Líquido − Pago = Saldo a acertar</p>
+              <p>
+                {formatCurrency(r.equacao.valorLiquidoApurado)} − {formatCurrency(r.equacao.totalPagoConfirmado)} ={" "}
+                {formatCurrency(r.equacao.totalSobrasAcertar)}
+              </p>
+            </div>
+
+            <h3 className="text-sm font-bold uppercase tracking-wide text-red-800 mb-2">Perdas do mês</h3>
+            <DataTable
+              data={r.perdas.map((p, i) => ({ ...p, id: `perda_${i}` }))}
+              keyField="id"
+              emptyMessage="Nenhuma perda registrada."
+              columns={[
+                { key: "categoria", label: "Categoria" },
+                { key: "descricao", label: "Descrição" },
+                { key: "valor", label: "Valor", render: (p) => formatCurrency(p.valor) },
+              ]}
+            />
+
+            <h3 className="text-sm font-bold uppercase tracking-wide text-amber-800 mb-2 mt-8">Sobras — saldos a acertar</h3>
+            <DataTable
+              data={r.sobras.map((s, i) => ({ ...s, id: `sobra_${i}` }))}
+              keyField="id"
+              emptyMessage="Nenhuma sobra pendente."
+              columns={[
+                { key: "categoria", label: "Categoria" },
+                { key: "descricao", label: "Descrição" },
+                { key: "valor", label: "Valor", render: (s) => formatCurrency(s.valor) },
+              ]}
+            />
+
+            <h3 className="text-sm font-bold uppercase tracking-wide text-gray-700 mb-2 mt-8">Por cooperado</h3>
+            <DataTable
+              data={r.linhasCooperado}
+              keyField="cooperadoId"
+              emptyMessage="Nenhum cooperado com movimentação neste mês."
+              columns={[
+                { key: "nome", label: "Cooperado", render: (l) => l.cooperadoNome },
+                { key: "entregas", label: "Entregas", render: (l) => String(l.entregasConferidas) },
+                { key: "bruto", label: "Bruto", render: (l) => formatCurrency(l.valorBruto) },
+                {
+                  key: "perdas",
+                  label: "Perdas",
+                  render: (l) => formatCurrency(l.taxaCooperativa + l.outrasPerdas),
+                },
+                { key: "liquido", label: "Líquido", render: (l) => formatCurrency(l.valorLiquido) },
+                { key: "acertar", label: "A acertar", render: (l) => formatCurrency(l.sobraAcertar) },
+                {
+                  key: "status",
+                  label: "Situação",
+                  render: (l) =>
+                    l.statusPagamento === "pago"
+                      ? "Pago"
+                      : l.statusPagamento === "aguardando_assinatura"
+                        ? "Aguardando assinatura"
+                        : l.statusPagamento === "pendente"
+                          ? "A pagar"
+                          : "—",
+                },
+              ]}
+            />
+
+            <ul className="mt-6 text-xs text-gray-600 space-y-1 list-disc pl-5">
+              {r.observacoesTransparencia.map((o, i) => (
+                <li key={i}>{o}</li>
+              ))}
+            </ul>
+          </>
         );
       }
       case "saldo_mensal": {
