@@ -15,6 +15,7 @@ import {
 } from "@/services/cooperativaCloudService";
 import { pushCooperadoToCloud } from "@/services/cooperadoCloudService";
 import { reconciliarFichaFromNotasConferidas, ajustesFichaMesId } from "@/services/notaPedidoService";
+import { normalizarPrestacaoContas } from "@/services/prestacaoContasService";
 import { exigeSenhaCadastroCooperado } from "@/utils/cooperativaCadastro";
 
 const STORAGE_KEY = "coopeagriplla_data";
@@ -208,7 +209,7 @@ function migrateData(raw: Partial<AppData> & Record<string, unknown>): AppData {
     veiculos: base.veiculos ?? [],
     fechamentos: base.fechamentos ?? [],
     livroCaixa: base.livroCaixa ?? [],
-    prestacoesContas: base.prestacoesContas ?? [],
+    prestacoesContas: (base.prestacoesContas ?? []).map(normalizarPrestacaoContas),
     auditLog: base.auditLog ?? [],
   };
 

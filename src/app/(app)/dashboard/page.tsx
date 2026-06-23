@@ -24,6 +24,8 @@ import { prestacaoPrincipalCooperado, valorRestantePrestacao } from "@/services/
 import { totalValoresAvulsosPendentes } from "@/services/valoresAvulsosReceberService";
 import { MuralComunicados } from "@/components/comunicado/MuralComunicados";
 import { PrestacaoContasDashboardBanner } from "@/components/prestacao/PrestacaoContasDashboardBanner";
+import { InicioResolvidosPanel } from "@/components/cooperado/InicioResolvidosPanel";
+import { listarResolvidosInicioCooperado } from "@/services/cooperadoInicioResolvidosService";
 import { cooperadoPrecisaCadastrarPix } from "@/utils/pix";
 import { formatCurrency, formatMesReferencia, getCurrentMesReferencia } from "@/utils/format";
 import { getUserCooperativaId, getUserCooperativaNome } from "@/utils/cooperativa";
@@ -59,6 +61,7 @@ function CooperadoDashboard() {
   );
   const avulsosAbertos = totalValoresAvulsosPendentes(data, cooperadoId, undefined, coopId) > 0;
   const comunicados = coopId ? getComunicadosMuralInicioCooperado(data, coopId, cooperadoId) : [];
+  const resolvidos = listarResolvidosInicioCooperado(data, cooperadoId, coopId);
   const temSecaoPendencias =
     rejeitadas.length > 0 ||
     emAnalise > 0 ||
@@ -133,6 +136,8 @@ function CooperadoDashboard() {
           </Button>
         </div>
       </div>
+
+      <InicioResolvidosPanel itens={resolvidos} />
     </div>
   );
 }

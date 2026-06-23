@@ -13,7 +13,7 @@ import {
 } from "lucide-react";
 import { useAppData } from "@/hooks/useAppData";
 import { usePermissions } from "@/hooks/usePermissions";
-import { isDiretoriaRole } from "@/permissions";
+import { isDiretoriaRole, canUser } from "@/permissions";
 import { getUserCooperativaId } from "@/utils/cooperativa";
 import { PageHeader } from "@/components/ui/Table";
 import { Button } from "@/components/ui/Button";
@@ -259,7 +259,7 @@ function ResponsavelView({ coopId }: { coopId: string }) {
                                   <div className="h-40 bg-gray-100 rounded-lg flex items-center justify-center text-gray-400">Sem imagem</div>
                                 )}
                                 <p className="text-xs text-gray-500 mt-2">
-                                  Enviado em {formatDate(nota.enviadoEm.split("T")[0])}
+                                  Enviado em {nota.enviadoEm ? formatDate(nota.enviadoEm) : "—"}
                                 </p>
                               </div>
                               <div className="space-y-3">
@@ -300,7 +300,7 @@ function ResponsavelView({ coopId }: { coopId: string }) {
                                     <CheckCircle2 size={18} /> Conferido
                                     {nota.conferidoEm && (
                                       <span className="text-xs text-gray-500 font-normal">
-                                        · {formatDate(nota.conferidoEm.split("T")[0])}
+                                        · {formatDate(nota.conferidoEm)}
                                       </span>
                                     )}
                                   </div>
@@ -517,14 +517,15 @@ function CooperadoView({ cooperadoId, coopId }: { cooperadoId: string; coopId?: 
 
 export default function PrestacaoContasPage() {
   const data = useAppData();
-  const { check, user } = usePermissions();
+  const { user } = usePermissions();
   const router = useRouter();
   const coopId = user && data ? getUserCooperativaId(user, data) : undefined;
   const isDiretoria = user ? isDiretoriaRole(user.role) : false;
 
   useEffect(() => {
-    if (user && !check("prestacao_contas", "view")) router.replace("/dashboard");
-  }, [user, router, check]);
+    if (!user) return;
+    if (!canUser(user, "prestacao_contas", "view")) router.replace("/dashboard");
+  }, [user, router]);
 
   if (!data || !user) return null;
 

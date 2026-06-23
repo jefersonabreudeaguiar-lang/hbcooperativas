@@ -16,7 +16,8 @@ export const TIPO_REPASSE_LABELS: Record<TipoRepassePrestacao, string> = {
 export function prestacoesDoCooperado(data: AppData, cooperadoId: string, cooperativaId?: string): PrestacaoContas[] {
   return (data.prestacoesContas ?? [])
     .filter((p) => p.cooperadoId === cooperadoId && (!cooperativaId || p.cooperativaId === cooperativaId))
-    .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+    .map(normalizarPrestacaoContas)
+    .sort((a, b) => prestacaoTime(b, "created") - prestacaoTime(a, "created"));
 }
 
 export function prestacoesAtivasCooperado(data: AppData, cooperadoId: string, cooperativaId?: string): PrestacaoContas[] {
@@ -26,11 +27,40 @@ export function prestacoesAtivasCooperado(data: AppData, cooperadoId: string, co
 export function prestacoesCooperativa(data: AppData, cooperativaId: string): PrestacaoContas[] {
   return (data.prestacoesContas ?? [])
     .filter((p) => p.cooperativaId === cooperativaId)
-    .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+    .map(normalizarPrestacaoContas)
+    .sort((a, b) => prestacaoTime(b, "updated") - prestacaoTime(a, "updated"));
 }
 
 export function valorRestantePrestacao(p: PrestacaoContas): number {
   return Math.max(0, Math.round((p.valorRepasse - p.valorConferido) * 100) / 100);
+}
+
+function prestacaoTime(p: PrestacaoContas, prefer: "updated" | "created"): number {
+  const raw =
+    prefer === "updated"
+      ? p.updatedAt ?? p.createdAt ?? p.enviadoEm
+      : p.createdAt ?? p.enviadoEm ?? p.updatedAt;
+  return raw ? new Date(raw).getTime() : 0;
+}
+
+/** Garante campos obrigatórios após sync ou dados antigos. */
+export function normalizarPrestacaoContas(p: PrestacaoContas): PrestacaoContas {
+  const now = new Date().toISOString();
+  const notas = (p.notas ?? []).map((n) => ({
+    ...n,
+    conferido: n.conferido ?? false,
+    enviadoEm: n.enviadoEm ?? now,
+  }));
+  const base: PrestacaoContas = {
+    ...p,
+    notas,
+    valorRepasse: Number(p.valorRepasse) || 0,
+    valorConferido: Number(p.valorConferido) || 0,
+    createdAt: p.createdAt ?? p.enviadoEm ?? now,
+    updatedAt: p.updatedAt ?? p.createdAt ?? p.enviadoEm ?? now,
+    status: p.status ?? "pendente",
+  };
+  return { ...base, status: calcularStatusPrestacao(base) };
 }
 
 export function calcularStatusPrestacao(p: PrestacaoContas): PrestacaoContasStatus {
