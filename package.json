@@ -7,6 +7,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
+    "test:comunicados": "node scripts/test-comunicado-service.mjs",
     "generate:pwa-icons": "node scripts/generate-pwa-icons.mjs",
     "reset:operacional": "node scripts/reset-operacional-cloud.mjs"
   },

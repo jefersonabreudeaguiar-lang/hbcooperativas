@@ -58,16 +58,18 @@ export function FormField({
   required,
   error,
   hint,
+  htmlFor,
 }: {
   label: string;
   children: React.ReactNode;
   required?: boolean;
   error?: string;
   hint?: string;
+  htmlFor?: string;
 }) {
   return (
     <div className="space-y-1">
-      <Label required={required}>{label}</Label>
+      <Label htmlFor={htmlFor} required={required}>{label}</Label>
       {children}
       {hint && !error && <p className="text-xs text-gray-500">{hint}</p>}
       {error && <p className="text-xs text-red-600 font-medium">{error}</p>}

@@ -1,30 +1,26 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useCallback } from "react";
 import { Plus, Repeat, Pause, Play, Trash2, RefreshCw, Send, Pencil } from "lucide-react";
 import { useAppData } from "@/hooks/useAppData";
 import { usePermissions } from "@/hooks/usePermissions";
 import { getUserCooperativaId } from "@/utils/cooperativa";
 import { PageHeader, Modal } from "@/components/ui/Table";
 import { Button } from "@/components/ui/Button";
-import { Input, Select, Textarea, FormField } from "@/components/ui/Form";
 import { Card } from "@/components/ui/Card";
 import { AlertBanner } from "@/components/ui/AlertBanner";
 import { updateData, generateId, addAuditEntry, getData } from "@/services/dataStore";
 import { resolveCooperativaCnpj } from "@/services/notaPedidoCloudService";
 import { pushOperacionalToCloud } from "@/services/cooperativaSyncCloudService";
-import { getComunicadosParaExibicao, getComunicadosCooperado, cooperadoTemConteudoComunicado } from "@/services/comunicadoService";
-import { AudioRecorder } from "@/components/comunicado/AudioRecorder";
+import {
+  getComunicadosParaExibicao,
+  getComunicadosCooperado,
+  cooperadoTemConteudoComunicado,
+  getComunicadoAssunto,
+} from "@/services/comunicadoService";
+import { ComunicadoForm } from "@/components/comunicado/ComunicadoForm";
 import { ComunicadoCard } from "@/components/comunicado/ComunicadoCard";
 import type { Comunicado, ComunicadoCategoria } from "@/types";
-
-const CATEGORIA_LABELS: Record<ComunicadoCategoria, string> = {
-  financeiro: "Financeiro",
-  reuniao: "Reunião",
-  entrega: "Entrega",
-  documentacao: "Documentação",
-  aviso_geral: "Aviso Geral",
-};
 
 const FORM_VAZIO = (): Partial<Comunicado> => ({
   categoria: "aviso_geral",
@@ -41,6 +37,22 @@ const FORM_VAZIO = (): Partial<Comunicado> => ({
   audioDataUrl: undefined,
 });
 
+function formTemAssunto(form: Partial<Comunicado>): boolean {
+  return Boolean(form.assunto?.trim() || form.titulo?.trim());
+}
+
+function formTemConteudo(form: Partial<Comunicado>): boolean {
+  return cooperadoTemConteudoComunicado({
+    ...form,
+    titulo: form.assunto?.trim() || form.titulo?.trim() || "",
+    descricao: form.descricao ?? "",
+  } as Comunicado);
+}
+
+function formularioPreenchido(form: Partial<Comunicado>): boolean {
+  return Boolean(form.assunto?.trim() || form.titulo?.trim() || form.descricao?.trim() || form.audioDataUrl);
+}
+
 export default function ComunicadosPage() {
   const data = useAppData();
   const { check, user, isCooperado, cooperadoId } = usePermissions();
@@ -52,6 +64,10 @@ export default function ComunicadosPage() {
   const [alteracoesPendentes, setAlteracoesPendentes] = useState(false);
   const [publicando, setPublicando] = useState(false);
   const [msgPublicacao, setMsgPublicacao] = useState("");
+
+  const handleFormChange = useCallback((patch: Partial<Comunicado>) => {
+    setForm((prev) => ({ ...prev, ...patch }));
+  }, []);
 
   const comunicadosExibicao = useMemo(() => {
     if (!data || !coopId) return [];
@@ -97,7 +113,7 @@ export default function ComunicadosPage() {
   const salvarComunicado = () => {
     const assunto = form.assunto?.trim() || form.titulo?.trim();
     if (!assunto || !user || !coopId) return;
-    if (!cooperadoTemConteudoComunicado({ ...form, descricao: form.descricao ?? "", titulo: assunto } as Comunicado)) return;
+    if (!formTemConteudo(form)) return;
 
     updateData((d) => {
       if (editingId) {
@@ -177,7 +193,7 @@ export default function ComunicadosPage() {
   };
 
   const handleDelete = (c: Comunicado) => {
-    if (!user || !confirm(`Remover o recado "${c.assunto ?? c.titulo}"?`)) return;
+    if (!user || !confirm(`Remover o recado "${getComunicadoAssunto(c)}"?`)) return;
     updateData((d) => ({
       ...d,
       comunicados: d.comunicados.filter((x) => x.id !== c.id),
@@ -209,103 +225,7 @@ export default function ComunicadosPage() {
   if (!data) return null;
 
   const canManage = check("comunicados", "create");
-  const formValido = Boolean(
-    (form.assunto?.trim() || form.titulo?.trim()) &&
-      cooperadoTemConteudoComunicado({
-        ...form,
-        titulo: form.assunto?.trim() || form.titulo || "",
-        descricao: form.descricao ?? "",
-      } as Comunicado)
-  );
-
-  const FormularioComunicado = ({ idPrefix = "" }: { idPrefix?: string }) => (
-    <div className="space-y-4">
-      <FormField label="Assunto" required hint="Título curto que aparece no mural e na notificação">
-        <Input
-          id={`${idPrefix}assunto`}
-          value={form.assunto ?? form.titulo ?? ""}
-          onChange={(e) => setForm({ ...form, assunto: e.target.value, titulo: e.target.value })}
-          placeholder="Ex: Reunião geral, prazo de entrega..."
-        />
-      </FormField>
-
-      <FormField label="Aviso em áudio" hint="Grave o recado ou digite o texto abaixo (pelo menos um dos dois)">
-        <AudioRecorder
-          value={form.audioDataUrl}
-          onChange={(audioDataUrl) => setForm({ ...form, audioDataUrl })}
-        />
-      </FormField>
-
-      <FormField label="Texto do aviso" hint="Opcional se você gravou áudio">
-        <Textarea
-          id={`${idPrefix}descricao`}
-          value={form.descricao ?? ""}
-          onChange={(e) => setForm({ ...form, descricao: e.target.value })}
-          rows={6}
-          placeholder="Escreva aqui o comunicado para os cooperados..."
-          className="min-h-[140px] text-base leading-relaxed"
-        />
-      </FormField>
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-        <FormField label="Categoria">
-          <Select
-            value={form.categoria ?? "aviso_geral"}
-            onChange={(e) => setForm({ ...form, categoria: e.target.value as ComunicadoCategoria })}
-          >
-            {Object.entries(CATEGORIA_LABELS).map(([k, v]) => (
-              <option key={k} value={k}>{v}</option>
-            ))}
-          </Select>
-        </FormField>
-        {!form.recorrente && (
-          <FormField label="Data">
-            <Input type="date" value={form.data ?? ""} onChange={(e) => setForm({ ...form, data: e.target.value })} />
-          </FormField>
-        )}
-      </div>
-      <div className="flex flex-col gap-2">
-        <label className="flex items-center gap-2 text-sm">
-          <input type="checkbox" checked={form.fixado ?? false} onChange={(e) => setForm({ ...form, fixado: e.target.checked })} className="rounded" />
-          Fixar no topo do mural
-        </label>
-        <label className="flex items-center gap-2 text-sm">
-          <input
-            type="checkbox"
-            checked={form.somenteDiretoria ?? false}
-            onChange={(e) =>
-              setForm({
-                ...form,
-                somenteDiretoria: e.target.checked,
-                visivelParaTodos: e.target.checked ? false : form.visivelParaTodos,
-              })
-            }
-            className="rounded"
-          />
-          Enviar apenas para cooperados da diretoria
-        </label>
-        {!form.somenteDiretoria && (
-          <p className="text-xs text-gray-500 ml-6">
-            Marque cooperados como diretoria em Cooperados → editar ficha.
-          </p>
-        )}
-        <label className="flex items-center gap-2 text-sm">
-          <input type="checkbox" checked={form.recorrente ?? false} onChange={(e) => setForm({ ...form, recorrente: e.target.checked })} className="rounded" />
-          Repetir automaticamente todo mês
-        </label>
-      </div>
-      {form.recorrente && (
-        <FormField label="A partir de qual dia do mês?" hint="O aviso aparece todo mês a partir deste dia">
-          <Input
-            type="number"
-            min={1}
-            max={28}
-            value={form.diaDoMes ?? 1}
-            onChange={(e) => setForm({ ...form, diaDoMes: parseInt(e.target.value, 10) || 1 })}
-          />
-        </FormField>
-      )}
-    </div>
-  );
+  const formValido = formTemAssunto(form) && formTemConteudo(form);
 
   return (
     <div>
@@ -348,11 +268,11 @@ export default function ComunicadosPage() {
         </AlertBanner>
       )}
 
-      {canManage && (
+      {canManage && !modalOpen && (
         <Card title="Novo recado" className="mb-6">
-          <FormularioComunicado idPrefix="inline-" />
+          <ComunicadoForm form={form} onFormChange={handleFormChange} idPrefix="inline-" />
           <div className="flex flex-col-reverse sm:flex-row justify-end gap-2 mt-6">
-            <Button variant="secondary" onClick={limparFormulario} disabled={!form.assunto && !form.descricao && !form.audioDataUrl}>
+            <Button variant="secondary" onClick={limparFormulario} disabled={!formularioPreenchido(form)}>
               Limpar
             </Button>
             <Button onClick={salvarComunicado} disabled={!formValido}>
@@ -384,7 +304,7 @@ export default function ComunicadosPage() {
             {templatesRecorrentes.map((c) => (
               <li key={c.id} className="flex items-center justify-between gap-3 py-3">
                 <div className="min-w-0">
-                  <p className="font-medium text-gray-900 truncate">{c.titulo}</p>
+                  <p className="font-medium text-gray-900 truncate">{getComunicadoAssunto(c)}</p>
                   <p className="text-xs text-gray-500">
                     Dia {c.diaDoMes ?? 1} · {c.ativo === false ? "Pausado" : "Ativo"}
                   </p>
@@ -408,7 +328,13 @@ export default function ComunicadosPage() {
 
       <div className="flex gap-2 mb-6 flex-wrap">
         <Button variant={!categoriaFilter ? "primary" : "secondary"} size="sm" onClick={() => setCategoriaFilter("")}>Todos</Button>
-        {Object.entries(CATEGORIA_LABELS).map(([k, v]) => (
+        {(Object.entries({
+          financeiro: "Financeiro",
+          reuniao: "Reunião",
+          entrega: "Entrega",
+          documentacao: "Documentação",
+          aviso_geral: "Aviso Geral",
+        }) as [ComunicadoCategoria, string][]).map(([k, v]) => (
           <Button key={k} variant={categoriaFilter === k ? "primary" : "secondary"} size="sm" onClick={() => setCategoriaFilter(k)}>{v}</Button>
         ))}
       </div>
@@ -453,7 +379,7 @@ export default function ComunicadosPage() {
         onClose={() => { setModalOpen(false); limparFormulario(); }}
         title={editingId ? "Editar aviso" : "Novo aviso"}
       >
-        <FormularioComunicado idPrefix="modal-" />
+        <ComunicadoForm form={form} onFormChange={handleFormChange} idPrefix="modal-" />
         <div className="flex justify-end gap-2 mt-6">
           <Button variant="secondary" onClick={() => { setModalOpen(false); limparFormulario(); }}>Cancelar</Button>
           <Button onClick={salvarComunicado} disabled={!formValido}>
