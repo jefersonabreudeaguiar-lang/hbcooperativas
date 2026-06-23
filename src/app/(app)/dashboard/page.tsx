@@ -20,7 +20,7 @@ import {
 import { notaPertenceCooperativa } from "@/utils/fotoEntrega";
 import { getComunicadosMuralInicioCooperado } from "@/services/comunicadoService";
 import { getResumoMensalidadesCooperado } from "@/services/mensalidadeService";
-import { prestacaoPrincipalCooperado, valorRestantePrestacao } from "@/services/prestacaoContasService";
+import { prestacaoPrincipalCooperado, prestacaoExigeAtencaoCooperado } from "@/services/prestacaoContasService";
 import { totalValoresAvulsosPendentes } from "@/services/valoresAvulsosReceberService";
 import { MuralComunicados } from "@/components/comunicado/MuralComunicados";
 import { PrestacaoContasDashboardBanner } from "@/components/prestacao/PrestacaoContasDashboardBanner";
@@ -54,11 +54,7 @@ function CooperadoDashboard() {
     resumoMens.situacao !== "sem_mensalidade" &&
     resumoMens.situacao !== "aguardando_confirmacao";
   const prestacao = coopId ? prestacaoPrincipalCooperado(data, cooperadoId, coopId) : undefined;
-  const prestacaoAberta = Boolean(
-    prestacao &&
-      prestacao.status !== "conferida" &&
-      valorRestantePrestacao(prestacao) > 0
-  );
+  const prestacaoAberta = prestacao ? prestacaoExigeAtencaoCooperado(prestacao) : false;
   const avulsosAbertos = totalValoresAvulsosPendentes(data, cooperadoId, undefined, coopId) > 0;
   const comunicados = coopId ? getComunicadosMuralInicioCooperado(data, coopId, cooperadoId) : [];
   const resolvidos = listarResolvidosInicioCooperado(data, cooperadoId, coopId);
@@ -81,7 +77,7 @@ function CooperadoDashboard() {
       <MuralComunicados comunicados={comunicados} limite={5} hideWhenEmpty />
 
       {prestacaoAberta && (
-        <PrestacaoContasDashboardBanner cooperadoId={cooperadoId} cooperativaId={coopId} />
+        <PrestacaoContasDashboardBanner data={data} cooperadoId={cooperadoId} cooperativaId={coopId} />
       )}
 
       {mensalidadeAberta && (

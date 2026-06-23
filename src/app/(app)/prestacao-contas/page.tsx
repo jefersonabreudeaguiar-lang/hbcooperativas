@@ -32,6 +32,8 @@ import {
   prestacoesCooperativa,
   prestacoesDoCooperado,
   TIPO_REPASSE_LABELS,
+  resumoValoresPrestacao,
+  tituloPrestacaoCooperado,
   valorRestantePrestacao,
 } from "@/services/prestacaoContasService";
 import { compressFotoFile, makeFotoThumbnail } from "@/utils/fotoEntrega";
@@ -209,7 +211,8 @@ function ResponsavelView({ coopId, data }: { coopId: string; data: AppData }) {
         ) : (
           <div className="space-y-3">
             {prestacoes.map((p) => {
-              const restante = valorRestantePrestacao(p);
+              const resumo = resumoValoresPrestacao(p);
+              const restante = resumo.restante;
               const aberto = expandido === p.id;
 
               return (
@@ -228,8 +231,9 @@ function ResponsavelView({ coopId, data }: { coopId: string; data: AppData }) {
                       <p className="text-sm text-gray-600 mt-1 truncate">{p.historico}</p>
                       <p className="text-xs text-gray-500 mt-1">
                         {labelTipoRepasse(p.tipoRepasse)} · Repasse {formatCurrency(p.valorRepasse)}
-                        {p.valorConferido > 0 && ` · Conferido ${formatCurrency(p.valorConferido)}`}
-                        {restante > 0 && p.valorConferido > 0 && (
+                        {resumo.abatido > 0 && ` · Lançado ${formatCurrency(resumo.abatido)}`}
+                        {resumo.conferido > 0 && ` · Conferido ${formatCurrency(resumo.conferido)}`}
+                        {restante > 0 && (
                           <span className="text-amber-700 font-medium"> · Falta {formatCurrency(restante)}</span>
                         )}
                       </p>
@@ -240,8 +244,8 @@ function ResponsavelView({ coopId, data }: { coopId: string; data: AppData }) {
                   {aberto && (
                     <div className="border-t p-4 bg-gray-50/80 space-y-4">
                       {restante > 0 && (
-                        <AlertBanner variant="warning" title={`Saldo a conferir: ${formatCurrency(restante)}`}>
-                          Confira cada nota abaixo. Ao marcar conferido, o valor é subtraído automaticamente.
+                        <AlertBanner variant="warning" title={`Saldo a prestar: ${formatCurrency(restante)}`}>
+                          Informe o valor de cada nota. O saldo diminui conforme os valores são lançados nas notas enviadas.
                         </AlertBanner>
                       )}
 
@@ -355,6 +359,7 @@ function CooperadoView({
   const [prestacaoId, setPrestacaoId] = useState<string | null>(null);
   const [enviando, setEnviando] = useState(false);
   const [preview, setPreview] = useState<string[]>([]);
+  const [previewValores, setPreviewValores] = useState<string[]>([]);
 
   const ativas = useMemo(
     () => prestacoesAtivasCooperado(data, cooperadoId, coopId),
@@ -379,19 +384,28 @@ function CooperadoView({
       urls.push(compressed);
     }
     setPreview((prev) => [...prev, ...urls]);
+    setPreviewValores((prev) => [...prev, ...urls.map(() => "")]);
   };
 
   const enviarNotas = async () => {
     if (!selecionada || !preview.length || !user) return;
+
+    const valores = preview.map((_, i) => parseFloat(previewValores[i]?.replace(",", ".") ?? ""));
+    if (valores.some((v) => !Number.isFinite(v) || v <= 0)) {
+      alert("Informe o valor (R$) de cada nota antes de enviar.");
+      return;
+    }
+
     setEnviando(true);
     try {
       const notas = await Promise.all(
-        preview.map(async (full) => {
+        preview.map(async (full, i) => {
           const thumb = await makeFotoThumbnail(full);
           return {
             id: generateId("pcn"),
             fotoDataUrl: full,
             fotoMiniatura: thumb,
+            valorNota: valores[i],
             conferido: false,
             enviadoEm: new Date().toISOString(),
           };
@@ -411,6 +425,7 @@ function CooperadoView({
       });
 
       setPreview([]);
+      setPreviewValores([]);
       if (fileRef.current) fileRef.current.value = "";
     } finally {
       setEnviando(false);
@@ -427,27 +442,29 @@ function CooperadoView({
 
   return (
     <div className="space-y-6">
-      {selecionada && (
+      {selecionada && (() => {
+        const resumo = resumoValoresPrestacao(selecionada);
+        return (
         <>
           <div className="rounded-2xl border-2 border-violet-200 bg-gradient-to-br from-violet-50 to-white p-5">
             <div className="flex items-center gap-2 mb-2">
               <FileCheck className="text-violet-700" size={22} />
               <span className="font-bold text-violet-900 text-lg">
-                {valorRestantePrestacao(selecionada) < selecionada.valorRepasse && selecionada.valorConferido > 0
-                  ? "Falta prestar conta do restante"
-                  : "Presta conta"}
+                {tituloPrestacaoCooperado(selecionada)}
               </span>
             </div>
             <p className="text-sm text-violet-800">{labelTipoRepasse(selecionada.tipoRepasse)} · {selecionada.historico}</p>
-            <div className="flex flex-wrap gap-4 mt-3 text-sm">
-              <span>Repasse: <strong>{formatCurrency(selecionada.valorRepasse)}</strong></span>
-              {selecionada.valorConferido > 0 && (
-                <>
-                  <span>Conferido: <strong>{formatCurrency(selecionada.valorConferido)}</strong></span>
-                  <span className="text-amber-800 font-semibold">
-                    Falta: {formatCurrency(valorRestantePrestacao(selecionada))}
-                  </span>
-                </>
+            <div className="mt-3">
+              <p className="text-2xl font-bold text-violet-900">
+                {formatCurrency(resumo.restante > 0 ? resumo.restante : 0)}
+              </p>
+              <p className="text-sm text-violet-800 mt-0.5">
+                {resumo.restante > 0 ? "Falta prestar" : "Aguardando conferência final"}
+              </p>
+              {resumo.abatido > 0 && (
+                <p className="text-xs text-violet-700/90 mt-2">
+                  Lançado nas notas: {formatCurrency(resumo.abatido)}
+                </p>
               )}
             </div>
             <div className="mt-2">
@@ -469,7 +486,7 @@ function CooperadoView({
 
           <Card title="Fotos das notas de despesa">
             <p className="text-sm text-gray-500 mb-4">
-              Tire fotos das notas que comprovam o repasse. Após enviar, a cooperativa conferirá cada uma.
+              Tire fotos das notas e informe o valor de cada uma. O saldo a prestar diminui conforme você envia.
             </p>
             <input
               ref={fileRef}
@@ -485,10 +502,28 @@ function CooperadoView({
             </Button>
 
             {preview.length > 0 && (
-              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 mb-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-4">
                 {preview.map((url, i) => (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img key={i} src={url} alt="" className="rounded-lg border aspect-square object-cover" />
+                  <div key={i} className="rounded-lg border p-2 space-y-2">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img src={url} alt="" className="w-full aspect-square object-cover rounded-lg" />
+                    <FormField label="Valor da nota (R$)" required>
+                      <Input
+                        type="number"
+                        step="0.01"
+                        min={0}
+                        placeholder="0,00"
+                        value={previewValores[i] ?? ""}
+                        onChange={(e) =>
+                          setPreviewValores((prev) => {
+                            const next = [...prev];
+                            next[i] = e.target.value;
+                            return next;
+                          })
+                        }
+                      />
+                    </FormField>
+                  </div>
                 ))}
               </div>
             )}
@@ -501,14 +536,19 @@ function CooperadoView({
 
             <Button
               className="w-full"
-              disabled={!preview.length || enviando}
+              disabled={
+                !preview.length ||
+                enviando ||
+                preview.some((_, i) => !(parseFloat(previewValores[i]?.replace(",", ".") ?? "") > 0))
+              }
               onClick={() => void enviarNotas()}
             >
               <Send size={16} /> {enviando ? "Enviando…" : "Enviar notas para conferência"}
             </Button>
           </Card>
         </>
-      )}
+        );
+      })()}
 
       {historico.filter((p) => p.status === "conferida").length > 0 && (
         <Card title="Histórico conferido">

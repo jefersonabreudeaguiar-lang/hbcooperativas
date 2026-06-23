@@ -5,6 +5,7 @@ import type {
   PrestacaoContasStatus,
   TipoRepassePrestacao,
 } from "@/types";
+import { round2 } from "@/utils/calculations";
 
 export const TIPO_REPASSE_LABELS: Record<TipoRepassePrestacao, string> = {
   despesa: "Despesa",
@@ -31,8 +32,66 @@ export function prestacoesCooperativa(data: AppData, cooperativaId: string): Pre
     .sort((a, b) => prestacaoTime(b, "updated") - prestacaoTime(a, "updated"));
 }
 
+export function totalValorNotasPrestacao(p: PrestacaoContas): number {
+  return round2(
+    (p.notas ?? []).reduce((s, n) => s + (Number(n.valorNota) || 0), 0)
+  );
+}
+
+function recalcValorConferidoNotas(notas: PrestacaoContasNota[]): number {
+  return round2(
+    notas.filter((n) => n.conferido).reduce((s, n) => s + (Number(n.valorNota) || 0), 0)
+  );
+}
+
+/** Saldo a prestar — abate o valor informado em cada nota enviada. */
 export function valorRestantePrestacao(p: PrestacaoContas): number {
-  return Math.max(0, Math.round((p.valorRepasse - p.valorConferido) * 100) / 100);
+  return Math.max(0, round2(p.valorRepasse - totalValorNotasPrestacao(p)));
+}
+
+export interface ResumoValoresPrestacao {
+  repasse: number;
+  abatido: number;
+  restante: number;
+  conferido: number;
+  notasAguardando: number;
+}
+
+export function resumoValoresPrestacao(p: PrestacaoContas): ResumoValoresPrestacao {
+  const notas = p.notas ?? [];
+  const abatido = totalValorNotasPrestacao(p);
+  const conferido = recalcValorConferidoNotas(notas);
+  return {
+    repasse: p.valorRepasse,
+    abatido,
+    restante: valorRestantePrestacao(p),
+    conferido,
+    notasAguardando: notas.filter(
+      (n) => !n.conferido && Boolean(n.fotoDataUrl || n.fotoMiniatura)
+    ).length,
+  };
+}
+
+/** Permanece no início do cooperado até zerar e conferir todas as notas. */
+export function prestacaoExigeAtencaoCooperado(p: PrestacaoContas): boolean {
+  const resumo = resumoValoresPrestacao(p);
+  if (calcularStatusPrestacao(p) === "conferida") return false;
+  if (resumo.restante > 0) return true;
+  return resumo.notasAguardando > 0;
+}
+
+export function tituloPrestacaoCooperado(p: PrestacaoContas): string {
+  const resumo = resumoValoresPrestacao(p);
+  if (resumo.restante <= 0 && resumo.notasAguardando > 0) {
+    return "Notas enviadas — aguardando conferência";
+  }
+  if (resumo.conferido > 0 && resumo.restante > 0) {
+    return "Falta prestar conta do restante";
+  }
+  if (resumo.notasAguardando > 0) {
+    return "Notas enviadas — aguardando conferência";
+  }
+  return "Presta conta";
 }
 
 function prestacaoTime(p: PrestacaoContas, prefer: "updated" | "created"): number {
@@ -76,7 +135,7 @@ export function normalizarPrestacaoContas(p: PrestacaoContas): PrestacaoContas {
     historico: p.historico?.trim() || "Repasse",
     notas,
     valorRepasse: Number(p.valorRepasse) || 0,
-    valorConferido: Number(p.valorConferido) || 0,
+    valorConferido: recalcValorConferidoNotas(notas),
     createdAt: p.createdAt ?? p.enviadoEm ?? now,
     updatedAt: p.updatedAt ?? p.createdAt ?? p.enviadoEm ?? now,
     status: p.status ?? "pendente",
@@ -86,9 +145,19 @@ export function normalizarPrestacaoContas(p: PrestacaoContas): PrestacaoContas {
 
 export function calcularStatusPrestacao(p: PrestacaoContas): PrestacaoContasStatus {
   const restante = valorRestantePrestacao(p);
-  if (restante <= 0 && p.valorConferido > 0) return "conferida";
-  if (p.valorConferido > 0 && restante > 0) return "parcial";
-  if ((p.notas ?? []).some((n) => n.fotoDataUrl || n.fotoMiniatura)) return "em_conferencia";
+  const notas = (p.notas ?? []).filter((n) => n.fotoDataUrl || n.fotoMiniatura);
+  const conferido = recalcValorConferidoNotas(p.notas ?? []);
+
+  if (
+    restante <= 0 &&
+    notas.length > 0 &&
+    notas.every((n) => n.conferido) &&
+    conferido > 0
+  ) {
+    return "conferida";
+  }
+  if (conferido > 0 && restante > 0) return "parcial";
+  if (notas.length > 0) return "em_conferencia";
   return "pendente";
 }
 
@@ -137,7 +206,12 @@ export function adicionarNotasPrestacao(
     prestacoesContas: (data.prestacoesContas ?? []).map((p) => {
       if (p.id !== prestacaoId) return p;
       const merged = [...(p.notas ?? []), ...notas];
-      const next = { ...p, notas: merged, updatedAt: new Date().toISOString() };
+      const next = {
+        ...p,
+        notas: merged,
+        valorConferido: recalcValorConferidoNotas(merged),
+        updatedAt: new Date().toISOString(),
+      };
       return { ...next, status: calcularStatusPrestacao(next) };
     }),
   };
@@ -154,7 +228,13 @@ export function atualizarNotaPrestacao(
     prestacoesContas: (data.prestacoesContas ?? []).map((p) => {
       if (p.id !== prestacaoId) return p;
       const notas = (p.notas ?? []).map((n) => (n.id === notaId ? { ...n, ...patch } : n));
-      return { ...p, notas, updatedAt: new Date().toISOString() };
+      const next = {
+        ...p,
+        notas,
+        valorConferido: recalcValorConferidoNotas(notas),
+        updatedAt: new Date().toISOString(),
+      };
+      return { ...next, status: calcularStatusPrestacao(next) };
     }),
   };
 }
@@ -165,17 +245,14 @@ export function conferirNotaPrestacao(data: AppData, prestacaoId: string, notaId
     ...data,
     prestacoesContas: (data.prestacoesContas ?? []).map((p) => {
       if (p.id !== prestacaoId) return p;
-      let valorConferido = p.valorConferido;
       const notas = (p.notas ?? []).map((n) => {
         if (n.id !== notaId || n.conferido) return n;
-        const valor = Number(n.valorNota) || 0;
-        valorConferido += valor;
         return { ...n, conferido: true, conferidoEm: now };
       });
       const next: PrestacaoContas = {
         ...p,
         notas,
-        valorConferido: Math.round(valorConferido * 100) / 100,
+        valorConferido: recalcValorConferidoNotas(notas),
         updatedAt: now,
       };
       return { ...next, status: calcularStatusPrestacao(next) };
