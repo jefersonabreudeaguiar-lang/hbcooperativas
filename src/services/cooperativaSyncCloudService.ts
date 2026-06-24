@@ -155,6 +155,8 @@ function normalizeCloudOperacional(cloud: OperacionalSyncPayload): OperacionalSy
 }
 
 function buildEmptyOperacionalResetPayload(data: AppData, coopId: string): OperacionalSyncPayload {
+  const cooperadoIds = new Set(data.cooperados.filter((c) => c.cooperativaId === coopId).map((c) => c.id));
+  const mensalidadesCoop = data.mensalidades.filter((m) => cooperadoIds.has(m.cooperadoId));
   return {
     updatedAt: new Date().toISOString(),
     operationalResetVersion: OPERATIONAL_RESET_VERSION,
@@ -163,7 +165,7 @@ function buildEmptyOperacionalResetPayload(data: AppData, coopId: string): Opera
     ajustesFichaMes: [],
     pagamentosCooperado: [],
     comunicados: [],
-    mensalidades: [],
+    mensalidades: mensalidadesCoop,
     descontos: [],
     valoresAvulsosReceber: [],
     livroCaixa: [],
@@ -451,11 +453,13 @@ export function mergeOperacionalIntoData(
     ],
     mensalidades: [
       ...data.mensalidades.filter((m) => !mensalidadeVisivelNoDispositivo(data, m, coopId)),
-      ...mergeOperacionalArrayFromCloud(
-        mensalidadesLocaisVisiveis,
-        mensalidadesCloudVisiveis,
-        cloudSyncTime
-      ),
+      ...(mensalidadesCloudVisiveis.length > 0
+        ? mergeOperacionalArrayFromCloud(
+            mensalidadesLocaisVisiveis,
+            mensalidadesCloudVisiveis,
+            cloudSyncTime
+          )
+        : mensalidadesLocaisVisiveis),
     ],
     descontos: [
       ...data.descontos.filter((d) => !cooperadoIds.has(d.cooperadoId)),
