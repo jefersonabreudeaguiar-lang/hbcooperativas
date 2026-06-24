@@ -1,7 +1,7 @@
 import type { AppData, NotaPedido, User } from "@/types";
 import { normalizeCnpj } from "@/utils/cooperativa";
 import { fetchCooperativaByCnpjFromCloud } from "@/services/cooperativaCloudService";
-import { getNotaCooperativaCnpj, getFotosExibicaoNota } from "@/utils/fotoEntrega";
+import { getNotaCooperativaCnpj, getFotosExibicaoNota, mergeNotaComFotos } from "@/utils/fotoEntrega";
 import { getData, saveDataSafe } from "@/services/dataStore";
 import { reconciliarFichaFromNotasConferidas } from "@/services/notaPedidoService";
 import { needsOperationalResetCloudPush } from "@/services/operationalReset";
@@ -101,12 +101,13 @@ export function mergeCloudNotasIntoData(
 
   for (const raw of cloudNotas) {
     const cn = normalizeCloudNotaForLocal(data, raw, cnpj);
-    const mergedNota: NotaPedido = {
+    const local = byId.get(cn.id);
+    const cloudNota: NotaPedido = {
       ...cn,
       cooperativaCnpj: digits,
       fotoNaNuvem: cn.fotoNaNuvem ?? Boolean(cn.fotoPedido || cn.fotosPedido?.length),
     };
-    const local = byId.get(mergedNota.id);
+    const mergedNota = local ? mergeNotaComFotos(local, cloudNota) : cloudNota;
     if (shouldApplyCloudNota(local, mergedNota)) {
       byId.set(mergedNota.id, mergedNota);
       changed = true;
@@ -351,20 +352,19 @@ export async function ensureNotaComFoto(
   nota: NotaPedido,
   coopId?: string
 ): Promise<NotaPedido> {
-  if (getFotosExibicaoNota(nota).length > 0) return nota;
+  const localFotos = getFotosExibicaoNota(nota);
+  const esperado = nota.fotosEnviadasCount ?? localFotos.length;
+  if (localFotos.length >= esperado && esperado > 0) return nota;
+
   const cnpj = getCooperativaCnpj(data, coopId ?? nota.cooperativaId);
   if (!cnpj) return nota;
+
   const cloud = await fetchNotaPedidoFromCloud(cnpj, nota.id);
-  if (cloud?.fotosPedido?.length) {
-    return {
-      ...nota,
-      fotosPedido: cloud.fotosPedido,
-      fotoPedido: cloud.fotoPedido ?? cloud.fotosPedido[0],
-      fotoNaNuvem: true,
-    };
-  }
-  if (cloud?.fotoPedido) {
-    return { ...nota, fotoPedido: cloud.fotoPedido, fotoNaNuvem: true };
-  }
-  return nota;
+  if (!cloud) return nota;
+
+  const merged = mergeNotaComFotos(nota, cloud);
+  const cloudFotos = getFotosExibicaoNota(merged);
+  if (cloudFotos.length === 0) return nota;
+
+  return merged;
 }

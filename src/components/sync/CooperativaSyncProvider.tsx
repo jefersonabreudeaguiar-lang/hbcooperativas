@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef } from "react";
 import { useAuth } from "@/modules/auth/AuthProvider";
 import { useAppData } from "@/hooks/useAppData";
 import { getUserCooperativaId, normalizeCnpj } from "@/utils/cooperativa";
-import { resolveCooperativaCnpj, pushNotasPedidoToCloud, flushPendingNotaDeletes } from "@/services/notaPedidoCloudService";
+import { resolveCooperativaCnpj, pushNotasPedidoToCloud, flushPendingNotaDeletes, fetchNotaPedidoFromCloud } from "@/services/notaPedidoCloudService";
 import {
   SYNC_INTERVAL_MS,
   syncCooperativaBidirectional,
@@ -12,9 +12,9 @@ import {
 import { pushCooperadoToCloud, resolverCooperadoIdCanonico, flushPendingCooperadoPushes } from "@/services/cooperadoCloudService";
 import { getData, updateDataSafe } from "@/services/dataStore";
 import { getCooperadoNome } from "@/utils/calculations";
-import { compactarFotosNoArmazenamento } from "@/utils/fotoEntrega";
+import { compactarFotosNoArmazenamento, contarFotosEnviadasNota } from "@/utils/fotoEntrega";
 import { isDiretoriaRole } from "@/permissions";
-import type { UserRole } from "@/types";
+import type { NotaPedido, UserRole } from "@/types";
 
 /** Sincronização automática em todas as telas (cooperado e responsável). */
 export function CooperativaSyncProvider({ children }: { children: React.ReactNode }) {
@@ -71,6 +71,30 @@ export function CooperativaSyncProvider({ children }: { children: React.ReactNod
               })
             );
           }
+        }
+
+        const incompletasNaNuvem = latest.notasPedido.filter(
+          (n) =>
+            n.cooperadoId === cooperadoCanonico &&
+            n.status === "aguardando_conferencia" &&
+            n.fotoNaNuvem &&
+            (n.fotosEnviadasCount ?? n.fotosPedidoMiniaturas?.length ?? 0) > 1
+        );
+        for (const nota of incompletasNaNuvem) {
+          const esperado = nota.fotosEnviadasCount ?? nota.fotosPedidoMiniaturas?.length ?? 0;
+          const cloud = await fetchNotaPedidoFromCloud(cnpj, nota.id);
+          const naNuvem = cloud ? contarFotosEnviadasNota(cloud) : 0;
+          if (naNuvem >= esperado) continue;
+          const miniaturas = nota.fotosPedidoMiniaturas;
+          if (!miniaturas?.length) continue;
+          const repush: NotaPedido = {
+            ...nota,
+            fotosPedido: miniaturas,
+            fotoPedido: miniaturas[0],
+            fotosEnviadasCount: esperado,
+            updatedAt: new Date().toISOString(),
+          };
+          await pushNotasPedidoToCloud(cnpj, [repush], cooperadoNome);
         }
       }
     } finally {

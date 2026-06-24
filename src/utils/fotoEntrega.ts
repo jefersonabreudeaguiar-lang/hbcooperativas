@@ -259,10 +259,49 @@ export function contarFotosEnviadasNota(nota: NotaPedido): number {
   const fotos = getFotosExibicaoNota(nota);
   if (fotos.length > 0) return fotos.length;
   if (nota.fotosPedido?.length) return nota.fotosPedido.length;
+  if (nota.fotosEnviadasCount && nota.fotosEnviadasCount > 0) return nota.fotosEnviadasCount;
   if (nota.fotoNaNuvem || nota.fotoPedido || nota.fotoPedidoMiniatura || nota.fotoEnviadaEm) return 1;
   return 0;
 }
 
 export function contarFotosEnviadasNotas(notas: NotaPedido[]): number {
   return notas.reduce((total, nota) => total + contarFotosEnviadasNota(nota), 0);
+}
+
+/** Une metadados mais recentes com o conjunto de fotos mais completo (tabela vs storage). */
+export function mergeNotaComFotos(a: NotaPedido, b: NotaPedido): NotaPedido {
+  const aTime = new Date(a.updatedAt).getTime();
+  const bTime = new Date(b.updatedAt).getTime();
+  const meta = aTime >= bTime ? a : b;
+  const other = meta === a ? b : a;
+
+  const metaFotos = getFotosExibicaoNota(meta);
+  const otherFotos = getFotosExibicaoNota(other);
+  const rich = metaFotos.length >= otherFotos.length ? meta : other;
+  const richFotos = getFotosExibicaoNota(rich);
+
+  const fotosPedido =
+    rich.fotosPedido?.length ? rich.fotosPedido : other.fotosPedido?.length ? other.fotosPedido : meta.fotosPedido;
+  const fotosPedidoMiniaturas =
+    rich.fotosPedidoMiniaturas?.length
+      ? rich.fotosPedidoMiniaturas
+      : other.fotosPedidoMiniaturas?.length
+        ? other.fotosPedidoMiniaturas
+        : meta.fotosPedidoMiniaturas;
+
+  const countEsperado = Math.max(
+    a.fotosEnviadasCount ?? metaFotos.length,
+    b.fotosEnviadasCount ?? otherFotos.length,
+    richFotos.length
+  );
+
+  return {
+    ...meta,
+    fotoPedido: rich.fotoPedido ?? fotosPedido?.[0] ?? meta.fotoPedido,
+    fotosPedido,
+    fotosPedidoMiniaturas,
+    fotoPedidoMiniatura: rich.fotoPedidoMiniatura ?? fotosPedidoMiniaturas?.[0] ?? meta.fotoPedidoMiniatura,
+    fotoNaNuvem: meta.fotoNaNuvem ?? rich.fotoNaNuvem ?? richFotos.length > 0,
+    fotosEnviadasCount: countEsperado > 0 ? countEsperado : undefined,
+  };
 }

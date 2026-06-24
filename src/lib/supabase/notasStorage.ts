@@ -1,13 +1,31 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { NotaPedido } from "@/types";
 import { isNotasPedidoTableMissing } from "@/lib/supabase/errors";
+import { mergeNotaComFotos } from "@/utils/fotoEntrega";
 
 const BUCKET = "hb-entregas";
 
 export async function ensureEntregasBucket(supabase: SupabaseClient): Promise<void> {
   const { data: buckets } = await supabase.storage.listBuckets();
   if (buckets?.some((b) => b.name === BUCKET)) return;
-  await supabase.storage.createBucket(BUCKET, { public: false, fileSizeLimit: 10 * 1024 * 1024 });
+  await supabase.storage.createBucket(BUCKET, { public: false, fileSizeLimit: 50 * 1024 * 1024 });
+}
+
+/** Metadados na tabela SQL — fotos completas ficam no storage JSON. */
+export function notaPayloadForTable(nota: NotaPedido): NotaPedido {
+  const qtd =
+    nota.fotosEnviadasCount ??
+    nota.fotosPedido?.length ??
+    (nota.fotoPedido ? 1 : 0);
+  return {
+    ...nota,
+    fotoPedido: undefined,
+    fotosPedido: undefined,
+    fotoPedidoMiniatura: undefined,
+    fotosPedidoMiniaturas: undefined,
+    fotoNaNuvem: qtd > 0 ? true : nota.fotoNaNuvem,
+    fotosEnviadasCount: qtd > 0 ? qtd : nota.fotosEnviadasCount,
+  };
 }
 
 function storagePath(cnpj: string, notaId: string): string {
@@ -86,8 +104,7 @@ export async function fetchNotaFromStorage(
   }
 }
 
-/** Tabela SQL (legado) — usada se existir. */
-/** Une notas da tabela SQL e do storage, mantendo a versão mais recente por id. */
+/** Une notas da tabela SQL e do storage, mantendo metadados recentes e o maior conjunto de fotos. */
 export function mergeNotasSources(tableNotas: NotaPedido[], storageNotas: NotaPedido[]): NotaPedido[] {
   const byId = new Map<string, NotaPedido>();
   for (const nota of tableNotas) {
@@ -100,9 +117,7 @@ export function mergeNotasSources(tableNotas: NotaPedido[], storageNotas: NotaPe
       byId.set(nota.id, nota);
       continue;
     }
-    const curTime = new Date(cur.updatedAt).getTime();
-    const nextTime = new Date(nota.updatedAt).getTime();
-    if (nextTime >= curTime) byId.set(nota.id, nota);
+    byId.set(nota.id, mergeNotaComFotos(cur, nota));
   }
   return [...byId.values()].sort(
     (a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()

@@ -6,6 +6,7 @@ import {
   fetchNotasFromStorage,
   fetchNotasFromTable,
   mergeNotasSources,
+  notaPayloadForTable,
   uploadNotaToStorage,
   upsertNotasInTable,
 } from "@/lib/supabase/notasStorage";
@@ -68,10 +69,18 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Cliente Supabase indisponível." }, { status: 503 });
   }
 
-  const tableResult = await upsertNotasInTable(supabase, cnpj, notas, cooperadoNome);
+  const tableResult = await upsertNotasInTable(
+    supabase,
+    cnpj,
+    notas.map(notaPayloadForTable),
+    cooperadoNome
+  );
   if (tableResult.ok) {
     for (const nota of notas) {
-      await uploadNotaToStorage(supabase, cnpj, nota, cooperadoNome);
+      const uploaded = await uploadNotaToStorage(supabase, cnpj, nota, cooperadoNome);
+      if (!uploaded.ok) {
+        return NextResponse.json({ error: uploaded.error }, { status: 500 });
+      }
     }
     return NextResponse.json({ success: true, count: notas.length, source: "table" }, { status: 201 });
   }

@@ -223,6 +223,8 @@ export interface NotaPedido {
   fotosPedidoMiniaturas?: string[];
   /** Foto completa está no Supabase (não duplicar no navegador). */
   fotoNaNuvem?: boolean;
+  /** Quantidade de fotos no envio — usado para reenviar se a nuvem perdeu alguma. */
+  fotosEnviadasCount?: number;
   /** CNPJ da cooperativa — identifica entregas entre aparelhos diferentes. */
   cooperativaCnpj?: string;
   /** Nome do cooperado no envio — ajuda o responsável a vincular a ficha. */

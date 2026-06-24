@@ -49,7 +49,7 @@ import {
   resolverInstituicaoConferencia,
 } from "@/utils/instituicaoPreferida";
 import { getCooperadoNome } from "@/utils/calculations";
-import { isFotoDuplicada, compressFotoFile, makeFotoThumbnail, getFotoExibicaoNota, getFotosExibicaoNota, notaPertenceCooperativa, compactarFotosNoArmazenamento, liberarEspacoArmazenamento, parametrosCompressaoFoto, agruparPendentesPorCooperado, getChaveGrupoConferencia, notaPertenceGrupoConferencia } from "@/utils/fotoEntrega";
+import { isFotoDuplicada, compressFotoFile, makeFotoThumbnail, getFotoExibicaoNota, getFotosExibicaoNota, notaPertenceCooperativa, compactarFotosNoArmazenamento, liberarEspacoArmazenamento, parametrosCompressaoFoto, agruparPendentesPorCooperado, getChaveGrupoConferencia, notaPertenceGrupoConferencia, contarFotosEnviadasNota, contarFotosEnviadasNotas } from "@/utils/fotoEntrega";
 import type { NotaPedido, NotaPedidoItem, Cooperado, AppData } from "@/types";
 
 const NOVO_AVULSO = "__novo__";
@@ -408,6 +408,16 @@ export default function NotasPedidoContent() {
   const grupoAbaAtiva = useMemo(
     () => pendentesPorCooperado.find((g) => g.chave === abaConferenciaKey),
     [pendentesPorCooperado, abaConferenciaKey]
+  );
+
+  const totalFotosPendentes = useMemo(
+    () => contarFotosEnviadasNotas(pendentesTodas),
+    [pendentesTodas]
+  );
+
+  const fotosAbaAtiva = useMemo(
+    () => contarFotosEnviadasNotas(pendentesAbaAtiva),
+    [pendentesAbaAtiva]
   );
 
   useEffect(() => {
@@ -825,6 +835,7 @@ export default function NotasPedidoContent() {
           escolaAvulsaNome: escolaAvulsa,
           fotoPedido: fotosSessao[0],
           fotosPedido: [...fotosSessao],
+          fotosEnviadasCount: qtdFotos,
           fotoEnviadaEm: now,
           observacoes,
           status: "aguardando_conferencia",
@@ -855,6 +866,7 @@ export default function NotasPedidoContent() {
         status: "aguardando_conferencia",
         fotoPedido: fotosSessao[0],
         fotosPedido: [...fotosSessao],
+        fotosEnviadasCount: qtdFotos,
         fotoEnviadaEm: now,
         mesReferencia: mes,
         observacoes,
@@ -1014,8 +1026,10 @@ export default function NotasPedidoContent() {
 
   const openConferir = async (nota: NotaPedido) => {
     let notaComFoto = nota;
-    if (getFotosExibicaoNota(nota).length === 0 && data && coopId) {
-      notaComFoto = await ensureNotaComFoto(data, nota, coopId);
+    if (data && coopId) {
+      if (!isCooperado || getFotosExibicaoNota(nota).length === 0) {
+        notaComFoto = await ensureNotaComFoto(data, nota, coopId);
+      }
     }
     setSelectedNota(notaComFoto);
     const instId = coopId
@@ -1488,12 +1502,16 @@ export default function NotasPedidoContent() {
         <div className="mb-6">
           <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-2 mb-3">
             <div>
-              <h2 className="text-sm font-semibold text-gray-700">Fila para conferir ({pendentesTodas.length})</h2>
-              <p className="text-xs text-gray-500 mt-0.5">Selecione o cooperado na aba — cada um vê só as próprias fotos.</p>
+              <h2 className="text-sm font-semibold text-gray-700">
+                Fila para conferir ({totalFotosPendentes} {totalFotosPendentes === 1 ? "foto" : "fotos"}
+                {pendentesTodas.length > 1 ? ` · ${pendentesTodas.length} entregas` : ""})
+              </h2>
+              <p className="text-xs text-gray-500 mt-0.5">Selecione o cooperado — cada card pode ter várias fotos do mesmo pedido.</p>
             </div>
             {grupoAbaAtiva && (
               <p className="text-xs font-medium text-amber-800">
-                {pendentesAbaAtiva.length} foto(s) de {grupoAbaAtiva.nome}
+                {fotosAbaAtiva} {fotosAbaAtiva === 1 ? "foto" : "fotos"} de {grupoAbaAtiva.nome}
+                {pendentesAbaAtiva.length > 1 ? ` (${pendentesAbaAtiva.length} entregas)` : ""}
               </p>
             )}
           </div>
@@ -1524,25 +1542,32 @@ export default function NotasPedidoContent() {
                     abaConferenciaKey === grupo.chave ? "bg-white/25 text-white" : "bg-amber-100 text-amber-800"
                   )}
                 >
-                  {grupo.notas.length}
+                  {contarFotosEnviadasNotas(grupo.notas)}
                 </span>
               </button>
             ))}
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-            {pendentesAbaAtiva.map((n) => (
-              <button key={n.id} type="button" onClick={() => openConferir(n)} className="text-left border-2 border-amber-300 bg-amber-50 rounded-xl overflow-hidden hover:border-amber-500">
+            {pendentesAbaAtiva.map((n) => {
+              const qtdFotosCard = contarFotosEnviadasNota(n);
+              return (
+              <button key={n.id} type="button" onClick={() => openConferir(n)} className="text-left border-2 border-amber-300 bg-amber-50 rounded-xl overflow-hidden hover:border-amber-500 relative">
                 {getFotoExibicaoNota(n) && (
                   // eslint-disable-next-line @next/next/no-img-element
                   <img src={getFotoExibicaoNota(n)} alt="" className="w-full h-36 object-cover" />
+                )}
+                {qtdFotosCard > 1 && (
+                  <span className="absolute top-2 right-2 bg-black/70 text-white text-xs font-bold px-2 py-0.5 rounded-full">
+                    {qtdFotosCard} fotos
+                  </span>
                 )}
                 <div className="p-3">
                   <p className="font-medium text-sm">{formatDate(n.dataEntrega)} · {n.numeroNota}</p>
                   <p className="text-xs text-gray-600 mt-0.5">{getEscolaNotaLabel(n, data.instituicoes)}</p>
                 </div>
               </button>
-            ))}
+            );})}
           </div>
         </div>
       )}
@@ -2057,7 +2082,13 @@ export default function NotasPedidoContent() {
               </div>
               <div className="shrink-0 px-4 py-3 bg-black/40 text-white text-sm space-y-0.5">
                 <p><strong>{getCooperadoNome(data.cooperados, selectedNota.cooperadoId)}</strong> · {formatDate(selectedNota.dataEntrega)}</p>
-                <p className="text-white/80">{getEscolaNotaLabel(selectedNota, data.instituicoes)} · {selectedNota.numeroNota}</p>
+                <p className="text-white/80">
+                  {getEscolaNotaLabel(selectedNota, data.instituicoes)} · {selectedNota.numeroNota}
+                  {(() => {
+                    const qtd = getFotosExibicaoNota(selectedNota).length;
+                    return qtd > 1 ? ` · ${qtd} fotos` : "";
+                  })()}
+                </p>
               </div>
             </div>
 

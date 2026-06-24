@@ -4,6 +4,7 @@ import { isNotasPedidoTableMissing } from "@/lib/supabase/errors";
 import { normalizeCnpj } from "@/utils/cooperativa";
 import type { NotaPedido } from "@/types";
 import { fetchNotaFromStorage, uploadNotaToStorage, deleteNotaFromStorage, deleteNotaFromTable } from "@/lib/supabase/notasStorage";
+import { mergeNotaComFotos } from "@/utils/fotoEntrega";
 
 export async function GET(
   request: Request,
@@ -25,6 +26,7 @@ export async function GET(
     return NextResponse.json({ nota: null, configured: false });
   }
 
+  let fromTable: NotaPedido | null = null;
   const { data, error } = await supabase
     .from("notas_pedido")
     .select("payload")
@@ -34,15 +36,18 @@ export async function GET(
 
   if (!error && data?.payload) {
     const nota = data.payload as NotaPedido;
-    if (nota?.id) return NextResponse.json({ nota });
-  }
-
-  if (error && !isNotasPedidoTableMissing(error)) {
+    if (nota?.id) fromTable = nota;
+  } else if (error && !isNotasPedidoTableMissing(error)) {
     console.error("[notas-pedido/get]", error.message);
   }
 
-  const nota = await fetchNotaFromStorage(supabase, cnpj, id);
-  return NextResponse.json({ nota });
+  const fromStorage = await fetchNotaFromStorage(supabase, cnpj, id);
+  if (fromTable && fromStorage) {
+    return NextResponse.json({ nota: mergeNotaComFotos(fromTable, fromStorage) });
+  }
+  if (fromStorage) return NextResponse.json({ nota: fromStorage });
+  if (fromTable) return NextResponse.json({ nota: fromTable });
+  return NextResponse.json({ nota: null });
 }
 
 export async function PATCH(
