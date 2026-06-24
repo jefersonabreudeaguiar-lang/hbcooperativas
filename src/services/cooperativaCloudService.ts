@@ -231,6 +231,7 @@ export function mergeCooperativaIntoData(
     next[idx] = {
       ...cur,
       ...cloudCoop,
+      id: cur.id,
       mensalidadeConfig,
       senhaCadastroCooperado: cloudCoop.senhaCadastroCooperado ?? cur.senhaCadastroCooperado,
       updatedAt: tCloud > tLocal ? cloudCoop.updatedAt : cur.updatedAt,

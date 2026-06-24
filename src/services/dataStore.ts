@@ -13,7 +13,7 @@ import {
   syncCooperativaToCloud,
   verifyCadastroSenhaCooperado,
 } from "@/services/cooperativaCloudService";
-import { pushCooperadoToCloud } from "@/services/cooperadoCloudService";
+import { pushCooperadoToCloud, queueCooperadoPush } from "@/services/cooperadoCloudService";
 import { reconciliarFichaFromNotasConferidas, ajustesFichaMesId } from "@/services/notaPedidoService";
 import { normalizarPrestacaoContas, aplicarPrestacoesContasExcluidas } from "@/services/prestacaoContasService";
 import { aplicarInstituicoesExcluidas } from "@/services/instituicaoContratoService";
@@ -790,8 +790,12 @@ export async function registerCooperado(input: RegisterCooperadoInput): Promise<
 
   let pushResult = await pushCooperadoToCloud(cnpjCoop, cooperado, email);
   if (!pushResult.ok) {
+    queueCooperadoPush(cnpjCoop, cooperado, email);
     await establishCloudSession(email, input.password, cloudProfile);
     pushResult = await pushCooperadoToCloud(cnpjCoop, cooperado, email);
+  }
+  if (!pushResult.ok) {
+    queueCooperadoPush(cnpjCoop, cooperado, email);
   }
 
   return { success: true, user: safeUser };

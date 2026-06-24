@@ -32,6 +32,27 @@ export function mergeArrayByNewer<T extends WithUpdatedAt>(local: T[], cloud: T[
   return [...map.values()];
 }
 
+/** Nuvem é a lista canônica; local só permanece se for mais novo que o snapshot da nuvem (exclusões propagam). */
+function mergeOperacionalArrayFromCloud<T extends WithUpdatedAt>(
+  localCoop: T[],
+  cloudItems: T[],
+  cloudUpdatedAt: string | undefined
+): T[] {
+  const cloudTime = cloudUpdatedAt ? new Date(cloudUpdatedAt).getTime() : 0;
+  const cloudIds = new Set(cloudItems.map((i) => i.id));
+  const map = new Map<string, T>();
+
+  for (const item of cloudItems) map.set(item.id, item);
+
+  for (const item of localCoop) {
+    if (cloudIds.has(item.id)) continue;
+    if (cloudTime > 0 && itemTime(item) <= cloudTime) continue;
+    map.set(item.id, item);
+  }
+
+  return [...map.values()];
+}
+
 function mergePrestacoesExcluidasByNewer(
   local: PrestacaoContasExcluida[],
   cloud: PrestacaoContasExcluida[]
@@ -391,64 +412,79 @@ export function mergeOperacionalIntoData(
     isCoop: (i: T) => boolean
   ) => items.filter((i) => !isCoop(i));
 
+  const cloudSyncTime = cloud.updatedAt;
+
   let next: AppData = {
     ...data,
     arquivosMensais: [
       ...filterCoop(data.arquivosMensais, (a) => a.cooperativaId === coopId),
-      ...mergeArrayByNewer(
+      ...mergeOperacionalArrayFromCloud(
         data.arquivosMensais.filter((a) => a.cooperativaId === coopId),
-        cloudArquivos
+        cloudArquivos,
+        cloudSyncTime
       ),
     ],
     ajustesFichaMes: [
       ...filterCoop(data.ajustesFichaMes ?? [], (a) => a.cooperativaId === coopId),
-      ...mergeArrayByNewer(
+      ...mergeOperacionalArrayFromCloud(
         (data.ajustesFichaMes ?? []).filter((a) => a.cooperativaId === coopId),
-        cloudAjustes
+        cloudAjustes,
+        cloudSyncTime
       ),
     ],
     pagamentosCooperado: [
       ...filterCoop(data.pagamentosCooperado, (p) => p.cooperativaId === coopId),
-      ...mergeArrayByNewer(
+      ...mergeOperacionalArrayFromCloud(
         data.pagamentosCooperado.filter((p) => p.cooperativaId === coopId),
-        cloudPagamentos
+        cloudPagamentos,
+        cloudSyncTime
       ),
     ],
     comunicados: [
       ...filterCoop(data.comunicados, (c) => c.cooperativaId === coopId),
-      ...mergeArrayByNewer(
+      ...mergeOperacionalArrayFromCloud(
         data.comunicados.filter((c) => c.cooperativaId === coopId),
-        cloudComunicados
+        cloudComunicados,
+        cloudSyncTime
       ),
     ],
     mensalidades: [
       ...data.mensalidades.filter((m) => !mensalidadeVisivelNoDispositivo(data, m, coopId)),
-      ...mergeArrayByNewer(mensalidadesLocaisVisiveis, mensalidadesCloudVisiveis),
+      ...mergeOperacionalArrayFromCloud(
+        mensalidadesLocaisVisiveis,
+        mensalidadesCloudVisiveis,
+        cloudSyncTime
+      ),
     ],
     descontos: [
       ...data.descontos.filter((d) => !cooperadoIds.has(d.cooperadoId)),
-      ...mergeArrayByNewer(
+      ...mergeOperacionalArrayFromCloud(
         data.descontos.filter((d) => cooperadoIds.has(d.cooperadoId)),
-        cloudDescontos
+        cloudDescontos,
+        cloudSyncTime
       ),
     ],
     valoresAvulsosReceber: [
       ...filterCoop(data.valoresAvulsosReceber ?? [], (v) => v.cooperativaId === coopId),
-      ...mergeArrayByNewer(
+      ...mergeOperacionalArrayFromCloud(
         (data.valoresAvulsosReceber ?? []).filter((v) => v.cooperativaId === coopId),
-        cloudAvulsos
+        cloudAvulsos,
+        cloudSyncTime
       ),
     ],
     livroCaixa: [
       ...filterCoop(data.livroCaixa ?? [], (l) => l.cooperativaId === coopId),
-      ...mergeArrayByNewer(
+      ...mergeOperacionalArrayFromCloud(
         (data.livroCaixa ?? []).filter((l) => l.cooperativaId === coopId),
-        cloudLivro
+        cloudLivro,
+        cloudSyncTime
       ),
     ],
     prestacoesContas: [
       ...filterCoop(data.prestacoesContas ?? [], (p) => p.cooperativaId === coopId),
-      ...mergeArrayByNewer(localPrestCoop, cloudPrest).filter((p) => !prestacoesExcluidasIds.has(p.id)),
+      ...mergeOperacionalArrayFromCloud(localPrestCoop, cloudPrest, cloudSyncTime).filter(
+        (p) => !prestacoesExcluidasIds.has(p.id)
+      ),
     ],
     prestacoesContasExcluidas: [
       ...filterCoop(data.prestacoesContasExcluidas ?? [], (e) => e.cooperativaId === coopId),
@@ -570,7 +606,7 @@ export async function pushOperacionalToCloud(
   let cloudCooperados: Cooperado[] = [];
   if (!options?.authoritative) {
     bundle = await fetchSyncBundle(digits);
-    cloudCooperados = await fetchCooperadosFromCloud(digits);
+    cloudCooperados = (await fetchCooperadosFromCloud(digits)).cooperados;
     if (bundle?.operacional) {
       merged = mergeOperacionalIntoData(d, bundle.operacional, cid, cloudCooperados);
       saveDataSafe(merged);
@@ -669,7 +705,7 @@ export async function syncOperacionalFromCloud(cnpj: string): Promise<boolean> {
   const current = getData();
   const coopId = resolveCoopId(current, cnpj);
   if (!coopId) return false;
-  const cloudCooperados = await fetchCooperadosFromCloud(cnpj);
+  const cloudCooperados = (await fetchCooperadosFromCloud(cnpj)).cooperados;
   const merged = mergeOperacionalIntoData(current, bundle.operacional, coopId, cloudCooperados);
   saveDataSafe(merged);
   return true;
@@ -690,12 +726,13 @@ export async function syncCooperativaProfileFromCloud(cnpj: string): Promise<boo
 export const SYNC_INTERVAL_MS = 12_000;
 
 /** Sincroniza tudo da cooperativa: cooperados, notas, contratos, operacional, perfil. */
-export async function syncAllCooperativaFromCloud(cnpj: string): Promise<void> {
+export async function syncAllCooperativaFromCloud(cnpj: string, preferredCoopId?: string): Promise<void> {
   const digits = normalizeCnpj(cnpj);
   if (digits.length !== 14) return;
 
   await syncCooperativaProfileFromCloud(digits);
-  await syncCooperadosFromCloud(digits);
+  const coopId = preferredCoopId ?? resolveCoopId(getData(), digits);
+  await syncCooperadosFromCloud(digits, coopId);
   await syncNotasPedidoFromCloud(digits);
   await syncContratosFromCloud(digits);
   await syncOperacionalFromCloud(digits);
@@ -718,7 +755,7 @@ export async function syncCooperativaBidirectional(
     return;
   }
 
-  await syncAllCooperativaFromCloud(digits);
+  await syncAllCooperativaFromCloud(digits, coopId);
 
   const d = getData();
   const cid = coopId ?? resolveCoopId(d, digits);

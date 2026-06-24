@@ -1,7 +1,8 @@
 import type { AppData, Cooperado, FichaCorrida } from "@/types";
-import { normalizeCnpj } from "@/utils/cooperativa";
+import { findCooperativaByCnpj, getCooperativaById, normalizeCnpj } from "@/utils/cooperativa";
 import { notaPertenceCooperativa } from "@/utils/fotoEntrega";
 import { getData, saveDataSafe } from "@/services/dataStore";
+import { fetchCooperativaByCnpjFromCloud, mergeCooperativaIntoData } from "@/services/cooperativaCloudService";
 function cpfDigits(value: string): string {
   return value.replace(/\D/g, "");
 }
@@ -55,18 +56,120 @@ export function remapearMensalidadesCooperadoIds(
   return changed ? { ...data, mensalidades } : data;
 }
 
+const PENDING_COOPERADO_PUSH_KEY = "coopeagriplla_pending_cooperado_push";
+
+function loadPendingCooperadoPushes(): { cnpj: string; cooperadoId: string; email?: string }[] {
+  if (typeof window === "undefined") return [];
+  try {
+    const raw = localStorage.getItem(PENDING_COOPERADO_PUSH_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw) as { cnpj?: string; cooperadoId?: string; email?: string }[];
+    if (!Array.isArray(parsed)) return [];
+    return parsed
+      .filter((e) => e.cnpj && e.cooperadoId)
+      .map((e) => ({
+        cnpj: normalizeCnpj(String(e.cnpj)),
+        cooperadoId: String(e.cooperadoId),
+        email: e.email?.trim().toLowerCase(),
+      }));
+  } catch {
+    return [];
+  }
+}
+
+function savePendingCooperadoPushes(entries: { cnpj: string; cooperadoId: string; email?: string }[]): void {
+  if (typeof window === "undefined") return;
+  if (entries.length === 0) localStorage.removeItem(PENDING_COOPERADO_PUSH_KEY);
+  else localStorage.setItem(PENDING_COOPERADO_PUSH_KEY, JSON.stringify(entries));
+}
+
+export function queueCooperadoPush(cnpj: string, cooperado: Cooperado, email?: string): void {
+  const digits = normalizeCnpj(cnpj);
+  if (digits.length !== 14 || !cooperado.id) return;
+  const entries = loadPendingCooperadoPushes();
+  if (entries.some((e) => e.cnpj === digits && e.cooperadoId === cooperado.id)) return;
+  savePendingCooperadoPushes([
+    ...entries,
+    { cnpj: digits, cooperadoId: cooperado.id, email: email?.trim().toLowerCase() },
+  ]);
+}
+
+export function resolveCooperativaForCloudMerge(
+  data: AppData,
+  cnpj: string,
+  preferredCoopId?: string
+) {
+  const digits = normalizeCnpj(cnpj);
+  const matches = data.cooperativas.filter((c) => {
+    const stored = normalizeCnpj(String(c.cnpj ?? ""));
+    const ativa = !c.status || c.status === "ativa";
+    return stored === digits && ativa;
+  });
+
+  if (preferredCoopId) {
+    const preferred = getCooperativaById(data, preferredCoopId);
+    if (preferred && normalizeCnpj(preferred.cnpj) === digits) return preferred;
+  }
+
+  if (matches.length === 0) return findCooperativaByCnpj(data, cnpj);
+
+  return [...matches].sort((a, b) => {
+    const countA = data.cooperados.filter((c) => c.cooperativaId === a.id).length;
+    const countB = data.cooperados.filter((c) => c.cooperativaId === b.id).length;
+    if (countB !== countA) return countB - countA;
+    const usersA = data.users.filter((u) => u.cooperativaId === a.id).length;
+    const usersB = data.users.filter((u) => u.cooperativaId === b.id).length;
+    return usersB - usersA;
+  })[0];
+}
+
+function alinharCooperadosParaCooperativa(
+  data: AppData,
+  canonicalCoopId: string,
+  duplicateCoopIds: string[]
+): AppData {
+  const dup = new Set(duplicateCoopIds.filter((id) => id !== canonicalCoopId));
+  if (dup.size === 0) return data;
+
+  let changed = false;
+  const cooperados = data.cooperados.map((c) => {
+    if (!dup.has(c.cooperativaId)) return c;
+    changed = true;
+    return { ...c, cooperativaId: canonicalCoopId, updatedAt: new Date().toISOString() };
+  });
+
+  const users = data.users.map((u) => {
+    if (!u.cooperativaId || !dup.has(u.cooperativaId)) return u;
+    changed = true;
+    return { ...u, cooperativaId: canonicalCoopId };
+  });
+
+  if (!changed) return data;
+  return { ...data, cooperados, users };
+}
+
 export function mergeCloudCooperadosIntoData(
   data: AppData,
   cloudCooperados: Cooperado[],
-  cnpj: string
+  cnpj: string,
+  preferredCoopId?: string
 ): AppData {
   if (cloudCooperados.length === 0) return data;
 
   const digits = normalizeCnpj(cnpj);
-  const coop = data.cooperativas.find((c) => normalizeCnpj(c.cnpj) === digits);
-  if (!coop) return data;
+  let coop = resolveCooperativaForCloudMerge(data, digits, preferredCoopId);
 
-  let cooperados = [...data.cooperados];
+  if (!coop) {
+    return data;
+  }
+
+  const duplicateIds = data.cooperativas
+    .filter((c) => normalizeCnpj(String(c.cnpj ?? "")) === digits)
+    .map((c) => c.id);
+  let base = alinharCooperadosParaCooperativa(data, coop.id, duplicateIds);
+  coop = resolveCooperativaForCloudMerge(base, digits, preferredCoopId) ?? coop;
+
+  let cooperados = [...base.cooperados];
   let changed = false;
   const idRemap = new Map<string, string>();
 
@@ -140,26 +243,28 @@ export function mergeCloudCooperadosIntoData(
     }
   }
 
-  if (!changed && idRemap.size === 0) return data;
+  if (!changed && idRemap.size === 0) return base;
 
-  let next: AppData = changed ? { ...data, cooperados } : data;
+  let next: AppData = changed ? { ...base, cooperados } : base;
   if (idRemap.size > 0) {
     next = remapearMensalidadesCooperadoIds(next, idRemap);
   }
   return next;
 }
 
-export async function fetchCooperadosFromCloud(cnpj: string): Promise<Cooperado[]> {
+export async function fetchCooperadosFromCloud(
+  cnpj: string
+): Promise<{ ok: boolean; cooperados: Cooperado[] }> {
   const digits = normalizeCnpj(cnpj);
-  if (digits.length !== 14) return [];
+  if (digits.length !== 14) return { ok: false, cooperados: [] };
 
   try {
     const res = await fetch(`/api/cooperados?cnpj=${digits}`, { cache: "no-store" });
-    if (!res.ok) return [];
+    if (!res.ok) return { ok: false, cooperados: [] };
     const json = await res.json().catch(() => ({}));
-    return (json.cooperados ?? []) as Cooperado[];
+    return { ok: true, cooperados: (json.cooperados ?? []) as Cooperado[] };
   } catch {
-    return [];
+    return { ok: false, cooperados: [] };
   }
 }
 
@@ -187,10 +292,10 @@ export async function pushCooperadoToCloud(
       };
     }
     if (!res.ok) {
-        return {
-          ok: false,
-          error: (json.error as string) ?? "Erro ao publicar cooperado na nuvem.",
-        };
+      return {
+        ok: false,
+        error: (json.error as string) ?? "Erro ao publicar cooperado na nuvem.",
+      };
     }
     return { ok: true };
   } catch {
@@ -198,11 +303,58 @@ export async function pushCooperadoToCloud(
   }
 }
 
-export async function syncCooperadosFromCloud(cnpj: string): Promise<number> {
-  const cloudCooperados = await fetchCooperadosFromCloud(cnpj);
+export async function flushPendingCooperadoPushes(cnpj?: string): Promise<void> {
+  const digits = cnpj ? normalizeCnpj(cnpj) : "";
+  const all = loadPendingCooperadoPushes();
+  let entries = all;
+  if (digits.length === 14) {
+    entries = all.filter((e) => e.cnpj === digits);
+  }
+  if (entries.length === 0) return;
+
+  const data = getData();
+  const remaining: typeof entries = [];
+
+  for (const entry of entries) {
+    const cooperado = data.cooperados.find((c) => c.id === entry.cooperadoId);
+    if (!cooperado) {
+      continue;
+    }
+    const result = await pushCooperadoToCloud(entry.cnpj, cooperado, entry.email);
+    if (!result.ok) remaining.push(entry);
+  }
+
+  const other = digits.length === 14 ? all.filter((e) => e.cnpj !== digits) : [];
+  savePendingCooperadoPushes([...other, ...remaining]);
+}
+
+export async function ensureCooperativaLocalForCnpj(cnpj: string): Promise<string | undefined> {
+  const digits = normalizeCnpj(cnpj);
+  if (digits.length !== 14) return undefined;
+
+  const current = getData();
+  const existing = resolveCooperativaForCloudMerge(current, digits);
+  if (existing) return existing.id;
+
+  const cloud = await fetchCooperativaByCnpjFromCloud(digits);
+  if (!cloud) return undefined;
+
+  const merged = {
+    ...current,
+    cooperativas: mergeCooperativaIntoData(current.cooperativas, cloud),
+  };
+  saveDataSafe(merged);
+  return resolveCooperativaForCloudMerge(merged, digits)?.id;
+}
+
+export async function syncCooperadosFromCloud(cnpj: string, preferredCoopId?: string): Promise<number> {
+  await flushPendingCooperadoPushes(cnpj);
+  const coopId = preferredCoopId ?? (await ensureCooperativaLocalForCnpj(cnpj));
+  const { ok, cooperados: cloudCooperados } = await fetchCooperadosFromCloud(cnpj);
+  if (!ok) return 0;
   if (cloudCooperados.length === 0) return 0;
   const current = getData();
-  const merged = mergeCloudCooperadosIntoData(current, cloudCooperados, cnpj);
+  const merged = mergeCloudCooperadosIntoData(current, cloudCooperados, cnpj, coopId);
   if (merged === current) return cloudCooperados.length;
   saveDataSafe(merged);
   return cloudCooperados.length;

@@ -47,7 +47,7 @@ export default function CooperadosPage() {
     const coopId = getUserCooperativaId(user, data);
     const coop = data.cooperativas.find((c) => c.id === coopId);
     const cnpj = normalizeCnpj(coop?.cnpj ?? user.cooperativaCnpj ?? "");
-    if (cnpj.length === 14) void syncCooperadosFromCloud(cnpj);
+    if (cnpj.length === 14 && coopId) void syncCooperadosFromCloud(cnpj, coopId);
   }, [data, user?.id]);
 
   const openNew = () => {

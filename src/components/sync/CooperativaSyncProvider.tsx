@@ -9,7 +9,7 @@ import {
   SYNC_INTERVAL_MS,
   syncCooperativaBidirectional,
 } from "@/services/cooperativaSyncCloudService";
-import { pushCooperadoToCloud, resolverCooperadoIdCanonico } from "@/services/cooperadoCloudService";
+import { pushCooperadoToCloud, resolverCooperadoIdCanonico, flushPendingCooperadoPushes } from "@/services/cooperadoCloudService";
 import { getData, updateData } from "@/services/dataStore";
 import { getCooperadoNome } from "@/utils/calculations";
 import { isDiretoriaRole } from "@/permissions";
@@ -29,6 +29,7 @@ export function CooperativaSyncProvider({ children }: { children: React.ReactNod
       const cnpj = await resolveCooperativaCnpj(data, coopId, user);
       if (!cnpj) return;
 
+      await flushPendingCooperadoPushes(cnpj);
       const pushCatalog = isDiretoriaRole(user.role as UserRole);
       const pushMensalidades = isDiretoriaRole(user.role as UserRole);
       await flushPendingNotaDeletes(cnpj);
