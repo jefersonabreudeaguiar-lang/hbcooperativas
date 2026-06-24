@@ -595,7 +595,6 @@ export async function pushOperacionalToCloud(
 
   if (needsOperationalResetCloudPush()) {
     await pushOperationalResetToCloud(digits, coopId);
-    return;
   }
 
   const d = aplicarPrestacoesContasExcluidas(data ?? getData());
@@ -753,7 +752,6 @@ export async function syncCooperativaBidirectional(
 
   if (needsOperationalResetCloudPush()) {
     await pushOperationalResetToCloud(digits, coopId);
-    return;
   }
 
   await syncAllCooperativaFromCloud(digits, coopId);

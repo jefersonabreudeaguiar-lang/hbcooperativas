@@ -94,6 +94,7 @@ async function resetOperacional(cnpj) {
     updatedAt: new Date().toISOString(),
     operationalResetVersion: 3,
     fullReset: true,
+    wipeNotas: true,
     arquivosMensais: [],
     ajustesFichaMes: [],
     pagamentosCooperado: [],

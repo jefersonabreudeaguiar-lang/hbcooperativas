@@ -30,8 +30,10 @@ export interface OperacionalSyncPayload {
   updatedAt: string;
   /** Versão global de reset — dados anteriores são ignorados ao sincronizar. */
   operationalResetVersion?: number;
-  /** Sinaliza limpeza total de notas e lançamentos na nuvem. */
+  /** Sinaliza limpeza de lançamentos operacionais (não apaga entregas/fotos). */
   fullReset?: boolean;
+  /** Só true no reset admin manual — apaga entregas na nuvem. */
+  wipeNotas?: boolean;
   arquivosMensais: ArquivoMensalCooperado[];
   ajustesFichaMes?: AjustesFichaMesCooperativa[];
   pagamentosCooperado: PagamentoCooperadoRegistro[];

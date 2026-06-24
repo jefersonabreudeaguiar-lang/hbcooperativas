@@ -21,12 +21,10 @@ export function markOperationalResetCloudDone(): void {
   localStorage.removeItem(OPERATIONAL_RESET_CLOUD_KEY);
 }
 
-/** Remove entregas, fichas, pagamentos, avisos e demais lançamentos; mantém cadastros e contratos. */
+/** Remove pagamentos, avisos e demais lançamentos; mantém entregas (API própria), cadastros e contratos. */
 export function clearOperationalData(data: AppData): AppData {
   return {
     ...data,
-    notasPedido: [],
-    fichaCorrida: [],
     pagamentosCooperado: [],
     arquivosMensais: [],
     ajustesFichaMes: [],

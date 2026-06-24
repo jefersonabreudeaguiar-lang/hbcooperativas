@@ -46,6 +46,7 @@ export async function resetOperacionalSyncForCnpj(
     updatedAt: new Date().toISOString(),
     operationalResetVersion: 3,
     fullReset: true,
+    wipeNotas: true,
     arquivosMensais: [],
     ajustesFichaMes: [],
     pagamentosCooperado: [],

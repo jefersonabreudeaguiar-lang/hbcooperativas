@@ -113,15 +113,17 @@ export function mergeCloudNotasIntoData(
     }
   }
 
-  // Entrega excluída na nuvem some localmente só se já tinha sido sincronizada.
-  for (const [id, n] of [...byId.entries()]) {
-    if (cloudIds.has(id)) continue;
-    if (n.status !== "aguardando_conferencia" && n.status !== "rejeitada") continue;
-    const notaCnpj = getNotaCooperativaCnpj(data, n);
-    if (notaCnpj !== digits) continue;
-    if (!n.fotoNaNuvem) continue;
-    byId.delete(id);
-    changed = true;
+  // Propaga exclusão na nuvem só quando a lista não veio vazia (evita apagar tudo por falha/reset).
+  if (cloudNotas.length > 0) {
+    for (const [id, n] of [...byId.entries()]) {
+      if (cloudIds.has(id)) continue;
+      if (n.status !== "aguardando_conferencia" && n.status !== "rejeitada") continue;
+      const notaCnpj = getNotaCooperativaCnpj(data, n);
+      if (notaCnpj !== digits) continue;
+      if (!n.fotoNaNuvem) continue;
+      byId.delete(id);
+      changed = true;
+    }
   }
 
   if (!changed) return data;

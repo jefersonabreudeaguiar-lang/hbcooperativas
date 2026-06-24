@@ -64,7 +64,7 @@ export async function POST(request: Request) {
 
   if (section === "operacional") {
     const payload = body.payload as OperacionalSyncPayload;
-    if (payload.fullReset === true) {
+    if (payload.wipeNotas === true) {
       await deleteAllNotasForCnpj(supabase, cnpj);
     }
     const uploaded = await uploadOperacionalSync(supabase, cnpj, payload);
