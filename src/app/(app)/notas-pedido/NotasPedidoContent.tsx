@@ -2131,7 +2131,12 @@ export default function NotasPedidoContent() {
             <Button variant="danger" onClick={() => { setMotivoRejeicao(""); setRejectModal(true); }}>
               <XCircle size={18} /> Pedir correção
             </Button>
-            <Button size="lg" onClick={handleLancarNota}><CheckCircle size={18} /> Aprovar e lançar na ficha</Button>
+            <Button size="lg" onClick={handleLancarNota}>
+              <CheckCircle size={18} />
+              {selectedNota && getFotosExibicaoNota(selectedNota).length > 1
+                ? `Aprovar entrega (${getFotosExibicaoNota(selectedNota).length} fotos)`
+                : "Aprovar e lançar na ficha"}
+            </Button>
           </div>
         ) : undefined}
       >
@@ -2175,6 +2180,15 @@ export default function NotasPedidoContent() {
             </div>
 
             <div className="flex-1 overflow-y-auto p-4 lg:p-6 space-y-4 bg-gray-50">
+              {(() => {
+                const qtdFotosModal = getFotosExibicaoNota(selectedNota).length;
+                if (qtdFotosModal <= 1) return null;
+                return (
+                  <AlertBanner variant="info" title={`${qtdFotosModal} fotos = 1 entrega`}>
+                    Role à esquerda para ver todas as páginas do pedido. Ao aprovar, o valor inteiro vai para a ficha de uma só vez — não é preciso conferir foto por foto.
+                  </AlertBanner>
+                );
+              })()}
               <FormField label="Cooperado" required hint="Quem receberá o valor na ficha">
                 <Select value={conferenciaCooperadoId} onChange={(e) => setConferenciaCooperadoId(e.target.value)}>
                   <option value="">Selecione...</option>

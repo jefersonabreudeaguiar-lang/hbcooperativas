@@ -92,14 +92,14 @@ async function resetOperacional(cnpj) {
 
   const payload = {
     updatedAt: new Date().toISOString(),
-    operationalResetVersion: 3,
+    operationalResetVersion: 4,
     fullReset: true,
     wipeNotas: true,
     arquivosMensais: [],
     ajustesFichaMes: [],
     pagamentosCooperado: [],
     comunicados: [],
-    mensalidades: [],
+    mensalidades: existing?.mensalidades ?? [],
     descontos: [],
     valoresAvulsosReceber: [],
     livroCaixa: [],

@@ -38,7 +38,7 @@ export async function POST(request: Request) {
 
   return NextResponse.json({
     success: true,
-    operationalResetVersion: 3,
+    operationalResetVersion: 4,
     results,
   });
 }

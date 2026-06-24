@@ -381,7 +381,7 @@ export function resetData(): void {
   notify();
 }
 
-/** Zera lançamentos (entregas, fichas, pagamentos) mantendo cadastros e contratos. */
+/** Zera entregas, fichas e pagamentos mantendo cadastros, contratos e mensalidades. */
 export function resetOperationalData(): void {
   if (typeof window === "undefined") return;
   const current = loadData();
