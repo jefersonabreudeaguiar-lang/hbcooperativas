@@ -37,7 +37,7 @@ import { formatCurrency, formatDate, formatMesReferencia, getCurrentMesReferenci
 import { getCooperadoNome } from "@/utils/calculations";
 import type { Mensalidade } from "@/types";
 import { MensalidadeConfigPanel } from "@/components/mensalidade/MensalidadeConfigPanel";
-import { MensalidadeStatusBanner } from "@/components/cooperado/MensalidadeStatusBanner";
+import { MensalidadeCooperadoCard } from "@/components/mensalidade/MensalidadeCooperadoCard";
 
 const SHARE_KEY = "hb_comprovante_mensalidade_share";
 
@@ -326,12 +326,6 @@ function MensalidadesContent() {
         </AlertBanner>
       )}
 
-      {isCooperado && cooperadoId && (
-        <div className="mb-6">
-          <MensalidadeStatusBanner cooperadoId={cooperadoId} modo="geral" />
-        </div>
-      )}
-
       {isCooperado && chavePixCoop && cooperativa && (
         <Card className="mb-6 border-green-200 bg-green-50/40">
           <p className="text-sm font-medium text-gray-900">PIX da cooperativa (CNPJ)</p>
@@ -434,7 +428,7 @@ function MensalidadesContent() {
             : "Configure o valor fixo e os meses de cobrança no painel acima."
         }
         mobileCard={(m) => (
-          <MensalidadeCard
+          <MensalidadeMobileCard
             m={m}
             data={data}
             isCooperado={isCooperado}
@@ -601,7 +595,7 @@ async function readPdfAsDataUrl(file: File): Promise<string> {
   });
 }
 
-function MensalidadeCard({
+function MensalidadeMobileCard({
   m,
   data,
   isCooperado,
@@ -618,11 +612,15 @@ function MensalidadeCard({
   onComprovante: () => void;
   onConfirmar: () => void;
 }) {
+  if (isCooperado) {
+    return (
+      <MensalidadeCooperadoCard mensalidade={m} onPix={onPix} onComprovante={onComprovante} />
+    );
+  }
+
   return (
     <div className="bg-white border rounded-xl p-4">
-      {!isCooperado && (
-        <p className="font-medium text-sm">{getCooperadoNome(data.cooperados, m.cooperadoId)}</p>
-      )}
+      <p className="font-medium text-sm">{getCooperadoNome(data.cooperados, m.cooperadoId)}</p>
       <div className="flex items-center justify-between mt-1">
         <p className="text-sm text-gray-600">{formatMesReferencia(m.mesReferencia)}</p>
         <StatusBadge status={statusEfetivoMensalidade(m)} />
@@ -632,20 +630,7 @@ function MensalidadeCard({
       {m.status === "paga" && m.dataPagamento && (
         <p className="text-xs text-green-700 mt-1">Paga em {formatDate(m.dataPagamento)}</p>
       )}
-      {isCooperado && mensalidadePodePagarComPix(m) && (
-        <div className="flex flex-col gap-2 mt-3">
-          <Button size="sm" className="w-full" onClick={onPix}><QrCode size={14} /> Pagar PIX</Button>
-          <Button size="sm" variant="secondary" className="w-full" onClick={onComprovante}>
-            <Paperclip size={14} /> Enviar comprovante
-          </Button>
-        </div>
-      )}
-      {isCooperado && mensalidadeAguardandoConfirmacao(m) && (
-        <p className="text-xs text-blue-700 mt-3 flex items-center gap-1">
-          <AlertCircle size={14} /> Pendente — aguardando confirmação da diretoria
-        </p>
-      )}
-      {!isCooperado && m.status === "aguardando_confirmacao" && (
+      {m.status === "aguardando_confirmacao" && (
         <div className="flex flex-col gap-2 mt-3">
           {m.comprovante && m.comprovante.startsWith("data:image") && (
             // eslint-disable-next-line @next/next/no-img-element

@@ -10,7 +10,7 @@ import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { AlertBanner } from "@/components/ui/AlertBanner";
 import { OnboardingChecklist } from "@/components/cooperado/OnboardingChecklist";
-import { MensalidadeStatusBanner } from "@/components/cooperado/MensalidadeStatusBanner";
+import { CooperadoMensalidadesPagarPanel } from "@/components/cooperado/CooperadoMensalidadesPagarPanel";
 import { ValoresAvulsosDashboardCard } from "@/components/ficha/ValoresAvulsosReceberPanel";
 import { getAdminStats } from "@/services/dashboardService";
 import { cooperadoExibirValorReceberInicio,
@@ -71,7 +71,7 @@ function CooperadoDashboard() {
         <p className="text-sm text-gray-500 mt-1">{coopNome} · {formatMesReferencia(mes)}</p>
       </div>
 
-      <MensalidadeStatusBanner cooperadoId={cooperadoId} modo="inicio" />
+      <CooperadoMensalidadesPagarPanel cooperadoId={cooperadoId} />
 
       <AvisosInicioSection comunicados={comunicados} hideWhenEmpty />
 
