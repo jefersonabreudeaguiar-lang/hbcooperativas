@@ -104,11 +104,28 @@ function normalizeNomeGrupo(nome: string): string {
 }
 
 /** Agrupa entregas pendentes pelo cooperado (nome salvo na nuvem ou cadastro local). */
-export function getChaveGrupoConferencia(nota: NotaPedido, data: AppData): string {
+export function getChaveGrupoConferencia(
+  nota: NotaPedido,
+  data: AppData,
+  cooperativaId?: string
+): string {
+  const coopId = cooperativaId ?? nota.cooperativaId;
   const snapshot = nota.cooperadoNomeSnapshot?.trim();
-  if (snapshot) return `nome:${normalizeNomeGrupo(snapshot)}`;
 
-  const local = data.cooperados.find((c) => c.id === nota.cooperadoId);
+  if (snapshot && coopId) {
+    const nomeKey = normalizeNomeGrupo(snapshot);
+    const byName = data.cooperados.find(
+      (c) =>
+        c.cooperativaId === coopId &&
+        normalizeNomeGrupo(c.nomeCompleto) === nomeKey
+    );
+    if (byName) return `id:${byName.id}`;
+    return `nome:${nomeKey}`;
+  }
+
+  const local = data.cooperados.find(
+    (c) => c.id === nota.cooperadoId && (!coopId || c.cooperativaId === coopId)
+  );
   if (local) return `id:${local.id}`;
 
   return `id:${nota.cooperadoId}`;
@@ -153,7 +170,7 @@ export function agruparPendentesPorCooperado(
 ): GrupoConferenciaEntrega[] {
   const map = new Map<string, NotaPedido[]>();
   for (const nota of pendentes) {
-    const chave = getChaveGrupoConferencia(nota, data);
+    const chave = getChaveGrupoConferencia(nota, data, cooperativaId);
     const lista = map.get(chave) ?? [];
     lista.push(nota);
     map.set(chave, lista);
@@ -168,12 +185,33 @@ export function agruparPendentesPorCooperado(
     .sort((a, b) => a.nome.localeCompare(b.nome, "pt-BR"));
 }
 
+/** Resolve a aba ativa da fila (evita grid vazio por chave desatualizada). */
+export function resolverAbaConferenciaAtiva(
+  grupos: GrupoConferenciaEntrega[],
+  abaConferenciaKey: string,
+  filtroCooperadoId?: string
+): { chave: string; grupo: GrupoConferenciaEntrega | undefined } {
+  if (grupos.length === 0) {
+    return { chave: abaConferenciaKey, grupo: undefined };
+  }
+  if (abaConferenciaKey) {
+    const direta = grupos.find((g) => g.chave === abaConferenciaKey);
+    if (direta) return { chave: direta.chave, grupo: direta };
+  }
+  if (filtroCooperadoId) {
+    const porId = grupos.find((g) => g.cooperadoId === filtroCooperadoId);
+    if (porId) return { chave: porId.chave, grupo: porId };
+  }
+  return { chave: grupos[0].chave, grupo: grupos[0] };
+}
+
 export function notaPertenceGrupoConferencia(
   nota: NotaPedido,
   data: AppData,
-  chave: string
+  chave: string,
+  cooperativaId?: string
 ): boolean {
-  return getChaveGrupoConferencia(nota, data) === chave;
+  return getChaveGrupoConferencia(nota, data, cooperativaId) === chave;
 }
 
 /** Remove fotos grandes já enviadas ou arquivadas — libera espaço no navegador. */

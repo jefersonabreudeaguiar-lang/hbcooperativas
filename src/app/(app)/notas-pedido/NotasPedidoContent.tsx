@@ -33,7 +33,7 @@ import {
   ensureNotaComFoto,
   resolveCooperativaCnpj,
 } from "@/services/notaPedidoCloudService";
-import { listCooperadosDaCooperativa, pushCooperadoToCloud, resolverCooperadoIdCanonico, getCooperadoNomeResolvido } from "@/services/cooperadoCloudService";
+import { listCooperadosDaCooperativa, pushCooperadoToCloud, resolverCooperadoIdCanonico, getCooperadoNomeResolvido, notaPertenceCooperado } from "@/services/cooperadoCloudService";
 import { pushOperacionalToCloud, syncContratosFromCloud } from "@/services/cooperativaSyncCloudService";
 import { getProdutosContrato } from "@/services/catalogoContratosService";
 import { listarResumosMensaisEntregas, filtrarResumosEntregasPendentes } from "@/services/cooperadoEntregasService";
@@ -49,7 +49,7 @@ import {
   resolverInstituicaoConferencia,
 } from "@/utils/instituicaoPreferida";
 import { getCooperadoNome } from "@/utils/calculations";
-import { isFotoDuplicada, compressFotoFile, makeFotoThumbnail, getFotoExibicaoNota, getFotosExibicaoNota, notaPertenceCooperativa, compactarFotosNoArmazenamento, liberarEspacoArmazenamento, parametrosCompressaoFoto, agruparPendentesPorCooperado, getChaveGrupoConferencia, notaPertenceGrupoConferencia, contarFotosEnviadasNota, contarFotosEnviadasNotas } from "@/utils/fotoEntrega";
+import { isFotoDuplicada, compressFotoFile, makeFotoThumbnail, getFotoExibicaoNota, getFotosExibicaoNota, notaPertenceCooperativa, compactarFotosNoArmazenamento, liberarEspacoArmazenamento, parametrosCompressaoFoto, agruparPendentesPorCooperado, getChaveGrupoConferencia, notaPertenceGrupoConferencia, contarFotosEnviadasNota, contarFotosEnviadasNotas, resolverAbaConferenciaAtiva } from "@/utils/fotoEntrega";
 import type { NotaPedido, NotaPedidoItem, Cooperado, AppData } from "@/types";
 
 const NOVO_AVULSO = "__novo__";
@@ -328,7 +328,6 @@ export default function NotasPedidoContent() {
     const cid = searchParams.get("cooperado");
     if (cid && !isCooperado) {
       setFiltroCooperadoId(cid);
-      setAbaConferenciaKey(`id:${cid}`);
     }
   }, [searchParams, isCooperado]);
 
@@ -338,28 +337,6 @@ export default function NotasPedidoContent() {
       filtroResponsavelIniciado.current = true;
     }
   }, [isCooperado]);
-
-  const notas = useMemo(() => {
-    if (!data) return [];
-    return data.notasPedido
-      .filter((n) => {
-        if (coopId && !notaPertenceCooperativa(data, n, coopId)) return false;
-        if (isCooperado && cooperadoId && n.cooperadoId !== cooperadoId) return false;
-        if (
-          !isCooperado &&
-          abaConferenciaKey &&
-          statusFilter === "aguardando_conferencia" &&
-          !notaPertenceGrupoConferencia(n, data, abaConferenciaKey)
-        ) {
-          return false;
-        } else if (!isCooperado && filtroCooperadoId && n.cooperadoId !== filtroCooperadoId) {
-          return false;
-        }
-        if (statusFilter && n.status !== statusFilter) return false;
-        return true;
-      })
-      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-  }, [data, coopId, isCooperado, cooperadoId, filtroCooperadoId, statusFilter, abaConferenciaKey]);
 
   const resumosMensaisCooperado = useMemo(() => {
     if (!isCooperado || !data || !cooperadoId) return [];
@@ -400,14 +377,14 @@ export default function NotasPedidoContent() {
     return agruparPendentesPorCooperado(data, pendentesTodas, coopId);
   }, [data, pendentesTodas, coopId]);
 
-  const pendentesAbaAtiva = useMemo(() => {
-    if (!abaConferenciaKey) return [];
-    return pendentesPorCooperado.find((g) => g.chave === abaConferenciaKey)?.notas ?? [];
-  }, [pendentesPorCooperado, abaConferenciaKey]);
+  const { chave: abaConferenciaEfetiva, grupo: grupoAbaAtiva } = useMemo(
+    () => resolverAbaConferenciaAtiva(pendentesPorCooperado, abaConferenciaKey, filtroCooperadoId),
+    [pendentesPorCooperado, abaConferenciaKey, filtroCooperadoId]
+  );
 
-  const grupoAbaAtiva = useMemo(
-    () => pendentesPorCooperado.find((g) => g.chave === abaConferenciaKey),
-    [pendentesPorCooperado, abaConferenciaKey]
+  const pendentesAbaAtiva = useMemo(
+    () => grupoAbaAtiva?.notas ?? [],
+    [grupoAbaAtiva]
   );
 
   const totalFotosPendentes = useMemo(
@@ -422,19 +399,21 @@ export default function NotasPedidoContent() {
 
   useEffect(() => {
     if (isCooperado || pendentesPorCooperado.length === 0) return;
-    const abaValida = pendentesPorCooperado.some((g) => g.chave === abaConferenciaKey);
-    if (!abaValida) {
-      const proxima = pendentesPorCooperado[0];
-      setAbaConferenciaKey(proxima.chave);
-      setFiltroCooperadoId(proxima.cooperadoId);
+    if (abaConferenciaEfetiva && abaConferenciaEfetiva !== abaConferenciaKey) {
+      setAbaConferenciaKey(abaConferenciaEfetiva);
     }
-  }, [pendentesPorCooperado, abaConferenciaKey, isCooperado]);
-
-  useEffect(() => {
-    if (isCooperado || !filtroCooperadoId) return;
-    const grupo = pendentesPorCooperado.find((g) => g.cooperadoId === filtroCooperadoId);
-    if (grupo) setAbaConferenciaKey(grupo.chave);
-  }, [filtroCooperadoId, pendentesPorCooperado, isCooperado]);
+    const cooperadoDaAba = grupoAbaAtiva?.cooperadoId;
+    if (cooperadoDaAba && cooperadoDaAba !== filtroCooperadoId) {
+      setFiltroCooperadoId(cooperadoDaAba);
+    }
+  }, [
+    isCooperado,
+    pendentesPorCooperado.length,
+    abaConferenciaEfetiva,
+    abaConferenciaKey,
+    grupoAbaAtiva?.cooperadoId,
+    filtroCooperadoId,
+  ]);
 
   const selecionarAbaConferencia = (grupo: (typeof pendentesPorCooperado)[number]) => {
     setAbaConferenciaKey(grupo.chave);
@@ -443,6 +422,37 @@ export default function NotasPedidoContent() {
       setStatusFilter("aguardando_conferencia");
     }
   };
+
+  const notas = useMemo(() => {
+    if (!data) return [];
+    const filtrarPorGrupoAtivo =
+      !isCooperado && pendentesTodas.length > 0 && Boolean(abaConferenciaEfetiva);
+
+    return data.notasPedido
+      .filter((n) => {
+        if (coopId && !notaPertenceCooperativa(data, n, coopId)) return false;
+        if (isCooperado && cooperadoId && n.cooperadoId !== cooperadoId) return false;
+
+        if (filtrarPorGrupoAtivo) {
+          if (!notaPertenceGrupoConferencia(n, data, abaConferenciaEfetiva, coopId)) return false;
+        } else if (!isCooperado && filtroCooperadoId) {
+          if (!notaPertenceCooperado(data, n, filtroCooperadoId, coopId)) return false;
+        }
+
+        if (statusFilter && n.status !== statusFilter) return false;
+        return true;
+      })
+      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+  }, [
+    data,
+    coopId,
+    isCooperado,
+    cooperadoId,
+    filtroCooperadoId,
+    statusFilter,
+    abaConferenciaEfetiva,
+    pendentesTodas.length,
+  ]);
 
   const contratosEntrega = useMemo(() => {
     if (!data || !coopId) return [];
@@ -1047,17 +1057,21 @@ export default function NotasPedidoContent() {
     setConferenciaDescontoPct(data?.config.descontoPadraoCooperativa ?? 5);
     const coopDonoId =
       data && coopId
-        ? agruparPendentesPorCooperado(data, [nota], coopId)[0]?.cooperadoId ?? nota.cooperadoId
+        ? resolverCooperadoIdCanonico(
+            data,
+            nota.cooperadoId,
+            coopId,
+            nota.cooperadoNomeSnapshot
+          )
         : nota.cooperadoId;
     setConferenciaCooperadoId(coopDonoId);
     setConferenciaEscolaAvulsa(nota.escolaAvulsaNome?.trim() ?? "");
     setAlterarInstConferencia(false);
     setConferirErrors({});
-    if (!isCooperado && data) {
-      const chave = getChaveGrupoConferencia(nota, data);
-      const grupo = agruparPendentesPorCooperado(data, [nota], coopId)[0];
+    if (!isCooperado && data && coopId) {
+      const chave = getChaveGrupoConferencia(nota, data, coopId);
       setAbaConferenciaKey(chave);
-      if (grupo?.cooperadoId) setFiltroCooperadoId(grupo.cooperadoId);
+      setFiltroCooperadoId(coopDonoId);
     }
     setConferirModal(true);
   };
@@ -1073,7 +1087,7 @@ export default function NotasPedidoContent() {
         if (n.status !== "aguardando_conferencia") return false;
         if (excludeId && n.id === excludeId) return false;
         if (!notaPertenceCooperativa(d, n, coopIdLocal)) return false;
-        if (chaveGrupo && getChaveGrupoConferencia(n, d) !== chaveGrupo) return false;
+        if (chaveGrupo && getChaveGrupoConferencia(n, d, coopIdLocal) !== chaveGrupo) return false;
         return true;
       })
       .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
@@ -1201,7 +1215,7 @@ export default function NotasPedidoContent() {
     }
 
     const notaId = selectedNota.id;
-    const chaveAtual = getChaveGrupoConferencia(selectedNota, data);
+    const chaveAtual = getChaveGrupoConferencia(selectedNota, data, coopId);
     const coopNome = getCooperadoNomeResolvido(getData() ?? data, conferenciaCooperadoId, coopId);
     const pendentesRestantes = coopId ? contarPendentesConferencia(getData(), coopId) : 0;
 
@@ -1242,7 +1256,7 @@ export default function NotasPedidoContent() {
     }
 
     const notaId = selectedNota.id;
-    const chaveAtual = getChaveGrupoConferencia(selectedNota, data);
+    const chaveAtual = getChaveGrupoConferencia(selectedNota, data, coopId);
     const pendentesRestantes = coopId ? contarPendentesConferencia(getData(), coopId) : 0;
 
     setRejectModal(false);
@@ -1401,6 +1415,48 @@ export default function NotasPedidoContent() {
     );
   };
 
+  const cooperadosConferenciaOptions = useMemo(() => {
+    if (!data || !coopId) return cooperadosCoop;
+    if (!conferenciaCooperadoId) return cooperadosCoop;
+    if (cooperadosCoop.some((c) => c.id === conferenciaCooperadoId)) return cooperadosCoop;
+    const nome =
+      selectedNota?.cooperadoNomeSnapshot?.trim() ||
+      getCooperadoNomeResolvido(data, conferenciaCooperadoId, coopId);
+    return [
+      ...cooperadosCoop,
+      {
+        id: conferenciaCooperadoId,
+        cooperativaId: coopId,
+        nomeCompleto: nome,
+        cpfCnpj: "",
+        telefone: "",
+        endereco: "",
+        comunidade: "",
+        cafDap: "",
+        chavePix: "",
+        banco: "",
+        agencia: "",
+        conta: "",
+        status: "ativo" as const,
+        produtos: [],
+        observacoes: "Identificado pelo envio da entrega.",
+        createdAt: selectedNota?.createdAt ?? new Date().toISOString(),
+        updatedAt: selectedNota?.updatedAt ?? new Date().toISOString(),
+      },
+    ].sort((a, b) => a.nomeCompleto.localeCompare(b.nomeCompleto, "pt-BR"));
+  }, [cooperadosCoop, conferenciaCooperadoId, data, coopId, selectedNota]);
+
+  const cooperadoConferenciaAutoIdentificado = useMemo(() => {
+    if (!selectedNota || !data || !coopId || !conferenciaCooperadoId) return false;
+    const canonico = resolverCooperadoIdCanonico(
+      data,
+      selectedNota.cooperadoId,
+      coopId,
+      selectedNota.cooperadoNomeSnapshot
+    );
+    return canonico === conferenciaCooperadoId && Boolean(selectedNota.cooperadoNomeSnapshot?.trim());
+  }, [selectedNota, data, coopId, conferenciaCooperadoId]);
+
   return (
     <div className="relative pb-20 sm:pb-0">
       <PageHeader
@@ -1506,7 +1562,9 @@ export default function NotasPedidoContent() {
                 Fila para conferir ({totalFotosPendentes} {totalFotosPendentes === 1 ? "foto" : "fotos"}
                 {pendentesTodas.length > 1 ? ` · ${pendentesTodas.length} entregas` : ""})
               </h2>
-              <p className="text-xs text-gray-500 mt-0.5">Selecione o cooperado — cada card pode ter várias fotos do mesmo pedido.</p>
+              <p className="text-xs text-gray-500 mt-0.5">
+                Escolha o cooperado abaixo ou nas abas — toque em um card para conferir as fotos.
+              </p>
             </div>
             {grupoAbaAtiva && (
               <p className="text-xs font-medium text-amber-800">
@@ -1526,11 +1584,11 @@ export default function NotasPedidoContent() {
                 key={grupo.chave}
                 type="button"
                 role="tab"
-                aria-selected={abaConferenciaKey === grupo.chave}
+                aria-selected={abaConferenciaEfetiva === grupo.chave}
                 onClick={() => selecionarAbaConferencia(grupo)}
                 className={cn(
                   "shrink-0 inline-flex items-center gap-2 px-4 py-2.5 rounded-t-lg text-sm font-semibold border border-b-0 transition-colors",
-                  abaConferenciaKey === grupo.chave
+                  abaConferenciaEfetiva === grupo.chave
                     ? "bg-amber-500 text-white border-amber-500 shadow-sm"
                     : "bg-gray-50 text-gray-700 border-gray-300 hover:bg-amber-50 hover:border-amber-300"
                 )}
@@ -1539,7 +1597,7 @@ export default function NotasPedidoContent() {
                 <span
                   className={cn(
                     "min-w-[1.25rem] h-5 px-1.5 rounded-full text-xs font-bold inline-flex items-center justify-center",
-                    abaConferenciaKey === grupo.chave ? "bg-white/25 text-white" : "bg-amber-100 text-amber-800"
+                    abaConferenciaEfetiva === grupo.chave ? "bg-white/25 text-white" : "bg-amber-100 text-amber-800"
                   )}
                 >
                   {contarFotosEnviadasNotas(grupo.notas)}
@@ -1549,6 +1607,11 @@ export default function NotasPedidoContent() {
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+            {pendentesAbaAtiva.length === 0 ? (
+              <p className="col-span-full text-sm text-amber-800 bg-amber-50 border border-amber-200 rounded-xl p-4">
+                Nenhuma entrega pendente para este cooperado. Selecione outra aba acima.
+              </p>
+            ) : null}
             {pendentesAbaAtiva.map((n) => {
               const qtdFotosCard = contarFotosEnviadasNota(n);
               return (
@@ -1621,6 +1684,25 @@ export default function NotasPedidoContent() {
       )}
 
       <FilterBar>
+        {!isCooperado && pendentesPorCooperado.length > 0 && (
+          <FormField label="Cooperado para conferir">
+            <Select
+              value={grupoAbaAtiva?.cooperadoId ?? filtroCooperadoId}
+              onChange={(e) => {
+                const grupo = pendentesPorCooperado.find((g) => g.cooperadoId === e.target.value);
+                if (grupo) selecionarAbaConferencia(grupo);
+                else setFiltroCooperadoId(e.target.value);
+              }}
+              className="min-w-[220px]"
+            >
+              {pendentesPorCooperado.map((g) => (
+                <option key={g.chave} value={g.cooperadoId}>
+                  {g.nome} ({contarFotosEnviadasNotas(g.notas)} {contarFotosEnviadasNotas(g.notas) === 1 ? "foto" : "fotos"})
+                </option>
+              ))}
+            </Select>
+          </FormField>
+        )}
         {isCooperado && abaCooperado === "entregas" && (
           <FormField label="Filtrar entregas">
             <Select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className="min-w-[200px]">
@@ -2081,7 +2163,7 @@ export default function NotasPedidoContent() {
                 })()}
               </div>
               <div className="shrink-0 px-4 py-3 bg-black/40 text-white text-sm space-y-0.5">
-                <p><strong>{getCooperadoNome(data.cooperados, selectedNota.cooperadoId)}</strong> · {formatDate(selectedNota.dataEntrega)}</p>
+                <p><strong>{getCooperadoNomeResolvido(data, selectedNota.cooperadoId, coopId)}</strong> · {formatDate(selectedNota.dataEntrega)}</p>
                 <p className="text-white/80">
                   {getEscolaNotaLabel(selectedNota, data.instituicoes)} · {selectedNota.numeroNota}
                   {(() => {
@@ -2096,11 +2178,16 @@ export default function NotasPedidoContent() {
               <FormField label="Cooperado" required hint="Quem receberá o valor na ficha">
                 <Select value={conferenciaCooperadoId} onChange={(e) => setConferenciaCooperadoId(e.target.value)}>
                   <option value="">Selecione...</option>
-                  {cooperadosCoop.map((c) => (
+                  {cooperadosConferenciaOptions.map((c) => (
                     <option key={c.id} value={c.id}>{c.nomeCompleto}{c.avulso ? " (avulso)" : ""}</option>
                   ))}
                 </Select>
-                {cooperadosCoop.length === 0 && (
+                {cooperadoConferenciaAutoIdentificado && (
+                  <p className="text-xs text-green-700 mt-1">
+                    Identificado automaticamente pelo envio: {selectedNota.cooperadoNomeSnapshot}
+                  </p>
+                )}
+                {cooperadosConferenciaOptions.length === 0 && (
                   <p className="text-xs text-amber-700 mt-1">Carregando cooperados da nuvem…</p>
                 )}
               </FormField>
