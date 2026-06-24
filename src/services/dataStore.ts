@@ -21,6 +21,7 @@ import { exigeSenhaCadastroCooperado } from "@/utils/cooperativaCadastro";
 import { hashPassword, isPasswordHash, verifyPassword } from "@/lib/security/password";
 import {
   clearAccessToken,
+  clearCloudBootstrapCredentials,
   establishCloudSession,
   registerCloudUser,
 } from "@/lib/security/clientSession";
@@ -444,6 +445,23 @@ export async function login(email: string, password: string): Promise<User | nul
 
   if (user && typeof window !== "undefined") {
     const { password: _, ...safeUser } = user;
+    let cooperativaCnpj = safeUser.cooperativaCnpj
+      ? normalizeCnpj(safeUser.cooperativaCnpj)
+      : undefined;
+    if (!cooperativaCnpj) {
+      const coopId = getUserCooperativaId(safeUser, data);
+      const coop = coopId ? getCooperativaById(data, coopId) : undefined;
+      if (coop?.cnpj) cooperativaCnpj = normalizeCnpj(coop.cnpj);
+    }
+    if (cooperativaCnpj && cooperativaCnpj !== safeUser.cooperativaCnpj) {
+      updateData((d) => ({
+        ...d,
+        users: d.users.map((u) =>
+          u.id === user.id ? { ...u, cooperativaCnpj } : u
+        ),
+      }));
+      safeUser.cooperativaCnpj = cooperativaCnpj;
+    }
     persistSession(safeUser);
     await establishCloudSession(email, password, {
       id: safeUser.id,
@@ -452,7 +470,7 @@ export async function login(email: string, password: string): Promise<User | nul
       role: safeUser.role,
       cooperativaId: safeUser.cooperativaId,
       cooperadoId: safeUser.cooperadoId,
-      cooperativaCnpj: safeUser.cooperativaCnpj,
+      cooperativaCnpj,
     });
   }
   return user ?? null;
@@ -463,6 +481,7 @@ export function logout(): void {
     localStorage.removeItem(SESSION_KEY);
     sessionStorage.removeItem(SESSION_KEY);
     clearAccessToken();
+    clearCloudBootstrapCredentials();
     notify();
   }
 }

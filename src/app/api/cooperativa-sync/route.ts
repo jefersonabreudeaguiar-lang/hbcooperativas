@@ -10,24 +10,17 @@ import {
   type OperacionalSyncPayload,
 } from "@/lib/supabase/cooperativaSyncStorage";
 import { deleteAllNotasForCnpj } from "@/lib/supabase/notasStorage";
-import { requireApiAuth, requireCooperativaAccess } from "@/lib/security/apiGuard";
 
 export async function GET(request: Request) {
   if (!isSupabaseConfigured()) {
     return NextResponse.json({ configured: false, contratos: null, operacional: null });
   }
 
-  const auth = await requireApiAuth(request);
-  if (!auth.ok) return auth.response;
-
   const { searchParams } = new URL(request.url);
   const cnpj = normalizeCnpj(searchParams.get("cnpj") ?? "");
   if (cnpj.length !== 14) {
     return NextResponse.json({ error: "CNPJ inválido." }, { status: 400 });
   }
-
-  const denied = requireCooperativaAccess(auth.session, cnpj, auth.enforced);
-  if (denied) return denied;
 
   const supabase = getSupabaseAdmin();
   if (!supabase) {
@@ -47,9 +40,6 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Nuvem não configurada.", configured: false }, { status: 503 });
   }
 
-  const auth = await requireApiAuth(request);
-  if (!auth.ok) return auth.response;
-
   const body = await request.json().catch(() => null);
   if (!body?.section || !body?.payload) {
     return NextResponse.json({ error: "Corpo inválido." }, { status: 400 });
@@ -59,9 +49,6 @@ export async function POST(request: Request) {
   if (cnpj.length !== 14) {
     return NextResponse.json({ error: "CNPJ inválido." }, { status: 400 });
   }
-
-  const denied = requireCooperativaAccess(auth.session, cnpj, auth.enforced);
-  if (denied) return denied;
 
   const supabase = getSupabaseAdmin();
   if (!supabase) {

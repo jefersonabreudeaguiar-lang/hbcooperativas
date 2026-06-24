@@ -5,7 +5,6 @@ import { useRouter } from "next/navigation";
 import type { User } from "@/types";
 import { getSession, login as doLogin, logout as doLogout, registerCooperado, registerCooperativa, subscribe, ensureCooperativaInCloudForUser } from "@/services/dataStore";
 import type { RegisterCooperadoInput, RegisterCooperativaInput } from "@/services/dataStore";
-import { refreshCloudSession } from "@/lib/security/clientSession";
 
 interface AuthContextType {
   user: Omit<User, "password"> | null;
@@ -33,11 +32,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     refresh();
     return subscribe(refresh);
   }, [refresh]);
-
-  useEffect(() => {
-    if (!user || loading) return;
-    void refreshCloudSession();
-  }, [user?.id, loading]);
 
   useEffect(() => {
     if (!user || loading) return;

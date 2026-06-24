@@ -48,7 +48,6 @@ import {
   resolverInstituicaoConferencia,
 } from "@/utils/instituicaoPreferida";
 import { getCooperadoNome } from "@/utils/calculations";
-import { ensureAccessTokenForApi } from "@/lib/security/clientSession";
 import { isFotoDuplicada, compressFotoFile, makeFotoThumbnail, getFotoExibicaoNota, getFotosExibicaoNota, notaPertenceCooperativa, compactarFotosNoArmazenamento, agruparPendentesPorCooperado, getChaveGrupoConferencia, notaPertenceGrupoConferencia } from "@/utils/fotoEntrega";
 import type { NotaPedido, NotaPedidoItem, Cooperado, AppData } from "@/types";
 
@@ -289,14 +288,14 @@ export default function NotasPedidoContent() {
 
     let currentData = data ?? getData();
     if (isCooperado && user && coopId) {
-      const sessionOk = await ensureAccessTokenForApi();
-      if (!sessionOk) {
-        setErroEnvio("Sessão da nuvem expirada. Saia da conta e entre novamente com e-mail e senha.");
-        setAnexarModal(true);
-        return;
-      }
       const cnpj = await resolveCooperativaCnpj(currentData, coopId, user);
-      if (cnpj) await syncContratosFromCloud(cnpj);
+      if (cnpj) {
+        try {
+          await syncContratosFromCloud(cnpj);
+        } catch {
+          /* offline — modal abre com contratos locais */
+        }
+      }
       currentData = getData();
     }
 
@@ -801,13 +800,6 @@ export default function NotasPedidoContent() {
       return;
     }
 
-    const sessionOk = await ensureAccessTokenForApi();
-    if (!sessionOk) {
-      setEnviando(false);
-      setErroEnvio("Sessão da nuvem expirada. Saia da conta e entre novamente com e-mail e senha para enviar fotos.");
-      return;
-    }
-
     const cooperadoRecord = workingData.cooperados.find((c) => c.id === cid);
     if (cooperadoRecord) {
       void pushCooperadoToCloud(cnpj, { ...cooperadoRecord, updatedAt: now }, user.email);
@@ -877,17 +869,9 @@ export default function NotasPedidoContent() {
 
     let cloudOk = false;
     const cloud = await pushNotasPedidoToCloud(cnpj, notasCompletas, cooperadoNome);
-    if (!cloud.ok) {
-      setEnviando(false);
-      setErroEnvio(
-        cloud.error ??
-          (cloud.offline
-            ? "Sem conexão com o servidor. Verifique a internet e tente novamente."
-            : "Não foi possível enviar ao responsável.")
-      );
-      return;
+    if (cloud.ok) {
+      cloudOk = true;
     }
-    cloudOk = true;
 
     const miniaturas = await Promise.all(
       fotosSessao.map((f) => makeFotoThumbnail(f))
@@ -962,9 +946,13 @@ export default function NotasPedidoContent() {
     if (isCooperado) setStatusFilter("aguardando_conferencia");
     setAnexarSucesso(true);
     setSuccessMsg(
-      qtdFotos === 1
-        ? "Entrega enviada! Aparece abaixo como Em análise — o responsável já pode conferir."
-        : `Entrega enviada com ${qtdFotos} fotos! Aparece abaixo como Em análise.`
+      cloudOk
+        ? qtdFotos === 1
+          ? "Entrega enviada! Aparece abaixo como Em análise — o responsável já pode conferir."
+          : `Entrega enviada com ${qtdFotos} fotos! Aparece abaixo como Em análise.`
+        : qtdFotos === 1
+          ? "Entrega registrada neste aparelho. Será enviada ao responsável assim que a conexão permitir."
+          : `Entrega com ${qtdFotos} fotos registrada neste aparelho. Sincronização automática em andamento.`
     );
   };
 

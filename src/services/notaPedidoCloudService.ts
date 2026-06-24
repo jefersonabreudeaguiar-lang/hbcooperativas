@@ -5,8 +5,6 @@ import { getNotaCooperativaCnpj, getFotosExibicaoNota } from "@/utils/fotoEntreg
 import { getData, saveDataSafe } from "@/services/dataStore";
 import { reconciliarFichaFromNotasConferidas } from "@/services/notaPedidoService";
 import { needsOperationalResetCloudPush } from "@/services/operationalReset";
-import { mensagemErroAuthApi, secureApiFetch } from "@/lib/security/clientSession";
-
 const STATUS_RANK: Record<NotaPedido["status"], number> = {
   rascunho: 0,
   aguardando_conferencia: 0,
@@ -112,8 +110,6 @@ export function mergeCloudNotasIntoData(
     return removed ? { ...data, notasPedido } : data;
   }
 
-  const digits = normalizeCnpj(cnpj);
-  const cloudIds = new Set(cloudNotas.map((n) => n.id));
   const byId = new Map(data.notasPedido.map((n) => [n.id, n]));
   let changed = false;
 
@@ -122,18 +118,6 @@ export function mergeCloudNotasIntoData(
     const local = byId.get(cn.id);
     if (shouldApplyCloudNota(local, cn)) {
       byId.set(cn.id, cn);
-      changed = true;
-    }
-  }
-
-  for (const [id, n] of [...byId.entries()]) {
-    if (n.status !== "aguardando_conferencia") continue;
-    const notaCnpj = getNotaCooperativaCnpj(data, n);
-    if (notaCnpj !== digits) continue;
-    if ((n.fotoNaNuvem || n.cooperativaCnpj) && !cloudIds.has(id)) {
-      const ageMs = Date.now() - new Date(n.updatedAt).getTime();
-      if (ageMs < 3 * 60 * 1000) continue;
-      byId.delete(id);
       changed = true;
     }
   }
@@ -147,7 +131,7 @@ export async function fetchNotasPedidoFromCloud(cnpj: string): Promise<NotaPedid
   if (digits.length !== 14) return [];
 
   try {
-    const res = await secureApiFetch(`/api/notas-pedido?cnpj=${digits}`, { cache: "no-store" });
+    const res = await fetch(`/api/notas-pedido?cnpj=${digits}`, { cache: "no-store" });
     if (!res.ok) return [];
     const json = await res.json().catch(() => ({}));
     return ((json.notas ?? []) as unknown[])
@@ -166,7 +150,7 @@ export async function fetchNotaPedidoFromCloud(
   if (digits.length !== 14) return null;
 
   try {
-    const res = await secureApiFetch(
+    const res = await fetch(
       `/api/notas-pedido/${encodeURIComponent(notaId)}?cnpj=${digits}`,
       { cache: "no-store" }
     );
@@ -220,7 +204,7 @@ export async function pushNotasPedidoToCloud(
 
   try {
     for (const nota of notas) {
-      const res = await secureApiFetch("/api/notas-pedido", {
+      const res = await fetch("/api/notas-pedido", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ cnpj: digits, notas: [nota], cooperadoNome }),
@@ -236,7 +220,7 @@ export async function pushNotasPedidoToCloud(
       if (!res.ok) {
         return {
           ok: false,
-          error: mensagemErroAuthApi(res.status, json.error as string | undefined),
+          error: (json.error as string) ?? "Erro ao enviar entrega na nuvem.",
         };
       }
     }
@@ -254,7 +238,7 @@ export async function deleteNotaPedidoFromCloud(
   if (digits.length !== 14) return { ok: false, error: "CNPJ inválido." };
 
   try {
-    const res = await secureApiFetch(
+    const res = await fetch(
       `/api/notas-pedido/${encodeURIComponent(notaId)}?cnpj=${digits}`,
       { method: "DELETE" }
     );
@@ -276,7 +260,7 @@ export async function patchNotaPedidoInCloud(
   if (digits.length !== 14) return;
 
   try {
-    await secureApiFetch(`/api/notas-pedido/${encodeURIComponent(nota.id)}`, {
+    await fetch(`/api/notas-pedido/${encodeURIComponent(nota.id)}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ cnpj: digits, nota }),

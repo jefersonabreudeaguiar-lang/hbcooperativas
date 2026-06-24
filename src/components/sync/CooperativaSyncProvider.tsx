@@ -3,15 +3,15 @@
 import { useCallback, useEffect, useRef } from "react";
 import { useAuth } from "@/modules/auth/AuthProvider";
 import { useAppData } from "@/hooks/useAppData";
-import { getUserCooperativaId } from "@/utils/cooperativa";
-import { resolveCooperativaCnpj } from "@/services/notaPedidoCloudService";
+import { getUserCooperativaId, normalizeCnpj } from "@/utils/cooperativa";
+import { resolveCooperativaCnpj, pushNotasPedidoToCloud } from "@/services/notaPedidoCloudService";
 import {
   SYNC_INTERVAL_MS,
   syncCooperativaBidirectional,
 } from "@/services/cooperativaSyncCloudService";
 import { pushCooperadoToCloud, resolverCooperadoIdCanonico } from "@/services/cooperadoCloudService";
-import { getData } from "@/services/dataStore";
-import { ensureAccessTokenForApi } from "@/lib/security/clientSession";
+import { getData, updateData } from "@/services/dataStore";
+import { getCooperadoNome } from "@/utils/calculations";
 import { isDiretoriaRole } from "@/permissions";
 import type { UserRole } from "@/types";
 
@@ -27,18 +27,38 @@ export function CooperativaSyncProvider({ children }: { children: React.ReactNod
     syncingRef.current = true;
     try {
       const cnpj = await resolveCooperativaCnpj(data, coopId, user);
-      if (cnpj) {
-        await ensureAccessTokenForApi();
-        const pushCatalog = isDiretoriaRole(user.role as UserRole);
-        const pushMensalidades = isDiretoriaRole(user.role as UserRole);
-        await syncCooperativaBidirectional(cnpj, coopId, { pushCatalog, pushMensalidades });
+      if (!cnpj) return;
 
-        if (user.role === "cooperado" && user.cooperadoId) {
-          const latest = getData();
-          const cooperadoCanonico = resolverCooperadoIdCanonico(latest, user.cooperadoId, coopId);
-          const registro = latest.cooperados.find((c) => c.id === cooperadoCanonico);
-          if (registro) {
-            await pushCooperadoToCloud(cnpj, registro, user.email);
+      const pushCatalog = isDiretoriaRole(user.role as UserRole);
+      const pushMensalidades = isDiretoriaRole(user.role as UserRole);
+      await syncCooperativaBidirectional(cnpj, coopId, { pushCatalog, pushMensalidades });
+
+      if (user.role === "cooperado" && user.cooperadoId) {
+        const latest = getData();
+        const cooperadoCanonico = resolverCooperadoIdCanonico(latest, user.cooperadoId, coopId);
+        const registro = latest.cooperados.find((c) => c.id === cooperadoCanonico);
+        if (registro) {
+          await pushCooperadoToCloud(cnpj, registro, user.email);
+        }
+
+        const cooperadoNome = getCooperadoNome(latest.cooperados, cooperadoCanonico);
+        const pendentes = latest.notasPedido.filter(
+          (n) =>
+            n.cooperadoId === cooperadoCanonico &&
+            n.status === "aguardando_conferencia" &&
+            !n.fotoNaNuvem
+        );
+        for (const nota of pendentes) {
+          const result = await pushNotasPedidoToCloud(cnpj, [nota], cooperadoNome);
+          if (result.ok) {
+            updateData((d) => ({
+              ...d,
+              notasPedido: d.notasPedido.map((n) =>
+                n.id === nota.id
+                  ? { ...n, fotoNaNuvem: true, cooperativaCnpj: normalizeCnpj(cnpj) }
+                  : n
+              ),
+            }));
           }
         }
       }

@@ -3,7 +3,6 @@ import { getSupabaseAdmin, isSupabaseConfigured } from "@/lib/supabase/admin";
 import { normalizeCnpj } from "@/utils/cooperativa";
 import type { Cooperativa, MensalidadeConfig } from "@/types";
 import { cooperativaFromCloudRow, exigeSenhaCadastroCooperado, mensalidadeConfigComSenhaCadastro, mensalidadeConfigSemSenhaCadastro } from "@/utils/cooperativaCadastro";
-import { requireApiAuth, requireCooperativaAccess, requireStaffRole } from "@/lib/security/apiGuard";
 
 export async function PATCH(
   request: Request,
@@ -13,19 +12,11 @@ export async function PATCH(
     return NextResponse.json({ error: "Nuvem não configurada." }, { status: 503 });
   }
 
-  const auth = await requireApiAuth(request);
-  if (!auth.ok) return auth.response;
-
   const { cnpj: rawCnpj } = await context.params;
   const cnpj = normalizeCnpj(rawCnpj ?? "");
   if (cnpj.length !== 14) {
     return NextResponse.json({ error: "CNPJ inválido." }, { status: 400 });
   }
-
-  const deniedCoop = requireCooperativaAccess(auth.session, cnpj, auth.enforced);
-  if (deniedCoop) return deniedCoop;
-  const deniedStaff = requireStaffRole(auth.session, auth.enforced);
-  if (deniedStaff) return deniedStaff;
 
   const body = await request.json().catch(() => null);
   if (!body) {

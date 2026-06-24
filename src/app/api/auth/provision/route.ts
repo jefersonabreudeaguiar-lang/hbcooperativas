@@ -5,7 +5,13 @@ import {
   ensureAuthInfrastructure,
   tokenResponseForUser,
 } from "@/lib/security/authRoutes";
-import { findAppUserByEmail, logSecurityEvent, upsertAppUser, verifyAppUserPassword } from "@/lib/supabase/usersAuth";
+import {
+  findAppUserByEmail,
+  logSecurityEvent,
+  updateAppUserPasswordHash,
+  upsertAppUser,
+  verifyAppUserPassword,
+} from "@/lib/supabase/usersAuth";
 import type { UserRole } from "@/types";
 
 const VALID_ROLES: UserRole[] = ["admin", "tesoureiro", "responsavel", "cooperado"];
@@ -29,15 +35,7 @@ export async function POST(request: Request) {
   const supabase = getSupabaseAdmin()!;
   const existing = await findAppUserByEmail(supabase, email);
 
-  if (existing) {
-    const verified = await verifyAppUserPassword(supabase, email, password);
-    if (!verified) {
-      return NextResponse.json({ error: "Credenciais inválidas." }, { status: 401 });
-    }
-    return tokenResponseForUser(verified);
-  }
-
-  const user = await upsertAppUser(supabase, {
+  const profilePayload = {
     id,
     email,
     password,
@@ -46,7 +44,36 @@ export async function POST(request: Request) {
     cooperativaId: body?.cooperativaId ? String(body.cooperativaId) : undefined,
     cooperadoId: body?.cooperadoId ? String(body.cooperadoId) : undefined,
     cooperativaCnpj: body?.cooperativaCnpj ? String(body.cooperativaCnpj) : undefined,
-  });
+  };
+
+  if (existing) {
+    const verified = await verifyAppUserPassword(supabase, email, password);
+    if (verified) {
+      const synced = await upsertAppUser(supabase, {
+        ...profilePayload,
+        id: verified.id,
+        name: name || verified.name,
+      });
+      return tokenResponseForUser(synced ?? verified);
+    }
+    if (existing.id === id) {
+      await updateAppUserPasswordHash(supabase, id, password);
+      const synced = await upsertAppUser(supabase, profilePayload);
+      if (synced) {
+        await logSecurityEvent(supabase, {
+          action: "auth.provision.resync",
+          userId: synced.id,
+          userEmail: synced.email,
+          cooperativaCnpj: synced.cooperativa_cnpj ?? undefined,
+          ip: clientIp(request),
+        });
+        return tokenResponseForUser(synced);
+      }
+    }
+    return NextResponse.json({ error: "Credenciais inválidas." }, { status: 401 });
+  }
+
+  const user = await upsertAppUser(supabase, profilePayload);
 
   if (!user) {
     return NextResponse.json({ error: "Tabela de usuários não configurada." }, { status: 503 });
