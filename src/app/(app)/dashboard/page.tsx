@@ -17,7 +17,7 @@ import { cooperadoExibirValorReceberInicio,
   listarNotasPendentesCooperado,
 } from "@/services/cooperadoEntregasService";
 import { resolverCooperadoIdCanonico } from "@/services/cooperadoCloudService";
-import { notaPertenceCooperativa } from "@/utils/fotoEntrega";
+import { notaPertenceCooperativa, contarFotosEnviadasNotas } from "@/utils/fotoEntrega";
 import { getComunicadosInicioCooperado } from "@/services/comunicadoService";
 import { getResumoMensalidadesCooperado } from "@/services/mensalidadeService";
 import { prestacaoPrincipalCooperado, prestacaoExigeAtencaoCooperado } from "@/services/prestacaoContasService";
@@ -47,7 +47,8 @@ function CooperadoDashboard() {
   const precisaPix = cooperado ? cooperadoPrecisaCadastrarPix(cooperado.chavePix, cooperado.pixValido) : false;
   const notasPendentes = listarNotasPendentesCooperado(data, cooperadoId, coopId);
   const rejeitadas = notasPendentes.filter((n) => n.status === "rejeitada");
-  const emAnalise = notasPendentes.filter((n) => n.status === "aguardando_conferencia").length;
+  const notasEmAnalise = notasPendentes.filter((n) => n.status === "aguardando_conferencia");
+  const fotosEmAnalise = contarFotosEnviadasNotas(notasEmAnalise);
   const resumoMens = getResumoMensalidadesCooperado(data, cooperadoId, coopId);
   const mensalidadeAberta = resumoMens.situacao === "atrasada";
   const prestacao = coopId ? prestacaoPrincipalCooperado(data, cooperadoId, coopId) : undefined;
@@ -57,7 +58,7 @@ function CooperadoDashboard() {
   const resolvidos = listarResolvidosInicioCooperado(data, cooperadoId, coopId);
   const temSecaoPendencias =
     rejeitadas.length > 0 ||
-    emAnalise > 0 ||
+    fotosEmAnalise > 0 ||
     valorReceber.exibir ||
     precisaPix ||
     mensalidadeAberta ||
@@ -92,9 +93,9 @@ function CooperadoDashboard() {
         </AlertBanner>
       )}
 
-      {emAnalise > 0 && (
+      {fotosEmAnalise > 0 && (
         <AlertBanner variant="info" title="Entregas em análise">
-          {emAnalise} foto(s) aguardando conferência da cooperativa. Você será avisado quando o valor for lançado.
+          {fotosEmAnalise} foto{fotosEmAnalise === 1 ? "" : "s"} aguardando conferência da cooperativa. Você será avisado quando o valor for lançado.
         </AlertBanner>
       )}
 

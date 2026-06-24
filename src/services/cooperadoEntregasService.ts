@@ -9,6 +9,7 @@ import {
 import { getCurrentMesReferencia } from "@/utils/format";
 import { mesesComValoresAvulsos, totalValoresAvulsosPendentes } from "@/services/valoresAvulsosReceberService";
 import { contarEntregasNoMes } from "@/services/entregaCooperadoService";
+import { contarFotosEnviadasNota } from "@/utils/fotoEntrega";
 
 export interface ResumoMesEntregasCooperado {
   mesReferencia: string;
@@ -211,7 +212,9 @@ export function getResumoMesEntregasCooperado(
     mesReferencia,
     notas,
     quantidadeEntregas: contarEntregasNoMes(notas),
-    emAnalise: notas.filter((n) => n.status === "aguardando_conferencia").length,
+    emAnalise: notas
+      .filter((n) => n.status === "aguardando_conferencia")
+      .reduce((s, n) => s + contarFotosEnviadasNota(n), 0),
     rejeitadas: notas.filter((n) => n.status === "rejeitada").length,
     conferidas: notas.filter((n) => n.status === "conferida").length,
     pagas: notas.filter((n) => n.status === "pago").length,

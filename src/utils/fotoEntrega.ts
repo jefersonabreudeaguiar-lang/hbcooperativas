@@ -253,3 +253,16 @@ export function contarFotosUnicas(notas: NotaPedido[], cooperadoId: string, mesR
       n.status !== "cancelado"
   ).length;
 }
+
+/** Quantidade de fotos enviadas em uma nota (várias fotos = 1 entrega). */
+export function contarFotosEnviadasNota(nota: NotaPedido): number {
+  const fotos = getFotosExibicaoNota(nota);
+  if (fotos.length > 0) return fotos.length;
+  if (nota.fotosPedido?.length) return nota.fotosPedido.length;
+  if (nota.fotoNaNuvem || nota.fotoPedido || nota.fotoPedidoMiniatura || nota.fotoEnviadaEm) return 1;
+  return 0;
+}
+
+export function contarFotosEnviadasNotas(notas: NotaPedido[]): number {
+  return notas.reduce((total, nota) => total + contarFotosEnviadasNota(nota), 0);
+}
