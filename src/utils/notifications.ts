@@ -83,7 +83,7 @@ export function notificarNovoComunicado(assunto: string, preview?: string): void
   tocarSomAprovacao();
   notificacaoNavegador(
     assunto || "Recado da cooperativa",
-    preview?.trim() || "Há um novo aviso no mural da cooperativa.",
+    preview?.trim() || "Há um novo aviso da cooperativa no início.",
     "comunicado-cooperativa"
   );
 }

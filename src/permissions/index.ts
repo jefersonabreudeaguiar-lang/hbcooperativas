@@ -191,13 +191,11 @@ const COOPERADO_MENU: { href: string; label: string; resource: Resource }[] = [
   { href: "/ficha-corrida", label: "Quanto vou receber", resource: "ficha_corrida" },
   { href: "/mensalidades", label: "Mensalidades", resource: "mensalidades" },
   { href: "/meu-cadastro", label: "Meu cadastro", resource: "dashboard" },
-  { href: "/comunicados", label: "Avisos", resource: "comunicados" },
 ];
 
 const COOPERADO_DRAWER_MENU: { href: string; label: string; resource: Resource }[] = [
   { href: "/dashboard", label: "Início", resource: "dashboard" },
   { href: "/meu-cadastro", label: "Meu cadastro", resource: "dashboard" },
-  { href: "/comunicados", label: "Avisos", resource: "comunicados" },
   { href: "/prestacao-contas", label: "Prestação de contas", resource: "prestacao_contas" },
 ];
 

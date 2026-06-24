@@ -63,7 +63,7 @@ export function ComunicadoNotifier() {
       gravarVistos(vistosRef.current);
 
       const assunto = getComunicadoAssunto(c);
-      const preview = c.descricao?.trim() || (c.audioDataUrl ? "Ouça o recado em áudio no mural." : undefined);
+      const preview = c.descricao?.trim() || (c.audioDataUrl ? "Ouça o recado em áudio no início." : undefined);
       notificarNovoComunicado(assunto, preview);
       setAlerta({ id: c.id, assunto });
       break;
@@ -103,7 +103,7 @@ export function ComunicadoNotifier() {
       <AlertBanner variant="info" title="Recado da cooperativa" onDismiss={() => setAlerta(null)}>
         <strong>{alerta.assunto}</strong>
         <Link href="/dashboard" className="block mt-2 font-semibold underline">
-          Ver no mural do início
+          Ver no início
         </Link>
       </AlertBanner>
     </div>

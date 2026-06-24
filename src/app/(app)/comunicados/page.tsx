@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useMemo, useCallback } from "react";
+import { useState, useMemo, useCallback, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import { Plus, Repeat, Pause, Play, Trash2, RefreshCw, Send, Pencil } from "lucide-react";
 import { useAppData } from "@/hooks/useAppData";
 import { usePermissions } from "@/hooks/usePermissions";
@@ -55,6 +56,7 @@ function formularioPreenchido(form: Partial<Comunicado>): boolean {
 
 export default function ComunicadosPage() {
   const data = useAppData();
+  const router = useRouter();
   const { check, user, isCooperado, cooperadoId } = usePermissions();
   const coopId = user && data ? getUserCooperativaId(user, data) : undefined;
   const [categoriaFilter, setCategoriaFilter] = useState("");
@@ -64,6 +66,10 @@ export default function ComunicadosPage() {
   const [alteracoesPendentes, setAlteracoesPendentes] = useState(false);
   const [publicando, setPublicando] = useState(false);
   const [msgPublicacao, setMsgPublicacao] = useState("");
+
+  useEffect(() => {
+    if (isCooperado) router.replace("/dashboard");
+  }, [isCooperado, router]);
 
   const handleFormChange = useCallback((patch: Partial<Comunicado>) => {
     setForm((prev) => ({ ...prev, ...patch }));
@@ -214,7 +220,7 @@ export default function ComunicadosPage() {
       }
       await pushOperacionalToCloud(cnpj, d, coopId);
       setAlteracoesPendentes(false);
-      setMsgPublicacao("Avisos enviados! Os cooperados verão na aba Avisos.");
+      setMsgPublicacao("Avisos enviados! Os cooperados verão no início.");
     } catch {
       setMsgPublicacao("Não foi possível enviar. Verifique a internet e tente de novo.");
     } finally {
@@ -223,6 +229,7 @@ export default function ComunicadosPage() {
   };
 
   if (!data) return null;
+  if (isCooperado) return null;
 
   const canManage = check("comunicados", "create");
   const formValido = formTemAssunto(form) && formTemConteudo(form);
@@ -233,7 +240,7 @@ export default function ComunicadosPage() {
         title="Comunicados"
         subtitle={
           canManage
-            ? "Assunto, texto ou áudio — publique no mural do início dos cooperados"
+            ? "Assunto, texto ou áudio — publique no início dos cooperados"
             : "Recados da cooperativa"
         }
         action={
@@ -285,7 +292,7 @@ export default function ComunicadosPage() {
       {canManage && (
         <AlertBanner variant="info" className="mb-4">
           Após salvar, toque em <strong>Enviar aos cooperados</strong>. O recado aparece no{" "}
-          <strong>mural do início</strong> e gera notificação no celular (com permissão).
+          <strong>início</strong> e gera notificação no celular (com permissão).
           {" "}Use <strong>apenas diretoria</strong> para avisos exclusivos — marque os cooperados em Cooperados.
         </AlertBanner>
       )}

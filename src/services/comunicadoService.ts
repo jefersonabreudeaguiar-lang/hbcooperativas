@@ -109,43 +109,6 @@ function lembreteMensalidadeVirtual(coop: Cooperativa): ComunicadoExibicao | nul
   };
 }
 
-function mensalidadePendenteMuralVirtual(
-  coop: Cooperativa,
-  resumo: ResumoMensalidadesCooperado
-): ComunicadoExibicao {
-  const m = resumo.mensalidadeMesAtual;
-  const cfg = coop.mensalidadeConfig;
-  const mes = m?.mesReferencia ?? mesAtualRef();
-  const valor = m?.valor ?? cfg?.valorPadrao ?? 0;
-  const assunto = "Mensalidade em atraso";
-  const partes = [`${formatMesReferencia(mes)} · ${formatCurrency(valor)}`];
-  if (m?.vencimento) {
-    partes.push(`venceu em ${formatDate(m.vencimento)}`);
-  }
-  if (resumo.qtdAtrasadas > 1) {
-    partes.push(`${resumo.qtdAtrasadas} mensalidade(s) em aberto`);
-  }
-
-  return {
-    id: `virtual_mensalidade_pendente_${coop.id}_${mes}`,
-    cooperativaId: coop.id,
-    assunto,
-    titulo: assunto,
-    descricao: `${partes.join(" · ")}. Toque para pagar via PIX na aba Mensalidades.`,
-    data: dataHojeIso(),
-    responsavel: coop.responsavel ?? "Cooperativa",
-    categoria: "financeiro",
-    fixado: true,
-    visivelParaTodos: true,
-    recorrente: false,
-    ativo: true,
-    createdAt: hoje().toISOString(),
-    virtual: true,
-    recorrenteLabel: "Pendência · em atraso",
-    href: "/mensalidades",
-  };
-}
-
 /** Combina comunicados cadastrados + lembretes automáticos de mensalidade. */
 export function getComunicadosParaExibicao(
   data: AppData,
@@ -222,8 +185,8 @@ export function getComunicadosCooperado(
   );
 }
 
-/** Mural do início do cooperado — avisos e mensalidade pendente sincronizados com a aba Mensalidades. */
-export function getComunicadosMuralInicioCooperado(
+/** Avisos exibidos no início do cooperado (mensalidade fica no banner dedicado). */
+export function getComunicadosInicioCooperado(
   data: AppData,
   cooperativaId: string,
   cooperadoId?: string
@@ -236,27 +199,26 @@ export function getComunicadosMuralInicioCooperado(
     resumoMens.situacao === "em_dia" ||
     resumoMens.situacao === "sem_mensalidade" ||
     resumoMens.situacao === "aguardando_confirmacao";
-  const mensalidadePendente = resumoMens?.situacao === "atrasada";
-  const coop = data.cooperativas.find((c) => c.id === cooperativaId);
 
-  const lista = getComunicadosCooperado(data, cooperativaId, cooperadoId).filter((c) => {
-    if (c.virtual && c.id.startsWith("virtual_mensalidade_pendente_")) return false;
-    if (c.virtual && c.id.startsWith("virtual_mensalidade")) {
-      return !mensalidadeResolvida;
-    }
-    if (c.virtual) return false;
-    if (mensalidadeResolvida && c.categoria === "financeiro") return false;
-    return true;
-  });
+  return getComunicadosCooperado(data, cooperativaId, cooperadoId)
+    .filter((c) => {
+      if (c.virtual) return false;
+      if (mensalidadeResolvida && c.categoria === "financeiro") return false;
+      return true;
+    })
+    .sort((a, b) => {
+      if (a.fixado !== b.fixado) return a.fixado ? -1 : 1;
+      return new Date(b.data).getTime() - new Date(a.data).getTime();
+    });
+}
 
-  if (mensalidadePendente && resumoMens && coop) {
-    lista.unshift(mensalidadePendenteMuralVirtual(coop, resumoMens));
-  }
-
-  return lista.sort((a, b) => {
-    if (a.fixado !== b.fixado) return a.fixado ? -1 : 1;
-    return new Date(b.data).getTime() - new Date(a.data).getTime();
-  });
+/** @deprecated Use getComunicadosInicioCooperado */
+export function getComunicadosMuralInicioCooperado(
+  data: AppData,
+  cooperativaId: string,
+  cooperadoId?: string
+): ComunicadoExibicao[] {
+  return getComunicadosInicioCooperado(data, cooperativaId, cooperadoId);
 }
 
 export function cooperadoTemConteudoComunicado(c: Comunicado): boolean {

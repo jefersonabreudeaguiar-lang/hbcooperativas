@@ -18,11 +18,11 @@ import { cooperadoExibirValorReceberInicio,
 } from "@/services/cooperadoEntregasService";
 import { resolverCooperadoIdCanonico } from "@/services/cooperadoCloudService";
 import { notaPertenceCooperativa } from "@/utils/fotoEntrega";
-import { getComunicadosMuralInicioCooperado } from "@/services/comunicadoService";
+import { getComunicadosInicioCooperado } from "@/services/comunicadoService";
 import { getResumoMensalidadesCooperado } from "@/services/mensalidadeService";
 import { prestacaoPrincipalCooperado, prestacaoExigeAtencaoCooperado } from "@/services/prestacaoContasService";
 import { totalValoresAvulsosPendentes } from "@/services/valoresAvulsosReceberService";
-import { MuralComunicados } from "@/components/comunicado/MuralComunicados";
+import { AvisosInicioSection } from "@/components/comunicado/AvisosInicioSection";
 import { PrestacaoContasDashboardBanner } from "@/components/prestacao/PrestacaoContasDashboardBanner";
 import { InicioResolvidosPanel } from "@/components/cooperado/InicioResolvidosPanel";
 import { listarResolvidosInicioCooperado } from "@/services/cooperadoInicioResolvidosService";
@@ -53,7 +53,7 @@ function CooperadoDashboard() {
   const prestacao = coopId ? prestacaoPrincipalCooperado(data, cooperadoId, coopId) : undefined;
   const prestacaoAberta = prestacao ? prestacaoExigeAtencaoCooperado(prestacao) : false;
   const avulsosAbertos = totalValoresAvulsosPendentes(data, cooperadoId, undefined, coopId) > 0;
-  const comunicados = coopId ? getComunicadosMuralInicioCooperado(data, coopId, cooperadoId) : [];
+  const comunicados = coopId ? getComunicadosInicioCooperado(data, coopId, cooperadoId) : [];
   const resolvidos = listarResolvidosInicioCooperado(data, cooperadoId, coopId);
   const temSecaoPendencias =
     rejeitadas.length > 0 ||
@@ -73,7 +73,7 @@ function CooperadoDashboard() {
 
       <MensalidadeStatusBanner cooperadoId={cooperadoId} modo="inicio" />
 
-      <MuralComunicados comunicados={comunicados} limite={5} hideWhenEmpty />
+      <AvisosInicioSection comunicados={comunicados} hideWhenEmpty />
 
       {avulsosAbertos && (
         <ValoresAvulsosDashboardCard cooperadoId={cooperadoId} cooperativaId={coopId} />
