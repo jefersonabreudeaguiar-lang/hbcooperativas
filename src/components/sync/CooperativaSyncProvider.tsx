@@ -10,8 +10,9 @@ import {
   syncCooperativaBidirectional,
 } from "@/services/cooperativaSyncCloudService";
 import { pushCooperadoToCloud, resolverCooperadoIdCanonico, flushPendingCooperadoPushes } from "@/services/cooperadoCloudService";
-import { getData, updateData } from "@/services/dataStore";
+import { getData, updateDataSafe } from "@/services/dataStore";
 import { getCooperadoNome } from "@/utils/calculations";
+import { compactarFotosNoArmazenamento } from "@/utils/fotoEntrega";
 import { isDiretoriaRole } from "@/permissions";
 import type { UserRole } from "@/types";
 
@@ -53,14 +54,22 @@ export function CooperativaSyncProvider({ children }: { children: React.ReactNod
         for (const nota of pendentes) {
           const result = await pushNotasPedidoToCloud(cnpj, [nota], cooperadoNome);
           if (result.ok) {
-            updateData((d) => ({
-              ...d,
-              notasPedido: d.notasPedido.map((n) =>
-                n.id === nota.id
-                  ? { ...n, fotoNaNuvem: true, cooperativaCnpj: normalizeCnpj(cnpj) }
-                  : n
-              ),
-            }));
+            updateDataSafe((d) =>
+              compactarFotosNoArmazenamento({
+                ...d,
+                notasPedido: d.notasPedido.map((n) =>
+                  n.id === nota.id
+                    ? {
+                        ...n,
+                        fotoNaNuvem: true,
+                        cooperativaCnpj: normalizeCnpj(cnpj),
+                        fotoPedido: undefined,
+                        fotosPedido: undefined,
+                      }
+                    : n
+                ),
+              })
+            );
           }
         }
       }

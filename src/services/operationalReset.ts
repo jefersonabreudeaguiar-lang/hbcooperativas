@@ -1,7 +1,7 @@
 import type { AppData } from "@/types";
 
 /** Incremente ao publicar uma limpeza global de lançamentos nos dispositivos. */
-export const OPERATIONAL_RESET_VERSION = 2;
+export const OPERATIONAL_RESET_VERSION = 3;
 
 export const OPERATIONAL_RESET_STORAGE_KEY = "coopeagriplla_operational_reset_v";
 export const OPERATIONAL_RESET_CLOUD_KEY = "coopeagriplla_operational_reset_cloud_v";
@@ -21,7 +21,7 @@ export function markOperationalResetCloudDone(): void {
   localStorage.removeItem(OPERATIONAL_RESET_CLOUD_KEY);
 }
 
-/** Remove entregas, fichas, pagamentos e demais lançamentos; mantém cadastros e contratos. */
+/** Remove entregas, fichas, pagamentos, avisos e demais lançamentos; mantém cadastros e contratos. */
 export function clearOperationalData(data: AppData): AppData {
   return {
     ...data,
@@ -41,6 +41,7 @@ export function clearOperationalData(data: AppData): AppData {
     livroCaixa: [],
     prestacoesContas: [],
     prestacoesContasExcluidas: [],
+    comunicados: [],
     auditLog: [],
   };
 }

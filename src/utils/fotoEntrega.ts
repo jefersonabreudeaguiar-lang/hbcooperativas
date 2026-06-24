@@ -194,6 +194,44 @@ export function compactarFotosNoArmazenamento(data: AppData): AppData {
   return changed ? { ...data, notasPedido } : data;
 }
 
+/** Libera espaço no localStorage antes de gravar (comprovantes, fotos grandes, auditoria). */
+export function liberarEspacoArmazenamento(data: AppData, nivel: 1 | 2 = 1): AppData {
+  let next = compactarFotosNoArmazenamento(data);
+
+  next = {
+    ...next,
+    mensalidades: next.mensalidades.map((m) =>
+      m.comprovante && (m.status === "paga" || m.status === "aguardando_confirmacao")
+        ? { ...m, comprovante: undefined }
+        : m
+    ),
+    comunicados: next.comunicados.map((c) =>
+      c.audioDataUrl ? { ...c, audioDataUrl: undefined } : c
+    ),
+  };
+
+  if (nivel >= 2) {
+    next = {
+      ...next,
+      auditLog: next.auditLog.slice(0, 40),
+      notasPedido: next.notasPedido.map((n) => ({
+        ...n,
+        fotoPedido: undefined,
+        fotosPedido: undefined,
+      })),
+    };
+  }
+
+  return next;
+}
+
+export function parametrosCompressaoFoto(qtdNaSessao: number): { maxWidth: number; quality: number } {
+  if (qtdNaSessao >= 15) return { maxWidth: 640, quality: 0.48 };
+  if (qtdNaSessao >= 8) return { maxWidth: 720, quality: 0.52 };
+  if (qtdNaSessao >= 4) return { maxWidth: 840, quality: 0.58 };
+  return { maxWidth: 960, quality: 0.62 };
+}
+
 /** Comparação exata do conteúdo da imagem (base64). */
 export function isFotoDuplicada(
   dataUrl: string,

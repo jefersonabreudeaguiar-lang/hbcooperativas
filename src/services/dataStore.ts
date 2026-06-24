@@ -3,7 +3,7 @@
 import type { AppData, AuditAction, User, Cooperado, Cooperativa, PrestacaoContas } from "@/types";
 import { emptyInitialData, DEMO_ENTITY_IDS, DEMO_EMAILS, DEMO_CNPJ } from "@/mock/data";
 import { findCooperativaByCnpj, getCooperativaById, getUserCooperativaId, normalizeCnpj } from "@/utils/cooperativa";
-import { compactarFotosNoArmazenamento } from "@/utils/fotoEntrega";
+import { compactarFotosNoArmazenamento, liberarEspacoArmazenamento } from "@/utils/fotoEntrega";
 import { ensureMensalidadesDoMes, ensureMensalidadeCooperado, sincronizarMensalidadeCooperativa } from "@/services/mensalidadeService";
 import { applyOperationalResetIfNeeded, clearOperationalData } from "@/services/operationalReset";
 import {
@@ -295,27 +295,37 @@ function loadData(forceReload = false): AppData {
 
     // Persiste limpeza de dados demo uma única vez
     if (!localStorage.getItem(DEMO_PURGED_KEY)) {
-      saveData(data);
+      const saved = saveDataSafe(data);
+      memoryCache = saved.ok ? data : data;
       localStorage.setItem(DEMO_PURGED_KEY, "1");
-      return data;
+      return memoryCache;
     }
 
     if (reset.changed) {
-      saveData(data);
-      return data;
+      const saved = saveDataSafe(data);
+      memoryCache = saved.ok ? data : data;
+      return memoryCache;
     }
 
     const afterTasks = runAutomaticTasks(data);
     if (afterTasks !== data) {
-      saveData(afterTasks);
-      return afterTasks;
+      const saved = saveDataSafe(afterTasks);
+      memoryCache = saved.ok ? afterTasks : data;
+      return memoryCache;
     }
 
     memoryCache = data;
     return data;
   } catch {
-    memoryCache = emptyInitialData;
-    return memoryCache;
+    if (memoryCache) return memoryCache;
+    try {
+      const fallback = migrateData(JSON.parse(stored!));
+      memoryCache = fallback;
+      return fallback;
+    } catch {
+      memoryCache = emptyInitialData;
+      return memoryCache;
+    }
   }
 }
 
@@ -324,24 +334,40 @@ function saveData(data: AppData): void {
   if (!result.ok) throw new Error(result.error);
 }
 
+function isStorageQuotaError(e: unknown): boolean {
+  return (
+    e instanceof DOMException &&
+    (e.name === "QuotaExceededError" || e.code === 22 || e.code === 1014)
+  );
+}
+
 export function saveDataSafe(data: AppData): { ok: true } | { ok: false; error: string } {
   if (typeof window === "undefined") return { ok: true };
-  try {
-    memoryCache = data;
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
-    notify();
-    return { ok: true };
-  } catch (e) {
-    const quota =
-      e instanceof DOMException &&
-      (e.name === "QuotaExceededError" || e.code === 22 || e.code === 1014);
-    return {
-      ok: false,
-      error: quota
-        ? "Memória do navegador cheia. Envie menos fotos por vez ou remova entregas antigas."
-        : "Não foi possível salvar os dados. Tente novamente.",
-    };
+
+  const previousCache = memoryCache;
+  const candidates = [data, liberarEspacoArmazenamento(data, 1), liberarEspacoArmazenamento(data, 2)];
+
+  for (let i = 0; i < candidates.length; i++) {
+    const candidate = candidates[i];
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(candidate));
+      memoryCache = candidate;
+      notify();
+      return { ok: true };
+    } catch (e) {
+      if (!isStorageQuotaError(e)) {
+        memoryCache = previousCache ?? memoryCache;
+        return { ok: false, error: "Não foi possível salvar os dados. Tente novamente." };
+      }
+    }
   }
+
+  memoryCache = previousCache ?? memoryCache;
+  return {
+    ok: false,
+    error:
+      "Memória do navegador cheia. Envie a entrega agora (com internet) ou remova fotos antigas antes de anexar mais.",
+  };
 }
 
 export function getData(): AppData {

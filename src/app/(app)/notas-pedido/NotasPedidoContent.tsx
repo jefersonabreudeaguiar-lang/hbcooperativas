@@ -49,7 +49,7 @@ import {
   resolverInstituicaoConferencia,
 } from "@/utils/instituicaoPreferida";
 import { getCooperadoNome } from "@/utils/calculations";
-import { isFotoDuplicada, compressFotoFile, makeFotoThumbnail, getFotoExibicaoNota, getFotosExibicaoNota, notaPertenceCooperativa, compactarFotosNoArmazenamento, agruparPendentesPorCooperado, getChaveGrupoConferencia, notaPertenceGrupoConferencia } from "@/utils/fotoEntrega";
+import { isFotoDuplicada, compressFotoFile, makeFotoThumbnail, getFotoExibicaoNota, getFotosExibicaoNota, notaPertenceCooperativa, compactarFotosNoArmazenamento, liberarEspacoArmazenamento, parametrosCompressaoFoto, agruparPendentesPorCooperado, getChaveGrupoConferencia, notaPertenceGrupoConferencia } from "@/utils/fotoEntrega";
 import type { NotaPedido, NotaPedidoItem, Cooperado, AppData } from "@/types";
 
 const NOVO_AVULSO = "__novo__";
@@ -183,19 +183,23 @@ export default function NotasPedidoContent() {
     setRascunhoContratoId("");
   }, [ANEXAR_DRAFT_KEY]);
 
-  const salvarRascunhoAnexar = (fotos: string[], contratoId: string) => {
-    if (!ANEXAR_DRAFT_KEY || typeof window === "undefined") return;
+  const salvarRascunhoAnexar = (fotos: string[], contratoId: string): boolean => {
+    if (!ANEXAR_DRAFT_KEY || typeof window === "undefined") return true;
     if (fotos.length === 0) {
       limparRascunhoAnexar();
-      return;
+      return true;
     }
     try {
       sessionStorage.setItem(
         ANEXAR_DRAFT_KEY,
         JSON.stringify({ fotos, contratoId, savedAt: Date.now() })
       );
+      return true;
     } catch {
-      /* quota */
+      setErroEnvio(
+        "Memória do aparelho cheia. Envie as fotos agora ou remova algumas antes de continuar anexando."
+      );
+      return false;
     }
   };
 
@@ -715,7 +719,8 @@ export default function NotasPedidoContent() {
     setProcessandoFoto(true);
     setFotoDuplicadaMsg("");
     try {
-      const dataUrl = await compressFotoFile(file);
+      const { maxWidth, quality } = parametrosCompressaoFoto(fotosSessao.length);
+      const dataUrl = await compressFotoFile(file, maxWidth, quality);
       const notasCooperado = data.notasPedido.filter((n) => n.cooperadoId === cooperadoId);
 
       setFotosSessao((prev) => {
@@ -919,16 +924,66 @@ export default function NotasPedidoContent() {
 
     if (!saved.ok) {
       const idsNovos = new Set(notasLocais.map((n) => n.id));
+      saved = updateDataSafe((d) =>
+        persistir(
+          liberarEspacoArmazenamento(
+            {
+              ...d,
+              notasPedido: d.notasPedido.map((n) =>
+                idsNovos.has(n.id)
+                  ? {
+                      ...n,
+                      fotoPedido: cloudOk ? undefined : n.fotoPedido,
+                      fotosPedido: cloudOk ? undefined : n.fotosPedido,
+                    }
+                  : n
+              ),
+            },
+            2
+          )
+        )
+      );
+    }
+
+    if (!saved.ok && cloudOk) {
       saved = updateDataSafe((d) => {
-        const base = compactarFotosNoArmazenamento({
-          ...d,
-          notasPedido: d.notasPedido.map((n) =>
-            idsNovos.has(n.id)
-              ? { ...n, fotoPedido: undefined, fotosPedido: undefined }
-              : n
-          ),
-        });
-        return persistir(base);
+        const idsNovos = new Set(notasLocais.map((n) => n.id));
+        const notasSemFotoFull = notasLocais.map((n) => ({
+          ...n,
+          fotoNaNuvem: true,
+          fotoPedido: undefined,
+          fotosPedido: undefined,
+        }));
+        const base = liberarEspacoArmazenamento(compactarFotosNoArmazenamento(d), 2);
+        if (reenviarNotaId) {
+          return addAuditEntry(
+            {
+              ...base,
+              notasPedido: base.notasPedido.map((n) =>
+                n.id === reenviarNotaId ? notasSemFotoFull[0] : n
+              ),
+            },
+            {
+              entityType: "nota_pedido",
+              entityId: reenviarNotaId,
+              action: "editar",
+              userId: user.id,
+              userName: user.name,
+              changes: "Entrega reenviada (fotos na nuvem)",
+            }
+          );
+        }
+        return addAuditEntry(
+          { ...base, notasPedido: [...base.notasPedido, ...notasSemFotoFull] },
+          {
+            entityType: "nota_pedido",
+            entityId: notasSemFotoFull[notasSemFotoFull.length - 1]?.id ?? "",
+            action: "criar",
+            userId: user.id,
+            userName: user.name,
+            changes: qtdFotos > 1 ? `1 entrega com ${qtdFotos} fotos (nuvem)` : "1 entrega com foto (nuvem)",
+          }
+        );
       });
     }
 

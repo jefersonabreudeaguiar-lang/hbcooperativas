@@ -44,12 +44,12 @@ export async function resetOperacionalSyncForCnpj(
   const existing = await fetchOperacionalSync(supabase, digits);
   const payload: OperacionalSyncPayload = {
     updatedAt: new Date().toISOString(),
-    operationalResetVersion: 2,
+    operationalResetVersion: 3,
     fullReset: true,
     arquivosMensais: [],
     ajustesFichaMes: [],
     pagamentosCooperado: [],
-    comunicados: existing?.comunicados ?? [],
+    comunicados: [],
     mensalidades: [],
     descontos: [],
     valoresAvulsosReceber: [],
