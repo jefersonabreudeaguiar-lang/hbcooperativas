@@ -29,6 +29,7 @@ import {
   patchNotaPedidoInCloud,
   pushNotasPedidoToCloud,
   deleteNotaPedidoFromCloud,
+  queueNotaDelete,
   ensureNotaComFoto,
   resolveCooperativaCnpj,
 } from "@/services/notaPedidoCloudService";
@@ -1203,10 +1204,7 @@ export default function NotasPedidoContent() {
     if (cnpj) {
       const del = await deleteNotaPedidoFromCloud(cnpj, excluirNotaTarget.id);
       if (!del.ok) {
-        setExcluindo(false);
-        setErroEnvio(del.error ?? "Não foi possível excluir na nuvem.");
-        setExcluirNotaTarget(null);
-        return;
+        queueNotaDelete(cnpj, excluirNotaTarget.id);
       }
     }
 

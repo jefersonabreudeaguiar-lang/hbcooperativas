@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef } from "react";
 import { useAuth } from "@/modules/auth/AuthProvider";
 import { useAppData } from "@/hooks/useAppData";
 import { getUserCooperativaId, normalizeCnpj } from "@/utils/cooperativa";
-import { resolveCooperativaCnpj, pushNotasPedidoToCloud } from "@/services/notaPedidoCloudService";
+import { resolveCooperativaCnpj, pushNotasPedidoToCloud, flushPendingNotaDeletes } from "@/services/notaPedidoCloudService";
 import {
   SYNC_INTERVAL_MS,
   syncCooperativaBidirectional,
@@ -31,6 +31,7 @@ export function CooperativaSyncProvider({ children }: { children: React.ReactNod
 
       const pushCatalog = isDiretoriaRole(user.role as UserRole);
       const pushMensalidades = isDiretoriaRole(user.role as UserRole);
+      await flushPendingNotaDeletes(cnpj);
       await syncCooperativaBidirectional(cnpj, coopId, { pushCatalog, pushMensalidades });
 
       if (user.role === "cooperado" && user.cooperadoId) {

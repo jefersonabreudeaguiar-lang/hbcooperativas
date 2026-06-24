@@ -118,15 +118,15 @@ export async function DELETE(
   }
 
   const tableDel = await deleteNotaFromTable(supabase, cnpj, id);
-  if (tableDel.ok) {
-    await deleteNotaFromStorage(supabase, cnpj, id);
+  const storageDel = await deleteNotaFromStorage(supabase, cnpj, id);
+
+  if (tableDel.ok || storageDel.ok) {
     return NextResponse.json({ success: true });
   }
 
-  const storageDel = await deleteNotaFromStorage(supabase, cnpj, id);
-  if (!storageDel.ok) {
+  if (storageDel.ok === false && "error" in storageDel) {
     return NextResponse.json({ error: storageDel.error }, { status: 500 });
   }
 
-  return NextResponse.json({ success: true, source: "storage" });
+  return NextResponse.json({ error: "Entrega não encontrada na nuvem." }, { status: 404 });
 }

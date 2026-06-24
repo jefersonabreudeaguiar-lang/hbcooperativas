@@ -94,51 +94,56 @@ export function mergeCloudNotasIntoData(
   cloudNotas: NotaPedido[],
   cnpj: string
 ): AppData {
-  if (cloudNotas.length === 0) {
-    const digits = normalizeCnpj(cnpj);
-    let removed = false;
-    const notasPedido = data.notasPedido.filter((n) => {
-      if (n.status !== "aguardando_conferencia") return true;
-      const notaCnpj = getNotaCooperativaCnpj(data, n);
-      if (notaCnpj !== digits) return true;
-      if (n.fotoNaNuvem || n.cooperativaCnpj) {
-        removed = true;
-        return false;
-      }
-      return true;
-    });
-    return removed ? { ...data, notasPedido } : data;
-  }
-
+  const digits = normalizeCnpj(cnpj);
+  const cloudIds = new Set(cloudNotas.map((n) => n.id));
   const byId = new Map(data.notasPedido.map((n) => [n.id, n]));
   let changed = false;
 
   for (const raw of cloudNotas) {
     const cn = normalizeCloudNotaForLocal(data, raw, cnpj);
-    const local = byId.get(cn.id);
-    if (shouldApplyCloudNota(local, cn)) {
-      byId.set(cn.id, cn);
+    const mergedNota: NotaPedido = {
+      ...cn,
+      cooperativaCnpj: digits,
+      fotoNaNuvem: cn.fotoNaNuvem ?? Boolean(cn.fotoPedido || cn.fotosPedido?.length),
+    };
+    const local = byId.get(mergedNota.id);
+    if (shouldApplyCloudNota(local, mergedNota)) {
+      byId.set(mergedNota.id, mergedNota);
       changed = true;
     }
+  }
+
+  // Entrega excluída na nuvem (ex.: cooperado apagou) some também no responsável.
+  for (const [id, n] of [...byId.entries()]) {
+    if (cloudIds.has(id)) continue;
+    if (n.status !== "aguardando_conferencia" && n.status !== "rejeitada") continue;
+    const notaCnpj = getNotaCooperativaCnpj(data, n);
+    if (notaCnpj !== digits) continue;
+    if (!n.fotoNaNuvem && !n.cooperativaCnpj) continue;
+    byId.delete(id);
+    changed = true;
   }
 
   if (!changed) return data;
   return { ...data, notasPedido: Array.from(byId.values()) };
 }
 
-export async function fetchNotasPedidoFromCloud(cnpj: string): Promise<NotaPedido[]> {
+export async function fetchNotasPedidoFromCloud(
+  cnpj: string
+): Promise<{ ok: boolean; notas: NotaPedido[] }> {
   const digits = normalizeCnpj(cnpj);
-  if (digits.length !== 14) return [];
+  if (digits.length !== 14) return { ok: false, notas: [] };
 
   try {
     const res = await fetch(`/api/notas-pedido?cnpj=${digits}`, { cache: "no-store" });
-    if (!res.ok) return [];
+    if (!res.ok) return { ok: false, notas: [] };
     const json = await res.json().catch(() => ({}));
-    return ((json.notas ?? []) as unknown[])
+    const notas = ((json.notas ?? []) as unknown[])
       .map(mapRowToNota)
       .filter((n): n is NotaPedido => Boolean(n));
+    return { ok: true, notas };
   } catch {
-    return [];
+    return { ok: false, notas: [] };
   }
 }
 
@@ -230,6 +235,61 @@ export async function pushNotasPedidoToCloud(
   }
 }
 
+const PENDING_NOTA_DELETES_KEY = "coopeagriplla_pending_nota_deletes";
+
+function loadPendingNotaDeletes(): { cnpj: string; notaId: string }[] {
+  if (typeof window === "undefined") return [];
+  try {
+    const raw = localStorage.getItem(PENDING_NOTA_DELETES_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw) as { cnpj?: string; notaId?: string }[];
+    if (!Array.isArray(parsed)) return [];
+    return parsed
+      .filter((e) => e.cnpj && e.notaId)
+      .map((e) => ({ cnpj: normalizeCnpj(String(e.cnpj)), notaId: String(e.notaId) }));
+  } catch {
+    return [];
+  }
+}
+
+function savePendingNotaDeletes(entries: { cnpj: string; notaId: string }[]): void {
+  if (typeof window === "undefined") return;
+  if (entries.length === 0) localStorage.removeItem(PENDING_NOTA_DELETES_KEY);
+  else localStorage.setItem(PENDING_NOTA_DELETES_KEY, JSON.stringify(entries));
+}
+
+export function queueNotaDelete(cnpj: string, notaId: string): void {
+  const digits = normalizeCnpj(cnpj);
+  if (digits.length !== 14 || !notaId) return;
+  const entries = loadPendingNotaDeletes();
+  if (entries.some((e) => e.cnpj === digits && e.notaId === notaId)) return;
+  savePendingNotaDeletes([...entries, { cnpj: digits, notaId }]);
+}
+
+export async function flushPendingNotaDeletes(cnpj?: string): Promise<void> {
+  const digits = cnpj ? normalizeCnpj(cnpj) : "";
+  let entries = loadPendingNotaDeletes();
+  if (digits.length === 14) {
+    entries = entries.filter((e) => e.cnpj === digits);
+  }
+  if (entries.length === 0) return;
+
+  const remaining: { cnpj: string; notaId: string }[] = [];
+  const all = loadPendingNotaDeletes();
+
+  for (const entry of entries) {
+    const result = await deleteNotaPedidoFromCloud(entry.cnpj, entry.notaId);
+    if (!result.ok) {
+      remaining.push(entry);
+    }
+  }
+
+  const other = digits.length === 14
+    ? all.filter((e) => e.cnpj !== digits)
+    : [];
+  savePendingNotaDeletes([...other, ...remaining]);
+}
+
 export async function deleteNotaPedidoFromCloud(
   cnpj: string,
   notaId: string
@@ -272,10 +332,11 @@ export async function patchNotaPedidoInCloud(
 
 export async function syncNotasPedidoFromCloud(cnpj: string): Promise<number> {
   if (needsOperationalResetCloudPush()) return 0;
-  const cloudNotas = await fetchNotasPedidoFromCloud(cnpj);
+  await flushPendingNotaDeletes(cnpj);
+  const { ok, notas: cloudNotas } = await fetchNotasPedidoFromCloud(cnpj);
+  if (!ok) return 0;
   const current = getData();
-  const merged =
-    cloudNotas.length > 0 ? mergeCloudNotasIntoData(current, cloudNotas, cnpj) : current;
+  const merged = mergeCloudNotasIntoData(current, cloudNotas, cnpj);
   const reconciled = reconciliarFichaFromNotasConferidas(merged);
   if (reconciled !== current) {
     saveDataSafe(reconciled);
