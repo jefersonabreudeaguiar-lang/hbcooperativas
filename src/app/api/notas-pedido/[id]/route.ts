@@ -3,7 +3,7 @@ import { getSupabaseAdmin, isSupabaseConfigured } from "@/lib/supabase/admin";
 import { isNotasPedidoTableMissing } from "@/lib/supabase/errors";
 import { normalizeCnpj } from "@/utils/cooperativa";
 import type { NotaPedido } from "@/types";
-import { fetchNotaFromStorage, uploadNotaToStorage, deleteNotaFromStorage, deleteNotaFromTable, notaPayloadForTable } from "@/lib/supabase/notasStorage";
+import { fetchNotaFromStorage, fetchNotaMetaFromStorage, countUploadedFotoParts, uploadNotaToStorage, deleteNotaFromStorage, deleteNotaFromTable, notaPayloadForTable } from "@/lib/supabase/notasStorage";
 import { mergeNotaComFotos } from "@/utils/fotoEntrega";
 
 export async function GET(
@@ -24,6 +24,12 @@ export async function GET(
   const supabase = getSupabaseAdmin();
   if (!supabase) {
     return NextResponse.json({ nota: null, configured: false });
+  }
+
+  if (searchParams.get("uploadProgress") === "1") {
+    const uploadedParts = await countUploadedFotoParts(supabase, cnpj, id);
+    const meta = await fetchNotaMetaFromStorage(supabase, cnpj, id);
+    return NextResponse.json({ nota: meta, uploadedParts });
   }
 
   let fromTable: NotaPedido | null = null;
@@ -87,7 +93,8 @@ export async function PATCH(
     .eq("cooperativa_cnpj", cnpj);
 
   if (!error) {
-    const uploaded = await uploadNotaToStorage(supabase, cnpj, nota);
+    const forStorage = notaPayloadForTable(nota);
+    const uploaded = await uploadNotaToStorage(supabase, cnpj, forStorage);
     if (!uploaded.ok) {
       return NextResponse.json({ error: uploaded.error }, { status: 500 });
     }
@@ -98,7 +105,7 @@ export async function PATCH(
     console.error("[notas-pedido/patch]", error.message);
   }
 
-  const uploaded = await uploadNotaToStorage(supabase, cnpj, nota);
+  const uploaded = await uploadNotaToStorage(supabase, cnpj, notaPayloadForTable(nota));
   if (!uploaded.ok) {
     return NextResponse.json({ error: uploaded.error }, { status: 500 });
   }

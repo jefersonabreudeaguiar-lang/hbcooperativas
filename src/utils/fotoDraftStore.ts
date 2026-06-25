@@ -13,6 +13,14 @@ interface DraftMeta {
   contratoId: string;
   count: number;
   savedAt: number;
+  /** ID estável da entrega — reutilizado em retentativas de envio. */
+  pendingNotaId?: string;
+}
+
+export interface FotoDraftMetaLoaded {
+  contratoId: string;
+  count: number;
+  pendingNotaId?: string;
 }
 
 interface DraftFotoRow {
@@ -138,7 +146,7 @@ async function migrateLegacyDraft(coopKey: string): Promise<void> {
   }
 }
 
-export async function loadFotoDraftMeta(coopKey: string): Promise<{ contratoId: string; count: number } | null> {
+export async function loadFotoDraftMeta(coopKey: string): Promise<FotoDraftMetaLoaded | null> {
   if (typeof indexedDB === "undefined") return null;
   await migrateLegacyDraft(coopKey);
   try {
@@ -150,9 +158,37 @@ export async function loadFotoDraftMeta(coopKey: string): Promise<{ contratoId: 
       await clearFotoDraft(coopKey);
       return null;
     }
-    return { contratoId: meta.contratoId ?? "", count: meta.count };
+    return {
+      contratoId: meta.contratoId ?? "",
+      count: meta.count,
+      pendingNotaId: meta.pendingNotaId,
+    };
   } catch {
     return null;
+  }
+}
+
+/** Gera ou reutiliza o ID da entrega em andamento (evita entregas órfãs ao retentar). */
+export async function getOrCreatePendingNotaId(
+  coopKey: string,
+  factory: () => string
+): Promise<string> {
+  if (typeof indexedDB === "undefined") return factory();
+  const db = await openDb();
+  try {
+    const prev = await txGetMeta(db, coopKey);
+    if (prev?.pendingNotaId) return prev.pendingNotaId;
+    const pendingNotaId = factory();
+    await txPutMeta(db, {
+      coopKey,
+      contratoId: prev?.contratoId ?? "",
+      count: prev?.count ?? 0,
+      savedAt: Date.now(),
+      pendingNotaId,
+    });
+    return pendingNotaId;
+  } finally {
+    db.close();
   }
 }
 
@@ -228,6 +264,7 @@ export async function appendFotoDraft(
       contratoId: contratoId || prev?.contratoId || "",
       count: index + 1,
       savedAt: Date.now(),
+      pendingNotaId: prev?.pendingNotaId,
     });
     return index;
   } finally {
@@ -265,11 +302,13 @@ export async function removeFotoDraftAt(coopKey: string, removeIndex: number): P
         data: src.data,
       });
     }
+    const fullMeta = await txGetMeta(freshDb, coopKey);
     await txPutMeta(freshDb, {
       coopKey,
       contratoId: meta.contratoId,
       count: rows.length,
       savedAt: Date.now(),
+      pendingNotaId: fullMeta?.pendingNotaId,
     });
   } finally {
     freshDb.close();

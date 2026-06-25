@@ -28,6 +28,67 @@ function notaUsesFotoParts(nota: NotaPedido): boolean {
   return Boolean(nota.fotosEnviadasCount && nota.fotosEnviadasCount > 0);
 }
 
+/** Conta arquivos foto-*.jpg já enviados (sem carregar conteúdo). */
+export async function countUploadedFotoParts(
+  supabase: SupabaseClient,
+  cnpj: string,
+  notaId: string
+): Promise<number> {
+  const folder = `${cnpj}/${notaId}`;
+  const { data: files } = await supabase.storage.from(BUCKET).list(folder, { limit: 500 });
+  if (!files?.length) return 0;
+  return files.filter((f) => f.name.startsWith("foto-") && f.name.endsWith(".jpg")).length;
+}
+
+/** Metadados JSON da entrega — sem montar fotos (leve). */
+export async function fetchNotaMetaFromStorage(
+  supabase: SupabaseClient,
+  cnpj: string,
+  notaId: string
+): Promise<NotaPedido | null> {
+  await ensureEntregasBucket(supabase);
+  const { data: blob, error } = await supabase.storage
+    .from(BUCKET)
+    .download(storagePath(cnpj, notaId));
+  if (error || !blob) return null;
+  try {
+    const parsed = JSON.parse(await blob.text()) as NotaPedido;
+    return parsed?.id ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Anexa só a 1ª foto para cards da fila (responsável) — não carrega todas. */
+async function attachListPreviewFromParts(
+  supabase: SupabaseClient,
+  cnpj: string,
+  nota: NotaPedido
+): Promise<NotaPedido> {
+  if (!notaUsesFotoParts(nota)) return nota;
+  if (nota.fotoPedidoMiniatura || nota.fotosPedidoMiniaturas?.length) return nota;
+  const first = await downloadFotoPartAsDataUrl(supabase, cnpj, nota.id, 0);
+  if (!first) return nota;
+  return {
+    ...nota,
+    fotoPedidoMiniatura: first,
+    fotosPedidoMiniaturas: [first],
+  };
+}
+
+/** Anexa miniatura da 1ª foto para exibição na fila (sync list). */
+export async function enrichNotasListWithPreviews(
+  supabase: SupabaseClient,
+  cnpj: string,
+  notas: NotaPedido[]
+): Promise<NotaPedido[]> {
+  const out: NotaPedido[] = [];
+  for (const nota of notas) {
+    out.push(await attachListPreviewFromParts(supabase, cnpj, nota));
+  }
+  return out;
+}
+
 async function downloadFotoPartAsDataUrl(
   supabase: SupabaseClient,
   cnpj: string,
@@ -197,7 +258,9 @@ export async function fetchNotasFromStorage(
     if (dlErr || !blob) continue;
     try {
       const parsed = JSON.parse(await blob.text()) as NotaPedido;
-      if (parsed?.id) notas.push(parsed);
+      if (!parsed?.id) continue;
+      const withPreview = await attachListPreviewFromParts(supabase, cnpj, parsed);
+      notas.push(withPreview);
     } catch {
       /* ignore corrupt file */
     }
@@ -347,12 +410,17 @@ export async function deleteAllNotasForCnpj(
   await ensureEntregasBucket(supabase);
   const { data: files } = await supabase.storage.from(BUCKET).list(digits, { limit: 1000 });
   if (files?.length) {
-    const paths = files
-      .filter((file) => file.name.endsWith(".json"))
-      .map((file) => `${digits}/${file.name}`);
-    if (paths.length) {
-      const { error } = await supabase.storage.from(BUCKET).remove(paths);
-      if (!error) removed += paths.length;
+    const pathsToRemove: string[] = [];
+    for (const file of files) {
+      if (file.name.endsWith(".json")) {
+        pathsToRemove.push(`${digits}/${file.name}`);
+        const notaId = file.name.replace(/\.json$/, "");
+        await removeNotaFotoParts(supabase, digits, notaId);
+      }
+    }
+    if (pathsToRemove.length) {
+      const { error } = await supabase.storage.from(BUCKET).remove(pathsToRemove);
+      if (!error) removed += pathsToRemove.length;
     }
   }
 

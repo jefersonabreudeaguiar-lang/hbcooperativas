@@ -59,6 +59,7 @@ import {
   listFotoDraftPreviews,
   getFotoDraftData,
   isFotoDraftDuplicada,
+  getOrCreatePendingNotaId,
   removeFotoDraftAt,
   type FotoDraftPreview,
 } from "@/utils/fotoDraftStore";
@@ -190,6 +191,7 @@ export default function NotasPedidoContent() {
   const [filaConferenciaPos, setFilaConferenciaPos] = useState(0);
   const [filaConferenciaTotal, setFilaConferenciaTotal] = useState(0);
   const [conferenciaTransicao, setConferenciaTransicao] = useState(false);
+  const [conferenciaFotoErro, setConferenciaFotoErro] = useState("");
 
   const coopId = user && data ? getUserCooperativaId(user, data) : undefined;
   const ANEXAR_DRAFT_KEY = coopId ? `hb_anexar_draft_${coopId}` : "";
@@ -859,7 +861,7 @@ export default function NotasPedidoContent() {
     const inst = workingData.instituicoes.find((i) => i.id === contratoId);
     const localEntrega = inst?.localEntrega ?? inst?.endereco ?? local;
 
-    const buildNotaEntrega = (d: AppData): NotaPedido | null => {
+    const buildNotaEntrega = async (d: AppData): Promise<NotaPedido | null> => {
       if (reenviarNotaId) {
         const base = d.notasPedido.find((n) => n.id === reenviarNotaId);
         if (!base) return null;
@@ -884,8 +886,13 @@ export default function NotasPedidoContent() {
         };
       }
 
+      const notaId =
+        ANEXAR_DRAFT_KEY
+          ? await getOrCreatePendingNotaId(ANEXAR_DRAFT_KEY, () => generateId("np"))
+          : generateId("np");
+
       return {
-        id: generateId("np"),
+        id: notaId,
         cooperativaId: coopId,
         cooperadoId: cid,
         instituicaoId: contratoId,
@@ -910,10 +917,64 @@ export default function NotasPedidoContent() {
       };
     };
 
-    const notaEntrega = buildNotaEntrega(workingData);
+    const notaEntrega = await buildNotaEntrega(workingData);
     if (!notaEntrega) {
       setEnviando(false);
       setErroEnvio("Não foi possível preparar o envio. Tente novamente.");
+      return;
+    }
+
+    const miniaturas = fotosSessaoPreviews
+      .slice()
+      .sort((a, b) => a.index - b.index)
+      .map((p) => p.preview);
+
+    const notaLocalBase = {
+      ...notaEntrega,
+      fotoNaNuvem: false,
+      fotosPedidoMiniaturas: miniaturas,
+      fotoPedidoMiniatura: miniaturas[0],
+      fotoPedido: undefined,
+      fotosPedido: undefined,
+    };
+
+    const persistirLocal = (d: AppData, notaFinal: NotaPedido) => {
+      const base = compactarFotosNoArmazenamento(liberarEspacoArmazenamento(d, 1));
+
+      if (reenviarNotaId) {
+        const updated = base.notasPedido.map((n) => (n.id === reenviarNotaId ? notaFinal : n));
+        return addAuditEntry({ ...base, notasPedido: updated }, {
+          entityType: "nota_pedido",
+          entityId: reenviarNotaId,
+          action: "editar",
+          userId: user.id,
+          userName: user.name,
+          changes: notaFinal.fotoNaNuvem ? "Entrega reenviada" : "Entrega em envio",
+        });
+      }
+
+      const exists = base.notasPedido.some((n) => n.id === notaFinal.id);
+      const notasPedido = exists
+        ? base.notasPedido.map((n) => (n.id === notaFinal.id ? notaFinal : n))
+        : [...base.notasPedido, notaFinal];
+
+      return addAuditEntry({ ...base, notasPedido }, {
+        entityType: "nota_pedido",
+        entityId: notaFinal.id,
+        action: exists ? "editar" : "criar",
+        userId: user.id,
+        userName: user.name,
+        changes: qtdFotos > 1 ? `1 entrega com ${qtdFotos} fotos` : "1 entrega com foto",
+      });
+    };
+
+    let saved = updateDataSafe((d) => persistirLocal(d, notaLocalBase));
+    if (!saved.ok) {
+      saved = updateDataSafe((d) => persistirLocal(liberarEspacoArmazenamento(d, 2), notaLocalBase));
+    }
+    if (!saved.ok) {
+      setEnviando(false);
+      setErroEnvio(`${saved.error} Não foi possível registrar a entrega neste aparelho.`);
       return;
     }
 
@@ -935,14 +996,9 @@ export default function NotasPedidoContent() {
       }
     }
 
-    const miniaturas = fotosSessaoPreviews
-      .slice()
-      .sort((a, b) => a.index - b.index)
-      .map((p) => p.preview);
-
     const notasLocais = [{
       ...notaEntrega,
-      fotoNaNuvem: cloudOk,
+      fotoNaNuvem: true,
       fotosPedidoMiniaturas: miniaturas,
       fotoPedidoMiniatura: miniaturas[0],
       fotoPedido: undefined,
@@ -958,106 +1014,25 @@ export default function NotasPedidoContent() {
       return;
     }
 
-    const persistir = (d: AppData) => {
-      const base = compactarFotosNoArmazenamento(liberarEspacoArmazenamento(d, 1));
-
-      if (reenviarNotaId) {
-        const local = notasLocais[0];
-        const updated = base.notasPedido.map((n) => (n.id === reenviarNotaId ? local : n));
-        return addAuditEntry({ ...base, notasPedido: updated }, {
-          entityType: "nota_pedido",
-          entityId: reenviarNotaId,
-          action: "editar",
-          userId: user.id,
-          userName: user.name,
-          changes: "Entrega reenviada",
-        });
-      }
-
-      const notas = [...base.notasPedido, ...notasLocais];
-      const lastId = notasLocais[notasLocais.length - 1]?.id;
-      return addAuditEntry({ ...base, notasPedido: notas }, {
-        entityType: "nota_pedido",
-        entityId: lastId ?? "",
-        action: "criar",
-        userId: user.id,
-        userName: user.name,
-        changes: qtdFotos > 1 ? `1 entrega com ${qtdFotos} fotos` : "1 entrega com foto",
-      });
-    };
-
-    let saved = updateDataSafe(persistir);
-
+    saved = updateDataSafe((d) => persistirLocal(d, notasLocais[0]));
     if (!saved.ok) {
-      const idsNovos = new Set(notasLocais.map((n) => n.id));
-      saved = updateDataSafe((d) =>
-        persistir(
-          liberarEspacoArmazenamento(
-            {
-              ...d,
-              notasPedido: d.notasPedido.map((n) =>
-                idsNovos.has(n.id)
-                  ? {
-                      ...n,
-                      fotoPedido: cloudOk ? undefined : n.fotoPedido,
-                      fotosPedido: cloudOk ? undefined : n.fotosPedido,
-                    }
-                  : n
-              ),
-            },
-            2
-          )
-        )
-      );
+      saved = updateDataSafe((d) => persistirLocal(liberarEspacoArmazenamento(d, 2), notasLocais[0]));
     }
 
     if (!saved.ok && cloudOk) {
-      saved = updateDataSafe((d) => {
-        const idsNovos = new Set(notasLocais.map((n) => n.id));
-        const notasSemFotoFull = notasLocais.map((n) => ({
-          ...n,
-          fotoNaNuvem: true,
-          fotoPedido: undefined,
-          fotosPedido: undefined,
-        }));
-        const base = liberarEspacoArmazenamento(compactarFotosNoArmazenamento(d), 2);
-        if (reenviarNotaId) {
-          return addAuditEntry(
-            {
-              ...base,
-              notasPedido: base.notasPedido.map((n) =>
-                n.id === reenviarNotaId ? notasSemFotoFull[0] : n
-              ),
-            },
-            {
-              entityType: "nota_pedido",
-              entityId: reenviarNotaId,
-              action: "editar",
-              userId: user.id,
-              userName: user.name,
-              changes: "Entrega reenviada (fotos na nuvem)",
-            }
-          );
-        }
-        return addAuditEntry(
-          { ...base, notasPedido: [...base.notasPedido, ...notasSemFotoFull] },
-          {
-            entityType: "nota_pedido",
-            entityId: notasSemFotoFull[notasSemFotoFull.length - 1]?.id ?? "",
-            action: "criar",
-            userId: user.id,
-            userName: user.name,
-            changes: qtdFotos > 1 ? `1 entrega com ${qtdFotos} fotos (nuvem)` : "1 entrega com foto (nuvem)",
-          }
-        );
-      });
+      saved = updateDataSafe((d) =>
+        persistirLocal(
+          liberarEspacoArmazenamento(compactarFotosNoArmazenamento(d), 2),
+          { ...notasLocais[0], fotoPedido: undefined, fotosPedido: undefined }
+        )
+      );
     }
 
     if (!saved.ok) {
       setEnviando(false);
       setEnvioProgresso(null);
       setErroEnvio(
-        `${saved.error}${cloudOk ? "" : ` ${cloudError}`} As fotos continuam salvas no aparelho — toque Enviar de novo.`
+        `${saved.error} Fotos já estão na nuvem — aguarde a sincronização ou toque Enviar de novo.`
       );
       return;
     }
@@ -1072,13 +1047,9 @@ export default function NotasPedidoContent() {
     if (isCooperado) setStatusFilter("aguardando_conferencia");
     setAnexarSucesso(true);
     setSuccessMsg(
-      cloudOk
-        ? qtdFotos === 1
-          ? "Entrega enviada! Aparece abaixo como Em análise — o responsável já pode conferir."
-          : `Entrega enviada com ${qtdFotos} fotos! Aparece abaixo como Em análise.`
-        : qtdFotos === 1
-          ? "Entrega registrada neste aparelho. Será enviada ao responsável assim que a conexão permitir."
-          : `Entrega com ${qtdFotos} fotos registrada neste aparelho. Sincronização automática em andamento.`
+      qtdFotos === 1
+        ? "Entrega enviada! Aparece abaixo como Em análise — o responsável já pode conferir."
+        : `Entrega enviada com ${qtdFotos} fotos! Aparece abaixo como Em análise.`
     );
   };
 
@@ -1087,6 +1058,7 @@ export default function NotasPedidoContent() {
     setFilaConferenciaPos(0);
     setFilaConferenciaTotal(0);
     setConferenciaTransicao(false);
+    setConferenciaFotoErro("");
     setConferirModal(false);
     setSelectedNota(null);
   };
@@ -1094,12 +1066,24 @@ export default function NotasPedidoContent() {
   const prepararConferenciaNota = async (nota: NotaPedido, opts?: { transicao?: boolean }) => {
     const d = getData() ?? data;
     if (opts?.transicao) setConferenciaTransicao(true);
+    setConferenciaFotoErro("");
 
     let notaComFoto = nota;
     if (d && coopId) {
       if (!isCooperado || getFotosExibicaoNota(nota).length === 0) {
         notaComFoto = await ensureNotaComFoto(d, nota, coopId);
       }
+    }
+    const fotosCarregadas = getFotosExibicaoNota(notaComFoto);
+    const esperado = notaComFoto.fotosEnviadasCount ?? contarFotosEnviadasNota(notaComFoto);
+    if (
+      notaComFoto.fotoNaNuvem &&
+      esperado > 0 &&
+      fotosCarregadas.length === 0
+    ) {
+      setConferenciaFotoErro(
+        "Não foi possível carregar as fotos da nuvem. Verifique a conexão e abra esta entrega de novo."
+      );
     }
     setSelectedNota(notaComFoto);
     const instId = coopId
@@ -2292,7 +2276,25 @@ export default function NotasPedidoContent() {
                       </div>
                     );
                   }
-                  if (selectedNota.fotoNaNuvem) {
+                  if (conferenciaFotoErro) {
+                    return (
+                      <div className="text-center py-12 px-4 space-y-3">
+                        <p className="text-red-300 text-sm">{conferenciaFotoErro}</p>
+                        <Button
+                          type="button"
+                          variant="secondary"
+                          size="sm"
+                          onClick={() => selectedNota && void prepararConferenciaNota(selectedNota, { transicao: true })}
+                        >
+                          Tentar carregar de novo
+                        </Button>
+                      </div>
+                    );
+                  }
+                  if (conferenciaTransicao) {
+                    return <p className="text-gray-400 text-center py-12">Carregando fotos da nuvem...</p>;
+                  }
+                  if (selectedNota.fotoNaNuvem && contarFotosEnviadasNota(selectedNota) > 0) {
                     return <p className="text-gray-400 text-center py-12">Carregando fotos da nuvem...</p>;
                   }
                   return <p className="text-gray-400 text-center py-12">Sem foto</p>;

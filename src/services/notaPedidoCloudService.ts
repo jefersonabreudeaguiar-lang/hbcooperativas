@@ -362,7 +362,22 @@ export async function pushNotaComFotosEmStreaming(
   };
 
   try {
-    for (let i = 0; i < totalCount; i++) {
+    let startIndex = 0;
+    try {
+      const progressRes = await fetch(
+        `/api/notas-pedido/${encodeURIComponent(nota.id)}?cnpj=${digits}&uploadProgress=1`
+      );
+      if (progressRes.ok) {
+        const progressJson = await progressRes.json().catch(() => ({}));
+        const uploaded = Number(progressJson.uploadedParts ?? 0);
+        if (uploaded >= totalCount) return { ok: true };
+        if (uploaded > 0) startIndex = uploaded;
+      }
+    } catch {
+      /* primeira tentativa */
+    }
+
+    for (let i = startIndex; i < totalCount; i++) {
       const foto = await readFotoAt(i);
       if (!foto) {
         return { ok: false, error: `Foto ${i + 1} de ${totalCount} não encontrada no aparelho.` };
@@ -492,10 +507,15 @@ export async function ensureNotaComFoto(
 ): Promise<NotaPedido> {
   const localFotos = getFotosExibicaoNota(nota);
   const esperado = nota.fotosEnviadasCount ?? localFotos.length;
-  if (localFotos.length >= esperado && esperado > 0) return nota;
+  const fullResCount = nota.fotosPedido?.length ?? 0;
+
+  if (fullResCount >= esperado && esperado > 0) return nota;
+  if (localFotos.length >= esperado && esperado > 0 && fullResCount >= esperado) return nota;
 
   const cnpj = getCooperativaCnpj(data, coopId ?? nota.cooperativaId);
   if (!cnpj) return nota;
+
+  if (!nota.fotoNaNuvem && fullResCount === 0) return nota;
 
   const cloud = await fetchNotaPedidoFromCloud(cnpj, nota.id);
   if (!cloud) return nota;

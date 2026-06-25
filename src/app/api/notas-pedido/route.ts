@@ -9,6 +9,7 @@ import {
   notaPayloadForTable,
   uploadNotaToStorage,
   upsertNotasInTable,
+  enrichNotasListWithPreviews,
 } from "@/lib/supabase/notasStorage";
 
 export async function GET(request: Request) {
@@ -33,11 +34,13 @@ export async function GET(request: Request) {
   ]);
 
   if (!fromTable.tableMissing) {
-    const notas = mergeNotasSources(fromTable.notas, fromStorage);
+    const merged = mergeNotasSources(fromTable.notas, fromStorage);
+    const notas = await enrichNotasListWithPreviews(supabase, cnpj, merged);
     return NextResponse.json({ notas, source: "merged" });
   }
 
-  return NextResponse.json({ notas: fromStorage, source: "storage" });
+  const notas = await enrichNotasListWithPreviews(supabase, cnpj, fromStorage);
+  return NextResponse.json({ notas, source: "storage" });
 }
 
 export async function POST(request: Request) {

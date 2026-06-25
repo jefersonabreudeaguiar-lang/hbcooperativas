@@ -4,7 +4,7 @@ import { isNotasPedidoTableMissing } from "@/lib/supabase/errors";
 import { normalizeCnpj } from "@/utils/cooperativa";
 import type { NotaPedido } from "@/types";
 import {
-  fetchNotaFromStorage,
+  fetchNotaMetaFromStorage,
   notaPayloadForTable,
   uploadNotaFotoPart,
   upsertNotasInTable,
@@ -78,7 +78,7 @@ export async function POST(
         updatedAt: new Date().toISOString(),
       };
     } else {
-      const fromStorage = await fetchNotaFromStorage(supabase, cnpj, id);
+      const fromStorage = await fetchNotaMetaFromStorage(supabase, cnpj, id);
       if (fromStorage) {
         metaNota = {
           ...fromStorage,
