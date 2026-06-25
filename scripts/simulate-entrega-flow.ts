@@ -485,8 +485,12 @@ function simCompactarLiberaMemoria() {
     !d.notasPedido[0].fotosPedido?.length
   );
   assert(
-    "Miniatura permanece",
-    Boolean(d.notasPedido[0].fotoPedidoMiniatura || d.notasPedido[0].fotosPedidoMiniaturas?.length)
+    "Compactar remove miniaturas quando fotoNaNuvem (memória)",
+    !d.notasPedido[0].fotoPedidoMiniatura && !d.notasPedido[0].fotosPedidoMiniaturas?.length
+  );
+  assert(
+    "Contagem de fotos preservada",
+    (d.notasPedido[0].fotosEnviadasCount ?? 0) > 0
   );
 }
 

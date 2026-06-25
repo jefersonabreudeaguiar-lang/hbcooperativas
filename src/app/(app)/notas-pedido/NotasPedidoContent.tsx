@@ -35,6 +35,7 @@ import {
   queueNotaDelete,
   ensureNotaComFoto,
   resolveCooperativaCnpj,
+  fetchNotaFotoPartBlobUrl,
 } from "@/services/notaPedidoCloudService";
 import {
   processDeliveryImage,
@@ -44,6 +45,7 @@ import {
   userFacingPipelineError,
   appendFotoMetaToNota,
   buildNotaPedidoFotoMeta,
+  slimNotaDraftForUpload,
   type ImagePipelineStep,
 } from "@/services/imagePipelineService";
 import {
@@ -217,8 +219,15 @@ export default function NotasPedidoContent() {
   const [conferenciaTransicao, setConferenciaTransicao] = useState(false);
   const [conferenciaFotoErro, setConferenciaFotoErro] = useState("");
   const [conferenciaFotoIdx, setConferenciaFotoIdx] = useState(0);
-  const [lancamentoSequencia, setLancamentoSequencia] = useState<{ fotos: string[]; idx: number } | null>(null);
+  const [lancamentoSequencia, setLancamentoSequencia] = useState<{
+    url: string;
+    displayIdx: number;
+    total: number;
+  } | null>(null);
   const lancamentoSequenciaTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const conferenciaFotoCacheRef = useRef<Map<number, string>>(new Map());
+  const [conferenciaFotoAtualUrl, setConferenciaFotoAtualUrl] = useState<string | null>(null);
+  const [conferenciaFotoCarregando, setConferenciaFotoCarregando] = useState(false);
 
   const coopId = user && data ? getUserCooperativaId(user, data) : undefined;
   const ANEXAR_DRAFT_KEY = coopId ? `hb_anexar_draft_${coopId}` : "";
@@ -228,6 +237,52 @@ export default function NotasPedidoContent() {
     fotoPreviewUrlRef.current = null;
     setFotoAtualPreview(null);
   }, []);
+
+  const revokeConferenciaFotoCache = useCallback(() => {
+    for (const url of conferenciaFotoCacheRef.current.values()) {
+      revokePreviewUrl(url);
+    }
+    conferenciaFotoCacheRef.current.clear();
+    setConferenciaFotoAtualUrl(null);
+    setConferenciaFotoCarregando(false);
+  }, []);
+
+  const loadConferenciaFoto = useCallback(
+    async (nota: NotaPedido, index: number): Promise<string | null> => {
+      const cached = conferenciaFotoCacheRef.current.get(index);
+      if (cached) {
+        setConferenciaFotoAtualUrl(cached);
+        return cached;
+      }
+
+      const localFotos = getFotosExibicaoNota(nota);
+      if (localFotos[index]) {
+        conferenciaFotoCacheRef.current.set(index, localFotos[index]);
+        setConferenciaFotoAtualUrl(localFotos[index]);
+        return localFotos[index];
+      }
+
+      if (!nota.fotoNaNuvem) return null;
+      const cnpj =
+        nota.cooperativaCnpj ??
+        (data && coopId ? getCooperativaCnpj(data, coopId) : undefined) ??
+        (user && coopId ? await resolveCooperativaCnpj(data ?? getData(), coopId, user) : undefined);
+      if (!cnpj) return null;
+
+      setConferenciaFotoCarregando(true);
+      try {
+        const url = await fetchNotaFotoPartBlobUrl(cnpj, nota.id, index);
+        if (url) {
+          conferenciaFotoCacheRef.current.set(index, url);
+          setConferenciaFotoAtualUrl(url);
+        }
+        return url;
+      } finally {
+        setConferenciaFotoCarregando(false);
+      }
+    },
+    [data, coopId, user]
+  );
 
   const resetFotosSessaoUi = useCallback(() => {
     fotoAbortRef.current?.abort();
@@ -292,6 +347,11 @@ export default function NotasPedidoContent() {
     setErroEnvio("");
     setFormErrors({});
   };
+
+  useEffect(() => {
+    if (!conferirModal || !selectedNota) return;
+    void loadConferenciaFoto(selectedNota, conferenciaFotoIdx);
+  }, [conferirModal, selectedNota, conferenciaFotoIdx, loadConferenciaFoto]);
 
   useEffect(() => {
     if (!isCooperado) return;
@@ -960,7 +1020,7 @@ export default function NotasPedidoContent() {
             thumbnailBlob: processed.thumbnail,
             mimeType: processed.mimeType,
             cooperadoNome,
-            notaSnapshot: draftNota,
+            notaSnapshot: slimNotaDraftForUpload(draftNota),
           });
           await markFotoDraftUploaded(ANEXAR_DRAFT_KEY, newIndex);
           setFotosSessaoCount(totalCount);
@@ -1002,6 +1062,7 @@ export default function NotasPedidoContent() {
       setFotosConfirmadasNaSessao(totalCount);
       revokePreviewUrl(processed.previewUrl);
       revokeFotoPreview();
+      lastFotoFileRef.current = null;
       setEnvioProgresso(null);
       setFotoPipelineStep("success");
       setFormErrors((err) => ({ ...err, foto: undefined }));
@@ -1304,6 +1365,7 @@ export default function NotasPedidoContent() {
       lancamentoSequenciaTimerRef.current = null;
     }
     setLancamentoSequencia(null);
+    revokeConferenciaFotoCache();
     filaConferenciaRef.current = null;
     setFilaConferenciaPos(0);
     setFilaConferenciaTotal(0);
@@ -1323,16 +1385,19 @@ export default function NotasPedidoContent() {
     if (d && coopId) {
       notaComFoto = await ensureNotaComFoto(d, nota, coopId);
     }
-    const fotosCarregadas = getFotosExibicaoNota(notaComFoto);
-    const esperado = notaComFoto.fotosEnviadasCount ?? contarFotosEnviadasNota(notaComFoto);
+    const totalFotos = contarFotosEnviadasNota(notaComFoto);
     if (
       notaComFoto.fotoNaNuvem &&
-      esperado > 0 &&
-      fotosCarregadas.length === 0
+      totalFotos > 0 &&
+      getFotosExibicaoNota(notaComFoto).length === 0
     ) {
-      setConferenciaFotoErro(
-        "Não foi possível carregar as fotos da nuvem. Verifique a conexão e abra esta entrega de novo."
-      );
+      revokeConferenciaFotoCache();
+      const primeira = await loadConferenciaFoto(notaComFoto, 0);
+      if (!primeira) {
+        setConferenciaFotoErro(
+          "Não foi possível carregar as fotos da nuvem. Verifique a conexão e abra esta entrega de novo."
+        );
+      }
     }
     setSelectedNota(notaComFoto);
     const instId = coopId
@@ -1440,33 +1505,46 @@ export default function NotasPedidoContent() {
     setConferirErrors((e) => ({ ...e, itens: undefined }));
   };
 
-  const aguardarSequenciaLancamentoFotos = useCallback((fotos: string[]): Promise<void> => {
-    if (fotos.length === 0) return Promise.resolve();
+  const aguardarSequenciaLancamentoFotos = useCallback(
+    async (nota: NotaPedido, total: number): Promise<void> => {
+      if (total === 0) return;
 
-    if (lancamentoSequenciaTimerRef.current) {
-      clearTimeout(lancamentoSequenciaTimerRef.current);
-      lancamentoSequenciaTimerRef.current = null;
-    }
+      if (lancamentoSequenciaTimerRef.current) {
+        clearTimeout(lancamentoSequenciaTimerRef.current);
+        lancamentoSequenciaTimerRef.current = null;
+      }
 
-    return new Promise((resolve) => {
-      let idx = 0;
-      setLancamentoSequencia({ fotos, idx: 0 });
+      return new Promise((resolve) => {
+        let idx = 0;
 
-      const avancar = () => {
-        idx += 1;
-        if (idx >= fotos.length) {
-          lancamentoSequenciaTimerRef.current = null;
-          setLancamentoSequencia(null);
-          resolve();
-          return;
-        }
-        setLancamentoSequencia({ fotos, idx });
-        lancamentoSequenciaTimerRef.current = setTimeout(avancar, 1400);
-      };
+        const mostrar = async () => {
+          const url =
+            conferenciaFotoCacheRef.current.get(idx) ??
+            (await loadConferenciaFoto(nota, idx));
+          if (url) {
+            setLancamentoSequencia({ url, displayIdx: idx, total });
+          }
+        };
 
-      lancamentoSequenciaTimerRef.current = setTimeout(avancar, fotos.length === 1 ? 1000 : 1400);
-    });
-  }, []);
+        void mostrar();
+
+        const avancar = () => {
+          idx += 1;
+          if (idx >= total) {
+            lancamentoSequenciaTimerRef.current = null;
+            setLancamentoSequencia(null);
+            resolve();
+            return;
+          }
+          void mostrar();
+          lancamentoSequenciaTimerRef.current = setTimeout(avancar, 1400);
+        };
+
+        lancamentoSequenciaTimerRef.current = setTimeout(avancar, total === 1 ? 1000 : 1400);
+      });
+    },
+    [loadConferenciaFoto]
+  );
 
   const handleLancarNota = () => {
     if (lancamentoSequencia) return;
@@ -1481,7 +1559,7 @@ export default function NotasPedidoContent() {
 
     lancandoRef.current = true;
     let notaAtualizada: NotaPedido | null = null;
-    const fotosAprovadas = getFotosExibicaoNota(selectedNota);
+    const qtdFotosAprovadas = contarFotosEnviadasNota(selectedNota);
     const notaId = selectedNota.id;
     const chaveAtual = getChaveGrupoConferencia(selectedNota, data, coopId);
     const coopNomeAprovar = getCooperadoNomeResolvido(data, conferenciaCooperadoId, coopId);
@@ -1562,7 +1640,7 @@ export default function NotasPedidoContent() {
 
     void (async () => {
       try {
-        await aguardarSequenciaLancamentoFotos(fotosAprovadas);
+        await aguardarSequenciaLancamentoFotos(selectedNota, qtdFotosAprovadas);
 
         const proxima = obterProximaNotaConferencia(chaveAtual, notaId);
 
@@ -2609,11 +2687,11 @@ export default function NotasPedidoContent() {
             <Button size="lg" onClick={handleLancarNota} disabled={conferenciaTransicao || Boolean(lancamentoSequencia)}>
               <CheckCircle size={18} />
               {lancamentoSequencia
-                ? `Lançando foto ${lancamentoSequencia.idx + 1} de ${lancamentoSequencia.fotos.length}…`
+                ? `Lançando foto ${lancamentoSequencia.displayIdx + 1} de ${lancamentoSequencia.total}…`
                 : conferenciaTransicao
                 ? "Carregando próxima entrega…"
-                : selectedNota && getFotosExibicaoNota(selectedNota).length > 1
-                  ? `Aprovar e lançar (${getFotosExibicaoNota(selectedNota).length} fotos)`
+                : selectedNota && contarFotosEnviadasNota(selectedNota) > 1
+                  ? `Aprovar e lançar (${contarFotosEnviadasNota(selectedNota)} fotos)`
                   : filaConferenciaTotal > 1
                     ? `Aprovar e próxima (${filaConferenciaPos}/${filaConferenciaTotal})`
                     : "Aprovar e lançar na ficha"}
@@ -2633,30 +2711,30 @@ export default function NotasPedidoContent() {
               <div className="flex-1 flex items-center justify-center p-4 min-h-[40vh] lg:min-h-0 overflow-y-auto">
                 {(() => {
                   if (lancamentoSequencia) {
-                    const { fotos, idx } = lancamentoSequencia;
+                    const { url, displayIdx, total } = lancamentoSequencia;
                     return (
                       <div className="w-full space-y-4 text-center">
                         {/* eslint-disable-next-line @next/next/no-img-element */}
                         <img
-                          src={fotos[idx]}
-                          alt={`Lançada ${idx + 1} de ${fotos.length}`}
+                          src={url}
+                          alt={`Lançada ${displayIdx + 1} de ${total}`}
                           className="max-w-full max-h-[70vh] lg:max-h-[calc(100dvh-12rem)] object-contain mx-auto ring-4 ring-green-500/50"
                         />
                         <p className="text-green-400 font-semibold text-base">
-                          Foto {idx + 1} de {fotos.length} · Lançada na ficha ✓
+                          Foto {displayIdx + 1} de {total} · Lançada na ficha ✓
                         </p>
                         <div className="flex flex-wrap items-center justify-center gap-2">
-                          {fotos.map((_, i) => (
+                          {Array.from({ length: total }, (_, i) => (
                             <span
                               key={i}
                               className={cn(
                                 "text-xs font-semibold px-2.5 py-1 rounded-full border",
-                                i <= idx
+                                i <= displayIdx
                                   ? "bg-green-500/20 border-green-400 text-green-200"
                                   : "bg-white/10 border-white/20 text-white/50"
                               )}
                             >
-                              Foto {i + 1}{i <= idx ? " ✓" : ""}
+                              Foto {i + 1}{i <= displayIdx ? " ✓" : ""}
                             </span>
                           ))}
                         </div>
@@ -2664,38 +2742,37 @@ export default function NotasPedidoContent() {
                     );
                   }
 
-                  const fotos = getFotosExibicaoNota(selectedNota);
-                  const idx = Math.min(conferenciaFotoIdx, Math.max(0, fotos.length - 1));
-                  if (fotos.length > 0) {
+                  const totalFotos = contarFotosEnviadasNota(selectedNota);
+                  const idx = Math.min(conferenciaFotoIdx, Math.max(0, totalFotos - 1));
+                  if (totalFotos > 0) {
                     return (
                       <div className="w-full space-y-3">
-                        {/* eslint-disable-next-line @next/next/no-img-element */}
-                        <img
-                          src={fotos[idx]}
-                          alt={`Pedido ${idx + 1} de ${fotos.length}`}
-                          className="max-w-full max-h-[70vh] lg:max-h-[calc(100dvh-12rem)] object-contain mx-auto"
-                        />
-                        {fotos.length > 1 && (
+                        {conferenciaFotoCarregando && !conferenciaFotoAtualUrl ? (
+                          <p className="text-white/70 text-sm text-center py-12">Carregando foto…</p>
+                        ) : conferenciaFotoAtualUrl ? (
+                          /* eslint-disable-next-line @next/next/no-img-element */
+                          <img
+                            src={conferenciaFotoAtualUrl}
+                            alt={`Pedido ${idx + 1} de ${totalFotos}`}
+                            className="max-w-full max-h-[70vh] lg:max-h-[calc(100dvh-12rem)] object-contain mx-auto"
+                          />
+                        ) : null}
+                        {totalFotos > 1 && (
                           <>
                             <div className="flex flex-wrap items-center justify-center gap-2">
-                              {fotos.map((foto, i) => (
+                              {Array.from({ length: totalFotos }, (_, i) => (
                                 <button
                                   key={i}
                                   type="button"
                                   onClick={() => setConferenciaFotoIdx(i)}
                                   className={cn(
-                                    "rounded-lg overflow-hidden border-2 transition-all",
+                                    "text-xs font-semibold px-3 py-1.5 rounded-full border transition-all",
                                     i === idx
-                                      ? "border-green-400 ring-2 ring-green-400/40"
-                                      : "border-white/20 opacity-70 hover:opacity-100"
+                                      ? "border-green-400 bg-green-500/20 text-green-100"
+                                      : "border-white/20 text-white/70 hover:border-white/40"
                                   )}
                                 >
-                                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                                  <img
-                                    src={foto}
-                                    alt={`Miniatura ${i + 1}`}
-                                    className="w-14 h-14 object-cover"
-                                  />
+                                  Foto {i + 1}
                                 </button>
                               ))}
                             </div>
@@ -2710,14 +2787,14 @@ export default function NotasPedidoContent() {
                                 Anterior
                               </Button>
                               <span className="font-medium tabular-nums">
-                                Foto {idx + 1} de {fotos.length}
+                                Foto {idx + 1} de {totalFotos}
                               </span>
                               <Button
                                 type="button"
                                 variant="secondary"
                                 size="sm"
-                                disabled={idx >= fotos.length - 1}
-                                onClick={() => setConferenciaFotoIdx((i) => Math.min(fotos.length - 1, i + 1))}
+                                disabled={idx >= totalFotos - 1}
+                                onClick={() => setConferenciaFotoIdx((i) => Math.min(totalFotos - 1, i + 1))}
                               >
                                 Próxima foto
                               </Button>

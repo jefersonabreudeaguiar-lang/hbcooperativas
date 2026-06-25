@@ -341,13 +341,29 @@ export function compactarFotosNoArmazenamento(data: AppData): AppData {
   let changed = false;
   const notasPedido = data.notasPedido.map((n) => {
     const arquivada = n.status === "conferida" || n.status === "pago" || n.status === "rejeitada";
-    if (arquivada && (n.fotoPedido || n.fotosPedido?.length)) {
+    const naNuvem = Boolean(n.fotoNaNuvem && (n.fotosEnviadasCount ?? 0) > 0);
+
+    if (arquivada && (n.fotoPedido || n.fotosPedido?.length || n.fotosPedidoMiniaturas?.length)) {
       changed = true;
-      return { ...n, fotoPedido: undefined, fotosPedido: undefined };
+      return {
+        ...n,
+        fotoPedido: undefined,
+        fotosPedido: undefined,
+        fotoPedidoMiniatura: undefined,
+        fotosPedidoMiniaturas: undefined,
+        fotosMeta: n.fotosMeta?.map((f) => ({ ...f, url: undefined, thumbnailUrl: undefined })),
+      };
     }
-    if (n.fotoNaNuvem && (n.fotoPedido || n.fotosPedido?.length)) {
+    if (naNuvem && (n.fotoPedido || n.fotosPedido?.length || n.fotosPedidoMiniaturas?.length)) {
       changed = true;
-      return { ...n, fotoPedido: undefined, fotosPedido: undefined };
+      return {
+        ...n,
+        fotoPedido: undefined,
+        fotosPedido: undefined,
+        fotoPedidoMiniatura: undefined,
+        fotosPedidoMiniaturas: undefined,
+        fotosMeta: n.fotosMeta?.map((f) => ({ ...f, url: undefined, thumbnailUrl: undefined })),
+      };
     }
     return n;
   });

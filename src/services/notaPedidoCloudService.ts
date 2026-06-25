@@ -5,6 +5,8 @@ import { getNotaCooperativaCnpj, getFotosExibicaoNota, mergeNotaComFotos, contar
 import { getData, saveDataSafe } from "@/services/dataStore";
 import { reconciliarFichaFromNotasConferidas } from "@/services/notaPedidoService";
 import { needsOperationalResetCloudPush } from "@/services/operationalReset";
+import { slimNotaDraftForUpload } from "@/services/imagePipelineService";
+import { flushPendingDeliveryImages } from "@/services/offlineImageQueueService";
 const STATUS_RANK: Record<NotaPedido["status"], number> = {
   rascunho: 0,
   aguardando_conferencia: 0,
@@ -212,20 +214,45 @@ export async function fetchNotasPedidoFromCloud(
 
 export async function fetchNotaPedidoFromCloud(
   cnpj: string,
-  notaId: string
+  notaId: string,
+  options?: { metaOnly?: boolean }
 ): Promise<NotaPedido | null> {
   const digits = normalizeCnpj(cnpj);
   if (digits.length !== 14) return null;
 
+  const metaOnly = options?.metaOnly !== false;
+
   try {
     const res = await fetch(
-      `/api/notas-pedido/${encodeURIComponent(notaId)}?cnpj=${digits}`,
+      `/api/notas-pedido/${encodeURIComponent(notaId)}?cnpj=${digits}${metaOnly ? "" : "&full=1"}`,
       { cache: "no-store" }
     );
     if (!res.ok) return null;
     const json = await res.json().catch(() => ({}));
     const nota = json.nota as NotaPedido | undefined;
     return nota?.id ? nota : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Carrega uma foto da nuvem como blob: URL (libera com revokePreviewUrl). */
+export async function fetchNotaFotoPartBlobUrl(
+  cnpj: string,
+  notaId: string,
+  index: number
+): Promise<string | null> {
+  const digits = normalizeCnpj(cnpj);
+  if (digits.length !== 14) return null;
+
+  try {
+    const res = await fetch(
+      `/api/notas-pedido/${encodeURIComponent(notaId)}/foto?cnpj=${digits}&index=${index}`,
+      { cache: "no-store" }
+    );
+    if (!res.ok) return null;
+    const blob = await res.blob();
+    return URL.createObjectURL(blob);
   } catch {
     return null;
   }
@@ -398,8 +425,6 @@ export async function patchNotaPedidoInCloud(
   }
 }
 
-import { flushPendingDeliveryImages } from "@/services/offlineImageQueueService";
-
 export async function syncOfflineDeliveryImages(): Promise<{
   uploaded: number;
   failed: number;
@@ -420,16 +445,12 @@ export async function uploadFotoImediataToCloud(
   const digits = normalizeCnpj(cnpj);
   if (digits.length !== 14) return { ok: false, error: "CNPJ inválido." };
 
-  const metaNota: NotaPedido = {
+  const metaNota: NotaPedido = slimNotaDraftForUpload({
     ...nota,
     status: "rascunho",
     fotosEnviadasCount: totalCount,
     fotoNaNuvem: true,
-    fotoPedido: undefined,
-    fotosPedido: undefined,
-    fotoPedidoMiniatura: undefined,
-    fotosPedidoMiniaturas: undefined,
-  };
+  });
 
   try {
     const res = await fetch(`/api/notas-pedido/${encodeURIComponent(nota.id)}/foto`, {
@@ -474,16 +495,12 @@ export async function uploadFotoBlobToCloud(
   const digits = normalizeCnpj(cnpj);
   if (digits.length !== 14) return { ok: false, error: "CNPJ inválido." };
 
-  const metaNota: NotaPedido = {
+  const metaNota: NotaPedido = slimNotaDraftForUpload({
     ...nota,
     status: "rascunho",
     fotosEnviadasCount: totalCount,
     fotoNaNuvem: true,
-    fotoPedido: undefined,
-    fotosPedido: undefined,
-    fotoPedidoMiniatura: undefined,
-    fotosPedidoMiniaturas: undefined,
-  };
+  });
 
   try {
     const form = new FormData();
@@ -580,15 +597,11 @@ export async function pushNotaComFotosEmStreaming(
   if (digits.length !== 14) return { ok: false, error: "CNPJ inválido." };
   if (totalCount <= 0) return pushNotasPedidoToCloud(cnpj, [nota], cooperadoNome);
 
-  const metaNota: NotaPedido = {
+  const metaNota: NotaPedido = slimNotaDraftForUpload({
     ...nota,
     fotosEnviadasCount: totalCount,
     fotoNaNuvem: true,
-    fotoPedido: undefined,
-    fotosPedido: undefined,
-    fotoPedidoMiniatura: undefined,
-    fotosPedidoMiniaturas: undefined,
-  };
+  });
 
   try {
     let startIndex = 0;
@@ -741,23 +754,18 @@ export async function ensureNotaComFoto(
     localFotos.length
   );
   const fullResCount = nota.fotosPedido?.length ?? 0;
-  const temSóMiniaturas =
-    fullResCount === 0 && Boolean(nota.fotosPedidoMiniaturas?.length || nota.fotoPedidoMiniatura);
 
   if (esperado <= 0) return nota;
-  if (fullResCount >= esperado && !temSóMiniaturas) return nota;
+  if (fullResCount >= esperado) return nota;
+  if (localFotos.length >= esperado) return nota;
 
   const cnpj = getCooperativaCnpj(data, coopId ?? nota.cooperativaId);
   if (!cnpj) return nota;
 
   if (!nota.fotoNaNuvem && fullResCount === 0 && localFotos.length === 0) return nota;
 
-  const cloud = await fetchNotaPedidoFromCloud(cnpj, nota.id);
+  const cloud = await fetchNotaPedidoFromCloud(cnpj, nota.id, { metaOnly: true });
   if (!cloud) return nota;
 
-  const merged = mergeNotaComFotos(nota, cloud);
-  const cloudFotos = getFotosExibicaoNota(merged);
-  if (cloudFotos.length === 0) return nota;
-
-  return merged;
+  return mergeNotaComFotos(nota, cloud);
 }

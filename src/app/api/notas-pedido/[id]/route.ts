@@ -47,7 +47,12 @@ export async function GET(
     console.error("[notas-pedido/get]", error.message);
   }
 
-  const fromStorage = await fetchNotaFromStorage(supabase, cnpj, id);
+  const fromStorage = await fetchNotaFromStorage(
+    supabase,
+    cnpj,
+    id,
+    { includePhotos: searchParams.get("full") === "1" }
+  );
   if (fromTable && fromStorage) {
     return NextResponse.json({ nota: mergeNotaComFotos(fromTable, fromStorage) });
   }

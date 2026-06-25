@@ -22,7 +22,15 @@ Seleção → validateImageFile → processDeliveryImage (compress + thumbnail)
 | `src/services/offlineImageQueueService.ts` | Fila offline em IndexedDB + retry |
 | `src/services/notaPedidoCloudService.ts` | `uploadFotoBlobToCloud`, `syncOfflineDeliveryImages` |
 
-### Metadados na nota (`fotosMeta[]`)
+### Comportamento anti-memória (v2)
+
+- **Sem limite de quantidade** — o gargalo era memória, não contador.
+- **Uma decodificação por foto** (`createImageBitmap` + canvas único).
+- **Sync nuvem só metadados** — não baixa 16+ fotos em base64 ao sincronizar.
+- **Conferência lazy** — carrega **1 foto por vez** via `GET /api/notas-pedido/[id]/foto?index=N`.
+- **localStorage** — remove fotos/miniaturas quando `fotoNaNuvem`; guarda só `fotosEnviadasCount`.
+- **FormData leve** — `slimNotaDraftForUpload()` no upload de cada foto.
+
 
 Apenas campos leves: `id`, `storagePath`, `url`, `thumbnailUrl`, `mimeType`, `sizeBytes`, `width`, `height`, `status`, `createdAt`.
 

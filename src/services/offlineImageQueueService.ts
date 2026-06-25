@@ -2,6 +2,7 @@ import type { NotaPedido } from "@/types";
 import {
   buildNotaPedidoFotoMeta,
   uploadImageToSupabase,
+  slimNotaDraftForUpload,
   type UploadImageParams,
 } from "@/services/imagePipelineService";
 
@@ -20,7 +21,7 @@ export interface PendingDeliveryImage {
   index: number;
   totalCount: number;
   compressedBlob: Blob;
-  thumbnailBlob: Blob;
+  thumbnailBlob?: Blob;
   mimeType: string;
   cooperadoNome?: string;
   notaSnapshot: NotaPedido;
@@ -156,9 +157,10 @@ export async function flushPendingDeliveryImages(): Promise<{
       continue;
     }
 
+    const slimNota = slimNotaDraftForUpload(item.notaSnapshot);
     const params: UploadImageParams = {
       cnpj: item.cnpj,
-      nota: item.notaSnapshot,
+      nota: slimNota,
       index: item.index,
       totalCount: item.totalCount,
       blob: item.compressedBlob,

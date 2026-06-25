@@ -6,6 +6,7 @@ import type { NotaPedido } from "@/types";
 import {
   deleteAndCompactFotoPart,
   fetchNotaMetaFromStorage,
+  downloadFotoPartBuffer,
   notaPayloadForTable,
   uploadNotaFotoPart,
   uploadNotaFotoPartBuffer,
@@ -192,6 +193,41 @@ async function processFotoUpload(id: string, input: FotoUploadInput) {
   }
 
   return NextResponse.json({ success: true, index, totalCount });
+}
+
+export async function GET(
+  request: Request,
+  context: { params: Promise<{ id: string }> }
+) {
+  if (!isSupabaseConfigured()) {
+    return NextResponse.json({ error: "Nuvem não configurada." }, { status: 503 });
+  }
+
+  const { id } = await context.params;
+  const { searchParams } = new URL(request.url);
+  const cnpj = normalizeCnpj(searchParams.get("cnpj") ?? "");
+  const index = Number(searchParams.get("index"));
+
+  if (cnpj.length !== 14 || !Number.isFinite(index) || index < 0) {
+    return NextResponse.json({ error: "Parâmetros inválidos." }, { status: 400 });
+  }
+
+  const supabase = getSupabaseAdmin();
+  if (!supabase) {
+    return NextResponse.json({ error: "Cliente indisponível." }, { status: 503 });
+  }
+
+  const part = await downloadFotoPartBuffer(supabase, cnpj, id, index);
+  if (!part) {
+    return NextResponse.json({ error: "Foto não encontrada." }, { status: 404 });
+  }
+
+  return new NextResponse(new Uint8Array(part.buffer), {
+    headers: {
+      "Content-Type": part.contentType,
+      "Cache-Control": "private, max-age=3600",
+    },
+  });
 }
 
 export async function POST(

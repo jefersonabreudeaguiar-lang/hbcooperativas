@@ -4,10 +4,10 @@ import { normalizeCnpj } from "@/utils/cooperativa";
 
 export const MAX_IMAGE_BYTES = 20 * 1024 * 1024;
 export const WARN_IMAGE_BYTES = 8 * 1024 * 1024;
-export const COMPRESS_MAX_WIDTH = 1280;
-export const THUMBNAIL_MAX_WIDTH = 320;
-export const COMPRESS_QUALITY = 0.7;
-export const THUMBNAIL_QUALITY = 0.55;
+export const COMPRESS_MAX_WIDTH = 1024;
+export const THUMBNAIL_MAX_WIDTH = 240;
+export const COMPRESS_QUALITY = 0.68;
+export const THUMBNAIL_QUALITY = 0.5;
 
 const ALLOWED_MIME = new Set(["image/jpeg", "image/png", "image/webp"]);
 
@@ -56,6 +56,14 @@ export interface UploadImageResult {
   storagePath?: string;
 }
 
+interface CompressSettings {
+  maxWidth: number;
+  quality: number;
+  thumbWidth: number;
+  thumbQuality: number;
+  preferWebP: boolean;
+}
+
 let webpSupportedCache: boolean | null = null;
 
 function devLog(label: string, data: Record<string, unknown>) {
@@ -67,8 +75,11 @@ function throwIfAborted(signal?: AbortSignal) {
   if (signal?.aborted) throw new DOMException("Processamento cancelado.", "AbortError");
 }
 
+async function yieldToBrowser(): Promise<void> {
+  await new Promise<void>((resolve) => setTimeout(resolve, 0));
+}
+
 export function estimateMemoryCost(file: File): number {
-  /** Estimativa conservadora: decode bitmap ≈ 4 bytes/pixel + original file. */
   const pixelGuess = Math.min(file.size * 4, 48 * 1024 * 1024);
   return file.size + pixelGuess;
 }
@@ -77,6 +88,17 @@ export function isLowMemoryDevice(): boolean {
   if (typeof navigator === "undefined") return false;
   const dm = (navigator as Navigator & { deviceMemory?: number }).deviceMemory;
   return typeof dm === "number" && dm > 0 && dm <= 2;
+}
+
+export function resolveCompressSettings(_file?: File): CompressSettings {
+  const low = isLowMemoryDevice();
+  return {
+    maxWidth: low ? 880 : COMPRESS_MAX_WIDTH,
+    quality: low ? 0.6 : COMPRESS_QUALITY,
+    thumbWidth: THUMBNAIL_MAX_WIDTH,
+    thumbQuality: THUMBNAIL_QUALITY,
+    preferWebP: !low,
+  };
 }
 
 export function validateImageFile(file: File): ImageValidationResult {
@@ -108,15 +130,6 @@ export function validateImageFile(file: File): ImageValidationResult {
         ? "Aparelho com pouca memória — feche outros apps se a foto demorar."
         : undefined;
 
-  if (lowMemoryDevice && file.size > 12 * 1024 * 1024) {
-    return {
-      ok: false,
-      error:
-        "A foto está muito pesada para este celular. Tente tirar uma nova foto mais próxima ou use uma imagem menor.",
-      lowMemoryDevice,
-    };
-  }
-
   return { ok: true, warning, lowMemoryDevice };
 }
 
@@ -145,123 +158,218 @@ async function detectWebPSupport(): Promise<boolean> {
   return webpSupportedCache;
 }
 
-async function loadImageSource(file: File, signal?: AbortSignal): Promise<{ src: string; revoke: () => void }> {
-  throwIfAborted(signal);
-  const objectUrl = URL.createObjectURL(file);
-  return {
-    src: objectUrl,
-    revoke: () => URL.revokeObjectURL(objectUrl),
-  };
+function canvasToBlob(
+  canvas: HTMLCanvasElement | OffscreenCanvas,
+  mimeType: string,
+  quality: number
+): Promise<Blob> {
+  if ("convertToBlob" in canvas) {
+    return canvas.convertToBlob({ type: mimeType, quality });
+  }
+  return new Promise((resolve, reject) => {
+    (canvas as HTMLCanvasElement).toBlob(
+      (blob) => {
+        if (blob) resolve(blob);
+        else {
+          reject(
+            new Error(
+              "A foto está muito pesada para este celular. Tente tirar uma nova foto mais próxima ou use uma imagem menor."
+            )
+          );
+        }
+      },
+      mimeType,
+      quality
+    );
+  });
 }
 
-async function renderToBlob(
-  src: string,
-  maxWidth: number,
-  quality: number,
+function createCanvas(width: number, height: number): HTMLCanvasElement | OffscreenCanvas {
+  if (typeof OffscreenCanvas !== "undefined") {
+    return new OffscreenCanvas(width, height);
+  }
+  const canvas = document.createElement("canvas");
+  canvas.width = width;
+  canvas.height = height;
+  return canvas;
+}
+
+function clearCanvas(canvas: HTMLCanvasElement | OffscreenCanvas): void {
+  if ("width" in canvas && "height" in canvas && !(canvas instanceof OffscreenCanvas)) {
+    canvas.width = 0;
+    canvas.height = 0;
+  }
+}
+
+/** Uma decodificação → foto comprimida + miniatura (memória constante). */
+async function processImageSinglePass(
+  file: File,
+  settings: CompressSettings,
   mimeType: "image/webp" | "image/jpeg",
   signal?: AbortSignal
-): Promise<{ blob: Blob; width: number; height: number }> {
+): Promise<{ compressed: Blob; thumbnail: Blob; width: number; height: number }> {
   throwIfAborted(signal);
-  if (typeof document === "undefined") {
-    throw new Error("Canvas indisponível neste ambiente.");
+  await yieldToBrowser();
+
+  if (typeof createImageBitmap === "function") {
+    try {
+      const bitmap = await createImageBitmap(file, {
+        resizeWidth: settings.maxWidth,
+        resizeQuality: "medium",
+      });
+      throwIfAborted(signal);
+
+      const width = bitmap.width;
+      const height = bitmap.height;
+      const mainCanvas = createCanvas(width, height);
+      const mainCtx = mainCanvas.getContext("2d");
+      if (!mainCtx) {
+        bitmap.close();
+        throw new Error("Canvas indisponível.");
+      }
+      mainCtx.drawImage(bitmap, 0, 0, width, height);
+      bitmap.close();
+
+      const compressed = await canvasToBlob(mainCanvas, mimeType, settings.quality);
+      clearCanvas(mainCanvas);
+      throwIfAborted(signal);
+
+      const thumbBitmap = await createImageBitmap(compressed, {
+        resizeWidth: settings.thumbWidth,
+        resizeQuality: "low",
+      });
+      const thumbCanvas = createCanvas(thumbBitmap.width, thumbBitmap.height);
+      const thumbCtx = thumbCanvas.getContext("2d");
+      if (!thumbCtx) {
+        thumbBitmap.close();
+        throw new Error("Canvas indisponível.");
+      }
+      thumbCtx.drawImage(thumbBitmap, 0, 0);
+      thumbBitmap.close();
+
+      const thumbnail = await canvasToBlob(thumbCanvas, mimeType, settings.thumbQuality);
+      clearCanvas(thumbCanvas);
+      return { compressed, thumbnail, width, height };
+    } catch {
+      /* fallback abaixo */
+    }
   }
 
-  return new Promise((resolve, reject) => {
-    const img = new Image();
-    img.onload = () => {
-      throwIfAborted(signal);
-      const scale = Math.min(1, maxWidth / Math.max(img.width, 1));
-      const width = Math.max(1, Math.round(img.width * scale));
-      const height = Math.max(1, Math.round(img.height * scale));
-      const canvas = document.createElement("canvas");
-      canvas.width = width;
-      canvas.height = height;
-      const ctx = canvas.getContext("2d");
-      if (!ctx) {
+  const objectUrl = URL.createObjectURL(file);
+  try {
+    const { width, height, draw, cleanup } = await new Promise<{
+      width: number;
+      height: number;
+      draw: (ctx: CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D, w: number, h: number) => void;
+      cleanup: () => void;
+    }>((resolve, reject) => {
+      const img = new Image();
+      img.onload = () => {
+        throwIfAborted(signal);
+        const scale = Math.min(1, settings.maxWidth / Math.max(img.width, 1));
+        const width = Math.max(1, Math.round(img.width * scale));
+        const height = Math.max(1, Math.round(img.height * scale));
+        resolve({
+          width,
+          height,
+          draw: (ctx, w, h) => ctx.drawImage(img, 0, 0, w, h),
+          cleanup: () => {
+            img.src = "";
+          },
+        });
+      };
+      img.onerror = () => {
         img.src = "";
-        reject(new Error("Canvas indisponível."));
-        return;
-      }
-      ctx.drawImage(img, 0, 0, width, height);
-      img.src = "";
-      canvas.toBlob(
-        (blob) => {
-          canvas.width = 0;
-          canvas.height = 0;
-          if (!blob) {
-            reject(
-              new Error(
-                "A foto está muito pesada para este celular. Tente tirar uma nova foto mais próxima ou use uma imagem menor."
-              )
-            );
-            return;
-          }
-          resolve({ blob, width, height });
-        },
-        mimeType,
-        quality
-      );
-    };
-    img.onerror = () => {
-      img.src = "";
-      reject(new Error("Não foi possível ler a imagem."));
-    };
-    img.src = src;
-  });
+        reject(new Error("Não foi possível ler a imagem."));
+      };
+      img.src = objectUrl;
+    });
+
+    const mainCanvas = createCanvas(width, height);
+    const mainCtx = mainCanvas.getContext("2d");
+    if (!mainCtx) throw new Error("Canvas indisponível.");
+    draw(mainCtx, width, height);
+    cleanup();
+
+    const compressed = await canvasToBlob(mainCanvas, mimeType, settings.quality);
+    clearCanvas(mainCanvas);
+    throwIfAborted(signal);
+
+    const thumbScale = Math.min(1, settings.thumbWidth / Math.max(width, 1));
+    const tw = Math.max(1, Math.round(width * thumbScale));
+    const th = Math.max(1, Math.round(height * thumbScale));
+    const thumbCanvas = createCanvas(tw, th);
+    const thumbCtx = thumbCanvas.getContext("2d");
+    if (!thumbCtx) throw new Error("Canvas indisponível.");
+
+    const tmpUrl = URL.createObjectURL(compressed);
+    await new Promise<void>((resolve, reject) => {
+      const img = new Image();
+      img.onload = () => {
+        thumbCtx.drawImage(img, 0, 0, tw, th);
+        img.src = "";
+        URL.revokeObjectURL(tmpUrl);
+        resolve();
+      };
+      img.onerror = () => {
+        URL.revokeObjectURL(tmpUrl);
+        reject(new Error("Memória insuficiente para miniatura."));
+      };
+      img.src = tmpUrl;
+    });
+
+    const thumbnail = await canvasToBlob(thumbCanvas, mimeType, settings.thumbQuality);
+    clearCanvas(thumbCanvas);
+    return { compressed, thumbnail, width, height };
+  } finally {
+    URL.revokeObjectURL(objectUrl);
+  }
 }
 
 export async function compressImage(
   file: File,
   options: CompressImageOptions = {}
 ): Promise<{ blob: Blob; mimeType: string; width: number; height: number; ms: number }> {
-  const maxWidth = options.maxWidth ?? COMPRESS_MAX_WIDTH;
-  const quality = options.quality ?? COMPRESS_QUALITY;
-  const preferWebP = options.preferWebP ?? true;
+  const settings = resolveCompressSettings(file);
+  const maxWidth = options.maxWidth ?? settings.maxWidth;
+  const quality = options.quality ?? settings.quality;
+  const preferWebP = options.preferWebP ?? settings.preferWebP;
   const started = performance.now();
 
-  const { src, revoke } = await loadImageSource(file, options.signal);
-  try {
-    const useWebP = preferWebP && (await detectWebPSupport());
-    const mimeType: "image/webp" | "image/jpeg" = useWebP ? "image/webp" : "image/jpeg";
-    const { blob, width, height } = await renderToBlob(src, maxWidth, quality, mimeType, options.signal);
-    const ms = Math.round(performance.now() - started);
-    devLog("compress", {
-      originalBytes: file.size,
-      compressedBytes: blob.size,
-      reductionPct: Math.round((1 - blob.size / file.size) * 100),
-      ms,
-      mimeType,
-      width,
-      height,
-    });
-    return { blob, mimeType, width, height, ms };
-  } finally {
-    revoke();
-  }
+  const useWebP = preferWebP && (await detectWebPSupport());
+  const mimeType: "image/webp" | "image/jpeg" = useWebP ? "image/webp" : "image/jpeg";
+  const { compressed, width, height } = await processImageSinglePass(
+    file,
+    { ...settings, maxWidth, quality },
+    mimeType,
+    options.signal
+  );
+  const ms = Math.round(performance.now() - started);
+  devLog("compress", {
+    originalBytes: file.size,
+    compressedBytes: compressed.size,
+    reductionPct: Math.round((1 - compressed.size / file.size) * 100),
+    ms,
+    mimeType,
+    width,
+    height,
+  });
+  return { blob: compressed, mimeType, width, height, ms };
 }
 
 export async function createThumbnail(
   file: File,
   options: { signal?: AbortSignal } = {}
 ): Promise<{ blob: Blob; mimeType: string; width: number; height: number }> {
-  const { src, revoke } = await loadImageSource(file, options.signal);
-  try {
-    const useWebP = await detectWebPSupport();
-    const mimeType: "image/webp" | "image/jpeg" = useWebP ? "image/webp" : "image/jpeg";
-    const { blob, width, height } = await renderToBlob(
-      src,
-      THUMBNAIL_MAX_WIDTH,
-      THUMBNAIL_QUALITY,
-      mimeType,
-      options.signal
-    );
-    return { blob, mimeType, width, height };
-  } finally {
-    revoke();
-  }
+  const full = await processDeliveryImage(file, options.signal);
+  return {
+    blob: full.thumbnail,
+    mimeType: full.mimeType,
+    width: Math.min(full.width, THUMBNAIL_MAX_WIDTH),
+    height: full.height,
+  };
 }
 
-/** Comprime a partir do blob já gerado (evita reler arquivo original). */
 export async function createThumbnailFromBlob(
   source: Blob,
   signal?: AbortSignal
@@ -280,23 +388,38 @@ export async function processDeliveryImage(
     throw new Error(validation.error ?? "Arquivo inválido.");
   }
 
-  throwIfAborted(signal);
-  const compressed = await compressImage(file, { signal });
-  throwIfAborted(signal);
-  const thumbnail = await createThumbnailFromBlob(compressed.blob, signal);
-  throwIfAborted(signal);
+  const settings = resolveCompressSettings(file);
+  const useWebP = settings.preferWebP && (await detectWebPSupport());
+  const mimeType: "image/webp" | "image/jpeg" = useWebP ? "image/webp" : "image/jpeg";
+  const started = performance.now();
 
-  const previewUrl = URL.createObjectURL(compressed.blob);
+  throwIfAborted(signal);
+  const { compressed, thumbnail, width, height } = await processImageSinglePass(
+    file,
+    settings,
+    mimeType,
+    signal
+  );
+
+  const compressionMs = Math.round(performance.now() - started);
+  devLog("processDeliveryImage", {
+    originalBytes: file.size,
+    compressedBytes: compressed.size,
+    thumbBytes: thumbnail.size,
+    compressionMs,
+  });
+
+  const previewUrl = URL.createObjectURL(compressed);
   return {
-    compressed: compressed.blob,
+    compressed,
     thumbnail,
     previewUrl,
-    mimeType: compressed.mimeType,
-    sizeBytes: compressed.blob.size,
-    width: compressed.width,
-    height: compressed.height,
+    mimeType,
+    sizeBytes: compressed.size,
+    width,
+    height,
     originalSizeBytes: file.size,
-    compressionMs: compressed.ms,
+    compressionMs,
   };
 }
 
@@ -322,6 +445,34 @@ export function buildNotaPedidoFotoMeta(
   };
 }
 
+/** Payload mínimo no FormData — evita JSON grande a cada foto. */
+export function slimNotaDraftForUpload(nota: NotaPedido): NotaPedido {
+  return {
+    id: nota.id,
+    cooperativaId: nota.cooperativaId,
+    cooperadoId: nota.cooperadoId,
+    instituicaoId: nota.instituicaoId,
+    numeroNota: nota.numeroNota,
+    dataEntrega: nota.dataEntrega,
+    localEntrega: nota.localEntrega,
+    itens: nota.itens ?? [],
+    valorBruto: nota.valorBruto ?? 0,
+    percentualDescontoCooperativa: nota.percentualDescontoCooperativa ?? 0,
+    valorDesconto: nota.valorDesconto ?? 0,
+    valorLiquido: nota.valorLiquido ?? 0,
+    status: nota.status,
+    fotosEnviadasCount: nota.fotosEnviadasCount,
+    fotoNaNuvem: true,
+    cooperativaCnpj: nota.cooperativaCnpj,
+    cooperadoNomeSnapshot: nota.cooperadoNomeSnapshot,
+    mesReferencia: nota.mesReferencia,
+    observacoes: nota.observacoes,
+    escolaAvulsaNome: nota.escolaAvulsaNome,
+    createdAt: nota.createdAt,
+    updatedAt: nota.updatedAt,
+  };
+}
+
 export async function uploadImageToSupabase(params: UploadImageParams): Promise<UploadImageResult> {
   const digits = normalizeCnpj(params.cnpj);
   if (digits.length !== 14) return { ok: false, error: "CNPJ inválido." };
@@ -334,7 +485,7 @@ export async function uploadImageToSupabase(params: UploadImageParams): Promise<
 
   const result = await uploadFotoBlobToCloud(
     digits,
-    params.nota,
+    slimNotaDraftForUpload(params.nota),
     params.index,
     params.totalCount,
     uploadBlob,
@@ -356,7 +507,6 @@ export async function uploadImageToSupabase(params: UploadImageParams): Promise<
   };
 }
 
-/** Mantém leitura de fotos antigas em base64; prepara metadados leves quando possível. */
 export function migrateLegacyBase64Images(nota: NotaPedido): NotaPedido {
   if (nota.fotosMeta?.length) return nota;
   if (nota.fotoNaNuvem && !nota.fotoPedido && !nota.fotosPedido?.length) return nota;
@@ -388,7 +538,11 @@ export function appendFotoMetaToNota(nota: NotaPedido, foto: NotaPedidoFoto): No
   const next = [...prev.filter((f) => f.index !== foto.index), foto].sort(
     (a, b) => (a.index ?? 0) - (b.index ?? 0)
   );
-  return migrateLegacyBase64Images({ ...nota, fotosMeta: next, fotoNaNuvem: foto.status === "uploaded" ? true : nota.fotoNaNuvem });
+  return migrateLegacyBase64Images({
+    ...nota,
+    fotosMeta: next,
+    fotoNaNuvem: foto.status === "uploaded" ? true : nota.fotoNaNuvem,
+  });
 }
 
 export function userFacingPipelineError(err: unknown): string {

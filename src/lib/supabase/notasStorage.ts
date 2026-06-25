@@ -370,7 +370,8 @@ export async function fetchNotasFromStorage(
 export async function fetchNotaFromStorage(
   supabase: SupabaseClient,
   cnpj: string,
-  notaId: string
+  notaId: string,
+  options?: { includePhotos?: boolean }
 ): Promise<NotaPedido | null> {
   await ensureEntregasBucket(supabase);
   const { data: blob, error } = await supabase.storage
@@ -380,13 +381,29 @@ export async function fetchNotaFromStorage(
   try {
     const parsed = JSON.parse(await blob.text()) as NotaPedido;
     if (!parsed?.id) return null;
-    if (notaUsesFotoParts(parsed)) {
+    if (options?.includePhotos && notaUsesFotoParts(parsed)) {
       return assembleNotaFotosFromParts(supabase, cnpj, parsed);
     }
     return parsed;
   } catch {
     return null;
   }
+}
+
+/** Baixa uma foto da nuvem (stream) — sem base64 na RAM. */
+export async function downloadFotoPartBuffer(
+  supabase: SupabaseClient,
+  cnpj: string,
+  notaId: string,
+  index: number
+): Promise<{ buffer: Buffer; contentType: string } | null> {
+  const { data: blob, error } = await supabase.storage
+    .from(BUCKET)
+    .download(fotoPartPath(cnpj, notaId, index));
+  if (error || !blob) return null;
+  const buffer = Buffer.from(await blob.arrayBuffer());
+  const contentType = blob.type || "image/jpeg";
+  return { buffer, contentType };
 }
 
 /** Une notas da tabela SQL e do storage, mantendo metadados recentes e o maior conjunto de fotos. */
