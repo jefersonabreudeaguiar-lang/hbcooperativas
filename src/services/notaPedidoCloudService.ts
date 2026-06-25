@@ -29,6 +29,11 @@ function shouldApplyCloudNota(local: NotaPedido | undefined, cloud: NotaPedido):
     return true;
   }
 
+  // Rascunho na nuvem (foto parcial) não apaga entrega já publicada localmente.
+  if (local.status === "aguardando_conferencia" && cloud.status === "rascunho") {
+    return false;
+  }
+
   const localRank = STATUS_RANK[local.status] ?? 0;
   const cloudRank = STATUS_RANK[cloud.status] ?? 0;
   if (cloudRank < localRank) return false;
@@ -131,6 +136,7 @@ function propagateCloudNotaDeletions(
   // Lista da nuvem claramente incompleta — não apagar em massa.
   if (toRemove.length > MAX_NOTA_DELETIONS_PER_SYNC) return false;
   if (toRemove.length + cloudPending.length < localPendingCloud.length - 1) return false;
+  if (cloudPending.length === 0 && localPendingCloud.length > 0) return false;
 
   let changed = false;
   for (const nota of toRemove) {
@@ -192,7 +198,7 @@ export async function fetchNotasPedidoFromCloud(
   if (digits.length !== 14) return { ok: false, notas: [] };
 
   try {
-    const res = await fetch(`/api/notas-pedido?cnpj=${digits}&lite=1`, { cache: "no-store" });
+    const res = await fetch(`/api/notas-pedido?cnpj=${digits}&lite=1&previews=1`, { cache: "no-store" });
     if (!res.ok) return { ok: false, notas: [] };
     const json = await res.json().catch(() => ({}));
     const notas = ((json.notas ?? []) as unknown[])

@@ -357,12 +357,32 @@ export function contarFotosEnviadasNotas(notas: NotaPedido[]): number {
   return notas.reduce((total, nota) => total + contarFotosEnviadasNota(nota), 0);
 }
 
+const NOTA_STATUS_RANK: Record<NotaPedido["status"], number> = {
+  rascunho: 0,
+  aguardando_conferencia: 1,
+  rejeitada: 1,
+  entregue: 2,
+  conferida: 2,
+  pago: 3,
+  cancelado: 3,
+};
+
+/** Status publicado na nuvem nunca perde para rascunho (upload de foto atualiza JSON antes do Enviar). */
+function mergeNotaStatus(a: NotaPedido, b: NotaPedido): NotaPedido["status"] {
+  const aRank = NOTA_STATUS_RANK[a.status] ?? 0;
+  const bRank = NOTA_STATUS_RANK[b.status] ?? 0;
+  if (aRank > bRank) return a.status;
+  if (bRank > aRank) return b.status;
+  return new Date(a.updatedAt).getTime() >= new Date(b.updatedAt).getTime() ? a.status : b.status;
+}
+
 /** Une metadados mais recentes com o conjunto de fotos mais completo (tabela vs storage). */
 export function mergeNotaComFotos(a: NotaPedido, b: NotaPedido): NotaPedido {
   const aTime = new Date(a.updatedAt).getTime();
   const bTime = new Date(b.updatedAt).getTime();
   const meta = aTime >= bTime ? a : b;
   const other = meta === a ? b : a;
+  const status = mergeNotaStatus(a, b);
 
   const metaFotos = getFotosExibicaoNota(meta);
   const otherFotos = getFotosExibicaoNota(other);
@@ -386,6 +406,7 @@ export function mergeNotaComFotos(a: NotaPedido, b: NotaPedido): NotaPedido {
 
   return {
     ...meta,
+    status,
     fotoPedido: rich.fotoPedido ?? fotosPedido?.[0] ?? meta.fotoPedido,
     fotosPedido,
     fotosPedidoMiniaturas,

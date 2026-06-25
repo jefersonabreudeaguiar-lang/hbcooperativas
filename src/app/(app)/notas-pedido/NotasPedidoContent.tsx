@@ -146,8 +146,6 @@ export default function NotasPedidoContent() {
   const [fotosSessaoCount, setFotosSessaoCount] = useState(0);
   const [fotosNaNuvemCount, setFotosNaNuvemCount] = useState(0);
   const [fotoAtualPreview, setFotoAtualPreview] = useState<string | null>(null);
-  const [entregasEnviadasNaSessao, setEntregasEnviadasNaSessao] = useState(0);
-  const [entregaFlashMsg, setEntregaFlashMsg] = useState("");
   const [envioProgresso, setEnvioProgresso] = useState<{ sent: number; total: number } | null>(null);
   const [fotoDuplicadaMsg, setFotoDuplicadaMsg] = useState("");
   const [processandoFoto, setProcessandoFoto] = useState(false);
@@ -157,7 +155,6 @@ export default function NotasPedidoContent() {
   const [reenviarNotaId, setReenviarNotaId] = useState<string | null>(null);
   const fotoInputRef = useRef<HTMLInputElement>(null);
   const fotoPreviewUrlRef = useRef<string | null>(null);
-  const entregaFlashTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const [selectedNota, setSelectedNota] = useState<NotaPedido | null>(null);
   const [conferenciaItens, setConferenciaItens] = useState<ItemForm[]>([]);
@@ -218,12 +215,6 @@ export default function NotasPedidoContent() {
     setFotosNaNuvemCount(0);
     setEnvioProgresso(null);
   }, [revokeFotoPreview]);
-
-  const mostrarFlashEntrega = useCallback((msg: string) => {
-    if (entregaFlashTimerRef.current) clearTimeout(entregaFlashTimerRef.current);
-    setEntregaFlashMsg(msg);
-    entregaFlashTimerRef.current = setTimeout(() => setEntregaFlashMsg(""), 4000);
-  }, []);
 
   const syncFotosSessaoFromDraft = useCallback(async () => {
     if (!ANEXAR_DRAFT_KEY) {
@@ -310,8 +301,6 @@ export default function NotasPedidoContent() {
     setErroEnvio("");
     setAnexarSucesso(false);
     setReenviarNotaId(notaRejeitada?.id ?? null);
-    setEntregasEnviadasNaSessao(0);
-    setEntregaFlashMsg("");
     setInstituicaoId(notaRejeitada?.instituicaoId ?? "");
     setUsarEscolaAvulsa(Boolean(notaRejeitada?.escolaAvulsaNome?.trim()));
     setEscolaAvulsaNome(notaRejeitada?.escolaAvulsaNome ?? "");
@@ -771,10 +760,10 @@ export default function NotasPedidoContent() {
     if (fotoInputRef.current) fotoInputRef.current.value = "";
     if (!file || !data || !cooperadoId || !ANEXAR_DRAFT_KEY || fotoProcessandoRef.current || processandoFoto || enviando) return;
 
-    if (fotosSessaoCount >= 1) {
+    if (fotoAtualPreview) {
       setFormErrors((err) => ({
         ...err,
-        foto: "Envie esta foto antes de tirar outra — uma entrega por vez.",
+        foto: "Toque em Tirar próxima foto ou remova esta antes de adicionar outra.",
       }));
       return;
     }
@@ -784,7 +773,8 @@ export default function NotasPedidoContent() {
     setFotoDuplicadaMsg("");
     setErroEnvio("");
     try {
-      const { maxWidth, quality } = parametrosCompressaoFoto(1);
+      const qtdAtual = await countFotoDraft(ANEXAR_DRAFT_KEY);
+      const { maxWidth, quality } = parametrosCompressaoFoto(qtdAtual + 1);
       const dataUrl = await compressFotoFile(file, maxWidth, quality);
       const notasCooperado = data.notasPedido.filter((n) => n.cooperadoId === cooperadoId);
 
@@ -797,11 +787,9 @@ export default function NotasPedidoContent() {
         return;
       }
 
-      if (reenviarNotaId) {
+      if (reenviarNotaId && qtdAtual === 0) {
         await clearFotoDraft(ANEXAR_DRAFT_KEY);
         await getOrCreatePendingNotaId(ANEXAR_DRAFT_KEY, () => reenviarNotaId);
-      } else {
-        await clearFotoDraft(ANEXAR_DRAFT_KEY);
       }
 
       const resolved = resolverContratoEntrega(data, coopId!, contratoInstId || undefined, {
@@ -819,7 +807,7 @@ export default function NotasPedidoContent() {
         reenviarNotaId ??
         (await getOrCreatePendingNotaId(ANEXAR_DRAFT_KEY, () => generateId("np")));
       const newIndex = await appendFotoDraftMeta(ANEXAR_DRAFT_KEY, contratoId, fingerprintFoto(dataUrl));
-      const totalCount = 1;
+      const totalCount = newIndex + 1;
 
       revokeFotoPreview();
       const previewUrl = URL.createObjectURL(file);
@@ -864,7 +852,7 @@ export default function NotasPedidoContent() {
             updatedAt: now,
           };
 
-      setEnvioProgresso({ sent: 0, total: 1 });
+      setEnvioProgresso({ sent: newIndex + 1, total: totalCount });
       const uploaded = await uploadFotoImediataToCloud(
         cnpj,
         draftNota,
@@ -885,8 +873,8 @@ export default function NotasPedidoContent() {
       }
 
       await markFotoDraftUploaded(ANEXAR_DRAFT_KEY, newIndex);
-      setFotosSessaoCount(1);
-      setFotosNaNuvemCount(1);
+      setFotosSessaoCount(totalCount);
+      setFotosNaNuvemCount(await countFotosUploadedDraft(ANEXAR_DRAFT_KEY));
       setEnvioProgresso(null);
       setFormErrors((err) => ({ ...err, foto: undefined }));
     } catch {
@@ -896,6 +884,12 @@ export default function NotasPedidoContent() {
       fotoProcessandoRef.current = false;
       setProcessandoFoto(false);
     }
+  };
+
+  const tirarProximaFoto = () => {
+    revokeFotoPreview();
+    setFormErrors((prev) => ({ ...prev, foto: undefined }));
+    setFotoDuplicadaMsg("");
   };
 
   const removerFotoSessao = (idx: number) => {
@@ -963,6 +957,9 @@ export default function NotasPedidoContent() {
     if (fotosSessaoCount > 0 && fotosNaNuvemCount < fotosSessaoCount) {
       errors.foto = "Aguarde todas as fotos serem enviadas para a nuvem antes de concluir.";
     }
+    if (fotosSessaoCount > 0 && fotoAtualPreview) {
+      errors.foto = "Toque em Tirar próxima foto antes de enviar, ou remova a foto atual.";
+    }
     if (!contratoId) errors.contrato = "Contrato da entrega não encontrado. Aguarde a sincronização ou fale com a cooperativa.";
     if (Object.keys(errors).length) {
       setFormErrors(errors);
@@ -974,7 +971,7 @@ export default function NotasPedidoContent() {
     const now = new Date().toISOString();
     const mes = getCurrentMesReferencia();
     const cooperadoNome = getCooperadoNome(workingData.cooperados, cid);
-    const qtdFotos = 1;
+    const qtdFotos = fotosSessaoCount;
 
     setEnviando(true);
     setEnvioProgresso(null);
@@ -1165,21 +1162,13 @@ export default function NotasPedidoContent() {
     limparRascunhoAnexar();
     resetFotosSessaoUi();
     setFotoDuplicadaMsg("");
-    setUltimaNotaEnviadaIds((prev) => [...prev, notaFinalLocal.id]);
+    setUltimaNotaEnviadaIds([notaFinalLocal.id]);
     if (isCooperado) setStatusFilter("aguardando_conferencia");
-
-    if (reenviarNotaId) {
-      setAnexarSucesso(true);
-      setSuccessMsg("Entrega reenviada! O responsável já pode conferir.");
-      return;
-    }
-
-    const numero = entregasEnviadasNaSessao + 1;
-    setEntregasEnviadasNaSessao(numero);
-    mostrarFlashEntrega(
-      numero === 1
-        ? "Entrega 1 enviada! Tire a próxima foto."
-        : `Entrega ${numero} enviada! Tire a próxima foto ou toque Concluir.`
+    setAnexarSucesso(true);
+    setSuccessMsg(
+      qtdFotos === 1
+        ? "Entrega enviada! O responsável já pode conferir a foto."
+        : `Entrega enviada com ${qtdFotos} fotos! O responsável já pode conferir.`
     );
   };
 
@@ -2018,21 +2007,13 @@ export default function NotasPedidoContent() {
       <Modal
         open={anexarModal}
         onClose={() => fecharAnexarModal()}
-        title={
-          anexarSucesso
-            ? "Foto enviada!"
-            : reenviarNotaId
-              ? "Enviar de novo"
-              : entregasEnviadasNaSessao > 0
-                ? `Entrega ${entregasEnviadasNaSessao + 1}`
-                : "Enviar foto da entrega"
-        }
+        title={anexarSucesso ? "Entrega enviada!" : reenviarNotaId ? "Enviar de novo" : "Enviar fotos da entrega"}
         size="md"
         footer={
           anexarSucesso ? (
             <div className="flex flex-col-reverse sm:flex-row justify-end gap-2">
               <Button type="button" variant="secondary" onClick={enviarOutraFoto}>
-                Enviar outra foto
+                Enviar outra entrega
               </Button>
               <Button type="button" size="lg" onClick={concluirSessaoEntregas}>
                 <CheckCircle size={18} /> Ver minhas entregas
@@ -2043,22 +2024,23 @@ export default function NotasPedidoContent() {
               <Button type="button" variant="secondary" disabled={enviando} onClick={() => fecharAnexarModal()}>
                 Cancelar
               </Button>
-              {entregasEnviadasNaSessao > 0 && fotosSessaoCount === 0 && (
-                <Button type="button" variant="secondary" disabled={enviando} onClick={concluirSessaoEntregas}>
-                  <CheckCircle size={18} /> Concluir ({entregasEnviadasNaSessao} enviada{entregasEnviadasNaSessao > 1 ? "s" : ""})
-                </Button>
-              )}
               <Button
                 type="button"
                 size="lg"
                 onClick={() => void handleAnexarEntrega()}
-                disabled={fotosSessaoCount === 0 || fotosNaNuvemCount < 1 || enviando || processandoFoto}
+                disabled={
+                  fotosSessaoCount === 0 ||
+                  fotosNaNuvemCount < fotosSessaoCount ||
+                  Boolean(fotoAtualPreview) ||
+                  enviando ||
+                  processandoFoto
+                }
               >
                 <FileText size={18} />{" "}
                 {enviando
-                  ? "Enviando entrega…"
+                  ? "Publicando para o responsável…"
                   : fotosSessaoCount > 0
-                    ? "Enviar esta entrega"
+                    ? `Enviar entrega${fotosSessaoCount > 1 ? ` (${fotosSessaoCount} fotos)` : ""}`
                     : "Tire uma foto primeiro"}
               </Button>
             </div>
@@ -2077,37 +2059,33 @@ export default function NotasPedidoContent() {
               {erroEnvio}
             </AlertBanner>
           )}
-          {entregaFlashMsg && (
-            <AlertBanner variant="success" title="Entrega enviada">
-              {entregaFlashMsg}
-            </AlertBanner>
-          )}
           <p className="text-sm text-gray-600">
             {reenviarNotaId
               ? "Tire a nova foto do pedido corrigido e envie."
-              : "Uma foto = uma entrega. Tire → confira → envie → tire a próxima, até lançar todas."}
+              : "Tire foto por foto na mesma entrega. Só o responsável vê depois de tocar Enviar entrega."}
           </p>
 
-          {!reenviarNotaId && entregasEnviadasNaSessao > 0 && (
-            <div className="rounded-xl border border-green-200 bg-green-50/60 p-3 text-sm text-green-900">
-              <strong>{entregasEnviadasNaSessao}</strong>{" "}
-              {entregasEnviadasNaSessao === 1 ? "entrega já enviada" : "entregas já enviadas"} nesta sessão.
-              {fotosSessaoCount === 0 && " Tire a próxima foto abaixo."}
-            </div>
-          )}
-
-          {!reenviarNotaId && entregasEnviadasNaSessao === 0 && (
+          {!reenviarNotaId && (
             <div className="rounded-xl border border-green-200 bg-green-50/60 p-4">
-              <div className="flex items-center gap-2 mb-1">
-                <ImagePlus size={18} className="text-green-700" />
-                <span className="text-sm font-semibold text-green-900">
-                  {fotosSessaoCount === 0 ? "Passo 1: tire a foto" : "Passo 2: envie esta entrega"}
+              <div className="flex items-center justify-between gap-2 mb-1">
+                <span className="text-sm font-semibold text-green-900 flex items-center gap-2">
+                  <ImagePlus size={18} />
+                  {fotosSessaoCount === 0
+                    ? "Nenhuma foto ainda"
+                    : `${fotosSessaoCount} ${fotosSessaoCount === 1 ? "foto na nuvem" : "fotos na nuvem"}`}
                 </span>
+                {fotosSessaoCount > 0 && (
+                  <span className="text-xs font-bold text-green-800 bg-green-200 px-2 py-0.5 rounded-full">
+                    {fotosNaNuvemCount >= fotosSessaoCount ? "Pronta" : "Enviando…"}
+                  </span>
+                )}
               </div>
               <p className="text-xs text-green-800">
-                {fotosSessaoCount === 0
-                  ? "Depois de enviar, aparece o campo para a próxima foto."
-                  : "Toque em Enviar esta entrega — em seguida você tira a próxima."}
+                {fotoAtualPreview
+                  ? "Confira esta foto e toque em Tirar próxima foto, ou Enviar entrega quando terminar."
+                  : fotosSessaoCount === 0
+                    ? "Passo 1: tire a primeira foto."
+                    : "Tire a próxima foto ou envie a entrega completa para o responsável."}
               </p>
             </div>
           )}
@@ -2157,58 +2135,56 @@ export default function NotasPedidoContent() {
             label={
               reenviarNotaId
                 ? "Nova foto"
-                : entregasEnviadasNaSessao > 0
-                  ? `Foto da entrega ${entregasEnviadasNaSessao + 1}`
-                  : "Foto da entrega"
+                : fotoAtualPreview
+                  ? `Foto ${fotosSessaoCount} desta entrega`
+                  : fotosSessaoCount > 0
+                    ? `Foto ${fotosSessaoCount + 1} desta entrega`
+                    : "Foto da entrega"
             }
             required
             error={formErrors.foto}
             hint="Mostre o pedido inteiro com a assinatura de quem recebeu."
           >
-            {fotosSessaoCount === 0 ? (
-              <label className={`flex flex-col items-center gap-2 p-8 border-2 border-dashed border-green-400 rounded-2xl bg-green-50/50 ${processandoFoto || enviando ? "opacity-60 pointer-events-none" : "cursor-pointer active:bg-green-100"}`}>
-                <Camera size={48} className="text-green-700" />
-                <span className="text-base font-semibold text-green-800">
-                  {processandoFoto
-                    ? "Enviando para a nuvem..."
-                    : entregasEnviadasNaSessao > 0
-                      ? "Tirar próxima foto"
-                      : "Tirar foto agora"}
-                </span>
-                <input ref={fotoInputRef} type="file" accept="image/*" capture="environment" className="hidden" onChange={(e) => void handleFoto(e)} disabled={processandoFoto || enviando} />
-              </label>
-            ) : (
+            {fotoAtualPreview ? (
               <div className="space-y-3">
-                {fotoAtualPreview && (
-                  <div className="relative rounded-xl overflow-hidden border-2 border-green-300 bg-black/5">
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img
-                      src={fotoAtualPreview}
-                      alt="Foto desta entrega"
-                      className="w-full max-h-72 object-contain mx-auto bg-gray-900/5"
-                    />
-                    {fotosNaNuvemCount >= 1 && (
-                      <span className="absolute top-2 left-2 bg-green-700 text-white text-xs font-semibold px-2 py-1 rounded-full">
-                        Na nuvem
-                      </span>
-                    )}
-                  </div>
-                )}
-                <div className="flex gap-2">
+                <div className="relative rounded-xl overflow-hidden border-2 border-green-300 bg-black/5">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={fotoAtualPreview}
+                    alt={`Foto ${fotosSessaoCount}`}
+                    className="w-full max-h-72 object-contain mx-auto bg-gray-900/5"
+                  />
+                  <span className="absolute top-2 left-2 bg-green-700 text-white text-xs font-semibold px-2 py-1 rounded-full">
+                    Foto {fotosSessaoCount} · na nuvem
+                  </span>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  <Button type="button" size="sm" onClick={tirarProximaFoto} disabled={enviando || processandoFoto}>
+                    <Camera size={14} className="mr-1" /> Tirar próxima foto
+                  </Button>
                   <Button
                     type="button"
                     variant="secondary"
                     size="sm"
                     disabled={enviando || processandoFoto}
-                    onClick={() => removerFotoSessao(0)}
+                    onClick={() => removerFotoSessao(fotosSessaoCount - 1)}
                   >
-                    <X size={14} className="mr-1" /> Tirar outra
+                    <X size={14} className="mr-1" /> Remover esta
                   </Button>
                 </div>
-                <p className="text-sm text-green-800 font-medium">
-                  Confira a foto e toque em <strong>Enviar esta entrega</strong>. Depois aparece a próxima.
-                </p>
               </div>
+            ) : (
+              <label className={`flex flex-col items-center gap-2 p-8 border-2 border-dashed border-green-400 rounded-2xl bg-green-50/50 ${processandoFoto || enviando ? "opacity-60 pointer-events-none" : "cursor-pointer active:bg-green-100"}`}>
+                <Camera size={48} className="text-green-700" />
+                <span className="text-base font-semibold text-green-800">
+                  {processandoFoto
+                    ? "Enviando para a nuvem..."
+                    : fotosSessaoCount === 0
+                      ? "Tirar foto agora"
+                      : "Tirar próxima foto"}
+                </span>
+                <input ref={fotoInputRef} type="file" accept="image/*" capture="environment" className="hidden" onChange={(e) => void handleFoto(e)} disabled={processandoFoto || enviando} />
+              </label>
             )}
           </FormField>
           <div className="border border-gray-200 rounded-xl p-4 space-y-3">
