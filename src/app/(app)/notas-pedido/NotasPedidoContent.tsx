@@ -2295,7 +2295,21 @@ export default function NotasPedidoContent() {
                     return <p className="text-gray-400 text-center py-12">Carregando fotos da nuvem...</p>;
                   }
                   if (selectedNota.fotoNaNuvem && contarFotosEnviadasNota(selectedNota) > 0) {
-                    return <p className="text-gray-400 text-center py-12">Carregando fotos da nuvem...</p>;
+                    return (
+                      <div className="text-center py-12 px-4 space-y-3">
+                        <p className="text-red-300 text-sm">
+                          Fotos na nuvem, mas não carregaram neste aparelho. Verifique a conexão.
+                        </p>
+                        <Button
+                          type="button"
+                          variant="secondary"
+                          size="sm"
+                          onClick={() => selectedNota && void prepararConferenciaNota(selectedNota, { transicao: true })}
+                        >
+                          Tentar carregar de novo
+                        </Button>
+                      </div>
+                    );
                   }
                   return <p className="text-gray-400 text-center py-12">Sem foto</p>;
                 })()}

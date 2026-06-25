@@ -8,6 +8,7 @@
     "start": "next start",
     "lint": "eslint",
     "test:comunicados": "node scripts/test-comunicado-service.mjs",
+    "test:entregas": "npx tsx scripts/simulate-entrega-flow.ts",
     "generate:pwa-icons": "node scripts/generate-pwa-icons.mjs",
     "reset:operacional": "node scripts/reset-operacional-cloud.mjs"
   },

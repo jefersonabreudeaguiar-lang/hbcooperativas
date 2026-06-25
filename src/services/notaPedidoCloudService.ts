@@ -19,6 +19,16 @@ const STATUS_RANK: Record<NotaPedido["status"], number> = {
 function shouldApplyCloudNota(local: NotaPedido | undefined, cloud: NotaPedido): boolean {
   if (!local) return true;
 
+  // Responsável rejeitou — cooperado precisa ver o status na hora.
+  if (local.status === "aguardando_conferencia" && cloud.status === "rejeitada") {
+    return true;
+  }
+
+  // Cooperado reenviou após rejeição — responsável volta a ver na fila.
+  if (local.status === "rejeitada" && cloud.status === "aguardando_conferencia") {
+    return true;
+  }
+
   const localRank = STATUS_RANK[local.status] ?? 0;
   const cloudRank = STATUS_RANK[cloud.status] ?? 0;
   if (cloudRank < localRank) return false;
@@ -147,8 +157,21 @@ export function mergeCloudNotasIntoData(
       cooperativaCnpj: digits,
       fotoNaNuvem: cn.fotoNaNuvem ?? Boolean(cn.fotoPedido || cn.fotosPedido?.length),
     };
-    const mergedNota = local ? mergeNotaComFotos(local, cloudNota) : cloudNota;
-    if (shouldApplyCloudNota(local, mergedNota)) {
+    if (!local || shouldApplyCloudNota(local, cloudNota)) {
+      let mergedNota = local ? mergeNotaComFotos(local, cloudNota) : cloudNota;
+      if (local && cloudNota.status !== local.status) {
+        mergedNota = {
+          ...mergedNota,
+          status: cloudNota.status,
+          conferidaPor: cloudNota.conferidaPor,
+          dataConferencia: cloudNota.dataConferencia,
+          rejeitadaPor: cloudNota.rejeitadaPor,
+          dataRejeicao: cloudNota.dataRejeicao,
+          motivoRejeicao: cloudNota.motivoRejeicao,
+          reenviadaEm: cloudNota.reenviadaEm,
+          updatedAt: cloudNota.updatedAt,
+        };
+      }
       byId.set(mergedNota.id, mergedNota);
       changed = true;
     }
@@ -537,11 +560,10 @@ export async function ensureNotaComFoto(
   coopId?: string
 ): Promise<NotaPedido> {
   const localFotos = getFotosExibicaoNota(nota);
-  const esperado = nota.fotosEnviadasCount ?? localFotos.length;
+  const esperado = Math.max(nota.fotosEnviadasCount ?? 0, localFotos.length);
   const fullResCount = nota.fotosPedido?.length ?? 0;
 
   if (fullResCount >= esperado && esperado > 0) return nota;
-  if (localFotos.length >= esperado && esperado > 0 && fullResCount >= esperado) return nota;
 
   const cnpj = getCooperativaCnpj(data, coopId ?? nota.cooperativaId);
   if (!cnpj) return nota;

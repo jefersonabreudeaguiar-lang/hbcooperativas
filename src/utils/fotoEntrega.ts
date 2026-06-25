@@ -344,10 +344,11 @@ export function contarFotosUnicas(notas: NotaPedido[], cooperadoId: string, mesR
 
 /** Quantidade de fotos enviadas em uma nota (várias fotos = 1 entrega). */
 export function contarFotosEnviadasNota(nota: NotaPedido): number {
-  const fotos = getFotosExibicaoNota(nota);
-  if (fotos.length > 0) return fotos.length;
-  if (nota.fotosPedido?.length) return nota.fotosPedido.length;
-  if (nota.fotosEnviadasCount && nota.fotosEnviadasCount > 0) return nota.fotosEnviadasCount;
+  const declarado = nota.fotosEnviadasCount ?? 0;
+  const exibidas = getFotosExibicaoNota(nota).length;
+  const noArray = nota.fotosPedido?.length ?? 0;
+  const total = Math.max(declarado, exibidas, noArray);
+  if (total > 0) return total;
   if (nota.fotoNaNuvem || nota.fotoPedido || nota.fotoPedidoMiniatura || nota.fotoEnviadaEm) return 1;
   return 0;
 }
