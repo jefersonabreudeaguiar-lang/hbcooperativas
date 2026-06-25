@@ -174,6 +174,10 @@ export default function NotasPedidoContent() {
   const anexarParamHandledRef = useRef(false);
   const fotoProcessandoRef = useRef(false);
   const lancandoRef = useRef(false);
+  const filaConferenciaRef = useRef<{ total: number; concluidas: number; chave: string } | null>(null);
+  const [filaConferenciaPos, setFilaConferenciaPos] = useState(0);
+  const [filaConferenciaTotal, setFilaConferenciaTotal] = useState(0);
+  const [conferenciaTransicao, setConferenciaTransicao] = useState(false);
 
   const coopId = user && data ? getUserCooperativaId(user, data) : undefined;
   const ANEXAR_DRAFT_KEY = coopId ? `hb_anexar_draft_${coopId}` : "";
@@ -1034,11 +1038,23 @@ export default function NotasPedidoContent() {
     );
   };
 
-  const openConferir = async (nota: NotaPedido) => {
+  const fecharConferirModal = () => {
+    filaConferenciaRef.current = null;
+    setFilaConferenciaPos(0);
+    setFilaConferenciaTotal(0);
+    setConferenciaTransicao(false);
+    setConferirModal(false);
+    setSelectedNota(null);
+  };
+
+  const prepararConferenciaNota = async (nota: NotaPedido, opts?: { transicao?: boolean }) => {
+    const d = getData() ?? data;
+    if (opts?.transicao) setConferenciaTransicao(true);
+
     let notaComFoto = nota;
-    if (data && coopId) {
+    if (d && coopId) {
       if (!isCooperado || getFotosExibicaoNota(nota).length === 0) {
-        notaComFoto = await ensureNotaComFoto(data, nota, coopId);
+        notaComFoto = await ensureNotaComFoto(d, nota, coopId);
       }
     }
     setSelectedNota(notaComFoto);
@@ -1046,33 +1062,45 @@ export default function NotasPedidoContent() {
       ? resolverInstituicaoConferencia(coopId, instituicoes, nota.instituicaoId)
       : nota.instituicaoId;
     setConferenciaInstId(instId);
-    if (data && instId) {
-      const inst = data.instituicoes.find((i) => i.id === instId);
+    if (d && instId) {
+      const inst = d.instituicoes.find((i) => i.id === instId);
       setConferenciaLocal(inst?.localEntrega ?? inst?.endereco ?? "");
-      setConferenciaItens(loadItensFromInstituicao(data, instId, coopId, nota.itens));
+      setConferenciaItens(loadItensFromInstituicao(d, instId, coopId, nota.itens));
     } else {
       setConferenciaItens([]);
       setConferenciaLocal("");
     }
-    setConferenciaDescontoPct(data?.config.descontoPadraoCooperativa ?? 5);
+    setConferenciaDescontoPct(d?.config.descontoPadraoCooperativa ?? 5);
     const coopDonoId =
-      data && coopId
-        ? resolverCooperadoIdCanonico(
-            data,
-            nota.cooperadoId,
-            coopId,
-            nota.cooperadoNomeSnapshot
-          )
+      d && coopId
+        ? resolverCooperadoIdCanonico(d, nota.cooperadoId, coopId, nota.cooperadoNomeSnapshot)
         : nota.cooperadoId;
     setConferenciaCooperadoId(coopDonoId);
     setConferenciaEscolaAvulsa(nota.escolaAvulsaNome?.trim() ?? "");
     setAlterarInstConferencia(false);
     setConferirErrors({});
-    if (!isCooperado && data && coopId) {
-      const chave = getChaveGrupoConferencia(nota, data, coopId);
+    if (!isCooperado && d && coopId) {
+      const chave = getChaveGrupoConferencia(nota, d, coopId);
       setAbaConferenciaKey(chave);
       setFiltroCooperadoId(coopDonoId);
     }
+    setConferenciaTransicao(false);
+  };
+
+  const openConferir = async (nota: NotaPedido) => {
+    const d = getData() ?? data;
+    if (!isCooperado && d && coopId) {
+      const chave = getChaveGrupoConferencia(nota, d, coopId);
+      const fila = listarPendentesConferencia(d, coopId, chave);
+      filaConferenciaRef.current = { total: fila.length, concluidas: 0, chave };
+      setFilaConferenciaPos(1);
+      setFilaConferenciaTotal(fila.length);
+    } else {
+      filaConferenciaRef.current = null;
+      setFilaConferenciaPos(0);
+      setFilaConferenciaTotal(0);
+    }
+    await prepararConferenciaNota(nota);
     setConferirModal(true);
   };
 
@@ -1092,26 +1120,33 @@ export default function NotasPedidoContent() {
       })
       .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
 
-  const contarPendentesConferencia = (d: AppData, coopIdLocal: string) =>
-    listarPendentesConferencia(d, coopIdLocal).length;
-
-  const continuarFilaConferencia = (chaveGrupo: string, notaConcluidaId: string) => {
-    if (!coopId) return;
+  const obterProximaNotaConferencia = (chaveGrupo: string, notaConcluidaId: string): NotaPedido | null => {
+    if (!coopId) return null;
     const d = getData();
-    if (!d) return;
+    if (!d) return null;
 
     const mesmaAba = listarPendentesConferencia(d, coopId, chaveGrupo, notaConcluidaId);
-    if (mesmaAba.length > 0) {
-      void openConferir(mesmaAba[0]);
-      return;
-    }
+    if (mesmaAba.length > 0) return mesmaAba[0];
 
     const outras = listarPendentesConferencia(d, coopId, undefined, notaConcluidaId);
     if (outras.length > 0) {
       const proximoGrupo = agruparPendentesPorCooperado(d, outras, coopId)[0];
-      if (proximoGrupo) selecionarAbaConferencia(proximoGrupo);
-      void openConferir(outras[0]);
+      if (proximoGrupo) {
+        selecionarAbaConferencia(proximoGrupo);
+        const filaGrupo = outras.filter(
+          (n) => getChaveGrupoConferencia(n, d, coopId) === proximoGrupo.chave
+        );
+        filaConferenciaRef.current = {
+          total: filaGrupo.length,
+          concluidas: 0,
+          chave: proximoGrupo.chave,
+        };
+        setFilaConferenciaPos(1);
+        setFilaConferenciaTotal(filaGrupo.length);
+      }
+      return outras[0];
     }
+    return null;
   };
 
   const openView = async (nota: NotaPedido) => {
@@ -1217,17 +1252,28 @@ export default function NotasPedidoContent() {
     const notaId = selectedNota.id;
     const chaveAtual = getChaveGrupoConferencia(selectedNota, data, coopId);
     const coopNome = getCooperadoNomeResolvido(getData() ?? data, conferenciaCooperadoId, coopId);
-    const pendentesRestantes = coopId ? contarPendentesConferencia(getData(), coopId) : 0;
+    const proxima = obterProximaNotaConferencia(chaveAtual, notaId);
 
-    setConferirModal(false);
-    setSelectedNota(null);
-    setLancadoMsg(
-      pendentesRestantes > 0
-        ? `Nota aprovada! ${formatCurrency(conferenciaTotais.liquido)} na ficha de ${coopNome.split(" ")[0]}. Faltam ${pendentesRestantes} na fila.`
-        : `Nota aprovada! ${formatCurrency(conferenciaTotais.liquido)} na ficha de ${coopNome.split(" ")[0]}. Fila concluída!`
-    );
-    setTimeout(() => setLancadoMsg(""), 6000);
-    continuarFilaConferencia(chaveAtual, notaId);
+    if (proxima) {
+      const mesmoGrupo = filaConferenciaRef.current?.chave === chaveAtual;
+      if (filaConferenciaRef.current && mesmoGrupo) {
+        filaConferenciaRef.current.concluidas += 1;
+        setFilaConferenciaPos(filaConferenciaRef.current.concluidas + 1);
+      } else if (filaConferenciaRef.current) {
+        setFilaConferenciaPos(1);
+      }
+      setLancadoMsg(
+        `Nota aprovada! ${formatCurrency(conferenciaTotais.liquido)} na ficha de ${coopNome.split(" ")[0]}. Abrindo a próxima entrega…`
+      );
+      setTimeout(() => setLancadoMsg(""), 4000);
+      void prepararConferenciaNota(proxima, { transicao: true });
+    } else {
+      fecharConferirModal();
+      setLancadoMsg(
+        `Nota aprovada! ${formatCurrency(conferenciaTotais.liquido)} na ficha de ${coopNome.split(" ")[0]}. Fila concluída!`
+      );
+      setTimeout(() => setLancadoMsg(""), 6000);
+    }
   };
 
   const handleRejeitarNota = () => {
@@ -1257,19 +1303,27 @@ export default function NotasPedidoContent() {
 
     const notaId = selectedNota.id;
     const chaveAtual = getChaveGrupoConferencia(selectedNota, data, coopId);
-    const pendentesRestantes = coopId ? contarPendentesConferencia(getData(), coopId) : 0;
+    const proxima = obterProximaNotaConferencia(chaveAtual, notaId);
 
     setRejectModal(false);
-    setConferirModal(false);
-    setSelectedNota(null);
     setMotivoRejeicao("");
-    setLancadoMsg(
-      pendentesRestantes > 0
-        ? `Correção enviada ao cooperado. Faltam ${pendentesRestantes} na fila.`
-        : "Correção enviada ao cooperado. Fila concluída!"
-    );
-    setTimeout(() => setLancadoMsg(""), 5000);
-    continuarFilaConferencia(chaveAtual, notaId);
+
+    if (proxima) {
+      const mesmoGrupo = filaConferenciaRef.current?.chave === chaveAtual;
+      if (filaConferenciaRef.current && mesmoGrupo) {
+        filaConferenciaRef.current.concluidas += 1;
+        setFilaConferenciaPos(filaConferenciaRef.current.concluidas + 1);
+      } else if (filaConferenciaRef.current) {
+        setFilaConferenciaPos(1);
+      }
+      setLancadoMsg("Correção enviada ao cooperado. Abrindo a próxima entrega…");
+      setTimeout(() => setLancadoMsg(""), 4000);
+      void prepararConferenciaNota(proxima, { transicao: true });
+    } else {
+      fecharConferirModal();
+      setLancadoMsg("Correção enviada ao cooperado. Fila concluída!");
+      setTimeout(() => setLancadoMsg(""), 5000);
+    }
   };
 
   const handleExcluirPendente = async () => {
@@ -2131,21 +2185,35 @@ export default function NotasPedidoContent() {
         </div>
       </Modal>
 
-      <Modal open={conferirModal} onClose={() => setConferirModal(false)} title="Conferir entrega" size="full"
+      <Modal open={conferirModal} onClose={fecharConferirModal} title={
+        filaConferenciaTotal > 1
+          ? `Conferir entrega (${filaConferenciaPos} de ${filaConferenciaTotal})`
+          : "Conferir entrega"
+      } size="full"
         footer={selectedNota?.status === "aguardando_conferencia" && check("notas_pedido", "approve") ? (
           <div className="flex flex-col sm:flex-row gap-2 justify-between">
-            <Button variant="danger" onClick={() => { setMotivoRejeicao(""); setRejectModal(true); }}>
+            <Button variant="danger" onClick={() => { setMotivoRejeicao(""); setRejectModal(true); }} disabled={conferenciaTransicao}>
               <XCircle size={18} /> Pedir correção
             </Button>
-            <Button size="lg" onClick={handleLancarNota}>
+            <Button size="lg" onClick={handleLancarNota} disabled={conferenciaTransicao}>
               <CheckCircle size={18} />
-              {selectedNota && getFotosExibicaoNota(selectedNota).length > 1
-                ? `Aprovar entrega (${getFotosExibicaoNota(selectedNota).length} fotos)`
-                : "Aprovar e lançar na ficha"}
+              {conferenciaTransicao
+                ? "Carregando próxima entrega…"
+                : selectedNota && getFotosExibicaoNota(selectedNota).length > 1
+                  ? `Aprovar entrega (${getFotosExibicaoNota(selectedNota).length} fotos)`
+                  : filaConferenciaTotal > 1
+                    ? `Aprovar e próxima (${filaConferenciaPos}/${filaConferenciaTotal})`
+                    : "Aprovar e lançar na ficha"}
             </Button>
           </div>
         ) : undefined}
       >
+        <div className="relative">
+        {conferenciaTransicao && (
+          <div className="absolute inset-0 z-20 flex items-center justify-center bg-white/80 backdrop-blur-sm">
+            <p className="text-sm font-medium text-gray-700">Carregando próxima entrega…</p>
+          </div>
+        )}
         {selectedNota && (
           <div className="flex flex-col lg:flex-row min-h-[calc(100dvh-8.5rem)]">
             <div className="lg:w-[48%] xl:w-1/2 bg-gray-900 flex flex-col shrink-0 lg:min-h-[calc(100dvh-8.5rem)]">
@@ -2186,6 +2254,11 @@ export default function NotasPedidoContent() {
             </div>
 
             <div className="flex-1 overflow-y-auto p-4 lg:p-6 space-y-4 bg-gray-50">
+              {filaConferenciaTotal > 1 && (
+                <AlertBanner variant="info" title={`Fila: ${filaConferenciaPos} de ${filaConferenciaTotal} entregas`}>
+                  Ao aprovar, a próxima entrega abre aqui mesmo — sem fechar a tela — até lançar todas.
+                </AlertBanner>
+              )}
               {(() => {
                 const qtdFotosModal = getFotosExibicaoNota(selectedNota).length;
                 if (qtdFotosModal <= 1) return null;
@@ -2333,6 +2406,7 @@ export default function NotasPedidoContent() {
             </div>
           </div>
         )}
+        </div>
       </Modal>
 
       <PromptDialog
