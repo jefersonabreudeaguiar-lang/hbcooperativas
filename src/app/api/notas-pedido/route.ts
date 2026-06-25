@@ -35,8 +35,11 @@ export async function GET(request: Request) {
     fetchNotasFromStorage(supabase, cnpj),
   ]);
 
+  const visiveis = (lista: NotaPedido[]) =>
+    lista.filter((n) => n.status !== "rascunho");
+
   if (!fromTable.tableMissing) {
-    const merged = mergeNotasSources(fromTable.notas, fromStorage);
+    const merged = visiveis(mergeNotasSources(fromTable.notas, fromStorage));
     const notas = lite
       ? merged
       : await enrichNotasListWithPreviews(supabase, cnpj, merged);
@@ -44,8 +47,8 @@ export async function GET(request: Request) {
   }
 
   const notas = lite
-    ? fromStorage
-    : await enrichNotasListWithPreviews(supabase, cnpj, fromStorage);
+    ? visiveis(fromStorage)
+    : await enrichNotasListWithPreviews(supabase, cnpj, visiveis(fromStorage));
   return NextResponse.json({ notas, source: "storage" });
 }
 

@@ -4,6 +4,7 @@ import { isNotasPedidoTableMissing } from "@/lib/supabase/errors";
 import { normalizeCnpj } from "@/utils/cooperativa";
 import type { NotaPedido } from "@/types";
 import {
+  deleteAndCompactFotoPart,
   fetchNotaMetaFromStorage,
   notaPayloadForTable,
   uploadNotaFotoPart,
@@ -42,6 +43,8 @@ export async function POST(
 
   let metaNota: NotaPedido | null = null;
 
+  const isDraft = body.draft === true || notaBody?.status === "rascunho";
+
   if (index === 0) {
     if (!notaBody?.id || notaBody.id !== id) {
       return NextResponse.json({ error: "Entrega inicial inválida." }, { status: 400 });
@@ -49,6 +52,7 @@ export async function POST(
     metaNota = {
       ...notaBody,
       id,
+      status: isDraft ? "rascunho" : (notaBody.status ?? "aguardando_conferencia"),
       fotosEnviadasCount: totalCount,
       fotoNaNuvem: true,
       fotoPedido: undefined,
@@ -124,4 +128,35 @@ export async function POST(
   }
 
   return NextResponse.json({ success: true, index, totalCount });
+}
+
+export async function DELETE(
+  request: Request,
+  context: { params: Promise<{ id: string }> }
+) {
+  if (!isSupabaseConfigured()) {
+    return NextResponse.json({ configured: false }, { status: 503 });
+  }
+
+  const { id } = await context.params;
+  const { searchParams } = new URL(request.url);
+  const cnpj = normalizeCnpj(searchParams.get("cnpj") ?? "");
+  const index = Number(searchParams.get("index"));
+  const totalCount = Number(searchParams.get("totalCount"));
+
+  if (cnpj.length !== 14 || !Number.isFinite(index) || !Number.isFinite(totalCount)) {
+    return NextResponse.json({ error: "Parâmetros inválidos." }, { status: 400 });
+  }
+
+  const supabase = getSupabaseAdmin();
+  if (!supabase) {
+    return NextResponse.json({ error: "Cliente indisponível." }, { status: 503 });
+  }
+
+  const result = await deleteAndCompactFotoPart(supabase, cnpj, id, index, totalCount);
+  if (!result.ok) {
+    return NextResponse.json({ error: result.error }, { status: 500 });
+  }
+
+  return NextResponse.json({ success: true, newCount: result.newCount });
 }

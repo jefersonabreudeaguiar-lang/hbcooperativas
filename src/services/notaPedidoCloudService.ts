@@ -392,6 +392,110 @@ export async function patchNotaPedidoInCloud(
   }
 }
 
+/** Envia uma foto para a nuvem assim que tirada (entrega fica em rascunho até Enviar). */
+export async function uploadFotoImediataToCloud(
+  cnpj: string,
+  nota: NotaPedido,
+  index: number,
+  totalCount: number,
+  fotoDataUrl: string,
+  cooperadoNome?: string
+): Promise<{ ok: boolean; offline?: boolean; error?: string }> {
+  const digits = normalizeCnpj(cnpj);
+  if (digits.length !== 14) return { ok: false, error: "CNPJ inválido." };
+
+  const metaNota: NotaPedido = {
+    ...nota,
+    status: "rascunho",
+    fotosEnviadasCount: totalCount,
+    fotoNaNuvem: true,
+    fotoPedido: undefined,
+    fotosPedido: undefined,
+    fotoPedidoMiniatura: undefined,
+    fotosPedidoMiniaturas: undefined,
+  };
+
+  try {
+    const res = await fetch(`/api/notas-pedido/${encodeURIComponent(nota.id)}/foto`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        cnpj: digits,
+        index,
+        totalCount,
+        foto: fotoDataUrl,
+        draft: true,
+        nota: metaNota,
+        cooperadoNome: index === 0 ? cooperadoNome : undefined,
+      }),
+    });
+    const json = await res.json().catch(() => ({}));
+    if (res.status === 503) {
+      return { ok: false, offline: true, error: (json.error as string) ?? "Nuvem indisponível." };
+    }
+    if (!res.ok) {
+      return {
+        ok: false,
+        error: (json.error as string) ?? `Erro ao enviar foto ${index + 1} para a nuvem.`,
+      };
+    }
+    return { ok: true };
+  } catch {
+    return { ok: false, offline: true, error: "Sem conexão com o servidor." };
+  }
+}
+
+/** Remove foto da nuvem (rascunho) e compacta índices. */
+export async function deleteFotoRascunhoFromCloud(
+  cnpj: string,
+  notaId: string,
+  index: number,
+  totalCount: number
+): Promise<{ ok: boolean; newCount?: number; error?: string }> {
+  const digits = normalizeCnpj(cnpj);
+  if (digits.length !== 14) return { ok: false, error: "CNPJ inválido." };
+
+  try {
+    const res = await fetch(
+      `/api/notas-pedido/${encodeURIComponent(notaId)}/foto?cnpj=${digits}&index=${index}&totalCount=${totalCount}`,
+      { method: "DELETE" }
+    );
+    const json = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      return { ok: false, error: (json.error as string) ?? "Erro ao remover foto na nuvem." };
+    }
+    return { ok: true, newCount: Number(json.newCount) };
+  } catch {
+    return { ok: false, error: "Sem conexão com o servidor." };
+  }
+}
+
+/** Publica entrega para o responsável (sai de rascunho). */
+export async function finalizeNotaEntregaNaNuvem(
+  cnpj: string,
+  nota: NotaPedido,
+  cooperadoNome?: string
+): Promise<{ ok: boolean; offline?: boolean; error?: string }> {
+  const digits = normalizeCnpj(cnpj);
+  if (digits.length !== 14) return { ok: false, error: "CNPJ inválido." };
+
+  const finalNota: NotaPedido = {
+    ...nota,
+    status: "aguardando_conferencia",
+    fotoNaNuvem: true,
+    fotoPedido: undefined,
+    fotosPedido: undefined,
+    fotoPedidoMiniatura: undefined,
+    fotosPedidoMiniaturas: undefined,
+    updatedAt: new Date().toISOString(),
+  };
+
+  const patched = await patchNotaPedidoInCloud(digits, finalNota);
+  if (!patched.ok) return patched;
+
+  return { ok: true };
+}
+
 /** Envia fotos uma a uma — memória constante no celular. */
 export async function pushNotaComFotosEmStreaming(
   cnpj: string,

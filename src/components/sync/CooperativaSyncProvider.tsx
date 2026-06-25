@@ -10,6 +10,7 @@ import {
   pushNotaComFotosEmStreaming,
   flushPendingNotaDeletes,
   fetchNotaPedidoFromCloud,
+  finalizeNotaEntregaNaNuvem,
 } from "@/services/notaPedidoCloudService";
 import {
   SYNC_INTERVAL_MS,
@@ -19,7 +20,6 @@ import { pushCooperadoToCloud, resolverCooperadoIdCanonico, flushPendingCooperad
 import { getData, updateDataSafe } from "@/services/dataStore";
 import { getCooperadoNome } from "@/utils/calculations";
 import { compactarFotosNoArmazenamento, contarFotosEnviadasNota } from "@/utils/fotoEntrega";
-import { loadFotoDraftMeta, getFotoDraftData } from "@/utils/fotoDraftStore";
 import { isDiretoriaRole } from "@/permissions";
 import type { UserRole } from "@/types";
 
@@ -52,9 +52,8 @@ export function CooperativaSyncProvider({ children }: { children: React.ReactNod
         }
 
         const cooperadoNome = getCooperadoNome(latest.cooperados, cooperadoCanonico);
-        const draftKey = `hb_anexar_draft_${coopId}`;
-        const draftMeta = await loadFotoDraftMeta(draftKey);
 
+        /** Legado: entregas antigas ainda com fotos no aparelho. */
         const pendentes = latest.notasPedido.filter(
           (n) =>
             n.cooperadoId === cooperadoCanonico &&
@@ -62,35 +61,6 @@ export function CooperativaSyncProvider({ children }: { children: React.ReactNod
             !n.fotoNaNuvem
         );
         for (const nota of pendentes) {
-          if (draftMeta?.pendingNotaId === nota.id && draftMeta.count > 0) {
-            const result = await pushNotaComFotosEmStreaming(
-              cnpj,
-              nota,
-              (i) => getFotoDraftData(draftKey, i),
-              draftMeta.count,
-              cooperadoNome
-            );
-            if (result.ok) {
-              updateDataSafe((d) =>
-                compactarFotosNoArmazenamento({
-                  ...d,
-                  notasPedido: d.notasPedido.map((n) =>
-                    n.id === nota.id
-                      ? {
-                          ...n,
-                          fotoNaNuvem: true,
-                          cooperativaCnpj: normalizeCnpj(cnpj),
-                          fotoPedido: undefined,
-                          fotosPedido: undefined,
-                        }
-                      : n
-                  ),
-                })
-              );
-            }
-            continue;
-          }
-
           const fotos = nota.fotosPedido ?? (nota.fotoPedido ? [nota.fotoPedido] : []);
           if (fotos.length === 0) continue;
           const result =
@@ -123,6 +93,22 @@ export function CooperativaSyncProvider({ children }: { children: React.ReactNod
           }
         }
 
+        /** Retenta publicar entregas cujo Enviar falhou após fotos já na nuvem. */
+        const aguardandoLocal = latest.notasPedido.filter(
+          (n) =>
+            n.cooperadoId === cooperadoCanonico &&
+            n.status === "aguardando_conferencia" &&
+            n.fotoNaNuvem
+        );
+        for (const nota of aguardandoLocal) {
+          const cloud = await fetchNotaPedidoFromCloud(cnpj, nota.id);
+          if (!cloud || cloud.status !== "rascunho") continue;
+          const esperado = nota.fotosEnviadasCount ?? 0;
+          const naNuvem = contarFotosEnviadasNota(cloud);
+          if (naNuvem < esperado) continue;
+          await finalizeNotaEntregaNaNuvem(cnpj, nota, cooperadoNome);
+        }
+
         const incompletasNaNuvem = latest.notasPedido.filter(
           (n) =>
             n.cooperadoId === cooperadoCanonico &&
@@ -136,15 +122,15 @@ export function CooperativaSyncProvider({ children }: { children: React.ReactNod
           const naNuvem = cloud ? contarFotosEnviadasNota(cloud) : 0;
           if (naNuvem >= esperado) continue;
 
-          if (draftMeta?.pendingNotaId === nota.id && draftMeta.count >= esperado) {
-            await pushNotaComFotosEmStreaming(
-              cnpj,
-              nota,
-              (i) => getFotoDraftData(draftKey, i),
-              esperado,
-              cooperadoNome
-            );
-          }
+          const fotos = nota.fotosPedido ?? (nota.fotoPedido ? [nota.fotoPedido] : []);
+          if (fotos.length === 0) continue;
+          await pushNotaComFotosEmStreaming(
+            cnpj,
+            nota,
+            (i) => Promise.resolve(fotos[i]),
+            esperado,
+            cooperadoNome
+          );
         }
       }
     } finally {

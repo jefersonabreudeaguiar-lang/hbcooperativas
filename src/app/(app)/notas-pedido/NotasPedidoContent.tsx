@@ -28,7 +28,9 @@ import {
   getCooperativaCnpj,
   patchNotaPedidoInCloud,
   pushNotasPedidoToCloud,
-  pushNotaComFotosEmStreaming,
+  uploadFotoImediataToCloud,
+  finalizeNotaEntregaNaNuvem,
+  deleteFotoRascunhoFromCloud,
   deleteNotaPedidoFromCloud,
   queueNotaDelete,
   ensureNotaComFoto,
@@ -50,18 +52,18 @@ import {
   resolverInstituicaoConferencia,
 } from "@/utils/instituicaoPreferida";
 import { getCooperadoNome } from "@/utils/calculations";
-import { isFotoDuplicada, compressFotoFile, makeFotoThumbnail, getFotoExibicaoNota, getFotosExibicaoNota, notaPertenceCooperativa, compactarFotosNoArmazenamento, liberarEspacoArmazenamento, parametrosCompressaoFoto, agruparPendentesPorCooperado, getChaveGrupoConferencia, notaPertenceGrupoConferencia, contarFotosEnviadasNota, contarFotosEnviadasNotas, resolverAbaConferenciaAtiva } from "@/utils/fotoEntrega";
+import { isFotoDuplicada, compressFotoFile, getFotoExibicaoNota, getFotosExibicaoNota, notaPertenceCooperativa, compactarFotosNoArmazenamento, liberarEspacoArmazenamento, parametrosCompressaoFoto, agruparPendentesPorCooperado, getChaveGrupoConferencia, notaPertenceGrupoConferencia, contarFotosEnviadasNota, contarFotosEnviadasNotas, resolverAbaConferenciaAtiva } from "@/utils/fotoEntrega";
 import {
   loadFotoDraftMeta,
   clearFotoDraft,
-  appendFotoDraft,
+  appendFotoDraftMeta,
   countFotoDraft,
-  listFotoDraftPreviews,
-  getFotoDraftData,
+  countFotosUploadedDraft,
+  fingerprintFoto,
   isFotoDraftDuplicada,
   getOrCreatePendingNotaId,
   removeFotoDraftAt,
-  type FotoDraftPreview,
+  markFotoDraftUploaded,
 } from "@/utils/fotoDraftStore";
 import type { NotaPedido, NotaPedidoItem, Cooperado, AppData } from "@/types";
 
@@ -142,7 +144,7 @@ export default function NotasPedidoContent() {
   const [instituicaoId, setInstituicaoId] = useState("");
   const [localEntrega, setLocalEntrega] = useState("");
   const [fotosSessaoCount, setFotosSessaoCount] = useState(0);
-  const [fotosSessaoPreviews, setFotosSessaoPreviews] = useState<FotoDraftPreview[]>([]);
+  const [fotosNaNuvemCount, setFotosNaNuvemCount] = useState(0);
   const [envioProgresso, setEnvioProgresso] = useState<{ sent: number; total: number } | null>(null);
   const [fotoDuplicadaMsg, setFotoDuplicadaMsg] = useState("");
   const [processandoFoto, setProcessandoFoto] = useState(false);
@@ -198,7 +200,7 @@ export default function NotasPedidoContent() {
 
   const resetFotosSessaoUi = useCallback(() => {
     setFotosSessaoCount(0);
-    setFotosSessaoPreviews([]);
+    setFotosNaNuvemCount(0);
     setEnvioProgresso(null);
   }, []);
 
@@ -212,9 +214,8 @@ export default function NotasPedidoContent() {
       resetFotosSessaoUi();
       return;
     }
-    const previews = await listFotoDraftPreviews(ANEXAR_DRAFT_KEY);
     setFotosSessaoCount(meta.count);
-    setFotosSessaoPreviews(previews);
+    setFotosNaNuvemCount(meta.uploadedCount ?? 0);
   }, [ANEXAR_DRAFT_KEY, resetFotosSessaoUi]);
 
   const limparRascunhoAnexar = useCallback(() => {
@@ -750,6 +751,7 @@ export default function NotasPedidoContent() {
     fotoProcessandoRef.current = true;
     setProcessandoFoto(true);
     setFotoDuplicadaMsg("");
+    setErroEnvio("");
     try {
       const qtdAtual = await countFotoDraft(ANEXAR_DRAFT_KEY);
       const { maxWidth, quality } = parametrosCompressaoFoto(qtdAtual + 1);
@@ -767,14 +769,89 @@ export default function NotasPedidoContent() {
 
       if (reenviarNotaId) {
         await clearFotoDraft(ANEXAR_DRAFT_KEY);
-        setFotosSessaoPreviews([]);
+        await getOrCreatePendingNotaId(ANEXAR_DRAFT_KEY, () => reenviarNotaId);
         setFotosSessaoCount(0);
+        setFotosNaNuvemCount(0);
       }
 
-      const preview = await makeFotoThumbnail(dataUrl, 160, 0.4);
-      const index = await appendFotoDraft(ANEXAR_DRAFT_KEY, contratoInstId, preview, dataUrl);
-      setFotosSessaoCount(index + 1);
-      setFotosSessaoPreviews((prev) => [...prev, { index, preview }]);
+      const resolved = resolverContratoEntrega(data, coopId!, contratoInstId || undefined, {
+        criarPadraoSeVazio: false,
+      });
+      const contratoId = resolved.instituicaoId || contratoInstId;
+      const cnpj = await resolveCooperativaCnpj(data, coopId, user);
+      if (!cnpj) {
+        setErroEnvio("CNPJ da cooperativa não encontrado. Verifique a conexão.");
+        return;
+      }
+
+      const cooperadoNome = getCooperadoNome(data.cooperados, cooperadoId);
+      const notaId =
+        reenviarNotaId ??
+        (await getOrCreatePendingNotaId(ANEXAR_DRAFT_KEY, () => generateId("np")));
+      const newIndex = await appendFotoDraftMeta(ANEXAR_DRAFT_KEY, contratoId, fingerprintFoto(dataUrl));
+      const totalCount = newIndex + 1;
+
+      const inst = data.instituicoes.find((i) => i.id === contratoId);
+      const localEntregaDraft = inst?.localEntrega ?? inst?.endereco ?? "";
+      const now = new Date().toISOString();
+      const mes = getCurrentMesReferencia();
+
+      const draftNota: NotaPedido = reenviarNotaId
+        ? {
+            ...(data.notasPedido.find((n) => n.id === reenviarNotaId) as NotaPedido),
+            instituicaoId: contratoId,
+            localEntrega: localEntregaDraft,
+            fotosEnviadasCount: totalCount,
+            status: "rascunho",
+            cooperativaCnpj: cnpj,
+            cooperadoNomeSnapshot: cooperadoNome,
+            updatedAt: now,
+          }
+        : {
+            id: notaId,
+            cooperativaId: coopId!,
+            cooperadoId,
+            instituicaoId: contratoId,
+            numeroNota: gerarNumeroNota(data, coopId!),
+            dataEntrega: now.split("T")[0],
+            localEntrega: localEntregaDraft,
+            itens: [],
+            valorBruto: 0,
+            percentualDescontoCooperativa: data.config.descontoPadraoCooperativa,
+            valorDesconto: 0,
+            valorLiquido: 0,
+            status: "rascunho",
+            fotosEnviadasCount: totalCount,
+            mesReferencia: mes,
+            cooperativaCnpj: cnpj,
+            cooperadoNomeSnapshot: cooperadoNome,
+            createdAt: now,
+            updatedAt: now,
+          };
+
+      setEnvioProgresso({ sent: newIndex, total: totalCount });
+      const uploaded = await uploadFotoImediataToCloud(
+        cnpj,
+        draftNota,
+        newIndex,
+        totalCount,
+        dataUrl,
+        cooperadoNome
+      );
+
+      if (!uploaded.ok) {
+        await removeFotoDraftAt(ANEXAR_DRAFT_KEY, newIndex);
+        setErroEnvio(
+          uploaded.error ??
+            "Não foi possível enviar a foto para a nuvem. Verifique a conexão e tente de novo."
+        );
+        return;
+      }
+
+      await markFotoDraftUploaded(ANEXAR_DRAFT_KEY, newIndex);
+      setFotosSessaoCount(totalCount);
+      setFotosNaNuvemCount(await countFotosUploadedDraft(ANEXAR_DRAFT_KEY));
+      setEnvioProgresso(null);
       setFormErrors((err) => ({ ...err, foto: undefined }));
     } catch {
       setErroEnvio("Não foi possível processar a foto. Tente outra imagem ou feche outros apps.");
@@ -785,13 +862,31 @@ export default function NotasPedidoContent() {
   };
 
   const removerFotoSessao = (idx: number) => {
-    if (!ANEXAR_DRAFT_KEY) return;
+    if (!ANEXAR_DRAFT_KEY || !data || !coopId) return;
     void (async () => {
+      const meta = await loadFotoDraftMeta(ANEXAR_DRAFT_KEY);
+      if (!meta?.count || idx < 0 || idx >= meta.count) return;
+
+      const cnpj = await resolveCooperativaCnpj(data, coopId, user);
+      const notaId = reenviarNotaId ?? meta.pendingNotaId;
+      if (cnpj && notaId && meta.uploadedCount && meta.uploadedCount > 0) {
+        const removed = await deleteFotoRascunhoFromCloud(cnpj, notaId, idx, meta.count);
+        if (!removed.ok) {
+          setErroEnvio(removed.error ?? "Não foi possível remover a foto na nuvem.");
+          return;
+        }
+      }
+
       await removeFotoDraftAt(ANEXAR_DRAFT_KEY, idx);
-      const previews = await listFotoDraftPreviews(ANEXAR_DRAFT_KEY);
       const count = await countFotoDraft(ANEXAR_DRAFT_KEY);
+      const uploaded = await countFotosUploadedDraft(ANEXAR_DRAFT_KEY);
       setFotosSessaoCount(count);
-      setFotosSessaoPreviews(previews);
+      setFotosNaNuvemCount(uploaded);
+
+      if (count === 0 && notaId && cnpj) {
+        void deleteNotaPedidoFromCloud(cnpj, notaId);
+        await clearFotoDraft(ANEXAR_DRAFT_KEY);
+      }
     })();
     setFotoDuplicadaMsg("");
     setFormErrors((prev) => ({ ...prev, foto: undefined }));
@@ -827,6 +922,9 @@ export default function NotasPedidoContent() {
       errors.escolaAvulsa = "Informe o nome da escola.";
     }
     if (fotosSessaoCount === 0) errors.foto = "Tire ou escolha pelo menos uma foto do pedido assinado.";
+    if (fotosSessaoCount > 0 && fotosNaNuvemCount < fotosSessaoCount) {
+      errors.foto = "Aguarde todas as fotos serem enviadas para a nuvem antes de concluir.";
+    }
     if (!contratoId) errors.contrato = "Contrato da entrega não encontrado. Aguarde a sincronização ou fale com a cooperativa.";
     if (Object.keys(errors).length) {
       setFormErrors(errors);
@@ -924,18 +1022,13 @@ export default function NotasPedidoContent() {
       return;
     }
 
-    const miniaturas = fotosSessaoPreviews
-      .slice()
-      .sort((a, b) => a.index - b.index)
-      .map((p) => p.preview);
-
-    const notaLocalBase = {
+    const notaLocalBase: NotaPedido = {
       ...notaEntrega,
-      fotoNaNuvem: false,
-      fotosPedidoMiniaturas: miniaturas,
-      fotoPedidoMiniatura: miniaturas[0],
+      fotoNaNuvem: true,
       fotoPedido: undefined,
       fotosPedido: undefined,
+      fotoPedidoMiniatura: undefined,
+      fotosPedidoMiniaturas: undefined,
     };
 
     const persistirLocal = (d: AppData, notaFinal: NotaPedido) => {
@@ -980,50 +1073,42 @@ export default function NotasPedidoContent() {
 
     let cloudOk = false;
     let cloudError = "";
-    if (ANEXAR_DRAFT_KEY) {
-      const cloud = await pushNotaComFotosEmStreaming(
-        cnpj,
-        notaEntrega,
-        (i) => getFotoDraftData(ANEXAR_DRAFT_KEY, i),
-        qtdFotos,
-        cooperadoNome,
-        (sent, total) => setEnvioProgresso({ sent, total })
-      );
-      if (cloud.ok) {
-        cloudOk = true;
-      } else {
-        cloudError = cloud.error ?? "Erro ao enviar na nuvem.";
-      }
+    const cloud = await finalizeNotaEntregaNaNuvem(cnpj, notaEntrega, cooperadoNome);
+    if (cloud.ok) {
+      cloudOk = true;
+    } else {
+      cloudError = cloud.error ?? "Erro ao publicar entrega na nuvem.";
     }
 
-    const notasLocais = [{
+    const notaFinalLocal: NotaPedido = {
       ...notaEntrega,
       fotoNaNuvem: true,
-      fotosPedidoMiniaturas: miniaturas,
-      fotoPedidoMiniatura: miniaturas[0],
       fotoPedido: undefined,
       fotosPedido: undefined,
-    }];
+      fotoPedidoMiniatura: undefined,
+      fotosPedidoMiniaturas: undefined,
+    };
 
     if (!cloudOk) {
       setEnviando(false);
       setEnvioProgresso(null);
       setErroEnvio(
-        cloudError || "Falha ao enviar para a nuvem. Verifique a conexão e toque Enviar de novo — as fotos continuam guardadas no aparelho."
+        cloudError ||
+          "Falha ao publicar a entrega. As fotos já estão na nuvem — verifique a conexão e toque Enviar de novo."
       );
       return;
     }
 
-    saved = updateDataSafe((d) => persistirLocal(d, notasLocais[0]));
+    saved = updateDataSafe((d) => persistirLocal(d, notaFinalLocal));
     if (!saved.ok) {
-      saved = updateDataSafe((d) => persistirLocal(liberarEspacoArmazenamento(d, 2), notasLocais[0]));
+      saved = updateDataSafe((d) => persistirLocal(liberarEspacoArmazenamento(d, 2), notaFinalLocal));
     }
 
-    if (!saved.ok && cloudOk) {
+    if (!saved.ok) {
       saved = updateDataSafe((d) =>
         persistirLocal(
           liberarEspacoArmazenamento(compactarFotosNoArmazenamento(d), 2),
-          { ...notasLocais[0], fotoPedido: undefined, fotosPedido: undefined }
+          notaFinalLocal
         )
       );
     }
@@ -1032,7 +1117,7 @@ export default function NotasPedidoContent() {
       setEnviando(false);
       setEnvioProgresso(null);
       setErroEnvio(
-        `${saved.error} Fotos já estão na nuvem — aguarde a sincronização ou toque Enviar de novo.`
+        `${saved.error} Entrega já está na nuvem — aguarde a sincronização ou toque Enviar de novo.`
       );
       return;
     }
@@ -1042,8 +1127,7 @@ export default function NotasPedidoContent() {
     limparRascunhoAnexar();
     resetFotosSessaoUi();
     setFotoDuplicadaMsg("");
-    const ids = notasLocais.map((n) => n.id);
-    setUltimaNotaEnviadaIds(ids);
+    setUltimaNotaEnviadaIds([notaFinalLocal.id]);
     if (isCooperado) setStatusFilter("aguardando_conferencia");
     setAnexarSucesso(true);
     setSuccessMsg(
@@ -1575,7 +1659,7 @@ export default function NotasPedidoContent() {
       {isCooperado && rascunhoFotosCount > 0 && !anexarModal && (
         <AlertBanner variant="warning" className="mb-4" title="Fotos não enviadas">
           Você tem {rascunhoFotosCount}{" "}
-          {rascunhoFotosCount === 1 ? "foto salva" : "fotos salvas"} de uma sessão anterior.
+          {rascunhoFotosCount === 1 ? "foto na nuvem" : "fotos na nuvem"} de uma sessão anterior.
           <div className="flex flex-wrap gap-2 mt-3">
             <Button size="sm" onClick={continuarRascunhoFotos}>
               Continuar envio
@@ -2031,27 +2115,34 @@ export default function NotasPedidoContent() {
           </FormField>
 
           {fotosSessaoCount > 0 && (
-            <div className="grid grid-cols-3 gap-2">
-              {fotosSessaoPreviews
-                .slice()
-                .sort((a, b) => a.index - b.index)
-                .map(({ index, preview }) => (
-                <div key={index} className="relative group">
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img src={preview} alt={`Foto ${index + 1}`} className="w-full h-24 object-cover rounded-lg border-2 border-green-200" loading="lazy" decoding="async" />
-                  <span className="absolute top-1 left-1 bg-green-700 text-white text-xs font-bold w-6 h-6 rounded-full flex items-center justify-center">
-                    {index + 1}
-                  </span>
-                  <button
-                    type="button"
-                    onClick={() => removerFotoSessao(index)}
-                    className="absolute top-1 right-1 bg-red-600 text-white rounded-full p-1 opacity-90 hover:opacity-100"
-                    aria-label="Remover foto"
+            <div className="space-y-2">
+              <p className="text-sm text-green-800 font-medium">
+                {fotosNaNuvemCount >= fotosSessaoCount
+                  ? `${fotosSessaoCount} ${fotosSessaoCount === 1 ? "foto na nuvem" : "fotos na nuvem"} — pronta para enviar`
+                  : `Enviando foto ${fotosNaNuvemCount + 1} de ${fotosSessaoCount} para a nuvem…`}
+              </p>
+              <div className="flex flex-wrap gap-2">
+                {Array.from({ length: fotosSessaoCount }, (_, index) => (
+                  <div
+                    key={index}
+                    className="relative flex items-center justify-center w-16 h-16 rounded-lg border-2 border-green-300 bg-green-50"
                   >
-                    <X size={14} />
-                  </button>
-                </div>
-              ))}
+                    <span className="text-lg font-bold text-green-800">{index + 1}</span>
+                    {index < fotosNaNuvemCount && (
+                      <span className="absolute bottom-1 right-1 w-2.5 h-2.5 rounded-full bg-green-600" title="Na nuvem" />
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => removerFotoSessao(index)}
+                      disabled={processandoFoto || enviando}
+                      className="absolute -top-2 -right-2 bg-red-600 text-white rounded-full p-1 opacity-90 hover:opacity-100 disabled:opacity-40"
+                      aria-label="Remover foto"
+                    >
+                      <X size={12} />
+                    </button>
+                  </div>
+                ))}
+              </div>
             </div>
           )}
           <div className="border border-gray-200 rounded-xl p-4 space-y-3">

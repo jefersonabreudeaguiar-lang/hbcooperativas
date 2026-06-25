@@ -28,6 +28,79 @@ function notaUsesFotoParts(nota: NotaPedido): boolean {
   return Boolean(nota.fotosEnviadasCount && nota.fotosEnviadasCount > 0);
 }
 
+/** Remove uma foto da nuvem e compacta índices seguintes (foto-002 vira foto-001, etc.). */
+export async function deleteAndCompactFotoPart(
+  supabase: SupabaseClient,
+  cnpj: string,
+  notaId: string,
+  removeIndex: number,
+  totalCount: number
+): Promise<{ ok: true; newCount: number } | { ok: false; error: string }> {
+  if (removeIndex < 0 || removeIndex >= totalCount) {
+    return { ok: false, error: "Índice de foto inválido." };
+  }
+
+  await ensureEntregasBucket(supabase);
+
+  const { error: delErr } = await supabase.storage
+    .from(BUCKET)
+    .remove([fotoPartPath(cnpj, notaId, removeIndex)]);
+  if (delErr) {
+    console.error("[notas-storage/delete-part]", delErr.message);
+    return { ok: false, error: "Erro ao remover foto na nuvem." };
+  }
+
+  for (let i = removeIndex + 1; i < totalCount; i++) {
+    const { data: blob, error: dlErr } = await supabase.storage
+      .from(BUCKET)
+      .download(fotoPartPath(cnpj, notaId, i));
+    if (dlErr || !blob) continue;
+    const buffer = Buffer.from(await blob.arrayBuffer());
+    const newIndex = i - 1;
+    const { error: upErr } = await supabase.storage
+      .from(BUCKET)
+      .upload(fotoPartPath(cnpj, notaId, newIndex), buffer, {
+        contentType: "image/jpeg",
+        upsert: true,
+      });
+    if (upErr) {
+      console.error("[notas-storage/compact-part]", upErr.message);
+      return { ok: false, error: "Erro ao reorganizar fotos na nuvem." };
+    }
+    await supabase.storage.from(BUCKET).remove([fotoPartPath(cnpj, notaId, i)]);
+  }
+
+  const newCount = totalCount - 1;
+  const meta = await fetchNotaMetaFromStorage(supabase, cnpj, notaId);
+  if (meta) {
+    const updated: NotaPedido = {
+      ...meta,
+      fotosEnviadasCount: newCount,
+      fotoNaNuvem: newCount > 0,
+      updatedAt: new Date().toISOString(),
+    };
+    await supabase.storage
+      .from(BUCKET)
+      .upload(storagePath(cnpj, notaId), JSON.stringify(updated), {
+        contentType: "application/json",
+        upsert: true,
+      });
+    const { error: tableErr } = await supabase
+      .from("notas_pedido")
+      .update({
+        payload: notaPayloadForTable(updated),
+        updated_at: updated.updatedAt,
+      })
+      .eq("id", notaId)
+      .eq("cooperativa_cnpj", cnpj);
+    if (tableErr && !isNotasPedidoTableMissing(tableErr)) {
+      console.error("[notas-storage/delete-part-table]", tableErr.message);
+    }
+  }
+
+  return { ok: true, newCount };
+}
+
 /** Conta arquivos foto-*.jpg já enviados (sem carregar conteúdo). */
 export async function countUploadedFotoParts(
   supabase: SupabaseClient,

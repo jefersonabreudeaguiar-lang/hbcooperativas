@@ -1,19 +1,15 @@
-/** Rascunho de fotos em IndexedDB — uma foto por registro (não estoura RAM no celular). */
+/** Rascunho de fotos — só metadados no aparelho (fotos ficam na nuvem). */
 
-const DB_NAME = "hb_anexar_fotos_v2";
+const DB_NAME = "hb_anexar_fotos_v3";
 const STORE_META = "meta";
 const STORE_FOTOS = "fotos";
 const MAX_AGE_MS = 2 * 60 * 60 * 1000;
-
-const LEGACY_DB_NAME = "hb_anexar_fotos_v1";
-const LEGACY_STORE = "drafts";
 
 interface DraftMeta {
   coopKey: string;
   contratoId: string;
   count: number;
   savedAt: number;
-  /** ID estável da entrega — reutilizado em retentativas de envio. */
   pendingNotaId?: string;
 }
 
@@ -21,14 +17,15 @@ export interface FotoDraftMetaLoaded {
   contratoId: string;
   count: number;
   pendingNotaId?: string;
+  uploadedCount?: number;
 }
 
 interface DraftFotoRow {
   key: string;
   coopKey: string;
   index: number;
-  preview: string;
-  data: string;
+  fingerprint: string;
+  uploaded: boolean;
 }
 
 export interface FotoDraftPreview {
@@ -38,6 +35,18 @@ export interface FotoDraftPreview {
 
 function fotoKey(coopKey: string, index: number): string {
   return `${coopKey}#${index}`;
+}
+
+/** Hash leve para deduplicar sem guardar a imagem inteira. */
+export function fingerprintFoto(dataUrl: string): string {
+  let h = 2166136261;
+  const sample =
+    dataUrl.length > 8192 ? dataUrl.slice(0, 4096) + dataUrl.slice(-4096) : dataUrl;
+  for (let i = 0; i < sample.length; i++) {
+    h ^= sample.charCodeAt(i);
+    h = Math.imul(h, 16777619);
+  }
+  return (h >>> 0).toString(36);
 }
 
 function openDb(): Promise<IDBDatabase> {
@@ -115,45 +124,21 @@ function txDeleteAllForCoop(db: IDBDatabase, coopKey: string): Promise<void> {
   });
 }
 
-async function migrateLegacyDraft(coopKey: string): Promise<void> {
-  if (typeof indexedDB === "undefined") return;
-  try {
-    const legacy = await new Promise<IDBDatabase | null>((resolve) => {
-      const req = indexedDB.open(LEGACY_DB_NAME, 1);
-      req.onsuccess = () => resolve(req.result);
-      req.onerror = () => resolve(null);
-    });
-    if (!legacy) return;
-    const row = await new Promise<{ fotos: string[]; contratoId: string } | undefined>((resolve, reject) => {
-      const tx = legacy.transaction(LEGACY_STORE, "readonly");
-      tx.onerror = () => reject(tx.error);
-      const req = tx.objectStore(LEGACY_STORE).get(coopKey);
-      req.onsuccess = () => resolve(req.result as { fotos: string[]; contratoId: string } | undefined);
-      req.onerror = () => reject(req.error);
-    });
-    legacy.close();
-    if (!row?.fotos?.length) return;
-
-    const { makeFotoThumbnail } = await import("@/utils/fotoEntrega");
-    for (let i = 0; i < row.fotos.length; i++) {
-      const data = row.fotos[i];
-      const preview = await makeFotoThumbnail(data, 160, 0.4);
-      await appendFotoDraft(coopKey, row.contratoId ?? "", preview, data);
-    }
-    indexedDB.deleteDatabase(LEGACY_DB_NAME);
-  } catch {
-    /* ignore migration errors */
-  }
-}
-
 export async function loadFotoDraftMeta(coopKey: string): Promise<FotoDraftMetaLoaded | null> {
   if (typeof indexedDB === "undefined") return null;
-  await migrateLegacyDraft(coopKey);
   try {
     const db = await openDb();
     const meta = await txGetMeta(db, coopKey);
+    if (!meta?.count) {
+      db.close();
+      return null;
+    }
+    let uploadedCount = 0;
+    for (let i = 0; i < meta.count; i++) {
+      const row = await txGetFoto(db, coopKey, i);
+      if (row?.uploaded) uploadedCount += 1;
+    }
     db.close();
-    if (!meta?.count) return null;
     if (Date.now() - meta.savedAt > MAX_AGE_MS) {
       await clearFotoDraft(coopKey);
       return null;
@@ -162,13 +147,13 @@ export async function loadFotoDraftMeta(coopKey: string): Promise<FotoDraftMetaL
       contratoId: meta.contratoId ?? "",
       count: meta.count,
       pendingNotaId: meta.pendingNotaId,
+      uploadedCount,
     };
   } catch {
     return null;
   }
 }
 
-/** Gera ou reutiliza o ID da entrega em andamento (evita entregas órfãs ao retentar). */
 export async function getOrCreatePendingNotaId(
   coopKey: string,
   factory: () => string
@@ -192,7 +177,6 @@ export async function getOrCreatePendingNotaId(
   }
 }
 
-/** Compatível com código antigo — carrega só metadados (não traz fotos para RAM). */
 export async function loadFotoDraft(
   coopKey: string
 ): Promise<{ fotos: string[]; contratoId: string } | null> {
@@ -206,40 +190,32 @@ export async function countFotoDraft(coopKey: string): Promise<number> {
   return meta?.count ?? 0;
 }
 
+export async function countFotosUploadedDraft(coopKey: string): Promise<number> {
+  const meta = await loadFotoDraftMeta(coopKey);
+  return meta?.uploadedCount ?? 0;
+}
+
+/** Compatível — não carrega miniaturas (fotos estão na nuvem). */
 export async function listFotoDraftPreviews(coopKey: string): Promise<FotoDraftPreview[]> {
   const meta = await loadFotoDraftMeta(coopKey);
   if (!meta?.count) return [];
-  const db = await openDb();
-  const previews: FotoDraftPreview[] = [];
-  try {
-    for (let i = 0; i < meta.count; i++) {
-      const row = await txGetFoto(db, coopKey, i);
-      if (row?.preview) previews.push({ index: i, preview: row.preview });
-    }
-  } finally {
-    db.close();
-  }
-  return previews;
+  return Array.from({ length: meta.count }, (_, index) => ({ index, preview: "" }));
 }
 
-export async function getFotoDraftData(coopKey: string, index: number): Promise<string | undefined> {
-  const db = await openDb();
-  try {
-    const row = await txGetFoto(db, coopKey, index);
-    return row?.data;
-  } finally {
-    db.close();
-  }
+/** Fotos não ficam no aparelho — sempre undefined. */
+export async function getFotoDraftData(_coopKey: string, _index: number): Promise<string | undefined> {
+  return undefined;
 }
 
-export async function isFotoDraftDuplicada(coopKey: string, data: string): Promise<boolean> {
+export async function isFotoDraftDuplicada(coopKey: string, dataUrl: string): Promise<boolean> {
+  const fp = fingerprintFoto(dataUrl);
   const meta = await loadFotoDraftMeta(coopKey);
   if (!meta?.count) return false;
   const db = await openDb();
   try {
     for (let i = 0; i < meta.count; i++) {
       const row = await txGetFoto(db, coopKey, i);
-      if (row?.data === data) return true;
+      if (row?.fingerprint === fp) return true;
     }
     return false;
   } finally {
@@ -247,18 +223,23 @@ export async function isFotoDraftDuplicada(coopKey: string, data: string): Promi
   }
 }
 
-export async function appendFotoDraft(
+export async function appendFotoDraftMeta(
   coopKey: string,
   contratoId: string,
-  preview: string,
-  data: string
+  fingerprint: string
 ): Promise<number> {
   if (typeof indexedDB === "undefined") throw new Error("IndexedDB indisponível.");
   const db = await openDb();
   try {
     const prev = await txGetMeta(db, coopKey);
     const index = prev?.count ?? 0;
-    await txPutFoto(db, { key: fotoKey(coopKey, index), coopKey, index, preview, data });
+    await txPutFoto(db, {
+      key: fotoKey(coopKey, index),
+      coopKey,
+      index,
+      fingerprint,
+      uploaded: false,
+    });
     await txPutMeta(db, {
       coopKey,
       contratoId: contratoId || prev?.contratoId || "",
@@ -270,6 +251,31 @@ export async function appendFotoDraft(
   } finally {
     db.close();
   }
+}
+
+export async function markFotoDraftUploaded(coopKey: string, index: number): Promise<void> {
+  if (typeof indexedDB === "undefined") return;
+  const db = await openDb();
+  try {
+    const row = await txGetFoto(db, coopKey, index);
+    if (!row) return;
+    await txPutFoto(db, { ...row, uploaded: true });
+    const meta = await txGetMeta(db, coopKey);
+    if (meta) await txPutMeta(db, { ...meta, savedAt: Date.now() });
+  } finally {
+    db.close();
+  }
+}
+
+/** @deprecated Use appendFotoDraftMeta — fotos vão direto para a nuvem. */
+export async function appendFotoDraft(
+  coopKey: string,
+  contratoId: string,
+  _preview: string,
+  data: string
+): Promise<number> {
+  const fp = fingerprintFoto(data);
+  return appendFotoDraftMeta(coopKey, contratoId, fp);
 }
 
 export async function removeFotoDraftAt(coopKey: string, removeIndex: number): Promise<void> {
@@ -298,8 +304,8 @@ export async function removeFotoDraftAt(coopKey: string, removeIndex: number): P
         key: fotoKey(coopKey, i),
         coopKey,
         index: i,
-        preview: src.preview,
-        data: src.data,
+        fingerprint: src.fingerprint,
+        uploaded: src.uploaded,
       });
     }
     const fullMeta = await txGetMeta(freshDb, coopKey);
@@ -326,17 +332,14 @@ export async function clearFotoDraft(coopKey: string): Promise<void> {
   }
 }
 
-/** @deprecated Fotos já são salvas ao adicionar — mantido por compatibilidade. */
 export async function saveFotoDraft(
   coopKey: string,
   _fotos: string[],
-  contratoId: string
+  _contratoId: string
 ): Promise<boolean> {
   if (_fotos.length === 0) {
     await clearFotoDraft(coopKey);
     return true;
   }
-  const meta = await loadFotoDraftMeta(coopKey);
-  if (meta && meta.count === _fotos.length) return true;
   return false;
 }
