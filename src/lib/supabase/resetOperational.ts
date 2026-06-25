@@ -6,6 +6,7 @@ import {
   uploadOperacionalSync,
   type OperacionalSyncPayload,
 } from "@/lib/supabase/cooperativaSyncStorage";
+import { OPERATIONAL_RESET_VERSION } from "@/services/operationalReset";
 
 const ENTREGAS_BUCKET = "hb-entregas";
 const SYNC_BUCKET = "hb-cooperativa-sync";
@@ -44,7 +45,7 @@ export async function resetOperacionalSyncForCnpj(
   const existing = await fetchOperacionalSync(supabase, digits);
   const payload: OperacionalSyncPayload = {
     updatedAt: new Date().toISOString(),
-    operationalResetVersion: 4,
+    operationalResetVersion: OPERATIONAL_RESET_VERSION,
     fullReset: true,
     wipeNotas: true,
     arquivosMensais: [],

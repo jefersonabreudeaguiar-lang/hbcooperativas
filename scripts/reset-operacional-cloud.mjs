@@ -56,10 +56,24 @@ async function listCnpjs() {
   return [...new Set([...fromDb, ...entregas, ...sync])];
 }
 
+async function removeNotaFotoParts(cnpj, notaId) {
+  const folder = `${cnpj}/${notaId}`;
+  const { data: files } = await supabase.storage.from(ENTREGAS_BUCKET).list(folder, { limit: 500 });
+  if (!files?.length) return;
+  const paths = files.map((f) => `${folder}/${f.name}`);
+  await supabase.storage.from(ENTREGAS_BUCKET).remove(paths);
+}
+
 async function deleteAllNotas(cnpj) {
   let removed = 0;
   const { data: files } = await supabase.storage.from(ENTREGAS_BUCKET).list(cnpj, { limit: 1000 });
   if (files?.length) {
+    for (const file of files) {
+      if (file.name.endsWith(".json")) {
+        const notaId = file.name.replace(/\.json$/, "");
+        await removeNotaFotoParts(cnpj, notaId);
+      }
+    }
     const paths = files
       .filter((f) => f.name.endsWith(".json"))
       .map((f) => `${cnpj}/${f.name}`);
@@ -92,7 +106,7 @@ async function resetOperacional(cnpj) {
 
   const payload = {
     updatedAt: new Date().toISOString(),
-    operationalResetVersion: 4,
+    operationalResetVersion: 5,
     fullReset: true,
     wipeNotas: true,
     arquivosMensais: [],

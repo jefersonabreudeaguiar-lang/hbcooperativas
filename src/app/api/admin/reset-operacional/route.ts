@@ -5,6 +5,7 @@ import {
   resetOperationalCloudAll,
   resetOperationalCloudForCnpj,
 } from "@/lib/supabase/resetOperational";
+import { OPERATIONAL_RESET_VERSION } from "@/services/operationalReset";
 
 export async function POST(request: Request) {
   if (!isSupabaseConfigured()) {
@@ -38,7 +39,7 @@ export async function POST(request: Request) {
 
   return NextResponse.json({
     success: true,
-    operationalResetVersion: 4,
+    operationalResetVersion: OPERATIONAL_RESET_VERSION,
     results,
   });
 }
