@@ -1264,10 +1264,10 @@ export default function NotasPedidoContent() {
     if (notaAtualizada && coopId) {
       void (async () => {
         try {
-          const d = getData();
-          const cnpj = await resolveCooperativaCnpj(d, coopId, user);
+          const cnpj = await resolveCooperativaCnpj(getData(), coopId, user);
           if (!cnpj) return;
           await patchNotaPedidoInCloud(cnpj, notaAtualizada!);
+          const d = getData();
           await pushOperacionalToCloud(cnpj, d, coopId);
         } finally {
           lancandoRef.current = false;

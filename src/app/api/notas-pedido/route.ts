@@ -28,6 +28,8 @@ export async function GET(request: Request) {
     return NextResponse.json({ notas: [], configured: false });
   }
 
+  const lite = searchParams.get("lite") === "1";
+
   const [fromTable, fromStorage] = await Promise.all([
     fetchNotasFromTable(supabase, cnpj),
     fetchNotasFromStorage(supabase, cnpj),
@@ -35,11 +37,15 @@ export async function GET(request: Request) {
 
   if (!fromTable.tableMissing) {
     const merged = mergeNotasSources(fromTable.notas, fromStorage);
-    const notas = await enrichNotasListWithPreviews(supabase, cnpj, merged);
+    const notas = lite
+      ? merged
+      : await enrichNotasListWithPreviews(supabase, cnpj, merged);
     return NextResponse.json({ notas, source: "merged" });
   }
 
-  const notas = await enrichNotasListWithPreviews(supabase, cnpj, fromStorage);
+  const notas = lite
+    ? fromStorage
+    : await enrichNotasListWithPreviews(supabase, cnpj, fromStorage);
   return NextResponse.json({ notas, source: "storage" });
 }
 

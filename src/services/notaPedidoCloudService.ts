@@ -89,13 +89,53 @@ export function normalizeCloudNotaForLocal(
   };
 }
 
+/** Máximo de entregas removidas por ciclo de sync (evita apagar fila inteira por lista incompleta). */
+const MAX_NOTA_DELETIONS_PER_SYNC = 2;
+
+/**
+ * Propaga exclusão na nuvem (ex.: cooperado apagou) sem remover a fila inteira
+ * quando a listagem da nuvem veio incompleta (reset, timeout, wipe acidental).
+ */
+function propagateCloudNotaDeletions(
+  data: AppData,
+  byId: Map<string, NotaPedido>,
+  cloudNotas: NotaPedido[],
+  cnpj: string
+): boolean {
+  if (cloudNotas.length === 0) return false;
+
+  const digits = normalizeCnpj(cnpj);
+  const cloudIds = new Set(cloudNotas.map((n) => n.id));
+
+  const localPendingCloud = [...byId.values()].filter(
+    (n) =>
+      (n.status === "aguardando_conferencia" || n.status === "rejeitada") &&
+      n.fotoNaNuvem &&
+      getNotaCooperativaCnpj(data, n) === digits
+  );
+  const cloudPending = cloudNotas.filter((n) => n.status === "aguardando_conferencia");
+  const toRemove = localPendingCloud.filter((n) => !cloudIds.has(n.id));
+
+  if (toRemove.length === 0) return false;
+
+  // Lista da nuvem claramente incompleta — não apagar em massa.
+  if (toRemove.length > MAX_NOTA_DELETIONS_PER_SYNC) return false;
+  if (toRemove.length + cloudPending.length < localPendingCloud.length - 1) return false;
+
+  let changed = false;
+  for (const nota of toRemove) {
+    byId.delete(nota.id);
+    changed = true;
+  }
+  return changed;
+}
+
 export function mergeCloudNotasIntoData(
   data: AppData,
   cloudNotas: NotaPedido[],
   cnpj: string
 ): AppData {
   const digits = normalizeCnpj(cnpj);
-  const cloudIds = new Set(cloudNotas.map((n) => n.id));
   const byId = new Map(data.notasPedido.map((n) => [n.id, n]));
   let changed = false;
 
@@ -114,17 +154,8 @@ export function mergeCloudNotasIntoData(
     }
   }
 
-  // Propaga exclusão na nuvem só quando a lista não veio vazia (evita apagar tudo por falha/reset).
-  if (cloudNotas.length > 0) {
-    for (const [id, n] of [...byId.entries()]) {
-      if (cloudIds.has(id)) continue;
-      if (n.status !== "aguardando_conferencia" && n.status !== "rejeitada") continue;
-      const notaCnpj = getNotaCooperativaCnpj(data, n);
-      if (notaCnpj !== digits) continue;
-      if (!n.fotoNaNuvem) continue;
-      byId.delete(id);
-      changed = true;
-    }
+  if (propagateCloudNotaDeletions(data, byId, cloudNotas, cnpj)) {
+    changed = true;
   }
 
   if (!changed) return data;
@@ -138,7 +169,7 @@ export async function fetchNotasPedidoFromCloud(
   if (digits.length !== 14) return { ok: false, notas: [] };
 
   try {
-    const res = await fetch(`/api/notas-pedido?cnpj=${digits}`, { cache: "no-store" });
+    const res = await fetch(`/api/notas-pedido?cnpj=${digits}&lite=1`, { cache: "no-store" });
     if (!res.ok) return { ok: false, notas: [] };
     const json = await res.json().catch(() => ({}));
     const notas = ((json.notas ?? []) as unknown[])

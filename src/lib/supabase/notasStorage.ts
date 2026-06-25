@@ -246,8 +246,19 @@ export async function fetchNotasFromStorage(
   cnpj: string
 ): Promise<NotaPedido[]> {
   await ensureEntregasBucket(supabase);
-  const { data: files, error } = await supabase.storage.from(BUCKET).list(cnpj, { limit: 500 });
-  if (error || !files?.length) return [];
+  const files: { name: string }[] = [];
+  let offset = 0;
+  const pageSize = 500;
+  for (;;) {
+    const { data: page, error } = await supabase.storage
+      .from(BUCKET)
+      .list(cnpj, { limit: pageSize, offset });
+    if (error || !page?.length) break;
+    files.push(...page);
+    if (page.length < pageSize) break;
+    offset += pageSize;
+  }
+  if (!files.length) return [];
 
   const notas: NotaPedido[] = [];
   for (const file of files) {
@@ -259,8 +270,7 @@ export async function fetchNotasFromStorage(
     try {
       const parsed = JSON.parse(await blob.text()) as NotaPedido;
       if (!parsed?.id) continue;
-      const withPreview = await attachListPreviewFromParts(supabase, cnpj, parsed);
-      notas.push(withPreview);
+      notas.push(parsed);
     } catch {
       /* ignore corrupt file */
     }

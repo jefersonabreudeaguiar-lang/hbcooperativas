@@ -161,7 +161,8 @@ function buildEmptyOperacionalResetPayload(data: AppData, coopId: string): Opera
     updatedAt: new Date().toISOString(),
     operationalResetVersion: OPERATIONAL_RESET_VERSION,
     fullReset: true,
-    wipeNotas: true,
+    /** Reset operacional limpa fichas/pagamentos — entregas só no reset admin explícito. */
+    wipeNotas: false,
     arquivosMensais: [],
     ajustesFichaMes: [],
     pagamentosCooperado: [],
