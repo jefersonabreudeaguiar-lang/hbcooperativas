@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef } from "react";
 import { useAuth } from "@/modules/auth/AuthProvider";
 import { useAppData } from "@/hooks/useAppData";
 import { getUserCooperativaId, normalizeCnpj } from "@/utils/cooperativa";
-import { resolveCooperativaCnpj, pushNotasPedidoToCloud, pushNotaComFotosEmLotes, flushPendingNotaDeletes, fetchNotaPedidoFromCloud } from "@/services/notaPedidoCloudService";
+import { resolveCooperativaCnpj, pushNotasPedidoToCloud, pushNotaComFotosEmStreaming, flushPendingNotaDeletes, fetchNotaPedidoFromCloud } from "@/services/notaPedidoCloudService";
 import {
   SYNC_INTERVAL_MS,
   syncCooperativaBidirectional,
@@ -55,8 +55,14 @@ export function CooperativaSyncProvider({ children }: { children: React.ReactNod
           const fotos =
             nota.fotosPedido ?? (nota.fotoPedido ? [nota.fotoPedido] : []);
           const result =
-            fotos.length > 4
-              ? await pushNotaComFotosEmLotes(cnpj, nota, fotos, cooperadoNome)
+            fotos.length > 1
+              ? await pushNotaComFotosEmStreaming(
+                  cnpj,
+                  nota,
+                  (i) => Promise.resolve(fotos[i]),
+                  fotos.length,
+                  cooperadoNome
+                )
               : await pushNotasPedidoToCloud(cnpj, [nota], cooperadoNome);
           if (result.ok) {
             updateDataSafe((d) =>
@@ -99,7 +105,13 @@ export function CooperativaSyncProvider({ children }: { children: React.ReactNod
             fotosEnviadasCount: esperado,
             updatedAt: new Date().toISOString(),
           };
-          await pushNotaComFotosEmLotes(cnpj, repush, miniaturas, cooperadoNome);
+          await pushNotaComFotosEmStreaming(
+            cnpj,
+            repush,
+            (i) => Promise.resolve(miniaturas[i]),
+            esperado,
+            cooperadoNome
+          );
         }
       }
     } finally {

@@ -28,7 +28,7 @@ import {
   getCooperativaCnpj,
   patchNotaPedidoInCloud,
   pushNotasPedidoToCloud,
-  pushNotaComFotosEmLotes,
+  pushNotaComFotosEmStreaming,
   deleteNotaPedidoFromCloud,
   queueNotaDelete,
   ensureNotaComFoto,
@@ -50,8 +50,18 @@ import {
   resolverInstituicaoConferencia,
 } from "@/utils/instituicaoPreferida";
 import { getCooperadoNome } from "@/utils/calculations";
-import { isFotoDuplicada, compressFotoFile, getFotoExibicaoNota, getFotosExibicaoNota, notaPertenceCooperativa, compactarFotosNoArmazenamento, liberarEspacoArmazenamento, parametrosCompressaoFoto, agruparPendentesPorCooperado, getChaveGrupoConferencia, notaPertenceGrupoConferencia, contarFotosEnviadasNota, contarFotosEnviadasNotas, resolverAbaConferenciaAtiva, recomprimirFotosSessao, gerarMiniaturasSequencial } from "@/utils/fotoEntrega";
-import { saveFotoDraft, loadFotoDraft, clearFotoDraft } from "@/utils/fotoDraftStore";
+import { isFotoDuplicada, compressFotoFile, makeFotoThumbnail, getFotoExibicaoNota, getFotosExibicaoNota, notaPertenceCooperativa, compactarFotosNoArmazenamento, liberarEspacoArmazenamento, parametrosCompressaoFoto, agruparPendentesPorCooperado, getChaveGrupoConferencia, notaPertenceGrupoConferencia, contarFotosEnviadasNota, contarFotosEnviadasNotas, resolverAbaConferenciaAtiva } from "@/utils/fotoEntrega";
+import {
+  loadFotoDraftMeta,
+  clearFotoDraft,
+  appendFotoDraft,
+  countFotoDraft,
+  listFotoDraftPreviews,
+  getFotoDraftData,
+  isFotoDraftDuplicada,
+  removeFotoDraftAt,
+  type FotoDraftPreview,
+} from "@/utils/fotoDraftStore";
 import type { NotaPedido, NotaPedidoItem, Cooperado, AppData } from "@/types";
 
 const NOVO_AVULSO = "__novo__";
@@ -130,7 +140,9 @@ export default function NotasPedidoContent() {
   const [escolaAvulsaNome, setEscolaAvulsaNome] = useState("");
   const [instituicaoId, setInstituicaoId] = useState("");
   const [localEntrega, setLocalEntrega] = useState("");
-  const [fotosSessao, setFotosSessao] = useState<string[]>([]);
+  const [fotosSessaoCount, setFotosSessaoCount] = useState(0);
+  const [fotosSessaoPreviews, setFotosSessaoPreviews] = useState<FotoDraftPreview[]>([]);
+  const [envioProgresso, setEnvioProgresso] = useState<{ sent: number; total: number } | null>(null);
   const [fotoDuplicadaMsg, setFotoDuplicadaMsg] = useState("");
   const [processandoFoto, setProcessandoFoto] = useState(false);
   const [enviando, setEnviando] = useState(false);
@@ -168,7 +180,7 @@ export default function NotasPedidoContent() {
   const [ultimaNotaEnviadaIds, setUltimaNotaEnviadaIds] = useState<string[]>([]);
   const [excluirNotaTarget, setExcluirNotaTarget] = useState<NotaPedido | null>(null);
   const [excluindo, setExcluindo] = useState(false);
-  const [rascunhoFotosPendente, setRascunhoFotosPendente] = useState<string[]>([]);
+  const [rascunhoFotosCount, setRascunhoFotosCount] = useState(0);
   const [rascunhoContratoId, setRascunhoContratoId] = useState("");
 
   const anexarParamHandledRef = useRef(false);
@@ -182,29 +194,33 @@ export default function NotasPedidoContent() {
   const coopId = user && data ? getUserCooperativaId(user, data) : undefined;
   const ANEXAR_DRAFT_KEY = coopId ? `hb_anexar_draft_${coopId}` : "";
 
+  const resetFotosSessaoUi = useCallback(() => {
+    setFotosSessaoCount(0);
+    setFotosSessaoPreviews([]);
+    setEnvioProgresso(null);
+  }, []);
+
+  const syncFotosSessaoFromDraft = useCallback(async () => {
+    if (!ANEXAR_DRAFT_KEY) {
+      resetFotosSessaoUi();
+      return;
+    }
+    const meta = await loadFotoDraftMeta(ANEXAR_DRAFT_KEY);
+    if (!meta?.count) {
+      resetFotosSessaoUi();
+      return;
+    }
+    const previews = await listFotoDraftPreviews(ANEXAR_DRAFT_KEY);
+    setFotosSessaoCount(meta.count);
+    setFotosSessaoPreviews(previews);
+  }, [ANEXAR_DRAFT_KEY, resetFotosSessaoUi]);
+
   const limparRascunhoAnexar = useCallback(() => {
     if (ANEXAR_DRAFT_KEY) void clearFotoDraft(ANEXAR_DRAFT_KEY);
-    if (ANEXAR_DRAFT_KEY && typeof window !== "undefined") {
-      sessionStorage.removeItem(ANEXAR_DRAFT_KEY);
-    }
-    setRascunhoFotosPendente([]);
+    setRascunhoFotosCount(0);
     setRascunhoContratoId("");
-  }, [ANEXAR_DRAFT_KEY]);
-
-  const salvarRascunhoAnexar = async (fotos: string[], contratoId: string): Promise<boolean> => {
-    if (!ANEXAR_DRAFT_KEY) return true;
-    if (fotos.length === 0) {
-      limparRascunhoAnexar();
-      return true;
-    }
-    const ok = await saveFotoDraft(ANEXAR_DRAFT_KEY, fotos, contratoId);
-    if (!ok) {
-      setErroEnvio(
-        "Não foi possível guardar rascunho no aparelho. Envie as fotos agora ou tire menos de uma vez."
-      );
-    }
-    return ok;
-  };
+    resetFotosSessaoUi();
+  }, [ANEXAR_DRAFT_KEY, resetFotosSessaoUi]);
 
   const fecharAnexarModal = (force = false) => {
     if (!force && (enviando || processandoFoto)) return;
@@ -212,7 +228,7 @@ export default function NotasPedidoContent() {
     if (force) {
       setAnexarModal(false);
       setAnexarSucesso(false);
-      setFotosSessao([]);
+      resetFotosSessaoUi();
       setFotoDuplicadaMsg("");
       setErroEnvio("");
       setFormErrors({});
@@ -220,17 +236,16 @@ export default function NotasPedidoContent() {
       return;
     }
 
-    if (fotosSessao.length > 0 && !anexarSucesso) {
-      setRascunhoFotosPendente(fotosSessao);
+    if (fotosSessaoCount > 0 && !anexarSucesso) {
+      setRascunhoFotosCount(fotosSessaoCount);
       if (contratoInstId) setRascunhoContratoId(contratoInstId);
-      void salvarRascunhoAnexar(fotosSessao, contratoInstId);
-    } else if (fotosSessao.length === 0) {
+    } else if (fotosSessaoCount === 0) {
       limparRascunhoAnexar();
     }
 
     setAnexarModal(false);
     setAnexarSucesso(false);
-    setFotosSessao([]);
+    resetFotosSessaoUi();
     setFotoDuplicadaMsg("");
     setErroEnvio("");
     setFormErrors({});
@@ -238,33 +253,31 @@ export default function NotasPedidoContent() {
 
   useEffect(() => {
     if (!ANEXAR_DRAFT_KEY) return;
-    if (typeof window !== "undefined") sessionStorage.removeItem(ANEXAR_DRAFT_KEY);
-    void loadFotoDraft(ANEXAR_DRAFT_KEY).then((draft) => {
-      if (!draft?.fotos.length) return;
-      setRascunhoFotosPendente(draft.fotos);
-      if (draft.contratoId) setRascunhoContratoId(draft.contratoId);
+    void loadFotoDraftMeta(ANEXAR_DRAFT_KEY).then((meta) => {
+      if (!meta?.count) return;
+      setRascunhoFotosCount(meta.count);
+      if (meta.contratoId) setRascunhoContratoId(meta.contratoId);
     });
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ANEXAR_DRAFT_KEY]);
 
   const continuarRascunhoFotos = () => {
-    if (rascunhoFotosPendente.length === 0) return;
+    if (rascunhoFotosCount === 0) return;
     setFormErrors({});
     setErroEnvio("");
     setAnexarSucesso(false);
     setReenviarNotaId(null);
-    setFotosSessao(rascunhoFotosPendente);
     setFotoDuplicadaMsg("");
     if (rascunhoContratoId) {
       setContratoInstId(rascunhoContratoId);
       if (coopId) setInstituicaoPadraoId(coopId, rascunhoContratoId);
     }
-    setRascunhoFotosPendente([]);
-    setAnexarModal(true);
+    setRascunhoFotosCount(0);
+    void syncFotosSessaoFromDraft().then(() => setAnexarModal(true));
   };
 
   const openAnexar = async (notaRejeitada?: NotaPedido) => {
-    if (!notaRejeitada && rascunhoFotosPendente.length > 0) {
+    if (!notaRejeitada && rascunhoFotosCount > 0) {
       continuarRascunhoFotos();
       return;
     }
@@ -276,11 +289,13 @@ export default function NotasPedidoContent() {
     setInstituicaoId(notaRejeitada?.instituicaoId ?? "");
     setUsarEscolaAvulsa(Boolean(notaRejeitada?.escolaAvulsaNome?.trim()));
     setEscolaAvulsaNome(notaRejeitada?.escolaAvulsaNome ?? "");
-    setFotosSessao([]);
+    resetFotosSessaoUi();
     setFotoDuplicadaMsg("");
     setObservacoes(notaRejeitada?.observacoes ?? "");
     if (!notaRejeitada) {
       limparRascunhoAnexar();
+    } else {
+      void syncFotosSessaoFromDraft();
     }
 
     let currentData = data ?? getData();
@@ -309,6 +324,9 @@ export default function NotasPedidoContent() {
     }
 
     setAnexarModal(true);
+    if (!notaRejeitada) {
+      void syncFotosSessaoFromDraft();
+    }
   };
 
   const cooperadosCoop = useMemo(() => {
@@ -725,28 +743,39 @@ export default function NotasPedidoContent() {
   const handleFoto = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (fotoInputRef.current) fotoInputRef.current.value = "";
-    if (!file || !data || !cooperadoId || fotoProcessandoRef.current || processandoFoto || enviando) return;
+    if (!file || !data || !cooperadoId || !ANEXAR_DRAFT_KEY || fotoProcessandoRef.current || processandoFoto || enviando) return;
 
     fotoProcessandoRef.current = true;
     setProcessandoFoto(true);
     setFotoDuplicadaMsg("");
     try {
-      const { maxWidth, quality } = parametrosCompressaoFoto(fotosSessao.length);
+      const qtdAtual = await countFotoDraft(ANEXAR_DRAFT_KEY);
+      const { maxWidth, quality } = parametrosCompressaoFoto(qtdAtual + 1);
       const dataUrl = await compressFotoFile(file, maxWidth, quality);
       const notasCooperado = data.notasPedido.filter((n) => n.cooperadoId === cooperadoId);
 
-      setFotosSessao((prev) => {
-        if (isFotoDuplicada(dataUrl, prev, notasCooperado)) {
-          setFotoDuplicadaMsg("Imagem repetida — esta foto já foi adicionada ou já foi enviada antes.");
-          return prev;
-        }
-        setFormErrors((err) => ({ ...err, foto: undefined }));
-        const next = reenviarNotaId ? [dataUrl] : [...prev, dataUrl];
-        void salvarRascunhoAnexar(next, contratoInstId);
-        return next;
-      });
+      if (await isFotoDraftDuplicada(ANEXAR_DRAFT_KEY, dataUrl)) {
+        setFotoDuplicadaMsg("Imagem repetida — esta foto já foi adicionada ou já foi enviada antes.");
+        return;
+      }
+      if (isFotoDuplicada(dataUrl, [], notasCooperado)) {
+        setFotoDuplicadaMsg("Imagem repetida — esta foto já foi enviada antes.");
+        return;
+      }
+
+      if (reenviarNotaId) {
+        await clearFotoDraft(ANEXAR_DRAFT_KEY);
+        setFotosSessaoPreviews([]);
+        setFotosSessaoCount(0);
+      }
+
+      const preview = await makeFotoThumbnail(dataUrl, 160, 0.4);
+      const index = await appendFotoDraft(ANEXAR_DRAFT_KEY, contratoInstId, preview, dataUrl);
+      setFotosSessaoCount(index + 1);
+      setFotosSessaoPreviews((prev) => [...prev, { index, preview }]);
+      setFormErrors((err) => ({ ...err, foto: undefined }));
     } catch {
-      setErroEnvio("Não foi possível processar a foto. Tente outra imagem.");
+      setErroEnvio("Não foi possível processar a foto. Tente outra imagem ou feche outros apps.");
     } finally {
       fotoProcessandoRef.current = false;
       setProcessandoFoto(false);
@@ -754,11 +783,14 @@ export default function NotasPedidoContent() {
   };
 
   const removerFotoSessao = (idx: number) => {
-    setFotosSessao((prev) => {
-      const next = prev.filter((_, i) => i !== idx);
-      void salvarRascunhoAnexar(next, contratoInstId);
-      return next;
-    });
+    if (!ANEXAR_DRAFT_KEY) return;
+    void (async () => {
+      await removeFotoDraftAt(ANEXAR_DRAFT_KEY, idx);
+      const previews = await listFotoDraftPreviews(ANEXAR_DRAFT_KEY);
+      const count = await countFotoDraft(ANEXAR_DRAFT_KEY);
+      setFotosSessaoCount(count);
+      setFotosSessaoPreviews(previews);
+    })();
     setFotoDuplicadaMsg("");
     setFormErrors((prev) => ({ ...prev, foto: undefined }));
   };
@@ -792,7 +824,7 @@ export default function NotasPedidoContent() {
     if (usarEscolaAvulsa && !escolaAvulsaNome.trim()) {
       errors.escolaAvulsa = "Informe o nome da escola.";
     }
-    if (fotosSessao.length === 0) errors.foto = "Tire ou escolha pelo menos uma foto do pedido assinado.";
+    if (fotosSessaoCount === 0) errors.foto = "Tire ou escolha pelo menos uma foto do pedido assinado.";
     if (!contratoId) errors.contrato = "Contrato da entrega não encontrado. Aguarde a sincronização ou fale com a cooperativa.";
     if (Object.keys(errors).length) {
       setFormErrors(errors);
@@ -804,9 +836,10 @@ export default function NotasPedidoContent() {
     const now = new Date().toISOString();
     const mes = getCurrentMesReferencia();
     const cooperadoNome = getCooperadoNome(workingData.cooperados, cid);
-    const qtdFotos = fotosSessao.length;
+    const qtdFotos = fotosSessaoCount;
 
     setEnviando(true);
+    setEnvioProgresso(null);
     setErroEnvio("");
 
     const cnpj = await resolveCooperativaCnpj(workingData, coopId, user);
@@ -826,17 +859,15 @@ export default function NotasPedidoContent() {
     const inst = workingData.instituicoes.find((i) => i.id === contratoId);
     const localEntrega = inst?.localEntrega ?? inst?.endereco ?? local;
 
-    const buildNotasCompletas = (d: AppData, fotosEnvio: string[]): NotaPedido[] => {
+    const buildNotaEntrega = (d: AppData): NotaPedido | null => {
       if (reenviarNotaId) {
         const base = d.notasPedido.find((n) => n.id === reenviarNotaId);
-        if (!base) return [];
-        return [{
+        if (!base) return null;
+        return {
           ...base,
           instituicaoId: contratoId,
           localEntrega,
           escolaAvulsaNome: escolaAvulsa,
-          fotoPedido: fotosEnvio[0],
-          fotosPedido: [...fotosEnvio],
           fotosEnviadasCount: qtdFotos,
           fotoEnviadaEm: now,
           observacoes,
@@ -848,10 +879,12 @@ export default function NotasPedidoContent() {
           updatedAt: now,
           cooperativaCnpj: cnpj,
           cooperadoNomeSnapshot: cooperadoNome,
-        }];
+          fotoPedido: undefined,
+          fotosPedido: undefined,
+        };
       }
 
-      const nota: NotaPedido = {
+      return {
         id: generateId("np"),
         cooperativaId: coopId,
         cooperadoId: cid,
@@ -866,8 +899,6 @@ export default function NotasPedidoContent() {
         valorDesconto: 0,
         valorLiquido: 0,
         status: "aguardando_conferencia",
-        fotoPedido: fotosEnvio[0],
-        fotosPedido: [...fotosEnvio],
         fotosEnviadasCount: qtdFotos,
         fotoEnviadaEm: now,
         mesReferencia: mes,
@@ -877,20 +908,10 @@ export default function NotasPedidoContent() {
         createdAt: now,
         updatedAt: now,
       };
-      return [nota];
     };
 
-    let fotosEnvio: string[];
-    try {
-      fotosEnvio = await recomprimirFotosSessao(fotosSessao);
-    } catch {
-      setEnviando(false);
-      setErroEnvio("Não foi possível preparar as fotos. Feche outros apps e tente enviar de novo.");
-      return;
-    }
-
-    const notasCompletas = buildNotasCompletas(workingData, fotosEnvio);
-    if (notasCompletas.length === 0) {
+    const notaEntrega = buildNotaEntrega(workingData);
+    if (!notaEntrega) {
       setEnviando(false);
       setErroEnvio("Não foi possível preparar o envio. Tente novamente.");
       return;
@@ -898,23 +919,44 @@ export default function NotasPedidoContent() {
 
     let cloudOk = false;
     let cloudError = "";
-    const cloud = await pushNotaComFotosEmLotes(cnpj, notasCompletas[0], fotosEnvio, cooperadoNome);
-    if (cloud.ok) {
-      cloudOk = true;
-    } else {
-      cloudError = cloud.error ?? "Erro ao enviar na nuvem.";
+    if (ANEXAR_DRAFT_KEY) {
+      const cloud = await pushNotaComFotosEmStreaming(
+        cnpj,
+        notaEntrega,
+        (i) => getFotoDraftData(ANEXAR_DRAFT_KEY, i),
+        qtdFotos,
+        cooperadoNome,
+        (sent, total) => setEnvioProgresso({ sent, total })
+      );
+      if (cloud.ok) {
+        cloudOk = true;
+      } else {
+        cloudError = cloud.error ?? "Erro ao enviar na nuvem.";
+      }
     }
 
-    const miniaturas = await gerarMiniaturasSequencial(fotosEnvio);
+    const miniaturas = fotosSessaoPreviews
+      .slice()
+      .sort((a, b) => a.index - b.index)
+      .map((p) => p.preview);
 
-    const notasLocais = notasCompletas.map((n) => ({
-      ...n,
+    const notasLocais = [{
+      ...notaEntrega,
       fotoNaNuvem: cloudOk,
       fotosPedidoMiniaturas: miniaturas,
       fotoPedidoMiniatura: miniaturas[0],
-      fotoPedido: cloudOk ? undefined : undefined,
-      fotosPedido: cloudOk ? undefined : fotosEnvio,
-    }));
+      fotoPedido: undefined,
+      fotosPedido: undefined,
+    }];
+
+    if (!cloudOk) {
+      setEnviando(false);
+      setEnvioProgresso(null);
+      setErroEnvio(
+        cloudError || "Falha ao enviar para a nuvem. Verifique a conexão e toque Enviar de novo — as fotos continuam guardadas no aparelho."
+      );
+      return;
+    }
 
     const persistir = (d: AppData) => {
       const base = compactarFotosNoArmazenamento(liberarEspacoArmazenamento(d, 1));
@@ -1013,15 +1055,17 @@ export default function NotasPedidoContent() {
 
     if (!saved.ok) {
       setEnviando(false);
+      setEnvioProgresso(null);
       setErroEnvio(
-        `${saved.error}${cloudOk ? "" : ` ${cloudError}`} As fotos continuam na tela — toque Enviar de novo.`
+        `${saved.error}${cloudOk ? "" : ` ${cloudError}`} As fotos continuam salvas no aparelho — toque Enviar de novo.`
       );
       return;
     }
 
     setEnviando(false);
+    setEnvioProgresso(null);
     limparRascunhoAnexar();
-    setFotosSessao([]);
+    resetFotosSessaoUi();
     setFotoDuplicadaMsg("");
     const ids = notasLocais.map((n) => n.id);
     setUltimaNotaEnviadaIds(ids);
@@ -1386,7 +1430,7 @@ export default function NotasPedidoContent() {
 
   const enviarOutraFoto = () => {
     setAnexarSucesso(false);
-    setFotosSessao([]);
+    resetFotosSessaoUi();
     setFotoDuplicadaMsg("");
     setErroEnvio("");
     setFormErrors({});
@@ -1544,10 +1588,10 @@ export default function NotasPedidoContent() {
         <AlertBanner variant="success" className="mt-4" onDismiss={() => setLancadoMsg("")}>{lancadoMsg}</AlertBanner>
       )}
 
-      {isCooperado && rascunhoFotosPendente.length > 0 && !anexarModal && (
+      {isCooperado && rascunhoFotosCount > 0 && !anexarModal && (
         <AlertBanner variant="warning" className="mb-4" title="Fotos não enviadas">
-          Você tem {rascunhoFotosPendente.length}{" "}
-          {rascunhoFotosPendente.length === 1 ? "foto salva" : "fotos salvas"} de uma sessão anterior.
+          Você tem {rascunhoFotosCount}{" "}
+          {rascunhoFotosCount === 1 ? "foto salva" : "fotos salvas"} de uma sessão anterior.
           <div className="flex flex-wrap gap-2 mt-3">
             <Button size="sm" onClick={continuarRascunhoFotos}>
               Continuar envio
@@ -1879,14 +1923,18 @@ export default function NotasPedidoContent() {
                 type="button"
                 size="lg"
                 onClick={() => void handleAnexarEntrega()}
-                disabled={fotosSessao.length === 0 || enviando || processandoFoto}
+                disabled={fotosSessaoCount === 0 || enviando || processandoFoto}
               >
                 <FileText size={18} />{" "}
                 {enviando
-                  ? fotosSessao.length > 4
-                    ? `Enviando ${fotosSessao.length} fotos…`
-                    : "Enviando..."
-                  : fotosSessao.length > 0 ? `Enviar entrega${fotosSessao.length > 1 ? ` (${fotosSessao.length} fotos)` : ""}` : "Enviar para a cooperativa"}
+                  ? envioProgresso
+                    ? `Enviando foto ${envioProgresso.sent} de ${envioProgresso.total}…`
+                    : fotosSessaoCount > 1
+                      ? `Enviando ${fotosSessaoCount} fotos…`
+                      : "Enviando..."
+                  : fotosSessaoCount > 0
+                    ? `Enviar entrega${fotosSessaoCount > 1 ? ` (${fotosSessaoCount} fotos)` : ""}`
+                    : "Enviar para a cooperativa"}
               </Button>
             </div>
           )
@@ -1915,28 +1963,34 @@ export default function NotasPedidoContent() {
               <div className="flex items-center justify-between gap-2 mb-2">
                 <span className="text-sm font-semibold text-green-900 flex items-center gap-2">
                   <ImagePlus size={18} />
-                  {fotosSessao.length === 0
+                  {fotosSessaoCount === 0
                     ? "Nenhuma imagem ainda"
-                    : `${fotosSessao.length} ${fotosSessao.length === 1 ? "imagem adicionada" : "imagens adicionadas"}`}
+                    : `${fotosSessaoCount} ${fotosSessaoCount === 1 ? "imagem adicionada" : "imagens adicionadas"}`}
                 </span>
-                {fotosSessao.length > 0 && (
+                {fotosSessaoCount > 0 && (
                   <span className="text-xs font-bold text-green-800 bg-green-200 px-2 py-0.5 rounded-full">
-                    +{fotosSessao.length}
+                    +{fotosSessaoCount}
                   </span>
                 )}
               </div>
               <div className="h-3 bg-green-100 rounded-full overflow-hidden">
                 <div
                   className="h-full bg-green-600 rounded-full transition-all duration-500 ease-out"
-                  style={{ width: `${Math.min(100, Math.max(fotosSessao.length * 12, fotosSessao.length > 0 ? 12 : 0))}%` }}
+                  style={{
+                    width: envioProgresso
+                      ? `${Math.round((envioProgresso.sent / envioProgresso.total) * 100)}%`
+                      : `${Math.min(100, Math.max(fotosSessaoCount * 8, fotosSessaoCount > 0 ? 8 : 0))}%`,
+                  }}
                 />
               </div>
               <p className="text-xs text-green-800 mt-2">
-                {fotosSessao.length === 0
-                  ? "Adicione as fotos deste envio."
-                  : fotosSessao.length >= 6
-                    ? "Muitas fotos: ao enviar, o app comprime e manda em partes para não encher a memória do celular."
-                    : "Continue adicionando fotos ou toque em Enviar entrega quando terminar."}
+                {envioProgresso
+                  ? `Enviando uma foto por vez (${envioProgresso.sent}/${envioProgresso.total}) — memória do celular protegida.`
+                  : fotosSessaoCount === 0
+                    ? "Adicione as fotos deste envio."
+                    : fotosSessaoCount >= 6
+                      ? "Quantas fotos precisar: cada uma fica guardada no aparelho e é enviada individualmente."
+                      : "Continue adicionando fotos ou toque em Enviar entrega quando terminar."}
               </p>
             </div>
           )}
@@ -1986,24 +2040,27 @@ export default function NotasPedidoContent() {
             <label className={`flex flex-col items-center gap-2 p-8 border-2 border-dashed border-green-400 rounded-2xl bg-green-50/50 ${processandoFoto || enviando ? "opacity-60 pointer-events-none" : "cursor-pointer active:bg-green-100"}`}>
               <Camera size={48} className="text-green-700" />
               <span className="text-base font-semibold text-green-800">
-                {processandoFoto ? "Processando foto..." : fotosSessao.length === 0 ? "Tirar foto agora" : "Tirar outra foto"}
+                {processandoFoto ? "Processando foto..." : fotosSessaoCount === 0 ? "Tirar foto agora" : "Tirar outra foto"}
               </span>
               <input ref={fotoInputRef} type="file" accept="image/*" capture="environment" className="hidden" onChange={(e) => void handleFoto(e)} disabled={processandoFoto || enviando} />
             </label>
           </FormField>
 
-          {fotosSessao.length > 0 && (
+          {fotosSessaoCount > 0 && (
             <div className="grid grid-cols-3 gap-2">
-              {fotosSessao.map((foto, idx) => (
-                <div key={idx} className="relative group">
+              {fotosSessaoPreviews
+                .slice()
+                .sort((a, b) => a.index - b.index)
+                .map(({ index, preview }) => (
+                <div key={index} className="relative group">
                   {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img src={foto} alt={`Foto ${idx + 1}`} className="w-full h-24 object-cover rounded-lg border-2 border-green-200" />
+                  <img src={preview} alt={`Foto ${index + 1}`} className="w-full h-24 object-cover rounded-lg border-2 border-green-200" loading="lazy" decoding="async" />
                   <span className="absolute top-1 left-1 bg-green-700 text-white text-xs font-bold w-6 h-6 rounded-full flex items-center justify-center">
-                    {idx + 1}
+                    {index + 1}
                   </span>
                   <button
                     type="button"
-                    onClick={() => removerFotoSessao(idx)}
+                    onClick={() => removerFotoSessao(index)}
                     className="absolute top-1 right-1 bg-red-600 text-white rounded-full p-1 opacity-90 hover:opacity-100"
                     aria-label="Remover foto"
                   >

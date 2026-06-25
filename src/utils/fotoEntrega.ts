@@ -42,13 +42,21 @@ function compressImageFromUrl(src: string, maxWidth: number, quality: number): P
       canvas.height = h;
       const ctx = canvas.getContext("2d");
       if (!ctx) {
+        img.src = "";
         resolve(src);
         return;
       }
       ctx.drawImage(img, 0, 0, w, h);
-      resolve(canvas.toDataURL("image/jpeg", quality));
+      const out = canvas.toDataURL("image/jpeg", quality);
+      canvas.width = 0;
+      canvas.height = 0;
+      img.src = "";
+      resolve(out);
     };
-    img.onerror = () => resolve(src);
+    img.onerror = () => {
+      img.src = "";
+      resolve(src);
+    };
     img.src = src;
   });
 }
@@ -281,12 +289,13 @@ export function liberarEspacoArmazenamento(data: AppData, nivel: 1 | 2 = 1): App
 }
 
 export function parametrosCompressaoFoto(qtdNaSessao: number): { maxWidth: number; quality: number } {
-  if (qtdNaSessao >= 20) return { maxWidth: 480, quality: 0.4 };
-  if (qtdNaSessao >= 15) return { maxWidth: 520, quality: 0.42 };
-  if (qtdNaSessao >= 10) return { maxWidth: 580, quality: 0.45 };
-  if (qtdNaSessao >= 6) return { maxWidth: 640, quality: 0.48 };
-  if (qtdNaSessao >= 3) return { maxWidth: 720, quality: 0.52 };
-  return { maxWidth: 840, quality: 0.58 };
+  if (qtdNaSessao >= 25) return { maxWidth: 420, quality: 0.38 };
+  if (qtdNaSessao >= 20) return { maxWidth: 460, quality: 0.4 };
+  if (qtdNaSessao >= 15) return { maxWidth: 500, quality: 0.42 };
+  if (qtdNaSessao >= 10) return { maxWidth: 540, quality: 0.44 };
+  if (qtdNaSessao >= 6) return { maxWidth: 600, quality: 0.46 };
+  if (qtdNaSessao >= 3) return { maxWidth: 680, quality: 0.5 };
+  return { maxWidth: 760, quality: 0.55 };
 }
 
 /** Comprime todas as fotos da sessão antes do envio (libera memória dos originais maiores). */
@@ -308,8 +317,8 @@ export async function gerarMiniaturasSequencial(fotos: string[]): Promise<string
   return miniaturas;
 }
 
-/** Tamanho sugerido de cada lote no upload à nuvem (JSON). */
-export const FOTOS_UPLOAD_LOTE = 4;
+/** Tamanho de cada lote legado (upload monolítico — preferir streaming). */
+export const FOTOS_UPLOAD_LOTE = 2;
 
 /** Comparação exata do conteúdo da imagem (base64). */
 export function isFotoDuplicada(

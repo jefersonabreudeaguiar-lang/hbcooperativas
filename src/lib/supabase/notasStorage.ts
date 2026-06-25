@@ -4,6 +4,131 @@ import { isNotasPedidoTableMissing } from "@/lib/supabase/errors";
 import { mergeNotaComFotos } from "@/utils/fotoEntrega";
 
 const BUCKET = "hb-entregas";
+export const FOTOS_STORAGE_PARTS = "parts";
+
+function storagePath(cnpj: string, notaId: string): string {
+  return `${cnpj}/${notaId}.json`;
+}
+
+function fotoPartPath(cnpj: string, notaId: string, index: number): string {
+  return `${cnpj}/${notaId}/foto-${String(index).padStart(3, "0")}.jpg`;
+}
+
+function dataUrlToBuffer(dataUrl: string): Buffer {
+  const base64 = dataUrl.includes(",") ? dataUrl.split(",")[1] : dataUrl;
+  return Buffer.from(base64, "base64");
+}
+
+function bufferToDataUrl(buffer: Buffer): string {
+  return `data:image/jpeg;base64,${buffer.toString("base64")}`;
+}
+
+function notaUsesFotoParts(nota: NotaPedido): boolean {
+  if (nota.fotosPedido?.length) return false;
+  return Boolean(nota.fotosEnviadasCount && nota.fotosEnviadasCount > 0);
+}
+
+async function downloadFotoPartAsDataUrl(
+  supabase: SupabaseClient,
+  cnpj: string,
+  notaId: string,
+  index: number
+): Promise<string | undefined> {
+  const { data: blob, error } = await supabase.storage
+    .from(BUCKET)
+    .download(fotoPartPath(cnpj, notaId, index));
+  if (error || !blob) return undefined;
+  const buffer = Buffer.from(await blob.arrayBuffer());
+  return bufferToDataUrl(buffer);
+}
+
+/** Monta fotosPedido a partir de arquivos separados na nuvem. */
+export async function assembleNotaFotosFromParts(
+  supabase: SupabaseClient,
+  cnpj: string,
+  nota: NotaPedido
+): Promise<NotaPedido> {
+  if (nota.fotosPedido?.length) return nota;
+  const count = nota.fotosEnviadasCount ?? 0;
+  if (count <= 0) return nota;
+
+  const fotos: string[] = [];
+  for (let i = 0; i < count; i++) {
+    const part = await downloadFotoPartAsDataUrl(supabase, cnpj, nota.id, i);
+    if (part) fotos.push(part);
+  }
+  if (fotos.length === 0) return nota;
+  return {
+    ...nota,
+    fotoPedido: fotos[0],
+    fotosPedido: fotos,
+    fotosEnviadasCount: Math.max(count, fotos.length),
+    fotoNaNuvem: true,
+  };
+}
+
+/** Envia uma foto por vez — não reescreve JSON gigante na nuvem. */
+export async function uploadNotaFotoPart(
+  supabase: SupabaseClient,
+  cnpj: string,
+  nota: NotaPedido,
+  index: number,
+  totalCount: number,
+  fotoDataUrl: string,
+  cooperadoNome?: string
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  await ensureEntregasBucket(supabase);
+
+  const metaPayload: NotaPedido = {
+    ...nota,
+    cooperadoNomeSnapshot: nota.cooperadoNomeSnapshot ?? cooperadoNome,
+    cooperativaCnpj: cnpj,
+    fotoPedido: undefined,
+    fotosPedido: undefined,
+    fotoPedidoMiniatura: undefined,
+    fotosPedidoMiniaturas: undefined,
+    fotosEnviadasCount: totalCount,
+    fotoNaNuvem: true,
+    updatedAt: new Date().toISOString(),
+  };
+
+  const jpeg = dataUrlToBuffer(fotoDataUrl);
+  const { error: fotoErr } = await supabase.storage
+    .from(BUCKET)
+    .upload(fotoPartPath(cnpj, nota.id, index), jpeg, {
+      contentType: "image/jpeg",
+      upsert: true,
+    });
+  if (fotoErr) {
+    console.error("[notas-storage/foto-part]", fotoErr.message);
+    return { ok: false, error: "Erro ao enviar foto para a nuvem." };
+  }
+
+  const { error: metaErr } = await supabase.storage
+    .from(BUCKET)
+    .upload(storagePath(cnpj, nota.id), JSON.stringify(metaPayload), {
+      contentType: "application/json",
+      upsert: true,
+    });
+  if (metaErr) {
+    console.error("[notas-storage/meta]", metaErr.message);
+    return { ok: false, error: "Erro ao atualizar entrega na nuvem." };
+  }
+
+  return { ok: true };
+}
+
+async function removeNotaFotoParts(
+  supabase: SupabaseClient,
+  cnpj: string,
+  notaId: string
+): Promise<void> {
+  const folder = `${cnpj}/${notaId}`;
+  const { data: files } = await supabase.storage.from(BUCKET).list(folder, { limit: 500 });
+  if (!files?.length) return;
+  const paths = files.map((f) => `${folder}/${f.name}`);
+  await supabase.storage.from(BUCKET).remove(paths);
+}
 
 export async function ensureEntregasBucket(supabase: SupabaseClient): Promise<void> {
   const { data: buckets } = await supabase.storage.listBuckets();
@@ -26,10 +151,6 @@ export function notaPayloadForTable(nota: NotaPedido): NotaPedido {
     fotoNaNuvem: qtd > 0 ? true : nota.fotoNaNuvem,
     fotosEnviadasCount: qtd > 0 ? qtd : nota.fotosEnviadasCount,
   };
-}
-
-function storagePath(cnpj: string, notaId: string): string {
-  return `${cnpj}/${notaId}.json`;
 }
 
 export async function uploadNotaToStorage(
@@ -98,7 +219,11 @@ export async function fetchNotaFromStorage(
   if (error || !blob) return null;
   try {
     const parsed = JSON.parse(await blob.text()) as NotaPedido;
-    return parsed?.id ? parsed : null;
+    if (!parsed?.id) return null;
+    if (notaUsesFotoParts(parsed)) {
+      return assembleNotaFotosFromParts(supabase, cnpj, parsed);
+    }
+    return parsed;
   } catch {
     return null;
   }
@@ -182,6 +307,7 @@ export async function deleteNotaFromStorage(
   notaId: string
 ): Promise<{ ok: true } | { ok: false; error: string }> {
   await ensureEntregasBucket(supabase);
+  await removeNotaFotoParts(supabase, cnpj, notaId);
   const { error } = await supabase.storage.from(BUCKET).remove([storagePath(cnpj, notaId)]);
   if (error) {
     console.error("[notas-storage/delete]", error.message);

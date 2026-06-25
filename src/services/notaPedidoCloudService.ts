@@ -338,7 +338,64 @@ export async function patchNotaPedidoInCloud(
   }
 }
 
-/** Envia muitas fotos em lotes — evita estourar memória e limite de tamanho do POST. */
+/** Envia fotos uma a uma — memória constante no celular. */
+export async function pushNotaComFotosEmStreaming(
+  cnpj: string,
+  nota: NotaPedido,
+  readFotoAt: (index: number) => Promise<string | undefined>,
+  totalCount: number,
+  cooperadoNome?: string,
+  onProgress?: (sent: number, total: number) => void
+): Promise<{ ok: boolean; offline?: boolean; error?: string }> {
+  const digits = normalizeCnpj(cnpj);
+  if (digits.length !== 14) return { ok: false, error: "CNPJ inválido." };
+  if (totalCount <= 0) return pushNotasPedidoToCloud(cnpj, [nota], cooperadoNome);
+
+  const metaNota: NotaPedido = {
+    ...nota,
+    fotosEnviadasCount: totalCount,
+    fotoNaNuvem: true,
+    fotoPedido: undefined,
+    fotosPedido: undefined,
+    fotoPedidoMiniatura: undefined,
+    fotosPedidoMiniaturas: undefined,
+  };
+
+  try {
+    for (let i = 0; i < totalCount; i++) {
+      const foto = await readFotoAt(i);
+      if (!foto) {
+        return { ok: false, error: `Foto ${i + 1} de ${totalCount} não encontrada no aparelho.` };
+      }
+
+      const res = await fetch(`/api/notas-pedido/${encodeURIComponent(nota.id)}/foto`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          cnpj: digits,
+          index: i,
+          totalCount,
+          foto,
+          nota: metaNota,
+          cooperadoNome: i === 0 ? cooperadoNome : undefined,
+        }),
+      });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        return {
+          ok: false,
+          error: (json.error as string) ?? `Erro ao enviar foto ${i + 1} de ${totalCount}.`,
+        };
+      }
+      onProgress?.(i + 1, totalCount);
+    }
+    return { ok: true };
+  } catch {
+    return { ok: false, error: "Sem conexão com o servidor." };
+  }
+}
+
+/** Envia muitas fotos em lotes — fallback quando fotos já estão na RAM. */
 export async function pushNotaComFotosEmLotes(
   cnpj: string,
   nota: NotaPedido,
@@ -348,6 +405,16 @@ export async function pushNotaComFotosEmLotes(
 ): Promise<{ ok: boolean; offline?: boolean; error?: string }> {
   if (fotos.length === 0) {
     return pushNotasPedidoToCloud(cnpj, [nota], cooperadoNome);
+  }
+
+  if (fotos.length > 2) {
+    return pushNotaComFotosEmStreaming(
+      cnpj,
+      nota,
+      (i) => Promise.resolve(fotos[i]),
+      fotos.length,
+      cooperadoNome
+    );
   }
 
   if (fotos.length <= loteSize) {
