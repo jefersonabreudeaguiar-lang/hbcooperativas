@@ -1,7 +1,7 @@
 import type { AppData, NotaPedido, User } from "@/types";
 import { normalizeCnpj } from "@/utils/cooperativa";
 import { fetchCooperativaByCnpjFromCloud } from "@/services/cooperativaCloudService";
-import { getNotaCooperativaCnpj, getFotosExibicaoNota, mergeNotaComFotos } from "@/utils/fotoEntrega";
+import { getNotaCooperativaCnpj, getFotosExibicaoNota, mergeNotaComFotos, FOTOS_UPLOAD_LOTE } from "@/utils/fotoEntrega";
 import { getData, saveDataSafe } from "@/services/dataStore";
 import { reconciliarFichaFromNotasConferidas } from "@/services/notaPedidoService";
 import { needsOperationalResetCloudPush } from "@/services/operationalReset";
@@ -318,19 +318,90 @@ export async function deleteNotaPedidoFromCloud(
 export async function patchNotaPedidoInCloud(
   cnpj: string,
   nota: NotaPedido
-): Promise<void> {
+): Promise<{ ok: boolean; error?: string }> {
   const digits = normalizeCnpj(cnpj);
-  if (digits.length !== 14) return;
+  if (digits.length !== 14) return { ok: false, error: "CNPJ inválido." };
 
   try {
-    await fetch(`/api/notas-pedido/${encodeURIComponent(nota.id)}`, {
+    const res = await fetch(`/api/notas-pedido/${encodeURIComponent(nota.id)}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ cnpj: digits, nota }),
     });
+    const json = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      return { ok: false, error: (json.error as string) ?? "Erro ao atualizar entrega na nuvem." };
+    }
+    return { ok: true };
   } catch {
-    /* offline */
+    return { ok: false, error: "Sem conexão com o servidor." };
   }
+}
+
+/** Envia muitas fotos em lotes — evita estourar memória e limite de tamanho do POST. */
+export async function pushNotaComFotosEmLotes(
+  cnpj: string,
+  nota: NotaPedido,
+  fotos: string[],
+  cooperadoNome?: string,
+  loteSize = FOTOS_UPLOAD_LOTE
+): Promise<{ ok: boolean; offline?: boolean; error?: string }> {
+  if (fotos.length === 0) {
+    return pushNotasPedidoToCloud(cnpj, [nota], cooperadoNome);
+  }
+
+  if (fotos.length <= loteSize) {
+    return pushNotasPedidoToCloud(
+      cnpj,
+      [
+        {
+          ...nota,
+          fotoPedido: fotos[0],
+          fotosPedido: fotos,
+          fotosEnviadasCount: fotos.length,
+          fotoNaNuvem: true,
+        },
+      ],
+      cooperadoNome
+    );
+  }
+
+  const firstBatch = fotos.slice(0, loteSize);
+  const initial: NotaPedido = {
+    ...nota,
+    fotoPedido: firstBatch[0],
+    fotosPedido: firstBatch,
+    fotosEnviadasCount: fotos.length,
+    fotoNaNuvem: true,
+    updatedAt: new Date().toISOString(),
+  };
+
+  const created = await pushNotasPedidoToCloud(cnpj, [initial], cooperadoNome);
+  if (!created.ok) return created;
+
+  let accumulated = [...firstBatch];
+  for (let i = loteSize; i < fotos.length; i += loteSize) {
+    accumulated = [...accumulated, ...fotos.slice(i, i + loteSize)];
+    const updated: NotaPedido = {
+      ...nota,
+      fotoPedido: accumulated[0],
+      fotosPedido: accumulated,
+      fotosEnviadasCount: fotos.length,
+      fotoNaNuvem: true,
+      updatedAt: new Date().toISOString(),
+    };
+    const patched = await patchNotaPedidoInCloud(cnpj, updated);
+    if (!patched.ok) {
+      return {
+        ok: false,
+        error:
+          patched.error ??
+          `Falha ao enviar lote ${Math.ceil(i / loteSize) + 1}. Verifique a conexão e tente de novo.`,
+      };
+    }
+  }
+
+  return { ok: true };
 }
 
 export async function syncNotasPedidoFromCloud(cnpj: string): Promise<number> {

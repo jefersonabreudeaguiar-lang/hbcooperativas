@@ -28,6 +28,7 @@ import {
   getCooperativaCnpj,
   patchNotaPedidoInCloud,
   pushNotasPedidoToCloud,
+  pushNotaComFotosEmLotes,
   deleteNotaPedidoFromCloud,
   queueNotaDelete,
   ensureNotaComFoto,
@@ -49,7 +50,8 @@ import {
   resolverInstituicaoConferencia,
 } from "@/utils/instituicaoPreferida";
 import { getCooperadoNome } from "@/utils/calculations";
-import { isFotoDuplicada, compressFotoFile, makeFotoThumbnail, getFotoExibicaoNota, getFotosExibicaoNota, notaPertenceCooperativa, compactarFotosNoArmazenamento, liberarEspacoArmazenamento, parametrosCompressaoFoto, agruparPendentesPorCooperado, getChaveGrupoConferencia, notaPertenceGrupoConferencia, contarFotosEnviadasNota, contarFotosEnviadasNotas, resolverAbaConferenciaAtiva } from "@/utils/fotoEntrega";
+import { isFotoDuplicada, compressFotoFile, getFotoExibicaoNota, getFotosExibicaoNota, notaPertenceCooperativa, compactarFotosNoArmazenamento, liberarEspacoArmazenamento, parametrosCompressaoFoto, agruparPendentesPorCooperado, getChaveGrupoConferencia, notaPertenceGrupoConferencia, contarFotosEnviadasNota, contarFotosEnviadasNotas, resolverAbaConferenciaAtiva, recomprimirFotosSessao, gerarMiniaturasSequencial } from "@/utils/fotoEntrega";
+import { saveFotoDraft, loadFotoDraft, clearFotoDraft } from "@/utils/fotoDraftStore";
 import type { NotaPedido, NotaPedidoItem, Cooperado, AppData } from "@/types";
 
 const NOVO_AVULSO = "__novo__";
@@ -177,30 +179,27 @@ export default function NotasPedidoContent() {
   const ANEXAR_DRAFT_KEY = coopId ? `hb_anexar_draft_${coopId}` : "";
 
   const limparRascunhoAnexar = useCallback(() => {
-    if (!ANEXAR_DRAFT_KEY || typeof window === "undefined") return;
-    sessionStorage.removeItem(ANEXAR_DRAFT_KEY);
+    if (ANEXAR_DRAFT_KEY) void clearFotoDraft(ANEXAR_DRAFT_KEY);
+    if (ANEXAR_DRAFT_KEY && typeof window !== "undefined") {
+      sessionStorage.removeItem(ANEXAR_DRAFT_KEY);
+    }
     setRascunhoFotosPendente([]);
     setRascunhoContratoId("");
   }, [ANEXAR_DRAFT_KEY]);
 
-  const salvarRascunhoAnexar = (fotos: string[], contratoId: string): boolean => {
-    if (!ANEXAR_DRAFT_KEY || typeof window === "undefined") return true;
+  const salvarRascunhoAnexar = async (fotos: string[], contratoId: string): Promise<boolean> => {
+    if (!ANEXAR_DRAFT_KEY) return true;
     if (fotos.length === 0) {
       limparRascunhoAnexar();
       return true;
     }
-    try {
-      sessionStorage.setItem(
-        ANEXAR_DRAFT_KEY,
-        JSON.stringify({ fotos, contratoId, savedAt: Date.now() })
-      );
-      return true;
-    } catch {
+    const ok = await saveFotoDraft(ANEXAR_DRAFT_KEY, fotos, contratoId);
+    if (!ok) {
       setErroEnvio(
-        "Memória do aparelho cheia. Envie as fotos agora ou remova algumas antes de continuar anexando."
+        "Não foi possível guardar rascunho no aparelho. Envie as fotos agora ou tire menos de uma vez."
       );
-      return false;
     }
+    return ok;
   };
 
   const fecharAnexarModal = (force = false) => {
@@ -220,7 +219,7 @@ export default function NotasPedidoContent() {
     if (fotosSessao.length > 0 && !anexarSucesso) {
       setRascunhoFotosPendente(fotosSessao);
       if (contratoInstId) setRascunhoContratoId(contratoInstId);
-      salvarRascunhoAnexar(fotosSessao, contratoInstId);
+      void salvarRascunhoAnexar(fotosSessao, contratoInstId);
     } else if (fotosSessao.length === 0) {
       limparRascunhoAnexar();
     }
@@ -234,24 +233,13 @@ export default function NotasPedidoContent() {
   };
 
   useEffect(() => {
-    if (!ANEXAR_DRAFT_KEY || typeof window === "undefined") return;
-    try {
-      const raw = sessionStorage.getItem(ANEXAR_DRAFT_KEY);
-      if (!raw) return;
-      const draft = JSON.parse(raw) as { fotos?: string[]; contratoId?: string; savedAt?: number };
-      if (!draft.fotos?.length) {
-        sessionStorage.removeItem(ANEXAR_DRAFT_KEY);
-        return;
-      }
-      if (draft.savedAt && Date.now() - draft.savedAt > 30 * 60 * 1000) {
-        sessionStorage.removeItem(ANEXAR_DRAFT_KEY);
-        return;
-      }
+    if (!ANEXAR_DRAFT_KEY) return;
+    if (typeof window !== "undefined") sessionStorage.removeItem(ANEXAR_DRAFT_KEY);
+    void loadFotoDraft(ANEXAR_DRAFT_KEY).then((draft) => {
+      if (!draft?.fotos.length) return;
       setRascunhoFotosPendente(draft.fotos);
       if (draft.contratoId) setRascunhoContratoId(draft.contratoId);
-    } catch {
-      sessionStorage.removeItem(ANEXAR_DRAFT_KEY);
-    }
+    });
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ANEXAR_DRAFT_KEY]);
 
@@ -750,7 +738,7 @@ export default function NotasPedidoContent() {
         }
         setFormErrors((err) => ({ ...err, foto: undefined }));
         const next = reenviarNotaId ? [dataUrl] : [...prev, dataUrl];
-        salvarRascunhoAnexar(next, contratoInstId);
+        void salvarRascunhoAnexar(next, contratoInstId);
         return next;
       });
     } catch {
@@ -764,7 +752,7 @@ export default function NotasPedidoContent() {
   const removerFotoSessao = (idx: number) => {
     setFotosSessao((prev) => {
       const next = prev.filter((_, i) => i !== idx);
-      salvarRascunhoAnexar(next, contratoInstId);
+      void salvarRascunhoAnexar(next, contratoInstId);
       return next;
     });
     setFotoDuplicadaMsg("");
@@ -834,7 +822,7 @@ export default function NotasPedidoContent() {
     const inst = workingData.instituicoes.find((i) => i.id === contratoId);
     const localEntrega = inst?.localEntrega ?? inst?.endereco ?? local;
 
-    const buildNotasCompletas = (d: AppData): NotaPedido[] => {
+    const buildNotasCompletas = (d: AppData, fotosEnvio: string[]): NotaPedido[] => {
       if (reenviarNotaId) {
         const base = d.notasPedido.find((n) => n.id === reenviarNotaId);
         if (!base) return [];
@@ -843,8 +831,8 @@ export default function NotasPedidoContent() {
           instituicaoId: contratoId,
           localEntrega,
           escolaAvulsaNome: escolaAvulsa,
-          fotoPedido: fotosSessao[0],
-          fotosPedido: [...fotosSessao],
+          fotoPedido: fotosEnvio[0],
+          fotosPedido: [...fotosEnvio],
           fotosEnviadasCount: qtdFotos,
           fotoEnviadaEm: now,
           observacoes,
@@ -874,8 +862,8 @@ export default function NotasPedidoContent() {
         valorDesconto: 0,
         valorLiquido: 0,
         status: "aguardando_conferencia",
-        fotoPedido: fotosSessao[0],
-        fotosPedido: [...fotosSessao],
+        fotoPedido: fotosEnvio[0],
+        fotosPedido: [...fotosEnvio],
         fotosEnviadasCount: qtdFotos,
         fotoEnviadaEm: now,
         mesReferencia: mes,
@@ -888,7 +876,16 @@ export default function NotasPedidoContent() {
       return [nota];
     };
 
-    const notasCompletas = buildNotasCompletas(workingData);
+    let fotosEnvio: string[];
+    try {
+      fotosEnvio = await recomprimirFotosSessao(fotosSessao);
+    } catch {
+      setEnviando(false);
+      setErroEnvio("Não foi possível preparar as fotos. Feche outros apps e tente enviar de novo.");
+      return;
+    }
+
+    const notasCompletas = buildNotasCompletas(workingData, fotosEnvio);
     if (notasCompletas.length === 0) {
       setEnviando(false);
       setErroEnvio("Não foi possível preparar o envio. Tente novamente.");
@@ -896,26 +893,27 @@ export default function NotasPedidoContent() {
     }
 
     let cloudOk = false;
-    const cloud = await pushNotasPedidoToCloud(cnpj, notasCompletas, cooperadoNome);
+    let cloudError = "";
+    const cloud = await pushNotaComFotosEmLotes(cnpj, notasCompletas[0], fotosEnvio, cooperadoNome);
     if (cloud.ok) {
       cloudOk = true;
+    } else {
+      cloudError = cloud.error ?? "Erro ao enviar na nuvem.";
     }
 
-    const miniaturas = await Promise.all(
-      fotosSessao.map((f) => makeFotoThumbnail(f))
-    );
+    const miniaturas = await gerarMiniaturasSequencial(fotosEnvio);
 
     const notasLocais = notasCompletas.map((n) => ({
       ...n,
       fotoNaNuvem: cloudOk,
       fotosPedidoMiniaturas: miniaturas,
       fotoPedidoMiniatura: miniaturas[0],
-      fotoPedido: cloudOk ? undefined : n.fotoPedido,
-      fotosPedido: cloudOk ? undefined : n.fotosPedido,
+      fotoPedido: cloudOk ? undefined : undefined,
+      fotosPedido: cloudOk ? undefined : fotosEnvio,
     }));
 
     const persistir = (d: AppData) => {
-      const base = compactarFotosNoArmazenamento(d);
+      const base = compactarFotosNoArmazenamento(liberarEspacoArmazenamento(d, 1));
 
       if (reenviarNotaId) {
         const local = notasLocais[0];
@@ -1011,7 +1009,9 @@ export default function NotasPedidoContent() {
 
     if (!saved.ok) {
       setEnviando(false);
-      setErroEnvio(saved.error);
+      setErroEnvio(
+        `${saved.error}${cloudOk ? "" : ` ${cloudError}`} As fotos continuam na tela — toque Enviar de novo.`
+      );
       return;
     }
 
@@ -1828,7 +1828,11 @@ export default function NotasPedidoContent() {
                 disabled={fotosSessao.length === 0 || enviando || processandoFoto}
               >
                 <FileText size={18} />{" "}
-                {enviando ? "Enviando..." : fotosSessao.length > 0 ? `Enviar entrega${fotosSessao.length > 1 ? ` (${fotosSessao.length} fotos)` : ""}` : "Enviar para a cooperativa"}
+                {enviando
+                  ? fotosSessao.length > 4
+                    ? `Enviando ${fotosSessao.length} fotos…`
+                    : "Enviando..."
+                  : fotosSessao.length > 0 ? `Enviar entrega${fotosSessao.length > 1 ? ` (${fotosSessao.length} fotos)` : ""}` : "Enviar para a cooperativa"}
               </Button>
             </div>
           )
@@ -1876,7 +1880,9 @@ export default function NotasPedidoContent() {
               <p className="text-xs text-green-800 mt-2">
                 {fotosSessao.length === 0
                   ? "Adicione as fotos deste envio."
-                  : "Continue adicionando fotos ou toque em Enviar entrega quando terminar."}
+                  : fotosSessao.length >= 6
+                    ? "Muitas fotos: ao enviar, o app comprime e manda em partes para não encher a memória do celular."
+                    : "Continue adicionando fotos ou toque em Enviar entrega quando terminar."}
               </p>
             </div>
           )}

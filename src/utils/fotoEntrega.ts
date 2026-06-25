@@ -7,21 +7,29 @@ export async function compressFotoFile(
   maxWidth = 960,
   quality = 0.62
 ): Promise<string> {
-  const raw = await readFileAsDataUrl(file);
-  return compressDataUrl(raw, maxWidth, quality);
+  if (typeof document === "undefined") {
+    const raw = await readFileAsDataUrl(file);
+    return compressDataUrl(raw, maxWidth, quality);
+  }
+  const objectUrl = URL.createObjectURL(file);
+  try {
+    return await compressImageFromUrl(objectUrl, maxWidth, quality);
+  } finally {
+    URL.revokeObjectURL(objectUrl);
+  }
 }
 
 /** Miniatura para listas no aparelho do cooperado (poucos KB). */
-export async function makeFotoThumbnail(dataUrl: string): Promise<string> {
-  return compressDataUrl(dataUrl, 320, 0.5);
+export async function makeFotoThumbnail(
+  dataUrl: string,
+  maxWidth = 280,
+  quality = 0.45
+): Promise<string> {
+  return compressDataUrl(dataUrl, maxWidth, quality);
 }
 
-export async function compressDataUrl(
-  dataUrl: string,
-  maxWidth: number,
-  quality: number
-): Promise<string> {
-  if (typeof document === "undefined") return dataUrl;
+function compressImageFromUrl(src: string, maxWidth: number, quality: number): Promise<string> {
+  if (typeof document === "undefined") return Promise.resolve(src);
 
   return new Promise((resolve) => {
     const img = new Image();
@@ -34,15 +42,24 @@ export async function compressDataUrl(
       canvas.height = h;
       const ctx = canvas.getContext("2d");
       if (!ctx) {
-        resolve(dataUrl);
+        resolve(src);
         return;
       }
       ctx.drawImage(img, 0, 0, w, h);
       resolve(canvas.toDataURL("image/jpeg", quality));
     };
-    img.onerror = () => resolve(dataUrl);
-    img.src = dataUrl;
+    img.onerror = () => resolve(src);
+    img.src = src;
   });
+}
+
+export async function compressDataUrl(
+  dataUrl: string,
+  maxWidth: number,
+  quality: number
+): Promise<string> {
+  if (typeof document === "undefined") return dataUrl;
+  return compressImageFromUrl(dataUrl, maxWidth, quality);
 }
 
 function readFileAsDataUrl(file: File): Promise<string> {
@@ -264,11 +281,35 @@ export function liberarEspacoArmazenamento(data: AppData, nivel: 1 | 2 = 1): App
 }
 
 export function parametrosCompressaoFoto(qtdNaSessao: number): { maxWidth: number; quality: number } {
-  if (qtdNaSessao >= 15) return { maxWidth: 640, quality: 0.48 };
-  if (qtdNaSessao >= 8) return { maxWidth: 720, quality: 0.52 };
-  if (qtdNaSessao >= 4) return { maxWidth: 840, quality: 0.58 };
-  return { maxWidth: 960, quality: 0.62 };
+  if (qtdNaSessao >= 20) return { maxWidth: 480, quality: 0.4 };
+  if (qtdNaSessao >= 15) return { maxWidth: 520, quality: 0.42 };
+  if (qtdNaSessao >= 10) return { maxWidth: 580, quality: 0.45 };
+  if (qtdNaSessao >= 6) return { maxWidth: 640, quality: 0.48 };
+  if (qtdNaSessao >= 3) return { maxWidth: 720, quality: 0.52 };
+  return { maxWidth: 840, quality: 0.58 };
 }
+
+/** Comprime todas as fotos da sessão antes do envio (libera memória dos originais maiores). */
+export async function recomprimirFotosSessao(fotos: string[]): Promise<string[]> {
+  const out: string[] = [];
+  for (let i = 0; i < fotos.length; i++) {
+    const { maxWidth, quality } = parametrosCompressaoFoto(fotos.length);
+    out.push(await compressDataUrl(fotos[i], maxWidth, quality));
+  }
+  return out;
+}
+
+/** Gera miniaturas uma a uma — evita pico de memória no celular. */
+export async function gerarMiniaturasSequencial(fotos: string[]): Promise<string[]> {
+  const miniaturas: string[] = [];
+  for (const foto of fotos) {
+    miniaturas.push(await makeFotoThumbnail(foto, 240, 0.42));
+  }
+  return miniaturas;
+}
+
+/** Tamanho sugerido de cada lote no upload à nuvem (JSON). */
+export const FOTOS_UPLOAD_LOTE = 4;
 
 /** Comparação exata do conteúdo da imagem (base64). */
 export function isFotoDuplicada(
