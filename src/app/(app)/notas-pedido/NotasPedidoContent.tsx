@@ -145,6 +145,9 @@ export default function NotasPedidoContent() {
   const [localEntrega, setLocalEntrega] = useState("");
   const [fotosSessaoCount, setFotosSessaoCount] = useState(0);
   const [fotosNaNuvemCount, setFotosNaNuvemCount] = useState(0);
+  const [fotoAtualPreview, setFotoAtualPreview] = useState<string | null>(null);
+  const [entregasEnviadasNaSessao, setEntregasEnviadasNaSessao] = useState(0);
+  const [entregaFlashMsg, setEntregaFlashMsg] = useState("");
   const [envioProgresso, setEnvioProgresso] = useState<{ sent: number; total: number } | null>(null);
   const [fotoDuplicadaMsg, setFotoDuplicadaMsg] = useState("");
   const [processandoFoto, setProcessandoFoto] = useState(false);
@@ -153,6 +156,8 @@ export default function NotasPedidoContent() {
   const [observacoes, setObservacoes] = useState("");
   const [reenviarNotaId, setReenviarNotaId] = useState<string | null>(null);
   const fotoInputRef = useRef<HTMLInputElement>(null);
+  const fotoPreviewUrlRef = useRef<string | null>(null);
+  const entregaFlashTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const [selectedNota, setSelectedNota] = useState<NotaPedido | null>(null);
   const [conferenciaItens, setConferenciaItens] = useState<ItemForm[]>([]);
@@ -194,14 +199,30 @@ export default function NotasPedidoContent() {
   const [filaConferenciaTotal, setFilaConferenciaTotal] = useState(0);
   const [conferenciaTransicao, setConferenciaTransicao] = useState(false);
   const [conferenciaFotoErro, setConferenciaFotoErro] = useState("");
+  const [conferenciaFotoIdx, setConferenciaFotoIdx] = useState(0);
 
   const coopId = user && data ? getUserCooperativaId(user, data) : undefined;
   const ANEXAR_DRAFT_KEY = coopId ? `hb_anexar_draft_${coopId}` : "";
 
+  const revokeFotoPreview = useCallback(() => {
+    if (fotoPreviewUrlRef.current) {
+      URL.revokeObjectURL(fotoPreviewUrlRef.current);
+      fotoPreviewUrlRef.current = null;
+    }
+    setFotoAtualPreview(null);
+  }, []);
+
   const resetFotosSessaoUi = useCallback(() => {
+    revokeFotoPreview();
     setFotosSessaoCount(0);
     setFotosNaNuvemCount(0);
     setEnvioProgresso(null);
+  }, [revokeFotoPreview]);
+
+  const mostrarFlashEntrega = useCallback((msg: string) => {
+    if (entregaFlashTimerRef.current) clearTimeout(entregaFlashTimerRef.current);
+    setEntregaFlashMsg(msg);
+    entregaFlashTimerRef.current = setTimeout(() => setEntregaFlashMsg(""), 4000);
   }, []);
 
   const syncFotosSessaoFromDraft = useCallback(async () => {
@@ -289,6 +310,8 @@ export default function NotasPedidoContent() {
     setErroEnvio("");
     setAnexarSucesso(false);
     setReenviarNotaId(notaRejeitada?.id ?? null);
+    setEntregasEnviadasNaSessao(0);
+    setEntregaFlashMsg("");
     setInstituicaoId(notaRejeitada?.instituicaoId ?? "");
     setUsarEscolaAvulsa(Boolean(notaRejeitada?.escolaAvulsaNome?.trim()));
     setEscolaAvulsaNome(notaRejeitada?.escolaAvulsaNome ?? "");
@@ -748,13 +771,20 @@ export default function NotasPedidoContent() {
     if (fotoInputRef.current) fotoInputRef.current.value = "";
     if (!file || !data || !cooperadoId || !ANEXAR_DRAFT_KEY || fotoProcessandoRef.current || processandoFoto || enviando) return;
 
+    if (fotosSessaoCount >= 1) {
+      setFormErrors((err) => ({
+        ...err,
+        foto: "Envie esta foto antes de tirar outra — uma entrega por vez.",
+      }));
+      return;
+    }
+
     fotoProcessandoRef.current = true;
     setProcessandoFoto(true);
     setFotoDuplicadaMsg("");
     setErroEnvio("");
     try {
-      const qtdAtual = await countFotoDraft(ANEXAR_DRAFT_KEY);
-      const { maxWidth, quality } = parametrosCompressaoFoto(qtdAtual + 1);
+      const { maxWidth, quality } = parametrosCompressaoFoto(1);
       const dataUrl = await compressFotoFile(file, maxWidth, quality);
       const notasCooperado = data.notasPedido.filter((n) => n.cooperadoId === cooperadoId);
 
@@ -770,8 +800,8 @@ export default function NotasPedidoContent() {
       if (reenviarNotaId) {
         await clearFotoDraft(ANEXAR_DRAFT_KEY);
         await getOrCreatePendingNotaId(ANEXAR_DRAFT_KEY, () => reenviarNotaId);
-        setFotosSessaoCount(0);
-        setFotosNaNuvemCount(0);
+      } else {
+        await clearFotoDraft(ANEXAR_DRAFT_KEY);
       }
 
       const resolved = resolverContratoEntrega(data, coopId!, contratoInstId || undefined, {
@@ -789,7 +819,12 @@ export default function NotasPedidoContent() {
         reenviarNotaId ??
         (await getOrCreatePendingNotaId(ANEXAR_DRAFT_KEY, () => generateId("np")));
       const newIndex = await appendFotoDraftMeta(ANEXAR_DRAFT_KEY, contratoId, fingerprintFoto(dataUrl));
-      const totalCount = newIndex + 1;
+      const totalCount = 1;
+
+      revokeFotoPreview();
+      const previewUrl = URL.createObjectURL(file);
+      fotoPreviewUrlRef.current = previewUrl;
+      setFotoAtualPreview(previewUrl);
 
       const inst = data.instituicoes.find((i) => i.id === contratoId);
       const localEntregaDraft = inst?.localEntrega ?? inst?.endereco ?? "";
@@ -829,7 +864,7 @@ export default function NotasPedidoContent() {
             updatedAt: now,
           };
 
-      setEnvioProgresso({ sent: newIndex, total: totalCount });
+      setEnvioProgresso({ sent: 0, total: 1 });
       const uploaded = await uploadFotoImediataToCloud(
         cnpj,
         draftNota,
@@ -841,6 +876,7 @@ export default function NotasPedidoContent() {
 
       if (!uploaded.ok) {
         await removeFotoDraftAt(ANEXAR_DRAFT_KEY, newIndex);
+        revokeFotoPreview();
         setErroEnvio(
           uploaded.error ??
             "Não foi possível enviar a foto para a nuvem. Verifique a conexão e tente de novo."
@@ -849,11 +885,12 @@ export default function NotasPedidoContent() {
       }
 
       await markFotoDraftUploaded(ANEXAR_DRAFT_KEY, newIndex);
-      setFotosSessaoCount(totalCount);
-      setFotosNaNuvemCount(await countFotosUploadedDraft(ANEXAR_DRAFT_KEY));
+      setFotosSessaoCount(1);
+      setFotosNaNuvemCount(1);
       setEnvioProgresso(null);
       setFormErrors((err) => ({ ...err, foto: undefined }));
     } catch {
+      revokeFotoPreview();
       setErroEnvio("Não foi possível processar a foto. Tente outra imagem ou feche outros apps.");
     } finally {
       fotoProcessandoRef.current = false;
@@ -878,6 +915,7 @@ export default function NotasPedidoContent() {
       }
 
       await removeFotoDraftAt(ANEXAR_DRAFT_KEY, idx);
+      revokeFotoPreview();
       const count = await countFotoDraft(ANEXAR_DRAFT_KEY);
       const uploaded = await countFotosUploadedDraft(ANEXAR_DRAFT_KEY);
       setFotosSessaoCount(count);
@@ -936,7 +974,7 @@ export default function NotasPedidoContent() {
     const now = new Date().toISOString();
     const mes = getCurrentMesReferencia();
     const cooperadoNome = getCooperadoNome(workingData.cooperados, cid);
-    const qtdFotos = fotosSessaoCount;
+    const qtdFotos = 1;
 
     setEnviando(true);
     setEnvioProgresso(null);
@@ -1127,13 +1165,21 @@ export default function NotasPedidoContent() {
     limparRascunhoAnexar();
     resetFotosSessaoUi();
     setFotoDuplicadaMsg("");
-    setUltimaNotaEnviadaIds([notaFinalLocal.id]);
+    setUltimaNotaEnviadaIds((prev) => [...prev, notaFinalLocal.id]);
     if (isCooperado) setStatusFilter("aguardando_conferencia");
-    setAnexarSucesso(true);
-    setSuccessMsg(
-      qtdFotos === 1
-        ? "Entrega enviada! Aparece abaixo como Em análise — o responsável já pode conferir."
-        : `Entrega enviada com ${qtdFotos} fotos! Aparece abaixo como Em análise.`
+
+    if (reenviarNotaId) {
+      setAnexarSucesso(true);
+      setSuccessMsg("Entrega reenviada! O responsável já pode conferir.");
+      return;
+    }
+
+    const numero = entregasEnviadasNaSessao + 1;
+    setEntregasEnviadasNaSessao(numero);
+    mostrarFlashEntrega(
+      numero === 1
+        ? "Entrega 1 enviada! Tire a próxima foto."
+        : `Entrega ${numero} enviada! Tire a próxima foto ou toque Concluir.`
     );
   };
 
@@ -1151,6 +1197,7 @@ export default function NotasPedidoContent() {
     const d = getData() ?? data;
     if (opts?.transicao) setConferenciaTransicao(true);
     setConferenciaFotoErro("");
+    setConferenciaFotoIdx(0);
 
     let notaComFoto = nota;
     if (d && coopId) {
@@ -1485,17 +1532,6 @@ export default function NotasPedidoContent() {
     );
   };
 
-  const concluirEnvioFoto = () => {
-    const firstId = ultimaNotaEnviadaIds[0];
-    fecharAnexarModal(true);
-    setAbaCooperado("entregas");
-    if (firstId) {
-      requestAnimationFrame(() => {
-        document.getElementById(`nota-enviada-${firstId}`)?.scrollIntoView({ behavior: "smooth", block: "center" });
-      });
-    }
-  };
-
   const enviarOutraFoto = () => {
     setAnexarSucesso(false);
     resetFotosSessaoUi();
@@ -1503,6 +1539,18 @@ export default function NotasPedidoContent() {
     setErroEnvio("");
     setFormErrors({});
     limparRascunhoAnexar();
+  };
+
+  const concluirSessaoEntregas = () => {
+    const ids = ultimaNotaEnviadaIds;
+    fecharAnexarModal(true);
+    setAbaCooperado("entregas");
+    const lastId = ids[ids.length - 1];
+    if (lastId) {
+      requestAnimationFrame(() => {
+        document.getElementById(`nota-enviada-${lastId}`)?.scrollIntoView({ behavior: "smooth", block: "center" });
+      });
+    }
   };
 
   if (!data) {
@@ -1970,7 +2018,15 @@ export default function NotasPedidoContent() {
       <Modal
         open={anexarModal}
         onClose={() => fecharAnexarModal()}
-        title={anexarSucesso ? "Foto enviada!" : reenviarNotaId ? "Enviar de novo" : "Enviar foto da entrega"}
+        title={
+          anexarSucesso
+            ? "Foto enviada!"
+            : reenviarNotaId
+              ? "Enviar de novo"
+              : entregasEnviadasNaSessao > 0
+                ? `Entrega ${entregasEnviadasNaSessao + 1}`
+                : "Enviar foto da entrega"
+        }
         size="md"
         footer={
           anexarSucesso ? (
@@ -1978,7 +2034,7 @@ export default function NotasPedidoContent() {
               <Button type="button" variant="secondary" onClick={enviarOutraFoto}>
                 Enviar outra foto
               </Button>
-              <Button type="button" size="lg" onClick={concluirEnvioFoto}>
+              <Button type="button" size="lg" onClick={concluirSessaoEntregas}>
                 <CheckCircle size={18} /> Ver minhas entregas
               </Button>
             </div>
@@ -1987,22 +2043,23 @@ export default function NotasPedidoContent() {
               <Button type="button" variant="secondary" disabled={enviando} onClick={() => fecharAnexarModal()}>
                 Cancelar
               </Button>
+              {entregasEnviadasNaSessao > 0 && fotosSessaoCount === 0 && (
+                <Button type="button" variant="secondary" disabled={enviando} onClick={concluirSessaoEntregas}>
+                  <CheckCircle size={18} /> Concluir ({entregasEnviadasNaSessao} enviada{entregasEnviadasNaSessao > 1 ? "s" : ""})
+                </Button>
+              )}
               <Button
                 type="button"
                 size="lg"
                 onClick={() => void handleAnexarEntrega()}
-                disabled={fotosSessaoCount === 0 || enviando || processandoFoto}
+                disabled={fotosSessaoCount === 0 || fotosNaNuvemCount < 1 || enviando || processandoFoto}
               >
                 <FileText size={18} />{" "}
                 {enviando
-                  ? envioProgresso
-                    ? `Enviando foto ${envioProgresso.sent} de ${envioProgresso.total}…`
-                    : fotosSessaoCount > 1
-                      ? `Enviando ${fotosSessaoCount} fotos…`
-                      : "Enviando..."
+                  ? "Enviando entrega…"
                   : fotosSessaoCount > 0
-                    ? `Enviar entrega${fotosSessaoCount > 1 ? ` (${fotosSessaoCount} fotos)` : ""}`
-                    : "Enviar para a cooperativa"}
+                    ? "Enviar esta entrega"
+                    : "Tire uma foto primeiro"}
               </Button>
             </div>
           )
@@ -2020,45 +2077,37 @@ export default function NotasPedidoContent() {
               {erroEnvio}
             </AlertBanner>
           )}
+          {entregaFlashMsg && (
+            <AlertBanner variant="success" title="Entrega enviada">
+              {entregaFlashMsg}
+            </AlertBanner>
+          )}
           <p className="text-sm text-gray-600">
             {reenviarNotaId
-              ? "Tire novas fotos do pedido corrigido."
-              : "Cada envio conta como uma entrega. Você pode incluir várias fotos do mesmo pedido antes de enviar."}
+              ? "Tire a nova foto do pedido corrigido e envie."
+              : "Uma foto = uma entrega. Tire → confira → envie → tire a próxima, até lançar todas."}
           </p>
 
-          {!reenviarNotaId && (
+          {!reenviarNotaId && entregasEnviadasNaSessao > 0 && (
+            <div className="rounded-xl border border-green-200 bg-green-50/60 p-3 text-sm text-green-900">
+              <strong>{entregasEnviadasNaSessao}</strong>{" "}
+              {entregasEnviadasNaSessao === 1 ? "entrega já enviada" : "entregas já enviadas"} nesta sessão.
+              {fotosSessaoCount === 0 && " Tire a próxima foto abaixo."}
+            </div>
+          )}
+
+          {!reenviarNotaId && entregasEnviadasNaSessao === 0 && (
             <div className="rounded-xl border border-green-200 bg-green-50/60 p-4">
-              <div className="flex items-center justify-between gap-2 mb-2">
-                <span className="text-sm font-semibold text-green-900 flex items-center gap-2">
-                  <ImagePlus size={18} />
-                  {fotosSessaoCount === 0
-                    ? "Nenhuma imagem ainda"
-                    : `${fotosSessaoCount} ${fotosSessaoCount === 1 ? "imagem adicionada" : "imagens adicionadas"}`}
+              <div className="flex items-center gap-2 mb-1">
+                <ImagePlus size={18} className="text-green-700" />
+                <span className="text-sm font-semibold text-green-900">
+                  {fotosSessaoCount === 0 ? "Passo 1: tire a foto" : "Passo 2: envie esta entrega"}
                 </span>
-                {fotosSessaoCount > 0 && (
-                  <span className="text-xs font-bold text-green-800 bg-green-200 px-2 py-0.5 rounded-full">
-                    +{fotosSessaoCount}
-                  </span>
-                )}
               </div>
-              <div className="h-3 bg-green-100 rounded-full overflow-hidden">
-                <div
-                  className="h-full bg-green-600 rounded-full transition-all duration-500 ease-out"
-                  style={{
-                    width: envioProgresso
-                      ? `${Math.round((envioProgresso.sent / envioProgresso.total) * 100)}%`
-                      : `${Math.min(100, Math.max(fotosSessaoCount * 8, fotosSessaoCount > 0 ? 8 : 0))}%`,
-                  }}
-                />
-              </div>
-              <p className="text-xs text-green-800 mt-2">
-                {envioProgresso
-                  ? `Enviando uma foto por vez (${envioProgresso.sent}/${envioProgresso.total}) — memória do celular protegida.`
-                  : fotosSessaoCount === 0
-                    ? "Adicione as fotos deste envio."
-                    : fotosSessaoCount >= 6
-                      ? "Quantas fotos precisar: cada uma fica guardada no aparelho e é enviada individualmente."
-                      : "Continue adicionando fotos ou toque em Enviar entrega quando terminar."}
+              <p className="text-xs text-green-800">
+                {fotosSessaoCount === 0
+                  ? "Depois de enviar, aparece o campo para a próxima foto."
+                  : "Toque em Enviar esta entrega — em seguida você tira a próxima."}
               </p>
             </div>
           )}
@@ -2104,47 +2153,64 @@ export default function NotasPedidoContent() {
             )}
           </FormField>
 
-          <FormField label={reenviarNotaId ? "Nova foto" : "Adicionar foto do pedido"} required error={formErrors.foto} hint="Mostre o pedido inteiro com a assinatura de quem recebeu.">
-            <label className={`flex flex-col items-center gap-2 p-8 border-2 border-dashed border-green-400 rounded-2xl bg-green-50/50 ${processandoFoto || enviando ? "opacity-60 pointer-events-none" : "cursor-pointer active:bg-green-100"}`}>
-              <Camera size={48} className="text-green-700" />
-              <span className="text-base font-semibold text-green-800">
-                {processandoFoto ? "Processando foto..." : fotosSessaoCount === 0 ? "Tirar foto agora" : "Tirar outra foto"}
-              </span>
-              <input ref={fotoInputRef} type="file" accept="image/*" capture="environment" className="hidden" onChange={(e) => void handleFoto(e)} disabled={processandoFoto || enviando} />
-            </label>
-          </FormField>
-
-          {fotosSessaoCount > 0 && (
-            <div className="space-y-2">
-              <p className="text-sm text-green-800 font-medium">
-                {fotosNaNuvemCount >= fotosSessaoCount
-                  ? `${fotosSessaoCount} ${fotosSessaoCount === 1 ? "foto na nuvem" : "fotos na nuvem"} — pronta para enviar`
-                  : `Enviando foto ${fotosNaNuvemCount + 1} de ${fotosSessaoCount} para a nuvem…`}
-              </p>
-              <div className="flex flex-wrap gap-2">
-                {Array.from({ length: fotosSessaoCount }, (_, index) => (
-                  <div
-                    key={index}
-                    className="relative flex items-center justify-center w-16 h-16 rounded-lg border-2 border-green-300 bg-green-50"
-                  >
-                    <span className="text-lg font-bold text-green-800">{index + 1}</span>
-                    {index < fotosNaNuvemCount && (
-                      <span className="absolute bottom-1 right-1 w-2.5 h-2.5 rounded-full bg-green-600" title="Na nuvem" />
+          <FormField
+            label={
+              reenviarNotaId
+                ? "Nova foto"
+                : entregasEnviadasNaSessao > 0
+                  ? `Foto da entrega ${entregasEnviadasNaSessao + 1}`
+                  : "Foto da entrega"
+            }
+            required
+            error={formErrors.foto}
+            hint="Mostre o pedido inteiro com a assinatura de quem recebeu."
+          >
+            {fotosSessaoCount === 0 ? (
+              <label className={`flex flex-col items-center gap-2 p-8 border-2 border-dashed border-green-400 rounded-2xl bg-green-50/50 ${processandoFoto || enviando ? "opacity-60 pointer-events-none" : "cursor-pointer active:bg-green-100"}`}>
+                <Camera size={48} className="text-green-700" />
+                <span className="text-base font-semibold text-green-800">
+                  {processandoFoto
+                    ? "Enviando para a nuvem..."
+                    : entregasEnviadasNaSessao > 0
+                      ? "Tirar próxima foto"
+                      : "Tirar foto agora"}
+                </span>
+                <input ref={fotoInputRef} type="file" accept="image/*" capture="environment" className="hidden" onChange={(e) => void handleFoto(e)} disabled={processandoFoto || enviando} />
+              </label>
+            ) : (
+              <div className="space-y-3">
+                {fotoAtualPreview && (
+                  <div className="relative rounded-xl overflow-hidden border-2 border-green-300 bg-black/5">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={fotoAtualPreview}
+                      alt="Foto desta entrega"
+                      className="w-full max-h-72 object-contain mx-auto bg-gray-900/5"
+                    />
+                    {fotosNaNuvemCount >= 1 && (
+                      <span className="absolute top-2 left-2 bg-green-700 text-white text-xs font-semibold px-2 py-1 rounded-full">
+                        Na nuvem
+                      </span>
                     )}
-                    <button
-                      type="button"
-                      onClick={() => removerFotoSessao(index)}
-                      disabled={processandoFoto || enviando}
-                      className="absolute -top-2 -right-2 bg-red-600 text-white rounded-full p-1 opacity-90 hover:opacity-100 disabled:opacity-40"
-                      aria-label="Remover foto"
-                    >
-                      <X size={12} />
-                    </button>
                   </div>
-                ))}
+                )}
+                <div className="flex gap-2">
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    size="sm"
+                    disabled={enviando || processandoFoto}
+                    onClick={() => removerFotoSessao(0)}
+                  >
+                    <X size={14} className="mr-1" /> Tirar outra
+                  </Button>
+                </div>
+                <p className="text-sm text-green-800 font-medium">
+                  Confira a foto e toque em <strong>Enviar esta entrega</strong>. Depois aparece a próxima.
+                </p>
               </div>
-            </div>
-          )}
+            )}
+          </FormField>
           <div className="border border-gray-200 rounded-xl p-4 space-y-3">
             <label className="flex items-start gap-3 cursor-pointer">
               <input
@@ -2352,18 +2418,41 @@ export default function NotasPedidoContent() {
               <div className="flex-1 flex items-center justify-center p-4 min-h-[40vh] lg:min-h-0 overflow-y-auto">
                 {(() => {
                   const fotos = getFotosExibicaoNota(selectedNota);
+                  const idx = Math.min(conferenciaFotoIdx, Math.max(0, fotos.length - 1));
                   if (fotos.length > 0) {
                     return (
-                      <div className={cn("w-full space-y-3", fotos.length > 1 && "max-h-[70vh] lg:max-h-[calc(100dvh-12rem)]")}>
-                        {fotos.map((foto, i) => (
-                          // eslint-disable-next-line @next/next/no-img-element
-                          <img
-                            key={i}
-                            src={foto}
-                            alt={`Pedido ${i + 1}`}
-                            className="max-w-full max-h-[70vh] lg:max-h-[calc(100dvh-12rem)] object-contain mx-auto"
-                          />
-                        ))}
+                      <div className="w-full space-y-3">
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img
+                          src={fotos[idx]}
+                          alt={`Pedido ${idx + 1} de ${fotos.length}`}
+                          className="max-w-full max-h-[70vh] lg:max-h-[calc(100dvh-12rem)] object-contain mx-auto"
+                        />
+                        {fotos.length > 1 && (
+                          <div className="flex items-center justify-center gap-3 text-white/90 text-sm">
+                            <Button
+                              type="button"
+                              variant="secondary"
+                              size="sm"
+                              disabled={idx <= 0}
+                              onClick={() => setConferenciaFotoIdx((i) => Math.max(0, i - 1))}
+                            >
+                              Anterior
+                            </Button>
+                            <span className="font-medium tabular-nums">
+                              Foto {idx + 1} de {fotos.length}
+                            </span>
+                            <Button
+                              type="button"
+                              variant="secondary"
+                              size="sm"
+                              disabled={idx >= fotos.length - 1}
+                              onClick={() => setConferenciaFotoIdx((i) => Math.min(fotos.length - 1, i + 1))}
+                            >
+                              Próxima foto
+                            </Button>
+                          </div>
+                        )}
                       </div>
                     );
                   }
@@ -2427,8 +2516,8 @@ export default function NotasPedidoContent() {
                 const qtdFotosModal = getFotosExibicaoNota(selectedNota).length;
                 if (qtdFotosModal <= 1) return null;
                 return (
-                  <AlertBanner variant="info" title={`${qtdFotosModal} fotos = 1 entrega`}>
-                    Role à esquerda para ver todas as páginas do pedido. Ao aprovar, o valor inteiro vai para a ficha de uma só vez — não é preciso conferir foto por foto.
+                  <AlertBanner variant="info" title={`${qtdFotosModal} fotos nesta entrega`}>
+                    Veja foto por foto à esquerda. Ao aprovar, o valor inteiro vai para a ficha de uma só vez.
                   </AlertBanner>
                 );
               })()}
