@@ -211,6 +211,21 @@ export async function uploadNotaFotoPart(
   fotoDataUrl: string,
   cooperadoNome?: string
 ): Promise<{ ok: true } | { ok: false; error: string }> {
+  const jpeg = dataUrlToBuffer(fotoDataUrl);
+  return uploadNotaFotoPartBuffer(supabase, cnpj, nota, index, totalCount, jpeg, cooperadoNome);
+}
+
+/** Upload direto de bytes JPEG — usado com FormData (sem base64 no celular). */
+export async function uploadNotaFotoPartBuffer(
+  supabase: SupabaseClient,
+  cnpj: string,
+  nota: NotaPedido,
+  index: number,
+  totalCount: number,
+  jpeg: Buffer,
+  cooperadoNome?: string,
+  contentType = "image/jpeg"
+): Promise<{ ok: true } | { ok: false; error: string }> {
   await ensureEntregasBucket(supabase);
 
   const metaPayload: NotaPedido = {
@@ -226,11 +241,10 @@ export async function uploadNotaFotoPart(
     updatedAt: new Date().toISOString(),
   };
 
-  const jpeg = dataUrlToBuffer(fotoDataUrl);
   const { error: fotoErr } = await supabase.storage
     .from(BUCKET)
     .upload(fotoPartPath(cnpj, nota.id, index), jpeg, {
-      contentType: "image/jpeg",
+      contentType,
       upsert: true,
     });
   if (fotoErr) {

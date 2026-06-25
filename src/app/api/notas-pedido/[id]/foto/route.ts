@@ -8,31 +8,85 @@ import {
   fetchNotaMetaFromStorage,
   notaPayloadForTable,
   uploadNotaFotoPart,
+  uploadNotaFotoPartBuffer,
   upsertNotasInTable,
 } from "@/lib/supabase/notasStorage";
 
-export async function POST(
-  request: Request,
-  context: { params: Promise<{ id: string }> }
-) {
-  if (!isSupabaseConfigured()) {
-    return NextResponse.json({ configured: false }, { status: 503 });
+interface FotoUploadInput {
+  cnpj: string;
+  index: number;
+  totalCount: number;
+  cooperadoNome: string;
+  notaBody?: NotaPedido;
+  isDraft: boolean;
+  fotoDataUrl?: string;
+  fotoBuffer?: Buffer;
+  mimeType?: string;
+}
+
+async function parseFotoUploadRequest(request: Request): Promise<FotoUploadInput | { error: string }> {
+  const contentType = request.headers.get("content-type") ?? "";
+
+  if (contentType.includes("multipart/form-data")) {
+    const form = await request.formData();
+    const cnpj = normalizeCnpj(String(form.get("cnpj") ?? ""));
+    const index = Number(form.get("index"));
+    const totalCount = Number(form.get("totalCount"));
+    const cooperadoNome = String(form.get("cooperadoNome") ?? "").trim();
+    const isDraft = form.get("draft") === "true";
+    const notaRaw = form.get("nota");
+    let notaBody: NotaPedido | undefined;
+    if (typeof notaRaw === "string" && notaRaw.trim()) {
+      try {
+        notaBody = JSON.parse(notaRaw) as NotaPedido;
+      } catch {
+        return { error: "Metadados da entrega inválidos." };
+      }
+    }
+    const file = form.get("foto");
+    if (!(file instanceof Blob) || file.size === 0) {
+      return { error: "Foto ausente ou inválida." };
+    }
+    const fotoBuffer = Buffer.from(await file.arrayBuffer());
+    const mimeType = String(form.get("mimeType") ?? file.type ?? "image/jpeg");
+    if (cnpj.length !== 14 || !Number.isFinite(index) || !Number.isFinite(totalCount)) {
+      return { error: "Dados inválidos." };
+    }
+    return { cnpj, index, totalCount, cooperadoNome, notaBody, isDraft, fotoBuffer, mimeType };
   }
 
-  const { id } = await context.params;
   const body = await request.json().catch(() => null);
   if (!body?.foto || typeof body.index !== "number" || typeof body.totalCount !== "number") {
-    return NextResponse.json({ error: "Corpo inválido." }, { status: 400 });
+    return { error: "Corpo inválido." };
   }
 
   const cnpj = normalizeCnpj(String(body.cnpj ?? ""));
   const index = body.index as number;
   const totalCount = body.totalCount as number;
-  const foto = String(body.foto);
   const cooperadoNome = String(body.cooperadoNome ?? "").trim();
   const notaBody = body.nota as NotaPedido | undefined;
+  const isDraft = body.draft === true || notaBody?.status === "rascunho";
 
-  if (cnpj.length !== 14 || index < 0 || totalCount < 1 || index >= totalCount) {
+  if (cnpj.length !== 14) {
+    return { error: "Dados inválidos." };
+  }
+
+  return {
+    cnpj,
+    index,
+    totalCount,
+    cooperadoNome,
+    notaBody,
+    isDraft,
+    fotoDataUrl: String(body.foto),
+  };
+}
+
+async function processFotoUpload(id: string, input: FotoUploadInput) {
+  const { cnpj, index, totalCount, cooperadoNome, notaBody, isDraft, fotoDataUrl, fotoBuffer, mimeType } =
+    input;
+
+  if (index < 0 || totalCount < 1 || index >= totalCount) {
     return NextResponse.json({ error: "Dados inválidos." }, { status: 400 });
   }
 
@@ -42,8 +96,6 @@ export async function POST(
   }
 
   let metaNota: NotaPedido | null = null;
-
-  const isDraft = body.draft === true || notaBody?.status === "rascunho";
 
   if (index === 0) {
     if (!notaBody?.id || notaBody.id !== id) {
@@ -99,15 +151,27 @@ export async function POST(
     }
   }
 
-  const uploaded = await uploadNotaFotoPart(
-    supabase,
-    cnpj,
-    metaNota,
-    index,
-    totalCount,
-    foto,
-    cooperadoNome
-  );
+  const uploaded = fotoBuffer
+    ? await uploadNotaFotoPartBuffer(
+        supabase,
+        cnpj,
+        metaNota,
+        index,
+        totalCount,
+        fotoBuffer,
+        cooperadoNome,
+        mimeType ?? "image/jpeg"
+      )
+    : await uploadNotaFotoPart(
+        supabase,
+        cnpj,
+        metaNota,
+        index,
+        totalCount,
+        fotoDataUrl!,
+        cooperadoNome
+      );
+
   if (!uploaded.ok) {
     return NextResponse.json({ error: uploaded.error }, { status: 500 });
   }
@@ -128,6 +192,23 @@ export async function POST(
   }
 
   return NextResponse.json({ success: true, index, totalCount });
+}
+
+export async function POST(
+  request: Request,
+  context: { params: Promise<{ id: string }> }
+) {
+  if (!isSupabaseConfigured()) {
+    return NextResponse.json({ configured: false }, { status: 503 });
+  }
+
+  const { id } = await context.params;
+  const parsed = await parseFotoUploadRequest(request);
+  if ("error" in parsed) {
+    return NextResponse.json({ error: parsed.error }, { status: 400 });
+  }
+
+  return processFotoUpload(id, parsed);
 }
 
 export async function DELETE(

@@ -11,6 +11,7 @@ import {
   flushPendingNotaDeletes,
   fetchNotaPedidoFromCloud,
   finalizeNotaEntregaNaNuvem,
+  syncOfflineDeliveryImages,
 } from "@/services/notaPedidoCloudService";
 import {
   SYNC_INTERVAL_MS,
@@ -38,6 +39,7 @@ export function CooperativaSyncProvider({ children }: { children: React.ReactNod
       if (!cnpj) return;
 
       await flushPendingCooperadoPushes(cnpj);
+      await syncOfflineDeliveryImages();
       const pushCatalog = isDiretoriaRole(user.role as UserRole);
       const pushMensalidades = isDiretoriaRole(user.role as UserRole);
       await flushPendingNotaDeletes(cnpj);

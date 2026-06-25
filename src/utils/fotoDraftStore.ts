@@ -263,14 +263,20 @@ export async function getFotoDraftData(_coopKey: string, _index: number): Promis
 }
 
 export async function isFotoDraftDuplicada(coopKey: string, dataUrl: string): Promise<boolean> {
-  const fp = fingerprintFoto(dataUrl);
+  return isFotoDraftDuplicadaByFingerprint(coopKey, fingerprintFoto(dataUrl));
+}
+
+export async function isFotoDraftDuplicadaByFingerprint(
+  coopKey: string,
+  fingerprint: string
+): Promise<boolean> {
   const meta = await loadFotoDraftMeta(coopKey);
   if (!meta?.count) return false;
   const db = await openDb();
   try {
     for (let i = 0; i < meta.count; i++) {
       const row = await txGetFoto(db, coopKey, i);
-      if (row?.fingerprint === fp) return true;
+      if (row?.fingerprint === fingerprint) return true;
     }
     return false;
   } finally {

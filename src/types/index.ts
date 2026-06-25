@@ -199,6 +199,23 @@ export interface NotaPedidoItem {
   valorBruto: number;
 }
 
+export type NotaPedidoFotoStatus = "local_pending" | "uploading" | "uploaded" | "failed";
+
+/** Metadados leves de foto — imagem fica no Supabase Storage, não no localStorage. */
+export interface NotaPedidoFoto {
+  id: string;
+  storagePath?: string;
+  url?: string;
+  thumbnailUrl?: string;
+  mimeType: string;
+  sizeBytes: number;
+  width: number;
+  height: number;
+  status: NotaPedidoFotoStatus;
+  createdAt: string;
+  index?: number;
+}
+
 export interface NotaPedido {
   id: string;
   cooperativaId: string;
@@ -221,6 +238,8 @@ export interface NotaPedido {
   /** Miniatura leve — lista no aparelho do cooperado após envio à nuvem. */
   fotoPedidoMiniatura?: string;
   fotosPedidoMiniaturas?: string[];
+  /** Metadados leves das fotos (Storage) — preferir em novos envios. */
+  fotosMeta?: NotaPedidoFoto[];
   /** Foto completa está no Supabase (não duplicar no navegador). */
   fotoNaNuvem?: boolean;
   /** Quantidade de fotos no envio — usado para reenviar se a nuvem perdeu alguma. */

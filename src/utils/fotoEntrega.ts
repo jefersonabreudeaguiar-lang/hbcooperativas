@@ -4,19 +4,109 @@ import { normalizeCnpj } from "@/utils/cooperativa";
 /** Reduz tamanho da foto para caber no armazenamento e enviar à nuvem. */
 export async function compressFotoFile(
   file: File,
-  maxWidth = 960,
-  quality = 0.62
+  maxWidth = 640,
+  quality = 0.48
 ): Promise<string> {
+  const blob = await compressFotoFileToBlob(file, maxWidth, quality);
+  return blobToDataUrl(blob);
+}
+
+/** Comprime para Blob JPEG — evita base64 na memória (≈33% menor no celular). */
+export async function compressFotoFileToBlob(
+  file: File,
+  maxWidth = 640,
+  quality = 0.48
+): Promise<Blob> {
+  if (file.size > 24 * 1024 * 1024) {
+    throw new Error("Arquivo muito grande. Use a câmera do app ou uma foto menor.");
+  }
   if (typeof document === "undefined") {
     const raw = await readFileAsDataUrl(file);
-    return compressDataUrl(raw, maxWidth, quality);
+    const dataUrl = await compressDataUrl(raw, maxWidth, quality);
+    return dataUrlToBlob(dataUrl);
   }
   const objectUrl = URL.createObjectURL(file);
   try {
-    return await compressImageFromUrl(objectUrl, maxWidth, quality);
+    return await compressImageUrlToBlob(objectUrl, maxWidth, quality);
   } finally {
     URL.revokeObjectURL(objectUrl);
   }
+}
+
+export function blobToDataUrl(blob: Blob): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result as string);
+    reader.onerror = () => reject(new Error("Falha ao ler foto comprimida."));
+    reader.readAsDataURL(blob);
+  });
+}
+
+export function dataUrlToBlob(dataUrl: string): Blob {
+  const base64 = dataUrl.includes(",") ? dataUrl.split(",")[1] : dataUrl;
+  const binary = atob(base64);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+  return new Blob([bytes], { type: "image/jpeg" });
+}
+
+/** Hash leve do arquivo original — sem carregar a imagem inteira na RAM. */
+export async function fingerprintFotoFile(file: File): Promise<string> {
+  const head = file.slice(0, 4096);
+  const tail = file.size > 8192 ? file.slice(file.size - 4096) : file.slice(0);
+  const [headBuf, tailBuf] = await Promise.all([head.arrayBuffer(), tail.arrayBuffer()]);
+  let h = 2166136261;
+  const mix = (buf: ArrayBuffer) => {
+    const arr = new Uint8Array(buf);
+    for (let i = 0; i < arr.length; i++) {
+      h ^= arr[i];
+      h = Math.imul(h, 16777619);
+    }
+  };
+  mix(headBuf);
+  mix(tailBuf);
+  return `${file.size}-${file.lastModified}-${(h >>> 0).toString(36)}`;
+}
+
+function compressImageUrlToBlob(src: string, maxWidth: number, quality: number): Promise<Blob> {
+  if (typeof document === "undefined") {
+    return Promise.reject(new Error("Canvas indisponível."));
+  }
+
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => {
+      const scale = Math.min(1, maxWidth / Math.max(img.width, 1));
+      const w = Math.max(1, Math.round(img.width * scale));
+      const h = Math.max(1, Math.round(img.height * scale));
+      const canvas = document.createElement("canvas");
+      canvas.width = w;
+      canvas.height = h;
+      const ctx = canvas.getContext("2d");
+      if (!ctx) {
+        img.src = "";
+        reject(new Error("Canvas indisponível."));
+        return;
+      }
+      ctx.drawImage(img, 0, 0, w, h);
+      img.src = "";
+      canvas.toBlob(
+        (blob) => {
+          canvas.width = 0;
+          canvas.height = 0;
+          if (blob) resolve(blob);
+          else reject(new Error("Memória insuficiente para comprimir a foto."));
+        },
+        "image/jpeg",
+        quality
+      );
+    };
+    img.onerror = () => {
+      img.src = "";
+      reject(new Error("Falha ao ler a imagem."));
+    };
+    img.src = src;
+  });
 }
 
 /** Miniatura para listas no aparelho do cooperado (poucos KB). */
@@ -88,6 +178,13 @@ export function getFotoExibicaoNota(nota: NotaPedido): string | undefined {
 }
 
 export function getFotosExibicaoNota(nota: NotaPedido): string[] {
+  const fromMeta = (nota.fotosMeta ?? [])
+    .filter((f) => f.url || f.thumbnailUrl)
+    .sort((a, b) => (a.index ?? 0) - (b.index ?? 0))
+    .map((f) => f.url ?? f.thumbnailUrl!)
+    .filter(Boolean);
+  if (fromMeta.length > 0) return fromMeta;
+
   if (nota.fotosPedido?.length) {
     return nota.fotosPedido
       .map((f, i) => f ?? nota.fotosPedidoMiniaturas?.[i])
@@ -288,14 +385,9 @@ export function liberarEspacoArmazenamento(data: AppData, nivel: 1 | 2 = 1): App
   return next;
 }
 
-export function parametrosCompressaoFoto(qtdNaSessao: number): { maxWidth: number; quality: number } {
-  if (qtdNaSessao >= 25) return { maxWidth: 420, quality: 0.38 };
-  if (qtdNaSessao >= 20) return { maxWidth: 460, quality: 0.4 };
-  if (qtdNaSessao >= 15) return { maxWidth: 500, quality: 0.42 };
-  if (qtdNaSessao >= 10) return { maxWidth: 540, quality: 0.44 };
-  if (qtdNaSessao >= 6) return { maxWidth: 600, quality: 0.46 };
-  if (qtdNaSessao >= 3) return { maxWidth: 680, quality: 0.5 };
-  return { maxWidth: 760, quality: 0.55 };
+export function parametrosCompressaoFoto(_qtdNaSessao: number): { maxWidth: number; quality: number } {
+  /** Mesma compressão sempre — sem limite de quantidade; leve para celular. */
+  return { maxWidth: 640, quality: 0.48 };
 }
 
 /** Comprime todas as fotos da sessão antes do envio (libera memória dos originais maiores). */

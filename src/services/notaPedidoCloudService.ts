@@ -398,6 +398,16 @@ export async function patchNotaPedidoInCloud(
   }
 }
 
+import { flushPendingDeliveryImages } from "@/services/offlineImageQueueService";
+
+export async function syncOfflineDeliveryImages(): Promise<{
+  uploaded: number;
+  failed: number;
+  remaining: number;
+}> {
+  return flushPendingDeliveryImages();
+}
+
 /** Envia uma foto para a nuvem assim que tirada (entrega fica em rascunho até Enviar). */
 export async function uploadFotoImediataToCloud(
   cnpj: string,
@@ -434,6 +444,61 @@ export async function uploadFotoImediataToCloud(
         nota: metaNota,
         cooperadoNome: index === 0 ? cooperadoNome : undefined,
       }),
+    });
+    const json = await res.json().catch(() => ({}));
+    if (res.status === 503) {
+      return { ok: false, offline: true, error: (json.error as string) ?? "Nuvem indisponível." };
+    }
+    if (!res.ok) {
+      return {
+        ok: false,
+        error: (json.error as string) ?? `Erro ao enviar foto ${index + 1} para a nuvem.`,
+      };
+    }
+    return { ok: true };
+  } catch {
+    return { ok: false, offline: true, error: "Sem conexão com o servidor." };
+  }
+}
+
+/** Envia foto comprimida como Blob (FormData) — memória constante no celular. */
+export async function uploadFotoBlobToCloud(
+  cnpj: string,
+  nota: NotaPedido,
+  index: number,
+  totalCount: number,
+  fotoBlob: Blob,
+  cooperadoNome?: string,
+  ext: "jpg" | "webp" = "jpg"
+): Promise<{ ok: boolean; offline?: boolean; error?: string }> {
+  const digits = normalizeCnpj(cnpj);
+  if (digits.length !== 14) return { ok: false, error: "CNPJ inválido." };
+
+  const metaNota: NotaPedido = {
+    ...nota,
+    status: "rascunho",
+    fotosEnviadasCount: totalCount,
+    fotoNaNuvem: true,
+    fotoPedido: undefined,
+    fotosPedido: undefined,
+    fotoPedidoMiniatura: undefined,
+    fotosPedidoMiniaturas: undefined,
+  };
+
+  try {
+    const form = new FormData();
+    form.append("cnpj", digits);
+    form.append("index", String(index));
+    form.append("totalCount", String(totalCount));
+    form.append("draft", "true");
+    form.append("foto", fotoBlob, `foto-${String(index).padStart(3, "0")}.${ext}`);
+    form.append("mimeType", fotoBlob.type || (ext === "webp" ? "image/webp" : "image/jpeg"));
+    form.append("nota", JSON.stringify(metaNota));
+    if (index === 0 && cooperadoNome) form.append("cooperadoNome", cooperadoNome);
+
+    const res = await fetch(`/api/notas-pedido/${encodeURIComponent(nota.id)}/foto`, {
+      method: "POST",
+      body: form,
     });
     const json = await res.json().catch(() => ({}));
     if (res.status === 503) {

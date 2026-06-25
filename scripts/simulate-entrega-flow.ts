@@ -416,10 +416,11 @@ function simFilaConferenciaGrupos() {
 }
 
 function simCompressaoProgressiva() {
-  for (const qtd of [1, 3, 10, 21, 25, 30]) {
+  const base = parametrosCompressaoFoto(1);
+  for (const qtd of [1, 3, 10, 21, 25, 50, 100]) {
     const p = parametrosCompressaoFoto(qtd);
     assert(`compressão qtd=${qtd} maxWidth>0`, p.maxWidth > 0 && p.quality > 0 && p.quality <= 1);
-    if (qtd >= 25) assert(`qtd=${qtd} usa resolução baixa`, p.maxWidth <= 420);
+    assert(`qtd=${qtd} usa mesma compressão leve`, p.maxWidth === base.maxWidth && p.quality === base.quality);
   }
 }
 
@@ -555,7 +556,7 @@ function simUmaEntregaCom25Fotos() {
   const nota = makeNota("f25", { fotosCount: 25, fotosEnviadasCount: 25 });
   assert("25 fotos contadas", contarFotosEnviadasNota(nota) === 25);
   const p = parametrosCompressaoFoto(25);
-  assert("compressão 25 fotos", p.maxWidth === 420);
+  assert("compressão 25 fotos", p.maxWidth === 640);
   assert("nota pertence cooperativa", notaPertenceCooperativa(d, nota, COOP_ID));
 }
 

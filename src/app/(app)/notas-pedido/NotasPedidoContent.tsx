@@ -28,7 +28,7 @@ import {
   getCooperativaCnpj,
   patchNotaPedidoInCloud,
   pushNotasPedidoToCloud,
-  uploadFotoImediataToCloud,
+  syncOfflineDeliveryImages,
   finalizeNotaEntregaNaNuvem,
   deleteFotoRascunhoFromCloud,
   deleteNotaPedidoFromCloud,
@@ -36,6 +36,20 @@ import {
   ensureNotaComFoto,
   resolveCooperativaCnpj,
 } from "@/services/notaPedidoCloudService";
+import {
+  processDeliveryImage,
+  uploadImageToSupabase,
+  validateImageFile,
+  revokePreviewUrl,
+  userFacingPipelineError,
+  appendFotoMetaToNota,
+  buildNotaPedidoFotoMeta,
+  type ImagePipelineStep,
+} from "@/services/imagePipelineService";
+import {
+  enqueuePendingDeliveryImage,
+  buildPendingImageId,
+} from "@/services/offlineImageQueueService";
 import { listCooperadosDaCooperativa, pushCooperadoToCloud, resolverCooperadoIdCanonico, getCooperadoNomeResolvido, notaPertenceCooperado } from "@/services/cooperadoCloudService";
 import { pushOperacionalToCloud, syncContratosFromCloud } from "@/services/cooperativaSyncCloudService";
 import { getProdutosContrato } from "@/services/catalogoContratosService";
@@ -52,15 +66,14 @@ import {
   resolverInstituicaoConferencia,
 } from "@/utils/instituicaoPreferida";
 import { getCooperadoNome } from "@/utils/calculations";
-import { isFotoDuplicada, compressFotoFile, getFotoExibicaoNota, getFotosExibicaoNota, notaPertenceCooperativa, compactarFotosNoArmazenamento, liberarEspacoArmazenamento, parametrosCompressaoFoto, agruparPendentesPorCooperado, getChaveGrupoConferencia, notaPertenceGrupoConferencia, contarFotosEnviadasNota, contarFotosEnviadasNotas, resolverAbaConferenciaAtiva } from "@/utils/fotoEntrega";
+import { fingerprintFotoFile, getFotoExibicaoNota, getFotosExibicaoNota, notaPertenceCooperativa, compactarFotosNoArmazenamento, liberarEspacoArmazenamento, agruparPendentesPorCooperado, getChaveGrupoConferencia, notaPertenceGrupoConferencia, contarFotosEnviadasNota, contarFotosEnviadasNotas, resolverAbaConferenciaAtiva } from "@/utils/fotoEntrega";
 import {
   loadFotoDraftMeta,
   clearFotoDraft,
   appendFotoDraftMeta,
   countFotoDraft,
   countFotosUploadedDraft,
-  fingerprintFoto,
-  isFotoDraftDuplicada,
+  isFotoDraftDuplicadaByFingerprint,
   getOrCreatePendingNotaId,
   removeFotoDraftAt,
   markFotoDraftUploaded,
@@ -151,6 +164,8 @@ export default function NotasPedidoContent() {
   const [fotoAtualPreview, setFotoAtualPreview] = useState<string | null>(null);
   const [envioProgresso, setEnvioProgresso] = useState<{ sent: number; total: number } | null>(null);
   const [fotoDuplicadaMsg, setFotoDuplicadaMsg] = useState("");
+  const [fotoPipelineStep, setFotoPipelineStep] = useState<ImagePipelineStep | "idle">("idle");
+  const [fotoValidationWarning, setFotoValidationWarning] = useState("");
   const [processandoFoto, setProcessandoFoto] = useState(false);
   const [enviando, setEnviando] = useState(false);
   const [erroEnvio, setErroEnvio] = useState("");
@@ -193,6 +208,8 @@ export default function NotasPedidoContent() {
 
   const anexarParamHandledRef = useRef(false);
   const fotoProcessandoRef = useRef(false);
+  const fotoAbortRef = useRef<AbortController | null>(null);
+  const lastFotoFileRef = useRef<File | null>(null);
   const lancandoRef = useRef(false);
   const filaConferenciaRef = useRef<{ total: number; concluidas: number; chave: string } | null>(null);
   const [filaConferenciaPos, setFilaConferenciaPos] = useState(0);
@@ -207,19 +224,22 @@ export default function NotasPedidoContent() {
   const ANEXAR_DRAFT_KEY = coopId ? `hb_anexar_draft_${coopId}` : "";
 
   const revokeFotoPreview = useCallback(() => {
-    if (fotoPreviewUrlRef.current) {
-      URL.revokeObjectURL(fotoPreviewUrlRef.current);
-      fotoPreviewUrlRef.current = null;
-    }
+    revokePreviewUrl(fotoPreviewUrlRef.current);
+    fotoPreviewUrlRef.current = null;
     setFotoAtualPreview(null);
   }, []);
 
   const resetFotosSessaoUi = useCallback(() => {
+    fotoAbortRef.current?.abort();
+    fotoAbortRef.current = null;
     revokeFotoPreview();
     setFotosSessaoCount(0);
     setFotosConfirmadasNaSessao(0);
     setFotosNaNuvemCount(0);
     setEnvioProgresso(null);
+    setFotoPipelineStep("idle");
+    setFotoValidationWarning("");
+    lastFotoFileRef.current = null;
   }, [revokeFotoPreview]);
 
   const syncFotosSessaoFromDraft = useCallback(async () => {
@@ -274,6 +294,14 @@ export default function NotasPedidoContent() {
   };
 
   useEffect(() => {
+    if (!isCooperado) return;
+    const flush = () => void syncOfflineDeliveryImages();
+    flush();
+    window.addEventListener("online", flush);
+    return () => window.removeEventListener("online", flush);
+  }, [isCooperado]);
+
+  useEffect(() => {
     if (!ANEXAR_DRAFT_KEY) return;
     void loadFotoDraftMeta(ANEXAR_DRAFT_KEY).then((meta) => {
       if (!meta?.count) return;
@@ -321,6 +349,10 @@ export default function NotasPedidoContent() {
     }
 
     let currentData = data ?? getData();
+    if (isCooperado && currentData) {
+      updateDataSafe((d) => compactarFotosNoArmazenamento(d));
+      currentData = getData() ?? currentData;
+    }
     if (isCooperado && user && coopId) {
       const cnpj = await resolveCooperativaCnpj(currentData, coopId, user);
       if (cnpj) {
@@ -762,27 +794,51 @@ export default function NotasPedidoContent() {
     setTimeout(() => setLancadoMsg(""), 6000);
   };
 
-  const handleFoto = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (fotoInputRef.current) fotoInputRef.current.value = "";
-    if (!file || !data || !cooperadoId || !ANEXAR_DRAFT_KEY || fotoProcessandoRef.current || processandoFoto || enviando) return;
+  const pipelineStepLabel = (step: ImagePipelineStep | "idle") => {
+    switch (step) {
+      case "preparing":
+        return "Preparando foto…";
+      case "compressing":
+        return "Comprimindo para envio…";
+      case "uploading":
+        return "Enviando com segurança…";
+      case "success":
+        return "Foto anexada com sucesso";
+      default:
+        return processandoFoto ? "Processando…" : "";
+    }
+  };
+
+  const processarFotoArquivo = async (file: File) => {
+    if (!data || !cooperadoId || !ANEXAR_DRAFT_KEY || enviando) return;
+
+    fotoAbortRef.current?.abort();
+    const abort = new AbortController();
+    fotoAbortRef.current = abort;
+    lastFotoFileRef.current = file;
 
     fotoProcessandoRef.current = true;
     setProcessandoFoto(true);
     setFotoDuplicadaMsg("");
     setErroEnvio("");
-    try {
-      const qtdAtual = await countFotoDraft(ANEXAR_DRAFT_KEY);
-      const { maxWidth, quality } = parametrosCompressaoFoto(qtdAtual + 1);
-      const dataUrl = await compressFotoFile(file, maxWidth, quality);
-      const notasCooperado = data.notasPedido.filter((n) => n.cooperadoId === cooperadoId);
+    setFotoValidationWarning("");
+    setFotoPipelineStep("preparing");
 
-      if (await isFotoDraftDuplicada(ANEXAR_DRAFT_KEY, dataUrl)) {
-        setFotoDuplicadaMsg("Imagem repetida — esta foto já foi adicionada ou já foi enviada antes.");
+    try {
+      const validation = validateImageFile(file);
+      if (!validation.ok) {
+        setErroEnvio(validation.error ?? "Arquivo inválido.");
+        setFotoPipelineStep("error");
         return;
       }
-      if (isFotoDuplicada(dataUrl, [], notasCooperado)) {
-        setFotoDuplicadaMsg("Imagem repetida — esta foto já foi enviada antes.");
+      if (validation.warning) setFotoValidationWarning(validation.warning);
+
+      const qtdAtual = await countFotoDraft(ANEXAR_DRAFT_KEY);
+      const fileFingerprint = await fingerprintFotoFile(file);
+
+      if (await isFotoDraftDuplicadaByFingerprint(ANEXAR_DRAFT_KEY, fileFingerprint)) {
+        setFotoDuplicadaMsg("Imagem repetida — esta foto já foi adicionada ou já foi enviada antes.");
+        setFotoPipelineStep("idle");
         return;
       }
 
@@ -798,20 +854,23 @@ export default function NotasPedidoContent() {
       const cnpj = await resolveCooperativaCnpj(data, coopId, user);
       if (!cnpj) {
         setErroEnvio("CNPJ da cooperativa não encontrado. Verifique a conexão.");
+        setFotoPipelineStep("error");
         return;
       }
+
+      setFotoPipelineStep("compressing");
+      const processed = await processDeliveryImage(file, abort.signal);
 
       const cooperadoNome = getCooperadoNome(data.cooperados, cooperadoId);
       const notaId =
         reenviarNotaId ??
         (await getOrCreatePendingNotaId(ANEXAR_DRAFT_KEY, () => generateId("np")));
-      const newIndex = await appendFotoDraftMeta(ANEXAR_DRAFT_KEY, contratoId, fingerprintFoto(dataUrl));
+      const newIndex = await appendFotoDraftMeta(ANEXAR_DRAFT_KEY, contratoId, fileFingerprint);
       const totalCount = newIndex + 1;
 
       revokeFotoPreview();
-      const previewUrl = URL.createObjectURL(file);
-      fotoPreviewUrlRef.current = previewUrl;
-      setFotoAtualPreview(previewUrl);
+      fotoPreviewUrlRef.current = processed.previewUrl;
+      setFotoAtualPreview(processed.previewUrl);
 
       const inst = data.instituicoes.find((i) => i.id === contratoId);
       const localEntregaDraft = inst?.localEntrega ?? inst?.endereco ?? "";
@@ -841,7 +900,7 @@ export default function NotasPedidoContent() {
         }
       }
 
-      const draftNota: NotaPedido = reenviarNotaId
+      let draftNota: NotaPedido = reenviarNotaId
         ? {
             ...(data.notasPedido.find((n) => n.id === reenviarNotaId) as NotaPedido),
             instituicaoId: contratoId,
@@ -875,39 +934,104 @@ export default function NotasPedidoContent() {
           };
 
       setEnvioProgresso({ sent: newIndex + 1, total: totalCount });
-      const uploaded = await uploadFotoImediataToCloud(
+      setFotoPipelineStep("uploading");
+
+      const uploaded = await uploadImageToSupabase({
         cnpj,
-        draftNota,
-        newIndex,
+        nota: draftNota,
+        index: newIndex,
         totalCount,
-        dataUrl,
-        cooperadoNome
-      );
+        blob: processed.compressed,
+        mimeType: processed.mimeType,
+        cooperadoNome,
+      });
 
       if (!uploaded.ok) {
+        if (uploaded.offline) {
+          await enqueuePendingDeliveryImage({
+            id: buildPendingImageId(notaId, newIndex),
+            notaPedidoId: notaId,
+            cooperativaId: coopId!,
+            cooperadoId,
+            cnpj,
+            index: newIndex,
+            totalCount,
+            compressedBlob: processed.compressed,
+            thumbnailBlob: processed.thumbnail,
+            mimeType: processed.mimeType,
+            cooperadoNome,
+            notaSnapshot: draftNota,
+          });
+          await markFotoDraftUploaded(ANEXAR_DRAFT_KEY, newIndex);
+          setFotosSessaoCount(totalCount);
+          setFotosNaNuvemCount(await countFotosUploadedDraft(ANEXAR_DRAFT_KEY));
+          setFotosConfirmadasNaSessao(totalCount);
+          revokePreviewUrl(processed.previewUrl);
+          revokeFotoPreview();
+          setFotoValidationWarning("Sem internet — foto guardada no aparelho e será enviada quando voltar a conexão.");
+          setFotoPipelineStep("success");
+          setFormErrors((err) => ({ ...err, foto: undefined }));
+          return;
+        }
+
         await removeFotoDraftAt(ANEXAR_DRAFT_KEY, newIndex);
+        revokePreviewUrl(processed.previewUrl);
         revokeFotoPreview();
-        setErroEnvio(
-          uploaded.error ??
-            "Não foi possível enviar a foto para a nuvem. Verifique a conexão e tente de novo."
-        );
+        setErroEnvio(uploaded.error ?? "Não foi possível enviar a foto para a nuvem.");
+        setFotoPipelineStep("error");
         return;
       }
+
+      const fotoMeta = buildNotaPedidoFotoMeta({
+        cnpj,
+        nota: draftNota,
+        index: newIndex,
+        totalCount,
+        blob: processed.compressed,
+        mimeType: processed.mimeType,
+        cooperadoNome,
+        status: "uploaded",
+      });
+      fotoMeta.width = processed.width;
+      fotoMeta.height = processed.height;
+      draftNota = appendFotoMetaToNota(draftNota, fotoMeta);
 
       await markFotoDraftUploaded(ANEXAR_DRAFT_KEY, newIndex);
       setFotosSessaoCount(totalCount);
       setFotosNaNuvemCount(await countFotosUploadedDraft(ANEXAR_DRAFT_KEY));
       setFotosConfirmadasNaSessao(totalCount);
+      revokePreviewUrl(processed.previewUrl);
       revokeFotoPreview();
       setEnvioProgresso(null);
+      setFotoPipelineStep("success");
       setFormErrors((err) => ({ ...err, foto: undefined }));
-    } catch {
+      setTimeout(() => setFotoPipelineStep("idle"), 1500);
+    } catch (err) {
+      if (err instanceof DOMException && err.name === "AbortError") {
+        setFotoPipelineStep("idle");
+        return;
+      }
       revokeFotoPreview();
-      setErroEnvio("Não foi possível processar a foto. Tente outra imagem ou feche outros apps.");
+      setErroEnvio(userFacingPipelineError(err));
+      setFotoPipelineStep("error");
     } finally {
       fotoProcessandoRef.current = false;
       setProcessandoFoto(false);
+      if (fotoAbortRef.current === abort) fotoAbortRef.current = null;
     }
+  };
+
+  const handleFoto = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (fotoInputRef.current) fotoInputRef.current.value = "";
+    if (!file || fotoProcessandoRef.current || processandoFoto) return;
+    await processarFotoArquivo(file);
+  };
+
+  const retentarUltimaFoto = () => {
+    const file = lastFotoFileRef.current;
+    if (!file || processandoFoto) return;
+    void processarFotoArquivo(file);
   };
 
   const removerFotoSessao = (idx: number) => {
@@ -1002,6 +1126,15 @@ export default function NotasPedidoContent() {
       setErroEnvio(
         "CNPJ da cooperativa não encontrado. Faça logout e login de novo, ou peça ao responsável para conferir o cadastro."
       );
+      return;
+    }
+
+    await syncOfflineDeliveryImages();
+    const uploadedAfterFlush = await countFotosUploadedDraft(ANEXAR_DRAFT_KEY);
+    setFotosNaNuvemCount(uploadedAfterFlush);
+    if (uploadedAfterFlush < fotosSessaoCount) {
+      setEnviando(false);
+      setErroEnvio("Ainda há fotos aguardando conexão para subir. Conecte-se à internet e tente de novo.");
       return;
     }
 
@@ -2099,7 +2232,7 @@ export default function NotasPedidoContent() {
           <p className="text-sm text-gray-600">
             {reenviarNotaId
               ? "Tire a nova foto — ela vai automaticamente para a nuvem. Depois envie para o responsável."
-              : "Cada foto vai automaticamente para a nuvem. Quando terminar todas, toque Enviar entrega para o responsável."}
+              : "Cada foto vai direto para a nuvem (sem limite de quantidade). Quando terminar, toque Enviar entrega para o responsável."}
           </p>
 
           {!reenviarNotaId && (
@@ -2118,15 +2251,21 @@ export default function NotasPedidoContent() {
                 )}
               </div>
               <p className="text-xs text-green-800">
-                {processandoFoto
-                  ? "Enviando foto para a nuvem… aguarde um instante."
+                {processandoFoto && fotoPipelineStep !== "idle"
+                  ? pipelineStepLabel(fotoPipelineStep)
                   : fotosSessaoCount === 0
-                    ? "Passo 1: tire a primeira foto (vai direto para a nuvem)."
+                    ? "Passo 1: tire a primeira foto (comprimida e enviada automaticamente)."
                     : fotosNaNuvemCount >= fotosSessaoCount
                       ? "Todas na nuvem. Tire mais fotos ou envie a entrega ao responsável."
                       : "Aguardando envio de uma foto para a nuvem…"}
               </p>
             </div>
+          )}
+
+          {fotoValidationWarning && (
+            <AlertBanner variant="warning" onDismiss={() => setFotoValidationWarning("")}>
+              {fotoValidationWarning}
+            </AlertBanner>
           )}
 
           {fotoDuplicadaMsg && (
@@ -2166,15 +2305,41 @@ export default function NotasPedidoContent() {
             </div>
           )}
 
+          {(fotoPipelineStep === "error" || erroEnvio) && lastFotoFileRef.current && !processandoFoto && (
+            <div className="flex flex-wrap gap-2">
+              <Button type="button" size="sm" variant="secondary" onClick={retentarUltimaFoto}>
+                <RefreshCw size={14} className="mr-1" /> Tentar novamente
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                variant="secondary"
+                onClick={() => fotoInputRef.current?.click()}
+              >
+                <Camera size={14} className="mr-1" /> Tirar outra foto
+              </Button>
+            </div>
+          )}
+
           {!reenviarNotaId && fotosSessaoCount > 0 && !processandoFoto && !enviando && (
-            <Button
-              type="button"
-              variant="secondary"
-              size="sm"
-              onClick={() => removerFotoSessao(fotosSessaoCount - 1)}
-            >
-              <X size={14} className="mr-1" /> Remover última foto
-            </Button>
+            <div className="flex flex-wrap gap-2">
+              <Button
+                type="button"
+                variant="secondary"
+                size="sm"
+                onClick={() => fotoInputRef.current?.click()}
+              >
+                <Camera size={14} className="mr-1" /> Tirar outra foto
+              </Button>
+              <Button
+                type="button"
+                variant="secondary"
+                size="sm"
+                onClick={() => removerFotoSessao(fotosSessaoCount - 1)}
+              >
+                <X size={14} className="mr-1" /> Remover foto
+              </Button>
+            </div>
           )}
 
           <FormField label="Contrato" required error={formErrors.contrato} hint="A entrega será conferida e lançada neste contrato.">
@@ -2236,7 +2401,7 @@ export default function NotasPedidoContent() {
                 />
                 <span className="absolute inset-0 flex items-center justify-center bg-black/30">
                   <span className="bg-amber-600 text-white text-sm font-semibold px-3 py-2 rounded-full">
-                    Enviando para a nuvem…
+                    {pipelineStepLabel(fotoPipelineStep)}
                   </span>
                 </span>
               </div>
@@ -2245,7 +2410,7 @@ export default function NotasPedidoContent() {
                 <Camera size={48} className="text-green-700" />
                 <span className="text-base font-semibold text-green-800">
                   {processandoFoto
-                    ? "Enviando para a nuvem..."
+                    ? pipelineStepLabel(fotoPipelineStep)
                     : fotosSessaoCount === 0
                       ? "Tirar foto agora"
                       : "Tirar próxima foto"}
