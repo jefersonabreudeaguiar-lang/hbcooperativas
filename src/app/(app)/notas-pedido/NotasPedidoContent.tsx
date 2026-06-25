@@ -200,6 +200,8 @@ export default function NotasPedidoContent() {
   const [conferenciaTransicao, setConferenciaTransicao] = useState(false);
   const [conferenciaFotoErro, setConferenciaFotoErro] = useState("");
   const [conferenciaFotoIdx, setConferenciaFotoIdx] = useState(0);
+  const [lancamentoSequencia, setLancamentoSequencia] = useState<{ fotos: string[]; idx: number } | null>(null);
+  const lancamentoSequenciaTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const coopId = user && data ? getUserCooperativaId(user, data) : undefined;
   const ANEXAR_DRAFT_KEY = coopId ? `hb_anexar_draft_${coopId}` : "";
@@ -232,7 +234,7 @@ export default function NotasPedidoContent() {
     }
     setFotosSessaoCount(meta.count);
     setFotosNaNuvemCount(meta.uploadedCount ?? 0);
-    setFotosConfirmadasNaSessao(meta.count);
+    setFotosConfirmadasNaSessao(meta.uploadedCount ?? meta.count);
   }, [ANEXAR_DRAFT_KEY, resetFotosSessaoUi]);
 
   const limparRascunhoAnexar = useCallback(() => {
@@ -765,14 +767,6 @@ export default function NotasPedidoContent() {
     if (fotoInputRef.current) fotoInputRef.current.value = "";
     if (!file || !data || !cooperadoId || !ANEXAR_DRAFT_KEY || fotoProcessandoRef.current || processandoFoto || enviando) return;
 
-    if (fotoAtualPreview) {
-      setFormErrors((err) => ({
-        ...err,
-        foto: "Toque em Tirar próxima foto ou remova esta antes de adicionar outra.",
-      }));
-      return;
-    }
-
     fotoProcessandoRef.current = true;
     setProcessandoFoto(true);
     setFotoDuplicadaMsg("");
@@ -903,6 +897,8 @@ export default function NotasPedidoContent() {
       await markFotoDraftUploaded(ANEXAR_DRAFT_KEY, newIndex);
       setFotosSessaoCount(totalCount);
       setFotosNaNuvemCount(await countFotosUploadedDraft(ANEXAR_DRAFT_KEY));
+      setFotosConfirmadasNaSessao(totalCount);
+      revokeFotoPreview();
       setEnvioProgresso(null);
       setFormErrors((err) => ({ ...err, foto: undefined }));
     } catch {
@@ -912,13 +908,6 @@ export default function NotasPedidoContent() {
       fotoProcessandoRef.current = false;
       setProcessandoFoto(false);
     }
-  };
-
-  const tirarProximaFoto = () => {
-    setFotosConfirmadasNaSessao((prev) => Math.max(prev, fotosSessaoCount));
-    revokeFotoPreview();
-    setFormErrors((prev) => ({ ...prev, foto: undefined }));
-    setFotoDuplicadaMsg("");
   };
 
   const removerFotoSessao = (idx: number) => {
@@ -943,6 +932,7 @@ export default function NotasPedidoContent() {
       const uploaded = await countFotosUploadedDraft(ANEXAR_DRAFT_KEY);
       setFotosSessaoCount(count);
       setFotosNaNuvemCount(uploaded);
+      setFotosConfirmadasNaSessao(uploaded);
 
       if (count === 0 && notaId && cnpj) {
         void deleteNotaPedidoFromCloud(cnpj, notaId);
@@ -986,8 +976,8 @@ export default function NotasPedidoContent() {
     if (fotosSessaoCount > 0 && fotosNaNuvemCount < fotosSessaoCount) {
       errors.foto = "Aguarde todas as fotos serem enviadas para a nuvem antes de concluir.";
     }
-    if (fotosSessaoCount > 0 && fotoAtualPreview) {
-      errors.foto = "Toque em Tirar próxima foto antes de enviar, ou remova a foto atual.";
+    if (processandoFoto) {
+      errors.foto = "Aguarde o envio da foto para a nuvem terminar.";
     }
     if (!contratoId) errors.contrato = "Contrato da entrega não encontrado. Aguarde a sincronização ou fale com a cooperativa.";
     if (Object.keys(errors).length) {
@@ -1176,6 +1166,11 @@ export default function NotasPedidoContent() {
   };
 
   const fecharConferirModal = () => {
+    if (lancamentoSequenciaTimerRef.current) {
+      clearTimeout(lancamentoSequenciaTimerRef.current);
+      lancamentoSequenciaTimerRef.current = null;
+    }
+    setLancamentoSequencia(null);
     filaConferenciaRef.current = null;
     setFilaConferenciaPos(0);
     setFilaConferenciaTotal(0);
@@ -1193,9 +1188,7 @@ export default function NotasPedidoContent() {
 
     let notaComFoto = nota;
     if (d && coopId) {
-      if (!isCooperado || getFotosExibicaoNota(nota).length === 0) {
-        notaComFoto = await ensureNotaComFoto(d, nota, coopId);
-      }
+      notaComFoto = await ensureNotaComFoto(d, nota, coopId);
     }
     const fotosCarregadas = getFotosExibicaoNota(notaComFoto);
     const esperado = notaComFoto.fotosEnviadasCount ?? contarFotosEnviadasNota(notaComFoto);
@@ -1314,7 +1307,36 @@ export default function NotasPedidoContent() {
     setConferirErrors((e) => ({ ...e, itens: undefined }));
   };
 
+  const aguardarSequenciaLancamentoFotos = useCallback((fotos: string[]): Promise<void> => {
+    if (fotos.length === 0) return Promise.resolve();
+
+    if (lancamentoSequenciaTimerRef.current) {
+      clearTimeout(lancamentoSequenciaTimerRef.current);
+      lancamentoSequenciaTimerRef.current = null;
+    }
+
+    return new Promise((resolve) => {
+      let idx = 0;
+      setLancamentoSequencia({ fotos, idx: 0 });
+
+      const avancar = () => {
+        idx += 1;
+        if (idx >= fotos.length) {
+          lancamentoSequenciaTimerRef.current = null;
+          setLancamentoSequencia(null);
+          resolve();
+          return;
+        }
+        setLancamentoSequencia({ fotos, idx });
+        lancamentoSequenciaTimerRef.current = setTimeout(avancar, 1400);
+      };
+
+      lancamentoSequenciaTimerRef.current = setTimeout(avancar, fotos.length === 1 ? 1000 : 1400);
+    });
+  }, []);
+
   const handleLancarNota = () => {
+    if (lancamentoSequencia) return;
     if (lancandoRef.current || !user || !data || !selectedNota) return;
     const errors: typeof conferirErrors = {};
     if (!conferenciaCooperadoId) errors.itens = "Escolha o cooperado dono desta nota.";
@@ -1326,6 +1348,11 @@ export default function NotasPedidoContent() {
 
     lancandoRef.current = true;
     let notaAtualizada: NotaPedido | null = null;
+    const fotosAprovadas = getFotosExibicaoNota(selectedNota);
+    const notaId = selectedNota.id;
+    const chaveAtual = getChaveGrupoConferencia(selectedNota, data, coopId);
+    const coopNomeAprovar = getCooperadoNomeResolvido(data, conferenciaCooperadoId, coopId);
+    const valorAprovado = conferenciaTotais.liquido;
 
     updateData((d) => {
       const now = new Date().toISOString();
@@ -1400,32 +1427,36 @@ export default function NotasPedidoContent() {
       lancandoRef.current = false;
     }
 
-    const notaId = selectedNota.id;
-    const dAtual = getData() ?? data;
-    const chaveAtual = getChaveGrupoConferencia(selectedNota, dAtual, coopId);
-    const coopNome = getCooperadoNomeResolvido(dAtual, conferenciaCooperadoId, coopId);
-    const proxima = obterProximaNotaConferencia(chaveAtual, notaId);
+    void (async () => {
+      try {
+        await aguardarSequenciaLancamentoFotos(fotosAprovadas);
 
-    if (proxima) {
-      const mesmoGrupo = filaConferenciaRef.current?.chave === chaveAtual;
-      if (filaConferenciaRef.current && mesmoGrupo) {
-        filaConferenciaRef.current.concluidas += 1;
-        setFilaConferenciaPos(filaConferenciaRef.current.concluidas + 1);
-      } else if (filaConferenciaRef.current) {
-        setFilaConferenciaPos(1);
+        const proxima = obterProximaNotaConferencia(chaveAtual, notaId);
+
+        if (proxima) {
+          const mesmoGrupo = filaConferenciaRef.current?.chave === chaveAtual;
+          if (filaConferenciaRef.current && mesmoGrupo) {
+            filaConferenciaRef.current.concluidas += 1;
+            setFilaConferenciaPos(filaConferenciaRef.current.concluidas + 1);
+          } else if (filaConferenciaRef.current) {
+            setFilaConferenciaPos(1);
+          }
+          setLancadoMsg(
+            `Nota aprovada! ${formatCurrency(valorAprovado)} na ficha de ${coopNomeAprovar.split(" ")[0]}. Abrindo a próxima entrega…`
+          );
+          setTimeout(() => setLancadoMsg(""), 4000);
+          await prepararConferenciaNota(proxima, { transicao: true });
+        } else {
+          fecharConferirModal();
+          setLancadoMsg(
+            `Nota aprovada! ${formatCurrency(valorAprovado)} na ficha de ${coopNomeAprovar.split(" ")[0]}. Fila concluída!`
+          );
+          setTimeout(() => setLancadoMsg(""), 6000);
+        }
+      } catch {
+        /* ignore */
       }
-      setLancadoMsg(
-        `Nota aprovada! ${formatCurrency(conferenciaTotais.liquido)} na ficha de ${coopNome.split(" ")[0]}. Abrindo a próxima entrega…`
-      );
-      setTimeout(() => setLancadoMsg(""), 4000);
-      void prepararConferenciaNota(proxima, { transicao: true });
-    } else {
-      fecharConferirModal();
-      setLancadoMsg(
-        `Nota aprovada! ${formatCurrency(conferenciaTotais.liquido)} na ficha de ${coopNome.split(" ")[0]}. Fila concluída!`
-      );
-      setTimeout(() => setLancadoMsg(""), 6000);
-    }
+    })();
   };
 
   const handleRejeitarNota = () => {
@@ -2036,7 +2067,6 @@ export default function NotasPedidoContent() {
                 disabled={
                   fotosSessaoCount === 0 ||
                   fotosNaNuvemCount < fotosSessaoCount ||
-                  Boolean(fotoAtualPreview) ||
                   enviando ||
                   processandoFoto
                 }
@@ -2044,8 +2074,10 @@ export default function NotasPedidoContent() {
                 <FileText size={18} />{" "}
                 {enviando
                   ? "Publicando para o responsável…"
+                  : processandoFoto
+                    ? "Enviando foto para a nuvem…"
                   : fotosSessaoCount > 0
-                    ? `Enviar entrega${fotosSessaoCount > 1 ? ` (${fotosSessaoCount} fotos)` : ""}`
+                    ? `Enviar para o responsável${fotosSessaoCount > 1 ? ` (${fotosSessaoCount} fotos)` : ""}`
                     : "Tire uma foto primeiro"}
               </Button>
             </div>
@@ -2066,8 +2098,8 @@ export default function NotasPedidoContent() {
           )}
           <p className="text-sm text-gray-600">
             {reenviarNotaId
-              ? "Tire a nova foto do pedido corrigido e envie."
-              : "Tire foto por foto na mesma entrega. Só o responsável vê depois de tocar Enviar entrega."}
+              ? "Tire a nova foto — ela vai automaticamente para a nuvem. Depois envie para o responsável."
+              : "Cada foto vai automaticamente para a nuvem. Quando terminar todas, toque Enviar entrega para o responsável."}
           </p>
 
           {!reenviarNotaId && (
@@ -2086,11 +2118,13 @@ export default function NotasPedidoContent() {
                 )}
               </div>
               <p className="text-xs text-green-800">
-                {fotoAtualPreview
-                  ? "Confira esta foto e toque em Tirar próxima foto, ou Enviar entrega quando terminar."
+                {processandoFoto
+                  ? "Enviando foto para a nuvem… aguarde um instante."
                   : fotosSessaoCount === 0
-                    ? "Passo 1: tire a primeira foto."
-                    : "Tire a próxima foto ou envie a entrega completa para o responsável."}
+                    ? "Passo 1: tire a primeira foto (vai direto para a nuvem)."
+                    : fotosNaNuvemCount >= fotosSessaoCount
+                      ? "Todas na nuvem. Tire mais fotos ou envie a entrega ao responsável."
+                      : "Aguardando envio de uma foto para a nuvem…"}
               </p>
             </div>
           )}
@@ -2101,12 +2135,14 @@ export default function NotasPedidoContent() {
             </AlertBanner>
           )}
 
-          {!reenviarNotaId && fotosSessaoCount > 0 && (
+          {!reenviarNotaId && (fotosSessaoCount > 0 || processandoFoto) && (
             <div className="flex flex-wrap items-center gap-2">
-              {Array.from({ length: fotosSessaoCount }, (_, i) => {
+              {Array.from(
+                { length: processandoFoto ? fotosConfirmadasNaSessao + 1 : fotosSessaoCount },
+                (_, i) => {
                 const n = i + 1;
-                const confirmada = n <= fotosConfirmadasNaSessao;
-                const atual = n === fotosSessaoCount && Boolean(fotoAtualPreview);
+                const confirmada = n <= fotosConfirmadasNaSessao && fotosNaNuvemCount >= n;
+                const enviandoFoto = processandoFoto && n === fotosConfirmadasNaSessao + 1;
                 return (
                   <span
                     key={n}
@@ -2114,20 +2150,31 @@ export default function NotasPedidoContent() {
                       "text-xs font-semibold px-2.5 py-1 rounded-full border",
                       confirmada
                         ? "bg-green-100 border-green-400 text-green-800"
-                        : atual
-                          ? "bg-blue-100 border-blue-400 text-blue-800"
+                        : enviandoFoto
+                          ? "bg-amber-100 border-amber-400 text-amber-900"
                           : "bg-gray-100 border-gray-300 text-gray-600"
                     )}
                   >
                     Foto {n}
-                    {confirmada ? " ✓" : atual ? " · atual" : ""}
+                    {confirmada ? " ✓" : enviandoFoto ? " · enviando…" : ""}
                   </span>
                 );
               })}
-              {!fotoAtualPreview && fotosConfirmadasNaSessao === fotosSessaoCount && (
-                <span className="text-xs text-green-700">Próxima foto ou enviar entrega</span>
+              {!processandoFoto && fotosSessaoCount > 0 && fotosNaNuvemCount >= fotosSessaoCount && (
+                <span className="text-xs text-green-700">Pronta para enviar ao responsável</span>
               )}
             </div>
+          )}
+
+          {!reenviarNotaId && fotosSessaoCount > 0 && !processandoFoto && !enviando && (
+            <Button
+              type="button"
+              variant="secondary"
+              size="sm"
+              onClick={() => removerFotoSessao(fotosSessaoCount - 1)}
+            >
+              <X size={14} className="mr-1" /> Remover última foto
+            </Button>
           )}
 
           <FormField label="Contrato" required error={formErrors.contrato} hint="A entrega será conferida e lançada neste contrato.">
@@ -2169,8 +2216,8 @@ export default function NotasPedidoContent() {
             label={
               reenviarNotaId
                 ? "Nova foto"
-                : fotoAtualPreview
-                  ? `Foto ${fotosSessaoCount} desta entrega`
+                : processandoFoto
+                  ? `Enviando foto ${fotosConfirmadasNaSessao + 1} para a nuvem`
                   : fotosSessaoCount > 0
                     ? `Foto ${fotosSessaoCount + 1} desta entrega`
                     : "Foto da entrega"
@@ -2179,33 +2226,19 @@ export default function NotasPedidoContent() {
             error={formErrors.foto}
             hint="Mostre o pedido inteiro com a assinatura de quem recebeu."
           >
-            {fotoAtualPreview ? (
-              <div className="space-y-3">
-                <div className="relative rounded-xl overflow-hidden border-2 border-green-300 bg-black/5">
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img
-                    src={fotoAtualPreview}
-                    alt={`Foto ${fotosSessaoCount}`}
-                    className="w-full max-h-72 object-contain mx-auto bg-gray-900/5"
-                  />
-                  <span className="absolute top-2 left-2 bg-green-700 text-white text-xs font-semibold px-2 py-1 rounded-full">
-                    Foto {fotosSessaoCount} · na nuvem
+            {fotoAtualPreview && processandoFoto ? (
+              <div className="relative rounded-xl overflow-hidden border-2 border-amber-300 bg-black/5">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={fotoAtualPreview}
+                  alt={`Foto ${fotosConfirmadasNaSessao + 1}`}
+                  className="w-full max-h-72 object-contain mx-auto bg-gray-900/5 opacity-90"
+                />
+                <span className="absolute inset-0 flex items-center justify-center bg-black/30">
+                  <span className="bg-amber-600 text-white text-sm font-semibold px-3 py-2 rounded-full">
+                    Enviando para a nuvem…
                   </span>
-                </div>
-                <div className="flex flex-wrap gap-2">
-                  <Button type="button" size="sm" onClick={tirarProximaFoto} disabled={enviando || processandoFoto}>
-                    <Camera size={14} className="mr-1" /> Tirar próxima foto
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="secondary"
-                    size="sm"
-                    disabled={enviando || processandoFoto}
-                    onClick={() => removerFotoSessao(fotosSessaoCount - 1)}
-                  >
-                    <X size={14} className="mr-1" /> Remover esta
-                  </Button>
-                </div>
+                </span>
               </div>
             ) : (
               <label className={`flex flex-col items-center gap-2 p-8 border-2 border-dashed border-green-400 rounded-2xl bg-green-50/50 ${processandoFoto || enviando ? "opacity-60 pointer-events-none" : "cursor-pointer active:bg-green-100"}`}>
@@ -2216,6 +2249,11 @@ export default function NotasPedidoContent() {
                     : fotosSessaoCount === 0
                       ? "Tirar foto agora"
                       : "Tirar próxima foto"}
+                </span>
+                <span className="text-xs text-green-700 text-center">
+                  {fotosSessaoCount === 0
+                    ? "A foto vai direto para a nuvem"
+                    : "Mais uma foto na mesma entrega — envio automático"}
                 </span>
                 <input ref={fotoInputRef} type="file" accept="image/*" capture="environment" className="hidden" onChange={(e) => void handleFoto(e)} disabled={processandoFoto || enviando} />
               </label>
@@ -2400,15 +2438,17 @@ export default function NotasPedidoContent() {
       } size="full"
         footer={selectedNota?.status === "aguardando_conferencia" && check("notas_pedido", "approve") ? (
           <div className="flex flex-col sm:flex-row gap-2 justify-between">
-            <Button variant="danger" onClick={() => { setMotivoRejeicao(""); setRejectModal(true); }} disabled={conferenciaTransicao}>
+            <Button variant="danger" onClick={() => { setMotivoRejeicao(""); setRejectModal(true); }} disabled={conferenciaTransicao || Boolean(lancamentoSequencia)}>
               <XCircle size={18} /> Pedir correção
             </Button>
-            <Button size="lg" onClick={handleLancarNota} disabled={conferenciaTransicao}>
+            <Button size="lg" onClick={handleLancarNota} disabled={conferenciaTransicao || Boolean(lancamentoSequencia)}>
               <CheckCircle size={18} />
-              {conferenciaTransicao
+              {lancamentoSequencia
+                ? `Lançando foto ${lancamentoSequencia.idx + 1} de ${lancamentoSequencia.fotos.length}…`
+                : conferenciaTransicao
                 ? "Carregando próxima entrega…"
                 : selectedNota && getFotosExibicaoNota(selectedNota).length > 1
-                  ? `Aprovar entrega (${getFotosExibicaoNota(selectedNota).length} fotos)`
+                  ? `Aprovar e lançar (${getFotosExibicaoNota(selectedNota).length} fotos)`
                   : filaConferenciaTotal > 1
                     ? `Aprovar e próxima (${filaConferenciaPos}/${filaConferenciaTotal})`
                     : "Aprovar e lançar na ficha"}
@@ -2427,6 +2467,38 @@ export default function NotasPedidoContent() {
             <div className="lg:w-[48%] xl:w-1/2 bg-gray-900 flex flex-col shrink-0 lg:min-h-[calc(100dvh-8.5rem)]">
               <div className="flex-1 flex items-center justify-center p-4 min-h-[40vh] lg:min-h-0 overflow-y-auto">
                 {(() => {
+                  if (lancamentoSequencia) {
+                    const { fotos, idx } = lancamentoSequencia;
+                    return (
+                      <div className="w-full space-y-4 text-center">
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img
+                          src={fotos[idx]}
+                          alt={`Lançada ${idx + 1} de ${fotos.length}`}
+                          className="max-w-full max-h-[70vh] lg:max-h-[calc(100dvh-12rem)] object-contain mx-auto ring-4 ring-green-500/50"
+                        />
+                        <p className="text-green-400 font-semibold text-base">
+                          Foto {idx + 1} de {fotos.length} · Lançada na ficha ✓
+                        </p>
+                        <div className="flex flex-wrap items-center justify-center gap-2">
+                          {fotos.map((_, i) => (
+                            <span
+                              key={i}
+                              className={cn(
+                                "text-xs font-semibold px-2.5 py-1 rounded-full border",
+                                i <= idx
+                                  ? "bg-green-500/20 border-green-400 text-green-200"
+                                  : "bg-white/10 border-white/20 text-white/50"
+                              )}
+                            >
+                              Foto {i + 1}{i <= idx ? " ✓" : ""}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    );
+                  }
+
                   const fotos = getFotosExibicaoNota(selectedNota);
                   const idx = Math.min(conferenciaFotoIdx, Math.max(0, fotos.length - 1));
                   if (fotos.length > 0) {
@@ -2439,29 +2511,53 @@ export default function NotasPedidoContent() {
                           className="max-w-full max-h-[70vh] lg:max-h-[calc(100dvh-12rem)] object-contain mx-auto"
                         />
                         {fotos.length > 1 && (
-                          <div className="flex items-center justify-center gap-3 text-white/90 text-sm">
-                            <Button
-                              type="button"
-                              variant="secondary"
-                              size="sm"
-                              disabled={idx <= 0}
-                              onClick={() => setConferenciaFotoIdx((i) => Math.max(0, i - 1))}
-                            >
-                              Anterior
-                            </Button>
-                            <span className="font-medium tabular-nums">
-                              Foto {idx + 1} de {fotos.length}
-                            </span>
-                            <Button
-                              type="button"
-                              variant="secondary"
-                              size="sm"
-                              disabled={idx >= fotos.length - 1}
-                              onClick={() => setConferenciaFotoIdx((i) => Math.min(fotos.length - 1, i + 1))}
-                            >
-                              Próxima foto
-                            </Button>
-                          </div>
+                          <>
+                            <div className="flex flex-wrap items-center justify-center gap-2">
+                              {fotos.map((foto, i) => (
+                                <button
+                                  key={i}
+                                  type="button"
+                                  onClick={() => setConferenciaFotoIdx(i)}
+                                  className={cn(
+                                    "rounded-lg overflow-hidden border-2 transition-all",
+                                    i === idx
+                                      ? "border-green-400 ring-2 ring-green-400/40"
+                                      : "border-white/20 opacity-70 hover:opacity-100"
+                                  )}
+                                >
+                                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                                  <img
+                                    src={foto}
+                                    alt={`Miniatura ${i + 1}`}
+                                    className="w-14 h-14 object-cover"
+                                  />
+                                </button>
+                              ))}
+                            </div>
+                            <div className="flex items-center justify-center gap-3 text-white/90 text-sm">
+                              <Button
+                                type="button"
+                                variant="secondary"
+                                size="sm"
+                                disabled={idx <= 0}
+                                onClick={() => setConferenciaFotoIdx((i) => Math.max(0, i - 1))}
+                              >
+                                Anterior
+                              </Button>
+                              <span className="font-medium tabular-nums">
+                                Foto {idx + 1} de {fotos.length}
+                              </span>
+                              <Button
+                                type="button"
+                                variant="secondary"
+                                size="sm"
+                                disabled={idx >= fotos.length - 1}
+                                onClick={() => setConferenciaFotoIdx((i) => Math.min(fotos.length - 1, i + 1))}
+                              >
+                                Próxima foto
+                              </Button>
+                            </div>
+                          </>
                         )}
                       </div>
                     );
@@ -2527,7 +2623,7 @@ export default function NotasPedidoContent() {
                 if (qtdFotosModal <= 1) return null;
                 return (
                   <AlertBanner variant="info" title={`${qtdFotosModal} fotos nesta entrega`}>
-                    Veja foto por foto à esquerda. Ao aprovar, o valor inteiro vai para a ficha de uma só vez.
+                    Veja foto por foto à esquerda, informe as quantidades e toque Aprovar. Cada foto será lançada na sequência.
                   </AlertBanner>
                 );
               })()}

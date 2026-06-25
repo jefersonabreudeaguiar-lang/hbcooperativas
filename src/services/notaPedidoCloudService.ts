@@ -1,7 +1,7 @@
 import type { AppData, NotaPedido, User } from "@/types";
 import { normalizeCnpj } from "@/utils/cooperativa";
 import { fetchCooperativaByCnpjFromCloud } from "@/services/cooperativaCloudService";
-import { getNotaCooperativaCnpj, getFotosExibicaoNota, mergeNotaComFotos, FOTOS_UPLOAD_LOTE } from "@/utils/fotoEntrega";
+import { getNotaCooperativaCnpj, getFotosExibicaoNota, mergeNotaComFotos, contarFotosEnviadasNota, FOTOS_UPLOAD_LOTE } from "@/utils/fotoEntrega";
 import { getData, saveDataSafe } from "@/services/dataStore";
 import { reconciliarFichaFromNotasConferidas } from "@/services/notaPedidoService";
 import { needsOperationalResetCloudPush } from "@/services/operationalReset";
@@ -670,15 +670,22 @@ export async function ensureNotaComFoto(
   coopId?: string
 ): Promise<NotaPedido> {
   const localFotos = getFotosExibicaoNota(nota);
-  const esperado = Math.max(nota.fotosEnviadasCount ?? 0, localFotos.length);
+  const esperado = Math.max(
+    nota.fotosEnviadasCount ?? 0,
+    contarFotosEnviadasNota(nota),
+    localFotos.length
+  );
   const fullResCount = nota.fotosPedido?.length ?? 0;
+  const temSóMiniaturas =
+    fullResCount === 0 && Boolean(nota.fotosPedidoMiniaturas?.length || nota.fotoPedidoMiniatura);
 
-  if (fullResCount >= esperado && esperado > 0) return nota;
+  if (esperado <= 0) return nota;
+  if (fullResCount >= esperado && !temSóMiniaturas) return nota;
 
   const cnpj = getCooperativaCnpj(data, coopId ?? nota.cooperativaId);
   if (!cnpj) return nota;
 
-  if (!nota.fotoNaNuvem && fullResCount === 0) return nota;
+  if (!nota.fotoNaNuvem && fullResCount === 0 && localFotos.length === 0) return nota;
 
   const cloud = await fetchNotaPedidoFromCloud(cnpj, nota.id);
   if (!cloud) return nota;
