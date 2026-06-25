@@ -64,6 +64,8 @@ import {
   getOrCreatePendingNotaId,
   removeFotoDraftAt,
   markFotoDraftUploaded,
+  saveDraftNotaIdentity,
+  getDraftNotaIdentity,
 } from "@/utils/fotoDraftStore";
 import type { NotaPedido, NotaPedidoItem, Cooperado, AppData } from "@/types";
 
@@ -144,6 +146,7 @@ export default function NotasPedidoContent() {
   const [instituicaoId, setInstituicaoId] = useState("");
   const [localEntrega, setLocalEntrega] = useState("");
   const [fotosSessaoCount, setFotosSessaoCount] = useState(0);
+  const [fotosConfirmadasNaSessao, setFotosConfirmadasNaSessao] = useState(0);
   const [fotosNaNuvemCount, setFotosNaNuvemCount] = useState(0);
   const [fotoAtualPreview, setFotoAtualPreview] = useState<string | null>(null);
   const [envioProgresso, setEnvioProgresso] = useState<{ sent: number; total: number } | null>(null);
@@ -212,6 +215,7 @@ export default function NotasPedidoContent() {
   const resetFotosSessaoUi = useCallback(() => {
     revokeFotoPreview();
     setFotosSessaoCount(0);
+    setFotosConfirmadasNaSessao(0);
     setFotosNaNuvemCount(0);
     setEnvioProgresso(null);
   }, [revokeFotoPreview]);
@@ -228,6 +232,7 @@ export default function NotasPedidoContent() {
     }
     setFotosSessaoCount(meta.count);
     setFotosNaNuvemCount(meta.uploadedCount ?? 0);
+    setFotosConfirmadasNaSessao(meta.count);
   }, [ANEXAR_DRAFT_KEY, resetFotosSessaoUi]);
 
   const limparRascunhoAnexar = useCallback(() => {
@@ -819,6 +824,29 @@ export default function NotasPedidoContent() {
       const now = new Date().toISOString();
       const mes = getCurrentMesReferencia();
 
+      let numeroNota: string;
+      let createdAt: string;
+      let mesReferencia: string;
+
+      if (reenviarNotaId) {
+        const base = data.notasPedido.find((n) => n.id === reenviarNotaId);
+        numeroNota = base?.numeroNota ?? gerarNumeroNota(data, coopId!);
+        createdAt = base?.createdAt ?? now;
+        mesReferencia = base?.mesReferencia ?? mes;
+      } else {
+        const identity = qtdAtual > 0 ? await getDraftNotaIdentity(ANEXAR_DRAFT_KEY) : null;
+        if (identity) {
+          numeroNota = identity.numeroNota;
+          createdAt = identity.createdAt;
+          mesReferencia = identity.mesReferencia;
+        } else {
+          numeroNota = gerarNumeroNota(data, coopId!);
+          createdAt = now;
+          mesReferencia = mes;
+          await saveDraftNotaIdentity(ANEXAR_DRAFT_KEY, { numeroNota, createdAt, mesReferencia });
+        }
+      }
+
       const draftNota: NotaPedido = reenviarNotaId
         ? {
             ...(data.notasPedido.find((n) => n.id === reenviarNotaId) as NotaPedido),
@@ -835,7 +863,7 @@ export default function NotasPedidoContent() {
             cooperativaId: coopId!,
             cooperadoId,
             instituicaoId: contratoId,
-            numeroNota: gerarNumeroNota(data, coopId!),
+            numeroNota,
             dataEntrega: now.split("T")[0],
             localEntrega: localEntregaDraft,
             itens: [],
@@ -845,10 +873,10 @@ export default function NotasPedidoContent() {
             valorLiquido: 0,
             status: "rascunho",
             fotosEnviadasCount: totalCount,
-            mesReferencia: mes,
+            mesReferencia,
             cooperativaCnpj: cnpj,
             cooperadoNomeSnapshot: cooperadoNome,
-            createdAt: now,
+            createdAt,
             updatedAt: now,
           };
 
@@ -887,6 +915,7 @@ export default function NotasPedidoContent() {
   };
 
   const tirarProximaFoto = () => {
+    setFotosConfirmadasNaSessao((prev) => Math.max(prev, fotosSessaoCount));
     revokeFotoPreview();
     setFormErrors((prev) => ({ ...prev, foto: undefined }));
     setFotoDuplicadaMsg("");
@@ -1024,13 +1053,15 @@ export default function NotasPedidoContent() {
           ? await getOrCreatePendingNotaId(ANEXAR_DRAFT_KEY, () => generateId("np"))
           : generateId("np");
 
+      const draftIdentity = ANEXAR_DRAFT_KEY ? await getDraftNotaIdentity(ANEXAR_DRAFT_KEY) : null;
+
       return {
         id: notaId,
         cooperativaId: coopId,
         cooperadoId: cid,
         instituicaoId: contratoId,
-        numeroNota: gerarNumeroNota(workingData, coopId),
-        dataEntrega: now.split("T")[0],
+        numeroNota: draftIdentity?.numeroNota ?? gerarNumeroNota(workingData, coopId),
+        dataEntrega: (draftIdentity?.createdAt ?? now).split("T")[0],
         localEntrega,
         escolaAvulsaNome: escolaAvulsa,
         itens: [],
@@ -1041,11 +1072,11 @@ export default function NotasPedidoContent() {
         status: "aguardando_conferencia",
         fotosEnviadasCount: qtdFotos,
         fotoEnviadaEm: now,
-        mesReferencia: mes,
+        mesReferencia: draftIdentity?.mesReferencia ?? mes,
         observacoes,
         cooperativaCnpj: cnpj,
         cooperadoNomeSnapshot: cooperadoNome,
-        createdAt: now,
+        createdAt: draftIdentity?.createdAt ?? now,
         updatedAt: now,
       };
     };
@@ -1056,15 +1087,6 @@ export default function NotasPedidoContent() {
       setErroEnvio("Não foi possível preparar o envio. Tente novamente.");
       return;
     }
-
-    const notaLocalBase: NotaPedido = {
-      ...notaEntrega,
-      fotoNaNuvem: true,
-      fotoPedido: undefined,
-      fotosPedido: undefined,
-      fotoPedidoMiniatura: undefined,
-      fotosPedidoMiniaturas: undefined,
-    };
 
     const persistirLocal = (d: AppData, notaFinal: NotaPedido) => {
       const base = compactarFotosNoArmazenamento(liberarEspacoArmazenamento(d, 1));
@@ -1096,23 +1118,15 @@ export default function NotasPedidoContent() {
       });
     };
 
-    let saved = updateDataSafe((d) => persistirLocal(d, notaLocalBase));
-    if (!saved.ok) {
-      saved = updateDataSafe((d) => persistirLocal(liberarEspacoArmazenamento(d, 2), notaLocalBase));
-    }
-    if (!saved.ok) {
-      setEnviando(false);
-      setErroEnvio(`${saved.error} Não foi possível registrar a entrega neste aparelho.`);
-      return;
-    }
-
-    let cloudOk = false;
-    let cloudError = "";
     const cloud = await finalizeNotaEntregaNaNuvem(cnpj, notaEntrega, cooperadoNome);
-    if (cloud.ok) {
-      cloudOk = true;
-    } else {
-      cloudError = cloud.error ?? "Erro ao publicar entrega na nuvem.";
+    if (!cloud.ok) {
+      setEnviando(false);
+      setEnvioProgresso(null);
+      setErroEnvio(
+        cloud.error ??
+          "Falha ao publicar a entrega. As fotos já estão na nuvem — verifique a conexão e toque Enviar de novo."
+      );
+      return;
     }
 
     const notaFinalLocal: NotaPedido = {
@@ -1124,17 +1138,7 @@ export default function NotasPedidoContent() {
       fotosPedidoMiniaturas: undefined,
     };
 
-    if (!cloudOk) {
-      setEnviando(false);
-      setEnvioProgresso(null);
-      setErroEnvio(
-        cloudError ||
-          "Falha ao publicar a entrega. As fotos já estão na nuvem — verifique a conexão e toque Enviar de novo."
-      );
-      return;
-    }
-
-    saved = updateDataSafe((d) => persistirLocal(d, notaFinalLocal));
+    let saved = updateDataSafe((d) => persistirLocal(d, notaFinalLocal));
     if (!saved.ok) {
       saved = updateDataSafe((d) => persistirLocal(liberarEspacoArmazenamento(d, 2), notaFinalLocal));
     }
@@ -1163,7 +1167,6 @@ export default function NotasPedidoContent() {
     resetFotosSessaoUi();
     setFotoDuplicadaMsg("");
     setUltimaNotaEnviadaIds([notaFinalLocal.id]);
-    if (isCooperado) setStatusFilter("aguardando_conferencia");
     setAnexarSucesso(true);
     setSuccessMsg(
       qtdFotos === 1
@@ -1398,8 +1401,9 @@ export default function NotasPedidoContent() {
     }
 
     const notaId = selectedNota.id;
-    const chaveAtual = getChaveGrupoConferencia(selectedNota, data, coopId);
-    const coopNome = getCooperadoNomeResolvido(getData() ?? data, conferenciaCooperadoId, coopId);
+    const dAtual = getData() ?? data;
+    const chaveAtual = getChaveGrupoConferencia(selectedNota, dAtual, coopId);
+    const coopNome = getCooperadoNomeResolvido(dAtual, conferenciaCooperadoId, coopId);
     const proxima = obterProximaNotaConferencia(chaveAtual, notaId);
 
     if (proxima) {
@@ -1450,7 +1454,8 @@ export default function NotasPedidoContent() {
     }
 
     const notaId = selectedNota.id;
-    const chaveAtual = getChaveGrupoConferencia(selectedNota, data, coopId);
+    const dAtual = getData() ?? data;
+    const chaveAtual = getChaveGrupoConferencia(selectedNota, dAtual, coopId);
     const proxima = obterProximaNotaConferencia(chaveAtual, notaId);
 
     setRejectModal(false);
@@ -2094,6 +2099,35 @@ export default function NotasPedidoContent() {
             <AlertBanner variant="error" onDismiss={() => setFotoDuplicadaMsg("")}>
               {fotoDuplicadaMsg}
             </AlertBanner>
+          )}
+
+          {!reenviarNotaId && fotosSessaoCount > 0 && (
+            <div className="flex flex-wrap items-center gap-2">
+              {Array.from({ length: fotosSessaoCount }, (_, i) => {
+                const n = i + 1;
+                const confirmada = n <= fotosConfirmadasNaSessao;
+                const atual = n === fotosSessaoCount && Boolean(fotoAtualPreview);
+                return (
+                  <span
+                    key={n}
+                    className={cn(
+                      "text-xs font-semibold px-2.5 py-1 rounded-full border",
+                      confirmada
+                        ? "bg-green-100 border-green-400 text-green-800"
+                        : atual
+                          ? "bg-blue-100 border-blue-400 text-blue-800"
+                          : "bg-gray-100 border-gray-300 text-gray-600"
+                    )}
+                  >
+                    Foto {n}
+                    {confirmada ? " ✓" : atual ? " · atual" : ""}
+                  </span>
+                );
+              })}
+              {!fotoAtualPreview && fotosConfirmadasNaSessao === fotosSessaoCount && (
+                <span className="text-xs text-green-700">Próxima foto ou enviar entrega</span>
+              )}
+            </div>
           )}
 
           <FormField label="Contrato" required error={formErrors.contrato} hint="A entrega será conferida e lançada neste contrato.">

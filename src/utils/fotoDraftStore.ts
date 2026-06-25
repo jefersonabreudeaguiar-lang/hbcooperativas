@@ -11,6 +11,15 @@ interface DraftMeta {
   count: number;
   savedAt: number;
   pendingNotaId?: string;
+  numeroNota?: string;
+  createdAt?: string;
+  mesReferencia?: string;
+}
+
+export interface DraftNotaIdentity {
+  numeroNota: string;
+  createdAt: string;
+  mesReferencia: string;
 }
 
 export interface FotoDraftMetaLoaded {
@@ -18,6 +27,9 @@ export interface FotoDraftMetaLoaded {
   count: number;
   pendingNotaId?: string;
   uploadedCount?: number;
+  numeroNota?: string;
+  createdAt?: string;
+  mesReferencia?: string;
 }
 
 interface DraftFotoRow {
@@ -148,6 +160,49 @@ export async function loadFotoDraftMeta(coopKey: string): Promise<FotoDraftMetaL
       count: meta.count,
       pendingNotaId: meta.pendingNotaId,
       uploadedCount,
+      numeroNota: meta.numeroNota,
+      createdAt: meta.createdAt,
+      mesReferencia: meta.mesReferencia,
+    };
+  } catch {
+    return null;
+  }
+}
+
+export async function saveDraftNotaIdentity(
+  coopKey: string,
+  identity: DraftNotaIdentity
+): Promise<void> {
+  if (typeof indexedDB === "undefined") return;
+  const db = await openDb();
+  try {
+    const prev = await txGetMeta(db, coopKey);
+    await txPutMeta(db, {
+      coopKey,
+      contratoId: prev?.contratoId ?? "",
+      count: prev?.count ?? 0,
+      savedAt: Date.now(),
+      pendingNotaId: prev?.pendingNotaId,
+      numeroNota: identity.numeroNota,
+      createdAt: identity.createdAt,
+      mesReferencia: identity.mesReferencia,
+    });
+  } finally {
+    db.close();
+  }
+}
+
+export async function getDraftNotaIdentity(coopKey: string): Promise<DraftNotaIdentity | null> {
+  if (typeof indexedDB === "undefined") return null;
+  try {
+    const db = await openDb();
+    const meta = await txGetMeta(db, coopKey);
+    db.close();
+    if (!meta?.numeroNota || !meta.createdAt || !meta.mesReferencia) return null;
+    return {
+      numeroNota: meta.numeroNota,
+      createdAt: meta.createdAt,
+      mesReferencia: meta.mesReferencia,
     };
   } catch {
     return null;
@@ -246,6 +301,9 @@ export async function appendFotoDraftMeta(
       count: index + 1,
       savedAt: Date.now(),
       pendingNotaId: prev?.pendingNotaId,
+      numeroNota: prev?.numeroNota,
+      createdAt: prev?.createdAt,
+      mesReferencia: prev?.mesReferencia,
     });
     return index;
   } finally {
@@ -315,6 +373,9 @@ export async function removeFotoDraftAt(coopKey: string, removeIndex: number): P
       count: rows.length,
       savedAt: Date.now(),
       pendingNotaId: fullMeta?.pendingNotaId,
+      numeroNota: fullMeta?.numeroNota,
+      createdAt: fullMeta?.createdAt,
+      mesReferencia: fullMeta?.mesReferencia,
     });
   } finally {
     freshDb.close();
