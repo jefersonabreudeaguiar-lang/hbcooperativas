@@ -634,6 +634,15 @@ export default function FichaCorridaPage() {
     (isCooperado || aba === "ficha") &&
     (visualizandoHistorico ? !!pagamentoConfirmadoMes : exibirQuantoVouReceber);
 
+  const exibirPagamento =
+    !!cooperadoSelecionadoId &&
+    (isCooperado || aba === "pagar") &&
+    (isCooperado
+      ? visualizandoHistorico
+        ? !!pagamentoConfirmadoMes
+        : exibirQuantoVouReceber
+      : pendentePagamentoResponsavel);
+
   const baixarReciboAtual = () => {
     const pg = reciboAtual;
     if (!pg?.reciboHtml) return;
@@ -979,7 +988,7 @@ export default function FichaCorridaPage() {
         </>
       )}
 
-      {cooperadoSelecionadoId && mostrarPagar && exibirRelatorioMes && (isCooperado || pendentePagamentoResponsavel) && (
+      {cooperadoSelecionadoId && exibirPagamento && (
         <>
           <div className="bg-gradient-to-br from-green-700 to-green-800 text-white rounded-2xl p-6 mb-6 shadow-sm">
             <p className="text-green-100 text-sm">
@@ -1015,6 +1024,12 @@ export default function FichaCorridaPage() {
               />
             )}
           </div>
+
+          {!isCooperado && aba === "pagar" && resumoItensMes.entregas > 0 && (
+            <Card title={`Lançamentos · ${formatMesReferencia(mesAtivo)}`} className="mb-6">
+              <TabelaResumoItens itens={resumoItensMes.itens} entregas={resumoItensMes.entregas} />
+            </Card>
+          )}
 
           {!isCooperado && cooperadoSelecionado && check("ficha_corrida", "edit") && (
             <Card title={`Pagamento — ${nomeCooperado.split(" ")[0]}`} className="mb-6">

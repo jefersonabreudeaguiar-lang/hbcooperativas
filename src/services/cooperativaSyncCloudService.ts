@@ -39,13 +39,16 @@ function mergeOperacionalArrayFromCloud<T extends WithUpdatedAt>(
   cloudUpdatedAt: string | undefined
 ): T[] {
   const cloudTime = cloudUpdatedAt ? new Date(cloudUpdatedAt).getTime() : 0;
-  const cloudIds = new Set(cloudItems.map((i) => i.id));
   const map = new Map<string, T>();
 
   for (const item of cloudItems) map.set(item.id, item);
 
   for (const item of localCoop) {
-    if (cloudIds.has(item.id)) continue;
+    const cloudItem = map.get(item.id);
+    if (cloudItem) {
+      if (itemTime(item) > itemTime(cloudItem)) map.set(item.id, item);
+      continue;
+    }
     if (cloudTime > 0 && itemTime(item) <= cloudTime) continue;
     map.set(item.id, item);
   }

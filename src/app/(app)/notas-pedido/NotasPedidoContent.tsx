@@ -196,6 +196,7 @@ export default function NotasPedidoContent() {
   const [avulsoDataEntrega, setAvulsoDataEntrega] = useState("");
   const [avulsoAssinatura, setAvulsoAssinatura] = useState("");
   const [avulsoItens, setAvulsoItens] = useState<ItemForm[]>([]);
+  const avulsoInstIdAnteriorRef = useRef("");
   const [avulsoErrors, setAvulsoErrors] = useState<{ cooperado?: string; instituicao?: string; assinatura?: string; itens?: string }>({});
 
   const [filtroCooperadoId, setFiltroCooperadoId] = useState("");
@@ -838,9 +839,19 @@ export default function NotasPedidoContent() {
   useEffect(() => {
     if (!data || !avulsoInstId) {
       setAvulsoItens([]);
+      avulsoInstIdAnteriorRef.current = "";
       return;
     }
-    setAvulsoItens(loadItensFromInstituicao(data, avulsoInstId, coopId));
+    const instituicaoMudou = avulsoInstIdAnteriorRef.current !== avulsoInstId;
+    avulsoInstIdAnteriorRef.current = avulsoInstId;
+    setAvulsoItens((prev) => {
+      const base = loadItensFromInstituicao(data, avulsoInstId, coopId);
+      if (instituicaoMudou || prev.length === 0) return base;
+      return base.map((item) => {
+        const existente = prev.find((p) => p.produtoInstituicaoId === item.produtoInstituicaoId);
+        return existente ? { ...item, quantidade: existente.quantidade } : item;
+      });
+    });
   }, [avulsoInstId, data, coopId]);
 
   const avulsoTotais = useMemo(() => {
@@ -867,6 +878,7 @@ export default function NotasPedidoContent() {
       preCooperadoId && cooperadosCoop.some((c) => c.id === preCooperadoId)
         ? preCooperadoId
         : cooperadosCoop[0]?.id ?? NOVO_AVULSO;
+    avulsoInstIdAnteriorRef.current = "";
     setAvulsoCooperadoId(defaultCoop);
     setAvulsoNovoNome("");
     setAvulsoInstId(instId);
@@ -2932,8 +2944,16 @@ export default function NotasPedidoContent() {
                         aria-label={`Quantidade de ${item.produtoNome}`}
                         placeholder="0"
                         className={qtyInputClassName(item.quantidade > 0, "w-28")}
-                        value={item.quantidade || ""}
-                        onChange={(e) => updateAvulsoQty(idx, parseFloat(e.target.value) || 0)}
+                        value={item.quantidade === 0 ? "" : item.quantidade}
+                        onChange={(e) => {
+                          const raw = e.target.value;
+                          if (raw === "" || raw === ".") {
+                            updateAvulsoQty(idx, 0);
+                            return;
+                          }
+                          const qty = parseFloat(raw);
+                          if (!Number.isNaN(qty)) updateAvulsoQty(idx, qty);
+                        }}
                       />
                       <p className="text-[10px] font-medium text-gray-600 mt-1">{labelUnidade(item.unidade)}</p>
                     </div>
