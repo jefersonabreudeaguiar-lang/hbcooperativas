@@ -53,7 +53,11 @@ function CooperadoDashboard() {
   const mensalidadeAberta = resumoMens.situacao === "atrasada";
   const prestacao = coopId ? prestacaoPrincipalCooperado(data, cooperadoId, coopId) : undefined;
   const prestacaoAberta = prestacao ? prestacaoExigeAtencaoCooperado(prestacao) : false;
-  const avulsosAbertos = totalValoresAvulsosPendentes(data, cooperadoId, undefined, coopId) > 0;
+  const avulsosPendentesTotal = totalValoresAvulsosPendentes(data, cooperadoId, undefined, coopId);
+  const avulsosJaNoCardPrincipal =
+    valorReceber.exibir &&
+    totalValoresAvulsosPendentes(data, cooperadoId, valorReceber.mes, coopId) > 0;
+  const exibirCardAvulsosSeparado = avulsosPendentesTotal > 0 && !avulsosJaNoCardPrincipal;
   const comunicados = coopId ? getComunicadosInicioCooperado(data, coopId, cooperadoId) : [];
   const resolvidos = listarResolvidosInicioCooperado(data, cooperadoId, coopId);
   const temSecaoPendencias =
@@ -63,7 +67,7 @@ function CooperadoDashboard() {
     precisaPix ||
     mensalidadeAberta ||
     prestacaoAberta ||
-    avulsosAbertos;
+    exibirCardAvulsosSeparado;
 
   return (
     <div className="space-y-6 max-w-3xl">
@@ -76,7 +80,7 @@ function CooperadoDashboard() {
 
       <AvisosInicioSection comunicados={comunicados} hideWhenEmpty />
 
-      {avulsosAbertos && (
+      {exibirCardAvulsosSeparado && (
         <ValoresAvulsosDashboardCard cooperadoId={cooperadoId} cooperativaId={coopId} />
       )}
 
