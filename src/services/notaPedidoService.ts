@@ -377,11 +377,19 @@ export function buildFichaFromNota(
   nota: NotaPedido,
   data: AppData,
   responsavel: string,
-  cooperadoNome?: string
+  cooperadoNome?: string,
+  opts?: { fotoIndex?: number; totalFotos?: number }
 ): FichaCorrida {
-  const saldoAnterior = getSaldoAnteriorFicha(data, nota.cooperadoId, nota.mesReferencia, nota.id);
+  const saldoAnterior =
+    opts?.fotoIndex != null
+      ? getSaldoAnteriorFicha(data, nota.cooperadoId, nota.mesReferencia)
+      : getSaldoAnteriorFicha(data, nota.cooperadoId, nota.mesReferencia, nota.id);
   const inst = data.instituicoes.find((i) => i.id === nota.instituicaoId);
   const escola = nota.escolaAvulsaNome?.trim() || inst?.nome || "Instituição";
+  const sufixoFoto =
+    opts?.fotoIndex != null && opts.totalFotos != null && opts.totalFotos > 1
+      ? ` (foto ${opts.fotoIndex + 1}/${opts.totalFotos})`
+      : "";
   const descontosDetalhe: FichaCorridaDesconto[] = [];
   if (nota.valorDesconto > 0) {
     descontosDetalhe.push({
@@ -399,7 +407,7 @@ export function buildFichaFromNota(
       nota.cooperadoNomeSnapshot?.trim() ||
       data.cooperados.find((c) => c.id === nota.cooperadoId)?.nomeCompleto,
     notaPedidoId: nota.id,
-    descricao: `Nota ${nota.numeroNota} — ${escola}`,
+    descricao: `Nota ${nota.numeroNota} — ${escola}${sufixoFoto}`,
     valorBruto: nota.valorBruto,
     descontos: nota.valorDesconto,
     valorLiquido: nota.valorLiquido,
@@ -807,6 +815,29 @@ export function aplicarItensNaNota(
     valorLiquido: calc.valorLiquido,
     updatedAt: new Date().toISOString(),
   };
+}
+
+/** Soma itens lançados em várias fotos da mesma entrega. */
+export function consolidarItensLancamentoPorFoto(
+  lancamentos: NotaPedidoItem[][]
+): NotaPedidoItem[] {
+  const map = new Map<string, NotaPedidoItem>();
+  for (const lista of lancamentos) {
+    for (const item of lista) {
+      if (item.quantidade <= 0) continue;
+      const prev = map.get(item.produtoInstituicaoId);
+      if (prev) {
+        map.set(item.produtoInstituicaoId, {
+          ...prev,
+          quantidade: round2(prev.quantidade + item.quantidade),
+          valorBruto: round2(prev.valorBruto + item.valorBruto),
+        });
+      } else {
+        map.set(item.produtoInstituicaoId, { ...item });
+      }
+    }
+  }
+  return [...map.values()];
 }
 
 export function registrarPagamentoCooperado(

@@ -23,6 +23,7 @@ import {
   buildFichaFromNota,
   aplicarItensNaNota,
   upsertArquivoMensal,
+  consolidarItensLancamentoPorFoto,
 } from "@/services/notaPedidoService";
 import {
   getCooperativaCnpj,
@@ -226,8 +227,12 @@ export default function NotasPedidoContent() {
   } | null>(null);
   const lancamentoSequenciaTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const conferenciaFotoCacheRef = useRef<Map<number, string>>(new Map());
+  const fotosLancadasConferenciaRef = useRef<Set<number>>(new Set());
+  const lancamentosFotoConferenciaRef = useRef<Map<number, NotaPedidoItem[]>>(new Map());
   const [conferenciaFotoAtualUrl, setConferenciaFotoAtualUrl] = useState<string | null>(null);
   const [conferenciaFotoCarregando, setConferenciaFotoCarregando] = useState(false);
+  const [conferenciaFotoSomenteLeitura, setConferenciaFotoSomenteLeitura] = useState(false);
+  const [fotosLancadasUi, setFotosLancadasUi] = useState<Set<number>>(() => new Set());
 
   const coopId = user && data ? getUserCooperativaId(user, data) : undefined;
   const ANEXAR_DRAFT_KEY = coopId ? `hb_anexar_draft_${coopId}` : "";
@@ -282,6 +287,169 @@ export default function NotasPedidoContent() {
       }
     },
     [data, coopId, user]
+  );
+
+  const resetConferenciaPorFoto = useCallback(() => {
+    fotosLancadasConferenciaRef.current = new Set();
+    lancamentosFotoConferenciaRef.current = new Map();
+    setConferenciaFotoSomenteLeitura(false);
+    setFotosLancadasUi(new Set());
+  }, []);
+
+  const carregarItensParaFotoConferencia = useCallback(
+    (fotoIdx: number) => {
+      const d = getData() ?? data;
+      if (!d || !conferenciaInstId) return;
+      if (fotosLancadasConferenciaRef.current.has(fotoIdx)) {
+        const salvos = lancamentosFotoConferenciaRef.current.get(fotoIdx);
+        setConferenciaItens(loadItensFromInstituicao(d, conferenciaInstId, coopId, salvos));
+        setConferenciaFotoSomenteLeitura(true);
+        return;
+      }
+      setConferenciaItens(loadItensFromInstituicao(d, conferenciaInstId, coopId));
+      setConferenciaFotoSomenteLeitura(false);
+    },
+    [data, conferenciaInstId, coopId]
+  );
+
+  const lancarFotoConferenciaAtual = useCallback(
+    (fotoIdx: number, totalFotos: number): { ok: boolean; error?: string } => {
+      if (!user || !selectedNota) return { ok: false, error: "Entrega não selecionada." };
+      if (fotosLancadasConferenciaRef.current.has(fotoIdx)) return { ok: true };
+
+      const r = calcularItensNota(
+        conferenciaItens.map((i) => ({ ...i, valorBruto: 0 })),
+        conferenciaDescontoPct
+      );
+      if (r.valorLiquido <= 0) {
+        return { ok: false, error: "Informe a quantidade de pelo menos um produto nesta foto." };
+      }
+
+      const d0 = getData() ?? data;
+      if (!d0) return { ok: false, error: "Dados indisponíveis." };
+
+      const coopSel =
+        coopId && d0
+          ? listCooperadosDaCooperativa(d0, coopId).find((c) => c.id === conferenciaCooperadoId)
+          : undefined;
+      const nomeCoop =
+        coopSel?.nomeCompleto?.trim() ||
+        selectedNota.cooperadoNomeSnapshot?.trim() ||
+        getCooperadoNomeResolvido(d0, conferenciaCooperadoId, coopId);
+
+      updateData((d) => {
+        const cooperadoIdCanonico = resolverCooperadoIdCanonico(
+          d,
+          conferenciaCooperadoId,
+          coopId,
+          nomeCoop
+        );
+        const base = aplicarItensNaNota(
+          {
+            ...selectedNota,
+            cooperadoId: cooperadoIdCanonico,
+            cooperadoNomeSnapshot: nomeCoop,
+            instituicaoId: conferenciaInstId,
+            localEntrega: conferenciaLocal,
+            escolaAvulsaNome: conferenciaEscolaAvulsa.trim() || selectedNota.escolaAvulsaNome,
+          },
+          conferenciaItens.map((i) => ({ ...i, valorBruto: 0 })),
+          conferenciaDescontoPct
+        );
+        const ficha = buildFichaFromNota(base, d, user.name, nomeCoop, {
+          fotoIndex: fotoIdx,
+          totalFotos,
+        });
+        lancamentosFotoConferenciaRef.current.set(fotoIdx, base.itens);
+        fotosLancadasConferenciaRef.current.add(fotoIdx);
+        setFotosLancadasUi(new Set(fotosLancadasConferenciaRef.current));
+
+        const jaNaFicha = d.fichaCorrida.some(
+          (f) => f.notaPedidoId === selectedNota.id && f.descricao.includes(`foto ${fotoIdx + 1}/`)
+        );
+        if (jaNaFicha) return d;
+
+        const arquivosMensais = upsertArquivoMensal(d, base.cooperadoId, base.cooperativaId, base.mesReferencia, {
+          notaPedidoIds: [selectedNota.id],
+        });
+        return addAuditEntry(
+          {
+            ...d,
+            fichaCorrida: [...d.fichaCorrida, ficha],
+            arquivosMensais,
+          },
+          {
+            entityType: "nota_pedido",
+            entityId: selectedNota.id,
+            action: "aprovar",
+            userId: user.id,
+            userName: user.name,
+            changes: `Foto ${fotoIdx + 1}/${totalFotos} lançada na ficha`,
+          }
+        );
+      });
+
+      return { ok: true };
+    },
+    [
+      user,
+      selectedNota,
+      conferenciaItens,
+      conferenciaDescontoPct,
+      data,
+      conferenciaCooperadoId,
+      coopId,
+      conferenciaInstId,
+      conferenciaLocal,
+      conferenciaEscolaAvulsa,
+    ]
+  );
+
+  const irParaFotoConferencia = useCallback(
+    (novoIdx: number) => {
+      if (!selectedNota) return;
+      const total = contarFotosEnviadasNota(selectedNota);
+      if (total <= 1) {
+        setConferenciaFotoIdx(Math.min(Math.max(0, novoIdx), total - 1));
+        return;
+      }
+
+      const clamped = Math.min(Math.max(0, novoIdx), total - 1);
+      const atual = conferenciaFotoIdx;
+
+      if (clamped > atual && !fotosLancadasConferenciaRef.current.has(atual)) {
+        const r = calcularItensNota(
+          conferenciaItens.map((i) => ({ ...i, valorBruto: 0 })),
+          conferenciaDescontoPct
+        );
+        if (r.valorLiquido > 0) {
+          const lanc = lancarFotoConferenciaAtual(atual, total);
+          if (!lanc.ok) {
+            setConferirErrors({ itens: lanc.error });
+            return;
+          }
+          setLancadoMsg(`Foto ${atual + 1} lançada na ficha. Preencha a foto ${clamped + 1}.`);
+          setTimeout(() => setLancadoMsg(""), 3500);
+        } else if (clamped > atual + 1) {
+          setConferirErrors({
+            itens: `Lance os itens da foto ${atual + 1} antes de pular para a foto ${clamped + 1}.`,
+          });
+          return;
+        }
+      }
+
+      setConferirErrors({});
+      setConferenciaFotoIdx(clamped);
+      carregarItensParaFotoConferencia(clamped);
+    },
+    [
+      selectedNota,
+      conferenciaFotoIdx,
+      conferenciaItens,
+      conferenciaDescontoPct,
+      lancarFotoConferenciaAtual,
+      carregarItensParaFotoConferencia,
+    ]
   );
 
   const resetFotosSessaoUi = useCallback(() => {
@@ -1366,6 +1534,7 @@ export default function NotasPedidoContent() {
     }
     setLancamentoSequencia(null);
     revokeConferenciaFotoCache();
+    resetConferenciaPorFoto();
     filaConferenciaRef.current = null;
     setFilaConferenciaPos(0);
     setFilaConferenciaTotal(0);
@@ -1380,6 +1549,7 @@ export default function NotasPedidoContent() {
     if (opts?.transicao) setConferenciaTransicao(true);
     setConferenciaFotoErro("");
     setConferenciaFotoIdx(0);
+    resetConferenciaPorFoto();
 
     let notaComFoto = nota;
     if (d && coopId) {
@@ -1407,7 +1577,11 @@ export default function NotasPedidoContent() {
     if (d && instId) {
       const inst = d.instituicoes.find((i) => i.id === instId);
       setConferenciaLocal(inst?.localEntrega ?? inst?.endereco ?? "");
-      setConferenciaItens(loadItensFromInstituicao(d, instId, coopId, nota.itens));
+      const multiFoto = totalFotos > 1;
+      setConferenciaItens(
+        loadItensFromInstituicao(d, instId, coopId, multiFoto ? undefined : nota.itens)
+      );
+      setConferenciaFotoSomenteLeitura(false);
     } else {
       setConferenciaItens([]);
       setConferenciaLocal("");
@@ -1551,19 +1725,57 @@ export default function NotasPedidoContent() {
     if (lancandoRef.current || !user || !data || !selectedNota) return;
     const errors: typeof conferirErrors = {};
     if (!conferenciaCooperadoId) errors.itens = "Escolha o cooperado dono desta nota.";
-    if (conferenciaTotais.liquido <= 0) errors.itens = errors.itens ?? "Informe a quantidade de pelo menos um produto.";
     if (Object.keys(errors).length) {
       setConferirErrors(errors);
       return;
     }
 
+    const qtdFotosAprovadas = contarFotosEnviadasNota(selectedNota);
+    const fotoAtual = conferenciaFotoIdx;
+    const multiFoto = qtdFotosAprovadas > 1;
+    const ultimaFoto = fotoAtual >= qtdFotosAprovadas - 1;
+
+    if (multiFoto && !ultimaFoto) {
+      if (conferenciaFotoSomenteLeitura) {
+        irParaFotoConferencia(fotoAtual + 1);
+        return;
+      }
+      const lanc = lancarFotoConferenciaAtual(fotoAtual, qtdFotosAprovadas);
+      if (!lanc.ok) {
+        setConferirErrors({ itens: lanc.error });
+        return;
+      }
+      setConferirErrors({});
+      setLancadoMsg(`Foto ${fotoAtual + 1} lançada na ficha. Preencha a foto ${fotoAtual + 2}.`);
+      setTimeout(() => setLancadoMsg(""), 3500);
+      irParaFotoConferencia(fotoAtual + 1);
+      return;
+    }
+
+    if (conferenciaTotais.liquido <= 0 && !fotosLancadasConferenciaRef.current.has(fotoAtual)) {
+      setConferirErrors({ itens: "Informe a quantidade de pelo menos um produto." });
+      return;
+    }
+
+    if (multiFoto && !fotosLancadasConferenciaRef.current.has(fotoAtual) && !conferenciaFotoSomenteLeitura) {
+      const lanc = lancarFotoConferenciaAtual(fotoAtual, qtdFotosAprovadas);
+      if (!lanc.ok) {
+        setConferirErrors({ itens: lanc.error });
+        return;
+      }
+    }
+
     lancandoRef.current = true;
     let notaAtualizada: NotaPedido | null = null;
-    const qtdFotosAprovadas = contarFotosEnviadasNota(selectedNota);
     const notaId = selectedNota.id;
     const chaveAtual = getChaveGrupoConferencia(selectedNota, data, coopId);
     const coopNomeAprovar = getCooperadoNomeResolvido(data, conferenciaCooperadoId, coopId);
-    const valorAprovado = conferenciaTotais.liquido;
+
+    const itensConsolidados = consolidarItensLancamentoPorFoto(
+      [...lancamentosFotoConferenciaRef.current.values()]
+    );
+    const calcConsolidado = calcularItensNota(itensConsolidados, conferenciaDescontoPct);
+    const valorAprovado = calcConsolidado.valorLiquido;
 
     updateData((d) => {
       const now = new Date().toISOString();
@@ -1579,20 +1791,39 @@ export default function NotasPedidoContent() {
         coopId,
         nomeCoop
       );
-      const base = aplicarItensNaNota(
-        {
-          ...selectedNota,
-          cooperadoId: cooperadoIdCanonico,
-          cooperadoNomeSnapshot: nomeCoop,
-          instituicaoId: conferenciaInstId,
-          localEntrega: conferenciaLocal,
-          escolaAvulsaNome: conferenciaEscolaAvulsa.trim() || selectedNota.escolaAvulsaNome,
-          assinaturaRecebedor: selectedNota.assinaturaRecebedor?.trim() || "Assinatura na nota",
-          dataAssinatura: selectedNota.dataAssinatura || selectedNota.dataEntrega,
-        },
-        conferenciaItens.map((i) => ({ ...i, valorBruto: 0 })),
-        conferenciaDescontoPct
-      );
+
+      const base = multiFoto
+        ? {
+            ...selectedNota,
+            cooperadoId: cooperadoIdCanonico,
+            cooperadoNomeSnapshot: nomeCoop,
+            instituicaoId: conferenciaInstId,
+            localEntrega: conferenciaLocal,
+            escolaAvulsaNome: conferenciaEscolaAvulsa.trim() || selectedNota.escolaAvulsaNome,
+            assinaturaRecebedor: selectedNota.assinaturaRecebedor?.trim() || "Assinatura na nota",
+            dataAssinatura: selectedNota.dataAssinatura || selectedNota.dataEntrega,
+            itens: calcConsolidado.itens,
+            valorBruto: calcConsolidado.valorBruto,
+            percentualDescontoCooperativa: conferenciaDescontoPct,
+            valorDesconto: calcConsolidado.valorDesconto,
+            valorLiquido: calcConsolidado.valorLiquido,
+            updatedAt: now,
+          }
+        : aplicarItensNaNota(
+            {
+              ...selectedNota,
+              cooperadoId: cooperadoIdCanonico,
+              cooperadoNomeSnapshot: nomeCoop,
+              instituicaoId: conferenciaInstId,
+              localEntrega: conferenciaLocal,
+              escolaAvulsaNome: conferenciaEscolaAvulsa.trim() || selectedNota.escolaAvulsaNome,
+              assinaturaRecebedor: selectedNota.assinaturaRecebedor?.trim() || "Assinatura na nota",
+              dataAssinatura: selectedNota.dataAssinatura || selectedNota.dataEntrega,
+            },
+            conferenciaItens.map((i) => ({ ...i, valorBruto: 0 })),
+            conferenciaDescontoPct
+          );
+
       notaAtualizada = {
         ...base,
         status: "conferida",
@@ -1600,17 +1831,52 @@ export default function NotasPedidoContent() {
         dataConferencia: now.split("T")[0],
       };
       const notasPedido = d.notasPedido.map((n) => (n.id === selectedNota.id ? notaAtualizada! : n));
+
+      if (multiFoto) {
+        const arquivosMensais = upsertArquivoMensal(
+          d,
+          notaAtualizada.cooperadoId,
+          notaAtualizada.cooperativaId,
+          notaAtualizada.mesReferencia,
+          { notaPedidoIds: [notaAtualizada.id] }
+        );
+        return addAuditEntry(
+          { ...d, notasPedido, arquivosMensais },
+          {
+            entityType: "nota_pedido",
+            entityId: selectedNota.id,
+            action: "aprovar",
+            userId: user.id,
+            userName: user.name,
+            changes:
+              qtdFotosAprovadas > 1
+                ? `Entrega conferida (${qtdFotosAprovadas} fotos)`
+                : "Entrega conferida",
+          }
+        );
+      }
+
       const jaNaFicha = d.fichaCorrida.some((f) => f.notaPedidoId === selectedNota.id);
       if (jaNaFicha) {
         return addAuditEntry(
           { ...d, notasPedido },
-          { entityType: "nota_pedido", entityId: selectedNota.id, action: "aprovar", userId: user.id, userName: user.name }
+          {
+            entityType: "nota_pedido",
+            entityId: selectedNota.id,
+            action: "aprovar",
+            userId: user.id,
+            userName: user.name,
+          }
         );
       }
       const ficha = buildFichaFromNota(notaAtualizada, d, user.name, nomeCoop);
-      const arquivosMensais = upsertArquivoMensal(d, notaAtualizada.cooperadoId, notaAtualizada.cooperativaId, notaAtualizada.mesReferencia, {
-        notaPedidoIds: [notaAtualizada.id],
-      });
+      const arquivosMensais = upsertArquivoMensal(
+        d,
+        notaAtualizada.cooperadoId,
+        notaAtualizada.cooperativaId,
+        notaAtualizada.mesReferencia,
+        { notaPedidoIds: [notaAtualizada.id] }
+      );
       return addAuditEntry(
         {
           ...d,
@@ -1618,7 +1884,13 @@ export default function NotasPedidoContent() {
           fichaCorrida: [...d.fichaCorrida, ficha],
           arquivosMensais,
         },
-        { entityType: "nota_pedido", entityId: selectedNota.id, action: "aprovar", userId: user.id, userName: user.name }
+        {
+          entityType: "nota_pedido",
+          entityId: selectedNota.id,
+          action: "aprovar",
+          userId: user.id,
+          userName: user.name,
+        }
       );
     });
 
@@ -2686,15 +2958,31 @@ export default function NotasPedidoContent() {
             </Button>
             <Button size="lg" onClick={handleLancarNota} disabled={conferenciaTransicao || Boolean(lancamentoSequencia)}>
               <CheckCircle size={18} />
-              {lancamentoSequencia
-                ? `Lançando foto ${lancamentoSequencia.displayIdx + 1} de ${lancamentoSequencia.total}…`
-                : conferenciaTransicao
-                ? "Carregando próxima entrega…"
-                : selectedNota && contarFotosEnviadasNota(selectedNota) > 1
-                  ? `Aprovar e lançar (${contarFotosEnviadasNota(selectedNota)} fotos)`
-                  : filaConferenciaTotal > 1
-                    ? `Aprovar e próxima (${filaConferenciaPos}/${filaConferenciaTotal})`
-                    : "Aprovar e lançar na ficha"}
+              {(() => {
+                if (lancamentoSequencia) {
+                  return `Lançando foto ${lancamentoSequencia.displayIdx + 1} de ${lancamentoSequencia.total}…`;
+                }
+                if (conferenciaTransicao) return "Carregando próxima entrega…";
+                if (!selectedNota) return "Aprovar e lançar na ficha";
+                const qtdFotosBtn = contarFotosEnviadasNota(selectedNota);
+                const multiFotoBtn = qtdFotosBtn > 1;
+                const ultimaFotoBtn = conferenciaFotoIdx >= qtdFotosBtn - 1;
+                if (multiFotoBtn && conferenciaFotoSomenteLeitura && !ultimaFotoBtn) {
+                  return "Próxima foto";
+                }
+                if (multiFotoBtn && !ultimaFotoBtn) {
+                  return `Lançar foto ${conferenciaFotoIdx + 1} e continuar`;
+                }
+                if (multiFotoBtn && ultimaFotoBtn) {
+                  return filaConferenciaTotal > 1
+                    ? `Concluir entrega · próxima (${filaConferenciaPos}/${filaConferenciaTotal})`
+                    : "Concluir entrega (última foto)";
+                }
+                if (filaConferenciaTotal > 1) {
+                  return `Aprovar e próxima (${filaConferenciaPos}/${filaConferenciaTotal})`;
+                }
+                return "Aprovar e lançar na ficha";
+              })()}
             </Button>
           </div>
         ) : undefined}
@@ -2764,15 +3052,18 @@ export default function NotasPedidoContent() {
                                 <button
                                   key={i}
                                   type="button"
-                                  onClick={() => setConferenciaFotoIdx(i)}
+                                  onClick={() => irParaFotoConferencia(i)}
                                   className={cn(
                                     "text-xs font-semibold px-3 py-1.5 rounded-full border transition-all",
                                     i === idx
                                       ? "border-green-400 bg-green-500/20 text-green-100"
-                                      : "border-white/20 text-white/70 hover:border-white/40"
+                                      : fotosLancadasUi.has(i)
+                                        ? "border-green-600/60 bg-green-900/30 text-green-200"
+                                        : "border-white/20 text-white/70 hover:border-white/40"
                                   )}
                                 >
                                   Foto {i + 1}
+                                  {fotosLancadasUi.has(i) ? " ✓" : ""}
                                 </button>
                               ))}
                             </div>
@@ -2782,7 +3073,7 @@ export default function NotasPedidoContent() {
                                 variant="secondary"
                                 size="sm"
                                 disabled={idx <= 0}
-                                onClick={() => setConferenciaFotoIdx((i) => Math.max(0, i - 1))}
+                                onClick={() => irParaFotoConferencia(idx - 1)}
                               >
                                 Anterior
                               </Button>
@@ -2794,7 +3085,7 @@ export default function NotasPedidoContent() {
                                 variant="secondary"
                                 size="sm"
                                 disabled={idx >= totalFotos - 1}
-                                onClick={() => setConferenciaFotoIdx((i) => Math.min(totalFotos - 1, i + 1))}
+                                onClick={() => irParaFotoConferencia(idx + 1)}
                               >
                                 Próxima foto
                               </Button>
@@ -2863,12 +3154,20 @@ export default function NotasPedidoContent() {
               {(() => {
                 const qtdFotosModal = getFotosExibicaoNota(selectedNota).length;
                 if (qtdFotosModal <= 1) return null;
+                const idxModal = Math.min(conferenciaFotoIdx, qtdFotosModal - 1);
                 return (
-                  <AlertBanner variant="info" title={`${qtdFotosModal} fotos nesta entrega`}>
-                    Veja foto por foto à esquerda, informe as quantidades e toque Aprovar. Cada foto será lançada na sequência.
+                  <AlertBanner variant="info" title={`${qtdFotosModal} fotos nesta entrega · foto ${idxModal + 1} de ${qtdFotosModal}`}>
+                    {conferenciaFotoSomenteLeitura
+                      ? "Esta foto já foi lançada na ficha. Avance para a próxima ou volte para conferir."
+                      : "Preencha as quantidades desta foto e toque em «Lançar foto e continuar». A próxima foto abre com quantidades zeradas."}
                   </AlertBanner>
                 );
               })()}
+              {lancadoMsg && (
+                <AlertBanner variant="success" onDismiss={() => setLancadoMsg("")}>
+                  {lancadoMsg}
+                </AlertBanner>
+              )}
               <FormField label="Cooperado" required hint="Quem receberá o valor na ficha">
                 <Select value={conferenciaCooperadoId} onChange={(e) => setConferenciaCooperadoId(e.target.value)}>
                   <option value="">Selecione...</option>
@@ -2941,7 +3240,13 @@ export default function NotasPedidoContent() {
                 <div className="border border-gray-200 rounded-xl overflow-hidden bg-white shadow-sm">
                   <div className="bg-green-700 text-white px-4 py-3">
                     <p className="font-semibold">{conferenciaInstNome || "Contrato"}</p>
-                    <p className="text-green-100 text-xs mt-0.5">Confira a foto ao lado e informe as quantidades entregues</p>
+                    <p className="text-green-100 text-xs mt-0.5">
+                      {conferenciaFotoSomenteLeitura
+                        ? "Foto já lançada — quantidades bloqueadas"
+                        : contarFotosEnviadasNota(selectedNota) > 1
+                          ? `Foto ${Math.min(conferenciaFotoIdx, contarFotosEnviadasNota(selectedNota) - 1) + 1} — informe só o que aparece nesta foto`
+                          : "Confira a foto ao lado e informe as quantidades entregues"}
+                    </p>
                   </div>
                   {conferirErrors.itens && (
                     <p className="text-sm text-red-600 px-4 pt-3">{conferirErrors.itens}</p>
@@ -2975,9 +3280,13 @@ export default function NotasPedidoContent() {
                                   min={0}
                                   step="0.01"
                                   inputMode="decimal"
+                                  disabled={conferenciaFotoSomenteLeitura}
                                   aria-label={`Quantidade de ${item.produtoNome}`}
                                   placeholder="0"
-                                  className={qtyInputClassName(item.quantidade > 0, "w-full")}
+                                  className={qtyInputClassName(
+                                    item.quantidade > 0,
+                                    cn("w-full", conferenciaFotoSomenteLeitura && "opacity-70 cursor-not-allowed")
+                                  )}
                                   value={item.quantidade === 0 ? "" : item.quantidade}
                                   onChange={(e) => {
                                     const raw = e.target.value;
