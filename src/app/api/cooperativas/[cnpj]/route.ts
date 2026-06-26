@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { getSupabaseAdmin, isSupabaseConfigured } from "@/lib/supabase/admin";
 import { normalizeCnpj } from "@/utils/cooperativa";
 import type { Cooperativa, MensalidadeConfig } from "@/types";
-import { cooperativaFromCloudRow, exigeSenhaCadastroCooperado, mensalidadeConfigComSenhaCadastro, mensalidadeConfigSemSenhaCadastro } from "@/utils/cooperativaCadastro";
+import { cooperativaFromCloudRow, exigeSenhaCadastroCooperado, mensalidadeConfigComSenhaCadastro, mensalidadeConfigComSenhaAreaAdmin, mensalidadeConfigSemSenhaCadastro } from "@/utils/cooperativaCadastro";
 
 export async function PATCH(
   request: Request,
@@ -51,6 +51,19 @@ export async function PATCH(
     patch.mensalidade_config = mensalidadeConfigComSenhaCadastro(
       mergedCfg,
       String(body.senhaCadastroCooperado ?? "").trim() || undefined
+    );
+  }
+  if (body.senhaAreaAdminHash !== undefined) {
+    const { data: atual } = await supabase
+      .from("cooperativas")
+      .select("mensalidade_config")
+      .eq("cnpj", cnpj)
+      .maybeSingle();
+    const atualCfg = (patch.mensalidade_config as MensalidadeConfig | undefined)
+      ?? ((atual?.mensalidade_config as MensalidadeConfig | null) ?? undefined);
+    patch.mensalidade_config = mensalidadeConfigComSenhaAreaAdmin(
+      atualCfg,
+      String(body.senhaAreaAdminHash ?? "").trim() || undefined
     );
   }
 

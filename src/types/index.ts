@@ -23,6 +23,8 @@ export interface MensalidadeConfig {
   configSalvaEm?: string;
   /** Armazenado na nuvem — senha exigida no cadastro de cooperados (opcional). */
   senhaCadastroCooperado?: string;
+  /** Hash bcrypt da senha da área administrativa (opcional). */
+  senhaAreaAdminHash?: string;
 }
 
 export interface Cooperativa {
@@ -37,6 +39,8 @@ export interface Cooperativa {
   mensalidadeConfig?: MensalidadeConfig;
   /** Senha opcional que o cooperado deve informar no auto-cadastro pelo CNPJ. */
   senhaCadastroCooperado?: string;
+  /** Hash bcrypt da senha exclusiva da área administrativa (/admin). */
+  senhaAreaAdminHash?: string;
   createdAt: string;
   updatedAt: string;
 }

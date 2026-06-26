@@ -234,6 +234,7 @@ export function mergeCooperativaIntoData(
       id: cur.id,
       mensalidadeConfig,
       senhaCadastroCooperado: cloudCoop.senhaCadastroCooperado ?? cur.senhaCadastroCooperado,
+      senhaAreaAdminHash: cloudCoop.senhaAreaAdminHash ?? cur.senhaAreaAdminHash,
       updatedAt: tCloud > tLocal ? cloudCoop.updatedAt : cur.updatedAt,
     };
     return next;

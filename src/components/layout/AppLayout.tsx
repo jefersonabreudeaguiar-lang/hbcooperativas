@@ -6,7 +6,7 @@ import {
   LayoutDashboard, Users, CreditCard, PieChart, Truck, Wallet,
   Percent, Building2, Landmark, Megaphone, MapPin, Car, FileText,
   CalendarCheck, LogOut, Menu, X, Building, ClipboardList, Receipt, User, Tag,
-  BookOpen, FileCheck,
+  BookOpen, FileCheck, Shield,
 } from "lucide-react";
 import { useState } from "react";
 import { useAuth } from "@/modules/auth/AuthProvider";
@@ -27,6 +27,7 @@ const ICONS: Record<string, React.ReactNode> = {
   "/precos": <Tag size={20} />,
   "/contratos": <FileText size={20} />,
   "/meu-perfil": <Building size={20} />,
+  "/admin": <Shield size={20} />,
   "/comunicados": <Megaphone size={20} />,
   "/livro-caixa": <BookOpen size={20} />,
   "/prestacao-contas": <FileCheck size={20} />,

@@ -675,6 +675,7 @@ export async function pushCooperativaProfileToCloud(cooperativa: Cooperativa): P
         email: cooperativa.email,
         mensalidadeConfig: cooperativa.mensalidadeConfig,
         senhaCadastroCooperado: cooperativa.senhaCadastroCooperado?.trim() ?? "",
+        senhaAreaAdminHash: cooperativa.senhaAreaAdminHash?.trim() ?? "",
       }),
     });
   } catch {
