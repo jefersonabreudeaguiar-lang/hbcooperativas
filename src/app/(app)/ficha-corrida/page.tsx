@@ -789,6 +789,30 @@ export default function FichaCorridaPage() {
         </div>
       )}
 
+      {cooperadoSelecionadoId && (
+        <ValoresAvulsosReceberPanel
+          cooperadoId={cooperadoSelecionadoId}
+          cooperativaId={coopId}
+          mesReferencia={mesAtivo}
+          modo={isCooperado ? "cooperado" : "responsavel"}
+          filtrarHistoricoPorMes={isCooperado && visualizandoHistorico}
+          onLancar={!isCooperado && check("ficha_corrida", "edit") ? handleLancarAvulsoReceber : undefined}
+          onRemover={!isCooperado && check("ficha_corrida", "edit") ? handleRemoverAvulsoReceber : undefined}
+          lancamentoForm={
+            !isCooperado && check("ficha_corrida", "edit")
+              ? {
+                  motivo: avulsoReceberMotivo,
+                  valor: avulsoReceberValor,
+                  data: avulsoReceberData,
+                  onMotivo: setAvulsoReceberMotivo,
+                  onValor: setAvulsoReceberValor,
+                  onData: setAvulsoReceberData,
+                }
+              : undefined
+          }
+        />
+      )}
+
       {!isCooperado && aba === "pagar" && cooperadosParaPagar.length === 0 && (
         <AlertBanner variant="success" className="mb-6" title="Nenhum pagamento pendente">
           Todos os cooperados com valor neste mês já tiveram pagamento registrado. Acompanhe assinaturas e histórico na aba{" "}
@@ -902,29 +926,6 @@ export default function FichaCorridaPage() {
                   </Button>
                 </div>
               </div>
-            )}
-
-            {cooperadoSelecionadoId && (
-              <ValoresAvulsosReceberPanel
-                cooperadoId={cooperadoSelecionadoId}
-                cooperativaId={coopId}
-                mesReferencia={mesAtivo}
-                modo={isCooperado ? "cooperado" : "responsavel"}
-                onLancar={!isCooperado && check("ficha_corrida", "edit") ? handleLancarAvulsoReceber : undefined}
-                onRemover={!isCooperado && check("ficha_corrida", "edit") ? handleRemoverAvulsoReceber : undefined}
-                lancamentoForm={
-                  !isCooperado && check("ficha_corrida", "edit")
-                    ? {
-                        motivo: avulsoReceberMotivo,
-                        valor: avulsoReceberValor,
-                        data: avulsoReceberData,
-                        onMotivo: setAvulsoReceberMotivo,
-                        onValor: setAvulsoReceberValor,
-                        onData: setAvulsoReceberData,
-                      }
-                    : undefined
-                }
-              />
             )}
 
             {resumo && (

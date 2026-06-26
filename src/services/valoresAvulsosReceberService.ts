@@ -39,10 +39,11 @@ export function valoresAvulsosHistoricoCooperado(
   data: AppData,
   cooperadoId: string,
   cooperativaId?: string,
-  limite = 20
+  limite = 20,
+  mesReferencia?: string
 ): ValorAvulsoReceber[] {
   return valoresAvulsosDoCooperado(data, cooperadoId, cooperativaId)
-    .filter((v) => v.status === "pago")
+    .filter((v) => v.status === "pago" && (!mesReferencia || v.mesReferencia === mesReferencia))
     .slice(0, limite);
 }
 

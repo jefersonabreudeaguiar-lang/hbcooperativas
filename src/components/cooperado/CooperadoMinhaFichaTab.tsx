@@ -27,10 +27,8 @@ import {
   statusEntregaCooperado,
   valoresEntregaCooperado,
 } from "@/services/entregaCooperadoService";
-import {
-  totalValoresAvulsosPendentes,
-  valoresAvulsosDoCooperado,
-} from "@/services/valoresAvulsosReceberService";
+import { ValoresAvulsosReceberPanel } from "@/components/ficha/ValoresAvulsosReceberPanel";
+import { totalValoresAvulsosPendentes } from "@/services/valoresAvulsosReceberService";
 import { formatCurrency, formatDate, formatMesReferencia } from "@/utils/format";
 import { cn } from "@/utils/format";
 import { baixarRecibo, nomeArquivoRecibo } from "@/utils/recibo";
@@ -339,19 +337,21 @@ export function CooperadoMinhaFichaTab({
     [resumos]
   );
 
-  const avulsosHistorico = useMemo(() => {
-    if (!data) return [];
-    return valoresAvulsosDoCooperado(data, cooperadoId, cooperativaId).filter((v) => v.status === "pago").slice(0, 5);
-  }, [data, cooperadoId, cooperativaId]);
-
   if (resumos.length === 0) {
     return (
-      <div className="text-center py-16 text-gray-500 bg-white rounded-2xl border border-dashed">
-        <Wallet size={48} className="mx-auto mb-4 text-gray-300" />
-        <p className="font-semibold text-gray-800">Nenhum registro na ficha ainda</p>
-        <p className="text-sm mt-2 max-w-sm mx-auto">
-          Quando suas entregas forem conferidas, o extrato mensal aparecerá aqui com valores e detalhes.
-        </p>
+      <div className="space-y-6">
+        <div className="text-center py-16 text-gray-500 bg-white rounded-2xl border border-dashed">
+          <Wallet size={48} className="mx-auto mb-4 text-gray-300" />
+          <p className="font-semibold text-gray-800">Nenhum registro na ficha ainda</p>
+          <p className="text-sm mt-2 max-w-sm mx-auto">
+            Quando suas entregas forem conferidas, o extrato mensal aparecerá aqui com valores e detalhes.
+          </p>
+        </div>
+        <ValoresAvulsosReceberPanel
+          cooperadoId={cooperadoId}
+          cooperativaId={cooperativaId}
+          modo="cooperado"
+        />
       </div>
     );
   }
@@ -396,23 +396,11 @@ export function CooperadoMinhaFichaTab({
         ))}
       </div>
 
-      {avulsosHistorico.length > 0 && (
-        <div className="rounded-2xl border border-gray-200 bg-white p-5">
-          <p className="text-xs font-semibold uppercase tracking-wide text-gray-500 mb-3">
-            Valores avulsos recebidos (recentes)
-          </p>
-          <ul className="space-y-2 text-sm">
-            {avulsosHistorico.map((v) => (
-              <li key={v.id} className="flex justify-between gap-2 text-gray-700">
-                <span className="truncate">
-                  {v.motivo} · {formatMesReferencia(v.mesReferencia)}
-                </span>
-                <span className="font-semibold text-emerald-700 shrink-0">{formatCurrency(v.valor)}</span>
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
+      <ValoresAvulsosReceberPanel
+        cooperadoId={cooperadoId}
+        cooperativaId={cooperativaId}
+        modo="cooperado"
+      />
     </div>
   );
 }

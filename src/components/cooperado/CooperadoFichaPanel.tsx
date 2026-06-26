@@ -18,6 +18,7 @@ import {
   agregarItensFichaMes,
 } from "@/services/notaPedidoService";
 import { ResumoDescontosMes } from "@/components/ficha/ResumoDescontosMes";
+import { ValoresAvulsosReceberPanel } from "@/components/ficha/ValoresAvulsosReceberPanel";
 import { fichaPertenceCooperado, notaPertenceCooperado } from "@/services/cooperadoCloudService";
 import { formatCurrency, formatDate, formatMesReferencia, formatCPFCNPJ, formatPhone, getCurrentMesReferencia } from "@/utils/format";
 import { baixarRecibo, nomeArquivoRecibo } from "@/utils/recibo";
@@ -149,6 +150,13 @@ export function CooperadoFichaPanel({ cooperado }: { cooperado: Cooperado }) {
           </Link>
         </div>
       </Card>
+
+      <ValoresAvulsosReceberPanel
+        cooperadoId={cooperado.id}
+        cooperativaId={cooperado.cooperativaId}
+        mesReferencia={mesFilter}
+        modo="responsavel"
+      />
 
       <Card title="Entregas e notas">
         {mesNotas.length === 0 ? (
