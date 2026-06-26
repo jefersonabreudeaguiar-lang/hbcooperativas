@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useMemo, useState, useEffect, useCallback } from "react";
 import { useSearchParams } from "next/navigation";
-import { QrCode, XCircle, Wallet, CheckCircle2, FileDown, PenLine, BookOpen, CreditCard, History, Users } from "lucide-react";
+import { QrCode, XCircle, Wallet, CheckCircle2, FileDown, PenLine, BookOpen, CreditCard, History, Users, ChevronDown } from "lucide-react";
 import { useAppData } from "@/hooks/useAppData";
 import { usePermissions } from "@/hooks/usePermissions";
 import { getUserCooperativaId } from "@/utils/cooperativa";
@@ -63,7 +63,7 @@ import {
 import { cooperadoPrecisaCadastrarPix } from "@/utils/pix";
 import { baixarRecibo, resumoReciboFromPagamento, nomeArquivoRecibo } from "@/utils/recibo";
 import { updateData, addAuditEntry, getData } from "@/services/dataStore";
-import { formatCurrency, formatDate, formatMesReferencia, getCurrentMesReferencia } from "@/utils/format";
+import { formatCurrency, formatDate, formatMesReferencia, getCurrentMesReferencia, cn } from "@/utils/format";
 import type { PagamentoCooperadoRegistro, FichaCorrida, NotaPedido } from "@/types";
 
 function TabelaResumoItens({
@@ -157,6 +157,7 @@ export default function FichaCorridaPage() {
   const [divisaoFicha, setDivisaoFicha] = useState<FichaCorrida | null>(null);
   const [divisaoSelecionados, setDivisaoSelecionados] = useState<string[]>([]);
   const [divisaoSalvando, setDivisaoSalvando] = useState(false);
+  const [lancamentosPagarExpandido, setLancamentosPagarExpandido] = useState(false);
 
   const coopId = user && data ? getUserCooperativaId(user, data) : undefined;
 
@@ -217,6 +218,10 @@ export default function FichaCorridaPage() {
   }, [isCooperado, aba, cooperadoFilter, data, coopId, mesAtivo]);
 
   const cooperadoSelecionadoId = isCooperado ? cooperadoId : cooperadoFilter;
+
+  useEffect(() => {
+    setLancamentosPagarExpandido(false);
+  }, [cooperadoSelecionadoId, mesAtivo, aba]);
 
   const cooperadoSelecionado = useMemo(() => {
     if (!data || !cooperadoSelecionadoId) return undefined;
@@ -1026,58 +1031,92 @@ export default function FichaCorridaPage() {
             )}
           </div>
 
-          {!isCooperado && aba === "pagar" && resumoItensMes.entregas > 0 && (
-            <Card title={`Lançamentos · ${formatMesReferencia(mesAtivo)}`} className="mb-6">
-              <TabelaResumoItens itens={resumoItensMes.itens} entregas={resumoItensMes.entregas} />
-            </Card>
-          )}
+          {!isCooperado &&
+            aba === "pagar" &&
+            (resumoItensMes.entregas > 0 || fichasPendentesMes.length > 0) && (
+              <div className="mb-6 rounded-xl border border-gray-200 bg-white overflow-hidden shadow-sm">
+                <button
+                  type="button"
+                  onClick={() => setLancamentosPagarExpandido((v) => !v)}
+                  className="w-full flex items-center justify-between gap-3 px-4 py-3.5 text-left hover:bg-gray-50 transition-colors"
+                  aria-expanded={lancamentosPagarExpandido}
+                >
+                  <div>
+                    <p className="font-semibold text-gray-900">
+                      Lançamentos · {formatMesReferencia(mesAtivo)}
+                    </p>
+                    <p className="text-sm text-gray-500 mt-0.5">
+                      {fichasPendentesMes.length} entrega{fichasPendentesMes.length !== 1 ? "s" : ""}
+                      {resumoItensMes.itens.length > 0 &&
+                        ` · ${resumoItensMes.itens.length} item${resumoItensMes.itens.length !== 1 ? "s" : ""}`}
+                      {" · "}
+                      {lancamentosPagarExpandido ? "toque para ocultar" : "toque para ver detalhes"}
+                    </p>
+                  </div>
+                  <ChevronDown
+                    size={20}
+                    className={cn(
+                      "text-gray-400 shrink-0 transition-transform",
+                      lancamentosPagarExpandido && "rotate-180"
+                    )}
+                  />
+                </button>
+                {lancamentosPagarExpandido && (
+                  <div className="border-t border-gray-200 px-4 pb-4 pt-3 space-y-5">
+                    {resumoItensMes.entregas > 0 && (
+                      <TabelaResumoItens itens={resumoItensMes.itens} entregas={resumoItensMes.entregas} />
+                    )}
+                    {fichasPendentesMes.length > 0 && (
+                      <div>
+                        <p className="text-sm font-semibold text-gray-800 mb-3">Entregas pendentes de pagamento</p>
+                        <div className="space-y-3">
+                          {fichasPendentesMes.map((f) => {
+                            const divisao = f.divisaoEntrega;
+                            const dividida = divisao && divisao.participantes.length > 1;
+                            return (
+                              <div
+                                key={f.id}
+                                className="rounded-xl border border-gray-200 bg-gray-50/80 p-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3"
+                              >
+                                <div className="min-w-0">
+                                  <p className="font-medium text-gray-900 truncate">{f.descricao}</p>
+                                  <p className="text-sm text-green-700 font-semibold mt-0.5">
+                                    {formatCurrency(f.valorLiquido)}
+                                    {dividida && (
+                                      <span className="text-gray-500 font-normal ml-1">
+                                        (parte de {divisao!.participantes.length})
+                                      </span>
+                                    )}
+                                  </p>
+                                  {dividida && (
+                                    <p className="text-xs text-blue-800 mt-2 rounded-lg bg-blue-50 border border-blue-100 px-2 py-1.5">
+                                      {textoInformativoDivisaoEntrega(divisao!)}
+                                    </p>
+                                  )}
+                                </div>
+                                <Button
+                                  type="button"
+                                  variant="secondary"
+                                  size="sm"
+                                  className="shrink-0"
+                                  onClick={() => abrirDivisaoEntrega(f)}
+                                >
+                                  <Users size={16} />
+                                  {dividida ? "Alterar divisão" : "Dividir valor"}
+                                </Button>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
 
           {!isCooperado && cooperadoSelecionado && check("ficha_corrida", "edit") && (
             <Card title={`Pagamento — ${nomeCooperado.split(" ")[0]}`} className="mb-6">
-              {fichasPendentesMes.length > 0 && (
-                <div className="mb-6 pb-6 border-b border-gray-200">
-                  <p className="text-sm font-semibold text-gray-800 mb-3">Entregas pendentes de pagamento</p>
-                  <div className="space-y-3">
-                    {fichasPendentesMes.map((f) => {
-                      const divisao = f.divisaoEntrega;
-                      const dividida = divisao && divisao.participantes.length > 1;
-                      return (
-                        <div
-                          key={f.id}
-                          className="rounded-xl border border-gray-200 bg-gray-50/80 p-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3"
-                        >
-                          <div className="min-w-0">
-                            <p className="font-medium text-gray-900 truncate">{f.descricao}</p>
-                            <p className="text-sm text-green-700 font-semibold mt-0.5">
-                              {formatCurrency(f.valorLiquido)}
-                              {dividida && (
-                                <span className="text-gray-500 font-normal ml-1">
-                                  (parte de {divisao!.participantes.length})
-                                </span>
-                              )}
-                            </p>
-                            {dividida && (
-                              <p className="text-xs text-blue-800 mt-2 rounded-lg bg-blue-50 border border-blue-100 px-2 py-1.5">
-                                {textoInformativoDivisaoEntrega(divisao!)}
-                              </p>
-                            )}
-                          </div>
-                          <Button
-                            type="button"
-                            variant="secondary"
-                            size="sm"
-                            className="shrink-0"
-                            onClick={() => abrirDivisaoEntrega(f)}
-                          >
-                            <Users size={16} />
-                            {dividida ? "Alterar divisão" : "Dividir valor"}
-                          </Button>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-              )}
               <div className="space-y-4">
                 <div className="flex items-center gap-2 text-sm">
                   <Wallet size={18} className="text-gray-500" />
