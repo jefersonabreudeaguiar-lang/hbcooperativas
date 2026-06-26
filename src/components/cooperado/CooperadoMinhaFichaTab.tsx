@@ -10,6 +10,8 @@ import {
   Package,
   PenLine,
   Wallet,
+  Camera,
+  BookOpen,
 } from "lucide-react";
 import { useAppData } from "@/hooks/useAppData";
 import { Button } from "@/components/ui/Button";
@@ -28,6 +30,7 @@ import {
   valoresEntregaCooperado,
 } from "@/services/entregaCooperadoService";
 import { ValoresAvulsosReceberPanel } from "@/components/ficha/ValoresAvulsosReceberPanel";
+import { CooperadoFichaFotosPanel } from "@/components/cooperado/CooperadoFichaFotosPanel";
 import { totalValoresAvulsosPendentes } from "@/services/valoresAvulsosReceberService";
 import { formatCurrency, formatDate, formatMesReferencia } from "@/utils/format";
 import { cn } from "@/utils/format";
@@ -326,6 +329,7 @@ export function CooperadoMinhaFichaTab({
 }: CooperadoMinhaFichaTabProps) {
   const data = useAppData();
   const [mesExpandido, setMesExpandido] = useState<string | null>(resumos[0]?.mesReferencia ?? null);
+  const [subAba, setSubAba] = useState<"extrato" | "fotos">("extrato");
 
   const totalRecebido = useMemo(
     () => resumos.reduce((s, r) => s + r.valorRecebido, 0),
@@ -340,24 +344,88 @@ export function CooperadoMinhaFichaTab({
   if (resumos.length === 0) {
     return (
       <div className="space-y-6">
-        <div className="text-center py-16 text-gray-500 bg-white rounded-2xl border border-dashed">
-          <Wallet size={48} className="mx-auto mb-4 text-gray-300" />
-          <p className="font-semibold text-gray-800">Nenhum registro na ficha ainda</p>
-          <p className="text-sm mt-2 max-w-sm mx-auto">
-            Quando suas entregas forem conferidas, o extrato mensal aparecerá aqui com valores e detalhes.
-          </p>
+        <div className="flex gap-2 border-b border-gray-200">
+          <button
+            type="button"
+            onClick={() => setSubAba("extrato")}
+            className={cn(
+              "px-4 py-2.5 text-sm font-medium border-b-2 -mb-px flex items-center gap-2",
+              subAba === "extrato"
+                ? "border-green-600 text-green-700"
+                : "border-transparent text-gray-500 hover:text-gray-700"
+            )}
+          >
+            <BookOpen size={16} /> Extrato
+          </button>
+          <button
+            type="button"
+            onClick={() => setSubAba("fotos")}
+            className={cn(
+              "px-4 py-2.5 text-sm font-medium border-b-2 -mb-px flex items-center gap-2",
+              subAba === "fotos"
+                ? "border-green-600 text-green-700"
+                : "border-transparent text-gray-500 hover:text-gray-700"
+            )}
+          >
+            <Camera size={16} /> Fotos por mês
+          </button>
         </div>
-        <ValoresAvulsosReceberPanel
-          cooperadoId={cooperadoId}
-          cooperativaId={cooperativaId}
-          modo="cooperado"
-        />
+
+        {subAba === "fotos" ? (
+          <CooperadoFichaFotosPanel resumos={[]} getEscolaLabel={getEscolaLabel} />
+        ) : (
+          <>
+            <div className="text-center py-16 text-gray-500 bg-white rounded-2xl border border-dashed">
+              <Wallet size={48} className="mx-auto mb-4 text-gray-300" />
+              <p className="font-semibold text-gray-800">Nenhum registro na ficha ainda</p>
+              <p className="text-sm mt-2 max-w-sm mx-auto">
+                Quando suas entregas forem conferidas, o extrato mensal aparecerá aqui com valores e detalhes.
+              </p>
+            </div>
+            <ValoresAvulsosReceberPanel
+              cooperadoId={cooperadoId}
+              cooperativaId={cooperativaId}
+              modo="cooperado"
+            />
+          </>
+        )}
       </div>
     );
   }
 
   return (
     <div className="space-y-6">
+      <div className="flex gap-2 border-b border-gray-200">
+        <button
+          type="button"
+          onClick={() => setSubAba("extrato")}
+          className={cn(
+            "px-4 py-2.5 text-sm font-medium border-b-2 -mb-px flex items-center gap-2",
+            subAba === "extrato"
+              ? "border-green-600 text-green-700"
+              : "border-transparent text-gray-500 hover:text-gray-700"
+          )}
+        >
+          <BookOpen size={16} /> Extrato
+        </button>
+        <button
+          type="button"
+          onClick={() => setSubAba("fotos")}
+          className={cn(
+            "px-4 py-2.5 text-sm font-medium border-b-2 -mb-px flex items-center gap-2",
+            subAba === "fotos"
+              ? "border-green-600 text-green-700"
+              : "border-transparent text-gray-500 hover:text-gray-700"
+          )}
+        >
+          <Camera size={16} /> Fotos por mês
+        </button>
+      </div>
+
+      {subAba === "fotos" ? (
+        <CooperadoFichaFotosPanel resumos={resumos} getEscolaLabel={getEscolaLabel} />
+      ) : (
+        <>
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <div className="rounded-2xl bg-gradient-to-br from-emerald-700 to-emerald-800 text-white p-5">
           <p className="text-emerald-100 text-sm">Total já recebido</p>
@@ -401,6 +469,8 @@ export function CooperadoMinhaFichaTab({
         cooperativaId={cooperativaId}
         modo="cooperado"
       />
+        </>
+      )}
     </div>
   );
 }
