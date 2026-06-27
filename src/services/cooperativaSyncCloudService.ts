@@ -32,13 +32,12 @@ export function mergeArrayByNewer<T extends WithUpdatedAt>(local: T[], cloud: T[
   return [...map.values()];
 }
 
-/** Nuvem é a lista canônica; local só permanece se for mais novo que o snapshot da nuvem (exclusões propagam). */
+/** Nuvem é canônica para itens presentes nos dois lados; registros só locais são mantidos até subirem na nuvem. */
 function mergeOperacionalArrayFromCloud<T extends WithUpdatedAt>(
   localCoop: T[],
   cloudItems: T[],
-  cloudUpdatedAt: string | undefined
+  _cloudUpdatedAt: string | undefined
 ): T[] {
-  const cloudTime = cloudUpdatedAt ? new Date(cloudUpdatedAt).getTime() : 0;
   const map = new Map<string, T>();
 
   for (const item of cloudItems) map.set(item.id, item);
@@ -49,7 +48,6 @@ function mergeOperacionalArrayFromCloud<T extends WithUpdatedAt>(
       if (itemTime(item) > itemTime(cloudItem)) map.set(item.id, item);
       continue;
     }
-    if (cloudTime > 0 && itemTime(item) <= cloudTime) continue;
     map.set(item.id, item);
   }
 

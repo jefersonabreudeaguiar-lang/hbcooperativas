@@ -594,7 +594,7 @@ export default function FichaCorridaPage() {
       const d = getData();
       const cnpj = await resolveCooperativaCnpj(d, coopId, user);
       if (!cnpj) return;
-      await pushOperacionalToCloud(cnpj, d, coopId);
+      await pushOperacionalToCloud(cnpj, d, coopId, { authoritative: true });
       await pushNotasPagasToCloud(cnpj, resumoPag.notaPedidoIds, d);
     })();
     setConfirmPagamento(false);
@@ -617,7 +617,7 @@ export default function FichaCorridaPage() {
     void (async () => {
       const d = getData();
       const cnpj = await resolveCooperativaCnpj(d, coopId, user);
-      if (cnpj) await pushOperacionalToCloud(cnpj, d, coopId);
+      if (cnpj) await pushOperacionalToCloud(cnpj, d, coopId, { authoritative: true });
     })();
     setAssinaturaModal(false);
     setAssinatura(null);

@@ -870,6 +870,7 @@ export function registrarPagamentoCooperado(
     pagoPor: responsavel,
     pagoEm: now,
     createdAt: now,
+    updatedAt: now,
   };
 
   let next = marcarFichaComoPaga(data, cooperadoCanonico, mesReferencia, responsavel);
