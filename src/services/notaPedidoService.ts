@@ -308,6 +308,78 @@ export function upsertArquivoMensal(
   return next;
 }
 
+function arquivoMensalSyncKey(data: AppData, a: ArquivoMensalCooperado): string {
+  const canonico = resolverCooperadoIdCanonico(data, a.cooperadoId, a.cooperativaId);
+  return `${a.cooperativaId}|${canonico}|${a.mesReferencia}`;
+}
+
+function arquivoMensalTime(a: ArquivoMensalCooperado): number {
+  return a.updatedAt ? new Date(a.updatedAt).getTime() : 0;
+}
+
+/** Mantém cota paga salva; só desmarca se o registro mais recente tiver false explícito. */
+function mergeCotaIngressoPagaField(
+  a: ArquivoMensalCooperado,
+  b: ArquivoMensalCooperado
+): boolean | undefined {
+  if (a.cotaIngressoPaga === true || b.cotaIngressoPaga === true) {
+    const newer = arquivoMensalTime(a) >= arquivoMensalTime(b) ? a : b;
+    if (newer.cotaIngressoPaga === false) return false;
+    return true;
+  }
+  if (a.cotaIngressoPaga === false || b.cotaIngressoPaga === false) return false;
+  return undefined;
+}
+
+function mergeParArquivoMensal(
+  data: AppData,
+  a: ArquivoMensalCooperado,
+  b: ArquivoMensalCooperado
+): ArquivoMensalCooperado {
+  const newer = arquivoMensalTime(a) >= arquivoMensalTime(b) ? a : b;
+  const older = newer === a ? b : a;
+  const updatedAt =
+    arquivoMensalTime(a) >= arquivoMensalTime(b) ? a.updatedAt : b.updatedAt;
+  return {
+    ...newer,
+    cooperadoId: resolverCooperadoIdCanonico(data, newer.cooperadoId, newer.cooperativaId),
+    notaPedidoIds: [...new Set([...a.notaPedidoIds, ...b.notaPedidoIds])],
+    pagamentoIds: [...new Set([...a.pagamentoIds, ...b.pagamentoIds])],
+    mensalidadeFixa: newer.mensalidadeFixa ?? older.mensalidadeFixa,
+    descontoAvulso: newer.descontoAvulso ?? older.descontoAvulso,
+    descontoAvulsoMotivo: newer.descontoAvulsoMotivo ?? older.descontoAvulsoMotivo,
+    cotaIngressoPaga: mergeCotaIngressoPagaField(a, b),
+    updatedAt,
+  };
+}
+
+/** Mescla arquivos mensais por cooperado+mês, preservando cota paga na sincronização. */
+export function mergeArquivosMensaisFromCloud(
+  data: AppData,
+  localCoop: ArquivoMensalCooperado[],
+  cloudItems: ArquivoMensalCooperado[]
+): ArquivoMensalCooperado[] {
+  const map = new Map<string, ArquivoMensalCooperado>();
+
+  for (const item of cloudItems) {
+    const key = arquivoMensalSyncKey(data, item);
+    const cur = map.get(key);
+    const normalized = {
+      ...item,
+      cooperadoId: resolverCooperadoIdCanonico(data, item.cooperadoId, item.cooperativaId),
+    };
+    map.set(key, cur ? mergeParArquivoMensal(data, cur, normalized) : normalized);
+  }
+
+  for (const item of localCoop) {
+    const key = arquivoMensalSyncKey(data, item);
+    const cur = map.get(key);
+    map.set(key, cur ? mergeParArquivoMensal(data, cur, item) : item);
+  }
+
+  return [...map.values()];
+}
+
 export function getArquivoMensalCooperado(
   data: AppData,
   cooperadoId: string,

@@ -134,7 +134,7 @@ export default function CooperadosPage() {
     void (async () => {
       const d = getData();
       const cnpj = await resolveCooperativaCnpj(d, c.cooperativaId, user);
-      if (cnpj) await pushOperacionalToCloud(cnpj, d, c.cooperativaId);
+      if (cnpj) await pushOperacionalToCloud(cnpj, d, c.cooperativaId, { authoritative: true });
     })();
   };
 

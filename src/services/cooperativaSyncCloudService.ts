@@ -5,7 +5,7 @@ import { getData, saveDataSafe } from "@/services/dataStore";
 import { syncCooperadosFromCloud, fetchCooperadosFromCloud, pushCooperadoToCloud } from "@/services/cooperadoCloudService";
 import { syncNotasPedidoFromCloud, patchNotaPedidoInCloud } from "@/services/notaPedidoCloudService";
 import { fetchCooperativaByCnpjFromCloud, mergeCooperativaIntoData } from "@/services/cooperativaCloudService";
-import { reconciliarFichaFromNotasConferidas } from "@/services/notaPedidoService";
+import { mergeArquivosMensaisFromCloud, reconciliarFichaFromNotasConferidas } from "@/services/notaPedidoService";
 import { sincronizarMensalidadeCooperativa, mensalidadeVisivelNoDispositivo, normalizarMensalidadeCooperadoLocal, mesclarMensalidadesPayloadNuvem, prepararMensalidadesCloud, prepararMensalidadeCloud, reconciliarMensalidadesComCooperadosCloud, mensalidadeCloudEntraNoDispositivo, enriquecerMensalidadeCooperadoSnapshot } from "@/services/mensalidadeService";
 import { aplicarPrestacoesContasExcluidas } from "@/services/prestacaoContasService";
 import { aplicarInstituicoesExcluidas } from "@/services/instituicaoContratoService";
@@ -424,10 +424,10 @@ export function mergeOperacionalIntoData(
     ...data,
     arquivosMensais: [
       ...filterCoop(data.arquivosMensais, (a) => a.cooperativaId === coopId),
-      ...mergeOperacionalArrayFromCloud(
+      ...mergeArquivosMensaisFromCloud(
+        data,
         data.arquivosMensais.filter((a) => a.cooperativaId === coopId),
-        cloudArquivos,
-        cloudSyncTime
+        cloudArquivos
       ),
     ],
     ajustesFichaMes: [

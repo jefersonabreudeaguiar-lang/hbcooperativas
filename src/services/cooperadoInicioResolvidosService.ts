@@ -58,8 +58,12 @@ export function listarResolvidosInicioCooperado(
     pCoopId === canonico ||
     resolverCooperadoIdCanonico(data, pCoopId, coopId) === canonico;
 
+  const mesesPagamentoConfirmadoExibido = new Set<string>();
+
   for (const p of data.pagamentosCooperado) {
     if (!pertencePagamento(p.cooperadoId) || p.status !== "confirmado") continue;
+    if (mesesPagamentoConfirmadoExibido.has(p.mesReferencia)) continue;
+    mesesPagamentoConfirmadoExibido.add(p.mesReferencia);
     const resolvidoEm = p.assinadoEm ?? p.updatedAt ?? p.pagoEm;
     pushItem(lista, vistos, {
       id: `pagamento_${p.id}`,
@@ -71,7 +75,7 @@ export function listarResolvidosInicioCooperado(
     });
   }
 
-  for (const m of data.mensalidades.filter((x) => x.cooperadoId === cooperadoId)) {
+  for (const m of data.mensalidades.filter((x) => x.cooperadoId === cooperadoId || x.cooperadoId === canonico)) {
     if (m.status === "paga") {
       pushItem(lista, vistos, {
         id: `mensalidade_paga_${m.id}`,
@@ -93,14 +97,39 @@ export function listarResolvidosInicioCooperado(
     }
   }
 
+  const mesesComPagamentoCooperado = new Set(
+    data.pagamentosCooperado
+      .filter((p) => pertencePagamento(p.cooperadoId))
+      .map((p) => p.mesReferencia)
+  );
+  const mesesEntregaPagaExibida = new Set<string>();
+
   for (const n of data.notasPedido) {
     if (!notaPertenceCooperado(data, n, cooperadoId, coopId)) continue;
     if (n.status !== "conferida" && n.status !== "pago") continue;
+
+    if (n.status === "pago") {
+      // Mês já coberto por pagamento na ficha — evita "Entrega paga" duplicada com "Recebimento confirmado".
+      if (mesesComPagamentoCooperado.has(n.mesReferencia)) continue;
+      if (mesesEntregaPagaExibida.has(n.mesReferencia)) continue;
+      mesesEntregaPagaExibida.add(n.mesReferencia);
+      const resolvidoEm = n.dataConferencia ?? n.updatedAt;
+      pushItem(lista, vistos, {
+        id: `entrega_paga_mes_${n.mesReferencia}`,
+        tipo: "entrega",
+        titulo: "Entrega paga",
+        subtitulo: formatMesReferencia(n.mesReferencia),
+        resolvidoEm,
+        href: "/notas-pedido",
+      });
+      continue;
+    }
+
     const resolvidoEm = n.dataConferencia ?? n.updatedAt;
     pushItem(lista, vistos, {
       id: `entrega_${n.id}`,
       tipo: "entrega",
-      titulo: n.status === "pago" ? "Entrega paga" : "Entrega conferida",
+      titulo: "Entrega conferida",
       subtitulo: formatMesReferencia(n.mesReferencia),
       resolvidoEm,
       href: "/notas-pedido",
