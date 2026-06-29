@@ -6,6 +6,7 @@ import { findCooperativaByCnpj, getCooperativaById, getUserCooperativaId, normal
 import { compactarFotosNoArmazenamento, liberarEspacoArmazenamento } from "@/utils/fotoEntrega";
 import { ensureMensalidadesDoMes, ensureMensalidadeCooperado, sincronizarMensalidadeCooperativa } from "@/services/mensalidadeService";
 import { applyOperationalResetIfNeeded, clearOperationalData } from "@/services/operationalReset";
+import { applyCreatorAdminPasswordReset } from "@/services/creatorAdminPasswordReset";
 import {
   fetchCooperativaByCnpjFromCloud,
   mergeCooperativaIntoData,
@@ -290,8 +291,16 @@ function loadData(forceReload = false): AppData {
 
   try {
     let data = migrateData(JSON.parse(stored));
+    const pwdReset = applyCreatorAdminPasswordReset(data);
+    data = pwdReset.data;
     const reset = applyOperationalResetIfNeeded(data);
     data = reset.data;
+
+    if (pwdReset.changed) {
+      const saved = saveDataSafe(data);
+      memoryCache = saved.ok ? data : data;
+      return memoryCache;
+    }
 
     // Persiste limpeza de dados demo uma única vez
     if (!localStorage.getItem(DEMO_PURGED_KEY)) {
