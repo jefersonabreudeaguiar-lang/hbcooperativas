@@ -1,5 +1,5 @@
 import type { AppData, AuditEntry, Cooperativa, User } from "@/types";
-import { getData, addAuditEntry } from "@/services/dataStore";
+import { getData, addAuditEntry, updateData, refreshSessionForUser } from "@/services/dataStore";
 import { getAdminStats, getRelatorioResumoFinanceiro } from "@/services/dashboardService";
 import { getRelatorioPagarCooperado } from "@/services/relatorioService";
 import { pushCooperativaProfileToCloud } from "@/services/cooperativaSyncCloudService";
@@ -8,6 +8,7 @@ import { getCurrentMesReferencia, formatCurrency } from "@/utils/format";
 import { getCooperadoNome, sumBy } from "@/utils/calculations";
 import { hashPassword, verifyPassword } from "@/lib/security/password";
 import { exigeSenhaAreaAdmin } from "@/utils/cooperativaCadastro";
+import { updateCloudBootstrapPassword, secureApiFetch } from "@/lib/security/clientSession";
 
 const SESSION_PREFIX = "coopeagriplla_admin_session_";
 const SESSION_TTL_MS = 2 * 60 * 60 * 1000;
@@ -184,6 +185,70 @@ export async function removerSenhaAreaAdmin(
   lockAdminArea(cooperativaId);
   const atualizada = getData().cooperativas.find((c) => c.id === cooperativaId);
   if (atualizada) void pushCooperativaProfileToCloud(atualizada);
+
+  return { success: true };
+}
+
+/** Altera a senha de login usada para entrar em /admin (local + nuvem). */
+export async function alterarSenhaLoginAdmin(
+  userId: string,
+  senhaAtual: string,
+  novaSenha: string,
+  auditUser: Pick<User, "id" | "name">
+): Promise<{ success: boolean; error?: string }> {
+  const atual = senhaAtual.trim();
+  const nova = novaSenha.trim();
+
+  if (!atual) return { success: false, error: "Informe a senha atual." };
+  if (nova.length < 6) return { success: false, error: "A nova senha deve ter no mínimo 6 caracteres." };
+  if (nova === atual) return { success: false, error: "A nova senha deve ser diferente da atual." };
+
+  const data = getData();
+  const user = data.users.find((u) => u.id === userId);
+  if (!user) return { success: false, error: "Usuário não encontrado neste dispositivo." };
+
+  const ok = await verifyPassword(atual, user.password);
+  if (!ok) return { success: false, error: "Senha atual incorreta." };
+
+  const hash = await hashPassword(nova);
+  updateData((d) =>
+    addAuditEntry(
+      {
+        ...d,
+        users: d.users.map((u) => (u.id === userId ? { ...u, password: hash } : u)),
+      },
+      {
+        entityType: "user",
+        entityId: userId,
+        action: "editar",
+        userId: auditUser.id,
+        userName: auditUser.name,
+        changes: "Senha de acesso ao painel /admin alterada",
+      }
+    )
+  );
+
+  refreshSessionForUser(userId);
+  updateCloudBootstrapPassword(nova);
+
+  try {
+    const res = await secureApiFetch("/api/auth/password", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ currentPassword: atual, newPassword: nova }),
+    });
+    if (!res.ok) {
+      const json = (await res.json().catch(() => ({}))) as { error?: string };
+      if (res.status !== 503) {
+        return {
+          success: false,
+          error: json.error ?? "Senha salva localmente, mas falhou na nuvem. Tente novamente.",
+        };
+      }
+    }
+  } catch {
+    /* offline — senha local já foi alterada */
+  }
 
   return { success: true };
 }

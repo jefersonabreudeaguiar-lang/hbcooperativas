@@ -78,6 +78,11 @@ export function clearCloudBootstrapCredentials(): void {
   localStorage.removeItem(BOOTSTRAP_KEY);
 }
 
+export function updateCloudBootstrapPassword(newPassword: string): void {
+  const bootstrap = loadCloudBootstrapCredentials();
+  if (bootstrap) rememberCloudCredentials(bootstrap.email, newPassword);
+}
+
 function loadCloudBootstrapCredentials(): { email: string; password: string } | null {
   if (typeof window === "undefined") return null;
   try {

@@ -24,6 +24,7 @@ import {
 import { Card, StatCard } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { AlertBanner } from "@/components/ui/AlertBanner";
+import { Input, FormField } from "@/components/ui/Form";
 import { useAppData } from "@/hooks/useAppData";
 import { formatCurrency, formatMesReferencia, formatDate } from "@/utils/format";
 import { formatCnpj, getCooperativaById } from "@/utils/cooperativa";
@@ -31,9 +32,8 @@ import {
   getAdminAreaSnapshot,
   lockAdminArea,
   refreshAdminAreaSession,
-  removerSenhaAreaAdmin,
+  alterarSenhaLoginAdmin,
 } from "@/services/adminAreaService";
-import { updateData } from "@/services/dataStore";
 import type { Cooperativa, User } from "@/types";
 
 type AdminUser = Pick<User, "id" | "name">;
@@ -58,8 +58,11 @@ const QUICK_LINKS = [
 export function AdminDashboardPanel({ cooperativaId, user, onLocked }: AdminDashboardPanelProps) {
   const data = useAppData();
   const [showSenhaPanel, setShowSenhaPanel] = useState(false);
-  const [senhaAtualRemover, setSenhaAtualRemover] = useState("");
-  const [msgSenha, setMsgSenha] = useState<string | null>(null);
+  const [senhaAtual, setSenhaAtual] = useState("");
+  const [novaSenha, setNovaSenha] = useState("");
+  const [confirmarSenha, setConfirmarSenha] = useState("");
+  const [salvandoSenha, setSalvandoSenha] = useState(false);
+  const [msgSenha, setMsgSenha] = useState<{ type: "ok" | "erro"; text: string } | null>(null);
 
   const cooperativa = data ? getCooperativaById(data, cooperativaId) : undefined;
 
@@ -90,16 +93,26 @@ export function AdminDashboardPanel({ cooperativaId, user, onLocked }: AdminDash
     refreshAdminAreaSession(cooperativaId);
   };
 
-  const handleRemoverSenha = async () => {
+  const handleAlterarSenha = async () => {
     setMsgSenha(null);
-    const result = await removerSenhaAreaAdmin(updateData, cooperativaId, user, senhaAtualRemover);
-    if (!result.success) {
-      setMsgSenha(result.error ?? "Erro ao remover senha.");
+    if (novaSenha !== confirmarSenha) {
+      setMsgSenha({ type: "erro", text: "A confirmação não coincide com a nova senha." });
       return;
     }
-    setSenhaAtualRemover("");
-    setShowSenhaPanel(false);
-    onLocked();
+    setSalvandoSenha(true);
+    try {
+      const result = await alterarSenhaLoginAdmin(user.id, senhaAtual, novaSenha, user);
+      if (!result.success) {
+        setMsgSenha({ type: "erro", text: result.error ?? "Não foi possível alterar a senha." });
+        return;
+      }
+      setSenhaAtual("");
+      setNovaSenha("");
+      setConfirmarSenha("");
+      setMsgSenha({ type: "ok", text: "Senha alterada com sucesso. Use a nova senha no próximo login em /admin." });
+    } finally {
+      setSalvandoSenha(false);
+    }
   };
 
   return (
@@ -133,9 +146,12 @@ export function AdminDashboardPanel({ cooperativaId, user, onLocked }: AdminDash
               variant="secondary"
               size="sm"
               className="bg-white/10 border-white/20 text-white hover:bg-white/20"
-              onClick={() => setShowSenhaPanel((v) => !v)}
+              onClick={() => {
+                setShowSenhaPanel((v) => !v);
+                setMsgSenha(null);
+              }}
             >
-              <Settings size={16} /> Senha
+              <Settings size={16} /> Alterar senha
             </Button>
             <Button
               variant="secondary"
@@ -150,28 +166,66 @@ export function AdminDashboardPanel({ cooperativaId, user, onLocked }: AdminDash
       </div>
 
       {showSenhaPanel && (
-        <Card title="Gerenciar senha da área admin" className="border-amber-200 bg-amber-50/30">
+        <Card title="Alterar senha de acesso ao /admin" className="border-amber-200 bg-amber-50/30">
           <p className="text-sm text-gray-600 mb-4">
-            Para alterar a senha, saia do painel e use a opção &quot;Cadastrar ou alterar senha&quot; na tela de
-            login. Aqui você pode remover a proteção (exige senha atual).
+            Esta é a senha usada para entrar na URL <strong>/admin</strong>. A alteração vale neste aparelho e na
+            nuvem (quando conectado).
           </p>
-          {msgSenha && (
+          {msgSenha?.type === "erro" && (
             <AlertBanner variant="error" title="Erro" className="mb-4">
-              {msgSenha}
+              {msgSenha.text}
             </AlertBanner>
           )}
-          <div className="flex flex-wrap gap-2 items-end">
-            <div className="flex-1 min-w-[200px]">
-              <label className="text-xs font-medium text-gray-600 block mb-1">Senha atual</label>
-              <input
+          {msgSenha?.type === "ok" && (
+            <AlertBanner variant="success" title="Senha atualizada" className="mb-4">
+              {msgSenha.text}
+            </AlertBanner>
+          )}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 max-w-2xl">
+            <FormField label="Senha atual">
+              <Input
                 type="password"
-                value={senhaAtualRemover}
-                onChange={(e) => setSenhaAtualRemover(e.target.value)}
-                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+                value={senhaAtual}
+                onChange={(e) => setSenhaAtual(e.target.value)}
+                autoComplete="current-password"
               />
-            </div>
-            <Button variant="danger" onClick={() => void handleRemoverSenha()} disabled={!senhaAtualRemover}>
-              <Lock size={16} /> Remover proteção
+            </FormField>
+            <div className="hidden sm:block" />
+            <FormField label="Nova senha" hint="Mínimo 6 caracteres">
+              <Input
+                type="password"
+                value={novaSenha}
+                onChange={(e) => setNovaSenha(e.target.value)}
+                autoComplete="new-password"
+              />
+            </FormField>
+            <FormField label="Confirmar nova senha">
+              <Input
+                type="password"
+                value={confirmarSenha}
+                onChange={(e) => setConfirmarSenha(e.target.value)}
+                autoComplete="new-password"
+              />
+            </FormField>
+          </div>
+          <div className="mt-4 flex flex-wrap gap-2">
+            <Button
+              onClick={() => void handleAlterarSenha()}
+              disabled={salvandoSenha || !senhaAtual || novaSenha.length < 6 || !confirmarSenha}
+            >
+              <Lock size={16} /> {salvandoSenha ? "Salvando…" : "Salvar nova senha"}
+            </Button>
+            <Button
+              variant="secondary"
+              onClick={() => {
+                setShowSenhaPanel(false);
+                setSenhaAtual("");
+                setNovaSenha("");
+                setConfirmarSenha("");
+                setMsgSenha(null);
+              }}
+            >
+              Cancelar
             </Button>
           </div>
         </Card>

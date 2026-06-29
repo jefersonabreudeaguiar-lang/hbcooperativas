@@ -449,6 +449,15 @@ function persistSession(user: Omit<User, "password">): void {
   notify();
 }
 
+/** Atualiza a sessão local após mudança de dados do usuário (ex.: nova senha). */
+export function refreshSessionForUser(userId: string): void {
+  const data = loadData();
+  const user = data.users.find((u) => u.id === userId && u.active);
+  if (!user || typeof window === "undefined") return;
+  const { password: _, ...safeUser } = user;
+  persistSession(safeUser);
+}
+
 // Auth
 export async function login(email: string, password: string): Promise<User | null> {
   const data = loadData();
