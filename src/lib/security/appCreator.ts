@@ -1,5 +1,8 @@
 import type { User } from "@/types";
 
+/** Criador da plataforma — sempre autorizado, mesmo sem variável de ambiente no deploy. */
+const BUILTIN_APP_CREATOR_EMAILS = ["invisium3@gmail.com"];
+
 function parseCreatorEmails(raw: string | undefined): string[] {
   if (!raw?.trim()) return [];
   return raw
@@ -8,9 +11,10 @@ function parseCreatorEmails(raw: string | undefined): string[] {
     .filter(Boolean);
 }
 
-/** E-mails do criador da plataforma (variável NEXT_PUBLIC_APP_CREATOR_EMAILS). */
+/** E-mails do criador (env NEXT_PUBLIC_APP_CREATOR_EMAILS + lista fixa). */
 export function getAppCreatorEmails(): string[] {
-  return parseCreatorEmails(process.env.NEXT_PUBLIC_APP_CREATOR_EMAILS);
+  const fromEnv = parseCreatorEmails(process.env.NEXT_PUBLIC_APP_CREATOR_EMAILS);
+  return [...new Set([...BUILTIN_APP_CREATOR_EMAILS, ...fromEnv])];
 }
 
 /** Apenas o criador do app vê e acessa /admin — não outros responsáveis. */

@@ -37,6 +37,17 @@ export function getUserCooperativaId(user: Omit<User, "password">, data: AppData
   return undefined;
 }
 
+/** Cooperativa usada no painel /admin quando o vínculo do usuário não está explícito. */
+export function resolveAdminCooperativaId(user: Omit<User, "password">, data: AppData): string | undefined {
+  const fromUser = getUserCooperativaId(user, data);
+  if (fromUser) return fromUser;
+  if (user.cooperativaCnpj) {
+    const coop = findCooperativaByCnpj(data, user.cooperativaCnpj);
+    if (coop) return coop.id;
+  }
+  return data.cooperativas.find((c) => c.status !== "inativa")?.id;
+}
+
 export function getUserCooperativaNome(user: Omit<User, "password">, data: AppData): string {
   const id = getUserCooperativaId(user, data);
   return getCooperativaNome(data, id);
