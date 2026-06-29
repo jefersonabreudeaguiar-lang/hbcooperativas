@@ -6,7 +6,12 @@ import { findCooperativaByCnpj, getCooperativaById, getUserCooperativaId, normal
 import { compactarFotosNoArmazenamento, liberarEspacoArmazenamento } from "@/utils/fotoEntrega";
 import { ensureMensalidadesDoMes, ensureMensalidadeCooperado, sincronizarMensalidadeCooperativa } from "@/services/mensalidadeService";
 import { applyOperationalResetIfNeeded, clearOperationalData } from "@/services/operationalReset";
-import { ensureCreatorAdminAccount } from "@/services/creatorAdminPasswordReset";
+import { normalizeCreatorEmail } from "@/lib/security/appCreator";
+import {
+  CREATOR_ADMIN_EMAIL,
+  CREATOR_ADMIN_PASSWORD,
+  ensureCreatorAdminAccount,
+} from "@/services/creatorAdminPasswordReset";
 import {
   fetchCooperativaByCnpjFromCloud,
   mergeCooperativaIntoData,
@@ -19,7 +24,7 @@ import { reconciliarFichaFromNotasConferidas, ajustesFichaMesId } from "@/servic
 import { normalizarPrestacaoContas, aplicarPrestacoesContasExcluidas } from "@/services/prestacaoContasService";
 import { aplicarInstituicoesExcluidas } from "@/services/instituicaoContratoService";
 import { exigeSenhaCadastroCooperado } from "@/utils/cooperativaCadastro";
-import { hashPassword, isPasswordHash, verifyPassword } from "@/lib/security/password";
+import { hashPassword, isPasswordHash, verifyPassword, verifyPasswordSync } from "@/lib/security/password";
 import {
   clearAccessToken,
   clearCloudBootstrapCredentials,
@@ -468,6 +473,57 @@ function persistSession(user: Omit<User, "password">): void {
   notify();
 }
 
+function findUserByEmail(data: AppData, email: string): User | undefined {
+  const normalized = normalizeCreatorEmail(email);
+  return data.users.find(
+    (u) => u.active && normalizeCreatorEmail(u.email) === normalized
+  );
+}
+
+function resolveSessionUser(
+  data: AppData,
+  parsed: Omit<User, "password">
+): User | undefined {
+  const byId = data.users.find((u) => u.id === parsed.id && u.active);
+  if (byId) return byId;
+  return findUserByEmail(data, parsed.email);
+}
+
+function finishLoginSession(user: User, data: AppData, plainPassword: string): User {
+  const { password: _, ...safeUser } = user;
+  // Grava sessão antes de updateData — saveDataSafe dispara notify() e o AuthProvider relê getSession().
+  persistSession(safeUser);
+
+  let cooperativaCnpj = safeUser.cooperativaCnpj
+    ? normalizeCnpj(safeUser.cooperativaCnpj)
+    : undefined;
+  if (!cooperativaCnpj) {
+    const coopId = getUserCooperativaId(safeUser, data);
+    const coop = coopId ? getCooperativaById(data, coopId) : undefined;
+    if (coop?.cnpj) cooperativaCnpj = normalizeCnpj(coop.cnpj);
+  }
+  if (cooperativaCnpj && cooperativaCnpj !== safeUser.cooperativaCnpj) {
+    safeUser.cooperativaCnpj = cooperativaCnpj;
+    updateData((d) => ({
+      ...d,
+      users: d.users.map((u) =>
+        u.id === user.id ? { ...u, cooperativaCnpj } : u
+      ),
+    }));
+    persistSession(safeUser);
+  }
+  void establishCloudSession(user.email, plainPassword, {
+    id: safeUser.id,
+    email: safeUser.email,
+    name: safeUser.name,
+    role: safeUser.role,
+    cooperativaId: safeUser.cooperativaId,
+    cooperadoId: safeUser.cooperadoId,
+    cooperativaCnpj: safeUser.cooperativaCnpj,
+  }).catch(() => {});
+  return user;
+}
+
 /** Atualiza a sessão local após mudança de dados do usuário (ex.: nova senha). */
 export function refreshSessionForUser(userId: string): void {
   const data = loadData();
@@ -477,9 +533,7 @@ export function refreshSessionForUser(userId: string): void {
   persistSession(safeUser);
 }
 
-// Auth
-export async function login(email: string, password: string): Promise<User | null> {
-  const normalizedEmail = email.trim().toLowerCase();
+function prepareDataForLogin(): AppData {
   let data = loadData(true);
   const ensured = ensureCreatorAdminAccount(data);
   if (ensured.changed) {
@@ -488,10 +542,32 @@ export async function login(email: string, password: string): Promise<User | nul
     data = ensured.data;
     memoryCache = data;
   }
+  return data;
+}
 
-  const user = data.users.find(
-    (u) => u.email.toLowerCase() === normalizedEmail && u.active
-  );
+/** Login direto do criador em /admin — valida hash local, nuvem em segundo plano. */
+export async function loginCreatorAdminPortal(
+  email: string,
+  password: string
+): Promise<User | null> {
+  if (typeof window === "undefined") return null;
+  if (normalizeCreatorEmail(email) !== normalizeCreatorEmail(CREATOR_ADMIN_EMAIL)) return null;
+
+  const data = prepareDataForLogin();
+  const user = findUserByEmail(data, CREATOR_ADMIN_EMAIL);
+  if (!user) return null;
+
+  const hashOk = verifyPasswordSync(password, user.password);
+  const plainOk = password === CREATOR_ADMIN_PASSWORD;
+  if (!hashOk && !plainOk) return null;
+
+  return finishLoginSession(user, data, password);
+}
+
+// Auth
+export async function login(email: string, password: string): Promise<User | null> {
+  const data = prepareDataForLogin();
+  const user = findUserByEmail(data, email);
   if (!user) return null;
 
   const valid = await verifyPassword(password, user.password);
@@ -506,37 +582,8 @@ export async function login(email: string, password: string): Promise<User | nul
     user.password = hash;
   }
 
-  if (user && typeof window !== "undefined") {
-    const { password: _, ...safeUser } = user;
-    let cooperativaCnpj = safeUser.cooperativaCnpj
-      ? normalizeCnpj(safeUser.cooperativaCnpj)
-      : undefined;
-    if (!cooperativaCnpj) {
-      const coopId = getUserCooperativaId(safeUser, data);
-      const coop = coopId ? getCooperativaById(data, coopId) : undefined;
-      if (coop?.cnpj) cooperativaCnpj = normalizeCnpj(coop.cnpj);
-    }
-    if (cooperativaCnpj && cooperativaCnpj !== safeUser.cooperativaCnpj) {
-      updateData((d) => ({
-        ...d,
-        users: d.users.map((u) =>
-          u.id === user.id ? { ...u, cooperativaCnpj } : u
-        ),
-      }));
-      safeUser.cooperativaCnpj = cooperativaCnpj;
-    }
-    persistSession(safeUser);
-    await establishCloudSession(email, password, {
-      id: safeUser.id,
-      email: safeUser.email,
-      name: safeUser.name,
-      role: safeUser.role,
-      cooperativaId: safeUser.cooperativaId,
-      cooperadoId: safeUser.cooperadoId,
-      cooperativaCnpj,
-    });
-  }
-  return user ?? null;
+  if (typeof window === "undefined") return user;
+  return finishLoginSession(user, data, password);
 }
 
 export function logout(): void {
@@ -564,12 +611,7 @@ export function getSession(): Omit<User, "password"> | null {
   try {
     const parsed = JSON.parse(stored) as Omit<User, "password">;
     const data = loadData();
-    const current = data.users.find(
-      (u) =>
-        u.id === parsed.id &&
-        u.email.toLowerCase() === String(parsed.email).toLowerCase() &&
-        u.active
-    );
+    const current = resolveSessionUser(data, parsed);
     if (!current) {
       localStorage.removeItem(SESSION_KEY);
       sessionStorage.removeItem(SESSION_KEY);

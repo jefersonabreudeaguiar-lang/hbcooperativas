@@ -3,13 +3,14 @@
 import { createContext, useContext, useEffect, useState, useCallback, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import type { User } from "@/types";
-import { getSession, login as doLogin, logout as doLogout, registerCooperado, registerCooperativa, subscribe, ensureCooperativaInCloudForUser } from "@/services/dataStore";
+import { getSession, login as doLogin, loginCreatorAdminPortal, logout as doLogout, registerCooperado, registerCooperativa, subscribe, ensureCooperativaInCloudForUser } from "@/services/dataStore";
 import type { RegisterCooperadoInput, RegisterCooperativaInput } from "@/services/dataStore";
 
 interface AuthContextType {
   user: Omit<User, "password"> | null;
   loading: boolean;
   login: (email: string, password: string) => Promise<boolean>;
+  loginCreatorAdmin: (email: string, password: string) => Promise<boolean>;
   register: (input: RegisterCooperadoInput) => Promise<{ success: boolean; error?: string }>;
   registerCooperativa: (input: RegisterCooperativaInput) => Promise<{ success: boolean; error?: string }>;
   logout: () => void;
@@ -48,6 +49,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return false;
   };
 
+  const loginCreatorAdmin = async (email: string, password: string) => {
+    const result = await loginCreatorAdminPortal(email, password);
+    if (result) {
+      const { password: _, ...safeUser } = result;
+      setUser(safeUser);
+      return true;
+    }
+    return false;
+  };
+
   const register = async (input: RegisterCooperadoInput) => {
     const result = await registerCooperado(input);
     if (result.success) {
@@ -73,7 +84,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   return (
-    <AuthContext.Provider value={{ user, loading, login, register, registerCooperativa: registerCooperativaAccount, logout, refresh }}>
+    <AuthContext.Provider value={{ user, loading, login, loginCreatorAdmin, register, registerCooperativa: registerCooperativaAccount, logout, refresh }}>
       {children}
     </AuthContext.Provider>
   );

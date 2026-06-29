@@ -13,7 +13,7 @@ import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 
 export default function AdminPortalPage() {
-  const { user, loading: authLoading, login } = useAuth();
+  const { user, loading: authLoading, loginCreatorAdmin } = useAuth();
   const data = useAppData();
 
   if (authLoading) {
@@ -27,7 +27,7 @@ export default function AdminPortalPage() {
   }
 
   if (!user) {
-    return <AdminPortalLogin onLogin={login} />;
+    return <AdminPortalLogin onLogin={loginCreatorAdmin} />;
   }
 
   if (!data) {
@@ -71,22 +71,11 @@ export default function AdminPortalPage() {
   if (!coopId) {
     return (
       <AdminPortalShell subtitle={`Criador · ${user.email}`}>
-        <div className="max-w-lg mx-auto">
-          <Card title="Cooperativa não encontrada">
-            <p className="text-sm text-gray-600 mb-4">
-              Entrada reconhecida, mas não há cooperativa neste aparelho. Cadastre ou entre no app
-              principal com a conta vinculada ao CNPJ.
-            </p>
-            <div className="flex flex-wrap gap-2">
-              <Link href="/cadastro">
-                <Button>Cadastrar cooperativa</Button>
-              </Link>
-              <Link href="/dashboard">
-                <Button variant="secondary">Ir para o app</Button>
-              </Link>
-            </div>
-          </Card>
+        <div className="mb-4 flex items-center gap-2 rounded-lg border border-green-200 bg-green-50 px-3 py-2 text-sm text-green-900">
+          <Shield size={18} className="shrink-0" />
+          <span>Painel executivo — visão geral (cadastre uma cooperativa para filtrar por CNPJ)</span>
         </div>
+        <AdminDashboardPanel user={user} onLocked={() => {}} />
       </AdminPortalShell>
     );
   }

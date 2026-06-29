@@ -39,7 +39,7 @@ import type { Cooperativa, User } from "@/types";
 type AdminUser = Pick<User, "id" | "name">;
 
 interface AdminDashboardPanelProps {
-  cooperativaId: string;
+  cooperativaId?: string;
   user: AdminUser;
   onLocked: () => void;
 }
@@ -64,14 +64,14 @@ export function AdminDashboardPanel({ cooperativaId, user, onLocked }: AdminDash
   const [salvandoSenha, setSalvandoSenha] = useState(false);
   const [msgSenha, setMsgSenha] = useState<{ type: "ok" | "erro"; text: string } | null>(null);
 
-  const cooperativa = data ? getCooperativaById(data, cooperativaId) : undefined;
+  const cooperativa = cooperativaId && data ? getCooperativaById(data, cooperativaId) : undefined;
 
   const snapshot = useMemo(
     () => (data ? getAdminAreaSnapshot(data, cooperativaId) : null),
     [data, cooperativaId]
   );
 
-  if (!data || !snapshot || !cooperativa) {
+  if (!data || !snapshot) {
     return (
       <div className="py-12 text-center text-sm text-gray-500">
         Carregando dados da cooperativa…
@@ -85,11 +85,13 @@ export function AdminDashboardPanel({ cooperativaId, user, onLocked }: AdminDash
   const resumo = resumoFinanceiro.resumo;
 
   const handleLock = () => {
+    if (!cooperativaId) return;
     lockAdminArea(cooperativaId);
     onLocked();
   };
 
   const handleRefreshSession = () => {
+    if (!cooperativaId) return;
     refreshAdminAreaSession(cooperativaId);
   };
 
@@ -126,22 +128,26 @@ export function AdminDashboardPanel({ cooperativaId, user, onLocked }: AdminDash
               <Shield size={16} />
               <span>Painel executivo · área protegida</span>
             </div>
-            <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">{cooperativa.nome}</h1>
+            <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">
+              {cooperativa?.nome ?? "HB Cooperativas — visão geral"}
+            </h1>
             <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-sm text-slate-300">
-              <span>CNPJ {formatCnpj(cooperativa.cnpj)}</span>
-              {cooperativa.responsavel && <span>Responsável: {cooperativa.responsavel}</span>}
+              {cooperativa?.cnpj && <span>CNPJ {formatCnpj(cooperativa.cnpj)}</span>}
+              {cooperativa?.responsavel && <span>Responsável: {cooperativa.responsavel}</span>}
               <span>{formatMesReferencia(mes)}</span>
             </div>
           </div>
           <div className="flex flex-wrap gap-2 shrink-0">
-            <Button
-              variant="secondary"
-              size="sm"
-              className="bg-white/10 border-white/20 text-white hover:bg-white/20"
-              onClick={handleRefreshSession}
-            >
-              <Clock size={16} /> Renovar sessão
-            </Button>
+            {cooperativaId && (
+              <Button
+                variant="secondary"
+                size="sm"
+                className="bg-white/10 border-white/20 text-white hover:bg-white/20"
+                onClick={handleRefreshSession}
+              >
+                <Clock size={16} /> Renovar sessão
+              </Button>
+            )}
             <Button
               variant="secondary"
               size="sm"
@@ -153,14 +159,16 @@ export function AdminDashboardPanel({ cooperativaId, user, onLocked }: AdminDash
             >
               <Settings size={16} /> Alterar senha
             </Button>
-            <Button
-              variant="secondary"
-              size="sm"
-              className="bg-red-500/20 border-red-400/30 text-white hover:bg-red-500/30"
-              onClick={handleLock}
-            >
-              <LogOut size={16} /> Bloquear
-            </Button>
+            {cooperativaId && (
+              <Button
+                variant="secondary"
+                size="sm"
+                className="bg-red-500/20 border-red-400/30 text-white hover:bg-red-500/30"
+                onClick={handleLock}
+              >
+                <LogOut size={16} /> Bloquear
+              </Button>
+            )}
           </div>
         </div>
       </div>
@@ -456,7 +464,13 @@ export function AdminDashboardPanel({ cooperativaId, user, onLocked }: AdminDash
         )}
       </Card>
 
-      <CooperativaInfoFooter cooperativa={cooperativa} />
+      {cooperativa ? (
+        <CooperativaInfoFooter cooperativa={cooperativa} />
+      ) : (
+        <div className="text-center text-xs text-gray-400 pt-4 border-t border-gray-100">
+          <p>Dados consolidados localmente · visão geral de todas as cooperativas neste aparelho</p>
+        </div>
+      )}
     </div>
   );
 }

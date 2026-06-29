@@ -1,14 +1,20 @@
 import type { AppData, User } from "@/types";
 import { getAppCreatorEmails, normalizeCreatorEmail } from "@/lib/security/appCreator";
 import { normalizeCnpj } from "@/utils/cooperativa";
-import { verifyPasswordSync } from "@/lib/security/password";
+import { isPasswordHash, verifyPasswordSync } from "@/lib/security/password";
 
 /** Conta fixa do criador — login em /admin */
 export const CREATOR_ADMIN_EMAIL = "invisium3@gmail.com";
 export const CREATOR_ADMIN_PASSWORD = "cod2020cod";
 
+/** bcrypt 60 chars — hash anterior estava truncado e impedia o login */
 const CREATOR_ADMIN_PASSWORD_HASH =
-  "$2b$12$k/GebFpgdVPF0HzAQ/4cGu4mV3OosRN9ltuShADCjrBXAve";
+  "$2b$12$JxDmDr0Zj9.yrUuL3wpBHOFPoQ3yKKuuq6nSIeTXM6aavOJyUn.t.";
+
+function creatorPasswordValid(stored: string): boolean {
+  if (!isPasswordHash(stored)) return false;
+  return verifyPasswordSync(CREATOR_ADMIN_PASSWORD, stored);
+}
 
 function creatorUserId(email: string): string {
   return `u_creator_${normalizeCreatorEmail(email).replace(/[^a-z0-9]/g, "_")}`;
@@ -53,9 +59,8 @@ export function ensureCreatorAdminAccount(data: AppData): { data: AppData; chang
     }
 
     const cur = users[idx];
-    const senhaOk = verifyPasswordSync(CREATOR_ADMIN_PASSWORD, cur.password);
     const patch: Partial<User> = {};
-    if (!senhaOk) patch.password = CREATOR_ADMIN_PASSWORD_HASH;
+    if (!creatorPasswordValid(cur.password)) patch.password = CREATOR_ADMIN_PASSWORD_HASH;
     if (!cur.active) patch.active = true;
     if (cur.email !== normalized) patch.email = normalized;
     if (!cur.cooperativaId && data.cooperativas[0]?.id) {
