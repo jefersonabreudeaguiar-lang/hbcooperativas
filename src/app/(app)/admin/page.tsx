@@ -6,6 +6,7 @@ import { useAuth } from "@/modules/auth/AuthProvider";
 import { useAppData } from "@/hooks/useAppData";
 import { isDiretoriaRole } from "@/permissions";
 import { usePermissions } from "@/hooks/usePermissions";
+import { isAppCreator } from "@/lib/security/appCreator";
 import { getUserCooperativaId } from "@/utils/cooperativa";
 import { AdminAreaGate } from "@/components/admin/AdminAreaGate";
 import { AdminDashboardPanel } from "@/components/admin/AdminDashboardPanel";
@@ -23,6 +24,10 @@ export default function AdminAreaPage() {
 
   useEffect(() => {
     if (!user) return;
+    if (!isAppCreator(user)) {
+      router.replace("/dashboard");
+      return;
+    }
     if (!isDiretoriaRole(user.role) || !check("cooperativas", "edit")) {
       router.replace("/dashboard");
       return;

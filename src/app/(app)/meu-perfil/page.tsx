@@ -1,9 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Save, Building2, Eye, EyeOff, Trash2, Shield } from "lucide-react";
+import { Save, Building2, Eye, EyeOff, Trash2 } from "lucide-react";
 import { useAppData } from "@/hooks/useAppData";
 import { usePermissions } from "@/hooks/usePermissions";
 import { getUserCooperativaId, getCooperativaById, formatCnpj } from "@/utils/cooperativa";
@@ -23,7 +22,7 @@ import { ensureMensalidadeCooperado, aplicarConfigMensalidadeCooperativa, mergeC
 import { formatCurrency } from "@/utils/format";
 import { isDiretoriaRole } from "@/permissions";
 import { EquipeResponsaveisPanel } from "@/components/equipe/EquipeResponsaveisPanel";
-import { exigeSenhaCadastroCooperado, exigeSenhaAreaAdmin } from "@/utils/cooperativaCadastro";
+import { exigeSenhaCadastroCooperado } from "@/utils/cooperativaCadastro";
 import type { Cooperativa, MensalidadeConfig } from "@/types";
 
 export default function MeuPerfilPage() {
@@ -343,29 +342,6 @@ export default function MeuPerfilPage() {
           </div>
         )}
       </Card>
-
-      {canEdit && (
-        <Card title="Área administrativa protegida" className="mb-6">
-          <p className="text-sm text-gray-500 mb-4">
-            Painel executivo com indicadores, alertas e filas operacionais. Protegido por senha exclusiva,
-            independente do login pessoal.
-          </p>
-          {exigeSenhaAreaAdmin(cooperativa) ? (
-            <p className="text-sm text-green-800 bg-green-50 border border-green-200 rounded-lg px-3 py-2 mb-4">
-              Senha da área admin cadastrada — acesse o painel e informe a senha para visualizar os dados.
-            </p>
-          ) : (
-            <p className="text-sm text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 mb-4">
-              Nenhuma senha cadastrada — no primeiro acesso ao painel você definirá a proteção.
-            </p>
-          )}
-          <Link href="/admin">
-            <Button variant="secondary">
-              <Shield size={18} /> Abrir área admin
-            </Button>
-          </Link>
-        </Card>
-      )}
 
       {coopId && (
         <EquipeResponsaveisPanel cooperativaId={coopId} cooperativaCnpj={cooperativa.cnpj} />
