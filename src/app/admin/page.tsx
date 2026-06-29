@@ -5,8 +5,7 @@ import { AlertTriangle, Shield } from "lucide-react";
 import { useAuth } from "@/modules/auth/AuthProvider";
 import { useAppData } from "@/hooks/useAppData";
 import { isAppCreator } from "@/lib/security/appCreator";
-import { resolveAdminCooperativaId } from "@/utils/cooperativa";
-import { AdminDashboardPanel } from "@/components/admin/AdminDashboardPanel";
+import { PlatformAdminDashboard } from "@/components/admin/PlatformAdminDashboard";
 import { AdminPortalShell } from "@/components/admin/AdminPortalShell";
 import { AdminPortalLogin } from "@/components/admin/AdminPortalLogin";
 import { Card } from "@/components/ui/Card";
@@ -40,10 +39,7 @@ export default function AdminPortalPage() {
     );
   }
 
-  const creator = isAppCreator(user);
-  const coopId = resolveAdminCooperativaId(user, data);
-
-  if (!creator) {
+  if (!isAppCreator(user)) {
     return (
       <AdminPortalShell subtitle="Acesso negado">
         <div className="max-w-lg mx-auto">
@@ -68,25 +64,13 @@ export default function AdminPortalPage() {
     );
   }
 
-  if (!coopId) {
-    return (
-      <AdminPortalShell subtitle={`Criador · ${user.email}`}>
-        <div className="mb-4 flex items-center gap-2 rounded-lg border border-green-200 bg-green-50 px-3 py-2 text-sm text-green-900">
-          <Shield size={18} className="shrink-0" />
-          <span>Painel executivo — visão geral (cadastre uma cooperativa para filtrar por CNPJ)</span>
-        </div>
-        <AdminDashboardPanel user={user} onLocked={() => {}} />
-      </AdminPortalShell>
-    );
-  }
-
   return (
     <AdminPortalShell subtitle={`Criador · ${user.email}`}>
       <div className="mb-4 flex items-center gap-2 rounded-lg border border-green-200 bg-green-50 px-3 py-2 text-sm text-green-900">
         <Shield size={18} className="shrink-0" />
-        <span>Painel executivo — acesso direto pela URL /admin</span>
+        <span>Painel geral da plataforma — todas as cooperativas, uso e limites do servidor</span>
       </div>
-      <AdminDashboardPanel cooperativaId={coopId} user={user} onLocked={() => {}} />
+      <PlatformAdminDashboard user={user} />
     </AdminPortalShell>
   );
 }
