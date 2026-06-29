@@ -68,7 +68,13 @@ export function AdminDashboardPanel({ cooperativaId, user, onLocked }: AdminDash
     [data, cooperativaId]
   );
 
-  if (!data || !snapshot || !cooperativa) return null;
+  if (!data || !snapshot || !cooperativa) {
+    return (
+      <div className="py-12 text-center text-sm text-gray-500">
+        Carregando dados da cooperativa…
+      </div>
+    );
+  }
 
   const { stats, resumoFinanceiro, alertas, entregasAguardando, pagamentosPendentes, auditRecente } =
     snapshot;
