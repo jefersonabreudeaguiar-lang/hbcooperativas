@@ -6,13 +6,14 @@ import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Input, FormField } from "@/components/ui/Form";
 import { AdminPortalShell } from "@/components/admin/AdminPortalShell";
+import { CREATOR_ADMIN_EMAIL } from "@/services/creatorAdminPasswordReset";
 
 interface AdminPortalLoginProps {
   onLogin: (email: string, password: string) => Promise<boolean>;
 }
 
 export function AdminPortalLogin({ onLogin }: AdminPortalLoginProps) {
-  const [email, setEmail] = useState("");
+  const [email, setEmail] = useState(CREATOR_ADMIN_EMAIL);
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState("");

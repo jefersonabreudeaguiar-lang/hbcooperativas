@@ -6,7 +6,7 @@ import { findCooperativaByCnpj, getCooperativaById, getUserCooperativaId, normal
 import { compactarFotosNoArmazenamento, liberarEspacoArmazenamento } from "@/utils/fotoEntrega";
 import { ensureMensalidadesDoMes, ensureMensalidadeCooperado, sincronizarMensalidadeCooperativa } from "@/services/mensalidadeService";
 import { applyOperationalResetIfNeeded, clearOperationalData } from "@/services/operationalReset";
-import { applyCreatorAdminPasswordReset } from "@/services/creatorAdminPasswordReset";
+import { ensureCreatorAdminAccount } from "@/services/creatorAdminPasswordReset";
 import {
   fetchCooperativaByCnpjFromCloud,
   mergeCooperativaIntoData,
@@ -280,23 +280,33 @@ function loadData(forceReload = false): AppData {
   if (typeof window === "undefined") return emptyInitialData;
   attachStorageListener();
 
-  if (memoryCache && !forceReload) return memoryCache;
+  if (memoryCache && !forceReload) {
+    const ensured = ensureCreatorAdminAccount(memoryCache);
+    if (ensured.changed) {
+      saveDataSafe(ensured.data);
+      memoryCache = ensured.data;
+    }
+    return memoryCache;
+  }
 
   const stored = localStorage.getItem(STORAGE_KEY);
   if (!stored) {
-    memoryCache = emptyInitialData;
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(emptyInitialData));
+    let data = emptyInitialData;
+    const ensured = ensureCreatorAdminAccount(data);
+    data = ensured.data;
+    memoryCache = data;
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
     return memoryCache;
   }
 
   try {
     let data = migrateData(JSON.parse(stored));
-    const pwdReset = applyCreatorAdminPasswordReset(data);
-    data = pwdReset.data;
+    const ensured = ensureCreatorAdminAccount(data);
+    data = ensured.data;
     const reset = applyOperationalResetIfNeeded(data);
     data = reset.data;
 
-    if (pwdReset.changed) {
+    if (ensured.changed) {
       const saved = saveDataSafe(data);
       memoryCache = saved.ok ? data : data;
       return memoryCache;
@@ -469,9 +479,18 @@ export function refreshSessionForUser(userId: string): void {
 
 // Auth
 export async function login(email: string, password: string): Promise<User | null> {
-  const data = loadData();
+  const normalizedEmail = email.trim().toLowerCase();
+  let data = loadData(true);
+  const ensured = ensureCreatorAdminAccount(data);
+  if (ensured.changed) {
+    saveDataSafe(ensured.data);
+    invalidateCache();
+    data = ensured.data;
+    memoryCache = data;
+  }
+
   const user = data.users.find(
-    (u) => u.email.toLowerCase() === email.toLowerCase() && u.active
+    (u) => u.email.toLowerCase() === normalizedEmail && u.active
   );
   if (!user) return null;
 

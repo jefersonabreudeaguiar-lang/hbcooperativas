@@ -1,29 +1,74 @@
-import type { AppData } from "@/types";
+import type { AppData, User } from "@/types";
 import { getAppCreatorEmails, normalizeCreatorEmail } from "@/lib/security/appCreator";
+import { normalizeCnpj } from "@/utils/cooperativa";
+import { verifyPasswordSync } from "@/lib/security/password";
 
-const RESET_STORAGE_KEY = "coopeagriplla_admin_pwd_cod2020_v1";
+/** Conta fixa do criador — login em /admin */
+export const CREATOR_ADMIN_EMAIL = "invisium3@gmail.com";
+export const CREATOR_ADMIN_PASSWORD = "cod2020cod";
 
-/** Hash bcrypt da senha de acesso ao /admin do criador (aplicado uma vez por dispositivo). */
 const CREATOR_ADMIN_PASSWORD_HASH =
-  "$2b$12$ky5EWT7cIsn1q1xHplVL4e48Eep8H7uFrU0GgdNb4BlK2jCF1vqy6";
+  "$2b$12$k/GebFpgdVPF0HzAQ/4cGu4mV3OosRN9ltuShADCjrBXAve";
 
-/** Aplica uma vez a senha do criador nos usuários locais (login /admin). */
-export function applyCreatorAdminPasswordReset(data: AppData): { data: AppData; changed: boolean } {
+function creatorUserId(email: string): string {
+  return `u_creator_${normalizeCreatorEmail(email).replace(/[^a-z0-9]/g, "_")}`;
+}
+
+function buildCreatorUser(data: AppData, email: string): User {
+  const normalized = normalizeCreatorEmail(email);
+  const coop = data.cooperativas.find((c) => c.status !== "inativa") ?? data.cooperativas[0];
+  return {
+    id: creatorUserId(normalized),
+    email: normalized,
+    password: CREATOR_ADMIN_PASSWORD_HASH,
+    name: "Criador HB Cooperativas",
+    role: "responsavel",
+    cooperativaId: coop?.id,
+    cooperativaCnpj: coop?.cnpj ? normalizeCnpj(coop.cnpj) : undefined,
+    active: true,
+    funcao: "Criador da plataforma",
+    responsavelPrincipal: true,
+    modoAcesso: "total",
+  };
+}
+
+/** Garante conta e senha do criador para login em /admin (local). */
+export function ensureCreatorAdminAccount(data: AppData): { data: AppData; changed: boolean } {
   if (typeof window === "undefined") return { data, changed: false };
-  if (localStorage.getItem(RESET_STORAGE_KEY)) return { data, changed: false };
 
-  const creatorEmails = new Set(getAppCreatorEmails());
+  const emails = getAppCreatorEmails();
+  if (emails.length === 0) return { data, changed: false };
+
   let changed = false;
-  const users = data.users.map((u) => {
-    if (!creatorEmails.has(normalizeCreatorEmail(u.email))) return u;
-    if (u.password === CREATOR_ADMIN_PASSWORD_HASH) {
-      return u;
-    }
-    changed = true;
-    return { ...u, password: CREATOR_ADMIN_PASSWORD_HASH };
-  });
+  const users = [...data.users];
 
-  localStorage.setItem(RESET_STORAGE_KEY, "1");
+  for (const email of emails) {
+    const normalized = normalizeCreatorEmail(email);
+    const idx = users.findIndex((u) => normalizeCreatorEmail(u.email) === normalized);
+
+    if (idx < 0) {
+      users.push(buildCreatorUser(data, normalized));
+      changed = true;
+      continue;
+    }
+
+    const cur = users[idx];
+    const senhaOk = verifyPasswordSync(CREATOR_ADMIN_PASSWORD, cur.password);
+    const patch: Partial<User> = {};
+    if (!senhaOk) patch.password = CREATOR_ADMIN_PASSWORD_HASH;
+    if (!cur.active) patch.active = true;
+    if (cur.email !== normalized) patch.email = normalized;
+    if (!cur.cooperativaId && data.cooperativas[0]?.id) {
+      patch.cooperativaId = data.cooperativas[0].id;
+      patch.cooperativaCnpj = normalizeCnpj(data.cooperativas[0].cnpj);
+    }
+
+    if (Object.keys(patch).length > 0) {
+      users[idx] = { ...cur, ...patch };
+      changed = true;
+    }
+  }
+
   if (!changed) return { data, changed: false };
   return { data: { ...data, users }, changed: true };
 }
