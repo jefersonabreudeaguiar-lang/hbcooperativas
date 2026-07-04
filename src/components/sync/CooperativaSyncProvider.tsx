@@ -10,6 +10,7 @@ import {
   flushPendingNotaDeletes,
   fetchNotaPedidoFromCloud,
   finalizeNotaEntregaNaNuvem,
+  refreshCooperadoNotasEmAnalise,
   syncOfflineDeliveryImages,
 } from "@/services/notaPedidoCloudService";
 import {
@@ -79,6 +80,8 @@ export function CooperativaSyncProvider({ children }: { children: React.ReactNod
       if (currentUser.role === "cooperado" && currentUser.cooperadoId) {
         const latest = getData();
         const cooperadoCanonico = resolverCooperadoIdCanonico(latest, currentUser.cooperadoId, currentCoopId);
+        await refreshCooperadoNotasEmAnalise(cnpj, currentUser.cooperadoId, currentCoopId);
+
         const registro = latest.cooperados.find((c) => c.id === cooperadoCanonico);
 
         if (registro && now - lastCooperadoPushRef.current >= COOPERADO_PUSH_GAP_MS) {
@@ -189,7 +192,10 @@ export function CooperativaSyncProvider({ children }: { children: React.ReactNod
     const intervalId = setInterval(startSync, getSyncIntervalMs());
 
     const onVisible = () => {
-      if (document.visibilityState === "visible") startSync();
+      if (document.visibilityState === "visible") {
+        lastSyncAtRef.current = 0;
+        startSync();
+      }
     };
     document.addEventListener("visibilitychange", onVisible);
 

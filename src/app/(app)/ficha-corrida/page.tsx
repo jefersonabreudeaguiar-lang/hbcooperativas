@@ -63,6 +63,7 @@ import {
 import { cooperadoPrecisaCadastrarPix } from "@/utils/pix";
 import { baixarRecibo, resumoReciboFromPagamento, nomeArquivoRecibo } from "@/utils/recibo";
 import { updateData, addAuditEntry, getData } from "@/services/dataStore";
+import { requestAppSync } from "@/services/syncRequest";
 import { formatCurrency, formatDate, formatMesReferencia, getCurrentMesReferencia, cn } from "@/utils/format";
 import type { PagamentoCooperadoRegistro, FichaCorrida, NotaPedido } from "@/types";
 
@@ -130,6 +131,11 @@ export default function FichaCorridaPage() {
   const [cooperadoFilter, setCooperadoFilter] = useState(searchParams.get("cooperado") ?? "");
   const [aba, setAba] = useState<"ficha" | "pagar">("ficha");
   const [abaMesCooperado, setAbaMesCooperado] = useState<"aberto" | string>("aberto");
+
+  useEffect(() => {
+    if (!isCooperado) return;
+    requestAppSync();
+  }, [isCooperado]);
 
   useEffect(() => {
     const c = searchParams.get("cooperado");

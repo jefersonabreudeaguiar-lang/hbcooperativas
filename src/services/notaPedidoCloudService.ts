@@ -1,6 +1,7 @@
 import type { AppData, NotaPedido, User } from "@/types";
 import { normalizeCnpj } from "@/utils/cooperativa";
 import { fetchCooperativaByCnpjFromCloud } from "@/services/cooperativaCloudService";
+import { notaPertenceCooperado, resolverCooperadoIdCanonico } from "@/services/cooperadoCloudService";
 import { getNotaCooperativaCnpj, getFotosExibicaoNota, mergeNotaComFotos, contarFotosEnviadasNota, FOTOS_UPLOAD_LOTE } from "@/utils/fotoEntrega";
 import { getData, saveDataSafe } from "@/services/dataStore";
 import { reconciliarFichaFromNotasConferidas } from "@/services/notaPedidoService";
@@ -36,6 +37,14 @@ function shouldApplyCloudNota(local: NotaPedido | undefined, cloud: NotaPedido):
     return true;
   }
 
+  // Responsável conferiu ou pagou — cooperado precisa ver na hora.
+  if (
+    local.status === "aguardando_conferencia" &&
+    (cloud.status === "conferida" || cloud.status === "pago")
+  ) {
+    return true;
+  }
+
   // Rascunho na nuvem (foto parcial) não apaga entrega já publicada localmente.
   if (local.status === "aguardando_conferencia" && cloud.status === "rascunho") {
     return false;
@@ -44,6 +53,9 @@ function shouldApplyCloudNota(local: NotaPedido | undefined, cloud: NotaPedido):
   const localRank = STATUS_RANK[local.status] ?? 0;
   const cloudRank = STATUS_RANK[cloud.status] ?? 0;
   if (cloudRank < localRank) return false;
+
+  // Upgrade de status na nuvem sempre prevalece (ex.: conferida após análise).
+  if (cloudRank > localRank) return true;
 
   const cloudTime = new Date(cloud.updatedAt).getTime();
   const localTime = new Date(local.updatedAt).getTime();
@@ -173,6 +185,7 @@ export function mergeCloudNotasIntoData(
     if (!local || shouldApplyCloudNota(local, cloudNota)) {
       let mergedNota = local ? mergeNotaComFotos(local, cloudNota) : cloudNota;
       if (local && cloudNota.status !== local.status) {
+        const conferiuNaNuvem = cloudNota.status === "conferida" || cloudNota.status === "pago";
         mergedNota = {
           ...mergedNota,
           status: cloudNota.status,
@@ -182,6 +195,15 @@ export function mergeCloudNotasIntoData(
           dataRejeicao: cloudNota.dataRejeicao,
           motivoRejeicao: cloudNota.motivoRejeicao,
           reenviadaEm: cloudNota.reenviadaEm,
+          ...(conferiuNaNuvem
+            ? {
+                itens: cloudNota.itens ?? mergedNota.itens,
+                valorBruto: cloudNota.valorBruto,
+                valorDesconto: cloudNota.valorDesconto,
+                valorLiquido: cloudNota.valorLiquido,
+                percentualDescontoCooperativa: cloudNota.percentualDescontoCooperativa,
+              }
+            : {}),
           updatedAt: cloudNota.updatedAt,
         };
       }
@@ -747,7 +769,6 @@ export async function syncNotasPedidoFromCloud(cnpj: string): Promise<number> {
   const { ok, notas: cloudNotas, delta } = await fetchNotasPedidoFromCloud(digits, { forceFull });
   if (!ok) return 0;
   if (delta && cloudNotas.length === 0) {
-    markNotasSyncDone(digits, false);
     return 0;
   }
   const current = getData();
@@ -756,8 +777,51 @@ export async function syncNotasPedidoFromCloud(cnpj: string): Promise<number> {
   if (reconciled !== current) {
     saveDataSafe(reconciled);
   }
-  markNotasSyncDone(digits, forceFull || !delta);
+  markNotasSyncDone(digits, forceFull || !delta, cloudNotas);
   return cloudNotas.filter((n) => n.status === "aguardando_conferencia").length;
+}
+
+/**
+ * Atualiza entregas que ainda aparecem "em análise" no aparelho mas já foram
+ * conferidas/rejeitadas na nuvem (fallback quando o delta sync perdeu a nota).
+ */
+export async function refreshCooperadoNotasEmAnalise(
+  cnpj: string,
+  cooperadoId: string,
+  cooperativaId?: string
+): Promise<number> {
+  const digits = normalizeCnpj(cnpj);
+  if (digits.length !== 14) return 0;
+
+  const data = getData();
+  const canonico = resolverCooperadoIdCanonico(data, cooperadoId, cooperativaId);
+  const emAnalise = data.notasPedido.filter(
+    (n) =>
+      n.status === "aguardando_conferencia" &&
+      n.fotoNaNuvem &&
+      notaPertenceCooperado(data, n, canonico, cooperativaId)
+  );
+
+  if (emAnalise.length === 0) return 0;
+
+  let merged = data;
+  const atualizadas: NotaPedido[] = [];
+
+  for (const nota of emAnalise) {
+    const cloud = await fetchNotaPedidoFromCloud(digits, nota.id);
+    if (!cloud || cloud.status === nota.status || cloud.status === "rascunho") continue;
+    merged = mergeCloudNotasIntoData(merged, [cloud], digits);
+    atualizadas.push(cloud);
+  }
+
+  if (atualizadas.length === 0) return 0;
+
+  const reconciled = reconciliarFichaFromNotasConferidas(merged);
+  if (reconciled !== data) {
+    saveDataSafe(reconciled);
+  }
+  markNotasSyncDone(digits, false, atualizadas);
+  return atualizadas.length;
 }
 
 export async function ensureNotaComFoto(

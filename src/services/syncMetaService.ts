@@ -42,14 +42,36 @@ export function shouldForceFullNotasSync(cnpj: string): boolean {
   return elapsed >= FULL_SYNC_INTERVAL_MS;
 }
 
-export function markNotasSyncDone(cnpj: string, full: boolean): void {
+export function markNotasSyncDone(
+  cnpj: string,
+  full: boolean,
+  cloudNotas?: { updatedAt: string }[]
+): void {
   const store = readStore();
-  const now = new Date().toISOString();
   const prev = store.notas[cnpj] ?? {};
+  let lastNotasAt = prev.lastNotasAt;
+
+  if (cloudNotas && cloudNotas.length > 0) {
+    const maxCloudMs = cloudNotas.reduce((max, nota) => {
+      const t = new Date(nota.updatedAt).getTime();
+      return Number.isFinite(t) && t > max ? t : max;
+    }, 0);
+    if (maxCloudMs > 0) {
+      const maxIso = new Date(maxCloudMs).toISOString();
+      const prevMs = lastNotasAt ? new Date(lastNotasAt).getTime() : 0;
+      if (!lastNotasAt || maxCloudMs > prevMs) {
+        lastNotasAt = maxIso;
+      }
+    }
+  } else if (full) {
+    lastNotasAt = new Date().toISOString();
+  }
+
+  const now = new Date().toISOString();
   store.notas[cnpj] = {
     ...prev,
-    lastNotasAt: now,
-    lastFullNotasAt: full ? now : prev.lastFullNotasAt ?? now,
+    lastNotasAt: lastNotasAt ?? prev.lastNotasAt,
+    lastFullNotasAt: full ? (lastNotasAt ?? now) : prev.lastFullNotasAt ?? now,
   };
   writeStore(store);
 }

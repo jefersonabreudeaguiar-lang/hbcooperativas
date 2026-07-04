@@ -70,7 +70,25 @@ import {
   resolverInstituicaoConferencia,
 } from "@/utils/instituicaoPreferida";
 import { getCooperadoNome } from "@/utils/calculations";
-import { fingerprintFotoFile, getFotoExibicaoNota, getFotosExibicaoNota, notaPertenceCooperativa, compactarFotosNoArmazenamento, liberarEspacoArmazenamento, agruparPendentesPorCooperado, getChaveGrupoConferencia, notaPertenceGrupoConferencia, contarFotosEnviadasNota, contarFotosEnviadasNotas, resolverAbaConferenciaAtiva } from "@/utils/fotoEntrega";
+import {
+  fingerprintFotoFile,
+  getFotoExibicaoNota,
+  getFotosExibicaoNota,
+  notaPertenceCooperativa,
+  compactarFotosNoArmazenamento,
+  liberarEspacoArmazenamento,
+  agruparPendentesPorCooperado,
+  getChaveGrupoConferencia,
+  notaPertenceGrupoConferencia,
+  contarFotosEnviadasNota,
+  contarFotosEnviadasNotas,
+  resolverAbaConferenciaAtiva,
+  MAX_FOTOS_POR_SESSAO_ENTREGA,
+  AVISO_FOTOS_SESSAO_EM,
+  fotosSessaoAtingiuLimite,
+  fotosRestantesNaSessao,
+  mensagemLimiteFotosSessao,
+} from "@/utils/fotoEntrega";
 import {
   loadFotoDraftMeta,
   clearFotoDraft,
@@ -578,8 +596,12 @@ export default function NotasPedidoContent() {
 
   const abrirCameraAnexar = useCallback(() => {
     if (processandoFoto || enviando) return;
+    if (fotosSessaoAtingiuLimite(fotosSessaoCount)) return;
     fotoInputRef.current?.click();
-  }, [enviando, processandoFoto]);
+  }, [enviando, fotosSessaoCount, processandoFoto]);
+
+  const limiteFotosSessaoAtingido = fotosSessaoAtingiuLimite(fotosSessaoCount);
+  const proximoDoLimiteFotos = fotosSessaoCount >= AVISO_FOTOS_SESSAO_EM && !limiteFotosSessaoAtingido;
 
   const continuarRascunhoFotos = (abrirCamera = false) => {
     if (rascunhoFotosCount === 0) return;
@@ -594,8 +616,13 @@ export default function NotasPedidoContent() {
     }
     setRascunhoFotosCount(0);
     setAnexarModal(true);
-    void syncFotosSessaoFromDraft();
-    if (abrirCamera) abrirCameraAnexar();
+    void (async () => {
+      await syncFotosSessaoFromDraft();
+      if (abrirCamera) {
+        const count = await countFotoDraft(ANEXAR_DRAFT_KEY);
+        if (!fotosSessaoAtingiuLimite(count)) abrirCameraAnexar();
+      }
+    })();
   };
 
   const openAnexar = (notaRejeitada?: NotaPedido, options?: { abrirCamera?: boolean }) => {
@@ -834,6 +861,11 @@ export default function NotasPedidoContent() {
       setConferenciaItens(loadItensFromInstituicao(data, instId, coopId));
     }
   };
+
+  useEffect(() => {
+    if (!isCooperado || !data) return;
+    requestAppSync();
+  }, [isCooperado, data]);
 
   useEffect(() => {
     if (searchParams.get("anexar") !== "1" || !isCooperado || !data || anexarParamHandledRef.current) return;
@@ -1118,6 +1150,12 @@ export default function NotasPedidoContent() {
       if (validation.warning) setFotoValidationWarning(validation.warning);
 
       const qtdAtual = await countFotoDraft(ANEXAR_DRAFT_KEY);
+      if (fotosSessaoAtingiuLimite(qtdAtual)) {
+        setErroEnvio(mensagemLimiteFotosSessao());
+        setFotoPipelineStep("idle");
+        return;
+      }
+
       const fileFingerprint = await fingerprintFotoFile(file);
 
       if (await isFotoDraftDuplicadaByFingerprint(ANEXAR_DRAFT_KEY, fileFingerprint)) {
@@ -2462,7 +2500,7 @@ export default function NotasPedidoContent() {
           <span className="flex-1 text-left min-w-0">
             <span className="block text-lg font-bold leading-tight">Tirar foto da entrega</span>
             <span className="block text-sm text-green-100 mt-1">
-              Um toque abre a câmera na hora — envio em segundo plano
+              Um toque abre a câmera — até {MAX_FOTOS_POR_SESSAO_ENTREGA} fotos por entrega
             </span>
           </span>
           <ChevronRight size={22} className="shrink-0 text-green-200" />
@@ -2594,7 +2632,7 @@ export default function NotasPedidoContent() {
         capture="environment"
         className="hidden"
         onChange={(e) => void handleFoto(e)}
-        disabled={processandoFoto || enviando}
+        disabled={processandoFoto || enviando || limiteFotosSessaoAtingido}
       />
 
       <Modal
@@ -2627,6 +2665,12 @@ export default function NotasPedidoContent() {
                   enviando ||
                   processandoFoto
                 }
+                className={cn(
+                  limiteFotosSessaoAtingido &&
+                    fotosSessaoCount > 0 &&
+                    fotosNaNuvemCount >= fotosSessaoCount &&
+                    "ring-2 ring-amber-400 ring-offset-2 shadow-md"
+                )}
               >
                 <FileText size={18} />{" "}
                 {enviando
@@ -2656,34 +2700,94 @@ export default function NotasPedidoContent() {
           <p className="text-sm text-gray-600">
             {reenviarNotaId
               ? "Tire a nova foto — pode tirar a próxima na hora; o envio roda em segundo plano."
-              : "Tire quantas fotos precisar — uma após a outra, sem esperar. O envio para a nuvem é automático em segundo plano."}
+              : `Tire as fotos do pedido (até ${MAX_FOTOS_POR_SESSAO_ENTREGA} por entrega). O envio para a nuvem é automático em segundo plano.`}
           </p>
 
+          {!reenviarNotaId && limiteFotosSessaoAtingido && (
+            <AlertBanner variant="info" title="Limite desta entrega atingido">
+              <p>Você já tirou o máximo de {MAX_FOTOS_POR_SESSAO_ENTREGA} fotos nesta entrega.</p>
+              <ol className="mt-2 space-y-1.5 list-decimal list-inside">
+                <li>
+                  Toque em <span className="font-semibold">Enviar para o responsável</span> abaixo para concluir
+                </li>
+                <li>
+                  Depois use <span className="font-semibold">Enviar outra entrega</span> para fotografar mais pedidos
+                </li>
+              </ol>
+            </AlertBanner>
+          )}
+
+          {!reenviarNotaId && proximoDoLimiteFotos && (
+            <AlertBanner variant="warning" title={`${fotosRestantesNaSessao(fotosSessaoCount)} foto(s) restante(s) nesta entrega`}>
+              Após {MAX_FOTOS_POR_SESSAO_ENTREGA} fotos, envie ao responsável antes de tirar mais. Assim o app não trava e suas fotos chegam com segurança.
+            </AlertBanner>
+          )}
+
           {!reenviarNotaId && (
-            <div className="rounded-xl border border-green-200 bg-green-50/60 p-4">
-              <div className="flex items-center justify-between gap-2 mb-1">
-                <span className="text-sm font-semibold text-green-900 flex items-center gap-2">
+            <div className={cn(
+              "rounded-xl border p-4",
+              limiteFotosSessaoAtingido
+                ? "border-amber-300 bg-amber-50/70"
+                : "border-green-200 bg-green-50/60"
+            )}>
+              <div className="flex items-center justify-between gap-2 mb-2">
+                <span className={cn(
+                  "text-sm font-semibold flex items-center gap-2",
+                  limiteFotosSessaoAtingido ? "text-amber-900" : "text-green-900"
+                )}>
                   <ImagePlus size={18} />
                   {fotosSessaoCount === 0
                     ? "Nenhuma foto ainda"
-                    : `${fotosSessaoCount} ${fotosSessaoCount === 1 ? "foto capturada" : "fotos capturadas"}`}
+                    : `${fotosSessaoCount} de ${MAX_FOTOS_POR_SESSAO_ENTREGA} ${fotosSessaoCount === 1 ? "foto" : "fotos"}`}
                 </span>
                 {fotosSessaoCount > 0 && (
-                  <span className="text-xs font-bold text-green-800 bg-green-200 px-2 py-0.5 rounded-full">
-                    {fotosNaNuvemCount >= fotosSessaoCount
-                      ? "Pronta"
-                      : `${fotosNaNuvemCount}/${fotosSessaoCount} na nuvem`}
+                  <span className={cn(
+                    "text-xs font-bold px-2 py-0.5 rounded-full",
+                    limiteFotosSessaoAtingido
+                      ? "bg-amber-200 text-amber-900"
+                      : fotosNaNuvemCount >= fotosSessaoCount
+                        ? "bg-green-200 text-green-800"
+                        : "bg-amber-100 text-amber-900"
+                  )}>
+                    {limiteFotosSessaoAtingido
+                      ? "Enviar agora"
+                      : fotosNaNuvemCount >= fotosSessaoCount
+                        ? "Pronta"
+                        : `${fotosNaNuvemCount}/${fotosSessaoCount} na nuvem`}
                   </span>
                 )}
               </div>
-              <p className="text-xs text-green-800">
+              <div className="flex items-center gap-3 mb-2">
+                <div className="flex-1 h-2 bg-white/70 rounded-full overflow-hidden border border-black/5">
+                  <div
+                    className={cn(
+                      "h-full rounded-full transition-all duration-300",
+                      limiteFotosSessaoAtingido ? "bg-amber-500" : "bg-green-600"
+                    )}
+                    style={{
+                      width: `${Math.min(100, (fotosSessaoCount / MAX_FOTOS_POR_SESSAO_ENTREGA) * 100)}%`,
+                    }}
+                  />
+                </div>
+                <span className="text-[11px] font-bold text-gray-600 tabular-nums shrink-0">
+                  {fotosSessaoCount}/{MAX_FOTOS_POR_SESSAO_ENTREGA}
+                </span>
+              </div>
+              <p className={cn(
+                "text-xs",
+                limiteFotosSessaoAtingido ? "text-amber-900" : "text-green-800"
+              )}>
                 {processandoFoto
                   ? pipelineStepLabel(fotoPipelineStep)
-                  : fotosSessaoCount === 0
-                    ? "Toque abaixo para tirar a primeira foto."
-                    : fotosNaNuvemCount >= fotosSessaoCount
-                      ? "Todas sincronizadas. Tire mais fotos ou envie ao responsável."
-                      : "Pode tirar a próxima foto — sincronização em segundo plano."}
+                  : limiteFotosSessaoAtingido
+                    ? "Envie ao responsável para concluir. Depois inicie outra entrega para tirar mais fotos."
+                    : fotosSessaoCount === 0
+                      ? "Toque abaixo para tirar a primeira foto."
+                      : fotosNaNuvemCount >= fotosSessaoCount
+                        ? proximoDoLimiteFotos
+                          ? `Pode tirar mais ${fotosRestantesNaSessao(fotosSessaoCount)} foto(s) ou enviar ao responsável.`
+                          : "Todas sincronizadas. Tire mais fotos ou envie ao responsável."
+                        : "Pode tirar a próxima foto — sincronização em segundo plano."}
               </p>
             </div>
           )}
@@ -2742,7 +2846,7 @@ export default function NotasPedidoContent() {
             </div>
           )}
 
-          {!reenviarNotaId && !enviando && (
+          {!reenviarNotaId && !enviando && !limiteFotosSessaoAtingido && (
             <div className="flex flex-wrap gap-2">
               <Button
                 type="button"
@@ -2800,23 +2904,43 @@ export default function NotasPedidoContent() {
               <button
                 type="button"
                 onClick={abrirCameraAnexar}
-                disabled={processandoFoto || enviando}
-                className={`w-full flex flex-col items-center gap-2 p-8 border-2 border-dashed border-green-500 rounded-2xl bg-green-50 ${processandoFoto || enviando ? "opacity-60 pointer-events-none" : "cursor-pointer active:bg-green-100 active:border-green-600"}`}
+                disabled={processandoFoto || enviando || limiteFotosSessaoAtingido}
+                className={`w-full flex flex-col items-center gap-2 p-8 border-2 border-dashed rounded-2xl ${
+                  limiteFotosSessaoAtingido
+                    ? "border-amber-400 bg-amber-50/80 opacity-90"
+                    : processandoFoto || enviando
+                      ? "border-green-500 bg-green-50 opacity-60 pointer-events-none"
+                      : "border-green-500 bg-green-50 cursor-pointer active:bg-green-100 active:border-green-600"
+                }`}
               >
-                <Camera size={52} className="text-green-700" strokeWidth={2.25} />
-                <span className="text-lg font-bold text-green-900">
-                  {processandoFoto
-                    ? pipelineStepLabel(fotoPipelineStep)
-                    : fotosSessaoCount === 0
-                      ? "Tirar foto agora"
-                      : "Tirar próxima foto"}
+                <Camera
+                  size={52}
+                  className={limiteFotosSessaoAtingido ? "text-amber-700" : "text-green-700"}
+                  strokeWidth={2.25}
+                />
+                <span className={cn(
+                  "text-lg font-bold text-center",
+                  limiteFotosSessaoAtingido ? "text-amber-900" : "text-green-900"
+                )}>
+                  {limiteFotosSessaoAtingido
+                    ? "Limite de fotos atingido"
+                    : processandoFoto
+                      ? pipelineStepLabel(fotoPipelineStep)
+                      : fotosSessaoCount === 0
+                        ? "Tirar foto agora"
+                        : "Tirar próxima foto"}
                 </span>
-                <span className="text-sm text-green-700 text-center">
-                  {processandoFoto
-                    ? "Só um instante…"
-                    : fotosSessaoCount === 0
-                      ? "Toque para abrir a câmera"
-                      : "Pode tirar a próxima na hora — envio em segundo plano"}
+                <span className={cn(
+                  "text-sm text-center",
+                  limiteFotosSessaoAtingido ? "text-amber-800" : "text-green-700"
+                )}>
+                  {limiteFotosSessaoAtingido
+                    ? "Envie ao responsável abaixo. Depois inicie outra entrega."
+                    : processandoFoto
+                      ? "Só um instante…"
+                      : fotosSessaoCount === 0
+                        ? "Toque para abrir a câmera"
+                        : `Mais ${fotosRestantesNaSessao(fotosSessaoCount)} foto(s) nesta entrega — envio em segundo plano`}
                 </span>
               </button>
             )}

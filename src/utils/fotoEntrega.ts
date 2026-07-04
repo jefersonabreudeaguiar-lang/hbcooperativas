@@ -530,6 +530,24 @@ export async function gerarMiniaturasSequencial(fotos: string[]): Promise<string
 /** Tamanho de cada lote legado (upload monolítico — preferir streaming). */
 export const FOTOS_UPLOAD_LOTE = 2;
 
+/** Máximo de fotos por entrega antes de enviar ao responsável (evita falhas no celular). */
+export const MAX_FOTOS_POR_SESSAO_ENTREGA = 8;
+
+/** A partir desta quantidade, avisa que o limite da sessão está próximo. */
+export const AVISO_FOTOS_SESSAO_EM = 6;
+
+export function fotosSessaoAtingiuLimite(count: number): boolean {
+  return count >= MAX_FOTOS_POR_SESSAO_ENTREGA;
+}
+
+export function fotosRestantesNaSessao(count: number): number {
+  return Math.max(0, MAX_FOTOS_POR_SESSAO_ENTREGA - count);
+}
+
+export function mensagemLimiteFotosSessao(): string {
+  return `Limite de ${MAX_FOTOS_POR_SESSAO_ENTREGA} fotos por entrega. Envie ao responsável e depois inicie outra entrega para tirar mais fotos.`;
+}
+
 /** Comparação exata do conteúdo da imagem (base64). */
 export function isFotoDuplicada(
   dataUrl: string,

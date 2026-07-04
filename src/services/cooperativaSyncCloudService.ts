@@ -732,13 +732,13 @@ export async function syncCooperativaProfileFromCloud(cnpj: string): Promise<boo
 
 /** Intervalo padrão de sincronização automática (ms). */
 export const SYNC_INTERVAL_MS = 12_000;
-/** Celular: sync raro em background — sob demanda após ações do usuário. */
-export const SYNC_INTERVAL_MOBILE_MS = 180_000;
+/** Celular: sync mais frequente para status de entregas e valores. */
+export const SYNC_INTERVAL_MOBILE_MS = 90_000;
 /** Desktop: sync moderado. */
 export const SYNC_INTERVAL_DESKTOP_MS = 60_000;
 /** Intervalo mínimo entre duas sincronizações completas. */
 export const SYNC_MIN_GAP_MS = 15_000;
-export const SYNC_MIN_GAP_MOBILE_MS = 60_000;
+export const SYNC_MIN_GAP_MOBILE_MS = 25_000;
 
 export function isMobileDevice(): boolean {
   if (typeof window === "undefined") return false;
@@ -756,7 +756,7 @@ export function getSyncMinGapMs(): number {
   return isMobileDevice() ? SYNC_MIN_GAP_MOBILE_MS : SYNC_MIN_GAP_MS;
 }
 
-/** Sync leve em background (cooperado no celular): só perfil, cooperados e notas. */
+/** Sync leve em background (cooperado no celular): perfil, cooperados, notas e operacional. */
 export async function syncCooperativaBackground(
   cnpj: string,
   preferredCoopId?: string
@@ -769,6 +769,7 @@ export async function syncCooperativaBackground(
     const coopId = preferredCoopId ?? resolveCoopId(getData(), digits);
     await syncCooperadosFromCloud(digits, coopId);
     await syncNotasPedidoFromCloud(digits);
+    await syncOperacionalFromCloud(digits);
   });
 }
 

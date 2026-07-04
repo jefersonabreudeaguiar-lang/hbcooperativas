@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useAppDataSelector } from "@/hooks/useAppData";
 import { useAuth } from "@/modules/auth/AuthProvider";
@@ -30,6 +31,7 @@ import { cooperadoPrecisaCadastrarPix } from "@/utils/pix";
 import { formatCurrency, formatMesReferencia, getCurrentMesReferencia } from "@/utils/format";
 import { getUserCooperativaId, getUserCooperativaNome } from "@/utils/cooperativa";
 import { Camera, Wallet, ClipboardList, Users, AlertCircle } from "lucide-react";
+import { requestAppSync } from "@/services/syncRequest";
 
 function DashboardSkeleton() {
   return (
@@ -47,6 +49,10 @@ function DashboardSkeleton() {
 function CooperadoDashboard() {
   const { user } = useAuth();
   const router = useRouter();
+
+  useEffect(() => {
+    requestAppSync();
+  }, []);
 
   const view = useAppDataSelector((data) => {
     if (!data || !user?.cooperadoId) return null;
