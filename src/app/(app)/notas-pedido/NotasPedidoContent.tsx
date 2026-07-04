@@ -2719,7 +2719,7 @@ export default function NotasPedidoContent() {
 
           {!reenviarNotaId && proximoDoLimiteFotos && (
             <AlertBanner variant="warning" title={`${fotosRestantesNaSessao(fotosSessaoCount)} foto(s) restante(s) nesta entrega`}>
-              Após {MAX_FOTOS_POR_SESSAO_ENTREGA} fotos, envie ao responsável antes de tirar mais. Assim o app não trava e suas fotos chegam com segurança.
+              Após {MAX_FOTOS_POR_SESSAO_ENTREGA} fotos, envie ao responsável. As fotos já tiradas continuam subindo em segundo plano.
             </AlertBanner>
           )}
 
@@ -2805,7 +2805,7 @@ export default function NotasPedidoContent() {
           )}
 
           {!reenviarNotaId && fotosSessaoCount > 0 && (
-            <div className="flex flex-wrap items-center gap-2">
+            <div className={cn("flex flex-wrap items-center gap-2", fotosSessaoCount > 12 && "max-h-24 overflow-y-auto pr-1")}>
               {Array.from({ length: fotosSessaoCount }, (_, i) => {
                 const n = i + 1;
                 const naNuvem = fotosNaNuvemCount >= n;
