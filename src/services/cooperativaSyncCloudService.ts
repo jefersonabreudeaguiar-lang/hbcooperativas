@@ -225,7 +225,7 @@ function buildEmptyOperacionalResetPayload(data: AppData, coopId: string): Opera
     ajustesFichaMes: [],
     pagamentosCooperado: [],
     comunicados: [],
-    mensalidades: mensalidadesCoop,
+    mensalidades: [],
     descontos: [],
     valoresAvulsosReceber: [],
     livroCaixa: [],
@@ -476,82 +476,101 @@ export function mergeOperacionalIntoData(
   ) => items.filter((i) => !isCoop(i));
 
   const cloudSyncTime = cloud.updatedAt;
+  const cloudAuthoritative = cloud.fullReset === true;
 
   let next: AppData = {
     ...data,
     arquivosMensais: [
       ...filterCoop(data.arquivosMensais, (a) => a.cooperativaId === coopId),
-      ...mergeArquivosMensaisFromCloud(
-        data,
-        data.arquivosMensais.filter((a) => a.cooperativaId === coopId),
-        cloudArquivos
-      ),
+      ...(cloudAuthoritative
+        ? cloudArquivos
+        : mergeArquivosMensaisFromCloud(
+            data,
+            data.arquivosMensais.filter((a) => a.cooperativaId === coopId),
+            cloudArquivos
+          )),
     ],
     ajustesFichaMes: [
       ...filterCoop(data.ajustesFichaMes ?? [], (a) => a.cooperativaId === coopId),
-      ...mergeOperacionalArrayFromCloud(
-        (data.ajustesFichaMes ?? []).filter((a) => a.cooperativaId === coopId),
-        cloudAjustes,
-        cloudSyncTime
-      ),
+      ...(cloudAuthoritative
+        ? cloudAjustes
+        : mergeOperacionalArrayFromCloud(
+            (data.ajustesFichaMes ?? []).filter((a) => a.cooperativaId === coopId),
+            cloudAjustes,
+            cloudSyncTime
+          )),
     ],
     pagamentosCooperado: [
       ...filterCoop(data.pagamentosCooperado, (p) => p.cooperativaId === coopId),
-      ...mergePagamentosCooperadoFromCloud(
-        data.pagamentosCooperado.filter((p) => p.cooperativaId === coopId),
-        cloudPagamentos
-      ),
+      ...(cloudAuthoritative
+        ? cloudPagamentos
+        : mergePagamentosCooperadoFromCloud(
+            data.pagamentosCooperado.filter((p) => p.cooperativaId === coopId),
+            cloudPagamentos
+          )),
     ],
     comunicados: [
       ...filterCoop(data.comunicados, (c) => c.cooperativaId === coopId),
-      ...mergeComunicadosFromCloud(
-        data.comunicados.filter((c) => c.cooperativaId === coopId),
-        cloudComunicados
-      ),
+      ...(cloudAuthoritative
+        ? cloudComunicados
+        : mergeComunicadosFromCloud(
+            data.comunicados.filter((c) => c.cooperativaId === coopId),
+            cloudComunicados
+          )),
     ],
     mensalidades: [
       ...data.mensalidades.filter((m) => !mensalidadeVisivelNoDispositivo(data, m, coopId)),
-      ...(mensalidadesCloudVisiveis.length > 0
-        ? mergeOperacionalArrayFromCloud(
-            mensalidadesLocaisVisiveis,
-            mensalidadesCloudVisiveis,
-            cloudSyncTime
-          )
-        : mensalidadesLocaisVisiveis),
+      ...(cloudAuthoritative
+        ? mensalidadesCloudVisiveis
+        : mensalidadesCloudVisiveis.length > 0
+          ? mergeOperacionalArrayFromCloud(
+              mensalidadesLocaisVisiveis,
+              mensalidadesCloudVisiveis,
+              cloudSyncTime
+            )
+          : []),
     ],
     descontos: [
       ...data.descontos.filter((d) => !cooperadoIds.has(d.cooperadoId)),
-      ...mergeOperacionalArrayFromCloud(
-        data.descontos.filter((d) => cooperadoIds.has(d.cooperadoId)),
-        cloudDescontos,
-        cloudSyncTime
-      ),
+      ...(cloudAuthoritative
+        ? cloudDescontos
+        : mergeOperacionalArrayFromCloud(
+            data.descontos.filter((d) => cooperadoIds.has(d.cooperadoId)),
+            cloudDescontos,
+            cloudSyncTime
+          )),
     ],
     valoresAvulsosReceber: [
       ...filterCoop(data.valoresAvulsosReceber ?? [], (v) => v.cooperativaId === coopId),
-      ...mergeOperacionalArrayFromCloud(
-        (data.valoresAvulsosReceber ?? []).filter((v) => v.cooperativaId === coopId),
-        cloudAvulsos,
-        cloudSyncTime
-      ),
+      ...(cloudAuthoritative
+        ? cloudAvulsos
+        : mergeOperacionalArrayFromCloud(
+            (data.valoresAvulsosReceber ?? []).filter((v) => v.cooperativaId === coopId),
+            cloudAvulsos,
+            cloudSyncTime
+          )),
     ],
     livroCaixa: [
       ...filterCoop(data.livroCaixa ?? [], (l) => l.cooperativaId === coopId),
-      ...mergeOperacionalArrayFromCloud(
-        (data.livroCaixa ?? []).filter((l) => l.cooperativaId === coopId),
-        cloudLivro,
-        cloudSyncTime
-      ),
+      ...(cloudAuthoritative
+        ? cloudLivro
+        : mergeOperacionalArrayFromCloud(
+            (data.livroCaixa ?? []).filter((l) => l.cooperativaId === coopId),
+            cloudLivro,
+            cloudSyncTime
+          )),
     ],
     prestacoesContas: [
       ...filterCoop(data.prestacoesContas ?? [], (p) => p.cooperativaId === coopId),
-      ...mergeOperacionalArrayFromCloud(localPrestCoop, cloudPrest, cloudSyncTime).filter(
-        (p) => !prestacoesExcluidasIds.has(p.id)
-      ),
+      ...(cloudAuthoritative
+        ? cloudPrest.filter((p) => !prestacoesExcluidasIds.has(p.id))
+        : mergeOperacionalArrayFromCloud(localPrestCoop, cloudPrest, cloudSyncTime).filter(
+            (p) => !prestacoesExcluidasIds.has(p.id)
+          )),
     ],
     prestacoesContasExcluidas: [
       ...filterCoop(data.prestacoesContasExcluidas ?? [], (e) => e.cooperativaId === coopId),
-      ...mergedExcluidasCoop,
+      ...(cloudAuthoritative ? cloudExcluidas : mergedExcluidasCoop),
     ],
   };
 
@@ -574,6 +593,13 @@ export function mergeOperacionalIntoData(
       );
     }),
   };
+
+  const cloudResetLimpouMensalidades =
+    cloud.fullReset === true && (cloud.mensalidades ?? []).length === 0;
+
+  if (cloudResetLimpouMensalidades) {
+    return aplicarPrestacoesContasExcluidas(reconciliarFichaFromNotasConferidas(next));
+  }
 
   return sincronizarMensalidadeCooperativa(
     aplicarPrestacoesContasExcluidas(reconciliarFichaFromNotasConferidas(next)),
@@ -851,8 +877,22 @@ export async function syncCooperativaBackground(
     const coopId = preferredCoopId ?? resolveCoopId(getData(), digits);
     await syncCooperadosFromCloud(digits, coopId);
     await syncNotasPedidoFromCloud(digits);
+    await syncContratosFromCloud(digits);
     await syncOperacionalFromCloud(digits);
   });
+}
+
+/** Cooperado: envia alterações operacionais (mensalidade informada, etc.) sem apagar dados de outros. */
+export async function pushCooperadoOperacionalToCloud(
+  cnpj: string,
+  coopId?: string
+): Promise<void> {
+  const digits = normalizeCnpj(cnpj);
+  if (digits.length !== 14) return;
+  const d = getData();
+  const cid = coopId ?? resolveCoopId(d, digits);
+  if (!cid) return;
+  await pushOperacionalToCloud(digits, d, cid);
 }
 
 /** Sincroniza tudo da cooperativa: cooperados, notas, contratos, operacional, perfil. */

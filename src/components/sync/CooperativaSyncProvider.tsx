@@ -17,6 +17,7 @@ import {
   getSyncIntervalMs,
   getSyncMinGapMs,
   isMobileDevice,
+  pushCooperadoOperacionalToCloud,
   syncCooperativaBackground,
   syncCooperativaBidirectional,
 } from "@/services/cooperativaSyncCloudService";
@@ -71,6 +72,7 @@ export function CooperativaSyncProvider({ children }: { children: React.ReactNod
 
       if (cooperadoNoCelular) {
         await syncCooperativaBackground(cnpj, currentCoopId);
+        await pushCooperadoOperacionalToCloud(cnpj, currentCoopId);
       } else {
         const pushCatalog = isDiretoriaRole(currentUser.role as UserRole);
         const pushMensalidades = isDiretoriaRole(currentUser.role as UserRole);

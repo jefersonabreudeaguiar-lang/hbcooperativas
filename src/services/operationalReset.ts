@@ -3,7 +3,7 @@ import { normalizeCnpj } from "@/utils/cooperativa";
 import { clearNotasSyncMeta } from "@/services/syncMetaService";
 
 /** Incremente ao publicar uma limpeza global de lançamentos nos dispositivos. */
-export const OPERATIONAL_RESET_VERSION = 8;
+export const OPERATIONAL_RESET_VERSION = 9;
 
 export const OPERATIONAL_RESET_STORAGE_KEY = "coopeagriplla_operational_reset_v";
 export const OPERATIONAL_RESET_CLOUD_KEY = "coopeagriplla_operational_reset_cloud_v";
@@ -36,7 +36,7 @@ function markCloudResetApplied(cnpj: string, version: number): void {
   localStorage.setItem(`${CLOUD_RESET_APPLIED_PREFIX}${normalizeCnpj(cnpj)}`, String(version));
 }
 
-/** Remove entregas, fichas, pagamentos e avisos; mantém mensalidades, cadastros e contratos. */
+/** Remove entregas, fichas, pagamentos, mensalidades e avisos; mantém cadastros e contratos. */
 export function clearOperationalData(data: AppData): AppData {
   return {
     ...data,
@@ -45,6 +45,7 @@ export function clearOperationalData(data: AppData): AppData {
     pagamentosCooperado: [],
     arquivosMensais: [],
     ajustesFichaMes: [],
+    mensalidades: [],
     cotas: [],
     entregas: [],
     descontos: [],
@@ -77,6 +78,7 @@ export function clearOperationalDataForCooperativa(data: AppData, coopId: string
     pagamentosCooperado: data.pagamentosCooperado.filter((p) => !belongsToCoop(p)),
     arquivosMensais: data.arquivosMensais.filter((a) => !belongsToCoop(a)),
     ajustesFichaMes: (data.ajustesFichaMes ?? []).filter((a) => !belongsToCoop(a)),
+    mensalidades: data.mensalidades.filter((m) => !cooperadoIds.has(m.cooperadoId)),
     cotas: data.cotas.filter((c) => !belongsToCoopCooperado(c)),
     entregas: data.entregas.filter((e) => !belongsToCoopCooperado(e)),
     descontos: data.descontos.filter((d) => !cooperadoIds.has(d.cooperadoId)),

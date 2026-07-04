@@ -52,7 +52,7 @@ export async function resetOperacionalSyncForCnpj(
     ajustesFichaMes: [],
     pagamentosCooperado: [],
     comunicados: [],
-    mensalidades: existing?.mensalidades ?? [],
+    mensalidades: [],
     descontos: [],
     valoresAvulsosReceber: [],
     livroCaixa: [],

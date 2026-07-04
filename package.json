@@ -13,7 +13,9 @@
     "generate:pwa-icons": "node scripts/generate-pwa-icons.mjs",
     "reset:operacional": "node scripts/reset-operacional-cloud.mjs",
     "wipe:cooperados-teste": "node scripts/wipe-cooperado-test-data.mjs",
-    "backup:cloud": "node scripts/backup-cloud.mjs"
+    "wipe:platform": "node scripts/wipe-platform-completo.mjs",
+    "backup:cloud": "node scripts/backup-cloud.mjs",
+    "test:sync-flows": "npx tsx scripts/simulate-sync-flows.ts"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.108.2",

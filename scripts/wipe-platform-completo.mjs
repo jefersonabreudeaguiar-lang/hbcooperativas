@@ -1,3 +1,11 @@
+/**
+ * Zera TODA a plataforma na nuvem para recomeçar do zero:
+ * - entregas/notas/fotos
+ * - operacional (mensalidades, pagamentos, comunicados, ficha, livro caixa)
+ * - cadastros cooperado na nuvem
+ * - contas cooperado (app_users)
+ * - config de mensalidade da cooperativa (evita recriação automática)
+ */
 import { createClient } from "@supabase/supabase-js";
 import ws from "ws";
 import { readFileSync, existsSync } from "node:fs";
@@ -33,6 +41,17 @@ const supabase = createClient(url, serviceKey, {
 
 const ENTREGAS_BUCKET = "hb-entregas";
 const SYNC_BUCKET = "hb-cooperativa-sync";
+const COOPERADOS_BUCKET = "hb-cooperados";
+const OPERATIONAL_RESET_VERSION = 9;
+
+const MENSALIDADE_CONFIG_ZERADA = {
+  valorPadrao: 0,
+  diaVencimento: 10,
+  diaLembrete: 9,
+  gerarAutomaticamente: false,
+  mesesCobranca: [],
+  lembreteAtivo: false,
+};
 
 function normalizeCnpj(value) {
   return String(value ?? "").replace(/\D/g, "");
@@ -45,15 +64,16 @@ async function listStoragePrefixes(bucket) {
 }
 
 async function listCnpjs() {
-  const { data } = await supabase.from("cooperativas").select("cnpj");
+  const { data } = await supabase.from("cooperativas").select("cnpj, id");
   const fromDb = (data ?? [])
     .map((row) => normalizeCnpj(row.cnpj))
     .filter((c) => c.length === 14);
-  const [entregas, sync] = await Promise.all([
+  const [entregas, sync, cooperados] = await Promise.all([
     listStoragePrefixes(ENTREGAS_BUCKET),
     listStoragePrefixes(SYNC_BUCKET),
+    listStoragePrefixes(COOPERADOS_BUCKET),
   ]);
-  return [...new Set([...fromDb, ...entregas, ...sync])];
+  return [...new Set([...fromDb, ...entregas, ...sync, ...cooperados])];
 }
 
 async function removeNotaFotoParts(cnpj, notaId) {
@@ -106,7 +126,7 @@ async function resetOperacional(cnpj) {
 
   const payload = {
     updatedAt: new Date().toISOString(),
-    operationalResetVersion: 9,
+    operationalResetVersion: OPERATIONAL_RESET_VERSION,
     fullReset: true,
     wipeNotas: true,
     arquivosMensais: [],
@@ -129,16 +149,89 @@ async function resetOperacional(cnpj) {
   if (error) throw new Error(error.message);
 }
 
+async function resetContratosIfExists(cnpj) {
+  const path = `${cnpj}/contratos.json`;
+  const { data: blob } = await supabase.storage.from(SYNC_BUCKET).download(path);
+  if (!blob) return;
+  let existing = null;
+  try {
+    existing = JSON.parse(await blob.text());
+  } catch {
+    return;
+  }
+  const payload = {
+    updatedAt: new Date().toISOString(),
+    instituicoes: existing?.instituicoes ?? [],
+    produtosInstituicao: existing?.produtosInstituicao ?? [],
+    instituicoesExcluidas: existing?.instituicoesExcluidas ?? [],
+    cronogramasContrato: existing?.cronogramasContrato ?? [],
+  };
+  await supabase.storage.from(SYNC_BUCKET).upload(path, JSON.stringify(payload), {
+    contentType: "application/json",
+    upsert: true,
+  });
+}
+
+async function zerarMensalidadeConfigCooperativa(cnpj) {
+  const digits = normalizeCnpj(cnpj);
+  const { error } = await supabase
+    .from("cooperativas")
+    .update({ mensalidade_config: MENSALIDADE_CONFIG_ZERADA, updated_at: new Date().toISOString() })
+    .eq("cnpj", digits);
+  if (error) {
+    console.warn(`Aviso: mensalidade_config não zerada para ${digits}:`, error.message);
+  }
+}
+
+async function deleteAllCooperadosStorage(cnpj) {
+  const { data: files } = await supabase.storage.from(COOPERADOS_BUCKET).list(cnpj, { limit: 500 });
+  if (!files?.length) return 0;
+  const paths = files.filter((f) => f.name.endsWith(".json")).map((f) => `${cnpj}/${f.name}`);
+  if (!paths.length) return 0;
+  const { error } = await supabase.storage.from(COOPERADOS_BUCKET).remove(paths);
+  if (error) throw new Error(error.message);
+  return paths.length;
+}
+
+async function deleteCooperadoAppUsers(cnpj) {
+  const { error, count } = await supabase
+    .from("app_users")
+    .delete({ count: "exact" })
+    .eq("role", "cooperado")
+    .eq("cooperativa_cnpj", cnpj);
+  if (error) {
+    const msg = error.message ?? "";
+    if (error.code === "42P01" || /app_users/i.test(msg) || /schema cache/i.test(msg)) return 0;
+    throw new Error(error.message);
+  }
+  return count ?? 0;
+}
+
 const cnpjs = await listCnpjs();
 if (cnpjs.length === 0) {
   console.log("Nenhuma cooperativa encontrada na nuvem.");
   process.exit(0);
 }
 
+let totalNotas = 0;
+let totalCooperados = 0;
+let totalUsers = 0;
+
 for (const cnpj of cnpjs) {
   const notas = await deleteAllNotas(cnpj);
   await resetOperacional(cnpj);
-  console.log(`CNPJ ${cnpj}: ${notas} entrega(s) removida(s), operacional zerado.`);
+  await resetContratosIfExists(cnpj);
+  await zerarMensalidadeConfigCooperativa(cnpj);
+  const cooperados = await deleteAllCooperadosStorage(cnpj);
+  const users = await deleteCooperadoAppUsers(cnpj);
+  totalNotas += notas;
+  totalCooperados += cooperados;
+  totalUsers += users;
+  console.log(
+    `CNPJ ${cnpj}: ${notas} entrega(s), operacional+mensalidades zerados, ${cooperados} cadastro(s), ${users} conta(s).`
+  );
 }
 
-console.log("Limpeza na nuvem concluída.");
+console.log(
+  `Plataforma zerada (v${OPERATIONAL_RESET_VERSION}) — ${totalNotas} entrega(s), ${totalCooperados} cooperado(s), ${totalUsers} conta(s).`
+);

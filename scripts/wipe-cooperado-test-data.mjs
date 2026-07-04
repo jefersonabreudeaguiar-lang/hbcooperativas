@@ -41,7 +41,7 @@ const supabase = createClient(url, serviceKey, {
 const ENTREGAS_BUCKET = "hb-entregas";
 const SYNC_BUCKET = "hb-cooperativa-sync";
 const COOPERADOS_BUCKET = "hb-cooperados";
-const OPERATIONAL_RESET_VERSION = 8;
+const OPERATIONAL_RESET_VERSION = 9;
 
 function normalizeCnpj(value) {
   return String(value ?? "").replace(/\D/g, "");
@@ -123,7 +123,7 @@ async function resetOperacional(cnpj) {
     ajustesFichaMes: [],
     pagamentosCooperado: [],
     comunicados: [],
-    mensalidades: existing?.mensalidades ?? [],
+    mensalidades: [],
     descontos: [],
     valoresAvulsosReceber: [],
     livroCaixa: [],
