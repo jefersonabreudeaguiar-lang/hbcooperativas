@@ -1,4 +1,4 @@
-import type { AppData, Cooperativa, Cooperado, Instituicao, ProdutoInstituicao, Desconto, PrestacaoContasExcluida, InstituicaoExcluida } from "@/types";
+import type { AppData, Cooperativa, Cooperado, Instituicao, ProdutoInstituicao, Desconto, PrestacaoContasExcluida, InstituicaoExcluida, PagamentoCooperadoRegistro, Comunicado } from "@/types";
 import { normalizeCnpj } from "@/utils/cooperativa";
 import type { ContratosSyncPayload, OperacionalSyncPayload } from "@/lib/supabase/cooperativaSyncStorage";
 import { getData, saveDataSafe, runWithBatchedSaveAsync } from "@/services/dataStore";
@@ -51,6 +51,62 @@ function mergeOperacionalArrayFromCloud<T extends WithUpdatedAt>(
     map.set(item.id, item);
   }
 
+  return [...map.values()];
+}
+
+const PAGAMENTO_STATUS_RANK: Record<PagamentoCooperadoRegistro["status"], number> = {
+  aguardando_confirmacao: 0,
+  confirmado: 1,
+};
+
+/** Pagamento confirmado localmente não volta para aguardando assinatura na nuvem. */
+function mergePagamentosCooperadoFromCloud(
+  localCoop: PagamentoCooperadoRegistro[],
+  cloudItems: PagamentoCooperadoRegistro[]
+): PagamentoCooperadoRegistro[] {
+  const map = new Map<string, PagamentoCooperadoRegistro>();
+  for (const item of cloudItems) map.set(item.id, item);
+  for (const local of localCoop) {
+    const cloud = map.get(local.id);
+    if (!cloud) {
+      map.set(local.id, local);
+      continue;
+    }
+    const localRank = PAGAMENTO_STATUS_RANK[local.status] ?? 0;
+    const cloudRank = PAGAMENTO_STATUS_RANK[cloud.status] ?? 0;
+    if (localRank > cloudRank) {
+      map.set(local.id, local);
+      continue;
+    }
+    if (cloudRank > localRank) {
+      map.set(local.id, cloud);
+      continue;
+    }
+    map.set(local.id, itemTime(local) >= itemTime(cloud) ? local : cloud);
+  }
+  return [...map.values()];
+}
+
+/** Comunicado desativado localmente (ex.: após assinar recibo) permanece oculto. */
+function mergeComunicadosFromCloud(localCoop: Comunicado[], cloudItems: Comunicado[]): Comunicado[] {
+  const map = new Map<string, Comunicado>();
+  for (const item of cloudItems) map.set(item.id, item);
+  for (const local of localCoop) {
+    const cloud = map.get(local.id);
+    if (!cloud) {
+      map.set(local.id, local);
+      continue;
+    }
+    if (local.ativo === false) {
+      map.set(local.id, local);
+      continue;
+    }
+    if (cloud.ativo === false) {
+      map.set(local.id, cloud);
+      continue;
+    }
+    map.set(local.id, itemTime(local) >= itemTime(cloud) ? local : cloud);
+  }
   return [...map.values()];
 }
 
@@ -440,18 +496,16 @@ export function mergeOperacionalIntoData(
     ],
     pagamentosCooperado: [
       ...filterCoop(data.pagamentosCooperado, (p) => p.cooperativaId === coopId),
-      ...mergeOperacionalArrayFromCloud(
+      ...mergePagamentosCooperadoFromCloud(
         data.pagamentosCooperado.filter((p) => p.cooperativaId === coopId),
-        cloudPagamentos,
-        cloudSyncTime
+        cloudPagamentos
       ),
     ],
     comunicados: [
       ...filterCoop(data.comunicados, (c) => c.cooperativaId === coopId),
-      ...mergeOperacionalArrayFromCloud(
+      ...mergeComunicadosFromCloud(
         data.comunicados.filter((c) => c.cooperativaId === coopId),
-        cloudComunicados,
-        cloudSyncTime
+        cloudComunicados
       ),
     ],
     mensalidades: [

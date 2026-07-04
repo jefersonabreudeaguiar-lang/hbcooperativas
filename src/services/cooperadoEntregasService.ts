@@ -53,6 +53,9 @@ export function cooperadoExibirValorReceberInicio(
   if (aguardandoAssinatura) {
     return { exibir: true, mes, valor, aguardandoAssinatura: true };
   }
+  if (getPagamentoConfirmadoMes(data, cooperadoId, mes)) {
+    return { exibir: false, mes, valor: 0, aguardandoAssinatura: false };
+  }
   if (valor <= 0 || cooperadoMesQuitado(data, cooperadoId, mes)) {
     return { exibir: false, mes, valor: 0, aguardandoAssinatura: false };
   }

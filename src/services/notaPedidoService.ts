@@ -1010,13 +1010,34 @@ export function confirmarPagamentoCooperado(
       : p
   );
 
-  return {
+  let next: AppData = {
     ...data,
     pagamentosCooperado,
     arquivosMensais: upsertArquivoMensal(data, pagamento.cooperadoId, pagamento.cooperativaId, pagamento.mesReferencia, {
       pagamentoIds: [pagamentoId],
     }),
   };
+
+  next = marcarFichaComoPaga(next, pagamento.cooperadoId, pagamento.mesReferencia, pagamento.pagoPor ?? "Cooperativa");
+
+  const coopId = pagamento.cooperativaId;
+  const canonico = resolverCooperadoIdCanonico(next, pagamento.cooperadoId, coopId);
+  next = {
+    ...next,
+    comunicados: next.comunicados.map((c) => {
+      const paraCooperado =
+        !c.cooperadoId || c.cooperadoId === pagamento.cooperadoId || c.cooperadoId === canonico;
+      const avisoPagamento =
+        c.categoria === "financeiro" &&
+        c.titulo.trim().toLowerCase() === "pagamento realizado";
+      if (paraCooperado && avisoPagamento && c.cooperativaId === coopId) {
+        return { ...c, ativo: false };
+      }
+      return c;
+    }),
+  };
+
+  return next;
 }
 
 export function marcarFichaComoPaga(

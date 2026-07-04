@@ -624,6 +624,7 @@ export default function FichaCorridaPage() {
       const d = getData();
       const cnpj = await resolveCooperativaCnpj(d, coopId, user);
       if (cnpj) await pushOperacionalToCloud(cnpj, d, coopId, { authoritative: true });
+      requestAppSync();
     })();
     setAssinaturaModal(false);
     setAssinatura(null);

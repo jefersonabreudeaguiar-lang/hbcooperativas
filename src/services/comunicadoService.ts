@@ -5,6 +5,7 @@ import {
   getResumoMensalidadesCooperado,
   type ResumoMensalidadesCooperado,
 } from "@/services/mensalidadeService";
+import { getPagamentoAguardandoCooperado } from "@/services/notaPedidoService";
 import { formatCurrency, formatDate, formatMesReferencia, getCurrentMesReferencia } from "@/utils/format";
 
 export interface ComunicadoExibicao extends Comunicado {
@@ -200,9 +201,17 @@ export function getComunicadosInicioCooperado(
     resumoMens.situacao === "sem_mensalidade" ||
     resumoMens.situacao === "aguardando_confirmacao";
 
+  const pagamentoAguardandoAssinatura = cooperadoId
+    ? !!getPagamentoAguardandoCooperado(data, cooperadoId)
+    : false;
+
   return getComunicadosCooperado(data, cooperativaId, cooperadoId)
     .filter((c) => {
       if (c.virtual) return false;
+      const avisoPagamentoCooperativa =
+        c.categoria === "financeiro" &&
+        c.titulo.trim().toLowerCase() === "pagamento realizado";
+      if (avisoPagamentoCooperativa && !pagamentoAguardandoAssinatura) return false;
       if (mensalidadeResolvida && c.categoria === "financeiro") return false;
       return true;
     })
