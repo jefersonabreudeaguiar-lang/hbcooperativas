@@ -4,7 +4,6 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useAppData } from "@/hooks/useAppData";
 import { usePermissions } from "@/hooks/usePermissions";
-import { subscribe } from "@/services/dataStore";
 import { getComunicadoAssunto, getComunicadosCooperado } from "@/services/comunicadoService";
 import { getUserCooperativaId } from "@/utils/cooperativa";
 import {
@@ -75,9 +74,9 @@ export function ComunicadoNotifier() {
 
   useEffect(() => {
     if (!isCooperado || !cooperadoId) return;
-    processar();
-    return subscribe(processar);
-  }, [isCooperado, cooperadoId, processar]);
+    const timer = setTimeout(processar, 150);
+    return () => clearTimeout(timer);
+  }, [data, isCooperado, cooperadoId, processar]);
 
   useEffect(() => {
     if (!isCooperado || permissionAskedRef.current) return;

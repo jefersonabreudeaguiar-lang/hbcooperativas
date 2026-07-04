@@ -1,7 +1,7 @@
 import type { AppData, Cooperativa, Cooperado, Instituicao, ProdutoInstituicao, Desconto, PrestacaoContasExcluida, InstituicaoExcluida } from "@/types";
 import { normalizeCnpj } from "@/utils/cooperativa";
 import type { ContratosSyncPayload, OperacionalSyncPayload } from "@/lib/supabase/cooperativaSyncStorage";
-import { getData, saveDataSafe } from "@/services/dataStore";
+import { getData, saveDataSafe, runWithBatchedSaveAsync } from "@/services/dataStore";
 import { syncCooperadosFromCloud, fetchCooperadosFromCloud, pushCooperadoToCloud } from "@/services/cooperadoCloudService";
 import { syncNotasPedidoFromCloud, patchNotaPedidoInCloud } from "@/services/notaPedidoCloudService";
 import { fetchCooperativaByCnpjFromCloud, mergeCooperativaIntoData } from "@/services/cooperativaCloudService";
@@ -733,9 +733,10 @@ export async function syncCooperativaProfileFromCloud(cnpj: string): Promise<boo
 /** Intervalo padrão de sincronização automática (ms). */
 export const SYNC_INTERVAL_MS = 12_000;
 /** Celular: intervalo maior para não travar a UI a cada sync. */
-export const SYNC_INTERVAL_MOBILE_MS = 45_000;
+export const SYNC_INTERVAL_MOBILE_MS = 90_000;
 /** Intervalo mínimo entre duas sincronizações completas. */
 export const SYNC_MIN_GAP_MS = 10_000;
+export const SYNC_MIN_GAP_MOBILE_MS = 30_000;
 
 export function isMobileDevice(): boolean {
   if (typeof window === "undefined") return false;
@@ -749,17 +750,39 @@ export function getSyncIntervalMs(): number {
   return isMobileDevice() ? SYNC_INTERVAL_MOBILE_MS : SYNC_INTERVAL_MS;
 }
 
+export function getSyncMinGapMs(): number {
+  return isMobileDevice() ? SYNC_MIN_GAP_MOBILE_MS : SYNC_MIN_GAP_MS;
+}
+
+/** Sync leve em background (cooperado no celular): só perfil, cooperados e notas. */
+export async function syncCooperativaBackground(
+  cnpj: string,
+  preferredCoopId?: string
+): Promise<void> {
+  const digits = normalizeCnpj(cnpj);
+  if (digits.length !== 14) return;
+
+  await runWithBatchedSaveAsync(async () => {
+    await syncCooperativaProfileFromCloud(digits);
+    const coopId = preferredCoopId ?? resolveCoopId(getData(), digits);
+    await syncCooperadosFromCloud(digits, coopId);
+    await syncNotasPedidoFromCloud(digits);
+  });
+}
+
 /** Sincroniza tudo da cooperativa: cooperados, notas, contratos, operacional, perfil. */
 export async function syncAllCooperativaFromCloud(cnpj: string, preferredCoopId?: string): Promise<void> {
   const digits = normalizeCnpj(cnpj);
   if (digits.length !== 14) return;
 
-  await syncCooperativaProfileFromCloud(digits);
-  const coopId = preferredCoopId ?? resolveCoopId(getData(), digits);
-  await syncCooperadosFromCloud(digits, coopId);
-  await syncNotasPedidoFromCloud(digits);
-  await syncContratosFromCloud(digits);
-  await syncOperacionalFromCloud(digits);
+  await runWithBatchedSaveAsync(async () => {
+    await syncCooperativaProfileFromCloud(digits);
+    const coopId = preferredCoopId ?? resolveCoopId(getData(), digits);
+    await syncCooperadosFromCloud(digits, coopId);
+    await syncNotasPedidoFromCloud(digits);
+    await syncContratosFromCloud(digits);
+    await syncOperacionalFromCloud(digits);
+  });
 }
 
 /**
@@ -778,7 +801,9 @@ export async function syncCooperativaBidirectional(
     await pushOperationalResetToCloud(digits, coopId);
   }
 
-  await syncAllCooperativaFromCloud(digits, coopId);
+  await runWithBatchedSaveAsync(async () => {
+    await syncAllCooperativaFromCloud(digits, coopId);
+  });
 
   const d = getData();
   const cid = coopId ?? resolveCoopId(d, digits);

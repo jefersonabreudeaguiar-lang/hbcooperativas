@@ -43,6 +43,8 @@ let storageListenerAttached = false;
 let lastPersistedSerialized: string | null = null;
 let notifyFlushScheduled = false;
 let automaticTasksScheduled = false;
+let saveBatchDepth = 0;
+let saveBatchPending: AppData | null = null;
 
 function invalidateCache(): void {
   memoryCache = null;
@@ -72,6 +74,65 @@ function attachStorageListener(): void {
 export function subscribe(listener: Listener): () => void {
   listeners.add(listener);
   return () => listeners.delete(listener);
+}
+
+/** Agrupa várias gravações do sync em uma só (evita travar o celular). */
+export function beginSaveBatch(): void {
+  saveBatchDepth++;
+}
+
+export function endSaveBatch(): void {
+  if (saveBatchDepth <= 0) return;
+  saveBatchDepth--;
+  if (saveBatchDepth === 0 && saveBatchPending) {
+    const pending = saveBatchPending;
+    saveBatchPending = null;
+    persistDataToStorage(pending);
+  }
+}
+
+export async function runWithBatchedSaveAsync(fn: () => Promise<void>): Promise<void> {
+  beginSaveBatch();
+  try {
+    await fn();
+  } finally {
+    endSaveBatch();
+  }
+}
+
+function persistDataToStorage(data: AppData): { ok: true } | { ok: false; error: string } {
+  if (typeof window === "undefined") return { ok: true };
+
+  const previousCache = memoryCache;
+  const candidates = [data, liberarEspacoArmazenamento(data, 1), liberarEspacoArmazenamento(data, 2)];
+
+  for (let i = 0; i < candidates.length; i++) {
+    const candidate = candidates[i];
+    try {
+      const serialized = JSON.stringify(candidate);
+      if (serialized === lastPersistedSerialized) {
+        memoryCache = candidate;
+        return { ok: true };
+      }
+      localStorage.setItem(STORAGE_KEY, serialized);
+      lastPersistedSerialized = serialized;
+      memoryCache = candidate;
+      notify();
+      return { ok: true };
+    } catch (e) {
+      if (!isStorageQuotaError(e)) {
+        memoryCache = previousCache ?? memoryCache;
+        return { ok: false, error: "Não foi possível salvar os dados. Tente novamente." };
+      }
+    }
+  }
+
+  memoryCache = previousCache ?? memoryCache;
+  return {
+    ok: false,
+    error:
+      "Memória do navegador cheia. Envie a entrega agora (com internet) ou remova fotos antigas antes de anexar mais.",
+  };
 }
 
 function stripDemoData(data: AppData): AppData {
@@ -397,36 +458,13 @@ function isStorageQuotaError(e: unknown): boolean {
 export function saveDataSafe(data: AppData): { ok: true } | { ok: false; error: string } {
   if (typeof window === "undefined") return { ok: true };
 
-  const previousCache = memoryCache;
-  const candidates = [data, liberarEspacoArmazenamento(data, 1), liberarEspacoArmazenamento(data, 2)];
-
-  for (let i = 0; i < candidates.length; i++) {
-    const candidate = candidates[i];
-    try {
-      const serialized = JSON.stringify(candidate);
-      if (serialized === lastPersistedSerialized) {
-        memoryCache = candidate;
-        return { ok: true };
-      }
-      localStorage.setItem(STORAGE_KEY, serialized);
-      lastPersistedSerialized = serialized;
-      memoryCache = candidate;
-      notify();
-      return { ok: true };
-    } catch (e) {
-      if (!isStorageQuotaError(e)) {
-        memoryCache = previousCache ?? memoryCache;
-        return { ok: false, error: "Não foi possível salvar os dados. Tente novamente." };
-      }
-    }
+  if (saveBatchDepth > 0) {
+    memoryCache = data;
+    saveBatchPending = data;
+    return { ok: true };
   }
 
-  memoryCache = previousCache ?? memoryCache;
-  return {
-    ok: false,
-    error:
-      "Memória do navegador cheia. Envie a entrega agora (com internet) ou remova fotos antigas antes de anexar mais.",
-  };
+  return persistDataToStorage(data);
 }
 
 export function getData(): AppData {

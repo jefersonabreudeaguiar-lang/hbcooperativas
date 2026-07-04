@@ -14,7 +14,9 @@ import {
 } from "@/services/notaPedidoCloudService";
 import {
   getSyncIntervalMs,
-  SYNC_MIN_GAP_MS,
+  getSyncMinGapMs,
+  isMobileDevice,
+  syncCooperativaBackground,
   syncCooperativaBidirectional,
 } from "@/services/cooperativaSyncCloudService";
 import { pushCooperadoToCloud, resolverCooperadoIdCanonico, flushPendingCooperadoPushes } from "@/services/cooperadoCloudService";
@@ -24,11 +26,14 @@ import { compactarFotosNoArmazenamento, contarFotosEnviadasNota } from "@/utils/
 import { isDiretoriaRole } from "@/permissions";
 import type { UserRole } from "@/types";
 
-/** Sincronização automática — otimizada para celular (menos frequente, sem loop de re-render). */
+const COOPERADO_PUSH_GAP_MS = 3 * 60 * 1000;
+
+/** Sincronização automática — leve no celular do cooperado. */
 export function CooperativaSyncProvider({ children }: { children: React.ReactNode }) {
   const { user } = useAuth();
   const syncingRef = useRef(false);
   const lastSyncAtRef = useRef(0);
+  const lastCooperadoPushRef = useRef(0);
   const userRef = useRef(user);
   userRef.current = user;
 
@@ -47,7 +52,7 @@ export function CooperativaSyncProvider({ children }: { children: React.ReactNod
     if (!currentCoopId) return;
 
     const now = Date.now();
-    if (now - lastSyncAtRef.current < SYNC_MIN_GAP_MS) return;
+    if (now - lastSyncAtRef.current < getSyncMinGapMs()) return;
     lastSyncAtRef.current = now;
 
     syncingRef.current = true;
@@ -57,17 +62,26 @@ export function CooperativaSyncProvider({ children }: { children: React.ReactNod
 
       await flushPendingCooperadoPushes(cnpj);
       await syncOfflineDeliveryImages();
-      const pushCatalog = isDiretoriaRole(currentUser.role as UserRole);
-      const pushMensalidades = isDiretoriaRole(currentUser.role as UserRole);
       await flushPendingNotaDeletes(cnpj);
-      await syncCooperativaBidirectional(cnpj, currentCoopId, { pushCatalog, pushMensalidades });
+
+      const cooperadoNoCelular = currentUser.role === "cooperado" && isMobileDevice();
+
+      if (cooperadoNoCelular) {
+        await syncCooperativaBackground(cnpj, currentCoopId);
+      } else {
+        const pushCatalog = isDiretoriaRole(currentUser.role as UserRole);
+        const pushMensalidades = isDiretoriaRole(currentUser.role as UserRole);
+        await syncCooperativaBidirectional(cnpj, currentCoopId, { pushCatalog, pushMensalidades });
+      }
 
       if (currentUser.role === "cooperado" && currentUser.cooperadoId) {
         const latest = getData();
         const cooperadoCanonico = resolverCooperadoIdCanonico(latest, currentUser.cooperadoId, currentCoopId);
         const registro = latest.cooperados.find((c) => c.id === cooperadoCanonico);
-        if (registro) {
+
+        if (registro && now - lastCooperadoPushRef.current >= COOPERADO_PUSH_GAP_MS) {
           await pushCooperadoToCloud(cnpj, registro, currentUser.email);
+          lastCooperadoPushRef.current = Date.now();
         }
 
         const cooperadoNome = getCooperadoNome(latest.cooperados, cooperadoCanonico);
@@ -163,7 +177,7 @@ export function CooperativaSyncProvider({ children }: { children: React.ReactNod
       void runSync();
     };
 
-    startSync();
+    const initialDelay = setTimeout(startSync, 1500);
 
     const intervalId = setInterval(startSync, getSyncIntervalMs());
 
@@ -173,6 +187,7 @@ export function CooperativaSyncProvider({ children }: { children: React.ReactNod
     document.addEventListener("visibilitychange", onVisible);
 
     return () => {
+      clearTimeout(initialDelay);
       clearInterval(intervalId);
       document.removeEventListener("visibilitychange", onVisible);
     };

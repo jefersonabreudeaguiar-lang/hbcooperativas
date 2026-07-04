@@ -25,7 +25,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const router = useRouter();
 
   const refresh = useCallback(() => {
-    setUser(getSession());
+    const session = getSession();
+    setUser((prev) => {
+      if (
+        prev?.id === session?.id &&
+        prev?.email === session?.email &&
+        prev?.cooperadoId === session?.cooperadoId &&
+        prev?.cooperativaId === session?.cooperativaId
+      ) {
+        return prev;
+      }
+      return session;
+    });
     setLoading(false);
   }, []);
 

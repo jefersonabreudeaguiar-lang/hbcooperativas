@@ -3,7 +3,6 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import { useAppData } from "@/hooks/useAppData";
 import { usePermissions } from "@/hooks/usePermissions";
-import { subscribe } from "@/services/dataStore";
 import {
   notificarEntregaAprovada,
   prepararAudioNotificacao,
@@ -55,9 +54,9 @@ export function EntregaAprovadaNotifier() {
 
   useEffect(() => {
     if (!isCooperado || !cooperadoId) return;
-    processarNotas();
-    return subscribe(processarNotas);
-  }, [isCooperado, cooperadoId, processarNotas]);
+    const timer = setTimeout(processarNotas, 150);
+    return () => clearTimeout(timer);
+  }, [data, isCooperado, cooperadoId, processarNotas]);
 
   useEffect(() => {
     if (!isCooperado || permissionAskedRef.current) return;
