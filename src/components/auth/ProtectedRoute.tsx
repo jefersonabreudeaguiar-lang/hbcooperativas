@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect } from "react";
+import { useLayoutEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/modules/auth/AuthProvider";
 
@@ -8,7 +8,7 @@ export function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth();
   const router = useRouter();
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (!loading && !user) {
       router.replace("/login");
     }
@@ -16,10 +16,12 @@ export function ProtectedRoute({ children }: { children: React.ReactNode }) {
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50">
-        <div className="text-center">
-          <div className="w-10 h-10 border-4 border-green-600 border-t-transparent rounded-full animate-spin mx-auto" />
-          <p className="mt-3 text-sm text-gray-500">Carregando...</p>
+      <div className="min-h-screen flex flex-col bg-gray-50">
+        <div className="h-14 bg-green-900/90 animate-pulse shrink-0" />
+        <div className="flex-1 p-4 space-y-3 max-w-lg mx-auto w-full pt-6">
+          <div className="h-8 w-48 bg-gray-200 rounded-lg animate-pulse" />
+          <div className="h-24 bg-white rounded-xl border border-gray-200 animate-pulse" />
+          <div className="h-24 bg-white rounded-xl border border-gray-200 animate-pulse" />
         </div>
       </div>
     );

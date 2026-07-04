@@ -47,6 +47,8 @@ let automaticTasksScheduled = false;
 let saveBatchDepth = 0;
 let saveBatchPending: AppData | null = null;
 let dataRevision = 0;
+let dataWarmScheduled = false;
+let dataWarmInFlight = false;
 
 export function getDataRevision(): number {
   return dataRevision;
@@ -59,6 +61,7 @@ function bumpRevision(): void {
 function invalidateCache(): void {
   memoryCache = null;
   lastPersistedSerialized = null;
+  dataWarmScheduled = false;
 }
 
 function notify(): void {
@@ -409,6 +412,28 @@ function scheduleAutomaticTasksIfNeeded(data: AppData): AppData {
   return data;
 }
 
+/** Inicia leitura do localStorage em background — não bloqueia a abertura do app. */
+export function preloadAppData(): void {
+  if (typeof window === "undefined" || memoryCache || dataWarmInFlight) return;
+  dataWarmInFlight = true;
+  const run = () => {
+    try {
+      loadData();
+      reconcileSessionAfterDataLoad();
+      notifyImmediate();
+    } finally {
+      dataWarmInFlight = false;
+    }
+  };
+  queueMicrotask(run);
+}
+
+function scheduleDataWarmIfNeeded(): void {
+  if (memoryCache || dataWarmScheduled || typeof window === "undefined") return;
+  dataWarmScheduled = true;
+  preloadAppData();
+}
+
 function loadData(forceReload = false): AppData {
   if (typeof window === "undefined") return emptyInitialData;
   attachStorageListener();
@@ -503,7 +528,11 @@ export function saveDataSafe(data: AppData): { ok: true } | { ok: false; error: 
 }
 
 export function getData(): AppData {
-  return loadData();
+  if (typeof window === "undefined") return emptyInitialData;
+  attachStorageListener();
+  if (memoryCache) return memoryCache;
+  scheduleDataWarmIfNeeded();
+  return emptyInitialData;
 }
 
 export function resetData(): void {
@@ -717,7 +746,7 @@ export function logout(): void {
   }
 }
 
-export function getSession(): Omit<User, "password"> | null {
+function readStoredSessionRaw(): Omit<User, "password"> | null {
   if (typeof window === "undefined") return null;
 
   const legacy = sessionStorage.getItem(SESSION_KEY);
@@ -730,9 +759,41 @@ export function getSession(): Omit<User, "password"> | null {
   if (!stored) return null;
 
   try {
-    const parsed = JSON.parse(stored) as Omit<User, "password">;
-    const data = loadData();
-    const current = resolveSessionUser(data, parsed);
+    return JSON.parse(stored) as Omit<User, "password">;
+  } catch {
+    localStorage.removeItem(SESSION_KEY);
+    sessionStorage.removeItem(SESSION_KEY);
+    return null;
+  }
+}
+
+function reconcileSessionAfterDataLoad(): void {
+  const parsed = readStoredSessionRaw();
+  if (!parsed || !memoryCache) return;
+
+  const current = resolveSessionUser(memoryCache, parsed);
+  if (!current) {
+    localStorage.removeItem(SESSION_KEY);
+    sessionStorage.removeItem(SESSION_KEY);
+    notify();
+    return;
+  }
+
+  const { password: _, ...safeUser } = current;
+  const serialized = JSON.stringify(safeUser);
+  const stored = localStorage.getItem(SESSION_KEY);
+  if (stored && serialized !== stored) {
+    localStorage.setItem(SESSION_KEY, serialized);
+    notify();
+  }
+}
+
+export function getSession(): Omit<User, "password"> | null {
+  const parsed = readStoredSessionRaw();
+  if (!parsed) return null;
+
+  if (memoryCache) {
+    const current = resolveSessionUser(memoryCache, parsed);
     if (!current) {
       localStorage.removeItem(SESSION_KEY);
       sessionStorage.removeItem(SESSION_KEY);
@@ -740,14 +801,15 @@ export function getSession(): Omit<User, "password"> | null {
     }
     const { password: _, ...safeUser } = current;
     const serialized = JSON.stringify(safeUser);
-    if (serialized !== stored) {
+    const stored = localStorage.getItem(SESSION_KEY);
+    if (stored && serialized !== stored) {
       localStorage.setItem(SESSION_KEY, serialized);
     }
     return safeUser;
-  } catch {
-    localStorage.removeItem(SESSION_KEY);
-    return null;
   }
+
+  scheduleDataWarmIfNeeded();
+  return parsed;
 }
 
 export interface RegisterCooperadoInput {

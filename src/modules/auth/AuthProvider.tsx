@@ -1,9 +1,9 @@
 "use client";
 
-import { createContext, useContext, useEffect, useState, useCallback, type ReactNode } from "react";
+import { createContext, useContext, useEffect, useLayoutEffect, useState, useCallback, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import type { User } from "@/types";
-import { getSession, login as doLogin, loginCreatorAdminPortal, logout as doLogout, registerCooperado, registerCooperativa, subscribe, ensureCooperativaInCloudForUser } from "@/services/dataStore";
+import { getSession, login as doLogin, loginCreatorAdminPortal, logout as doLogout, registerCooperado, registerCooperativa, subscribe, ensureCooperativaInCloudForUser, preloadAppData } from "@/services/dataStore";
 import type { RegisterCooperadoInput, RegisterCooperativaInput } from "@/services/dataStore";
 
 interface AuthContextType {
@@ -40,10 +40,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setLoading(false);
   }, []);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     refresh();
-    return subscribe(refresh);
+    preloadAppData();
   }, [refresh]);
+
+  useEffect(() => subscribe(refresh), [refresh]);
 
   useEffect(() => {
     if (!user || loading) return;

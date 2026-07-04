@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect } from "react";
+import { useLayoutEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/modules/auth/AuthProvider";
 
@@ -16,7 +16,7 @@ export function GuestRoute({
   const { user, loading } = useAuth();
   const router = useRouter();
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (!loading && user && authenticatedRedirect) {
       router.replace(authenticatedRedirect);
     }
@@ -25,9 +25,9 @@ export function GuestRoute({
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50">
-        <div className="text-center">
-          <div className="w-10 h-10 border-4 border-green-600 border-t-transparent rounded-full animate-spin mx-auto" />
-          <p className="mt-3 text-sm text-gray-500">Carregando...</p>
+        <div className="w-full max-w-md px-6 space-y-4 animate-pulse">
+          <div className="h-10 bg-gray-200 rounded-lg mx-auto w-40" />
+          <div className="h-64 bg-white rounded-2xl border border-gray-200" />
         </div>
       </div>
     );
