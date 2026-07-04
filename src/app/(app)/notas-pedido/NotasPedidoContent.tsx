@@ -542,7 +542,46 @@ export default function NotasPedidoContent() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ANEXAR_DRAFT_KEY]);
 
-  const continuarRascunhoFotos = () => {
+  const aplicarContratoLocal = useCallback(
+    (currentData: NonNullable<ReturnType<typeof getData>>, notaRejeitada?: NotaPedido) => {
+      if (!coopId) return;
+      const resolved = resolverContratoEntrega(
+        currentData,
+        coopId,
+        notaRejeitada?.instituicaoId,
+        { criarPadraoSeVazio: !isCooperado }
+      );
+      if (resolved.criou) updateData(() => resolved.data);
+      setContratoInstId(resolved.instituicaoId);
+      if (resolved.instituicaoId) setInstituicaoPadraoId(coopId, resolved.instituicaoId);
+    },
+    [coopId, isCooperado]
+  );
+
+  const sincronizarContratosEmBackground = useCallback(
+    async (notaRejeitada?: NotaPedido) => {
+      if (!isCooperado || !user || !coopId) return;
+      let currentData = getData();
+      const cnpj = await resolveCooperativaCnpj(currentData, coopId, user);
+      if (cnpj) {
+        try {
+          await syncContratosFromCloud(cnpj);
+        } catch {
+          /* offline — mantém contratos locais */
+        }
+      }
+      currentData = getData();
+      if (currentData) aplicarContratoLocal(currentData, notaRejeitada);
+    },
+    [aplicarContratoLocal, coopId, isCooperado, user]
+  );
+
+  const abrirCameraAnexar = useCallback(() => {
+    if (processandoFoto || enviando) return;
+    fotoInputRef.current?.click();
+  }, [enviando, processandoFoto]);
+
+  const continuarRascunhoFotos = (abrirCamera = false) => {
     if (rascunhoFotosCount === 0) return;
     setFormErrors({});
     setErroEnvio("");
@@ -554,12 +593,14 @@ export default function NotasPedidoContent() {
       if (coopId) setInstituicaoPadraoId(coopId, rascunhoContratoId);
     }
     setRascunhoFotosCount(0);
-    void syncFotosSessaoFromDraft().then(() => setAnexarModal(true));
+    setAnexarModal(true);
+    void syncFotosSessaoFromDraft();
+    if (abrirCamera) abrirCameraAnexar();
   };
 
-  const openAnexar = async (notaRejeitada?: NotaPedido) => {
+  const openAnexar = (notaRejeitada?: NotaPedido, options?: { abrirCamera?: boolean }) => {
     if (!notaRejeitada && rascunhoFotosCount > 0) {
-      continuarRascunhoFotos();
+      continuarRascunhoFotos(options?.abrirCamera ?? false);
       return;
     }
 
@@ -589,34 +630,16 @@ export default function NotasPedidoContent() {
       }
       currentData = getData() ?? currentData;
     }
-    if (isCooperado && user && coopId) {
-      const cnpj = await resolveCooperativaCnpj(currentData, coopId, user);
-      if (cnpj) {
-        try {
-          await syncContratosFromCloud(cnpj);
-        } catch {
-          /* offline — modal abre com contratos locais */
-        }
-      }
-      currentData = getData();
-    }
 
-    if (currentData && coopId) {
-      const resolved = resolverContratoEntrega(
-        currentData,
-        coopId,
-        notaRejeitada?.instituicaoId,
-        { criarPadraoSeVazio: !isCooperado }
-      );
-      if (resolved.criou) updateData(() => resolved.data);
-      setContratoInstId(resolved.instituicaoId);
-      if (resolved.instituicaoId) setInstituicaoPadraoId(coopId, resolved.instituicaoId);
-    }
+    if (currentData) aplicarContratoLocal(currentData, notaRejeitada);
 
     setAnexarModal(true);
     if (!notaRejeitada) {
       void syncFotosSessaoFromDraft();
     }
+    void sincronizarContratosEmBackground(notaRejeitada);
+
+    if (options?.abrirCamera) abrirCameraAnexar();
   };
 
   const cooperadosCoop = useMemo(() => {
@@ -815,10 +838,16 @@ export default function NotasPedidoContent() {
   useEffect(() => {
     if (searchParams.get("anexar") !== "1" || !isCooperado || !data || anexarParamHandledRef.current) return;
     anexarParamHandledRef.current = true;
-    openAnexar();
+    openAnexar(undefined, { abrirCamera: true });
     router.replace("/notas-pedido", { scroll: false });
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchParams, isCooperado, data]);
+
+  useEffect(() => {
+    if (!isCooperado || !user || !coopId || !data) return;
+    void sincronizarContratosEmBackground();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isCooperado, user?.id, coopId]);
 
   useEffect(() => {
     if (!anexarModal || !data || !coopId) return;
@@ -2127,7 +2156,7 @@ export default function NotasPedidoContent() {
         </div>
         {isCooperado && n.status === "rejeitada" && (
           <div className="flex flex-col gap-2 mt-3">
-            <Button size="sm" className="w-full" variant="secondary" onClick={(e) => { e.stopPropagation(); openAnexar(n); }}>
+            <Button size="sm" className="w-full" variant="secondary" onClick={(e) => { e.stopPropagation(); openAnexar(n, { abrirCamera: true }); }}>
               <RefreshCw size={16} /> Enviar de novo
             </Button>
             <Button
@@ -2204,13 +2233,13 @@ export default function NotasPedidoContent() {
           isCooperado
             ? abaCooperado === "ficha"
               ? "Extrato financeiro mensal com valores recebidos e detalhamento de cada entrega"
-              : "Entregas numeradas por mês e semana — toque em cada uma para ver as fotos"
+              : "Toque no botão verde para fotografar sua entrega — histórico por mês abaixo"
             : "Analise fotos, lance produtos ou registre entregas avulsas sem nota"
         }
         action={isCooperado ? (
           <div className="hidden sm:block">
-            <Button size="lg" onClick={() => openAnexar()}>
-              <Camera size={18} /> Enviar foto
+            <Button size="lg" onClick={() => openAnexar(undefined, { abrirCamera: true })}>
+              <Camera size={18} /> Tirar foto
             </Button>
           </div>
         ) : check("notas_pedido", "create") ? (
@@ -2234,7 +2263,7 @@ export default function NotasPedidoContent() {
           Você tem {rascunhoFotosCount}{" "}
           {rascunhoFotosCount === 1 ? "foto na nuvem" : "fotos na nuvem"} de uma sessão anterior.
           <div className="flex flex-wrap gap-2 mt-3">
-            <Button size="sm" onClick={continuarRascunhoFotos}>
+            <Button size="sm" onClick={() => continuarRascunhoFotos(true)}>
               Continuar envio
             </Button>
             <Button size="sm" variant="secondary" onClick={limparRascunhoAnexar}>
@@ -2421,6 +2450,25 @@ export default function NotasPedidoContent() {
         </div>
       )}
 
+      {isCooperado && abaCooperado === "entregas" && (
+        <button
+          type="button"
+          onClick={() => openAnexar(undefined, { abrirCamera: true })}
+          className="w-full mb-6 rounded-2xl bg-gradient-to-br from-green-600 to-green-700 text-white shadow-lg shadow-green-900/20 p-5 flex items-center gap-4 active:scale-[0.98] transition-transform"
+        >
+          <span className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-white/20">
+            <Camera size={32} strokeWidth={2.25} />
+          </span>
+          <span className="flex-1 text-left min-w-0">
+            <span className="block text-lg font-bold leading-tight">Tirar foto da entrega</span>
+            <span className="block text-sm text-green-100 mt-1">
+              Um toque abre a câmera na hora — envio em segundo plano
+            </span>
+          </span>
+          <ChevronRight size={22} className="shrink-0 text-green-200" />
+        </button>
+      )}
+
       <FilterBar>
         {!isCooperado && pendentesPorCooperado.length > 0 && (
           <FormField label="Cooperado para conferir">
@@ -2502,7 +2550,7 @@ export default function NotasPedidoContent() {
             resumos={resumosMensaisCooperado}
             nomeCooperado={nomeCooperadoExibicao}
             ultimaNotaEnviadaIds={ultimaNotaEnviadaIds}
-            onReenviar={openAnexar}
+            onReenviar={(n) => openAnexar(n, { abrirCamera: true })}
             onExcluir={(n) => setExcluirNotaTarget(n)}
             getEscolaLabel={(n) => getEscolaNotaLabel(n, data.instituicoes)}
           />
@@ -2533,11 +2581,21 @@ export default function NotasPedidoContent() {
 
       {isCooperado && (
         <div className="fixed bottom-20 right-4 z-30 sm:hidden">
-          <Button size="lg" className="shadow-lg rounded-full px-5" onClick={() => openAnexar()}>
-            <Camera size={20} /> Enviar foto
+          <Button size="lg" className="shadow-lg rounded-full px-5" onClick={() => openAnexar(undefined, { abrirCamera: true })}>
+            <Camera size={20} /> Tirar foto
           </Button>
         </div>
       )}
+
+      <input
+        ref={fotoInputRef}
+        type="file"
+        accept="image/*"
+        capture="environment"
+        className="hidden"
+        onChange={(e) => void handleFoto(e)}
+        disabled={processandoFoto || enviando}
+      />
 
       <Modal
         open={anexarModal}
@@ -2677,7 +2735,7 @@ export default function NotasPedidoContent() {
                 type="button"
                 size="sm"
                 variant="secondary"
-                onClick={() => fotoInputRef.current?.click()}
+                onClick={abrirCameraAnexar}
               >
                 <Camera size={14} className="mr-1" /> Tirar outra foto
               </Button>
@@ -2691,7 +2749,7 @@ export default function NotasPedidoContent() {
                 variant="secondary"
                 size="sm"
                 disabled={processandoFoto}
-                onClick={() => fotoInputRef.current?.click()}
+                onClick={abrirCameraAnexar}
               >
                 <Camera size={14} className="mr-1" />
                 {fotosSessaoCount === 0 ? "Tirar foto" : "Tirar próxima foto"}
@@ -2710,7 +2768,61 @@ export default function NotasPedidoContent() {
             </div>
           )}
 
-          <FormField label="Contrato" required error={formErrors.contrato} hint="A entrega será conferida e lançada neste contrato.">
+          <FormField
+            label={
+              reenviarNotaId
+                ? "Nova foto"
+                : processandoFoto
+                  ? "Comprimindo foto…"
+                  : fotosSessaoCount > 0
+                    ? `Foto ${fotosSessaoCount + 1} desta entrega`
+                    : "Foto da entrega"
+            }
+            required
+            error={formErrors.foto}
+            hint="Mostre o pedido inteiro com a assinatura de quem recebeu."
+          >
+            {fotoAtualPreview && processandoFoto ? (
+              <div className="relative rounded-xl overflow-hidden border-2 border-amber-300 bg-black/5">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={fotoAtualPreview}
+                  alt={`Foto ${fotosConfirmadasNaSessao + 1}`}
+                  className="w-full max-h-72 object-contain mx-auto bg-gray-900/5 opacity-90"
+                />
+                <span className="absolute inset-0 flex items-center justify-center bg-black/30">
+                  <span className="bg-amber-600 text-white text-sm font-semibold px-3 py-2 rounded-full">
+                    {pipelineStepLabel(fotoPipelineStep)}
+                  </span>
+                </span>
+              </div>
+            ) : (
+              <button
+                type="button"
+                onClick={abrirCameraAnexar}
+                disabled={processandoFoto || enviando}
+                className={`w-full flex flex-col items-center gap-2 p-8 border-2 border-dashed border-green-500 rounded-2xl bg-green-50 ${processandoFoto || enviando ? "opacity-60 pointer-events-none" : "cursor-pointer active:bg-green-100 active:border-green-600"}`}
+              >
+                <Camera size={52} className="text-green-700" strokeWidth={2.25} />
+                <span className="text-lg font-bold text-green-900">
+                  {processandoFoto
+                    ? pipelineStepLabel(fotoPipelineStep)
+                    : fotosSessaoCount === 0
+                      ? "Tirar foto agora"
+                      : "Tirar próxima foto"}
+                </span>
+                <span className="text-sm text-green-700 text-center">
+                  {processandoFoto
+                    ? "Só um instante…"
+                    : fotosSessaoCount === 0
+                      ? "Toque para abrir a câmera"
+                      : "Pode tirar a próxima na hora — envio em segundo plano"}
+                </span>
+              </button>
+            )}
+          </FormField>
+
+          <FormField label="Contrato" required error={formErrors.contrato} hint={isCooperado ? "Selecionado automaticamente — altere só se precisar." : "A entrega será conferida e lançada neste contrato."}>
             {contratosEntrega.length === 0 ? (
               <AlertBanner variant="warning">
                 Nenhum contrato disponível. {isCooperado
@@ -2742,56 +2854,6 @@ export default function NotasPedidoContent() {
                   <option key={c.id} value={c.id}>{getContratoLabel(c)}</option>
                 ))}
               </Select>
-            )}
-          </FormField>
-
-          <FormField
-            label={
-              reenviarNotaId
-                ? "Nova foto"
-                : processandoFoto
-                  ? "Comprimindo foto…"
-                  : fotosSessaoCount > 0
-                    ? `Foto ${fotosSessaoCount + 1} desta entrega`
-                    : "Foto da entrega"
-            }
-            required
-            error={formErrors.foto}
-            hint="Mostre o pedido inteiro com a assinatura de quem recebeu."
-          >
-            {fotoAtualPreview && processandoFoto ? (
-              <div className="relative rounded-xl overflow-hidden border-2 border-amber-300 bg-black/5">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                  src={fotoAtualPreview}
-                  alt={`Foto ${fotosConfirmadasNaSessao + 1}`}
-                  className="w-full max-h-72 object-contain mx-auto bg-gray-900/5 opacity-90"
-                />
-                <span className="absolute inset-0 flex items-center justify-center bg-black/30">
-                  <span className="bg-amber-600 text-white text-sm font-semibold px-3 py-2 rounded-full">
-                    {pipelineStepLabel(fotoPipelineStep)}
-                  </span>
-                </span>
-              </div>
-            ) : (
-              <label className={`flex flex-col items-center gap-2 p-8 border-2 border-dashed border-green-400 rounded-2xl bg-green-50/50 ${processandoFoto || enviando ? "opacity-60 pointer-events-none" : "cursor-pointer active:bg-green-100"}`}>
-                <Camera size={48} className="text-green-700" />
-                <span className="text-base font-semibold text-green-800">
-                  {processandoFoto
-                    ? pipelineStepLabel(fotoPipelineStep)
-                    : fotosSessaoCount === 0
-                      ? "Tirar foto agora"
-                      : "Tirar próxima foto"}
-                </span>
-                <span className="text-xs text-green-700 text-center">
-                  {processandoFoto
-                    ? "Só um instante…"
-                    : fotosSessaoCount === 0
-                      ? "Toque para abrir a câmera"
-                      : "Pode tirar a próxima na hora — envio em segundo plano"}
-                </span>
-                <input ref={fotoInputRef} type="file" accept="image/*" capture="environment" className="hidden" onChange={(e) => void handleFoto(e)} disabled={processandoFoto || enviando} />
-              </label>
             )}
           </FormField>
           <div className="border border-gray-200 rounded-xl p-4 space-y-3">
@@ -3422,7 +3484,7 @@ export default function NotasPedidoContent() {
             )}
             {isCooperado && selectedNota.status === "rejeitada" && (
               <div className="flex flex-col gap-2">
-                <Button className="w-full" onClick={() => { setViewModal(false); openAnexar(selectedNota); }}>
+                <Button className="w-full" onClick={() => { setViewModal(false); openAnexar(selectedNota, { abrirCamera: true }); }}>
                   <RefreshCw size={18} /> Enviar de novo
                 </Button>
                 <Button className="w-full" variant="danger" onClick={() => setExcluirNotaTarget(selectedNota)}>
