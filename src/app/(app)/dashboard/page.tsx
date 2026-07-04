@@ -1,9 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo } from "react";
 import { useRouter } from "next/navigation";
-import { useAppData } from "@/hooks/useAppData";
+import { useAppDataSelector } from "@/hooks/useAppData";
 import { useAuth } from "@/modules/auth/AuthProvider";
 import { isDiretoriaRole } from "@/permissions";
 import { StatCard } from "@/components/ui/Card";
@@ -34,13 +33,12 @@ import { Camera, Wallet, ClipboardList, Users, AlertCircle } from "lucide-react"
 
 function CooperadoDashboard() {
   const { user } = useAuth();
-  const data = useAppData();
   const router = useRouter();
-  const coopId = user && data ? getUserCooperativaId(user, data) : undefined;
 
-  const view = useMemo(() => {
+  const view = useAppDataSelector((data) => {
     if (!data || !user?.cooperadoId) return null;
 
+    const coopId = getUserCooperativaId(user, data);
     const cooperadoId = resolverCooperadoIdCanonico(data, user.cooperadoId, coopId);
     const mes = getCurrentMesReferencia();
     const cooperado = data.cooperados.find((c) => c.id === cooperadoId);
@@ -89,7 +87,7 @@ function CooperadoDashboard() {
       temSecaoPendencias,
       coopId,
     };
-  }, [data, user, coopId]);
+  }, [user?.id, user?.cooperadoId, user?.cooperativaId]);
 
   if (!view) return null;
 
@@ -176,19 +174,18 @@ function CooperadoDashboard() {
 }
 
 function AdminDashboard() {
-  const data = useAppData();
   const { user } = useAuth();
-  const coopId = user && data ? getUserCooperativaId(user, data) : undefined;
 
-  const view = useMemo(() => {
+  const view = useAppDataSelector((data) => {
     if (!data || !user) return null;
+    const coopId = getUserCooperativaId(user, data);
     const stats = getAdminStats(data);
     const coopNome = getUserCooperativaNome(user, data);
     const pendentes = data.notasPedido.filter(
       (n) => n.status === "aguardando_conferencia" && notaPertenceCooperativa(data, n, coopId)
     ).length;
     return { stats, coopNome, pendentes, mes: getCurrentMesReferencia() };
-  }, [data, user, coopId]);
+  }, [user?.id, user?.cooperativaId, user?.role]);
 
   if (!view) return null;
 

@@ -200,7 +200,7 @@ export async function fetchNotasPedidoFromCloud(
   if (digits.length !== 14) return { ok: false, notas: [] };
 
   try {
-    const res = await fetch(`/api/notas-pedido?cnpj=${digits}&lite=1&previews=1`, { cache: "no-store" });
+    const res = await fetch(`/api/notas-pedido?cnpj=${digits}&lite=1`, { cache: "no-store" });
     if (!res.ok) return { ok: false, notas: [] };
     const json = await res.json().catch(() => ({}));
     const notas = ((json.notas ?? []) as unknown[])

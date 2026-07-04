@@ -10,7 +10,7 @@ import {
 } from "lucide-react";
 import { useState } from "react";
 import { useAuth } from "@/modules/auth/AuthProvider";
-import { useAppData } from "@/hooks/useAppData";
+import { useAppDataSelector } from "@/hooks/useAppData";
 import { getMenuItems, getMobileNavItems, getCooperadoDrawerMenuItems, getUserFuncaoLabel } from "@/permissions";
 import { getUserCooperativaNome } from "@/utils/cooperativa";
 import { PLATFORM_NAME, PLATFORM_TAGLINE } from "@/utils/constants";
@@ -69,8 +69,10 @@ function navIcon(href: string, resource: Resource, size = 20) {
 
 function BrandHeader({ compact = false }: { compact?: boolean }) {
   const { user } = useAuth();
-  const data = useAppData();
-  const coopNome = user && data ? getUserCooperativaNome(user, data) : "";
+  const coopNome = useAppDataSelector(
+    (data) => (user ? getUserCooperativaNome(user, data) : ""),
+    [user?.id, user?.cooperativaId, user?.role]
+  );
 
   return (
     <div className="flex items-center gap-3">

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState, useCallback } from "react";
-import { useAppData } from "@/hooks/useAppData";
+import { useAppDataSelector } from "@/hooks/useAppData";
 import { usePermissions } from "@/hooks/usePermissions";
 import {
   notificarEntregaAprovada,
@@ -16,17 +16,23 @@ interface AprovacaoAlert {
 }
 
 export function EntregaAprovadaNotifier() {
-  const data = useAppData();
   const { isCooperado, cooperadoId } = usePermissions();
+  const notasCooperado = useAppDataSelector(
+    (data) =>
+      cooperadoId
+        ? data.notasPedido.filter((n) => n.cooperadoId === cooperadoId)
+        : [],
+    [cooperadoId]
+  ) ?? [];
   const prevStatusRef = useRef<Map<string, NotaPedidoStatus>>(new Map());
   const initializedRef = useRef(false);
   const permissionAskedRef = useRef(false);
   const [alerta, setAlerta] = useState<AprovacaoAlert | null>(null);
 
   const processarNotas = useCallback(() => {
-    if (!data || !isCooperado || !cooperadoId) return;
+    if (!isCooperado || !cooperadoId) return;
 
-    const minhas = data.notasPedido.filter((n) => n.cooperadoId === cooperadoId);
+    const minhas = notasCooperado;
 
     if (!initializedRef.current) {
       minhas.forEach((n) => prevStatusRef.current.set(n.id, n.status));
@@ -50,13 +56,13 @@ export function EntregaAprovadaNotifier() {
 
       setAlerta({ id: nota.id });
     });
-  }, [data, isCooperado, cooperadoId]);
+  }, [notasCooperado, isCooperado, cooperadoId]);
 
   useEffect(() => {
     if (!isCooperado || !cooperadoId) return;
     const timer = setTimeout(processarNotas, 150);
     return () => clearTimeout(timer);
-  }, [data, isCooperado, cooperadoId, processarNotas]);
+  }, [notasCooperado, isCooperado, cooperadoId, processarNotas]);
 
   useEffect(() => {
     if (!isCooperado || permissionAskedRef.current) return;

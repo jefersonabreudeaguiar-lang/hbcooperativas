@@ -401,6 +401,68 @@ export function liberarEspacoArmazenamento(data: AppData, nivel: 1 | 2 = 1): App
   return next;
 }
 
+function isInlineDataUrl(value?: string): boolean {
+  return typeof value === "string" && value.startsWith("data:");
+}
+
+/**
+ * Remove binários pesados antes de gravar no localStorage.
+ * Mantém fotos pendentes de envio; remove o que já está na nuvem ou é preview.
+ */
+export function stripBinaryForPersist(data: AppData): AppData {
+  let next = compactarFotosNoArmazenamento(data);
+
+  const notasPedido = next.notasPedido.map((n) => {
+    const uploaded = Boolean(n.fotoNaNuvem && (n.fotosEnviadasCount ?? 0) > 0);
+    const archived = n.status === "conferida" || n.status === "pago" || n.status === "rejeitada";
+    const hasCloudMeta = n.fotosMeta?.some(
+      (f) => Boolean(f.storagePath) && f.status !== "local_pending"
+    );
+
+    if (uploaded || archived || hasCloudMeta) {
+      return {
+        ...n,
+        fotoPedido: undefined,
+        fotosPedido: undefined,
+        fotoPedidoMiniatura: undefined,
+        fotosPedidoMiniaturas: undefined,
+        fotosMeta: n.fotosMeta?.map((f) => ({
+          ...f,
+          url: isInlineDataUrl(f.url) ? undefined : f.url,
+          thumbnailUrl: isInlineDataUrl(f.thumbnailUrl) ? undefined : f.thumbnailUrl,
+        })),
+      };
+    }
+
+    if (n.fotoPedidoMiniatura || n.fotosPedidoMiniaturas?.length) {
+      return {
+        ...n,
+        fotoPedidoMiniatura: undefined,
+        fotosPedidoMiniaturas: undefined,
+        fotosMeta: n.fotosMeta?.map((f) => ({
+          ...f,
+          thumbnailUrl: isInlineDataUrl(f.thumbnailUrl) ? undefined : f.thumbnailUrl,
+        })),
+      };
+    }
+
+    return n;
+  });
+
+  return {
+    ...next,
+    notasPedido,
+    mensalidades: next.mensalidades.map((m) =>
+      m.comprovante && (m.status === "paga" || m.status === "aguardando_confirmacao")
+        ? { ...m, comprovante: undefined }
+        : m
+    ),
+    comunicados: next.comunicados.map((c) =>
+      c.audioDataUrl ? { ...c, audioDataUrl: undefined } : c
+    ),
+  };
+}
+
 export function parametrosCompressaoFoto(_qtdNaSessao: number): { maxWidth: number; quality: number } {
   /** Mesma compressão sempre — sem limite de quantidade; leve para celular. */
   return { maxWidth: 640, quality: 0.48 };

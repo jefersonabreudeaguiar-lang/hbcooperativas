@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { useAppData } from "@/hooks/useAppData";
+import { useAppDataSelector } from "@/hooks/useAppData";
 import { usePermissions } from "@/hooks/usePermissions";
 import { getComunicadoAssunto, getComunicadosCooperado } from "@/services/comunicadoService";
 import { getUserCooperativaId } from "@/utils/cooperativa";
@@ -33,19 +33,25 @@ function gravarVistos(ids: Set<string>) {
 }
 
 export function ComunicadoNotifier() {
-  const data = useAppData();
   const { isCooperado, cooperadoId, user } = usePermissions();
+  const comunicadosCooperado = useAppDataSelector(
+    (data) => {
+      if (!user || !cooperadoId) return [];
+      const coopId = getUserCooperativaId(user, data);
+      if (!coopId) return [];
+      return getComunicadosCooperado(data, coopId, cooperadoId);
+    },
+    [user?.id, cooperadoId]
+  ) ?? [];
   const vistosRef = useRef<Set<string>>(lerVistos());
   const initializedRef = useRef(false);
   const permissionAskedRef = useRef(false);
   const [alerta, setAlerta] = useState<{ id: string; assunto: string } | null>(null);
 
   const processar = useCallback(() => {
-    if (!data || !isCooperado || !cooperadoId || !user) return;
-    const coopId = getUserCooperativaId(user, data);
-    if (!coopId) return;
+    if (!isCooperado || !cooperadoId || !user) return;
 
-    const comunicados = getComunicadosCooperado(data, coopId, cooperadoId);
+    const comunicados = comunicadosCooperado;
     const idsAtuais = new Set(comunicados.map((c) => c.id));
 
     if (!initializedRef.current) {
@@ -70,13 +76,13 @@ export function ComunicadoNotifier() {
 
     idsAtuais.forEach((id) => vistosRef.current.add(id));
     gravarVistos(vistosRef.current);
-  }, [data, isCooperado, cooperadoId, user]);
+  }, [comunicadosCooperado, isCooperado, cooperadoId, user]);
 
   useEffect(() => {
     if (!isCooperado || !cooperadoId) return;
     const timer = setTimeout(processar, 150);
     return () => clearTimeout(timer);
-  }, [data, isCooperado, cooperadoId, processar]);
+  }, [comunicadosCooperado, isCooperado, cooperadoId, processar]);
 
   useEffect(() => {
     if (!isCooperado || permissionAskedRef.current) return;

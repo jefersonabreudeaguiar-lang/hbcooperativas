@@ -17,6 +17,7 @@ import { AlertBanner } from "@/components/ui/AlertBanner";
 import { PromptDialog, ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { Card } from "@/components/ui/Card";
 import { updateData, updateDataSafe, generateId, addAuditEntry, getData } from "@/services/dataStore";
+import { requestAppSync } from "@/services/syncRequest";
 import {
   calcularItensNota,
   gerarNumeroNota,
@@ -1532,6 +1533,7 @@ export default function NotasPedidoContent() {
 
     setEnviando(false);
     setEnvioProgresso(null);
+    requestAppSync();
     limparRascunhoAnexar();
     resetFotosSessaoUi();
     setFotoDuplicadaMsg("");
@@ -1910,6 +1912,8 @@ export default function NotasPedidoContent() {
         }
       );
     });
+
+    requestAppSync();
 
     if (notaAtualizada && coopId) {
       void (async () => {

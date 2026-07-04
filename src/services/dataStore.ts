@@ -3,7 +3,7 @@
 import type { AppData, AuditAction, User, Cooperado, Cooperativa, PrestacaoContas } from "@/types";
 import { emptyInitialData, DEMO_ENTITY_IDS, DEMO_EMAILS, DEMO_CNPJ } from "@/mock/data";
 import { findCooperativaByCnpj, getCooperativaById, getUserCooperativaId, normalizeCnpj } from "@/utils/cooperativa";
-import { compactarFotosNoArmazenamento, liberarEspacoArmazenamento } from "@/utils/fotoEntrega";
+import { compactarFotosNoArmazenamento, liberarEspacoArmazenamento, stripBinaryForPersist } from "@/utils/fotoEntrega";
 import { ensureMensalidadesDoMes, ensureMensalidadeCooperado, sincronizarMensalidadeCooperativa } from "@/services/mensalidadeService";
 import { applyOperationalResetIfNeeded, clearOperationalData } from "@/services/operationalReset";
 import { normalizeCreatorEmail } from "@/lib/security/appCreator";
@@ -45,6 +45,15 @@ let notifyFlushScheduled = false;
 let automaticTasksScheduled = false;
 let saveBatchDepth = 0;
 let saveBatchPending: AppData | null = null;
+let dataRevision = 0;
+
+export function getDataRevision(): number {
+  return dataRevision;
+}
+
+function bumpRevision(): void {
+  dataRevision++;
+}
 
 function invalidateCache(): void {
   memoryCache = null;
@@ -56,8 +65,16 @@ function notify(): void {
   notifyFlushScheduled = true;
   queueMicrotask(() => {
     notifyFlushScheduled = false;
+    bumpRevision();
     listeners.forEach((l) => l());
   });
+}
+
+/** Atualização instantânea da UI — sem esperar microtask nem disco. */
+function notifyImmediate(): void {
+  bumpRevision();
+  notifyFlushScheduled = false;
+  listeners.forEach((l) => l());
 }
 
 function attachStorageListener(): void {
@@ -87,7 +104,7 @@ export function endSaveBatch(): void {
   if (saveBatchDepth === 0 && saveBatchPending) {
     const pending = saveBatchPending;
     saveBatchPending = null;
-    persistDataToStorage(pending);
+    persistDataToStorage(pending, { skipNotify: true });
   }
 }
 
@@ -100,11 +117,19 @@ export async function runWithBatchedSaveAsync(fn: () => Promise<void>): Promise<
   }
 }
 
-function persistDataToStorage(data: AppData): { ok: true } | { ok: false; error: string } {
+function persistDataToStorage(
+  data: AppData,
+  options?: { skipNotify?: boolean }
+): { ok: true } | { ok: false; error: string } {
   if (typeof window === "undefined") return { ok: true };
 
+  const stripped = stripBinaryForPersist(data);
   const previousCache = memoryCache;
-  const candidates = [data, liberarEspacoArmazenamento(data, 1), liberarEspacoArmazenamento(data, 2)];
+  const candidates = [
+    stripped,
+    liberarEspacoArmazenamento(stripped, 1),
+    liberarEspacoArmazenamento(stripped, 2),
+  ];
 
   for (let i = 0; i < candidates.length; i++) {
     const candidate = candidates[i];
@@ -112,12 +137,13 @@ function persistDataToStorage(data: AppData): { ok: true } | { ok: false; error:
       const serialized = JSON.stringify(candidate);
       if (serialized === lastPersistedSerialized) {
         memoryCache = candidate;
+        if (!options?.skipNotify) notify();
         return { ok: true };
       }
       localStorage.setItem(STORAGE_KEY, serialized);
       lastPersistedSerialized = serialized;
       memoryCache = candidate;
-      notify();
+      if (!options?.skipNotify) notify();
       return { ok: true };
     } catch (e) {
       if (!isStorageQuotaError(e)) {
@@ -348,7 +374,9 @@ function migrateResponsavelPrincipal(data: AppData): AppData {
 function runAutomaticTasks(data: AppData): AppData {
   let current = compactarFotosNoArmazenamento(data);
   current = reconciliarFichaFromNotasConferidas(current);
-  return sincronizarMensalidadeCooperativa(current);
+  current = sincronizarMensalidadeCooperativa(current);
+  const stripped = stripBinaryForPersist(current);
+  return stripped;
 }
 
 /** Tarefas pesadas após primeira pintura — evita travar o celular na abertura. */
@@ -360,7 +388,8 @@ function scheduleAutomaticTasksIfNeeded(data: AppData): AppData {
   const run = () => {
     try {
       const afterTasks = runAutomaticTasks(baseline);
-      if (afterTasks !== baseline) saveDataSafe(afterTasks);
+      const serialized = JSON.stringify(afterTasks);
+      if (serialized !== lastPersistedSerialized) saveDataSafe(afterTasks);
     } catch {
       /* não bloqueia o app */
     }
@@ -461,6 +490,7 @@ export function saveDataSafe(data: AppData): { ok: true } | { ok: false; error: 
   if (saveBatchDepth > 0) {
     memoryCache = data;
     saveBatchPending = data;
+    notifyImmediate();
     return { ok: true };
   }
 
@@ -504,9 +534,22 @@ export function updateDataSafe(
 ): { ok: true; data: AppData } | { ok: false; error: string } {
   const current = loadData();
   const updated = updater(current);
-  const saved = saveDataSafe(updated);
-  if (!saved.ok) return saved;
-  return { ok: true, data: updated };
+  memoryCache = updated;
+
+  if (saveBatchDepth > 0) {
+    saveBatchPending = updated;
+    notifyImmediate();
+    return { ok: true, data: updated };
+  }
+
+  notifyImmediate();
+  const saved = persistDataToStorage(updated, { skipNotify: true });
+  if (!saved.ok) {
+    memoryCache = current;
+    notifyImmediate();
+    return saved;
+  }
+  return { ok: true, data: memoryCache ?? updated };
 }
 
 export function generateId(prefix: string): string {

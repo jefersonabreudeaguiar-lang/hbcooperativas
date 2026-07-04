@@ -20,6 +20,7 @@ import {
   syncCooperativaBidirectional,
 } from "@/services/cooperativaSyncCloudService";
 import { pushCooperadoToCloud, resolverCooperadoIdCanonico, flushPendingCooperadoPushes } from "@/services/cooperadoCloudService";
+import { registerSyncHandler } from "@/services/syncRequest";
 import { getData, updateDataSafe } from "@/services/dataStore";
 import { getCooperadoNome } from "@/utils/calculations";
 import { compactarFotosNoArmazenamento, contarFotosEnviadasNota } from "@/utils/fotoEntrega";
@@ -172,12 +173,17 @@ export function CooperativaSyncProvider({ children }: { children: React.ReactNod
   useEffect(() => {
     if (!user?.id || !coopId) return;
 
+    const unregister = registerSyncHandler(() => {
+      if (document.hidden) return;
+      void runSync();
+    });
+
     const startSync = () => {
       if (document.hidden) return;
       void runSync();
     };
 
-    const initialDelay = setTimeout(startSync, 1500);
+    const initialDelay = setTimeout(startSync, 800);
 
     const intervalId = setInterval(startSync, getSyncIntervalMs());
 
@@ -187,6 +193,7 @@ export function CooperativaSyncProvider({ children }: { children: React.ReactNod
     document.addEventListener("visibilitychange", onVisible);
 
     return () => {
+      unregister();
       clearTimeout(initialDelay);
       clearInterval(intervalId);
       document.removeEventListener("visibilitychange", onVisible);
