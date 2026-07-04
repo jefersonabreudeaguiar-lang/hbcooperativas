@@ -106,7 +106,7 @@ async function resetOperacional(cnpj) {
 
   const payload = {
     updatedAt: new Date().toISOString(),
-    operationalResetVersion: 7,
+    operationalResetVersion: 8,
     fullReset: true,
     wipeNotas: true,
     arquivosMensais: [],

@@ -11,6 +11,7 @@ import { aplicarPrestacoesContasExcluidas } from "@/services/prestacaoContasServ
 import { aplicarInstituicoesExcluidas } from "@/services/instituicaoContratoService";
 import {
   OPERATIONAL_RESET_VERSION,
+  applyCloudOperationalResetIfNeeded,
   needsOperationalResetCloudPush,
   markOperationalResetCloudDone,
 } from "@/services/operationalReset";
@@ -764,9 +765,13 @@ export async function publicarCatalogoContratos(cnpj: string, data?: AppData, co
 export async function syncOperacionalFromCloud(cnpj: string): Promise<boolean> {
   const bundle = await fetchSyncBundle(cnpj);
   if (!bundle?.operacional) return false;
-  const current = getData();
+  let current = getData();
   const coopId = resolveCoopId(current, cnpj);
   if (!coopId) return false;
+
+  const reset = applyCloudOperationalResetIfNeeded(current, cnpj, coopId, bundle.operacional);
+  if (reset.changed) current = reset.data;
+
   const cloudCooperados = (await fetchCooperadosFromCloud(cnpj)).cooperados;
   const merged = mergeOperacionalIntoData(current, bundle.operacional, coopId, cloudCooperados);
   saveDataSafe(merged);
@@ -810,6 +815,27 @@ export function getSyncMinGapMs(): number {
   return isMobileDevice() ? SYNC_MIN_GAP_MOBILE_MS : SYNC_MIN_GAP_MS;
 }
 
+export async function ensureCloudOperationalResetApplied(
+  cnpj: string,
+  preferredCoopId?: string
+): Promise<boolean> {
+  const digits = normalizeCnpj(cnpj);
+  if (digits.length !== 14) return false;
+
+  const bundle = await fetchSyncBundle(digits);
+  if (!bundle?.operacional?.fullReset) return false;
+
+  const current = getData();
+  const coopId = preferredCoopId ?? resolveCoopId(current, digits);
+  if (!coopId) return false;
+
+  const reset = applyCloudOperationalResetIfNeeded(current, digits, coopId, bundle.operacional);
+  if (!reset.changed) return false;
+
+  saveDataSafe(reset.data);
+  return true;
+}
+
 /** Sync leve em background (cooperado no celular): perfil, cooperados, notas e operacional. */
 export async function syncCooperativaBackground(
   cnpj: string,
@@ -817,6 +843,8 @@ export async function syncCooperativaBackground(
 ): Promise<void> {
   const digits = normalizeCnpj(cnpj);
   if (digits.length !== 14) return;
+
+  await ensureCloudOperationalResetApplied(digits, preferredCoopId);
 
   await runWithBatchedSaveAsync(async () => {
     await syncCooperativaProfileFromCloud(digits);
@@ -831,6 +859,8 @@ export async function syncCooperativaBackground(
 export async function syncAllCooperativaFromCloud(cnpj: string, preferredCoopId?: string): Promise<void> {
   const digits = normalizeCnpj(cnpj);
   if (digits.length !== 14) return;
+
+  await ensureCloudOperationalResetApplied(digits, preferredCoopId);
 
   await runWithBatchedSaveAsync(async () => {
     await syncCooperativaProfileFromCloud(digits);

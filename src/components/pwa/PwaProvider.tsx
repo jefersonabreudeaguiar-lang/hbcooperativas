@@ -5,6 +5,7 @@ import { X } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { AppIcon } from "@/components/ui/AppIcon";
 import { useAuth } from "@/modules/auth/AuthProvider";
+import { APP_BUILD_VERSION } from "@/lib/appBuildVersion";
 
 const DISMISS_COUNT_KEY = "hb-coop-pwa-install-dismiss-count";
 const LEGACY_DISMISS_KEY = "hb-coop-pwa-install-dismissed";
@@ -56,18 +57,26 @@ export function PwaProvider() {
   const [dismissCount, setDismissCount] = useState(0);
 
   useEffect(() => {
-    if (loading || isStandalone() || !shouldShowPrompt(isCooperado)) {
+    if (loading) return;
+
+    if ("serviceWorker" in navigator) {
+      void navigator.serviceWorker
+        .register(`/sw.js?build=${APP_BUILD_VERSION}`)
+        .then((reg) => {
+          void reg.update();
+          reg.waiting?.postMessage({ type: "SKIP_WAITING" });
+        })
+        .catch(() => {
+          /* registro opcional em dev sem HTTPS */
+        });
+    }
+
+    if (isStandalone() || !shouldShowPrompt(isCooperado)) {
       setVisible(false);
       return;
     }
 
     setDismissCount(readDismissCount());
-
-    if ("serviceWorker" in navigator) {
-      void navigator.serviceWorker.register("/sw.js").catch(() => {
-        /* registro opcional em dev sem HTTPS */
-      });
-    }
 
     const isIos = /iphone|ipad|ipod/i.test(navigator.userAgent);
     const isSafari = isIos && !/(crios|fxios)/i.test(navigator.userAgent);

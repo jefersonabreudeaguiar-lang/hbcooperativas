@@ -1,11 +1,11 @@
 import type { AppData, NotaPedido, User } from "@/types";
-import { normalizeCnpj } from "@/utils/cooperativa";
+import { normalizeCnpj, findCooperativaByCnpj } from "@/utils/cooperativa";
 import { fetchCooperativaByCnpjFromCloud } from "@/services/cooperativaCloudService";
 import { notaPertenceCooperado, resolverCooperadoIdCanonico } from "@/services/cooperadoCloudService";
 import { getNotaCooperativaCnpj, getFotosExibicaoNota, mergeNotaComFotos, contarFotosEnviadasNota, FOTOS_UPLOAD_LOTE } from "@/utils/fotoEntrega";
 import { getData, saveDataSafe } from "@/services/dataStore";
 import { reconciliarFichaFromNotasConferidas } from "@/services/notaPedidoService";
-import { needsOperationalResetCloudPush } from "@/services/operationalReset";
+import { needsOperationalResetCloudPush, getCloudResetAppliedVersion } from "@/services/operationalReset";
 import { slimNotaDraftForUpload } from "@/services/imagePipelineService";
 import { flushPendingDeliveryImages } from "@/services/offlineImageQueueService";
 import {
@@ -768,10 +768,26 @@ export async function syncNotasPedidoFromCloud(cnpj: string): Promise<number> {
   const forceFull = shouldForceFullNotasSync(digits);
   const { ok, notas: cloudNotas, delta } = await fetchNotasPedidoFromCloud(digits, { forceFull });
   if (!ok) return 0;
+
+  const current = getData();
+  const coop = findCooperativaByCnpj(current, digits);
+  const cloudResetApplied = getCloudResetAppliedVersion(digits) > 0;
+
+  if (cloudNotas.length === 0 && (forceFull || cloudResetApplied)) {
+    if (coop) {
+      const filtered = current.notasPedido.filter((n) => n.cooperativaId !== coop.id);
+      if (filtered.length !== current.notasPedido.length) {
+        saveDataSafe(reconciliarFichaFromNotasConferidas({ ...current, notasPedido: filtered }));
+      }
+    }
+    markNotasSyncDone(digits, true, []);
+    return 0;
+  }
+
   if (delta && cloudNotas.length === 0) {
     return 0;
   }
-  const current = getData();
+
   const merged = mergeCloudNotasIntoData(current, cloudNotas, digits);
   const reconciled = reconciliarFichaFromNotasConferidas(merged);
   if (reconciled !== current) {
