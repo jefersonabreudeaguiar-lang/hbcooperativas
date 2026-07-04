@@ -1,6 +1,6 @@
 "use client";
 
-import { type ReactNode } from "react";
+import { type ReactNode, useCallback, useMemo, useState } from "react";
 import { X } from "lucide-react";
 import { Button } from "./Button";
 
@@ -55,6 +55,54 @@ interface DataTableProps<T> {
   emptyMessage?: string;
   mobileCard?: (item: T) => ReactNode;
   viewLabel?: string;
+  /** Renderiza só linhas visíveis em listas longas (scroll virtual). */
+  virtualize?: boolean;
+  virtualizeThreshold?: number;
+  rowHeight?: number;
+  maxBodyHeight?: number;
+}
+
+const DEFAULT_VIRTUAL_THRESHOLD = 60;
+const DEFAULT_ROW_HEIGHT = 48;
+const DEFAULT_MAX_BODY_HEIGHT = 520;
+const VIRTUAL_OVERSCAN = 6;
+
+function useVirtualWindow<T>(
+  data: T[],
+  enabled: boolean,
+  rowHeight: number,
+  maxBodyHeight: number
+) {
+  const [scrollTop, setScrollTop] = useState(0);
+  const onScroll = useCallback((e: React.UIEvent<HTMLDivElement>) => {
+    setScrollTop(e.currentTarget.scrollTop);
+  }, []);
+
+  return useMemo(() => {
+    if (!enabled || data.length === 0) {
+      return {
+        slice: data,
+        paddingTop: 0,
+        paddingBottom: 0,
+        totalHeight: data.length * rowHeight,
+        onScroll,
+      };
+    }
+
+    const viewportRows = Math.ceil(maxBodyHeight / rowHeight) + VIRTUAL_OVERSCAN;
+    const start = Math.max(0, Math.floor(scrollTop / rowHeight) - Math.floor(VIRTUAL_OVERSCAN / 2));
+    const end = Math.min(data.length, start + viewportRows);
+    const paddingTop = start * rowHeight;
+    const paddingBottom = Math.max(0, (data.length - end) * rowHeight);
+
+    return {
+      slice: data.slice(start, end),
+      paddingTop,
+      paddingBottom,
+      totalHeight: data.length * rowHeight,
+      onScroll,
+    };
+  }, [data, enabled, maxBodyHeight, onScroll, rowHeight, scrollTop]);
 }
 
 export function DataTable<T extends object>({
@@ -67,8 +115,14 @@ export function DataTable<T extends object>({
   emptyMessage = "Nenhum registro encontrado.",
   mobileCard,
   viewLabel = "Ver",
+  virtualize = true,
+  virtualizeThreshold = DEFAULT_VIRTUAL_THRESHOLD,
+  rowHeight = DEFAULT_ROW_HEIGHT,
+  maxBodyHeight = DEFAULT_MAX_BODY_HEIGHT,
 }: DataTableProps<T>) {
   const hasActions = onEdit || onDelete || onView;
+  const useVirtual = virtualize && data.length >= virtualizeThreshold;
+  const virtual = useVirtualWindow(data, useVirtual, rowHeight, maxBodyHeight);
 
   if (data.length === 0) {
     return (
@@ -79,12 +133,19 @@ export function DataTable<T extends object>({
   }
 
   if (mobileCard) {
+    const mobileData = useVirtual ? virtual.slice : data;
     return (
       <>
-        <div className="md:hidden space-y-3">
-          {data.map((item) => (
+        <div
+          className={`md:hidden space-y-3 ${useVirtual ? "overflow-y-auto" : ""}`}
+          style={useVirtual ? { maxHeight: maxBodyHeight } : undefined}
+          onScroll={useVirtual ? virtual.onScroll : undefined}
+        >
+          {useVirtual && virtual.paddingTop > 0 && <div style={{ height: virtual.paddingTop }} aria-hidden />}
+          {mobileData.map((item) => (
             <div key={String(item[keyField])}>{mobileCard(item)}</div>
           ))}
+          {useVirtual && virtual.paddingBottom > 0 && <div style={{ height: virtual.paddingBottom }} aria-hidden />}
         </div>
         <div className="hidden md:block">{renderTable()}</div>
       </>
@@ -94,49 +155,69 @@ export function DataTable<T extends object>({
   return renderTable();
 
   function renderTable() {
-    return (
-    <div className="overflow-x-auto rounded-lg border border-gray-200 bg-white">
-      <table className="w-full text-sm">
-        <thead>
-          <tr className="bg-gray-50 border-b border-gray-200">
+    const rows = useVirtual ? virtual.slice : data;
+
+    const body = (
+      <>
+        {useVirtual && virtual.paddingTop > 0 && (
+          <tr aria-hidden>
+            <td colSpan={columns.length + (hasActions ? 1 : 0)} style={{ height: virtual.paddingTop, padding: 0, border: 0 }} />
+          </tr>
+        )}
+        {rows.map((item) => (
+          <tr key={String(item[keyField])} className="hover:bg-gray-50 transition-colors" style={useVirtual ? { height: rowHeight } : undefined}>
             {columns.map((col) => (
-              <th key={col.key} className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider whitespace-nowrap">
-                {col.label}
-              </th>
+              <td key={col.key} className="px-4 py-3 text-gray-700">
+                {col.render ? col.render(item) : String((item as Record<string, unknown>)[col.key] ?? "-")}
+              </td>
             ))}
             {hasActions && (
-              <th className="px-4 py-3 text-right text-xs font-semibold text-gray-600 uppercase tracking-wider">Ações</th>
+              <td className="px-4 py-3 text-right whitespace-nowrap">
+                <div className="flex items-center justify-end gap-1">
+                  {onView && (
+                    <Button variant="ghost" size="sm" onClick={() => onView(item)}>{viewLabel}</Button>
+                  )}
+                  {onEdit && (
+                    <Button variant="ghost" size="sm" onClick={() => onEdit(item)}>Editar</Button>
+                  )}
+                  {onDelete && (
+                    <Button variant="ghost" size="sm" onClick={() => onDelete(item)} className="text-red-600 hover:text-red-700 hover:bg-red-50">Excluir</Button>
+                  )}
+                </div>
+              </td>
             )}
           </tr>
-        </thead>
-        <tbody className="divide-y divide-gray-100">
-          {data.map((item) => (
-              <tr key={String(item[keyField])} className="hover:bg-gray-50 transition-colors">
-                {columns.map((col) => (
-                  <td key={col.key} className="px-4 py-3 text-gray-700">
-                    {col.render ? col.render(item) : String((item as Record<string, unknown>)[col.key] ?? "-")}
-                  </td>
-                ))}
-                {hasActions && (
-                  <td className="px-4 py-3 text-right whitespace-nowrap">
-                    <div className="flex items-center justify-end gap-1">
-                      {onView && (
-                        <Button variant="ghost" size="sm" onClick={() => onView(item)}>{viewLabel}</Button>
-                      )}
-                      {onEdit && (
-                        <Button variant="ghost" size="sm" onClick={() => onEdit(item)}>Editar</Button>
-                      )}
-                      {onDelete && (
-                        <Button variant="ghost" size="sm" onClick={() => onDelete(item)} className="text-red-600 hover:text-red-700 hover:bg-red-50">Excluir</Button>
-                      )}
-                    </div>
-                  </td>
-                )}
-              </tr>
-            ))}
-        </tbody>
-      </table>
-    </div>
+        ))}
+        {useVirtual && virtual.paddingBottom > 0 && (
+          <tr aria-hidden>
+            <td colSpan={columns.length + (hasActions ? 1 : 0)} style={{ height: virtual.paddingBottom, padding: 0, border: 0 }} />
+          </tr>
+        )}
+      </>
+    );
+
+    return (
+      <div
+        className={`overflow-x-auto rounded-lg border border-gray-200 bg-white ${useVirtual ? "overflow-y-auto" : ""}`}
+        style={useVirtual ? { maxHeight: maxBodyHeight } : undefined}
+        onScroll={useVirtual ? virtual.onScroll : undefined}
+      >
+        <table className="w-full text-sm">
+          <thead className="sticky top-0 z-10 bg-gray-50">
+            <tr className="border-b border-gray-200">
+              {columns.map((col) => (
+                <th key={col.key} className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider whitespace-nowrap">
+                  {col.label}
+                </th>
+              ))}
+              {hasActions && (
+                <th className="px-4 py-3 text-right text-xs font-semibold text-gray-600 uppercase tracking-wider">Ações</th>
+              )}
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-gray-100">{body}</tbody>
+        </table>
+      </div>
     );
   }
 }

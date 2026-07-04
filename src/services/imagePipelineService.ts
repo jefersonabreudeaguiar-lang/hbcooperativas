@@ -71,6 +71,8 @@ function devLog(label: string, data: Record<string, unknown>) {
   console.debug(`[image-pipeline] ${label}`, data);
 }
 
+import { compressImageInWorker } from "@/services/photoCompressWorker";
+
 function throwIfAborted(signal?: AbortSignal) {
   if (signal?.aborted) throw new DOMException("Processamento cancelado.", "AbortError");
 }
@@ -394,12 +396,32 @@ export async function processDeliveryImage(
   const started = performance.now();
 
   throwIfAborted(signal);
-  const { compressed, thumbnail, width, height } = await processImageSinglePass(
-    file,
-    settings,
-    mimeType,
-    signal
-  );
+
+  let compressed: Blob;
+  let thumbnail: Blob;
+  let width: number;
+  let height: number;
+
+  const workerResult = await compressImageInWorker(file, {
+    maxWidth: settings.maxWidth,
+    quality: settings.quality,
+    thumbWidth: settings.thumbWidth,
+    thumbQuality: settings.thumbQuality,
+    outputMime: mimeType,
+  });
+
+  if (workerResult.ok) {
+    compressed = workerResult.compressed;
+    thumbnail = workerResult.thumbnail;
+    width = workerResult.width;
+    height = workerResult.height;
+  } else {
+    const fallback = await processImageSinglePass(file, settings, mimeType, signal);
+    compressed = fallback.compressed;
+    thumbnail = fallback.thumbnail;
+    width = fallback.width;
+    height = fallback.height;
+  }
 
   const compressionMs = Math.round(performance.now() - started);
   devLog("processDeliveryImage", {

@@ -23,6 +23,7 @@ import { pushCooperadoToCloud, resolverCooperadoIdCanonico, flushPendingCooperad
 import { registerSyncHandler } from "@/services/syncRequest";
 import { getData, updateDataSafe } from "@/services/dataStore";
 import { getCooperadoNome } from "@/utils/calculations";
+import { readNotaFotoAtIndex, resolveNotaFotosForUpload } from "@/services/localMediaStore";
 import { compactarFotosNoArmazenamento, contarFotosEnviadasNota } from "@/utils/fotoEntrega";
 import { isDiretoriaRole } from "@/permissions";
 import type { UserRole } from "@/types";
@@ -94,14 +95,14 @@ export function CooperativaSyncProvider({ children }: { children: React.ReactNod
             !n.fotoNaNuvem
         );
         for (const nota of pendentes) {
-          const fotos = nota.fotosPedido ?? (nota.fotoPedido ? [nota.fotoPedido] : []);
+          const fotos = await resolveNotaFotosForUpload(nota);
           if (fotos.length === 0) continue;
           const result =
             fotos.length > 1
               ? await pushNotaComFotosEmStreaming(
                   cnpj,
                   nota,
-                  (i) => Promise.resolve(fotos[i]),
+                  (i) => readNotaFotoAtIndex(nota, i),
                   fotos.length,
                   cooperadoNome
                 )
@@ -154,12 +155,12 @@ export function CooperativaSyncProvider({ children }: { children: React.ReactNod
           const naNuvem = cloud ? contarFotosEnviadasNota(cloud) : 0;
           if (naNuvem >= esperado) continue;
 
-          const fotos = nota.fotosPedido ?? (nota.fotoPedido ? [nota.fotoPedido] : []);
+          const fotos = await resolveNotaFotosForUpload(nota);
           if (fotos.length === 0) continue;
           await pushNotaComFotosEmStreaming(
             cnpj,
             nota,
-            (i) => Promise.resolve(fotos[i]),
+            (i) => readNotaFotoAtIndex(nota, i),
             esperado,
             cooperadoNome
           );

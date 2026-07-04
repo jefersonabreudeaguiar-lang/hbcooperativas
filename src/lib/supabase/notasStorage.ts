@@ -428,13 +428,19 @@ export function mergeNotasSources(tableNotas: NotaPedido[], storageNotas: NotaPe
 
 export async function fetchNotasFromTable(
   supabase: SupabaseClient,
-  cnpj: string
+  cnpj: string,
+  since?: string
 ): Promise<{ notas: NotaPedido[]; tableMissing: boolean }> {
-  const { data, error } = await supabase
+  let query = supabase
     .from("notas_pedido")
     .select("payload, updated_at")
-    .eq("cooperativa_cnpj", cnpj)
-    .order("updated_at", { ascending: false });
+    .eq("cooperativa_cnpj", cnpj);
+
+  if (since) {
+    query = query.gte("updated_at", since);
+  }
+
+  const { data, error } = await query.order("updated_at", { ascending: false });
 
   if (error) {
     if (isNotasPedidoTableMissing(error)) {

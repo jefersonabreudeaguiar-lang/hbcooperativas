@@ -30,25 +30,29 @@ export async function GET(request: Request) {
 
   const lite = searchParams.get("lite") === "1";
   const withPreviews = searchParams.get("previews") === "1";
+  const since = searchParams.get("since")?.trim() || undefined;
+  const delta = Boolean(since);
 
   const [fromTable, fromStorage] = await Promise.all([
-    fetchNotasFromTable(supabase, cnpj),
-    fetchNotasFromStorage(supabase, cnpj),
+    fetchNotasFromTable(supabase, cnpj, since),
+    delta ? Promise.resolve([] as NotaPedido[]) : fetchNotasFromStorage(supabase, cnpj),
   ]);
 
   const visiveis = (lista: NotaPedido[]) =>
     lista.filter((n) => n.status !== "rascunho");
 
   if (!fromTable.tableMissing) {
-    const merged = visiveis(mergeNotasSources(fromTable.notas, fromStorage));
+    const merged = visiveis(
+      delta ? fromTable.notas : mergeNotasSources(fromTable.notas, fromStorage)
+    );
     const notas =
       lite && !withPreviews
         ? merged
         : await enrichNotasListWithPreviews(supabase, cnpj, merged);
-    return NextResponse.json({ notas, source: "merged" });
+    return NextResponse.json({ notas, source: delta ? "delta" : "merged" });
   }
 
-  const base = visiveis(fromStorage);
+  const base = visiveis(delta ? [] : fromStorage);
   const notas =
     lite && !withPreviews
       ? base

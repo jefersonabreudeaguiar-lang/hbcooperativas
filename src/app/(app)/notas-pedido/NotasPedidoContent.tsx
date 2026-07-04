@@ -16,6 +16,7 @@ import { NotaStatusBadge } from "@/components/ui/NotaStatusBadge";
 import { AlertBanner } from "@/components/ui/AlertBanner";
 import { PromptDialog, ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { Card } from "@/components/ui/Card";
+import { NotaFotoImg } from "@/components/ui/NotaFotoImg";
 import { updateData, updateDataSafe, generateId, addAuditEntry, getData } from "@/services/dataStore";
 import { requestAppSync } from "@/services/syncRequest";
 import {
@@ -2103,8 +2104,7 @@ export default function NotasPedidoContent() {
       >
         <div className="flex gap-3">
           {getFotoExibicaoNota(n) ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img src={getFotoExibicaoNota(n)} alt="" className="w-16 h-16 rounded-lg object-cover shrink-0" />
+            <NotaFotoImg src={getFotoExibicaoNota(n)} alt="" className="w-16 h-16 rounded-lg object-cover shrink-0" />
           ) : (
             <div className="w-16 h-16 rounded-lg bg-gray-100 shrink-0 flex items-center justify-center text-gray-400">
               {n.lancamentoDireto ? <FileText size={20} /> : <Camera size={20} />}
@@ -2360,8 +2360,7 @@ export default function NotasPedidoContent() {
               return (
               <button key={n.id} type="button" onClick={() => openConferir(n)} className="text-left border-2 border-amber-300 bg-amber-50 rounded-xl overflow-hidden hover:border-amber-500 relative">
                 {getFotoExibicaoNota(n) && (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img src={getFotoExibicaoNota(n)} alt="" className="w-full h-36 object-cover" />
+                  <NotaFotoImg src={getFotoExibicaoNota(n)} alt="" className="w-full h-36 object-cover" />
                 )}
                 {qtdFotosCard > 1 && (
                   <span className="absolute top-2 right-2 bg-black/70 text-white text-xs font-bold px-2 py-0.5 rounded-full">
@@ -3417,8 +3416,7 @@ export default function NotasPedidoContent() {
             {getFotosExibicaoNota(selectedNota).length > 0 && (
               <div className={cn("grid gap-2", getFotosExibicaoNota(selectedNota).length > 1 ? "grid-cols-1 sm:grid-cols-2" : "grid-cols-1")}>
                 {getFotosExibicaoNota(selectedNota).map((foto, i) => (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img key={i} src={foto} alt={`Pedido ${i + 1}`} className="w-full rounded-xl border" />
+                  <NotaFotoImg key={i} src={foto} alt={`Pedido ${i + 1}`} className="w-full rounded-xl border" />
                 ))}
               </div>
             )}

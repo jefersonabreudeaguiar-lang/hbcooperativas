@@ -1,5 +1,28 @@
 import type { AppData, NotaPedido } from "@/types";
 import { normalizeCnpj } from "@/utils/cooperativa";
+import { isInlineDataUrl } from "@/utils/mediaHelpers";
+
+/** Referência leve para foto no IndexedDB — não vai no JSON pesado. */
+export const LOCAL_MEDIA_REF_PREFIX = "idb:";
+
+export function isLocalMediaRef(value?: string): boolean {
+  return typeof value === "string" && value.startsWith(LOCAL_MEDIA_REF_PREFIX);
+}
+
+export function buildLocalMediaRef(notaId: string, index: number): string {
+  return `${LOCAL_MEDIA_REF_PREFIX}${notaId}#${index}`;
+}
+
+export function parseLocalMediaRef(ref: string): { notaId: string; index: number } | null {
+  if (!isLocalMediaRef(ref)) return null;
+  const body = ref.slice(LOCAL_MEDIA_REF_PREFIX.length);
+  const hash = body.lastIndexOf("#");
+  if (hash <= 0) return null;
+  const notaId = body.slice(0, hash);
+  const index = Number(body.slice(hash + 1));
+  if (!notaId || Number.isNaN(index)) return null;
+  return { notaId, index };
+}
 
 /** Reduz tamanho da foto para caber no armazenamento e enviar à nuvem. */
 export async function compressFotoFile(
@@ -174,7 +197,8 @@ export function getFotoExibicaoNota(nota: NotaPedido): string | undefined {
   if (nota.fotosPedido?.length) return nota.fotosPedido[0];
   if (nota.fotoPedidoMiniatura) return nota.fotoPedidoMiniatura;
   if (nota.fotosPedidoMiniaturas?.length) return nota.fotosPedidoMiniaturas[0];
-  return undefined;
+  const meta = nota.fotosMeta?.find((f) => f.url || f.thumbnailUrl);
+  return meta?.url ?? meta?.thumbnailUrl;
 }
 
 export function getFotosExibicaoNota(nota: NotaPedido): string[] {
@@ -401,13 +425,9 @@ export function liberarEspacoArmazenamento(data: AppData, nivel: 1 | 2 = 1): App
   return next;
 }
 
-function isInlineDataUrl(value?: string): boolean {
-  return typeof value === "string" && value.startsWith("data:");
-}
-
 /**
  * Remove binários pesados antes de gravar no localStorage.
- * Mantém fotos pendentes de envio; remove o que já está na nuvem ou é preview.
+ * Mantém fotos pendentes de envio (refs idb: ou base64); remove o que já está na nuvem.
  */
 export function stripBinaryForPersist(data: AppData): AppData {
   let next = compactarFotosNoArmazenamento(data);
@@ -429,6 +449,26 @@ export function stripBinaryForPersist(data: AppData): AppData {
         fotosMeta: n.fotosMeta?.map((f) => ({
           ...f,
           url: isInlineDataUrl(f.url) ? undefined : f.url,
+          thumbnailUrl: isInlineDataUrl(f.thumbnailUrl) ? undefined : f.thumbnailUrl,
+        })),
+      };
+    }
+
+    const keepRef = (v?: string) => (v && isLocalMediaRef(v) ? v : undefined);
+
+    const fotosPedido = n.fotosPedido
+      ?.map((f) => (isLocalMediaRef(f) ? f : undefined))
+      .filter((f): f is string => !!f);
+
+    if (fotosPedido?.length || keepRef(n.fotoPedido)) {
+      return {
+        ...n,
+        fotoPedido: keepRef(n.fotoPedido) ?? fotosPedido?.[0],
+        fotosPedido: fotosPedido?.length ? fotosPedido : undefined,
+        fotoPedidoMiniatura: undefined,
+        fotosPedidoMiniaturas: undefined,
+        fotosMeta: n.fotosMeta?.map((f) => ({
+          ...f,
           thumbnailUrl: isInlineDataUrl(f.thumbnailUrl) ? undefined : f.thumbnailUrl,
         })),
       };

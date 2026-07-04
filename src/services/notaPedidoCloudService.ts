@@ -7,6 +7,11 @@ import { reconciliarFichaFromNotasConferidas } from "@/services/notaPedidoServic
 import { needsOperationalResetCloudPush } from "@/services/operationalReset";
 import { slimNotaDraftForUpload } from "@/services/imagePipelineService";
 import { flushPendingDeliveryImages } from "@/services/offlineImageQueueService";
+import {
+  getLastNotasSyncAt,
+  markNotasSyncDone,
+  shouldForceFullNotasSync,
+} from "@/services/syncMetaService";
 const STATUS_RANK: Record<NotaPedido["status"], number> = {
   rascunho: 0,
   aguardando_conferencia: 0,
@@ -194,21 +199,27 @@ export function mergeCloudNotasIntoData(
 }
 
 export async function fetchNotasPedidoFromCloud(
-  cnpj: string
-): Promise<{ ok: boolean; notas: NotaPedido[] }> {
+  cnpj: string,
+  options?: { since?: string; forceFull?: boolean }
+): Promise<{ ok: boolean; notas: NotaPedido[]; delta: boolean }> {
   const digits = normalizeCnpj(cnpj);
-  if (digits.length !== 14) return { ok: false, notas: [] };
+  if (digits.length !== 14) return { ok: false, notas: [], delta: false };
+
+  const forceFull = options?.forceFull ?? shouldForceFullNotasSync(digits);
+  const since = forceFull ? undefined : options?.since ?? getLastNotasSyncAt(digits);
 
   try {
-    const res = await fetch(`/api/notas-pedido?cnpj=${digits}&lite=1`, { cache: "no-store" });
-    if (!res.ok) return { ok: false, notas: [] };
+    const qs = new URLSearchParams({ cnpj: digits, lite: "1" });
+    if (since) qs.set("since", since);
+    const res = await fetch(`/api/notas-pedido?${qs.toString()}`, { cache: "no-store" });
+    if (!res.ok) return { ok: false, notas: [], delta: Boolean(since) };
     const json = await res.json().catch(() => ({}));
     const notas = ((json.notas ?? []) as unknown[])
       .map(mapRowToNota)
       .filter((n): n is NotaPedido => Boolean(n));
-    return { ok: true, notas };
+    return { ok: true, notas, delta: Boolean(since) };
   } catch {
-    return { ok: false, notas: [] };
+    return { ok: false, notas: [], delta: Boolean(since) };
   }
 }
 
@@ -731,14 +742,21 @@ export async function pushNotaComFotosEmLotes(
 export async function syncNotasPedidoFromCloud(cnpj: string): Promise<number> {
   if (needsOperationalResetCloudPush()) return 0;
   await flushPendingNotaDeletes(cnpj);
-  const { ok, notas: cloudNotas } = await fetchNotasPedidoFromCloud(cnpj);
+  const digits = normalizeCnpj(cnpj);
+  const forceFull = shouldForceFullNotasSync(digits);
+  const { ok, notas: cloudNotas, delta } = await fetchNotasPedidoFromCloud(digits, { forceFull });
   if (!ok) return 0;
+  if (delta && cloudNotas.length === 0) {
+    markNotasSyncDone(digits, false);
+    return 0;
+  }
   const current = getData();
-  const merged = mergeCloudNotasIntoData(current, cloudNotas, cnpj);
+  const merged = mergeCloudNotasIntoData(current, cloudNotas, digits);
   const reconciled = reconciliarFichaFromNotasConferidas(merged);
   if (reconciled !== current) {
     saveDataSafe(reconciled);
   }
+  markNotasSyncDone(digits, forceFull || !delta);
   return cloudNotas.filter((n) => n.status === "aguardando_conferencia").length;
 }
 

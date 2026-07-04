@@ -6,9 +6,12 @@ import {
   type UploadImageParams,
 } from "@/services/imagePipelineService";
 
-const DB_NAME = "hb_cooperativas_media";
-const DB_VERSION = 1;
-const STORE = "pending_delivery_images";
+import {
+  openMediaDb,
+  STORE_PENDING_DELIVERY,
+} from "@/services/mediaDb";
+
+const STORE = STORE_PENDING_DELIVERY;
 
 export type PendingImageStatus = "local_pending" | "uploading" | "failed";
 
@@ -32,23 +35,7 @@ export interface PendingDeliveryImage {
 }
 
 function openDb(): Promise<IDBDatabase> {
-  return new Promise((resolve, reject) => {
-    if (typeof indexedDB === "undefined") {
-      reject(new Error("IndexedDB indisponível."));
-      return;
-    }
-    const req = indexedDB.open(DB_NAME, DB_VERSION);
-    req.onupgradeneeded = () => {
-      const db = req.result;
-      if (!db.objectStoreNames.contains(STORE)) {
-        const store = db.createObjectStore(STORE, { keyPath: "id" });
-        store.createIndex("byNota", "notaPedidoId", { unique: false });
-        store.createIndex("byStatus", "status", { unique: false });
-      }
-    };
-    req.onsuccess = () => resolve(req.result);
-    req.onerror = () => reject(req.error ?? new Error("Erro ao abrir fila offline."));
-  });
+  return openMediaDb();
 }
 
 function txGetAll(db: IDBDatabase): Promise<PendingDeliveryImage[]> {

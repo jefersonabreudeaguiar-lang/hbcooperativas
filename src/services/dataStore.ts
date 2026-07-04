@@ -3,6 +3,7 @@
 import type { AppData, AuditAction, User, Cooperado, Cooperativa, PrestacaoContas } from "@/types";
 import { emptyInitialData, DEMO_ENTITY_IDS, DEMO_EMAILS, DEMO_CNPJ } from "@/mock/data";
 import { findCooperativaByCnpj, getCooperativaById, getUserCooperativaId, normalizeCnpj } from "@/utils/cooperativa";
+import { migrateInlinePhotosToIdb } from "@/services/localMediaMigration";
 import { compactarFotosNoArmazenamento, liberarEspacoArmazenamento, stripBinaryForPersist } from "@/utils/fotoEntrega";
 import { ensureMensalidadesDoMes, ensureMensalidadeCooperado, sincronizarMensalidadeCooperativa } from "@/services/mensalidadeService";
 import { applyOperationalResetIfNeeded, clearOperationalData } from "@/services/operationalReset";
@@ -386,13 +387,17 @@ function scheduleAutomaticTasksIfNeeded(data: AppData): AppData {
 
   const baseline = data;
   const run = () => {
-    try {
-      const afterTasks = runAutomaticTasks(baseline);
-      const serialized = JSON.stringify(afterTasks);
-      if (serialized !== lastPersistedSerialized) saveDataSafe(afterTasks);
-    } catch {
-      /* não bloqueia o app */
-    }
+    void (async () => {
+      try {
+        let working = runAutomaticTasks(baseline);
+        working = await migrateInlinePhotosToIdb(working);
+        working = stripBinaryForPersist(working);
+        const serialized = JSON.stringify(working);
+        if (serialized !== lastPersistedSerialized) saveDataSafe(working);
+      } catch {
+        /* não bloqueia o app */
+      }
+    })();
   };
 
   if (typeof requestIdleCallback !== "undefined") {
