@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { useAppData } from "@/hooks/useAppData";
 import { useAuth } from "@/modules/auth/AuthProvider";
@@ -37,37 +38,77 @@ function CooperadoDashboard() {
   const router = useRouter();
   const coopId = user && data ? getUserCooperativaId(user, data) : undefined;
 
-  if (!data || !user?.cooperadoId) return null;
+  const view = useMemo(() => {
+    if (!data || !user?.cooperadoId) return null;
 
-  const cooperadoId = resolverCooperadoIdCanonico(data, user.cooperadoId, coopId);
-  const mes = getCurrentMesReferencia();
-  const cooperado = data.cooperados.find((c) => c.id === cooperadoId);
-  const coopNome = getUserCooperativaNome(user, data);
-  const valorReceber = cooperadoExibirValorReceberInicio(data, cooperadoId, coopId);
-  const precisaPix = cooperado ? cooperadoPrecisaCadastrarPix(cooperado.chavePix, cooperado.pixValido) : false;
-  const notasPendentes = listarNotasPendentesCooperado(data, cooperadoId, coopId);
-  const rejeitadas = notasPendentes.filter((n) => n.status === "rejeitada");
-  const notasEmAnalise = notasPendentes.filter((n) => n.status === "aguardando_conferencia");
-  const fotosEmAnalise = contarFotosEnviadasNotas(notasEmAnalise);
-  const resumoMens = getResumoMensalidadesCooperado(data, cooperadoId, coopId);
-  const mensalidadeAberta = resumoMens.situacao === "atrasada";
-  const prestacao = coopId ? prestacaoPrincipalCooperado(data, cooperadoId, coopId) : undefined;
-  const prestacaoAberta = prestacao ? prestacaoExigeAtencaoCooperado(prestacao) : false;
-  const avulsosPendentesTotal = totalValoresAvulsosPendentes(data, cooperadoId, undefined, coopId);
-  const avulsosJaNoCardPrincipal =
-    valorReceber.exibir &&
-    totalValoresAvulsosPendentes(data, cooperadoId, valorReceber.mes, coopId) > 0;
-  const exibirCardAvulsosSeparado = avulsosPendentesTotal > 0 && !avulsosJaNoCardPrincipal;
-  const comunicados = coopId ? getComunicadosInicioCooperado(data, coopId, cooperadoId) : [];
-  const resolvidos = listarResolvidosInicioCooperado(data, cooperadoId, coopId);
-  const temSecaoPendencias =
-    rejeitadas.length > 0 ||
-    fotosEmAnalise > 0 ||
-    valorReceber.exibir ||
-    precisaPix ||
-    mensalidadeAberta ||
-    prestacaoAberta ||
-    exibirCardAvulsosSeparado;
+    const cooperadoId = resolverCooperadoIdCanonico(data, user.cooperadoId, coopId);
+    const mes = getCurrentMesReferencia();
+    const cooperado = data.cooperados.find((c) => c.id === cooperadoId);
+    const coopNome = getUserCooperativaNome(user, data);
+    const valorReceber = cooperadoExibirValorReceberInicio(data, cooperadoId, coopId);
+    const precisaPix = cooperado ? cooperadoPrecisaCadastrarPix(cooperado.chavePix, cooperado.pixValido) : false;
+    const notasPendentes = listarNotasPendentesCooperado(data, cooperadoId, coopId);
+    const rejeitadas = notasPendentes.filter((n) => n.status === "rejeitada");
+    const notasEmAnalise = notasPendentes.filter((n) => n.status === "aguardando_conferencia");
+    const fotosEmAnalise = contarFotosEnviadasNotas(notasEmAnalise);
+    const resumoMens = getResumoMensalidadesCooperado(data, cooperadoId, coopId);
+    const mensalidadeAberta = resumoMens.situacao === "atrasada";
+    const prestacao = coopId ? prestacaoPrincipalCooperado(data, cooperadoId, coopId) : undefined;
+    const prestacaoAberta = prestacao ? prestacaoExigeAtencaoCooperado(prestacao) : false;
+    const avulsosPendentesTotal = totalValoresAvulsosPendentes(data, cooperadoId, undefined, coopId);
+    const avulsosJaNoCardPrincipal =
+      valorReceber.exibir &&
+      totalValoresAvulsosPendentes(data, cooperadoId, valorReceber.mes, coopId) > 0;
+    const exibirCardAvulsosSeparado = avulsosPendentesTotal > 0 && !avulsosJaNoCardPrincipal;
+    const comunicados = coopId ? getComunicadosInicioCooperado(data, coopId, cooperadoId) : [];
+    const resolvidos = listarResolvidosInicioCooperado(data, cooperadoId, coopId);
+    const temSecaoPendencias =
+      rejeitadas.length > 0 ||
+      fotosEmAnalise > 0 ||
+      valorReceber.exibir ||
+      precisaPix ||
+      mensalidadeAberta ||
+      prestacaoAberta ||
+      exibirCardAvulsosSeparado;
+
+    return {
+      cooperadoId,
+      mes,
+      cooperado,
+      coopNome,
+      valorReceber,
+      precisaPix,
+      rejeitadas,
+      fotosEmAnalise,
+      mensalidadeAberta,
+      prestacao,
+      prestacaoAberta,
+      exibirCardAvulsosSeparado,
+      comunicados,
+      resolvidos,
+      temSecaoPendencias,
+      coopId,
+    };
+  }, [data, user, coopId]);
+
+  if (!view) return null;
+
+  const {
+    cooperadoId,
+    mes,
+    cooperado,
+    coopNome,
+    valorReceber,
+    precisaPix,
+    rejeitadas,
+    fotosEmAnalise,
+    prestacao,
+    exibirCardAvulsosSeparado,
+    comunicados,
+    resolvidos,
+    temSecaoPendencias,
+    coopId: viewCoopId,
+  } = view;
 
   return (
     <div className="space-y-6 max-w-3xl">
@@ -81,7 +122,7 @@ function CooperadoDashboard() {
       <AvisosInicioSection comunicados={comunicados} hideWhenEmpty />
 
       {exibirCardAvulsosSeparado && (
-        <ValoresAvulsosDashboardCard cooperadoId={cooperadoId} cooperativaId={coopId} />
+        <ValoresAvulsosDashboardCard cooperadoId={cooperadoId} cooperativaId={viewCoopId} />
       )}
 
       <OnboardingChecklist pixOk={!precisaPix} />
@@ -139,19 +180,25 @@ function AdminDashboard() {
   const { user } = useAuth();
   const coopId = user && data ? getUserCooperativaId(user, data) : undefined;
 
-  if (!data || !user) return null;
+  const view = useMemo(() => {
+    if (!data || !user) return null;
+    const stats = getAdminStats(data);
+    const coopNome = getUserCooperativaNome(user, data);
+    const pendentes = data.notasPedido.filter(
+      (n) => n.status === "aguardando_conferencia" && notaPertenceCooperativa(data, n, coopId)
+    ).length;
+    return { stats, coopNome, pendentes, mes: getCurrentMesReferencia() };
+  }, [data, user, coopId]);
 
-  const stats = getAdminStats(data);
-  const coopNome = getUserCooperativaNome(user, data);
-  const pendentes = data.notasPedido.filter(
-    (n) => n.status === "aguardando_conferencia" && notaPertenceCooperativa(data, n, coopId)
-  ).length;
+  if (!view) return null;
+
+  const { stats, coopNome, pendentes, mes } = view;
 
   return (
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-bold text-gray-900">Painel da cooperativa</h1>
-        <p className="text-sm text-gray-500 mt-1">{coopNome} · {formatMesReferencia(getCurrentMesReferencia())}</p>
+        <p className="text-sm text-gray-500 mt-1">{coopNome} · {formatMesReferencia(mes)}</p>
       </div>
 
       {pendentes > 0 && (

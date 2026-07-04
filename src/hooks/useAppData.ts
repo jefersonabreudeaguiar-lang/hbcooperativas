@@ -1,32 +1,18 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useSyncExternalStore } from "react";
 import { getData, subscribe } from "@/services/dataStore";
 import type { AppData } from "@/types";
 
+function getServerSnapshot(): AppData | null {
+  return null;
+}
+
+/** Dados do app com uma única assinatura React (menos re-renders em cascata). */
 export function useAppData(): AppData | null {
-  const [data, setData] = useState<AppData | null>(() => {
-    if (typeof window === "undefined") return null;
-    try {
-      return getData();
-    } catch {
-      return null;
-    }
-  });
-
-  const load = useCallback(() => {
-    setData(getData());
-  }, []);
-
-  useEffect(() => {
-    load();
-    return subscribe(load);
-  }, [load]);
-
-  return data;
+  return useSyncExternalStore(subscribe, getData, getServerSnapshot);
 }
 
 export function useDataRefresh() {
-  const [, setTick] = useState(0);
-  useEffect(() => subscribe(() => setTick((t) => t + 1)), []);
+  useSyncExternalStore(subscribe, () => 0, () => 0);
 }

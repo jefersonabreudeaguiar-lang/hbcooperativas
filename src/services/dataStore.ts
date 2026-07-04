@@ -40,9 +40,22 @@ type Listener = () => void;
 const listeners = new Set<Listener>();
 let memoryCache: AppData | null = null;
 let storageListenerAttached = false;
+let lastPersistedSerialized: string | null = null;
+let notifyFlushScheduled = false;
+let automaticTasksScheduled = false;
 
 function invalidateCache(): void {
   memoryCache = null;
+  lastPersistedSerialized = null;
+}
+
+function notify(): void {
+  if (notifyFlushScheduled) return;
+  notifyFlushScheduled = true;
+  queueMicrotask(() => {
+    notifyFlushScheduled = false;
+    listeners.forEach((l) => l());
+  });
 }
 
 function attachStorageListener(): void {
@@ -54,10 +67,6 @@ function attachStorageListener(): void {
       notify();
     }
   });
-}
-
-function notify() {
-  listeners.forEach((l) => l());
 }
 
 export function subscribe(listener: Listener): () => void {
@@ -281,6 +290,30 @@ function runAutomaticTasks(data: AppData): AppData {
   return sincronizarMensalidadeCooperativa(current);
 }
 
+/** Tarefas pesadas após primeira pintura — evita travar o celular na abertura. */
+function scheduleAutomaticTasksIfNeeded(data: AppData): AppData {
+  if (automaticTasksScheduled || typeof window === "undefined") return data;
+  automaticTasksScheduled = true;
+
+  const baseline = data;
+  const run = () => {
+    try {
+      const afterTasks = runAutomaticTasks(baseline);
+      if (afterTasks !== baseline) saveDataSafe(afterTasks);
+    } catch {
+      /* não bloqueia o app */
+    }
+  };
+
+  if (typeof requestIdleCallback !== "undefined") {
+    requestIdleCallback(run, { timeout: 4000 });
+  } else {
+    setTimeout(run, 50);
+  }
+
+  return data;
+}
+
 function loadData(forceReload = false): AppData {
   if (typeof window === "undefined") return emptyInitialData;
   attachStorageListener();
@@ -300,7 +333,9 @@ function loadData(forceReload = false): AppData {
     const ensured = ensureCreatorAdminAccount(data);
     data = ensured.data;
     memoryCache = data;
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+    const serialized = JSON.stringify(data);
+    localStorage.setItem(STORAGE_KEY, serialized);
+    lastPersistedSerialized = serialized;
     return memoryCache;
   }
 
@@ -331,14 +366,8 @@ function loadData(forceReload = false): AppData {
       return memoryCache;
     }
 
-    const afterTasks = runAutomaticTasks(data);
-    if (afterTasks !== data) {
-      const saved = saveDataSafe(afterTasks);
-      memoryCache = saved.ok ? afterTasks : data;
-      return memoryCache;
-    }
-
     memoryCache = data;
+    scheduleAutomaticTasksIfNeeded(data);
     return data;
   } catch {
     if (memoryCache) return memoryCache;
@@ -374,7 +403,13 @@ export function saveDataSafe(data: AppData): { ok: true } | { ok: false; error: 
   for (let i = 0; i < candidates.length; i++) {
     const candidate = candidates[i];
     try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(candidate));
+      const serialized = JSON.stringify(candidate);
+      if (serialized === lastPersistedSerialized) {
+        memoryCache = candidate;
+        return { ok: true };
+      }
+      localStorage.setItem(STORAGE_KEY, serialized);
+      lastPersistedSerialized = serialized;
       memoryCache = candidate;
       notify();
       return { ok: true };

@@ -732,6 +732,22 @@ export async function syncCooperativaProfileFromCloud(cnpj: string): Promise<boo
 
 /** Intervalo padrão de sincronização automática (ms). */
 export const SYNC_INTERVAL_MS = 12_000;
+/** Celular: intervalo maior para não travar a UI a cada sync. */
+export const SYNC_INTERVAL_MOBILE_MS = 45_000;
+/** Intervalo mínimo entre duas sincronizações completas. */
+export const SYNC_MIN_GAP_MS = 10_000;
+
+export function isMobileDevice(): boolean {
+  if (typeof window === "undefined") return false;
+  return (
+    window.matchMedia("(max-width: 768px)").matches ||
+    /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent)
+  );
+}
+
+export function getSyncIntervalMs(): number {
+  return isMobileDevice() ? SYNC_INTERVAL_MOBILE_MS : SYNC_INTERVAL_MS;
+}
 
 /** Sincroniza tudo da cooperativa: cooperados, notas, contratos, operacional, perfil. */
 export async function syncAllCooperativaFromCloud(cnpj: string, preferredCoopId?: string): Promise<void> {

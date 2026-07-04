@@ -579,7 +579,12 @@ export default function NotasPedidoContent() {
 
     let currentData = data ?? getData();
     if (isCooperado && currentData) {
-      updateDataSafe((d) => compactarFotosNoArmazenamento(d));
+      const compactar = () => updateDataSafe((d) => compactarFotosNoArmazenamento(d));
+      if (typeof requestIdleCallback !== "undefined") {
+        requestIdleCallback(compactar, { timeout: 2500 });
+      } else {
+        setTimeout(compactar, 0);
+      }
       currentData = getData() ?? currentData;
     }
     if (isCooperado && user && coopId) {

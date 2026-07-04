@@ -2,7 +2,6 @@
 
 import { useCallback, useEffect, useRef } from "react";
 import { useAuth } from "@/modules/auth/AuthProvider";
-import { useAppData } from "@/hooks/useAppData";
 import { getUserCooperativaId, normalizeCnpj } from "@/utils/cooperativa";
 import {
   resolveCooperativaCnpj,
@@ -14,7 +13,8 @@ import {
   syncOfflineDeliveryImages,
 } from "@/services/notaPedidoCloudService";
 import {
-  SYNC_INTERVAL_MS,
+  getSyncIntervalMs,
+  SYNC_MIN_GAP_MS,
   syncCooperativaBidirectional,
 } from "@/services/cooperativaSyncCloudService";
 import { pushCooperadoToCloud, resolverCooperadoIdCanonico, flushPendingCooperadoPushes } from "@/services/cooperadoCloudService";
@@ -24,38 +24,54 @@ import { compactarFotosNoArmazenamento, contarFotosEnviadasNota } from "@/utils/
 import { isDiretoriaRole } from "@/permissions";
 import type { UserRole } from "@/types";
 
-/** Sincronização automática em todas as telas (cooperado e responsável). */
+/** Sincronização automática — otimizada para celular (menos frequente, sem loop de re-render). */
 export function CooperativaSyncProvider({ children }: { children: React.ReactNode }) {
   const { user } = useAuth();
-  const data = useAppData();
   const syncingRef = useRef(false);
-  const coopId = user && data ? getUserCooperativaId(user, data) : undefined;
+  const lastSyncAtRef = useRef(0);
+  const userRef = useRef(user);
+  userRef.current = user;
+
+  const coopId =
+    user && typeof window !== "undefined"
+      ? getUserCooperativaId(user, getData())
+      : user?.cooperativaId;
 
   const runSync = useCallback(async () => {
-    if (!user || !data || !coopId || syncingRef.current) return;
+    const currentUser = userRef.current;
+    if (!currentUser || syncingRef.current) return;
+    if (typeof document !== "undefined" && document.hidden) return;
+
+    const data = getData();
+    const currentCoopId = getUserCooperativaId(currentUser, data);
+    if (!currentCoopId) return;
+
+    const now = Date.now();
+    if (now - lastSyncAtRef.current < SYNC_MIN_GAP_MS) return;
+    lastSyncAtRef.current = now;
+
     syncingRef.current = true;
     try {
-      const cnpj = await resolveCooperativaCnpj(data, coopId, user);
+      const cnpj = await resolveCooperativaCnpj(data, currentCoopId, currentUser);
       if (!cnpj) return;
 
       await flushPendingCooperadoPushes(cnpj);
       await syncOfflineDeliveryImages();
-      const pushCatalog = isDiretoriaRole(user.role as UserRole);
-      const pushMensalidades = isDiretoriaRole(user.role as UserRole);
+      const pushCatalog = isDiretoriaRole(currentUser.role as UserRole);
+      const pushMensalidades = isDiretoriaRole(currentUser.role as UserRole);
       await flushPendingNotaDeletes(cnpj);
-      await syncCooperativaBidirectional(cnpj, coopId, { pushCatalog, pushMensalidades });
+      await syncCooperativaBidirectional(cnpj, currentCoopId, { pushCatalog, pushMensalidades });
 
-      if (user.role === "cooperado" && user.cooperadoId) {
+      if (currentUser.role === "cooperado" && currentUser.cooperadoId) {
         const latest = getData();
-        const cooperadoCanonico = resolverCooperadoIdCanonico(latest, user.cooperadoId, coopId);
+        const cooperadoCanonico = resolverCooperadoIdCanonico(latest, currentUser.cooperadoId, currentCoopId);
         const registro = latest.cooperados.find((c) => c.id === cooperadoCanonico);
         if (registro) {
-          await pushCooperadoToCloud(cnpj, registro, user.email);
+          await pushCooperadoToCloud(cnpj, registro, currentUser.email);
         }
 
         const cooperadoNome = getCooperadoNome(latest.cooperados, cooperadoCanonico);
 
-        /** Legado: entregas antigas ainda com fotos no aparelho. */
         const pendentes = latest.notasPedido.filter(
           (n) =>
             n.cooperadoId === cooperadoCanonico &&
@@ -95,7 +111,6 @@ export function CooperativaSyncProvider({ children }: { children: React.ReactNod
           }
         }
 
-        /** Retenta publicar entregas cujo Enviar falhou após fotos já na nuvem. */
         const aguardandoLocal = latest.notasPedido.filter(
           (n) =>
             n.cooperadoId === cooperadoCanonico &&
@@ -138,17 +153,22 @@ export function CooperativaSyncProvider({ children }: { children: React.ReactNod
     } finally {
       syncingRef.current = false;
     }
-  }, [user, data, coopId]);
+  }, []);
 
   useEffect(() => {
-    if (!user || !coopId) return;
+    if (!user?.id || !coopId) return;
 
-    void runSync();
+    const startSync = () => {
+      if (document.hidden) return;
+      void runSync();
+    };
 
-    const intervalId = setInterval(() => void runSync(), SYNC_INTERVAL_MS);
+    startSync();
+
+    const intervalId = setInterval(startSync, getSyncIntervalMs());
 
     const onVisible = () => {
-      if (document.visibilityState === "visible") void runSync();
+      if (document.visibilityState === "visible") startSync();
     };
     document.addEventListener("visibilitychange", onVisible);
 
