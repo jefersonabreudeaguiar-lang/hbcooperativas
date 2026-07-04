@@ -46,8 +46,6 @@ import {
   validateImageFile,
   revokePreviewUrl,
   userFacingPipelineError,
-  appendFotoMetaToNota,
-  buildNotaPedidoFotoMeta,
   slimNotaDraftForUpload,
   type ImagePipelineStep,
 } from "@/services/imagePipelineService";
@@ -55,6 +53,7 @@ import {
   enqueuePendingDeliveryImage,
   buildPendingImageId,
 } from "@/services/offlineImageQueueService";
+import { putLocalNotaMedia } from "@/services/localMediaStore";
 import { listCooperadosDaCooperativa, pushCooperadoToCloud, resolverCooperadoIdCanonico, getCooperadoNomeResolvido, notaPertenceCooperado } from "@/services/cooperadoCloudService";
 import { pushOperacionalToCloud, syncContratosFromCloud } from "@/services/cooperativaSyncCloudService";
 import { getProdutosContrato } from "@/services/catalogoContratosService";
@@ -215,6 +214,7 @@ export default function NotasPedidoContent() {
   const anexarParamHandledRef = useRef(false);
   const fotoProcessandoRef = useRef(false);
   const fotoAbortRef = useRef<AbortController | null>(null);
+  const uploadFilaRef = useRef(Promise.resolve());
   const lastFotoFileRef = useRef<File | null>(null);
   const lancandoRef = useRef(false);
   const filaConferenciaRef = useRef<{ total: number; concluidas: number; chave: string } | null>(null);
@@ -480,7 +480,7 @@ export default function NotasPedidoContent() {
     }
     setFotosSessaoCount(meta.count);
     setFotosNaNuvemCount(meta.uploadedCount ?? 0);
-    setFotosConfirmadasNaSessao(meta.uploadedCount ?? meta.count);
+    setFotosConfirmadasNaSessao(meta.count);
   }, [ANEXAR_DRAFT_KEY, resetFotosSessaoUi]);
 
   const limparRascunhoAnexar = useCallback(() => {
@@ -1044,22 +1044,30 @@ export default function NotasPedidoContent() {
   const pipelineStepLabel = (step: ImagePipelineStep | "idle") => {
     switch (step) {
       case "preparing":
-        return "Preparando foto…";
+        return "Preparando…";
       case "compressing":
-        return "Comprimindo para envio…";
+        return "Comprimindo…";
       case "uploading":
-        return "Enviando com segurança…";
+        return "Sincronizando em segundo plano…";
       case "success":
-        return "Foto anexada com sucesso";
+        return "Foto adicionada";
       default:
-        return processandoFoto ? "Processando…" : "";
+        return processandoFoto ? "Preparando…" : "";
     }
+  };
+
+  const aguardarFilaUpload = () => uploadFilaRef.current;
+
+  const enfileirarUploadFoto = (job: () => Promise<void>) => {
+    uploadFilaRef.current = uploadFilaRef.current.then(job).catch(() => {});
   };
 
   const processarFotoArquivo = async (file: File) => {
     if (!data || !cooperadoId || !ANEXAR_DRAFT_KEY || enviando) return;
 
-    fotoAbortRef.current?.abort();
+    if (fotoProcessandoRef.current) {
+      fotoAbortRef.current?.abort();
+    }
     const abort = new AbortController();
     fotoAbortRef.current = abort;
     lastFotoFileRef.current = file;
@@ -1115,10 +1123,6 @@ export default function NotasPedidoContent() {
       const newIndex = await appendFotoDraftMeta(ANEXAR_DRAFT_KEY, contratoId, fileFingerprint);
       const totalCount = newIndex + 1;
 
-      revokeFotoPreview();
-      fotoPreviewUrlRef.current = processed.previewUrl;
-      setFotoAtualPreview(processed.previewUrl);
-
       const inst = data.instituicoes.find((i) => i.id === contratoId);
       const localEntregaDraft = inst?.localEntrega ?? inst?.endereco ?? "";
       const now = new Date().toISOString();
@@ -1147,7 +1151,7 @@ export default function NotasPedidoContent() {
         }
       }
 
-      let draftNota: NotaPedido = reenviarNotaId
+      const draftNota: NotaPedido = reenviarNotaId
         ? {
             ...(data.notasPedido.find((n) => n.id === reenviarNotaId) as NotaPedido),
             instituicaoId: contratoId,
@@ -1180,80 +1184,70 @@ export default function NotasPedidoContent() {
             updatedAt: now,
           };
 
-      setEnvioProgresso({ sent: newIndex + 1, total: totalCount });
-      setFotoPipelineStep("uploading");
-
-      const uploaded = await uploadImageToSupabase({
-        cnpj,
-        nota: draftNota,
-        index: newIndex,
-        totalCount,
-        blob: processed.compressed,
-        mimeType: processed.mimeType,
-        cooperadoNome,
-      });
-
-      if (!uploaded.ok) {
-        if (uploaded.offline) {
-          await enqueuePendingDeliveryImage({
-            id: buildPendingImageId(notaId, newIndex),
-            notaPedidoId: notaId,
-            cooperativaId: coopId!,
-            cooperadoId,
-            cnpj,
-            index: newIndex,
-            totalCount,
-            compressedBlob: processed.compressed,
-            thumbnailBlob: processed.thumbnail,
-            mimeType: processed.mimeType,
-            cooperadoNome,
-            notaSnapshot: slimNotaDraftForUpload(draftNota),
-          });
-          await markFotoDraftUploaded(ANEXAR_DRAFT_KEY, newIndex);
-          setFotosSessaoCount(totalCount);
-          setFotosNaNuvemCount(await countFotosUploadedDraft(ANEXAR_DRAFT_KEY));
-          setFotosConfirmadasNaSessao(totalCount);
-          revokePreviewUrl(processed.previewUrl);
-          revokeFotoPreview();
-          setFotoValidationWarning("Sem internet — foto guardada no aparelho e será enviada quando voltar a conexão.");
-          setFotoPipelineStep("success");
-          setFormErrors((err) => ({ ...err, foto: undefined }));
-          return;
-        }
-
-        await removeFotoDraftAt(ANEXAR_DRAFT_KEY, newIndex);
-        revokePreviewUrl(processed.previewUrl);
-        revokeFotoPreview();
-        setErroEnvio(uploaded.error ?? "Não foi possível enviar a foto para a nuvem.");
-        setFotoPipelineStep("error");
-        return;
-      }
-
-      const fotoMeta = buildNotaPedidoFotoMeta({
-        cnpj,
-        nota: draftNota,
-        index: newIndex,
-        totalCount,
-        blob: processed.compressed,
-        mimeType: processed.mimeType,
-        cooperadoNome,
-        status: "uploaded",
-      });
-      fotoMeta.width = processed.width;
-      fotoMeta.height = processed.height;
-      draftNota = appendFotoMetaToNota(draftNota, fotoMeta);
-
-      await markFotoDraftUploaded(ANEXAR_DRAFT_KEY, newIndex);
+      // UI instantânea — libera câmera antes do upload
       setFotosSessaoCount(totalCount);
-      setFotosNaNuvemCount(await countFotosUploadedDraft(ANEXAR_DRAFT_KEY));
       setFotosConfirmadasNaSessao(totalCount);
+      setFormErrors((err) => ({ ...err, foto: undefined }));
+      setFotoPipelineStep("success");
       revokePreviewUrl(processed.previewUrl);
       revokeFotoPreview();
       lastFotoFileRef.current = null;
-      setEnvioProgresso(null);
-      setFotoPipelineStep("success");
-      setFormErrors((err) => ({ ...err, foto: undefined }));
-      setTimeout(() => setFotoPipelineStep("idle"), 1500);
+      if (fotoInputRef.current) fotoInputRef.current.value = "";
+
+      const draftKey = ANEXAR_DRAFT_KEY;
+      enfileirarUploadFoto(async () => {
+        try {
+          await putLocalNotaMedia(notaId, newIndex, processed.compressed, {
+            thumbnailBlob: processed.thumbnail,
+            mimeType: processed.mimeType,
+          });
+
+          const uploaded = await uploadImageToSupabase({
+            cnpj,
+            nota: draftNota,
+            index: newIndex,
+            totalCount,
+            blob: processed.compressed,
+            mimeType: processed.mimeType,
+            cooperadoNome,
+          });
+
+          if (!uploaded.ok) {
+            if (uploaded.offline) {
+              await enqueuePendingDeliveryImage({
+                id: buildPendingImageId(notaId, newIndex),
+                notaPedidoId: notaId,
+                cooperativaId: coopId!,
+                cooperadoId,
+                cnpj,
+                index: newIndex,
+                totalCount,
+                compressedBlob: processed.compressed,
+                thumbnailBlob: processed.thumbnail,
+                mimeType: processed.mimeType,
+                cooperadoNome,
+                notaSnapshot: slimNotaDraftForUpload(draftNota),
+              });
+              await markFotoDraftUploaded(draftKey, newIndex);
+              setFotoValidationWarning("Sem internet — foto guardada e será enviada quando voltar a conexão.");
+            } else {
+              await removeFotoDraftAt(draftKey, newIndex);
+              const count = await countFotoDraft(draftKey);
+              setFotosSessaoCount(count);
+              setFotosConfirmadasNaSessao(count);
+              setErroEnvio(uploaded.error ?? "Não foi possível enviar a foto para a nuvem.");
+              return;
+            }
+          } else {
+            await markFotoDraftUploaded(draftKey, newIndex);
+          }
+
+          setFotosNaNuvemCount(await countFotosUploadedDraft(draftKey));
+          requestAppSync();
+        } catch {
+          setErroEnvio("Falha ao enviar foto em segundo plano. Toque em tentar novamente.");
+        }
+      });
     } catch (err) {
       if (err instanceof DOMException && err.name === "AbortError") {
         setFotoPipelineStep("idle");
@@ -1265,6 +1259,7 @@ export default function NotasPedidoContent() {
     } finally {
       fotoProcessandoRef.current = false;
       setProcessandoFoto(false);
+      setFotoPipelineStep("idle");
       if (fotoAbortRef.current === abort) fotoAbortRef.current = null;
     }
   };
@@ -1272,7 +1267,7 @@ export default function NotasPedidoContent() {
   const handleFoto = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (fotoInputRef.current) fotoInputRef.current.value = "";
-    if (!file || fotoProcessandoRef.current || processandoFoto) return;
+    if (!file || fotoProcessandoRef.current) return;
     await processarFotoArquivo(file);
   };
 
@@ -1346,10 +1341,10 @@ export default function NotasPedidoContent() {
     }
     if (fotosSessaoCount === 0) errors.foto = "Tire ou escolha pelo menos uma foto do pedido assinado.";
     if (fotosSessaoCount > 0 && fotosNaNuvemCount < fotosSessaoCount) {
-      errors.foto = "Aguarde todas as fotos serem enviadas para a nuvem antes de concluir.";
+      errors.foto = "Aguarde a sincronização das fotos (alguns segundos) ou verifique a internet.";
     }
     if (processandoFoto) {
-      errors.foto = "Aguarde o envio da foto para a nuvem terminar.";
+      errors.foto = "Aguarde a compressão da foto atual.";
     }
     if (!contratoId) errors.contrato = "Contrato da entrega não encontrado. Aguarde a sincronização ou fale com a cooperativa.";
     if (Object.keys(errors).length) {
@@ -1377,6 +1372,7 @@ export default function NotasPedidoContent() {
       return;
     }
 
+    await aguardarFilaUpload();
     await syncOfflineDeliveryImages();
     const uploadedAfterFlush = await countFotosUploadedDraft(ANEXAR_DRAFT_KEY);
     setFotosNaNuvemCount(uploadedAfterFlush);
@@ -2601,8 +2597,8 @@ export default function NotasPedidoContent() {
           )}
           <p className="text-sm text-gray-600">
             {reenviarNotaId
-              ? "Tire a nova foto — ela vai automaticamente para a nuvem. Depois envie para o responsável."
-              : "Cada foto vai direto para a nuvem (sem limite de quantidade). Quando terminar, toque Enviar entrega para o responsável."}
+              ? "Tire a nova foto — pode tirar a próxima na hora; o envio roda em segundo plano."
+              : "Tire quantas fotos precisar — uma após a outra, sem esperar. O envio para a nuvem é automático em segundo plano."}
           </p>
 
           {!reenviarNotaId && (
@@ -2612,22 +2608,24 @@ export default function NotasPedidoContent() {
                   <ImagePlus size={18} />
                   {fotosSessaoCount === 0
                     ? "Nenhuma foto ainda"
-                    : `${fotosSessaoCount} ${fotosSessaoCount === 1 ? "foto na nuvem" : "fotos na nuvem"}`}
+                    : `${fotosSessaoCount} ${fotosSessaoCount === 1 ? "foto capturada" : "fotos capturadas"}`}
                 </span>
                 {fotosSessaoCount > 0 && (
                   <span className="text-xs font-bold text-green-800 bg-green-200 px-2 py-0.5 rounded-full">
-                    {fotosNaNuvemCount >= fotosSessaoCount ? "Pronta" : "Enviando…"}
+                    {fotosNaNuvemCount >= fotosSessaoCount
+                      ? "Pronta"
+                      : `${fotosNaNuvemCount}/${fotosSessaoCount} na nuvem`}
                   </span>
                 )}
               </div>
               <p className="text-xs text-green-800">
-                {processandoFoto && fotoPipelineStep !== "idle"
+                {processandoFoto
                   ? pipelineStepLabel(fotoPipelineStep)
                   : fotosSessaoCount === 0
-                    ? "Passo 1: tire a primeira foto (comprimida e enviada automaticamente)."
+                    ? "Toque abaixo para tirar a primeira foto."
                     : fotosNaNuvemCount >= fotosSessaoCount
-                      ? "Todas na nuvem. Tire mais fotos ou envie a entrega ao responsável."
-                      : "Aguardando envio de uma foto para a nuvem…"}
+                      ? "Todas sincronizadas. Tire mais fotos ou envie ao responsável."
+                      : "Pode tirar a próxima foto — sincronização em segundo plano."}
               </p>
             </div>
           )}
@@ -2644,32 +2642,27 @@ export default function NotasPedidoContent() {
             </AlertBanner>
           )}
 
-          {!reenviarNotaId && (fotosSessaoCount > 0 || processandoFoto) && (
+          {!reenviarNotaId && fotosSessaoCount > 0 && (
             <div className="flex flex-wrap items-center gap-2">
-              {Array.from(
-                { length: processandoFoto ? fotosConfirmadasNaSessao + 1 : fotosSessaoCount },
-                (_, i) => {
+              {Array.from({ length: fotosSessaoCount }, (_, i) => {
                 const n = i + 1;
-                const confirmada = n <= fotosConfirmadasNaSessao && fotosNaNuvemCount >= n;
-                const enviandoFoto = processandoFoto && n === fotosConfirmadasNaSessao + 1;
+                const naNuvem = fotosNaNuvemCount >= n;
                 return (
                   <span
                     key={n}
                     className={cn(
                       "text-xs font-semibold px-2.5 py-1 rounded-full border",
-                      confirmada
+                      naNuvem
                         ? "bg-green-100 border-green-400 text-green-800"
-                        : enviandoFoto
-                          ? "bg-amber-100 border-amber-400 text-amber-900"
-                          : "bg-gray-100 border-gray-300 text-gray-600"
+                        : "bg-amber-100 border-amber-400 text-amber-900"
                     )}
                   >
                     Foto {n}
-                    {confirmada ? " ✓" : enviandoFoto ? " · enviando…" : ""}
+                    {naNuvem ? " ✓" : " · sync…"}
                   </span>
                 );
               })}
-              {!processandoFoto && fotosSessaoCount > 0 && fotosNaNuvemCount >= fotosSessaoCount && (
+              {fotosNaNuvemCount >= fotosSessaoCount && (
                 <span className="text-xs text-green-700">Pronta para enviar ao responsável</span>
               )}
             </div>
@@ -2691,24 +2684,29 @@ export default function NotasPedidoContent() {
             </div>
           )}
 
-          {!reenviarNotaId && fotosSessaoCount > 0 && !processandoFoto && !enviando && (
+          {!reenviarNotaId && !enviando && (
             <div className="flex flex-wrap gap-2">
               <Button
                 type="button"
                 variant="secondary"
                 size="sm"
+                disabled={processandoFoto}
                 onClick={() => fotoInputRef.current?.click()}
               >
-                <Camera size={14} className="mr-1" /> Tirar outra foto
+                <Camera size={14} className="mr-1" />
+                {fotosSessaoCount === 0 ? "Tirar foto" : "Tirar próxima foto"}
               </Button>
-              <Button
-                type="button"
-                variant="secondary"
-                size="sm"
-                onClick={() => removerFotoSessao(fotosSessaoCount - 1)}
-              >
-                <X size={14} className="mr-1" /> Remover foto
-              </Button>
+              {fotosSessaoCount > 0 && (
+                <Button
+                  type="button"
+                  variant="secondary"
+                  size="sm"
+                  disabled={processandoFoto}
+                  onClick={() => removerFotoSessao(fotosSessaoCount - 1)}
+                >
+                  <X size={14} className="mr-1" /> Remover última
+                </Button>
+              )}
             </div>
           )}
 
@@ -2752,7 +2750,7 @@ export default function NotasPedidoContent() {
               reenviarNotaId
                 ? "Nova foto"
                 : processandoFoto
-                  ? `Enviando foto ${fotosConfirmadasNaSessao + 1} para a nuvem`
+                  ? "Comprimindo foto…"
                   : fotosSessaoCount > 0
                     ? `Foto ${fotosSessaoCount + 1} desta entrega`
                     : "Foto da entrega"
@@ -2786,9 +2784,11 @@ export default function NotasPedidoContent() {
                       : "Tirar próxima foto"}
                 </span>
                 <span className="text-xs text-green-700 text-center">
-                  {fotosSessaoCount === 0
-                    ? "A foto vai direto para a nuvem"
-                    : "Mais uma foto na mesma entrega — envio automático"}
+                  {processandoFoto
+                    ? "Só um instante…"
+                    : fotosSessaoCount === 0
+                      ? "Toque para abrir a câmera"
+                      : "Pode tirar a próxima na hora — envio em segundo plano"}
                 </span>
                 <input ref={fotoInputRef} type="file" accept="image/*" capture="environment" className="hidden" onChange={(e) => void handleFoto(e)} disabled={processandoFoto || enviando} />
               </label>
