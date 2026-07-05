@@ -520,6 +520,21 @@ export interface Comunicado {
   createdAt: string;
 }
 
+export interface Reclamacao {
+  id: string;
+  cooperativaId: string;
+  cooperadoId: string;
+  /** Item ou produto relacionado à reclamação. */
+  item: string;
+  /** Data do fato (YYYY-MM-DD). */
+  data: string;
+  descricao: string;
+  registradoPor?: string;
+  registradoPorNome?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface Propriedade {
   id: string;
   cooperadoId: string;
@@ -664,6 +679,7 @@ export interface AppData {
   pagamentos: Pagamento[];
   financeiro: FinanceiroMensal[];
   comunicados: Comunicado[];
+  reclamacoes: Reclamacao[];
   propriedades: Propriedade[];
   veiculos: Veiculo[];
   fechamentos: FechamentoMensal[];
@@ -688,6 +704,7 @@ export type Resource =
   | "descontos"
   | "financeiro"
   | "comunicados"
+  | "reclamacoes"
   | "propriedades"
   | "veiculos"
   | "instituicoes"

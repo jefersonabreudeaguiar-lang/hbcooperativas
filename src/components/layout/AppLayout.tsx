@@ -6,7 +6,7 @@ import {
   LayoutDashboard, Users, CreditCard, PieChart, Truck, Wallet,
   Percent, Building2, Landmark, Megaphone, MapPin, Car, FileText,
   CalendarCheck, LogOut, Menu, X, Building, ClipboardList, Receipt, User, Tag,
-  BookOpen, FileCheck, Shield,
+  BookOpen, FileCheck, Shield, MessageSquareWarning,
 } from "lucide-react";
 import { useState } from "react";
 import { useAuth } from "@/modules/auth/AuthProvider";
@@ -29,6 +29,7 @@ const ICONS: Record<string, React.ReactNode> = {
   "/meu-perfil": <Building size={20} />,
   "/admin": <Shield size={20} />,
   "/comunicados": <Megaphone size={20} />,
+  "/reclamacoes": <MessageSquareWarning size={20} />,
   "/livro-caixa": <BookOpen size={20} />,
   "/prestacao-contas": <FileCheck size={20} />,
   "/cooperativas": <Building size={20} />,
@@ -46,6 +47,7 @@ const ICONS: Record<string, React.ReactNode> = {
   ficha_corrida: <Receipt size={20} />,
   financeiro: <Landmark size={20} />,
   comunicados: <Megaphone size={20} />,
+  reclamacoes: <MessageSquareWarning size={20} />,
   propriedades: <MapPin size={20} />,
   veiculos: <Car size={20} />,
   relatorios: <FileText size={20} />,

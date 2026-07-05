@@ -30,6 +30,7 @@ import {
   gerarRelatorioFinanceiroHtml,
   gerarRelatorioAtingimentoCronogramaHtml,
   gerarRelatorioSobrasPerdasHtml,
+  gerarRelatorioReclamacoesHtml,
   imprimirDocumentoHtml,
   nomeArquivoRelatorio,
 } from "@/utils/relatorioHtml";
@@ -37,6 +38,7 @@ import { ModalEmitirRelatorio } from "@/components/relatorios/ModalEmitirRelator
 import type { EmissorRelatorio } from "@/types";
 import { formatCurrency, formatDate, formatMesReferencia, getCurrentMesReferencia } from "@/utils/format";
 import { getCooperadoNome } from "@/utils/calculations";
+import { getRelatorioReclamacoes } from "@/services/reclamacaoService";
 import { labelUnidade } from "@/utils/unidades";
 
 const RELATORIOS = [
@@ -51,6 +53,7 @@ const RELATORIOS = [
   { id: "descontos_aplicados", label: "Descontos Aplicados" },
   { id: "sobras_perdas", label: "Sobras e Perdas (transparência)" },
   { id: "saldo_mensal", label: "Saldo Mensal da Cooperativa" },
+  { id: "historico_reclamacoes", label: "Histórico de Reclamações" },
 ];
 
 export default function RelatoriosPage() {
@@ -110,10 +113,16 @@ export default function RelatoriosPage() {
     if (tipo === "sobras_perdas") {
       return gerarRelatorioSobrasPerdasHtml(data, mes, coopId, emissor);
     }
+    if (tipo === "historico_reclamacoes") {
+      return gerarRelatorioReclamacoesHtml(data, coopId, cooperadoId || undefined, emissor);
+    }
     return gerarRelatorioFinanceiroHtml(data, mes, tituloRelatorio, emissor);
   };
 
   const nomeDocumento = () => {
+    if (tipo === "historico_reclamacoes") {
+      return nomeArquivoRelatorio(tipo, getCurrentMesReferencia());
+    }
     if (tipo === "entregas_por_itens" || tipo === "atingimento_cronograma") {
       const inst = data?.instituicoes.find((i) => i.id === instituicaoSelecionadaId);
       return nomeArquivoRelatorio(tipo, mes, inst?.nome);
@@ -298,6 +307,32 @@ export default function RelatoriosPage() {
               ["Pagamentos realizados", String(r.resumo.pagamentosRealizados)],
               ["Mensalidades recebidas", String(r.resumo.mensalidadesRecebidas)],
             ];
+        break;
+      }
+      case "historico_reclamacoes": {
+        const r = getRelatorioReclamacoes(data, coopId, cooperadoId || undefined);
+        headers = ["Seção", "Data", "Cooperado", "Item", "Descrição", "Quantidade", "Percentual"];
+        rows = [
+          ["Resumo", "", "", "", "Total de reclamações", String(r.total), "100%"],
+          ...r.porCooperado.map((p) => [
+            "Por cooperado",
+            "",
+            p.cooperadoNome,
+            "",
+            "",
+            String(p.quantidade),
+            `${p.percentual}%`,
+          ]),
+          ...r.historico.map((h) => [
+            "Histórico",
+            h.data,
+            h.cooperadoNome,
+            h.item,
+            h.descricao,
+            "",
+            "",
+          ]),
+        ];
         break;
       }
       default:
@@ -758,6 +793,90 @@ export default function RelatoriosPage() {
           </div>
         );
       }
+      case "historico_reclamacoes": {
+        const r = getRelatorioReclamacoes(data, coopId, cooperadoId || undefined);
+        return (
+          <>
+            <div className="mb-4 rounded-xl border border-amber-200 bg-amber-50/60 p-4">
+              <p className="text-sm font-semibold text-amber-950">Levantamento de reclamações</p>
+              <p className="text-xs text-amber-900 mt-1 leading-relaxed">
+                Histórico completo com distribuição percentual por cooperado (soma 100%). Exporte em PDF para arquivo ou assembleia.
+              </p>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
+              <StatCard title="Total de reclamações" value={String(r.total)} />
+              <StatCard title="Cooperados com ocorrências" value={String(r.porCooperado.length)} variant="warning" />
+              <StatCard
+                title="Maior incidência"
+                value={
+                  r.porCooperado[0]
+                    ? `${r.porCooperado[0].percentual.toLocaleString("pt-BR")}%`
+                    : "—"
+                }
+              />
+            </div>
+
+            <h3 className="text-sm font-bold uppercase tracking-wide text-gray-700 mb-2">Distribuição por cooperado</h3>
+            <DataTable
+              data={r.porCooperado.map((p) => ({ ...p, id: p.cooperadoId }))}
+              keyField="id"
+              emptyMessage="Nenhuma reclamação registrada."
+              columns={[
+                { key: "nome", label: "Cooperado", render: (p) => p.cooperadoNome },
+                { key: "qtd", label: "Reclamações", render: (p) => String(p.quantidade) },
+                {
+                  key: "pct",
+                  label: "% do total",
+                  render: (p) => `${p.percentual.toLocaleString("pt-BR")}%`,
+                },
+              ]}
+            />
+
+            {r.porCooperado.length > 0 && (
+              <div className="my-6 space-y-3">
+                {r.porCooperado.map((p) => (
+                  <div key={p.cooperadoId}>
+                    <div className="flex justify-between text-sm mb-1">
+                      <span className="font-medium text-gray-900">{p.cooperadoNome}</span>
+                      <span className="text-gray-600 tabular-nums">
+                        {p.quantidade} · {p.percentual.toLocaleString("pt-BR")}%
+                      </span>
+                    </div>
+                    <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
+                      <div
+                        className="h-full bg-amber-500 rounded-full"
+                        style={{ width: `${Math.min(100, p.percentual)}%` }}
+                      />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            <h3 className="text-sm font-bold uppercase tracking-wide text-gray-700 mb-2 mt-8">Histórico completo</h3>
+            <DataTable
+              data={r.historico}
+              keyField="id"
+              emptyMessage="Nenhuma reclamação registrada."
+              columns={[
+                { key: "data", label: "Data", render: (h) => formatDate(h.data) },
+                { key: "cooperado", label: "Cooperado", render: (h) => h.cooperadoNome },
+                { key: "item", label: "Item" },
+                {
+                  key: "descricao",
+                  label: "Descrição",
+                  render: (h) => (
+                    <span className="line-clamp-2 max-w-md" title={h.descricao}>
+                      {h.descricao}
+                    </span>
+                  ),
+                },
+              ]}
+            />
+          </>
+        );
+      }
       default:
         return null;
     }
@@ -792,7 +911,7 @@ export default function RelatoriosPage() {
           </Select>
         </FormField>
         <FormField label="Mês">
-          <Select value={mes} onChange={(e) => setMes(e.target.value)} className="min-w-[180px]">
+          <Select value={mes} onChange={(e) => setMes(e.target.value)} className="min-w-[180px]" disabled={tipo === "historico_reclamacoes"}>
             {meses.map((m) => (
               <option key={m} value={m}>{formatMesReferencia(m)}</option>
             ))}
@@ -808,16 +927,18 @@ export default function RelatoriosPage() {
             </Select>
           </FormField>
         ) : null}
-        {tipo === "pagar_cooperado" && (
+        {tipo === "pagar_cooperado" || tipo === "historico_reclamacoes" ? (
           <FormField label="Cooperado">
             <Select value={cooperadoId} onChange={(e) => setCooperadoId(e.target.value)} className="min-w-[200px]">
               <option value="">Todos</option>
-              {data.cooperados.map((c) => (
+              {data.cooperados
+                .filter((c) => !coopId || c.cooperativaId === coopId)
+                .map((c) => (
                 <option key={c.id} value={c.id}>{c.nomeCompleto}</option>
               ))}
             </Select>
           </FormField>
-        )}
+        ) : null}
       </FilterBar>
 
       <Card>{renderRelatorio()}</Card>

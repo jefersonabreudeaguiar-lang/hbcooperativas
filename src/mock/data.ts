@@ -23,6 +23,7 @@ export const emptyInitialData: AppData = {
   pagamentos: [],
   financeiro: [],
   comunicados: [],
+  reclamacoes: [],
   propriedades: [],
   veiculos: [],
   fechamentos: [],

@@ -1,10 +1,11 @@
 import type { AppData, EmissorRelatorio, FechamentoMensal } from "@/types";
 import { PLATFORM_NAME } from "@/utils/constants";
 import { formatCnpj } from "@/utils/cooperativa";
-import { formatCurrency, formatDate, formatMesReferencia } from "@/utils/format";
+import { formatCurrency, formatDate, formatMesReferencia, getCurrentMesReferencia } from "@/utils/format";
 import type { FechamentoCalculado, RelatorioEntregasPorItens, ResumoFinanceiroMes } from "@/services/relatorioService";
 import { calcularFechamentoMensalLive, getRelatorioEntregasPorItensInstituicao, getResumoFinanceiroMes } from "@/services/relatorioService";
 import { getRelatorioSobrasPerdas, type RelatorioSobrasPerdas } from "@/services/sobrasPerdasService";
+import { getRelatorioReclamacoes } from "@/services/reclamacaoService";
 import { getRelatorioAtingimentoCronograma, type StatusAtingimentoItem } from "@/services/relatorioCronogramaService";
 import { baixarHtmlComoPdf } from "@/utils/downloadPdf";
 
@@ -88,7 +89,8 @@ function cooperativaHeader(
   data: AppData,
   titulo: string,
   mesReferencia: string,
-  cooperativaId?: string
+  cooperativaId?: string,
+  periodoLabel?: string
 ): string {
   const coop = resolveCooperativa(data, cooperativaId);
   const nome = coop?.nome ?? PLATFORM_NAME;
@@ -96,6 +98,7 @@ function cooperativaHeader(
   const endereco = coop?.endereco ?? "";
   const telefone = coop?.telefone ?? "";
   const email = coop?.email ?? "";
+  const periodo = periodoLabel ?? formatMesReferencia(mesReferencia);
   return `
     <div class="header">
       <h1>${escapeHtml(nome)}</h1>
@@ -105,7 +108,7 @@ function cooperativaHeader(
         ${telefone ? `Tel.: ${escapeHtml(telefone)}<br/>` : ""}
         ${email ? `${escapeHtml(email)}<br/>` : ""}
       </div>
-      <div class="periodo">${escapeHtml(titulo)} · ${escapeHtml(formatMesReferencia(mesReferencia))}</div>
+      <div class="periodo">${escapeHtml(titulo)} · ${escapeHtml(periodo)}</div>
     </div>`;
 }
 
@@ -115,20 +118,22 @@ function documentoShell(
   data: AppData,
   mesReferencia: string,
   cooperativaId?: string,
-  emissor?: EmissorRelatorio
+  emissor?: EmissorRelatorio,
+  periodoLabel?: string
 ): string {
   const gerado = formatDate(new Date().toISOString().split("T")[0]);
   const emissorHtml = emissor ? blocoEmissorAssinatura(emissor) : "";
+  const periodo = periodoLabel ?? formatMesReferencia(mesReferencia);
   return `<!DOCTYPE html>
 <html lang="pt-BR">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>${escapeHtml(titulo)} — ${escapeHtml(formatMesReferencia(mesReferencia))}</title>
+  <title>${escapeHtml(titulo)} — ${escapeHtml(periodo)}</title>
   <style>${DOC_STYLES}</style>
 </head>
 <body>
-  ${cooperativaHeader(data, titulo, mesReferencia, cooperativaId)}
+  ${cooperativaHeader(data, titulo, mesReferencia, cooperativaId, periodoLabel)}
   ${body}
   ${emissorHtml}
   <div class="footer">
@@ -547,6 +552,91 @@ export function gerarRelatorioSobrasPerdasHtml(
     mesReferencia,
     cooperativaId,
     emissor
+  );
+}
+
+export function gerarRelatorioReclamacoesHtml(
+  data: AppData,
+  cooperativaId?: string,
+  cooperadoId?: string,
+  emissor?: EmissorRelatorio
+): string {
+  const rel = getRelatorioReclamacoes(data, cooperativaId, cooperadoId);
+  const mesRef = getCurrentMesReferencia();
+
+  const linhasHistorico = rel.historico
+    .map(
+      (r) =>
+        `<tr>
+          <td>${escapeHtml(formatDate(r.data))}</td>
+          <td>${escapeHtml(r.cooperadoNome)}</td>
+          <td>${escapeHtml(r.item)}</td>
+          <td>${escapeHtml(r.descricao)}</td>
+          <td>${escapeHtml(r.registradoPorNome ?? "—")}</td>
+        </tr>`
+    )
+    .join("");
+
+  const linhasDistribuicao = rel.porCooperado
+    .map(
+      (p) =>
+        `<tr>
+          <td>${escapeHtml(p.cooperadoNome)}</td>
+          <td class="num">${p.quantidade}</td>
+          <td class="num">${p.percentual.toLocaleString("pt-BR")}%</td>
+        </tr>`
+    )
+    .join("");
+
+  const somaPct = rel.porCooperado.reduce((s, p) => s + p.percentual, 0);
+
+  const body = `
+    <p class="carta">
+      Relatório consolidado do <strong>histórico de reclamações</strong> registradas pela diretoria/responsável.
+      Inclui levantamento quantitativo e distribuição percentual por cooperado (base 100%).
+    </p>
+
+    <div class="resumo-grid">
+      <div class="resumo-card"><div class="label">Total de reclamações</div><div class="value">${rel.total}</div></div>
+      <div class="resumo-card"><div class="label">Cooperados com ocorrências</div><div class="value">${rel.porCooperado.length}</div></div>
+      <div class="resumo-card"><div class="label">Soma dos percentuais</div><div class="value">${somaPct.toLocaleString("pt-BR")}%</div></div>
+      <div class="resumo-card"><div class="label">Maior incidência</div><div class="value" style="font-size:1rem;">${
+        rel.porCooperado[0]
+          ? `${escapeHtml(rel.porCooperado[0].cooperadoNome)} (${rel.porCooperado[0].percentual.toLocaleString("pt-BR")}%)`
+          : "—"
+      }</div></div>
+    </div>
+
+    <h2>Distribuição por cooperado</h2>
+    <table>
+      <thead><tr><th>Cooperado</th><th class="num">Reclamações</th><th class="num">% do total</th></tr></thead>
+      <tbody>${linhasDistribuicao || `<tr><td colspan="3">Nenhuma reclamação registrada.</td></tr>`}</tbody>
+      ${
+        rel.porCooperado.length > 0
+          ? `<tfoot><tr><td><strong>Total</strong></td><td class="num"><strong>${rel.total}</strong></td><td class="num"><strong>100%</strong></td></tr></tfoot>`
+          : ""
+      }
+    </table>
+
+    <h2>Histórico completo</h2>
+    <table>
+      <thead><tr><th>Data</th><th>Cooperado</th><th>Item</th><th>Descrição</th><th>Registrado por</th></tr></thead>
+      <tbody>${linhasHistorico || `<tr><td colspan="5">Nenhuma reclamação registrada.</td></tr>`}</tbody>
+    </table>
+
+    <p class="carta" style="margin-top:28px;">
+      Documento para arquivo interno, assembleia ou prestação de contas. Os percentuais representam a participação
+      de cada cooperado no total de reclamações levantadas.
+    </p>`;
+
+  return documentoShell(
+    "Histórico de Reclamações",
+    body,
+    data,
+    mesRef,
+    cooperativaId,
+    emissor,
+    "Histórico completo"
   );
 }
 
