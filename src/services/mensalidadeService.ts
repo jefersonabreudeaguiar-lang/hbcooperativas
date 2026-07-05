@@ -38,6 +38,78 @@ export function deveCobrarMensalidadeMes(cfg: MensalidadeConfig | undefined, mes
   return meses.includes(mesReferencia);
 }
 
+/** Mensalidade pertence a um mês ainda marcado para cobrança na cooperativa. */
+export function mensalidadeMesEmCobranca(
+  data: AppData,
+  mensalidade: Pick<Mensalidade, "mesReferencia" | "cooperadoId">,
+  cooperativaId?: string
+): boolean {
+  const coopId = cooperativaId ?? getCooperativaIdDoCooperado(data, mensalidade.cooperadoId);
+  if (!coopId) return false;
+  const cfg = getConfigMensalidadeCooperativa(data, coopId);
+  return deveCobrarMensalidadeMes(cfg, mensalidade.mesReferencia);
+}
+
+/** Remove cobranças não pagas de meses desmarcados na configuração. */
+export function limparMensalidadesMesesDesmarcados(
+  data: AppData,
+  cooperativaId: string,
+  mesesAtivos: string[]
+): AppData {
+  const ativos = new Set(mesesAtivos);
+  const mensalidades = data.mensalidades.filter((m) => {
+    const cooperado = data.cooperados.find((c) => c.id === m.cooperadoId);
+    if (!cooperado || cooperado.cooperativaId !== cooperativaId) return true;
+    if (ativos.has(m.mesReferencia)) return true;
+    if (m.status === "paga") return true;
+    return false;
+  });
+  if (mensalidades.length === data.mensalidades.length) return data;
+  return { ...data, mensalidades };
+}
+
+export interface MensalidadesVencidasMesGrupo {
+  mesReferencia: string;
+  itens: Mensalidade[];
+}
+
+/** Agrupa mensalidades vencidas (não pagas) por mês para o painel do responsável. */
+export function agruparMensalidadesVencidasPorMes(
+  data: AppData,
+  cooperativaId: string
+): MensalidadesVencidasMesGrupo[] {
+  const hoje = new Date().toISOString().split("T")[0];
+  const cooperados = data.cooperados.filter(
+    (c) => c.cooperativaId === cooperativaId && c.status !== "desligado"
+  );
+  const byMes = new Map<string, Mensalidade[]>();
+
+  for (const cooperado of cooperados) {
+    const lista = listarMensalidadesExibicaoCooperado(data, cooperado.id, cooperativaId);
+    for (const m of lista) {
+      if (m.status === "paga") continue;
+      if (!mensalidadeMesEmCobranca(data, m, cooperativaId)) continue;
+      if (!mensalidadeCobrancaVisivel(m, hoje)) continue;
+      if (statusEfetivoMensalidade(m, hoje) !== "atrasada") continue;
+      const arr = byMes.get(m.mesReferencia) ?? [];
+      arr.push(m);
+      byMes.set(m.mesReferencia, arr);
+    }
+  }
+
+  return [...byMes.entries()]
+    .map(([mesReferencia, itens]) => ({
+      mesReferencia,
+      itens: itens.sort((a, b) =>
+        getCooperadoNomeResolvido(data, a.cooperadoId, cooperativaId).localeCompare(
+          getCooperadoNomeResolvido(data, b.cooperadoId, cooperativaId),
+          "pt-BR"
+        )
+      ),
+    }))
+    .sort((a, b) => b.mesReferencia.localeCompare(a.mesReferencia));
+}
+
 /** True quando amanhã é o dia de vencimento configurado. */
 export function isAvisoMensalidadeVenceAmanha(cfg: MensalidadeConfig | undefined): boolean {
   if (!cfg || cfg.valorPadrao <= 0) return false;
@@ -524,6 +596,7 @@ export function listarMensalidadesExibicaoCooperado(
   }
 
   return [...byMes.values()]
+    .filter((m) => !coopId || mensalidadeMesEmCobranca(data, m, coopId))
     .filter((m) => mensalidadeListagemVisivel(m))
     .sort(
       (a, b) =>
@@ -719,6 +792,8 @@ export function aplicarConfigMensalidadeCooperativa(
     }
   }
 
+  next = limparMensalidadesMesesDesmarcados(next, cooperativaId, meses);
+
   return sincronizarMensalidadeCooperativa(next, cooperativaId);
 }
 
@@ -728,13 +803,16 @@ export function sincronizarMensalidadeCooperativa(
   cooperativaId?: string
 ): AppData {
   let next = data;
-  if (cooperativaId) {
-    next = vincularMensalidadesCooperativa(next, cooperativaId);
-  } else {
-    for (const coop of next.cooperativas) {
-      next = vincularMensalidadesCooperativa(next, coop.id);
-    }
+  const coops = cooperativaId
+    ? next.cooperativas.filter((c) => c.id === cooperativaId)
+    : next.cooperativas;
+
+  for (const coop of coops) {
+    const meses = mesesCobrancaEfetivos(coop.mensalidadeConfig);
+    next = limparMensalidadesMesesDesmarcados(next, coop.id, meses);
+    next = vincularMensalidadesCooperativa(next, coop.id);
   }
+
   const ensured = ensureMensalidadesMeses(next, cooperativaId);
   if (ensured) next = ensured;
   const status = atualizarStatusMensalidades(next);

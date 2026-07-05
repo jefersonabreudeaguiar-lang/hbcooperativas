@@ -31,6 +31,7 @@ import {
   mensalidadeListagemVisivel,
   mensalidadeCobrancaVisivel,
   mesesCobrancaEfetivos,
+  mensalidadeMesEmCobranca,
 } from "@/services/mensalidadeService";
 import { compressDataUrl, compressFotoFile } from "@/utils/fotoEntrega";
 import { formatCurrency, formatDate, formatMesReferencia, getCurrentMesReferencia } from "@/utils/format";
@@ -38,6 +39,7 @@ import { getCooperadoNome } from "@/utils/calculations";
 import type { Mensalidade } from "@/types";
 import { MensalidadeConfigPanel } from "@/components/mensalidade/MensalidadeConfigPanel";
 import { MensalidadeCooperadoCard } from "@/components/mensalidade/MensalidadeCooperadoCard";
+import { MensalidadesVencidasPorMesPanel } from "@/components/mensalidade/MensalidadesVencidasPorMesPanel";
 
 const SHARE_KEY = "hb_comprovante_mensalidade_share";
 
@@ -93,7 +95,8 @@ function MensalidadesContent() {
       ? listarMensalidadesExibicaoCooperado(data, cooperadoId, coopId)
       : data.mensalidades.filter((m) => {
           const c = data.cooperados.find((x) => x.id === m.cooperadoId);
-          return !coopId || c?.cooperativaId === coopId;
+          if (coopId && c?.cooperativaId !== coopId) return false;
+          return mensalidadeMesEmCobranca(data, m, coopId);
         });
 
     return base
@@ -118,7 +121,8 @@ function MensalidadesContent() {
         ? listarMensalidadesCooperado(data, cooperadoId, coopId)
         : data.mensalidades.filter((m) => {
             const c = data.cooperados.find((x) => x.id === m.cooperadoId);
-            return !coopId || c?.cooperativaId === coopId;
+            if (coopId && c?.cooperativaId !== coopId) return false;
+            return mensalidadeMesEmCobranca(data, m, coopId);
           });
       return base
         .filter((m) => m.status === "aguardando_confirmacao")
@@ -134,7 +138,8 @@ function MensalidadesContent() {
       ? listarMensalidadesExibicaoCooperado(data, cooperadoId, coopId)
       : data.mensalidades.filter((m) => {
           const c = data.cooperados.find((x) => x.id === m.cooperadoId);
-          return !coopId || c?.cooperativaId === coopId;
+          if (coopId && c?.cooperativaId !== coopId) return false;
+          return mensalidadeMesEmCobranca(data, m, coopId);
         });
     for (const m of base) set.add(m.mesReferencia);
     if (cooperativa?.mensalidadeConfig) {
@@ -400,6 +405,11 @@ function MensalidadesContent() {
         </Card>
       )}
 
+      {!isCooperado && coopId && (
+        <MensalidadesVencidasPorMesPanel cooperativaId={coopId} />
+      )}
+
+      {isCooperado && (
       <FilterBar>
         <FormField label="Mês">
           <Select value={mesFilter} onChange={(e) => setMesFilter(e.target.value)} className="min-w-[180px]">
@@ -418,7 +428,9 @@ function MensalidadesContent() {
           </Select>
         </FormField>
       </FilterBar>
+      )}
 
+      {isCooperado && (
       <DataTable
         data={mensalidades}
         keyField="id"
@@ -481,6 +493,7 @@ function MensalidadesContent() {
           },
         ]}
       />
+      )}
 
       {mensalidadePix && chavePixCoop && cooperativa && (
         <PixQrModal
