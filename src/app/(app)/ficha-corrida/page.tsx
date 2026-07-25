@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useMemo, useState, useEffect, useCallback } from "react";
 import { useSearchParams } from "next/navigation";
-import { QrCode, XCircle, Wallet, CheckCircle2, FileDown, PenLine, BookOpen, CreditCard, History, Users, ChevronDown } from "lucide-react";
+import { QrCode, XCircle, Wallet, CheckCircle2, FileDown, PenLine, BookOpen, CreditCard, History, Users, ChevronDown, Pencil } from "lucide-react";
 import { useAppData } from "@/hooks/useAppData";
 import { usePermissions } from "@/hooks/usePermissions";
 import { getUserCooperativaId } from "@/utils/cooperativa";
@@ -148,6 +148,8 @@ export default function FichaCorridaPage() {
   const [confirmPagamento, setConfirmPagamento] = useState(false);
   const [pixInvalidoOpen, setPixInvalidoOpen] = useState(false);
   const [motivoPix, setMotivoPix] = useState("");
+  const [pixEditarOpen, setPixEditarOpen] = useState(false);
+  const [chavePixEdit, setChavePixEdit] = useState("");
   const [pagoMsg, setPagoMsg] = useState("");
   const [assinaturaModal, setAssinaturaModal] = useState(false);
   const [reciboSucessoOpen, setReciboSucessoOpen] = useState(false);
@@ -513,6 +515,43 @@ export default function FichaCorridaPage() {
     })();
     setPixInvalidoOpen(false);
     setMotivoPix("");
+  };
+
+  const handleSalvarPixCooperado = () => {
+    if (!cooperadoSelecionado || !user || !chavePixEdit.trim()) return;
+    const chave = chavePixEdit.trim();
+    updateData((d) => {
+      const updated = {
+        ...d,
+        cooperados: d.cooperados.map((c) =>
+          c.id === cooperadoSelecionado.id
+            ? {
+                ...c,
+                chavePix: chave,
+                pixValido: true,
+                pixInvalidoMotivo: undefined,
+                updatedAt: new Date().toISOString(),
+              }
+            : c
+        ),
+      };
+      return addAuditEntry(updated, {
+        entityType: "cooperado",
+        entityId: cooperadoSelecionado.id,
+        action: "editar",
+        userId: user.id,
+        userName: user.name,
+        changes: "Chave PIX atualizada pelo responsável",
+      });
+    });
+    void (async () => {
+      const d = getData();
+      const cnpj = await resolveCooperativaCnpj(d, coopId, user);
+      const coop = d.cooperados.find((c) => c.id === cooperadoSelecionado.id);
+      if (cnpj && coop) await pushCooperadoToCloud(cnpj, coop);
+    })();
+    setPixEditarOpen(false);
+    setChavePixEdit("");
   };
 
   const abrirDivisaoEntrega = (ficha: FichaCorrida) => {
@@ -1125,7 +1164,7 @@ export default function FichaCorridaPage() {
           {!isCooperado && cooperadoSelecionado && check("ficha_corrida", "edit") && (
             <Card title={`Pagamento — ${nomeCooperado.split(" ")[0]}`} className="mb-6">
               <div className="space-y-4">
-                <div className="flex items-center gap-2 text-sm">
+                <div className="flex flex-wrap items-center gap-2 text-sm">
                   <Wallet size={18} className="text-gray-500" />
                   <span>Chave PIX:</span>
                   {cooperadoSelecionado.chavePix ? (
@@ -1133,6 +1172,16 @@ export default function FichaCorridaPage() {
                   ) : (
                     <span className="text-red-600 font-medium">Não cadastrada</span>
                   )}
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    onClick={() => {
+                      setChavePixEdit(cooperadoSelecionado.chavePix ?? "");
+                      setPixEditarOpen(true);
+                    }}
+                  >
+                    <Pencil size={14} /> Editar PIX
+                  </Button>
                 </div>
                 <div className="flex flex-col gap-3">
                   <Button onClick={() => { salvarAjustesFicha(); setPixModalOpen(true); }} disabled={!pixOk || totalPendente <= 0} size="lg" className="w-full">
@@ -1234,6 +1283,17 @@ export default function FichaCorridaPage() {
         value={motivoPix}
         onChange={setMotivoPix}
         onConfirm={handlePixInvalido}
+      />
+
+      <PromptDialog
+        open={pixEditarOpen}
+        onClose={() => setPixEditarOpen(false)}
+        title="Editar chave PIX"
+        label="Informe a chave PIX correta do cooperado"
+        confirmLabel="Salvar PIX"
+        value={chavePixEdit}
+        onChange={setChavePixEdit}
+        onConfirm={handleSalvarPixCooperado}
       />
 
       <Modal

@@ -73,7 +73,16 @@ export default function CooperadosPage() {
     updateData((d) => {
       let updated = { ...d };
       if (editing) {
-        savedCooperado = { ...editing, ...form, produtos, updatedAt: now } as Cooperado;
+        const chavePix = (form.chavePix ?? "").trim();
+        savedCooperado = {
+          ...editing,
+          ...form,
+          produtos,
+          chavePix,
+          pixValido: chavePix ? true : false,
+          pixInvalidoMotivo: chavePix ? undefined : editing.pixInvalidoMotivo,
+          updatedAt: now,
+        } as Cooperado;
         updated.cooperados = d.cooperados.map((c) =>
           c.id === editing.id ? savedCooperado! : c
         );
@@ -81,6 +90,7 @@ export default function CooperadosPage() {
       } else {
         const coopId = form.cooperativaId ?? getUserCooperativaId(user, d);
         if (!coopId) return d;
+        const chavePix = (form.chavePix ?? "").trim();
         savedCooperado = {
           id: generateId("c"),
           cooperativaId: coopId,
@@ -90,7 +100,8 @@ export default function CooperadosPage() {
           endereco: form.endereco ?? "",
           comunidade: form.comunidade ?? "",
           cafDap: form.cafDap ?? "",
-          chavePix: form.chavePix ?? "",
+          chavePix,
+          pixValido: Boolean(chavePix),
           banco: form.banco ?? "",
           agencia: form.agencia ?? "",
           conta: form.conta ?? "",
