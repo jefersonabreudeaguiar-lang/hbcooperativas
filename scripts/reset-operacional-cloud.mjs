@@ -106,7 +106,7 @@ async function resetOperacional(cnpj) {
 
   const payload = {
     updatedAt: new Date().toISOString(),
-    operationalResetVersion: 9,
+    operationalResetVersion: 10,
     fullReset: true,
     wipeNotas: true,
     arquivosMensais: [],
@@ -129,6 +129,27 @@ async function resetOperacional(cnpj) {
   if (error) throw new Error(error.message);
 }
 
+async function zerarMensalidadeConfigCooperativa(cnpj) {
+  const digits = normalizeCnpj(cnpj);
+  const { error } = await supabase
+    .from("cooperativas")
+    .update({
+      mensalidade_config: {
+        valorPadrao: 0,
+        diaVencimento: 10,
+        diaLembrete: 9,
+        gerarAutomaticamente: false,
+        mesesCobranca: [],
+        lembreteAtivo: false,
+      },
+      updated_at: new Date().toISOString(),
+    })
+    .eq("cnpj", digits);
+  if (error) {
+    console.warn(`Aviso: mensalidade_config não zerada para ${digits}:`, error.message);
+  }
+}
+
 const cnpjs = await listCnpjs();
 if (cnpjs.length === 0) {
   console.log("Nenhuma cooperativa encontrada na nuvem.");
@@ -138,7 +159,8 @@ if (cnpjs.length === 0) {
 for (const cnpj of cnpjs) {
   const notas = await deleteAllNotas(cnpj);
   await resetOperacional(cnpj);
-  console.log(`CNPJ ${cnpj}: ${notas} entrega(s) removida(s), operacional zerado.`);
+  await zerarMensalidadeConfigCooperativa(cnpj);
+  console.log(`CNPJ ${cnpj}: ${notas} entrega(s) removida(s), operacional e mensalidades zerados (cadastros mantidos).`);
 }
 
-console.log("Limpeza na nuvem concluída.");
+console.log("Limpeza na nuvem concluída (v10). Cadastros de cooperados preservados.");

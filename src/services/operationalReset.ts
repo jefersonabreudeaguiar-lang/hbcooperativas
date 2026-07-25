@@ -3,7 +3,7 @@ import { normalizeCnpj } from "@/utils/cooperativa";
 import { clearNotasSyncMeta } from "@/services/syncMetaService";
 
 /** Incremente ao publicar uma limpeza global de lançamentos nos dispositivos. */
-export const OPERATIONAL_RESET_VERSION = 9;
+export const OPERATIONAL_RESET_VERSION = 10;
 
 export const OPERATIONAL_RESET_STORAGE_KEY = "coopeagriplla_operational_reset_v";
 export const OPERATIONAL_RESET_CLOUD_KEY = "coopeagriplla_operational_reset_cloud_v";
@@ -40,6 +40,18 @@ function markCloudResetApplied(cnpj: string, version: number): void {
 export function clearOperationalData(data: AppData): AppData {
   return {
     ...data,
+    cooperativas: data.cooperativas.map((c) => ({
+      ...c,
+      mensalidadeConfig: c.mensalidadeConfig
+        ? {
+            ...c.mensalidadeConfig,
+            valorPadrao: 0,
+            gerarAutomaticamente: false,
+            mesesCobranca: [],
+            lembreteAtivo: false,
+          }
+        : c.mensalidadeConfig,
+    })),
     notasPedido: [],
     fichaCorrida: [],
     pagamentosCooperado: [],
@@ -57,6 +69,7 @@ export function clearOperationalData(data: AppData): AppData {
     prestacoesContas: [],
     prestacoesContasExcluidas: [],
     comunicados: [],
+    reclamacoes: [],
     auditLog: [],
   };
 }
@@ -73,6 +86,22 @@ export function clearOperationalDataForCooperativa(data: AppData, coopId: string
 
   return {
     ...data,
+    cooperativas: data.cooperativas.map((c) =>
+      c.id === coopId
+        ? {
+            ...c,
+            mensalidadeConfig: c.mensalidadeConfig
+              ? {
+                  ...c.mensalidadeConfig,
+                  valorPadrao: 0,
+                  gerarAutomaticamente: false,
+                  mesesCobranca: [],
+                  lembreteAtivo: false,
+                }
+              : c.mensalidadeConfig,
+          }
+        : c
+    ),
     notasPedido: data.notasPedido.filter((n) => n.cooperativaId !== coopId),
     fichaCorrida: data.fichaCorrida.filter((f) => !cooperadoIds.has(f.cooperadoId)),
     pagamentosCooperado: data.pagamentosCooperado.filter((p) => !belongsToCoop(p)),
@@ -90,6 +119,7 @@ export function clearOperationalDataForCooperativa(data: AppData, coopId: string
     prestacoesContas: (data.prestacoesContas ?? []).filter((p) => !belongsToCoop(p)),
     prestacoesContasExcluidas: (data.prestacoesContasExcluidas ?? []).filter((e) => !belongsToCoop(e)),
     comunicados: data.comunicados.filter((c) => !belongsToCoop(c)),
+    reclamacoes: (data.reclamacoes ?? []).filter((r) => r.cooperativaId !== coopId),
   };
 }
 

@@ -41,7 +41,7 @@ const supabase = createClient(url, serviceKey, {
 const ENTREGAS_BUCKET = "hb-entregas";
 const SYNC_BUCKET = "hb-cooperativa-sync";
 const COOPERADOS_BUCKET = "hb-cooperados";
-const OPERATIONAL_RESET_VERSION = 9;
+const OPERATIONAL_RESET_VERSION = 10;
 
 function normalizeCnpj(value) {
   return String(value ?? "").replace(/\D/g, "");
