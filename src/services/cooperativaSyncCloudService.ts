@@ -817,13 +817,13 @@ export async function syncCooperativaProfileFromCloud(cnpj: string): Promise<boo
 
 /** Intervalo padrão de sincronização automática (ms). */
 export const SYNC_INTERVAL_MS = 12_000;
-/** Celular: sync mais frequente para status de entregas e valores. */
-export const SYNC_INTERVAL_MOBILE_MS = 90_000;
-/** Desktop: sync moderado. */
-export const SYNC_INTERVAL_DESKTOP_MS = 60_000;
+/** Celular: sync espaçado para reduzir Edge Requests na Vercel. */
+export const SYNC_INTERVAL_MOBILE_MS = 5 * 60_000;
+/** Desktop: sync espaçado. */
+export const SYNC_INTERVAL_DESKTOP_MS = 4 * 60_000;
 /** Intervalo mínimo entre duas sincronizações completas. */
-export const SYNC_MIN_GAP_MS = 15_000;
-export const SYNC_MIN_GAP_MOBILE_MS = 25_000;
+export const SYNC_MIN_GAP_MS = 90_000;
+export const SYNC_MIN_GAP_MOBILE_MS = 2 * 60_000;
 
 export function isMobileDevice(): boolean {
   if (typeof window === "undefined") return false;

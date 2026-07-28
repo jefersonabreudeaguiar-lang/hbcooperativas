@@ -30,7 +30,7 @@ import { compactarFotosNoArmazenamento, contarFotosEnviadasNota } from "@/utils/
 import { isDiretoriaRole } from "@/permissions";
 import type { UserRole } from "@/types";
 
-const COOPERADO_PUSH_GAP_MS = 3 * 60 * 1000;
+const COOPERADO_PUSH_GAP_MS = 5 * 60 * 1000;
 
 /** Sincronização automática — leve no celular do cooperado. */
 export function CooperativaSyncProvider({ children }: { children: React.ReactNode }) {
