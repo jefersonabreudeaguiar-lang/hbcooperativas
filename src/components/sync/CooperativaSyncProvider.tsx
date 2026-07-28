@@ -195,7 +195,6 @@ export function CooperativaSyncProvider({ children }: { children: React.ReactNod
 
     const onVisible = () => {
       if (document.visibilityState === "visible") {
-        lastSyncAtRef.current = 0;
         startSync();
       }
     };
