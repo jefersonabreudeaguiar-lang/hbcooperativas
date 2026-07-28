@@ -23,6 +23,12 @@ import {
 } from "@/services/cooperativaSyncCloudService";
 import { pushCooperadoToCloud, resolverCooperadoIdCanonico, flushPendingCooperadoPushes } from "@/services/cooperadoCloudService";
 import { registerSyncHandler } from "@/services/syncRequest";
+import {
+  isAppIdle,
+  markUserActivity,
+  onAppIdleChange,
+  startIdleMonitor,
+} from "@/services/idleActivity";
 import { getData, updateDataSafe } from "@/services/dataStore";
 import { getCooperadoNome } from "@/utils/calculations";
 import { readNotaFotoAtIndex, resolveNotaFotosForUpload } from "@/services/localMediaStore";
@@ -32,12 +38,13 @@ import type { UserRole } from "@/types";
 
 const COOPERADO_PUSH_GAP_MS = 5 * 60 * 1000;
 
-/** Sincronização automática — leve no celular do cooperado. */
+/** Sincronização automática — pausa na ociosidade; volta ao abrir/usar o app. */
 export function CooperativaSyncProvider({ children }: { children: React.ReactNode }) {
   const { user } = useAuth();
   const syncingRef = useRef(false);
   const lastSyncAtRef = useRef(0);
   const lastCooperadoPushRef = useRef(0);
+  const intervalIdRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const userRef = useRef(user);
   userRef.current = user;
 
@@ -46,10 +53,11 @@ export function CooperativaSyncProvider({ children }: { children: React.ReactNod
       ? getUserCooperativaId(user, getData())
       : user?.cooperativaId;
 
-  const runSync = useCallback(async () => {
+  const runSync = useCallback(async (opts?: { force?: boolean }) => {
     const currentUser = userRef.current;
     if (!currentUser || syncingRef.current) return;
     if (typeof document !== "undefined" && document.hidden) return;
+    if (!opts?.force && isAppIdle()) return;
 
     const data = getData();
     const currentCoopId = getUserCooperativaId(currentUser, data);
@@ -179,31 +187,68 @@ export function CooperativaSyncProvider({ children }: { children: React.ReactNod
   useEffect(() => {
     if (!user?.id || !coopId) return;
 
-    const unregister = registerSyncHandler(() => {
-      if (document.hidden) return;
-      void runSync();
-    });
+    const stopIdle = startIdleMonitor();
 
-    const startSync = () => {
-      if (document.hidden) return;
-      void runSync();
+    const clearAutoInterval = () => {
+      if (intervalIdRef.current) {
+        clearInterval(intervalIdRef.current);
+        intervalIdRef.current = null;
+      }
     };
 
-    const initialDelay = setTimeout(startSync, 800);
+    const startAutoInterval = () => {
+      if (intervalIdRef.current || isAppIdle()) return;
+      intervalIdRef.current = setInterval(() => {
+        if (document.hidden || isAppIdle()) return;
+        void runSync();
+      }, getSyncIntervalMs());
+    };
 
-    const intervalId = setInterval(startSync, getSyncIntervalMs());
+    const wakeAndSync = () => {
+      markUserActivity();
+      clearAutoInterval();
+      startAutoInterval();
+      void runSync({ force: true });
+    };
+
+    const unregister = registerSyncHandler(() => {
+      if (document.hidden) return;
+      markUserActivity();
+      void runSync({ force: true });
+    });
+
+    const initialDelay = setTimeout(() => {
+      if (!isAppIdle()) {
+        startAutoInterval();
+        void runSync({ force: true });
+      }
+    }, 800);
+
+    const unsubIdle = onAppIdleChange((nowIdle) => {
+      if (nowIdle) {
+        clearAutoInterval();
+        return;
+      }
+      // Acordou: usuário abriu/usou o app de novo
+      startAutoInterval();
+      void runSync({ force: true });
+    });
 
     const onVisible = () => {
       if (document.visibilityState === "visible") {
-        startSync();
+        wakeAndSync();
+      } else {
+        clearAutoInterval();
       }
     };
     document.addEventListener("visibilitychange", onVisible);
 
     return () => {
       unregister();
+      unsubIdle();
+      stopIdle();
       clearTimeout(initialDelay);
-      clearInterval(intervalId);
+      clearAutoInterval();
       document.removeEventListener("visibilitychange", onVisible);
     };
   }, [coopId, user?.id, runSync]);

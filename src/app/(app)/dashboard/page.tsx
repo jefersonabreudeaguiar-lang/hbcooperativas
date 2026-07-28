@@ -52,11 +52,6 @@ function CooperadoDashboard() {
 
   useEffect(() => {
     requestAppSync();
-    const onVisible = () => {
-      if (document.visibilityState === "visible") requestAppSync();
-    };
-    document.addEventListener("visibilitychange", onVisible);
-    return () => document.removeEventListener("visibilitychange", onVisible);
   }, []);
 
   const view = useAppDataSelector((data) => {
