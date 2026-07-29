@@ -1,6 +1,14 @@
 "use client";
 
-import { useCallback, useEffect, useRef } from "react";
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { useAuth } from "@/modules/auth/AuthProvider";
 import { getUserCooperativaId, normalizeCnpj } from "@/utils/cooperativa";
 import {
@@ -37,6 +45,21 @@ import type { UserRole } from "@/types";
 
 const COOPERADO_PUSH_GAP_MS = 5 * 60 * 1000;
 
+export type SyncStatusValue = {
+  syncing: boolean;
+  /** Timestamp da última sync concluída (sucesso ou tentativa com fim). */
+  lastSyncedAt: number | null;
+};
+
+const SyncStatusContext = createContext<SyncStatusValue>({
+  syncing: false,
+  lastSyncedAt: null,
+});
+
+export function useSyncStatus(): SyncStatusValue {
+  return useContext(SyncStatusContext);
+}
+
 /**
  * Sync sob demanda (pacote economia Edge Requests):
  * — ao abrir o app / voltar para a aba
@@ -47,10 +70,13 @@ const COOPERADO_PUSH_GAP_MS = 5 * 60 * 1000;
 export function CooperativaSyncProvider({ children }: { children: React.ReactNode }) {
   const { user } = useAuth();
   const syncingRef = useRef(false);
-  const lastSyncAtRef = useRef(0);
+  const lastSyncStartedAtRef = useRef(0);
   const lastCooperadoPushRef = useRef(0);
   const userRef = useRef(user);
   userRef.current = user;
+
+  const [syncing, setSyncing] = useState(false);
+  const [lastSyncedAt, setLastSyncedAt] = useState<number | null>(null);
 
   const coopId =
     user && typeof window !== "undefined"
@@ -68,10 +94,12 @@ export function CooperativaSyncProvider({ children }: { children: React.ReactNod
     if (!currentCoopId) return;
 
     const now = Date.now();
-    if (now - lastSyncAtRef.current < getSyncMinGapMs()) return;
-    lastSyncAtRef.current = now;
+    if (now - lastSyncStartedAtRef.current < getSyncMinGapMs()) return;
+    lastSyncStartedAtRef.current = now;
 
     syncingRef.current = true;
+    setSyncing(true);
+    let completed = false;
     try {
       const cnpj = await resolveCooperativaCnpj(data, currentCoopId, currentUser);
       if (!cnpj) return;
@@ -183,8 +211,11 @@ export function CooperativaSyncProvider({ children }: { children: React.ReactNod
           );
         }
       }
+      completed = true;
     } finally {
       syncingRef.current = false;
+      setSyncing(false);
+      if (completed) setLastSyncedAt(Date.now());
     }
   }, []);
 
@@ -199,7 +230,6 @@ export function CooperativaSyncProvider({ children }: { children: React.ReactNod
       void runSync({ force: true });
     });
 
-    // Abriu o app: um sync inicial
     const initialDelay = setTimeout(() => {
       if (!document.hidden) {
         markUserActivity();
@@ -207,14 +237,12 @@ export function CooperativaSyncProvider({ children }: { children: React.ReactNod
       }
     }, 800);
 
-    // Voltou da ociosidade (tocou de novo): sync uma vez — sem interval
     const unsubIdle = onAppIdleChange((nowIdle) => {
       if (nowIdle) return;
       if (document.hidden) return;
       void runSync({ force: true });
     });
 
-    // Voltou para a aba: sync uma vez
     const onVisible = () => {
       if (document.visibilityState === "visible") {
         markUserActivity();
@@ -232,5 +260,12 @@ export function CooperativaSyncProvider({ children }: { children: React.ReactNod
     };
   }, [coopId, user?.id, runSync]);
 
-  return <>{children}</>;
+  const status = useMemo(
+    () => ({ syncing, lastSyncedAt }),
+    [syncing, lastSyncedAt]
+  );
+
+  return (
+    <SyncStatusContext.Provider value={status}>{children}</SyncStatusContext.Provider>
+  );
 }

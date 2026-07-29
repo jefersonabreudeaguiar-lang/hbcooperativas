@@ -40,6 +40,7 @@ import { formatCurrency, formatDate, formatMesReferencia, getCurrentMesReferenci
 import { getCooperadoNome } from "@/utils/calculations";
 import { getRelatorioReclamacoes } from "@/services/reclamacaoService";
 import { labelUnidade } from "@/utils/unidades";
+import { PageSkeleton } from "@/components/ui/PageSkeleton";
 
 const RELATORIOS = [
   { id: "resumo_financeiro", label: "Resumo Financeiro Mensal" },
@@ -364,7 +365,7 @@ export default function RelatoriosPage() {
     setModalEmissao("print");
   };
 
-  if (!data || !user) return null;
+  if (!data || !user) return <PageSkeleton />;
   if (!check("relatorios", "view")) return null;
 
   const renderRelatorio = () => {

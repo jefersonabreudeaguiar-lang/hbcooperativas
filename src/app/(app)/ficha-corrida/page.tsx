@@ -46,6 +46,7 @@ import { AlertBanner } from "@/components/ui/AlertBanner";
 import { PixQrModal } from "@/components/pix/PixQrModal";
 import { ConfirmDialog, PromptDialog } from "@/components/ui/ConfirmDialog";
 import { SignaturePad } from "@/components/ui/SignaturePad";
+import { PageSkeleton } from "@/components/ui/PageSkeleton";
 import { ReciboResumoView } from "@/components/ficha/ReciboResumoView";
 import { ResumoDescontosMes } from "@/components/ficha/ResumoDescontosMes";
 import { DivisaoEntregaModal } from "@/components/ficha/DivisaoEntregaModal";
@@ -700,7 +701,7 @@ export default function FichaCorridaPage() {
     void baixarRecibo(pg.reciboHtml, nomeArquivoRecibo(pg.mesReferencia, nomeCooperado || "cooperado"));
   };
 
-  if (!data) return null;
+  if (!data) return <PageSkeleton />;
 
   const pixOk = cooperadoSelecionado && !cooperadoPrecisaCadastrarPix(cooperadoSelecionado.chavePix, cooperadoSelecionado.pixValido);
   const mostrarPagar = isCooperado || aba === "pagar";
@@ -708,11 +709,11 @@ export default function FichaCorridaPage() {
   return (
     <div>
       <PageHeader
-        title={isCooperado ? "Quanto vou receber" : "Ficha corrida dos cooperados"}
+        title={isCooperado ? "Quanto vou receber" : "Pagar cooperados"}
         subtitle={
           isCooperado
             ? "Mês em aberto com valores pendentes — meses pagos ficam nas abas ao lado"
-            : "Total consolidado das entregas por cooperado; em Pagar fica só o valor e o PIX"
+            : "Ficha consolidada das entregas; na aba Pagar fica o valor e o PIX"
         }
       />
 
@@ -823,14 +824,14 @@ export default function FichaCorridaPage() {
             onClick={() => setAba("ficha")}
             className={`px-4 py-2.5 text-sm font-medium border-b-2 -mb-px flex items-center gap-2 ${aba === "ficha" ? "border-green-600 text-green-700" : "border-transparent text-gray-500 hover:text-gray-700"}`}
           >
-            <BookOpen size={16} /> Ficha corrida
+            <BookOpen size={16} /> Ficha
           </button>
           <button
             type="button"
             onClick={() => setAba("pagar")}
             className={`px-4 py-2.5 text-sm font-medium border-b-2 -mb-px flex items-center gap-2 ${aba === "pagar" ? "border-green-600 text-green-700" : "border-transparent text-gray-500 hover:text-gray-700"}`}
           >
-            <CreditCard size={16} /> Pagar cooperado
+            <CreditCard size={16} /> Pagar
             {cooperadosParaPagar.length > 0 && (
               <span className="bg-amber-500 text-white text-xs font-bold px-1.5 py-0.5 rounded-full">
                 {cooperadosParaPagar.length}
@@ -867,7 +868,7 @@ export default function FichaCorridaPage() {
       {!isCooperado && aba === "pagar" && cooperadosParaPagar.length === 0 && (
         <AlertBanner variant="success" className="mb-6" title="Nenhum pagamento pendente">
           Todos os cooperados com valor neste mês já tiveram pagamento registrado. Acompanhe assinaturas e histórico na aba{" "}
-          <strong>Ficha corrida</strong>.
+          <strong>Ficha</strong>.
         </AlertBanner>
       )}
 

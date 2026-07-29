@@ -32,19 +32,7 @@ import { formatCurrency, formatMesReferencia, getCurrentMesReferencia } from "@/
 import { getUserCooperativaId, getUserCooperativaNome } from "@/utils/cooperativa";
 import { Camera, Wallet, ClipboardList, Users, AlertCircle } from "lucide-react";
 import { requestAppSync } from "@/services/syncRequest";
-
-function DashboardSkeleton() {
-  return (
-    <div className="space-y-6 animate-pulse">
-      <div className="h-8 w-56 bg-gray-200 rounded-lg" />
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-        <div className="h-28 bg-white rounded-xl border border-gray-200" />
-        <div className="h-28 bg-white rounded-xl border border-gray-200" />
-      </div>
-      <div className="h-36 bg-white rounded-xl border border-gray-200" />
-    </div>
-  );
-}
+import { PageSkeleton } from "@/components/ui/PageSkeleton";
 
 function CooperadoDashboard() {
   const { user } = useAuth();
@@ -108,7 +96,7 @@ function CooperadoDashboard() {
     };
   }, [user?.id, user?.cooperadoId, user?.cooperativaId]);
 
-  if (!view) return <DashboardSkeleton />;
+  if (!view) return <PageSkeleton />;
 
   const {
     cooperadoId,
@@ -206,7 +194,7 @@ function AdminDashboard() {
     return { stats, coopNome, pendentes, mes: getCurrentMesReferencia() };
   }, [user?.id, user?.cooperativaId, user?.role]);
 
-  if (!view) return <DashboardSkeleton />;
+  if (!view) return <PageSkeleton />;
 
   const { stats, coopNome, pendentes, mes } = view;
 

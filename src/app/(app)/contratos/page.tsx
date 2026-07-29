@@ -21,6 +21,7 @@ import { sortPorOrdemLancamento } from "@/utils/produtos";
 import type { AppData, Instituicao, InstituicaoTipo, ProdutoInstituicao } from "@/types";
 import { CONTRATO_PNAE_PADRAO_NOME } from "@/utils/contratosEntrega";
 import { ContratosCronogramasPanel } from "@/components/contratos/ContratosCronogramasPanel";
+import { PageSkeleton } from "@/components/ui/PageSkeleton";
 
 export default function ContratosPage() {
   const data = useAppData();
@@ -222,7 +223,7 @@ export default function ContratosPage() {
     }
   };
 
-  if (!data) return null;
+  if (!data) return <PageSkeleton />;
 
   const semItens = instituicoes.filter((i) => (produtosPorInst.get(i.id)?.length ?? 0) === 0);
 

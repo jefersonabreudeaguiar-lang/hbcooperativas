@@ -18,6 +18,7 @@ import {
   getRelatorioReclamacoes,
 } from "@/services/reclamacaoService";
 import { formatDate } from "@/utils/format";
+import { PageSkeleton } from "@/components/ui/PageSkeleton";
 
 const FORM_VAZIO = () => ({
   cooperadoId: "",
@@ -116,7 +117,7 @@ export default function ReclamacoesPage() {
     });
   };
 
-  if (!data || !user) return null;
+  if (!data || !user) return <PageSkeleton />;
   if (!check("reclamacoes", "view")) return null;
 
   return (

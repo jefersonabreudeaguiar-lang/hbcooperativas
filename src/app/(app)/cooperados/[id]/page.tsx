@@ -10,6 +10,7 @@ import { getUserCooperativaId } from "@/utils/cooperativa";
 import { PageHeader } from "@/components/ui/Table";
 import { Button } from "@/components/ui/Button";
 import { CooperadoFichaPanel } from "@/components/cooperado/CooperadoFichaPanel";
+import { PageSkeleton } from "@/components/ui/PageSkeleton";
 
 export default function CooperadoFichaPage() {
   const params = useParams();
@@ -26,7 +27,7 @@ export default function CooperadoFichaPage() {
   const coopId = user && data ? getUserCooperativaId(user, data) : undefined;
   const acessoOk = cooperado && (!coopId || cooperado.cooperativaId === coopId) && !isCooperado;
 
-  if (!data) return null;
+  if (!data) return <PageSkeleton />;
 
   if (!cooperado || !acessoOk) {
     return (

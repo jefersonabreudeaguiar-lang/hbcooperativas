@@ -20,6 +20,7 @@ import {
   contarItensCatalogo,
 } from "@/services/catalogoContratosService";
 import { getData } from "@/services/dataStore";
+import { PageSkeleton } from "@/components/ui/PageSkeleton";
 
 export default function PrecosPage() {
   const data = useAppData();
@@ -65,7 +66,7 @@ export default function PrecosPage() {
     );
   }, [instSelecionada, produtosDaCoop, busca]);
 
-  if (!data) return null;
+  if (!data) return <PageSkeleton />;
 
   const instComItens = instituicoes.filter((i) =>
     produtosDaCoop.some((p) => p.instituicaoId === i.id)

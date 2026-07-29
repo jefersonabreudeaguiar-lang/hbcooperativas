@@ -2347,16 +2347,16 @@ export default function NotasPedidoContent() {
 
       {!isCooperado && instituicoes.length === 0 && (
         <AlertBanner variant="warning" className="mb-6" title="Publique um contrato com itens e preços">
-          Para conferir entregas, cadastre o contrato em{" "}
-          <Link href="/contratos" className="font-semibold underline">Contratos</Link>{" "}
-          e defina ao menos um item ativo com preço em{" "}
-          <Link href="/precos" className="font-semibold underline">Preços</Link>.
+          Para conferir entregas, cadastre instituições, itens e preços em{" "}
+          <Link href="/contratos" className="font-semibold underline">Contratos</Link>
+          {" "}e publique para os cooperados.
         </AlertBanner>
       )}
 
       {isCooperado && contratosEntrega.length === 0 && (
         <AlertBanner variant="warning" className="mb-6" title="Aguardando contrato da cooperativa">
-          O responsável ainda não publicou um contrato com itens e preços. Aguarde a sincronização ou fale com a cooperativa.
+          O responsável ainda não publicou um contrato com itens e preços. Veja o status no topo
+          (“Atualizando…” / “Atualizado”) ou fale com a cooperativa.
         </AlertBanner>
       )}
 

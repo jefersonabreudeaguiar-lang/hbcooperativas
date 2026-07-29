@@ -15,6 +15,7 @@ import { getMenuItems, getMobileNavItems, getCooperadoDrawerMenuItems, getUserFu
 import { getUserCooperativaNome } from "@/utils/cooperativa";
 import { PLATFORM_NAME, PLATFORM_TAGLINE } from "@/utils/constants";
 import { AppIcon } from "@/components/ui/AppIcon";
+import { SyncStatusChip, SyncStatusChipLight } from "@/components/sync/SyncStatusChip";
 import { cn } from "@/utils/format";
 import type { Resource } from "@/types";
 
@@ -160,11 +161,14 @@ export function MobileNav() {
 
   return (
     <>
-      <header className="lg:hidden flex items-center justify-between px-4 py-3 bg-green-900 text-white sticky top-0 z-40">
+      <header className="lg:hidden flex items-center justify-between gap-2 px-4 py-3 bg-green-900 text-white sticky top-0 z-40">
         <BrandHeader compact />
-        <button onClick={() => setOpen(true)} className="p-2 hover:bg-green-800 rounded-lg shrink-0" aria-label="Abrir menu">
-          <Menu size={22} />
-        </button>
+        <div className="flex items-center gap-1.5 shrink-0">
+          <SyncStatusChip />
+          <button onClick={() => setOpen(true)} className="p-2 hover:bg-green-800 rounded-lg" aria-label="Abrir menu">
+            <Menu size={22} />
+          </button>
+        </div>
       </header>
 
       {open && (
@@ -230,6 +234,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
         <MobileNav />
         <main className="flex-1 overflow-y-auto p-4 lg:p-6 pb-28 lg:pb-6">
+          <div className="hidden lg:flex justify-end mb-3">
+            <SyncStatusChipLight />
+          </div>
           {children}
         </main>
       </div>

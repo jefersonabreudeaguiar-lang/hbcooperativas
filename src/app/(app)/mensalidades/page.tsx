@@ -13,6 +13,7 @@ import { Select, FormField } from "@/components/ui/Form";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import { Card } from "@/components/ui/Card";
 import { AlertBanner } from "@/components/ui/AlertBanner";
+import { PageSkeleton } from "@/components/ui/PageSkeleton";
 import { PixQrModal } from "@/components/pix/PixQrModal";
 import { updateData, addAuditEntry, getData } from "@/services/dataStore";
 import { resolveCooperativaCnpj } from "@/services/notaPedidoCloudService";
@@ -279,7 +280,7 @@ function MensalidadesContent() {
     pushOperacional();
   };
 
-  if (!data) return null;
+  if (!data) return <PageSkeleton />;
 
   const cfgOk =
     cooperativa?.mensalidadeConfig?.gerarAutomaticamente &&

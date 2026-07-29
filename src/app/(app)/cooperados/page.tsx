@@ -18,6 +18,7 @@ import { pushOperacionalToCloud } from "@/services/cooperativaSyncCloudService";
 import { resolveCooperativaCnpj } from "@/services/notaPedidoCloudService";
 import { getStatusCotaCooperado, setCotaIngressoCooperado } from "@/services/notaPedidoService";
 import type { Cooperado, CooperadoStatus } from "@/types";
+import { PageSkeleton } from "@/components/ui/PageSkeleton";
 
 export default function CooperadosPage() {
   const data = useAppData();
@@ -149,7 +150,7 @@ export default function CooperadosPage() {
     })();
   };
 
-  if (!data) return null;
+  if (!data) return <PageSkeleton />;
 
   return (
     <div>
