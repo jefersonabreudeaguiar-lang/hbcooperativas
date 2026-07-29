@@ -14,7 +14,6 @@ import {
   syncOfflineDeliveryImages,
 } from "@/services/notaPedidoCloudService";
 import {
-  getSyncIntervalMs,
   getSyncMinGapMs,
   isMobileDevice,
   pushCooperadoOperacionalToCloud,
@@ -38,13 +37,18 @@ import type { UserRole } from "@/types";
 
 const COOPERADO_PUSH_GAP_MS = 5 * 60 * 1000;
 
-/** Sincronização automática — pausa na ociosidade; volta ao abrir/usar o app. */
+/**
+ * Sync sob demanda (pacote economia Edge Requests):
+ * — ao abrir o app / voltar para a aba
+ * — ao acordar da ociosidade (usuário mexeu de novo)
+ * — após ações (requestAppSync)
+ * Sem intervalo periódico enquanto o app fica aberto.
+ */
 export function CooperativaSyncProvider({ children }: { children: React.ReactNode }) {
   const { user } = useAuth();
   const syncingRef = useRef(false);
   const lastSyncAtRef = useRef(0);
   const lastCooperadoPushRef = useRef(0);
-  const intervalIdRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const userRef = useRef(user);
   userRef.current = user;
 
@@ -189,56 +193,32 @@ export function CooperativaSyncProvider({ children }: { children: React.ReactNod
 
     const stopIdle = startIdleMonitor();
 
-    const clearAutoInterval = () => {
-      if (intervalIdRef.current) {
-        clearInterval(intervalIdRef.current);
-        intervalIdRef.current = null;
-      }
-    };
-
-    const startAutoInterval = () => {
-      if (intervalIdRef.current || isAppIdle()) return;
-      intervalIdRef.current = setInterval(() => {
-        if (document.hidden || isAppIdle()) return;
-        void runSync();
-      }, getSyncIntervalMs());
-    };
-
-    const wakeAndSync = () => {
-      markUserActivity();
-      clearAutoInterval();
-      startAutoInterval();
-      void runSync({ force: true });
-    };
-
     const unregister = registerSyncHandler(() => {
       if (document.hidden) return;
       markUserActivity();
       void runSync({ force: true });
     });
 
+    // Abriu o app: um sync inicial
     const initialDelay = setTimeout(() => {
-      if (!isAppIdle()) {
-        startAutoInterval();
+      if (!document.hidden) {
+        markUserActivity();
         void runSync({ force: true });
       }
     }, 800);
 
+    // Voltou da ociosidade (tocou de novo): sync uma vez — sem interval
     const unsubIdle = onAppIdleChange((nowIdle) => {
-      if (nowIdle) {
-        clearAutoInterval();
-        return;
-      }
-      // Acordou: usuário abriu/usou o app de novo
-      startAutoInterval();
+      if (nowIdle) return;
+      if (document.hidden) return;
       void runSync({ force: true });
     });
 
+    // Voltou para a aba: sync uma vez
     const onVisible = () => {
       if (document.visibilityState === "visible") {
-        wakeAndSync();
-      } else {
-        clearAutoInterval();
+        markUserActivity();
+        void runSync({ force: true });
       }
     };
     document.addEventListener("visibilitychange", onVisible);
@@ -248,7 +228,6 @@ export function CooperativaSyncProvider({ children }: { children: React.ReactNod
       unsubIdle();
       stopIdle();
       clearTimeout(initialDelay);
-      clearAutoInterval();
       document.removeEventListener("visibilitychange", onVisible);
     };
   }, [coopId, user?.id, runSync]);
