@@ -87,13 +87,17 @@ function baseData(): AppData {
 
 function mensalidadePendente(): Mensalidade {
   const now = new Date().toISOString();
+  const future = new Date();
+  future.setMonth(future.getMonth() + 1);
+  const mes = `${future.getFullYear()}-${String(future.getMonth() + 1).padStart(2, "0")}`;
+  const vencimento = `${mes}-28`;
   return {
     id: "mens-1",
     cooperadoId: COOPERADO_ID,
     cooperativaId: COOP_ID,
-    mesReferencia: "2026-07",
+    mesReferencia: mes,
     valor: 50,
-    vencimento: "2026-07-10",
+    vencimento,
     status: "pendente",
     cooperadoNomeSnapshot: COOPERADO_NOME,
     createdAt: now,
@@ -163,7 +167,7 @@ console.log("=== Simulação sync cooperado ↔ responsável ===\n");
   };
   const coopDevice = baseData();
   const merged = mergeOperacionalIntoData(coopDevice, cloud, COOP_ID, coopDevice.cooperados);
-  const m = merged.mensalidades.find((x) => x.mesReferencia === "2026-07");
+  const m = merged.mensalidades.find((x) => x.id === "mens-1");
   assert("Cooperado recebe mensalidade do responsável", Boolean(m));
   assert("Status pendente preservado", m?.status === "pendente");
 }
@@ -192,7 +196,11 @@ console.log("=== Simulação sync cooperado ↔ responsável ===\n");
   );
 
   respData = confirmarPagamentoMensalidade(respData, "mens-1", "u-resp");
-  assert("Responsável confirma → paga", respData.mensalidades[0]?.status === "paga");
+  assert("Responsável confirma → paga", respData !== null && respData.mensalidades[0]?.status === "paga");
+  if (!respData) {
+    console.log(`\n=== Resultado: ${passed} ok, ${failed} falha(s) ===`);
+    process.exit(1);
+  }
 
   const cloudConfirmado: OperacionalSyncPayload = {
     ...cloudResetVazio(),

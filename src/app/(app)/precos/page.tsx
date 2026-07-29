@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, useEffect } from "react";
+import { useMemo, useState } from "react";
 import { Search, Tag, RefreshCw } from "lucide-react";
 import { useAppData } from "@/hooks/useAppData";
 import { usePermissions } from "@/hooks/usePermissions";
@@ -41,12 +41,6 @@ export default function PrecosPage() {
       setSyncing(false);
     }
   };
-
-  useEffect(() => {
-    if (!data || !coopId || !user) return;
-    void runSync();
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [coopId, user?.id]);
 
   const instituicoes = useMemo(() => {
     if (!data || !coopId) return [];

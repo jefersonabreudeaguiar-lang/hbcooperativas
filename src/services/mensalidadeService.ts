@@ -809,7 +809,11 @@ export function sincronizarMensalidadeCooperativa(
 
   for (const coop of coops) {
     const meses = mesesCobrancaEfetivos(coop.mensalidadeConfig);
-    next = limparMensalidadesMesesDesmarcados(next, coop.id, meses);
+    // Só remove meses desmarcados quando há cobrança configurada.
+    // Sem meses marcados, limpar aqui apagaria cobranças vindas da nuvem no sync.
+    if (meses.length > 0) {
+      next = limparMensalidadesMesesDesmarcados(next, coop.id, meses);
+    }
     next = vincularMensalidadesCooperativa(next, coop.id);
   }
 

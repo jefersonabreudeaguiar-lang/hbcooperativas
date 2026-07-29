@@ -214,8 +214,7 @@ const DIRETORIA_MENU: { href: string; label: string; resource: Resource }[] = [
   { href: "/cotas", label: "Cotas", resource: "cotas" },
   { href: "/livro-caixa", label: "Livro caixa", resource: "livro_caixa" },
   { href: "/prestacao-contas", label: "Prestação de contas", resource: "prestacao_contas" },
-  { href: "/entregas", label: "Entregas (legado)", resource: "entregas" },
-  { href: "/pagamentos", label: "Pagamentos (legado)", resource: "pagamentos" },
+  // Entregas/Pagamentos legado removidos do menu — fluxo oficial: notas-pedido + ficha-corrida
   { href: "/descontos", label: "Descontos", resource: "descontos" },
   { href: "/financeiro", label: "Financeiro", resource: "financeiro" },
   { href: "/comunicados", label: "Comunicados", resource: "comunicados" },
