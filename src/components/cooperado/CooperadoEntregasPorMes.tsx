@@ -28,6 +28,7 @@ import {
 import { textoInformativoDivisaoEntrega, nomesParticipantesDivisao } from "@/services/divisaoEntregaService";
 import { useAppData } from "@/hooks/useAppData";
 import { NotaStatusBadge } from "@/components/ui/NotaStatusBadge";
+import { NotaStatusTimeline } from "@/components/notas/NotaStatusTimeline";
 import { Button } from "@/components/ui/Button";
 import { formatCurrency, formatDate, formatMesReferencia } from "@/utils/format";
 import { cn } from "@/utils/format";
@@ -215,6 +216,10 @@ function EntregaSemanaItem({
           {expandida ? <ChevronDown size={18} className="text-gray-400" /> : <ChevronRight size={18} className="text-gray-400" />}
         </div>
       </button>
+
+      <div className="px-4 pb-3" onClick={(e) => e.stopPropagation()}>
+        <NotaStatusTimeline status={status} valorLiquido={valores.valorLiquido} />
+      </div>
 
       {expandida && (
         <div className="border-t border-gray-100 px-4 pb-4 pt-3 space-y-4 bg-gray-50/50">

@@ -13,6 +13,7 @@ import { PageHeader, DataTable, FilterBar, Modal } from "@/components/ui/Table";
 import { Button } from "@/components/ui/Button";
 import { Input, Select, FormField, Textarea } from "@/components/ui/Form";
 import { NotaStatusBadge } from "@/components/ui/NotaStatusBadge";
+import { NotaStatusTimeline } from "@/components/notas/NotaStatusTimeline";
 import { AlertBanner } from "@/components/ui/AlertBanner";
 import { PromptDialog, ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { Card } from "@/components/ui/Card";
@@ -2192,6 +2193,11 @@ export default function NotasPedidoContent() {
           </div>
           <ChevronRight size={18} className="text-gray-300 shrink-0 self-center" />
         </div>
+        {isCooperado && (
+          <div className="mt-3 pt-3 border-t border-gray-100">
+            <NotaStatusTimeline status={n.status} valorLiquido={n.valorLiquido} />
+          </div>
+        )}
         {isCooperado && n.status === "rejeitada" && (
           <div className="flex flex-col gap-2 mt-3">
             <Button size="sm" className="w-full" variant="secondary" onClick={(e) => { e.stopPropagation(); openAnexar(n, { abrirCamera: true }); }}>
@@ -3550,6 +3556,9 @@ export default function NotasPedidoContent() {
         {selectedNota && (
           <div className="space-y-4">
             <NotaStatusBadge status={selectedNota.status} />
+            {isCooperado && (
+              <NotaStatusTimeline status={selectedNota.status} valorLiquido={selectedNota.valorLiquido} />
+            )}
             {isCooperado && (selectedNota.status === "conferida" || selectedNota.status === "pago") ? (
               <div className="space-y-3">
                 <p className="text-sm text-gray-600">

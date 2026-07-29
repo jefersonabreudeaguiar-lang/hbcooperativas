@@ -195,11 +195,10 @@ const COOPERADO_MENU: { href: string; label: string; resource: Resource }[] = [
   { href: "/ficha-corrida", label: "Quanto vou receber", resource: "ficha_corrida" },
   { href: "/mensalidades", label: "Mensalidades", resource: "mensalidades" },
   { href: "/meu-cadastro", label: "Meu cadastro", resource: "dashboard" },
+  { href: "/prestacao-contas", label: "Prestação de contas", resource: "prestacao_contas" },
 ];
 
-const COOPERADO_DRAWER_MENU: { href: string; label: string; resource: Resource }[] = [
-  { href: "/dashboard", label: "Início", resource: "dashboard" },
-  { href: "/meu-cadastro", label: "Meu cadastro", resource: "dashboard" },
+const COOPERADO_DRAWER_EXTRA: { href: string; label: string; resource: Resource }[] = [
   { href: "/prestacao-contas", label: "Prestação de contas", resource: "prestacao_contas" },
 ];
 
@@ -263,7 +262,17 @@ export function getMenuItems(user: PermissionSubject): { href: string; label: st
 
 export function getCooperadoDrawerMenuItems(user: PermissionSubject): { href: string; label: string; resource: Resource }[] {
   if (user.role !== "cooperado") return getMenuItems(user);
-  return filterMenuForUser(COOPERADO_DRAWER_MENU, user);
+  // Mesmos itens do bottom nav + Meu cadastro + Prestação (overflow do hamburger)
+  const mobileHrefs = new Set(
+    ["/dashboard", "/notas-pedido", "/precos", "/ficha-corrida", "/mensalidades"]
+  );
+  const fromMenu = COOPERADO_MENU.filter(
+    (i) => mobileHrefs.has(i.href) || i.href === "/meu-cadastro" || i.href === "/prestacao-contas"
+  );
+  // Garante Prestação mesmo se filtro de permissão mudar no futuro
+  const hasPrestacao = fromMenu.some((i) => i.href === "/prestacao-contas");
+  const merged = hasPrestacao ? fromMenu : [...fromMenu, ...COOPERADO_DRAWER_EXTRA];
+  return filterMenuForUser(merged, user);
 }
 
 export function getCooperadoExtraItems(): { href: string; label: string }[] {

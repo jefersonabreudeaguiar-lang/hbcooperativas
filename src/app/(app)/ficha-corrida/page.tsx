@@ -23,6 +23,7 @@ import {
   upsertAjustesFichaMesCooperativa,
   agregarItensFichaMes,
 } from "@/services/notaPedidoService";
+import { listarPagamentosAguardandoAssinatura } from "@/services/filaDoDiaService";
 import { listCooperadosComFichaNoMes, getCooperadoNomeResolvido, resolverCooperadoParaPagamento, fichaPertenceCooperado, listCooperadosDaCooperativa } from "@/services/cooperadoCloudService";
 import { resolveCooperativaCnpj, patchNotaPedidoInCloud } from "@/services/notaPedidoCloudService";
 import {
@@ -47,6 +48,7 @@ import { PixQrModal } from "@/components/pix/PixQrModal";
 import { ConfirmDialog, PromptDialog } from "@/components/ui/ConfirmDialog";
 import { SignaturePad } from "@/components/ui/SignaturePad";
 import { PageSkeleton } from "@/components/ui/PageSkeleton";
+import { PagarStepper } from "@/components/ficha/PagarStepper";
 import { ReciboResumoView } from "@/components/ficha/ReciboResumoView";
 import { ResumoDescontosMes } from "@/components/ficha/ResumoDescontosMes";
 import { DivisaoEntregaModal } from "@/components/ficha/DivisaoEntregaModal";
@@ -130,8 +132,11 @@ export default function FichaCorridaPage() {
   const searchParams = useSearchParams();
   const [mesFilter, setMesFilter] = useState(searchParams.get("mes") ?? getCurrentMesReferencia());
   const [cooperadoFilter, setCooperadoFilter] = useState(searchParams.get("cooperado") ?? "");
-  const [aba, setAba] = useState<"ficha" | "pagar">("ficha");
+  const [aba, setAba] = useState<"ficha" | "pagar">(
+    searchParams.get("aba") === "pagar" || searchParams.get("fila") === "assinaturas" ? "pagar" : "ficha"
+  );
   const [abaMesCooperado, setAbaMesCooperado] = useState<"aberto" | string>("aberto");
+  const [pixStepVisited, setPixStepVisited] = useState(false);
 
   useEffect(() => {
     if (!isCooperado) return;
@@ -141,9 +146,16 @@ export default function FichaCorridaPage() {
   useEffect(() => {
     const c = searchParams.get("cooperado");
     const m = searchParams.get("mes");
+    const a = searchParams.get("aba");
+    const fila = searchParams.get("fila");
     if (c && !isCooperado) setCooperadoFilter(c);
     if (m) setMesFilter(m);
+    if (!isCooperado && (a === "pagar" || fila === "assinaturas")) setAba("pagar");
   }, [searchParams, isCooperado]);
+
+  useEffect(() => {
+    setPixStepVisited(false);
+  }, [cooperadoFilter, mesFilter]);
 
   const [pixModalOpen, setPixModalOpen] = useState(false);
   const [confirmPagamento, setConfirmPagamento] = useState(false);
@@ -216,6 +228,11 @@ export default function FichaCorridaPage() {
       cooperadoPendentePagamentoResponsavel(data, c.id, mesAtivo, coopId)
     );
   }, [data, coopId, mesAtivo, cooperadosComFicha]);
+
+  const pagamentosAguardandoAssinatura = useMemo(() => {
+    if (!data || !coopId) return [];
+    return listarPagamentosAguardandoAssinatura(data, coopId, mesAtivo);
+  }, [data, coopId, mesAtivo]);
 
   const cooperadosNoSelect = !isCooperado && aba === "pagar" ? cooperadosParaPagar : cooperadosComFicha;
 
@@ -472,6 +489,14 @@ export default function FichaCorridaPage() {
   ]);
 
   const totalPendente = resumo?.valorLiquido ?? 0;
+
+  const pagarStep: 1 | 2 | 3 | 4 = pagamentoAguardando
+    ? 4
+    : confirmPagamento
+      ? 3
+      : pixStepVisited || pixModalOpen
+        ? 2
+        : 1;
   const totalExibido =
     visualizandoHistorico && pagamentoConfirmadoMes
       ? pagamentoConfirmadoMes.valorLiquido
@@ -645,8 +670,11 @@ export default function FichaCorridaPage() {
     })();
     setConfirmPagamento(false);
     setCooperadoFilter("");
-    setAba("ficha");
-    setPagoMsg(`Pagamento registrado! ${nomeCooperado.split(" ")[0]} foi notificado(a). Consulte a ficha corrida para acompanhar a assinatura.`);
+    setAba("pagar");
+    setPixStepVisited(false);
+    setPagoMsg(
+      `Pagamento registrado! ${nomeCooperado.split(" ")[0]} foi notificado(a). Aguardando assinatura do recibo — veja a lista abaixo.`
+    );
   };
 
   const handleEnviarAssinatura = () => {
@@ -832,12 +860,63 @@ export default function FichaCorridaPage() {
             className={`px-4 py-2.5 text-sm font-medium border-b-2 -mb-px flex items-center gap-2 ${aba === "pagar" ? "border-green-600 text-green-700" : "border-transparent text-gray-500 hover:text-gray-700"}`}
           >
             <CreditCard size={16} /> Pagar
-            {cooperadosParaPagar.length > 0 && (
+            {(cooperadosParaPagar.length > 0 || pagamentosAguardandoAssinatura.length > 0) && (
               <span className="bg-amber-500 text-white text-xs font-bold px-1.5 py-0.5 rounded-full">
-                {cooperadosParaPagar.length}
+                {cooperadosParaPagar.length + pagamentosAguardandoAssinatura.length}
               </span>
             )}
           </button>
+        </div>
+      )}
+
+      {!isCooperado && aba === "pagar" && (
+        <div className="mb-6 space-y-4">
+          {cooperadoSelecionadoId && !pagamentoAguardando && (
+            <PagarStepper currentStep={pagarStep} />
+          )}
+
+          {pagamentosAguardandoAssinatura.length > 0 && (
+            <Card
+              title={`Falta assinar (${pagamentosAguardandoAssinatura.length})`}
+              className="border-violet-200"
+            >
+              <p className="text-sm text-gray-600 mb-3">
+                Pagamento já registrado — o cooperado precisa abrir o app e confirmar o recibo.
+              </p>
+              <ul className="space-y-2">
+                {pagamentosAguardandoAssinatura.map((p) => {
+                  const nome = getCooperadoNomeResolvido(data!, p.cooperadoId, coopId);
+                  return (
+                    <li
+                      key={p.id}
+                      className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 rounded-xl border border-violet-100 bg-violet-50/50 px-3 py-2.5"
+                    >
+                      <div className="min-w-0">
+                        <p className="font-medium text-gray-900 truncate">{nome}</p>
+                        <p className="text-xs text-gray-500">
+                          {formatMesReferencia(p.mesReferencia)} · pago em {formatDate(p.pagoEm)}
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-2 shrink-0">
+                        <span className="text-sm font-bold text-violet-800">{formatCurrency(p.valorLiquido)}</span>
+                        <Button
+                          size="sm"
+                          variant="secondary"
+                          onClick={() => {
+                            setAba("ficha");
+                            setCooperadoFilter(p.cooperadoId);
+                            setMesFilter(p.mesReferencia);
+                          }}
+                        >
+                          <PenLine size={14} /> Ver ficha
+                        </Button>
+                      </div>
+                    </li>
+                  );
+                })}
+              </ul>
+            </Card>
+          )}
         </div>
       )}
 
@@ -865,10 +944,15 @@ export default function FichaCorridaPage() {
         />
       )}
 
-      {!isCooperado && aba === "pagar" && cooperadosParaPagar.length === 0 && (
+      {!isCooperado && aba === "pagar" && cooperadosParaPagar.length === 0 && pagamentosAguardandoAssinatura.length === 0 && (
         <AlertBanner variant="success" className="mb-6" title="Nenhum pagamento pendente">
-          Todos os cooperados com valor neste mês já tiveram pagamento registrado. Acompanhe assinaturas e histórico na aba{" "}
-          <strong>Ficha</strong>.
+          Todos os cooperados com valor neste mês já tiveram pagamento registrado e assinatura não está pendente.
+        </AlertBanner>
+      )}
+
+      {!isCooperado && aba === "pagar" && cooperadosParaPagar.length === 0 && pagamentosAguardandoAssinatura.length > 0 && (
+        <AlertBanner variant="info" className="mb-6" title="Só falta a assinatura">
+          Não há mais PIX a registrar neste mês. Acompanhe quem ainda não assinou na lista acima.
         </AlertBanner>
       )}
 
@@ -1185,13 +1269,25 @@ export default function FichaCorridaPage() {
                   </Button>
                 </div>
                 <div className="flex flex-col gap-3">
-                  <Button onClick={() => { salvarAjustesFicha(); setPixModalOpen(true); }} disabled={!pixOk || totalPendente <= 0} size="lg" className="w-full">
+                  <Button
+                    onClick={() => {
+                      salvarAjustesFicha();
+                      setPixStepVisited(true);
+                      setPixModalOpen(true);
+                    }}
+                    disabled={!pixOk || totalPendente <= 0}
+                    size="lg"
+                    className="w-full"
+                  >
                     <QrCode size={20} /> Gerar QR Code PIX
                   </Button>
                   <Button
                     size="lg"
                     className="w-full bg-green-600 hover:bg-green-700 text-white"
-                    onClick={() => setConfirmPagamento(true)}
+                    onClick={() => {
+                      setPixStepVisited(true);
+                      setConfirmPagamento(true);
+                    }}
                     disabled={totalPendente <= 0}
                   >
                     <CheckCircle2 size={20} /> Pagamento realizado

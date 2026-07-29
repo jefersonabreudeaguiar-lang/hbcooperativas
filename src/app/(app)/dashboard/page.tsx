@@ -14,6 +14,8 @@ import { OnboardingChecklist } from "@/components/cooperado/OnboardingChecklist"
 import { CooperadoMensalidadesPagarPanel } from "@/components/cooperado/CooperadoMensalidadesPagarPanel";
 import { ValoresAvulsosDashboardCard } from "@/components/ficha/ValoresAvulsosReceberPanel";
 import { getAdminStats } from "@/services/dashboardService";
+import { getFilaDoDia } from "@/services/filaDoDiaService";
+import { FilaDoDiaPanel } from "@/components/dashboard/FilaDoDiaPanel";
 import { cooperadoExibirValorReceberInicio,
   listarNotasPendentesCooperado,
 } from "@/services/cooperadoEntregasService";
@@ -30,7 +32,7 @@ import { listarResolvidosInicioCooperado } from "@/services/cooperadoInicioResol
 import { cooperadoPrecisaCadastrarPix } from "@/utils/pix";
 import { formatCurrency, formatMesReferencia, getCurrentMesReferencia } from "@/utils/format";
 import { getUserCooperativaId, getUserCooperativaNome } from "@/utils/cooperativa";
-import { Camera, Wallet, ClipboardList, Users, AlertCircle } from "lucide-react";
+import { Camera, Wallet, ClipboardList, Users } from "lucide-react";
 import { requestAppSync } from "@/services/syncRequest";
 import { PageSkeleton } from "@/components/ui/PageSkeleton";
 
@@ -188,54 +190,28 @@ function AdminDashboard() {
     const coopId = getUserCooperativaId(user, data);
     const stats = getAdminStats(data);
     const coopNome = getUserCooperativaNome(user, data);
-    const pendentes = data.notasPedido.filter(
-      (n) => n.status === "aguardando_conferencia" && notaPertenceCooperativa(data, n, coopId)
-    ).length;
-    return { stats, coopNome, pendentes, mes: getCurrentMesReferencia() };
+    const mes = getCurrentMesReferencia();
+    const fila = getFilaDoDia(data, coopId, mes);
+    return { stats, coopNome, fila, mes };
   }, [user?.id, user?.cooperativaId, user?.role]);
 
   if (!view) return <PageSkeleton />;
 
-  const { stats, coopNome, pendentes, mes } = view;
+  const { stats, coopNome, fila, mes } = view;
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 max-w-3xl">
       <div>
         <h1 className="text-2xl font-bold text-gray-900">Painel da cooperativa</h1>
         <p className="text-sm text-gray-500 mt-1">{coopNome} · {formatMesReferencia(mes)}</p>
       </div>
 
-      {pendentes > 0 && (
-        <AlertBanner variant="warning" title={`${pendentes} entrega(s) para conferir`}>
-          Fotos enviadas pelos cooperados aguardando análise.
-          <Link href="/notas-pedido">
-            <Button size="sm" className="mt-3"><ClipboardList size={16} /> Conferir agora</Button>
-          </Link>
-        </AlertBanner>
-      )}
+      <FilaDoDiaPanel items={fila} />
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <StatCard title="A pagar aos cooperados" value={formatCurrency(stats.valoresAPagar)} icon={<Wallet size={24} />} variant="warning" />
         <StatCard title="Entregas p/ conferir" value={String(stats.entregasPendentes)} icon={<ClipboardList size={24} />} variant="gold" />
         <StatCard title="Cooperados ativos" value={String(stats.cooperadosAtivos)} icon={<Users size={24} />} />
-      </div>
-
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <Link href="/notas-pedido" className="block p-5 bg-white border border-gray-200 rounded-xl hover:border-green-400 hover:shadow-sm transition-all">
-          <ClipboardList className="text-green-700 mb-2" size={24} />
-          <p className="font-semibold text-gray-900">Conferir entregas</p>
-          <p className="text-sm text-gray-500 mt-1">Ver fotos e lançar produtos</p>
-        </Link>
-        <Link href="/ficha-corrida" className="block p-5 bg-white border border-gray-200 rounded-xl hover:border-green-400 hover:shadow-sm transition-all">
-          <Wallet className="text-green-700 mb-2" size={24} />
-          <p className="font-semibold text-gray-900">Pagar cooperados</p>
-          <p className="text-sm text-gray-500 mt-1">Gerar PIX e registrar pagamento</p>
-        </Link>
-        <Link href="/contratos" className="block p-5 bg-white border border-gray-200 rounded-xl hover:border-green-400 hover:shadow-sm transition-all">
-          <AlertCircle className="text-green-700 mb-2" size={24} />
-          <p className="font-semibold text-gray-900">Contratos</p>
-          <p className="text-sm text-gray-500 mt-1">Instituições, itens e preços</p>
-        </Link>
       </div>
     </div>
   );
