@@ -98,19 +98,25 @@ async function processFotoUpload(id: string, input: FotoUploadInput) {
 
   let metaNota: NotaPedido | null = null;
 
-  // Status já publicado na nuvem nunca regride para rascunho (draft/offline tardio).
+  // Preferir status da TABELA (publicado) sobre JSON do storage (pode estar rascunho).
+  const existingFromTable = await (async () => {
+    const { data } = await supabase
+      .from("notas_pedido")
+      .select("payload, status")
+      .eq("id", id)
+      .eq("cooperativa_cnpj", cnpj)
+      .maybeSingle();
+    if (!data) return null;
+    const payload = data.payload as NotaPedido | undefined;
+    const sqlStatus = data.status as NotaPedido["status"] | undefined;
+    if (!payload?.id && !sqlStatus) return null;
+    return {
+      ...(payload?.id ? payload : ({ id } as NotaPedido)),
+      status: sqlStatus && sqlStatus !== "rascunho" ? sqlStatus : payload?.status ?? "rascunho",
+    } as NotaPedido;
+  })();
   const existingMeta =
-    (await fetchNotaMetaFromStorage(supabase, cnpj, id)) ??
-    (await (async () => {
-      const { data } = await supabase
-        .from("notas_pedido")
-        .select("payload")
-        .eq("id", id)
-        .eq("cooperativa_cnpj", cnpj)
-        .maybeSingle();
-      const payload = data?.payload as NotaPedido | undefined;
-      return payload?.id ? payload : null;
-    })());
+    existingFromTable ?? (await fetchNotaMetaFromStorage(supabase, cnpj, id));
   const statusExistente = existingMeta?.status;
   const preservarPublicado =
     statusExistente && statusExistente !== "rascunho" ? statusExistente : undefined;
@@ -198,6 +204,7 @@ async function processFotoUpload(id: string, input: FotoUploadInput) {
     const { error } = await supabase
       .from("notas_pedido")
       .update({
+        status: metaNota.status,
         payload: notaPayloadForTable(metaNota),
         updated_at: metaNota.updatedAt,
       })

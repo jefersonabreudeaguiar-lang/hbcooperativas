@@ -430,10 +430,10 @@ export async function fetchNotasFromTable(
   supabase: SupabaseClient,
   cnpj: string,
   since?: string
-): Promise<{ notas: NotaPedido[]; tableMissing: boolean }> {
+): Promise<{ notas: NotaPedido[]; tableMissing: boolean; serverWatermark?: string }> {
   let query = supabase
     .from("notas_pedido")
-    .select("payload, updated_at")
+    .select("payload, status, updated_at")
     .eq("cooperativa_cnpj", cnpj);
 
   if (since) {
@@ -450,10 +450,33 @@ export async function fetchNotasFromTable(
     return { notas: [], tableMissing: false };
   }
 
+  let serverWatermark: string | undefined;
   const notas = (data ?? [])
-    .map((row) => row.payload as NotaPedido)
-    .filter((n) => n?.id);
-  return { notas, tableMissing: false };
+    .map((row) => {
+      const payload = row.payload as NotaPedido | null;
+      if (!payload?.id) return null;
+      const sqlStatus = row.status as NotaPedido["status"] | null;
+      const sqlUpdatedAt = typeof row.updated_at === "string" ? row.updated_at : undefined;
+      if (sqlUpdatedAt) {
+        const t = new Date(sqlUpdatedAt).getTime();
+        const prev = serverWatermark ? new Date(serverWatermark).getTime() : 0;
+        if (Number.isFinite(t) && t >= prev) serverWatermark = sqlUpdatedAt;
+      }
+      // Coluna SQL status ganha se payload ainda estiver em rascunho (desync).
+      const status =
+        sqlStatus && sqlStatus !== "rascunho"
+          ? sqlStatus
+          : payload.status;
+      return {
+        ...payload,
+        status,
+        updatedAt: sqlUpdatedAt ?? payload.updatedAt,
+        serverUpdatedAt: sqlUpdatedAt,
+      } as NotaPedido & { serverUpdatedAt?: string };
+    })
+    .filter((n): n is NotaPedido & { serverUpdatedAt?: string } => Boolean(n));
+
+  return { notas, tableMissing: false, serverWatermark };
 }
 
 export async function upsertNotasInTable(

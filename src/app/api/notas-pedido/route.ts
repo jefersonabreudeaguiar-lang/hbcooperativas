@@ -35,7 +35,7 @@ export async function GET(request: Request) {
 
   const [fromTable, fromStorage] = await Promise.all([
     fetchNotasFromTable(supabase, cnpj, since),
-    delta ? Promise.resolve([] as NotaPedido[]) : fetchNotasFromStorage(supabase, cnpj),
+    delta ? Promise.resolve({ notas: [] as NotaPedido[], tableMissing: false }) : fetchNotasFromStorage(supabase, cnpj).then((notas) => ({ notas, tableMissing: false })),
   ]);
 
   const visiveis = (lista: NotaPedido[]) =>
@@ -43,16 +43,20 @@ export async function GET(request: Request) {
 
   if (!fromTable.tableMissing) {
     const merged = visiveis(
-      delta ? fromTable.notas : mergeNotasSources(fromTable.notas, fromStorage)
+      delta ? fromTable.notas : mergeNotasSources(fromTable.notas, fromStorage.notas)
     );
     const notas =
       lite && !withPreviews
         ? merged
         : await enrichNotasListWithPreviews(supabase, cnpj, merged);
-    return NextResponse.json({ notas, source: delta ? "delta" : "merged" });
+    return NextResponse.json({
+      notas,
+      source: delta ? "delta" : "merged",
+      serverWatermark: fromTable.serverWatermark,
+    });
   }
 
-  const base = visiveis(delta ? [] : fromStorage);
+  const base = visiveis(delta ? [] : fromStorage.notas);
   const notas =
     lite && !withPreviews
       ? base

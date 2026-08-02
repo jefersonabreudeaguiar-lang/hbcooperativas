@@ -228,7 +228,7 @@ export function mergeCloudNotasIntoData(
 export async function fetchNotasPedidoFromCloud(
   cnpj: string,
   options?: { since?: string; forceFull?: boolean }
-): Promise<{ ok: boolean; notas: NotaPedido[]; delta: boolean }> {
+): Promise<{ ok: boolean; notas: NotaPedido[]; delta: boolean; serverWatermark?: string }> {
   const digits = normalizeCnpj(cnpj);
   if (digits.length !== 14) return { ok: false, notas: [], delta: false };
 
@@ -244,7 +244,9 @@ export async function fetchNotasPedidoFromCloud(
     const notas = ((json.notas ?? []) as unknown[])
       .map(mapRowToNota)
       .filter((n): n is NotaPedido => Boolean(n));
-    return { ok: true, notas, delta: Boolean(since) };
+    const serverWatermark =
+      typeof json.serverWatermark === "string" ? json.serverWatermark : undefined;
+    return { ok: true, notas, delta: Boolean(since), serverWatermark };
   } catch {
     return { ok: false, notas: [], delta: Boolean(since) };
   }
@@ -836,7 +838,9 @@ export async function syncNotasPedidoFromCloud(cnpj: string): Promise<number> {
   await flushPendingNotaDeletes(cnpj);
   const digits = normalizeCnpj(cnpj);
   const forceFull = shouldForceFullNotasSync(digits);
-  const { ok, notas: cloudNotas, delta } = await fetchNotasPedidoFromCloud(digits, { forceFull });
+  const { ok, notas: cloudNotas, delta, serverWatermark } = await fetchNotasPedidoFromCloud(digits, {
+    forceFull,
+  });
   if (!ok) return 0;
 
   const current = getData();
@@ -845,19 +849,17 @@ export async function syncNotasPedidoFromCloud(cnpj: string): Promise<number> {
 
   if (cloudNotas.length === 0 && (forceFull || cloudResetApplied)) {
     if (coop && cloudResetApplied) {
-      // Wipe total só após reset operacional explícito na nuvem.
       const filtered = current.notasPedido.filter((n) => n.cooperativaId !== coop.id);
       if (filtered.length !== current.notasPedido.length) {
         saveDataSafe(reconciliarFichaFromNotasConferidas({ ...current, notasPedido: filtered }));
       }
     }
-    // forceFull com lista vazia SEM reset: NÃO apagar nada local
-    // (API oculta rascunhos; lista vazia ≠ "tudo foi excluído").
-    markNotasSyncDone(digits, true, []);
+    markNotasSyncDone(digits, true, [], serverWatermark);
     return 0;
   }
 
   if (delta && cloudNotas.length === 0) {
+    markNotasSyncDone(digits, false, [], serverWatermark);
     return 0;
   }
 
@@ -866,7 +868,7 @@ export async function syncNotasPedidoFromCloud(cnpj: string): Promise<number> {
   if (reconciled !== current) {
     saveDataSafe(reconciled);
   }
-  markNotasSyncDone(digits, forceFull || !delta, cloudNotas);
+  markNotasSyncDone(digits, forceFull || !delta, cloudNotas, serverWatermark);
   return cloudNotas.filter((n) => n.status === "aguardando_conferencia").length;
 }
 

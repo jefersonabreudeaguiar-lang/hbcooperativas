@@ -20,6 +20,7 @@ import { Card } from "@/components/ui/Card";
 import { NotaFotoImg } from "@/components/ui/NotaFotoImg";
 import { updateData, updateDataSafe, generateId, addAuditEntry, getData } from "@/services/dataStore";
 import { requestAppSync } from "@/services/syncRequest";
+import { forceNextFullNotasSync } from "@/services/syncMetaService";
 import {
   calcularItensNota,
   gerarNumeroNota,
@@ -867,6 +868,17 @@ export default function NotasPedidoContent() {
     if (!isCooperado || !data) return;
     requestAppSync();
   }, [isCooperado, data]);
+
+  // Responsável: ao abrir Conferir entregas, força full sync uma vez (não depende só de delta).
+  const responsavelFullSyncRef = useRef(false);
+  useEffect(() => {
+    if (isCooperado || !data || !coopId) return;
+    if (responsavelFullSyncRef.current) return;
+    responsavelFullSyncRef.current = true;
+    const cnpj = getCooperativaCnpj(data, coopId);
+    if (cnpj) forceNextFullNotasSync(cnpj);
+    requestAppSync();
+  }, [isCooperado, data, coopId]);
 
   useEffect(() => {
     if (searchParams.get("anexar") !== "1" || !isCooperado || !data || anexarParamHandledRef.current) return;
