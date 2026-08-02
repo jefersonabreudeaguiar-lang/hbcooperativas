@@ -222,6 +222,8 @@ export default function NotasPedidoContent() {
 
   const [filtroCooperadoId, setFiltroCooperadoId] = useState("");
   const [abaConferenciaKey, setAbaConferenciaKey] = useState("");
+  /** Fila = só nomes pendentes; cooperado = notas daquele; historico = tabela completa. */
+  const [vistaResponsavel, setVistaResponsavel] = useState<"fila" | "cooperado" | "historico">("fila");
   const [abaCooperado, setAbaCooperado] = useState<"entregas" | "ficha">("entregas");
   const [contratoInstId, setContratoInstId] = useState("");
   const [anexarSucesso, setAnexarSucesso] = useState(false);
@@ -680,15 +682,19 @@ export default function NotasPedidoContent() {
     const cid = searchParams.get("cooperado");
     if (cid && !isCooperado) {
       setFiltroCooperadoId(cid);
+      setVistaResponsavel("cooperado");
     }
   }, [searchParams, isCooperado]);
 
   useEffect(() => {
     if (!isCooperado && !filtroResponsavelIniciado.current) {
       setStatusFilter("aguardando_conferencia");
+      if (!searchParams.get("cooperado")) {
+        setVistaResponsavel("fila");
+      }
       filtroResponsavelIniciado.current = true;
     }
-  }, [isCooperado]);
+  }, [isCooperado, searchParams]);
 
   const resumosMensaisCooperado = useMemo(() => {
     if (!isCooperado || !data || !cooperadoId) return [];
@@ -729,6 +735,13 @@ export default function NotasPedidoContent() {
     return agruparPendentesPorCooperado(data, pendentesTodas, coopId);
   }, [data, pendentesTodas, coopId]);
 
+  useEffect(() => {
+    if (isCooperado || vistaResponsavel !== "cooperado" || !filtroCooperadoId) return;
+    if (abaConferenciaKey) return;
+    const grupo = pendentesPorCooperado.find((g) => g.cooperadoId === filtroCooperadoId);
+    if (grupo) setAbaConferenciaKey(grupo.chave);
+  }, [isCooperado, vistaResponsavel, filtroCooperadoId, abaConferenciaKey, pendentesPorCooperado]);
+
   const { chave: abaConferenciaEfetiva, grupo: grupoAbaAtiva } = useMemo(
     () => resolverAbaConferenciaAtiva(pendentesPorCooperado, abaConferenciaKey, filtroCooperadoId),
     [pendentesPorCooperado, abaConferenciaKey, filtroCooperadoId]
@@ -750,7 +763,29 @@ export default function NotasPedidoContent() {
   );
 
   useEffect(() => {
-    if (isCooperado || pendentesPorCooperado.length === 0) return;
+    if (isCooperado || vistaResponsavel !== "cooperado") return;
+
+    if (pendentesPorCooperado.length === 0) {
+      setVistaResponsavel("fila");
+      setAbaConferenciaKey("");
+      setFiltroCooperadoId("");
+      return;
+    }
+
+    const aindaNaFila = abaConferenciaKey
+      ? pendentesPorCooperado.some((g) => g.chave === abaConferenciaKey)
+      : filtroCooperadoId
+        ? pendentesPorCooperado.some((g) => g.cooperadoId === filtroCooperadoId)
+        : false;
+
+    if (!aindaNaFila) {
+      // Todas as notas deste cooperado foram lançadas — some da fila.
+      setVistaResponsavel("fila");
+      setAbaConferenciaKey("");
+      setFiltroCooperadoId("");
+      return;
+    }
+
     if (abaConferenciaEfetiva && abaConferenciaEfetiva !== abaConferenciaKey) {
       setAbaConferenciaKey(abaConferenciaEfetiva);
     }
@@ -760,7 +795,8 @@ export default function NotasPedidoContent() {
     }
   }, [
     isCooperado,
-    pendentesPorCooperado.length,
+    vistaResponsavel,
+    pendentesPorCooperado,
     abaConferenciaEfetiva,
     abaConferenciaKey,
     grupoAbaAtiva?.cooperadoId,
@@ -770,15 +806,32 @@ export default function NotasPedidoContent() {
   const selecionarAbaConferencia = (grupo: (typeof pendentesPorCooperado)[number]) => {
     setAbaConferenciaKey(grupo.chave);
     setFiltroCooperadoId(grupo.cooperadoId);
+    setVistaResponsavel("cooperado");
     if (statusFilter !== "aguardando_conferencia") {
       setStatusFilter("aguardando_conferencia");
     }
   };
 
+  const voltarFilaResponsavel = () => {
+    setVistaResponsavel("fila");
+    setAbaConferenciaKey("");
+    setFiltroCooperadoId("");
+  };
+
+  const abrirHistoricoResponsavel = () => {
+    setVistaResponsavel("historico");
+    setAbaConferenciaKey("");
+    setFiltroCooperadoId("");
+    setStatusFilter("");
+  };
+
   const notas = useMemo(() => {
     if (!data) return [];
     const filtrarPorGrupoAtivo =
-      !isCooperado && pendentesTodas.length > 0 && Boolean(abaConferenciaEfetiva);
+      !isCooperado &&
+      vistaResponsavel === "cooperado" &&
+      pendentesTodas.length > 0 &&
+      Boolean(abaConferenciaEfetiva);
 
     return data.notasPedido
       .filter((n) => {
@@ -804,7 +857,11 @@ export default function NotasPedidoContent() {
     statusFilter,
     abaConferenciaEfetiva,
     pendentesTodas.length,
+    vistaResponsavel,
   ]);
+
+  const mostrarTabelaResponsavel =
+    !isCooperado && (vistaResponsavel === "historico" || pendentesTodas.length === 0);
 
   const contratosEntrega = useMemo(() => {
     if (!data || !coopId) return [];
@@ -2295,7 +2352,9 @@ export default function NotasPedidoContent() {
             ? abaCooperado === "ficha"
               ? "Extrato financeiro mensal com valores recebidos e detalhamento de cada entrega"
               : "Toque no botão verde para fotografar sua entrega — histórico por mês abaixo"
-            : "Analise fotos, lance produtos ou registre entregas avulsas sem nota"
+            : pendentesTodas.length > 0
+              ? `${pendentesTodas.length} ${pendentesTodas.length === 1 ? "nota" : "notas"} a conferir e lançar · só quem enviou foto aparece abaixo`
+              : "Nenhuma nota pendente — histórico e lançamento avulso continuam disponíveis"
         }
         action={isCooperado ? (
           <div className="hidden sm:block">
@@ -2383,83 +2442,169 @@ export default function NotasPedidoContent() {
         </AlertBanner>
       )}
 
-      {!isCooperado && pendentesTodas.length > 0 && (
-        <div className="mb-6">
-          <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-2 mb-3">
-            <div>
-              <h2 className="text-sm font-semibold text-gray-700">
-                Fila para conferir ({totalFotosPendentes} {totalFotosPendentes === 1 ? "foto" : "fotos"}
-                {pendentesTodas.length > 1 ? ` · ${pendentesTodas.length} entregas` : ""})
-              </h2>
-              <p className="text-xs text-gray-500 mt-0.5">
-                Escolha o cooperado abaixo ou nas abas — toque em um card para conferir as fotos.
+      {!isCooperado && (
+        <div className="mb-6 space-y-4">
+          {pendentesTodas.length > 0 ? (
+            <>
+              <div className="rounded-2xl border border-amber-200 bg-amber-50 px-5 py-4">
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                  <div>
+                    <p className="text-2xl font-bold text-amber-950 tabular-nums leading-tight">
+                      {pendentesTodas.length}{" "}
+                      {pendentesTodas.length === 1 ? "nota" : "notas"} a conferir e lançar
+                    </p>
+                    <p className="text-sm text-amber-900/80 mt-1">
+                      {pendentesPorCooperado.length}{" "}
+                      {pendentesPorCooperado.length === 1 ? "cooperado enviou" : "cooperados enviaram"}{" "}
+                      foto
+                      {totalFotosPendentes > pendentesTodas.length
+                        ? ` · ${totalFotosPendentes} fotos`
+                        : ""}
+                      . Ao lançar todas de um cooperado, o nome some da lista.
+                    </p>
+                  </div>
+                  {vistaResponsavel !== "historico" ? (
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      size="sm"
+                      className="shrink-0"
+                      onClick={abrirHistoricoResponsavel}
+                    >
+                      Ver histórico
+                    </Button>
+                  ) : (
+                    <Button
+                      type="button"
+                      size="sm"
+                      className="shrink-0"
+                      onClick={() => {
+                        setVistaResponsavel("fila");
+                        setStatusFilter("aguardando_conferencia");
+                      }}
+                    >
+                      Voltar à fila
+                    </Button>
+                  )}
+                </div>
+              </div>
+
+              {vistaResponsavel === "fila" && (
+                <div>
+                  <h2 className="text-sm font-semibold text-gray-800 mb-2">
+                    Cooperados com entrega pendente
+                  </h2>
+                  <p className="text-xs text-gray-500 mb-3">
+                    Toque no nome para conferir as fotos. Só entram quem enviou entrega.
+                  </p>
+                  <ul className="divide-y divide-gray-200 rounded-xl border border-gray-200 bg-white overflow-hidden">
+                    {pendentesPorCooperado.map((grupo) => {
+                      const qtdNotas = grupo.notas.length;
+                      const qtdFotos = contarFotosEnviadasNotas(grupo.notas);
+                      return (
+                        <li key={grupo.chave}>
+                          <button
+                            type="button"
+                            onClick={() => selecionarAbaConferencia(grupo)}
+                            className="w-full flex items-center gap-3 px-4 py-3.5 text-left hover:bg-amber-50/80 transition-colors active:bg-amber-100/60"
+                          >
+                            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-amber-100 text-amber-900 text-sm font-bold">
+                              {grupo.nome.trim().charAt(0).toUpperCase() || "?"}
+                            </span>
+                            <span className="flex-1 min-w-0">
+                              <span className="block font-semibold text-gray-900 truncate">
+                                {grupo.nome}
+                              </span>
+                              <span className="block text-xs text-gray-500 mt-0.5">
+                                {qtdNotas} {qtdNotas === 1 ? "nota" : "notas"}
+                                {qtdFotos !== qtdNotas
+                                  ? ` · ${qtdFotos} ${qtdFotos === 1 ? "foto" : "fotos"}`
+                                  : ""}{" "}
+                                aguardando
+                              </span>
+                            </span>
+                            <span className="shrink-0 inline-flex items-center gap-1.5 text-amber-800 text-sm font-semibold">
+                              <span className="min-w-[1.5rem] h-6 px-1.5 rounded-full bg-amber-100 inline-flex items-center justify-center text-xs font-bold">
+                                {qtdNotas}
+                              </span>
+                              <ChevronRight size={18} className="text-gray-400" />
+                            </span>
+                          </button>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                </div>
+              )}
+
+              {vistaResponsavel === "cooperado" && grupoAbaAtiva && (
+                <div>
+                  <button
+                    type="button"
+                    onClick={voltarFilaResponsavel}
+                    className="inline-flex items-center gap-1.5 text-sm font-medium text-gray-600 hover:text-gray-900 mb-3"
+                  >
+                    <ChevronRight size={16} className="rotate-180" />
+                    Todos os cooperados
+                  </button>
+                  <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-2 mb-3">
+                    <div>
+                      <h2 className="text-lg font-bold text-gray-900">{grupoAbaAtiva.nome}</h2>
+                      <p className="text-sm text-gray-600 mt-0.5">
+                        {fotosAbaAtiva} {fotosAbaAtiva === 1 ? "foto" : "fotos"}
+                        {pendentesAbaAtiva.length > 1
+                          ? ` · ${pendentesAbaAtiva.length} notas`
+                          : ""}{" "}
+                        — toque para conferir e lançar
+                      </p>
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                    {pendentesAbaAtiva.map((n) => {
+                      const qtdFotosCard = contarFotosEnviadasNota(n);
+                      return (
+                        <button
+                          key={n.id}
+                          type="button"
+                          onClick={() => void openConferir(n)}
+                          className="text-left border-2 border-amber-300 bg-amber-50 rounded-xl overflow-hidden hover:border-amber-500 relative"
+                        >
+                          {getFotoExibicaoNota(n) && (
+                            <NotaFotoImg
+                              src={getFotoExibicaoNota(n)}
+                              alt=""
+                              className="w-full h-36 object-cover"
+                            />
+                          )}
+                          {qtdFotosCard > 1 && (
+                            <span className="absolute top-2 right-2 bg-black/70 text-white text-xs font-bold px-2 py-0.5 rounded-full">
+                              {qtdFotosCard} fotos
+                            </span>
+                          )}
+                          <div className="p-3">
+                            <p className="font-medium text-sm">
+                              {formatDate(n.dataEntrega)} · {n.numeroNota}
+                            </p>
+                            <p className="text-xs text-gray-600 mt-0.5">
+                              {getEscolaNotaLabel(n, data.instituicoes)}
+                            </p>
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+            </>
+          ) : (
+            <div className="rounded-2xl border border-green-200 bg-green-50/60 px-5 py-6 text-center">
+              <CheckCircle size={32} className="mx-auto text-green-600 mb-2" />
+              <p className="text-base font-semibold text-green-900">Tudo em dia</p>
+              <p className="text-sm text-green-800/80 mt-1 max-w-md mx-auto">
+                Nenhuma nota a conferir. Quando um cooperado enviar fotos, o nome dele aparece aqui.
               </p>
             </div>
-            {grupoAbaAtiva && (
-              <p className="text-xs font-medium text-amber-800">
-                {fotosAbaAtiva} {fotosAbaAtiva === 1 ? "foto" : "fotos"} de {grupoAbaAtiva.nome}
-                {pendentesAbaAtiva.length > 1 ? ` (${pendentesAbaAtiva.length} entregas)` : ""}
-              </p>
-            )}
-          </div>
-
-          <div
-            role="tablist"
-            aria-label="Cooperados com entregas pendentes"
-            className="flex gap-2 overflow-x-auto pb-2 mb-4 border-b border-gray-200 -mx-1 px-1"
-          >
-            {pendentesPorCooperado.map((grupo) => (
-              <button
-                key={grupo.chave}
-                type="button"
-                role="tab"
-                aria-selected={abaConferenciaEfetiva === grupo.chave}
-                onClick={() => selecionarAbaConferencia(grupo)}
-                className={cn(
-                  "shrink-0 inline-flex items-center gap-2 px-4 py-2.5 rounded-t-lg text-sm font-semibold border border-b-0 transition-colors",
-                  abaConferenciaEfetiva === grupo.chave
-                    ? "bg-amber-500 text-white border-amber-500 shadow-sm"
-                    : "bg-gray-50 text-gray-700 border-gray-300 hover:bg-amber-50 hover:border-amber-300"
-                )}
-              >
-                {grupo.nome}
-                <span
-                  className={cn(
-                    "min-w-[1.25rem] h-5 px-1.5 rounded-full text-xs font-bold inline-flex items-center justify-center",
-                    abaConferenciaEfetiva === grupo.chave ? "bg-white/25 text-white" : "bg-amber-100 text-amber-800"
-                  )}
-                >
-                  {contarFotosEnviadasNotas(grupo.notas)}
-                </span>
-              </button>
-            ))}
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-            {pendentesAbaAtiva.length === 0 ? (
-              <p className="col-span-full text-sm text-amber-800 bg-amber-50 border border-amber-200 rounded-xl p-4">
-                Nenhuma entrega pendente para este cooperado. Selecione outra aba acima.
-              </p>
-            ) : null}
-            {pendentesAbaAtiva.map((n) => {
-              const qtdFotosCard = contarFotosEnviadasNota(n);
-              return (
-              <button key={n.id} type="button" onClick={() => openConferir(n)} className="text-left border-2 border-amber-300 bg-amber-50 rounded-xl overflow-hidden hover:border-amber-500 relative">
-                {getFotoExibicaoNota(n) && (
-                  <NotaFotoImg src={getFotoExibicaoNota(n)} alt="" className="w-full h-36 object-cover" />
-                )}
-                {qtdFotosCard > 1 && (
-                  <span className="absolute top-2 right-2 bg-black/70 text-white text-xs font-bold px-2 py-0.5 rounded-full">
-                    {qtdFotosCard} fotos
-                  </span>
-                )}
-                <div className="p-3">
-                  <p className="font-medium text-sm">{formatDate(n.dataEntrega)} · {n.numeroNota}</p>
-                  <p className="text-xs text-gray-600 mt-0.5">{getEscolaNotaLabel(n, data.instituicoes)}</p>
-                </div>
-              </button>
-            );})}
-          </div>
+          )}
         </div>
       )}
 
@@ -2530,26 +2675,8 @@ export default function NotasPedidoContent() {
         </button>
       )}
 
+      {(isCooperado || mostrarTabelaResponsavel) && (
       <FilterBar>
-        {!isCooperado && pendentesPorCooperado.length > 0 && (
-          <FormField label="Cooperado para conferir">
-            <Select
-              value={grupoAbaAtiva?.cooperadoId ?? filtroCooperadoId}
-              onChange={(e) => {
-                const grupo = pendentesPorCooperado.find((g) => g.cooperadoId === e.target.value);
-                if (grupo) selecionarAbaConferencia(grupo);
-                else setFiltroCooperadoId(e.target.value);
-              }}
-              className="min-w-[220px]"
-            >
-              {pendentesPorCooperado.map((g) => (
-                <option key={g.chave} value={g.cooperadoId}>
-                  {g.nome} ({contarFotosEnviadasNotas(g.notas)} {contarFotosEnviadasNotas(g.notas) === 1 ? "foto" : "fotos"})
-                </option>
-              ))}
-            </Select>
-          </FormField>
-        )}
         {isCooperado && abaCooperado === "entregas" && (
           <FormField label="Filtrar entregas">
             <Select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className="min-w-[200px]">
@@ -2562,7 +2689,7 @@ export default function NotasPedidoContent() {
             </Select>
           </FormField>
         )}
-        {!isCooperado && cooperadosCoop.length > 0 && pendentesTodas.length === 0 && (
+        {!isCooperado && cooperadosCoop.length > 0 && (
           <FormField label="Cooperado">
             <Select value={filtroCooperadoId} onChange={(e) => setFiltroCooperadoId(e.target.value)} className="min-w-[200px]">
               <option value="">Todos</option>
@@ -2583,7 +2710,19 @@ export default function NotasPedidoContent() {
           </Select>
         </FormField>
         )}
+        {!isCooperado && pendentesTodas.length > 0 && vistaResponsavel === "historico" && (
+          <div className="flex items-end">
+            <Button type="button" size="sm" onClick={() => {
+              setVistaResponsavel("fila");
+              setStatusFilter("aguardando_conferencia");
+              setFiltroCooperadoId("");
+            }}>
+              Voltar à fila ({pendentesTodas.length})
+            </Button>
+          </div>
+        )}
       </FilterBar>
+      )}
 
       {isCooperado ? (
         abaCooperado === "ficha" ? (
@@ -2616,7 +2755,7 @@ export default function NotasPedidoContent() {
             getEscolaLabel={(n) => getEscolaNotaLabel(n, data.instituicoes)}
           />
         )
-      ) : (
+      ) : mostrarTabelaResponsavel ? (
       <DataTable
         data={notas}
         keyField="id"
@@ -2638,7 +2777,7 @@ export default function NotasPedidoContent() {
         onView={(n) => (n.status === "aguardando_conferencia" ? void openConferir(n) : openView(n))}
         viewLabel="Conferir"
       />
-      )}
+      ) : null}
 
       {isCooperado && (
         <div className="fixed bottom-20 right-4 z-30 sm:hidden">
