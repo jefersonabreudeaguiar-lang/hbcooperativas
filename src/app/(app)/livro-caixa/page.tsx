@@ -93,7 +93,7 @@ export default function LivroCaixaPage() {
     try {
       const d = getData();
       const cnpj = await resolveCooperativaCnpj(d, coopId, user);
-      if (cnpj) await pushOperacionalToCloud(cnpj, d, coopId);
+      if (cnpj) await pushOperacionalToCloud(cnpj, d, coopId, { authoritative: true });
     } finally {
       setPublicando(false);
     }

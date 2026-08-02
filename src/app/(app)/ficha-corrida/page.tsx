@@ -341,7 +341,7 @@ export default function FichaCorridaPage() {
     void (async () => {
       const d = getData();
       const cnpj = await resolveCooperativaCnpj(d, coopId, user);
-      if (cnpj) await pushOperacionalToCloud(cnpj, d, coopId);
+      if (cnpj) await pushOperacionalToCloud(cnpj, d, coopId, { authoritative: true });
     })();
   }, [user, data, coopId, isCooperado, mensalidadeInput, descontoAvulsoInput, descontoAvulsoMotivo, mesAtivo]);
 
@@ -350,7 +350,7 @@ export default function FichaCorridaPage() {
       if (!user || !coopId) return;
       const d = getData();
       const cnpj = await resolveCooperativaCnpj(d, coopId, user);
-      if (cnpj) await pushOperacionalToCloud(cnpj, d, coopId);
+      if (cnpj) await pushOperacionalToCloud(cnpj, d, coopId, { authoritative: true });
     })();
   }, [user, coopId]);
 
@@ -621,7 +621,7 @@ export default function FichaCorridaPage() {
       const d = getData();
       const cnpj = await resolveCooperativaCnpj(d, coopId, user);
       if (cnpj && notaAtualizada) await patchNotaPedidoInCloud(cnpj, notaAtualizada);
-      if (cnpj) await pushOperacionalToCloud(cnpj, d, coopId);
+      if (cnpj) await pushOperacionalToCloud(cnpj, d, coopId, { authoritative: true });
       setDivisaoFicha(null);
       setDivisaoSelecionados([]);
     } finally {

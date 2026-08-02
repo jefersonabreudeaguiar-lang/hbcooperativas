@@ -1095,7 +1095,7 @@ export default function NotasPedidoContent() {
       }
       const nota = cloudNotaId ? d.notasPedido.find((n) => n.id === cloudNotaId) : undefined;
       if (nota) await pushNotasPedidoToCloud(cnpj, [nota], cloudCooperadoNome);
-      await pushOperacionalToCloud(cnpj, d, coopId);
+      await pushOperacionalToCloud(cnpj, d, coopId, { authoritative: true });
     })();
 
     setAvulsoModal(false);
@@ -1987,7 +1987,7 @@ export default function NotasPedidoContent() {
           if (!cnpj) return;
           await patchNotaPedidoInCloud(cnpj, notaAtualizada!);
           const d = getData();
-          await pushOperacionalToCloud(cnpj, d, coopId);
+          await pushOperacionalToCloud(cnpj, d, coopId, { authoritative: true });
         } finally {
           lancandoRef.current = false;
         }

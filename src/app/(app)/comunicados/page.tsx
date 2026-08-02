@@ -218,7 +218,7 @@ export default function ComunicadosPage() {
         setMsgPublicacao("CNPJ da cooperativa não encontrado.");
         return;
       }
-      await pushOperacionalToCloud(cnpj, d, coopId);
+      await pushOperacionalToCloud(cnpj, d, coopId, { authoritative: true });
       setAlteracoesPendentes(false);
       setMsgPublicacao("Avisos enviados! Os cooperados verão no início.");
     } catch {

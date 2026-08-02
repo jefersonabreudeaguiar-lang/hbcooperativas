@@ -317,17 +317,30 @@ function arquivoMensalTime(a: ArquivoMensalCooperado): number {
   return a.updatedAt ? new Date(a.updatedAt).getTime() : 0;
 }
 
-/** Mantém cota paga salva; só desmarca se o registro mais recente tiver false explícito. */
+/** Mantém cota paga; só desmarca se o lado mais recente tiver false explícito
+ *  E o outro lado não for true com mesmo/maior updatedAt (responsável não “volta sozinho”). */
 function mergeCotaIngressoPagaField(
   a: ArquivoMensalCooperado,
   b: ArquivoMensalCooperado
 ): boolean | undefined {
-  if (a.cotaIngressoPaga === true || b.cotaIngressoPaga === true) {
-    const newer = arquivoMensalTime(a) >= arquivoMensalTime(b) ? a : b;
-    if (newer.cotaIngressoPaga === false) return false;
-    return true;
+  const aTrue = a.cotaIngressoPaga === true;
+  const bTrue = b.cotaIngressoPaga === true;
+  const aFalse = a.cotaIngressoPaga === false;
+  const bFalse = b.cotaIngressoPaga === false;
+
+  if (aTrue && bTrue) return true;
+  if (aTrue && !bFalse) return true;
+  if (bTrue && !aFalse) return true;
+
+  // Um true e um false: só aceita false se o registro com false for estritamente mais novo.
+  if (aTrue && bFalse) {
+    return arquivoMensalTime(b) > arquivoMensalTime(a) ? false : true;
   }
-  if (a.cotaIngressoPaga === false || b.cotaIngressoPaga === false) return false;
+  if (bTrue && aFalse) {
+    return arquivoMensalTime(a) > arquivoMensalTime(b) ? false : true;
+  }
+
+  if (aFalse || bFalse) return false;
   return undefined;
 }
 

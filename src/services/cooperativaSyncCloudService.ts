@@ -33,7 +33,7 @@ export function mergeArrayByNewer<T extends WithUpdatedAt>(local: T[], cloud: T[
   return [...map.values()];
 }
 
-/** Nuvem é canônica para itens presentes nos dois lados; registros só locais são mantidos até subirem na nuvem. */
+/** Nuvem é base; local ganha se for mais recente ou empatar (ação do responsável não reverte). */
 function mergeOperacionalArrayFromCloud<T extends WithUpdatedAt>(
   localCoop: T[],
   cloudItems: T[],
@@ -46,7 +46,7 @@ function mergeOperacionalArrayFromCloud<T extends WithUpdatedAt>(
   for (const item of localCoop) {
     const cloudItem = map.get(item.id);
     if (cloudItem) {
-      if (itemTime(item) > itemTime(cloudItem)) map.set(item.id, item);
+      if (itemTime(item) >= itemTime(cloudItem)) map.set(item.id, item);
       continue;
     }
     map.set(item.id, item);
@@ -685,23 +685,25 @@ export async function pushOperacionalToCloud(
     await pushOperationalResetToCloud(digits, coopId);
   }
 
-  const d = aplicarPrestacoesContasExcluidas(data ?? getData());
-  const cid = coopId ?? resolveCoopId(d, digits);
+  // Snapshot inicial só para resolver CNPJ/coop; após awaits sempre reler getData()
+  // para não sobrescrever ações do responsável feitas durante o fetch.
+  const seed = data ?? getData();
+  const cid = coopId ?? resolveCoopId(seed, digits);
   if (!cid) return;
 
-  let merged = d;
   let bundle: Awaited<ReturnType<typeof fetchSyncBundle>> | null = null;
   let cloudCooperados: Cooperado[] = [];
   if (!options?.authoritative) {
     bundle = await fetchSyncBundle(digits);
     cloudCooperados = (await fetchCooperadosFromCloud(digits)).cooperados;
-    if (bundle?.operacional) {
-      merged = mergeOperacionalIntoData(d, bundle.operacional, cid, cloudCooperados);
-      saveDataSafe(merged);
-    }
-  } else {
-    saveDataSafe(merged);
   }
+
+  const fresh = aplicarPrestacoesContasExcluidas(getData());
+  let merged = fresh;
+  if (!options?.authoritative && bundle?.operacional) {
+    merged = mergeOperacionalIntoData(fresh, bundle.operacional, cid, cloudCooperados);
+  }
+  saveDataSafe(merged);
 
   const payload = buildOperacionalPayload(merged, cid);
   const cloudMensalidades = prepararMensalidadesCloud(
@@ -727,12 +729,34 @@ export async function pushOperacionalToCloud(
   );
   await Promise.all(cooperadosCoop.map((c) => pushCooperadoToCloud(digits, c)));
 
-  payload.updatedAt = new Date().toISOString();
+  // Após awaits dos cooperados, reler de novo e remontar payload se o responsável
+  // salvou algo nesse intervalo — evita last-write-wins com blob antigo.
+  const afterPushCoop = aplicarPrestacoesContasExcluidas(getData());
+  const payloadFinal = buildOperacionalPayload(afterPushCoop, cid);
+  if (bundle?.operacional) {
+    const cloudMens = prepararMensalidadesCloud(
+      afterPushCoop,
+      bundle.operacional.mensalidades ?? [],
+      cid,
+      cloudCooperados
+    );
+    payloadFinal.mensalidades = mesclarMensalidadesPayloadNuvem(
+      afterPushCoop,
+      cid,
+      payloadFinal.mensalidades,
+      cloudMens
+    );
+  }
+  payloadFinal.mensalidades = payloadFinal.mensalidades.map((m) =>
+    enriquecerMensalidadeCooperadoSnapshot(afterPushCoop, m, cid)
+  );
+  payloadFinal.updatedAt = new Date().toISOString();
+
   try {
     await fetch("/api/cooperativa-sync", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ cnpj: digits, section: "operacional", payload }),
+      body: JSON.stringify({ cnpj: digits, section: "operacional", payload: payloadFinal }),
     });
   } catch {
     /* offline */
@@ -937,7 +961,9 @@ export async function syncCooperativaBidirectional(
   if (!cid) return;
 
   if (options?.pushMensalidades !== false) {
-    await pushOperacionalToCloud(digits, d, cid);
+    // Já puxamos a nuvem acima; push autoritativo com getData() fresco evita
+    // segundo merge com snapshot antigo apagar ação do responsável.
+    await pushOperacionalToCloud(digits, undefined, cid, { authoritative: true });
   }
 
   if (options?.pushCatalog) {
