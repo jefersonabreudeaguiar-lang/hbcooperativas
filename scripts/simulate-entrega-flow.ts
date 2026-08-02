@@ -349,8 +349,8 @@ function simListaNuvemIncompletaNaoApagaFila() {
 function simExclusaoUnicaPropagada() {
   const cloud = new CloudStore();
   let responsavel = baseAppData();
-  const n1 = makeNota("del-1");
-  const n2 = makeNota("del-2");
+  const n1 = makeNota("del-1", { status: "rejeitada" });
+  const n2 = makeNota("del-2", { status: "rejeitada" });
   cloud.upsert(n1);
   cloud.upsert(n2);
   responsavel = { ...responsavel, notasPedido: [n1, n2] };
@@ -358,8 +358,33 @@ function simExclusaoUnicaPropagada() {
   cloud.delete("del-1");
   const merged = mergeCloudNotasIntoData(responsavel, cloud.list(), CNPJ);
   assert(
-    "Exclusão única na nuvem remove 1 local",
+    "Exclusão única de rejeitada na nuvem remove 1 local",
     merged.notasPedido.length === 1 && merged.notasPedido[0].id === "del-2"
+  );
+}
+
+function simAguardandoAusenteNaListaNaoApaga() {
+  const cloud = new CloudStore();
+  let local = baseAppData();
+  const emAnalise = makeNota("keep-ag", {
+    status: "aguardando_conferencia",
+    fotoNaNuvem: true,
+    fotosEnviadasCount: 2,
+  });
+  const outra = makeNota("other-ag", {
+    status: "aguardando_conferencia",
+    fotoNaNuvem: true,
+    fotosEnviadasCount: 1,
+  });
+  cloud.upsert(outra);
+  // emAnalise ainda rascunho na nuvem → filtrada da lista (como a API faz)
+  local = { ...local, notasPedido: [emAnalise, outra] };
+
+  const merged = mergeCloudNotasIntoData(local, cloud.list(), CNPJ);
+  assert(
+    "aguardando_conferencia local ausente da lista NÃO é apagada",
+    merged.notasPedido.some((n) => n.id === "keep-ag"),
+    `ids=${merged.notasPedido.map((n) => n.id).join(",")}`
   );
 }
 
@@ -572,6 +597,7 @@ simCooperadoEnvia21Entregas();
 simLancarTodas21Sequencial();
 simListaNuvemIncompletaNaoApagaFila();
 simExclusaoUnicaPropagada();
+simAguardandoAusenteNaListaNaoApaga();
 simMergeTableStorage();
 simShouldNotDowngradeConferida();
 simFilaConferenciaGrupos();

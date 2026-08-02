@@ -98,6 +98,23 @@ async function processFotoUpload(id: string, input: FotoUploadInput) {
 
   let metaNota: NotaPedido | null = null;
 
+  // Status já publicado na nuvem nunca regride para rascunho (draft/offline tardio).
+  const existingMeta =
+    (await fetchNotaMetaFromStorage(supabase, cnpj, id)) ??
+    (await (async () => {
+      const { data } = await supabase
+        .from("notas_pedido")
+        .select("payload")
+        .eq("id", id)
+        .eq("cooperativa_cnpj", cnpj)
+        .maybeSingle();
+      const payload = data?.payload as NotaPedido | undefined;
+      return payload?.id ? payload : null;
+    })());
+  const statusExistente = existingMeta?.status;
+  const preservarPublicado =
+    statusExistente && statusExistente !== "rascunho" ? statusExistente : undefined;
+
   if (index === 0) {
     if (!notaBody?.id || notaBody.id !== id) {
       return NextResponse.json({ error: "Entrega inicial inválida." }, { status: 400 });
@@ -105,7 +122,9 @@ async function processFotoUpload(id: string, input: FotoUploadInput) {
     metaNota = {
       ...notaBody,
       id,
-      status: isDraft ? "rascunho" : (notaBody.status ?? "aguardando_conferencia"),
+      status:
+        preservarPublicado ??
+        (isDraft ? "rascunho" : (notaBody.status ?? "aguardando_conferencia")),
       fotosEnviadasCount: totalCount,
       fotoNaNuvem: true,
       fotoPedido: undefined,
@@ -128,24 +147,22 @@ async function processFotoUpload(id: string, input: FotoUploadInput) {
       metaNota = {
         ...notaBody,
         id,
+        status: preservarPublicado ?? notaBody.status,
         fotosEnviadasCount: totalCount,
         fotoNaNuvem: true,
         fotoPedido: undefined,
         fotosPedido: undefined,
         updatedAt: new Date().toISOString(),
       };
-    } else {
-      const fromStorage = await fetchNotaMetaFromStorage(supabase, cnpj, id);
-      if (fromStorage) {
-        metaNota = {
-          ...fromStorage,
-          fotosEnviadasCount: totalCount,
-          fotoNaNuvem: true,
-          fotoPedido: undefined,
-          fotosPedido: undefined,
-          updatedAt: new Date().toISOString(),
-        };
-      }
+    } else if (existingMeta) {
+      metaNota = {
+        ...existingMeta,
+        fotosEnviadasCount: totalCount,
+        fotoNaNuvem: true,
+        fotoPedido: undefined,
+        fotosPedido: undefined,
+        updatedAt: new Date().toISOString(),
+      };
     }
     if (!metaNota) {
       return NextResponse.json({ error: "Entrega não encontrada na nuvem." }, { status: 404 });

@@ -141,13 +141,17 @@ function propagateCloudNotaDeletions(
   const digits = normalizeCnpj(cnpj);
   const cloudIds = new Set(cloudNotas.map((n) => n.id));
 
+  // Só propaga exclusão de rejeitadas. aguardando_conferencia ausente da lista
+  // costuma ser rascunho ainda oculto na API (foto parcial / draft tardio) — nunca apagar.
   const localPendingCloud = [...byId.values()].filter(
     (n) =>
-      (n.status === "aguardando_conferencia" || n.status === "rejeitada") &&
+      n.status === "rejeitada" &&
       n.fotoNaNuvem &&
       getNotaCooperativaCnpj(data, n) === digits
   );
-  const cloudPending = cloudNotas.filter((n) => n.status === "aguardando_conferencia");
+  const cloudPending = cloudNotas.filter(
+    (n) => n.status === "aguardando_conferencia" || n.status === "rejeitada"
+  );
   const toRemove = localPendingCloud.filter((n) => !cloudIds.has(n.id));
 
   if (toRemove.length === 0) return false;
@@ -478,9 +482,10 @@ export async function uploadFotoImediataToCloud(
   const digits = normalizeCnpj(cnpj);
   if (digits.length !== 14) return { ok: false, error: "CNPJ inválido." };
 
+  const jaPublicada = nota.status !== "rascunho";
   const metaNota: NotaPedido = slimNotaDraftForUpload({
     ...nota,
-    status: "rascunho",
+    status: jaPublicada ? nota.status : "rascunho",
     fotosEnviadasCount: totalCount,
     fotoNaNuvem: true,
   });
@@ -494,7 +499,7 @@ export async function uploadFotoImediataToCloud(
         index,
         totalCount,
         foto: fotoDataUrl,
-        draft: true,
+        draft: !jaPublicada,
         nota: metaNota,
         cooperadoNome: index === 0 ? cooperadoNome : undefined,
       }),
@@ -528,9 +533,12 @@ export async function uploadFotoBlobToCloud(
   const digits = normalizeCnpj(cnpj);
   if (digits.length !== 14) return { ok: false, error: "CNPJ inválido." };
 
+  // Nunca rebaixar entrega já publicada (Enviar) de volta para rascunho —
+  // draft tardio / fila offline apagava a nota da listagem da API.
+  const jaPublicada = nota.status !== "rascunho";
   const metaNota: NotaPedido = slimNotaDraftForUpload({
     ...nota,
-    status: "rascunho",
+    status: jaPublicada ? nota.status : "rascunho",
     fotosEnviadasCount: totalCount,
     fotoNaNuvem: true,
   });
@@ -540,7 +548,7 @@ export async function uploadFotoBlobToCloud(
     form.append("cnpj", digits);
     form.append("index", String(index));
     form.append("totalCount", String(totalCount));
-    form.append("draft", "true");
+    form.append("draft", jaPublicada ? "false" : "true");
     form.append("foto", fotoBlob, `foto-${String(index).padStart(3, "0")}.${ext}`);
     form.append("mimeType", fotoBlob.type || (ext === "webp" ? "image/webp" : "image/jpeg"));
     form.append("nota", JSON.stringify(metaNota));
@@ -774,12 +782,15 @@ export async function syncNotasPedidoFromCloud(cnpj: string): Promise<number> {
   const cloudResetApplied = getCloudResetAppliedVersion(digits) > 0;
 
   if (cloudNotas.length === 0 && (forceFull || cloudResetApplied)) {
-    if (coop) {
+    if (coop && cloudResetApplied) {
+      // Wipe total só após reset operacional explícito na nuvem.
       const filtered = current.notasPedido.filter((n) => n.cooperativaId !== coop.id);
       if (filtered.length !== current.notasPedido.length) {
         saveDataSafe(reconciliarFichaFromNotasConferidas({ ...current, notasPedido: filtered }));
       }
     }
+    // forceFull com lista vazia SEM reset: NÃO apagar nada local
+    // (API oculta rascunhos; lista vazia ≠ "tudo foi excluído").
     markNotasSyncDone(digits, true, []);
     return 0;
   }
