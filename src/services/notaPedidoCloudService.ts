@@ -3,6 +3,7 @@ import { normalizeCnpj, findCooperativaByCnpj } from "@/utils/cooperativa";
 import { fetchCooperativaByCnpjFromCloud } from "@/services/cooperativaCloudService";
 import { notaPertenceCooperado, resolverCooperadoIdCanonico } from "@/services/cooperadoCloudService";
 import { getNotaCooperativaCnpj, getFotosExibicaoNota, mergeNotaComFotos, contarFotosEnviadasNota, FOTOS_UPLOAD_LOTE } from "@/utils/fotoEntrega";
+import { getCooperadoNome } from "@/utils/calculations";
 import { getData, saveDataSafe } from "@/services/dataStore";
 import { reconciliarFichaFromNotasConferidas } from "@/services/notaPedidoService";
 import { needsOperationalResetCloudPush, getCloudResetAppliedVersion } from "@/services/operationalReset";
@@ -15,7 +16,7 @@ import {
 } from "@/services/syncMetaService";
 const STATUS_RANK: Record<NotaPedido["status"], number> = {
   rascunho: 0,
-  aguardando_conferencia: 0,
+  aguardando_conferencia: 1,
   rejeitada: 1,
   entregue: 2,
   conferida: 2,
@@ -616,13 +617,63 @@ export async function finalizeNotaEntregaNaNuvem(
     fotosPedido: undefined,
     fotoPedidoMiniatura: undefined,
     fotosPedidoMiniaturas: undefined,
+    cooperadoNomeSnapshot: nota.cooperadoNomeSnapshot ?? cooperadoNome,
     updatedAt: new Date().toISOString(),
   };
 
   const patched = await patchNotaPedidoInCloud(digits, finalNota);
   if (!patched.ok) return patched;
 
+  // Confirma que a nuvem realmente saiu de rascunho (PATCH antigo podia
+  // "suceder" com 0 linhas e a entrega sumia da lista do responsável).
+  const cloud = await fetchNotaPedidoFromCloud(digits, finalNota.id, { metaOnly: true });
+  if (cloud && cloud.status === "rascunho") {
+    const retry = await pushNotasPedidoToCloud(digits, [finalNota], cooperadoNome);
+    if (!retry.ok) {
+      return {
+        ok: false,
+        error: retry.error ?? "Entrega não publicou na nuvem. Tente Enviar de novo.",
+      };
+    }
+  }
+
   return { ok: true };
+}
+
+/** Republica na nuvem todas as entregas locais ainda em análise (cooperado). */
+export async function republishLocalAguardandoConferencia(
+  cnpj: string,
+  cooperadoId: string,
+  cooperativaId?: string
+): Promise<number> {
+  const digits = normalizeCnpj(cnpj);
+  if (digits.length !== 14) return 0;
+
+  const data = getData();
+  const canonico = resolverCooperadoIdCanonico(data, cooperadoId, cooperativaId);
+  const pendentes = data.notasPedido.filter(
+    (n) =>
+      n.status === "aguardando_conferencia" &&
+      n.fotoNaNuvem &&
+      notaPertenceCooperado(data, n, canonico, cooperativaId)
+  );
+  if (pendentes.length === 0) return 0;
+
+  let okCount = 0;
+  for (const nota of pendentes) {
+    const cloud = await fetchNotaPedidoFromCloud(digits, nota.id, { metaOnly: true });
+    // Já publicada e visível — não precisa republicar.
+    if (cloud && cloud.status && cloud.status !== "rascunho") {
+      okCount += 1;
+      continue;
+    }
+    const nome =
+      nota.cooperadoNomeSnapshot ??
+      getCooperadoNome(data.cooperados, nota.cooperadoId);
+    const result = await finalizeNotaEntregaNaNuvem(digits, nota, nome);
+    if (result.ok) okCount += 1;
+  }
+  return okCount;
 }
 
 /** Envia fotos uma a uma — memória constante no celular. */
@@ -640,9 +691,11 @@ export async function pushNotaComFotosEmStreaming(
 
   const metaNota: NotaPedido = slimNotaDraftForUpload({
     ...nota,
+    status: nota.status === "rascunho" ? "rascunho" : nota.status,
     fotosEnviadasCount: totalCount,
     fotoNaNuvem: true,
   });
+  const isDraft = metaNota.status === "rascunho";
 
   try {
     let startIndex = 0;
@@ -653,7 +706,12 @@ export async function pushNotaComFotosEmStreaming(
       if (progressRes.ok) {
         const progressJson = await progressRes.json().catch(() => ({}));
         const uploaded = Number(progressJson.uploadedParts ?? 0);
-        if (uploaded >= totalCount) return { ok: true };
+        if (uploaded >= totalCount) {
+          if (!isDraft) {
+            await finalizeNotaEntregaNaNuvem(digits, nota, cooperadoNome);
+          }
+          return { ok: true };
+        }
         if (uploaded > 0) startIndex = uploaded;
       }
     } catch {
@@ -674,6 +732,7 @@ export async function pushNotaComFotosEmStreaming(
           index: i,
           totalCount,
           foto,
+          draft: isDraft,
           nota: metaNota,
           cooperadoNome: i === 0 ? cooperadoNome : undefined,
         }),
@@ -686,6 +745,9 @@ export async function pushNotaComFotosEmStreaming(
         };
       }
       onProgress?.(i + 1, totalCount);
+    }
+    if (!isDraft) {
+      await finalizeNotaEntregaNaNuvem(digits, nota, cooperadoNome);
     }
     return { ok: true };
   } catch {

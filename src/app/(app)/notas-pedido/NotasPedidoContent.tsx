@@ -1566,6 +1566,7 @@ export default function NotasPedidoContent() {
 
     const notaFinalLocal: NotaPedido = {
       ...notaEntrega,
+      status: "aguardando_conferencia",
       fotoNaNuvem: true,
       fotoPedido: undefined,
       fotosPedido: undefined,
@@ -1596,9 +1597,11 @@ export default function NotasPedidoContent() {
       return;
     }
 
+    // Confirma de novo na nuvem ANTES do sync de aba (evita sumir ao ir para Início).
+    await finalizeNotaEntregaNaNuvem(cnpj, notaFinalLocal, cooperadoNome);
+
     setEnviando(false);
     setEnvioProgresso(null);
-    requestAppSync();
     limparRascunhoAnexar();
     resetFotosSessaoUi();
     setFotoDuplicadaMsg("");
@@ -1609,6 +1612,8 @@ export default function NotasPedidoContent() {
         ? "Entrega enviada! O responsável já pode conferir a foto."
         : `Entrega enviada com ${qtdFotos} fotos! O responsável já pode conferir.`
     );
+    // Sync depois — republicação no provider cobre edge cases.
+    requestAppSync();
   };
 
   const fecharConferirModal = () => {

@@ -144,10 +144,22 @@ export async function flushPendingDeliveryImages(): Promise<{
       continue;
     }
 
-    const slimNota = slimNotaDraftForUpload(item.notaSnapshot);
+    const slimFromQueue = slimNotaDraftForUpload(item.notaSnapshot);
+    // Usa status atual do AppData se a entrega já foi publicada (Enviar) —
+    // snapshot da fila offline ainda pode estar como rascunho.
+    let notaLive = slimFromQueue;
+    try {
+      const { getData } = await import("@/services/dataStore");
+      const local = getData().notasPedido.find((n) => n.id === item.notaSnapshot.id);
+      if (local && local.status !== "rascunho") {
+        notaLive = slimNotaDraftForUpload({ ...slimFromQueue, status: local.status });
+      }
+    } catch {
+      /* usa snapshot */
+    }
     const params: UploadImageParams = {
       cnpj: item.cnpj,
-      nota: slimNota,
+      nota: notaLive,
       index: item.index,
       totalCount: item.totalCount,
       blob: item.compressedBlob,

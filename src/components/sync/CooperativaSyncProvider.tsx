@@ -19,6 +19,7 @@ import {
   fetchNotaPedidoFromCloud,
   finalizeNotaEntregaNaNuvem,
   refreshCooperadoNotasEmAnalise,
+  republishLocalAguardandoConferencia,
   syncOfflineDeliveryImages,
 } from "@/services/notaPedidoCloudService";
 import {
@@ -123,6 +124,9 @@ export function CooperativaSyncProvider({ children }: { children: React.ReactNod
         const latest = getData();
         const cooperadoCanonico = resolverCooperadoIdCanonico(latest, currentUser.cooperadoId, currentCoopId);
         await refreshCooperadoNotasEmAnalise(cnpj, currentUser.cooperadoId, currentCoopId);
+        // Garante que entregas "em análise" locais estejam publicadas na nuvem
+        // (visíveis para o responsável) após trocar de aba / sync.
+        await republishLocalAguardandoConferencia(cnpj, currentUser.cooperadoId, currentCoopId);
 
         const registro = latest.cooperados.find((c) => c.id === cooperadoCanonico);
 

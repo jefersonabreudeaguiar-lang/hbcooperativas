@@ -3,7 +3,16 @@ import { getSupabaseAdmin, isSupabaseConfigured } from "@/lib/supabase/admin";
 import { isNotasPedidoTableMissing } from "@/lib/supabase/errors";
 import { normalizeCnpj } from "@/utils/cooperativa";
 import type { NotaPedido } from "@/types";
-import { fetchNotaFromStorage, fetchNotaMetaFromStorage, countUploadedFotoParts, uploadNotaToStorage, deleteNotaFromStorage, deleteNotaFromTable, notaPayloadForTable } from "@/lib/supabase/notasStorage";
+import {
+  fetchNotaFromStorage,
+  fetchNotaMetaFromStorage,
+  countUploadedFotoParts,
+  uploadNotaToStorage,
+  deleteNotaFromStorage,
+  deleteNotaFromTable,
+  notaPayloadForTable,
+  upsertNotasInTable,
+} from "@/lib/supabase/notasStorage";
 import { mergeNotaComFotos } from "@/utils/fotoEntrega";
 
 export async function GET(
@@ -86,18 +95,16 @@ export async function PATCH(
     return NextResponse.json({ error: "Cliente indisponível." }, { status: 503 });
   }
 
-  const { error } = await supabase
-    .from("notas_pedido")
-    .update({
-      status: nota.status,
-      mes_referencia: nota.mesReferencia,
-      payload: notaPayloadForTable(nota),
-      updated_at: nota.updatedAt,
-    })
-    .eq("id", id)
-    .eq("cooperativa_cnpj", cnpj);
+  // Upsert — update com 0 linhas no Supabase retorna sucesso e a entrega
+  // ficava eternamente em rascunho (invisível na lista / some no sync).
+  const tableResult = await upsertNotasInTable(
+    supabase,
+    cnpj,
+    [notaPayloadForTable(nota)],
+    nota.cooperadoNomeSnapshot
+  );
 
-  if (!error) {
+  if (tableResult.ok) {
     const forStorage = notaPayloadForTable(nota);
     const uploaded = await uploadNotaToStorage(supabase, cnpj, forStorage);
     if (!uploaded.ok) {
@@ -106,8 +113,9 @@ export async function PATCH(
     return NextResponse.json({ success: true, source: "table" });
   }
 
-  if (!isNotasPedidoTableMissing(error)) {
-    console.error("[notas-pedido/patch]", error.message);
+  if (!tableResult.tableMissing) {
+    console.error("[notas-pedido/patch]", tableResult.error);
+    return NextResponse.json({ error: tableResult.error ?? "Erro ao atualizar entrega." }, { status: 500 });
   }
 
   const uploaded = await uploadNotaToStorage(supabase, cnpj, notaPayloadForTable(nota));
