@@ -1,6 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { NotaPedido } from "@/types";
 import { isNotasPedidoTableMissing } from "@/lib/supabase/errors";
+import { protectNotaAgainstStatusDowngrade } from "@/utils/notaStatus";
 import { mergeNotaComFotos } from "@/utils/fotoEntrega";
 
 const BUCKET = "hb-entregas";
@@ -485,7 +486,42 @@ export async function upsertNotasInTable(
   notas: NotaPedido[],
   cooperadoNome?: string
 ): Promise<{ ok: true } | { ok: false; tableMissing: boolean; error?: string }> {
-  const rows = notas.map((nota) => ({
+  if (notas.length === 0) return { ok: true };
+
+  const ids = notas.map((n) => n.id);
+  const { data: existingRows, error: existingError } = await supabase
+    .from("notas_pedido")
+    .select("id, status, payload")
+    .eq("cooperativa_cnpj", cnpj)
+    .in("id", ids);
+
+  if (existingError && !isNotasPedidoTableMissing(existingError)) {
+    console.error("[notas-pedido/upsert-existing]", existingError.message);
+  }
+  if (existingError && isNotasPedidoTableMissing(existingError)) {
+    return { ok: false, tableMissing: true };
+  }
+
+  const existingById = new Map(
+    (existingRows ?? []).map((row) => [
+      String(row.id),
+      {
+        status: row.status as NotaPedido["status"] | undefined,
+        payload: (row.payload as NotaPedido | null) ?? undefined,
+      },
+    ])
+  );
+
+  const protectedNotas = notas.map((nota) => {
+    const ex = existingById.get(nota.id);
+    if (!ex?.status) return nota;
+    return protectNotaAgainstStatusDowngrade(
+      { ...(ex.payload ?? {}), status: ex.status },
+      nota
+    );
+  });
+
+  const rows = protectedNotas.map((nota) => ({
     id: nota.id,
     cooperativa_cnpj: cnpj,
     cooperado_id: nota.cooperadoId,

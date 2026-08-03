@@ -14,19 +14,25 @@ import {
   markNotasSyncDone,
   shouldForceFullNotasSync,
 } from "@/services/syncMetaService";
-const STATUS_RANK: Record<NotaPedido["status"], number> = {
-  rascunho: 0,
-  aguardando_conferencia: 1,
-  rejeitada: 1,
-  entregue: 2,
-  conferida: 2,
-  pago: 3,
-  cancelado: 3,
-};
+import {
+  isNotaStatusDowngrade,
+  isNotaStatusTerminalConferencia,
+  NOTA_STATUS_RANK,
+} from "@/utils/notaStatus";
+
+const STATUS_RANK = NOTA_STATUS_RANK;
 
 /** Evita que sync da nuvem recoloque na fila uma entrega já baixada localmente. */
 function shouldApplyCloudNota(local: NotaPedido | undefined, cloud: NotaPedido): boolean {
   if (!local) return true;
+
+  // Nunca rebaixar conferida/pago para fila/rascunho (mesmo se a nuvem tiver updatedAt mais novo).
+  if (
+    isNotaStatusTerminalConferencia(local.status) &&
+    isNotaStatusDowngrade(local.status, cloud.status)
+  ) {
+    return false;
+  }
 
   // Responsável rejeitou — cooperado precisa ver o status na hora.
   if (local.status === "aguardando_conferencia" && cloud.status === "rejeitada") {
@@ -611,6 +617,17 @@ export async function finalizeNotaEntregaNaNuvem(
   const digits = normalizeCnpj(cnpj);
   if (digits.length !== 14) return { ok: false, error: "CNPJ inválido." };
 
+  // Nunca rebaixar se a nuvem já avançou (conferida/pago/rejeitada).
+  const existing = await fetchNotaPedidoFromCloud(digits, nota.id, { metaOnly: true });
+  if (existing?.status) {
+    if (isNotaStatusTerminalConferencia(existing.status) || existing.status === "rejeitada") {
+      return { ok: true };
+    }
+    if (existing.status === "aguardando_conferencia") {
+      return { ok: true };
+    }
+  }
+
   const finalNota: NotaPedido = {
     ...nota,
     status: "aguardando_conferencia",
@@ -662,10 +679,18 @@ export async function republishLocalAguardandoConferencia(
   if (pendentes.length === 0) return 0;
 
   let okCount = 0;
+  let adopted = data;
+  let adoptedChanged = false;
+
   for (const nota of pendentes) {
     const cloud = await fetchNotaPedidoFromCloud(digits, nota.id, { metaOnly: true });
     // Já publicada e visível — não precisa republicar.
     if (cloud && cloud.status && cloud.status !== "rascunho") {
+      // Nuvem já conferiu/rejeitou — adota localmente (some do mural "em análise").
+      if (cloud.status !== "aguardando_conferencia") {
+        adopted = mergeCloudNotasIntoData(adopted, [cloud], digits);
+        adoptedChanged = true;
+      }
       okCount += 1;
       continue;
     }
@@ -675,6 +700,12 @@ export async function republishLocalAguardandoConferencia(
     const result = await finalizeNotaEntregaNaNuvem(digits, nota, nome);
     if (result.ok) okCount += 1;
   }
+
+  if (adoptedChanged) {
+    const reconciled = reconciliarFichaFromNotasConferidas(adopted);
+    saveDataSafe(reconciled);
+  }
+
   return okCount;
 }
 

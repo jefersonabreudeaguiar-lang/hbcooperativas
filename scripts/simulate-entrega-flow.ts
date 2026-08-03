@@ -19,6 +19,7 @@ import {
 } from "../src/utils/fotoEntrega";
 import { reconciliarFichaFromNotasConferidas } from "../src/services/notaPedidoService";
 import { normalizeCnpj } from "../src/utils/cooperativa";
+import { protectNotaAgainstStatusDowngrade } from "../src/utils/notaStatus";
 
 const CNPJ = "12345678000199";
 const COOP_ID = "coop-1";
@@ -420,6 +421,44 @@ function simShouldNotDowngradeConferida() {
     "Conferida local não regride para aguardando",
     merged.notasPedido[0].status === "conferida"
   );
+
+  const cloudNewer = makeNota("down-1", {
+    status: "aguardando_conferencia",
+    updatedAt: new Date(Date.now() + 60_000).toISOString(),
+  });
+  const merged2 = mergeCloudNotasIntoData(local, [cloudNewer], CNPJ);
+  assert(
+    "Conferida não regride mesmo com nuvem mais nova",
+    merged2.notasPedido[0].status === "conferida"
+  );
+
+  const protectedNota = protectNotaAgainstStatusDowngrade(conferida, cloudNewer);
+  assert("protect upsert bloqueia downgrade", protectedNota.status === "conferida");
+  assert("protect mantém valor", protectedNota.valorLiquido === 50);
+}
+
+function simReconciliarValorAReceber() {
+  let d = baseAppData();
+  const conferida = makeNota("val-1", {
+    status: "conferida",
+    valorLiquido: 120,
+    valorBruto: 130,
+    valorDesconto: 10,
+    itens: [
+      {
+        produtoInstituicaoId: "p1",
+        produtoNome: "Alface",
+        unidade: "kg",
+        precoUnitario: 10,
+        quantidade: 13,
+        valorBruto: 130,
+      },
+    ],
+  });
+  d = { ...d, notasPedido: [conferida], fichaCorrida: [] };
+  d = reconciliarFichaFromNotasConferidas(d);
+  assert("ficha criada após conferida", d.fichaCorrida.length === 1);
+  assert("valor ficha > 0", d.fichaCorrida[0].valorLiquido === 120);
 }
 
 function simFilaConferenciaGrupos() {
@@ -600,6 +639,7 @@ simExclusaoUnicaPropagada();
 simAguardandoAusenteNaListaNaoApaga();
 simMergeTableStorage();
 simShouldNotDowngradeConferida();
+simReconciliarValorAReceber();
 simFilaConferenciaGrupos();
 simCompressaoProgressiva();
 simFotosPartesSemRam();

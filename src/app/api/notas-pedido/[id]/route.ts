@@ -44,14 +44,23 @@ export async function GET(
   let fromTable: NotaPedido | null = null;
   const { data, error } = await supabase
     .from("notas_pedido")
-    .select("payload")
+    .select("payload, status, updated_at")
     .eq("id", id)
     .eq("cooperativa_cnpj", cnpj)
     .maybeSingle();
 
   if (!error && data?.payload) {
     const nota = data.payload as NotaPedido;
-    if (nota?.id) fromTable = nota;
+    const sqlStatus = data.status as NotaPedido["status"] | null;
+    const sqlUpdatedAt = typeof data.updated_at === "string" ? data.updated_at : undefined;
+    if (nota?.id) {
+      fromTable = {
+        ...nota,
+        status:
+          sqlStatus && sqlStatus !== "rascunho" ? sqlStatus : nota.status,
+        updatedAt: sqlUpdatedAt ?? nota.updatedAt,
+      };
+    }
   } else if (error && !isNotasPedidoTableMissing(error)) {
     console.error("[notas-pedido/get]", error.message);
   }

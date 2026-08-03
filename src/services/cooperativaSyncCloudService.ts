@@ -1,4 +1,4 @@
-import type { AppData, Cooperativa, Cooperado, Instituicao, ProdutoInstituicao, Desconto, PrestacaoContasExcluida, InstituicaoExcluida, PagamentoCooperadoRegistro, Comunicado } from "@/types";
+import type { AppData, Cooperativa, Cooperado, Instituicao, ProdutoInstituicao, Desconto, PrestacaoContasExcluida, InstituicaoExcluida, PagamentoCooperadoRegistro, Comunicado, FichaCorrida } from "@/types";
 import { normalizeCnpj } from "@/utils/cooperativa";
 import type { ContratosSyncPayload, OperacionalSyncPayload } from "@/lib/supabase/cooperativaSyncStorage";
 import { getData, saveDataSafe, runWithBatchedSaveAsync } from "@/services/dataStore";
@@ -191,6 +191,7 @@ function buildOperacionalPayload(data: AppData, coopId: string): OperacionalSync
       (p) => p.cooperativaId === coopId && !excluidasIds.has(p.id)
     ),
     prestacoesContasExcluidas: (data.prestacoesContasExcluidas ?? []).filter((e) => e.cooperativaId === coopId),
+    fichaCorrida: data.fichaCorrida.filter((f) => f.cooperativaId === coopId),
     config: { ...data.config },
   };
 }
@@ -209,6 +210,7 @@ function normalizeCloudOperacional(cloud: OperacionalSyncPayload): OperacionalSy
     livroCaixa: [],
     prestacoesContas: [],
     prestacoesContasExcluidas: [],
+    fichaCorrida: [],
   };
 }
 
@@ -231,6 +233,7 @@ function buildEmptyOperacionalResetPayload(data: AppData, coopId: string): Opera
     livroCaixa: [],
     prestacoesContas: [],
     prestacoesContasExcluidas: [],
+    fichaCorrida: [],
     config: { ...data.config },
   };
 }
@@ -459,6 +462,7 @@ export function mergeOperacionalIntoData(
   const cloudAvulsos = (cloud.valoresAvulsosReceber ?? []).map((v) => ({ ...v, cooperativaId: coopId }));
   const cloudLivro = (cloud.livroCaixa ?? []).map((l) => ({ ...l, cooperativaId: coopId }));
   const cloudExcluidas = (cloud.prestacoesContasExcluidas ?? []).map((e) => ({ ...e, cooperativaId: coopId }));
+  const cloudFichas = (cloud.fichaCorrida ?? []).map((f) => ({ ...f, cooperativaId: coopId }));
   const mergedExcluidasCoop = mergePrestacoesExcluidasByNewer(
     (data.prestacoesContasExcluidas ?? []).filter((e) => e.cooperativaId === coopId),
     cloudExcluidas
@@ -571,6 +575,16 @@ export function mergeOperacionalIntoData(
     prestacoesContasExcluidas: [
       ...filterCoop(data.prestacoesContasExcluidas ?? [], (e) => e.cooperativaId === coopId),
       ...(cloudAuthoritative ? cloudExcluidas : mergedExcluidasCoop),
+    ],
+    fichaCorrida: [
+      ...filterCoop(data.fichaCorrida ?? [], (f) => f.cooperativaId === coopId),
+      ...(cloudAuthoritative
+        ? cloudFichas
+        : mergeOperacionalArrayFromCloud(
+            (data.fichaCorrida ?? []).filter((f) => f.cooperativaId === coopId),
+            cloudFichas,
+            cloudSyncTime
+          )),
     ],
   };
 

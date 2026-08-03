@@ -1991,6 +1991,12 @@ export default function NotasPedidoContent() {
       const notasPedido = d.notasPedido.map((n) => (n.id === selectedNota.id ? notaAtualizada! : n));
 
       if (multiFoto) {
+        const jaTemFicha = d.fichaCorrida.some((f) => f.notaPedidoId === selectedNota.id);
+        let fichaCorrida = d.fichaCorrida;
+        if (!jaTemFicha && notaAtualizada.valorLiquido > 0) {
+          const ficha = buildFichaFromNota(notaAtualizada, d, user.name, nomeCoop);
+          fichaCorrida = [...fichaCorrida, ficha];
+        }
         const arquivosMensais = upsertArquivoMensal(
           d,
           notaAtualizada.cooperadoId,
@@ -1999,7 +2005,7 @@ export default function NotasPedidoContent() {
           { notaPedidoIds: [notaAtualizada.id] }
         );
         return addAuditEntry(
-          { ...d, notasPedido, arquivosMensais },
+          { ...d, notasPedido, fichaCorrida, arquivosMensais },
           {
             entityType: "nota_pedido",
             entityId: selectedNota.id,

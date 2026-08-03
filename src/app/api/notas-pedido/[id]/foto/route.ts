@@ -12,6 +12,7 @@ import {
   uploadNotaFotoPartBuffer,
   upsertNotasInTable,
 } from "@/lib/supabase/notasStorage";
+import { pickHigherNotaStatus } from "@/utils/notaStatus";
 
 interface FotoUploadInput {
   cnpj: string;
@@ -120,6 +121,20 @@ async function processFotoUpload(id: string, input: FotoUploadInput) {
   const statusExistente = existingMeta?.status;
   const preservarPublicado =
     statusExistente && statusExistente !== "rascunho" ? statusExistente : undefined;
+  // Preferir status de maior rank (conferida não volta para aguardando por foto tardia).
+  const statusIncoming = isDraft
+    ? "rascunho"
+    : (notaBody?.status ?? "aguardando_conferencia");
+  const statusFinal =
+    statusExistente && !isDraft
+      ? pickHigherNotaStatus(
+          statusExistente,
+          statusIncoming as NotaPedido["status"],
+          existingMeta?.updatedAt,
+          notaBody?.updatedAt
+        )
+      : preservarPublicado ??
+        (isDraft ? "rascunho" : (notaBody?.status ?? "aguardando_conferencia"));
 
   if (index === 0) {
     if (!notaBody?.id || notaBody.id !== id) {
@@ -128,9 +143,7 @@ async function processFotoUpload(id: string, input: FotoUploadInput) {
     metaNota = {
       ...notaBody,
       id,
-      status:
-        preservarPublicado ??
-        (isDraft ? "rascunho" : (notaBody.status ?? "aguardando_conferencia")),
+      status: statusFinal,
       fotosEnviadasCount: totalCount,
       fotoNaNuvem: true,
       fotoPedido: undefined,
@@ -153,7 +166,7 @@ async function processFotoUpload(id: string, input: FotoUploadInput) {
       metaNota = {
         ...notaBody,
         id,
-        status: preservarPublicado ?? notaBody.status,
+        status: statusFinal,
         fotosEnviadasCount: totalCount,
         fotoNaNuvem: true,
         fotoPedido: undefined,
