@@ -17,7 +17,7 @@ import {
   parametrosCompressaoFoto,
   resolverAbaConferenciaAtiva,
 } from "../src/utils/fotoEntrega";
-import { reconciliarFichaFromNotasConferidas } from "../src/services/notaPedidoService";
+import { reconciliarFichaFromNotasConferidas, dedupeFichaCorridaPorNota, getResumoPagamentoCooperado } from "../src/services/notaPedidoService";
 import { normalizeCnpj } from "../src/utils/cooperativa";
 import { protectNotaAgainstStatusDowngrade } from "../src/utils/notaStatus";
 
@@ -500,6 +500,53 @@ function simReconciliarValorAReceber() {
   assert("valor ficha > 0", d.fichaCorrida[0].valorLiquido === 120);
 }
 
+function simDedupeFichaNaoDobraValor() {
+  let d = baseAppData();
+  const conferida = makeNota("dup-1", {
+    status: "conferida",
+    valorLiquido: 100,
+    valorBruto: 105,
+    valorDesconto: 5,
+    itens: [
+      {
+        produtoInstituicaoId: "p1",
+        produtoNome: "Alface",
+        unidade: "kg",
+        precoUnitario: 10,
+        quantidade: 10.5,
+        valorBruto: 105,
+      },
+    ],
+  });
+  const f1 = {
+    id: "fc-local",
+    cooperativaId: COOP_ID,
+    cooperadoId: COOPERADO_ID,
+    notaPedidoId: "dup-1",
+    descricao: "Nota N-dup-1 — Escola",
+    valorBruto: 105,
+    descontos: 5,
+    valorLiquido: 100,
+    saldoAcumulado: 100,
+    mesReferencia: "2026-06",
+    status: "pendente" as const,
+    dataLancamento: new Date().toISOString().slice(0, 10),
+    createdAt: new Date(Date.now() - 1000).toISOString(),
+  };
+  const f2 = {
+    ...f1,
+    id: "fc-cloud",
+    createdAt: new Date().toISOString(),
+  };
+  d = { ...d, notasPedido: [conferida], fichaCorrida: [f1, f2] };
+  const deduped = dedupeFichaCorridaPorNota(d.fichaCorrida, d.notasPedido);
+  assert("dedupe deixa 1 ficha por nota", deduped.length === 1);
+  d = reconciliarFichaFromNotasConferidas({ ...d, fichaCorrida: [f1, f2] });
+  assert("reconciliar remove duplicata", d.fichaCorrida.length === 1);
+  const resumo = getResumoPagamentoCooperado(d, COOPERADO_ID, "2026-06", COOP_ID);
+  assert("valor a receber não dobra", resumo.valorEntregas === 100, `got ${resumo.valorEntregas}`);
+}
+
 function simFilaConferenciaGrupos() {
   const d = baseAppData();
   const pendentes = [
@@ -680,6 +727,7 @@ simMergeTableStorage();
 simShouldNotDowngradeConferida();
 simStickyAguardandoNaoSomeNoSync();
 simReconciliarValorAReceber();
+simDedupeFichaNaoDobraValor();
 simFilaConferenciaGrupos();
 simCompressaoProgressiva();
 simFotosPartesSemRam();

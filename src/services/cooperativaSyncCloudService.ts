@@ -5,7 +5,7 @@ import { getData, saveDataSafe, runWithBatchedSaveAsync } from "@/services/dataS
 import { syncCooperadosFromCloud, fetchCooperadosFromCloud, pushCooperadoToCloud } from "@/services/cooperadoCloudService";
 import { syncNotasPedidoFromCloud, patchNotaPedidoInCloud } from "@/services/notaPedidoCloudService";
 import { fetchCooperativaByCnpjFromCloud, mergeCooperativaIntoData } from "@/services/cooperativaCloudService";
-import { mergeArquivosMensaisFromCloud, reconciliarFichaFromNotasConferidas } from "@/services/notaPedidoService";
+import { mergeArquivosMensaisFromCloud, reconciliarFichaFromNotasConferidas, dedupeFichaCorridaPorNota } from "@/services/notaPedidoService";
 import { sincronizarMensalidadeCooperativa, mensalidadeVisivelNoDispositivo, normalizarMensalidadeCooperadoLocal, mesclarMensalidadesPayloadNuvem, prepararMensalidadesCloud, prepararMensalidadeCloud, reconciliarMensalidadesComCooperadosCloud, mensalidadeCloudEntraNoDispositivo, enriquecerMensalidadeCooperadoSnapshot } from "@/services/mensalidadeService";
 import { aplicarPrestacoesContasExcluidas } from "@/services/prestacaoContasService";
 import { aplicarInstituicoesExcluidas } from "@/services/instituicaoContratoService";
@@ -576,16 +576,19 @@ export function mergeOperacionalIntoData(
       ...filterCoop(data.prestacoesContasExcluidas ?? [], (e) => e.cooperativaId === coopId),
       ...(cloudAuthoritative ? cloudExcluidas : mergedExcluidasCoop),
     ],
-    fichaCorrida: [
-      ...filterCoop(data.fichaCorrida ?? [], (f) => f.cooperativaId === coopId),
-      ...(cloudAuthoritative
-        ? cloudFichas
-        : mergeOperacionalArrayFromCloud(
-            (data.fichaCorrida ?? []).filter((f) => f.cooperativaId === coopId),
-            cloudFichas,
-            cloudSyncTime
-          )),
-    ],
+    fichaCorrida: dedupeFichaCorridaPorNota(
+      [
+        ...filterCoop(data.fichaCorrida ?? [], (f) => f.cooperativaId === coopId),
+        ...(cloudAuthoritative
+          ? cloudFichas
+          : mergeOperacionalArrayFromCloud(
+              (data.fichaCorrida ?? []).filter((f) => f.cooperativaId === coopId),
+              cloudFichas,
+              cloudSyncTime
+            )),
+      ],
+      data.notasPedido
+    ),
   };
 
   const localConfigTime = new Date(data.cooperativas.find((c) => c.id === coopId)?.updatedAt ?? 0).getTime();
@@ -914,9 +917,10 @@ export async function syncCooperativaBackground(
     await syncCooperativaProfileFromCloud(digits);
     const coopId = preferredCoopId ?? resolveCoopId(getData(), digits);
     await syncCooperadosFromCloud(digits, coopId);
-    await syncNotasPedidoFromCloud(digits);
-    await syncContratosFromCloud(digits);
+    // Ficha (operacional) antes das notas — evita 2ª ficha e valor dobrado no cooperado.
     await syncOperacionalFromCloud(digits);
+    await syncContratosFromCloud(digits);
+    await syncNotasPedidoFromCloud(digits);
   });
 }
 
@@ -944,9 +948,10 @@ export async function syncAllCooperativaFromCloud(cnpj: string, preferredCoopId?
     await syncCooperativaProfileFromCloud(digits);
     const coopId = preferredCoopId ?? resolveCoopId(getData(), digits);
     await syncCooperadosFromCloud(digits, coopId);
-    await syncNotasPedidoFromCloud(digits);
-    await syncContratosFromCloud(digits);
+    // Ficha (operacional) antes das notas — evita 2ª ficha e valor dobrado.
     await syncOperacionalFromCloud(digits);
+    await syncContratosFromCloud(digits);
+    await syncNotasPedidoFromCloud(digits);
   });
 }
 

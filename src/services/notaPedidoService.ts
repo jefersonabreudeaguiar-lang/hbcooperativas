@@ -657,11 +657,68 @@ export function dividirEntregaEntreCooperados(
   return rebuildFichasNota({ ...data, notasPedido }, notaAtualizada);
 }
 
+/** Parte da ficha: lançamento único da nota ou fatia por foto (multi-foto). */
+export function chaveParteFichaCorrida(f: FichaCorrida): string {
+  const m = f.descricao.match(/\(foto\s+(\d+)\s*\/\s*(\d+)\)/i);
+  if (m) return `foto:${m[1]}/${m[2]}`;
+  return "full";
+}
+
+/**
+ * Remove fichas duplicadas da mesma nota (ex.: sync criou uma e o lançamento outra).
+ * Mantém fatias por foto quando houver; se existir só "full", fica uma por notaPedidoId.
+ */
+export function dedupeFichaCorridaPorNota(
+  fichas: FichaCorrida[],
+  notas?: NotaPedido[]
+): FichaCorrida[] {
+  const notaValor = new Map((notas ?? []).map((n) => [n.id, n.valorLiquido]));
+  const byNota = new Map<string, FichaCorrida[]>();
+
+  for (const f of fichas) {
+    const list = byNota.get(f.notaPedidoId) ?? [];
+    list.push(f);
+    byNota.set(f.notaPedidoId, list);
+  }
+
+  const out: FichaCorrida[] = [];
+  for (const [notaId, list] of byNota) {
+    const parts = list.map((f) => ({ f, part: chaveParteFichaCorrida(f) }));
+    const hasFotoParts = parts.some((p) => p.part.startsWith("foto:"));
+    const best = new Map<string, FichaCorrida>();
+
+    for (const { f, part } of parts) {
+      if (hasFotoParts && part === "full") continue;
+      const cur = best.get(part);
+      if (!cur) {
+        best.set(part, f);
+        continue;
+      }
+      const target = notaValor.get(notaId);
+      const curMatch = target != null && Math.abs(cur.valorLiquido - target) < 0.01;
+      const newMatch = target != null && Math.abs(f.valorLiquido - target) < 0.01;
+      if (newMatch && !curMatch) {
+        best.set(part, f);
+        continue;
+      }
+      if (curMatch && !newMatch) continue;
+      const tNew = new Date(f.createdAt).getTime();
+      const tCur = new Date(cur.createdAt).getTime();
+      if (tNew >= tCur) best.set(part, f);
+    }
+
+    out.push(...best.values());
+  }
+
+  return out;
+}
+
 /** Cria lançamentos na ficha a partir de notas já conferidas (sincronizadas da nuvem). */
 export function reconciliarFichaFromNotasConferidas(data: AppData): AppData {
-  const fichaNotaIds = new Set(data.fichaCorrida.map((f) => f.notaPedidoId));
-  let changed = false;
-  let fichaCorrida = [...data.fichaCorrida];
+  const dedupedInitial = dedupeFichaCorridaPorNota(data.fichaCorrida, data.notasPedido);
+  let fichaCorrida = dedupedInitial;
+  let changed = dedupedInitial.length !== data.fichaCorrida.length;
+  const fichaNotaIds = new Set(fichaCorrida.map((f) => f.notaPedidoId));
   let arquivosMensais = data.arquivosMensais;
 
   const notasOrdenadas = [...data.notasPedido].sort(
@@ -703,6 +760,12 @@ export function reconciliarFichaFromNotasConferidas(data: AppData): AppData {
     arquivosMensais = upsertArquivoMensal(ctx, nota.cooperadoId, nota.cooperativaId, nota.mesReferencia, {
       notaPedidoIds: [nota.id],
     });
+    changed = true;
+  }
+
+  const dedupedFinal = dedupeFichaCorridaPorNota(fichaCorrida, data.notasPedido);
+  if (dedupedFinal.length !== fichaCorrida.length) {
+    fichaCorrida = dedupedFinal;
     changed = true;
   }
 
