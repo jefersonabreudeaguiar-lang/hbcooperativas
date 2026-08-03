@@ -17,14 +17,40 @@ import {
 import {
   isNotaStatusDowngrade,
   isNotaStatusTerminalConferencia,
+  protectNotaAgainstStatusDowngrade,
   NOTA_STATUS_RANK,
 } from "@/utils/notaStatus";
 
 const STATUS_RANK = NOTA_STATUS_RANK;
 
-/** Evita que sync da nuvem recoloque na fila uma entrega já baixada localmente. */
+/**
+ * Evita sumiço na fila do responsável: nota em análise local só sai por
+ * rejeição/conferência/pagamento — nunca por rascunho, lista incompleta ou sync.
+ */
 function shouldApplyCloudNota(local: NotaPedido | undefined, cloud: NotaPedido): boolean {
   if (!local) return true;
+
+  // Sticky fila: aguardando local permanece até decisão do responsável (ou rejeição).
+  if (local.status === "aguardando_conferencia") {
+    if (cloud.status === "rascunho") return false;
+    if (cloud.status === "aguardando_conferencia") {
+      // Só mescla fotos/meta — status permanece em análise.
+      const cloudTime = new Date(cloud.updatedAt).getTime();
+      const localTime = new Date(local.updatedAt).getTime();
+      const cloudFotos = contarFotosEnviadasNota(cloud);
+      const localFotos = contarFotosEnviadasNota(local);
+      return cloudTime > localTime || cloudFotos > localFotos;
+    }
+    if (
+      cloud.status === "rejeitada" ||
+      cloud.status === "conferida" ||
+      cloud.status === "pago" ||
+      cloud.status === "cancelado"
+    ) {
+      return true;
+    }
+    return false;
+  }
 
   // Nunca rebaixar conferida/pago para fila/rascunho (mesmo se a nuvem tiver updatedAt mais novo).
   if (
@@ -35,26 +61,8 @@ function shouldApplyCloudNota(local: NotaPedido | undefined, cloud: NotaPedido):
   }
 
   // Responsável rejeitou — cooperado precisa ver o status na hora.
-  if (local.status === "aguardando_conferencia" && cloud.status === "rejeitada") {
-    return true;
-  }
-
-  // Cooperado reenviou após rejeição — responsável volta a ver na fila.
   if (local.status === "rejeitada" && cloud.status === "aguardando_conferencia") {
     return true;
-  }
-
-  // Responsável conferiu ou pagou — cooperado precisa ver na hora.
-  if (
-    local.status === "aguardando_conferencia" &&
-    (cloud.status === "conferida" || cloud.status === "pago")
-  ) {
-    return true;
-  }
-
-  // Rascunho na nuvem (foto parcial) não apaga entrega já publicada localmente.
-  if (local.status === "aguardando_conferencia" && cloud.status === "rascunho") {
-    return false;
   }
 
   const localRank = STATUS_RANK[local.status] ?? 0;
@@ -196,27 +204,44 @@ export function mergeCloudNotasIntoData(
     if (!local || shouldApplyCloudNota(local, cloudNota)) {
       let mergedNota = local ? mergeNotaComFotos(local, cloudNota) : cloudNota;
       if (local && cloudNota.status !== local.status) {
-        const conferiuNaNuvem = cloudNota.status === "conferida" || cloudNota.status === "pago";
-        mergedNota = {
-          ...mergedNota,
-          status: cloudNota.status,
-          conferidaPor: cloudNota.conferidaPor,
-          dataConferencia: cloudNota.dataConferencia,
-          rejeitadaPor: cloudNota.rejeitadaPor,
-          dataRejeicao: cloudNota.dataRejeicao,
-          motivoRejeicao: cloudNota.motivoRejeicao,
-          reenviadaEm: cloudNota.reenviadaEm,
-          ...(conferiuNaNuvem
-            ? {
-                itens: cloudNota.itens ?? mergedNota.itens,
-                valorBruto: cloudNota.valorBruto,
-                valorDesconto: cloudNota.valorDesconto,
-                valorLiquido: cloudNota.valorLiquido,
-                percentualDescontoCooperativa: cloudNota.percentualDescontoCooperativa,
-              }
-            : {}),
-          updatedAt: cloudNota.updatedAt,
-        };
+        // Nunca aplicar rebaixamento de status no merge (fila some e volta).
+        if (isNotaStatusDowngrade(local.status, cloudNota.status)) {
+          mergedNota = {
+            ...mergedNota,
+            status: local.status,
+            updatedAt: local.updatedAt,
+          };
+        } else {
+          const conferiuNaNuvem = cloudNota.status === "conferida" || cloudNota.status === "pago";
+          const protegida = protectNotaAgainstStatusDowngrade(local, {
+            ...cloudNota,
+            ...mergedNota,
+            status: cloudNota.status,
+          });
+          mergedNota = {
+            ...protegida,
+            status: cloudNota.status,
+            conferidaPor: cloudNota.conferidaPor,
+            dataConferencia: cloudNota.dataConferencia,
+            rejeitadaPor: cloudNota.rejeitadaPor,
+            dataRejeicao: cloudNota.dataRejeicao,
+            motivoRejeicao: cloudNota.motivoRejeicao,
+            reenviadaEm: cloudNota.reenviadaEm,
+            ...(conferiuNaNuvem
+              ? {
+                  itens: cloudNota.itens ?? mergedNota.itens,
+                  valorBruto: cloudNota.valorBruto,
+                  valorDesconto: cloudNota.valorDesconto,
+                  valorLiquido: cloudNota.valorLiquido,
+                  percentualDescontoCooperativa: cloudNota.percentualDescontoCooperativa,
+                }
+              : {}),
+            updatedAt: cloudNota.updatedAt,
+          };
+        }
+      } else if (local?.status === "aguardando_conferencia") {
+        // Merge de fotos não pode tirar da fila.
+        mergedNota = { ...mergedNota, status: "aguardando_conferencia" };
       }
       byId.set(mergedNota.id, mergedNota);
       changed = true;

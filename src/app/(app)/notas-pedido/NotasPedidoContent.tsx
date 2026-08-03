@@ -21,6 +21,7 @@ import { NotaFotoImg } from "@/components/ui/NotaFotoImg";
 import { updateData, updateDataSafe, generateId, addAuditEntry, getData } from "@/services/dataStore";
 import { requestAppSync } from "@/services/syncRequest";
 import { forceNextFullNotasSync } from "@/services/syncMetaService";
+import { useSyncStatus } from "@/components/sync/CooperativaSyncProvider";
 import {
   calcularItensNota,
   gerarNumeroNota,
@@ -165,6 +166,7 @@ function qtyInputClassName(filled: boolean, extra?: string) {
 export default function NotasPedidoContent() {
   const data = useAppData();
   const { check, user, isCooperado, cooperadoId } = usePermissions();
+  const { syncing } = useSyncStatus();
   const searchParams = useSearchParams();
   const router = useRouter();
 
@@ -730,10 +732,28 @@ export default function NotasPedidoContent() {
       .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
   }, [data, coopId, isCooperado]);
 
+  // Evita fila “sumir e voltar” durante sync: mantém pendentes ainda em análise nos dados.
+  const pendentesStickyRef = useRef<typeof pendentesTodas>([]);
+  const pendentesEstaveis = useMemo(() => {
+    if (!data) return pendentesTodas;
+    if (pendentesTodas.length > 0) {
+      pendentesStickyRef.current = pendentesTodas;
+      return pendentesTodas;
+    }
+    if (syncing && pendentesStickyRef.current.length > 0) {
+      const aindaEmAnalise = pendentesStickyRef.current.filter((n) =>
+        data.notasPedido.some((x) => x.id === n.id && x.status === "aguardando_conferencia")
+      );
+      if (aindaEmAnalise.length > 0) return aindaEmAnalise;
+    }
+    pendentesStickyRef.current = [];
+    return pendentesTodas;
+  }, [data, pendentesTodas, syncing]);
+
   const pendentesPorCooperado = useMemo(() => {
     if (!data) return [];
-    return agruparPendentesPorCooperado(data, pendentesTodas, coopId);
-  }, [data, pendentesTodas, coopId]);
+    return agruparPendentesPorCooperado(data, pendentesEstaveis, coopId);
+  }, [data, pendentesEstaveis, coopId]);
 
   useEffect(() => {
     if (isCooperado || vistaResponsavel !== "cooperado" || !filtroCooperadoId) return;
@@ -753,8 +773,8 @@ export default function NotasPedidoContent() {
   );
 
   const totalFotosPendentes = useMemo(
-    () => contarFotosEnviadasNotas(pendentesTodas),
-    [pendentesTodas]
+    () => contarFotosEnviadasNotas(pendentesEstaveis),
+    [pendentesEstaveis]
   );
 
   const fotosAbaAtiva = useMemo(
@@ -764,6 +784,9 @@ export default function NotasPedidoContent() {
 
   useEffect(() => {
     if (isCooperado || vistaResponsavel !== "cooperado") return;
+
+    // Durante sync não esvazia a vista — evita “sumiu e voltou”.
+    if (syncing) return;
 
     if (pendentesPorCooperado.length === 0) {
       setVistaResponsavel("fila");
@@ -796,6 +819,7 @@ export default function NotasPedidoContent() {
   }, [
     isCooperado,
     vistaResponsavel,
+    syncing,
     pendentesPorCooperado,
     abaConferenciaEfetiva,
     abaConferenciaKey,
@@ -861,7 +885,7 @@ export default function NotasPedidoContent() {
   ]);
 
   const mostrarTabelaResponsavel =
-    !isCooperado && (vistaResponsavel === "historico" || pendentesTodas.length === 0);
+    !isCooperado && (vistaResponsavel === "historico" || pendentesEstaveis.length === 0);
 
   const contratosEntrega = useMemo(() => {
     if (!data || !coopId) return [];
@@ -2358,8 +2382,8 @@ export default function NotasPedidoContent() {
             ? abaCooperado === "ficha"
               ? "Extrato financeiro mensal com valores recebidos e detalhamento de cada entrega"
               : "Toque no botão verde para fotografar sua entrega — histórico por mês abaixo"
-            : pendentesTodas.length > 0
-              ? `${pendentesTodas.length} ${pendentesTodas.length === 1 ? "nota" : "notas"} a conferir e lançar · só quem enviou foto aparece abaixo`
+            : pendentesEstaveis.length > 0
+              ? `${pendentesEstaveis.length} ${pendentesEstaveis.length === 1 ? "nota" : "notas"} a conferir e lançar · só quem enviou foto aparece abaixo`
               : "Nenhuma nota pendente — histórico e lançamento avulso continuam disponíveis"
         }
         action={isCooperado ? (
@@ -2450,23 +2474,23 @@ export default function NotasPedidoContent() {
 
       {!isCooperado && (
         <div className="mb-6 space-y-4">
-          {pendentesTodas.length > 0 ? (
+          {pendentesEstaveis.length > 0 ? (
             <>
               <div className="rounded-2xl border border-amber-200 bg-amber-50 px-5 py-4">
                 <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
                   <div>
                     <p className="text-2xl font-bold text-amber-950 tabular-nums leading-tight">
-                      {pendentesTodas.length}{" "}
-                      {pendentesTodas.length === 1 ? "nota" : "notas"} a conferir e lançar
+                      {pendentesEstaveis.length}{" "}
+                      {pendentesEstaveis.length === 1 ? "nota" : "notas"} a conferir e lançar
                     </p>
                     <p className="text-sm text-amber-900/80 mt-1">
                       {pendentesPorCooperado.length}{" "}
                       {pendentesPorCooperado.length === 1 ? "cooperado enviou" : "cooperados enviaram"}{" "}
                       foto
-                      {totalFotosPendentes > pendentesTodas.length
+                      {totalFotosPendentes > pendentesEstaveis.length
                         ? ` · ${totalFotosPendentes} fotos`
                         : ""}
-                      . Ao lançar todas de um cooperado, o nome some da lista.
+                      . Ficam na fila até você lançar — não somem no sync.
                     </p>
                   </div>
                   {vistaResponsavel !== "historico" ? (
@@ -2716,14 +2740,14 @@ export default function NotasPedidoContent() {
           </Select>
         </FormField>
         )}
-        {!isCooperado && pendentesTodas.length > 0 && vistaResponsavel === "historico" && (
+        {!isCooperado && pendentesEstaveis.length > 0 && vistaResponsavel === "historico" && (
           <div className="flex items-end">
             <Button type="button" size="sm" onClick={() => {
               setVistaResponsavel("fila");
               setStatusFilter("aguardando_conferencia");
               setFiltroCooperadoId("");
             }}>
-              Voltar à fila ({pendentesTodas.length})
+              Voltar à fila ({pendentesEstaveis.length})
             </Button>
           </div>
         )}

@@ -402,6 +402,45 @@ function simMergeTableStorage() {
   );
 }
 
+function simStickyAguardandoNaoSomeNoSync() {
+  let local = baseAppData();
+  const pendente = makeNota("sticky-1", {
+    status: "aguardando_conferencia",
+    updatedAt: new Date(Date.now() - 10_000).toISOString(),
+  });
+  local = { ...local, notasPedido: [pendente] };
+
+  // Nuvem manda rascunho mais novo — fila do responsável deve manter em análise.
+  const cloudRascunho = makeNota("sticky-1", {
+    status: "rascunho",
+    updatedAt: new Date().toISOString(),
+  });
+  let merged = mergeCloudNotasIntoData(local, [cloudRascunho], CNPJ);
+  assert(
+    "Sticky: rascunho na nuvem não tira da fila",
+    merged.notasPedido[0].status === "aguardando_conferencia"
+  );
+
+  // Lista incompleta (delta sem a nota) — local permanece.
+  merged = mergeCloudNotasIntoData(local, [], CNPJ);
+  assert(
+    "Sticky: lista vazia não apaga aguardando local",
+    merged.notasPedido.some((n) => n.id === "sticky-1" && n.status === "aguardando_conferencia")
+  );
+
+  // Só some quando responsável lança (conferida).
+  const cloudConferida = makeNota("sticky-1", {
+    status: "conferida",
+    valorLiquido: 40,
+    updatedAt: new Date().toISOString(),
+  });
+  merged = mergeCloudNotasIntoData(local, [cloudConferida], CNPJ);
+  assert(
+    "Sticky: conferida remove da fila (status avançou)",
+    merged.notasPedido[0].status === "conferida"
+  );
+}
+
 function simShouldNotDowngradeConferida() {
   let local = baseAppData();
   const conferida = makeNota("down-1", {
@@ -639,6 +678,7 @@ simExclusaoUnicaPropagada();
 simAguardandoAusenteNaListaNaoApaga();
 simMergeTableStorage();
 simShouldNotDowngradeConferida();
+simStickyAguardandoNaoSomeNoSync();
 simReconciliarValorAReceber();
 simFilaConferenciaGrupos();
 simCompressaoProgressiva();
