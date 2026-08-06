@@ -31,6 +31,9 @@ const STATUS_STYLES: Record<string, string> = {
   precisa_corrigir: "bg-orange-100 text-orange-900 border-orange-300",
   aprovada: "bg-blue-100 text-blue-800 border-blue-200",
   em_analise: "bg-amber-100 text-amber-900 border-amber-300",
+  aberta: "bg-indigo-100 text-indigo-900 border-indigo-300",
+  encerrada: "bg-gray-100 text-gray-700 border-gray-300",
+  resultado_publicado: "bg-green-100 text-green-800 border-green-200",
 };
 
 const STATUS_LABELS: Record<string, string> = {
@@ -59,6 +62,9 @@ const STATUS_LABELS: Record<string, string> = {
   precisa_corrigir: "Precisa corrigir",
   aprovada: "Aprovada",
   em_analise: "Em análise",
+  aberta: "Enquete aberta",
+  encerrada: "Encerrada",
+  resultado_publicado: "Resultado publicado",
 };
 
 export function StatusBadge({ status, className }: BadgeProps) {

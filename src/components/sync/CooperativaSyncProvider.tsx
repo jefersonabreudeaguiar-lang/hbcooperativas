@@ -24,7 +24,6 @@ import {
 } from "@/services/notaPedidoCloudService";
 import {
   getSyncMinGapMs,
-  isMobileDevice,
   pushCooperadoOperacionalToCloud,
   syncCooperativaBackground,
   syncCooperativaBidirectional,
@@ -87,6 +86,7 @@ export function CooperativaSyncProvider({ children }: { children: React.ReactNod
   const runSync = useCallback(async (opts?: { force?: boolean }) => {
     const currentUser = userRef.current;
     if (!currentUser || syncingRef.current) return;
+    if (typeof navigator !== "undefined" && !navigator.onLine) return;
     if (typeof document !== "undefined" && document.hidden) return;
     if (!opts?.force && isAppIdle()) return;
 
@@ -109,9 +109,9 @@ export function CooperativaSyncProvider({ children }: { children: React.ReactNod
       await syncOfflineDeliveryImages();
       await flushPendingNotaDeletes(cnpj);
 
-      const cooperadoNoCelular = currentUser.role === "cooperado" && isMobileDevice();
+      const cooperadoLogado = currentUser.role === "cooperado";
 
-      if (cooperadoNoCelular) {
+      if (cooperadoLogado) {
         await syncCooperativaBackground(cnpj, currentCoopId);
         await pushCooperadoOperacionalToCloud(cnpj, currentCoopId);
       } else {
@@ -230,6 +230,7 @@ export function CooperativaSyncProvider({ children }: { children: React.ReactNod
 
     const unregister = registerSyncHandler(() => {
       if (document.hidden) return;
+      if (typeof navigator !== "undefined" && !navigator.onLine) return;
       markUserActivity();
       void runSync({ force: true });
     });
@@ -255,12 +256,20 @@ export function CooperativaSyncProvider({ children }: { children: React.ReactNod
     };
     document.addEventListener("visibilitychange", onVisible);
 
+    const onOnline = () => {
+      if (document.hidden) return;
+      markUserActivity();
+      void runSync({ force: true });
+    };
+    window.addEventListener("online", onOnline);
+
     return () => {
       unregister();
       unsubIdle();
       stopIdle();
       clearTimeout(initialDelay);
       document.removeEventListener("visibilitychange", onVisible);
+      window.removeEventListener("online", onOnline);
     };
   }, [coopId, user?.id, runSync]);
 

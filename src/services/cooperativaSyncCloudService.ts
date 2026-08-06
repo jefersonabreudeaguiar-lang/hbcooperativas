@@ -1,4 +1,4 @@
-import type { AppData, Cooperativa, Cooperado, Instituicao, ProdutoInstituicao, Desconto, PrestacaoContasExcluida, InstituicaoExcluida, PagamentoCooperadoRegistro, Comunicado, FichaCorrida } from "@/types";
+import type { AppData, Cooperativa, Cooperado, Instituicao, ProdutoInstituicao, Desconto, PrestacaoContasExcluida, InstituicaoExcluida, PagamentoCooperadoRegistro, Comunicado, FichaCorrida, VotacaoPauta, VotacaoVoto } from "@/types";
 import { normalizeCnpj } from "@/utils/cooperativa";
 import type { ContratosSyncPayload, OperacionalSyncPayload } from "@/lib/supabase/cooperativaSyncStorage";
 import { getData, saveDataSafe, runWithBatchedSaveAsync } from "@/services/dataStore";
@@ -111,6 +111,28 @@ function mergeComunicadosFromCloud(localCoop: Comunicado[], cloudItems: Comunica
   return [...map.values()];
 }
 
+function mergeVotacaoPautasFromCloud(localCoop: VotacaoPauta[], cloudItems: VotacaoPauta[]): VotacaoPauta[] {
+  const map = new Map<string, VotacaoPauta>();
+  for (const item of localCoop) map.set(item.id, item);
+  for (const cloud of cloudItems) {
+    const local = map.get(cloud.id);
+    if (!local || itemTime(cloud) >= itemTime(local)) map.set(cloud.id, cloud);
+  }
+  return [...map.values()];
+}
+
+function mergeVotacaoVotosFromCloud(localCoop: VotacaoVoto[], cloudItems: VotacaoVoto[]): VotacaoVoto[] {
+  const map = new Map<string, VotacaoVoto>();
+  const key = (v: VotacaoVoto) => `${v.pautaId}:${v.cooperadoId}`;
+  for (const item of localCoop) map.set(key(item), item);
+  for (const cloud of cloudItems) {
+    const k = key(cloud);
+    const local = map.get(k);
+    if (!local || itemTime(cloud) >= itemTime(local)) map.set(k, cloud);
+  }
+  return [...map.values()];
+}
+
 function mergePrestacoesExcluidasByNewer(
   local: PrestacaoContasExcluida[],
   cloud: PrestacaoContasExcluida[]
@@ -192,6 +214,8 @@ function buildOperacionalPayload(data: AppData, coopId: string): OperacionalSync
     ),
     prestacoesContasExcluidas: (data.prestacoesContasExcluidas ?? []).filter((e) => e.cooperativaId === coopId),
     fichaCorrida: data.fichaCorrida.filter((f) => f.cooperativaId === coopId),
+    votacaoPautas: (data.votacaoPautas ?? []).filter((p) => p.cooperativaId === coopId),
+    votacaoVotos: (data.votacaoVotos ?? []).filter((v) => v.cooperativaId === coopId),
     config: { ...data.config },
   };
 }
@@ -211,6 +235,8 @@ function normalizeCloudOperacional(cloud: OperacionalSyncPayload): OperacionalSy
     prestacoesContas: [],
     prestacoesContasExcluidas: [],
     fichaCorrida: [],
+    votacaoPautas: [],
+    votacaoVotos: [],
   };
 }
 
@@ -234,6 +260,8 @@ function buildEmptyOperacionalResetPayload(data: AppData, coopId: string): Opera
     prestacoesContas: [],
     prestacoesContasExcluidas: [],
     fichaCorrida: [],
+    votacaoPautas: [],
+    votacaoVotos: [],
     config: { ...data.config },
   };
 }
@@ -463,6 +491,8 @@ export function mergeOperacionalIntoData(
   const cloudLivro = (cloud.livroCaixa ?? []).map((l) => ({ ...l, cooperativaId: coopId }));
   const cloudExcluidas = (cloud.prestacoesContasExcluidas ?? []).map((e) => ({ ...e, cooperativaId: coopId }));
   const cloudFichas = (cloud.fichaCorrida ?? []).map((f) => ({ ...f, cooperativaId: coopId }));
+  const cloudPautas = (cloud.votacaoPautas ?? []).map((p) => ({ ...p, cooperativaId: coopId }));
+  const cloudVotos = (cloud.votacaoVotos ?? []).map((v) => ({ ...v, cooperativaId: coopId }));
   const mergedExcluidasCoop = mergePrestacoesExcluidasByNewer(
     (data.prestacoesContasExcluidas ?? []).filter((e) => e.cooperativaId === coopId),
     cloudExcluidas
@@ -526,13 +556,11 @@ export function mergeOperacionalIntoData(
       ...data.mensalidades.filter((m) => !mensalidadeVisivelNoDispositivo(data, m, coopId)),
       ...(cloudAuthoritative
         ? mensalidadesCloudVisiveis
-        : mensalidadesCloudVisiveis.length > 0
-          ? mergeOperacionalArrayFromCloud(
-              mensalidadesLocaisVisiveis,
-              mensalidadesCloudVisiveis,
-              cloudSyncTime
-            )
-          : []),
+        : mergeOperacionalArrayFromCloud(
+            mensalidadesLocaisVisiveis,
+            mensalidadesCloudVisiveis,
+            cloudSyncTime
+          )),
     ],
     descontos: [
       ...data.descontos.filter((d) => !cooperadoIds.has(d.cooperadoId)),
@@ -589,6 +617,24 @@ export function mergeOperacionalIntoData(
       ],
       data.notasPedido
     ),
+    votacaoPautas: [
+      ...filterCoop(data.votacaoPautas ?? [], (p) => p.cooperativaId === coopId),
+      ...(cloudAuthoritative
+        ? cloudPautas
+        : mergeVotacaoPautasFromCloud(
+            (data.votacaoPautas ?? []).filter((p) => p.cooperativaId === coopId),
+            cloudPautas
+          )),
+    ],
+    votacaoVotos: [
+      ...filterCoop(data.votacaoVotos ?? [], (v) => v.cooperativaId === coopId),
+      ...(cloudAuthoritative
+        ? cloudVotos
+        : mergeVotacaoVotosFromCloud(
+            (data.votacaoVotos ?? []).filter((v) => v.cooperativaId === coopId),
+            cloudVotos
+          )),
+    ],
   };
 
   const localConfigTime = new Date(data.cooperativas.find((c) => c.id === coopId)?.updatedAt ?? 0).getTime();

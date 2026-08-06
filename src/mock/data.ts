@@ -24,6 +24,8 @@ export const emptyInitialData: AppData = {
   financeiro: [],
   comunicados: [],
   reclamacoes: [],
+  votacaoPautas: [],
+  votacaoVotos: [],
   propriedades: [],
   veiculos: [],
   fechamentos: [],

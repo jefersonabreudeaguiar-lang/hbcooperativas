@@ -328,6 +328,8 @@ function migrateData(raw: Partial<AppData> & Record<string, unknown>): AppData {
       ativo: c.ativo ?? true,
     })),
     reclamacoes: base.reclamacoes ?? [],
+    votacaoPautas: base.votacaoPautas ?? [],
+    votacaoVotos: base.votacaoVotos ?? [],
     propriedades: base.propriedades ?? [],
     veiculos: base.veiculos ?? [],
     fechamentos: base.fechamentos ?? [],

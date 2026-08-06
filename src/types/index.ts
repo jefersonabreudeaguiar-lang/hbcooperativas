@@ -576,6 +576,39 @@ export interface Reclamacao {
   updatedAt: string;
 }
 
+export type VotacaoPautaStatus = "rascunho" | "aberta" | "encerrada" | "resultado_publicado";
+
+/** Pauta de votação assemblear / enquete da cooperativa. */
+export interface VotacaoPauta {
+  id: string;
+  cooperativaId: string;
+  /** Texto da pauta — o que será votado. */
+  texto: string;
+  /** Início da votação (YYYY-MM-DD). */
+  inicioEm: string;
+  /** Fim da votação (YYYY-MM-DD). */
+  fimEm: string;
+  status: VotacaoPautaStatus;
+  /** Quando a enquete foi lançada aos cooperados. */
+  abertaEm?: string;
+  /** Quando o responsável publicou o resultado no mural (24 h). */
+  resultadoPublicadoEm?: string;
+  criadoPorUserId?: string;
+  criadoPorNome?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface VotacaoVoto {
+  id: string;
+  pautaId: string;
+  cooperativaId: string;
+  cooperadoId: string;
+  cooperadoNome: string;
+  voto: "sim" | "nao";
+  createdAt: string;
+}
+
 export interface Propriedade {
   id: string;
   cooperadoId: string;
@@ -721,6 +754,8 @@ export interface AppData {
   financeiro: FinanceiroMensal[];
   comunicados: Comunicado[];
   reclamacoes: Reclamacao[];
+  votacaoPautas: VotacaoPauta[];
+  votacaoVotos: VotacaoVoto[];
   propriedades: Propriedade[];
   veiculos: Veiculo[];
   fechamentos: FechamentoMensal[];
@@ -746,6 +781,7 @@ export type Resource =
   | "financeiro"
   | "comunicados"
   | "reclamacoes"
+  | "votacoes"
   | "propriedades"
   | "veiculos"
   | "instituicoes"

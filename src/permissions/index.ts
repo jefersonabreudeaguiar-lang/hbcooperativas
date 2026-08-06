@@ -19,6 +19,7 @@ export const PERMISSIONS: PermissionMatrix = {
     financeiro: ALL_CRUD,
     comunicados: ALL_CRUD,
     reclamacoes: ALL_CRUD,
+    votacoes: ALL_CRUD,
     propriedades: ALL_CRUD,
     veiculos: ALL_CRUD,
     instituicoes: ALL_CRUD,
@@ -41,6 +42,7 @@ export const PERMISSIONS: PermissionMatrix = {
     financeiro: ALL_CRUD,
     comunicados: ALL_CRUD,
     reclamacoes: ALL_CRUD,
+    votacoes: ALL_CRUD,
     propriedades: ALL_CRUD,
     veiculos: ALL_CRUD,
     instituicoes: ALL_CRUD,
@@ -62,6 +64,7 @@ export const PERMISSIONS: PermissionMatrix = {
     ficha_corrida: ["view", "edit", "export"],
     comunicados: ["view", "create", "edit", "export"],
     reclamacoes: ["view", "create", "edit", "delete", "export"],
+    votacoes: ["view", "create", "edit", "export"],
     relatorios: VIEW_EXPORT,
     fechamento: ["view", "approve", "export"],
     livro_caixa: ["view", "create", "edit", "export"],
@@ -100,6 +103,7 @@ export const MODULOS_ACESSO: ModuloAcesso[] = [
   { resource: "cooperados", label: "Cooperados", href: "/cooperados", actions: ["view", "create", "edit", "delete", "export"] },
   { resource: "mensalidades", label: "Mensalidades", href: "/mensalidades", actions: ["view", "edit", "export"] },
   { resource: "comunicados", label: "Comunicados", href: "/comunicados", actions: VIEW_ONLY },
+  { resource: "votacoes", label: "Votações", href: "/votacoes", actions: ALL_CRUD },
   { resource: "reclamacoes", label: "Reclamações", href: "/reclamacoes", actions: ALL_CRUD },
   { resource: "relatorios", label: "Relatórios", href: "/relatorios", actions: VIEW_EXPORT },
   { resource: "fechamento", label: "Fechamento mensal", href: "/fechamento-mensal", actions: ["view", "approve", "export"] },
@@ -210,6 +214,7 @@ const DIRETORIA_MENU: { href: string; label: string; resource: Resource }[] = [
   { href: "/meu-perfil", label: "Perfil da cooperativa", resource: "cooperativas" },
   { href: "/cooperados", label: "Cooperados", resource: "cooperados" },
   { href: "/mensalidades", label: "Mensalidades", resource: "mensalidades" },
+  { href: "/votacoes", label: "Votações", resource: "votacoes" },
   { href: "/cotas", label: "Cotas", resource: "cotas" },
   { href: "/livro-caixa", label: "Livro caixa", resource: "livro_caixa" },
   { href: "/prestacao-contas", label: "Prestação de contas", resource: "prestacao_contas" },
@@ -235,6 +240,7 @@ const RESPONSAVEL_HREFS = [
   "/livro-caixa",
   "/prestacao-contas",
   "/comunicados",
+  "/votacoes",
   "/reclamacoes",
   "/relatorios",
   "/fechamento-mensal",
@@ -290,6 +296,7 @@ export function getMobileNavItems(user: PermissionSubject): { href: string; labe
     { href: "/dashboard", label: "Início", resource: "dashboard" },
     { href: "/notas-pedido", label: "Conferir", resource: "notas_pedido" },
     { href: "/ficha-corrida", label: "Pagar", resource: "ficha_corrida" },
+    { href: "/votacoes", label: "Votações", resource: "votacoes" },
     { href: "/cooperados", label: "Cooperados", resource: "cooperados" },
     { href: "/contratos", label: "Contratos", resource: "instituicoes" },
     { href: "/meu-perfil", label: "Perfil", resource: "cooperativas" },
@@ -300,14 +307,19 @@ export function getMobileNavItems(user: PermissionSubject): { href: string; labe
     return filterMenuForUser(responsavelItems, user);
   }
 
-  const adminItems: { href: string; label: string; resource: Resource }[] = [
-    { href: "/dashboard", label: "Início", resource: "dashboard" },
-    { href: "/notas-pedido", label: "Conferir", resource: "notas_pedido" },
-    { href: "/ficha-corrida", label: "Pagar", resource: "ficha_corrida" },
-    { href: "/contratos", label: "Contratos", resource: "instituicoes" },
-    { href: "/cooperados", label: "Cooperados", resource: "cooperados" },
-  ];
-  return filterMenuForUser(adminItems, user);
+  if (user.role === "tesoureiro" || user.role === "admin") {
+    const tesoureiroItems: { href: string; label: string; resource: Resource }[] = [
+      { href: "/dashboard", label: "Início", resource: "dashboard" },
+      { href: "/notas-pedido", label: "Conferir", resource: "notas_pedido" },
+      { href: "/ficha-corrida", label: "Pagar", resource: "ficha_corrida" },
+      { href: "/votacoes", label: "Votações", resource: "votacoes" },
+      { href: "/cooperados", label: "Cooperados", resource: "cooperados" },
+      { href: "/contratos", label: "Contratos", resource: "instituicoes" },
+    ];
+    return filterMenuForUser(tesoureiroItems, user);
+  }
+
+  return [];
 }
 
 export const ROLE_LABELS: Record<UserRole, string> = {

@@ -31,6 +31,7 @@ import {
   gerarRelatorioAtingimentoCronogramaHtml,
   gerarRelatorioSobrasPerdasHtml,
   gerarRelatorioReclamacoesHtml,
+  gerarRelatorioVotacoesHtml,
   imprimirDocumentoHtml,
   nomeArquivoRelatorio,
 } from "@/utils/relatorioHtml";
@@ -39,6 +40,7 @@ import type { EmissorRelatorio } from "@/types";
 import { formatCurrency, formatDate, formatMesReferencia, getCurrentMesReferencia } from "@/utils/format";
 import { getCooperadoNome } from "@/utils/calculations";
 import { getRelatorioReclamacoes } from "@/services/reclamacaoService";
+import { getRelatorioVotacoes } from "@/services/votacaoService";
 import { labelUnidade } from "@/utils/unidades";
 import { PageSkeleton } from "@/components/ui/PageSkeleton";
 
@@ -55,6 +57,7 @@ const RELATORIOS = [
   { id: "sobras_perdas", label: "Sobras e Perdas (transparência)" },
   { id: "saldo_mensal", label: "Saldo Mensal da Cooperativa" },
   { id: "historico_reclamacoes", label: "Histórico de Reclamações" },
+  { id: "historico_votacoes", label: "Histórico de Votações" },
 ];
 
 export default function RelatoriosPage() {
@@ -117,11 +120,17 @@ export default function RelatoriosPage() {
     if (tipo === "historico_reclamacoes") {
       return gerarRelatorioReclamacoesHtml(data, coopId, cooperadoId || undefined, emissor);
     }
+    if (tipo === "historico_votacoes") {
+      return gerarRelatorioVotacoesHtml(data, coopId, emissor);
+    }
     return gerarRelatorioFinanceiroHtml(data, mes, tituloRelatorio, emissor);
   };
 
   const nomeDocumento = () => {
     if (tipo === "historico_reclamacoes") {
+      return nomeArquivoRelatorio(tipo, getCurrentMesReferencia());
+    }
+    if (tipo === "historico_votacoes") {
       return nomeArquivoRelatorio(tipo, getCurrentMesReferencia());
     }
     if (tipo === "entregas_por_itens" || tipo === "atingimento_cronograma") {
@@ -334,6 +343,33 @@ export default function RelatoriosPage() {
             "",
           ]),
         ];
+        break;
+      }
+      case "historico_votacoes": {
+        const r = getRelatorioVotacoes(data, coopId);
+        headers = ["Pauta", "Período", "Cooperado", "Voto", "Data", "SIM %", "NÃO %"];
+        rows = r.pautas.flatMap(({ pauta, resumo }) => {
+          const periodo = `${pauta.inicioEm} a ${pauta.fimEm}`;
+          const headerRow = [
+            pauta.texto,
+            periodo,
+            "",
+            "",
+            "",
+            `${resumo.pctSim}%`,
+            `${resumo.pctNao}%`,
+          ];
+          const votoRows = resumo.votos.map((v) => [
+            pauta.texto,
+            periodo,
+            v.cooperadoNome,
+            v.voto === "sim" ? "SIM" : "NÃO",
+            v.createdAt.split("T")[0],
+            "",
+            "",
+          ]);
+          return [headerRow, ...votoRows];
+        });
         break;
       }
       default:
@@ -878,6 +914,54 @@ export default function RelatoriosPage() {
           </>
         );
       }
+      case "historico_votacoes": {
+        const r = getRelatorioVotacoes(data, coopId);
+        return (
+          <>
+            <div className="mb-4 rounded-xl border border-indigo-200 bg-indigo-50/60 p-4">
+              <p className="text-sm font-semibold text-indigo-950">Histórico de pautas de votação</p>
+              <p className="text-xs text-indigo-900 mt-1 leading-relaxed">
+                Cada pauta com votos SIM/NÃO, nome de quem votou e percentuais sobre 100% dos votos computados.
+              </p>
+            </div>
+
+            {r.pautas.length === 0 && (
+              <p className="text-center text-gray-500 py-8">Nenhuma pauta de votação registrada.</p>
+            )}
+
+            {r.pautas.map(({ pauta, resumo }) => (
+              <div key={pauta.id} className="mb-10 last:mb-0 border-b border-gray-100 pb-8 last:border-0">
+                <h3 className="text-base font-bold text-gray-900 leading-snug">{pauta.texto}</h3>
+                <p className="text-xs text-gray-500 mt-1 mb-4">
+                  {formatDate(pauta.inicioEm)} → {formatDate(pauta.fimEm)} · {resumo.totalVotos} voto(s)
+                </p>
+                <div className="grid grid-cols-2 gap-4 mb-4 max-w-md">
+                  <StatCard title="SIM" value={`${resumo.pctSim.toLocaleString("pt-BR")}%`} subtitle={`${resumo.votosSim} voto(s)`} />
+                  <StatCard title="NÃO" value={`${resumo.pctNao.toLocaleString("pt-BR")}%`} subtitle={`${resumo.votosNao} voto(s)`} variant="warning" />
+                </div>
+                <DataTable
+                  data={resumo.votos.map((v) => ({ ...v }))}
+                  keyField="id"
+                  emptyMessage="Nenhum voto nesta pauta."
+                  columns={[
+                    { key: "nome", label: "Cooperado", render: (v) => v.cooperadoNome },
+                    {
+                      key: "voto",
+                      label: "Voto",
+                      render: (v) => (
+                        <span className={v.voto === "sim" ? "font-bold text-green-700" : "font-bold text-red-700"}>
+                          {v.voto === "sim" ? "SIM" : "NÃO"}
+                        </span>
+                      ),
+                    },
+                    { key: "data", label: "Data", render: (v) => formatDate(v.createdAt.split("T")[0]) },
+                  ]}
+                />
+              </div>
+            ))}
+          </>
+        );
+      }
       default:
         return null;
     }
@@ -912,7 +996,7 @@ export default function RelatoriosPage() {
           </Select>
         </FormField>
         <FormField label="Mês">
-          <Select value={mes} onChange={(e) => setMes(e.target.value)} className="min-w-[180px]" disabled={tipo === "historico_reclamacoes"}>
+          <Select value={mes} onChange={(e) => setMes(e.target.value)} className="min-w-[180px]" disabled={tipo === "historico_reclamacoes" || tipo === "historico_votacoes"}>
             {meses.map((m) => (
               <option key={m} value={m}>{formatMesReferencia(m)}</option>
             ))}

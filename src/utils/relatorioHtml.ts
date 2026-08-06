@@ -6,6 +6,7 @@ import type { FechamentoCalculado, RelatorioEntregasPorItens, ResumoFinanceiroMe
 import { calcularFechamentoMensalLive, getRelatorioEntregasPorItensInstituicao, getResumoFinanceiroMes } from "@/services/relatorioService";
 import { getRelatorioSobrasPerdas, type RelatorioSobrasPerdas } from "@/services/sobrasPerdasService";
 import { getRelatorioReclamacoes } from "@/services/reclamacaoService";
+import { getRelatorioVotacoes } from "@/services/votacaoService";
 import { getRelatorioAtingimentoCronograma, type StatusAtingimentoItem } from "@/services/relatorioCronogramaService";
 import { baixarHtmlComoPdf } from "@/utils/downloadPdf";
 
@@ -637,6 +638,62 @@ export function gerarRelatorioReclamacoesHtml(
     cooperativaId,
     emissor,
     "Histórico completo"
+  );
+}
+
+export function gerarRelatorioVotacoesHtml(
+  data: AppData,
+  cooperativaId?: string,
+  emissor?: EmissorRelatorio
+): string {
+  const rel = getRelatorioVotacoes(data, cooperativaId);
+  const mesRef = getCurrentMesReferencia();
+
+  const blocos = rel.pautas
+    .map(({ pauta, resumo }) => {
+      const linhasVotos = resumo.votos
+        .map(
+          (v) =>
+            `<tr>
+              <td>${escapeHtml(v.cooperadoNome)}</td>
+              <td class="num">${v.voto === "sim" ? "SIM" : "NÃO"}</td>
+              <td>${escapeHtml(formatDate(v.createdAt.split("T")[0]))}</td>
+            </tr>`
+        )
+        .join("");
+
+      return `
+        <h2>${escapeHtml(pauta.texto)}</h2>
+        <p class="carta" style="margin-top:0;">
+          Período: ${escapeHtml(formatDate(pauta.inicioEm))} a ${escapeHtml(formatDate(pauta.fimEm))} ·
+          Status: ${escapeHtml(pauta.status)} · Votos: ${resumo.totalVotos} de ${resumo.totalElegiveis}
+        </p>
+        <div class="resumo-grid">
+          <div class="resumo-card"><div class="label">SIM</div><div class="value">${resumo.pctSim.toLocaleString("pt-BR")}%</div></div>
+          <div class="resumo-card"><div class="label">NÃO</div><div class="value">${resumo.pctNao.toLocaleString("pt-BR")}%</div></div>
+        </div>
+        <table>
+          <thead><tr><th>Cooperado</th><th class="num">Voto</th><th>Data</th></tr></thead>
+          <tbody>${linhasVotos || `<tr><td colspan="3">Nenhum voto registrado.</td></tr>`}</tbody>
+        </table>`;
+    })
+    .join("");
+
+  const body = `
+    <p class="carta">
+      Registro histórico das <strong>pautas de votação</strong> da cooperativa, com voto nominal de cada cooperado
+      e percentuais de SIM e NÃO (base 100% sobre os votos computados).
+    </p>
+    ${blocos || `<p class="carta">Nenhuma pauta de votação registrada.</p>`}`;
+
+  return documentoShell(
+    "Histórico de Votações",
+    body,
+    data,
+    mesRef,
+    cooperativaId,
+    emissor,
+    "Pautas assembleares"
   );
 }
 

@@ -214,7 +214,7 @@ console.log("=== Simulação sync cooperado ↔ responsável ===\n");
   assert("Cooperado vê mensalidade paga", coopData.mensalidades[0]?.status === "paga");
 }
 
-// 4. Nuvem vazia não ressuscita mensalidades antigas do cooperado
+// 4. Nuvem vazia sem reset não apaga mensalidades locais (cooperado offline / nuvem atrasada)
 {
   const stale = { ...baseData(), mensalidades: [mensalidadePendente()] };
   const cloudEmpty: OperacionalSyncPayload = {
@@ -225,8 +225,8 @@ console.log("=== Simulação sync cooperado ↔ responsável ===\n");
   };
   const merged = mergeOperacionalIntoData(stale, cloudEmpty, COOP_ID, stale.cooperados);
   assert(
-    "Nuvem vazia não mantém mensalidades locais obsoletas",
-    merged.mensalidades.filter((m) => m.cooperadoId === COOPERADO_ID).length === 0
+    "Nuvem vazia preserva mensalidades locais sem fullReset",
+    merged.mensalidades.filter((m) => m.cooperadoId === COOPERADO_ID).length === 1
   );
 }
 

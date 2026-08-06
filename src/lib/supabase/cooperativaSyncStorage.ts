@@ -15,6 +15,8 @@ import type {
   InstituicaoExcluida,
   CronogramaContratoMensal,
   FichaCorrida,
+  VotacaoPauta,
+  VotacaoVoto,
 } from "@/types";
 
 const BUCKET = "hb-cooperativa-sync";
@@ -47,6 +49,8 @@ export interface OperacionalSyncPayload {
   prestacoesContasExcluidas?: PrestacaoContasExcluida[];
   /** Lançamentos da ficha (valor a receber) — sincroniza responsável ↔ cooperado. */
   fichaCorrida?: FichaCorrida[];
+  votacaoPautas?: VotacaoPauta[];
+  votacaoVotos?: VotacaoVoto[];
   config: { descontoPadraoCooperativa: number };
 }
 
