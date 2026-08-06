@@ -575,7 +575,10 @@ export function contarFotosEnviadasNota(nota: NotaPedido): number {
   const declarado = nota.fotosEnviadasCount ?? 0;
   const exibidas = getFotosExibicaoNota(nota).length;
   const noArray = nota.fotosPedido?.length ?? 0;
-  const total = Math.max(declarado, exibidas, noArray);
+  const metaCount =
+    nota.fotosMeta?.filter((f) => f.storagePath || f.url || f.thumbnailUrl || f.status === "uploaded")
+      .length ?? 0;
+  const total = Math.max(declarado, exibidas, noArray, metaCount);
   if (total > 0) return total;
   if (nota.fotoNaNuvem || nota.fotoPedido || nota.fotoPedidoMiniatura || nota.fotoEnviadaEm) return 1;
   return 0;

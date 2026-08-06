@@ -2,6 +2,7 @@ import type { AppData, FechamentoMensal, FinanceiroMensal } from "@/types";
 import { getData } from "@/services/dataStore";
 import { sumBy } from "@/utils/calculations";
 import { getCurrentMesReferencia } from "@/utils/format";
+import { isNotaNaFilaConferenciaResponsavel } from "@/utils/notaStatus";
 import { getTotalAPagarCooperado, getTotalRecebidoCooperado } from "@/services/notaPedidoService";
 import {
   calcularFechamentoMensalLive,
@@ -124,7 +125,7 @@ export function getAdminStats(data?: AppData): AdminDashboardStats {
 
   const pagamentosPendentes = d.fichaCorrida.filter((f) => f.status === "pendente");
   const pagamentosPagos = d.fichaCorrida.filter((f) => f.status === "pago");
-  const notasAguardando = d.notasPedido.filter((n) => n.status === "aguardando_conferencia");
+  const notasAguardando = d.notasPedido.filter((n) => isNotaNaFilaConferenciaResponsavel(n.status));
 
   const mensalidadesAbertas = d.mensalidades.filter((m) => m.status === "pendente" || m.status === "atrasada");
   const cotasAbertas = d.cotas.filter((c) => c.status !== "quitada");

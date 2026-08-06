@@ -110,13 +110,19 @@ export async function readNotaFotoAtIndex(
 ): Promise<string | undefined> {
   const inline =
     nota.fotosPedido?.[index] ??
-    (index === 0 ? nota.fotoPedido : undefined);
-  if (!inline) return undefined;
-  if (!isLocalMediaRef(inline)) return inline;
+    nota.fotosPedidoMiniaturas?.[index] ??
+    (index === 0 ? nota.fotoPedido ?? nota.fotoPedidoMiniatura : undefined);
+  if (inline) {
+    if (!isLocalMediaRef(inline)) return inline;
+    const blob = await getLocalMediaBlob(inline);
+    if (blob) return blobToDataUrl(blob);
+  }
 
-  const blob = await getLocalMediaBlob(inline);
-  if (!blob) return undefined;
-  return blobToDataUrl(blob);
+  // Após compactar o JSON, a foto pode continuar só no IndexedDB.
+  const idbUrl = await getLocalMediaBlobUrl(buildLocalMediaRef(nota.id, index));
+  if (idbUrl) return idbUrl;
+
+  return undefined;
 }
 
 export async function resolveNotaFotosForUpload(nota: NotaPedido): Promise<string[]> {

@@ -6,14 +6,19 @@ import { useAuth } from "@/modules/auth/AuthProvider";
 import { useAppData } from "@/hooks/useAppData";
 import { isAppCreator } from "@/lib/security/appCreator";
 import { PlatformAdminDashboard } from "@/components/admin/PlatformAdminDashboard";
+import { AdminCobrancaPanel } from "@/components/admin/AdminCobrancaPanel";
 import { AdminPortalShell } from "@/components/admin/AdminPortalShell";
 import { AdminPortalLogin } from "@/components/admin/AdminPortalLogin";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
+import { useState } from "react";
+
+type AdminView = "visao" | "cobranca";
 
 export default function AdminPortalPage() {
   const { user, loading: authLoading, loginCreatorAdmin } = useAuth();
   const data = useAppData();
+  const [view, setView] = useState<AdminView>("visao");
 
   if (authLoading) {
     return (
@@ -66,11 +71,37 @@ export default function AdminPortalPage() {
 
   return (
     <AdminPortalShell subtitle={`Criador · ${user.email}`}>
-      <div className="mb-4 flex items-center gap-2 rounded-lg border border-green-200 bg-green-50 px-3 py-2 text-sm text-green-900">
-        <Shield size={18} className="shrink-0" />
-        <span>Painel geral da plataforma — todas as cooperativas, uso e limites do servidor</span>
+      <div className="mb-4 flex flex-col sm:flex-row sm:items-center gap-3">
+        <div className="flex items-center gap-2 rounded-lg border border-green-200 bg-green-50 px-3 py-2 text-sm text-green-900 flex-1">
+          <Shield size={18} className="shrink-0" />
+          <span>
+            {view === "visao"
+              ? "Painel geral da plataforma — cooperativas, uso e limites"
+              : "Cobrança por cooperado — registrar, avisar e bloquear temporariamente"}
+          </span>
+        </div>
+        <div className="flex rounded-xl border border-gray-200 bg-white p-1 shrink-0">
+          <button
+            type="button"
+            onClick={() => setView("visao")}
+            className={`px-4 py-2 text-sm font-medium rounded-lg transition-colors ${
+              view === "visao" ? "bg-slate-900 text-white" : "text-gray-600 hover:bg-gray-50"
+            }`}
+          >
+            Visão geral
+          </button>
+          <button
+            type="button"
+            onClick={() => setView("cobranca")}
+            className={`px-4 py-2 text-sm font-medium rounded-lg transition-colors ${
+              view === "cobranca" ? "bg-emerald-700 text-white" : "text-gray-600 hover:bg-gray-50"
+            }`}
+          >
+            Cobrança
+          </button>
+        </div>
       </div>
-      <PlatformAdminDashboard user={user} />
+      {view === "visao" ? <PlatformAdminDashboard user={user} /> : <AdminCobrancaPanel user={user} />}
     </AdminPortalShell>
   );
 }

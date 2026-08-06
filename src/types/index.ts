@@ -41,8 +41,49 @@ export interface Cooperativa {
   senhaCadastroCooperado?: string;
   /** Hash bcrypt da senha exclusiva da área administrativa (/admin). */
   senhaAreaAdminHash?: string;
+  /** Cobrança da plataforma HB (por cooperado cadastrado). */
+  cobrancaSaas?: CobrancaSaasCooperativa;
   createdAt: string;
   updatedAt: string;
+}
+
+/** Status da assinatura HB no mês corrente do ciclo. */
+export type CobrancaSaasStatusMes =
+  | "aguardando_primeiro_cooperado"
+  | "em_dia"
+  | "cobranca_enviada"
+  | "aviso_bloqueio"
+  | "bloqueado";
+
+export interface CobrancaSaasLancamento {
+  id: string;
+  /** Identificador do período (ex.: 2026-08-15 — aniversário do 1º cooperado). */
+  periodoId: string;
+  mesReferencia: string;
+  qtdCooperados: number;
+  valorUnitario: number;
+  valorMinimo: number;
+  valorTotal: number;
+  status: "pendente" | "enviada" | "paga" | "cancelada";
+  criadaEm: string;
+  enviadaEm?: string;
+  pagaEm?: string;
+  observacao?: string;
+}
+
+export interface CobrancaSaasCooperativa {
+  /** ISO — responsável aceitou os termos no cadastro. */
+  termosAceitosEm?: string;
+  /** ISO — data/hora do 1º cooperado no CNPJ (início do ciclo mensal). */
+  cicloInicioEm?: string;
+  statusMes: CobrancaSaasStatusMes;
+  /** Último período pago (periodoId). */
+  ultimoPeriodoPago?: string;
+  avisoMensagem?: string;
+  avisoEm?: string;
+  bloqueadoEm?: string;
+  bloqueadoPor?: string;
+  historico?: CobrancaSaasLancamento[];
 }
 
 export type CooperadoStatus = "ativo" | "suspenso" | "desligado";

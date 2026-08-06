@@ -14,6 +14,11 @@ import { fetchCloudStatus, type CloudStatus } from "@/services/cooperativaCloudS
 import { formatCnpj, normalizeCnpj } from "@/utils/cooperativa";
 import { PLATFORM_NAME } from "@/utils/constants";
 import { cn } from "@/utils/format";
+import {
+  COBRANCA_SAAS_MINIMO_LABEL,
+  COBRANCA_SAAS_PRECO_LABEL,
+  textoTermosCobrancaSaas,
+} from "@/services/cobrancaSaasService";
 
 type AbaCadastro = "cooperado" | "responsavel";
 
@@ -44,6 +49,7 @@ export default function CadastroPage() {
   const [passwordResp, setPasswordResp] = useState("");
   const [confirmPasswordResp, setConfirmPasswordResp] = useState("");
   const [senhaCadastroCooperado, setSenhaCadastroCooperado] = useState("");
+  const [aceitouTermosCobranca, setAceitouTermosCobranca] = useState(false);
 
   const [showPassword, setShowPassword] = useState(false);
   const [showSenhaAcessoCadastro, setShowSenhaAcessoCadastro] = useState(false);
@@ -161,6 +167,10 @@ export default function CadastroPage() {
       setError("As senhas não coincidem.");
       return;
     }
+    if (!aceitouTermosCobranca) {
+      setError("Aceite as regras de cobrança da plataforma para concluir o cadastro.");
+      return;
+    }
 
     setLoading(true);
     const result = await registerCooperativa({
@@ -172,6 +182,7 @@ export default function CadastroPage() {
       telefone: telefoneCoop,
       endereco: enderecoCoop,
       senhaCadastroCooperado: senhaCadastroCooperado.trim() || undefined,
+      aceitouTermosCobranca: true,
     });
     setLoading(false);
 
@@ -491,6 +502,36 @@ export default function CadastroPage() {
                         </p>
                       </div>
 
+                      <div className="rounded-xl border border-emerald-200 bg-emerald-50/60 p-4 space-y-3">
+                        <div>
+                          <p className="text-sm font-semibold text-emerald-950">Como funciona a cobrança da plataforma</p>
+                          <p className="text-xs text-emerald-900/80 mt-1 leading-relaxed">
+                            Antes do primeiro cadastro, leia com atenção. A mensalidade é calculada pelos cooperados
+                            cadastrados no CNPJ ({COBRANCA_SAAS_PRECO_LABEL}/cooperado, mínimo {COBRANCA_SAAS_MINIMO_LABEL}).
+                          </p>
+                        </div>
+                        <ul className="space-y-2 text-xs text-emerald-950/90 leading-relaxed">
+                          {textoTermosCobrancaSaas().map((item) => (
+                            <li key={item} className="flex gap-2">
+                              <span className="mt-1.5 h-1.5 w-1.5 rounded-full bg-emerald-600 shrink-0" />
+                              <span>{item}</span>
+                            </li>
+                          ))}
+                        </ul>
+                        <label className="flex items-start gap-3 cursor-pointer rounded-lg bg-white/80 border border-emerald-100 p-3">
+                          <input
+                            type="checkbox"
+                            className="mt-0.5 h-4 w-4 rounded border-emerald-300 text-emerald-700 focus:ring-emerald-600"
+                            checked={aceitouTermosCobranca}
+                            onChange={(e) => setAceitouTermosCobranca(e.target.checked)}
+                          />
+                          <span className="text-xs text-gray-800 leading-relaxed">
+                            Li e aceito as regras de cobrança do {PLATFORM_NAME}. Entendi que o mês começa a contar
+                            a partir do dia do cadastro do <strong>primeiro cooperado</strong> neste CNPJ.
+                          </span>
+                        </label>
+                      </div>
+
                       <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg text-xs text-amber-900">
                         {cloudStatus === "not_configured" ? (
                           <>
@@ -516,7 +557,7 @@ export default function CadastroPage() {
                       {error && <p className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">{error}</p>}
                       {success && <p className="text-sm text-green-700 bg-green-50 border border-green-200 rounded-lg px-3 py-2">{success}</p>}
 
-                      <Button type="submit" className="w-full" size="lg" disabled={loading}>
+                      <Button type="submit" className="w-full" size="lg" disabled={loading || !aceitouTermosCobranca}>
                         {loading ? "Cadastrando..." : "Cadastrar Cooperativa e Entrar"}
                       </Button>
                     </form>

@@ -25,6 +25,7 @@ import { reconciliarFichaFromNotasConferidas, ajustesFichaMesId } from "@/servic
 import { normalizarPrestacaoContas, aplicarPrestacoesContasExcluidas } from "@/services/prestacaoContasService";
 import { aplicarInstituicoesExcluidas } from "@/services/instituicaoContratoService";
 import { exigeSenhaCadastroCooperado } from "@/utils/cooperativaCadastro";
+import { defaultCobrancaSaas, sincronizarCicloCobrancaSaas } from "@/services/cobrancaSaasService";
 import { hashPassword, isPasswordHash, verifyPassword, verifyPasswordSync } from "@/lib/security/password";
 import {
   clearAccessToken,
@@ -1052,6 +1053,7 @@ export async function registerCooperado(input: RegisterCooperadoInput): Promise<
       userName: nome,
       changes: "Auto-cadastro pelo portal",
     });
+    updated = sincronizarCicloCobrancaSaas(updated, cooperativa.id);
     const withMens = ensureMensalidadeCooperado(updated, cooperadoId);
     return withMens ?? updated;
   });
@@ -1099,6 +1101,8 @@ export interface RegisterCooperativaInput {
   telefone?: string;
   endereco?: string;
   senhaCadastroCooperado?: string;
+  /** Obrigatório no 1º cadastro do responsável — aceitou regras de cobrança HB. */
+  aceitouTermosCobranca?: boolean;
 }
 
 async function validarSenhaCadastroCooperado(
@@ -1150,6 +1154,12 @@ export async function registerCooperativa(input: RegisterCooperativaInput): Prom
   if (!input.password || input.password.length < 6) {
     return { success: false, error: "A senha deve ter no mínimo 6 caracteres." };
   }
+  if (!input.aceitouTermosCobranca) {
+    return {
+      success: false,
+      error: "Para cadastrar, é necessário aceitar as regras de cobrança da plataforma HB Cooperativas.",
+    };
+  }
 
   const data = loadData();
   if (data.users.some((u) => u.email.toLowerCase() === email)) {
@@ -1185,6 +1195,10 @@ export async function registerCooperativa(input: RegisterCooperativaInput): Prom
   const cooperativa = {
     ...cloudResult.cooperativa,
     senhaCadastroCooperado: input.senhaCadastroCooperado?.trim() || undefined,
+    cobrancaSaas: defaultCobrancaSaas({
+      termosAceitosEm: now,
+      statusMes: "aguardando_primeiro_cooperado",
+    }),
   };
   const cooperativaId = cooperativa.id;
 

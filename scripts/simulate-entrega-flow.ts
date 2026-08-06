@@ -439,6 +439,18 @@ function simStickyAguardandoNaoSomeNoSync() {
     "Sticky: conferida remove da fila (status avançou)",
     merged.notasPedido[0].status === "conferida"
   );
+
+  // entregue na nuvem não tira aguardando local da fila.
+  local = { ...local, notasPedido: [pendente] };
+  const cloudEntregue = makeNota("sticky-1", {
+    status: "entregue",
+    updatedAt: new Date().toISOString(),
+  });
+  merged = mergeCloudNotasIntoData(local, [cloudEntregue], CNPJ);
+  assert(
+    "Sticky: entregue na nuvem não tira aguardando da fila",
+    merged.notasPedido[0].status === "aguardando_conferencia"
+  );
 }
 
 function simShouldNotDowngradeConferida() {

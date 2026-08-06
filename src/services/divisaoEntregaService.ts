@@ -1,6 +1,6 @@
 import type { DivisaoEntregaNota } from "@/types";
 
-export { dividirEntregaEntreCooperados, rebuildFichasNota } from "@/services/notaPedidoService";
+export { dividirEntregaEntreCooperados, rebuildFichasNota, criarDivisaoEntregaFromParticipantes, buildFichasDivisaoFromNota } from "@/services/notaPedidoService";
 
 export function textoInformativoDivisaoEntrega(divisao: DivisaoEntregaNota): string {
   const n = divisao.participantes.length;

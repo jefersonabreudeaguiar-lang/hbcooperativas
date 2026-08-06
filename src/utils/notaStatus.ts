@@ -30,6 +30,21 @@ export function isNotaStatusTerminalConferencia(status: NotaPedidoStatus): boole
   return status === "conferida" || status === "pago" || status === "cancelado";
 }
 
+/** Nota visível na fila do responsável (Conferir entregas) até lançar ou rejeitar. */
+export function isNotaNaFilaConferenciaResponsavel(status: NotaPedidoStatus | undefined | null): boolean {
+  return status === "aguardando_conferencia" || status === "entregue";
+}
+
+/** Sai da fila do responsável — só após lançamento, rejeição ou cancelamento. */
+export function isNotaSaiuDaFilaConferencia(status: NotaPedidoStatus | undefined | null): boolean {
+  return (
+    status === "conferida" ||
+    status === "rejeitada" ||
+    status === "pago" ||
+    status === "cancelado"
+  );
+}
+
 /**
  * Impede que push/PATCH do cooperado (ou foto tardia) apague conferência do responsável.
  * Mantém campos financeiros e de conferência do status mais avançado.

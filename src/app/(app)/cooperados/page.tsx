@@ -17,6 +17,7 @@ import { pushCooperadoToCloud, syncCooperadosFromCloud } from "@/services/cooper
 import { pushOperacionalToCloud } from "@/services/cooperativaSyncCloudService";
 import { resolveCooperativaCnpj } from "@/services/notaPedidoCloudService";
 import { getStatusCotaCooperado, setCotaIngressoCooperado } from "@/services/notaPedidoService";
+import { sincronizarCicloCobrancaSaas } from "@/services/cobrancaSaasService";
 import type { Cooperado, CooperadoStatus } from "@/types";
 import { PageSkeleton } from "@/components/ui/PageSkeleton";
 
@@ -116,6 +117,7 @@ export default function CooperadosPage() {
         };
         updated.cooperados = [...d.cooperados, savedCooperado];
         updated = addAuditEntry(updated, { entityType: "cooperado", entityId: savedCooperado.id, action: "criar", userId: user.id, userName: user.name });
+        updated = sincronizarCicloCobrancaSaas(updated, coopId);
       }
       return updated;
     });

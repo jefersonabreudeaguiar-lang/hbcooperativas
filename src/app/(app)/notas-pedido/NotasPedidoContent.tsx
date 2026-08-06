@@ -4,7 +4,7 @@ import { useState, useMemo, useEffect, useRef, useCallback } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import {
-  Camera, CheckCircle, FileText, XCircle, RefreshCw, ChevronRight, Eye, Building2, Pencil, UserPlus, X, ImagePlus, Trash2, FileSignature, BookOpen, Package,
+  Camera, CheckCircle, FileText, XCircle, RefreshCw, ChevronRight, Eye, Building2, Pencil, UserPlus, X, ImagePlus, Trash2, FileSignature, BookOpen, Package, Users,
 } from "lucide-react";
 import { useAppData } from "@/hooks/useAppData";
 import { usePermissions } from "@/hooks/usePermissions";
@@ -29,6 +29,13 @@ import {
   aplicarItensNaNota,
   upsertArquivoMensal,
   consolidarItensLancamentoPorFoto,
+  criarDivisaoEntregaFromParticipantes,
+  buildFichasDivisaoFromNota,
+  rebuildFichasNota,
+  excluirEntregaNota,
+  podeExcluirEntregaNota,
+  mensagemBloqueioExclusaoEntrega,
+  relancarEntregaNota,
 } from "@/services/notaPedidoService";
 import {
   getCooperativaCnpj,
@@ -63,6 +70,7 @@ import { getProdutosContrato } from "@/services/catalogoContratosService";
 import { listarResumosMensaisEntregas, filtrarResumosEntregasPendentes } from "@/services/cooperadoEntregasService";
 import { CooperadoEntregasPorMes } from "@/components/cooperado/CooperadoEntregasPorMes";
 import { CooperadoMinhaFichaTab } from "@/components/cooperado/CooperadoMinhaFichaTab";
+import { CorrecoesEntregasPanel } from "@/components/notas/CorrecoesEntregasPanel";
 import { getContratoLabel, getContratosEntrega, resolverContratoEntrega } from "@/utils/contratosEntrega";
 import { cn, formatCurrency, formatDate, formatMesReferencia, getCurrentMesReferencia } from "@/utils/format";
 import { labelUnidade } from "@/utils/unidades";
@@ -91,7 +99,12 @@ import {
   fotosSessaoAtingiuLimite,
   fotosRestantesNaSessao,
   mensagemLimiteFotosSessao,
+  mergeNotaComFotos,
 } from "@/utils/fotoEntrega";
+import {
+  isNotaNaFilaConferenciaResponsavel,
+  isNotaSaiuDaFilaConferencia,
+} from "@/utils/notaStatus";
 import {
   loadFotoDraftMeta,
   clearFotoDraft,
@@ -165,7 +178,7 @@ function qtyInputClassName(filled: boolean, extra?: string) {
 
 export default function NotasPedidoContent() {
   const data = useAppData();
-  const { check, user, isCooperado, cooperadoId } = usePermissions();
+  const { check, user, isCooperado, isDiretoria, cooperadoId } = usePermissions();
   const { syncing } = useSyncStatus();
   const searchParams = useSearchParams();
   const router = useRouter();
@@ -203,12 +216,15 @@ export default function NotasPedidoContent() {
   const [selectedNota, setSelectedNota] = useState<NotaPedido | null>(null);
   const [conferenciaItens, setConferenciaItens] = useState<ItemForm[]>([]);
   const [conferenciaCooperadoId, setConferenciaCooperadoId] = useState("");
+  /** 0 = não dividir; 1–5 = quantidade de cooperados na divisão. */
+  const [conferenciaDivisaoQtd, setConferenciaDivisaoQtd] = useState(0);
+  const [conferenciaDivisaoIds, setConferenciaDivisaoIds] = useState<string[]>([]);
   const [conferenciaDescontoPct, setConferenciaDescontoPct] = useState(5);
   const [conferenciaInstId, setConferenciaInstId] = useState("");
   const [conferenciaLocal, setConferenciaLocal] = useState("");
   const [conferenciaEscolaAvulsa, setConferenciaEscolaAvulsa] = useState("");
   const [motivoRejeicao, setMotivoRejeicao] = useState("");
-  const [conferirErrors, setConferirErrors] = useState<{ itens?: string }>({});
+  const [conferirErrors, setConferirErrors] = useState<{ itens?: string; divisao?: string }>({});
   const [instituicaoPadraoId, setInstituicaoPadraoIdState] = useState("");
   const [alterarInstConferencia, setAlterarInstConferencia] = useState(false);
 
@@ -224,13 +240,16 @@ export default function NotasPedidoContent() {
 
   const [filtroCooperadoId, setFiltroCooperadoId] = useState("");
   const [abaConferenciaKey, setAbaConferenciaKey] = useState("");
-  /** Fila = só nomes pendentes; cooperado = notas daquele; historico = tabela completa. */
-  const [vistaResponsavel, setVistaResponsavel] = useState<"fila" | "cooperado" | "historico">("fila");
+  /** Fila = só nomes pendentes; cooperado = notas daquele; historico = tabela; correcoes = apagar/re-lançar. */
+  const [vistaResponsavel, setVistaResponsavel] = useState<
+    "fila" | "cooperado" | "historico" | "correcoes"
+  >("fila");
   const [abaCooperado, setAbaCooperado] = useState<"entregas" | "ficha">("entregas");
   const [contratoInstId, setContratoInstId] = useState("");
   const [anexarSucesso, setAnexarSucesso] = useState(false);
   const [ultimaNotaEnviadaIds, setUltimaNotaEnviadaIds] = useState<string[]>([]);
   const [excluirNotaTarget, setExcluirNotaTarget] = useState<NotaPedido | null>(null);
+  const [excluirComoResponsavel, setExcluirComoResponsavel] = useState(false);
   const [excluindo, setExcluindo] = useState(false);
   const [rascunhoFotosCount, setRascunhoFotosCount] = useState(0);
   const [rascunhoContratoId, setRascunhoContratoId] = useState("");
@@ -323,6 +342,24 @@ export default function NotasPedidoContent() {
     setFotosLancadasUi(new Set());
   }, []);
 
+  const resolverDivisaoConferencia = useCallback(
+    (d: AppData, nota: NotaPedido) => {
+      if (!coopId || conferenciaDivisaoQtd < 2) return undefined;
+      const ids = conferenciaDivisaoIds.slice(0, conferenciaDivisaoQtd);
+      const origemId = resolverCooperadoIdCanonico(
+        d,
+        nota.cooperadoId,
+        coopId,
+        nota.cooperadoNomeSnapshot
+      );
+      const origemNome =
+        nota.cooperadoNomeSnapshot?.trim() ||
+        getCooperadoNomeResolvido(d, origemId, coopId);
+      return criarDivisaoEntregaFromParticipantes(d, coopId, origemId, origemNome, ids);
+    },
+    [coopId, conferenciaDivisaoQtd, conferenciaDivisaoIds]
+  );
+
   const carregarItensParaFotoConferencia = useCallback(
     (fotoIdx: number) => {
       const d = getData() ?? data;
@@ -343,6 +380,16 @@ export default function NotasPedidoContent() {
     (fotoIdx: number, totalFotos: number): { ok: boolean; error?: string } => {
       if (!user || !selectedNota) return { ok: false, error: "Entrega não selecionada." };
       if (fotosLancadasConferenciaRef.current.has(fotoIdx)) return { ok: true };
+
+      if (conferenciaDivisaoQtd >= 2) {
+        const ids = conferenciaDivisaoIds.slice(0, conferenciaDivisaoQtd);
+        if (ids.some((id) => !id)) {
+          return { ok: false, error: "Escolha o cooperado em cada parte da divisão." };
+        }
+        if (new Set(ids).size !== ids.length) {
+          return { ok: false, error: "Cada cooperado só pode aparecer uma vez na divisão." };
+        }
+      }
 
       const r = calcularItensNota(
         conferenciaItens.map((i) => ({ ...i, valorBruto: 0 })),
@@ -383,16 +430,62 @@ export default function NotasPedidoContent() {
           conferenciaItens.map((i) => ({ ...i, valorBruto: 0 })),
           conferenciaDescontoPct
         );
-        const ficha = buildFichaFromNota(base, d, user.name, nomeCoop, {
-          fotoIndex: fotoIdx,
-          totalFotos,
-        });
         lancamentosFotoConferenciaRef.current.set(fotoIdx, base.itens);
         fotosLancadasConferenciaRef.current.add(fotoIdx);
         setFotosLancadasUi(new Set(fotosLancadasConferenciaRef.current));
 
+        const divisao = resolverDivisaoConferencia(d, selectedNota);
+        const fotoTag = `foto ${fotoIdx + 1}/`;
+
+        if (divisao) {
+          const jaNaFicha = divisao.participantes.every((p) =>
+            d.fichaCorrida.some(
+              (f) =>
+                f.notaPedidoId === selectedNota.id &&
+                f.cooperadoId === p.cooperadoId &&
+                f.descricao.includes(fotoTag)
+            )
+          );
+          if (jaNaFicha) return d;
+
+          const fichas = buildFichasDivisaoFromNota(d, base, user.name, divisao, d.fichaCorrida, {
+            fotoIndex: fotoIdx,
+            totalFotos,
+          });
+          let arquivosMensais = d.arquivosMensais;
+          for (const p of divisao.participantes) {
+            arquivosMensais = upsertArquivoMensal(
+              { ...d, fichaCorrida: [...d.fichaCorrida, ...fichas], arquivosMensais },
+              p.cooperadoId,
+              base.cooperativaId,
+              base.mesReferencia,
+              { notaPedidoIds: [selectedNota.id] }
+            );
+          }
+          return addAuditEntry(
+            {
+              ...d,
+              fichaCorrida: [...d.fichaCorrida, ...fichas],
+              arquivosMensais,
+            },
+            {
+              entityType: "nota_pedido",
+              entityId: selectedNota.id,
+              action: "aprovar",
+              userId: user.id,
+              userName: user.name,
+              changes: `Foto ${fotoIdx + 1}/${totalFotos} lançada · dividida entre ${divisao.participantes.length} cooperados`,
+            }
+          );
+        }
+
+        const ficha = buildFichaFromNota(base, d, user.name, nomeCoop, {
+          fotoIndex: fotoIdx,
+          totalFotos,
+        });
+
         const jaNaFicha = d.fichaCorrida.some(
-          (f) => f.notaPedidoId === selectedNota.id && f.descricao.includes(`foto ${fotoIdx + 1}/`)
+          (f) => f.notaPedidoId === selectedNota.id && f.descricao.includes(fotoTag)
         );
         if (jaNaFicha) return d;
 
@@ -429,6 +522,9 @@ export default function NotasPedidoContent() {
       conferenciaInstId,
       conferenciaLocal,
       conferenciaEscolaAvulsa,
+      conferenciaDivisaoQtd,
+      conferenciaDivisaoIds,
+      resolverDivisaoConferencia,
     ]
   );
 
@@ -727,28 +823,59 @@ export default function NotasPedidoContent() {
     return data.notasPedido
       .filter((n) => {
         if (coopId && !notaPertenceCooperativa(data, n, coopId)) return false;
-        return n.status === "aguardando_conferencia";
+        return isNotaNaFilaConferenciaResponsavel(n.status);
       })
       .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
   }, [data, coopId, isCooperado]);
 
-  // Evita fila “sumir e voltar” durante sync: mantém pendentes ainda em análise nos dados.
-  const pendentesStickyRef = useRef<typeof pendentesTodas>([]);
+  // Fila estável: permanece até lançar/rejeitar — não some no sync nem por status transitório.
+  const filaStickyIdsRef = useRef<Set<string>>(new Set());
+  const filaStickySnapshotRef = useRef<Map<string, NotaPedido>>(new Map());
   const pendentesEstaveis = useMemo(() => {
     if (!data) return pendentesTodas;
-    if (pendentesTodas.length > 0) {
-      pendentesStickyRef.current = pendentesTodas;
-      return pendentesTodas;
+
+    for (const n of pendentesTodas) {
+      filaStickyIdsRef.current.add(n.id);
+      filaStickySnapshotRef.current.set(n.id, n);
     }
-    if (syncing && pendentesStickyRef.current.length > 0) {
-      const aindaEmAnalise = pendentesStickyRef.current.filter((n) =>
-        data.notasPedido.some((x) => x.id === n.id && x.status === "aguardando_conferencia")
-      );
-      if (aindaEmAnalise.length > 0) return aindaEmAnalise;
+
+    for (const id of [...filaStickyIdsRef.current]) {
+      const atual = data.notasPedido.find((x) => x.id === id);
+      if (atual && isNotaSaiuDaFilaConferencia(atual.status)) {
+        filaStickyIdsRef.current.delete(id);
+        filaStickySnapshotRef.current.delete(id);
+      }
     }
-    pendentesStickyRef.current = [];
-    return pendentesTodas;
-  }, [data, pendentesTodas, syncing]);
+
+    const byId = new Map<string, NotaPedido>();
+    for (const n of pendentesTodas) byId.set(n.id, n);
+
+    for (const id of filaStickyIdsRef.current) {
+      if (byId.has(id)) continue;
+      const atual = data.notasPedido.find((x) => x.id === id);
+      const snap = filaStickySnapshotRef.current.get(id);
+      if (!atual) {
+        if (snap) byId.set(id, snap);
+        continue;
+      }
+      if (isNotaSaiuDaFilaConferencia(atual.status)) continue;
+      if (isNotaNaFilaConferenciaResponsavel(atual.status)) {
+        byId.set(id, atual);
+        filaStickySnapshotRef.current.set(id, atual);
+        continue;
+      }
+      if (snap) {
+        byId.set(id, {
+          ...mergeNotaComFotos(snap, atual),
+          status: "aguardando_conferencia",
+        });
+      }
+    }
+
+    return Array.from(byId.values()).sort(
+      (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+    );
+  }, [data, pendentesTodas]);
 
   const pendentesPorCooperado = useMemo(() => {
     if (!data) return [];
@@ -849,6 +976,19 @@ export default function NotasPedidoContent() {
     setStatusFilter("");
   };
 
+  const abrirCorrecoesResponsavel = () => {
+    setVistaResponsavel("correcoes");
+    setAbaConferenciaKey("");
+    setFiltroCooperadoId("");
+  };
+
+  const mostrarCorrecoesResponsavel = isDiretoria && vistaResponsavel === "correcoes";
+
+  const mostrarTabelaResponsavel =
+    !isCooperado &&
+    vistaResponsavel !== "correcoes" &&
+    (vistaResponsavel === "historico" || pendentesEstaveis.length === 0);
+
   const notas = useMemo(() => {
     if (!data) return [];
     const filtrarPorGrupoAtivo =
@@ -883,9 +1023,6 @@ export default function NotasPedidoContent() {
     pendentesTodas.length,
     vistaResponsavel,
   ]);
-
-  const mostrarTabelaResponsavel =
-    !isCooperado && (vistaResponsavel === "historico" || pendentesEstaveis.length === 0);
 
   const contratosEntrega = useMemo(() => {
     if (!data || !coopId) return [];
@@ -1049,6 +1186,14 @@ export default function NotasPedidoContent() {
     setAvulsoErrors({});
     setAvulsoModal(true);
   };
+
+  useEffect(() => {
+    if (isCooperado || !isDiretoria) return;
+    if (searchParams.get("correcoes") === "1") {
+      abrirCorrecoesResponsavel();
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams, isCooperado, isDiretoria]);
 
   useEffect(() => {
     if (searchParams.get("lancar") === "1" && !isCooperado && check("notas_pedido", "create")) {
@@ -1722,6 +1867,8 @@ export default function NotasPedidoContent() {
     setFilaConferenciaTotal(0);
     setConferenciaTransicao(false);
     setConferenciaFotoErro("");
+    setConferenciaDivisaoQtd(0);
+    setConferenciaDivisaoIds([]);
     setConferirModal(false);
     setSelectedNota(null);
   };
@@ -1774,6 +1921,8 @@ export default function NotasPedidoContent() {
         ? resolverCooperadoIdCanonico(d, nota.cooperadoId, coopId, nota.cooperadoNomeSnapshot)
         : nota.cooperadoId;
     setConferenciaCooperadoId(coopDonoId);
+    setConferenciaDivisaoQtd(0);
+    setConferenciaDivisaoIds([]);
     setConferenciaEscolaAvulsa(nota.escolaAvulsaNome?.trim() ?? "");
     setAlterarInstConferencia(false);
     setConferirErrors({});
@@ -1810,7 +1959,7 @@ export default function NotasPedidoContent() {
   ) =>
     d.notasPedido
       .filter((n) => {
-        if (n.status !== "aguardando_conferencia") return false;
+        if (!isNotaNaFilaConferenciaResponsavel(n.status)) return false;
         if (excludeId && n.id === excludeId) return false;
         if (!notaPertenceCooperativa(d, n, coopIdLocal)) return false;
         if (chaveGrupo && getChaveGrupoConferencia(n, d, coopIdLocal) !== chaveGrupo) return false;
@@ -1906,7 +2055,16 @@ export default function NotasPedidoContent() {
     if (lancamentoSequencia) return;
     if (lancandoRef.current || !user || !data || !selectedNota) return;
     const errors: typeof conferirErrors = {};
-    if (!conferenciaCooperadoId) errors.itens = "Escolha o cooperado dono desta nota.";
+    if (conferenciaDivisaoQtd >= 2) {
+      const ids = conferenciaDivisaoIds.slice(0, conferenciaDivisaoQtd);
+      if (ids.some((id) => !id)) {
+        errors.divisao = "Escolha o cooperado em cada parte da divisão.";
+      } else if (new Set(ids).size !== ids.length) {
+        errors.divisao = "Cada cooperado só pode aparecer uma vez na divisão.";
+      }
+    } else if (!conferenciaCooperadoId) {
+      errors.itens = "Escolha o cooperado dono desta nota.";
+    }
     if (Object.keys(errors).length) {
       setConferirErrors(errors);
       return;
@@ -1957,7 +2115,20 @@ export default function NotasPedidoContent() {
       [...lancamentosFotoConferenciaRef.current.values()]
     );
     const calcConsolidado = calcularItensNota(itensConsolidados, conferenciaDescontoPct);
-    const valorAprovado = calcConsolidado.valorLiquido;
+    const valorAprovado = multiFoto
+      ? calcConsolidado.valorLiquido
+      : calcularItensNota(
+          conferenciaItens.map((i) => ({ ...i, valorBruto: 0 })),
+          conferenciaDescontoPct
+        ).valorLiquido;
+    const divisaoPreview = resolverDivisaoConferencia(data, selectedNota);
+    const msgBeneficiarios = divisaoPreview
+      ? divisaoPreview.participantes.map((p) => p.cooperadoNome.split(" ")[0]).join(", ")
+      : coopNomeAprovar.split(" ")[0];
+    const valorPorCooperado =
+      divisaoPreview && divisaoPreview.participantes.length > 0
+        ? valorAprovado / divisaoPreview.participantes.length
+        : valorAprovado;
 
     updateData((d) => {
       const now = new Date().toISOString();
@@ -2012,32 +2183,24 @@ export default function NotasPedidoContent() {
         conferidaPor: user.name,
         dataConferencia: now.split("T")[0],
       };
+      const divisao = resolverDivisaoConferencia(d, notaAtualizada);
+      if (divisao) {
+        notaAtualizada = { ...notaAtualizada, divisaoEntrega: divisao };
+      }
       const notasPedido = d.notasPedido.map((n) => (n.id === selectedNota.id ? notaAtualizada! : n));
 
       if (multiFoto) {
-        const jaTemFicha = d.fichaCorrida.some((f) => f.notaPedidoId === selectedNota.id);
-        let fichaCorrida = d.fichaCorrida;
-        if (!jaTemFicha && notaAtualizada.valorLiquido > 0) {
-          const ficha = buildFichaFromNota(notaAtualizada, d, user.name, nomeCoop);
-          fichaCorrida = [...fichaCorrida, ficha];
-        }
-        const arquivosMensais = upsertArquivoMensal(
-          d,
-          notaAtualizada.cooperadoId,
-          notaAtualizada.cooperativaId,
-          notaAtualizada.mesReferencia,
-          { notaPedidoIds: [notaAtualizada.id] }
-        );
         return addAuditEntry(
-          { ...d, notasPedido, fichaCorrida, arquivosMensais },
+          { ...d, notasPedido },
           {
             entityType: "nota_pedido",
             entityId: selectedNota.id,
             action: "aprovar",
             userId: user.id,
             userName: user.name,
-            changes:
-              qtdFotosAprovadas > 1
+            changes: divisao
+              ? `Entrega conferida (${qtdFotosAprovadas} fotos) · dividida entre ${divisao.participantes.length} cooperados`
+              : qtdFotosAprovadas > 1
                 ? `Entrega conferida (${qtdFotosAprovadas} fotos)`
                 : "Entrega conferida",
           }
@@ -2045,7 +2208,7 @@ export default function NotasPedidoContent() {
       }
 
       const jaNaFicha = d.fichaCorrida.some((f) => f.notaPedidoId === selectedNota.id);
-      if (jaNaFicha) {
+      if (jaNaFicha && !divisao) {
         return addAuditEntry(
           { ...d, notasPedido },
           {
@@ -2057,6 +2220,19 @@ export default function NotasPedidoContent() {
           }
         );
       }
+
+      if (divisao) {
+        const rebuilt = rebuildFichasNota({ ...d, notasPedido }, notaAtualizada);
+        return addAuditEntry(rebuilt, {
+          entityType: "nota_pedido",
+          entityId: selectedNota.id,
+          action: "aprovar",
+          userId: user.id,
+          userName: user.name,
+          changes: `Entrega conferida · dividida entre ${divisao.participantes.length} cooperados`,
+        });
+      }
+
       const ficha = buildFichaFromNota(notaAtualizada, d, user.name, nomeCoop);
       const arquivosMensais = upsertArquivoMensal(
         d,
@@ -2115,14 +2291,18 @@ export default function NotasPedidoContent() {
             setFilaConferenciaPos(1);
           }
           setLancadoMsg(
-            `Nota aprovada! ${formatCurrency(valorAprovado)} na ficha de ${coopNomeAprovar.split(" ")[0]}. Abrindo a próxima entrega…`
+            divisaoPreview
+              ? `Nota aprovada! ${formatCurrency(valorPorCooperado)} para cada (${msgBeneficiarios}). Abrindo a próxima entrega…`
+              : `Nota aprovada! ${formatCurrency(valorAprovado)} na ficha de ${msgBeneficiarios}. Abrindo a próxima entrega…`
           );
           setTimeout(() => setLancadoMsg(""), 4000);
           await prepararConferenciaNota(proxima, { transicao: true });
         } else {
           fecharConferirModal();
           setLancadoMsg(
-            `Nota aprovada! ${formatCurrency(valorAprovado)} na ficha de ${coopNomeAprovar.split(" ")[0]}. Fila concluída!`
+            divisaoPreview
+              ? `Nota aprovada! ${formatCurrency(valorPorCooperado)} para cada (${msgBeneficiarios}). Fila concluída!`
+              : `Nota aprovada! ${formatCurrency(valorAprovado)} na ficha de ${msgBeneficiarios}. Fila concluída!`
           );
           setTimeout(() => setLancadoMsg(""), 6000);
         }
@@ -2183,8 +2363,124 @@ export default function NotasPedidoContent() {
     }
   };
 
+  const executarExclusaoEntregaResponsavel = async (alvo: NotaPedido) => {
+    if (!isDiretoria || !user || !data || !coopId) return;
+    const check = podeExcluirEntregaNota(data, alvo.id, coopId);
+    if (!check.ok) {
+      setSuccessMsg(mensagemBloqueioExclusaoEntrega(check.reason));
+      return;
+    }
+
+    const cnpj = await resolveCooperativaCnpj(data, coopId, user);
+    if (cnpj) {
+      const del = await deleteNotaPedidoFromCloud(cnpj, alvo.id);
+      if (!del.ok) queueNotaDelete(cnpj, alvo.id);
+    }
+
+    updateData((d) => {
+      const result = excluirEntregaNota(d, alvo.id, coopId);
+      if (!result.ok) return d;
+      return addAuditEntry(result.data, {
+        entityType: "nota_pedido",
+        entityId: alvo.id,
+        action: "excluir",
+        userId: user.id,
+        userName: user.name,
+        changes:
+          alvo.status === "conferida"
+            ? `Entrega ${alvo.numeroNota} excluída pelo responsável (removida da ficha)`
+            : alvo.status === "rejeitada"
+              ? `Entrega devolvida excluída pelo responsável · ${getCooperadoNomeResolvido(d, alvo.cooperadoId, coopId)}`
+              : `Entrega pendente excluída pelo responsável · ${getCooperadoNomeResolvido(d, alvo.cooperadoId, coopId)}`,
+      });
+    });
+
+    filaStickyIdsRef.current.delete(alvo.id);
+    filaStickySnapshotRef.current.delete(alvo.id);
+
+    const d = getData();
+    const cnpjSync = await resolveCooperativaCnpj(d, coopId, user);
+    if (cnpjSync) await pushOperacionalToCloud(cnpjSync, d, coopId, { authoritative: true });
+    requestAppSync();
+
+    setViewModal(false);
+    setConferirModal(false);
+    setSelectedNota(null);
+    setSuccessMsg(
+      alvo.status === "conferida"
+        ? `Entrega ${alvo.numeroNota} excluída e removida da ficha do cooperado.`
+        : "Entrega excluída."
+    );
+  };
+
+  const executarRelancarEntregaResponsavel = async (alvo: NotaPedido) => {
+    if (!isDiretoria || !user || !data || !coopId) return;
+
+    let notaRelancada: NotaPedido | undefined;
+    updateData((d) => {
+      const result = relancarEntregaNota(d, alvo.id, coopId);
+      if (!result.ok) return d;
+      notaRelancada = result.nota;
+      return addAuditEntry(result.data, {
+        entityType: "nota_pedido",
+        entityId: alvo.id,
+        action: "editar",
+        userId: user.id,
+        userName: user.name,
+        changes: `Entrega ${alvo.numeroNota} re-lançada para conferência · ${getCooperadoNomeResolvido(d, alvo.cooperadoId, coopId)}`,
+      });
+    });
+
+    if (!notaRelancada) {
+      setSuccessMsg("Não foi possível re-lançar esta entrega.");
+      return;
+    }
+
+    const cnpj = await resolveCooperativaCnpj(getData(), coopId, user);
+    if (cnpj) {
+      await patchNotaPedidoInCloud(cnpj, notaRelancada);
+      const d = getData();
+      await pushOperacionalToCloud(cnpj, d, coopId, { authoritative: true });
+    }
+    requestAppSync();
+
+    filaStickyIdsRef.current.add(notaRelancada.id);
+    filaStickySnapshotRef.current.set(notaRelancada.id, notaRelancada);
+
+    setVistaResponsavel("fila");
+    setStatusFilter("aguardando_conferencia");
+    setSuccessMsg(
+      `Entrega ${alvo.numeroNota} voltou para «Conferir entregas». Abra a fila para lançar de novo.`
+    );
+  };
+
+  const solicitarExclusaoNota = (nota: NotaPedido, comoResponsavel: boolean) => {
+    if (comoResponsavel && data && coopId) {
+      const check = podeExcluirEntregaNota(data, nota.id, coopId);
+      if (!check.ok) {
+        setSuccessMsg(mensagemBloqueioExclusaoEntrega(check.reason));
+        return;
+      }
+    }
+    setExcluirComoResponsavel(comoResponsavel);
+    setExcluirNotaTarget(nota);
+  };
+
   const handleExcluirPendente = async () => {
     if (!excluirNotaTarget || !user || !data || !coopId) return;
+
+    if (excluirComoResponsavel) {
+      setExcluindo(true);
+      try {
+        await executarExclusaoEntregaResponsavel(excluirNotaTarget);
+      } finally {
+        setExcluindo(false);
+        setExcluirNotaTarget(null);
+        setExcluirComoResponsavel(false);
+      }
+      return;
+    }
+
     if (excluirNotaTarget.cooperadoId !== (cooperadoId ?? user.cooperadoId)) return;
     if (
       excluirNotaTarget.status !== "aguardando_conferencia" &&
@@ -2222,6 +2518,7 @@ export default function NotasPedidoContent() {
 
     setExcluindo(false);
     setExcluirNotaTarget(null);
+    setExcluirComoResponsavel(false);
     setViewModal(false);
     setSuccessMsg(
       eraRejeitada
@@ -2311,7 +2608,7 @@ export default function NotasPedidoContent() {
               size="sm"
               className="w-full"
               variant="danger"
-              onClick={(e) => { e.stopPropagation(); setExcluirNotaTarget(n); }}
+              onClick={(e) => { e.stopPropagation(); solicitarExclusaoNota(n, false); }}
             >
               <Trash2 size={16} /> Excluir
             </Button>
@@ -2322,7 +2619,7 @@ export default function NotasPedidoContent() {
             size="sm"
             className="w-full mt-3"
             variant="danger"
-            onClick={(e) => { e.stopPropagation(); setExcluirNotaTarget(n); }}
+            onClick={(e) => { e.stopPropagation(); solicitarExclusaoNota(n, false); }}
           >
             <Trash2 size={16} /> Excluir pendente
           </Button>
@@ -2373,6 +2670,33 @@ export default function NotasPedidoContent() {
     return canonico === conferenciaCooperadoId && Boolean(selectedNota.cooperadoNomeSnapshot?.trim());
   }, [selectedNota, data, coopId, conferenciaCooperadoId]);
 
+  const handleConferenciaDivisaoQtdChange = (raw: number) => {
+    const qtd = Math.min(5, Math.max(0, Math.floor(raw)));
+    setConferenciaDivisaoQtd(qtd);
+    if (qtd <= 1) {
+      setConferenciaDivisaoIds([]);
+      return;
+    }
+    setConferenciaDivisaoIds((prev) => {
+      const next: string[] = [];
+      for (let i = 0; i < qtd; i++) {
+        next.push(prev[i] ?? (i === 0 ? conferenciaCooperadoId : ""));
+      }
+      return next;
+    });
+    setConferirErrors((e) => ({ ...e, divisao: undefined, itens: undefined }));
+  };
+
+  const setConferenciaDivisaoCooperado = (idx: number, cooperadoId: string) => {
+    setConferenciaDivisaoIds((prev) => {
+      const next = [...prev];
+      while (next.length <= idx) next.push("");
+      next[idx] = cooperadoId;
+      return next.slice(0, conferenciaDivisaoQtd);
+    });
+    setConferirErrors((e) => ({ ...e, divisao: undefined }));
+  };
+
   return (
     <div className="relative pb-20 sm:pb-0">
       <PageHeader
@@ -2392,12 +2716,79 @@ export default function NotasPedidoContent() {
               <Camera size={18} /> Tirar foto
             </Button>
           </div>
-        ) : check("notas_pedido", "create") ? (
-          <Button size="lg" onClick={() => openLancarAvulso()}>
-            <UserPlus size={18} /> Lançar entrega
-          </Button>
+        ) : !isCooperado ? (
+          <div className="flex flex-col sm:flex-row gap-2 shrink-0">
+            {isDiretoria && (
+              <Button
+                size="lg"
+                variant={vistaResponsavel === "correcoes" ? "primary" : "secondary"}
+                onClick={abrirCorrecoesResponsavel}
+              >
+                <RefreshCw size={18} /> Correções
+              </Button>
+            )}
+            {check("notas_pedido", "create") && (
+              <Button size="lg" onClick={() => openLancarAvulso()}>
+                <UserPlus size={18} /> Lançar entrega
+              </Button>
+            )}
+          </div>
         ) : undefined}
       />
+
+      {!isCooperado && (
+        <nav
+          className="mb-4 rounded-xl border border-gray-200 bg-white p-1.5 shadow-sm flex flex-wrap gap-1 sticky top-0 z-20"
+          aria-label="Seções de entregas"
+        >
+          <button
+            type="button"
+            onClick={() => {
+              setVistaResponsavel("fila");
+              setStatusFilter("aguardando_conferencia");
+              setAbaConferenciaKey("");
+              setFiltroCooperadoId("");
+            }}
+            className={cn(
+              "flex-1 min-w-[7rem] px-3 py-2.5 text-sm font-semibold rounded-lg transition-colors",
+              vistaResponsavel === "fila" || vistaResponsavel === "cooperado"
+                ? "bg-green-600 text-white shadow-sm"
+                : "text-gray-600 hover:bg-gray-100"
+            )}
+          >
+            Conferir
+            {pendentesEstaveis.length > 0 && (
+              <span className="ml-1 text-xs opacity-90">({pendentesEstaveis.length})</span>
+            )}
+          </button>
+          {isDiretoria && (
+            <button
+              type="button"
+              onClick={abrirCorrecoesResponsavel}
+              className={cn(
+                "flex-1 min-w-[7rem] px-3 py-2.5 text-sm font-semibold rounded-lg transition-colors",
+                vistaResponsavel === "correcoes"
+                  ? "bg-green-600 text-white shadow-sm"
+                  : "text-gray-600 hover:bg-gray-100"
+              )}
+            >
+              Correções
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={abrirHistoricoResponsavel}
+            className={cn(
+              "flex-1 min-w-[7rem] px-3 py-2.5 text-sm font-semibold rounded-lg transition-colors",
+              vistaResponsavel === "historico"
+                ? "bg-green-600 text-white shadow-sm"
+                : "text-gray-600 hover:bg-gray-100"
+            )}
+          >
+            Histórico
+          </button>
+        </nav>
+      )}
 
       {successMsg && (
         <AlertBanner variant="success" title="Entrega enviada!" onDismiss={() => setSuccessMsg("")}>
@@ -2474,7 +2865,18 @@ export default function NotasPedidoContent() {
 
       {!isCooperado && (
         <div className="mb-6 space-y-4">
-          {pendentesEstaveis.length > 0 ? (
+          {mostrarCorrecoesResponsavel && coopId && (
+            <CorrecoesEntregasPanel
+              data={data}
+              coopId={coopId}
+              cooperados={cooperadosCoop}
+              getEscolaLabel={(n) => getEscolaNotaLabel(n, data.instituicoes)}
+              onApagar={executarExclusaoEntregaResponsavel}
+              onRelancar={executarRelancarEntregaResponsavel}
+            />
+          )}
+
+          {!mostrarCorrecoesResponsavel && pendentesEstaveis.length > 0 ? (
             <>
               <div className="rounded-2xl border border-amber-200 bg-amber-50 px-5 py-4">
                 <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
@@ -2599,6 +3001,23 @@ export default function NotasPedidoContent() {
                           onClick={() => void openConferir(n)}
                           className="text-left border-2 border-amber-300 bg-amber-50 rounded-xl overflow-hidden hover:border-amber-500 relative"
                         >
+                          {check("notas_pedido", "edit") &&
+                            coopId &&
+                            podeExcluirEntregaNota(data, n.id, coopId).ok && (
+                              <Button
+                                type="button"
+                                variant="danger"
+                                size="sm"
+                                className="absolute top-2 left-2 z-10 h-8 w-8 p-0"
+                                aria-label="Excluir entrega"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  solicitarExclusaoNota(n, true);
+                                }}
+                              >
+                                <Trash2 size={14} />
+                              </Button>
+                            )}
                           {getFotoExibicaoNota(n) && (
                             <NotaFotoImg
                               src={getFotoExibicaoNota(n)}
@@ -2626,7 +3045,7 @@ export default function NotasPedidoContent() {
                 </div>
               )}
             </>
-          ) : (
+          ) : !mostrarCorrecoesResponsavel ? (
             <div className="rounded-2xl border border-green-200 bg-green-50/60 px-5 py-6 text-center">
               <CheckCircle size={32} className="mx-auto text-green-600 mb-2" />
               <p className="text-base font-semibold text-green-900">Tudo em dia</p>
@@ -2634,7 +3053,7 @@ export default function NotasPedidoContent() {
                 Nenhuma nota a conferir. Quando um cooperado enviar fotos, o nome dele aparece aqui.
               </p>
             </div>
-          )}
+          ) : null}
         </div>
       )}
 
@@ -2781,11 +3200,18 @@ export default function NotasPedidoContent() {
             nomeCooperado={nomeCooperadoExibicao}
             ultimaNotaEnviadaIds={ultimaNotaEnviadaIds}
             onReenviar={(n) => openAnexar(n, { abrirCamera: true })}
-            onExcluir={(n) => setExcluirNotaTarget(n)}
+            onExcluir={(n) => solicitarExclusaoNota(n, false)}
             getEscolaLabel={(n) => getEscolaNotaLabel(n, data.instituicoes)}
           />
         )
       ) : mostrarTabelaResponsavel ? (
+      <>
+        {check("notas_pedido", "edit") && (
+          <p className="text-sm text-gray-600 mb-3">
+            Histórico de entregas — filtre por cooperado e use <strong>Excluir</strong> para remover uma entrega
+            específica (não disponível para entregas já pagas).
+          </p>
+        )}
       <DataTable
         data={notas}
         keyField="id"
@@ -2806,7 +3232,13 @@ export default function NotasPedidoContent() {
         ]}
         onView={(n) => (n.status === "aguardando_conferencia" ? void openConferir(n) : openView(n))}
         viewLabel="Conferir"
+        onDelete={
+          check("notas_pedido", "edit")
+            ? (n) => solicitarExclusaoNota(n, true)
+            : undefined
+        }
       />
+      </>
       ) : null}
 
       {isCooperado && (
@@ -3574,22 +4006,71 @@ export default function NotasPedidoContent() {
                   {lancadoMsg}
                 </AlertBanner>
               )}
-              <FormField label="Cooperado" required hint="Quem receberá o valor na ficha">
-                <Select value={conferenciaCooperadoId} onChange={(e) => setConferenciaCooperadoId(e.target.value)}>
-                  <option value="">Selecione...</option>
-                  {cooperadosConferenciaOptions.map((c) => (
-                    <option key={c.id} value={c.id}>{c.nomeCompleto}{c.avulso ? " (avulso)" : ""}</option>
-                  ))}
+              <FormField
+                label="Dividir entre quantos cooperados?"
+                hint="0 = um cooperado só · 2 a 5 = valor igual para cada um (incluindo quem enviou)"
+              >
+                <Select
+                  value={conferenciaDivisaoQtd}
+                  onChange={(e) => handleConferenciaDivisaoQtdChange(parseInt(e.target.value, 10) || 0)}
+                >
+                  <option value={0}>0 — não dividir</option>
+                  <option value={1}>1 — um cooperado</option>
+                  <option value={2}>2 cooperados</option>
+                  <option value={3}>3 cooperados</option>
+                  <option value={4}>4 cooperados</option>
+                  <option value={5}>5 cooperados</option>
                 </Select>
-                {cooperadoConferenciaAutoIdentificado && (
-                  <p className="text-xs text-green-700 mt-1">
-                    Identificado automaticamente pelo envio: {selectedNota.cooperadoNomeSnapshot}
-                  </p>
-                )}
-                {cooperadosConferenciaOptions.length === 0 && (
-                  <p className="text-xs text-amber-700 mt-1">Carregando cooperados da nuvem…</p>
-                )}
               </FormField>
+
+              {conferenciaDivisaoQtd <= 1 ? (
+                <FormField label="Cooperado" required hint="Quem receberá o valor na ficha">
+                  <Select value={conferenciaCooperadoId} onChange={(e) => setConferenciaCooperadoId(e.target.value)}>
+                    <option value="">Selecione...</option>
+                    {cooperadosConferenciaOptions.map((c) => (
+                      <option key={c.id} value={c.id}>{c.nomeCompleto}{c.avulso ? " (avulso)" : ""}</option>
+                    ))}
+                  </Select>
+                  {cooperadoConferenciaAutoIdentificado && (
+                    <p className="text-xs text-green-700 mt-1">
+                      Identificado automaticamente pelo envio: {selectedNota.cooperadoNomeSnapshot}
+                    </p>
+                  )}
+                  {cooperadosConferenciaOptions.length === 0 && (
+                    <p className="text-xs text-amber-700 mt-1">Carregando cooperados da nuvem…</p>
+                  )}
+                </FormField>
+              ) : (
+                <div className="rounded-xl border border-blue-200 bg-blue-50/60 p-4 space-y-3">
+                  <p className="text-sm font-medium text-blue-900 flex items-center gap-2">
+                    <Users size={16} />
+                    Valor dividido igualmente entre {conferenciaDivisaoQtd} cooperados
+                  </p>
+                  {Array.from({ length: conferenciaDivisaoQtd }, (_, idx) => (
+                    <FormField key={idx} label={`Cooperado ${idx + 1}`} required>
+                      <Select
+                        value={conferenciaDivisaoIds[idx] ?? ""}
+                        onChange={(e) => setConferenciaDivisaoCooperado(idx, e.target.value)}
+                      >
+                        <option value="">Selecione...</option>
+                        {cooperadosConferenciaOptions.map((c) => (
+                          <option key={c.id} value={c.id}>{c.nomeCompleto}{c.avulso ? " (avulso)" : ""}</option>
+                        ))}
+                      </Select>
+                    </FormField>
+                  ))}
+                  {conferenciaTotais.liquido > 0 && (
+                    <p className="text-xs text-blue-800">
+                      Cada cooperado receberá cerca de{" "}
+                      <strong>{formatCurrency(conferenciaTotais.liquido / conferenciaDivisaoQtd)}</strong> nesta
+                      entrega.
+                    </p>
+                  )}
+                  {conferirErrors.divisao && (
+                    <p className="text-sm text-red-600">{conferirErrors.divisao}</p>
+                  )}
+                </div>
+              )}
 
               <div className="rounded-xl border border-green-200 bg-white p-4">
                 <div className="flex items-start justify-between gap-3">
@@ -3806,32 +4287,61 @@ export default function NotasPedidoContent() {
                 <Button className="w-full" onClick={() => { setViewModal(false); openAnexar(selectedNota, { abrirCamera: true }); }}>
                   <RefreshCw size={18} /> Enviar de novo
                 </Button>
-                <Button className="w-full" variant="danger" onClick={() => setExcluirNotaTarget(selectedNota)}>
+                <Button className="w-full" variant="danger" onClick={() => solicitarExclusaoNota(selectedNota, false)}>
                   <Trash2 size={18} /> Excluir entrega
                 </Button>
               </div>
             )}
             {isCooperado && selectedNota.status === "aguardando_conferencia" && (
-              <Button className="w-full" variant="danger" onClick={() => setExcluirNotaTarget(selectedNota)}>
+              <Button className="w-full" variant="danger" onClick={() => solicitarExclusaoNota(selectedNota, false)}>
                 <Trash2 size={18} /> Excluir entrega pendente
               </Button>
             )}
+            {!isCooperado &&
+              check("notas_pedido", "edit") &&
+              coopId &&
+              podeExcluirEntregaNota(data, selectedNota.id, coopId).ok && (
+                <Button
+                  className="w-full"
+                  variant="danger"
+                  onClick={() => solicitarExclusaoNota(selectedNota, true)}
+                >
+                  <Trash2 size={18} /> Excluir entrega
+                </Button>
+              )}
           </div>
         )}
       </Modal>
 
       <ConfirmDialog
         open={Boolean(excluirNotaTarget)}
-        onClose={() => !excluindo && setExcluirNotaTarget(null)}
+        onClose={() => {
+          if (!excluindo) {
+            setExcluirNotaTarget(null);
+            setExcluirComoResponsavel(false);
+          }
+        }}
         title={
-          excluirNotaTarget?.status === "rejeitada"
-            ? "Excluir entrega devolvida?"
-            : "Excluir entrega pendente?"
+          excluirComoResponsavel
+            ? excluirNotaTarget?.status === "conferida"
+              ? "Excluir entrega lançada?"
+              : excluirNotaTarget?.status === "rejeitada"
+                ? "Excluir entrega devolvida?"
+                : "Excluir entrega pendente?"
+            : excluirNotaTarget?.status === "rejeitada"
+              ? "Excluir entrega devolvida?"
+              : "Excluir entrega pendente?"
         }
         message={
-          excluirNotaTarget?.status === "rejeitada"
-            ? "A entrega com pedido de correção será removida da sua lista e também some para o responsável. Você poderá enviar uma nova foto depois."
-            : "A foto será removida da sua lista e também desaparece para o responsável. Esta ação não pode ser desfeita."
+          excluirComoResponsavel
+            ? excluirNotaTarget?.status === "conferida"
+              ? "A entrega será removida do histórico e o valor sai da ficha do cooperado (e dos demais, se houve divisão). Não pode ser desfeito."
+              : excluirNotaTarget?.status === "rejeitada"
+                ? "A entrega some da lista do cooperado e do responsável. O cooperado poderá enviar uma nova foto depois."
+                : "A foto sai da fila de conferência e também desaparece para o cooperado. Esta ação não pode ser desfeita."
+            : excluirNotaTarget?.status === "rejeitada"
+              ? "A entrega com pedido de correção será removida da sua lista e também some para o responsável. Você poderá enviar uma nova foto depois."
+              : "A foto será removida da sua lista e também desaparece para o responsável. Esta ação não pode ser desfeita."
         }
         confirmLabel="Sim, excluir"
         variant="danger"

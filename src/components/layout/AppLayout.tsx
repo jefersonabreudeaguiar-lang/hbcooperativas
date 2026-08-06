@@ -16,6 +16,7 @@ import { getUserCooperativaNome } from "@/utils/cooperativa";
 import { PLATFORM_NAME, PLATFORM_TAGLINE } from "@/utils/constants";
 import { AppIcon } from "@/components/ui/AppIcon";
 import { SyncStatusChip, SyncStatusChipLight } from "@/components/sync/SyncStatusChip";
+import { CobrancaSaasBanner } from "@/components/cobranca/CobrancaSaasBanner";
 import { cn } from "@/utils/format";
 import type { Resource } from "@/types";
 
@@ -237,6 +238,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           <div className="hidden lg:flex justify-end mb-3">
             <SyncStatusChipLight />
           </div>
+          <CobrancaSaasBanner />
           {children}
         </main>
       </div>

@@ -7,6 +7,7 @@ import { getCooperadoNome } from "@/utils/calculations";
 import { getData, saveDataSafe } from "@/services/dataStore";
 import { reconciliarFichaFromNotasConferidas } from "@/services/notaPedidoService";
 import { needsOperationalResetCloudPush, getCloudResetAppliedVersion } from "@/services/operationalReset";
+import { readNotaFotoAtIndex } from "@/services/localMediaStore";
 import { slimNotaDraftForUpload } from "@/services/imagePipelineService";
 import { flushPendingDeliveryImages } from "@/services/offlineImageQueueService";
 import {
@@ -33,6 +34,14 @@ function shouldApplyCloudNota(local: NotaPedido | undefined, cloud: NotaPedido):
   // Sticky fila: aguardando local permanece até decisão do responsável (ou rejeição).
   if (local.status === "aguardando_conferencia") {
     if (cloud.status === "rascunho") return false;
+    if (cloud.status === "entregue") {
+      // Legacy “em análise” — mescla fotos/meta sem tirar da fila como conferida.
+      const cloudTime = new Date(cloud.updatedAt).getTime();
+      const localTime = new Date(local.updatedAt).getTime();
+      const cloudFotos = contarFotosEnviadasNota(cloud);
+      const localFotos = contarFotosEnviadasNota(local);
+      return cloudTime > localTime || cloudFotos > localFotos;
+    }
     if (cloud.status === "aguardando_conferencia") {
       // Só mescla fotos/meta — status permanece em análise.
       const cloudTime = new Date(cloud.updatedAt).getTime();
@@ -47,6 +56,16 @@ function shouldApplyCloudNota(local: NotaPedido | undefined, cloud: NotaPedido):
       cloud.status === "pago" ||
       cloud.status === "cancelado"
     ) {
+      // Re-lançamento pelo responsável: local mais recente, sem conferência, aguardando de novo.
+      if (
+        cloud.status === "conferida" &&
+        (local.valorLiquido ?? 0) <= 0 &&
+        !local.conferidaPor
+      ) {
+        const localTime = new Date(local.updatedAt).getTime();
+        const cloudTime = new Date(cloud.updatedAt).getTime();
+        if (localTime > cloudTime) return false;
+      }
       return true;
     }
     return false;
@@ -211,6 +230,16 @@ export function mergeCloudNotasIntoData(
             status: local.status,
             updatedAt: local.updatedAt,
           };
+        } else if (
+          local.status === "aguardando_conferencia" &&
+          cloudNota.status === "entregue"
+        ) {
+          // Legacy “entregue” na nuvem — mescla fotos, fila permanece em análise.
+          mergedNota = {
+            ...mergedNota,
+            status: "aguardando_conferencia",
+            updatedAt: local.updatedAt,
+          };
         } else {
           const conferiuNaNuvem = cloudNota.status === "conferida" || cloudNota.status === "pago";
           const protegida = protectNotaAgainstStatusDowngrade(local, {
@@ -239,9 +268,12 @@ export function mergeCloudNotasIntoData(
             updatedAt: cloudNota.updatedAt,
           };
         }
-      } else if (local?.status === "aguardando_conferencia") {
+      } else if (local?.status === "aguardando_conferencia" || local?.status === "entregue") {
         // Merge de fotos não pode tirar da fila.
-        mergedNota = { ...mergedNota, status: "aguardando_conferencia" };
+        mergedNota = {
+          ...mergedNota,
+          status: local.status === "entregue" ? "entregue" : "aguardando_conferencia",
+        };
       }
       byId.set(mergedNota.id, mergedNota);
       changed = true;
@@ -305,6 +337,41 @@ export async function fetchNotaPedidoFromCloud(
   } catch {
     return null;
   }
+}
+
+/** Carrega todas as fotos de uma nota para exibição (local, IDB ou nuvem). */
+export async function resolveFotosNotaParaExibicao(
+  nota: NotaPedido,
+  cnpj?: string
+): Promise<string[]> {
+  const qtd = contarFotosEnviadasNota(nota);
+  if (qtd <= 0) return [];
+
+  const digits = cnpj ? normalizeCnpj(cnpj) : normalizeCnpj(nota.cooperativaCnpj ?? "");
+  const cnpjOk = digits.length === 14 ? digits : undefined;
+  const inline = getFotosExibicaoNota(nota);
+  const out: string[] = [];
+
+  for (let i = 0; i < qtd; i++) {
+    if (inline[i]) {
+      out.push(inline[i]);
+      continue;
+    }
+    const local = await readNotaFotoAtIndex(nota, i);
+    if (local) {
+      out.push(local);
+      continue;
+    }
+    if (cnpjOk) {
+      const cloud = await fetchNotaFotoPartBlobUrl(cnpjOk, nota.id, i);
+      if (cloud) {
+        out.push(cloud);
+        continue;
+      }
+    }
+  }
+
+  return out;
 }
 
 /** Carrega uma foto da nuvem como blob: URL (libera com revokePreviewUrl). */

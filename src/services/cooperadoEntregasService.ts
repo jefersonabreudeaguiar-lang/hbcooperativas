@@ -253,6 +253,58 @@ export function listarMesesPagosCooperado(
   return [...meses].sort((a, b) => b.localeCompare(a));
 }
 
+export function notaTemFotoEnviadaCooperado(nota: NotaPedido): boolean {
+  if (nota.status === "cancelado") return false;
+  if (
+    nota.status === "rascunho" &&
+    !nota.fotoNaNuvem &&
+    !nota.fotoEnviadaEm &&
+    !nota.fotoPedido &&
+    !(nota.fotosPedido?.length ?? 0)
+  ) {
+    return false;
+  }
+  return (
+    contarFotosEnviadasNota(nota) > 0 ||
+    Boolean(nota.fotoNaNuvem) ||
+    Boolean(nota.fotoEnviadaEm) ||
+    Boolean(nota.fotoPedido || nota.fotosPedido?.length) ||
+    Boolean(nota.fotosMeta?.some((f) => f.storagePath || f.url || f.thumbnailUrl))
+  );
+}
+
+export function filtrarNotasComFotoEnviada(notas: NotaPedido[]): NotaPedido[] {
+  return notas.filter(notaTemFotoEnviadaCooperado);
+}
+
+/** Resumos mensais só com notas que têm foto enviada (pendente ou já lançada). */
+export function listarResumosFotosCooperado(
+  data: AppData,
+  cooperadoId: string,
+  cooperativaId?: string
+): ResumoMesEntregasCooperado[] {
+  const porMes = new Map<string, NotaPedido[]>();
+
+  for (const nota of notasDoCooperado(data, cooperadoId, cooperativaId)) {
+    if (!notaTemFotoEnviadaCooperado(nota)) continue;
+    const list = porMes.get(nota.mesReferencia) ?? [];
+    list.push(nota);
+    porMes.set(nota.mesReferencia, list);
+  }
+
+  return [...porMes.entries()]
+    .sort(([a], [b]) => b.localeCompare(a))
+    .map(([mesReferencia, notas]) => {
+      const ordenadas = ordenarNotasMesCronologico(notas);
+      const resumo = getResumoMesEntregasCooperado(data, cooperadoId, mesReferencia, cooperativaId);
+      return {
+        ...resumo,
+        notas: ordenadas,
+        quantidadeEntregas: contarEntregasNoMes(ordenadas),
+      };
+    });
+}
+
 export function listarResumosMensaisEntregas(
   data: AppData,
   cooperadoId: string,

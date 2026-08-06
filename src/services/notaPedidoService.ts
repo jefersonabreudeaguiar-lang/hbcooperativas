@@ -534,6 +534,80 @@ function dividirItensEntrega(itens: NotaPedidoItem[], index: number, count: numb
     .filter((i) => i.quantidade > 0);
 }
 
+/** Monta divisão a partir da lista explícita de cooperados (mín. 2). */
+export function criarDivisaoEntregaFromParticipantes(
+  data: AppData,
+  cooperativaId: string,
+  origemId: string,
+  origemNome: string,
+  participanteIds: string[]
+): DivisaoEntregaNota | undefined {
+  const ids = participanteIds
+    .map((id) => resolverCooperadoIdCanonico(data, id, cooperativaId))
+    .filter(Boolean);
+  const uniqueIds = [...new Set(ids)];
+  if (uniqueIds.length < 2) return undefined;
+
+  return {
+    cooperadoOrigemId: origemId,
+    cooperadoOrigemNome: origemNome,
+    participantes: uniqueIds.map((id) => ({
+      cooperadoId: id,
+      cooperadoNome: getCooperadoNomeResolvido(data, id, cooperativaId),
+    })),
+    divididoEm: new Date().toISOString(),
+  };
+}
+
+/** Cria N fichas divididas igualmente (opcional: fatia por foto). */
+export function buildFichasDivisaoFromNota(
+  data: AppData,
+  nota: NotaPedido,
+  responsavel: string,
+  divisao: DivisaoEntregaNota,
+  baseFichaCorrida: FichaCorrida[],
+  opts?: { fotoIndex?: number; totalFotos?: number }
+): FichaCorrida[] {
+  const participantes = divisao.participantes;
+  const N = participantes.length;
+  const novasFichas: FichaCorrida[] = [];
+
+  for (let i = 0; i < N; i++) {
+    const p = participantes[i];
+    const ctx = { ...data, fichaCorrida: [...baseFichaCorrida, ...novasFichas] };
+    const notaParticipante: NotaPedido = {
+      ...nota,
+      cooperadoId: p.cooperadoId,
+      cooperadoNomeSnapshot: p.cooperadoNome,
+    };
+    const base = buildFichaFromNota(notaParticipante, ctx, responsavel, p.cooperadoNome, opts);
+    const valorBruto = dividirValorEntrega(nota.valorBruto, i, N);
+    const descontos = dividirValorEntrega(nota.valorDesconto, i, N);
+    const valorLiquido = dividirValorEntrega(nota.valorLiquido, i, N);
+    const saldoAnterior =
+      opts?.fotoIndex != null
+        ? getSaldoAnteriorFicha(ctx, p.cooperadoId, nota.mesReferencia)
+        : getSaldoAnteriorFicha(ctx, p.cooperadoId, nota.mesReferencia, nota.id);
+    const ficha: FichaCorrida = {
+      ...base,
+      valorBruto,
+      descontos,
+      valorLiquido,
+      itens: dividirItensEntrega(nota.itens ?? [], i, N),
+      descontosDetalhe: base.descontosDetalhe?.map((d) => ({
+        ...d,
+        valor: dividirValorEntrega(d.valor, i, N),
+      })),
+      saldoAcumulado: round2(saldoAnterior + valorLiquido),
+      divisaoEntrega: divisao,
+    };
+    if (nota.status === "pago") ficha.status = "pago";
+    novasFichas.push(ficha);
+  }
+
+  return novasFichas;
+}
+
 /** Recria fichas da nota (1 ou N cooperados conforme divisaoEntrega). */
 export function rebuildFichasNota(data: AppData, nota: NotaPedido): AppData {
   const without = data.fichaCorrida.filter((f) => f.notaPedidoId !== nota.id);
@@ -551,41 +625,9 @@ export function rebuildFichasNota(data: AppData, nota: NotaPedido): AppData {
     return { ...data, fichaCorrida, arquivosMensais };
   }
 
-  const N = participantes.length;
-  let fichaCorrida = without;
-  const novasFichas: FichaCorrida[] = [];
-
-  for (let i = 0; i < N; i++) {
-    const p = participantes[i];
-    const ctx = { ...data, fichaCorrida: [...fichaCorrida, ...novasFichas] };
-    const notaParticipante: NotaPedido = {
-      ...nota,
-      cooperadoId: p.cooperadoId,
-      cooperadoNomeSnapshot: p.cooperadoNome,
-    };
-    const base = buildFichaFromNota(notaParticipante, ctx, responsavel, p.cooperadoNome);
-    const valorBruto = dividirValorEntrega(nota.valorBruto, i, N);
-    const descontos = dividirValorEntrega(nota.valorDesconto, i, N);
-    const valorLiquido = dividirValorEntrega(nota.valorLiquido, i, N);
-    const saldoAnterior = getSaldoAnteriorFicha(ctx, p.cooperadoId, nota.mesReferencia, nota.id);
-    const ficha: FichaCorrida = {
-      ...base,
-      valorBruto,
-      descontos,
-      valorLiquido,
-      itens: dividirItensEntrega(nota.itens ?? [], i, N),
-      descontosDetalhe: base.descontosDetalhe?.map((d) => ({
-        ...d,
-        valor: dividirValorEntrega(d.valor, i, N),
-      })),
-      saldoAcumulado: round2(saldoAnterior + valorLiquido),
-      divisaoEntrega: nota.divisaoEntrega,
-    };
-    if (nota.status === "pago") ficha.status = "pago";
-    novasFichas.push(ficha);
-  }
-
-  fichaCorrida = [...fichaCorrida, ...novasFichas];
+  const divisao = nota.divisaoEntrega!;
+  const novasFichas = buildFichasDivisaoFromNota(data, nota, responsavel, divisao, without);
+  const fichaCorrida = [...without, ...novasFichas];
 
   let arquivosMensais = data.arquivosMensais;
   for (const p of participantes) {
@@ -1145,4 +1187,215 @@ export function marcarFichaComoPaga(
       : n
   );
   return { ...data, fichaCorrida: fichaAtualizada, notasPedido };
+}
+
+export type MotivoBloqueioExclusaoEntrega =
+  | "not_found"
+  | "wrong_coop"
+  | "pago"
+  | "ficha_paga"
+  | "em_pagamento";
+
+function recalcularSaldosFichaCooperadoMes(
+  fichas: FichaCorrida[],
+  cooperadoId: string,
+  mesReferencia: string
+): FichaCorrida[] {
+  const ordenadas = fichas
+    .filter((f) => f.cooperadoId === cooperadoId && f.mesReferencia === mesReferencia)
+    .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+
+  let saldo = 0;
+  const saldoPorId = new Map<string, number>();
+  for (const f of ordenadas) {
+    saldo = round2(saldo + f.valorLiquido);
+    saldoPorId.set(f.id, saldo);
+  }
+
+  return fichas.map((f) => {
+    const novoSaldo = saldoPorId.get(f.id);
+    return novoSaldo !== undefined ? { ...f, saldoAcumulado: novoSaldo } : f;
+  });
+}
+
+/** Verifica se a entrega pode ser excluída pela cooperativa (responsável). */
+export function podeExcluirEntregaNota(
+  data: AppData,
+  notaId: string,
+  cooperativaId: string
+): { ok: true } | { ok: false; reason: MotivoBloqueioExclusaoEntrega } {
+  const nota = data.notasPedido.find((n) => n.id === notaId);
+  if (!nota) return { ok: false, reason: "not_found" };
+  if (nota.cooperativaId !== cooperativaId) return { ok: false, reason: "wrong_coop" };
+  if (nota.status === "pago") return { ok: false, reason: "pago" };
+
+  const fichas = data.fichaCorrida.filter((f) => f.notaPedidoId === notaId);
+  if (fichas.some((f) => f.status === "pago")) return { ok: false, reason: "ficha_paga" };
+
+  if (data.pagamentosCooperado.some((p) => p.notaPedidoIds.includes(notaId))) {
+    return { ok: false, reason: "em_pagamento" };
+  }
+
+  return { ok: true };
+}
+
+/** Remove entrega, fichas vinculadas e referências mensais; recalcula saldos afetados. */
+export function excluirEntregaNota(
+  data: AppData,
+  notaId: string,
+  cooperativaId: string
+): { ok: true; data: AppData } | { ok: false; reason: MotivoBloqueioExclusaoEntrega } {
+  const check = podeExcluirEntregaNota(data, notaId, cooperativaId);
+  if (!check.ok) return check;
+
+  const nota = data.notasPedido.find((n) => n.id === notaId)!;
+  const { fichaCorrida, arquivosMensais } = removerFichasNotaERecalcular(data, nota);
+
+  const notasPedido = data.notasPedido.filter((n) => n.id !== notaId);
+
+  return {
+    ok: true,
+    data: { ...data, notasPedido, fichaCorrida, arquivosMensais },
+  };
+}
+
+export function mensagemBloqueioExclusaoEntrega(reason: MotivoBloqueioExclusaoEntrega): string {
+  switch (reason) {
+    case "not_found":
+      return "Entrega não encontrada.";
+    case "wrong_coop":
+      return "Esta entrega não pertence à sua cooperativa.";
+    case "pago":
+      return "Entrega já paga — não pode ser alterada.";
+    case "ficha_paga":
+      return "Há lançamento pago na ficha — não pode alterar.";
+    case "em_pagamento":
+      return "Entrega incluída em um pagamento — cancele o pagamento antes.";
+    default:
+      return "Não foi possível alterar esta entrega.";
+  }
+}
+
+function cooperadosAfetadosPelaNota(data: AppData, nota: NotaPedido): Set<string> {
+  const ids = new Set<string>([nota.cooperadoId]);
+  for (const f of data.fichaCorrida.filter((x) => x.notaPedidoId === nota.id)) {
+    ids.add(f.cooperadoId);
+  }
+  for (const p of nota.divisaoEntrega?.participantes ?? []) {
+    ids.add(p.cooperadoId);
+  }
+  return ids;
+}
+
+function removerFichasNotaERecalcular(
+  data: AppData,
+  nota: NotaPedido
+): Pick<AppData, "fichaCorrida" | "arquivosMensais"> {
+  let fichaCorrida = data.fichaCorrida.filter((f) => f.notaPedidoId !== nota.id);
+  for (const cooperadoAfetadoId of cooperadosAfetadosPelaNota(data, nota)) {
+    fichaCorrida = recalcularSaldosFichaCooperadoMes(
+      fichaCorrida,
+      cooperadoAfetadoId,
+      nota.mesReferencia
+    );
+  }
+  const arquivosMensais = data.arquivosMensais.map((a) => ({
+    ...a,
+    notaPedidoIds: a.notaPedidoIds.filter((id) => id !== nota.id),
+  }));
+  return { fichaCorrida, arquivosMensais };
+}
+
+/** Entrega lançada (conferida) pode voltar à fila de conferência — exceto paga/em pagamento. */
+export function podeRelancarEntregaNota(
+  data: AppData,
+  notaId: string,
+  cooperativaId: string
+): { ok: true } | { ok: false; reason: MotivoBloqueioExclusaoEntrega } {
+  const nota = data.notasPedido.find((n) => n.id === notaId);
+  if (!nota) return { ok: false, reason: "not_found" };
+  if (nota.cooperativaId !== cooperativaId) return { ok: false, reason: "wrong_coop" };
+  if (nota.status !== "conferida") return { ok: false, reason: "not_found" };
+
+  const check = podeExcluirEntregaNota(data, notaId, cooperativaId);
+  if (!check.ok) return check;
+  return { ok: true };
+}
+
+/** Remove lançamento da ficha e devolve a nota à fila (aguardando conferência), mantendo fotos. */
+export function relancarEntregaNota(
+  data: AppData,
+  notaId: string,
+  cooperativaId: string
+): { ok: true; data: AppData; nota: NotaPedido } | { ok: false; reason: MotivoBloqueioExclusaoEntrega } {
+  const check = podeRelancarEntregaNota(data, notaId, cooperativaId);
+  if (!check.ok) return check;
+
+  const nota = data.notasPedido.find((n) => n.id === notaId)!;
+  const { fichaCorrida, arquivosMensais } = removerFichasNotaERecalcular(data, nota);
+  const descontoPadrao = data.config?.descontoPadraoCooperativa ?? nota.percentualDescontoCooperativa ?? 5;
+
+  const notaRelancada: NotaPedido = {
+    ...nota,
+    status: "aguardando_conferencia",
+    itens: [],
+    valorBruto: 0,
+    valorDesconto: 0,
+    valorLiquido: 0,
+    percentualDescontoCooperativa: descontoPadrao,
+    conferidaPor: undefined,
+    dataConferencia: undefined,
+    divisaoEntrega: undefined,
+    rejeitadaPor: undefined,
+    dataRejeicao: undefined,
+    motivoRejeicao: undefined,
+    updatedAt: new Date().toISOString(),
+  };
+
+  const notasPedido = data.notasPedido.map((n) => (n.id === notaId ? notaRelancada : n));
+
+  return {
+    ok: true,
+    nota: notaRelancada,
+    data: { ...data, notasPedido, fichaCorrida, arquivosMensais },
+  };
+}
+
+export function notaEnvolveCooperadoCorrecao(
+  data: AppData,
+  nota: NotaPedido,
+  cooperadoId: string,
+  cooperativaId: string
+): boolean {
+  const canon = resolverCooperadoIdCanonico(data, cooperadoId, cooperativaId);
+  const dono = resolverCooperadoIdCanonico(
+    data,
+    nota.cooperadoId,
+    cooperativaId,
+    nota.cooperadoNomeSnapshot
+  );
+  if (dono === canon) return true;
+  return (
+    nota.divisaoEntrega?.participantes.some(
+      (p) => resolverCooperadoIdCanonico(data, p.cooperadoId, cooperativaId) === canon
+    ) ?? false
+  );
+}
+
+export function listarEntregasCorrecaoCooperado(
+  data: AppData,
+  cooperadoId: string,
+  cooperativaId: string,
+  acao: "apagar" | "relancar"
+): NotaPedido[] {
+  return data.notasPedido
+    .filter((n) => {
+      if (n.cooperativaId !== cooperativaId) return false;
+      if (!notaEnvolveCooperadoCorrecao(data, n, cooperadoId, cooperativaId)) return false;
+      if (acao === "relancar") {
+        return podeRelancarEntregaNota(data, n.id, cooperativaId).ok;
+      }
+      return podeExcluirEntregaNota(data, n.id, cooperativaId).ok;
+    })
+    .sort((a, b) => new Date(b.dataEntrega).getTime() - new Date(a.dataEntrega).getTime());
 }

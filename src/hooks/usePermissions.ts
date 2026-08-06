@@ -2,7 +2,7 @@
 
 import { useAuth } from "@/modules/auth/AuthProvider";
 import { useAppDataSelector } from "@/hooks/useAppData";
-import { canUser, canGerenciarEquipe, getUserFuncaoLabel } from "@/permissions";
+import { canUser, canGerenciarEquipe, getUserFuncaoLabel, isDiretoriaRole, isResponsavelRole } from "@/permissions";
 import { resolverCooperadoIdCanonico } from "@/services/cooperadoCloudService";
 import { getUserCooperativaId } from "@/utils/cooperativa";
 import type { Action, Resource } from "@/types";
@@ -29,8 +29,21 @@ export function usePermissions() {
   };
 
   const isCooperado = user?.role === "cooperado";
+  const isResponsavel = user ? isResponsavelRole(user.role) : false;
+  /** Responsável, tesoureiro ou admin — quem opera conferência/correções na diretoria. */
+  const isDiretoria = user ? isDiretoriaRole(user.role) : false;
   const podeGerenciarEquipe = user ? canGerenciarEquipe(user) : false;
   const funcaoLabel = user ? getUserFuncaoLabel(user) : "";
 
-  return { user, check, isCooperado, cooperadoId, coopId, podeGerenciarEquipe, funcaoLabel };
+  return {
+    user,
+    check,
+    isCooperado,
+    isResponsavel,
+    isDiretoria,
+    cooperadoId,
+    coopId,
+    podeGerenciarEquipe,
+    funcaoLabel,
+  };
 }

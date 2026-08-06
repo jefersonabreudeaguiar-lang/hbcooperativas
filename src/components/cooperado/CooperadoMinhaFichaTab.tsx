@@ -22,6 +22,7 @@ import {
   getResumoPagamentoExibicao,
 } from "@/services/notaPedidoService";
 import type { ResumoMesEntregasCooperado } from "@/services/cooperadoEntregasService";
+import { listarResumosFotosCooperado } from "@/services/cooperadoEntregasService";
 import {
   agruparEntregasPorSemanaNoMes,
   agruparNotasEmEntregas,
@@ -341,6 +342,11 @@ export function CooperadoMinhaFichaTab({
     [resumos]
   );
 
+  const resumosFotos = useMemo(() => {
+    if (!data) return [];
+    return listarResumosFotosCooperado(data, cooperadoId, cooperativaId);
+  }, [data, cooperadoId, cooperativaId]);
+
   if (resumos.length === 0) {
     return (
       <div className="space-y-6">
@@ -372,7 +378,11 @@ export function CooperadoMinhaFichaTab({
         </div>
 
         {subAba === "fotos" ? (
-          <CooperadoFichaFotosPanel resumos={[]} getEscolaLabel={getEscolaLabel} />
+          <CooperadoFichaFotosPanel
+            resumos={resumosFotos}
+            getEscolaLabel={getEscolaLabel}
+            cooperativaId={cooperativaId}
+          />
         ) : (
           <>
             <div className="text-center py-16 text-gray-500 bg-white rounded-2xl border border-dashed">
@@ -423,7 +433,11 @@ export function CooperadoMinhaFichaTab({
       </div>
 
       {subAba === "fotos" ? (
-        <CooperadoFichaFotosPanel resumos={resumos} getEscolaLabel={getEscolaLabel} />
+        <CooperadoFichaFotosPanel
+          resumos={resumosFotos}
+          getEscolaLabel={getEscolaLabel}
+          cooperativaId={cooperativaId}
+        />
       ) : (
         <>
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">

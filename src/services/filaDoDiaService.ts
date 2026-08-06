@@ -4,6 +4,7 @@ import { contarItensCatalogo } from "@/services/catalogoContratosService";
 import { cooperadoPendentePagamentoResponsavel } from "@/services/cooperadoEntregasService";
 import { listCooperadosComFichaNoMes } from "@/services/cooperadoCloudService";
 import { getCurrentMesReferencia } from "@/utils/format";
+import { isNotaNaFilaConferenciaResponsavel } from "@/utils/notaStatus";
 
 export type FilaDoDiaItem = {
   id: string;
@@ -19,7 +20,7 @@ export function getFilaDoDia(data: AppData, coopId: string | undefined, mes = ge
   if (!coopId) return [];
 
   const conferir = data.notasPedido.filter(
-    (n) => n.status === "aguardando_conferencia" && notaPertenceCooperativa(data, n, coopId)
+    (n) => isNotaNaFilaConferenciaResponsavel(n.status) && notaPertenceCooperativa(data, n, coopId)
   ).length;
 
   const mensalidades = data.mensalidades.filter((m) => {

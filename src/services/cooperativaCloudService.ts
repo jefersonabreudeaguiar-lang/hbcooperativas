@@ -233,6 +233,8 @@ export function mergeCooperativaIntoData(
       ...cloudCoop,
       id: cur.id,
       mensalidadeConfig,
+      /** Cobrança HB fica só no aparelho / local — nuvem ainda não versiona esse campo. */
+      cobrancaSaas: cur.cobrancaSaas ?? cloudCoop.cobrancaSaas,
       senhaCadastroCooperado: cloudCoop.senhaCadastroCooperado ?? cur.senhaCadastroCooperado,
       senhaAreaAdminHash: cloudCoop.senhaAreaAdminHash ?? cur.senhaAreaAdminHash,
       updatedAt: tCloud > tLocal ? cloudCoop.updatedAt : cur.updatedAt,
