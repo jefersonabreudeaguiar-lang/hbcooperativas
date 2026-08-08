@@ -291,7 +291,13 @@ export function mergeCloudNotasIntoData(
 export async function fetchNotasPedidoFromCloud(
   cnpj: string,
   options?: { since?: string; forceFull?: boolean }
-): Promise<{ ok: boolean; notas: NotaPedido[]; delta: boolean; serverWatermark?: string }> {
+): Promise<{
+  ok: boolean;
+  notas: NotaPedido[];
+  delta: boolean;
+  serverWatermark?: string;
+  storageOnly?: boolean;
+}> {
   const digits = normalizeCnpj(cnpj);
   if (digits.length !== 14) return { ok: false, notas: [], delta: false };
 
@@ -309,7 +315,15 @@ export async function fetchNotasPedidoFromCloud(
       .filter((n): n is NotaPedido => Boolean(n));
     const serverWatermark =
       typeof json.serverWatermark === "string" ? json.serverWatermark : undefined;
-    return { ok: true, notas, delta: Boolean(since), serverWatermark };
+    const storageOnly = json.storageOnly === true;
+    // Storage-only: lista completa sempre — não tratar como delta incompleto.
+    return {
+      ok: true,
+      notas,
+      delta: storageOnly ? false : Boolean(since),
+      serverWatermark: storageOnly ? undefined : serverWatermark,
+      storageOnly,
+    };
   } catch {
     return { ok: false, notas: [], delta: Boolean(since) };
   }
@@ -961,18 +975,29 @@ export async function syncNotasPedidoFromCloud(cnpj: string): Promise<number> {
   await flushPendingNotaDeletes(cnpj);
   const digits = normalizeCnpj(cnpj);
   const forceFull = shouldForceFullNotasSync(digits);
-  const { ok, notas: cloudNotas, delta, serverWatermark } = await fetchNotasPedidoFromCloud(digits, {
-    forceFull,
-  });
+  const { ok, notas: cloudNotas, delta, serverWatermark, storageOnly } =
+    await fetchNotasPedidoFromCloud(digits, { forceFull });
   if (!ok) return 0;
 
   const current = getData();
   const coop = findCooperativaByCnpj(current, digits);
   const cloudResetApplied = getCloudResetAppliedVersion(digits) > 0;
+  const treatAsFull = forceFull || storageOnly || !delta;
 
-  if (cloudNotas.length === 0 && (forceFull || cloudResetApplied)) {
+  if (cloudNotas.length === 0 && treatAsFull) {
+    // Lista vazia no full: só limpa se houve reset de nuvem explícito.
+    // NUNCA apaga notas em análise — sync incompleto/storage falhou não pode esconder fila.
     if (coop && cloudResetApplied) {
-      const filtered = current.notasPedido.filter((n) => n.cooperativaId !== coop.id);
+      const filtered = current.notasPedido.filter((n) => {
+        if (n.cooperativaId !== coop.id && getNotaCooperativaCnpj(current, n) !== digits) {
+          return true;
+        }
+        // Preserva entregas lançadas pelo cooperado ainda não conferidas.
+        if (n.status === "aguardando_conferencia" || n.status === "entregue") {
+          return true;
+        }
+        return false;
+      });
       if (filtered.length !== current.notasPedido.length) {
         saveDataSafe(reconciliarFichaFromNotasConferidas({ ...current, notasPedido: filtered }));
       }
@@ -986,12 +1011,41 @@ export async function syncNotasPedidoFromCloud(cnpj: string): Promise<number> {
     return 0;
   }
 
-  const merged = mergeCloudNotasIntoData(current, cloudNotas, digits);
+  const beforeAguardando = current.notasPedido.filter(
+    (n) => n.status === "aguardando_conferencia" || n.status === "entregue"
+  );
+
+  let merged = mergeCloudNotasIntoData(current, cloudNotas, digits);
+
+  // Invariante: sync nunca remove/rebaixa para rascunho uma entrega em análise.
+  const afterById = new Map(merged.notasPedido.map((n) => [n.id, n]));
+  let notas = [...merged.notasPedido];
+  let invariantFixed = false;
+  for (const before of beforeAguardando) {
+    const after = afterById.get(before.id);
+    if (!after) {
+      notas.push(before);
+      invariantFixed = true;
+      continue;
+    }
+    if (after.status === "rascunho") {
+      notas = notas.map((n) =>
+        n.id === before.id
+          ? { ...n, status: before.status, updatedAt: before.updatedAt }
+          : n
+      );
+      invariantFixed = true;
+    }
+  }
+  if (invariantFixed) {
+    merged = { ...merged, notasPedido: notas };
+  }
+
   const reconciled = reconciliarFichaFromNotasConferidas(merged);
   if (reconciled !== current) {
     saveDataSafe(reconciled);
   }
-  markNotasSyncDone(digits, forceFull || !delta, cloudNotas, serverWatermark);
+  markNotasSyncDone(digits, treatAsFull, cloudNotas, serverWatermark);
   return cloudNotas.filter((n) => n.status === "aguardando_conferencia").length;
 }
 

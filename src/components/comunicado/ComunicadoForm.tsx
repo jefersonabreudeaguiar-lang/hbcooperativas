@@ -16,9 +16,16 @@ export interface ComunicadoFormProps {
   form: Partial<Comunicado>;
   onFormChange: (patch: Partial<Comunicado>) => void;
   idPrefix?: string;
+  /** Quantos cooperados marcados como diretoria existem na cooperativa. */
+  qtdDiretoria?: number;
 }
 
-export function ComunicadoForm({ form, onFormChange, idPrefix = "" }: ComunicadoFormProps) {
+export function ComunicadoForm({
+  form,
+  onFormChange,
+  idPrefix = "",
+  qtdDiretoria,
+}: ComunicadoFormProps) {
   const assuntoId = `${idPrefix}assunto`;
   const descricaoId = `${idPrefix}descricao`;
 
@@ -93,25 +100,31 @@ export function ComunicadoForm({ form, onFormChange, idPrefix = "" }: Comunicado
           />
           Fixar no topo do mural
         </label>
-        <label className="flex items-center gap-2 text-sm">
+        <label className="flex items-start gap-2 text-sm p-3 rounded-xl border border-purple-200 bg-purple-50/70 cursor-pointer">
           <input
             type="checkbox"
             checked={form.somenteDiretoria ?? false}
             onChange={(e) =>
               onFormChange({
                 somenteDiretoria: e.target.checked,
-                visivelParaTodos: e.target.checked ? false : form.visivelParaTodos,
+                visivelParaTodos: e.target.checked ? false : true,
               })
             }
-            className="rounded"
+            className="mt-0.5 rounded border-gray-300 text-purple-700 focus:ring-purple-500"
           />
-          Enviar apenas para cooperados da diretoria
+          <span>
+            <span className="block font-medium text-gray-900">
+              Enviar apenas para cooperados da diretoria
+            </span>
+            <span className="block text-xs text-gray-600 mt-0.5">
+              {form.somenteDiretoria
+                ? qtdDiretoria === 0
+                  ? "Nenhum cooperado marcado como diretoria ainda. Marque em Cooperados → Ver ficha."
+                  : `Só ${qtdDiretoria} cooperado${qtdDiretoria === 1 ? "" : "s"} da diretoria verá este aviso. Os demais não recebem.`
+                : "Desmarcado = todos os cooperados. Para restringir, marque cooperados em Cooperados → Ver ficha → Membro da diretoria."}
+            </span>
+          </span>
         </label>
-        {!form.somenteDiretoria && (
-          <p className="text-xs text-gray-500 ml-6">
-            Marque cooperados como diretoria em Cooperados → editar ficha.
-          </p>
-        )}
         <label className="flex items-center gap-2 text-sm">
           <input
             type="checkbox"

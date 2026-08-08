@@ -18,6 +18,7 @@ import {
   getComunicadosCooperado,
   cooperadoTemConteudoComunicado,
   getComunicadoAssunto,
+  contarCooperadosDiretoria,
 } from "@/services/comunicadoService";
 import { ComunicadoForm } from "@/components/comunicado/ComunicadoForm";
 import { ComunicadoCard } from "@/components/comunicado/ComunicadoCard";
@@ -220,7 +221,11 @@ export default function ComunicadosPage() {
       }
       await pushOperacionalToCloud(cnpj, d, coopId, { authoritative: true });
       setAlteracoesPendentes(false);
-      setMsgPublicacao("Avisos enviados! Os cooperados verão no início.");
+      setMsgPublicacao(
+        d.comunicados.some((c) => c.somenteDiretoria && c.ativo !== false)
+          ? "Avisos enviados! Recados da diretoria só aparecem para cooperados marcados como membro da diretoria."
+          : "Avisos enviados! Os cooperados verão no início."
+      );
     } catch {
       setMsgPublicacao("Não foi possível enviar. Verifique a internet e tente de novo.");
     } finally {
@@ -233,6 +238,7 @@ export default function ComunicadosPage() {
 
   const canManage = check("comunicados", "create");
   const formValido = formTemAssunto(form) && formTemConteudo(form);
+  const qtdDiretoria = coopId ? contarCooperadosDiretoria(data, coopId) : 0;
 
   return (
     <div>
@@ -277,7 +283,12 @@ export default function ComunicadosPage() {
 
       {canManage && !modalOpen && (
         <Card title="Novo recado" className="mb-6">
-          <ComunicadoForm form={form} onFormChange={handleFormChange} idPrefix="inline-" />
+          <ComunicadoForm
+            form={form}
+            onFormChange={handleFormChange}
+            idPrefix="inline-"
+            qtdDiretoria={qtdDiretoria}
+          />
           <div className="flex flex-col-reverse sm:flex-row justify-end gap-2 mt-6">
             <Button variant="secondary" onClick={limparFormulario} disabled={!formularioPreenchido(form)}>
               Limpar
@@ -293,7 +304,7 @@ export default function ComunicadosPage() {
         <AlertBanner variant="info" className="mb-4">
           Após salvar, toque em <strong>Enviar aos cooperados</strong>. O recado aparece no{" "}
           <strong>início</strong> e gera notificação no celular (com permissão).
-          {" "}Use <strong>apenas diretoria</strong> para avisos exclusivos — marque os cooperados em Cooperados.
+          {" "}Com <strong>apenas diretoria</strong>, só cooperados marcados como membro da diretoria veem o aviso.
         </AlertBanner>
       )}
 
@@ -386,7 +397,12 @@ export default function ComunicadosPage() {
         onClose={() => { setModalOpen(false); limparFormulario(); }}
         title={editingId ? "Editar aviso" : "Novo aviso"}
       >
-        <ComunicadoForm form={form} onFormChange={handleFormChange} idPrefix="modal-" />
+        <ComunicadoForm
+          form={form}
+          onFormChange={handleFormChange}
+          idPrefix="modal-"
+          qtdDiretoria={qtdDiretoria}
+        />
         <div className="flex justify-end gap-2 mt-6">
           <Button variant="secondary" onClick={() => { setModalOpen(false); limparFormulario(); }}>Cancelar</Button>
           <Button onClick={salvarComunicado} disabled={!formValido}>

@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import Link from "next/link";
 import { Wallet, FileText, Camera, CreditCard, FileDown, PenLine } from "lucide-react";
 import { useAppData } from "@/hooks/useAppData";
+import { usePermissions } from "@/hooks/usePermissions";
 import { Card } from "@/components/ui/Card";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import { NotaStatusBadge } from "@/components/ui/NotaStatusBadge";
@@ -19,7 +20,9 @@ import {
 } from "@/services/notaPedidoService";
 import { ResumoDescontosMes } from "@/components/ficha/ResumoDescontosMes";
 import { ValoresAvulsosReceberPanel } from "@/components/ficha/ValoresAvulsosReceberPanel";
-import { fichaPertenceCooperado, notaPertenceCooperado } from "@/services/cooperadoCloudService";
+import { fichaPertenceCooperado, notaPertenceCooperado, pushCooperadoToCloud } from "@/services/cooperadoCloudService";
+import { updateData, addAuditEntry } from "@/services/dataStore";
+import { getUserCooperativaId, normalizeCnpj } from "@/utils/cooperativa";
 import { formatCurrency, formatDate, formatMesReferencia, formatCPFCNPJ, formatPhone, getCurrentMesReferencia } from "@/utils/format";
 import { baixarRecibo, nomeArquivoRecibo } from "@/utils/recibo";
 import type { Cooperado } from "@/types";
@@ -31,7 +34,47 @@ function getEscolaLabel(nota: { instituicaoId: string; escolaAvulsaNome?: string
 
 export function CooperadoFichaPanel({ cooperado }: { cooperado: Cooperado }) {
   const data = useAppData();
+  const { check, user } = usePermissions();
+  const podeEditar = check("cooperados", "edit");
   const [mesFilter, setMesFilter] = useState(getCurrentMesReferencia());
+  const [salvandoDiretoria, setSalvandoDiretoria] = useState(false);
+
+  const toggleMembroDiretoria = (marcado: boolean) => {
+    if (!user || !data || salvandoDiretoria) return;
+    setSalvandoDiretoria(true);
+    const now = new Date().toISOString();
+    let saved: Cooperado | null = null;
+    updateData((d) => {
+      const idx = d.cooperados.findIndex((c) => c.id === cooperado.id);
+      if (idx < 0) return d;
+      const atualizado: Cooperado = {
+        ...d.cooperados[idx],
+        membroDiretoria: marcado,
+        updatedAt: now,
+      };
+      saved = atualizado;
+      let next = {
+        ...d,
+        cooperados: d.cooperados.map((c) => (c.id === cooperado.id ? atualizado : c)),
+      };
+      next = addAuditEntry(next, {
+        entityType: "cooperado",
+        entityId: cooperado.id,
+        action: "editar",
+        userId: user.id,
+        userName: user.name,
+        changes: marcado ? "Marcado como membro da diretoria" : "Removido da diretoria",
+      });
+      return next;
+    });
+    if (saved) {
+      const coopId = getUserCooperativaId(user, data);
+      const coop = data.cooperativas.find((c) => c.id === coopId);
+      const cnpj = normalizeCnpj(coop?.cnpj ?? user.cooperativaCnpj ?? "");
+      if (cnpj.length === 14) void pushCooperadoToCloud(cnpj, saved);
+    }
+    setSalvandoDiretoria(false);
+  };
 
   const resumo = useMemo(() => {
     if (!data) return null;
@@ -132,6 +175,9 @@ export function CooperadoFichaPanel({ cooperado }: { cooperado: Cooperado }) {
           ) : (
             <span className="text-xs font-bold text-red-600 bg-red-50 px-2 py-1 rounded-full border border-red-200">Cota não paga</span>
           )}
+          {cooperado.membroDiretoria ? (
+            <span className="text-xs font-medium text-purple-700 bg-purple-100 px-2 py-1 rounded-full">Diretoria</span>
+          ) : null}
         </div>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
           <div><span className="text-gray-500">CPF/CNPJ:</span> {cooperado.cpfCnpj ? formatCPFCNPJ(cooperado.cpfCnpj) : "—"}</div>
@@ -141,6 +187,25 @@ export function CooperadoFichaPanel({ cooperado }: { cooperado: Cooperado }) {
           <div className="flex items-center gap-2"><span className="text-gray-500">Status:</span> <StatusBadge status={cooperado.status} /></div>
           {cooperado.avulso && <div className="text-amber-700 text-xs font-medium">Cooperado avulso (sem app)</div>}
         </div>
+
+        {podeEditar && (
+          <label className="mt-4 flex items-start gap-3 p-3 border border-purple-200 bg-purple-50/60 rounded-xl cursor-pointer hover:bg-purple-50">
+            <input
+              type="checkbox"
+              checked={Boolean(cooperado.membroDiretoria)}
+              disabled={salvandoDiretoria}
+              onChange={(e) => toggleMembroDiretoria(e.target.checked)}
+              className="mt-1 rounded border-gray-300 text-purple-700 focus:ring-purple-500"
+            />
+            <span>
+              <span className="block text-sm font-semibold text-gray-900">Membro da diretoria</span>
+              <span className="block text-xs text-gray-600 mt-0.5">
+                Marque se este cooperado faz parte da diretoria. Ele passa a receber avisos exclusivos da diretoria.
+              </span>
+            </span>
+          </label>
+        )}
+
         <div className="flex flex-wrap gap-2 mt-4">
           <Link href={`/ficha-corrida?cooperado=${cooperado.id}&mes=${mesFilter}`}>
             <Button variant="secondary" size="sm"><Wallet size={16} /> Ficha corrida / pagar</Button>

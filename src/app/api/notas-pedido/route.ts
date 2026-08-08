@@ -33,35 +33,45 @@ export async function GET(request: Request) {
   const since = searchParams.get("since")?.trim() || undefined;
   const delta = Boolean(since);
 
-  const [fromTable, fromStorage] = await Promise.all([
-    fetchNotasFromTable(supabase, cnpj, since),
-    delta ? Promise.resolve({ notas: [] as NotaPedido[], tableMissing: false }) : fetchNotasFromStorage(supabase, cnpj).then((notas) => ({ notas, tableMissing: false })),
-  ]);
+  const fromTable = await fetchNotasFromTable(supabase, cnpj, since);
 
   const visiveis = (lista: NotaPedido[]) =>
     lista.filter((n) => n.status !== "rascunho");
 
-  if (!fromTable.tableMissing) {
-    const merged = visiveis(
-      delta ? fromTable.notas : mergeNotasSources(fromTable.notas, fromStorage.notas)
-    );
+  // Sem tabela SQL: delta vazio escondia entregas publicadas (só storage).
+  // Sempre lista o storage completo — nunca retornar [] por causa de `since`.
+  if (fromTable.tableMissing) {
+    const fromStorage = await fetchNotasFromStorage(supabase, cnpj);
+    const merged = visiveis(fromStorage);
     const notas =
       lite && !withPreviews
         ? merged
         : await enrichNotasListWithPreviews(supabase, cnpj, merged);
     return NextResponse.json({
       notas,
-      source: delta ? "delta" : "merged",
-      serverWatermark: fromTable.serverWatermark,
+      source: "storage",
+      storageOnly: true,
+      // Força o cliente a tratar como full (não avançar cursor de delta cego).
+      serverWatermark: undefined,
     });
   }
 
-  const base = visiveis(delta ? [] : fromStorage.notas);
+  const fromStorage = delta
+    ? ([] as NotaPedido[])
+    : await fetchNotasFromStorage(supabase, cnpj);
+
+  const merged = visiveis(
+    delta ? fromTable.notas : mergeNotasSources(fromTable.notas, fromStorage)
+  );
   const notas =
     lite && !withPreviews
-      ? base
-      : await enrichNotasListWithPreviews(supabase, cnpj, base);
-  return NextResponse.json({ notas, source: "storage" });
+      ? merged
+      : await enrichNotasListWithPreviews(supabase, cnpj, merged);
+  return NextResponse.json({
+    notas,
+    source: delta ? "delta" : "merged",
+    serverWatermark: fromTable.serverWatermark,
+  });
 }
 
 export async function POST(request: Request) {

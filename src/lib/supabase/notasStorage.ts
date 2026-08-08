@@ -309,12 +309,22 @@ export async function uploadNotaToStorage(
   cooperadoNome?: string
 ): Promise<{ ok: true } | { ok: false; error: string }> {
   await ensureEntregasBucket(supabase);
-  const payload = {
-    ...nota,
-    cooperadoNomeSnapshot: nota.cooperadoNomeSnapshot ?? cooperadoNome,
-    cooperativaCnpj: cnpj,
-  };
-  const body = JSON.stringify(payload);
+
+  // Nunca rebaixar status no storage (ex.: rascunho por cima de aguardando = some da fila).
+  const existing = await fetchNotaMetaFromStorage(supabase, cnpj, nota.id);
+  const protectedNota = existing
+    ? protectNotaAgainstStatusDowngrade(existing, {
+        ...nota,
+        cooperadoNomeSnapshot: nota.cooperadoNomeSnapshot ?? cooperadoNome,
+        cooperativaCnpj: cnpj,
+      })
+    : {
+        ...nota,
+        cooperadoNomeSnapshot: nota.cooperadoNomeSnapshot ?? cooperadoNome,
+        cooperativaCnpj: cnpj,
+      };
+
+  const body = JSON.stringify(protectedNota);
   const { error } = await supabase.storage
     .from(BUCKET)
     .upload(storagePath(cnpj, nota.id), body, {

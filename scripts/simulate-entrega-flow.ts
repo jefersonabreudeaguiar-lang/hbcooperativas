@@ -453,6 +453,84 @@ function simStickyAguardandoNaoSomeNoSync() {
   );
 }
 
+/** Regressão: lista parcial da nuvem NÃO pode apagar outras entregas em análise. */
+function simListaParcialNuncaEscondeAguardando() {
+  let local = baseAppData();
+  const a = makeNota("keep-a", { status: "aguardando_conferencia" });
+  const b = makeNota("keep-b", { status: "aguardando_conferencia" });
+  const c = makeNota("keep-c", { status: "aguardando_conferencia" });
+  local = { ...local, notasPedido: [a, b, c] };
+
+  // Nuvem só devolve uma das três (delta/storage incompleto).
+  const merged = mergeCloudNotasIntoData(local, [{ ...a, updatedAt: new Date().toISOString() }], CNPJ);
+  const pendentes = merged.notasPedido.filter((n) => n.status === "aguardando_conferencia");
+  assert(
+    "Lista parcial: mantém as 3 em análise",
+    pendentes.length === 3 &&
+      pendentes.some((n) => n.id === "keep-a") &&
+      pendentes.some((n) => n.id === "keep-b") &&
+      pendentes.some((n) => n.id === "keep-c"),
+    `got ${pendentes.map((n) => n.id).join(",")}`
+  );
+}
+
+/** Regressão: upload/reenvio com rascunho não pode sobrescrever aguardando/conferida. */
+function simProtectUploadNaoRebaixaStatus() {
+  const aguardando = makeNota("prot-1", { status: "aguardando_conferencia" });
+  const rascunho = makeNota("prot-1", {
+    status: "rascunho",
+    updatedAt: new Date(Date.now() + 60_000).toISOString(),
+  });
+  const protectedAguardando = protectNotaAgainstStatusDowngrade(aguardando, rascunho);
+  assert(
+    "Protect: rascunho não sobrescreve aguardando",
+    protectedAguardando.status === "aguardando_conferencia"
+  );
+
+  const conferida = makeNota("prot-2", {
+    status: "conferida",
+    valorLiquido: 99,
+    conferidaPor: "Resp",
+  });
+  const staleAguardando = makeNota("prot-2", {
+    status: "aguardando_conferencia",
+    updatedAt: new Date(Date.now() + 60_000).toISOString(),
+  });
+  const protectedConferida = protectNotaAgainstStatusDowngrade(conferida, staleAguardando);
+  assert(
+    "Protect: aguardando não sobrescreve conferida",
+    protectedConferida.status === "conferida" && protectedConferida.valorLiquido === 99
+  );
+}
+
+/** Regressão: entrega nova na nuvem sempre entra na fila do responsável. */
+function simNovaEntregaCooperadoApareceNoResponsavel() {
+  let responsavel = baseAppData();
+  const cloud = new CloudStore();
+
+  const nova = makeNota("nova-1", {
+    status: "aguardando_conferencia",
+    fotoNaNuvem: true,
+    updatedAt: new Date().toISOString(),
+  });
+  cloud.upsert(nova);
+
+  responsavel = syncFromCloud(responsavel, cloud);
+  assert(
+    "Nova entrega do cooperado entra na fila do responsável",
+    listarPendentes(responsavel).some((n) => n.id === "nova-1"),
+    `pending=${listarPendentes(responsavel).map((n) => n.id).join(",")}`
+  );
+
+  // Sync seguinte com lista parcial (sem a nota) não pode esconder.
+  const outras = makeNota("outra-1", { status: "conferida", valorLiquido: 10 });
+  const merged = mergeCloudNotasIntoData(responsavel, [outras], CNPJ);
+  assert(
+    "Após lista parcial, nova entrega continua na fila",
+    merged.notasPedido.some((n) => n.id === "nova-1" && n.status === "aguardando_conferencia")
+  );
+}
+
 function simShouldNotDowngradeConferida() {
   let local = baseAppData();
   const conferida = makeNota("down-1", {
@@ -738,6 +816,9 @@ simAguardandoAusenteNaListaNaoApaga();
 simMergeTableStorage();
 simShouldNotDowngradeConferida();
 simStickyAguardandoNaoSomeNoSync();
+simListaParcialNuncaEscondeAguardando();
+simProtectUploadNaoRebaixaStatus();
+simNovaEntregaCooperadoApareceNoResponsavel();
 simReconciliarValorAReceber();
 simDedupeFichaNaoDobraValor();
 simFilaConferenciaGrupos();

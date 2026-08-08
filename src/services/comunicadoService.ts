@@ -152,12 +152,23 @@ export function getComunicadosParaExibicao(
 
 /** Aviso geral da cooperativa (não direcionado a um cooperado específico). */
 export function comunicadoParaTodosCooperados(c: Comunicado): boolean {
-  return !c.cooperadoId && c.visivelParaTodos !== false;
+  if (c.cooperadoId || c.somenteDiretoria) return false;
+  return c.visivelParaTodos !== false;
 }
 
 function cooperadoEhMembroDiretoria(data: AppData, cooperadoId?: string): boolean {
   if (!cooperadoId) return false;
   return Boolean(data.cooperados.find((c) => c.id === cooperadoId)?.membroDiretoria);
+}
+
+/** Quantos cooperados ativos da cooperativa receberão um aviso “só diretoria”. */
+export function contarCooperadosDiretoria(data: AppData, cooperativaId: string): number {
+  return data.cooperados.filter(
+    (c) =>
+      c.cooperativaId === cooperativaId &&
+      c.status === "ativo" &&
+      Boolean(c.membroDiretoria)
+  ).length;
 }
 
 /** Quem pode ver este aviso no aparelho do cooperado. */
@@ -168,6 +179,7 @@ export function comunicadoVisivelParaCooperado(
 ): boolean {
   if (c.cooperadoId) return Boolean(cooperadoId && c.cooperadoId === cooperadoId);
 
+  // Prioridade: aviso exclusivo da diretoria — nunca cai no “visível para todos”.
   if (c.somenteDiretoria) {
     if (!data || !cooperadoId) return false;
     return cooperadoEhMembroDiretoria(data, cooperadoId);
@@ -208,6 +220,8 @@ export function getComunicadosInicioCooperado(
   return getComunicadosCooperado(data, cooperativaId, cooperadoId)
     .filter((c) => {
       if (c.virtual) return false;
+      // Avisos exclusivos da diretoria sempre aparecem no mural do membro.
+      if (c.somenteDiretoria) return true;
       const avisoPagamentoCooperativa =
         c.categoria === "financeiro" &&
         c.titulo.trim().toLowerCase() === "pagamento realizado";
