@@ -37,8 +37,9 @@ import { pushCooperadoOperacionalToCloud } from "@/services/cooperativaSyncCloud
 import { getCooperativaCnpj } from "@/services/notaPedidoCloudService";
 import { formatCurrency, formatMesReferencia, getCurrentMesReferencia } from "@/utils/format";
 import { getUserCooperativaId, getUserCooperativaNome } from "@/utils/cooperativa";
-import { Camera, Wallet, ClipboardList, Users, Vote } from "lucide-react";
+import { Camera, Wallet, ClipboardList, Users, Vote, Download } from "lucide-react";
 import { usePermissions } from "@/hooks/usePermissions";
+import { cooperadoTemAppInstalado, isAppStandalone, resumoInstalacaoApp } from "@/services/cooperadoAppInstallService";
 import { requestAppSync } from "@/services/syncRequest";
 import { PageSkeleton } from "@/components/ui/PageSkeleton";
 
@@ -81,6 +82,11 @@ function CooperadoDashboard() {
       mensalidadeAberta ||
       prestacaoAberta ||
       exibirCardAvulsosSeparado;
+    const mostrarBaixarApp =
+      Boolean(cooperado) &&
+      !cooperado!.avulso &&
+      !isAppStandalone() &&
+      !cooperadoTemAppInstalado(cooperado!);
 
     return {
       cooperadoId,
@@ -100,6 +106,7 @@ function CooperadoDashboard() {
       resultadoVotacao,
       resolvidos,
       temSecaoPendencias,
+      mostrarBaixarApp,
       coopId,
     };
   }, [user?.id, user?.cooperadoId, user?.cooperativaId]);
@@ -122,6 +129,7 @@ function CooperadoDashboard() {
     resultadoVotacao,
     resolvidos,
     temSecaoPendencias,
+    mostrarBaixarApp,
     coopId: viewCoopId,
   } = view;
 
@@ -151,6 +159,24 @@ function CooperadoDashboard() {
         <h1 className="text-2xl font-bold text-gray-900">Olá, {cooperado?.nomeCompleto.split(" ")[0]}!</h1>
         <p className="text-sm text-gray-500 mt-1">{coopNome} · {formatMesReferencia(mes)}</p>
       </div>
+
+      {mostrarBaixarApp && (
+        <Link
+          href="/baixar-app"
+          className="flex items-center gap-4 rounded-2xl border-2 border-green-300 bg-gradient-to-r from-green-50 to-emerald-50 px-5 py-4 hover:border-green-400 transition-colors"
+        >
+          <span className="flex h-12 w-12 items-center justify-center rounded-xl bg-green-700 text-white shrink-0">
+            <Download size={24} />
+          </span>
+          <span className="min-w-0 flex-1">
+            <span className="block font-bold text-gray-900">Baixar aplicativo</span>
+            <span className="block text-sm text-gray-600 mt-0.5">
+              Android e iPhone — adicione à tela inicial e use sem abrir o navegador
+            </span>
+          </span>
+          <span className="text-sm font-semibold text-green-800 shrink-0">Ver como →</span>
+        </Link>
+      )}
 
       {pautaAtiva && <VotacaoAtivaPanel pauta={pautaAtiva} onVotar={handleVotar} />}
 
@@ -227,12 +253,13 @@ function AdminDashboard() {
     const coopNome = getUserCooperativaNome(user, data);
     const mes = getCurrentMesReferencia();
     const fila = getFilaDoDia(data, coopId, mes);
-    return { stats, coopNome, fila, mes };
+    const instalacao = coopId ? resumoInstalacaoApp(data, coopId) : null;
+    return { stats, coopNome, fila, mes, instalacao };
   }, [user?.id, user?.cooperativaId, user?.role]);
 
   if (!view) return <PageSkeleton />;
 
-  const { stats, coopNome, fila, mes } = view;
+  const { stats, coopNome, fila, mes, instalacao } = view;
 
   return (
     <div className="space-y-6 max-w-3xl">
@@ -240,6 +267,26 @@ function AdminDashboard() {
         <h1 className="text-2xl font-bold text-gray-900">Painel da cooperativa</h1>
         <p className="text-sm text-gray-500 mt-1">{coopNome} · {formatMesReferencia(mes)}</p>
       </div>
+
+      {instalacao && instalacao.semApp > 0 && (
+        <Link
+          href="/cooperados"
+          className="flex items-center gap-4 rounded-2xl border-2 border-amber-200 bg-gradient-to-r from-amber-50 to-orange-50 px-5 py-4 hover:border-amber-300 transition-colors"
+        >
+          <span className="flex h-12 w-12 items-center justify-center rounded-xl bg-amber-600 text-white shrink-0">
+            <Download size={24} />
+          </span>
+          <span className="min-w-0 flex-1">
+            <span className="block font-bold text-gray-900">
+              {instalacao.semApp} cooperado{instalacao.semApp === 1 ? "" : "s"} sem o app
+            </span>
+            <span className="block text-sm text-gray-600 mt-0.5">
+              {instalacao.comApp} já instalaram · veja a lista em Cooperados
+            </span>
+          </span>
+          <span className="text-sm font-semibold text-amber-800 shrink-0">Ver →</span>
+        </Link>
+      )}
 
       {check("votacoes", "view") && (
         <Link

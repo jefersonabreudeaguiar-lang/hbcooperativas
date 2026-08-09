@@ -12,10 +12,17 @@ import {
   isIosNonSafari,
   type DevicePlatform,
 } from "@/components/pwa/BaixarAppGuide";
+import { registrarAcessoCooperadoApp } from "@/services/cooperadoAppInstallService";
+import { getData } from "@/services/dataStore";
+import { getUserCooperativaId, normalizeCnpj } from "@/utils/cooperativa";
 
-const DISMISS_COUNT_KEY = "hb-coop-pwa-install-dismiss-count";
-const LEGACY_DISMISS_KEY = "hb-coop-pwa-install-dismissed";
-const COOPERADO_MIN_PROMPTS = 3;
+/** v2 — reexibe o aviso de baixar o app para quem já tinha fechado a versão antiga. */
+const DISMISS_COUNT_KEY = "hb-coop-pwa-install-dismiss-count-v2";
+const LEGACY_DISMISS_KEYS = [
+  "hb-coop-pwa-install-dismiss-count",
+  "hb-coop-pwa-install-dismissed",
+];
+const COOPERADO_MIN_PROMPTS = 5;
 
 type BeforeInstallPromptEvent = Event & {
   prompt: () => Promise<void>;
@@ -37,20 +44,22 @@ function readDismissCount(): number {
     const n = parseInt(stored, 10);
     return Number.isFinite(n) && n >= 0 ? n : 0;
   }
-  if (localStorage.getItem(LEGACY_DISMISS_KEY)) return 1;
+  // Não herda contagem antiga — força mostrar de novo o “Baixar app”.
+  for (const key of LEGACY_DISMISS_KEYS) localStorage.removeItem(key);
   return 0;
 }
 
 function writeDismissCount(count: number) {
   localStorage.setItem(DISMISS_COUNT_KEY, String(count));
-  localStorage.removeItem(LEGACY_DISMISS_KEY);
+  for (const key of LEGACY_DISMISS_KEYS) localStorage.removeItem(key);
 }
 
 function maxDismissals(isCooperado: boolean): number {
   return isCooperado ? COOPERADO_MIN_PROMPTS : 1;
 }
 
-function shouldShowPrompt(isCooperado: boolean): boolean {
+function shouldShowPrompt(isCooperado: boolean, forcarPorFaltaDeApp: boolean): boolean {
+  if (forcarPorFaltaDeApp) return true;
   return readDismissCount() < maxDismissals(isCooperado);
 }
 
@@ -77,6 +86,19 @@ export function PwaProvider() {
   const [dismissCount, setDismissCount] = useState(0);
 
   useEffect(() => {
+    if (loading || !user?.cooperadoId) return;
+    const data = getData();
+    const coopId = getUserCooperativaId(user, data);
+    const coop = data.cooperativas.find((c) => c.id === coopId);
+    const cnpj = normalizeCnpj(coop?.cnpj ?? user.cooperativaCnpj ?? "");
+    registrarAcessoCooperadoApp({
+      cooperadoId: user.cooperadoId,
+      cnpj: cnpj.length === 14 ? cnpj : undefined,
+      email: user.email,
+    });
+  }, [loading, user?.id, user?.cooperadoId, user?.email, user?.cooperativaCnpj, user?.cooperativaId]);
+
+  useEffect(() => {
     if (loading) return;
 
     if ("serviceWorker" in navigator) {
@@ -91,7 +113,20 @@ export function PwaProvider() {
         });
     }
 
-    if (isStandalone() || !shouldShowPrompt(isCooperado)) {
+    if (isStandalone()) {
+      setVisible(false);
+      return;
+    }
+
+    const data = getData();
+    const registro = user?.cooperadoId
+      ? data.cooperados.find((c) => c.id === user.cooperadoId)
+      : undefined;
+    const jaMarcadoComApp = Boolean(registro?.appInstaladoEm);
+    // Cooperado ativo sem app: reabre o aviso mesmo se já tinha fechado antes.
+    const forcarPorFaltaDeApp = Boolean(isCooperado && !jaMarcadoComApp);
+
+    if (!shouldShowPrompt(isCooperado, forcarPorFaltaDeApp)) {
       setVisible(false);
       return;
     }
@@ -102,15 +137,15 @@ export function PwaProvider() {
     setNonSafariIos(isIosNonSafari());
 
     // iPhone/iPad: sempre mostra instruções (Safari A2HS).
-    if (detected === "ios") {
+    if (detected === "ios" || forcarPorFaltaDeApp) {
       setVisible(true);
-      return;
+      if (detected === "ios") return;
     }
 
     // Android/desktop: banner quando o Chrome oferecer instalação; senão mostra fallback.
     const onBeforeInstall = (e: Event) => {
       e.preventDefault();
-      if (!shouldShowPrompt(isCooperado)) return;
+      if (!shouldShowPrompt(isCooperado, forcarPorFaltaDeApp)) return;
       setDeferredPrompt(e as BeforeInstallPromptEvent);
       setVisible(true);
     };
@@ -119,15 +154,15 @@ export function PwaProvider() {
 
     // Fallback Android: se o evento não vier em alguns segundos, mostra o guia mesmo assim.
     const fallbackTimer = window.setTimeout(() => {
-      if (!shouldShowPrompt(isCooperado)) return;
-      if (detected === "android") setVisible(true);
+      if (!shouldShowPrompt(isCooperado, forcarPorFaltaDeApp)) return;
+      if (detected === "android" || forcarPorFaltaDeApp) setVisible(true);
     }, 2500);
 
     return () => {
       window.removeEventListener("beforeinstallprompt", onBeforeInstall);
       window.clearTimeout(fallbackTimer);
     };
-  }, [isCooperado, loading]);
+  }, [isCooperado, loading, user?.cooperadoId]);
 
   const dismiss = () => {
     const next = readDismissCount() + 1;

@@ -3,6 +3,8 @@ import { findCooperativaByCnpj, getCooperativaById, normalizeCnpj } from "@/util
 import { notaPertenceCooperativa } from "@/utils/fotoEntrega";
 import { getData, saveDataSafe } from "@/services/dataStore";
 import { fetchCooperativaByCnpjFromCloud, mergeCooperativaIntoData } from "@/services/cooperativaCloudService";
+import { mergeAppInstallFields } from "@/services/cooperadoAppInstallService";
+
 function cpfDigits(value: string): string {
   return value.replace(/\D/g, "");
 }
@@ -214,6 +216,8 @@ export function mergeCloudCooperadosIntoData(
         if (pixValido) pixInvalidoMotivo = undefined;
       }
 
+      const installFields = mergeAppInstallFields(local, cn);
+
       const merged: Cooperado = {
         ...local,
         ...cn,
@@ -222,10 +226,21 @@ export function mergeCloudCooperadosIntoData(
         chavePix,
         pixValido,
         pixInvalidoMotivo,
+        ...installFields,
         updatedAt: cloudMaisRecente ? cn.updatedAt : local.updatedAt,
       };
 
-      if (cloudMaisRecente || merged.chavePix !== local.chavePix || merged.pixValido !== local.pixValido) {
+      const installMudou =
+        merged.appInstaladoEm !== local.appInstaladoEm ||
+        merged.ultimoAcessoEm !== local.ultimoAcessoEm ||
+        merged.ultimoAcessoModo !== local.ultimoAcessoModo;
+
+      if (
+        cloudMaisRecente ||
+        merged.chavePix !== local.chavePix ||
+        merged.pixValido !== local.pixValido ||
+        installMudou
+      ) {
         cooperados[index] = merged;
         changed = true;
       }

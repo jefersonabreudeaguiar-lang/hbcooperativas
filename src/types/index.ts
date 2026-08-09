@@ -164,6 +164,15 @@ export interface Cooperado {
   avulso?: boolean;
   /** Cooperado integrante da diretoria — recebe avisos exclusivos. */
   membroDiretoria?: boolean;
+  /**
+   * Quando o cooperado abriu o app instalado (PWA / tela inicial) pela primeira vez.
+   * Ausente = ainda não detectamos o app no celular.
+   */
+  appInstaladoEm?: string;
+  /** Último acesso ao sistema (app ou navegador). */
+  ultimoAcessoEm?: string;
+  /** Como foi o último acesso detectado. */
+  ultimoAcessoModo?: "app" | "navegador";
   produtos: string[];
   observacoes: string;
   createdAt: string;

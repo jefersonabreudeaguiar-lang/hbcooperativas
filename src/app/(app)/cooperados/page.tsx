@@ -3,21 +3,27 @@
 import { useState, useMemo, useEffect } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Plus, ShoppingCart, UserCircle, Pencil } from "lucide-react";
+import { Plus, ShoppingCart, UserCircle, Pencil, Download, Smartphone } from "lucide-react";
 import { useAppData } from "@/hooks/useAppData";
 import { usePermissions } from "@/hooks/usePermissions";
 import { PageHeader, DataTable, FilterBar, Modal } from "@/components/ui/Table";
 import { Button } from "@/components/ui/Button";
 import { Input, Select, Textarea, FormField } from "@/components/ui/Form";
 import { StatusBadge } from "@/components/ui/StatusBadge";
+import { Card } from "@/components/ui/Card";
+import { AlertBanner } from "@/components/ui/AlertBanner";
 import { updateData, generateId, addAuditEntry, getData } from "@/services/dataStore";
-import { formatCPFCNPJ, formatPhone, formatMesReferencia, getCurrentMesReferencia } from "@/utils/format";
+import { formatCPFCNPJ, formatPhone, formatMesReferencia, getCurrentMesReferencia, formatDate } from "@/utils/format";
 import { getUserCooperativaId, normalizeCnpj } from "@/utils/cooperativa";
 import { pushCooperadoToCloud, syncCooperadosFromCloud } from "@/services/cooperadoCloudService";
 import { pushOperacionalToCloud } from "@/services/cooperativaSyncCloudService";
 import { resolveCooperativaCnpj } from "@/services/notaPedidoCloudService";
 import { getStatusCotaCooperado, setCotaIngressoCooperado } from "@/services/notaPedidoService";
 import { sincronizarCicloCobrancaSaas } from "@/services/cobrancaSaasService";
+import {
+  cooperadoTemAppInstalado,
+  resumoInstalacaoApp,
+} from "@/services/cooperadoAppInstallService";
 import type { Cooperado, CooperadoStatus } from "@/types";
 import { PageSkeleton } from "@/components/ui/PageSkeleton";
 
@@ -27,22 +33,35 @@ export default function CooperadosPage() {
   const router = useRouter();
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
+  const [appFilter, setAppFilter] = useState<"" | "sem_app" | "com_app">("");
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState<Cooperado | null>(null);
   const [form, setForm] = useState<Partial<Cooperado>>({});
 
   const mesAtual = getCurrentMesReferencia();
+  const coopId = user && data ? getUserCooperativaId(user, data) : undefined;
+
+  const instalacao = useMemo(() => {
+    if (!data || !coopId) return null;
+    return resumoInstalacaoApp(data, coopId);
+  }, [data, coopId]);
 
   const cooperados = useMemo(() => {
     if (!data || !user) return [];
-    const coopId = getUserCooperativaId(user, data);
+    const cid = getUserCooperativaId(user, data);
     return data.cooperados.filter((c) => {
-      if (coopId && c.cooperativaId !== coopId) return false;
+      if (cid && c.cooperativaId !== cid) return false;
       const matchSearch = !search || c.nomeCompleto.toLowerCase().includes(search.toLowerCase()) || c.cpfCnpj.includes(search);
       const matchStatus = !statusFilter || c.status === statusFilter;
+      if (appFilter === "sem_app") {
+        if (c.avulso || c.status !== "ativo" || cooperadoTemAppInstalado(c)) return false;
+      }
+      if (appFilter === "com_app") {
+        if (c.avulso || c.status !== "ativo" || !cooperadoTemAppInstalado(c)) return false;
+      }
       return matchSearch && matchStatus;
     });
-  }, [data, search, statusFilter, user]);
+  }, [data, search, statusFilter, appFilter, user]);
 
   useEffect(() => {
     if (!data || !user) return;
@@ -164,6 +183,77 @@ export default function CooperadosPage() {
         )}
       />
 
+      {instalacao && (
+        <Card className="mb-6 border-2 border-green-200 bg-gradient-to-r from-green-50 to-white">
+          <div className="flex flex-col sm:flex-row sm:items-start gap-4">
+            <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-green-700 text-white shrink-0">
+              <Smartphone size={24} />
+            </div>
+            <div className="flex-1 min-w-0 space-y-3">
+              <div>
+                <h2 className="font-bold text-gray-900">App no celular</h2>
+                <p className="text-sm text-gray-600 mt-0.5">
+                  Quem já instalou o HB Cooperativas na tela inicial (Android ou iPhone).
+                </p>
+              </div>
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                <div className="rounded-xl bg-white border border-gray-200 px-3 py-2">
+                  <p className="text-xs text-gray-500">Com app</p>
+                  <p className="text-xl font-bold text-green-800">{instalacao.comApp}</p>
+                </div>
+                <div className="rounded-xl bg-white border border-amber-200 px-3 py-2">
+                  <p className="text-xs text-gray-500">Sem app</p>
+                  <p className="text-xl font-bold text-amber-800">{instalacao.semApp}</p>
+                </div>
+                <div className="rounded-xl bg-white border border-gray-200 px-3 py-2 col-span-2 sm:col-span-1">
+                  <p className="text-xs text-gray-500">Elegíveis (ativos)</p>
+                  <p className="text-xl font-bold text-gray-900">{instalacao.elegiveis}</p>
+                </div>
+              </div>
+
+              {instalacao.semApp > 0 ? (
+                <AlertBanner variant="warning" title={`${instalacao.semApp} cooperado(s) ainda sem o app`}>
+                  <p className="mb-2">
+                    Peça para abrir o site no celular e usar <strong>Baixar aplicativo</strong>. Quem já
+                    instalou e abrir o app passa a aparecer como “Com app”.
+                  </p>
+                  <ul className="text-sm space-y-1 max-h-40 overflow-y-auto mb-3">
+                    {instalacao.listaSemApp.map((c) => (
+                      <li key={c.id} className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
+                        <span className="font-medium text-gray-900">{c.nomeCompleto}</span>
+                        {c.telefone ? (
+                          <span className="text-gray-500">{formatPhone(c.telefone)}</span>
+                        ) : (
+                          <span className="text-gray-400">sem telefone</span>
+                        )}
+                      </li>
+                    ))}
+                  </ul>
+                  <div className="flex flex-wrap gap-2">
+                    <Button size="sm" variant="secondary" onClick={() => setAppFilter("sem_app")}>
+                      Ver só sem app
+                    </Button>
+                    <Link href="/baixar-app">
+                      <Button size="sm">
+                        <Download size={16} /> Abrir página de download
+                      </Button>
+                    </Link>
+                  </div>
+                </AlertBanner>
+              ) : (
+                <AlertBanner variant="success" title="Todos com o app">
+                  Os cooperados ativos (exceto avulsos) já abriram o aplicativo instalado pelo menos uma vez.
+                </AlertBanner>
+              )}
+
+              <p className="text-xs text-gray-500">
+                Avulsos ({instalacao.avulsos}) não entram nesta conta — não usam o app.
+              </p>
+            </div>
+          </div>
+        </Card>
+      )}
+
       <FilterBar>
         <Input placeholder="Buscar por nome ou CPF..." value={search} onChange={(e) => setSearch(e.target.value)} className="max-w-xs" />
         <Select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className="max-w-[180px]">
@@ -171,6 +261,11 @@ export default function CooperadosPage() {
           <option value="ativo">Ativo</option>
           <option value="suspenso">Suspenso</option>
           <option value="desligado">Desligado</option>
+        </Select>
+        <Select value={appFilter} onChange={(e) => setAppFilter(e.target.value as "" | "sem_app" | "com_app")} className="max-w-[200px]">
+          <option value="">App: todos</option>
+          <option value="sem_app">Sem app no celular</option>
+          <option value="com_app">Com app instalado</option>
         </Select>
       </FilterBar>
 
@@ -184,6 +279,13 @@ export default function CooperadosPage() {
                 {c.nomeCompleto}
                 {c.avulso ? <span className="ml-2 text-xs font-medium text-amber-700 bg-amber-100 px-1.5 py-0.5 rounded">Avulso</span> : null}
                 {c.membroDiretoria ? <span className="ml-2 text-xs font-medium text-purple-700 bg-purple-100 px-1.5 py-0.5 rounded">Diretoria</span> : null}
+                {!c.avulso && c.status === "ativo" && (
+                  cooperadoTemAppInstalado(c) ? (
+                    <span className="ml-2 text-xs font-medium text-green-800 bg-green-100 px-1.5 py-0.5 rounded">App OK</span>
+                  ) : (
+                    <span className="ml-2 text-xs font-medium text-amber-800 bg-amber-100 px-1.5 py-0.5 rounded">Sem app</span>
+                  )
+                )}
               </span>
               {check("cooperados", "edit") && (
                 <button
@@ -200,6 +302,24 @@ export default function CooperadosPage() {
           { key: "cpfCnpj", label: "CPF/CNPJ", render: (c) => (c.cpfCnpj ? formatCPFCNPJ(c.cpfCnpj) : "—") },
           { key: "comunidade", label: "Comunidade" },
           { key: "telefone", label: "Telefone", render: (c) => formatPhone(c.telefone) },
+          {
+            key: "app",
+            label: "App",
+            render: (c) => {
+              if (c.avulso) return <span className="text-xs text-gray-400">Avulso</span>;
+              if (cooperadoTemAppInstalado(c)) {
+                return (
+                  <span className="text-xs text-green-800">
+                    Instalado
+                    {c.appInstaladoEm ? (
+                      <span className="block text-gray-500">{formatDate(c.appInstaladoEm.split("T")[0])}</span>
+                    ) : null}
+                  </span>
+                );
+              }
+              return <span className="text-xs font-medium text-amber-800">Não instalou</span>;
+            },
+          },
           { key: "pix", label: "PIX", render: (c) => c.chavePix || "—" },
           { key: "produtos", label: "Produtos", render: (c) => c.produtos.join(", ") },
           { key: "status", label: "Status", render: (c) => <StatusBadge status={c.status} /> },
