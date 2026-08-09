@@ -148,6 +148,15 @@ function LoginForm() {
                 Cadastre-se aqui
               </Link>
             </p>
+
+            <p className="text-center text-sm mt-4">
+              <Link
+                href="/baixar-app"
+                className="inline-flex items-center gap-1.5 font-semibold text-green-800 hover:text-green-950"
+              >
+                Baixar aplicativo — Android e iPhone
+              </Link>
+            </p>
           </div>
         </div>
       </div>

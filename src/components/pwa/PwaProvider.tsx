@@ -1,11 +1,17 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { X } from "lucide-react";
+import Link from "next/link";
+import { X, Download } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { AppIcon } from "@/components/ui/AppIcon";
 import { useAuth } from "@/modules/auth/AuthProvider";
 import { APP_BUILD_VERSION } from "@/lib/appBuildVersion";
+import {
+  detectDevicePlatform,
+  isIosNonSafari,
+  type DevicePlatform,
+} from "@/components/pwa/BaixarAppGuide";
 
 const DISMISS_COUNT_KEY = "hb-coop-pwa-install-dismiss-count";
 const LEGACY_DISMISS_KEY = "hb-coop-pwa-install-dismissed";
@@ -48,12 +54,26 @@ function shouldShowPrompt(isCooperado: boolean): boolean {
   return readDismissCount() < maxDismissals(isCooperado);
 }
 
+function bannerCopy(platform: DevicePlatform, nonSafariIos: boolean): string {
+  if (platform === "ios") {
+    if (nonSafariIos) {
+      return "No iPhone, abra este site no Safari → Compartilhar → Adicionar à Tela de Início.";
+    }
+    return "No iPhone: toque em Compartilhar e depois em Adicionar à Tela de Início.";
+  }
+  if (platform === "android") {
+    return "No Android: toque em Instalar app ou use o menu ⋮ → Instalar app / Adicionar à tela inicial.";
+  }
+  return "Disponível para Android e iPhone — adicione à tela inicial e abra como aplicativo.";
+}
+
 export function PwaProvider() {
   const { user, loading } = useAuth();
   const isCooperado = user?.role === "cooperado";
   const [deferredPrompt, setDeferredPrompt] = useState<BeforeInstallPromptEvent | null>(null);
   const [visible, setVisible] = useState(false);
-  const [iosHint, setIosHint] = useState(false);
+  const [platform, setPlatform] = useState<DevicePlatform>("other");
+  const [nonSafariIos, setNonSafariIos] = useState(false);
   const [dismissCount, setDismissCount] = useState(0);
 
   useEffect(() => {
@@ -77,27 +97,36 @@ export function PwaProvider() {
     }
 
     setDismissCount(readDismissCount());
+    const detected = detectDevicePlatform();
+    setPlatform(detected);
+    setNonSafariIos(isIosNonSafari());
 
-    const isIos = /iphone|ipad|ipod/i.test(navigator.userAgent);
-    const isSafari = isIos && !/(crios|fxios)/i.test(navigator.userAgent);
-    if (isSafari) {
-      setIosHint(true);
+    // iPhone/iPad: sempre mostra instruções (Safari A2HS).
+    if (detected === "ios") {
       setVisible(true);
       return;
     }
 
-    setIosHint(false);
-
+    // Android/desktop: banner quando o Chrome oferecer instalação; senão mostra fallback.
     const onBeforeInstall = (e: Event) => {
       e.preventDefault();
       if (!shouldShowPrompt(isCooperado)) return;
       setDeferredPrompt(e as BeforeInstallPromptEvent);
-      setIosHint(false);
       setVisible(true);
     };
 
     window.addEventListener("beforeinstallprompt", onBeforeInstall);
-    return () => window.removeEventListener("beforeinstallprompt", onBeforeInstall);
+
+    // Fallback Android: se o evento não vier em alguns segundos, mostra o guia mesmo assim.
+    const fallbackTimer = window.setTimeout(() => {
+      if (!shouldShowPrompt(isCooperado)) return;
+      if (detected === "android") setVisible(true);
+    }, 2500);
+
+    return () => {
+      window.removeEventListener("beforeinstallprompt", onBeforeInstall);
+      window.clearTimeout(fallbackTimer);
+    };
   }, [isCooperado, loading]);
 
   const dismiss = () => {
@@ -125,6 +154,7 @@ export function PwaProvider() {
 
   const maxShows = maxDismissals(isCooperado);
   const currentShow = Math.min(dismissCount + 1, maxShows);
+  const isIos = platform === "ios";
 
   return (
     <div className="fixed bottom-20 lg:bottom-6 left-4 right-4 z-50 max-w-md mx-auto">
@@ -132,22 +162,28 @@ export function PwaProvider() {
         <div className="flex items-start gap-3">
           <AppIcon size="lg" />
           <div className="flex-1 min-w-0">
-            <p className="font-semibold leading-tight">Instalar HB Cooperativas</p>
-            <p className="text-sm text-green-100 mt-1">
-              {iosHint
-                ? "No iPhone: toque em Compartilhar e depois em Adicionar à Tela de Início."
-                : "Adicione o app à tela inicial para abrir como atalho, sem precisar do navegador."}
-            </p>
+            <p className="font-semibold leading-tight">Baixar aplicativo</p>
+            <p className="text-sm text-green-100 mt-1">{bannerCopy(platform, nonSafariIos)}</p>
             {isCooperado && (
               <p className="text-xs text-green-200/90 mt-2">
                 Aviso {currentShow} de {maxShows} — instale o app para acessar mais rápido.
               </p>
             )}
-            {!iosHint && deferredPrompt && (
-              <Button size="sm" variant="inverse" className="mt-3 font-semibold" onClick={install}>
-                Instalar app
-              </Button>
-            )}
+            <div className="flex flex-wrap gap-2 mt-3">
+              {!isIos && deferredPrompt && (
+                <Button size="sm" variant="inverse" className="font-semibold" onClick={install}>
+                  Instalar no Android
+                </Button>
+              )}
+              <Link
+                href="/baixar-app"
+                onClick={() => setVisible(false)}
+                className="inline-flex items-center gap-1.5 rounded-lg bg-green-800 hover:bg-green-700 px-3 py-2 text-sm font-semibold text-white border border-green-600"
+              >
+                <Download size={14} />
+                {isIos ? "Ver passos no iPhone" : "Android e iPhone"}
+              </Link>
+            </div>
           </div>
           <button
             type="button"

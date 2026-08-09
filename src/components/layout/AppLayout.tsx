@@ -6,7 +6,7 @@ import {
   LayoutDashboard, Users, CreditCard, PieChart, Truck, Wallet,
   Percent, Building2,   Landmark, Megaphone, MapPin, Car, FileText,
   CalendarCheck, LogOut, Menu, X, Building, ClipboardList, Receipt, User, Tag,
-  BookOpen, FileCheck, Shield, MessageSquareWarning, Vote,
+  BookOpen, FileCheck, Shield, MessageSquareWarning, Vote, Download,
 } from "lucide-react";
 import { useState } from "react";
 import { useAuth } from "@/modules/auth/AuthProvider";
@@ -136,11 +136,19 @@ export function Sidebar({ mobile = false, onClose }: { mobile?: boolean; onClose
         })}
       </nav>
 
-      <div className="p-4 border-t border-green-800">
-        <div className="px-3 py-2 mb-2">
+      <div className="p-4 border-t border-green-800 space-y-1">
+        <div className="px-3 py-2 mb-1">
           <p className="text-sm font-medium truncate">{user.name}</p>
           <p className="text-xs text-green-300">{getUserFuncaoLabel(user)}</p>
         </div>
+        <Link
+          href="/baixar-app"
+          onClick={onClose}
+          className="flex items-center gap-2 w-full px-3 py-2 text-sm text-green-200 hover:bg-green-800 hover:text-white rounded-lg transition-colors"
+        >
+          <Download size={18} />
+          Baixar app (Android e iPhone)
+        </Link>
         <button
           onClick={logout}
           className="flex items-center gap-2 w-full px-3 py-2 text-sm text-green-200 hover:bg-green-800 hover:text-white rounded-lg transition-colors"
