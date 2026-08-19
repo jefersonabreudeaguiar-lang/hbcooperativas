@@ -15,7 +15,8 @@
     "wipe:cooperados-teste": "node scripts/wipe-cooperado-test-data.mjs",
     "wipe:platform": "node scripts/wipe-platform-completo.mjs",
     "backup:cloud": "node scripts/backup-cloud.mjs",
-    "test:sync-flows": "npx tsx scripts/simulate-sync-flows.ts"
+    "test:sync-flows": "npx tsx scripts/simulate-sync-flows.ts",
+    "audit:totais": "npx tsx scripts/audit-totais-cooperados.ts"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.108.2",

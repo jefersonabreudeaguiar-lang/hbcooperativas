@@ -1,9 +1,9 @@
 import type { AppData, FechamentoMensal, FinanceiroMensal } from "@/types";
 import { getData } from "@/services/dataStore";
-import { sumBy } from "@/utils/calculations";
+import { getTotalAPagarCooperado, getTotalRecebidoCooperado } from "@/services/notaPedidoService";
+import { round2, sumBy } from "@/utils/calculations";
 import { getCurrentMesReferencia } from "@/utils/format";
 import { isNotaNaFilaConferenciaResponsavel } from "@/utils/notaStatus";
-import { getTotalAPagarCooperado, getTotalRecebidoCooperado } from "@/services/notaPedidoService";
 import {
   calcularFechamentoMensalLive,
   fechamentoToPartial,
@@ -130,10 +130,17 @@ export function getAdminStats(data?: AppData): AdminDashboardStats {
   const mensalidadesAbertas = d.mensalidades.filter((m) => m.status === "pendente" || m.status === "atrasada");
   const cotasAbertas = d.cotas.filter((c) => c.status !== "quitada");
 
+  const valoresAPagar = round2(
+    d.cooperados.reduce(
+      (s, c) => s + getTotalAPagarCooperado(d, c.id, undefined, c.cooperativaId),
+      0
+    )
+  );
+
   return {
     totalVendidoMes: sumBy(entregasMes, (e) => e.valorBruto),
     totalVendidoAno: sumBy(entregasAno, (e) => e.valorBruto),
-    valoresAPagar: sumBy(pagamentosPendentes, (f) => f.valorLiquido),
+    valoresAPagar,
     valoresPagos: sumBy(pagamentosPagos, (f) => f.valorLiquido),
     saldoCooperativa: financeiroMes?.saldoFinal ?? 0,
     mensalidadesRecebidas: financeiroMes?.mensalidadesRecebidas ?? 0,

@@ -755,6 +755,33 @@ export function dedupeFichaCorridaPorNota(
   return out;
 }
 
+/** Só entra no “a pagar” ficha pendente cuja nota existe e está conferida (não rejeitada/rascunho). */
+export function fichaNotaElegivelParaPagamento(data: AppData, ficha: FichaCorrida): boolean {
+  if (ficha.status !== "pendente") return false;
+  const nota = data.notasPedido.find((n) => n.id === ficha.notaPedidoId);
+  if (!nota) return false;
+  return nota.status === "conferida";
+}
+
+/** Fichas pendentes válidas para pagamento (deduplicadas e amarradas a nota conferida). */
+export function listarFichasPendentesPagamento(
+  data: AppData,
+  cooperadoId: string,
+  mesReferencia: string,
+  cooperativaId?: string
+): FichaCorrida[] {
+  const coopId = cooperativaId ?? data.cooperados.find((c) => c.id === cooperadoId)?.cooperativaId;
+  const candidatas = data.fichaCorrida.filter(
+    (f) =>
+      fichaPertenceCooperado(data, f, cooperadoId, coopId) &&
+      f.mesReferencia === mesReferencia &&
+      f.status === "pendente"
+  );
+  return dedupeFichaCorridaPorNota(candidatas, data.notasPedido).filter((f) =>
+    fichaNotaElegivelParaPagamento(data, f)
+  );
+}
+
 /** Cria lançamentos na ficha a partir de notas já conferidas (sincronizadas da nuvem). */
 export function reconciliarFichaFromNotasConferidas(data: AppData): AppData {
   const dedupedInitial = dedupeFichaCorridaPorNota(data.fichaCorrida, data.notasPedido);
@@ -857,12 +884,7 @@ export function getResumoPagamentoCooperado(
 } {
   const coopId = cooperativaId ?? data.cooperados.find((c) => c.id === cooperadoId)?.cooperativaId;
   const cooperadoCanonico = resolverCooperadoIdCanonico(data, cooperadoId, coopId);
-  const fichas = data.fichaCorrida.filter(
-    (f) =>
-      fichaPertenceCooperado(data, f, cooperadoId, coopId) &&
-      f.mesReferencia === mesReferencia &&
-      f.status === "pendente"
-  );
+  const fichas = listarFichasPendentesPagamento(data, cooperadoId, mesReferencia, coopId);
   const valorBruto = round2(fichas.reduce((s, f) => s + f.valorBruto, 0));
   const descontoCooperativa = round2(fichas.reduce((s, f) => s + f.descontos, 0));
   const valorEntregas = round2(fichas.reduce((s, f) => s + f.valorLiquido, 0));
