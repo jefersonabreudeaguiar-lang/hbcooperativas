@@ -45,6 +45,34 @@ export function isNotaSaiuDaFilaConferencia(status: NotaPedidoStatus | undefined
   );
 }
 
+/** Payload típico após re-lançar entrega (fila zerada, aguardando conferência). */
+export function isNotaRelancamentoPayload(nota: NotaPedido): boolean {
+  return (
+    nota.status === "aguardando_conferencia" &&
+    !nota.conferidaPor &&
+    !nota.rejeitadaPor &&
+    (nota.valorLiquido ?? 0) === 0 &&
+    (nota.valorBruto ?? 0) === 0 &&
+    (nota.itens?.length ?? 0) === 0
+  );
+}
+
+/** Re-lançamento explícito: conferida/rejeitada → aguardando, com valores zerados. */
+export function isNotaRelancamentoIntencional(
+  existing: Pick<NotaPedido, "status"> & Partial<NotaPedido>,
+  incoming: NotaPedido
+): boolean {
+  if (!isNotaRelancamentoPayload(incoming)) return false;
+  const wasFinalizada =
+    existing.status === "conferida" ||
+    existing.status === "rejeitada" ||
+    existing.status === "pago";
+  if (!wasFinalizada) return false;
+  const incTime = incoming.updatedAt ? new Date(incoming.updatedAt).getTime() : 0;
+  const exTime = existing.updatedAt ? new Date(existing.updatedAt).getTime() : 0;
+  return incTime >= exTime;
+}
+
 /**
  * Impede que push/PATCH do cooperado (ou foto tardia) apague conferência do responsável.
  * Mantém campos financeiros e de conferência do status mais avançado.
@@ -53,6 +81,10 @@ export function protectNotaAgainstStatusDowngrade(
   existing: Pick<NotaPedido, "status"> & Partial<NotaPedido>,
   incoming: NotaPedido
 ): NotaPedido {
+  if (isNotaRelancamentoIntencional(existing, incoming)) {
+    return incoming;
+  }
+
   if (!isNotaStatusDowngrade(existing.status, incoming.status)) {
     return incoming;
   }

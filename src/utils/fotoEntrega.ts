@@ -1,6 +1,7 @@
 import type { AppData, NotaPedido } from "@/types";
 import { normalizeCnpj } from "@/utils/cooperativa";
 import { isInlineDataUrl } from "@/utils/mediaHelpers";
+import { isNotaRelancamentoIntencional } from "@/utils/notaStatus";
 
 /** Referência leve para foto no IndexedDB — não vai no JSON pesado. */
 export const LOCAL_MEDIA_REF_PREFIX = "idb:";
@@ -600,6 +601,8 @@ const NOTA_STATUS_RANK: Record<NotaPedido["status"], number> = {
 
 /** Status publicado na nuvem nunca perde para rascunho (upload de foto atualiza JSON antes do Enviar). */
 function mergeNotaStatus(a: NotaPedido, b: NotaPedido): NotaPedido["status"] {
+  if (isNotaRelancamentoIntencional(b, a)) return a.status;
+  if (isNotaRelancamentoIntencional(a, b)) return b.status;
   const aRank = NOTA_STATUS_RANK[a.status] ?? 0;
   const bRank = NOTA_STATUS_RANK[b.status] ?? 0;
   if (aRank > bRank) return a.status;

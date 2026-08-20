@@ -103,6 +103,7 @@ import {
 } from "@/utils/fotoEntrega";
 import {
   isNotaNaFilaConferenciaResponsavel,
+  isNotaRelancamentoPayload,
   isNotaSaiuDaFilaConferencia,
 } from "@/utils/notaStatus";
 import {
@@ -1898,7 +1899,28 @@ export default function NotasPedidoContent() {
         );
       }
     }
-    setSelectedNota(notaComFoto);
+    setSelectedNota(
+      nota.status === "aguardando_conferencia"
+        ? {
+            ...notaComFoto,
+            status: "aguardando_conferencia",
+            ...(isNotaRelancamentoPayload(nota)
+              ? {
+                  itens: nota.itens,
+                  valorBruto: nota.valorBruto,
+                  valorDesconto: nota.valorDesconto,
+                  valorLiquido: nota.valorLiquido,
+                  conferidaPor: undefined,
+                  dataConferencia: undefined,
+                  divisaoEntrega: undefined,
+                  rejeitadaPor: undefined,
+                  dataRejeicao: undefined,
+                  motivoRejeicao: undefined,
+                }
+              : {}),
+          }
+        : notaComFoto
+    );
     const instId = coopId
       ? resolverInstituicaoConferencia(coopId, instituicoes, nota.instituicaoId)
       : nota.instituicaoId;
@@ -3788,7 +3810,7 @@ export default function NotasPedidoContent() {
           ? `Conferir entrega (${filaConferenciaPos} de ${filaConferenciaTotal})`
           : "Conferir entrega"
       } size="full"
-        footer={selectedNota?.status === "aguardando_conferencia" && check("notas_pedido", "approve") ? (
+        footer={selectedNota && isNotaNaFilaConferenciaResponsavel(selectedNota.status) && check("notas_pedido", "approve") ? (
           <div className="flex flex-col sm:flex-row gap-2 justify-between">
             <Button variant="danger" onClick={() => { setMotivoRejeicao(""); setRejectModal(true); }} disabled={conferenciaTransicao || Boolean(lancamentoSequencia)}>
               <XCircle size={18} /> Pedir correção

@@ -18,6 +18,7 @@ import {
 import {
   isNotaStatusDowngrade,
   isNotaStatusTerminalConferencia,
+  isNotaRelancamentoPayload,
   protectNotaAgainstStatusDowngrade,
   NOTA_STATUS_RANK,
 } from "@/utils/notaStatus";
@@ -238,6 +239,27 @@ export function mergeCloudNotasIntoData(
           mergedNota = {
             ...mergedNota,
             status: "aguardando_conferencia",
+            updatedAt: local.updatedAt,
+          };
+        } else if (
+          isNotaRelancamentoPayload(local) &&
+          new Date(local.updatedAt).getTime() >= new Date(cloudNota.updatedAt).getTime()
+        ) {
+          // Re-lançamento local mais recente que a nuvem ainda conferida.
+          mergedNota = {
+            ...mergedNota,
+            status: "aguardando_conferencia",
+            itens: local.itens ?? [],
+            valorBruto: local.valorBruto,
+            valorDesconto: local.valorDesconto,
+            valorLiquido: local.valorLiquido,
+            percentualDescontoCooperativa: local.percentualDescontoCooperativa,
+            conferidaPor: undefined,
+            dataConferencia: undefined,
+            divisaoEntrega: undefined,
+            rejeitadaPor: undefined,
+            dataRejeicao: undefined,
+            motivoRejeicao: undefined,
             updatedAt: local.updatedAt,
           };
         } else {
