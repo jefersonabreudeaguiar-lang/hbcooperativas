@@ -2547,6 +2547,48 @@ export default function NotasPedidoContent() {
     }
   };
 
+  const cooperadosConferenciaOptions = useMemo(() => {
+    if (!data || !coopId) return cooperadosCoop;
+    if (!conferenciaCooperadoId) return cooperadosCoop;
+    if (cooperadosCoop.some((c) => c.id === conferenciaCooperadoId)) return cooperadosCoop;
+    const nome =
+      selectedNota?.cooperadoNomeSnapshot?.trim() ||
+      getCooperadoNomeResolvido(data, conferenciaCooperadoId, coopId);
+    return [
+      ...cooperadosCoop,
+      {
+        id: conferenciaCooperadoId,
+        cooperativaId: coopId,
+        nomeCompleto: nome,
+        cpfCnpj: "",
+        telefone: "",
+        endereco: "",
+        comunidade: "",
+        cafDap: "",
+        chavePix: "",
+        banco: "",
+        agencia: "",
+        conta: "",
+        status: "ativo" as const,
+        produtos: [],
+        observacoes: "Identificado pelo envio da entrega.",
+        createdAt: selectedNota?.createdAt ?? new Date().toISOString(),
+        updatedAt: selectedNota?.updatedAt ?? new Date().toISOString(),
+      },
+    ].sort((a, b) => a.nomeCompleto.localeCompare(b.nomeCompleto, "pt-BR"));
+  }, [cooperadosCoop, conferenciaCooperadoId, data, coopId, selectedNota]);
+
+  const cooperadoConferenciaAutoIdentificado = useMemo(() => {
+    if (!selectedNota || !data || !coopId || !conferenciaCooperadoId) return false;
+    const canonico = resolverCooperadoIdCanonico(
+      data,
+      selectedNota.cooperadoId,
+      coopId,
+      selectedNota.cooperadoNomeSnapshot
+    );
+    return canonico === conferenciaCooperadoId && Boolean(selectedNota.cooperadoNomeSnapshot?.trim());
+  }, [selectedNota, data, coopId, conferenciaCooperadoId]);
+
   if (!data) {
     return <div className="flex justify-center py-20"><div className="w-8 h-8 border-4 border-green-600 border-t-transparent rounded-full animate-spin" /></div>;
   }
@@ -2626,48 +2668,6 @@ export default function NotasPedidoContent() {
       </button>
     );
   };
-
-  const cooperadosConferenciaOptions = useMemo(() => {
-    if (!data || !coopId) return cooperadosCoop;
-    if (!conferenciaCooperadoId) return cooperadosCoop;
-    if (cooperadosCoop.some((c) => c.id === conferenciaCooperadoId)) return cooperadosCoop;
-    const nome =
-      selectedNota?.cooperadoNomeSnapshot?.trim() ||
-      getCooperadoNomeResolvido(data, conferenciaCooperadoId, coopId);
-    return [
-      ...cooperadosCoop,
-      {
-        id: conferenciaCooperadoId,
-        cooperativaId: coopId,
-        nomeCompleto: nome,
-        cpfCnpj: "",
-        telefone: "",
-        endereco: "",
-        comunidade: "",
-        cafDap: "",
-        chavePix: "",
-        banco: "",
-        agencia: "",
-        conta: "",
-        status: "ativo" as const,
-        produtos: [],
-        observacoes: "Identificado pelo envio da entrega.",
-        createdAt: selectedNota?.createdAt ?? new Date().toISOString(),
-        updatedAt: selectedNota?.updatedAt ?? new Date().toISOString(),
-      },
-    ].sort((a, b) => a.nomeCompleto.localeCompare(b.nomeCompleto, "pt-BR"));
-  }, [cooperadosCoop, conferenciaCooperadoId, data, coopId, selectedNota]);
-
-  const cooperadoConferenciaAutoIdentificado = useMemo(() => {
-    if (!selectedNota || !data || !coopId || !conferenciaCooperadoId) return false;
-    const canonico = resolverCooperadoIdCanonico(
-      data,
-      selectedNota.cooperadoId,
-      coopId,
-      selectedNota.cooperadoNomeSnapshot
-    );
-    return canonico === conferenciaCooperadoId && Boolean(selectedNota.cooperadoNomeSnapshot?.trim());
-  }, [selectedNota, data, coopId, conferenciaCooperadoId]);
 
   const handleConferenciaDivisaoQtdChange = (raw: number) => {
     const qtd = Math.min(5, Math.max(0, Math.floor(raw)));
