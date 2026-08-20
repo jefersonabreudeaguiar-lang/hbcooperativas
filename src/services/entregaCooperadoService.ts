@@ -1,6 +1,10 @@
 import type { AppData, NotaPedido, NotaPedidoItem } from "@/types";
 import { ordenarNotasMesCronologico } from "@/services/cooperadoEntregasService";
 import { fichaPertenceCooperado } from "@/services/cooperadoCloudService";
+import {
+  dedupeFichaCorridaPorNota,
+  fichaValidaNoExtrato,
+} from "@/services/notaPedidoService";
 import { getFotosExibicaoNota } from "@/utils/fotoEntrega";
 import { formatMesReferencia } from "@/utils/format";
 import { round2 } from "@/utils/calculations";
@@ -143,8 +147,14 @@ export function valoresEntregaCooperado(
   const ids = new Set(aprovadas.map((n) => n.id));
 
   if (data) {
-    const fichas = data.fichaCorrida.filter(
-      (f) => ids.has(f.notaPedidoId) && fichaPertenceCooperado(data, f, cid)
+    const fichas = dedupeFichaCorridaPorNota(
+      data.fichaCorrida.filter(
+        (f) =>
+          ids.has(f.notaPedidoId) &&
+          fichaPertenceCooperado(data, f, cid) &&
+          fichaValidaNoExtrato(data, f)
+      ),
+      data.notasPedido
     );
     const fichaIds = new Set(fichas.map((f) => f.notaPedidoId));
     const semFicha = aprovadas.filter((n) => !fichaIds.has(n.id));

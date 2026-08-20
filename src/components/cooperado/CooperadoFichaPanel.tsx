@@ -17,6 +17,7 @@ import {
   getMensalidadeFixaMes,
   getArquivoMensalCooperado,
   getAjustesCompartilhadosFichaMes,
+  listarFichasExtratoCooperadoMes,
   agregarItensFichaMes,
 } from "@/services/notaPedidoService";
 import { ResumoDescontosMes } from "@/components/ficha/ResumoDescontosMes";
@@ -97,8 +98,11 @@ export function CooperadoFichaPanel({ cooperado }: { cooperado: Cooperado }) {
     [resumo, mesFilter]
   );
   const mesFicha = useMemo(
-    () => resumo?.ficha.filter((f) => f.mesReferencia === mesFilter) ?? [],
-    [resumo, mesFilter]
+    () =>
+      data
+        ? listarFichasExtratoCooperadoMes(data, cooperado.id, mesFilter, cooperado.cooperativaId)
+        : [],
+    [data, cooperado.id, cooperado.cooperativaId, mesFilter]
   );
   const resumoItensMes = useMemo(() => {
     if (!data) return { itens: [], entregas: 0, valorBruto: 0 };

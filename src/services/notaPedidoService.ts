@@ -38,11 +38,7 @@ export function agregarItensFichaMes(
   mesReferencia: string,
   cooperativaId?: string
 ): { itens: ItemResumoFichaMes[]; entregas: number; valorBruto: number } {
-  const fichas = data.fichaCorrida.filter(
-    (f) =>
-      fichaPertenceCooperado(data, f, cooperadoId, cooperativaId) &&
-      f.mesReferencia === mesReferencia
-  );
+  const fichas = listarFichasExtratoCooperadoMes(data, cooperadoId, mesReferencia, cooperativaId);
 
   const map = new Map<string, ItemResumoFichaMes>();
   for (const ficha of fichas) {
@@ -782,6 +778,55 @@ export function fichaNotaElegivelParaPagamento(data: AppData, ficha: FichaCorrid
   return nota.status === "conferida";
 }
 
+/** Ficha válida no extrato (cooperado e responsável) — amarrada a nota conferida/paga. */
+export function fichaValidaNoExtrato(data: AppData, ficha: FichaCorrida): boolean {
+  const nota = data.notasPedido.find((n) => n.id === ficha.notaPedidoId);
+  if (!nota) return false;
+  if (nota.status !== "conferida" && nota.status !== "pago") return false;
+  if (ficha.status === "pago") return true;
+  if (ficha.status === "pendente") return fichaNotaElegivelParaPagamento(data, ficha);
+  return false;
+}
+
+/** Fichas do mês para extrato e totais por item (mesma base do “a receber”). */
+export function listarFichasExtratoCooperadoMes(
+  data: AppData,
+  cooperadoId: string,
+  mesReferencia: string,
+  cooperativaId?: string
+): FichaCorrida[] {
+  const coopId = cooperativaId ?? data.cooperados.find((c) => c.id === cooperadoId)?.cooperativaId;
+  const candidatas = data.fichaCorrida.filter(
+    (f) =>
+      fichaPertenceCooperado(data, f, cooperadoId, coopId) &&
+      f.mesReferencia === mesReferencia &&
+      fichaValidaNoExtrato(data, f)
+  );
+  return dedupeFichaCorridaPorNota(candidatas, data.notasPedido);
+}
+
+/** Remove lançamentos órfãos ou de notas ainda não conferidas (evita valor inflado no app). */
+export function purgarFichasInvalidas(data: AppData): AppData {
+  const removidas = data.fichaCorrida.filter((f) => !fichaValidaNoExtrato(data, f));
+  if (removidas.length === 0) return data;
+
+  let fichaCorrida = data.fichaCorrida.filter((f) => fichaValidaNoExtrato(data, f));
+  const pares = new Set(removidas.map((f) => `${f.cooperadoId}|${f.mesReferencia}`));
+  for (const par of pares) {
+    const [cooperadoId, mesReferencia] = par.split("|");
+    fichaCorrida = recalcularSaldosFichaCooperadoMes(fichaCorrida, cooperadoId, mesReferencia);
+  }
+
+  const arquivosMensais = data.arquivosMensais.map((a) => ({
+    ...a,
+    notaPedidoIds: a.notaPedidoIds.filter((id) =>
+      fichaCorrida.some((f) => f.notaPedidoId === id && f.cooperadoId === a.cooperadoId)
+    ),
+  }));
+
+  return { ...data, fichaCorrida, arquivosMensais };
+}
+
 /** Fichas pendentes válidas para pagamento (deduplicadas e amarradas a nota conferida). */
 export function listarFichasPendentesPagamento(
   data: AppData,
@@ -803,6 +848,7 @@ export function listarFichasPendentesPagamento(
 
 /** Cria lançamentos na ficha a partir de notas já conferidas (sincronizadas da nuvem). */
 export function reconciliarFichaFromNotasConferidas(data: AppData): AppData {
+  data = purgarFichasInvalidas(data);
   const dedupedInitial = dedupeFichaCorridaPorNota(data.fichaCorrida, data.notasPedido);
   let fichaCorrida = dedupedInitial;
   let changed = dedupedInitial.length !== data.fichaCorrida.length;
