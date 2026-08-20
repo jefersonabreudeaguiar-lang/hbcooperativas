@@ -804,6 +804,87 @@ function simUmaEntregaCom25Fotos() {
   assert("nota pertence cooperativa", notaPertenceCooperativa(d, nota, COOP_ID));
 }
 
+function simPruneStaleConferidasOnFullSync() {
+  let local = baseAppData();
+  const fantasma = makeNota("fantasma-1", {
+    status: "conferida",
+    valorLiquido: 2000,
+    valorBruto: 2100,
+    fotoNaNuvem: true,
+    updatedAt: new Date(Date.now() - 86_400_000).toISOString(),
+  });
+  const valida = makeNota("valida-1", {
+    status: "conferida",
+    valorLiquido: 200,
+    valorBruto: 211,
+    fotoNaNuvem: true,
+  });
+  local = { ...local, notasPedido: [fantasma, valida] };
+
+  // Delta parcial: não remove fantasma (lista incompleta).
+  const mergedDelta = mergeCloudNotasIntoData(local, [valida], CNPJ);
+  assert(
+    "Delta parcial mantém conferida local ausente da nuvem",
+    mergedDelta.notasPedido.some((n) => n.id === "fantasma-1")
+  );
+
+  // Sync completo: remove conferidas locais que não existem na nuvem.
+  const mergedFull = mergeCloudNotasIntoData(local, [valida], CNPJ, { pruneStaleConferidas: true });
+  assert(
+    "Full sync remove conferida fantasma",
+    !mergedFull.notasPedido.some((n) => n.id === "fantasma-1")
+  );
+  assert(
+    "Full sync mantém conferida presente na nuvem",
+    mergedFull.notasPedido.some((n) => n.id === "valida-1")
+  );
+
+  let comFicha = {
+    ...mergedFull,
+    notasPedido: [valida],
+    fichaCorrida: [
+      {
+        id: "fc-fant",
+        cooperadoId: COOPERADO_ID,
+        cooperativaId: COOP_ID,
+        notaPedidoId: "fantasma-1",
+        descricao: "Fantasma",
+        mesReferencia: "2026-08",
+        status: "pendente" as const,
+        valorBruto: 2100,
+        descontos: 100,
+        valorLiquido: 2000,
+        saldoAcumulado: 2000,
+        dataLancamento: "2026-08-01",
+        itens: [],
+        createdAt: new Date().toISOString(),
+      },
+      {
+        id: "fc-ok",
+        cooperadoId: COOPERADO_ID,
+        cooperativaId: COOP_ID,
+        notaPedidoId: "valida-1",
+        descricao: "Válida",
+        mesReferencia: "2026-08",
+        status: "pendente" as const,
+        valorBruto: 211,
+        descontos: 11,
+        valorLiquido: 200,
+        saldoAcumulado: 200,
+        dataLancamento: "2026-08-02",
+        itens: [],
+        createdAt: new Date().toISOString(),
+      },
+    ],
+  };
+  comFicha = reconciliarFichaFromNotasConferidas(comFicha);
+  assert(
+    "Reconciliar após prune remove ficha órfã",
+    comFicha.fichaCorrida.every((f) => f.notaPedidoId !== "fantasma-1")
+  );
+  assert("Ficha válida permanece", comFicha.fichaCorrida.some((f) => f.notaPedidoId === "valida-1"));
+}
+
 // ─── Main ───────────────────────────────────────────────────────────────────
 
 console.log("=== Simulação fluxo entregas HB Cooperativas ===\n");
@@ -815,6 +896,7 @@ simExclusaoUnicaPropagada();
 simAguardandoAusenteNaListaNaoApaga();
 simMergeTableStorage();
 simShouldNotDowngradeConferida();
+simPruneStaleConferidasOnFullSync();
 simStickyAguardandoNaoSomeNoSync();
 simListaParcialNuncaEscondeAguardando();
 simProtectUploadNaoRebaixaStatus();

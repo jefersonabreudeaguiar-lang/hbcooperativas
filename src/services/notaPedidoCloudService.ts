@@ -161,6 +161,18 @@ export function normalizeCloudNotaForLocal(
 /** Máximo de entregas removidas por ciclo de sync (evita apagar fila inteira por lista incompleta). */
 const MAX_NOTA_DELETIONS_PER_SYNC = 2;
 
+/** Limite de conferidas/pagas removidas por sync completo (fichas fantasma no cooperado). */
+const MAX_STALE_CONFERIDA_REMOVALS_PER_SYNC = 80;
+
+export interface MergeCloudNotasOptions {
+  /** Sync completo da nuvem — remove conferidas/pagas locais que não existem mais na nuvem. */
+  pruneStaleConferidas?: boolean;
+}
+
+function isNotaTerminalRemovivelSeAusenteNaNuvem(status: NotaPedido["status"]): boolean {
+  return status === "conferida" || status === "pago" || status === "cancelado";
+}
+
 /**
  * Propaga exclusão na nuvem (ex.: cooperado apagou) sem remover a fila inteira
  * quando a listagem da nuvem veio incompleta (reset, timeout, wipe acidental).
@@ -204,10 +216,43 @@ function propagateCloudNotaDeletions(
   return changed;
 }
 
+/**
+ * Sync completo: remove conferidas/pagas locais ausentes da nuvem (notas apagadas na nuvem
+ * mas ainda no localStorage do cooperado — causa extrato inflado e fichas fantasma).
+ */
+function pruneStaleLocalConferidasFromCloud(
+  data: AppData,
+  byId: Map<string, NotaPedido>,
+  cloudNotas: NotaPedido[],
+  cnpj: string
+): boolean {
+  if (cloudNotas.length === 0) return false;
+
+  const digits = normalizeCnpj(cnpj);
+  const cloudIds = new Set(cloudNotas.map((n) => n.id));
+
+  const stale = [...byId.values()].filter(
+    (n) =>
+      getNotaCooperativaCnpj(data, n) === digits &&
+      !cloudIds.has(n.id) &&
+      isNotaTerminalRemovivelSeAusenteNaNuvem(n.status) &&
+      (n.fotoNaNuvem || n.status === "conferida" || n.status === "pago")
+  );
+
+  if (stale.length === 0) return false;
+  if (stale.length > MAX_STALE_CONFERIDA_REMOVALS_PER_SYNC) return false;
+
+  for (const nota of stale) {
+    byId.delete(nota.id);
+  }
+  return true;
+}
+
 export function mergeCloudNotasIntoData(
   data: AppData,
   cloudNotas: NotaPedido[],
-  cnpj: string
+  cnpj: string,
+  options?: MergeCloudNotasOptions
 ): AppData {
   const digits = normalizeCnpj(cnpj);
   const byId = new Map(data.notasPedido.map((n) => [n.id, n]));
@@ -303,6 +348,10 @@ export function mergeCloudNotasIntoData(
   }
 
   if (propagateCloudNotaDeletions(data, byId, cloudNotas, cnpj)) {
+    changed = true;
+  }
+
+  if (options?.pruneStaleConferidas && pruneStaleLocalConferidasFromCloud(data, byId, cloudNotas, cnpj)) {
     changed = true;
   }
 
@@ -1037,7 +1086,9 @@ export async function syncNotasPedidoFromCloud(cnpj: string): Promise<number> {
     (n) => n.status === "aguardando_conferencia" || n.status === "entregue"
   );
 
-  let merged = mergeCloudNotasIntoData(current, cloudNotas, digits);
+  let merged = mergeCloudNotasIntoData(current, cloudNotas, digits, {
+    pruneStaleConferidas: treatAsFull,
+  });
 
   // Invariante: sync nunca remove/rebaixa para rascunho uma entrega em análise.
   const afterById = new Map(merged.notasPedido.map((n) => [n.id, n]));
