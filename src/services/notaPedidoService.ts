@@ -702,8 +702,27 @@ export function dividirEntregaEntreCooperados(
 /** Parte da ficha: lançamento único da nota ou fatia por foto (multi-foto). */
 export function chaveParteFichaCorrida(f: FichaCorrida): string {
   const m = f.descricao.match(/\(foto\s+(\d+)\s*\/\s*(\d+)\)/i);
+  const divisao = (f.divisaoEntrega?.participantes.length ?? 0) > 1;
+  const coop = f.cooperadoId;
+  if (divisao) {
+    if (m) return `div:${coop}:foto:${m[1]}/${m[2]}`;
+    return `div:${coop}:full`;
+  }
   if (m) return `foto:${m[1]}/${m[2]}`;
   return "full";
+}
+
+/** Verifica se cada participante da divisão tem ao menos uma ficha na nota. */
+export function divisaoFichasCobremParticipantes(
+  data: AppData,
+  fichas: FichaCorrida[],
+  nota: NotaPedido
+): boolean {
+  const participantes = nota.divisaoEntrega?.participantes ?? [];
+  if (participantes.length <= 1) return fichas.length >= 1;
+  return participantes.every((p) =>
+    fichas.some((f) => fichaPertenceCooperado(data, f, p.cooperadoId, nota.cooperativaId))
+  );
 }
 
 /**
@@ -802,7 +821,9 @@ export function reconciliarFichaFromNotasConferidas(data: AppData): AppData {
     const qtdParticipantes = nota.divisaoEntrega?.participantes.length ?? 1;
 
     if (nota.divisaoEntrega && qtdParticipantes > 1) {
-      if (fichasExistentes.length === qtdParticipantes) continue;
+      if (divisaoFichasCobremParticipantes({ ...data, fichaCorrida }, fichasExistentes, nota)) {
+        continue;
+      }
       const ctx = { ...data, fichaCorrida, arquivosMensais };
       const rebuilt = rebuildFichasNota(ctx, nota);
       fichaCorrida = rebuilt.fichaCorrida;

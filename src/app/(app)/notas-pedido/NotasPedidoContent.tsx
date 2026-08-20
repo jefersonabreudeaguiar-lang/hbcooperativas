@@ -2190,21 +2190,20 @@ export default function NotasPedidoContent() {
       const notasPedido = d.notasPedido.map((n) => (n.id === selectedNota.id ? notaAtualizada! : n));
 
       if (multiFoto) {
-        return addAuditEntry(
-          { ...d, notasPedido },
-          {
-            entityType: "nota_pedido",
-            entityId: selectedNota.id,
-            action: "aprovar",
-            userId: user.id,
-            userName: user.name,
-            changes: divisao
-              ? `Entrega conferida (${qtdFotosAprovadas} fotos) · dividida entre ${divisao.participantes.length} cooperados`
-              : qtdFotosAprovadas > 1
-                ? `Entrega conferida (${qtdFotosAprovadas} fotos)`
-                : "Entrega conferida",
-          }
-        );
+        const baseData = { ...d, notasPedido };
+        const next = divisao ? rebuildFichasNota(baseData, notaAtualizada!) : baseData;
+        return addAuditEntry(next, {
+          entityType: "nota_pedido",
+          entityId: selectedNota.id,
+          action: "aprovar",
+          userId: user.id,
+          userName: user.name,
+          changes: divisao
+            ? `Entrega conferida (${qtdFotosAprovadas} fotos) · dividida entre ${divisao.participantes.length} cooperados`
+            : qtdFotosAprovadas > 1
+              ? `Entrega conferida (${qtdFotosAprovadas} fotos)`
+              : "Entrega conferida",
+        });
       }
 
       const jaNaFicha = d.fichaCorrida.some((f) => f.notaPedidoId === selectedNota.id);

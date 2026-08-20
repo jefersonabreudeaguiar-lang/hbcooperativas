@@ -654,7 +654,7 @@ export function fichaPertenceCooperado(
   if (nomeAlvo.length > 1 && nomeAlvo === nomeDono) return true;
 
   const nota = data.notasPedido.find((n) => n.id === ficha.notaPedidoId);
-  if (nota) {
+  if (nota && (nota.divisaoEntrega?.participantes.length ?? 0) <= 1) {
     if (nota.cooperadoId === cooperadoId) return true;
     const notaDono = resolverCooperadoIdCanonico(
       data,
@@ -670,7 +670,11 @@ export function fichaPertenceCooperado(
 
 export function notaPertenceCooperado(
   data: AppData,
-  nota: { cooperadoId: string; cooperadoNomeSnapshot?: string },
+  nota: {
+    cooperadoId: string;
+    cooperadoNomeSnapshot?: string;
+    divisaoEntrega?: { participantes: { cooperadoId: string; cooperadoNome: string }[] };
+  },
   cooperadoId: string,
   cooperativaId?: string
 ): boolean {
@@ -682,5 +686,17 @@ export function notaPertenceCooperado(
   const nomeDono = nomeNormalizado(
     nota.cooperadoNomeSnapshot?.trim() || getCooperadoNomeResolvido(data, nota.cooperadoId, cooperativaId)
   );
-  return nomeAlvo.length > 1 && nomeAlvo === nomeDono;
+  if (nomeAlvo.length > 1 && nomeAlvo === nomeDono) return true;
+
+  const participantes = nota.divisaoEntrega?.participantes ?? [];
+  if (participantes.length <= 1) return false;
+  return participantes.some((p) => {
+    if (p.cooperadoId === cooperadoId) return true;
+    const pCanon = resolverCooperadoIdCanonico(data, p.cooperadoId, cooperativaId, p.cooperadoNome);
+    if (pCanon === alvo) return true;
+    const nomePart = nomeNormalizado(
+      p.cooperadoNome?.trim() || getCooperadoNomeResolvido(data, p.cooperadoId, cooperativaId)
+    );
+    return nomeAlvo.length > 1 && nomeAlvo === nomePart;
+  });
 }
