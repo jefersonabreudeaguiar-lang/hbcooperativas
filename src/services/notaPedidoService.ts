@@ -1349,7 +1349,7 @@ function removerFichasNotaERecalcular(
   return { fichaCorrida, arquivosMensais };
 }
 
-/** Entrega lançada (conferida) pode voltar à fila de conferência — exceto paga/em pagamento. */
+/** Entrega lançada (conferida) ou devolvida para correção pode voltar à fila — exceto paga/em pagamento. */
 export function podeRelancarEntregaNota(
   data: AppData,
   notaId: string,
@@ -1358,7 +1358,9 @@ export function podeRelancarEntregaNota(
   const nota = data.notasPedido.find((n) => n.id === notaId);
   if (!nota) return { ok: false, reason: "not_found" };
   if (nota.cooperativaId !== cooperativaId) return { ok: false, reason: "wrong_coop" };
-  if (nota.status !== "conferida") return { ok: false, reason: "not_found" };
+  if (nota.status !== "conferida" && nota.status !== "rejeitada") {
+    return { ok: false, reason: "not_found" };
+  }
 
   const check = podeExcluirEntregaNota(data, notaId, cooperativaId);
   if (!check.ok) return check;

@@ -78,8 +78,9 @@ export function CorrecoesEntregasPanel({
     <div className="space-y-4">
       <AlertBanner variant="info" title="Correções de entregas">
         Use esta aba para <strong>apagar</strong> uma entrega por completo ou{" "}
-        <strong>re-lançar</strong> uma entrega já conferida — ela volta para a fila de conferência
-        com as mesmas fotos. Entregas <strong>pagas</strong> ou em pagamento não aparecem aqui.
+        <strong>re-lançar</strong> uma entrega conferida ou devolvida para correção — ela volta
+        para a fila de conferência com as mesmas fotos. Entregas <strong>pagas</strong> ou em
+        pagamento não aparecem aqui.
       </AlertBanner>
 
       <Card className="p-4 space-y-4">
@@ -109,7 +110,7 @@ export function CorrecoesEntregasPanel({
         {cooperadoId && entregas.length === 0 && (
           <div className="rounded-xl border border-gray-200 bg-gray-50 px-4 py-8 text-center text-sm text-gray-600">
             {acao === "relancar"
-              ? "Nenhuma entrega lançada (e ainda não paga) para este cooperado."
+              ? "Nenhuma entrega conferida ou devolvida para correção neste cooperado."
               : "Nenhuma entrega que possa ser apagada para este cooperado."}
           </div>
         )}
