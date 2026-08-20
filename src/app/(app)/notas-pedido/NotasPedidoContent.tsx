@@ -2012,6 +2012,7 @@ export default function NotasPedidoContent() {
         };
         setFilaConferenciaPos(1);
         setFilaConferenciaTotal(filaGrupo.length);
+        return filaGrupo[0];
       }
       return outras[0];
     }

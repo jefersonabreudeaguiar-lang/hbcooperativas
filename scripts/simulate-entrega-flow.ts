@@ -200,13 +200,24 @@ function obterProximaNota(
   chaveGrupo: string,
   concluidaId: string
 ): NotaPedido | null {
-  const pendentes = listarPendentes(d);
-  const mesmaAba = pendentes.filter(
-    (n) => n.id !== concluidaId && getChaveGrupoConferencia(n, d, COOP_ID) === chaveGrupo
+  const outras = listarPendentes(d)
+    .filter((n) => n.id !== concluidaId)
+    .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+  const mesmaAba = outras.filter(
+    (n) => getChaveGrupoConferencia(n, d, COOP_ID) === chaveGrupo
   );
   if (mesmaAba.length > 0) return mesmaAba[0];
-  const outras = pendentes.filter((n) => n.id !== concluidaId);
-  return outras[0] ?? null;
+  if (outras.length > 0) {
+    const proximoGrupo = agruparPendentesPorCooperado(d, outras, COOP_ID)[0];
+    if (proximoGrupo) {
+      const filaGrupo = outras.filter(
+        (n) => getChaveGrupoConferencia(n, d, COOP_ID) === proximoGrupo.chave
+      );
+      return filaGrupo[0];
+    }
+    return outras[0];
+  }
+  return null;
 }
 
 function aprovarNota(d: AppData, nota: NotaPedido, responsavel: string): AppData {
@@ -655,6 +666,75 @@ function simFilaConferenciaGrupos() {
   assert("Aba resolve grupo do cooperado", grupo?.notas.length === 2);
 }
 
+function simProximaNotaRespeitaGrupoAlfabetico() {
+  const d = {
+    ...baseAppData(),
+    cooperados: [
+      ...baseAppData().cooperados,
+      {
+        id: "c-2",
+        cooperativaId: COOP_ID,
+        nomeCompleto: "Ana Costa",
+        cpfCnpj: "",
+        telefone: "",
+        endereco: "",
+        comunidade: "",
+        cafDap: "",
+        chavePix: "",
+        banco: "",
+        agencia: "",
+        conta: "",
+        status: "ativo" as const,
+        produtos: [],
+        observacoes: "",
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      },
+      {
+        id: "c-3",
+        cooperativaId: COOP_ID,
+        nomeCompleto: "Maria Souza",
+        cpfCnpj: "",
+        telefone: "",
+        endereco: "",
+        comunidade: "",
+        cafDap: "",
+        chavePix: "",
+        banco: "",
+        agencia: "",
+        conta: "",
+        status: "ativo" as const,
+        produtos: [],
+        observacoes: "",
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      },
+    ],
+  };
+  const joao = makeNota("joao-1", { createdAt: "2026-06-01T10:00:00.000Z" });
+  const maria = makeNota("maria-1", {
+    cooperadoId: "c-3",
+    cooperadoNomeSnapshot: "Maria Souza",
+    createdAt: "2026-06-01T08:00:00.000Z",
+  });
+  const ana = makeNota("ana-1", {
+    cooperadoId: "c-2",
+    cooperadoNomeSnapshot: "Ana Costa",
+    createdAt: "2026-06-01T12:00:00.000Z",
+  });
+  const chaveJoao = getChaveGrupoConferencia(joao, d, COOP_ID);
+  const proxima = obterProximaNota(
+    { ...d, notasPedido: [joao, maria, ana] },
+    chaveJoao,
+    joao.id
+  );
+  assert(
+    "Próxima nota ao trocar grupo segue ordem alfabética do cooperado",
+    proxima?.id === ana.id,
+    `expected ana-1 got ${proxima?.id ?? "null"}`
+  );
+}
+
 function simCompressaoProgressiva() {
   const base = parametrosCompressaoFoto(1);
   for (const qtd of [1, 3, 10, 21, 25, 50, 100]) {
@@ -904,6 +984,7 @@ simNovaEntregaCooperadoApareceNoResponsavel();
 simReconciliarValorAReceber();
 simDedupeFichaNaoDobraValor();
 simFilaConferenciaGrupos();
+simProximaNotaRespeitaGrupoAlfabetico();
 simCompressaoProgressiva();
 simFotosPartesSemRam();
 simCompactarLiberaMemoria();
