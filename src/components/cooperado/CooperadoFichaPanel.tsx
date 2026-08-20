@@ -6,6 +6,7 @@ import { Wallet, FileText, Camera, CreditCard, FileDown, PenLine } from "lucide-
 import { useAppData } from "@/hooks/useAppData";
 import { usePermissions } from "@/hooks/usePermissions";
 import { Card } from "@/components/ui/Card";
+import { PageSkeleton } from "@/components/ui/PageSkeleton";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import { NotaStatusBadge } from "@/components/ui/NotaStatusBadge";
 import { Button } from "@/components/ui/Button";
@@ -20,7 +21,8 @@ import {
 } from "@/services/notaPedidoService";
 import { ResumoDescontosMes } from "@/components/ficha/ResumoDescontosMes";
 import { ValoresAvulsosReceberPanel } from "@/components/ficha/ValoresAvulsosReceberPanel";
-import { fichaPertenceCooperado, notaPertenceCooperado, pushCooperadoToCloud } from "@/services/cooperadoCloudService";
+import { fichaPertenceCooperado, notaPertenceCooperado, pagamentoCooperadoPertenceCooperado, pushCooperadoToCloud } from "@/services/cooperadoCloudService";
+import { mensalidadePertenceCooperado } from "@/services/mensalidadeService";
 import { updateData, addAuditEntry } from "@/services/dataStore";
 import { getUserCooperativaId, normalizeCnpj } from "@/utils/cooperativa";
 import { formatCurrency, formatDate, formatMesReferencia, formatCPFCNPJ, formatPhone, getCurrentMesReferencia } from "@/utils/format";
@@ -80,8 +82,12 @@ export function CooperadoFichaPanel({ cooperado }: { cooperado: Cooperado }) {
     if (!data) return null;
     const notas = data.notasPedido.filter((n) => notaPertenceCooperado(data, n, cooperado.id, cooperado.cooperativaId));
     const ficha = data.fichaCorrida.filter((f) => fichaPertenceCooperado(data, f, cooperado.id, cooperado.cooperativaId));
-    const mensalidades = data.mensalidades.filter((m) => m.cooperadoId === cooperado.id);
-    const pagamentos = data.pagamentosCooperado.filter((p) => p.cooperadoId === cooperado.id);
+    const mensalidades = data.mensalidades.filter((m) =>
+      mensalidadePertenceCooperado(data, m, cooperado.id, cooperado.cooperativaId)
+    );
+    const pagamentos = data.pagamentosCooperado.filter((p) =>
+      pagamentoCooperadoPertenceCooperado(data, p, cooperado.id, cooperado.cooperativaId)
+    );
     const meses = [...new Set([...notas.map((n) => n.mesReferencia), ...ficha.map((f) => f.mesReferencia), getCurrentMesReferencia()])].sort().reverse();
     return { notas, ficha, mensalidades, pagamentos, meses };
   }, [data, cooperado.id]);
@@ -109,7 +115,7 @@ export function CooperadoFichaPanel({ cooperado }: { cooperado: Cooperado }) {
     [resumo, mesFilter]
   );
 
-  if (!data || !resumo) return null;
+  if (!data || !resumo) return <PageSkeleton compact />;
 
   const resumoPagamento = getResumoPagamentoExibicao(
     data,

@@ -2,7 +2,7 @@
 
 import { useMemo, useRef } from "react";
 import { useSyncExternalStore } from "react";
-import { getData, getDataRevision, subscribe } from "@/services/dataStore";
+import { getData, getDataRevision, isAppDataWarm, subscribe } from "@/services/dataStore";
 import type { AppData } from "@/types";
 
 function getServerSnapshot(): AppData | null {
@@ -13,9 +13,14 @@ function getServerRevision(): number {
   return 0;
 }
 
-/** Dados do app — assinatura única via revisão. */
+function getWarmRevision(): number {
+  return isAppDataWarm() ? getDataRevision() : -1;
+}
+
+/** Dados do app — null até localStorage carregar (evita flash de totais zerados). */
 export function useAppData(): AppData | null {
-  useSyncExternalStore(subscribe, getDataRevision, getServerRevision);
+  useSyncExternalStore(subscribe, getWarmRevision, getServerRevision);
+  if (!isAppDataWarm()) return null;
   return getData();
 }
 
@@ -27,18 +32,24 @@ export function useAppDataSelector<T>(
   selector: (data: AppData) => T,
   deps: readonly unknown[] = []
 ): T | null {
-  const revision = useSyncExternalStore(subscribe, getDataRevision, getServerRevision);
+  const revision = useSyncExternalStore(subscribe, getWarmRevision, getServerRevision);
   const selectorRef = useRef(selector);
   selectorRef.current = selector;
 
   return useMemo(() => {
+    if (!isAppDataWarm()) return null;
     const data = getData();
-    if (!data) return null;
     return selectorRef.current(data);
     // eslint-disable-next-line react-hooks/exhaustive-deps -- revision + deps controlam recálculo
   }, [revision, ...deps]);
 }
 
 export function useDataRefresh(): void {
-  useSyncExternalStore(subscribe, getDataRevision, getServerRevision);
+  useSyncExternalStore(subscribe, getWarmRevision, getServerRevision);
+}
+
+/** Indica se os dados locais já foram carregados do disco. */
+export function useAppDataReady(): boolean {
+  useSyncExternalStore(subscribe, getWarmRevision, getServerRevision);
+  return isAppDataWarm();
 }

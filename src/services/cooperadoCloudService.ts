@@ -1,7 +1,12 @@
-import type { AppData, Cooperado, FichaCorrida } from "@/types";
+import type {
+  AppData,
+  Cooperado,
+  FichaCorrida,
+  PagamentoCooperadoRegistro,
+} from "@/types";
 import { findCooperativaByCnpj, getCooperativaById, normalizeCnpj } from "@/utils/cooperativa";
 import { notaPertenceCooperativa } from "@/utils/fotoEntrega";
-import { getData, saveDataSafe } from "@/services/dataStore";
+import { getData, refreshStoredSession, saveDataSafe } from "@/services/dataStore";
 import { fetchCooperativaByCnpjFromCloud, mergeCooperativaIntoData } from "@/services/cooperativaCloudService";
 import { mergeAppInstallFields } from "@/services/cooperadoAppInstallService";
 
@@ -47,15 +52,91 @@ export function remapearMensalidadesCooperadoIds(
   data: AppData,
   idRemap: Map<string, string>
 ): AppData {
-  if (idRemap.size === 0) return data;
+  return remapearCooperadoIdsEmData(data, idRemap);
+}
+
+function remapCooperadoIdList<T extends { cooperadoId: string }>(
+  items: T[],
+  idRemap: Map<string, string>,
+  touchUpdatedAt?: boolean
+): { items: T[]; changed: boolean } {
   let changed = false;
-  const mensalidades = data.mensalidades.map((m) => {
-    const novo = idRemap.get(m.cooperadoId);
-    if (!novo || novo === m.cooperadoId) return m;
+  const out = items.map((item) => {
+    const novo = idRemap.get(item.cooperadoId);
+    if (!novo || novo === item.cooperadoId) return item;
     changed = true;
-    return { ...m, cooperadoId: novo, updatedAt: new Date().toISOString() };
+    return touchUpdatedAt
+      ? ({ ...item, cooperadoId: novo, updatedAt: new Date().toISOString() } as T)
+      : ({ ...item, cooperadoId: novo } as T);
   });
-  return changed ? { ...data, mensalidades } : data;
+  return { items: out, changed };
+}
+
+/** Propaga remapeamento cloud→local para lançamentos (preserva dados, só corrige IDs). */
+export function remapearCooperadoIdsEmData(data: AppData, idRemap: Map<string, string>): AppData {
+  if (idRemap.size === 0) return data;
+
+  let next = data;
+  let changed = false;
+
+  const mensalidades = remapCooperadoIdList(data.mensalidades, idRemap, true);
+  if (mensalidades.changed) {
+    next = { ...next, mensalidades: mensalidades.items };
+    changed = true;
+  }
+
+  for (const key of [
+    "notasPedido",
+    "fichaCorrida",
+    "pagamentosCooperado",
+    "descontos",
+    "valoresAvulsosReceber",
+    "entregas",
+    "cotas",
+    "pagamentos",
+    "arquivosMensais",
+  ] as const) {
+    const cur = next[key] as { cooperadoId: string }[];
+    const remapped = remapCooperadoIdList(cur, idRemap);
+    if (remapped.changed) {
+      next = { ...next, [key]: remapped.items };
+      changed = true;
+    }
+  }
+
+  let usersChanged = false;
+  const users = next.users.map((u) => {
+    if (!u.cooperadoId) return u;
+    const novo = idRemap.get(u.cooperadoId);
+    if (!novo || novo === u.cooperadoId) return u;
+    usersChanged = true;
+    return { ...u, cooperadoId: novo };
+  });
+  if (usersChanged) {
+    next = { ...next, users };
+    changed = true;
+  }
+
+  return changed ? next : data;
+}
+
+export function pagamentoCooperadoPertenceCooperado(
+  data: AppData,
+  pagamento: PagamentoCooperadoRegistro,
+  cooperadoId: string,
+  cooperativaId?: string
+): boolean {
+  if (pagamento.cooperadoId === cooperadoId) return true;
+  const alvo = resolverCooperadoIdCanonico(data, cooperadoId, cooperativaId);
+  const dono = resolverCooperadoIdCanonico(
+    data,
+    pagamento.cooperadoId,
+    cooperativaId ?? pagamento.cooperativaId
+  );
+  if (alvo === dono) return true;
+  const nomeAlvo = nomeNormalizado(getCooperadoNomeResolvido(data, cooperadoId, cooperativaId));
+  const nomeDono = nomeNormalizado(getCooperadoNomeResolvido(data, pagamento.cooperadoId, cooperativaId));
+  return nomeAlvo.length > 2 && nomeAlvo === nomeDono;
 }
 
 const PENDING_COOPERADO_PUSH_KEY = "coopeagriplla_pending_cooperado_push";
@@ -262,7 +343,7 @@ export function mergeCloudCooperadosIntoData(
 
   let next: AppData = changed ? { ...base, cooperados } : base;
   if (idRemap.size > 0) {
-    next = remapearMensalidadesCooperadoIds(next, idRemap);
+    next = remapearCooperadoIdsEmData(next, idRemap);
   }
   return next;
 }
@@ -372,6 +453,7 @@ export async function syncCooperadosFromCloud(cnpj: string, preferredCoopId?: st
   const merged = mergeCloudCooperadosIntoData(current, cloudCooperados, cnpj, coopId);
   if (merged === current) return cloudCooperados.length;
   saveDataSafe(merged);
+  refreshStoredSession();
   return cloudCooperados.length;
 }
 

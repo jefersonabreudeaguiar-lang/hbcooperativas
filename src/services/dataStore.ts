@@ -55,6 +55,11 @@ export function getDataRevision(): number {
   return dataRevision;
 }
 
+/** true após localStorage ter sido lido (evita UI/sync com shell vazio). */
+export function isAppDataWarm(): boolean {
+  return memoryCache !== null;
+}
+
 function bumpRevision(): void {
   dataRevision++;
 }
@@ -432,6 +437,30 @@ export function preloadAppData(): void {
   queueMicrotask(run);
 }
 
+/** Aguarda localStorage carregar antes de sync destrutivo (timeout evita travar offline). */
+export function waitForAppDataWarm(timeoutMs = 5000): Promise<boolean> {
+  if (typeof window === "undefined") return Promise.resolve(false);
+  if (isAppDataWarm()) return Promise.resolve(true);
+  preloadAppData();
+  return new Promise((resolve) => {
+    if (isAppDataWarm()) {
+      resolve(true);
+      return;
+    }
+    const timeout = setTimeout(() => {
+      unsub();
+      resolve(isAppDataWarm());
+    }, timeoutMs);
+    const unsub = subscribe(() => {
+      if (isAppDataWarm()) {
+        clearTimeout(timeout);
+        unsub();
+        resolve(true);
+      }
+    });
+  });
+}
+
 function scheduleDataWarmIfNeeded(): void {
   if (memoryCache || dataWarmScheduled || typeof window === "undefined") return;
   dataWarmScheduled = true;
@@ -790,6 +819,10 @@ function reconcileSessionAfterDataLoad(): void {
     localStorage.setItem(SESSION_KEY, serialized);
     notify();
   }
+}
+
+export function refreshStoredSession(): void {
+  reconcileSessionAfterDataLoad();
 }
 
 export function getSession(): Omit<User, "password"> | null {

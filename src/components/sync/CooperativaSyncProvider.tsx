@@ -36,7 +36,7 @@ import {
   onAppIdleChange,
   startIdleMonitor,
 } from "@/services/idleActivity";
-import { getData, updateDataSafe } from "@/services/dataStore";
+import { getData, updateDataSafe, waitForAppDataWarm } from "@/services/dataStore";
 import { getCooperadoNome } from "@/utils/calculations";
 import { readNotaFotoAtIndex, resolveNotaFotosForUpload } from "@/services/localMediaStore";
 import { compactarFotosNoArmazenamento, contarFotosEnviadasNota } from "@/utils/fotoEntrega";
@@ -89,6 +89,9 @@ export function CooperativaSyncProvider({ children }: { children: React.ReactNod
     if (typeof navigator !== "undefined" && !navigator.onLine) return;
     if (typeof document !== "undefined" && document.hidden) return;
     if (!opts?.force && isAppIdle()) return;
+
+    const warm = await waitForAppDataWarm();
+    if (!warm) return;
 
     const data = getData();
     const currentCoopId = getUserCooperativaId(currentUser, data);

@@ -739,12 +739,12 @@ export async function pushOperacionalToCloud(
   cnpj: string,
   data?: AppData,
   coopId?: string,
-  options?: { authoritative?: boolean }
+  options?: { authoritative?: boolean; skipOperationalResetPush?: boolean }
 ): Promise<void> {
   const digits = normalizeCnpj(cnpj);
   if (digits.length !== 14) return;
 
-  if (needsOperationalResetCloudPush()) {
+  if (!options?.skipOperationalResetPush && needsOperationalResetCloudPush()) {
     await pushOperationalResetToCloud(digits, coopId);
   }
 
@@ -980,7 +980,10 @@ export async function pushCooperadoOperacionalToCloud(
   const d = getData();
   const cid = coopId ?? resolveCoopId(d, digits);
   if (!cid) return;
-  await pushOperacionalToCloud(digits, d, cid);
+  await pushOperacionalToCloud(digits, d, cid, {
+    authoritative: true,
+    skipOperationalResetPush: true,
+  });
 }
 
 /** Sincroniza tudo da cooperativa: cooperados, notas, contratos, operacional, perfil. */
