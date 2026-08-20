@@ -1,6 +1,7 @@
 import type { AppData, CronogramaContratoMensal, Instituicao, NotaPedido } from "@/types";
 import { getCooperadoNome, round2, sumBy } from "@/utils/calculations";
 import { getCronogramaMes } from "@/services/cronogramaContratoService";
+import { dedupeFichaCorridaPorNota, fichaValidaNoExtrato } from "@/services/notaPedidoService";
 
 export type StatusAtingimentoItem = "atingido" | "parcial" | "critico" | "nao_entregue";
 
@@ -137,7 +138,33 @@ export function getRelatorioAtingimentoCronograma(
     .sort((a, b) => a.percentualValor - b.percentualValor);
 
   const coopMap = new Map<string, LinhaCooperadoAtingimento>();
+  const notaIds = new Set(notas.map((n) => n.id));
+  const fichasInst = dedupeFichaCorridaPorNota(
+    data.fichaCorrida.filter(
+      (f) =>
+        f.mesReferencia === mesReferencia &&
+        notaIds.has(f.notaPedidoId) &&
+        fichaValidaNoExtrato(data, f)
+    ),
+    data.notasPedido
+  );
+
+  for (const ficha of fichasInst) {
+    const cur = coopMap.get(ficha.cooperadoId) ?? {
+      cooperadoId: ficha.cooperadoId,
+      cooperadoNome: getCooperadoNome(data.cooperados, ficha.cooperadoId),
+      entregas: 0,
+      valorEntregue: 0,
+      percentualDoContrato: 0,
+    };
+    cur.entregas += 1;
+    cur.valorEntregue = round2(cur.valorEntregue + ficha.valorBruto);
+    coopMap.set(ficha.cooperadoId, cur);
+  }
+
   for (const nota of notas) {
+    if ((nota.divisaoEntrega?.participantes.length ?? 0) > 1) continue;
+    if (fichasInst.some((f) => f.notaPedidoId === nota.id)) continue;
     const cur = coopMap.get(nota.cooperadoId) ?? {
       cooperadoId: nota.cooperadoId,
       cooperadoNome: getCooperadoNome(data.cooperados, nota.cooperadoId),

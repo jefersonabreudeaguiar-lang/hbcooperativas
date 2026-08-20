@@ -160,7 +160,7 @@ function EntregaSemanaItem({
   const nota = notaPrincipal(entrega);
   const status = statusEntregaCooperado(entrega);
   const valores = valoresEntregaCooperado(entrega, data ?? undefined, cooperadoId);
-  const itens = itensConsolidadosEntrega(entrega);
+  const itens = itensConsolidadosEntrega(entrega, data ?? undefined, cooperadoId);
 
   return (
     <div

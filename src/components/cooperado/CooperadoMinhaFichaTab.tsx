@@ -181,7 +181,7 @@ function MesFichaAccordion({
                       {semana.entregas.map((entrega) => {
                         const nota = entrega.notas[0];
                         const valores = valoresEntregaCooperado(entrega, data, cooperadoId);
-                        const itens = itensConsolidadosEntrega(entrega);
+                        const itens = itensConsolidadosEntrega(entrega, data, cooperadoId);
                         const status = statusEntregaCooperado(entrega);
                         return (
                           <div key={entrega.id} className="rounded-xl border border-gray-200 bg-white p-4">

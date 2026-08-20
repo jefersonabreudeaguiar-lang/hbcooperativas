@@ -12,6 +12,7 @@ import type {
 } from "@/types";
 import {
   fichaPertenceCooperado,
+  notaPertenceCooperado,
   listCooperadosDaCooperativa,
   resolverCooperadoIdCanonico,
   getCooperadoNomeResolvido,
@@ -68,6 +69,55 @@ export function agregarItensFichaMes(
   const valorBruto = round2(itens.reduce((s, i) => s + i.valorBruto, 0));
 
   return { itens, entregas: fichas.length, valorBruto };
+}
+
+/** Itens conferidos do cooperado nas notas (usa ficha dividida quando existir). */
+export function agregarItensNotasCooperado(
+  data: AppData,
+  cooperadoId: string,
+  notas: NotaPedido[],
+  cooperativaId?: string
+): NotaPedidoItem[] {
+  const coopId = cooperativaId ?? data.cooperados.find((c) => c.id === cooperadoId)?.cooperativaId;
+  const map = new Map<string, NotaPedidoItem>();
+
+  for (const nota of notas) {
+    if (nota.status !== "conferida" && nota.status !== "pago") continue;
+    if (!notaPertenceCooperado(data, nota, cooperadoId, coopId)) continue;
+
+    const fichas = dedupeFichaCorridaPorNota(
+      data.fichaCorrida.filter(
+        (f) =>
+          f.notaPedidoId === nota.id &&
+          fichaPertenceCooperado(data, f, cooperadoId, coopId) &&
+          fichaValidaNoExtrato(data, f)
+      ),
+      data.notasPedido
+    );
+
+    let itensFonte: NotaPedidoItem[];
+    if (fichas.length > 0) {
+      itensFonte = fichas.flatMap((f) => f.itens ?? []);
+    } else if ((nota.divisaoEntrega?.participantes.length ?? 0) > 1) {
+      continue;
+    } else {
+      itensFonte = nota.itens ?? [];
+    }
+
+    for (const item of itensFonte) {
+      if (item.quantidade <= 0) continue;
+      const key = item.produtoInstituicaoId;
+      const existente = map.get(key);
+      if (existente) {
+        existente.quantidade = round2(existente.quantidade + item.quantidade);
+        existente.valorBruto = round2(existente.valorBruto + item.valorBruto);
+      } else {
+        map.set(key, { ...item });
+      }
+    }
+  }
+
+  return [...map.values()].sort((a, b) => a.produtoNome.localeCompare(b.produtoNome, "pt-BR"));
 }
 
 export function calcularItensNota(

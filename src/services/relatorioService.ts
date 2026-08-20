@@ -1,7 +1,12 @@
-import type { AppData, Cooperado, FechamentoMensal, Instituicao, NotaPedido } from "@/types";
+import type { AppData, Cooperado, FechamentoMensal, Instituicao, NotaPedido, NotaPedidoItem } from "@/types";
 import { getCooperadoNome, round2, sumBy } from "@/utils/calculations";
 import { getCurrentMesReferencia } from "@/utils/format";
-import { getTotalAPagarCooperado } from "@/services/notaPedidoService";
+import { notaPertenceCooperado } from "@/services/cooperadoCloudService";
+import {
+  agregarItensNotasCooperado,
+  getTotalAPagarCooperado,
+  listarFichasExtratoCooperadoMes,
+} from "@/services/notaPedidoService";
 
 export interface ResumoFinanceiroMes {
   mesReferencia: string;
@@ -185,11 +190,25 @@ function linhaCooperado(
   mes: string,
   pagamentosMes: AppData["pagamentosCooperado"]
 ): LinhaCooperadoFechamento {
-  const notas = notasConferidasOuPagas(data, mes).filter((n) => n.cooperadoId === cooperado.id);
+  const notas = notasConferidasOuPagas(data, mes).filter((n) =>
+    notaPertenceCooperado(data, n, cooperado.id, cooperado.cooperativaId)
+  );
+  const fichas = listarFichasExtratoCooperadoMes(data, cooperado.id, mes, cooperado.cooperativaId);
+  const fichaNotaIds = new Set(fichas.map((f) => f.notaPedidoId));
+  const semFicha = notas.filter((n) => !fichaNotaIds.has(n.id));
+
+  const entregas = new Set([...fichas.map((f) => f.notaPedidoId), ...semFicha.map((n) => n.id)]).size;
+  const valorBruto = round2(
+    fichas.reduce((s, f) => s + f.valorBruto, 0) + semFicha.reduce((s, n) => s + n.valorBruto, 0)
+  );
+  const valorLiquido = round2(
+    fichas.reduce((s, f) => s + f.valorLiquido, 0) + semFicha.reduce((s, n) => s + n.valorLiquido, 0)
+  );
+
   const pg = pagamentosMes.find((p) => p.cooperadoId === cooperado.id);
   const aPagar = getTotalAPagarCooperado(data, cooperado.id, mes);
   let statusPagamento: LinhaCooperadoFechamento["statusPagamento"] = "sem_entrega";
-  if (notas.length === 0) statusPagamento = "sem_entrega";
+  if (entregas === 0) statusPagamento = "sem_entrega";
   else if (pg?.status === "confirmado") statusPagamento = "pago";
   else if (pg?.status === "aguardando_confirmacao") statusPagamento = "aguardando_assinatura";
   else if (aPagar > 0) statusPagamento = "pendente";
@@ -198,9 +217,9 @@ function linhaCooperado(
   return {
     cooperadoId: cooperado.id,
     cooperadoNome: cooperado.nomeCompleto,
-    entregas: notas.length,
-    valorBruto: sumBy(notas, (n) => n.valorBruto),
-    valorLiquido: sumBy(notas, (n) => n.valorLiquido),
+    entregas,
+    valorBruto,
+    valorLiquido,
     aPagar,
     pago: pg?.status === "confirmado" ? pg.valorLiquido : sumBy(notas.filter((n) => n.status === "pago"), (n) => n.valorLiquido),
     statusPagamento,
@@ -275,32 +294,47 @@ function chaveItemRelatorio(item: {
   return `nome:${item.produtoNome.trim().toLowerCase()}::${item.unidade.trim().toLowerCase()}`;
 }
 
-function agregarItensDasNotas(notas: NotaPedido[]): LinhaItemEntregaRelatorio[] {
+function agregarItensLista(itens: NotaPedidoItem[]): LinhaItemEntregaRelatorio[] {
   const map = new Map<string, LinhaItemEntregaRelatorio>();
-  for (const nota of notas) {
-    for (const item of nota.itens ?? []) {
-      if (item.quantidade <= 0) continue;
-      const key = chaveItemRelatorio(item);
-      const valor = round2(item.quantidade * item.precoUnitario);
-      const cur = map.get(key);
-      if (cur) {
-        cur.quantidade = round2(cur.quantidade + item.quantidade);
-        cur.valorTotal = round2(cur.valorTotal + valor);
-        cur.precoUnitario =
-          cur.quantidade > 0 ? round2(cur.valorTotal / cur.quantidade) : cur.precoUnitario;
-      } else {
-        map.set(key, {
-          produtoInstituicaoId: item.produtoInstituicaoId,
-          produtoNome: item.produtoNome,
-          unidade: item.unidade,
-          precoUnitario: item.precoUnitario,
-          quantidade: item.quantidade,
-          valorTotal: valor,
-        });
-      }
+  for (const item of itens) {
+    if (item.quantidade <= 0) continue;
+    const key = chaveItemRelatorio(item);
+    const valor = round2(item.quantidade * item.precoUnitario);
+    const cur = map.get(key);
+    if (cur) {
+      cur.quantidade = round2(cur.quantidade + item.quantidade);
+      cur.valorTotal = round2(cur.valorTotal + valor);
+      cur.precoUnitario =
+        cur.quantidade > 0 ? round2(cur.valorTotal / cur.quantidade) : cur.precoUnitario;
+    } else {
+      map.set(key, {
+        produtoInstituicaoId: item.produtoInstituicaoId,
+        produtoNome: item.produtoNome,
+        unidade: item.unidade,
+        precoUnitario: item.precoUnitario,
+        quantidade: item.quantidade,
+        valorTotal: valor,
+      });
     }
   }
   return [...map.values()].sort((a, b) => a.produtoNome.localeCompare(b.produtoNome, "pt-BR"));
+}
+
+function agregarItensDasNotas(notas: NotaPedido[]): LinhaItemEntregaRelatorio[] {
+  return agregarItensLista(notas.flatMap((n) => n.itens ?? []));
+}
+
+function cooperadoIdsDasNotas(notas: NotaPedido[]): string[] {
+  const ids = new Set<string>();
+  for (const nota of notas) {
+    const participantes = nota.divisaoEntrega?.participantes;
+    if (participantes && participantes.length > 1) {
+      for (const p of participantes) ids.add(p.cooperadoId);
+    } else {
+      ids.add(nota.cooperadoId);
+    }
+  }
+  return [...ids];
 }
 
 /** Consolida quantidades e valores por item das entregas conferidas de uma instituição no mês. */
@@ -319,24 +353,23 @@ export function getRelatorioEntregasPorItensInstituicao(
 
   const itens = agregarItensDasNotas(notas);
 
-  const porCooperadoMap = new Map<string, NotaPedido[]>();
-  for (const nota of notas) {
-    const list = porCooperadoMap.get(nota.cooperadoId) ?? [];
-    list.push(nota);
-    porCooperadoMap.set(nota.cooperadoId, list);
-  }
-
-  const porCooperado: LinhaCooperadoItensRelatorio[] = [...porCooperadoMap.entries()]
-    .map(([cooperadoId, notasCoop]) => {
-      const itensCoop = agregarItensDasNotas(notasCoop);
+  const porCooperado: LinhaCooperadoItensRelatorio[] = cooperadoIdsDasNotas(notas)
+    .map((cooperadoId) => {
+      const notasCoop = notas.filter((n) =>
+        notaPertenceCooperado(data, n, cooperadoId, cooperativaId)
+      );
+      const itensCoop = agregarItensLista(
+        agregarItensNotasCooperado(data, cooperadoId, notasCoop, cooperativaId)
+      );
       return {
         cooperadoId,
         cooperadoNome: getCooperadoNomeSafe(data, cooperadoId),
-        quantidadeEntregas: notasCoop.length,
+        quantidadeEntregas: new Set(notasCoop.map((n) => n.id)).size,
         itens: itensCoop,
         totalBruto: round2(itensCoop.reduce((s, i) => s + i.valorTotal, 0)),
       };
     })
+    .filter((l) => l.itens.length > 0 || l.quantidadeEntregas > 0)
     .sort((a, b) => a.cooperadoNome.localeCompare(b.cooperadoNome, "pt-BR"));
 
   const totalItens = round2(itens.reduce((s, i) => s + i.valorTotal, 0));

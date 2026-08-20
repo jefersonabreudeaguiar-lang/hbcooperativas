@@ -2,6 +2,7 @@ import type { AppData, NotaPedido, NotaPedidoItem } from "@/types";
 import { ordenarNotasMesCronologico } from "@/services/cooperadoEntregasService";
 import { fichaPertenceCooperado } from "@/services/cooperadoCloudService";
 import {
+  agregarItensNotasCooperado,
   dedupeFichaCorridaPorNota,
   fichaValidaNoExtrato,
 } from "@/services/notaPedidoService";
@@ -184,8 +185,16 @@ export function valoresEntregaCooperado(
   };
 }
 
-/** Itens consolidados da entrega (mesma lógica do total bruto). */
-export function itensConsolidadosEntrega(entrega: EntregaCooperadoView): NotaPedidoItem[] {
+/** Itens consolidados da entrega (mesma lógica do total bruto / ficha corrida). */
+export function itensConsolidadosEntrega(
+  entrega: EntregaCooperadoView,
+  data?: AppData,
+  cooperadoId?: string
+): NotaPedidoItem[] {
+  if (data && cooperadoId) {
+    return agregarItensNotasCooperado(data, cooperadoId, entrega.notas);
+  }
+
   const map = new Map<string, NotaPedidoItem>();
 
   for (const nota of notasComValorEntrega(entrega.notas)) {
