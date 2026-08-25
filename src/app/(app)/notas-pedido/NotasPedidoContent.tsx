@@ -46,6 +46,8 @@ import {
   deleteFotoRascunhoFromCloud,
   deleteNotaPedidoFromCloud,
   queueNotaDelete,
+  unqueueNotaDelete,
+  flushPendingNotaDeletes,
   ensureNotaComFoto,
   resolveCooperativaCnpj,
   fetchNotaFotoPartBlobUrl,
@@ -2395,8 +2397,8 @@ export default function NotasPedidoContent() {
 
     const cnpj = await resolveCooperativaCnpj(data, coopId, user);
     if (cnpj) {
-      const del = await deleteNotaPedidoFromCloud(cnpj, alvo.id);
-      if (!del.ok) queueNotaDelete(cnpj, alvo.id);
+      // Tombstone local: impede que o sync traga a nota de volta da nuvem antes do DELETE concluir.
+      queueNotaDelete(cnpj, alvo.id);
     }
 
     updateData((d) => {
@@ -2422,7 +2424,14 @@ export default function NotasPedidoContent() {
 
     const d = getData();
     const cnpjSync = await resolveCooperativaCnpj(d, coopId, user);
-    if (cnpjSync) await pushOperacionalToCloud(cnpjSync, d, coopId, { authoritative: true });
+    if (cnpjSync) {
+      const del = await deleteNotaPedidoFromCloud(cnpjSync, alvo.id);
+      if (del.ok) {
+        unqueueNotaDelete(cnpjSync, alvo.id);
+      }
+      await flushPendingNotaDeletes(cnpjSync);
+      await pushOperacionalToCloud(cnpjSync, d, coopId, { authoritative: true });
+    }
     requestAppSync();
 
     setViewModal(false);

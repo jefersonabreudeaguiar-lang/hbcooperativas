@@ -248,6 +248,16 @@ function pruneStaleLocalConferidasFromCloud(
   return true;
 }
 
+function getPendingNotaDeleteIdSet(cnpj: string): Set<string> {
+  const digits = normalizeCnpj(cnpj);
+  if (digits.length !== 14) return new Set();
+  return new Set(
+    loadPendingNotaDeletes()
+      .filter((e) => e.cnpj === digits)
+      .map((e) => e.notaId)
+  );
+}
+
 export function mergeCloudNotasIntoData(
   data: AppData,
   cloudNotas: NotaPedido[],
@@ -256,10 +266,12 @@ export function mergeCloudNotasIntoData(
 ): AppData {
   const digits = normalizeCnpj(cnpj);
   const byId = new Map(data.notasPedido.map((n) => [n.id, n]));
+  const pendingDeletes = getPendingNotaDeleteIdSet(digits);
   let changed = false;
 
   for (const raw of cloudNotas) {
     const cn = normalizeCloudNotaForLocal(data, raw, cnpj);
+    if (pendingDeletes.has(cn.id)) continue;
     const local = byId.get(cn.id);
     const cloudNota: NotaPedido = {
       ...cn,
@@ -550,10 +562,17 @@ export async function pushNotasPedidoToCloud(
 
 const PENDING_NOTA_DELETES_KEY = "coopeagriplla_pending_nota_deletes";
 
+function pendingNotaDeletesStorage(): Storage | null {
+  if (typeof window !== "undefined") return window.localStorage;
+  const g = globalThis as { localStorage?: Storage };
+  return g.localStorage ?? null;
+}
+
 function loadPendingNotaDeletes(): { cnpj: string; notaId: string }[] {
-  if (typeof window === "undefined") return [];
+  const storage = pendingNotaDeletesStorage();
+  if (!storage) return [];
   try {
-    const raw = localStorage.getItem(PENDING_NOTA_DELETES_KEY);
+    const raw = storage.getItem(PENDING_NOTA_DELETES_KEY);
     if (!raw) return [];
     const parsed = JSON.parse(raw) as { cnpj?: string; notaId?: string }[];
     if (!Array.isArray(parsed)) return [];
@@ -566,9 +585,10 @@ function loadPendingNotaDeletes(): { cnpj: string; notaId: string }[] {
 }
 
 function savePendingNotaDeletes(entries: { cnpj: string; notaId: string }[]): void {
-  if (typeof window === "undefined") return;
-  if (entries.length === 0) localStorage.removeItem(PENDING_NOTA_DELETES_KEY);
-  else localStorage.setItem(PENDING_NOTA_DELETES_KEY, JSON.stringify(entries));
+  const storage = pendingNotaDeletesStorage();
+  if (!storage) return;
+  if (entries.length === 0) storage.removeItem(PENDING_NOTA_DELETES_KEY);
+  else storage.setItem(PENDING_NOTA_DELETES_KEY, JSON.stringify(entries));
 }
 
 export function queueNotaDelete(cnpj: string, notaId: string): void {
@@ -577,6 +597,16 @@ export function queueNotaDelete(cnpj: string, notaId: string): void {
   const entries = loadPendingNotaDeletes();
   if (entries.some((e) => e.cnpj === digits && e.notaId === notaId)) return;
   savePendingNotaDeletes([...entries, { cnpj: digits, notaId }]);
+}
+
+/** Remove da fila de exclusão pendente após DELETE confirmado na nuvem. */
+export function unqueueNotaDelete(cnpj: string, notaId: string): void {
+  const digits = normalizeCnpj(cnpj);
+  if (digits.length !== 14 || !notaId) return;
+  const entries = loadPendingNotaDeletes().filter(
+    (e) => !(e.cnpj === digits && e.notaId === notaId)
+  );
+  savePendingNotaDeletes(entries);
 }
 
 export async function flushPendingNotaDeletes(cnpj?: string): Promise<void> {
@@ -1082,8 +1112,12 @@ export async function syncNotasPedidoFromCloud(cnpj: string): Promise<number> {
     return 0;
   }
 
+  const pendingDeletes = getPendingNotaDeleteIdSet(digits);
+
   const beforeAguardando = current.notasPedido.filter(
-    (n) => n.status === "aguardando_conferencia" || n.status === "entregue"
+    (n) =>
+      (n.status === "aguardando_conferencia" || n.status === "entregue") &&
+      !pendingDeletes.has(n.id)
   );
 
   let merged = mergeCloudNotasIntoData(current, cloudNotas, digits, {
@@ -1095,6 +1129,7 @@ export async function syncNotasPedidoFromCloud(cnpj: string): Promise<number> {
   let notas = [...merged.notasPedido];
   let invariantFixed = false;
   for (const before of beforeAguardando) {
+    if (pendingDeletes.has(before.id)) continue;
     const after = afterById.get(before.id);
     if (!after) {
       notas.push(before);

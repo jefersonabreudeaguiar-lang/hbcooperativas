@@ -4,7 +4,7 @@
  */
 
 import type { AppData, NotaPedido } from "../src/types";
-import { mergeCloudNotasIntoData } from "../src/services/notaPedidoCloudService";
+import { mergeCloudNotasIntoData, queueNotaDelete, unqueueNotaDelete } from "../src/services/notaPedidoCloudService";
 import { mergeNotasSources } from "../src/lib/supabase/notasStorage";
 import {
   agruparPendentesPorCooperado,
@@ -735,6 +735,44 @@ function simProximaNotaRespeitaGrupoAlfabetico() {
   );
 }
 
+function simMergeIgnoraNotaExclusaoPendente() {
+  const storage = new Map<string, string>();
+  const g = globalThis as typeof globalThis & {
+    localStorage?: Storage;
+  };
+  const prev = g.localStorage;
+  g.localStorage = {
+    get length() {
+      return storage.size;
+    },
+    clear: () => storage.clear(),
+    getItem: (key: string) => storage.get(key) ?? null,
+    key: (index: number) => [...storage.keys()][index] ?? null,
+    removeItem: (key: string) => {
+      storage.delete(key);
+    },
+    setItem: (key: string, value: string) => {
+      storage.set(key, value);
+    },
+  } as Storage;
+
+  try {
+    const local = baseAppData();
+    const nota = makeNota("del-pending-1", { status: "aguardando_conferencia", valorLiquido: 0 });
+    const semNota = { ...local, notasPedido: [] as typeof local.notasPedido };
+    queueNotaDelete(CNPJ, nota.id);
+    const merged = mergeCloudNotasIntoData(semNota, [nota], CNPJ);
+    assert(
+      "Merge não reimporta nota com exclusão pendente",
+      !merged.notasPedido.some((n) => n.id === nota.id)
+    );
+    unqueueNotaDelete(CNPJ, nota.id);
+  } finally {
+    if (prev === undefined) delete g.localStorage;
+    else g.localStorage = prev;
+  }
+}
+
 function simCompressaoProgressiva() {
   const base = parametrosCompressaoFoto(1);
   for (const qtd of [1, 3, 10, 21, 25, 50, 100]) {
@@ -985,6 +1023,7 @@ simReconciliarValorAReceber();
 simDedupeFichaNaoDobraValor();
 simFilaConferenciaGrupos();
 simProximaNotaRespeitaGrupoAlfabetico();
+simMergeIgnoraNotaExclusaoPendente();
 simCompressaoProgressiva();
 simFotosPartesSemRam();
 simCompactarLiberaMemoria();
