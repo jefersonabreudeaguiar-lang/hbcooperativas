@@ -1,6 +1,6 @@
 "use client";
 
-import type { AppData, AuditAction, User, Cooperado, Cooperativa, PrestacaoContas } from "@/types";
+import type { AppData, AuditAction, User, Cooperado, Cooperativa, PrestacaoContas, UserRole } from "@/types";
 import { emptyInitialData, DEMO_ENTITY_IDS, DEMO_EMAILS, DEMO_CNPJ } from "@/mock/data";
 import { findCooperativaByCnpj, getCooperativaById, getUserCooperativaId, normalizeCnpj } from "@/utils/cooperativa";
 import { migrateInlinePhotosToIdb } from "@/services/localMediaMigration";
@@ -20,7 +20,13 @@ import {
   syncCooperativaToCloud,
   verifyCadastroSenhaCooperado,
 } from "@/services/cooperativaCloudService";
-import { pushCooperadoToCloud, queueCooperadoPush } from "@/services/cooperadoCloudService";
+import {
+  pushCooperadoToCloud,
+  queueCooperadoPush,
+  syncCooperadosFromCloud,
+  ensureCooperativaLocalForCnpj,
+  resolverCooperadoIdCanonico,
+} from "@/services/cooperadoCloudService";
 import { reconciliarFichaFromNotasConferidas, ajustesFichaMesId } from "@/services/notaPedidoService";
 import { normalizarPrestacaoContas, aplicarPrestacoesContasExcluidas } from "@/services/prestacaoContasService";
 import { aplicarInstituicoesExcluidas } from "@/services/instituicaoContratoService";
@@ -31,7 +37,9 @@ import {
   clearAccessToken,
   clearCloudBootstrapCredentials,
   establishCloudSession,
+  loginViaCloudApi,
   registerCloudUser,
+  type CloudSessionProfile,
 } from "@/lib/security/clientSession";
 
 const STORAGE_KEY = "coopeagriplla_data";
@@ -747,26 +755,92 @@ export async function loginCreatorAdminPortal(
   return finishLoginSession(user, data, password);
 }
 
-// Auth
-export async function login(email: string, password: string): Promise<User | null> {
-  const data = prepareDataForLogin();
-  const user = findUserByEmail(data, email);
-  if (!user) return null;
+const CLOUD_BOOTSTRAP_ROLES: UserRole[] = ["cooperado", "responsavel", "tesoureiro", "admin"];
 
-  const valid = await verifyPassword(password, user.password);
-  if (!valid) return null;
+/**
+ * Após login validado na nuvem, materializa users[] local + cooperativa/cooperado
+ * para aparelhos novos (ex.: PWA instalado) sem duplicar cadastro.
+ */
+async function bootstrapLocalUserFromCloudLogin(
+  profile: CloudSessionProfile,
+  plainPassword: string
+): Promise<User | null> {
+  if (!CLOUD_BOOTSTRAP_ROLES.includes(profile.role as UserRole)) return null;
 
-  if (!isPasswordHash(user.password)) {
-    const hash = await hashPassword(password);
-    updateData((d) => ({
-      ...d,
-      users: d.users.map((u) => (u.id === user.id ? { ...u, password: hash } : u)),
-    }));
-    user.password = hash;
+  const email = normalizeCreatorEmail(profile.email);
+  const cnpj = profile.cooperativaCnpj ? normalizeCnpj(profile.cooperativaCnpj) : "";
+
+  if (cnpj.length === 14) {
+    await ensureCooperativaLocalForCnpj(cnpj);
+    await syncCooperadosFromCloud(cnpj, profile.cooperativaId ?? undefined);
   }
 
-  if (typeof window === "undefined") return user;
-  return finishLoginSession(user, data, password);
+  let data = loadData(true);
+  let cooperativaId = profile.cooperativaId ?? undefined;
+  if (!cooperativaId && cnpj.length === 14) {
+    cooperativaId = findCooperativaByCnpj(data, cnpj)?.id;
+  }
+
+  let cooperadoId = profile.cooperadoId ?? undefined;
+  if (cooperadoId && cooperativaId) {
+    cooperadoId = resolverCooperadoIdCanonico(data, cooperadoId, cooperativaId) ?? cooperadoId;
+  }
+
+  const passwordHash = await hashPassword(plainPassword);
+  const bootstrapped: User = {
+    id: profile.id,
+    email,
+    password: passwordHash,
+    name: profile.name,
+    role: profile.role as UserRole,
+    cooperadoId,
+    cooperativaId,
+    cooperativaCnpj: cnpj.length === 14 ? cnpj : profile.cooperativaCnpj,
+    active: true,
+  };
+
+  updateData((d) => {
+    const users = d.users.filter(
+      (u) =>
+        u.id !== bootstrapped.id &&
+        normalizeCreatorEmail(u.email) !== email
+    );
+    return { ...d, users: [...users, bootstrapped] };
+  });
+
+  data = loadData(true);
+  return data.users.find((u) => u.id === bootstrapped.id && u.active) ?? bootstrapped;
+}
+
+// Auth
+export async function login(email: string, password: string): Promise<User | null> {
+  if (typeof window === "undefined") return null;
+
+  const data = prepareDataForLogin();
+  const localUser = findUserByEmail(data, email);
+
+  if (localUser) {
+    const valid = await verifyPassword(password, localUser.password);
+    if (valid) {
+      if (!isPasswordHash(localUser.password)) {
+        const hash = await hashPassword(password);
+        updateData((d) => ({
+          ...d,
+          users: d.users.map((u) => (u.id === localUser.id ? { ...u, password: hash } : u)),
+        }));
+        localUser.password = hash;
+      }
+      return finishLoginSession(localUser, data, password);
+    }
+  }
+
+  const cloud = await loginViaCloudApi(email, password);
+  if (!cloud) return null;
+
+  const bootstrapped = await bootstrapLocalUserFromCloudLogin(cloud.user, password);
+  if (!bootstrapped) return null;
+
+  return finishLoginSession(bootstrapped, getData(), password);
 }
 
 export function logout(): void {

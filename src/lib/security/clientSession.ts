@@ -110,6 +110,56 @@ async function requestCloudToken(
   return json.token ?? null;
 }
 
+/** Valida credenciais em app_users (Supabase) — usado quando o aparelho ainda não tem users[] local. */
+export async function loginViaCloudApi(
+  email: string,
+  password: string
+): Promise<{ token: string; user: CloudSessionProfile } | null> {
+  try {
+    const normalizedEmail = email.trim().toLowerCase();
+    const res = await fetch("/api/auth/login", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email: normalizedEmail, password }),
+    });
+    if (res.status === 503 || res.status === 429) return null;
+    if (!res.ok) return null;
+
+    const json = (await res.json()) as {
+      token?: string;
+      user?: {
+        id?: string;
+        email?: string;
+        name?: string;
+        role?: string;
+        cooperativaId?: string | null;
+        cooperadoId?: string | null;
+        cooperativaCnpj?: string | null;
+      };
+    };
+    if (!json.token || !json.user?.id || !json.user.email || !json.user.name || !json.user.role) {
+      return null;
+    }
+
+    const profile: CloudSessionProfile = {
+      id: json.user.id,
+      email: json.user.email.trim().toLowerCase(),
+      name: json.user.name.trim(),
+      role: json.user.role,
+      cooperativaId: json.user.cooperativaId ?? undefined,
+      cooperadoId: json.user.cooperadoId ?? undefined,
+      cooperativaCnpj: json.user.cooperativaCnpj ?? undefined,
+    };
+
+    setAccessToken(json.token);
+    rememberCloudCredentials(normalizedEmail, password);
+    setActiveCloudProfile(profile);
+    return { token: json.token, user: profile };
+  } catch {
+    return null;
+  }
+}
+
 export async function establishCloudSession(
   email: string,
   password: string,
