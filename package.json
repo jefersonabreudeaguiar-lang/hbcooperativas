@@ -16,6 +16,7 @@
     "wipe:platform": "node scripts/wipe-platform-completo.mjs",
     "backup:cloud": "node scripts/backup-cloud.mjs",
     "test:sync-flows": "npx tsx scripts/simulate-sync-flows.ts",
+    "test:hb-credit-lab": "npx tsx scripts/test-hb-credit-lab.ts",
     "audit:totais": "npx tsx scripts/audit-totais-cooperados.ts"
   },
   "dependencies": {

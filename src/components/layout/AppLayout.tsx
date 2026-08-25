@@ -3,10 +3,10 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
-  LayoutDashboard, Users, CreditCard, PieChart, Truck, Wallet,
-  Percent, Building2,   Landmark, Megaphone, MapPin, Car, FileText,
+  LayoutDashboard, Users, CreditCard, PieChart, Truck,
+  Percent, Building2, Landmark, Megaphone, MapPin, Car, FileText,
   CalendarCheck, LogOut, Menu, X, Building, ClipboardList, Receipt, User, Tag,
-  BookOpen, FileCheck, Shield, MessageSquareWarning, Vote, Download,
+  BookOpen, FileCheck, Shield, MessageSquareWarning, Vote, Download, Wallet,
 } from "lucide-react";
 import { useState } from "react";
 import { useAuth } from "@/modules/auth/AuthProvider";
@@ -17,6 +17,7 @@ import { PLATFORM_NAME, PLATFORM_TAGLINE } from "@/utils/constants";
 import { AppIcon } from "@/components/ui/AppIcon";
 import { SyncStatusChip, SyncStatusChipLight } from "@/components/sync/SyncStatusChip";
 import { CobrancaSaasBanner } from "@/components/cobranca/CobrancaSaasBanner";
+import { useHbCreditLabEnabled } from "@/modules/hb-credit-lab/hooks/useHbCreditLabEnabled";
 import { cn } from "@/utils/format";
 import type { Resource } from "@/types";
 
@@ -96,6 +97,7 @@ function BrandHeader({ compact = false }: { compact?: boolean }) {
 export function Sidebar({ mobile = false, onClose }: { mobile?: boolean; onClose?: () => void }) {
   const pathname = usePathname();
   const { user, logout } = useAuth();
+  const labEnabled = useHbCreditLabEnabled();
   if (!user) return null;
 
   const menuItems = mobile && user.role === "cooperado"
@@ -134,6 +136,21 @@ export function Sidebar({ mobile = false, onClose }: { mobile?: boolean; onClose
             </Link>
           );
         })}
+        {labEnabled && user.role === "cooperado" && (
+          <Link
+            href="/lab/conta-coop"
+            onClick={onClose}
+            className={cn(
+              "flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors border border-teal-400/30 mt-2",
+              pathname.startsWith("/lab/conta-coop")
+                ? "bg-teal-800 text-white"
+                : "text-teal-100 hover:bg-teal-900/60 hover:text-white"
+            )}
+          >
+            <Wallet size={20} />
+            Conta Coop (lab)
+          </Link>
+        )}
       </nav>
 
       <div className="p-4 border-t border-green-800 space-y-1">
