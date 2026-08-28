@@ -19,7 +19,7 @@ import {
   COBRANCA_SAAS_PRECO_LABEL,
   textoTermosCobrancaSaas,
 } from "@/services/cobrancaSaasService";
-import { isHbCreditEnabledClient } from "@/modules/hb-credit/config";
+import { useHbCreditEnabled } from "@/hooks/useHbCreditEnabled";
 import { setAccessToken } from "@/lib/security/clientSession";
 
 type AbaCadastro = "cooperado" | "responsavel" | "parceiro";
@@ -54,7 +54,7 @@ export default function CadastroPage() {
   const [aceitouTermosCobranca, setAceitouTermosCobranca] = useState(false);
 
   // Parceiro / Mercado (Conta Coop — homologação)
-  const creditCadastroEnabled = isHbCreditEnabledClient();
+  const { enabled: creditCadastroEnabled, loading: creditCadastroLoading } = useHbCreditEnabled();
   const [cnpjMercado, setCnpjMercado] = useState("");
   const [nomeMercado, setNomeMercado] = useState("");
   const [emailParceiro, setEmailParceiro] = useState("");
@@ -78,6 +78,11 @@ export default function CadastroPage() {
     setError("");
     setSuccess("");
   }, [aba]);
+
+  useEffect(() => {
+    if (creditCadastroLoading) return;
+    if (aba === "parceiro" && !creditCadastroEnabled) setAba("cooperado");
+  }, [aba, creditCadastroEnabled, creditCadastroLoading]);
 
   useEffect(() => {
     fetchCloudStatus().then(({ status, message }) => {
@@ -632,7 +637,7 @@ export default function CadastroPage() {
                       </Button>
                     </form>
                   </>
-                ) : (
+                ) : aba === "parceiro" && creditCadastroEnabled ? (
                   <>
                     <h2 className="text-xl font-bold text-gray-900 mb-1">Cadastro de mercado parceiro</h2>
                     <p className="text-sm text-gray-500 mb-6">Conta Coop — status inicial: pendente até aprovação</p>
@@ -677,7 +682,7 @@ export default function CadastroPage() {
                       </Button>
                     </form>
                   </>
-                )}
+                ) : null}
 
                 <p className="text-center text-sm text-gray-500 mt-6">
                   Já tem conta?{" "}
