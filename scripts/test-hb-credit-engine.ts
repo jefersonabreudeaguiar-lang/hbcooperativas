@@ -1,7 +1,7 @@
 /**
- * Testes Conta Coop: regra dos 3 valores, idempotência e anti double-spend.
+ * Testes HB Credit Engine: regra dos 3 valores, idempotência e anti double-spend.
  *
- * Uso (homologação, migration aplicada):
+ * Uso (homologação, migrations foundation + operational aplicadas):
  *   HB_CREDIT_ENABLED=true npx tsx scripts/test-hb-credit-engine.ts
  *
  * Requer SUPABASE_SERVICE_ROLE_KEY e cooperativa/cooperado de teste via env opcionais.
@@ -26,9 +26,9 @@ function assert(cond: boolean, msg: string) {
 
 async function testTresValores(cnpj: string, cooperadoId: string) {
   const { data } = await supabase
-    .from("conta_coop_limites")
-    .select("limite_liberado_centavos, valor_usado_centavos")
-    .eq("cooperativa_cnpj", cnpj)
+    .from("hb_credit_accounts")
+    .select("limit_released_cents, amount_used_cents")
+    .eq("cooperative_cnpj", cnpj)
     .eq("cooperado_id", cooperadoId)
     .maybeSingle();
 
@@ -37,8 +37,8 @@ async function testTresValores(cnpj: string, cooperadoId: string) {
     return;
   }
 
-  const limite = Number(data.limite_liberado_centavos);
-  const usado = Number(data.valor_usado_centavos);
+  const limite = Number(data.limit_released_cents);
+  const usado = Number(data.amount_used_cents);
   const disponivel = computeDisponivel(limite, usado);
   assert(usado <= limite, "usado > limite");
   assert(limite === usado + disponivel, "limite != usado + disponivel");
@@ -55,24 +55,24 @@ async function testIdempotency(cnpj: string, cooperadoId: string, intentId: stri
     p_intent_id: intentId,
     p_nonce: nonce,
     p_cooperado_id: cooperadoId,
-    p_cooperativa_cnpj: cnpj,
+    p_cooperative_cnpj: cnpj,
     p_idempotency_key: key,
-    p_transacao_id: tx1,
-    p_recebivel_id: recv,
+    p_transaction_id: tx1,
+    p_receivable_id: recv,
     p_receipt_code: "TEST001",
     p_actor_user_id: "test-script",
   };
 
-  const first = await supabase.rpc("conta_coop_authorize_payment", params);
+  const first = await supabase.rpc("hb_credit_authorize_payment", params);
   if (first.error?.message?.includes("does not exist")) {
-    console.log("  skip idempotency (RPC ausente — aplique migration)");
+    console.log("  skip idempotency (RPC ausente — aplique migrations hb_credit)");
     return;
   }
 
-  const second = await supabase.rpc("conta_coop_authorize_payment", {
+  const second = await supabase.rpc("hb_credit_authorize_payment", {
     ...params,
-    p_transacao_id: tx2,
-    p_recebivel_id: `${recv}_2`,
+    p_transaction_id: tx2,
+    p_receivable_id: `${recv}_2`,
   });
 
   const r1 = first.data as { ok?: boolean; duplicate?: boolean };
@@ -88,9 +88,9 @@ async function testIdempotency(cnpj: string, cooperadoId: string, intentId: stri
 
 async function testDoubleSpend(cnpj: string, cooperadoId: string, amountCents: number) {
   const { data: limiteBefore } = await supabase
-    .from("conta_coop_limites")
-    .select("valor_usado_centavos, limite_liberado_centavos")
-    .eq("cooperativa_cnpj", cnpj)
+    .from("hb_credit_accounts")
+    .select("amount_used_cents, limit_released_cents")
+    .eq("cooperative_cnpj", cnpj)
     .eq("cooperado_id", cooperadoId)
     .maybeSingle();
 
@@ -100,8 +100,8 @@ async function testDoubleSpend(cnpj: string, cooperadoId: string, amountCents: n
   }
 
   const disponivel = computeDisponivel(
-    Number(limiteBefore.limite_liberado_centavos),
-    Number(limiteBefore.valor_usado_centavos)
+    Number(limiteBefore.limit_released_cents),
+    Number(limiteBefore.amount_used_cents)
   );
 
   if (disponivel < amountCents * 2) {
@@ -109,8 +109,13 @@ async function testDoubleSpend(cnpj: string, cooperadoId: string, amountCents: n
     return;
   }
 
-  // Cria dois intents e tenta autorizar em paralelo com saldo só para um
-  const parceiro = await supabase.from("conta_coop_parceiros").select("id").eq("cooperativa_cnpj", cnpj).eq("status", "ativo").limit(1).maybeSingle();
+  const parceiro = await supabase
+    .from("hb_credit_partners")
+    .select("id")
+    .eq("cooperative_cnpj", cnpj)
+    .eq("status", "ACTIVE")
+    .limit(1)
+    .maybeSingle();
   if (!parceiro.data?.id) {
     console.log("  skip double-spend (sem parceiro ativo)");
     return;
@@ -119,12 +124,12 @@ async function testDoubleSpend(cnpj: string, cooperadoId: string, amountCents: n
   const mkIntent = async () => {
     const id = `intent_test_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
     const nonce = `nonce_${Date.now()}`;
-    await supabase.from("conta_coop_intents").insert({
+    await supabase.from("hb_credit_payment_intents").insert({
       id,
-      cooperativa_cnpj: cnpj,
-      parceiro_id: parceiro.data!.id,
-      amount_centavos: amountCents,
-      status: "pendente",
+      cooperative_cnpj: cnpj,
+      partner_id: parceiro.data!.id,
+      amount_cents: amountCents,
+      status: "PENDING",
       nonce,
       expires_at: new Date(Date.now() + 600_000).toISOString(),
     });
@@ -135,14 +140,14 @@ async function testDoubleSpend(cnpj: string, cooperadoId: string, amountCents: n
   const b = await mkIntent();
 
   const run = (intentId: string, nonce: string, suffix: string) =>
-    supabase.rpc("conta_coop_authorize_payment", {
+    supabase.rpc("hb_credit_authorize_payment", {
       p_intent_id: intentId,
       p_nonce: nonce,
       p_cooperado_id: cooperadoId,
-      p_cooperativa_cnpj: cnpj,
+      p_cooperative_cnpj: cnpj,
       p_idempotency_key: `ds_${suffix}_${Date.now()}`,
-      p_transacao_id: `tx_ds_${suffix}_${Date.now()}`,
-      p_recebivel_id: `recv_ds_${suffix}_${Date.now()}`,
+      p_transaction_id: `tx_ds_${suffix}_${Date.now()}`,
+      p_receivable_id: `recv_ds_${suffix}_${Date.now()}`,
       p_receipt_code: suffix.toUpperCase(),
       p_actor_user_id: "test-script",
     });

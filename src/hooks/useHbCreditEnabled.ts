@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { isHbCreditEnabledClient } from "@/modules/hb-credit/config";
+import { isHbCreditEnabledClient, isHbCreditUiAllowed } from "@/modules/hb-credit/config";
 
 export function useHbCreditEnabled() {
   const clientFlag = isHbCreditEnabledClient();
@@ -29,7 +29,7 @@ export function useHbCreditEnabled() {
   }, [clientFlag]);
 
   return {
-    enabled: clientFlag && serverEnabled === true,
+    enabled: isHbCreditUiAllowed(serverEnabled === true),
     loading: clientFlag && serverEnabled === null,
     clientFlag,
   };

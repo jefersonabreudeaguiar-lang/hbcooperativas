@@ -3,6 +3,7 @@ import { listParceiros, setParceiroStatus } from "@/lib/supabase/contaCoopStorag
 import { requireCreditApi, requireCreditCnpj, requireCreditStaff } from "@/lib/security/creditGuard";
 import { normalizeCnpj } from "@/utils/cooperativa";
 import type { ParceiroStatus } from "@/modules/hb-credit/types";
+import { apiParceiroStatus } from "@/modules/hb-credit/infrastructure/mappers/statusMapper";
 
 export async function GET(request: Request) {
   const gate = await requireCreditApi(request);
@@ -28,7 +29,8 @@ export async function POST(request: Request) {
   const body = await request.json().catch(() => null);
   const cnpj = normalizeCnpj(String(body?.cnpj ?? gate.ctx.session?.cooperativaCnpj ?? ""));
   const parceiroId = String(body?.parceiroId ?? "");
-  const status = String(body?.status ?? "") as ParceiroStatus;
+  const rawStatus = String(body?.status ?? "");
+  const status = apiParceiroStatus(rawStatus);
 
   if (cnpj.length !== 14 || !parceiroId || !["ativo", "bloqueado"].includes(status)) {
     return NextResponse.json({ error: "Dados inválidos." }, { status: 400 });
