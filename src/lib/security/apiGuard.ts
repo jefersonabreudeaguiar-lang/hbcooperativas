@@ -68,7 +68,7 @@ export function requireStaffRole(
   enforced: boolean
 ): NextResponse | null {
   if (!enforced || !session) return null;
-  if (session.role === "cooperado") {
+  if (session.role === "cooperado" || session.role === "parceiro") {
     return NextResponse.json({ error: "Ação restrita à equipe da cooperativa." }, { status: 403 });
   }
   return null;

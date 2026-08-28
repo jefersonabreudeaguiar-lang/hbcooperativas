@@ -29,6 +29,7 @@ export const PERMISSIONS: PermissionMatrix = {
     fechamento: ["view", "create", "edit", "approve", "export"],
     livro_caixa: ALL_CRUD,
     prestacao_contas: ALL_CRUD,
+    conta_coop: ALL_CRUD,
   },
   tesoureiro: {
     dashboard: ALL_CRUD,
@@ -52,6 +53,7 @@ export const PERMISSIONS: PermissionMatrix = {
     fechamento: ["view", "create", "edit", "export"],
     livro_caixa: ALL_CRUD,
     prestacao_contas: ALL_CRUD,
+    conta_coop: ALL_CRUD,
   },
   responsavel: {
     dashboard: VIEW_ONLY,
@@ -69,6 +71,7 @@ export const PERMISSIONS: PermissionMatrix = {
     fechamento: ["view", "approve", "export"],
     livro_caixa: ["view", "create", "edit", "export"],
     prestacao_contas: ["view", "create", "edit", "delete", "export"],
+    conta_coop: ["view", "create", "edit", "approve", "export"],
   },
   cooperado: {
     dashboard: VIEW_ONLY,
@@ -79,6 +82,11 @@ export const PERMISSIONS: PermissionMatrix = {
     descontos: VIEW_ONLY,
     comunicados: VIEW_ONLY,
     prestacao_contas: ["view", "create", "edit"],
+    conta_coop: ["view", "create"],
+  },
+  parceiro: {
+    dashboard: VIEW_ONLY,
+    conta_coop: ["view", "create"],
   },
 };
 
@@ -108,6 +116,7 @@ export const MODULOS_ACESSO: ModuloAcesso[] = [
   { resource: "relatorios", label: "Relatórios", href: "/relatorios", actions: VIEW_EXPORT },
   { resource: "fechamento", label: "Fechamento mensal", href: "/fechamento-mensal", actions: ["view", "approve", "export"] },
   { resource: "cooperativas", label: "Perfil da cooperativa", href: "/meu-perfil", actions: ["view", "create", "edit", "export"] },
+  { resource: "conta_coop", label: "Conta Coop", href: "/conta-coop", actions: ["view", "create", "edit", "approve", "export"] },
 ];
 
 export const PRESET_RELATORIOS: Resource[] = ["dashboard", "relatorios", "fechamento"];
@@ -204,7 +213,19 @@ const COOPERADO_MENU: { href: string; label: string; resource: Resource }[] = [
 
 const COOPERADO_DRAWER_EXTRA: { href: string; label: string; resource: Resource }[] = [
   { href: "/prestacao-contas", label: "Prestação de contas", resource: "prestacao_contas" },
+  { href: "/minha-conta-coop", label: "Conta Coop", resource: "conta_coop" },
 ];
+
+const PARCEIRO_MENU: { href: string; label: string; resource: Resource }[] = [
+  { href: "/mercado-parceiro", label: "Painel mercado", resource: "conta_coop" },
+];
+
+const CREDIT_MENU_BY_ROLE: Partial<Record<UserRole, { href: string; label: string; resource: Resource }>> = {
+  cooperado: { href: "/minha-conta-coop", label: "Conta Coop", resource: "conta_coop" },
+  responsavel: { href: "/conta-coop", label: "Conta Coop", resource: "conta_coop" },
+  admin: { href: "/conta-coop", label: "Conta Coop", resource: "conta_coop" },
+  tesoureiro: { href: "/conta-coop", label: "Conta Coop", resource: "conta_coop" },
+};
 
 const DIRETORIA_MENU: { href: string; label: string; resource: Resource }[] = [
   { href: "/dashboard", label: "Início", resource: "dashboard" },
@@ -244,6 +265,7 @@ const RESPONSAVEL_HREFS = [
   "/reclamacoes",
   "/relatorios",
   "/fechamento-mensal",
+  "/conta-coop",
 ];
 
 function filterMenuForUser(
@@ -253,9 +275,28 @@ function filterMenuForUser(
   return items.filter((item) => canUser(user, item.resource, "view") || item.href === "/meu-cadastro");
 }
 
-export function getMenuItems(user: PermissionSubject): { href: string; label: string; resource: Resource }[] {
+export function appendHbCreditMenuItem(
+  items: { href: string; label: string; resource: Resource }[],
+  user: PermissionSubject,
+  creditEnabled: boolean
+): { href: string; label: string; resource: Resource }[] {
+  if (!creditEnabled) return items;
+  const extra = CREDIT_MENU_BY_ROLE[user.role];
+  if (!extra || !canUser(user, extra.resource, "view")) return items;
+  if (items.some((i) => i.href === extra.href)) return items;
+  return [...items, extra];
+}
+
+export function getMenuItems(
+  user: PermissionSubject,
+  creditEnabled = false
+): { href: string; label: string; resource: Resource }[] {
+  if (user.role === "parceiro") {
+    return filterMenuForUser(PARCEIRO_MENU, user);
+  }
+
   if (user.role === "cooperado") {
-    return filterMenuForUser(COOPERADO_MENU, user);
+    return appendHbCreditMenuItem(filterMenuForUser(COOPERADO_MENU, user), user, creditEnabled);
   }
 
   let source = DIRETORIA_MENU;
@@ -263,11 +304,14 @@ export function getMenuItems(user: PermissionSubject): { href: string; label: st
     source = DIRETORIA_MENU.filter((i) => RESPONSAVEL_HREFS.includes(i.href));
   }
 
-  return filterMenuForUser(source, user);
+  return appendHbCreditMenuItem(filterMenuForUser(source, user), user, creditEnabled);
 }
 
-export function getCooperadoDrawerMenuItems(user: PermissionSubject): { href: string; label: string; resource: Resource }[] {
-  if (user.role !== "cooperado") return getMenuItems(user);
+export function getCooperadoDrawerMenuItems(
+  user: PermissionSubject,
+  creditEnabled = false
+): { href: string; label: string; resource: Resource }[] {
+  if (user.role !== "cooperado") return getMenuItems(user, creditEnabled);
   // Mesmos itens do bottom nav + Meu cadastro + Prestação (overflow do hamburger)
   const mobileHrefs = new Set(
     ["/dashboard", "/notas-pedido", "/precos", "/ficha-corrida", "/mensalidades"]
@@ -277,8 +321,8 @@ export function getCooperadoDrawerMenuItems(user: PermissionSubject): { href: st
   );
   // Garante Prestação mesmo se filtro de permissão mudar no futuro
   const hasPrestacao = fromMenu.some((i) => i.href === "/prestacao-contas");
-  const merged = hasPrestacao ? fromMenu : [...fromMenu, ...COOPERADO_DRAWER_EXTRA];
-  return filterMenuForUser(merged, user);
+  const merged = hasPrestacao ? fromMenu : [...fromMenu, ...COOPERADO_DRAWER_EXTRA.filter((i) => i.href !== "/minha-conta-coop")];
+  return appendHbCreditMenuItem(filterMenuForUser(merged, user), user, creditEnabled);
 }
 
 export function getCooperadoExtraItems(): { href: string; label: string }[] {
@@ -327,6 +371,7 @@ export const ROLE_LABELS: Record<UserRole, string> = {
   tesoureiro: "Tesoureiro",
   responsavel: "Responsável",
   cooperado: "Cooperado",
+  parceiro: "Mercado parceiro",
 };
 
 export const MODO_ACESSO_LABELS: Record<ModoAcesso, string> = {

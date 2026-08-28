@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Eye, EyeOff, CheckCircle2, AlertCircle, User, Building2 } from "lucide-react";
+import { Eye, EyeOff, CheckCircle2, AlertCircle, User, Building2, Store } from "lucide-react";
 import { useAuth } from "@/modules/auth/AuthProvider";
 import { GuestRoute } from "@/components/auth/GuestRoute";
 import { Button } from "@/components/ui/Button";
@@ -19,8 +19,10 @@ import {
   COBRANCA_SAAS_PRECO_LABEL,
   textoTermosCobrancaSaas,
 } from "@/services/cobrancaSaasService";
+import { isHbCreditEnabledClient } from "@/modules/hb-credit/config";
+import { setAccessToken } from "@/lib/security/clientSession";
 
-type AbaCadastro = "cooperado" | "responsavel";
+type AbaCadastro = "cooperado" | "responsavel" | "parceiro";
 
 export default function CadastroPage() {
   const [aba, setAba] = useState<AbaCadastro>("cooperado");
@@ -50,6 +52,15 @@ export default function CadastroPage() {
   const [confirmPasswordResp, setConfirmPasswordResp] = useState("");
   const [senhaCadastroCooperado, setSenhaCadastroCooperado] = useState("");
   const [aceitouTermosCobranca, setAceitouTermosCobranca] = useState(false);
+
+  // Parceiro / Mercado (Conta Coop — homologação)
+  const creditCadastroEnabled = isHbCreditEnabledClient();
+  const [cnpjMercado, setCnpjMercado] = useState("");
+  const [nomeMercado, setNomeMercado] = useState("");
+  const [emailParceiro, setEmailParceiro] = useState("");
+  const [passwordParceiro, setPasswordParceiro] = useState("");
+  const [confirmPasswordParceiro, setConfirmPasswordParceiro] = useState("");
+  const [cooperativaCnpjParceiro, setCooperativaCnpjParceiro] = useState("");
 
   const [showPassword, setShowPassword] = useState(false);
   const [showSenhaAcessoCadastro, setShowSenhaAcessoCadastro] = useState(false);
@@ -201,12 +212,56 @@ export default function CadastroPage() {
     }
   };
 
+  const handleParceiroSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError("");
+    setSuccess("");
+
+    if (passwordParceiro !== confirmPasswordParceiro) {
+      setError("As senhas não coincidem.");
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const res = await fetch("/api/auth/register-parceiro", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          cooperativaCnpj: cooperativaCnpjParceiro,
+          cnpjMercado,
+          nomeMercado,
+          email: emailParceiro,
+          password: passwordParceiro,
+          name: nomeMercado,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setError(data.error ?? "Cadastro recusado.");
+        return;
+      }
+      if (data.accessToken) setAccessToken(data.accessToken);
+      setSuccess("Mercado cadastrado! Status: PENDENTE — aguarde aprovação da cooperativa.");
+      setTimeout(() => router.push("/mercado-parceiro"), 1500);
+    } catch {
+      setError("Erro de conexão ao cadastrar mercado.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const painelEsquerdo = aba === "cooperado"
     ? {
         titulo: "Cadastre-se na sua cooperativa",
         texto: "Informe o CNPJ da cooperativa cadastrada pela diretoria. O nome aparecerá automaticamente após a validação.",
       }
-    : {
+    : aba === "parceiro"
+      ? {
+          titulo: "Cadastre seu mercado parceiro",
+          texto: "Após o cadastro, o responsável da cooperativa analisa e aprova. Somente mercados ATIVOS podem criar cobranças.",
+        }
+      : {
         titulo: "Cadastre sua cooperativa",
         texto: "Responsável: registre o CNPJ e os dados da cooperativa. Depois disso, os cooperados poderão se vincular pelo CNPJ.",
       };
@@ -271,6 +326,21 @@ export default function CadastroPage() {
                   <Building2 size={18} />
                   Sou Responsável
                 </button>
+                {creditCadastroEnabled && (
+                  <button
+                    type="button"
+                    onClick={() => setAba("parceiro")}
+                    className={cn(
+                      "flex-1 flex items-center justify-center gap-2 py-4 text-sm font-medium transition-colors",
+                      aba === "parceiro"
+                        ? "bg-green-50 text-green-800 border-b-2 border-green-700 -mb-px"
+                        : "text-gray-500 hover:text-gray-700 hover:bg-gray-50"
+                    )}
+                  >
+                    <Store size={18} />
+                    Parceiro
+                  </button>
+                )}
               </div>
 
               <div className="p-8">
@@ -436,7 +506,7 @@ export default function CadastroPage() {
                       </Button>
                     </form>
                   </>
-                ) : (
+                ) : aba === "responsavel" ? (
                   <>
                     <h2 className="text-xl font-bold text-gray-900 mb-1">Cadastro da cooperativa</h2>
                     <p className="text-sm text-gray-500 mb-6">Responsável — registre a cooperativa no sistema</p>
@@ -559,6 +629,51 @@ export default function CadastroPage() {
 
                       <Button type="submit" className="w-full" size="lg" disabled={loading || !aceitouTermosCobranca}>
                         {loading ? "Cadastrando..." : "Cadastrar Cooperativa e Entrar"}
+                      </Button>
+                    </form>
+                  </>
+                ) : (
+                  <>
+                    <h2 className="text-xl font-bold text-gray-900 mb-1">Cadastro de mercado parceiro</h2>
+                    <p className="text-sm text-gray-500 mb-6">Conta Coop — status inicial: pendente até aprovação</p>
+
+                    <form onSubmit={handleParceiroSubmit} className="space-y-4">
+                      <div>
+                        <Label htmlFor="coopCnpjParceiro">CNPJ da cooperativa</Label>
+                        <Input
+                          id="coopCnpjParceiro"
+                          value={cooperativaCnpjParceiro}
+                          onChange={(e) => setCooperativaCnpjParceiro(e.target.value)}
+                          placeholder="00.000.000/0000-00"
+                          required
+                        />
+                      </div>
+                      <div>
+                        <Label htmlFor="cnpjMercado">CNPJ do mercado</Label>
+                        <Input id="cnpjMercado" value={cnpjMercado} onChange={(e) => setCnpjMercado(e.target.value)} required />
+                      </div>
+                      <div>
+                        <Label htmlFor="nomeMercado">Nome do mercado</Label>
+                        <Input id="nomeMercado" value={nomeMercado} onChange={(e) => setNomeMercado(e.target.value)} required />
+                      </div>
+                      <div>
+                        <Label htmlFor="emailParceiro">E-mail</Label>
+                        <Input id="emailParceiro" type="email" value={emailParceiro} onChange={(e) => setEmailParceiro(e.target.value)} required />
+                      </div>
+                      <div>
+                        <Label htmlFor="passwordParceiro">Senha</Label>
+                        <Input id="passwordParceiro" type="password" value={passwordParceiro} onChange={(e) => setPasswordParceiro(e.target.value)} minLength={6} required />
+                      </div>
+                      <div>
+                        <Label htmlFor="confirmPasswordParceiro">Confirmar senha</Label>
+                        <Input id="confirmPasswordParceiro" type="password" value={confirmPasswordParceiro} onChange={(e) => setConfirmPasswordParceiro(e.target.value)} minLength={6} required />
+                      </div>
+
+                      {error && <p className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">{error}</p>}
+                      {success && <p className="text-sm text-green-700 bg-green-50 border border-green-200 rounded-lg px-3 py-2">{success}</p>}
+
+                      <Button type="submit" className="w-full" size="lg" disabled={loading}>
+                        {loading ? "Cadastrando..." : "Cadastrar mercado"}
                       </Button>
                     </form>
                   </>

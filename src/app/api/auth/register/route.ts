@@ -8,7 +8,7 @@ import {
 import { logSecurityEvent, upsertAppUser } from "@/lib/supabase/usersAuth";
 import type { UserRole } from "@/types";
 
-const VALID_ROLES: UserRole[] = ["admin", "tesoureiro", "responsavel", "cooperado"];
+const VALID_ROLES: UserRole[] = ["admin", "tesoureiro", "responsavel", "cooperado", "parceiro"];
 
 export async function POST(request: Request) {
   const blocked = ensureAuthInfrastructure(request);

@@ -6,7 +6,7 @@ import {
   LayoutDashboard, Users, CreditCard, PieChart, Truck, Wallet,
   Percent, Building2,   Landmark, Megaphone, MapPin, Car, FileText,
   CalendarCheck, LogOut, Menu, X, Building, ClipboardList, Receipt, User, Tag,
-  BookOpen, FileCheck, Shield, MessageSquareWarning, Vote, Download,
+  BookOpen, FileCheck, Shield, MessageSquareWarning, Vote, Download, ShoppingCart,
 } from "lucide-react";
 import { useState } from "react";
 import { useAuth } from "@/modules/auth/AuthProvider";
@@ -18,6 +18,7 @@ import { AppIcon } from "@/components/ui/AppIcon";
 import { SyncStatusChip, SyncStatusChipLight } from "@/components/sync/SyncStatusChip";
 import { CobrancaSaasBanner } from "@/components/cobranca/CobrancaSaasBanner";
 import { cn } from "@/utils/format";
+import { useHbCreditEnabled } from "@/hooks/useHbCreditEnabled";
 import type { Resource } from "@/types";
 
 const ICONS: Record<string, React.ReactNode> = {
@@ -35,6 +36,10 @@ const ICONS: Record<string, React.ReactNode> = {
   "/reclamacoes": <MessageSquareWarning size={20} />,
   "/livro-caixa": <BookOpen size={20} />,
   "/prestacao-contas": <FileCheck size={20} />,
+  "/conta-coop": <Wallet size={20} />,
+  "/minha-conta-coop": <Wallet size={20} />,
+  "/mercado-parceiro": <ShoppingCart size={20} />,
+  conta_coop: <Wallet size={20} />,
   "/cooperativas": <Building size={20} />,
   "/cooperados": <Users size={20} />,
   "/instituicoes": <Building2 size={20} />,
@@ -96,11 +101,12 @@ function BrandHeader({ compact = false }: { compact?: boolean }) {
 export function Sidebar({ mobile = false, onClose }: { mobile?: boolean; onClose?: () => void }) {
   const pathname = usePathname();
   const { user, logout } = useAuth();
+  const { enabled: creditEnabled } = useHbCreditEnabled();
   if (!user) return null;
 
   const menuItems = mobile && user.role === "cooperado"
-    ? getCooperadoDrawerMenuItems(user)
-    : getMenuItems(user);
+    ? getCooperadoDrawerMenuItems(user, creditEnabled)
+    : getMenuItems(user, creditEnabled);
 
   return (
     <aside className={cn(
