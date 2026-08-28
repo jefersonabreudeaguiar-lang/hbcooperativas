@@ -2,12 +2,19 @@
 -- RPC atômico, PIN, parceiro em app_users. NÃO altera Ficha Corrida.
 
 -- Papéis: parceiro/mercado (somente quando HB Credit homologado)
-alter table public.app_users drop constraint if exists app_users_role_check;
-alter table public.app_users add constraint app_users_role_check
-  check (role in ('admin', 'tesoureiro', 'responsavel', 'cooperado', 'parceiro'));
-
-alter table public.app_users add column if not exists parceiro_id text;
-create index if not exists app_users_parceiro_idx on public.app_users (parceiro_id);
+do $$
+begin
+  if exists (
+    select 1 from information_schema.tables
+    where table_schema = 'public' and table_name = 'app_users'
+  ) then
+    alter table public.app_users drop constraint if exists app_users_role_check;
+    alter table public.app_users add constraint app_users_role_check
+      check (role in ('admin', 'tesoureiro', 'responsavel', 'cooperado', 'parceiro'));
+    alter table public.app_users add column if not exists parceiro_id text;
+    create index if not exists app_users_parceiro_idx on public.app_users (parceiro_id);
+  end if;
+end $$;
 
 -- Extensões operacionais
 alter table public.hb_credit_accounts add column if not exists pin_hash text;
