@@ -1,0 +1,6 @@
+{
+  "env": {
+    "HB_CREDIT_ENABLED": "true",
+    "NEXT_PUBLIC_HB_CREDIT_ENABLED": "true"
+  }
+}
