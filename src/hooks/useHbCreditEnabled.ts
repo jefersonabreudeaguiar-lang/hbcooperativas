@@ -1,20 +1,15 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { isHbCreditEnabledClient, isHbCreditUiAllowed } from "@/modules/hb-credit/config";
+import { isHbCreditEnabledClient } from "@/modules/hb-credit/config";
 
 export function useHbCreditEnabled() {
   const clientFlag = isHbCreditEnabledClient();
-  const [serverEnabled, setServerEnabled] = useState<boolean | null>(clientFlag ? null : false);
+  const [serverEnabled, setServerEnabled] = useState<boolean | null>(null);
 
   useEffect(() => {
-    if (!clientFlag) {
-      setServerEnabled(false);
-      return;
-    }
-
     let cancelled = false;
-    fetch("/api/credit/status")
+    fetch("/api/credit/status", { cache: "no-store" })
       .then((res) => res.json())
       .then((data: { enabled?: boolean }) => {
         if (!cancelled) setServerEnabled(data.enabled === true);
@@ -26,11 +21,12 @@ export function useHbCreditEnabled() {
     return () => {
       cancelled = true;
     };
-  }, [clientFlag]);
+  }, []);
 
   return {
-    enabled: isHbCreditUiAllowed(serverEnabled === true),
-    loading: clientFlag && serverEnabled === null,
+    // Fail-closed: só liga UI quando o servidor confirma (autoridade real).
+    enabled: serverEnabled === true,
+    loading: serverEnabled === null,
     clientFlag,
   };
 }

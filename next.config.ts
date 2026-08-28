@@ -28,6 +28,10 @@ const SECURITY_HEADERS = [
 ];
 
 const nextConfig: NextConfig = {
+  env: {
+    NEXT_PUBLIC_HB_CREDIT_ENABLED:
+      process.env.NEXT_PUBLIC_HB_CREDIT_ENABLED ?? process.env.HB_CREDIT_ENABLED ?? "false",
+  },
   // Permite abrir o dev server pelo celular (IP da rede, ex.: 192.168.1.7:3000)
   allowedDevOrigins: [
     "192.168.1.7:3000",

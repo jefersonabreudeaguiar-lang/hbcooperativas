@@ -339,19 +339,24 @@ export function getMobileNavItems(
     );
   }
 
-  const responsavelItems: { href: string; label: string; resource: Resource }[] = [
-    { href: "/dashboard", label: "Início", resource: "dashboard" },
-    { href: "/notas-pedido", label: "Conferir", resource: "notas_pedido" },
-    { href: "/ficha-corrida", label: "Pagar", resource: "ficha_corrida" },
-    { href: "/votacoes", label: "Votações", resource: "votacoes" },
-    { href: "/cooperados", label: "Cooperados", resource: "cooperados" },
-    { href: "/contratos", label: "Contratos", resource: "instituicoes" },
-    { href: "/meu-perfil", label: "Perfil", resource: "cooperativas" },
-    { href: "/relatorios", label: "Relatórios", resource: "relatorios" },
-  ];
-
   if (user.role === "responsavel") {
-    return appendHbCreditMenuItem(filterMenuForUser(responsavelItems, user), user, creditEnabled);
+    const responsavelItems: { href: string; label: string; resource: Resource }[] = [
+      { href: "/dashboard", label: "Início", resource: "dashboard" },
+      { href: "/notas-pedido", label: "Conferir", resource: "notas_pedido" },
+      { href: "/ficha-corrida", label: "Pagar", resource: "ficha_corrida" },
+      { href: "/conta-coop", label: "Conta Coop", resource: "conta_coop" },
+      { href: "/votacoes", label: "Votações", resource: "votacoes" },
+      { href: "/cooperados", label: "Cooperados", resource: "cooperados" },
+      { href: "/contratos", label: "Contratos", resource: "instituicoes" },
+      { href: "/meu-perfil", label: "Perfil", resource: "cooperativas" },
+      { href: "/relatorios", label: "Relatórios", resource: "relatorios" },
+    ];
+    return creditEnabled
+      ? filterMenuForUser(responsavelItems, user)
+      : filterMenuForUser(
+          responsavelItems.filter((i) => i.href !== "/conta-coop"),
+          user
+        );
   }
 
   if (user.role === "tesoureiro" || user.role === "admin") {
