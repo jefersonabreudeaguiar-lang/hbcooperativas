@@ -15,7 +15,8 @@ export function useHbCreditEnabled() {
         if (!cancelled) setServerEnabled(data.enabled === true);
       })
       .catch(() => {
-        if (!cancelled) setServerEnabled(false);
+        // Falha de rede no PWA: não tratar como OFF definitivo.
+        if (!cancelled) setServerEnabled(null);
       });
 
     return () => {
@@ -23,10 +24,15 @@ export function useHbCreditEnabled() {
     };
   }, []);
 
+  const enabled =
+    serverEnabled === true ||
+    (serverEnabled !== false && clientFlag);
+
   return {
-    // Fail-closed: só liga UI quando o servidor confirma (autoridade real).
-    enabled: serverEnabled === true,
+    // UI: servidor confirma OU flag pública no bundle (PWA). Operações seguem fail-closed na API.
+    enabled,
     loading: serverEnabled === null,
     clientFlag,
+    serverConfirmed: serverEnabled === true,
   };
 }

@@ -211,9 +211,12 @@ const COOPERADO_MENU: { href: string; label: string; resource: Resource }[] = [
   { href: "/prestacao-contas", label: "Prestação de contas", resource: "prestacao_contas" },
 ];
 
-const COOPERADO_DRAWER_EXTRA: { href: string; label: string; resource: Resource }[] = [
+/** Menu hamburger mobile do cooperado — sem repetir a barra inferior. */
+const COOPERADO_DRAWER_MENU: { href: string; label: string; resource: Resource }[] = [
+  { href: "/dashboard", label: "Início", resource: "dashboard" },
+  { href: "/meu-cadastro", label: "Meu cadastro", resource: "dashboard" },
+  { href: "/comunicados", label: "Avisos", resource: "comunicados" },
   { href: "/prestacao-contas", label: "Prestação de contas", resource: "prestacao_contas" },
-  { href: "/minha-conta-coop", label: "Conta Coop", resource: "conta_coop" },
 ];
 
 const PARCEIRO_MENU: { href: string; label: string; resource: Resource }[] = [
@@ -312,17 +315,7 @@ export function getCooperadoDrawerMenuItems(
   creditEnabled = false
 ): { href: string; label: string; resource: Resource }[] {
   if (user.role !== "cooperado") return getMenuItems(user, creditEnabled);
-  // Mesmos itens do bottom nav + Meu cadastro + Prestação (overflow do hamburger)
-  const mobileHrefs = new Set(
-    ["/dashboard", "/notas-pedido", "/precos", "/ficha-corrida", "/mensalidades"]
-  );
-  const fromMenu = COOPERADO_MENU.filter(
-    (i) => mobileHrefs.has(i.href) || i.href === "/meu-cadastro" || i.href === "/prestacao-contas"
-  );
-  // Garante Prestação mesmo se filtro de permissão mudar no futuro
-  const hasPrestacao = fromMenu.some((i) => i.href === "/prestacao-contas");
-  const merged = hasPrestacao ? fromMenu : [...fromMenu, ...COOPERADO_DRAWER_EXTRA.filter((i) => i.href !== "/minha-conta-coop")];
-  return appendHbCreditMenuItem(filterMenuForUser(merged, user), user, creditEnabled);
+  return appendHbCreditMenuItem(filterMenuForUser(COOPERADO_DRAWER_MENU, user), user, creditEnabled);
 }
 
 export function getCooperadoExtraItems(): { href: string; label: string }[] {
