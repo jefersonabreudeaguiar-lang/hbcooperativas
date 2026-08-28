@@ -25,6 +25,7 @@ import { useSyncStatus } from "@/components/sync/CooperativaSyncProvider";
 import {
   calcularItensNota,
   gerarNumeroNota,
+  isNumeroNotaJaConferidaParaCooperado,
   buildFichaFromNota,
   aplicarItensNaNota,
   upsertArquivoMensal,
@@ -227,7 +228,8 @@ export default function NotasPedidoContent() {
   const [conferenciaLocal, setConferenciaLocal] = useState("");
   const [conferenciaEscolaAvulsa, setConferenciaEscolaAvulsa] = useState("");
   const [motivoRejeicao, setMotivoRejeicao] = useState("");
-  const [conferirErrors, setConferirErrors] = useState<{ itens?: string; divisao?: string }>({});
+  const [conferenciaNumeroNotaManual, setConferenciaNumeroNotaManual] = useState("");
+  const [conferirErrors, setConferirErrors] = useState<{ itens?: string; divisao?: string; numeroNota?: string }>({});
   const [instituicaoPadraoId, setInstituicaoPadraoIdState] = useState("");
   const [alterarInstConferencia, setAlterarInstConferencia] = useState(false);
 
@@ -1948,6 +1950,7 @@ export default function NotasPedidoContent() {
     setConferenciaDivisaoQtd(0);
     setConferenciaDivisaoIds([]);
     setConferenciaEscolaAvulsa(nota.escolaAvulsaNome?.trim() ?? "");
+    setConferenciaNumeroNotaManual("");
     setAlterarInstConferencia(false);
     setConferirErrors({});
     if (!isCooperado && d && coopId) {
@@ -2122,6 +2125,30 @@ export default function NotasPedidoContent() {
       return;
     }
 
+    const numeroNotaManual = conferenciaNumeroNotaManual.trim();
+    if (numeroNotaManual && coopId) {
+      const cooperadoIdParaNumero =
+        conferenciaDivisaoQtd >= 2
+          ? resolverCooperadoIdCanonico(
+              data,
+              selectedNota.cooperadoId,
+              coopId,
+              selectedNota.cooperadoNomeSnapshot
+            )
+          : conferenciaCooperadoId;
+      if (
+        isNumeroNotaJaConferidaParaCooperado(data, {
+          cooperadoId: cooperadoIdParaNumero,
+          cooperativaId: coopId,
+          numeroNota: numeroNotaManual,
+          excludeNotaId: selectedNota.id,
+        })
+      ) {
+        setConferirErrors({ numeroNota: "Nota já conferida para este cooperado." });
+        return;
+      }
+    }
+
     if (multiFoto && !fotosLancadasConferenciaRef.current.has(fotoAtual) && !conferenciaFotoSomenteLeitura) {
       const lanc = lancarFotoConferenciaAtual(fotoAtual, qtdFotosAprovadas);
       if (!lanc.ok) {
@@ -2204,6 +2231,7 @@ export default function NotasPedidoContent() {
 
       notaAtualizada = {
         ...base,
+        ...(numeroNotaManual ? { numeroNota: numeroNotaManual } : {}),
         status: "conferida",
         conferidaPor: user.name,
         dataConferencia: now.split("T")[0],
@@ -4071,7 +4099,26 @@ export default function NotasPedidoContent() {
                     <p className="text-xs text-amber-700 mt-1">Carregando cooperados da nuvem…</p>
                   )}
                 </FormField>
-              ) : (
+              ) : null}
+
+              <FormField
+                label="Número da nota (opcional)"
+                hint="Sequência individual por cooperado — deixe em branco se não quiser informar"
+                error={conferirErrors.numeroNota}
+              >
+                <Input
+                  value={conferenciaNumeroNotaManual}
+                  onChange={(e) => {
+                    setConferenciaNumeroNotaManual(e.target.value);
+                    setConferirErrors((prev) => ({ ...prev, numeroNota: undefined }));
+                  }}
+                  placeholder="Ex.: 15 ou 015"
+                  inputMode="numeric"
+                  autoComplete="off"
+                />
+              </FormField>
+
+              {conferenciaDivisaoQtd >= 2 ? (
                 <div className="rounded-xl border border-blue-200 bg-blue-50/60 p-4 space-y-3">
                   <p className="text-sm font-medium text-blue-900 flex items-center gap-2">
                     <Users size={16} />
@@ -4101,7 +4148,7 @@ export default function NotasPedidoContent() {
                     <p className="text-sm text-red-600">{conferirErrors.divisao}</p>
                   )}
                 </div>
-              )}
+              ) : null}
 
               <div className="rounded-xl border border-green-200 bg-white p-4">
                 <div className="flex items-start justify-between gap-3">

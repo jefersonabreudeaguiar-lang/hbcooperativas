@@ -144,6 +144,51 @@ export function gerarNumeroNota(data: AppData, cooperativaId: string): string {
   return `${ano}-${String(count).padStart(4, "0")}`;
 }
 
+/** Normaliza número informado na conferência (ex.: "01" e "1" equivalem). */
+export function normalizarNumeroNotaConferencia(raw: string): string | null {
+  const trimmed = raw.trim();
+  if (!trimmed) return null;
+  if (/^\d+$/.test(trimmed)) return String(parseInt(trimmed, 10));
+  return trimmed.toLowerCase();
+}
+
+/** Verifica duplicidade de número já conferido/lançado para o mesmo cooperado (não global). */
+export function isNumeroNotaJaConferidaParaCooperado(
+  data: AppData,
+  params: {
+    cooperadoId: string;
+    cooperativaId: string;
+    numeroNota: string;
+    excludeNotaId?: string;
+  }
+): boolean {
+  const alvo = normalizarNumeroNotaConferencia(params.numeroNota);
+  if (!alvo) return false;
+
+  const cooperadoCanonico = resolverCooperadoIdCanonico(
+    data,
+    params.cooperadoId,
+    params.cooperativaId
+  );
+
+  return data.notasPedido.some((nota) => {
+    if (params.excludeNotaId && nota.id === params.excludeNotaId) return false;
+    if (nota.cooperativaId !== params.cooperativaId) return false;
+    if (nota.status !== "conferida" && nota.status !== "pago") return false;
+
+    const notaCooperadoId = resolverCooperadoIdCanonico(
+      data,
+      nota.cooperadoId,
+      params.cooperativaId,
+      nota.cooperadoNomeSnapshot
+    );
+    if (notaCooperadoId !== cooperadoCanonico) return false;
+
+    const existente = normalizarNumeroNotaConferencia(nota.numeroNota);
+    return Boolean(existente && existente === alvo);
+  });
+}
+
 export function getSaldoAnteriorFicha(
   data: AppData,
   cooperadoId: string,
