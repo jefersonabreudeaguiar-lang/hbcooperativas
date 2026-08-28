@@ -4,6 +4,7 @@ import { createContext, useContext, useEffect, useLayoutEffect, useState, useCal
 import { useRouter } from "next/navigation";
 import type { User } from "@/types";
 import { getSession, login as doLogin, loginCreatorAdminPortal, logout as doLogout, registerCooperado, registerCooperativa, subscribe, ensureCooperativaInCloudForUser, preloadAppData } from "@/services/dataStore";
+import { ensureCloudSessionReady, setActiveCloudProfile, userToCloudProfile } from "@/lib/security/clientSession";
 import type { RegisterCooperadoInput, RegisterCooperativaInput } from "@/services/dataStore";
 
 interface AuthContextType {
@@ -49,6 +50,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     if (!user || loading) return;
+    setActiveCloudProfile(userToCloudProfile(user));
+    void ensureCloudSessionReady();
     ensureCooperativaInCloudForUser(user).catch(() => {});
   }, [user?.id, loading]);
 

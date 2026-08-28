@@ -1,4 +1,4 @@
-import { secureApiFetch } from "@/lib/security/clientSession";
+import { secureApiFetch, mensagemErroAuthApi } from "@/lib/security/clientSession";
 import type {
   ContaCoopDashboard,
   ContaCoopIntent,
@@ -8,7 +8,11 @@ import type {
 } from "@/modules/hb-credit/types";
 
 async function parseJson<T>(res: Response): Promise<T & { error?: string }> {
-  return res.json() as Promise<T & { error?: string }>;
+  const data = (await res.json()) as T & { error?: string };
+  if (!res.ok && data.error) {
+    throw new Error(mensagemErroAuthApi(res.status, data.error));
+  }
+  return data;
 }
 
 export async function fetchCreditDashboard(cnpj: string): Promise<ContaCoopDashboard | null> {

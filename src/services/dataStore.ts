@@ -39,6 +39,8 @@ import {
   establishCloudSession,
   loginViaCloudApi,
   registerCloudUser,
+  setActiveCloudProfile,
+  userToCloudProfile,
   type CloudSessionProfile,
 } from "@/lib/security/clientSession";
 
@@ -703,15 +705,9 @@ function finishLoginSession(user: User, data: AppData, plainPassword: string): U
     }));
     persistSession(safeUser);
   }
-  void establishCloudSession(user.email, plainPassword, {
-    id: safeUser.id,
-    email: safeUser.email,
-    name: safeUser.name,
-    role: safeUser.role,
-    cooperativaId: safeUser.cooperativaId,
-    cooperadoId: safeUser.cooperadoId,
-    cooperativaCnpj: safeUser.cooperativaCnpj,
-  }).catch(() => {});
+  const cloudProfile = userToCloudProfile(safeUser);
+  setActiveCloudProfile(cloudProfile);
+  void establishCloudSession(user.email, plainPassword, cloudProfile).catch(() => {});
   return user;
 }
 
@@ -849,6 +845,7 @@ export function logout(): void {
     sessionStorage.removeItem(SESSION_KEY);
     clearAccessToken();
     clearCloudBootstrapCredentials();
+    setActiveCloudProfile(null);
     notify();
   }
 }

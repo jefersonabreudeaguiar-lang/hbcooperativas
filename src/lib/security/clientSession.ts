@@ -61,6 +61,29 @@ export function userToCloudProfile(user: {
   };
 }
 
+const LOCAL_SESSION_KEY = "coopeagriplla_session";
+
+function loadStoredSessionProfile(): CloudSessionProfile | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = localStorage.getItem(LOCAL_SESSION_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as {
+      id?: string;
+      email?: string;
+      name?: string;
+      role?: string;
+      cooperativaId?: string;
+      cooperadoId?: string;
+      cooperativaCnpj?: string;
+    };
+    if (!parsed.id || !parsed.email || !parsed.name || !parsed.role) return null;
+    return userToCloudProfile(parsed as CloudSessionProfile);
+  } catch {
+    return null;
+  }
+}
+
 function rememberCloudCredentials(email: string, password: string): void {
   if (typeof window === "undefined") return;
   try {
@@ -211,7 +234,7 @@ export async function refreshCloudSession(): Promise<boolean> {
 
 /** Restaura JWT antes de sync/envio de fotos — transparente para o usuário. */
 export async function ensureCloudSessionReady(profile?: CloudSessionProfile): Promise<boolean> {
-  const active = profile ?? activeCloudProfile;
+  const active = profile ?? activeCloudProfile ?? loadStoredSessionProfile();
   if (!active) {
     if (getAccessToken()) return refreshCloudSession();
     return false;
@@ -239,7 +262,10 @@ export async function ensureAccessTokenForApi(): Promise<boolean> {
 
 export function mensagemErroAuthApi(status: number, error?: string): string {
   if (status === 401 || error === "Autenticação necessária.") {
-    return "Não foi possível sincronizar com a nuvem. Verifique sua internet e faça login novamente.";
+    return "Sessão na nuvem não encontrada. Desconecte, entre de novo com e-mail e senha e abra a Conta Coop.";
+  }
+  if (error === "Sessão inválida ou expirada.") {
+    return "Sessão expirada. Faça login novamente para usar a Conta Coop.";
   }
   if (status === 403) {
     return "Sem permissão para esta cooperativa. Verifique o login ou fale com a diretoria.";
