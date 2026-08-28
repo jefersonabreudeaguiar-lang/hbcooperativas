@@ -16,7 +16,8 @@
     "wipe:platform": "node scripts/wipe-platform-completo.mjs",
     "backup:cloud": "node scripts/backup-cloud.mjs",
     "test:sync-flows": "npx tsx scripts/simulate-sync-flows.ts",
-    "audit:totais": "npx tsx scripts/audit-totais-cooperados.ts"
+    "audit:totais": "npx tsx scripts/audit-totais-cooperados.ts",
+    "test:hb-credit-foundation": "npx tsx scripts/test-hb-credit-foundation.ts"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.108.2",
