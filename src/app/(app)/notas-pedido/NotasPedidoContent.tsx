@@ -4065,6 +4065,27 @@ export default function NotasPedidoContent() {
                   {lancadoMsg}
                 </AlertBanner>
               )}
+
+              <div className="rounded-xl border-2 border-teal-300 bg-teal-50/80 p-4 shadow-sm">
+                <FormField
+                  label="Número da nota"
+                  hint="Opcional · sequência por cooperado (ex.: 15). Repetido para o mesmo cooperado bloqueia o lançamento."
+                  error={conferirErrors.numeroNota}
+                >
+                  <Input
+                    value={conferenciaNumeroNotaManual}
+                    onChange={(e) => {
+                      setConferenciaNumeroNotaManual(e.target.value);
+                      setConferirErrors((prev) => ({ ...prev, numeroNota: undefined }));
+                    }}
+                    placeholder="Ex.: 15 ou 015"
+                    inputMode="numeric"
+                    autoComplete="off"
+                    className="text-lg font-semibold"
+                  />
+                </FormField>
+              </div>
+
               <FormField
                 label="Dividir entre quantos cooperados?"
                 hint="0 = um cooperado só · 2 a 5 = valor igual para cada um (incluindo quem enviou)"
@@ -4100,23 +4121,6 @@ export default function NotasPedidoContent() {
                   )}
                 </FormField>
               ) : null}
-
-              <FormField
-                label="Número da nota (opcional)"
-                hint="Sequência individual por cooperado — deixe em branco se não quiser informar"
-                error={conferirErrors.numeroNota}
-              >
-                <Input
-                  value={conferenciaNumeroNotaManual}
-                  onChange={(e) => {
-                    setConferenciaNumeroNotaManual(e.target.value);
-                    setConferirErrors((prev) => ({ ...prev, numeroNota: undefined }));
-                  }}
-                  placeholder="Ex.: 15 ou 015"
-                  inputMode="numeric"
-                  autoComplete="off"
-                />
-              </FormField>
 
               {conferenciaDivisaoQtd >= 2 ? (
                 <div className="rounded-xl border border-blue-200 bg-blue-50/60 p-4 space-y-3">
