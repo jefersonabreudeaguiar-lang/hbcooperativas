@@ -782,14 +782,6 @@ export default function NotasPedidoContent() {
   }, [data, coopId]);
 
   useEffect(() => {
-    const cid = searchParams.get("cooperado");
-    if (cid && !isCooperado) {
-      setFiltroCooperadoId(cid);
-      setVistaResponsavel("cooperado");
-    }
-  }, [searchParams, isCooperado]);
-
-  useEffect(() => {
     if (!isCooperado && !filtroResponsavelIniciado.current) {
       setStatusFilter("aguardando_conferencia");
       if (!searchParams.get("cooperado")) {
@@ -889,9 +881,10 @@ export default function NotasPedidoContent() {
 
   useEffect(() => {
     if (isCooperado || vistaResponsavel !== "cooperado" || !filtroCooperadoId) return;
-    if (abaConferenciaKey) return;
     const grupo = pendentesPorCooperado.find((g) => g.cooperadoId === filtroCooperadoId);
-    if (grupo) setAbaConferenciaKey(grupo.chave);
+    if (grupo && grupo.chave !== abaConferenciaKey) {
+      setAbaConferenciaKey(grupo.chave);
+    }
   }, [isCooperado, vistaResponsavel, filtroCooperadoId, abaConferenciaKey, pendentesPorCooperado]);
 
   const { chave: abaConferenciaEfetiva, grupo: grupoAbaAtiva } = useMemo(
@@ -944,10 +937,6 @@ export default function NotasPedidoContent() {
     if (abaConferenciaEfetiva && abaConferenciaEfetiva !== abaConferenciaKey) {
       setAbaConferenciaKey(abaConferenciaEfetiva);
     }
-    const cooperadoDaAba = grupoAbaAtiva?.cooperadoId;
-    if (cooperadoDaAba && cooperadoDaAba !== filtroCooperadoId) {
-      setFiltroCooperadoId(cooperadoDaAba);
-    }
   }, [
     isCooperado,
     vistaResponsavel,
@@ -955,7 +944,6 @@ export default function NotasPedidoContent() {
     pendentesPorCooperado,
     abaConferenciaEfetiva,
     abaConferenciaKey,
-    grupoAbaAtiva?.cooperadoId,
     filtroCooperadoId,
   ]);
 
@@ -967,6 +955,37 @@ export default function NotasPedidoContent() {
       setStatusFilter("aguardando_conferencia");
     }
   };
+
+  const selecionarCooperadoConferencia = (cooperadoId: string) => {
+    const grupo = pendentesPorCooperado.find((g) => g.cooperadoId === cooperadoId);
+    if (grupo) {
+      selecionarAbaConferencia(grupo);
+      return;
+    }
+    setFiltroCooperadoId(cooperadoId);
+    setAbaConferenciaKey("");
+    setVistaResponsavel("cooperado");
+    if (statusFilter !== "aguardando_conferencia") {
+      setStatusFilter("aguardando_conferencia");
+    }
+  };
+
+  useEffect(() => {
+    const cid = searchParams.get("cooperado");
+    if (!cid || isCooperado) return;
+    const grupo = pendentesPorCooperado.find((g) => g.cooperadoId === cid);
+    if (grupo) {
+      setAbaConferenciaKey(grupo.chave);
+      setFiltroCooperadoId(grupo.cooperadoId);
+    } else {
+      setFiltroCooperadoId(cid);
+      setAbaConferenciaKey("");
+    }
+    setVistaResponsavel("cooperado");
+    if (statusFilter !== "aguardando_conferencia") {
+      setStatusFilter("aguardando_conferencia");
+    }
+  }, [searchParams, isCooperado, pendentesPorCooperado, statusFilter]);
 
   const voltarFilaResponsavel = () => {
     setVistaResponsavel("fila");
@@ -2019,6 +2038,8 @@ export default function NotasPedidoContent() {
         setFilaConferenciaTotal(filaGrupo.length);
         return filaGrupo[0];
       }
+      const fallbackGrupo = agruparPendentesPorCooperado(d, [outras[0]], coopId)[0];
+      if (fallbackGrupo) selecionarAbaConferencia(fallbackGrupo);
       return outras[0];
     }
     return null;
@@ -3199,7 +3220,21 @@ export default function NotasPedidoContent() {
         )}
         {!isCooperado && cooperadosCoop.length > 0 && (
           <FormField label="Cooperado">
-            <Select value={filtroCooperadoId} onChange={(e) => setFiltroCooperadoId(e.target.value)} className="min-w-[200px]">
+            <Select
+              value={filtroCooperadoId}
+              onChange={(e) => {
+                const id = e.target.value;
+                setFiltroCooperadoId(id);
+                if (!id) {
+                  setAbaConferenciaKey("");
+                  return;
+                }
+                if (vistaResponsavel === "cooperado") {
+                  selecionarCooperadoConferencia(id);
+                }
+              }}
+              className="min-w-[200px]"
+            >
               <option value="">Todos</option>
               {cooperadosCoop.map((c) => (
                 <option key={c.id} value={c.id}>{c.nomeCompleto}</option>

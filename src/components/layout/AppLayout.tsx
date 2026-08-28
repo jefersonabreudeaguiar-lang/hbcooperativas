@@ -172,9 +172,10 @@ export function MobileNav() {
   const [open, setOpen] = useState(false);
   const pathname = usePathname();
   const { user } = useAuth();
+  const { enabled: creditEnabled } = useHbCreditEnabled();
   if (!user) return null;
 
-  const mobileItems = getMobileNavItems(user);
+  const mobileItems = getMobileNavItems(user, creditEnabled);
 
   return (
     <>

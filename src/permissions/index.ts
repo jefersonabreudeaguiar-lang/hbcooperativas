@@ -329,7 +329,10 @@ export function getCooperadoExtraItems(): { href: string; label: string }[] {
   return [];
 }
 
-export function getMobileNavItems(user: PermissionSubject): { href: string; label: string; resource: Resource }[] {
+export function getMobileNavItems(
+  user: PermissionSubject,
+  creditEnabled = false
+): { href: string; label: string; resource: Resource }[] {
   if (user.role === "cooperado") {
     return COOPERADO_MENU.filter((i) =>
       ["/dashboard", "/notas-pedido", "/precos", "/ficha-corrida", "/mensalidades"].includes(i.href)
@@ -348,7 +351,7 @@ export function getMobileNavItems(user: PermissionSubject): { href: string; labe
   ];
 
   if (user.role === "responsavel") {
-    return filterMenuForUser(responsavelItems, user);
+    return appendHbCreditMenuItem(filterMenuForUser(responsavelItems, user), user, creditEnabled);
   }
 
   if (user.role === "tesoureiro" || user.role === "admin") {
@@ -360,7 +363,7 @@ export function getMobileNavItems(user: PermissionSubject): { href: string; labe
       { href: "/cooperados", label: "Cooperados", resource: "cooperados" },
       { href: "/contratos", label: "Contratos", resource: "instituicoes" },
     ];
-    return filterMenuForUser(tesoureiroItems, user);
+    return appendHbCreditMenuItem(filterMenuForUser(tesoureiroItems, user), user, creditEnabled);
   }
 
   return [];

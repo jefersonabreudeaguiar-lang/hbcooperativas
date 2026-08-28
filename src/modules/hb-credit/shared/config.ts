@@ -5,6 +5,8 @@
 
 const SERVER_FLAG = "HB_CREDIT_ENABLED";
 const CLIENT_FLAG = "NEXT_PUBLIC_HB_CREDIT_ENABLED";
+const SERVER_LAB_FLAG = "HB_CREDIT_LAB_ENABLED";
+const CLIENT_LAB_FLAG = "NEXT_PUBLIC_HB_CREDIT_LAB_ENABLED";
 
 const ALLOWED_ON = new Set(["true", "1"]);
 
@@ -13,15 +15,23 @@ function parseFlag(raw: string | undefined): boolean {
   return ALLOWED_ON.has(raw.trim().toLowerCase());
 }
 
+function isDevLabServerEnabled(): boolean {
+  return process.env.NODE_ENV !== "production" && parseFlag(process.env[SERVER_LAB_FLAG]);
+}
+
+function isDevLabClientEnabled(): boolean {
+  return process.env.NODE_ENV !== "production" && parseFlag(process.env[CLIENT_LAB_FLAG]);
+}
+
 /** Servidor: autoridade para operações financeiras. */
 export function isHbCreditEnabledServer(): boolean {
-  return parseFlag(process.env[SERVER_FLAG]);
+  return parseFlag(process.env[SERVER_FLAG]) || isDevLabServerEnabled();
 }
 
 /** Cliente: somente indica intenção de UI; nunca autoriza operação financeira. */
 export function isHbCreditEnabledClient(): boolean {
   if (typeof window === "undefined") return false;
-  return parseFlag(process.env[CLIENT_FLAG]);
+  return parseFlag(process.env[CLIENT_FLAG]) || isDevLabClientEnabled();
 }
 
 /**

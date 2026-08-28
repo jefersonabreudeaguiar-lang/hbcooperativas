@@ -341,13 +341,14 @@ export function resolverAbaConferenciaAtiva(
   if (grupos.length === 0) {
     return { chave: abaConferenciaKey, grupo: undefined };
   }
-  if (abaConferenciaKey) {
-    const direta = grupos.find((g) => g.chave === abaConferenciaKey);
-    if (direta) return { chave: direta.chave, grupo: direta };
-  }
+  // Escolha explícita do cooperado prevalece sobre chave antiga (troca de aba).
   if (filtroCooperadoId) {
     const porId = grupos.find((g) => g.cooperadoId === filtroCooperadoId);
     if (porId) return { chave: porId.chave, grupo: porId };
+  }
+  if (abaConferenciaKey) {
+    const direta = grupos.find((g) => g.chave === abaConferenciaKey);
+    if (direta) return { chave: direta.chave, grupo: direta };
   }
   return { chave: grupos[0].chave, grupo: grupos[0] };
 }
