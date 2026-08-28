@@ -18,9 +18,25 @@ import {
   postCreditParceiroStatus,
 } from "@/services/creditApiService";
 import { formatCentsBRL } from "@/modules/hb-credit/engine/money";
+import { buildCreditosBaseMap } from "@/modules/hb-credit/engine/creditBaseFromFicha";
 import type { ContaCoopDashboard, ContaCoopLimiteCooperado, ContaCoopParceiro } from "@/modules/hb-credit/types";
 import { cn } from "@/utils/format";
 import { PageSkeleton } from "@/components/ui/PageSkeleton";
+
+type PreviewColetivo = {
+  ok?: boolean;
+  error?: string;
+  percentual?: number;
+  limiteAtualTotal?: number;
+  novoLimiteTotal?: number;
+  totalApos?: number;
+  itens?: Array<{
+    cooperadoId: string;
+    creditoBaseCents: number;
+    novoLimiteCents: number;
+    ajustadoPorUso?: boolean;
+  }>;
+};
 
 type Tab = "painel" | "limites" | "mercados";
 
@@ -44,8 +60,8 @@ function ContaCoopContent() {
   const [tetoReais, setTetoReais] = useState("");
   const [cooperadoId, setCooperadoId] = useState("");
   const [novoLimiteReais, setNovoLimiteReais] = useState("");
-  const [valorColetivoReais, setValorColetivoReais] = useState("");
-  const [previewColetivo, setPreviewColetivo] = useState<Record<string, unknown> | null>(null);
+  const [percentualColetivo, setPercentualColetivo] = useState("");
+  const [previewColetivo, setPreviewColetivo] = useState<PreviewColetivo | null>(null);
   const [busy, setBusy] = useState(false);
 
   const cnpj = useMemo(() => {
@@ -65,6 +81,15 @@ function ContaCoopContent() {
     (id: string) => cooperadosAtivos.find((c) => c.id === id)?.nomeCompleto ?? id,
     [cooperadosAtivos]
   );
+
+  const creditosBaseColetivo = useMemo(() => {
+    if (!data || !cooperadosAtivos.length) return {};
+    return buildCreditosBaseMap(
+      data,
+      cooperadosAtivos.map((c) => c.id),
+      user?.cooperativaId
+    );
+  }, [data, cooperadosAtivos, user?.cooperativaId]);
 
   const reload = useCallback(async () => {
     if (!cnpj) return;
@@ -125,15 +150,22 @@ function ContaCoopContent() {
 
   const previewColetivoAction = async () => {
     if (!cnpj) return;
+    const percentual = Number(percentualColetivo.replace(",", "."));
+    if (!Number.isFinite(percentual) || percentual < 0 || percentual > 100) {
+      setError("Informe um percentual entre 0 e 100.");
+      return;
+    }
     setBusy(true);
+    setError("");
     try {
       const res = await postCreditLimites({
         action: "preview_coletivo",
         cnpj,
         cooperadoIds: cooperadosAtivos.map((c) => c.id),
-        valorReais: Number(valorColetivoReais.replace(",", ".")),
+        percentual,
+        creditosBaseCents: creditosBaseColetivo,
       });
-      setPreviewColetivo((res as { preview?: Record<string, unknown> }).preview ?? null);
+      setPreviewColetivo((res as { preview?: PreviewColetivo }).preview ?? null);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Erro na prévia.");
     } finally {
@@ -143,6 +175,11 @@ function ContaCoopContent() {
 
   const salvarColetivo = async () => {
     if (!cnpj) return;
+    const percentual = Number(percentualColetivo.replace(",", "."));
+    if (!Number.isFinite(percentual) || percentual < 0 || percentual > 100) {
+      setError("Informe um percentual entre 0 e 100.");
+      return;
+    }
     setBusy(true);
     setError("");
     try {
@@ -150,7 +187,8 @@ function ContaCoopContent() {
         action: "set_coletivo",
         cnpj,
         cooperadoIds: cooperadosAtivos.map((c) => c.id),
-        valorReais: Number(valorColetivoReais.replace(",", ".")),
+        percentual,
+        creditosBaseCents: creditosBaseColetivo,
       });
       setPreviewColetivo(null);
       await reload();
@@ -275,21 +313,60 @@ function ContaCoopContent() {
 
           <Card className="p-5 space-y-4">
             <h3 className="font-semibold">Coletivo ({cooperadosAtivos.length} cooperados)</h3>
+            <p className="text-sm text-gray-600">
+              Libera para cada cooperado um percentual do crédito pendente na ficha (Quanto vou receber).
+            </p>
             <div className="flex flex-wrap gap-2 items-end">
               <div>
-                <Label>Valor por cooperado (R$)</Label>
-                <Input value={valorColetivoReais} onChange={(e) => setValorColetivoReais(e.target.value)} className="w-40" />
+                <Label>Percentual do crédito (%)</Label>
+                <Input
+                  value={percentualColetivo}
+                  onChange={(e) => setPercentualColetivo(e.target.value)}
+                  className="w-40"
+                  placeholder="50"
+                  inputMode="decimal"
+                />
               </div>
               <Button variant="secondary" onClick={previewColetivoAction} disabled={busy}>Prévia</Button>
               <Button onClick={salvarColetivo} disabled={busy}>Liberar todos</Button>
             </div>
             {previewColetivo && (
-              <div className="text-sm bg-gray-50 border rounded-lg p-3 space-y-1">
-                <p>Limite atual total: {formatCentsBRL(Number(previewColetivo.limiteAtualTotal ?? 0))}</p>
-                <p>Novo pacote: {formatCentsBRL(Number(previewColetivo.novoLimiteTotal ?? 0))}</p>
-                <p className="font-medium">Total após: {formatCentsBRL(Number(previewColetivo.totalApos ?? 0))}</p>
-                {!previewColetivo.ok && (
-                  <p className="text-red-600">{String(previewColetivo.error ?? "Ultrapassa teto")}</p>
+              <div className="text-sm bg-gray-50 border rounded-lg p-3 space-y-3">
+                <div className="space-y-1">
+                  <p>Percentual: {previewColetivo.percentual ?? percentualColetivo}%</p>
+                  <p>Limite atual total: {formatCentsBRL(Number(previewColetivo.limiteAtualTotal ?? 0))}</p>
+                  <p>Novo pacote: {formatCentsBRL(Number(previewColetivo.novoLimiteTotal ?? 0))}</p>
+                  <p className="font-medium">Total após: {formatCentsBRL(Number(previewColetivo.totalApos ?? 0))}</p>
+                  {!previewColetivo.ok && (
+                    <p className="text-red-600">{String(previewColetivo.error ?? "Ultrapassa teto")}</p>
+                  )}
+                </div>
+                {!!previewColetivo.itens?.length && (
+                  <div className="overflow-x-auto border rounded-lg bg-white">
+                    <table className="w-full text-xs">
+                      <thead className="bg-gray-50 text-left">
+                        <tr>
+                          <th className="p-2">Cooperado</th>
+                          <th className="p-2">Crédito (ficha)</th>
+                          <th className="p-2">Novo limite</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {previewColetivo.itens.map((item) => (
+                          <tr key={item.cooperadoId} className="border-t">
+                            <td className="p-2">{cooperadoNome(item.cooperadoId)}</td>
+                            <td className="p-2">{formatCentsBRL(item.creditoBaseCents)}</td>
+                            <td className="p-2">
+                              {formatCentsBRL(item.novoLimiteCents)}
+                              {item.ajustadoPorUso && (
+                                <span className="block text-amber-700">Mínimo = já usado</span>
+                              )}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
                 )}
               </div>
             )}
@@ -300,6 +377,7 @@ function ContaCoopContent() {
               <thead className="bg-gray-50 text-left">
                 <tr>
                   <th className="p-3">Cooperado</th>
+                  <th className="p-3">Crédito (ficha)</th>
                   <th className="p-3">Liberado</th>
                   <th className="p-3">Usado</th>
                   <th className="p-3">Disponível</th>
@@ -310,6 +388,7 @@ function ContaCoopContent() {
                 {limites.map((l) => (
                   <tr key={l.id} className="border-t">
                     <td className="p-3">{cooperadoNome(l.cooperadoId)}</td>
+                    <td className="p-3">{formatCentsBRL(creditosBaseColetivo[l.cooperadoId] ?? 0)}</td>
                     <td className="p-3">{formatCentsBRL(l.limiteLiberadoCents)}</td>
                     <td className="p-3">{formatCentsBRL(l.valorUsadoCents)}</td>
                     <td className="p-3">{formatCentsBRL(l.valorDisponivelCents)}</td>
@@ -321,7 +400,7 @@ function ContaCoopContent() {
                   </tr>
                 ))}
                 {!limites.length && (
-                  <tr><td colSpan={5} className="p-6 text-center text-gray-500">Nenhum limite liberado ainda.</td></tr>
+                  <tr><td colSpan={6} className="p-6 text-center text-gray-500">Nenhum limite liberado ainda.</td></tr>
                 )}
               </tbody>
             </table>

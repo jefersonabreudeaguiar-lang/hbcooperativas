@@ -3,8 +3,10 @@ import {
   listLimitesCooperados,
   previewLimiteAlteracao,
   previewLimiteColetivo,
+  previewLimiteColetivoPercentual,
   setCooperadoBloqueado,
   setLimiteColetivo,
+  setLimiteColetivoPercentual,
   setLimiteCooperado,
   setTetoGlobal,
 } from "@/lib/supabase/contaCoopStorage";
@@ -69,6 +71,20 @@ export async function POST(request: Request) {
 
   if (action === "set_coletivo") {
     const cooperadoIds = (body?.cooperadoIds ?? []) as string[];
+    const percentual = Number(body?.percentual);
+    if (Number.isFinite(percentual)) {
+      const creditosBaseCents = (body?.creditosBaseCents ?? {}) as Record<string, number>;
+      const result = await setLimiteColetivoPercentual(
+        gate.ctx.supabase,
+        cnpj,
+        cooperadoIds,
+        percentual,
+        creditosBaseCents,
+        actorId
+      );
+      if (!result.ok) return NextResponse.json({ error: result.error }, { status: 400 });
+      return NextResponse.json({ ok: true, updated: result.updated });
+    }
     const valorCents = Number(body?.valorCentavos ?? reaisToCents(Number(body?.valorReais ?? 0)));
     const result = await setLimiteColetivo(gate.ctx.supabase, cnpj, cooperadoIds, valorCents, actorId);
     if (!result.ok) return NextResponse.json({ error: result.error }, { status: 400 });
@@ -77,6 +93,18 @@ export async function POST(request: Request) {
 
   if (action === "preview_coletivo") {
     const cooperadoIds = (body?.cooperadoIds ?? []) as string[];
+    const percentual = Number(body?.percentual);
+    if (Number.isFinite(percentual)) {
+      const creditosBaseCents = (body?.creditosBaseCents ?? {}) as Record<string, number>;
+      const preview = await previewLimiteColetivoPercentual(
+        gate.ctx.supabase,
+        cnpj,
+        cooperadoIds,
+        percentual,
+        creditosBaseCents
+      );
+      return NextResponse.json({ ok: true, preview });
+    }
     const valorCents = Number(body?.valorCentavos ?? reaisToCents(Number(body?.valorReais ?? 0)));
     const preview = await previewLimiteColetivo(gate.ctx.supabase, cnpj, cooperadoIds, valorCents);
     return NextResponse.json({ ok: true, preview });

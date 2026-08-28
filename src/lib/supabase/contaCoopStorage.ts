@@ -11,6 +11,7 @@ import type {
   ParceiroStatus,
 } from "@/modules/hb-credit/types";
 import { computeDisponivel } from "@/modules/hb-credit/engine/money";
+import { calcLimiteFromPercentual } from "@/modules/hb-credit/engine/creditBaseFromFicha";
 import { INTENT_EXPIRY_MINUTES } from "@/modules/hb-credit/config";
 import {
   intentStatusFromDb,
@@ -739,6 +740,151 @@ export async function previewLimiteColetivo(
     tetoGlobal: teto,
     ok: true,
   };
+}
+
+export type LimiteColetivoPreviewItem = {
+  cooperadoId: string;
+  creditoBaseCents: number;
+  limiteAtualCents: number;
+  valorUsadoCents: number;
+  novoLimiteCents: number;
+  ajustadoPorUso: boolean;
+};
+
+async function readLimiteAtualCooperado(
+  supabase: SupabaseClient,
+  cnpj: string,
+  cooperadoId: string
+): Promise<{ limiteAtualCents: number; valorUsadoCents: number }> {
+  const digits = normalizeCnpj(cnpj);
+  const { data } = await supabase
+    .from("hb_credit_accounts")
+    .select("limit_released_cents, amount_used_cents")
+    .eq("cooperative_cnpj", digits)
+    .eq("cooperado_id", cooperadoId)
+    .maybeSingle();
+  return {
+    limiteAtualCents: data ? Number(data.limit_released_cents) : 0,
+    valorUsadoCents: data ? Number(data.amount_used_cents) : 0,
+  };
+}
+
+export async function previewLimiteColetivoPercentual(
+  supabase: SupabaseClient,
+  cnpj: string,
+  cooperadoIds: string[],
+  percentual: number,
+  creditosBaseCents: Record<string, number>
+): Promise<{
+  limiteAtualTotal: number;
+  novoLimiteTotal: number;
+  totalApos: number;
+  tetoGlobal: number;
+  ok: boolean;
+  error?: string;
+  percentual: number;
+  itens: LimiteColetivoPreviewItem[];
+}> {
+  const digits = normalizeCnpj(cnpj);
+  const teto = await getOrCreateTeto(supabase, digits);
+  const distribuido = await sumLimitesDistribuidos(supabase, digits);
+
+  if (!Number.isFinite(percentual) || percentual < 0 || percentual > 100) {
+    return {
+      limiteAtualTotal: distribuido,
+      novoLimiteTotal: 0,
+      totalApos: distribuido,
+      tetoGlobal: teto,
+      ok: false,
+      error: "Percentual inválido (use 0 a 100).",
+      percentual,
+      itens: [],
+    };
+  }
+
+  const itens: LimiteColetivoPreviewItem[] = [];
+  let somaAtualSelecionados = 0;
+  let novoLimiteTotal = 0;
+
+  for (const cooperadoId of cooperadoIds) {
+    const creditoBaseCents = Math.max(0, Math.round(Number(creditosBaseCents[cooperadoId] ?? 0)));
+    const { limiteAtualCents, valorUsadoCents } = await readLimiteAtualCooperado(supabase, digits, cooperadoId);
+    somaAtualSelecionados += limiteAtualCents;
+
+    let novoLimiteCents = calcLimiteFromPercentual(creditoBaseCents, percentual);
+    let ajustadoPorUso = false;
+    if (novoLimiteCents < valorUsadoCents) {
+      novoLimiteCents = valorUsadoCents;
+      ajustadoPorUso = true;
+    }
+
+    novoLimiteTotal += novoLimiteCents;
+    itens.push({
+      cooperadoId,
+      creditoBaseCents,
+      limiteAtualCents,
+      valorUsadoCents,
+      novoLimiteCents,
+      ajustadoPorUso,
+    });
+  }
+
+  const totalApos = distribuido - somaAtualSelecionados + novoLimiteTotal;
+
+  if (totalApos > teto) {
+    return {
+      limiteAtualTotal: distribuido,
+      novoLimiteTotal,
+      totalApos,
+      tetoGlobal: teto,
+      ok: false,
+      error: "Ultrapassa o teto global da cooperativa.",
+      percentual,
+      itens,
+    };
+  }
+
+  return {
+    limiteAtualTotal: distribuido,
+    novoLimiteTotal,
+    totalApos,
+    tetoGlobal: teto,
+    ok: true,
+    percentual,
+    itens,
+  };
+}
+
+export async function setLimiteColetivoPercentual(
+  supabase: SupabaseClient,
+  cnpj: string,
+  cooperadoIds: string[],
+  percentual: number,
+  creditosBaseCents: Record<string, number>,
+  actorUserId: string
+): Promise<{ ok: true; updated: number } | { ok: false; error: string }> {
+  const preview = await previewLimiteColetivoPercentual(
+    supabase,
+    cnpj,
+    cooperadoIds,
+    percentual,
+    creditosBaseCents
+  );
+  if (!preview.ok) return { ok: false, error: preview.error ?? "Prévia recusada." };
+
+  let updated = 0;
+  for (const item of preview.itens) {
+    const result = await setLimiteCooperado(
+      supabase,
+      cnpj,
+      item.cooperadoId,
+      item.novoLimiteCents,
+      actorUserId
+    );
+    if (!result.ok) return result;
+    updated++;
+  }
+  return { ok: true, updated };
 }
 
 export async function cancelPaymentIntent(
