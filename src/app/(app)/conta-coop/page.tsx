@@ -27,10 +27,13 @@ import { PageSkeleton } from "@/components/ui/PageSkeleton";
 type PreviewColetivo = {
   ok?: boolean;
   error?: string;
+  aviso?: string;
   percentual?: number;
+  tetoGlobal?: number;
   limiteAtualTotal?: number;
   novoLimiteTotal?: number;
   totalApos?: number;
+  autoAjusteTetoCents?: number;
   itens?: Array<{
     cooperadoId: string;
     creditoBaseCents: number;
@@ -261,6 +264,12 @@ function ContaCoopContent() {
         <div className="grid gap-4 md:grid-cols-2">
           <Card className="p-5 space-y-3">
             <h3 className="font-semibold text-gray-900">Teto global</h3>
+            {dashboard.teto.tetoGlobalCents === 0 && (
+              <p className="text-sm text-amber-800 bg-amber-50 border border-amber-200 rounded-lg p-2">
+                Teto ainda não definido (R$ 0,00). Na liberação coletiva por percentual, o teto será ajustado
+                automaticamente. Ou defina manualmente abaixo.
+              </p>
+            )}
             <p className="text-sm text-gray-600">Teto: {formatCentsBRL(dashboard.teto.tetoGlobalCents)}</p>
             <p className="text-sm text-gray-600">Distribuído: {formatCentsBRL(dashboard.teto.limiteDistribuidoCents)}</p>
             <p className="text-sm font-medium text-green-800">
@@ -337,9 +346,13 @@ function ContaCoopContent() {
               <div className="text-sm bg-gray-50 border rounded-lg p-3 space-y-3">
                 <div className="space-y-1">
                   <p>Percentual: {previewColetivo.percentual ?? percentualColetivo}%</p>
+                  <p>Teto global: {formatCentsBRL(Number(previewColetivo.tetoGlobal ?? 0))}</p>
                   <p>Limite atual total: {formatCentsBRL(Number(previewColetivo.limiteAtualTotal ?? 0))}</p>
                   <p>Novo pacote: {formatCentsBRL(Number(previewColetivo.novoLimiteTotal ?? 0))}</p>
                   <p className="font-medium">Total após: {formatCentsBRL(Number(previewColetivo.totalApos ?? 0))}</p>
+                  {previewColetivo.aviso && (
+                    <p className="text-amber-800">{previewColetivo.aviso}</p>
+                  )}
                   {!previewColetivo.ok && (
                     <p className="text-red-600">{String(previewColetivo.error ?? "Ultrapassa teto")}</p>
                   )}

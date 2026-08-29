@@ -10,7 +10,7 @@ import type {
   ContaCoopTresValores,
   ParceiroStatus,
 } from "@/modules/hb-credit/types";
-import { computeDisponivel } from "@/modules/hb-credit/engine/money";
+import { computeDisponivel, formatCentsBRL } from "@/modules/hb-credit/engine/money";
 import { calcLimiteFromPercentual } from "@/modules/hb-credit/engine/creditBaseFromFicha";
 import { INTENT_EXPIRY_MINUTES } from "@/modules/hb-credit/config";
 import {
@@ -81,6 +81,10 @@ export async function setTetoGlobal(
     updated_at: new Date().toISOString(),
   });
   return { ok: true };
+}
+
+function mensagemUltrapassaTeto(tetoCents: number, totalAposCents: number): string {
+  return `Ultrapassa o teto global (${formatCentsBRL(tetoCents)}). Total após liberação: ${formatCentsBRL(totalAposCents)}. Aumente o teto na aba Painel.`;
 }
 
 async function sumLimitesDistribuidos(supabase: SupabaseClient, cnpj: string): Promise<number> {
@@ -211,7 +215,7 @@ export async function previewLimiteAlteracao(
       totalDistribuidoApos: totalApos,
       tetoGlobal: teto,
       ok: false,
-      error: "Ultrapassa o teto global da cooperativa.",
+      error: teto === 0 ? "Teto global ainda não definido (R$ 0,00). Defina o teto na aba Painel ou use a liberação coletiva." : mensagemUltrapassaTeto(teto, totalApos),
     };
   }
 
@@ -784,6 +788,8 @@ export async function previewLimiteColetivoPercentual(
   error?: string;
   percentual: number;
   itens: LimiteColetivoPreviewItem[];
+  autoAjusteTetoCents?: number;
+  aviso?: string;
 }> {
   const digits = normalizeCnpj(cnpj);
   const teto = await getOrCreateTeto(supabase, digits);
@@ -832,13 +838,27 @@ export async function previewLimiteColetivoPercentual(
   const totalApos = distribuido - somaAtualSelecionados + novoLimiteTotal;
 
   if (totalApos > teto) {
+    if (teto === 0 && totalApos > 0) {
+      return {
+        limiteAtualTotal: distribuido,
+        novoLimiteTotal,
+        totalApos,
+        tetoGlobal: teto,
+        ok: true,
+        percentual,
+        itens,
+        autoAjusteTetoCents: totalApos,
+        aviso: `Teto global ainda não definido. Na liberação, será ajustado para ${formatCentsBRL(totalApos)}.`,
+      };
+    }
+
     return {
       limiteAtualTotal: distribuido,
       novoLimiteTotal,
       totalApos,
       tetoGlobal: teto,
       ok: false,
-      error: "Ultrapassa o teto global da cooperativa.",
+      error: mensagemUltrapassaTeto(teto, totalApos),
       percentual,
       itens,
     };
@@ -871,6 +891,16 @@ export async function setLimiteColetivoPercentual(
     creditosBaseCents
   );
   if (!preview.ok) return { ok: false, error: preview.error ?? "Prévia recusada." };
+
+  if (preview.autoAjusteTetoCents && preview.autoAjusteTetoCents > 0) {
+    const tetoResult = await setTetoGlobal(
+      supabase,
+      cnpj,
+      preview.autoAjusteTetoCents,
+      actorUserId
+    );
+    if (!tetoResult.ok) return tetoResult;
+  }
 
   let updated = 0;
   for (const item of preview.itens) {
