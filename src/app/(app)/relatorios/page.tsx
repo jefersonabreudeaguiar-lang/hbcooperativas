@@ -34,6 +34,11 @@ import {
   gerarRelatorioVotacoesHtml,
   gerarRelatorioConciliacaoHtml,
   gerarRelatorioDemonstrativoPagamentosHtml,
+  gerarRelatorioRazaoAnaliticoHtml,
+  gerarRelatorioMapaReceitasHtml,
+  gerarRelatorioExtratoContaCoopHtml,
+  gerarRelatorioTrilhaAuditoriaHtml,
+  gerarRelatorioParecerContabilHtml,
   imprimirDocumentoHtml,
   nomeArquivoRelatorio,
 } from "@/utils/relatorioHtml";
@@ -47,6 +52,14 @@ import {
   calcularConciliacaoMensal,
   getDemonstrativoPagamentosMes,
 } from "@/services/conciliacaoMensalService";
+import {
+  auditLogParaExportacao,
+  getExtratoContaCoopMes,
+  getMapaReceitasContrato,
+  getParecerContabilMes,
+  getRazaoAnaliticoCooperado,
+  getRazaoAnaliticoTodosCooperados,
+} from "@/services/contadorRelatorioService";
 import { labelUnidade } from "@/utils/unidades";
 import { PageSkeleton } from "@/components/ui/PageSkeleton";
 
@@ -66,6 +79,11 @@ const RELATORIOS = [
   { id: "historico_votacoes", label: "Histórico de Votações" },
   { id: "conciliacao_mensal", label: "R4 — Conciliação mensal (contador)" },
   { id: "demonstrativo_pagamentos", label: "R2 — Demonstrativo de pagamentos" },
+  { id: "razao_analitico", label: "R1 — Razão analítico por cooperado" },
+  { id: "mapa_receitas_contrato", label: "R3 — Mapa receitas por contrato" },
+  { id: "extrato_conta_coop", label: "R5 — Extrato Conta Coop" },
+  { id: "trilha_auditoria", label: "R6 — Trilha de auditoria" },
+  { id: "parecer_contabil", label: "R9 — Parecer contábil mensal" },
 ];
 
 export default function RelatoriosPage() {
@@ -139,6 +157,26 @@ export default function RelatoriosPage() {
     if (tipo === "demonstrativo_pagamentos") {
       const linhas = getDemonstrativoPagamentosMes(data, mes);
       return gerarRelatorioDemonstrativoPagamentosHtml(data, mes, linhas, emissor);
+    }
+    if (tipo === "razao_analitico") {
+      const razoes = cooperadoId
+        ? [getRazaoAnaliticoCooperado(data, cooperadoId, mes, coopId ?? undefined)]
+        : getRazaoAnaliticoTodosCooperados(data, mes, coopId ?? undefined);
+      return gerarRelatorioRazaoAnaliticoHtml(data, razoes, mes, emissor);
+    }
+    if (tipo === "mapa_receitas_contrato") {
+      return gerarRelatorioMapaReceitasHtml(data, getMapaReceitasContrato(data, mes, coopId ?? undefined), emissor);
+    }
+    if (tipo === "extrato_conta_coop") {
+      return gerarRelatorioExtratoContaCoopHtml(data, getExtratoContaCoopMes(data, mes, coopId ?? undefined), emissor);
+    }
+    if (tipo === "trilha_auditoria") {
+      return gerarRelatorioTrilhaAuditoriaHtml(data, auditLogParaExportacao(data, mes), mes, emissor);
+    }
+    if (tipo === "parecer_contabil") {
+      const parecer = coopId ? getParecerContabilMes(data, coopId, mes) : undefined;
+      if (!parecer) return "";
+      return gerarRelatorioParecerContabilHtml(data, parecer, emissor);
     }
     return gerarRelatorioFinanceiroHtml(data, mes, tituloRelatorio, emissor);
   };
@@ -415,6 +453,53 @@ export default function RelatoriosPage() {
           p.pagoPor,
           p.pagoEm.split("T")[0],
         ]);
+        break;
+      }
+      case "razao_analitico": {
+        const razoes = cooperadoId
+          ? [getRazaoAnaliticoCooperado(data, cooperadoId, mes, coopId ?? undefined)]
+          : getRazaoAnaliticoTodosCooperados(data, mes, coopId ?? undefined);
+        headers = ["Cooperado", "Data", "Tipo", "Descrição", "Valor", "Saldo"];
+        rows = razoes.flatMap((r) =>
+          r.linhas.map((l) => [r.cooperadoNome, l.data, l.tipo, l.descricao, String(l.valor), String(l.saldo)])
+        );
+        break;
+      }
+      case "mapa_receitas_contrato": {
+        const mapa = getMapaReceitasContrato(data, mes, coopId ?? undefined);
+        headers = ["Instituição", "Entregas", "Bruto", "Líquido"];
+        rows = mapa.linhas.map((l) => [l.instituicaoNome, String(l.qtdEntregas), String(l.valorBruto), String(l.valorLiquido)]);
+        break;
+      }
+      case "extrato_conta_coop": {
+        const ex = getExtratoContaCoopMes(data, mes, coopId ?? undefined);
+        headers = ["Cooperado", "Descrição", "Valor"];
+        rows = ex.linhas.map((l) => [l.cooperadoNome, l.motivo, String(l.valor)]);
+        break;
+      }
+      case "trilha_auditoria": {
+        headers = ["Data", "Usuário", "Ação", "Entidade", "Resumo"];
+        rows = auditLogParaExportacao(data, mes).map((e) => [
+          e.timestamp,
+          e.userName,
+          e.action,
+          e.entityType,
+          e.changes ?? "",
+        ]);
+        break;
+      }
+      case "parecer_contabil": {
+        const parecer = coopId ? getParecerContabilMes(data, coopId, mes) : undefined;
+        headers = ["Campo", "Valor"];
+        rows = parecer
+          ? [
+              ["Mês", parecer.mesReferencia],
+              ["Contador", parecer.contadorNome],
+              ["Função", parecer.contadorFuncao],
+              ["Emitido em", parecer.emitidoEm],
+              ["Texto", parecer.texto],
+            ]
+          : [["Aviso", "Nenhum parecer registrado para este mês"]];
         break;
       }
       default:
@@ -1053,6 +1138,109 @@ export default function RelatoriosPage() {
             ]}
             emptyMessage="Nenhum pagamento registrado neste mês."
           />
+        );
+      }
+      case "razao_analitico": {
+        const razoes = cooperadoId
+          ? [getRazaoAnaliticoCooperado(data, cooperadoId, mes, coopId ?? undefined)]
+          : getRazaoAnaliticoTodosCooperados(data, mes, coopId ?? undefined);
+        if (razoes.length === 0) return <p className="text-gray-500">Sem movimentação no mês.</p>;
+        return (
+          <div className="space-y-6">
+            {razoes.map((r) => (
+              <Card key={r.cooperadoId} title={r.cooperadoNome}>
+                <DataTable
+                  data={r.linhas.map((l, i) => ({ ...l, id: `${r.cooperadoId}_${i}` }))}
+                  keyField="id"
+                  columns={[
+                    { key: "data", label: "Data" },
+                    { key: "tipo", label: "Tipo" },
+                    { key: "descricao", label: "Descrição" },
+                    { key: "valor", label: "Valor", render: (l) => formatCurrency(l.valor) },
+                    { key: "saldo", label: "Saldo", render: (l) => formatCurrency(l.saldo) },
+                  ]}
+                />
+                <p className="text-sm font-medium text-green-800 mt-2">Saldo final: {formatCurrency(r.saldoFinal)}</p>
+              </Card>
+            ))}
+          </div>
+        );
+      }
+      case "mapa_receitas_contrato": {
+        const mapa = getMapaReceitasContrato(data, mes, coopId ?? undefined);
+        return (
+          <>
+            <div className="grid grid-cols-2 gap-4 mb-4">
+              <StatCard title="Total bruto" value={formatCurrency(mapa.totalBruto)} />
+              <StatCard title="Total líquido" value={formatCurrency(mapa.totalLiquido)} variant="success" />
+            </div>
+            <DataTable
+              data={mapa.linhas.map((l) => ({ ...l, id: l.instituicaoId }))}
+              keyField="id"
+              columns={[
+                { key: "instituicaoNome", label: "Instituição" },
+                { key: "qtdEntregas", label: "Entregas" },
+                { key: "valorBruto", label: "Bruto", render: (l) => formatCurrency(l.valorBruto) },
+                { key: "valorLiquido", label: "Líquido", render: (l) => formatCurrency(l.valorLiquido) },
+              ]}
+            />
+          </>
+        );
+      }
+      case "extrato_conta_coop": {
+        const ex = getExtratoContaCoopMes(data, mes, coopId ?? undefined);
+        return (
+          <>
+            <div className="mb-4">
+              <StatCard title="Total Conta Coop" value={formatCurrency(ex.total)} />
+            </div>
+            <DataTable
+              data={ex.linhas.map((l, i) => ({ ...l, id: `${l.cooperadoId}_${i}` }))}
+              keyField="id"
+              columns={[
+                { key: "cooperadoNome", label: "Cooperado" },
+                { key: "motivo", label: "Descrição" },
+                { key: "valor", label: "Valor", render: (l) => formatCurrency(l.valor) },
+              ]}
+              emptyMessage="Sem compras Conta Coop neste mês."
+            />
+          </>
+        );
+      }
+      case "trilha_auditoria": {
+        const entries = auditLogParaExportacao(data, mes);
+        return (
+          <DataTable
+            data={entries.map((e) => ({ ...e }))}
+            keyField="id"
+            columns={[
+              { key: "timestamp", label: "Data", render: (e) => formatDate(e.timestamp.split("T")[0]) },
+              { key: "userName", label: "Usuário" },
+              { key: "action", label: "Ação" },
+              { key: "entityType", label: "Entidade" },
+              { key: "changes", label: "Resumo" },
+            ]}
+            emptyMessage="Nenhum evento de auditoria."
+          />
+        );
+      }
+      case "parecer_contabil": {
+        const parecer = coopId ? getParecerContabilMes(data, coopId, mes) : undefined;
+        if (!parecer) {
+          return (
+            <Card>
+              <p className="text-gray-600">Nenhum parecer registrado para {formatMesReferencia(mes)}.</p>
+              <p className="text-sm text-gray-500 mt-2">O contador pode registrar em /contador/parecer</p>
+            </Card>
+          );
+        }
+        return (
+          <Card title={`Parecer — ${parecer.contadorNome}`}>
+            <p className="text-xs text-gray-500 mb-3">
+              {parecer.contadorFuncao} · {formatDate(parecer.emitidoEm.split("T")[0])}
+            </p>
+            <p className="text-sm whitespace-pre-wrap text-gray-800">{parecer.texto}</p>
+          </Card>
         );
       }
       default:

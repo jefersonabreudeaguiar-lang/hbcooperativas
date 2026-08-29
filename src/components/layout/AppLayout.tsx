@@ -42,6 +42,7 @@ const ICONS: Record<string, React.ReactNode> = {
   "/contador/dashboard": <Shield size={20} />,
   "/contador/conciliacao": <Scale size={20} />,
   "/contador/trilha-auditoria": <FileCheck size={20} />,
+  "/contador/parecer": <FileText size={20} />,
   contador: <Shield size={20} />,
   conta_coop: <Wallet size={20} />,
   "/cooperativas": <Building size={20} />,

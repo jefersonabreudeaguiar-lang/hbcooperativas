@@ -355,6 +355,7 @@ function migrateData(raw: Partial<AppData> & Record<string, unknown>): AppData {
     prestacoesContasExcluidas: base.prestacoesContasExcluidas ?? [],
     instituicoesExcluidas: base.instituicoesExcluidas ?? [],
     auditLog: base.auditLog ?? [],
+    pareceresContabeis: base.pareceresContabeis ?? [],
   };
 
   return stripDemoData(

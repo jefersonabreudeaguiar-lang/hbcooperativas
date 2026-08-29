@@ -22,6 +22,7 @@ import { ensureMensalidadeCooperado, aplicarConfigMensalidadeCooperativa, mergeC
 import { formatCurrency } from "@/utils/format";
 import { isDiretoriaRole } from "@/permissions";
 import { EquipeResponsaveisPanel } from "@/components/equipe/EquipeResponsaveisPanel";
+import { EquipeContadorPanel } from "@/components/equipe/EquipeContadorPanel";
 import { exigeSenhaCadastroCooperado } from "@/utils/cooperativaCadastro";
 import type { Cooperativa, MensalidadeConfig } from "@/types";
 
@@ -346,6 +347,8 @@ export default function MeuPerfilPage() {
       {coopId && (
         <EquipeResponsaveisPanel cooperativaId={coopId} cooperativaCnpj={cooperativa.cnpj} />
       )}
+
+      {coopId && <EquipeContadorPanel cooperativaId={coopId} cooperativaCnpj={cooperativa.cnpj} />}
 
       <Card title="Mensalidade — configuração mensal">
         <p className="text-sm text-gray-500 mb-4">

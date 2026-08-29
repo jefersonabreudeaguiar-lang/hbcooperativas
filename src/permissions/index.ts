@@ -144,6 +144,26 @@ export const MODULOS_ACESSO: ModuloAcesso[] = [
 
 export const PRESET_RELATORIOS: Resource[] = ["dashboard", "relatorios", "fechamento"];
 
+/** Módulos liberados automaticamente ao cadastrar um contador (somente leitura contábil). */
+export const PRESET_CONTADOR: Resource[] = [
+  "dashboard",
+  "contador",
+  "relatorios",
+  "fechamento",
+  "ficha_corrida",
+  "notas_pedido",
+  "mensalidades",
+  "livro_caixa",
+  "prestacao_contas",
+  "financeiro",
+  "instituicoes",
+  "cooperados",
+  "conta_coop",
+];
+
+export const CONTADOR_ACESSO_DESCRICAO =
+  "Painel contador, conciliação, trilha de auditoria, relatórios R1–R9, fechamento e consultas financeiras — sem alterar lançamentos.";
+
 export function can(role: UserRole, resource: Resource, action: Action): boolean {
   const rolePerms = PERMISSIONS[role];
   if (!rolePerms) return false;
@@ -263,6 +283,7 @@ const CONTADOR_MENU: { href: string; label: string; resource: Resource }[] = [
   { href: "/contador/dashboard", label: "Painel contador", resource: "contador" },
   { href: "/contador/conciliacao", label: "Conciliação", resource: "contador" },
   { href: "/contador/trilha-auditoria", label: "Trilha de auditoria", resource: "contador" },
+  { href: "/contador/parecer", label: "Parecer contábil", resource: "contador" },
   { href: "/relatorios", label: "Relatórios", resource: "relatorios" },
   { href: "/fechamento-mensal", label: "Fechamento mensal", resource: "fechamento" },
   { href: "/ficha-corrida", label: "Ficha corrida", resource: "ficha_corrida" },
@@ -443,6 +464,7 @@ export function getMobileNavItems(
         { href: "/contador/dashboard", label: "Painel", resource: "contador" },
         { href: "/contador/conciliacao", label: "Conciliar", resource: "contador" },
         { href: "/contador/trilha-auditoria", label: "Auditoria", resource: "contador" },
+        { href: "/contador/parecer", label: "Parecer", resource: "contador" },
         { href: "/relatorios", label: "Relatórios", resource: "relatorios" },
       ],
       user

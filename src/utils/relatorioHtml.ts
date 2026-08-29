@@ -1,7 +1,7 @@
 import type { AppData, EmissorRelatorio, FechamentoMensal, Cooperativa } from "@/types";
 import { PLATFORM_NAME } from "@/utils/constants";
 import { formatCnpj } from "@/utils/cooperativa";
-import { formatCurrency, formatDate, formatMesReferencia, getCurrentMesReferencia } from "@/utils/format";
+import { formatCurrency, formatDate, formatDateTime, formatMesReferencia, getCurrentMesReferencia } from "@/utils/format";
 import type { FechamentoCalculado, RelatorioEntregasPorItens, ResumoFinanceiroMes } from "@/services/relatorioService";
 import { calcularFechamentoMensalLive, getRelatorioEntregasPorItensInstituicao, getResumoFinanceiroMes } from "@/services/relatorioService";
 import type { ConciliacaoMensalResult } from "@/services/conciliacaoMensalService";
@@ -970,6 +970,130 @@ export function nomeArquivoRelatorio(tipo: string, mesReferencia: string, sufixo
         .slice(0, 40)}`
     : "";
   return `relatorio-${tipo}-${mesReferencia}${extra}.pdf`;
+}
+
+export function gerarRelatorioRazaoAnaliticoHtml(
+  data: AppData,
+  razoes: import("@/services/contadorRelatorioService").RazaoAnaliticoCooperado[],
+  mesReferencia: string,
+  emissor?: EmissorRelatorio
+): string {
+  const blocos = razoes
+    .map((r) => {
+      const rows = r.linhas
+        .map(
+          (l) =>
+            `<tr><td>${formatDate(l.data)}</td><td>${escapeHtml(l.tipo)}</td><td>${escapeHtml(l.descricao)}</td><td class="num">${formatCurrency(l.valor)}</td><td class="num">${formatCurrency(l.saldo)}</td></tr>`
+        )
+        .join("");
+      return `<div class="coop-bloco"><h3>${escapeHtml(r.cooperadoNome)}</h3>
+        <table><thead><tr><th>Data</th><th>Tipo</th><th>Descrição</th><th class="num">Valor</th><th class="num">Saldo</th></tr></thead>
+        <tbody>${rows}</tbody>
+        <tfoot><tr><td colspan="3">Saldo final</td><td class="num" colspan="2">${formatCurrency(r.saldoFinal)}</td></tr></tfoot></table></div>`;
+    })
+    .join("");
+
+  return documentoShell(
+    "R1 — Razão analítico por cooperado",
+    `<h2>R1 — Razão analítico</h2><p class="carta">Extrato mensal item a item: créditos de entrega, descontos e pagamentos.</p>${blocos || "<p>Sem movimentação no período.</p>"}`,
+    data,
+    mesReferencia,
+    undefined,
+    emissor
+  );
+}
+
+export function gerarRelatorioMapaReceitasHtml(
+  data: AppData,
+  mapa: import("@/services/contadorRelatorioService").MapaReceitasContrato,
+  emissor?: EmissorRelatorio
+): string {
+  const rows = mapa.linhas
+    .map(
+      (l) =>
+        `<tr><td>${escapeHtml(l.instituicaoNome)}</td><td class="num">${l.qtdEntregas}</td><td class="num">${formatCurrency(l.valorBruto)}</td><td class="num">${formatCurrency(l.valorLiquido)}</td></tr>`
+    )
+    .join("");
+  const body = `
+    <h2>R3 — Mapa de receitas por contrato</h2>
+    <table>
+      <thead><tr><th>Instituição / contrato</th><th class="num">Entregas</th><th class="num">Bruto</th><th class="num">Líquido</th></tr></thead>
+      <tbody>${rows}</tbody>
+      <tfoot><tr><td>Total</td><td></td><td class="num">${formatCurrency(mapa.totalBruto)}</td><td class="num">${formatCurrency(mapa.totalLiquido)}</td></tr></tfoot>
+    </table>`;
+  return documentoShell("Mapa receitas por contrato (R3)", body, data, mapa.mesReferencia, undefined, emissor);
+}
+
+export function gerarRelatorioExtratoContaCoopHtml(
+  data: AppData,
+  extrato: import("@/services/contadorRelatorioService").ExtratoContaCoopMes,
+  emissor?: EmissorRelatorio
+): string {
+  const rows = extrato.linhas
+    .map(
+      (l) =>
+        `<tr><td>${escapeHtml(l.cooperadoNome)}</td><td>${escapeHtml(l.motivo)}</td><td class="num">${formatCurrency(l.valor)}</td></tr>`
+    )
+    .join("");
+  const body = `
+    <h2>R5 — Extrato Conta Coop</h2>
+    <p class="carta">Compras registradas na ficha como desconto Conta Coop no mês.</p>
+    <table>
+      <thead><tr><th>Cooperado</th><th>Descrição</th><th class="num">Valor</th></tr></thead>
+      <tbody>${rows || "<tr><td colspan=\"3\">Sem compras Conta Coop no mês.</td></tr>"}</tbody>
+      <tfoot><tr><td colspan="2">Total</td><td class="num">${formatCurrency(extrato.total)}</td></tr></tfoot>
+    </table>`;
+  return documentoShell("Extrato Conta Coop (R5)", body, data, extrato.mesReferencia, undefined, emissor);
+}
+
+export function gerarRelatorioTrilhaAuditoriaHtml(
+  data: AppData,
+  entries: import("@/types").AuditEntry[],
+  mesReferencia: string,
+  emissor?: EmissorRelatorio
+): string {
+  const rows = entries
+    .slice(0, 200)
+    .map(
+      (e) =>
+        `<tr><td>${formatDateTime(e.timestamp)}</td><td>${escapeHtml(e.userName)}</td><td>${escapeHtml(e.action)}</td><td>${escapeHtml(e.entityType)}</td><td>${escapeHtml(e.changes ?? "")}</td></tr>`
+    )
+    .join("");
+  const body = `
+    <h2>R6 — Trilha de auditoria</h2>
+    <table>
+      <thead><tr><th>Data</th><th>Usuário</th><th>Ação</th><th>Entidade</th><th>Resumo</th></tr></thead>
+      <tbody>${rows || "<tr><td colspan=\"5\">Nenhum evento.</td></tr>"}</tbody>
+    </table>`;
+  return documentoShell("Trilha de auditoria (R6)", body, data, mesReferencia, undefined, emissor);
+}
+
+export function gerarRelatorioParecerContabilHtml(
+  data: AppData,
+  parecer: import("@/types").ParecerContabilMensal,
+  emissor?: EmissorRelatorio
+): string {
+  const assinatura = parecer.assinaturaDataUrl
+    ? `<img class="assinatura-img" src="${parecer.assinaturaDataUrl}" alt="Assinatura contador" />`
+    : "";
+  const body = `
+    <h2>R9 — Parecer contábil mensal</h2>
+    <div class="destinatario">
+      <div class="rotulo">Contador responsável</div>
+      <div class="nome">${escapeHtml(parecer.contadorNome)}</div>
+      <div class="detalhe">${escapeHtml(parecer.contadorFuncao)} · ${formatDateTime(parecer.emitidoEm)}</div>
+    </div>
+    <div class="carta" style="white-space:pre-wrap">${escapeHtml(parecer.texto)}</div>
+    ${assinatura}
+    <div class="assinatura-linha">${escapeHtml(parecer.contadorNome)}<br/>${escapeHtml(parecer.contadorFuncao)}</div>`;
+  return documentoShell(
+    "Parecer contábil (R9)",
+    body,
+    data,
+    parecer.mesReferencia,
+    parecer.cooperativaId,
+    emissor
+  );
 }
 
 export type { ResumoFinanceiroMes, FechamentoCalculado };

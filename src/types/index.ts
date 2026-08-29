@@ -742,6 +742,19 @@ export interface InstituicaoExcluida {
   deletedAt: string;
 }
 
+export interface ParecerContabilMensal {
+  id: string;
+  cooperativaId: string;
+  mesReferencia: string;
+  texto: string;
+  contadorNome: string;
+  contadorFuncao: string;
+  assinaturaDataUrl?: string;
+  emitidoEm: string;
+  emitidoPorUserId: string;
+  updatedAt: string;
+}
+
 export interface AppData {
   cooperativas: Cooperativa[];
   users: User[];
@@ -773,6 +786,7 @@ export interface AppData {
   prestacoesContasExcluidas?: PrestacaoContasExcluida[];
   instituicoesExcluidas?: InstituicaoExcluida[];
   auditLog: AuditEntry[];
+  pareceresContabeis?: ParecerContabilMensal[];
   config: {
     descontoPadraoCooperativa: number;
   };

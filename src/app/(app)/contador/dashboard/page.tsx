@@ -161,11 +161,11 @@ export default function ContadorDashboardPage() {
                 <p className="text-sm text-gray-600 mt-1">Histórico de ações na nuvem e local.</p>
               </Card>
             </Link>
-            <Link href={`/relatorios`}>
+            <Link href="/contador/parecer">
               <Card className="hover:border-green-300 transition-colors cursor-pointer h-full">
                 <FileText className="text-green-700 mb-2" size={24} />
-                <h3 className="font-semibold">Relatórios R2/R4</h3>
-                <p className="text-sm text-gray-600 mt-1">Demonstrativo de pagamentos e conciliação em PDF.</p>
+                <h3 className="font-semibold">Parecer contábil (R9)</h3>
+                <p className="text-sm text-gray-600 mt-1">Registrar opinião profissional assinada do mês.</p>
               </Card>
             </Link>
           </div>
