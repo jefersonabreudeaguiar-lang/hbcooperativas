@@ -39,6 +39,7 @@ import {
   establishCloudSession,
   loginViaCloudApi,
   registerCloudUser,
+  rememberCloudCredentials,
   setActiveCloudProfile,
   userToCloudProfile,
   type CloudSessionProfile,
@@ -682,7 +683,7 @@ function resolveSessionUser(
   return findUserByEmail(data, parsed.email);
 }
 
-function finishLoginSession(user: User, data: AppData, plainPassword: string): User {
+async function finishLoginSession(user: User, data: AppData, plainPassword: string): Promise<User> {
   const { password: _, ...safeUser } = user;
   // Grava sessão antes de updateData — saveDataSafe dispara notify() e o AuthProvider relê getSession().
   persistSession(safeUser);
@@ -707,7 +708,8 @@ function finishLoginSession(user: User, data: AppData, plainPassword: string): U
   }
   const cloudProfile = userToCloudProfile(safeUser);
   setActiveCloudProfile(cloudProfile);
-  void establishCloudSession(user.email, plainPassword, cloudProfile).catch(() => {});
+  rememberCloudCredentials(user.email.trim().toLowerCase(), plainPassword);
+  await establishCloudSession(user.email, plainPassword, cloudProfile);
   return user;
 }
 
@@ -748,7 +750,7 @@ export async function loginCreatorAdminPortal(
   const plainOk = password === CREATOR_ADMIN_PASSWORD;
   if (!hashOk && !plainOk) return null;
 
-  return finishLoginSession(user, data, password);
+  return await finishLoginSession(user, data, password);
 }
 
 const CLOUD_BOOTSTRAP_ROLES: UserRole[] = ["cooperado", "responsavel", "tesoureiro", "admin"];
@@ -826,7 +828,7 @@ export async function login(email: string, password: string): Promise<User | nul
         }));
         localUser.password = hash;
       }
-      return finishLoginSession(localUser, data, password);
+      return await finishLoginSession(localUser, data, password);
     }
   }
 
@@ -836,7 +838,7 @@ export async function login(email: string, password: string): Promise<User | nul
   const bootstrapped = await bootstrapLocalUserFromCloudLogin(cloud.user, password);
   if (!bootstrapped) return null;
 
-  return finishLoginSession(bootstrapped, getData(), password);
+  return await finishLoginSession(bootstrapped, getData(), password);
 }
 
 export function logout(): void {

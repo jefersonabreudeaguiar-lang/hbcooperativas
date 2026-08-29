@@ -60,6 +60,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (result) {
       const { password: _, ...safeUser } = result;
       setUser(safeUser);
+      setActiveCloudProfile(userToCloudProfile(safeUser));
+      await ensureCloudSessionReady(userToCloudProfile(safeUser));
       return true;
     }
     return false;

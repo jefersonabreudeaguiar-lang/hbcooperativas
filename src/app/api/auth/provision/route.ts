@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
+import { normalizeCnpj } from "@/utils/cooperativa";
 import {
   clientIp,
   ensureAuthInfrastructure,
@@ -34,6 +35,7 @@ export async function POST(request: Request) {
 
   const supabase = getSupabaseAdmin()!;
   const existing = await findAppUserByEmail(supabase, email);
+  const requestCnpj = body?.cooperativaCnpj ? normalizeCnpj(String(body.cooperativaCnpj)) : "";
 
   const profilePayload = {
     id,
@@ -43,7 +45,7 @@ export async function POST(request: Request) {
     role,
     cooperativaId: body?.cooperativaId ? String(body.cooperativaId) : undefined,
     cooperadoId: body?.cooperadoId ? String(body.cooperadoId) : undefined,
-    cooperativaCnpj: body?.cooperativaCnpj ? String(body.cooperativaCnpj) : undefined,
+    cooperativaCnpj: requestCnpj.length === 14 ? requestCnpj : undefined,
   };
 
   if (existing) {
@@ -62,6 +64,24 @@ export async function POST(request: Request) {
       if (synced) {
         await logSecurityEvent(supabase, {
           action: "auth.provision.resync",
+          userId: synced.id,
+          userEmail: synced.email,
+          cooperativaCnpj: synced.cooperativa_cnpj ?? undefined,
+          ip: clientIp(request),
+        });
+        return tokenResponseForUser(synced);
+      }
+    }
+    const existingCnpj = existing.cooperativa_cnpj ? normalizeCnpj(existing.cooperativa_cnpj) : "";
+    if (requestCnpj.length === 14 && existingCnpj.length === 14 && requestCnpj === existingCnpj) {
+      await updateAppUserPasswordHash(supabase, existing.id, password);
+      const synced = await upsertAppUser(supabase, {
+        ...profilePayload,
+        id: existing.id,
+      });
+      if (synced) {
+        await logSecurityEvent(supabase, {
+          action: "auth.provision.resync_cnpj",
           userId: synced.id,
           userEmail: synced.email,
           cooperativaCnpj: synced.cooperativa_cnpj ?? undefined,

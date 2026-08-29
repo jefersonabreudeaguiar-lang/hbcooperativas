@@ -84,7 +84,7 @@ function loadStoredSessionProfile(): CloudSessionProfile | null {
   }
 }
 
-function rememberCloudCredentials(email: string, password: string): void {
+export function rememberCloudCredentials(email: string, password: string): void {
   if (typeof window === "undefined") return;
   try {
     localStorage.setItem(
@@ -123,14 +123,18 @@ async function requestCloudToken(
   endpoint: "/api/auth/login" | "/api/auth/provision" | "/api/auth/register",
   payload: Record<string, unknown>
 ): Promise<string | null> {
-  const res = await fetch(endpoint, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(payload),
-  });
-  if (!res.ok) return null;
-  const json = (await res.json()) as { token?: string };
-  return json.token ?? null;
+  try {
+    const res = await fetch(endpoint, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    if (!res.ok) return null;
+    const json = (await res.json()) as { token?: string };
+    return json.token ?? null;
+  } catch {
+    return null;
+  }
 }
 
 /** Valida credenciais em app_users (Supabase) — usado quando o aparelho ainda não tem users[] local. */
@@ -192,9 +196,10 @@ export async function establishCloudSession(
     const normalizedEmail = email.trim().toLowerCase();
     const fullPayload = { ...profile, email: normalizedEmail, password };
 
+    // Provision primeiro: sincroniza usuário local → nuvem e corrige senha quando necessário.
     let token =
-      (await requestCloudToken("/api/auth/login", { email: normalizedEmail, password })) ??
       (await requestCloudToken("/api/auth/provision", fullPayload)) ??
+      (await requestCloudToken("/api/auth/login", { email: normalizedEmail, password })) ??
       (await requestCloudToken("/api/auth/register", fullPayload));
 
     if (!token) {
@@ -204,6 +209,7 @@ export async function establishCloudSession(
 
     setAccessToken(token);
     rememberCloudCredentials(normalizedEmail, password);
+    setActiveCloudProfile(profile);
     return true;
   } catch {
     clearAccessToken();
@@ -219,20 +225,24 @@ export async function refreshCloudSession(): Promise<boolean> {
       headers: { Authorization: `Bearer ${token}` },
       cache: "no-store",
     });
-    if (!res.ok) {
+    if (res.status === 401) {
       clearAccessToken();
       return false;
+    }
+    if (!res.ok) {
+      // Falha temporária de rede/servidor — mantém token atual.
+      return true;
     }
     const json = (await res.json()) as { token?: string; enforced?: boolean };
     if (json.enforced === false) return true;
     if (json.token) setAccessToken(json.token);
     return true;
   } catch {
-    return false;
+    return Boolean(getAccessToken());
   }
 }
 
-/** Restaura JWT antes de sync/envio de fotos — transparente para o usuário. */
+/** Restaura JWT antes de APIs protegidas (Conta Coop, sync, etc.). */
 export async function ensureCloudSessionReady(profile?: CloudSessionProfile): Promise<boolean> {
   const active = profile ?? activeCloudProfile ?? loadStoredSessionProfile();
   if (!active) {
@@ -248,8 +258,10 @@ export async function ensureCloudSessionReady(profile?: CloudSessionProfile): Pr
   }
 
   const bootstrap = loadCloudBootstrapCredentials();
-  if (bootstrap && bootstrap.email === active.email.trim().toLowerCase()) {
-    return establishCloudSession(bootstrap.email, bootstrap.password, active);
+  const email = active.email.trim().toLowerCase();
+  if (bootstrap && bootstrap.email === email) {
+    const ok = await establishCloudSession(bootstrap.email, bootstrap.password, active);
+    if (ok) return true;
   }
 
   return Boolean(getAccessToken());
@@ -262,10 +274,16 @@ export async function ensureAccessTokenForApi(): Promise<boolean> {
 
 export function mensagemErroAuthApi(status: number, error?: string): string {
   if (status === 401 || error === "Autenticação necessária.") {
-    return "Sessão na nuvem não encontrada. Desconecte, entre de novo com e-mail e senha e abra a Conta Coop.";
+    return "Não foi possível conectar à Conta Coop. Saia, entre de novo e aguarde alguns segundos antes de abrir a Conta Coop.";
   }
   if (error === "Sessão inválida ou expirada.") {
     return "Sessão expirada. Faça login novamente para usar a Conta Coop.";
+  }
+  if (error === "Credenciais inválidas." || error === "Dados inválidos.") {
+    return "Conta na nuvem desatualizada. Saia, entre de novo com e-mail e senha atuais.";
+  }
+  if (status === 503 || error?.includes("não configurada")) {
+    return "Nuvem (Supabase) não configurada para autenticação. Fale com o suporte HB Cooperativas.";
   }
   if (status === 403) {
     return "Sem permissão para esta cooperativa. Verifique o login ou fale com a diretoria.";
@@ -274,7 +292,11 @@ export function mensagemErroAuthApi(status: number, error?: string): string {
 }
 
 export async function secureApiFetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
-  await ensureCloudSessionReady();
+  const profile = activeCloudProfile ?? loadStoredSessionProfile();
+  let ready = await ensureCloudSessionReady(profile ?? undefined);
+  if (!ready && profile) {
+    ready = await ensureCloudSessionReady(profile);
+  }
 
   const headers = new Headers(init?.headers);
   const token = getAccessToken();
@@ -282,12 +304,12 @@ export async function secureApiFetch(input: RequestInfo | URL, init?: RequestIni
 
   let res = await fetch(input, { ...init, headers });
 
-  if (res.status === 401) {
-    const rebooted = await ensureCloudSessionReady();
-    if (rebooted) {
+  if (res.status === 401 && profile) {
+    const rebooted = await ensureCloudSessionReady(profile);
+    const newToken = getAccessToken();
+    if (rebooted && newToken) {
       const retryHeaders = new Headers(init?.headers);
-      const newToken = getAccessToken();
-      if (newToken) retryHeaders.set("Authorization", `Bearer ${newToken}`);
+      retryHeaders.set("Authorization", `Bearer ${newToken}`);
       res = await fetch(input, { ...init, headers: retryHeaders });
     }
   }
