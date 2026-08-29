@@ -10,7 +10,6 @@ import {
   fetchNotaMetaFromStorage,
   downloadFotoPartBuffer,
   notaPayloadForTable,
-  uploadNotaFotoPart,
   uploadNotaFotoPartBuffer,
   upsertNotasInTable,
 } from "@/lib/supabase/notasStorage";
