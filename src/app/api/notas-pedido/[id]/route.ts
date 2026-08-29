@@ -3,7 +3,7 @@ import { getSupabaseAdmin, isSupabaseConfigured } from "@/lib/supabase/admin";
 import { isNotasPedidoTableMissing } from "@/lib/supabase/errors";
 import { normalizeCnpj } from "@/utils/cooperativa";
 import type { NotaPedido } from "@/types";
-import { guardCooperativaApi } from "@/lib/security/apiGuard";
+import { guardCooperativaApi, requireManagementRole } from "@/lib/security/apiGuard";
 import {
   fetchNotaFromStorage,
   fetchNotaMetaFromStorage,
@@ -157,16 +157,41 @@ export async function DELETE(
     return NextResponse.json({ error: "CNPJ inválido." }, { status: 400 });
   }
 
-  const guard = await guardCooperativaApi(request, cnpj, {
-    requireManagement: true,
-    write: true,
-    checkSaas: true,
-  });
+  const guard = await guardCooperativaApi(request, cnpj, { write: true, checkSaas: true });
   if (!guard.ok) return guard.response;
 
   const supabase = getSupabaseAdmin();
   if (!supabase) {
     return NextResponse.json({ error: "Cliente indisponível." }, { status: 503 });
+  }
+
+  if (guard.enforced && guard.session?.role === "cooperado") {
+    const cooperadoId = guard.session.cooperadoId;
+    if (!cooperadoId) {
+      return NextResponse.json({ error: "Sem permissão." }, { status: 403 });
+    }
+    const existing = await fetchNotaFromStorage(supabase, cnpj, id);
+    const fromTable = await supabase
+      .from("notas_pedido")
+      .select("payload, status")
+      .eq("id", id)
+      .eq("cooperativa_cnpj", cnpj)
+      .maybeSingle();
+    const tableNota =
+      fromTable.data?.payload && typeof fromTable.data.payload === "object"
+        ? (fromTable.data.payload as NotaPedido)
+        : null;
+    const nota = tableNota ?? existing;
+    if (!nota || nota.cooperadoId !== cooperadoId) {
+      return NextResponse.json({ error: "Sem permissão para esta entrega." }, { status: 403 });
+    }
+    const status = (fromTable.data?.status as NotaPedido["status"] | undefined) ?? nota.status;
+    if (status !== "aguardando_conferencia" && status !== "rejeitada") {
+      return NextResponse.json({ error: "Esta entrega não pode ser excluída." }, { status: 403 });
+    }
+  } else {
+    const mgmt = requireManagementRole(guard.session, guard.enforced);
+    if (mgmt) return mgmt;
   }
 
   const tableDel = await deleteNotaFromTable(supabase, cnpj, id);

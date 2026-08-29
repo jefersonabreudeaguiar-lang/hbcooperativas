@@ -45,11 +45,11 @@ import {
   syncOfflineDeliveryImages,
   finalizeNotaEntregaNaNuvem,
   deleteFotoRascunhoFromCloud,
+  confirmNotaDeletedFromCloud,
   deleteNotaPedidoFromCloud,
   queueNotaDelete,
   unqueueNotaDelete,
   flushPendingNotaDeletes,
-  fetchNotaPedidoFromCloud,
   getPendingNotaDeleteIds,
   ensureNotaComFoto,
   resolveCooperativaCnpj,
@@ -866,7 +866,9 @@ export default function NotasPedidoContent() {
       const atual = data.notasPedido.find((x) => x.id === id);
       const snap = filaStickySnapshotRef.current.get(id);
       if (!atual) {
-        if (snap) byId.set(id, snap);
+        // Excluída localmente — não ressuscitar pelo snapshot da fila sticky.
+        filaStickyIdsRef.current.delete(id);
+        filaStickySnapshotRef.current.delete(id);
         continue;
       }
       if (isNotaSaiuDaFilaConferencia(atual.status)) continue;
@@ -2493,11 +2495,8 @@ export default function NotasPedidoContent() {
     const cnpjSync = await resolveCooperativaCnpj(d, coopId, user);
     if (cnpjSync) {
       const del = await deleteNotaPedidoFromCloud(cnpjSync, alvo.id);
-      if (del.ok) {
-        const stillThere = await fetchNotaPedidoFromCloud(cnpjSync, alvo.id);
-        if (!stillThere) {
-          unqueueNotaDelete(cnpjSync, alvo.id);
-        }
+      if (del.ok && (await confirmNotaDeletedFromCloud(cnpjSync, alvo.id))) {
+        unqueueNotaDelete(cnpjSync, alvo.id);
       }
       await flushPendingNotaDeletes(cnpjSync);
       await pushOperacionalToCloud(cnpjSync, d, coopId, { authoritative: true });
@@ -2593,10 +2592,12 @@ export default function NotasPedidoContent() {
     setExcluindo(true);
     const cnpj = await resolveCooperativaCnpj(data, coopId, user);
     if (cnpj) {
+      queueNotaDelete(cnpj, excluirNotaTarget.id);
       const del = await deleteNotaPedidoFromCloud(cnpj, excluirNotaTarget.id);
-      if (!del.ok) {
-        queueNotaDelete(cnpj, excluirNotaTarget.id);
+      if (del.ok && (await confirmNotaDeletedFromCloud(cnpj, excluirNotaTarget.id))) {
+        unqueueNotaDelete(cnpj, excluirNotaTarget.id);
       }
+      await flushPendingNotaDeletes(cnpj);
     }
 
     const eraRejeitada = excluirNotaTarget.status === "rejeitada";

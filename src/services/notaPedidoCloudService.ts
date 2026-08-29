@@ -677,6 +677,19 @@ export async function deleteNotaPedidoFromCloud(
   }
 }
 
+/** Confirma ausência na nuvem (GET + lista) antes de remover tombstone local. */
+export async function confirmNotaDeletedFromCloud(cnpj: string, notaId: string): Promise<boolean> {
+  const digits = normalizeCnpj(cnpj);
+  if (digits.length !== 14 || !notaId) return false;
+
+  const single = await fetchNotaPedidoFromCloud(digits, notaId);
+  if (single) return false;
+
+  const list = await fetchNotasPedidoFromCloud(digits, { forceFull: true });
+  if (!list.ok) return false;
+  return !list.notas.some((n) => n.id === notaId);
+}
+
 export async function patchNotaPedidoInCloud(
   cnpj: string,
   nota: NotaPedido
