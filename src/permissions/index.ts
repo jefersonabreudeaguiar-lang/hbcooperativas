@@ -9,29 +9,17 @@ const VIEW_ONLY: Action[] = ["view"];
 
 export const PERMISSIONS: PermissionMatrix = {
   admin: {
-    dashboard: ALL_CRUD,
+    dashboard: VIEW_ONLY,
     cooperativas: ALL_CRUD,
     cooperados: ALL_CRUD,
-    mensalidades: ALL_CRUD,
-    cotas: ALL_CRUD,
-    entregas: ALL_CRUD,
-    pagamentos: ALL_CRUD,
-    descontos: ALL_CRUD,
-    financeiro: ALL_CRUD,
     comunicados: ALL_CRUD,
     reclamacoes: ALL_CRUD,
     votacoes: ALL_CRUD,
     propriedades: ALL_CRUD,
     veiculos: ALL_CRUD,
-    instituicoes: ALL_CRUD,
-    notas_pedido: ALL_CRUD,
-    ficha_corrida: ALL_CRUD,
+    instituicoes: VIEW_ONLY,
+    notas_pedido: VIEW_ONLY,
     relatorios: VIEW_EXPORT,
-    fechamento: ["view", "create", "edit", "approve", "export"],
-    livro_caixa: ALL_CRUD,
-    prestacao_contas: ALL_CRUD,
-    conta_coop: ALL_CRUD,
-    contador: VIEW_EXPORT,
   },
   tesoureiro: {
     dashboard: ALL_CRUD,
@@ -231,16 +219,30 @@ export function modulosRestritos(user: PermissionSubject): Resource[] {
 }
 
 export function canGerenciarEquipe(user: Pick<User, "role" | "responsavelPrincipal">): boolean {
-  if (user.role === "admin" || user.role === "tesoureiro") return true;
+  if (user.role === "tesoureiro") return true;
   return isResponsavelRole(user.role) && user.responsavelPrincipal === true;
+}
+
+export function isTesoureiroRole(role: UserRole | string): boolean {
+  return normalizeUserRole(role) === "tesoureiro";
+}
+
+export function isCooperativePlatformAdminRole(role: UserRole | string): boolean {
+  return normalizeUserRole(role) === "admin";
+}
+
+/** Admin geral da plataforma não entra na área financeira da cooperativa. */
+export function canAccessTesoureiroArea(user: PermissionSubject): boolean {
+  return !isCooperativePlatformAdminRole(user.role);
 }
 
 export function getUserFuncaoLabel(user: Pick<User, "role" | "funcao">): string {
   return user.funcao?.trim() || ROLE_LABELS[user.role];
 }
 
+/** Perfil tesoureiro (compatibilidade legada). */
 export function isAdminRole(role: UserRole): boolean {
-  return role === "admin" || role === "tesoureiro";
+  return role === "tesoureiro";
 }
 
 export function isResponsavelRole(role: UserRole | string): boolean {
@@ -258,7 +260,7 @@ export function isContadorRole(role: UserRole): boolean {
 
 /** Acesso à Central do Contador (auditoria). */
 export function canAccessCentralContador(role: UserRole): boolean {
-  return role === "contador" || role === "admin" || role === "tesoureiro";
+  return role === "contador" || role === "tesoureiro";
 }
 
 export function isReadOnlyAuditorRole(role: UserRole): boolean {
@@ -301,10 +303,21 @@ const CONTADOR_MENU: { href: string; label: string; resource: Resource }[] = [
   { href: "/conta-coop", label: "Conta Coop", resource: "conta_coop" },
 ];
 
+const ADMIN_HREFS = [
+  "/dashboard",
+  "/cooperados",
+  "/meu-perfil",
+  "/comunicados",
+  "/votacoes",
+  "/reclamacoes",
+  "/propriedades",
+  "/veiculos",
+  "/relatorios",
+];
+
 const CREDIT_MENU_BY_ROLE: Partial<Record<UserRole, { href: string; label: string; resource: Resource }>> = {
   cooperado: { href: "/minha-conta-coop", label: "Conta Coop", resource: "conta_coop" },
   responsavel: { href: "/conta-coop", label: "Conta Coop", resource: "conta_coop" },
-  admin: { href: "/conta-coop", label: "Conta Coop", resource: "conta_coop" },
   tesoureiro: { href: "/conta-coop", label: "Conta Coop", resource: "conta_coop" },
 };
 
@@ -404,6 +417,11 @@ export function getMenuItems(
     return appendHbCreditMenuItem(filterMenuForUser(COOPERADO_MENU, user), user, creditEnabled, contaCoopUiVisible);
   }
 
+  if (isCooperativePlatformAdminRole(user.role)) {
+    const adminItems = DIRETORIA_MENU.filter((i) => ADMIN_HREFS.includes(i.href));
+    return filterMenuForUser(adminItems, user);
+  }
+
   let source = DIRETORIA_MENU;
   if (isResponsavelRole(user.role)) {
     source = DIRETORIA_MENU.filter((i) => RESPONSAVEL_HREFS.includes(i.href));
@@ -474,7 +492,7 @@ export function getMobileNavItems(
     );
   }
 
-  if (user.role === "tesoureiro" || user.role === "admin") {
+  if (isTesoureiroRole(user.role)) {
     const tesoureiroItems: { href: string; label: string; resource: Resource }[] = [
       { href: "/dashboard", label: "Início", resource: "dashboard" },
       { href: "/contador/dashboard", label: "Contador", resource: "contador" },
@@ -485,6 +503,18 @@ export function getMobileNavItems(
       { href: "/contratos", label: "Contratos", resource: "instituicoes" },
     ];
     return appendHbCreditMenuItem(filterMenuForUser(tesoureiroItems, user), user, creditEnabled, contaCoopUiVisible);
+  }
+
+  if (isCooperativePlatformAdminRole(user.role)) {
+    return filterMenuForUser(
+      [
+        { href: "/dashboard", label: "Início", resource: "dashboard" },
+        { href: "/cooperados", label: "Cooperados", resource: "cooperados" },
+        { href: "/comunicados", label: "Comunicados", resource: "comunicados" },
+        { href: "/votacoes", label: "Votações", resource: "votacoes" },
+      ],
+      user
+    );
   }
 
   if (user.role === "contador") {

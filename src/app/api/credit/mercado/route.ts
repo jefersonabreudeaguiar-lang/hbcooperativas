@@ -1,12 +1,15 @@
 import { NextResponse } from "next/server";
 import {
   getParceiroByUserId,
+  hasPartnerFinancialPin,
   listIntentsParceiro,
   listRecebiveisParceiro,
   listSettlementsForPartner,
+  setPartnerFinancialPin,
   updatePartnerPix,
 } from "@/lib/supabase/contaCoopStorage";
 import { requireCreditApi } from "@/lib/security/creditGuard";
+import { FINANCIAL_PIN_MIN_LENGTH } from "@/modules/hb-credit/config";
 
 export async function GET(request: Request) {
   const gate = await requireCreditApi(request);
@@ -27,8 +30,9 @@ export async function GET(request: Request) {
   const intents = await listIntentsParceiro(gate.ctx.supabase, parceiro.id);
   const recebiveis = await listRecebiveisParceiro(gate.ctx.supabase, parceiro.id);
   const settlements = await listSettlementsForPartner(gate.ctx.supabase, parceiro.id);
+  const hasPin = await hasPartnerFinancialPin(gate.ctx.supabase, parceiro.id);
 
-  return NextResponse.json({ ok: true, parceiro, intents, recebiveis, settlements });
+  return NextResponse.json({ ok: true, parceiro, intents, recebiveis, settlements, hasPin });
 }
 
 export async function PATCH(request: Request) {
@@ -46,7 +50,26 @@ export async function PATCH(request: Request) {
     return NextResponse.json({ error: "Mercado não vinculado." }, { status: 404 });
   }
 
-  const body = (await request.json().catch(() => ({}))) as { pixKey?: string; pixHolderName?: string };
+  const body = (await request.json().catch(() => ({}))) as {
+    pixKey?: string;
+    pixHolderName?: string;
+    action?: string;
+    pin?: string;
+  };
+
+  if (body.action === "set_pin") {
+    const pin = String(body.pin ?? "");
+    if (pin.length < FINANCIAL_PIN_MIN_LENGTH || !/^\d+$/.test(pin)) {
+      return NextResponse.json(
+        { error: `PIN numérico com mínimo ${FINANCIAL_PIN_MIN_LENGTH} dígitos.` },
+        { status: 400 }
+      );
+    }
+    const result = await setPartnerFinancialPin(gate.ctx.supabase, parceiro.id, pin);
+    if (!result.ok) return NextResponse.json({ error: result.error }, { status: 400 });
+    return NextResponse.json({ ok: true, hasPin: true });
+  }
+
   const pixKey = String(body.pixKey ?? "").trim();
   const pixHolderName = String(body.pixHolderName ?? "").trim();
   if (pixKey.length < 5) {

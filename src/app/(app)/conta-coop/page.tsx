@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { CreditFeatureGate } from "@/components/hb-credit/CreditFeatureGate";
 import { CloudSessionGate } from "@/components/hb-credit/CloudSessionGate";
+import { TesoureiroAreaGuard } from "@/components/permissions/TesoureiroAreaGuard";
 import { ContaCoopSegmentTabs } from "@/components/hb-credit/ContaCoopSegmentTabs";
 import { ContaCoopLiquidacaoPanel } from "@/components/hb-credit/ContaCoopLiquidacaoPanel";
 import { ContaCoopEstornosPanel } from "@/components/hb-credit/ContaCoopEstornosPanel";
@@ -51,7 +52,9 @@ export default function ContaCoopPage() {
   return (
     <CreditFeatureGate>
       <CloudSessionGate>
-        <ContaCoopContent />
+        <TesoureiroAreaGuard>
+          <ContaCoopContent />
+        </TesoureiroAreaGuard>
       </CloudSessionGate>
     </CreditFeatureGate>
   );

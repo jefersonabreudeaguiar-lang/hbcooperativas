@@ -60,9 +60,20 @@ export function requireCreditResponsavel(ctx: CreditAuthOk): NextResponse | null
   return requireStaffRole(ctx.session, ctx.enforced);
 }
 
+/** Conta Coop / estornos / limites — responsável ou tesoureiro (admin geral não). */
+export function requireCreditCooperativeFinance(ctx: CreditAuthOk): NextResponse | null {
+  if (!ctx.enforced || !ctx.session) return null;
+  const role = ctx.session.role;
+  if (role === "responsavel" || role === "tesoureiro") return null;
+  return NextResponse.json(
+    { error: "Ação restrita ao responsável ou tesoureiro da cooperativa." },
+    { status: 403 }
+  );
+}
+
 /** @deprecated alias */
 export function requireCreditStaff(ctx: CreditAuthOk): NextResponse | null {
-  return requireCreditResponsavel(ctx);
+  return requireCreditCooperativeFinance(ctx);
 }
 
 export function requireCreditCooperado(

@@ -164,6 +164,7 @@ export async function fetchMercadoParceiroData() {
     intents?: ContaCoopIntent[];
     recebiveis?: { id: string; amountCents: number; status: string; createdAt: string }[];
     settlements?: ContaCoopSettlement[];
+    hasPin?: boolean;
   }>(res);
   if (!res.ok || !data.ok) throw new Error(data.error ?? "Erro ao carregar mercado.");
   return data;
@@ -178,6 +179,17 @@ export async function saveMercadoPix(pixKey: string, pixHolderName: string) {
   const data = await parseJson<{ ok?: boolean; error?: string; parceiro?: ContaCoopParceiro }>(res);
   if (!res.ok || !data.ok) throw new Error(data.error ?? "Erro ao salvar PIX.");
   return data.parceiro;
+}
+
+export async function setMercadoFinancialPin(pin: string) {
+  const res = await secureApiFetch("/api/credit/mercado", {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ action: "set_pin", pin }),
+  });
+  const data = await parseJson<{ ok?: boolean; error?: string; hasPin?: boolean }>(res);
+  if (!res.ok || !data.ok) throw new Error(data.error ?? "Não foi possível salvar PIN.");
+  return data;
 }
 
 export async function fetchLiquidacaoPreview(cnpj: string, partnerId: string, mesReferencia: string) {

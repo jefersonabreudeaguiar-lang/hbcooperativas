@@ -16,8 +16,10 @@ import {
   fetchPartnerRefundData,
   postRefundRequestAction,
   saveMercadoPix,
+  setMercadoFinancialPin,
 } from "@/services/creditApiService";
 import { formatCentsBRL } from "@/modules/hb-credit/engine/money";
+import { FINANCIAL_PIN_MIN_LENGTH } from "@/modules/hb-credit/config";
 import type { ContaCoopCompraEstornavel, ContaCoopIntent, ContaCoopParceiro, ContaCoopSettlement, ContaCoopSolicitacaoEstorno } from "@/modules/hb-credit/types";
 import { PageSkeleton } from "@/components/ui/PageSkeleton";
 import { SignaturePad } from "@/components/ui/SignaturePad";
@@ -49,6 +51,11 @@ function MercadoParceiroContent() {
   const [qrUrl, setQrUrl] = useState("");
   const [qrPayload, setQrPayload] = useState("");
   const [busy, setBusy] = useState(false);
+  const [hasPin, setHasPin] = useState(false);
+  const [pinSetup, setPinSetup] = useState("");
+  const [estornoAlvo, setEstornoAlvo] = useState<ContaCoopCompraEstornavel | null>(null);
+  const [estornoMotivo, setEstornoMotivo] = useState("");
+  const [estornoPin, setEstornoPin] = useState("");
 
   const reload = useCallback(async () => {
     setLoading(true);
@@ -59,6 +66,7 @@ function MercadoParceiroContent() {
       setIntents(data.intents ?? []);
       setRecebiveis(data.recebiveis ?? []);
       setSettlements(data.settlements ?? []);
+      setHasPin(Boolean(data.hasPin));
       if (data.parceiro?.status === "ativo") {
         try {
           const refundData = await fetchPartnerRefundData();
@@ -118,21 +126,57 @@ function MercadoParceiroContent() {
     }
   };
 
-  const solicitarEstorno = async (compra: ContaCoopCompraEstornavel) => {
-    const motivo = window.prompt(
-      `Informe o motivo do estorno de ${formatCentsBRL(compra.amountCents)}.\n\nA cooperativa precisa aprovar antes do crédito voltar ao cooperado.`
-    );
-    if (!motivo?.trim()) return;
+  const salvarPin = async () => {
+    setBusy(true);
+    setError("");
+    setSuccess("");
+    try {
+      await setMercadoFinancialPin(pinSetup);
+      setHasPin(true);
+      setPinSetup("");
+      setSuccess("PIN financeiro cadastrado.");
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Erro ao salvar PIN.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const abrirEstorno = (compra: ContaCoopCompraEstornavel) => {
+    if (!hasPin) {
+      setError("Cadastre seu PIN financeiro antes de solicitar estorno.");
+      return;
+    }
+    setEstornoAlvo(compra);
+    setEstornoMotivo("");
+    setEstornoPin("");
+    setError("");
+  };
+
+  const enviarEstorno = async () => {
+    if (!estornoAlvo) return;
+    if (estornoMotivo.trim().length < 5) {
+      setError("Descreva o motivo do estorno (mínimo 5 caracteres).");
+      return;
+    }
+    if (estornoPin.length < FINANCIAL_PIN_MIN_LENGTH) {
+      setError(`Informe seu PIN financeiro (${FINANCIAL_PIN_MIN_LENGTH}+ dígitos).`);
+      return;
+    }
     setBusy(true);
     setError("");
     setSuccess("");
     try {
       await postRefundRequestAction({
         action: "create",
-        transactionId: compra.id,
-        motivo: motivo.trim(),
+        transactionId: estornoAlvo.id,
+        motivo: estornoMotivo.trim(),
+        pin: estornoPin,
       });
       setSuccess("Solicitação enviada à cooperativa. Aguarde aprovação.");
+      setEstornoAlvo(null);
+      setEstornoMotivo("");
+      setEstornoPin("");
       await reload();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Erro ao solicitar estorno.");
@@ -140,6 +184,7 @@ function MercadoParceiroContent() {
       setBusy(false);
     }
   };
+
 
   const cancelarSolicitacao = async (requestId: string) => {
     if (!window.confirm("Cancelar esta solicitação de estorno?")) return;
@@ -303,6 +348,76 @@ function MercadoParceiroContent() {
         )}
       </Card>
 
+      <Card className="p-5 space-y-4">
+        <div>
+          <h3 className="font-semibold text-gray-900">PIN financeiro do mercado</h3>
+          <p className="text-sm text-gray-600">
+            Obrigatório para solicitar estorno. Use um PIN numérico de {FINANCIAL_PIN_MIN_LENGTH} ou mais dígitos.
+          </p>
+        </div>
+        {hasPin ? (
+          <p className="text-sm text-green-700">PIN cadastrado. Você precisará dele ao solicitar estorno.</p>
+        ) : (
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
+            <div className="flex-1">
+              <Label>Criar PIN</Label>
+              <Input
+                className="mt-1"
+                type="password"
+                inputMode="numeric"
+                autoComplete="off"
+                value={pinSetup}
+                onChange={(e) => setPinSetup(e.target.value.replace(/\D/g, ""))}
+                placeholder="Somente números"
+              />
+            </div>
+            <Button onClick={() => void salvarPin()} disabled={busy || pinSetup.length < FINANCIAL_PIN_MIN_LENGTH}>
+              Salvar PIN
+            </Button>
+          </div>
+        )}
+      </Card>
+
+      {estornoAlvo && (
+        <Card className="space-y-4 border-amber-300 bg-amber-50/40 p-5">
+          <div>
+            <h3 className="font-semibold text-gray-900">Solicitar estorno</h3>
+            <p className="text-sm text-gray-600">
+              {formatCentsBRL(estornoAlvo.amountCents)} · a cooperativa precisa aprovar
+            </p>
+          </div>
+          <div>
+            <Label>Motivo</Label>
+            <Input
+              className="mt-1"
+              value={estornoMotivo}
+              onChange={(e) => setEstornoMotivo(e.target.value)}
+              placeholder="Ex.: compra de teste, produto devolvido..."
+            />
+          </div>
+          <div>
+            <Label>PIN financeiro</Label>
+            <Input
+              className="mt-1"
+              type="password"
+              inputMode="numeric"
+              autoComplete="off"
+              value={estornoPin}
+              onChange={(e) => setEstornoPin(e.target.value.replace(/\D/g, ""))}
+              placeholder="Confirme com seu PIN"
+            />
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <Button onClick={() => void enviarEstorno()} disabled={busy}>
+              {busy ? "Enviando..." : "Enviar solicitação"}
+            </Button>
+            <Button variant="secondary" onClick={() => setEstornoAlvo(null)} disabled={busy}>
+              Cancelar
+            </Button>
+          </div>
+        </Card>
+      )}
+
       <Card className="p-5 space-y-2">
         <h3 className="font-semibold">Compras confirmadas</h3>
         <p className="text-sm text-gray-600">
@@ -319,7 +434,7 @@ function MercadoParceiroContent() {
               )}
             </div>
             {!compra.solicitacaoPendenteId ? (
-              <Button size="sm" variant="secondary" onClick={() => void solicitarEstorno(compra)} disabled={busy || !ativo}>
+              <Button size="sm" variant="secondary" onClick={() => abrirEstorno(compra)} disabled={busy || !ativo || !hasPin}>
                 Solicitar estorno
               </Button>
             ) : (

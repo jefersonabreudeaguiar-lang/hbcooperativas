@@ -769,6 +769,118 @@ export async function verifyFinancialPin(
   return { ok: true };
 }
 
+async function recordPartnerPinFailure(
+  supabase: SupabaseClient,
+  partnerId: string,
+  actorUserId: string
+): Promise<void> {
+  const { data } = await supabase
+    .from("hb_credit_partners")
+    .select("pin_failed_attempts, cooperative_cnpj")
+    .eq("id", partnerId)
+    .maybeSingle();
+
+  const attempts = Number(data?.pin_failed_attempts ?? 0) + 1;
+  const lockedUntil =
+    attempts >= PIN_MAX_ATTEMPTS
+      ? new Date(Date.now() + PIN_LOCK_MINUTES * 60_000).toISOString()
+      : null;
+
+  await supabase
+    .from("hb_credit_partners")
+    .update({
+      pin_failed_attempts: attempts,
+      pin_locked_until: lockedUntil,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", partnerId);
+
+  if (data?.cooperative_cnpj) {
+    await supabase.from("hb_credit_audit_log").insert({
+      cooperative_cnpj: String(data.cooperative_cnpj),
+      actor: actorUserId,
+      action: "PARTNER_PIN_FAILED",
+      resource_type: "partner",
+      resource_id: partnerId,
+      metadata: { attempts },
+    });
+  }
+}
+
+async function resetPartnerPinFailures(supabase: SupabaseClient, partnerId: string): Promise<void> {
+  await supabase
+    .from("hb_credit_partners")
+    .update({
+      pin_failed_attempts: 0,
+      pin_locked_until: null,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", partnerId);
+}
+
+export async function setPartnerFinancialPin(
+  supabase: SupabaseClient,
+  partnerId: string,
+  pin: string
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const pinHash = await hashPassword(pin);
+  const now = new Date().toISOString();
+  const { error } = await supabase
+    .from("hb_credit_partners")
+    .update({
+      pin_hash: pinHash,
+      pin_updated_at: now,
+      pin_failed_attempts: 0,
+      pin_locked_until: null,
+      updated_at: now,
+    })
+    .eq("id", partnerId);
+
+  if (error) return { ok: false, error: error.message };
+  return { ok: true };
+}
+
+export async function hasPartnerFinancialPin(
+  supabase: SupabaseClient,
+  partnerId: string
+): Promise<boolean> {
+  const { data } = await supabase.from("hb_credit_partners").select("pin_hash").eq("id", partnerId).maybeSingle();
+  return Boolean(data?.pin_hash);
+}
+
+export async function verifyPartnerFinancialPin(
+  supabase: SupabaseClient,
+  partnerId: string,
+  pin: string,
+  actorUserId: string
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const { data } = await supabase
+    .from("hb_credit_partners")
+    .select("pin_hash, pin_locked_until")
+    .eq("id", partnerId)
+    .maybeSingle();
+
+  if (!data?.pin_hash) {
+    return { ok: false, error: "PIN financeiro não definido. Cadastre seu PIN no painel do mercado." };
+  }
+
+  if (data.pin_locked_until && new Date(String(data.pin_locked_until)).getTime() > Date.now()) {
+    return {
+      ok: false,
+      error: "PIN bloqueado temporariamente. Tente novamente em alguns minutos.",
+    };
+  }
+
+  const valid = await verifyPassword(pin, String(data.pin_hash));
+  if (!valid) {
+    await recordPartnerPinFailure(supabase, partnerId, actorUserId);
+    return { ok: false, error: "PIN financeiro inválido." };
+  }
+
+  await resetPartnerPinFailures(supabase, partnerId);
+  return { ok: true };
+}
+
 export async function createPaymentIntent(
   supabase: SupabaseClient,
   input: {
@@ -1441,6 +1553,7 @@ export async function createRefundRequest(
     partnerId: string;
     transactionId: string;
     motivo: string;
+    pin: string;
     requestedByUserId: string;
   }
 ): Promise<{ ok: true; solicitacao: ContaCoopSolicitacaoEstorno } | { ok: false; error: string }> {
@@ -1448,6 +1561,14 @@ export async function createRefundRequest(
   if (motivo.length < 5) {
     return { ok: false, error: "Descreva o motivo do estorno (mínimo 5 caracteres)." };
   }
+
+  const pinCheck = await verifyPartnerFinancialPin(
+    supabase,
+    params.partnerId,
+    params.pin,
+    params.requestedByUserId
+  );
+  if (!pinCheck.ok) return pinCheck;
 
   const { data: tx, error: txError } = await supabase
     .from("hb_credit_transactions")
