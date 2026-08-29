@@ -2691,7 +2691,13 @@ export default function NotasPedidoContent() {
       >
         <div className="flex gap-3">
           {getFotoExibicaoNota(n) ? (
-            <NotaFotoImg src={getFotoExibicaoNota(n)} alt="" className="w-16 h-16 rounded-lg object-cover shrink-0" />
+            <div className="w-20 h-24 rounded-lg border border-gray-200 bg-gray-50 shrink-0 flex items-center justify-center overflow-hidden p-1">
+              <NotaFotoImg
+                src={getFotoExibicaoNota(n)}
+                alt=""
+                className="max-w-full max-h-full object-contain"
+              />
+            </div>
           ) : (
             <div className="w-16 h-16 rounded-lg bg-gray-100 shrink-0 flex items-center justify-center text-gray-400">
               {n.lancamentoDireto ? <FileText size={20} /> : <Camera size={20} />}
@@ -3099,11 +3105,13 @@ export default function NotasPedidoContent() {
                               </Button>
                             )}
                           {getFotoExibicaoNota(n) && (
-                            <NotaFotoImg
-                              src={getFotoExibicaoNota(n)}
-                              alt=""
-                              className="w-full h-36 object-cover"
-                            />
+                            <div className="w-full h-52 sm:h-60 bg-gray-100 border-b border-amber-200 flex items-center justify-center p-2">
+                              <NotaFotoImg
+                                src={getFotoExibicaoNota(n)}
+                                alt=""
+                                className="max-w-full max-h-full w-auto h-auto object-contain"
+                              />
+                            </div>
                           )}
                           {qtdFotosCard > 1 && (
                             <span className="absolute top-2 right-2 bg-black/70 text-white text-xs font-bold px-2 py-0.5 rounded-full">
@@ -3935,11 +3943,14 @@ export default function NotasPedidoContent() {
                     return (
                       <div className="w-full space-y-4 text-center">
                         {/* eslint-disable-next-line @next/next/no-img-element */}
-                        <img
-                          src={url}
-                          alt={`Lançada ${displayIdx + 1} de ${total}`}
-                          className="max-w-full max-h-[70vh] lg:max-h-[calc(100dvh-12rem)] object-contain mx-auto ring-4 ring-green-500/50"
-                        />
+                        <div className="inline-block max-w-full rounded-xl border-2 border-green-400/40 bg-black/30 p-2 shadow-lg ring-4 ring-green-500/50">
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img
+                            src={url}
+                            alt={`Lançada ${displayIdx + 1} de ${total}`}
+                            className="block max-w-full max-h-[75vh] lg:max-h-[calc(100dvh-11rem)] object-contain mx-auto"
+                          />
+                        </div>
                         <p className="text-green-400 font-semibold text-base">
                           Foto {displayIdx + 1} de {total} · Lançada na ficha ✓
                         </p>
@@ -3970,12 +3981,16 @@ export default function NotasPedidoContent() {
                         {conferenciaFotoCarregando && !conferenciaFotoAtualUrl ? (
                           <p className="text-white/70 text-sm text-center py-12">Carregando foto…</p>
                         ) : conferenciaFotoAtualUrl ? (
-                          /* eslint-disable-next-line @next/next/no-img-element */
-                          <img
-                            src={conferenciaFotoAtualUrl}
-                            alt={`Pedido ${idx + 1} de ${totalFotos}`}
-                            className="max-w-full max-h-[70vh] lg:max-h-[calc(100dvh-12rem)] object-contain mx-auto"
-                          />
+                          <div className="w-full flex items-center justify-center">
+                            <div className="inline-block max-w-full rounded-xl border-2 border-white/25 bg-black/30 p-2 shadow-lg">
+                              {/* eslint-disable-next-line @next/next/no-img-element */}
+                              <img
+                                src={conferenciaFotoAtualUrl}
+                                alt={`Pedido ${idx + 1} de ${totalFotos}`}
+                                className="block max-w-full max-h-[75vh] lg:max-h-[calc(100dvh-11rem)] object-contain mx-auto"
+                              />
+                            </div>
+                          </div>
                         ) : null}
                         {totalFotos > 1 && (
                           <>
@@ -4395,7 +4410,16 @@ export default function NotasPedidoContent() {
             {getFotosExibicaoNota(selectedNota).length > 0 && (
               <div className={cn("grid gap-2", getFotosExibicaoNota(selectedNota).length > 1 ? "grid-cols-1 sm:grid-cols-2" : "grid-cols-1")}>
                 {getFotosExibicaoNota(selectedNota).map((foto, i) => (
-                  <NotaFotoImg key={i} src={foto} alt={`Pedido ${i + 1}`} className="w-full rounded-xl border" />
+                  <div
+                    key={i}
+                    className="w-full min-h-[12rem] max-h-96 rounded-xl border border-gray-200 bg-gray-100 flex items-center justify-center p-2"
+                  >
+                    <NotaFotoImg
+                      src={foto}
+                      alt={`Pedido ${i + 1}`}
+                      className="max-w-full max-h-[22rem] object-contain"
+                    />
+                  </div>
                 ))}
               </div>
             )}

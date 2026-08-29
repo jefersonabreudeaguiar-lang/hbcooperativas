@@ -140,7 +140,13 @@ export function CorrecoesEntregasPanel({
                       )}
                     >
                       {foto ? (
-                        <NotaFotoImg src={foto} alt="" className="w-16 h-16 rounded-lg object-cover shrink-0" />
+                        <div className="w-20 h-24 rounded-lg border border-gray-200 bg-gray-50 shrink-0 flex items-center justify-center overflow-hidden p-1">
+                          <NotaFotoImg
+                            src={foto}
+                            alt=""
+                            className="max-w-full max-h-full object-contain"
+                          />
+                        </div>
                       ) : (
                         <div className="w-16 h-16 rounded-lg bg-gray-100 shrink-0" />
                       )}
