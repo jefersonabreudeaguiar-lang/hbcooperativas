@@ -1,4 +1,4 @@
-import type { Cooperativa, MensalidadeConfig } from "@/types";
+import type { Cooperativa, MensalidadeConfig, CobrancaSaasCooperativa } from "@/types";
 import { hashPasswordSync } from "@/lib/security/password";
 
 const SENHA_KEY = "senhaCadastroCooperado";
@@ -125,6 +125,7 @@ export function cooperativaFromCloudRow(row: Record<string, unknown>): Cooperati
     mensalidadeConfig: mensalidadeConfigLimpa,
     senhaCadastroCooperadoHash,
     senhaAreaAdminHash,
+    cobrancaSaas: (row.cobranca_saas as CobrancaSaasCooperativa | null | undefined) ?? undefined,
     createdAt: String(row.created_at ?? new Date().toISOString()),
     updatedAt: String(row.updated_at ?? new Date().toISOString()),
   };

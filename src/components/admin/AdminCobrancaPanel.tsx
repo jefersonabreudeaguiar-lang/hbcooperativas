@@ -16,7 +16,8 @@ import { Button } from "@/components/ui/Button";
 import { AlertBanner } from "@/components/ui/AlertBanner";
 import { Input } from "@/components/ui/Form";
 import { useAppData } from "@/hooks/useAppData";
-import { updateData } from "@/services/dataStore";
+import { updateData, getData } from "@/services/dataStore";
+import { pushCobrancaSaasToCloud } from "@/services/cooperativaCloudService";
 import {
   COBRANCA_SAAS_MINIMO_LABEL,
   COBRANCA_SAAS_MINIMO_MES,
@@ -117,11 +118,19 @@ export function AdminCobrancaPanel({ user }: AdminCobrancaPanelProps) {
     };
   }, [rows]);
 
+  const syncSaasCloud = (cooperativaId: string) => {
+    const coop = getData().cooperativas.find((c) => c.id === cooperativaId);
+    if (coop?.cobrancaSaas) {
+      void pushCobrancaSaasToCloud(coop.cnpj, coop.cobrancaSaas);
+    }
+  };
+
   const run = (cooperativaId: string, fn: () => void, okMsg: string) => {
     setFeedback(null);
     setBusyId(cooperativaId);
     try {
       fn();
+      syncSaasCloud(cooperativaId);
       setFeedback({ type: "ok", text: okMsg });
     } catch (e) {
       setFeedback({ type: "erro", text: e instanceof Error ? e.message : "Falha ao aplicar ação." });
@@ -139,6 +148,7 @@ export function AdminCobrancaPanel({ user }: AdminCobrancaPanelProps) {
         if (!r.ok) throw new Error(r.error ?? "Não foi possível registrar a cobrança.");
         return r.data;
       });
+      syncSaasCloud(row.cooperativaId);
       setFeedback({
         type: "ok",
         text: `Cobrança registrada para ${row.nome}: ${row.valorFormatado} (${row.qtdCooperados} cooperado${row.qtdCooperados === 1 ? "" : "s"}).`,
@@ -159,6 +169,7 @@ export function AdminCobrancaPanel({ user }: AdminCobrancaPanelProps) {
         if (!r.ok) throw new Error(r.error ?? "Não foi possível confirmar.");
         return r.data;
       });
+      syncSaasCloud(row.cooperativaId);
       setFeedback({ type: "ok", text: `Pagamento confirmado — ${row.nome} em dia.` });
     } catch (e) {
       setFeedback({ type: "erro", text: e instanceof Error ? e.message : "Falha ao aplicar ação." });
@@ -180,6 +191,7 @@ export function AdminCobrancaPanel({ user }: AdminCobrancaPanelProps) {
         if (!r.ok) throw new Error(r.error ?? "Não foi possível recusar.");
         return r.data;
       });
+      syncSaasCloud(row.cooperativaId);
       setFeedback({ type: "ok", text: `Pagamento não confirmado — ${row.nome} notificado.` });
     } catch (e) {
       setFeedback({ type: "erro", text: e instanceof Error ? e.message : "Falha ao aplicar ação." });

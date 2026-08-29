@@ -19,7 +19,11 @@ export async function PATCH(
     return NextResponse.json({ error: "CNPJ inválido." }, { status: 400 });
   }
 
-  const guard = await guardCooperativaApi(request, cnpj, { requireManagement: true });
+  const guard = await guardCooperativaApi(request, cnpj, {
+    requireManagement: true,
+    write: true,
+    checkSaas: false,
+  });
   if (!guard.ok) return guard.response;
 
   const body = await request.json().catch(() => null);
@@ -69,6 +73,9 @@ export async function PATCH(
       atualCfg,
       String(body.senhaAreaAdminHash ?? "").trim() || undefined
     );
+  }
+  if (body.cobrancaSaas != null) {
+    patch.cobranca_saas = body.cobrancaSaas;
   }
 
   if (Object.keys(patch).length === 0) {

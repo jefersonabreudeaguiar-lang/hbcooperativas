@@ -14,6 +14,7 @@ import {
   verifyAppUserPassword,
 } from "@/lib/supabase/usersAuth";
 import { applyAppUsersSchemaSql } from "@/lib/supabase/appUsersSchema";
+import { isProvisionNewUserRole } from "@/lib/security/authPolicy";
 import { normalizeCnpj } from "@/utils/cooperativa";
 import type { UserRole } from "@/types";
 
@@ -112,6 +113,10 @@ export async function POST(request: Request) {
       { error: "Não foi possível sincronizar sua conta na nuvem.", code: "SYNC_DENIED" },
       { status: 401 }
     );
+  }
+
+  if (!isProvisionNewUserRole(role)) {
+    return NextResponse.json({ error: "Perfil não permitido na sincronização.", code: "ROLE_DENIED" }, { status: 403 });
   }
 
   const created = await upsertAppUser(supabase, profilePayload);

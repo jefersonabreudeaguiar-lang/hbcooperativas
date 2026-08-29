@@ -3,6 +3,7 @@ import { getSupabaseAdmin, isSupabaseConfigured } from "@/lib/supabase/admin";
 import { normalizeCnpj } from "@/utils/cooperativa";
 import type { Cooperado } from "@/types";
 import { guardCooperativaApi } from "@/lib/security/apiGuard";
+import { logServerMutationAudit } from "@/lib/security/serverAudit";
 import { fetchCooperadosFromStorage, uploadCooperadoToStorage } from "@/lib/supabase/cooperadosStorage";
 
 export async function GET(request: Request) {
@@ -52,7 +53,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Cooperado inválido." }, { status: 400 });
   }
 
-  const guard = await guardCooperativaApi(request, cnpj);
+  const guard = await guardCooperativaApi(request, cnpj, { write: true, checkSaas: true });
   if (!guard.ok) return guard.response;
 
   const supabase = getSupabaseAdmin();
@@ -63,6 +64,15 @@ export async function POST(request: Request) {
   const uploaded = await uploadCooperadoToStorage(supabase, cnpj, cooperado, email);
   if (!uploaded.ok) {
     return NextResponse.json({ error: uploaded.error }, { status: 500 });
+  }
+
+  if (guard.session) {
+    await logServerMutationAudit(supabase, guard.session, cnpj, {
+      action: "criar",
+      entityType: "cooperado",
+      entityId: cooperado.id,
+      summary: `Cooperado ${cooperado.nomeCompleto} sincronizado na nuvem.`,
+    });
   }
 
   return NextResponse.json({ success: true, source: "storage" }, { status: 201 });

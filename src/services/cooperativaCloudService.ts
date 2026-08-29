@@ -1,5 +1,6 @@
-import type { Cooperativa, MensalidadeConfig } from "@/types";
+import type { Cooperativa, MensalidadeConfig, CobrancaSaasCooperativa } from "@/types";
 import { normalizeCnpj } from "@/utils/cooperativa";
+import { secureApiFetch } from "@/lib/security/clientSession";
 import { cooperativaFromCloudRow, exigeSenhaCadastroCooperado, mensalidadeConfigComSenhaCadastro } from "@/utils/cooperativaCadastro";
 
 export type CloudCooperativa = Pick<Cooperativa, "id" | "nome" | "cnpj"> & Partial<Cooperativa>;
@@ -141,6 +142,25 @@ export async function syncCooperativaToCloud(
     telefone: cooperativa.telefone,
     endereco: cooperativa.endereco,
   });
+}
+
+/** Publica status de cobrança HB na nuvem (enforcement server-side). */
+export async function pushCobrancaSaasToCloud(
+  cnpj: string,
+  cobrancaSaas: CobrancaSaasCooperativa
+): Promise<boolean> {
+  const digits = normalizeCnpj(cnpj);
+  if (digits.length !== 14) return false;
+  try {
+    const res = await secureApiFetch(`/api/cooperativas/${digits}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ cobrancaSaas }),
+    });
+    return res.ok;
+  } catch {
+    return false;
+  }
 }
 
 function scoreMensalidadeConfig(cfg?: MensalidadeConfig): number {

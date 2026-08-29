@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getSupabaseAdmin, isSupabaseConfigured } from "@/lib/supabase/admin";
 import { normalizeCnpj } from "@/utils/cooperativa";
 import { guardCooperativaApi } from "@/lib/security/apiGuard";
+import { logServerMutationAudit } from "@/lib/security/serverAudit";
 import {
   fetchContratosSync,
   fetchOperacionalSync,
@@ -54,7 +55,11 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "CNPJ inválido." }, { status: 400 });
   }
 
-  const guard = await guardCooperativaApi(request, cnpj, { requireManagement: true });
+  const guard = await guardCooperativaApi(request, cnpj, {
+    requireManagement: true,
+    write: true,
+    checkSaas: true,
+  });
   if (!guard.ok) return guard.response;
 
   const supabase = getSupabaseAdmin();
@@ -66,6 +71,14 @@ export async function POST(request: Request) {
   if (section === "contratos") {
     const uploaded = await uploadContratosSync(supabase, cnpj, body.payload as ContratosSyncPayload);
     if (!uploaded.ok) return NextResponse.json({ error: uploaded.error }, { status: 500 });
+    if (guard.session) {
+      await logServerMutationAudit(supabase, guard.session, cnpj, {
+        action: "editar",
+        entityType: "sync_contratos",
+        entityId: cnpj,
+        summary: "Sync contratos publicado na nuvem (API).",
+      });
+    }
     return NextResponse.json({ success: true, section }, { status: 201 });
   }
 
@@ -76,6 +89,14 @@ export async function POST(request: Request) {
     }
     const uploaded = await uploadOperacionalSync(supabase, cnpj, payload);
     if (!uploaded.ok) return NextResponse.json({ error: uploaded.error }, { status: 500 });
+    if (guard.session) {
+      await logServerMutationAudit(supabase, guard.session, cnpj, {
+        action: "editar",
+        entityType: "sync_operacional",
+        entityId: cnpj,
+        summary: "Sync operacional publicado na nuvem (API).",
+      });
+    }
     return NextResponse.json({ success: true, section }, { status: 201 });
   }
 

@@ -285,7 +285,7 @@ export async function POST(
     return NextResponse.json({ error: parsed.error }, { status: 400 });
   }
 
-  const guard = await guardCooperativaApi(request, parsed.cnpj);
+  const guard = await guardCooperativaApi(request, parsed.cnpj, { write: true, checkSaas: true });
   if (!guard.ok) return guard.response;
 
   return processFotoUpload(id, parsed);
@@ -309,7 +309,11 @@ export async function DELETE(
     return NextResponse.json({ error: "Parâmetros inválidos." }, { status: 400 });
   }
 
-  const guard = await guardCooperativaApi(request, cnpj, { requireManagement: true });
+  const guard = await guardCooperativaApi(request, cnpj, {
+    requireManagement: true,
+    write: true,
+    checkSaas: true,
+  });
   if (!guard.ok) return guard.response;
 
   const supabase = getSupabaseAdmin();

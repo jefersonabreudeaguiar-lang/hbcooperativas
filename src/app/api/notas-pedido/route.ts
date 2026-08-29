@@ -3,6 +3,7 @@ import { getSupabaseAdmin, isSupabaseConfigured } from "@/lib/supabase/admin";
 import { normalizeCnpj } from "@/utils/cooperativa";
 import type { NotaPedido } from "@/types";
 import { guardCooperativaApi } from "@/lib/security/apiGuard";
+import { logServerMutationAudit } from "@/lib/security/serverAudit";
 import {
   fetchNotasFromStorage,
   fetchNotasFromTable,
@@ -102,7 +103,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Nenhuma entrega informada." }, { status: 400 });
   }
 
-  const guard = await guardCooperativaApi(request, cnpj);
+  const guard = await guardCooperativaApi(request, cnpj, { write: true, checkSaas: true });
   if (!guard.ok) return guard.response;
 
   const supabase = getSupabaseAdmin();
@@ -123,6 +124,14 @@ export async function POST(request: Request) {
         return NextResponse.json({ error: uploaded.error }, { status: 500 });
       }
     }
+    if (guard.session) {
+      await logServerMutationAudit(supabase, guard.session, cnpj, {
+        action: "criar",
+        entityType: "nota_pedido",
+        entityId: notas[0]?.id ?? "lote",
+        summary: `${notas.length} entrega(s) publicada(s) na nuvem.`,
+      });
+    }
     return NextResponse.json({ success: true, count: notas.length, source: "table" }, { status: 201 });
   }
 
@@ -131,6 +140,15 @@ export async function POST(request: Request) {
     if (!uploaded.ok) {
       return NextResponse.json({ error: uploaded.error }, { status: 500 });
     }
+  }
+
+  if (guard.session) {
+    await logServerMutationAudit(supabase, guard.session, cnpj, {
+      action: "criar",
+      entityType: "nota_pedido",
+      entityId: notas[0]?.id ?? "lote",
+      summary: `${notas.length} entrega(s) publicada(s) na nuvem (storage).`,
+    });
   }
 
   return NextResponse.json(

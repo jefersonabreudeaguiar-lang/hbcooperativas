@@ -61,7 +61,11 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "CNPJ inválido." }, { status: 400 });
   }
 
-  const guard = await guardCooperativaApi(request, cnpj, { requireManagement: true });
+  const guard = await guardCooperativaApi(request, cnpj, {
+    requireManagement: true,
+    write: true,
+    checkSaas: true,
+  });
   if (!guard.ok) return guard.response;
 
   const rawEntries = body?.entries;
@@ -74,13 +78,14 @@ export async function POST(request: Request) {
     return NextResponse.json({ ok: false, error: "Cliente Supabase indisponível." }, { status: 503 });
   }
 
+  const session = guard.session;
   const entries: CooperativeAuditInsert[] = rawEntries.slice(0, 100).map((e: Record<string, unknown>) => ({
     id: String(e.id ?? `audit_${Date.now()}`),
     cooperativeCnpj: cnpj,
     occurredAt: String(e.occurredAt ?? e.occurred_at ?? new Date().toISOString()),
-    actorUserId: e.actorUserId ? String(e.actorUserId) : undefined,
-    actorName: String(e.actorName ?? e.actor_name ?? "Sistema"),
-    actorRole: e.actorRole ? String(e.actorRole) : undefined,
+    actorUserId: guard.enforced && session ? session.sub : e.actorUserId ? String(e.actorUserId) : undefined,
+    actorName: guard.enforced && session ? session.name : String(e.actorName ?? e.actor_name ?? "Sistema"),
+    actorRole: guard.enforced && session ? session.role : e.actorRole ? String(e.actorRole) : undefined,
     action: String(e.action ?? "editar"),
     entityType: String(e.entityType ?? e.entity_type ?? "geral"),
     entityId: String(e.entityId ?? e.entity_id ?? ""),
@@ -88,7 +93,7 @@ export async function POST(request: Request) {
     summary: String(e.summary ?? ""),
     justification: e.justification ? String(e.justification) : undefined,
     changes: e.changes ? String(e.changes) : undefined,
-    source: String(e.source ?? "web"),
+    source: guard.enforced && session ? "api-authenticated" : String(e.source ?? "web"),
   }));
 
   const result = await insertCooperativeAuditEntries(supabase, entries);

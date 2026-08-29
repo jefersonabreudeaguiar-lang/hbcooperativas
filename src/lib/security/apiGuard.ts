@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { normalizeCnpj } from "@/utils/cooperativa";
 import { isApiSecurityEnforced } from "@/lib/security/env";
 import { extractBearerToken, verifyAccessToken, type SessionClaims } from "@/lib/security/jwt";
+import { requireCooperativaSaasWritable } from "@/lib/security/saasGuard";
 import { rateLimitApi } from "@/lib/security/rateLimit";
 
 export type AuthResult =
@@ -47,7 +48,12 @@ export function canAccessCooperativaCnpj(session: SessionClaims, cnpj: string): 
 
   const sessionCnpj = session.cooperativaCnpj ? normalizeCnpj(session.cooperativaCnpj) : "";
   if (sessionCnpj.length === 14 && sessionCnpj === digits) {
-    if (session.role === "cooperado" || session.role === "parceiro" || session.role === "responsavel") {
+    if (
+      session.role === "cooperado" ||
+      session.role === "parceiro" ||
+      session.role === "responsavel" ||
+      session.role === "contador"
+    ) {
       return true;
     }
   }
@@ -102,10 +108,25 @@ export function requireManagementRole(
   return null;
 }
 
+/** Contador: somente leitura — bloqueia POST/PATCH/DELETE nas APIs cooperativas. */
+export function requireNotContadorWrite(
+  session: SessionClaims | null,
+  enforced: boolean
+): NextResponse | null {
+  if (!enforced || !session) return null;
+  if (session.role === "contador") {
+    return NextResponse.json(
+      { error: "Contador possui acesso somente leitura." },
+      { status: 403 }
+    );
+  }
+  return null;
+}
+
 export async function guardCooperativaApi(
   request: Request,
   cnpj: string,
-  options?: { requireManagement?: boolean }
+  options?: { requireManagement?: boolean; write?: boolean; checkSaas?: boolean }
 ): Promise<
   | { ok: true; session: SessionClaims | null; enforced: boolean }
   | { ok: false; response: NextResponse }
@@ -119,6 +140,16 @@ export async function guardCooperativaApi(
   if (options?.requireManagement) {
     const mgmt = requireManagementRole(auth.session, auth.enforced);
     if (mgmt) return { ok: false, response: mgmt };
+  }
+
+  if (options?.write) {
+    const contadorDenied = requireNotContadorWrite(auth.session, auth.enforced);
+    if (contadorDenied) return { ok: false, response: contadorDenied };
+  }
+
+  if (options?.checkSaas) {
+    const saasDenied = await requireCooperativaSaasWritable(cnpj, auth.session, auth.enforced);
+    if (saasDenied) return { ok: false, response: saasDenied };
   }
 
   return { ok: true, session: auth.session, enforced: auth.enforced };

@@ -4,10 +4,10 @@ import { isCooperativasTableMissing } from "@/lib/supabase/errors";
 import { normalizeCnpj } from "@/utils/cooperativa";
 import { exigeSenhaCadastroCooperado, senhaCadastroStoredFromConfig } from "@/utils/cooperativaCadastro";
 import { verifyPassword } from "@/lib/security/password";
-import { rateLimitAuth } from "@/lib/security/rateLimit";
+import { rateLimitCadastroSenha } from "@/lib/security/rateLimit";
 
 export async function POST(request: Request) {
-  if (!rateLimitAuth(request)) {
+  if (!rateLimitCadastroSenha(request)) {
     return NextResponse.json({ error: "Muitas tentativas." }, { status: 429 });
   }
 

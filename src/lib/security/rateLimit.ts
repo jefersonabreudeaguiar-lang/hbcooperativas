@@ -5,6 +5,7 @@ const buckets = new Map<string, Bucket>();
 const WINDOW_MS = 60_000;
 const MAX_REQUESTS = 120;
 const AUTH_MAX = 20;
+const CADASTRO_SENHA_MAX = 8;
 
 function clientKey(request: Request, suffix = ""): string {
   const forwarded = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim();
@@ -31,4 +32,8 @@ export function rateLimitApi(request: Request): boolean {
 
 export function rateLimitAuth(request: Request): boolean {
   return checkLimit(clientKey(request, ":auth"), AUTH_MAX);
+}
+
+export function rateLimitCadastroSenha(request: Request): boolean {
+  return checkLimit(clientKey(request, ":cadastro-senha"), CADASTRO_SENHA_MAX);
 }

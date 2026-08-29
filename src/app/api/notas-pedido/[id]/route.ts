@@ -103,7 +103,7 @@ export async function PATCH(
     return NextResponse.json({ error: "Dados inválidos." }, { status: 400 });
   }
 
-  const guard = await guardCooperativaApi(request, cnpj);
+  const guard = await guardCooperativaApi(request, cnpj, { write: true, checkSaas: true });
   if (!guard.ok) return guard.response;
 
   const supabase = getSupabaseAdmin();
@@ -157,7 +157,11 @@ export async function DELETE(
     return NextResponse.json({ error: "CNPJ inválido." }, { status: 400 });
   }
 
-  const guard = await guardCooperativaApi(request, cnpj, { requireManagement: true });
+  const guard = await guardCooperativaApi(request, cnpj, {
+    requireManagement: true,
+    write: true,
+    checkSaas: true,
+  });
   if (!guard.ok) return guard.response;
 
   const supabase = getSupabaseAdmin();
