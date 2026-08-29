@@ -162,7 +162,7 @@ export const PRESET_CONTADOR: Resource[] = [
 ];
 
 export const CONTADOR_ACESSO_DESCRICAO =
-  "Painel contador, conciliação, trilha de auditoria, relatórios R1–R9, fechamento e consultas financeiras — sem alterar lançamentos.";
+  "Painel contador, conciliação, trilha de auditoria, relatórios R1–R10, dossiê ZIP, snapshot de fechamento e consultas financeiras — sem alterar lançamentos.";
 
 export function can(role: UserRole, resource: Resource, action: Action): boolean {
   const rolePerms = PERMISSIONS[role];
@@ -284,6 +284,8 @@ const CONTADOR_MENU: { href: string; label: string; resource: Resource }[] = [
   { href: "/contador/conciliacao", label: "Conciliação", resource: "contador" },
   { href: "/contador/trilha-auditoria", label: "Trilha de auditoria", resource: "contador" },
   { href: "/contador/parecer", label: "Parecer contábil", resource: "contador" },
+  { href: "/contador/dossie", label: "Dossiê ZIP", resource: "contador" },
+  { href: "/contador/snapshot", label: "Snapshot fechamento", resource: "contador" },
   { href: "/relatorios", label: "Relatórios", resource: "relatorios" },
   { href: "/fechamento-mensal", label: "Fechamento mensal", resource: "fechamento" },
   { href: "/ficha-corrida", label: "Ficha corrida", resource: "ficha_corrida" },
@@ -465,6 +467,8 @@ export function getMobileNavItems(
         { href: "/contador/conciliacao", label: "Conciliar", resource: "contador" },
         { href: "/contador/trilha-auditoria", label: "Auditoria", resource: "contador" },
         { href: "/contador/parecer", label: "Parecer", resource: "contador" },
+        { href: "/contador/dossie", label: "Dossiê", resource: "contador" },
+        { href: "/contador/snapshot", label: "Snapshot", resource: "contador" },
         { href: "/relatorios", label: "Relatórios", resource: "relatorios" },
       ],
       user

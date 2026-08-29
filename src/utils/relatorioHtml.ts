@@ -1096,4 +1096,85 @@ export function gerarRelatorioParecerContabilHtml(
   );
 }
 
+export function gerarRelatorioIndiceDossieHtml(
+  data: AppData,
+  mesReferencia: string,
+  cooperativaId: string,
+  meta: { temParecer: boolean; temSnapshot: boolean; qtdRelatorios: number },
+  emissor?: EmissorRelatorio
+): string {
+  const itens = [
+    "01-fechamento.html — Fechamento mensal",
+    "02-conciliacao-r4.html — Conciliação (R4)",
+    "03-demonstrativo-pagamentos-r2.html — Demonstrativo de pagamentos (R2)",
+    "04-mapa-receitas-r3.html — Mapa de receitas por contrato (R3)",
+    "05-extrato-conta-coop-r5.html — Extrato Conta Coop (R5)",
+    "06-razao-analitico-r1.html — Razão analítico por cooperado (R1)",
+    "07-trilha-auditoria-r6.csv — Trilha de auditoria (R6)",
+    "08-relatorio-assembleia-r10.html — Relatório para assembleia (R10)",
+  ];
+  if (meta.temParecer) itens.push("09-parecer-contabil-r9.html — Parecer contábil assinado (R9)");
+  if (meta.temSnapshot) itens.push("snapshot-fechamento.json — Snapshot imutável do fechamento aprovado");
+
+  const lista = itens.map((i) => `<li>${escapeHtml(i)}</li>`).join("");
+  const body = `
+    <h2>Dossiê contábil mensal</h2>
+    <p class="carta">Pacote gerado pela Central do Contador · ${meta.qtdRelatorios} documento(s) principal(is).</p>
+    <div class="destinatario">
+      <div class="rotulo">Conteúdo do arquivo ZIP</div>
+      <ul style="font-family:system-ui,sans-serif;font-size:14px;line-height:1.7;margin:8px 0 0;padding-left:20px">${lista}</ul>
+    </div>
+    <p class="carta">Abra os arquivos HTML no navegador para imprimir ou salvar em PDF. O CSV da trilha pode ser importado em planilhas.</p>`;
+  return documentoShell("Índice do dossiê contábil", body, data, mesReferencia, cooperativaId, emissor);
+}
+
+export function gerarRelatorioAssembleiaHtml(
+  data: AppData,
+  mesReferencia: string,
+  cooperativaId: string,
+  conciliacao: ConciliacaoMensalResult,
+  fechamento: FechamentoMensal | undefined,
+  parecer: import("@/types").ParecerContabilMensal | undefined,
+  snapshot: import("@/types").FechamentoSnapshot | undefined,
+  emissor?: EmissorRelatorio
+): string {
+  const calc = calcularFechamentoMensalLive(mesReferencia, data);
+  const parecerResumo = parecer
+    ? `<p class="carta" style="white-space:pre-wrap">${escapeHtml(parecer.texto.slice(0, 800))}${parecer.texto.length > 800 ? "…" : ""}</p>
+       <p class="carta"><strong>Contador:</strong> ${escapeHtml(parecer.contadorNome)} · ${parecer.assinaturaDataUrl ? "Assinado" : "Sem assinatura digital"}</p>`
+    : `<p class="carta">Parecer contábil (R9) ainda não registrado para este mês.</p>`;
+
+  const snapshotInfo = snapshot
+    ? `<p class="carta">Snapshot imutável capturado em ${formatDateTime(snapshot.capturedAt)} por ${escapeHtml(snapshot.capturedByName)} · hash <code>${snapshot.contentHash}</code></p>`
+    : `<p class="carta">Snapshot de fechamento ainda não gerado (aprove o fechamento mensal para congelar os dados).</p>`;
+
+  const body = `
+    <h2>R10 — Relatório para assembleia</h2>
+    <p class="carta">Síntese executiva para prestação de contas em assembleia, consolidando fechamento, conciliação e parecer do contador.</p>
+    <div class="resumo-grid">
+      <div class="resumo-card"><div class="label">Total vendas</div><div class="value">${formatCurrency(calc.totalVendas)}</div></div>
+      <div class="resumo-card"><div class="label">Pagamentos cooperados</div><div class="value">${formatCurrency(calc.totalPagamentos)}</div></div>
+      <div class="resumo-card"><div class="label">Conciliação OK</div><div class="value">${conciliacao.resumo.percentualOk}%</div></div>
+      <div class="resumo-card"><div class="label">Status fechamento</div><div class="value">${escapeHtml(fechamento?.status ?? "Não iniciado")}</div></div>
+    </div>
+    <h2>Indicadores operacionais</h2>
+    <table>
+      <thead><tr><th>Indicador</th><th class="num">Valor</th></tr></thead>
+      <tbody>
+        <tr><td>Entregas conferidas</td><td class="num">${conciliacao.kpis.totalEntregasConferidas}</td></tr>
+        <tr><td>Total a pagar cooperados</td><td class="num">${formatCurrency(conciliacao.kpis.totalAPagarCooperados)}</td></tr>
+        <tr><td>Total pago confirmado</td><td class="num">${formatCurrency(conciliacao.kpis.totalPagoCooperados)}</td></tr>
+        <tr><td>Divergências na conciliação</td><td class="num">${conciliacao.resumo.divergencias}</td></tr>
+        <tr><td>Saldo cooperativa (fechamento)</td><td class="num">${formatCurrency(calc.saldoCooperativa)}</td></tr>
+      </tbody>
+    </table>
+    <h2>Parecer do contador</h2>
+    ${parecerResumo}
+    <h2>Registro imutável</h2>
+    ${snapshotInfo}
+    ${fechamento?.aprovadoPor ? `<p class="carta">Fechamento aprovado por <strong>${escapeHtml(fechamento.aprovadoPor)}</strong> em ${formatDate(fechamento.dataAprovacao ?? "")}.</p>` : ""}
+  `;
+  return documentoShell("Relatório assembleia (R10)", body, data, mesReferencia, cooperativaId, emissor);
+}
+
 export type { ResumoFinanceiroMes, FechamentoCalculado };

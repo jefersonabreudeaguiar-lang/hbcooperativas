@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useMemo } from "react";
-import { CheckCircle, Lock, FileCheck, Download, Printer, FileText } from "lucide-react";
+import { CheckCircle, Lock, FileCheck, Download, Printer, FileText, ShieldCheck } from "lucide-react";
 import { useAppData } from "@/hooks/useAppData";
 import { usePermissions } from "@/hooks/usePermissions";
 import { getUserCooperativaId } from "@/utils/cooperativa";
@@ -12,6 +12,7 @@ import { StatusBadge } from "@/components/ui/StatusBadge";
 import { updateData, addAuditEntry } from "@/services/dataStore";
 import { calcularFechamentoMensal, listMesesComLancamentos } from "@/services/dashboardService";
 import { calcularFechamentoMensalLive } from "@/services/relatorioService";
+import { capturarSnapshotFechamento, getSnapshotFechamentoMes } from "@/services/fechamentoSnapshotService";
 import {
   baixarDocumento,
   gerarRelatorioFechamentoHtml,
@@ -38,6 +39,7 @@ export default function FechamentoMensalPage() {
   if (!data || !user) return null;
 
   const fechamento = data.fechamentos.find((f) => f.mesReferencia === selectedMes);
+  const snapshot = coopId ? getSnapshotFechamentoMes(data, coopId, selectedMes) : undefined;
   const calculoLive = calcularFechamentoMensalLive(selectedMes, data);
   const calculo = calcularFechamentoMensal(selectedMes, data);
   const isBloqueado = fechamento?.bloqueado ?? false;
@@ -124,6 +126,9 @@ export default function FechamentoMensalPage() {
       updated.financeiro = d.financeiro.map((f) =>
         f.mesReferencia === selectedMes ? { ...f, status: "aprovado" as const } : f
       );
+      if (coopId) {
+        updated = capturarSnapshotFechamento(updated, coopId, selectedMes, user);
+      }
       return addAuditEntry(updated, {
         entityType: "fechamento",
         entityId: fechamento.id,
@@ -229,6 +234,11 @@ export default function FechamentoMensalPage() {
             )}
             {fechamento?.aprovadoPor && (
               <span className="text-sm text-gray-500">Aprovado por: {fechamento.aprovadoPor}</span>
+            )}
+            {snapshot && (
+              <span className="text-sm text-green-700 flex items-center gap-1">
+                <ShieldCheck size={14} /> Snapshot {snapshot.contentHash}
+              </span>
             )}
           </div>
           <div className="flex gap-2 flex-wrap">

@@ -154,11 +154,11 @@ export default function ContadorDashboardPage() {
                 <p className="text-sm text-gray-600 mt-1">Compare entregas, ficha, pagamentos e caixa.</p>
               </Card>
             </Link>
-            <Link href={`/contador/trilha-auditoria?mes=${mes}`}>
+            <Link href={`/contador/dossie?mes=${mes}`}>
               <Card className="hover:border-green-300 transition-colors cursor-pointer h-full">
-                <ShieldCheck className="text-green-700 mb-2" size={24} />
-                <h3 className="font-semibold">Trilha de auditoria</h3>
-                <p className="text-sm text-gray-600 mt-1">Histórico de ações na nuvem e local.</p>
+                <FileText className="text-green-700 mb-2" size={24} />
+                <h3 className="font-semibold">Dossiê ZIP mensal</h3>
+                <p className="text-sm text-gray-600 mt-1">Baixe R1–R10, parecer e snapshot em um pacote.</p>
               </Card>
             </Link>
             <Link href="/contador/parecer">
@@ -166,6 +166,23 @@ export default function ContadorDashboardPage() {
                 <FileText className="text-green-700 mb-2" size={24} />
                 <h3 className="font-semibold">Parecer contábil (R9)</h3>
                 <p className="text-sm text-gray-600 mt-1">Registrar opinião profissional assinada do mês.</p>
+              </Card>
+            </Link>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-4">
+            <Link href={`/contador/trilha-auditoria?mes=${mes}`}>
+              <Card className="hover:border-green-300 transition-colors cursor-pointer h-full">
+                <ShieldCheck className="text-green-700 mb-2" size={24} />
+                <h3 className="font-semibold">Trilha de auditoria</h3>
+                <p className="text-sm text-gray-600 mt-1">Histórico de ações na nuvem e local.</p>
+              </Card>
+            </Link>
+            <Link href={`/contador/snapshot?mes=${mes}`}>
+              <Card className="hover:border-green-300 transition-colors cursor-pointer h-full">
+                <ShieldCheck className="text-green-700 mb-2" size={24} />
+                <h3 className="font-semibold">Snapshot imutável</h3>
+                <p className="text-sm text-gray-600 mt-1">Consulte o registro congelado no fechamento aprovado.</p>
               </Card>
             </Link>
           </div>

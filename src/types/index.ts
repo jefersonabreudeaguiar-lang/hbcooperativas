@@ -755,6 +755,19 @@ export interface ParecerContabilMensal {
   updatedAt: string;
 }
 
+/** Registro congelado no momento da aprovação do fechamento — imutável após captura. */
+export interface FechamentoSnapshot {
+  id: string;
+  cooperativaId: string;
+  mesReferencia: string;
+  fechamentoId: string;
+  capturedAt: string;
+  capturedByUserId: string;
+  capturedByName: string;
+  contentHash: string;
+  payloadJson: string;
+}
+
 export interface AppData {
   cooperativas: Cooperativa[];
   users: User[];
@@ -787,6 +800,7 @@ export interface AppData {
   instituicoesExcluidas?: InstituicaoExcluida[];
   auditLog: AuditEntry[];
   pareceresContabeis?: ParecerContabilMensal[];
+  fechamentoSnapshots?: FechamentoSnapshot[];
   config: {
     descontoPadraoCooperativa: number;
   };
