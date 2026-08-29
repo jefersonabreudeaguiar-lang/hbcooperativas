@@ -44,11 +44,14 @@ function LoginForm() {
     setError("");
     setSubmitting(true);
     try {
-      const success = await login(email, password);
-      if (success) {
+      const result = await login(email, password);
+      if (result.ok) {
         router.push(redirectTo);
       } else {
-        setError("E-mail ou senha inválidos.");
+        setError(
+          result.error?.trim() ||
+            "E-mail ou senha inválidos. Se usa Gmail, tente com ou sem pontos no e-mail."
+        );
       }
     } finally {
       setSubmitting(false);

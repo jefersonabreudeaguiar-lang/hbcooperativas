@@ -11,8 +11,8 @@ function parseCreatorEmails(raw: string | undefined): string[] {
     .filter(Boolean);
 }
 
-/** Normaliza e-mail para comparação (Gmail ignora pontos e sufixo +alias). */
-export function normalizeCreatorEmail(email: string): string {
+/** Normaliza e-mail para login/cadastro (Gmail ignora pontos e sufixo +alias). */
+export function normalizeAuthEmail(email: string): string {
   const trimmed = email.trim().toLowerCase();
   const at = trimmed.lastIndexOf("@");
   if (at <= 0) return trimmed;
@@ -27,6 +27,9 @@ export function normalizeCreatorEmail(email: string): string {
 
   return `${local}@${domain}`;
 }
+
+/** @deprecated Use normalizeAuthEmail — mantido para compatibilidade interna. */
+export const normalizeCreatorEmail = normalizeAuthEmail;
 
 /** E-mails do criador (env NEXT_PUBLIC_APP_CREATOR_EMAILS + lista fixa). */
 export function getAppCreatorEmails(): string[] {

@@ -1,6 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { UserRole } from "@/types";
 import { normalizeCnpj } from "@/utils/cooperativa";
+import { normalizeAuthEmail } from "@/lib/security/appCreator";
 import { hashPassword, verifyPassword } from "@/lib/security/password";
 import { encryptSensitiveField } from "@/lib/security/fieldCrypto";
 
@@ -37,14 +38,14 @@ export async function isAppUsersTableReady(supabase: SupabaseClient): Promise<bo
   return !error;
 }
 
-export async function findAppUserByEmail(
+async function queryAppUserByEmailExact(
   supabase: SupabaseClient,
   email: string
 ): Promise<AppUserRow | null> {
   const { data, error } = await supabase
     .from("app_users")
     .select("*")
-    .eq("email", email.trim().toLowerCase())
+    .eq("email", email)
     .maybeSingle();
 
   if (error) {
@@ -54,11 +55,29 @@ export async function findAppUserByEmail(
   return data as AppUserRow | null;
 }
 
+export async function findAppUserByEmail(
+  supabase: SupabaseClient,
+  email: string
+): Promise<AppUserRow | null> {
+  const canonical = normalizeAuthEmail(email);
+  const simple = email.trim().toLowerCase();
+
+  const byCanonical = await queryAppUserByEmailExact(supabase, canonical);
+  if (byCanonical) return byCanonical;
+
+  if (simple !== canonical) {
+    const bySimple = await queryAppUserByEmailExact(supabase, simple);
+    if (bySimple) return bySimple;
+  }
+
+  return null;
+}
+
 export async function upsertAppUser(
   supabase: SupabaseClient,
   input: UpsertAppUserInput
 ): Promise<AppUserRow | null> {
-  const email = input.email.trim().toLowerCase();
+  const email = normalizeAuthEmail(input.email);
   const password_hash = await hashPassword(input.password);
   const cooperativa_cnpj = input.cooperativaCnpj ? normalizeCnpj(input.cooperativaCnpj) : null;
 

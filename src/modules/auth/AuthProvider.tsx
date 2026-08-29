@@ -5,13 +5,13 @@ import { useRouter } from "next/navigation";
 import type { User } from "@/types";
 import { normalizeUserRole } from "@/permissions";
 import { getSession, login as doLogin, loginCreatorAdminPortal, logout as doLogout, registerCooperado, registerCooperativa, subscribe, ensureCooperativaInCloudForUser, preloadAppData } from "@/services/dataStore";
-import { ensureCloudSessionReady, setActiveCloudProfile, userToCloudProfile } from "@/lib/security/clientSession";
+import { ensureCloudSessionReady, setActiveCloudProfile, userToCloudProfile, getLastCloudSyncError } from "@/lib/security/clientSession";
 import type { RegisterCooperadoInput, RegisterCooperativaInput } from "@/services/dataStore";
 
 interface AuthContextType {
   user: Omit<User, "password"> | null;
   loading: boolean;
-  login: (email: string, password: string) => Promise<boolean>;
+  login: (email: string, password: string) => Promise<{ ok: boolean; error?: string }>;
   loginCreatorAdmin: (email: string, password: string) => Promise<boolean>;
   register: (input: RegisterCooperadoInput) => Promise<{ success: boolean; error?: string }>;
   registerCooperativa: (input: RegisterCooperativaInput) => Promise<{ success: boolean; error?: string }>;
@@ -64,9 +64,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setUser({ ...safeUser, role: normalizeUserRole(safeUser.role) });
       setActiveCloudProfile(userToCloudProfile(safeUser));
       await ensureCloudSessionReady(userToCloudProfile(safeUser));
-      return true;
+      return { ok: true as const };
     }
-    return false;
+    return { ok: false as const, error: getLastCloudSyncError() };
   };
 
   const loginCreatorAdmin = async (email: string, password: string) => {

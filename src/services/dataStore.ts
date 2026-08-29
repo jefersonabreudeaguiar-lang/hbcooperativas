@@ -8,7 +8,7 @@ import { migrateInlinePhotosToIdb } from "@/services/localMediaMigration";
 import { compactarFotosNoArmazenamento, liberarEspacoArmazenamento, stripBinaryForPersist } from "@/utils/fotoEntrega";
 import { ensureMensalidadesDoMes, ensureMensalidadeCooperado, sincronizarMensalidadeCooperativa } from "@/services/mensalidadeService";
 import { applyOperationalResetIfNeeded, clearOperationalData } from "@/services/operationalReset";
-import { normalizeCreatorEmail } from "@/lib/security/appCreator";
+import { normalizeCreatorEmail, normalizeAuthEmail } from "@/lib/security/appCreator";
 import {
   CREATOR_ADMIN_EMAIL,
   CREATOR_ADMIN_PASSWORD,
@@ -895,9 +895,7 @@ function reconcileSessionAfterDataLoad(): void {
 
   const current = resolveSessionUser(memoryCache, parsed);
   if (!current) {
-    localStorage.removeItem(SESSION_KEY);
-    sessionStorage.removeItem(SESSION_KEY);
-    notify();
+    // Mantém sessão após update/sync — users[] local pode estar temporariamente desalinhado.
     return;
   }
 
@@ -920,18 +918,17 @@ export function getSession(): Omit<User, "password"> | null {
 
   if (memoryCache) {
     const current = resolveSessionUser(memoryCache, parsed);
-    if (!current) {
-      localStorage.removeItem(SESSION_KEY);
-      sessionStorage.removeItem(SESSION_KEY);
-      return null;
+    if (current) {
+      const { password: _, ...safeUser } = current;
+      const serialized = JSON.stringify(safeUser);
+      const stored = localStorage.getItem(SESSION_KEY);
+      if (stored && serialized !== stored) {
+        localStorage.setItem(SESSION_KEY, serialized);
+      }
+      return safeUser;
     }
-    const { password: _, ...safeUser } = current;
-    const serialized = JSON.stringify(safeUser);
-    const stored = localStorage.getItem(SESSION_KEY);
-    if (stored && serialized !== stored) {
-      localStorage.setItem(SESSION_KEY, serialized);
-    }
-    return safeUser;
+    // Sessão válida no dispositivo — não deslogar se users[] local ainda não sincronizou.
+    return { ...parsed, role: normalizeUserRole(parsed.role) };
   }
 
   scheduleDataWarmIfNeeded();
@@ -1071,7 +1068,7 @@ export async function ensureCooperativaInCloudForUser(user: Omit<User, "password
 
 export async function registerCooperado(input: RegisterCooperadoInput): Promise<RegisterResult> {
   const nome = input.nomeCompleto.trim();
-  const email = input.email.trim().toLowerCase();
+  const email = normalizeAuthEmail(input.email);
   const cnpjCoop = normalizeCnpj(input.cooperativaCnpj);
 
   if (!nome) return { success: false, error: "Informe o nome completo." };

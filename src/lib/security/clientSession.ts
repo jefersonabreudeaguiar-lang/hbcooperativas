@@ -1,3 +1,5 @@
+import { normalizeAuthEmail } from "@/lib/security/appCreator";
+
 const TOKEN_KEY = "coopeagriplla_access_token";
 
 /** Sessão ativa via cookie httpOnly (Fase 2). */
@@ -157,7 +159,7 @@ export async function loginViaCloudApi(
   password: string
 ): Promise<{ token: string; user: CloudSessionProfile } | null> {
   try {
-    const normalizedEmail = email.trim().toLowerCase();
+    const normalizedEmail = normalizeAuthEmail(email);
     const res = await fetch("/api/auth/login", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -177,7 +179,10 @@ export async function loginViaCloudApi(
         "Conta na nuvem não configurada (tabela app_users). Fale com o suporte HB Cooperativas.";
       return null;
     }
-    if (res.status === 429) return null;
+    if (res.status === 429) {
+      lastCloudSyncError = "Muitas tentativas. Aguarde um minuto e tente de novo.";
+      return null;
+    }
     if (!res.ok) {
       lastCloudSyncError = json.error ?? "Credenciais inválidas na nuvem.";
       return null;
@@ -214,7 +219,7 @@ export async function establishCloudSession(
 ): Promise<boolean> {
   try {
     clearCloudBootstrapCredentials();
-    const normalizedEmail = email.trim().toLowerCase();
+    const normalizedEmail = normalizeAuthEmail(email);
     const fullPayload = { ...profile, email: normalizedEmail, password };
 
     const sync = await requestCloudToken("/api/auth/sync-session", fullPayload);

@@ -6,6 +6,7 @@ import {
   tokenResponseForUser,
 } from "@/lib/security/authRoutes";
 import { isPublicRegisterRole } from "@/lib/security/authPolicy";
+import { normalizeAuthEmail } from "@/lib/security/appCreator";
 import { logSecurityEvent, upsertAppUser } from "@/lib/supabase/usersAuth";
 import type { UserRole } from "@/types";
 
@@ -16,7 +17,7 @@ export async function POST(request: Request) {
   if (blocked) return blocked;
 
   const body = await request.json().catch(() => null);
-  const email = String(body?.email ?? "").trim().toLowerCase();
+  const email = normalizeAuthEmail(String(body?.email ?? ""));
   const password = String(body?.password ?? "");
   const id = String(body?.id ?? "").trim();
   const name = String(body?.name ?? "").trim();

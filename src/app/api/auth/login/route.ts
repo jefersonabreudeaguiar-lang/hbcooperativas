@@ -7,6 +7,7 @@ import {
   ensureAuthInfrastructure,
   tokenResponseForUser,
 } from "@/lib/security/authRoutes";
+import { normalizeAuthEmail } from "@/lib/security/appCreator";
 import { logSecurityEvent, verifyAppUserPassword, isAppUsersTableReady } from "@/lib/supabase/usersAuth";
 
 export async function POST(request: Request) {
@@ -14,7 +15,7 @@ export async function POST(request: Request) {
   if (blocked) return blocked;
 
   const body = await request.json().catch(() => null);
-  const email = String(body?.email ?? "").trim().toLowerCase();
+  const email = normalizeAuthEmail(String(body?.email ?? ""));
   const password = String(body?.password ?? "");
 
   if (!email || !password) {
