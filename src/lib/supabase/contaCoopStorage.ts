@@ -3,13 +3,18 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { normalizeCnpj } from "@/utils/cooperativa";
 import { hashPassword, verifyPassword } from "@/lib/security/password";
 import type {
+  ContaCoopCooperadoLiquidacao,
   ContaCoopDashboard,
   ContaCoopIntent,
   ContaCoopLedgerEntry,
   ContaCoopLimiteCooperado,
+  ContaCoopLiquidacaoPreview,
   ContaCoopParceiro,
+  ContaCoopSettlement,
+  ContaCoopSettlementTransacao,
   ContaCoopTresValores,
   ParceiroStatus,
+  SettlementStatus,
 } from "@/modules/hb-credit/types";
 import { computeDisponivel, formatCentsBRL } from "@/modules/hb-credit/engine/money";
 import { calcLimiteFromPercentual, calcTetoGlobalCents, sumCreditosBaseCents } from "@/modules/hb-credit/engine/creditBaseFromFicha";
@@ -594,6 +599,9 @@ function mapParceiroRow(row: Record<string, unknown>): ContaCoopParceiro {
     nomeMercado: String(row.name),
     email: String(row.email),
     status: partnerStatusFromDb(String(row.status)),
+    pixKey: row.pix_key ? String(row.pix_key) : null,
+    pixHolderName: row.pix_holder_name ? String(row.pix_holder_name) : null,
+    pixUpdatedAt: row.pix_updated_at ? String(row.pix_updated_at) : null,
     appUserId: row.app_user_id ? String(row.app_user_id) : null,
     createdAt: String(row.created_at),
     updatedAt: String(row.updated_at),
@@ -1420,4 +1428,412 @@ export async function auditCreditIntegrity(
   }
 
   return { ok: divergences.length === 0, divergences };
+}
+
+function mesReferenciaRange(mesReferencia: string): { start: string; end: string } {
+  const [year, month] = mesReferencia.split("-").map(Number);
+  const start = new Date(Date.UTC(year, month - 1, 1)).toISOString();
+  const end = new Date(Date.UTC(year, month, 1)).toISOString();
+  return { start, end };
+}
+
+function settlementStatusFromDb(status: string): SettlementStatus {
+  if (status === "CONFIRMED") return "confirmado";
+  if (status === "CANCELLED") return "cancelado";
+  return "aguardando_mercado";
+}
+
+function settlementStatusToDb(status: SettlementStatus): string {
+  if (status === "confirmado") return "CONFIRMED";
+  if (status === "cancelado") return "CANCELLED";
+  return "AWAITING_PARTNER";
+}
+
+function mapSettlementRow(row: Record<string, unknown>, partnerNome?: string): ContaCoopSettlement {
+  return {
+    id: String(row.id),
+    partnerId: String(row.partner_id),
+    partnerNome: partnerNome ?? String(row.partner_id),
+    mesReferencia: String(row.mes_referencia),
+    totalCents: Number(row.total_cents),
+    transacoesCount: Number(row.transacoes_count),
+    status: settlementStatusFromDb(String(row.status)),
+    responsavelNome: row.responsavel_nome ? String(row.responsavel_nome) : null,
+    pagoEm: row.pago_em ? String(row.pago_em) : null,
+    comprovanteMemo: row.comprovante_memo ? String(row.comprovante_memo) : null,
+    relatorioHtml: row.relatorio_html ? String(row.relatorio_html) : null,
+    partnerConfirmadoEm: row.partner_confirmado_em ? String(row.partner_confirmado_em) : null,
+    createdAt: String(row.created_at),
+  };
+}
+
+export async function updatePartnerPix(
+  supabase: SupabaseClient,
+  parceiroId: string,
+  pixKey: string,
+  pixHolderName: string
+): Promise<ContaCoopParceiro | null> {
+  const { data, error } = await supabase
+    .from("hb_credit_partners")
+    .update({
+      pix_key: pixKey.trim(),
+      pix_holder_name: pixHolderName.trim(),
+      pix_updated_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", parceiroId)
+    .select()
+    .single();
+  if (error || !data) return null;
+  return mapParceiroRow(data as Record<string, unknown>);
+}
+
+type SettlementTxRow = {
+  id: string;
+  recebivelId: string;
+  cooperadoId: string;
+  tipo: "PAYMENT" | "REFUND";
+  amountCents: number;
+  receiptCode?: string | null;
+  descricao?: string | null;
+  createdAt: string;
+  recebivelStatus?: string;
+};
+
+async function listSettlementTransactions(
+  supabase: SupabaseClient,
+  cnpj: string,
+  partnerId: string,
+  mesReferencia: string
+): Promise<SettlementTxRow[]> {
+  const digits = normalizeCnpj(cnpj);
+  const { start, end } = mesReferenciaRange(mesReferencia);
+
+  const { data: txs } = await supabase
+    .from("hb_credit_transactions")
+    .select("id, cooperado_id, event_type, amount_cents, receipt_code, created_at, status, payment_intent_id")
+    .eq("cooperative_cnpj", digits)
+    .eq("partner_id", partnerId)
+    .in("event_type", ["PAYMENT", "REFUND"])
+    .eq("status", "posted")
+    .gte("created_at", start)
+    .lt("created_at", end)
+    .order("created_at", { ascending: true });
+
+  const intentIds = (txs ?? []).map((t) => t.payment_intent_id).filter(Boolean) as string[];
+  const intentDesc: Record<string, string> = {};
+  if (intentIds.length) {
+    const { data: intents } = await supabase
+      .from("hb_credit_payment_intents")
+      .select("id, description")
+      .in("id", intentIds);
+    for (const intent of intents ?? []) {
+      if (intent.description) intentDesc[String(intent.id)] = String(intent.description);
+    }
+  }
+
+  const paymentIds = (txs ?? []).filter((t) => t.event_type === "PAYMENT").map((t) => String(t.id));
+  const recebivelByTx: Record<string, { id: string; status: string }> = {};
+  if (paymentIds.length) {
+    const { data: recebiveis } = await supabase
+      .from("hb_credit_receivables")
+      .select("id, transaction_id, status")
+      .in("transaction_id", paymentIds);
+    for (const r of recebiveis ?? []) {
+      recebivelByTx[String(r.transaction_id)] = { id: String(r.id), status: String(r.status) };
+    }
+  }
+
+  return (txs ?? []).map((t) => {
+    const intentId = t.payment_intent_id ? String(t.payment_intent_id) : "";
+    const recebivel = recebivelByTx[String(t.id)];
+    return {
+      id: String(t.id),
+      recebivelId: recebivel?.id ?? "",
+      cooperadoId: String(t.cooperado_id ?? ""),
+      tipo: String(t.event_type) as "PAYMENT" | "REFUND",
+      amountCents: Number(t.amount_cents),
+      receiptCode: t.receipt_code ? String(t.receipt_code) : null,
+      descricao: intentDesc[intentId] ?? null,
+      createdAt: String(t.created_at),
+      recebivelStatus: recebivel?.status,
+    };
+  });
+}
+
+function buildCooperadoLiquidacao(transacoes: SettlementTxRow[]): ContaCoopCooperadoLiquidacao[] {
+  const byCooperado = new Map<string, ContaCoopCooperadoLiquidacao>();
+  for (const tx of transacoes) {
+    const cooperadoId = tx.cooperadoId || "sem_cooperado";
+    const current =
+      byCooperado.get(cooperadoId) ??
+      ({
+        cooperadoId,
+        totalComprasCents: 0,
+        totalEstornosCents: 0,
+        saldoCents: 0,
+        transacoes: [],
+      } satisfies ContaCoopCooperadoLiquidacao);
+
+    const item: ContaCoopSettlementTransacao = {
+      id: tx.id,
+      recebivelId: tx.recebivelId,
+      cooperadoId: tx.cooperadoId,
+      tipo: tx.tipo,
+      amountCents: tx.amountCents,
+      receiptCode: tx.receiptCode,
+      descricao: tx.descricao,
+      createdAt: tx.createdAt,
+    };
+    current.transacoes.push(item);
+    if (tx.tipo === "PAYMENT") current.totalComprasCents += tx.amountCents;
+    if (tx.tipo === "REFUND") current.totalEstornosCents += tx.amountCents;
+    current.saldoCents = current.totalComprasCents - current.totalEstornosCents;
+    byCooperado.set(cooperadoId, current);
+  }
+  return [...byCooperado.values()].sort((a, b) => a.cooperadoId.localeCompare(b.cooperadoId));
+}
+
+export async function previewPartnerSettlement(
+  supabase: SupabaseClient,
+  cnpj: string,
+  partnerId: string,
+  mesReferencia: string
+): Promise<ContaCoopLiquidacaoPreview | null> {
+  const digits = normalizeCnpj(cnpj);
+  const { data: partnerRow } = await supabase
+    .from("hb_credit_partners")
+    .select("*")
+    .eq("cooperative_cnpj", digits)
+    .eq("id", partnerId)
+    .maybeSingle();
+  if (!partnerRow) return null;
+
+  const transacoes = await listSettlementTransactions(supabase, digits, partnerId, mesReferencia);
+  const cooperados = buildCooperadoLiquidacao(transacoes);
+  const openRecebiveis = transacoes.filter(
+    (tx) => tx.tipo === "PAYMENT" && tx.recebivelStatus === "OPEN"
+  );
+  const totalCents = openRecebiveis.reduce((sum, tx) => sum + tx.amountCents, 0);
+
+  return {
+    partnerId,
+    partnerNome: String(partnerRow.name),
+    mesReferencia,
+    pixKey: partnerRow.pix_key ? String(partnerRow.pix_key) : null,
+    pixHolderName: partnerRow.pix_holder_name ? String(partnerRow.pix_holder_name) : null,
+    totalCents,
+    transacoesCount: openRecebiveis.length,
+    cooperados,
+  };
+}
+
+export async function registerPartnerSettlementPayment(
+  supabase: SupabaseClient,
+  params: {
+    cnpj: string;
+    partnerId: string;
+    mesReferencia: string;
+    responsavelUserId: string;
+    responsavelNome: string;
+    comprovanteMemo?: string;
+    relatorioHtml: string;
+  }
+): Promise<{ ok: boolean; error?: string; settlement?: ContaCoopSettlement }> {
+  const preview = await previewPartnerSettlement(supabase, params.cnpj, params.partnerId, params.mesReferencia);
+  if (!preview) return { ok: false, error: "Mercado não encontrado." };
+  if (preview.totalCents <= 0) return { ok: false, error: "Não há recebíveis em aberto neste mês para liquidar." };
+  if (!preview.pixKey?.trim()) return { ok: false, error: "Mercado ainda não cadastrou chave PIX." };
+
+  const { data: existing } = await supabase
+    .from("hb_credit_settlements")
+    .select("id")
+    .eq("cooperative_cnpj", normalizeCnpj(params.cnpj))
+    .eq("partner_id", params.partnerId)
+    .eq("mes_referencia", params.mesReferencia)
+    .eq("status", "AWAITING_PARTNER")
+    .maybeSingle();
+  if (existing) return { ok: false, error: "Já existe um pagamento aguardando confirmação do mercado neste mês." };
+
+  const settlementId = genId("settle");
+  const now = new Date().toISOString();
+  const openRecebivelIds = (await listSettlementTransactions(supabase, params.cnpj, params.partnerId, params.mesReferencia))
+    .filter((tx) => tx.tipo === "PAYMENT" && tx.recebivelStatus === "OPEN" && tx.recebivelId)
+    .map((tx) => tx.recebivelId);
+
+  const { error: insertError } = await supabase.from("hb_credit_settlements").insert({
+    id: settlementId,
+    cooperative_cnpj: normalizeCnpj(params.cnpj),
+    partner_id: params.partnerId,
+    mes_referencia: params.mesReferencia,
+    total_cents: preview.totalCents,
+    transacoes_count: preview.transacoesCount,
+    status: "AWAITING_PARTNER",
+    responsavel_user_id: params.responsavelUserId,
+    responsavel_nome: params.responsavelNome,
+    pago_em: now,
+    comprovante_memo: params.comprovanteMemo ?? null,
+    relatorio_html: params.relatorioHtml,
+    created_at: now,
+    updated_at: now,
+  });
+  if (insertError) return { ok: false, error: insertError.message };
+
+  if (openRecebivelIds.length) {
+    const { error: recvError } = await supabase
+      .from("hb_credit_receivables")
+      .update({
+        status: "PROCESSING",
+        settlement_id: settlementId,
+        updated_at: now,
+      })
+      .in("id", openRecebivelIds);
+    if (recvError) return { ok: false, error: recvError.message };
+  }
+
+  await supabase.from("hb_credit_audit_log").insert({
+    cooperative_cnpj: normalizeCnpj(params.cnpj),
+    actor: params.responsavelUserId,
+    action: "SETTLEMENT_REGISTERED",
+    resource_type: "settlement",
+    resource_id: settlementId,
+    metadata: {
+      partnerId: params.partnerId,
+      mesReferencia: params.mesReferencia,
+      totalCents: preview.totalCents,
+    },
+  });
+
+  return {
+    ok: true,
+    settlement: {
+      id: settlementId,
+      partnerId: params.partnerId,
+      partnerNome: preview.partnerNome,
+      mesReferencia: params.mesReferencia,
+      totalCents: preview.totalCents,
+      transacoesCount: preview.transacoesCount,
+      status: "aguardando_mercado",
+      responsavelNome: params.responsavelNome,
+      pagoEm: now,
+      comprovanteMemo: params.comprovanteMemo ?? null,
+      relatorioHtml: params.relatorioHtml,
+      createdAt: now,
+    },
+  };
+}
+
+export async function confirmPartnerSettlement(
+  supabase: SupabaseClient,
+  settlementId: string,
+  parceiroId: string,
+  assinaturaDataUrl: string
+): Promise<{ ok: boolean; error?: string; settlement?: ContaCoopSettlement }> {
+  const { data: row } = await supabase
+    .from("hb_credit_settlements")
+    .select("*")
+    .eq("id", settlementId)
+    .eq("partner_id", parceiroId)
+    .maybeSingle();
+  if (!row) return { ok: false, error: "Liquidação não encontrada." };
+  if (String(row.status) !== "AWAITING_PARTNER") return { ok: false, error: "Esta liquidação já foi processada." };
+
+  const now = new Date().toISOString();
+  const { error: updateError } = await supabase
+    .from("hb_credit_settlements")
+    .update({
+      status: "CONFIRMED",
+      partner_assinatura_data_url: assinaturaDataUrl,
+      partner_confirmado_em: now,
+      updated_at: now,
+    })
+    .eq("id", settlementId);
+  if (updateError) return { ok: false, error: updateError.message };
+
+  await supabase
+    .from("hb_credit_receivables")
+    .update({ status: "SETTLED", updated_at: now })
+    .eq("settlement_id", settlementId);
+
+  const { data: partnerRow } = await supabase
+    .from("hb_credit_partners")
+    .select("name")
+    .eq("id", parceiroId)
+    .maybeSingle();
+
+  return {
+    ok: true,
+    settlement: mapSettlementRow(row as Record<string, unknown>, partnerRow?.name ? String(partnerRow.name) : undefined),
+  };
+}
+
+export async function listSettlementsForPartner(
+  supabase: SupabaseClient,
+  parceiroId: string,
+  limit = 12
+): Promise<ContaCoopSettlement[]> {
+  const { data } = await supabase
+    .from("hb_credit_settlements")
+    .select("*")
+    .eq("partner_id", parceiroId)
+    .order("created_at", { ascending: false })
+    .limit(limit);
+  return (data ?? []).map((row) => mapSettlementRow(row as Record<string, unknown>));
+}
+
+export async function getSettlementById(
+  supabase: SupabaseClient,
+  settlementId: string
+): Promise<(ContaCoopSettlement & { partnerAssinatura?: string | null }) | null> {
+  const { data } = await supabase.from("hb_credit_settlements").select("*").eq("id", settlementId).maybeSingle();
+  if (!data) return null;
+  const mapped = mapSettlementRow(data as Record<string, unknown>);
+  return {
+    ...mapped,
+    partnerAssinatura: data.partner_assinatura_data_url ? String(data.partner_assinatura_data_url) : null,
+  };
+}
+
+export async function listCooperadoContaCoopDescontosMes(
+  supabase: SupabaseClient,
+  cnpj: string,
+  cooperadoId: string,
+  mesReferencia: string
+): Promise<Array<{ motivo: string; valorReais: number; tipo: "conta_coop"; createdAt: string }>> {
+  const digits = normalizeCnpj(cnpj);
+  const { start, end } = mesReferenciaRange(mesReferencia);
+  const { data: txs } = await supabase
+    .from("hb_credit_transactions")
+    .select("id, event_type, amount_cents, created_at, partner_id, receipt_code")
+    .eq("cooperative_cnpj", digits)
+    .eq("cooperado_id", cooperadoId)
+    .in("event_type", ["PAYMENT", "REFUND"])
+    .eq("status", "posted")
+    .gte("created_at", start)
+    .lt("created_at", end)
+    .order("created_at", { ascending: true });
+
+  if (!txs?.length) return [];
+
+  const partnerIds = [...new Set(txs.map((t) => String(t.partner_id)).filter(Boolean))];
+  const partnerNames: Record<string, string> = {};
+  if (partnerIds.length) {
+    const { data: partners } = await supabase.from("hb_credit_partners").select("id, name").in("id", partnerIds);
+    for (const p of partners ?? []) partnerNames[String(p.id)] = String(p.name);
+  }
+
+  return txs.map((t) => {
+    const cents = Number(t.amount_cents);
+    const partnerNome = partnerNames[String(t.partner_id)] ?? "Mercado parceiro";
+    const isRefund = String(t.event_type) === "REFUND";
+    const receipt = t.receipt_code ? ` (${String(t.receipt_code)})` : "";
+    return {
+      motivo: isRefund
+        ? `Estorno Conta Coop — ${partnerNome}${receipt}`
+        : `Compra Conta Coop — ${partnerNome}${receipt}`,
+      valorReais: cents / 100,
+      tipo: "conta_coop" as const,
+      createdAt: String(t.created_at),
+    };
+  });
 }

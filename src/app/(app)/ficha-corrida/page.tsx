@@ -26,6 +26,8 @@ import {
 import { listarPagamentosAguardandoAssinatura } from "@/services/filaDoDiaService";
 import { listCooperadosComFichaNoMes, getCooperadoNomeResolvido, resolverCooperadoParaPagamento, fichaPertenceCooperado, listCooperadosDaCooperativa } from "@/services/cooperadoCloudService";
 import { resolveCooperativaCnpj, patchNotaPedidoInCloud } from "@/services/notaPedidoCloudService";
+import { mergeDescontosContaCoopNoResumo, type DescontoContaCoopRemoto } from "@/lib/hb-credit/mergeFichaDescontos";
+import { fetchFichaDescontosContaCoop } from "@/services/creditApiService";
 import {
   pushOperacionalToCloud,
   pushNotasPagasToCloud,
@@ -462,6 +464,28 @@ export default function FichaCorridaPage() {
     return getPagamentoConfirmadoMes(data, cooperadoSelecionadoId, mesAtivo);
   }, [data, cooperadoSelecionadoId, mesAtivo]);
 
+  const [descontosContaCoop, setDescontosContaCoop] = useState<DescontoContaCoopRemoto[]>([]);
+
+  useEffect(() => {
+    if (!data || !cooperadoSelecionadoId || !mesAtivo || !user) {
+      setDescontosContaCoop([]);
+      return;
+    }
+    void (async () => {
+      try {
+        const cnpj = await resolveCooperativaCnpj(data, coopId, user);
+        if (!cnpj) {
+          setDescontosContaCoop([]);
+          return;
+        }
+        const items = await fetchFichaDescontosContaCoop(cnpj, cooperadoSelecionadoId, mesAtivo);
+        setDescontosContaCoop(items);
+      } catch {
+        setDescontosContaCoop([]);
+      }
+    })();
+  }, [coopId, cooperadoSelecionadoId, data, mesAtivo, user]);
+
   const resumo = useMemo(() => {
     if (!data || !cooperadoSelecionadoId) return null;
     if (pagamentoAguardando) return resumoFromPagamento(pagamentoAguardando);
@@ -488,7 +512,13 @@ export default function FichaCorridaPage() {
     pagamentoConfirmadoMes,
   ]);
 
-  const totalPendente = resumo?.valorLiquido ?? 0;
+  const resumoExibicao = useMemo(() => {
+    if (!resumo) return null;
+    if (pagamentoAguardando || (visualizandoHistorico && pagamentoConfirmadoMes)) return resumo;
+    return mergeDescontosContaCoopNoResumo(resumo, descontosContaCoop);
+  }, [descontosContaCoop, pagamentoAguardando, pagamentoConfirmadoMes, resumo, visualizandoHistorico]);
+
+  const totalPendente = resumoExibicao?.valorLiquido ?? 0;
 
   const pagarStep: 1 | 2 | 3 | 4 = pagamentoAguardando
     ? 4
@@ -638,7 +668,10 @@ export default function FichaCorridaPage() {
       descontoAvulso,
       descontoAvulsoMotivo: descontoAvulsoMotivo.trim() || undefined,
     };
-    const resumoPag = getResumoPagamentoCooperado(data, cooperadoSelecionado.id, mesAtivo, coopId, patch);
+    const resumoPag = mergeDescontosContaCoopNoResumo(
+      getResumoPagamentoCooperado(data, cooperadoSelecionado.id, mesAtivo, coopId, patch),
+      descontosContaCoop
+    );
     updateData((d) => {
       const ajustesFichaMes = upsertAjustesFichaMesCooperativa(d, coopId, mesAtivo, patch);
       const comAjustes = addAuditEntry(
@@ -1064,13 +1097,13 @@ export default function FichaCorridaPage() {
               </div>
             )}
 
-            {resumo && (
+            {resumoExibicao && (
               <ResumoDescontosMes
-                valorBruto={resumo.valorBruto}
-                descontoCooperativa={resumo.descontoCooperativa}
+                valorBruto={resumoExibicao.valorBruto}
+                descontoCooperativa={resumoExibicao.descontoCooperativa}
                 descontoPadraoPct={data.config.descontoPadraoCooperativa}
-                valorEntregas={resumo.valorEntregas}
-                descontosExtras={resumo.descontosExtras}
+                valorEntregas={resumoExibicao.valorEntregas}
+                descontosExtras={resumoExibicao.descontosExtras}
                 totalLiquido={totalExibido}
                 rotuloTotal={
                   isCooperado
@@ -1142,13 +1175,13 @@ export default function FichaCorridaPage() {
             {!isCooperado && nomeCooperado && (
               <p className="text-green-100 text-sm mt-2">{nomeCooperado}</p>
             )}
-            {resumo && (resumo.valorBruto > 0 || totalPendente > 0 || resumo.descontosExtras.length > 0) && (
+            {resumoExibicao && (resumoExibicao.valorBruto > 0 || totalPendente > 0 || resumoExibicao.descontosExtras.length > 0) && (
               <ResumoDescontosMes
-                valorBruto={resumo.valorBruto}
-                descontoCooperativa={resumo.descontoCooperativa}
+                valorBruto={resumoExibicao.valorBruto}
+                descontoCooperativa={resumoExibicao.descontoCooperativa}
                 descontoPadraoPct={data.config.descontoPadraoCooperativa}
-                valorEntregas={resumo.valorEntregas}
-                descontosExtras={resumo.descontosExtras}
+                valorEntregas={resumoExibicao.valorEntregas}
+                descontosExtras={resumoExibicao.descontosExtras}
                 totalLiquido={totalExibido}
                 rotuloTotal={
                   isCooperado

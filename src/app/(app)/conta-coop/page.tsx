@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { CreditFeatureGate } from "@/components/hb-credit/CreditFeatureGate";
 import { CloudSessionGate } from "@/components/hb-credit/CloudSessionGate";
 import { ContaCoopSegmentTabs } from "@/components/hb-credit/ContaCoopSegmentTabs";
+import { ContaCoopLiquidacaoPanel } from "@/components/hb-credit/ContaCoopLiquidacaoPanel";
 import { Card, StatCard } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Input, Label } from "@/components/ui/Form";
@@ -43,7 +44,7 @@ type PreviewColetivo = {
   }>;
 };
 
-type Tab = "painel" | "limites" | "mercados";
+type Tab = "painel" | "limites" | "mercados" | "liquidar";
 
 export default function ContaCoopPage() {
   return (
@@ -243,6 +244,12 @@ function ContaCoopContent() {
     }
   };
 
+  const cooperativaNome = useMemo(() => {
+    if (!user || !data) return "Cooperativa";
+    const coopId = getUserCooperativaId(user, data);
+    return data.cooperativas.find((c) => c.id === coopId)?.nome ?? "Cooperativa";
+  }, [user, data]);
+
   const statusMercadoLabel = (status: string) => {
     if (status === "ativo") return "Ativo";
     if (status === "pendente") return "Aguardando aprovação";
@@ -267,6 +274,7 @@ function ContaCoopContent() {
           { id: "painel", label: "Visão geral" },
           { id: "limites", label: "Limites" },
           { id: "mercados", label: "Mercados" },
+          { id: "liquidar", label: "Liquidar" },
         ]}
         active={tab}
         onChange={setTab}
@@ -552,6 +560,15 @@ function ContaCoopContent() {
             </table>
           </Card>
         </div>
+      )}
+
+      {tab === "liquidar" && (
+        <ContaCoopLiquidacaoPanel
+          cnpj={cnpj}
+          cooperativaNome={cooperativaNome}
+          parceiros={parceiros}
+          cooperadoNome={cooperadoNome}
+        />
       )}
 
       {tab === "mercados" && (

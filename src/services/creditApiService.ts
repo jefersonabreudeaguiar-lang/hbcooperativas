@@ -4,7 +4,9 @@ import type {
   ContaCoopIntent,
   ContaCoopLedgerEntry,
   ContaCoopLimiteCooperado,
+  ContaCoopLiquidacaoPreview,
   ContaCoopParceiro,
+  ContaCoopSettlement,
 } from "@/modules/hb-credit/types";
 
 async function parseJson<T>(res: Response): Promise<T & { error?: string }> {
@@ -159,7 +161,69 @@ export async function fetchMercadoParceiroData() {
     parceiro?: ContaCoopParceiro;
     intents?: ContaCoopIntent[];
     recebiveis?: { id: string; amountCents: number; status: string; createdAt: string }[];
+    settlements?: ContaCoopSettlement[];
   }>(res);
   if (!res.ok || !data.ok) throw new Error(data.error ?? "Erro ao carregar mercado.");
   return data;
+}
+
+export async function saveMercadoPix(pixKey: string, pixHolderName: string) {
+  const res = await secureApiFetch("/api/credit/mercado", {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ pixKey, pixHolderName }),
+  });
+  const data = await parseJson<{ ok?: boolean; error?: string; parceiro?: ContaCoopParceiro }>(res);
+  if (!res.ok || !data.ok) throw new Error(data.error ?? "Erro ao salvar PIX.");
+  return data.parceiro;
+}
+
+export async function fetchLiquidacaoPreview(cnpj: string, partnerId: string, mesReferencia: string) {
+  const res = await secureApiFetch(
+    `/api/credit/settlements?cnpj=${encodeURIComponent(cnpj)}&partnerId=${encodeURIComponent(partnerId)}&mesReferencia=${encodeURIComponent(mesReferencia)}`
+  );
+  const data = await parseJson<{ ok?: boolean; error?: string; preview?: ContaCoopLiquidacaoPreview }>(res);
+  if (!res.ok || !data.ok) throw new Error(data.error ?? "Erro ao carregar prévia.");
+  return data.preview ?? null;
+}
+
+export async function registrarPagamentoMercado(input: {
+  cnpj: string;
+  partnerId: string;
+  mesReferencia: string;
+  cooperativaNome: string;
+  comprovanteMemo?: string;
+}) {
+  const res = await secureApiFetch("/api/credit/settlements", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ action: "register_payment", ...input }),
+  });
+  const data = await parseJson<{ ok?: boolean; error?: string; settlement?: ContaCoopSettlement }>(res);
+  if (!res.ok || !data.ok) throw new Error(data.error ?? "Pagamento não registrado.");
+  return data.settlement;
+}
+
+export async function confirmarLiquidacaoMercado(settlementId: string, assinaturaDataUrl: string) {
+  const res = await secureApiFetch("/api/credit/settlements", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ action: "confirm_partner", settlementId, assinaturaDataUrl }),
+  });
+  const data = await parseJson<{ ok?: boolean; error?: string; settlement?: ContaCoopSettlement }>(res);
+  if (!res.ok || !data.ok) throw new Error(data.error ?? "Confirmação recusada.");
+  return data.settlement;
+}
+
+export async function fetchFichaDescontosContaCoop(cnpj: string, cooperadoId: string, mesReferencia: string) {
+  const res = await secureApiFetch(
+    `/api/credit/ficha-descontos?cnpj=${encodeURIComponent(cnpj)}&cooperadoId=${encodeURIComponent(cooperadoId)}&mesReferencia=${encodeURIComponent(mesReferencia)}`
+  );
+  const data = await parseJson<{
+    ok?: boolean;
+    error?: string;
+    descontos?: Array<{ motivo: string; valorReais: number; tipo: "conta_coop"; createdAt: string }>;
+  }>(res);
+  if (!res.ok || !data.ok) throw new Error(data.error ?? "Erro ao carregar descontos Conta Coop.");
+  return data.descontos ?? [];
 }

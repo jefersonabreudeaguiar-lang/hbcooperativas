@@ -50,6 +50,9 @@ export interface ContaCoopParceiro {
   nomeMercado: string;
   email: string;
   status: ParceiroStatus;
+  pixKey?: string | null;
+  pixHolderName?: string | null;
+  pixUpdatedAt?: string | null;
   appUserId?: string | null;
   createdAt: string;
   updatedAt: string;
@@ -104,4 +107,52 @@ export interface ContaCoopDashboard {
   agregadoCooperados: ContaCoopTresValores;
   parceirosPendentes: number;
   transacoesRecentes: number;
+}
+
+export type SettlementStatus = "aguardando_mercado" | "confirmado" | "cancelado";
+
+export interface ContaCoopSettlementTransacao {
+  id: string;
+  recebivelId: string;
+  cooperadoId: string;
+  tipo: "PAYMENT" | "REFUND";
+  amountCents: number;
+  receiptCode?: string | null;
+  descricao?: string | null;
+  createdAt: string;
+}
+
+export interface ContaCoopCooperadoLiquidacao {
+  cooperadoId: string;
+  totalComprasCents: number;
+  totalEstornosCents: number;
+  saldoCents: number;
+  transacoes: ContaCoopSettlementTransacao[];
+}
+
+export interface ContaCoopLiquidacaoPreview {
+  partnerId: string;
+  partnerNome: string;
+  mesReferencia: string;
+  pixKey?: string | null;
+  pixHolderName?: string | null;
+  totalCents: number;
+  transacoesCount: number;
+  cooperados: ContaCoopCooperadoLiquidacao[];
+}
+
+export interface ContaCoopSettlement {
+  id: string;
+  partnerId: string;
+  partnerNome: string;
+  mesReferencia: string;
+  totalCents: number;
+  transacoesCount: number;
+  status: SettlementStatus;
+  responsavelNome?: string | null;
+  pagoEm?: string | null;
+  comprovanteMemo?: string | null;
+  relatorioHtml?: string | null;
+  partnerConfirmadoEm?: string | null;
+  createdAt: string;
 }

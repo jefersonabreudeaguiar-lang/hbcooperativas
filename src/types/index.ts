@@ -322,7 +322,7 @@ export interface NotaPedido {
 }
 
 export interface FichaCorridaDesconto {
-  tipo: "cooperativa" | "mensalidade" | "cota" | "manual" | "credito_avulso";
+  tipo: "cooperativa" | "mensalidade" | "cota" | "manual" | "credito_avulso" | "conta_coop";
   motivo: string;
   valor: number;
 }

@@ -10,12 +10,16 @@ import { Input, Label } from "@/components/ui/Form";
 import { AlertBanner } from "@/components/ui/AlertBanner";
 import {
   cancelCreditIntent,
+  confirmarLiquidacaoMercado,
   createCreditIntent,
   fetchMercadoParceiroData,
+  saveMercadoPix,
 } from "@/services/creditApiService";
 import { formatCentsBRL } from "@/modules/hb-credit/engine/money";
-import type { ContaCoopIntent, ContaCoopParceiro } from "@/modules/hb-credit/types";
+import type { ContaCoopIntent, ContaCoopParceiro, ContaCoopSettlement } from "@/modules/hb-credit/types";
 import { PageSkeleton } from "@/components/ui/PageSkeleton";
+import { SignaturePad } from "@/components/ui/SignaturePad";
+import { formatMesReferencia } from "@/utils/format";
 
 export default function MercadoParceiroPage() {
   return (
@@ -31,6 +35,11 @@ function MercadoParceiroContent() {
   const [parceiro, setParceiro] = useState<ContaCoopParceiro | null>(null);
   const [intents, setIntents] = useState<ContaCoopIntent[]>([]);
   const [recebiveis, setRecebiveis] = useState<{ id: string; amountCents: number; status: string; createdAt: string }[]>([]);
+  const [settlements, setSettlements] = useState<ContaCoopSettlement[]>([]);
+  const [pixKey, setPixKey] = useState("");
+  const [pixHolderName, setPixHolderName] = useState("");
+  const [assinatura, setAssinatura] = useState<string | null>(null);
+  const [success, setSuccess] = useState("");
   const [valorReais, setValorReais] = useState("");
   const [descricao, setDescricao] = useState("");
   const [qrUrl, setQrUrl] = useState("");
@@ -45,6 +54,9 @@ function MercadoParceiroContent() {
       setParceiro(data.parceiro ?? null);
       setIntents(data.intents ?? []);
       setRecebiveis(data.recebiveis ?? []);
+      setSettlements(data.settlements ?? []);
+      if (data.parceiro?.pixKey) setPixKey(data.parceiro.pixKey);
+      if (data.parceiro?.pixHolderName) setPixHolderName(data.parceiro.pixHolderName);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Erro ao carregar painel.");
     } finally {
@@ -89,6 +101,42 @@ function MercadoParceiroContent() {
     }
   };
 
+  const salvarPix = async () => {
+    setBusy(true);
+    setError("");
+    setSuccess("");
+    try {
+      await saveMercadoPix(pixKey, pixHolderName);
+      setSuccess("PIX cadastrado com sucesso.");
+      await reload();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Erro ao salvar PIX.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const confirmarLiquidacao = async (settlementId: string) => {
+    if (!assinatura) {
+      setError("Assine o relatório antes de confirmar.");
+      return;
+    }
+    setBusy(true);
+    setError("");
+    setSuccess("");
+    try {
+      await confirmarLiquidacaoMercado(settlementId, assinatura);
+      setSuccess("Pagamento confirmado e relatório assinado enviado à cooperativa.");
+      setAssinatura(null);
+      await reload();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Erro ao confirmar.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const pendenteConfirmacao = settlements.find((s) => s.status === "aguardando_mercado");
   if (loading && !parceiro) return <PageSkeleton />;
 
   const ativo = parceiro?.status === "ativo";
@@ -102,6 +150,7 @@ function MercadoParceiroContent() {
       />
 
       {error && <AlertBanner variant="error">{error}</AlertBanner>}
+      {success && <AlertBanner variant="info" title="OK">{success}</AlertBanner>}
 
       {pendente && (
         <AlertBanner variant="warning" title="Aguardando aprovação">
@@ -113,6 +162,59 @@ function MercadoParceiroContent() {
         <AlertBanner variant="error" title="Mercado bloqueado">
           Novas cobranças estão suspensas. Histórico anterior permanece intacto.
         </AlertBanner>
+      )}
+
+      <Card className="p-5 space-y-4">
+        <div>
+          <h3 className="font-semibold text-gray-900">Seu PIX para receber da cooperativa</h3>
+          <p className="text-sm text-gray-600">Cadastre antes do dia de pagamento — igual o cooperado cadastra o PIX na ficha.</p>
+        </div>
+        <div className="grid gap-3 sm:grid-cols-2">
+          <div>
+            <Label>Chave PIX</Label>
+            <Input value={pixKey} onChange={(e) => setPixKey(e.target.value)} placeholder="CPF, CNPJ, e-mail ou telefone" />
+          </div>
+          <div>
+            <Label>Titular da chave</Label>
+            <Input value={pixHolderName} onChange={(e) => setPixHolderName(e.target.value)} placeholder="Nome do titular" />
+          </div>
+        </div>
+        <Button onClick={salvarPix} disabled={busy || !pixKey.trim() || !pixHolderName.trim()}>
+          Salvar PIX
+        </Button>
+        {parceiro?.pixKey && (
+          <p className="text-sm text-green-700">PIX cadastrado: <strong>{parceiro.pixKey}</strong></p>
+        )}
+      </Card>
+
+      {pendenteConfirmacao && (
+        <Card className="space-y-4 border-green-300 bg-green-50/50 p-5">
+          <div>
+            <h3 className="font-semibold text-gray-900">Confirmar pagamento da cooperativa</h3>
+            <p className="text-sm text-gray-600">
+              {formatMesReferencia(pendenteConfirmacao.mesReferencia)} · Total {formatCentsBRL(pendenteConfirmacao.totalCents)} ·{" "}
+              {pendenteConfirmacao.transacoesCount} transação(ões)
+            </p>
+            <p className="text-xs text-gray-500 mt-1">
+              Registrado por {pendenteConfirmacao.responsavelNome ?? "cooperativa"}
+              {pendenteConfirmacao.pagoEm ? ` em ${new Date(pendenteConfirmacao.pagoEm).toLocaleString("pt-BR")}` : ""}
+            </p>
+          </div>
+          {pendenteConfirmacao.relatorioHtml && (
+            <iframe
+              title="Relatório de liquidação"
+              srcDoc={pendenteConfirmacao.relatorioHtml}
+              className="h-72 w-full rounded-xl border bg-white"
+            />
+          )}
+          <div>
+            <Label>Assine como responsável do mercado</Label>
+            <SignaturePad onChange={setAssinatura} className="mt-2 h-36 w-full rounded-xl border bg-white" />
+          </div>
+          <Button size="lg" className="w-full" onClick={() => void confirmarLiquidacao(pendenteConfirmacao.id)} disabled={busy || !assinatura}>
+            Confirmar recebimento e enviar à cooperativa
+          </Button>
+        </Card>
       )}
 
       <Card className="p-5 space-y-3">
@@ -155,6 +257,20 @@ function MercadoParceiroContent() {
           </div>
         ))}
         {!intents.length && <p className="text-sm text-gray-500">Nenhuma cobrança.</p>}
+      </Card>
+
+      <Card className="p-5 space-y-2">
+        <h3 className="font-semibold">Histórico de liquidações</h3>
+        {settlements.map((s) => (
+          <div key={s.id} className="flex justify-between border-b py-2 text-sm">
+            <div>
+              <p className="font-medium">{formatMesReferencia(s.mesReferencia)}</p>
+              <p className="text-xs text-gray-500">{s.status === "confirmado" ? "Confirmado" : s.status === "aguardando_mercado" ? "Aguardando sua assinatura" : s.status}</p>
+            </div>
+            <span className="font-semibold">{formatCentsBRL(s.totalCents)}</span>
+          </div>
+        ))}
+        {!settlements.length && <p className="text-sm text-gray-500">Nenhuma liquidação ainda.</p>}
       </Card>
 
       <Card className="p-5 space-y-2">
