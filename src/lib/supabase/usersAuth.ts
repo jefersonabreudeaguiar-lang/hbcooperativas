@@ -32,6 +32,11 @@ function isMissingTable(error: { code?: string; message?: string } | null): bool
   return error.code === "42P01" || /app_users/i.test(error.message ?? "");
 }
 
+export async function isAppUsersTableReady(supabase: SupabaseClient): Promise<boolean> {
+  const { error } = await supabase.from("app_users").select("id", { head: true, count: "exact" });
+  return !error;
+}
+
 export async function findAppUserByEmail(
   supabase: SupabaseClient,
   email: string

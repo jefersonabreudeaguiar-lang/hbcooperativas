@@ -36,20 +36,56 @@ if (!supabaseUrl) {
   console.error("Configure NEXT_PUBLIC_SUPABASE_URL em .env.local");
   process.exit(1);
 }
+if (!dbPassword) {
+  console.error("Configure SUPABASE_DB_PASSWORD ou DATABASE_URL completa em .env.local");
+  process.exit(1);
+}
 
 const projectRef = supabaseUrl.replace(/^https:\/\//, "").split(".")[0];
 
-function buildConnectionString(): string {
-  if (dbPassword.startsWith("postgresql://") || dbPassword.startsWith("postgres://")) {
-    return dbPassword;
+function buildConnectionCandidates(password: string): string[] {
+  const regions = ["us-east-1", "sa-east-1", "us-east-2", "us-west-1", "eu-west-1"];
+  const list: string[] = [];
+  if (password.startsWith("postgresql://") || password.startsWith("postgres://")) {
+    return [password];
   }
-  if (!dbPassword) {
-    throw new Error(
-      "Configure SUPABASE_DB_PASSWORD (senha do banco) ou DATABASE_URL completa em .env.local"
-    );
+  const enc = encodeURIComponent(password);
+  // Projeto ifptyzikekrswippzmsf usa pooler aws-1-us-east-1 (Session mode, porta 5432)
+  list.push(`postgresql://postgres.${projectRef}:${enc}@aws-1-us-east-1.pooler.supabase.com:5432/postgres`);
+  list.push(`postgresql://postgres:${enc}@db.${projectRef}.supabase.co:5432/postgres`);
+  for (const region of regions) {
+    for (const aws of ["aws-0", "aws-1"]) {
+      list.push(
+        `postgresql://postgres.${projectRef}:${enc}@${aws}-${region}.pooler.supabase.com:5432/postgres`,
+        `postgresql://postgres.${projectRef}:${enc}@${aws}-${region}.pooler.supabase.com:6543/postgres`
+      );
+    }
   }
-  const host = `db.${projectRef}.supabase.co`;
-  return `postgresql://postgres:${encodeURIComponent(dbPassword)}@${host}:5432/postgres`;
+  return list;
+}
+
+async function connectPg(password: string): Promise<pg.Client> {
+  const candidates = buildConnectionCandidates(password);
+  let lastError: Error | null = null;
+  for (const conn of candidates) {
+    const client = new pg.Client({
+      connectionString: conn,
+      ssl: { rejectUnauthorized: false },
+      connectionTimeoutMillis: 20000,
+    });
+    try {
+      await client.connect();
+      return client;
+    } catch (e) {
+      lastError = e instanceof Error ? e : new Error(String(e));
+      try {
+        await client.end();
+      } catch {
+        /* ignore */
+      }
+    }
+  }
+  throw lastError ?? new Error("Não foi possível conectar ao Postgres do Supabase.");
 }
 
 async function tableExists(client: pg.Client, table: string): Promise<boolean> {
@@ -101,11 +137,8 @@ async function ensurePrerequisites(client: pg.Client) {
 }
 
 async function main() {
-  const conn = buildConnectionString();
-  const client = new pg.Client({ connectionString: conn, ssl: { rejectUnauthorized: false } });
-
   console.log("HB Credit — aplicar migrations\n");
-  await client.connect();
+  const client = await connectPg(dbPassword);
 
   try {
     await verifyExistingApp(client);
@@ -147,6 +180,14 @@ async function main() {
 }
 
 main().catch((err) => {
-  console.error("\nErro:", err instanceof Error ? err.message : err);
+  const msg = err instanceof Error ? err.message : String(err);
+  console.error("\nErro:", msg);
+  if (/password authentication failed|timeout|connect|terminated/i.test(msg)) {
+    console.error("\nAlternativa: Supabase → SQL Editor → cole os arquivos:");
+    console.error("  1) supabase/migrations/20260828120000_hb_credit_foundation.sql");
+    console.error("  2) supabase/migrations/20260828140000_hb_credit_operational.sql");
+    console.error("\nOu copie a URI (Session pooler) em Database → Connection string");
+    console.error("e coloque em .env.local como DATABASE_URL=...");
+  }
   process.exit(1);
 });

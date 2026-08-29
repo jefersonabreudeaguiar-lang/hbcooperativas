@@ -709,7 +709,13 @@ async function finishLoginSession(user: User, data: AppData, plainPassword: stri
   const cloudProfile = userToCloudProfile(safeUser);
   setActiveCloudProfile(cloudProfile);
   rememberCloudCredentials(user.email.trim().toLowerCase(), plainPassword);
-  await establishCloudSession(user.email, plainPassword, cloudProfile);
+
+  const cloudOk = await establishCloudSession(user.email, plainPassword, cloudProfile);
+  if (!cloudOk) {
+    const cloudHit = await loginViaCloudApi(user.email, plainPassword);
+    if (cloudHit) setActiveCloudProfile(cloudHit.user);
+  }
+
   return user;
 }
 

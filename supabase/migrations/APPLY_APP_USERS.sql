@@ -1,4 +1,6 @@
--- Usuários autenticados na nuvem (hash bcrypt, JWT validado nas API routes)
+-- Execute no SQL Editor do Supabase (projeto ifptyzikekrswippzmsf)
+-- Obrigatório para login na nuvem / Conta Coop (responsável e cooperado)
+
 create table if not exists public.app_users (
   id text primary key,
   email text not null,
@@ -43,7 +45,6 @@ create trigger app_users_updated_at
   before update on public.app_users
   for each row execute function public.set_app_users_updated_at();
 
--- Trilha de auditoria server-side (ações sensíveis)
 create table if not exists public.security_audit_log (
   id uuid primary key default gen_random_uuid(),
   action text not null,

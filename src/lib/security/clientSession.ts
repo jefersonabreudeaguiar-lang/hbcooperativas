@@ -1,8 +1,12 @@
 const TOKEN_KEY = "coopeagriplla_access_token";
 const BOOTSTRAP_KEY = "coopeagriplla_cloud_bootstrap";
 
+/** Fallback em memória — PWA/mobile quando localStorage falha ou atrasa. */
+let memoryAccessToken: string | null = null;
+
 export function getAccessToken(): string | null {
   if (typeof window === "undefined") return null;
+  if (memoryAccessToken) return memoryAccessToken;
   let token = localStorage.getItem(TOKEN_KEY);
   if (!token) {
     token = sessionStorage.getItem(TOKEN_KEY);
@@ -11,14 +15,22 @@ export function getAccessToken(): string | null {
       sessionStorage.removeItem(TOKEN_KEY);
     }
   }
+  if (token) memoryAccessToken = token;
   return token;
 }
 
 export function setAccessToken(token: string | null): void {
   if (typeof window === "undefined") return;
+  memoryAccessToken = token;
   sessionStorage.removeItem(TOKEN_KEY);
   if (!token) localStorage.removeItem(TOKEN_KEY);
-  else localStorage.setItem(TOKEN_KEY, token);
+  else {
+    try {
+      localStorage.setItem(TOKEN_KEY, token);
+    } catch {
+      sessionStorage.setItem(TOKEN_KEY, token);
+    }
+  }
 }
 
 export function clearAccessToken(): void {
@@ -120,21 +132,29 @@ function loadCloudBootstrapCredentials(): { email: string; password: string } | 
 }
 
 async function requestCloudToken(
-  endpoint: "/api/auth/login" | "/api/auth/provision" | "/api/auth/register",
+  endpoint: "/api/auth/login" | "/api/auth/provision" | "/api/auth/register" | "/api/auth/sync-session",
   payload: Record<string, unknown>
-): Promise<string | null> {
+): Promise<{ token: string | null; error?: string; status?: number }> {
   try {
     const res = await fetch(endpoint, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload),
     });
-    if (!res.ok) return null;
-    const json = (await res.json()) as { token?: string };
-    return json.token ?? null;
+    const json = (await res.json().catch(() => ({}))) as { token?: string; error?: string; code?: string };
+    if (!res.ok) {
+      return { token: null, error: json.error ?? res.statusText, status: res.status };
+    }
+    return { token: json.token ?? null };
   } catch {
-    return null;
+    return { token: null, error: "Falha de rede." };
   }
+}
+
+let lastCloudSyncError = "";
+
+export function getLastCloudSyncError(): string {
+  return lastCloudSyncError;
 }
 
 /** Valida credenciais em app_users (Supabase) — usado quando o aparelho ainda não tem users[] local. */
@@ -149,11 +169,10 @@ export async function loginViaCloudApi(
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ email: normalizedEmail, password }),
     });
-    if (res.status === 503 || res.status === 429) return null;
-    if (!res.ok) return null;
-
-    const json = (await res.json()) as {
+    const json = (await res.json().catch(() => ({}))) as {
       token?: string;
+      error?: string;
+      code?: string;
       user?: {
         id?: string;
         email?: string;
@@ -164,6 +183,19 @@ export async function loginViaCloudApi(
         cooperativaCnpj?: string | null;
       };
     };
+
+    if (res.status === 503 || json.code === "APP_USERS_MISSING") {
+      lastCloudSyncError =
+        json.error ??
+        "Conta na nuvem não configurada (tabela app_users). Fale com o suporte HB Cooperativas.";
+      return null;
+    }
+    if (res.status === 429) return null;
+    if (!res.ok) {
+      lastCloudSyncError = json.error ?? "Credenciais inválidas na nuvem.";
+      return null;
+    }
+
     if (!json.token || !json.user?.id || !json.user.email || !json.user.name || !json.user.role) {
       return null;
     }
@@ -196,14 +228,31 @@ export async function establishCloudSession(
     const normalizedEmail = email.trim().toLowerCase();
     const fullPayload = { ...profile, email: normalizedEmail, password };
 
-    // Provision primeiro: sincroniza usuário local → nuvem e corrige senha quando necessário.
-    let token =
-      (await requestCloudToken("/api/auth/provision", fullPayload)) ??
-      (await requestCloudToken("/api/auth/login", { email: normalizedEmail, password })) ??
-      (await requestCloudToken("/api/auth/register", fullPayload));
+    const sync = await requestCloudToken("/api/auth/sync-session", fullPayload);
+    let token = sync.token;
+    let syncError = sync.error ?? "";
 
     if (!token) {
-      clearAccessToken();
+      const login = await requestCloudToken("/api/auth/login", { email: normalizedEmail, password });
+      token = login.token;
+      syncError = login.error ?? syncError;
+
+      if (!token) {
+        const provision = await requestCloudToken("/api/auth/provision", fullPayload);
+        token = provision.token;
+        syncError = provision.error ?? syncError;
+      }
+
+      if (!token) {
+        const register = await requestCloudToken("/api/auth/register", fullPayload);
+        token = register.token;
+        syncError = register.error ?? syncError;
+      }
+    }
+
+    lastCloudSyncError = token ? "" : syncError;
+
+    if (!token) {
       return false;
     }
 
@@ -212,7 +261,7 @@ export async function establishCloudSession(
     setActiveCloudProfile(profile);
     return true;
   } catch {
-    clearAccessToken();
+    lastCloudSyncError = "Erro inesperado ao conectar na nuvem.";
     return false;
   }
 }
@@ -282,8 +331,8 @@ export function mensagemErroAuthApi(status: number, error?: string): string {
   if (error === "Credenciais inválidas." || error === "Dados inválidos.") {
     return "Conta na nuvem desatualizada. Saia, entre de novo com e-mail e senha atuais.";
   }
-  if (status === 503 || error?.includes("não configurada")) {
-    return "Nuvem (Supabase) não configurada para autenticação. Fale com o suporte HB Cooperativas.";
+  if (status === 503 || error?.includes("não configurada") || error?.includes("app_users")) {
+    return "Conta na nuvem não configurada (tabela app_users). Fale com o suporte HB Cooperativas.";
   }
   if (status === 403) {
     return "Sem permissão para esta cooperativa. Verifique o login ou fale com a diretoria.";

@@ -7,7 +7,7 @@ import {
   ensureAuthInfrastructure,
   tokenResponseForUser,
 } from "@/lib/security/authRoutes";
-import { logSecurityEvent, verifyAppUserPassword } from "@/lib/supabase/usersAuth";
+import { logSecurityEvent, verifyAppUserPassword, isAppUsersTableReady } from "@/lib/supabase/usersAuth";
 
 export async function POST(request: Request) {
   const blocked = ensureAuthInfrastructure(request);
@@ -22,6 +22,16 @@ export async function POST(request: Request) {
   }
 
   const supabase = getSupabaseAdmin()!;
+  if (!(await isAppUsersTableReady(supabase))) {
+    return NextResponse.json(
+      {
+        error: "Tabela app_users não existe no Supabase. Execute a migration APPLY_APP_USERS.sql.",
+        code: "APP_USERS_MISSING",
+      },
+      { status: 503 }
+    );
+  }
+
   const user = await verifyAppUserPassword(supabase, email, password);
 
   if (!user) {

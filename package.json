@@ -20,6 +20,7 @@
     "test:hb-credit-foundation": "npx tsx scripts/test-hb-credit-foundation.ts",
     "test:hb-credit": "npx tsx scripts/test-hb-credit-engine.ts",
     "apply:hb-credit-migrations": "npx tsx scripts/apply-hb-credit-migrations.ts",
+    "apply:app-users": "npx tsx scripts/apply-app-users-schema.ts",
     "homologate:hb-credit": "npx tsx scripts/homologate-hb-credit.ts",
     "activate:hb-credit": "npx tsx scripts/activate-hb-credit-sequence.ts"
   },
@@ -40,6 +41,7 @@
     "@tailwindcss/postcss": "^4",
     "@types/bcryptjs": "^2.4.6",
     "@types/node": "^20",
+    "@types/pg": "^8.23.1",
     "@types/qrcode": "^1.5.6",
     "@types/react": "^19",
     "@types/react-dom": "^19",

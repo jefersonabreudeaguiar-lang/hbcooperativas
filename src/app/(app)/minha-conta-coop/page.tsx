@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { CreditFeatureGate } from "@/components/hb-credit/CreditFeatureGate";
+import { CloudSessionGate } from "@/components/hb-credit/CloudSessionGate";
 import { PageHeader } from "@/components/ui/Table";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
@@ -26,7 +27,9 @@ import { generateId } from "@/services/dataStore";
 export default function MinhaContaCoopPage() {
   return (
     <CreditFeatureGate>
-      <MinhaContaCoopContent />
+      <CloudSessionGate>
+        <MinhaContaCoopContent />
+      </CloudSessionGate>
     </CreditFeatureGate>
   );
 }
