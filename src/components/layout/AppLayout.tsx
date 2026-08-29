@@ -16,9 +16,11 @@ import { getUserCooperativaNome } from "@/utils/cooperativa";
 import { PLATFORM_NAME, PLATFORM_TAGLINE } from "@/utils/constants";
 import { AppIcon } from "@/components/ui/AppIcon";
 import { SyncStatusChip, SyncStatusChipLight } from "@/components/sync/SyncStatusChip";
-import { CobrancaSaasBanner } from "@/components/cobranca/CobrancaSaasBanner";
+import { CobrancaSaasPainel } from "@/components/cobranca/CobrancaSaasPainel";
+import { ContratoServicoAppGate } from "@/components/cobranca/ContratoServicoAppGate";
 import { cn } from "@/utils/format";
 import { useHbCreditEnabled } from "@/hooks/useHbCreditEnabled";
+import { isContaCoopUiVisibleForUser } from "@/utils/contaCoopUiVisibility";
 import type { Resource } from "@/types";
 
 const ICONS: Record<string, React.ReactNode> = {
@@ -107,11 +109,23 @@ export function Sidebar({ mobile = false, onClose }: { mobile?: boolean; onClose
   const pathname = usePathname();
   const { user, logout } = useAuth();
   const { enabled: creditEnabled } = useHbCreditEnabled();
+  const cooperadoNome = useAppDataSelector(
+    (data) => {
+      if (!user) return "";
+      if (user.cooperadoId) {
+        return data.cooperados.find((c) => c.id === user.cooperadoId)?.nomeCompleto ?? user.name ?? "";
+      }
+      return user.name ?? "";
+    },
+    [user?.id, user?.cooperadoId, user?.name]
+  );
   if (!user) return null;
 
+  const contaCoopUiVisible = isContaCoopUiVisibleForUser(user, cooperadoNome || undefined);
+
   const menuItems = mobile && user.role === "cooperado"
-    ? getCooperadoDrawerMenuItems(user, creditEnabled)
-    : getMenuItems(user, creditEnabled);
+    ? getCooperadoDrawerMenuItems(user, creditEnabled, contaCoopUiVisible)
+    : getMenuItems(user, creditEnabled, contaCoopUiVisible);
 
   return (
     <aside className={cn(
@@ -178,9 +192,20 @@ export function MobileNav() {
   const pathname = usePathname();
   const { user } = useAuth();
   const { enabled: creditEnabled } = useHbCreditEnabled();
+  const cooperadoNome = useAppDataSelector(
+    (data) => {
+      if (!user) return "";
+      if (user.cooperadoId) {
+        return data.cooperados.find((c) => c.id === user.cooperadoId)?.nomeCompleto ?? user.name ?? "";
+      }
+      return user.name ?? "";
+    },
+    [user?.id, user?.cooperadoId, user?.name]
+  );
   if (!user) return null;
 
-  const mobileItems = getMobileNavItems(user, creditEnabled);
+  const contaCoopUiVisible = isContaCoopUiVisibleForUser(user, cooperadoNome || undefined);
+  const mobileItems = getMobileNavItems(user, creditEnabled, contaCoopUiVisible);
 
   return (
     <>
@@ -260,7 +285,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           <div className="hidden lg:flex justify-end mb-3">
             <SyncStatusChipLight />
           </div>
-          <CobrancaSaasBanner />
+          <ContratoServicoAppGate />
+          <CobrancaSaasPainel />
           {children}
         </main>
       </div>

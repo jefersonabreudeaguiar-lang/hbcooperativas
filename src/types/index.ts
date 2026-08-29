@@ -52,6 +52,7 @@ export type CobrancaSaasStatusMes =
   | "aguardando_primeiro_cooperado"
   | "em_dia"
   | "cobranca_enviada"
+  | "aguardando_confirmacao"
   | "aviso_bloqueio"
   | "bloqueado";
 
@@ -64,16 +65,26 @@ export interface CobrancaSaasLancamento {
   valorUnitario: number;
   valorMinimo: number;
   valorTotal: number;
-  status: "pendente" | "enviada" | "paga" | "cancelada";
+  status: "pendente" | "enviada" | "aguardando_confirmacao" | "paga" | "cancelada" | "rejeitada";
   criadaEm: string;
   enviadaEm?: string;
   pagaEm?: string;
+  informadoPagamentoEm?: string;
+  informadoPagamentoPor?: string;
+  comprovanteDataUrl?: string;
+  confirmadoPor?: string;
+  rejeitadoEm?: string;
+  motivoRejeicao?: string;
   observacao?: string;
 }
 
 export interface CobrancaSaasCooperativa {
   /** ISO — responsável aceitou os termos no cadastro. */
   termosAceitosEm?: string;
+  /** ISO — responsável assinou o contrato de serviço vigente. */
+  contratoServicoAssinadoEm?: string;
+  contratoServicoAssinadoPor?: string;
+  contratoServicoVersao?: string;
   /** ISO — data/hora do 1º cooperado no CNPJ (início do ciclo mensal). */
   cicloInicioEm?: string;
   statusMes: CobrancaSaasStatusMes;

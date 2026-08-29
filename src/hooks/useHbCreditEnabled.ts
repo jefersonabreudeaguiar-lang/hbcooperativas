@@ -76,7 +76,5 @@ export function useHbCreditEnabled(): HbCreditFlagState {
   };
 }
 
-/** Menu Conta Coop: módulo confirmado pelo servidor + perfil autorizado. */
-export function isHbCreditNavVisible(creditEnabled: boolean, canViewContaCoop: boolean): boolean {
-  return creditEnabled && canViewContaCoop;
-}
+/** Menu Conta Coop: reexporta regra central de permissions. */
+export { isHbCreditNavVisible } from "@/permissions";

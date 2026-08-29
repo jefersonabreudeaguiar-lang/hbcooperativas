@@ -24,8 +24,10 @@ import {
   bloquearTemporarioCobrancaSaas,
   confirmarPagamentoCobrancaSaas,
   desbloquearCobrancaSaas,
+  ensureCobrancaPeriodoAtualSaas,
   enviarAvisoBloqueioCobrancaSaas,
   listarCobrancasSaasAdmin,
+  rejeitarPagamentoCobrancaSaas,
   registrarCobrancaSaas,
   sincronizarCicloCobrancaSaas,
   type CobrancaSaasAdminRow,
@@ -46,6 +48,8 @@ function statusTone(status: CobrancaSaasAdminRow["statusMes"]): string {
       return "bg-green-100 text-green-800";
     case "cobranca_enviada":
       return "bg-blue-100 text-blue-800";
+    case "aguardando_confirmacao":
+      return "bg-indigo-100 text-indigo-800";
     case "aviso_bloqueio":
       return "bg-amber-100 text-amber-900";
     case "bloqueado":
@@ -76,6 +80,7 @@ export function AdminCobrancaPanel({ user }: AdminCobrancaPanelProps) {
       let next = d;
       for (const coop of d.cooperativas) {
         next = sincronizarCicloCobrancaSaas(next, coop.id);
+        next = ensureCobrancaPeriodoAtualSaas(next, coop.id).data;
       }
       return next;
     });
@@ -97,8 +102,15 @@ export function AdminCobrancaPanel({ user }: AdminCobrancaPanelProps) {
   const totais = useMemo(() => {
     const comCiclo = rows.filter((r) => r.cicloInicioEm);
     const aReceber = rows
-      .filter((r) => r.statusMes === "cobranca_enviada" || r.statusMes === "aviso_bloqueio" || r.statusMes === "bloqueado")
+      .filter(
+        (r) =>
+          r.statusMes === "cobranca_enviada" ||
+          r.statusMes === "aguardando_confirmacao" ||
+          r.statusMes === "aviso_bloqueio" ||
+          r.statusMes === "bloqueado"
+      )
       .reduce((s, r) => s + r.valorTotal, 0);
+    const aguardandoConfirmacao = rows.filter((r) => r.aguardandoConfirmacao).length;
     const bloqueadas = rows.filter((r) => r.statusMes === "bloqueado").length;
     return {
       cooperativas: rows.length,
@@ -106,6 +118,7 @@ export function AdminCobrancaPanel({ user }: AdminCobrancaPanelProps) {
       cooperados: rows.reduce((s, r) => s + r.qtdCooperados, 0),
       aReceber,
       bloqueadas,
+      aguardandoConfirmacao,
     };
   }, [rows]);
 
@@ -147,11 +160,32 @@ export function AdminCobrancaPanel({ user }: AdminCobrancaPanelProps) {
     setBusyId(row.cooperativaId);
     try {
       updateData((d) => {
-        const r = confirmarPagamentoCobrancaSaas(d, row.cooperativaId);
+        const r = confirmarPagamentoCobrancaSaas(d, row.cooperativaId, user.name);
         if (!r.ok) throw new Error(r.error ?? "Não foi possível confirmar.");
         return r.data;
       });
       setFeedback({ type: "ok", text: `Pagamento confirmado — ${row.nome} em dia.` });
+    } catch (e) {
+      setFeedback({ type: "erro", text: e instanceof Error ? e.message : "Falha ao aplicar ação." });
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  const handleRejeitarPagamento = (row: CobrancaSaasAdminRow) => {
+    const motivo = window.prompt(
+      `Recusar pagamento informado por ${row.nome}?\n\nOpcional: descreva o motivo para o responsável.`
+    );
+    if (motivo === null) return;
+    setFeedback(null);
+    setBusyId(row.cooperativaId);
+    try {
+      updateData((d) => {
+        const r = rejeitarPagamentoCobrancaSaas(d, row.cooperativaId, user.name, motivo);
+        if (!r.ok) throw new Error(r.error ?? "Não foi possível recusar.");
+        return r.data;
+      });
+      setFeedback({ type: "ok", text: `Pagamento não confirmado — ${row.nome} notificado.` });
     } catch (e) {
       setFeedback({ type: "erro", text: e instanceof Error ? e.message : "Falha ao aplicar ação." });
     } finally {
@@ -242,7 +276,13 @@ export function AdminCobrancaPanel({ user }: AdminCobrancaPanelProps) {
         <StatCard
           title="Em aberto (estimado)"
           value={formatCurrency(totais.aReceber)}
-          subtitle={totais.bloqueadas > 0 ? `${totais.bloqueadas} bloqueada(s)` : "Cobranças enviadas / avisos"}
+          subtitle={
+            totais.aguardandoConfirmacao > 0
+              ? `${totais.aguardandoConfirmacao} aguardando confirmação`
+              : totais.bloqueadas > 0
+                ? `${totais.bloqueadas} suspensa(s)`
+                : "Cobranças do ciclo"
+          }
           icon={<Banknote size={22} />}
           variant="gold"
         />
@@ -283,6 +323,17 @@ export function AdminCobrancaPanel({ user }: AdminCobrancaPanelProps) {
                       </span>
                     </div>
                     <p className="text-sm text-gray-500">CNPJ {row.cnpjFormatado}</p>
+                    {!row.contratoAssinado && (
+                      <p className="text-xs text-amber-700 mt-1">Contrato de serviço ainda não assinado</p>
+                    )}
+                    {row.aguardandoConfirmacao && row.informadoPagamentoPor && (
+                      <p className="text-xs text-indigo-700 mt-1">
+                        Pagamento informado por {row.informadoPagamentoPor}
+                        {row.informadoPagamentoEm
+                          ? ` em ${new Date(row.informadoPagamentoEm).toLocaleString("pt-BR")}`
+                          : ""}
+                      </p>
+                    )}
                     <p className="text-sm text-gray-700 mt-1">{row.mesVencimentoLabel}</p>
                     <p className="text-sm font-medium text-emerald-800 mt-1 tabular-nums">
                       {row.qtdCooperados} cooperado{row.qtdCooperados === 1 ? "" : "s"} · {row.valorFormatado}
@@ -305,7 +356,16 @@ export function AdminCobrancaPanel({ user }: AdminCobrancaPanelProps) {
                       disabled={busy || row.statusMes === "aguardando_primeiro_cooperado"}
                       onClick={() => handleConfirmarPagamento(row)}
                     >
-                      <CheckCircle2 size={15} /> Confirmar pgto
+                      <CheckCircle2 size={15} /> Confirmado
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="secondary"
+                      disabled={busy || !row.aguardandoConfirmacao}
+                      onClick={() => handleRejeitarPagamento(row)}
+                      className="border-red-200 text-red-800 hover:bg-red-50"
+                    >
+                      Não confirmado
                     </Button>
                     <Button
                       size="sm"

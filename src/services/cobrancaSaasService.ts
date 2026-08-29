@@ -1,4 +1,9 @@
 import type { AppData, Cooperativa, CobrancaSaasCooperativa, CobrancaSaasLancamento, CobrancaSaasStatusMes } from "@/types";
+import {
+  CONTRATO_SERVICO_VERSAO,
+  gerarReferenciaBoletoSaas,
+  PROPRIETARIO_APP,
+} from "@/config/contratoServicoApp";
 import { normalizeCnpj } from "@/utils/cooperativa";
 import { PLATFORM_NAME } from "@/utils/constants";
 import { formatCurrency } from "@/utils/format";
@@ -182,9 +187,14 @@ export interface CobrancaSaasAdminRow {
   vencimento?: string;
   statusMes: CobrancaSaasStatusMes;
   statusLabel: string;
+  lancamentoStatus?: CobrancaSaasLancamento["status"];
+  aguardandoConfirmacao: boolean;
+  contratoAssinado: boolean;
   avisoMensagem?: string;
   ultimoPeriodoPago?: string;
   valorFormatado: string;
+  informadoPagamentoEm?: string;
+  informadoPagamentoPor?: string;
 }
 
 function statusLabel(s: CobrancaSaasStatusMes): string {
@@ -194,25 +204,333 @@ function statusLabel(s: CobrancaSaasStatusMes): string {
     case "em_dia":
       return "Em dia";
     case "cobranca_enviada":
-      return "Cobrança enviada";
+      return "Cobrança pendente";
+    case "aguardando_confirmacao":
+      return "Aguardando confirmação";
     case "aviso_bloqueio":
-      return "Aviso de bloqueio";
+      return "Aviso de suspensão";
     case "bloqueado":
-      return "Bloqueado";
+      return "Suspenso";
     default:
       return s;
   }
 }
 
+export function contratoServicoAssinado(coop: Cooperativa | undefined): boolean {
+  const cob = coop?.cobrancaSaas;
+  return Boolean(
+    cob?.contratoServicoAssinadoEm && cob.contratoServicoVersao === CONTRATO_SERVICO_VERSAO
+  );
+}
+
+export function precisaAssinarContratoServico(coop: Cooperativa | undefined): boolean {
+  return !contratoServicoAssinado(coop);
+}
+
+export function assinarContratoServicoSaas(
+  data: AppData,
+  cooperativaId: string,
+  signatarioNome: string
+): AppData {
+  const coop = data.cooperativas.find((c) => c.id === cooperativaId);
+  const base = coop?.cobrancaSaas ?? defaultCobrancaSaas();
+  const now = new Date().toISOString();
+  let next = patchCobrancaSaas(data, cooperativaId, {
+    ...base,
+    termosAceitosEm: base.termosAceitosEm ?? now,
+    contratoServicoAssinadoEm: now,
+    contratoServicoAssinadoPor: signatarioNome,
+    contratoServicoVersao: CONTRATO_SERVICO_VERSAO,
+  });
+  next = sincronizarCicloCobrancaSaas(next, cooperativaId);
+  return ensureCobrancaPeriodoAtualSaas(next, cooperativaId).data;
+}
+
+function lancamentoPeriodoAtual(cob: CobrancaSaasCooperativa, periodoId: string): CobrancaSaasLancamento | undefined {
+  return (cob.historico ?? []).find((h) => h.periodoId === periodoId);
+}
+
+function diasAtraso(vencimento: string, ref = new Date()): number {
+  const v = new Date(`${vencimento}T23:59:59`);
+  const diff = ref.getTime() - v.getTime();
+  return diff > 0 ? Math.floor(diff / 86400000) : 0;
+}
+
+/** Gera cobrança do ciclo atual, aplica avisos de atraso e sincroniza statusMes. */
+export function ensureCobrancaPeriodoAtualSaas(
+  data: AppData,
+  cooperativaId: string
+): { data: AppData; ok: boolean } {
+  let next = sincronizarCicloCobrancaSaas(data, cooperativaId);
+  const coop = next.cooperativas.find((c) => c.id === cooperativaId);
+  if (!coop) return { data: next, ok: false };
+
+  const cob = coop.cobrancaSaas ?? defaultCobrancaSaas();
+  if (!contratoServicoAssinado(coop) || !cob.cicloInicioEm) {
+    return { data: next, ok: true };
+  }
+
+  const periodo = getPeriodoCobrancaSaas(cob.cicloInicioEm);
+  const qtd = contarCooperadosCobranca(next, cooperativaId);
+  if (qtd <= 0) return { data: next, ok: true };
+
+  if (cob.ultimoPeriodoPago === periodo.periodoId) {
+    if (cob.statusMes !== "em_dia" && cob.statusMes !== "aguardando_primeiro_cooperado") {
+      next = patchCobrancaSaas(next, cooperativaId, {
+        ...cob,
+        statusMes: "em_dia",
+        avisoMensagem: undefined,
+        avisoEm: undefined,
+        bloqueadoEm: undefined,
+        bloqueadoPor: undefined,
+      });
+    }
+    return { data: next, ok: true };
+  }
+
+  let historico = [...(cob.historico ?? [])];
+  let lanc = lancamentoPeriodoAtual(cob, periodo.periodoId);
+  const calc = calcularValorCobrancaSaas(qtd);
+  const now = new Date().toISOString();
+
+  if (!lanc) {
+    lanc = {
+      id: gerarId(),
+      periodoId: periodo.periodoId,
+      mesReferencia: periodo.mesReferencia,
+      qtdCooperados: calc.qtd,
+      valorUnitario: calc.valorUnitario,
+      valorMinimo: calc.valorMinimo,
+      valorTotal: calc.valorTotal,
+      status: "enviada",
+      criadaEm: now,
+      enviadaEm: now,
+      observacao: "Cobrança mensal gerada automaticamente",
+    };
+    historico = [...historico.filter((h) => h.periodoId !== periodo.periodoId), lanc];
+  }
+
+  let statusMes: CobrancaSaasStatusMes = cob.statusMes;
+  let avisoMensagem = cob.avisoMensagem;
+  const atraso = diasAtraso(periodo.vencimento);
+
+  if (lanc.status === "paga") {
+    statusMes = "em_dia";
+    avisoMensagem = undefined;
+  } else if (lanc.status === "aguardando_confirmacao") {
+    statusMes = "aguardando_confirmacao";
+    avisoMensagem =
+      "Pagamento informado — aguardando confirmação do proprietário do aplicativo. O app permanece sujeito a aviso de suspensão até a validação.";
+  } else if (atraso >= 14 && cob.statusMes !== "bloqueado") {
+    statusMes = "bloqueado";
+    avisoMensagem =
+      "Suspensão por inadimplência: mensalidade do aplicativo em atraso. Regularize o pagamento e aguarde confirmação do proprietário.";
+  } else if (atraso >= 7) {
+    statusMes = "aviso_bloqueio";
+    avisoMensagem =
+      "Aviso de suspensão: mensalidade do aplicativo vencida. Pague via PIX ou boleto e informe o pagamento para evitar limitação do serviço.";
+  } else if (lanc.status === "enviada" || lanc.status === "rejeitada") {
+    statusMes = "cobranca_enviada";
+    if (lanc.status === "rejeitada") {
+      avisoMensagem =
+        lanc.motivoRejeicao ||
+        "Pagamento não confirmado pelo proprietário. Verifique o comprovante e informe novamente.";
+    } else {
+      avisoMensagem = undefined;
+    }
+  }
+
+  next = patchCobrancaSaas(next, cooperativaId, {
+    ...cob,
+    historico,
+    statusMes,
+    avisoMensagem,
+    avisoEm: avisoMensagem ? cob.avisoEm ?? now : undefined,
+    bloqueadoEm: statusMes === "bloqueado" ? cob.bloqueadoEm ?? now : undefined,
+    bloqueadoPor: statusMes === "bloqueado" ? cob.bloqueadoPor ?? "Sistema (inadimplência)" : undefined,
+  });
+
+  return { data: next, ok: true };
+}
+
+export interface PainelCobrancaSaasResponsavel {
+  precisaContrato: boolean;
+  contratoVersao: string;
+  periodoLabel: string;
+  vencimento: string;
+  vencimentoLabel: string;
+  qtdCooperados: number;
+  valorTotal: number;
+  valorFormatado: string;
+  statusMes: CobrancaSaasStatusMes;
+  statusLabel: string;
+  lancamentoStatus?: CobrancaSaasLancamento["status"];
+  pixChave: string;
+  pixNome: string;
+  cpfProprietario: string;
+  boletoReferencia?: string;
+  podeInformarPagamento: boolean;
+  aguardandoConfirmacao: boolean;
+  avisoMensagem?: string;
+  emAtraso: boolean;
+  diasAtraso: number;
+}
+
+export function getPainelCobrancaSaasResponsavel(
+  data: AppData,
+  cooperativaId: string | undefined
+): PainelCobrancaSaasResponsavel | null {
+  if (!cooperativaId) return null;
+  const synced = ensureCobrancaPeriodoAtualSaas(data, cooperativaId).data;
+  const coop = synced.cooperativas.find((c) => c.id === cooperativaId);
+  if (!coop) return null;
+
+  const cob = coop.cobrancaSaas ?? defaultCobrancaSaas();
+  const precisaContrato = precisaAssinarContratoServico(coop);
+  const qtd = contarCooperadosCobranca(synced, cooperativaId);
+  const calc = calcularValorCobrancaSaas(qtd);
+  const periodo = cob.cicloInicioEm ? getPeriodoCobrancaSaas(cob.cicloInicioEm) : undefined;
+  const lanc = periodo ? lancamentoPeriodoAtual(cob, periodo.periodoId) : undefined;
+  const atraso = periodo ? diasAtraso(periodo.vencimento) : 0;
+
+  return {
+    precisaContrato,
+    contratoVersao: CONTRATO_SERVICO_VERSAO,
+    periodoLabel: periodo?.label ?? "Ciclo inicia no 1º cooperado",
+    vencimento: periodo?.vencimento ?? "",
+    vencimentoLabel: periodo
+      ? periodo.vencimento.split("-").reverse().join("/")
+      : "—",
+    qtdCooperados: qtd,
+    valorTotal: calc.valorTotal,
+    valorFormatado: formatCurrency(calc.valorTotal),
+    statusMes: cob.statusMes,
+    statusLabel: statusLabel(cob.statusMes),
+    lancamentoStatus: lanc?.status,
+    pixChave: PROPRIETARIO_APP.pixChave,
+    pixNome: PROPRIETARIO_APP.pixNome,
+    cpfProprietario: PROPRIETARIO_APP.cpfFormatado,
+    boletoReferencia:
+      periodo && calc.valorTotal > 0
+        ? gerarReferenciaBoletoSaas(normalizeCnpj(coop.cnpj), periodo.periodoId, calc.valorTotal)
+        : undefined,
+    podeInformarPagamento: Boolean(
+      !precisaContrato &&
+        lanc &&
+        (lanc.status === "enviada" || lanc.status === "rejeitada") &&
+        calc.valorTotal > 0
+    ),
+    aguardandoConfirmacao: lanc?.status === "aguardando_confirmacao",
+    avisoMensagem: cob.avisoMensagem,
+    emAtraso: atraso > 0 && cob.ultimoPeriodoPago !== periodo?.periodoId,
+    diasAtraso: atraso,
+  };
+}
+
+export function responsavelInformouPagamentoSaas(
+  data: AppData,
+  cooperativaId: string,
+  responsavelNome: string,
+  comprovanteDataUrl?: string
+): { data: AppData; ok: boolean; error?: string } {
+  let next = ensureCobrancaPeriodoAtualSaas(data, cooperativaId).data;
+  const coop = next.cooperativas.find((c) => c.id === cooperativaId);
+  const cob = coop?.cobrancaSaas;
+  if (!coop || !cob?.cicloInicioEm) {
+    return { data: next, ok: false, error: "Ciclo de cobrança ainda não iniciado." };
+  }
+  if (precisaAssinarContratoServico(coop)) {
+    return { data: next, ok: false, error: "Assine o contrato de serviço antes de informar pagamento." };
+  }
+
+  const periodo = getPeriodoCobrancaSaas(cob.cicloInicioEm);
+  const lanc = lancamentoPeriodoAtual(cob, periodo.periodoId);
+  if (!lanc || (lanc.status !== "enviada" && lanc.status !== "rejeitada")) {
+    return { data: next, ok: false, error: "Não há cobrança em aberto para informar pagamento." };
+  }
+
+  const now = new Date().toISOString();
+  const historico = (cob.historico ?? []).map((h) =>
+    h.periodoId === periodo.periodoId
+      ? {
+          ...h,
+          status: "aguardando_confirmacao" as const,
+          informadoPagamentoEm: now,
+          informadoPagamentoPor: responsavelNome,
+          comprovanteDataUrl: comprovanteDataUrl ?? h.comprovanteDataUrl,
+          rejeitadoEm: undefined,
+          motivoRejeicao: undefined,
+        }
+      : h
+  );
+
+  next = patchCobrancaSaas(next, cooperativaId, {
+    ...cob,
+    historico,
+    statusMes: "aguardando_confirmacao",
+    avisoMensagem:
+      "Pagamento informado — aguardando confirmação do proprietário do aplicativo. O acesso permanece sujeito a aviso de suspensão até a validação.",
+    avisoEm: now,
+  });
+
+  return { data: next, ok: true };
+}
+
+export function rejeitarPagamentoCobrancaSaas(
+  data: AppData,
+  cooperativaId: string,
+  adminNome: string,
+  motivo?: string
+): { data: AppData; ok: boolean; error?: string } {
+  const coop = data.cooperativas.find((c) => c.id === cooperativaId);
+  const cob = coop?.cobrancaSaas;
+  if (!coop || !cob?.cicloInicioEm) {
+    return { data, ok: false, error: "Ciclo não iniciado." };
+  }
+  const periodo = getPeriodoCobrancaSaas(cob.cicloInicioEm);
+  const lanc = lancamentoPeriodoAtual(cob, periodo.periodoId);
+  if (!lanc || lanc.status !== "aguardando_confirmacao") {
+    return { data, ok: false, error: "Não há pagamento aguardando confirmação." };
+  }
+
+  const now = new Date().toISOString();
+  const msg =
+    motivo?.trim() ||
+    "Pagamento não confirmado. Verifique se o valor e o favorecido (CPF do proprietário) estão corretos.";
+
+  const historico = (cob.historico ?? []).map((h) =>
+    h.periodoId === periodo.periodoId
+      ? {
+          ...h,
+          status: "rejeitada" as const,
+          rejeitadoEm: now,
+          motivoRejeicao: msg,
+          observacao: `Rejeitado por ${adminNome}`,
+        }
+      : h
+  );
+
+  let next = patchCobrancaSaas(data, cooperativaId, {
+    ...cob,
+    historico,
+    statusMes: "cobranca_enviada",
+    avisoMensagem: msg,
+    avisoEm: now,
+  });
+  next = ensureCobrancaPeriodoAtualSaas(next, cooperativaId).data;
+  return { data: next, ok: true };
+}
+
 export function listarCobrancasSaasAdmin(data: AppData): CobrancaSaasAdminRow[] {
   return [...data.cooperativas]
     .map((coop) => {
-      const synced = sincronizarCicloCobrancaSaas(data, coop.id);
+      const synced = ensureCobrancaPeriodoAtualSaas(data, coop.id).data;
       const c = synced.cooperativas.find((x) => x.id === coop.id) ?? coop;
       const cob = c.cobrancaSaas ?? defaultCobrancaSaas();
       const qtd = contarCooperadosCobranca(data, c.id);
       const calc = calcularValorCobrancaSaas(qtd);
       const periodo = cob.cicloInicioEm ? getPeriodoCobrancaSaas(cob.cicloInicioEm) : undefined;
+      const lanc = periodo ? lancamentoPeriodoAtual(cob, periodo.periodoId) : undefined;
       return {
         cooperativaId: c.id,
         nome: c.nome,
@@ -229,8 +547,13 @@ export function listarCobrancasSaasAdmin(data: AppData): CobrancaSaasAdminRow[] 
         vencimento: periodo?.vencimento,
         statusMes: cob.statusMes,
         statusLabel: statusLabel(cob.statusMes),
+        lancamentoStatus: lanc?.status,
+        aguardandoConfirmacao: lanc?.status === "aguardando_confirmacao",
+        contratoAssinado: contratoServicoAssinado(c),
         avisoMensagem: cob.avisoMensagem,
         ultimoPeriodoPago: cob.ultimoPeriodoPago,
+        informadoPagamentoEm: lanc?.informadoPagamentoEm,
+        informadoPagamentoPor: lanc?.informadoPagamentoPor,
       };
     })
     .sort((a, b) => a.nome.localeCompare(b.nome, "pt-BR"));
@@ -284,7 +607,8 @@ export function registrarCobrancaSaas(
 
 export function confirmarPagamentoCobrancaSaas(
   data: AppData,
-  cooperativaId: string
+  cooperativaId: string,
+  adminNome?: string
 ): { data: AppData; ok: boolean; error?: string } {
   let next = sincronizarCicloCobrancaSaas(data, cooperativaId);
   const coop = next.cooperativas.find((c) => c.id === cooperativaId);
@@ -295,9 +619,25 @@ export function confirmarPagamentoCobrancaSaas(
   const cob = coop.cobrancaSaas;
   const periodo = getPeriodoCobrancaSaas(cicloInicioEm);
   const now = new Date().toISOString();
+  const lancAtual = lancamentoPeriodoAtual(cob, periodo.periodoId);
+
+  if (
+    lancAtual &&
+    lancAtual.status !== "aguardando_confirmacao" &&
+    lancAtual.status !== "enviada" &&
+    lancAtual.status !== "rejeitada"
+  ) {
+    if (lancAtual.status === "paga") return { data: next, ok: true };
+  }
+
   const historico = (cob.historico ?? []).map((h) =>
     h.periodoId === periodo.periodoId
-      ? { ...h, status: "paga" as const, pagaEm: now }
+      ? {
+          ...h,
+          status: "paga" as const,
+          pagaEm: now,
+          confirmadoPor: adminNome ?? "Proprietário HB",
+        }
       : h
   );
   if (!historico.some((h) => h.periodoId === periodo.periodoId)) {
@@ -314,6 +654,7 @@ export function confirmarPagamentoCobrancaSaas(
       status: "paga",
       criadaEm: now,
       pagaEm: now,
+      confirmadoPor: adminNome ?? "Proprietário HB",
       observacao: "Pagamento confirmado",
     });
   }
@@ -385,37 +726,39 @@ export function getCobrancaSaasAvisosResponsavel(
   data: AppData,
   cooperativaId: string | undefined
 ): { tom: "warning" | "error" | "info"; titulo: string; mensagem: string } | null {
-  if (!cooperativaId) return null;
-  const coop = data.cooperativas.find((c) => c.id === cooperativaId);
-  if (!coop) return null;
-  const cob = coop.cobrancaSaas;
-  if (!cob) return null;
+  const painel = getPainelCobrancaSaasResponsavel(data, cooperativaId);
+  if (!painel || painel.precisaContrato) return null;
 
-  if (cob.statusMes === "bloqueado") {
+  if (painel.statusMes === "bloqueado") {
     return {
       tom: "error",
-      titulo: "Bloqueio temporário — mensalidade HB",
+      titulo: "Suspensão — mensalidade do aplicativo",
       mensagem:
-        cob.avisoMensagem ||
-        "A área da cooperativa está com bloqueio temporário por pendência de pagamento da plataforma.",
+        painel.avisoMensagem ||
+        "O acesso está sujeito a suspensão por inadimplência da mensalidade HB Cooperativas.",
     };
   }
-  if (cob.statusMes === "aviso_bloqueio") {
+  if (painel.statusMes === "aviso_bloqueio") {
     return {
       tom: "warning",
-      titulo: "Aviso de bloqueio — mensalidade HB",
-      mensagem:
-        cob.avisoMensagem ||
-        "Há cobrança em aberto. Regularize para evitar bloqueio temporário.",
+      titulo: "Aviso de suspensão — mensalidade HB",
+      mensagem: painel.avisoMensagem || "Regularize o pagamento para evitar limitação do serviço.",
     };
   }
-  if (cob.statusMes === "cobranca_enviada") {
-    const qtd = contarCooperadosCobranca(data, cooperativaId);
-    const calc = calcularValorCobrancaSaas(qtd);
+  if (painel.aguardandoConfirmacao) {
     return {
       tom: "info",
-      titulo: "Cobrança HB enviada",
-      mensagem: `Mensalidade do ciclo: ${formatCurrency(calc.valorTotal)} (${qtd} cooperado${qtd === 1 ? "" : "s"} × ${COBRANCA_SAAS_PRECO_LABEL}, mín. ${COBRANCA_SAAS_MINIMO_LABEL}).`,
+      titulo: "Pagamento aguardando confirmação",
+      mensagem:
+        painel.avisoMensagem ||
+        "O proprietário do app ainda não confirmou seu pagamento. O serviço permanece sujeito a aviso de suspensão.",
+    };
+  }
+  if (painel.statusMes === "cobranca_enviada" && painel.valorTotal > 0) {
+    return {
+      tom: "info",
+      titulo: "Mensalidade do aplicativo em aberto",
+      mensagem: `Ciclo ${painel.periodoLabel}: ${painel.valorFormatado} (${painel.qtdCooperados} cooperado${painel.qtdCooperados === 1 ? "" : "s"}). Vencimento ${painel.vencimentoLabel}.`,
     };
   }
   return null;
