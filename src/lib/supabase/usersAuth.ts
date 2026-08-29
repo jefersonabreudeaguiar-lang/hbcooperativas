@@ -33,7 +33,7 @@ function isMissingTable(error: { code?: string; message?: string } | null): bool
 }
 
 export async function isAppUsersTableReady(supabase: SupabaseClient): Promise<boolean> {
-  const { error } = await supabase.from("app_users").select("id", { head: true, count: "exact" });
+  const { error } = await supabase.from("app_users").select("id").limit(1);
   return !error;
 }
 

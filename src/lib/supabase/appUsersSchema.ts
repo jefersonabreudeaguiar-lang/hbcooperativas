@@ -11,7 +11,7 @@ export function isAppUsersTableMissing(error: { code?: string; message?: string 
 }
 
 export async function checkAppUsersTable(supabase: SupabaseClient): Promise<boolean> {
-  const { error } = await supabase.from("app_users").select("id", { count: "exact", head: true });
+  const { error } = await supabase.from("app_users").select("id").limit(1);
   return !error;
 }
 

@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { getSupabaseAdmin, isSupabaseConfigured } from "@/lib/supabase/admin";
-import { checkAppUsersTable, isAppUsersTableMissing } from "@/lib/supabase/appUsersSchema";
+import { isAppUsersTableMissing } from "@/lib/supabase/appUsersSchema";
 
 export async function GET() {
   if (!isSupabaseConfigured()) {
@@ -20,7 +20,7 @@ export async function GET() {
     });
   }
 
-  const { error } = await supabase.from("app_users").select("id", { head: true, count: "exact" });
+  const { error } = await supabase.from("app_users").select("id").limit(1);
   if (error && isAppUsersTableMissing(error)) {
     return NextResponse.json({
       configured: true,
@@ -36,13 +36,13 @@ export async function GET() {
       configured: true,
       appUsersTableOk: false,
       message: error.message,
+      code: isAppUsersTableMissing(error) ? "APP_USERS_MISSING" : undefined,
     });
   }
 
-  const ok = await checkAppUsersTable(supabase);
   return NextResponse.json({
     configured: true,
-    appUsersTableOk: ok,
-    message: ok ? "Autenticação na nuvem pronta." : "Tabela app_users indisponível.",
+    appUsersTableOk: true,
+    message: "Autenticação na nuvem pronta.",
   });
 }
