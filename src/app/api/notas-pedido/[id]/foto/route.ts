@@ -4,6 +4,7 @@ import { isNotasPedidoTableMissing } from "@/lib/supabase/errors";
 import { normalizeCnpj } from "@/utils/cooperativa";
 import type { NotaPedido } from "@/types";
 import { guardCooperativaApi } from "@/lib/security/apiGuard";
+import { bufferFromDataUrl, validateImageUpload } from "@/lib/security/uploadMime";
 import {
   deleteAndCompactFotoPart,
   fetchNotaMetaFromStorage,
@@ -91,6 +92,24 @@ async function processFotoUpload(id: string, input: FotoUploadInput) {
 
   if (index < 0 || totalCount < 1 || index >= totalCount) {
     return NextResponse.json({ error: "Dados inválidos." }, { status: 400 });
+  }
+
+  let uploadBuffer = fotoBuffer;
+  let uploadMime = mimeType;
+  if (!uploadBuffer && fotoDataUrl) {
+    uploadBuffer = bufferFromDataUrl(fotoDataUrl) ?? undefined;
+    if (!uploadBuffer) {
+      return NextResponse.json({ error: "Imagem inválida." }, { status: 400 });
+    }
+  }
+  if (uploadBuffer) {
+    const mimeCheck = validateImageUpload(uploadBuffer, uploadMime);
+    if (!mimeCheck.ok) {
+      return NextResponse.json({ error: mimeCheck.error }, { status: 400 });
+    }
+    uploadMime = mimeCheck.mime;
+  } else {
+    return NextResponse.json({ error: "Foto ausente ou inválida." }, { status: 400 });
   }
 
   const supabase = getSupabaseAdmin();
@@ -189,26 +208,16 @@ async function processFotoUpload(id: string, input: FotoUploadInput) {
     }
   }
 
-  const uploaded = fotoBuffer
-    ? await uploadNotaFotoPartBuffer(
-        supabase,
-        cnpj,
-        metaNota,
-        index,
-        totalCount,
-        fotoBuffer,
-        cooperadoNome,
-        mimeType ?? "image/jpeg"
-      )
-    : await uploadNotaFotoPart(
-        supabase,
-        cnpj,
-        metaNota,
-        index,
-        totalCount,
-        fotoDataUrl!,
-        cooperadoNome
-      );
+  const uploaded = await uploadNotaFotoPartBuffer(
+    supabase,
+    cnpj,
+    metaNota,
+    index,
+    totalCount,
+    uploadBuffer,
+    cooperadoNome,
+    uploadMime ?? "image/jpeg"
+  );
 
   if (!uploaded.ok) {
     return NextResponse.json({ error: uploaded.error }, { status: 500 });

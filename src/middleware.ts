@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { getAuthSecret, isApiSecurityEnforced } from "@/lib/security/env";
-import { extractBearerToken, verifyAccessToken } from "@/lib/security/jwt";
+import { extractAccessToken, verifyAccessToken } from "@/lib/security/jwt";
 import { hasSetupSecret, isPublicApiRoute } from "@/lib/security/publicApiPaths";
 
 export async function middleware(request: NextRequest) {
@@ -21,7 +21,7 @@ export async function middleware(request: NextRequest) {
     return NextResponse.next();
   }
 
-  const token = extractBearerToken(request);
+  const token = extractAccessToken(request);
   if (!token) {
     return NextResponse.json({ error: "Autenticação necessária." }, { status: 401 });
   }

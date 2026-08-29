@@ -39,6 +39,7 @@ import {
   clearCloudBootstrapCredentials,
   establishCloudSession,
   loginViaCloudApi,
+  logoutCloudSession,
   registerCloudUser,
   setActiveCloudProfile,
   userToCloudProfile,
@@ -861,9 +862,8 @@ export function logout(): void {
   if (typeof window !== "undefined") {
     localStorage.removeItem(SESSION_KEY);
     sessionStorage.removeItem(SESSION_KEY);
-    clearAccessToken();
+    void logoutCloudSession();
     clearCloudBootstrapCredentials();
-    setActiveCloudProfile(null);
     notify();
   }
 }

@@ -1,6 +1,7 @@
 import { SignJWT, jwtVerify, type JWTPayload } from "jose";
 import type { UserRole } from "@/types";
 import { getAuthSecret } from "@/lib/security/env";
+import { extractSessionTokenFromCookie } from "@/lib/security/sessionCookie";
 
 export interface SessionClaims extends JWTPayload {
   sub: string;
@@ -59,4 +60,9 @@ export function extractBearerToken(request: Request): string | null {
   if (!header?.startsWith("Bearer ")) return null;
   const token = header.slice(7).trim();
   return token || null;
+}
+
+/** Bearer header ou cookie httpOnly `hb_session`. */
+export function extractAccessToken(request: Request): string | null {
+  return extractBearerToken(request) ?? extractSessionTokenFromCookie(request);
 }

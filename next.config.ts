@@ -13,6 +13,7 @@ const SECURITY_HEADERS = [
   {
     key: "Content-Security-Policy",
     value: [
+      "object-src 'none'",
       "default-src 'self'",
       "script-src 'self' 'unsafe-inline' 'unsafe-eval'",
       "style-src 'self' 'unsafe-inline'",

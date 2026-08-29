@@ -1,39 +1,45 @@
 const TOKEN_KEY = "coopeagriplla_access_token";
 
-/** Fallback em memória — PWA/mobile quando localStorage falha ou atrasa. */
+/** Sessão ativa via cookie httpOnly (Fase 2). */
+let cloudSessionActive = false;
+
+/** Fallback em memória — apenas dev/local quando token ainda vem no JSON. */
 let memoryAccessToken: string | null = null;
+
+export function markCloudSessionActive(): void {
+  cloudSessionActive = true;
+}
+
+export function markCloudSessionInactive(): void {
+  cloudSessionActive = false;
+}
+
+export function isCloudSessionActive(): boolean {
+  return cloudSessionActive;
+}
 
 export function getAccessToken(): string | null {
   if (typeof window === "undefined") return null;
   if (memoryAccessToken) return memoryAccessToken;
-  let token = localStorage.getItem(TOKEN_KEY);
-  if (!token) {
-    token = sessionStorage.getItem(TOKEN_KEY);
-    if (token) {
-      localStorage.setItem(TOKEN_KEY, token);
-      sessionStorage.removeItem(TOKEN_KEY);
-    }
-  }
-  if (token) memoryAccessToken = token;
-  return token;
+  if (cloudSessionActive) return "__cookie__";
+  return null;
 }
 
 export function setAccessToken(token: string | null): void {
   if (typeof window === "undefined") return;
   memoryAccessToken = token;
   sessionStorage.removeItem(TOKEN_KEY);
-  if (!token) localStorage.removeItem(TOKEN_KEY);
-  else {
-    try {
-      localStorage.setItem(TOKEN_KEY, token);
-    } catch {
-      sessionStorage.setItem(TOKEN_KEY, token);
-    }
-  }
+  localStorage.removeItem(TOKEN_KEY);
+  if (token) markCloudSessionActive();
 }
 
 export function clearAccessToken(): void {
-  setAccessToken(null);
+  memoryAccessToken = null;
+  markCloudSessionInactive();
+  if (typeof window !== "undefined") {
+    sessionStorage.removeItem(TOKEN_KEY);
+    localStorage.removeItem(TOKEN_KEY);
+  }
 }
 
 /** Remove credencial bootstrap legada — senha nunca deve persistir no cliente. */
@@ -101,23 +107,41 @@ function loadStoredSessionProfile(): CloudSessionProfile | null {
   }
 }
 
+type CloudAuthUser = {
+  id?: string;
+  email?: string;
+  name?: string;
+  role?: string;
+  cooperativaId?: string | null;
+  cooperadoId?: string | null;
+  cooperativaCnpj?: string | null;
+};
+
 async function requestCloudToken(
   endpoint: "/api/auth/login" | "/api/auth/provision" | "/api/auth/register" | "/api/auth/sync-session",
   payload: Record<string, unknown>
-): Promise<{ token: string | null; error?: string; status?: number }> {
+): Promise<{ ok: boolean; token?: string | null; user?: CloudAuthUser; error?: string; status?: number }> {
   try {
     const res = await fetch(endpoint, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
+      credentials: "include",
       body: JSON.stringify(payload),
     });
-    const json = (await res.json().catch(() => ({}))) as { token?: string; error?: string; code?: string };
+    const json = (await res.json().catch(() => ({}))) as {
+      token?: string;
+      error?: string;
+      code?: string;
+      user?: CloudAuthUser;
+    };
     if (!res.ok) {
-      return { token: null, error: json.error ?? res.statusText, status: res.status };
+      return { ok: false, error: json.error ?? res.statusText, status: res.status };
     }
-    return { token: json.token ?? null };
+    markCloudSessionActive();
+    if (json.token) memoryAccessToken = json.token;
+    return { ok: true, token: json.token ?? null, user: json.user };
   } catch {
-    return { token: null, error: "Falha de rede." };
+    return { ok: false, error: "Falha de rede." };
   }
 }
 
@@ -137,21 +161,14 @@ export async function loginViaCloudApi(
     const res = await fetch("/api/auth/login", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
+      credentials: "include",
       body: JSON.stringify({ email: normalizedEmail, password }),
     });
     const json = (await res.json().catch(() => ({}))) as {
       token?: string;
       error?: string;
       code?: string;
-      user?: {
-        id?: string;
-        email?: string;
-        name?: string;
-        role?: string;
-        cooperativaId?: string | null;
-        cooperadoId?: string | null;
-        cooperativaCnpj?: string | null;
-      };
+      user?: CloudAuthUser;
     };
 
     if (res.status === 503 || json.code === "APP_USERS_MISSING") {
@@ -166,7 +183,7 @@ export async function loginViaCloudApi(
       return null;
     }
 
-    if (!json.token || !json.user?.id || !json.user.email || !json.user.name || !json.user.role) {
+    if (!json.user?.id || !json.user.email || !json.user.name || !json.user.role) {
       return null;
     }
 
@@ -180,10 +197,11 @@ export async function loginViaCloudApi(
       cooperativaCnpj: json.user.cooperativaCnpj ?? undefined,
     };
 
-    setAccessToken(json.token);
+    markCloudSessionActive();
+    if (json.token) memoryAccessToken = json.token;
     clearCloudBootstrapCredentials();
     setActiveCloudProfile(profile);
-    return { token: json.token, user: profile };
+    return { token: json.token ?? "__cookie__", user: profile };
   } catch {
     return null;
   }
@@ -200,34 +218,34 @@ export async function establishCloudSession(
     const fullPayload = { ...profile, email: normalizedEmail, password };
 
     const sync = await requestCloudToken("/api/auth/sync-session", fullPayload);
-    let token = sync.token;
+    let ok = sync.ok;
     let syncError = sync.error ?? "";
 
-    if (!token) {
+    if (!ok) {
       const login = await requestCloudToken("/api/auth/login", { email: normalizedEmail, password });
-      token = login.token;
+      ok = login.ok;
       syncError = login.error ?? syncError;
 
-      if (!token) {
+      if (!ok) {
         const provision = await requestCloudToken("/api/auth/provision", fullPayload);
-        token = provision.token;
+        ok = provision.ok;
         syncError = provision.error ?? syncError;
       }
 
-      if (!token) {
+      if (!ok) {
         const register = await requestCloudToken("/api/auth/register", fullPayload);
-        token = register.token;
+        ok = register.ok;
         syncError = register.error ?? syncError;
       }
     }
 
-    lastCloudSyncError = token ? "" : syncError;
+    lastCloudSyncError = ok ? "" : syncError;
 
-    if (!token) {
+    if (!ok) {
       return false;
     }
 
-    setAccessToken(token);
+    markCloudSessionActive();
     setActiveCloudProfile(profile);
     return true;
   } catch {
@@ -237,11 +255,9 @@ export async function establishCloudSession(
 }
 
 export async function refreshCloudSession(): Promise<boolean> {
-  const token = getAccessToken();
-  if (!token) return false;
   try {
     const res = await fetch("/api/auth/session", {
-      headers: { Authorization: `Bearer ${token}` },
+      credentials: "include",
       cache: "no-store",
     });
     if (res.status === 401) {
@@ -249,14 +265,18 @@ export async function refreshCloudSession(): Promise<boolean> {
       return false;
     }
     if (!res.ok) {
-      return true;
+      return cloudSessionActive;
     }
-    const json = (await res.json()) as { token?: string; enforced?: boolean };
-    if (json.enforced === false) return true;
-    if (json.token) setAccessToken(json.token);
+    const json = (await res.json()) as { token?: string; enforced?: boolean; valid?: boolean };
+    if (json.valid === false) {
+      clearAccessToken();
+      return false;
+    }
+    markCloudSessionActive();
+    if (json.token) memoryAccessToken = json.token;
     return true;
   } catch {
-    return Boolean(getAccessToken());
+    return cloudSessionActive;
   }
 }
 
@@ -266,13 +286,13 @@ export async function ensureCloudSessionReady(profile?: CloudSessionProfile): Pr
 
   const active = profile ?? activeCloudProfile ?? loadStoredSessionProfile();
   if (!active) {
-    if (getAccessToken()) return refreshCloudSession();
+    if (cloudSessionActive) return refreshCloudSession();
     return false;
   }
 
   activeCloudProfile = active;
 
-  if (getAccessToken()) {
+  if (cloudSessionActive) {
     const refreshed = await refreshCloudSession();
     if (refreshed) return true;
   }
@@ -306,25 +326,39 @@ export function mensagemErroAuthApi(status: number, error?: string): string {
 
 export async function secureApiFetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
   const profile = activeCloudProfile ?? loadStoredSessionProfile();
-  let ready = await ensureCloudSessionReady(profile ?? undefined);
+  await ensureCloudSessionReady(profile ?? undefined);
 
   const headers = new Headers(init?.headers);
-  const token = getAccessToken();
-  if (token) headers.set("Authorization", `Bearer ${token}`);
+  const token = memoryAccessToken;
+  if (token && token !== "__cookie__") {
+    headers.set("Authorization", `Bearer ${token}`);
+  }
 
-  let res = await fetch(input, { ...init, headers });
+  let res = await fetch(input, { ...init, headers, credentials: "include" });
 
   if (res.status === 401 && profile) {
-    ready = await ensureCloudSessionReady(profile);
-    const newToken = getAccessToken();
-    if (ready && newToken) {
+    const ready = await refreshCloudSession();
+    if (ready) {
       const retryHeaders = new Headers(init?.headers);
-      retryHeaders.set("Authorization", `Bearer ${newToken}`);
-      res = await fetch(input, { ...init, headers: retryHeaders });
+      const retryToken = memoryAccessToken;
+      if (retryToken && retryToken !== "__cookie__") {
+        retryHeaders.set("Authorization", `Bearer ${retryToken}`);
+      }
+      res = await fetch(input, { ...init, headers: retryHeaders, credentials: "include" });
     }
   }
 
   return res;
+}
+
+export async function logoutCloudSession(): Promise<void> {
+  try {
+    await fetch("/api/auth/logout", { method: "POST", credentials: "include" });
+  } catch {
+    /* offline */
+  }
+  clearAccessToken();
+  setActiveCloudProfile(null);
 }
 
 export async function registerCloudUser(input: {

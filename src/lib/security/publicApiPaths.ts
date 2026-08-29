@@ -12,6 +12,7 @@ export function isPublicApiRoute(pathname: string, method: string): boolean {
     "/api/auth/provision",
     "/api/auth/sync-session",
     "/api/auth/schema-status",
+    "/api/auth/logout",
     "/api/cooperativas/lookup",
     "/api/cooperativas/status",
     "/api/cooperativas/verify-cadastro-senha",

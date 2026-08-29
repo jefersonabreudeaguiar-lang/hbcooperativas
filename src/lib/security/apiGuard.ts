@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { normalizeCnpj } from "@/utils/cooperativa";
 import { isApiSecurityEnforced } from "@/lib/security/env";
-import { extractBearerToken, verifyAccessToken, type SessionClaims } from "@/lib/security/jwt";
+import { extractAccessToken, verifyAccessToken, type SessionClaims } from "@/lib/security/jwt";
 import { requireCooperativaSaasWritable } from "@/lib/security/saasGuard";
 import { rateLimitApi } from "@/lib/security/rateLimit";
 
@@ -21,7 +21,7 @@ export async function requireApiAuth(request: Request): Promise<AuthResult> {
     return { ok: true, session: null, enforced: false };
   }
 
-  const token = extractBearerToken(request);
+  const token = extractAccessToken(request);
   if (!token) {
     return {
       ok: false,

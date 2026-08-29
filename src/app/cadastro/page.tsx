@@ -20,7 +20,7 @@ import {
   textoTermosCobrancaSaas,
 } from "@/services/cobrancaSaasService";
 import { useHbCreditEnabled } from "@/hooks/useHbCreditEnabled";
-import { setAccessToken } from "@/lib/security/clientSession";
+import { markCloudSessionActive } from "@/lib/security/clientSession";
 
 type AbaCadastro = "cooperado" | "responsavel" | "parceiro";
 
@@ -232,6 +232,7 @@ export default function CadastroPage() {
       const res = await fetch("/api/auth/register-parceiro", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        credentials: "include",
         body: JSON.stringify({
           cooperativaCnpj: cooperativaCnpjParceiro,
           cnpjMercado,
@@ -246,7 +247,7 @@ export default function CadastroPage() {
         setError(data.error ?? "Cadastro recusado.");
         return;
       }
-      if (data.accessToken) setAccessToken(data.accessToken);
+      if (data.user) markCloudSessionActive();
       setSuccess("Mercado cadastrado! Status: PENDENTE — aguarde aprovação da cooperativa.");
       setTimeout(() => router.push("/mercado-parceiro"), 1500);
     } catch {
