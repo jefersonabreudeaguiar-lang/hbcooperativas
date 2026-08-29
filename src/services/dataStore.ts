@@ -1,5 +1,6 @@
 "use client";
 
+import { normalizeUserRole } from "@/permissions";
 import type { AppData, AuditAction, User, Cooperado, Cooperativa, PrestacaoContas, UserRole } from "@/types";
 import { emptyInitialData, DEMO_ENTITY_IDS, DEMO_EMAILS, DEMO_CNPJ } from "@/mock/data";
 import { findCooperativaByCnpj, getCooperativaById, getUserCooperativaId, normalizeCnpj } from "@/utils/cooperativa";
@@ -298,7 +299,7 @@ function migrateData(raw: Partial<AppData> & Record<string, unknown>): AppData {
     cooperados,
     users: (base.users ?? []).map((u) => ({
       ...u,
-      role: (u.role as string) === "presidente" ? "responsavel" : u.role,
+      role: normalizeUserRole(String(u.role)),
       cooperativaId: u.cooperativaId ?? (u.cooperadoId
         ? cooperados.find((c) => c.id === u.cooperadoId)?.cooperativaId
         : cooperativas[0]?.id),
@@ -669,7 +670,8 @@ export function addAuditEntry(
 
 function persistSession(user: Omit<User, "password">): void {
   if (typeof window === "undefined") return;
-  localStorage.setItem(SESSION_KEY, JSON.stringify(user));
+  const safeUser = { ...user, role: normalizeUserRole(user.role) };
+  localStorage.setItem(SESSION_KEY, JSON.stringify(safeUser));
   // Migra sessão antiga (sessionStorage) se existir
   sessionStorage.removeItem(SESSION_KEY);
   notify();
@@ -777,7 +779,7 @@ async function bootstrapLocalUserFromCloudLogin(
   profile: CloudSessionProfile,
   plainPassword: string
 ): Promise<User | null> {
-  if (!CLOUD_BOOTSTRAP_ROLES.includes(profile.role as UserRole)) return null;
+  if (!CLOUD_BOOTSTRAP_ROLES.includes(normalizeUserRole(profile.role))) return null;
 
   const email = normalizeCreatorEmail(profile.email);
   const cnpj = profile.cooperativaCnpj ? normalizeCnpj(profile.cooperativaCnpj) : "";
@@ -804,7 +806,7 @@ async function bootstrapLocalUserFromCloudLogin(
     email,
     password: passwordHash,
     name: profile.name,
-    role: profile.role as UserRole,
+    role: normalizeUserRole(profile.role),
     cooperadoId,
     cooperativaId,
     cooperativaCnpj: cnpj.length === 14 ? cnpj : profile.cooperativaCnpj,
@@ -933,7 +935,7 @@ export function getSession(): Omit<User, "password"> | null {
   }
 
   scheduleDataWarmIfNeeded();
-  return parsed;
+  return { ...parsed, role: normalizeUserRole(parsed.role) };
 }
 
 export interface RegisterCooperadoInput {

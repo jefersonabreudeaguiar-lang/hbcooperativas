@@ -16,10 +16,11 @@ import { Card } from "@/components/ui/Card";
 import { PixQrModal } from "@/components/pix/PixQrModal";
 import { useAuth } from "@/modules/auth/AuthProvider";
 import { useAppData } from "@/hooks/useAppData";
-import { updateData } from "@/services/dataStore";
+import { getData, updateData } from "@/services/dataStore";
 import {
   ensureCobrancaPeriodoAtualSaas,
   getPainelCobrancaSaasResponsavel,
+  precisaAssinarContratoServico,
   responsavelInformouPagamentoSaas,
   sincronizarCicloCobrancaSaas,
 } from "@/services/cobrancaSaasService";
@@ -42,12 +43,15 @@ export function CobrancaSaasPainel() {
 
   useEffect(() => {
     if (!user || !coopId || user.role === "cooperado") return;
-    updateData((d) => {
-      const before = JSON.stringify(d.cooperativas.find((c) => c.id === coopId)?.cobrancaSaas ?? {});
-      let next = sincronizarCicloCobrancaSaas(d, coopId);
+    const d = getData();
+    const coop = d.cooperativas.find((c) => c.id === coopId);
+    if (!coop || precisaAssinarContratoServico(coop)) return;
+    updateData((current) => {
+      const before = JSON.stringify(current.cooperativas.find((c) => c.id === coopId)?.cobrancaSaas ?? {});
+      let next = sincronizarCicloCobrancaSaas(current, coopId);
       next = ensureCobrancaPeriodoAtualSaas(next, coopId).data;
       const after = JSON.stringify(next.cooperativas.find((c) => c.id === coopId)?.cobrancaSaas ?? {});
-      return before === after ? d : next;
+      return before === after ? current : next;
     });
   }, [user?.id, user?.role, coopId]);
 

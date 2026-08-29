@@ -3,6 +3,7 @@
 import { createContext, useContext, useEffect, useLayoutEffect, useState, useCallback, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import type { User } from "@/types";
+import { normalizeUserRole } from "@/permissions";
 import { getSession, login as doLogin, loginCreatorAdminPortal, logout as doLogout, registerCooperado, registerCooperativa, subscribe, ensureCooperativaInCloudForUser, preloadAppData } from "@/services/dataStore";
 import { ensureCloudSessionReady, setActiveCloudProfile, userToCloudProfile } from "@/lib/security/clientSession";
 import type { RegisterCooperadoInput, RegisterCooperativaInput } from "@/services/dataStore";
@@ -31,6 +32,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (
         prev?.id === session?.id &&
         prev?.email === session?.email &&
+        prev?.role === session?.role &&
         prev?.cooperadoId === session?.cooperadoId &&
         prev?.cooperativaId === session?.cooperativaId
       ) {
@@ -59,7 +61,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const result = await doLogin(email, password);
     if (result) {
       const { password: _, ...safeUser } = result;
-      setUser(safeUser);
+      setUser({ ...safeUser, role: normalizeUserRole(safeUser.role) });
       setActiveCloudProfile(userToCloudProfile(safeUser));
       await ensureCloudSessionReady(userToCloudProfile(safeUser));
       return true;
@@ -71,7 +73,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const result = await loginCreatorAdminPortal(email, password);
     if (result) {
       const { password: _, ...safeUser } = result;
-      setUser(safeUser);
+      setUser({ ...safeUser, role: normalizeUserRole(safeUser.role) });
       return true;
     }
     return false;
@@ -80,7 +82,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const register = async (input: RegisterCooperadoInput) => {
     const result = await registerCooperado(input);
     if (result.success) {
-      setUser(result.user);
+      setUser({ ...result.user, role: normalizeUserRole(result.user.role) });
       return { success: true };
     }
     return { success: false, error: result.error };
@@ -89,7 +91,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const registerCooperativaAccount = async (input: RegisterCooperativaInput) => {
     const result = await registerCooperativa(input);
     if (result.success) {
-      setUser(result.user);
+      setUser({ ...result.user, role: normalizeUserRole(result.user.role) });
       return { success: true };
     }
     return { success: false, error: result.error };

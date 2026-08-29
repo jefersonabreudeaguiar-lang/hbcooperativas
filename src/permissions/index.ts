@@ -165,8 +165,14 @@ export const PRESET_CONTADOR: Resource[] = [
 export const CONTADOR_ACESSO_DESCRICAO =
   "Painel contador, conciliação, trilha de auditoria, relatórios R1–R10, dossiê ZIP, snapshot de fechamento e consultas financeiras — sem alterar lançamentos.";
 
+/** Perfil legado "presidente" → responsável (sessões e dados antigos). */
+export function normalizeUserRole(role: string): UserRole {
+  if (role === "presidente") return "responsavel";
+  return role as UserRole;
+}
+
 export function can(role: UserRole, resource: Resource, action: Action): boolean {
-  const rolePerms = PERMISSIONS[role];
+  const rolePerms = PERMISSIONS[normalizeUserRole(role)];
   if (!rolePerms) return false;
   const resourcePerms = rolePerms[resource];
   if (!resourcePerms) return false;
@@ -209,7 +215,7 @@ export function modulosLiberados(user: PermissionSubject): Resource[] {
   }
   return MODULOS_ACESSO.filter((mod) => {
     const denied = user.permissoesNegadas?.[mod.resource];
-    const allowed = PERMISSIONS[user.role]?.[mod.resource] ?? mod.actions;
+    const allowed = PERMISSIONS[normalizeUserRole(user.role)]?.[mod.resource] ?? mod.actions;
     if (!allowed.length) return false;
     return !denied || denied.length < allowed.length;
   }).map((m) => m.resource);
@@ -219,14 +225,14 @@ export function modulosRestritos(user: PermissionSubject): Resource[] {
   if (user.modoAcesso !== "total") return [];
   return MODULOS_ACESSO.filter((mod) => {
     const denied = user.permissoesNegadas?.[mod.resource];
-    const allowed = PERMISSIONS[user.role]?.[mod.resource] ?? [];
+    const allowed = PERMISSIONS[normalizeUserRole(user.role)]?.[mod.resource] ?? [];
     return denied && denied.length >= allowed.length && allowed.length > 0;
   }).map((m) => m.resource);
 }
 
 export function canGerenciarEquipe(user: Pick<User, "role" | "responsavelPrincipal">): boolean {
   if (user.role === "admin" || user.role === "tesoureiro") return true;
-  return user.role === "responsavel" && user.responsavelPrincipal === true;
+  return isResponsavelRole(user.role) && user.responsavelPrincipal === true;
 }
 
 export function getUserFuncaoLabel(user: Pick<User, "role" | "funcao">): string {
@@ -237,12 +243,13 @@ export function isAdminRole(role: UserRole): boolean {
   return role === "admin" || role === "tesoureiro";
 }
 
-export function isResponsavelRole(role: UserRole): boolean {
-  return role === "responsavel";
+export function isResponsavelRole(role: UserRole | string): boolean {
+  return normalizeUserRole(role) === "responsavel";
 }
 
-export function isDiretoriaRole(role: UserRole): boolean {
-  return isResponsavelRole(role) || isAdminRole(role) || role === "tesoureiro";
+export function isDiretoriaRole(role: UserRole | string): boolean {
+  const normalized = normalizeUserRole(role);
+  return normalized === "responsavel" || normalized === "admin" || normalized === "tesoureiro";
 }
 
 export function isContadorRole(role: UserRole): boolean {
@@ -398,7 +405,7 @@ export function getMenuItems(
   }
 
   let source = DIRETORIA_MENU;
-  if (user.role === "responsavel") {
+  if (isResponsavelRole(user.role)) {
     source = DIRETORIA_MENU.filter((i) => RESPONSAVEL_HREFS.includes(i.href));
   }
 
@@ -443,7 +450,7 @@ export function getMobileNavItems(
     return appendHbCreditMenuItem(filterMenuForUser(baseItems, user), user, creditEnabled, contaCoopUiVisible);
   }
 
-  if (user.role === "responsavel") {
+  if (isResponsavelRole(user.role)) {
     const responsavelItems: { href: string; label: string; resource: Resource }[] = [
       { href: "/dashboard", label: "Início", resource: "dashboard" },
       { href: "/notas-pedido", label: "Conferir", resource: "notas_pedido" },
