@@ -3,35 +3,34 @@ import {
   buildQrPayload,
   cancelPaymentIntent,
   createPaymentIntent,
-  getParceiroByUserId,
-  listIntentsParceiro,
   parseQrPayload,
   validateIntentForCooperado,
 } from "@/lib/supabase/contaCoopStorage";
-import { requireCreditApi, requireCreditCnpj } from "@/lib/security/creditGuard";
+import {
+  requireCreditApi,
+  requireCreditCooperado,
+  requireCreditCnpj,
+  requireCreditParceiro,
+} from "@/lib/security/creditGuard";
 import { normalizeCnpj } from "@/utils/cooperativa";
 import { reaisToCents } from "@/modules/hb-credit/engine/money";
 
 export async function POST(request: Request) {
-  const gate = await requireCreditApi(request);
+  const gate = await requireCreditApi(request, { requireOperations: true });
   if (!gate.ok) return gate.response;
 
   const body = await request.json().catch(() => null);
   const action = String(body?.action ?? "create");
 
   if (action === "cancel") {
-    if (gate.ctx.session?.role !== "parceiro" && gate.ctx.enforced) {
-      return NextResponse.json({ error: "Ação restrita ao mercado parceiro." }, { status: 403 });
-    }
-    const parceiro = gate.ctx.session?.role === "parceiro"
-      ? await getParceiroByUserId(gate.ctx.supabase, gate.ctx.session.sub)
-      : null;
-    const parceiroId = parceiro?.id ?? String(body?.parceiroId ?? "");
+    const parceiroGate = await requireCreditParceiro(gate.ctx, String(body?.parceiroId ?? ""));
+    if (!parceiroGate.ok) return parceiroGate.response;
+
     const intentId = String(body?.intentId ?? "");
-    if (!parceiroId || !intentId) {
+    if (!intentId) {
       return NextResponse.json({ error: "Dados inválidos." }, { status: 400 });
     }
-    const result = await cancelPaymentIntent(gate.ctx.supabase, intentId, parceiroId);
+    const result = await cancelPaymentIntent(gate.ctx.supabase, intentId, parceiroGate.parceiro.id);
     if (!result.ok) return NextResponse.json({ error: result.error }, { status: 400 });
     return NextResponse.json({ ok: true });
   }
@@ -49,6 +48,8 @@ export async function POST(request: Request) {
 
     const denyCoop = requireCreditCnpj(gate.ctx, cnpj);
     if (denyCoop) return denyCoop;
+    const denySelf = requireCreditCooperado(gate.ctx, cooperadoId);
+    if (denySelf) return denySelf;
 
     const result = await validateIntentForCooperado(
       gate.ctx.supabase,
@@ -67,27 +68,20 @@ export async function POST(request: Request) {
     });
   }
 
-  // create intent — parceiro only
-  if (gate.ctx.session?.role !== "parceiro" && gate.ctx.enforced) {
-    return NextResponse.json({ error: "Ação restrita ao mercado parceiro." }, { status: 403 });
-  }
+  const parceiroGate = await requireCreditParceiro(gate.ctx, String(body?.parceiroId ?? ""));
+  if (!parceiroGate.ok) return parceiroGate.response;
 
-  const parceiro =
-    gate.ctx.session?.role === "parceiro"
-      ? await getParceiroByUserId(gate.ctx.supabase, gate.ctx.session.sub)
-      : null;
-
-  const parceiroId = parceiro?.id ?? String(body?.parceiroId ?? "");
-  const cnpj = normalizeCnpj(parceiro?.cooperativaCnpj ?? String(body?.cnpj ?? ""));
+  const parceiro = parceiroGate.parceiro;
+  const cnpj = normalizeCnpj(parceiro.cooperativaCnpj);
   const amountCents = Number(body?.amountCentavos ?? reaisToCents(Number(body?.amountReais ?? 0)));
 
-  if (!parceiroId || cnpj.length !== 14 || amountCents <= 0) {
+  if (cnpj.length !== 14 || amountCents <= 0) {
     return NextResponse.json({ error: "Dados inválidos." }, { status: 400 });
   }
 
   try {
     const intent = await createPaymentIntent(gate.ctx.supabase, {
-      parceiroId,
+      parceiroId: parceiro.id,
       cooperativaCnpj: cnpj,
       amountCents,
       descricao: body?.descricao ? String(body.descricao) : undefined,

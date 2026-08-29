@@ -3,8 +3,10 @@
  */
 export {
   assertHbCreditEnabledServer,
+  assertHbCreditOperationsEnabled,
   isHbCreditEnabledClient,
   isHbCreditEnabledServer,
+  isHbCreditOperationsEnabled,
   isHbCreditUiAllowed,
   HB_CREDIT_MODULE_ID,
   HB_CREDIT_FOUNDATION_VERSION,

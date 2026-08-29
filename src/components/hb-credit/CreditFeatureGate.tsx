@@ -7,20 +7,30 @@ import { PageSkeleton } from "@/components/ui/PageSkeleton";
 import { AlertBanner } from "@/components/ui/AlertBanner";
 
 export function CreditFeatureGate({ children }: { children: React.ReactNode }) {
-  const { enabled, loading } = useHbCreditEnabled();
+  const { enabled, loading, status, errorMessage } = useHbCreditEnabled();
   const router = useRouter();
 
   useEffect(() => {
-    if (!loading && !enabled) {
+    if (status === "disabled") {
       router.replace("/dashboard");
     }
-  }, [enabled, loading, router]);
+  }, [status, router]);
 
   if (loading) return <PageSkeleton />;
+
+  if (status === "error") {
+    return (
+      <AlertBanner variant="warning" title="Conta Coop indisponível">
+        Não foi possível confirmar o módulo no servidor. Verifique a conexão e tente novamente.
+        {errorMessage ? ` (${errorMessage})` : ""}
+      </AlertBanner>
+    );
+  }
+
   if (!enabled) {
     return (
       <AlertBanner variant="warning" title="Conta Coop indisponível">
-        Módulo desativado neste ambiente. Homologação local exige HB_CREDIT_ENABLED=true.
+        Módulo desativado neste ambiente.
       </AlertBanner>
     );
   }

@@ -5,7 +5,7 @@ import { normalizeCnpj } from "@/utils/cooperativa";
 import { FINANCIAL_PIN_MIN_LENGTH } from "@/modules/hb-credit/config";
 
 export async function POST(request: Request) {
-  const gate = await requireCreditApi(request);
+  const gate = await requireCreditApi(request, { requireOperations: true });
   if (!gate.ok) return gate.response;
 
   const body = await request.json().catch(() => null);

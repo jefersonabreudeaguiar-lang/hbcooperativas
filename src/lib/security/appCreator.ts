@@ -40,7 +40,7 @@ export function isAppCreator(user: Pick<User, "email"> | null | undefined): bool
 
   if (typeof window === "undefined") return false;
   try {
-    const raw = localStorage.getItem("coopeagriplla_cloud_bootstrap");
+    const raw = localStorage.getItem("coopeagriplla_session");
     if (!raw) return false;
     const parsed = JSON.parse(raw) as { email?: string };
     return matchesCreatorEmail(parsed.email);

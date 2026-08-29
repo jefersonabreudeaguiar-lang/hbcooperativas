@@ -65,12 +65,13 @@ export async function POST(request: Request) {
   const denySelf = requireCreditCooperado(gate.ctx, cooperadoId);
   if (denySelf) return denySelf;
 
-  if (action === "set_pin") {
+  if (action === "set_pin" || action === "change_pin") {
     const pin = String(body?.pin ?? "");
     if (pin.length < FINANCIAL_PIN_MIN_LENGTH || !/^\d+$/.test(pin)) {
       return NextResponse.json({ error: `PIN numérico com mínimo ${FINANCIAL_PIN_MIN_LENGTH} dígitos.` }, { status: 400 });
     }
-    await setFinancialPin(gate.ctx.supabase, cnpj, cooperadoId, pin);
+    const result = await setFinancialPin(gate.ctx.supabase, cnpj, cooperadoId, pin);
+    if (!result.ok) return NextResponse.json({ error: result.error }, { status: 400 });
     return NextResponse.json({ ok: true });
   }
 

@@ -278,16 +278,27 @@ function filterMenuForUser(
   return items.filter((item) => canUser(user, item.resource, "view") || item.href === "/meu-cadastro");
 }
 
+/** Menu Conta Coop: módulo confirmado pelo servidor + perfil autorizado. */
+export function isHbCreditNavVisible(creditEnabled: boolean, canViewContaCoop: boolean): boolean {
+  return creditEnabled && canViewContaCoop;
+}
+
 export function appendHbCreditMenuItem(
   items: { href: string; label: string; resource: Resource }[],
   user: PermissionSubject,
   creditEnabled: boolean
 ): { href: string; label: string; resource: Resource }[] {
-  if (!creditEnabled) return items;
   const extra = CREDIT_MENU_BY_ROLE[user.role];
-  if (!extra || !canUser(user, extra.resource, "view")) return items;
-  if (items.some((i) => i.href === extra.href)) return items;
-  return [...items, extra];
+  if (
+    !isHbCreditNavVisible(
+      creditEnabled,
+      Boolean(extra && canUser(user, extra.resource, "view"))
+    )
+  ) {
+    return items;
+  }
+  if (items.some((i) => i.href === extra!.href)) return items;
+  return [...items, extra!];
 }
 
 export function getMenuItems(
@@ -322,14 +333,23 @@ export function getCooperadoExtraItems(): { href: string; label: string }[] {
   return [];
 }
 
+const COOPERADO_MOBILE_NAV_HREFS = [
+  "/dashboard",
+  "/notas-pedido",
+  "/precos",
+  "/ficha-corrida",
+  "/mensalidades",
+];
+
 export function getMobileNavItems(
   user: PermissionSubject,
   creditEnabled = false
 ): { href: string; label: string; resource: Resource }[] {
   if (user.role === "cooperado") {
-    return COOPERADO_MENU.filter((i) =>
-      ["/dashboard", "/notas-pedido", "/precos", "/ficha-corrida", "/mensalidades"].includes(i.href)
+    const baseItems = COOPERADO_MENU.filter((i) =>
+      COOPERADO_MOBILE_NAV_HREFS.includes(i.href)
     );
+    return appendHbCreditMenuItem(filterMenuForUser(baseItems, user), user, creditEnabled);
   }
 
   if (user.role === "responsavel") {

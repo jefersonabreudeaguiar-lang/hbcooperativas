@@ -19,6 +19,7 @@
     "audit:totais": "npx tsx scripts/audit-totais-cooperados.ts",
     "test:hb-credit-foundation": "npx tsx scripts/test-hb-credit-foundation.ts",
     "test:hb-credit": "npx tsx scripts/test-hb-credit-engine.ts",
+    "test:hb-credit-p0": "npx tsx scripts/test-hb-credit-p0-security.ts",
     "apply:hb-credit-migrations": "npx tsx scripts/apply-hb-credit-migrations.ts",
     "apply:app-users": "npx tsx scripts/apply-app-users-schema.ts",
     "homologate:hb-credit": "npx tsx scripts/homologate-hb-credit.ts",

@@ -1,3 +1,4 @@
+import { randomBytes } from "crypto";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { normalizeCnpj } from "@/utils/cooperativa";
 import { hashPassword, verifyPassword } from "@/lib/security/password";
@@ -22,7 +23,11 @@ import {
 } from "@/modules/hb-credit/infrastructure/mappers/statusMapper";
 
 function genId(prefix: string): string {
-  return `${prefix}_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
+  return `${prefix}_${Date.now()}_${randomBytes(6).toString("hex")}`;
+}
+
+function secureNonce(): string {
+  return randomBytes(16).toString("hex");
 }
 
 export function buildQrPayload(intentId: string, nonce: string): string {
@@ -51,13 +56,17 @@ export function parseQrPayload(raw: string): { intentId: string; nonce: string }
   }
 }
 
-const DEFAULT_TETO_PERCENT = 100;
+const PIN_MAX_ATTEMPTS = 5;
+const PIN_LOCK_MINUTES = 15;
 
-export async function getOrCreateTetoPercent(
+export const TETO_NAO_CONFIGURADO =
+  "Configuração financeira da cooperativa ausente. Defina o teto percentual na aba Painel antes de liberar crédito.";
+
+/** Lê percentual configurado — fail-closed: não cria fallback nem auto-insert. */
+export async function getTetoPercentConfigured(
   supabase: SupabaseClient,
-  cnpj: string,
-  defaultPercent = DEFAULT_TETO_PERCENT
-): Promise<number> {
+  cnpj: string
+): Promise<number | null> {
   const digits = normalizeCnpj(cnpj);
   const { data, error } = await supabase
     .from("hb_credit_cooperative_caps")
@@ -67,33 +76,71 @@ export async function getOrCreateTetoPercent(
 
   if (error) {
     if (/global_credit_cap_percent/i.test(error.message ?? "")) {
-      return defaultPercent;
+      return null;
     }
     throw error;
   }
 
-  if (data) {
-    const stored = Number(data.global_credit_cap_percent);
-    return stored > 0 ? stored : defaultPercent;
+  if (!data) return null;
+
+  const stored = Number(data.global_credit_cap_percent);
+  if (!Number.isFinite(stored) || stored <= 0 || stored > 100) {
+    return null;
   }
 
-  await supabase.from("hb_credit_cooperative_caps").insert({
-    cooperative_cnpj: digits,
-    global_credit_cap_cents: 0,
-    global_credit_cap_percent: defaultPercent,
-  });
-  return defaultPercent;
+  return stored;
+}
+
+/** @deprecated leitura legada — não usar para novas liberações */
+export async function getOrCreateTetoPercent(
+  supabase: SupabaseClient,
+  cnpj: string,
+  _defaultPercent?: number
+): Promise<number | null> {
+  return getTetoPercentConfigured(supabase, cnpj);
 }
 
 export async function resolveTetoGlobal(
   supabase: SupabaseClient,
   cnpj: string,
-  creditosBaseCents: Record<string, number>
-): Promise<{ percent: number; cents: number; creditoBaseTotalCents: number }> {
-  const percent = await getOrCreateTetoPercent(supabase, cnpj);
+  creditosBaseCents: Record<string, number>,
+  options?: { allowUnconfigured?: boolean }
+): Promise<
+  | { configured: true; percent: number; cents: number; creditoBaseTotalCents: number }
+  | { configured: false; error: string }
+> {
+  const percent = await getTetoPercentConfigured(supabase, cnpj);
+  if (percent == null) {
+    if (options?.allowUnconfigured) {
+      return {
+        configured: false,
+        error: TETO_NAO_CONFIGURADO,
+      };
+    }
+    return { configured: false, error: TETO_NAO_CONFIGURADO };
+  }
+
   const creditoBaseTotalCents = sumCreditosBaseCents(creditosBaseCents);
   const cents = calcTetoGlobalCents(creditosBaseCents, percent);
-  return { percent, cents, creditoBaseTotalCents };
+  return { configured: true, percent, cents, creditoBaseTotalCents };
+}
+
+async function requireConfiguredTeto(
+  supabase: SupabaseClient,
+  cnpj: string,
+  creditosBaseCents: Record<string, number>
+): Promise<
+  | { ok: true; percent: number; cents: number; creditoBaseTotalCents: number }
+  | { ok: false; error: string }
+> {
+  const teto = await resolveTetoGlobal(supabase, cnpj, creditosBaseCents);
+  if (!teto.configured) return { ok: false, error: teto.error };
+  return {
+    ok: true,
+    percent: teto.percent,
+    cents: teto.cents,
+    creditoBaseTotalCents: teto.creditoBaseTotalCents,
+  };
 }
 
 /** @deprecated use resolveTetoGlobal */
@@ -103,7 +150,7 @@ export async function getOrCreateTeto(
   creditosBaseCents: Record<string, number> = {}
 ): Promise<number> {
   const resolved = await resolveTetoGlobal(supabase, cnpj, creditosBaseCents);
-  return resolved.cents;
+  return resolved.configured ? resolved.cents : 0;
 }
 
 export async function setTetoGlobalPercent(
@@ -153,7 +200,11 @@ export async function setTetoGlobal(
   tetoCentavos: number,
   actorUserId: string
 ): Promise<{ ok: true } | { ok: false; error: string }> {
-  return setTetoGlobalPercent(supabase, cnpj, DEFAULT_TETO_PERCENT, {}, actorUserId);
+  void tetoCentavos;
+  void actorUserId;
+  void supabase;
+  void cnpj;
+  return { ok: false, error: TETO_NAO_CONFIGURADO };
 }
 
 function mensagemUltrapassaTeto(
@@ -178,7 +229,12 @@ export async function getDashboardResumo(
   creditosBaseCents: Record<string, number> = {}
 ): Promise<ContaCoopDashboard> {
   const digits = normalizeCnpj(cnpj);
-  const teto = await resolveTetoGlobal(supabase, digits, creditosBaseCents);
+  const tetoResult = await resolveTetoGlobal(supabase, digits, creditosBaseCents);
+  const tetoPercent = tetoResult.configured ? tetoResult.percent : 0;
+  const tetoCents = tetoResult.configured ? tetoResult.cents : 0;
+  const creditoBaseTotalCents = tetoResult.configured
+    ? tetoResult.creditoBaseTotalCents
+    : sumCreditosBaseCents(creditosBaseCents);
   const { data: limites } = await supabase
     .from("hb_credit_accounts")
     .select("limit_released_cents, amount_used_cents")
@@ -206,11 +262,13 @@ export async function getDashboardResumo(
 
   return {
     teto: {
-      tetoGlobalPercent: teto.percent,
-      tetoGlobalCents: teto.cents,
-      creditoBaseTotalCents: teto.creditoBaseTotalCents,
+      tetoGlobalPercent: tetoPercent,
+      tetoGlobalCents: tetoCents,
+      creditoBaseTotalCents,
       limiteDistribuidoCents: limiteDistribuido,
-      restanteParaLiberarCents: Math.max(0, teto.cents - limiteDistribuido),
+      restanteParaLiberarCents: tetoResult.configured
+        ? Math.max(0, tetoCents - limiteDistribuido)
+        : 0,
     },
     agregadoCooperados: {
       limiteLiberadoCents: limiteDistribuido,
@@ -268,7 +326,19 @@ export async function previewLimiteAlteracao(
   error?: string;
 }> {
   const digits = normalizeCnpj(cnpj);
-  const teto = await resolveTetoGlobal(supabase, digits, creditosBaseCents);
+  const tetoReq = await requireConfiguredTeto(supabase, digits, creditosBaseCents);
+  if (!tetoReq.ok) {
+    return {
+      atual: { limiteLiberadoCents: 0, valorUsadoCents: 0, valorDisponivelCents: 0 },
+      novo: novoLimiteCents,
+      totalDistribuidoApos: 0,
+      tetoGlobal: 0,
+      tetoGlobalPercent: 0,
+      ok: false,
+      error: tetoReq.error,
+    };
+  }
+  const teto = tetoReq;
   const { data: atualRow } = await supabase
     .from("hb_credit_accounts")
     .select("*")
@@ -531,41 +601,142 @@ export async function setFinancialPin(
   cnpj: string,
   cooperadoId: string,
   pin: string
-): Promise<void> {
+): Promise<{ ok: true } | { ok: false; error: string }> {
   const pinHash = await hashPassword(pin);
+  const digits = normalizeCnpj(cnpj);
+  const now = new Date().toISOString();
+
+  const { data: existing } = await supabase
+    .from("hb_credit_accounts")
+    .select("id, limit_released_cents, amount_used_cents, status")
+    .eq("cooperative_cnpj", digits)
+    .eq("cooperado_id", cooperadoId)
+    .maybeSingle();
+
+  if (existing) {
+    const { error } = await supabase
+      .from("hb_credit_accounts")
+      .update({
+        pin_hash: pinHash,
+        pin_updated_at: now,
+        pin_failed_attempts: 0,
+        pin_locked_until: null,
+        updated_at: now,
+      })
+      .eq("cooperative_cnpj", digits)
+      .eq("cooperado_id", cooperadoId);
+
+    if (error) return { ok: false, error: error.message };
+    return { ok: true };
+  }
+
+  const { error } = await supabase.from("hb_credit_accounts").insert({
+    cooperative_cnpj: digits,
+    cooperado_id: cooperadoId,
+    limit_released_cents: 0,
+    amount_used_cents: 0,
+    status: "active",
+    pin_hash: pinHash,
+    pin_updated_at: now,
+    pin_failed_attempts: 0,
+    updated_at: now,
+  });
+
+  if (error) return { ok: false, error: error.message };
+  return { ok: true };
+}
+
+async function recordPinFailure(
+  supabase: SupabaseClient,
+  cnpj: string,
+  cooperadoId: string,
+  actorUserId: string
+): Promise<void> {
+  const digits = normalizeCnpj(cnpj);
+  const { data } = await supabase
+    .from("hb_credit_accounts")
+    .select("pin_failed_attempts")
+    .eq("cooperative_cnpj", digits)
+    .eq("cooperado_id", cooperadoId)
+    .maybeSingle();
+
+  const attempts = Number(data?.pin_failed_attempts ?? 0) + 1;
+  const lockedUntil =
+    attempts >= PIN_MAX_ATTEMPTS
+      ? new Date(Date.now() + PIN_LOCK_MINUTES * 60_000).toISOString()
+      : null;
+
+  await supabase
+    .from("hb_credit_accounts")
+    .update({
+      pin_failed_attempts: attempts,
+      pin_locked_until: lockedUntil,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("cooperative_cnpj", digits)
+    .eq("cooperado_id", cooperadoId);
+
+  await supabase.from("hb_credit_audit_log").insert({
+    cooperative_cnpj: digits,
+    actor: actorUserId,
+    action: "PIN_FAILED",
+    resource_type: "account",
+    resource_id: cooperadoId,
+    metadata: { attempts, locked: Boolean(lockedUntil) },
+  });
+}
+
+async function resetPinFailures(
+  supabase: SupabaseClient,
+  cnpj: string,
+  cooperadoId: string
+): Promise<void> {
   const digits = normalizeCnpj(cnpj);
   await supabase
     .from("hb_credit_accounts")
-    .upsert(
-      {
-        cooperative_cnpj: digits,
-        cooperado_id: cooperadoId,
-        limit_released_cents: 0,
-        amount_used_cents: 0,
-        status: "active",
-        pin_hash: pinHash,
-        updated_at: new Date().toISOString(),
-      },
-      { onConflict: "cooperative_cnpj,cooperado_id" }
-    );
+    .update({
+      pin_failed_attempts: 0,
+      pin_locked_until: null,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("cooperative_cnpj", digits)
+    .eq("cooperado_id", cooperadoId);
 }
 
 export async function verifyFinancialPin(
   supabase: SupabaseClient,
   cnpj: string,
   cooperadoId: string,
-  pin: string
-): Promise<boolean> {
-  const limite = await getLimiteCooperado(supabase, cnpj, cooperadoId);
-  if (!limite) return false;
+  pin: string,
+  actorUserId = cooperadoId
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const digits = normalizeCnpj(cnpj);
   const { data } = await supabase
     .from("hb_credit_accounts")
-    .select("pin_hash")
-    .eq("cooperative_cnpj", normalizeCnpj(cnpj))
+    .select("pin_hash, pin_locked_until")
+    .eq("cooperative_cnpj", digits)
     .eq("cooperado_id", cooperadoId)
     .maybeSingle();
-  if (!data?.pin_hash) return false;
-  return verifyPassword(pin, String(data.pin_hash));
+
+  if (!data?.pin_hash) {
+    return { ok: false, error: "PIN financeiro não definido." };
+  }
+
+  if (data.pin_locked_until && new Date(String(data.pin_locked_until)).getTime() > Date.now()) {
+    return {
+      ok: false,
+      error: `PIN bloqueado temporariamente. Tente novamente em alguns minutos.`,
+    };
+  }
+
+  const valid = await verifyPassword(pin, String(data.pin_hash));
+  if (!valid) {
+    await recordPinFailure(supabase, cnpj, cooperadoId, actorUserId);
+    return { ok: false, error: "PIN financeiro inválido." };
+  }
+
+  await resetPinFailures(supabase, cnpj, cooperadoId);
+  return { ok: true };
 }
 
 export async function createPaymentIntent(
@@ -588,7 +759,7 @@ export async function createPaymentIntent(
   }
 
   const id = genId("intent");
-  const nonce = genId("nonce");
+  const nonce = secureNonce();
   const expiresAt = new Date(Date.now() + INTENT_EXPIRY_MINUTES * 60_000).toISOString();
   const now = new Date().toISOString();
 
@@ -686,8 +857,14 @@ export async function authorizePayment(
   | { ok: true; transacaoId: string; receiptCode: string; disponivelAposCents: number; duplicate?: boolean }
   | { ok: false; error: string }
 > {
-  const pinOk = await verifyFinancialPin(supabase, input.cooperativaCnpj, input.cooperadoId, input.pin);
-  if (!pinOk) return { ok: false, error: "PIN financeiro inválido." };
+  const pinCheck = await verifyFinancialPin(
+    supabase,
+    input.cooperativaCnpj,
+    input.cooperadoId,
+    input.pin,
+    input.actorUserId
+  );
+  if (!pinCheck.ok) return { ok: false, error: pinCheck.error };
 
   const transacaoId = genId("tx");
   const recebivelId = genId("recv");
@@ -824,7 +1001,19 @@ export async function previewLimiteColetivo(
   error?: string;
 }> {
   const digits = normalizeCnpj(cnpj);
-  const teto = await resolveTetoGlobal(supabase, digits, creditosBaseCents);
+  const tetoReq = await requireConfiguredTeto(supabase, digits, creditosBaseCents);
+  if (!tetoReq.ok) {
+    return {
+      limiteAtualTotal: 0,
+      novoLimiteTotal: 0,
+      totalApos: 0,
+      tetoGlobal: 0,
+      tetoGlobalPercent: 0,
+      ok: false,
+      error: tetoReq.error,
+    };
+  }
+  const teto = tetoReq;
   const distribuido = await sumLimitesDistribuidos(supabase, digits);
 
   let somaAtualSelecionados = 0;
@@ -907,7 +1096,21 @@ export async function previewLimiteColetivoPercentual(
   itens: LimiteColetivoPreviewItem[];
 }> {
   const digits = normalizeCnpj(cnpj);
-  const teto = await resolveTetoGlobal(supabase, digits, creditosBaseCents);
+  const tetoReq = await requireConfiguredTeto(supabase, digits, creditosBaseCents);
+  if (!tetoReq.ok) {
+    return {
+      limiteAtualTotal: 0,
+      novoLimiteTotal: 0,
+      totalApos: 0,
+      tetoGlobal: 0,
+      tetoGlobalPercent: 0,
+      ok: false,
+      error: tetoReq.error,
+      percentual,
+      itens: [],
+    };
+  }
+  const teto = tetoReq;
   const distribuido = await sumLimitesDistribuidos(supabase, digits);
 
   if (!Number.isFinite(percentual) || percentual < 0 || percentual > 100) {
@@ -1139,4 +1342,76 @@ export async function hasFinancialPin(
     .eq("cooperado_id", cooperadoId)
     .maybeSingle();
   return Boolean(data?.pin_hash);
+}
+
+export type CreditIntegrityReport = {
+  ok: boolean;
+  divergences: string[];
+};
+
+/** Verificação de integridade — registra divergências sem corrigir dados. */
+export async function auditCreditIntegrity(
+  supabase: SupabaseClient,
+  cnpj: string
+): Promise<CreditIntegrityReport> {
+  const digits = normalizeCnpj(cnpj);
+  const divergences: string[] = [];
+
+  const { data: accounts } = await supabase
+    .from("hb_credit_accounts")
+    .select("cooperado_id, limit_released_cents, amount_used_cents, available_cents")
+    .eq("cooperative_cnpj", digits);
+
+  for (const row of accounts ?? []) {
+    const limite = Number(row.limit_released_cents);
+    const usado = Number(row.amount_used_cents);
+    const disponivel = Number(row.available_cents);
+    const esperado = limite - usado;
+    if (disponivel !== esperado) {
+      divergences.push(
+        `Conta ${row.cooperado_id}: disponível (${disponivel}) ≠ limite (${limite}) - usado (${usado}).`
+      );
+    }
+    if (usado > limite) {
+      divergences.push(`Conta ${row.cooperado_id}: utilizado (${usado}) > limite (${limite}).`);
+    }
+  }
+
+  const { data: payments } = await supabase
+    .from("hb_credit_transactions")
+    .select("id, amount_cents, status, event_type")
+    .eq("cooperative_cnpj", digits)
+    .eq("event_type", "PAYMENT")
+    .eq("status", "posted");
+
+  const paymentTotal = (payments ?? []).reduce((s, r) => s + Number(r.amount_cents), 0);
+
+  const { data: recebiveis } = await supabase
+    .from("hb_credit_receivables")
+    .select("amount_cents, status")
+    .eq("cooperative_cnpj", digits)
+    .neq("status", "BLOCKED_FOR_REVIEW");
+
+  const receivableTotal = (recebiveis ?? []).reduce((s, r) => s + Number(r.amount_cents), 0);
+
+  if (paymentTotal !== receivableTotal) {
+    divergences.push(
+      `Utilizações confirmadas (${paymentTotal}) ≠ recebíveis criados (${receivableTotal}).`
+    );
+  }
+
+  const distribuido = (accounts ?? []).reduce((s, r) => s + Number(r.limit_released_cents), 0);
+  const usadoTotal = (accounts ?? []).reduce((s, r) => s + Number(r.amount_used_cents), 0);
+  const disponivelTotal = (accounts ?? []).reduce(
+    (s, r) => s + Number(r.limit_released_cents) - Number(r.amount_used_cents),
+    0
+  );
+
+  if (distribuido !== usadoTotal + disponivelTotal) {
+    divergences.push(
+      `Crédito liberado (${distribuido}) ≠ utilizado (${usadoTotal}) + disponível (${disponivelTotal}).`
+    );
+  }
+
+  return { ok: divergences.length === 0, divergences };
 }

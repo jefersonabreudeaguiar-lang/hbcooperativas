@@ -1,5 +1,4 @@
 const TOKEN_KEY = "coopeagriplla_access_token";
-const BOOTSTRAP_KEY = "coopeagriplla_cloud_bootstrap";
 
 /** Fallback em memória — PWA/mobile quando localStorage falha ou atrasa. */
 let memoryAccessToken: string | null = null;
@@ -35,6 +34,12 @@ export function setAccessToken(token: string | null): void {
 
 export function clearAccessToken(): void {
   setAccessToken(null);
+}
+
+/** Remove credencial bootstrap legada — senha nunca deve persistir no cliente. */
+export function clearCloudBootstrapCredentials(): void {
+  if (typeof window === "undefined") return;
+  localStorage.removeItem("coopeagriplla_cloud_bootstrap");
 }
 
 export interface CloudSessionProfile {
@@ -91,41 +96,6 @@ function loadStoredSessionProfile(): CloudSessionProfile | null {
     };
     if (!parsed.id || !parsed.email || !parsed.name || !parsed.role) return null;
     return userToCloudProfile(parsed as CloudSessionProfile);
-  } catch {
-    return null;
-  }
-}
-
-export function rememberCloudCredentials(email: string, password: string): void {
-  if (typeof window === "undefined") return;
-  try {
-    localStorage.setItem(
-      BOOTSTRAP_KEY,
-      JSON.stringify({ email: email.trim().toLowerCase(), password })
-    );
-  } catch {
-    /* quota */
-  }
-}
-
-export function clearCloudBootstrapCredentials(): void {
-  if (typeof window === "undefined") return;
-  localStorage.removeItem(BOOTSTRAP_KEY);
-}
-
-export function updateCloudBootstrapPassword(newPassword: string): void {
-  const bootstrap = loadCloudBootstrapCredentials();
-  if (bootstrap) rememberCloudCredentials(bootstrap.email, newPassword);
-}
-
-function loadCloudBootstrapCredentials(): { email: string; password: string } | null {
-  if (typeof window === "undefined") return null;
-  try {
-    const raw = localStorage.getItem(BOOTSTRAP_KEY);
-    if (!raw) return null;
-    const parsed = JSON.parse(raw) as { email?: string; password?: string };
-    if (!parsed.email || !parsed.password) return null;
-    return { email: parsed.email.trim().toLowerCase(), password: parsed.password };
   } catch {
     return null;
   }
@@ -211,7 +181,7 @@ export async function loginViaCloudApi(
     };
 
     setAccessToken(json.token);
-    rememberCloudCredentials(normalizedEmail, password);
+    clearCloudBootstrapCredentials();
     setActiveCloudProfile(profile);
     return { token: json.token, user: profile };
   } catch {
@@ -225,6 +195,7 @@ export async function establishCloudSession(
   profile: CloudSessionProfile
 ): Promise<boolean> {
   try {
+    clearCloudBootstrapCredentials();
     const normalizedEmail = email.trim().toLowerCase();
     const fullPayload = { ...profile, email: normalizedEmail, password };
 
@@ -257,7 +228,6 @@ export async function establishCloudSession(
     }
 
     setAccessToken(token);
-    rememberCloudCredentials(normalizedEmail, password);
     setActiveCloudProfile(profile);
     return true;
   } catch {
@@ -279,7 +249,6 @@ export async function refreshCloudSession(): Promise<boolean> {
       return false;
     }
     if (!res.ok) {
-      // Falha temporária de rede/servidor — mantém token atual.
       return true;
     }
     const json = (await res.json()) as { token?: string; enforced?: boolean };
@@ -293,6 +262,8 @@ export async function refreshCloudSession(): Promise<boolean> {
 
 /** Restaura JWT antes de APIs protegidas (Conta Coop, sync, etc.). */
 export async function ensureCloudSessionReady(profile?: CloudSessionProfile): Promise<boolean> {
+  clearCloudBootstrapCredentials();
+
   const active = profile ?? activeCloudProfile ?? loadStoredSessionProfile();
   if (!active) {
     if (getAccessToken()) return refreshCloudSession();
@@ -306,14 +277,7 @@ export async function ensureCloudSessionReady(profile?: CloudSessionProfile): Pr
     if (refreshed) return true;
   }
 
-  const bootstrap = loadCloudBootstrapCredentials();
-  const email = active.email.trim().toLowerCase();
-  if (bootstrap && bootstrap.email === email) {
-    const ok = await establishCloudSession(bootstrap.email, bootstrap.password, active);
-    if (ok) return true;
-  }
-
-  return Boolean(getAccessToken());
+  return false;
 }
 
 /** @deprecated use ensureCloudSessionReady */
@@ -343,9 +307,6 @@ export function mensagemErroAuthApi(status: number, error?: string): string {
 export async function secureApiFetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
   const profile = activeCloudProfile ?? loadStoredSessionProfile();
   let ready = await ensureCloudSessionReady(profile ?? undefined);
-  if (!ready && profile) {
-    ready = await ensureCloudSessionReady(profile);
-  }
 
   const headers = new Headers(init?.headers);
   const token = getAccessToken();
@@ -354,9 +315,9 @@ export async function secureApiFetch(input: RequestInfo | URL, init?: RequestIni
   let res = await fetch(input, { ...init, headers });
 
   if (res.status === 401 && profile) {
-    const rebooted = await ensureCloudSessionReady(profile);
+    ready = await ensureCloudSessionReady(profile);
     const newToken = getAccessToken();
-    if (rebooted && newToken) {
+    if (ready && newToken) {
       const retryHeaders = new Headers(init?.headers);
       retryHeaders.set("Authorization", `Bearer ${newToken}`);
       res = await fetch(input, { ...init, headers: retryHeaders });
@@ -376,7 +337,7 @@ export async function registerCloudUser(input: {
   cooperadoId?: string;
   cooperativaCnpj?: string;
 }): Promise<boolean> {
-  const ok = await establishCloudSession(input.email, input.password, {
+  return establishCloudSession(input.email, input.password, {
     id: input.id,
     email: input.email,
     name: input.name,
@@ -385,5 +346,14 @@ export async function registerCloudUser(input: {
     cooperadoId: input.cooperadoId,
     cooperativaCnpj: input.cooperativaCnpj,
   });
-  return ok;
+}
+
+/** @deprecated Senha não é mais persistida no cliente. */
+export function rememberCloudCredentials(_email: string, _password: string): void {
+  clearCloudBootstrapCredentials();
+}
+
+/** @deprecated Senha não é mais persistida no cliente. */
+export function updateCloudBootstrapPassword(_newPassword: string): void {
+  clearCloudBootstrapCredentials();
 }

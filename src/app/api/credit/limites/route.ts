@@ -12,6 +12,7 @@ import {
 } from "@/lib/supabase/contaCoopStorage";
 import { requireCreditApi, requireCreditCnpj, requireCreditStaff } from "@/lib/security/creditGuard";
 import { normalizeCnpj } from "@/utils/cooperativa";
+import { validateCreditosBaseCents } from "@/modules/hb-credit/engine/creditBaseValidation";
 import { reaisToCents } from "@/modules/hb-credit/engine/money";
 
 export async function GET(request: Request) {
@@ -32,7 +33,7 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
-  const gate = await requireCreditApi(request);
+  const gate = await requireCreditApi(request, { requireOperations: true });
   if (!gate.ok) return gate.response;
 
   const body = await request.json().catch(() => null);
@@ -46,7 +47,11 @@ export async function POST(request: Request) {
   if (denyStaff) return denyStaff;
 
   const actorId = gate.ctx.session?.sub ?? "system";
-  const creditosBaseCents = (body?.creditosBaseCents ?? {}) as Record<string, number>;
+  const creditosValidation = validateCreditosBaseCents(body?.creditosBaseCents ?? {});
+  if (!creditosValidation.ok) {
+    return NextResponse.json({ error: creditosValidation.error, code: creditosValidation.code }, { status: 400 });
+  }
+  const creditosBaseCents = creditosValidation.sanitized;
 
   if (action === "set_teto") {
     const tetoPercent = Number(body?.tetoPercentual ?? body?.tetoPercent ?? 0);
@@ -93,7 +98,6 @@ export async function POST(request: Request) {
     const cooperadoIds = (body?.cooperadoIds ?? []) as string[];
     const percentual = Number(body?.percentual);
     if (Number.isFinite(percentual)) {
-      const creditosBaseCents = (body?.creditosBaseCents ?? {}) as Record<string, number>;
       const result = await setLimiteColetivoPercentual(
         gate.ctx.supabase,
         cnpj,
@@ -122,7 +126,6 @@ export async function POST(request: Request) {
     const cooperadoIds = (body?.cooperadoIds ?? []) as string[];
     const percentual = Number(body?.percentual);
     if (Number.isFinite(percentual)) {
-      const creditosBaseCents = (body?.creditosBaseCents ?? {}) as Record<string, number>;
       const preview = await previewLimiteColetivoPercentual(
         gate.ctx.supabase,
         cnpj,

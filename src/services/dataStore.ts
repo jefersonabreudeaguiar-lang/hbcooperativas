@@ -39,7 +39,6 @@ import {
   establishCloudSession,
   loginViaCloudApi,
   registerCloudUser,
-  rememberCloudCredentials,
   setActiveCloudProfile,
   userToCloudProfile,
   type CloudSessionProfile,
@@ -708,7 +707,7 @@ async function finishLoginSession(user: User, data: AppData, plainPassword: stri
   }
   const cloudProfile = userToCloudProfile(safeUser);
   setActiveCloudProfile(cloudProfile);
-  rememberCloudCredentials(user.email.trim().toLowerCase(), plainPassword);
+  clearCloudBootstrapCredentials();
 
   const cloudOk = await establishCloudSession(user.email, plainPassword, cloudProfile);
   if (!cloudOk) {

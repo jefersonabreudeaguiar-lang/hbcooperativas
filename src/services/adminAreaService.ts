@@ -8,7 +8,7 @@ import { getCurrentMesReferencia, formatCurrency } from "@/utils/format";
 import { getCooperadoNome, sumBy } from "@/utils/calculations";
 import { hashPassword, verifyPassword } from "@/lib/security/password";
 import { exigeSenhaAreaAdmin } from "@/utils/cooperativaCadastro";
-import { updateCloudBootstrapPassword, secureApiFetch } from "@/lib/security/clientSession";
+import { clearCloudBootstrapCredentials, secureApiFetch } from "@/lib/security/clientSession";
 
 const SESSION_PREFIX = "coopeagriplla_admin_session_";
 const SESSION_TTL_MS = 2 * 60 * 60 * 1000;
@@ -229,7 +229,7 @@ export async function alterarSenhaLoginAdmin(
   );
 
   refreshSessionForUser(userId);
-  updateCloudBootstrapPassword(nova);
+  clearCloudBootstrapCredentials();
 
   try {
     const res = await secureApiFetch("/api/auth/password", {

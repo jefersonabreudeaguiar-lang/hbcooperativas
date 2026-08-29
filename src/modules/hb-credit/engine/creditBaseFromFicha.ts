@@ -43,6 +43,8 @@ export function calcTetoGlobalCents(
   creditosBaseCents: Record<string, number>,
   tetoPercent: number
 ): number {
-  const percent = tetoPercent > 0 ? tetoPercent : 100;
-  return calcLimiteFromPercentual(sumCreditosBaseCents(creditosBaseCents), percent);
+  if (!Number.isFinite(tetoPercent) || tetoPercent <= 0 || tetoPercent > 100) {
+    throw new Error("Configuração de teto percentual inválida ou ausente.");
+  }
+  return calcLimiteFromPercentual(sumCreditosBaseCents(creditosBaseCents), tetoPercent);
 }

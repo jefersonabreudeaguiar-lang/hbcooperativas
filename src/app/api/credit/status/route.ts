@@ -1,9 +1,16 @@
 import { NextResponse } from "next/server";
-import { isHbCreditEnabledServer } from "@/modules/hb-credit/config";
+import {
+  isHbCreditEnabledServer,
+  isHbCreditOperationsEnabled,
+} from "@/modules/hb-credit/config";
+import { isApiSecurityEnforced } from "@/lib/security/env";
 
 export async function GET() {
+  const enabled = isHbCreditEnabledServer();
   return NextResponse.json({
-    enabled: isHbCreditEnabledServer(),
+    enabled,
+    operationsEnabled: isHbCreditOperationsEnabled(),
+    securityEnforced: isApiSecurityEnforced(),
     module: "conta-coop",
     version: 1,
   });

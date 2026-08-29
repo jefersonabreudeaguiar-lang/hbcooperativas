@@ -1,8 +1,15 @@
 import { NextResponse } from "next/server";
-import { assertHbCreditEnabledServer, CreditDisabledError } from "@/modules/hb-credit/config";
+import {
+  assertHbCreditEnabledServer,
+  assertHbCreditOperationsEnabled,
+  CreditDisabledError,
+  HbCreditDisabledError,
+} from "@/modules/hb-credit/config";
 import { requireApiAuth, requireCooperativaAccess, requireStaffRole } from "@/lib/security/apiGuard";
 import type { SessionClaims } from "@/lib/security/jwt";
 import { getSupabaseAdmin, isSupabaseConfigured } from "@/lib/supabase/admin";
+import { getParceiroByUserId } from "@/lib/supabase/contaCoopStorage";
+import type { ContaCoopParceiro } from "@/modules/hb-credit/types";
 
 export type CreditAuthOk = {
   session: SessionClaims | null;
@@ -11,12 +18,16 @@ export type CreditAuthOk = {
 };
 
 export async function requireCreditApi(
-  request: Request
+  request: Request,
+  options?: { requireOperations?: boolean }
 ): Promise<{ ok: true; ctx: CreditAuthOk } | { ok: false; response: NextResponse }> {
   try {
     assertHbCreditEnabledServer();
+    if (options?.requireOperations) {
+      assertHbCreditOperationsEnabled();
+    }
   } catch (e) {
-    if (e instanceof CreditDisabledError) {
+    if (e instanceof CreditDisabledError || e instanceof HbCreditDisabledError) {
       return { ok: false, response: NextResponse.json({ error: e.message, enabled: false }, { status: 404 }) };
     }
     throw e;
@@ -44,8 +55,14 @@ export function requireCreditCnpj(
   return requireCooperativaAccess(ctx.session, cnpj, ctx.enforced);
 }
 
-export function requireCreditStaff(ctx: CreditAuthOk): NextResponse | null {
+/** Equipe da cooperativa (responsável, tesoureiro, admin). */
+export function requireCreditResponsavel(ctx: CreditAuthOk): NextResponse | null {
   return requireStaffRole(ctx.session, ctx.enforced);
+}
+
+/** @deprecated alias */
+export function requireCreditStaff(ctx: CreditAuthOk): NextResponse | null {
+  return requireCreditResponsavel(ctx);
 }
 
 export function requireCreditCooperado(
@@ -53,19 +70,46 @@ export function requireCreditCooperado(
   cooperadoId: string
 ): NextResponse | null {
   if (!ctx.enforced || !ctx.session) return null;
-  if (ctx.session.role === "cooperado" && ctx.session.cooperadoId !== cooperadoId) {
-    return NextResponse.json({ error: "Sem permissão." }, { status: 403 });
+  if (ctx.session.role === "cooperado") {
+    if (ctx.session.cooperadoId !== cooperadoId) {
+      return NextResponse.json({ error: "Sem permissão." }, { status: 403 });
+    }
+    return null;
+  }
+  if (ctx.session.role === "parceiro") {
+    return NextResponse.json({ error: "Ação restrita ao cooperado." }, { status: 403 });
   }
   return null;
 }
 
-export function requireCreditParceiro(ctx: CreditAuthOk, parceiroId: string): NextResponse | null {
-  if (!ctx.enforced || !ctx.session) return null;
-  if (ctx.session.role === "parceiro" && ctx.session.sub !== ctx.session.sub) {
-    // parceiro_id stored in token - extend jwt later
+export async function resolveCreditParceiro(
+  ctx: CreditAuthOk
+): Promise<ContaCoopParceiro | null> {
+  if (!ctx.session?.sub) return null;
+  return getParceiroByUserId(ctx.supabase, ctx.session.sub);
+}
+
+/** Valida parceiro autenticado — nunca confia em partner_id do cliente. */
+export async function requireCreditParceiro(
+  ctx: CreditAuthOk,
+  clientParceiroId?: string
+): Promise<{ ok: true; parceiro: ContaCoopParceiro } | { ok: false; response: NextResponse }> {
+  if (!ctx.enforced || !ctx.session) {
+    return { ok: false, response: NextResponse.json({ error: "Autenticação necessária." }, { status: 401 }) };
   }
-  if (ctx.session.role === "parceiro") {
-    // validated per-route via getParceiroByUserId
+
+  if (ctx.session.role !== "parceiro") {
+    return { ok: false, response: NextResponse.json({ error: "Acesso restrito ao mercado parceiro." }, { status: 403 }) };
   }
-  return null;
+
+  const parceiro = await resolveCreditParceiro(ctx);
+  if (!parceiro) {
+    return { ok: false, response: NextResponse.json({ error: "Mercado não vinculado." }, { status: 404 }) };
+  }
+
+  if (clientParceiroId && clientParceiroId !== parceiro.id) {
+    return { ok: false, response: NextResponse.json({ error: "Sem permissão para este mercado." }, { status: 403 }) };
+  }
+
+  return { ok: true, parceiro };
 }

@@ -5,6 +5,7 @@
 
 const SERVER_FLAG = "HB_CREDIT_ENABLED";
 const CLIENT_FLAG = "NEXT_PUBLIC_HB_CREDIT_ENABLED";
+const OPERATIONS_FLAG = "HB_CREDIT_OPERATIONS_ENABLED";
 const SERVER_LAB_FLAG = "HB_CREDIT_LAB_ENABLED";
 const CLIENT_LAB_FLAG = "NEXT_PUBLIC_HB_CREDIT_LAB_ENABLED";
 
@@ -23,9 +24,29 @@ function isDevLabClientEnabled(): boolean {
   return process.env.NODE_ENV !== "production" && parseFlag(process.env[CLIENT_LAB_FLAG]);
 }
 
+function isProductionWithoutAuthSecret(): boolean {
+  return process.env.NODE_ENV === "production" && !process.env.AUTH_SECRET?.trim();
+}
+
 /** Servidor: autoridade para operações financeiras. */
 export function isHbCreditEnabledServer(): boolean {
+  if (isProductionWithoutAuthSecret()) return false;
   return parseFlag(process.env[SERVER_FLAG]) || isDevLabServerEnabled();
+}
+
+/** Kill switch operacional — bloqueia novas liberações/cobranças/autorizações. */
+export function isHbCreditOperationsEnabled(): boolean {
+  if (!isHbCreditEnabledServer()) return false;
+  const raw = process.env[OPERATIONS_FLAG];
+  if (raw == null || raw.trim() === "") return true;
+  return parseFlag(raw);
+}
+
+export function assertHbCreditOperationsEnabled(): void {
+  assertHbCreditEnabledServer();
+  if (!isHbCreditOperationsEnabled()) {
+    throw new HbCreditDisabledError("Operações da Conta Coop temporariamente suspensas.");
+  }
 }
 
 /** Cliente: somente indica intenção de UI; nunca autoriza operação financeira. */

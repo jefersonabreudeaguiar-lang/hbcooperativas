@@ -46,7 +46,11 @@ export function canAccessCooperativaCnpj(session: SessionClaims, cnpj: string): 
   if (session.role === "admin" || session.role === "tesoureiro") return true;
 
   const sessionCnpj = session.cooperativaCnpj ? normalizeCnpj(session.cooperativaCnpj) : "";
-  if (sessionCnpj.length === 14 && sessionCnpj === digits) return true;
+  if (sessionCnpj.length === 14 && sessionCnpj === digits) {
+    if (session.role === "cooperado" || session.role === "parceiro" || session.role === "responsavel") {
+      return true;
+    }
+  }
 
   return false;
 }

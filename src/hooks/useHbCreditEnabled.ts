@@ -1,38 +1,82 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { isHbCreditEnabledClient } from "@/modules/hb-credit/config";
 
-export function useHbCreditEnabled() {
+export type HbCreditFlagStatus = "loading" | "enabled" | "disabled" | "error";
+
+export interface HbCreditFlagState {
+  /** Módulo habilitado e confirmado pelo servidor — use para menu e gates. */
+  enabled: boolean;
+  status: HbCreditFlagStatus;
+  loading: boolean;
+  clientFlag: boolean;
+  serverConfirmed: boolean;
+  errorMessage: string | null;
+}
+
+const STATUS_FETCH_TIMEOUT_MS = 12_000;
+
+export function useHbCreditEnabled(): HbCreditFlagState {
   const clientFlag = isHbCreditEnabledClient();
   const [serverEnabled, setServerEnabled] = useState<boolean | null>(null);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
-  useEffect(() => {
-    let cancelled = false;
-    fetch("/api/credit/status", { cache: "no-store" })
-      .then((res) => res.json())
-      .then((data: { enabled?: boolean }) => {
-        if (!cancelled) setServerEnabled(data.enabled === true);
-      })
-      .catch(() => {
-        // Falha de rede no PWA: não tratar como OFF definitivo.
-        if (!cancelled) setServerEnabled(null);
-      });
-
-    return () => {
-      cancelled = true;
-    };
+  const fetchStatus = useCallback(async (signal: AbortSignal) => {
+    try {
+      const res = await fetch("/api/credit/status", { cache: "no-store", signal });
+      if (!res.ok) {
+        setServerEnabled(null);
+        setErrorMessage(`Status HTTP ${res.status}`);
+        return;
+      }
+      const data = (await res.json()) as { enabled?: boolean };
+      setServerEnabled(data.enabled === true);
+      setErrorMessage(null);
+    } catch (e) {
+      if (signal.aborted) return;
+      setServerEnabled(null);
+      setErrorMessage(e instanceof Error ? e.message : "Falha de rede ao consultar status.");
+    }
   }, []);
 
-  const enabled =
-    serverEnabled === true ||
-    (serverEnabled !== false && clientFlag);
+  useEffect(() => {
+    const controller = new AbortController();
+    const timeout = window.setTimeout(() => controller.abort(), STATUS_FETCH_TIMEOUT_MS);
+
+    void fetchStatus(controller.signal);
+
+    return () => {
+      controller.abort();
+      window.clearTimeout(timeout);
+    };
+  }, [fetchStatus]);
+
+  let status: HbCreditFlagStatus;
+  if (serverEnabled === null && !errorMessage) {
+    status = "loading";
+  } else if (errorMessage) {
+    status = "error";
+  } else if (serverEnabled === true) {
+    status = "enabled";
+  } else {
+    status = "disabled";
+  }
+
+  /** Visibilidade exige confirmação explícita do servidor — fail-closed. */
+  const enabled = status === "enabled";
 
   return {
-    // UI: servidor confirma OU flag pública no bundle (PWA). Operações seguem fail-closed na API.
     enabled,
-    loading: serverEnabled === null,
+    status,
+    loading: status === "loading",
     clientFlag,
     serverConfirmed: serverEnabled === true,
+    errorMessage,
   };
+}
+
+/** Menu Conta Coop: módulo confirmado pelo servidor + perfil autorizado. */
+export function isHbCreditNavVisible(creditEnabled: boolean, canViewContaCoop: boolean): boolean {
+  return creditEnabled && canViewContaCoop;
 }

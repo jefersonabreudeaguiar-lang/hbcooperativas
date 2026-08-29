@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { requireCreditApi, requireCreditCnpj, requireCreditStaff } from "@/lib/security/creditGuard";
 import { getDashboardResumo } from "@/lib/supabase/contaCoopStorage";
+import { validateCreditosBaseCents } from "@/modules/hb-credit/engine/creditBaseValidation";
 import { normalizeCnpj } from "@/utils/cooperativa";
 
 async function loadDashboard(request: Request) {
@@ -13,7 +14,16 @@ async function loadDashboard(request: Request) {
   if (request.method === "POST") {
     const body = await request.json().catch(() => null);
     cnpj = normalizeCnpj(String(body?.cnpj ?? gate.ctx.session?.cooperativaCnpj ?? ""));
-    creditosBaseCents = (body?.creditosBaseCents ?? {}) as Record<string, number>;
+    const creditosValidation = validateCreditosBaseCents(body?.creditosBaseCents ?? {});
+    if (!creditosValidation.ok) {
+      return {
+        error: NextResponse.json(
+          { error: creditosValidation.error, code: creditosValidation.code },
+          { status: 400 }
+        ),
+      };
+    }
+    creditosBaseCents = creditosValidation.sanitized;
   } else {
     const { searchParams } = new URL(request.url);
     cnpj = normalizeCnpj(searchParams.get("cnpj") ?? gate.ctx.session?.cooperativaCnpj ?? "");
