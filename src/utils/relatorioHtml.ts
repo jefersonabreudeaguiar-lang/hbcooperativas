@@ -1,9 +1,11 @@
-import type { AppData, EmissorRelatorio, FechamentoMensal } from "@/types";
+import type { AppData, EmissorRelatorio, FechamentoMensal, Cooperativa } from "@/types";
 import { PLATFORM_NAME } from "@/utils/constants";
 import { formatCnpj } from "@/utils/cooperativa";
 import { formatCurrency, formatDate, formatMesReferencia, getCurrentMesReferencia } from "@/utils/format";
 import type { FechamentoCalculado, RelatorioEntregasPorItens, ResumoFinanceiroMes } from "@/services/relatorioService";
 import { calcularFechamentoMensalLive, getRelatorioEntregasPorItensInstituicao, getResumoFinanceiroMes } from "@/services/relatorioService";
+import type { ConciliacaoMensalResult } from "@/services/conciliacaoMensalService";
+import { getDemonstrativoPagamentosMes } from "@/services/conciliacaoMensalService";
 import { getRelatorioSobrasPerdas, type RelatorioSobrasPerdas } from "@/services/sobrasPerdasService";
 import { getRelatorioReclamacoes } from "@/services/reclamacaoService";
 import { getRelatorioVotacoes } from "@/services/votacaoService";
@@ -852,6 +854,97 @@ export function gerarRelatorioAtingimentoCronogramaHtml(
 
 export async function baixarDocumento(html: string, nomeArquivo: string): Promise<void> {
   await baixarHtmlComoPdf(html, nomeArquivo);
+}
+
+export function gerarRelatorioConciliacaoHtml(
+  data: AppData,
+  conciliacao: ConciliacaoMensalResult,
+  coop: Cooperativa | undefined,
+  emissor?: EmissorRelatorio
+): string {
+  const linhasHtml = conciliacao.linhas
+    .map(
+      (l) => `<tr>
+        <td>${escapeHtml(l.label)}<br/><span style="font-size:11px;color:#666">${escapeHtml(l.descricao)}</span></td>
+        <td class="num">${formatCurrency(l.valorA)}<br/><span style="font-size:11px;color:#666">${escapeHtml(l.labelA)}</span></td>
+        <td class="num">${formatCurrency(l.valorB)}<br/><span style="font-size:11px;color:#666">${escapeHtml(l.labelB)}</span></td>
+        <td class="num">${formatCurrency(l.diferenca)}</td>
+        <td>${escapeHtml(l.status === "ok" ? "Conciliado" : l.status === "divergencia" ? "Divergência" : l.status === "parcial" ? "Parcial" : "Sem dados")}</td>
+      </tr>`
+    )
+    .join("");
+
+  const alertasHtml =
+    conciliacao.alertas.length === 0
+      ? "<p>Nenhum alerta para este mês.</p>"
+      : `<ul>${conciliacao.alertas
+          .map((a) => `<li><strong>${escapeHtml(a.titulo)}</strong> — ${escapeHtml(a.descricao)}</li>`)
+          .join("")}</ul>`;
+
+  const body = `
+    <h2>R4 — Conciliação mensal</h2>
+    <div class="resumo-grid">
+      <div class="resumo-card"><div class="label">Índice de conciliação</div><div class="value">${conciliacao.resumo.percentualOk}%</div></div>
+      <div class="resumo-card"><div class="label">Divergências</div><div class="value">${conciliacao.resumo.divergencias}</div></div>
+      <div class="resumo-card"><div class="label">Linhas OK</div><div class="value">${conciliacao.resumo.conciliadas}</div></div>
+      <div class="resumo-card"><div class="label">Fechamento</div><div class="value">${escapeHtml(conciliacao.kpis.fechamentoStatus ?? "Não iniciado")}</div></div>
+    </div>
+    <h2>Matriz de verificação</h2>
+    <table>
+      <thead><tr><th>Verificação</th><th class="num">Fonte A</th><th class="num">Fonte B</th><th class="num">Diferença</th><th>Status</th></tr></thead>
+      <tbody>${linhasHtml}</tbody>
+    </table>
+    <h2>Alertas de auditoria</h2>
+    ${alertasHtml}
+  `;
+
+  return documentoShell(
+    "Conciliação mensal (R4)",
+    body,
+    data,
+    conciliacao.mesReferencia,
+    coop?.id,
+    emissor
+  );
+}
+
+export function gerarRelatorioDemonstrativoPagamentosHtml(
+  data: AppData,
+  mesReferencia: string,
+  linhas: ReturnType<typeof getDemonstrativoPagamentosMes>,
+  emissor?: EmissorRelatorio
+): string {
+  const rows = linhas
+    .map(
+      (p) => `<tr>
+        <td>${escapeHtml(p.cooperadoNome)}</td>
+        <td class="num">${formatCurrency(p.valorBruto)}</td>
+        <td class="num">${formatCurrency(p.descontoCooperativa)}</td>
+        <td class="num">${formatCurrency(p.valorLiquido)}</td>
+        <td>${escapeHtml(p.status === "confirmado" ? "Confirmado" : "Aguardando assinatura")}</td>
+        <td>${p.assinado ? "Sim" : "Não"}</td>
+        <td>${escapeHtml(p.pagoPor)}</td>
+        <td>${formatDate(p.pagoEm.split("T")[0])}</td>
+      </tr>`
+    )
+    .join("");
+
+  const totalLiquido = linhas.reduce((s, p) => s + p.valorLiquido, 0);
+
+  const body = `
+    <h2>R2 — Demonstrativo de pagamentos</h2>
+    <p class="carta">Relação de pagamentos registrados aos cooperados no mês, com status de assinatura do recibo.</p>
+    <table>
+      <thead><tr>
+        <th>Cooperado</th><th class="num">Bruto</th><th class="num">Desc. coop.</th><th class="num">Líquido</th>
+        <th>Status</th><th>Assinado</th><th>Registrado por</th><th>Data</th>
+      </tr></thead>
+      <tbody>${rows}</tbody>
+      <tfoot><tr><td colspan="3">Total líquido pago</td><td class="num">${formatCurrency(totalLiquido)}</td><td colspan="4"></td></tr></tfoot>
+    </table>
+  `;
+
+  return documentoShell("Demonstrativo de pagamentos (R2)", body, data, mesReferencia, undefined, emissor);
 }
 
 /** @deprecated Use baixarDocumento */

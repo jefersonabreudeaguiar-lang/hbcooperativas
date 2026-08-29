@@ -1,6 +1,6 @@
 // Tipos centrais — plataforma HB Cooperativas
 
-export type UserRole = "admin" | "tesoureiro" | "responsavel" | "cooperado" | "parceiro";
+export type UserRole = "admin" | "tesoureiro" | "responsavel" | "cooperado" | "parceiro" | "contador";
 
 /** Total = perfil padrão da função; parcial = só o que estiver em permissoesExtras. */
 export type ModoAcesso = "total" | "parcial";
@@ -800,6 +800,7 @@ export type Resource =
   | "fechamento"
   | "livro_caixa"
   | "prestacao_contas"
-  | "conta_coop";
+  | "conta_coop"
+  | "contador";
 
 export type Action = "view" | "create" | "edit" | "delete" | "approve" | "export";

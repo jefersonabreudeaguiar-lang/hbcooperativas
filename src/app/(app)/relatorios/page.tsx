@@ -32,6 +32,8 @@ import {
   gerarRelatorioSobrasPerdasHtml,
   gerarRelatorioReclamacoesHtml,
   gerarRelatorioVotacoesHtml,
+  gerarRelatorioConciliacaoHtml,
+  gerarRelatorioDemonstrativoPagamentosHtml,
   imprimirDocumentoHtml,
   nomeArquivoRelatorio,
 } from "@/utils/relatorioHtml";
@@ -41,6 +43,10 @@ import { formatCurrency, formatDate, formatMesReferencia, getCurrentMesReferenci
 import { getCooperadoNome } from "@/utils/calculations";
 import { getRelatorioReclamacoes } from "@/services/reclamacaoService";
 import { getRelatorioVotacoes } from "@/services/votacaoService";
+import {
+  calcularConciliacaoMensal,
+  getDemonstrativoPagamentosMes,
+} from "@/services/conciliacaoMensalService";
 import { labelUnidade } from "@/utils/unidades";
 import { PageSkeleton } from "@/components/ui/PageSkeleton";
 
@@ -58,6 +64,8 @@ const RELATORIOS = [
   { id: "saldo_mensal", label: "Saldo Mensal da Cooperativa" },
   { id: "historico_reclamacoes", label: "Histórico de Reclamações" },
   { id: "historico_votacoes", label: "Histórico de Votações" },
+  { id: "conciliacao_mensal", label: "R4 — Conciliação mensal (contador)" },
+  { id: "demonstrativo_pagamentos", label: "R2 — Demonstrativo de pagamentos" },
 ];
 
 export default function RelatoriosPage() {
@@ -122,6 +130,15 @@ export default function RelatoriosPage() {
     }
     if (tipo === "historico_votacoes") {
       return gerarRelatorioVotacoesHtml(data, coopId, emissor);
+    }
+    if (tipo === "conciliacao_mensal") {
+      const coop = coopId ? data.cooperativas.find((c) => c.id === coopId) : data.cooperativas[0];
+      const conc = calcularConciliacaoMensal(data, mes, coopId ?? undefined);
+      return gerarRelatorioConciliacaoHtml(data, conc, coop, emissor);
+    }
+    if (tipo === "demonstrativo_pagamentos") {
+      const linhas = getDemonstrativoPagamentosMes(data, mes);
+      return gerarRelatorioDemonstrativoPagamentosHtml(data, mes, linhas, emissor);
     }
     return gerarRelatorioFinanceiroHtml(data, mes, tituloRelatorio, emissor);
   };
@@ -370,6 +387,34 @@ export default function RelatoriosPage() {
           ]);
           return [headerRow, ...votoRows];
         });
+        break;
+      }
+      case "conciliacao_mensal": {
+        const conc = calcularConciliacaoMensal(data, mes, coopId ?? undefined);
+        headers = ["Verificação", "Fonte A", "Valor A", "Fonte B", "Valor B", "Diferença", "Status"];
+        rows = conc.linhas.map((l) => [
+          l.label,
+          l.labelA,
+          String(l.valorA),
+          l.labelB,
+          String(l.valorB),
+          String(l.diferenca),
+          l.status,
+        ]);
+        break;
+      }
+      case "demonstrativo_pagamentos": {
+        headers = ["Cooperado", "Bruto", "Desc. coop.", "Líquido", "Status", "Assinado", "Registrado por", "Data"];
+        rows = getDemonstrativoPagamentosMes(data, mes).map((p) => [
+          p.cooperadoNome,
+          String(p.valorBruto),
+          String(p.descontoCooperativa),
+          String(p.valorLiquido),
+          p.status,
+          p.assinado ? "sim" : "nao",
+          p.pagoPor,
+          p.pagoEm.split("T")[0],
+        ]);
         break;
       }
       default:
@@ -960,6 +1005,54 @@ export default function RelatoriosPage() {
               </div>
             ))}
           </>
+        );
+      }
+      case "conciliacao_mensal": {
+        const conc = calcularConciliacaoMensal(data, mes, coopId ?? undefined);
+        return (
+          <>
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-4">
+              <StatCard title="Conciliação OK" value={`${conc.resumo.percentualOk}%`} variant={conc.resumo.divergencias ? "warning" : "success"} />
+              <StatCard title="Divergências" value={String(conc.resumo.divergencias)} variant="warning" />
+              <StatCard title="Notas sem ficha" value={String(conc.kpis.notasSemFicha)} />
+              <StatCard title="Fechamento" value={conc.kpis.fechamentoStatus ?? "—"} />
+            </div>
+            <DataTable
+              data={conc.linhas.map((l) => ({ ...l, id: l.id }))}
+              keyField="id"
+              columns={[
+                { key: "label", label: "Verificação" },
+                { key: "valorA", label: "Fonte A", render: (l) => formatCurrency(l.valorA) },
+                { key: "valorB", label: "Fonte B", render: (l) => formatCurrency(l.valorB) },
+                { key: "diferenca", label: "Diferença", render: (l) => formatCurrency(l.diferenca) },
+                { key: "status", label: "Status" },
+              ]}
+            />
+          </>
+        );
+      }
+      case "demonstrativo_pagamentos": {
+        const linhas = getDemonstrativoPagamentosMes(data, mes);
+        return (
+          <DataTable
+            data={linhas}
+            keyField="id"
+            columns={[
+              { key: "cooperadoNome", label: "Cooperado" },
+              { key: "valorBruto", label: "Bruto", render: (p) => formatCurrency(p.valorBruto) },
+              { key: "valorLiquido", label: "Líquido", render: (p) => formatCurrency(p.valorLiquido) },
+              {
+                key: "status",
+                label: "Status",
+                render: (p) => (
+                  <StatusBadge status={p.status === "confirmado" ? "pago" : "aguardando_confirmacao"} />
+                ),
+              },
+              { key: "assinado", label: "Assinado", render: (p) => (p.assinado ? "Sim" : "Não") },
+              { key: "pagoPor", label: "Registrado por" },
+            ]}
+            emptyMessage="Nenhum pagamento registrado neste mês."
+          />
         );
       }
       default:

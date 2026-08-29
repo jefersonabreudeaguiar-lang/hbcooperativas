@@ -17,7 +17,7 @@ import { applyAppUsersSchemaSql } from "@/lib/supabase/appUsersSchema";
 import { normalizeCnpj } from "@/utils/cooperativa";
 import type { UserRole } from "@/types";
 
-const VALID_ROLES: UserRole[] = ["admin", "tesoureiro", "responsavel", "cooperado", "parceiro"];
+const VALID_ROLES: UserRole[] = ["admin", "tesoureiro", "responsavel", "cooperado", "parceiro", "contador"];
 
 /**
  * Unifica login + provision + register em uma única chamada.

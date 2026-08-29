@@ -645,16 +645,23 @@ export function addAuditEntry(
     changes?: string;
   }
 ): AppData {
+  const auditEntry = {
+    id: generateId("audit"),
+    timestamp: new Date().toISOString(),
+    ...entry,
+  };
+  if (typeof window !== "undefined") {
+    try {
+      const { queueAuditEntryForCloud } = require("@/services/cooperativeAuditCloudService") as typeof import("@/services/cooperativeAuditCloudService");
+      const actor = data.users.find((u) => u.id === entry.userId);
+      queueAuditEntryForCloud(data, auditEntry, actor);
+    } catch {
+      /* cloud audit opcional */
+    }
+  }
   return {
     ...data,
-    auditLog: [
-      {
-        id: generateId("audit"),
-        timestamp: new Date().toISOString(),
-        ...entry,
-      },
-      ...data.auditLog,
-    ],
+    auditLog: [auditEntry, ...data.auditLog],
   };
 }
 

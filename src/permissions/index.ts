@@ -30,6 +30,7 @@ export const PERMISSIONS: PermissionMatrix = {
     livro_caixa: ALL_CRUD,
     prestacao_contas: ALL_CRUD,
     conta_coop: ALL_CRUD,
+    contador: VIEW_EXPORT,
   },
   tesoureiro: {
     dashboard: ALL_CRUD,
@@ -54,6 +55,7 @@ export const PERMISSIONS: PermissionMatrix = {
     livro_caixa: ALL_CRUD,
     prestacao_contas: ALL_CRUD,
     conta_coop: ALL_CRUD,
+    contador: VIEW_EXPORT,
   },
   responsavel: {
     dashboard: VIEW_ONLY,
@@ -87,6 +89,27 @@ export const PERMISSIONS: PermissionMatrix = {
   parceiro: {
     dashboard: VIEW_ONLY,
     conta_coop: ["view", "create"],
+  },
+  contador: {
+    dashboard: VIEW_ONLY,
+    contador: VIEW_EXPORT,
+    relatorios: VIEW_EXPORT,
+    fechamento: VIEW_EXPORT,
+    ficha_corrida: VIEW_EXPORT,
+    notas_pedido: VIEW_EXPORT,
+    mensalidades: VIEW_EXPORT,
+    cotas: VIEW_EXPORT,
+    livro_caixa: VIEW_EXPORT,
+    prestacao_contas: VIEW_EXPORT,
+    financeiro: VIEW_EXPORT,
+    descontos: VIEW_EXPORT,
+    instituicoes: VIEW_EXPORT,
+    cooperados: VIEW_ONLY,
+    cooperativas: VIEW_ONLY,
+    conta_coop: VIEW_EXPORT,
+    comunicados: VIEW_ONLY,
+    reclamacoes: VIEW_ONLY,
+    votacoes: VIEW_ONLY,
   },
 };
 
@@ -201,6 +224,19 @@ export function isDiretoriaRole(role: UserRole): boolean {
   return isResponsavelRole(role) || isAdminRole(role);
 }
 
+export function isContadorRole(role: UserRole): boolean {
+  return role === "contador";
+}
+
+/** Acesso à Central do Contador (auditoria). */
+export function canAccessCentralContador(role: UserRole): boolean {
+  return role === "contador" || role === "admin" || role === "tesoureiro";
+}
+
+export function isReadOnlyAuditorRole(role: UserRole): boolean {
+  return role === "contador";
+}
+
 const COOPERADO_MENU: { href: string; label: string; resource: Resource }[] = [
   { href: "/dashboard", label: "Início", resource: "dashboard" },
   { href: "/notas-pedido", label: "Minhas entregas", resource: "notas_pedido" },
@@ -221,6 +257,17 @@ const COOPERADO_DRAWER_MENU: { href: string; label: string; resource: Resource }
 
 const PARCEIRO_MENU: { href: string; label: string; resource: Resource }[] = [
   { href: "/mercado-parceiro", label: "Painel mercado", resource: "conta_coop" },
+];
+
+const CONTADOR_MENU: { href: string; label: string; resource: Resource }[] = [
+  { href: "/contador/dashboard", label: "Painel contador", resource: "contador" },
+  { href: "/contador/conciliacao", label: "Conciliação", resource: "contador" },
+  { href: "/contador/trilha-auditoria", label: "Trilha de auditoria", resource: "contador" },
+  { href: "/relatorios", label: "Relatórios", resource: "relatorios" },
+  { href: "/fechamento-mensal", label: "Fechamento mensal", resource: "fechamento" },
+  { href: "/ficha-corrida", label: "Ficha corrida", resource: "ficha_corrida" },
+  { href: "/livro-caixa", label: "Livro caixa", resource: "livro_caixa" },
+  { href: "/conta-coop", label: "Conta Coop", resource: "conta_coop" },
 ];
 
 const CREDIT_MENU_BY_ROLE: Partial<Record<UserRole, { href: string; label: string; resource: Resource }>> = {
@@ -251,6 +298,7 @@ const DIRETORIA_MENU: { href: string; label: string; resource: Resource }[] = [
   { href: "/veiculos", label: "Veículos", resource: "veiculos" },
   { href: "/relatorios", label: "Relatórios", resource: "relatorios" },
   { href: "/fechamento-mensal", label: "Fechamento mensal", resource: "fechamento" },
+  { href: "/contador/dashboard", label: "Central do contador", resource: "contador" },
 ];
 
 const RESPONSAVEL_HREFS = [
@@ -307,6 +355,10 @@ export function getMenuItems(
 ): { href: string; label: string; resource: Resource }[] {
   if (user.role === "parceiro") {
     return filterMenuForUser(PARCEIRO_MENU, user);
+  }
+
+  if (user.role === "contador") {
+    return appendHbCreditMenuItem(filterMenuForUser(CONTADOR_MENU, user), user, creditEnabled);
   }
 
   if (user.role === "cooperado") {
@@ -375,6 +427,7 @@ export function getMobileNavItems(
   if (user.role === "tesoureiro" || user.role === "admin") {
     const tesoureiroItems: { href: string; label: string; resource: Resource }[] = [
       { href: "/dashboard", label: "Início", resource: "dashboard" },
+      { href: "/contador/dashboard", label: "Contador", resource: "contador" },
       { href: "/notas-pedido", label: "Conferir", resource: "notas_pedido" },
       { href: "/ficha-corrida", label: "Pagar", resource: "ficha_corrida" },
       { href: "/votacoes", label: "Votações", resource: "votacoes" },
@@ -382,6 +435,18 @@ export function getMobileNavItems(
       { href: "/contratos", label: "Contratos", resource: "instituicoes" },
     ];
     return appendHbCreditMenuItem(filterMenuForUser(tesoureiroItems, user), user, creditEnabled);
+  }
+
+  if (user.role === "contador") {
+    return filterMenuForUser(
+      [
+        { href: "/contador/dashboard", label: "Painel", resource: "contador" },
+        { href: "/contador/conciliacao", label: "Conciliar", resource: "contador" },
+        { href: "/contador/trilha-auditoria", label: "Auditoria", resource: "contador" },
+        { href: "/relatorios", label: "Relatórios", resource: "relatorios" },
+      ],
+      user
+    );
   }
 
   return [];
@@ -393,6 +458,7 @@ export const ROLE_LABELS: Record<UserRole, string> = {
   responsavel: "Responsável",
   cooperado: "Cooperado",
   parceiro: "Mercado parceiro",
+  contador: "Contador",
 };
 
 export const MODO_ACESSO_LABELS: Record<ModoAcesso, string> = {

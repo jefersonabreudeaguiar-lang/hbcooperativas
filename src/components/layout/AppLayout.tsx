@@ -6,7 +6,7 @@ import {
   LayoutDashboard, Users, CreditCard, PieChart, Truck, Wallet,
   Percent, Building2,   Landmark, Megaphone, MapPin, Car, FileText,
   CalendarCheck, LogOut, Menu, X, Building, ClipboardList, Receipt, User, Tag,
-  BookOpen, FileCheck, Shield, MessageSquareWarning, Vote, Download, ShoppingCart,
+  BookOpen, FileCheck, Shield, MessageSquareWarning, Vote, Download, ShoppingCart, Scale,
 } from "lucide-react";
 import { useState } from "react";
 import { useAuth } from "@/modules/auth/AuthProvider";
@@ -39,6 +39,10 @@ const ICONS: Record<string, React.ReactNode> = {
   "/conta-coop": <Wallet size={20} />,
   "/minha-conta-coop": <Wallet size={20} />,
   "/mercado-parceiro": <ShoppingCart size={20} />,
+  "/contador/dashboard": <Shield size={20} />,
+  "/contador/conciliacao": <Scale size={20} />,
+  "/contador/trilha-auditoria": <FileCheck size={20} />,
+  contador: <Shield size={20} />,
   conta_coop: <Wallet size={20} />,
   "/cooperativas": <Building size={20} />,
   "/cooperados": <Users size={20} />,
