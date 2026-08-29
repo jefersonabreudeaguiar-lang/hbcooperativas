@@ -3,7 +3,8 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { CreditFeatureGate } from "@/components/hb-credit/CreditFeatureGate";
 import { CloudSessionGate } from "@/components/hb-credit/CloudSessionGate";
-import { PageHeader } from "@/components/ui/Table";
+import { ContaCoopSegmentTabs } from "@/components/hb-credit/ContaCoopSegmentTabs";
+import { HbCreditQrScanner } from "@/components/hb-credit/HbCreditQrScanner";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Input, Label } from "@/components/ui/Form";
@@ -21,8 +22,12 @@ import {
 import { formatCentsBRL } from "@/modules/hb-credit/engine/money";
 import type { ContaCoopIntent, ContaCoopLedgerEntry, ContaCoopLimiteCooperado } from "@/modules/hb-credit/types";
 import { FINANCIAL_PIN_MIN_LENGTH } from "@/modules/hb-credit/config";
+import { labelLedgerTipo } from "@/lib/hb-credit/ledgerLabels";
 import { PageSkeleton } from "@/components/ui/PageSkeleton";
 import { generateId } from "@/services/dataStore";
+import { cn } from "@/utils/format";
+
+type Tab = "inicio" | "pagar" | "extrato";
 
 export default function MinhaContaCoopPage() {
   return (
@@ -37,6 +42,7 @@ export default function MinhaContaCoopPage() {
 function MinhaContaCoopContent() {
   const { user } = usePermissions();
   const data = useAppData();
+  const [tab, setTab] = useState<Tab>("inicio");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
@@ -46,6 +52,7 @@ function MinhaContaCoopContent() {
   const [ledger, setLedger] = useState<ContaCoopLedgerEntry[]>([]);
   const [pinSetup, setPinSetup] = useState("");
   const [qrInput, setQrInput] = useState("");
+  const [showManualQr, setShowManualQr] = useState(false);
   const [pendingIntent, setPendingIntent] = useState<{
     intent: ContaCoopIntent;
     parceiroNome: string;
@@ -53,6 +60,7 @@ function MinhaContaCoopContent() {
   } | null>(null);
   const [payPin, setPayPin] = useState("");
   const [busy, setBusy] = useState(false);
+  const [isOffline, setIsOffline] = useState(false);
 
   const cnpj = useMemo(() => {
     if (!user || !data) return "";
@@ -62,6 +70,17 @@ function MinhaContaCoopContent() {
     return coop?.cnpj ? normalizeCnpj(coop.cnpj) : "";
   }, [user, data]);
   const cooperadoId = user?.cooperadoId ?? "";
+
+  useEffect(() => {
+    const sync = () => setIsOffline(!navigator.onLine);
+    sync();
+    window.addEventListener("online", sync);
+    window.addEventListener("offline", sync);
+    return () => {
+      window.removeEventListener("online", sync);
+      window.removeEventListener("offline", sync);
+    };
+  }, []);
 
   const reload = useCallback(async () => {
     if (!cnpj || !cooperadoId) return;
@@ -93,7 +112,7 @@ function MinhaContaCoopContent() {
       await setCreditFinancialPin(cnpj, cooperadoId, pinSetup);
       setHasPin(true);
       setPinSetup("");
-      setSuccess("PIN financeiro cadastrado.");
+      setSuccess("PIN cadastrado. Agora você pode pagar nos mercados parceiros.");
     } catch (e) {
       setError(e instanceof Error ? e.message : "Erro ao salvar PIN.");
     } finally {
@@ -101,18 +120,20 @@ function MinhaContaCoopContent() {
     }
   };
 
-  const validarQr = async () => {
-    if (!cnpj || !cooperadoId || !qrInput.trim()) return;
+  const processarQr = async (payload: string) => {
+    if (!cnpj || !cooperadoId || !payload.trim()) return;
     setBusy(true);
     setError("");
     setSuccess("");
+    setQrInput(payload.trim());
     try {
-      const res = await validateCreditQr(cnpj, cooperadoId, qrInput.trim());
+      const res = await validateCreditQr(cnpj, cooperadoId, payload.trim());
       if (res.intent && res.limite && res.parceiroNome) {
         setPendingIntent({ intent: res.intent, limite: res.limite, parceiroNome: res.parceiroNome });
+        setTab("pagar");
       }
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Código inválido.");
+      setError(e instanceof Error ? e.message : "Código inválido ou expirado.");
       setPendingIntent(null);
     } finally {
       setBusy(false);
@@ -132,10 +153,11 @@ function MinhaContaCoopContent() {
         pin: payPin,
         idempotencyKey: generateId("idem"),
       });
-      setSuccess(`Pagamento confirmado. Comprovante: ${res.receiptCode}`);
+      setSuccess(`Pagamento aprovado! Comprovante ${res.receiptCode}`);
       setPendingIntent(null);
       setQrInput("");
       setPayPin("");
+      setTab("extrato");
       await reload();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Pagamento recusado.");
@@ -149,100 +171,241 @@ function MinhaContaCoopContent() {
   const disponivel = account?.valorDisponivelCents ?? 0;
   const limite = account?.limiteLiberadoCents ?? 0;
   const usado = account?.valorUsadoCents ?? 0;
+  const usoPercent = limite > 0 ? Math.min(100, Math.round((usado / limite) * 100)) : 0;
+  const pagamentoBloqueado = !hasPin || account?.bloqueado || isOffline;
 
   return (
-    <div className="space-y-6 max-w-lg mx-auto">
-      <PageHeader title="Conta Coop" subtitle="Saldo e pagamentos — decisão sempre no servidor" />
+    <div className="mx-auto max-w-lg space-y-5 pb-8">
+      <header className="space-y-1">
+        <p className="text-xs font-semibold uppercase tracking-wider text-green-700">Conta Coop</p>
+        <h1 className="text-2xl font-bold text-gray-900">Seu crédito interno</h1>
+        <p className="text-sm text-gray-500">Use nas lojas parceiras da cooperativa</p>
+      </header>
 
       {error && <AlertBanner variant="error">{error}</AlertBanner>}
-      {success && <AlertBanner variant="info" title="OK">{success}</AlertBanner>}
-      {account?.bloqueado && (
-        <AlertBanner variant="warning" title="Conta bloqueada">
-          Novos pagamentos estão suspensos. Fale com a cooperativa.
+      {success && (
+        <AlertBanner variant="info" title="Tudo certo">
+          {success}
         </AlertBanner>
       )}
-
-      <Card className="p-5 space-y-3 bg-gradient-to-br from-green-50 to-white border-green-200">
-        <p className="text-xs text-gray-500 uppercase tracking-wide">Disponível agora</p>
-        <p className="text-3xl font-bold text-green-900">{formatCentsBRL(disponivel)}</p>
-        <div className="grid grid-cols-2 gap-2 text-sm text-gray-600 pt-2">
-          <div>Limite: {formatCentsBRL(limite)}</div>
-          <div>Usado: {formatCentsBRL(usado)}</div>
+      {account?.bloqueado && (
+        <AlertBanner variant="warning" title="Conta pausada">
+          Pagamentos suspensos. Entre em contato com a cooperativa.
+        </AlertBanner>
+      )}
+      {isOffline && (
+        <div className="flex items-center gap-2 rounded-xl border border-gray-200 bg-gray-50 px-3 py-2 text-sm text-gray-600">
+          <span className="h-2 w-2 shrink-0 rounded-full bg-amber-500" />
+          Sem internet — valores podem estar desatualizados
         </div>
-        {updatedAt && (
-          <p className="text-xs text-gray-400">Atualizado: {new Date(updatedAt).toLocaleString("pt-BR")}</p>
-        )}
-        <p className="text-xs text-amber-800 bg-amber-50 border border-amber-100 rounded-lg p-2">
-          Sem servidor = sem novo pagamento. Offline mostra apenas o último saldo conhecido.
-        </p>
-      </Card>
-
-      {!hasPin && (
-        <Card className="p-5 space-y-3">
-          <h3 className="font-semibold">PIN financeiro</h3>
-          <p className="text-sm text-gray-600">Cadastre um PIN numérico para autorizar pagamentos.</p>
-          <Label>PIN ({FINANCIAL_PIN_MIN_LENGTH}+ dígitos)</Label>
-          <Input
-            type="password"
-            inputMode="numeric"
-            value={pinSetup}
-            onChange={(e) => setPinSetup(e.target.value.replace(/\D/g, ""))}
-            maxLength={8}
-          />
-          <Button onClick={salvarPin} disabled={busy || pinSetup.length < FINANCIAL_PIN_MIN_LENGTH}>
-            Salvar PIN
-          </Button>
-        </Card>
       )}
 
-      <Card className="p-5 space-y-3">
-        <h3 className="font-semibold">Pagar no mercado</h3>
-        <Label>Cole o código QR ou hb-credit://</Label>
-        <Input value={qrInput} onChange={(e) => setQrInput(e.target.value)} placeholder="hb-credit://pay/..." />
-        <Button onClick={validarQr} disabled={busy || !hasPin || account?.bloqueado}>
-          Verificar cobrança
-        </Button>
-      </Card>
+      <ContaCoopSegmentTabs
+        tabs={[
+          { id: "inicio", label: "Início" },
+          { id: "pagar", label: "Pagar" },
+          { id: "extrato", label: "Extrato" },
+        ]}
+        active={tab}
+        onChange={setTab}
+      />
 
-      {pendingIntent && (
-        <Card className="p-5 space-y-3 border-green-300 bg-green-50/50">
-          <p className="font-semibold text-lg">{pendingIntent.parceiroNome}</p>
-          <p className="text-2xl font-bold">{formatCentsBRL(pendingIntent.intent.amountCents)}</p>
-          <p className="text-sm text-gray-600">
-            Disponível antes: {formatCentsBRL(pendingIntent.limite.valorDisponivelCents)}
-          </p>
-          <p className="text-sm font-medium text-green-800">
-            Disponível depois:{" "}
-            {formatCentsBRL(pendingIntent.limite.valorDisponivelCents - pendingIntent.intent.amountCents)}
-          </p>
-          <Label>PIN financeiro</Label>
-          <Input
-            type="password"
-            inputMode="numeric"
-            value={payPin}
-            onChange={(e) => setPayPin(e.target.value.replace(/\D/g, ""))}
-          />
-          <Button onClick={confirmarPagamento} disabled={busy || payPin.length < FINANCIAL_PIN_MIN_LENGTH}>
-            Confirmar pagamento
-          </Button>
-        </Card>
-      )}
-
-      <Card className="p-5 space-y-2">
-        <h3 className="font-semibold">Extrato</h3>
-        {ledger.map((entry) => (
-          <div key={entry.id} className="flex justify-between text-sm border-b py-2">
-            <div>
-              <p className="font-medium">{entry.tipo}</p>
-              <p className="text-xs text-gray-500">{new Date(entry.createdAt).toLocaleString("pt-BR")}</p>
+      {tab === "inicio" && (
+        <>
+          <div className="overflow-hidden rounded-3xl bg-gradient-to-br from-green-800 via-green-700 to-emerald-600 p-6 text-white shadow-lg">
+            <p className="text-sm font-medium text-green-100">Disponível para usar</p>
+            <p className="mt-1 text-4xl font-bold tracking-tight">{formatCentsBRL(disponivel)}</p>
+            <div className="mt-5 space-y-2">
+              <div className="flex justify-between text-xs text-green-100">
+                <span>Usado {formatCentsBRL(usado)}</span>
+                <span>Limite {formatCentsBRL(limite)}</span>
+              </div>
+              <div className="h-2 overflow-hidden rounded-full bg-green-900/40">
+                <div
+                  className="h-full rounded-full bg-white/90 transition-all"
+                  style={{ width: `${usoPercent}%` }}
+                />
+              </div>
             </div>
-            <p className={entry.amountCents < 0 ? "text-red-700" : "text-green-700"}>
-              {formatCentsBRL(entry.amountCents)}
-            </p>
+            {updatedAt && (
+              <p className="mt-4 text-xs text-green-200/80">
+                Atualizado {new Date(updatedAt).toLocaleString("pt-BR")}
+              </p>
+            )}
           </div>
-        ))}
-        {!ledger.length && <p className="text-sm text-gray-500">Nenhum movimento ainda.</p>}
-      </Card>
+
+          <div className="grid grid-cols-2 gap-3">
+            <Card className="!p-4 text-center">
+              <p className="text-xs text-gray-500">Crédito liberado</p>
+              <p className="mt-1 text-lg font-bold text-gray-900">{formatCentsBRL(limite)}</p>
+            </Card>
+            <Card className="!p-4 text-center">
+              <p className="text-xs text-gray-500">Já utilizado</p>
+              <p className="mt-1 text-lg font-bold text-gray-900">{formatCentsBRL(usado)}</p>
+            </Card>
+          </div>
+
+          {!hasPin ? (
+            <Card className="space-y-4 border-amber-200 bg-amber-50/40 !p-5">
+              <div>
+                <h3 className="font-semibold text-gray-900">Crie seu PIN de pagamento</h3>
+                <p className="mt-1 text-sm text-gray-600">
+                  Você precisa de um PIN numérico para autorizar compras nos mercados.
+                </p>
+              </div>
+              <div>
+                <Label>PIN ({FINANCIAL_PIN_MIN_LENGTH} a 8 dígitos)</Label>
+                <Input
+                  type="password"
+                  inputMode="numeric"
+                  autoComplete="off"
+                  value={pinSetup}
+                  onChange={(e) => setPinSetup(e.target.value.replace(/\D/g, ""))}
+                  maxLength={8}
+                  className="mt-1 text-lg tracking-widest"
+                  placeholder="••••"
+                />
+              </div>
+              <Button
+                className="w-full"
+                onClick={salvarPin}
+                disabled={busy || pinSetup.length < FINANCIAL_PIN_MIN_LENGTH}
+              >
+                Cadastrar PIN
+              </Button>
+            </Card>
+          ) : (
+            <Button size="lg" className="w-full" onClick={() => setTab("pagar")} disabled={account?.bloqueado}>
+              Pagar com QR Code
+            </Button>
+          )}
+        </>
+      )}
+
+      {tab === "pagar" && (
+        <div className="space-y-4">
+          {!hasPin ? (
+            <Card className="!p-5 text-center text-sm text-gray-600">
+              Cadastre seu PIN na aba Início antes de pagar.
+              <Button variant="secondary" className="mt-3 w-full" onClick={() => setTab("inicio")}>
+                Ir para Início
+              </Button>
+            </Card>
+          ) : pendingIntent ? (
+            <Card className="space-y-4 border-green-300 bg-green-50/60 !p-5">
+              <div className="text-center">
+                <p className="text-sm text-gray-600">Pagando em</p>
+                <p className="text-xl font-bold text-gray-900">{pendingIntent.parceiroNome}</p>
+                <p className="mt-2 text-3xl font-bold text-green-800">
+                  {formatCentsBRL(pendingIntent.intent.amountCents)}
+                </p>
+              </div>
+              <div className="rounded-xl bg-white/80 p-3 text-sm">
+                <div className="flex justify-between py-1">
+                  <span className="text-gray-600">Saldo antes</span>
+                  <span>{formatCentsBRL(pendingIntent.limite.valorDisponivelCents)}</span>
+                </div>
+                <div className="flex justify-between py-1 font-semibold text-green-800">
+                  <span>Saldo depois</span>
+                  <span>
+                    {formatCentsBRL(pendingIntent.limite.valorDisponivelCents - pendingIntent.intent.amountCents)}
+                  </span>
+                </div>
+              </div>
+              <div>
+                <Label>Digite seu PIN</Label>
+                <Input
+                  type="password"
+                  inputMode="numeric"
+                  autoComplete="off"
+                  value={payPin}
+                  onChange={(e) => setPayPin(e.target.value.replace(/\D/g, ""))}
+                  maxLength={8}
+                  className="mt-1 text-center text-2xl tracking-[0.4em]"
+                  placeholder="••••"
+                />
+              </div>
+              <div className="flex gap-2">
+                <Button variant="secondary" className="flex-1" onClick={() => setPendingIntent(null)} disabled={busy}>
+                  Cancelar
+                </Button>
+                <Button
+                  className="flex-1"
+                  onClick={confirmarPagamento}
+                  disabled={busy || payPin.length < FINANCIAL_PIN_MIN_LENGTH}
+                >
+                  Confirmar
+                </Button>
+              </div>
+            </Card>
+          ) : (
+            <>
+              <HbCreditQrScanner
+                onScan={(payload) => void processarQr(payload)}
+                onError={setError}
+                disabled={pagamentoBloqueado || busy}
+              />
+
+              <button
+                type="button"
+                className="w-full text-center text-sm font-medium text-green-700 underline-offset-2 hover:underline"
+                onClick={() => setShowManualQr((v) => !v)}
+              >
+                {showManualQr ? "Ocultar colar código" : "Colar código manualmente"}
+              </button>
+
+              {showManualQr && (
+                <Card className="space-y-3 !p-4">
+                  <Label>Código do QR (hb-credit://…)</Label>
+                  <Input
+                    value={qrInput}
+                    onChange={(e) => setQrInput(e.target.value)}
+                    placeholder="hb-credit://pay/..."
+                  />
+                  <Button
+                    className="w-full"
+                    onClick={() => void processarQr(qrInput)}
+                    disabled={busy || pagamentoBloqueado || !qrInput.trim()}
+                  >
+                    Verificar cobrança
+                  </Button>
+                </Card>
+              )}
+            </>
+          )}
+        </div>
+      )}
+
+      {tab === "extrato" && (
+        <Card className="!p-0 overflow-hidden">
+          <div className="border-b border-gray-100 px-5 py-4">
+            <h3 className="font-semibold text-gray-900">Movimentações</h3>
+            <p className="text-xs text-gray-500">Pagamentos e ajustes do seu crédito</p>
+          </div>
+          <div className="divide-y divide-gray-100">
+            {ledger.map((entry) => (
+              <div key={entry.id} className="flex items-center justify-between gap-3 px-5 py-4">
+                <div className="min-w-0">
+                  <p className="font-medium text-gray-900">{labelLedgerTipo(String(entry.tipo))}</p>
+                  <p className="text-xs text-gray-500">{new Date(entry.createdAt).toLocaleString("pt-BR")}</p>
+                  {entry.memo && <p className="truncate text-xs text-gray-400">{entry.memo}</p>}
+                </div>
+                <p
+                  className={cn(
+                    "shrink-0 text-base font-semibold tabular-nums",
+                    entry.amountCents < 0 ? "text-red-600" : "text-green-700"
+                  )}
+                >
+                  {formatCentsBRL(entry.amountCents)}
+                </p>
+              </div>
+            ))}
+            {!ledger.length && (
+              <p className="px-5 py-10 text-center text-sm text-gray-500">Nenhuma movimentação ainda.</p>
+            )}
+          </div>
+        </Card>
+      )}
     </div>
   );
 }

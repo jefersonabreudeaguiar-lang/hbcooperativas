@@ -3,8 +3,8 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { CreditFeatureGate } from "@/components/hb-credit/CreditFeatureGate";
 import { CloudSessionGate } from "@/components/hb-credit/CloudSessionGate";
-import { PageHeader } from "@/components/ui/Table";
-import { Card } from "@/components/ui/Card";
+import { ContaCoopSegmentTabs } from "@/components/hb-credit/ContaCoopSegmentTabs";
+import { Card, StatCard } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Input, Label } from "@/components/ui/Form";
 import { AlertBanner } from "@/components/ui/AlertBanner";
@@ -243,77 +243,138 @@ function ContaCoopContent() {
     }
   };
 
+  const statusMercadoLabel = (status: string) => {
+    if (status === "ativo") return "Ativo";
+    if (status === "pendente") return "Aguardando aprovação";
+    if (status === "bloqueado") return "Bloqueado";
+    return status;
+  };
+
   if (loading && !dashboard) return <PageSkeleton />;
 
   return (
-    <div className="space-y-6 max-w-5xl">
-      <PageHeader title="Conta Coop" subtitle="Limite liberado → compra → débito → recebível (servidor como autoridade)" />
+    <div className="mx-auto max-w-5xl space-y-5 pb-8">
+      <header className="space-y-1">
+        <p className="text-xs font-semibold uppercase tracking-wider text-green-700">Conta Coop</p>
+        <h1 className="text-2xl font-bold text-gray-900">Gestão do crédito interno</h1>
+        <p className="text-sm text-gray-500">Libere limites, acompanhe uso e gerencie mercados parceiros</p>
+      </header>
 
       {error && <AlertBanner variant="error">{error}</AlertBanner>}
 
-      <div className="flex flex-wrap gap-2">
-        {(["painel", "limites", "mercados"] as Tab[]).map((t) => (
-          <button
-            key={t}
-            type="button"
-            onClick={() => setTab(t)}
-            className={cn(
-              "px-4 py-2 rounded-lg text-sm font-medium border",
-              tab === t ? "bg-green-700 text-white border-green-700" : "bg-white text-gray-700 border-gray-200"
-            )}
-          >
-            {t === "painel" ? "Painel" : t === "limites" ? "Limites" : "Mercados"}
-          </button>
-        ))}
-      </div>
+      <ContaCoopSegmentTabs
+        tabs={[
+          { id: "painel", label: "Visão geral" },
+          { id: "limites", label: "Limites" },
+          { id: "mercados", label: "Mercados" },
+        ]}
+        active={tab}
+        onChange={setTab}
+      />
 
       {tab === "painel" && dashboard && (
-        <div className="grid gap-4 md:grid-cols-2">
-          <Card className="p-5 space-y-3">
-            <h3 className="font-semibold text-gray-900">Teto global</h3>
-            <p className="text-sm text-gray-600">
-              Percentual máximo sobre o crédito total na ficha de todos os cooperados.
-            </p>
-            <p className="text-sm text-gray-600">
-              Teto: {dashboard.teto.tetoGlobalPercent}% = {formatCentsBRL(dashboard.teto.tetoGlobalCents)}
-            </p>
-            <p className="text-xs text-gray-500">
-              Crédito total na ficha: {formatCentsBRL(dashboard.teto.creditoBaseTotalCents)}
-            </p>
-            <p className="text-sm text-gray-600">Distribuído: {formatCentsBRL(dashboard.teto.limiteDistribuidoCents)}</p>
-            <p className="text-sm font-medium text-green-800">
-              Restante: {formatCentsBRL(dashboard.teto.restanteParaLiberarCents)}
-            </p>
-            <div className="flex gap-2 items-end pt-2">
-              <div className="flex-1">
-                <Label htmlFor="teto">Novo teto (% do crédito na ficha)</Label>
-                <Input
-                  id="teto"
-                  value={tetoPercentual}
-                  onChange={(e) => setTetoPercentual(e.target.value)}
-                  placeholder="100"
-                  inputMode="decimal"
-                />
+        <div className="space-y-4">
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            <StatCard
+              title="Disponível (todos)"
+              value={formatCentsBRL(dashboard.agregadoCooperados.valorDisponivelCents)}
+              subtitle={`Usado ${formatCentsBRL(dashboard.agregadoCooperados.valorUsadoCents)}`}
+              variant="success"
+            />
+            <StatCard
+              title="Crédito liberado"
+              value={formatCentsBRL(dashboard.agregadoCooperados.limiteLiberadoCents)}
+              variant="default"
+            />
+            <StatCard
+              title="Ainda pode liberar"
+              value={formatCentsBRL(dashboard.teto.restanteParaLiberarCents)}
+              subtitle={`Teto ${dashboard.teto.tetoGlobalPercent}%`}
+              variant="gold"
+            />
+            <StatCard
+              title="Atividade"
+              value={String(dashboard.transacoesRecentes)}
+              subtitle={`${dashboard.parceirosPendentes} mercado(s) pendente(s)`}
+              variant="default"
+            />
+          </div>
+
+          <div className="grid gap-4 md:grid-cols-2">
+            <Card className="space-y-4 !p-5">
+              <div>
+                <h3 className="font-semibold text-gray-900">Teto da cooperativa</h3>
+                <p className="mt-1 text-sm text-gray-600">
+                  Limite máximo que a cooperativa pode distribuir entre cooperados, com base na ficha corrida.
+                </p>
               </div>
-              <Button onClick={salvarTeto} disabled={busy}>Salvar teto</Button>
-            </div>
-          </Card>
-          <Card className="p-5 space-y-2">
-            <h3 className="font-semibold text-gray-900">Cooperados (agregado)</h3>
-            <p className="text-sm">Limite liberado: {formatCentsBRL(dashboard.agregadoCooperados.limiteLiberadoCents)}</p>
-            <p className="text-sm">Usado: {formatCentsBRL(dashboard.agregadoCooperados.valorUsadoCents)}</p>
-            <p className="text-sm font-medium">Disponível: {formatCentsBRL(dashboard.agregadoCooperados.valorDisponivelCents)}</p>
-            <p className="text-xs text-gray-500 pt-2">
-              Mercados pendentes: {dashboard.parceirosPendentes} · Transações (7 dias): {dashboard.transacoesRecentes}
-            </p>
-          </Card>
+              <div className="rounded-xl bg-gray-50 p-4 text-sm space-y-1">
+                <p>
+                  <span className="text-gray-500">Teto atual:</span>{" "}
+                  <strong>
+                    {dashboard.teto.tetoGlobalPercent}% = {formatCentsBRL(dashboard.teto.tetoGlobalCents)}
+                  </strong>
+                </p>
+                <p>
+                  <span className="text-gray-500">Crédito na ficha:</span>{" "}
+                  {formatCentsBRL(dashboard.teto.creditoBaseTotalCents)}
+                </p>
+                <p>
+                  <span className="text-gray-500">Já distribuído:</span>{" "}
+                  {formatCentsBRL(dashboard.teto.limiteDistribuidoCents)}
+                </p>
+              </div>
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
+                <div className="flex-1">
+                  <Label htmlFor="teto">Alterar teto (%)</Label>
+                  <Input
+                    id="teto"
+                    value={tetoPercentual}
+                    onChange={(e) => setTetoPercentual(e.target.value)}
+                    placeholder={String(dashboard.teto.tetoGlobalPercent)}
+                    inputMode="decimal"
+                  />
+                </div>
+                <Button onClick={salvarTeto} disabled={busy}>
+                  Salvar teto
+                </Button>
+              </div>
+            </Card>
+
+            <Card className="space-y-3 !p-5">
+              <h3 className="font-semibold text-gray-900">Como funciona</h3>
+              <ol className="space-y-3 text-sm text-gray-600">
+                <li className="flex gap-3">
+                  <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-green-100 text-xs font-bold text-green-800">
+                    1
+                  </span>
+                  <span>Defina o teto e libere crédito para os cooperados</span>
+                </li>
+                <li className="flex gap-3">
+                  <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-green-100 text-xs font-bold text-green-800">
+                    2
+                  </span>
+                  <span>Cooperado paga nos mercados parceiros com QR Code</span>
+                </li>
+                <li className="flex gap-3">
+                  <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-green-100 text-xs font-bold text-green-800">
+                    3
+                  </span>
+                  <span>A cooperativa recebe e liquida os recebíveis depois</span>
+                </li>
+              </ol>
+            </Card>
+          </div>
         </div>
       )}
 
       {tab === "limites" && (
         <div className="space-y-6">
-          <Card className="p-5 space-y-4">
-            <h3 className="font-semibold">Individual</h3>
+          <Card className="space-y-4 !p-5">
+            <div>
+              <h3 className="font-semibold text-gray-900">Liberação individual</h3>
+              <p className="text-sm text-gray-600">Ajuste o limite de um cooperado específico.</p>
+            </div>
             <div className="grid gap-3 md:grid-cols-3">
               <div>
                 <Label>Cooperado</Label>
@@ -338,11 +399,15 @@ function ContaCoopContent() {
             </div>
           </Card>
 
-          <Card className="p-5 space-y-4">
-            <h3 className="font-semibold">Coletivo ({cooperadosAtivos.length} cooperados)</h3>
-            <p className="text-sm text-gray-600">
-              Libera para cada cooperado um percentual do crédito pendente na ficha (Quanto vou receber).
-            </p>
+          <Card className="space-y-4 !p-5">
+            <div>
+              <h3 className="font-semibold text-gray-900">
+                Liberação coletiva · {cooperadosAtivos.length} cooperados
+              </h3>
+              <p className="text-sm text-gray-600">
+                Aplica o mesmo percentual do crédito na ficha para todos de uma vez. Use Prévia antes de confirmar.
+              </p>
+            </div>
             <div className="flex flex-wrap gap-2 items-end">
               <div>
                 <Label>Percentual do crédito (%)</Label>
@@ -406,7 +471,45 @@ function ContaCoopContent() {
             )}
           </Card>
 
-          <Card className="p-0 overflow-hidden">
+          <div className="space-y-3 md:hidden">
+            {limites.map((l) => (
+              <Card key={l.id} className="space-y-3 !p-4">
+                <div className="flex items-start justify-between gap-2">
+                  <div>
+                    <p className="font-semibold text-gray-900">{cooperadoNome(l.cooperadoId)}</p>
+                    {l.bloqueado && (
+                      <span className="mt-1 inline-block rounded-full bg-red-100 px-2 py-0.5 text-xs font-medium text-red-700">
+                        Bloqueado
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-lg font-bold text-green-800">{formatCentsBRL(l.valorDisponivelCents)}</p>
+                </div>
+                <div className="grid grid-cols-3 gap-2 text-xs text-gray-600">
+                  <div>
+                    <p className="text-gray-400">Ficha</p>
+                    <p className="font-medium">{formatCentsBRL(creditosBaseColetivo[l.cooperadoId] ?? 0)}</p>
+                  </div>
+                  <div>
+                    <p className="text-gray-400">Liberado</p>
+                    <p className="font-medium">{formatCentsBRL(l.limiteLiberadoCents)}</p>
+                  </div>
+                  <div>
+                    <p className="text-gray-400">Usado</p>
+                    <p className="font-medium">{formatCentsBRL(l.valorUsadoCents)}</p>
+                  </div>
+                </div>
+                <Button size="sm" variant="secondary" className="w-full" onClick={() => toggleBloqueio(l)} disabled={busy}>
+                  {l.bloqueado ? "Desbloquear cooperado" : "Bloquear pagamentos"}
+                </Button>
+              </Card>
+            ))}
+            {!limites.length && (
+              <Card className="!p-6 text-center text-sm text-gray-500">Nenhum limite liberado ainda.</Card>
+            )}
+          </div>
+
+          <Card className="hidden overflow-hidden !p-0 md:block">
             <table className="w-full text-sm">
               <thead className="bg-gray-50 text-left">
                 <tr>
@@ -421,11 +524,16 @@ function ContaCoopContent() {
               <tbody>
                 {limites.map((l) => (
                   <tr key={l.id} className="border-t">
-                    <td className="p-3">{cooperadoNome(l.cooperadoId)}</td>
+                    <td className="p-3">
+                      {cooperadoNome(l.cooperadoId)}
+                      {l.bloqueado && (
+                        <span className="ml-2 rounded-full bg-red-100 px-2 py-0.5 text-xs text-red-700">Bloqueado</span>
+                      )}
+                    </td>
                     <td className="p-3">{formatCentsBRL(creditosBaseColetivo[l.cooperadoId] ?? 0)}</td>
                     <td className="p-3">{formatCentsBRL(l.limiteLiberadoCents)}</td>
                     <td className="p-3">{formatCentsBRL(l.valorUsadoCents)}</td>
-                    <td className="p-3">{formatCentsBRL(l.valorDisponivelCents)}</td>
+                    <td className="p-3 font-medium text-green-800">{formatCentsBRL(l.valorDisponivelCents)}</td>
                     <td className="p-3">
                       <Button size="sm" variant="secondary" onClick={() => toggleBloqueio(l)} disabled={busy}>
                         {l.bloqueado ? "Desbloquear" : "Bloquear"}
@@ -434,7 +542,11 @@ function ContaCoopContent() {
                   </tr>
                 ))}
                 {!limites.length && (
-                  <tr><td colSpan={6} className="p-6 text-center text-gray-500">Nenhum limite liberado ainda.</td></tr>
+                  <tr>
+                    <td colSpan={6} className="p-6 text-center text-gray-500">
+                      Nenhum limite liberado ainda.
+                    </td>
+                  </tr>
                 )}
               </tbody>
             </table>
@@ -443,43 +555,46 @@ function ContaCoopContent() {
       )}
 
       {tab === "mercados" && (
-        <Card className="p-0 overflow-hidden">
-          <table className="w-full text-sm">
-            <thead className="bg-gray-50 text-left">
-              <tr>
-                <th className="p-3">Mercado</th>
-                <th className="p-3">CNPJ</th>
-                <th className="p-3">Status</th>
-                <th className="p-3">Ações</th>
-              </tr>
-            </thead>
-            <tbody>
-              {parceiros.map((p) => (
-                <tr key={p.id} className="border-t">
-                  <td className="p-3">{p.nomeMercado}</td>
-                  <td className="p-3 font-mono text-xs">{p.cnpjMercado}</td>
-                  <td className="p-3 capitalize">{p.status}</td>
-                  <td className="p-3 space-x-2">
-                    {p.status === "pendente" && (
-                      <Button size="sm" onClick={() => atualizarMercado(p.id, "ativo")} disabled={busy}>Aprovar</Button>
-                    )}
-                    {p.status !== "bloqueado" && p.status !== "pendente" && (
-                      <Button size="sm" variant="secondary" onClick={() => atualizarMercado(p.id, "bloqueado")} disabled={busy}>
-                        Bloquear
-                      </Button>
-                    )}
-                    {p.status === "bloqueado" && (
-                      <Button size="sm" onClick={() => atualizarMercado(p.id, "ativo")} disabled={busy}>Reativar</Button>
-                    )}
-                  </td>
-                </tr>
-              ))}
-              {!parceiros.length && (
-                <tr><td colSpan={4} className="p-6 text-center text-gray-500">Nenhum mercado cadastrado.</td></tr>
-              )}
-            </tbody>
-          </table>
-        </Card>
+        <div className="space-y-3">
+          {parceiros.map((p) => (
+            <Card key={p.id} className="flex flex-col gap-3 !p-4 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <p className="font-semibold text-gray-900">{p.nomeMercado}</p>
+                <p className="font-mono text-xs text-gray-500">{p.cnpjMercado}</p>
+                <span
+                  className={cn(
+                    "mt-2 inline-block rounded-full px-2.5 py-0.5 text-xs font-medium",
+                    p.status === "ativo" && "bg-green-100 text-green-800",
+                    p.status === "pendente" && "bg-amber-100 text-amber-800",
+                    p.status === "bloqueado" && "bg-red-100 text-red-800"
+                  )}
+                >
+                  {statusMercadoLabel(p.status)}
+                </span>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {p.status === "pendente" && (
+                  <Button size="sm" onClick={() => atualizarMercado(p.id, "ativo")} disabled={busy}>
+                    Aprovar mercado
+                  </Button>
+                )}
+                {p.status !== "bloqueado" && p.status !== "pendente" && (
+                  <Button size="sm" variant="secondary" onClick={() => atualizarMercado(p.id, "bloqueado")} disabled={busy}>
+                    Bloquear
+                  </Button>
+                )}
+                {p.status === "bloqueado" && (
+                  <Button size="sm" onClick={() => atualizarMercado(p.id, "ativo")} disabled={busy}>
+                    Reativar
+                  </Button>
+                )}
+              </div>
+            </Card>
+          ))}
+          {!parceiros.length && (
+            <Card className="!p-8 text-center text-sm text-gray-500">Nenhum mercado parceiro cadastrado.</Card>
+          )}
+        </div>
       )}
     </div>
   );
