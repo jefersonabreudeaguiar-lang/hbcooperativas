@@ -102,15 +102,9 @@ export function PwaProvider() {
     if (loading) return;
 
     if ("serviceWorker" in navigator) {
-      void navigator.serviceWorker
-        .register(`/sw.js?build=${APP_BUILD_VERSION}`)
-        .then((reg) => {
-          void reg.update();
-          reg.waiting?.postMessage({ type: "SKIP_WAITING" });
-        })
-        .catch(() => {
-          /* registro opcional em dev sem HTTPS */
-        });
+      void navigator.serviceWorker.register(`/sw.js?build=${APP_BUILD_VERSION}`).catch(() => {
+        /* registro opcional em dev sem HTTPS */
+      });
     }
 
     if (isStandalone()) {

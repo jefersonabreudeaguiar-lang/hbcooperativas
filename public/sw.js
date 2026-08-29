@@ -1,4 +1,4 @@
-const CACHE_VERSION = "hb-coop-v14";
+const CACHE_VERSION = "hb-coop-v15";
 const PRECACHE = ["/", "/dashboard", "/manifest.webmanifest", "/icons/icon-192.png", "/icons/icon-512.png"];
 
 self.addEventListener("install", (event) => {

@@ -1,7 +1,8 @@
 "use client";
 
-import { useCallback, useEffect, useId, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/Button";
+import { decodeQrFromFile, decodeQrFromImageData } from "@/lib/hb-credit/decodeQrImage";
 import { cn } from "@/utils/format";
 
 interface HbCreditQrScannerProps {
@@ -9,6 +10,9 @@ interface HbCreditQrScannerProps {
   onError?: (message: string) => void;
   disabled?: boolean;
   className?: string;
+  /** Abre a câmera nativa do celular ao montar (mesmo fluxo das fotos de entrega). */
+  autoOpenCamera?: boolean;
+  fullscreen?: boolean;
 }
 
 function humanizeCameraError(error: unknown): string {
@@ -20,276 +24,244 @@ function humanizeCameraError(error: unknown): string {
   if (lower.includes("notfound") || lower.includes("devices")) {
     return "Nenhuma câmera encontrada neste aparelho.";
   }
-  if (lower.includes("secure") || lower.includes("https")) {
-    return "A câmera só funciona com conexão segura (HTTPS).";
-  }
-  return "Não foi possível abrir a câmera. Use a opção de colar o código.";
+  return "Não foi possível abrir a câmera. Tente novamente ou cole o código manualmente.";
 }
 
-async function waitForPaint(): Promise<void> {
-  await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
-  await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
-}
-
-export function HbCreditQrScanner({ onScan, onError, disabled, className }: HbCreditQrScannerProps) {
-  const reactId = useId();
-  const readerId = `hb-qr-${reactId.replace(/:/g, "")}`;
-  const mountRef = useRef<HTMLDivElement>(null);
+export function HbCreditQrScanner({
+  onScan,
+  onError,
+  disabled,
+  className,
+  autoOpenCamera = false,
+  fullscreen = false,
+}: HbCreditQrScannerProps) {
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
-  const html5ScannerRef = useRef<{ stop: () => Promise<void>; clear: () => void } | null>(null);
-  const scanLoopRef = useRef<number | null>(null);
-  const cancelledRef = useRef(false);
+  const scanFrameRef = useRef<number | null>(null);
   const onScanRef = useRef(onScan);
-  const [active, setActive] = useState(false);
-  const [cameraError, setCameraError] = useState("");
-  const [starting, setStarting] = useState(false);
+  const [liveActive, setLiveActive] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
 
   useEffect(() => {
     onScanRef.current = onScan;
   }, [onScan]);
 
-  const releaseStream = useCallback(() => {
-    if (scanLoopRef.current != null) {
-      cancelAnimationFrame(scanLoopRef.current);
-      scanLoopRef.current = null;
+  const stopLiveScan = useCallback(() => {
+    if (scanFrameRef.current != null) {
+      cancelAnimationFrame(scanFrameRef.current);
+      scanFrameRef.current = null;
     }
     streamRef.current?.getTracks().forEach((track) => track.stop());
     streamRef.current = null;
-    if (mountRef.current) {
-      mountRef.current.replaceChildren();
+    if (videoRef.current) {
+      videoRef.current.srcObject = null;
     }
+    setLiveActive(false);
   }, []);
 
-  const stopHtml5Scanner = useCallback(async () => {
-    const scanner = html5ScannerRef.current;
-    html5ScannerRef.current = null;
-    if (!scanner) return;
+  useEffect(() => {
+    return () => {
+      stopLiveScan();
+    };
+  }, [stopLiveScan]);
+
+  const emitScan = useCallback(
+    (payload: string) => {
+      stopLiveScan();
+      onScanRef.current(payload);
+    },
+    [stopLiveScan]
+  );
+
+  const openNativeCamera = useCallback(() => {
+    if (disabled || busy) return;
+    setError("");
+    fileInputRef.current?.click();
+  }, [busy, disabled]);
+
+  useEffect(() => {
+    if (!autoOpenCamera || disabled) return;
+    const timer = window.setTimeout(() => openNativeCamera(), 400);
+    return () => window.clearTimeout(timer);
+  }, [autoOpenCamera, disabled, openNativeCamera]);
+
+  const handlePhotoCapture = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file || disabled) return;
+
+    setBusy(true);
+    setError("");
     try {
-      await scanner.stop();
-    } catch {
-      /* ignore */
+      const payload = await decodeQrFromFile(file);
+      if (!payload) {
+        const message = "QR Code não encontrado na foto. Aproxime a câmera e tente de novo.";
+        setError(message);
+        onError?.(message);
+        return;
+      }
+      emitScan(payload);
+    } catch (e) {
+      const message = humanizeCameraError(e);
+      setError(message);
+      onError?.(message);
+    } finally {
+      setBusy(false);
     }
-    try {
-      scanner.clear();
-    } catch {
-      /* ignore */
+  };
+
+  const startLiveScan = async () => {
+    if (disabled || busy || liveActive) return;
+    if (typeof window !== "undefined" && !window.isSecureContext) {
+      const message = "A câmera ao vivo exige conexão segura (HTTPS). Use fotografar QR.";
+      setError(message);
+      onError?.(message);
+      return;
     }
-  }, []);
 
-  const cleanupScanner = useCallback(async () => {
-    cancelledRef.current = true;
-    releaseStream();
-    await stopHtml5Scanner();
-    mountRef.current?.replaceChildren();
-  }, [releaseStream, stopHtml5Scanner]);
-
-  const stopScanner = useCallback(async () => {
-    await cleanupScanner();
-    setActive(false);
-    setStarting(false);
-  }, [cleanupScanner]);
-
-  const startNativeScanner = useCallback(async (): Promise<boolean> => {
-    const mount = mountRef.current;
-    if (!mount || typeof window === "undefined") return false;
-
-    const BarcodeDetectorCtor = (window as Window & { BarcodeDetector?: new (opts: { formats: string[] }) => {
-      detect: (source: HTMLVideoElement) => Promise<Array<{ rawValue?: string }>>;
-    } }).BarcodeDetector;
-
-    if (!BarcodeDetectorCtor || !navigator.mediaDevices?.getUserMedia) {
-      return false;
-    }
+    setBusy(true);
+    setError("");
+    stopLiveScan();
 
     try {
-      const video = document.createElement("video");
-      video.playsInline = true;
-      video.muted = true;
-      video.autoplay = true;
-      video.setAttribute("playsinline", "true");
-      video.className = "h-full w-full object-cover";
-      mount.replaceChildren(video);
-
       const stream = await navigator.mediaDevices.getUserMedia({
         video: {
           facingMode: { ideal: "environment" },
-          width: { ideal: 1280, max: 1920 },
-          height: { ideal: 720, max: 1080 },
+          width: { ideal: 640, max: 1280 },
+          height: { ideal: 480, max: 720 },
         },
         audio: false,
       });
 
       streamRef.current = stream;
+      const video = videoRef.current;
+      if (!video) throw new Error("Video element missing");
+
       video.srcObject = stream;
+      video.playsInline = true;
+      video.muted = true;
+      video.setAttribute("playsinline", "true");
       await video.play();
+      setLiveActive(true);
 
-      const detector = new BarcodeDetectorCtor({ formats: ["qr_code"] });
-      cancelledRef.current = false;
-
-      const tick = async () => {
-        if (cancelledRef.current) return;
-        try {
-          const codes = await detector.detect(video);
-          const payload = codes.find((code) => code.rawValue?.trim())?.rawValue?.trim();
-          if (payload) {
-            await stopScanner();
-            onScanRef.current(payload);
-            return;
-          }
-        } catch {
-          /* ignore frame errors */
+      const tick = () => {
+        const canvas = canvasRef.current;
+        if (!video || !canvas || video.readyState < 2) {
+          scanFrameRef.current = requestAnimationFrame(tick);
+          return;
         }
-        scanLoopRef.current = requestAnimationFrame(() => {
-          void tick();
-        });
+
+        const width = video.videoWidth;
+        const height = video.videoHeight;
+        if (width > 0 && height > 0) {
+          canvas.width = width;
+          canvas.height = height;
+          const ctx = canvas.getContext("2d", { willReadFrequently: true });
+          if (ctx) {
+            ctx.drawImage(video, 0, 0, width, height);
+            const payload = decodeQrFromImageData(ctx.getImageData(0, 0, width, height));
+            if (payload) {
+              emitScan(payload);
+              return;
+            }
+          }
+        }
+
+        scanFrameRef.current = requestAnimationFrame(tick);
       };
 
-      scanLoopRef.current = requestAnimationFrame(() => {
-        void tick();
-      });
-      return true;
-    } catch {
-      releaseStream();
-      return false;
-    }
-  }, [releaseStream, stopScanner]);
-
-  const startHtml5Scanner = useCallback(async (): Promise<boolean> => {
-    const mount = mountRef.current;
-    if (!mount) return false;
-
-    mount.replaceChildren();
-    const { Html5Qrcode } = await import("html5-qrcode");
-    const scanner = new Html5Qrcode(readerId, { verbose: false });
-    html5ScannerRef.current = scanner;
-    cancelledRef.current = false;
-
-    let cameraId: string | { facingMode: string } = { facingMode: "environment" };
-    try {
-      const cameras = await Html5Qrcode.getCameras();
-      const backCamera = cameras.find((camera) => /back|rear|traseira|environment/i.test(camera.label));
-      if (backCamera?.id) {
-        cameraId = backCamera.id;
-      } else if (cameras.length > 0) {
-        cameraId = cameras[cameras.length - 1].id;
-      }
-    } catch {
-      /* use facingMode fallback */
-    }
-
-    await scanner.start(
-      cameraId,
-      {
-        fps: 8,
-        qrbox: { width: 240, height: 240 },
-        disableFlip: false,
-      },
-      (decodedText) => {
-        if (cancelledRef.current) return;
-        cancelledRef.current = true;
-        void stopScanner().then(() => onScanRef.current(decodedText.trim()));
-      },
-      () => {
-        /* ignore per-frame decode misses */
-      }
-    );
-
-    return true;
-  }, [readerId, stopScanner]);
-
-  const startScanner = useCallback(async () => {
-    if (disabled || starting || active) return;
-
-    if (typeof window !== "undefined" && !window.isSecureContext) {
-      const message = humanizeCameraError(new Error("secure context required"));
-      setCameraError(message);
-      onError?.(message);
-      return;
-    }
-
-    setStarting(true);
-    setCameraError("");
-    cancelledRef.current = false;
-
-    try {
-      await cleanupScanner();
-      await waitForPaint();
-
-      let started = false;
-      try {
-        started = await startNativeScanner();
-      } catch {
-        started = false;
-      }
-
-      if (!started) {
-        await waitForPaint();
-        started = await startHtml5Scanner();
-      }
-
-      if (!started) {
-        throw new Error("Scanner unavailable");
-      }
-
-      setActive(true);
+      scanFrameRef.current = requestAnimationFrame(tick);
     } catch (e) {
-      await stopScanner();
+      stopLiveScan();
       const message = humanizeCameraError(e);
-      setCameraError(message);
+      setError(message);
       onError?.(message);
     } finally {
-      setStarting(false);
+      setBusy(false);
     }
-  }, [active, cleanupScanner, disabled, onError, startHtml5Scanner, startNativeScanner, starting, stopScanner]);
-
-  useEffect(() => {
-    return () => {
-      void stopScanner();
-    };
-  }, [stopScanner]);
+  };
 
   return (
-    <div className={cn("space-y-3", className)}>
-      <div className="relative overflow-hidden rounded-2xl border-2 border-dashed bg-gray-950 min-h-[280px]">
-        <div
-          id={readerId}
-          ref={mountRef}
-          className={cn("absolute inset-0", active || starting ? "opacity-100" : "opacity-0")}
-          aria-hidden={!active && !starting}
-        />
+    <div className={cn("space-y-4", className)}>
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="image/*"
+        capture="environment"
+        className="hidden"
+        onChange={(event) => void handlePhotoCapture(event)}
+        disabled={disabled || busy}
+      />
 
-        {!active && !starting && (
-          <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 p-6 text-center">
-            <div className="flex h-16 w-16 items-center justify-center rounded-full bg-green-100 text-2xl">📷</div>
-            <p className="text-sm text-gray-300">Aponte a câmera para o QR Code do mercado</p>
+      <div
+        className={cn(
+          "relative overflow-hidden rounded-3xl border bg-gray-950",
+          fullscreen ? "min-h-[55vh] border-green-700/40" : "min-h-[220px] border-gray-300"
+        )}
+      >
+        <video
+          ref={videoRef}
+          className={cn("absolute inset-0 h-full w-full object-cover", liveActive ? "opacity-100" : "opacity-0")}
+          playsInline
+          muted
+          autoPlay
+        />
+        <canvas ref={canvasRef} className="hidden" aria-hidden />
+
+        {!liveActive && (
+          <div className="absolute inset-0 flex flex-col items-center justify-center gap-4 p-6 text-center">
+            <div className="flex h-20 w-20 items-center justify-center rounded-full bg-green-500/15 text-3xl ring-1 ring-green-400/30">
+              📷
+            </div>
+            <div className="space-y-1">
+              <p className={cn("font-semibold", fullscreen ? "text-white" : "text-gray-100")}>
+                Fotografe o QR Code do mercado
+              </p>
+              <p className={cn("text-sm", fullscreen ? "text-green-100/80" : "text-gray-400")}>
+                Usa a mesma câmera das fotos de entrega — estável no celular.
+              </p>
+            </div>
           </div>
         )}
 
-        {starting && !active && (
-          <div className="absolute inset-x-0 bottom-4 text-center text-xs font-medium text-green-200">
-            Preparando câmera…
+        {liveActive && (
+          <div className="pointer-events-none absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/80 to-transparent p-4 text-center text-sm text-white">
+            Aponte para o QR Code — leitura automática
           </div>
         )}
       </div>
 
-      {cameraError && (
-        <p className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">{cameraError}</p>
+      {error && (
+        <p className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">{error}</p>
       )}
 
-      <div className="flex flex-wrap gap-2">
-        {!active ? (
+      <div className="space-y-2">
+        <Button
+          type="button"
+          size="lg"
+          className="w-full"
+          onClick={openNativeCamera}
+          disabled={disabled || busy}
+        >
+          {busy && !liveActive ? "Lendo foto…" : "Abrir câmera e fotografar QR"}
+        </Button>
+
+        {!liveActive ? (
           <Button
             type="button"
-            size="lg"
-            className="flex-1 min-w-[140px]"
-            onClick={() => void startScanner()}
-            disabled={disabled || starting}
+            variant="secondary"
+            className="w-full"
+            onClick={() => void startLiveScan()}
+            disabled={disabled || busy}
           >
-            {starting ? "Abrindo câmera…" : "Escanear QR Code"}
+            Leitura ao vivo (alternativa)
           </Button>
         ) : (
-          <Button type="button" variant="secondary" className="flex-1" onClick={() => void stopScanner()}>
-            Parar câmera
+          <Button type="button" variant="secondary" className="w-full" onClick={stopLiveScan}>
+            Parar leitura ao vivo
           </Button>
         )}
       </div>

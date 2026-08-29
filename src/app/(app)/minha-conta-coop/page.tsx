@@ -1,11 +1,11 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import dynamic from "next/dynamic";
+import { useRouter } from "next/navigation";
 import { CreditFeatureGate } from "@/components/hb-credit/CreditFeatureGate";
 import { CloudSessionGate } from "@/components/hb-credit/CloudSessionGate";
 import { ContaCoopSegmentTabs } from "@/components/hb-credit/ContaCoopSegmentTabs";
-import { HbCreditScannerErrorBoundary } from "@/components/hb-credit/HbCreditScannerErrorBoundary";
+import { consumeHbCreditScanResult } from "@/lib/hb-credit/scanSession";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Input, Label } from "@/components/ui/Form";
@@ -28,18 +28,6 @@ import { PageSkeleton } from "@/components/ui/PageSkeleton";
 import { generateId } from "@/services/dataStore";
 import { cn } from "@/utils/format";
 
-const HbCreditQrScanner = dynamic(
-  () => import("@/components/hb-credit/HbCreditQrScanner").then((mod) => mod.HbCreditQrScanner),
-  {
-    ssr: false,
-    loading: () => (
-      <div className="rounded-2xl border border-gray-200 bg-gray-50 px-4 py-10 text-center text-sm text-gray-500">
-        Carregando leitor de QR…
-      </div>
-    ),
-  }
-);
-
 type Tab = "inicio" | "pagar" | "extrato";
 
 export default function MinhaContaCoopPage() {
@@ -53,6 +41,7 @@ export default function MinhaContaCoopPage() {
 }
 
 function MinhaContaCoopContent() {
+  const router = useRouter();
   const { user } = usePermissions();
   const data = useAppData();
   const [tab, setTab] = useState<Tab>("inicio");
@@ -74,7 +63,6 @@ function MinhaContaCoopContent() {
   const [payPin, setPayPin] = useState("");
   const [busy, setBusy] = useState(false);
   const [isOffline, setIsOffline] = useState(false);
-  const [scannerKey, setScannerKey] = useState(0);
 
   const cnpj = useMemo(() => {
     if (!user || !data) return "";
@@ -118,6 +106,36 @@ function MinhaContaCoopContent() {
     reload();
   }, [reload]);
 
+  const processarQr = useCallback(
+    async (payload: string) => {
+      if (!cnpj || !cooperadoId || !payload.trim()) return;
+      setBusy(true);
+      setError("");
+      setSuccess("");
+      setQrInput(payload.trim());
+      setTab("pagar");
+      try {
+        const res = await validateCreditQr(cnpj, cooperadoId, payload.trim());
+        if (res.intent && res.limite && res.parceiroNome) {
+          setPendingIntent({ intent: res.intent, limite: res.limite, parceiroNome: res.parceiroNome });
+        }
+      } catch (e) {
+        setError(e instanceof Error ? e.message : "Código inválido ou expirado.");
+        setPendingIntent(null);
+      } finally {
+        setBusy(false);
+      }
+    },
+    [cnpj, cooperadoId]
+  );
+
+  useEffect(() => {
+    const payload = consumeHbCreditScanResult();
+    if (payload) {
+      void processarQr(payload);
+    }
+  }, [processarQr]);
+
   const salvarPin = async () => {
     if (!cnpj || !cooperadoId) return;
     setBusy(true);
@@ -129,26 +147,6 @@ function MinhaContaCoopContent() {
       setSuccess("PIN cadastrado. Agora você pode pagar nos mercados parceiros.");
     } catch (e) {
       setError(e instanceof Error ? e.message : "Erro ao salvar PIN.");
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const processarQr = async (payload: string) => {
-    if (!cnpj || !cooperadoId || !payload.trim()) return;
-    setBusy(true);
-    setError("");
-    setSuccess("");
-    setQrInput(payload.trim());
-    try {
-      const res = await validateCreditQr(cnpj, cooperadoId, payload.trim());
-      if (res.intent && res.limite && res.parceiroNome) {
-        setPendingIntent({ intent: res.intent, limite: res.limite, parceiroNome: res.parceiroNome });
-        setTab("pagar");
-      }
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Código inválido ou expirado.");
-      setPendingIntent(null);
     } finally {
       setBusy(false);
     }
@@ -289,7 +287,7 @@ function MinhaContaCoopContent() {
               </Button>
             </Card>
           ) : (
-            <Button size="lg" className="w-full" onClick={() => setTab("pagar")} disabled={account?.bloqueado}>
+            <Button size="lg" className="w-full" onClick={() => router.push("/minha-conta-coop/escanear")} disabled={account?.bloqueado}>
               Pagar com QR Code
             </Button>
           )}
@@ -353,15 +351,18 @@ function MinhaContaCoopContent() {
               </div>
             </Card>
           ) : (
-            <>
-              <HbCreditScannerErrorBoundary onReset={() => setScannerKey((k) => k + 1)}>
-                <HbCreditQrScanner
-                  key={scannerKey}
-                  onScan={(payload) => void processarQr(payload)}
-                  onError={setError}
+            <Card className="space-y-4 !p-5">
+              <div className="text-center space-y-2">
+                <p className="text-sm text-gray-600">Escaneie o QR Code gerado no mercado parceiro.</p>
+                <Button
+                  size="lg"
+                  className="w-full"
+                  onClick={() => router.push("/minha-conta-coop/escanear")}
                   disabled={pagamentoBloqueado || busy}
-                />
-              </HbCreditScannerErrorBoundary>
+                >
+                  Abrir câmera para pagar
+                </Button>
+              </div>
 
               <button
                 type="button"
@@ -372,7 +373,7 @@ function MinhaContaCoopContent() {
               </button>
 
               {showManualQr && (
-                <Card className="space-y-3 !p-4">
+                <div className="space-y-3 border-t border-gray-100 pt-4">
                   <Label>Código do QR (hb-credit://…)</Label>
                   <Input
                     value={qrInput}
@@ -386,9 +387,9 @@ function MinhaContaCoopContent() {
                   >
                     Verificar cobrança
                   </Button>
-                </Card>
+                </div>
               )}
-            </>
+            </Card>
           )}
         </div>
       )}
