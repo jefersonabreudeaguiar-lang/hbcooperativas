@@ -30,3 +30,19 @@ export function calcLimiteFromPercentual(creditoBaseCents: number, percentual: n
   }
   return Math.round(Math.max(0, creditoBaseCents) * (percentual / 100));
 }
+
+export function sumCreditosBaseCents(creditosBaseCents: Record<string, number>): number {
+  return Object.values(creditosBaseCents).reduce(
+    (total, value) => total + Math.max(0, Math.round(Number(value) || 0)),
+    0
+  );
+}
+
+/** Teto global em centavos = percentual sobre a soma do crédito na ficha de todos os cooperados. */
+export function calcTetoGlobalCents(
+  creditosBaseCents: Record<string, number>,
+  tetoPercent: number
+): number {
+  const percent = tetoPercent > 0 ? tetoPercent : 100;
+  return calcLimiteFromPercentual(sumCreditosBaseCents(creditosBaseCents), percent);
+}

@@ -30,6 +30,7 @@ type PreviewColetivo = {
   aviso?: string;
   percentual?: number;
   tetoGlobal?: number;
+  tetoGlobalPercent?: number;
   limiteAtualTotal?: number;
   novoLimiteTotal?: number;
   totalApos?: number;
@@ -63,7 +64,7 @@ function ContaCoopContent() {
   const [dashboard, setDashboard] = useState<ContaCoopDashboard | null>(null);
   const [limites, setLimites] = useState<ContaCoopLimiteCooperado[]>([]);
   const [parceiros, setParceiros] = useState<ContaCoopParceiro[]>([]);
-  const [tetoReais, setTetoReais] = useState("");
+  const [tetoPercentual, setTetoPercentual] = useState("");
   const [cooperadoId, setCooperadoId] = useState("");
   const [novoLimiteReais, setNovoLimiteReais] = useState("");
   const [percentualColetivo, setPercentualColetivo] = useState("");
@@ -103,7 +104,7 @@ function ContaCoopContent() {
     setError("");
     try {
       const [dash, lim, parc] = await Promise.all([
-        fetchCreditDashboard(cnpj),
+        fetchCreditDashboard(cnpj, creditosBaseColetivo),
         fetchCreditLimites(cnpj),
         fetchCreditParceiros(cnpj),
       ]);
@@ -115,7 +116,7 @@ function ContaCoopContent() {
     } finally {
       setLoading(false);
     }
-  }, [cnpj]);
+  }, [cnpj, creditosBaseColetivo]);
 
   useEffect(() => {
     reload();
@@ -126,7 +127,12 @@ function ContaCoopContent() {
     setBusy(true);
     setError("");
     try {
-      await postCreditLimites({ action: "set_teto", cnpj, tetoReais: Number(tetoReais.replace(",", ".")) });
+      await postCreditLimites({
+        action: "set_teto",
+        cnpj,
+        tetoPercentual: Number(tetoPercentual.replace(",", ".")),
+        creditosBaseCents: creditosBaseColetivo,
+      });
       await reload();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Erro ao salvar teto.");
@@ -145,6 +151,7 @@ function ContaCoopContent() {
         cnpj,
         cooperadoId,
         novoLimiteReais: Number(novoLimiteReais.replace(",", ".")),
+        creditosBaseCents: creditosBaseColetivo,
       });
       await reload();
     } catch (e) {
@@ -264,21 +271,29 @@ function ContaCoopContent() {
         <div className="grid gap-4 md:grid-cols-2">
           <Card className="p-5 space-y-3">
             <h3 className="font-semibold text-gray-900">Teto global</h3>
-            {dashboard.teto.tetoGlobalCents === 0 && (
-              <p className="text-sm text-amber-800 bg-amber-50 border border-amber-200 rounded-lg p-2">
-                Teto ainda não definido (R$ 0,00). Na liberação coletiva por percentual, o teto será ajustado
-                automaticamente. Ou defina manualmente abaixo.
-              </p>
-            )}
-            <p className="text-sm text-gray-600">Teto: {formatCentsBRL(dashboard.teto.tetoGlobalCents)}</p>
+            <p className="text-sm text-gray-600">
+              Percentual máximo sobre o crédito total na ficha de todos os cooperados.
+            </p>
+            <p className="text-sm text-gray-600">
+              Teto: {dashboard.teto.tetoGlobalPercent}% = {formatCentsBRL(dashboard.teto.tetoGlobalCents)}
+            </p>
+            <p className="text-xs text-gray-500">
+              Crédito total na ficha: {formatCentsBRL(dashboard.teto.creditoBaseTotalCents)}
+            </p>
             <p className="text-sm text-gray-600">Distribuído: {formatCentsBRL(dashboard.teto.limiteDistribuidoCents)}</p>
             <p className="text-sm font-medium text-green-800">
               Restante: {formatCentsBRL(dashboard.teto.restanteParaLiberarCents)}
             </p>
             <div className="flex gap-2 items-end pt-2">
               <div className="flex-1">
-                <Label htmlFor="teto">Novo teto (R$)</Label>
-                <Input id="teto" value={tetoReais} onChange={(e) => setTetoReais(e.target.value)} placeholder="100000" />
+                <Label htmlFor="teto">Novo teto (% do crédito na ficha)</Label>
+                <Input
+                  id="teto"
+                  value={tetoPercentual}
+                  onChange={(e) => setTetoPercentual(e.target.value)}
+                  placeholder="100"
+                  inputMode="decimal"
+                />
               </div>
               <Button onClick={salvarTeto} disabled={busy}>Salvar teto</Button>
             </div>
@@ -346,15 +361,18 @@ function ContaCoopContent() {
               <div className="text-sm bg-gray-50 border rounded-lg p-3 space-y-3">
                 <div className="space-y-1">
                   <p>Percentual: {previewColetivo.percentual ?? percentualColetivo}%</p>
-                  <p>Teto global: {formatCentsBRL(Number(previewColetivo.tetoGlobal ?? 0))}</p>
+                  <p>
+                    Teto global: {previewColetivo.tetoGlobalPercent ?? dashboard?.teto.tetoGlobalPercent ?? 100}% ={" "}
+                    {formatCentsBRL(Number(previewColetivo.tetoGlobal ?? 0))}
+                  </p>
                   <p>Limite atual total: {formatCentsBRL(Number(previewColetivo.limiteAtualTotal ?? 0))}</p>
                   <p>Novo pacote: {formatCentsBRL(Number(previewColetivo.novoLimiteTotal ?? 0))}</p>
                   <p className="font-medium">Total após: {formatCentsBRL(Number(previewColetivo.totalApos ?? 0))}</p>
-                  {previewColetivo.aviso && (
-                    <p className="text-amber-800">{previewColetivo.aviso}</p>
-                  )}
                   {!previewColetivo.ok && (
                     <p className="text-red-600">{String(previewColetivo.error ?? "Ultrapassa teto")}</p>
+                  )}
+                  {previewColetivo.ok && previewColetivo.aviso && (
+                    <p className="text-amber-800">{previewColetivo.aviso}</p>
                   )}
                 </div>
                 {!!previewColetivo.itens?.length && (

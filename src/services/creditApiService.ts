@@ -15,8 +15,15 @@ async function parseJson<T>(res: Response): Promise<T & { error?: string }> {
   return data;
 }
 
-export async function fetchCreditDashboard(cnpj: string): Promise<ContaCoopDashboard | null> {
-  const res = await secureApiFetch(`/api/credit/dashboard?cnpj=${encodeURIComponent(cnpj)}`);
+export async function fetchCreditDashboard(
+  cnpj: string,
+  creditosBaseCents: Record<string, number> = {}
+): Promise<ContaCoopDashboard | null> {
+  const res = await secureApiFetch("/api/credit/dashboard", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ cnpj, creditosBaseCents }),
+  });
   const data = await parseJson<{ ok?: boolean; dashboard?: ContaCoopDashboard }>(res);
   if (!res.ok || !data.ok) throw new Error(data.error ?? "Erro ao carregar painel.");
   return data.dashboard ?? null;

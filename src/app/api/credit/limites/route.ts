@@ -8,7 +8,7 @@ import {
   setLimiteColetivo,
   setLimiteColetivoPercentual,
   setLimiteCooperado,
-  setTetoGlobal,
+  setTetoGlobalPercent,
 } from "@/lib/supabase/contaCoopStorage";
 import { requireCreditApi, requireCreditCnpj, requireCreditStaff } from "@/lib/security/creditGuard";
 import { normalizeCnpj } from "@/utils/cooperativa";
@@ -46,10 +46,17 @@ export async function POST(request: Request) {
   if (denyStaff) return denyStaff;
 
   const actorId = gate.ctx.session?.sub ?? "system";
+  const creditosBaseCents = (body?.creditosBaseCents ?? {}) as Record<string, number>;
 
   if (action === "set_teto") {
-    const tetoCents = Number(body?.tetoCentavos ?? reaisToCents(Number(body?.tetoReais ?? 0)));
-    const result = await setTetoGlobal(gate.ctx.supabase, cnpj, tetoCents, actorId);
+    const tetoPercent = Number(body?.tetoPercentual ?? body?.tetoPercent ?? 0);
+    const result = await setTetoGlobalPercent(
+      gate.ctx.supabase,
+      cnpj,
+      tetoPercent,
+      creditosBaseCents,
+      actorId
+    );
     if (!result.ok) return NextResponse.json({ error: result.error }, { status: 400 });
     return NextResponse.json({ ok: true });
   }
@@ -57,14 +64,27 @@ export async function POST(request: Request) {
   if (action === "preview_individual") {
     const cooperadoId = String(body?.cooperadoId ?? "");
     const novoCents = Number(body?.novoLimiteCentavos ?? reaisToCents(Number(body?.novoLimiteReais ?? 0)));
-    const preview = await previewLimiteAlteracao(gate.ctx.supabase, cnpj, cooperadoId, novoCents);
+    const preview = await previewLimiteAlteracao(
+      gate.ctx.supabase,
+      cnpj,
+      cooperadoId,
+      novoCents,
+      creditosBaseCents
+    );
     return NextResponse.json({ ok: true, preview });
   }
 
   if (action === "set_individual") {
     const cooperadoId = String(body?.cooperadoId ?? "");
     const novoCents = Number(body?.novoLimiteCentavos ?? reaisToCents(Number(body?.novoLimiteReais ?? 0)));
-    const result = await setLimiteCooperado(gate.ctx.supabase, cnpj, cooperadoId, novoCents, actorId);
+    const result = await setLimiteCooperado(
+      gate.ctx.supabase,
+      cnpj,
+      cooperadoId,
+      novoCents,
+      actorId,
+      creditosBaseCents
+    );
     if (!result.ok) return NextResponse.json({ error: result.error }, { status: 400 });
     return NextResponse.json({ ok: true, limite: result.limite });
   }
@@ -86,7 +106,14 @@ export async function POST(request: Request) {
       return NextResponse.json({ ok: true, updated: result.updated });
     }
     const valorCents = Number(body?.valorCentavos ?? reaisToCents(Number(body?.valorReais ?? 0)));
-    const result = await setLimiteColetivo(gate.ctx.supabase, cnpj, cooperadoIds, valorCents, actorId);
+    const result = await setLimiteColetivo(
+      gate.ctx.supabase,
+      cnpj,
+      cooperadoIds,
+      valorCents,
+      actorId,
+      creditosBaseCents
+    );
     if (!result.ok) return NextResponse.json({ error: result.error }, { status: 400 });
     return NextResponse.json({ ok: true, updated: result.updated });
   }
@@ -106,7 +133,13 @@ export async function POST(request: Request) {
       return NextResponse.json({ ok: true, preview });
     }
     const valorCents = Number(body?.valorCentavos ?? reaisToCents(Number(body?.valorReais ?? 0)));
-    const preview = await previewLimiteColetivo(gate.ctx.supabase, cnpj, cooperadoIds, valorCents);
+    const preview = await previewLimiteColetivo(
+      gate.ctx.supabase,
+      cnpj,
+      cooperadoIds,
+      valorCents,
+      creditosBaseCents
+    );
     return NextResponse.json({ ok: true, preview });
   }
 

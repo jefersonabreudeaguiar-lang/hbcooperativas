@@ -34,7 +34,11 @@ export interface ContaCoopTresValores {
 }
 
 export interface ContaCoopTetoResumo {
+  /** Percentual máximo sobre o crédito total na ficha (0 = usa 100%). */
+  tetoGlobalPercent: number;
+  /** Valor em centavos equivalente ao percentual (crédito ficha × %). */
   tetoGlobalCents: number;
+  creditoBaseTotalCents: number;
   limiteDistribuidoCents: number;
   restanteParaLiberarCents: number;
 }

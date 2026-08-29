@@ -11,7 +11,7 @@ import type {
   ParceiroStatus,
 } from "@/modules/hb-credit/types";
 import { computeDisponivel, formatCentsBRL } from "@/modules/hb-credit/engine/money";
-import { calcLimiteFromPercentual } from "@/modules/hb-credit/engine/creditBaseFromFicha";
+import { calcLimiteFromPercentual, calcTetoGlobalCents, sumCreditosBaseCents } from "@/modules/hb-credit/engine/creditBaseFromFicha";
 import { INTENT_EXPIRY_MINUTES } from "@/modules/hb-credit/config";
 import {
   intentStatusFromDb,
@@ -51,40 +51,117 @@ export function parseQrPayload(raw: string): { intentId: string; nonce: string }
   }
 }
 
+const DEFAULT_TETO_PERCENT = 100;
+
+export async function getOrCreateTetoPercent(
+  supabase: SupabaseClient,
+  cnpj: string,
+  defaultPercent = DEFAULT_TETO_PERCENT
+): Promise<number> {
+  const digits = normalizeCnpj(cnpj);
+  const { data, error } = await supabase
+    .from("hb_credit_cooperative_caps")
+    .select("global_credit_cap_percent")
+    .eq("cooperative_cnpj", digits)
+    .maybeSingle();
+
+  if (error) {
+    if (/global_credit_cap_percent/i.test(error.message ?? "")) {
+      return defaultPercent;
+    }
+    throw error;
+  }
+
+  if (data) {
+    const stored = Number(data.global_credit_cap_percent);
+    return stored > 0 ? stored : defaultPercent;
+  }
+
+  await supabase.from("hb_credit_cooperative_caps").insert({
+    cooperative_cnpj: digits,
+    global_credit_cap_cents: 0,
+    global_credit_cap_percent: defaultPercent,
+  });
+  return defaultPercent;
+}
+
+export async function resolveTetoGlobal(
+  supabase: SupabaseClient,
+  cnpj: string,
+  creditosBaseCents: Record<string, number>
+): Promise<{ percent: number; cents: number; creditoBaseTotalCents: number }> {
+  const percent = await getOrCreateTetoPercent(supabase, cnpj);
+  const creditoBaseTotalCents = sumCreditosBaseCents(creditosBaseCents);
+  const cents = calcTetoGlobalCents(creditosBaseCents, percent);
+  return { percent, cents, creditoBaseTotalCents };
+}
+
+/** @deprecated use resolveTetoGlobal */
 export async function getOrCreateTeto(
   supabase: SupabaseClient,
   cnpj: string,
-  defaultCents = 0
+  creditosBaseCents: Record<string, number> = {}
 ): Promise<number> {
-  const digits = normalizeCnpj(cnpj);
-  const { data } = await supabase.from("hb_credit_cooperative_caps").select("global_credit_cap_cents").eq("cooperative_cnpj", digits).maybeSingle();
-  if (data) return Number(data.global_credit_cap_cents);
-  await supabase.from("hb_credit_cooperative_caps").insert({ cooperative_cnpj: digits, global_credit_cap_cents: defaultCents });
-  return defaultCents;
+  const resolved = await resolveTetoGlobal(supabase, cnpj, creditosBaseCents);
+  return resolved.cents;
 }
 
+export async function setTetoGlobalPercent(
+  supabase: SupabaseClient,
+  cnpj: string,
+  tetoPercent: number,
+  creditosBaseCents: Record<string, number>,
+  actorUserId: string
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  if (!Number.isFinite(tetoPercent) || tetoPercent < 0 || tetoPercent > 100) {
+    return { ok: false, error: "Informe um percentual entre 0 e 100." };
+  }
+
+  const digits = normalizeCnpj(cnpj);
+  const distribuido = await sumLimitesDistribuidos(supabase, digits);
+  const tetoCents = calcTetoGlobalCents(creditosBaseCents, tetoPercent);
+
+  if (tetoCents < distribuido) {
+    return {
+      ok: false,
+      error: `Teto de ${tetoPercent}% (${formatCentsBRL(tetoCents)}) não pode ser menor que o já distribuído (${formatCentsBRL(distribuido)}).`,
+    };
+  }
+
+  const row = {
+    cooperative_cnpj: digits,
+    global_credit_cap_percent: tetoPercent,
+    global_credit_cap_cents: tetoCents,
+    updated_by: actorUserId,
+    updated_at: new Date().toISOString(),
+  };
+  const { error } = await supabase.from("hb_credit_cooperative_caps").upsert(row);
+  if (error && /global_credit_cap_percent/i.test(error.message ?? "")) {
+    const { global_credit_cap_percent: _drop, ...legacyRow } = row;
+    const retry = await supabase.from("hb_credit_cooperative_caps").upsert(legacyRow);
+    if (retry.error) return { ok: false, error: retry.error.message };
+  } else if (error) {
+    return { ok: false, error: error.message };
+  }
+  return { ok: true };
+}
+
+/** @deprecated use setTetoGlobalPercent */
 export async function setTetoGlobal(
   supabase: SupabaseClient,
   cnpj: string,
   tetoCentavos: number,
   actorUserId: string
 ): Promise<{ ok: true } | { ok: false; error: string }> {
-  const digits = normalizeCnpj(cnpj);
-  const distribuido = await sumLimitesDistribuidos(supabase, digits);
-  if (tetoCentavos < distribuido) {
-    return { ok: false, error: `Teto não pode ser menor que o já distribuído (${distribuido} centavos).` };
-  }
-  await supabase.from("hb_credit_cooperative_caps").upsert({
-    cooperative_cnpj: digits,
-    global_credit_cap_cents: tetoCentavos,
-    updated_by: actorUserId,
-    updated_at: new Date().toISOString(),
-  });
-  return { ok: true };
+  return setTetoGlobalPercent(supabase, cnpj, DEFAULT_TETO_PERCENT, {}, actorUserId);
 }
 
-function mensagemUltrapassaTeto(tetoCents: number, totalAposCents: number): string {
-  return `Ultrapassa o teto global (${formatCentsBRL(tetoCents)}). Total após liberação: ${formatCentsBRL(totalAposCents)}. Aumente o teto na aba Painel.`;
+function mensagemUltrapassaTeto(
+  tetoPercent: number,
+  tetoCents: number,
+  totalAposCents: number
+): string {
+  return `Ultrapassa o teto global (${tetoPercent}% = ${formatCentsBRL(tetoCents)}). Total após liberação: ${formatCentsBRL(totalAposCents)}. Aumente o percentual do teto na aba Painel.`;
 }
 
 async function sumLimitesDistribuidos(supabase: SupabaseClient, cnpj: string): Promise<number> {
@@ -95,9 +172,13 @@ async function sumLimitesDistribuidos(supabase: SupabaseClient, cnpj: string): P
   return (data ?? []).reduce((s, r) => s + Number(r.limit_released_cents), 0);
 }
 
-export async function getDashboardResumo(supabase: SupabaseClient, cnpj: string): Promise<ContaCoopDashboard> {
+export async function getDashboardResumo(
+  supabase: SupabaseClient,
+  cnpj: string,
+  creditosBaseCents: Record<string, number> = {}
+): Promise<ContaCoopDashboard> {
   const digits = normalizeCnpj(cnpj);
-  const tetoGlobal = await getOrCreateTeto(supabase, digits);
+  const teto = await resolveTetoGlobal(supabase, digits, creditosBaseCents);
   const { data: limites } = await supabase
     .from("hb_credit_accounts")
     .select("limit_released_cents, amount_used_cents")
@@ -125,9 +206,11 @@ export async function getDashboardResumo(supabase: SupabaseClient, cnpj: string)
 
   return {
     teto: {
-      tetoGlobalCents: tetoGlobal,
+      tetoGlobalPercent: teto.percent,
+      tetoGlobalCents: teto.cents,
+      creditoBaseTotalCents: teto.creditoBaseTotalCents,
       limiteDistribuidoCents: limiteDistribuido,
-      restanteParaLiberarCents: Math.max(0, tetoGlobal - limiteDistribuido),
+      restanteParaLiberarCents: Math.max(0, teto.cents - limiteDistribuido),
     },
     agregadoCooperados: {
       limiteLiberadoCents: limiteDistribuido,
@@ -173,17 +256,19 @@ export async function previewLimiteAlteracao(
   supabase: SupabaseClient,
   cnpj: string,
   cooperadoId: string,
-  novoLimiteCents: number
+  novoLimiteCents: number,
+  creditosBaseCents: Record<string, number> = {}
 ): Promise<{
   atual: ContaCoopTresValores;
   novo: number;
   totalDistribuidoApos: number;
   tetoGlobal: number;
+  tetoGlobalPercent: number;
   ok: boolean;
   error?: string;
 }> {
   const digits = normalizeCnpj(cnpj);
-  const teto = await getOrCreateTeto(supabase, digits);
+  const teto = await resolveTetoGlobal(supabase, digits, creditosBaseCents);
   const { data: atualRow } = await supabase
     .from("hb_credit_accounts")
     .select("*")
@@ -199,7 +284,8 @@ export async function previewLimiteAlteracao(
       atual: { limiteLiberadoCents: atualLimite, valorUsadoCents: usado, valorDisponivelCents: computeDisponivel(atualLimite, usado) },
       novo: novoLimiteCents,
       totalDistribuidoApos: 0,
-      tetoGlobal: teto,
+      tetoGlobal: teto.cents,
+      tetoGlobalPercent: teto.percent,
       ok: false,
       error: "Novo limite não pode ser menor que o valor já usado.",
     };
@@ -208,14 +294,15 @@ export async function previewLimiteAlteracao(
   const distribuido = await sumLimitesDistribuidos(supabase, digits);
   const totalApos = distribuido - atualLimite + novoLimiteCents;
 
-  if (totalApos > teto) {
+  if (totalApos > teto.cents) {
     return {
       atual: { limiteLiberadoCents: atualLimite, valorUsadoCents: usado, valorDisponivelCents: computeDisponivel(atualLimite, usado) },
       novo: novoLimiteCents,
       totalDistribuidoApos: totalApos,
-      tetoGlobal: teto,
+      tetoGlobal: teto.cents,
+      tetoGlobalPercent: teto.percent,
       ok: false,
-      error: teto === 0 ? "Teto global ainda não definido (R$ 0,00). Defina o teto na aba Painel ou use a liberação coletiva." : mensagemUltrapassaTeto(teto, totalApos),
+      error: mensagemUltrapassaTeto(teto.percent, teto.cents, totalApos),
     };
   }
 
@@ -223,7 +310,8 @@ export async function previewLimiteAlteracao(
     atual: { limiteLiberadoCents: atualLimite, valorUsadoCents: usado, valorDisponivelCents: computeDisponivel(atualLimite, usado) },
     novo: novoLimiteCents,
     totalDistribuidoApos: totalApos,
-    tetoGlobal: teto,
+    tetoGlobal: teto.cents,
+    tetoGlobalPercent: teto.percent,
     ok: true,
   };
 }
@@ -233,9 +321,16 @@ export async function setLimiteCooperado(
   cnpj: string,
   cooperadoId: string,
   novoLimiteCents: number,
-  actorUserId: string
+  actorUserId: string,
+  creditosBaseCents: Record<string, number> = {}
 ): Promise<{ ok: true; limite: ContaCoopLimiteCooperado } | { ok: false; error: string }> {
-  const preview = await previewLimiteAlteracao(supabase, cnpj, cooperadoId, novoLimiteCents);
+  const preview = await previewLimiteAlteracao(
+    supabase,
+    cnpj,
+    cooperadoId,
+    novoLimiteCents,
+    creditosBaseCents
+  );
   if (!preview.ok) return { ok: false, error: preview.error! };
 
   const digits = normalizeCnpj(cnpj);
@@ -288,11 +383,28 @@ export async function setLimiteColetivo(
   cnpj: string,
   cooperadoIds: string[],
   valorPorCooperadoCents: number,
-  actorUserId: string
+  actorUserId: string,
+  creditosBaseCents: Record<string, number> = {}
 ): Promise<{ ok: true; updated: number } | { ok: false; error: string }> {
+  const preview = await previewLimiteColetivo(
+    supabase,
+    cnpj,
+    cooperadoIds,
+    valorPorCooperadoCents,
+    creditosBaseCents
+  );
+  if (!preview.ok) return { ok: false, error: preview.error ?? "Prévia recusada." };
+
   let updated = 0;
   for (const cooperadoId of cooperadoIds) {
-    const result = await setLimiteCooperado(supabase, cnpj, cooperadoId, valorPorCooperadoCents, actorUserId);
+    const result = await setLimiteCooperado(
+      supabase,
+      cnpj,
+      cooperadoId,
+      valorPorCooperadoCents,
+      actorUserId,
+      creditosBaseCents
+    );
     if (!result.ok) return result;
     updated++;
   }
@@ -700,17 +812,19 @@ export async function previewLimiteColetivo(
   supabase: SupabaseClient,
   cnpj: string,
   cooperadoIds: string[],
-  valorPorCooperadoCents: number
+  valorPorCooperadoCents: number,
+  creditosBaseCents: Record<string, number> = {}
 ): Promise<{
   limiteAtualTotal: number;
   novoLimiteTotal: number;
   totalApos: number;
   tetoGlobal: number;
+  tetoGlobalPercent: number;
   ok: boolean;
   error?: string;
 }> {
   const digits = normalizeCnpj(cnpj);
-  const teto = await getOrCreateTeto(supabase, digits);
+  const teto = await resolveTetoGlobal(supabase, digits, creditosBaseCents);
   const distribuido = await sumLimitesDistribuidos(supabase, digits);
 
   let somaAtualSelecionados = 0;
@@ -726,14 +840,15 @@ export async function previewLimiteColetivo(
 
   const totalApos = distribuido - somaAtualSelecionados + cooperadoIds.length * valorPorCooperadoCents;
 
-  if (totalApos > teto) {
+  if (totalApos > teto.cents) {
     return {
       limiteAtualTotal: distribuido,
       novoLimiteTotal: cooperadoIds.length * valorPorCooperadoCents,
       totalApos,
-      tetoGlobal: teto,
+      tetoGlobal: teto.cents,
+      tetoGlobalPercent: teto.percent,
       ok: false,
-      error: "Ultrapassa o teto global da cooperativa.",
+      error: mensagemUltrapassaTeto(teto.percent, teto.cents, totalApos),
     };
   }
 
@@ -741,7 +856,8 @@ export async function previewLimiteColetivo(
     limiteAtualTotal: distribuido,
     novoLimiteTotal: cooperadoIds.length * valorPorCooperadoCents,
     totalApos,
-    tetoGlobal: teto,
+    tetoGlobal: teto.cents,
+    tetoGlobalPercent: teto.percent,
     ok: true,
   };
 }
@@ -784,15 +900,14 @@ export async function previewLimiteColetivoPercentual(
   novoLimiteTotal: number;
   totalApos: number;
   tetoGlobal: number;
+  tetoGlobalPercent: number;
   ok: boolean;
   error?: string;
   percentual: number;
   itens: LimiteColetivoPreviewItem[];
-  autoAjusteTetoCents?: number;
-  aviso?: string;
 }> {
   const digits = normalizeCnpj(cnpj);
-  const teto = await getOrCreateTeto(supabase, digits);
+  const teto = await resolveTetoGlobal(supabase, digits, creditosBaseCents);
   const distribuido = await sumLimitesDistribuidos(supabase, digits);
 
   if (!Number.isFinite(percentual) || percentual < 0 || percentual > 100) {
@@ -800,9 +915,24 @@ export async function previewLimiteColetivoPercentual(
       limiteAtualTotal: distribuido,
       novoLimiteTotal: 0,
       totalApos: distribuido,
-      tetoGlobal: teto,
+      tetoGlobal: teto.cents,
+      tetoGlobalPercent: teto.percent,
       ok: false,
       error: "Percentual inválido (use 0 a 100).",
+      percentual,
+      itens: [],
+    };
+  }
+
+  if (percentual > teto.percent) {
+    return {
+      limiteAtualTotal: distribuido,
+      novoLimiteTotal: 0,
+      totalApos: distribuido,
+      tetoGlobal: teto.cents,
+      tetoGlobalPercent: teto.percent,
+      ok: false,
+      error: `Liberação de ${percentual}% ultrapassa o teto global de ${teto.percent}% do crédito na ficha.`,
       percentual,
       itens: [],
     };
@@ -837,28 +967,15 @@ export async function previewLimiteColetivoPercentual(
 
   const totalApos = distribuido - somaAtualSelecionados + novoLimiteTotal;
 
-  if (totalApos > teto) {
-    if (teto === 0 && totalApos > 0) {
-      return {
-        limiteAtualTotal: distribuido,
-        novoLimiteTotal,
-        totalApos,
-        tetoGlobal: teto,
-        ok: true,
-        percentual,
-        itens,
-        autoAjusteTetoCents: totalApos,
-        aviso: `Teto global ainda não definido. Na liberação, será ajustado para ${formatCentsBRL(totalApos)}.`,
-      };
-    }
-
+  if (totalApos > teto.cents) {
     return {
       limiteAtualTotal: distribuido,
       novoLimiteTotal,
       totalApos,
-      tetoGlobal: teto,
+      tetoGlobal: teto.cents,
+      tetoGlobalPercent: teto.percent,
       ok: false,
-      error: mensagemUltrapassaTeto(teto, totalApos),
+      error: mensagemUltrapassaTeto(teto.percent, teto.cents, totalApos),
       percentual,
       itens,
     };
@@ -868,7 +985,8 @@ export async function previewLimiteColetivoPercentual(
     limiteAtualTotal: distribuido,
     novoLimiteTotal,
     totalApos,
-    tetoGlobal: teto,
+    tetoGlobal: teto.cents,
+    tetoGlobalPercent: teto.percent,
     ok: true,
     percentual,
     itens,
@@ -892,16 +1010,6 @@ export async function setLimiteColetivoPercentual(
   );
   if (!preview.ok) return { ok: false, error: preview.error ?? "Prévia recusada." };
 
-  if (preview.autoAjusteTetoCents && preview.autoAjusteTetoCents > 0) {
-    const tetoResult = await setTetoGlobal(
-      supabase,
-      cnpj,
-      preview.autoAjusteTetoCents,
-      actorUserId
-    );
-    if (!tetoResult.ok) return tetoResult;
-  }
-
   let updated = 0;
   for (const item of preview.itens) {
     const result = await setLimiteCooperado(
@@ -909,7 +1017,8 @@ export async function setLimiteColetivoPercentual(
       cnpj,
       item.cooperadoId,
       item.novoLimiteCents,
-      actorUserId
+      actorUserId,
+      creditosBaseCents
     );
     if (!result.ok) return result;
     updated++;
