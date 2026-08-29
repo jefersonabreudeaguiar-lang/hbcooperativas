@@ -1535,6 +1535,7 @@ export function relancarEntregaNota(
     rejeitadaPor: undefined,
     dataRejeicao: undefined,
     motivoRejeicao: undefined,
+    relancadaEm: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
   };
 

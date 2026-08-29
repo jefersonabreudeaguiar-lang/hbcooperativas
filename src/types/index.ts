@@ -324,6 +324,8 @@ export interface NotaPedido {
   dataRejeicao?: string;
   motivoRejeicao?: string;
   reenviadaEm?: string;
+  /** Marca re-lançamento pelo responsável — evita que sync restaure conferida obsoleta na nuvem. */
+  relancadaEm?: string;
   mesReferencia: string;
   observacoes?: string;
   /** Nome informado pelo cooperado quando a escola não está no cadastro. */

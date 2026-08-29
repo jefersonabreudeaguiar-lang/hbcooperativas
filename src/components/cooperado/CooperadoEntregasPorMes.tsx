@@ -110,6 +110,11 @@ function ResumoMesCard({
             {resumo.rejeitadas} para corrigir
           </span>
         )}
+        {resumo.conferidas > 0 && (
+          <span className="text-xs font-medium text-green-800 bg-green-100 px-2.5 py-1 rounded-full">
+            {resumo.conferidas} aprovada{resumo.conferidas !== 1 ? "s" : ""}
+          </span>
+        )}
         {resumo.pagas > 0 && (
           <span className="text-xs font-medium text-emerald-800 bg-emerald-100 px-2.5 py-1 rounded-full">
             {resumo.pagas} paga{resumo.pagas !== 1 ? "s" : ""}

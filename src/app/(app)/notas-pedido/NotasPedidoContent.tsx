@@ -49,6 +49,8 @@ import {
   queueNotaDelete,
   unqueueNotaDelete,
   flushPendingNotaDeletes,
+  fetchNotaPedidoFromCloud,
+  getPendingNotaDeleteIds,
   ensureNotaComFoto,
   resolveCooperativaCnpj,
   fetchNotaFotoPartBlobUrl,
@@ -187,7 +189,7 @@ export default function NotasPedidoContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
 
-  const [statusFilter, setStatusFilter] = useState(isCooperado ? "pendentes" : "");
+  const [statusFilter, setStatusFilter] = useState(isCooperado ? "" : "");
   const filtroResponsavelIniciado = useRef(false);
   const [anexarModal, setAnexarModal] = useState(false);
   const [conferirModal, setConferirModal] = useState(false);
@@ -825,6 +827,12 @@ export default function NotasPedidoContent() {
       .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
   }, [data, coopId, isCooperado]);
 
+  const pendingDeleteIds = useMemo(() => {
+    if (!data || !coopId) return new Set<string>();
+    const cnpj = getCooperativaCnpj(data, coopId);
+    return cnpj ? getPendingNotaDeleteIds(cnpj) : new Set<string>();
+  }, [data, coopId]);
+
   // Fila estável: permanece até lançar/rejeitar — não some no sync nem por status transitório.
   const filaStickyIdsRef = useRef<Set<string>>(new Set());
   const filaStickySnapshotRef = useRef<Map<string, NotaPedido>>(new Map());
@@ -837,6 +845,11 @@ export default function NotasPedidoContent() {
     }
 
     for (const id of [...filaStickyIdsRef.current]) {
+      if (pendingDeleteIds.has(id)) {
+        filaStickyIdsRef.current.delete(id);
+        filaStickySnapshotRef.current.delete(id);
+        continue;
+      }
       const atual = data.notasPedido.find((x) => x.id === id);
       if (atual && isNotaSaiuDaFilaConferencia(atual.status)) {
         filaStickyIdsRef.current.delete(id);
@@ -848,6 +861,7 @@ export default function NotasPedidoContent() {
     for (const n of pendentesTodas) byId.set(n.id, n);
 
     for (const id of filaStickyIdsRef.current) {
+      if (pendingDeleteIds.has(id)) continue;
       if (byId.has(id)) continue;
       const atual = data.notasPedido.find((x) => x.id === id);
       const snap = filaStickySnapshotRef.current.get(id);
@@ -872,7 +886,7 @@ export default function NotasPedidoContent() {
     return Array.from(byId.values()).sort(
       (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
     );
-  }, [data, pendentesTodas]);
+  }, [data, pendentesTodas, pendingDeleteIds]);
 
   const pendentesPorCooperado = useMemo(() => {
     if (!data) return [];
@@ -2256,6 +2270,7 @@ export default function NotasPedidoContent() {
         status: "conferida",
         conferidaPor: user.name,
         dataConferencia: now.split("T")[0],
+        relancadaEm: undefined,
       };
       const divisao = resolverDivisaoConferencia(d, notaAtualizada);
       if (divisao) {
@@ -2331,26 +2346,27 @@ export default function NotasPedidoContent() {
       );
     });
 
-    requestAppSync();
-
-    if (notaAtualizada && coopId) {
-      void (async () => {
-        try {
-          const cnpj = await resolveCooperativaCnpj(getData(), coopId, user);
-          if (!cnpj) return;
-          await patchNotaPedidoInCloud(cnpj, notaAtualizada!);
-          const d = getData();
-          await pushOperacionalToCloud(cnpj, d, coopId, { authoritative: true });
-        } finally {
-          lancandoRef.current = false;
-        }
-      })();
-    } else {
-      lancandoRef.current = false;
-    }
-
     void (async () => {
       try {
+        if (notaAtualizada && coopId) {
+          const cnpj = await resolveCooperativaCnpj(getData(), coopId, user);
+          if (cnpj) {
+            const patched = await patchNotaPedidoInCloud(cnpj, notaAtualizada);
+            if (!patched.ok) {
+              setSuccessMsg(
+                patched.error ??
+                  "Entrega lançada aqui, mas não sincronizou com a nuvem. Verifique a conexão."
+              );
+            } else {
+              const d = getData();
+              await pushOperacionalToCloud(cnpj, d, coopId, { authoritative: true });
+              requestAppSync();
+            }
+          }
+        } else {
+          requestAppSync();
+        }
+
         await aguardarSequenciaLancamentoFotos(selectedNota, qtdFotosAprovadas);
 
         const proxima = obterProximaNotaConferencia(chaveAtual, notaId);
@@ -2381,6 +2397,8 @@ export default function NotasPedidoContent() {
         }
       } catch {
         /* ignore */
+      } finally {
+        lancandoRef.current = false;
       }
     })();
   };
@@ -2476,7 +2494,10 @@ export default function NotasPedidoContent() {
     if (cnpjSync) {
       const del = await deleteNotaPedidoFromCloud(cnpjSync, alvo.id);
       if (del.ok) {
-        unqueueNotaDelete(cnpjSync, alvo.id);
+        const stillThere = await fetchNotaPedidoFromCloud(cnpjSync, alvo.id);
+        if (!stillThere) {
+          unqueueNotaDelete(cnpjSync, alvo.id);
+        }
       }
       await flushPendingNotaDeletes(cnpjSync);
       await pushOperacionalToCloud(cnpjSync, d, coopId, { authoritative: true });

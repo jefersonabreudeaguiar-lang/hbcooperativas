@@ -19,7 +19,6 @@ import {
 import {
   isNotaStatusDowngrade,
   isNotaStatusTerminalConferencia,
-  isNotaRelancamentoPayload,
   protectNotaAgainstStatusDowngrade,
   NOTA_STATUS_RANK,
 } from "@/utils/notaStatus";
@@ -58,15 +57,13 @@ function shouldApplyCloudNota(local: NotaPedido | undefined, cloud: NotaPedido):
       cloud.status === "pago" ||
       cloud.status === "cancelado"
     ) {
-      // Re-lançamento pelo responsável: local mais recente, sem conferência, aguardando de novo.
+      // Re-lançamento explícito: nuvem ainda conferida, local voltou à fila com relancadaEm.
       if (
-        cloud.status === "conferida" &&
-        (local.valorLiquido ?? 0) <= 0 &&
-        !local.conferidaPor
+        local.relancadaEm &&
+        (cloud.status === "conferida" || cloud.status === "pago") &&
+        new Date(local.relancadaEm).getTime() > new Date(cloud.updatedAt).getTime()
       ) {
-        const localTime = new Date(local.updatedAt).getTime();
-        const cloudTime = new Date(cloud.updatedAt).getTime();
-        if (localTime > cloudTime) return false;
+        return false;
       }
       return true;
     }
@@ -168,6 +165,8 @@ const MAX_STALE_CONFERIDA_REMOVALS_PER_SYNC = 80;
 export interface MergeCloudNotasOptions {
   /** Sync completo da nuvem — remove conferidas/pagas locais que não existem mais na nuvem. */
   pruneStaleConferidas?: boolean;
+  /** Aplica status terminal da nuvem mesmo com updatedAt local mais novo (cooperado em análise). */
+  forceTerminalStatus?: boolean;
 }
 
 function isNotaTerminalRemovivelSeAusenteNaNuvem(status: NotaPedido["status"]): boolean {
@@ -259,6 +258,25 @@ function getPendingNotaDeleteIdSet(cnpj: string): Set<string> {
   );
 }
 
+/** IDs com exclusão pendente ou tombstone ativo — evita ressuscitar na fila/sync. */
+export function getPendingNotaDeleteIds(cnpj: string): ReadonlySet<string> {
+  return getPendingNotaDeleteIdSet(cnpj);
+}
+
+function isCloudTerminalStatusForCooperado(status: NotaPedido["status"]): boolean {
+  return status === "conferida" || status === "pago" || status === "rejeitada" || status === "cancelado";
+}
+
+function shouldForceApplyCloudNota(
+  local: NotaPedido | undefined,
+  cloud: NotaPedido,
+  options?: MergeCloudNotasOptions
+): boolean {
+  if (!options?.forceTerminalStatus || !local) return false;
+  if (local.status !== "aguardando_conferencia" && local.status !== "entregue") return false;
+  return isCloudTerminalStatusForCooperado(cloud.status);
+}
+
 export function mergeCloudNotasIntoData(
   data: AppData,
   cloudNotas: NotaPedido[],
@@ -279,7 +297,7 @@ export function mergeCloudNotasIntoData(
       cooperativaCnpj: digits,
       fotoNaNuvem: cn.fotoNaNuvem ?? Boolean(cn.fotoPedido || cn.fotosPedido?.length),
     };
-    if (!local || shouldApplyCloudNota(local, cloudNota)) {
+    if (!local || shouldForceApplyCloudNota(local, cloudNota, options) || shouldApplyCloudNota(local, cloudNota)) {
       let mergedNota = local ? mergeNotaComFotos(local, cloudNota) : cloudNota;
       if (local && cloudNota.status !== local.status) {
         // Nunca aplicar rebaixamento de status no merge (fila some e volta).
@@ -300,10 +318,11 @@ export function mergeCloudNotasIntoData(
             updatedAt: local.updatedAt,
           };
         } else if (
-          isNotaRelancamentoPayload(local) &&
-          new Date(local.updatedAt).getTime() >= new Date(cloudNota.updatedAt).getTime()
+          local.relancadaEm &&
+          (cloudNota.status === "conferida" || cloudNota.status === "pago") &&
+          new Date(local.relancadaEm).getTime() > new Date(cloudNota.updatedAt).getTime()
         ) {
-          // Re-lançamento local mais recente que a nuvem ainda conferida.
+          // Re-lançamento local mais recente que conferência obsoleta na nuvem.
           mergedNota = {
             ...mergedNota,
             status: "aguardando_conferencia",
@@ -318,6 +337,7 @@ export function mergeCloudNotasIntoData(
             rejeitadaPor: undefined,
             dataRejeicao: undefined,
             motivoRejeicao: undefined,
+            relancadaEm: local.relancadaEm,
             updatedAt: local.updatedAt,
           };
         } else {
@@ -336,6 +356,7 @@ export function mergeCloudNotasIntoData(
             dataRejeicao: cloudNota.dataRejeicao,
             motivoRejeicao: cloudNota.motivoRejeicao,
             reenviadaEm: cloudNota.reenviadaEm,
+            relancadaEm: undefined,
             ...(conferiuNaNuvem
               ? {
                   itens: cloudNota.itens ?? mergedNota.itens,
@@ -1133,8 +1154,7 @@ export async function syncNotasPedidoFromCloud(cnpj: string): Promise<number> {
     if (pendingDeletes.has(before.id)) continue;
     const after = afterById.get(before.id);
     if (!after) {
-      notas.push(before);
-      invariantFixed = true;
+      // Não ressuscita entregas removidas localmente (ex.: exclusão pelo responsável).
       continue;
     }
     if (after.status === "rascunho") {
@@ -1187,7 +1207,9 @@ export async function refreshCooperadoNotasEmAnalise(
   for (const nota of emAnalise) {
     const cloud = await fetchNotaPedidoFromCloud(digits, nota.id);
     if (!cloud || cloud.status === nota.status || cloud.status === "rascunho") continue;
-    merged = mergeCloudNotasIntoData(merged, [cloud], digits);
+    merged = mergeCloudNotasIntoData(merged, [cloud], digits, {
+      forceTerminalStatus: isCloudTerminalStatusForCooperado(cloud.status),
+    });
     atualizadas.push(cloud);
   }
 

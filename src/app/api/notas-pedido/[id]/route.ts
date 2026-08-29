@@ -171,12 +171,30 @@ export async function DELETE(
 
   const tableDel = await deleteNotaFromTable(supabase, cnpj, id);
   const storageDel = await deleteNotaFromStorage(supabase, cnpj, id);
+  const tableOk = tableDel.ok;
+  const tableMissing = "tableMissing" in tableDel && tableDel.tableMissing;
+  const storageOk = storageDel.ok;
 
-  if (tableDel.ok || storageDel.ok) {
+  if (tableOk && storageOk) {
     return NextResponse.json({ success: true });
   }
 
-  if (storageDel.ok === false && "error" in storageDel) {
+  if (tableMissing && storageOk) {
+    return NextResponse.json({ success: true });
+  }
+
+  if (tableOk && !storageOk) {
+    return NextResponse.json(
+      { error: "error" in storageDel ? storageDel.error : "Erro ao excluir arquivos da entrega." },
+      { status: 500 }
+    );
+  }
+
+  if (storageOk) {
+    return NextResponse.json({ success: true });
+  }
+
+  if (!storageOk && "error" in storageDel) {
     return NextResponse.json({ error: storageDel.error }, { status: 500 });
   }
 
