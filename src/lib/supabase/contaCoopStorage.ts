@@ -4,6 +4,7 @@ import { normalizeCnpj } from "@/utils/cooperativa";
 import { hashPassword, verifyPassword } from "@/lib/security/password";
 import type {
   ContaCoopCooperadoLiquidacao,
+  ContaCoopCompraEstornavel,
   ContaCoopDashboard,
   ContaCoopIntent,
   ContaCoopLedgerEntry,
@@ -1241,6 +1242,76 @@ export async function setLimiteColetivoPercentual(
     updated++;
   }
   return { ok: true, updated };
+}
+
+export async function listRefundablePayments(
+  supabase: SupabaseClient,
+  cnpj: string,
+  options?: { limit?: number; cooperadoId?: string; partnerId?: string }
+): Promise<ContaCoopCompraEstornavel[]> {
+  const digits = normalizeCnpj(cnpj);
+  const limit = Math.min(Math.max(options?.limit ?? 50, 1), 100);
+
+  let query = supabase
+    .from("hb_credit_transactions")
+    .select("id, cooperado_id, partner_id, amount_cents, receipt_code, payment_intent_id, created_at")
+    .eq("cooperative_cnpj", digits)
+    .eq("event_type", "PAYMENT")
+    .eq("status", "posted")
+    .order("created_at", { ascending: false })
+    .limit(limit);
+
+  if (options?.cooperadoId) query = query.eq("cooperado_id", options.cooperadoId);
+  if (options?.partnerId) query = query.eq("partner_id", options.partnerId);
+
+  const { data: txs, error } = await query;
+  if (error) throw error;
+  if (!txs?.length) return [];
+
+  const txIds = txs.map((t) => String(t.id));
+  const partnerIds = [...new Set(txs.map((t) => String(t.partner_id)).filter(Boolean))];
+  const intentIds = txs.map((t) => t.payment_intent_id).filter(Boolean) as string[];
+
+  const [{ data: refunds }, { data: partners }, { data: intents }, { data: recebiveis }] = await Promise.all([
+    supabase.from("hb_credit_refunds").select("original_transaction_id").in("original_transaction_id", txIds),
+    partnerIds.length
+      ? supabase.from("hb_credit_partners").select("id, name").in("id", partnerIds)
+      : Promise.resolve({ data: [] as { id: string; name: string }[] }),
+    intentIds.length
+      ? supabase.from("hb_credit_payment_intents").select("id, description").in("id", intentIds)
+      : Promise.resolve({ data: [] as { id: string; description: string | null }[] }),
+    supabase.from("hb_credit_receivables").select("transaction_id, status").in("transaction_id", txIds),
+  ]);
+
+  const refundedIds = new Set((refunds ?? []).map((r) => String(r.original_transaction_id)));
+  const partnerNames: Record<string, string> = {};
+  for (const p of partners ?? []) partnerNames[String(p.id)] = String(p.name);
+  const intentDesc: Record<string, string> = {};
+  for (const intent of intents ?? []) {
+    if (intent.description) intentDesc[String(intent.id)] = String(intent.description);
+  }
+  const recebivelByTx: Record<string, string> = {};
+  for (const r of recebiveis ?? []) {
+    recebivelByTx[String(r.transaction_id)] = String(r.status);
+  }
+
+  return txs
+    .filter((t) => !refundedIds.has(String(t.id)))
+    .map((t) => {
+      const intentId = t.payment_intent_id ? String(t.payment_intent_id) : "";
+      const recebivelDb = recebivelByTx[String(t.id)];
+      return {
+        id: String(t.id),
+        cooperadoId: String(t.cooperado_id ?? ""),
+        parceiroId: String(t.partner_id ?? ""),
+        parceiroNome: partnerNames[String(t.partner_id)] ?? "Mercado",
+        amountCents: Number(t.amount_cents),
+        receiptCode: t.receipt_code ? String(t.receipt_code) : null,
+        descricao: intentDesc[intentId] ?? null,
+        recebivelStatus: recebivelDb ? receivableStatusFromDb(recebivelDb) : undefined,
+        createdAt: String(t.created_at),
+      };
+    });
 }
 
 export async function cancelPaymentIntent(

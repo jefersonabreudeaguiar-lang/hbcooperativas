@@ -1,5 +1,6 @@
 import { secureApiFetch, mensagemErroAuthApi } from "@/lib/security/clientSession";
 import type {
+  ContaCoopCompraEstornavel,
   ContaCoopDashboard,
   ContaCoopIntent,
   ContaCoopLedgerEntry,
@@ -213,6 +214,32 @@ export async function confirmarLiquidacaoMercado(settlementId: string, assinatur
   const data = await parseJson<{ ok?: boolean; error?: string; settlement?: ContaCoopSettlement }>(res);
   if (!res.ok || !data.ok) throw new Error(data.error ?? "Confirmação recusada.");
   return data.settlement;
+}
+
+export async function fetchCreditRefundablePayments(
+  cnpj: string,
+  filters?: { cooperadoId?: string; partnerId?: string; limit?: number }
+): Promise<ContaCoopCompraEstornavel[]> {
+  const params = new URLSearchParams({ cnpj });
+  if (filters?.cooperadoId) params.set("cooperadoId", filters.cooperadoId);
+  if (filters?.partnerId) params.set("partnerId", filters.partnerId);
+  if (filters?.limit) params.set("limit", String(filters.limit));
+
+  const res = await secureApiFetch(`/api/credit/refund?${params.toString()}`);
+  const data = await parseJson<{ ok?: boolean; compras?: ContaCoopCompraEstornavel[] }>(res);
+  if (!res.ok || !data.ok) throw new Error(data.error ?? "Erro ao carregar compras para estorno.");
+  return data.compras ?? [];
+}
+
+export async function postCreditRefund(cnpj: string, transacaoId: string) {
+  const res = await secureApiFetch("/api/credit/refund", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ cnpj, transacaoId }),
+  });
+  const data = await parseJson<{ ok?: boolean; error?: string; disponivelAposCents?: number }>(res);
+  if (!res.ok || !data.ok) throw new Error(data.error ?? "Estorno recusado.");
+  return data;
 }
 
 export async function fetchFichaDescontosContaCoop(cnpj: string, cooperadoId: string, mesReferencia: string) {

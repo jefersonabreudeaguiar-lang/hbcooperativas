@@ -91,6 +91,19 @@ export interface ContaCoopTransacao {
   createdAt: string;
 }
 
+/** Compra confirmada que a equipe da cooperativa pode estornar. */
+export interface ContaCoopCompraEstornavel {
+  id: string;
+  cooperadoId: string;
+  parceiroId: string;
+  parceiroNome: string;
+  amountCents: number;
+  receiptCode?: string | null;
+  descricao?: string | null;
+  recebivelStatus?: RecebivelStatus;
+  createdAt: string;
+}
+
 export interface ContaCoopLedgerEntry {
   id: string;
   tipo: LedgerTipo | string;

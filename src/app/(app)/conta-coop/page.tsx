@@ -5,6 +5,7 @@ import { CreditFeatureGate } from "@/components/hb-credit/CreditFeatureGate";
 import { CloudSessionGate } from "@/components/hb-credit/CloudSessionGate";
 import { ContaCoopSegmentTabs } from "@/components/hb-credit/ContaCoopSegmentTabs";
 import { ContaCoopLiquidacaoPanel } from "@/components/hb-credit/ContaCoopLiquidacaoPanel";
+import { ContaCoopEstornosPanel } from "@/components/hb-credit/ContaCoopEstornosPanel";
 import { Card, StatCard } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Input, Label } from "@/components/ui/Form";
@@ -44,7 +45,7 @@ type PreviewColetivo = {
   }>;
 };
 
-type Tab = "painel" | "limites" | "mercados" | "liquidar";
+type Tab = "painel" | "limites" | "mercados" | "liquidar" | "estornos";
 
 export default function ContaCoopPage() {
   return (
@@ -275,6 +276,7 @@ function ContaCoopContent() {
           { id: "limites", label: "Limites" },
           { id: "mercados", label: "Mercados" },
           { id: "liquidar", label: "Liquidar" },
+          { id: "estornos", label: "Estornos" },
         ]}
         active={tab}
         onChange={setTab}
@@ -569,6 +571,10 @@ function ContaCoopContent() {
           parceiros={parceiros}
           cooperadoNome={cooperadoNome}
         />
+      )}
+
+      {tab === "estornos" && (
+        <ContaCoopEstornosPanel cnpj={cnpj} parceiros={parceiros} cooperadoNome={cooperadoNome} />
       )}
 
       {tab === "mercados" && (
