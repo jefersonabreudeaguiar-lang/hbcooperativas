@@ -8,6 +8,7 @@ import type {
   ContaCoopLiquidacaoPreview,
   ContaCoopParceiro,
   ContaCoopSettlement,
+  ContaCoopSolicitacaoEstorno,
 } from "@/modules/hb-credit/types";
 
 async function parseJson<T>(res: Response): Promise<T & { error?: string }> {
@@ -239,6 +240,45 @@ export async function postCreditRefund(cnpj: string, transacaoId: string) {
   });
   const data = await parseJson<{ ok?: boolean; error?: string; disponivelAposCents?: number }>(res);
   if (!res.ok || !data.ok) throw new Error(data.error ?? "Estorno recusado.");
+  return data;
+}
+
+export async function fetchRefundRequests(
+  cnpj: string,
+  status?: "pendente"
+): Promise<ContaCoopSolicitacaoEstorno[]> {
+  const params = new URLSearchParams({ cnpj });
+  if (status) params.set("status", status);
+  const res = await secureApiFetch(`/api/credit/refund-requests?${params.toString()}`);
+  const data = await parseJson<{ ok?: boolean; solicitacoes?: ContaCoopSolicitacaoEstorno[] }>(res);
+  if (!res.ok || !data.ok) throw new Error(data.error ?? "Erro ao carregar solicitações.");
+  return data.solicitacoes ?? [];
+}
+
+export async function fetchPartnerRefundData(): Promise<{
+  compras: ContaCoopCompraEstornavel[];
+  solicitacoes: ContaCoopSolicitacaoEstorno[];
+}> {
+  const res = await secureApiFetch("/api/credit/refund-requests");
+  const data = await parseJson<{
+    ok?: boolean;
+    compras?: ContaCoopCompraEstornavel[];
+    solicitacoes?: ContaCoopSolicitacaoEstorno[];
+  }>(res);
+  if (!res.ok || !data.ok) throw new Error(data.error ?? "Erro ao carregar dados de estorno.");
+  return { compras: data.compras ?? [], solicitacoes: data.solicitacoes ?? [] };
+}
+
+export async function postRefundRequestAction(body: Record<string, unknown>) {
+  const res = await secureApiFetch("/api/credit/refund-requests", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  const data = await parseJson<{ ok?: boolean; error?: string; disponivelAposCents?: number; solicitacao?: ContaCoopSolicitacaoEstorno }>(
+    res
+  );
+  if (!res.ok || !data.ok) throw new Error(data.error ?? "Operação recusada.");
   return data;
 }
 

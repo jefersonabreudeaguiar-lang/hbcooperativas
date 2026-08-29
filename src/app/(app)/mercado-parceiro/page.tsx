@@ -13,10 +13,12 @@ import {
   confirmarLiquidacaoMercado,
   createCreditIntent,
   fetchMercadoParceiroData,
+  fetchPartnerRefundData,
+  postRefundRequestAction,
   saveMercadoPix,
 } from "@/services/creditApiService";
 import { formatCentsBRL } from "@/modules/hb-credit/engine/money";
-import type { ContaCoopIntent, ContaCoopParceiro, ContaCoopSettlement } from "@/modules/hb-credit/types";
+import type { ContaCoopCompraEstornavel, ContaCoopIntent, ContaCoopParceiro, ContaCoopSettlement, ContaCoopSolicitacaoEstorno } from "@/modules/hb-credit/types";
 import { PageSkeleton } from "@/components/ui/PageSkeleton";
 import { SignaturePad } from "@/components/ui/SignaturePad";
 import { formatMesReferencia } from "@/utils/format";
@@ -36,6 +38,8 @@ function MercadoParceiroContent() {
   const [intents, setIntents] = useState<ContaCoopIntent[]>([]);
   const [recebiveis, setRecebiveis] = useState<{ id: string; amountCents: number; status: string; createdAt: string }[]>([]);
   const [settlements, setSettlements] = useState<ContaCoopSettlement[]>([]);
+  const [comprasEstornaveis, setComprasEstornaveis] = useState<ContaCoopCompraEstornavel[]>([]);
+  const [solicitacoesEstorno, setSolicitacoesEstorno] = useState<ContaCoopSolicitacaoEstorno[]>([]);
   const [pixKey, setPixKey] = useState("");
   const [pixHolderName, setPixHolderName] = useState("");
   const [assinatura, setAssinatura] = useState<string | null>(null);
@@ -55,6 +59,19 @@ function MercadoParceiroContent() {
       setIntents(data.intents ?? []);
       setRecebiveis(data.recebiveis ?? []);
       setSettlements(data.settlements ?? []);
+      if (data.parceiro?.status === "ativo") {
+        try {
+          const refundData = await fetchPartnerRefundData();
+          setComprasEstornaveis(refundData.compras);
+          setSolicitacoesEstorno(refundData.solicitacoes);
+        } catch {
+          setComprasEstornaveis([]);
+          setSolicitacoesEstorno([]);
+        }
+      } else {
+        setComprasEstornaveis([]);
+        setSolicitacoesEstorno([]);
+      }
       if (data.parceiro?.pixKey) setPixKey(data.parceiro.pixKey);
       if (data.parceiro?.pixHolderName) setPixHolderName(data.parceiro.pixHolderName);
     } catch (e) {
@@ -99,6 +116,51 @@ function MercadoParceiroContent() {
     } finally {
       setBusy(false);
     }
+  };
+
+  const solicitarEstorno = async (compra: ContaCoopCompraEstornavel) => {
+    const motivo = window.prompt(
+      `Informe o motivo do estorno de ${formatCentsBRL(compra.amountCents)}.\n\nA cooperativa precisa aprovar antes do crédito voltar ao cooperado.`
+    );
+    if (!motivo?.trim()) return;
+    setBusy(true);
+    setError("");
+    setSuccess("");
+    try {
+      await postRefundRequestAction({
+        action: "create",
+        transactionId: compra.id,
+        motivo: motivo.trim(),
+      });
+      setSuccess("Solicitação enviada à cooperativa. Aguarde aprovação.");
+      await reload();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Erro ao solicitar estorno.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const cancelarSolicitacao = async (requestId: string) => {
+    if (!window.confirm("Cancelar esta solicitação de estorno?")) return;
+    setBusy(true);
+    setError("");
+    try {
+      await postRefundRequestAction({ action: "cancel", requestId });
+      setSuccess("Solicitação cancelada.");
+      await reload();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Erro ao cancelar solicitação.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const statusSolicitacao = (status: ContaCoopSolicitacaoEstorno["status"]) => {
+    if (status === "pendente") return "Aguardando cooperativa";
+    if (status === "aprovado") return "Aprovado";
+    if (status === "negado") return "Negado";
+    return "Cancelado";
   };
 
   const salvarPix = async () => {
@@ -239,6 +301,64 @@ function MercadoParceiroContent() {
             <p className="text-xs text-gray-500 break-all text-center max-w-sm">{qrPayload}</p>
           </div>
         )}
+      </Card>
+
+      <Card className="p-5 space-y-2">
+        <h3 className="font-semibold">Compras confirmadas</h3>
+        <p className="text-sm text-gray-600">
+          Para devolver crédito ao cooperado, solicite estorno — a cooperativa precisa aprovar.
+        </p>
+        {comprasEstornaveis.map((compra) => (
+          <div key={compra.id} className="flex items-center justify-between border-b py-2 text-sm gap-3">
+            <div>
+              <p className="font-medium">{formatCentsBRL(compra.amountCents)}</p>
+              <p className="text-xs text-gray-500">{new Date(compra.createdAt).toLocaleString("pt-BR")}</p>
+              {compra.receiptCode && <p className="text-xs text-gray-500">Recibo {compra.receiptCode}</p>}
+              {compra.solicitacaoPendenteId && (
+                <p className="text-xs font-medium text-amber-700">Solicitação pendente na cooperativa</p>
+              )}
+            </div>
+            {!compra.solicitacaoPendenteId ? (
+              <Button size="sm" variant="secondary" onClick={() => void solicitarEstorno(compra)} disabled={busy || !ativo}>
+                Solicitar estorno
+              </Button>
+            ) : (
+              <Button
+                size="sm"
+                variant="secondary"
+                onClick={() => void cancelarSolicitacao(compra.solicitacaoPendenteId!)}
+                disabled={busy}
+              >
+                Cancelar solicitação
+              </Button>
+            )}
+          </div>
+        ))}
+        {!comprasEstornaveis.length && (
+          <p className="text-sm text-gray-500">Nenhuma compra confirmada elegível para estorno.</p>
+        )}
+      </Card>
+
+      <Card className="p-5 space-y-2">
+        <h3 className="font-semibold">Solicitações de estorno</h3>
+        {solicitacoesEstorno.slice(0, 15).map((s) => (
+          <div key={s.id} className="flex justify-between border-b py-2 text-sm gap-3">
+            <div>
+              <p className="font-medium">{formatCentsBRL(s.amountCents)} · {statusSolicitacao(s.status)}</p>
+              <p className="text-xs text-gray-500">{s.motivo}</p>
+              <p className="text-xs text-gray-500">{new Date(s.createdAt).toLocaleString("pt-BR")}</p>
+              {s.reviewNote && s.status === "negado" && (
+                <p className="text-xs text-red-600">Resposta: {s.reviewNote}</p>
+              )}
+            </div>
+            {s.status === "pendente" && (
+              <Button size="sm" variant="secondary" onClick={() => void cancelarSolicitacao(s.id)} disabled={busy}>
+                Cancelar
+              </Button>
+            )}
+          </div>
+        ))}
+        {!solicitacoesEstorno.length && <p className="text-sm text-gray-500">Nenhuma solicitação ainda.</p>}
       </Card>
 
       <Card className="p-5 space-y-2">

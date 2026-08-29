@@ -102,6 +102,26 @@ export interface ContaCoopCompraEstornavel {
   descricao?: string | null;
   recebivelStatus?: RecebivelStatus;
   createdAt: string;
+  /** Solicitação pendente do mercado parceiro, se houver. */
+  solicitacaoPendenteId?: string | null;
+}
+
+export type SolicitacaoEstornoStatus = "pendente" | "aprovado" | "negado" | "cancelado";
+
+export interface ContaCoopSolicitacaoEstorno {
+  id: string;
+  transactionId: string;
+  cooperadoId: string;
+  parceiroId: string;
+  parceiroNome: string;
+  amountCents: number;
+  motivo: string;
+  status: SolicitacaoEstornoStatus;
+  receiptCode?: string | null;
+  descricao?: string | null;
+  createdAt: string;
+  reviewedAt?: string | null;
+  reviewNote?: string | null;
 }
 
 export interface ContaCoopLedgerEntry {

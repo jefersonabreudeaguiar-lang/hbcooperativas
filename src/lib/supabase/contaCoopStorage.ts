@@ -13,7 +13,9 @@ import type {
   ContaCoopParceiro,
   ContaCoopSettlement,
   ContaCoopSettlementTransacao,
+  ContaCoopSolicitacaoEstorno,
   ContaCoopTresValores,
+  SolicitacaoEstornoStatus,
   ParceiroStatus,
   SettlementStatus,
 } from "@/modules/hb-credit/types";
@@ -1272,7 +1274,8 @@ export async function listRefundablePayments(
   const partnerIds = [...new Set(txs.map((t) => String(t.partner_id)).filter(Boolean))];
   const intentIds = txs.map((t) => t.payment_intent_id).filter(Boolean) as string[];
 
-  const [{ data: refunds }, { data: partners }, { data: intents }, { data: recebiveis }] = await Promise.all([
+  const [{ data: refunds }, { data: partners }, { data: intents }, { data: recebiveis }, pendingRequestsResult] =
+    await Promise.all([
     supabase.from("hb_credit_refunds").select("original_transaction_id").in("original_transaction_id", txIds),
     partnerIds.length
       ? supabase.from("hb_credit_partners").select("id, name").in("id", partnerIds)
@@ -1281,7 +1284,19 @@ export async function listRefundablePayments(
       ? supabase.from("hb_credit_payment_intents").select("id, description").in("id", intentIds)
       : Promise.resolve({ data: [] as { id: string; description: string | null }[] }),
     supabase.from("hb_credit_receivables").select("transaction_id, status").in("transaction_id", txIds),
+    supabase
+      .from("hb_credit_refund_requests")
+      .select("id, transaction_id")
+      .in("transaction_id", txIds)
+      .eq("status", "PENDING"),
   ]);
+
+  const pendingByTx: Record<string, string> = {};
+  if (!pendingRequestsResult.error) {
+    for (const row of pendingRequestsResult.data ?? []) {
+      pendingByTx[String(row.transaction_id)] = String(row.id);
+    }
+  }
 
   const refundedIds = new Set((refunds ?? []).map((r) => String(r.original_transaction_id)));
   const partnerNames: Record<string, string> = {};
@@ -1310,8 +1325,299 @@ export async function listRefundablePayments(
         descricao: intentDesc[intentId] ?? null,
         recebivelStatus: recebivelDb ? receivableStatusFromDb(recebivelDb) : undefined,
         createdAt: String(t.created_at),
+        solicitacaoPendenteId: pendingByTx[String(t.id)] ?? null,
       };
     });
+}
+
+function refundRequestStatusFromDb(status: string): SolicitacaoEstornoStatus {
+  if (status === "APPROVED") return "aprovado";
+  if (status === "DENIED") return "negado";
+  if (status === "CANCELLED") return "cancelado";
+  return "pendente";
+}
+
+function mapRefundRequestRow(
+  row: Record<string, unknown>,
+  extras?: { parceiroNome?: string; cooperadoId?: string; receiptCode?: string | null; descricao?: string | null }
+): ContaCoopSolicitacaoEstorno {
+  return {
+    id: String(row.id),
+    transactionId: String(row.transaction_id),
+    cooperadoId: extras?.cooperadoId ?? String(row.cooperado_id ?? ""),
+    parceiroId: String(row.partner_id),
+    parceiroNome: extras?.parceiroNome ?? "Mercado",
+    amountCents: Number(row.amount_cents),
+    motivo: String(row.motivo),
+    status: refundRequestStatusFromDb(String(row.status)),
+    receiptCode: extras?.receiptCode ?? null,
+    descricao: extras?.descricao ?? null,
+    createdAt: String(row.created_at),
+    reviewedAt: row.reviewed_at ? String(row.reviewed_at) : null,
+    reviewNote: row.review_note ? String(row.review_note) : null,
+  };
+}
+
+export async function listRefundRequests(
+  supabase: SupabaseClient,
+  filters: {
+    cooperativeCnpj?: string;
+    partnerId?: string;
+    status?: SolicitacaoEstornoStatus | "pendente";
+    limit?: number;
+  }
+): Promise<ContaCoopSolicitacaoEstorno[]> {
+  const limit = Math.min(Math.max(filters.limit ?? 50, 1), 100);
+  let query = supabase
+    .from("hb_credit_refund_requests")
+    .select("*")
+    .order("created_at", { ascending: false })
+    .limit(limit);
+
+  if (filters.cooperativeCnpj) {
+    query = query.eq("cooperative_cnpj", normalizeCnpj(filters.cooperativeCnpj));
+  }
+  if (filters.partnerId) query = query.eq("partner_id", filters.partnerId);
+  if (filters.status === "pendente") query = query.eq("status", "PENDING");
+
+  const { data, error } = await query;
+  if (error) {
+    if (/hb_credit_refund_requests/i.test(error.message ?? "")) return [];
+    throw error;
+  }
+  if (!data?.length) return [];
+
+  const txIds = data.map((r) => String(r.transaction_id));
+  const partnerIds = [...new Set(data.map((r) => String(r.partner_id)))];
+  const [{ data: txs }, { data: partners }] = await Promise.all([
+    supabase
+      .from("hb_credit_transactions")
+      .select("id, cooperado_id, receipt_code, payment_intent_id")
+      .in("id", txIds),
+    supabase.from("hb_credit_partners").select("id, name").in("id", partnerIds),
+  ]);
+
+  const txById: Record<string, { cooperadoId: string; receiptCode?: string | null; intentId?: string }> = {};
+  const intentIds: string[] = [];
+  for (const tx of txs ?? []) {
+    const intentId = tx.payment_intent_id ? String(tx.payment_intent_id) : undefined;
+    if (intentId) intentIds.push(intentId);
+    txById[String(tx.id)] = {
+      cooperadoId: String(tx.cooperado_id ?? ""),
+      receiptCode: tx.receipt_code ? String(tx.receipt_code) : null,
+      intentId,
+    };
+  }
+
+  const intentDesc: Record<string, string> = {};
+  if (intentIds.length) {
+    const { data: intents } = await supabase
+      .from("hb_credit_payment_intents")
+      .select("id, description")
+      .in("id", intentIds);
+    for (const intent of intents ?? []) {
+      if (intent.description) intentDesc[String(intent.id)] = String(intent.description);
+    }
+  }
+
+  const partnerNames: Record<string, string> = {};
+  for (const p of partners ?? []) partnerNames[String(p.id)] = String(p.name);
+
+  return data.map((row) => {
+    const tx = txById[String(row.transaction_id)];
+    const descricao = tx?.intentId ? intentDesc[tx.intentId] ?? null : null;
+    return mapRefundRequestRow(row as Record<string, unknown>, {
+      parceiroNome: partnerNames[String(row.partner_id)] ?? "Mercado",
+      cooperadoId: tx?.cooperadoId,
+      receiptCode: tx?.receiptCode ?? null,
+      descricao,
+    });
+  });
+}
+
+export async function createRefundRequest(
+  supabase: SupabaseClient,
+  params: {
+    partnerId: string;
+    transactionId: string;
+    motivo: string;
+    requestedByUserId: string;
+  }
+): Promise<{ ok: true; solicitacao: ContaCoopSolicitacaoEstorno } | { ok: false; error: string }> {
+  const motivo = params.motivo.trim();
+  if (motivo.length < 5) {
+    return { ok: false, error: "Descreva o motivo do estorno (mínimo 5 caracteres)." };
+  }
+
+  const { data: tx, error: txError } = await supabase
+    .from("hb_credit_transactions")
+    .select("id, cooperative_cnpj, partner_id, cooperado_id, amount_cents, receipt_code, payment_intent_id, status, event_type")
+    .eq("id", params.transactionId)
+    .eq("partner_id", params.partnerId)
+    .maybeSingle();
+
+  if (txError) {
+    if (/hb_credit_refund_requests/i.test(txError.message ?? "")) {
+      return { ok: false, error: "Migration de solicitações de estorno não aplicada na nuvem." };
+    }
+    return { ok: false, error: txError.message };
+  }
+  if (!tx) return { ok: false, error: "Compra não encontrada para este mercado." };
+  if (tx.event_type !== "PAYMENT" || tx.status !== "posted") {
+    return { ok: false, error: "Esta compra não pode ser estornada." };
+  }
+
+  const { data: existingRefund } = await supabase
+    .from("hb_credit_refunds")
+    .select("id")
+    .eq("original_transaction_id", params.transactionId)
+    .maybeSingle();
+  if (existingRefund) return { ok: false, error: "Esta compra já foi estornada." };
+
+  const { data: pending } = await supabase
+    .from("hb_credit_refund_requests")
+    .select("id")
+    .eq("transaction_id", params.transactionId)
+    .eq("status", "PENDING")
+    .maybeSingle();
+  if (pending) return { ok: false, error: "Já existe uma solicitação pendente para esta compra." };
+
+  const requestId = genId("refreq");
+  const now = new Date().toISOString();
+  const { data: inserted, error: insertError } = await supabase
+    .from("hb_credit_refund_requests")
+    .insert({
+      id: requestId,
+      cooperative_cnpj: String(tx.cooperative_cnpj),
+      partner_id: params.partnerId,
+      transaction_id: params.transactionId,
+      amount_cents: Number(tx.amount_cents),
+      motivo,
+      status: "PENDING",
+      requested_by_user_id: params.requestedByUserId,
+      created_at: now,
+      updated_at: now,
+    })
+    .select("*")
+    .single();
+
+  if (insertError || !inserted) {
+    return { ok: false, error: insertError?.message ?? "Não foi possível registrar a solicitação." };
+  }
+
+  let descricao: string | null = null;
+  if (tx.payment_intent_id) {
+    const { data: intent } = await supabase
+      .from("hb_credit_payment_intents")
+      .select("description")
+      .eq("id", String(tx.payment_intent_id))
+      .maybeSingle();
+    if (intent?.description) descricao = String(intent.description);
+  }
+
+  const { data: partner } = await supabase
+    .from("hb_credit_partners")
+    .select("name")
+    .eq("id", params.partnerId)
+    .maybeSingle();
+
+  return {
+    ok: true,
+    solicitacao: mapRefundRequestRow(inserted as Record<string, unknown>, {
+      parceiroNome: partner?.name ? String(partner.name) : "Mercado",
+      cooperadoId: String(tx.cooperado_id ?? ""),
+      receiptCode: tx.receipt_code ? String(tx.receipt_code) : null,
+      descricao,
+    }),
+  };
+}
+
+export async function approveRefundRequest(
+  supabase: SupabaseClient,
+  requestId: string,
+  cooperativeCnpj: string,
+  reviewerUserId: string,
+  reviewNote?: string
+): Promise<{ ok: true; disponivelAposCents: number } | { ok: false; error: string }> {
+  const digits = normalizeCnpj(cooperativeCnpj);
+  const { data: request, error } = await supabase
+    .from("hb_credit_refund_requests")
+    .select("*")
+    .eq("id", requestId)
+    .eq("cooperative_cnpj", digits)
+    .maybeSingle();
+
+  if (error) return { ok: false, error: error.message };
+  if (!request) return { ok: false, error: "Solicitação não encontrada." };
+  if (request.status !== "PENDING") return { ok: false, error: "Solicitação já foi analisada." };
+
+  const refund = await refundPayment(supabase, String(request.transaction_id), digits, reviewerUserId);
+  if (!refund.ok) return refund;
+
+  const now = new Date().toISOString();
+  const { error: updateError } = await supabase
+    .from("hb_credit_refund_requests")
+    .update({
+      status: "APPROVED",
+      reviewed_by_user_id: reviewerUserId,
+      review_note: reviewNote?.trim() || null,
+      reviewed_at: now,
+      updated_at: now,
+    })
+    .eq("id", requestId)
+    .eq("status", "PENDING");
+
+  if (updateError) return { ok: false, error: updateError.message };
+  return { ok: true, disponivelAposCents: refund.disponivelAposCents };
+}
+
+export async function denyRefundRequest(
+  supabase: SupabaseClient,
+  requestId: string,
+  cooperativeCnpj: string,
+  reviewerUserId: string,
+  reviewNote?: string
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const digits = normalizeCnpj(cooperativeCnpj);
+  const now = new Date().toISOString();
+  const { data, error } = await supabase
+    .from("hb_credit_refund_requests")
+    .update({
+      status: "DENIED",
+      reviewed_by_user_id: reviewerUserId,
+      review_note: reviewNote?.trim() || null,
+      reviewed_at: now,
+      updated_at: now,
+    })
+    .eq("id", requestId)
+    .eq("cooperative_cnpj", digits)
+    .eq("status", "PENDING")
+    .select("id")
+    .maybeSingle();
+
+  if (error) return { ok: false, error: error.message };
+  if (!data) return { ok: false, error: "Solicitação não encontrada ou já analisada." };
+  return { ok: true };
+}
+
+export async function cancelRefundRequest(
+  supabase: SupabaseClient,
+  requestId: string,
+  partnerId: string
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const now = new Date().toISOString();
+  const { data, error } = await supabase
+    .from("hb_credit_refund_requests")
+    .update({ status: "CANCELLED", updated_at: now })
+    .eq("id", requestId)
+    .eq("partner_id", partnerId)
+    .eq("status", "PENDING")
+    .select("id")
+    .maybeSingle();
+
+  if (error) return { ok: false, error: error.message };
+  if (!data) return { ok: false, error: "Solicitação não encontrada ou já analisada." };
+  return { ok: true };
 }
 
 export async function cancelPaymentIntent(
