@@ -41,12 +41,15 @@ export function CobrancaSaasPainel() {
   const coopId = user && data ? getUserCooperativaId(user, data) : undefined;
 
   useEffect(() => {
-    if (!user || !data || !coopId || user.role === "cooperado") return;
+    if (!user || !coopId || user.role === "cooperado") return;
     updateData((d) => {
+      const before = JSON.stringify(d.cooperativas.find((c) => c.id === coopId)?.cobrancaSaas ?? {});
       let next = sincronizarCicloCobrancaSaas(d, coopId);
-      return ensureCobrancaPeriodoAtualSaas(next, coopId).data;
+      next = ensureCobrancaPeriodoAtualSaas(next, coopId).data;
+      const after = JSON.stringify(next.cooperativas.find((c) => c.id === coopId)?.cobrancaSaas ?? {});
+      return before === after ? d : next;
     });
-  }, [user, data, coopId]);
+  }, [user?.id, user?.role, coopId]);
 
   const painel = useMemo(() => {
     if (!data || !coopId) return null;

@@ -340,15 +340,28 @@ export function ensureCobrancaPeriodoAtualSaas(
     }
   }
 
-  next = patchCobrancaSaas(next, cooperativaId, {
+  const nextCob: CobrancaSaasCooperativa = {
     ...cob,
     historico,
     statusMes,
     avisoMensagem,
     avisoEm: avisoMensagem ? cob.avisoEm ?? now : undefined,
     bloqueadoEm: statusMes === "bloqueado" ? cob.bloqueadoEm ?? now : undefined,
-    bloqueadoPor: statusMes === "bloqueado" ? cob.bloqueadoPor ?? "Sistema (inadimplência)" : undefined,
-  });
+    bloqueadoPor:
+      statusMes === "bloqueado" ? cob.bloqueadoPor ?? "Sistema (inadimplência)" : undefined,
+  };
+
+  const semAlteracao =
+    cob.statusMes === nextCob.statusMes &&
+    cob.avisoMensagem === nextCob.avisoMensagem &&
+    cob.ultimoPeriodoPago === nextCob.ultimoPeriodoPago &&
+    JSON.stringify(cob.historico ?? []) === JSON.stringify(nextCob.historico ?? []);
+
+  if (semAlteracao) {
+    return { data: next, ok: true };
+  }
+
+  next = patchCobrancaSaas(next, cooperativaId, nextCob);
 
   return { data: next, ok: true };
 }
@@ -381,13 +394,12 @@ export function getPainelCobrancaSaasResponsavel(
   cooperativaId: string | undefined
 ): PainelCobrancaSaasResponsavel | null {
   if (!cooperativaId) return null;
-  const synced = ensureCobrancaPeriodoAtualSaas(data, cooperativaId).data;
-  const coop = synced.cooperativas.find((c) => c.id === cooperativaId);
+  const coop = data.cooperativas.find((c) => c.id === cooperativaId);
   if (!coop) return null;
 
   const cob = coop.cobrancaSaas ?? defaultCobrancaSaas();
   const precisaContrato = precisaAssinarContratoServico(coop);
-  const qtd = contarCooperadosCobranca(synced, cooperativaId);
+  const qtd = contarCooperadosCobranca(data, cooperativaId);
   const calc = calcularValorCobrancaSaas(qtd);
   const periodo = cob.cicloInicioEm ? getPeriodoCobrancaSaas(cob.cicloInicioEm) : undefined;
   const lanc = periodo ? lancamentoPeriodoAtual(cob, periodo.periodoId) : undefined;

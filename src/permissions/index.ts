@@ -242,7 +242,7 @@ export function isResponsavelRole(role: UserRole): boolean {
 }
 
 export function isDiretoriaRole(role: UserRole): boolean {
-  return isResponsavelRole(role) || isAdminRole(role);
+  return isResponsavelRole(role) || isAdminRole(role) || role === "tesoureiro";
 }
 
 export function isContadorRole(role: UserRole): boolean {

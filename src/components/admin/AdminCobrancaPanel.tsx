@@ -66,25 +66,20 @@ export function AdminCobrancaPanel({ user }: AdminCobrancaPanelProps) {
   const [busyId, setBusyId] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!data) return;
-    let needsSync = false;
-    for (const coop of data.cooperativas) {
-      if (coop.cobrancaSaas?.cicloInicioEm) continue;
-      if (data.cooperados.some((c) => c.cooperativaId === coop.id)) {
-        needsSync = true;
-        break;
-      }
-    }
-    if (!needsSync) return;
+    if (!data?.cooperativas.length) return;
     updateData((d) => {
       let next = d;
+      let changed = false;
       for (const coop of d.cooperativas) {
+        const before = JSON.stringify(coop.cobrancaSaas ?? {});
         next = sincronizarCicloCobrancaSaas(next, coop.id);
         next = ensureCobrancaPeriodoAtualSaas(next, coop.id).data;
+        const after = JSON.stringify(next.cooperativas.find((c) => c.id === coop.id)?.cobrancaSaas ?? {});
+        if (before !== after) changed = true;
       }
-      return next;
+      return changed ? next : d;
     });
-  }, [data]);
+  }, [data?.cooperativas.length, data?.cooperados.length]);
 
   const rows = useMemo(() => (data ? listarCobrancasSaasAdmin(data) : []), [data]);
 
