@@ -2,7 +2,8 @@ import { NextResponse } from "next/server";
 import { getSupabaseAdmin, isSupabaseConfigured } from "@/lib/supabase/admin";
 import { normalizeCnpj } from "@/utils/cooperativa";
 import type { Cooperativa, MensalidadeConfig } from "@/types";
-import { cooperativaFromCloudRow, exigeSenhaCadastroCooperado, mensalidadeConfigComSenhaCadastro, mensalidadeConfigComSenhaAreaAdmin, mensalidadeConfigSemSenhaCadastro } from "@/utils/cooperativaCadastro";
+import { guardCooperativaApi } from "@/lib/security/apiGuard";
+import { cooperativaFromCloudRow, mensalidadeConfigComSenhaCadastro, mensalidadeConfigComSenhaAreaAdmin } from "@/utils/cooperativaCadastro";
 
 export async function PATCH(
   request: Request,
@@ -17,6 +18,9 @@ export async function PATCH(
   if (cnpj.length !== 14) {
     return NextResponse.json({ error: "CNPJ inválido." }, { status: 400 });
   }
+
+  const guard = await guardCooperativaApi(request, cnpj, { requireManagement: true });
+  if (!guard.ok) return guard.response;
 
   const body = await request.json().catch(() => null);
   if (!body) {

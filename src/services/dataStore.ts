@@ -1248,8 +1248,12 @@ async function validarSenhaCadastroCooperado(
     };
   }
 
-  if (cooperativa.senhaCadastroCooperado?.trim()) {
-    if (senha !== cooperativa.senhaCadastroCooperado.trim()) {
+  if (cooperativa.senhaCadastroCooperado?.trim() || cooperativa.senhaCadastroCooperadoHash?.trim()) {
+    const stored =
+      cooperativa.senhaCadastroCooperadoHash?.trim() ||
+      cooperativa.senhaCadastroCooperado?.trim() ||
+      "";
+    if (!verifyPasswordSync(senha, stored)) {
       return { ok: false, error: "Senha de acesso ao cadastro incorreta." };
     }
     return { ok: true };

@@ -5,6 +5,7 @@ import {
   ensureAuthInfrastructure,
   tokenResponseForUser,
 } from "@/lib/security/authRoutes";
+import { isPublicRegisterRole } from "@/lib/security/authPolicy";
 import { logSecurityEvent, upsertAppUser } from "@/lib/supabase/usersAuth";
 import type { UserRole } from "@/types";
 
@@ -23,6 +24,9 @@ export async function POST(request: Request) {
 
   if (!email || !password || !id || !name || !VALID_ROLES.includes(role)) {
     return NextResponse.json({ error: "Dados de cadastro inválidos." }, { status: 400 });
+  }
+  if (!isPublicRegisterRole(role)) {
+    return NextResponse.json({ error: "Perfil não permitido neste cadastro." }, { status: 403 });
   }
   if (password.length < 6) {
     return NextResponse.json({ error: "Senha deve ter no mínimo 6 caracteres." }, { status: 400 });

@@ -77,3 +77,49 @@ export function requireStaffRole(
   }
   return null;
 }
+
+/** Apenas administrador global da plataforma HB. */
+export function requireAdminRole(
+  session: SessionClaims | null,
+  enforced: boolean
+): NextResponse | null {
+  if (!enforced || !session) return null;
+  if (session.role !== "admin") {
+    return NextResponse.json({ error: "Acesso restrito ao administrador da plataforma." }, { status: 403 });
+  }
+  return null;
+}
+
+/** Diretoria da cooperativa (responsável, tesoureiro ou admin global). */
+export function requireManagementRole(
+  session: SessionClaims | null,
+  enforced: boolean
+): NextResponse | null {
+  if (!enforced || !session) return null;
+  if (session.role !== "admin" && session.role !== "tesoureiro" && session.role !== "responsavel") {
+    return NextResponse.json({ error: "Ação restrita à diretoria da cooperativa." }, { status: 403 });
+  }
+  return null;
+}
+
+export async function guardCooperativaApi(
+  request: Request,
+  cnpj: string,
+  options?: { requireManagement?: boolean }
+): Promise<
+  | { ok: true; session: SessionClaims | null; enforced: boolean }
+  | { ok: false; response: NextResponse }
+> {
+  const auth = await requireApiAuth(request);
+  if (!auth.ok) return { ok: false, response: auth.response };
+
+  const denied = requireCooperativaAccess(auth.session, cnpj, auth.enforced);
+  if (denied) return { ok: false, response: denied };
+
+  if (options?.requireManagement) {
+    const mgmt = requireManagementRole(auth.session, auth.enforced);
+    if (mgmt) return { ok: false, response: mgmt };
+  }
+
+  return { ok: true, session: auth.session, enforced: auth.enforced };
+}

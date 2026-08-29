@@ -2,8 +2,14 @@ import { NextResponse } from "next/server";
 import { getSupabaseAdmin, isSupabaseConfigured } from "@/lib/supabase/admin";
 import { isCooperativasTableMissing } from "@/lib/supabase/errors";
 import type { CloudPlatformOverview } from "@/services/platformAdminService";
+import { requireAdminRole, requireApiAuth } from "@/lib/security/apiGuard";
 
-export async function GET() {
+export async function GET(request: Request) {
+  const auth = await requireApiAuth(request);
+  if (!auth.ok) return auth.response;
+  const adminDenied = requireAdminRole(auth.session, auth.enforced);
+  if (adminDenied) return adminDenied;
+
   if (!isSupabaseConfigured()) {
     return NextResponse.json({
       configured: false,

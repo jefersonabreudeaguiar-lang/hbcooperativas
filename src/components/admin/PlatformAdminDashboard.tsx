@@ -35,6 +35,7 @@ import {
   type CloudPlatformOverview,
   type CooperativaPlatformRow,
 } from "@/services/platformAdminService";
+import { secureApiFetch } from "@/lib/security/clientSession";
 import type { User } from "@/types";
 
 type AdminUser = Pick<User, "id" | "name">;
@@ -58,7 +59,7 @@ export function PlatformAdminDashboard({ user }: PlatformAdminDashboardProps) {
   useEffect(() => {
     let cancelled = false;
     setCloudLoading(true);
-    fetch("/api/admin/platform-overview", { cache: "no-store" })
+    secureApiFetch("/api/admin/platform-overview", { cache: "no-store" })
       .then((r) => r.json())
       .then((json: CloudPlatformOverview) => {
         if (!cancelled) setCloud(json);

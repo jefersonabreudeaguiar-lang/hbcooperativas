@@ -3,6 +3,7 @@ import { getSupabaseAdmin, isSupabaseConfigured } from "@/lib/supabase/admin";
 import { isNotasPedidoTableMissing } from "@/lib/supabase/errors";
 import { normalizeCnpj } from "@/utils/cooperativa";
 import type { NotaPedido } from "@/types";
+import { guardCooperativaApi } from "@/lib/security/apiGuard";
 import {
   deleteAndCompactFotoPart,
   fetchNotaMetaFromStorage,
@@ -249,6 +250,9 @@ export async function GET(
     return NextResponse.json({ error: "Parâmetros inválidos." }, { status: 400 });
   }
 
+  const guard = await guardCooperativaApi(request, cnpj);
+  if (!guard.ok) return guard.response;
+
   const supabase = getSupabaseAdmin();
   if (!supabase) {
     return NextResponse.json({ error: "Cliente indisponível." }, { status: 503 });
@@ -281,6 +285,9 @@ export async function POST(
     return NextResponse.json({ error: parsed.error }, { status: 400 });
   }
 
+  const guard = await guardCooperativaApi(request, parsed.cnpj);
+  if (!guard.ok) return guard.response;
+
   return processFotoUpload(id, parsed);
 }
 
@@ -301,6 +308,9 @@ export async function DELETE(
   if (cnpj.length !== 14 || !Number.isFinite(index) || !Number.isFinite(totalCount)) {
     return NextResponse.json({ error: "Parâmetros inválidos." }, { status: 400 });
   }
+
+  const guard = await guardCooperativaApi(request, cnpj, { requireManagement: true });
+  if (!guard.ok) return guard.response;
 
   const supabase = getSupabaseAdmin();
   if (!supabase) {

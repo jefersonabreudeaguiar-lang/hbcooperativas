@@ -1,5 +1,6 @@
 import type { AppData, Cooperativa, Cooperado, Instituicao, ProdutoInstituicao, Desconto, PrestacaoContasExcluida, InstituicaoExcluida, PagamentoCooperadoRegistro, Comunicado, FichaCorrida, VotacaoPauta, VotacaoVoto } from "@/types";
 import { normalizeCnpj } from "@/utils/cooperativa";
+import { secureApiFetch } from "@/lib/security/clientSession";
 import type { ContratosSyncPayload, OperacionalSyncPayload } from "@/lib/supabase/cooperativaSyncStorage";
 import { getData, saveDataSafe, runWithBatchedSaveAsync } from "@/services/dataStore";
 import { syncCooperadosFromCloud, fetchCooperadosFromCloud, pushCooperadoToCloud } from "@/services/cooperadoCloudService";
@@ -275,7 +276,7 @@ export async function pushOperationalResetToCloud(cnpj: string, coopId?: string)
 
   const payload = buildEmptyOperacionalResetPayload(d, cid);
   try {
-    await fetch("/api/cooperativa-sync", {
+    await secureApiFetch("/api/cooperativa-sync", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ cnpj: digits, section: "operacional", payload }),
@@ -677,7 +678,7 @@ async function fetchSyncBundle(cnpj: string): Promise<{
   const digits = normalizeCnpj(cnpj);
   if (digits.length !== 14) return null;
   try {
-    const res = await fetch(`/api/cooperativa-sync?cnpj=${digits}`, { cache: "no-store" });
+    const res = await secureApiFetch(`/api/cooperativa-sync?cnpj=${digits}`, { cache: "no-store" });
     if (!res.ok) return null;
     const json = await res.json();
     if (!json.configured) return null;
@@ -725,7 +726,7 @@ export async function pushContratosToCloud(
 
   payload.updatedAt = new Date().toISOString();
   try {
-    await fetch("/api/cooperativa-sync", {
+    await secureApiFetch("/api/cooperativa-sync", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ cnpj: digits, section: "contratos", payload }),
@@ -816,7 +817,7 @@ export async function pushOperacionalToCloud(
   payloadFinal.updatedAt = new Date().toISOString();
 
   try {
-    await fetch("/api/cooperativa-sync", {
+    await secureApiFetch("/api/cooperativa-sync", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ cnpj: digits, section: "operacional", payload: payloadFinal }),
@@ -830,7 +831,7 @@ export async function pushCooperativaProfileToCloud(cooperativa: Cooperativa): P
   const cnpj = normalizeCnpj(cooperativa.cnpj);
   if (cnpj.length !== 14) return;
   try {
-    await fetch(`/api/cooperativas/${cnpj}`, {
+    await secureApiFetch(`/api/cooperativas/${cnpj}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({

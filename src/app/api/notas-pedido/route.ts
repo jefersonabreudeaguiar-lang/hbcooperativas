@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getSupabaseAdmin, isSupabaseConfigured } from "@/lib/supabase/admin";
 import { normalizeCnpj } from "@/utils/cooperativa";
 import type { NotaPedido } from "@/types";
+import { guardCooperativaApi } from "@/lib/security/apiGuard";
 import {
   fetchNotasFromStorage,
   fetchNotasFromTable,
@@ -22,6 +23,9 @@ export async function GET(request: Request) {
   if (cnpj.length !== 14) {
     return NextResponse.json({ error: "CNPJ inválido." }, { status: 400 });
   }
+
+  const guard = await guardCooperativaApi(request, cnpj);
+  if (!guard.ok) return guard.response;
 
   const supabase = getSupabaseAdmin();
   if (!supabase) {
@@ -97,6 +101,9 @@ export async function POST(request: Request) {
   if (!Array.isArray(notas) || notas.length === 0) {
     return NextResponse.json({ error: "Nenhuma entrega informada." }, { status: 400 });
   }
+
+  const guard = await guardCooperativaApi(request, cnpj);
+  if (!guard.ok) return guard.response;
 
   const supabase = getSupabaseAdmin();
   if (!supabase) {

@@ -6,6 +6,7 @@ import {
   ensureAuthInfrastructure,
   tokenResponseForUser,
 } from "@/lib/security/authRoutes";
+import { isProvisionNewUserRole } from "@/lib/security/authPolicy";
 import {
   findAppUserByEmail,
   logSecurityEvent,
@@ -91,6 +92,10 @@ export async function POST(request: Request) {
       }
     }
     return NextResponse.json({ error: "Credenciais inválidas." }, { status: 401 });
+  }
+
+  if (!isProvisionNewUserRole(role)) {
+    return NextResponse.json({ error: "Perfil não permitido na sincronização." }, { status: 403 });
   }
 
   const user = await upsertAppUser(supabase, profilePayload);

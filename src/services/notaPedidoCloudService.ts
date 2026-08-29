@@ -10,6 +10,7 @@ import { needsOperationalResetCloudPush, getCloudResetAppliedVersion } from "@/s
 import { readNotaFotoAtIndex } from "@/services/localMediaStore";
 import { slimNotaDraftForUpload } from "@/services/imagePipelineService";
 import { flushPendingDeliveryImages } from "@/services/offlineImageQueueService";
+import { secureApiFetch } from "@/lib/security/clientSession";
 import {
   getLastNotasSyncAt,
   markNotasSyncDone,
@@ -390,7 +391,7 @@ export async function fetchNotasPedidoFromCloud(
   try {
     const qs = new URLSearchParams({ cnpj: digits, lite: "1" });
     if (since) qs.set("since", since);
-    const res = await fetch(`/api/notas-pedido?${qs.toString()}`, { cache: "no-store" });
+    const res = await secureApiFetch(`/api/notas-pedido?${qs.toString()}`, { cache: "no-store" });
     if (!res.ok) return { ok: false, notas: [], delta: Boolean(since) };
     const json = await res.json().catch(() => ({}));
     const notas = ((json.notas ?? []) as unknown[])
@@ -423,7 +424,7 @@ export async function fetchNotaPedidoFromCloud(
   const metaOnly = options?.metaOnly !== false;
 
   try {
-    const res = await fetch(
+    const res = await secureApiFetch(
       `/api/notas-pedido/${encodeURIComponent(notaId)}?cnpj=${digits}${metaOnly ? "" : "&full=1"}`,
       { cache: "no-store" }
     );
@@ -481,7 +482,7 @@ export async function fetchNotaFotoPartBlobUrl(
   if (digits.length !== 14) return null;
 
   try {
-    const res = await fetch(
+    const res = await secureApiFetch(
       `/api/notas-pedido/${encodeURIComponent(notaId)}/foto?cnpj=${digits}&index=${index}`,
       { cache: "no-store" }
     );
@@ -534,7 +535,7 @@ export async function pushNotasPedidoToCloud(
 
   try {
     for (const nota of notas) {
-      const res = await fetch("/api/notas-pedido", {
+      const res = await secureApiFetch("/api/notas-pedido", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ cnpj: digits, notas: [nota], cooperadoNome }),
@@ -641,7 +642,7 @@ export async function deleteNotaPedidoFromCloud(
   if (digits.length !== 14) return { ok: false, error: "CNPJ inválido." };
 
   try {
-    const res = await fetch(
+    const res = await secureApiFetch(
       `/api/notas-pedido/${encodeURIComponent(notaId)}?cnpj=${digits}`,
       { method: "DELETE" }
     );
@@ -663,7 +664,7 @@ export async function patchNotaPedidoInCloud(
   if (digits.length !== 14) return { ok: false, error: "CNPJ inválido." };
 
   try {
-    const res = await fetch(`/api/notas-pedido/${encodeURIComponent(nota.id)}`, {
+    const res = await secureApiFetch(`/api/notas-pedido/${encodeURIComponent(nota.id)}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ cnpj: digits, nota }),
@@ -707,7 +708,7 @@ export async function uploadFotoImediataToCloud(
   });
 
   try {
-    const res = await fetch(`/api/notas-pedido/${encodeURIComponent(nota.id)}/foto`, {
+    const res = await secureApiFetch(`/api/notas-pedido/${encodeURIComponent(nota.id)}/foto`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -770,7 +771,7 @@ export async function uploadFotoBlobToCloud(
     form.append("nota", JSON.stringify(metaNota));
     if (index === 0 && cooperadoNome) form.append("cooperadoNome", cooperadoNome);
 
-    const res = await fetch(`/api/notas-pedido/${encodeURIComponent(nota.id)}/foto`, {
+    const res = await secureApiFetch(`/api/notas-pedido/${encodeURIComponent(nota.id)}/foto`, {
       method: "POST",
       body: form,
     });
@@ -801,7 +802,7 @@ export async function deleteFotoRascunhoFromCloud(
   if (digits.length !== 14) return { ok: false, error: "CNPJ inválido." };
 
   try {
-    const res = await fetch(
+    const res = await secureApiFetch(
       `/api/notas-pedido/${encodeURIComponent(notaId)}/foto?cnpj=${digits}&index=${index}&totalCount=${totalCount}`,
       { method: "DELETE" }
     );
@@ -940,7 +941,7 @@ export async function pushNotaComFotosEmStreaming(
   try {
     let startIndex = 0;
     try {
-      const progressRes = await fetch(
+      const progressRes = await secureApiFetch(
         `/api/notas-pedido/${encodeURIComponent(nota.id)}?cnpj=${digits}&uploadProgress=1`
       );
       if (progressRes.ok) {
@@ -964,7 +965,7 @@ export async function pushNotaComFotosEmStreaming(
         return { ok: false, error: `Foto ${i + 1} de ${totalCount} não encontrada no aparelho.` };
       }
 
-      const res = await fetch(`/api/notas-pedido/${encodeURIComponent(nota.id)}/foto`, {
+      const res = await secureApiFetch(`/api/notas-pedido/${encodeURIComponent(nota.id)}/foto`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({

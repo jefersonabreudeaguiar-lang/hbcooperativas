@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getSupabaseAdmin, isSupabaseConfigured } from "@/lib/supabase/admin";
 import { normalizeCnpj } from "@/utils/cooperativa";
 import type { Cooperado } from "@/types";
+import { guardCooperativaApi } from "@/lib/security/apiGuard";
 import { fetchCooperadosFromStorage, uploadCooperadoToStorage } from "@/lib/supabase/cooperadosStorage";
 
 export async function GET(request: Request) {
@@ -14,6 +15,9 @@ export async function GET(request: Request) {
   if (cnpj.length !== 14) {
     return NextResponse.json({ error: "CNPJ inválido." }, { status: 400 });
   }
+
+  const guard = await guardCooperativaApi(request, cnpj);
+  if (!guard.ok) return guard.response;
 
   const supabase = getSupabaseAdmin();
   if (!supabase) {
@@ -47,6 +51,9 @@ export async function POST(request: Request) {
   if (!cooperado?.id || !cooperado?.nomeCompleto?.trim()) {
     return NextResponse.json({ error: "Cooperado inválido." }, { status: 400 });
   }
+
+  const guard = await guardCooperativaApi(request, cnpj);
+  if (!guard.ok) return guard.response;
 
   const supabase = getSupabaseAdmin();
   if (!supabase) {

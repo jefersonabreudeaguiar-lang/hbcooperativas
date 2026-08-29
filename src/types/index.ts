@@ -21,8 +21,8 @@ export interface MensalidadeConfig {
   mesesCobranca?: string[];
   /** ISO — última vez que o responsável salvou esta configuração. */
   configSalvaEm?: string;
-  /** Armazenado na nuvem — senha exigida no cadastro de cooperados (opcional). */
-  senhaCadastroCooperado?: string;
+  /** Armazenado na nuvem — hash bcrypt da senha exigida no cadastro de cooperados (opcional). */
+  senhaCadastroCooperadoHash?: string;
   /** Hash bcrypt da senha da área administrativa (opcional). */
   senhaAreaAdminHash?: string;
 }
@@ -37,8 +37,10 @@ export interface Cooperativa {
   email?: string;
   status: CooperativaStatus;
   mensalidadeConfig?: MensalidadeConfig;
-  /** Senha opcional que o cooperado deve informar no auto-cadastro pelo CNPJ. */
+  /** Senha opcional que o cooperado deve informar no auto-cadastro pelo CNPJ (local). */
   senhaCadastroCooperado?: string;
+  /** Hash bcrypt da senha de cadastro de cooperados (nuvem). */
+  senhaCadastroCooperadoHash?: string;
   /** Hash bcrypt da senha exclusiva da área administrativa (/admin). */
   senhaAreaAdminHash?: string;
   /** Cobrança da plataforma HB (por cooperado cadastrado). */

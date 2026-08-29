@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getSupabaseAdmin, isSupabaseConfigured } from "@/lib/supabase/admin";
 import { normalizeCnpj } from "@/utils/cooperativa";
+import { guardCooperativaApi } from "@/lib/security/apiGuard";
 import {
   fetchCooperativeAuditLog,
   insertCooperativeAuditEntries,
@@ -17,6 +18,9 @@ export async function GET(request: Request) {
   if (cnpj.length !== 14) {
     return NextResponse.json({ error: "CNPJ inválido." }, { status: 400 });
   }
+
+  const guard = await guardCooperativaApi(request, cnpj);
+  if (!guard.ok) return guard.response;
 
   const supabase = getSupabaseAdmin();
   if (!supabase) {
@@ -56,6 +60,9 @@ export async function POST(request: Request) {
   if (cnpj.length !== 14) {
     return NextResponse.json({ error: "CNPJ inválido." }, { status: 400 });
   }
+
+  const guard = await guardCooperativaApi(request, cnpj, { requireManagement: true });
+  if (!guard.ok) return guard.response;
 
   const rawEntries = body?.entries;
   if (!Array.isArray(rawEntries) || rawEntries.length === 0) {

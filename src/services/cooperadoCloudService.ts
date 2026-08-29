@@ -9,6 +9,7 @@ import { notaPertenceCooperativa } from "@/utils/fotoEntrega";
 import { getData, refreshStoredSession, saveDataSafe } from "@/services/dataStore";
 import { fetchCooperativaByCnpjFromCloud, mergeCooperativaIntoData } from "@/services/cooperativaCloudService";
 import { mergeAppInstallFields } from "@/services/cooperadoAppInstallService";
+import { secureApiFetch } from "@/lib/security/clientSession";
 
 function cpfDigits(value: string): string {
   return value.replace(/\D/g, "");
@@ -355,7 +356,7 @@ export async function fetchCooperadosFromCloud(
   if (digits.length !== 14) return { ok: false, cooperados: [] };
 
   try {
-    const res = await fetch(`/api/cooperados?cnpj=${digits}`, { cache: "no-store" });
+    const res = await secureApiFetch(`/api/cooperados?cnpj=${digits}`, { cache: "no-store" });
     if (!res.ok) return { ok: false, cooperados: [] };
     const json = await res.json().catch(() => ({}));
     return { ok: true, cooperados: (json.cooperados ?? []) as Cooperado[] };
@@ -375,7 +376,7 @@ export async function pushCooperadoToCloud(
   }
 
   try {
-    const res = await fetch("/api/cooperados", {
+    const res = await secureApiFetch("/api/cooperados", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ cnpj: digits, cooperado, email }),

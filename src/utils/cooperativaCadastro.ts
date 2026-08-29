@@ -1,23 +1,41 @@
 import type { Cooperativa, MensalidadeConfig } from "@/types";
+import { hashPasswordSync } from "@/lib/security/password";
 
 const SENHA_KEY = "senhaCadastroCooperado";
+const SENHA_HASH_KEY = "senhaCadastroCooperadoHash";
 const SENHA_ADMIN_HASH_KEY = "senhaAreaAdminHash";
 
-export function senhaCadastroFromConfig(
+/** Valor armazenado (hash bcrypt ou legado em texto) — nunca expor ao cliente. */
+export function senhaCadastroStoredFromConfig(
   config: MensalidadeConfig | Record<string, unknown> | null | undefined
 ): string | undefined {
   if (!config || typeof config !== "object") return undefined;
-  const raw = (config as Record<string, unknown>)[SENHA_KEY];
-  const trimmed = String(raw ?? "").trim();
-  return trimmed || undefined;
+  const rec = config as Record<string, unknown>;
+  const hash = String(rec[SENHA_HASH_KEY] ?? "").trim();
+  if (hash) return hash;
+  const legacy = String(rec[SENHA_KEY] ?? "").trim();
+  return legacy || undefined;
+}
+
+/** @deprecated use senhaCadastroStoredFromConfig */
+export function senhaCadastroFromConfig(
+  config: MensalidadeConfig | Record<string, unknown> | null | undefined
+): string | undefined {
+  return senhaCadastroStoredFromConfig(config);
 }
 
 export function exigeSenhaCadastroCooperado(
-  cooperativa: Pick<Cooperativa, "senhaCadastroCooperado"> | null | undefined,
+  cooperativa:
+    | Pick<Cooperativa, "senhaCadastroCooperado" | "senhaCadastroCooperadoHash">
+    | null
+    | undefined,
   config?: MensalidadeConfig | Record<string, unknown> | null
 ): boolean {
-  const senha = cooperativa?.senhaCadastroCooperado ?? senhaCadastroFromConfig(config);
-  return Boolean(senha?.trim());
+  const stored =
+    cooperativa?.senhaCadastroCooperadoHash ??
+    cooperativa?.senhaCadastroCooperado ??
+    senhaCadastroStoredFromConfig(config);
+  return Boolean(stored?.trim());
 }
 
 export function mensalidadeConfigComSenhaCadastro(
@@ -26,10 +44,11 @@ export function mensalidadeConfigComSenhaCadastro(
 ): MensalidadeConfig | undefined {
   const trimmed = senhaCadastroCooperado?.trim();
   const base = { ...(config ?? {}) } as MensalidadeConfig & Record<string, unknown>;
+  delete base[SENHA_KEY];
   if (trimmed) {
-    base[SENHA_KEY] = trimmed;
+    base[SENHA_HASH_KEY] = hashPasswordSync(trimmed);
   } else {
-    delete base[SENHA_KEY];
+    delete base[SENHA_HASH_KEY];
   }
   if (Object.keys(base).length === 0) return undefined;
   return base as unknown as MensalidadeConfig;
@@ -83,13 +102,14 @@ export function mensalidadeConfigSemSenhaCadastro(
   if (!config || typeof config !== "object") return undefined;
   const next = { ...config } as Record<string, unknown>;
   delete next[SENHA_KEY];
+  delete next[SENHA_HASH_KEY];
   if (Object.keys(next).length === 0) return undefined;
   return next as unknown as MensalidadeConfig;
 }
 
 export function cooperativaFromCloudRow(row: Record<string, unknown>): Cooperativa {
   const mensalidadeRaw = row.mensalidade_config as MensalidadeConfig | null | undefined;
-  const senhaCadastroCooperado = senhaCadastroFromConfig(mensalidadeRaw);
+  const senhaCadastroCooperadoHash = senhaCadastroStoredFromConfig(mensalidadeRaw);
   const senhaAreaAdminHash = senhaAreaAdminHashFromConfig(mensalidadeRaw);
   const mensalidadeConfig = mensalidadeConfigSemSenhaCadastro(mensalidadeRaw);
   const mensalidadeConfigLimpa = mensalidadeConfigSemSenhaAreaAdmin(mensalidadeConfig);
@@ -103,7 +123,7 @@ export function cooperativaFromCloudRow(row: Record<string, unknown>): Cooperati
     email: String(row.email ?? ""),
     status: (row.status as Cooperativa["status"]) ?? "ativa",
     mensalidadeConfig: mensalidadeConfigLimpa,
-    senhaCadastroCooperado,
+    senhaCadastroCooperadoHash,
     senhaAreaAdminHash,
     createdAt: String(row.created_at ?? new Date().toISOString()),
     updatedAt: String(row.updated_at ?? new Date().toISOString()),

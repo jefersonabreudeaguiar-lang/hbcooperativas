@@ -1,6 +1,7 @@
 import type { AppData, AuditEntry, User } from "@/types";
 import { auditEntryToCloudInsert } from "@/lib/supabase/cooperativeAuditStorage";
 import { getCooperativaById, normalizeCnpj } from "@/utils/cooperativa";
+import { secureApiFetch } from "@/lib/security/clientSession";
 
 const pendingQueue: CooperativeAuditPayload[] = [];
 let flushTimer: ReturnType<typeof setTimeout> | null = null;
@@ -62,7 +63,7 @@ async function flushAuditQueue(): Promise<void> {
 
   for (const [cnpj, entries] of byCnpj) {
     try {
-      await fetch("/api/cooperativa-audit", {
+      await secureApiFetch("/api/cooperativa-audit", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ cnpj, entries }),
@@ -95,7 +96,7 @@ export async function fetchCloudAuditLog(
   if (opts?.limit) params.set("limit", String(opts.limit));
 
   try {
-    const res = await fetch(`/api/cooperativa-audit?${params.toString()}`, { cache: "no-store" });
+    const res = await secureApiFetch(`/api/cooperativa-audit?${params.toString()}`, { cache: "no-store" });
     if (!res.ok) return [];
     const json = await res.json();
     return Array.isArray(json.entries) ? json.entries : [];
@@ -114,7 +115,7 @@ export async function syncLocalAuditToCloud(data: AppData, cnpj: string): Promis
   });
 
   try {
-    await fetch("/api/cooperativa-audit", {
+    await secureApiFetch("/api/cooperativa-audit", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ cnpj: normalized, entries, bulk: true }),

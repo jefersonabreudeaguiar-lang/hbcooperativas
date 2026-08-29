@@ -2,7 +2,8 @@ import { NextResponse } from "next/server";
 import { getSupabaseAdmin, isSupabaseConfigured } from "@/lib/supabase/admin";
 import { isCooperativasTableMissing } from "@/lib/supabase/errors";
 import { normalizeCnpj } from "@/utils/cooperativa";
-import { exigeSenhaCadastroCooperado, senhaCadastroFromConfig } from "@/utils/cooperativaCadastro";
+import { exigeSenhaCadastroCooperado, senhaCadastroStoredFromConfig } from "@/utils/cooperativaCadastro";
+import { verifyPassword } from "@/lib/security/password";
 import { rateLimitAuth } from "@/lib/security/rateLimit";
 
 export async function POST(request: Request) {
@@ -51,8 +52,8 @@ export async function POST(request: Request) {
     return NextResponse.json({ valid: true, required: false, configured: true });
   }
 
-  const esperada = senhaCadastroFromConfig(cfg) ?? "";
-  const valid = senha.trim() === esperada;
+  const esperada = senhaCadastroStoredFromConfig(cfg) ?? "";
+  const valid = await verifyPassword(senha.trim(), esperada);
 
   return NextResponse.json({ valid, required: true, configured: true });
 }
