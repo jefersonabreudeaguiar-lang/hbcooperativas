@@ -124,3 +124,28 @@ export async function requireCreditParceiro(
 
   return { ok: true, parceiro };
 }
+
+/** Liquidação — mercado só a própria; equipe financeira só o CNPJ da sessão. */
+export async function requireCreditSettlementAccess(
+  ctx: CreditAuthOk,
+  settlement: { cooperativeCnpj: string; partnerId: string }
+): Promise<NextResponse | null> {
+  if (!ctx.enforced || !ctx.session) return null;
+
+  const denyCoop = requireCreditCnpj(ctx, settlement.cooperativeCnpj);
+  if (denyCoop) return denyCoop;
+
+  if (ctx.session.role === "parceiro") {
+    const parceiro = await resolveCreditParceiro(ctx);
+    if (!parceiro || parceiro.id !== settlement.partnerId) {
+      return NextResponse.json({ error: "Sem permissão para esta liquidação." }, { status: 403 });
+    }
+    return null;
+  }
+
+  if (ctx.session.role === "responsavel" || ctx.session.role === "tesoureiro") {
+    return null;
+  }
+
+  return NextResponse.json({ error: "Sem permissão para esta liquidação." }, { status: 403 });
+}

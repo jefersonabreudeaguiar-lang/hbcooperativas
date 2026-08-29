@@ -3,7 +3,12 @@ import { isSupabaseConfigured } from "@/lib/supabase/admin";
 const DEV_AUTH_SECRET = "dev-only-change-in-production-hb-cooperativas";
 
 export function getAuthSecret(): string {
-  return process.env.AUTH_SECRET?.trim() || DEV_AUTH_SECRET;
+  const secret = process.env.AUTH_SECRET?.trim();
+  if (secret) return secret;
+  if (process.env.NODE_ENV === "production") {
+    throw new Error("AUTH_SECRET é obrigatório em produção.");
+  }
+  return DEV_AUTH_SECRET;
 }
 
 /** Segurança de API ativa quando nuvem + segredo configurados (produção). */

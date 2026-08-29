@@ -8,10 +8,12 @@ import {
   registerPartnerSettlementPayment,
 } from "@/lib/supabase/contaCoopStorage";
 import { gerarRelatorioLiquidacaoMercadoHtml, injetarAssinaturaMercadoNoRelatorio } from "@/utils/reciboLiquidacaoMercado";
+import { encryptSensitiveField } from "@/lib/security/fieldCrypto";
 import {
   requireCreditApi,
   requireCreditCnpj,
   requireCreditParceiro,
+  requireCreditSettlementAccess,
   requireCreditStaff,
 } from "@/lib/security/creditGuard";
 
@@ -26,6 +28,20 @@ export async function GET(request: Request) {
   const settlementId = url.searchParams.get("settlementId") ?? "";
 
   if (settlementId) {
+    const { data: row } = await gate.ctx.supabase
+      .from("hb_credit_settlements")
+      .select("id, cooperative_cnpj, partner_id")
+      .eq("id", settlementId)
+      .maybeSingle();
+
+    if (!row) return NextResponse.json({ error: "Liquidação não encontrada." }, { status: 404 });
+
+    const denySettlement = await requireCreditSettlementAccess(gate.ctx, {
+      cooperativeCnpj: String(row.cooperative_cnpj),
+      partnerId: String(row.partner_id),
+    });
+    if (denySettlement) return denySettlement;
+
     const settlement = await getSettlementById(gate.ctx.supabase, settlementId);
     if (!settlement) return NextResponse.json({ error: "Liquidação não encontrada." }, { status: 404 });
     return NextResponse.json({ ok: true, settlement });
@@ -83,7 +99,10 @@ export async function POST(request: Request) {
         assinatura.trim(),
         new Date().toISOString()
       );
-      await gate.ctx.supabase.from("hb_credit_settlements").update({ relatorio_html: html }).eq("id", settlementId);
+      await gate.ctx.supabase
+        .from("hb_credit_settlements")
+        .update({ relatorio_html: encryptSensitiveField(html) })
+        .eq("id", settlementId);
     }
 
     return NextResponse.json({ ok: true, settlement: result.settlement });

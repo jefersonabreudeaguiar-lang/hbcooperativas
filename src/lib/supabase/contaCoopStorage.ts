@@ -22,6 +22,7 @@ import type {
 import { computeDisponivel, formatCentsBRL } from "@/modules/hb-credit/engine/money";
 import { calcLimiteFromPercentual, calcTetoGlobalCents, sumCreditosBaseCents } from "@/modules/hb-credit/engine/creditBaseFromFicha";
 import { INTENT_EXPIRY_MINUTES } from "@/modules/hb-credit/config";
+import { decryptSensitiveField, encryptSensitiveField } from "@/lib/security/fieldCrypto";
 import {
   intentStatusFromDb,
   intentStatusToDb,
@@ -36,6 +37,16 @@ function genId(prefix: string): string {
 
 function secureNonce(): string {
   return randomBytes(16).toString("hex");
+}
+
+function protectStoredField(value: string | null | undefined): string | null {
+  if (!value?.trim()) return null;
+  return encryptSensitiveField(value.trim());
+}
+
+function readStoredField(value: string | null | undefined): string | null {
+  if (!value?.trim()) return null;
+  return decryptSensitiveField(value.trim());
 }
 
 export function buildQrPayload(intentId: string, nonce: string): string {
@@ -602,8 +613,8 @@ function mapParceiroRow(row: Record<string, unknown>): ContaCoopParceiro {
     nomeMercado: String(row.name),
     email: String(row.email),
     status: partnerStatusFromDb(String(row.status)),
-    pixKey: row.pix_key ? String(row.pix_key) : null,
-    pixHolderName: row.pix_holder_name ? String(row.pix_holder_name) : null,
+    pixKey: readStoredField(row.pix_key as string | undefined),
+    pixHolderName: readStoredField(row.pix_holder_name as string | undefined),
     pixUpdatedAt: row.pix_updated_at ? String(row.pix_updated_at) : null,
     appUserId: row.app_user_id ? String(row.app_user_id) : null,
     createdAt: String(row.created_at),
@@ -1661,35 +1672,32 @@ export async function approveRefundRequest(
   reviewNote?: string
 ): Promise<{ ok: true; disponivelAposCents: number } | { ok: false; error: string }> {
   const digits = normalizeCnpj(cooperativeCnpj);
-  const { data: request, error } = await supabase
-    .from("hb_credit_refund_requests")
-    .select("*")
-    .eq("id", requestId)
-    .eq("cooperative_cnpj", digits)
-    .maybeSingle();
+  const refundTxId = genId("tx");
+  const refundId = genId("refund");
 
-  if (error) return { ok: false, error: error.message };
-  if (!request) return { ok: false, error: "Solicitação não encontrada." };
-  if (request.status !== "PENDING") return { ok: false, error: "Solicitação já foi analisada." };
+  const { data, error } = await supabase.rpc("hb_credit_approve_refund_request", {
+    p_request_id: requestId,
+    p_cooperative_cnpj: digits,
+    p_reviewer_user_id: reviewerUserId,
+    p_review_note: reviewNote?.trim() || null,
+    p_refund_transaction_id: refundTxId,
+    p_refund_id: refundId,
+  });
 
-  const refund = await refundPayment(supabase, String(request.transaction_id), digits, reviewerUserId);
-  if (!refund.ok) return refund;
+  if (error) {
+    if (/function.*does not exist/i.test(error.message)) {
+      return {
+        ok: false,
+        error: "Migration Fase 1 (hb_credit_phase1_security) não aplicada na nuvem.",
+      };
+    }
+    return { ok: false, error: error.message };
+  }
 
-  const now = new Date().toISOString();
-  const { error: updateError } = await supabase
-    .from("hb_credit_refund_requests")
-    .update({
-      status: "APPROVED",
-      reviewed_by_user_id: reviewerUserId,
-      review_note: reviewNote?.trim() || null,
-      reviewed_at: now,
-      updated_at: now,
-    })
-    .eq("id", requestId)
-    .eq("status", "PENDING");
+  const result = data as { ok?: boolean; error?: string; disponivel_apos_centavos?: number };
+  if (!result?.ok) return { ok: false, error: result?.error ?? "Aprovação recusada." };
 
-  if (updateError) return { ok: false, error: updateError.message };
-  return { ok: true, disponivelAposCents: refund.disponivelAposCents };
+  return { ok: true, disponivelAposCents: Number(result.disponivel_apos_centavos ?? 0) };
 }
 
 export async function denyRefundRequest(
@@ -1959,7 +1967,7 @@ function mapSettlementRow(row: Record<string, unknown>, partnerNome?: string): C
     responsavelNome: row.responsavel_nome ? String(row.responsavel_nome) : null,
     pagoEm: row.pago_em ? String(row.pago_em) : null,
     comprovanteMemo: row.comprovante_memo ? String(row.comprovante_memo) : null,
-    relatorioHtml: row.relatorio_html ? String(row.relatorio_html) : null,
+    relatorioHtml: readStoredField(row.relatorio_html as string | undefined),
     partnerConfirmadoEm: row.partner_confirmado_em ? String(row.partner_confirmado_em) : null,
     createdAt: String(row.created_at),
   };
@@ -1974,8 +1982,8 @@ export async function updatePartnerPix(
   const { data, error } = await supabase
     .from("hb_credit_partners")
     .update({
-      pix_key: pixKey.trim(),
-      pix_holder_name: pixHolderName.trim(),
+      pix_key: protectStoredField(pixKey),
+      pix_holder_name: protectStoredField(pixHolderName),
       pix_updated_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
     })
@@ -2118,8 +2126,8 @@ export async function previewPartnerSettlement(
     partnerId,
     partnerNome: String(partnerRow.name),
     mesReferencia,
-    pixKey: partnerRow.pix_key ? String(partnerRow.pix_key) : null,
-    pixHolderName: partnerRow.pix_holder_name ? String(partnerRow.pix_holder_name) : null,
+    pixKey: readStoredField(partnerRow.pix_key as string | undefined),
+    pixHolderName: readStoredField(partnerRow.pix_holder_name as string | undefined),
     totalCents,
     transacoesCount: openRecebiveis.length,
     cooperados,
@@ -2171,7 +2179,7 @@ export async function registerPartnerSettlementPayment(
     responsavel_nome: params.responsavelNome,
     pago_em: now,
     comprovante_memo: params.comprovanteMemo ?? null,
-    relatorio_html: params.relatorioHtml,
+    relatorio_html: protectStoredField(params.relatorioHtml),
     created_at: now,
     updated_at: now,
   });
@@ -2241,7 +2249,7 @@ export async function confirmPartnerSettlement(
     .from("hb_credit_settlements")
     .update({
       status: "CONFIRMED",
-      partner_assinatura_data_url: assinaturaDataUrl,
+      partner_assinatura_data_url: protectStoredField(assinaturaDataUrl),
       partner_confirmado_em: now,
       updated_at: now,
     })
@@ -2288,7 +2296,7 @@ export async function getSettlementById(
   const mapped = mapSettlementRow(data as Record<string, unknown>);
   return {
     ...mapped,
-    partnerAssinatura: data.partner_assinatura_data_url ? String(data.partner_assinatura_data_url) : null,
+    partnerAssinatura: readStoredField(data.partner_assinatura_data_url as string | undefined),
   };
 }
 

@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { listCooperadoContaCoopDescontosMes } from "@/lib/supabase/contaCoopStorage";
-import { requireCreditApi, requireCreditCnpj } from "@/lib/security/creditGuard";
+import { requireCreditApi, requireCreditCnpj, requireCreditCooperado, requireCreditSettlementAccess } from "@/lib/security/creditGuard";
 
 export async function GET(request: Request) {
   const gate = await requireCreditApi(request);
@@ -17,6 +17,9 @@ export async function GET(request: Request) {
 
   const denyCoop = requireCreditCnpj(gate.ctx, cnpj);
   if (denyCoop) return denyCoop;
+
+  const denySelf = requireCreditCooperado(gate.ctx, cooperadoId);
+  if (denySelf) return denySelf;
 
   const descontos = await listCooperadoContaCoopDescontosMes(
     gate.ctx.supabase,

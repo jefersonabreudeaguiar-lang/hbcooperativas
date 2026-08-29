@@ -3,7 +3,7 @@ import type { UserRole } from "@/types";
 import { normalizeCnpj } from "@/utils/cooperativa";
 import { normalizeAuthEmail } from "@/lib/security/appCreator";
 import { hashPassword, verifyPassword } from "@/lib/security/password";
-import { encryptSensitiveField } from "@/lib/security/fieldCrypto";
+import { decryptSensitiveField, encryptSensitiveField } from "@/lib/security/fieldCrypto";
 
 export type AppUserRow = {
   id: string;
@@ -155,5 +155,5 @@ export function protectSenhaCadastroForCloud(senha?: string): string | undefined
 
 export function readSenhaCadastroFromCloud(stored?: string): string | undefined {
   if (!stored?.trim()) return undefined;
-  return stored;
+  return decryptSensitiveField(stored.trim()) || undefined;
 }

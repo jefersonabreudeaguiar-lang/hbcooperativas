@@ -9,7 +9,6 @@ import {
   findAppUserByEmail,
   isAppUsersTableReady,
   logSecurityEvent,
-  updateAppUserPasswordHash,
   upsertAppUser,
   verifyAppUserPassword,
 } from "@/lib/supabase/usersAuth";
@@ -72,47 +71,35 @@ export async function POST(request: Request) {
   const existing = await findAppUserByEmail(supabase, email);
 
   if (existing) {
-    let user = await verifyAppUserPassword(supabase, email, password);
+    const user = await verifyAppUserPassword(supabase, email, password);
     if (user) {
       const synced = await upsertAppUser(supabase, {
         ...profilePayload,
         id: user.id,
         name: name || user.name,
       });
-      user = synced ?? user;
-    } else if (existing.id === id) {
-      await updateAppUserPasswordHash(supabase, id, password);
-      const synced = await upsertAppUser(supabase, profilePayload);
-      user = synced;
-    } else {
-      const existingCnpj = existing.cooperativa_cnpj ? normalizeCnpj(existing.cooperativa_cnpj) : "";
-      const cnpjConflict =
-        requestCnpj.length === 14 &&
-        existingCnpj.length === 14 &&
-        requestCnpj !== existingCnpj;
-      if (!cnpjConflict) {
-        await updateAppUserPasswordHash(supabase, existing.id, password);
-        const synced = await upsertAppUser(supabase, {
-          ...profilePayload,
-          id: existing.id,
-        });
-        user = synced;
-      }
-    }
+      const finalUser = synced ?? user;
 
-    if (user) {
       await logSecurityEvent(supabase, {
         action: "auth.sync_session",
-        userId: user.id,
-        userEmail: user.email,
-        cooperativaCnpj: user.cooperativa_cnpj ?? undefined,
+        userId: finalUser.id,
+        userEmail: finalUser.email,
+        cooperativaCnpj: finalUser.cooperativa_cnpj ?? undefined,
         ip: clientIp(request),
       });
-      return tokenResponseForUser(user);
+      return tokenResponseForUser(finalUser);
     }
 
+    await logSecurityEvent(supabase, {
+      action: "auth.sync_session.denied",
+      userEmail: email,
+      cooperativaCnpj: requestCnpj.length === 14 ? requestCnpj : undefined,
+      ip: clientIp(request),
+      metadata: { reason: "invalid_password" },
+    });
+
     return NextResponse.json(
-      { error: "Não foi possível sincronizar sua conta na nuvem.", code: "SYNC_DENIED" },
+      { error: "Senha incorreta. Faça login novamente.", code: "SYNC_DENIED" },
       { status: 401 }
     );
   }

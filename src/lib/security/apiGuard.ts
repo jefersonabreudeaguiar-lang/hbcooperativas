@@ -44,21 +44,18 @@ export function canAccessCooperativaCnpj(session: SessionClaims, cnpj: string): 
   const digits = normalizeCnpj(cnpj);
   if (digits.length !== 14) return false;
 
-  if (session.role === "admin" || session.role === "tesoureiro") return true;
+  if (session.role === "admin") return true;
 
   const sessionCnpj = session.cooperativaCnpj ? normalizeCnpj(session.cooperativaCnpj) : "";
-  if (sessionCnpj.length === 14 && sessionCnpj === digits) {
-    if (
-      session.role === "cooperado" ||
-      session.role === "parceiro" ||
-      session.role === "responsavel" ||
-      session.role === "contador"
-    ) {
-      return true;
-    }
-  }
+  if (sessionCnpj.length !== 14 || sessionCnpj !== digits) return false;
 
-  return false;
+  return (
+    session.role === "cooperado" ||
+    session.role === "parceiro" ||
+    session.role === "responsavel" ||
+    session.role === "contador" ||
+    session.role === "tesoureiro"
+  );
 }
 
 export function requireCooperativaAccess(
