@@ -290,18 +290,24 @@ export async function ensureCloudSessionReady(profile?: CloudSessionProfile): Pr
   clearCloudBootstrapCredentials();
 
   const active = profile ?? activeCloudProfile ?? loadStoredSessionProfile();
+  if (active) activeCloudProfile = active;
+
+  // Sempre valida cookie httpOnly — cloudSessionActive é só flag em memória (perde no reload).
+  if (await refreshCloudSession()) {
+    lastCloudSyncError = "";
+    return true;
+  }
+
   if (!active) {
-    if (cloudSessionActive) return refreshCloudSession();
+    lastCloudSyncError =
+      lastCloudSyncError ||
+      "Sessão local não encontrada. Faça login novamente.";
     return false;
   }
 
-  activeCloudProfile = active;
-
-  if (cloudSessionActive) {
-    const refreshed = await refreshCloudSession();
-    if (refreshed) return true;
-  }
-
+  lastCloudSyncError =
+    lastCloudSyncError ||
+    "Sessão na nuvem expirada ou desalinhada. Saia, entre de novo e aguarde alguns segundos.";
   return false;
 }
 

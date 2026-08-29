@@ -721,11 +721,12 @@ async function finishLoginSession(user: User, data: AppData, plainPassword: stri
   setActiveCloudProfile(cloudProfile);
   clearCloudBootstrapCredentials();
 
-  const cloudOk = await establishCloudSession(user.email, plainPassword, cloudProfile);
-  if (!cloudOk) {
-    const cloudHit = await loginViaCloudApi(user.email, plainPassword);
-    if (cloudHit) setActiveCloudProfile(cloudHit.user);
+  // Login direto na nuvem primeiro (cookie); sync-session alinha perfil em seguida.
+  const cloudHit = await loginViaCloudApi(user.email, plainPassword);
+  if (cloudHit) {
+    setActiveCloudProfile(cloudHit.user);
   }
+  await establishCloudSession(user.email, plainPassword, cloudProfile);
 
   return user;
 }

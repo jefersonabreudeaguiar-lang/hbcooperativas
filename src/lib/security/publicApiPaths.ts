@@ -20,6 +20,9 @@ export function isPublicApiRoute(pathname: string, method: string): boolean {
 
   if (publicPaths.has(pathname)) return true;
 
+  /** Renova cookie httpOnly — não pode exigir JWT válido no middleware (token expirado). */
+  if (pathname === "/api/auth/session" && m === "GET") return true;
+
   if (pathname.startsWith("/api/admin/apply-") && m === "POST") return false;
 
   return false;

@@ -5,9 +5,7 @@ import { useRouter } from "next/navigation";
 import { useAuth } from "@/modules/auth/AuthProvider";
 import {
   ensureCloudSessionReady,
-  getAccessToken,
   getLastCloudSyncError,
-  isCloudSessionActive,
   userToCloudProfile,
 } from "@/lib/security/clientSession";
 import { PageSkeleton } from "@/components/ui/PageSkeleton";
@@ -46,7 +44,7 @@ export function CloudSessionGate({ children }: { children: React.ReactNode }) {
 
     const profile = userToCloudProfile(user);
     const ok = await ensureCloudSessionReady(profile);
-    if (ok && (isCloudSessionActive() || getAccessToken())) {
+    if (ok) {
       setReady(true);
       return true;
     }
