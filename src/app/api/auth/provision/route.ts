@@ -15,7 +15,7 @@ import {
 } from "@/lib/supabase/usersAuth";
 import type { UserRole } from "@/types";
 
-const VALID_ROLES: UserRole[] = ["admin", "tesoureiro", "responsavel", "cooperado"];
+const VALID_ROLES: UserRole[] = ["admin", "tesoureiro", "responsavel", "cooperado", "contador"];
 
 /** Sincroniza usuário local existente para a nuvem na primeira sessão segura. */
 export async function POST(request: Request) {

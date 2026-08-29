@@ -12,9 +12,9 @@ import { AlertBanner } from "@/components/ui/AlertBanner";
 import { updateData } from "@/services/dataStore";
 import {
   aplicarAtualizacaoMembroEquipe,
-  aplicarContadorEquipeCriado,
-  criarContadorEquipe,
+  cadastrarContadorEquipeComNuvem,
   listContadoresEquipeIncluindoInativos,
+  sincronizarSenhaContadorNaNuvem,
 } from "@/services/equipeService";
 import { CONTADOR_ACESSO_DESCRICAO, PRESET_CONTADOR, getUserFuncaoLabel } from "@/permissions";
 import { MODULOS_ACESSO } from "@/permissions";
@@ -39,6 +39,8 @@ export function EquipeContadorPanel({ cooperativaId, cooperativaCnpj }: EquipeCo
   const [editando, setEditando] = useState<User | null>(null);
   const [form, setForm] = useState(emptyForm);
   const [erro, setErro] = useState("");
+  const [salvando, setSalvando] = useState(false);
+  const [feedbackOk, setFeedbackOk] = useState<string | null>(null);
 
   const contadores = useMemo(() => {
     if (!data) return [];
@@ -71,28 +73,48 @@ export function EquipeContadorPanel({ cooperativaId, cooperativaCnpj }: EquipeCo
     setModalOpen(true);
   };
 
-  const salvar = () => {
+  const salvar = async () => {
     setErro("");
-    if (editando) {
-      const result = aplicarAtualizacaoMembroEquipe(data, user, editando.id, {
-        name: form.name,
-        funcao: form.funcao,
-        password: form.password || undefined,
-      });
-      if (!result.ok) {
-        setErro(result.error);
-        return;
+    setFeedbackOk(null);
+    setSalvando(true);
+    try {
+      if (editando) {
+        const result = aplicarAtualizacaoMembroEquipe(data, user, editando.id, {
+          name: form.name,
+          funcao: form.funcao,
+          password: form.password || undefined,
+        });
+        if (!result.ok) {
+          setErro(result.error);
+          return;
+        }
+        if (form.password && form.password.length >= 6) {
+          const updated = result.data.users.find((u) => u.id === editando.id);
+          if (updated) {
+            const cloudOk = await sincronizarSenhaContadorNaNuvem(updated, form.password);
+            if (!cloudOk) {
+              setErro("Alteração salva no aparelho, mas a senha não foi atualizada na nuvem. Tente novamente.");
+              return;
+            }
+          }
+        }
+        updateData(() => result.data);
+        setFeedbackOk("Contador atualizado.");
+      } else {
+        const criado = await cadastrarContadorEquipeComNuvem(data, user, cooperativaId, cooperativaCnpj, form);
+        if (!criado.ok) {
+          setErro(criado.error);
+          return;
+        }
+        updateData(() => criado.data);
+        setFeedbackOk(
+          `Contador cadastrado. O login ${form.email.trim().toLowerCase()} já funciona em qualquer dispositivo em hbcooperativas.vercel.app/login.`
+        );
       }
-      updateData(() => result.data);
-    } else {
-      const criado = criarContadorEquipe(data, user, cooperativaId, cooperativaCnpj, form);
-      if (!criado.ok) {
-        setErro(criado.error);
-        return;
-      }
-      updateData((d) => aplicarContadorEquipeCriado(d, user, criado.user));
+      setModalOpen(false);
+    } finally {
+      setSalvando(false);
     }
-    setModalOpen(false);
   };
 
   const desativar = (contador: User) => {
@@ -109,6 +131,12 @@ export function EquipeContadorPanel({ cooperativaId, cooperativaCnpj }: EquipeCo
     <>
       <Card title="Contador / auditoria" className="mb-6">
         <p className="text-sm text-gray-500 mb-3">{CONTADOR_ACESSO_DESCRICAO}</p>
+
+        {feedbackOk && (
+          <AlertBanner variant="success" title="Pronto" className="mb-3">
+            {feedbackOk}
+          </AlertBanner>
+        )}
 
         <div className="rounded-xl border border-blue-100 bg-blue-50/60 p-4 mb-4">
           <p className="text-xs font-semibold uppercase tracking-wide text-blue-900 mb-2 flex items-center gap-2">
@@ -172,10 +200,12 @@ export function EquipeContadorPanel({ cooperativaId, cooperativaCnpj }: EquipeCo
         size="md"
         footer={
           <div className="flex justify-end gap-2">
-            <Button variant="secondary" onClick={() => setModalOpen(false)}>
+            <Button variant="secondary" onClick={() => setModalOpen(false)} disabled={salvando}>
               Cancelar
             </Button>
-            <Button onClick={salvar}>Salvar</Button>
+            <Button onClick={() => void salvar()} disabled={salvando}>
+              {salvando ? "Salvando…" : "Salvar"}
+            </Button>
           </div>
         }
       >

@@ -3,6 +3,8 @@ import { MODULOS_ACESSO, PRESET_RELATORIOS, negarModulos, resourcesFromModulos }
 import { generateId, addAuditEntry } from "@/services/dataStore";
 import { getUserCooperativaId } from "@/utils/cooperativa";
 import { hashPasswordSync } from "@/lib/security/password";
+import { registerCloudUser } from "@/lib/security/clientSession";
+import { normalizeCnpj } from "@/utils/cooperativa";
 
 type UsuarioActor = Pick<User, "id" | "name">;
 
@@ -163,6 +165,61 @@ export function criarContadorEquipe(
   };
 
   return { ok: true, user: newUser };
+}
+
+/** Cadastra contador localmente e publica credenciais na nuvem para login em qualquer dispositivo. */
+export async function cadastrarContadorEquipeComNuvem(
+  data: AppData,
+  actor: UsuarioActor,
+  cooperativaId: string,
+  cooperativaCnpj: string | undefined,
+  input: ContadorEquipeInput
+): Promise<{ ok: true; user: User; data: AppData } | { ok: false; error: string }> {
+  const criado = criarContadorEquipe(data, actor, cooperativaId, cooperativaCnpj, input);
+  if (!criado.ok) return criado;
+
+  const cnpj = cooperativaCnpj ? normalizeCnpj(cooperativaCnpj) : undefined;
+  const cloudOk = await registerCloudUser({
+    id: criado.user.id,
+    email: criado.user.email,
+    password: input.password,
+    name: criado.user.name,
+    role: "contador",
+    cooperativaId,
+    cooperativaCnpj: cnpj && cnpj.length === 14 ? cnpj : undefined,
+  });
+
+  if (!cloudOk) {
+    return {
+      ok: false,
+      error:
+        "Não foi possível publicar o contador na nuvem. Verifique internet e Supabase (tabela app_users) e tente novamente.",
+    };
+  }
+
+  return {
+    ok: true,
+    user: criado.user,
+    data: aplicarContadorEquipeCriado(data, actor, criado.user),
+  };
+}
+
+/** Atualiza senha do contador na nuvem após alteração local. */
+export async function sincronizarSenhaContadorNaNuvem(
+  contador: Pick<User, "id" | "email" | "name" | "role" | "cooperativaId" | "cooperativaCnpj">,
+  plainPassword: string
+): Promise<boolean> {
+  if (contador.role !== "contador" || plainPassword.length < 6) return false;
+  const cnpj = contador.cooperativaCnpj ? normalizeCnpj(contador.cooperativaCnpj) : undefined;
+  return registerCloudUser({
+    id: contador.id,
+    email: contador.email,
+    password: plainPassword,
+    name: contador.name,
+    role: "contador",
+    cooperativaId: contador.cooperativaId,
+    cooperativaCnpj: cnpj && cnpj.length === 14 ? cnpj : undefined,
+  });
 }
 
 export function aplicarContadorEquipeCriado(
