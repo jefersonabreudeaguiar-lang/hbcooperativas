@@ -1,10 +1,11 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import dynamic from "next/dynamic";
 import { CreditFeatureGate } from "@/components/hb-credit/CreditFeatureGate";
 import { CloudSessionGate } from "@/components/hb-credit/CloudSessionGate";
 import { ContaCoopSegmentTabs } from "@/components/hb-credit/ContaCoopSegmentTabs";
-import { HbCreditQrScanner } from "@/components/hb-credit/HbCreditQrScanner";
+import { HbCreditScannerErrorBoundary } from "@/components/hb-credit/HbCreditScannerErrorBoundary";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Input, Label } from "@/components/ui/Form";
@@ -26,6 +27,18 @@ import { labelLedgerTipo } from "@/lib/hb-credit/ledgerLabels";
 import { PageSkeleton } from "@/components/ui/PageSkeleton";
 import { generateId } from "@/services/dataStore";
 import { cn } from "@/utils/format";
+
+const HbCreditQrScanner = dynamic(
+  () => import("@/components/hb-credit/HbCreditQrScanner").then((mod) => mod.HbCreditQrScanner),
+  {
+    ssr: false,
+    loading: () => (
+      <div className="rounded-2xl border border-gray-200 bg-gray-50 px-4 py-10 text-center text-sm text-gray-500">
+        Carregando leitor de QR…
+      </div>
+    ),
+  }
+);
 
 type Tab = "inicio" | "pagar" | "extrato";
 
@@ -61,6 +74,7 @@ function MinhaContaCoopContent() {
   const [payPin, setPayPin] = useState("");
   const [busy, setBusy] = useState(false);
   const [isOffline, setIsOffline] = useState(false);
+  const [scannerKey, setScannerKey] = useState(0);
 
   const cnpj = useMemo(() => {
     if (!user || !data) return "";
@@ -340,11 +354,14 @@ function MinhaContaCoopContent() {
             </Card>
           ) : (
             <>
-              <HbCreditQrScanner
-                onScan={(payload) => void processarQr(payload)}
-                onError={setError}
-                disabled={pagamentoBloqueado || busy}
-              />
+              <HbCreditScannerErrorBoundary onReset={() => setScannerKey((k) => k + 1)}>
+                <HbCreditQrScanner
+                  key={scannerKey}
+                  onScan={(payload) => void processarQr(payload)}
+                  onError={setError}
+                  disabled={pagamentoBloqueado || busy}
+                />
+              </HbCreditScannerErrorBoundary>
 
               <button
                 type="button"

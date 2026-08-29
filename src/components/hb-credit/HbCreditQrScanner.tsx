@@ -11,71 +11,236 @@ interface HbCreditQrScannerProps {
   className?: string;
 }
 
+function humanizeCameraError(error: unknown): string {
+  const message = error instanceof Error ? error.message : String(error);
+  const lower = message.toLowerCase();
+  if (lower.includes("notallowed") || lower.includes("permission")) {
+    return "Permita o acesso à câmera nas configurações do navegador.";
+  }
+  if (lower.includes("notfound") || lower.includes("devices")) {
+    return "Nenhuma câmera encontrada neste aparelho.";
+  }
+  if (lower.includes("secure") || lower.includes("https")) {
+    return "A câmera só funciona com conexão segura (HTTPS).";
+  }
+  return "Não foi possível abrir a câmera. Use a opção de colar o código.";
+}
+
+async function waitForPaint(): Promise<void> {
+  await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+  await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+}
+
 export function HbCreditQrScanner({ onScan, onError, disabled, className }: HbCreditQrScannerProps) {
   const reactId = useId();
   const readerId = `hb-qr-${reactId.replace(/:/g, "")}`;
-  const scannerRef = useRef<{ stop: () => Promise<void> } | null>(null);
+  const mountRef = useRef<HTMLDivElement>(null);
+  const streamRef = useRef<MediaStream | null>(null);
+  const html5ScannerRef = useRef<{ stop: () => Promise<void>; clear: () => void } | null>(null);
+  const scanLoopRef = useRef<number | null>(null);
+  const cancelledRef = useRef(false);
+  const onScanRef = useRef(onScan);
   const [active, setActive] = useState(false);
   const [cameraError, setCameraError] = useState("");
   const [starting, setStarting] = useState(false);
 
-  const stopScanner = useCallback(async () => {
-    const scanner = scannerRef.current;
-    scannerRef.current = null;
-    if (scanner) {
-      try {
-        await scanner.stop();
-      } catch {
-        /* ignore stop errors */
-      }
+  useEffect(() => {
+    onScanRef.current = onScan;
+  }, [onScan]);
+
+  const releaseStream = useCallback(() => {
+    if (scanLoopRef.current != null) {
+      cancelAnimationFrame(scanLoopRef.current);
+      scanLoopRef.current = null;
     }
-    setActive(false);
+    streamRef.current?.getTracks().forEach((track) => track.stop());
+    streamRef.current = null;
+    if (mountRef.current) {
+      mountRef.current.replaceChildren();
+    }
   }, []);
 
-  const startScanner = useCallback(async () => {
-    if (disabled || starting) return;
-    setStarting(true);
-    setCameraError("");
+  const stopHtml5Scanner = useCallback(async () => {
+    const scanner = html5ScannerRef.current;
+    html5ScannerRef.current = null;
+    if (!scanner) return;
     try {
-      const { Html5Qrcode } = await import("html5-qrcode");
-      const scanner = new Html5Qrcode(readerId);
-      scannerRef.current = scanner;
+      await scanner.stop();
+    } catch {
+      /* ignore */
+    }
+    try {
+      scanner.clear();
+    } catch {
+      /* ignore */
+    }
+  }, []);
 
-      await scanner.start(
-        { facingMode: "environment" },
-        {
-          fps: 10,
-          qrbox: (viewfinderWidth, viewfinderHeight) => {
-            const edge = Math.min(viewfinderWidth, viewfinderHeight) * 0.72;
-            return { width: edge, height: edge };
-          },
-          aspectRatio: 1,
+  const cleanupScanner = useCallback(async () => {
+    cancelledRef.current = true;
+    releaseStream();
+    await stopHtml5Scanner();
+    mountRef.current?.replaceChildren();
+  }, [releaseStream, stopHtml5Scanner]);
+
+  const stopScanner = useCallback(async () => {
+    await cleanupScanner();
+    setActive(false);
+    setStarting(false);
+  }, [cleanupScanner]);
+
+  const startNativeScanner = useCallback(async (): Promise<boolean> => {
+    const mount = mountRef.current;
+    if (!mount || typeof window === "undefined") return false;
+
+    const BarcodeDetectorCtor = (window as Window & { BarcodeDetector?: new (opts: { formats: string[] }) => {
+      detect: (source: HTMLVideoElement) => Promise<Array<{ rawValue?: string }>>;
+    } }).BarcodeDetector;
+
+    if (!BarcodeDetectorCtor || !navigator.mediaDevices?.getUserMedia) {
+      return false;
+    }
+
+    try {
+      const video = document.createElement("video");
+      video.playsInline = true;
+      video.muted = true;
+      video.autoplay = true;
+      video.setAttribute("playsinline", "true");
+      video.className = "h-full w-full object-cover";
+      mount.replaceChildren(video);
+
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: {
+          facingMode: { ideal: "environment" },
+          width: { ideal: 1280, max: 1920 },
+          height: { ideal: 720, max: 1080 },
         },
-        (decodedText) => {
-          void stopScanner();
-          onScan(decodedText.trim());
-        },
-        () => {
-          /* ignore per-frame decode misses */
+        audio: false,
+      });
+
+      streamRef.current = stream;
+      video.srcObject = stream;
+      await video.play();
+
+      const detector = new BarcodeDetectorCtor({ formats: ["qr_code"] });
+      cancelledRef.current = false;
+
+      const tick = async () => {
+        if (cancelledRef.current) return;
+        try {
+          const codes = await detector.detect(video);
+          const payload = codes.find((code) => code.rawValue?.trim())?.rawValue?.trim();
+          if (payload) {
+            await stopScanner();
+            onScanRef.current(payload);
+            return;
+          }
+        } catch {
+          /* ignore frame errors */
         }
-      );
-      setActive(true);
-    } catch (e) {
-      const message =
-        e instanceof Error
-          ? e.message.includes("NotAllowed")
-            ? "Permita o acesso à câmera nas configurações do navegador."
-            : e.message.includes("NotFound")
-              ? "Nenhuma câmera encontrada neste aparelho."
-              : "Não foi possível abrir a câmera. Use a opção de colar o código."
-          : "Não foi possível abrir a câmera.";
+        scanLoopRef.current = requestAnimationFrame(() => {
+          void tick();
+        });
+      };
+
+      scanLoopRef.current = requestAnimationFrame(() => {
+        void tick();
+      });
+      return true;
+    } catch {
+      releaseStream();
+      return false;
+    }
+  }, [releaseStream, stopScanner]);
+
+  const startHtml5Scanner = useCallback(async (): Promise<boolean> => {
+    const mount = mountRef.current;
+    if (!mount) return false;
+
+    mount.replaceChildren();
+    const { Html5Qrcode } = await import("html5-qrcode");
+    const scanner = new Html5Qrcode(readerId, { verbose: false });
+    html5ScannerRef.current = scanner;
+    cancelledRef.current = false;
+
+    let cameraId: string | { facingMode: string } = { facingMode: "environment" };
+    try {
+      const cameras = await Html5Qrcode.getCameras();
+      const backCamera = cameras.find((camera) => /back|rear|traseira|environment/i.test(camera.label));
+      if (backCamera?.id) {
+        cameraId = backCamera.id;
+      } else if (cameras.length > 0) {
+        cameraId = cameras[cameras.length - 1].id;
+      }
+    } catch {
+      /* use facingMode fallback */
+    }
+
+    await scanner.start(
+      cameraId,
+      {
+        fps: 8,
+        qrbox: { width: 240, height: 240 },
+        disableFlip: false,
+      },
+      (decodedText) => {
+        if (cancelledRef.current) return;
+        cancelledRef.current = true;
+        void stopScanner().then(() => onScanRef.current(decodedText.trim()));
+      },
+      () => {
+        /* ignore per-frame decode misses */
+      }
+    );
+
+    return true;
+  }, [readerId, stopScanner]);
+
+  const startScanner = useCallback(async () => {
+    if (disabled || starting || active) return;
+
+    if (typeof window !== "undefined" && !window.isSecureContext) {
+      const message = humanizeCameraError(new Error("secure context required"));
       setCameraError(message);
       onError?.(message);
+      return;
+    }
+
+    setStarting(true);
+    setCameraError("");
+    cancelledRef.current = false;
+
+    try {
+      await cleanupScanner();
+      await waitForPaint();
+
+      let started = false;
+      try {
+        started = await startNativeScanner();
+      } catch {
+        started = false;
+      }
+
+      if (!started) {
+        await waitForPaint();
+        started = await startHtml5Scanner();
+      }
+
+      if (!started) {
+        throw new Error("Scanner unavailable");
+      }
+
+      setActive(true);
+    } catch (e) {
       await stopScanner();
+      const message = humanizeCameraError(e);
+      setCameraError(message);
+      onError?.(message);
     } finally {
       setStarting(false);
     }
-  }, [disabled, onError, onScan, readerId, starting, stopScanner]);
+  }, [active, cleanupScanner, disabled, onError, startHtml5Scanner, startNativeScanner, starting, stopScanner]);
 
   useEffect(() => {
     return () => {
@@ -85,17 +250,24 @@ export function HbCreditQrScanner({ onScan, onError, disabled, className }: HbCr
 
   return (
     <div className={cn("space-y-3", className)}>
-      <div
-        id={readerId}
-        className={cn(
-          "relative overflow-hidden rounded-2xl border-2 border-dashed bg-gray-950",
-          active ? "border-green-500 min-h-[280px]" : "border-gray-300 min-h-[200px]"
-        )}
-      >
-        {!active && (
+      <div className="relative overflow-hidden rounded-2xl border-2 border-dashed bg-gray-950 min-h-[280px]">
+        <div
+          id={readerId}
+          ref={mountRef}
+          className={cn("absolute inset-0", active || starting ? "opacity-100" : "opacity-0")}
+          aria-hidden={!active && !starting}
+        />
+
+        {!active && !starting && (
           <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 p-6 text-center">
             <div className="flex h-16 w-16 items-center justify-center rounded-full bg-green-100 text-2xl">📷</div>
-            <p className="text-sm text-gray-600">Aponte a câmera para o QR Code do mercado</p>
+            <p className="text-sm text-gray-300">Aponte a câmera para o QR Code do mercado</p>
+          </div>
+        )}
+
+        {starting && !active && (
+          <div className="absolute inset-x-0 bottom-4 text-center text-xs font-medium text-green-200">
+            Preparando câmera…
           </div>
         )}
       </div>
