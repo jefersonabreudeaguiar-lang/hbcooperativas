@@ -223,6 +223,25 @@ async function sumLimitesDistribuidos(supabase: SupabaseClient, cnpj: string): P
   return (data ?? []).reduce((s, r) => s + Number(r.limit_released_cents), 0);
 }
 
+/** Limites de cooperados que não entram na liberação coletiva atual (ex.: inativos). */
+async function sumLimitesForaSelecao(
+  supabase: SupabaseClient,
+  cnpj: string,
+  cooperadoIds: string[]
+): Promise<number> {
+  const digits = normalizeCnpj(cnpj);
+  const selected = new Set(cooperadoIds);
+  const { data } = await supabase
+    .from("hb_credit_accounts")
+    .select("cooperado_id, limit_released_cents")
+    .eq("cooperative_cnpj", digits);
+
+  return (data ?? []).reduce((sum, row) => {
+    if (selected.has(String(row.cooperado_id))) return sum;
+    return sum + Number(row.limit_released_cents);
+  }, 0);
+}
+
 export async function getDashboardResumo(
   supabase: SupabaseClient,
   cnpj: string,
@@ -1015,24 +1034,13 @@ export async function previewLimiteColetivo(
   }
   const teto = tetoReq;
   const distribuido = await sumLimitesDistribuidos(supabase, digits);
-
-  let somaAtualSelecionados = 0;
-  for (const cooperadoId of cooperadoIds) {
-    const { data } = await supabase
-      .from("hb_credit_accounts")
-      .select("limit_released_cents")
-      .eq("cooperative_cnpj", digits)
-      .eq("cooperado_id", cooperadoId)
-      .maybeSingle();
-    somaAtualSelecionados += data ? Number(data.limit_released_cents) : 0;
-  }
-
-  const totalApos = distribuido - somaAtualSelecionados + cooperadoIds.length * valorPorCooperadoCents;
+  const novoLimiteTotal = cooperadoIds.length * valorPorCooperadoCents;
+  const totalApos = (await sumLimitesForaSelecao(supabase, digits, cooperadoIds)) + novoLimiteTotal;
 
   if (totalApos > teto.cents) {
     return {
       limiteAtualTotal: distribuido,
-      novoLimiteTotal: cooperadoIds.length * valorPorCooperadoCents,
+      novoLimiteTotal,
       totalApos,
       tetoGlobal: teto.cents,
       tetoGlobalPercent: teto.percent,
@@ -1142,13 +1150,11 @@ export async function previewLimiteColetivoPercentual(
   }
 
   const itens: LimiteColetivoPreviewItem[] = [];
-  let somaAtualSelecionados = 0;
   let novoLimiteTotal = 0;
 
   for (const cooperadoId of cooperadoIds) {
     const creditoBaseCents = Math.max(0, Math.round(Number(creditosBaseCents[cooperadoId] ?? 0)));
     const { limiteAtualCents, valorUsadoCents } = await readLimiteAtualCooperado(supabase, digits, cooperadoId);
-    somaAtualSelecionados += limiteAtualCents;
 
     let novoLimiteCents = calcLimiteFromPercentual(creditoBaseCents, percentual);
     let ajustadoPorUso = false;
@@ -1168,7 +1174,7 @@ export async function previewLimiteColetivoPercentual(
     });
   }
 
-  const totalApos = distribuido - somaAtualSelecionados + novoLimiteTotal;
+  const totalApos = (await sumLimitesForaSelecao(supabase, digits, cooperadoIds)) + novoLimiteTotal;
 
   if (totalApos > teto.cents) {
     return {

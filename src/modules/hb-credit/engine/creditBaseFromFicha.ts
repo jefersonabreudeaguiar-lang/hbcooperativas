@@ -38,7 +38,7 @@ export function sumCreditosBaseCents(creditosBaseCents: Record<string, number>):
   );
 }
 
-/** Teto global em centavos = percentual sobre a soma do crédito na ficha de todos os cooperados. */
+/** Teto global em centavos = soma do percentual aplicado a cada cooperado (mesma regra da liberação coletiva). */
 export function calcTetoGlobalCents(
   creditosBaseCents: Record<string, number>,
   tetoPercent: number
@@ -46,5 +46,10 @@ export function calcTetoGlobalCents(
   if (!Number.isFinite(tetoPercent) || tetoPercent <= 0 || tetoPercent > 100) {
     throw new Error("Configuração de teto percentual inválida ou ausente.");
   }
-  return calcLimiteFromPercentual(sumCreditosBaseCents(creditosBaseCents), tetoPercent);
+  let total = 0;
+  for (const value of Object.values(creditosBaseCents)) {
+    const base = Math.max(0, Math.round(Number(value) || 0));
+    total += calcLimiteFromPercentual(base, tetoPercent);
+  }
+  return total;
 }

@@ -6,7 +6,7 @@ import {
   assertCreditosBaseConsistent,
   validateCreditosBaseCents,
 } from "../src/modules/hb-credit/engine/creditBaseValidation";
-import { calcTetoGlobalCents } from "../src/modules/hb-credit/engine/creditBaseFromFicha";
+import { calcLimiteFromPercentual, calcTetoGlobalCents } from "../src/modules/hb-credit/engine/creditBaseFromFicha";
 import {
   assertHbCreditEnabledServer,
   isHbCreditEnabledServer,
@@ -107,6 +107,17 @@ function testCreditBaseValidation() {
   ok("preview consistente", assertCreditosBaseConsistent(preview, preview).ok === true);
 }
 
+function testTetoColetivoRounding() {
+  console.log("\n[teto vs coletivo — arredondamento]");
+  const bases = { a: 33500, b: 33500, c: 33500 };
+  const teto = calcTetoGlobalCents(bases, 30);
+  const coletivo =
+    calcLimiteFromPercentual(bases.a, 30) +
+    calcLimiteFromPercentual(bases.b, 30) +
+    calcLimiteFromPercentual(bases.c, 30);
+  ok("teto 30% igual soma coletiva 30% por cooperado", teto === coletivo, `${teto} vs ${coletivo}`);
+}
+
 function testTetoFailClosed() {
   console.log("\n[teto fail-closed]");
   expectThrow("percentual ausente/0 rejeitado", () => calcTetoGlobalCents({ a: 1000 }, 0));
@@ -203,6 +214,7 @@ function main() {
   console.log("HB Credit — testes P0 segurança e visibilidade");
   testVisibility();
   testCreditBaseValidation();
+  testTetoColetivoRounding();
   testTetoFailClosed();
   testProductionFailClosed();
   testPinPreservesLimitsLogic();
