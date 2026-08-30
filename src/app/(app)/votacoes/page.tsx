@@ -332,11 +332,10 @@ export default function VotacoesPage() {
                     <Button
                       type="button"
                       size="sm"
-                      variant="secondary"
                       onClick={() => void handleBaixarAta(pauta.id)}
                       disabled={gerandoPdf === pauta.id}
                     >
-                      <FileDown size={16} /> Ata PDF
+                      <FileDown size={16} /> Baixar ata oficial
                     </Button>
                   )}
                 </div>
@@ -404,6 +403,25 @@ export default function VotacoesPage() {
                           </li>
                         ))}
                       </ul>
+                    </div>
+                  )}
+
+                  {votos.length > 0 && check("votacoes", "view") && (
+                    <div className="mt-4 rounded-xl border-2 border-emerald-200 bg-emerald-50/80 p-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                      <div>
+                        <p className="text-sm font-semibold text-emerald-900">Ata de deliberação (PDF)</p>
+                        <p className="text-xs text-emerald-800 mt-1">
+                          Documento profissional com dados cadastrais, voto e assinatura manuscrita de cada cooperado participante.
+                        </p>
+                      </div>
+                      <Button
+                        type="button"
+                        onClick={() => void handleBaixarAta(pauta.id)}
+                        disabled={gerandoPdf === pauta.id}
+                        className="shrink-0"
+                      >
+                        <FileDown size={18} /> {gerandoPdf === pauta.id ? "Gerando…" : "Baixar PDF"}
+                      </Button>
                     </div>
                   )}
 
