@@ -613,6 +613,13 @@ export interface VotacaoPauta {
   /** Fim da votação (YYYY-MM-DD). */
   fimEm: string;
   status: VotacaoPautaStatus;
+  /** Observações da diretoria (reunião, orientações, contexto). */
+  observacao?: string;
+  /** Link ou identificador da reunião online (ex.: grupo WhatsApp). */
+  reuniaoWhatsapp?: string;
+  /** Horário previsto da reunião online (HH:mm). */
+  reuniaoHorarioInicio?: string;
+  reuniaoHorarioFim?: string;
   /** Quando a enquete foi lançada aos cooperados. */
   abertaEm?: string;
   /** Quando o responsável publicou o resultado no mural (24 h). */
@@ -623,13 +630,17 @@ export interface VotacaoPauta {
   updatedAt: string;
 }
 
+export type VotacaoOpcao = "sim" | "nao" | "abstencao";
+
 export interface VotacaoVoto {
   id: string;
   pautaId: string;
   cooperativaId: string;
   cooperadoId: string;
   cooperadoNome: string;
-  voto: "sim" | "nao";
+  voto: VotacaoOpcao;
+  /** Assinatura manual do cooperado (data URL PNG). */
+  assinaturaDataUrl?: string;
   createdAt: string;
 }
 

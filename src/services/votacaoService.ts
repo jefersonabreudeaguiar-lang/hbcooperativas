@@ -1,4 +1,4 @@
-import type { AppData, VotacaoPauta, VotacaoPautaStatus, VotacaoVoto } from "@/types";
+import type { AppData, VotacaoOpcao, VotacaoPauta, VotacaoPautaStatus, VotacaoVoto } from "@/types";
 import { getCooperadoNome } from "@/utils/calculations";
 import { listCooperadosDaCooperativa } from "@/services/cooperadoCloudService";
 
@@ -8,7 +8,8 @@ export interface VotoCooperadoLinha {
   id: string;
   cooperadoId: string;
   cooperadoNome: string;
-  voto: "sim" | "nao";
+  voto: VotacaoOpcao;
+  assinaturaDataUrl?: string;
   createdAt: string;
 }
 
@@ -18,8 +19,10 @@ export interface ResumoVotacaoPauta {
   totalVotos: number;
   votosSim: number;
   votosNao: number;
+  votosAbstencao: number;
   pctSim: number;
   pctNao: number;
+  pctAbstencao: number;
   todosVotaram: boolean;
   periodoEncerrado: boolean;
   podePublicarResultado: boolean;
@@ -46,6 +49,19 @@ function endOfDay(isoDate: string): Date {
   return new Date(y, (m ?? 1) - 1, d ?? 1, 23, 59, 59, 999);
 }
 
+export function labelVoto(voto: VotacaoOpcao): string {
+  switch (voto) {
+    case "sim":
+      return "SIM";
+    case "nao":
+      return "NÃO";
+    case "abstencao":
+      return "ABSTENÇÃO";
+    default:
+      return voto;
+  }
+}
+
 export function pautaNoPeriodo(pauta: VotacaoPauta, ref: Date = new Date()): boolean {
   const t = ref.getTime();
   return t >= startOfDay(pauta.inicioEm).getTime() && t <= endOfDay(pauta.fimEm).getTime();
@@ -53,6 +69,19 @@ export function pautaNoPeriodo(pauta: VotacaoPauta, ref: Date = new Date()): boo
 
 export function pautaPeriodoEncerrado(pauta: VotacaoPauta, ref: Date = new Date()): boolean {
   return ref.getTime() > endOfDay(pauta.fimEm).getTime();
+}
+
+export function formatReuniaoWhatsapp(pauta: VotacaoPauta): string | null {
+  if (!pauta.reuniaoWhatsapp?.trim()) return null;
+  return pauta.reuniaoWhatsapp.trim();
+}
+
+export function formatHorarioReuniao(pauta: VotacaoPauta): string | null {
+  const ini = pauta.reuniaoHorarioInicio?.trim();
+  const fim = pauta.reuniaoHorarioFim?.trim();
+  if (!ini && !fim) return null;
+  if (ini && fim) return `${ini} às ${fim}`;
+  return ini ?? fim ?? null;
 }
 
 export function listarPautasCooperativa(data: AppData, cooperativaId?: string): VotacaoPauta[] {
@@ -71,6 +100,7 @@ export function listarVotosPauta(data: AppData, pautaId: string, cooperativaId?:
       cooperadoId: v.cooperadoId,
       cooperadoNome: v.cooperadoNome,
       voto: v.voto,
+      assinaturaDataUrl: v.assinaturaDataUrl,
       createdAt: v.createdAt,
     }))
     .sort((a, b) => a.cooperadoNome.localeCompare(b.cooperadoNome, "pt-BR"));
@@ -80,16 +110,51 @@ export function cooperadoJaVotou(data: AppData, pautaId: string, cooperadoId: st
   return (data.votacaoVotos ?? []).some((v) => v.pautaId === pautaId && v.cooperadoId === cooperadoId);
 }
 
+export function getPautaById(
+  data: AppData,
+  pautaId: string,
+  cooperativaId: string
+): VotacaoPauta | null {
+  return (
+    (data.votacaoPautas ?? []).find((p) => p.id === pautaId && p.cooperativaId === cooperativaId) ?? null
+  );
+}
+
+/** Pautas abertas no período em que o cooperado ainda não votou. */
+export function listPautasAbertasCooperado(
+  data: AppData,
+  cooperativaId: string,
+  cooperadoId: string,
+  ref: Date = new Date()
+): VotacaoPauta[] {
+  return listarPautasCooperativa(data, cooperativaId).filter(
+    (p) =>
+      p.status === "aberta" &&
+      pautaNoPeriodo(p, ref) &&
+      !cooperadoJaVotou(data, p.id, cooperadoId)
+  );
+}
+
+/** Primeira pauta aberta pendente (compatibilidade). */
 export function getPautaAtivaCooperado(
   data: AppData,
   cooperativaId: string,
   cooperadoId: string,
   ref: Date = new Date()
 ): VotacaoPauta | null {
-  const pautas = listarPautasCooperativa(data, cooperativaId).filter(
-    (p) => p.status === "aberta" && pautaNoPeriodo(p, ref) && !cooperadoJaVotou(data, p.id, cooperadoId)
-  );
-  return pautas[0] ?? null;
+  return listPautasAbertasCooperado(data, cooperativaId, cooperadoId, ref)[0] ?? null;
+}
+
+export function getPautaVotacaoCooperado(
+  data: AppData,
+  pautaId: string,
+  cooperativaId: string,
+  cooperadoId: string,
+  ref: Date = new Date()
+): { pauta: VotacaoPauta; jaVotou: boolean } | null {
+  const pauta = getPautaById(data, pautaId, cooperativaId);
+  if (!pauta || pauta.status !== "aberta" || !pautaNoPeriodo(pauta, ref)) return null;
+  return { pauta, jaVotou: cooperadoJaVotou(data, pautaId, cooperadoId) };
 }
 
 export function resultadoVisivelCooperado(
@@ -150,10 +215,10 @@ export function getResumoPauta(
   const votos = listarVotosPauta(data, pautaId, coopId);
   const votosSim = votos.filter((v) => v.voto === "sim").length;
   const votosNao = votos.filter((v) => v.voto === "nao").length;
+  const votosAbstencao = votos.filter((v) => v.voto === "abstencao").length;
   const totalVotos = votos.length;
   const totalElegiveis = elegiveis.length;
-  const pctSim = totalVotos > 0 ? Math.round((votosSim / totalVotos) * 1000) / 10 : 0;
-  const pctNao = totalVotos > 0 ? Math.round((votosNao / totalVotos) * 1000) / 10 : 0;
+  const pct = (n: number) => (totalVotos > 0 ? Math.round((n / totalVotos) * 1000) / 10 : 0);
   const votouIds = new Set(votos.map((v) => v.cooperadoId));
   const pendentes = elegiveis
     .filter((c) => !votouIds.has(c.id))
@@ -167,8 +232,10 @@ export function getResumoPauta(
     totalVotos,
     votosSim,
     votosNao,
-    pctSim,
-    pctNao,
+    votosAbstencao,
+    pctSim: pct(votosSim),
+    pctNao: pct(votosNao),
+    pctAbstencao: pct(votosAbstencao),
     todosVotaram,
     periodoEncerrado,
     podePublicarResultado:
@@ -210,6 +277,10 @@ export function criarPautaVotacao(
     texto: string;
     inicioEm: string;
     fimEm: string;
+    observacao?: string;
+    reuniaoWhatsapp?: string;
+    reuniaoHorarioInicio?: string;
+    reuniaoHorarioFim?: string;
     criadoPorUserId?: string;
     criadoPorNome?: string;
   }
@@ -228,6 +299,10 @@ export function criarPautaVotacao(
     texto,
     inicioEm: payload.inicioEm,
     fimEm: payload.fimEm,
+    observacao: payload.observacao?.trim() || undefined,
+    reuniaoWhatsapp: payload.reuniaoWhatsapp?.trim() || undefined,
+    reuniaoHorarioInicio: payload.reuniaoHorarioInicio?.trim() || undefined,
+    reuniaoHorarioFim: payload.reuniaoHorarioFim?.trim() || undefined,
     status: "rascunho",
     criadoPorUserId: payload.criadoPorUserId,
     criadoPorNome: payload.criadoPorNome,
@@ -298,7 +373,8 @@ export function registrarVotoCooperado(
     pautaId: string;
     cooperativaId: string;
     cooperadoId: string;
-    voto: "sim" | "nao";
+    voto: VotacaoOpcao;
+    assinaturaDataUrl: string;
   }
 ): { ok: true; data: AppData } | { ok: false; error: string } {
   const pauta = (data.votacaoPautas ?? []).find(
@@ -310,6 +386,9 @@ export function registrarVotoCooperado(
   if (cooperadoJaVotou(data, payload.pautaId, payload.cooperadoId)) {
     return { ok: false, error: "Você já registrou seu voto nesta pauta." };
   }
+  if (!payload.assinaturaDataUrl?.trim()) {
+    return { ok: false, error: "Assine no campo indicado antes de enviar o voto." };
+  }
 
   const now = new Date().toISOString();
   const voto: VotacaoVoto = {
@@ -319,6 +398,7 @@ export function registrarVotoCooperado(
     cooperadoId: payload.cooperadoId,
     cooperadoNome: getCooperadoNome(data.cooperados, payload.cooperadoId),
     voto: payload.voto,
+    assinaturaDataUrl: payload.assinaturaDataUrl.trim(),
     createdAt: now,
   };
 

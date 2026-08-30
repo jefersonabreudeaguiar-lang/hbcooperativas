@@ -32,18 +32,15 @@ import { PrestacaoContasDashboardBanner } from "@/components/prestacao/Prestacao
 import { InicioResolvidosPanel } from "@/components/cooperado/InicioResolvidosPanel";
 import { listarResolvidosInicioCooperado } from "@/services/cooperadoInicioResolvidosService";
 import { cooperadoPrecisaCadastrarPix } from "@/utils/pix";
-import { getPautaAtivaCooperado, registrarVotoCooperado, resultadoVisivelCooperado } from "@/services/votacaoService";
-import { VotacaoAtivaPanel } from "@/components/votacao/VotacaoAtivaPanel";
+import { listPautasAbertasCooperado, resultadoVisivelCooperado } from "@/services/votacaoService";
+import { VotacaoPautasInicioPanel } from "@/components/votacao/VotacaoPautasInicioPanel";
 import { VotacaoResultadoPanel } from "@/components/votacao/VotacaoResultadoPanel";
-import { updateData } from "@/services/dataStore";
-import { pushCooperadoOperacionalToCloud } from "@/services/cooperativaSyncCloudService";
 import { getCooperativaCnpj, getPendingNotaDeleteIds } from "@/services/notaPedidoCloudService";
 import { formatCurrency, formatMesReferencia, getCurrentMesReferencia } from "@/utils/format";
 import { getUserCooperativaId, getUserCooperativaNome, normalizeCnpj } from "@/utils/cooperativa";
 import { Camera, Wallet, ClipboardList, Users, Vote, Download } from "lucide-react";
 import { usePermissions } from "@/hooks/usePermissions";
 import { cooperadoTemAppInstalado, isAppStandalone, resumoInstalacaoApp } from "@/services/cooperadoAppInstallService";
-import { requestAppSync } from "@/services/syncRequest";
 import { PageSkeleton } from "@/components/ui/PageSkeleton";
 
 function CooperadoDashboard() {
@@ -78,7 +75,7 @@ function CooperadoDashboard() {
       totalValoresAvulsosPendentes(data, cooperadoId, valorReceber.mes, coopId) > 0;
     const exibirCardAvulsosSeparado = avulsosPendentesTotal > 0 && !avulsosJaNoCardPrincipal;
     const comunicados = coopId ? getComunicadosInicioCooperado(data, coopId, cooperadoId) : [];
-    const pautaAtiva = coopId ? getPautaAtivaCooperado(data, coopId, cooperadoId) : null;
+    const pautasAbertas = coopId ? listPautasAbertasCooperado(data, coopId, cooperadoId) : [];
     const resultadoVotacao = coopId ? resultadoVisivelCooperado(data, coopId) : null;
     const resolvidos = listarResolvidosInicioCooperado(data, cooperadoId, coopId);
     const temSecaoPendencias =
@@ -109,7 +106,7 @@ function CooperadoDashboard() {
       prestacaoAberta,
       exibirCardAvulsosSeparado,
       comunicados,
-      pautaAtiva,
+      pautasAbertas,
       resultadoVotacao,
       resolvidos,
       temSecaoPendencias,
@@ -132,33 +129,13 @@ function CooperadoDashboard() {
     prestacao,
     exibirCardAvulsosSeparado,
     comunicados,
-    pautaAtiva,
+    pautasAbertas,
     resultadoVotacao,
     resolvidos,
     temSecaoPendencias,
     mostrarBaixarApp,
     coopId: viewCoopId,
   } = view;
-
-  const handleVotar = async (voto: "sim" | "nao"): Promise<boolean> => {
-    if (!viewCoopId || !pautaAtiva) return false;
-    let ok = false;
-    updateData((d) => {
-      const result = registrarVotoCooperado(d, {
-        pautaId: pautaAtiva.id,
-        cooperativaId: viewCoopId,
-        cooperadoId,
-        voto,
-      });
-      if (!result.ok) return d;
-      ok = true;
-      const cnpj = getCooperativaCnpj(result.data, viewCoopId);
-      if (cnpj) void pushCooperadoOperacionalToCloud(cnpj, viewCoopId);
-      else requestAppSync();
-      return result.data;
-    });
-    return ok;
-  };
 
   return (
     <div className="space-y-6 max-w-3xl">
@@ -185,9 +162,9 @@ function CooperadoDashboard() {
         </Link>
       )}
 
-      {pautaAtiva && <VotacaoAtivaPanel pauta={pautaAtiva} onVotar={handleVotar} />}
+      {pautasAbertas.length > 0 && <VotacaoPautasInicioPanel pautas={pautasAbertas} />}
 
-      {!pautaAtiva && resultadoVotacao && (
+      {pautasAbertas.length === 0 && resultadoVotacao && (
         <VotacaoResultadoPanel resumo={resultadoVotacao.resumo} />
       )}
 

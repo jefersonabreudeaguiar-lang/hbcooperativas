@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Calendar, Megaphone, Plus, Send, Trash2, Users, Vote } from "lucide-react";
+import { Calendar, FileDown, Megaphone, Plus, Send, Trash2, Users, Vote } from "lucide-react";
 import { useAppData } from "@/hooks/useAppData";
 import { usePermissions } from "@/hooks/usePermissions";
 import { PageHeader } from "@/components/ui/Table";
@@ -24,7 +24,9 @@ import {
   listarPautasCooperativa,
   publicarResultadoPauta,
   removerPautaRascunho,
+  labelVoto,
 } from "@/services/votacaoService";
+import { baixarAtaDeliberacaoVotacaoPdf } from "@/utils/votacaoDeliberativaHtml";
 
 const hojeIso = () => new Date().toISOString().split("T")[0];
 
@@ -35,11 +37,16 @@ export default function VotacoesPage() {
   const coopId = user && data ? getUserCooperativaId(user, data) : undefined;
 
   const [texto, setTexto] = useState("");
+  const [observacao, setObservacao] = useState("");
+  const [reuniaoWhatsapp, setReuniaoWhatsapp] = useState("");
+  const [reuniaoHorarioInicio, setReuniaoHorarioInicio] = useState("");
+  const [reuniaoHorarioFim, setReuniaoHorarioFim] = useState("");
   const [inicioEm, setInicioEm] = useState(hojeIso());
   const [fimEm, setFimEm] = useState(hojeIso());
   const [msg, setMsg] = useState("");
   const [erro, setErro] = useState("");
   const [syncing, setSyncing] = useState(false);
+  const [gerandoPdf, setGerandoPdf] = useState<string | null>(null);
 
   useEffect(() => {
     if (isCooperado) router.replace("/dashboard");
@@ -80,6 +87,10 @@ export default function VotacoesPage() {
       const result = criarPautaVotacao(d, {
         cooperativaId: coopId,
         texto,
+        observacao,
+        reuniaoWhatsapp,
+        reuniaoHorarioInicio,
+        reuniaoHorarioFim,
         inicioEm,
         fimEm,
         criadoPorUserId: user.id,
@@ -90,6 +101,10 @@ export default function VotacoesPage() {
         return d;
       }
       setTexto("");
+      setObservacao("");
+      setReuniaoWhatsapp("");
+      setReuniaoHorarioInicio("");
+      setReuniaoHorarioFim("");
       setInicioEm(hojeIso());
       setFimEm(hojeIso());
       setMsg("Pauta salva como rascunho. Revise e use «Lançar enquete» para todos os cooperados.");
@@ -166,13 +181,27 @@ export default function VotacoesPage() {
     });
   };
 
+  const handleBaixarAta = async (pautaId: string) => {
+    if (!data || !coopId) return;
+    setErro("");
+    setGerandoPdf(pautaId);
+    try {
+      await baixarAtaDeliberacaoVotacaoPdf(data, pautaId, coopId);
+      setMsg("Ata de deliberação gerada. Revise o PDF e arquive conforme orientação jurídica.");
+    } catch (e) {
+      setErro(e instanceof Error ? e.message : "Não foi possível gerar o documento.");
+    } finally {
+      setGerandoPdf(null);
+    }
+  };
+
   if (!data || !coopId || !isDiretoria) return null;
 
   return (
     <div className="space-y-6 max-w-4xl">
       <PageHeader
         title="Votações"
-        subtitle="Crie pautas, acompanhe os votos em tempo real e publique o resultado no mural dos cooperados."
+        subtitle="Crie pautas com observações e reunião online, acompanhe votos com assinatura e gere a ata de deliberação."
       />
 
       {msg && (
@@ -194,10 +223,33 @@ export default function VotacoesPage() {
                 value={texto}
                 onChange={(e) => setTexto(e.target.value)}
                 rows={4}
-                placeholder="Ex.: Aprovar a compra do implemento agrícola proposto pela diretoria?"
+                placeholder="Ex.: Aprovar a implementação da Conta Coop com desconto automático na ficha corrida?"
                 className="min-h-[100px]"
               />
             </FormField>
+            <FormField label="Observações (reunião, contexto, orientações)">
+              <Textarea
+                value={observacao}
+                onChange={(e) => setObservacao(e.target.value)}
+                rows={3}
+                placeholder="Ex.: Reunião online para esclarecimentos. Deliberação formal via aplicativo HB Cooperativas."
+              />
+            </FormField>
+            <FormField label="Reunião online — WhatsApp (link ou identificação do grupo)">
+              <Input
+                value={reuniaoWhatsapp}
+                onChange={(e) => setReuniaoWhatsapp(e.target.value)}
+                placeholder="Ex.: https://chat.whatsapp.com/... ou nome do grupo"
+              />
+            </FormField>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <FormField label="Horário início (reunião)">
+                <Input type="time" value={reuniaoHorarioInicio} onChange={(e) => setReuniaoHorarioInicio(e.target.value)} />
+              </FormField>
+              <FormField label="Horário fim (reunião)">
+                <Input type="time" value={reuniaoHorarioFim} onChange={(e) => setReuniaoHorarioFim(e.target.value)} />
+              </FormField>
+            </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <FormField label="Data de início">
                 <Input type="date" value={inicioEm} onChange={(e) => setInicioEm(e.target.value)} />
@@ -226,7 +278,7 @@ export default function VotacoesPage() {
 
         {resumos.map((resumo) => {
           if (!resumo) return null;
-          const { pauta, totalVotos, totalElegiveis, votosSim, votosNao, pctSim, pctNao, todosVotaram, pendentes, votos, podePublicarResultado } = resumo;
+          const { pauta, totalVotos, totalElegiveis, votosSim, votosNao, votosAbstencao, pctSim, pctNao, pctAbstencao, todosVotaram, pendentes, votos, podePublicarResultado } = resumo;
           const pctParticipacao =
             totalElegiveis > 0 ? Math.round((totalVotos / totalElegiveis) * 1000) / 10 : 0;
 
@@ -236,6 +288,17 @@ export default function VotacoesPage() {
                 <div className="min-w-0 flex-1">
                   <StatusBadge status={pauta.status === "aberta" ? "aberta" : pauta.status} />
                   <p className="font-semibold text-gray-900 mt-2 text-lg leading-snug">{pauta.texto}</p>
+                  {pauta.observacao?.trim() && (
+                    <p className="text-sm text-gray-600 mt-2 whitespace-pre-wrap">{pauta.observacao.trim()}</p>
+                  )}
+                  {(pauta.reuniaoWhatsapp || pauta.reuniaoHorarioInicio || pauta.reuniaoHorarioFim) && (
+                    <p className="text-xs text-indigo-700 mt-2">
+                      {pauta.reuniaoWhatsapp ? `WhatsApp: ${pauta.reuniaoWhatsapp}` : ""}
+                      {pauta.reuniaoHorarioInicio || pauta.reuniaoHorarioFim
+                        ? ` · Reunião: ${pauta.reuniaoHorarioInicio ?? "—"} às ${pauta.reuniaoHorarioFim ?? "—"}`
+                        : ""}
+                    </p>
+                  )}
                   <p className="text-xs text-gray-500 mt-2 flex flex-wrap gap-x-4 gap-y-1">
                     <span className="inline-flex items-center gap-1">
                       <Calendar size={12} /> {formatDate(pauta.inicioEm)} → {formatDate(pauta.fimEm)}
@@ -265,12 +328,23 @@ export default function VotacoesPage() {
                       <Megaphone size={16} /> Lançar resultado
                     </Button>
                   )}
+                  {pauta.status !== "rascunho" && totalVotos > 0 && check("votacoes", "view") && (
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="secondary"
+                      onClick={() => void handleBaixarAta(pauta.id)}
+                      disabled={gerandoPdf === pauta.id}
+                    >
+                      <FileDown size={16} /> Ata PDF
+                    </Button>
+                  )}
                 </div>
               </div>
 
               {pauta.status !== "rascunho" && (
                 <>
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-5">
+                  <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 mb-5">
                     <div className="rounded-xl bg-green-50 border border-green-200 p-3 text-center">
                       <p className="text-xs text-green-800 font-medium">SIM</p>
                       <p className="text-2xl font-bold text-green-900 tabular-nums">{votosSim}</p>
@@ -280,6 +354,11 @@ export default function VotacoesPage() {
                       <p className="text-xs text-red-800 font-medium">NÃO</p>
                       <p className="text-2xl font-bold text-red-900 tabular-nums">{votosNao}</p>
                       <p className="text-xs text-red-700">{pctNao.toLocaleString("pt-BR")}%</p>
+                    </div>
+                    <div className="rounded-xl bg-gray-50 border border-gray-200 p-3 text-center">
+                      <p className="text-xs text-gray-700 font-medium">ABST.</p>
+                      <p className="text-2xl font-bold text-gray-900 tabular-nums">{votosAbstencao}</p>
+                      <p className="text-xs text-gray-600">{pctAbstencao.toLocaleString("pt-BR")}%</p>
                     </div>
                     <div className="rounded-xl bg-gray-50 border border-gray-200 p-3 text-center">
                       <p className="text-xs text-gray-600 font-medium flex items-center justify-center gap-1">
@@ -315,10 +394,12 @@ export default function VotacoesPage() {
                               className={
                                 v.voto === "sim"
                                   ? "font-bold text-green-700 bg-green-50 px-2 py-0.5 rounded"
-                                  : "font-bold text-red-700 bg-red-50 px-2 py-0.5 rounded"
+                                  : v.voto === "nao"
+                                    ? "font-bold text-red-700 bg-red-50 px-2 py-0.5 rounded"
+                                    : "font-bold text-gray-700 bg-gray-100 px-2 py-0.5 rounded"
                               }
                             >
-                              {v.voto === "sim" ? "SIM" : "NÃO"}
+                              {labelVoto(v.voto)}
                             </span>
                           </li>
                         ))}

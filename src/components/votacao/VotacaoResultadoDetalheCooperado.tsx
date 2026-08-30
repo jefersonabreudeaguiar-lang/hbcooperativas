@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { ArrowLeft, BarChart3 } from "lucide-react";
 import type { ResumoVotacaoPauta } from "@/services/votacaoService";
-import { horasRestantesResultadoPublicado } from "@/services/votacaoService";
+import { horasRestantesResultadoPublicado, labelVoto } from "@/services/votacaoService";
 import { formatDate } from "@/utils/format";
 import { Card, StatCard } from "@/components/ui/Card";
 import { DataTable } from "@/components/ui/Table";
@@ -13,7 +13,8 @@ interface VotacaoResultadoDetalheCooperadoProps {
 }
 
 export function VotacaoResultadoDetalheCooperado({ resumo }: VotacaoResultadoDetalheCooperadoProps) {
-  const { pauta, votos, pctSim, pctNao, votosSim, votosNao, totalVotos, totalElegiveis } = resumo;
+  const { pauta, votos, pctSim, pctNao, pctAbstencao, votosSim, votosNao, votosAbstencao, totalVotos, totalElegiveis } =
+    resumo;
   const horasRestantes = pauta.resultadoPublicadoEm
     ? horasRestantesResultadoPublicado(pauta.resultadoPublicadoEm)
     : 0;
@@ -43,9 +44,10 @@ export function VotacaoResultadoDetalheCooperado({ resumo }: VotacaoResultadoDet
         </p>
       </div>
 
-      <div className="grid grid-cols-2 gap-4">
+      <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
         <StatCard title="SIM" value={`${pctSim.toLocaleString("pt-BR")}%`} subtitle={`${votosSim} voto(s)`} />
         <StatCard title="NÃO" value={`${pctNao.toLocaleString("pt-BR")}%`} subtitle={`${votosNao} voto(s)`} variant="warning" />
+        <StatCard title="Abstenção" value={`${pctAbstencao.toLocaleString("pt-BR")}%`} subtitle={`${votosAbstencao} voto(s)`} />
       </div>
 
       <Card title="Resumo">
@@ -69,10 +71,12 @@ export function VotacaoResultadoDetalheCooperado({ resumo }: VotacaoResultadoDet
                   className={
                     v.voto === "sim"
                       ? "font-bold text-green-700 bg-green-50 px-2 py-0.5 rounded"
-                      : "font-bold text-red-700 bg-red-50 px-2 py-0.5 rounded"
+                      : v.voto === "nao"
+                        ? "font-bold text-red-700 bg-red-50 px-2 py-0.5 rounded"
+                        : "font-bold text-gray-700 bg-gray-100 px-2 py-0.5 rounded"
                   }
                 >
-                  {v.voto === "sim" ? "SIM" : "NÃO"}
+                  {labelVoto(v.voto)}
                 </span>
               ),
             },
