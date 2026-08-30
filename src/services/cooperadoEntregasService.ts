@@ -9,7 +9,7 @@ import {
 import { getCurrentMesReferencia } from "@/utils/format";
 import { mesesComValoresAvulsos, totalValoresAvulsosPendentes } from "@/services/valoresAvulsosReceberService";
 import { contarEntregasNoMes } from "@/services/entregaCooperadoService";
-import { contarFotosEnviadasNota } from "@/utils/fotoEntrega";
+import { contarFotosEnviadasNota, getFotosExibicaoNota } from "@/utils/fotoEntrega";
 
 export interface ResumoMesEntregasCooperado {
   mesReferencia: string;
@@ -215,9 +215,7 @@ export function getResumoMesEntregasCooperado(
     mesReferencia,
     notas,
     quantidadeEntregas: contarEntregasNoMes(notas),
-    emAnalise: notas
-      .filter((n) => n.status === "aguardando_conferencia")
-      .reduce((s, n) => s + contarFotosEnviadasNota(n), 0),
+    emAnalise: contarFotosEmAnaliseCooperado(notas),
     rejeitadas: notas.filter((n) => n.status === "rejeitada").length,
     conferidas: notas.filter((n) => n.status === "conferida").length,
     pagas: notas.filter((n) => n.status === "pago").length,
@@ -251,6 +249,36 @@ export function listarMesesPagosCooperado(
   }
 
   return [...meses].sort((a, b) => b.localeCompare(a));
+}
+
+/** Foto de fato anexada — ignora flags obsoletas (fotoNaNuvem/fotoEnviadaEm sem arquivo). */
+function notaTemConteudoFotoReal(nota: NotaPedido): boolean {
+  if (getFotosExibicaoNota(nota).length > 0) return true;
+  if (nota.fotoPedido || nota.fotoPedidoMiniatura) return true;
+  if (nota.fotosPedido?.some(Boolean)) return true;
+  return Boolean(
+    nota.fotosMeta?.some((f) => f.storagePath || f.url || f.thumbnailUrl || f.status === "uploaded")
+  );
+}
+
+/** Entrega do cooperado aguardando conferência e com foto real enviada. */
+export function notaEmAnaliseCooperado(nota: NotaPedido): boolean {
+  return nota.status === "aguardando_conferencia" && notaTemConteudoFotoReal(nota);
+}
+
+/** Total de fotos em análise — usado no Início e nos resumos mensais do cooperado. */
+export function contarFotosEmAnaliseCooperado(notas: NotaPedido[]): number {
+  return notas.filter(notaEmAnaliseCooperado).reduce((total, nota) => {
+    const exibidas = getFotosExibicaoNota(nota).length;
+    const meta =
+      nota.fotosMeta?.filter((f) => f.storagePath || f.url || f.thumbnailUrl || f.status === "uploaded")
+        .length ?? 0;
+    const noArray = nota.fotosPedido?.filter(Boolean).length ?? 0;
+    const count = Math.max(exibidas, meta, noArray);
+    if (count > 0) return total + count;
+    if (nota.fotoPedido || nota.fotoPedidoMiniatura) return total + 1;
+    return total;
+  }, 0);
 }
 
 export function notaTemFotoEnviadaCooperado(nota: NotaPedido): boolean {

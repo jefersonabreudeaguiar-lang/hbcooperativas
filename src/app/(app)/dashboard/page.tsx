@@ -15,11 +15,12 @@ import { ValoresAvulsosDashboardCard } from "@/components/ficha/ValoresAvulsosRe
 import { getAdminStats } from "@/services/dashboardService";
 import { getFilaDoDia } from "@/services/filaDoDiaService";
 import { FilaDoDiaPanel } from "@/components/dashboard/FilaDoDiaPanel";
-import { cooperadoExibirValorReceberInicio,
+import {
+  cooperadoExibirValorReceberInicio,
+  contarFotosEmAnaliseCooperado,
   listarNotasPendentesCooperado,
 } from "@/services/cooperadoEntregasService";
 import { resolverCooperadoIdCanonico } from "@/services/cooperadoCloudService";
-import { notaPertenceCooperativa, contarFotosEnviadasNotas } from "@/utils/fotoEntrega";
 import { getComunicadosInicioCooperado } from "@/services/comunicadoService";
 import { getResumoMensalidadesCooperado } from "@/services/mensalidadeService";
 import { prestacaoPrincipalCooperado, prestacaoExigeAtencaoCooperado } from "@/services/prestacaoContasService";
@@ -34,7 +35,7 @@ import { VotacaoAtivaPanel } from "@/components/votacao/VotacaoAtivaPanel";
 import { VotacaoResultadoPanel } from "@/components/votacao/VotacaoResultadoPanel";
 import { updateData } from "@/services/dataStore";
 import { pushCooperadoOperacionalToCloud } from "@/services/cooperativaSyncCloudService";
-import { getCooperativaCnpj } from "@/services/notaPedidoCloudService";
+import { getCooperativaCnpj, getPendingNotaDeleteIds } from "@/services/notaPedidoCloudService";
 import { formatCurrency, formatMesReferencia, getCurrentMesReferencia } from "@/utils/format";
 import { getUserCooperativaId, getUserCooperativaNome } from "@/utils/cooperativa";
 import { Camera, Wallet, ClipboardList, Users, Vote, Download } from "lucide-react";
@@ -59,8 +60,12 @@ function CooperadoDashboard() {
     const precisaPix = cooperado ? cooperadoPrecisaCadastrarPix(cooperado.chavePix, cooperado.pixValido) : false;
     const notasPendentes = listarNotasPendentesCooperado(data, cooperadoId, coopId);
     const rejeitadas = notasPendentes.filter((n) => n.status === "rejeitada");
-    const notasEmAnalise = notasPendentes.filter((n) => n.status === "aguardando_conferencia");
-    const fotosEmAnalise = contarFotosEnviadasNotas(notasEmAnalise);
+    const cnpj = coopId ? getCooperativaCnpj(data, coopId) : undefined;
+    const pendingDeletes = cnpj ? getPendingNotaDeleteIds(cnpj) : new Set<string>();
+    const notasEmAnalise = notasPendentes.filter(
+      (n) => n.status === "aguardando_conferencia" && !pendingDeletes.has(n.id)
+    );
+    const fotosEmAnalise = contarFotosEmAnaliseCooperado(notasEmAnalise);
     const resumoMens = getResumoMensalidadesCooperado(data, cooperadoId, coopId);
     const mensalidadeAberta = resumoMens.situacao === "atrasada";
     const prestacao = coopId ? prestacaoPrincipalCooperado(data, cooperadoId, coopId) : undefined;
