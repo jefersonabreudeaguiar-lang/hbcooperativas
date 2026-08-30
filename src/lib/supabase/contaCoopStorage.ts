@@ -2133,10 +2133,25 @@ export async function previewPartnerSettlement(
 
   const transacoes = await listSettlementTransactions(supabase, digits, partnerId, mesReferencia);
   const cooperados = buildCooperadoLiquidacao(transacoes);
-  const openRecebiveis = transacoes.filter(
-    (tx) => tx.tipo === "PAYMENT" && tx.recebivelStatus === "OPEN"
+  const eligibleRecebiveis = transacoes.filter(
+    (tx) => tx.tipo === "PAYMENT" && tx.recebivelStatus === "ELIGIBLE"
   );
-  const totalCents = openRecebiveis.reduce((sum, tx) => sum + tx.amountCents, 0);
+  const totalCents = eligibleRecebiveis.reduce((sum, tx) => sum + tx.amountCents, 0);
+
+  let fiscalResumo;
+  let pagamentoAprovado = false;
+  let bloqueioPagamento: string | null = null;
+  try {
+    const { summarizeFiscalNotesMonth, evaluatePartnerFiscalSettlementGate } = await import(
+      "@/lib/supabase/hbCreditFiscalNotesStorage"
+    );
+    fiscalResumo = await summarizeFiscalNotesMonth(supabase, digits, partnerId, mesReferencia);
+    const gate = evaluatePartnerFiscalSettlementGate(fiscalResumo);
+    pagamentoAprovado = gate.ready && totalCents > 0;
+    bloqueioPagamento = gate.message;
+  } catch {
+    bloqueioPagamento = "Módulo fiscal indisponível — aplique a migration de NFs Conta Coop.";
+  }
 
   return {
     partnerId,
@@ -2145,8 +2160,11 @@ export async function previewPartnerSettlement(
     pixKey: readStoredField(partnerRow.pix_key as string | undefined),
     pixHolderName: readStoredField(partnerRow.pix_holder_name as string | undefined),
     totalCents,
-    transacoesCount: openRecebiveis.length,
+    transacoesCount: eligibleRecebiveis.length,
     cooperados,
+    fiscalResumo,
+    pagamentoAprovado,
+    bloqueioPagamento,
   };
 }
 
@@ -2164,7 +2182,18 @@ export async function registerPartnerSettlementPayment(
 ): Promise<{ ok: boolean; error?: string; settlement?: ContaCoopSettlement }> {
   const preview = await previewPartnerSettlement(supabase, params.cnpj, params.partnerId, params.mesReferencia);
   if (!preview) return { ok: false, error: "Mercado não encontrado." };
-  if (preview.totalCents <= 0) return { ok: false, error: "Não há recebíveis em aberto neste mês para liquidar." };
+  if (preview.totalCents <= 0) {
+    return {
+      ok: false,
+      error: preview.bloqueioPagamento ?? "Não há recebíveis elegíveis neste mês para liquidar.",
+    };
+  }
+  if (!preview.pagamentoAprovado) {
+    return {
+      ok: false,
+      error: preview.bloqueioPagamento ?? "Conferência fiscal incompleta — finalize as NFs antes do pagamento.",
+    };
+  }
   if (!preview.pixKey?.trim()) return { ok: false, error: "Mercado ainda não cadastrou chave PIX." };
 
   const { data: existing } = await supabase
@@ -2180,7 +2209,7 @@ export async function registerPartnerSettlementPayment(
   const settlementId = genId("settle");
   const now = new Date().toISOString();
   const openRecebivelIds = (await listSettlementTransactions(supabase, params.cnpj, params.partnerId, params.mesReferencia))
-    .filter((tx) => tx.tipo === "PAYMENT" && tx.recebivelStatus === "OPEN" && tx.recebivelId)
+    .filter((tx) => tx.tipo === "PAYMENT" && tx.recebivelStatus === "ELIGIBLE" && tx.recebivelId)
     .map((tx) => tx.recebivelId);
 
   const { error: insertError } = await supabase.from("hb_credit_settlements").insert({

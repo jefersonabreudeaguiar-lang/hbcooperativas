@@ -6,6 +6,7 @@ import {
   listPartnerFiscalNotes,
   listStaffFiscalNotes,
   rejectFiscalNote,
+  countCooperativeFiscalPending,
   summarizeFiscalNotesMonth,
 } from "@/lib/supabase/hbCreditFiscalNotesStorage";
 import { getParceiroByUserId } from "@/lib/supabase/contaCoopStorage";
@@ -52,6 +53,11 @@ export async function GET(request: Request) {
   if (denyCoop) return denyCoop;
   const denyFinance = requireCreditCooperativeFinance(gate.ctx);
   if (denyFinance) return denyFinance;
+
+  if (view === "pending_summary") {
+    const pending = await countCooperativeFiscalPending(gate.ctx.supabase, digits, mesReferencia);
+    return NextResponse.json({ ok: true, ...pending, mesReferencia });
+  }
 
   if (transactionId) {
     const nota = await getFiscalNoteByTransaction(gate.ctx.supabase, digits, transactionId);

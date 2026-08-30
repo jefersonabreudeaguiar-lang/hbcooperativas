@@ -8,8 +8,10 @@ import {
   setPartnerFinancialPin,
   updatePartnerPix,
 } from "@/lib/supabase/contaCoopStorage";
+import { countPartnerFiscalPending } from "@/lib/supabase/hbCreditFiscalNotesStorage";
 import { requireCreditApi } from "@/lib/security/creditGuard";
 import { FINANCIAL_PIN_MIN_LENGTH } from "@/modules/hb-credit/config";
+import { getCurrentMesReferencia } from "@/utils/format";
 
 export async function GET(request: Request) {
   const gate = await requireCreditApi(request);
@@ -31,8 +33,24 @@ export async function GET(request: Request) {
   const recebiveis = await listRecebiveisParceiro(gate.ctx.supabase, parceiro.id);
   const settlements = await listSettlementsForPartner(gate.ctx.supabase, parceiro.id);
   const hasPin = await hasPartnerFinancialPin(gate.ctx.supabase, parceiro.id);
+  const mesReferencia = getCurrentMesReferencia();
+  let fiscalPendentes = 0;
+  try {
+    fiscalPendentes = await countPartnerFiscalPending(gate.ctx.supabase, parceiro.id, mesReferencia);
+  } catch {
+    fiscalPendentes = 0;
+  }
 
-  return NextResponse.json({ ok: true, parceiro, intents, recebiveis, settlements, hasPin });
+  return NextResponse.json({
+    ok: true,
+    parceiro,
+    intents,
+    recebiveis,
+    settlements,
+    hasPin,
+    fiscalPendentes,
+    mesReferenciaFiscal: mesReferencia,
+  });
 }
 
 export async function PATCH(request: Request) {

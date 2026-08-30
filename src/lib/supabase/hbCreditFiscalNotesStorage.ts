@@ -584,3 +584,87 @@ export async function getFiscalNoteByTransaction(
   const enriched = await enrichFiscalNotes(supabase, [data as Record<string, unknown>]);
   return enriched[0] ?? null;
 }
+
+/** Trava de liquidação — só libera PIX quando todas as NFs do mês estiverem conferidas. */
+export function evaluatePartnerFiscalSettlementGate(resumo: ContaCoopFiscalNotesResumo): {
+  ready: boolean;
+  message: string | null;
+} {
+  if (resumo.totalVendas === 0) {
+    return { ready: false, message: "Nenhuma venda Conta Coop neste mês para liquidar." };
+  }
+  if (resumo.pendentesAnexo > 0) {
+    return {
+      ready: false,
+      message: `${resumo.pendentesAnexo} venda(s) sem NF — mercado deve anexar antes do pagamento.`,
+    };
+  }
+  if (resumo.aguardandoConferencia > 0) {
+    return {
+      ready: false,
+      message: `${resumo.aguardandoConferencia} NF(s) aguardando conferência na aba Conferir NFs.`,
+    };
+  }
+  if (resumo.correcaoPedida > 0) {
+    return {
+      ready: false,
+      message: `${resumo.correcaoPedida} NF(s) com correção pedida — mercado deve reenviar.`,
+    };
+  }
+  if (resumo.totalConferidasCents !== resumo.totalVendasCents) {
+    return {
+      ready: false,
+      message: "Total conferido por NF não bate com vendas do mês.",
+    };
+  }
+  return { ready: true, message: null };
+}
+
+export async function countPartnerFiscalPending(
+  supabase: SupabaseClient,
+  partnerId: string,
+  mesReferencia: string
+): Promise<number> {
+  await syncPartnerFiscalNotesForMonth(supabase, partnerId, mesReferencia);
+  const { count } = await supabase
+    .from("hb_credit_fiscal_notes")
+    .select("id", { count: "exact", head: true })
+    .eq("partner_id", partnerId)
+    .eq("mes_referencia", mesReferencia)
+    .in("status", ["PENDING_UPLOAD", "AWAITING_REVIEW", "REJECTED"]);
+  return count ?? 0;
+}
+
+export async function countCooperativeFiscalPending(
+  supabase: SupabaseClient,
+  cnpj: string,
+  mesReferencia: string
+): Promise<{ conferir: number; mercadoPendente: number }> {
+  const digits = normalizeCnpj(cnpj);
+  const { data: partners } = await supabase
+    .from("hb_credit_partners")
+    .select("id")
+    .eq("cooperative_cnpj", digits)
+    .eq("status", "ACTIVE");
+
+  let conferir = 0;
+  let mercadoPendente = 0;
+  for (const p of partners ?? []) {
+    await syncPartnerFiscalNotesForMonth(supabase, String(p.id), mesReferencia);
+  }
+
+  const { data: rows } = await supabase
+    .from("hb_credit_fiscal_notes")
+    .select("status")
+    .eq("cooperative_cnpj", digits)
+    .eq("mes_referencia", mesReferencia)
+    .neq("status", "CANCELLED");
+
+  for (const row of rows ?? []) {
+    const st = String(row.status);
+    if (st === "AWAITING_REVIEW") conferir += 1;
+    if (st === "PENDING_UPLOAD" || st === "REJECTED") mercadoPendente += 1;
+  }
+
+  return { conferir, mercadoPendente };
+}

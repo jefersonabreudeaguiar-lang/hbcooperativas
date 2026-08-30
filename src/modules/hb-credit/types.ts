@@ -172,6 +172,10 @@ export interface ContaCoopLiquidacaoPreview {
   totalCents: number;
   transacoesCount: number;
   cooperados: ContaCoopCooperadoLiquidacao[];
+  /** Resumo fiscal do mês — vendas × NFs conferidas. */
+  fiscalResumo?: ContaCoopFiscalNotesResumo;
+  pagamentoAprovado?: boolean;
+  bloqueioPagamento?: string | null;
 }
 
 export type FiscalNoteStatus =

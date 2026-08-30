@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { CreditFeatureGate } from "@/components/hb-credit/CreditFeatureGate";
 import { CloudSessionGate } from "@/components/hb-credit/CloudSessionGate";
 import { TesoureiroAreaGuard } from "@/components/permissions/TesoureiroAreaGuard";
@@ -64,7 +65,20 @@ export default function ContaCoopPage() {
 function ContaCoopContent() {
   const data = useAppData();
   const { user } = usePermissions();
-  const [tab, setTab] = useState<Tab>("painel");
+  const searchParams = useSearchParams();
+  const initialTab = searchParams.get("tab");
+  const [tab, setTab] = useState<Tab>(() => {
+    if (
+      initialTab === "conferir_nf" ||
+      initialTab === "liquidar" ||
+      initialTab === "estornos" ||
+      initialTab === "limites" ||
+      initialTab === "mercados"
+    ) {
+      return initialTab;
+    }
+    return "painel";
+  });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [dashboard, setDashboard] = useState<ContaCoopDashboard | null>(null);

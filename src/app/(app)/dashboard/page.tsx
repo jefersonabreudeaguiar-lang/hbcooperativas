@@ -15,6 +15,8 @@ import { ValoresAvulsosDashboardCard } from "@/components/ficha/ValoresAvulsosRe
 import { getAdminStats } from "@/services/dashboardService";
 import { getFilaDoDia } from "@/services/filaDoDiaService";
 import { FilaDoDiaPanel } from "@/components/dashboard/FilaDoDiaPanel";
+import { ContaCoopFilaCloudPanel } from "@/components/hb-credit/ContaCoopFilaCloudPanel";
+import { useHbCreditEnabled } from "@/hooks/useHbCreditEnabled";
 import {
   cooperadoExibirValorReceberInicio,
   contarFotosEmAnaliseCooperado,
@@ -37,7 +39,7 @@ import { updateData } from "@/services/dataStore";
 import { pushCooperadoOperacionalToCloud } from "@/services/cooperativaSyncCloudService";
 import { getCooperativaCnpj, getPendingNotaDeleteIds } from "@/services/notaPedidoCloudService";
 import { formatCurrency, formatMesReferencia, getCurrentMesReferencia } from "@/utils/format";
-import { getUserCooperativaId, getUserCooperativaNome } from "@/utils/cooperativa";
+import { getUserCooperativaId, getUserCooperativaNome, normalizeCnpj } from "@/utils/cooperativa";
 import { Camera, Wallet, ClipboardList, Users, Vote, Download } from "lucide-react";
 import { usePermissions } from "@/hooks/usePermissions";
 import { cooperadoTemAppInstalado, isAppStandalone, resumoInstalacaoApp } from "@/services/cooperadoAppInstallService";
@@ -250,6 +252,7 @@ function CooperadoDashboard() {
 function AdminDashboard() {
   const { user } = useAuth();
   const { check } = usePermissions();
+  const creditFlag = useHbCreditEnabled();
 
   const view = useAppDataSelector((data) => {
     if (!data || !user) return null;
@@ -259,12 +262,18 @@ function AdminDashboard() {
     const mes = getCurrentMesReferencia();
     const fila = getFilaDoDia(data, coopId, mes);
     const instalacao = coopId ? resumoInstalacaoApp(data, coopId) : null;
-    return { stats, coopNome, fila, mes, instalacao };
+    let cnpj = "";
+    if (user.cooperativaCnpj) cnpj = normalizeCnpj(user.cooperativaCnpj);
+    else {
+      const coop = data.cooperativas.find((c) => c.id === coopId);
+      if (coop?.cnpj) cnpj = normalizeCnpj(coop.cnpj);
+    }
+    return { stats, coopNome, fila, mes, instalacao, cnpj };
   }, [user?.id, user?.cooperativaId, user?.role]);
 
   if (!view) return <PageSkeleton />;
 
-  const { stats, coopNome, fila, mes, instalacao } = view;
+  const { stats, coopNome, fila, mes, instalacao, cnpj } = view;
 
   return (
     <div className="space-y-6 max-w-3xl">
@@ -312,6 +321,8 @@ function AdminDashboard() {
       )}
 
       <FilaDoDiaPanel items={fila} />
+
+      {creditFlag.enabled && cnpj.length === 14 && <ContaCoopFilaCloudPanel cnpj={cnpj} />}
 
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <StatCard title="A pagar aos cooperados" value={formatCurrency(stats.valoresAPagar)} icon={<Wallet size={24} />} variant="warning" />

@@ -9,6 +9,7 @@ import { formatCentsBRL } from "@/modules/hb-credit/engine/money";
 import type { ContaCoopLiquidacaoPreview, ContaCoopParceiro } from "@/modules/hb-credit/types";
 import { fetchLiquidacaoPreview, registrarPagamentoMercado } from "@/services/creditApiService";
 import { formatMesReferencia, getCurrentMesReferencia } from "@/utils/format";
+import Link from "next/link";
 
 interface ContaCoopLiquidacaoPanelProps {
   cnpj: string;
@@ -121,6 +122,49 @@ export function ContaCoopLiquidacaoPanel({
 
       {preview && (
         <>
+          {preview.fiscalResumo && (
+            <Card className="space-y-3 !p-5">
+              <h4 className="font-semibold text-gray-900">Conferência fiscal × pagamento</h4>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-sm">
+                <div className="rounded-xl bg-gray-50 p-3">
+                  <p className="text-gray-500 text-xs">Vendas no app</p>
+                  <p className="font-bold">{formatCentsBRL(preview.fiscalResumo.totalVendasCents)}</p>
+                </div>
+                <div className="rounded-xl bg-gray-50 p-3">
+                  <p className="text-gray-500 text-xs">NFs conferidas</p>
+                  <p className="font-bold text-green-800">
+                    {formatCentsBRL(preview.fiscalResumo.totalConferidasCents)}
+                  </p>
+                </div>
+                <div className="rounded-xl bg-gray-50 p-3">
+                  <p className="text-gray-500 text-xs">A pagar (elegível)</p>
+                  <p className="font-bold text-green-900">{formatCentsBRL(preview.totalCents)}</p>
+                </div>
+                <div className="rounded-xl bg-gray-50 p-3">
+                  <p className="text-gray-500 text-xs">Pendências NF</p>
+                  <p className="font-bold text-amber-800">
+                    {preview.fiscalResumo.pendentesAnexo +
+                      preview.fiscalResumo.aguardandoConferencia +
+                      preview.fiscalResumo.correcaoPedida}
+                  </p>
+                </div>
+              </div>
+
+              {preview.pagamentoAprovado ? (
+                <AlertBanner variant="info" title="Pagamento aprovado">
+                  Todas as NFs conferidas e valores batendo. Você pode registrar o PIX abaixo.
+                </AlertBanner>
+              ) : (
+                <AlertBanner variant="warning" title="Pagamento bloqueado">
+                  {preview.bloqueioPagamento ?? "Finalize a conferência fiscal antes de pagar."}{" "}
+                  <Link href="/conta-coop?tab=conferir_nf" className="font-semibold underline">
+                    Ir para Conferir NFs
+                  </Link>
+                </AlertBanner>
+              )}
+            </Card>
+          )}
+
           <Card className="space-y-3 !p-5">
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div>
@@ -130,7 +174,7 @@ export function ContaCoopLiquidacaoPanel({
               <div className="text-right">
                 <p className="text-sm text-gray-500">Total a pagar</p>
                 <p className="text-3xl font-bold text-green-800">{formatCentsBRL(preview.totalCents)}</p>
-                <p className="text-xs text-gray-500">{preview.transacoesCount} recebível(is) em aberto</p>
+                <p className="text-xs text-gray-500">{preview.transacoesCount} recebível(is) elegível(is)</p>
               </div>
             </div>
             <div className="rounded-xl bg-gray-50 p-3 text-sm">
@@ -148,7 +192,12 @@ export function ContaCoopLiquidacaoPanel({
               className="w-full"
               size="lg"
               onClick={() => void registrarPagamento()}
-              disabled={busy || preview.totalCents <= 0 || !preview.pixKey}
+              disabled={
+                busy ||
+                preview.totalCents <= 0 ||
+                !preview.pixKey ||
+                preview.pagamentoAprovado === false
+              }
             >
               Registrar pagamento e enviar relatório ao mercado
             </Button>

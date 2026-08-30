@@ -166,6 +166,7 @@ export async function fetchMercadoParceiroData() {
     recebiveis?: { id: string; amountCents: number; status: string; createdAt: string }[];
     settlements?: ContaCoopSettlement[];
     hasPin?: boolean;
+    fiscalPendentes?: number;
   }>(res);
   if (!res.ok || !data.ok) throw new Error(data.error ?? "Erro ao carregar mercado.");
   return data;
@@ -392,4 +393,13 @@ export async function conferirFiscalNote(input: {
   );
   if (!res.ok || !data.ok) throw new Error(data.error ?? "Operação recusada.");
   return data.nota!;
+}
+
+export async function fetchCooperativeFiscalPending(cnpj: string, mesReferencia: string) {
+  const res = await secureApiFetch(
+    `/api/credit/fiscal-notes?cnpj=${encodeURIComponent(cnpj)}&mesReferencia=${encodeURIComponent(mesReferencia)}&view=pending_summary`
+  );
+  const data = await parseJson<{ ok?: boolean; error?: string; conferir?: number; mercadoPendente?: number }>(res);
+  if (!res.ok || !data.ok) throw new Error(data.error ?? "Erro ao carregar pendências fiscais.");
+  return { conferir: data.conferir ?? 0, mercadoPendente: data.mercadoPendente ?? 0 };
 }

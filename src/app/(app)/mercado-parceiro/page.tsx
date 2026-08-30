@@ -57,6 +57,7 @@ function MercadoParceiroContent() {
   const [estornoAlvo, setEstornoAlvo] = useState<ContaCoopCompraEstornavel | null>(null);
   const [estornoMotivo, setEstornoMotivo] = useState("");
   const [estornoPin, setEstornoPin] = useState("");
+  const [fiscalPendentes, setFiscalPendentes] = useState(0);
 
   const reload = useCallback(async () => {
     setLoading(true);
@@ -68,6 +69,7 @@ function MercadoParceiroContent() {
       setRecebiveis(data.recebiveis ?? []);
       setSettlements(data.settlements ?? []);
       setHasPin(Boolean(data.hasPin));
+      setFiscalPendentes(Number(data.fiscalPendentes ?? 0));
       if (data.parceiro?.status === "ativo") {
         try {
           const refundData = await fetchPartnerRefundData();
@@ -259,6 +261,13 @@ function MercadoParceiroContent() {
 
       {error && <AlertBanner variant="error">{error}</AlertBanner>}
       {success && <AlertBanner variant="info" title="OK">{success}</AlertBanner>}
+
+      {ativo && fiscalPendentes > 0 && (
+        <AlertBanner variant="warning" title="Notas fiscais pendentes">
+          Você tem {fiscalPendentes} venda(s) sem NF conferida neste mês. Anexe as notas abaixo para a cooperativa
+          liberar seu pagamento.
+        </AlertBanner>
+      )}
 
       {pendente && (
         <AlertBanner variant="warning" title="Aguardando aprovação">
