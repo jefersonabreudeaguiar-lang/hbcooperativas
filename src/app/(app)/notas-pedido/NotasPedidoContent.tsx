@@ -34,6 +34,7 @@ import {
   buildFichasDivisaoFromNota,
   rebuildFichasNota,
   excluirEntregaNota,
+  isNotaPedidoExcluida,
   podeExcluirEntregaNota,
   mensagemBloqueioExclusaoEntrega,
   relancarEntregaNota,
@@ -817,21 +818,23 @@ export default function NotasPedidoContent() {
   }, [data, cooperadoId, user?.name]);
 
 
-  const pendentesTodas = useMemo(() => {
-    if (!data || isCooperado) return [];
-    return data.notasPedido
-      .filter((n) => {
-        if (coopId && !notaPertenceCooperativa(data, n, coopId)) return false;
-        return isNotaNaFilaConferenciaResponsavel(n.status);
-      })
-      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-  }, [data, coopId, isCooperado]);
-
   const pendingDeleteIds = useMemo(() => {
     if (!data || !coopId) return new Set<string>();
     const cnpj = getCooperativaCnpj(data, coopId);
     return cnpj ? getPendingNotaDeleteIds(cnpj) : new Set<string>();
   }, [data, coopId]);
+
+  const pendentesTodas = useMemo(() => {
+    if (!data || isCooperado) return [];
+    return data.notasPedido
+      .filter((n) => {
+        if (coopId && !notaPertenceCooperativa(data, n, coopId)) return false;
+        if (coopId && isNotaPedidoExcluida(data, n.id, coopId)) return false;
+        if (pendingDeleteIds.has(n.id)) return false;
+        return isNotaNaFilaConferenciaResponsavel(n.status);
+      })
+      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+  }, [data, coopId, isCooperado, pendingDeleteIds]);
 
   // Fila estável: permanece até lançar/rejeitar — não some no sync nem por status transitório.
   const filaStickyIdsRef = useRef<Set<string>>(new Set());
@@ -845,6 +848,11 @@ export default function NotasPedidoContent() {
     }
 
     for (const id of [...filaStickyIdsRef.current]) {
+      if (coopId && isNotaPedidoExcluida(data, id, coopId)) {
+        filaStickyIdsRef.current.delete(id);
+        filaStickySnapshotRef.current.delete(id);
+        continue;
+      }
       if (pendingDeleteIds.has(id)) {
         filaStickyIdsRef.current.delete(id);
         filaStickySnapshotRef.current.delete(id);
@@ -861,11 +869,12 @@ export default function NotasPedidoContent() {
     for (const n of pendentesTodas) byId.set(n.id, n);
 
     for (const id of filaStickyIdsRef.current) {
+      if (coopId && isNotaPedidoExcluida(data, id, coopId)) continue;
       if (pendingDeleteIds.has(id)) continue;
       if (byId.has(id)) continue;
       const atual = data.notasPedido.find((x) => x.id === id);
       const snap = filaStickySnapshotRef.current.get(id);
-      if (!atual) {
+      if (!atual || (coopId && isNotaPedidoExcluida(data, id, coopId))) {
         // Excluída localmente — não ressuscitar pelo snapshot da fila sticky.
         filaStickyIdsRef.current.delete(id);
         filaStickySnapshotRef.current.delete(id);
@@ -888,7 +897,7 @@ export default function NotasPedidoContent() {
     return Array.from(byId.values()).sort(
       (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
     );
-  }, [data, pendentesTodas, pendingDeleteIds]);
+  }, [data, pendentesTodas, pendingDeleteIds, coopId]);
 
   const pendentesPorCooperado = useMemo(() => {
     if (!data) return [];

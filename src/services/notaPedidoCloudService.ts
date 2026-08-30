@@ -5,7 +5,7 @@ import { notaPertenceCooperado, resolverCooperadoIdCanonico } from "@/services/c
 import { getNotaCooperativaCnpj, getFotosExibicaoNota, mergeNotaComFotos, contarFotosEnviadasNota, FOTOS_UPLOAD_LOTE } from "@/utils/fotoEntrega";
 import { getCooperadoNome } from "@/utils/calculations";
 import { getData, saveDataSafe } from "@/services/dataStore";
-import { reconciliarFichaFromNotasConferidas } from "@/services/notaPedidoService";
+import { reconciliarFichaFromNotasConferidas, idsNotasPedidoExcluidas, aplicarNotasPedidoExcluidas } from "@/services/notaPedidoService";
 import { needsOperationalResetCloudPush, getCloudResetAppliedVersion } from "@/services/operationalReset";
 import { readNotaFotoAtIndex } from "@/services/localMediaStore";
 import { slimNotaDraftForUpload } from "@/services/imagePipelineService";
@@ -248,6 +248,17 @@ function pruneStaleLocalConferidasFromCloud(
   return true;
 }
 
+function getNotaBlockSet(data: AppData, cnpj: string, cooperativaId?: string): Set<string> {
+  const blocked = getPendingNotaDeleteIdSet(cnpj);
+  for (const id of idsNotasPedidoExcluidas(data, cooperativaId)) blocked.add(id);
+  return blocked;
+}
+
+function resolveCoopIdFromCnpj(data: AppData, cnpj: string): string | undefined {
+  const digits = normalizeCnpj(cnpj);
+  return data.cooperativas.find((c) => normalizeCnpj(c.cnpj) === digits)?.id;
+}
+
 function getPendingNotaDeleteIdSet(cnpj: string): Set<string> {
   const digits = normalizeCnpj(cnpj);
   if (digits.length !== 14) return new Set();
@@ -284,13 +295,14 @@ export function mergeCloudNotasIntoData(
   options?: MergeCloudNotasOptions
 ): AppData {
   const digits = normalizeCnpj(cnpj);
+  const coopId = resolveCoopIdFromCnpj(data, cnpj);
   const byId = new Map(data.notasPedido.map((n) => [n.id, n]));
-  const pendingDeletes = getPendingNotaDeleteIdSet(digits);
+  const blocked = getNotaBlockSet(data, cnpj, coopId);
   let changed = false;
 
   for (const raw of cloudNotas) {
     const cn = normalizeCloudNotaForLocal(data, raw, cnpj);
-    if (pendingDeletes.has(cn.id)) continue;
+    if (blocked.has(cn.id)) continue;
     const local = byId.get(cn.id);
     const cloudNota: NotaPedido = {
       ...cn,
@@ -389,8 +401,15 @@ export function mergeCloudNotasIntoData(
     changed = true;
   }
 
+  for (const id of blocked) {
+    if (byId.has(id)) {
+      byId.delete(id);
+      changed = true;
+    }
+  }
+
   if (!changed) return data;
-  return { ...data, notasPedido: Array.from(byId.values()) };
+  return aplicarNotasPedidoExcluidas({ ...data, notasPedido: Array.from(byId.values()) }, coopId);
 }
 
 export async function fetchNotasPedidoFromCloud(
@@ -912,10 +931,12 @@ export async function republishLocalAguardandoConferencia(
 
   const data = getData();
   const canonico = resolverCooperadoIdCanonico(data, cooperadoId, cooperativaId);
+  const excluidas = idsNotasPedidoExcluidas(data, cooperativaId);
   const pendentes = data.notasPedido.filter(
     (n) =>
       n.status === "aguardando_conferencia" &&
       n.fotoNaNuvem &&
+      !excluidas.has(n.id) &&
       notaPertenceCooperado(data, n, canonico, cooperativaId)
   );
   if (pendentes.length === 0) return 0;
@@ -926,8 +947,17 @@ export async function republishLocalAguardandoConferencia(
 
   for (const nota of pendentes) {
     const cloud = await fetchNotaPedidoFromCloud(digits, nota.id, { metaOnly: true });
+    if (!cloud) {
+      // Excluída na nuvem pelo responsável — remove cópia local, não republicar.
+      adopted = {
+        ...adopted,
+        notasPedido: adopted.notasPedido.filter((n) => n.id !== nota.id),
+      };
+      adoptedChanged = true;
+      continue;
+    }
     // Já publicada e visível — não precisa republicar.
-    if (cloud && cloud.status && cloud.status !== "rascunho") {
+    if (cloud.status && cloud.status !== "rascunho") {
       // Nuvem já conferiu/rejeitou — adota localmente (some do mural "em análise").
       if (cloud.status !== "aguardando_conferencia") {
         adopted = mergeCloudNotasIntoData(adopted, [cloud], digits);
@@ -1148,11 +1178,13 @@ export async function syncNotasPedidoFromCloud(cnpj: string): Promise<number> {
   }
 
   const pendingDeletes = getPendingNotaDeleteIdSet(digits);
+  const coopId = resolveCoopIdFromCnpj(current, digits);
+  const blocked = getNotaBlockSet(current, digits, coopId);
 
   const beforeAguardando = current.notasPedido.filter(
     (n) =>
       (n.status === "aguardando_conferencia" || n.status === "entregue") &&
-      !pendingDeletes.has(n.id)
+      !blocked.has(n.id)
   );
 
   let merged = mergeCloudNotasIntoData(current, cloudNotas, digits, {
@@ -1164,7 +1196,7 @@ export async function syncNotasPedidoFromCloud(cnpj: string): Promise<number> {
   let notas = [...merged.notasPedido];
   let invariantFixed = false;
   for (const before of beforeAguardando) {
-    if (pendingDeletes.has(before.id)) continue;
+    if (blocked.has(before.id)) continue;
     const after = afterById.get(before.id);
     if (!after) {
       // Não ressuscita entregas removidas localmente (ex.: exclusão pelo responsável).
@@ -1219,7 +1251,14 @@ export async function refreshCooperadoNotasEmAnalise(
 
   for (const nota of emAnalise) {
     const cloud = await fetchNotaPedidoFromCloud(digits, nota.id);
-    if (!cloud || cloud.status === nota.status || cloud.status === "rascunho") continue;
+    if (!cloud) {
+      merged = {
+        ...merged,
+        notasPedido: merged.notasPedido.filter((n) => n.id !== nota.id),
+      };
+      continue;
+    }
+    if (cloud.status === nota.status || cloud.status === "rascunho") continue;
     merged = mergeCloudNotasIntoData(merged, [cloud], digits, {
       forceTerminalStatus: isCloudTerminalStatusForCooperado(cloud.status),
     });

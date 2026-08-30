@@ -761,6 +761,13 @@ export interface PrestacaoContasExcluida {
   deletedAt: string;
 }
 
+/** Registro de exclusão — impede que a sincronização traga a entrega de volta. */
+export interface NotaPedidoExcluida {
+  id: string;
+  cooperativaId: string;
+  deletedAt: string;
+}
+
 /** Registro de exclusão — impede que a sincronização traga o contrato de volta. */
 export interface InstituicaoExcluida {
   id: string;
@@ -823,6 +830,7 @@ export interface AppData {
   livroCaixa: LivroCaixaLancamento[];
   prestacoesContas: PrestacaoContas[];
   prestacoesContasExcluidas?: PrestacaoContasExcluida[];
+  notasPedidoExcluidas?: NotaPedidoExcluida[];
   instituicoesExcluidas?: InstituicaoExcluida[];
   auditLog: AuditEntry[];
   pareceresContabeis?: ParecerContabilMensal[];

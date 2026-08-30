@@ -9,6 +9,7 @@ import type {
   AjustesFichaMesCooperativa,
   Comunicado,
   DivisaoEntregaNota,
+  NotaPedidoExcluida,
 } from "@/types";
 import {
   fichaPertenceCooperado,
@@ -1423,6 +1424,55 @@ export function podeExcluirEntregaNota(
   return { ok: true };
 }
 
+export function idsNotasPedidoExcluidas(data: AppData, cooperativaId?: string): Set<string> {
+  let items = data.notasPedidoExcluidas ?? [];
+  if (cooperativaId) items = items.filter((e) => e.cooperativaId === cooperativaId);
+  return new Set(items.map((e) => e.id));
+}
+
+export function isNotaPedidoExcluida(data: AppData, notaId: string, cooperativaId?: string): boolean {
+  return idsNotasPedidoExcluidas(data, cooperativaId).has(notaId);
+}
+
+export function registrarNotaPedidoExcluida(
+  data: AppData,
+  notaId: string,
+  cooperativaId: string
+): AppData {
+  const existing = data.notasPedidoExcluidas ?? [];
+  const now = new Date().toISOString();
+  const entry: NotaPedidoExcluida = { id: notaId, cooperativaId, deletedAt: now };
+  const idx = existing.findIndex((e) => e.id === notaId && e.cooperativaId === cooperativaId);
+  if (idx >= 0) {
+    const next = [...existing];
+    next[idx] = entry;
+    return { ...data, notasPedidoExcluidas: next };
+  }
+  return { ...data, notasPedidoExcluidas: [...existing, entry] };
+}
+
+export function removerNotaPedidoExcluida(
+  data: AppData,
+  notaId: string,
+  cooperativaId: string
+): AppData {
+  return {
+    ...data,
+    notasPedidoExcluidas: (data.notasPedidoExcluidas ?? []).filter(
+      (e) => !(e.id === notaId && e.cooperativaId === cooperativaId)
+    ),
+  };
+}
+
+/** Remove entregas tombstonadas após exclusão — evita reaparecer na fila de conferência. */
+export function aplicarNotasPedidoExcluidas(data: AppData, cooperativaId?: string): AppData {
+  const excl = idsNotasPedidoExcluidas(data, cooperativaId);
+  if (excl.size === 0) return data;
+  const notasPedido = data.notasPedido.filter((n) => !excl.has(n.id));
+  if (notasPedido.length === data.notasPedido.length) return data;
+  return { ...data, notasPedido };
+}
+
 /** Remove entrega, fichas vinculadas e referências mensais; recalcula saldos afetados. */
 export function excluirEntregaNota(
   data: AppData,
@@ -1439,7 +1489,11 @@ export function excluirEntregaNota(
 
   return {
     ok: true,
-    data: { ...data, notasPedido, fichaCorrida, arquivosMensais },
+    data: registrarNotaPedidoExcluida(
+      { ...data, notasPedido, fichaCorrida, arquivosMensais },
+      notaId,
+      cooperativaId
+    ),
   };
 }
 
@@ -1544,7 +1598,11 @@ export function relancarEntregaNota(
   return {
     ok: true,
     nota: notaRelancada,
-    data: { ...data, notasPedido, fichaCorrida, arquivosMensais },
+    data: removerNotaPedidoExcluida(
+      { ...data, notasPedido, fichaCorrida, arquivosMensais },
+      notaId,
+      cooperativaId
+    ),
   };
 }
 

@@ -1,6 +1,6 @@
 import type { AppData, FechamentoMensal, FinanceiroMensal } from "@/types";
 import { getData } from "@/services/dataStore";
-import { getTotalAPagarCooperado, getTotalRecebidoCooperado } from "@/services/notaPedidoService";
+import { getTotalAPagarCooperado, getTotalRecebidoCooperado, idsNotasPedidoExcluidas } from "@/services/notaPedidoService";
 import { round2, sumBy } from "@/utils/calculations";
 import { getCurrentMesReferencia } from "@/utils/format";
 import { isNotaNaFilaConferenciaResponsavel } from "@/utils/notaStatus";
@@ -125,7 +125,10 @@ export function getAdminStats(data?: AppData): AdminDashboardStats {
 
   const pagamentosPendentes = d.fichaCorrida.filter((f) => f.status === "pendente");
   const pagamentosPagos = d.fichaCorrida.filter((f) => f.status === "pago");
-  const notasAguardando = d.notasPedido.filter((n) => isNotaNaFilaConferenciaResponsavel(n.status));
+  const excluidas = idsNotasPedidoExcluidas(d);
+  const notasAguardando = d.notasPedido.filter(
+    (n) => isNotaNaFilaConferenciaResponsavel(n.status) && !excluidas.has(n.id)
+  );
 
   const mensalidadesAbertas = d.mensalidades.filter((m) => m.status === "pendente" || m.status === "atrasada");
   const cotasAbertas = d.cotas.filter((c) => c.status !== "quitada");

@@ -1,4 +1,4 @@
-import type { AppData, Cooperativa, Cooperado, Instituicao, ProdutoInstituicao, Desconto, PrestacaoContasExcluida, InstituicaoExcluida, PagamentoCooperadoRegistro, Comunicado, FichaCorrida, VotacaoPauta, VotacaoVoto } from "@/types";
+import type { AppData, Cooperativa, Cooperado, Instituicao, ProdutoInstituicao, Desconto, PrestacaoContasExcluida, NotaPedidoExcluida, InstituicaoExcluida, PagamentoCooperadoRegistro, Comunicado, FichaCorrida, VotacaoPauta, VotacaoVoto } from "@/types";
 import { normalizeCnpj } from "@/utils/cooperativa";
 import { secureApiFetch } from "@/lib/security/clientSession";
 import type { ContratosSyncPayload, OperacionalSyncPayload } from "@/lib/supabase/cooperativaSyncStorage";
@@ -6,7 +6,7 @@ import { getData, saveDataSafe, runWithBatchedSaveAsync } from "@/services/dataS
 import { syncCooperadosFromCloud, fetchCooperadosFromCloud, pushCooperadoToCloud } from "@/services/cooperadoCloudService";
 import { syncNotasPedidoFromCloud, patchNotaPedidoInCloud } from "@/services/notaPedidoCloudService";
 import { fetchCooperativaByCnpjFromCloud, mergeCooperativaIntoData } from "@/services/cooperativaCloudService";
-import { mergeArquivosMensaisFromCloud, reconciliarFichaFromNotasConferidas, dedupeFichaCorridaPorNota } from "@/services/notaPedidoService";
+import { mergeArquivosMensaisFromCloud, reconciliarFichaFromNotasConferidas, dedupeFichaCorridaPorNota, aplicarNotasPedidoExcluidas } from "@/services/notaPedidoService";
 import { sincronizarMensalidadeCooperativa, mensalidadeVisivelNoDispositivo, normalizarMensalidadeCooperadoLocal, mesclarMensalidadesPayloadNuvem, prepararMensalidadesCloud, prepararMensalidadeCloud, reconciliarMensalidadesComCooperadosCloud, mensalidadeCloudEntraNoDispositivo, enriquecerMensalidadeCooperadoSnapshot } from "@/services/mensalidadeService";
 import { aplicarPrestacoesContasExcluidas } from "@/services/prestacaoContasService";
 import { aplicarInstituicoesExcluidas } from "@/services/instituicaoContratoService";
@@ -134,6 +134,21 @@ function mergeVotacaoVotosFromCloud(localCoop: VotacaoVoto[], cloudItems: Votaca
   return [...map.values()];
 }
 
+function mergeNotasPedidoExcluidasByNewer(
+  local: NotaPedidoExcluida[],
+  cloud: NotaPedidoExcluida[]
+): NotaPedidoExcluida[] {
+  const map = new Map<string, NotaPedidoExcluida>();
+  for (const item of local) map.set(item.id, item);
+  for (const item of cloud) {
+    const cur = map.get(item.id);
+    const tItem = new Date(item.deletedAt).getTime();
+    const tCur = cur ? new Date(cur.deletedAt).getTime() : 0;
+    if (!cur || tItem >= tCur) map.set(item.id, item);
+  }
+  return [...map.values()];
+}
+
 function mergePrestacoesExcluidasByNewer(
   local: PrestacaoContasExcluida[],
   cloud: PrestacaoContasExcluida[]
@@ -214,6 +229,7 @@ function buildOperacionalPayload(data: AppData, coopId: string): OperacionalSync
       (p) => p.cooperativaId === coopId && !excluidasIds.has(p.id)
     ),
     prestacoesContasExcluidas: (data.prestacoesContasExcluidas ?? []).filter((e) => e.cooperativaId === coopId),
+    notasPedidoExcluidas: (data.notasPedidoExcluidas ?? []).filter((e) => e.cooperativaId === coopId),
     fichaCorrida: data.fichaCorrida.filter((f) => f.cooperativaId === coopId),
     votacaoPautas: (data.votacaoPautas ?? []).filter((p) => p.cooperativaId === coopId),
     votacaoVotos: (data.votacaoVotos ?? []).filter((v) => v.cooperativaId === coopId),
@@ -235,6 +251,7 @@ function normalizeCloudOperacional(cloud: OperacionalSyncPayload): OperacionalSy
     livroCaixa: [],
     prestacoesContas: [],
     prestacoesContasExcluidas: [],
+    notasPedidoExcluidas: [],
     fichaCorrida: [],
     votacaoPautas: [],
     votacaoVotos: [],
@@ -260,6 +277,7 @@ function buildEmptyOperacionalResetPayload(data: AppData, coopId: string): Opera
     livroCaixa: [],
     prestacoesContas: [],
     prestacoesContasExcluidas: [],
+    notasPedidoExcluidas: [],
     fichaCorrida: [],
     votacaoPautas: [],
     votacaoVotos: [],
@@ -490,6 +508,11 @@ export function mergeOperacionalIntoData(
   const cloudDescontos = (cloud.descontos ?? []).filter((d) => cooperadoIds.has(d.cooperadoId));
   const cloudAvulsos = (cloud.valoresAvulsosReceber ?? []).map((v) => ({ ...v, cooperativaId: coopId }));
   const cloudLivro = (cloud.livroCaixa ?? []).map((l) => ({ ...l, cooperativaId: coopId }));
+  const cloudExcluidasNotas = (cloud.notasPedidoExcluidas ?? []).map((e) => ({ ...e, cooperativaId: coopId }));
+  const mergedNotasExcluidasCoop = mergeNotasPedidoExcluidasByNewer(
+    (data.notasPedidoExcluidas ?? []).filter((e) => e.cooperativaId === coopId),
+    cloudExcluidasNotas
+  );
   const cloudExcluidas = (cloud.prestacoesContasExcluidas ?? []).map((e) => ({ ...e, cooperativaId: coopId }));
   const cloudFichas = (cloud.fichaCorrida ?? []).map((f) => ({ ...f, cooperativaId: coopId }));
   const cloudPautas = (cloud.votacaoPautas ?? []).map((p) => ({ ...p, cooperativaId: coopId }));
@@ -605,6 +628,10 @@ export function mergeOperacionalIntoData(
       ...filterCoop(data.prestacoesContasExcluidas ?? [], (e) => e.cooperativaId === coopId),
       ...(cloudAuthoritative ? cloudExcluidas : mergedExcluidasCoop),
     ],
+    notasPedidoExcluidas: [
+      ...filterCoop(data.notasPedidoExcluidas ?? [], (e) => e.cooperativaId === coopId),
+      ...(cloudAuthoritative ? cloudExcluidasNotas : mergedNotasExcluidasCoop),
+    ],
     fichaCorrida: dedupeFichaCorridaPorNota(
       [
         ...filterCoop(data.fichaCorrida ?? [], (f) => f.cooperativaId === coopId),
@@ -662,11 +689,17 @@ export function mergeOperacionalIntoData(
     cloud.fullReset === true && (cloud.mensalidades ?? []).length === 0;
 
   if (cloudResetLimpouMensalidades) {
-    return aplicarPrestacoesContasExcluidas(reconciliarFichaFromNotasConferidas(next));
+    return aplicarNotasPedidoExcluidas(
+      aplicarPrestacoesContasExcluidas(reconciliarFichaFromNotasConferidas(next)),
+      coopId
+    );
   }
 
   return sincronizarMensalidadeCooperativa(
-    aplicarPrestacoesContasExcluidas(reconciliarFichaFromNotasConferidas(next)),
+    aplicarNotasPedidoExcluidas(
+      aplicarPrestacoesContasExcluidas(reconciliarFichaFromNotasConferidas(next)),
+      coopId
+    ),
     coopId
   );
 }

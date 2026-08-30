@@ -215,10 +215,6 @@ export async function DELETE(
     );
   }
 
-  if (storageOk) {
-    return NextResponse.json({ success: true });
-  }
-
   if (!storageOk && "error" in storageDel) {
     return NextResponse.json({ error: storageDel.error }, { status: 500 });
   }

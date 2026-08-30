@@ -12,6 +12,7 @@ import type {
   LivroCaixaLancamento,
   PrestacaoContas,
   PrestacaoContasExcluida,
+  NotaPedidoExcluida,
   InstituicaoExcluida,
   CronogramaContratoMensal,
   FichaCorrida,
@@ -47,6 +48,7 @@ export interface OperacionalSyncPayload {
   livroCaixa?: LivroCaixaLancamento[];
   prestacoesContas?: PrestacaoContas[];
   prestacoesContasExcluidas?: PrestacaoContasExcluida[];
+  notasPedidoExcluidas?: NotaPedidoExcluida[];
   /** Lançamentos da ficha (valor a receber) — sincroniza responsável ↔ cooperado. */
   fichaCorrida?: FichaCorrida[];
   votacaoPautas?: VotacaoPauta[];
