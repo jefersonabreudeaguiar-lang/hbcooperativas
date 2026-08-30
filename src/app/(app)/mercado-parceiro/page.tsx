@@ -21,6 +21,7 @@ import {
 import { formatCentsBRL } from "@/modules/hb-credit/engine/money";
 import { FINANCIAL_PIN_MIN_LENGTH } from "@/modules/hb-credit/config";
 import type { ContaCoopCompraEstornavel, ContaCoopIntent, ContaCoopParceiro, ContaCoopSettlement, ContaCoopSolicitacaoEstorno } from "@/modules/hb-credit/types";
+import { ContaCoopFiscalNotesMercadoPanel } from "@/components/hb-credit/ContaCoopFiscalNotesMercadoPanel";
 import { PageSkeleton } from "@/components/ui/PageSkeleton";
 import { SignaturePad } from "@/components/ui/SignaturePad";
 import { formatMesReferencia } from "@/utils/format";
@@ -347,6 +348,8 @@ function MercadoParceiroContent() {
           </div>
         )}
       </Card>
+
+      {ativo && <ContaCoopFiscalNotesMercadoPanel />}
 
       <Card className="p-5 space-y-4">
         <div>

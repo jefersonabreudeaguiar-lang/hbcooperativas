@@ -72,6 +72,10 @@ function MinhaContaCoopContent() {
     return coop?.cnpj ? normalizeCnpj(coop.cnpj) : "";
   }, [user, data]);
   const cooperadoId = user?.cooperadoId ?? "";
+  const cooperadoNome = useMemo(() => {
+    if (!data || !cooperadoId) return user?.name ?? "";
+    return data.cooperados.find((c) => c.id === cooperadoId)?.nomeCompleto ?? user?.name ?? "";
+  }, [data, cooperadoId, user?.name]);
 
   useEffect(() => {
     const sync = () => setIsOffline(!navigator.onLine);
@@ -160,6 +164,7 @@ function MinhaContaCoopContent() {
       const res = await authorizeCreditPayment({
         cnpj,
         cooperadoId,
+        cooperadoNome,
         intentId: pendingIntent.intent.id,
         nonce: pendingIntent.intent.nonce,
         pin: payPin,

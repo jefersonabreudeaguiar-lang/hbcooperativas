@@ -118,6 +118,7 @@ export async function validateCreditQr(cnpj: string, cooperadoId: string, qrPayl
 export async function authorizeCreditPayment(input: {
   cnpj: string;
   cooperadoId: string;
+  cooperadoNome?: string;
   intentId: string;
   nonce: string;
   pin: string;
@@ -305,4 +306,90 @@ export async function fetchFichaDescontosContaCoop(cnpj: string, cooperadoId: st
   }>(res);
   if (!res.ok || !data.ok) throw new Error(data.error ?? "Erro ao carregar descontos Conta Coop.");
   return data.descontos ?? [];
+}
+
+export async function fetchMercadoFiscalVendas(mesReferencia: string) {
+  const res = await secureApiFetch(
+    `/api/credit/fiscal-notes?mesReferencia=${encodeURIComponent(mesReferencia)}`
+  );
+  const data = await parseJson<{ ok?: boolean; error?: string; vendas?: import("@/modules/hb-credit/types").ContaCoopFiscalNote[] }>(
+    res
+  );
+  if (!res.ok || !data.ok) throw new Error(data.error ?? "Erro ao carregar vendas.");
+  return data.vendas ?? [];
+}
+
+export async function uploadMercadoFiscalNotePhoto(transactionId: string, file: File) {
+  const form = new FormData();
+  form.append("foto", file);
+  form.append("mimeType", file.type || "image/jpeg");
+  const res = await secureApiFetch(`/api/credit/fiscal-notes/${encodeURIComponent(transactionId)}/foto`, {
+    method: "POST",
+    body: form,
+  });
+  const data = await parseJson<{ ok?: boolean; error?: string; nota?: import("@/modules/hb-credit/types").ContaCoopFiscalNote }>(
+    res
+  );
+  if (!res.ok || !data.ok) throw new Error(data.error ?? "Erro ao enviar NF.");
+  return data.nota!;
+}
+
+export async function fetchStaffFiscalNotes(input: {
+  cnpj: string;
+  mesReferencia: string;
+  partnerId?: string;
+  status?: import("@/modules/hb-credit/types").FiscalNoteStatus;
+}) {
+  const params = new URLSearchParams({
+    cnpj: input.cnpj,
+    mesReferencia: input.mesReferencia,
+  });
+  if (input.partnerId) params.set("partnerId", input.partnerId);
+  if (input.status) params.set("status", input.status);
+  const res = await secureApiFetch(`/api/credit/fiscal-notes?${params.toString()}`);
+  const data = await parseJson<{
+    ok?: boolean;
+    error?: string;
+    notas?: import("@/modules/hb-credit/types").ContaCoopFiscalNote[];
+    resumo?: import("@/modules/hb-credit/types").ContaCoopFiscalNotesResumo;
+  }>(res);
+  if (!res.ok || !data.ok) throw new Error(data.error ?? "Erro ao carregar NFs.");
+  return { notas: data.notas ?? [], resumo: data.resumo ?? null };
+}
+
+export async function fetchFiscalNotePhotoUrl(cnpj: string, transactionId: string) {
+  const res = await secureApiFetch(
+    `/api/credit/fiscal-notes?cnpj=${encodeURIComponent(cnpj)}&transactionId=${encodeURIComponent(transactionId)}&view=photo`
+  );
+  const data = await parseJson<{
+    ok?: boolean;
+    error?: string;
+    nota?: import("@/modules/hb-credit/types").ContaCoopFiscalNote;
+    photoUrl?: string | null;
+  }>(res);
+  if (!res.ok || !data.ok) throw new Error(data.error ?? "Erro ao carregar foto.");
+  return data;
+}
+
+export async function conferirFiscalNote(input: {
+  cnpj: string;
+  transactionId: string;
+  action: "approve" | "reject";
+  nfNumber?: string;
+  nfIssuedToName?: string;
+  nfDate?: string;
+  nfAmountReais?: number;
+  reason?: string;
+  responsavelNome?: string;
+}) {
+  const res = await secureApiFetch("/api/credit/fiscal-notes", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+  });
+  const data = await parseJson<{ ok?: boolean; error?: string; nota?: import("@/modules/hb-credit/types").ContaCoopFiscalNote }>(
+    res
+  );
+  if (!res.ok || !data.ok) throw new Error(data.error ?? "Operação recusada.");
+  return data.nota!;
 }

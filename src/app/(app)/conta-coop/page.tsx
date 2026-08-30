@@ -6,6 +6,7 @@ import { CloudSessionGate } from "@/components/hb-credit/CloudSessionGate";
 import { TesoureiroAreaGuard } from "@/components/permissions/TesoureiroAreaGuard";
 import { ContaCoopSegmentTabs } from "@/components/hb-credit/ContaCoopSegmentTabs";
 import { ContaCoopLiquidacaoPanel } from "@/components/hb-credit/ContaCoopLiquidacaoPanel";
+import { ContaCoopFiscalNotesConferenciaPanel } from "@/components/hb-credit/ContaCoopFiscalNotesConferenciaPanel";
 import { ContaCoopEstornosPanel } from "@/components/hb-credit/ContaCoopEstornosPanel";
 import { Card, StatCard } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
@@ -46,7 +47,7 @@ type PreviewColetivo = {
   }>;
 };
 
-type Tab = "painel" | "limites" | "mercados" | "liquidar" | "estornos";
+type Tab = "painel" | "limites" | "mercados" | "conferir_nf" | "liquidar" | "estornos";
 
 export default function ContaCoopPage() {
   return (
@@ -278,6 +279,7 @@ function ContaCoopContent() {
           { id: "painel", label: "Visão geral" },
           { id: "limites", label: "Limites" },
           { id: "mercados", label: "Mercados" },
+          { id: "conferir_nf", label: "Conferir NFs" },
           { id: "liquidar", label: "Liquidar" },
           { id: "estornos", label: "Estornos" },
         ]}
@@ -565,6 +567,15 @@ function ContaCoopContent() {
             </table>
           </Card>
         </div>
+      )}
+
+      {tab === "conferir_nf" && (
+        <ContaCoopFiscalNotesConferenciaPanel
+          cnpj={cnpj}
+          parceiros={parceiros}
+          cooperadoNome={cooperadoNome}
+          responsavelNome={user?.name ?? "Responsável"}
+        />
       )}
 
       {tab === "liquidar" && (

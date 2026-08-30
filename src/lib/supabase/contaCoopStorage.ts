@@ -1005,6 +1005,7 @@ export async function authorizePayment(
     idempotencyKey: string;
     pin: string;
     actorUserId: string;
+    cooperadoNome?: string;
   }
 ): Promise<
   | { ok: true; transacaoId: string; receiptCode: string; disponivelAposCents: number; duplicate?: boolean }
@@ -1045,9 +1046,17 @@ export async function authorizePayment(
   const result = data as { ok?: boolean; error?: string; duplicate?: boolean; transacao_id?: string; disponivel_apos_centavos?: number };
   if (!result?.ok) return { ok: false, error: result?.error ?? "Pagamento recusado." };
 
+  const txId = result.transacao_id ?? transacaoId;
+  try {
+    const { ensureFiscalNoteForTransaction } = await import("@/lib/supabase/hbCreditFiscalNotesStorage");
+    await ensureFiscalNoteForTransaction(supabase, txId, input.cooperadoNome);
+  } catch {
+    /* tabela fiscal opcional até migration aplicada */
+  }
+
   return {
     ok: true,
-    transacaoId: result.transacao_id ?? transacaoId,
+    transacaoId: txId,
     receiptCode,
     disponivelAposCents: Number(result.disponivel_apos_centavos ?? 0),
     duplicate: Boolean(result.duplicate),
@@ -1801,6 +1810,13 @@ export async function refundPayment(
 
   const result = data as { ok?: boolean; error?: string; disponivel_apos_centavos?: number };
   if (!result?.ok) return { ok: false, error: result?.error ?? "Estorno recusado." };
+
+  try {
+    const { cancelFiscalNoteForTransaction } = await import("@/lib/supabase/hbCreditFiscalNotesStorage");
+    await cancelFiscalNoteForTransaction(supabase, transacaoId, actorUserId);
+  } catch {
+    /* tabela fiscal opcional até migration aplicada */
+  }
 
   return { ok: true, disponivelAposCents: Number(result.disponivel_apos_centavos ?? 0) };
 }

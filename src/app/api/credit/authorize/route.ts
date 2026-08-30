@@ -44,6 +44,7 @@ export async function POST(request: Request) {
     idempotencyKey,
     pin,
     actorUserId: gate.ctx.session?.sub ?? cooperadoId,
+    cooperadoNome: String(body?.cooperadoNome ?? gate.ctx.session?.name ?? ""),
   });
 
   if (!result.ok) return NextResponse.json({ error: result.error }, { status: 400 });

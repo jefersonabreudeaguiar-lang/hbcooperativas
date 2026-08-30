@@ -174,6 +174,49 @@ export interface ContaCoopLiquidacaoPreview {
   cooperados: ContaCoopCooperadoLiquidacao[];
 }
 
+export type FiscalNoteStatus =
+  | "pendente_anexo"
+  | "aguardando_conferencia"
+  | "conferida"
+  | "correcao_pedida"
+  | "cancelada";
+
+export interface ContaCoopFiscalNote {
+  id: string;
+  transactionId: string;
+  receivableId: string | null;
+  partnerId: string;
+  cooperadoId: string;
+  cooperadoNome: string | null;
+  mesReferencia: string;
+  saleAmountCents: number;
+  status: FiscalNoteStatus;
+  photoStoragePath: string | null;
+  nfNumber: string | null;
+  nfIssuedToName: string | null;
+  nfDate: string | null;
+  nfAmountCents: number | null;
+  rejectReason: string | null;
+  reviewedByName: string | null;
+  reviewedAt: string | null;
+  receiptCode: string | null;
+  descricao: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ContaCoopFiscalNotesResumo {
+  mesReferencia: string;
+  partnerId?: string;
+  totalVendasCents: number;
+  totalConferidasCents: number;
+  pendentesAnexo: number;
+  aguardandoConferencia: number;
+  correcaoPedida: number;
+  conferidas: number;
+  totalVendas: number;
+}
+
 export interface ContaCoopSettlement {
   id: string;
   partnerId: string;
