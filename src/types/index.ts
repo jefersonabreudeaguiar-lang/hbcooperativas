@@ -696,6 +696,9 @@ export type LivroCaixaTipo = "credito" | "debito";
 export type LivroCaixaOrigem =
   | "manual"
   | "mensalidade"
+  | "mensalidade_ficha"
+  | "taxa_cooperativa"
+  | "desconto_ficha"
   | "pagamento_cooperado"
   | "credito_avulso"
   | "debito_avulso"

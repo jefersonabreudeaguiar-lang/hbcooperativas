@@ -153,6 +153,27 @@ export function calcularConciliacaoMensal(
     )
   );
 
+  const creditosTaxaCoopCaixa = round2(
+    sumBy(
+      caixaMes.lancamentos.filter((l) => l.origem === "taxa_cooperativa" && l.tipo === "credito"),
+      (l) => l.valor
+    )
+  );
+
+  const creditosMensFichaCaixa = round2(
+    sumBy(
+      caixaMes.lancamentos.filter((l) => l.origem === "mensalidade_ficha" && l.tipo === "credito"),
+      (l) => l.valor
+    )
+  );
+
+  const descontoMensPagamentos = round2(
+    sumBy(pagamentosMes, (p) =>
+      (p.descontosExtras ?? []).filter((d) => d.tipo === "mensalidade").reduce((s, d) => s + d.valor, 0)
+    )
+  );
+  const descontoMensRetido = round2(Math.max(descontoMensFicha, descontoMensPagamentos));
+
   const totalAPagar = round2(
     sumBy(data.cooperados, (c) => getTotalAPagarCooperado(data, c.id, mesReferencia))
   );
@@ -215,14 +236,50 @@ export function calcularConciliacaoMensal(
     {
       id: "mensalidades_caixa",
       label: "Mensalidades × Livro caixa",
-      descricao: "Mensalidades pagas versus créditos registrados no livro caixa.",
+      descricao: "Mensalidades pagas via PIX versus créditos registrados no livro caixa.",
       valorA: totalMensPagas,
-      labelA: "Mensalidades pagas",
+      labelA: "Mensalidades pagas (PIX)",
       valorB: creditosMensCaixa,
-      labelB: "Créditos no caixa",
+      labelB: "Créditos PIX no caixa",
       diferenca: round2(totalMensPagas - creditosMensCaixa),
       status:
         totalMensPagas > 0 && creditosMensCaixa === 0 ? "divergencia" : compare(totalMensPagas, creditosMensCaixa),
+    },
+    {
+      id: "mensalidade_ficha_caixa",
+      label: "Mensalidade na ficha × Caixa",
+      descricao: "Mensalidade abatida no pagamento do cooperado versus crédito contábil no livro caixa.",
+      valorA: descontoMensRetido,
+      labelA: "Mensalidade retida na ficha",
+      valorB: creditosMensFichaCaixa,
+      labelB: "Crédito contábil no caixa",
+      diferenca: round2(descontoMensRetido - creditosMensFichaCaixa),
+      status:
+        descontoMensRetido > 0 && creditosMensFichaCaixa === 0
+          ? "divergencia"
+          : compare(descontoMensRetido, creditosMensFichaCaixa),
+      detalhe:
+        descontoMensRetido > 0 && creditosMensFichaCaixa === 0
+          ? "Desconto de mensalidade na ficha sem lançamento contábil correspondente."
+          : undefined,
+    },
+    {
+      id: "taxa_cooperativa_caixa",
+      label: "Taxa cooperativa × Caixa",
+      descricao: "Taxa de 5% retida nos pagamentos versus créditos contábeis no livro caixa.",
+      valorA: descontoCoopPagamentos,
+      labelA: "Taxa nos pagamentos",
+      valorB: creditosTaxaCoopCaixa,
+      labelB: "Crédito contábil no caixa",
+      diferenca: round2(descontoCoopPagamentos - creditosTaxaCoopCaixa),
+      status:
+        descontoCoopPagamentos > 0 && creditosTaxaCoopCaixa === 0
+          ? "divergencia"
+          : compare(descontoCoopPagamentos, creditosTaxaCoopCaixa),
+      detalhe:
+        descontoCoopPagamentos > 0 && creditosTaxaCoopCaixa === 0
+          ? "Taxa cooperativa sem lançamento contábil correspondente no livro caixa."
+          : undefined,
     },
     {
       id: "obrigacao_pagamento",

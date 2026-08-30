@@ -14,7 +14,9 @@ import { updateData, addAuditEntry, getData } from "@/services/dataStore";
 import { resolveCooperativaCnpj } from "@/services/notaPedidoCloudService";
 import { pushOperacionalToCloud } from "@/services/cooperativaSyncCloudService";
 import {
+  completarLancamentosContabeisPagamentos,
   criarLancamentoManual,
+  isOrigemRetencaoContabil,
   mesesLivroCaixa,
   resumoLivroCaixa,
   resumoLivroCaixaGeral,
@@ -24,7 +26,10 @@ import type { LivroCaixaOrigem, LivroCaixaTipo } from "@/types";
 
 const ORIGEM_LABELS: Record<LivroCaixaOrigem, string> = {
   manual: "Manual",
-  mensalidade: "Mensalidade",
+  mensalidade: "Mensalidade (PIX)",
+  mensalidade_ficha: "Mensalidade na ficha",
+  taxa_cooperativa: "Taxa cooperativa (5%)",
+  desconto_ficha: "Desconto retido na ficha",
   pagamento_cooperado: "Pagamento cooperado",
   credito_avulso: "Crédito avulso",
   debito_avulso: "Débito avulso",
@@ -51,13 +56,25 @@ export default function LivroCaixaPage() {
     if (user && !check("livro_caixa", "view")) router.replace("/dashboard");
   }, [user, router, check]);
 
+  useEffect(() => {
+    if (!data || !coopId) return;
+    const updated = completarLancamentosContabeisPagamentos(data, coopId);
+    if (updated !== data) updateData(() => updated);
+  }, [data, coopId]);
+
   const meses = useMemo(() => (data && coopId ? mesesLivroCaixa(data, coopId) : [getCurrentMesReferencia()]), [data, coopId]);
   const resumoMes = useMemo(
-    () => (data && coopId ? resumoLivroCaixa(data, coopId, mes) : { saldo: 0, totalCreditos: 0, totalDebitos: 0, lancamentos: [] }),
+    () =>
+      data && coopId
+        ? resumoLivroCaixa(data, coopId, mes)
+        : { saldo: 0, saldoCaixaEfetivo: 0, totalCreditos: 0, totalDebitos: 0, totalCreditosRetencao: 0, lancamentos: [] },
     [data, coopId, mes]
   );
   const resumoGeral = useMemo(
-    () => (data && coopId ? resumoLivroCaixaGeral(data, coopId) : { saldo: 0, totalCreditos: 0, totalDebitos: 0, lancamentos: [] }),
+    () =>
+      data && coopId
+        ? resumoLivroCaixaGeral(data, coopId)
+        : { saldo: 0, saldoCaixaEfetivo: 0, totalCreditos: 0, totalDebitos: 0, totalCreditosRetencao: 0, lancamentos: [] },
     [data, coopId]
   );
 
@@ -103,7 +120,7 @@ export default function LivroCaixaPage() {
     <div className="max-w-4xl space-y-6">
       <PageHeader
         title="Livro caixa"
-        subtitle="Movimentos automáticos e lançamentos avulsos da cooperativa"
+        subtitle="Movimentos automáticos, retenções contábeis e lançamentos avulsos"
         action={
           canEdit && (
             <div className="flex gap-2">
@@ -118,11 +135,18 @@ export default function LivroCaixaPage() {
         }
       />
 
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <div className="rounded-2xl bg-gradient-to-br from-emerald-600 to-emerald-800 text-white p-5 shadow-lg">
           <Wallet size={24} className="opacity-90 mb-2" />
-          <p className="text-emerald-100 text-sm">Saldo geral</p>
-          <p className="text-3xl font-bold mt-1">{formatCurrency(resumoGeral.saldo)}</p>
+          <p className="text-emerald-100 text-sm">Saldo caixa efetivo</p>
+          <p className="text-3xl font-bold mt-1">{formatCurrency(resumoGeral.saldoCaixaEfetivo)}</p>
+          <p className="text-xs text-emerald-100/80 mt-2">Exclui retenções contábeis da ficha</p>
+        </div>
+        <div className="rounded-2xl border border-slate-200 bg-slate-50/80 p-5">
+          <Wallet size={22} className="text-slate-600 mb-2" />
+          <p className="text-sm text-slate-700">Saldo contábil geral</p>
+          <p className="text-2xl font-bold text-slate-900">{formatCurrency(resumoGeral.saldo)}</p>
+          <p className="text-xs text-slate-500 mt-2">Inclui taxa 5% e descontos na ficha</p>
         </div>
         <div className="rounded-2xl border border-green-200 bg-green-50/80 p-5">
           <TrendingUp size={22} className="text-green-700 mb-2" />
@@ -145,24 +169,38 @@ export default function LivroCaixaPage() {
           </Select>
         </div>
         <p className="text-sm text-gray-500 mb-4">
-          Pagamentos a cooperados e mensalidades confirmadas entram automaticamente. Use lançamento avulso para créditos PNAE e outras entradas.
+          Pagamentos a cooperados geram saída (líquido) e créditos contábeis de retenção (taxa 5%, mensalidade abatida e outros descontos).
+          Mensalidades confirmadas via PIX entram como entrada efetiva. Use lançamento avulso para créditos PNAE e outras entradas.
         </p>
         <div className="space-y-2">
           {resumoMes.lancamentos.map((l) => (
             <div
               key={l.id}
               className={`flex flex-col sm:flex-row sm:items-center justify-between gap-2 p-4 rounded-xl border ${
-                l.tipo === "credito" ? "border-green-100 bg-green-50/40" : "border-red-100 bg-red-50/40"
+                l.tipo === "credito"
+                  ? isOrigemRetencaoContabil(l.origem)
+                    ? "border-blue-100 bg-blue-50/40"
+                    : "border-green-100 bg-green-50/40"
+                  : "border-red-100 bg-red-50/40"
               }`}
             >
               <div className="min-w-0">
                 <p className="font-medium text-gray-900">{l.historico}</p>
                 <p className="text-xs text-gray-500 mt-1">
                   {formatDate(l.data)} · {ORIGEM_LABELS[l.origem]}
+                  {isOrigemRetencaoContabil(l.origem) ? " · retenção contábil" : ""}
                   {l.responsavel ? ` · ${l.responsavel}` : ""}
                 </p>
               </div>
-              <p className={`text-lg font-bold shrink-0 ${l.tipo === "credito" ? "text-green-700" : "text-red-700"}`}>
+              <p
+                className={`text-lg font-bold shrink-0 ${
+                  l.tipo === "credito"
+                    ? isOrigemRetencaoContabil(l.origem)
+                      ? "text-blue-700"
+                      : "text-green-700"
+                    : "text-red-700"
+                }`}
+              >
                 {l.tipo === "credito" ? "+" : "−"} {formatCurrency(l.valor)}
               </p>
             </div>
@@ -171,9 +209,21 @@ export default function LivroCaixaPage() {
             <p className="text-center text-gray-500 py-8">Nenhum lançamento neste mês.</p>
           )}
         </div>
-        <div className="mt-4 pt-4 border-t flex justify-between text-sm font-semibold">
-          <span>Saldo do mês</span>
-          <span className={resumoMes.saldo >= 0 ? "text-green-700" : "text-red-700"}>{formatCurrency(resumoMes.saldo)}</span>
+        <div className="mt-4 pt-4 border-t space-y-2 text-sm">
+          <div className="flex justify-between">
+            <span>Retenções contábeis no mês</span>
+            <span className="text-blue-700 font-semibold">{formatCurrency(resumoMes.totalCreditosRetencao)}</span>
+          </div>
+          <div className="flex justify-between font-semibold">
+            <span>Saldo caixa efetivo do mês</span>
+            <span className={resumoMes.saldoCaixaEfetivo >= 0 ? "text-green-700" : "text-red-700"}>
+              {formatCurrency(resumoMes.saldoCaixaEfetivo)}
+            </span>
+          </div>
+          <div className="flex justify-between text-gray-600">
+            <span>Saldo contábil do mês</span>
+            <span className={resumoMes.saldo >= 0 ? "text-green-700" : "text-red-700"}>{formatCurrency(resumoMes.saldo)}</span>
+          </div>
         </div>
       </Card>
 

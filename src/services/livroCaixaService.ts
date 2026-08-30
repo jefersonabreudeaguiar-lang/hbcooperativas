@@ -1,11 +1,35 @@
-import type { AppData, LivroCaixaLancamento, LivroCaixaOrigem, LivroCaixaTipo, Mensalidade, PagamentoCooperadoRegistro } from "@/types";
+import type {
+  AppData,
+  FichaCorridaDesconto,
+  LivroCaixaLancamento,
+  LivroCaixaOrigem,
+  LivroCaixaTipo,
+  Mensalidade,
+  PagamentoCooperadoRegistro,
+} from "@/types";
+import { round2 } from "@/utils/calculations";
 import { getCurrentMesReferencia } from "@/utils/format";
 
 export interface ResumoLivroCaixa {
   saldo: number;
+  /** Saldo considerando só movimentos de caixa efetivo (exclui retenções contábeis na ficha). */
+  saldoCaixaEfetivo: number;
   totalCreditos: number;
   totalDebitos: number;
+  /** Créditos de retenção (taxa coop, mensalidade abatida, outros descontos) — não são entrada de dinheiro. */
+  totalCreditosRetencao: number;
   lancamentos: LivroCaixaLancamento[];
+}
+
+/** Origens que registram retenção contábil, não entrada efetiva de caixa. */
+export const ORIGENS_RETENCAO_CONTABIL: LivroCaixaOrigem[] = [
+  "taxa_cooperativa",
+  "mensalidade_ficha",
+  "desconto_ficha",
+];
+
+export function isOrigemRetencaoContabil(origem: LivroCaixaOrigem): boolean {
+  return ORIGENS_RETENCAO_CONTABIL.includes(origem);
 }
 
 function mesFromData(dataIso: string): string {
@@ -22,11 +46,24 @@ export function resumoLivroCaixa(data: AppData, cooperativaId: string, mesRefere
   const lancamentos = lancamentosLivroCaixa(data, cooperativaId, mesReferencia);
   let totalCreditos = 0;
   let totalDebitos = 0;
+  let totalCreditosRetencao = 0;
   for (const l of lancamentos) {
-    if (l.tipo === "credito") totalCreditos += l.valor;
-    else totalDebitos += l.valor;
+    if (l.tipo === "credito") {
+      totalCreditos += l.valor;
+      if (isOrigemRetencaoContabil(l.origem)) totalCreditosRetencao += l.valor;
+    } else {
+      totalDebitos += l.valor;
+    }
   }
-  return { saldo: totalCreditos - totalDebitos, totalCreditos, totalDebitos, lancamentos };
+  const saldo = totalCreditos - totalDebitos;
+  return {
+    saldo,
+    saldoCaixaEfetivo: saldo - totalCreditosRetencao,
+    totalCreditos,
+    totalDebitos,
+    totalCreditosRetencao,
+    lancamentos,
+  };
 }
 
 export function resumoLivroCaixaGeral(data: AppData, cooperativaId: string): ResumoLivroCaixa {
@@ -76,9 +113,79 @@ export function criarLancamentoManual(
   });
 }
 
+function labelDescontoFicha(tipo: FichaCorridaDesconto["tipo"]): string {
+  switch (tipo) {
+    case "cota":
+      return "Cota retida na ficha";
+    case "conta_coop":
+      return "Conta Coop retida na ficha";
+    case "cooperativa":
+      return "Desconto cooperativa na ficha";
+    case "manual":
+      return "Desconto retido na ficha";
+    default:
+      return "Desconto retido na ficha";
+  }
+}
+
+/** Créditos contábeis de retenções no pagamento ao cooperado (taxa 5%, mensalidade abatida, etc.). */
+export function lancarRetencoesPagamentoNoCaixa(data: AppData, pagamento: PagamentoCooperadoRegistro): AppData {
+  const cooperado = data.cooperados.find((c) => c.id === pagamento.cooperadoId);
+  const nome = cooperado?.nomeCompleto?.trim() || "Cooperado";
+  const dataLanc = pagamento.pagoEm.split("T")[0];
+  const base = {
+    cooperativaId: pagamento.cooperativaId,
+    data: dataLanc,
+    mesReferencia: pagamento.mesReferencia,
+    responsavel: pagamento.pagoPor,
+  };
+
+  let next = data;
+
+  if (pagamento.descontoCooperativa > 0) {
+    next = appendLivroCaixaLancamento(next, {
+      ...base,
+      tipo: "credito",
+      valor: pagamento.descontoCooperativa,
+      historico: `Taxa cooperativa (5%) · ${nome} · ${pagamento.mesReferencia}`,
+      origem: "taxa_cooperativa",
+      origemId: `pg_taxa_${pagamento.id}`,
+    });
+  }
+
+  const mensalidades = (pagamento.descontosExtras ?? []).filter((d) => d.tipo === "mensalidade" && d.valor > 0);
+  const totalMens = round2(mensalidades.reduce((s, d) => s + d.valor, 0));
+  if (totalMens > 0) {
+    next = appendLivroCaixaLancamento(next, {
+      ...base,
+      tipo: "credito",
+      valor: totalMens,
+      historico: `Mensalidade retida na ficha · ${nome} · ${pagamento.mesReferencia}`,
+      origem: "mensalidade_ficha",
+      origemId: `pg_mensficha_${pagamento.id}`,
+    });
+  }
+
+  const outrosDescontos = (pagamento.descontosExtras ?? []).filter(
+    (d) => d.tipo !== "mensalidade" && d.tipo !== "credito_avulso" && d.tipo !== "cooperativa" && d.valor > 0
+  );
+  outrosDescontos.forEach((d, i) => {
+    next = appendLivroCaixaLancamento(next, {
+      ...base,
+      tipo: "credito",
+      valor: d.valor,
+      historico: `${labelDescontoFicha(d.tipo)} · ${d.motivo.trim() || pagamento.mesReferencia} · ${nome}`,
+      origem: "desconto_ficha",
+      origemId: `pg_desc_${pagamento.id}_${i}_${d.tipo}`,
+    });
+  });
+
+  return next;
+}
+
 export function lancarPagamentoCooperadoNoCaixa(data: AppData, pagamento: PagamentoCooperadoRegistro): AppData {
   const cooperado = data.cooperados.find((c) => c.id === pagamento.cooperadoId);
-  return appendLivroCaixaLancamento(data, {
+  let next = appendLivroCaixaLancamento(data, {
     cooperativaId: pagamento.cooperativaId,
     data: pagamento.pagoEm.split("T")[0],
     mesReferencia: pagamento.mesReferencia,
@@ -89,6 +196,8 @@ export function lancarPagamentoCooperadoNoCaixa(data: AppData, pagamento: Pagame
     origemId: `pg_caixa_${pagamento.id}`,
     responsavel: pagamento.pagoPor,
   });
+  next = lancarRetencoesPagamentoNoCaixa(next, pagamento);
+  return next;
 }
 
 export function lancarMensalidadeNoCaixa(data: AppData, mensalidade: Mensalidade): AppData {
@@ -99,10 +208,21 @@ export function lancarMensalidadeNoCaixa(data: AppData, mensalidade: Mensalidade
     mesReferencia: mensalidade.mesReferencia,
     tipo: "credito",
     valor: mensalidade.valor,
-    historico: `Mensalidade ${cooperado?.nomeCompleto ?? ""} · ${mensalidade.mesReferencia}`,
+    historico: `Mensalidade (PIX) ${cooperado?.nomeCompleto ?? ""} · ${mensalidade.mesReferencia}`,
     origem: "mensalidade",
     origemId: `mens_caixa_${mensalidade.id}`,
   });
+}
+
+/** Preenche retenções contábeis em pagamentos antigos que só tinham o débito líquido. */
+export function completarLancamentosContabeisPagamentos(data: AppData, cooperativaId?: string): AppData {
+  let next = data;
+  const pagamentos = data.pagamentosCooperado.filter((p) => !cooperativaId || p.cooperativaId === cooperativaId);
+  for (const pagamento of pagamentos) {
+    const atualizado = lancarRetencoesPagamentoNoCaixa(next, pagamento);
+    if (atualizado !== next) next = atualizado;
+  }
+  return next;
 }
 
 export function mesesLivroCaixa(data: AppData, cooperativaId: string): string[] {
