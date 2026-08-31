@@ -22,6 +22,7 @@
     "test:hb-credit-p0": "npx tsx scripts/test-hb-credit-p0-security.ts",
     "apply:hb-credit-migrations": "npx tsx scripts/apply-hb-credit-migrations.ts",
     "apply:app-users": "npx tsx scripts/apply-app-users-schema.ts",
+    "apply:password-reset": "npx tsx scripts/apply-password-reset-schema.ts",
     "homologate:hb-credit": "npx tsx scripts/homologate-hb-credit.ts",
     "activate:hb-credit": "npx tsx scripts/activate-hb-credit-sequence.ts"
   },

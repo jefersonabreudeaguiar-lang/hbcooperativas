@@ -36,6 +36,7 @@ function LoginForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const nextPath = searchParams.get("next");
+  const senhaRedefinida = searchParams.get("senha") === "redefinida";
   const redirectTo =
     nextPath && nextPath.startsWith("/") && !nextPath.startsWith("//") ? nextPath : "/dashboard";
 
@@ -103,6 +104,12 @@ function LoginForm() {
             <h2 className="text-2xl font-bold text-gray-900 mb-1">Entrar</h2>
             <p className="text-sm text-gray-500 mb-6">Acesse com seu e-mail e senha</p>
 
+            {senhaRedefinida && (
+              <p className="text-sm text-green-800 bg-green-50 border border-green-200 rounded-lg px-3 py-2 mb-4">
+                Senha redefinida com sucesso. Faça login com a nova senha.
+              </p>
+            )}
+
             <form onSubmit={handleSubmit} className="space-y-4">
               <div>
                 <Label htmlFor="email">E-mail</Label>
@@ -134,6 +141,11 @@ function LoginForm() {
                     {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
                   </button>
                 </div>
+                <p className="text-right mt-2">
+                  <Link href="/esqueci-senha" className="text-sm text-green-700 font-medium hover:text-green-800">
+                    Esqueci minha senha
+                  </Link>
+                </p>
               </div>
 
               {error && (

@@ -34,6 +34,7 @@ import { aplicarInstituicoesExcluidas } from "@/services/instituicaoContratoServ
 import { exigeSenhaCadastroCooperado } from "@/utils/cooperativaCadastro";
 import { defaultCobrancaSaas, sincronizarCicloCobrancaSaas } from "@/services/cobrancaSaasService";
 import { hashPassword, isPasswordHash, verifyPassword, verifyPasswordSync } from "@/lib/security/password";
+import { isApiSecurityEnforced } from "@/lib/security/env";
 import {
   clearAccessToken,
   clearCloudBootstrapCredentials,
@@ -840,6 +841,13 @@ export async function login(email: string, password: string): Promise<User | nul
   if (localUser) {
     const valid = await verifyPassword(password, localUser.password);
     if (valid) {
+      if (isApiSecurityEnforced()) {
+        const cloud = await loginViaCloudApi(email, password);
+        if (!cloud) return null;
+        const bootstrapped = await bootstrapLocalUserFromCloudLogin(cloud.user, password);
+        if (!bootstrapped) return null;
+        return await finishLoginSession(bootstrapped, getData(), password);
+      }
       if (!isPasswordHash(localUser.password)) {
         const hash = await hashPassword(password);
         updateData((d) => ({

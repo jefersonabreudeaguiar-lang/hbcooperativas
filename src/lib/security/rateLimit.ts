@@ -6,6 +6,8 @@ const WINDOW_MS = 60_000;
 const MAX_REQUESTS = 120;
 const AUTH_MAX = 20;
 const CADASTRO_SENHA_MAX = 8;
+const PASSWORD_RESET_MAX = 5;
+const PASSWORD_RESET_WINDOW_MS = 15 * 60_000;
 
 function clientKey(request: Request, suffix = ""): string {
   const forwarded = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim();
@@ -14,11 +16,11 @@ function clientKey(request: Request, suffix = ""): string {
   return `${ip}${suffix}`;
 }
 
-function checkLimit(key: string, max: number): boolean {
+function checkLimit(key: string, max: number, windowMs = WINDOW_MS): boolean {
   const now = Date.now();
   const cur = buckets.get(key);
   if (!cur || now >= cur.resetAt) {
-    buckets.set(key, { count: 1, resetAt: now + WINDOW_MS });
+    buckets.set(key, { count: 1, resetAt: now + windowMs });
     return true;
   }
   if (cur.count >= max) return false;
@@ -36,4 +38,8 @@ export function rateLimitAuth(request: Request): boolean {
 
 export function rateLimitCadastroSenha(request: Request): boolean {
   return checkLimit(clientKey(request, ":cadastro-senha"), CADASTRO_SENHA_MAX);
+}
+
+export function rateLimitPasswordReset(request: Request): boolean {
+  return checkLimit(clientKey(request, ":password-reset"), PASSWORD_RESET_MAX, PASSWORD_RESET_WINDOW_MS);
 }
