@@ -2556,10 +2556,8 @@ export default function NotasPedidoContent() {
     filaStickyIdsRef.current.add(notaRelancada.id);
     filaStickySnapshotRef.current.set(notaRelancada.id, notaRelancada);
 
-    setVistaResponsavel("fila");
-    setStatusFilter("aguardando_conferencia");
     setSuccessMsg(
-      `Entrega ${alvo.numeroNota} voltou para «Conferir entregas». Abra a fila para lançar de novo.`
+      `Entrega ${alvo.numeroNota} re-lançada. Ela voltou para «Conferir entregas» — você pode re-lançar outra entrega aqui.`
     );
   };
 

@@ -62,6 +62,14 @@ export async function POST(request: Request) {
 
       if (!sent.ok) {
         console.error("[forgot-password] email failed:", sent.error);
+        await logSecurityEvent(supabase, {
+          action: "auth.forgot_password.email_failed",
+          userId: user.id,
+          userEmail: user.email,
+          cooperativaCnpj: user.cooperativa_cnpj ?? undefined,
+          ip,
+          metadata: { error: sent.error },
+        });
       } else {
         await logSecurityEvent(supabase, {
           action: "auth.forgot_password.request",
