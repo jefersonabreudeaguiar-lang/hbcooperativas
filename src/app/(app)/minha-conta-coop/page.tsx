@@ -23,7 +23,11 @@ import {
 import { formatCentsBRL } from "@/modules/hb-credit/engine/money";
 import type { ContaCoopIntent, ContaCoopLedgerEntry, ContaCoopLimiteCooperado } from "@/modules/hb-credit/types";
 import { FINANCIAL_PIN_MIN_LENGTH } from "@/modules/hb-credit/config";
+import { refreshContaCoopValorReceberPilot } from "@/lib/hb-credit/syncContaCoopFichaDescontos";
 import { labelLedgerTipo } from "@/lib/hb-credit/ledgerLabels";
+import { getMesPrincipalQuantoVouReceber } from "@/services/cooperadoEntregasService";
+import { isContaCoopValorReceberPilot } from "@/utils/contaCoopUiVisibility";
+import { useSyncContaCoopValorReceberPilot } from "@/hooks/useSyncContaCoopValorReceberPilot";
 import { PageSkeleton } from "@/components/ui/PageSkeleton";
 import { cn } from "@/utils/format";
 
@@ -75,6 +79,21 @@ function MinhaContaCoopContent() {
     if (!data || !cooperadoId) return user?.name ?? "";
     return data.cooperados.find((c) => c.id === cooperadoId)?.nomeCompleto ?? user?.name ?? "";
   }, [data, cooperadoId, user?.name]);
+
+  const contaCoopSync = useMemo(() => {
+    if (!data || !cooperadoId || !user || !cnpj) return undefined;
+    const coopId = getUserCooperativaId(user, data);
+    if (!coopId || !isContaCoopValorReceberPilot(cooperadoId, cooperadoNome)) return undefined;
+    return {
+      cooperadoId,
+      mesReferencia: getMesPrincipalQuantoVouReceber(data, cooperadoId, coopId),
+      cooperativaId: coopId,
+      cooperadoNome,
+      user,
+    };
+  }, [cnpj, cooperadoId, cooperadoNome, data, user]);
+
+  useSyncContaCoopValorReceberPilot(contaCoopSync);
 
   useEffect(() => {
     const sync = () => setIsOffline(!navigator.onLine);
@@ -177,6 +196,15 @@ function MinhaContaCoopContent() {
       setUseCashback(false);
       setTab("extrato");
       await reload();
+      if (contaCoopSync) {
+        await refreshContaCoopValorReceberPilot({
+          cnpj,
+          cooperadoId: contaCoopSync.cooperadoId,
+          mesReferencia: contaCoopSync.mesReferencia,
+          cooperativaId: contaCoopSync.cooperativaId,
+          cooperadoNome: contaCoopSync.cooperadoNome,
+        }).catch(() => {});
+      }
     } catch (e) {
       setError(e instanceof Error ? e.message : "Pagamento recusado.");
     } finally {

@@ -21,7 +21,8 @@ import { useHbCreditEnabled } from "@/hooks/useHbCreditEnabled";
 import {
   cooperadoExibirValorReceberInicio,
   contarFotosEmAnaliseCooperado,
-  getMesQuantoVouReceber,
+  getMesPrincipalQuantoVouReceber,
+  getValorQuantoVouReceber,
   listarNotasPendentesCooperado,
 } from "@/services/cooperadoEntregasService";
 import { resolverCooperadoIdCanonico } from "@/services/cooperadoCloudService";
@@ -40,11 +41,10 @@ import { cooperadoPrecisaCadastrarPix } from "@/utils/pix";
 import { listPautasAbertasCooperado, resultadoVisivelCooperado } from "@/services/votacaoService";
 import { VotacaoPautasInicioPanel } from "@/components/votacao/VotacaoPautasInicioPanel";
 import { VotacaoResultadoPanel } from "@/components/votacao/VotacaoResultadoPanel";
-import { getCooperativaCnpj, getPendingNotaDeleteIds, resolveCooperativaCnpj } from "@/services/notaPedidoCloudService";
-import { getData, updateData } from "@/services/dataStore";
-import { syncContaCoopDescontosMesSePilot } from "@/lib/hb-credit/syncContaCoopFichaDescontos";
-import { isContaCoopValorReceberPilot } from "@/utils/contaCoopUiVisibility";
+import { getCooperativaCnpj, getPendingNotaDeleteIds } from "@/services/notaPedidoCloudService";
 import { buildValorExibicaoCooperadoOpts } from "@/services/notaPedidoService";
+import { useSyncContaCoopValorReceberPilot } from "@/hooks/useSyncContaCoopValorReceberPilot";
+import { isContaCoopValorReceberPilot } from "@/utils/contaCoopUiVisibility";
 import { formatCurrency, formatMesReferencia, getCurrentMesReferencia } from "@/utils/format";
 import { getUserCooperativaId, getUserCooperativaNome, normalizeCnpj } from "@/utils/cooperativa";
 import { Camera, Wallet, ClipboardList, Users, Vote, Download } from "lucide-react";
@@ -78,36 +78,27 @@ function CooperadoDashboard() {
     requestAppSync();
   }, [financeiroAusente]);
 
-  useEffect(() => {
-    if (!user?.cooperadoId) return;
-    void (async () => {
-      try {
-        const d = getData();
-        const coopId = getUserCooperativaId(user, d);
-        if (!coopId) return;
-        const cooperadoId = resolverCooperadoIdCanonico(d, user.cooperadoId!, coopId);
-        const exibicaoOpts = buildValorExibicaoCooperadoOpts(
-          d,
-          cooperadoId,
-          getMesQuantoVouReceber(d, cooperadoId, coopId),
-          coopId
-        );
-        if (!isContaCoopValorReceberPilot(cooperadoId, exibicaoOpts.cooperadoNome)) return;
-        const cnpj = await resolveCooperativaCnpj(d, coopId, user);
-        if (!cnpj) return;
-        const synced = await syncContaCoopDescontosMesSePilot(getData(), {
-          cnpj,
-          cooperadoId,
-          mesReferencia: exibicaoOpts.mesReferencia,
-          cooperativaId: coopId,
-          cooperadoNome: exibicaoOpts.cooperadoNome,
-        });
-        updateData(() => synced.data);
-      } catch {
-        /* offline ou HB indisponível */
-      }
-    })();
+  const contaCoopSync = useAppDataSelector((data) => {
+    if (!data || !user?.cooperadoId) return null;
+    const coopId = getUserCooperativaId(user, data);
+    if (!coopId) return null;
+    const cooperadoId = resolverCooperadoIdCanonico(data, user.cooperadoId, coopId);
+    const exibicaoOpts = buildValorExibicaoCooperadoOpts(
+      data,
+      cooperadoId,
+      getMesPrincipalQuantoVouReceber(data, cooperadoId, coopId),
+      coopId
+    );
+    if (!isContaCoopValorReceberPilot(cooperadoId, exibicaoOpts.cooperadoNome)) return null;
+    return {
+      cooperadoId,
+      mesReferencia: exibicaoOpts.mesReferencia,
+      cooperativaId: coopId,
+      cooperadoNome: exibicaoOpts.cooperadoNome,
+    };
   }, [user?.id, user?.cooperadoId, user?.cooperativaId]);
+
+  useSyncContaCoopValorReceberPilot(contaCoopSync ? { ...contaCoopSync, user } : undefined);
 
   const view = useAppDataSelector((data) => {
     if (!data || !user?.cooperadoId) return null;
@@ -134,7 +125,9 @@ function CooperadoDashboard() {
     const avulsosPendentesTotal = totalValoresAvulsosPendentes(data, cooperadoId, undefined, coopId);
     const avulsosJaNoCardPrincipal =
       valorReceber.exibir &&
-      totalValoresAvulsosPendentes(data, cooperadoId, valorReceber.mes, coopId) > 0;
+      (valorReceber.meses.length > 0
+        ? valorReceber.meses.some((m) => totalValoresAvulsosPendentes(data, cooperadoId, m, coopId) > 0)
+        : totalValoresAvulsosPendentes(data, cooperadoId, valorReceber.mes, coopId) > 0);
     const exibirCardAvulsosSeparado = avulsosPendentesTotal > 0 && !avulsosJaNoCardPrincipal;
     const comunicados = coopId ? getComunicadosInicioCooperado(data, coopId, cooperadoId) : [];
     const pautasAbertas = coopId ? listPautasAbertasCooperado(data, coopId, cooperadoId) : [];
@@ -287,7 +280,7 @@ function CooperadoDashboard() {
           <div className="bg-gradient-to-br from-amber-500 to-amber-600 text-white rounded-2xl p-6 shadow-sm">
             <Wallet size={28} className="mb-3 opacity-90" />
             <p className="text-amber-100 text-sm">
-              {valorReceber.aguardandoAssinatura ? "Confirme o recebimento" : "A receber"} · {formatMesReferencia(valorReceber.mes)}
+              {valorReceber.aguardandoAssinatura ? "Confirme o recebimento" : "A receber"} · {valorReceber.mesLabel}
             </p>
             <p className="text-3xl font-bold mt-1">{formatCurrency(valorReceber.valor)}</p>
             <Link href="/ficha-corrida" className="inline-block mt-4 text-sm font-medium bg-white/20 hover:bg-white/30 px-4 py-2 rounded-lg">

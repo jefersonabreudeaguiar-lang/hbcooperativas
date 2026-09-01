@@ -40,6 +40,35 @@ export function formatMesReferencia(mes: string): string {
   return `${meses[parseInt(mesNum, 10) - 1]} ${ano}`;
 }
 
+/** Rótulo de vários meses pendentes (ex.: agosto / setembro). */
+export function formatMesesReferenciaRotulo(meses: string[]): string {
+  const sorted = [...meses].sort();
+  if (sorted.length === 0) return "";
+  if (sorted.length === 1) return formatMesReferencia(sorted[0]);
+  const nomes = [
+    "janeiro",
+    "fevereiro",
+    "março",
+    "abril",
+    "maio",
+    "junho",
+    "julho",
+    "agosto",
+    "setembro",
+    "outubro",
+    "novembro",
+    "dezembro",
+  ];
+  const anos = new Set(sorted.map((m) => m.split("-")[0]));
+  return sorted
+    .map((m) => {
+      const [ano, mesNum] = m.split("-");
+      const nome = nomes[parseInt(mesNum, 10) - 1] ?? m;
+      return anos.size === 1 ? nome : `${nome} ${ano}`;
+    })
+    .join(" / ");
+}
+
 /** Formato compacto para grade de seleção (ex.: Jan/26). */
 export function formatMesReferenciaCurto(mes: string): string {
   const [ano, mesNum] = mes.split("-");

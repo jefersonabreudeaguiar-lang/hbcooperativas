@@ -2791,14 +2791,21 @@ export async function getSettlementById(
   };
 }
 
-export async function listCooperadoContaCoopDescontosMes(
+type CooperadoContaCoopDescontoRow = {
+  motivo: string;
+  valorReais: number;
+  tipo: "conta_coop";
+  createdAt: string;
+};
+
+async function listCooperadoContaCoopDescontosIntervalo(
   supabase: SupabaseClient,
   cnpj: string,
   cooperadoId: string,
-  mesReferencia: string
-): Promise<Array<{ motivo: string; valorReais: number; tipo: "conta_coop"; createdAt: string }>> {
+  startIso: string,
+  endIso: string
+): Promise<CooperadoContaCoopDescontoRow[]> {
   const digits = normalizeCnpj(cnpj);
-  const { start, end } = mesReferenciaRange(mesReferencia);
   const { data: txs } = await supabase
     .from("hb_credit_transactions")
     .select("id, event_type, amount_cents, created_at, partner_id, receipt_code")
@@ -2806,8 +2813,8 @@ export async function listCooperadoContaCoopDescontosMes(
     .eq("cooperado_id", cooperadoId)
     .in("event_type", ["PAYMENT", "REFUND"])
     .eq("status", "posted")
-    .gte("created_at", start)
-    .lt("created_at", end)
+    .gte("created_at", startIso)
+    .lte("created_at", endIso)
     .order("created_at", { ascending: true });
 
   if (!txs?.length) return [];
@@ -2833,6 +2840,37 @@ export async function listCooperadoContaCoopDescontosMes(
       createdAt: String(t.created_at),
     };
   });
+}
+
+/** Compras/estornos confirmados no mês calendário (liquidação mercado, relatórios). */
+export async function listCooperadoContaCoopDescontosMes(
+  supabase: SupabaseClient,
+  cnpj: string,
+  cooperadoId: string,
+  mesReferencia: string
+): Promise<CooperadoContaCoopDescontoRow[]> {
+  const { start, end } = mesReferenciaRange(mesReferencia);
+  return listCooperadoContaCoopDescontosIntervalo(supabase, cnpj, cooperadoId, start, end);
+}
+
+/**
+ * Compras que abatem o valor a receber enquanto a ficha do mês ainda está aberta:
+ * do 1º dia do mês da ficha até agora (inclui compras no mês calendário seguinte).
+ */
+export async function listCooperadoContaCoopDescontosAbateValorReceber(
+  supabase: SupabaseClient,
+  cnpj: string,
+  cooperadoId: string,
+  mesReferenciaFicha: string
+): Promise<CooperadoContaCoopDescontoRow[]> {
+  const { start } = mesReferenciaRange(mesReferenciaFicha);
+  return listCooperadoContaCoopDescontosIntervalo(
+    supabase,
+    cnpj,
+    cooperadoId,
+    start,
+    new Date().toISOString()
+  );
 }
 
 export async function getDiscountPoolResumo(

@@ -8,7 +8,7 @@ import {
   getValorExibicaoCooperado,
   buildValorExibicaoCooperadoOpts,
 } from "@/services/notaPedidoService";
-import { getCurrentMesReferencia } from "@/utils/format";
+import { formatMesReferencia, formatMesesReferenciaRotulo, getCurrentMesReferencia } from "@/utils/format";
 import { mesesComValoresAvulsos, totalValoresAvulsosPendentes } from "@/services/valoresAvulsosReceberService";
 import { contarEntregasNoMes } from "@/services/entregaCooperadoService";
 import { contarFotosEnviadasNota, getFotosExibicaoNota } from "@/utils/fotoEntrega";
@@ -41,27 +41,86 @@ export function listarNotasPendentesCooperado(
   );
 }
 
+function round2(value: number): number {
+  return Math.round(value * 100) / 100;
+}
+
+function valorLiquidoMesQuantoVouReceber(
+  data: AppData,
+  cooperadoId: string,
+  mesReferencia: string,
+  cooperativaId?: string
+): number {
+  const resumo = getResumoPagamentoExibicao(data, cooperadoId, mesReferencia, cooperativaId);
+  const exibicaoOpts = buildValorExibicaoCooperadoOpts(data, cooperadoId, mesReferencia, cooperativaId);
+  return getValorExibicaoCooperado(resumo, exibicaoOpts);
+}
+
+/** Meses com valor pendente ou aguardando assinatura (ordem cronológica). */
+export function listarMesesPendentesQuantoVouReceber(
+  data: AppData,
+  cooperadoId: string,
+  cooperativaId?: string
+): string[] {
+  const pendentes: string[] = [];
+  for (const mes of [...listarMesesEntregasCooperado(data, cooperadoId, cooperativaId)].sort((a, b) =>
+    a.localeCompare(b)
+  )) {
+    if (cooperadoMesQuitado(data, cooperadoId, mes)) continue;
+    if (getPagamentoAguardandoCooperado(data, cooperadoId, mes)) {
+      pendentes.push(mes);
+      continue;
+    }
+    if (valorLiquidoMesQuantoVouReceber(data, cooperadoId, mes, cooperativaId) > 0) {
+      pendentes.push(mes);
+      continue;
+    }
+    if (totalValoresAvulsosPendentes(data, cooperadoId, mes, cooperativaId) > 0) {
+      pendentes.push(mes);
+    }
+  }
+  return pendentes;
+}
+
+/** Mês mais antigo ainda em aberto — base para abatimento Conta Coop e ficha principal. */
+export function getMesPrincipalQuantoVouReceber(
+  data: AppData,
+  cooperadoId: string,
+  cooperativaId?: string
+): string {
+  const pendentes = listarMesesPendentesQuantoVouReceber(data, cooperadoId, cooperativaId);
+  if (pendentes.length) return pendentes[0];
+  return getMesQuantoVouReceber(data, cooperadoId, cooperativaId);
+}
+
 /** Valor a receber no início — oculta mês quitado ou sem valor pendente. */
 export function cooperadoExibirValorReceberInicio(
   data: AppData,
   cooperadoId: string,
   cooperativaId?: string
-): { exibir: boolean; mes: string; valor: number; aguardandoAssinatura: boolean } {
-  const { mes, valor, aguardandoAssinatura } = getValorQuantoVouReceber(
+): {
+  exibir: boolean;
+  mes: string;
+  meses: string[];
+  mesLabel: string;
+  valor: number;
+  aguardandoAssinatura: boolean;
+} {
+  const { mes, meses, mesLabel, valor, aguardandoAssinatura } = getValorQuantoVouReceber(
     data,
     cooperadoId,
     cooperativaId
   );
   if (aguardandoAssinatura) {
-    return { exibir: true, mes, valor, aguardandoAssinatura: true };
+    return { exibir: true, mes, meses, mesLabel, valor, aguardandoAssinatura: true };
   }
-  if (getPagamentoConfirmadoMes(data, cooperadoId, mes)) {
-    return { exibir: false, mes, valor: 0, aguardandoAssinatura: false };
+  if (meses.length === 1 && getPagamentoConfirmadoMes(data, cooperadoId, mes)) {
+    return { exibir: false, mes, meses, mesLabel, valor: 0, aguardandoAssinatura: false };
   }
-  if (valor <= 0 || cooperadoMesQuitado(data, cooperadoId, mes)) {
-    return { exibir: false, mes, valor: 0, aguardandoAssinatura: false };
+  if (valor <= 0 || meses.length === 0) {
+    return { exibir: false, mes, meses, mesLabel, valor: 0, aguardandoAssinatura: false };
   }
-  return { exibir: true, mes, valor, aguardandoAssinatura: false };
+  return { exibir: true, mes, meses, mesLabel, valor, aguardandoAssinatura: false };
 }
 
 export function filtrarResumosEntregasPendentes(
@@ -172,28 +231,36 @@ export function cooperadoTemValorPendente(
   cooperadoId: string,
   cooperativaId?: string
 ): boolean {
-  const mes = getMesQuantoVouReceber(data, cooperadoId, cooperativaId);
-  if (getPagamentoAguardandoCooperado(data, cooperadoId, mes)) return true;
-  if (getTotalAPagarCooperado(data, cooperadoId, mes) > 0 && !cooperadoMesQuitado(data, cooperadoId, mes)) {
-    return true;
-  }
-  return totalValoresAvulsosPendentes(data, cooperadoId, undefined, cooperativaId) > 0;
+  return getValorQuantoVouReceber(data, cooperadoId, cooperativaId).valor > 0;
 }
 
 export function getValorQuantoVouReceber(
   data: AppData,
   cooperadoId: string,
   cooperativaId?: string
-): { mes: string; valor: number; aguardandoAssinatura: boolean } {
-  const mes = getMesQuantoVouReceber(data, cooperadoId, cooperativaId);
-  const aguardando = getPagamentoAguardandoCooperado(data, cooperadoId, mes);
-  const resumo = getResumoPagamentoExibicao(data, cooperadoId, mes, cooperativaId);
-  const exibicaoOpts = buildValorExibicaoCooperadoOpts(data, cooperadoId, mes, cooperativaId);
-  const valor = getValorExibicaoCooperado(resumo, exibicaoOpts);
-  if (aguardando) {
-    return { mes, valor, aguardandoAssinatura: true };
-  }
-  return { mes, valor, aguardandoAssinatura: false };
+): {
+  mes: string;
+  meses: string[];
+  mesLabel: string;
+  valor: number;
+  aguardandoAssinatura: boolean;
+} {
+  const mesesPendentes = listarMesesPendentesQuantoVouReceber(data, cooperadoId, cooperativaId);
+  const mes = mesesPendentes[mesesPendentes.length - 1] ?? getMesQuantoVouReceber(data, cooperadoId, cooperativaId);
+  const mesLabel =
+    mesesPendentes.length > 0
+      ? formatMesesReferenciaRotulo(mesesPendentes)
+      : formatMesReferencia(mes);
+  const aguardandoAssinatura = mesesPendentes.some((m) =>
+    Boolean(getPagamentoAguardandoCooperado(data, cooperadoId, m))
+  );
+  const valor = round2(
+    mesesPendentes.reduce(
+      (s, m) => s + valorLiquidoMesQuantoVouReceber(data, cooperadoId, m, cooperativaId),
+      0
+    )
+  );
+  return { mes, meses: mesesPendentes, mesLabel, valor, aguardandoAssinatura };
 }
 
 export function getResumoMesEntregasCooperado(

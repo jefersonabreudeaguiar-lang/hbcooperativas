@@ -30,8 +30,7 @@ import {
 import { listarPagamentosAguardandoAssinatura } from "@/services/filaDoDiaService";
 import { listCooperadosComFichaNoMes, getCooperadoNomeResolvido, resolverCooperadoParaPagamento, fichaPertenceCooperado, listCooperadosDaCooperativa } from "@/services/cooperadoCloudService";
 import { resolveCooperativaCnpj, patchNotaPedidoInCloud } from "@/services/notaPedidoCloudService";
-import { syncContaCoopDescontosMesSePilot } from "@/lib/hb-credit/syncContaCoopFichaDescontos";
-import { isContaCoopValorReceberPilot } from "@/utils/contaCoopUiVisibility";
+import { useSyncContaCoopValorReceberPilot } from "@/hooks/useSyncContaCoopValorReceberPilot";
 import {
   pushOperacionalToCloud,
   pushNotasPagasToCloud,
@@ -41,7 +40,8 @@ import {
   cooperadoMesQuitado,
   cooperadoTemValorPendente,
   cooperadoPendentePagamentoResponsavel,
-  getMesQuantoVouReceber,
+  getMesPrincipalQuantoVouReceber,
+  getValorQuantoVouReceber,
   getPagamentoConfirmadoMes,
   listarMesesPagosCooperado,
 } from "@/services/cooperadoEntregasService";
@@ -190,7 +190,12 @@ export default function FichaCorridaPage() {
 
   const mesEmAberto = useMemo(() => {
     if (!data || !cooperadoId) return getCurrentMesReferencia();
-    return getMesQuantoVouReceber(data, cooperadoId, coopId);
+    return getMesPrincipalQuantoVouReceber(data, cooperadoId, coopId);
+  }, [data, cooperadoId, coopId]);
+
+  const valorReceberConsolidado = useMemo(() => {
+    if (!data || !cooperadoId) return null;
+    return getValorQuantoVouReceber(data, cooperadoId, coopId);
   }, [data, cooperadoId, coopId]);
 
   const mesesPagosCooperado = useMemo(() => {
@@ -473,26 +478,17 @@ export default function FichaCorridaPage() {
     return buildValorExibicaoCooperadoOpts(data, cooperadoSelecionadoId, mesAtivo, coopId);
   }, [data, cooperadoSelecionadoId, mesAtivo, coopId]);
 
-  useEffect(() => {
-    if (!data || !cooperadoSelecionadoId || !mesAtivo || !user || !coopId || !exibicaoOpts) return;
-    if (!isContaCoopValorReceberPilot(cooperadoSelecionadoId, exibicaoOpts.cooperadoNome)) return;
-    void (async () => {
-      try {
-        const cnpj = await resolveCooperativaCnpj(data, coopId, user);
-        if (!cnpj) return;
-        const synced = await syncContaCoopDescontosMesSePilot(getData(), {
-          cnpj,
+  useSyncContaCoopValorReceberPilot(
+    exibicaoOpts && cooperadoSelecionadoId && coopId
+      ? {
           cooperadoId: cooperadoSelecionadoId,
           mesReferencia: mesAtivo,
           cooperativaId: coopId,
           cooperadoNome: exibicaoOpts.cooperadoNome,
-        });
-        updateData(() => synced.data);
-      } catch {
-        /* offline ou HB indisponível */
-      }
-    })();
-  }, [coopId, cooperadoSelecionadoId, data, exibicaoOpts, mesAtivo, user]);
+          user,
+        }
+      : undefined
+  );
 
   const resumo = useMemo(() => {
     if (!data || !cooperadoSelecionadoId) return null;
@@ -523,9 +519,11 @@ export default function FichaCorridaPage() {
   const resumoExibicao = resumo;
 
   const totalPendente = isCooperado
-    ? resumoExibicao && exibicaoOpts
-      ? getValorExibicaoCooperado(resumoExibicao, exibicaoOpts)
-      : 0
+    ? visualizandoHistorico
+      ? resumoExibicao && exibicaoOpts
+        ? getValorExibicaoCooperado(resumoExibicao, exibicaoOpts)
+        : 0
+      : (valorReceberConsolidado?.valor ?? 0)
     : (resumoExibicao?.valorLiquido ?? 0);
 
   const descontosExtrasCooperado =
@@ -829,7 +827,9 @@ export default function FichaCorridaPage() {
           <div className="flex items-center gap-2 py-1">
             <span className="text-sm text-gray-600">Período:</span>
             <span className="text-sm font-bold text-green-800 bg-green-100 px-3 py-1.5 rounded-full">
-              {visualizandoHistorico ? formatMesReferencia(mesAtivo) : "Mês em aberto"}
+              {visualizandoHistorico
+                ? formatMesReferencia(mesAtivo)
+                : valorReceberConsolidado?.mesLabel ?? "Mês em aberto"}
             </span>
           </div>
         ) : (
@@ -1027,7 +1027,16 @@ export default function FichaCorridaPage() {
 
       {exibirRelatorioMes && (
         <>
-          <Card title={isCooperado ? `Resumo · ${formatMesReferencia(mesAtivo)}` : `Ficha — ${nomeCooperado}`} className="mb-6">
+          <Card
+            title={
+              isCooperado
+                ? visualizandoHistorico
+                  ? `Resumo · ${formatMesReferencia(mesAtivo)}`
+                  : `Resumo · ${valorReceberConsolidado?.mesLabel ?? formatMesReferencia(mesAtivo)}`
+                : `Ficha — ${nomeCooperado}`
+            }
+            className="mb-6"
+          >
             <div className="flex flex-wrap items-center gap-3 mb-4">
               {statusCota === "paga" ? (
                 <span className="inline-flex items-center gap-1 text-sm font-medium text-green-700 bg-green-50 px-3 py-1 rounded-full">
@@ -1053,9 +1062,11 @@ export default function FichaCorridaPage() {
                 valorEntregas={resumoExibicao.valorEntregas}
                 descontosExtras={descontosExtrasCooperado}
                 totalLiquido={
-                  exibicaoOpts
-                    ? getValorExibicaoCooperado(resumoExibicao, exibicaoOpts)
-                    : resumoExibicao.valorEntregas
+                  visualizandoHistorico
+                    ? exibicaoOpts
+                      ? getValorExibicaoCooperado(resumoExibicao, exibicaoOpts)
+                      : resumoExibicao.valorEntregas
+                    : (valorReceberConsolidado?.valor ?? 0)
                 }
                 rotuloTotal={
                   visualizandoHistorico
@@ -1177,7 +1188,10 @@ export default function FichaCorridaPage() {
                   ? "Total recebido"
                   : "Total a receber"
                 : "Valor a pagar"}{" "}
-              · {formatMesReferencia(mesAtivo)}
+              ·{" "}
+              {isCooperado && !visualizandoHistorico
+                ? valorReceberConsolidado?.mesLabel ?? formatMesReferencia(mesAtivo)
+                : formatMesReferencia(mesAtivo)}
             </p>
             <p className="text-3xl sm:text-4xl font-bold mt-2">
               {formatCurrency(totalExibido)}
