@@ -51,6 +51,9 @@ import {
   userToCloudProfile,
   type CloudSessionProfile,
 } from "@/lib/security/clientSession";
+import { generateId } from "@/utils/generateId";
+
+export { generateId };
 
 const STORAGE_KEY = "coopeagriplla_data";
 const SESSION_KEY = "coopeagriplla_session";
@@ -645,10 +648,6 @@ export function updateDataSafe(
     return saved;
   }
   return { ok: true, data: memoryCache ?? updated };
-}
-
-export function generateId(prefix: string): string {
-  return `${prefix}_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
 }
 
 export function addAuditEntry(

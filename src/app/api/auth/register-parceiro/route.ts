@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { generateId } from "@/services/dataStore";
+import { generateId } from "@/utils/generateId";
 import { getSupabaseAdmin, isSupabaseConfigured } from "@/lib/supabase/admin";
 import {
   clientIp,
