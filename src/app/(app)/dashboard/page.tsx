@@ -39,9 +39,7 @@ import { cooperadoPrecisaCadastrarPix } from "@/utils/pix";
 import { listPautasAbertasCooperado, resultadoVisivelCooperado } from "@/services/votacaoService";
 import { VotacaoPautasInicioPanel } from "@/components/votacao/VotacaoPautasInicioPanel";
 import { VotacaoResultadoPanel } from "@/components/votacao/VotacaoResultadoPanel";
-import { getData, updateData } from "@/services/dataStore";
-import { getCooperativaCnpj, getPendingNotaDeleteIds, resolveCooperativaCnpj } from "@/services/notaPedidoCloudService";
-import { syncContaCoopDescontosMesLocal } from "@/lib/hb-credit/syncContaCoopFichaDescontos";
+import { getCooperativaCnpj, getPendingNotaDeleteIds } from "@/services/notaPedidoCloudService";
 import { formatCurrency, formatMesReferencia, getCurrentMesReferencia } from "@/utils/format";
 import { getUserCooperativaId, getUserCooperativaNome, normalizeCnpj } from "@/utils/cooperativa";
 import { Camera, Wallet, ClipboardList, Users, Vote, Download } from "lucide-react";
@@ -74,29 +72,6 @@ function CooperadoDashboard() {
     recoverySyncRef.current = true;
     requestAppSync();
   }, [financeiroAusente]);
-
-  useEffect(() => {
-    if (!user?.cooperadoId) return;
-    void (async () => {
-      try {
-        const d = getData();
-        const coopId = getUserCooperativaId(user, d);
-        if (!coopId) return;
-        const cnpj = await resolveCooperativaCnpj(d, coopId, user);
-        if (!cnpj) return;
-        const cooperadoId = resolverCooperadoIdCanonico(d, user.cooperadoId!, coopId);
-        const synced = await syncContaCoopDescontosMesLocal(getData(), {
-          cnpj,
-          cooperadoId,
-          mesReferencia: getCurrentMesReferencia(),
-          cooperativaId: coopId,
-        });
-        updateData(() => synced.data);
-      } catch {
-        /* offline ou HB indisponível */
-      }
-    })();
-  }, [user?.id, user?.cooperadoId, user?.cooperativaId]);
 
   const view = useAppDataSelector((data) => {
     if (!data || !user?.cooperadoId) return null;

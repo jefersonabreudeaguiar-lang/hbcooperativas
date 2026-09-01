@@ -20,6 +20,7 @@ import { ResumoDescontosMes } from "@/components/ficha/ResumoDescontosMes";
 import {
   agregarItensFichaMes,
   getResumoPagamentoExibicao,
+  getValorExibicaoCooperado,
 } from "@/services/notaPedidoService";
 import type { ResumoMesEntregasCooperado } from "@/services/cooperadoEntregasService";
 import { listarResumosFotosCooperado } from "@/services/cooperadoEntregasService";
@@ -149,8 +150,10 @@ function MesFichaAccordion({
                 descontoCooperativa={resumoPagamento.descontoCooperativa}
                 descontoPadraoPct={data.config.descontoPadraoCooperativa}
                 valorEntregas={resumoPagamento.valorEntregas}
-                descontosExtras={resumoPagamento.descontosExtras}
-                totalLiquido={quitado ? resumo.valorRecebido : resumoPagamento.valorLiquido}
+                descontosExtras={[]}
+                totalLiquido={
+                  quitado ? resumo.valorRecebido : getValorExibicaoCooperado(resumoPagamento)
+                }
                 rotuloTotal={quitado ? "Total recebido" : "Total líquido"}
               />
             </div>

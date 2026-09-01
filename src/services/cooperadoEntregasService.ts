@@ -5,6 +5,7 @@ import {
   getResumoPagamentoExibicao,
   getTotalAPagarCooperado,
   getResumoPagamentoCooperado,
+  getValorExibicaoCooperado,
 } from "@/services/notaPedidoService";
 import { getCurrentMesReferencia } from "@/utils/format";
 import { mesesComValoresAvulsos, totalValoresAvulsosPendentes } from "@/services/valoresAvulsosReceberService";
@@ -185,11 +186,11 @@ export function getValorQuantoVouReceber(
 ): { mes: string; valor: number; aguardandoAssinatura: boolean } {
   const mes = getMesQuantoVouReceber(data, cooperadoId, cooperativaId);
   const aguardando = getPagamentoAguardandoCooperado(data, cooperadoId, mes);
-  if (aguardando) {
-    return { mes, valor: aguardando.valorLiquido, aguardandoAssinatura: true };
-  }
   const resumo = getResumoPagamentoExibicao(data, cooperadoId, mes, cooperativaId);
-  return { mes, valor: resumo.valorLiquido, aguardandoAssinatura: false };
+  if (aguardando) {
+    return { mes, valor: getValorExibicaoCooperado(resumo), aguardandoAssinatura: true };
+  }
+  return { mes, valor: getValorExibicaoCooperado(resumo), aguardandoAssinatura: false };
 }
 
 export function getResumoMesEntregasCooperado(
@@ -203,12 +204,9 @@ export function getResumoMesEntregasCooperado(
   );
   const pagamentoConfirmado = getPagamentoConfirmadoMes(data, cooperadoId, mesReferencia);
   const pagamentoAguardando = getPagamentoAguardandoCooperado(data, cooperadoId, mesReferencia);
-  const valorAReceber = getResumoPagamentoExibicao(
-    data,
-    cooperadoId,
-    mesReferencia,
-    cooperativaId
-  ).valorLiquido;
+  const valorAReceber = getValorExibicaoCooperado(
+    getResumoPagamentoExibicao(data, cooperadoId, mesReferencia, cooperativaId)
+  );
   const valorRecebido = pagamentoConfirmado?.valorLiquido ?? 0;
 
   return {

@@ -11,6 +11,7 @@ import {
   getResumoPagamentoCooperado,
   getResumoPagamentoExibicao,
   resumoFromPagamento,
+  getValorExibicaoCooperado,
   registrarPagamentoCooperado,
   confirmarPagamentoCooperado,
   getPagamentoAguardandoCooperado,
@@ -26,8 +27,6 @@ import {
 import { listarPagamentosAguardandoAssinatura } from "@/services/filaDoDiaService";
 import { listCooperadosComFichaNoMes, getCooperadoNomeResolvido, resolverCooperadoParaPagamento, fichaPertenceCooperado, listCooperadosDaCooperativa } from "@/services/cooperadoCloudService";
 import { resolveCooperativaCnpj, patchNotaPedidoInCloud } from "@/services/notaPedidoCloudService";
-import { mergeDescontosContaCoopNoResumo, type DescontoContaCoopRemoto } from "@/lib/hb-credit/mergeFichaDescontos";
-import { syncContaCoopDescontosMesLocal } from "@/lib/hb-credit/syncContaCoopFichaDescontos";
 import {
   pushOperacionalToCloud,
   pushNotasPagasToCloud,
@@ -464,34 +463,6 @@ export default function FichaCorridaPage() {
     return getPagamentoConfirmadoMes(data, cooperadoSelecionadoId, mesAtivo);
   }, [data, cooperadoSelecionadoId, mesAtivo]);
 
-  const [descontosContaCoop, setDescontosContaCoop] = useState<DescontoContaCoopRemoto[]>([]);
-
-  useEffect(() => {
-    if (!data || !cooperadoSelecionadoId || !mesAtivo || !user || !coopId) {
-      setDescontosContaCoop([]);
-      return;
-    }
-    void (async () => {
-      try {
-        const cnpj = await resolveCooperativaCnpj(data, coopId, user);
-        if (!cnpj) {
-          setDescontosContaCoop([]);
-          return;
-        }
-        const synced = await syncContaCoopDescontosMesLocal(getData(), {
-          cnpj,
-          cooperadoId: cooperadoSelecionadoId,
-          mesReferencia: mesAtivo,
-          cooperativaId: coopId,
-        });
-        setDescontosContaCoop(synced.descontos);
-        updateData(() => synced.data);
-      } catch {
-        setDescontosContaCoop([]);
-      }
-    })();
-  }, [coopId, cooperadoSelecionadoId, data, mesAtivo, user]);
-
   const resumo = useMemo(() => {
     if (!data || !cooperadoSelecionadoId) return null;
     if (pagamentoAguardando) return resumoFromPagamento(pagamentoAguardando);
@@ -518,15 +489,13 @@ export default function FichaCorridaPage() {
     pagamentoConfirmadoMes,
   ]);
 
-  const resumoExibicao = useMemo(() => {
-    if (!resumo) return null;
-    if (pagamentoAguardando || (visualizandoHistorico && pagamentoConfirmadoMes)) return resumo;
-    const jaTemContaCoop = resumo.descontosExtras.some((d) => d.tipo === "conta_coop");
-    if (jaTemContaCoop || !descontosContaCoop.length) return resumo;
-    return mergeDescontosContaCoopNoResumo(resumo, descontosContaCoop);
-  }, [descontosContaCoop, pagamentoAguardando, pagamentoConfirmadoMes, resumo, visualizandoHistorico]);
+  const resumoExibicao = resumo;
 
-  const totalPendente = resumoExibicao?.valorLiquido ?? 0;
+  const totalPendente = isCooperado
+    ? resumoExibicao
+      ? getValorExibicaoCooperado(resumoExibicao)
+      : 0
+    : (resumoExibicao?.valorLiquido ?? 0);
 
   const pagarStep: 1 | 2 | 3 | 4 = pagamentoAguardando
     ? 4
@@ -1028,31 +997,20 @@ export default function FichaCorridaPage() {
               )}
             </div>
 
-            {isCooperado && (mensalidadePadrao > 0 || (arquivoMes?.descontoAvulso ?? ajustesCompartilhadosMes?.descontoAvulso ?? 0) > 0) && (
-              <div className="rounded-xl border border-blue-200 bg-blue-50/60 p-4 text-sm space-y-2 mb-4">
-                <p className="font-semibold text-blue-900">Descontos aplicados pela cooperativa</p>
-                {mensalidadePadrao > 0 && (
-                  <div className="flex justify-between text-gray-800">
-                    <span>Mensalidade</span>
-                    <span className="font-medium text-red-700">- {formatCurrency(mensalidadePadrao)}</span>
-                  </div>
-                )}
-                {(arquivoMes?.descontoAvulso ?? ajustesCompartilhadosMes?.descontoAvulso ?? 0) > 0 && (
-                  <div className="flex justify-between text-gray-800 gap-3">
-                    <span>
-                      {arquivoMes?.descontoAvulsoMotivo?.trim() ||
-                        ajustesCompartilhadosMes?.descontoAvulsoMotivo?.trim() ||
-                        "Desconto avulso"}
-                    </span>
-                    <span className="font-medium text-red-700 shrink-0">
-                      -{" "}
-                      {formatCurrency(
-                        arquivoMes?.descontoAvulso ?? ajustesCompartilhadosMes?.descontoAvulso ?? 0
-                      )}
-                    </span>
-                  </div>
-                )}
-              </div>
+            {isCooperado && resumoExibicao && (
+              <ResumoDescontosMes
+                valorBruto={resumoExibicao.valorBruto}
+                descontoCooperativa={resumoExibicao.descontoCooperativa}
+                descontoPadraoPct={data.config.descontoPadraoCooperativa}
+                valorEntregas={resumoExibicao.valorEntregas}
+                descontosExtras={[]}
+                totalLiquido={getValorExibicaoCooperado(resumoExibicao)}
+                rotuloTotal={
+                  visualizandoHistorico
+                    ? "Total recebido"
+                    : "A receber"
+                }
+              />
             )}
 
             {!isCooperado && check("ficha_corrida", "edit") && (
@@ -1103,7 +1061,7 @@ export default function FichaCorridaPage() {
               </div>
             )}
 
-            {resumoExibicao && (
+            {!isCooperado && resumoExibicao && (
               <ResumoDescontosMes
                 valorBruto={resumoExibicao.valorBruto}
                 descontoCooperativa={resumoExibicao.descontoCooperativa}
@@ -1111,13 +1069,7 @@ export default function FichaCorridaPage() {
                 valorEntregas={resumoExibicao.valorEntregas}
                 descontosExtras={resumoExibicao.descontosExtras}
                 totalLiquido={totalExibido}
-                rotuloTotal={
-                  isCooperado
-                    ? visualizandoHistorico
-                      ? "Total recebido"
-                      : "A receber"
-                    : "Total a pagar"
-                }
+                rotuloTotal="Total a pagar"
               />
             )}
 
@@ -1187,7 +1139,7 @@ export default function FichaCorridaPage() {
                 descontoCooperativa={resumoExibicao.descontoCooperativa}
                 descontoPadraoPct={data.config.descontoPadraoCooperativa}
                 valorEntregas={resumoExibicao.valorEntregas}
-                descontosExtras={resumoExibicao.descontosExtras}
+                descontosExtras={isCooperado ? [] : resumoExibicao.descontosExtras}
                 totalLiquido={totalExibido}
                 rotuloTotal={
                   isCooperado

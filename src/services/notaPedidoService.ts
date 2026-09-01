@@ -23,11 +23,7 @@ import { valoresAvulsosPendentesMes, marcarValoresAvulsosPagosMes } from "@/serv
 import { round2 } from "@/utils/calculations";
 import { gerarReciboHtml, resumoReciboFromPagamento } from "@/utils/recibo";
 import { lancarPagamentoCooperadoNoCaixa } from "@/services/livroCaixaService";
-import {
-  descontosContaCoopFromArquivo,
-  mergeDescontosContaCoopNoResumo,
-  type DescontoContaCoopRemoto,
-} from "@/lib/hb-credit/mergeFichaDescontos";
+import type { DescontoContaCoopRemoto } from "@/lib/hb-credit/mergeFichaDescontos";
 import { fichaPreservarSemNotaLocal, notasSyncProvavelmenteCompleto } from "@/services/fichaSyncGuard";
 import { isCloudSyncInProgress } from "@/services/cloudSyncProgress";
 import { contarFotosEnviadasNota } from "@/utils/fotoEntrega";
@@ -1262,7 +1258,7 @@ export function getResumoPagamentoCooperado(
     descontosExtras.filter((d) => d.tipo === "credito_avulso").reduce((s, d) => s + d.valor, 0)
   );
   const valorLiquido = round2(Math.max(0, valorEntregas - totalDescontos + totalCreditos));
-  const base = {
+  return {
     valorBruto,
     descontoCooperativa,
     descontosExtras,
@@ -1271,8 +1267,11 @@ export function getResumoPagamentoCooperado(
     fichaIds: fichas.map((f) => f.id),
     notaPedidoIds: fichas.map((f) => f.notaPedidoId),
   };
-  const contaCoopRemotos = getDescontosContaCoopRemotosCached(data, cooperadoCanonico, mesReferencia, coopId);
-  return mergeDescontosContaCoopNoResumo(base, contaCoopRemotos);
+}
+
+/** Valor exibido ao cooperado — soma das entregas conferidas, sem mensalidade/cota/Conta Coop. */
+export function getValorExibicaoCooperado(resumo: ResumoPagamentoCooperado): number {
+  return resumo.valorEntregas;
 }
 
 export type ResumoPagamentoCooperado = ReturnType<typeof getResumoPagamentoCooperado>;
@@ -1311,17 +1310,6 @@ export function getTotalRecebidoCooperado(data: AppData, cooperadoId: string, me
     return true;
   });
   return round2(entries.reduce((s, f) => s + f.valorLiquido, 0));
-}
-
-export function getDescontosContaCoopRemotosCached(
-  data: AppData,
-  cooperadoId: string,
-  mesReferencia: string,
-  cooperativaId?: string
-): DescontoContaCoopRemoto[] {
-  const coopId = cooperativaId ?? data.cooperados.find((c) => c.id === cooperadoId)?.cooperativaId;
-  const arquivo = getArquivoMensalCooperado(data, cooperadoId, mesReferencia, coopId);
-  return descontosContaCoopFromArquivo(arquivo);
 }
 
 export function persistDescontosContaCoopNoArquivo(
