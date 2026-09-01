@@ -48,6 +48,7 @@ import {
   logoutCloudSession,
   registerCloudUser,
   setActiveCloudProfile,
+  setLastCloudSyncError,
   userToCloudProfile,
   type CloudSessionProfile,
 } from "@/lib/security/clientSession";
@@ -805,10 +806,13 @@ async function bootstrapLocalUserFromCloudLogin(
 
   const email = normalizeCreatorEmail(profile.email);
   const cnpj = profile.cooperativaCnpj ? normalizeCnpj(profile.cooperativaCnpj) : "";
+  const role = normalizeUserRole(profile.role);
 
   if (cnpj.length === 14) {
     await ensureCooperativaLocalForCnpj(cnpj);
-    await syncCooperadosFromCloud(cnpj, profile.cooperativaId ?? undefined);
+    if (role !== "parceiro") {
+      await syncCooperadosFromCloud(cnpj, profile.cooperativaId ?? undefined);
+    }
   }
 
   let data = loadData(true);
@@ -852,19 +856,29 @@ async function bootstrapLocalUserFromCloudLogin(
 export async function login(email: string, password: string): Promise<User | null> {
   if (typeof window === "undefined") return null;
 
+  if (isApiSecurityEnforced()) {
+    const cloud = await loginViaCloudApi(email, password);
+    if (!cloud) return null;
+
+    const bootstrapped = await bootstrapLocalUserFromCloudLogin(cloud.user, password);
+    if (!bootstrapped) {
+      setLastCloudSyncError(
+        cloud.user.role === "parceiro"
+          ? "Conta de mercado reconhecida na nuvem, mas o app não iniciou a sessão. Atualize a página (Ctrl+Shift+R)."
+          : "Perfil reconhecido na nuvem, mas não foi possível iniciar a sessão local."
+      );
+      return null;
+    }
+
+    return await finishLoginSession(bootstrapped, getData(), password);
+  }
+
   const data = prepareDataForLogin();
   const localUser = findUserByEmail(data, email);
 
   if (localUser) {
     const valid = await verifyPassword(password, localUser.password);
     if (valid) {
-      if (isApiSecurityEnforced()) {
-        const cloud = await loginViaCloudApi(email, password);
-        if (!cloud) return null;
-        const bootstrapped = await bootstrapLocalUserFromCloudLogin(cloud.user, password);
-        if (!bootstrapped) return null;
-        return await finishLoginSession(bootstrapped, getData(), password);
-      }
       if (!isPasswordHash(localUser.password)) {
         const hash = await hashPassword(password);
         updateData((d) => ({
@@ -881,7 +895,10 @@ export async function login(email: string, password: string): Promise<User | nul
   if (!cloud) return null;
 
   const bootstrapped = await bootstrapLocalUserFromCloudLogin(cloud.user, password);
-  if (!bootstrapped) return null;
+  if (!bootstrapped) {
+    setLastCloudSyncError("Perfil reconhecido na nuvem, mas não foi possível iniciar a sessão local.");
+    return null;
+  }
 
   return await finishLoginSession(bootstrapped, getData(), password);
 }

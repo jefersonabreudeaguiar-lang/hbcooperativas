@@ -153,6 +153,10 @@ export function getLastCloudSyncError(): string {
   return lastCloudSyncError;
 }
 
+export function setLastCloudSyncError(message: string): void {
+  lastCloudSyncError = message;
+}
+
 /** Valida credenciais em app_users (Supabase) — usado quando o aparelho ainda não tem users[] local. */
 export async function loginViaCloudApi(
   email: string,
