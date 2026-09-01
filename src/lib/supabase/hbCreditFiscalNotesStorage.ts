@@ -94,21 +94,89 @@ async function fetchReceivableForTransaction(
   return { id: String(data.id), status: String(data.status) };
 }
 
+/** Compras estornadas ou revertidas não entram na fila de NF. */
+async function fetchNonFiscalTransactionIds(
+  supabase: SupabaseClient,
+  transactionIds: string[]
+): Promise<Set<string>> {
+  const blocked = new Set<string>();
+  if (!transactionIds.length) return blocked;
+
+  const [{ data: refunds }, { data: txs }] = await Promise.all([
+    supabase
+      .from("hb_credit_refunds")
+      .select("original_transaction_id")
+      .in("original_transaction_id", transactionIds),
+    supabase.from("hb_credit_transactions").select("id, status").in("id", transactionIds),
+  ]);
+
+  for (const row of refunds ?? []) {
+    blocked.add(String(row.original_transaction_id));
+  }
+  for (const tx of txs ?? []) {
+    if (String(tx.status) === "reversed") blocked.add(String(tx.id));
+  }
+
+  return blocked;
+}
+
+async function filterFiscalNotesForActiveSales(
+  supabase: SupabaseClient,
+  rows: Record<string, unknown>[],
+  actorUserId = "system"
+): Promise<Record<string, unknown>[]> {
+  if (!rows.length) return rows;
+
+  const blocked = await fetchNonFiscalTransactionIds(
+    supabase,
+    rows.map((row) => String(row.transaction_id))
+  );
+  if (!blocked.size) return rows;
+
+  const active: Record<string, unknown>[] = [];
+  for (const row of rows) {
+    const txId = String(row.transaction_id);
+    if (!blocked.has(txId)) {
+      active.push(row);
+      continue;
+    }
+    if (String(row.status) !== "CANCELLED") {
+      await cancelFiscalNoteForTransaction(supabase, txId, actorUserId);
+    }
+  }
+  return active;
+}
+
 /** Cria registro fiscal após pagamento confirmado (idempotente). */
 export async function ensureFiscalNoteForTransaction(
   supabase: SupabaseClient,
   transactionId: string,
   cooperadoNome?: string | null
 ): Promise<ContaCoopFiscalNote | null> {
-  const tx = await fetchPaymentTransaction(supabase, transactionId);
-  if (!tx) return null;
-
   const { data: existing } = await supabase
     .from("hb_credit_fiscal_notes")
     .select("*")
     .eq("transaction_id", transactionId)
     .maybeSingle();
+
+  const tx = await fetchPaymentTransaction(supabase, transactionId);
+  if (!tx) {
+    if (existing && String(existing.status) !== "CANCELLED") {
+      await cancelFiscalNoteForTransaction(supabase, transactionId, "system");
+    }
+    return null;
+  }
+
+  const blocked = await fetchNonFiscalTransactionIds(supabase, [transactionId]);
+  if (blocked.has(transactionId)) {
+    if (existing && String(existing.status) !== "CANCELLED") {
+      await cancelFiscalNoteForTransaction(supabase, transactionId, "system");
+    }
+    return null;
+  }
+
   if (existing) {
+    if (String(existing.status) === "CANCELLED") return null;
     if (cooperadoNome?.trim() && !existing.cooperado_nome_snapshot) {
       await supabase
         .from("hb_credit_fiscal_notes")
@@ -269,8 +337,12 @@ async function syncPartnerFiscalNotesForMonth(
     .gte("created_at", start)
     .lt("created_at", end);
 
-  for (const tx of txs ?? []) {
-    await ensureFiscalNoteForTransaction(supabase, String(tx.id));
+  const txIds = (txs ?? []).map((tx) => String(tx.id));
+  const blocked = await fetchNonFiscalTransactionIds(supabase, txIds);
+
+  for (const txId of txIds) {
+    if (blocked.has(txId)) continue;
+    await ensureFiscalNoteForTransaction(supabase, txId);
   }
 }
 
@@ -289,7 +361,8 @@ export async function listPartnerFiscalNotes(
     .neq("status", "CANCELLED")
     .order("created_at", { ascending: false });
 
-  return enrichFiscalNotes(supabase, (data ?? []) as Record<string, unknown>[]);
+  const activeRows = await filterFiscalNotesForActiveSales(supabase, (data ?? []) as Record<string, unknown>[]);
+  return enrichFiscalNotes(supabase, activeRows);
 }
 
 export async function listStaffFiscalNotes(
@@ -320,7 +393,8 @@ export async function listStaffFiscalNotes(
   if (options?.status) query = query.eq("status", fiscalNoteStatusToDb(options.status));
 
   const { data } = await query;
-  return enrichFiscalNotes(supabase, (data ?? []) as Record<string, unknown>[]);
+  const activeRows = await filterFiscalNotesForActiveSales(supabase, (data ?? []) as Record<string, unknown>[]);
+  return enrichFiscalNotes(supabase, activeRows);
 }
 
 export async function summarizeFiscalNotesMonth(
@@ -581,6 +655,14 @@ export async function getFiscalNoteByTransaction(
     .eq("transaction_id", transactionId)
     .maybeSingle();
   if (!data) return null;
+  if (String(data.status) === "CANCELLED") return null;
+  const blocked = await fetchNonFiscalTransactionIds(supabase, [transactionId]);
+  if (blocked.has(transactionId)) {
+    if (String(data.status) !== "CANCELLED") {
+      await cancelFiscalNoteForTransaction(supabase, transactionId, "system");
+    }
+    return null;
+  }
   const enriched = await enrichFiscalNotes(supabase, [data as Record<string, unknown>]);
   return enriched[0] ?? null;
 }
@@ -626,13 +708,20 @@ export async function countPartnerFiscalPending(
   mesReferencia: string
 ): Promise<number> {
   await syncPartnerFiscalNotesForMonth(supabase, partnerId, mesReferencia);
-  const { count } = await supabase
+  const { data: rows } = await supabase
     .from("hb_credit_fiscal_notes")
-    .select("id", { count: "exact", head: true })
+    .select("id, transaction_id, status")
     .eq("partner_id", partnerId)
     .eq("mes_referencia", mesReferencia)
     .in("status", ["PENDING_UPLOAD", "AWAITING_REVIEW", "REJECTED"]);
-  return count ?? 0;
+
+  const activeRows = await filterFiscalNotesForActiveSales(
+    supabase,
+    (rows ?? []) as Record<string, unknown>[]
+  );
+  return activeRows.filter((row) =>
+    ["PENDING_UPLOAD", "AWAITING_REVIEW", "REJECTED"].includes(String(row.status))
+  ).length;
 }
 
 export async function countCooperativeFiscalPending(
@@ -655,12 +744,17 @@ export async function countCooperativeFiscalPending(
 
   const { data: rows } = await supabase
     .from("hb_credit_fiscal_notes")
-    .select("status")
+    .select("status, transaction_id")
     .eq("cooperative_cnpj", digits)
     .eq("mes_referencia", mesReferencia)
     .neq("status", "CANCELLED");
 
-  for (const row of rows ?? []) {
+  const activeRows = await filterFiscalNotesForActiveSales(
+    supabase,
+    (rows ?? []) as Record<string, unknown>[]
+  );
+
+  for (const row of activeRows) {
     const st = String(row.status);
     if (st === "AWAITING_REVIEW") conferir += 1;
     if (st === "PENDING_UPLOAD" || st === "REJECTED") mercadoPendente += 1;
