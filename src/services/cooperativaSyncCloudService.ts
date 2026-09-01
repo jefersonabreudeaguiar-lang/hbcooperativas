@@ -7,8 +7,8 @@ import { syncCooperadosFromCloud, fetchCooperadosFromCloud, pushCooperadoToCloud
 import { syncNotasPedidoFromCloud, patchNotaPedidoInCloud } from "@/services/notaPedidoCloudService";
 import { fetchCooperativaByCnpjFromCloud, mergeCooperativaIntoData } from "@/services/cooperativaCloudService";
 import { mergeArquivosMensaisFromCloud, reconciliarFichaFromNotasConferidas, dedupeFichaCorridaPorNota, aplicarNotasPedidoExcluidas } from "@/services/notaPedidoService";
-import { operacionalPushSeguro, precisaReparoFullSyncNotas } from "@/services/fichaSyncGuard";
-import { forceNextFullNotasSync } from "@/services/syncMetaService";
+import { operacionalPushSeguro, precisaReparoFullSyncNotas, cooperadoFinanceiroLocalAusente } from "@/services/fichaSyncGuard";
+import { clearNotasSyncMeta, forceNextFullNotasSync } from "@/services/syncMetaService";
 import { sincronizarMensalidadeCooperativa, mensalidadeVisivelNoDispositivo, normalizarMensalidadeCooperadoLocal, mesclarMensalidadesPayloadNuvem, prepararMensalidadesCloud, prepararMensalidadeCloud, reconciliarMensalidadesComCooperadosCloud, mensalidadeCloudEntraNoDispositivo, enriquecerMensalidadeCooperadoSnapshot } from "@/services/mensalidadeService";
 import { aplicarPrestacoesContasExcluidas } from "@/services/prestacaoContasService";
 import { aplicarInstituicoesExcluidas } from "@/services/instituicaoContratoService";
@@ -1013,7 +1013,8 @@ export async function ensureCloudOperationalResetApplied(
 /** Sync leve em background (cooperado no celular): perfil, cooperados, notas e operacional. */
 export async function syncCooperativaBackground(
   cnpj: string,
-  preferredCoopId?: string
+  preferredCoopId?: string,
+  cooperadoId?: string
 ): Promise<void> {
   const digits = normalizeCnpj(cnpj);
   if (digits.length !== 14) return;
@@ -1029,7 +1030,7 @@ export async function syncCooperativaBackground(
     await syncOperacionalFromCloud(digits);
     await syncContratosFromCloud(digits);
     if (coopId) {
-      await repararIntegridadeFichaNotas(digits, coopId);
+      await repararIntegridadeFichaNotas(digits, coopId, cooperadoId);
     }
     saveDataSafe(reconciliarFichaFromNotasConferidas(getData()));
   });
@@ -1046,12 +1047,49 @@ export async function repararIntegridadeFichaNotas(
   const digits = normalizeCnpj(cnpj);
   if (digits.length !== 14) return false;
   const data = getData();
-  if (!precisaReparoFullSyncNotas(data, cooperativaId, cooperadoId)) return false;
+  if (
+    !precisaReparoFullSyncNotas(data, cooperativaId, cooperadoId) &&
+    !(cooperadoId && cooperadoFinanceiroLocalAusente(data, cooperadoId, cooperativaId))
+  ) {
+    return false;
+  }
 
   forceNextFullNotasSync(digits);
+  clearNotasSyncMeta(digits);
   await syncNotasPedidoFromCloud(digits, { retryFull: true });
   await syncOperacionalFromCloud(digits);
+  saveDataSafe(reconciliarFichaFromNotasConferidas(getData()));
   return true;
+}
+
+/**
+ * Recuperação agressiva quando o cooperado abre o app sem ficha nem notas locais.
+ */
+export async function ensureCooperadoFinanceiroFromCloud(
+  cnpj: string,
+  cooperativaId: string,
+  cooperadoId: string
+): Promise<boolean> {
+  const digits = normalizeCnpj(cnpj);
+  if (digits.length !== 14) return false;
+
+  let data = getData();
+  if (!cooperadoFinanceiroLocalAusente(data, cooperadoId, cooperativaId)) {
+    return false;
+  }
+
+  clearNotasSyncMeta(digits);
+  forceNextFullNotasSync(digits);
+  await syncCooperadosFromCloud(digits, cooperativaId);
+  await syncNotasPedidoFromCloud(digits, { retryFull: true });
+  await syncOperacionalFromCloud(digits);
+  saveDataSafe(reconciliarFichaFromNotasConferidas(getData()));
+
+  data = getData();
+  if (cooperadoFinanceiroLocalAusente(data, cooperadoId, cooperativaId)) {
+    await repararIntegridadeFichaNotas(digits, cooperativaId, cooperadoId);
+  }
+  return !cooperadoFinanceiroLocalAusente(getData(), cooperadoId, cooperativaId);
 }
 
 /**

@@ -24,9 +24,11 @@ import {
 } from "@/services/notaPedidoCloudService";
 import {
   getSyncMinGapMs,
+  ensureCooperadoFinanceiroFromCloud,
   syncCooperativaBackground,
   syncCooperativaBidirectional,
 } from "@/services/cooperativaSyncCloudService";
+import { cooperadoFinanceiroLocalAusente } from "@/services/fichaSyncGuard";
 import { pushCooperadoToCloud, resolverCooperadoIdCanonico, flushPendingCooperadoPushes } from "@/services/cooperadoCloudService";
 import { registerSyncHandler } from "@/services/syncRequest";
 import {
@@ -114,7 +116,13 @@ export function CooperativaSyncProvider({ children }: { children: React.ReactNod
       const cooperadoLogado = currentUser.role === "cooperado";
 
       if (cooperadoLogado) {
-        await syncCooperativaBackground(cnpj, currentCoopId);
+        const cooperadoCanonico =
+          currentUser.cooperadoId &&
+          resolverCooperadoIdCanonico(getData(), currentUser.cooperadoId, currentCoopId);
+        await syncCooperativaBackground(cnpj, currentCoopId, cooperadoCanonico || undefined);
+        if (cooperadoCanonico) {
+          await ensureCooperadoFinanceiroFromCloud(cnpj, currentCoopId, cooperadoCanonico);
+        }
       } else {
         const pushCatalog = isDiretoriaRole(currentUser.role as UserRole);
         const pushMensalidades = isDiretoriaRole(currentUser.role as UserRole);

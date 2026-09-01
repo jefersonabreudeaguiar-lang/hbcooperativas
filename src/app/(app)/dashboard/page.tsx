@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useRef } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useAppDataSelector } from "@/hooks/useAppData";
@@ -23,6 +24,9 @@ import {
   listarNotasPendentesCooperado,
 } from "@/services/cooperadoEntregasService";
 import { resolverCooperadoIdCanonico } from "@/services/cooperadoCloudService";
+import { cooperadoFinanceiroLocalAusente } from "@/services/fichaSyncGuard";
+import { requestAppSync } from "@/services/syncRequest";
+import { useSyncStatus } from "@/components/sync/CooperativaSyncProvider";
 import { getComunicadosInicioCooperado } from "@/services/comunicadoService";
 import { getResumoMensalidadesCooperado } from "@/services/mensalidadeService";
 import { prestacaoPrincipalCooperado, prestacaoExigeAtencaoCooperado } from "@/services/prestacaoContasService";
@@ -46,6 +50,28 @@ import { PageSkeleton } from "@/components/ui/PageSkeleton";
 function CooperadoDashboard() {
   const { user } = useAuth();
   const router = useRouter();
+  const { syncing } = useSyncStatus();
+  const recoverySyncRef = useRef(false);
+
+  const financeiroAusente = useAppDataSelector((data) => {
+    if (!data || !user?.cooperadoId) return false;
+    const coopId = getUserCooperativaId(user, data);
+    if (!coopId) return false;
+    const cooperadoId = resolverCooperadoIdCanonico(data, user.cooperadoId, coopId);
+    return cooperadoFinanceiroLocalAusente(data, cooperadoId, coopId);
+  }, [user?.id, user?.cooperadoId, user?.cooperativaId]);
+
+  useEffect(() => {
+    recoverySyncRef.current = false;
+  }, [user?.id]);
+
+  useEffect(() => {
+    if (!financeiroAusente || recoverySyncRef.current || typeof navigator === "undefined" || !navigator.onLine) {
+      return;
+    }
+    recoverySyncRef.current = true;
+    requestAppSync();
+  }, [financeiroAusente]);
 
   const view = useAppDataSelector((data) => {
     if (!data || !user?.cooperadoId) return null;
@@ -143,6 +169,26 @@ function CooperadoDashboard() {
         <h1 className="text-2xl font-bold text-gray-900">Olá, {cooperado?.nomeCompleto.split(" ")[0]}!</h1>
         <p className="text-sm text-gray-500 mt-1">{coopNome} · {formatMesReferencia(mes)}</p>
       </div>
+
+      {financeiroAusente && (
+        <AlertBanner variant="info" title={syncing ? "Sincronizando sua ficha…" : "Valores ainda não carregaram"}>
+          {syncing
+            ? "Baixando entregas e ficha da nuvem. Aguarde alguns segundos com internet."
+            : "Toque em atualizar ou aguarde — seus lançamentos estão guardados na nuvem."}
+          {!syncing && (
+            <button
+              type="button"
+              className="ml-2 font-semibold underline"
+              onClick={() => {
+                recoverySyncRef.current = false;
+                requestAppSync();
+              }}
+            >
+              Atualizar agora
+            </button>
+          )}
+        </AlertBanner>
+      )}
 
       {mostrarBaixarApp && (
         <Link

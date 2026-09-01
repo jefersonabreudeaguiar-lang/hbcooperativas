@@ -31,7 +31,7 @@ import {
   cpfCooperadoDigits,
 } from "@/services/cooperadoCloudService";
 import { reconciliarFichaFromNotasConferidas, ajustesFichaMesId } from "@/services/notaPedidoService";
-import { forceNextFullNotasSync } from "@/services/syncMetaService";
+import { forceNextFullNotasSync, clearNotasSyncMeta } from "@/services/syncMetaService";
 import { normalizarPrestacaoContas, aplicarPrestacoesContasExcluidas } from "@/services/prestacaoContasService";
 import { aplicarInstituicoesExcluidas } from "@/services/instituicaoContratoService";
 import { exigeSenhaCadastroCooperado } from "@/utils/cooperativaCadastro";
@@ -737,6 +737,7 @@ async function finishLoginSession(user: User, data: AppData, plainPassword: stri
 
   // Após sair/voltar, delta de notas pode vir vazio com local zerado — força full na próxima sync.
   if (user.role === "cooperado" && cooperativaCnpj?.length === 14) {
+    clearNotasSyncMeta(cooperativaCnpj);
     forceNextFullNotasSync(cooperativaCnpj);
   }
 
@@ -883,7 +884,10 @@ export function logout(): void {
     const session = readStoredSessionRaw();
     if (session?.role === "cooperado") {
       const cnpj = session.cooperativaCnpj ? normalizeCnpj(session.cooperativaCnpj) : "";
-      if (cnpj.length === 14) forceNextFullNotasSync(cnpj);
+      if (cnpj.length === 14) {
+        clearNotasSyncMeta(cnpj);
+        forceNextFullNotasSync(cnpj);
+      }
     }
     localStorage.removeItem(SESSION_KEY);
     sessionStorage.removeItem(SESSION_KEY);

@@ -14,6 +14,7 @@ import { secureApiFetch } from "@/lib/security/clientSession";
 import {
   getLastNotasSyncAt,
   forceNextFullNotasSync,
+  clearNotasSyncMeta,
   markNotasSyncDone,
   shouldForceFullNotasSync,
 } from "@/services/syncMetaService";
@@ -1179,9 +1180,17 @@ export async function syncNotasPedidoFromCloud(
 
   if (delta && cloudNotas.length === 0) {
     const coopId = resolveCoopIdFromCnpj(current, digits);
-    if (!options?.retryFull && coopId && precisaReparoFullSyncNotas(current, coopId)) {
-      forceNextFullNotasSync(digits);
-      return syncNotasPedidoFromCloud(cnpj, { retryFull: true });
+    if (!options?.retryFull && coopId) {
+      const conferidasCoop = current.notasPedido.filter(
+        (n) =>
+          (n.status === "conferida" || n.status === "pago") &&
+          (n.cooperativaId === coopId || getNotaCooperativaCnpj(current, n) === digits)
+      ).length;
+      if (precisaReparoFullSyncNotas(current, coopId) || conferidasCoop === 0) {
+        forceNextFullNotasSync(digits);
+        clearNotasSyncMeta(digits);
+        return syncNotasPedidoFromCloud(cnpj, { retryFull: true });
+      }
     }
     markNotasSyncDone(digits, false, [], serverWatermark);
     return 0;

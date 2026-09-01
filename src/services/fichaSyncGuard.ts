@@ -1,7 +1,23 @@
 import type { AppData, FichaCorrida } from "@/types";
-import { fichaPertenceCooperado } from "@/services/cooperadoCloudService";
+import {
+  fichaPertenceCooperado,
+  notaPertenceCooperado,
+  resolverCooperadoIdCanonico,
+} from "@/services/cooperadoCloudService";
 
 const SYNC_COMPLETO_RATIO = 0.75;
+
+function notasConferidasCooperado(
+  data: AppData,
+  cooperadoId: string,
+  cooperativaId?: string
+): number {
+  return (data.notasPedido ?? []).filter(
+    (n) =>
+      (n.status === "conferida" || n.status === "pago") &&
+      notaPertenceCooperado(data, n, cooperadoId, cooperativaId)
+  ).length;
+}
 
 function notaExcluidaLocal(data: AppData, notaId: string, cooperativaId?: string): boolean {
   return (data.notasPedidoExcluidas ?? []).some(
@@ -20,10 +36,25 @@ function fichasDaCooperativa(data: AppData, cooperativaId: string, cooperadoId?:
 /** Indica se a maior parte das fichas locais já tem nota correspondente (sync de notas concluído). */
 export function notasSyncProvavelmenteCompleto(data: AppData, cooperativaId: string): boolean {
   const fichasCoop = fichasDaCooperativa(data, cooperativaId);
-  if (fichasCoop.length === 0) return true;
   const notaIds = new Set((data.notasPedido ?? []).map((n) => n.id));
+  if (fichasCoop.length === 0) {
+    // Vazio local ≠ sync ok — evita delta vazio eterno após relogin no celular.
+    return false;
+  }
   const comNota = fichasCoop.filter((f) => notaIds.has(f.notaPedidoId)).length;
   return comNota / fichasCoop.length >= SYNC_COMPLETO_RATIO;
+}
+
+/** Cooperado sem ficha e sem notas conferidas locais (precisa puxar da nuvem). */
+export function cooperadoFinanceiroLocalAusente(
+  data: AppData,
+  cooperadoId: string,
+  cooperativaId: string
+): boolean {
+  const canonico = resolverCooperadoIdCanonico(data, cooperadoId, cooperativaId);
+  const fichas = fichasDaCooperativa(data, cooperativaId, canonico).filter((f) => f.status === "pendente");
+  const conferidas = notasConferidasCooperado(data, canonico, cooperativaId);
+  return fichas.length === 0 && conferidas === 0;
 }
 
 /**
@@ -56,6 +87,9 @@ export function precisaReparoFullSyncNotas(
   cooperativaId: string,
   cooperadoId?: string
 ): boolean {
+  if (cooperadoId && cooperadoFinanceiroLocalAusente(data, cooperadoId, cooperativaId)) {
+    return true;
+  }
   if (notasSyncProvavelmenteCompleto(data, cooperativaId)) return false;
   const orfas = contarFichasOrfasAguardandoNotas(data, cooperativaId, cooperadoId);
   if (orfas === 0) return false;
