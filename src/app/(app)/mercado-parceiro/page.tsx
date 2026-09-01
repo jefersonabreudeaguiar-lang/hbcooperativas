@@ -1,9 +1,9 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import QRCode from "qrcode";
 import { CreditFeatureGate } from "@/components/hb-credit/CreditFeatureGate";
-import { PageHeader } from "@/components/ui/Table";
+import { ContaCoopSegmentTabs } from "@/components/hb-credit/ContaCoopSegmentTabs";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Input, Label } from "@/components/ui/Form";
@@ -25,7 +25,9 @@ import type { ContaCoopCompraEstornavel, ContaCoopIntent, ContaCoopParceiro, Con
 import { ContaCoopFiscalNotesMercadoPanel } from "@/components/hb-credit/ContaCoopFiscalNotesMercadoPanel";
 import { PageSkeleton } from "@/components/ui/PageSkeleton";
 import { SignaturePad } from "@/components/ui/SignaturePad";
-import { formatCpfCnpj, formatDateTime, formatMesReferencia } from "@/utils/format";
+import { formatCpfCnpj, formatDateTime, formatMesReferencia, getCurrentMesReferencia } from "@/utils/format";
+
+type MercadoTab = "inicio" | "cobrar" | "vendas" | "mais";
 
 type CobrancaQrAtiva = {
   qrUrl: string;
@@ -90,6 +92,7 @@ function MercadoParceiroContent() {
   const [estornoMotivo, setEstornoMotivo] = useState("");
   const [estornoPin, setEstornoPin] = useState("");
   const [fiscalPendentes, setFiscalPendentes] = useState(0);
+  const [tab, setTab] = useState<MercadoTab>("inicio");
 
   const reload = useCallback(async () => {
     setLoading(true);
@@ -155,6 +158,7 @@ function MercadoParceiroContent() {
           setCobrancaQr(null);
           setAguardandoPagamento(false);
           setSuccess("Pagamento confirmado!");
+          setTab("cobrar");
           requestAnimationFrame(() => {
             comprovanteRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
           });
@@ -198,6 +202,7 @@ function MercadoParceiroContent() {
           intentId: res.intent.id,
           expiresAt: res.intent.expiresAt,
         });
+        setTab("cobrar");
         requestAnimationFrame(() => {
           qrDestaqueRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
         });
@@ -209,8 +214,6 @@ function MercadoParceiroContent() {
       setBusy(false);
     }
   };
-
-  const fecharQrCobranca = () => setCobrancaQr(null);
 
   const fecharComprovante = () => {
     setComprovante(null);
@@ -362,25 +365,61 @@ function MercadoParceiroContent() {
   };
 
   const pendenteConfirmacao = settlements.find((s) => s.status === "aguardando_mercado");
+  const mesReferencia = getCurrentMesReferencia();
+
+  const resumoMercado = useMemo(() => {
+    const abertoCents = recebiveis
+      .filter((r) => r.status === "aberto")
+      .reduce((sum, r) => sum + r.amountCents, 0);
+    const elegivelCents = recebiveis
+      .filter((r) => r.status === "elegivel")
+      .reduce((sum, r) => sum + r.amountCents, 0);
+    const emLiquidacaoCents = recebiveis
+      .filter((r) => r.status === "em_processamento")
+      .reduce((sum, r) => sum + r.amountCents, 0);
+    const aguardandoAssinaturaCents = settlements
+      .filter((s) => s.status === "aguardando_mercado")
+      .reduce((sum, s) => sum + s.totalCents, 0);
+    const aReceberCents = abertoCents + elegivelCents;
+    const totalPendenteCents = aReceberCents + emLiquidacaoCents + aguardandoAssinaturaCents;
+    const nfPercent =
+      aReceberCents > 0 ? Math.min(100, Math.round((elegivelCents / aReceberCents) * 100)) : 0;
+
+    return {
+      abertoCents,
+      elegivelCents,
+      emLiquidacaoCents,
+      aguardandoAssinaturaCents,
+      aReceberCents,
+      totalPendenteCents,
+      nfPercent,
+    };
+  }, [recebiveis, settlements]);
+
   if (loading && !parceiro) return <PageSkeleton />;
 
   const ativo = parceiro?.status === "ativo";
   const pendente = parceiro?.status === "pendente";
 
   return (
-    <div className="space-y-6 max-w-2xl">
-      <PageHeader
-        title={parceiro?.nomeMercado ?? "Mercado parceiro"}
-        subtitle="Cobrança Conta Coop — QR referencia intent + nonce (sem autoridade própria)"
-      />
+    <div className="mx-auto max-w-lg space-y-5 pb-8">
+      <header className="space-y-1">
+        <p className="text-xs font-semibold uppercase tracking-wider text-green-700">Conta Coop · Mercado</p>
+        <h1 className="text-2xl font-bold text-gray-900">{parceiro?.nomeMercado ?? "Mercado parceiro"}</h1>
+        <p className="text-sm text-gray-500">Vendas com crédito interno da cooperativa</p>
+      </header>
 
       {error && <AlertBanner variant="error">{error}</AlertBanner>}
-      {success && <AlertBanner variant="info" title="OK">{success}</AlertBanner>}
+      {success && (
+        <AlertBanner variant="info" title="Tudo certo">
+          {success}
+        </AlertBanner>
+      )}
 
       {ativo && fiscalPendentes > 0 && (
         <AlertBanner variant="warning" title="Notas fiscais pendentes">
-          Você tem {fiscalPendentes} venda(s) sem NF conferida neste mês. Anexe as notas abaixo para a cooperativa
-          liberar seu pagamento.
+          Você tem {fiscalPendentes} venda(s) sem NF conferida em {formatMesReferencia(mesReferencia)}. Anexe as notas
+          na aba Mais para liberar o pagamento.
         </AlertBanner>
       )}
 
@@ -396,343 +435,439 @@ function MercadoParceiroContent() {
         </AlertBanner>
       )}
 
-      {comprovante && (
-        <div ref={comprovanteRef} className="sticky top-2 z-20 scroll-mt-4">
-          <Card className="overflow-hidden border-2 border-emerald-600 bg-white p-0 shadow-lg ring-4 ring-emerald-500/20 animate-in fade-in slide-in-from-top-2 duration-300">
-            <div className="bg-emerald-600 px-5 py-5 text-center text-white">
-              <p className="text-xs font-semibold uppercase tracking-widest text-emerald-100">Pagamento confirmado</p>
-              <p className="mt-2 text-4xl font-bold tabular-nums">{formatCentsBRL(comprovante.amountCents)}</p>
-              {comprovante.descricao && <p className="mt-1 text-sm text-emerald-100">{comprovante.descricao}</p>}
-            </div>
-            <div className="space-y-4 px-5 py-6">
-              <div className="rounded-xl border border-emerald-200 bg-emerald-50/60 p-4 space-y-3">
-                <div>
-                  <p className="text-xs font-semibold uppercase tracking-wide text-emerald-800">Cooperado</p>
-                  <p className="text-lg font-semibold text-gray-900">{comprovante.cooperadoNome}</p>
-                </div>
-                <div>
-                  <p className="text-xs font-semibold uppercase tracking-wide text-emerald-800">CPF</p>
-                  <p className="text-base font-medium text-gray-900 tabular-nums">
-                    {formatCpfCnpj(comprovante.cooperadoCpf)}
-                  </p>
-                </div>
-                <div className="grid grid-cols-2 gap-3 text-sm">
-                  <div>
-                    <p className="text-xs text-gray-500">Comprovante</p>
-                    <p className="font-semibold text-gray-900">{comprovante.receiptCode ?? "—"}</p>
-                  </div>
-                  <div>
-                    <p className="text-xs text-gray-500">Horário</p>
-                    <p className="font-semibold text-gray-900">{formatDateTime(comprovante.paidAt)}</p>
-                  </div>
-                </div>
-              </div>
-              <Button size="lg" className="w-full" onClick={fecharComprovante}>
-                Nova cobrança
-              </Button>
-            </div>
-          </Card>
-        </div>
-      )}
+      <ContaCoopSegmentTabs
+        tabs={[
+          { id: "inicio", label: "Início" },
+          { id: "cobrar", label: "Cobrar" },
+          { id: "vendas", label: "Vendas" },
+          { id: "mais", label: "Mais" },
+        ]}
+        active={tab}
+        onChange={setTab}
+      />
 
-      {cobrancaQr && (
-        <div ref={qrDestaqueRef} className="sticky top-2 z-20 scroll-mt-4">
-          <Card className="overflow-hidden border-2 border-green-600 bg-gradient-to-b from-green-50 to-white p-0 shadow-lg ring-4 ring-green-600/15">
-            <div className="bg-green-700 px-5 py-4 text-center text-white">
-              <p className="text-xs font-semibold uppercase tracking-widest text-green-100">Cobrança aberta</p>
-              <p className="mt-1 text-3xl font-bold tabular-nums sm:text-4xl">
-                {formatCentsBRL(cobrancaQr.amountCents)}
-              </p>
-              {cobrancaQr.descricao && (
-                <p className="mt-1 text-sm text-green-100">{cobrancaQr.descricao}</p>
-              )}
-              <p className="mt-2 text-xs text-green-200">
-                Peça ao cooperado escanear este QR · expira{" "}
-                {new Date(cobrancaQr.expiresAt).toLocaleTimeString("pt-BR", {
-                  hour: "2-digit",
-                  minute: "2-digit",
-                })}
-              </p>
-              {aguardandoPagamento && (
-                <p className="mt-3 inline-flex items-center gap-2 rounded-full bg-green-800/80 px-3 py-1 text-xs font-medium text-green-50">
-                  <span className="h-2 w-2 animate-pulse rounded-full bg-lime-300" />
-                  Aguardando pagamento do cooperado…
-                </p>
-              )}
-            </div>
-            <div className="flex flex-col items-center gap-4 px-5 py-6">
-              <div className="rounded-2xl border-4 border-gray-900 bg-white p-4 shadow-inner">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                  src={cobrancaQr.qrUrl}
-                  alt="QR Code da cobrança Conta Coop"
-                  className="h-auto w-[min(100vw-4rem,22rem)] max-w-full aspect-square"
+      {tab === "inicio" && (
+        <>
+          <div className="overflow-hidden rounded-3xl bg-gradient-to-br from-green-800 via-green-700 to-emerald-600 p-6 text-white shadow-lg">
+            <p className="text-sm font-medium text-green-100">A receber da cooperativa</p>
+            <p className="mt-1 text-4xl font-bold tracking-tight">{formatCentsBRL(resumoMercado.aReceberCents)}</p>
+            <p className="mt-1 text-xs text-green-200">{formatMesReferencia(mesReferencia)} · vendas aguardando repasse</p>
+            <div className="mt-5 space-y-2">
+              <div className="flex justify-between text-xs text-green-100">
+                <span>Com NF conferida {formatCentsBRL(resumoMercado.elegivelCents)}</span>
+                <span>Aguardando NF {formatCentsBRL(resumoMercado.abertoCents)}</span>
+              </div>
+              <div className="h-2 overflow-hidden rounded-full bg-green-900/40">
+                <div
+                  className="h-full rounded-full bg-white/90 transition-all"
+                  style={{ width: `${resumoMercado.nfPercent}%` }}
                 />
               </div>
-              <p className="text-center text-sm font-medium text-gray-800">
-                Aponte a câmera do cooperado para o quadrado preto
-              </p>
-              <p className="text-xs text-gray-500 break-all text-center max-w-md">{cobrancaQr.qrPayload}</p>
-              <div className="flex w-full max-w-sm flex-col gap-2 sm:flex-row">
-                <Button variant="secondary" className="flex-1" onClick={fecharQrCobranca} disabled={busy}>
-                  Minimizar
+            </div>
+            {(resumoMercado.emLiquidacaoCents > 0 || resumoMercado.aguardandoAssinaturaCents > 0) && (
+              <div className="mt-4 flex flex-wrap gap-x-4 gap-y-1 text-xs text-green-100">
+                {resumoMercado.emLiquidacaoCents > 0 && (
+                  <span>Em liquidação {formatCentsBRL(resumoMercado.emLiquidacaoCents)}</span>
+                )}
+                {resumoMercado.aguardandoAssinaturaCents > 0 && (
+                  <span>Aguardando sua assinatura {formatCentsBRL(resumoMercado.aguardandoAssinaturaCents)}</span>
+                )}
+              </div>
+            )}
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <Card className="!p-4 text-center">
+              <p className="text-xs text-gray-500">Pronto p/ pagamento</p>
+              <p className="mt-1 text-lg font-bold text-gray-900">{formatCentsBRL(resumoMercado.elegivelCents)}</p>
+            </Card>
+            <Card className="!p-4 text-center">
+              <p className="text-xs text-gray-500">Aguardando NF</p>
+              <p className="mt-1 text-lg font-bold text-gray-900">{formatCentsBRL(resumoMercado.abertoCents)}</p>
+            </Card>
+            <Card className="!p-4 text-center">
+              <p className="text-xs text-gray-500">Em liquidação</p>
+              <p className="mt-1 text-lg font-bold text-gray-900">{formatCentsBRL(resumoMercado.emLiquidacaoCents)}</p>
+            </Card>
+            <Card className="!p-4 text-center">
+              <p className="text-xs text-gray-500">Total pendente</p>
+              <p className="mt-1 text-lg font-bold text-gray-900">{formatCentsBRL(resumoMercado.totalPendenteCents)}</p>
+            </Card>
+          </div>
+          <Button size="lg" className="w-full" onClick={() => setTab("cobrar")} disabled={!ativo}>
+            Cobrar com QR Code
+          </Button>
+          {pendenteConfirmacao && (
+            <Button variant="secondary" size="lg" className="w-full" onClick={() => setTab("mais")}>
+              Confirmar pagamento da cooperativa
+            </Button>
+          )}
+        </>
+      )}
+
+      {tab === "cobrar" && (
+        <div className="space-y-4">
+          {comprovante && (
+            <div ref={comprovanteRef} className="scroll-mt-4">
+              <Card className="overflow-hidden border-2 border-emerald-600 bg-white p-0 shadow-lg ring-4 ring-emerald-500/20">
+                <div className="bg-emerald-600 px-5 py-5 text-center text-white">
+                  <p className="text-xs font-semibold uppercase tracking-widest text-emerald-100">Pagamento confirmado</p>
+                  <p className="mt-2 text-4xl font-bold tabular-nums">{formatCentsBRL(comprovante.amountCents)}</p>
+                  {comprovante.descricao && <p className="mt-1 text-sm text-emerald-100">{comprovante.descricao}</p>}
+                </div>
+                <div className="space-y-4 px-5 py-6">
+                  <div className="rounded-xl border border-emerald-200 bg-emerald-50/60 p-4 space-y-3">
+                    <div>
+                      <p className="text-xs font-semibold uppercase tracking-wide text-emerald-800">Cooperado</p>
+                      <p className="text-lg font-semibold text-gray-900">{comprovante.cooperadoNome}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs font-semibold uppercase tracking-wide text-emerald-800">CPF</p>
+                      <p className="text-base font-medium text-gray-900 tabular-nums">
+                        {formatCpfCnpj(comprovante.cooperadoCpf)}
+                      </p>
+                    </div>
+                    <div className="grid grid-cols-2 gap-3 text-sm">
+                      <div>
+                        <p className="text-xs text-gray-500">Comprovante</p>
+                        <p className="font-semibold text-gray-900">{comprovante.receiptCode ?? "—"}</p>
+                      </div>
+                      <div>
+                        <p className="text-xs text-gray-500">Horário</p>
+                        <p className="font-semibold text-gray-900">{formatDateTime(comprovante.paidAt)}</p>
+                      </div>
+                    </div>
+                  </div>
+                  <Button size="lg" className="w-full" onClick={fecharComprovante}>
+                    Nova cobrança
+                  </Button>
+                </div>
+              </Card>
+            </div>
+          )}
+
+          {cobrancaQr && !comprovante && (
+            <div ref={qrDestaqueRef} className="scroll-mt-4">
+              <Card className="overflow-hidden border-2 border-green-600 bg-gradient-to-b from-green-50 to-white p-0 shadow-lg ring-4 ring-green-600/15">
+                <div className="bg-green-700 px-5 py-4 text-center text-white">
+                  <p className="text-xs font-semibold uppercase tracking-widest text-green-100">Cobrança aberta</p>
+                  <p className="mt-1 text-3xl font-bold tabular-nums sm:text-4xl">
+                    {formatCentsBRL(cobrancaQr.amountCents)}
+                  </p>
+                  {cobrancaQr.descricao && (
+                    <p className="mt-1 text-sm text-green-100">{cobrancaQr.descricao}</p>
+                  )}
+                  <p className="mt-2 text-xs text-green-200">
+                    Peça ao cooperado escanear este QR · expira{" "}
+                    {new Date(cobrancaQr.expiresAt).toLocaleTimeString("pt-BR", {
+                      hour: "2-digit",
+                      minute: "2-digit",
+                    })}
+                  </p>
+                  {aguardandoPagamento && (
+                    <p className="mt-3 inline-flex items-center gap-2 rounded-full bg-green-800/80 px-3 py-1 text-xs font-medium text-green-50">
+                      <span className="h-2 w-2 animate-pulse rounded-full bg-lime-300" />
+                      Aguardando pagamento do cooperado…
+                    </p>
+                  )}
+                </div>
+                <div className="flex flex-col items-center gap-4 px-5 py-6">
+                  <div className="rounded-2xl border-4 border-gray-900 bg-white p-4 shadow-inner">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={cobrancaQr.qrUrl}
+                      alt="QR Code da cobrança Conta Coop"
+                      className="h-auto w-[min(100vw-4rem,22rem)] max-w-full aspect-square"
+                    />
+                  </div>
+                  <p className="text-center text-sm font-medium text-gray-800">
+                    Aponte a câmera do cooperado para o quadrado preto
+                  </p>
+                  <div className="flex w-full max-w-sm flex-col gap-2 sm:flex-row">
+                    <Button
+                      variant="secondary"
+                      className="flex-1 border-red-200 text-red-700 hover:bg-red-50"
+                      onClick={() => void cancelarCobrancaAtiva()}
+                      disabled={busy}
+                    >
+                      Cancelar cobrança
+                    </Button>
+                  </div>
+                </div>
+              </Card>
+            </div>
+          )}
+
+          {!comprovante && !cobrancaQr && (
+            <Card className="space-y-4 !p-5">
+              <div>
+                <h3 className="font-semibold text-gray-900">Nova cobrança</h3>
+                <p className="text-sm text-gray-600">Informe o valor e gere o QR para o cooperado pagar.</p>
+              </div>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div>
+                  <Label>Valor (R$)</Label>
+                  <Input value={valorReais} onChange={(e) => setValorReais(e.target.value)} disabled={!ativo} />
+                </div>
+                <div>
+                  <Label>Descrição</Label>
+                  <Input value={descricao} onChange={(e) => setDescricao(e.target.value)} disabled={!ativo} />
+                </div>
+              </div>
+              <Button onClick={() => void criarCobranca()} disabled={busy || !ativo} size="lg" className="w-full">
+                {busy ? "Gerando QR..." : "Gerar QR Code"}
+              </Button>
+            </Card>
+          )}
+        </div>
+      )}
+
+      {tab === "vendas" && (
+        <div className="space-y-4">
+          {estornoAlvo && (
+            <Card className="space-y-4 border-amber-300 bg-amber-50/40 p-5">
+              <div>
+                <h3 className="font-semibold text-gray-900">Solicitar estorno</h3>
+                <p className="text-sm text-gray-600">
+                  {formatCentsBRL(estornoAlvo.amountCents)} · a cooperativa precisa aprovar
+                </p>
+              </div>
+              <div>
+                <Label>Motivo</Label>
+                <Input
+                  className="mt-1"
+                  value={estornoMotivo}
+                  onChange={(e) => setEstornoMotivo(e.target.value)}
+                  placeholder="Ex.: compra de teste, produto devolvido..."
+                />
+              </div>
+              <div>
+                <Label>PIN financeiro</Label>
+                <Input
+                  className="mt-1"
+                  type="password"
+                  inputMode="numeric"
+                  autoComplete="off"
+                  value={estornoPin}
+                  onChange={(e) => setEstornoPin(e.target.value.replace(/\D/g, ""))}
+                  placeholder="Confirme com seu PIN"
+                />
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <Button onClick={() => void enviarEstorno()} disabled={busy}>
+                  {busy ? "Enviando..." : "Enviar solicitação"}
                 </Button>
-                <Button
-                  variant="secondary"
-                  className="flex-1 border-red-200 text-red-700 hover:bg-red-50"
-                  onClick={() => void cancelarCobrancaAtiva()}
-                  disabled={busy}
-                >
-                  Cancelar cobrança
+                <Button variant="secondary" onClick={() => setEstornoAlvo(null)} disabled={busy}>
+                  Cancelar
                 </Button>
               </div>
-            </div>
+            </Card>
+          )}
+
+          <Card className="p-5 space-y-2">
+            <h3 className="font-semibold">Compras confirmadas</h3>
+            <p className="text-sm text-gray-600">
+              Para devolver crédito ao cooperado, solicite estorno — a cooperativa precisa aprovar.
+            </p>
+            {comprasEstornaveis.map((compra) => (
+              <div key={compra.id} className="flex items-center justify-between border-b py-2 text-sm gap-3">
+                <div>
+                  <p className="font-medium">{formatCentsBRL(compra.amountCents)}</p>
+                  <p className="text-xs text-gray-500">{new Date(compra.createdAt).toLocaleString("pt-BR")}</p>
+                  {compra.receiptCode && <p className="text-xs text-gray-500">Recibo {compra.receiptCode}</p>}
+                  {compra.solicitacaoPendenteId && (
+                    <p className="text-xs font-medium text-amber-700">Solicitação pendente na cooperativa</p>
+                  )}
+                </div>
+                {!compra.solicitacaoPendenteId ? (
+                  <Button size="sm" variant="secondary" onClick={() => abrirEstorno(compra)} disabled={busy || !ativo || !hasPin}>
+                    Solicitar estorno
+                  </Button>
+                ) : (
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    onClick={() => void cancelarSolicitacao(compra.solicitacaoPendenteId!)}
+                    disabled={busy}
+                  >
+                    Cancelar solicitação
+                  </Button>
+                )}
+              </div>
+            ))}
+            {!comprasEstornaveis.length && (
+              <p className="text-sm text-gray-500">Nenhuma compra confirmada elegível para estorno.</p>
+            )}
+          </Card>
+
+          <Card className="p-5 space-y-2">
+            <h3 className="font-semibold">Solicitações de estorno</h3>
+            {solicitacoesEstorno.slice(0, 15).map((s) => (
+              <div key={s.id} className="flex justify-between border-b py-2 text-sm gap-3">
+                <div>
+                  <p className="font-medium">{formatCentsBRL(s.amountCents)} · {statusSolicitacao(s.status)}</p>
+                  <p className="text-xs text-gray-500">{s.motivo}</p>
+                  <p className="text-xs text-gray-500">{new Date(s.createdAt).toLocaleString("pt-BR")}</p>
+                  {s.reviewNote && s.status === "negado" && (
+                    <p className="text-xs text-red-600">Resposta: {s.reviewNote}</p>
+                  )}
+                </div>
+                {s.status === "pendente" && (
+                  <Button size="sm" variant="secondary" onClick={() => void cancelarSolicitacao(s.id)} disabled={busy}>
+                    Cancelar
+                  </Button>
+                )}
+              </div>
+            ))}
+            {!solicitacoesEstorno.length && <p className="text-sm text-gray-500">Nenhuma solicitação ainda.</p>}
+          </Card>
+
+          <Card className="p-5 space-y-2">
+            <h3 className="font-semibold">Cobranças recentes</h3>
+            {intents.map((intent) => (
+              <div key={intent.id} className="flex items-center justify-between border-b py-2 text-sm">
+                <div>
+                  <p className="font-medium">{formatCentsBRL(intent.amountCents)} · {intent.status}</p>
+                  <p className="text-xs text-gray-500">{new Date(intent.createdAt).toLocaleString("pt-BR")}</p>
+                </div>
+                {["pendente", "criada"].includes(intent.status) && (
+                  <Button size="sm" variant="secondary" onClick={() => cancelar(intent.id)} disabled={busy}>
+                    Cancelar
+                  </Button>
+                )}
+              </div>
+            ))}
+            {!intents.length && <p className="text-sm text-gray-500">Nenhuma cobrança.</p>}
           </Card>
         </div>
       )}
 
-      <Card className="p-5 space-y-4">
-        <div>
-          <h3 className="font-semibold text-gray-900">Seu PIX para receber da cooperativa</h3>
-          <p className="text-sm text-gray-600">Cadastre antes do dia de pagamento — igual o cooperado cadastra o PIX na ficha.</p>
-        </div>
-        <div className="grid gap-3 sm:grid-cols-2">
-          <div>
-            <Label>Chave PIX</Label>
-            <Input value={pixKey} onChange={(e) => setPixKey(e.target.value)} placeholder="CPF, CNPJ, e-mail ou telefone" />
-          </div>
-          <div>
-            <Label>Titular da chave</Label>
-            <Input value={pixHolderName} onChange={(e) => setPixHolderName(e.target.value)} placeholder="Nome do titular" />
-          </div>
-        </div>
-        <Button onClick={salvarPix} disabled={busy || !pixKey.trim() || !pixHolderName.trim()}>
-          Salvar PIX
-        </Button>
-        {parceiro?.pixKey && (
-          <p className="text-sm text-green-700">PIX cadastrado: <strong>{parceiro.pixKey}</strong></p>
-        )}
-      </Card>
-
-      {pendenteConfirmacao && (
-        <Card className="space-y-4 border-green-300 bg-green-50/50 p-5">
-          <div>
-            <h3 className="font-semibold text-gray-900">Confirmar pagamento da cooperativa</h3>
-            <p className="text-sm text-gray-600">
-              {formatMesReferencia(pendenteConfirmacao.mesReferencia)} · Total {formatCentsBRL(pendenteConfirmacao.totalCents)} ·{" "}
-              {pendenteConfirmacao.transacoesCount} transação(ões)
-            </p>
-            <p className="text-xs text-gray-500 mt-1">
-              Registrado por {pendenteConfirmacao.responsavelNome ?? "cooperativa"}
-              {pendenteConfirmacao.pagoEm ? ` em ${new Date(pendenteConfirmacao.pagoEm).toLocaleString("pt-BR")}` : ""}
-            </p>
-          </div>
-          {pendenteConfirmacao.relatorioHtml && (
-            <iframe
-              title="Relatório de liquidação"
-              srcDoc={pendenteConfirmacao.relatorioHtml}
-              className="h-72 w-full rounded-xl border bg-white"
-            />
-          )}
-          <div>
-            <Label>Assine como responsável do mercado</Label>
-            <SignaturePad onChange={setAssinatura} className="mt-2 h-36 w-full rounded-xl border bg-white" />
-          </div>
-          <Button size="lg" className="w-full" onClick={() => void confirmarLiquidacao(pendenteConfirmacao.id)} disabled={busy || !assinatura}>
-            Confirmar recebimento e enviar à cooperativa
-          </Button>
-        </Card>
-      )}
-
-      <Card className="p-5 space-y-3">
-        <p className="text-sm text-gray-600">Status: <strong className="capitalize">{parceiro?.status}</strong></p>
-        <div className="grid gap-3 sm:grid-cols-2">
-          <div>
-            <Label>Valor (R$)</Label>
-            <Input value={valorReais} onChange={(e) => setValorReais(e.target.value)} disabled={!ativo} />
-          </div>
-          <div>
-            <Label>Descrição</Label>
-            <Input value={descricao} onChange={(e) => setDescricao(e.target.value)} disabled={!ativo} />
-          </div>
-        </div>
-        <Button onClick={criarCobranca} disabled={busy || !ativo} size="lg" className="w-full sm:w-auto">
-          {busy ? "Gerando QR..." : "Nova cobrança"}
-        </Button>
-      </Card>
-
-      {ativo && <ContaCoopFiscalNotesMercadoPanel />}
-
-      <Card className="p-5 space-y-4">
-        <div>
-          <h3 className="font-semibold text-gray-900">PIN financeiro do mercado</h3>
-          <p className="text-sm text-gray-600">
-            Obrigatório para solicitar estorno. Use um PIN numérico de {FINANCIAL_PIN_MIN_LENGTH} ou mais dígitos.
-          </p>
-        </div>
-        {hasPin ? (
-          <p className="text-sm text-green-700">PIN cadastrado. Você precisará dele ao solicitar estorno.</p>
-        ) : (
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
-            <div className="flex-1">
-              <Label>Criar PIN</Label>
-              <Input
-                className="mt-1"
-                type="password"
-                inputMode="numeric"
-                autoComplete="off"
-                value={pinSetup}
-                onChange={(e) => setPinSetup(e.target.value.replace(/\D/g, ""))}
-                placeholder="Somente números"
-              />
-            </div>
-            <Button onClick={() => void salvarPin()} disabled={busy || pinSetup.length < FINANCIAL_PIN_MIN_LENGTH}>
-              Salvar PIN
-            </Button>
-          </div>
-        )}
-      </Card>
-
-      {estornoAlvo && (
-        <Card className="space-y-4 border-amber-300 bg-amber-50/40 p-5">
-          <div>
-            <h3 className="font-semibold text-gray-900">Solicitar estorno</h3>
-            <p className="text-sm text-gray-600">
-              {formatCentsBRL(estornoAlvo.amountCents)} · a cooperativa precisa aprovar
-            </p>
-          </div>
-          <div>
-            <Label>Motivo</Label>
-            <Input
-              className="mt-1"
-              value={estornoMotivo}
-              onChange={(e) => setEstornoMotivo(e.target.value)}
-              placeholder="Ex.: compra de teste, produto devolvido..."
-            />
-          </div>
-          <div>
-            <Label>PIN financeiro</Label>
-            <Input
-              className="mt-1"
-              type="password"
-              inputMode="numeric"
-              autoComplete="off"
-              value={estornoPin}
-              onChange={(e) => setEstornoPin(e.target.value.replace(/\D/g, ""))}
-              placeholder="Confirme com seu PIN"
-            />
-          </div>
-          <div className="flex flex-wrap gap-2">
-            <Button onClick={() => void enviarEstorno()} disabled={busy}>
-              {busy ? "Enviando..." : "Enviar solicitação"}
-            </Button>
-            <Button variant="secondary" onClick={() => setEstornoAlvo(null)} disabled={busy}>
-              Cancelar
-            </Button>
-          </div>
-        </Card>
-      )}
-
-      <Card className="p-5 space-y-2">
-        <h3 className="font-semibold">Compras confirmadas</h3>
-        <p className="text-sm text-gray-600">
-          Para devolver crédito ao cooperado, solicite estorno — a cooperativa precisa aprovar.
-        </p>
-        {comprasEstornaveis.map((compra) => (
-          <div key={compra.id} className="flex items-center justify-between border-b py-2 text-sm gap-3">
+      {tab === "mais" && (
+        <div className="space-y-4">
+          <Card className="p-5 space-y-4">
             <div>
-              <p className="font-medium">{formatCentsBRL(compra.amountCents)}</p>
-              <p className="text-xs text-gray-500">{new Date(compra.createdAt).toLocaleString("pt-BR")}</p>
-              {compra.receiptCode && <p className="text-xs text-gray-500">Recibo {compra.receiptCode}</p>}
-              {compra.solicitacaoPendenteId && (
-                <p className="text-xs font-medium text-amber-700">Solicitação pendente na cooperativa</p>
-              )}
+              <h3 className="font-semibold text-gray-900">Seu PIX para receber da cooperativa</h3>
+              <p className="text-sm text-gray-600">Cadastre antes do dia de pagamento — igual o cooperado cadastra o PIX na ficha.</p>
             </div>
-            {!compra.solicitacaoPendenteId ? (
-              <Button size="sm" variant="secondary" onClick={() => abrirEstorno(compra)} disabled={busy || !ativo || !hasPin}>
-                Solicitar estorno
-              </Button>
-            ) : (
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div>
+                <Label>Chave PIX</Label>
+                <Input value={pixKey} onChange={(e) => setPixKey(e.target.value)} placeholder="CPF, CNPJ, e-mail ou telefone" />
+              </div>
+              <div>
+                <Label>Titular da chave</Label>
+                <Input value={pixHolderName} onChange={(e) => setPixHolderName(e.target.value)} placeholder="Nome do titular" />
+              </div>
+            </div>
+            <Button onClick={() => void salvarPix()} disabled={busy || !pixKey.trim() || !pixHolderName.trim()}>
+              Salvar PIX
+            </Button>
+            {parceiro?.pixKey && (
+              <p className="text-sm text-green-700">
+                PIX cadastrado: <strong>{parceiro.pixKey}</strong>
+              </p>
+            )}
+          </Card>
+
+          {pendenteConfirmacao && (
+            <Card className="space-y-4 border-green-300 bg-green-50/50 p-5">
+              <div>
+                <h3 className="font-semibold text-gray-900">Confirmar pagamento da cooperativa</h3>
+                <p className="text-sm text-gray-600">
+                  {formatMesReferencia(pendenteConfirmacao.mesReferencia)} · Total {formatCentsBRL(pendenteConfirmacao.totalCents)} ·{" "}
+                  {pendenteConfirmacao.transacoesCount} transação(ões)
+                </p>
+                <p className="text-xs text-gray-500 mt-1">
+                  Registrado por {pendenteConfirmacao.responsavelNome ?? "cooperativa"}
+                  {pendenteConfirmacao.pagoEm ? ` em ${new Date(pendenteConfirmacao.pagoEm).toLocaleString("pt-BR")}` : ""}
+                </p>
+              </div>
+              {pendenteConfirmacao.relatorioHtml && (
+                <iframe
+                  title="Relatório de liquidação"
+                  srcDoc={pendenteConfirmacao.relatorioHtml}
+                  className="h-72 w-full rounded-xl border bg-white"
+                />
+              )}
+              <div>
+                <Label>Assine como responsável do mercado</Label>
+                <SignaturePad onChange={setAssinatura} className="mt-2 h-36 w-full rounded-xl border bg-white" />
+              </div>
               <Button
-                size="sm"
-                variant="secondary"
-                onClick={() => void cancelarSolicitacao(compra.solicitacaoPendenteId!)}
-                disabled={busy}
+                size="lg"
+                className="w-full"
+                onClick={() => void confirmarLiquidacao(pendenteConfirmacao.id)}
+                disabled={busy || !assinatura}
               >
-                Cancelar solicitação
+                Confirmar recebimento e enviar à cooperativa
               </Button>
-            )}
-          </div>
-        ))}
-        {!comprasEstornaveis.length && (
-          <p className="text-sm text-gray-500">Nenhuma compra confirmada elegível para estorno.</p>
-        )}
-      </Card>
+            </Card>
+          )}
 
-      <Card className="p-5 space-y-2">
-        <h3 className="font-semibold">Solicitações de estorno</h3>
-        {solicitacoesEstorno.slice(0, 15).map((s) => (
-          <div key={s.id} className="flex justify-between border-b py-2 text-sm gap-3">
+          {ativo && <ContaCoopFiscalNotesMercadoPanel />}
+
+          <Card className="p-5 space-y-4">
             <div>
-              <p className="font-medium">{formatCentsBRL(s.amountCents)} · {statusSolicitacao(s.status)}</p>
-              <p className="text-xs text-gray-500">{s.motivo}</p>
-              <p className="text-xs text-gray-500">{new Date(s.createdAt).toLocaleString("pt-BR")}</p>
-              {s.reviewNote && s.status === "negado" && (
-                <p className="text-xs text-red-600">Resposta: {s.reviewNote}</p>
-              )}
+              <h3 className="font-semibold text-gray-900">PIN financeiro do mercado</h3>
+              <p className="text-sm text-gray-600">
+                Obrigatório para solicitar estorno. Use um PIN numérico de {FINANCIAL_PIN_MIN_LENGTH} ou mais dígitos.
+              </p>
             </div>
-            {s.status === "pendente" && (
-              <Button size="sm" variant="secondary" onClick={() => void cancelarSolicitacao(s.id)} disabled={busy}>
-                Cancelar
-              </Button>
+            {hasPin ? (
+              <p className="text-sm text-green-700">PIN cadastrado. Você precisará dele ao solicitar estorno.</p>
+            ) : (
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
+                <div className="flex-1">
+                  <Label>Criar PIN</Label>
+                  <Input
+                    className="mt-1"
+                    type="password"
+                    inputMode="numeric"
+                    autoComplete="off"
+                    value={pinSetup}
+                    onChange={(e) => setPinSetup(e.target.value.replace(/\D/g, ""))}
+                    placeholder="Somente números"
+                  />
+                </div>
+                <Button onClick={() => void salvarPin()} disabled={busy || pinSetup.length < FINANCIAL_PIN_MIN_LENGTH}>
+                  Salvar PIN
+                </Button>
+              </div>
             )}
-          </div>
-        ))}
-        {!solicitacoesEstorno.length && <p className="text-sm text-gray-500">Nenhuma solicitação ainda.</p>}
-      </Card>
+          </Card>
 
-      <Card className="p-5 space-y-2">
-        <h3 className="font-semibold">Cobranças recentes</h3>
-        {intents.map((intent) => (
-          <div key={intent.id} className="flex items-center justify-between border-b py-2 text-sm">
-            <div>
-              <p className="font-medium">{formatCentsBRL(intent.amountCents)} · {intent.status}</p>
-              <p className="text-xs text-gray-500">{new Date(intent.createdAt).toLocaleString("pt-BR")}</p>
-            </div>
-            {["pendente", "criada"].includes(intent.status) && (
-              <Button size="sm" variant="secondary" onClick={() => cancelar(intent.id)} disabled={busy}>
-                Cancelar
-              </Button>
-            )}
-          </div>
-        ))}
-        {!intents.length && <p className="text-sm text-gray-500">Nenhuma cobrança.</p>}
-      </Card>
+          <Card className="p-5 space-y-2">
+            <h3 className="font-semibold">Histórico de liquidações</h3>
+            {settlements.map((s) => (
+              <div key={s.id} className="flex justify-between border-b py-2 text-sm">
+                <div>
+                  <p className="font-medium">{formatMesReferencia(s.mesReferencia)}</p>
+                  <p className="text-xs text-gray-500">
+                    {s.status === "confirmado"
+                      ? "Confirmado"
+                      : s.status === "aguardando_mercado"
+                        ? "Aguardando sua assinatura"
+                        : s.status}
+                  </p>
+                </div>
+                <span className="font-semibold">{formatCentsBRL(s.totalCents)}</span>
+              </div>
+            ))}
+            {!settlements.length && <p className="text-sm text-gray-500">Nenhuma liquidação ainda.</p>}
+          </Card>
 
-      <Card className="p-5 space-y-2">
-        <h3 className="font-semibold">Histórico de liquidações</h3>
-        {settlements.map((s) => (
-          <div key={s.id} className="flex justify-between border-b py-2 text-sm">
-            <div>
-              <p className="font-medium">{formatMesReferencia(s.mesReferencia)}</p>
-              <p className="text-xs text-gray-500">{s.status === "confirmado" ? "Confirmado" : s.status === "aguardando_mercado" ? "Aguardando sua assinatura" : s.status}</p>
-            </div>
-            <span className="font-semibold">{formatCentsBRL(s.totalCents)}</span>
-          </div>
-        ))}
-        {!settlements.length && <p className="text-sm text-gray-500">Nenhuma liquidação ainda.</p>}
-      </Card>
-
-      <Card className="p-5 space-y-2">
-        <h3 className="font-semibold">Recebíveis</h3>
-        {recebiveis.map((r) => (
-          <div key={r.id} className="flex justify-between text-sm border-b py-2">
-            <span>{formatCentsBRL(r.amountCents)}</span>
-            <span className="capitalize text-gray-600">{r.status}</span>
-          </div>
-        ))}
-        {!recebiveis.length && <p className="text-sm text-gray-500">Nenhum recebível ainda.</p>}
-      </Card>
+          <Card className="p-5 space-y-2">
+            <h3 className="font-semibold">Recebíveis</h3>
+            {recebiveis.map((r) => (
+              <div key={r.id} className="flex justify-between text-sm border-b py-2">
+                <span>{formatCentsBRL(r.amountCents)}</span>
+                <span className="capitalize text-gray-600">{r.status}</span>
+              </div>
+            ))}
+            {!recebiveis.length && <p className="text-sm text-gray-500">Nenhum recebível ainda.</p>}
+          </Card>
+        </div>
+      )}
     </div>
   );
 }
