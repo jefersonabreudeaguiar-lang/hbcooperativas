@@ -26,8 +26,6 @@ import { lancarPagamentoCooperadoNoCaixa } from "@/services/livroCaixaService";
 import type { DescontoContaCoopRemoto } from "@/lib/hb-credit/mergeFichaDescontos";
 import {
   descontosContaCoopFromArquivo,
-  descontosContaCoopLinhasExibicao,
-  liquidoUsoContaCoopMes,
   mergeDescontosContaCoopNoResumo,
 } from "@/lib/hb-credit/mergeFichaDescontos";
 import { isContaCoopValorReceberPilot } from "@/utils/contaCoopUiVisibility";
@@ -1307,12 +1305,16 @@ export function getDescontosContaCoopMesCached(
   return descontosContaCoopFromArquivo(arquivo);
 }
 
-export function getValorExibicaoCooperado(
+/**
+ * Resumo exibido ao cooperado no piloto (Orlando): entregas − mensalidade − Conta Coop + créditos.
+ * Demais cooperados usam o resumo original (só entregas na tela).
+ */
+export function getResumoExibicaoCooperadoPilot(
   resumo: ResumoPagamentoCooperado,
   opts?: ValorExibicaoCooperadoOpts
-): number {
+): ResumoPagamentoCooperado {
   if (!opts || !isContaCoopValorReceberPilot(opts.cooperadoId, opts.cooperadoNome)) {
-    return resumo.valorEntregas;
+    return resumo;
   }
   const descontos = getDescontosContaCoopMesCached(
     opts.data,
@@ -1320,8 +1322,18 @@ export function getValorExibicaoCooperado(
     opts.mesReferencia,
     opts.cooperativaId
   );
-  const uso = liquidoUsoContaCoopMes(descontos);
-  return round2(Math.max(0, resumo.valorEntregas - uso));
+  if (!descontos.length) return resumo;
+  return mergeDescontosContaCoopNoResumo(resumo, descontos);
+}
+
+export function getValorExibicaoCooperado(
+  resumo: ResumoPagamentoCooperado,
+  opts?: ValorExibicaoCooperadoOpts
+): number {
+  if (!opts || !isContaCoopValorReceberPilot(opts.cooperadoId, opts.cooperadoNome)) {
+    return resumo.valorEntregas;
+  }
+  return getResumoExibicaoCooperadoPilot(resumo, opts).valorLiquido;
 }
 
 export function getDescontosExtrasExibicaoCooperado(
@@ -1331,13 +1343,7 @@ export function getDescontosExtrasExibicaoCooperado(
   if (!opts || !isContaCoopValorReceberPilot(opts.cooperadoId, opts.cooperadoNome)) {
     return [];
   }
-  const descontos = getDescontosContaCoopMesCached(
-    opts.data,
-    opts.cooperadoId,
-    opts.mesReferencia,
-    opts.cooperativaId
-  );
-  return descontosContaCoopLinhasExibicao(descontos);
+  return getResumoExibicaoCooperadoPilot(resumo, opts).descontosExtras;
 }
 
 /** Registro de pagamento pelo responsável — inclui abatimento Conta Coop no piloto. */
