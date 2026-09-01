@@ -1,5 +1,5 @@
 /**
- * Regressão: crédito Conta Coop não zera após pagamento em dinheiro.
+ * Regressão: crédito Conta Coop sincronizado com entregas pendentes; zera após pagamento.
  * Uso: npx tsx scripts/test-credit-base-from-ficha.ts
  */
 import assert from "node:assert/strict";
@@ -100,10 +100,10 @@ function nota(status: NotaPedido["status"]): NotaPedido {
   assert.equal(getTotalAPagarCooperado(pago, COOPERADO, undefined, COOP), 0, "a pagar zera após pagamento");
   assert.equal(
     getCreditoBaseContaCoopReais(pago, COOPERADO, COOP),
-    100,
-    "crédito Conta Coop mantém entregas pagas em dinheiro"
+    0,
+    "crédito Conta Coop zera após pagamento ao cooperado"
   );
-  console.log("ok crédito base preservado após pagamento sem Conta Coop");
+  console.log("ok crédito base zera após pagamento");
 }
 
 {
@@ -113,36 +113,17 @@ function nota(status: NotaPedido["status"]): NotaPedido {
   });
   data = registrarPagamentoCooperado(data, COOPERADO, "2026-08", "Tesoureiro");
   assert.equal(getTotalAPagarCooperado(data, COOPERADO, undefined, COOP), 0);
-  assert.equal(getCreditoBaseContaCoopReais(data, COOPERADO, COOP), 100);
-  console.log("ok fluxo registrar pagamento preserva crédito Conta Coop");
+  assert.equal(getCreditoBaseContaCoopReais(data, COOPERADO, COOP), 0);
+  console.log("ok fluxo registrar pagamento zera crédito Conta Coop");
 }
 
 {
-  const comContaCoop = baseData({
-    notasPedido: [nota("pago")],
-    fichaCorrida: [ficha("pago", 100)],
-    pagamentosCooperado: [
-      {
-        id: "pg1",
-        cooperativaId: COOP,
-        cooperadoId: COOPERADO,
-        mesReferencia: "2026-08",
-        valorBruto: 100,
-        descontoCooperativa: 0,
-        descontosExtras: [{ tipo: "conta_coop", motivo: "Compra mercado", valor: 40 }],
-        valorLiquido: 60,
-        fichaIds: ["fc_x"],
-        notaPedidoIds: ["n1"],
-        status: "confirmado",
-        pagoPor: "Tesoureiro",
-        pagoEm: "2026-08-20T00:00:00.000Z",
-        createdAt: "2026-08-20T00:00:00.000Z",
-        updatedAt: "2026-08-20T00:00:00.000Z",
-      },
-    ],
+  const duasEntregas = baseData({
+    notasPedido: [nota("conferida"), { ...nota("conferida"), id: "n2", valorLiquido: 50, valorBruto: 50 }],
+    fichaCorrida: [ficha("pendente", 100), { ...ficha("pendente", 50), id: "fc2", notaPedidoId: "n2" }],
   });
-  assert.equal(getCreditoBaseContaCoopReais(comContaCoop, COOPERADO, COOP), 60);
-  console.log("ok desconto Conta Coop reduz crédito base");
+  assert.equal(getCreditoBaseContaCoopReais(duasEntregas, COOPERADO, COOP), 150);
+  console.log("ok crédito base soma entregas pendentes");
 }
 
 console.log("\nTodos os testes de creditBaseFromFicha passaram.");

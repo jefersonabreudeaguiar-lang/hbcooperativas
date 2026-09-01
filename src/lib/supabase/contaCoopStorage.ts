@@ -601,6 +601,137 @@ export async function setLimiteCooperado(
   return { ok: true, limite: mapLimiteRow(data as Record<string, unknown>) };
 }
 
+/** Zera limite e valor usado após liquidação (cooperado ou mercado). */
+export async function resetContaCoopCooperadoCredit(
+  supabase: SupabaseClient,
+  cnpj: string,
+  cooperadoId: string,
+  actorUserId: string,
+  metadata?: Record<string, unknown>
+): Promise<{ ok: true; limite: ContaCoopLimiteCooperado } | { ok: false; error: string }> {
+  const digits = normalizeCnpj(cnpj);
+  const now = new Date().toISOString();
+
+  const { data, error } = await supabase
+    .from("hb_credit_accounts")
+    .upsert(
+      {
+        cooperative_cnpj: digits,
+        cooperado_id: cooperadoId,
+        limit_released_cents: 0,
+        amount_used_cents: 0,
+        status: "active",
+        updated_at: now,
+        updated_by: actorUserId,
+      },
+      { onConflict: "cooperative_cnpj,cooperado_id" }
+    )
+    .select()
+    .single();
+
+  if (error) return { ok: false, error: error.message };
+
+  await supabase.from("hb_credit_audit_log").insert({
+    cooperative_cnpj: digits,
+    actor: actorUserId,
+    action: "CREDIT_RESET",
+    resource_type: "account",
+    resource_id: cooperadoId,
+    metadata: metadata ?? { motivo: "liquidacao" },
+  });
+
+  return { ok: true, limite: mapLimiteRow(data as Record<string, unknown>) };
+}
+
+/** Sincroniza limite liberado = teto% × crédito base das entregas pendentes. */
+export async function syncLimiteCooperadoFromCreditoBase(
+  supabase: SupabaseClient,
+  cnpj: string,
+  cooperadoId: string,
+  creditoBaseCents: number,
+  actorUserId: string,
+  creditosBaseCents: Record<string, number> = {}
+): Promise<{ ok: true; limite: ContaCoopLimiteCooperado } | { ok: false; error: string }> {
+  const base = Math.max(0, Math.round(Number(creditoBaseCents) || 0));
+  if (base === 0) {
+    return resetContaCoopCooperadoCredit(supabase, cnpj, cooperadoId, actorUserId, {
+      source: "sync_from_ficha",
+    });
+  }
+
+  const teto = await requireConfiguredTeto(supabase, cnpj, creditosBaseCents);
+  if (!teto.ok) return { ok: false, error: teto.error };
+
+  let novoLimiteCents = calcLimiteFromPercentual(base, teto.percent);
+  const { valorUsadoCents } = await readLimiteAtualCooperado(supabase, cnpj, cooperadoId);
+  if (novoLimiteCents < valorUsadoCents) {
+    novoLimiteCents = valorUsadoCents;
+  }
+
+  return setLimiteCooperado(supabase, cnpj, cooperadoId, novoLimiteCents, actorUserId, creditosBaseCents);
+}
+
+export async function syncLimitesCooperadosFromCreditoBase(
+  supabase: SupabaseClient,
+  cnpj: string,
+  cooperadoIds: string[],
+  creditosBaseCents: Record<string, number>,
+  actorUserId: string
+): Promise<{ ok: true; updated: number; errors: string[] } | { ok: false; error: string }> {
+  if (!cooperadoIds.length) return { ok: false, error: "Informe ao menos um cooperado." };
+
+  let updated = 0;
+  const errors: string[] = [];
+  for (const cooperadoId of cooperadoIds) {
+    const base = Math.max(0, Math.round(Number(creditosBaseCents[cooperadoId] ?? 0)));
+    const result = await syncLimiteCooperadoFromCreditoBase(
+      supabase,
+      cnpj,
+      cooperadoId,
+      base,
+      actorUserId,
+      creditosBaseCents
+    );
+    if (!result.ok) {
+      errors.push(`${cooperadoId}: ${result.error}`);
+      continue;
+    }
+    updated++;
+  }
+
+  if (updated === 0 && errors.length) {
+    return { ok: false, error: errors[0] };
+  }
+
+  return { ok: true, updated, errors };
+}
+
+/** Zera crédito dos cooperados envolvidos numa liquidação de mercado confirmada. */
+export async function resetContaCoopCooperadosFromSettlement(
+  supabase: SupabaseClient,
+  settlementId: string,
+  actorUserId: string
+): Promise<void> {
+  const { data: receivables } = await supabase
+    .from("hb_credit_receivables")
+    .select("cooperative_cnpj, cooperado_id")
+    .eq("settlement_id", settlementId);
+
+  const seen = new Set<string>();
+  for (const row of receivables ?? []) {
+    const cnpj = String(row.cooperative_cnpj ?? "");
+    const cooperadoId = String(row.cooperado_id ?? "");
+    if (!cnpj || !cooperadoId) continue;
+    const key = `${cnpj}:${cooperadoId}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    await resetContaCoopCooperadoCredit(supabase, cnpj, cooperadoId, actorUserId, {
+      source: "partner_settlement",
+      settlementId,
+    });
+  }
+}
+
 export async function setLimiteColetivo(
   supabase: SupabaseClient,
   cnpj: string,
@@ -2740,6 +2871,8 @@ export async function confirmPartnerSettlement(
     .from("hb_credit_receivables")
     .update({ status: "SETTLED", updated_at: now })
     .eq("settlement_id", settlementId);
+
+  await resetContaCoopCooperadosFromSettlement(supabase, settlementId, parceiroId);
 
   const { data: partnerRow } = await supabase
     .from("hb_credit_partners")

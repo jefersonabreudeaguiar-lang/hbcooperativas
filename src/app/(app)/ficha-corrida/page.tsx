@@ -32,6 +32,7 @@ import { listarPagamentosAguardandoAssinatura } from "@/services/filaDoDiaServic
 import { listCooperadosComFichaNoMes, getCooperadoNomeResolvido, resolverCooperadoParaPagamento, fichaPertenceCooperado, listCooperadosDaCooperativa } from "@/services/cooperadoCloudService";
 import { resolveCooperativaCnpj, patchNotaPedidoInCloud } from "@/services/notaPedidoCloudService";
 import { useSyncContaCoopValorReceberPilot } from "@/hooks/useSyncContaCoopValorReceberPilot";
+import { refreshContaCoopLimiteFromFicha } from "@/lib/hb-credit/syncContaCoopLimiteFromFicha";
 import {
   pushOperacionalToCloud,
   pushNotasPagasToCloud,
@@ -786,6 +787,12 @@ export default function FichaCorridaPage() {
       );
       await pushOperacionalToCloud(cnpj, d, coopId, { authoritative: true });
       await pushNotasPagasToCloud(cnpj, resumoPag.notaPedidoIds, d);
+      await refreshContaCoopLimiteFromFicha({
+        cnpj,
+        cooperadoId: cooperadoSelecionado.id,
+        cooperativaId: coopId,
+        cooperadoNome: cooperadoSelecionado.nomeCompleto,
+      }).catch(() => {});
     })();
     setConfirmPagamento(false);
     setCooperadoFilter("");

@@ -58,6 +58,22 @@ export async function postCreditLimites(body: Record<string, unknown>) {
   return data;
 }
 
+export async function syncCreditLimiteFromFicha(body: {
+  cnpj: string;
+  cooperadoId?: string;
+  cooperadoIds?: string[];
+  creditosBaseCents: Record<string, number>;
+}) {
+  const res = await secureApiFetch("/api/credit/sync-limite", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  const data = await parseJson<{ ok?: boolean; error?: string; updated?: number }>(res);
+  if (!res.ok || !data.ok) throw new Error(data.error ?? "Não foi possível sincronizar limite.");
+  return data;
+}
+
 export async function postCreditParceiroStatus(
   cnpj: string,
   parceiroId: string,

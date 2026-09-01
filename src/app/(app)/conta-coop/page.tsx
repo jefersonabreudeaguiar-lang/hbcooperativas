@@ -24,6 +24,7 @@ import {
   postCreditLimites,
   postCreditParceiroStatus,
   postUpdatePartnerDiscount,
+  syncCreditLimiteFromFicha,
 } from "@/services/creditApiService";
 import { formatCentsBRL } from "@/modules/hb-credit/engine/money";
 import { buildCreditosBaseMap } from "@/modules/hb-credit/engine/creditBaseFromFicha";
@@ -128,6 +129,13 @@ function ContaCoopContent() {
     setLoading(true);
     setError("");
     try {
+      if (cooperadosAtivos.length) {
+        await syncCreditLimiteFromFicha({
+          cnpj,
+          cooperadoIds: cooperadosAtivos.map((c) => c.id),
+          creditosBaseCents: creditosBaseColetivo,
+        }).catch(() => {});
+      }
       const [dash, lim, parc] = await Promise.all([
         fetchCreditDashboard(cnpj, creditosBaseColetivo),
         fetchCreditLimites(cnpj),
@@ -141,7 +149,7 @@ function ContaCoopContent() {
     } finally {
       setLoading(false);
     }
-  }, [cnpj, creditosBaseColetivo]);
+  }, [cnpj, creditosBaseColetivo, cooperadosAtivos]);
 
   useEffect(() => {
     reload();

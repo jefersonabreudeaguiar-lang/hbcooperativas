@@ -8,39 +8,11 @@ import {
 import { round2 } from "@/utils/calculations";
 import { reaisToCents } from "../shared/money";
 
-function sumDescontoContaCoopMes(
-  data: AppData,
-  cooperadoId: string,
-  mesReferencia: string,
-  cooperativaId?: string
-): number {
-  const coopId = cooperativaId ?? data.cooperados.find((c) => c.id === cooperadoId)?.cooperativaId;
-  const cooperadoCanonico = resolverCooperadoIdCanonico(data, cooperadoId, coopId);
-  let total = 0;
-
-  for (const f of listarFichasExtratoCooperadoMes(data, cooperadoCanonico, mesReferencia, coopId)) {
-    for (const d of f.descontosDetalhe ?? []) {
-      if (d.tipo === "conta_coop" && d.valor > 0) total += d.valor;
-    }
-  }
-
-  for (const p of data.pagamentosCooperado) {
-    if (p.mesReferencia !== mesReferencia) continue;
-    if (coopId && p.cooperativaId && p.cooperativaId !== coopId) continue;
-    const pagCanonico = resolverCooperadoIdCanonico(data, p.cooperadoId, coopId);
-    if (pagCanonico !== cooperadoCanonico) continue;
-    for (const d of p.descontosExtras ?? []) {
-      if (d.tipo === "conta_coop" && d.valor > 0) total += d.valor;
-    }
-  }
-
-  return round2(total);
-}
-
 /**
  * Crédito base Conta Coop:
- * — meses com ficha pendente: valor a pagar (Quanto vou receber);
- * — meses já pagos em dinheiro: entregas conferidas menos compras Conta Coop do mês.
+ * — somente meses com ficha pendente de pagamento ao cooperado;
+ * — base = valor das entregas (sincronizado com a ficha);
+ * — zera após liquidação do cooperado ou do mercado; novas entregas reconstruem a base.
  */
 export function getCreditoBaseContaCoopReais(
   data: AppData,
@@ -65,16 +37,9 @@ export function getCreditoBaseContaCoopReais(
   let total = 0;
   for (const mes of meses) {
     const fichas = listarFichasExtratoCooperadoMes(data, cooperadoCanonico, mes, coopId);
-    if (!fichas.length) continue;
+    if (!fichas.length || !fichas.some((f) => f.status === "pendente")) continue;
 
-    if (fichas.some((f) => f.status === "pendente")) {
-      total += getResumoPagamentoCooperado(data, cooperadoCanonico, mes, coopId).valorLiquido;
-      continue;
-    }
-
-    const valorEntregas = round2(fichas.reduce((s, f) => s + f.valorLiquido, 0));
-    const descontoContaCoop = sumDescontoContaCoopMes(data, cooperadoCanonico, mes, coopId);
-    total += round2(Math.max(0, valorEntregas - descontoContaCoop));
+    total += getResumoPagamentoCooperado(data, cooperadoCanonico, mes, coopId).valorEntregas;
   }
 
   return round2(Math.max(0, total));

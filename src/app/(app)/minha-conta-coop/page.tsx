@@ -28,6 +28,7 @@ import { labelLedgerTipo } from "@/lib/hb-credit/ledgerLabels";
 import { getMesPrincipalQuantoVouReceber } from "@/services/cooperadoEntregasService";
 import { isContaCoopValorReceberPilot } from "@/utils/contaCoopUiVisibility";
 import { useSyncContaCoopValorReceberPilot } from "@/hooks/useSyncContaCoopValorReceberPilot";
+import { useSyncContaCoopLimiteFromFicha } from "@/hooks/useSyncContaCoopLimiteFromFicha";
 import { PageSkeleton } from "@/components/ui/PageSkeleton";
 import { cn } from "@/utils/format";
 
@@ -94,6 +95,7 @@ function MinhaContaCoopContent() {
   }, [cnpj, cooperadoId, cooperadoNome, data, user]);
 
   useSyncContaCoopValorReceberPilot(contaCoopSync);
+  useSyncContaCoopLimiteFromFicha(contaCoopSync);
 
   useEffect(() => {
     const sync = () => setIsOffline(!navigator.onLine);
