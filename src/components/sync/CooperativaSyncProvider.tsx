@@ -29,6 +29,7 @@ import {
   syncCooperativaBidirectional,
 } from "@/services/cooperativaSyncCloudService";
 import { cooperadoFinanceiroLocalAusente } from "@/services/fichaSyncGuard";
+import { avaliarIntegridadeFinanceiroCooperado } from "@/services/cooperadoFinanceiroGuard";
 import { pushCooperadoToCloud, resolverCooperadoIdCanonico, flushPendingCooperadoPushes } from "@/services/cooperadoCloudService";
 import { registerSyncHandler } from "@/services/syncRequest";
 import {
@@ -37,7 +38,7 @@ import {
   onAppIdleChange,
   startIdleMonitor,
 } from "@/services/idleActivity";
-import { getData, updateDataSafe, waitForAppDataWarm } from "@/services/dataStore";
+import { getData, subscribe, updateDataSafe, waitForAppDataWarm } from "@/services/dataStore";
 import {
   ensureCloudSessionReady,
   getLastCloudSyncError,
@@ -340,6 +341,15 @@ export function CooperativaSyncProvider({ children }: { children: React.ReactNod
       window.removeEventListener("online", onOnline);
     };
   }, [coopId, user?.id, user?.role, runSync]);
+
+  useEffect(() => {
+    if (!user?.id || user.role !== "cooperado") return;
+    return subscribe(() => {
+      const current = userRef.current;
+      if (!current || current.role !== "cooperado") return;
+      avaliarIntegridadeFinanceiroCooperado(getData(), current);
+    });
+  }, [user?.id, user?.role]);
 
   const status = useMemo(
     () => ({ syncing, lastSyncedAt, lastSyncError }),

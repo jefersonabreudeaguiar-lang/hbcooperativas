@@ -23,7 +23,8 @@ import { valoresAvulsosPendentesMes, marcarValoresAvulsosPagosMes } from "@/serv
 import { round2 } from "@/utils/calculations";
 import { gerarReciboHtml, resumoReciboFromPagamento } from "@/utils/recibo";
 import { lancarPagamentoCooperadoNoCaixa } from "@/services/livroCaixaService";
-import { fichaPreservarSemNotaLocal } from "@/services/fichaSyncGuard";
+import { fichaPreservarSemNotaLocal, notasSyncProvavelmenteCompleto } from "@/services/fichaSyncGuard";
+import { isCloudSyncInProgress } from "@/services/cloudSyncProgress";
 
 export interface ItemResumoFichaMes {
   produtoInstituicaoId: string;
@@ -907,8 +908,39 @@ export function listarFichasExtratoCooperadoMes(
 
 /** Remove lançamentos órfãos ou de notas ainda não conferidas (evita valor inflado no app). */
 export function purgarFichasInvalidas(data: AppData): AppData {
+  if (isCloudSyncInProgress()) return data;
+
   const removidas = data.fichaCorrida.filter((f) => !fichaValidaNoExtrato(data, f));
   if (removidas.length === 0) return data;
+
+  // Salvaguarda: nunca zerar ficha de cooperado que ainda tem notas conferidas locais.
+  const cooperadosAfetados = new Set(
+    removidas.map((f) => `${f.cooperativaId ?? ""}|${f.cooperadoId}`)
+  );
+  for (const chave of cooperadosAfetados) {
+    const [cooperativaId, cooperadoId] = chave.split("|");
+    if (!cooperadoId) continue;
+    const conferidas = data.notasPedido.filter(
+      (n) =>
+        n.cooperadoId === cooperadoId &&
+        (n.status === "conferida" || n.status === "pago") &&
+        (!cooperativaId || n.cooperativaId === cooperativaId)
+    ).length;
+    if (conferidas === 0) continue;
+
+    const pendentesAtuais = data.fichaCorrida.filter(
+      (f) =>
+        f.cooperadoId === cooperadoId &&
+        f.status === "pendente" &&
+        (!cooperativaId || f.cooperativaId === cooperativaId)
+    );
+    const pendentesApos = pendentesAtuais.filter((f) => fichaValidaNoExtrato(data, f));
+    const removendoTodosPendentes =
+      pendentesAtuais.length > 0 && pendentesApos.length === 0;
+    if (removendoTodosPendentes && !notasSyncProvavelmenteCompleto(data, cooperativaId)) {
+      return data;
+    }
+  }
 
   let fichaCorrida = data.fichaCorrida.filter((f) => fichaValidaNoExtrato(data, f));
   const pares = new Set(removidas.map((f) => `${f.cooperadoId}|${f.mesReferencia}`));
@@ -948,7 +980,6 @@ export function listarFichasPendentesPagamento(
 
 /** Cria lançamentos na ficha a partir de notas já conferidas (sincronizadas da nuvem). */
 export function reconciliarFichaFromNotasConferidas(data: AppData): AppData {
-  data = purgarFichasInvalidas(data);
   const dedupedInitial = dedupeFichaCorridaPorNota(data.fichaCorrida, data.notasPedido);
   let fichaCorrida = dedupedInitial;
   let changed = dedupedInitial.length !== data.fichaCorrida.length;
@@ -1005,8 +1036,10 @@ export function reconciliarFichaFromNotasConferidas(data: AppData): AppData {
     changed = true;
   }
 
-  if (!changed) return data;
-  return { ...data, fichaCorrida, arquivosMensais };
+  if (!changed) {
+    return purgarFichasInvalidas(data);
+  }
+  return purgarFichasInvalidas({ ...data, fichaCorrida, arquivosMensais });
 }
 
 export function getTotalAPagarCooperado(

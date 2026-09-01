@@ -5,9 +5,9 @@ import { useAuth } from "@/modules/auth/AuthProvider";
 import { useAppDataSelector } from "@/hooks/useAppData";
 import { useSyncStatus } from "@/components/sync/CooperativaSyncProvider";
 import { cooperadoFinanceiroLocalAusente } from "@/services/fichaSyncGuard";
+import { solicitarRecuperacaoFinanceiroCooperado } from "@/services/cooperadoFinanceiroGuard";
 import { resolverCooperadoIdCanonico } from "@/services/cooperadoCloudService";
 import { getUserCooperativaId } from "@/utils/cooperativa";
-import { requestAppSync } from "@/services/syncRequest";
 import { PageSkeleton } from "@/components/ui/PageSkeleton";
 import { AlertBanner } from "@/components/ui/AlertBanner";
 import { Button } from "@/components/ui/Button";
@@ -31,7 +31,7 @@ export function CooperadoFinanceiroGate({ children }: { children: React.ReactNod
   useEffect(() => {
     if (user?.role !== "cooperado" || !user.cooperadoId) return;
     if (typeof navigator !== "undefined" && !navigator.onLine) return;
-    requestAppSync();
+    solicitarRecuperacaoFinanceiroCooperado();
   }, [user?.id, user?.cooperadoId, user?.role]);
 
   if (!user || user.role !== "cooperado") {
@@ -60,7 +60,7 @@ export function CooperadoFinanceiroGate({ children }: { children: React.ReactNod
             "Não foi possível baixar sua ficha. Verifique a internet e toque em Tentar novamente."}
         </AlertBanner>
         <div className="flex flex-wrap gap-2">
-          <Button onClick={() => requestAppSync()} disabled={syncing}>
+          <Button onClick={() => solicitarRecuperacaoFinanceiroCooperado()} disabled={syncing}>
             {syncing ? "Baixando…" : "Tentar novamente"}
           </Button>
           <Button variant="secondary" onClick={() => logout()}>

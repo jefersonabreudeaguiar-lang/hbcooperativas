@@ -156,6 +156,27 @@ export function applyOperationalResetIfNeeded(data: AppData): { data: AppData; c
   if (stored === String(OPERATIONAL_RESET_VERSION)) return { data, changed: false };
 
   localStorage.setItem(OPERATIONAL_RESET_STORAGE_KEY, String(OPERATIONAL_RESET_VERSION));
-  markOperationalResetCloudPending();
+  // Só a diretoria precisa republicar reset na nuvem — cooperado só limpa local e puxa de novo.
+  if (sessionRoleIsStaff()) {
+    markOperationalResetCloudPending();
+  }
   return { data: clearOperationalData(data), changed: true };
+}
+
+const SESSION_STORAGE_KEY = "coopeagriplla_session";
+
+function sessionRoleIsStaff(): boolean {
+  if (typeof window === "undefined") return false;
+  try {
+    const raw = localStorage.getItem(SESSION_STORAGE_KEY);
+    if (!raw) return false;
+    const parsed = JSON.parse(raw) as { role?: string };
+    return (
+      parsed.role === "responsavel" ||
+      parsed.role === "tesoureiro" ||
+      parsed.role === "admin"
+    );
+  } catch {
+    return false;
+  }
 }

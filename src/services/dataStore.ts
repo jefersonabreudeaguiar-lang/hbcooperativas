@@ -33,6 +33,7 @@ import {
 } from "@/services/cooperadoCloudService";
 import { reconciliarFichaFromNotasConferidas, ajustesFichaMesId } from "@/services/notaPedidoService";
 import { forceNextFullNotasSync, clearNotasSyncMeta } from "@/services/syncMetaService";
+import { requestAppSync } from "@/services/syncRequest";
 import { normalizarPrestacaoContas, aplicarPrestacoesContasExcluidas } from "@/services/prestacaoContasService";
 import { aplicarInstituicoesExcluidas } from "@/services/instituicaoContratoService";
 import { exigeSenhaCadastroCooperado } from "@/utils/cooperativaCadastro";
@@ -745,6 +746,7 @@ async function finishLoginSession(user: User, data: AppData, plainPassword: stri
   if (user.role === "cooperado" && cooperativaCnpj?.length === 14) {
     clearNotasSyncMeta(cooperativaCnpj);
     forceNextFullNotasSync(cooperativaCnpj);
+    queueMicrotask(() => requestAppSync());
   }
 
   return user;
