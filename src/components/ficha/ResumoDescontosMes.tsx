@@ -6,7 +6,10 @@ import type { FichaCorridaDesconto } from "@/types";
 function labelDescontoExtra(d: FichaCorridaDesconto): string {
   if (d.tipo === "mensalidade") return "Mensalidade";
   if (d.tipo === "conta_coop") return d.motivo.trim() || "Compra Conta Coop";
-  if (d.tipo === "credito_avulso") return d.motivo.trim() || "Valor avulso a receber";
+  if (d.tipo === "credito_avulso") {
+    if (d.motivo.toLowerCase().includes("estorno")) return d.motivo.trim() || "Estorno Conta Coop";
+    return d.motivo.trim() || "Valor avulso a receber";
+  }
   if (d.tipo === "manual" && d.motivo.trim().toLowerCase() === "desconto avulso") return "Desconto avulso";
   return d.motivo;
 }

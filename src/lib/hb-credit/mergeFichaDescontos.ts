@@ -66,13 +66,17 @@ export function mergeDescontosContaCoopNoResumo(
     });
   }
 
-  const totalDescontos = round2(
-    extras.filter((d) => d.tipo !== "credito_avulso").reduce((s, d) => s + d.valor, 0)
+  const totalDescontosSemCoop = round2(
+    resumo.descontosExtras.filter((d) => d.tipo !== "credito_avulso").reduce((s, d) => s + d.valor, 0)
   );
-  const totalCreditos = round2(
-    extras.filter((d) => d.tipo === "credito_avulso").reduce((s, d) => s + d.valor, 0)
+  const totalCreditosSemCoop = round2(
+    resumo.descontosExtras.filter((d) => d.tipo === "credito_avulso").reduce((s, d) => s + d.valor, 0)
   );
-  const valorLiquido = round2(Math.max(0, resumo.valorEntregas - totalDescontos + totalCreditos));
+  /** Líquido Conta Coop (compras − estornos) — evita estorno órfão inflar o valor a receber. */
+  const liquidoContaCoop = liquidoUsoContaCoopMes(descontosRemotos);
+  const valorLiquido = round2(
+    Math.max(0, resumo.valorEntregas - totalDescontosSemCoop - liquidoContaCoop + totalCreditosSemCoop)
+  );
 
   return {
     ...resumo,

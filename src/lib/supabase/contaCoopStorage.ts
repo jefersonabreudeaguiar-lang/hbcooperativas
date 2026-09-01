@@ -2803,19 +2803,27 @@ async function listCooperadoContaCoopDescontosIntervalo(
   cnpj: string,
   cooperadoId: string,
   startIso: string,
-  endIso: string
+  endIso: string,
+  opts?: { incluirPagamentosEstornados?: boolean }
 ): Promise<CooperadoContaCoopDescontoRow[]> {
   const digits = normalizeCnpj(cnpj);
-  const { data: txs } = await supabase
+  let query = supabase
     .from("hb_credit_transactions")
-    .select("id, event_type, amount_cents, created_at, partner_id, receipt_code")
+    .select("id, event_type, amount_cents, created_at, partner_id, receipt_code, status")
     .eq("cooperative_cnpj", digits)
     .eq("cooperado_id", cooperadoId)
     .in("event_type", ["PAYMENT", "REFUND"])
-    .eq("status", "posted")
     .gte("created_at", startIso)
     .lte("created_at", endIso)
     .order("created_at", { ascending: true });
+
+  if (opts?.incluirPagamentosEstornados) {
+    query = query.or("status.eq.posted,and(event_type.eq.PAYMENT,status.eq.reversed)");
+  } else {
+    query = query.eq("status", "posted");
+  }
+
+  const { data: txs } = await query;
 
   if (!txs?.length) return [];
 
@@ -2869,7 +2877,8 @@ export async function listCooperadoContaCoopDescontosAbateValorReceber(
     cnpj,
     cooperadoId,
     start,
-    new Date().toISOString()
+    new Date().toISOString(),
+    { incluirPagamentosEstornados: true }
   );
 }
 
