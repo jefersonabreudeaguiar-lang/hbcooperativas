@@ -4,7 +4,9 @@ import type { ResumoVotacaoPauta, VotoCooperadoLinha } from "@/services/votacaoS
 import {
   formatHorarioReuniao,
   formatReuniaoWhatsapp,
+  getEscopoEleitoralPauta,
   getResumoPauta,
+  labelEscopoEleitoral,
   labelVoto,
 } from "@/services/votacaoService";
 import { formatCnpj, getCooperativaById } from "@/utils/cooperativa";
@@ -536,6 +538,7 @@ export function gerarAtaDeliberacaoVotacaoHtml(
     </p>
 
     <h2>I — Objeto da deliberação</h2>
+    <p class="meta"><strong>Eleitorado:</strong> ${escapeHtml(labelEscopoEleitoral(getEscopoEleitoralPauta(pauta)))}</p>
     <div class="box box-green">
       <p class="destaque">${escapeHtml(pauta.texto)}</p>
       <p><strong>Período de votação:</strong> ${escapeHtml(formatDate(pauta.inicioEm))} a ${escapeHtml(formatDate(pauta.fimEm))}</p>

@@ -21,11 +21,14 @@ import {
   abrirPautaVotacao,
   criarPautaVotacao,
   getResumoPauta,
+  labelEscopoEleitoral,
   listarPautasCooperativa,
   publicarResultadoPauta,
   removerPautaRascunho,
   labelVoto,
+  getEscopoEleitoralPauta,
 } from "@/services/votacaoService";
+import type { EscopoEleitoralVotacao } from "@/types";
 import { baixarAtaDeliberacaoVotacaoPdf } from "@/utils/votacaoDeliberativaHtml";
 
 const hojeIso = () => new Date().toISOString().split("T")[0];
@@ -43,6 +46,7 @@ export default function VotacoesPage() {
   const [reuniaoHorarioFim, setReuniaoHorarioFim] = useState("");
   const [inicioEm, setInicioEm] = useState(hojeIso());
   const [fimEm, setFimEm] = useState(hojeIso());
+  const [escopoEleitoral, setEscopoEleitoral] = useState<EscopoEleitoralVotacao>("todos");
   const [msg, setMsg] = useState("");
   const [erro, setErro] = useState("");
   const [syncing, setSyncing] = useState(false);
@@ -93,6 +97,7 @@ export default function VotacoesPage() {
         reuniaoHorarioFim,
         inicioEm,
         fimEm,
+        escopoEleitoral,
         criadoPorUserId: user.id,
         criadoPorNome: user.name,
       });
@@ -107,7 +112,12 @@ export default function VotacoesPage() {
       setReuniaoHorarioFim("");
       setInicioEm(hojeIso());
       setFimEm(hojeIso());
-      setMsg("Pauta salva como rascunho. Revise e use «Lançar enquete» para todos os cooperados.");
+      setEscopoEleitoral("todos");
+      setMsg(
+        escopoEleitoral === "diretoria"
+          ? "Pauta salva como rascunho (votação restrita à diretoria). Revise e use «Lançar enquete»."
+          : "Pauta salva como rascunho. Revise e use «Lançar enquete» para todos os cooperados."
+      );
       void syncNuvem(result.data);
       return addAuditEntry(result.data, {
         entityType: "votacao",
@@ -130,7 +140,12 @@ export default function VotacoesPage() {
         setErro(result.error);
         return d;
       }
-      setMsg("Enquete lançada! Os cooperados verão a votação no Início.");
+      const pautaAberta = (result.data.votacaoPautas ?? []).find((p) => p.id === pautaId);
+      setMsg(
+        pautaAberta?.escopoEleitoral === "diretoria"
+          ? "Enquete lançada! Apenas membros da diretoria verão a votação no Início."
+          : "Enquete lançada! Os cooperados verão a votação no Início."
+      );
       void syncNuvem(result.data);
       return addAuditEntry(result.data, {
         entityType: "votacao",
@@ -258,6 +273,52 @@ export default function VotacoesPage() {
                 <Input type="date" value={fimEm} onChange={(e) => setFimEm(e.target.value)} />
               </FormField>
             </div>
+            <FormField label="Quem pode votar">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <label
+                  className={`flex items-start gap-3 p-3 border rounded-xl cursor-pointer transition-colors ${
+                    escopoEleitoral === "todos"
+                      ? "border-indigo-400 bg-indigo-50"
+                      : "border-gray-200 hover:bg-gray-50"
+                  }`}
+                >
+                  <input
+                    type="radio"
+                    name="escopoEleitoral"
+                    checked={escopoEleitoral === "todos"}
+                    onChange={() => setEscopoEleitoral("todos")}
+                    className="mt-1 text-indigo-600 focus:ring-indigo-500"
+                  />
+                  <span>
+                    <span className="block text-sm font-semibold text-gray-900">Todos os cooperados</span>
+                    <span className="block text-xs text-gray-500 mt-0.5">
+                      Cada cooperado ativo poderá votar e assinar no app.
+                    </span>
+                  </span>
+                </label>
+                <label
+                  className={`flex items-start gap-3 p-3 border rounded-xl cursor-pointer transition-colors ${
+                    escopoEleitoral === "diretoria"
+                      ? "border-purple-400 bg-purple-50"
+                      : "border-gray-200 hover:bg-gray-50"
+                  }`}
+                >
+                  <input
+                    type="radio"
+                    name="escopoEleitoral"
+                    checked={escopoEleitoral === "diretoria"}
+                    onChange={() => setEscopoEleitoral("diretoria")}
+                    className="mt-1 text-purple-700 focus:ring-purple-500"
+                  />
+                  <span>
+                    <span className="block text-sm font-semibold text-gray-900">Somente diretoria</span>
+                    <span className="block text-xs text-gray-500 mt-0.5">
+                      Apenas cooperados marcados como diretoria em Cooperados verão a votação.
+                    </span>
+                  </span>
+                </label>
+              </div>
+            </FormField>
             <Button type="button" onClick={handleCriar} disabled={syncing}>
               <Plus size={18} /> Salvar pauta (rascunho)
             </Button>
@@ -286,7 +347,18 @@ export default function VotacoesPage() {
             <Card key={pauta.id}>
               <div className="flex flex-wrap items-start justify-between gap-3 mb-4">
                 <div className="min-w-0 flex-1">
-                  <StatusBadge status={pauta.status === "aberta" ? "aberta" : pauta.status} />
+                  <div className="flex flex-wrap items-center gap-2">
+                    <StatusBadge status={pauta.status === "aberta" ? "aberta" : pauta.status} />
+                    <span
+                      className={`text-xs font-semibold px-2 py-0.5 rounded-full ${
+                        getEscopoEleitoralPauta(pauta) === "diretoria"
+                          ? "bg-purple-100 text-purple-800"
+                          : "bg-indigo-100 text-indigo-800"
+                      }`}
+                    >
+                      {labelEscopoEleitoral(getEscopoEleitoralPauta(pauta))}
+                    </span>
+                  </div>
                   <p className="font-semibold text-gray-900 mt-2 text-lg leading-snug">{pauta.texto}</p>
                   {pauta.observacao?.trim() && (
                     <p className="text-sm text-gray-600 mt-2 whitespace-pre-wrap">{pauta.observacao.trim()}</p>
@@ -378,7 +450,11 @@ export default function VotacoesPage() {
 
                   {todosVotaram && pauta.status === "aberta" && (
                     <AlertBanner variant="info" title="Votação completa">
-                      <p>Todos os cooperados registraram voto. Você pode publicar o resultado para o mural.</p>
+                      <p>
+                        {getEscopoEleitoralPauta(pauta) === "diretoria"
+                          ? "Todos os membros da diretoria registraram voto. Você pode publicar o resultado para o mural."
+                          : "Todos os cooperados registraram voto. Você pode publicar o resultado para o mural."}
+                      </p>
                     </AlertBanner>
                   )}
 

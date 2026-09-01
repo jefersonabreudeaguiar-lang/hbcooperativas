@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { ChevronRight, MessageCircle, Vote } from "lucide-react";
 import type { VotacaoPauta } from "@/types";
-import { formatHorarioReuniao, formatReuniaoWhatsapp } from "@/services/votacaoService";
+import { formatHorarioReuniao, formatReuniaoWhatsapp, getEscopoEleitoralPauta } from "@/services/votacaoService";
 import { formatDate } from "@/utils/format";
 
 interface VotacaoPautasInicioPanelProps {
@@ -32,6 +32,13 @@ export function VotacaoPautasInicioPanel({ pautas }: VotacaoPautasInicioPanelPro
 
           return (
             <li key={pauta.id} className="p-5 space-y-3">
+              <div className="flex flex-wrap items-center gap-2">
+                {getEscopoEleitoralPauta(pauta) === "diretoria" && (
+                  <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-purple-100 text-purple-800">
+                    Votação da diretoria
+                  </span>
+                )}
+              </div>
               <p className="font-semibold text-gray-900 leading-snug">{pauta.texto}</p>
               <p className="text-xs text-gray-500">
                 Votação: {formatDate(pauta.inicioEm)} até {formatDate(pauta.fimEm)}

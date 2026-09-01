@@ -64,17 +64,18 @@ export default function CooperadosPage() {
   }, [data, search, statusFilter, appFilter, user]);
 
   useEffect(() => {
-    if (!data || !user) return;
-    const coopId = getUserCooperativaId(user, data);
-    const coop = data.cooperativas.find((c) => c.id === coopId);
+    if (!user) return;
+    const d = getData();
+    const coopId = getUserCooperativaId(user, d);
+    const coop = d.cooperativas.find((c) => c.id === coopId);
     const cnpj = normalizeCnpj(coop?.cnpj ?? user.cooperativaCnpj ?? "");
     if (cnpj.length === 14 && coopId) void syncCooperadosFromCloud(cnpj, coopId);
-  }, [data, user?.id]);
+  }, [user?.id]);
 
   const openNew = () => {
     setEditing(null);
     const coopId = user && data ? getUserCooperativaId(user, data) : undefined;
-    setForm({ status: "ativo", produtos: [], cooperativaId: coopId, avulso: false });
+    setForm({ status: "ativo", produtos: [], cooperativaId: coopId, avulso: false, membroDiretoria: false });
     setModalOpen(true);
   };
 
@@ -84,11 +85,12 @@ export default function CooperadosPage() {
     setModalOpen(true);
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (!form.nomeCompleto || !user) return;
     if (!form.avulso && !form.cpfCnpj) return;
     const now = new Date().toISOString();
     const produtos = typeof form.produtos === "string" ? (form.produtos as string).split(",").map((p) => p.trim()) : form.produtos ?? [];
+    const membroDiretoria = Boolean(form.membroDiretoria);
     let savedCooperado: Cooperado | null = null;
 
     updateData((d) => {
@@ -100,6 +102,8 @@ export default function CooperadosPage() {
           ...form,
           produtos,
           chavePix,
+          membroDiretoria,
+          avulso: form.avulso ?? false,
           pixValido: chavePix ? true : false,
           pixInvalidoMotivo: chavePix ? undefined : editing.pixInvalidoMotivo,
           updatedAt: now,
@@ -128,7 +132,7 @@ export default function CooperadosPage() {
           conta: form.conta ?? "",
           status: (form.status as CooperadoStatus) ?? "ativo",
           avulso: form.avulso ?? false,
-          membroDiretoria: form.membroDiretoria ?? false,
+          membroDiretoria,
           produtos,
           observacoes: form.observacoes ?? "",
           createdAt: now,
@@ -141,11 +145,17 @@ export default function CooperadosPage() {
       return updated;
     });
 
-    if (savedCooperado && data && user) {
-      const coopId = getUserCooperativaId(user, data);
-      const coop = data.cooperativas.find((c) => c.id === coopId);
+    if (savedCooperado && user) {
+      const d = getData();
+      const coopId = getUserCooperativaId(user, d);
+      const coop = d.cooperativas.find((c) => c.id === coopId);
       const cnpj = normalizeCnpj(coop?.cnpj ?? user.cooperativaCnpj ?? "");
-      if (cnpj.length === 14) void pushCooperadoToCloud(cnpj, savedCooperado);
+      if (cnpj.length === 14) {
+        const push = await pushCooperadoToCloud(cnpj, savedCooperado);
+        if (!push.ok) {
+          window.alert(push.error ?? "Salvo no aparelho, mas não foi possível sincronizar na nuvem.");
+        }
+      }
     }
 
     setModalOpen(false);
@@ -418,7 +428,7 @@ export default function CooperadosPage() {
               <span>
                 <span className="block text-sm font-medium text-gray-900">Membro da diretoria</span>
                 <span className="block text-xs text-gray-500 mt-0.5">
-                  Recebe avisos exclusivos da diretoria enviados pela cooperativa.
+                  Participa de votações restritas à diretoria e recebe avisos exclusivos enviados pela cooperativa.
                 </span>
               </span>
             </label>
@@ -445,7 +455,7 @@ export default function CooperadosPage() {
         </div>
         <div className="flex justify-end gap-2 mt-6">
           <Button variant="secondary" onClick={() => setModalOpen(false)}>Cancelar</Button>
-          <Button onClick={handleSave}>Salvar</Button>
+          <Button onClick={() => void handleSave()}>Salvar</Button>
         </div>
       </Modal>
     </div>

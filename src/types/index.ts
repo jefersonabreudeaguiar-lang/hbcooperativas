@@ -175,7 +175,7 @@ export interface Cooperado {
   status: CooperadoStatus;
   /** Entregas lançadas pela cooperativa, sem app/foto de nota. */
   avulso?: boolean;
-  /** Cooperado integrante da diretoria — recebe avisos exclusivos. */
+  /** Cooperado integrante da diretoria — votações restritas e avisos exclusivos. */
   membroDiretoria?: boolean;
   /**
    * Quando o cooperado abriu o app instalado (PWA / tela inicial) pela primeira vez.
@@ -602,6 +602,9 @@ export interface Reclamacao {
 
 export type VotacaoPautaStatus = "rascunho" | "aberta" | "encerrada" | "resultado_publicado";
 
+/** Quem pode votar na pauta. */
+export type EscopoEleitoralVotacao = "todos" | "diretoria";
+
 /** Pauta de votação assemblear / enquete da cooperativa. */
 export interface VotacaoPauta {
   id: string;
@@ -613,6 +616,8 @@ export interface VotacaoPauta {
   /** Fim da votação (YYYY-MM-DD). */
   fimEm: string;
   status: VotacaoPautaStatus;
+  /** Quem pode votar: todos os cooperados ou somente membros da diretoria. */
+  escopoEleitoral?: EscopoEleitoralVotacao;
   /** Observações da diretoria (reunião, orientações, contexto). */
   observacao?: string;
   /** Link ou identificador da reunião online (ex.: grupo WhatsApp). */

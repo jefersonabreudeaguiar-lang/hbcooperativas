@@ -42,7 +42,7 @@ export function CooperadoFichaPanel({ cooperado }: { cooperado: Cooperado }) {
   const [mesFilter, setMesFilter] = useState(getCurrentMesReferencia());
   const [salvandoDiretoria, setSalvandoDiretoria] = useState(false);
 
-  const toggleMembroDiretoria = (marcado: boolean) => {
+  const toggleMembroDiretoria = async (marcado: boolean) => {
     if (!user || !data || salvandoDiretoria) return;
     setSalvandoDiretoria(true);
     const now = new Date().toISOString();
@@ -74,7 +74,12 @@ export function CooperadoFichaPanel({ cooperado }: { cooperado: Cooperado }) {
       const coopId = getUserCooperativaId(user, data);
       const coop = data.cooperativas.find((c) => c.id === coopId);
       const cnpj = normalizeCnpj(coop?.cnpj ?? user.cooperativaCnpj ?? "");
-      if (cnpj.length === 14) void pushCooperadoToCloud(cnpj, saved);
+      if (cnpj.length === 14) {
+        const push = await pushCooperadoToCloud(cnpj, saved);
+        if (!push.ok) {
+          window.alert(push.error ?? "Alteração salva localmente, mas não sincronizou na nuvem.");
+        }
+      }
     }
     setSalvandoDiretoria(false);
   };
@@ -210,7 +215,7 @@ export function CooperadoFichaPanel({ cooperado }: { cooperado: Cooperado }) {
             <span>
               <span className="block text-sm font-semibold text-gray-900">Membro da diretoria</span>
               <span className="block text-xs text-gray-600 mt-0.5">
-                Marque se este cooperado faz parte da diretoria. Ele passa a receber avisos exclusivos da diretoria.
+                Marque se este cooperado faz parte da diretoria. Ele poderá votar em pautas restritas e receber avisos exclusivos.
               </span>
             </span>
           </label>

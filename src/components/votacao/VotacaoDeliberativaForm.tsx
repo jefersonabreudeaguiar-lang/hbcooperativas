@@ -4,7 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { ArrowLeft, CheckCircle2, MessageCircle, MinusCircle, ThumbsDown, ThumbsUp, Vote } from "lucide-react";
 import type { VotacaoOpcao, VotacaoPauta } from "@/types";
-import { formatHorarioReuniao, formatReuniaoWhatsapp, labelVoto } from "@/services/votacaoService";
+import { formatHorarioReuniao, formatReuniaoWhatsapp, getEscopoEleitoralPauta, labelVoto } from "@/services/votacaoService";
 import { formatDate } from "@/utils/format";
 import { cn } from "@/utils/format";
 import { SignaturePad } from "@/components/ui/SignaturePad";
@@ -78,6 +78,11 @@ export function VotacaoDeliberativaForm({ pauta, onRegistrar, processando }: Vot
             Votação deliberativa
           </div>
           <p className="text-lg font-bold mt-2 leading-snug">{pauta.texto}</p>
+          {getEscopoEleitoralPauta(pauta) === "diretoria" && (
+            <p className="text-xs font-semibold mt-2 text-purple-100 bg-white/15 inline-block px-2 py-0.5 rounded-full">
+              Votação restrita à diretoria
+            </p>
+          )}
           <p className="text-indigo-100 text-xs mt-2">
             Período: {formatDate(pauta.inicioEm)} até {formatDate(pauta.fimEm)}
           </p>

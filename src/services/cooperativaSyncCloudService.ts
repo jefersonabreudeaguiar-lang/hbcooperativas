@@ -997,14 +997,17 @@ export async function syncCooperativaBackground(
     await syncCooperativaProfileFromCloud(digits);
     const coopId = preferredCoopId ?? resolveCoopId(getData(), digits);
     await syncCooperadosFromCloud(digits, coopId);
-    // Ficha (operacional) antes das notas — evita 2ª ficha e valor dobrado no cooperado.
+    // Notas antes do operacional — ficha exige nota conferida local; senão purgarFichasInvalidas apaga tudo.
+    await syncNotasPedidoFromCloud(digits);
     await syncOperacionalFromCloud(digits);
     await syncContratosFromCloud(digits);
-    await syncNotasPedidoFromCloud(digits);
   });
 }
 
-/** Cooperado: envia alterações operacionais (mensalidade informada, etc.) sem apagar dados de outros. */
+/**
+ * Cooperado: publica votos/mensalidades informadas mesclando com a nuvem.
+ * Nunca usa authoritative — evita sobrescrever ficha de outros cooperados com snapshot local incompleto.
+ */
 export async function pushCooperadoOperacionalToCloud(
   cnpj: string,
   coopId?: string
@@ -1015,7 +1018,6 @@ export async function pushCooperadoOperacionalToCloud(
   const cid = coopId ?? resolveCoopId(d, digits);
   if (!cid) return;
   await pushOperacionalToCloud(digits, d, cid, {
-    authoritative: true,
     skipOperationalResetPush: true,
   });
 }

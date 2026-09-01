@@ -1,6 +1,16 @@
-import type { AppData, VotacaoOpcao, VotacaoPauta, VotacaoPautaStatus, VotacaoVoto } from "@/types";
+import type {
+  AppData,
+  EscopoEleitoralVotacao,
+  VotacaoOpcao,
+  VotacaoPauta,
+  VotacaoPautaStatus,
+  VotacaoVoto,
+} from "@/types";
 import { getCooperadoNome } from "@/utils/calculations";
-import { listCooperadosDaCooperativa } from "@/services/cooperadoCloudService";
+import {
+  listCooperadosDaCooperativa,
+  resolverCooperadoIdCanonico,
+} from "@/services/cooperadoCloudService";
 
 const MS_24H = 24 * 60 * 60 * 1000;
 
@@ -47,6 +57,43 @@ function startOfDay(isoDate: string): Date {
 function endOfDay(isoDate: string): Date {
   const [y, m, d] = isoDate.split("-").map(Number);
   return new Date(y, (m ?? 1) - 1, d ?? 1, 23, 59, 59, 999);
+}
+
+export function getEscopoEleitoralPauta(pauta: VotacaoPauta): EscopoEleitoralVotacao {
+  return pauta.escopoEleitoral === "diretoria" ? "diretoria" : "todos";
+}
+
+export function labelEscopoEleitoral(escopo: EscopoEleitoralVotacao): string {
+  return escopo === "diretoria" ? "Somente diretoria" : "Todos os cooperados";
+}
+
+export function listCooperadosElegiveisPauta(
+  data: AppData,
+  cooperativaId: string,
+  pauta: VotacaoPauta
+) {
+  const base = listCooperadosDaCooperativa(data, cooperativaId);
+  if (getEscopoEleitoralPauta(pauta) === "diretoria") {
+    return base.filter((c) => Boolean(c.membroDiretoria));
+  }
+  return base;
+}
+
+export function cooperadoElegivelVotacao(
+  data: AppData,
+  cooperadoId: string,
+  cooperativaId: string,
+  pauta: VotacaoPauta
+): boolean {
+  if (getEscopoEleitoralPauta(pauta) === "todos") return true;
+  const elegiveis = listCooperadosElegiveisPauta(data, cooperativaId, pauta);
+  const alvo = resolverCooperadoIdCanonico(data, cooperadoId, cooperativaId);
+  return elegiveis.some(
+    (c) =>
+      c.id === cooperadoId ||
+      c.id === alvo ||
+      resolverCooperadoIdCanonico(data, c.id, cooperativaId) === alvo
+  );
 }
 
 export function labelVoto(voto: VotacaoOpcao): string {
@@ -131,6 +178,7 @@ export function listPautasAbertasCooperado(
     (p) =>
       p.status === "aberta" &&
       pautaNoPeriodo(p, ref) &&
+      cooperadoElegivelVotacao(data, cooperadoId, cooperativaId, p) &&
       !cooperadoJaVotou(data, p.id, cooperadoId)
   );
 }
@@ -154,6 +202,7 @@ export function getPautaVotacaoCooperado(
 ): { pauta: VotacaoPauta; jaVotou: boolean } | null {
   const pauta = getPautaById(data, pautaId, cooperativaId);
   if (!pauta || pauta.status !== "aberta" || !pautaNoPeriodo(pauta, ref)) return null;
+  if (!cooperadoElegivelVotacao(data, cooperadoId, cooperativaId, pauta)) return null;
   return { pauta, jaVotou: cooperadoJaVotou(data, pautaId, cooperadoId) };
 }
 
@@ -211,7 +260,7 @@ export function getResumoPauta(
     throw new Error("Pauta não encontrada.");
   }
   const coopId = cooperativaId ?? pauta.cooperativaId;
-  const elegiveis = listCooperadosDaCooperativa(data, coopId);
+  const elegiveis = listCooperadosElegiveisPauta(data, coopId, pauta);
   const votos = listarVotosPauta(data, pautaId, coopId);
   const votosSim = votos.filter((v) => v.voto === "sim").length;
   const votosNao = votos.filter((v) => v.voto === "nao").length;
@@ -281,6 +330,7 @@ export function criarPautaVotacao(
     reuniaoWhatsapp?: string;
     reuniaoHorarioInicio?: string;
     reuniaoHorarioFim?: string;
+    escopoEleitoral?: EscopoEleitoralVotacao;
     criadoPorUserId?: string;
     criadoPorNome?: string;
   }
@@ -303,6 +353,7 @@ export function criarPautaVotacao(
     reuniaoWhatsapp: payload.reuniaoWhatsapp?.trim() || undefined,
     reuniaoHorarioInicio: payload.reuniaoHorarioInicio?.trim() || undefined,
     reuniaoHorarioFim: payload.reuniaoHorarioFim?.trim() || undefined,
+    escopoEleitoral: payload.escopoEleitoral === "diretoria" ? "diretoria" : "todos",
     status: "rascunho",
     criadoPorUserId: payload.criadoPorUserId,
     criadoPorNome: payload.criadoPorNome,
@@ -383,6 +434,9 @@ export function registrarVotoCooperado(
   if (!pauta) return { ok: false, error: "Enquete não encontrada." };
   if (pauta.status !== "aberta") return { ok: false, error: "Esta enquete não está aberta." };
   if (!pautaNoPeriodo(pauta)) return { ok: false, error: "Fora do período de votação." };
+  if (!cooperadoElegivelVotacao(data, payload.cooperadoId, payload.cooperativaId, pauta)) {
+    return { ok: false, error: "Esta votação é restrita aos membros da diretoria." };
+  }
   if (cooperadoJaVotou(data, payload.pautaId, payload.cooperadoId)) {
     return { ok: false, error: "Você já registrou seu voto nesta pauta." };
   }

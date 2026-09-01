@@ -8,7 +8,7 @@ import { useAuth } from "@/modules/auth/AuthProvider";
 import { usePermissions } from "@/hooks/usePermissions";
 import { getUserCooperativaId } from "@/utils/cooperativa";
 import { resolverCooperadoIdCanonico } from "@/services/cooperadoCloudService";
-import { getPautaVotacaoCooperado, registrarVotoCooperado } from "@/services/votacaoService";
+import { getEscopoEleitoralPauta, getPautaById, getPautaVotacaoCooperado, registrarVotoCooperado } from "@/services/votacaoService";
 import { VotacaoDeliberativaForm } from "@/components/votacao/VotacaoDeliberativaForm";
 import { updateData } from "@/services/dataStore";
 import { pushCooperadoOperacionalToCloud } from "@/services/cooperativaSyncCloudService";
@@ -36,8 +36,17 @@ export default function VotacaoDeliberativaPage() {
       const coopId = getUserCooperativaId(user, data);
       if (!coopId) return null;
       const cooperadoId = resolverCooperadoIdCanonico(data, user.cooperadoId, coopId);
+      const pauta = getPautaById(data, pautaId, coopId);
       const ctx = getPautaVotacaoCooperado(data, pautaId, coopId, cooperadoId);
-      return ctx ? { ...ctx, coopId, cooperadoId } : null;
+      if (ctx) return { ...ctx, coopId, cooperadoId, motivoIndisponivel: null as string | null };
+      if (!pauta) return { pauta: null, jaVotou: false, coopId, cooperadoId, motivoIndisponivel: "inexistente" };
+      if (pauta.status !== "aberta") {
+        return { pauta: null, jaVotou: false, coopId, cooperadoId, motivoIndisponivel: "fechada" };
+      }
+      if (getEscopoEleitoralPauta(pauta) === "diretoria") {
+        return { pauta: null, jaVotou: false, coopId, cooperadoId, motivoIndisponivel: "diretoria" };
+      }
+      return { pauta: null, jaVotou: false, coopId, cooperadoId, motivoIndisponivel: "fechada" };
     },
     [user?.id, user?.cooperadoId, user?.cooperativaId, pautaId]
   );
@@ -45,11 +54,16 @@ export default function VotacaoDeliberativaPage() {
   if (!isCooperado) return null;
   if (view === undefined) return <PageSkeleton />;
 
-  if (!view) {
+  if (!view?.pauta) {
+    const mensagem =
+      view?.motivoIndisponivel === "diretoria"
+        ? "Esta votação é restrita aos membros da diretoria. Se você faz parte da diretoria, peça ao responsável para marcar seu cadastro em Cooperados."
+        : "Esta pauta não está aberta, o prazo encerrou ou você não tem acesso.";
+
     return (
       <div className="max-w-3xl space-y-4">
         <AlertBanner variant="info" title="Votação indisponível">
-          <p>Esta pauta não está aberta, o prazo encerrou ou você não tem acesso.</p>
+          <p>{mensagem}</p>
         </AlertBanner>
       </div>
     );

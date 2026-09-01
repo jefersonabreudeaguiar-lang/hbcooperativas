@@ -27,8 +27,11 @@ import {
   syncCooperadosFromCloud,
   ensureCooperativaLocalForCnpj,
   resolverCooperadoIdCanonico,
+  fetchCooperadosFromCloud,
+  cpfCooperadoDigits,
 } from "@/services/cooperadoCloudService";
 import { reconciliarFichaFromNotasConferidas, ajustesFichaMesId } from "@/services/notaPedidoService";
+import { forceNextFullNotasSync } from "@/services/syncMetaService";
 import { normalizarPrestacaoContas, aplicarPrestacoesContasExcluidas } from "@/services/prestacaoContasService";
 import { aplicarInstituicoesExcluidas } from "@/services/instituicaoContratoService";
 import { exigeSenhaCadastroCooperado } from "@/utils/cooperativaCadastro";
@@ -414,11 +417,11 @@ function scheduleAutomaticTasksIfNeeded(data: AppData): AppData {
   if (automaticTasksScheduled || typeof window === "undefined") return data;
   automaticTasksScheduled = true;
 
-  const baseline = data;
   const run = () => {
     void (async () => {
       try {
-        let working = runAutomaticTasks(baseline);
+        // Usar dados atuais (pós-sync) — baseline da abertura podia apagar ficha recém-puxada da nuvem.
+        let working = runAutomaticTasks(getData());
         working = await migrateInlinePhotosToIdb(working);
         working = stripBinaryForPersist(working);
         const serialized = JSON.stringify(working);
@@ -430,9 +433,10 @@ function scheduleAutomaticTasksIfNeeded(data: AppData): AppData {
   };
 
   if (typeof requestIdleCallback !== "undefined") {
-    requestIdleCallback(run, { timeout: 4000 });
+    // Após o 1º sync (~800 ms) — evita purgar ficha antes das notas chegarem da nuvem.
+    requestIdleCallback(run, { timeout: 3500 });
   } else {
-    setTimeout(run, 50);
+    setTimeout(run, 2500);
   }
 
   return data;
@@ -730,6 +734,11 @@ async function finishLoginSession(user: User, data: AppData, plainPassword: stri
     setActiveCloudProfile(cloudHit.user);
   }
   await establishCloudSession(user.email, plainPassword, cloudProfile);
+
+  // Após sair/voltar, delta de notas pode vir vazio com local zerado — força full na próxima sync.
+  if (user.role === "cooperado" && cooperativaCnpj?.length === 14) {
+    forceNextFullNotasSync(cooperativaCnpj);
+  }
 
   return user;
 }
@@ -1128,18 +1137,43 @@ export async function registerCooperado(input: RegisterCooperadoInput): Promise<
   }
 
   const cpfDigits = (input.cpfCnpj ?? "").replace(/\D/g, "");
-  if (cpfDigits && data.cooperados.some((c) => c.cpfCnpj.replace(/\D/g, "") === cpfDigits)) {
-    return { success: false, error: "Este CPF/CNPJ já está cadastrado." };
+  let cooperadoExistente: Cooperado | undefined;
+  if (cpfDigits) {
+    cooperadoExistente = data.cooperados.find(
+      (c) => c.cooperativaId === cooperativa.id && cpfCooperadoDigits(c.cpfCnpj) === cpfDigits
+    );
+    if (!cooperadoExistente) {
+      const cloudCoops = await fetchCooperadosFromCloud(cnpjCoop);
+      if (cloudCoops.ok) {
+        cooperadoExistente = cloudCoops.cooperados.find(
+          (c) => cpfCooperadoDigits(c.cpfCnpj) === cpfDigits
+        );
+      }
+    }
+  }
+
+  if (cooperadoExistente) {
+    const contaDoCooperado = data.users.find((u) => u.cooperadoId === cooperadoExistente!.id);
+    if (contaDoCooperado) {
+      return {
+        success: false,
+        error:
+          contaDoCooperado.email.toLowerCase() === email
+            ? "Este e-mail já está cadastrado. Use «Esqueci minha senha» ou faça login."
+            : "Este CPF já possui conta de acesso. Use o e-mail cadastrado ou «Esqueci minha senha».",
+      };
+    }
   }
 
   const now = new Date().toISOString();
-  const cooperadoId = generateId("c");
+  const cooperadoId = cooperadoExistente?.id ?? generateId("c");
   const userId = generateId("u");
+  const nomeCooperado = cooperadoExistente?.nomeCompleto?.trim() || nome;
 
-  const cooperado: Cooperado = {
+  const cooperado: Cooperado = cooperadoExistente ?? {
     id: cooperadoId,
     cooperativaId: cooperativa.id,
-    nomeCompleto: nome,
+    nomeCompleto: nomeCooperado,
     cpfCnpj: cpfDigits || "",
     telefone: input.telefone?.trim() ?? "",
     endereco: "",
@@ -1161,7 +1195,7 @@ export async function registerCooperado(input: RegisterCooperadoInput): Promise<
     id: userId,
     email,
     password: await hashPassword(input.password),
-    name: nome,
+    name: nomeCooperado,
     role: "cooperado",
     cooperadoId,
     cooperativaId: cooperativa.id,
@@ -1170,20 +1204,24 @@ export async function registerCooperado(input: RegisterCooperadoInput): Promise<
   };
 
   const { password: _, ...safeUser } = newUser;
+  const vinculouExistente = Boolean(cooperadoExistente);
 
   updateData((d) => {
+    const jaTemCooperado = d.cooperados.some((c) => c.id === cooperadoId);
     let updated = {
       ...d,
-      cooperados: [...d.cooperados, cooperado],
+      cooperados: jaTemCooperado ? d.cooperados : [...d.cooperados, cooperado],
       users: [...d.users, newUser],
     };
     updated = addAuditEntry(updated, {
       entityType: "cooperado",
       entityId: cooperadoId,
-      action: "criar",
+      action: vinculouExistente ? "editar" : "criar",
       userId,
-      userName: nome,
-      changes: "Auto-cadastro pelo portal",
+      userName: nomeCooperado,
+      changes: vinculouExistente
+        ? "Conta de acesso vinculada ao cooperado já cadastrado"
+        : "Auto-cadastro pelo portal",
     });
     updated = sincronizarCicloCobrancaSaas(updated, cooperativa.id);
     const withMens = ensureMensalidadeCooperado(updated, cooperadoId);
@@ -1195,7 +1233,7 @@ export async function registerCooperado(input: RegisterCooperadoInput): Promise<
   const cloudProfile = {
     id: userId,
     email,
-    name: nome,
+    name: nomeCooperado,
     role: "cooperado" as const,
     cooperativaId: cooperativa.id,
     cooperadoId,

@@ -309,6 +309,10 @@ export function mergeCloudCooperadosIntoData(
         pixValido,
         pixInvalidoMotivo,
         ...installFields,
+        membroDiretoria: cloudMaisRecente
+          ? Boolean(cn.membroDiretoria ?? local.membroDiretoria)
+          : Boolean(local.membroDiretoria ?? cn.membroDiretoria),
+        avulso: cloudMaisRecente ? Boolean(cn.avulso) : Boolean(local.avulso),
         updatedAt: cloudMaisRecente ? cn.updatedAt : local.updatedAt,
       };
 
@@ -321,6 +325,8 @@ export function mergeCloudCooperadosIntoData(
         cloudMaisRecente ||
         merged.chavePix !== local.chavePix ||
         merged.pixValido !== local.pixValido ||
+        merged.membroDiretoria !== local.membroDiretoria ||
+        merged.avulso !== local.avulso ||
         installMudou
       ) {
         cooperados[index] = merged;
