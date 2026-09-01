@@ -46,6 +46,7 @@ import {
   establishCloudSession,
   loginViaCloudApi,
   logoutCloudSession,
+  markCloudSessionActive,
   registerCloudUser,
   setActiveCloudProfile,
   setLastCloudSyncError,
@@ -710,7 +711,6 @@ function resolveSessionUser(
 
 async function finishLoginSession(user: User, data: AppData, plainPassword: string): Promise<User> {
   const { password: _, ...safeUser } = user;
-  // Grava sessão antes de updateData — saveDataSafe dispara notify() e o AuthProvider relê getSession().
   persistSession(safeUser);
 
   let cooperativaCnpj = safeUser.cooperativaCnpj
@@ -735,12 +735,15 @@ async function finishLoginSession(user: User, data: AppData, plainPassword: stri
   setActiveCloudProfile(cloudProfile);
   clearCloudBootstrapCredentials();
 
-  // Login direto na nuvem primeiro (cookie); sync-session alinha perfil em seguida.
-  const cloudHit = await loginViaCloudApi(user.email, plainPassword);
-  if (cloudHit) {
-    setActiveCloudProfile(cloudHit.user);
+  if (user.role !== "parceiro") {
+    const cloudHit = await loginViaCloudApi(user.email, plainPassword);
+    if (cloudHit) {
+      setActiveCloudProfile(cloudHit.user);
+    }
+    await establishCloudSession(user.email, plainPassword, cloudProfile);
+  } else {
+    markCloudSessionActive();
   }
-  await establishCloudSession(user.email, plainPassword, cloudProfile);
 
   // Após sair/voltar, delta de notas pode vir vazio com local zerado — força full na próxima sync.
   if (user.role === "cooperado" && cooperativaCnpj?.length === 14) {
@@ -794,6 +797,36 @@ export async function loginCreatorAdminPortal(
 
 const CLOUD_BOOTSTRAP_ROLES: UserRole[] = ["cooperado", "responsavel", "tesoureiro", "admin", "contador", "parceiro"];
 
+async function materializeParceiroFromCloud(
+  profile: CloudSessionProfile,
+  plainPassword: string
+): Promise<User> {
+  const email = normalizeCreatorEmail(profile.email);
+  const passwordHash = await hashPassword(plainPassword);
+  const user: User = {
+    id: profile.id,
+    email,
+    password: passwordHash,
+    name: profile.name.trim(),
+    role: "parceiro",
+    cooperativaId: profile.cooperativaId,
+    cooperativaCnpj: profile.cooperativaCnpj ? normalizeCnpj(profile.cooperativaCnpj) : undefined,
+    active: true,
+  };
+
+  updateData((d) => ({
+    ...d,
+    users: [
+      ...d.users.filter(
+        (u) => u.id !== user.id && normalizeCreatorEmail(u.email) !== email
+      ),
+      user,
+    ],
+  }));
+
+  return user;
+}
+
 /**
  * Após login validado na nuvem, materializa users[] local + cooperativa/cooperado
  * para aparelhos novos (ex.: PWA instalado) sem duplicar cadastro.
@@ -802,17 +835,22 @@ async function bootstrapLocalUserFromCloudLogin(
   profile: CloudSessionProfile,
   plainPassword: string
 ): Promise<User | null> {
-  if (!CLOUD_BOOTSTRAP_ROLES.includes(normalizeUserRole(profile.role))) return null;
+  const role = normalizeUserRole(profile.role);
+  if (!CLOUD_BOOTSTRAP_ROLES.includes(role)) return null;
+  if (role === "parceiro") {
+    return materializeParceiroFromCloud(profile, plainPassword);
+  }
 
   const email = normalizeCreatorEmail(profile.email);
   const cnpj = profile.cooperativaCnpj ? normalizeCnpj(profile.cooperativaCnpj) : "";
-  const role = normalizeUserRole(profile.role);
 
-  if (cnpj.length === 14) {
-    await ensureCooperativaLocalForCnpj(cnpj);
-    if (role !== "parceiro") {
+  try {
+    if (cnpj.length === 14) {
+      await ensureCooperativaLocalForCnpj(cnpj);
       await syncCooperadosFromCloud(cnpj, profile.cooperativaId ?? undefined);
     }
+  } catch {
+    /* login não deve falhar por sync operacional incompleto */
   }
 
   let data = loadData(true);

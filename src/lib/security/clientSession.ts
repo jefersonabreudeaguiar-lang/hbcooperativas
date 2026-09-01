@@ -193,6 +193,7 @@ export async function loginViaCloudApi(
     }
 
     if (!json.user?.id || !json.user.email || !json.user.name || !json.user.role) {
+      lastCloudSyncError = "Resposta incompleta do servidor de login.";
       return null;
     }
 
@@ -212,6 +213,7 @@ export async function loginViaCloudApi(
     setActiveCloudProfile(profile);
     return { token: json.token ?? "__cookie__", user: profile };
   } catch {
+    lastCloudSyncError = "Falha de rede ao validar login na nuvem.";
     return null;
   }
 }
