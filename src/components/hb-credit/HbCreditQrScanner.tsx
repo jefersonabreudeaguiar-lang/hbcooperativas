@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/Button";
-import { decodeQrFromFile, decodeQrFromImageData } from "@/lib/hb-credit/decodeQrImage";
+import { decodeQrFromFile, decodeQrFromVideoFrame } from "@/lib/hb-credit/decodeQrImage";
 import { cn } from "@/utils/format";
 
 interface HbCreditQrScannerProps {
@@ -10,8 +10,8 @@ interface HbCreditQrScannerProps {
   onError?: (message: string) => void;
   disabled?: boolean;
   className?: string;
-  /** Abre a câmera nativa do celular ao montar (mesmo fluxo das fotos de entrega). */
-  autoOpenCamera?: boolean;
+  /** Inicia leitura contínua ao abrir (como app de banco). */
+  autoStartLiveScan?: boolean;
   fullscreen?: boolean;
 }
 
@@ -24,7 +24,7 @@ function humanizeCameraError(error: unknown): string {
   if (lower.includes("notfound") || lower.includes("devices")) {
     return "Nenhuma câmera encontrada neste aparelho.";
   }
-  return "Não foi possível abrir a câmera. Tente novamente ou cole o código manualmente.";
+  return "Não foi possível abrir a câmera. Tente fotografar o QR ou cole o código.";
 }
 
 export function HbCreditQrScanner({
@@ -32,14 +32,15 @@ export function HbCreditQrScanner({
   onError,
   disabled,
   className,
-  autoOpenCamera = false,
+  autoStartLiveScan = true,
   fullscreen = false,
 }: HbCreditQrScannerProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
-  const canvasRef = useRef<HTMLCanvasElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const scanFrameRef = useRef<number | null>(null);
+  const scanningRef = useRef(false);
+  const lastScanAttemptRef = useRef(0);
   const onScanRef = useRef(onScan);
   const [liveActive, setLiveActive] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -50,6 +51,7 @@ export function HbCreditQrScanner({
   }, [onScan]);
 
   const stopLiveScan = useCallback(() => {
+    scanningRef.current = false;
     if (scanFrameRef.current != null) {
       cancelAnimationFrame(scanFrameRef.current);
       scanFrameRef.current = null;
@@ -82,41 +84,10 @@ export function HbCreditQrScanner({
     fileInputRef.current?.click();
   }, [busy, disabled]);
 
-  useEffect(() => {
-    if (!autoOpenCamera || disabled) return;
-    const timer = window.setTimeout(() => openNativeCamera(), 400);
-    return () => window.clearTimeout(timer);
-  }, [autoOpenCamera, disabled, openNativeCamera]);
-
-  const handlePhotoCapture = async (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    event.target.value = "";
-    if (!file || disabled) return;
-
-    setBusy(true);
-    setError("");
-    try {
-      const payload = await decodeQrFromFile(file);
-      if (!payload) {
-        const message = "QR Code não encontrado na foto. Aproxime a câmera e tente de novo.";
-        setError(message);
-        onError?.(message);
-        return;
-      }
-      emitScan(payload);
-    } catch (e) {
-      const message = humanizeCameraError(e);
-      setError(message);
-      onError?.(message);
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const startLiveScan = async () => {
-    if (disabled || busy || liveActive) return;
+  const startLiveScan = useCallback(async () => {
+    if (disabled || busy || liveActive || scanningRef.current) return;
     if (typeof window !== "undefined" && !window.isSecureContext) {
-      const message = "A câmera ao vivo exige conexão segura (HTTPS). Use fotografar QR.";
+      const message = "A câmera exige HTTPS. Use fotografar QR ou abra o app instalado.";
       setError(message);
       onError?.(message);
       return;
@@ -125,13 +96,14 @@ export function HbCreditQrScanner({
     setBusy(true);
     setError("");
     stopLiveScan();
+    scanningRef.current = true;
 
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
         video: {
           facingMode: { ideal: "environment" },
-          width: { ideal: 640, max: 1280 },
-          height: { ideal: 480, max: 720 },
+          width: { ideal: 1920, min: 640 },
+          height: { ideal: 1080, min: 480 },
         },
         audio: false,
       });
@@ -144,38 +116,70 @@ export function HbCreditQrScanner({
       video.playsInline = true;
       video.muted = true;
       video.setAttribute("playsinline", "true");
+      video.setAttribute("webkit-playsinline", "true");
       await video.play();
       setLiveActive(true);
 
-      const tick = () => {
-        const canvas = canvasRef.current;
-        if (!video || !canvas || video.readyState < 2) {
-          scanFrameRef.current = requestAnimationFrame(tick);
-          return;
-        }
+      const tick = async () => {
+        if (!scanningRef.current) return;
 
-        const width = video.videoWidth;
-        const height = video.videoHeight;
-        if (width > 0 && height > 0) {
-          canvas.width = width;
-          canvas.height = height;
-          const ctx = canvas.getContext("2d", { willReadFrequently: true });
-          if (ctx) {
-            ctx.drawImage(video, 0, 0, width, height);
-            const payload = decodeQrFromImageData(ctx.getImageData(0, 0, width, height));
+        const now = performance.now();
+        if (now - lastScanAttemptRef.current >= 120) {
+          lastScanAttemptRef.current = now;
+          try {
+            const payload = await decodeQrFromVideoFrame(video);
             if (payload) {
               emitScan(payload);
               return;
             }
+          } catch {
+            /* próximo frame */
           }
         }
 
-        scanFrameRef.current = requestAnimationFrame(tick);
+        scanFrameRef.current = requestAnimationFrame(() => {
+          void tick();
+        });
       };
 
-      scanFrameRef.current = requestAnimationFrame(tick);
+      scanFrameRef.current = requestAnimationFrame(() => {
+        void tick();
+      });
     } catch (e) {
       stopLiveScan();
+      const message = humanizeCameraError(e);
+      setError(message);
+      onError?.(message);
+    } finally {
+      setBusy(false);
+    }
+  }, [busy, disabled, emitScan, liveActive, onError, stopLiveScan]);
+
+  useEffect(() => {
+    if (!autoStartLiveScan || disabled) return;
+    const timer = window.setTimeout(() => {
+      void startLiveScan();
+    }, 350);
+    return () => window.clearTimeout(timer);
+  }, [autoStartLiveScan, disabled, startLiveScan]);
+
+  const handlePhotoCapture = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file || disabled) return;
+
+    setBusy(true);
+    setError("");
+    try {
+      const payload = await decodeQrFromFile(file);
+      if (!payload) {
+        const message = "QR Code não encontrado. Centralize o código na foto e tente de novo.";
+        setError(message);
+        onError?.(message);
+        return;
+      }
+      emitScan(payload);
+    } catch (e) {
       const message = humanizeCameraError(e);
       setError(message);
       onError?.(message);
@@ -199,39 +203,36 @@ export function HbCreditQrScanner({
       <div
         className={cn(
           "relative overflow-hidden rounded-3xl border bg-gray-950",
-          fullscreen ? "min-h-[55vh] border-green-700/40" : "min-h-[220px] border-gray-300"
+          fullscreen ? "min-h-[58vh] border-green-700/40" : "min-h-[280px] border-gray-300"
         )}
       >
         <video
           ref={videoRef}
-          className={cn("absolute inset-0 h-full w-full object-cover", liveActive ? "opacity-100" : "opacity-0")}
+          className={cn("absolute inset-0 h-full w-full object-cover", liveActive ? "opacity-100" : "opacity-30")}
           playsInline
           muted
           autoPlay
         />
-        <canvas ref={canvasRef} className="hidden" aria-hidden />
 
-        {!liveActive && (
-          <div className="absolute inset-0 flex flex-col items-center justify-center gap-4 p-6 text-center">
-            <div className="flex h-20 w-20 items-center justify-center rounded-full bg-green-500/15 text-3xl ring-1 ring-green-400/30">
-              📷
-            </div>
-            <div className="space-y-1">
-              <p className={cn("font-semibold", fullscreen ? "text-white" : "text-gray-100")}>
-                Fotografe o QR Code do mercado
-              </p>
-              <p className={cn("text-sm", fullscreen ? "text-green-100/80" : "text-gray-400")}>
-                Usa a mesma câmera das fotos de entrega — estável no celular.
-              </p>
-            </div>
+        <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
+          <div
+            className={cn(
+              "relative h-56 w-56 rounded-2xl border-2 border-green-400/90 shadow-[0_0_0_9999px_rgba(0,0,0,0.45)]",
+              liveActive && "animate-pulse"
+            )}
+          >
+            <span className="absolute -top-1 -left-1 h-8 w-8 border-l-4 border-t-4 border-green-400 rounded-tl-lg" />
+            <span className="absolute -top-1 -right-1 h-8 w-8 border-r-4 border-t-4 border-green-400 rounded-tr-lg" />
+            <span className="absolute -bottom-1 -left-1 h-8 w-8 border-l-4 border-b-4 border-green-400 rounded-bl-lg" />
+            <span className="absolute -bottom-1 -right-1 h-8 w-8 border-r-4 border-b-4 border-green-400 rounded-br-lg" />
           </div>
-        )}
+        </div>
 
-        {liveActive && (
-          <div className="pointer-events-none absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/80 to-transparent p-4 text-center text-sm text-white">
-            Aponte para o QR Code — leitura automática
-          </div>
-        )}
+        <div className="pointer-events-none absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/85 to-transparent p-4 text-center">
+          <p className="text-sm font-medium text-white">
+            {liveActive ? "Aponte para o QR — leitura automática" : busy ? "Abrindo câmera…" : "Centralize o QR na moldura"}
+          </p>
+        </div>
       </div>
 
       {error && (
@@ -239,31 +240,31 @@ export function HbCreditQrScanner({
       )}
 
       <div className="space-y-2">
-        <Button
-          type="button"
-          size="lg"
-          className="w-full"
-          onClick={openNativeCamera}
-          disabled={disabled || busy}
-        >
-          {busy && !liveActive ? "Lendo foto…" : "Abrir câmera e fotografar QR"}
-        </Button>
-
         {!liveActive ? (
           <Button
             type="button"
-            variant="secondary"
+            size="lg"
             className="w-full"
             onClick={() => void startLiveScan()}
             disabled={disabled || busy}
           >
-            Leitura ao vivo (alternativa)
+            {busy ? "Abrindo câmera…" : "Ler QR Code automaticamente"}
           </Button>
         ) : (
           <Button type="button" variant="secondary" className="w-full" onClick={stopLiveScan}>
-            Parar leitura ao vivo
+            Parar leitura
           </Button>
         )}
+
+        <Button
+          type="button"
+          variant="secondary"
+          className="w-full"
+          onClick={openNativeCamera}
+          disabled={disabled || busy}
+        >
+          {busy && !liveActive ? "Lendo foto…" : "Tirar foto do QR (alternativa)"}
+        </Button>
       </div>
     </div>
   );

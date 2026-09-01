@@ -106,7 +106,12 @@ function MercadoParceiroContent() {
       const res = await createCreditIntent(amount, descricao.trim() || undefined);
       if (res.qrPayload) {
         setQrPayload(res.qrPayload);
-        const url = await QRCode.toDataURL(res.qrPayload, { width: 260, margin: 2 });
+        const url = await QRCode.toDataURL(res.qrPayload, {
+          width: 320,
+          margin: 3,
+          errorCorrectionLevel: "H",
+          color: { dark: "#000000", light: "#ffffff" },
+        });
         setQrUrl(url);
       }
       await reload();

@@ -42,7 +42,7 @@ function EscanearQrContent() {
       <HbCreditScannerErrorBoundary onReset={() => router.refresh()}>
         <HbCreditQrScanner
           fullscreen
-          autoOpenCamera
+          autoStartLiveScan
           onScan={handleScan}
           onError={() => {
             /* erro exibido no componente */
@@ -51,7 +51,7 @@ function EscanearQrContent() {
       </HbCreditScannerErrorBoundary>
 
       <p className="text-center text-xs text-gray-500">
-        Se a leitura ao vivo falhar, use &quot;Abrir câmera e fotografar QR&quot; — é o método mais confiável no celular.
+        Aponte a câmera para o QR do mercado — a leitura é automática, como no app do banco.
       </p>
     </div>
   );
