@@ -20,7 +20,6 @@ import {
   textoTermosCobrancaSaas,
 } from "@/services/cobrancaSaasService";
 import { useHbCreditEnabled } from "@/hooks/useHbCreditEnabled";
-import { markCloudSessionActive } from "@/lib/security/clientSession";
 
 type AbaCadastro = "cooperado" | "responsavel" | "parceiro";
 
@@ -71,7 +70,7 @@ export default function CadastroPage() {
   const [cloudStatus, setCloudStatus] = useState<CloudStatus | null>(null);
   const [cloudMessage, setCloudMessage] = useState<string | null>(null);
   const [lookupError, setLookupError] = useState<string | null>(null);
-  const { register, registerCooperativa } = useAuth();
+  const { register, registerCooperativa, login } = useAuth();
   const router = useRouter();
 
   useEffect(() => {
@@ -258,7 +257,12 @@ export default function CadastroPage() {
         );
         return;
       }
-      if (data.user) markCloudSessionActive();
+      const logged = await login(emailParceiro, passwordParceiro);
+      if (!logged.ok) {
+        setSuccess("Mercado cadastrado! Faça login com seu e-mail e senha.");
+        setTimeout(() => router.push("/login?next=/mercado-parceiro"), 1500);
+        return;
+      }
       setSuccess("Mercado cadastrado! Status: PENDENTE — aguarde aprovação da cooperativa.");
       setTimeout(() => router.push("/mercado-parceiro"), 1500);
     } catch {

@@ -11,7 +11,7 @@ import type { RegisterCooperadoInput, RegisterCooperativaInput } from "@/service
 interface AuthContextType {
   user: Omit<User, "password"> | null;
   loading: boolean;
-  login: (email: string, password: string) => Promise<{ ok: boolean; error?: string }>;
+  login: (email: string, password: string) => Promise<{ ok: boolean; error?: string; redirectTo?: string }>;
   loginCreatorAdmin: (email: string, password: string) => Promise<boolean>;
   register: (input: RegisterCooperadoInput) => Promise<{ success: boolean; error?: string }>;
   registerCooperativa: (input: RegisterCooperativaInput) => Promise<{ success: boolean; error?: string }>;
@@ -64,7 +64,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setUser({ ...safeUser, role: normalizeUserRole(safeUser.role) });
       setActiveCloudProfile(userToCloudProfile(safeUser));
       await ensureCloudSessionReady(userToCloudProfile(safeUser));
-      return { ok: true as const };
+      const redirectTo = safeUser.role === "parceiro" ? "/mercado-parceiro" : "/dashboard";
+      return { ok: true as const, redirectTo };
     }
     return { ok: false as const, error: getLastCloudSyncError() };
   };

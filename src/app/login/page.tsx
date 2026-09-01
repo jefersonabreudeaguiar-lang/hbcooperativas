@@ -47,7 +47,7 @@ function LoginForm() {
     try {
       const result = await login(email, password);
       if (result.ok) {
-        router.push(redirectTo);
+        router.push(result.redirectTo ?? redirectTo);
       } else {
         setError(
           result.error?.trim() ||

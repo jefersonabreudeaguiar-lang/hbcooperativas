@@ -791,7 +791,7 @@ export async function loginCreatorAdminPortal(
   return await finishLoginSession(user, data, password);
 }
 
-const CLOUD_BOOTSTRAP_ROLES: UserRole[] = ["cooperado", "responsavel", "tesoureiro", "admin", "contador"];
+const CLOUD_BOOTSTRAP_ROLES: UserRole[] = ["cooperado", "responsavel", "tesoureiro", "admin", "contador", "parceiro"];
 
 /**
  * Após login validado na nuvem, materializa users[] local + cooperativa/cooperado

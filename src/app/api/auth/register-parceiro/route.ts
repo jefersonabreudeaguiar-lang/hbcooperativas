@@ -10,6 +10,7 @@ import { logSecurityEvent, upsertAppUserWithRoleRepair } from "@/lib/supabase/us
 import { registerParceiro } from "@/lib/supabase/contaCoopStorage";
 import { ensureHbCreditPartnersSchema } from "@/lib/supabase/hbCreditPartnersSchema";
 import { normalizeCnpj, formatCnpj } from "@/utils/cooperativa";
+import { normalizeAuthEmail } from "@/lib/security/appCreator";
 import { assertHbCreditEnabledServer, CreditDisabledError } from "@/modules/hb-credit/config";
 
 function duplicateFieldMessage(message: string): string | null {
@@ -40,7 +41,7 @@ export async function POST(request: Request) {
   const cnpjCooperativa = normalizeCnpj(String(body?.cooperativaCnpj ?? ""));
   const cnpjMercado = normalizeCnpj(String(body?.cnpjMercado ?? ""));
   const nomeMercado = String(body?.nomeMercado ?? "").trim();
-  const email = String(body?.email ?? "").trim().toLowerCase();
+  const email = normalizeAuthEmail(String(body?.email ?? ""));
   const password = String(body?.password ?? "");
   const name = String(body?.name ?? nomeMercado).trim();
 
