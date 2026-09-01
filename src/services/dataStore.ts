@@ -38,12 +38,12 @@ import { normalizarPrestacaoContas, aplicarPrestacoesContasExcluidas } from "@/s
 import { aplicarInstituicoesExcluidas } from "@/services/instituicaoContratoService";
 import { exigeSenhaCadastroCooperado } from "@/utils/cooperativaCadastro";
 import { defaultCobrancaSaas, sincronizarCicloCobrancaSaas } from "@/services/cobrancaSaasService";
-import { hashPassword, isPasswordHash, verifyPassword, verifyPasswordSync } from "@/lib/security/password";
-import { isApiSecurityEnforced } from "@/lib/security/env";
+import { hashPassword, hashPasswordSync, isPasswordHash, verifyPassword, verifyPasswordSync } from "@/lib/security/password";
 import {
   clearAccessToken,
   clearCloudBootstrapCredentials,
   establishCloudSession,
+  getLastCloudSyncError,
   loginViaCloudApi,
   logoutCloudSession,
   markCloudSessionActive,
@@ -802,13 +802,14 @@ async function materializeParceiroFromCloud(
   plainPassword: string
 ): Promise<User> {
   const email = normalizeCreatorEmail(profile.email);
-  const passwordHash = await hashPassword(plainPassword);
+  const passwordHash = hashPasswordSync(plainPassword);
   const user: User = {
     id: profile.id,
     email,
     password: passwordHash,
     name: profile.name.trim(),
     role: "parceiro",
+    cooperadoId: undefined,
     cooperativaId: profile.cooperativaId,
     cooperativaCnpj: profile.cooperativaCnpj ? normalizeCnpj(profile.cooperativaCnpj) : undefined,
     active: true,
@@ -825,6 +826,22 @@ async function materializeParceiroFromCloud(
   }));
 
   return user;
+}
+
+async function loginParceiroViaNuvem(profile: CloudSessionProfile, plainPassword: string): Promise<User | null> {
+  try {
+    const user = await materializeParceiroFromCloud(profile, plainPassword);
+    const { password: _, ...safeUser } = user;
+    persistSession(safeUser);
+    setActiveCloudProfile(userToCloudProfile(user));
+    markCloudSessionActive();
+    clearCloudBootstrapCredentials();
+    notify();
+    return user;
+  } catch {
+    setLastCloudSyncError("Erro ao iniciar sessão do mercado. Limpe o cache do navegador e tente de novo.");
+    return null;
+  }
 }
 
 /**
@@ -894,21 +911,23 @@ async function bootstrapLocalUserFromCloudLogin(
 export async function login(email: string, password: string): Promise<User | null> {
   if (typeof window === "undefined") return null;
 
-  if (isApiSecurityEnforced()) {
-    const cloud = await loginViaCloudApi(email, password);
-    if (!cloud) return null;
+  const cloud = await loginViaCloudApi(email, password);
+  if (cloud) {
+    if (normalizeUserRole(cloud.user.role) === "parceiro") {
+      return loginParceiroViaNuvem(cloud.user, password);
+    }
 
     const bootstrapped = await bootstrapLocalUserFromCloudLogin(cloud.user, password);
     if (!bootstrapped) {
-      setLastCloudSyncError(
-        cloud.user.role === "parceiro"
-          ? "Conta de mercado reconhecida na nuvem, mas o app não iniciou a sessão. Atualize a página (Ctrl+Shift+R)."
-          : "Perfil reconhecido na nuvem, mas não foi possível iniciar a sessão local."
-      );
+      setLastCloudSyncError("Perfil reconhecido na nuvem, mas não foi possível iniciar a sessão local.");
       return null;
     }
-
     return await finishLoginSession(bootstrapped, getData(), password);
+  }
+
+  const cloudErr = getLastCloudSyncError();
+  if (cloudErr && !/indispon|503|configurad/i.test(cloudErr)) {
+    return null;
   }
 
   const data = prepareDataForLogin();
@@ -929,16 +948,7 @@ export async function login(email: string, password: string): Promise<User | nul
     }
   }
 
-  const cloud = await loginViaCloudApi(email, password);
-  if (!cloud) return null;
-
-  const bootstrapped = await bootstrapLocalUserFromCloudLogin(cloud.user, password);
-  if (!bootstrapped) {
-    setLastCloudSyncError("Perfil reconhecido na nuvem, mas não foi possível iniciar a sessão local.");
-    return null;
-  }
-
-  return await finishLoginSession(bootstrapped, getData(), password);
+  return null;
 }
 
 export function logout(): void {

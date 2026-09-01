@@ -67,7 +67,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const redirectTo = safeUser.role === "parceiro" ? "/mercado-parceiro" : "/dashboard";
       return { ok: true as const, redirectTo };
     }
-    return { ok: false as const, error: getLastCloudSyncError() };
+    return {
+      ok: false as const,
+      error:
+        getLastCloudSyncError() ||
+        "E-mail ou senha inválidos. Se usa Gmail, tente com ou sem pontos no e-mail.",
+    };
   };
 
   const loginCreatorAdmin = async (email: string, password: string) => {

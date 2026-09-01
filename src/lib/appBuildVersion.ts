@@ -1,2 +1,2 @@
-/** Incremente a cada release que exige atualização no celular (PWA / cache). */
-export const APP_BUILD_VERSION = 19;
+/** Incrementar a cada deploy relevante — força atualização do PWA/service worker. */
+export const APP_BUILD_VERSION = 21;
