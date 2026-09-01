@@ -39,6 +39,25 @@ export async function uploadCooperadoToStorage(
   return { ok: true };
 }
 
+export async function fetchCooperadoFromStorage(
+  supabase: SupabaseClient,
+  cnpj: string,
+  cooperadoId: string
+): Promise<Cooperado | null> {
+  if (!cooperadoId.trim()) return null;
+  await ensureCooperadosBucket(supabase);
+  const { data: blob, error } = await supabase.storage
+    .from(BUCKET)
+    .download(storagePath(cnpj, cooperadoId));
+  if (error || !blob) return null;
+  try {
+    const parsed = JSON.parse(await blob.text()) as { cooperado?: Cooperado };
+    return parsed?.cooperado?.id ? parsed.cooperado : null;
+  } catch {
+    return null;
+  }
+}
+
 export async function fetchCooperadosFromStorage(
   supabase: SupabaseClient,
   cnpj: string

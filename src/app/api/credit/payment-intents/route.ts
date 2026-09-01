@@ -3,6 +3,7 @@ import {
   buildQrPayload,
   cancelPaymentIntent,
   createPaymentIntent,
+  getPartnerPaymentIntentStatus,
   parseQrPayload,
   validateIntentForCooperado,
 } from "@/lib/supabase/contaCoopStorage";
@@ -15,6 +16,28 @@ import {
 import { normalizeCnpj } from "@/utils/cooperativa";
 import { reaisToCents } from "@/modules/hb-credit/engine/money";
 import { INTENT_MAX_CENTS } from "@/modules/hb-credit/config";
+
+export async function GET(request: Request) {
+  const gate = await requireCreditApi(request);
+  if (!gate.ok) return gate.response;
+
+  const intentId = new URL(request.url).searchParams.get("intentId")?.trim() ?? "";
+  if (!intentId) {
+    return NextResponse.json({ error: "Cobrança inválida." }, { status: 400 });
+  }
+
+  const parceiroGate = await requireCreditParceiro(gate.ctx);
+  if (!parceiroGate.ok) return parceiroGate.response;
+
+  const result = await getPartnerPaymentIntentStatus(
+    gate.ctx.supabase,
+    parceiroGate.parceiro.id,
+    intentId
+  );
+  if (!result.ok) return NextResponse.json({ error: result.error }, { status: 400 });
+
+  return NextResponse.json({ ok: true, ...result.data });
+}
 
 export async function POST(request: Request) {
   const gate = await requireCreditApi(request, { requireOperations: true });

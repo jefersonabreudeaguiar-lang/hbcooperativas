@@ -156,6 +156,31 @@ export async function cancelCreditIntent(intentId: string) {
   return data;
 }
 
+export type CreditIntentPaymentPoll = {
+  status: ContaCoopIntent["status"];
+  intentId: string;
+  amountCents: number;
+  descricao?: string;
+  expiresAt: string;
+  payment?: {
+    transacaoId: string;
+    receiptCode: string | null;
+    paidAt: string;
+    cooperadoId: string;
+    cooperadoNome: string;
+    cooperadoCpf: string;
+  };
+};
+
+export async function pollCreditIntentPayment(intentId: string): Promise<CreditIntentPaymentPoll> {
+  const res = await secureApiFetch(
+    `/api/credit/payment-intents?intentId=${encodeURIComponent(intentId)}`
+  );
+  const data = await parseJson<CreditIntentPaymentPoll & { ok?: boolean; error?: string }>(res);
+  if (!res.ok || !data.ok) throw new Error(data.error ?? "Erro ao consultar cobrança.");
+  return data;
+}
+
 export async function fetchMercadoParceiroData() {
   const res = await secureApiFetch("/api/credit/mercado");
   const data = await parseJson<{

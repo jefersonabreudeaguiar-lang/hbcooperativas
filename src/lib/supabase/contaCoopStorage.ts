@@ -18,6 +18,7 @@ import type {
   SolicitacaoEstornoStatus,
   ParceiroStatus,
   SettlementStatus,
+  IntentStatus,
 } from "@/modules/hb-credit/types";
 import { computeDisponivel, formatCentsBRL } from "@/modules/hb-credit/engine/money";
 import { calcLimiteFromPercentual, calcTetoGlobalCents, sumCreditosBaseCents } from "@/modules/hb-credit/engine/creditBaseFromFicha";
@@ -1909,6 +1910,100 @@ export async function listRecebiveisParceiro(
     status: receivableStatusFromDb(String(r.status)),
     createdAt: String(r.created_at),
   }));
+}
+
+export type PartnerIntentPaymentStatus = {
+  status: IntentStatus;
+  intentId: string;
+  amountCents: number;
+  descricao?: string;
+  expiresAt: string;
+  payment?: {
+    transacaoId: string;
+    receiptCode: string | null;
+    paidAt: string;
+    cooperadoId: string;
+    cooperadoNome: string;
+    cooperadoCpf: string;
+  };
+};
+
+export async function getPartnerPaymentIntentStatus(
+  supabase: SupabaseClient,
+  parceiroId: string,
+  intentId: string
+): Promise<{ ok: true; data: PartnerIntentPaymentStatus } | { ok: false; error: string }> {
+  const { data: intent, error } = await supabase
+    .from("hb_credit_payment_intents")
+    .select("*")
+    .eq("id", intentId)
+    .eq("partner_id", parceiroId)
+    .maybeSingle();
+
+  if (error) return { ok: false, error: error.message };
+  if (!intent) return { ok: false, error: "Cobrança não encontrada." };
+
+  const status = intentStatusFromDb(String(intent.status));
+  const base: PartnerIntentPaymentStatus = {
+    status,
+    intentId: String(intent.id),
+    amountCents: Number(intent.amount_cents),
+    descricao: intent.description ? String(intent.description) : undefined,
+    expiresAt: String(intent.expires_at),
+  };
+
+  if (status !== "confirmada") {
+    return { ok: true, data: base };
+  }
+
+  const { data: tx } = await supabase
+    .from("hb_credit_transactions")
+    .select("id, cooperado_id, receipt_code, created_at")
+    .eq("payment_intent_id", intentId)
+    .eq("event_type", "PAYMENT")
+    .eq("status", "posted")
+    .maybeSingle();
+
+  const cooperadoId = String(tx?.cooperado_id ?? intent.cooperado_id ?? "");
+  let cooperadoNome = "Cooperado";
+  let cooperadoCpf = "";
+
+  if (cooperadoId) {
+    const { fetchCooperadoFromStorage } = await import("@/lib/supabase/cooperadosStorage");
+    const cooperado = await fetchCooperadoFromStorage(
+      supabase,
+      String(intent.cooperative_cnpj),
+      cooperadoId
+    );
+    if (cooperado) {
+      cooperadoNome = cooperado.nomeCompleto;
+      cooperadoCpf = cooperado.cpfCnpj ?? "";
+    } else {
+      const { data: fiscal } = await supabase
+        .from("hb_credit_fiscal_notes")
+        .select("cooperado_nome_snapshot")
+        .eq("transaction_id", tx?.id ?? "")
+        .maybeSingle();
+      if (fiscal?.cooperado_nome_snapshot) {
+        cooperadoNome = String(fiscal.cooperado_nome_snapshot);
+      }
+    }
+  }
+
+  return {
+    ok: true,
+    data: {
+      ...base,
+      payment: {
+        transacaoId: String(tx?.id ?? ""),
+        receiptCode: tx?.receipt_code ? String(tx.receipt_code) : null,
+        paidAt: String(tx?.created_at ?? intent.confirmed_at ?? new Date().toISOString()),
+        cooperadoId,
+        cooperadoNome,
+        cooperadoCpf,
+      },
+    },
+  };
 }
 
 export async function listIntentsParceiro(

@@ -5,6 +5,18 @@ export function formatCurrency(value: number): string {
   }).format(value);
 }
 
+export function formatCpfCnpj(valor?: string | null): string {
+  const digits = (valor ?? "").replace(/\D/g, "");
+  if (!digits) return "—";
+  if (digits.length === 11) {
+    return digits.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, "$1.$2.$3-$4");
+  }
+  if (digits.length === 14) {
+    return digits.replace(/(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})/, "$1.$2.$3/$4-$5");
+  }
+  return valor ?? "—";
+}
+
 export function formatDate(date: string): string {
   if (!date) return "-";
   const [y, m, d] = date.split("T")[0].split("-");
