@@ -1,10 +1,13 @@
 import { NextResponse } from "next/server";
 import {
+  acceptPartnerTerms,
+  getCooperativaNomeByCnpj,
   getParceiroByUserId,
   hasPartnerFinancialPin,
   listIntentsParceiro,
   listRecebiveisParceiro,
   listSettlementsForPartner,
+  partnerNeedsTermsAcceptance,
   setPartnerFinancialPin,
   updatePartnerPix,
 } from "@/lib/supabase/contaCoopStorage";
@@ -41,6 +44,10 @@ export async function GET(request: Request) {
     fiscalPendentes = 0;
   }
 
+  const cooperativaNome =
+    (await getCooperativaNomeByCnpj(gate.ctx.supabase, parceiro.cooperativaCnpj)) ?? "Cooperativa parceira";
+  const needsTermsAcceptance = partnerNeedsTermsAcceptance(parceiro);
+
   return NextResponse.json({
     ok: true,
     parceiro,
@@ -50,6 +57,8 @@ export async function GET(request: Request) {
     hasPin,
     fiscalPendentes,
     mesReferenciaFiscal: mesReferencia,
+    cooperativaNome,
+    needsTermsAcceptance,
   });
 }
 
@@ -86,6 +95,21 @@ export async function PATCH(request: Request) {
     const result = await setPartnerFinancialPin(gate.ctx.supabase, parceiro.id, pin);
     if (!result.ok) return NextResponse.json({ error: result.error }, { status: 400 });
     return NextResponse.json({ ok: true, hasPin: true });
+  }
+
+  if (body.action === "accept_terms") {
+    if (parceiro.status !== "ativo") {
+      return NextResponse.json({ error: "Mercado ainda não está ativo." }, { status: 400 });
+    }
+    const updated = await acceptPartnerTerms(gate.ctx.supabase, parceiro.id, gate.ctx.session?.sub ?? "system");
+    if (!updated) {
+      return NextResponse.json({ error: "Não foi possível registrar o aceite do termo." }, { status: 400 });
+    }
+    return NextResponse.json({
+      ok: true,
+      parceiro: updated,
+      needsTermsAcceptance: partnerNeedsTermsAcceptance(updated),
+    });
   }
 
   const pixKey = String(body.pixKey ?? "").trim();

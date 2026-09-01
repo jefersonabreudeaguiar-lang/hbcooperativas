@@ -9,6 +9,7 @@ import { ContaCoopSegmentTabs } from "@/components/hb-credit/ContaCoopSegmentTab
 import { ContaCoopLiquidacaoPanel } from "@/components/hb-credit/ContaCoopLiquidacaoPanel";
 import { ContaCoopFiscalNotesConferenciaPanel } from "@/components/hb-credit/ContaCoopFiscalNotesConferenciaPanel";
 import { ContaCoopEstornosPanel } from "@/components/hb-credit/ContaCoopEstornosPanel";
+import { ContaCoopDescontosPanel } from "@/components/hb-credit/ContaCoopDescontosPanel";
 import { Card, StatCard } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Input, Label } from "@/components/ui/Form";
@@ -22,6 +23,7 @@ import {
   fetchCreditParceiros,
   postCreditLimites,
   postCreditParceiroStatus,
+  postUpdatePartnerDiscount,
 } from "@/services/creditApiService";
 import { formatCentsBRL } from "@/modules/hb-credit/engine/money";
 import { buildCreditosBaseMap } from "@/modules/hb-credit/engine/creditBaseFromFicha";
@@ -48,7 +50,7 @@ type PreviewColetivo = {
   }>;
 };
 
-type Tab = "painel" | "limites" | "mercados" | "conferir_nf" | "liquidar" | "estornos";
+type Tab = "painel" | "limites" | "mercados" | "descontos" | "conferir_nf" | "liquidar" | "estornos";
 
 export default function ContaCoopPage() {
   return (
@@ -73,7 +75,8 @@ function ContaCoopContent() {
       initialTab === "liquidar" ||
       initialTab === "estornos" ||
       initialTab === "limites" ||
-      initialTab === "mercados"
+      initialTab === "mercados" ||
+      initialTab === "descontos"
     ) {
       return initialTab;
     }
@@ -90,6 +93,8 @@ function ContaCoopContent() {
   const [percentualColetivo, setPercentualColetivo] = useState("");
   const [previewColetivo, setPreviewColetivo] = useState<PreviewColetivo | null>(null);
   const [busy, setBusy] = useState(false);
+  const [discountDrafts, setDiscountDrafts] = useState<Record<string, string>>({});
+  const [approveDiscountDrafts, setApproveDiscountDrafts] = useState<Record<string, string>>({});
 
   const cnpj = useMemo(() => {
     if (!user || !data) return "";
@@ -250,14 +255,37 @@ function ContaCoopContent() {
     }
   };
 
-  const atualizarMercado = async (parceiroId: string, status: "ativo" | "bloqueado") => {
+  const atualizarMercado = async (parceiroId: string, status: "ativo" | "bloqueado", partnerDiscountPercent?: number) => {
     if (!cnpj) return;
     setBusy(true);
     try {
-      await postCreditParceiroStatus(cnpj, parceiroId, status);
+      await postCreditParceiroStatus(cnpj, parceiroId, status, partnerDiscountPercent);
       await reload();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Erro ao atualizar mercado.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const salvarDescontoMercado = async (parceiroId: string) => {
+    if (!cnpj) return;
+    const raw =
+      discountDrafts[parceiroId] ??
+      approveDiscountDrafts[parceiroId] ??
+      String(parceiros.find((p) => p.id === parceiroId)?.partnerDiscountPercent ?? "");
+    const percent = Number(raw.replace(",", "."));
+    if (!Number.isFinite(percent) || percent < 0 || percent > 100) {
+      setError("Informe um desconto entre 0 e 100%.");
+      return;
+    }
+    setBusy(true);
+    setError("");
+    try {
+      await postUpdatePartnerDiscount(cnpj, parceiroId, percent);
+      await reload();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Erro ao salvar desconto.");
     } finally {
       setBusy(false);
     }
@@ -293,6 +321,7 @@ function ContaCoopContent() {
           { id: "painel", label: "Visão geral" },
           { id: "limites", label: "Limites" },
           { id: "mercados", label: "Mercados" },
+          { id: "descontos", label: "Descontos" },
           { id: "conferir_nf", label: "Conferir NFs" },
           { id: "liquidar", label: "Liquidar" },
           { id: "estornos", label: "Estornos" },
@@ -605,43 +634,106 @@ function ContaCoopContent() {
         <ContaCoopEstornosPanel cnpj={cnpj} parceiros={parceiros} cooperadoNome={cooperadoNome} />
       )}
 
+      {tab === "descontos" && <ContaCoopDescontosPanel cnpj={cnpj} cooperadoNome={cooperadoNome} />}
+
       {tab === "mercados" && (
-        <div className="space-y-3">
-          {parceiros.map((p) => (
-            <Card key={p.id} className="flex flex-col gap-3 !p-4 sm:flex-row sm:items-center sm:justify-between">
-              <div>
-                <p className="font-semibold text-gray-900">{p.nomeMercado}</p>
-                <p className="font-mono text-xs text-gray-500">{p.cnpjMercado}</p>
-                <span
-                  className={cn(
-                    "mt-2 inline-block rounded-full px-2.5 py-0.5 text-xs font-medium",
-                    p.status === "ativo" && "bg-green-100 text-green-800",
-                    p.status === "pendente" && "bg-amber-100 text-amber-800",
-                    p.status === "bloqueado" && "bg-red-100 text-red-800"
+        <div className="space-y-4">
+          <Card className="border-green-200 bg-green-50/50 !p-4">
+            <h3 className="font-semibold text-gray-900">Desconto por contrato com cada mercado</h3>
+            <p className="mt-1 text-sm text-gray-600">
+              Informe o percentual de desconto acordado com o mercado parceiro. O cooperado paga o valor integral da
+              compra; na liquidação o mercado recebe o líquido e a diferença retorna à cooperativa (aba Descontos).
+            </p>
+          </Card>
+
+          {parceiros.map((p) => {
+            const descontoValor =
+              discountDrafts[p.id] ??
+              approveDiscountDrafts[p.id] ??
+              (p.partnerDiscountPercent != null ? String(p.partnerDiscountPercent) : "");
+
+            return (
+              <Card key={p.id} className="space-y-4 !p-4">
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="font-semibold text-gray-900">{p.nomeMercado}</p>
+                    <p className="font-mono text-xs text-gray-500">{p.cnpjMercado}</p>
+                  </div>
+                  <span
+                    className={cn(
+                      "inline-block rounded-full px-2.5 py-0.5 text-xs font-medium",
+                      p.status === "ativo" && "bg-green-100 text-green-800",
+                      p.status === "pendente" && "bg-amber-100 text-amber-800",
+                      p.status === "bloqueado" && "bg-red-100 text-red-800"
+                    )}
+                  >
+                    {statusMercadoLabel(p.status)}
+                  </span>
+                </div>
+
+                <div className="rounded-xl border-2 border-green-300 bg-green-50/80 p-4">
+                  <p className="text-sm font-medium text-green-900">Desconto contratual (%)</p>
+                  <p className="mt-0.5 text-xs text-green-800">
+                    {p.status === "pendente"
+                      ? "Obrigatório ao aprovar o mercado — percentual que o estabelecimento concede nas vendas Conta Coop."
+                      : "Percentual vigente neste contrato. Altere e clique em Salvar desconto."}
+                  </p>
+                  <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-end">
+                    <Input
+                      inputMode="decimal"
+                      placeholder="Ex: 5"
+                      value={descontoValor}
+                      onChange={(e) => {
+                        const v = e.target.value;
+                        if (p.status === "pendente") {
+                          setApproveDiscountDrafts((prev) => ({ ...prev, [p.id]: v }));
+                        } else {
+                          setDiscountDrafts((prev) => ({ ...prev, [p.id]: v }));
+                        }
+                      }}
+                      className="max-w-xs bg-white text-lg font-semibold"
+                    />
+                    {p.status === "pendente" ? (
+                      <Button
+                        onClick={() =>
+                          atualizarMercado(
+                            p.id,
+                            "ativo",
+                            Number((descontoValor || "0").replace(",", "."))
+                          )
+                        }
+                        disabled={busy || descontoValor.trim() === ""}
+                      >
+                        Aprovar mercado com este desconto
+                      </Button>
+                    ) : (
+                      <Button variant="secondary" onClick={() => salvarDescontoMercado(p.id)} disabled={busy}>
+                        Salvar desconto
+                      </Button>
+                    )}
+                  </div>
+                  {p.status === "ativo" && (p.partnerDiscountPercent ?? 0) > 0 && (
+                    <p className="mt-2 text-xs text-green-800">
+                      Vigente no sistema: <strong>{p.partnerDiscountPercent}%</strong>
+                    </p>
                   )}
-                >
-                  {statusMercadoLabel(p.status)}
-                </span>
-              </div>
-              <div className="flex flex-wrap gap-2">
-                {p.status === "pendente" && (
-                  <Button size="sm" onClick={() => atualizarMercado(p.id, "ativo")} disabled={busy}>
-                    Aprovar mercado
-                  </Button>
-                )}
-                {p.status !== "bloqueado" && p.status !== "pendente" && (
-                  <Button size="sm" variant="secondary" onClick={() => atualizarMercado(p.id, "bloqueado")} disabled={busy}>
-                    Bloquear
-                  </Button>
-                )}
-                {p.status === "bloqueado" && (
-                  <Button size="sm" onClick={() => atualizarMercado(p.id, "ativo")} disabled={busy}>
-                    Reativar
-                  </Button>
-                )}
-              </div>
-            </Card>
-          ))}
+                </div>
+
+                <div className="flex flex-wrap gap-2">
+                  {p.status === "ativo" && (
+                    <Button size="sm" variant="secondary" onClick={() => atualizarMercado(p.id, "bloqueado")} disabled={busy}>
+                      Bloquear mercado
+                    </Button>
+                  )}
+                  {p.status === "bloqueado" && (
+                    <Button size="sm" onClick={() => atualizarMercado(p.id, "ativo")} disabled={busy}>
+                      Reativar mercado
+                    </Button>
+                  )}
+                </div>
+              </Card>
+            );
+          })}
           {!parceiros.length && (
             <Card className="!p-8 text-center text-sm text-gray-500">Nenhum mercado parceiro cadastrado.</Card>
           )}

@@ -60,6 +60,7 @@ function MinhaContaCoopContent() {
     limite: ContaCoopLimiteCooperado;
   } | null>(null);
   const [payPin, setPayPin] = useState("");
+  const [useCashback, setUseCashback] = useState(false);
   const [busy, setBusy] = useState(false);
   const [isOffline, setIsOffline] = useState(false);
 
@@ -167,11 +168,13 @@ function MinhaContaCoopContent() {
         nonce: pendingIntent.intent.nonce,
         pin: payPin,
         idempotencyKey: `pay:${pendingIntent.intent.id}:${cooperadoId}`,
+        useCashback,
       });
       setSuccess(`Pagamento aprovado! Comprovante ${res.receiptCode}`);
       setPendingIntent(null);
       setQrInput("");
       setPayPin("");
+      setUseCashback(false);
       setTab("extrato");
       await reload();
     } catch (e) {
@@ -184,10 +187,15 @@ function MinhaContaCoopContent() {
   if (loading && !account) return <PageSkeleton />;
 
   const disponivel = account?.valorDisponivelCents ?? 0;
+  const cashback = account?.cashbackDisponivelCents ?? 0;
   const limite = account?.limiteLiberadoCents ?? 0;
   const usado = account?.valorUsadoCents ?? 0;
   const usoPercent = limite > 0 ? Math.min(100, Math.round((usado / limite) * 100)) : 0;
   const pagamentoBloqueado = !hasPin || account?.bloqueado || isOffline;
+  const effectiveDisponivel = disponivel + (useCashback ? cashback : 0);
+  const creditDebitPreview = pendingIntent
+    ? Math.max(0, pendingIntent.intent.amountCents - (useCashback ? Math.min(cashback, pendingIntent.intent.amountCents) : 0))
+    : 0;
 
   return (
     <div className="mx-auto max-w-lg space-y-5 pb-8">
@@ -228,8 +236,18 @@ function MinhaContaCoopContent() {
       {tab === "inicio" && (
         <>
           <div className="overflow-hidden rounded-3xl bg-gradient-to-br from-green-800 via-green-700 to-emerald-600 p-6 text-white shadow-lg">
-            <p className="text-sm font-medium text-green-100">Disponível para usar</p>
-            <p className="mt-1 text-4xl font-bold tracking-tight">{formatCentsBRL(disponivel)}</p>
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <p className="text-sm font-medium text-green-100">Disponível para usar</p>
+                <p className="mt-1 text-4xl font-bold tracking-tight">{formatCentsBRL(disponivel)}</p>
+              </div>
+              {cashback > 0 && (
+                <div className="rounded-2xl bg-white/15 px-3 py-2 text-right backdrop-blur-sm">
+                  <p className="text-[10px] font-medium uppercase tracking-wide text-green-100">Cashback</p>
+                  <p className="text-lg font-bold">{formatCentsBRL(cashback)}</p>
+                </div>
+              )}
+            </div>
             <div className="mt-5 space-y-2">
               <div className="flex justify-between text-xs text-green-100">
                 <span>Usado {formatCentsBRL(usado)}</span>
@@ -317,16 +335,48 @@ function MinhaContaCoopContent() {
               </div>
               <div className="rounded-xl bg-white/80 p-3 text-sm">
                 <div className="flex justify-between py-1">
-                  <span className="text-gray-600">Saldo antes</span>
+                  <span className="text-gray-600">Valor da compra</span>
+                  <span className="font-medium">{formatCentsBRL(pendingIntent.intent.amountCents)}</span>
+                </div>
+                <div className="flex justify-between py-1">
+                  <span className="text-gray-600">Crédito disponível</span>
                   <span>{formatCentsBRL(pendingIntent.limite.valorDisponivelCents)}</span>
                 </div>
+                {(pendingIntent.limite.cashbackDisponivelCents ?? 0) > 0 && (
+                  <div className="flex justify-between py-1 text-green-800">
+                    <span>Cashback disponível</span>
+                    <span>{formatCentsBRL(pendingIntent.limite.cashbackDisponivelCents ?? 0)}</span>
+                  </div>
+                )}
+                {useCashback && (pendingIntent.limite.cashbackDisponivelCents ?? 0) > 0 && (
+                  <div className="flex justify-between py-1 text-green-800">
+                    <span>Cashback aplicado</span>
+                    <span>
+                      −
+                      {formatCentsBRL(
+                        Math.min(pendingIntent.limite.cashbackDisponivelCents ?? 0, pendingIntent.intent.amountCents)
+                      )}
+                    </span>
+                  </div>
+                )}
                 <div className="flex justify-between py-1 font-semibold text-green-800">
-                  <span>Saldo depois</span>
+                  <span>Crédito após pagamento</span>
                   <span>
-                    {formatCentsBRL(pendingIntent.limite.valorDisponivelCents - pendingIntent.intent.amountCents)}
+                    {formatCentsBRL(pendingIntent.limite.valorDisponivelCents - creditDebitPreview)}
                   </span>
                 </div>
               </div>
+              {(pendingIntent.limite.cashbackDisponivelCents ?? 0) > 0 && (
+                <Button
+                  type="button"
+                  variant={useCashback ? "primary" : "secondary"}
+                  className="w-full"
+                  onClick={() => setUseCashback((v) => !v)}
+                  disabled={busy}
+                >
+                  {useCashback ? "Cashback somado ao pagamento ✓" : "Usar cashback neste pagamento"}
+                </Button>
+              )}
               <div>
                 <Label>Digite seu PIN</Label>
                 <Input
@@ -347,7 +397,11 @@ function MinhaContaCoopContent() {
                 <Button
                   className="flex-1"
                   onClick={confirmarPagamento}
-                  disabled={busy || payPin.length < FINANCIAL_PIN_MIN_LENGTH}
+                  disabled={
+                    busy ||
+                    payPin.length < FINANCIAL_PIN_MIN_LENGTH ||
+                    effectiveDisponivel < pendingIntent.intent.amountCents
+                  }
                 >
                   Confirmar
                 </Button>

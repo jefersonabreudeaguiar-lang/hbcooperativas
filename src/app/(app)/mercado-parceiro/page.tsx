@@ -23,6 +23,8 @@ import { formatCentsBRL } from "@/modules/hb-credit/engine/money";
 import { FINANCIAL_PIN_MIN_LENGTH } from "@/modules/hb-credit/config";
 import type { ContaCoopCompraEstornavel, ContaCoopIntent, ContaCoopParceiro, ContaCoopSettlement, ContaCoopSolicitacaoEstorno } from "@/modules/hb-credit/types";
 import { ContaCoopFiscalNotesMercadoPanel } from "@/components/hb-credit/ContaCoopFiscalNotesMercadoPanel";
+import { MercadoContaCoopTermosGate } from "@/components/hb-credit/MercadoContaCoopTermosGate";
+import { textoResumoAcordoDescontoMercado, getClausulasTermoMercadoContaCoop, TERMO_MERCADO_CONTA_COOP_VERSAO } from "@/config/termoUsoMercadoContaCoop";
 import { PageSkeleton } from "@/components/ui/PageSkeleton";
 import { SignaturePad } from "@/components/ui/SignaturePad";
 import { formatCpfCnpj, formatDateTime, formatMesReferencia, getCurrentMesReferencia } from "@/utils/format";
@@ -92,6 +94,8 @@ function MercadoParceiroContent() {
   const [estornoMotivo, setEstornoMotivo] = useState("");
   const [estornoPin, setEstornoPin] = useState("");
   const [fiscalPendentes, setFiscalPendentes] = useState(0);
+  const [cooperativaNome, setCooperativaNome] = useState("Cooperativa parceira");
+  const [needsTermsAcceptance, setNeedsTermsAcceptance] = useState(false);
   const [tab, setTab] = useState<MercadoTab>("inicio");
 
   const reload = useCallback(async () => {
@@ -105,6 +109,8 @@ function MercadoParceiroContent() {
       setSettlements(data.settlements ?? []);
       setHasPin(Boolean(data.hasPin));
       setFiscalPendentes(Number(data.fiscalPendentes ?? 0));
+      setCooperativaNome(data.cooperativaNome ?? "Cooperativa parceira");
+      setNeedsTermsAcceptance(Boolean(data.needsTermsAcceptance));
       if (data.parceiro?.status === "ativo") {
         try {
           const refundData = await fetchPartnerRefundData();
@@ -403,6 +409,10 @@ function MercadoParceiroContent() {
 
   return (
     <div className="mx-auto max-w-lg space-y-5 pb-8">
+      {ativo && needsTermsAcceptance && parceiro && (
+        <MercadoContaCoopTermosGate parceiro={parceiro} cooperativaNome={cooperativaNome} onAccepted={reload} />
+      )}
+
       <header className="space-y-1">
         <p className="text-xs font-semibold uppercase tracking-wider text-green-700">Conta Coop · Mercado</p>
         <h1 className="text-2xl font-bold text-gray-900">{parceiro?.nomeMercado ?? "Mercado parceiro"}</h1>
@@ -468,7 +478,33 @@ function MercadoParceiroContent() {
               <p className="mt-1 text-lg font-bold text-gray-900">{formatCentsBRL(resumoMercado.totalPendenteCents)}</p>
             </Card>
           </div>
-          <Button size="lg" className="w-full" onClick={() => setTab("cobrar")} disabled={!ativo}>
+
+          {ativo && (
+            <Card className="space-y-2 border-green-200 bg-green-50/40 !p-4">
+              <p className="text-xs font-semibold uppercase tracking-wide text-green-800">Acordo Conta Coop</p>
+              <p className="text-sm font-semibold text-gray-900">
+                Desconto contratual:{" "}
+                {(parceiro?.partnerDiscountPercent ?? 0).toLocaleString("pt-BR", {
+                  minimumFractionDigits: 0,
+                  maximumFractionDigits: 2,
+                })}
+                %
+              </p>
+              <p className="text-sm text-gray-700">
+                {textoResumoAcordoDescontoMercado(parceiro?.partnerDiscountPercent ?? 0)}
+              </p>
+              {parceiro?.partnerTermsAcceptedAt && (
+                <p className="text-xs text-gray-500">
+                  Termo aceito em {formatDateTime(parceiro.partnerTermsAcceptedAt)}
+                  {parceiro.partnerTermsDiscountSnapshot != null &&
+                    parceiro.partnerTermsDiscountSnapshot !== parceiro.partnerDiscountPercent &&
+                    ` · aceite registrado com ${parceiro.partnerTermsDiscountSnapshot}%`}
+                </p>
+              )}
+            </Card>
+          )}
+
+          <Button size="lg" className="w-full" onClick={() => setTab("cobrar")} disabled={!ativo || needsTermsAcceptance}>
             Cobrar com QR Code
           </Button>
           {pendenteConfirmacao && (
@@ -742,6 +778,39 @@ function MercadoParceiroContent() {
               </p>
             )}
           </Card>
+
+          {ativo && parceiro?.partnerTermsAcceptedAt && (
+            <Card className="space-y-3 !p-5">
+              <div>
+                <h3 className="font-semibold text-gray-900">Termo de Uso Conta Coop</h3>
+                <p className="text-sm text-gray-600">
+                  Aceito em {formatDateTime(parceiro.partnerTermsAcceptedAt)} · versão{" "}
+                  {parceiro.partnerTermsVersion ?? TERMO_MERCADO_CONTA_COOP_VERSAO}
+                </p>
+              </div>
+              <details className="rounded-xl border border-gray-200 bg-gray-50 p-4 text-sm">
+                <summary className="cursor-pointer font-medium text-gray-900">Ler termo completo</summary>
+                <div className="mt-4 space-y-4">
+                  {getClausulasTermoMercadoContaCoop({
+                    nomeMercado: parceiro.nomeMercado,
+                    cnpjMercado: formatCpfCnpj(parceiro.cnpjMercado),
+                    nomeCooperativa: cooperativaNome,
+                    cnpjCooperativa: formatCpfCnpj(parceiro.cooperativaCnpj),
+                    descontoPercent: parceiro.partnerDiscountPercent ?? 0,
+                  }).map((c) => (
+                    <div key={c.titulo}>
+                      <h4 className="font-semibold text-gray-900">{c.titulo}</h4>
+                      <ul className="mt-1 list-disc space-y-1 pl-5 text-gray-700">
+                        {c.itens.map((item, i) => (
+                          <li key={i}>{item}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  ))}
+                </div>
+              </details>
+            </Card>
+          )}
 
           {pendenteConfirmacao && (
             <Card className="space-y-4 border-green-300 bg-green-50/50 p-5">

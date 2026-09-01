@@ -47,6 +47,7 @@ export async function POST(request: Request) {
     pin,
     actorUserId: gate.ctx.session?.sub ?? cooperadoId,
     cooperadoNome: String(body?.cooperadoNome ?? gate.ctx.session?.name ?? ""),
+    useCashback: Boolean(body?.useCashback),
   });
 
   if (!result.ok) return NextResponse.json({ error: result.error }, { status: 400 });

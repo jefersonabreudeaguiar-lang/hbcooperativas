@@ -25,7 +25,10 @@ export type LedgerTipo =
   | "PAYMENT"
   | "REFUND"
   | "PARTNER_APPROVE"
-  | "PARTNER_BLOCK";
+  | "PARTNER_BLOCK"
+  | "CASHBACK_EARN"
+  | "CASHBACK_USE"
+  | "CASHBACK_SWEEP";
 
 export interface ContaCoopTresValores {
   limiteLiberadoCents: number;
@@ -54,6 +57,12 @@ export interface ContaCoopParceiro {
   pixHolderName?: string | null;
   pixUpdatedAt?: string | null;
   appUserId?: string | null;
+  /** Percentual de desconto contratual que o mercado concede nas compras (0–100). */
+  partnerDiscountPercent?: number;
+  partnerTermsVersion?: string | null;
+  partnerTermsAcceptedAt?: string | null;
+  partnerTermsAcceptedBy?: string | null;
+  partnerTermsDiscountSnapshot?: number | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -63,6 +72,7 @@ export interface ContaCoopLimiteCooperado extends ContaCoopTresValores {
   cooperativaCnpj: string;
   cooperadoId: string;
   bloqueado: boolean;
+  cashbackDisponivelCents?: number;
   updatedAt: string;
 }
 
@@ -234,5 +244,39 @@ export interface ContaCoopSettlement {
   comprovanteMemo?: string | null;
   relatorioHtml?: string | null;
   partnerConfirmadoEm?: string | null;
+  createdAt: string;
+}
+
+export interface ContaCoopDiscountPoolResumo {
+  mesReferencia: string;
+  totalGrossCents: number;
+  totalDiscountCents: number;
+  totalNetPartnerCents: number;
+  totalCashbackCents: number;
+  totalAppCents: number;
+  totalCoopCents: number;
+  appLiquidadoCents: number;
+  coopLiquidadoCents: number;
+  appPendenteCents: number;
+  coopPendenteCents: number;
+  transacoesCount: number;
+}
+
+export interface ContaCoopDiscountAllocation {
+  id: string;
+  transactionId: string;
+  cooperadoId: string;
+  partnerId: string;
+  partnerNome?: string;
+  mesReferencia: string;
+  grossCents: number;
+  discountCents: number;
+  netPartnerCents: number;
+  cashbackCents: number;
+  appCents: number;
+  coopCents: number;
+  cashbackStatus: string;
+  appPoolStatus: string;
+  coopPoolStatus: string;
   createdAt: string;
 }

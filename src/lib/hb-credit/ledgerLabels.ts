@@ -5,6 +5,9 @@ const LEDGER_LABELS: Record<string, string> = {
   REFUND: "Estorno",
   PARTNER_APPROVE: "Mercado aprovado",
   PARTNER_BLOCK: "Mercado bloqueado",
+  CASHBACK_EARN: "Cashback recebido (70%)",
+  CASHBACK_USE: "Cashback usado no pagamento",
+  CASHBACK_SWEEP: "Cashback convertido em crédito",
 };
 
 export function labelLedgerTipo(tipo: string): string {

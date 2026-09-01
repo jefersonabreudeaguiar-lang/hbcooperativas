@@ -14,6 +14,8 @@ import type {
   ContaCoopSettlement,
   ContaCoopSettlementTransacao,
   ContaCoopSolicitacaoEstorno,
+  ContaCoopDiscountPoolResumo,
+  ContaCoopDiscountAllocation,
   ContaCoopTresValores,
   SolicitacaoEstornoStatus,
   ParceiroStatus,
@@ -32,6 +34,7 @@ import {
   receivableStatusFromDb,
 } from "@/modules/hb-credit/infrastructure/mappers/statusMapper";
 import { humanizeCreditRefundError } from "@/lib/supabase/hbCreditRefundFixSchema";
+import { TERMO_MERCADO_CONTA_COOP_VERSAO } from "@/config/termoUsoMercadoContaCoop";
 
 /** Recebíveis em liquidação ou já pagos ao mercado não podem ser estornados. */
 const NON_REFUNDABLE_RECEIVABLE_DB = new Set(["PROCESSING", "SETTLED"]);
@@ -350,7 +353,7 @@ export async function listLimitesCooperados(
   return (data ?? []).map(mapLimiteRow);
 }
 
-function mapLimiteRow(row: Record<string, unknown>): ContaCoopLimiteCooperado {
+function mapLimiteRow(row: Record<string, unknown>, cashbackDisponivelCents = 0): ContaCoopLimiteCooperado {
   const limite = Number(row.limit_released_cents);
   const usado = Number(row.amount_used_cents);
   const status = String(row.status ?? "active");
@@ -362,8 +365,24 @@ function mapLimiteRow(row: Record<string, unknown>): ContaCoopLimiteCooperado {
     valorUsadoCents: usado,
     valorDisponivelCents: computeDisponivel(limite, usado),
     bloqueado: status === "blocked",
+    cashbackDisponivelCents,
     updatedAt: String(row.updated_at),
   };
+}
+
+async function getCashbackDisponivel(
+  supabase: SupabaseClient,
+  cnpj: string,
+  cooperadoId: string
+): Promise<number> {
+  const digits = normalizeCnpj(cnpj);
+  const { data } = await supabase
+    .from("hb_credit_cashback_balances")
+    .select("available_cents")
+    .eq("cooperative_cnpj", digits)
+    .eq("cooperado_id", cooperadoId)
+    .maybeSingle();
+  return Number(data?.available_cents ?? 0);
 }
 
 export async function previewLimiteAlteracao(
@@ -587,7 +606,8 @@ export async function setParceiroStatus(
   cnpj: string,
   parceiroId: string,
   status: ParceiroStatus,
-  actorUserId: string
+  actorUserId: string,
+  partnerDiscountPercent?: number
 ): Promise<ContaCoopParceiro | null> {
   const digits = normalizeCnpj(cnpj);
   const { data: before } = await supabase
@@ -598,9 +618,15 @@ export async function setParceiroStatus(
     .maybeSingle();
 
   const dbStatus = partnerStatusToDb(status);
+  const patch: Record<string, unknown> = { status: dbStatus, updated_at: new Date().toISOString() };
+  if (partnerDiscountPercent !== undefined) {
+    const pct = Math.min(100, Math.max(0, Math.round(partnerDiscountPercent * 100) / 100));
+    patch.partner_discount_percent = pct;
+  }
+
   const { data, error } = await supabase
     .from("hb_credit_partners")
-    .update({ status: dbStatus, updated_at: new Date().toISOString() })
+    .update(patch)
     .eq("id", parceiroId)
     .eq("cooperative_cnpj", digits)
     .select()
@@ -616,8 +642,38 @@ export async function setParceiroStatus(
     resource_id: parceiroId,
     metadata: {
       anterior: before ? { status: partnerStatusFromDb(String(before.status)) } : null,
-      novo: { status },
+      novo: { status, partnerDiscountPercent: patch.partner_discount_percent ?? undefined },
     },
+  });
+
+  return mapParceiroRow(data as Record<string, unknown>);
+}
+
+export async function updateParceiroDiscount(
+  supabase: SupabaseClient,
+  cnpj: string,
+  parceiroId: string,
+  partnerDiscountPercent: number,
+  actorUserId: string
+): Promise<ContaCoopParceiro | null> {
+  const digits = normalizeCnpj(cnpj);
+  const pct = Math.min(100, Math.max(0, Math.round(partnerDiscountPercent * 100) / 100));
+  const { data, error } = await supabase
+    .from("hb_credit_partners")
+    .update({ partner_discount_percent: pct, updated_at: new Date().toISOString() })
+    .eq("id", parceiroId)
+    .eq("cooperative_cnpj", digits)
+    .select()
+    .single();
+  if (error || !data) return null;
+
+  await supabase.from("hb_credit_audit_log").insert({
+    cooperative_cnpj: digits,
+    actor: actorUserId,
+    action: "PARTNER_DISCOUNT_UPDATED",
+    resource_type: "partner",
+    resource_id: parceiroId,
+    metadata: { partnerDiscountPercent: pct },
   });
 
   return mapParceiroRow(data as Record<string, unknown>);
@@ -635,6 +691,12 @@ function mapParceiroRow(row: Record<string, unknown>): ContaCoopParceiro {
     pixHolderName: readStoredField(row.pix_holder_name as string | undefined),
     pixUpdatedAt: row.pix_updated_at ? String(row.pix_updated_at) : null,
     appUserId: row.app_user_id ? String(row.app_user_id) : null,
+    partnerDiscountPercent: Number(row.partner_discount_percent ?? 0),
+    partnerTermsVersion: row.partner_terms_version ? String(row.partner_terms_version) : null,
+    partnerTermsAcceptedAt: row.partner_terms_accepted_at ? String(row.partner_terms_accepted_at) : null,
+    partnerTermsAcceptedBy: row.partner_terms_accepted_by ? String(row.partner_terms_accepted_by) : null,
+    partnerTermsDiscountSnapshot:
+      row.partner_terms_discount_snapshot != null ? Number(row.partner_terms_discount_snapshot) : null,
     createdAt: String(row.created_at),
     updatedAt: String(row.updated_at),
   };
@@ -652,7 +714,9 @@ export async function getLimiteCooperado(
     .eq("cooperative_cnpj", digits)
     .eq("cooperado_id", cooperadoId)
     .maybeSingle();
-  return data ? mapLimiteRow(data as Record<string, unknown>) : null;
+  if (!data) return null;
+  const cashback = await getCashbackDisponivel(supabase, digits, cooperadoId);
+  return mapLimiteRow(data as Record<string, unknown>, cashback);
 }
 
 export async function setFinancialPin(
@@ -991,7 +1055,10 @@ export async function validateIntentForCooperado(
   const limite = await getLimiteCooperado(supabase, digits, cooperadoId);
   if (!limite) return { ok: false, error: "Sem limite Conta Coop." };
   if (limite.bloqueado) return { ok: false, error: "Cooperado bloqueado." };
-  if (limite.valorDisponivelCents < Number(intent.amount_cents)) {
+  const gross = Number(intent.amount_cents);
+  const cashback = limite.cashbackDisponivelCents ?? 0;
+  const effective = limite.valorDisponivelCents + cashback;
+  if (effective < gross) {
     return { ok: false, error: "Limite insuficiente." };
   }
 
@@ -1024,9 +1091,17 @@ export async function authorizePayment(
     pin: string;
     actorUserId: string;
     cooperadoNome?: string;
+    useCashback?: boolean;
   }
 ): Promise<
-  | { ok: true; transacaoId: string; receiptCode: string; disponivelAposCents: number; duplicate?: boolean }
+  | {
+      ok: true;
+      transacaoId: string;
+      receiptCode: string;
+      disponivelAposCents: number;
+      cashbackAppliedCents?: number;
+      duplicate?: boolean;
+    }
   | { ok: false; error: string }
 > {
   const pinCheck = await verifyFinancialPin(
@@ -1037,6 +1112,12 @@ export async function authorizePayment(
     input.actorUserId
   );
   if (!pinCheck.ok) return { ok: false, error: pinCheck.error };
+
+  let cashbackAppliedCents = 0;
+  if (input.useCashback) {
+    const limite = await getLimiteCooperado(supabase, input.cooperativaCnpj, input.cooperadoId);
+    cashbackAppliedCents = limite?.cashbackDisponivelCents ?? 0;
+  }
 
   const transacaoId = genId("tx");
   const recebivelId = genId("recv");
@@ -1052,6 +1133,7 @@ export async function authorizePayment(
     p_receivable_id: recebivelId,
     p_receipt_code: receiptCode,
     p_actor_user_id: input.actorUserId,
+    p_cashback_applied_cents: cashbackAppliedCents,
   });
 
   if (error) {
@@ -1089,6 +1171,7 @@ export async function authorizePayment(
     transacaoId: txId,
     receiptCode: finalReceiptCode,
     disponivelAposCents: Number(result.disponivel_apos_centavos ?? 0),
+    cashbackAppliedCents: Number((result as { cashback_applied_cents?: number }).cashback_applied_cents ?? 0),
     duplicate: Boolean(result.duplicate),
   };
 }
@@ -1133,6 +1216,68 @@ export async function getParceiroByUserId(
 ): Promise<ContaCoopParceiro | null> {
   const { data } = await supabase.from("hb_credit_partners").select("*").eq("app_user_id", appUserId).maybeSingle();
   return data ? mapParceiroRow(data as Record<string, unknown>) : null;
+}
+
+export function partnerNeedsTermsAcceptance(parceiro: ContaCoopParceiro): boolean {
+  if (parceiro.status !== "ativo") return false;
+  if (!parceiro.partnerTermsAcceptedAt) return true;
+  if (parceiro.partnerTermsVersion !== TERMO_MERCADO_CONTA_COOP_VERSAO) return true;
+  return false;
+}
+
+export async function acceptPartnerTerms(
+  supabase: SupabaseClient,
+  partnerId: string,
+  appUserId: string
+): Promise<ContaCoopParceiro | null> {
+  const { data: before } = await supabase
+    .from("hb_credit_partners")
+    .select("cooperative_cnpj, partner_discount_percent, status")
+    .eq("id", partnerId)
+    .maybeSingle();
+
+  if (!before || String(before.status) !== "ACTIVE") return null;
+
+  const now = new Date().toISOString();
+  const discountSnapshot = Number(before.partner_discount_percent ?? 0);
+
+  const { data, error } = await supabase
+    .from("hb_credit_partners")
+    .update({
+      partner_terms_version: TERMO_MERCADO_CONTA_COOP_VERSAO,
+      partner_terms_accepted_at: now,
+      partner_terms_accepted_by: appUserId,
+      partner_terms_discount_snapshot: discountSnapshot,
+      updated_at: now,
+    })
+    .eq("id", partnerId)
+    .select()
+    .single();
+
+  if (error || !data) return null;
+
+  await supabase.from("hb_credit_audit_log").insert({
+    cooperative_cnpj: String(before.cooperative_cnpj),
+    actor: appUserId,
+    action: "PARTNER_TERMS_ACCEPTED",
+    resource_type: "partner",
+    resource_id: partnerId,
+    metadata: {
+      termsVersion: TERMO_MERCADO_CONTA_COOP_VERSAO,
+      discountPercent: discountSnapshot,
+    },
+  });
+
+  return mapParceiroRow(data as Record<string, unknown>);
+}
+
+export async function getCooperativaNomeByCnpj(
+  supabase: SupabaseClient,
+  cnpj: string
+): Promise<string | null> {
+  const digits = normalizeCnpj(cnpj);
+  const { data } = await supabase.from("cooperativas").select("nome").eq("cnpj", digits).maybeSingle();
+  return data?.nome ? String(data.nome) : null;
 }
 
 export async function setCooperadoBloqueado(
@@ -2233,26 +2378,33 @@ async function listSettlementTransactions(
   }
 
   const paymentIds = (txs ?? []).filter((t) => t.event_type === "PAYMENT").map((t) => String(t.id));
-  const recebivelByTx: Record<string, { id: string; status: string }> = {};
+  const recebivelByTx: Record<string, { id: string; status: string; netCents: number }> = {};
   if (paymentIds.length) {
     const { data: recebiveis } = await supabase
       .from("hb_credit_receivables")
-      .select("id, transaction_id, status")
+      .select("id, transaction_id, status, amount_cents, net_amount_cents")
       .in("transaction_id", paymentIds);
     for (const r of recebiveis ?? []) {
-      recebivelByTx[String(r.transaction_id)] = { id: String(r.id), status: String(r.status) };
+      recebivelByTx[String(r.transaction_id)] = {
+        id: String(r.id),
+        status: String(r.status),
+        netCents: Number(r.net_amount_cents ?? r.amount_cents),
+      };
     }
   }
 
   return (txs ?? []).map((t) => {
     const intentId = t.payment_intent_id ? String(t.payment_intent_id) : "";
     const recebivel = recebivelByTx[String(t.id)];
+    const gross = Number(t.amount_cents);
+    const settlementAmount = t.event_type === "PAYMENT" ? (recebivel?.netCents ?? gross) : gross;
     return {
       id: String(t.id),
       recebivelId: recebivel?.id ?? "",
       cooperadoId: String(t.cooperado_id ?? ""),
       tipo: String(t.event_type) as "PAYMENT" | "REFUND",
-      amountCents: Number(t.amount_cents),
+      amountCents: settlementAmount,
+      grossAmountCents: gross,
       receiptCode: t.receipt_code ? String(t.receipt_code) : null,
       descricao: intentDesc[intentId] ?? null,
       createdAt: String(t.created_at),
@@ -2436,6 +2588,13 @@ export async function registerPartnerSettlementPayment(
     },
   });
 
+  await supabase.rpc("hb_credit_liquidate_discount_pool", {
+    p_cooperative_cnpj: normalizeCnpj(params.cnpj),
+    p_mes_referencia: params.mesReferencia,
+    p_settlement_id: settlementId,
+    p_actor_user_id: params.responsavelUserId,
+  });
+
   return {
     ok: true,
     settlement: {
@@ -2579,4 +2738,123 @@ export async function listCooperadoContaCoopDescontosMes(
       createdAt: String(t.created_at),
     };
   });
+}
+
+export async function getDiscountPoolResumo(
+  supabase: SupabaseClient,
+  cnpj: string,
+  mesReferencia: string
+): Promise<ContaCoopDiscountPoolResumo> {
+  const digits = normalizeCnpj(cnpj);
+  const { data } = await supabase
+    .from("hb_credit_discount_allocations")
+    .select("*")
+    .eq("cooperative_cnpj", digits)
+    .eq("mes_referencia", mesReferencia)
+    .neq("cashback_status", "REVERSED");
+
+  const rows = data ?? [];
+  let appLiquidado = 0;
+  let coopLiquidado = 0;
+  let appPendente = 0;
+  let coopPendente = 0;
+  let totalGross = 0;
+  let totalDiscount = 0;
+  let totalNet = 0;
+  let totalCashback = 0;
+  let totalApp = 0;
+  let totalCoop = 0;
+
+  for (const row of rows) {
+    totalGross += Number(row.gross_cents);
+    totalDiscount += Number(row.discount_cents);
+    totalNet += Number(row.net_partner_cents);
+    totalCashback += Number(row.cashback_cents);
+    totalApp += Number(row.app_cents);
+    totalCoop += Number(row.coop_cents);
+    if (row.app_pool_status === "LIQUIDATED") appLiquidado += Number(row.app_cents);
+    else if (row.app_pool_status === "PENDING") appPendente += Number(row.app_cents);
+    if (row.coop_pool_status === "LIQUIDATED") coopLiquidado += Number(row.coop_cents);
+    else if (row.coop_pool_status === "PENDING") coopPendente += Number(row.coop_cents);
+  }
+
+  return {
+    mesReferencia,
+    totalGrossCents: totalGross,
+    totalDiscountCents: totalDiscount,
+    totalNetPartnerCents: totalNet,
+    totalCashbackCents: totalCashback,
+    totalAppCents: totalApp,
+    totalCoopCents: totalCoop,
+    appLiquidadoCents: appLiquidado,
+    coopLiquidadoCents: coopLiquidado,
+    appPendenteCents: appPendente,
+    coopPendenteCents: coopPendente,
+    transacoesCount: rows.length,
+  };
+}
+
+export async function listDiscountAllocations(
+  supabase: SupabaseClient,
+  cnpj: string,
+  mesReferencia: string
+): Promise<ContaCoopDiscountAllocation[]> {
+  const digits = normalizeCnpj(cnpj);
+  const { data } = await supabase
+    .from("hb_credit_discount_allocations")
+    .select("*")
+    .eq("cooperative_cnpj", digits)
+    .eq("mes_referencia", mesReferencia)
+    .order("created_at", { ascending: false });
+
+  const partnerIds = [...new Set((data ?? []).map((r) => String(r.partner_id)))];
+  const partnerNames: Record<string, string> = {};
+  if (partnerIds.length) {
+    const { data: partners } = await supabase.from("hb_credit_partners").select("id, name").in("id", partnerIds);
+    for (const p of partners ?? []) partnerNames[String(p.id)] = String(p.name);
+  }
+
+  return (data ?? []).map((row) => ({
+    id: String(row.id),
+    transactionId: String(row.transaction_id),
+    cooperadoId: String(row.cooperado_id),
+    partnerId: String(row.partner_id),
+    partnerNome: partnerNames[String(row.partner_id)],
+    mesReferencia: String(row.mes_referencia),
+    grossCents: Number(row.gross_cents),
+    discountCents: Number(row.discount_cents),
+    netPartnerCents: Number(row.net_partner_cents),
+    cashbackCents: Number(row.cashback_cents),
+    appCents: Number(row.app_cents),
+    coopCents: Number(row.coop_cents),
+    cashbackStatus: String(row.cashback_status),
+    appPoolStatus: String(row.app_pool_status),
+    coopPoolStatus: String(row.coop_pool_status),
+    createdAt: String(row.created_at),
+  }));
+}
+
+export async function sweepUnusedCashbackToCredit(
+  supabase: SupabaseClient,
+  cnpj: string,
+  mesReferencia: string,
+  actorUserId: string
+): Promise<{ ok: boolean; error?: string; totalCents?: number; cooperados?: number }> {
+  const { data, error } = await supabase.rpc("hb_credit_sweep_cashback_to_credit", {
+    p_cooperative_cnpj: normalizeCnpj(cnpj),
+    p_mes_referencia: mesReferencia,
+    p_actor_user_id: actorUserId,
+  });
+  if (error) {
+    if (/function.*does not exist/i.test(error.message)) {
+      return { ok: false, error: "Migration de desconto/cashback não aplicada na nuvem." };
+    }
+    return { ok: false, error: error.message };
+  }
+  const result = data as { ok?: boolean; total_cents?: number; cooperados?: number };
+  return {
+    ok: Boolean(result?.ok),
+    totalCents: Number(result?.total_cents ?? 0),
+    cooperados: Number(result?.cooperados ?? 0),
+  };
 }

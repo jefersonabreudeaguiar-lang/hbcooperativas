@@ -58,11 +58,16 @@ export async function postCreditLimites(body: Record<string, unknown>) {
   return data;
 }
 
-export async function postCreditParceiroStatus(cnpj: string, parceiroId: string, status: "ativo" | "bloqueado") {
+export async function postCreditParceiroStatus(
+  cnpj: string,
+  parceiroId: string,
+  status: "ativo" | "bloqueado",
+  partnerDiscountPercent?: number
+) {
   const res = await secureApiFetch("/api/credit/parceiros", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ cnpj, parceiroId, status }),
+    body: JSON.stringify({ cnpj, parceiroId, status, partnerDiscountPercent }),
   });
   const data = await parseJson<{ ok?: boolean; error?: string }>(res);
   if (!res.ok || !data.ok) throw new Error(data.error ?? "Não foi possível atualizar mercado.");
@@ -123,6 +128,7 @@ export async function authorizeCreditPayment(input: {
   nonce: string;
   pin: string;
   idempotencyKey: string;
+  useCashback?: boolean;
 }) {
   const res = await secureApiFetch("/api/credit/authorize", {
     method: "POST",
@@ -192,8 +198,23 @@ export async function fetchMercadoParceiroData() {
     settlements?: ContaCoopSettlement[];
     hasPin?: boolean;
     fiscalPendentes?: number;
+    cooperativaNome?: string;
+    needsTermsAcceptance?: boolean;
   }>(res);
   if (!res.ok || !data.ok) throw new Error(data.error ?? "Erro ao carregar mercado.");
+  return data;
+}
+
+export async function acceptMercadoContaCoopTermos() {
+  const res = await secureApiFetch("/api/credit/mercado", {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ action: "accept_terms" }),
+  });
+  const data = await parseJson<{ ok?: boolean; error?: string; parceiro?: ContaCoopParceiro; needsTermsAcceptance?: boolean }>(
+    res
+  );
+  if (!res.ok || !data.ok) throw new Error(data.error ?? "Não foi possível registrar o aceite.");
   return data;
 }
 
@@ -427,4 +448,41 @@ export async function fetchCooperativeFiscalPending(cnpj: string, mesReferencia:
   const data = await parseJson<{ ok?: boolean; error?: string; conferir?: number; mercadoPendente?: number }>(res);
   if (!res.ok || !data.ok) throw new Error(data.error ?? "Erro ao carregar pendências fiscais.");
   return { conferir: data.conferir ?? 0, mercadoPendente: data.mercadoPendente ?? 0 };
+}
+
+export async function fetchDiscountPool(cnpj: string, mesReferencia?: string) {
+  const qs = new URLSearchParams({ cnpj });
+  if (mesReferencia) qs.set("mes", mesReferencia);
+  const res = await secureApiFetch(`/api/credit/discount-pool?${qs.toString()}`);
+  const data = await parseJson<{
+    ok?: boolean;
+    error?: string;
+    resumo?: import("@/modules/hb-credit/types").ContaCoopDiscountPoolResumo;
+    allocations?: import("@/modules/hb-credit/types").ContaCoopDiscountAllocation[];
+    mesReferencia?: string;
+  }>(res);
+  if (!res.ok || !data.ok) throw new Error(data.error ?? "Erro ao carregar pool de descontos.");
+  return data;
+}
+
+export async function postUpdatePartnerDiscount(cnpj: string, parceiroId: string, partnerDiscountPercent: number) {
+  const res = await secureApiFetch("/api/credit/discount-pool", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ action: "update_partner_discount", cnpj, parceiroId, partnerDiscountPercent }),
+  });
+  const data = await parseJson<{ ok?: boolean; error?: string }>(res);
+  if (!res.ok || !data.ok) throw new Error(data.error ?? "Não foi possível salvar desconto.");
+  return data;
+}
+
+export async function postSweepCashback(cnpj: string, mesReferencia: string) {
+  const res = await secureApiFetch("/api/credit/discount-pool", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ action: "sweep_cashback", cnpj, mesReferencia }),
+  });
+  const data = await parseJson<{ ok?: boolean; error?: string; totalCents?: number; cooperados?: number }>(res);
+  if (!res.ok || !data.ok) throw new Error(data.error ?? "Falha ao converter cashback.");
+  return data;
 }
