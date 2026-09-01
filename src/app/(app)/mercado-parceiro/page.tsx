@@ -93,6 +93,9 @@ function MercadoParceiroContent() {
   const [estornoAlvo, setEstornoAlvo] = useState<ContaCoopCompraEstornavel | null>(null);
   const [estornoMotivo, setEstornoMotivo] = useState("");
   const [estornoPin, setEstornoPin] = useState("");
+  const [estornoFormError, setEstornoFormError] = useState("");
+  const [estornoFormSuccess, setEstornoFormSuccess] = useState("");
+  const estornoFormRef = useRef<HTMLDivElement>(null);
   const [fiscalPendentes, setFiscalPendentes] = useState(0);
   const [cooperativaNome, setCooperativaNome] = useState("Cooperativa parceira");
   const [needsTermsAcceptance, setNeedsTermsAcceptance] = useState(false);
@@ -271,26 +274,43 @@ function MercadoParceiroContent() {
 
   const abrirEstorno = (compra: ContaCoopCompraEstornavel) => {
     if (!hasPin) {
-      setError("Cadastre seu PIN financeiro antes de solicitar estorno.");
+      setError("Cadastre seu PIN financeiro na aba Mais antes de solicitar estorno.");
+      setTab("mais");
+      return;
+    }
+    if (needsTermsAcceptance) {
+      setError("Aceite o Termo de Uso Conta Coop antes de solicitar estorno.");
       return;
     }
     setEstornoAlvo(compra);
     setEstornoMotivo("");
     setEstornoPin("");
+    setEstornoFormError("");
+    setEstornoFormSuccess("");
     setError("");
+    setTab("vendas");
+    requestAnimationFrame(() => {
+      estornoFormRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    });
   };
 
   const enviarEstorno = async () => {
     if (!estornoAlvo) return;
     if (estornoMotivo.trim().length < 5) {
-      setError("Descreva o motivo do estorno (mínimo 5 caracteres).");
+      setEstornoFormError("Descreva o motivo do estorno (mínimo 5 caracteres).");
+      estornoFormRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
       return;
     }
     if (estornoPin.length < FINANCIAL_PIN_MIN_LENGTH) {
-      setError(`Informe seu PIN financeiro (${FINANCIAL_PIN_MIN_LENGTH}+ dígitos).`);
+      setEstornoFormError(
+        `Informe o PIN financeiro do mercado (${FINANCIAL_PIN_MIN_LENGTH}+ dígitos). Não use a senha de login — cadastre ou consulte na aba Mais.`
+      );
+      estornoFormRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
       return;
     }
     setBusy(true);
+    setEstornoFormError("");
+    setEstornoFormSuccess("");
     setError("");
     setSuccess("");
     try {
@@ -300,13 +320,17 @@ function MercadoParceiroContent() {
         motivo: estornoMotivo.trim(),
         pin: estornoPin,
       });
-      setSuccess("Solicitação enviada à cooperativa. Aguarde aprovação.");
+      setEstornoFormSuccess("Solicitação enviada à cooperativa. Aguarde aprovação na aba Estornos do responsável.");
+      setSuccess("Solicitação de estorno enviada.");
       setEstornoAlvo(null);
       setEstornoMotivo("");
       setEstornoPin("");
       await reload();
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Erro ao solicitar estorno.");
+      const msg = e instanceof Error ? e.message : "Erro ao solicitar estorno.";
+      setEstornoFormError(msg);
+      setError(msg);
+      estornoFormRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
     } finally {
       setBusy(false);
     }
@@ -635,13 +659,20 @@ function MercadoParceiroContent() {
       {tab === "vendas" && (
         <div className="space-y-4">
           {estornoAlvo && (
-            <Card className="space-y-4 border-amber-300 bg-amber-50/40 p-5">
+            <div ref={estornoFormRef} className="scroll-mt-4">
+            <Card className="space-y-4 border-amber-300 bg-amber-50/40 !p-5">
               <div>
                 <h3 className="font-semibold text-gray-900">Solicitar estorno</h3>
                 <p className="text-sm text-gray-600">
                   {formatCentsBRL(estornoAlvo.amountCents)} · a cooperativa precisa aprovar
                 </p>
               </div>
+              {estornoFormError && <AlertBanner variant="error">{estornoFormError}</AlertBanner>}
+              {estornoFormSuccess && (
+                <AlertBanner variant="info" title="Enviado">
+                  {estornoFormSuccess}
+                </AlertBanner>
+              )}
               <div>
                 <Label>Motivo</Label>
                 <Input
@@ -652,26 +683,44 @@ function MercadoParceiroContent() {
                 />
               </div>
               <div>
-                <Label>PIN financeiro</Label>
+                <Label>PIN financeiro do mercado</Label>
+                <p className="mt-0.5 text-xs text-gray-600">
+                  Não é a senha de login. Use o PIN numérico cadastrado na aba <strong>Mais</strong> (
+                  {FINANCIAL_PIN_MIN_LENGTH}+ dígitos).
+                </p>
                 <Input
                   className="mt-1"
                   type="password"
                   inputMode="numeric"
                   autoComplete="off"
+                  maxLength={8}
                   value={estornoPin}
                   onChange={(e) => setEstornoPin(e.target.value.replace(/\D/g, ""))}
-                  placeholder="Confirme com seu PIN"
+                  placeholder="••••"
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") void enviarEstorno();
+                  }}
                 />
               </div>
               <div className="flex flex-wrap gap-2">
-                <Button onClick={() => void enviarEstorno()} disabled={busy}>
+                <Button type="button" onClick={() => void enviarEstorno()} disabled={busy}>
                   {busy ? "Enviando..." : "Enviar solicitação"}
                 </Button>
-                <Button variant="secondary" onClick={() => setEstornoAlvo(null)} disabled={busy}>
+                <Button
+                  type="button"
+                  variant="secondary"
+                  onClick={() => {
+                    setEstornoAlvo(null);
+                    setEstornoFormError("");
+                    setEstornoFormSuccess("");
+                  }}
+                  disabled={busy}
+                >
                   Cancelar
                 </Button>
               </div>
             </Card>
+            </div>
           )}
 
           <Card className="p-5 space-y-2">

@@ -6,6 +6,7 @@ import {
   denyRefundRequest,
   listRefundablePayments,
   listRefundRequests,
+  partnerNeedsTermsAcceptance,
 } from "@/lib/supabase/contaCoopStorage";
 import {
   requireCreditApi,
@@ -78,6 +79,13 @@ export async function POST(request: Request) {
     }
     if (pin.length < FINANCIAL_PIN_MIN_LENGTH) {
       return NextResponse.json({ error: "Informe seu PIN financeiro." }, { status: 400 });
+    }
+
+    if (partnerNeedsTermsAcceptance(parceiroGate.parceiro)) {
+      return NextResponse.json(
+        { error: "Aceite o Termo de Uso Conta Coop no painel do mercado antes de solicitar estorno." },
+        { status: 400 }
+      );
     }
 
     const result = await createRefundRequest(gate.ctx.supabase, {

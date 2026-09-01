@@ -967,7 +967,11 @@ export async function verifyPartnerFinancialPin(
   const valid = await verifyPassword(pin, String(data.pin_hash));
   if (!valid) {
     await recordPartnerPinFailure(supabase, partnerId, actorUserId);
-    return { ok: false, error: "PIN financeiro inválido." };
+    return {
+      ok: false,
+      error:
+        "PIN financeiro incorreto. Use o PIN numérico cadastrado na aba Mais do mercado (mínimo 4 dígitos) — não é a senha de login.",
+    };
   }
 
   await resetPartnerPinFailures(supabase, partnerId);

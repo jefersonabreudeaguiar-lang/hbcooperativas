@@ -13,7 +13,7 @@ import type {
 
 async function parseJson<T>(res: Response): Promise<T & { error?: string }> {
   const data = (await res.json()) as T & { error?: string };
-  if (!res.ok && data.error) {
+  if (!res.ok) {
     throw new Error(mensagemErroAuthApi(res.status, data.error));
   }
   return data;
