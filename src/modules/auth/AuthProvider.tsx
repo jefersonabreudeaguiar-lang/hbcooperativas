@@ -1,15 +1,45 @@
 "use client";
 
-import { createContext, useContext, useEffect, useLayoutEffect, useState, useCallback, type ReactNode } from "react";
+import {
+  createContext,
+  useContext,
+  useEffect,
+  useLayoutEffect,
+  useState,
+  useCallback,
+  useMemo,
+  type ReactNode,
+} from "react";
 import { useRouter } from "next/navigation";
 import type { User } from "@/types";
 import { normalizeUserRole, resolveAppUserRole } from "@/permissions";
-import { getSession, login as doLogin, loginCreatorAdminPortal, logout as doLogout, registerCooperado, registerCooperativa, subscribe, ensureCooperativaInCloudForUser, preloadAppData, applyCloudProfileToLocalSession } from "@/services/dataStore";
-import { ensureCloudSessionReady, setActiveCloudProfile, userToCloudProfile, getLastCloudSyncError, fetchCloudSessionProfile } from "@/lib/security/clientSession";
+import { resolveExperienceUser, resolveMobileCooperadoId } from "@/lib/mobileExperience";
+import {
+  getSession,
+  login as doLogin,
+  loginCreatorAdminPortal,
+  logout as doLogout,
+  registerCooperado,
+  registerCooperativa,
+  subscribe,
+  ensureCooperativaInCloudForUser,
+  preloadAppData,
+  applyCloudProfileToLocalSession,
+} from "@/services/dataStore";
+import {
+  ensureCloudSessionReady,
+  setActiveCloudProfile,
+  userToCloudProfile,
+  getLastCloudSyncError,
+  fetchCloudSessionProfile,
+} from "@/lib/security/clientSession";
 import type { RegisterCooperadoInput, RegisterCooperativaInput } from "@/services/dataStore";
 
 interface AuthContextType {
+  /** Perfil efetivo na UI (no celular, responsável vira cooperado vinculado). */
   user: Omit<User, "password"> | null;
+  /** Conta real na nuvem (responsável, cooperado, etc.). */
+  accountUser: Omit<User, "password"> | null;
   loading: boolean;
   login: (email: string, password: string) => Promise<{ ok: boolean; error?: string; redirectTo?: string }>;
   loginCreatorAdmin: (email: string, password: string) => Promise<boolean>;
@@ -21,22 +51,38 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | null>(null);
 
+function enrichAccountSession(session: Omit<User, "password">): Omit<User, "password"> {
+  const mobileCooperadoId = resolveMobileCooperadoId(session);
+  return {
+    ...session,
+    role: resolveAppUserRole(session),
+    mobileCooperadoId: mobileCooperadoId ?? session.mobileCooperadoId,
+  };
+}
+
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [user, setUser] = useState<Omit<User, "password"> | null>(null);
+  const [accountUser, setAccountUser] = useState<Omit<User, "password"> | null>(null);
+  const [viewportTick, setViewportTick] = useState(0);
   const [loading, setLoading] = useState(true);
   const router = useRouter();
 
+  const user = useMemo(
+    () => resolveExperienceUser(accountUser),
+    [accountUser, viewportTick]
+  );
+
   const refresh = useCallback(() => {
     const session = getSession();
-    setUser((prev) => {
+    setAccountUser((prev) => {
       if (!session) return null;
-      const normalized = { ...session, role: resolveAppUserRole(session) };
+      const normalized = enrichAccountSession(session);
       if (
         prev?.id === normalized.id &&
         prev?.email === normalized.email &&
         prev?.role === normalized.role &&
         prev?.cooperadoId === normalized.cooperadoId &&
-        prev?.cooperativaId === normalized.cooperativaId
+        prev?.cooperativaId === normalized.cooperativaId &&
+        prev?.mobileCooperadoId === normalized.mobileCooperadoId
       ) {
         return prev;
       }
@@ -53,14 +99,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => subscribe(refresh), [refresh]);
 
   useEffect(() => {
-    if (!user || loading) return;
-    setActiveCloudProfile(userToCloudProfile(user));
-    void ensureCloudSessionReady();
-    ensureCooperativaInCloudForUser(user).catch(() => {});
-  }, [user?.id, loading]);
+    if (typeof window === "undefined") return;
+    const mq = window.matchMedia("(max-width: 1023px)");
+    const onChange = () => setViewportTick((t) => t + 1);
+    mq.addEventListener("change", onChange);
+    return () => mq.removeEventListener("change", onChange);
+  }, []);
 
   useEffect(() => {
-    if (!user?.id || loading || typeof navigator === "undefined" || !navigator.onLine) return;
+    if (!accountUser || loading) return;
+    setActiveCloudProfile(userToCloudProfile(accountUser));
+    void ensureCloudSessionReady();
+    ensureCooperativaInCloudForUser(accountUser).catch(() => {});
+  }, [accountUser?.id, loading]);
+
+  useEffect(() => {
+    if (!accountUser?.id || loading || typeof navigator === "undefined" || !navigator.onLine) return;
 
     let cancelled = false;
     void (async () => {
@@ -69,8 +123,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const synced = applyCloudProfileToLocalSession(profile);
       if (!synced || cancelled) return;
       if (
-        synced.role !== user.role ||
-        synced.cooperadoId !== user.cooperadoId
+        synced.role !== accountUser.role ||
+        synced.cooperadoId !== accountUser.cooperadoId ||
+        synced.mobileCooperadoId !== accountUser.mobileCooperadoId
       ) {
         refresh();
       }
@@ -79,7 +134,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return () => {
       cancelled = true;
     };
-  }, [user?.id, user?.role, user?.cooperadoId, loading, refresh]);
+  }, [accountUser?.id, accountUser?.role, accountUser?.cooperadoId, accountUser?.mobileCooperadoId, loading, refresh]);
 
   const login = async (email: string, password: string) => {
     const result = await doLogin(email, password);
@@ -87,11 +142,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const cloudProfile = await fetchCloudSessionProfile();
       const synced = cloudProfile ? applyCloudProfileToLocalSession(cloudProfile) : null;
       const sessionUser = synced ?? getSession();
-      const safeUser = sessionUser ?? (() => {
-        const { password: _, ...u } = result;
-        return u;
-      })();
-      setUser({ ...safeUser, role: resolveAppUserRole(safeUser) });
+      const safeUser = enrichAccountSession(
+        sessionUser ??
+          (() => {
+            const { password: _, ...u } = result;
+            return u;
+          })()
+      );
+      setAccountUser(safeUser);
       setActiveCloudProfile(userToCloudProfile(safeUser));
       await ensureCloudSessionReady(userToCloudProfile(safeUser));
       const redirectTo = resolveAppUserRole(safeUser) === "parceiro" ? "/mercado-parceiro" : "/dashboard";
@@ -109,7 +167,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const result = await loginCreatorAdminPortal(email, password);
     if (result) {
       const { password: _, ...safeUser } = result;
-      setUser({ ...safeUser, role: resolveAppUserRole(safeUser) });
+      setAccountUser(enrichAccountSession(safeUser));
       return true;
     }
     return false;
@@ -118,7 +176,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const register = async (input: RegisterCooperadoInput) => {
     const result = await registerCooperado(input);
     if (result.success) {
-      setUser({ ...result.user, role: normalizeUserRole(result.user.role) });
+      setAccountUser({ ...result.user, role: normalizeUserRole(result.user.role) });
       return { success: true };
     }
     return { success: false, error: result.error };
@@ -127,7 +185,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const registerCooperativaAccount = async (input: RegisterCooperativaInput) => {
     const result = await registerCooperativa(input);
     if (result.success) {
-      setUser({ ...result.user, role: normalizeUserRole(result.user.role) });
+      setAccountUser({ ...result.user, role: normalizeUserRole(result.user.role) });
       return { success: true };
     }
     return { success: false, error: result.error };
@@ -135,12 +193,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const logout = () => {
     doLogout();
-    setUser(null);
+    setAccountUser(null);
     router.replace("/login");
   };
 
   return (
-    <AuthContext.Provider value={{ user, loading, login, loginCreatorAdmin, register, registerCooperativa: registerCooperativaAccount, logout, refresh }}>
+    <AuthContext.Provider
+      value={{
+        user,
+        accountUser,
+        loading,
+        login,
+        loginCreatorAdmin,
+        register,
+        registerCooperativa: registerCooperativaAccount,
+        logout,
+        refresh,
+      }}
+    >
       {children}
     </AuthContext.Provider>
   );

@@ -137,6 +137,8 @@ export interface User {
   cooperativaId?: string;
   /** CNPJ informado no cadastro — garante envio à nuvem mesmo se ID local divergir. */
   cooperativaCnpj?: string;
+  /** No celular, responsável pode operar como este cooperado (ex.: gestor usando app do Orlando). */
+  mobileCooperadoId?: string;
   active: boolean;
   /** Cargo/função exibida em relatórios e no perfil (ex.: Presidente, Tesoureiro). */
   funcao?: string;

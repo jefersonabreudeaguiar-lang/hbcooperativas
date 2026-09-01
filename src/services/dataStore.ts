@@ -1,6 +1,7 @@
 "use client";
 
 import { normalizeUserRole, resolveAppUserRole } from "@/permissions";
+import { resolveMobileCooperadoId } from "@/lib/mobileExperience";
 import type { AppData, AuditAction, User, Cooperado, Cooperativa, PrestacaoContas, UserRole } from "@/types";
 import { emptyInitialData, DEMO_ENTITY_IDS, DEMO_EMAILS, DEMO_CNPJ } from "@/mock/data";
 import { findCooperativaByCnpj, getCooperativaById, getUserCooperativaId, normalizeCnpj } from "@/utils/cooperativa";
@@ -686,7 +687,12 @@ export function addAuditEntry(
 
 function persistSession(user: Omit<User, "password">): void {
   if (typeof window === "undefined") return;
-  const safeUser = { ...user, role: resolveAppUserRole(user) };
+  const mobileCooperadoId = resolveMobileCooperadoId(user) ?? user.mobileCooperadoId;
+  const safeUser = {
+    ...user,
+    mobileCooperadoId,
+    role: resolveAppUserRole(user),
+  };
   localStorage.setItem(SESSION_KEY, JSON.stringify(safeUser));
   // Migra sessão antiga (sessionStorage) se existir
   sessionStorage.removeItem(SESSION_KEY);
@@ -754,11 +760,14 @@ function mergeStoredSessionWithLocalUser(
 }
 
 function normalizeStoredSession(parsed: Omit<User, "password">): Omit<User, "password"> {
-  let next = parsed;
+  let next = {
+    ...parsed,
+    mobileCooperadoId: resolveMobileCooperadoId(parsed) ?? parsed.mobileCooperadoId,
+  };
   if (memoryCache) {
-    const inferred = inferCooperadoFieldsFromLocalData(memoryCache, parsed);
+    const inferred = inferCooperadoFieldsFromLocalData(memoryCache, next);
     if (inferred) {
-      next = { ...parsed, ...inferred };
+      next = { ...next, ...inferred };
     }
   }
   return {
@@ -794,6 +803,10 @@ export function applyCloudProfileToLocalSession(profile: CloudSessionProfile): O
     cooperadoId: profile.cooperadoId,
     cooperativaId: profile.cooperativaId,
     cooperativaCnpj: profile.cooperativaCnpj,
+    mobileCooperadoId: resolveMobileCooperadoId({
+      email: profile.email,
+      mobileCooperadoId: undefined,
+    }),
     active: true,
   });
 
