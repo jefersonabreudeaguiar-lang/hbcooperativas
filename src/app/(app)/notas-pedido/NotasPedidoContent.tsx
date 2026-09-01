@@ -33,6 +33,7 @@ import {
   criarDivisaoEntregaFromParticipantes,
   buildFichasDivisaoFromNota,
   rebuildFichasNota,
+  fichasValoresAlinhadosComNota,
   excluirEntregaNota,
   isNotaPedidoExcluida,
   podeExcluirEntregaNota,
@@ -2291,7 +2292,7 @@ export default function NotasPedidoContent() {
 
       if (multiFoto) {
         const baseData = { ...d, notasPedido };
-        const next = divisao ? rebuildFichasNota(baseData, notaAtualizada!) : baseData;
+        const next = rebuildFichasNota(baseData, notaAtualizada!);
         return addAuditEntry(next, {
           entityType: "nota_pedido",
           entityId: selectedNota.id,
@@ -2308,16 +2309,27 @@ export default function NotasPedidoContent() {
 
       const jaNaFicha = d.fichaCorrida.some((f) => f.notaPedidoId === selectedNota.id);
       if (jaNaFicha && !divisao) {
-        return addAuditEntry(
-          { ...d, notasPedido },
-          {
-            entityType: "nota_pedido",
-            entityId: selectedNota.id,
-            action: "aprovar",
-            userId: user.id,
-            userName: user.name,
-          }
-        );
+        if (fichasValoresAlinhadosComNota(d.fichaCorrida, notaAtualizada)) {
+          return addAuditEntry(
+            { ...d, notasPedido },
+            {
+              entityType: "nota_pedido",
+              entityId: selectedNota.id,
+              action: "aprovar",
+              userId: user.id,
+              userName: user.name,
+            }
+          );
+        }
+        const rebuilt = rebuildFichasNota({ ...d, notasPedido }, notaAtualizada);
+        return addAuditEntry(rebuilt, {
+          entityType: "nota_pedido",
+          entityId: selectedNota.id,
+          action: "aprovar",
+          userId: user.id,
+          userName: user.name,
+          changes: "Ficha realinhada com valores conferidos",
+        });
       }
 
       if (divisao) {

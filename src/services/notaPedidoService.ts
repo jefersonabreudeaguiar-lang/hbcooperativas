@@ -25,6 +25,7 @@ import { gerarReciboHtml, resumoReciboFromPagamento } from "@/utils/recibo";
 import { lancarPagamentoCooperadoNoCaixa } from "@/services/livroCaixaService";
 import { fichaPreservarSemNotaLocal, notasSyncProvavelmenteCompleto } from "@/services/fichaSyncGuard";
 import { isCloudSyncInProgress } from "@/services/cloudSyncProgress";
+import { contarFotosEnviadasNota } from "@/utils/fotoEntrega";
 
 export interface ItemResumoFichaMes {
   produtoInstituicaoId: string;
@@ -702,38 +703,100 @@ export function buildFichasDivisaoFromNota(
   return novasFichas;
 }
 
+/** Divide a nota conferida em N lançamentos (foto 1/N … N/N) com totais que somam a nota. */
+function buildFichasMultiFotoFromNota(
+  data: AppData,
+  nota: NotaPedido,
+  responsavel: string,
+  baseFichaCorrida: FichaCorrida[],
+  totalFotos: number
+): FichaCorrida[] {
+  const novasFichas: FichaCorrida[] = [];
+  for (let i = 0; i < totalFotos; i++) {
+    const ctx = { ...data, fichaCorrida: [...baseFichaCorrida, ...novasFichas] };
+    const base = buildFichaFromNota(nota, ctx, responsavel, nota.cooperadoNomeSnapshot, {
+      fotoIndex: i,
+      totalFotos,
+    });
+    const valorBruto = dividirValorEntrega(nota.valorBruto, i, totalFotos);
+    const descontos = dividirValorEntrega(nota.valorDesconto, i, totalFotos);
+    const valorLiquido = dividirValorEntrega(nota.valorLiquido, i, totalFotos);
+    const saldoAnterior = getSaldoAnteriorFicha(ctx, nota.cooperadoId, nota.mesReferencia, nota.id);
+    const ficha: FichaCorrida = {
+      ...base,
+      valorBruto,
+      descontos,
+      valorLiquido,
+      itens: dividirItensEntrega(nota.itens ?? [], i, totalFotos),
+      descontosDetalhe: base.descontosDetalhe?.map((d) => ({
+        ...d,
+        valor: dividirValorEntrega(d.valor, i, totalFotos),
+      })),
+      saldoAcumulado: round2(saldoAnterior + valorLiquido),
+    };
+    if (nota.status === "pago") ficha.status = "pago";
+    novasFichas.push(ficha);
+  }
+  return novasFichas;
+}
+
+function recalcularSaldosFichaNota(
+  fichaCorrida: FichaCorrida[],
+  nota: NotaPedido
+): FichaCorrida[] {
+  let next = recalcularSaldosFichaCooperadoMes(fichaCorrida, nota.cooperadoId, nota.mesReferencia);
+  for (const p of nota.divisaoEntrega?.participantes ?? []) {
+    if (p.cooperadoId !== nota.cooperadoId) {
+      next = recalcularSaldosFichaCooperadoMes(next, p.cooperadoId, nota.mesReferencia);
+    }
+  }
+  return next;
+}
+
 /** Recria fichas da nota (1 ou N cooperados conforme divisaoEntrega). */
 export function rebuildFichasNota(data: AppData, nota: NotaPedido): AppData {
   const without = data.fichaCorrida.filter((f) => f.notaPedidoId !== nota.id);
   const responsavel = nota.conferidaPor ?? "Cooperativa";
   const participantes = nota.divisaoEntrega?.participantes ?? [];
 
-  if (participantes.length <= 1) {
-    const ctx = { ...data, fichaCorrida: without };
-    const ficha = buildFichaFromNota(nota, ctx, responsavel, nota.cooperadoNomeSnapshot);
-    if (nota.status === "pago") ficha.status = "pago";
-    const fichaCorrida = [...without, ficha];
-    const arquivosMensais = upsertArquivoMensal(ctx, nota.cooperadoId, nota.cooperativaId, nota.mesReferencia, {
-      notaPedidoIds: [nota.id],
-    });
+  if (participantes.length > 1) {
+    const divisao = nota.divisaoEntrega!;
+    const novasFichas = buildFichasDivisaoFromNota(data, nota, responsavel, divisao, without);
+    let fichaCorrida = recalcularSaldosFichaNota([...without, ...novasFichas], nota);
+
+    let arquivosMensais = data.arquivosMensais;
+    for (const p of participantes) {
+      arquivosMensais = upsertArquivoMensal(
+        { ...data, fichaCorrida, arquivosMensais },
+        p.cooperadoId,
+        nota.cooperativaId,
+        nota.mesReferencia,
+        { notaPedidoIds: [nota.id] }
+      );
+    }
+
     return { ...data, fichaCorrida, arquivosMensais };
   }
 
-  const divisao = nota.divisaoEntrega!;
-  const novasFichas = buildFichasDivisaoFromNota(data, nota, responsavel, divisao, without);
-  const fichaCorrida = [...without, ...novasFichas];
-
-  let arquivosMensais = data.arquivosMensais;
-  for (const p of participantes) {
-    arquivosMensais = upsertArquivoMensal(
-      { ...data, fichaCorrida, arquivosMensais },
-      p.cooperadoId,
-      nota.cooperativaId,
-      nota.mesReferencia,
-      { notaPedidoIds: [nota.id] }
-    );
+  const qtdPartes = inferirQtdPartesFichaNota(data.fichaCorrida, nota);
+  let novasFichas: FichaCorrida[];
+  if (qtdPartes > 1) {
+    novasFichas = buildFichasMultiFotoFromNota(data, nota, responsavel, without, qtdPartes);
+  } else {
+    const ctx = { ...data, fichaCorrida: without };
+    const ficha = buildFichaFromNota(nota, ctx, responsavel, nota.cooperadoNomeSnapshot);
+    if (nota.status === "pago") ficha.status = "pago";
+    novasFichas = [ficha];
   }
 
+  const fichaCorrida = recalcularSaldosFichaNota([...without, ...novasFichas], nota);
+  const arquivosMensais = upsertArquivoMensal(
+    { ...data, fichaCorrida: without },
+    nota.cooperadoId,
+    nota.cooperativaId,
+    nota.mesReferencia,
+    { notaPedidoIds: [nota.id] }
+  );
   return { ...data, fichaCorrida, arquivosMensais };
 }
 
@@ -804,6 +867,34 @@ export function chaveParteFichaCorrida(f: FichaCorrida): string {
   }
   if (m) return `foto:${m[1]}/${m[2]}`;
   return "full";
+}
+
+export function somaValorBrutoFichasNota(fichas: FichaCorrida[], notaId: string): number {
+  return round2(
+    fichas.filter((f) => f.notaPedidoId === notaId).reduce((s, f) => s + (f.valorBruto ?? 0), 0)
+  );
+}
+
+/** Soma das fichas da nota bate com o valor bruto (ou líquido) conferido. */
+export function fichasValoresAlinhadosComNota(fichas: FichaCorrida[], nota: NotaPedido): boolean {
+  const bruto = somaValorBrutoFichasNota(fichas, nota.id);
+  if (Math.abs(bruto - nota.valorBruto) <= 0.02) return true;
+  const liquido = round2(
+    fichas.filter((f) => f.notaPedidoId === nota.id).reduce((s, f) => s + (f.valorLiquido ?? 0), 0)
+  );
+  return Math.abs(liquido - nota.valorLiquido) <= 0.02;
+}
+
+function inferirQtdPartesFichaNota(fichas: FichaCorrida[], nota: NotaPedido): number {
+  const fromNota = contarFotosEnviadasNota(nota);
+  if (fromNota > 1) return fromNota;
+  const existing = fichas.filter((f) => f.notaPedidoId === nota.id);
+  let maxTotal = 0;
+  for (const f of existing) {
+    const m = f.descricao.match(/\(foto (\d+)\/(\d+)\)/);
+    if (m) maxTotal = Math.max(maxTotal, parseInt(m[2], 10));
+  }
+  return maxTotal > 1 ? maxTotal : 1;
 }
 
 /** Verifica se cada participante da divisão tem ao menos uma ficha na nota. */
@@ -998,7 +1089,10 @@ export function reconciliarFichaFromNotasConferidas(data: AppData): AppData {
     const qtdParticipantes = nota.divisaoEntrega?.participantes.length ?? 1;
 
     if (nota.divisaoEntrega && qtdParticipantes > 1) {
-      if (divisaoFichasCobremParticipantes({ ...data, fichaCorrida }, fichasExistentes, nota)) {
+      if (
+        divisaoFichasCobremParticipantes({ ...data, fichaCorrida }, fichasExistentes, nota) &&
+        fichasValoresAlinhadosComNota(fichaCorrida, nota)
+      ) {
         continue;
       }
       const ctx = { ...data, fichaCorrida, arquivosMensais };
@@ -1010,7 +1104,18 @@ export function reconciliarFichaFromNotasConferidas(data: AppData): AppData {
       continue;
     }
 
-    if (fichaNotaIds.has(nota.id) || fichasExistentes.length > 0) continue;
+    if (fichasExistentes.length > 0) {
+      if (fichasValoresAlinhadosComNota(fichaCorrida, nota)) continue;
+      const ctx = { ...data, fichaCorrida, arquivosMensais };
+      const rebuilt = rebuildFichasNota(ctx, nota);
+      fichaCorrida = rebuilt.fichaCorrida;
+      arquivosMensais = rebuilt.arquivosMensais;
+      fichaNotaIds.add(nota.id);
+      changed = true;
+      continue;
+    }
+
+    if (fichaNotaIds.has(nota.id)) continue;
 
     const ctx = { ...data, fichaCorrida, arquivosMensais };
     const ficha = buildFichaFromNota(
