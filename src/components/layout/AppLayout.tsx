@@ -11,7 +11,7 @@ import {
 import { useState } from "react";
 import { useAuth } from "@/modules/auth/AuthProvider";
 import { useAppDataSelector } from "@/hooks/useAppData";
-import { getMenuItems, getMobileNavItems, getCooperadoDrawerMenuItems, getUserFuncaoLabel } from "@/permissions";
+import { getMenuItems, getMobileNavItems, getCooperadoDrawerMenuItems, getUserFuncaoLabel, isCooperadoAppUser } from "@/permissions";
 import { getUserCooperativaNome } from "@/utils/cooperativa";
 import { PLATFORM_NAME, PLATFORM_TAGLINE } from "@/utils/constants";
 import { AppIcon } from "@/components/ui/AppIcon";
@@ -123,7 +123,7 @@ export function Sidebar({ mobile = false, onClose }: { mobile?: boolean; onClose
 
   const contaCoopUiVisible = isContaCoopUiVisibleForUser(user, cooperadoNome || undefined);
 
-  const menuItems = mobile && user.role === "cooperado"
+  const menuItems = mobile && isCooperadoAppUser(user)
     ? getCooperadoDrawerMenuItems(user, creditEnabled, contaCoopUiVisible)
     : getMenuItems(user, creditEnabled, contaCoopUiVisible);
 
@@ -231,7 +231,7 @@ export function MobileNav() {
       <nav className="lg:hidden fixed bottom-0 left-0 right-0 z-40 flex safe-area-pb bg-white border-t-2 border-green-200 shadow-[0_-6px_24px_rgba(0,0,0,0.12)]">
         {mobileItems.map((item) => {
           const active = pathname === item.href || (item.href !== "/dashboard" && pathname.startsWith(item.href));
-          const isCooperadoNav = user.role === "cooperado";
+          const isCooperadoNav = isCooperadoAppUser(user);
           return (
             <Link
               key={item.href}

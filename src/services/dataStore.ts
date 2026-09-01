@@ -1,6 +1,6 @@
 "use client";
 
-import { normalizeUserRole } from "@/permissions";
+import { normalizeUserRole, resolveAppUserRole } from "@/permissions";
 import type { AppData, AuditAction, User, Cooperado, Cooperativa, PrestacaoContas, UserRole } from "@/types";
 import { emptyInitialData, DEMO_ENTITY_IDS, DEMO_EMAILS, DEMO_CNPJ } from "@/mock/data";
 import { findCooperativaByCnpj, getCooperativaById, getUserCooperativaId, normalizeCnpj } from "@/utils/cooperativa";
@@ -686,7 +686,7 @@ export function addAuditEntry(
 
 function persistSession(user: Omit<User, "password">): void {
   if (typeof window === "undefined") return;
-  const safeUser = { ...user, role: normalizeUserRole(user.role) };
+  const safeUser = { ...user, role: resolveAppUserRole(user) };
   localStorage.setItem(SESSION_KEY, JSON.stringify(safeUser));
   // Migra sessão antiga (sessionStorage) se existir
   sessionStorage.removeItem(SESSION_KEY);
@@ -707,6 +707,35 @@ function resolveSessionUser(
   const byId = data.users.find((u) => u.id === parsed.id && u.active);
   if (byId) return byId;
   return findUserByEmail(data, parsed.email);
+}
+
+/** Mescla sessão persistida (nuvem/login) com users[] local — evita role stale de responsável no celular. */
+function mergeStoredSessionWithLocalUser(
+  parsed: Omit<User, "password">,
+  local: User
+): Omit<User, "password"> {
+  const { password: _, ...localSafe } = local;
+  const merged: Omit<User, "password"> = {
+    ...localSafe,
+    id: parsed.id || localSafe.id,
+    email: parsed.email?.trim() ? parsed.email : localSafe.email,
+    name: parsed.name?.trim() ? parsed.name : localSafe.name,
+    cooperadoId: parsed.cooperadoId ?? localSafe.cooperadoId,
+    cooperativaId: parsed.cooperativaId ?? localSafe.cooperativaId,
+    cooperativaCnpj: parsed.cooperativaCnpj ?? localSafe.cooperativaCnpj,
+    role: parsed.role ? normalizeUserRole(parsed.role) : localSafe.role,
+  };
+  return {
+    ...merged,
+    role: resolveAppUserRole(merged),
+  };
+}
+
+function normalizeStoredSession(parsed: Omit<User, "password">): Omit<User, "password"> {
+  return {
+    ...parsed,
+    role: resolveAppUserRole({ ...parsed, role: normalizeUserRole(parsed.role) }),
+  };
 }
 
 async function finishLoginSession(user: User, data: AppData, plainPassword: string): Promise<User> {
@@ -1000,12 +1029,21 @@ function reconcileSessionAfterDataLoad(): void {
     return;
   }
 
-  const { password: _, ...safeUser } = current;
+  const safeUser = mergeStoredSessionWithLocalUser(parsed, current);
   const serialized = JSON.stringify(safeUser);
   const stored = localStorage.getItem(SESSION_KEY);
   if (stored && serialized !== stored) {
     localStorage.setItem(SESSION_KEY, serialized);
     notify();
+  }
+
+  if (safeUser.role === "cooperado" && current.role !== "cooperado") {
+    updateData((d) => ({
+      ...d,
+      users: d.users.map((u) =>
+        u.id === current.id ? { ...u, role: "cooperado", cooperadoId: safeUser.cooperadoId ?? u.cooperadoId } : u
+      ),
+    }));
   }
 }
 
@@ -1017,10 +1055,12 @@ export function getSession(): Omit<User, "password"> | null {
   const parsed = readStoredSessionRaw();
   if (!parsed) return null;
 
+  const normalizedParsed = normalizeStoredSession(parsed);
+
   if (memoryCache) {
-    const current = resolveSessionUser(memoryCache, parsed);
+    const current = resolveSessionUser(memoryCache, normalizedParsed);
     if (current) {
-      const { password: _, ...safeUser } = current;
+      const safeUser = mergeStoredSessionWithLocalUser(normalizedParsed, current);
       const serialized = JSON.stringify(safeUser);
       const stored = localStorage.getItem(SESSION_KEY);
       if (stored && serialized !== stored) {
@@ -1029,11 +1069,11 @@ export function getSession(): Omit<User, "password"> | null {
       return safeUser;
     }
     // Sessão válida no dispositivo — não deslogar se users[] local ainda não sincronizou.
-    return { ...parsed, role: normalizeUserRole(parsed.role) };
+    return normalizedParsed;
   }
 
   scheduleDataWarmIfNeeded();
-  return { ...parsed, role: normalizeUserRole(parsed.role) };
+  return normalizedParsed;
 }
 
 export interface RegisterCooperadoInput {

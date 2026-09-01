@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useAppDataSelector } from "@/hooks/useAppData";
 import { useAuth } from "@/modules/auth/AuthProvider";
-import { isDiretoriaRole } from "@/permissions";
+import { isCooperadoAppUser, isDiretoriaRole } from "@/permissions";
 import { StatCard } from "@/components/ui/Card";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
@@ -364,6 +364,10 @@ function AdminDashboard() {
 export default function DashboardPage() {
   const { user } = useAuth();
   if (!user) return null;
+
+  if (isCooperadoAppUser(user)) {
+    return <CooperadoDashboard />;
+  }
 
   if (isDiretoriaRole(user.role)) {
     return <AdminDashboard />;

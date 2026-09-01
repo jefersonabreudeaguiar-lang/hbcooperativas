@@ -3,7 +3,7 @@
 import { createContext, useContext, useEffect, useLayoutEffect, useState, useCallback, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import type { User } from "@/types";
-import { normalizeUserRole } from "@/permissions";
+import { normalizeUserRole, resolveAppUserRole } from "@/permissions";
 import { getSession, login as doLogin, loginCreatorAdminPortal, logout as doLogout, registerCooperado, registerCooperativa, subscribe, ensureCooperativaInCloudForUser, preloadAppData } from "@/services/dataStore";
 import { ensureCloudSessionReady, setActiveCloudProfile, userToCloudProfile, getLastCloudSyncError } from "@/lib/security/clientSession";
 import type { RegisterCooperadoInput, RegisterCooperativaInput } from "@/services/dataStore";
@@ -29,16 +29,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const refresh = useCallback(() => {
     const session = getSession();
     setUser((prev) => {
+      if (!session) return null;
+      const normalized = { ...session, role: resolveAppUserRole(session) };
       if (
-        prev?.id === session?.id &&
-        prev?.email === session?.email &&
-        prev?.role === session?.role &&
-        prev?.cooperadoId === session?.cooperadoId &&
-        prev?.cooperativaId === session?.cooperativaId
+        prev?.id === normalized.id &&
+        prev?.email === normalized.email &&
+        prev?.role === normalized.role &&
+        prev?.cooperadoId === normalized.cooperadoId &&
+        prev?.cooperativaId === normalized.cooperativaId
       ) {
         return prev;
       }
-      return session;
+      return normalized;
     });
     setLoading(false);
   }, []);
@@ -61,7 +63,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const result = await doLogin(email, password);
     if (result) {
       const { password: _, ...safeUser } = result;
-      setUser({ ...safeUser, role: normalizeUserRole(safeUser.role) });
+      setUser({ ...safeUser, role: resolveAppUserRole(safeUser) });
       setActiveCloudProfile(userToCloudProfile(safeUser));
       await ensureCloudSessionReady(userToCloudProfile(safeUser));
       const redirectTo = safeUser.role === "parceiro" ? "/mercado-parceiro" : "/dashboard";
@@ -79,7 +81,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const result = await loginCreatorAdminPortal(email, password);
     if (result) {
       const { password: _, ...safeUser } = result;
-      setUser({ ...safeUser, role: normalizeUserRole(safeUser.role) });
+      setUser({ ...safeUser, role: resolveAppUserRole(safeUser) });
       return true;
     }
     return false;
