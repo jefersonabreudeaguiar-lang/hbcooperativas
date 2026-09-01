@@ -242,16 +242,27 @@ export default function CadastroPage() {
           name: nomeMercado,
         }),
       });
-      const data = await res.json();
+      const raw = await res.text();
+      let data: { error?: string; hint?: string; user?: unknown } = {};
+      if (raw.trim()) {
+        try {
+          data = JSON.parse(raw) as typeof data;
+        } catch {
+          setError("Resposta inválida do servidor. Tente novamente em instantes.");
+          return;
+        }
+      }
       if (!res.ok) {
-        setError(data.error ?? "Cadastro recusado.");
+        setError(
+          [data.error ?? "Cadastro recusado.", data.hint].filter(Boolean).join(" ")
+        );
         return;
       }
       if (data.user) markCloudSessionActive();
       setSuccess("Mercado cadastrado! Status: PENDENTE — aguarde aprovação da cooperativa.");
       setTimeout(() => router.push("/mercado-parceiro"), 1500);
     } catch {
-      setError("Erro de conexão ao cadastrar mercado.");
+      setError("Erro de conexão ao cadastrar mercado. Verifique a internet e tente de novo.");
     } finally {
       setLoading(false);
     }
