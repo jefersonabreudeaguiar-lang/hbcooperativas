@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import QRCode from "qrcode";
 import { CreditFeatureGate } from "@/components/hb-credit/CreditFeatureGate";
 import { PageHeader } from "@/components/ui/Table";
@@ -26,6 +26,24 @@ import { PageSkeleton } from "@/components/ui/PageSkeleton";
 import { SignaturePad } from "@/components/ui/SignaturePad";
 import { formatMesReferencia } from "@/utils/format";
 
+type CobrancaQrAtiva = {
+  qrUrl: string;
+  qrPayload: string;
+  amountCents: number;
+  descricao?: string;
+  intentId: string;
+  expiresAt: string;
+};
+
+async function gerarQrDataUrl(payload: string): Promise<string> {
+  return QRCode.toDataURL(payload, {
+    width: 480,
+    margin: 4,
+    errorCorrectionLevel: "H",
+    color: { dark: "#000000", light: "#ffffff" },
+  });
+}
+
 export default function MercadoParceiroPage() {
   return (
     <CreditFeatureGate>
@@ -49,9 +67,9 @@ function MercadoParceiroContent() {
   const [success, setSuccess] = useState("");
   const [valorReais, setValorReais] = useState("");
   const [descricao, setDescricao] = useState("");
-  const [qrUrl, setQrUrl] = useState("");
-  const [qrPayload, setQrPayload] = useState("");
+  const [cobrancaQr, setCobrancaQr] = useState<CobrancaQrAtiva | null>(null);
   const [busy, setBusy] = useState(false);
+  const qrDestaqueRef = useRef<HTMLDivElement>(null);
   const [hasPin, setHasPin] = useState(false);
   const [pinSetup, setPinSetup] = useState("");
   const [estornoAlvo, setEstornoAlvo] = useState<ContaCoopCompraEstornavel | null>(null);
@@ -99,24 +117,43 @@ function MercadoParceiroContent() {
   const criarCobranca = async () => {
     setBusy(true);
     setError("");
-    setQrUrl("");
-    setQrPayload("");
+    setCobrancaQr(null);
     try {
       const amount = Number(valorReais.replace(",", "."));
       const res = await createCreditIntent(amount, descricao.trim() || undefined);
-      if (res.qrPayload) {
-        setQrPayload(res.qrPayload);
-        const url = await QRCode.toDataURL(res.qrPayload, {
-          width: 320,
-          margin: 3,
-          errorCorrectionLevel: "H",
-          color: { dark: "#000000", light: "#ffffff" },
+      if (res.qrPayload && res.intent) {
+        const url = await gerarQrDataUrl(res.qrPayload);
+        setCobrancaQr({
+          qrUrl: url,
+          qrPayload: res.qrPayload,
+          amountCents: res.intent.amountCents,
+          descricao: res.intent.descricao,
+          intentId: res.intent.id,
+          expiresAt: res.intent.expiresAt,
         });
-        setQrUrl(url);
+        requestAnimationFrame(() => {
+          qrDestaqueRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+        });
       }
       await reload();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Erro ao criar cobrança.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const fecharQrCobranca = () => setCobrancaQr(null);
+
+  const cancelarCobrancaAtiva = async () => {
+    if (!cobrancaQr) return;
+    setBusy(true);
+    try {
+      await cancelCreditIntent(cobrancaQr.intentId);
+      setCobrancaQr(null);
+      await reload();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Erro ao cancelar.");
     } finally {
       setBusy(false);
     }
@@ -286,6 +323,56 @@ function MercadoParceiroContent() {
         </AlertBanner>
       )}
 
+      {cobrancaQr && (
+        <div ref={qrDestaqueRef} className="sticky top-2 z-20 scroll-mt-4">
+          <Card className="overflow-hidden border-2 border-green-600 bg-gradient-to-b from-green-50 to-white p-0 shadow-lg ring-4 ring-green-600/15">
+            <div className="bg-green-700 px-5 py-4 text-center text-white">
+              <p className="text-xs font-semibold uppercase tracking-widest text-green-100">Cobrança aberta</p>
+              <p className="mt-1 text-3xl font-bold tabular-nums sm:text-4xl">
+                {formatCentsBRL(cobrancaQr.amountCents)}
+              </p>
+              {cobrancaQr.descricao && (
+                <p className="mt-1 text-sm text-green-100">{cobrancaQr.descricao}</p>
+              )}
+              <p className="mt-2 text-xs text-green-200">
+                Peça ao cooperado escanear este QR · expira{" "}
+                {new Date(cobrancaQr.expiresAt).toLocaleTimeString("pt-BR", {
+                  hour: "2-digit",
+                  minute: "2-digit",
+                })}
+              </p>
+            </div>
+            <div className="flex flex-col items-center gap-4 px-5 py-6">
+              <div className="rounded-2xl border-4 border-gray-900 bg-white p-4 shadow-inner">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={cobrancaQr.qrUrl}
+                  alt="QR Code da cobrança Conta Coop"
+                  className="h-auto w-[min(100vw-4rem,22rem)] max-w-full aspect-square"
+                />
+              </div>
+              <p className="text-center text-sm font-medium text-gray-800">
+                Aponte a câmera do cooperado para o quadrado preto
+              </p>
+              <p className="text-xs text-gray-500 break-all text-center max-w-md">{cobrancaQr.qrPayload}</p>
+              <div className="flex w-full max-w-sm flex-col gap-2 sm:flex-row">
+                <Button variant="secondary" className="flex-1" onClick={fecharQrCobranca} disabled={busy}>
+                  Minimizar
+                </Button>
+                <Button
+                  variant="secondary"
+                  className="flex-1 border-red-200 text-red-700 hover:bg-red-50"
+                  onClick={() => void cancelarCobrancaAtiva()}
+                  disabled={busy}
+                >
+                  Cancelar cobrança
+                </Button>
+              </div>
+            </div>
+          </Card>
+        </div>
+      )}
+
       <Card className="p-5 space-y-4">
         <div>
           <h3 className="font-semibold text-gray-900">Seu PIX para receber da cooperativa</h3>
@@ -351,16 +438,9 @@ function MercadoParceiroContent() {
             <Input value={descricao} onChange={(e) => setDescricao(e.target.value)} disabled={!ativo} />
           </div>
         </div>
-        <Button onClick={criarCobranca} disabled={busy || !ativo}>
-          Nova cobrança
+        <Button onClick={criarCobranca} disabled={busy || !ativo} size="lg" className="w-full sm:w-auto">
+          {busy ? "Gerando QR..." : "Nova cobrança"}
         </Button>
-        {qrUrl && (
-          <div className="flex flex-col items-center gap-2 pt-4 border-t">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={qrUrl} alt="QR cobrança" className="rounded-lg border" />
-            <p className="text-xs text-gray-500 break-all text-center max-w-sm">{qrPayload}</p>
-          </div>
-        )}
       </Card>
 
       {ativo && <ContaCoopFiscalNotesMercadoPanel />}
