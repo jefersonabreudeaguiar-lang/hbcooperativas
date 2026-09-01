@@ -337,7 +337,7 @@ export function mensagemErroAuthApi(status: number, error?: string): string {
 
 export async function secureApiFetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
   const profile = activeCloudProfile ?? loadStoredSessionProfile();
-  await ensureCloudSessionReady(profile ?? undefined);
+  const sessionReady = await ensureCloudSessionReady(profile ?? undefined);
 
   const headers = new Headers(init?.headers);
   const token = memoryAccessToken;
@@ -357,6 +357,16 @@ export async function secureApiFetch(input: RequestInfo | URL, init?: RequestIni
       }
       res = await fetch(input, { ...init, headers: retryHeaders, credentials: "include" });
     }
+  }
+
+  if (!sessionReady || res.status === 401) {
+    lastCloudSyncError =
+      lastCloudSyncError ||
+      "Sessão na nuvem expirada ou desalinhada. Saia, entre de novo e aguarde alguns segundos.";
+  } else if (res.status === 403) {
+    lastCloudSyncError =
+      mensagemErroAuthApi(403) ||
+      "Sem permissão para esta cooperativa. Verifique o login ou fale com a diretoria.";
   }
 
   return res;

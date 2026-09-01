@@ -38,6 +38,11 @@ import {
   startIdleMonitor,
 } from "@/services/idleActivity";
 import { getData, updateDataSafe, waitForAppDataWarm } from "@/services/dataStore";
+import {
+  ensureCloudSessionReady,
+  getLastCloudSyncError,
+  userToCloudProfile,
+} from "@/lib/security/clientSession";
 import { getCooperadoNome } from "@/utils/calculations";
 import { readNotaFotoAtIndex, resolveNotaFotosForUpload } from "@/services/localMediaStore";
 import { compactarFotosNoArmazenamento, contarFotosEnviadasNota } from "@/utils/fotoEntrega";
@@ -50,11 +55,14 @@ export type SyncStatusValue = {
   syncing: boolean;
   /** Timestamp da última sync concluída (sucesso ou tentativa com fim). */
   lastSyncedAt: number | null;
+  /** Erro da última tentativa (sessão nuvem, permissão, etc.). */
+  lastSyncError: string;
 };
 
 const SyncStatusContext = createContext<SyncStatusValue>({
   syncing: false,
   lastSyncedAt: null,
+  lastSyncError: "",
 });
 
 export function useSyncStatus(): SyncStatusValue {
@@ -78,6 +86,7 @@ export function CooperativaSyncProvider({ children }: { children: React.ReactNod
 
   const [syncing, setSyncing] = useState(false);
   const [lastSyncedAt, setLastSyncedAt] = useState<number | null>(null);
+  const [lastSyncError, setLastSyncError] = useState("");
 
   const coopId =
     user && typeof window !== "undefined"
@@ -99,13 +108,23 @@ export function CooperativaSyncProvider({ children }: { children: React.ReactNod
     if (!currentCoopId) return;
 
     const now = Date.now();
-    if (now - lastSyncStartedAtRef.current < getSyncMinGapMs()) return;
+    if (!opts?.force && now - lastSyncStartedAtRef.current < getSyncMinGapMs()) return;
     lastSyncStartedAtRef.current = now;
 
     syncingRef.current = true;
     setSyncing(true);
+    setLastSyncError("");
     let completed = false;
     try {
+      const sessionOk = await ensureCloudSessionReady(userToCloudProfile(currentUser));
+      if (!sessionOk) {
+        setLastSyncError(
+          getLastCloudSyncError() ||
+            "Não foi possível conectar à nuvem. Saia, entre de novo e aguarde alguns segundos."
+        );
+        return;
+      }
+
       const cnpj = await resolveCooperativaCnpj(data, currentCoopId, currentUser);
       if (!cnpj) return;
 
@@ -121,7 +140,20 @@ export function CooperativaSyncProvider({ children }: { children: React.ReactNod
           resolverCooperadoIdCanonico(getData(), currentUser.cooperadoId, currentCoopId);
         await syncCooperativaBackground(cnpj, currentCoopId, cooperadoCanonico || undefined);
         if (cooperadoCanonico) {
-          await ensureCooperadoFinanceiroFromCloud(cnpj, currentCoopId, cooperadoCanonico);
+          const recovered = await ensureCooperadoFinanceiroFromCloud(
+            cnpj,
+            currentCoopId,
+            cooperadoCanonico
+          );
+          if (
+            !recovered &&
+            cooperadoFinanceiroLocalAusente(getData(), cooperadoCanonico, currentCoopId)
+          ) {
+            setLastSyncError(
+              getLastCloudSyncError() ||
+                "Não foi possível baixar sua ficha. Verifique a internet e toque em Atualizar agora."
+            );
+          }
         }
       } else {
         const pushCatalog = isDiretoriaRole(currentUser.role as UserRole);
@@ -283,8 +315,8 @@ export function CooperativaSyncProvider({ children }: { children: React.ReactNod
   }, [coopId, user?.id, runSync]);
 
   const status = useMemo(
-    () => ({ syncing, lastSyncedAt }),
-    [syncing, lastSyncedAt]
+    () => ({ syncing, lastSyncedAt, lastSyncError }),
+    [syncing, lastSyncedAt, lastSyncError]
   );
 
   return (

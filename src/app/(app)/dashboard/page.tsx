@@ -50,7 +50,7 @@ import { PageSkeleton } from "@/components/ui/PageSkeleton";
 function CooperadoDashboard() {
   const { user } = useAuth();
   const router = useRouter();
-  const { syncing } = useSyncStatus();
+  const { syncing, lastSyncError } = useSyncStatus();
   const recoverySyncRef = useRef(false);
 
   const financeiroAusente = useAppDataSelector((data) => {
@@ -171,10 +171,15 @@ function CooperadoDashboard() {
       </div>
 
       {financeiroAusente && (
-        <AlertBanner variant="info" title={syncing ? "Sincronizando sua ficha…" : "Valores ainda não carregaram"}>
+        <AlertBanner
+          variant={lastSyncError ? "error" : "info"}
+          title={syncing ? "Sincronizando sua ficha…" : "Valores ainda não carregaram"}
+        >
           {syncing
             ? "Baixando entregas e ficha da nuvem. Aguarde alguns segundos com internet."
-            : "Toque em atualizar ou aguarde — seus lançamentos estão guardados na nuvem."}
+            : lastSyncError
+              ? `${lastSyncError} Toque em atualizar ou saia e entre de novo.`
+              : "Toque em atualizar ou aguarde — seus lançamentos estão guardados na nuvem."}
           {!syncing && (
             <button
               type="button"
