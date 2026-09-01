@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { authorizePayment, parseQrPayload } from "@/lib/supabase/contaCoopStorage";
-import { requireCreditApi, requireCreditCooperado, requireCreditCnpj } from "@/lib/security/creditGuard";
+import { requireCreditApi, requireCreditCnpj, resolveCreditPaymentCooperadoId } from "@/lib/security/creditGuard";
 import { normalizeCnpj } from "@/utils/cooperativa";
 import { FINANCIAL_PIN_MIN_LENGTH } from "@/modules/hb-credit/config";
 
@@ -9,7 +9,7 @@ export async function POST(request: Request) {
   if (!gate.ok) return gate.response;
 
   const body = await request.json().catch(() => null);
-  const cooperadoId = String(body?.cooperadoId ?? gate.ctx.session?.cooperadoId ?? "");
+  let cooperadoId = String(body?.cooperadoId ?? gate.ctx.session?.cooperadoId ?? "");
   const cnpj = normalizeCnpj(String(body?.cnpj ?? gate.ctx.session?.cooperativaCnpj ?? ""));
   const pin = String(body?.pin ?? "");
   const idempotencyKey = String(body?.idempotencyKey ?? "");
@@ -33,8 +33,10 @@ export async function POST(request: Request) {
 
   const denyCoop = requireCreditCnpj(gate.ctx, cnpj);
   if (denyCoop) return denyCoop;
-  const denySelf = requireCreditCooperado(gate.ctx, cooperadoId);
-  if (denySelf) return denySelf;
+
+  const resolved = resolveCreditPaymentCooperadoId(gate.ctx, request, cooperadoId);
+  if ("response" in resolved) return resolved.response;
+  cooperadoId = resolved.cooperadoId;
 
   const result = await authorizePayment(gate.ctx.supabase, {
     intentId,

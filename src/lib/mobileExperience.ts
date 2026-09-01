@@ -1,6 +1,11 @@
 import type { User, UserRole } from "@/types";
-import { normalizeAuthEmail } from "@/lib/security/appCreator";
 import { isCooperadoAppUser, normalizeUserRole } from "@/permissions";
+import {
+  resolveMobileCooperadoId,
+  resolveMobileCooperadoIdFromEmail,
+} from "@/lib/hb-credit/mobileCooperadoLink";
+
+export { resolveMobileCooperadoId, resolveMobileCooperadoIdFromEmail };
 
 function isAppStandaloneMode(): boolean {
   if (typeof window === "undefined") return false;
@@ -16,18 +21,6 @@ export function isMobileCooperativaApp(): boolean {
   if (isAppStandaloneMode()) return true;
   if (window.matchMedia("(max-width: 1023px)").matches) return true;
   return /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent);
-}
-
-/** Vínculos fixos: e-mail de gestão no celular → cooperado (ex.: Orlando). */
-const MOBILE_COOPERADO_BY_EMAIL: Record<string, string> = {
-  [normalizeAuthEmail("jefersonabreudeaguiar@gmail.com")]: "c_1782263929381_ncp55",
-};
-
-export function resolveMobileCooperadoId(user: Pick<User, "email" | "mobileCooperadoId">): string | undefined {
-  const fromProfile = user.mobileCooperadoId?.trim();
-  if (fromProfile) return fromProfile;
-  const email = normalizeAuthEmail(user.email ?? "");
-  return MOBILE_COOPERADO_BY_EMAIL[email];
 }
 
 /** Papel e cooperadoId usados na UI — no celular, responsável pode operar como cooperado vinculado. */

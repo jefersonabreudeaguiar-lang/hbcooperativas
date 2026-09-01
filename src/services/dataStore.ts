@@ -817,7 +817,10 @@ export function applyCloudProfileToLocalSession(profile: CloudSessionProfile): O
     }
   }
 
-  base = normalizeStoredSession(base);
+  base = normalizeStoredSession({
+    ...base,
+    mobileCooperadoId: resolveMobileCooperadoId(base) ?? base.mobileCooperadoId,
+  });
   persistSession(base);
 
   if (base.role === "cooperado" && memoryCache) {

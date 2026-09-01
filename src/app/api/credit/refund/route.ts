@@ -38,7 +38,7 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
-  const gate = await requireCreditApi(request);
+  const gate = await requireCreditApi(request, { requireOperations: true });
   if (!gate.ok) return gate.response;
 
   const body = await request.json().catch(() => null);

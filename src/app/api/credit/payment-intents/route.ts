@@ -8,12 +8,13 @@ import {
 } from "@/lib/supabase/contaCoopStorage";
 import {
   requireCreditApi,
-  requireCreditCooperado,
   requireCreditCnpj,
   requireCreditParceiro,
+  resolveCreditPaymentCooperadoId,
 } from "@/lib/security/creditGuard";
 import { normalizeCnpj } from "@/utils/cooperativa";
 import { reaisToCents } from "@/modules/hb-credit/engine/money";
+import { INTENT_MAX_CENTS } from "@/modules/hb-credit/config";
 
 export async function POST(request: Request) {
   const gate = await requireCreditApi(request, { requireOperations: true });
@@ -48,14 +49,15 @@ export async function POST(request: Request) {
 
     const denyCoop = requireCreditCnpj(gate.ctx, cnpj);
     if (denyCoop) return denyCoop;
-    const denySelf = requireCreditCooperado(gate.ctx, cooperadoId);
-    if (denySelf) return denySelf;
+
+    const resolved = resolveCreditPaymentCooperadoId(gate.ctx, request, cooperadoId);
+    if ("response" in resolved) return resolved.response;
 
     const result = await validateIntentForCooperado(
       gate.ctx.supabase,
       parsed.intentId,
       parsed.nonce,
-      cooperadoId,
+      resolved.cooperadoId,
       cnpj
     );
     if (!result.ok) return NextResponse.json({ error: result.error }, { status: 400 });
@@ -75,8 +77,11 @@ export async function POST(request: Request) {
   const cnpj = normalizeCnpj(parceiro.cooperativaCnpj);
   const amountCents = Number(body?.amountCentavos ?? reaisToCents(Number(body?.amountReais ?? 0)));
 
-  if (cnpj.length !== 14 || amountCents <= 0) {
+  if (cnpj.length !== 14 || !Number.isFinite(amountCents) || amountCents <= 0) {
     return NextResponse.json({ error: "Dados inválidos." }, { status: 400 });
+  }
+  if (amountCents !== Math.round(amountCents) || amountCents > INTENT_MAX_CENTS) {
+    return NextResponse.json({ error: "Valor da cobrança inválido ou acima do limite." }, { status: 400 });
   }
 
   try {

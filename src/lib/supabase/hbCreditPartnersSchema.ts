@@ -65,9 +65,13 @@ export async function ensureHbCreditPartnersSchema(
 }
 
 export async function applyHbCreditPartnersSchemaSql(): Promise<{ ok: true } | { ok: false; error: string }> {
-  const sql = readFileSync(
-    resolve(process.cwd(), "supabase/migrations/APPLY_HB_CREDIT_PARTNERS.sql"),
-    "utf8"
-  );
+  const partnersPath = resolve(process.cwd(), "supabase/migrations/APPLY_HB_CREDIT_PARTNERS.sql");
+  const completoPath = resolve(process.cwd(), "supabase/migrations/APPLY_HB_CREDIT_COMPLETO.sql");
+
+  let sql = readFileSync(partnersPath, "utf8").trim();
+  if (sql.length < 40) {
+    sql = readFileSync(completoPath, "utf8");
+  }
+
   return runPgSql(sql);
 }

@@ -25,7 +25,6 @@ import type { ContaCoopIntent, ContaCoopLedgerEntry, ContaCoopLimiteCooperado } 
 import { FINANCIAL_PIN_MIN_LENGTH } from "@/modules/hb-credit/config";
 import { labelLedgerTipo } from "@/lib/hb-credit/ledgerLabels";
 import { PageSkeleton } from "@/components/ui/PageSkeleton";
-import { generateId } from "@/services/dataStore";
 import { cn } from "@/utils/format";
 
 type Tab = "inicio" | "pagar" | "extrato";
@@ -42,7 +41,7 @@ export default function MinhaContaCoopPage() {
 
 function MinhaContaCoopContent() {
   const router = useRouter();
-  const { user } = usePermissions();
+  const { user, cooperadoId } = usePermissions();
   const data = useAppData();
   const [tab, setTab] = useState<Tab>("inicio");
   const [loading, setLoading] = useState(true);
@@ -71,7 +70,6 @@ function MinhaContaCoopContent() {
     const coop = data.cooperativas.find((c) => c.id === coopId);
     return coop?.cnpj ? normalizeCnpj(coop.cnpj) : "";
   }, [user, data]);
-  const cooperadoId = user?.cooperadoId ?? "";
   const cooperadoNome = useMemo(() => {
     if (!data || !cooperadoId) return user?.name ?? "";
     return data.cooperados.find((c) => c.id === cooperadoId)?.nomeCompleto ?? user?.name ?? "";
@@ -168,7 +166,7 @@ function MinhaContaCoopContent() {
         intentId: pendingIntent.intent.id,
         nonce: pendingIntent.intent.nonce,
         pin: payPin,
-        idempotencyKey: generateId("idem"),
+        idempotencyKey: `pay:${pendingIntent.intent.id}:${cooperadoId}`,
       });
       setSuccess(`Pagamento aprovado! Comprovante ${res.receiptCode}`);
       setPendingIntent(null);

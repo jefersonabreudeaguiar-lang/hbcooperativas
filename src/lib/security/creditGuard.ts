@@ -10,6 +10,10 @@ import type { SessionClaims } from "@/lib/security/jwt";
 import { getSupabaseAdmin, isSupabaseConfigured } from "@/lib/supabase/admin";
 import { getParceiroByUserId } from "@/lib/supabase/contaCoopStorage";
 import type { ContaCoopParceiro } from "@/modules/hb-credit/types";
+import {
+  isMobileCooperativaUserAgent,
+  resolveMobileCooperadoIdFromEmail,
+} from "@/lib/hb-credit/mobileCooperadoLink";
 
 export type CreditAuthOk = {
   session: SessionClaims | null;
@@ -91,6 +95,52 @@ export function requireCreditCooperado(
     return NextResponse.json({ error: "Ação restrita ao cooperado." }, { status: 403 });
   }
   return null;
+}
+
+/** Pagamento QR — cooperado real ou responsável no celular com vínculo fixo. */
+export function resolveCreditPaymentCooperadoId(
+  ctx: CreditAuthOk,
+  request: Request,
+  clientCooperadoId: string
+): { cooperadoId: string } | { response: NextResponse } {
+  if (!ctx.enforced || !ctx.session) {
+    return { cooperadoId: clientCooperadoId };
+  }
+
+  if (ctx.session.role === "cooperado") {
+    if (ctx.session.cooperadoId !== clientCooperadoId) {
+      return { response: NextResponse.json({ error: "Sem permissão." }, { status: 403 }) };
+    }
+    return { cooperadoId: clientCooperadoId };
+  }
+
+  if (ctx.session.role === "parceiro") {
+    return { response: NextResponse.json({ error: "Ação restrita ao cooperado." }, { status: 403 }) };
+  }
+
+  const staffRole =
+    ctx.session.role === "responsavel" ||
+    ctx.session.role === "tesoureiro" ||
+    ctx.session.role === "admin";
+
+  if (staffRole) {
+    const mapped = resolveMobileCooperadoIdFromEmail(ctx.session.email);
+    const ua = request.headers.get("user-agent");
+    if (mapped && isMobileCooperativaUserAgent(ua)) {
+      if (clientCooperadoId !== mapped) {
+        return {
+          response: NextResponse.json(
+            { error: "Cooperado não autorizado neste dispositivo." },
+            { status: 403 }
+          ),
+        };
+      }
+      return { cooperadoId: mapped };
+    }
+    return { response: NextResponse.json({ error: "Pagamento restrito ao cooperado." }, { status: 403 }) };
+  }
+
+  return { response: NextResponse.json({ error: "Sem permissão." }, { status: 403 }) };
 }
 
 export async function resolveCreditParceiro(

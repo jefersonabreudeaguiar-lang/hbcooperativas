@@ -31,6 +31,14 @@ import {
   receivableStatusFromDb,
 } from "@/modules/hb-credit/infrastructure/mappers/statusMapper";
 
+/** Recebíveis em liquidação ou já pagos ao mercado não podem ser estornados. */
+const NON_REFUNDABLE_RECEIVABLE_DB = new Set(["PROCESSING", "SETTLED"]);
+
+function isReceivableRefundableDbStatus(dbStatus: string | undefined): boolean {
+  if (!dbStatus) return true;
+  return !NON_REFUNDABLE_RECEIVABLE_DB.has(dbStatus);
+}
+
 function genId(prefix: string): string {
   return `${prefix}_${Date.now()}_${randomBytes(6).toString("hex")}`;
 }
@@ -1055,17 +1063,29 @@ export async function authorizePayment(
   if (!result?.ok) return { ok: false, error: result?.error ?? "Pagamento recusado." };
 
   const txId = result.transacao_id ?? transacaoId;
-  try {
-    const { ensureFiscalNoteForTransaction } = await import("@/lib/supabase/hbCreditFiscalNotesStorage");
-    await ensureFiscalNoteForTransaction(supabase, txId, input.cooperadoNome);
-  } catch {
-    /* tabela fiscal opcional até migration aplicada */
+  let finalReceiptCode = receiptCode;
+  if (result.duplicate) {
+    const { data: existingTx } = await supabase
+      .from("hb_credit_transactions")
+      .select("receipt_code")
+      .eq("id", txId)
+      .maybeSingle();
+    if (existingTx?.receipt_code) {
+      finalReceiptCode = String(existingTx.receipt_code);
+    }
+  } else {
+    try {
+      const { ensureFiscalNoteForTransaction } = await import("@/lib/supabase/hbCreditFiscalNotesStorage");
+      await ensureFiscalNoteForTransaction(supabase, txId, input.cooperadoNome);
+    } catch {
+      /* tabela fiscal opcional até migration aplicada */
+    }
   }
 
   return {
     ok: true,
     transacaoId: txId,
-    receiptCode,
+    receiptCode: finalReceiptCode,
     disponivelAposCents: Number(result.disponivel_apos_centavos ?? 0),
     duplicate: Boolean(result.duplicate),
   };
@@ -1452,6 +1472,7 @@ export async function listRefundablePayments(
 
   return txs
     .filter((t) => !refundedIds.has(String(t.id)))
+    .filter((t) => isReceivableRefundableDbStatus(recebivelByTx[String(t.id)]))
     .map((t) => {
       const intentId = t.payment_intent_id ? String(t.payment_intent_id) : "";
       const recebivelDb = recebivelByTx[String(t.id)];
@@ -1623,6 +1644,18 @@ export async function createRefundRequest(
     .maybeSingle();
   if (existingRefund) return { ok: false, error: "Esta compra já foi estornada." };
 
+  const { data: recebivel } = await supabase
+    .from("hb_credit_receivables")
+    .select("status")
+    .eq("transaction_id", params.transactionId)
+    .maybeSingle();
+  if (recebivel && !isReceivableRefundableDbStatus(String(recebivel.status))) {
+    return {
+      ok: false,
+      error: "Compra já em liquidação ou liquidada — estorno não permitido.",
+    };
+  }
+
   const { data: pending } = await supabase
     .from("hb_credit_refund_requests")
     .select("id")
@@ -1692,6 +1725,13 @@ export async function approveRefundRequest(
   const refundTxId = genId("tx");
   const refundId = genId("refund");
 
+  const { data: reqRow } = await supabase
+    .from("hb_credit_refund_requests")
+    .select("transaction_id")
+    .eq("id", requestId)
+    .eq("cooperative_cnpj", digits)
+    .maybeSingle();
+
   const { data, error } = await supabase.rpc("hb_credit_approve_refund_request", {
     p_request_id: requestId,
     p_cooperative_cnpj: digits,
@@ -1713,6 +1753,16 @@ export async function approveRefundRequest(
 
   const result = data as { ok?: boolean; error?: string; disponivel_apos_centavos?: number };
   if (!result?.ok) return { ok: false, error: result?.error ?? "Aprovação recusada." };
+
+  const transacaoId = reqRow?.transaction_id ? String(reqRow.transaction_id) : null;
+  if (transacaoId) {
+    try {
+      const { cancelFiscalNoteForTransaction } = await import("@/lib/supabase/hbCreditFiscalNotesStorage");
+      await cancelFiscalNoteForTransaction(supabase, transacaoId, reviewerUserId);
+    } catch {
+      /* tabela fiscal opcional até migration aplicada */
+    }
+  }
 
   return { ok: true, disponivelAposCents: Number(result.disponivel_apos_centavos ?? 0) };
 }
@@ -1798,6 +1848,18 @@ export async function refundPayment(
   cooperativaCnpj: string,
   actorUserId: string
 ): Promise<{ ok: true; disponivelAposCents: number } | { ok: false; error: string }> {
+  const { data: recebivel } = await supabase
+    .from("hb_credit_receivables")
+    .select("status")
+    .eq("transaction_id", transacaoId)
+    .maybeSingle();
+  if (recebivel && !isReceivableRefundableDbStatus(String(recebivel.status))) {
+    return {
+      ok: false,
+      error: "Compra já em liquidação ou liquidada — estorno não permitido.",
+    };
+  }
+
   const refundTxId = genId("tx");
   const refundId = genId("refund");
 
@@ -2247,7 +2309,10 @@ export async function registerPartnerSettlementPayment(
         updated_at: now,
       })
       .in("id", openRecebivelIds);
-    if (recvError) return { ok: false, error: recvError.message };
+    if (recvError) {
+      await supabase.from("hb_credit_settlements").delete().eq("id", settlementId);
+      return { ok: false, error: recvError.message };
+    }
   }
 
   await supabase.from("hb_credit_audit_log").insert({
@@ -2320,9 +2385,20 @@ export async function confirmPartnerSettlement(
     .eq("id", parceiroId)
     .maybeSingle();
 
+  const updatedRow = {
+    ...(row as Record<string, unknown>),
+    status: "CONFIRMED",
+    partner_assinatura_data_url: protectStoredField(assinaturaDataUrl),
+    partner_confirmado_em: now,
+    updated_at: now,
+  };
+
   return {
     ok: true,
-    settlement: mapSettlementRow(row as Record<string, unknown>, partnerRow?.name ? String(partnerRow.name) : undefined),
+    settlement: mapSettlementRow(
+      updatedRow,
+      partnerRow?.name ? String(partnerRow.name) : undefined
+    ),
   };
 }
 
