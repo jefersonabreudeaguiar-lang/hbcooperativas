@@ -33,28 +33,48 @@ function fichasDaCooperativa(data: AppData, cooperativaId: string, cooperadoId?:
   });
 }
 
-/** Indica se a maior parte das fichas locais já tem nota correspondente (sync de notas concluído). */
+/** Indica se a maior parte das fichas locais já tem nota conferida/paga (sync de notas concluído). */
 export function notasSyncProvavelmenteCompleto(data: AppData, cooperativaId: string): boolean {
   const fichasCoop = fichasDaCooperativa(data, cooperativaId);
-  const notaIds = new Set((data.notasPedido ?? []).map((n) => n.id));
   if (fichasCoop.length === 0) {
     // Vazio local ≠ sync ok — evita delta vazio eterno após relogin no celular.
     return false;
   }
-  const comNota = fichasCoop.filter((f) => notaIds.has(f.notaPedidoId)).length;
-  return comNota / fichasCoop.length >= SYNC_COMPLETO_RATIO;
+  const notasElegiveis = new Set(
+    (data.notasPedido ?? [])
+      .filter((n) => n.status === "conferida" || n.status === "pago")
+      .map((n) => n.id)
+  );
+  const comNotaConferida = fichasCoop.filter((f) => notasElegiveis.has(f.notaPedidoId)).length;
+  return comNotaConferida / fichasCoop.length >= SYNC_COMPLETO_RATIO;
 }
 
-/** Cooperado sem ficha e sem notas conferidas locais (precisa puxar da nuvem). */
+/** Cooperado sem dados financeiros locais completos (precisa puxar/reparar da nuvem). */
 export function cooperadoFinanceiroLocalAusente(
   data: AppData,
   cooperadoId: string,
   cooperativaId: string
 ): boolean {
   const canonico = resolverCooperadoIdCanonico(data, cooperadoId, cooperativaId);
-  const fichas = fichasDaCooperativa(data, cooperativaId, canonico).filter((f) => f.status === "pendente");
+  const fichasPendentes = fichasDaCooperativa(data, cooperativaId, canonico).filter(
+    (f) => f.status === "pendente"
+  );
   const conferidas = notasConferidasCooperado(data, canonico, cooperativaId);
-  return fichas.length === 0 && conferidas === 0;
+
+  if (fichasPendentes.length === 0 && conferidas === 0) return true;
+
+  // Ficha veio da nuvem antes das notas conferidas — estado quebrado típico no celular.
+  if (fichasPendentes.length > 0 && conferidas === 0) return true;
+
+  if (conferidas > 0) {
+    const fichasElegiveis = fichasPendentes.filter((f) => {
+      const nota = (data.notasPedido ?? []).find((n) => n.id === f.notaPedidoId);
+      return nota && (nota.status === "conferida" || nota.status === "pago");
+    }).length;
+    if (fichasElegiveis === 0) return true;
+  }
+
+  return false;
 }
 
 /**

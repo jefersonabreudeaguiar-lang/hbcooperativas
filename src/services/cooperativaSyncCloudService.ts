@@ -8,6 +8,7 @@ import { syncNotasPedidoFromCloud, patchNotaPedidoInCloud } from "@/services/not
 import { fetchCooperativaByCnpjFromCloud, mergeCooperativaIntoData } from "@/services/cooperativaCloudService";
 import { mergeArquivosMensaisFromCloud, reconciliarFichaFromNotasConferidas, dedupeFichaCorridaPorNota, aplicarNotasPedidoExcluidas } from "@/services/notaPedidoService";
 import { operacionalPushSeguro, precisaReparoFullSyncNotas, cooperadoFinanceiroLocalAusente } from "@/services/fichaSyncGuard";
+import { beginCloudSync, endCloudSync } from "@/services/cloudSyncProgress";
 import { clearNotasSyncMeta, forceNextFullNotasSync } from "@/services/syncMetaService";
 import { sincronizarMensalidadeCooperativa, mensalidadeVisivelNoDispositivo, normalizarMensalidadeCooperadoLocal, mesclarMensalidadesPayloadNuvem, prepararMensalidadesCloud, prepararMensalidadeCloud, reconciliarMensalidadesComCooperadosCloud, mensalidadeCloudEntraNoDispositivo, enriquecerMensalidadeCooperadoSnapshot } from "@/services/mensalidadeService";
 import { aplicarPrestacoesContasExcluidas } from "@/services/prestacaoContasService";
@@ -1019,21 +1020,26 @@ export async function syncCooperativaBackground(
   const digits = normalizeCnpj(cnpj);
   if (digits.length !== 14) return;
 
-  await ensureCloudOperationalResetApplied(digits, preferredCoopId);
+  beginCloudSync();
+  try {
+    await ensureCloudOperationalResetApplied(digits, preferredCoopId);
 
-  await runWithBatchedSaveAsync(async () => {
-    await syncCooperativaProfileFromCloud(digits);
-    const coopId = preferredCoopId ?? resolveCoopId(getData(), digits);
-    await syncCooperadosFromCloud(digits, coopId);
-    // Notas antes do operacional — ficha exige nota conferida local; senão purgarFichasInvalidas apaga tudo.
-    await syncNotasPedidoFromCloud(digits);
-    await syncOperacionalFromCloud(digits);
-    await syncContratosFromCloud(digits);
-    if (coopId) {
-      await repararIntegridadeFichaNotas(digits, coopId, cooperadoId);
-    }
-    saveDataSafe(reconciliarFichaFromNotasConferidas(getData()));
-  });
+    await runWithBatchedSaveAsync(async () => {
+      await syncCooperativaProfileFromCloud(digits);
+      const coopId = preferredCoopId ?? resolveCoopId(getData(), digits);
+      await syncCooperadosFromCloud(digits, coopId);
+      // Notas antes do operacional — ficha exige nota conferida local; senão purgarFichasInvalidas apaga tudo.
+      await syncNotasPedidoFromCloud(digits, { retryFull: true });
+      await syncOperacionalFromCloud(digits);
+      await syncContratosFromCloud(digits);
+      if (coopId) {
+        await repararIntegridadeFichaNotas(digits, coopId, cooperadoId);
+      }
+      saveDataSafe(reconciliarFichaFromNotasConferidas(getData()));
+    });
+  } finally {
+    endCloudSync();
+  }
 }
 
 /**
@@ -1075,21 +1081,26 @@ export async function ensureCooperadoFinanceiroFromCloud(
 
   let data = getData();
   if (!cooperadoFinanceiroLocalAusente(data, cooperadoId, cooperativaId)) {
-    return false;
+    return true;
   }
 
-  clearNotasSyncMeta(digits);
-  forceNextFullNotasSync(digits);
-  await syncCooperadosFromCloud(digits, cooperativaId);
-  await syncNotasPedidoFromCloud(digits, { retryFull: true });
-  await syncOperacionalFromCloud(digits);
-  saveDataSafe(reconciliarFichaFromNotasConferidas(getData()));
+  beginCloudSync();
+  try {
+    clearNotasSyncMeta(digits);
+    forceNextFullNotasSync(digits);
+    await syncCooperadosFromCloud(digits, cooperativaId);
+    await syncNotasPedidoFromCloud(digits, { retryFull: true });
+    await syncOperacionalFromCloud(digits);
+    saveDataSafe(reconciliarFichaFromNotasConferidas(getData()));
 
-  data = getData();
-  if (cooperadoFinanceiroLocalAusente(data, cooperadoId, cooperativaId)) {
-    await repararIntegridadeFichaNotas(digits, cooperativaId, cooperadoId);
+    data = getData();
+    if (cooperadoFinanceiroLocalAusente(data, cooperadoId, cooperativaId)) {
+      await repararIntegridadeFichaNotas(digits, cooperativaId, cooperadoId);
+    }
+    return !cooperadoFinanceiroLocalAusente(getData(), cooperadoId, cooperativaId);
+  } finally {
+    endCloudSync();
   }
-  return !cooperadoFinanceiroLocalAusente(getData(), cooperadoId, cooperativaId);
 }
 
 /**

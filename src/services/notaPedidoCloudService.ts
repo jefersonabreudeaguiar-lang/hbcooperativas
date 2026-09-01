@@ -6,7 +6,7 @@ import { getNotaCooperativaCnpj, getFotosExibicaoNota, mergeNotaComFotos, contar
 import { getCooperadoNome } from "@/utils/calculations";
 import { getData, saveDataSafe } from "@/services/dataStore";
 import { reconciliarFichaFromNotasConferidas, idsNotasPedidoExcluidas, aplicarNotasPedidoExcluidas } from "@/services/notaPedidoService";
-import { needsOperationalResetCloudPush, getCloudResetAppliedVersion } from "@/services/operationalReset";
+import { getCloudResetAppliedVersion } from "@/services/operationalReset";
 import { readNotaFotoAtIndex } from "@/services/localMediaStore";
 import { slimNotaDraftForUpload } from "@/services/imagePipelineService";
 import { flushPendingDeliveryImages } from "@/services/offlineImageQueueService";
@@ -1143,7 +1143,7 @@ export async function syncNotasPedidoFromCloud(
   cnpj: string,
   options?: { retryFull?: boolean }
 ): Promise<number> {
-  if (needsOperationalResetCloudPush()) return 0;
+  // Pull nunca bloqueado por reset pendente — só push de responsável usa essa flag.
   await flushPendingNotaDeletes(cnpj);
   const digits = normalizeCnpj(cnpj);
   const forceFull = options?.retryFull === true || shouldForceFullNotasSync(digits);

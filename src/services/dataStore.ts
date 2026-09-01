@@ -8,6 +8,7 @@ import { migrateInlinePhotosToIdb } from "@/services/localMediaMigration";
 import { compactarFotosNoArmazenamento, liberarEspacoArmazenamento, stripBinaryForPersist } from "@/utils/fotoEntrega";
 import { ensureMensalidadesDoMes, ensureMensalidadeCooperado, sincronizarMensalidadeCooperativa } from "@/services/mensalidadeService";
 import { applyOperationalResetIfNeeded, clearOperationalData } from "@/services/operationalReset";
+import { isCloudSyncInProgress } from "@/services/cloudSyncProgress";
 import { normalizeCreatorEmail, normalizeAuthEmail } from "@/lib/security/appCreator";
 import {
   CREATOR_ADMIN_EMAIL,
@@ -405,6 +406,7 @@ function migrateResponsavelPrincipal(data: AppData): AppData {
 }
 
 function runAutomaticTasks(data: AppData): AppData {
+  if (isCloudSyncInProgress()) return data;
   let current = compactarFotosNoArmazenamento(data);
   current = reconciliarFichaFromNotasConferidas(current);
   current = sincronizarMensalidadeCooperativa(current);
@@ -420,6 +422,10 @@ function scheduleAutomaticTasksIfNeeded(data: AppData): AppData {
   const run = () => {
     void (async () => {
       try {
+        if (isCloudSyncInProgress()) {
+          setTimeout(run, 1500);
+          return;
+        }
         // Usar dados atuais (pós-sync) — baseline da abertura podia apagar ficha recém-puxada da nuvem.
         let working = runAutomaticTasks(getData());
         working = await migrateInlinePhotosToIdb(working);

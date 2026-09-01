@@ -105,7 +105,12 @@ export function CooperativaSyncProvider({ children }: { children: React.ReactNod
 
     const data = getData();
     const currentCoopId = getUserCooperativaId(currentUser, data);
-    if (!currentCoopId) return;
+    if (!currentCoopId) {
+      if (currentUser.role === "cooperado") {
+        setLastSyncError("Cadastro da cooperativa não encontrado neste aparelho. Saia e entre de novo.");
+      }
+      return;
+    }
 
     const now = Date.now();
     if (!opts?.force && now - lastSyncStartedAtRef.current < getSyncMinGapMs()) return;
@@ -126,7 +131,12 @@ export function CooperativaSyncProvider({ children }: { children: React.ReactNod
       }
 
       const cnpj = await resolveCooperativaCnpj(data, currentCoopId, currentUser);
-      if (!cnpj) return;
+      if (!cnpj) {
+        if (currentUser.role === "cooperado") {
+          setLastSyncError("CNPJ da cooperativa não encontrado. Saia e entre de novo.");
+        }
+        return;
+      }
 
       await flushPendingCooperadoPushes(cnpj);
       await syncOfflineDeliveryImages();
@@ -257,6 +267,23 @@ export function CooperativaSyncProvider({ children }: { children: React.ReactNod
         }
       }
       completed = true;
+      if (cooperadoLogado && currentUser.cooperadoId) {
+        const cooperadoCanonico = resolverCooperadoIdCanonico(
+          getData(),
+          currentUser.cooperadoId,
+          currentCoopId
+        );
+        if (
+          cooperadoCanonico &&
+          cooperadoFinanceiroLocalAusente(getData(), cooperadoCanonico, currentCoopId)
+        ) {
+          completed = false;
+          setLastSyncError((prev) =>
+            prev ||
+            "Não foi possível baixar sua ficha. Verifique a internet e toque em Atualizar agora."
+          );
+        }
+      }
     } finally {
       syncingRef.current = false;
       setSyncing(false);
@@ -281,7 +308,7 @@ export function CooperativaSyncProvider({ children }: { children: React.ReactNod
         markUserActivity();
         void runSync({ force: true });
       }
-    }, 800);
+    }, user?.role === "cooperado" ? 0 : 800);
 
     const unsubIdle = onAppIdleChange((nowIdle) => {
       if (nowIdle) return;
@@ -312,7 +339,7 @@ export function CooperativaSyncProvider({ children }: { children: React.ReactNod
       document.removeEventListener("visibilitychange", onVisible);
       window.removeEventListener("online", onOnline);
     };
-  }, [coopId, user?.id, runSync]);
+  }, [coopId, user?.id, user?.role, runSync]);
 
   const status = useMemo(
     () => ({ syncing, lastSyncedAt, lastSyncError }),

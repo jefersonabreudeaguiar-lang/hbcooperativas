@@ -879,7 +879,10 @@ export function fichaNotaElegivelParaPagamento(data: AppData, ficha: FichaCorrid
 export function fichaValidaNoExtrato(data: AppData, ficha: FichaCorrida): boolean {
   const nota = data.notasPedido.find((n) => n.id === ficha.notaPedidoId);
   if (!nota) return fichaPreservarSemNotaLocal(data, ficha);
-  if (nota.status !== "conferida" && nota.status !== "pago") return false;
+  if (nota.status === "rejeitada" || nota.status === "rascunho") return false;
+  if (nota.status !== "conferida" && nota.status !== "pago") {
+    return fichaPreservarSemNotaLocal(data, ficha);
+  }
   if (ficha.status === "pago") return true;
   if (ficha.status === "pendente") return fichaNotaElegivelParaPagamento(data, ficha);
   return false;
