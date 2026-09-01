@@ -150,6 +150,21 @@ export interface ContaCoopDashboard {
   agregadoCooperados: ContaCoopTresValores;
   parceirosPendentes: number;
   transacoesRecentes: number;
+  /** Totais do mês corrente, calculados a partir das transações postadas no banco. */
+  lancamentosMes: ContaCoopDashboardLancamentosMes;
+}
+
+export interface ContaCoopDashboardLancamentosMes {
+  mesReferencia: string;
+  comprasBrutoCents: number;
+  comprasQtd: number;
+  estornosCents: number;
+  estornosQtd: number;
+  descontoMercadosCents: number;
+  liquidoMercadosCents: number;
+  creditoDebitadoCents: number;
+  recebivelMercadosAbertoCents: number;
+  cashbackSaldoCooperadosCents: number;
 }
 
 export type SettlementStatus = "aguardando_mercado" | "confirmado" | "cancelado";
@@ -259,7 +274,29 @@ export interface ContaCoopDiscountPoolResumo {
   coopLiquidadoCents: number;
   appPendenteCents: number;
   coopPendenteCents: number;
+  /** 20% já elegível (mercado liquidado) mas ainda não pago à HB via PIX. */
+  appRepassePendenteCents: number;
+  /** 20% já repassado e confirmado no mês. */
+  appRepassePagoCents: number;
   transacoesCount: number;
+}
+
+export interface ContaCoopAppRepasse {
+  id: string;
+  mesReferencia: string;
+  amountCents: number;
+  responsavelNome: string;
+  comprovanteMemo?: string | null;
+  livroCaixaOrigemId: string;
+  paidAt: string;
+}
+
+export interface ContaCoopAppRepassePreview {
+  mesReferencia: string;
+  amountCents: number;
+  allocCount: number;
+  alreadyPaid: boolean;
+  repasse?: ContaCoopAppRepasse | null;
 }
 
 export interface ContaCoopDiscountAllocation {

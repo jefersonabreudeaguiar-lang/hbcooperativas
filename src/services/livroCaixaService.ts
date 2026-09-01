@@ -214,6 +214,35 @@ export function lancarMensalidadeNoCaixa(data: AppData, mensalidade: Mensalidade
   });
 }
 
+/** Débito no caixa ao confirmar repasse HB dos 20% Conta Coop (idempotente por origemId). */
+export function lancarRepasseHbContaCoopNoCaixa(
+  data: AppData,
+  input: {
+    cooperativaId: string;
+    mesReferencia: string;
+    valorReais: number;
+    origemId: string;
+    responsavel?: string;
+    paidAt?: string;
+  }
+): AppData {
+  const dataLanc = (input.paidAt ?? new Date().toISOString()).split("T")[0];
+  const [ano, mesNum] = input.mesReferencia.split("-");
+  const mesCurto = mesNum && ano ? `${mesNum.padStart(2, "0")}/${ano}` : input.mesReferencia;
+  return appendLivroCaixaLancamento(data, {
+    cooperativaId: input.cooperativaId,
+    data: dataLanc,
+    mesReferencia: input.mesReferencia,
+    tipo: "debito",
+    valor: round2(input.valorReais),
+    historico: `Repasse HB · taxa Conta Coop 20% · ${mesCurto}`,
+    origem: "hb_app_repasse",
+    origemId: input.origemId,
+    categoria: "Conta Coop",
+    responsavel: input.responsavel,
+  });
+}
+
 /** Preenche retenções contábeis em pagamentos antigos que só tinham o débito líquido. */
 export function completarLancamentosContabeisPagamentos(data: AppData, cooperativaId?: string): AppData {
   let next = data;

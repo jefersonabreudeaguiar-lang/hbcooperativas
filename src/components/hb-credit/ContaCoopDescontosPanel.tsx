@@ -8,6 +8,7 @@ import { AlertBanner } from "@/components/ui/AlertBanner";
 import { formatCentsBRL } from "@/modules/hb-credit/engine/money";
 import type { ContaCoopDiscountAllocation, ContaCoopDiscountPoolResumo } from "@/modules/hb-credit/types";
 import { fetchDiscountPool, postSweepCashback } from "@/services/creditApiService";
+import { ContaCoopAppRepassePanel } from "@/components/hb-credit/ContaCoopAppRepassePanel";
 
 type Props = {
   cnpj: string;
@@ -104,10 +105,11 @@ export function ContaCoopDescontosPanel({ cnpj, cooperadoNome }: Props) {
                 <p className="mt-1 text-xl font-bold text-green-900">{formatCentsBRL(resumo.totalCashbackCents)}</p>
               </div>
               <div className="rounded-xl border border-blue-200 bg-blue-50/60 p-4">
-                <p className="text-xs font-medium text-blue-800">20% aplicativo (liquidação)</p>
+                <p className="text-xs font-medium text-blue-800">20% aplicativo</p>
                 <p className="mt-1 text-xl font-bold text-blue-900">{formatCentsBRL(resumo.totalAppCents)}</p>
                 <p className="mt-1 text-xs text-blue-700">
-                  Liquidado: {formatCentsBRL(resumo.appLiquidadoCents)} · Pendente:{" "}
+                  Repassado: {formatCentsBRL(resumo.appRepassePagoCents)} · A pagar (QR):{" "}
+                  {formatCentsBRL(resumo.appRepassePendenteCents)} · Aguard. mercado:{" "}
                   {formatCentsBRL(resumo.appPendenteCents)}
                 </p>
               </div>
@@ -121,9 +123,12 @@ export function ContaCoopDescontosPanel({ cnpj, cooperadoNome }: Props) {
               </div>
             </div>
             <p className="text-xs text-gray-500">
-              App e cooperativa são marcados como liquidados quando o pagamento ao mercado é registrado na aba Liquidar.
+              A parte dos mercados fica elegível após liquidação na aba Liquidar. O repasse dos 20% à HB é feito via QR
+              PIX abaixo, com lançamento automático no livro caixa.
             </p>
           </Card>
+
+          <ContaCoopAppRepassePanel cnpj={cnpj} mesReferencia={mesReferencia} resumo={resumo} onConfirmed={reload} />
 
           <Card className="space-y-3 !p-5">
             <div>

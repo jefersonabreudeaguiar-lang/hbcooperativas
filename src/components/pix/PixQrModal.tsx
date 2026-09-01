@@ -16,6 +16,8 @@ interface PixQrModalProps {
   valor: number;
   hintAposPagamento?: string;
   onEnviarComprovante?: () => void;
+  /** Rótulo do botão após pagamento (padrão: Enviar comprovante). */
+  confirmLabel?: string;
 }
 
 export function PixQrModal({
@@ -26,6 +28,7 @@ export function PixQrModal({
   valor,
   hintAposPagamento,
   onEnviarComprovante,
+  confirmLabel = "Enviar comprovante",
 }: PixQrModalProps) {
   const [qrUrl, setQrUrl] = useState("");
   const [copied, setCopied] = useState(false);
@@ -80,7 +83,7 @@ export function PixQrModal({
         )}
         {onEnviarComprovante && (
           <Button className="w-full" onClick={onEnviarComprovante}>
-            Enviar comprovante
+            {confirmLabel}
           </Button>
         )}
       </div>

@@ -167,6 +167,13 @@ export function calcularConciliacaoMensal(
     )
   );
 
+  const debitosHbAppRepasse = round2(
+    sumBy(
+      caixaMes.lancamentos.filter((l) => l.origem === "hb_app_repasse" && l.tipo === "debito"),
+      (l) => l.valor
+    )
+  );
+
   const descontoMensPagamentos = round2(
     sumBy(pagamentosMes, (p) =>
       (p.descontosExtras ?? []).filter((d) => d.tipo === "mensalidade").reduce((s, d) => s + d.valor, 0)
@@ -310,6 +317,28 @@ export function calcularConciliacaoMensal(
         descontoContaCoop > 0
           ? "Conciliação com ledger HB Credit na nuvem — ver aba Conta Coop."
           : "Sem compras Conta Coop neste mês.",
+    },
+    {
+      id: "hb_app_repasse_caixa",
+      label: "Repasse HB (20% Conta Coop)",
+      descricao: "Débito no livro caixa por repasse confirmado à plataforma HB (taxa 20% do desconto).",
+      valorA: debitosHbAppRepasse,
+      labelA: "Pago (livro caixa)",
+      valorB: debitosHbAppRepasse,
+      labelB: "Registrado no caixa",
+      diferenca: 0,
+      status:
+        debitosHbAppRepasse > 0
+          ? "ok"
+          : descontoContaCoop > 0
+            ? "parcial"
+            : "ausente",
+      detalhe:
+        descontoContaCoop > 0 && debitosHbAppRepasse === 0
+          ? "Há movimento Conta Coop na ficha, mas repasse HB 20% ainda não confirmado no livro caixa (aba Conta Coop > Descontos)."
+          : debitosHbAppRepasse > 0
+            ? "Valor apurado na nuvem — conferir aba Conta Coop > Descontos."
+            : undefined,
     },
   ];
 

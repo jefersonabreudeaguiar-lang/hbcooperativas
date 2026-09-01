@@ -6,6 +6,9 @@ import type {
   ContaCoopCooperadoLiquidacao,
   ContaCoopCompraEstornavel,
   ContaCoopDashboard,
+  ContaCoopDashboardLancamentosMes,
+  ContaCoopAppRepasse,
+  ContaCoopAppRepassePreview,
   ContaCoopIntent,
   ContaCoopLedgerEntry,
   ContaCoopLimiteCooperado,
@@ -25,6 +28,7 @@ import type {
 import { computeDisponivel, formatCentsBRL } from "@/modules/hb-credit/engine/money";
 import { calcLimiteFromPercentual, calcTetoGlobalCents, sumCreditosBaseCents } from "@/modules/hb-credit/engine/creditBaseFromFicha";
 import { INTENT_EXPIRY_MINUTES } from "@/modules/hb-credit/config";
+import { getCurrentMesReferencia } from "@/utils/format";
 import { decryptSensitiveField, encryptSensitiveField } from "@/lib/security/fieldCrypto";
 import {
   intentStatusFromDb,
@@ -317,7 +321,80 @@ export async function getDashboardResumo(
     .from("hb_credit_transactions")
     .select("*", { count: "exact", head: true })
     .eq("cooperative_cnpj", digits)
+    .eq("status", "posted")
+    .in("event_type", ["PAYMENT", "REFUND"])
     .gte("created_at", since);
+
+  const mesReferencia = getCurrentMesReferencia();
+  const { start, end } = mesReferenciaRange(mesReferencia);
+
+  const [{ data: txsMes }, { data: recebiveisAbertos }, { data: cashbackRows }] = await Promise.all([
+    supabase
+      .from("hb_credit_transactions")
+      .select("event_type, amount_cents, discount_cents, net_receivable_cents, credit_debited_cents, status")
+      .eq("cooperative_cnpj", digits)
+      .eq("status", "posted")
+      .in("event_type", ["PAYMENT", "REFUND"])
+      .gte("created_at", start)
+      .lt("created_at", end),
+    supabase
+      .from("hb_credit_receivables")
+      .select("amount_cents, net_amount_cents, gross_amount_cents, status")
+      .eq("cooperative_cnpj", digits)
+      .in("status", ["OPEN", "ELIGIBLE", "PROCESSING"]),
+    supabase
+      .from("hb_credit_cashback_balances")
+      .select("available_cents")
+      .eq("cooperative_cnpj", digits),
+  ]);
+
+  let comprasBrutoCents = 0;
+  let comprasQtd = 0;
+  let estornosCents = 0;
+  let estornosQtd = 0;
+  let descontoMercadosCents = 0;
+  let liquidoMercadosCents = 0;
+  let creditoDebitadoCents = 0;
+
+  for (const tx of txsMes ?? []) {
+    if (tx.event_type === "PAYMENT") {
+      comprasQtd += 1;
+      const gross = Number(tx.amount_cents);
+      const discount = Number(tx.discount_cents ?? 0);
+      const net = Number(tx.net_receivable_cents ?? gross - discount);
+      const debit = Number(tx.credit_debited_cents ?? gross);
+      comprasBrutoCents += gross;
+      descontoMercadosCents += discount;
+      liquidoMercadosCents += net;
+      creditoDebitadoCents += debit;
+    } else if (tx.event_type === "REFUND") {
+      estornosQtd += 1;
+      estornosCents += Number(tx.amount_cents);
+    }
+  }
+
+  let recebivelMercadosAbertoCents = 0;
+  for (const r of recebiveisAbertos ?? []) {
+    recebivelMercadosAbertoCents += Number(r.net_amount_cents ?? r.amount_cents);
+  }
+
+  const cashbackSaldoCooperadosCents = (cashbackRows ?? []).reduce(
+    (sum, row) => sum + Number(row.available_cents ?? 0),
+    0
+  );
+
+  const lancamentosMes: ContaCoopDashboardLancamentosMes = {
+    mesReferencia,
+    comprasBrutoCents,
+    comprasQtd,
+    estornosCents,
+    estornosQtd,
+    descontoMercadosCents,
+    liquidoMercadosCents,
+    creditoDebitadoCents,
+    recebivelMercadosAbertoCents,
+    cashbackSaldoCooperadosCents,
+  };
 
   return {
     teto: {
@@ -336,6 +413,7 @@ export async function getDashboardResumo(
     },
     parceirosPendentes: pendentes ?? 0,
     transacoesRecentes: recentes ?? 0,
+    lancamentosMes,
   };
 }
 
@@ -2258,9 +2336,22 @@ export async function auditCreditIntegrity(
   const receivableTotal = (recebiveis ?? []).reduce((s, r) => s + Number(r.amount_cents), 0);
 
   if (paymentTotal !== receivableTotal) {
-    divergences.push(
-      `Utilizações confirmadas (${paymentTotal}) ≠ recebíveis criados (${receivableTotal}).`
+    const { data: recebiveisGross } = await supabase
+      .from("hb_credit_receivables")
+      .select("gross_amount_cents, amount_cents, status")
+      .eq("cooperative_cnpj", digits)
+      .neq("status", "BLOCKED_FOR_REVIEW");
+
+    const receivableGrossTotal = (recebiveisGross ?? []).reduce(
+      (s, r) => s + Number(r.gross_amount_cents ?? r.amount_cents),
+      0
     );
+
+    if (paymentTotal !== receivableGrossTotal) {
+      divergences.push(
+        `Compras confirmadas bruto (${paymentTotal}) ≠ recebíveis bruto (${receivableGrossTotal}).`
+      );
+    }
   }
 
   const distribuido = (accounts ?? []).reduce((s, r) => s + Number(r.limit_released_cents), 0);
@@ -2762,6 +2853,8 @@ export async function getDiscountPoolResumo(
   let coopLiquidado = 0;
   let appPendente = 0;
   let coopPendente = 0;
+  let appRepassePendente = 0;
+  let appRepassePago = 0;
   let totalGross = 0;
   let totalDiscount = 0;
   let totalNet = 0;
@@ -2778,6 +2871,8 @@ export async function getDiscountPoolResumo(
     totalCoop += Number(row.coop_cents);
     if (row.app_pool_status === "LIQUIDATED") appLiquidado += Number(row.app_cents);
     else if (row.app_pool_status === "PENDING") appPendente += Number(row.app_cents);
+    if (row.app_repasse_id) appRepassePago += Number(row.app_cents);
+    else if (row.app_pool_status === "LIQUIDATED") appRepassePendente += Number(row.app_cents);
     if (row.coop_pool_status === "LIQUIDATED") coopLiquidado += Number(row.coop_cents);
     else if (row.coop_pool_status === "PENDING") coopPendente += Number(row.coop_cents);
   }
@@ -2794,7 +2889,138 @@ export async function getDiscountPoolResumo(
     coopLiquidadoCents: coopLiquidado,
     appPendenteCents: appPendente,
     coopPendenteCents: coopPendente,
+    appRepassePendenteCents: appRepassePendente,
+    appRepassePagoCents: appRepassePago,
     transacoesCount: rows.length,
+  };
+}
+
+function mapAppRepasseRow(row: Record<string, unknown>): ContaCoopAppRepasse {
+  return {
+    id: String(row.id),
+    mesReferencia: String(row.mes_referencia),
+    amountCents: Number(row.amount_cents),
+    responsavelNome: String(row.responsavel_nome),
+    comprovanteMemo: row.comprovante_memo ? String(row.comprovante_memo) : null,
+    livroCaixaOrigemId: String(row.livro_caixa_origem_id),
+    paidAt: String(row.paid_at ?? row.created_at),
+  };
+}
+
+export async function getAppRepassePreview(
+  supabase: SupabaseClient,
+  cnpj: string,
+  mesReferencia: string
+): Promise<ContaCoopAppRepassePreview> {
+  const digits = normalizeCnpj(cnpj);
+
+  const { data: existing } = await supabase
+    .from("hb_credit_app_repasse")
+    .select("*")
+    .eq("cooperative_cnpj", digits)
+    .eq("mes_referencia", mesReferencia)
+    .maybeSingle();
+
+  if (existing) {
+    return {
+      mesReferencia,
+      amountCents: 0,
+      allocCount: 0,
+      alreadyPaid: true,
+      repasse: mapAppRepasseRow(existing),
+    };
+  }
+
+  const { data: rows } = await supabase
+    .from("hb_credit_discount_allocations")
+    .select("app_cents")
+    .eq("cooperative_cnpj", digits)
+    .eq("mes_referencia", mesReferencia)
+    .eq("app_pool_status", "LIQUIDATED")
+    .is("app_repasse_id", null)
+    .neq("cashback_status", "REVERSED")
+    .gt("app_cents", 0);
+
+  const amountCents = (rows ?? []).reduce((sum, row) => sum + Number(row.app_cents), 0);
+  return {
+    mesReferencia,
+    amountCents,
+    allocCount: rows?.length ?? 0,
+    alreadyPaid: false,
+    repasse: null,
+  };
+}
+
+export async function confirmAppRepasse(
+  supabase: SupabaseClient,
+  params: {
+    cnpj: string;
+    mesReferencia: string;
+    responsavelUserId: string;
+    responsavelNome: string;
+    comprovanteMemo?: string;
+  }
+): Promise<{
+  ok: boolean;
+  error?: string;
+  repasse?: ContaCoopAppRepasse;
+  livroCaixaOrigemId?: string;
+}> {
+  const repasseId = genId("apprep");
+  const { data, error } = await supabase.rpc("hb_credit_confirm_app_repasse", {
+    p_cooperative_cnpj: normalizeCnpj(params.cnpj),
+    p_mes_referencia: params.mesReferencia,
+    p_repasse_id: repasseId,
+    p_responsavel_user_id: params.responsavelUserId,
+    p_responsavel_nome: params.responsavelNome,
+    p_comprovante_memo: params.comprovanteMemo ?? null,
+  });
+
+  if (error) {
+    if (/hb_credit_app_repasse|app_repasse_id|hb_credit_confirm_app_repasse/i.test(error.message)) {
+      return { ok: false, error: "Migration de repasse HB não aplicada na nuvem." };
+    }
+    return { ok: false, error: error.message };
+  }
+
+  const payload = data as {
+    ok?: boolean;
+    error?: string;
+    repasse_id?: string;
+    amount_cents?: number;
+    livro_caixa_origem_id?: string;
+  };
+
+  if (!payload?.ok) {
+    return { ok: false, error: payload?.error ?? "Não foi possível confirmar o repasse." };
+  }
+
+  const { data: row } = await supabase
+    .from("hb_credit_app_repasse")
+    .select("*")
+    .eq("id", payload.repasse_id ?? repasseId)
+    .maybeSingle();
+
+  if (!row) {
+    return {
+      ok: true,
+      livroCaixaOrigemId: payload.livro_caixa_origem_id,
+      repasse: {
+        id: payload.repasse_id ?? repasseId,
+        mesReferencia: params.mesReferencia,
+        amountCents: Number(payload.amount_cents ?? 0),
+        responsavelNome: params.responsavelNome,
+        comprovanteMemo: params.comprovanteMemo ?? null,
+        livroCaixaOrigemId: String(payload.livro_caixa_origem_id ?? `hb_app_${repasseId}`),
+        paidAt: new Date().toISOString(),
+      },
+    };
+  }
+
+  return {
+    ok: true,
+    livroCaixaOrigemId: String(payload.livro_caixa_origem_id ?? row.livro_caixa_origem_id),
+    repasse: mapAppRepasseRow(row),
   };
 }
 

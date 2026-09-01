@@ -27,7 +27,7 @@ import { listarPagamentosAguardandoAssinatura } from "@/services/filaDoDiaServic
 import { listCooperadosComFichaNoMes, getCooperadoNomeResolvido, resolverCooperadoParaPagamento, fichaPertenceCooperado, listCooperadosDaCooperativa } from "@/services/cooperadoCloudService";
 import { resolveCooperativaCnpj, patchNotaPedidoInCloud } from "@/services/notaPedidoCloudService";
 import { mergeDescontosContaCoopNoResumo, type DescontoContaCoopRemoto } from "@/lib/hb-credit/mergeFichaDescontos";
-import { fetchFichaDescontosContaCoop } from "@/services/creditApiService";
+import { syncContaCoopDescontosMesLocal } from "@/lib/hb-credit/syncContaCoopFichaDescontos";
 import {
   pushOperacionalToCloud,
   pushNotasPagasToCloud,
@@ -467,7 +467,7 @@ export default function FichaCorridaPage() {
   const [descontosContaCoop, setDescontosContaCoop] = useState<DescontoContaCoopRemoto[]>([]);
 
   useEffect(() => {
-    if (!data || !cooperadoSelecionadoId || !mesAtivo || !user) {
+    if (!data || !cooperadoSelecionadoId || !mesAtivo || !user || !coopId) {
       setDescontosContaCoop([]);
       return;
     }
@@ -478,8 +478,14 @@ export default function FichaCorridaPage() {
           setDescontosContaCoop([]);
           return;
         }
-        const items = await fetchFichaDescontosContaCoop(cnpj, cooperadoSelecionadoId, mesAtivo);
-        setDescontosContaCoop(items);
+        const synced = await syncContaCoopDescontosMesLocal(getData(), {
+          cnpj,
+          cooperadoId: cooperadoSelecionadoId,
+          mesReferencia: mesAtivo,
+          cooperativaId: coopId,
+        });
+        setDescontosContaCoop(synced.descontos);
+        updateData(() => synced.data);
       } catch {
         setDescontosContaCoop([]);
       }
@@ -515,6 +521,8 @@ export default function FichaCorridaPage() {
   const resumoExibicao = useMemo(() => {
     if (!resumo) return null;
     if (pagamentoAguardando || (visualizandoHistorico && pagamentoConfirmadoMes)) return resumo;
+    const jaTemContaCoop = resumo.descontosExtras.some((d) => d.tipo === "conta_coop");
+    if (jaTemContaCoop || !descontosContaCoop.length) return resumo;
     return mergeDescontosContaCoopNoResumo(resumo, descontosContaCoop);
   }, [descontosContaCoop, pagamentoAguardando, pagamentoConfirmadoMes, resumo, visualizandoHistorico]);
 
@@ -668,10 +676,6 @@ export default function FichaCorridaPage() {
       descontoAvulso,
       descontoAvulsoMotivo: descontoAvulsoMotivo.trim() || undefined,
     };
-    const resumoPag = mergeDescontosContaCoopNoResumo(
-      getResumoPagamentoCooperado(data, cooperadoSelecionado.id, mesAtivo, coopId, patch),
-      descontosContaCoop
-    );
     updateData((d) => {
       const ajustesFichaMes = upsertAjustesFichaMesCooperativa(d, coopId, mesAtivo, patch);
       const comAjustes = addAuditEntry(
@@ -689,15 +693,17 @@ export default function FichaCorridaPage() {
           changes: `Mensalidade e desconto avulso aplicados a todos os cooperados · ${formatMesReferencia(mesAtivo)}`,
         }
       );
-      return addAuditEntry(registrarPagamentoCooperado(comAjustes, cooperadoSelecionado.id, mesAtivo, user.name), {
+      const resumoPag = getResumoPagamentoCooperado(comAjustes, cooperadoSelecionado.id, mesAtivo, coopId, patch);
+      return addAuditEntry(registrarPagamentoCooperado(comAjustes, cooperadoSelecionado.id, mesAtivo, user.name, resumoPag), {
         entityType: "ficha_corrida", entityId: cooperadoSelecionado.id, action: "aprovar",
-        userId: user.id, userName: user.name, changes: `Pagamento: ${formatCurrency(totalPendente)}`,
+        userId: user.id, userName: user.name, changes: `Pagamento: ${formatCurrency(resumoPag.valorLiquido)}`,
       });
     });
     void (async () => {
       const d = getData();
       const cnpj = await resolveCooperativaCnpj(d, coopId, user);
       if (!cnpj) return;
+      const resumoPag = getResumoPagamentoCooperado(d, cooperadoSelecionado.id, mesAtivo, coopId, patch);
       await pushOperacionalToCloud(cnpj, d, coopId, { authoritative: true });
       await pushNotasPagasToCloud(cnpj, resumoPag.notaPedidoIds, d);
     })();

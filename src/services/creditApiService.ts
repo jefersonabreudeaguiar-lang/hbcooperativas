@@ -486,3 +486,41 @@ export async function postSweepCashback(cnpj: string, mesReferencia: string) {
   if (!res.ok || !data.ok) throw new Error(data.error ?? "Falha ao converter cashback.");
   return data;
 }
+
+export async function fetchAppRepassePreview(cnpj: string, mesReferencia?: string) {
+  const qs = new URLSearchParams({ cnpj });
+  if (mesReferencia) qs.set("mes", mesReferencia);
+  const res = await secureApiFetch(`/api/credit/app-repasse?${qs.toString()}`);
+  const data = await parseJson<{
+    ok?: boolean;
+    error?: string;
+    preview?: import("@/modules/hb-credit/types").ContaCoopAppRepassePreview;
+  }>(res);
+  if (!res.ok || !data.ok) throw new Error(data.error ?? "Erro ao carregar repasse HB.");
+  return data.preview!;
+}
+
+export async function postConfirmAppRepasse(
+  cnpj: string,
+  mesReferencia: string,
+  opts?: { comprovanteMemo?: string; responsavelNome?: string }
+) {
+  const res = await secureApiFetch("/api/credit/app-repasse", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      cnpj,
+      mesReferencia,
+      comprovanteMemo: opts?.comprovanteMemo,
+      responsavelNome: opts?.responsavelNome,
+    }),
+  });
+  const data = await parseJson<{
+    ok?: boolean;
+    error?: string;
+    repasse?: import("@/modules/hb-credit/types").ContaCoopAppRepasse;
+    livroCaixaOrigemId?: string;
+  }>(res);
+  if (!res.ok || !data.ok) throw new Error(data.error ?? "Não foi possível confirmar repasse.");
+  return data;
+}

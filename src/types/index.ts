@@ -445,6 +445,13 @@ export interface ArquivoMensalCooperado {
   descontoAvulsoMotivo?: string;
   /** Responsável confirma pagamento da cota de ingresso. */
   cotaIngressoPaga?: boolean;
+  /** Compras Conta Coop sincronizadas da nuvem — abatem do valor líquido a receber. */
+  contaCoopDescontos?: Array<{
+    motivo: string;
+    valorReais: number;
+    tipo: "conta_coop" | "credito_avulso";
+    createdAt?: string;
+  }>;
   updatedAt: string;
 }
 
@@ -711,6 +718,7 @@ export type LivroCaixaOrigem =
   | "debito_avulso"
   | "pnae"
   | "prestacao_contas"
+  | "hb_app_repasse"
   | "outro";
 
 export interface LivroCaixaLancamento {

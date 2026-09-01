@@ -12,6 +12,19 @@ function round2(value: number): number {
   return Math.round(value * 100) / 100;
 }
 
+export function descontosContaCoopFromArquivo(
+  arquivo?: { contaCoopDescontos?: Array<{ motivo: string; valorReais: number; tipo: "conta_coop" | "credito_avulso"; createdAt?: string }> }
+): DescontoContaCoopRemoto[] {
+  return (arquivo?.contaCoopDescontos ?? [])
+    .filter((d) => d.valorReais > 0)
+    .map((d) => ({
+      motivo: d.motivo,
+      valorReais: d.valorReais,
+      tipo: "conta_coop" as const,
+      createdAt: d.createdAt ?? new Date().toISOString(),
+    }));
+}
+
 export function mergeDescontosContaCoopNoResumo(
   resumo: ResumoPagamentoCooperado,
   descontosRemotos: DescontoContaCoopRemoto[]

@@ -28,7 +28,7 @@ import {
 import { formatCentsBRL } from "@/modules/hb-credit/engine/money";
 import { buildCreditosBaseMap } from "@/modules/hb-credit/engine/creditBaseFromFicha";
 import type { ContaCoopDashboard, ContaCoopLimiteCooperado, ContaCoopParceiro } from "@/modules/hb-credit/types";
-import { cn } from "@/utils/format";
+import { cn, formatMesReferencia } from "@/utils/format";
 import { PageSkeleton } from "@/components/ui/PageSkeleton";
 
 type PreviewColetivo = {
@@ -351,9 +351,52 @@ function ContaCoopContent() {
               variant="gold"
             />
             <StatCard
-              title="Atividade"
+              title="Atividade (7 dias)"
               value={String(dashboard.transacoesRecentes)}
               subtitle={`${dashboard.parceirosPendentes} mercado(s) pendente(s)`}
+              variant="default"
+            />
+          </div>
+
+          <div className="space-y-2">
+            <div>
+              <h3 className="font-semibold text-gray-900">
+                Lançamentos — {formatMesReferencia(dashboard.lancamentosMes.mesReferencia)}
+              </h3>
+              <p className="text-sm text-gray-600">
+                Valores calculados a partir das transações confirmadas no banco (compras, estornos e recebíveis).
+              </p>
+            </div>
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+              <StatCard
+                title="Compras (bruto)"
+                value={formatCentsBRL(dashboard.lancamentosMes.comprasBrutoCents)}
+                subtitle={`${dashboard.lancamentosMes.comprasQtd} pagamento(s)`}
+                variant="default"
+              />
+              <StatCard
+                title="Estornos"
+                value={formatCentsBRL(dashboard.lancamentosMes.estornosCents)}
+                subtitle={`${dashboard.lancamentosMes.estornosQtd} estorno(s)`}
+                variant="default"
+              />
+              <StatCard
+                title="Desconto mercados"
+                value={formatCentsBRL(dashboard.lancamentosMes.descontoMercadosCents)}
+                subtitle={`Líquido mercados ${formatCentsBRL(dashboard.lancamentosMes.liquidoMercadosCents)}`}
+                variant="gold"
+              />
+              <StatCard
+                title="Crédito debitado"
+                value={formatCentsBRL(dashboard.lancamentosMes.creditoDebitadoCents)}
+                subtitle={`Cashback saldo ${formatCentsBRL(dashboard.lancamentosMes.cashbackSaldoCooperadosCents)}`}
+                variant="success"
+              />
+            </div>
+            <StatCard
+              title="A receber mercados (aberto)"
+              value={formatCentsBRL(dashboard.lancamentosMes.recebivelMercadosAbertoCents)}
+              subtitle="Recebíveis em aberto, elegíveis ou em processamento"
               variant="default"
             />
           </div>

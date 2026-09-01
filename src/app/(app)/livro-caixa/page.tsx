@@ -35,6 +35,7 @@ const ORIGEM_LABELS: Record<LivroCaixaOrigem, string> = {
   debito_avulso: "Débito avulso",
   pnae: "PNAE / contrato",
   prestacao_contas: "Prestação de contas",
+  hb_app_repasse: "Repasse HB Conta Coop (20%)",
   outro: "Outro",
 };
 

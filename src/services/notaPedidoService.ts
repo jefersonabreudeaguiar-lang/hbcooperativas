@@ -23,6 +23,11 @@ import { valoresAvulsosPendentesMes, marcarValoresAvulsosPagosMes } from "@/serv
 import { round2 } from "@/utils/calculations";
 import { gerarReciboHtml, resumoReciboFromPagamento } from "@/utils/recibo";
 import { lancarPagamentoCooperadoNoCaixa } from "@/services/livroCaixaService";
+import {
+  descontosContaCoopFromArquivo,
+  mergeDescontosContaCoopNoResumo,
+  type DescontoContaCoopRemoto,
+} from "@/lib/hb-credit/mergeFichaDescontos";
 import { fichaPreservarSemNotaLocal, notasSyncProvavelmenteCompleto } from "@/services/fichaSyncGuard";
 import { isCloudSyncInProgress } from "@/services/cloudSyncProgress";
 import { contarFotosEnviadasNota } from "@/utils/fotoEntrega";
@@ -357,9 +362,15 @@ export function upsertArquivoMensal(
   cooperativaId: string,
   mesReferencia: string,
   patch: Partial<
-    Pick<
+      Pick<
       ArquivoMensalCooperado,
-      "notaPedidoIds" | "pagamentoIds" | "mensalidadeFixa" | "descontoAvulso" | "descontoAvulsoMotivo" | "cotaIngressoPaga"
+      | "notaPedidoIds"
+      | "pagamentoIds"
+      | "mensalidadeFixa"
+      | "descontoAvulso"
+      | "descontoAvulsoMotivo"
+      | "cotaIngressoPaga"
+      | "contaCoopDescontos"
     >
   >
 ): ArquivoMensalCooperado[] {
@@ -378,6 +389,7 @@ export function upsertArquivoMensal(
       descontoAvulso: patch.descontoAvulso,
       descontoAvulsoMotivo: patch.descontoAvulsoMotivo,
       cotaIngressoPaga: patch.cotaIngressoPaga,
+      contaCoopDescontos: patch.contaCoopDescontos,
       updatedAt: now,
     };
     return [...data.arquivosMensais, novo];
@@ -396,6 +408,7 @@ export function upsertArquivoMensal(
     descontoAvulso: patch.descontoAvulso !== undefined ? patch.descontoAvulso : cur.descontoAvulso,
     descontoAvulsoMotivo: patch.descontoAvulsoMotivo !== undefined ? patch.descontoAvulsoMotivo : cur.descontoAvulsoMotivo,
     cotaIngressoPaga: patch.cotaIngressoPaga !== undefined ? patch.cotaIngressoPaga : cur.cotaIngressoPaga,
+    contaCoopDescontos: patch.contaCoopDescontos !== undefined ? patch.contaCoopDescontos : cur.contaCoopDescontos,
     updatedAt: now,
   };
   const next = [...data.arquivosMensais];
@@ -1249,7 +1262,7 @@ export function getResumoPagamentoCooperado(
     descontosExtras.filter((d) => d.tipo === "credito_avulso").reduce((s, d) => s + d.valor, 0)
   );
   const valorLiquido = round2(Math.max(0, valorEntregas - totalDescontos + totalCreditos));
-  return {
+  const base = {
     valorBruto,
     descontoCooperativa,
     descontosExtras,
@@ -1258,6 +1271,8 @@ export function getResumoPagamentoCooperado(
     fichaIds: fichas.map((f) => f.id),
     notaPedidoIds: fichas.map((f) => f.notaPedidoId),
   };
+  const contaCoopRemotos = getDescontosContaCoopRemotosCached(data, cooperadoCanonico, mesReferencia, coopId);
+  return mergeDescontosContaCoopNoResumo(base, contaCoopRemotos);
 }
 
 export type ResumoPagamentoCooperado = ReturnType<typeof getResumoPagamentoCooperado>;
@@ -1296,6 +1311,37 @@ export function getTotalRecebidoCooperado(data: AppData, cooperadoId: string, me
     return true;
   });
   return round2(entries.reduce((s, f) => s + f.valorLiquido, 0));
+}
+
+export function getDescontosContaCoopRemotosCached(
+  data: AppData,
+  cooperadoId: string,
+  mesReferencia: string,
+  cooperativaId?: string
+): DescontoContaCoopRemoto[] {
+  const coopId = cooperativaId ?? data.cooperados.find((c) => c.id === cooperadoId)?.cooperativaId;
+  const arquivo = getArquivoMensalCooperado(data, cooperadoId, mesReferencia, coopId);
+  return descontosContaCoopFromArquivo(arquivo);
+}
+
+export function persistDescontosContaCoopNoArquivo(
+  data: AppData,
+  cooperadoId: string,
+  mesReferencia: string,
+  cooperativaId: string,
+  descontos: DescontoContaCoopRemoto[]
+): AppData {
+  return {
+    ...data,
+    arquivosMensais: upsertArquivoMensal(data, cooperadoId, cooperativaId, mesReferencia, {
+      contaCoopDescontos: descontos.map((d) => ({
+        motivo: d.motivo,
+        valorReais: d.valorReais,
+        tipo: d.motivo.toLowerCase().includes("estorno") ? ("credito_avulso" as const) : ("conta_coop" as const),
+        createdAt: d.createdAt,
+      })),
+    }),
+  };
 }
 
 export function getPagamentoAguardandoCooperado(
@@ -1361,11 +1407,13 @@ export function registrarPagamentoCooperado(
   data: AppData,
   cooperadoId: string,
   mesReferencia: string,
-  responsavel: string
+  responsavel: string,
+  resumoOverride?: ResumoPagamentoCooperado
 ): AppData {
   const coopId = data.cooperados.find((c) => c.id === cooperadoId)?.cooperativaId;
   const cooperadoCanonico = resolverCooperadoIdCanonico(data, cooperadoId, coopId);
-  const resumo = getResumoPagamentoCooperado(data, cooperadoCanonico, mesReferencia, coopId);
+  const resumo =
+    resumoOverride ?? getResumoPagamentoCooperado(data, cooperadoCanonico, mesReferencia, coopId);
   if (resumo.valorLiquido <= 0 || resumo.fichaIds.length === 0) return data;
 
   const now = new Date().toISOString();
