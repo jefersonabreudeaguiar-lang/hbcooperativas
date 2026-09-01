@@ -5,6 +5,9 @@ const ALLOWED_ON = new Set(["true", "1"]);
 /** Cooperado usado nos testes de homologação da Conta Coop. */
 const CONTA_COOP_TESTE_NOME = "orlando";
 
+/** Orlando Fetisch — piloto de abatimento Conta Coop no valor a receber. */
+export const CONTA_COOP_PILOT_COOPERADO_ID = "c_1782263929381_ncp55";
+
 export const CONTA_COOP_NAV_HREFS = ["/conta-coop", "/minha-conta-coop", "/mercado-parceiro"] as const;
 
 function parsePublicFlag(): boolean {
@@ -44,6 +47,19 @@ export function isContaCoopUiVisibleForUser(
   if (isContaCoopUiPublic()) return true;
   if (user.role !== "cooperado") return true;
   return matchesOrlandoTeste(resolveContaCoopDisplayName(user, cooperadoNome));
+}
+
+/**
+ * Abate compras Conta Coop no valor a receber exibido ao cooperado.
+ * Piloto: só Orlando. Depois de validado, use NEXT_PUBLIC_CONTA_COOP_VALOR_RECEBER_PUBLIC=1 para todos.
+ */
+export function isContaCoopValorReceberPilot(cooperadoId?: string, cooperadoNome?: string): boolean {
+  if (ALLOWED_ON.has((process.env.NEXT_PUBLIC_CONTA_COOP_VALOR_RECEBER_PUBLIC ?? "").trim().toLowerCase())) {
+    return true;
+  }
+  if (cooperadoId === CONTA_COOP_PILOT_COOPERADO_ID) return true;
+  if (cooperadoNome && matchesOrlandoTeste(cooperadoNome)) return true;
+  return false;
 }
 
 export function filterContaCoopNavItems<T extends { href: string; resource?: string }>(

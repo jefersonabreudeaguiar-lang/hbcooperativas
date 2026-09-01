@@ -12,6 +12,9 @@ import {
   getResumoPagamentoExibicao,
   resumoFromPagamento,
   getValorExibicaoCooperado,
+  getDescontosExtrasExibicaoCooperado,
+  buildValorExibicaoCooperadoOpts,
+  getResumoPagamentoParaRegistro,
   registrarPagamentoCooperado,
   confirmarPagamentoCooperado,
   getPagamentoAguardandoCooperado,
@@ -27,6 +30,8 @@ import {
 import { listarPagamentosAguardandoAssinatura } from "@/services/filaDoDiaService";
 import { listCooperadosComFichaNoMes, getCooperadoNomeResolvido, resolverCooperadoParaPagamento, fichaPertenceCooperado, listCooperadosDaCooperativa } from "@/services/cooperadoCloudService";
 import { resolveCooperativaCnpj, patchNotaPedidoInCloud } from "@/services/notaPedidoCloudService";
+import { syncContaCoopDescontosMesSePilot } from "@/lib/hb-credit/syncContaCoopFichaDescontos";
+import { isContaCoopValorReceberPilot } from "@/utils/contaCoopUiVisibility";
 import {
   pushOperacionalToCloud,
   pushNotasPagasToCloud,
@@ -463,6 +468,32 @@ export default function FichaCorridaPage() {
     return getPagamentoConfirmadoMes(data, cooperadoSelecionadoId, mesAtivo);
   }, [data, cooperadoSelecionadoId, mesAtivo]);
 
+  const exibicaoOpts = useMemo(() => {
+    if (!data || !cooperadoSelecionadoId) return undefined;
+    return buildValorExibicaoCooperadoOpts(data, cooperadoSelecionadoId, mesAtivo, coopId);
+  }, [data, cooperadoSelecionadoId, mesAtivo, coopId]);
+
+  useEffect(() => {
+    if (!data || !cooperadoSelecionadoId || !mesAtivo || !user || !coopId || !exibicaoOpts) return;
+    if (!isContaCoopValorReceberPilot(cooperadoSelecionadoId, exibicaoOpts.cooperadoNome)) return;
+    void (async () => {
+      try {
+        const cnpj = await resolveCooperativaCnpj(data, coopId, user);
+        if (!cnpj) return;
+        const synced = await syncContaCoopDescontosMesSePilot(getData(), {
+          cnpj,
+          cooperadoId: cooperadoSelecionadoId,
+          mesReferencia: mesAtivo,
+          cooperativaId: coopId,
+          cooperadoNome: exibicaoOpts.cooperadoNome,
+        });
+        updateData(() => synced.data);
+      } catch {
+        /* offline ou HB indisponível */
+      }
+    })();
+  }, [coopId, cooperadoSelecionadoId, data, exibicaoOpts, mesAtivo, user]);
+
   const resumo = useMemo(() => {
     if (!data || !cooperadoSelecionadoId) return null;
     if (pagamentoAguardando) return resumoFromPagamento(pagamentoAguardando);
@@ -492,10 +523,15 @@ export default function FichaCorridaPage() {
   const resumoExibicao = resumo;
 
   const totalPendente = isCooperado
-    ? resumoExibicao
-      ? getValorExibicaoCooperado(resumoExibicao)
+    ? resumoExibicao && exibicaoOpts
+      ? getValorExibicaoCooperado(resumoExibicao, exibicaoOpts)
       : 0
     : (resumoExibicao?.valorLiquido ?? 0);
+
+  const descontosExtrasCooperado =
+    isCooperado && resumoExibicao && exibicaoOpts
+      ? getDescontosExtrasExibicaoCooperado(resumoExibicao, exibicaoOpts)
+      : [];
 
   const pagarStep: 1 | 2 | 3 | 4 = pagamentoAguardando
     ? 4
@@ -662,7 +698,13 @@ export default function FichaCorridaPage() {
           changes: `Mensalidade e desconto avulso aplicados a todos os cooperados · ${formatMesReferencia(mesAtivo)}`,
         }
       );
-      const resumoPag = getResumoPagamentoCooperado(comAjustes, cooperadoSelecionado.id, mesAtivo, coopId, patch);
+      const resumoPag = getResumoPagamentoParaRegistro(
+        getResumoPagamentoCooperado(comAjustes, cooperadoSelecionado.id, mesAtivo, coopId, patch),
+        comAjustes,
+        cooperadoSelecionado.id,
+        mesAtivo,
+        coopId
+      );
       return addAuditEntry(registrarPagamentoCooperado(comAjustes, cooperadoSelecionado.id, mesAtivo, user.name, resumoPag), {
         entityType: "ficha_corrida", entityId: cooperadoSelecionado.id, action: "aprovar",
         userId: user.id, userName: user.name, changes: `Pagamento: ${formatCurrency(resumoPag.valorLiquido)}`,
@@ -672,7 +714,13 @@ export default function FichaCorridaPage() {
       const d = getData();
       const cnpj = await resolveCooperativaCnpj(d, coopId, user);
       if (!cnpj) return;
-      const resumoPag = getResumoPagamentoCooperado(d, cooperadoSelecionado.id, mesAtivo, coopId, patch);
+      const resumoPag = getResumoPagamentoParaRegistro(
+        getResumoPagamentoCooperado(d, cooperadoSelecionado.id, mesAtivo, coopId, patch),
+        d,
+        cooperadoSelecionado.id,
+        mesAtivo,
+        coopId
+      );
       await pushOperacionalToCloud(cnpj, d, coopId, { authoritative: true });
       await pushNotasPagasToCloud(cnpj, resumoPag.notaPedidoIds, d);
     })();
@@ -1003,8 +1051,12 @@ export default function FichaCorridaPage() {
                 descontoCooperativa={resumoExibicao.descontoCooperativa}
                 descontoPadraoPct={data.config.descontoPadraoCooperativa}
                 valorEntregas={resumoExibicao.valorEntregas}
-                descontosExtras={[]}
-                totalLiquido={getValorExibicaoCooperado(resumoExibicao)}
+                descontosExtras={descontosExtrasCooperado}
+                totalLiquido={
+                  exibicaoOpts
+                    ? getValorExibicaoCooperado(resumoExibicao, exibicaoOpts)
+                    : resumoExibicao.valorEntregas
+                }
                 rotuloTotal={
                   visualizandoHistorico
                     ? "Total recebido"
@@ -1139,7 +1191,7 @@ export default function FichaCorridaPage() {
                 descontoCooperativa={resumoExibicao.descontoCooperativa}
                 descontoPadraoPct={data.config.descontoPadraoCooperativa}
                 valorEntregas={resumoExibicao.valorEntregas}
-                descontosExtras={isCooperado ? [] : resumoExibicao.descontosExtras}
+                descontosExtras={isCooperado ? descontosExtrasCooperado : resumoExibicao.descontosExtras}
                 totalLiquido={totalExibido}
                 rotuloTotal={
                   isCooperado

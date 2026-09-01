@@ -14,6 +14,8 @@ import { Select, FormField } from "@/components/ui/Form";
 import {
   getResumoPagamentoExibicao,
   getValorExibicaoCooperado,
+  getDescontosExtrasExibicaoCooperado,
+  buildValorExibicaoCooperadoOpts,
   getStatusCotaCooperado,
   getMensalidadeFixaMes,
   getArquivoMensalCooperado,
@@ -133,7 +135,14 @@ export function CooperadoFichaPanel({ cooperado }: { cooperado: Cooperado }) {
     mesFilter,
     cooperado.cooperativaId
   );
-  const totalPendente = getValorExibicaoCooperado(resumoPagamento);
+  const totalPendente = getValorExibicaoCooperado(
+    resumoPagamento,
+    buildValorExibicaoCooperadoOpts(data, cooperado.id, mesFilter, cooperado.cooperativaId)
+  );
+  const descontosExtrasExibicao = getDescontosExtrasExibicaoCooperado(
+    resumoPagamento,
+    buildValorExibicaoCooperadoOpts(data, cooperado.id, mesFilter, cooperado.cooperativaId)
+  );
   const arquivo = getArquivoMensalCooperado(data, cooperado.id, mesFilter, cooperado.cooperativaId);
   const ajustesCompartilhados = getAjustesCompartilhadosFichaMes(
     data,
@@ -159,7 +168,7 @@ export function CooperadoFichaPanel({ cooperado }: { cooperado: Cooperado }) {
               descontoCooperativa={resumoPagamento.descontoCooperativa}
               descontoPadraoPct={data.config.descontoPadraoCooperativa}
               valorEntregas={resumoPagamento.valorEntregas}
-              descontosExtras={[]}
+              descontosExtras={descontosExtrasExibicao}
               totalLiquido={totalPendente}
               rotuloTotal="Total a receber"
               tema="escuro"

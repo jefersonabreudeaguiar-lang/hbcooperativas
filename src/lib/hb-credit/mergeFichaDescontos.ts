@@ -1,6 +1,10 @@
 import type { FichaCorridaDesconto } from "@/types";
 import type { ResumoPagamentoCooperado } from "@/services/notaPedidoService";
 
+function isEstornoContaCoop(motivo: string): boolean {
+  return motivo.toLowerCase().includes("estorno");
+}
+
 export type DescontoContaCoopRemoto = {
   motivo: string;
   valorReais: number;
@@ -25,6 +29,27 @@ export function descontosContaCoopFromArquivo(
     }));
 }
 
+/** Total líquido usado na Conta Coop no mês (compras − estornos confirmados). */
+export function liquidoUsoContaCoopMes(descontos: DescontoContaCoopRemoto[]): number {
+  let compras = 0;
+  let estornos = 0;
+  for (const d of descontos) {
+    if (isEstornoContaCoop(d.motivo)) estornos += d.valorReais;
+    else compras += d.valorReais;
+  }
+  return round2(Math.max(0, compras - estornos));
+}
+
+export function descontosContaCoopLinhasExibicao(descontos: DescontoContaCoopRemoto[]): FichaCorridaDesconto[] {
+  return descontos
+    .filter((d) => d.valorReais > 0)
+    .map((d) => ({
+      tipo: isEstornoContaCoop(d.motivo) ? ("credito_avulso" as const) : ("conta_coop" as const),
+      motivo: d.motivo,
+      valor: round2(d.valorReais),
+    }));
+}
+
 export function mergeDescontosContaCoopNoResumo(
   resumo: ResumoPagamentoCooperado,
   descontosRemotos: DescontoContaCoopRemoto[]
@@ -33,7 +58,7 @@ export function mergeDescontosContaCoopNoResumo(
 
   const extras: FichaCorridaDesconto[] = [...resumo.descontosExtras];
   for (const item of descontosRemotos) {
-    const isEstorno = item.motivo.toLowerCase().includes("estorno");
+    const isEstorno = isEstornoContaCoop(item.motivo);
     extras.push({
       tipo: isEstorno ? "credito_avulso" : "conta_coop",
       motivo: item.motivo,

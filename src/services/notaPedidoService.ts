@@ -24,6 +24,13 @@ import { round2 } from "@/utils/calculations";
 import { gerarReciboHtml, resumoReciboFromPagamento } from "@/utils/recibo";
 import { lancarPagamentoCooperadoNoCaixa } from "@/services/livroCaixaService";
 import type { DescontoContaCoopRemoto } from "@/lib/hb-credit/mergeFichaDescontos";
+import {
+  descontosContaCoopFromArquivo,
+  descontosContaCoopLinhasExibicao,
+  liquidoUsoContaCoopMes,
+  mergeDescontosContaCoopNoResumo,
+} from "@/lib/hb-credit/mergeFichaDescontos";
+import { isContaCoopValorReceberPilot } from "@/utils/contaCoopUiVisibility";
 import { fichaPreservarSemNotaLocal, notasSyncProvavelmenteCompleto } from "@/services/fichaSyncGuard";
 import { isCloudSyncInProgress } from "@/services/cloudSyncProgress";
 import { contarFotosEnviadasNota } from "@/utils/fotoEntrega";
@@ -1269,9 +1276,84 @@ export function getResumoPagamentoCooperado(
   };
 }
 
-/** Valor exibido ao cooperado — soma das entregas conferidas, sem mensalidade/cota/Conta Coop. */
-export function getValorExibicaoCooperado(resumo: ResumoPagamentoCooperado): number {
-  return resumo.valorEntregas;
+/** Valor exibido ao cooperado — soma das entregas; no piloto Orlando, menos uso Conta Coop no mês. */
+export type ValorExibicaoCooperadoOpts = {
+  data: AppData;
+  cooperadoId: string;
+  mesReferencia: string;
+  cooperativaId?: string;
+  cooperadoNome?: string;
+};
+
+export function buildValorExibicaoCooperadoOpts(
+  data: AppData,
+  cooperadoId: string,
+  mesReferencia: string,
+  cooperativaId?: string
+): ValorExibicaoCooperadoOpts {
+  const coopId = cooperativaId ?? data.cooperados.find((c) => c.id === cooperadoId)?.cooperativaId;
+  const cooperadoNome = data.cooperados.find((c) => c.id === cooperadoId)?.nomeCompleto;
+  return { data, cooperadoId, mesReferencia, cooperativaId: coopId, cooperadoNome };
+}
+
+export function getDescontosContaCoopMesCached(
+  data: AppData,
+  cooperadoId: string,
+  mesReferencia: string,
+  cooperativaId?: string
+): DescontoContaCoopRemoto[] {
+  const coopId = cooperativaId ?? data.cooperados.find((c) => c.id === cooperadoId)?.cooperativaId;
+  const arquivo = getArquivoMensalCooperado(data, cooperadoId, mesReferencia, coopId);
+  return descontosContaCoopFromArquivo(arquivo);
+}
+
+export function getValorExibicaoCooperado(
+  resumo: ResumoPagamentoCooperado,
+  opts?: ValorExibicaoCooperadoOpts
+): number {
+  if (!opts || !isContaCoopValorReceberPilot(opts.cooperadoId, opts.cooperadoNome)) {
+    return resumo.valorEntregas;
+  }
+  const descontos = getDescontosContaCoopMesCached(
+    opts.data,
+    opts.cooperadoId,
+    opts.mesReferencia,
+    opts.cooperativaId
+  );
+  const uso = liquidoUsoContaCoopMes(descontos);
+  return round2(Math.max(0, resumo.valorEntregas - uso));
+}
+
+export function getDescontosExtrasExibicaoCooperado(
+  resumo: ResumoPagamentoCooperado,
+  opts?: ValorExibicaoCooperadoOpts
+): FichaCorridaDesconto[] {
+  if (!opts || !isContaCoopValorReceberPilot(opts.cooperadoId, opts.cooperadoNome)) {
+    return [];
+  }
+  const descontos = getDescontosContaCoopMesCached(
+    opts.data,
+    opts.cooperadoId,
+    opts.mesReferencia,
+    opts.cooperativaId
+  );
+  return descontosContaCoopLinhasExibicao(descontos);
+}
+
+/** Registro de pagamento pelo responsável — inclui abatimento Conta Coop no piloto. */
+export function getResumoPagamentoParaRegistro(
+  resumo: ResumoPagamentoCooperado,
+  data: AppData,
+  cooperadoId: string,
+  mesReferencia: string,
+  cooperativaId?: string
+): ResumoPagamentoCooperado {
+  const coopId = cooperativaId ?? data.cooperados.find((c) => c.id === cooperadoId)?.cooperativaId;
+  const cooperadoNome = data.cooperados.find((c) => c.id === cooperadoId)?.nomeCompleto;
+  if (!isContaCoopValorReceberPilot(cooperadoId, cooperadoNome)) return resumo;
+  const descontos = getDescontosContaCoopMesCached(data, cooperadoId, mesReferencia, coopId);
+  if (!descontos.length) return resumo;
+  return mergeDescontosContaCoopNoResumo(resumo, descontos);
 }
 
 export type ResumoPagamentoCooperado = ReturnType<typeof getResumoPagamentoCooperado>;

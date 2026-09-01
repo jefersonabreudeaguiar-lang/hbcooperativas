@@ -21,6 +21,8 @@ import {
   agregarItensFichaMes,
   getResumoPagamentoExibicao,
   getValorExibicaoCooperado,
+  getDescontosExtrasExibicaoCooperado,
+  buildValorExibicaoCooperadoOpts,
 } from "@/services/notaPedidoService";
 import type { ResumoMesEntregasCooperado } from "@/services/cooperadoEntregasService";
 import { listarResumosFotosCooperado } from "@/services/cooperadoEntregasService";
@@ -78,6 +80,16 @@ function MesFichaAccordion({
     if (!data) return 0;
     return totalValoresAvulsosPendentes(data, cooperadoId, resumo.mesReferencia, cooperativaId);
   }, [data, cooperadoId, resumo.mesReferencia, cooperativaId]);
+
+  const exibicaoOpts = useMemo(() => {
+    if (!data) return undefined;
+    return buildValorExibicaoCooperadoOpts(data, cooperadoId, resumo.mesReferencia, cooperativaId);
+  }, [data, cooperadoId, resumo.mesReferencia, cooperativaId]);
+
+  const descontosExtrasExibicao = useMemo(
+    () => (resumoPagamento ? getDescontosExtrasExibicaoCooperado(resumoPagamento, exibicaoOpts) : []),
+    [resumoPagamento, exibicaoOpts]
+  );
 
   if (!data || !resumoPagamento) return null;
 
@@ -150,9 +162,11 @@ function MesFichaAccordion({
                 descontoCooperativa={resumoPagamento.descontoCooperativa}
                 descontoPadraoPct={data.config.descontoPadraoCooperativa}
                 valorEntregas={resumoPagamento.valorEntregas}
-                descontosExtras={[]}
+                descontosExtras={descontosExtrasExibicao}
                 totalLiquido={
-                  quitado ? resumo.valorRecebido : getValorExibicaoCooperado(resumoPagamento)
+                  quitado
+                    ? resumo.valorRecebido
+                    : getValorExibicaoCooperado(resumoPagamento, exibicaoOpts)
                 }
                 rotuloTotal={quitado ? "Total recebido" : "Total líquido"}
               />
