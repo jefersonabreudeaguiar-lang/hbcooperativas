@@ -25,7 +25,7 @@ export function suggestCreditLimitsFromDeliveries(
       cooperadoId,
       suggestedLimitCents,
       source: "ficha_corrida",
-      memo: `${percentual}% do crédito pendente na ficha`,
+      memo: `${percentual}% do crédito de entregas (pendente ou já pago sem uso Conta Coop)`,
     };
   });
 }

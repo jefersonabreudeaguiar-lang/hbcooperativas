@@ -1,15 +1,92 @@
 import type { AppData } from "@/types";
-import { getTotalAPagarCooperado } from "@/services/notaPedidoService";
+import { fichaPertenceCooperado, resolverCooperadoIdCanonico } from "@/services/cooperadoCloudService";
+import {
+  fichaValidaNoExtrato,
+  getResumoPagamentoCooperado,
+  listarFichasExtratoCooperadoMes,
+} from "@/services/notaPedidoService";
+import { round2 } from "@/utils/calculations";
 import { reaisToCents } from "../shared/money";
 
-/** Crédito base do cooperado = total pendente na ficha (Quanto vou receber). */
+function sumDescontoContaCoopMes(
+  data: AppData,
+  cooperadoId: string,
+  mesReferencia: string,
+  cooperativaId?: string
+): number {
+  const coopId = cooperativaId ?? data.cooperados.find((c) => c.id === cooperadoId)?.cooperativaId;
+  const cooperadoCanonico = resolverCooperadoIdCanonico(data, cooperadoId, coopId);
+  let total = 0;
+
+  for (const f of listarFichasExtratoCooperadoMes(data, cooperadoCanonico, mesReferencia, coopId)) {
+    for (const d of f.descontosDetalhe ?? []) {
+      if (d.tipo === "conta_coop" && d.valor > 0) total += d.valor;
+    }
+  }
+
+  for (const p of data.pagamentosCooperado) {
+    if (p.mesReferencia !== mesReferencia) continue;
+    if (coopId && p.cooperativaId && p.cooperativaId !== coopId) continue;
+    const pagCanonico = resolverCooperadoIdCanonico(data, p.cooperadoId, coopId);
+    if (pagCanonico !== cooperadoCanonico) continue;
+    for (const d of p.descontosExtras ?? []) {
+      if (d.tipo === "conta_coop" && d.valor > 0) total += d.valor;
+    }
+  }
+
+  return round2(total);
+}
+
+/**
+ * Crédito base Conta Coop:
+ * — meses com ficha pendente: valor a pagar (Quanto vou receber);
+ * — meses já pagos em dinheiro: entregas conferidas menos compras Conta Coop do mês.
+ */
+export function getCreditoBaseContaCoopReais(
+  data: AppData,
+  cooperadoId: string,
+  cooperativaId?: string
+): number {
+  const coopId = cooperativaId ?? data.cooperados.find((c) => c.id === cooperadoId)?.cooperativaId;
+  const cooperadoCanonico = resolverCooperadoIdCanonico(data, cooperadoId, coopId);
+
+  const meses = [
+    ...new Set(
+      data.fichaCorrida
+        .filter(
+          (f) =>
+            fichaPertenceCooperado(data, f, cooperadoCanonico, coopId) &&
+            fichaValidaNoExtrato(data, f)
+        )
+        .map((f) => f.mesReferencia)
+    ),
+  ].sort();
+
+  let total = 0;
+  for (const mes of meses) {
+    const fichas = listarFichasExtratoCooperadoMes(data, cooperadoCanonico, mes, coopId);
+    if (!fichas.length) continue;
+
+    if (fichas.some((f) => f.status === "pendente")) {
+      total += getResumoPagamentoCooperado(data, cooperadoCanonico, mes, coopId).valorLiquido;
+      continue;
+    }
+
+    const valorEntregas = round2(fichas.reduce((s, f) => s + f.valorLiquido, 0));
+    const descontoContaCoop = sumDescontoContaCoopMes(data, cooperadoCanonico, mes, coopId);
+    total += round2(Math.max(0, valorEntregas - descontoContaCoop));
+  }
+
+  return round2(Math.max(0, total));
+}
+
+/** Crédito base do cooperado para limite Conta Coop (centavos). */
 export function getCreditoBaseCooperadoCents(
   data: AppData,
   cooperadoId: string,
   cooperativaId?: string
 ): number {
-  const reais = getTotalAPagarCooperado(data, cooperadoId, undefined, cooperativaId);
-  return reaisToCents(Math.max(0, reais));
+  return reaisToCents(getCreditoBaseContaCoopReais(data, cooperadoId, cooperativaId));
 }
 
 export function buildCreditosBaseMap(
