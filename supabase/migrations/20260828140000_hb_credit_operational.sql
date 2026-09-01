@@ -10,7 +10,7 @@ begin
   ) then
     alter table public.app_users drop constraint if exists app_users_role_check;
     alter table public.app_users add constraint app_users_role_check
-      check (role in ('admin', 'tesoureiro', 'responsavel', 'cooperado', 'parceiro'));
+      check (role in ('admin', 'tesoureiro', 'responsavel', 'cooperado', 'parceiro', 'contador'));
     alter table public.app_users add column if not exists parceiro_id text;
     create index if not exists app_users_parceiro_idx on public.app_users (parceiro_id);
   end if;

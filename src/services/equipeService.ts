@@ -3,7 +3,7 @@ import { MODULOS_ACESSO, PRESET_RELATORIOS, negarModulos, resourcesFromModulos }
 import { generateId, addAuditEntry } from "@/services/dataStore";
 import { getUserCooperativaId } from "@/utils/cooperativa";
 import { hashPasswordSync } from "@/lib/security/password";
-import { registerCloudUser } from "@/lib/security/clientSession";
+import { registerCloudUser, getLastCloudSyncError } from "@/lib/security/clientSession";
 import { normalizeCnpj } from "@/utils/cooperativa";
 
 type UsuarioActor = Pick<User, "id" | "name">;
@@ -190,9 +190,11 @@ export async function cadastrarContadorEquipeComNuvem(
   });
 
   if (!cloudOk) {
+    const detail = getLastCloudSyncError();
     return {
       ok: false,
       error:
+        detail ||
         "Não foi possível publicar o contador na nuvem. Verifique internet e Supabase (tabela app_users) e tente novamente.",
     };
   }

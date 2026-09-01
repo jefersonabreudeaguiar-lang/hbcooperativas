@@ -6,7 +6,7 @@ create table if not exists public.app_users (
   email text not null,
   password_hash text not null,
   name text not null,
-  role text not null check (role in ('admin', 'tesoureiro', 'responsavel', 'cooperado', 'parceiro')),
+  role text not null check (role in ('admin', 'tesoureiro', 'responsavel', 'cooperado', 'parceiro', 'contador')),
   cooperativa_id text,
   cooperado_id text,
   cooperativa_cnpj text,

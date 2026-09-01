@@ -59,7 +59,15 @@ async function connectPg(connectionString: string): Promise<pg.Client> {
   return client;
 }
 
-export async function applyAppUsersSchemaSql(): Promise<{ ok: true } | { ok: false; error: string }> {
+export const APP_USERS_ALLOWED_ROLES_SQL = `('admin', 'tesoureiro', 'responsavel', 'cooperado', 'parceiro', 'contador')`;
+
+const APP_USERS_ROLE_CONSTRAINT_SQL = `
+alter table public.app_users drop constraint if exists app_users_role_check;
+alter table public.app_users add constraint app_users_role_check
+  check (role in ${APP_USERS_ALLOWED_ROLES_SQL});
+`;
+
+async function runPgSql(sql: string): Promise<{ ok: true } | { ok: false; error: string }> {
   loadEnvFile(resolve(process.cwd(), ".env.local"));
 
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL ?? "";
@@ -69,11 +77,6 @@ export async function applyAppUsersSchemaSql(): Promise<{ ok: true } | { ok: fal
   }
 
   const projectRef = supabaseUrl.replace(/^https:\/\//, "").split(".")[0];
-  const sql = readFileSync(
-    resolve(process.cwd(), "supabase/migrations/APPLY_APP_USERS.sql"),
-    "utf8"
-  );
-
   let lastError = "Não foi possível conectar ao Postgres do Supabase.";
   for (const conn of buildConnectionCandidates(projectRef, dbPassword)) {
     const client = await connectPg(conn).catch(() => null);
@@ -93,4 +96,25 @@ export async function applyAppUsersSchemaSql(): Promise<{ ok: true } | { ok: fal
   }
 
   return { ok: false, error: lastError };
+}
+
+export async function applyAppUsersRoleConstraintSql(): Promise<{ ok: true } | { ok: false; error: string }> {
+  return runPgSql(APP_USERS_ROLE_CONSTRAINT_SQL);
+}
+
+export async function applyAppUsersSchemaSql(): Promise<{ ok: true } | { ok: false; error: string }> {
+  loadEnvFile(resolve(process.cwd(), ".env.local"));
+
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL ?? "";
+  const dbPassword = process.env.DATABASE_URL ?? process.env.SUPABASE_DB_PASSWORD ?? "";
+  if (!supabaseUrl || !dbPassword) {
+    return { ok: false, error: "DATABASE_URL ou SUPABASE_DB_PASSWORD não configurado." };
+  }
+
+  const sql = readFileSync(
+    resolve(process.cwd(), "supabase/migrations/APPLY_APP_USERS.sql"),
+    "utf8"
+  );
+
+  return runPgSql(sql);
 }

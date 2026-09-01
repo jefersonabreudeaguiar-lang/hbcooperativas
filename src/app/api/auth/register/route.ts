@@ -7,7 +7,7 @@ import {
 } from "@/lib/security/authRoutes";
 import { isPublicRegisterRole } from "@/lib/security/authPolicy";
 import { normalizeAuthEmail } from "@/lib/security/appCreator";
-import { logSecurityEvent, upsertAppUser } from "@/lib/supabase/usersAuth";
+import { logSecurityEvent, upsertAppUserWithRoleRepair } from "@/lib/supabase/usersAuth";
 import type { UserRole } from "@/types";
 
 const VALID_ROLES: UserRole[] = ["admin", "tesoureiro", "responsavel", "cooperado", "parceiro", "contador"];
@@ -34,7 +34,7 @@ export async function POST(request: Request) {
   }
 
   const supabase = getSupabaseAdmin()!;
-  const user = await upsertAppUser(supabase, {
+  const user = await upsertAppUserWithRoleRepair(supabase, {
     id,
     email,
     password,

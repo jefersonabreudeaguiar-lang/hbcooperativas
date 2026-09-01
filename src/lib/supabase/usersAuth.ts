@@ -73,6 +73,12 @@ export async function findAppUserByEmail(
   return null;
 }
 
+function isRoleCheckViolation(error: { code?: string; message?: string } | null): boolean {
+  if (!error) return false;
+  if (error.code === "23514") return true;
+  return /app_users_role_check|check constraint/i.test(error.message ?? "");
+}
+
 export async function upsertAppUser(
   supabase: SupabaseClient,
   input: UpsertAppUserInput
@@ -96,9 +102,28 @@ export async function upsertAppUser(
   const { data, error } = await supabase.from("app_users").upsert(row, { onConflict: "id" }).select().single();
   if (error) {
     if (isMissingTable(error)) return null;
+    if (isRoleCheckViolation(error)) {
+      throw Object.assign(new Error("APP_USERS_ROLE_CHECK"), { cause: error });
+    }
     throw error;
   }
   return data as AppUserRow;
+}
+
+/** Repara constraint de role (ex.: contador) e tenta upsert novamente. */
+export async function upsertAppUserWithRoleRepair(
+  supabase: SupabaseClient,
+  input: UpsertAppUserInput
+): Promise<AppUserRow | null> {
+  try {
+    return await upsertAppUser(supabase, input);
+  } catch (e) {
+    if (!(e instanceof Error && e.message === "APP_USERS_ROLE_CHECK")) throw e;
+    const { applyAppUsersRoleConstraintSql } = await import("@/lib/supabase/appUsersSchema");
+    const fixed = await applyAppUsersRoleConstraintSql();
+    if (!fixed.ok) return null;
+    return await upsertAppUser(supabase, input);
+  }
 }
 
 export async function verifyAppUserPassword(

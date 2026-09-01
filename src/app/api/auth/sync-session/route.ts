@@ -9,7 +9,7 @@ import {
   findAppUserByEmail,
   isAppUsersTableReady,
   logSecurityEvent,
-  upsertAppUser,
+  upsertAppUserWithRoleRepair,
   verifyAppUserPassword,
 } from "@/lib/supabase/usersAuth";
 import { applyAppUsersSchemaSql } from "@/lib/supabase/appUsersSchema";
@@ -73,7 +73,7 @@ export async function POST(request: Request) {
   if (existing) {
     const user = await verifyAppUserPassword(supabase, email, password);
     if (user) {
-      const synced = await upsertAppUser(supabase, {
+      const synced = await upsertAppUserWithRoleRepair(supabase, {
         ...profilePayload,
         id: user.id,
         name: name || user.name,
@@ -108,7 +108,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Perfil não permitido na sincronização.", code: "ROLE_DENIED" }, { status: 403 });
   }
 
-  const created = await upsertAppUser(supabase, profilePayload);
+  const created = await upsertAppUserWithRoleRepair(supabase, profilePayload);
   if (!created) {
     return NextResponse.json(
       {
