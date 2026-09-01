@@ -13,9 +13,11 @@ import { flushPendingDeliveryImages } from "@/services/offlineImageQueueService"
 import { secureApiFetch } from "@/lib/security/clientSession";
 import {
   getLastNotasSyncAt,
+  forceNextFullNotasSync,
   markNotasSyncDone,
   shouldForceFullNotasSync,
 } from "@/services/syncMetaService";
+import { precisaReparoFullSyncNotas } from "@/services/fichaSyncGuard";
 import {
   isNotaStatusDowngrade,
   isNotaStatusTerminalConferencia,
@@ -1136,11 +1138,14 @@ export async function pushNotaComFotosEmLotes(
   return { ok: true };
 }
 
-export async function syncNotasPedidoFromCloud(cnpj: string): Promise<number> {
+export async function syncNotasPedidoFromCloud(
+  cnpj: string,
+  options?: { retryFull?: boolean }
+): Promise<number> {
   if (needsOperationalResetCloudPush()) return 0;
   await flushPendingNotaDeletes(cnpj);
   const digits = normalizeCnpj(cnpj);
-  const forceFull = shouldForceFullNotasSync(digits);
+  const forceFull = options?.retryFull === true || shouldForceFullNotasSync(digits);
   const { ok, notas: cloudNotas, delta, serverWatermark, storageOnly } =
     await fetchNotasPedidoFromCloud(digits, { forceFull });
   if (!ok) return 0;
@@ -1173,6 +1178,11 @@ export async function syncNotasPedidoFromCloud(cnpj: string): Promise<number> {
   }
 
   if (delta && cloudNotas.length === 0) {
+    const coopId = resolveCoopIdFromCnpj(current, digits);
+    if (!options?.retryFull && coopId && precisaReparoFullSyncNotas(current, coopId)) {
+      forceNextFullNotasSync(digits);
+      return syncNotasPedidoFromCloud(cnpj, { retryFull: true });
+    }
     markNotasSyncDone(digits, false, [], serverWatermark);
     return 0;
   }

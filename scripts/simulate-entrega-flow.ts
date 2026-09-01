@@ -17,7 +17,12 @@ import {
   parametrosCompressaoFoto,
   resolverAbaConferenciaAtiva,
 } from "../src/utils/fotoEntrega";
-import { reconciliarFichaFromNotasConferidas, dedupeFichaCorridaPorNota, getResumoPagamentoCooperado } from "../src/services/notaPedidoService";
+import { reconciliarFichaFromNotasConferidas, dedupeFichaCorridaPorNota, getResumoPagamentoCooperado, fichaValidaNoExtrato } from "../src/services/notaPedidoService";
+import {
+  notasSyncProvavelmenteCompleto,
+  precisaReparoFullSyncNotas,
+  fichaPreservarSemNotaLocal,
+} from "../src/services/fichaSyncGuard";
 import { normalizeCnpj } from "../src/utils/cooperativa";
 import { protectNotaAgainstStatusDowngrade } from "../src/utils/notaStatus";
 
@@ -960,6 +965,14 @@ function simPruneStaleConferidasOnFullSync() {
   let comFicha = {
     ...mergedFull,
     notasPedido: [valida],
+    notasPedidoExcluidas: [
+      {
+        id: "fantasma-1",
+        cooperativaId: COOP_ID,
+        excluidaEm: new Date().toISOString(),
+        excluidaPor: "teste",
+      },
+    ],
     fichaCorrida: [
       {
         id: "fc-fant",
@@ -1003,6 +1016,46 @@ function simPruneStaleConferidasOnFullSync() {
   assert("Ficha válida permanece", comFicha.fichaCorrida.some((f) => f.notaPedidoId === "valida-1"));
 }
 
+function simFichaSyncGuardPreservaAteNotasChegarem() {
+  const fichaNuvem = {
+    id: "fc-cloud",
+    cooperadoId: COOPERADO_ID,
+    cooperativaId: COOP_ID,
+    notaPedidoId: "nota-cloud-1",
+    descricao: "Da nuvem",
+    mesReferencia: "2026-08",
+    status: "pendente" as const,
+    valorBruto: 100,
+    descontos: 5,
+    valorLiquido: 95,
+    saldoAcumulado: 95,
+    dataLancamento: "2026-08-01",
+    itens: [],
+    createdAt: new Date().toISOString(),
+  };
+  let data = {
+    ...baseAppData(),
+    notasPedido: [],
+    fichaCorrida: [fichaNuvem],
+  };
+  assert("Sync incompleto detectado", !notasSyncProvavelmenteCompleto(data, COOP_ID));
+  assert("Precisa reparo full sync notas", precisaReparoFullSyncNotas(data, COOP_ID, COOPERADO_ID));
+  assert(
+    "Ficha preservada sem nota local (sync pendente)",
+    fichaPreservarSemNotaLocal(data, fichaNuvem)
+  );
+  data = reconciliarFichaFromNotasConferidas(data);
+  assert(
+    "Reconciliar não apaga ficha antes das notas",
+    data.fichaCorrida.some((f) => f.notaPedidoId === "nota-cloud-1")
+  );
+
+  const nota = makeNota("nota-cloud-1", { status: "conferida", valorLiquido: 95, valorBruto: 100 });
+  data = reconciliarFichaFromNotasConferidas({ ...data, notasPedido: [nota] });
+  assert("Após nota conferida, ficha permanece válida", fichaValidaNoExtrato(data, fichaNuvem));
+  assert("Sync completo após notas", notasSyncProvavelmenteCompleto(data, COOP_ID));
+}
+
 // ─── Main ───────────────────────────────────────────────────────────────────
 
 console.log("=== Simulação fluxo entregas HB Cooperativas ===\n");
@@ -1030,6 +1083,7 @@ simCompactarLiberaMemoria();
 simMergeNotaComFotos();
 simRejeicaoEReenvio();
 simUmaEntregaCom25Fotos();
+simFichaSyncGuardPreservaAteNotasChegarem();
 
 console.log("\nMonte Carlo (2000 iterações)...");
 simMonteCarlo(2000);

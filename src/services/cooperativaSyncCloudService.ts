@@ -7,6 +7,8 @@ import { syncCooperadosFromCloud, fetchCooperadosFromCloud, pushCooperadoToCloud
 import { syncNotasPedidoFromCloud, patchNotaPedidoInCloud } from "@/services/notaPedidoCloudService";
 import { fetchCooperativaByCnpjFromCloud, mergeCooperativaIntoData } from "@/services/cooperativaCloudService";
 import { mergeArquivosMensaisFromCloud, reconciliarFichaFromNotasConferidas, dedupeFichaCorridaPorNota, aplicarNotasPedidoExcluidas } from "@/services/notaPedidoService";
+import { operacionalPushSeguro, precisaReparoFullSyncNotas } from "@/services/fichaSyncGuard";
+import { forceNextFullNotasSync } from "@/services/syncMetaService";
 import { sincronizarMensalidadeCooperativa, mensalidadeVisivelNoDispositivo, normalizarMensalidadeCooperadoLocal, mesclarMensalidadesPayloadNuvem, prepararMensalidadesCloud, prepararMensalidadeCloud, reconciliarMensalidadesComCooperadosCloud, mensalidadeCloudEntraNoDispositivo, enriquecerMensalidadeCooperadoSnapshot } from "@/services/mensalidadeService";
 import { aplicarPrestacoesContasExcluidas } from "@/services/prestacaoContasService";
 import { aplicarInstituicoesExcluidas } from "@/services/instituicaoContratoService";
@@ -849,6 +851,31 @@ export async function pushOperacionalToCloud(
   );
   payloadFinal.updatedAt = new Date().toISOString();
 
+  if (!bundle?.operacional) {
+    bundle = await fetchSyncBundle(digits);
+    if (cloudCooperados.length === 0) {
+      cloudCooperados = (await fetchCooperadosFromCloud(digits)).cooperados;
+    }
+  }
+  const cloudFichaCount = (bundle?.operacional?.fichaCorrida ?? []).filter(
+    (f) => f.cooperativaId === cid
+  ).length;
+  if (
+    bundle?.operacional &&
+    !operacionalPushSeguro(
+      afterPushCoop,
+      cid,
+      cloudFichaCount,
+      payloadFinal.fichaCorrida?.length ?? 0
+    )
+  ) {
+    const repaired = reconciliarFichaFromNotasConferidas(
+      mergeOperacionalIntoData(afterPushCoop, bundle.operacional, cid, cloudCooperados)
+    );
+    saveDataSafe(repaired);
+    return;
+  }
+
   try {
     await secureApiFetch("/api/cooperativa-sync", {
       method: "POST",
@@ -1001,7 +1028,30 @@ export async function syncCooperativaBackground(
     await syncNotasPedidoFromCloud(digits);
     await syncOperacionalFromCloud(digits);
     await syncContratosFromCloud(digits);
+    if (coopId) {
+      await repararIntegridadeFichaNotas(digits, coopId);
+    }
+    saveDataSafe(reconciliarFichaFromNotasConferidas(getData()));
   });
+}
+
+/**
+ * Repara desalinhamento ficha↔notas (delta vazio, relogin no celular) para qualquer cooperado.
+ */
+export async function repararIntegridadeFichaNotas(
+  cnpj: string,
+  cooperativaId: string,
+  cooperadoId?: string
+): Promise<boolean> {
+  const digits = normalizeCnpj(cnpj);
+  if (digits.length !== 14) return false;
+  const data = getData();
+  if (!precisaReparoFullSyncNotas(data, cooperativaId, cooperadoId)) return false;
+
+  forceNextFullNotasSync(digits);
+  await syncNotasPedidoFromCloud(digits, { retryFull: true });
+  await syncOperacionalFromCloud(digits);
+  return true;
 }
 
 /**

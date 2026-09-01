@@ -880,6 +880,11 @@ export async function login(email: string, password: string): Promise<User | nul
 
 export function logout(): void {
   if (typeof window !== "undefined") {
+    const session = readStoredSessionRaw();
+    if (session?.role === "cooperado") {
+      const cnpj = session.cooperativaCnpj ? normalizeCnpj(session.cooperativaCnpj) : "";
+      if (cnpj.length === 14) forceNextFullNotasSync(cnpj);
+    }
     localStorage.removeItem(SESSION_KEY);
     sessionStorage.removeItem(SESSION_KEY);
     void logoutCloudSession();

@@ -23,6 +23,7 @@ import { valoresAvulsosPendentesMes, marcarValoresAvulsosPagosMes } from "@/serv
 import { round2 } from "@/utils/calculations";
 import { gerarReciboHtml, resumoReciboFromPagamento } from "@/utils/recibo";
 import { lancarPagamentoCooperadoNoCaixa } from "@/services/livroCaixaService";
+import { fichaPreservarSemNotaLocal } from "@/services/fichaSyncGuard";
 
 export interface ItemResumoFichaMes {
   produtoInstituicaoId: string;
@@ -877,7 +878,7 @@ export function fichaNotaElegivelParaPagamento(data: AppData, ficha: FichaCorrid
 /** Ficha válida no extrato (cooperado e responsável) — amarrada a nota conferida/paga. */
 export function fichaValidaNoExtrato(data: AppData, ficha: FichaCorrida): boolean {
   const nota = data.notasPedido.find((n) => n.id === ficha.notaPedidoId);
-  if (!nota) return false;
+  if (!nota) return fichaPreservarSemNotaLocal(data, ficha);
   if (nota.status !== "conferida" && nota.status !== "pago") return false;
   if (ficha.status === "pago") return true;
   if (ficha.status === "pendente") return fichaNotaElegivelParaPagamento(data, ficha);
