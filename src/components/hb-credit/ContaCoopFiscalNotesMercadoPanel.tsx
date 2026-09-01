@@ -130,15 +130,6 @@ export function ContaCoopFiscalNotesMercadoPanel() {
         </label>
       </div>
 
-      {pendentes > 0 && (
-        <AlertBanner variant="warning" title="Notas pendentes">
-          {pendentes} venda(s) sem NF ou com correção pedida. Lance para a cooperativa liberar pagamento.
-        </AlertBanner>
-      )}
-
-      {error && <AlertBanner variant="error">{error}</AlertBanner>}
-      {success && <AlertBanner variant="info" title="Enviado">{success}</AlertBanner>}
-
       {loading ? (
         <p className="text-sm text-gray-500">Carregando vendas…</p>
       ) : vendas.length === 0 ? (
@@ -191,6 +182,16 @@ export function ContaCoopFiscalNotesMercadoPanel() {
           })}
         </ul>
       )}
+
+      <div className="space-y-3">
+        {pendentes > 0 && (
+          <AlertBanner variant="warning" title="Notas pendentes">
+            {pendentes} venda(s) sem NF ou com correção pedida. Lance para a cooperativa liberar pagamento.
+          </AlertBanner>
+        )}
+        {error && <AlertBanner variant="error">{error}</AlertBanner>}
+        {success && <AlertBanner variant="info" title="Enviado">{success}</AlertBanner>}
+      </div>
     </Card>
   );
 }

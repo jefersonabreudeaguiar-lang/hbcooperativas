@@ -31,6 +31,7 @@ import {
   partnerStatusToDb,
   receivableStatusFromDb,
 } from "@/modules/hb-credit/infrastructure/mappers/statusMapper";
+import { humanizeCreditRefundError } from "@/lib/supabase/hbCreditRefundFixSchema";
 
 /** Recebíveis em liquidação ou já pagos ao mercado não podem ser estornados. */
 const NON_REFUNDABLE_RECEIVABLE_DB = new Set(["PROCESSING", "SETTLED"]);
@@ -1752,14 +1753,14 @@ export async function approveRefundRequest(
     if (/payment_intent_id.*already exists|23505/i.test(error.message ?? "")) {
       return {
         ok: false,
-        error: "Estorno bloqueado por migration desatualizada. Aplique 20260901150000_hb_credit_refund_intent_unique_fix.sql no Supabase.",
+        error: humanizeCreditRefundError(error.message ?? ""),
       };
     }
-    return { ok: false, error: error.message };
+    return { ok: false, error: humanizeCreditRefundError(error.message) };
   }
 
   const result = data as { ok?: boolean; error?: string; disponivel_apos_centavos?: number };
-  if (!result?.ok) return { ok: false, error: result?.error ?? "Aprovação recusada." };
+  if (!result?.ok) return { ok: false, error: humanizeCreditRefundError(result?.error ?? "Aprovação recusada.") };
 
   const transacaoId = reqRow?.transaction_id ? String(reqRow.transaction_id) : null;
   if (transacaoId) {
@@ -1885,14 +1886,14 @@ export async function refundPayment(
     if (/payment_intent_id.*already exists|23505/i.test(error.message ?? "")) {
       return {
         ok: false,
-        error: "Estorno bloqueado por migration desatualizada. Aplique 20260901150000_hb_credit_refund_intent_unique_fix.sql no Supabase.",
+        error: humanizeCreditRefundError(error.message ?? ""),
       };
     }
-    return { ok: false, error: error.message };
+    return { ok: false, error: humanizeCreditRefundError(error.message) };
   }
 
   const result = data as { ok?: boolean; error?: string; disponivel_apos_centavos?: number };
-  if (!result?.ok) return { ok: false, error: result?.error ?? "Estorno recusado." };
+  if (!result?.ok) return { ok: false, error: humanizeCreditRefundError(result?.error ?? "Estorno recusado.") };
 
   try {
     const { cancelFiscalNoteForTransaction } = await import("@/lib/supabase/hbCreditFiscalNotesStorage");

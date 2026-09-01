@@ -409,32 +409,6 @@ function MercadoParceiroContent() {
         <p className="text-sm text-gray-500">Vendas com crédito interno da cooperativa</p>
       </header>
 
-      {error && <AlertBanner variant="error">{error}</AlertBanner>}
-      {success && (
-        <AlertBanner variant="info" title="Tudo certo">
-          {success}
-        </AlertBanner>
-      )}
-
-      {ativo && fiscalPendentes > 0 && (
-        <AlertBanner variant="warning" title="Notas fiscais pendentes">
-          Você tem {fiscalPendentes} venda(s) sem NF conferida em {formatMesReferencia(mesReferencia)}. Anexe as notas
-          na aba Mais para liberar o pagamento.
-        </AlertBanner>
-      )}
-
-      {pendente && (
-        <AlertBanner variant="warning" title="Aguardando aprovação">
-          O responsável da cooperativa precisa aprovar este mercado antes de criar cobranças.
-        </AlertBanner>
-      )}
-
-      {parceiro?.status === "bloqueado" && (
-        <AlertBanner variant="error" title="Mercado bloqueado">
-          Novas cobranças estão suspensas. Histórico anterior permanece intacto.
-        </AlertBanner>
-      )}
-
       <ContaCoopSegmentTabs
         tabs={[
           { id: "inicio", label: "Início" },
@@ -868,6 +842,31 @@ function MercadoParceiroContent() {
           </Card>
         </div>
       )}
+
+      <div className="space-y-3 pt-1">
+        {error && <AlertBanner variant="error">{error}</AlertBanner>}
+        {success && (
+          <AlertBanner variant="info" title="Tudo certo">
+            {success}
+          </AlertBanner>
+        )}
+        {ativo && fiscalPendentes > 0 && (
+          <AlertBanner variant="warning" title="Notas fiscais pendentes">
+            Você tem {fiscalPendentes} venda(s) sem NF conferida em {formatMesReferencia(mesReferencia)}. Anexe as notas
+            na aba Mais para liberar o pagamento.
+          </AlertBanner>
+        )}
+        {pendente && (
+          <AlertBanner variant="warning" title="Aguardando aprovação">
+            O responsável da cooperativa precisa aprovar este mercado antes de criar cobranças.
+          </AlertBanner>
+        )}
+        {parceiro?.status === "bloqueado" && (
+          <AlertBanner variant="error" title="Mercado bloqueado">
+            Novas cobranças estão suspensas. Histórico anterior permanece intacto.
+          </AlertBanner>
+        )}
+      </div>
     </div>
   );
 }

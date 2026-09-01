@@ -205,13 +205,6 @@ export function ContaCoopEstornosPanel({ cnpj, parceiros, cooperadoNome }: Conta
         </div>
       </Card>
 
-      {error && <AlertBanner variant="error">{error}</AlertBanner>}
-      {success && (
-        <AlertBanner variant="info" title="Concluído">
-          {success}
-        </AlertBanner>
-      )}
-
       {!loading && solicitacoesPendentes.length > 0 && (
         <Card className="space-y-3 !p-5 border-amber-200 bg-amber-50/40">
           <div>
@@ -316,6 +309,15 @@ export function ContaCoopEstornosPanel({ cnpj, parceiros, cooperadoNome }: Conta
           ))}
         </div>
       )}
+
+      <div className="space-y-3">
+        {error && <AlertBanner variant="error">{error}</AlertBanner>}
+        {success && (
+          <AlertBanner variant="info" title="Concluído">
+            {success}
+          </AlertBanner>
+        )}
+      </div>
     </div>
   );
 }
