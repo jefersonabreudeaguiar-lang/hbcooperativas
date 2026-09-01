@@ -29,6 +29,7 @@ import {
   mergeDescontosContaCoopNoResumo,
 } from "@/lib/hb-credit/mergeFichaDescontos";
 import { isContaCoopValorReceberPilot } from "@/utils/contaCoopUiVisibility";
+import { formatMesesReferenciaRotulo } from "@/utils/format";
 import { fichaPreservarSemNotaLocal, notasSyncProvavelmenteCompleto } from "@/services/fichaSyncGuard";
 import { isCloudSyncInProgress } from "@/services/cloudSyncProgress";
 import { contarFotosEnviadasNota } from "@/utils/fotoEntrega";
@@ -79,6 +80,33 @@ export function agregarItensFichaMes(
   const valorBruto = round2(itens.reduce((s, i) => s + i.valorBruto, 0));
 
   return { itens, entregas: fichas.length, valorBruto };
+}
+
+/** Consolida itens de vários meses (pagamento único). */
+export function agregarItensFichaMeses(
+  data: AppData,
+  cooperadoId: string,
+  mesesReferencia: string[],
+  cooperativaId?: string
+): { itens: ItemResumoFichaMes[]; entregas: number; valorBruto: number } {
+  const map = new Map<string, ItemResumoFichaMes>();
+  let entregas = 0;
+  for (const mes of mesesReferencia) {
+    const parcial = agregarItensFichaMes(data, cooperadoId, mes, cooperativaId);
+    entregas += parcial.entregas;
+    for (const item of parcial.itens) {
+      const existente = map.get(item.produtoInstituicaoId);
+      if (existente) {
+        existente.quantidade = round2(existente.quantidade + item.quantidade);
+        existente.valorBruto = round2(existente.valorBruto + item.valorBruto);
+      } else {
+        map.set(item.produtoInstituicaoId, { ...item });
+      }
+    }
+  }
+  const itens = [...map.values()].sort((a, b) => a.produtoNome.localeCompare(b.produtoNome, "pt-BR"));
+  const valorBruto = round2(itens.reduce((s, i) => s + i.valorBruto, 0));
+  return { itens, entregas, valorBruto };
 }
 
 /** Itens conferidos do cooperado nas notas (usa ficha dividida quando existir). */
@@ -1420,6 +1448,85 @@ export function persistDescontosContaCoopNoArquivo(
   };
 }
 
+export function getMesesReferenciaPagamento(pagamento: PagamentoCooperadoRegistro): string[] {
+  if (pagamento.mesesReferencia?.length) {
+    return [...pagamento.mesesReferencia].sort();
+  }
+  return [pagamento.mesReferencia];
+}
+
+export function pagamentoCobreMesReferencia(
+  pagamento: PagamentoCooperadoRegistro,
+  mesReferencia: string
+): boolean {
+  return getMesesReferenciaPagamento(pagamento).includes(mesReferencia);
+}
+
+/** Soma resumos de todos os meses pendentes (PIX único). */
+export function getResumoPagamentoConsolidadoCooperado(
+  data: AppData,
+  cooperadoId: string,
+  mesesReferencia: string[],
+  cooperativaId?: string,
+  ajustesPorMes?: Record<string, AjustesResumoPagamento>
+): ResumoPagamentoCooperado {
+  const meses = [...mesesReferencia].sort();
+  if (!meses.length) {
+    return {
+      valorBruto: 0,
+      descontoCooperativa: 0,
+      descontosExtras: [],
+      valorEntregas: 0,
+      valorLiquido: 0,
+      fichaIds: [],
+      notaPedidoIds: [],
+    };
+  }
+  if (meses.length === 1) {
+    const base = getResumoPagamentoCooperado(
+      data,
+      cooperadoId,
+      meses[0],
+      cooperativaId,
+      ajustesPorMes?.[meses[0]]
+    );
+    return getResumoPagamentoParaRegistro(base, data, cooperadoId, meses[0], cooperativaId);
+  }
+
+  const coopId = cooperativaId ?? data.cooperados.find((c) => c.id === cooperadoId)?.cooperativaId;
+  let valorBruto = 0;
+  let descontoCooperativa = 0;
+  let valorEntregas = 0;
+  let valorLiquido = 0;
+  const descontosExtras: FichaCorridaDesconto[] = [];
+  const fichaIds: string[] = [];
+  const notaPedidoIds: string[] = [];
+
+  for (const mes of meses) {
+    const base = getResumoPagamentoCooperado(data, cooperadoId, mes, coopId, ajustesPorMes?.[mes]);
+    const r = getResumoPagamentoParaRegistro(base, data, cooperadoId, mes, coopId);
+    valorBruto = round2(valorBruto + r.valorBruto);
+    descontoCooperativa = round2(descontoCooperativa + r.descontoCooperativa);
+    valorEntregas = round2(valorEntregas + r.valorEntregas);
+    valorLiquido = round2(valorLiquido + r.valorLiquido);
+    descontosExtras.push(...r.descontosExtras);
+    fichaIds.push(...r.fichaIds);
+    for (const id of r.notaPedidoIds) {
+      if (!notaPedidoIds.includes(id)) notaPedidoIds.push(id);
+    }
+  }
+
+  return {
+    valorBruto,
+    descontoCooperativa,
+    descontosExtras,
+    valorEntregas,
+    valorLiquido,
+    fichaIds,
+    notaPedidoIds,
+  };
+}
+
 export function getPagamentoAguardandoCooperado(
   data: AppData,
   cooperadoId: string,
@@ -1433,7 +1540,7 @@ export function getPagamentoAguardandoCooperado(
         p.cooperadoId === canonico ||
         resolverCooperadoIdCanonico(data, p.cooperadoId, coopId ?? p.cooperativaId) === canonico) &&
       p.status === "aguardando_confirmacao" &&
-      (!mesReferencia || p.mesReferencia === mesReferencia)
+      (!mesReferencia || pagamentoCobreMesReferencia(p, mesReferencia))
   );
 }
 
@@ -1484,23 +1591,33 @@ export function registrarPagamentoCooperado(
   cooperadoId: string,
   mesReferencia: string,
   responsavel: string,
-  resumoOverride?: ResumoPagamentoCooperado
+  resumoOverride?: ResumoPagamentoCooperado,
+  opts?: { mesesReferencia?: string[] }
 ): AppData {
   const coopId = data.cooperados.find((c) => c.id === cooperadoId)?.cooperativaId;
   const cooperadoCanonico = resolverCooperadoIdCanonico(data, cooperadoId, coopId);
+  const mesesPagamento = opts?.mesesReferencia?.length
+    ? [...opts.mesesReferencia].sort()
+    : [mesReferencia];
+  const mesPrincipal = mesesPagamento[0] ?? mesReferencia;
   const resumo =
-    resumoOverride ?? getResumoPagamentoCooperado(data, cooperadoCanonico, mesReferencia, coopId);
+    resumoOverride ??
+    (mesesPagamento.length > 1
+      ? getResumoPagamentoConsolidadoCooperado(data, cooperadoCanonico, mesesPagamento, coopId)
+      : getResumoPagamentoCooperado(data, cooperadoCanonico, mesPrincipal, coopId));
   if (resumo.valorLiquido <= 0 || resumo.fichaIds.length === 0) return data;
 
   const now = new Date().toISOString();
   const cooperado = data.cooperados.find((c) => c.id === cooperadoCanonico);
   const coopIdResolved = cooperado?.cooperativaId ?? coopId ?? "";
+  const mesLabel = formatMesesReferenciaRotulo(mesesPagamento);
 
   const pagamento: PagamentoCooperadoRegistro = {
     id: `pg_${Date.now()}`,
     cooperativaId: coopIdResolved,
     cooperadoId: cooperadoCanonico,
-    mesReferencia,
+    mesReferencia: mesPrincipal,
+    mesesReferencia: mesesPagamento.length > 1 ? mesesPagamento : undefined,
     valorBruto: resumo.valorBruto,
     descontoCooperativa: resumo.descontoCooperativa,
     descontosExtras: resumo.descontosExtras,
@@ -1514,15 +1631,18 @@ export function registrarPagamentoCooperado(
     updatedAt: now,
   };
 
-  let next = marcarFichaComoPaga(data, cooperadoCanonico, mesReferencia, responsavel);
-  next = marcarValoresAvulsosPagosMes(next, cooperadoCanonico, mesReferencia, coopIdResolved);
+  let next = data;
+  for (const mes of mesesPagamento) {
+    next = marcarFichaComoPaga(next, cooperadoCanonico, mes, responsavel);
+    next = marcarValoresAvulsosPagosMes(next, cooperadoCanonico, mes, coopIdResolved);
+  }
 
   const comunicado: Comunicado = {
     id: `cm_${Date.now()}`,
     cooperativaId: coopIdResolved,
     cooperadoId: cooperadoCanonico,
     titulo: "Pagamento realizado",
-    descricao: `A cooperativa registrou o pagamento de ${resumo.valorLiquido.toFixed(2).replace(".", ",")} referente a ${mesReferencia}. Abra Quanto vou receber, confirme o recebimento e assine o recibo.`,
+    descricao: `A cooperativa registrou o pagamento de ${resumo.valorLiquido.toFixed(2).replace(".", ",")} referente a ${mesLabel}. Abra Quanto vou receber, confirme o recebimento e assine o recibo.`,
     data: now.split("T")[0],
     responsavel,
     categoria: "financeiro",
@@ -1536,10 +1656,16 @@ export function registrarPagamentoCooperado(
     ...next,
     pagamentosCooperado: [...next.pagamentosCooperado, pagamento],
     comunicados: [...next.comunicados, comunicado],
-    arquivosMensais: upsertArquivoMensal(next, cooperadoCanonico, coopIdResolved, mesReferencia, {
-      notaPedidoIds: resumo.notaPedidoIds,
-    }),
   };
+
+  for (const mes of mesesPagamento) {
+    next = {
+      ...next,
+      arquivosMensais: upsertArquivoMensal(next, cooperadoCanonico, coopIdResolved, mes, {
+        notaPedidoIds: resumo.notaPedidoIds,
+      }),
+    };
+  }
 
   return lancarPagamentoCooperadoNoCaixa(next, pagamento);
 }
@@ -1563,7 +1689,12 @@ export function confirmarPagamentoCooperado(
     status: "confirmado" as const,
     updatedAt: now,
   };
-  const itensMes = agregarItensFichaMes(data, pagamento.cooperadoId, pagamento.mesReferencia, pagamento.cooperativaId);
+  const itensMes = agregarItensFichaMeses(
+    data,
+    pagamento.cooperadoId,
+    getMesesReferenciaPagamento(pagamento),
+    pagamento.cooperativaId
+  );
   const resumoRecibo = resumoReciboFromPagamento(draft, itensMes);
   const reciboHtml = gerarReciboHtml(
     draft,
@@ -1582,12 +1713,17 @@ export function confirmarPagamentoCooperado(
   let next: AppData = {
     ...data,
     pagamentosCooperado,
-    arquivosMensais: upsertArquivoMensal(data, pagamento.cooperadoId, pagamento.cooperativaId, pagamento.mesReferencia, {
-      pagamentoIds: [pagamentoId],
-    }),
   };
 
-  next = marcarFichaComoPaga(next, pagamento.cooperadoId, pagamento.mesReferencia, pagamento.pagoPor ?? "Cooperativa");
+  for (const mes of getMesesReferenciaPagamento(pagamento)) {
+    next = marcarFichaComoPaga(next, pagamento.cooperadoId, mes, pagamento.pagoPor ?? "Cooperativa");
+    next = {
+      ...next,
+      arquivosMensais: upsertArquivoMensal(next, pagamento.cooperadoId, pagamento.cooperativaId, mes, {
+        pagamentoIds: [pagamentoId],
+      }),
+    };
+  }
 
   const coopId = pagamento.cooperativaId;
   const canonico = resolverCooperadoIdCanonico(next, pagamento.cooperadoId, coopId);

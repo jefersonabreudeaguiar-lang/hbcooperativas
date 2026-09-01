@@ -2,9 +2,9 @@ import type { AppData, PagamentoCooperadoRegistro } from "@/types";
 import { notaPertenceCooperativa } from "@/utils/fotoEntrega";
 import { contarItensCatalogo } from "@/services/catalogoContratosService";
 import { cooperadoPendentePagamentoResponsavel } from "@/services/cooperadoEntregasService";
-import { listCooperadosComFichaNoMes } from "@/services/cooperadoCloudService";
+import { listCooperadosDaCooperativa } from "@/services/cooperadoCloudService";
 import { getCurrentMesReferencia } from "@/utils/format";
-import { idsNotasPedidoExcluidas } from "@/services/notaPedidoService";
+import { idsNotasPedidoExcluidas, pagamentoCobreMesReferencia } from "@/services/notaPedidoService";
 import { isNotaNaFilaConferenciaResponsavel } from "@/utils/notaStatus";
 
 export type FilaDoDiaItem = {
@@ -38,8 +38,8 @@ export function getFilaDoDia(data: AppData, coopId: string | undefined, mes = ge
     (p) => p.cooperativaId === coopId && p.status === "aguardando_confirmacao"
   ).length;
 
-  const cooperadosPagar = listCooperadosComFichaNoMes(data, coopId, mes).filter((c) =>
-    cooperadoPendentePagamentoResponsavel(data, c.id, mes, coopId)
+  const cooperadosPagar = listCooperadosDaCooperativa(data, coopId).filter((c) =>
+    cooperadoPendentePagamentoResponsavel(data, c.id, undefined, coopId)
   ).length;
 
   const itensCatalogo = contarItensCatalogo(data, coopId);
@@ -125,7 +125,7 @@ export function listarPagamentosAguardandoAssinatura(
       (p) =>
         p.cooperativaId === coopId &&
         p.status === "aguardando_confirmacao" &&
-        (!mes || p.mesReferencia === mes)
+        (!mes || pagamentoCobreMesReferencia(p, mes))
     )
     .sort((a, b) => b.pagoEm.localeCompare(a.pagoEm));
 }

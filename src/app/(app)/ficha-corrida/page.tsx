@@ -8,13 +8,11 @@ import { useAppData } from "@/hooks/useAppData";
 import { usePermissions } from "@/hooks/usePermissions";
 import { getUserCooperativaId } from "@/utils/cooperativa";
 import {
-  getResumoPagamentoCooperado,
   getResumoPagamentoExibicao,
   resumoFromPagamento,
   getValorExibicaoCooperado,
   getDescontosExtrasExibicaoCooperado,
   buildValorExibicaoCooperadoOpts,
-  getResumoPagamentoParaRegistro,
   registrarPagamentoCooperado,
   confirmarPagamentoCooperado,
   getPagamentoAguardandoCooperado,
@@ -26,6 +24,9 @@ import {
   aplicarAjustesFichaMesTodosCooperados,
   upsertAjustesFichaMesCooperativa,
   agregarItensFichaMes,
+  agregarItensFichaMeses,
+  getResumoPagamentoConsolidadoCooperado,
+  getMesesReferenciaPagamento,
 } from "@/services/notaPedidoService";
 import { listarPagamentosAguardandoAssinatura } from "@/services/filaDoDiaService";
 import { listCooperadosComFichaNoMes, getCooperadoNomeResolvido, resolverCooperadoParaPagamento, fichaPertenceCooperado, listCooperadosDaCooperativa } from "@/services/cooperadoCloudService";
@@ -42,6 +43,7 @@ import {
   cooperadoPendentePagamentoResponsavel,
   getMesPrincipalQuantoVouReceber,
   getValorQuantoVouReceber,
+  listarMesesPendentesPagamentoResponsavel,
   getPagamentoConfirmadoMes,
   listarMesesPagosCooperado,
 } from "@/services/cooperadoEntregasService";
@@ -73,7 +75,7 @@ import { cooperadoPrecisaCadastrarPix } from "@/utils/pix";
 import { baixarRecibo, resumoReciboFromPagamento, nomeArquivoRecibo } from "@/utils/recibo";
 import { updateData, addAuditEntry, getData } from "@/services/dataStore";
 import { requestAppSync } from "@/services/syncRequest";
-import { formatCurrency, formatDate, formatMesReferencia, getCurrentMesReferencia, cn } from "@/utils/format";
+import { formatCurrency, formatDate, formatMesReferencia, formatMesesReferenciaRotulo, getCurrentMesReferencia, cn } from "@/utils/format";
 import type { PagamentoCooperadoRegistro, FichaCorrida, NotaPedido } from "@/types";
 
 function TabelaResumoItens({
@@ -235,26 +237,36 @@ export default function FichaCorridaPage() {
 
   const cooperadosParaPagar = useMemo(() => {
     if (!data || !coopId) return [];
-    return cooperadosComFicha.filter((c) =>
-      cooperadoPendentePagamentoResponsavel(data, c.id, mesAtivo, coopId)
+    return listCooperadosDaCooperativa(data, coopId).filter((c) =>
+      cooperadoPendentePagamentoResponsavel(data, c.id, undefined, coopId)
     );
-  }, [data, coopId, mesAtivo, cooperadosComFicha]);
+  }, [data, coopId]);
 
   const pagamentosAguardandoAssinatura = useMemo(() => {
     if (!data || !coopId) return [];
-    return listarPagamentosAguardandoAssinatura(data, coopId, mesAtivo);
-  }, [data, coopId, mesAtivo]);
+    return listarPagamentosAguardandoAssinatura(data, coopId);
+  }, [data, coopId]);
 
   const cooperadosNoSelect = !isCooperado && aba === "pagar" ? cooperadosParaPagar : cooperadosComFicha;
 
   useEffect(() => {
     if (isCooperado || aba !== "pagar" || !cooperadoFilter || !data || !coopId) return;
-    if (!cooperadoPendentePagamentoResponsavel(data, cooperadoFilter, mesAtivo, coopId)) {
+    if (!cooperadoPendentePagamentoResponsavel(data, cooperadoFilter, undefined, coopId)) {
       setCooperadoFilter("");
     }
   }, [isCooperado, aba, cooperadoFilter, data, coopId, mesAtivo]);
 
   const cooperadoSelecionadoId = isCooperado ? cooperadoId : cooperadoFilter;
+
+  const mesesPendentesPagamento = useMemo(() => {
+    if (!data || !cooperadoSelecionadoId || isCooperado) return [];
+    return listarMesesPendentesPagamentoResponsavel(data, cooperadoSelecionadoId, coopId);
+  }, [coopId, cooperadoSelecionadoId, data, isCooperado]);
+
+  const resumoPagamentoConsolidado = useMemo(() => {
+    if (!data || !cooperadoSelecionadoId || isCooperado || !mesesPendentesPagamento.length) return null;
+    return getResumoPagamentoConsolidadoCooperado(data, cooperadoSelecionadoId, mesesPendentesPagamento, coopId);
+  }, [coopId, cooperadoSelecionadoId, data, isCooperado, mesesPendentesPagamento]);
 
   useEffect(() => {
     setLancamentosPagarExpandido(false);
@@ -436,13 +448,17 @@ export default function FichaCorridaPage() {
 
   const fichasPendentesMes = useMemo(() => {
     if (!data || !cooperadoSelecionadoId) return [];
+    const meses =
+      !isCooperado && aba === "pagar" && mesesPendentesPagamento.length
+        ? mesesPendentesPagamento
+        : [mesAtivo];
     return data.fichaCorrida.filter(
       (f) =>
         fichaPertenceCooperado(data, f, cooperadoSelecionadoId, coopId) &&
-        f.mesReferencia === mesAtivo &&
+        meses.includes(f.mesReferencia) &&
         f.status === "pendente"
     );
-  }, [data, cooperadoSelecionadoId, mesAtivo, coopId]);
+  }, [data, cooperadoSelecionadoId, mesAtivo, coopId, isCooperado, aba, mesesPendentesPagamento]);
 
   const cooperadosParaDivisao = useMemo(() => {
     if (!data || !coopId || !cooperadoSelecionadoId) return [];
@@ -465,8 +481,32 @@ export default function FichaCorridaPage() {
 
   const pagamentoAguardando = useMemo(() => {
     if (!data || !cooperadoSelecionadoId) return undefined;
-    return getPagamentoAguardandoCooperado(data, cooperadoSelecionadoId, mesAtivo);
-  }, [data, cooperadoSelecionadoId, mesAtivo]);
+    return getPagamentoAguardandoCooperado(data, cooperadoSelecionadoId);
+  }, [data, cooperadoSelecionadoId]);
+
+  const resumoItensPagamento = useMemo(() => {
+    if (!data || !cooperadoSelecionadoId) return resumoItensMes;
+    if (pagamentoAguardando) {
+      return agregarItensFichaMeses(
+        data,
+        cooperadoSelecionadoId,
+        getMesesReferenciaPagamento(pagamentoAguardando),
+        coopId
+      );
+    }
+    if (!isCooperado && mesesPendentesPagamento.length > 1) {
+      return agregarItensFichaMeses(data, cooperadoSelecionadoId, mesesPendentesPagamento, coopId);
+    }
+    return resumoItensMes;
+  }, [
+    coopId,
+    data,
+    cooperadoSelecionadoId,
+    isCooperado,
+    mesesPendentesPagamento,
+    pagamentoAguardando,
+    resumoItensMes,
+  ]);
 
   const pagamentoConfirmadoMes = useMemo(() => {
     if (!data || !cooperadoSelecionadoId) return undefined;
@@ -496,6 +536,9 @@ export default function FichaCorridaPage() {
     if (visualizandoHistorico && pagamentoConfirmadoMes) {
       return resumoFromPagamento(pagamentoConfirmadoMes);
     }
+    if (!isCooperado && resumoPagamentoConsolidado) {
+      return resumoPagamentoConsolidado;
+    }
     return getResumoPagamentoExibicao(
       data,
       cooperadoSelecionadoId,
@@ -514,6 +557,7 @@ export default function FichaCorridaPage() {
     pagamentoAguardando,
     visualizandoHistorico,
     pagamentoConfirmadoMes,
+    resumoPagamentoConsolidado,
   ]);
 
   const resumoExibicao = resumo;
@@ -524,7 +568,9 @@ export default function FichaCorridaPage() {
         ? getValorExibicaoCooperado(resumoExibicao, exibicaoOpts)
         : 0
       : (valorReceberConsolidado?.valor ?? 0)
-    : (resumoExibicao?.valorLiquido ?? 0);
+    : pagamentoAguardando
+      ? pagamentoAguardando.valorLiquido
+      : (resumoPagamentoConsolidado?.valorLiquido ?? 0);
 
   const descontosExtrasCooperado =
     isCooperado && resumoExibicao && exibicaoOpts
@@ -545,8 +591,8 @@ export default function FichaCorridaPage() {
 
   const pendentePagamentoResponsavel = useMemo(() => {
     if (!data || !cooperadoSelecionadoId) return false;
-    return cooperadoPendentePagamentoResponsavel(data, cooperadoSelecionadoId, mesAtivo, coopId);
-  }, [data, cooperadoSelecionadoId, mesAtivo, coopId]);
+    return cooperadoPendentePagamentoResponsavel(data, cooperadoSelecionadoId, undefined, coopId);
+  }, [data, cooperadoSelecionadoId, coopId]);
 
   const descontosRegistradosMes = useMemo(() => {
     if (!data || !cooperadoSelecionadoId) return [];
@@ -555,8 +601,8 @@ export default function FichaCorridaPage() {
 
   const resumoReciboPagamento = useMemo(() => {
     if (!pagamentoAguardando) return null;
-    return resumoReciboFromPagamento(pagamentoAguardando, resumoItensMes);
-  }, [pagamentoAguardando, resumoItensMes]);
+    return resumoReciboFromPagamento(pagamentoAguardando, resumoItensPagamento);
+  }, [pagamentoAguardando, resumoItensPagamento]);
 
   const handlePixInvalido = () => {
     if (!cooperadoSelecionado || !user || !motivoPix.trim()) return;
@@ -672,6 +718,8 @@ export default function FichaCorridaPage() {
 
   const handleConfirmarPagamento = () => {
     if (!cooperadoSelecionado || !user || !data || !coopId || totalPendente <= 0) return;
+    const mesesPagar = mesesPendentesPagamento.length ? mesesPendentesPagamento : [mesAtivo];
+    const mesPrincipal = mesesPagar[0];
     const mensalidadeFixa = parseFloat(mensalidadeInput.replace(",", ".")) || 0;
     const descontoAvulso = parseFloat(descontoAvulsoInput.replace(",", ".")) || 0;
     const patch = {
@@ -680,44 +728,61 @@ export default function FichaCorridaPage() {
       descontoAvulsoMotivo: descontoAvulsoMotivo.trim() || undefined,
     };
     updateData((d) => {
-      const ajustesFichaMes = upsertAjustesFichaMesCooperativa(d, coopId, mesAtivo, patch);
-      const comAjustes = addAuditEntry(
-        {
-          ...d,
+      let comAjustes = d;
+      for (const mes of mesesPagar) {
+        const ajustesFichaMes = upsertAjustesFichaMesCooperativa(comAjustes, coopId, mes, patch);
+        comAjustes = {
+          ...comAjustes,
           ajustesFichaMes,
-          arquivosMensais: aplicarAjustesFichaMesTodosCooperados({ ...d, ajustesFichaMes }, coopId, mesAtivo, patch),
-        },
+          arquivosMensais: aplicarAjustesFichaMesTodosCooperados(
+            { ...comAjustes, ajustesFichaMes },
+            coopId,
+            mes,
+            patch
+          ),
+        };
+      }
+      comAjustes = addAuditEntry(comAjustes, {
+        entityType: "ficha_corrida",
+        entityId: cooperadoSelecionado.id,
+        action: "editar",
+        userId: user.id,
+        userName: user.name,
+        changes: `Mensalidade e desconto avulso aplicados · ${formatMesesReferenciaRotulo(mesesPagar)}`,
+      });
+      const ajustesPorMes = Object.fromEntries(mesesPagar.map((mes) => [mes, patch]));
+      const resumoPag = getResumoPagamentoConsolidadoCooperado(
+        comAjustes,
+        cooperadoSelecionado.id,
+        mesesPagar,
+        coopId,
+        ajustesPorMes
+      );
+      return addAuditEntry(
+        registrarPagamentoCooperado(comAjustes, cooperadoSelecionado.id, mesPrincipal, user.name, resumoPag, {
+          mesesReferencia: mesesPagar,
+        }),
         {
           entityType: "ficha_corrida",
           entityId: cooperadoSelecionado.id,
-          action: "editar",
+          action: "aprovar",
           userId: user.id,
           userName: user.name,
-          changes: `Mensalidade e desconto avulso aplicados a todos os cooperados · ${formatMesReferencia(mesAtivo)}`,
+          changes: `Pagamento consolidado (${formatMesesReferenciaRotulo(mesesPagar)}): ${formatCurrency(resumoPag.valorLiquido)}`,
         }
       );
-      const resumoPag = getResumoPagamentoParaRegistro(
-        getResumoPagamentoCooperado(comAjustes, cooperadoSelecionado.id, mesAtivo, coopId, patch),
-        comAjustes,
-        cooperadoSelecionado.id,
-        mesAtivo,
-        coopId
-      );
-      return addAuditEntry(registrarPagamentoCooperado(comAjustes, cooperadoSelecionado.id, mesAtivo, user.name, resumoPag), {
-        entityType: "ficha_corrida", entityId: cooperadoSelecionado.id, action: "aprovar",
-        userId: user.id, userName: user.name, changes: `Pagamento: ${formatCurrency(resumoPag.valorLiquido)}`,
-      });
     });
     void (async () => {
       const d = getData();
       const cnpj = await resolveCooperativaCnpj(d, coopId, user);
       if (!cnpj) return;
-      const resumoPag = getResumoPagamentoParaRegistro(
-        getResumoPagamentoCooperado(d, cooperadoSelecionado.id, mesAtivo, coopId, patch),
+      const ajustesPorMes = Object.fromEntries(mesesPagar.map((mes) => [mes, patch]));
+      const resumoPag = getResumoPagamentoConsolidadoCooperado(
         d,
         cooperadoSelecionado.id,
-        mesAtivo,
-        coopId
+        mesesPagar,
+        coopId,
+        ajustesPorMes
       );
       await pushOperacionalToCloud(cnpj, d, coopId, { authoritative: true });
       await pushNotasPagasToCloud(cnpj, resumoPag.notaPedidoIds, d);
@@ -1191,7 +1256,11 @@ export default function FichaCorridaPage() {
               ·{" "}
               {isCooperado && !visualizandoHistorico
                 ? valorReceberConsolidado?.mesLabel ?? formatMesReferencia(mesAtivo)
-                : formatMesReferencia(mesAtivo)}
+                : pagamentoAguardando
+                  ? formatMesesReferenciaRotulo(getMesesReferenciaPagamento(pagamentoAguardando))
+                  : mesesPendentesPagamento.length
+                    ? formatMesesReferenciaRotulo(mesesPendentesPagamento)
+                    : formatMesReferencia(mesAtivo)}
             </p>
             <p className="text-3xl sm:text-4xl font-bold mt-2">
               {formatCurrency(totalExibido)}
@@ -1221,7 +1290,7 @@ export default function FichaCorridaPage() {
 
           {!isCooperado &&
             aba === "pagar" &&
-            (resumoItensMes.entregas > 0 || fichasPendentesMes.length > 0) && (
+            (resumoItensPagamento.entregas > 0 || fichasPendentesMes.length > 0) && (
               <div className="mb-6 rounded-xl border border-gray-200 bg-white overflow-hidden shadow-sm">
                 <button
                   type="button"
@@ -1231,12 +1300,15 @@ export default function FichaCorridaPage() {
                 >
                   <div>
                     <p className="font-semibold text-gray-900">
-                      Lançamentos · {formatMesReferencia(mesAtivo)}
+                      Lançamentos ·{" "}
+                      {mesesPendentesPagamento.length
+                        ? formatMesesReferenciaRotulo(mesesPendentesPagamento)
+                        : formatMesReferencia(mesAtivo)}
                     </p>
                     <p className="text-sm text-gray-500 mt-0.5">
                       {fichasPendentesMes.length} entrega{fichasPendentesMes.length !== 1 ? "s" : ""}
-                      {resumoItensMes.itens.length > 0 &&
-                        ` · ${resumoItensMes.itens.length} item${resumoItensMes.itens.length !== 1 ? "s" : ""}`}
+                      {resumoItensPagamento.itens.length > 0 &&
+                        ` · ${resumoItensPagamento.itens.length} item${resumoItensPagamento.itens.length !== 1 ? "s" : ""}`}
                       {" · "}
                       {lancamentosPagarExpandido ? "toque para ocultar" : "toque para ver detalhes"}
                     </p>
@@ -1251,8 +1323,11 @@ export default function FichaCorridaPage() {
                 </button>
                 {lancamentosPagarExpandido && (
                   <div className="border-t border-gray-200 px-4 pb-4 pt-3 space-y-5">
-                    {resumoItensMes.entregas > 0 && (
-                      <TabelaResumoItens itens={resumoItensMes.itens} entregas={resumoItensMes.entregas} />
+                    {resumoItensPagamento.entregas > 0 && (
+                      <TabelaResumoItens
+                        itens={resumoItensPagamento.itens}
+                        entregas={resumoItensPagamento.entregas}
+                      />
                     )}
                     {fichasPendentesMes.length > 0 && (
                       <div>

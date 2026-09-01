@@ -404,6 +404,8 @@ export interface PagamentoCooperadoRegistro {
   cooperativaId: string;
   cooperadoId: string;
   mesReferencia: string;
+  /** Meses quitados num único PIX (ex.: agosto + setembro). */
+  mesesReferencia?: string[];
   valorBruto: number;
   descontoCooperativa: number;
   descontosExtras: FichaCorridaDesconto[];

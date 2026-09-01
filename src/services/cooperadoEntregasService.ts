@@ -7,6 +7,8 @@ import {
   getResumoPagamentoCooperado,
   getValorExibicaoCooperado,
   buildValorExibicaoCooperadoOpts,
+  pagamentoCobreMesReferencia,
+  getMesesReferenciaPagamento,
 } from "@/services/notaPedidoService";
 import { formatMesReferencia, formatMesesReferenciaRotulo, getCurrentMesReferencia } from "@/utils/format";
 import { mesesComValoresAvulsos, totalValoresAvulsosPendentes } from "@/services/valoresAvulsosReceberService";
@@ -177,7 +179,7 @@ export function getPagamentoConfirmadoMes(
       (p.cooperadoId === cooperadoId ||
         p.cooperadoId === canonico ||
         resolverCooperadoIdCanonico(data, p.cooperadoId, coopId ?? p.cooperativaId) === canonico) &&
-      p.mesReferencia === mesReferencia &&
+      pagamentoCobreMesReferencia(p, mesReferencia) &&
       p.status === "confirmado"
   );
 }
@@ -214,16 +216,50 @@ export function getMesQuantoVouReceber(
   return mesAtual;
 }
 
-/** Cooperado ainda sem pagamento registrado pelo responsável neste mês. */
+/** Meses com valor líquido pendente de PIX pelo responsável. */
+export function listarMesesPendentesPagamentoResponsavel(
+  data: AppData,
+  cooperadoId: string,
+  cooperativaId?: string
+): string[] {
+  const pendentes: string[] = [];
+  for (const mes of [...listarMesesEntregasCooperado(data, cooperadoId, cooperativaId)].sort((a, b) =>
+    a.localeCompare(b)
+  )) {
+    if (getPagamentoConfirmadoMes(data, cooperadoId, mes)) continue;
+    if (getPagamentoAguardandoCooperado(data, cooperadoId, mes)) {
+      pendentes.push(mes);
+      continue;
+    }
+    if (getResumoPagamentoCooperado(data, cooperadoId, mes, cooperativaId).valorLiquido > 0) {
+      pendentes.push(mes);
+      continue;
+    }
+    if (totalValoresAvulsosPendentes(data, cooperadoId, mes, cooperativaId) > 0) {
+      pendentes.push(mes);
+    }
+  }
+  return pendentes;
+}
+
+/** Cooperado ainda sem pagamento registrado pelo responsável (um ou mais meses). */
 export function cooperadoPendentePagamentoResponsavel(
   data: AppData,
   cooperadoId: string,
-  mesReferencia: string,
+  mesReferencia?: string,
   cooperativaId?: string
 ): boolean {
-  if (getPagamentoAguardandoCooperado(data, cooperadoId, mesReferencia)) return false;
-  if (getPagamentoConfirmadoMes(data, cooperadoId, mesReferencia)) return false;
-  return getResumoPagamentoCooperado(data, cooperadoId, mesReferencia, cooperativaId).valorLiquido > 0;
+  const meses = listarMesesPendentesPagamentoResponsavel(data, cooperadoId, cooperativaId);
+  if (mesReferencia && !meses.includes(mesReferencia)) return false;
+  if (!meses.length) return false;
+
+  const aguardando = getPagamentoAguardandoCooperado(data, cooperadoId);
+  if (!aguardando) return true;
+
+  const cobertos = new Set(getMesesReferenciaPagamento(aguardando));
+  const mesesSemCobertura = meses.filter((m) => !cobertos.has(m));
+  if (mesReferencia) return mesesSemCobertura.includes(mesReferencia);
+  return mesesSemCobertura.length > 0;
 }
 
 export function cooperadoTemValorPendente(
@@ -254,12 +290,23 @@ export function getValorQuantoVouReceber(
   const aguardandoAssinatura = mesesPendentes.some((m) =>
     Boolean(getPagamentoAguardandoCooperado(data, cooperadoId, m))
   );
-  const valor = round2(
-    mesesPendentes.reduce(
+  const aguardando = getPagamentoAguardandoCooperado(data, cooperadoId);
+  let valor = 0;
+  if (aguardando) {
+    const cobertos = new Set(getMesesReferenciaPagamento(aguardando));
+    valor = aguardando.valorLiquido;
+    for (const m of mesesPendentes) {
+      if (!cobertos.has(m)) {
+        valor += valorLiquidoMesQuantoVouReceber(data, cooperadoId, m, cooperativaId);
+      }
+    }
+  } else {
+    valor = mesesPendentes.reduce(
       (s, m) => s + valorLiquidoMesQuantoVouReceber(data, cooperadoId, m, cooperativaId),
       0
-    )
-  );
+    );
+  }
+  valor = round2(valor);
   return { mes, meses: mesesPendentes, mesLabel, valor, aguardandoAssinatura };
 }
 
