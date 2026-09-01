@@ -709,21 +709,43 @@ function resolveSessionUser(
   return findUserByEmail(data, parsed.email);
 }
 
+function inferCooperadoFieldsFromLocalData(
+  data: AppData,
+  parsed: Omit<User, "password">
+): Pick<User, "cooperadoId" | "cooperativaId" | "role"> | null {
+  const email = normalizeCreatorEmail(parsed.email);
+  const candidates = data.users.filter(
+    (u) =>
+      u.active &&
+      u.cooperadoId?.trim() &&
+      (u.id === parsed.id || normalizeCreatorEmail(u.email) === email)
+  );
+  const match = candidates[0];
+  if (!match?.cooperadoId) return null;
+  return {
+    cooperadoId: match.cooperadoId,
+    cooperativaId: match.cooperativaId ?? parsed.cooperativaId,
+    role: "cooperado",
+  };
+}
+
 /** Mescla sessão persistida (nuvem/login) com users[] local — evita role stale de responsável no celular. */
 function mergeStoredSessionWithLocalUser(
   parsed: Omit<User, "password">,
-  local: User
+  local: User,
+  data?: AppData
 ): Omit<User, "password"> {
   const { password: _, ...localSafe } = local;
+  const inferred = data ? inferCooperadoFieldsFromLocalData(data, parsed) : null;
   const merged: Omit<User, "password"> = {
     ...localSafe,
     id: parsed.id || localSafe.id,
     email: parsed.email?.trim() ? parsed.email : localSafe.email,
     name: parsed.name?.trim() ? parsed.name : localSafe.name,
-    cooperadoId: parsed.cooperadoId ?? localSafe.cooperadoId,
-    cooperativaId: parsed.cooperativaId ?? localSafe.cooperativaId,
+    cooperadoId: parsed.cooperadoId ?? inferred?.cooperadoId ?? localSafe.cooperadoId,
+    cooperativaId: parsed.cooperativaId ?? inferred?.cooperativaId ?? localSafe.cooperativaId,
     cooperativaCnpj: parsed.cooperativaCnpj ?? localSafe.cooperativaCnpj,
-    role: parsed.role ? normalizeUserRole(parsed.role) : localSafe.role,
+    role: parsed.role ? normalizeUserRole(parsed.role) : inferred?.role ?? localSafe.role,
   };
   return {
     ...merged,
@@ -732,10 +754,71 @@ function mergeStoredSessionWithLocalUser(
 }
 
 function normalizeStoredSession(parsed: Omit<User, "password">): Omit<User, "password"> {
+  let next = parsed;
+  if (memoryCache) {
+    const inferred = inferCooperadoFieldsFromLocalData(memoryCache, parsed);
+    if (inferred) {
+      next = { ...parsed, ...inferred };
+    }
+  }
   return {
-    ...parsed,
-    role: resolveAppUserRole({ ...parsed, role: normalizeUserRole(parsed.role) }),
+    ...next,
+    role: resolveAppUserRole({ ...next, role: normalizeUserRole(next.role) }),
   };
+}
+
+/** Alinha sessão local com perfil autoritativo da nuvem (JWT / app_users). */
+export function applyCloudProfileToLocalSession(profile: CloudSessionProfile): Omit<User, "password"> | null {
+  if (typeof window === "undefined") return null;
+
+  const parsed = readStoredSessionRaw();
+  if (
+    parsed &&
+    parsed.id !== profile.id &&
+    normalizeCreatorEmail(parsed.email) !== normalizeCreatorEmail(profile.email)
+  ) {
+    return null;
+  }
+
+  let base: Omit<User, "password"> = normalizeStoredSession({
+    ...(parsed ?? {
+      id: profile.id,
+      email: profile.email,
+      name: profile.name,
+      active: true,
+    }),
+    id: profile.id,
+    email: profile.email,
+    name: profile.name,
+    role: normalizeUserRole(profile.role),
+    cooperadoId: profile.cooperadoId,
+    cooperativaId: profile.cooperativaId,
+    cooperativaCnpj: profile.cooperativaCnpj,
+    active: true,
+  });
+
+  if (memoryCache) {
+    const local = resolveSessionUser(memoryCache, base);
+    if (local) {
+      base = mergeStoredSessionWithLocalUser(base, local, memoryCache);
+    }
+  }
+
+  base = normalizeStoredSession(base);
+  persistSession(base);
+
+  if (base.role === "cooperado" && memoryCache) {
+    updateData((d) => ({
+      ...d,
+      users: d.users.map((u) =>
+        u.id === base.id || normalizeCreatorEmail(u.email) === normalizeCreatorEmail(base.email)
+          ? { ...u, role: "cooperado", cooperadoId: base.cooperadoId ?? u.cooperadoId }
+          : u
+      ),
+    }));
+  }
+
+  return base;
 }
 
 async function finishLoginSession(user: User, data: AppData, plainPassword: string): Promise<User> {
@@ -1029,7 +1112,7 @@ function reconcileSessionAfterDataLoad(): void {
     return;
   }
 
-  const safeUser = mergeStoredSessionWithLocalUser(parsed, current);
+  const safeUser = mergeStoredSessionWithLocalUser(parsed, current, memoryCache);
   const serialized = JSON.stringify(safeUser);
   const stored = localStorage.getItem(SESSION_KEY);
   if (stored && serialized !== stored) {
@@ -1060,7 +1143,7 @@ export function getSession(): Omit<User, "password"> | null {
   if (memoryCache) {
     const current = resolveSessionUser(memoryCache, normalizedParsed);
     if (current) {
-      const safeUser = mergeStoredSessionWithLocalUser(normalizedParsed, current);
+      const safeUser = mergeStoredSessionWithLocalUser(normalizedParsed, current, memoryCache);
       const serialized = JSON.stringify(safeUser);
       const stored = localStorage.getItem(SESSION_KEY);
       if (stored && serialized !== stored) {

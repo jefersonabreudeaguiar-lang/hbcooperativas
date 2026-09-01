@@ -4,8 +4,8 @@ import { createContext, useContext, useEffect, useLayoutEffect, useState, useCal
 import { useRouter } from "next/navigation";
 import type { User } from "@/types";
 import { normalizeUserRole, resolveAppUserRole } from "@/permissions";
-import { getSession, login as doLogin, loginCreatorAdminPortal, logout as doLogout, registerCooperado, registerCooperativa, subscribe, ensureCooperativaInCloudForUser, preloadAppData } from "@/services/dataStore";
-import { ensureCloudSessionReady, setActiveCloudProfile, userToCloudProfile, getLastCloudSyncError } from "@/lib/security/clientSession";
+import { getSession, login as doLogin, loginCreatorAdminPortal, logout as doLogout, registerCooperado, registerCooperativa, subscribe, ensureCooperativaInCloudForUser, preloadAppData, applyCloudProfileToLocalSession } from "@/services/dataStore";
+import { ensureCloudSessionReady, setActiveCloudProfile, userToCloudProfile, getLastCloudSyncError, fetchCloudSessionProfile } from "@/lib/security/clientSession";
 import type { RegisterCooperadoInput, RegisterCooperativaInput } from "@/services/dataStore";
 
 interface AuthContextType {
@@ -59,14 +59,42 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     ensureCooperativaInCloudForUser(user).catch(() => {});
   }, [user?.id, loading]);
 
+  useEffect(() => {
+    if (!user?.id || loading || typeof navigator === "undefined" || !navigator.onLine) return;
+
+    let cancelled = false;
+    void (async () => {
+      const profile = await fetchCloudSessionProfile();
+      if (cancelled || !profile) return;
+      const synced = applyCloudProfileToLocalSession(profile);
+      if (!synced || cancelled) return;
+      if (
+        synced.role !== user.role ||
+        synced.cooperadoId !== user.cooperadoId
+      ) {
+        refresh();
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [user?.id, user?.role, user?.cooperadoId, loading, refresh]);
+
   const login = async (email: string, password: string) => {
     const result = await doLogin(email, password);
     if (result) {
-      const { password: _, ...safeUser } = result;
+      const cloudProfile = await fetchCloudSessionProfile();
+      const synced = cloudProfile ? applyCloudProfileToLocalSession(cloudProfile) : null;
+      const sessionUser = synced ?? getSession();
+      const safeUser = sessionUser ?? (() => {
+        const { password: _, ...u } = result;
+        return u;
+      })();
       setUser({ ...safeUser, role: resolveAppUserRole(safeUser) });
       setActiveCloudProfile(userToCloudProfile(safeUser));
       await ensureCloudSessionReady(userToCloudProfile(safeUser));
-      const redirectTo = safeUser.role === "parceiro" ? "/mercado-parceiro" : "/dashboard";
+      const redirectTo = resolveAppUserRole(safeUser) === "parceiro" ? "/mercado-parceiro" : "/dashboard";
       return { ok: true as const, redirectTo };
     }
     return {

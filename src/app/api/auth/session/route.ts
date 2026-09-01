@@ -3,6 +3,8 @@ import { extractAccessToken, verifyAccessToken, signAccessToken } from "@/lib/se
 import { isApiSecurityEnforced } from "@/lib/security/env";
 import { buildSessionCookieHeader } from "@/lib/security/sessionCookie";
 import { rateLimitAuth } from "@/lib/security/rateLimit";
+import { resolveEffectiveAppUserRole } from "@/lib/security/authRoutes";
+import type { UserRole } from "@/types";
 
 export async function GET(request: Request) {
   if (!rateLimitAuth(request)) {
@@ -27,10 +29,18 @@ export async function GET(request: Request) {
     sub: session.sub,
     email: String(session.email),
     name: String(session.name ?? ""),
-    role: session.role,
+    role: resolveEffectiveAppUserRole({
+      role: session.role as UserRole,
+      cooperado_id: session.cooperadoId ?? null,
+    }),
     cooperativaId: session.cooperativaId,
     cooperadoId: session.cooperadoId,
     cooperativaCnpj: session.cooperativaCnpj,
+  });
+
+  const effectiveRole = resolveEffectiveAppUserRole({
+    role: session.role as UserRole,
+    cooperado_id: session.cooperadoId ?? null,
   });
 
   const enforced = isApiSecurityEnforced();
@@ -42,7 +52,7 @@ export async function GET(request: Request) {
       id: session.sub,
       email: session.email,
       name: session.name,
-      role: session.role,
+      role: effectiveRole,
       cooperativaId: session.cooperativaId,
       cooperadoId: session.cooperadoId,
       cooperativaCnpj: session.cooperativaCnpj,

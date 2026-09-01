@@ -15,12 +15,22 @@ export function clientIp(request: Request): string {
   );
 }
 
+export function resolveEffectiveAppUserRole(
+  user: Pick<AppUserRow, "role" | "cooperado_id">
+): UserRole {
+  const role = user.role as UserRole;
+  if (role === "parceiro" || role === "contador") return role;
+  if (user.cooperado_id?.trim()) return "cooperado";
+  return role;
+}
+
 export async function tokenResponseForUser(user: AppUserRow): Promise<NextResponse> {
+  const role = resolveEffectiveAppUserRole(user);
   const token = await signAccessToken({
     sub: user.id,
     email: user.email,
     name: user.name,
-    role: user.role as UserRole,
+    role,
     cooperativaId: user.cooperativa_id ?? undefined,
     cooperadoId: user.cooperado_id ?? undefined,
     cooperativaCnpj: user.cooperativa_cnpj ?? undefined,
@@ -32,7 +42,7 @@ export async function tokenResponseForUser(user: AppUserRow): Promise<NextRespon
       id: user.id,
       email: user.email,
       name: user.name,
-      role: user.role,
+      role,
       cooperativaId: user.cooperativa_id,
       cooperadoId: user.cooperado_id,
       cooperativaCnpj: user.cooperativa_cnpj,

@@ -119,6 +119,24 @@ type CloudAuthUser = {
   cooperativaCnpj?: string | null;
 };
 
+function profileFromCloudAuthUser(raw: CloudAuthUser): CloudSessionProfile | null {
+  if (!raw.id || !raw.email || !raw.name || !raw.role) return null;
+  const cooperadoId = raw.cooperadoId ?? undefined;
+  let role = raw.role;
+  if (cooperadoId?.trim() && role !== "parceiro" && role !== "contador") {
+    role = "cooperado";
+  }
+  return {
+    id: raw.id,
+    email: raw.email.trim().toLowerCase(),
+    name: raw.name.trim(),
+    role,
+    cooperativaId: raw.cooperativaId ?? undefined,
+    cooperadoId,
+    cooperativaCnpj: raw.cooperativaCnpj ?? undefined,
+  };
+}
+
 async function requestCloudToken(
   endpoint: "/api/auth/login" | "/api/auth/provision" | "/api/auth/register" | "/api/auth/sync-session",
   payload: Record<string, unknown>
@@ -197,15 +215,11 @@ export async function loginViaCloudApi(
       return null;
     }
 
-    const profile: CloudSessionProfile = {
-      id: json.user.id,
-      email: json.user.email.trim().toLowerCase(),
-      name: json.user.name.trim(),
-      role: json.user.role,
-      cooperativaId: json.user.cooperativaId ?? undefined,
-      cooperadoId: json.user.cooperadoId ?? undefined,
-      cooperativaCnpj: json.user.cooperativaCnpj ?? undefined,
-    };
+    const profile = profileFromCloudAuthUser(json.user);
+    if (!profile) {
+      lastCloudSyncError = "Resposta incompleta do servidor de login.";
+      return null;
+    }
 
     markCloudSessionActive();
     if (json.token) memoryAccessToken = json.token;
@@ -265,7 +279,7 @@ export async function establishCloudSession(
   }
 }
 
-export async function refreshCloudSession(): Promise<boolean> {
+export async function fetchCloudSessionProfile(): Promise<CloudSessionProfile | null> {
   try {
     const res = await fetch("/api/auth/session", {
       credentials: "include",
@@ -273,22 +287,29 @@ export async function refreshCloudSession(): Promise<boolean> {
     });
     if (res.status === 401) {
       clearAccessToken();
-      return false;
+      return null;
     }
-    if (!res.ok) {
-      return cloudSessionActive;
-    }
-    const json = (await res.json()) as { token?: string; enforced?: boolean; valid?: boolean };
-    if (json.valid === false) {
-      clearAccessToken();
-      return false;
-    }
+    if (!res.ok) return null;
+    const json = (await res.json()) as {
+      valid?: boolean;
+      enforced?: boolean;
+      token?: string;
+      user?: CloudAuthUser;
+    };
+    if (json.valid === false || !json.user) return null;
     markCloudSessionActive();
     if (json.token) memoryAccessToken = json.token;
-    return true;
+    const profile = profileFromCloudAuthUser(json.user);
+    if (profile) setActiveCloudProfile(profile);
+    return profile;
   } catch {
-    return cloudSessionActive;
+    return null;
   }
+}
+
+export async function refreshCloudSession(): Promise<boolean> {
+  const profile = await fetchCloudSessionProfile();
+  return profile !== null || cloudSessionActive;
 }
 
 /** Restaura JWT antes de APIs protegidas (Conta Coop, sync, etc.). */
