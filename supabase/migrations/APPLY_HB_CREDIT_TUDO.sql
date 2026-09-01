@@ -446,9 +446,36 @@ as $$
 declare
   v_tx public.hb_credit_transactions%rowtype;
   v_account public.hb_credit_accounts%rowtype;
+  v_existing_refund public.hb_credit_refunds%rowtype;
   v_disponivel bigint;
   v_ledger_id uuid;
 begin
+  select * into v_existing_refund from public.hb_credit_refunds
+  where original_transaction_id = p_transaction_id
+  limit 1;
+
+  if found then
+    select * into v_tx from public.hb_credit_transactions
+    where id = p_transaction_id and cooperative_cnpj = p_cooperative_cnpj;
+
+    if not found then
+      return jsonb_build_object('ok', false, 'error', 'Transação não encontrada.');
+    end if;
+
+    select * into v_account from public.hb_credit_accounts where id = v_tx.account_id;
+    if not found then
+      return jsonb_build_object('ok', false, 'error', 'Conta não encontrada.');
+    end if;
+
+    v_disponivel := v_account.limit_released_cents - v_account.amount_used_cents;
+    return jsonb_build_object(
+      'ok', true,
+      'duplicate', true,
+      'transacao_id', p_transaction_id,
+      'disponivel_apos_centavos', v_disponivel
+    );
+  end if;
+
   select * into v_tx from public.hb_credit_transactions
   where id = p_transaction_id and cooperative_cnpj = p_cooperative_cnpj
   for update;
@@ -491,7 +518,7 @@ begin
     id, cooperative_cnpj, account_id, payment_intent_id, partner_id, cooperado_id,
     event_type, amount_cents, status, idempotency_key
   ) values (
-    p_refund_transaction_id, p_cooperative_cnpj, v_account.id, v_tx.payment_intent_id,
+    p_refund_transaction_id, p_cooperative_cnpj, v_account.id, null,
     v_tx.partner_id, v_tx.cooperado_id, 'REFUND', v_tx.amount_cents, 'posted',
     'refund:' || p_transaction_id
   );
@@ -509,7 +536,11 @@ begin
     direction, balance_reference_cents, metadata
   ) values (
     v_ledger_id, p_cooperative_cnpj, v_account.id, p_refund_transaction_id, 'REFUND', v_tx.amount_cents,
-    'credit', v_disponivel, jsonb_build_object('memo', 'Estorno Conta Coop')
+    'credit', v_disponivel, jsonb_build_object(
+      'memo', 'Estorno Conta Coop',
+      'original_transaction_id', p_transaction_id,
+      'payment_intent_id', v_tx.payment_intent_id
+    )
   );
 
   insert into public.hb_credit_audit_log (

@@ -1749,6 +1749,12 @@ export async function approveRefundRequest(
         error: "Migration Fase 1 (hb_credit_phase1_security) não aplicada na nuvem.",
       };
     }
+    if (/payment_intent_id.*already exists|23505/i.test(error.message ?? "")) {
+      return {
+        ok: false,
+        error: "Estorno bloqueado por migration desatualizada. Aplique 20260901150000_hb_credit_refund_intent_unique_fix.sql no Supabase.",
+      };
+    }
     return { ok: false, error: error.message };
   }
 
@@ -1875,6 +1881,12 @@ export async function refundPayment(
   if (error) {
     if (/function.*does not exist/i.test(error.message)) {
       return { ok: false, error: "Migration HB Credit não aplicada na nuvem." };
+    }
+    if (/payment_intent_id.*already exists|23505/i.test(error.message ?? "")) {
+      return {
+        ok: false,
+        error: "Estorno bloqueado por migration desatualizada. Aplique 20260901150000_hb_credit_refund_intent_unique_fix.sql no Supabase.",
+      };
     }
     return { ok: false, error: error.message };
   }

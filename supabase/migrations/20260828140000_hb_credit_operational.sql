@@ -216,7 +216,7 @@ begin
     id, cooperative_cnpj, account_id, payment_intent_id, partner_id, cooperado_id,
     event_type, amount_cents, status, idempotency_key
   ) values (
-    p_refund_transaction_id, p_cooperative_cnpj, v_account.id, v_tx.payment_intent_id,
+    p_refund_transaction_id, p_cooperative_cnpj, v_account.id, null,
     v_tx.partner_id, v_tx.cooperado_id, 'REFUND', v_tx.amount_cents, 'posted',
     'refund:' || p_transaction_id
   );
