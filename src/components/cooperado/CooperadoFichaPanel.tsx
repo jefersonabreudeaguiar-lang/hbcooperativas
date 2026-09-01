@@ -112,14 +112,18 @@ export function CooperadoFichaPanel({ cooperado }: { cooperado: Cooperado }) {
         : [],
     [data, cooperado.id, cooperado.cooperativaId, mesFilter]
   );
-  const resumoItensMes = useMemo(() => {
-    if (!data) return { itens: [], entregas: 0, valorBruto: 0 };
-    return agregarItensFichaMes(data, cooperado.id, mesFilter, cooperado.cooperativaId);
-  }, [data, cooperado.id, cooperado.cooperativaId, mesFilter]);
   const pagamentosMes = useMemo(
     () => resumo?.pagamentos.filter((p) => p.mesReferencia === mesFilter) ?? [],
     [resumo, mesFilter]
   );
+  const resumoItensMes = useMemo(() => {
+    if (!data) return { itens: [], entregas: 0, valorBruto: 0 };
+    const pagamentoConfirmado = pagamentosMes.some((p) => p.status === "confirmado");
+    const aguardando = pagamentosMes.some((p) => p.status === "aguardando_confirmacao");
+    return agregarItensFichaMes(data, cooperado.id, mesFilter, cooperado.cooperativaId, {
+      apenasPendentes: !pagamentoConfirmado && !aguardando,
+    });
+  }, [data, cooperado.id, cooperado.cooperativaId, mesFilter, pagamentosMes]);
   const pagamentoConfirmadoMes = pagamentosMes.find((p) => p.status === "confirmado");
 
   const mesMensalidades = useMemo(

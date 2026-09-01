@@ -1,9 +1,11 @@
 import type { AppData, Cooperado, FechamentoMensal, Instituicao, NotaPedido, NotaPedidoItem } from "@/types";
 import { getCooperadoNome, round2, sumBy } from "@/utils/calculations";
-import { getCurrentMesReferencia } from "@/utils/format";
+import { formatMesesReferenciaRotulo, getCurrentMesReferencia } from "@/utils/format";
 import { notaPertenceCooperado } from "@/services/cooperadoCloudService";
+import { listarMesesPendentesPagamentoResponsavel } from "@/services/cooperadoEntregasService";
 import {
   agregarItensNotasCooperado,
+  getResumoPagamentoCooperado,
   getTotalAPagarCooperado,
   listarFichasExtratoCooperadoMes,
 } from "@/services/notaPedidoService";
@@ -258,6 +260,50 @@ export function getRelatorioPagarCooperado(mesReferencia: string, data: AppData,
   return linhas.map((l) => ({ cooperado: l.cooperadoNome, total: l.aPagar, entregas: l.entregas }));
 }
 
+export type LinhaPagarCooperadoEmAberto = {
+  cooperadoId: string;
+  cooperado: string;
+  meses: string[];
+  mesesLabel: string;
+  entregas: number;
+  total: number;
+};
+
+/** Valores a pagar consolidados — todos os meses pendentes por cooperado. */
+export function getRelatorioPagarCooperadoEmAberto(
+  data: AppData,
+  cooperativaId?: string,
+  cooperadoId?: string
+): LinhaPagarCooperadoEmAberto[] {
+  return data.cooperados
+    .filter(
+      (c) =>
+        c.status === "ativo" &&
+        (!cooperativaId || c.cooperativaId === cooperativaId) &&
+        (!cooperadoId || c.id === cooperadoId)
+    )
+    .map((c) => {
+      const meses = listarMesesPendentesPagamentoResponsavel(data, c.id, cooperativaId);
+      let entregas = 0;
+      let total = 0;
+      for (const mes of meses) {
+        const resumo = getResumoPagamentoCooperado(data, c.id, mes, cooperativaId);
+        total = round2(total + resumo.valorLiquido);
+        entregas += resumo.fichaIds.length;
+      }
+      return {
+        cooperadoId: c.id,
+        cooperado: c.nomeCompleto,
+        meses,
+        mesesLabel: meses.length ? formatMesesReferenciaRotulo(meses) : "",
+        entregas,
+        total,
+      };
+    })
+    .filter((l) => l.total > 0)
+    .sort((a, b) => a.cooperado.localeCompare(b.cooperado, "pt-BR"));
+}
+
 export function getRelatorioEntregasInstituicaoLive(
   mesReferencia: string,
   instituicaoId: string,
@@ -337,6 +383,23 @@ function cooperadoIdsDasNotas(notas: NotaPedido[]): string[] {
   return [...ids];
 }
 
+function consolidarLinhasItensRelatorio(linhas: LinhaItemEntregaRelatorio[]): LinhaItemEntregaRelatorio[] {
+  const map = new Map<string, LinhaItemEntregaRelatorio>();
+  for (const item of linhas) {
+    const key = chaveItemRelatorio(item);
+    const cur = map.get(key);
+    if (cur) {
+      cur.quantidade = round2(cur.quantidade + item.quantidade);
+      cur.valorTotal = round2(cur.valorTotal + item.valorTotal);
+      cur.precoUnitario =
+        cur.quantidade > 0 ? round2(cur.valorTotal / cur.quantidade) : cur.precoUnitario;
+    } else {
+      map.set(key, { ...item });
+    }
+  }
+  return [...map.values()].sort((a, b) => a.produtoNome.localeCompare(b.produtoNome, "pt-BR"));
+}
+
 /** Consolida quantidades e valores por item das entregas conferidas de uma instituição no mês. */
 export function getRelatorioEntregasPorItensInstituicao(
   mesReferencia: string,
@@ -350,8 +413,6 @@ export function getRelatorioEntregasPorItensInstituicao(
       n.instituicaoId === instituicaoId &&
       (!cooperativaId || n.cooperativaId === cooperativaId)
   );
-
-  const itens = agregarItensDasNotas(notas);
 
   const porCooperado: LinhaCooperadoItensRelatorio[] = cooperadoIdsDasNotas(notas)
     .map((cooperadoId) => {
@@ -372,7 +433,10 @@ export function getRelatorioEntregasPorItensInstituicao(
     .filter((l) => l.itens.length > 0 || l.quantidadeEntregas > 0)
     .sort((a, b) => a.cooperadoNome.localeCompare(b.cooperadoNome, "pt-BR"));
 
+  const itens = consolidarLinhasItensRelatorio(porCooperado.flatMap((l) => l.itens));
+
   const totalItens = round2(itens.reduce((s, i) => s + i.valorTotal, 0));
+  const totalCooperados = round2(porCooperado.reduce((s, l) => s + l.totalBruto, 0));
 
   return {
     mesReferencia,
@@ -381,7 +445,7 @@ export function getRelatorioEntregasPorItensInstituicao(
     itens,
     porCooperado,
     quantidadeEntregas: notas.length,
-    totalBruto: totalItens > 0 ? totalItens : sumBy(notas, (n) => n.valorBruto),
+    totalBruto: totalItens > 0 ? totalItens : totalCooperados > 0 ? totalCooperados : sumBy(notas, (n) => n.valorBruto),
     totalLiquido: sumBy(notas, (n) => n.valorLiquido),
   };
 }

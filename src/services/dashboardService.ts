@@ -10,6 +10,7 @@ import {
   getRelatorioEntregasInstituicaoLive,
   getRelatorioEntregasPorItensInstituicao,
   getRelatorioPagarCooperado,
+  getRelatorioPagarCooperadoEmAberto,
   getRelatorioPNAELive,
   getResumoFinanceiroMes,
   listMesesComLancamentos,
@@ -207,10 +208,19 @@ export function getRelatorioEntregasPorItens(
   return getRelatorioEntregasPorItensInstituicao(mesReferencia, instituicaoId, d, cooperativaId);
 }
 
+export function getRelatorioPagarCooperadoEmAbertoReport(
+  data?: AppData,
+  cooperativaId?: string,
+  cooperadoId?: string
+) {
+  const d = data ?? getData();
+  return getRelatorioPagarCooperadoEmAberto(d, cooperativaId, cooperadoId);
+}
+
 export { getRelatorioSobrasPerdas } from "@/services/sobrasPerdasService";
 export { getRelatorioAtingimentoCronograma } from "@/services/relatorioCronogramaService";
 
-export { listMesesComLancamentos, getRelatorioPagarCooperado, calcularFechamentoMensalLive };
+export { listMesesComLancamentos, getRelatorioPagarCooperado, getRelatorioPagarCooperadoEmAberto, calcularFechamentoMensalLive };
 
 export function getFinanceiroResumoCooperado(data?: AppData): Pick<FinanceiroMensal, "saldoFinal" | "entradas" | "saidas" | "dataAtualizacao"> | null {
   const d = data ?? getData();

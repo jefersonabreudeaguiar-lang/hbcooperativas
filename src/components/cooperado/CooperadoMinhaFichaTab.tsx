@@ -73,8 +73,16 @@ function MesFichaAccordion({
 
   const itensMes = useMemo(() => {
     if (!data) return { itens: [], entregas: 0, valorBruto: 0 };
-    return agregarItensFichaMes(data, cooperadoId, resumo.mesReferencia, cooperativaId);
-  }, [data, cooperadoId, resumo.mesReferencia, cooperativaId]);
+    const apenasPendentes = !resumo.pagamentoConfirmado && !resumo.pagamentoAguardando;
+    return agregarItensFichaMes(data, cooperadoId, resumo.mesReferencia, cooperativaId, { apenasPendentes });
+  }, [
+    data,
+    cooperadoId,
+    resumo.mesReferencia,
+    cooperativaId,
+    resumo.pagamentoConfirmado,
+    resumo.pagamentoAguardando,
+  ]);
 
   const avulsosPendentes = useMemo(() => {
     if (!data) return 0;

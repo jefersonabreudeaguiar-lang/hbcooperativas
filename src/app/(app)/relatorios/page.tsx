@@ -18,6 +18,7 @@ import {
   getRelatorioEntregasPorItens,
   getRelatorioPNAE,
   getRelatorioPagarCooperado,
+  getRelatorioPagarCooperadoEmAbertoReport,
   listMesesComLancamentos,
   exportToCSV,
   downloadCSV,
@@ -65,7 +66,8 @@ import { PageSkeleton } from "@/components/ui/PageSkeleton";
 
 const RELATORIOS = [
   { id: "resumo_financeiro", label: "Resumo Financeiro Mensal" },
-  { id: "pagar_cooperado", label: "Valores a Pagar por Cooperado" },
+  { id: "pagar_cooperado", label: "Valores a Pagar por Cooperado (mês)" },
+  { id: "pagar_cooperado_aberto", label: "Valores a Pagar — Geral em Aberto" },
   { id: "mensalidades_abertas", label: "Mensalidades em Aberto" },
   { id: "cotas_abertas", label: "Cotas em Aberto" },
   { id: "entregas_instituicao", label: "Entregas por Instituição" },
@@ -218,6 +220,16 @@ export default function RelatoriosPage() {
         headers = ["Cooperado", "Entregas", "Valor a pagar"];
         rows = getRelatorioPagarCooperado(mes, data, cooperadoId || undefined).map((x) => [
           x.cooperado,
+          String(x.entregas),
+          String(x.total),
+        ]);
+        break;
+      }
+      case "pagar_cooperado_aberto": {
+        headers = ["Cooperado", "Meses em aberto", "Entregas", "Valor a pagar"];
+        rows = getRelatorioPagarCooperadoEmAbertoReport(data, coopId, cooperadoId || undefined).map((x) => [
+          x.cooperado,
+          x.mesesLabel,
           String(x.entregas),
           String(x.total),
         ]);
@@ -562,6 +574,33 @@ export default function RelatoriosPage() {
             ]}
             emptyMessage="Nenhum valor a pagar neste mês."
           />
+        );
+      }
+      case "pagar_cooperado_aberto": {
+        const porCooperado = getRelatorioPagarCooperadoEmAbertoReport(data, coopId, cooperadoId || undefined);
+        const totalGeral = porCooperado.reduce((s, r) => s + r.total, 0);
+        return (
+          <>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
+              <StatCard title="Cooperados com valor em aberto" value={String(porCooperado.length)} />
+              <StatCard title="Total geral a pagar" value={formatCurrency(totalGeral)} variant="warning" />
+            </div>
+            <DataTable
+              data={porCooperado}
+              keyField="cooperadoId"
+              columns={[
+                { key: "cooperado", label: "Cooperado" },
+                {
+                  key: "meses",
+                  label: "Meses em aberto",
+                  render: (r) => r.mesesLabel || "—",
+                },
+                { key: "entregas", label: "Entregas" },
+                { key: "total", label: "Valor a Pagar", render: (r) => formatCurrency(r.total) },
+              ]}
+              emptyMessage="Nenhum valor pendente de pagamento."
+            />
+          </>
         );
       }
       case "mensalidades_abertas": {
@@ -1277,7 +1316,7 @@ export default function RelatoriosPage() {
           </Select>
         </FormField>
         <FormField label="Mês">
-          <Select value={mes} onChange={(e) => setMes(e.target.value)} className="min-w-[180px]" disabled={tipo === "historico_reclamacoes" || tipo === "historico_votacoes"}>
+          <Select value={mes} onChange={(e) => setMes(e.target.value)} className="min-w-[180px]" disabled={tipo === "historico_reclamacoes" || tipo === "historico_votacoes" || tipo === "pagar_cooperado_aberto"}>
             {meses.map((m) => (
               <option key={m} value={m}>{formatMesReferencia(m)}</option>
             ))}
@@ -1293,7 +1332,7 @@ export default function RelatoriosPage() {
             </Select>
           </FormField>
         ) : null}
-        {tipo === "pagar_cooperado" || tipo === "historico_reclamacoes" ? (
+        {tipo === "pagar_cooperado" || tipo === "pagar_cooperado_aberto" || tipo === "historico_reclamacoes" ? (
           <FormField label="Cooperado">
             <Select value={cooperadoId} onChange={(e) => setCooperadoId(e.target.value)} className="min-w-[200px]">
               <option value="">Todos</option>

@@ -110,7 +110,7 @@ function TabelaResumoItens({
           </thead>
           <tbody className="divide-y divide-gray-100">
             {itens.map((i) => (
-              <tr key={i.produtoInstituicaoId} className="hover:bg-green-50/40">
+              <tr key={i.produtoInstituicaoId || `${i.produtoNome}-${i.unidade}`} className="hover:bg-green-50/40">
                 <td className="px-4 py-2.5 font-medium text-gray-900">{i.produtoNome}</td>
                 <td className="px-4 py-2.5 text-right text-gray-700">
                   {i.quantidade} {i.unidade}
@@ -496,7 +496,14 @@ export default function FichaCorridaPage() {
       );
     }
     if (!isCooperado && mesesPendentesPagamento.length > 1) {
-      return agregarItensFichaMeses(data, cooperadoSelecionadoId, mesesPendentesPagamento, coopId);
+      return agregarItensFichaMeses(data, cooperadoSelecionadoId, mesesPendentesPagamento, coopId, {
+        apenasPendentes: true,
+      });
+    }
+    if (!isCooperado && mesesPendentesPagamento.length === 1) {
+      return agregarItensFichaMes(data, cooperadoSelecionadoId, mesesPendentesPagamento[0], coopId, {
+        apenasPendentes: true,
+      });
     }
     return resumoItensMes;
   }, [
@@ -594,6 +601,39 @@ export default function FichaCorridaPage() {
     if (!data || !cooperadoSelecionadoId) return false;
     return cooperadoPendentePagamentoResponsavel(data, cooperadoSelecionadoId, undefined, coopId);
   }, [data, cooperadoSelecionadoId, coopId]);
+
+  const resumoItensExibicao = useMemo(() => {
+    if (!data || !cooperadoSelecionadoId) return resumoItensMes;
+    if (!isCooperado && aba === "pagar") return resumoItensPagamento;
+    if (
+      !visualizandoHistorico &&
+      (pendentePagamentoResponsavel ||
+        pagamentoAguardando ||
+        (isCooperado && (valorReceberConsolidado?.valor ?? 0) > 0))
+    ) {
+      if (!isCooperado && mesesPendentesPagamento.length > 1) {
+        return agregarItensFichaMeses(data, cooperadoSelecionadoId, mesesPendentesPagamento, coopId, {
+          apenasPendentes: true,
+        });
+      }
+      return agregarItensFichaMes(data, cooperadoSelecionadoId, mesAtivo, coopId, { apenasPendentes: true });
+    }
+    return resumoItensMes;
+  }, [
+    aba,
+    coopId,
+    cooperadoSelecionadoId,
+    data,
+    isCooperado,
+    mesAtivo,
+    mesesPendentesPagamento,
+    pagamentoAguardando,
+    pendentePagamentoResponsavel,
+    resumoItensMes,
+    resumoItensPagamento,
+    valorReceberConsolidado?.valor,
+    visualizandoHistorico,
+  ]);
 
   const descontosRegistradosMes = useMemo(() => {
     if (!data || !cooperadoSelecionadoId) return [];
@@ -1229,8 +1269,15 @@ export default function FichaCorridaPage() {
             )}
           </Card>
 
-          <Card title={`Resumo das entregas · ${formatMesReferencia(mesAtivo)}`} className="mb-6">
-            <TabelaResumoItens itens={resumoItensMes.itens} entregas={resumoItensMes.entregas} />
+          <Card
+            title={`Resumo das entregas · ${
+              !isCooperado && mesesPendentesPagamento.length > 1
+                ? formatMesesReferenciaRotulo(mesesPendentesPagamento)
+                : formatMesReferencia(mesAtivo)
+            }`}
+            className="mb-6"
+          >
+            <TabelaResumoItens itens={resumoItensExibicao.itens} entregas={resumoItensExibicao.entregas} />
             {fichasPendentesMes.some((f) => f.divisaoEntrega && f.divisaoEntrega.participantes.length > 1) && (
               <div className="mt-4 space-y-2">
                 {fichasPendentesMes

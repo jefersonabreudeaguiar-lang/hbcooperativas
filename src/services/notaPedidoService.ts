@@ -43,34 +43,54 @@ export interface ItemResumoFichaMes {
   valorBruto: number;
 }
 
+export type AgregarItensFichaOpts = {
+  /** Alinha tabela de itens ao resumo de pagamento (só fichas pendentes). */
+  apenasPendentes?: boolean;
+};
+
+/** Valor da linha = quantidade × preço (mesma regra de calcularItensNota e relatórios). */
+function valorBrutoItemLinha(item: NotaPedidoItem): number {
+  return round2(item.quantidade * item.precoUnitario);
+}
+
+function mesclarItemResumo(map: Map<string, ItemResumoFichaMes>, item: NotaPedidoItem) {
+  if (item.quantidade <= 0) return;
+  const valorLinha = valorBrutoItemLinha(item);
+  const key = item.produtoInstituicaoId || `${item.produtoNome.trim()}::${item.unidade.trim()}`;
+  const existente = map.get(key);
+  if (existente) {
+    existente.quantidade = round2(existente.quantidade + item.quantidade);
+    existente.valorBruto = round2(existente.valorBruto + valorLinha);
+    existente.precoUnitario =
+      existente.quantidade > 0 ? round2(existente.valorBruto / existente.quantidade) : item.precoUnitario;
+  } else {
+    map.set(key, {
+      produtoInstituicaoId: item.produtoInstituicaoId,
+      produtoNome: item.produtoNome,
+      unidade: item.unidade,
+      precoUnitario: item.precoUnitario,
+      quantidade: item.quantidade,
+      valorBruto: valorLinha,
+    });
+  }
+}
+
 /** Soma itens de todas as entregas do cooperado no mês (ficha corrida consolidada). */
 export function agregarItensFichaMes(
   data: AppData,
   cooperadoId: string,
   mesReferencia: string,
-  cooperativaId?: string
+  cooperativaId?: string,
+  opts?: AgregarItensFichaOpts
 ): { itens: ItemResumoFichaMes[]; entregas: number; valorBruto: number } {
-  const fichas = listarFichasExtratoCooperadoMes(data, cooperadoId, mesReferencia, cooperativaId);
+  const fichas = opts?.apenasPendentes
+    ? listarFichasPendentesPagamento(data, cooperadoId, mesReferencia, cooperativaId)
+    : listarFichasExtratoCooperadoMes(data, cooperadoId, mesReferencia, cooperativaId);
 
   const map = new Map<string, ItemResumoFichaMes>();
   for (const ficha of fichas) {
     for (const item of ficha.itens ?? []) {
-      if (item.quantidade <= 0) continue;
-      const key = item.produtoInstituicaoId;
-      const existente = map.get(key);
-      if (existente) {
-        existente.quantidade = round2(existente.quantidade + item.quantidade);
-        existente.valorBruto = round2(existente.valorBruto + item.valorBruto);
-      } else {
-        map.set(key, {
-          produtoInstituicaoId: item.produtoInstituicaoId,
-          produtoNome: item.produtoNome,
-          unidade: item.unidade,
-          precoUnitario: item.precoUnitario,
-          quantidade: item.quantidade,
-          valorBruto: item.valorBruto,
-        });
-      }
+      mesclarItemResumo(map, item);
     }
   }
 
@@ -87,20 +107,24 @@ export function agregarItensFichaMeses(
   data: AppData,
   cooperadoId: string,
   mesesReferencia: string[],
-  cooperativaId?: string
+  cooperativaId?: string,
+  opts?: AgregarItensFichaOpts
 ): { itens: ItemResumoFichaMes[]; entregas: number; valorBruto: number } {
   const map = new Map<string, ItemResumoFichaMes>();
   let entregas = 0;
   for (const mes of mesesReferencia) {
-    const parcial = agregarItensFichaMes(data, cooperadoId, mes, cooperativaId);
+    const parcial = agregarItensFichaMes(data, cooperadoId, mes, cooperativaId, opts);
     entregas += parcial.entregas;
     for (const item of parcial.itens) {
-      const existente = map.get(item.produtoInstituicaoId);
+      const key = item.produtoInstituicaoId || `${item.produtoNome.trim()}::${item.unidade.trim()}`;
+      const existente = map.get(key);
       if (existente) {
         existente.quantidade = round2(existente.quantidade + item.quantidade);
         existente.valorBruto = round2(existente.valorBruto + item.valorBruto);
+        existente.precoUnitario =
+          existente.quantidade > 0 ? round2(existente.valorBruto / existente.quantidade) : item.precoUnitario;
       } else {
-        map.set(item.produtoInstituicaoId, { ...item });
+        map.set(key, { ...item });
       }
     }
   }
@@ -144,13 +168,14 @@ export function agregarItensNotasCooperado(
 
     for (const item of itensFonte) {
       if (item.quantidade <= 0) continue;
-      const key = item.produtoInstituicaoId;
+      const key = item.produtoInstituicaoId || `${item.produtoNome.trim()}::${item.unidade.trim()}`;
+      const valorLinha = valorBrutoItemLinha(item);
       const existente = map.get(key);
       if (existente) {
         existente.quantidade = round2(existente.quantidade + item.quantidade);
-        existente.valorBruto = round2(existente.valorBruto + item.valorBruto);
+        existente.valorBruto = round2(existente.valorBruto + valorLinha);
       } else {
-        map.set(key, { ...item });
+        map.set(key, { ...item, valorBruto: valorLinha });
       }
     }
   }

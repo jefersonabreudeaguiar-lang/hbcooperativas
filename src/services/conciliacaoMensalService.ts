@@ -1,6 +1,10 @@
 import type { AppData } from "@/types";
 import { round2, sumBy } from "@/utils/calculations";
-import { getTotalAPagarCooperado } from "@/services/notaPedidoService";
+import {
+  dedupeFichaCorridaPorNota,
+  fichaValidaNoExtrato,
+  getTotalAPagarCooperado,
+} from "@/services/notaPedidoService";
 import { calcularFechamentoMensalLive, listMesesComLancamentos } from "@/services/relatorioService";
 import { resumoLivroCaixa } from "@/services/livroCaixaService";
 import { getUserCooperativaId } from "@/utils/cooperativa";
@@ -102,7 +106,10 @@ export function calcularConciliacaoMensal(
   const calc = calcularFechamentoMensalLive(mesReferencia, data);
 
   const notasOk = notasConferidasMes(data, mesReferencia);
-  const fichasMes = data.fichaCorrida.filter((f) => f.mesReferencia === mesReferencia);
+  const fichasMes = dedupeFichaCorridaPorNota(
+    data.fichaCorrida.filter((f) => f.mesReferencia === mesReferencia && fichaValidaNoExtrato(data, f)),
+    data.notasPedido
+  );
   const totalBrutoNotas = round2(sumBy(notasOk, (n) => n.valorBruto));
   const totalBrutoFicha = round2(sumBy(fichasMes, (f) => f.valorBruto));
 
