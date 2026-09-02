@@ -16,6 +16,7 @@ import {
   getRelatorioResumoFinanceiroEmAberto,
   getResumoFinanceiroMes,
   getTotalValoresAPagarEmAberto,
+  flattenLinhasPagarCooperadoEmAberto,
 } from "@/services/relatorioService";
 import type { ConciliacaoMensalResult } from "@/services/conciliacaoMensalService";
 import { getDemonstrativoPagamentosMes } from "@/services/conciliacaoMensalService";
@@ -749,18 +750,12 @@ export function gerarRelatorioPagarCooperadoAbertoHtml(
   const total = cooperadoId
     ? round2(linhas.reduce((s, l) => s + l.total, 0))
     : getTotalValoresAPagarEmAberto(data, cooperativaId);
-  const rows = linhas
+  const detalharPorMes = linhas.some((r) => r.porMes.length > 1);
+  const linhasTabela = flattenLinhasPagarCooperadoEmAberto(linhas);
+  const rows = linhasTabela
     .map(
       (l) =>
         `<tr><td>${escapeHtml(l.cooperado)}</td><td>${escapeHtml(l.mesesLabel)}</td><td class="num">${l.entregas}</td><td class="num">${formatCurrency(l.total)}</td></tr>`
-    )
-    .join("");
-  const detalheRows = linhas
-    .flatMap((l) =>
-      l.porMes.map(
-        (m) =>
-          `<tr><td>${escapeHtml(l.cooperado)}</td><td>${escapeHtml(m.mesLabel)}</td><td class="num">${m.entregas}</td><td class="num">${formatCurrency(m.total)}</td></tr>`
-      )
     )
     .join("");
 
@@ -768,19 +763,10 @@ export function gerarRelatorioPagarCooperadoAbertoHtml(
     <h2>Valores a pagar — geral em aberto</h2>
     <p class="carta">Soma consolidada de todos os meses com pagamento pendente ao cooperado.</p>
     <table>
-      <thead><tr><th>Cooperado</th><th>Meses em aberto</th><th class="num">Entregas</th><th class="num">Valor a pagar</th></tr></thead>
+      <thead><tr><th>Cooperado</th><th>${detalharPorMes ? "Mês" : "Meses em aberto"}</th><th class="num">Entregas</th><th class="num">Valor a pagar</th></tr></thead>
       <tbody>${rows || `<tr><td colspan="4">Nenhum valor pendente.</td></tr>`}</tbody>
       <tfoot><tr><td colspan="3"><strong>Total geral</strong></td><td class="num"><strong>${formatCurrency(total)}</strong></td></tr></tfoot>
-    </table>
-    ${
-      detalheRows
-        ? `<h3 style="margin-top:24px">Detalhamento por mês</h3>
-    <table>
-      <thead><tr><th>Cooperado</th><th>Mês</th><th class="num">Entregas</th><th class="num">Valor a pagar</th></tr></thead>
-      <tbody>${detalheRows}</tbody>
-    </table>`
-        : ""
-    }`;
+    </table>`;
 
   return documentoShell(
     "Valores a Pagar — Geral em Aberto",

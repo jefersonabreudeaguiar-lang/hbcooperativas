@@ -31,7 +31,7 @@ import {
   getRelatorioAtingimentoCronograma,
   calcularFechamentoMensal,
 } from "@/services/dashboardService";
-import { calcularFechamentoMensalLive } from "@/services/relatorioService";
+import { calcularFechamentoMensalLive, flattenLinhasPagarCooperadoEmAberto } from "@/services/relatorioService";
 import {
   baixarDocumento,
   gerarRelatorioEntregasPorItensPeriodoHtml,
@@ -428,11 +428,9 @@ export default function RelatoriosPage() {
       }
       case "pagar_cooperado": {
         headers = ["Cooperado", "Mês", "Entregas", "Valor a pagar"];
-        rows = getRelatorioPagarCooperadoEmAbertoReport(data, coopId, cooperadoId || undefined).flatMap((x) =>
-          x.porMes.length
-            ? x.porMes.map((m) => [x.cooperado, m.mesLabel, String(m.entregas), String(m.total)])
-            : [[x.cooperado, x.mesesLabel, String(x.entregas), String(x.total)]]
-        );
+        rows = flattenLinhasPagarCooperadoEmAberto(
+          getRelatorioPagarCooperadoEmAbertoReport(data, coopId, cooperadoId || undefined)
+        ).map((l) => [l.cooperado, l.mesesLabel, String(l.entregas), String(l.total)]);
         break;
       }
       case "resumo_financeiro_aberto": {
@@ -842,6 +840,8 @@ export default function RelatoriosPage() {
       }
       case "pagar_cooperado": {
         const porCooperado = getRelatorioPagarCooperadoEmAbertoReport(data, coopId, cooperadoId || undefined);
+        const linhasTabela = flattenLinhasPagarCooperadoEmAberto(porCooperado);
+        const detalharPorMes = porCooperado.some((r) => r.porMes.length > 1);
         const totalGeral = cooperadoId
           ? porCooperado.reduce((s, r) => s + r.total, 0)
           : getTotalValoresAPagarEmAberto(data, coopId);
@@ -856,46 +856,19 @@ export default function RelatoriosPage() {
               <StatCard title="Total geral a pagar" value={formatCurrency(totalGeral)} variant="warning" />
             </div>
             <DataTable
-              data={porCooperado}
-              keyField="cooperadoId"
+              data={linhasTabela}
+              keyField="id"
               columns={[
                 { key: "cooperado", label: "Cooperado" },
                 {
-                  key: "meses",
-                  label: "Meses em aberto",
-                  render: (r) => r.mesesLabel || "—",
+                  key: "mesesLabel",
+                  label: detalharPorMes ? "Mês" : "Meses em aberto",
                 },
                 { key: "entregas", label: "Entregas" },
                 { key: "total", label: "Valor a Pagar", render: (r) => formatCurrency(r.total) },
               ]}
               emptyMessage="Nenhum valor pendente de pagamento."
             />
-            {porCooperado.some((r) => r.porMes.length > 0) && (
-              <>
-                <h3 className="text-sm font-bold uppercase tracking-wide text-gray-700 mt-6 mb-3">
-                  Detalhamento por mês
-                </h3>
-                <DataTable
-                  data={porCooperado.flatMap((r) =>
-                    r.porMes.map((m) => ({
-                      id: `${r.cooperadoId}-${m.mes}`,
-                      cooperado: r.cooperado,
-                      mesLabel: m.mesLabel,
-                      entregas: m.entregas,
-                      total: m.total,
-                    }))
-                  )}
-                  keyField="id"
-                  columns={[
-                    { key: "cooperado", label: "Cooperado" },
-                    { key: "mes", label: "Mês", render: (l) => l.mesLabel },
-                    { key: "entregas", label: "Entregas" },
-                    { key: "total", label: "Valor a pagar", render: (l) => formatCurrency(l.total) },
-                  ]}
-                  emptyMessage="Nenhum mês com valor pendente."
-                />
-              </>
-            )}
           </>
         );
       }

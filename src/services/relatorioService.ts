@@ -329,6 +329,39 @@ export type LinhaPagarCooperadoEmAberto = {
   }[];
 };
 
+export type LinhaPagarCooperadoEmAbertoTabela = {
+  id: string;
+  cooperado: string;
+  mesesLabel: string;
+  entregas: number;
+  total: number;
+};
+
+/** Uma linha por cooperado, ou por mês quando houver mais de um mês em aberto. */
+export function flattenLinhasPagarCooperadoEmAberto(
+  linhas: LinhaPagarCooperadoEmAberto[]
+): LinhaPagarCooperadoEmAbertoTabela[] {
+  const detalharPorMes = linhas.some((r) => r.porMes.length > 1);
+  if (detalharPorMes) {
+    return linhas.flatMap((r) =>
+      r.porMes.map((m) => ({
+        id: `${r.cooperadoId}-${m.mes}`,
+        cooperado: r.cooperado,
+        mesesLabel: m.mesLabel,
+        entregas: m.entregas,
+        total: m.total,
+      }))
+    );
+  }
+  return linhas.map((r) => ({
+    id: r.cooperadoId,
+    cooperado: r.cooperado,
+    mesesLabel: r.mesesLabel,
+    entregas: r.entregas,
+    total: r.total,
+  }));
+}
+
 /** Total geral a pagar a cooperados (todos os meses em aberto). Fonte única para relatórios consolidados. */
 export function getTotalValoresAPagarEmAberto(data: AppData, cooperativaId?: string): number {
   return round2(
