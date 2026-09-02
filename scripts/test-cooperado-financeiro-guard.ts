@@ -104,7 +104,19 @@ function nota(id: string, status: NotaPedido["status"]): NotaPedido {
   assert.ok(next.fichaCorrida.length > 0, "purgar não deve zerar ficha com conferidas parciais");
 }
 
-// 4) reconciliar cria ficha a partir de conferidas antes de purgar
+// 4) Cooperado sem histórico de entregas = financeiro ok (não bloqueia o app)
+{
+  const data = baseData({
+    notasPedido: [nota("n0", "rascunho")],
+  });
+  assert.equal(
+    cooperadoFinanceiroLocalAusente(data, COOPERADO, COOP),
+    false,
+    "cooperado só com rascunho não deve ser tratado como financeiro ausente"
+  );
+}
+
+// 5) reconciliar cria ficha a partir de conferidas antes de purgar
 {
   const data = baseData({
     notasPedido: [nota("n1", "conferida")],

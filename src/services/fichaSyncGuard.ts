@@ -61,7 +61,8 @@ export function cooperadoFinanceiroLocalAusente(
   );
   const conferidas = notasConferidasCooperado(data, canonico, cooperativaId);
 
-  if (fichasPendentes.length === 0 && conferidas === 0) return true;
+  // Sem ficha e sem entrega conferida = cooperado novo ou só com rascunho — estado válido.
+  if (fichasPendentes.length === 0 && conferidas === 0) return false;
 
   // Ficha veio da nuvem antes das notas conferidas — estado quebrado típico no celular.
   if (fichasPendentes.length > 0 && conferidas === 0) return true;
