@@ -973,6 +973,8 @@ export const SYNC_INTERVAL_DESKTOP_MS = 15 * 60_000;
 /** Intervalo mínimo entre duas sincronizações (evita rajada ao abrir/voltar). */
 export const SYNC_MIN_GAP_MS = 2 * 60_000;
 export const SYNC_MIN_GAP_MOBILE_MS = 2 * 60_000;
+/** Responsável / diretoria — permite nova sync mais cedo após salvar ou abrir tela. */
+export const SYNC_MIN_GAP_GESTAO_MS = 25_000;
 
 export function isMobileDevice(): boolean {
   if (typeof window === "undefined") return false;
@@ -986,7 +988,19 @@ export function getSyncIntervalMs(): number {
   return isMobileDevice() ? SYNC_INTERVAL_MOBILE_MS : SYNC_INTERVAL_DESKTOP_MS;
 }
 
-export function getSyncMinGapMs(): number {
+export function getSyncMinGapMs(role?: string): number {
+  if (role === "cooperado") {
+    return isMobileDevice() ? SYNC_MIN_GAP_MOBILE_MS : SYNC_MIN_GAP_MS;
+  }
+  if (
+    role === "responsavel" ||
+    role === "tesoureiro" ||
+    role === "admin" ||
+    role === "presidente" ||
+    role === "contador"
+  ) {
+    return SYNC_MIN_GAP_GESTAO_MS;
+  }
   return isMobileDevice() ? SYNC_MIN_GAP_MOBILE_MS : SYNC_MIN_GAP_MS;
 }
 

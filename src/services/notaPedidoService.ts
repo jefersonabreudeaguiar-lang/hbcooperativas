@@ -18,7 +18,7 @@ import {
   resolverCooperadoIdCanonico,
   getCooperadoNomeResolvido,
 } from "@/services/cooperadoCloudService";
-import { descontosDoCooperadoNoMes } from "@/services/descontosService";
+import { descontosDoCooperadoNoMes, descontoManualDuplicaContaCoop } from "@/services/descontosService";
 import { valoresAvulsosPendentesMes, marcarValoresAvulsosPagosMes } from "@/services/valoresAvulsosReceberService";
 import { round2 } from "@/utils/calculations";
 import { gerarReciboHtml, resumoReciboFromPagamento } from "@/utils/recibo";
@@ -26,8 +26,13 @@ import { lancarPagamentoCooperadoNoCaixa } from "@/services/livroCaixaService";
 import type { DescontoContaCoopRemoto } from "@/lib/hb-credit/mergeFichaDescontos";
 import {
   descontosContaCoopFromArquivo,
+  dedupeDescontosContaCoopRemotos,
+  dedupeDescontosExtrasContaCoop,
+  filtrarDescontosContaCoopParaMesReferencia,
+  liquidoUsoContaCoopMes,
   mergeDescontosContaCoopNoResumo,
 } from "@/lib/hb-credit/mergeFichaDescontos";
+import { listarMesesPendentesPagamentoResponsavel } from "@/services/cooperadoEntregasService";
 import { formatMesesReferenciaRotulo } from "@/utils/format";
 import { fichaPreservarSemNotaLocal, notasSyncProvavelmenteCompleto } from "@/services/fichaSyncGuard";
 import { isCloudSyncInProgress } from "@/services/cloudSyncProgress";
@@ -1375,6 +1380,10 @@ export function getResumoPagamentoCooperado(
       ? ajustes.descontoAvulsoMotivo
       : arquivo?.descontoAvulsoMotivo ?? compartilhado?.descontoAvulsoMotivo;
   const descontosExtras: FichaCorridaDesconto[] = [];
+  const mesesPendentes = listarMesesPendentesPagamentoResponsavel(data, cooperadoCanonico, coopIdResolved);
+  const coopBruto = getDescontosContaCoopMesCached(data, cooperadoCanonico, mesReferencia, coopIdResolved);
+  const coopMes = filtrarDescontosContaCoopParaMesReferencia(coopBruto, mesReferencia, mesesPendentes);
+  const temContaCoopMes = coopMes.length > 0 || liquidoUsoContaCoopMes(coopBruto) > 0;
   if (mensalidadeFixa > 0) {
     descontosExtras.push({
       tipo: "mensalidade",
@@ -1392,6 +1401,7 @@ export function getResumoPagamentoCooperado(
   for (const d of descontosDoCooperadoNoMes(data, cooperadoCanonico, mesReferencia)) {
     if (d.valorDescontado <= 0) continue;
     if (mensalidadeFixa > 0 && d.tipo === "mensalidade_aberta") continue;
+    if (temContaCoopMes && descontoManualDuplicaContaCoop(d)) continue;
     descontosExtras.push({
       tipo: "manual",
       motivo: d.motivo,
@@ -1474,7 +1484,12 @@ function aplicarDescontosContaCoopMesNoResumo(
   cooperativaId?: string
 ): ResumoPagamentoCooperado {
   const coopId = cooperativaId ?? data.cooperados.find((c) => c.id === cooperadoId)?.cooperativaId;
-  const descontos = getDescontosContaCoopMesCached(data, cooperadoId, mesReferencia, coopId);
+  const mesesPendentes = listarMesesPendentesPagamentoResponsavel(data, cooperadoId, coopId);
+  const descontos = filtrarDescontosContaCoopParaMesReferencia(
+    getDescontosContaCoopMesCached(data, cooperadoId, mesReferencia, coopId),
+    mesReferencia,
+    mesesPendentes
+  );
   if (!descontos.length) return resumo;
   return mergeDescontosContaCoopNoResumo(resumo, descontos);
 }
@@ -1570,10 +1585,11 @@ export function persistDescontosContaCoopNoArquivo(
   cooperativaId: string,
   descontos: DescontoContaCoopRemoto[]
 ): AppData {
+  const deduped = dedupeDescontosContaCoopRemotos(descontos);
   return {
     ...data,
     arquivosMensais: upsertArquivoMensal(data, cooperadoId, cooperativaId, mesReferencia, {
-      contaCoopDescontos: descontos.map((d) => ({
+      contaCoopDescontos: deduped.map((d) => ({
         motivo: d.motivo,
         valorReais: d.valorReais,
         tipo: d.motivo.toLowerCase().includes("estorno") ? ("credito_avulso" as const) : ("conta_coop" as const),
@@ -1654,7 +1670,7 @@ export function getResumoPagamentoConsolidadoCooperado(
   return {
     valorBruto,
     descontoCooperativa,
-    descontosExtras,
+    descontosExtras: dedupeDescontosExtrasContaCoop(descontosExtras),
     valorEntregas,
     valorLiquido,
     fichaIds,

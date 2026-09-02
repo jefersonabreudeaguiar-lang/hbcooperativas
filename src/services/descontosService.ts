@@ -7,6 +7,12 @@ export const TIPO_DESCONTO_LABELS: Record<Desconto["tipo"], string> = {
   manual: "Desconto manual",
 };
 
+/** Desconto manual legado que repete compra já abatida pela Conta Coop. */
+export function descontoManualDuplicaContaCoop(d: Pick<Desconto, "motivo">): boolean {
+  const m = d.motivo.toLowerCase();
+  return m.includes("conta coop") || m.includes("conta-coop") || m.includes("compra conta coop");
+}
+
 export function descontosDoCooperadoNoMes(
   data: AppData,
   cooperadoId: string,

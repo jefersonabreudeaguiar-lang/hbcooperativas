@@ -5,7 +5,8 @@ import { getData } from "@/services/dataStore";
 import { resolveCooperativaCnpj } from "@/services/notaPedidoCloudService";
 import { isContaCoopValorReceberPilot } from "@/utils/contaCoopUiVisibility";
 
-const SYNC_INTERVAL_MS = 300_000;
+const SYNC_INTERVAL_MS = 120_000;
+const SYNC_INITIAL_DELAY_MS = 2_000;
 
 type HookOpts = {
   cooperativaId?: string;
@@ -70,7 +71,7 @@ export function useSyncContaCoopValorReceberCooperativa(opts?: HookOpts) {
     };
     document.addEventListener("visibilitychange", onVisible);
     const interval = window.setInterval(run, SYNC_INTERVAL_MS);
-    const initial = window.setTimeout(run, 8_000);
+    const initial = window.setTimeout(run, SYNC_INITIAL_DELAY_MS);
 
     return () => {
       cancelled = true;

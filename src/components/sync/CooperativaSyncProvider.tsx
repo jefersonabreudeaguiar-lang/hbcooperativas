@@ -114,7 +114,7 @@ export function CooperativaSyncProvider({ children }: { children: React.ReactNod
     }
 
     const now = Date.now();
-    if (!opts?.force && now - lastSyncStartedAtRef.current < getSyncMinGapMs()) return;
+    if (!opts?.force && now - lastSyncStartedAtRef.current < getSyncMinGapMs(currentUser.role)) return;
     lastSyncStartedAtRef.current = now;
 
     syncingRef.current = true;
@@ -309,7 +309,7 @@ export function CooperativaSyncProvider({ children }: { children: React.ReactNod
         markUserActivity();
         void runSync({ force: true });
       }
-    }, user?.role === "cooperado" ? 0 : 800);
+    }, user?.role === "cooperado" ? 0 : 400);
 
     const unsubIdle = onAppIdleChange((nowIdle) => {
       if (nowIdle) return;

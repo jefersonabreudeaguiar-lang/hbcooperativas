@@ -68,7 +68,7 @@ import {
   nomesParticipantesDivisao,
   textoInformativoDivisaoEntrega,
 } from "@/services/divisaoEntregaService";
-import { descontosDoCooperadoNoMes, TIPO_DESCONTO_LABELS } from "@/services/descontosService";
+import { descontosDoCooperadoNoMes, TIPO_DESCONTO_LABELS, descontoManualDuplicaContaCoop } from "@/services/descontosService";
 import {
   criarValorAvulsoReceber,
   cancelarValorAvulsoReceber,
@@ -674,8 +674,11 @@ export default function FichaCorridaPage() {
 
   const descontosRegistradosMes = useMemo(() => {
     if (!data || !cooperadoSelecionadoId) return [];
-    return descontosDoCooperadoNoMes(data, cooperadoSelecionadoId, mesAtivo);
-  }, [data, cooperadoSelecionadoId, mesAtivo]);
+    const lista = descontosDoCooperadoNoMes(data, cooperadoSelecionadoId, mesAtivo);
+    const temContaCoopNoResumo = (resumoExibicao?.descontosExtras ?? []).some((d) => d.tipo === "conta_coop");
+    if (!temContaCoopNoResumo) return lista;
+    return lista.filter((d) => !descontoManualDuplicaContaCoop(d));
+  }, [data, cooperadoSelecionadoId, mesAtivo, resumoExibicao?.descontosExtras]);
 
   const resumoReciboPagamento = useMemo(() => {
     if (!pagamentoAguardando) return null;
