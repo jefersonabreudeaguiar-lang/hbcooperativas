@@ -131,7 +131,10 @@ export const MODULOS_ACESSO: ModuloAcesso[] = [
   { resource: "conta_coop", label: "Conta Coop", href: "/conta-coop", actions: ["view", "create", "edit", "approve", "export"] },
 ];
 
-export const PRESET_RELATORIOS: Resource[] = ["dashboard", "relatorios", "fechamento"];
+export const PRESET_RELATORIOS: Resource[] = ["dashboard", "relatorios"];
+
+/** Início + relatórios + fechamento (perfil ampliado de consulta). */
+export const PRESET_RELATORIOS_COM_FECHAMENTO: Resource[] = ["dashboard", "relatorios", "fechamento"];
 
 /** Módulos liberados automaticamente ao cadastrar um contador (somente leitura contábil). */
 export const PRESET_CONTADOR: Resource[] = [
@@ -309,13 +312,13 @@ const PARCEIRO_MENU: { href: string; label: string; resource: Resource }[] = [
 
 const CONTADOR_MENU: { href: string; label: string; resource: Resource }[] = [
   { href: "/contador/dashboard", label: "Painel contador", resource: "contador" },
-  { href: "/contador/conciliacao", label: "Conciliação", resource: "contador" },
-  { href: "/contador/trilha-auditoria", label: "Trilha de auditoria", resource: "contador" },
+  { href: "/relatorios?tipo=conciliacao_mensal", label: "Conciliação", resource: "contador" },
+  { href: "/relatorios?tipo=trilha_auditoria", label: "Trilha de auditoria", resource: "contador" },
   { href: "/contador/parecer", label: "Parecer contábil", resource: "contador" },
   { href: "/contador/dossie", label: "Dossiê ZIP", resource: "contador" },
   { href: "/contador/snapshot", label: "Snapshot fechamento", resource: "contador" },
   { href: "/relatorios", label: "Relatórios", resource: "relatorios" },
-  { href: "/fechamento-mensal", label: "Fechamento mensal", resource: "fechamento" },
+  { href: "/relatorios?tipo=fechamento_mensal", label: "Fechamento mensal", resource: "fechamento" },
   { href: "/ficha-corrida", label: "Ficha corrida", resource: "ficha_corrida" },
   { href: "/livro-caixa", label: "Livro caixa", resource: "livro_caixa" },
   { href: "/conta-coop", label: "Conta Coop", resource: "conta_coop" },
@@ -548,8 +551,8 @@ export function getMobileNavItems(
     return filterMenuForUser(
       [
         { href: "/contador/dashboard", label: "Painel", resource: "contador" },
-        { href: "/contador/conciliacao", label: "Conciliar", resource: "contador" },
-        { href: "/contador/trilha-auditoria", label: "Auditoria", resource: "contador" },
+        { href: "/relatorios?tipo=conciliacao_mensal", label: "Conciliar", resource: "contador" },
+        { href: "/relatorios?tipo=trilha_auditoria", label: "Auditoria", resource: "contador" },
         { href: "/contador/parecer", label: "Parecer", resource: "contador" },
         { href: "/contador/dossie", label: "Dossiê", resource: "contador" },
         { href: "/contador/snapshot", label: "Snapshot", resource: "contador" },

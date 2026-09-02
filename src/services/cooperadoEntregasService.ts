@@ -1,14 +1,17 @@
 import type { AppData, NotaPedido, PagamentoCooperadoRegistro } from "@/types";
-import { notaPertenceCooperado, resolverCooperadoIdCanonico } from "@/services/cooperadoCloudService";
+import { notaPertenceCooperado, fichaPertenceCooperado, resolverCooperadoIdCanonico } from "@/services/cooperadoCloudService";
 import {
   getPagamentoAguardandoCooperado,
   getResumoPagamentoExibicao,
   getTotalAPagarCooperado,
   getResumoPagamentoCooperado,
+  getResumoValorAPagarRelatorio,
+  getResumoPagamentoConsolidadoCooperado,
   getValorExibicaoCooperado,
   buildValorExibicaoCooperadoOpts,
   pagamentoCobreMesReferencia,
   getMesesReferenciaPagamento,
+  fichaValidaNoExtrato,
 } from "@/services/notaPedidoService";
 import { formatMesReferencia, formatMesesReferenciaRotulo, getCurrentMesReferencia } from "@/utils/format";
 import { mesesComValoresAvulsos, totalValoresAvulsosPendentes } from "@/services/valoresAvulsosReceberService";
@@ -154,6 +157,12 @@ export function listarMesesEntregasCooperado(
   for (const mes of mesesComValoresAvulsos(data, cooperadoId, cooperativaId)) {
     set.add(mes);
   }
+  for (const f of data.fichaCorrida) {
+    if (!fichaPertenceCooperado(data, f, cooperadoId, cooperativaId)) continue;
+    if (f.status === "pendente" && fichaValidaNoExtrato(data, f)) {
+      set.add(f.mesReferencia);
+    }
+  }
   set.add(getCurrentMesReferencia());
   return [...set].sort((a, b) => b.localeCompare(a));
 }
@@ -231,7 +240,7 @@ export function listarMesesPendentesPagamentoResponsavel(
       pendentes.push(mes);
       continue;
     }
-    if (getResumoPagamentoCooperado(data, cooperadoId, mes, cooperativaId).valorLiquido > 0) {
+    if (getResumoValorAPagarRelatorio(data, cooperadoId, mes, cooperativaId).valorLiquido > 0) {
       pendentes.push(mes);
       continue;
     }
@@ -295,11 +304,24 @@ export function getValorQuantoVouReceber(
   if (aguardando) {
     const cobertos = new Set(getMesesReferenciaPagamento(aguardando));
     valor = aguardando.valorLiquido;
-    for (const m of mesesPendentes) {
-      if (!cobertos.has(m)) {
-        valor += valorLiquidoMesQuantoVouReceber(data, cooperadoId, m, cooperativaId);
-      }
+    const mesesSemCobertura = mesesPendentes.filter((m) => !cobertos.has(m));
+    if (mesesSemCobertura.length > 1) {
+      valor += getResumoPagamentoConsolidadoCooperado(
+        data,
+        cooperadoId,
+        mesesSemCobertura,
+        cooperativaId
+      ).valorLiquido;
+    } else if (mesesSemCobertura.length === 1) {
+      valor += valorLiquidoMesQuantoVouReceber(data, cooperadoId, mesesSemCobertura[0], cooperativaId);
     }
+  } else if (mesesPendentes.length > 1) {
+    valor = getResumoPagamentoConsolidadoCooperado(
+      data,
+      cooperadoId,
+      mesesPendentes,
+      cooperativaId
+    ).valorLiquido;
   } else {
     valor = mesesPendentes.reduce(
       (s, m) => s + valorLiquidoMesQuantoVouReceber(data, cooperadoId, m, cooperativaId),

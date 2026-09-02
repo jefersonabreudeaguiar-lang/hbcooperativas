@@ -28,7 +28,6 @@ import {
   descontosContaCoopFromArquivo,
   mergeDescontosContaCoopNoResumo,
 } from "@/lib/hb-credit/mergeFichaDescontos";
-import { isContaCoopValorReceberPilot } from "@/utils/contaCoopUiVisibility";
 import { formatMesesReferenciaRotulo } from "@/utils/format";
 import { fichaPreservarSemNotaLocal, notasSyncProvavelmenteCompleto } from "@/services/fichaSyncGuard";
 import { isCloudSyncInProgress } from "@/services/cloudSyncProgress";
@@ -195,7 +194,10 @@ export function calcularItensNota(
     }));
 
   const valorBruto = round2(calculados.reduce((s, i) => s + i.valorBruto, 0));
-  const valorDesconto = round2(valorBruto * (percentualDesconto / 100));
+  // Desconto por linha (soma arredondada) — bate com a soma das fichas multi-foto.
+  const valorDesconto = round2(
+    calculados.reduce((s, i) => s + round2(i.valorBruto * (percentualDesconto / 100)), 0)
+  );
   const valorLiquido = round2(valorBruto - valorDesconto);
 
   return { itens: calculados, valorBruto, valorDesconto, valorLiquido };
@@ -743,9 +745,11 @@ export function buildFichasDivisaoFromNota(
       cooperadoNomeSnapshot: p.cooperadoNome,
     };
     const base = buildFichaFromNota(notaParticipante, ctx, responsavel, p.cooperadoNome, opts);
-    const valorBruto = dividirValorEntrega(nota.valorBruto, i, N);
-    const descontos = dividirValorEntrega(nota.valorDesconto, i, N);
-    const valorLiquido = dividirValorEntrega(nota.valorLiquido, i, N);
+    const itensFatia = dividirItensEntrega(nota.itens ?? [], i, N);
+    const calc = calcularItensNota(itensFatia, nota.percentualDescontoCooperativa);
+    const valorBruto = calc.valorBruto;
+    const descontos = calc.valorDesconto;
+    const valorLiquido = calc.valorLiquido;
     const saldoAnterior =
       opts?.fotoIndex != null
         ? getSaldoAnteriorFicha(ctx, p.cooperadoId, nota.mesReferencia)
@@ -755,11 +759,17 @@ export function buildFichasDivisaoFromNota(
       valorBruto,
       descontos,
       valorLiquido,
-      itens: dividirItensEntrega(nota.itens ?? [], i, N),
-      descontosDetalhe: base.descontosDetalhe?.map((d) => ({
-        ...d,
-        valor: dividirValorEntrega(d.valor, i, N),
-      })),
+      itens: calc.itens,
+      descontosDetalhe:
+        descontos > 0
+          ? [
+              {
+                tipo: "cooperativa" as const,
+                motivo: `Taxa cooperativa (${nota.percentualDescontoCooperativa}%)`,
+                valor: descontos,
+              },
+            ]
+          : [],
       saldoAcumulado: round2(saldoAnterior + valorLiquido),
       divisaoEntrega: divisao,
     };
@@ -785,20 +795,28 @@ function buildFichasMultiFotoFromNota(
       fotoIndex: i,
       totalFotos,
     });
-    const valorBruto = dividirValorEntrega(nota.valorBruto, i, totalFotos);
-    const descontos = dividirValorEntrega(nota.valorDesconto, i, totalFotos);
-    const valorLiquido = dividirValorEntrega(nota.valorLiquido, i, totalFotos);
+    const itensFatia = dividirItensEntrega(nota.itens ?? [], i, totalFotos);
+    const calc = calcularItensNota(itensFatia, nota.percentualDescontoCooperativa);
+    const valorBruto = calc.valorBruto;
+    const descontos = calc.valorDesconto;
+    const valorLiquido = calc.valorLiquido;
     const saldoAnterior = getSaldoAnteriorFicha(ctx, nota.cooperadoId, nota.mesReferencia, nota.id);
     const ficha: FichaCorrida = {
       ...base,
       valorBruto,
       descontos,
       valorLiquido,
-      itens: dividirItensEntrega(nota.itens ?? [], i, totalFotos),
-      descontosDetalhe: base.descontosDetalhe?.map((d) => ({
-        ...d,
-        valor: dividirValorEntrega(d.valor, i, totalFotos),
-      })),
+      itens: calc.itens,
+      descontosDetalhe:
+        descontos > 0
+          ? [
+              {
+                tipo: "cooperativa" as const,
+                motivo: `Taxa cooperativa (${nota.percentualDescontoCooperativa}%)`,
+                valor: descontos,
+              },
+            ]
+          : [],
       saldoAcumulado: round2(saldoAnterior + valorLiquido),
     };
     if (nota.status === "pago") ficha.status = "pago";
@@ -942,14 +960,89 @@ export function somaValorBrutoFichasNota(fichas: FichaCorrida[], notaId: string)
   );
 }
 
-/** Soma das fichas da nota bate com o valor bruto (ou líquido) conferido. */
+export function somaTotaisFichasNota(
+  fichas: FichaCorrida[],
+  notaId: string
+): { valorBruto: number; valorDesconto: number; valorLiquido: number } {
+  const list = fichas.filter((f) => f.notaPedidoId === notaId);
+  return {
+    valorBruto: round2(list.reduce((s, f) => s + (f.valorBruto ?? 0), 0)),
+    valorDesconto: round2(list.reduce((s, f) => s + (f.descontos ?? 0), 0)),
+    valorLiquido: round2(list.reduce((s, f) => s + (f.valorLiquido ?? 0), 0)),
+  };
+}
+
+/** Soma das fichas da nota bate com bruto e líquido conferidos. */
 export function fichasValoresAlinhadosComNota(fichas: FichaCorrida[], nota: NotaPedido): boolean {
-  const bruto = somaValorBrutoFichasNota(fichas, nota.id);
-  if (Math.abs(bruto - nota.valorBruto) <= 0.02) return true;
-  const liquido = round2(
-    fichas.filter((f) => f.notaPedidoId === nota.id).reduce((s, f) => s + (f.valorLiquido ?? 0), 0)
+  const { valorBruto, valorLiquido } = somaTotaisFichasNota(fichas, nota.id);
+  return (
+    Math.abs(valorBruto - nota.valorBruto) <= 0.01 &&
+    Math.abs(valorLiquido - nota.valorLiquido) <= 0.01
   );
-  return Math.abs(liquido - nota.valorLiquido) <= 0.02;
+}
+
+/** Ajusta totais da nota para bater com a soma das fichas (multi-entrega). */
+export function sincronizarTotaisNotaComFichas(
+  nota: NotaPedido,
+  fichas: FichaCorrida[],
+  opts?: { forcarDescontoLiquido?: boolean; sincronizarBruto?: boolean }
+): NotaPedido {
+  const list = fichas.filter((f) => f.notaPedidoId === nota.id);
+  if (!list.length) return nota;
+  const tot = somaTotaisFichasNota(fichas, nota.id);
+  const brutoCompativel =
+    opts?.sincronizarBruto ||
+    opts?.forcarDescontoLiquido ||
+    Math.abs(tot.valorBruto - nota.valorBruto) <= 0.05;
+  if (!brutoCompativel) return nota;
+  if (fichasValoresAlinhadosComNota(fichas, nota)) return nota;
+  return {
+    ...nota,
+    ...(opts?.sincronizarBruto || opts?.forcarDescontoLiquido
+      ? { valorBruto: tot.valorBruto }
+      : {}),
+    valorDesconto: tot.valorDesconto,
+    valorLiquido: tot.valorLiquido,
+    updatedAt: new Date().toISOString(),
+  };
+}
+
+/** Alinha uma ficha única da nota com os totais conferidos (centavos de arredondamento). */
+export function alinharFichaUnicaComNota(
+  fichas: FichaCorrida[],
+  nota: NotaPedido
+): FichaCorrida[] {
+  const list = fichas.filter((f) => f.notaPedidoId === nota.id);
+  if (list.length !== 1) return fichas;
+  const f = list[0];
+  if (
+    Math.abs((f.valorBruto ?? 0) - nota.valorBruto) <= 0.02 &&
+    Math.abs((f.descontos ?? 0) - nota.valorDesconto) <= 0.01 &&
+    Math.abs((f.valorLiquido ?? 0) - nota.valorLiquido) <= 0.01
+  ) {
+    return fichas;
+  }
+  if (Math.abs((f.valorBruto ?? 0) - nota.valorBruto) > 0.02) return fichas;
+  const descontosDetalhe =
+    nota.valorDesconto > 0
+      ? [
+          {
+            tipo: "cooperativa" as const,
+            motivo: `Taxa cooperativa (${nota.percentualDescontoCooperativa}%)`,
+            valor: nota.valorDesconto,
+          },
+        ]
+      : [];
+  return fichas.map((entry) =>
+    entry.id === f.id
+      ? {
+          ...entry,
+          descontos: nota.valorDesconto,
+          valorLiquido: nota.valorLiquido,
+          descontosDetalhe,
+        }
+      : entry
+  );
 }
 
 function inferirQtdPartesFichaNota(fichas: FichaCorrida[], nota: NotaPedido): number {
@@ -1132,7 +1225,7 @@ export function listarFichasPendentesPagamento(
       f.status === "pendente"
   );
   return dedupeFichaCorridaPorNota(candidatas, data.notasPedido).filter((f) =>
-    fichaNotaElegivelParaPagamento(data, f)
+    fichaValidaNoExtrato(data, f)
   );
 }
 
@@ -1222,7 +1315,7 @@ export function getTotalAPagarCooperado(
 ): number {
   const coopId = cooperativaId ?? data.cooperados.find((c) => c.id === cooperadoId)?.cooperativaId;
   if (mesReferencia) {
-    return getResumoPagamentoCooperado(data, cooperadoId, mesReferencia, coopId).valorLiquido;
+    return getResumoValorAPagarRelatorio(data, cooperadoId, mesReferencia, coopId).valorLiquido;
   }
   const meses = [
     ...new Set(
@@ -1235,7 +1328,10 @@ export function getTotalAPagarCooperado(
     ),
   ];
   return round2(
-    meses.reduce((s, mes) => s + getResumoPagamentoCooperado(data, cooperadoId, mes, coopId).valorLiquido, 0)
+    meses.reduce(
+      (s, mes) => s + getResumoValorAPagarRelatorio(data, cooperadoId, mes, coopId).valorLiquido,
+      0
+    )
   );
 }
 
@@ -1327,7 +1423,18 @@ export function getResumoPagamentoCooperado(
   };
 }
 
-/** Valor exibido ao cooperado — soma das entregas; no piloto Orlando, menos uso Conta Coop no mês. */
+/** Valor líquido para relatórios e pagamento — inclui abatimento Conta Coop (mesma base da ficha). */
+export function getResumoValorAPagarRelatorio(
+  data: AppData,
+  cooperadoId: string,
+  mesReferencia: string,
+  cooperativaId?: string
+): ResumoPagamentoCooperado {
+  const base = getResumoPagamentoCooperado(data, cooperadoId, mesReferencia, cooperativaId);
+  return getResumoPagamentoParaRegistro(base, data, cooperadoId, mesReferencia, cooperativaId);
+}
+
+/** Valor exibido ao cooperado — entregas; menos uso Conta Coop no mercado quando houver compras no mês. */
 export type ValorExibicaoCooperadoOpts = {
   data: AppData;
   cooperadoId: string;
@@ -1358,49 +1465,7 @@ export function getDescontosContaCoopMesCached(
   return descontosContaCoopFromArquivo(arquivo);
 }
 
-/**
- * Resumo exibido ao cooperado no piloto (Orlando): entregas − mensalidade − Conta Coop + créditos.
- * Demais cooperados usam o resumo original (só entregas na tela).
- */
-export function getResumoExibicaoCooperadoPilot(
-  resumo: ResumoPagamentoCooperado,
-  opts?: ValorExibicaoCooperadoOpts
-): ResumoPagamentoCooperado {
-  if (!opts || !isContaCoopValorReceberPilot(opts.cooperadoId, opts.cooperadoNome)) {
-    return resumo;
-  }
-  const descontos = getDescontosContaCoopMesCached(
-    opts.data,
-    opts.cooperadoId,
-    opts.mesReferencia,
-    opts.cooperativaId
-  );
-  if (!descontos.length) return resumo;
-  return mergeDescontosContaCoopNoResumo(resumo, descontos);
-}
-
-export function getValorExibicaoCooperado(
-  resumo: ResumoPagamentoCooperado,
-  opts?: ValorExibicaoCooperadoOpts
-): number {
-  if (!opts || !isContaCoopValorReceberPilot(opts.cooperadoId, opts.cooperadoNome)) {
-    return resumo.valorEntregas;
-  }
-  return getResumoExibicaoCooperadoPilot(resumo, opts).valorLiquido;
-}
-
-export function getDescontosExtrasExibicaoCooperado(
-  resumo: ResumoPagamentoCooperado,
-  opts?: ValorExibicaoCooperadoOpts
-): FichaCorridaDesconto[] {
-  if (!opts || !isContaCoopValorReceberPilot(opts.cooperadoId, opts.cooperadoNome)) {
-    return [];
-  }
-  return getResumoExibicaoCooperadoPilot(resumo, opts).descontosExtras;
-}
-
-/** Registro de pagamento pelo responsável — inclui abatimento Conta Coop no piloto. */
-export function getResumoPagamentoParaRegistro(
+function aplicarDescontosContaCoopMesNoResumo(
   resumo: ResumoPagamentoCooperado,
   data: AppData,
   cooperadoId: string,
@@ -1408,11 +1473,55 @@ export function getResumoPagamentoParaRegistro(
   cooperativaId?: string
 ): ResumoPagamentoCooperado {
   const coopId = cooperativaId ?? data.cooperados.find((c) => c.id === cooperadoId)?.cooperativaId;
-  const cooperadoNome = data.cooperados.find((c) => c.id === cooperadoId)?.nomeCompleto;
-  if (!isContaCoopValorReceberPilot(cooperadoId, cooperadoNome)) return resumo;
   const descontos = getDescontosContaCoopMesCached(data, cooperadoId, mesReferencia, coopId);
   if (!descontos.length) return resumo;
   return mergeDescontosContaCoopNoResumo(resumo, descontos);
+}
+
+/** Resumo com abatimento Conta Coop quando houver compras no mercado no mês. */
+export function getResumoExibicaoCooperadoPilot(
+  resumo: ResumoPagamentoCooperado,
+  opts?: ValorExibicaoCooperadoOpts
+): ResumoPagamentoCooperado {
+  if (!opts) return resumo;
+  return aplicarDescontosContaCoopMesNoResumo(
+    resumo,
+    opts.data,
+    opts.cooperadoId,
+    opts.mesReferencia,
+    opts.cooperativaId
+  );
+}
+
+export function getValorExibicaoCooperado(
+  resumo: ResumoPagamentoCooperado,
+  opts?: ValorExibicaoCooperadoOpts
+): number {
+  if (!opts) return resumo.valorEntregas;
+  const merged = getResumoExibicaoCooperadoPilot(resumo, opts);
+  if (merged !== resumo) return merged.valorLiquido;
+  return resumo.valorEntregas;
+}
+
+export function getDescontosExtrasExibicaoCooperado(
+  resumo: ResumoPagamentoCooperado,
+  opts?: ValorExibicaoCooperadoOpts
+): FichaCorridaDesconto[] {
+  if (!opts) return [];
+  const merged = getResumoExibicaoCooperadoPilot(resumo, opts);
+  if (merged === resumo) return [];
+  return merged.descontosExtras;
+}
+
+/** Registro de pagamento pelo responsável — inclui abatimento Conta Coop (mercado). */
+export function getResumoPagamentoParaRegistro(
+  resumo: ResumoPagamentoCooperado,
+  data: AppData,
+  cooperadoId: string,
+  mesReferencia: string,
+  cooperativaId?: string
+): ResumoPagamentoCooperado {
+  return aplicarDescontosContaCoopMesNoResumo(resumo, data, cooperadoId, mesReferencia, cooperativaId);
 }
 
 export type ResumoPagamentoCooperado = ReturnType<typeof getResumoPagamentoCooperado>;

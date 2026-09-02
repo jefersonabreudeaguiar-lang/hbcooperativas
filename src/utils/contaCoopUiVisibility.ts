@@ -50,16 +50,14 @@ export function isContaCoopUiVisibleForUser(
 }
 
 /**
- * Abate compras Conta Coop no valor a receber exibido ao cooperado.
- * Piloto: só Orlando. Depois de validado, use NEXT_PUBLIC_CONTA_COOP_VALOR_RECEBER_PUBLIC=1 para todos.
+ * Abate compras Conta Coop (mercado) no valor a receber — vale para todos os cooperados ativos.
+ * NEXT_PUBLIC_CONTA_COOP_VALOR_RECEBER_PUBLIC=0 desativa temporariamente (rollback).
  */
 export function isContaCoopValorReceberPilot(cooperadoId?: string, cooperadoNome?: string): boolean {
-  if (ALLOWED_ON.has((process.env.NEXT_PUBLIC_CONTA_COOP_VALOR_RECEBER_PUBLIC ?? "").trim().toLowerCase())) {
-    return true;
-  }
-  if (cooperadoId === CONTA_COOP_PILOT_COOPERADO_ID) return true;
-  if (cooperadoNome && matchesOrlandoTeste(cooperadoNome)) return true;
-  return false;
+  void cooperadoId;
+  void cooperadoNome;
+  const raw = (process.env.NEXT_PUBLIC_CONTA_COOP_VALOR_RECEBER_PUBLIC ?? "1").trim().toLowerCase();
+  return raw !== "0" && raw !== "false";
 }
 
 export function filterContaCoopNavItems<T extends { href: string; resource?: string }>(

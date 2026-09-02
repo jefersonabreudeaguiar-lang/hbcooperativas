@@ -34,6 +34,7 @@ import {
   buildFichasDivisaoFromNota,
   rebuildFichasNota,
   fichasValoresAlinhadosComNota,
+  sincronizarTotaisNotaComFichas,
   excluirEntregaNota,
   isNotaPedidoExcluida,
   podeExcluirEntregaNota,
@@ -2288,10 +2289,31 @@ export default function NotasPedidoContent() {
       if (divisao) {
         notaAtualizada = { ...notaAtualizada, divisaoEntrega: divisao };
       }
+      const fichasExistentes = d.fichaCorrida.filter((f) => f.notaPedidoId === selectedNota.id);
+      if (fichasExistentes.length > 0) {
+        notaAtualizada = sincronizarTotaisNotaComFichas(notaAtualizada!, d.fichaCorrida, {
+          forcarDescontoLiquido: true,
+          sincronizarBruto: fichasExistentes.length > 1,
+        });
+      }
       const notasPedido = d.notasPedido.map((n) => (n.id === selectedNota.id ? notaAtualizada! : n));
 
       if (multiFoto) {
         const baseData = { ...d, notasPedido };
+        if (fichasExistentes.length > 0 && fichasValoresAlinhadosComNota(d.fichaCorrida, notaAtualizada!)) {
+          return addAuditEntry(baseData, {
+            entityType: "nota_pedido",
+            entityId: selectedNota.id,
+            action: "aprovar",
+            userId: user.id,
+            userName: user.name,
+            changes: divisao
+              ? `Entrega conferida (${qtdFotosAprovadas} fotos) · dividida entre ${divisao.participantes.length} cooperados`
+              : qtdFotosAprovadas > 1
+                ? `Entrega conferida (${qtdFotosAprovadas} fotos)`
+                : "Entrega conferida",
+          });
+        }
         const next = rebuildFichasNota(baseData, notaAtualizada!);
         return addAuditEntry(next, {
           entityType: "nota_pedido",

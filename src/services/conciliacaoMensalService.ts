@@ -1,5 +1,6 @@
 import type { AppData } from "@/types";
 import { round2, sumBy } from "@/utils/calculations";
+import { hrefRelatorio } from "@/utils/relatorioRoutes";
 import {
   dedupeFichaCorridaPorNota,
   fichaValidaNoExtrato,
@@ -397,7 +398,7 @@ export function calcularConciliacaoMensal(
       severidade: "critico",
       titulo: `Divergência: ${l.label}`,
       descricao: `Diferença de R$ ${Math.abs(l.diferenca).toFixed(2)} entre ${l.labelA} e ${l.labelB}.`,
-      href: "/contador/conciliacao",
+      href: hrefRelatorio("conciliacao_mensal", { mes: mesReferencia }),
     });
   }
 

@@ -1,7 +1,9 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
+import { useSearchParams } from "next/navigation";
 import { CheckCircle, Lock, FileCheck, Download, Printer, FileText, ShieldCheck } from "lucide-react";
+import Link from "next/link";
 import { useAppData } from "@/hooks/useAppData";
 import { usePermissions } from "@/hooks/usePermissions";
 import { getUserCooperativaId } from "@/utils/cooperativa";
@@ -23,13 +25,20 @@ import { ModalEmitirRelatorio } from "@/components/relatorios/ModalEmitirRelator
 import type { EmissorRelatorio } from "@/types";
 import { formatCurrency, formatDate, formatMesReferencia, getCurrentMesReferencia } from "@/utils/format";
 import type { FechamentoMensal } from "@/types";
+import { hrefRelatorio } from "@/utils/relatorioRoutes";
 
 export default function FechamentoMensalPage() {
   const data = useAppData();
   const { check, user } = usePermissions();
+  const searchParams = useSearchParams();
   const coopId = user && data ? getUserCooperativaId(user, data) : undefined;
   const [selectedMes, setSelectedMes] = useState(getCurrentMesReferencia());
   const [modalEmissao, setModalEmissao] = useState<"pdf" | "print" | null>(null);
+
+  useEffect(() => {
+    const q = searchParams.get("mes");
+    if (q) setSelectedMes(q);
+  }, [searchParams]);
 
   const meses = useMemo(() => {
     if (!data) return [getCurrentMesReferencia()];
@@ -178,10 +187,15 @@ export default function FechamentoMensalPage() {
         </div>
       )}
 
-      <p className="text-sm text-gray-600 mb-4 flex items-center gap-2">
-        <FileText size={16} className="text-green-700" />
-        {calculoLive.qtdEntregas} entrega(s) · {calculoLive.qtdCooperadosPagos} pagamento(s) confirmado(s) ·{" "}
-        {calculoLive.qtdCooperadosAPagar} cooperado(s) a pagar
+      <p className="text-sm text-gray-600 mb-4 flex flex-wrap items-center gap-x-4 gap-y-2">
+        <span className="flex items-center gap-2">
+          <FileText size={16} className="text-green-700" />
+          {calculoLive.qtdEntregas} entrega(s) · {calculoLive.qtdCooperadosPagos} pagamento(s) confirmado(s) ·{" "}
+          {calculoLive.qtdCooperadosAPagar} cooperado(s) a pagar
+        </span>
+        <Link href={hrefRelatorio("fechamento_mensal", { mes: selectedMes })} className="text-green-700 font-medium text-sm">
+          Ver em Relatórios →
+        </Link>
       </p>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4 mb-6">

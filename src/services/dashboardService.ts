@@ -9,11 +9,17 @@ import {
   fechamentoToPartial,
   getRelatorioEntregasInstituicaoLive,
   getRelatorioEntregasPorItensInstituicao,
+  getRelatorioEntregasPorItensEmAberto,
+  getRelatorioEntregasPorItensPeriodo,
+  getRelatorioMensalidadesEmAbertoConsolidado,
   getRelatorioPagarCooperado,
   getRelatorioPagarCooperadoEmAberto,
   getRelatorioPNAELive,
+  getRelatorioResumoFinanceiroEmAberto,
   getResumoFinanceiroMes,
+  getTotalValoresAPagarEmAberto,
   listMesesComLancamentos,
+  listarMesesComDebitoCooperativa,
 } from "@/services/relatorioService";
 
 export interface CooperadoDashboardStats {
@@ -208,6 +214,36 @@ export function getRelatorioEntregasPorItens(
   return getRelatorioEntregasPorItensInstituicao(mesReferencia, instituicaoId, d, cooperativaId);
 }
 
+export function getRelatorioEntregasPorItensPeriodoReport(
+  instituicaoId: string,
+  mesesReferencia: string[],
+  data?: AppData,
+  cooperativaId?: string,
+  opcoes?: { apenasPendente?: boolean }
+) {
+  const d = data ?? getData();
+  return getRelatorioEntregasPorItensPeriodo(instituicaoId, mesesReferencia, d, cooperativaId, opcoes);
+}
+
+export function getRelatorioEntregasPorItensEmAbertoReport(
+  instituicaoId: string,
+  data?: AppData,
+  cooperativaId?: string
+) {
+  const d = data ?? getData();
+  return getRelatorioEntregasPorItensEmAberto(instituicaoId, d, cooperativaId);
+}
+
+export function getRelatorioResumoFinanceiroEmAbertoReport(data?: AppData, cooperativaId?: string) {
+  const d = data ?? getData();
+  return getRelatorioResumoFinanceiroEmAberto(d, cooperativaId);
+}
+
+export function getRelatorioMensalidadesEmAbertoConsolidadoReport(data?: AppData, cooperativaId?: string) {
+  const d = data ?? getData();
+  return getRelatorioMensalidadesEmAbertoConsolidado(d, cooperativaId);
+}
+
 export function getRelatorioPagarCooperadoEmAbertoReport(
   data?: AppData,
   cooperativaId?: string,
@@ -220,7 +256,7 @@ export function getRelatorioPagarCooperadoEmAbertoReport(
 export { getRelatorioSobrasPerdas } from "@/services/sobrasPerdasService";
 export { getRelatorioAtingimentoCronograma } from "@/services/relatorioCronogramaService";
 
-export { listMesesComLancamentos, getRelatorioPagarCooperado, getRelatorioPagarCooperadoEmAberto, calcularFechamentoMensalLive };
+export { listMesesComLancamentos, getRelatorioPagarCooperado, getRelatorioPagarCooperadoEmAberto, calcularFechamentoMensalLive, getRelatorioResumoFinanceiroEmAberto, getRelatorioEntregasPorItensEmAberto, getRelatorioMensalidadesEmAbertoConsolidado, listarMesesComDebitoCooperativa, getTotalValoresAPagarEmAberto };
 
 export function getFinanceiroResumoCooperado(data?: AppData): Pick<FinanceiroMensal, "saldoFinal" | "entradas" | "saidas" | "dataAtualizacao"> | null {
   const d = data ?? getData();

@@ -1,9 +1,11 @@
 "use client";
 
-import { useState, useMemo, useEffect } from "react";
-import { useRouter } from "next/navigation";
+import { useState, useMemo, useEffect, useCallback, useRef } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import Link from "next/link";
 import { Download, Printer, FileText } from "lucide-react";
 import { useAppData } from "@/hooks/useAppData";
+import { useSyncContaCoopValorReceberCooperativa } from "@/hooks/useSyncContaCoopValorReceberCooperativa";
 import { usePermissions } from "@/hooks/usePermissions";
 import { getUserCooperativaId } from "@/utils/cooperativa";
 import { PageHeader, FilterBar, DataTable } from "@/components/ui/Table";
@@ -15,20 +17,30 @@ import { NotaStatusBadge } from "@/components/ui/NotaStatusBadge";
 import {
   getRelatorioResumoFinanceiro,
   getRelatorioEntregasPorInstituicao,
-  getRelatorioEntregasPorItens,
+  getRelatorioEntregasPorItensPeriodoReport,
   getRelatorioPNAE,
-  getRelatorioPagarCooperado,
   getRelatorioPagarCooperadoEmAbertoReport,
+  getRelatorioResumoFinanceiroEmAbertoReport,
+  getRelatorioMensalidadesEmAbertoConsolidadoReport,
+  getTotalValoresAPagarEmAberto,
   listMesesComLancamentos,
+  listarMesesComDebitoCooperativa,
   exportToCSV,
   downloadCSV,
   getRelatorioSobrasPerdas,
   getRelatorioAtingimentoCronograma,
+  calcularFechamentoMensal,
 } from "@/services/dashboardService";
+import { calcularFechamentoMensalLive } from "@/services/relatorioService";
 import {
   baixarDocumento,
-  gerarRelatorioEntregasPorItensHtml,
+  gerarRelatorioEntregasPorItensPeriodoHtml,
+  gerarRelatorioEntregasInstituicaoHtml,
   gerarRelatorioFinanceiroHtml,
+  gerarRelatorioMensalidadesAbertasMesHtml,
+  gerarRelatorioMensalidadesAbertasTotalHtml,
+  gerarRelatorioPagarCooperadoAbertoHtml,
+  gerarRelatorioResumoFinanceiroAbertoHtml,
   gerarRelatorioAtingimentoCronogramaHtml,
   gerarRelatorioSobrasPerdasHtml,
   gerarRelatorioReclamacoesHtml,
@@ -40,10 +52,12 @@ import {
   gerarRelatorioExtratoContaCoopHtml,
   gerarRelatorioTrilhaAuditoriaHtml,
   gerarRelatorioParecerContabilHtml,
+  gerarRelatorioFechamentoHtml,
   imprimirDocumentoHtml,
   nomeArquivoRelatorio,
 } from "@/utils/relatorioHtml";
 import { ModalEmitirRelatorio } from "@/components/relatorios/ModalEmitirRelatorio";
+import { EntregasPorItensPainel } from "@/components/relatorios/EntregasPorItensPainel";
 import type { EmissorRelatorio } from "@/types";
 import { formatCurrency, formatDate, formatMesReferencia, getCurrentMesReferencia } from "@/utils/format";
 import { getCooperadoNome } from "@/utils/calculations";
@@ -63,41 +77,102 @@ import {
 } from "@/services/contadorRelatorioService";
 import { labelUnidade } from "@/utils/unidades";
 import { PageSkeleton } from "@/components/ui/PageSkeleton";
+import { TrilhaAuditoriaPanel } from "@/components/contador/TrilhaAuditoriaPanel";
+import { hrefRelatorio } from "@/utils/relatorioRoutes";
+import { isContadorRole, isResponsavelRole } from "@/permissions";
+import type { UserRole } from "@/types";
 
-const RELATORIOS = [
-  { id: "resumo_financeiro", label: "Resumo Financeiro Mensal" },
-  { id: "pagar_cooperado", label: "Valores a Pagar por Cooperado (mês)" },
-  { id: "pagar_cooperado_aberto", label: "Valores a Pagar — Geral em Aberto" },
-  { id: "mensalidades_abertas", label: "Mensalidades em Aberto" },
-  { id: "cotas_abertas", label: "Cotas em Aberto" },
-  { id: "entregas_instituicao", label: "Entregas por Instituição" },
-  { id: "entregas_por_itens", label: "Entregas por Item (mensal)" },
-  { id: "atingimento_cronograma", label: "Atingimento do Cronograma (contrato)" },
-  { id: "vendas_pnae", label: "Vendas ao PNAE" },
-  { id: "descontos_aplicados", label: "Descontos Aplicados" },
-  { id: "sobras_perdas", label: "Sobras e Perdas (transparência)" },
-  { id: "saldo_mensal", label: "Saldo Mensal da Cooperativa" },
-  { id: "historico_reclamacoes", label: "Histórico de Reclamações" },
-  { id: "historico_votacoes", label: "Histórico de Votações" },
-  { id: "conciliacao_mensal", label: "R4 — Conciliação mensal (contador)" },
-  { id: "demonstrativo_pagamentos", label: "R2 — Demonstrativo de pagamentos" },
-  { id: "razao_analitico", label: "R1 — Razão analítico por cooperado" },
-  { id: "mapa_receitas_contrato", label: "R3 — Mapa receitas por contrato" },
-  { id: "extrato_conta_coop", label: "R5 — Extrato Conta Coop" },
-  { id: "trilha_auditoria", label: "R6 — Trilha de auditoria" },
-  { id: "parecer_contabil", label: "R9 — Parecer contábil mensal" },
+type ReportAudience = "gestao" | "contador" | "ambos";
+
+type ReportDef = {
+  id: string;
+  label: string;
+  grupo: string;
+  audience: ReportAudience;
+  /** Não usa filtro de mês — consolida todos os meses com débito. */
+  consolidado?: boolean;
+};
+
+const RELATORIOS: ReportDef[] = [
+  { id: "resumo_financeiro", label: "Resumo Financeiro (mês)", grupo: "Financeiro", audience: "ambos" },
+  { id: "resumo_financeiro_aberto", label: "Resumo Financeiro — Total em Aberto", grupo: "Financeiro", audience: "ambos", consolidado: true },
+  { id: "pagar_cooperado", label: "Pagamento por cooperado (em aberto)", grupo: "Financeiro", audience: "ambos", consolidado: true },
+  { id: "mensalidades_abertas", label: "Mensalidades em Aberto (mês)", grupo: "Financeiro", audience: "ambos" },
+  { id: "mensalidades_abertas_total", label: "Mensalidades em Aberto — Total", grupo: "Financeiro", audience: "ambos", consolidado: true },
+  { id: "cotas_abertas", label: "Cotas em Aberto", grupo: "Financeiro", audience: "ambos", consolidado: true },
+  { id: "saldo_mensal", label: "Saldo Mensal da Cooperativa", grupo: "Financeiro", audience: "ambos" },
+  { id: "fechamento_mensal", label: "Fechamento Mensal", grupo: "Financeiro", audience: "ambos" },
+  { id: "entregas_instituicao", label: "Entregas por Instituição (mês)", grupo: "Entregas e contratos", audience: "gestao" },
+  { id: "entregas_por_itens", label: "Item por mês (em aberto)", grupo: "Entregas e contratos", audience: "ambos" },
+  { id: "atingimento_cronograma", label: "Atingimento do Cronograma", grupo: "Entregas e contratos", audience: "gestao" },
+  { id: "vendas_pnae", label: "Vendas ao PNAE (mês)", grupo: "Entregas e contratos", audience: "gestao" },
+  { id: "descontos_aplicados", label: "Descontos Aplicados (mês)", grupo: "Transparência", audience: "ambos" },
+  { id: "sobras_perdas", label: "Sobras e Perdas", grupo: "Transparência", audience: "ambos" },
+  { id: "historico_reclamacoes", label: "Histórico de Reclamações", grupo: "Transparência", audience: "ambos", consolidado: true },
+  { id: "historico_votacoes", label: "Histórico de Votações", grupo: "Transparência", audience: "ambos", consolidado: true },
+  { id: "razao_analitico", label: "R1 — Razão analítico por cooperado", grupo: "Contabilidade", audience: "contador" },
+  { id: "demonstrativo_pagamentos", label: "R2 — Demonstrativo de pagamentos", grupo: "Contabilidade", audience: "contador" },
+  { id: "mapa_receitas_contrato", label: "R3 — Mapa receitas por contrato", grupo: "Contabilidade", audience: "contador" },
+  { id: "conciliacao_mensal", label: "R4 — Conciliação mensal", grupo: "Contabilidade", audience: "contador" },
+  { id: "extrato_conta_coop", label: "R5 — Extrato Conta Coop", grupo: "Contabilidade", audience: "contador" },
+  { id: "trilha_auditoria", label: "R6 — Trilha de auditoria", grupo: "Contabilidade", audience: "contador" },
+  { id: "parecer_contabil", label: "R9 — Parecer contábil mensal", grupo: "Contabilidade", audience: "contador" },
 ];
+
+const RELATORIOS_CONSOLIDADOS = new Set(RELATORIOS.filter((r) => r.consolidado).map((r) => r.id));
+const RELATORIOS_MESES_MULTIPLOS = new Set(["entregas_por_itens"]);
+
+function relatorioVisivel(role: UserRole | string | undefined, r: ReportDef): boolean {
+  if (!role || role === "tesoureiro" || role === "admin" || role === "presidente") return true;
+  if (isContadorRole(role as UserRole)) return r.audience === "contador" || r.audience === "ambos";
+  if (isResponsavelRole(role)) return r.audience === "gestao" || r.audience === "ambos";
+  return true;
+}
 
 export default function RelatoriosPage() {
   const data = useAppData();
   const { user, check } = usePermissions();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const coopId = user && data ? getUserCooperativaId(user, data) : undefined;
+
+  useSyncContaCoopValorReceberCooperativa(
+    coopId && user ? { cooperativaId: coopId, user, enabled: Boolean(data) } : undefined
+  );
+
   const [tipo, setTipo] = useState("resumo_financeiro");
   const [mes, setMes] = useState(getCurrentMesReferencia());
   const [cooperadoId, setCooperadoId] = useState("");
   const [instituicaoId, setInstituicaoId] = useState("");
+  const [mesesEntregasItens, setMesesEntregasItens] = useState<string[]>([]);
+  const [apenasPendenteItens, setApenasPendenteItens] = useState(true);
   const [modalEmissao, setModalEmissao] = useState<"pdf" | "print" | null>(null);
+  const [urlSynced, setUrlSynced] = useState(false);
+  const tipoAnteriorRef = useRef<string>("");
+
+  const aplicarPadraoEntregasPorItensEmAberto = useCallback(() => {
+    if (!data) return;
+    const mesesAberto = listarMesesComDebitoCooperativa(data, coopId);
+    setMesesEntregasItens(mesesAberto.length > 0 ? mesesAberto : [mes]);
+    setApenasPendenteItens(true);
+  }, [data, coopId, mes]);
+
+  const syncRelatorioUrl = useCallback(
+    (nextTipo: string, nextMes: string, nextMesesItens?: string[], nextPendenteItens?: boolean) => {
+      const params = new URLSearchParams({ tipo: nextTipo });
+      if (!RELATORIOS_CONSOLIDADOS.has(nextTipo) && !RELATORIOS_MESES_MULTIPLOS.has(nextTipo)) {
+        params.set("mes", nextMes);
+      }
+      if (RELATORIOS_MESES_MULTIPLOS.has(nextTipo) && nextMesesItens?.length) {
+        params.set("meses", nextMesesItens.join(","));
+      }
+      if (RELATORIOS_MESES_MULTIPLOS.has(nextTipo) && nextPendenteItens) {
+        params.set("pendente", "1");
+      }
+      router.replace(`/relatorios?${params.toString()}`, { scroll: false });
+    },
+    [router]
+  );
 
   useEffect(() => {
     if (user && !check("relatorios", "view")) {
@@ -110,6 +185,73 @@ export default function RelatoriosPage() {
     return listMesesComLancamentos(data);
   }, [data]);
 
+  const relatoriosVisiveis = useMemo(
+    () => RELATORIOS.filter((r) => relatorioVisivel(user?.role, r)),
+    [user?.role]
+  );
+
+  const gruposRelatorio = useMemo(() => {
+    const map = new Map<string, ReportDef[]>();
+    for (const r of relatoriosVisiveis) {
+      const list = map.get(r.grupo) ?? [];
+      list.push(r);
+      map.set(r.grupo, list);
+    }
+    return [...map.entries()];
+  }, [relatoriosVisiveis]);
+
+  useEffect(() => {
+    if (relatoriosVisiveis.some((r) => r.id === tipo)) return;
+    if (relatoriosVisiveis[0]) setTipo(relatoriosVisiveis[0].id);
+  }, [relatoriosVisiveis, tipo]);
+
+  useEffect(() => {
+    if (!data || urlSynced) return;
+    const qTipo = searchParams.get("tipo");
+    const qMes = searchParams.get("mes");
+    const qMeses = searchParams.get("meses");
+    const qPendente = searchParams.get("pendente");
+    if (qTipo === "entregas_por_itens_aberto" || qTipo === "pagar_cooperado_aberto") {
+      setTipo(qTipo === "pagar_cooperado_aberto" ? "pagar_cooperado" : "entregas_por_itens");
+      setApenasPendenteItens(true);
+      if (data) setMesesEntregasItens(listarMesesComDebitoCooperativa(data, coopId));
+    } else if (qTipo && relatoriosVisiveis.some((r) => r.id === qTipo)) {
+      setTipo(qTipo);
+      if (qTipo === "entregas_por_itens" && !qMeses && data) {
+        setMesesEntregasItens(listarMesesComDebitoCooperativa(data, coopId));
+        setApenasPendenteItens(true);
+      }
+    }
+    if (qMes) setMes(qMes);
+    if (qMeses) {
+      setMesesEntregasItens(qMeses.split(",").filter(Boolean));
+    } else if (qMes && qTipo === "entregas_por_itens") {
+      setMesesEntregasItens([qMes]);
+    }
+    if (qPendente === "1") setApenasPendenteItens(true);
+    setUrlSynced(true);
+  }, [data, searchParams, relatoriosVisiveis, urlSynced, coopId]);
+
+  useEffect(() => {
+    if (!urlSynced) return;
+    syncRelatorioUrl(tipo, mes, mesesEntregasItens, apenasPendenteItens);
+  }, [tipo, mes, mesesEntregasItens, apenasPendenteItens, urlSynced, syncRelatorioUrl]);
+
+  useEffect(() => {
+    if (tipo !== "entregas_por_itens" || !data || !urlSynced) return;
+    if (mesesEntregasItens.length > 0) return;
+    aplicarPadraoEntregasPorItensEmAberto();
+  }, [tipo, data, urlSynced, mesesEntregasItens.length, aplicarPadraoEntregasPorItensEmAberto]);
+
+  useEffect(() => {
+    const prev = tipoAnteriorRef.current;
+    tipoAnteriorRef.current = tipo;
+    if (tipo !== "entregas_por_itens" || !data) return;
+    if (prev === "entregas_por_itens") return;
+    if (searchParams.get("meses")) return;
+    aplicarPadraoEntregasPorItensEmAberto();
+  }, [tipo, data, searchParams, aplicarPadraoEntregasPorItensEmAberto]);
+
   const instituicoesCoop = useMemo(() => {
     if (!data) return [];
     return data.instituicoes.filter((i) => !coopId || i.cooperativaId === coopId);
@@ -117,7 +259,33 @@ export default function RelatoriosPage() {
 
   const instituicaoSelecionadaId = instituicaoId || instituicoesCoop[0]?.id || "";
 
+  const mesesEntregasItensEfetivos = useMemo(() => {
+    if (mesesEntregasItens.length > 0) return [...mesesEntregasItens].sort();
+    if (data && tipo === "entregas_por_itens") {
+      const abertos = listarMesesComDebitoCooperativa(data, coopId);
+      if (abertos.length > 0) return abertos;
+    }
+    return [mes];
+  }, [mesesEntregasItens, mes, data, coopId, tipo]);
+
+  const mesesEntregasItensOpcoes = useMemo(() => {
+    if (!data) return meses;
+    const abertos = listarMesesComDebitoCooperativa(data, coopId);
+    return abertos.length > 0 ? abertos : meses;
+  }, [data, coopId, meses]);
+
   const tituloRelatorio = RELATORIOS.find((r) => r.id === tipo)?.label ?? "Relatório";
+
+  const toggleMesEntregasItens = (mesRef: string) => {
+    setMesesEntregasItens((prev) => {
+      const base = prev.length > 0 ? prev : mesesEntregasItensEfetivos;
+      if (base.includes(mesRef)) {
+        const next = base.filter((m) => m !== mesRef);
+        return next.length > 0 ? next.sort() : base;
+      }
+      return [...base, mesRef].sort();
+    });
+  };
 
   const resolveInstituicaoId = () => {
     if (
@@ -134,8 +302,32 @@ export default function RelatoriosPage() {
     if (!data) return "";
     if (tipo === "entregas_por_itens") {
       const inst = resolveInstituicaoId();
+      if (!inst || mesesEntregasItensEfetivos.length === 0) return "";
+      return gerarRelatorioEntregasPorItensPeriodoHtml(
+        data,
+        inst,
+        mesesEntregasItensEfetivos,
+        coopId,
+        emissor,
+        { apenasPendente: true }
+      );
+    }
+    if (tipo === "entregas_instituicao") {
+      const inst = resolveInstituicaoId();
       if (!inst) return "";
-      return gerarRelatorioEntregasPorItensHtml(data, mes, inst, coopId, emissor);
+      return gerarRelatorioEntregasInstituicaoHtml(data, mes, inst, coopId, emissor);
+    }
+    if (tipo === "mensalidades_abertas_total") {
+      return gerarRelatorioMensalidadesAbertasTotalHtml(data, coopId, emissor);
+    }
+    if (tipo === "mensalidades_abertas") {
+      return gerarRelatorioMensalidadesAbertasMesHtml(data, mes, coopId, emissor);
+    }
+    if (tipo === "resumo_financeiro_aberto") {
+      return gerarRelatorioResumoFinanceiroAbertoHtml(data, coopId, emissor);
+    }
+    if (tipo === "pagar_cooperado") {
+      return gerarRelatorioPagarCooperadoAbertoHtml(data, coopId, cooperadoId || undefined, emissor);
     }
     if (tipo === "atingimento_cronograma") {
       const inst = resolveInstituicaoId();
@@ -180,6 +372,10 @@ export default function RelatoriosPage() {
       if (!parecer) return "";
       return gerarRelatorioParecerContabilHtml(data, parecer, emissor);
     }
+    if (tipo === "fechamento_mensal") {
+      const fechamento = data.fechamentos.find((f) => f.mesReferencia === mes);
+      return gerarRelatorioFechamentoHtml(data, mes, fechamento, emissor);
+    }
     return gerarRelatorioFinanceiroHtml(data, mes, tituloRelatorio, emissor);
   };
 
@@ -190,9 +386,18 @@ export default function RelatoriosPage() {
     if (tipo === "historico_votacoes") {
       return nomeArquivoRelatorio(tipo, getCurrentMesReferencia());
     }
-    if (tipo === "entregas_por_itens" || tipo === "atingimento_cronograma") {
+    if (tipo === "entregas_por_itens" || tipo === "entregas_instituicao" || tipo === "atingimento_cronograma") {
       const inst = data?.instituicoes.find((i) => i.id === instituicaoSelecionadaId);
-      return nomeArquivoRelatorio(tipo, mes, inst?.nome);
+      const periodo =
+        tipo === "entregas_por_itens"
+          ? mesesEntregasItensEfetivos.length === 1
+            ? mesesEntregasItensEfetivos[0]
+            : "periodo"
+          : mes;
+      return nomeArquivoRelatorio(tipo, periodo, inst?.nome);
+    }
+    if (RELATORIOS_CONSOLIDADOS.has(tipo)) {
+      return nomeArquivoRelatorio(tipo, getCurrentMesReferencia());
     }
     return nomeArquivoRelatorio(tipo, mes);
   };
@@ -217,28 +422,38 @@ export default function RelatoriosPage() {
         break;
       }
       case "pagar_cooperado": {
-        headers = ["Cooperado", "Entregas", "Valor a pagar"];
-        rows = getRelatorioPagarCooperado(mes, data, cooperadoId || undefined).map((x) => [
-          x.cooperado,
-          String(x.entregas),
-          String(x.total),
-        ]);
+        headers = ["Cooperado", "Mês", "Entregas", "Valor a pagar"];
+        rows = getRelatorioPagarCooperadoEmAbertoReport(data, coopId, cooperadoId || undefined).flatMap((x) =>
+          x.porMes.length
+            ? x.porMes.map((m) => [x.cooperado, m.mesLabel, String(m.entregas), String(m.total)])
+            : [[x.cooperado, x.mesesLabel, String(x.entregas), String(x.total)]]
+        );
         break;
       }
-      case "pagar_cooperado_aberto": {
-        headers = ["Cooperado", "Meses em aberto", "Entregas", "Valor a pagar"];
-        rows = getRelatorioPagarCooperadoEmAbertoReport(data, coopId, cooperadoId || undefined).map((x) => [
-          x.cooperado,
-          x.mesesLabel,
-          String(x.entregas),
-          String(x.total),
-        ]);
+      case "resumo_financeiro_aberto": {
+        const r = getRelatorioResumoFinanceiroEmAbertoReport(data, coopId);
+        headers = ["Indicador", "Valor"];
+        rows = [
+          ["Meses com débito", r.mesesLabel],
+          ["Cooperados com débito", String(r.cooperadosComDebito)],
+          ["Entregas (período)", String(r.totalEntregas)],
+          ["Vendas bruto", String(r.totalVendasBruto)],
+          ["Vendas líquido", String(r.totalVendasLiquido)],
+          ["Total a pagar", String(r.valoresAPagar)],
+        ];
+        break;
+      }
+      case "mensalidades_abertas_total": {
+        const r = getRelatorioMensalidadesEmAbertoConsolidadoReport(data, coopId);
+        headers = ["Cooperado", "Mês", "Valor", "Vencimento", "Status"];
+        rows = r.linhas.map((m) => [m.cooperadoNome, m.mesReferencia, String(m.valor), m.vencimento, m.status]);
+        if (rows.length) rows.push(["", "", "TOTAL", String(r.total), ""]);
         break;
       }
       case "mensalidades_abertas":
         headers = ["Cooperado", "Mês", "Valor", "Vencimento", "Status"];
         rows = data.mensalidades
-          .filter((m) => m.status !== "paga" && (!mes || m.mesReferencia === mes))
+          .filter((m) => m.status !== "paga" && m.mesReferencia === mes)
           .map((m) => [
             getCooperadoNome(data.cooperados, m.cooperadoId),
             m.mesReferencia,
@@ -274,18 +489,39 @@ export default function RelatoriosPage() {
       }
       case "entregas_por_itens": {
         const inst = instituicaoSelecionadaId;
-        if (!inst) break;
-        const r = getRelatorioEntregasPorItens(inst, mes, data, coopId);
-        headers = ["Item", "Unidade", "Quantidade total", "Valor unitário médio", "Valor total"];
+        if (!inst || mesesEntregasItensEfetivos.length === 0) break;
+        const r = getRelatorioEntregasPorItensPeriodoReport(
+          inst,
+          mesesEntregasItensEfetivos,
+          data,
+          coopId,
+          { apenasPendente: true }
+        );
+        headers = ["Seção", "Cooperado", "Item", "Unidade", "Quantidade", "Valor unitário médio", "Valor total"];
         rows = r.itens.map((item) => [
+          "Consolidado",
+          "",
           item.produtoNome,
           item.unidade,
           String(item.quantidade),
           String(item.precoUnitario),
           String(item.valorTotal),
         ]);
+        for (const coop of r.porCooperado) {
+          for (const item of coop.itens) {
+            rows.push([
+              "Detalhe",
+              coop.cooperadoNome,
+              item.produtoNome,
+              item.unidade,
+              String(item.quantidade),
+              "",
+              String(item.valorTotal),
+            ]);
+          }
+        }
         if (rows.length > 0) {
-          rows.push(["", "", "", "TOTAL GERAL", String(r.totalBruto)]);
+          rows.push(["", "", "", "", "", "TOTAL GERAL", String(r.totalBruto)]);
         }
         break;
       }
@@ -384,6 +620,35 @@ export default function RelatoriosPage() {
               ["Pagamentos realizados", String(r.resumo.pagamentosRealizados)],
               ["Mensalidades recebidas", String(r.resumo.mensalidadesRecebidas)],
             ];
+        break;
+      }
+      case "fechamento_mensal": {
+        const calc = calcularFechamentoMensalLive(mes, data);
+        const calcStored = calcularFechamentoMensal(mes, data);
+        headers = ["Seção", "Cooperado / Instituição", "Entregas", "Bruto", "A pagar", "Pago", "Líquido"];
+        rows = [
+          ["Resumo", "Total vendas", "", "", String(calcStored.totalVendas ?? 0), "", ""],
+          ["Resumo", "Pagamentos", "", "", String(calcStored.totalPagamentos ?? 0), "", ""],
+          ["Resumo", "Saldo cooperativa", "", "", String(calcStored.saldoCooperativa ?? 0), "", ""],
+          ...calc.linhasCooperado.map((l) => [
+            "Cooperado",
+            l.cooperadoNome,
+            String(l.entregas),
+            String(l.valorBruto),
+            String(l.aPagar),
+            String(l.pago),
+            "",
+          ]),
+          ...calc.linhasInstituicao.map((l) => [
+            "Instituição",
+            l.instituicaoNome,
+            String(l.entregas),
+            String(l.valorBruto),
+            "",
+            "",
+            String(l.valorLiquido),
+          ]),
+        ];
         break;
       }
       case "historico_reclamacoes": {
@@ -519,7 +784,16 @@ export default function RelatoriosPage() {
         rows = [[tipo, mes]];
     }
 
-    downloadCSV(`relatorio_${tipo}_${mes}.csv`, exportToCSV(headers, rows));
+    downloadCSV(
+      `relatorio_${tipo}_${
+        RELATORIOS_CONSOLIDADOS.has(tipo)
+          ? "consolidado"
+          : RELATORIOS_MESES_MULTIPLOS.has(tipo)
+            ? mesesEntregasItensEfetivos.join("-")
+            : mes
+      }.csv`,
+      exportToCSV(headers, rows)
+    );
   };
 
   const emitirDocumento = (emissor: EmissorRelatorio) => {
@@ -562,25 +836,16 @@ export default function RelatoriosPage() {
         );
       }
       case "pagar_cooperado": {
-        const porCooperado = getRelatorioPagarCooperado(mes, data, cooperadoId || undefined);
-        return (
-          <DataTable
-            data={porCooperado}
-            keyField="cooperado"
-            columns={[
-              { key: "cooperado", label: "Cooperado" },
-              { key: "entregas", label: "Entregas" },
-              { key: "total", label: "Valor a Pagar", render: (r) => formatCurrency(r.total) },
-            ]}
-            emptyMessage="Nenhum valor a pagar neste mês."
-          />
-        );
-      }
-      case "pagar_cooperado_aberto": {
         const porCooperado = getRelatorioPagarCooperadoEmAbertoReport(data, coopId, cooperadoId || undefined);
-        const totalGeral = porCooperado.reduce((s, r) => s + r.total, 0);
+        const totalGeral = cooperadoId
+          ? porCooperado.reduce((s, r) => s + r.total, 0)
+          : getTotalValoresAPagarEmAberto(data, coopId);
         return (
           <>
+            <p className="text-sm text-gray-600 mb-4">
+              Consolidado dos meses com pagamento pendente (ex.: agosto e setembro). Valores sincronizados com a
+              ficha corrida e Quanto vou receber.
+            </p>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
               <StatCard title="Cooperados com valor em aberto" value={String(porCooperado.length)} />
               <StatCard title="Total geral a pagar" value={formatCurrency(totalGeral)} variant="warning" />
@@ -599,6 +864,75 @@ export default function RelatoriosPage() {
                 { key: "total", label: "Valor a Pagar", render: (r) => formatCurrency(r.total) },
               ]}
               emptyMessage="Nenhum valor pendente de pagamento."
+            />
+            {porCooperado.some((r) => r.porMes.length > 0) && (
+              <>
+                <h3 className="text-sm font-bold uppercase tracking-wide text-gray-700 mt-6 mb-3">
+                  Detalhamento por mês
+                </h3>
+                <DataTable
+                  data={porCooperado.flatMap((r) =>
+                    r.porMes.map((m) => ({
+                      id: `${r.cooperadoId}-${m.mes}`,
+                      cooperado: r.cooperado,
+                      mesLabel: m.mesLabel,
+                      entregas: m.entregas,
+                      total: m.total,
+                    }))
+                  )}
+                  keyField="id"
+                  columns={[
+                    { key: "cooperado", label: "Cooperado" },
+                    { key: "mes", label: "Mês", render: (l) => l.mesLabel },
+                    { key: "entregas", label: "Entregas" },
+                    { key: "total", label: "Valor a pagar", render: (l) => formatCurrency(l.total) },
+                  ]}
+                  emptyMessage="Nenhum mês com valor pendente."
+                />
+              </>
+            )}
+          </>
+        );
+      }
+      case "resumo_financeiro_aberto": {
+        const r = getRelatorioResumoFinanceiroEmAbertoReport(data, coopId);
+        return (
+          <>
+            <p className="text-sm text-gray-600 mb-4">
+              Soma de todos os meses com débito: <strong>{r.mesesLabel}</strong>
+            </p>
+            <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
+              <StatCard title="Cooperados com débito" value={String(r.cooperadosComDebito)} variant="warning" />
+              <StatCard title="Entregas (período)" value={String(r.totalEntregas)} />
+              <StatCard title="Vendas (bruto)" value={formatCurrency(r.totalVendasBruto)} />
+              <StatCard title="Vendas (líquido)" value={formatCurrency(r.totalVendasLiquido)} variant="success" />
+              <StatCard title="Total a pagar" value={formatCurrency(r.valoresAPagar)} variant="warning" />
+              <StatCard title="Aguardando conferência (últ. meses)" value={String(r.entregasAguardando)} />
+            </div>
+            <p className="text-xs text-gray-500 mt-3">
+              Total a pagar conferido e sincronizado com o relatório &quot;Pagamento por cooperado (em aberto)&quot; ({r.cooperadosComDebito} cooperado(s)).
+            </p>
+          </>
+        );
+      }
+      case "mensalidades_abertas_total": {
+        const r = getRelatorioMensalidadesEmAbertoConsolidadoReport(data, coopId);
+        return (
+          <>
+            <div className="mb-4">
+              <StatCard title="Total mensalidades em aberto" value={formatCurrency(r.total)} variant="warning" />
+            </div>
+            <DataTable
+              data={r.linhas}
+              keyField="id"
+              columns={[
+                { key: "cooperadoNome", label: "Cooperado" },
+                { key: "mes", label: "Mês", render: (m) => formatMesReferencia(m.mesReferencia) },
+                { key: "valor", label: "Valor", render: (m) => formatCurrency(m.valor) },
+                { key: "vencimento", label: "Vencimento", render: (m) => formatDate(m.vencimento) },
+                { key: "status", label: "Status", render: (m) => <StatusBadge status={m.status} /> },
+              ]}
+              emptyMessage="Nenhuma mensalidade em aberto."
             />
           </>
         );
@@ -662,81 +996,17 @@ export default function RelatoriosPage() {
       case "entregas_por_itens": {
         const inst = instituicaoSelecionadaId;
         if (!inst) return <p className="text-gray-500">Cadastre uma instituição em Contratos.</p>;
-        const r = getRelatorioEntregasPorItens(inst, mes, data, coopId);
-        return (
-          <>
-            <div className="mb-4 rounded-xl border border-green-200 bg-green-50/60 p-4">
-              <p className="text-sm font-semibold text-green-900">{r.instituicaoNome}</p>
-              <p className="text-xs text-green-800 mt-1">
-                {formatMesReferencia(mes)} · {r.quantidadeEntregas} entrega(s) conferida(s)
-              </p>
-            </div>
-
-            <div className="mb-6 rounded-xl border border-emerald-300 bg-white p-4 shadow-sm">
-              <h3 className="text-sm font-bold uppercase tracking-wide text-emerald-800 mb-3">
-                Resumo consolidado do mês — total por item (todos os cooperados)
-              </h3>
-              {r.itens.length === 0 ? (
-                <p className="text-sm text-gray-500">Nenhum item conferido neste mês.</p>
-              ) : (
-                <ul className="space-y-2">
-                  {r.itens.map((item) => (
-                    <li
-                      key={item.produtoInstituicaoId || `${item.produtoNome}-${item.unidade}`}
-                      className="flex flex-wrap items-baseline justify-between gap-2 border-b border-emerald-50 pb-2 last:border-0"
-                    >
-                      <span className="font-semibold text-gray-900">{item.produtoNome}</span>
-                      <span className="text-sm text-emerald-900">
-                        {item.quantidade.toLocaleString("pt-BR", { maximumFractionDigits: 2 })}{" "}
-                        {labelUnidade(item.unidade) || item.unidade}
-                        <span className="text-gray-500 mx-2">·</span>
-                        {formatCurrency(item.valorTotal)}
-                      </span>
-                    </li>
-                  ))}
-                </ul>
-              )}
-              {r.itens.length > 0 && (
-                <p className="mt-4 text-right text-lg font-bold text-green-800">
-                  Total geral: {formatCurrency(r.totalBruto)}
-                </p>
-              )}
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
-              <StatCard title="Itens distintos" value={String(r.itens.length)} />
-              <StatCard title="Total geral (bruto)" value={formatCurrency(r.totalBruto)} variant="success" />
-            </div>
-            <DataTable
-              data={r.itens.map((item, idx) => ({
-                ...item,
-                id: item.produtoInstituicaoId || `${item.produtoNome}-${idx}`,
-              }))}
-              keyField="id"
-              emptyMessage="Nenhum item conferido neste mês para esta instituição."
-              columns={[
-                { key: "produto", label: "Item", render: (item) => item.produtoNome },
-                {
-                  key: "unidade",
-                  label: "Unidade",
-                  render: (item) => labelUnidade(item.unidade) || item.unidade,
-                },
-                {
-                  key: "quantidade",
-                  label: "Quantidade total",
-                  render: (item) =>
-                    `${item.quantidade.toLocaleString("pt-BR", { maximumFractionDigits: 2 })} ${item.unidade}`,
-                },
-                { key: "preco", label: "Preço médio", render: (item) => formatCurrency(item.precoUnitario) },
-                { key: "total", label: "Valor total", render: (item) => formatCurrency(item.valorTotal) },
-              ]}
-            />
-
-            <p className="text-xs text-gray-500 mt-4">
-              Use <strong>PDF</strong> para baixar o relatório formal com o resumo consolidado por item.
-            </p>
-          </>
+        if (mesesEntregasItensEfetivos.length === 0) {
+          return <p className="text-gray-500">Selecione ao menos um mês para gerar o relatório.</p>;
+        }
+        const r = getRelatorioEntregasPorItensPeriodoReport(
+          inst,
+          mesesEntregasItensEfetivos,
+          data,
+          coopId,
+          { apenasPendente: true }
         );
+        return <EntregasPorItensPainel relatorio={r} />;
       }
       case "atingimento_cronograma": {
         const inst = instituicaoSelecionadaId;
@@ -999,6 +1269,63 @@ export default function RelatoriosPage() {
           </div>
         );
       }
+      case "fechamento_mensal": {
+        const fechamento = data.fechamentos.find((f) => f.mesReferencia === mes);
+        const calculoLive = calcularFechamentoMensalLive(mes, data);
+        const calculo = calcularFechamentoMensal(mes, data);
+        return (
+          <>
+            <div className="mb-4 rounded-xl border border-green-200 bg-green-50/60 p-4 flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <p className="text-sm font-semibold text-green-900">Consolidação mensal</p>
+                <p className="text-xs text-green-800 mt-1">
+                  {calculoLive.qtdEntregas} entrega(s) · {calculoLive.qtdCooperadosPagos} pagamento(s) ·{" "}
+                  {calculoLive.qtdCooperadosAPagar} cooperado(s) a pagar
+                  {fechamento?.status ? ` · Status: ${fechamento.status}` : ""}
+                </p>
+              </div>
+              <Link href={`/fechamento-mensal?mes=${mes}`}>
+                <Button size="sm" variant="secondary">
+                  Revisar / aprovar fechamento →
+                </Button>
+              </Link>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4 mb-6">
+              <StatCard title="Total Vendas" value={formatCurrency(calculo.totalVendas ?? 0)} />
+              <StatCard title="Total Pagamentos" value={formatCurrency(calculo.totalPagamentos ?? 0)} variant="success" />
+              <StatCard title="Mensalidades" value={formatCurrency(calculo.totalMensalidades ?? 0)} />
+              <StatCard title="Cotas" value={formatCurrency(calculo.totalCotas ?? 0)} />
+              <StatCard title="Descontos" value={formatCurrency(calculo.totalDescontos ?? 0)} variant="warning" />
+              <StatCard title="Saldo Cooperativa" value={formatCurrency(calculo.saldoCooperativa ?? 0)} variant="gold" />
+            </div>
+            <h3 className="text-sm font-bold uppercase tracking-wide text-gray-700 mb-3">Por cooperado</h3>
+            <DataTable
+              data={calculoLive.linhasCooperado}
+              keyField="cooperadoId"
+              columns={[
+                { key: "nome", label: "Cooperado", render: (l) => l.cooperadoNome },
+                { key: "entregas", label: "Entregas" },
+                { key: "bruto", label: "Bruto", render: (l) => formatCurrency(l.valorBruto) },
+                { key: "pagar", label: "A pagar", render: (l) => formatCurrency(l.aPagar) },
+                { key: "pago", label: "Pago", render: (l) => formatCurrency(l.pago) },
+              ]}
+              emptyMessage="Nenhum lançamento neste mês."
+            />
+            <h3 className="text-sm font-bold uppercase tracking-wide text-gray-700 mt-8 mb-3">Por instituição</h3>
+            <DataTable
+              data={calculoLive.linhasInstituicao.map((l) => ({ ...l, id: l.instituicaoId }))}
+              keyField="id"
+              columns={[
+                { key: "instituicao", label: "Instituição", render: (l) => l.instituicaoNome },
+                { key: "entregas", label: "Entregas" },
+                { key: "bruto", label: "Bruto", render: (l) => formatCurrency(l.valorBruto) },
+                { key: "liquido", label: "Líquido", render: (l) => formatCurrency(l.valorLiquido) },
+              ]}
+              emptyMessage="Nenhuma entrega neste mês."
+            />
+          </>
+        );
+      }
       case "historico_reclamacoes": {
         const r = getRelatorioReclamacoes(data, coopId, cooperadoId || undefined);
         return (
@@ -1135,6 +1462,9 @@ export default function RelatoriosPage() {
         const conc = calcularConciliacaoMensal(data, mes, coopId ?? undefined);
         return (
           <>
+            <p className="text-xs text-gray-500 mb-4">
+              Visão unificada de conciliação (substitui a rota legada /contador/conciliacao).
+            </p>
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-4">
               <StatCard title="Conciliação OK" value={`${conc.resumo.percentualOk}%`} variant={conc.resumo.divergencias ? "warning" : "success"} />
               <StatCard title="Divergências" value={String(conc.resumo.divergencias)} variant="warning" />
@@ -1149,9 +1479,38 @@ export default function RelatoriosPage() {
                 { key: "valorA", label: "Fonte A", render: (l) => formatCurrency(l.valorA) },
                 { key: "valorB", label: "Fonte B", render: (l) => formatCurrency(l.valorB) },
                 { key: "diferenca", label: "Diferença", render: (l) => formatCurrency(l.diferenca) },
-                { key: "status", label: "Status" },
+                {
+                  key: "status",
+                  label: "Status",
+                  render: (l) => (
+                    <StatusBadge
+                      status={
+                        l.status === "ok" ? "aprovado" : l.status === "divergencia" ? "bloqueado" : "pendente"
+                      }
+                    />
+                  ),
+                },
               ]}
             />
+            {conc.alertas.length > 0 && (
+              <>
+                <h3 className="text-sm font-bold uppercase tracking-wide text-gray-700 mt-8 mb-3">Alertas de auditoria</h3>
+                <DataTable
+                  data={conc.alertas.map((a) => ({
+                    ...a,
+                    id: a.id,
+                    severidade:
+                      a.severidade === "critico" ? "Crítico" : a.severidade === "aviso" ? "Aviso" : "Info",
+                  }))}
+                  keyField="id"
+                  columns={[
+                    { key: "severidade", label: "Nível" },
+                    { key: "titulo", label: "Alerta" },
+                    { key: "descricao", label: "Detalhe" },
+                  ]}
+                />
+              </>
+            )}
           </>
         );
       }
@@ -1247,21 +1606,7 @@ export default function RelatoriosPage() {
         );
       }
       case "trilha_auditoria": {
-        const entries = auditLogParaExportacao(data, mes);
-        return (
-          <DataTable
-            data={entries.map((e) => ({ ...e }))}
-            keyField="id"
-            columns={[
-              { key: "timestamp", label: "Data", render: (e) => formatDate(e.timestamp.split("T")[0]) },
-              { key: "userName", label: "Usuário" },
-              { key: "action", label: "Ação" },
-              { key: "entityType", label: "Entidade" },
-              { key: "changes", label: "Resumo" },
-            ]}
-            emptyMessage="Nenhum evento de auditoria."
-          />
-        );
+        return <TrilhaAuditoriaPanel data={data} mes={mes} coopId={coopId} />;
       }
       case "parecer_contabil": {
         const parecer = coopId ? getParecerContabilMes(data, coopId, mes) : undefined;
@@ -1269,7 +1614,9 @@ export default function RelatoriosPage() {
           return (
             <Card>
               <p className="text-gray-600">Nenhum parecer registrado para {formatMesReferencia(mes)}.</p>
-              <p className="text-sm text-gray-500 mt-2">O contador pode registrar em /contador/parecer</p>
+              <Link href={`/contador/parecer?mes=${mes}`} className="inline-block mt-3 text-sm text-green-700 font-medium">
+                Registrar parecer contábil →
+              </Link>
             </Card>
           );
         }
@@ -1309,20 +1656,74 @@ export default function RelatoriosPage() {
 
       <FilterBar>
         <FormField label="Tipo de Relatório">
-          <Select value={tipo} onChange={(e) => setTipo(e.target.value)} className="min-w-[250px]">
-            {RELATORIOS.map((r) => (
-              <option key={r.id} value={r.id}>{r.label}</option>
+          <Select
+            value={tipo}
+            onChange={(e) => {
+              setTipo(e.target.value);
+            }}
+            className="min-w-[280px]"
+          >
+            {gruposRelatorio.map(([grupo, items]) => (
+              <optgroup key={grupo} label={grupo}>
+                {items.map((r) => (
+                  <option key={r.id} value={r.id}>
+                    {r.label}
+                  </option>
+                ))}
+              </optgroup>
             ))}
           </Select>
         </FormField>
         <FormField label="Mês">
-          <Select value={mes} onChange={(e) => setMes(e.target.value)} className="min-w-[180px]" disabled={tipo === "historico_reclamacoes" || tipo === "historico_votacoes" || tipo === "pagar_cooperado_aberto"}>
+          <Select
+            value={mes}
+            onChange={(e) => setMes(e.target.value)}
+            className="min-w-[180px]"
+            disabled={RELATORIOS_CONSOLIDADOS.has(tipo) || RELATORIOS_MESES_MULTIPLOS.has(tipo)}
+          >
             {meses.map((m) => (
               <option key={m} value={m}>{formatMesReferencia(m)}</option>
             ))}
           </Select>
         </FormField>
-        {tipo === "entregas_instituicao" || tipo === "entregas_por_itens" || tipo === "atingimento_cronograma" ? (
+        {tipo === "entregas_por_itens" && (
+          <FormField label="Meses em aberto">
+            <div className="rounded-xl border border-amber-200 bg-amber-50/80 p-3 max-h-48 overflow-y-auto min-w-[320px]">
+              <p className="text-xs text-amber-900 mb-3">
+                Soma apenas entregas com pagamento pendente (fichas em aberto). Padrão: todos os meses com débito.
+              </p>
+              <div className="flex flex-wrap gap-2 mb-3">
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="secondary"
+                  onClick={() => {
+                    if (!data) return;
+                    aplicarPadraoEntregasPorItensEmAberto();
+                  }}
+                >
+                  Todos os meses em aberto
+                </Button>
+              </div>
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                {mesesEntregasItensOpcoes.map((m) => (
+                  <label key={m} className="flex items-center gap-2 text-sm text-gray-800 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={mesesEntregasItensEfetivos.includes(m)}
+                      onChange={() => toggleMesEntregasItens(m)}
+                      className="rounded border-gray-300 text-green-700 focus:ring-green-600"
+                    />
+                    {formatMesReferencia(m)}
+                  </label>
+                ))}
+              </div>
+            </div>
+          </FormField>
+        )}
+        {tipo === "entregas_instituicao" ||
+        tipo === "entregas_por_itens" ||
+        tipo === "atingimento_cronograma" ? (
           <FormField label={tipo === "atingimento_cronograma" ? "Contrato / Instituição" : "Instituição de entrega"}>
             <Select value={instituicaoSelecionadaId} onChange={(e) => setInstituicaoId(e.target.value)} className="min-w-[250px]">
               <option value="">Selecione...</option>
@@ -1332,7 +1733,7 @@ export default function RelatoriosPage() {
             </Select>
           </FormField>
         ) : null}
-        {tipo === "pagar_cooperado" || tipo === "pagar_cooperado_aberto" || tipo === "historico_reclamacoes" ? (
+        {tipo === "pagar_cooperado" || tipo === "historico_reclamacoes" ? (
           <FormField label="Cooperado">
             <Select value={cooperadoId} onChange={(e) => setCooperadoId(e.target.value)} className="min-w-[200px]">
               <option value="">Todos</option>

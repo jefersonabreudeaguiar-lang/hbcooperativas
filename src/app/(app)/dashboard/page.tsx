@@ -44,7 +44,6 @@ import { VotacaoResultadoPanel } from "@/components/votacao/VotacaoResultadoPane
 import { getCooperativaCnpj, getPendingNotaDeleteIds } from "@/services/notaPedidoCloudService";
 import { buildValorExibicaoCooperadoOpts } from "@/services/notaPedidoService";
 import { useSyncContaCoopValorReceberPilot } from "@/hooks/useSyncContaCoopValorReceberPilot";
-import { isContaCoopValorReceberPilot } from "@/utils/contaCoopUiVisibility";
 import { formatCurrency, formatMesReferencia, getCurrentMesReferencia } from "@/utils/format";
 import { getUserCooperativaId, getUserCooperativaNome, normalizeCnpj } from "@/utils/cooperativa";
 import { Camera, Wallet, ClipboardList, Users, Vote, Download } from "lucide-react";
@@ -89,7 +88,6 @@ function CooperadoDashboard() {
       getMesPrincipalQuantoVouReceber(data, cooperadoId, coopId),
       coopId
     );
-    if (!isContaCoopValorReceberPilot(cooperadoId, exibicaoOpts.cooperadoNome)) return null;
     return {
       cooperadoId,
       mesReferencia: exibicaoOpts.mesReferencia,

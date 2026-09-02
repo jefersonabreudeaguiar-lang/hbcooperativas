@@ -291,6 +291,10 @@ export default function MeuPerfilPage() {
         )}
       </Card>
 
+      {coopId && (
+        <EquipeResponsaveisPanel cooperativaId={coopId} cooperativaCnpj={cooperativa.cnpj} />
+      )}
+
       <Card title="Senha de acesso ao cadastro (CNPJ)" className="mb-6">
         <p className="text-sm text-gray-500 mb-4">
           Opcional: defina uma senha que o cooperado deve informar ao criar a conta informando o CNPJ.
@@ -343,10 +347,6 @@ export default function MeuPerfilPage() {
           </div>
         )}
       </Card>
-
-      {coopId && (
-        <EquipeResponsaveisPanel cooperativaId={coopId} cooperativaCnpj={cooperativa.cnpj} />
-      )}
 
       {coopId && <EquipeContadorPanel cooperativaId={coopId} cooperativaCnpj={cooperativa.cnpj} />}
 

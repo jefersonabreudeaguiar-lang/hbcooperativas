@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import Link from "next/link";
 import { Download, FileCheck, Printer } from "lucide-react";
 import { useAppData } from "@/hooks/useAppData";
 import { usePermissions } from "@/hooks/usePermissions";
@@ -22,6 +23,7 @@ import {
   nomeArquivoRelatorio,
 } from "@/utils/relatorioHtml";
 import { formatMesReferencia, getCurrentMesReferencia } from "@/utils/format";
+import { hrefRelatorio } from "@/utils/relatorioRoutes";
 import type { EmissorRelatorio } from "@/types";
 
 const MODELO_PARECER = `Em minha qualidade de contador responsável pela revisão dos registros operacionais da cooperativa, analisei os documentos, relatórios de conciliação e trilha de auditoria referentes ao mês indicado.
@@ -139,7 +141,10 @@ export default function ContadorParecerPage() {
       <Card className="mb-4">
         <p className="text-sm text-gray-600 mb-4">
           Registre sua opinião profissional sobre os registros do mês. Recomenda-se emitir após revisar a conciliação em{" "}
-          <strong>/contador/conciliacao</strong>.
+          <Link href={hrefRelatorio("conciliacao_mensal", { mes })} className="text-green-700 font-medium">
+            conciliação mensal
+          </Link>
+          .
         </p>
 
         {!parecer && (

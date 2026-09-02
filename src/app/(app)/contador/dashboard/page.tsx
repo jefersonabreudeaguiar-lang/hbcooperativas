@@ -22,6 +22,7 @@ import {
   calcularConciliacaoMensal,
   listMesesConciliacao,
 } from "@/services/conciliacaoMensalService";
+import { hrefRelatorio } from "@/utils/relatorioRoutes";
 import { formatCurrency, formatMesReferencia, getCurrentMesReferencia } from "@/utils/format";
 import { getCooperativaById } from "@/utils/cooperativa";
 
@@ -57,7 +58,7 @@ export default function ContadorDashboardPage() {
                 ))}
               </Select>
             </FormField>
-            <Link href={`/contador/conciliacao?mes=${mes}`}>
+            <Link href={hrefRelatorio("conciliacao_mensal", { mes })}>
               <Button variant="secondary">
                 <Scale size={16} /> Conciliação
               </Button>
@@ -116,7 +117,7 @@ export default function ContadorDashboardPage() {
                   </div>
                 ))}
               </div>
-              <Link href={`/contador/conciliacao?mes=${mes}`} className="inline-block mt-4 text-sm text-green-700 font-medium">
+              <Link href={hrefRelatorio("conciliacao_mensal", { mes })} className="inline-block mt-4 text-sm text-green-700 font-medium">
                 Ver matriz completa →
               </Link>
             </Card>
@@ -147,7 +148,7 @@ export default function ContadorDashboardPage() {
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            <Link href={`/contador/conciliacao?mes=${mes}`}>
+            <Link href={hrefRelatorio("conciliacao_mensal", { mes })}>
               <Card className="hover:border-green-300 transition-colors cursor-pointer h-full">
                 <Scale className="text-green-700 mb-2" size={24} />
                 <h3 className="font-semibold">Conciliação mensal</h3>
@@ -171,7 +172,7 @@ export default function ContadorDashboardPage() {
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-4">
-            <Link href={`/contador/trilha-auditoria?mes=${mes}`}>
+            <Link href={hrefRelatorio("trilha_auditoria", { mes })}>
               <Card className="hover:border-green-300 transition-colors cursor-pointer h-full">
                 <ShieldCheck className="text-green-700 mb-2" size={24} />
                 <h3 className="font-semibold">Trilha de auditoria</h3>

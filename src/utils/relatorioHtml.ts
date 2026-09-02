@@ -1,9 +1,22 @@
 import type { AppData, EmissorRelatorio, FechamentoMensal, Cooperativa } from "@/types";
 import { PLATFORM_NAME } from "@/utils/constants";
 import { formatCnpj } from "@/utils/cooperativa";
+import { round2 } from "@/utils/calculations";
 import { formatCurrency, formatDate, formatDateTime, formatMesReferencia, getCurrentMesReferencia } from "@/utils/format";
-import type { FechamentoCalculado, RelatorioEntregasPorItens, ResumoFinanceiroMes } from "@/services/relatorioService";
-import { calcularFechamentoMensalLive, getRelatorioEntregasPorItensInstituicao, getResumoFinanceiroMes } from "@/services/relatorioService";
+import type { FechamentoCalculado, RelatorioEntregasPorItens, RelatorioEntregasPorItensEmAberto, RelatorioEntregasPorItensPeriodo, ResumoFinanceiroEmAberto, ResumoFinanceiroMes } from "@/services/relatorioService";
+import {
+  calcularFechamentoMensalLive,
+  getCooperadoNomeSafe,
+  getRelatorioEntregasInstituicaoLive,
+  getRelatorioEntregasPorItensEmAberto,
+  getRelatorioEntregasPorItensInstituicao,
+  getRelatorioEntregasPorItensPeriodo,
+  getRelatorioMensalidadesEmAbertoConsolidado,
+  getRelatorioPagarCooperadoEmAberto,
+  getRelatorioResumoFinanceiroEmAberto,
+  getResumoFinanceiroMes,
+  getTotalValoresAPagarEmAberto,
+} from "@/services/relatorioService";
 import type { ConciliacaoMensalResult } from "@/services/conciliacaoMensalService";
 import { getDemonstrativoPagamentosMes } from "@/services/conciliacaoMensalService";
 import { getRelatorioSobrasPerdas, type RelatorioSobrasPerdas } from "@/services/sobrasPerdasService";
@@ -267,6 +280,30 @@ function formatQuantidadeItem(quantidade: number, unidade: string): string {
   return unidade ? `${q} ${unidade}` : q;
 }
 
+export function gerarRelatorioEntregasPorItensPeriodoHtml(
+  data: AppData,
+  instituicaoId: string,
+  mesesReferencia: string[],
+  cooperativaId?: string,
+  emissor?: EmissorRelatorio,
+  opcoes?: { apenasPendente?: boolean; incluirDetalheCooperado?: boolean }
+): string {
+  const rel = getRelatorioEntregasPorItensPeriodo(instituicaoId, mesesReferencia, data, cooperativaId, {
+    apenasPendente: opcoes?.apenasPendente,
+  });
+  const titulo = opcoes?.apenasPendente ? "Entregas por item — pendente" : "Entregas por item";
+  return gerarEntregasPorItensDocumento(
+    data,
+    rel,
+    rel.mesesLabel,
+    cooperativaId,
+    emissor,
+    titulo,
+    opcoes?.incluirDetalheCooperado ?? false
+  );
+}
+
+/** @deprecated Use gerarRelatorioEntregasPorItensPeriodoHtml */
 export function gerarRelatorioEntregasPorItensHtml(
   data: AppData,
   mesReferencia: string,
@@ -274,12 +311,39 @@ export function gerarRelatorioEntregasPorItensHtml(
   cooperativaId?: string,
   emissor?: EmissorRelatorio
 ): string {
-  const rel = getRelatorioEntregasPorItensInstituicao(mesReferencia, instituicaoId, data, cooperativaId);
-  const coop = resolveCooperativa(data, cooperativaId);
+  return gerarRelatorioEntregasPorItensPeriodoHtml(data, instituicaoId, [mesReferencia], cooperativaId, emissor);
+}
+
+/** @deprecated Use gerarRelatorioEntregasPorItensPeriodoHtml */
+export function gerarRelatorioEntregasPorItensAbertoHtml(
+  data: AppData,
+  instituicaoId: string,
+  cooperativaId?: string,
+  emissor?: EmissorRelatorio
+): string {
+  const rel = getRelatorioEntregasPorItensEmAberto(instituicaoId, data, cooperativaId);
+  return gerarRelatorioEntregasPorItensPeriodoHtml(
+    data,
+    instituicaoId,
+    rel.meses,
+    cooperativaId,
+    emissor,
+    { apenasPendente: true }
+  );
+}
+
+function gerarEntregasPorItensDocumento(
+  data: AppData,
+  rel: RelatorioEntregasPorItens | RelatorioEntregasPorItensEmAberto | RelatorioEntregasPorItensPeriodo,
+  periodoLabel: string,
+  cooperativaId: string | undefined,
+  emissor: EmissorRelatorio | undefined,
+  tituloDoc: string,
+  incluirDetalheCooperado = false
+): string {
   const inst = rel.instituicao;
   const localEntrega = inst?.localEntrega?.trim() || inst?.endereco?.trim() || "";
   const responsavelInst = inst?.responsavel?.trim() || "";
-  const hoje = formatDate(new Date().toISOString().split("T")[0]);
 
   const linhasItens = rel.itens
     .map(
@@ -295,12 +359,22 @@ export function gerarRelatorioEntregasPorItensHtml(
     )
     .join("");
 
-  const resumoConsolidadoLista = rel.itens
-    .map(
-      (item) =>
-        `<li><strong>${escapeHtml(item.produtoNome)}</strong>: <span class="qtd">${escapeHtml(formatQuantidadeItem(item.quantidade, item.unidade))}</span> — ${formatCurrency(item.valorTotal)}</li>`
+  const linhasCooperado = rel.porCooperado
+    .flatMap((coop) =>
+      coop.itens.map(
+        (item) =>
+          `<tr>
+            <td>${escapeHtml(coop.cooperadoNome)}</td>
+            <td>${escapeHtml(item.produtoNome)}</td>
+            <td class="num">${item.quantidade.toLocaleString("pt-BR", { maximumFractionDigits: 2 })} ${escapeHtml(item.unidade)}</td>
+            <td class="num">${formatCurrency(item.valorTotal)}</td>
+          </tr>`
+      )
     )
     .join("");
+
+  const pendente = "apenasPendente" in rel && rel.apenasPendente === true;
+  const rotuloTotal = pendente ? "Total em aberto (entregas pendentes)" : "Total geral (bruto)";
 
   const body = `
     <div class="destinatario">
@@ -312,63 +386,50 @@ export function gerarRelatorioEntregasPorItensHtml(
     </div>
 
     <p class="carta">
-      ${responsavelInst ? `Prezado(a) Senhor(a) <strong>${escapeHtml(responsavelInst)}</strong>,` : "Prezado(a) Senhor(a),"}
-      <br/><br/>
-      A <strong>${escapeHtml(coop?.nome ?? PLATFORM_NAME)}</strong> apresenta o resumo consolidado das entregas
-      realizadas no mês de <strong>${escapeHtml(formatMesReferencia(mesReferencia))}</strong>,
-      referentes ao contrato de fornecimento com <strong>${escapeHtml(rel.instituicaoNome)}</strong>.
-      ${rel.quantidadeEntregas > 0 ? ` Foram registradas <strong>${rel.quantidadeEntregas}</strong> entrega(s) conferida(s) no período.` : ""}
+      Período: <strong>${escapeHtml(periodoLabel)}</strong> · ${rel.quantidadeEntregas} entrega(s) · ${rel.itens.length} item(ns) · ${pendente ? "Total em aberto" : "Total"}: <strong>${formatCurrency(rel.totalBruto)}</strong>
     </p>
 
-    <div class="resumo-itens-box">
-      <div class="titulo">Resumo consolidado do mês — total vendido por item (todos os cooperados)</div>
-      ${
-        rel.itens.length > 0
-          ? `<ul class="resumo-itens-list">${resumoConsolidadoLista}</ul>
-             <p class="carta" style="margin:12px 0 0;font-size:13px;">
-               <strong>Total geral:</strong> ${formatCurrency(rel.totalBruto)} · ${rel.itens.length} item(ns) distinto(s)
-             </p>`
-          : `<p class="carta" style="margin:0;">Nenhum item conferido neste mês para esta instituição.</p>`
-      }
-    </div>
-
-    <h2>Resumo por item (detalhado)</h2>
+    <h2>Consolidado por item</h2>
     <table>
       <thead>
         <tr>
           <th class="num">#</th>
           <th>Item / Produto</th>
           <th>Unidade</th>
-          <th class="num">Quantidade total</th>
-          <th class="num">Valor unitário</th>
+          <th class="num">Quantidade</th>
+          <th class="num">Preço médio</th>
           <th class="num">Valor total</th>
         </tr>
       </thead>
       <tbody>
-        ${linhasItens || `<tr><td colspan="6">Nenhum item conferido neste mês para esta instituição.</td></tr>`}
+        ${linhasItens || `<tr><td colspan="6">Nenhum item no período.</td></tr>`}
       </tbody>
       <tfoot>
         <tr>
-          <td colspan="5">Total geral das entregas (bruto)</td>
-          <td class="num">${formatCurrency(rel.totalBruto)}</td>
+          <td colspan="5"><strong>${rotuloTotal}</strong></td>
+          <td class="num"><strong>${formatCurrency(rel.totalBruto)}</strong></td>
         </tr>
       </tfoot>
     </table>
 
-    <p class="carta" style="margin-top:24px;">
-      Este documento consolida as quantidades e valores unitários praticados nas entregas conferidas.
-      Permanecemos à disposição para esclarecimentos.
-    </p>
+    ${
+      incluirDetalheCooperado && rel.porCooperado.length > 0
+        ? `<h2>Detalhamento por cooperado</h2>
+    <table>
+      <thead><tr><th>Cooperado</th><th>Item</th><th class="num">Quantidade</th><th class="num">Valor</th></tr></thead>
+      <tbody>${linhasCooperado}</tbody>
+    </table>`
+        : ""
+    }`;
 
-    <p class="carta" style="margin-top:32px;">
-      ${escapeHtml(coop?.endereco ?? coop?.nome ?? PLATFORM_NAME)}, ${hoje}.
-    </p>`;
+  const mesRef =
+    rel.mesReferencia === "consolidado" ? getCurrentMesReferencia() : rel.mesReferencia;
 
   return documentoShell(
-    `Entregas — ${rel.instituicaoNome}`,
+    `${tituloDoc} — ${rel.instituicaoNome}`,
     body,
     data,
-    mesReferencia,
+    mesRef,
     cooperativaId,
     emissor
   );
@@ -409,6 +470,326 @@ export function gerarRelatorioFinanceiroHtml(
     </table>`;
 
   return documentoShell(tituloRelatorio, body, data, mesReferencia, undefined, emissor);
+}
+
+export function gerarRelatorioResumoFinanceiroAbertoHtml(
+  data: AppData,
+  cooperativaId: string | undefined,
+  emissor?: EmissorRelatorio
+): string {
+  const r = getRelatorioResumoFinanceiroEmAberto(data, cooperativaId);
+  const linhasPagar = getRelatorioPagarCooperadoEmAberto(data, cooperativaId);
+  const totalConferido = getTotalValoresAPagarEmAberto(data, cooperativaId);
+  const linhasPagarHtml = linhasPagar
+    .map(
+      (l) =>
+        `<tr><td>${escapeHtml(l.cooperado)}</td><td>${escapeHtml(l.mesesLabel)}</td><td class="num">${l.entregas}</td><td class="num">${formatCurrency(l.total)}</td></tr>`
+    )
+    .join("");
+
+  const body = `
+    <p class="carta">Consolidado de todos os meses com débito pendente: <strong>${escapeHtml(r.mesesLabel)}</strong></p>
+    <div class="resumo-grid">
+      <div class="resumo-card"><div class="label">Cooperados com débito</div><div class="value">${r.cooperadosComDebito}</div></div>
+      <div class="resumo-card"><div class="label">Entregas (período)</div><div class="value">${r.totalEntregas}</div></div>
+      <div class="resumo-card"><div class="label">Vendas (bruto)</div><div class="value">${formatCurrency(r.totalVendasBruto)}</div></div>
+      <div class="resumo-card"><div class="label">Total a pagar</div><div class="value">${formatCurrency(totalConferido)}</div></div>
+    </div>
+    <p class="carta" style="font-size:12px;color:#6b7280;">
+      Total sincronizado com o relatório <em>Pagamento por cooperado (em aberto)</em> (${linhasPagar.length} cooperado(s)).
+    </p>
+    <h2>Valores a pagar por cooperado</h2>
+    <table>
+      <thead><tr><th>Cooperado</th><th>Meses em aberto</th><th class="num">Entregas</th><th class="num">Total</th></tr></thead>
+      <tbody>${linhasPagarHtml || `<tr><td colspan="4">Nenhum débito pendente.</td></tr>`}</tbody>
+      <tfoot><tr><td colspan="3"><strong>Total geral</strong></td><td class="num"><strong>${formatCurrency(totalConferido)}</strong></td></tr></tfoot>
+    </table>`;
+
+  return documentoShell(
+    "Resumo Financeiro — Total em Aberto",
+    body,
+    data,
+    getCurrentMesReferencia(),
+    cooperativaId,
+    emissor
+  );
+}
+
+function labelStatusNota(status: string): string {
+  const map: Record<string, string> = {
+    rascunho: "Rascunho",
+    entregue: "Entregue",
+    aguardando_conferencia: "Em análise",
+    conferida: "Conferida",
+    rejeitada: "Rejeitada",
+    pago: "Pago",
+    cancelado: "Cancelado",
+  };
+  return map[status] ?? status;
+}
+
+function labelStatusMensalidade(status: string): string {
+  const map: Record<string, string> = {
+    pendente: "Pendente",
+    em_aberto: "Em aberto",
+    atrasada: "Atrasada",
+    parcelada: "Parcelada",
+    parcial: "Parcial",
+    paga: "Paga",
+  };
+  return map[status] ?? status;
+}
+
+export function gerarRelatorioEntregasInstituicaoHtml(
+  data: AppData,
+  mesReferencia: string,
+  instituicaoId: string,
+  cooperativaId?: string,
+  emissor?: EmissorRelatorio
+): string {
+  const r = getRelatorioEntregasInstituicaoLive(mesReferencia, instituicaoId, data);
+  const inst = r.instituicao;
+  const localEntrega = inst?.localEntrega?.trim() || inst?.endereco?.trim() || "";
+  const responsavelInst = inst?.responsavel?.trim() || "";
+
+  const linhas = r.entregas
+    .map(
+      (n) =>
+        `<tr>
+          <td>${formatDate(n.dataEntrega)}</td>
+          <td>${escapeHtml(getCooperadoNomeSafe(data, n.cooperadoId))}</td>
+          <td>${escapeHtml(n.numeroNota ?? "—")}</td>
+          <td class="num">${formatCurrency(n.valorBruto)}</td>
+          <td class="num">${formatCurrency(n.valorLiquido)}</td>
+          <td>${escapeHtml(labelStatusNota(n.status))}</td>
+        </tr>`
+    )
+    .join("");
+
+  const body = `
+    <div class="destinatario">
+      <div class="rotulo">Instituição / contrato</div>
+      <div class="nome">${escapeHtml(inst?.nome ?? "Instituição")}</div>
+      ${localEntrega ? `<div class="detalhe">${escapeHtml(localEntrega)}</div>` : ""}
+      ${responsavelInst ? `<div class="detalhe">A/C ${escapeHtml(responsavelInst)}</div>` : ""}
+      ${inst?.cnpj ? `<div class="detalhe">CNPJ: ${escapeHtml(formatCnpj(inst.cnpj))}</div>` : ""}
+    </div>
+
+    <div class="resumo-grid">
+      <div class="resumo-card"><div class="label">Entregas conferidas</div><div class="value">${r.entregas.length}</div></div>
+      <div class="resumo-card"><div class="label">Total bruto</div><div class="value">${formatCurrency(r.totalBruto)}</div></div>
+      <div class="resumo-card"><div class="label">Total líquido</div><div class="value">${formatCurrency(r.totalLiquido)}</div></div>
+    </div>
+
+    <h2>Entregas do período</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>Data</th>
+          <th>Cooperado</th>
+          <th>Nota</th>
+          <th class="num">Bruto</th>
+          <th class="num">Líquido</th>
+          <th>Status</th>
+        </tr>
+      </thead>
+      <tbody>${linhas || `<tr><td colspan="6">Nenhuma entrega conferida neste mês.</td></tr>`}</tbody>
+      <tfoot>
+        <tr>
+          <td colspan="3"><strong>Totais</strong></td>
+          <td class="num"><strong>${formatCurrency(r.totalBruto)}</strong></td>
+          <td class="num"><strong>${formatCurrency(r.totalLiquido)}</strong></td>
+          <td></td>
+        </tr>
+      </tfoot>
+    </table>`;
+
+  return documentoShell(
+    `Entregas por instituição — ${inst?.nome ?? "Instituição"}`,
+    body,
+    data,
+    mesReferencia,
+    cooperativaId,
+    emissor
+  );
+}
+
+export function gerarRelatorioMensalidadesAbertasTotalHtml(
+  data: AppData,
+  cooperativaId?: string,
+  emissor?: EmissorRelatorio
+): string {
+  const { linhas, total } = getRelatorioMensalidadesEmAbertoConsolidado(data, cooperativaId);
+  const mesesUnicos = [...new Set(linhas.map((l) => l.mesReferencia))].sort();
+  const cooperadosUnicos = new Set(linhas.map((l) => l.cooperadoId)).size;
+
+  const rows = linhas
+    .map(
+      (m) =>
+        `<tr>
+          <td>${escapeHtml(m.cooperadoNome)}</td>
+          <td>${escapeHtml(formatMesReferencia(m.mesReferencia))}</td>
+          <td class="num">${formatCurrency(m.valor)}</td>
+          <td>${formatDate(m.vencimento)}</td>
+          <td>${escapeHtml(labelStatusMensalidade(m.status))}</td>
+        </tr>`
+    )
+    .join("");
+
+  const body = `
+    <p class="carta">
+      Consolidado de todas as mensalidades não pagas${mesesUnicos.length ? `: <strong>${mesesUnicos.map((m) => formatMesReferencia(m)).join(", ")}</strong>` : ""}.
+    </p>
+    <div class="resumo-grid">
+      <div class="resumo-card"><div class="label">Cooperados</div><div class="value">${cooperadosUnicos}</div></div>
+      <div class="resumo-card"><div class="label">Parcelas em aberto</div><div class="value">${linhas.length}</div></div>
+      <div class="resumo-card"><div class="label">Total em aberto</div><div class="value">${formatCurrency(total)}</div></div>
+    </div>
+    <h2>Detalhamento</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>Cooperado</th>
+          <th>Mês ref.</th>
+          <th class="num">Valor</th>
+          <th>Vencimento</th>
+          <th>Status</th>
+        </tr>
+      </thead>
+      <tbody>${rows || `<tr><td colspan="5">Nenhuma mensalidade em aberto.</td></tr>`}</tbody>
+      <tfoot>
+        <tr>
+          <td colspan="2"><strong>Total geral</strong></td>
+          <td class="num"><strong>${formatCurrency(total)}</strong></td>
+          <td colspan="2"></td>
+        </tr>
+      </tfoot>
+    </table>`;
+
+  return documentoShell(
+    "Mensalidades em Aberto — Total",
+    body,
+    data,
+    getCurrentMesReferencia(),
+    cooperativaId,
+    emissor
+  );
+}
+
+export function gerarRelatorioMensalidadesAbertasMesHtml(
+  data: AppData,
+  mesReferencia: string,
+  cooperativaId?: string,
+  emissor?: EmissorRelatorio
+): string {
+  const linhas = data.mensalidades
+    .filter((m) => {
+      if (m.status === "paga" || m.mesReferencia !== mesReferencia) return false;
+      if (!cooperativaId) return true;
+      const coop = data.cooperados.find((c) => c.id === m.cooperadoId);
+      return coop?.cooperativaId === cooperativaId;
+    })
+    .map((m) => ({
+      cooperadoNome: getCooperadoNomeSafe(data, m.cooperadoId),
+      valor: m.valor,
+      vencimento: m.vencimento,
+      status: m.status,
+    }))
+    .sort((a, b) => a.cooperadoNome.localeCompare(b.cooperadoNome, "pt-BR"));
+
+  const total = round2(linhas.reduce((s, l) => s + l.valor, 0));
+
+  const rows = linhas
+    .map(
+      (m) =>
+        `<tr>
+          <td>${escapeHtml(m.cooperadoNome)}</td>
+          <td class="num">${formatCurrency(m.valor)}</td>
+          <td>${formatDate(m.vencimento)}</td>
+          <td>${escapeHtml(labelStatusMensalidade(m.status))}</td>
+        </tr>`
+    )
+    .join("");
+
+  const body = `
+    <div class="resumo-grid">
+      <div class="resumo-card"><div class="label">Cooperados</div><div class="value">${new Set(linhas.map((l) => l.cooperadoNome)).size}</div></div>
+      <div class="resumo-card"><div class="label">Total em aberto</div><div class="value">${formatCurrency(total)}</div></div>
+    </div>
+    <h2>Mensalidades pendentes</h2>
+    <table>
+      <thead><tr><th>Cooperado</th><th class="num">Valor</th><th>Vencimento</th><th>Status</th></tr></thead>
+      <tbody>${rows || `<tr><td colspan="4">Nenhuma mensalidade em aberto neste mês.</td></tr>`}</tbody>
+      <tfoot>
+        <tr>
+          <td><strong>Total</strong></td>
+          <td class="num"><strong>${formatCurrency(total)}</strong></td>
+          <td colspan="2"></td>
+        </tr>
+      </tfoot>
+    </table>`;
+
+  return documentoShell(
+    "Mensalidades em Aberto",
+    body,
+    data,
+    mesReferencia,
+    cooperativaId,
+    emissor
+  );
+}
+
+export function gerarRelatorioPagarCooperadoAbertoHtml(
+  data: AppData,
+  cooperativaId: string | undefined,
+  cooperadoId: string | undefined,
+  emissor?: EmissorRelatorio
+): string {
+  const linhas = getRelatorioPagarCooperadoEmAberto(data, cooperativaId, cooperadoId);
+  const total = cooperadoId
+    ? round2(linhas.reduce((s, l) => s + l.total, 0))
+    : getTotalValoresAPagarEmAberto(data, cooperativaId);
+  const rows = linhas
+    .map(
+      (l) =>
+        `<tr><td>${escapeHtml(l.cooperado)}</td><td>${escapeHtml(l.mesesLabel)}</td><td class="num">${l.entregas}</td><td class="num">${formatCurrency(l.total)}</td></tr>`
+    )
+    .join("");
+  const detalheRows = linhas
+    .flatMap((l) =>
+      l.porMes.map(
+        (m) =>
+          `<tr><td>${escapeHtml(l.cooperado)}</td><td>${escapeHtml(m.mesLabel)}</td><td class="num">${m.entregas}</td><td class="num">${formatCurrency(m.total)}</td></tr>`
+      )
+    )
+    .join("");
+
+  const body = `
+    <h2>Valores a pagar — geral em aberto</h2>
+    <p class="carta">Soma consolidada de todos os meses com pagamento pendente ao cooperado.</p>
+    <table>
+      <thead><tr><th>Cooperado</th><th>Meses em aberto</th><th class="num">Entregas</th><th class="num">Valor a pagar</th></tr></thead>
+      <tbody>${rows || `<tr><td colspan="4">Nenhum valor pendente.</td></tr>`}</tbody>
+      <tfoot><tr><td colspan="3"><strong>Total geral</strong></td><td class="num"><strong>${formatCurrency(total)}</strong></td></tr></tfoot>
+    </table>
+    ${
+      detalheRows
+        ? `<h3 style="margin-top:24px">Detalhamento por mês</h3>
+    <table>
+      <thead><tr><th>Cooperado</th><th>Mês</th><th class="num">Entregas</th><th class="num">Valor a pagar</th></tr></thead>
+      <tbody>${detalheRows}</tbody>
+    </table>`
+        : ""
+    }`;
+
+  return documentoShell(
+    "Valores a Pagar — Geral em Aberto",
+    body,
+    data,
+    getCurrentMesReferencia(),
+    cooperativaId,
+    emissor
+  );
 }
 
 function statusCooperadoSobrasLabel(s: string): string {

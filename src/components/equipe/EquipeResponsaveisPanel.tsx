@@ -23,6 +23,7 @@ import {
   modulosLiberados,
   modulosRestritos,
   getUserFuncaoLabel,
+  PRESET_RELATORIOS,
 } from "@/permissions";
 import type { ModoAcesso, Resource, User } from "@/types";
 
@@ -65,7 +66,23 @@ export function EquipeResponsaveisPanel({ cooperativaId, cooperativaCnpj }: Equi
     else if (principal) setFuncaoPrincipal("Responsável principal");
   }, [principal?.id, principal?.funcao]);
 
-  if (!data || !user || !podeGerenciarEquipe) return null;
+  if (!data || !user) return null;
+
+  if (!podeGerenciarEquipe) {
+    return (
+      <Card title="Equipe e acessos" className="mb-6" id="equipe-acessos">
+        <AlertBanner variant="info" title="Quem pode cadastrar usuários">
+          Somente o <strong>responsável principal</strong> (conta criada no cadastro da cooperativa) ou o{" "}
+          <strong>tesoureiro</strong> pode adicionar outros responsáveis — por exemplo, alguém com acesso{" "}
+          <strong>só a Relatórios</strong>.
+        </AlertBanner>
+        <p className="text-sm text-gray-600 mt-3">
+          Se você precisa desse acesso, peça ao responsável principal para entrar em{" "}
+          <strong>Perfil da cooperativa</strong> e usar o botão <strong>Adicionar responsável</strong> nesta seção.
+        </p>
+      </Card>
+    );
+  }
 
   const abrirNovo = () => {
     setEditando(null);
@@ -160,10 +177,19 @@ export function EquipeResponsaveisPanel({ cooperativaId, cooperativaCnpj }: Equi
 
   return (
     <>
-      <Card title="Equipe e acessos" className="mb-6">
+      <Card title="Equipe e acessos" className="mb-6" id="equipe-acessos">
         <p className="text-sm text-gray-500 mb-4">
-          Cadastre outros responsáveis com acesso total ou parcial. Quem emite relatório terá nome, função e campo para assinatura.
+          Cadastre outros responsáveis com acesso total ou parcial. Para liberar{" "}
+          <strong>somente Relatórios</strong>, escolha &quot;Acesso parcial&quot; e marque Início + Relatórios
+          (o padrão ao criar já vem assim). Quem emite relatório terá nome, função e campo para assinatura.
         </p>
+        <ol className="text-sm text-gray-700 list-decimal list-inside space-y-1 mb-4 rounded-lg bg-green-50/80 border border-green-100 px-3 py-2">
+          <li>Clique em <strong>Adicionar responsável</strong> (botão verde abaixo)</li>
+          <li>Preencha nome, e-mail e senha</li>
+          <li>Tipo de acesso: <strong>Acesso parcial</strong></li>
+          <li>Use <strong>Aplicar perfil: só Relatórios</strong> ou marque Início + Relatórios</li>
+          <li>Salvar</li>
+        </ol>
 
         {principal && (
           <div className="rounded-xl border border-green-200 bg-green-50/50 p-4 mb-4">
@@ -299,9 +325,27 @@ export function EquipeResponsaveisPanel({ cooperativaId, cooperativaCnpj }: Equi
             </p>
             <p className="text-xs text-gray-500 mb-3">
               {form.modoAcesso === "parcial"
-                ? "Marque apenas o que este responsável pode acessar (ex.: só Relatórios)."
+                ? "Marque apenas o que este responsável pode acessar. Perfil só relatórios: Início + Relatórios."
                 : "Marque o que deve ficar bloqueado sobre o acesso padrão da função."}
             </p>
+            {form.modoAcesso === "parcial" && (
+              <Button
+                type="button"
+                size="sm"
+                variant="secondary"
+                className="mb-3"
+                onClick={() =>
+                  setForm((f) => ({
+                    ...f,
+                    modoAcesso: "parcial",
+                    modulosLiberados: [...PRESET_RELATORIOS],
+                    modulosRestritos: [],
+                  }))
+                }
+              >
+                Aplicar perfil: só Relatórios
+              </Button>
+            )}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-48 overflow-y-auto pr-1">
               {modulos.map((mod) => {
                 const checked =

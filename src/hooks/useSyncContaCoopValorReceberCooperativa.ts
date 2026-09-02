@@ -1,30 +1,25 @@
 import { useEffect, useRef, useState } from "react";
 import type { User } from "@/types";
-import {
-  refreshContaCoopValorReceberPilot,
-  type SyncContaCoopValorReceberOpts,
-} from "@/lib/hb-credit/syncContaCoopFichaDescontos";
+import { refreshContaCoopDescontosCooperativaPendentes } from "@/lib/hb-credit/syncContaCoopFichaDescontos";
 import { getData } from "@/services/dataStore";
 import { resolveCooperativaCnpj } from "@/services/notaPedidoCloudService";
 import { isContaCoopValorReceberPilot } from "@/utils/contaCoopUiVisibility";
 
-const SYNC_INTERVAL_MS = 45_000;
+const SYNC_INTERVAL_MS = 90_000;
 
 type HookOpts = {
-  cooperadoId?: string;
-  mesReferencia?: string;
   cooperativaId?: string;
-  cooperadoNome?: string;
-  user?: Pick<User, "cooperativaCnpj" | "cooperativaId" | "id"> | null;
+  user?: Pick<User, "cooperativaCnpj" | "cooperativaId" | "id" | "role"> | null;
+  enabled?: boolean;
 };
 
-/** Mantém o abatimento Conta Coop → valor a receber sincronizado (todos os cooperados). */
-export function useSyncContaCoopValorReceberPilot(opts?: HookOpts) {
+/** Sincroniza abatimentos Conta Coop de todos os cooperados com meses em aberto (visão responsável). */
+export function useSyncContaCoopValorReceberCooperativa(opts?: HookOpts) {
   const [cnpj, setCnpj] = useState("");
-  const optsRef = useRef<SyncContaCoopValorReceberOpts | undefined>(undefined);
+  const optsRef = useRef<{ cnpj: string; cooperativaId: string } | undefined>(undefined);
 
   useEffect(() => {
-    if (!opts?.cooperativaId || !opts.user) {
+    if (!opts?.cooperativaId || !opts.user || opts.enabled === false) {
       setCnpj("");
       return;
     }
@@ -35,29 +30,23 @@ export function useSyncContaCoopValorReceberPilot(opts?: HookOpts) {
     return () => {
       cancelled = true;
     };
-  }, [opts?.cooperativaId, opts?.user?.id]);
+  }, [opts?.cooperativaId, opts?.user?.id, opts?.enabled]);
 
   optsRef.current =
-    opts?.cooperadoId && opts.mesReferencia && opts.cooperativaId && cnpj
-      ? {
-          cnpj,
-          cooperadoId: opts.cooperadoId,
-          mesReferencia: opts.mesReferencia,
-          cooperativaId: opts.cooperativaId,
-          cooperadoNome: opts.cooperadoNome,
-        }
+    opts?.cooperativaId && cnpj && opts.enabled !== false && isContaCoopValorReceberPilot()
+      ? { cnpj, cooperativaId: opts.cooperativaId }
       : undefined;
 
   useEffect(() => {
     const syncOpts = optsRef.current;
-    if (!syncOpts || !isContaCoopValorReceberPilot(syncOpts.cooperadoId, syncOpts.cooperadoNome)) return;
+    if (!syncOpts?.cnpj) return;
 
     let cancelled = false;
 
     const run = () => {
       const current = optsRef.current;
       if (!current?.cnpj || cancelled || typeof navigator === "undefined" || !navigator.onLine) return;
-      void refreshContaCoopValorReceberPilot(current).catch(() => {
+      void refreshContaCoopDescontosCooperativaPendentes(current).catch(() => {
         /* offline ou HB indisponível */
       });
     };
@@ -75,11 +64,5 @@ export function useSyncContaCoopValorReceberPilot(opts?: HookOpts) {
       document.removeEventListener("visibilitychange", onVisible);
       window.clearInterval(interval);
     };
-  }, [
-    cnpj,
-    opts?.cooperadoId,
-    opts?.cooperadoNome,
-    opts?.cooperativaId,
-    opts?.mesReferencia,
-  ]);
+  }, [cnpj, opts?.cooperativaId, opts?.enabled]);
 }
