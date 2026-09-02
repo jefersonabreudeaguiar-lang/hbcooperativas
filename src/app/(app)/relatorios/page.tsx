@@ -136,10 +136,6 @@ export default function RelatoriosPage() {
   const searchParams = useSearchParams();
   const coopId = user && data ? getUserCooperativaId(user, data) : undefined;
 
-  useSyncContaCoopValorReceberCooperativa(
-    coopId && user ? { cooperativaId: coopId, user, enabled: Boolean(data) } : undefined
-  );
-
   const [tipo, setTipo] = useState("resumo_financeiro");
   const [mes, setMes] = useState(getCurrentMesReferencia());
   const [cooperadoId, setCooperadoId] = useState("");
@@ -149,6 +145,15 @@ export default function RelatoriosPage() {
   const [modalEmissao, setModalEmissao] = useState<"pdf" | "print" | null>(null);
   const [urlSynced, setUrlSynced] = useState(false);
   const tipoAnteriorRef = useRef<string>("");
+
+  const relatorioUsaContaCoop =
+    tipo === "pagar_cooperado" || tipo === "resumo_financeiro_aberto";
+
+  useSyncContaCoopValorReceberCooperativa(
+    coopId && user && relatorioUsaContaCoop
+      ? { cooperativaId: coopId, user, enabled: Boolean(data) }
+      : undefined
+  );
 
   const aplicarPadraoEntregasPorItensEmAberto = useCallback(() => {
     if (!data) return;

@@ -56,7 +56,16 @@ export function mergeDescontosContaCoopNoResumo(
 ): ResumoPagamentoCooperado {
   if (!descontosRemotos.length) return resumo;
 
-  const extras: FichaCorridaDesconto[] = [...resumo.descontosExtras];
+  const liquidoContaCoop = liquidoUsoContaCoopMes(descontosRemotos);
+  const coopJaAplicado = round2(
+    resumo.descontosExtras.filter((d) => d.tipo === "conta_coop").reduce((s, d) => s + d.valor, 0)
+  );
+  if (coopJaAplicado > 0 && Math.abs(coopJaAplicado - liquidoContaCoop) < 0.02) {
+    return resumo;
+  }
+
+  const extrasBase = resumo.descontosExtras.filter((d) => d.tipo !== "conta_coop");
+  const extras: FichaCorridaDesconto[] = [...extrasBase];
   for (const item of descontosRemotos) {
     const isEstorno = isEstornoContaCoop(item.motivo);
     extras.push({
@@ -67,13 +76,11 @@ export function mergeDescontosContaCoopNoResumo(
   }
 
   const totalDescontosSemCoop = round2(
-    resumo.descontosExtras.filter((d) => d.tipo !== "credito_avulso").reduce((s, d) => s + d.valor, 0)
+    extrasBase.filter((d) => d.tipo !== "credito_avulso").reduce((s, d) => s + d.valor, 0)
   );
   const totalCreditosSemCoop = round2(
-    resumo.descontosExtras.filter((d) => d.tipo === "credito_avulso").reduce((s, d) => s + d.valor, 0)
+    extrasBase.filter((d) => d.tipo === "credito_avulso").reduce((s, d) => s + d.valor, 0)
   );
-  /** Líquido Conta Coop (compras − estornos) — evita estorno órfão inflar o valor a receber. */
-  const liquidoContaCoop = liquidoUsoContaCoopMes(descontosRemotos);
   const valorLiquido = round2(
     Math.max(0, resumo.valorEntregas - totalDescontosSemCoop - liquidoContaCoop + totalCreditosSemCoop)
   );

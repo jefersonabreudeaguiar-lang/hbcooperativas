@@ -2,7 +2,7 @@ import type { AppData } from "@/types";
 import type { DescontoContaCoopRemoto } from "@/lib/hb-credit/mergeFichaDescontos";
 import { fetchFichaDescontosContaCoop } from "@/services/creditApiService";
 import { listarMesesPendentesPagamentoResponsavel } from "@/services/cooperadoEntregasService";
-import { getData, updateData } from "@/services/dataStore";
+import { beginSaveBatch, endSaveBatch, getData, updateData } from "@/services/dataStore";
 import { persistDescontosContaCoopNoArquivo } from "@/services/notaPedidoService";
 
 export type SyncContaCoopValorReceberOpts = {
@@ -42,36 +42,62 @@ export async function syncContaCoopDescontosMesSePilot(
   return syncContaCoopDescontosMesLocal(data, opts);
 }
 
+function arquivosMensaisFingerprint(arquivos: AppData["arquivosMensais"]): string {
+  return JSON.stringify(
+    arquivos.map((a) => ({
+      id: a.id,
+      contaCoopDescontos: a.contaCoopDescontos,
+    }))
+  );
+}
+
 /** Sincroniza meses em aberto de todos os cooperados da cooperativa (relatórios / responsável). */
 export async function refreshContaCoopDescontosCooperativaPendentes(opts: {
   cnpj: string;
   cooperativaId: string;
   data?: AppData;
-}): Promise<void> {
-  let data = opts.data ?? getData();
+}): Promise<boolean> {
+  const before = opts.data ?? getData();
+  const beforeFp = arquivosMensaisFingerprint(before.arquivosMensais);
+  let data = before;
   const cooperados = data.cooperados.filter(
     (c) => c.status === "ativo" && c.cooperativaId === opts.cooperativaId
   );
-  for (const c of cooperados) {
-    const meses = listarMesesPendentesPagamentoResponsavel(data, c.id, opts.cooperativaId);
-    for (const mes of meses) {
-      const synced = await syncContaCoopDescontosMesLocal(data, {
-        cnpj: opts.cnpj,
-        cooperadoId: c.id,
-        mesReferencia: mes,
-        cooperativaId: opts.cooperativaId,
-      });
-      data = synced.data;
+  beginSaveBatch();
+  try {
+    for (const c of cooperados) {
+      const meses = listarMesesPendentesPagamentoResponsavel(data, c.id, opts.cooperativaId);
+      for (const mes of meses) {
+        const synced = await syncContaCoopDescontosMesLocal(data, {
+          cnpj: opts.cnpj,
+          cooperadoId: c.id,
+          mesReferencia: mes,
+          cooperativaId: opts.cooperativaId,
+        });
+        data = synced.data;
+      }
     }
+    const afterFp = arquivosMensaisFingerprint(data.arquivosMensais);
+    if (afterFp !== beforeFp) {
+      updateData(() => data);
+      return true;
+    }
+    return false;
+  } finally {
+    endSaveBatch();
   }
-  updateData(() => data);
 }
 
 /** Busca compras na nuvem, grava no arquivo mensal e atualiza o store local. */
 export async function refreshContaCoopValorReceberPilot(
   opts: SyncContaCoopValorReceberOpts
 ): Promise<{ descontos: DescontoContaCoopRemoto[] }> {
-  const synced = await syncContaCoopDescontosMesSePilot(getData(), opts);
-  updateData(() => synced.data);
+  const before = getData();
+  const beforeFp = arquivosMensaisFingerprint(before.arquivosMensais);
+  const synced = await syncContaCoopDescontosMesSePilot(before, opts);
+  const afterFp = arquivosMensaisFingerprint(synced.data.arquivosMensais);
+  if (afterFp !== beforeFp) {
+    updateData(() => synced.data);
+  }
   return { descontos: synced.descontos };
 }

@@ -1391,6 +1391,7 @@ export function getResumoPagamentoCooperado(
   }
   for (const d of descontosDoCooperadoNoMes(data, cooperadoCanonico, mesReferencia)) {
     if (d.valorDescontado <= 0) continue;
+    if (mensalidadeFixa > 0 && d.tipo === "mensalidade_aberta") continue;
     descontosExtras.push({
       tipo: "manual",
       motivo: d.motivo,

@@ -5,7 +5,7 @@ import { getData } from "@/services/dataStore";
 import { resolveCooperativaCnpj } from "@/services/notaPedidoCloudService";
 import { isContaCoopValorReceberPilot } from "@/utils/contaCoopUiVisibility";
 
-const SYNC_INTERVAL_MS = 90_000;
+const SYNC_INTERVAL_MS = 300_000;
 
 type HookOpts = {
   cooperativaId?: string;
@@ -13,9 +13,10 @@ type HookOpts = {
   enabled?: boolean;
 };
 
-/** Sincroniza abatimentos Conta Coop de todos os cooperados com meses em aberto (visão responsável). */
+/** Sincroniza abatimentos Conta Coop em background — só relatórios em aberto, sem bloquear sync principal. */
 export function useSyncContaCoopValorReceberCooperativa(opts?: HookOpts) {
   const [cnpj, setCnpj] = useState("");
+  const runningRef = useRef(false);
   const optsRef = useRef<{ cnpj: string; cooperativaId: string } | undefined>(undefined);
 
   useEffect(() => {
@@ -45,24 +46,37 @@ export function useSyncContaCoopValorReceberCooperativa(opts?: HookOpts) {
 
     const run = () => {
       const current = optsRef.current;
-      if (!current?.cnpj || cancelled || typeof navigator === "undefined" || !navigator.onLine) return;
-      void refreshContaCoopDescontosCooperativaPendentes(current).catch(() => {
-        /* offline ou HB indisponível */
-      });
+      if (
+        !current?.cnpj ||
+        cancelled ||
+        runningRef.current ||
+        typeof navigator === "undefined" ||
+        !navigator.onLine
+      ) {
+        return;
+      }
+      runningRef.current = true;
+      void refreshContaCoopDescontosCooperativaPendentes(current)
+        .catch(() => {
+          /* offline ou HB indisponível */
+        })
+        .finally(() => {
+          runningRef.current = false;
+        });
     };
-
-    run();
 
     const onVisible = () => {
       if (document.visibilityState === "visible") run();
     };
     document.addEventListener("visibilitychange", onVisible);
     const interval = window.setInterval(run, SYNC_INTERVAL_MS);
+    const initial = window.setTimeout(run, 8_000);
 
     return () => {
       cancelled = true;
       document.removeEventListener("visibilitychange", onVisible);
       window.clearInterval(interval);
+      window.clearTimeout(initial);
     };
   }, [cnpj, opts?.cooperativaId, opts?.enabled]);
 }
