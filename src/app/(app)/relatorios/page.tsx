@@ -56,7 +56,7 @@ import {
   imprimirDocumentoHtml,
   nomeArquivoRelatorio,
 } from "@/utils/relatorioHtml";
-import { ModalEmitirRelatorio } from "@/components/relatorios/ModalEmitirRelatorio";
+import { ModalEmitirRelatorio, buildEmissorFromUser } from "@/components/relatorios/ModalEmitirRelatorio";
 import { EntregasPorItensPainel } from "@/components/relatorios/EntregasPorItensPainel";
 import type { EmissorRelatorio } from "@/types";
 import { formatCurrency, formatDate, formatMesReferencia, getCurrentMesReferencia } from "@/utils/format";
@@ -121,6 +121,9 @@ const RELATORIOS: ReportDef[] = [
 
 const RELATORIOS_CONSOLIDADOS = new Set(RELATORIOS.filter((r) => r.consolidado).map((r) => r.id));
 const RELATORIOS_MESES_MULTIPLOS = new Set(["entregas_por_itens"]);
+/** PDF/impressão sem assinatura — só nome do responsável logado. */
+const RELATORIOS_EMISSAO_SIMPLES = new Set(["pagar_cooperado", "entregas_por_itens"]);
+const RELATORIOS_INSTITUICAO_DOCUMENTO = new Set(["entregas_por_itens", "pagar_cooperado", "entregas_instituicao", "atingimento_cronograma"]);
 
 function relatorioVisivel(role: UserRole | string | undefined, r: ReportDef): boolean {
   if (!role || role === "tesoureiro" || role === "admin" || role === "presidente") return true;
@@ -332,7 +335,13 @@ export default function RelatoriosPage() {
       return gerarRelatorioResumoFinanceiroAbertoHtml(data, coopId, emissor);
     }
     if (tipo === "pagar_cooperado") {
-      return gerarRelatorioPagarCooperadoAbertoHtml(data, coopId, cooperadoId || undefined, emissor);
+      return gerarRelatorioPagarCooperadoAbertoHtml(
+        data,
+        coopId,
+        cooperadoId || undefined,
+        emissor,
+        instituicaoSelecionadaId || undefined
+      );
     }
     if (tipo === "atingimento_cronograma") {
       const inst = resolveInstituicaoId();
@@ -799,6 +808,18 @@ export default function RelatoriosPage() {
     );
   };
 
+  const validarEmissaoDocumento = (): boolean => {
+    if (RELATORIOS_INSTITUICAO_DOCUMENTO.has(tipo) && !instituicaoSelecionadaId) {
+      window.alert("Selecione a instituição do contrato para gerar o documento.");
+      return false;
+    }
+    if (tipo === "entregas_por_itens" && mesesEntregasItensEfetivos.length === 0) {
+      window.alert("Selecione ao menos um mês em aberto.");
+      return false;
+    }
+    return true;
+  };
+
   const emitirDocumento = (emissor: EmissorRelatorio) => {
     const html = gerarHtmlDocumento(emissor);
     if (!html) return;
@@ -810,13 +831,33 @@ export default function RelatoriosPage() {
     setModalEmissao(null);
   };
 
+  const emitirDocumentoDireto = (modo: "pdf" | "print") => {
+    if (!user || !validarEmissaoDocumento()) return;
+    const emissor = buildEmissorFromUser(user, { modo: "simples" });
+    const html = gerarHtmlDocumento(emissor);
+    if (!html) return;
+    if (modo === "print") {
+      imprimirDocumentoHtml(html);
+    } else {
+      void baixarDocumento(html, nomeDocumento());
+    }
+  };
+
   const handleExportDocumento = () => {
     if (!check("relatorios", "export")) return;
+    if (RELATORIOS_EMISSAO_SIMPLES.has(tipo)) {
+      emitirDocumentoDireto("pdf");
+      return;
+    }
     setModalEmissao("pdf");
   };
 
   const handlePrint = () => {
     if (!check("relatorios", "export")) return;
+    if (RELATORIOS_EMISSAO_SIMPLES.has(tipo)) {
+      emitirDocumentoDireto("print");
+      return;
+    }
     setModalEmissao("print");
   };
 
@@ -1699,10 +1740,16 @@ export default function RelatoriosPage() {
             </div>
           </FormField>
         )}
-        {tipo === "entregas_instituicao" ||
-        tipo === "entregas_por_itens" ||
-        tipo === "atingimento_cronograma" ? (
-          <FormField label={tipo === "atingimento_cronograma" ? "Contrato / Instituição" : "Instituição de entrega"}>
+        {RELATORIOS_INSTITUICAO_DOCUMENTO.has(tipo) ? (
+          <FormField
+            label={
+              tipo === "atingimento_cronograma"
+                ? "Contrato / Instituição"
+                : tipo === "pagar_cooperado"
+                  ? "Instituição do contrato"
+                  : "Instituição de entrega"
+            }
+          >
             <Select value={instituicaoSelecionadaId} onChange={(e) => setInstituicaoId(e.target.value)} className="min-w-[250px]">
               <option value="">Selecione...</option>
               {instituicoesCoop.map((i) => (

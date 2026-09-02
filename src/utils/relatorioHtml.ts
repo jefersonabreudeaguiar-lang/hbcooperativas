@@ -1,4 +1,4 @@
-import type { AppData, EmissorRelatorio, FechamentoMensal, Cooperativa } from "@/types";
+import type { AppData, EmissorRelatorio, FechamentoMensal, Cooperativa, Instituicao } from "@/types";
 import { PLATFORM_NAME } from "@/utils/constants";
 import { formatCnpj } from "@/utils/cooperativa";
 import { round2 } from "@/utils/calculations";
@@ -162,7 +162,22 @@ function documentoShell(
 </html>`;
 }
 
+function blocoEmissorSimples(emissor: EmissorRelatorio): string {
+  const dataEmissao = formatDate(emissor.emitidoEm.split("T")[0]);
+  const hora = new Date(emissor.emitidoEm).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
+  return `
+    <div class="emissor-box">
+      <div class="rotulo">Responsável pela emissão</div>
+      <div class="nome">${escapeHtml(emissor.nome)}</div>
+      <div class="detalhe">Emitido em ${dataEmissao} às ${hora}</div>
+    </div>`;
+}
+
 function blocoEmissorAssinatura(emissor: EmissorRelatorio): string {
+  if (emissor.modo === "simples") {
+    return blocoEmissorSimples(emissor);
+  }
+
   const dataEmissao = formatDate(emissor.emitidoEm.split("T")[0]);
   const hora = new Date(emissor.emitidoEm).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
   const assinaturaImg = emissor.assinaturaDataUrl
@@ -182,6 +197,22 @@ function blocoEmissorAssinatura(emissor: EmissorRelatorio): string {
         <div class="assinatura-linha">${escapeHtml(emissor.nome)}<br/>${escapeHtml(emissor.funcao)}</div>
       </div>
       <div><div class="assinatura-linha">Visto / conferência</div></div>
+    </div>`;
+}
+
+function blocoDestinatarioInstituicao(
+  inst: Pick<Instituicao, "nome" | "cnpj" | "endereco" | "localEntrega" | "responsavel"> | null | undefined
+): string {
+  if (!inst) return "";
+  const localEntrega = inst.localEntrega?.trim() || inst.endereco?.trim() || "";
+  const responsavelInst = inst.responsavel?.trim() || "";
+  return `
+    <div class="destinatario">
+      <div class="rotulo">Destinatário — instituição do contrato</div>
+      <div class="nome">${escapeHtml(inst.nome)}</div>
+      ${localEntrega ? `<div class="detalhe">${escapeHtml(localEntrega)}</div>` : ""}
+      ${responsavelInst ? `<div class="detalhe">A/C ${escapeHtml(responsavelInst)}</div>` : ""}
+      ${inst.cnpj ? `<div class="detalhe">CNPJ: ${escapeHtml(formatCnpj(inst.cnpj))}</div>` : ""}
     </div>`;
 }
 
@@ -343,8 +374,6 @@ function gerarEntregasPorItensDocumento(
   incluirDetalheCooperado = false
 ): string {
   const inst = rel.instituicao;
-  const localEntrega = inst?.localEntrega?.trim() || inst?.endereco?.trim() || "";
-  const responsavelInst = inst?.responsavel?.trim() || "";
 
   const linhasItens = rel.itens
     .map(
@@ -378,13 +407,7 @@ function gerarEntregasPorItensDocumento(
   const rotuloTotal = pendente ? "Total em aberto (entregas pendentes)" : "Total geral (bruto)";
 
   const body = `
-    <div class="destinatario">
-      <div class="rotulo">Destinatário</div>
-      <div class="nome">${escapeHtml(rel.instituicaoNome)}</div>
-      ${localEntrega ? `<div class="detalhe">${escapeHtml(localEntrega)}</div>` : ""}
-      ${responsavelInst ? `<div class="detalhe">A/C ${escapeHtml(responsavelInst)}</div>` : ""}
-      ${inst?.cnpj ? `<div class="detalhe">CNPJ: ${escapeHtml(formatCnpj(inst.cnpj))}</div>` : ""}
-    </div>
+    ${blocoDestinatarioInstituicao(inst)}
 
     <p class="carta">
       Período: <strong>${escapeHtml(periodoLabel)}</strong> · ${rel.quantidadeEntregas} entrega(s) · ${rel.itens.length} item(ns) · ${pendente ? "Total em aberto" : "Total"}: <strong>${formatCurrency(rel.totalBruto)}</strong>
@@ -432,7 +455,8 @@ function gerarEntregasPorItensDocumento(
     data,
     mesRef,
     cooperativaId,
-    emissor
+    emissor,
+    periodoLabel
   );
 }
 
@@ -744,8 +768,10 @@ export function gerarRelatorioPagarCooperadoAbertoHtml(
   data: AppData,
   cooperativaId: string | undefined,
   cooperadoId: string | undefined,
-  emissor?: EmissorRelatorio
+  emissor?: EmissorRelatorio,
+  instituicaoId?: string
 ): string {
+  const inst = instituicaoId ? data.instituicoes.find((i) => i.id === instituicaoId) : undefined;
   const linhas = getRelatorioPagarCooperadoEmAberto(data, cooperativaId, cooperadoId);
   const total = cooperadoId
     ? round2(linhas.reduce((s, l) => s + l.total, 0))
@@ -760,21 +786,32 @@ export function gerarRelatorioPagarCooperadoAbertoHtml(
     .join("");
 
   const body = `
+    ${blocoDestinatarioInstituicao(inst)}
+
+    <p class="carta">
+      Relação dos valores pendentes de pagamento aos cooperados, consolidados dos meses em aberto,
+      para fins de acompanhamento do contrato e transparência financeira.
+    </p>
+
     <h2>Valores a pagar — geral em aberto</h2>
-    <p class="carta">Soma consolidada de todos os meses com pagamento pendente ao cooperado.</p>
     <table>
       <thead><tr><th>Cooperado</th><th>${detalharPorMes ? "Mês" : "Meses em aberto"}</th><th class="num">Entregas</th><th class="num">Valor a pagar</th></tr></thead>
       <tbody>${rows || `<tr><td colspan="4">Nenhum valor pendente.</td></tr>`}</tbody>
       <tfoot><tr><td colspan="3"><strong>Total geral</strong></td><td class="num"><strong>${formatCurrency(total)}</strong></td></tr></tfoot>
     </table>`;
 
+  const periodoLabel = linhas.length
+    ? [...new Set(linhas.flatMap((l) => l.meses))].sort().map((m) => formatMesReferencia(m)).join(" · ")
+    : formatMesReferencia(getCurrentMesReferencia());
+
   return documentoShell(
-    "Valores a Pagar — Geral em Aberto",
+    "Pagamento por Cooperado — Em Aberto",
     body,
     data,
     getCurrentMesReferencia(),
     cooperativaId,
-    emissor
+    emissor,
+    periodoLabel
   );
 }
 

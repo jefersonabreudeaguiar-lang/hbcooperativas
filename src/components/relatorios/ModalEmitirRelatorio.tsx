@@ -73,10 +73,14 @@ export function ModalEmitirRelatorio({
   );
 }
 
-export function buildEmissorFromUser(user: UsuarioEmissor): EmissorRelatorio {
+export function buildEmissorFromUser(
+  user: UsuarioEmissor,
+  opts?: { modo?: EmissorRelatorio["modo"] }
+): EmissorRelatorio {
   return {
     nome: user.name,
     funcao: getUserFuncaoLabel(user),
     emitidoEm: new Date().toISOString(),
+    modo: opts?.modo,
   };
 }

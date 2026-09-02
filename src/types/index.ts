@@ -157,6 +157,8 @@ export interface EmissorRelatorio {
   funcao: string;
   emitidoEm: string;
   assinaturaDataUrl?: string;
+  /** Sem assinatura manuscrita — só identifica o responsável logado. */
+  modo?: "simples" | "completo";
 }
 
 export interface Cooperado {
