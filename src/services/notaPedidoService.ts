@@ -29,10 +29,8 @@ import {
   dedupeDescontosContaCoopRemotos,
   dedupeDescontosExtrasContaCoop,
   filtrarDescontosContaCoopParaMesReferencia,
-  liquidoUsoContaCoopMes,
   mergeDescontosContaCoopNoResumo,
 } from "@/lib/hb-credit/mergeFichaDescontos";
-import { listarMesesPendentesPagamentoResponsavel } from "@/services/cooperadoEntregasService";
 import { formatMesesReferenciaRotulo } from "@/utils/format";
 import { fichaPreservarSemNotaLocal, notasSyncProvavelmenteCompleto } from "@/services/fichaSyncGuard";
 import { isCloudSyncInProgress } from "@/services/cloudSyncProgress";
@@ -1340,6 +1338,37 @@ export function getTotalAPagarCooperado(
   );
 }
 
+/** Meses com ficha/pagamento pendente — sem chamar getResumoValorAPagar (evita recursão). */
+function mesesReferenciaComDebitoAberto(
+  data: AppData,
+  cooperadoId: string,
+  cooperativaId?: string
+): string[] {
+  const coopId = cooperativaId ?? data.cooperados.find((c) => c.id === cooperadoId)?.cooperativaId;
+  const canonico = resolverCooperadoIdCanonico(data, cooperadoId, coopId);
+  const meses = new Set<string>();
+
+  for (const f of data.fichaCorrida) {
+    if (
+      fichaPertenceCooperado(data, f, canonico, coopId) &&
+      f.status === "pendente" &&
+      fichaValidaNoExtrato(data, f)
+    ) {
+      meses.add(f.mesReferencia);
+    }
+  }
+
+  for (const p of data.pagamentosCooperado) {
+    const pCanonico = resolverCooperadoIdCanonico(data, p.cooperadoId, p.cooperativaId ?? coopId);
+    if (pCanonico !== canonico || p.status !== "aguardando_confirmacao") continue;
+    for (const mes of getMesesReferenciaPagamento(p)) {
+      meses.add(mes);
+    }
+  }
+
+  return [...meses].sort();
+}
+
 export function getResumoPagamentoCooperado(
   data: AppData,
   cooperadoId: string,
@@ -1380,10 +1409,10 @@ export function getResumoPagamentoCooperado(
       ? ajustes.descontoAvulsoMotivo
       : arquivo?.descontoAvulsoMotivo ?? compartilhado?.descontoAvulsoMotivo;
   const descontosExtras: FichaCorridaDesconto[] = [];
-  const mesesPendentes = listarMesesPendentesPagamentoResponsavel(data, cooperadoCanonico, coopIdResolved);
+  const mesesPendentes = mesesReferenciaComDebitoAberto(data, cooperadoCanonico, coopIdResolved);
   const coopBruto = getDescontosContaCoopMesCached(data, cooperadoCanonico, mesReferencia, coopIdResolved);
   const coopMes = filtrarDescontosContaCoopParaMesReferencia(coopBruto, mesReferencia, mesesPendentes);
-  const temContaCoopMes = coopMes.length > 0 || liquidoUsoContaCoopMes(coopBruto) > 0;
+  const temContaCoopMes = coopMes.length > 0;
   if (mensalidadeFixa > 0) {
     descontosExtras.push({
       tipo: "mensalidade",
@@ -1484,7 +1513,7 @@ function aplicarDescontosContaCoopMesNoResumo(
   cooperativaId?: string
 ): ResumoPagamentoCooperado {
   const coopId = cooperativaId ?? data.cooperados.find((c) => c.id === cooperadoId)?.cooperativaId;
-  const mesesPendentes = listarMesesPendentesPagamentoResponsavel(data, cooperadoId, coopId);
+  const mesesPendentes = mesesReferenciaComDebitoAberto(data, cooperadoId, coopId);
   const descontos = filtrarDescontosContaCoopParaMesReferencia(
     getDescontosContaCoopMesCached(data, cooperadoId, mesReferencia, coopId),
     mesReferencia,
