@@ -11,12 +11,12 @@ import { resolverCooperadoIdCanonico } from "@/services/cooperadoCloudService";
 import { getEscopoEleitoralPauta, getPautaById, getPautaVotacaoCooperado, registrarVotoCooperado } from "@/services/votacaoService";
 import { VotacaoDeliberativaForm } from "@/components/votacao/VotacaoDeliberativaForm";
 import { updateData } from "@/services/dataStore";
-import { pushCooperadoOperacionalToCloud } from "@/services/cooperativaSyncCloudService";
+import { pushVotoCooperadoToCloud } from "@/services/votacaoCloudService";
 import { getCooperativaCnpj } from "@/services/notaPedidoCloudService";
 import { requestAppSync } from "@/services/syncRequest";
 import { PageSkeleton } from "@/components/ui/PageSkeleton";
 import { AlertBanner } from "@/components/ui/AlertBanner";
-import type { VotacaoOpcao } from "@/types";
+import type { VotacaoOpcao, VotacaoVoto } from "@/types";
 
 export default function VotacaoDeliberativaPage() {
   const params = useParams();
@@ -85,6 +85,8 @@ export default function VotacaoDeliberativaPage() {
   ): Promise<{ ok: boolean; error?: string }> => {
     setProcessando(true);
     let result: { ok: boolean; error?: string } = { ok: false };
+    let votoEnviado: VotacaoVoto | null = null;
+    let cnpjEnvio: string | undefined;
     try {
       updateData((d) => {
         const reg = registrarVotoCooperado(d, {
@@ -98,12 +100,25 @@ export default function VotacaoDeliberativaPage() {
           result = { ok: false, error: reg.error };
           return d;
         }
+        votoEnviado =
+          (reg.data.votacaoVotos ?? []).find(
+            (item) => item.pautaId === pautaId && item.cooperadoId === view.cooperadoId
+          ) ?? null;
+        cnpjEnvio = getCooperativaCnpj(reg.data, view.coopId);
         result = { ok: true };
-        const cnpj = getCooperativaCnpj(reg.data, view.coopId);
-        if (cnpj) void pushCooperadoOperacionalToCloud(cnpj, view.coopId);
-        else requestAppSync();
         return reg.data;
       });
+
+      if (result.ok && votoEnviado && cnpjEnvio) {
+        const cloud = await pushVotoCooperadoToCloud(cnpjEnvio, votoEnviado);
+        if (!cloud.ok) {
+          result = { ok: false, error: cloud.error };
+        } else {
+          requestAppSync();
+        }
+      } else if (result.ok && !cnpjEnvio) {
+        requestAppSync();
+      }
     } finally {
       setProcessando(false);
     }

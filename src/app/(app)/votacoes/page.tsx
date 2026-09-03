@@ -11,11 +11,11 @@ import { Card } from "@/components/ui/Card";
 import { AlertBanner } from "@/components/ui/AlertBanner";
 import { FormField, Input, Textarea } from "@/components/ui/Form";
 import { StatusBadge } from "@/components/ui/StatusBadge";
-import { updateData, addAuditEntry } from "@/services/dataStore";
+import { updateData, addAuditEntry, getData } from "@/services/dataStore";
 import { getUserCooperativaId } from "@/utils/cooperativa";
 import { formatDate } from "@/utils/format";
-import { getCooperativaCnpj } from "@/services/notaPedidoCloudService";
-import { pushOperacionalToCloud } from "@/services/cooperativaSyncCloudService";
+import { getCooperativaCnpj, resolveCooperativaCnpj } from "@/services/notaPedidoCloudService";
+import { pushOperacionalToCloud, syncOperacionalFromCloud } from "@/services/cooperativaSyncCloudService";
 import { requestAppSync } from "@/services/syncRequest";
 import {
   abrirPautaVotacao,
@@ -56,6 +56,32 @@ export default function VotacoesPage() {
     if (isCooperado) router.replace("/dashboard");
     else if (user && !check("votacoes", "view")) router.replace("/dashboard");
   }, [isCooperado, user, router, check]);
+
+  useEffect(() => {
+    if (isCooperado || !coopId) return;
+
+    let cancelled = false;
+    const pullVotos = async () => {
+      const latest = getData();
+      if (!latest || cancelled) return;
+      const cnpj = await resolveCooperativaCnpj(latest, coopId, user ?? undefined);
+      if (!cnpj || cancelled) return;
+      await syncOperacionalFromCloud(cnpj);
+    };
+
+    void pullVotos();
+    const interval = setInterval(() => void pullVotos(), 30_000);
+    const onVisible = () => {
+      if (document.visibilityState === "visible") void pullVotos();
+    };
+    document.addEventListener("visibilitychange", onVisible);
+
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+      document.removeEventListener("visibilitychange", onVisible);
+    };
+  }, [coopId, isCooperado, user?.id]);
 
   const pautas = useMemo(
     () => (data && coopId ? listarPautasCooperativa(data, coopId) : []),
