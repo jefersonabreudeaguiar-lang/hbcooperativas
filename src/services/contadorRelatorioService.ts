@@ -1,9 +1,15 @@
-import type { AppData, AuditEntry, ParecerContabilMensal, User } from "@/types";
+import type { AppData, AuditEntry, Cooperado, FichaCorridaDesconto, ParecerContabilMensal, User } from "@/types";
 import { getCooperadoNome, round2, sumBy } from "@/utils/calculations";
 import {
+  agregarItensFichaMeses,
+  getResumoPagamentoConsolidadoCooperado,
   getResumoPagamentoCooperado,
   listarFichasExtratoCooperadoMes,
+  type ItemResumoFichaMes,
 } from "@/services/notaPedidoService";
+import { listarMesesPendentesPagamentoResponsavel } from "@/services/cooperadoEntregasService";
+import { listCooperadosDaCooperativa } from "@/services/cooperadoCloudService";
+import { formatMesesReferenciaRotulo } from "@/utils/format";
 import { generateId, addAuditEntry } from "@/services/dataStore";
 
 export interface LinhaRazaoAnalitico {
@@ -52,6 +58,81 @@ export interface ExtratoContaCoopMes {
   mesReferencia: string;
   linhas: LinhaExtratoContaCoop[];
   total: number;
+}
+
+/** Dados por cooperado para emissão de NF (vendas em aberto, estilo recibo). */
+export interface LinhaNotaFiscalCooperado {
+  cooperadoId: string;
+  cooperado: Cooperado;
+  meses: string[];
+  mesesLabel: string;
+  entregas: number;
+  itens: ItemResumoFichaMes[];
+  valorBruto: number;
+  descontoCooperativa: number;
+  valorEntregas: number;
+  descontosExtras: FichaCorridaDesconto[];
+  valorLiquido: number;
+}
+
+export interface RelatorioNotasFiscaisCooperados {
+  meses: string[];
+  mesesLabel: string;
+  linhas: LinhaNotaFiscalCooperado[];
+  totalCooperados: number;
+  totalBruto: number;
+  totalLiquido: number;
+}
+
+/** Vendas pendentes por cooperado — base para NF do contador (multi-mês). */
+export function getRelatorioNotasFiscaisCooperados(
+  data: AppData,
+  mesesReferencia: string[],
+  cooperativaId?: string,
+  cooperadoId?: string
+): RelatorioNotasFiscaisCooperados {
+  const meses = [...new Set(mesesReferencia.filter(Boolean))].sort();
+  const cooperados = listCooperadosDaCooperativa(data, cooperativaId).filter((c) => c.status === "ativo");
+  const linhas: LinhaNotaFiscalCooperado[] = [];
+
+  for (const cooperado of cooperados) {
+    if (cooperadoId && cooperado.id !== cooperadoId) continue;
+    const mesesPendentes = listarMesesPendentesPagamentoResponsavel(data, cooperado.id, cooperativaId);
+    const mesesCoop = meses.filter((m) => mesesPendentes.includes(m));
+    if (!mesesCoop.length) continue;
+
+    const itensParcial = agregarItensFichaMeses(data, cooperado.id, mesesCoop, cooperativaId, {
+      apenasPendentes: true,
+    });
+    const resumo = getResumoPagamentoConsolidadoCooperado(data, cooperado.id, mesesCoop, cooperativaId);
+
+    linhas.push({
+      cooperadoId: cooperado.id,
+      cooperado,
+      meses: mesesCoop,
+      mesesLabel: formatMesesReferenciaRotulo(mesesCoop),
+      entregas: itensParcial.entregas,
+      itens: itensParcial.itens,
+      valorBruto: resumo.valorBruto,
+      descontoCooperativa: resumo.descontoCooperativa,
+      valorEntregas: resumo.valorEntregas,
+      descontosExtras: resumo.descontosExtras,
+      valorLiquido: resumo.valorLiquido,
+    });
+  }
+
+  linhas.sort((a, b) =>
+    a.cooperado.nomeCompleto.localeCompare(b.cooperado.nomeCompleto, "pt-BR")
+  );
+
+  return {
+    meses,
+    mesesLabel: formatMesesReferenciaRotulo(meses),
+    linhas,
+    totalCooperados: linhas.length,
+    totalBruto: round2(linhas.reduce((s, l) => s + l.valorBruto, 0)),
+    totalLiquido: round2(linhas.reduce((s, l) => s + l.valorLiquido, 0)),
+  };
 }
 
 export function getRazaoAnaliticoCooperado(

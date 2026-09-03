@@ -254,6 +254,55 @@ export function atualizarFuncaoUsuario(
   };
 }
 
+/** Publica responsável/tesoureiro na nuvem (app_users) para login em qualquer aparelho. */
+export async function sincronizarMembroEquipeNaNuvem(
+  membro: Pick<User, "id" | "email" | "name" | "role" | "cooperativaId" | "cooperativaCnpj">,
+  plainPassword: string
+): Promise<boolean> {
+  if ((membro.role !== "responsavel" && membro.role !== "tesoureiro") || plainPassword.length < 6) {
+    return false;
+  }
+  const cnpj = membro.cooperativaCnpj ? normalizeCnpj(membro.cooperativaCnpj) : undefined;
+  return registerCloudUser({
+    id: membro.id,
+    email: membro.email,
+    password: plainPassword,
+    name: membro.name,
+    role: membro.role,
+    cooperativaId: membro.cooperativaId,
+    cooperativaCnpj: cnpj && cnpj.length === 14 ? cnpj : undefined,
+  });
+}
+
+/** Cadastra responsável localmente e publica credenciais na nuvem. */
+export async function cadastrarMembroEquipeComNuvem(
+  data: AppData,
+  actor: UsuarioActor,
+  cooperativaId: string,
+  cooperativaCnpj: string | undefined,
+  input: MembroEquipeInput
+): Promise<{ ok: true; user: User; data: AppData } | { ok: false; error: string }> {
+  const criado = criarMembroEquipe(data, actor, cooperativaId, cooperativaCnpj, input);
+  if (!criado.ok) return criado;
+
+  const cloudOk = await sincronizarMembroEquipeNaNuvem(criado.user, input.password);
+  if (!cloudOk) {
+    const detail = getLastCloudSyncError();
+    return {
+      ok: false,
+      error:
+        detail ||
+        "Não foi possível publicar o acesso na nuvem. Verifique internet e Supabase (tabela app_users) e tente novamente.",
+    };
+  }
+
+  return {
+    ok: true,
+    user: criado.user,
+    data: aplicarMembroEquipeCriado(data, actor, criado.user),
+  };
+}
+
 export function aplicarMembroEquipeCriado(
   data: AppData,
   actor: UsuarioActor,

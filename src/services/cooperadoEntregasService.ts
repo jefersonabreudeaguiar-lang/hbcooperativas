@@ -2,13 +2,10 @@ import type { AppData, NotaPedido, PagamentoCooperadoRegistro } from "@/types";
 import { notaPertenceCooperado, fichaPertenceCooperado, resolverCooperadoIdCanonico } from "@/services/cooperadoCloudService";
 import {
   getPagamentoAguardandoCooperado,
-  getResumoPagamentoExibicao,
   getTotalAPagarCooperado,
   getResumoPagamentoCooperado,
   getResumoValorAPagarRelatorio,
   getResumoPagamentoConsolidadoCooperado,
-  getValorExibicaoCooperado,
-  buildValorExibicaoCooperadoOpts,
   pagamentoCobreMesReferencia,
   getMesesReferenciaPagamento,
   fichaValidaNoExtrato,
@@ -56,9 +53,7 @@ function valorLiquidoMesQuantoVouReceber(
   mesReferencia: string,
   cooperativaId?: string
 ): number {
-  const resumo = getResumoPagamentoExibicao(data, cooperadoId, mesReferencia, cooperativaId);
-  const exibicaoOpts = buildValorExibicaoCooperadoOpts(data, cooperadoId, mesReferencia, cooperativaId);
-  return getValorExibicaoCooperado(resumo, exibicaoOpts);
+  return getResumoValorAPagarRelatorio(data, cooperadoId, mesReferencia, cooperativaId).valorLiquido;
 }
 
 /** Meses com valor pendente ou aguardando assinatura (ordem cronológica). */
@@ -343,10 +338,12 @@ export function getResumoMesEntregasCooperado(
   );
   const pagamentoConfirmado = getPagamentoConfirmadoMes(data, cooperadoId, mesReferencia);
   const pagamentoAguardando = getPagamentoAguardandoCooperado(data, cooperadoId, mesReferencia);
-  const valorAReceber = getValorExibicaoCooperado(
-    getResumoPagamentoExibicao(data, cooperadoId, mesReferencia, cooperativaId),
-    buildValorExibicaoCooperadoOpts(data, cooperadoId, mesReferencia, cooperativaId)
-  );
+  const valorAReceber = getResumoValorAPagarRelatorio(
+    data,
+    cooperadoId,
+    mesReferencia,
+    cooperativaId
+  ).valorLiquido;
   const valorRecebido = pagamentoConfirmado?.valorLiquido ?? 0;
 
   return {

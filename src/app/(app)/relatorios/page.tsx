@@ -53,6 +53,8 @@ import {
   gerarRelatorioTrilhaAuditoriaHtml,
   gerarRelatorioParecerContabilHtml,
   gerarRelatorioFechamentoHtml,
+  gerarRelatorioNotasFiscaisCooperadosHtml,
+  baixarDocumentoNotasFiscais,
   imprimirDocumentoHtml,
   nomeArquivoRelatorio,
 } from "@/utils/relatorioHtml";
@@ -74,6 +76,7 @@ import {
   getParecerContabilMes,
   getRazaoAnaliticoCooperado,
   getRazaoAnaliticoTodosCooperados,
+  getRelatorioNotasFiscaisCooperados,
 } from "@/services/contadorRelatorioService";
 import { labelUnidade } from "@/utils/unidades";
 import { PageSkeleton } from "@/components/ui/PageSkeleton";
@@ -117,12 +120,22 @@ const RELATORIOS: ReportDef[] = [
   { id: "extrato_conta_coop", label: "R5 — Extrato Conta Coop", grupo: "Contabilidade", audience: "contador" },
   { id: "trilha_auditoria", label: "R6 — Trilha de auditoria", grupo: "Contabilidade", audience: "contador" },
   { id: "parecer_contabil", label: "R9 — Parecer contábil mensal", grupo: "Contabilidade", audience: "contador" },
+  {
+    id: "notas_fiscais_cooperados",
+    label: "NF — Vendas por cooperado (em aberto)",
+    grupo: "Contabilidade",
+    audience: "ambos",
+  },
 ];
 
 const RELATORIOS_CONSOLIDADOS = new Set(RELATORIOS.filter((r) => r.consolidado).map((r) => r.id));
-const RELATORIOS_MESES_MULTIPLOS = new Set(["entregas_por_itens"]);
+const RELATORIOS_MESES_MULTIPLOS = new Set(["entregas_por_itens", "notas_fiscais_cooperados"]);
 /** PDF/impressão sem assinatura — só nome do responsável logado. */
-const RELATORIOS_EMISSAO_SIMPLES = new Set(["pagar_cooperado", "entregas_por_itens"]);
+const RELATORIOS_EMISSAO_SIMPLES = new Set([
+  "pagar_cooperado",
+  "entregas_por_itens",
+  "notas_fiscais_cooperados",
+]);
 const RELATORIOS_INSTITUICAO_DOCUMENTO = new Set(["entregas_por_itens", "pagar_cooperado", "entregas_instituicao", "atingimento_cronograma"]);
 
 function relatorioVisivel(role: UserRole | string | undefined, r: ReportDef): boolean {
@@ -229,11 +242,16 @@ export default function RelatoriosPage() {
         setMesesEntregasItens(listarMesesComDebitoCooperativa(data, coopId));
         setApenasPendenteItens(true);
       }
+      if (qTipo === "notas_fiscais_cooperados" && !qMeses && data) {
+        setMesesEntregasItens(listarMesesComDebitoCooperativa(data, coopId));
+      }
     }
     if (qMes) setMes(qMes);
     if (qMeses) {
       setMesesEntregasItens(qMeses.split(",").filter(Boolean));
     } else if (qMes && qTipo === "entregas_por_itens") {
+      setMesesEntregasItens([qMes]);
+    } else if (qMes && qTipo === "notas_fiscais_cooperados") {
       setMesesEntregasItens([qMes]);
     }
     if (qPendente === "1") setApenasPendenteItens(true);
@@ -246,7 +264,7 @@ export default function RelatoriosPage() {
   }, [tipo, mes, mesesEntregasItens, apenasPendenteItens, urlSynced, syncRelatorioUrl]);
 
   useEffect(() => {
-    if (tipo !== "entregas_por_itens" || !data || !urlSynced) return;
+    if (!RELATORIOS_MESES_MULTIPLOS.has(tipo) || !data || !urlSynced) return;
     if (mesesEntregasItens.length > 0) return;
     aplicarPadraoEntregasPorItensEmAberto();
   }, [tipo, data, urlSynced, mesesEntregasItens.length, aplicarPadraoEntregasPorItensEmAberto]);
@@ -254,8 +272,8 @@ export default function RelatoriosPage() {
   useEffect(() => {
     const prev = tipoAnteriorRef.current;
     tipoAnteriorRef.current = tipo;
-    if (tipo !== "entregas_por_itens" || !data) return;
-    if (prev === "entregas_por_itens") return;
+    if (!RELATORIOS_MESES_MULTIPLOS.has(tipo) || !data) return;
+    if (RELATORIOS_MESES_MULTIPLOS.has(prev)) return;
     if (searchParams.get("meses")) return;
     aplicarPadraoEntregasPorItensEmAberto();
   }, [tipo, data, searchParams, aplicarPadraoEntregasPorItensEmAberto]);
@@ -269,7 +287,7 @@ export default function RelatoriosPage() {
 
   const mesesEntregasItensEfetivos = useMemo(() => {
     if (mesesEntregasItens.length > 0) return [...mesesEntregasItens].sort();
-    if (data && tipo === "entregas_por_itens") {
+    if (data && RELATORIOS_MESES_MULTIPLOS.has(tipo)) {
       const abertos = listarMesesComDebitoCooperativa(data, coopId);
       if (abertos.length > 0) return abertos;
     }
@@ -318,6 +336,16 @@ export default function RelatoriosPage() {
         coopId,
         emissor,
         { apenasPendente: true }
+      );
+    }
+    if (tipo === "notas_fiscais_cooperados") {
+      if (mesesEntregasItensEfetivos.length === 0) return "";
+      return gerarRelatorioNotasFiscaisCooperadosHtml(
+        data,
+        mesesEntregasItensEfetivos,
+        coopId,
+        cooperadoId || undefined,
+        emissor
       );
     }
     if (tipo === "entregas_instituicao") {
@@ -409,6 +437,13 @@ export default function RelatoriosPage() {
             : "periodo"
           : mes;
       return nomeArquivoRelatorio(tipo, periodo, inst?.nome);
+    }
+    if (tipo === "notas_fiscais_cooperados") {
+      const periodo =
+        mesesEntregasItensEfetivos.length === 1
+          ? mesesEntregasItensEfetivos[0]
+          : "periodo";
+      return nomeArquivoRelatorio("notas_fiscais_cooperados", periodo);
     }
     if (RELATORIOS_CONSOLIDADOS.has(tipo)) {
       return nomeArquivoRelatorio(tipo, getCurrentMesReferencia());
@@ -534,6 +569,45 @@ export default function RelatoriosPage() {
         }
         if (rows.length > 0) {
           rows.push(["", "", "", "", "", "TOTAL GERAL", String(r.totalBruto)]);
+        }
+        break;
+      }
+      case "notas_fiscais_cooperados": {
+        if (mesesEntregasItensEfetivos.length === 0) break;
+        const r = getRelatorioNotasFiscaisCooperados(
+          data,
+          mesesEntregasItensEfetivos,
+          coopId,
+          cooperadoId || undefined
+        );
+        headers = ["Cooperado", "CPF/CNPJ", "Período", "Produto", "Qtd", "Unidade", "Valor unit.", "Valor", "Líquido coop."];
+        for (const linha of r.linhas) {
+          for (const item of linha.itens) {
+            rows.push([
+              linha.cooperado.nomeCompleto,
+              linha.cooperado.cpfCnpj ?? "",
+              linha.mesesLabel,
+              item.produtoNome,
+              String(item.quantidade),
+              item.unidade,
+              String(item.precoUnitario),
+              String(item.valorBruto),
+              String(linha.valorLiquido),
+            ]);
+          }
+          if (!linha.itens.length) {
+            rows.push([
+              linha.cooperado.nomeCompleto,
+              linha.cooperado.cpfCnpj ?? "",
+              linha.mesesLabel,
+              "",
+              "",
+              "",
+              "",
+              "",
+              String(linha.valorLiquido),
+            ]);
+          }
         }
         break;
       }
@@ -817,6 +891,10 @@ export default function RelatoriosPage() {
       window.alert("Selecione ao menos um mês em aberto.");
       return false;
     }
+    if (tipo === "notas_fiscais_cooperados" && mesesEntregasItensEfetivos.length === 0) {
+      window.alert("Selecione ao menos um mês para o relatório de NF.");
+      return false;
+    }
     return true;
   };
 
@@ -838,6 +916,8 @@ export default function RelatoriosPage() {
     if (!html) return;
     if (modo === "print") {
       imprimirDocumentoHtml(html);
+    } else if (tipo === "notas_fiscais_cooperados") {
+      void baixarDocumentoNotasFiscais(html, nomeDocumento());
     } else {
       void baixarDocumento(html, nomeDocumento());
     }
@@ -1026,6 +1106,98 @@ export default function RelatoriosPage() {
           { apenasPendente: true }
         );
         return <EntregasPorItensPainel relatorio={r} />;
+      }
+      case "notas_fiscais_cooperados": {
+        if (mesesEntregasItensEfetivos.length === 0) {
+          return <p className="text-gray-500">Selecione ao menos um mês (agosto/setembro em aberto).</p>;
+        }
+        const r = getRelatorioNotasFiscaisCooperados(
+          data,
+          mesesEntregasItensEfetivos,
+          coopId,
+          cooperadoId || undefined
+        );
+        if (!r.linhas.length) {
+          return (
+            <p className="text-gray-500">
+              Nenhum cooperado com vendas pendentes nos meses selecionados
+              ({r.mesesLabel}).
+            </p>
+          );
+        }
+        return (
+          <>
+            <div className="rounded-xl border border-blue-200 bg-blue-50/80 p-4 text-sm text-blue-900 mb-4">
+              <p className="font-semibold">Relatório para emissão de nota fiscal</p>
+              <p className="mt-1">
+                Cada cooperado abaixo será um bloco no PDF (estilo recibo), com cadastro, itens vendidos e
+                valores apurados. Use <strong>PDF</strong> para enviar ao contador.
+              </p>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
+              <StatCard title="Cooperados" value={String(r.totalCooperados)} />
+              <StatCard title="Total bruto" value={formatCurrency(r.totalBruto)} />
+              <StatCard title="Total líquido apurado" value={formatCurrency(r.totalLiquido)} variant="success" />
+            </div>
+            <div className="space-y-6">
+              {r.linhas.map((linha) => (
+                <div
+                  key={linha.cooperadoId}
+                  className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm"
+                >
+                  <h3 className="font-bold text-green-900 text-lg border-b border-green-100 pb-2 mb-3">
+                    {linha.cooperado.nomeCompleto}
+                  </h3>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-1 text-sm text-gray-700 mb-4">
+                    {linha.cooperado.cpfCnpj && (
+                      <p>
+                        <span className="text-gray-500">CPF/CNPJ:</span> {linha.cooperado.cpfCnpj}
+                      </p>
+                    )}
+                    {linha.cooperado.telefone && (
+                      <p>
+                        <span className="text-gray-500">Telefone:</span> {linha.cooperado.telefone}
+                      </p>
+                    )}
+                    {linha.cooperado.endereco && (
+                      <p className="sm:col-span-2">
+                        <span className="text-gray-500">Endereço:</span> {linha.cooperado.endereco}
+                      </p>
+                    )}
+                    <p>
+                      <span className="text-gray-500">Período:</span> {linha.mesesLabel}
+                    </p>
+                    <p>
+                      <span className="text-gray-500">Entregas:</span> {linha.entregas}
+                    </p>
+                  </div>
+                  <DataTable
+                    data={linha.itens.map((item, idx) => ({
+                      ...item,
+                      id: item.produtoInstituicaoId || String(idx),
+                    }))}
+                    keyField="id"
+                    emptyMessage="Sem itens."
+                    columns={[
+                      { key: "produto", label: "Produto", render: (i) => i.produtoNome },
+                      {
+                        key: "qtd",
+                        label: "Quantidade",
+                        render: (i) =>
+                          `${i.quantidade.toLocaleString("pt-BR")} ${labelUnidade(i.unidade) || i.unidade}`,
+                      },
+                      { key: "unit", label: "Preço unit.", render: (i) => formatCurrency(i.precoUnitario) },
+                      { key: "total", label: "Valor", render: (i) => formatCurrency(i.valorBruto) },
+                    ]}
+                  />
+                  <p className="text-sm font-semibold text-green-800 mt-3 text-right">
+                    Líquido apurado: {formatCurrency(linha.valorLiquido)}
+                  </p>
+                </div>
+              ))}
+            </div>
+          </>
+        );
       }
       case "atingimento_cronograma": {
         const inst = instituicaoSelecionadaId;
@@ -1740,6 +1912,42 @@ export default function RelatoriosPage() {
             </div>
           </FormField>
         )}
+        {tipo === "notas_fiscais_cooperados" && (
+          <FormField label="Meses para somar">
+            <div className="rounded-xl border border-blue-200 bg-blue-50/80 p-3 max-h-48 overflow-y-auto min-w-[320px]">
+              <p className="text-xs text-blue-900 mb-3">
+                Marque os meses em aberto (ex.: agosto e setembro). O PDF lista todos os cooperados com vendas
+                pendentes — um recibo por cooperado.
+              </p>
+              <div className="flex flex-wrap gap-2 mb-3">
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="secondary"
+                  onClick={() => {
+                    if (!data) return;
+                    aplicarPadraoEntregasPorItensEmAberto();
+                  }}
+                >
+                  Todos os meses em aberto
+                </Button>
+              </div>
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                {mesesEntregasItensOpcoes.map((m) => (
+                  <label key={m} className="flex items-center gap-2 text-sm text-gray-800 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={mesesEntregasItensEfetivos.includes(m)}
+                      onChange={() => toggleMesEntregasItens(m)}
+                      className="rounded border-gray-300 text-green-700 focus:ring-green-600"
+                    />
+                    {formatMesReferencia(m)}
+                  </label>
+                ))}
+              </div>
+            </div>
+          </FormField>
+        )}
         {RELATORIOS_INSTITUICAO_DOCUMENTO.has(tipo) ? (
           <FormField
             label={
@@ -1758,7 +1966,9 @@ export default function RelatoriosPage() {
             </Select>
           </FormField>
         ) : null}
-        {tipo === "pagar_cooperado" || tipo === "historico_reclamacoes" ? (
+        {tipo === "pagar_cooperado" ||
+        tipo === "historico_reclamacoes" ||
+        tipo === "notas_fiscais_cooperados" ? (
           <FormField label="Cooperado">
             <Select value={cooperadoId} onChange={(e) => setCooperadoId(e.target.value)} className="min-w-[200px]">
               <option value="">Todos</option>

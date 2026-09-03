@@ -22,7 +22,11 @@ function aguardarImagens(doc: Document): Promise<void> {
 }
 
 /** Converte HTML (recibos, relatórios) em PDF e dispara o download no navegador. */
-export async function baixarHtmlComoPdf(html: string, nomeArquivo: string): Promise<void> {
+export async function baixarHtmlComoPdf(
+  html: string,
+  nomeArquivo: string,
+  opts?: { pagebreakAvoid?: string }
+): Promise<void> {
   if (typeof window === "undefined") return;
 
   const iframe = document.createElement("iframe");
@@ -46,16 +50,17 @@ export async function baixarHtmlComoPdf(html: string, nomeArquivo: string): Prom
 
   try {
     const html2pdf = (await import("html2pdf.js")).default;
-    await html2pdf()
-      .set({
-        margin: [10, 10, 10, 10],
-        filename: nomePdf,
-        image: { type: "jpeg", quality: 0.95 },
-        html2canvas: { scale: 2, useCORS: true, logging: false },
-        jsPDF: { unit: "mm", format: "a4", orientation: "portrait" },
-      })
-      .from(doc.body)
-      .save();
+    const pdfOpts: Record<string, unknown> = {
+      margin: [10, 10, 10, 10],
+      filename: nomePdf,
+      image: { type: "jpeg", quality: 0.95 },
+      html2canvas: { scale: 2, useCORS: true, logging: false },
+      jsPDF: { unit: "mm", format: "a4", orientation: "portrait" },
+    };
+    if (opts?.pagebreakAvoid) {
+      pdfOpts.pagebreak = { mode: ["avoid-all", "css", "legacy"], avoid: opts.pagebreakAvoid };
+    }
+    await html2pdf().set(pdfOpts).from(doc.body).save();
   } finally {
     document.body.removeChild(iframe);
   }

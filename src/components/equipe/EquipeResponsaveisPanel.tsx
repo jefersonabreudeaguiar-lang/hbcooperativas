@@ -13,8 +13,9 @@ import { updateData } from "@/services/dataStore";
 import {
   aplicarAtualizacaoMembroEquipe,
   aplicarMembroEquipeCriado,
-  criarMembroEquipe,
+  cadastrarMembroEquipeComNuvem,
   listMembrosEquipeIncluindoInativos,
+  sincronizarMembroEquipeNaNuvem,
   modulosDisponiveisParaForm,
   presetModulosRelatorios,
 } from "@/services/equipeService";
@@ -49,6 +50,8 @@ export function EquipeResponsaveisPanel({ cooperativaId, cooperativaCnpj }: Equi
   const [editando, setEditando] = useState<User | null>(null);
   const [form, setForm] = useState(emptyForm);
   const [erro, setErro] = useState("");
+  const [salvando, setSalvando] = useState(false);
+  const [feedbackOk, setFeedbackOk] = useState<string | null>(null);
   const [funcaoPrincipal, setFuncaoPrincipal] = useState("");
   const [salvouFuncao, setSalvouFuncao] = useState(false);
 
@@ -125,31 +128,51 @@ export function EquipeResponsaveisPanel({ cooperativaId, cooperativaCnpj }: Equi
     }));
   };
 
-  const salvarMembro = () => {
+  const salvarMembro = async () => {
     setErro("");
-    if (editando) {
-      const result = aplicarAtualizacaoMembroEquipe(data, user, editando.id, {
-        name: form.name,
-        funcao: form.funcao,
-        password: form.password || undefined,
-        modoAcesso: form.modoAcesso,
-        modulosLiberados: form.modulosLiberados,
-        modulosRestritos: form.modulosRestritos,
-      });
-      if (!result.ok) {
-        setErro(result.error);
-        return;
+    setFeedbackOk(null);
+    setSalvando(true);
+    try {
+      if (editando) {
+        const result = aplicarAtualizacaoMembroEquipe(data, user, editando.id, {
+          name: form.name,
+          funcao: form.funcao,
+          password: form.password || undefined,
+          modoAcesso: form.modoAcesso,
+          modulosLiberados: form.modulosLiberados,
+          modulosRestritos: form.modulosRestritos,
+        });
+        if (!result.ok) {
+          setErro(result.error);
+          return;
+        }
+        if (form.password && form.password.length >= 6) {
+          const updated = result.data.users.find((u) => u.id === editando.id);
+          if (updated) {
+            const cloudOk = await sincronizarMembroEquipeNaNuvem(updated, form.password);
+            if (!cloudOk) {
+              setErro("Alteração salva no aparelho, mas a senha não foi atualizada na nuvem. Tente novamente.");
+              return;
+            }
+          }
+        }
+        updateData(() => result.data);
+        setFeedbackOk("Acesso atualizado.");
+      } else {
+        const criado = await cadastrarMembroEquipeComNuvem(data, user, cooperativaId, cooperativaCnpj, form);
+        if (!criado.ok) {
+          setErro(criado.error);
+          return;
+        }
+        updateData(() => criado.data);
+        setFeedbackOk(
+          `Responsável cadastrado. O login ${form.email.trim().toLowerCase()} já funciona em qualquer dispositivo.`
+        );
       }
-      updateData(() => result.data);
-    } else {
-      const criado = criarMembroEquipe(data, user, cooperativaId, cooperativaCnpj, form);
-      if (!criado.ok) {
-        setErro(criado.error);
-        return;
-      }
-      updateData((d) => aplicarMembroEquipeCriado(d, user, criado.user));
+      setModalOpen(false);
+    } finally {
+      setSalvando(false);
     }
-    setModalOpen(false);
   };
 
   const salvarFuncaoPrincipal = () => {
@@ -183,6 +206,12 @@ export function EquipeResponsaveisPanel({ cooperativaId, cooperativaCnpj }: Equi
           <strong>somente Relatórios</strong>, escolha &quot;Acesso parcial&quot; e marque Início + Relatórios
           (o padrão ao criar já vem assim). Quem emite relatório terá nome, função e campo para assinatura.
         </p>
+        {feedbackOk && (
+          <AlertBanner variant="success" title="Salvo" className="mb-4">
+            {feedbackOk}
+          </AlertBanner>
+        )}
+
         <ol className="text-sm text-gray-700 list-decimal list-inside space-y-1 mb-4 rounded-lg bg-green-50/80 border border-green-100 px-3 py-2">
           <li>Clique em <strong>Adicionar responsável</strong> (botão verde abaixo)</li>
           <li>Preencha nome, e-mail e senha</li>
@@ -263,8 +292,12 @@ export function EquipeResponsaveisPanel({ cooperativaId, cooperativaCnpj }: Equi
         size="md"
         footer={
           <div className="flex justify-end gap-2">
-            <Button variant="secondary" onClick={() => setModalOpen(false)}>Cancelar</Button>
-            <Button onClick={salvarMembro}>Salvar</Button>
+            <Button variant="secondary" onClick={() => setModalOpen(false)} disabled={salvando}>
+              Cancelar
+            </Button>
+            <Button onClick={() => void salvarMembro()} disabled={salvando}>
+              {salvando ? "Salvando…" : "Salvar"}
+            </Button>
           </div>
         }
       >

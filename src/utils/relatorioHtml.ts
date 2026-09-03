@@ -2,7 +2,7 @@ import type { AppData, EmissorRelatorio, FechamentoMensal, Cooperativa, Institui
 import { PLATFORM_NAME } from "@/utils/constants";
 import { formatCnpj } from "@/utils/cooperativa";
 import { round2 } from "@/utils/calculations";
-import { formatCurrency, formatDate, formatDateTime, formatMesReferencia, getCurrentMesReferencia } from "@/utils/format";
+import { formatCurrency, formatDate, formatDateTime, formatMesReferencia, formatCpfCnpj, getCurrentMesReferencia } from "@/utils/format";
 import type { FechamentoCalculado, RelatorioEntregasPorItens, RelatorioEntregasPorItensEmAberto, RelatorioEntregasPorItensPeriodo, ResumoFinanceiroEmAberto, ResumoFinanceiroMes } from "@/services/relatorioService";
 import {
   calcularFechamentoMensalLive,
@@ -20,6 +20,10 @@ import {
 } from "@/services/relatorioService";
 import type { ConciliacaoMensalResult } from "@/services/conciliacaoMensalService";
 import { getDemonstrativoPagamentosMes } from "@/services/conciliacaoMensalService";
+import {
+  getRelatorioNotasFiscaisCooperados,
+  type LinhaNotaFiscalCooperado,
+} from "@/services/contadorRelatorioService";
 import { getRelatorioSobrasPerdas, type RelatorioSobrasPerdas } from "@/services/sobrasPerdasService";
 import { getRelatorioReclamacoes } from "@/services/reclamacaoService";
 import { getRelatorioVotacoes, labelVoto } from "@/services/votacaoService";
@@ -80,6 +84,68 @@ const DOC_STYLES = `
   .emissor-box .rotulo { font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; color: #64748b; font-weight: 700; margin-bottom: 6px; }
   .emissor-box .nome { font-weight: 700; color: #111; }
   .emissor-box .detalhe { color: #475569; margin-top: 2px; }
+  .recibo-nf-cooperado {
+    page-break-inside: avoid;
+    break-inside: avoid-page;
+    -webkit-column-break-inside: avoid;
+    border: 1px solid #d1d5db;
+    border-radius: 10px;
+    padding: 20px 22px;
+    margin: 28px 0;
+    background: #fff;
+  }
+  .recibo-nf-cooperado h2.coop-nome {
+    font-family: system-ui, sans-serif;
+    font-size: 1.05rem;
+    color: #14532d;
+    margin: 0 0 12px;
+    padding-bottom: 8px;
+    border-bottom: 2px solid #bbf7d0;
+  }
+  .dados-cooperado-grid {
+    display: grid;
+    grid-template-columns: 140px 1fr;
+    gap: 4px 12px;
+    font-family: system-ui, sans-serif;
+    font-size: 12px;
+    margin: 12px 0 16px;
+    color: #374151;
+  }
+  .dados-cooperado-grid .rotulo { font-weight: 600; color: #6b7280; }
+  .resumo-financeiro-nf {
+    font-family: system-ui, sans-serif;
+    background: #f9fafb;
+    border: 1px solid #e5e7eb;
+    border-radius: 8px;
+    padding: 14px 16px;
+    margin-top: 14px;
+  }
+  .resumo-financeiro-nf .linha {
+    display: flex;
+    justify-content: space-between;
+    padding: 4px 0;
+    font-size: 13px;
+    border-bottom: 1px dashed #e5e7eb;
+  }
+  .resumo-financeiro-nf .linha:last-child {
+    border-bottom: none;
+    font-weight: 700;
+    font-size: 14px;
+    color: #14532d;
+    padding-top: 8px;
+    margin-top: 4px;
+  }
+  .nf-aviso {
+    font-family: system-ui, sans-serif;
+    background: #eff6ff;
+    border: 1px solid #bfdbfe;
+    border-radius: 8px;
+    padding: 14px 16px;
+    margin: 0 0 20px;
+    font-size: 13px;
+    color: #1e3a8a;
+    line-height: 1.55;
+  }
   @media print {
     body { padding: 12mm; margin: 0; }
     .no-print { display: none !important; }
@@ -1257,8 +1323,146 @@ export function gerarRelatorioAtingimentoCronogramaHtml(
   );
 }
 
-export async function baixarDocumento(html: string, nomeArquivo: string): Promise<void> {
-  await baixarHtmlComoPdf(html, nomeArquivo);
+export async function baixarDocumento(
+  html: string,
+  nomeArquivo: string,
+  opts?: { pagebreakAvoid?: string }
+): Promise<void> {
+  await baixarHtmlComoPdf(html, nomeArquivo, opts);
+}
+
+function blocoDadosCooperadoFiscal(linha: LinhaNotaFiscalCooperado): string {
+  const c = linha.cooperado;
+  const pares: [string, string][] = [
+    ["Nome completo", c.nomeCompleto],
+    ["CPF/CNPJ", formatCpfCnpj(c.cpfCnpj)],
+    ["Telefone", c.telefone ?? ""],
+    ["Endereço", c.endereco ?? ""],
+    ["Comunidade", c.comunidade ?? ""],
+    ["CAF / DAP", c.cafDap ?? ""],
+    ["Chave PIX", c.chavePix ?? ""],
+  ];
+  if (c.banco?.trim()) {
+    pares.push(["Dados bancários", `${c.banco} · Ag. ${c.agencia ?? "—"} · Cc ${c.conta ?? "—"}`]);
+  }
+  pares.push(["Período", linha.mesesLabel]);
+  pares.push(["Entregas no período", String(linha.entregas)]);
+
+  const grid = pares
+    .filter(([, v]) => v.trim())
+    .map(
+      ([rotulo, valor]) =>
+        `<div class="rotulo">${escapeHtml(rotulo)}</div><div>${escapeHtml(valor)}</div>`
+    )
+    .join("");
+
+  return `<div class="dados-cooperado-grid">${grid}</div>`;
+}
+
+function blocoItensCooperadoFiscal(linha: LinhaNotaFiscalCooperado): string {
+  const rows = linha.itens
+    .map(
+      (i) =>
+        `<tr>
+          <td>${escapeHtml(i.produtoNome)}</td>
+          <td class="num">${i.quantidade.toLocaleString("pt-BR")} ${escapeHtml(i.unidade)}</td>
+          <td class="num">${formatCurrency(i.precoUnitario)}</td>
+          <td class="num">${formatCurrency(i.valorBruto)}</td>
+        </tr>`
+    )
+    .join("");
+
+  return `
+    <h2 style="font-size:0.85rem;margin:16px 0 8px">Produtos vendidos</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>Produto</th>
+          <th class="num">Quantidade</th>
+          <th class="num">Preço unit.</th>
+          <th class="num">Valor</th>
+        </tr>
+      </thead>
+      <tbody>${rows || `<tr><td colspan="4">Sem itens no período selecionado.</td></tr>`}</tbody>
+      <tfoot>
+        <tr>
+          <td colspan="3"><strong>Total bruto dos itens</strong></td>
+          <td class="num"><strong>${formatCurrency(linha.itens.reduce((s, i) => s + i.valorBruto, 0) || linha.valorBruto)}</strong></td>
+        </tr>
+      </tfoot>
+    </table>`;
+}
+
+function blocoResumoFinanceiroFiscal(linha: LinhaNotaFiscalCooperado, descontoPct: number): string {
+  const extras = linha.descontosExtras
+    .map((d) => {
+      const credito = d.tipo === "credito_avulso";
+      const sinal = credito ? "+ " : "− ";
+      return `<div class="linha"><span>${escapeHtml(d.motivo)}</span><span>${sinal}${formatCurrency(d.valor)}</span></div>`;
+    })
+    .join("");
+
+  return `
+    <div class="resumo-financeiro-nf">
+      <div class="linha"><span>Total entregas (bruto)</span><span>${formatCurrency(linha.valorBruto)}</span></div>
+      <div class="linha"><span>Desconto cooperativa${descontoPct > 0 ? ` (${descontoPct}%)` : ""}</span><span>− ${formatCurrency(linha.descontoCooperativa)}</span></div>
+      <div class="linha"><span>Entregas líquidas</span><span>${formatCurrency(linha.valorEntregas)}</span></div>
+      ${extras}
+      <div class="linha"><span>Valor líquido apurado (base NF)</span><span>${formatCurrency(linha.valorLiquido)}</span></div>
+    </div>`;
+}
+
+function blocoReciboCooperadoFiscal(linha: LinhaNotaFiscalCooperado, descontoPct: number): string {
+  return `
+    <section class="recibo-nf-cooperado">
+      <h2 class="coop-nome">${escapeHtml(linha.cooperado.nomeCompleto)}</h2>
+      ${blocoDadosCooperadoFiscal(linha)}
+      ${blocoItensCooperadoFiscal(linha)}
+      <h2 style="font-size:0.85rem;margin:16px 0 8px">Resumo financeiro</h2>
+      ${blocoResumoFinanceiroFiscal(linha, descontoPct)}
+    </section>`;
+}
+
+/** Documento estilo recibo — um bloco por cooperado, para emissão de NF pelo contador. */
+export function gerarRelatorioNotasFiscaisCooperadosHtml(
+  data: AppData,
+  mesesReferencia: string[],
+  cooperativaId: string | undefined,
+  cooperadoId: string | undefined,
+  emissor?: EmissorRelatorio
+): string {
+  const rel = getRelatorioNotasFiscaisCooperados(data, mesesReferencia, cooperativaId, cooperadoId);
+  const descontoPct = data.config?.descontoPadraoCooperativa ?? 5;
+  const blocos = rel.linhas.map((l) => blocoReciboCooperadoFiscal(l, descontoPct)).join("");
+
+  const body = `
+    <div class="nf-aviso">
+      <strong>Documento para emissão de nota fiscal</strong> — consolida as vendas pendentes de pagamento
+      (${escapeHtml(rel.mesesLabel)}). Cada bloco abaixo corresponde a um cooperado. Utilize os dados cadastrais,
+      itens e valores apurados para lançamento contábil e emissão de NF-e/NFS-e conforme orientação do contador.
+    </div>
+
+    <div class="resumo-grid">
+      <div class="resumo-card"><div class="label">Cooperados</div><div class="value">${rel.totalCooperados}</div></div>
+      <div class="resumo-card"><div class="label">Total bruto</div><div class="value">${formatCurrency(rel.totalBruto)}</div></div>
+      <div class="resumo-card"><div class="label">Total líquido apurado</div><div class="value">${formatCurrency(rel.totalLiquido)}</div></div>
+    </div>
+
+    ${blocos || `<p>Nenhum cooperado com vendas pendentes nos meses selecionados.</p>`}`;
+
+  return documentoShell(
+    "Vendas por Cooperado — Emissão de NF",
+    body,
+    data,
+    mesesReferencia[mesesReferencia.length - 1] ?? getCurrentMesReferencia(),
+    cooperativaId,
+    emissor,
+    rel.mesesLabel
+  );
+}
+
+export async function baixarDocumentoNotasFiscais(html: string, nomeArquivo: string): Promise<void> {
+  await baixarHtmlComoPdf(html, nomeArquivo, { pagebreakAvoid: ".recibo-nf-cooperado" });
 }
 
 export function gerarRelatorioConciliacaoHtml(

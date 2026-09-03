@@ -540,7 +540,7 @@ function montarRelatorioEntregasPorItensPendente(
         porCooperadoMap.set(cooperadoId, linha);
       }
       linha.quantidadeEntregas += 1;
-      linha.totalBruto = round2(linha.totalBruto + ficha.valorLiquido);
+      linha.totalBruto = round2(linha.totalBruto + ficha.valorBruto);
       linha.itens = consolidarLinhasItensRelatorio([
         ...linha.itens,
         ...agregarItensLista(ficha.itens ?? []),
@@ -554,6 +554,8 @@ function montarRelatorioEntregasPorItensPendente(
   const itens = consolidarLinhasItensRelatorio(porCooperado.flatMap((l) => l.itens));
   const totalItens = round2(itens.reduce((s, i) => s + i.valorTotal, 0));
 
+  const totalCooperadosBruto = round2(porCooperado.reduce((s, l) => s + l.totalBruto, 0));
+
   return {
     mesReferencia: meses.length === 1 ? meses[0] : "periodo",
     instituicao: inst,
@@ -561,7 +563,7 @@ function montarRelatorioEntregasPorItensPendente(
     itens,
     porCooperado,
     quantidadeEntregas: fichaIds.size,
-    totalBruto: totalLiquido > 0 ? totalLiquido : totalItens,
+    totalBruto: totalCooperadosBruto > 0 ? totalCooperadosBruto : totalItens,
     totalLiquido,
   };
 }

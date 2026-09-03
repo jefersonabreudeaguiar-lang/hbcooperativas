@@ -984,11 +984,34 @@ export function fichasValoresAlinhadosComNota(fichas: FichaCorrida[], nota: Nota
   );
 }
 
+/** Agrega itens de todas as fichas da nota (divisão entre cooperados / multi-foto). */
+export function consolidarItensDeFichasNota(
+  fichas: FichaCorrida[],
+  notaId: string
+): NotaPedidoItem[] {
+  const map = new Map<string, NotaPedidoItem>();
+  for (const f of fichas.filter((x) => x.notaPedidoId === notaId)) {
+    for (const item of f.itens ?? []) {
+      if ((item.quantidade ?? 0) <= 0) continue;
+      const key = item.produtoInstituicaoId || `${item.produtoNome.trim()}::${item.unidade.trim()}`;
+      const valorLinha = valorBrutoItemLinha(item);
+      const existente = map.get(key);
+      if (existente) {
+        existente.quantidade = round2(existente.quantidade + item.quantidade);
+        existente.valorBruto = round2(existente.valorBruto + valorLinha);
+      } else {
+        map.set(key, { ...item, valorBruto: valorLinha });
+      }
+    }
+  }
+  return [...map.values()].sort((a, b) => a.produtoNome.localeCompare(b.produtoNome, "pt-BR"));
+}
+
 /** Ajusta totais da nota para bater com a soma das fichas (multi-entrega). */
 export function sincronizarTotaisNotaComFichas(
   nota: NotaPedido,
   fichas: FichaCorrida[],
-  opts?: { forcarDescontoLiquido?: boolean; sincronizarBruto?: boolean }
+  opts?: { forcarDescontoLiquido?: boolean; sincronizarBruto?: boolean; sincronizarItens?: boolean }
 ): NotaPedido {
   const list = fichas.filter((f) => f.notaPedidoId === nota.id);
   if (!list.length) return nota;
@@ -998,16 +1021,52 @@ export function sincronizarTotaisNotaComFichas(
     opts?.forcarDescontoLiquido ||
     Math.abs(tot.valorBruto - nota.valorBruto) <= 0.05;
   if (!brutoCompativel) return nota;
-  if (fichasValoresAlinhadosComNota(fichas, nota)) return nota;
-  return {
+
+  const itensFicha = consolidarItensDeFichasNota(fichas, nota.id);
+  const calcItens =
+    itensFicha.length > 0
+      ? calcularItensNota(itensFicha, nota.percentualDescontoCooperativa ?? 0)
+      : null;
+  const itensDesalinhados =
+    calcItens != null &&
+    (Math.abs(calcItens.valorBruto - nota.valorBruto) > 0.05 ||
+      Math.abs(calcItens.valorLiquido - nota.valorLiquido) > 0.05);
+
+  const totaisOk = fichasValoresAlinhadosComNota(fichas, nota);
+  if (totaisOk && !itensDesalinhados && !opts?.sincronizarItens) return nota;
+
+  const sincronizarItens =
+    opts?.sincronizarItens ?? (itensDesalinhados || (nota.divisaoEntrega?.participantes.length ?? 0) > 1);
+
+  let updated: NotaPedido = {
     ...nota,
-    ...(opts?.sincronizarBruto || opts?.forcarDescontoLiquido
+    ...(opts?.sincronizarBruto || opts?.forcarDescontoLiquido || !totaisOk
       ? { valorBruto: tot.valorBruto }
       : {}),
-    valorDesconto: tot.valorDesconto,
-    valorLiquido: tot.valorLiquido,
+    ...(!totaisOk
+      ? {
+          valorDesconto: tot.valorDesconto,
+          valorLiquido: tot.valorLiquido,
+        }
+      : {}),
     updatedAt: new Date().toISOString(),
   };
+
+  if (sincronizarItens && calcItens) {
+    updated = {
+      ...updated,
+      itens: calcItens.itens,
+      ...(opts?.sincronizarBruto || opts?.forcarDescontoLiquido || !totaisOk
+        ? {}
+        : {
+            valorBruto: tot.valorBruto,
+            valorDesconto: tot.valorDesconto,
+            valorLiquido: tot.valorLiquido,
+          }),
+    };
+  }
+
+  return updated;
 }
 
 /** Alinha uma ficha única da nota com os totais conferidos (centavos de arredondamento). */
