@@ -27,7 +27,7 @@ import {
 } from "@/services/cooperadoEntregasService";
 import { resolverCooperadoIdCanonico } from "@/services/cooperadoCloudService";
 import { cooperadoFinanceiroLocalAusente } from "@/services/fichaSyncGuard";
-import { requestAppSyncImmediate } from "@/services/syncRequest";
+import { requestAppSyncImmediate, requestVotacaoOperacionalSync } from "@/services/syncRequest";
 import { useSyncStatus } from "@/components/sync/CooperativaSyncProvider";
 import { getComunicadosInicioCooperado } from "@/services/comunicadoService";
 import { getResumoMensalidadesCooperado } from "@/services/mensalidadeService";
@@ -68,6 +68,11 @@ function CooperadoDashboard() {
   useEffect(() => {
     recoverySyncRef.current = false;
   }, [user?.id]);
+
+  useEffect(() => {
+    if (!user?.cooperadoId || typeof navigator === "undefined" || !navigator.onLine) return;
+    requestVotacaoOperacionalSync();
+  }, [user?.id, user?.cooperadoId]);
 
   useEffect(() => {
     if (!financeiroAusente || recoverySyncRef.current || typeof navigator === "undefined" || !navigator.onLine) {

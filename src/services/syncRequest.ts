@@ -34,3 +34,22 @@ export function requestAppSyncImmediate(): void {
   debounceTimer = null;
   dispatchSync(true);
 }
+
+type VotacaoOperacionalHandler = () => void;
+
+let votacaoOperacionalHandler: VotacaoOperacionalHandler | null = null;
+
+/** Registra pull leve de operacional (pautas/votos) para cooperado. */
+export function registerVotacaoOperacionalSyncHandler(handler: VotacaoOperacionalHandler): () => void {
+  votacaoOperacionalHandler = handler;
+  return () => {
+    if (votacaoOperacionalHandler === handler) votacaoOperacionalHandler = null;
+  };
+}
+
+/** Baixa pautas de votação da nuvem — ignora intervalo de 2 min da sync completa. */
+export function requestVotacaoOperacionalSync(): void {
+  if (document.hidden) return;
+  if (typeof navigator !== "undefined" && !navigator.onLine) return;
+  votacaoOperacionalHandler?.();
+}

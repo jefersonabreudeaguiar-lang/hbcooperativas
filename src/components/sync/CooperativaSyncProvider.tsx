@@ -27,11 +27,12 @@ import {
   ensureCooperadoFinanceiroFromCloud,
   syncCooperativaBackground,
   syncCooperativaBidirectional,
+  syncOperacionalFromCloud,
 } from "@/services/cooperativaSyncCloudService";
 import { cooperadoFinanceiroLocalAusente } from "@/services/fichaSyncGuard";
 import { avaliarIntegridadeFinanceiroCooperado } from "@/services/cooperadoFinanceiroGuard";
 import { pushCooperadoToCloud, resolverCooperadoIdCanonico, flushPendingCooperadoPushes } from "@/services/cooperadoCloudService";
-import { registerSyncHandler } from "@/services/syncRequest";
+import { registerSyncHandler, registerVotacaoOperacionalSyncHandler } from "@/services/syncRequest";
 import {
   isAppIdle,
   markUserActivity,
@@ -51,6 +52,8 @@ import { isDiretoriaRole } from "@/permissions";
 import type { UserRole } from "@/types";
 
 const COOPERADO_PUSH_GAP_MS = 5 * 60 * 1000;
+/** Intervalo mínimo entre pulls de operacional só para votação (bem menor que sync completa). */
+const VOTACAO_OPERACIONAL_PULL_GAP_MS = 25_000;
 
 /** Upload/finalização de fotos do cooperado — roda após liberar o indicador “Atualizando…”. */
 async function runCooperadoFotoUploadsInBackground(
@@ -171,6 +174,8 @@ export function CooperativaSyncProvider({ children }: { children: React.ReactNod
   const syncingRef = useRef(false);
   const lastSyncStartedAtRef = useRef(0);
   const lastCooperadoPushRef = useRef(0);
+  const lastVotacaoOperacionalPullRef = useRef(0);
+  const votacaoOperacionalPullRef = useRef(false);
   const userRef = useRef(user);
   userRef.current = user;
 
@@ -182,6 +187,40 @@ export function CooperativaSyncProvider({ children }: { children: React.ReactNod
     user && typeof window !== "undefined"
       ? getUserCooperativaId(user, getData())
       : user?.cooperativaId;
+
+  const pullVotacaoOperacionalCooperado = useCallback(async () => {
+    const currentUser = userRef.current;
+    if (!currentUser || currentUser.role !== "cooperado") return;
+    if (typeof navigator !== "undefined" && !navigator.onLine) return;
+    if (typeof document !== "undefined" && document.hidden) return;
+    if (votacaoOperacionalPullRef.current) return;
+
+    const now = Date.now();
+    if (now - lastVotacaoOperacionalPullRef.current < VOTACAO_OPERACIONAL_PULL_GAP_MS) return;
+
+    const warm = await waitForAppDataWarm();
+    if (!warm) return;
+
+    const data = getData();
+    const currentCoopId = getUserCooperativaId(currentUser, data);
+    if (!currentCoopId) return;
+
+    const sessionOk = await ensureCloudSessionReady(userToCloudProfile(currentUser));
+    if (!sessionOk) return;
+
+    const cnpj = await resolveCooperativaCnpj(data, currentCoopId, currentUser);
+    if (!cnpj) return;
+
+    votacaoOperacionalPullRef.current = true;
+    lastVotacaoOperacionalPullRef.current = now;
+    try {
+      await syncOperacionalFromCloud(cnpj);
+    } catch {
+      /* offline / retry na próxima abertura */
+    } finally {
+      votacaoOperacionalPullRef.current = false;
+    }
+  }, []);
 
   const runSync = useCallback(async (opts?: { force?: boolean }) => {
     const currentUser = userRef.current;
@@ -325,6 +364,10 @@ export function CooperativaSyncProvider({ children }: { children: React.ReactNod
 
     const stopIdle = startIdleMonitor();
 
+    const unregisterVotacao = registerVotacaoOperacionalSyncHandler(() => {
+      void pullVotacaoOperacionalCooperado();
+    });
+
     const unregister = registerSyncHandler((force) => {
       if (document.hidden) return;
       if (typeof navigator !== "undefined" && !navigator.onLine) return;
@@ -335,6 +378,7 @@ export function CooperativaSyncProvider({ children }: { children: React.ReactNod
     const initialDelay = setTimeout(() => {
       if (!document.hidden) {
         markUserActivity();
+        if (user?.role === "cooperado") void pullVotacaoOperacionalCooperado();
         void runSync();
       }
     }, user?.role === "cooperado" ? 0 : 400);
@@ -342,12 +386,14 @@ export function CooperativaSyncProvider({ children }: { children: React.ReactNod
     const unsubIdle = onAppIdleChange((nowIdle) => {
       if (nowIdle) return;
       if (document.hidden) return;
+      if (user?.role === "cooperado") void pullVotacaoOperacionalCooperado();
       void runSync();
     });
 
     const onVisible = () => {
       if (document.visibilityState === "visible") {
         markUserActivity();
+        if (user?.role === "cooperado") void pullVotacaoOperacionalCooperado();
         void runSync();
       }
     };
@@ -356,11 +402,13 @@ export function CooperativaSyncProvider({ children }: { children: React.ReactNod
     const onOnline = () => {
       if (document.hidden) return;
       markUserActivity();
+      if (user?.role === "cooperado") void pullVotacaoOperacionalCooperado();
       void runSync();
     };
     window.addEventListener("online", onOnline);
 
     return () => {
+      unregisterVotacao();
       unregister();
       unsubIdle();
       stopIdle();
@@ -368,7 +416,7 @@ export function CooperativaSyncProvider({ children }: { children: React.ReactNod
       document.removeEventListener("visibilitychange", onVisible);
       window.removeEventListener("online", onOnline);
     };
-  }, [coopId, user?.id, user?.role, runSync]);
+  }, [coopId, user?.id, user?.role, runSync, pullVotacaoOperacionalCooperado]);
 
   useEffect(() => {
     if (!user?.id || user.role !== "cooperado") return;
