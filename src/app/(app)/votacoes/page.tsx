@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { Calendar, FileDown, Megaphone, Plus, Send, Trash2, Users, Vote } from "lucide-react";
 import { useAppData } from "@/hooks/useAppData";
@@ -30,6 +30,9 @@ import {
 } from "@/services/votacaoService";
 import type { EscopoEleitoralVotacao } from "@/types";
 import { baixarAtaDeliberacaoVotacaoPdf } from "@/utils/votacaoDeliberativaHtml";
+import { VotacaoPlacarAoVivoPanel } from "@/components/votacao/VotacaoPlacarAoVivoPanel";
+
+const LIVE_VOTOS_PULL_MS = 10_000;
 
 const hojeIso = () => new Date().toISOString().split("T")[0];
 
@@ -51,6 +54,26 @@ export default function VotacoesPage() {
   const [erro, setErro] = useState("");
   const [syncing, setSyncing] = useState(false);
   const [gerandoPdf, setGerandoPdf] = useState<string | null>(null);
+  const [lastLivePullAt, setLastLivePullAt] = useState<number | null>(null);
+  const [livePulling, setLivePulling] = useState(false);
+  const livePullingRef = useRef(false);
+
+  const pullVotosLive = useCallback(async () => {
+    if (isCooperado || !coopId || livePullingRef.current) return;
+    livePullingRef.current = true;
+    setLivePulling(true);
+    try {
+      const latest = getData();
+      if (!latest) return;
+      const cnpj = await resolveCooperativaCnpj(latest, coopId, user ?? undefined);
+      if (!cnpj) return;
+      await syncOperacionalFromCloud(cnpj);
+      setLastLivePullAt(Date.now());
+    } finally {
+      livePullingRef.current = false;
+      setLivePulling(false);
+    }
+  }, [coopId, isCooperado, user?.id]);
 
   useEffect(() => {
     if (isCooperado) router.replace("/dashboard");
@@ -60,28 +83,18 @@ export default function VotacoesPage() {
   useEffect(() => {
     if (isCooperado || !coopId) return;
 
-    let cancelled = false;
-    const pullVotos = async () => {
-      const latest = getData();
-      if (!latest || cancelled) return;
-      const cnpj = await resolveCooperativaCnpj(latest, coopId, user ?? undefined);
-      if (!cnpj || cancelled) return;
-      await syncOperacionalFromCloud(cnpj);
-    };
-
-    void pullVotos();
-    const interval = setInterval(() => void pullVotos(), 30_000);
+    void pullVotosLive();
+    const interval = setInterval(() => void pullVotosLive(), LIVE_VOTOS_PULL_MS);
     const onVisible = () => {
-      if (document.visibilityState === "visible") void pullVotos();
+      if (document.visibilityState === "visible") void pullVotosLive();
     };
     document.addEventListener("visibilitychange", onVisible);
 
     return () => {
-      cancelled = true;
       clearInterval(interval);
       document.removeEventListener("visibilitychange", onVisible);
     };
-  }, [coopId, isCooperado, user?.id]);
+  }, [coopId, isCooperado, pullVotosLive]);
 
   const pautas = useMemo(
     () => (data && coopId ? listarPautasCooperativa(data, coopId) : []),
@@ -91,6 +104,11 @@ export default function VotacoesPage() {
   const resumos = useMemo(
     () => pautas.map((p) => (data && coopId ? getResumoPauta(data, p.id, coopId) : null)).filter(Boolean),
     [pautas, data, coopId]
+  );
+
+  const placarAoVivo = useMemo(
+    () => resumos.find((r) => r?.pauta.status === "aberta") ?? null,
+    [resumos]
   );
 
   const syncNuvem = async (nextData: typeof data) => {
@@ -254,6 +272,15 @@ export default function VotacoesPage() {
         <AlertBanner variant="error" title="Atenção">
           <p>{erro}</p>
         </AlertBanner>
+      )}
+
+      {placarAoVivo && (
+        <VotacaoPlacarAoVivoPanel
+          resumo={placarAoVivo}
+          lastUpdatedAt={lastLivePullAt}
+          pulling={livePulling}
+          onRefresh={() => void pullVotosLive()}
+        />
       )}
 
       {check("votacoes", "create") && (
