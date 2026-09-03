@@ -3,7 +3,7 @@
 import { useState, Suspense } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Leaf, Eye, EyeOff } from "lucide-react";
+import { Eye, EyeOff } from "lucide-react";
 import { useAuth } from "@/modules/auth/AuthProvider";
 import { GuestRoute } from "@/components/auth/GuestRoute";
 import { Button } from "@/components/ui/Button";
@@ -11,6 +11,17 @@ import { AppIcon } from "@/components/ui/AppIcon";
 import { Input, Label } from "@/components/ui/Form";
 
 import { PLATFORM_NAME, PLATFORM_TAGLINE } from "@/utils/constants";
+
+const SEGMENTOS_ATENDIDOS = [
+  "Agrícola e agroindustrial",
+  "Crédito e consumo",
+  "Transporte e logística",
+  "Mercados e comércio",
+  "Saúde e assistência",
+  "Alimentação escolar",
+  "Pesca e extrativismo",
+  "Serviços e infraestrutura",
+] as const;
 
 export default function LoginPage() {
   return (
@@ -76,12 +87,16 @@ function LoginForm() {
               <p className="text-green-300 text-lg">{PLATFORM_TAGLINE}</p>
             </div>
           </div>
-          <h2 className="text-2xl font-semibold mb-4">Agricultura Familiar com Transparência</h2>
+          <h2 className="text-2xl font-semibold mb-4">Cooperativa com Transparência</h2>
           <p className="text-green-200 text-lg leading-relaxed max-w-md">
-            Portal do cooperado e painel administrativo para controle de entregas, PNAE, pagamentos, mensalidades, cotas e relatórios financeiros.
+            Portal do cooperado e painel da diretoria para entregas, contratos, pagamentos, mensalidades,
+            Conta Coop, votações e relatórios — pensado para cooperativas de diferentes segmentos.
           </p>
-          <div className="mt-10 grid grid-cols-2 gap-4 max-w-sm">
-            {["Entregas PNAE", "Pagamentos", "Mensalidades", "Relatórios"].map((item) => (
+          <p className="text-green-300 text-sm font-medium mt-8 mb-3 uppercase tracking-wide">
+            Segmentos atendidos
+          </p>
+          <div className="grid grid-cols-2 gap-3 max-w-md">
+            {SEGMENTOS_ATENDIDOS.map((item) => (
               <div key={item} className="bg-green-800/50 rounded-lg px-4 py-3 text-sm font-medium border border-green-700">
                 {item}
               </div>
@@ -99,6 +114,10 @@ function LoginForm() {
               <p className="text-sm text-gray-500">{PLATFORM_TAGLINE}</p>
             </div>
           </div>
+
+          <p className="lg:hidden text-center text-sm text-gray-600 mb-6 max-w-sm mx-auto">
+            Cooperativa com transparência — agrícola, crédito, transporte, mercados, saúde, alimentação escolar e mais.
+          </p>
 
           <div className="bg-white rounded-2xl shadow-lg border border-gray-200 p-8">
             <h2 className="text-2xl font-bold text-gray-900 mb-1">Entrar</h2>
