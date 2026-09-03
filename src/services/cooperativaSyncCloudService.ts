@@ -153,11 +153,15 @@ function mergeVotacaoVotosFromCloud(
 
   const map = new Map<string, VotacaoVoto>();
   const key = (v: VotacaoVoto) => `${v.pautaId}:${v.cooperadoId}`;
-  for (const item of localFiltrado) map.set(key(item), item);
+  for (const item of localFiltrado) {
+    if (reaberturaPorPauta.has(item.pautaId)) continue;
+    map.set(key(item), item);
+  }
   for (const cloud of cloudItems) {
     const k = key(cloud);
     const local = map.get(k);
-    if (!local || itemTime(cloud) >= itemTime(local)) map.set(k, cloud);
+    const merged = !local || itemTime(cloud) >= itemTime(local) ? cloud : local;
+    map.set(k, { ...merged, confirmadoNuvem: true });
   }
   return [...map.values()];
 }

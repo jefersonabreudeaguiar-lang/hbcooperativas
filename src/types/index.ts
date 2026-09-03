@@ -661,6 +661,8 @@ export interface VotacaoVoto {
   voto: VotacaoOpcao;
   /** Assinatura manual do cooperado (data URL PNG). */
   assinaturaDataUrl?: string;
+  /** Voto confirmado na nuvem — exigido em pautas reabertas para ocultar pendência local. */
+  confirmadoNuvem?: boolean;
   createdAt: string;
 }
 

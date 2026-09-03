@@ -8,7 +8,7 @@ import { useAuth } from "@/modules/auth/AuthProvider";
 import { usePermissions } from "@/hooks/usePermissions";
 import { getUserCooperativaId } from "@/utils/cooperativa";
 import { resolverCooperadoIdCanonico } from "@/services/cooperadoCloudService";
-import { getEscopoEleitoralPauta, getPautaById, getPautaVotacaoCooperado, registrarVotoCooperado } from "@/services/votacaoService";
+import { getEscopoEleitoralPauta, getPautaById, getPautaVotacaoCooperado, registrarVotoCooperado, confirmarVotoCooperadoNuvem, removerVotoCooperadoPauta } from "@/services/votacaoService";
 import { VotacaoDeliberativaForm } from "@/components/votacao/VotacaoDeliberativaForm";
 import { updateData } from "@/services/dataStore";
 import { pushVotoCooperadoToCloud } from "@/services/votacaoCloudService";
@@ -112,8 +112,14 @@ export default function VotacaoDeliberativaPage() {
       if (result.ok && votoEnviado && cnpjEnvio) {
         const cloud = await pushVotoCooperadoToCloud(cnpjEnvio, votoEnviado);
         if (!cloud.ok) {
+          updateData((d) =>
+            removerVotoCooperadoPauta(d, pautaId, view.cooperadoId, view.coopId)
+          );
           result = { ok: false, error: cloud.error };
         } else {
+          updateData((d) =>
+            confirmarVotoCooperadoNuvem(d, pautaId, view.cooperadoId, view.coopId)
+          );
           requestAppSync();
         }
       } else if (result.ok && !cnpjEnvio) {

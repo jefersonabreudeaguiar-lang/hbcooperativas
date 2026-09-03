@@ -169,6 +169,7 @@ export function cooperadoJaVotou(
   return (data.votacaoVotos ?? []).some((v) => {
     if (v.pautaId !== pautaId || v.cooperadoId !== cooperadoId) return false;
     if (reabertoEm && new Date(v.createdAt).getTime() < reabertoEm) return false;
+    if (reabertoEm && v.confirmadoNuvem !== true) return false;
     return true;
   });
 }
@@ -432,6 +433,41 @@ export function publicarResultadoPauta(
       : p
   );
   return { ok: true, data: { ...data, votacaoPautas: next } };
+}
+
+export function removerVotoCooperadoPauta(
+  data: AppData,
+  pautaId: string,
+  cooperadoId: string,
+  cooperativaId: string
+): AppData {
+  return {
+    ...data,
+    votacaoVotos: (data.votacaoVotos ?? []).filter(
+      (v) =>
+        !(
+          v.pautaId === pautaId &&
+          v.cooperadoId === cooperadoId &&
+          v.cooperativaId === cooperativaId
+        )
+    ),
+  };
+}
+
+export function confirmarVotoCooperadoNuvem(
+  data: AppData,
+  pautaId: string,
+  cooperadoId: string,
+  cooperativaId: string
+): AppData {
+  return {
+    ...data,
+    votacaoVotos: (data.votacaoVotos ?? []).map((v) =>
+      v.pautaId === pautaId && v.cooperadoId === cooperadoId && v.cooperativaId === cooperativaId
+        ? { ...v, confirmadoNuvem: true }
+        : v
+    ),
+  };
 }
 
 export function registrarVotoCooperado(
