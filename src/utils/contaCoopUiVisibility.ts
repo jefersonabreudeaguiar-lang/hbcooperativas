@@ -1,35 +1,27 @@
 import type { User } from "@/types";
 
-const ALLOWED_ON = new Set(["true", "1"]);
+const DISABLED_VALUES = new Set(["0", "false"]);
 
-/** Cooperado usado nos testes de homologação da Conta Coop. */
-const CONTA_COOP_TESTE_NOME = "orlando";
-
-/** Orlando Fetisch — piloto de abatimento Conta Coop no valor a receber. */
+/** Orlando Fetisch — referência histórica do piloto inicial (sem restrição de UI). */
 export const CONTA_COOP_PILOT_COOPERADO_ID = "c_1782263929381_ncp55";
 
 export const CONTA_COOP_NAV_HREFS = ["/conta-coop", "/minha-conta-coop", "/mercado-parceiro"] as const;
 
-function parsePublicFlag(): boolean {
-  return ALLOWED_ON.has((process.env.NEXT_PUBLIC_CONTA_COOP_UI_PUBLIC ?? "").trim().toLowerCase());
+function parsePublicFlag(defaultEnabled: boolean): boolean {
+  const raw = (process.env.NEXT_PUBLIC_CONTA_COOP_UI_PUBLIC ?? (defaultEnabled ? "1" : ""))
+    .trim()
+    .toLowerCase();
+  if (!raw) return defaultEnabled;
+  if (DISABLED_VALUES.has(raw)) return false;
+  return true;
 }
 
 /**
- * Quando true (env NEXT_PUBLIC_CONTA_COOP_UI_PUBLIC=1), a Conta Coop aparece para todos.
- * Enquanto false, só o cooperado Orlando vê o menu; demais cooperados ficam sem o item.
+ * Conta Coop visível para todos os cooperados por padrão.
+ * NEXT_PUBLIC_CONTA_COOP_UI_PUBLIC=0 desativa temporariamente (rollback).
  */
 export function isContaCoopUiPublic(): boolean {
-  return parsePublicFlag();
-}
-
-function normalizeNome(n: string): string {
-  return n.normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim().toLowerCase();
-}
-
-function matchesOrlandoTeste(displayName: string): boolean {
-  const n = normalizeNome(displayName);
-  if (!n) return false;
-  return n.includes(CONTA_COOP_TESTE_NOME) || n.split(/\s+/)[0] === CONTA_COOP_TESTE_NOME;
+  return parsePublicFlag(true);
 }
 
 export function resolveContaCoopDisplayName(
@@ -42,11 +34,10 @@ export function resolveContaCoopDisplayName(
 /** Visibilidade da Conta Coop na navegação — não altera permissões nem rotas. */
 export function isContaCoopUiVisibleForUser(
   user: Pick<User, "role" | "name" | "email" | "cooperadoId">,
-  cooperadoNome?: string
+  _cooperadoNome?: string
 ): boolean {
-  if (isContaCoopUiPublic()) return true;
   if (user.role !== "cooperado") return true;
-  return matchesOrlandoTeste(resolveContaCoopDisplayName(user, cooperadoNome));
+  return isContaCoopUiPublic();
 }
 
 /**
