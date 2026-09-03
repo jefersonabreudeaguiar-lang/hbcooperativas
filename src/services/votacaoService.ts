@@ -153,8 +153,24 @@ export function listarVotosPauta(data: AppData, pautaId: string, cooperativaId?:
     .sort((a, b) => a.cooperadoNome.localeCompare(b.cooperadoNome, "pt-BR"));
 }
 
-export function cooperadoJaVotou(data: AppData, pautaId: string, cooperadoId: string): boolean {
-  return (data.votacaoVotos ?? []).some((v) => v.pautaId === pautaId && v.cooperadoId === cooperadoId);
+export function cooperadoJaVotou(
+  data: AppData,
+  pautaId: string,
+  cooperadoId: string,
+  cooperativaId?: string
+): boolean {
+  const pauta = cooperativaId
+    ? getPautaById(data, pautaId, cooperativaId)
+    : (data.votacaoPautas ?? []).find((p) => p.id === pautaId);
+  const reabertoEm = pauta?.votosReabertosEm
+    ? new Date(pauta.votosReabertosEm).getTime()
+    : 0;
+
+  return (data.votacaoVotos ?? []).some((v) => {
+    if (v.pautaId !== pautaId || v.cooperadoId !== cooperadoId) return false;
+    if (reabertoEm && new Date(v.createdAt).getTime() < reabertoEm) return false;
+    return true;
+  });
 }
 
 export function getPautaById(
@@ -179,7 +195,7 @@ export function listPautasAbertasCooperado(
       p.status === "aberta" &&
       pautaNoPeriodo(p, ref) &&
       cooperadoElegivelVotacao(data, cooperadoId, cooperativaId, p) &&
-      !cooperadoJaVotou(data, p.id, cooperadoId)
+      !cooperadoJaVotou(data, p.id, cooperadoId, cooperativaId)
   );
 }
 
@@ -203,7 +219,7 @@ export function getPautaVotacaoCooperado(
   const pauta = getPautaById(data, pautaId, cooperativaId);
   if (!pauta || pauta.status !== "aberta" || !pautaNoPeriodo(pauta, ref)) return null;
   if (!cooperadoElegivelVotacao(data, cooperadoId, cooperativaId, pauta)) return null;
-  return { pauta, jaVotou: cooperadoJaVotou(data, pautaId, cooperadoId) };
+  return { pauta, jaVotou: cooperadoJaVotou(data, pautaId, cooperadoId, cooperativaId) };
 }
 
 export function resultadoVisivelCooperado(
@@ -437,7 +453,7 @@ export function registrarVotoCooperado(
   if (!cooperadoElegivelVotacao(data, payload.cooperadoId, payload.cooperativaId, pauta)) {
     return { ok: false, error: "Esta votação é restrita aos membros da diretoria." };
   }
-  if (cooperadoJaVotou(data, payload.pautaId, payload.cooperadoId)) {
+  if (cooperadoJaVotou(data, payload.pautaId, payload.cooperadoId, payload.cooperativaId)) {
     return { ok: false, error: "Você já registrou seu voto nesta pauta." };
   }
   if (!payload.assinaturaDataUrl?.trim()) {
@@ -456,9 +472,13 @@ export function registrarVotoCooperado(
     createdAt: now,
   };
 
+  const votosSemDuplicata = (data.votacaoVotos ?? []).filter(
+    (v) => !(v.pautaId === payload.pautaId && v.cooperadoId === payload.cooperadoId)
+  );
+
   return {
     ok: true,
-    data: { ...data, votacaoVotos: [...(data.votacaoVotos ?? []), voto] },
+    data: { ...data, votacaoVotos: [...votosSemDuplicata, voto] },
   };
 }
 

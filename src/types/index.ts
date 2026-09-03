@@ -642,6 +642,8 @@ export interface VotacaoPauta {
   abertaEm?: string;
   /** Quando o responsável publicou o resultado no mural (24 h). */
   resultadoPublicadoEm?: string;
+  /** Votos registrados antes desta data não contam — permite re-votação após falha de sync. */
+  votosReabertosEm?: string;
   criadoPorUserId?: string;
   criadoPorNome?: string;
   createdAt: string;

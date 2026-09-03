@@ -137,10 +137,23 @@ function mergeVotacaoPautasFromCloud(localCoop: VotacaoPauta[], cloudItems: Vota
   return [...map.values()];
 }
 
-function mergeVotacaoVotosFromCloud(localCoop: VotacaoVoto[], cloudItems: VotacaoVoto[]): VotacaoVoto[] {
+function mergeVotacaoVotosFromCloud(
+  localCoop: VotacaoVoto[],
+  cloudItems: VotacaoVoto[],
+  pautas: VotacaoPauta[] = []
+): VotacaoVoto[] {
+  const reaberturaPorPauta = new Map(
+    pautas.filter((p) => p.votosReabertosEm).map((p) => [p.id, new Date(p.votosReabertosEm!).getTime()])
+  );
+  const localFiltrado = localCoop.filter((v) => {
+    const reabertoEm = reaberturaPorPauta.get(v.pautaId);
+    if (!reabertoEm) return true;
+    return new Date(v.createdAt).getTime() >= reabertoEm;
+  });
+
   const map = new Map<string, VotacaoVoto>();
   const key = (v: VotacaoVoto) => `${v.pautaId}:${v.cooperadoId}`;
-  for (const item of localCoop) map.set(key(item), item);
+  for (const item of localFiltrado) map.set(key(item), item);
   for (const cloud of cloudItems) {
     const k = key(cloud);
     const local = map.get(k);
@@ -551,6 +564,15 @@ export function mergeOperacionalIntoData(
   const cloudSyncTime = cloud.updatedAt;
   const cloudAuthoritative = cloud.fullReset === true;
 
+  const localPautasCoop = (data.votacaoPautas ?? []).filter((p) => p.cooperativaId === coopId);
+  const localVotosCoop = (data.votacaoVotos ?? []).filter((v) => v.cooperativaId === coopId);
+  const mergedPautasCoop = cloudAuthoritative
+    ? cloudPautas
+    : mergeVotacaoPautasFromCloud(localPautasCoop, cloudPautas);
+  const mergedVotosCoop = cloudAuthoritative
+    ? cloudVotos
+    : mergeVotacaoVotosFromCloud(localVotosCoop, cloudVotos, mergedPautasCoop);
+
   let next: AppData = {
     ...data,
     arquivosMensais: [
@@ -662,21 +684,11 @@ export function mergeOperacionalIntoData(
     ),
     votacaoPautas: [
       ...filterCoop(data.votacaoPautas ?? [], (p) => p.cooperativaId === coopId),
-      ...(cloudAuthoritative
-        ? cloudPautas
-        : mergeVotacaoPautasFromCloud(
-            (data.votacaoPautas ?? []).filter((p) => p.cooperativaId === coopId),
-            cloudPautas
-          )),
+      ...mergedPautasCoop,
     ],
     votacaoVotos: [
       ...filterCoop(data.votacaoVotos ?? [], (v) => v.cooperativaId === coopId),
-      ...(cloudAuthoritative
-        ? cloudVotos
-        : mergeVotacaoVotosFromCloud(
-            (data.votacaoVotos ?? []).filter((v) => v.cooperativaId === coopId),
-            cloudVotos
-          )),
+      ...mergedVotosCoop,
     ],
   };
 
