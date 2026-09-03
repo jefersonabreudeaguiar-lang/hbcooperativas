@@ -20,17 +20,27 @@ export async function appendVotacaoVotoToOperacional(
     return { ok: false, error: "Esta enquete não está aberta." };
   }
 
-  const jaExiste = (current.votacaoVotos ?? []).some(
-    (v) => v.pautaId === voto.pautaId && v.cooperadoId === voto.cooperadoId
-  );
-  if (jaExiste) {
+  const reabertoEm = pauta.votosReabertosEm ? new Date(pauta.votosReabertosEm).getTime() : 0;
+
+  const votoValidoExistente = (current.votacaoVotos ?? []).some((v) => {
+    if (v.pautaId !== voto.pautaId || v.cooperadoId !== voto.cooperadoId) return false;
+    if (reabertoEm && new Date(v.createdAt).getTime() < reabertoEm) return false;
+    return true;
+  });
+  if (votoValidoExistente) {
     return { ok: false, error: "Voto já registrado para este cooperado." };
   }
+
+  const votosAtualizados = (current.votacaoVotos ?? []).filter((v) => {
+    if (v.pautaId !== voto.pautaId || v.cooperadoId !== voto.cooperadoId) return true;
+    if (reabertoEm && new Date(v.createdAt).getTime() < reabertoEm) return false;
+    return true;
+  });
 
   const next: OperacionalSyncPayload = {
     ...current,
     updatedAt: new Date().toISOString(),
-    votacaoVotos: [...(current.votacaoVotos ?? []), voto],
+    votacaoVotos: [...votosAtualizados, voto],
   };
 
   return uploadOperacionalSync(supabase, cnpj, next);

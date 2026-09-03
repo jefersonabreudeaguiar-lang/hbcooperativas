@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getSupabaseAdmin, isSupabaseConfigured } from "@/lib/supabase/admin";
 import { normalizeCnpj } from "@/utils/cooperativa";
 import { guardCooperativaApi } from "@/lib/security/apiGuard";
+import { resolveAuthorizedCooperadoId } from "@/lib/hb-credit/mobileCooperadoLink";
 import { logServerMutationAudit } from "@/lib/security/serverAudit";
 import { appendVotacaoVotoToOperacional } from "@/lib/supabase/votacaoSyncStorage";
 import type { VotacaoVoto } from "@/types";
@@ -22,13 +23,14 @@ export async function POST(request: Request) {
   const guard = await guardCooperativaApi(request, cnpj, { write: true, checkSaas: true });
   if (!guard.ok) return guard.response;
 
-  if (guard.enforced && guard.session) {
-    if (guard.session.role !== "cooperado") {
-      return NextResponse.json({ error: "Apenas cooperados registram voto por este canal." }, { status: 403 });
-    }
-    if (!guard.session.cooperadoId || guard.session.cooperadoId !== voto.cooperadoId) {
-      return NextResponse.json({ error: "Voto deve ser do cooperado autenticado." }, { status: 403 });
-    }
+  const authCooperado = resolveAuthorizedCooperadoId(
+    guard.session,
+    request,
+    voto.cooperadoId,
+    guard.enforced
+  );
+  if (!authCooperado.ok) {
+    return NextResponse.json({ error: authCooperado.error }, { status: 403 });
   }
 
   const supabase = getSupabaseAdmin();
@@ -39,6 +41,7 @@ export async function POST(request: Request) {
   const merged: VotacaoVoto = {
     ...voto,
     cooperativaId: voto.cooperativaId,
+    cooperadoId: authCooperado.cooperadoId,
     cooperadoNome: String(voto.cooperadoNome ?? "").trim() || "Cooperado",
     assinaturaDataUrl: String(voto.assinaturaDataUrl ?? "").trim(),
     createdAt: voto.createdAt || new Date().toISOString(),
