@@ -4,6 +4,7 @@ import {
   notaPertenceCooperado,
   resolverCooperadoIdCanonico,
 } from "@/services/cooperadoCloudService";
+import { getCurrentMesReferencia } from "@/utils/format";
 
 const SYNC_COMPLETO_RATIO = 0.75;
 
@@ -78,6 +79,64 @@ export function cooperadoFinanceiroLocalAusente(
   return false;
 }
 
+function mesReferenciaAnterior(mesReferencia: string): string {
+  const [y, m] = mesReferencia.split("-").map(Number);
+  if (m === 1) return `${y - 1}-12`;
+  return `${y}-${String(m - 1).padStart(2, "0")}`;
+}
+
+/**
+ * Cooperado ativo cujo último mês local é o mês anterior ao calendário —
+ * típico quando agosto baixou mas setembro (notas + ficha) ainda não sincronizou.
+ */
+export function cooperadoPrecisaFullSyncFinanceiro(
+  data: AppData,
+  cooperadoId: string,
+  cooperativaId: string
+): boolean {
+  const canonico = resolverCooperadoIdCanonico(data, cooperadoId, cooperativaId);
+  const mesAtual = getCurrentMesReferencia();
+  const mesAnterior = mesReferenciaAnterior(mesAtual);
+
+  const conferidas = (data.notasPedido ?? []).filter(
+    (n) =>
+      (n.status === "conferida" || n.status === "pago") &&
+      notaPertenceCooperado(data, n, canonico, cooperativaId)
+  );
+  if (conferidas.length === 0) return false;
+
+  const maxMesNota = conferidas.reduce(
+    (max, n) => (n.mesReferencia > max ? n.mesReferencia : max),
+    ""
+  );
+  const fichasPendentes = fichasDaCooperativa(data, cooperativaId, canonico).filter(
+    (f) => f.status === "pendente"
+  );
+  const maxMesFicha = fichasPendentes.reduce(
+    (max, f) => (f.mesReferencia > max ? f.mesReferencia : max),
+    ""
+  );
+  const maxMesLocal = maxMesNota > maxMesFicha ? maxMesNota : maxMesFicha;
+  if (maxMesLocal !== mesAnterior) return false;
+
+  const teveAtividade =
+    conferidas.some((n) => n.mesReferencia === maxMesLocal) ||
+    fichasPendentes.some((f) => f.mesReferencia === maxMesLocal);
+  return teveAtividade;
+}
+
+/** Ficha/notas ausentes ou valor a receber possivelmente incompleto (sync parcial). */
+export function cooperadoFinanceiroDesatualizado(
+  data: AppData,
+  cooperadoId: string,
+  cooperativaId: string
+): boolean {
+  return (
+    cooperadoFinanceiroLocalAusente(data, cooperadoId, cooperativaId) ||
+    cooperadoPrecisaFullSyncFinanceiro(data, cooperadoId, cooperativaId)
+  );
+}
+
 /**
  * Mantém ficha sem nota local enquanto o sync de notas parece incompleto.
  * Evita apagar ficha recém-puxada da nuvem antes das notas chegarem (celular pós-login).
@@ -108,7 +167,11 @@ export function precisaReparoFullSyncNotas(
   cooperativaId: string,
   cooperadoId?: string
 ): boolean {
-  if (cooperadoId && cooperadoFinanceiroLocalAusente(data, cooperadoId, cooperativaId)) {
+  if (
+    cooperadoId &&
+    (cooperadoFinanceiroLocalAusente(data, cooperadoId, cooperativaId) ||
+      cooperadoPrecisaFullSyncFinanceiro(data, cooperadoId, cooperativaId))
+  ) {
     return true;
   }
   if (notasSyncProvavelmenteCompleto(data, cooperativaId)) return false;

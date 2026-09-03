@@ -7,7 +7,7 @@ import { syncCooperadosFromCloud, fetchCooperadosFromCloud, pushCooperadoToCloud
 import { syncNotasPedidoFromCloud, patchNotaPedidoInCloud } from "@/services/notaPedidoCloudService";
 import { fetchCooperativaByCnpjFromCloud, mergeCooperativaIntoData } from "@/services/cooperativaCloudService";
 import { mergeArquivosMensaisFromCloud, reconciliarFichaFromNotasConferidas, dedupeFichaCorridaPorNota, aplicarNotasPedidoExcluidas } from "@/services/notaPedidoService";
-import { operacionalPushSeguro, precisaReparoFullSyncNotas, cooperadoFinanceiroLocalAusente } from "@/services/fichaSyncGuard";
+import { operacionalPushSeguro, precisaReparoFullSyncNotas, cooperadoFinanceiroDesatualizado } from "@/services/fichaSyncGuard";
 import { beginCloudSync, endCloudSync } from "@/services/cloudSyncProgress";
 import { clearNotasSyncMeta, forceNextFullNotasSync } from "@/services/syncMetaService";
 import { sincronizarMensalidadeCooperativa, mensalidadeVisivelNoDispositivo, normalizarMensalidadeCooperadoLocal, mesclarMensalidadesPayloadNuvem, prepararMensalidadesCloud, prepararMensalidadeCloud, reconciliarMensalidadesComCooperadosCloud, mensalidadeCloudEntraNoDispositivo, enriquecerMensalidadeCooperadoSnapshot } from "@/services/mensalidadeService";
@@ -1105,7 +1105,7 @@ export async function repararIntegridadeFichaNotas(
   const data = getData();
   if (
     !precisaReparoFullSyncNotas(data, cooperativaId, cooperadoId) &&
-    !(cooperadoId && cooperadoFinanceiroLocalAusente(data, cooperadoId, cooperativaId))
+    !(cooperadoId && cooperadoFinanceiroDesatualizado(data, cooperadoId, cooperativaId))
   ) {
     return false;
   }
@@ -1130,7 +1130,7 @@ export async function ensureCooperadoFinanceiroFromCloud(
   if (digits.length !== 14) return false;
 
   let data = getData();
-  if (!cooperadoFinanceiroLocalAusente(data, cooperadoId, cooperativaId)) {
+  if (!cooperadoFinanceiroDesatualizado(data, cooperadoId, cooperativaId)) {
     return true;
   }
 
@@ -1144,10 +1144,10 @@ export async function ensureCooperadoFinanceiroFromCloud(
     saveDataSafe(reconciliarFichaFromNotasConferidas(getData()));
 
     data = getData();
-    if (cooperadoFinanceiroLocalAusente(data, cooperadoId, cooperativaId)) {
+    if (cooperadoFinanceiroDesatualizado(data, cooperadoId, cooperativaId)) {
       await repararIntegridadeFichaNotas(digits, cooperativaId, cooperadoId);
     }
-    return !cooperadoFinanceiroLocalAusente(getData(), cooperadoId, cooperativaId);
+    return !cooperadoFinanceiroDesatualizado(getData(), cooperadoId, cooperativaId);
   } finally {
     endCloudSync();
   }

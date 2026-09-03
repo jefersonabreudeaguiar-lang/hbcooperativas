@@ -29,7 +29,7 @@ import {
   syncCooperativaBidirectional,
   syncOperacionalFromCloud,
 } from "@/services/cooperativaSyncCloudService";
-import { cooperadoFinanceiroLocalAusente } from "@/services/fichaSyncGuard";
+import { cooperadoFinanceiroDesatualizado } from "@/services/fichaSyncGuard";
 import { avaliarIntegridadeFinanceiroCooperado } from "@/services/cooperadoFinanceiroGuard";
 import { pushCooperadoToCloud, resolverCooperadoIdCanonico, flushPendingCooperadoPushes } from "@/services/cooperadoCloudService";
 import { registerSyncHandler, registerVotacaoOperacionalSyncHandler } from "@/services/syncRequest";
@@ -291,7 +291,7 @@ export function CooperativaSyncProvider({ children }: { children: React.ReactNod
           );
           if (
             !recovered &&
-            cooperadoFinanceiroLocalAusente(getData(), cooperadoCanonico, currentCoopId)
+            cooperadoFinanceiroDesatualizado(getData(), cooperadoCanonico, currentCoopId)
           ) {
             setLastSyncError(
               getLastCloudSyncError() ||
@@ -335,7 +335,7 @@ export function CooperativaSyncProvider({ children }: { children: React.ReactNod
         );
         if (
           cooperadoCanonico &&
-          cooperadoFinanceiroLocalAusente(getData(), cooperadoCanonico, currentCoopId)
+          cooperadoFinanceiroDesatualizado(getData(), cooperadoCanonico, currentCoopId)
         ) {
           completed = false;
           setLastSyncError((prev) =>

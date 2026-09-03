@@ -26,7 +26,7 @@ import {
   listarNotasPendentesCooperado,
 } from "@/services/cooperadoEntregasService";
 import { resolverCooperadoIdCanonico } from "@/services/cooperadoCloudService";
-import { cooperadoFinanceiroLocalAusente } from "@/services/fichaSyncGuard";
+import { cooperadoFinanceiroDesatualizado } from "@/services/fichaSyncGuard";
 import { requestAppSyncImmediate, requestVotacaoOperacionalSync } from "@/services/syncRequest";
 import { useSyncStatus } from "@/components/sync/CooperativaSyncProvider";
 import { getComunicadosInicioCooperado } from "@/services/comunicadoService";
@@ -62,7 +62,7 @@ function CooperadoDashboard() {
     const coopId = getUserCooperativaId(user, data);
     if (!coopId) return false;
     const cooperadoId = resolverCooperadoIdCanonico(data, user.cooperadoId, coopId);
-    return cooperadoFinanceiroLocalAusente(data, cooperadoId, coopId);
+    return cooperadoFinanceiroDesatualizado(data, cooperadoId, coopId);
   }, [user?.id, user?.cooperadoId, user?.cooperativaId]);
 
   useEffect(() => {
