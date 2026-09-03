@@ -21,6 +21,18 @@ import {
 } from "@/services/operationalReset";
 type WithUpdatedAt = { id: string; updatedAt?: string; createdAt?: string };
 
+/** Evita POST operacional repetido na mesma sessão quando o payload não mudou. */
+const lastOperacionalPushFingerprint = new Map<string, string>();
+
+function operacionalPushCacheKey(cnpj: string, authoritative: boolean): string {
+  return `${cnpj}:${authoritative ? "auth" : "merge"}`;
+}
+
+function fingerprintOperacionalPayload(payload: OperacionalSyncPayload): string {
+  const { updatedAt: _ignored, ...rest } = payload;
+  return JSON.stringify(rest);
+}
+
 function itemTime(item: WithUpdatedAt): number {
   const t = item.updatedAt ?? item.createdAt;
   return t ? new Date(t).getTime() : 0;
@@ -877,12 +889,19 @@ export async function pushOperacionalToCloud(
     return;
   }
 
+  const pushKey = operacionalPushCacheKey(digits, !!options?.authoritative);
+  const fingerprint = fingerprintOperacionalPayload(payloadFinal);
+  if (lastOperacionalPushFingerprint.get(pushKey) === fingerprint) {
+    return;
+  }
+
   try {
     await secureApiFetch("/api/cooperativa-sync", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ cnpj: digits, section: "operacional", payload: payloadFinal }),
     });
+    lastOperacionalPushFingerprint.set(pushKey, fingerprint);
   } catch {
     /* offline */
   }
@@ -1043,7 +1062,8 @@ export async function syncCooperativaBackground(
       const coopId = preferredCoopId ?? resolveCoopId(getData(), digits);
       await syncCooperadosFromCloud(digits, coopId);
       // Notas antes do operacional — ficha exige nota conferida local; senão purgarFichasInvalidas apaga tudo.
-      await syncNotasPedidoFromCloud(digits, { retryFull: true });
+      // Delta por padrão; full a cada 2 min ou quando repararIntegridade/ensureFinanceiro forçam.
+      await syncNotasPedidoFromCloud(digits);
       await syncOperacionalFromCloud(digits);
       await syncContratosFromCloud(digits);
       if (coopId) {

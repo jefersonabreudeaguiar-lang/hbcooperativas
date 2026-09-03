@@ -52,6 +52,95 @@ import type { UserRole } from "@/types";
 
 const COOPERADO_PUSH_GAP_MS = 5 * 60 * 1000;
 
+/** Upload/finalização de fotos do cooperado — roda após liberar o indicador “Atualizando…”. */
+async function runCooperadoFotoUploadsInBackground(
+  cnpj: string,
+  cooperadoCanonico: string,
+  cooperadoNome: string
+): Promise<void> {
+  const latest = getData();
+
+  const pendentes = latest.notasPedido.filter(
+    (n) =>
+      n.cooperadoId === cooperadoCanonico &&
+      n.status === "aguardando_conferencia" &&
+      !n.fotoNaNuvem
+  );
+  for (const nota of pendentes) {
+    const fotos = await resolveNotaFotosForUpload(nota);
+    if (fotos.length === 0) continue;
+    const result =
+      fotos.length > 1
+        ? await pushNotaComFotosEmStreaming(
+            cnpj,
+            nota,
+            (i) => readNotaFotoAtIndex(nota, i),
+            fotos.length,
+            cooperadoNome
+          )
+        : await pushNotasPedidoToCloud(cnpj, [nota], cooperadoNome);
+    if (result.ok) {
+      updateDataSafe((d) =>
+        compactarFotosNoArmazenamento({
+          ...d,
+          notasPedido: d.notasPedido.map((n) =>
+            n.id === nota.id
+              ? {
+                  ...n,
+                  fotoNaNuvem: true,
+                  cooperativaCnpj: normalizeCnpj(cnpj),
+                  fotoPedido: undefined,
+                  fotosPedido: undefined,
+                }
+              : n
+          ),
+        })
+      );
+    }
+  }
+
+  const afterUpload = getData();
+  const aguardandoLocal = afterUpload.notasPedido.filter(
+    (n) =>
+      n.cooperadoId === cooperadoCanonico &&
+      n.status === "aguardando_conferencia" &&
+      n.fotoNaNuvem
+  );
+  for (const nota of aguardandoLocal) {
+    const cloud = await fetchNotaPedidoFromCloud(cnpj, nota.id);
+    if (!cloud || cloud.status !== "rascunho") continue;
+    const esperado = nota.fotosEnviadasCount ?? 0;
+    const naNuvem = contarFotosEnviadasNota(cloud);
+    if (naNuvem < esperado) continue;
+    await finalizeNotaEntregaNaNuvem(cnpj, nota, cooperadoNome);
+  }
+
+  const afterFinalize = getData();
+  const incompletasNaNuvem = afterFinalize.notasPedido.filter(
+    (n) =>
+      n.cooperadoId === cooperadoCanonico &&
+      n.status === "aguardando_conferencia" &&
+      n.fotoNaNuvem &&
+      (n.fotosEnviadasCount ?? 0) > 0
+  );
+  for (const nota of incompletasNaNuvem) {
+    const esperado = nota.fotosEnviadasCount ?? 0;
+    const cloud = await fetchNotaPedidoFromCloud(cnpj, nota.id);
+    const naNuvem = cloud ? contarFotosEnviadasNota(cloud) : 0;
+    if (naNuvem >= esperado) continue;
+
+    const fotos = await resolveNotaFotosForUpload(nota);
+    if (fotos.length === 0) continue;
+    await pushNotaComFotosEmStreaming(
+      cnpj,
+      nota,
+      (i) => readNotaFotoAtIndex(nota, i),
+      esperado,
+      cooperadoNome
+    );
+  }
+}
+
 export type SyncStatusValue = {
   syncing: boolean;
   /** Timestamp da última sync concluída (sucesso ou tentativa com fim). */
@@ -121,6 +210,11 @@ export function CooperativaSyncProvider({ children }: { children: React.ReactNod
     setSyncing(true);
     setLastSyncError("");
     let completed = false;
+    let fotoUploadBackground: {
+      cnpj: string;
+      cooperadoCanonico: string;
+      cooperadoNome: string;
+    } | null = null;
     try {
       const sessionOk = await ensureCloudSessionReady(userToCloudProfile(currentUser));
       if (!sessionOk) {
@@ -187,85 +281,11 @@ export function CooperativaSyncProvider({ children }: { children: React.ReactNod
           lastCooperadoPushRef.current = Date.now();
         }
 
-        const cooperadoNome = getCooperadoNome(latest.cooperados, cooperadoCanonico);
-
-        const pendentes = latest.notasPedido.filter(
-          (n) =>
-            n.cooperadoId === cooperadoCanonico &&
-            n.status === "aguardando_conferencia" &&
-            !n.fotoNaNuvem
-        );
-        for (const nota of pendentes) {
-          const fotos = await resolveNotaFotosForUpload(nota);
-          if (fotos.length === 0) continue;
-          const result =
-            fotos.length > 1
-              ? await pushNotaComFotosEmStreaming(
-                  cnpj,
-                  nota,
-                  (i) => readNotaFotoAtIndex(nota, i),
-                  fotos.length,
-                  cooperadoNome
-                )
-              : await pushNotasPedidoToCloud(cnpj, [nota], cooperadoNome);
-          if (result.ok) {
-            updateDataSafe((d) =>
-              compactarFotosNoArmazenamento({
-                ...d,
-                notasPedido: d.notasPedido.map((n) =>
-                  n.id === nota.id
-                    ? {
-                        ...n,
-                        fotoNaNuvem: true,
-                        cooperativaCnpj: normalizeCnpj(cnpj),
-                        fotoPedido: undefined,
-                        fotosPedido: undefined,
-                      }
-                    : n
-                ),
-              })
-            );
-          }
-        }
-
-        const aguardandoLocal = latest.notasPedido.filter(
-          (n) =>
-            n.cooperadoId === cooperadoCanonico &&
-            n.status === "aguardando_conferencia" &&
-            n.fotoNaNuvem
-        );
-        for (const nota of aguardandoLocal) {
-          const cloud = await fetchNotaPedidoFromCloud(cnpj, nota.id);
-          if (!cloud || cloud.status !== "rascunho") continue;
-          const esperado = nota.fotosEnviadasCount ?? 0;
-          const naNuvem = contarFotosEnviadasNota(cloud);
-          if (naNuvem < esperado) continue;
-          await finalizeNotaEntregaNaNuvem(cnpj, nota, cooperadoNome);
-        }
-
-        const incompletasNaNuvem = latest.notasPedido.filter(
-          (n) =>
-            n.cooperadoId === cooperadoCanonico &&
-            n.status === "aguardando_conferencia" &&
-            n.fotoNaNuvem &&
-            (n.fotosEnviadasCount ?? 0) > 0
-        );
-        for (const nota of incompletasNaNuvem) {
-          const esperado = nota.fotosEnviadasCount ?? 0;
-          const cloud = await fetchNotaPedidoFromCloud(cnpj, nota.id);
-          const naNuvem = cloud ? contarFotosEnviadasNota(cloud) : 0;
-          if (naNuvem >= esperado) continue;
-
-          const fotos = await resolveNotaFotosForUpload(nota);
-          if (fotos.length === 0) continue;
-          await pushNotaComFotosEmStreaming(
-            cnpj,
-            nota,
-            (i) => readNotaFotoAtIndex(nota, i),
-            esperado,
-            cooperadoNome
-          );
-        }
+        fotoUploadBackground = {
+          cnpj,
+          cooperadoCanonico,
+          cooperadoNome: getCooperadoNome(latest.cooperados, cooperadoCanonico),
+        };
       }
       completed = true;
       if (cooperadoLogado && currentUser.cooperadoId) {
@@ -290,6 +310,14 @@ export function CooperativaSyncProvider({ children }: { children: React.ReactNod
       setSyncing(false);
       if (completed) setLastSyncedAt(Date.now());
     }
+
+    if (fotoUploadBackground) {
+      void runCooperadoFotoUploadsInBackground(
+        fotoUploadBackground.cnpj,
+        fotoUploadBackground.cooperadoCanonico,
+        fotoUploadBackground.cooperadoNome
+      );
+    }
   }, []);
 
   useEffect(() => {
@@ -297,30 +325,30 @@ export function CooperativaSyncProvider({ children }: { children: React.ReactNod
 
     const stopIdle = startIdleMonitor();
 
-    const unregister = registerSyncHandler(() => {
+    const unregister = registerSyncHandler((force) => {
       if (document.hidden) return;
       if (typeof navigator !== "undefined" && !navigator.onLine) return;
       markUserActivity();
-      void runSync({ force: true });
+      void runSync({ force: force ?? false });
     });
 
     const initialDelay = setTimeout(() => {
       if (!document.hidden) {
         markUserActivity();
-        void runSync({ force: true });
+        void runSync();
       }
     }, user?.role === "cooperado" ? 0 : 400);
 
     const unsubIdle = onAppIdleChange((nowIdle) => {
       if (nowIdle) return;
       if (document.hidden) return;
-      void runSync({ force: true });
+      void runSync();
     });
 
     const onVisible = () => {
       if (document.visibilityState === "visible") {
         markUserActivity();
-        void runSync({ force: true });
+        void runSync();
       }
     };
     document.addEventListener("visibilitychange", onVisible);
@@ -328,7 +356,7 @@ export function CooperativaSyncProvider({ children }: { children: React.ReactNod
     const onOnline = () => {
       if (document.hidden) return;
       markUserActivity();
-      void runSync({ force: true });
+      void runSync();
     };
     window.addEventListener("online", onOnline);
 

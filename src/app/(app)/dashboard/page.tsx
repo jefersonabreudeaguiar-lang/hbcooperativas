@@ -27,7 +27,7 @@ import {
 } from "@/services/cooperadoEntregasService";
 import { resolverCooperadoIdCanonico } from "@/services/cooperadoCloudService";
 import { cooperadoFinanceiroLocalAusente } from "@/services/fichaSyncGuard";
-import { requestAppSync } from "@/services/syncRequest";
+import { requestAppSyncImmediate } from "@/services/syncRequest";
 import { useSyncStatus } from "@/components/sync/CooperativaSyncProvider";
 import { getComunicadosInicioCooperado } from "@/services/comunicadoService";
 import { getResumoMensalidadesCooperado } from "@/services/mensalidadeService";
@@ -74,7 +74,7 @@ function CooperadoDashboard() {
       return;
     }
     recoverySyncRef.current = true;
-    requestAppSync();
+    requestAppSyncImmediate();
   }, [financeiroAusente]);
 
   const contaCoopSync = useAppDataSelector((data) => {
@@ -213,7 +213,7 @@ function CooperadoDashboard() {
               className="ml-2 font-semibold underline"
               onClick={() => {
                 recoverySyncRef.current = false;
-                requestAppSync();
+                requestAppSyncImmediate();
               }}
             >
               Atualizar agora
