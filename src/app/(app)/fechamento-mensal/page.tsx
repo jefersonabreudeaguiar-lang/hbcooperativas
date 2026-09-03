@@ -12,6 +12,7 @@ import { Button } from "@/components/ui/Button";
 import { Card, StatCard } from "@/components/ui/Card";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import { updateData, addAuditEntry } from "@/services/dataStore";
+import { requestAppSync } from "@/services/syncRequest";
 import { calcularFechamentoMensal, listMesesComLancamentos } from "@/services/dashboardService";
 import { calcularFechamentoMensalLive } from "@/services/relatorioService";
 import { capturarSnapshotFechamento, getSnapshotFechamentoMes } from "@/services/fechamentoSnapshotService";
@@ -146,6 +147,7 @@ export default function FechamentoMensalPage() {
         userName: user.name,
       });
     });
+    requestAppSync();
   };
 
   return (

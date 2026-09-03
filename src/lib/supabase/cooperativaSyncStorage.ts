@@ -18,6 +18,8 @@ import type {
   FichaCorrida,
   VotacaoPauta,
   VotacaoVoto,
+  ParecerContabilMensal,
+  FechamentoSnapshot,
 } from "@/types";
 
 const BUCKET = "hb-cooperativa-sync";
@@ -53,6 +55,8 @@ export interface OperacionalSyncPayload {
   fichaCorrida?: FichaCorrida[];
   votacaoPautas?: VotacaoPauta[];
   votacaoVotos?: VotacaoVoto[];
+  pareceresContabeis?: ParecerContabilMensal[];
+  fechamentoSnapshots?: FechamentoSnapshot[];
   config: { descontoPadraoCooperativa: number };
 }
 

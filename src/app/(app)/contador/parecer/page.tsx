@@ -14,6 +14,7 @@ import { AlertBanner } from "@/components/ui/AlertBanner";
 import { SignaturePad } from "@/components/ui/SignaturePad";
 import { ModalEmitirRelatorio } from "@/components/relatorios/ModalEmitirRelatorio";
 import { updateData } from "@/services/dataStore";
+import { requestAppSync } from "@/services/syncRequest";
 import { getParecerContabilMes, salvarParecerContabil } from "@/services/contadorRelatorioService";
 import { listMesesConciliacao } from "@/services/conciliacaoMensalService";
 import {
@@ -90,6 +91,7 @@ export default function ContadorParecerPage() {
       )
     );
     setSalvo(true);
+    requestAppSync();
     setTimeout(() => setSalvo(false), 2500);
   };
 

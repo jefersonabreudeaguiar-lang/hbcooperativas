@@ -1,4 +1,4 @@
-import type { AppData, Cooperativa, Cooperado, Instituicao, ProdutoInstituicao, Desconto, PrestacaoContasExcluida, NotaPedidoExcluida, InstituicaoExcluida, PagamentoCooperadoRegistro, Comunicado, FichaCorrida, VotacaoPauta, VotacaoVoto } from "@/types";
+import type { AppData, Cooperativa, Cooperado, Instituicao, ProdutoInstituicao, Desconto, PrestacaoContasExcluida, NotaPedidoExcluida, InstituicaoExcluida, PagamentoCooperadoRegistro, Comunicado, FichaCorrida, VotacaoPauta, VotacaoVoto, ParecerContabilMensal, FechamentoSnapshot } from "@/types";
 import { normalizeCnpj } from "@/utils/cooperativa";
 import { secureApiFetch } from "@/lib/security/clientSession";
 import type { ContratosSyncPayload, OperacionalSyncPayload } from "@/lib/supabase/cooperativaSyncStorage";
@@ -69,6 +69,44 @@ function mergeOperacionalArrayFromCloud<T extends WithUpdatedAt>(
   }
 
   return [...map.values()];
+}
+
+function snapshotCapturedAt(snapshot: FechamentoSnapshot): number {
+  return new Date(snapshot.capturedAt).getTime();
+}
+
+/** Um parecer por mês — vence o registro com updatedAt mais recente. */
+function mergePareceresContabeisFromCloud(
+  localCoop: ParecerContabilMensal[],
+  cloudItems: ParecerContabilMensal[]
+): ParecerContabilMensal[] {
+  const byMes = new Map<string, ParecerContabilMensal>();
+  for (const item of cloudItems) {
+    const cur = byMes.get(item.mesReferencia);
+    if (!cur || itemTime(item) >= itemTime(cur)) byMes.set(item.mesReferencia, item);
+  }
+  for (const item of localCoop) {
+    const cur = byMes.get(item.mesReferencia);
+    if (!cur || itemTime(item) >= itemTime(cur)) byMes.set(item.mesReferencia, item);
+  }
+  return [...byMes.values()];
+}
+
+/** Snapshot imutável por mês — vence a captura mais recente. */
+function mergeFechamentoSnapshotsFromCloud(
+  localCoop: FechamentoSnapshot[],
+  cloudItems: FechamentoSnapshot[]
+): FechamentoSnapshot[] {
+  const byMes = new Map<string, FechamentoSnapshot>();
+  for (const item of cloudItems) {
+    const cur = byMes.get(item.mesReferencia);
+    if (!cur || snapshotCapturedAt(item) >= snapshotCapturedAt(cur)) byMes.set(item.mesReferencia, item);
+  }
+  for (const item of localCoop) {
+    const cur = byMes.get(item.mesReferencia);
+    if (!cur || snapshotCapturedAt(item) >= snapshotCapturedAt(cur)) byMes.set(item.mesReferencia, item);
+  }
+  return [...byMes.values()];
 }
 
 const PAGAMENTO_STATUS_RANK: Record<PagamentoCooperadoRegistro["status"], number> = {
@@ -265,6 +303,8 @@ function buildOperacionalPayload(data: AppData, coopId: string): OperacionalSync
     fichaCorrida: data.fichaCorrida.filter((f) => f.cooperativaId === coopId),
     votacaoPautas: (data.votacaoPautas ?? []).filter((p) => p.cooperativaId === coopId),
     votacaoVotos: (data.votacaoVotos ?? []).filter((v) => v.cooperativaId === coopId),
+    pareceresContabeis: (data.pareceresContabeis ?? []).filter((p) => p.cooperativaId === coopId),
+    fechamentoSnapshots: (data.fechamentoSnapshots ?? []).filter((s) => s.cooperativaId === coopId),
     config: { ...data.config },
   };
 }
@@ -287,6 +327,8 @@ function normalizeCloudOperacional(cloud: OperacionalSyncPayload): OperacionalSy
     fichaCorrida: [],
     votacaoPautas: [],
     votacaoVotos: [],
+    pareceresContabeis: [],
+    fechamentoSnapshots: [],
   };
 }
 
@@ -313,6 +355,8 @@ function buildEmptyOperacionalResetPayload(data: AppData, coopId: string): Opera
     fichaCorrida: [],
     votacaoPautas: [],
     votacaoVotos: [],
+    pareceresContabeis: [],
+    fechamentoSnapshots: [],
     config: { ...data.config },
   };
 }
@@ -549,6 +593,8 @@ export function mergeOperacionalIntoData(
   const cloudFichas = (cloud.fichaCorrida ?? []).map((f) => ({ ...f, cooperativaId: coopId }));
   const cloudPautas = (cloud.votacaoPautas ?? []).map((p) => ({ ...p, cooperativaId: coopId }));
   const cloudVotos = (cloud.votacaoVotos ?? []).map((v) => ({ ...v, cooperativaId: coopId }));
+  const cloudPareceres = (cloud.pareceresContabeis ?? []).map((p) => ({ ...p, cooperativaId: coopId }));
+  const cloudSnapshots = (cloud.fechamentoSnapshots ?? []).map((s) => ({ ...s, cooperativaId: coopId }));
   const mergedExcluidasCoop = mergePrestacoesExcluidasByNewer(
     (data.prestacoesContasExcluidas ?? []).filter((e) => e.cooperativaId === coopId),
     cloudExcluidas
@@ -693,6 +739,24 @@ export function mergeOperacionalIntoData(
     votacaoVotos: [
       ...filterCoop(data.votacaoVotos ?? [], (v) => v.cooperativaId === coopId),
       ...mergedVotosCoop,
+    ],
+    pareceresContabeis: [
+      ...filterCoop(data.pareceresContabeis ?? [], (p) => p.cooperativaId === coopId),
+      ...(cloudAuthoritative
+        ? cloudPareceres
+        : mergePareceresContabeisFromCloud(
+            (data.pareceresContabeis ?? []).filter((p) => p.cooperativaId === coopId),
+            cloudPareceres
+          )),
+    ],
+    fechamentoSnapshots: [
+      ...filterCoop(data.fechamentoSnapshots ?? [], (s) => s.cooperativaId === coopId),
+      ...(cloudAuthoritative
+        ? cloudSnapshots
+        : mergeFechamentoSnapshotsFromCloud(
+            (data.fechamentoSnapshots ?? []).filter((s) => s.cooperativaId === coopId),
+            cloudSnapshots
+          )),
     ],
   };
 
