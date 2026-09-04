@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState, useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
-import { Calendar, FileDown, Megaphone, Plus, Send, Trash2, Users, Vote } from "lucide-react";
+import { Calendar, CircleStop, FileDown, Megaphone, Plus, Send, Trash2, Users, Vote } from "lucide-react";
 import { useAppData } from "@/hooks/useAppData";
 import { usePermissions } from "@/hooks/usePermissions";
 import { PageHeader } from "@/components/ui/Table";
@@ -20,6 +20,7 @@ import { requestAppSync } from "@/services/syncRequest";
 import {
   abrirPautaVotacao,
   criarPautaVotacao,
+  finalizarPautaVotacao,
   getResumoPauta,
   labelEscopoEleitoral,
   listarPautasCooperativa,
@@ -31,6 +32,10 @@ import {
 import type { EscopoEleitoralVotacao } from "@/types";
 import { baixarAtaDeliberacaoVotacaoPdf } from "@/utils/votacaoDeliberativaHtml";
 import { VotacaoPlacarAoVivoPanel } from "@/components/votacao/VotacaoPlacarAoVivoPanel";
+import { VotacaoDocumentosPanel } from "@/components/votacao/VotacaoDocumentosPanel";
+import { ContaCoopSegmentTabs } from "@/components/hb-credit/ContaCoopSegmentTabs";
+
+type VotacaoTab = "pautas" | "documentos";
 
 const LIVE_VOTOS_PULL_MS = 10_000;
 
@@ -54,6 +59,7 @@ export default function VotacoesPage() {
   const [erro, setErro] = useState("");
   const [syncing, setSyncing] = useState(false);
   const [gerandoPdf, setGerandoPdf] = useState<string | null>(null);
+  const [tab, setTab] = useState<VotacaoTab>("pautas");
   const [lastLivePullAt, setLastLivePullAt] = useState<number | null>(null);
   const [livePulling, setLivePulling] = useState(false);
   const livePullingRef = useRef(false);
@@ -202,6 +208,38 @@ export default function VotacoesPage() {
     });
   };
 
+  const handleFinalizar = (pautaId: string) => {
+    if (!data || !coopId || !user) return;
+    const resumo = getResumoPauta(data, pautaId, coopId);
+    const msgConfirm =
+      resumo.totalVotos > 0
+        ? `Finalizar a votação agora?\n\nNenhum cooperado poderá registrar novo voto. Os ${resumo.totalVotos} voto(s) já registrados serão mantidos para publicação e geração da ata.`
+        : "Finalizar a votação agora?\n\nNenhum cooperado poderá registrar novo voto. Ainda não há votos — a ata só poderá ser gerada após pelo menos um voto.";
+    if (!window.confirm(msgConfirm)) return;
+    setErro("");
+    setMsg("");
+    updateData((d) => {
+      const result = finalizarPautaVotacao(d, pautaId, coopId, {
+        userId: user.id,
+        userName: user.name,
+      });
+      if (!result.ok) {
+        setErro(result.error);
+        return d;
+      }
+      setMsg("Votação finalizada. Novos votos bloqueados — publique o resultado ou baixe a ata em Documentos.");
+      void syncNuvem(result.data);
+      return addAuditEntry(result.data, {
+        entityType: "votacao",
+        entityId: pautaId,
+        action: "editar",
+        userId: user.id,
+        userName: user.name,
+        changes: "Votação finalizada manualmente",
+      });
+    });
+  };
+
   const handlePublicarResultado = (pautaId: string) => {
     if (!data || !coopId || !user) return;
     setErro("");
@@ -260,7 +298,7 @@ export default function VotacoesPage() {
     <div className="space-y-6 max-w-4xl">
       <PageHeader
         title="Votações"
-        subtitle="Crie pautas com observações e reunião online, acompanhe votos com assinatura e gere a ata de deliberação."
+        subtitle="Crie pautas, acompanhe votos com assinatura, finalize votações e acesse atas na aba Documentos."
       />
 
       {msg && (
@@ -274,7 +312,7 @@ export default function VotacoesPage() {
         </AlertBanner>
       )}
 
-      {placarAoVivo && (
+      {placarAoVivo && tab === "pautas" && (
         <VotacaoPlacarAoVivoPanel
           resumo={placarAoVivo}
           lastUpdatedAt={lastLivePullAt}
@@ -283,7 +321,24 @@ export default function VotacoesPage() {
         />
       )}
 
-      {check("votacoes", "create") && (
+      <ContaCoopSegmentTabs<VotacaoTab>
+        tabs={[
+          { id: "pautas", label: "Pautas e acompanhamento" },
+          { id: "documentos", label: "Documentos" },
+        ]}
+        active={tab}
+        onChange={setTab}
+      />
+
+      {tab === "documentos" && (
+        <VotacaoDocumentosPanel
+          resumos={resumos.filter((r): r is NonNullable<typeof r> => Boolean(r))}
+          gerandoPdf={gerandoPdf}
+          onBaixarAta={(pautaId) => void handleBaixarAta(pautaId)}
+        />
+      )}
+
+      {tab === "pautas" && check("votacoes", "create") && (
         <Card title="Nova pauta de votação">
           <div className="space-y-4">
             <FormField label="Pauta — o que será votado">
@@ -379,6 +434,7 @@ export default function VotacoesPage() {
         </Card>
       )}
 
+      {tab === "pautas" && (
       <section className="space-y-4">
         <h2 className="text-sm font-bold uppercase tracking-wide text-gray-600 flex items-center gap-2">
           <Vote size={18} /> Pautas e acompanhamento
@@ -392,7 +448,7 @@ export default function VotacoesPage() {
 
         {resumos.map((resumo) => {
           if (!resumo) return null;
-          const { pauta, totalVotos, totalElegiveis, votosSim, votosNao, votosAbstencao, pctSim, pctNao, pctAbstencao, todosVotaram, pendentes, votos, podePublicarResultado } = resumo;
+          const { pauta, totalVotos, totalElegiveis, votosSim, votosNao, votosAbstencao, pctSim, pctNao, pctAbstencao, todosVotaram, pendentes, votos, podePublicarResultado, podeFinalizar } = resumo;
           const pctParticipacao =
             totalElegiveis > 0 ? Math.round((totalVotos / totalElegiveis) * 1000) / 10 : 0;
 
@@ -448,7 +504,20 @@ export default function VotacoesPage() {
                       </Button>
                     </>
                   )}
-                  {pauta.status === "aberta" && podePublicarResultado && check("votacoes", "edit") && (
+                  {pauta.status === "aberta" && podeFinalizar && check("votacoes", "edit") && (
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="secondary"
+                      onClick={() => handleFinalizar(pauta.id)}
+                      disabled={syncing}
+                    >
+                      <CircleStop size={16} /> Finalizar votação
+                    </Button>
+                  )}
+                  {(pauta.status === "aberta" || pauta.status === "encerrada") &&
+                    podePublicarResultado &&
+                    check("votacoes", "edit") && (
                     <Button type="button" size="sm" onClick={() => handlePublicarResultado(pauta.id)} disabled={syncing}>
                       <Megaphone size={16} /> Lançar resultado
                     </Button>
@@ -505,8 +574,18 @@ export default function VotacoesPage() {
                     <AlertBanner variant="info" title="Votação completa">
                       <p>
                         {getEscopoEleitoralPauta(pauta) === "diretoria"
-                          ? "Todos os membros da diretoria registraram voto. Você pode publicar o resultado para o mural."
-                          : "Todos os cooperados registraram voto. Você pode publicar o resultado para o mural."}
+                          ? "Todos os membros da diretoria registraram voto. Finalize a votação ou publique o resultado para o mural."
+                          : "Todos os cooperados registraram voto. Finalize a votação ou publique o resultado para o mural."}
+                      </p>
+                    </AlertBanner>
+                  )}
+
+                  {pauta.status === "encerrada" && (
+                    <AlertBanner variant="info" title="Votação finalizada">
+                      <p>
+                        Novos votos estão bloqueados
+                        {pauta.encerradaEm ? ` desde ${formatDate(pauta.encerradaEm.split("T")[0])}` : ""}.
+                        Publique o resultado no mural ou baixe a ata na aba <strong>Documentos</strong>.
                       </p>
                     </AlertBanner>
                   )}
@@ -566,6 +645,7 @@ export default function VotacoesPage() {
           );
         })}
       </section>
+      )}
     </div>
   );
 }

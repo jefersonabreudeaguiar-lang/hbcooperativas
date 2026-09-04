@@ -35,6 +35,7 @@ export interface ResumoVotacaoPauta {
   pctAbstencao: number;
   todosVotaram: boolean;
   periodoEncerrado: boolean;
+  podeFinalizar: boolean;
   podePublicarResultado: boolean;
   votos: VotoCooperadoLinha[];
   pendentes: { id: string; nome: string }[];
@@ -314,6 +315,10 @@ export function getResumoPauta(
     .map((c) => ({ id: c.id, nome: c.nomeCompleto }));
   const todosVotaram = totalElegiveis > 0 && totalVotos >= totalElegiveis;
   const periodoEncerrado = pautaPeriodoEncerrado(pauta);
+  const podeFinalizar = pauta.status === "aberta";
+  const podePublicarResultado =
+    pauta.status === "encerrada" ||
+    (pauta.status === "aberta" && (todosVotaram || periodoEncerrado) && totalVotos > 0);
 
   return {
     pauta,
@@ -327,8 +332,8 @@ export function getResumoPauta(
     pctAbstencao: pct(votosAbstencao),
     todosVotaram,
     periodoEncerrado,
-    podePublicarResultado:
-      pauta.status === "aberta" && (todosVotaram || periodoEncerrado) && totalVotos > 0,
+    podeFinalizar,
+    podePublicarResultado,
     votos,
     pendentes,
   };
@@ -421,7 +426,10 @@ export function abrirPautaVotacao(
     (p) => p.cooperativaId === cooperativaId && p.status === "aberta"
   );
   if (aberta) {
-    return { ok: false, error: "Já existe uma enquete aberta. Encerre ou publique o resultado antes de lançar outra." };
+    return {
+      ok: false,
+      error: "Já existe uma enquete aberta. Finalize ou publique o resultado antes de lançar outra.",
+    };
   }
 
   const now = new Date().toISOString();
@@ -433,19 +441,50 @@ export function abrirPautaVotacao(
   return { ok: true, data: { ...data, votacaoPautas: next } };
 }
 
+export function finalizarPautaVotacao(
+  data: AppData,
+  pautaId: string,
+  cooperativaId: string,
+  opts?: { userId?: string; userName?: string }
+): { ok: true; data: AppData } | { ok: false; error: string } {
+  const pauta = (data.votacaoPautas ?? []).find((p) => p.id === pautaId && p.cooperativaId === cooperativaId);
+  if (!pauta) return { ok: false, error: "Pauta não encontrada." };
+  if (pauta.status !== "aberta") {
+    return { ok: false, error: "Só enquetes abertas podem ser finalizadas." };
+  }
+
+  const now = new Date().toISOString();
+  const next = (data.votacaoPautas ?? []).map((p) =>
+    p.id === pautaId
+      ? {
+          ...p,
+          status: "encerrada" as const,
+          encerradaEm: now,
+          encerradaPorUserId: opts?.userId,
+          encerradaPorNome: opts?.userName,
+          updatedAt: now,
+        }
+      : p
+  );
+  return { ok: true, data: { ...data, votacaoPautas: next } };
+}
+
 export function publicarResultadoPauta(
   data: AppData,
   pautaId: string,
   cooperativaId: string
 ): { ok: true; data: AppData } | { ok: false; error: string } {
   const resumo = getResumoPauta(data, pautaId, cooperativaId);
-  if (resumo.pauta.status !== "aberta") {
-    return { ok: false, error: "Só é possível publicar resultado de enquetes abertas." };
+  if (resumo.pauta.status !== "aberta" && resumo.pauta.status !== "encerrada") {
+    return { ok: false, error: "Só é possível publicar resultado de enquetes abertas ou finalizadas." };
   }
   if (!resumo.podePublicarResultado) {
     return {
       ok: false,
-      error: "Aguarde todos votarem ou o fim do prazo, com pelo menos um voto registrado.",
+      error:
+        resumo.pauta.status === "encerrada"
+          ? "Não foi possível publicar o resultado desta votação."
+          : "Aguarde todos votarem ou o fim do prazo, com pelo menos um voto registrado — ou finalize a votação antes.",
     };
   }
 
