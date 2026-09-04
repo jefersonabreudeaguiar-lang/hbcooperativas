@@ -5,14 +5,18 @@ import { ComunicadoNotifier } from "@/components/cooperado/ComunicadoNotifier";
 import { CooperativaSyncProvider } from "@/components/sync/CooperativaSyncProvider";
 import { CooperadoFinanceiroGate } from "@/components/cooperado/CooperadoFinanceiroGate";
 
+import { GestaoAccessGuard } from "@/components/permissions/GestaoAccessGuard";
+
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   return (
     <ProtectedRoute>
       <CooperativaSyncProvider>
         <CooperadoFinanceiroGate>
-          <EntregaAprovadaNotifier />
-          <ComunicadoNotifier />
-          <AppShell>{children}</AppShell>
+          <GestaoAccessGuard>
+            <EntregaAprovadaNotifier />
+            <ComunicadoNotifier />
+            <AppShell>{children}</AppShell>
+          </GestaoAccessGuard>
         </CooperadoFinanceiroGate>
       </CooperativaSyncProvider>
     </ProtectedRoute>

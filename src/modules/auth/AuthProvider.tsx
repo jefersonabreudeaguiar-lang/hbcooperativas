@@ -25,6 +25,7 @@ import {
   ensureCooperativaInCloudForUser,
   preloadAppData,
   applyCloudProfileToLocalSession,
+  getData,
 } from "@/services/dataStore";
 import {
   ensureCloudSessionReady,
@@ -53,9 +54,10 @@ const AuthContext = createContext<AuthContextType | null>(null);
 
 function enrichAccountSession(session: Omit<User, "password">): Omit<User, "password"> {
   const mobileCooperadoId = resolveMobileCooperadoId(session);
+  const data = getData();
   return {
     ...session,
-    role: resolveAppUserRole(session),
+    role: resolveAppUserRole(session, data),
     mobileCooperadoId: mobileCooperadoId ?? session.mobileCooperadoId,
   };
 }
@@ -63,12 +65,13 @@ function enrichAccountSession(session: Omit<User, "password">): Omit<User, "pass
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [accountUser, setAccountUser] = useState<Omit<User, "password"> | null>(null);
   const [viewportTick, setViewportTick] = useState(0);
+  const [dataTick, setDataTick] = useState(0);
   const [loading, setLoading] = useState(true);
   const router = useRouter();
 
   const user = useMemo(
-    () => resolveExperienceUser(accountUser),
-    [accountUser, viewportTick]
+    () => resolveExperienceUser(accountUser, getData()),
+    [accountUser, viewportTick, dataTick]
   );
 
   const refresh = useCallback(() => {
@@ -96,7 +99,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     preloadAppData();
   }, [refresh]);
 
-  useEffect(() => subscribe(refresh), [refresh]);
+  useEffect(() => {
+    const unsub = subscribe(() => {
+      refresh();
+      setDataTick((t) => t + 1);
+    });
+    return unsub;
+  }, [refresh]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -152,7 +161,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setAccountUser(safeUser);
       setActiveCloudProfile(userToCloudProfile(safeUser));
       await ensureCloudSessionReady(userToCloudProfile(safeUser));
-      const redirectTo = resolveAppUserRole(safeUser) === "parceiro" ? "/mercado-parceiro" : "/dashboard";
+      const redirectTo = resolveAppUserRole(safeUser, getData()) === "parceiro" ? "/mercado-parceiro" : "/dashboard";
       return { ok: true as const, redirectTo };
     }
     return {

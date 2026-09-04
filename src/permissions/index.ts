@@ -1,4 +1,6 @@
-import type { Action, ModoAcesso, Resource, User, UserRole } from "@/types";
+import type { Action, AppData, ModoAcesso, Resource, User, UserRole } from "@/types";
+import { canAccessPainelResponsavel } from "@/lib/security/responsavelPanelAccess";
+export { canAccessPainelResponsavel } from "@/lib/security/responsavelPanelAccess";
 import { filterContaCoopNavItems } from "@/utils/contaCoopUiVisibility";
 
 type PermissionMatrix = Record<UserRole, Partial<Record<Resource, Action[]>>>;
@@ -268,10 +270,14 @@ export function isCooperadoAppUser(
   return Boolean(user.cooperadoId?.trim());
 }
 
-/** Papel efetivo para menu/rotas — cooperadoId prevalece sobre role stale no armazenamento local. */
-export function resolveAppUserRole(user: Pick<User, "role" | "cooperadoId">): UserRole {
+/** Papel efetivo para menu/rotas — cooperadoId prevalece; painel da diretoria só para quem foi autorizado. */
+export function resolveAppUserRole(
+  user: Pick<User, "id" | "email" | "role" | "cooperadoId" | "cooperativaId" | "active">,
+  data?: AppData | null
+): UserRole {
   const role = normalizeUserRole(user.role);
   if (isCooperadoAppUser({ ...user, role })) return "cooperado";
+  if (isDiretoriaRole(role) && !canAccessPainelResponsavel(user, data)) return "cooperado";
   return role;
 }
 
@@ -423,9 +429,11 @@ export function appendHbCreditMenuItem(
 export function getMenuItems(
   user: PermissionSubject,
   creditEnabled = false,
-  contaCoopUiVisible = false
+  contaCoopUiVisible = false,
+  data?: AppData | null
 ): { href: string; label: string; resource: Resource }[] {
-  const effectiveRole = resolveAppUserRole(user as Pick<User, "role" | "cooperadoId">);
+  const navSubject = user as Pick<User, "id" | "email" | "role" | "cooperadoId" | "cooperativaId" | "active">;
+  const effectiveRole = resolveAppUserRole(navSubject, data);
   const navUser = { ...user, role: effectiveRole };
 
   if (effectiveRole === "parceiro") {
@@ -457,10 +465,12 @@ export function getMenuItems(
 export function getCooperadoDrawerMenuItems(
   user: PermissionSubject,
   creditEnabled = false,
-  contaCoopUiVisible = false
+  contaCoopUiVisible = false,
+  data?: AppData | null
 ): { href: string; label: string; resource: Resource }[] {
-  if (!isCooperadoAppUser(user as Pick<User, "role" | "cooperadoId">)) {
-    return getMenuItems(user, creditEnabled, contaCoopUiVisible);
+  const navSubject = user as Pick<User, "id" | "email" | "role" | "cooperadoId" | "cooperativaId" | "active">;
+  if (!isCooperadoAppUser(navSubject) && resolveAppUserRole(navSubject, data) !== "cooperado") {
+    return getMenuItems(user, creditEnabled, contaCoopUiVisible, data);
   }
   const navUser = { ...user, role: "cooperado" as UserRole };
   return appendHbCreditMenuItem(
@@ -486,9 +496,11 @@ const COOPERADO_MOBILE_NAV_HREFS = [
 export function getMobileNavItems(
   user: PermissionSubject,
   creditEnabled = false,
-  contaCoopUiVisible = false
+  contaCoopUiVisible = false,
+  data?: AppData | null
 ): { href: string; label: string; resource: Resource }[] {
-  const effectiveRole = resolveAppUserRole(user as Pick<User, "role" | "cooperadoId">);
+  const navSubject = user as Pick<User, "id" | "email" | "role" | "cooperadoId" | "cooperativaId" | "active">;
+  const effectiveRole = resolveAppUserRole(navSubject, data);
   const navUser = { ...user, role: effectiveRole };
 
   if (effectiveRole === "cooperado") {

@@ -1,9 +1,13 @@
-import type { User, UserRole } from "@/types";
+import type { AppData, User, UserRole } from "@/types";
 import { isCooperadoAppUser, normalizeUserRole } from "@/permissions";
 import {
   resolveMobileCooperadoId,
   resolveMobileCooperadoIdFromEmail,
 } from "@/lib/hb-credit/mobileCooperadoLink";
+import {
+  canAccessPainelResponsavel,
+  resolveCooperadoExperienceId,
+} from "@/lib/security/responsavelPanelAccess";
 
 export { resolveMobileCooperadoId, resolveMobileCooperadoIdFromEmail };
 
@@ -23,13 +27,36 @@ export function isMobileCooperativaApp(): boolean {
   return /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent);
 }
 
-/** Papel e cooperadoId usados na UI — no celular, responsável pode operar como cooperado vinculado. */
+function asCooperadoExperience<T extends Omit<User, "password">>(user: T, cooperadoId: string): T {
+  return {
+    ...user,
+    role: "cooperado",
+    cooperadoId,
+  };
+}
+
+/** Papel e cooperadoId usados na UI — cooperado sempre cooperado; gestão só para quem foi autorizado. */
 export function resolveExperienceUser<T extends Omit<User, "password">>(
-  user: T | null | undefined
+  user: T | null | undefined,
+  data?: AppData | null
 ): T | null {
   if (!user) return null;
-  if (!isMobileCooperativaApp()) return user;
-  if (isCooperadoAppUser(user)) return { ...user, role: "cooperado" as UserRole };
+
+  if (isCooperadoAppUser(user)) {
+    const cooperadoId = resolveCooperadoExperienceId(user) ?? user.cooperadoId;
+    return cooperadoId ? asCooperadoExperience(user, cooperadoId) : { ...user, role: "cooperado" as UserRole };
+  }
+
+  const allowPainel = canAccessPainelResponsavel(user, data);
+  const mobile = isMobileCooperativaApp();
+
+  if (!allowPainel) {
+    const cooperadoId = resolveCooperadoExperienceId(user);
+    if (cooperadoId) return asCooperadoExperience(user, cooperadoId);
+    return user;
+  }
+
+  if (!mobile) return user;
 
   const role = normalizeUserRole(user.role);
   if (role !== "responsavel" && role !== "tesoureiro" && role !== "admin") {
@@ -39,9 +66,5 @@ export function resolveExperienceUser<T extends Omit<User, "password">>(
   const mobileCooperadoId = resolveMobileCooperadoId(user);
   if (!mobileCooperadoId) return user;
 
-  return {
-    ...user,
-    role: "cooperado",
-    cooperadoId: mobileCooperadoId,
-  };
+  return asCooperadoExperience(user, mobileCooperadoId);
 }

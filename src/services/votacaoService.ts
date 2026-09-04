@@ -140,17 +140,36 @@ export function listarPautasCooperativa(data: AppData, cooperativaId?: string): 
 }
 
 export function listarVotosPauta(data: AppData, pautaId: string, cooperativaId?: string): VotoCooperadoLinha[] {
-  return (data.votacaoVotos ?? [])
-    .filter((v) => v.pautaId === pautaId && (!cooperativaId || v.cooperativaId === cooperativaId))
-    .map((v) => ({
+  const pauta = cooperativaId
+    ? getPautaById(data, pautaId, cooperativaId)
+    : (data.votacaoPautas ?? []).find((p) => p.id === pautaId);
+  const coopId = cooperativaId ?? pauta?.cooperativaId;
+  const reabertoEm = pauta?.votosReabertosEm ? new Date(pauta.votosReabertosEm).getTime() : 0;
+
+  const byCanon = new Map<string, VotoCooperadoLinha>();
+  for (const v of data.votacaoVotos ?? []) {
+    if (v.pautaId !== pautaId) continue;
+    if (coopId && v.cooperativaId !== coopId) continue;
+    if (reabertoEm && new Date(v.createdAt).getTime() < reabertoEm) continue;
+
+    const cooperadoId = coopId
+      ? resolverCooperadoIdCanonico(data, v.cooperadoId, coopId)
+      : v.cooperadoId;
+    const linha: VotoCooperadoLinha = {
       id: v.id,
-      cooperadoId: v.cooperadoId,
+      cooperadoId,
       cooperadoNome: v.cooperadoNome,
       voto: v.voto,
       assinaturaDataUrl: v.assinaturaDataUrl,
       createdAt: v.createdAt,
-    }))
-    .sort((a, b) => a.cooperadoNome.localeCompare(b.cooperadoNome, "pt-BR"));
+    };
+    const prev = byCanon.get(cooperadoId);
+    if (!prev || linha.createdAt.localeCompare(prev.createdAt) >= 0) {
+      byCanon.set(cooperadoId, linha);
+    }
+  }
+
+  return [...byCanon.values()].sort((a, b) => a.cooperadoNome.localeCompare(b.cooperadoNome, "pt-BR"));
 }
 
 export function cooperadoJaVotou(
@@ -285,9 +304,13 @@ export function getResumoPauta(
   const totalVotos = votos.length;
   const totalElegiveis = elegiveis.length;
   const pct = (n: number) => (totalVotos > 0 ? Math.round((n / totalVotos) * 1000) / 10 : 0);
-  const votouIds = new Set(votos.map((v) => v.cooperadoId));
+  const votouIds = new Set(
+    votos.map((v) =>
+      coopId ? resolverCooperadoIdCanonico(data, v.cooperadoId, coopId) : v.cooperadoId
+    )
+  );
   const pendentes = elegiveis
-    .filter((c) => !votouIds.has(c.id))
+    .filter((c) => !votouIds.has(resolverCooperadoIdCanonico(data, c.id, coopId)))
     .map((c) => ({ id: c.id, nome: c.nomeCompleto }));
   const todosVotaram = totalElegiveis > 0 && totalVotos >= totalElegiveis;
   const periodoEncerrado = pautaPeriodoEncerrado(pauta);

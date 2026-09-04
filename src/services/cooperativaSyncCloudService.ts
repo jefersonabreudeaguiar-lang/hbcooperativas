@@ -883,17 +883,16 @@ export async function pushOperacionalToCloud(
   const cid = coopId ?? resolveCoopId(seed, digits);
   if (!cid) return;
 
-  let bundle: Awaited<ReturnType<typeof fetchSyncBundle>> | null = null;
-  let cloudCooperados: Cooperado[] = [];
-  if (!options?.authoritative) {
-    bundle = await fetchSyncBundle(digits);
-    cloudCooperados = (await fetchCooperadosFromCloud(digits)).cooperados;
-  }
+  let bundle: Awaited<ReturnType<typeof fetchSyncBundle>> | null = await fetchSyncBundle(digits);
+  let cloudCooperados: Cooperado[] = (await fetchCooperadosFromCloud(digits)).cooperados;
 
   const fresh = aplicarPrestacoesContasExcluidas(getData());
   let merged = fresh;
-  if (!options?.authoritative && bundle?.operacional) {
-    merged = mergeOperacionalIntoData(fresh, bundle.operacional, cid, cloudCooperados);
+  if (bundle?.operacional) {
+    const fromCloud = mergeOperacionalIntoData(fresh, bundle.operacional, cid, cloudCooperados);
+    merged = options?.authoritative
+      ? { ...fresh, votacaoPautas: fromCloud.votacaoPautas, votacaoVotos: fromCloud.votacaoVotos }
+      : fromCloud;
   }
   saveDataSafe(merged);
 
@@ -924,7 +923,23 @@ export async function pushOperacionalToCloud(
   // Após awaits dos cooperados, reler de novo e remontar payload se o responsável
   // salvou algo nesse intervalo — evita last-write-wins com blob antigo.
   const afterPushCoop = aplicarPrestacoesContasExcluidas(getData());
-  const payloadFinal = buildOperacionalPayload(afterPushCoop, cid);
+  let dataForPayload = afterPushCoop;
+  if (bundle?.operacional) {
+    bundle = await fetchSyncBundle(digits);
+    if (bundle?.operacional) {
+      if (cloudCooperados.length === 0) {
+        cloudCooperados = (await fetchCooperadosFromCloud(digits)).cooperados;
+      }
+      const voteMerged = mergeOperacionalIntoData(afterPushCoop, bundle.operacional, cid, cloudCooperados);
+      dataForPayload = {
+        ...afterPushCoop,
+        votacaoPautas: voteMerged.votacaoPautas,
+        votacaoVotos: voteMerged.votacaoVotos,
+      };
+      saveDataSafe(dataForPayload);
+    }
+  }
+  const payloadFinal = buildOperacionalPayload(dataForPayload, cid);
   if (bundle?.operacional) {
     const cloudMens = prepararMensalidadesCloud(
       afterPushCoop,

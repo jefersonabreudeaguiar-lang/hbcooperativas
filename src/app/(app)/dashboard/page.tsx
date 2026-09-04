@@ -5,7 +5,9 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useAppDataSelector } from "@/hooks/useAppData";
 import { useAuth } from "@/modules/auth/AuthProvider";
+import { getData } from "@/services/dataStore";
 import { isCooperadoAppUser, isDiretoriaRole } from "@/permissions";
+import { canAccessPainelResponsavel } from "@/lib/security/responsavelPanelAccess";
 import { StatCard } from "@/components/ui/Card";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
@@ -394,10 +396,13 @@ function AdminDashboard() {
 }
 
 export default function DashboardPage() {
-  const { user } = useAuth();
+  const { user, accountUser } = useAuth();
   if (!user) return null;
 
-  if (isCooperadoAppUser(user)) {
+  const authSubject = accountUser ?? user;
+  const canGestao = canAccessPainelResponsavel(authSubject, getData());
+
+  if (isCooperadoAppUser(user) || !canGestao) {
     return <CooperadoDashboard />;
   }
 

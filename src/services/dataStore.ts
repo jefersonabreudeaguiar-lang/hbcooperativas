@@ -691,7 +691,7 @@ function persistSession(user: Omit<User, "password">): void {
   const safeUser = {
     ...user,
     mobileCooperadoId,
-    role: resolveAppUserRole(user),
+    role: resolveAppUserRole(user, getData()),
   };
   localStorage.setItem(SESSION_KEY, JSON.stringify(safeUser));
   // Migra sessão antiga (sessionStorage) se existir
@@ -755,7 +755,7 @@ function mergeStoredSessionWithLocalUser(
   };
   return {
     ...merged,
-    role: resolveAppUserRole(merged),
+    role: resolveAppUserRole(merged, data ?? getData()),
   };
 }
 
@@ -772,7 +772,10 @@ function normalizeStoredSession(parsed: Omit<User, "password">): Omit<User, "pas
   }
   return {
     ...next,
-    role: resolveAppUserRole({ ...next, role: normalizeUserRole(next.role) }),
+    role: resolveAppUserRole(
+      { ...next, role: normalizeUserRole(next.role) },
+      memoryCache ?? getData()
+    ),
   };
 }
 

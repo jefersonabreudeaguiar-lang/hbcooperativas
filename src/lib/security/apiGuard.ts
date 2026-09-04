@@ -4,6 +4,7 @@ import { isApiSecurityEnforced } from "@/lib/security/env";
 import { extractAccessToken, verifyAccessToken, type SessionClaims } from "@/lib/security/jwt";
 import { requireCooperativaSaasWritable } from "@/lib/security/saasGuard";
 import { rateLimitApi } from "@/lib/security/rateLimit";
+import { canAccessPainelResponsavelSession } from "@/lib/security/responsavelPanelAccess";
 
 export type AuthResult =
   | { ok: true; session: SessionClaims | null; enforced: boolean }
@@ -93,13 +94,13 @@ export function requireAdminRole(
   return null;
 }
 
-/** Diretoria da cooperativa (responsável, tesoureiro ou admin global). */
+/** Diretoria da cooperativa (responsável, tesoureiro ou admin global autorizado). */
 export function requireManagementRole(
   session: SessionClaims | null,
   enforced: boolean
 ): NextResponse | null {
   if (!enforced || !session) return null;
-  if (session.role !== "admin" && session.role !== "tesoureiro" && session.role !== "responsavel") {
+  if (!canAccessPainelResponsavelSession(session)) {
     return NextResponse.json({ error: "Ação restrita à diretoria da cooperativa." }, { status: 403 });
   }
   return null;
