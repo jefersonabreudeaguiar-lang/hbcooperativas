@@ -43,7 +43,7 @@ import { cn } from "@/utils/format";
 import { CONTA_COOP_DESCONTO_SPLIT } from "@/config/contaCoopEconomia";
 import { AdminSectionHeader } from "@/components/admin/AdminSectionHeader";
 import { HbChargeBreakdownDetail } from "@/components/payments/HbChargeBreakdownDetail";
-import { fetchAdminHbChargePreview } from "@/services/adminHbChargeApiService";
+import { createAdminHbAsaasCharge, fetchAdminHbChargePreview } from "@/services/adminHbChargeApiService";
 import { formatCentsBRL } from "@/modules/hb-credit/engine/money";
 import type { HbUnifiedChargeBreakdown } from "@/services/hbAsaasChargeTypes";
 import type { User } from "@/types";
@@ -305,11 +305,22 @@ export function AdminCobrancaPanel({ user }: AdminCobrancaPanelProps) {
         preview && preview.totalCents > 0
           ? formatCentsBRL(preview.totalCents)
           : row.valorFormatado;
+
+      let pixMsg = "";
+      if (preview && preview.totalCents > 0) {
+        const pix = await createAdminHbAsaasCharge(row.cnpj, preview.mesReferenciaContaCoop);
+        if (pix.ok && pix.pixGenerated) {
+          pixMsg = " PIX Asaas gerado automaticamente na nuvem.";
+        } else if (!pix.ok && pix.error) {
+          pixMsg = ` Aviso PIX: ${pix.error}`;
+        }
+      }
+
       setFeedback({
         type: synced ? "ok" : "erro",
         text: synced
-          ? `Cobrança registrada para ${row.nome}: ${totalLabel} (${row.qtdCooperados} cooperado${row.qtdCooperados === 1 ? "" : "s"}${preview?.repasseDue ? ` + repasse Conta Coop ${CONTA_COOP_DESCONTO_SPLIT.appPercent}%` : ""}).`
-          : `Cobrança registrada localmente, mas falhou ao publicar na nuvem. O responsável não verá o PIX até sincronizar.`,
+          ? `Cobrança registrada para ${row.nome}: ${totalLabel} (${row.qtdCooperados} cooperado${row.qtdCooperados === 1 ? "" : "s"}${preview?.repasseDue ? ` + repasse Conta Coop ${CONTA_COOP_DESCONTO_SPLIT.appPercent}%` : ""}).${pixMsg}`
+          : `Cobrança registrada localmente, mas falhou ao publicar na nuvem. O responsável não verá o PIX até sincronizar.${pixMsg}`,
       });
     } catch (e) {
       setFeedback({ type: "erro", text: e instanceof Error ? e.message : "Falha ao aplicar ação." });
@@ -455,8 +466,8 @@ export function AdminCobrancaPanel({ user }: AdminCobrancaPanelProps) {
 
       <div className="rounded-xl border border-emerald-200 bg-emerald-50/60 px-4 py-3 text-sm text-emerald-950">
         <strong>Como cobrar:</strong> expanda a cooperativa para ver o detalhamento unificado (mensalidade + repasse
-        Conta Coop) calculado na nuvem. A cooperativa paga via PIX Asaas; a confirmação é automática. Use{" "}
-        <em>Registrar cobrança</em> para marcar o ciclo como enviado ou confirme manualmente se necessário.
+        Conta Coop) calculado na nuvem. Ao registrar a cobrança, o <strong>PIX Asaas é gerado automaticamente</strong> na
+        nuvem; o responsável também vê o QR Code ao abrir o painel. A confirmação do pagamento é automática via webhook.
       </div>
 
       {feedback?.type === "ok" && (

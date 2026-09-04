@@ -16,3 +16,29 @@ export async function fetchAdminHbChargePreview(
   }
   return json.breakdown;
 }
+
+export async function createAdminHbAsaasCharge(
+  cnpj: string,
+  mesReferencia?: string
+): Promise<{
+  ok: boolean;
+  error?: string;
+  chargeId?: string;
+  pixGenerated?: boolean;
+}> {
+  const res = await secureApiFetch("/api/admin/hb-asaas-charge", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ cnpj, mesReferencia }),
+  });
+  const json = (await res.json()) as {
+    ok?: boolean;
+    error?: string;
+    chargeId?: string;
+    pix?: { payload?: string };
+  };
+  if (!res.ok || !json.ok) {
+    return { ok: false, error: json.error ?? "Não foi possível gerar PIX Asaas na nuvem." };
+  }
+  return { ok: true, chargeId: json.chargeId, pixGenerated: Boolean(json.pix?.payload) };
+}

@@ -25,3 +25,19 @@ export function getAsaasConfig(): AsaasConfig | null {
     sandbox,
   };
 }
+
+export function getAsaasSetupInfo(): {
+  configured: boolean;
+  sandbox: boolean;
+  webhookUrl: string;
+  webhookTokenConfigured: boolean;
+} {
+  const config = getAsaasConfig();
+  const appUrl = (process.env.NEXT_PUBLIC_APP_URL ?? "").replace(/\/$/, "");
+  return {
+    configured: Boolean(config),
+    sandbox: config?.sandbox ?? false,
+    webhookUrl: appUrl ? `${appUrl}/api/webhooks/asaas` : "/api/webhooks/asaas",
+    webhookTokenConfigured: Boolean(config?.webhookToken),
+  };
+}

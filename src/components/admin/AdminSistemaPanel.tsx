@@ -12,6 +12,8 @@ import {
   Settings,
   Gauge,
   RefreshCw,
+  Banknote,
+  Copy,
 } from "lucide-react";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
@@ -46,6 +48,14 @@ export function AdminSistemaPanel({ user }: AdminSistemaPanelProps) {
   const [cloudLoading, setCloudLoading] = useState(true);
   const [capacity, setCapacity] = useState<PlatformCapacitySnapshot | null>(null);
   const [capacityLoading, setCapacityLoading] = useState(true);
+  const [asaasSetup, setAsaasSetup] = useState<{
+    configured: boolean;
+    sandbox: boolean;
+    webhookUrl: string;
+    webhookTokenConfigured: boolean;
+  } | null>(null);
+  const [asaasLoading, setAsaasLoading] = useState(true);
+  const [webhookCopied, setWebhookCopied] = useState(false);
   const [senhaAtual, setSenhaAtual] = useState("");
   const [novaSenha, setNovaSenha] = useState("");
   const [confirmarSenha, setConfirmarSenha] = useState("");
@@ -83,8 +93,21 @@ export function AdminSistemaPanel({ user }: AdminSistemaPanelProps) {
       .finally(() => setCapacityLoading(false));
   };
 
+  const reloadAsaasSetup = () => {
+    setAsaasLoading(true);
+    secureApiFetch("/api/admin/asaas-setup", { cache: "no-store" })
+      .then((r) => r.json())
+      .then((json: { ok?: boolean; setup?: typeof asaasSetup }) => {
+        if (json.ok && json.setup) setAsaasSetup(json.setup);
+        else setAsaasSetup(null);
+      })
+      .catch(() => setAsaasSetup(null))
+      .finally(() => setAsaasLoading(false));
+  };
+
   useEffect(() => {
     reloadCapacity();
+    reloadAsaasSetup();
   }, []);
 
   const snapshot = useMemo(
@@ -352,6 +375,77 @@ export function AdminSistemaPanel({ user }: AdminSistemaPanelProps) {
               arquivos separados e não entram neste limite de 5 MB.
             </p>
           </div>
+        )}
+      </Card>
+
+      <Card
+        title="PIX SaaS · Asaas"
+        action={
+          <button
+            type="button"
+            className="inline-flex items-center gap-1 text-xs text-gray-500 hover:text-gray-800"
+            onClick={reloadAsaasSetup}
+            disabled={asaasLoading}
+          >
+            <RefreshCw size={14} className={asaasLoading ? "animate-spin" : ""} /> Atualizar
+          </button>
+        }
+      >
+        <div className="flex items-start gap-2 mb-4 text-sm text-gray-600">
+          <Banknote size={18} className="text-emerald-700 shrink-0 mt-0.5" />
+          <p>
+            Cobrança unificada (mensalidade + repasse Conta Coop) com <strong>PIX automático</strong>. O responsável vê o
+            QR Code ao abrir o painel; o cron diário também gera cobranças pendentes.
+          </p>
+        </div>
+
+        {asaasLoading && !asaasSetup ? (
+          <p className="text-sm text-gray-500 py-4 text-center">Verificando integração Asaas…</p>
+        ) : (
+          <dl className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-3 text-sm">
+            <div className="flex justify-between py-2 border-b border-gray-100">
+              <dt className="text-gray-500">API Asaas</dt>
+              <dd className={asaasSetup?.configured ? "text-green-700 font-medium" : "text-red-700 font-medium"}>
+                {asaasSetup?.configured ? "Configurada" : "Não configurada (ASAAS_API_KEY)"}
+              </dd>
+            </div>
+            <div className="flex justify-between py-2 border-b border-gray-100">
+              <dt className="text-gray-500">Ambiente</dt>
+              <dd className="text-gray-800">{asaasSetup?.sandbox ? "Sandbox" : "Produção"}</dd>
+            </div>
+            <div className="flex justify-between py-2 border-b border-gray-100">
+              <dt className="text-gray-500">Token webhook</dt>
+              <dd className={asaasSetup?.webhookTokenConfigured ? "text-green-700" : "text-amber-700"}>
+                {asaasSetup?.webhookTokenConfigured ? "Definido" : "Falta ASAAS_WEBHOOK_TOKEN"}
+              </dd>
+            </div>
+            <div className="sm:col-span-2 py-2">
+              <dt className="text-gray-500 mb-1">URL do webhook (cadastrar no painel Asaas)</dt>
+              <dd className="flex flex-wrap items-center gap-2">
+                <code className="text-xs bg-gray-50 border border-gray-200 rounded px-2 py-1 break-all">
+                  {asaasSetup?.webhookUrl ?? "—"}
+                </code>
+                {asaasSetup?.webhookUrl && (
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    onClick={() => {
+                      void navigator.clipboard.writeText(asaasSetup.webhookUrl).then(() => {
+                        setWebhookCopied(true);
+                        setTimeout(() => setWebhookCopied(false), 2000);
+                      });
+                    }}
+                  >
+                    <Copy size={14} /> {webhookCopied ? "Copiado!" : "Copiar URL"}
+                  </Button>
+                )}
+              </dd>
+              <p className="text-xs text-gray-500 mt-2">
+                Eventos: <strong>PAYMENT_RECEIVED</strong> e <strong>PAYMENT_CONFIRMED</strong>. Cron:{" "}
+                <code>/api/cron/hb-asaas-charges</code> (variável <code>CRON_SECRET</code> na Vercel).
+              </p>
+            </div>
+          </dl>
         )}
       </Card>
 

@@ -68,10 +68,15 @@ export function HbUnifiedPaymentPanel({ cnpj, mesReferenciaContaCoop, compact, o
     setLoading(true);
     setError("");
     try {
-      const next = await fetchHbChargePreview(cnpj, mesRef);
-      setBreakdown(next);
-      if (!next.saasDue && !next.repasseDue && !paid) {
-        /* nothing due */
+      const result = await fetchHbChargePreview(cnpj, mesRef, { autoPix: true });
+      setBreakdown(result.breakdown ?? null);
+      if (result.pix?.payload) {
+        setPixPayload(result.pix.payload);
+        setPixImage(result.pix.encodedImage);
+        setChargeId(result.chargeId ?? null);
+      }
+      if (result.autoPixError) {
+        setError(result.autoPixError);
       }
     } catch (e) {
       setBreakdown(null);
@@ -79,7 +84,7 @@ export function HbUnifiedPaymentPanel({ cnpj, mesReferenciaContaCoop, compact, o
     } finally {
       setLoading(false);
     }
-  }, [cnpj, mesRef, paid]);
+  }, [cnpj, mesRef]);
 
   useEffect(() => {
     void reloadPreview();
@@ -192,7 +197,7 @@ export function HbUnifiedPaymentPanel({ cnpj, mesReferenciaContaCoop, compact, o
     return (
       <Card className="mb-4">
         <p className="text-sm text-gray-500 flex items-center gap-2 py-4">
-          <Loader2 size={16} className="animate-spin" /> Calculando cobrança com dados reais da nuvem…
+          <Loader2 size={16} className="animate-spin" /> Calculando cobrança e gerando PIX automaticamente…
         </p>
       </Card>
     );
@@ -280,7 +285,7 @@ export function HbUnifiedPaymentPanel({ cnpj, mesReferenciaContaCoop, compact, o
         <Button onClick={() => void gerarPixAsaas()} disabled={busy || breakdown.totalCents <= 0}>
           {busy ? (
             <>
-              <Loader2 size={16} className="animate-spin" /> Gerando cobrança…
+              <Loader2 size={16} className="animate-spin" /> Gerando PIX…
             </>
           ) : (
             <>

@@ -3,5 +3,11 @@
     "HB_CREDIT_ENABLED": "true",
     "NEXT_PUBLIC_HB_CREDIT_ENABLED": "true",
     "AUTH_SECRET": "hb-cooperativas-prod-jwt-secret-2026-stable"
-  }
+  },
+  "crons": [
+    {
+      "path": "/api/cron/hb-asaas-charges",
+      "schedule": "0 10 * * *"
+    }
+  ]
 }
