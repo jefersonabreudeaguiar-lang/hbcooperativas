@@ -170,10 +170,10 @@ const ATA_STYLES = `
   .voto-nao { font-weight: 700; color: #991b1b; }
   .voto-abst { font-weight: 700; color: #475569; }
   .sig-mini {
-    width: 44px !important;
-    height: 13px !important;
-    max-width: 44px !important;
-    max-height: 13px !important;
+    width: 56px !important;
+    height: 16px !important;
+    max-width: 56px !important;
+    max-height: 16px !important;
     object-fit: contain;
     object-position: center;
     display: block;
