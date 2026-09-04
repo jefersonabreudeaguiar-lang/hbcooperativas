@@ -165,13 +165,13 @@ const ATA_STYLES = `
   .col-voto { width: 10%; text-align: center; }
   .col-data { width: 16%; white-space: nowrap; }
   .col-cpf { width: 14%; white-space: nowrap; }
-  .col-sig { width: 14%; text-align: center; }
+  .col-sig { width: 9%; text-align: center; padding: 3px 4px; }
   .voto-sim { font-weight: 700; color: #14532d; }
   .voto-nao { font-weight: 700; color: #991b1b; }
   .voto-abst { font-weight: 700; color: #475569; }
   .sig-mini {
-    max-height: 22px;
-    max-width: 72px;
+    max-height: 14px;
+    max-width: 48px;
     width: auto;
     height: auto;
     object-fit: contain;
