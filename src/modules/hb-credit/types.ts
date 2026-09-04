@@ -274,9 +274,9 @@ export interface ContaCoopDiscountPoolResumo {
   coopLiquidadoCents: number;
   appPendenteCents: number;
   coopPendenteCents: number;
-  /** 20% já elegível (mercado liquidado) mas ainda não pago à HB via PIX. */
+  /** 30% já elegível (mercado liquidado) mas ainda não pago à HB via PIX. */
   appRepassePendenteCents: number;
-  /** 20% já repassado e confirmado no mês. */
+  /** 30% já repassado e confirmado no mês. */
   appRepassePagoCents: number;
   transacoesCount: number;
 }

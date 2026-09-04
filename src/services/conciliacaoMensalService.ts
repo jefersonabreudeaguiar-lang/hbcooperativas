@@ -1,4 +1,5 @@
 import type { AppData } from "@/types";
+import { CONTA_COOP_DESCONTO_SPLIT } from "@/config/contaCoopEconomia";
 import { round2, sumBy } from "@/utils/calculations";
 import { hrefRelatorio } from "@/utils/relatorioRoutes";
 import {
@@ -328,8 +329,8 @@ export function calcularConciliacaoMensal(
     },
     {
       id: "hb_app_repasse_caixa",
-      label: "Repasse HB (20% Conta Coop)",
-      descricao: "Débito no livro caixa por repasse confirmado à plataforma HB (taxa 20% do desconto).",
+      label: `Repasse HB (${CONTA_COOP_DESCONTO_SPLIT.appPercent}% Conta Coop)`,
+      descricao: `Débito no livro caixa por repasse confirmado à plataforma HB (taxa ${CONTA_COOP_DESCONTO_SPLIT.appPercent}% do desconto).`,
       valorA: debitosHbAppRepasse,
       labelA: "Pago (livro caixa)",
       valorB: debitosHbAppRepasse,
@@ -343,7 +344,7 @@ export function calcularConciliacaoMensal(
             : "ausente",
       detalhe:
         descontoContaCoop > 0 && debitosHbAppRepasse === 0
-          ? "Há movimento Conta Coop na ficha, mas repasse HB 20% ainda não confirmado no livro caixa (aba Conta Coop > Descontos)."
+          ? `Há movimento Conta Coop na ficha, mas repasse HB ${CONTA_COOP_DESCONTO_SPLIT.appPercent}% ainda não confirmado no livro caixa (aba Conta Coop > Descontos).`
           : debitosHbAppRepasse > 0
             ? "Valor apurado na nuvem — conferir aba Conta Coop > Descontos."
             : undefined,

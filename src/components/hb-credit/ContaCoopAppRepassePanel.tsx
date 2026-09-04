@@ -10,6 +10,7 @@ import { PixQrModal } from "@/components/pix/PixQrModal";
 import { formatCentsBRL } from "@/modules/hb-credit/engine/money";
 import { formatMesReferencia } from "@/utils/format";
 import type { ContaCoopAppRepassePreview, ContaCoopDiscountPoolResumo } from "@/modules/hb-credit/types";
+import { CONTA_COOP_DESCONTO_SPLIT } from "@/config/contaCoopEconomia";
 import { PROPRIETARIO_APP } from "@/config/contratoServicoApp";
 import { useAuth } from "@/modules/auth/AuthProvider";
 import { useAppData } from "@/hooks/useAppData";
@@ -111,7 +112,7 @@ export function ContaCoopAppRepassePanel({ cnpj, mesReferencia, resumo, onConfir
     <>
       <Card className="space-y-4 !p-5 border-blue-200 bg-blue-50/30">
         <div>
-          <h3 className="font-semibold text-gray-900">Repasse ao aplicativo (20%)</h3>
+          <h3 className="font-semibold text-gray-900">Repasse ao aplicativo ({CONTA_COOP_DESCONTO_SPLIT.appPercent}%)</h3>
           <p className="mt-1 text-sm text-gray-600">
             Valor apurado das compras com desconto em {formatMesReferencia(mesReferencia)}, após liquidação dos
             mercados. Gere o QR PIX, pague à HB Cooperativas e confirme — o débito entra automaticamente no livro
@@ -168,7 +169,7 @@ export function ContaCoopAppRepassePanel({ cnpj, mesReferencia, resumo, onConfir
         {!jaPago && valorReais <= 0 && resumo.appPendenteCents > 0 && (
           <p className="text-sm text-amber-800">
             Ainda não há valor elegível para repasse. Liquide os mercados na aba <strong>Liquidar</strong> para liberar
-            o pagamento dos 20%.
+            o pagamento dos {CONTA_COOP_DESCONTO_SPLIT.appPercent}%.
           </p>
         )}
       </Card>

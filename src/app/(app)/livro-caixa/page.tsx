@@ -22,6 +22,7 @@ import {
   resumoLivroCaixaGeral,
 } from "@/services/livroCaixaService";
 import { formatCurrency, formatDate, formatMesReferencia, getCurrentMesReferencia } from "@/utils/format";
+import { CONTA_COOP_DESCONTO_SPLIT } from "@/config/contaCoopEconomia";
 import type { LivroCaixaOrigem, LivroCaixaTipo } from "@/types";
 
 const ORIGEM_LABELS: Record<LivroCaixaOrigem, string> = {
@@ -35,7 +36,7 @@ const ORIGEM_LABELS: Record<LivroCaixaOrigem, string> = {
   debito_avulso: "Débito avulso",
   pnae: "PNAE / contrato",
   prestacao_contas: "Prestação de contas",
-  hb_app_repasse: "Repasse HB Conta Coop (20%)",
+  hb_app_repasse: `Repasse HB Conta Coop (${CONTA_COOP_DESCONTO_SPLIT.appPercent}%)`,
   outro: "Outro",
 };
 

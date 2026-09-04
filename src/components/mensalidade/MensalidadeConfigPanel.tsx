@@ -12,6 +12,10 @@ import { resolveCooperativaCnpj } from "@/services/notaPedidoCloudService";
 import { pushCooperativaProfileToCloud, pushOperacionalToCloud } from "@/services/cooperativaSyncCloudService";
 import { aplicarConfigMensalidadeCooperativa, mergeConfigMensalidadeCooperativa } from "@/services/mensalidadeService";
 import {
+  CONTA_COOP_DESCONTO_SPLIT,
+  MENSALIDADE_COOPERADO_VALOR_PADRAO,
+} from "@/config/contaCoopEconomia";
+import {
   classificarMesReferencia,
   formatCurrency,
   formatMesReferenciaCurto,
@@ -74,7 +78,7 @@ export function MensalidadeConfigPanel({ cooperativaId, user, canEdit }: Props) 
 
     const cfg = configSalva;
     if (!cfg) {
-      setValorPadrao("");
+      setValorPadrao(String(MENSALIDADE_COOPERADO_VALOR_PADRAO));
       setDiaVencimento("10");
       setMesesMarcados([]);
       return;
@@ -167,7 +171,9 @@ export function MensalidadeConfigPanel({ cooperativaId, user, canEdit }: Props) 
           <h3 className="font-bold text-gray-900">Valor fixo da mensalidade</h3>
           <p className="text-sm text-gray-600 mt-1">
             Depois de salvar, o valor permanece fixo para todos os cooperados até você alterar aqui.
-            É descontado automaticamente nos pagamentos dos meses marcados.
+            É descontado automaticamente nos pagamentos dos meses marcados. O padrão recomendado é R${" "}
+            {MENSALIDADE_COOPERADO_VALOR_PADRAO.toFixed(2).replace(".", ",")} (mensalidade + taxa{" "}
+            {CONTA_COOP_DESCONTO_SPLIT.appPercent}% Conta Coop do app).
           </p>
         </div>
       </div>
@@ -183,7 +189,11 @@ export function MensalidadeConfigPanel({ cooperativaId, user, canEdit }: Props) 
       )}
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-        <FormField label="Valor fixo (R$)" required>
+        <FormField
+          label="Valor fixo (R$)"
+          required
+          hint={`Padrão HB: R$ ${MENSALIDADE_COOPERADO_VALOR_PADRAO.toFixed(2).replace(".", ",")} (inclui ${CONTA_COOP_DESCONTO_SPLIT.appPercent}% Conta Coop)`}
+        >
           <Input
             type="number"
             step="0.01"
@@ -194,7 +204,7 @@ export function MensalidadeConfigPanel({ cooperativaId, user, canEdit }: Props) 
               setValorPadrao(e.target.value);
             }}
             disabled={!canEdit}
-            placeholder="Ex: 50,00"
+            placeholder={MENSALIDADE_COOPERADO_VALOR_PADRAO.toFixed(2).replace(".", ",")}
           />
         </FormField>
         <FormField label="Dia da mensalidade (vencimento)" required hint="Dia do mês em que vence (1 a 28)">

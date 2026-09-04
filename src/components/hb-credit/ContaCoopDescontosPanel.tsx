@@ -9,6 +9,7 @@ import { formatCentsBRL } from "@/modules/hb-credit/engine/money";
 import type { ContaCoopDiscountAllocation, ContaCoopDiscountPoolResumo } from "@/modules/hb-credit/types";
 import { fetchDiscountPool, postSweepCashback } from "@/services/creditApiService";
 import { ContaCoopAppRepassePanel } from "@/components/hb-credit/ContaCoopAppRepassePanel";
+import { CONTA_COOP_DESCONTO_SPLIT, MENSALIDADE_COOPERADO_VALOR_PADRAO } from "@/config/contaCoopEconomia";
 
 type Props = {
   cnpj: string;
@@ -101,11 +102,11 @@ export function ContaCoopDescontosPanel({ cnpj, cooperadoNome }: Props) {
             </p>
             <div className="grid gap-3 sm:grid-cols-3">
               <div className="rounded-xl border border-green-200 bg-green-50/60 p-4">
-                <p className="text-xs font-medium text-green-800">70% cashback cooperado</p>
+                <p className="text-xs font-medium text-green-800">{CONTA_COOP_DESCONTO_SPLIT.cooperadoPercent}% cashback cooperado</p>
                 <p className="mt-1 text-xl font-bold text-green-900">{formatCentsBRL(resumo.totalCashbackCents)}</p>
               </div>
               <div className="rounded-xl border border-blue-200 bg-blue-50/60 p-4">
-                <p className="text-xs font-medium text-blue-800">20% aplicativo</p>
+                <p className="text-xs font-medium text-blue-800">{CONTA_COOP_DESCONTO_SPLIT.appPercent}% aplicativo</p>
                 <p className="mt-1 text-xl font-bold text-blue-900">{formatCentsBRL(resumo.totalAppCents)}</p>
                 <p className="mt-1 text-xs text-blue-700">
                   Repassado: {formatCentsBRL(resumo.appRepassePagoCents)} · A pagar (QR):{" "}
@@ -114,7 +115,7 @@ export function ContaCoopDescontosPanel({ cnpj, cooperadoNome }: Props) {
                 </p>
               </div>
               <div className="rounded-xl border border-amber-200 bg-amber-50/60 p-4">
-                <p className="text-xs font-medium text-amber-800">10% cooperativa (liquidação)</p>
+                <p className="text-xs font-medium text-amber-800">{CONTA_COOP_DESCONTO_SPLIT.cooperativaPercent}% cooperativa (liquidação)</p>
                 <p className="mt-1 text-xl font-bold text-amber-900">{formatCentsBRL(resumo.totalCoopCents)}</p>
                 <p className="mt-1 text-xs text-amber-700">
                   Liquidado: {formatCentsBRL(resumo.coopLiquidadoCents)} · Pendente:{" "}
@@ -123,8 +124,10 @@ export function ContaCoopDescontosPanel({ cnpj, cooperadoNome }: Props) {
               </div>
             </div>
             <p className="text-xs text-gray-500">
-              A parte dos mercados fica elegível após liquidação na aba Liquidar. O repasse dos 20% à HB é feito via QR
-              PIX abaixo, com lançamento automático no livro caixa.
+              A parte dos mercados fica elegível após liquidação na aba Liquidar. O repasse dos{" "}
+              {CONTA_COOP_DESCONTO_SPLIT.appPercent}% à HB é feito via QR PIX abaixo, com lançamento automático no livro
+              caixa. A mensalidade fixa de R$ {MENSALIDADE_COOPERADO_VALOR_PADRAO.toFixed(2).replace(".", ",")} por
+              cooperado complementa a taxa do app (descontada na ficha).
             </p>
           </Card>
 
@@ -153,9 +156,9 @@ export function ContaCoopDescontosPanel({ cnpj, cooperadoNome }: Props) {
                     <th className="p-3">Bruto</th>
                     <th className="p-3">Desconto</th>
                     <th className="p-3">Líquido</th>
-                    <th className="p-3">70%</th>
-                    <th className="p-3">20%</th>
-                    <th className="p-3">10%</th>
+                    <th className="p-3">{CONTA_COOP_DESCONTO_SPLIT.cooperadoPercent}%</th>
+                    <th className="p-3">{CONTA_COOP_DESCONTO_SPLIT.appPercent}%</th>
+                    <th className="p-3">{CONTA_COOP_DESCONTO_SPLIT.cooperativaPercent}%</th>
                   </tr>
                 </thead>
                 <tbody>

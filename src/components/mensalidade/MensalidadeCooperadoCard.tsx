@@ -27,6 +27,7 @@ export function MensalidadeCooperadoCard({ mensalidade, onPix, onComprovante }: 
         <StatusBadge status={statusEfetivoMensalidade(m)} />
       </div>
       <p className="text-lg font-bold text-gray-900 mt-2">{formatCurrency(m.valor)}</p>
+      {m.observacao && <p className="text-xs text-gray-600 mt-1 leading-snug">{m.observacao}</p>}
       <p className="text-xs text-gray-500">Vence {formatDate(m.vencimento)}</p>
       {m.status === "paga" && m.dataPagamento && (
         <p className="text-xs text-green-700 mt-1">Paga em {formatDate(m.dataPagamento)}</p>

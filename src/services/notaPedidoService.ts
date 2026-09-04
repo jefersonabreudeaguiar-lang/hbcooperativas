@@ -23,6 +23,7 @@ import { valoresAvulsosPendentesMes, marcarValoresAvulsosPagosMes } from "@/serv
 import { round2 } from "@/utils/calculations";
 import { gerarReciboHtml, resumoReciboFromPagamento } from "@/utils/recibo";
 import { lancarPagamentoCooperadoNoCaixa } from "@/services/livroCaixaService";
+import { textoDescontoMensalidadeFicha } from "@/config/contaCoopEconomia";
 import type { DescontoContaCoopRemoto } from "@/lib/hb-credit/mergeFichaDescontos";
 import {
   descontosContaCoopFromArquivo,
@@ -279,7 +280,7 @@ export function getMensalidadesPendentesMes(data: AppData, cooperadoId: string, 
     )
     .map((m) => ({
       tipo: "mensalidade" as const,
-      motivo: `Mensalidade ${mesReferencia}`,
+      motivo: textoDescontoMensalidadeFicha(mesReferencia, m.valor),
       valor: m.valor,
     }));
 }
@@ -1475,7 +1476,7 @@ export function getResumoPagamentoCooperado(
   if (mensalidadeFixa > 0) {
     descontosExtras.push({
       tipo: "mensalidade",
-      motivo: `Mensalidade ${mesReferencia}`,
+      motivo: textoDescontoMensalidadeFicha(mesReferencia, mensalidadeFixa),
       valor: mensalidadeFixa,
     });
   }

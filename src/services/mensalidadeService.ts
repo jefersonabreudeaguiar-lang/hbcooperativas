@@ -14,6 +14,10 @@ import {
 } from "@/services/notaPedidoService";
 import { getCurrentMesReferencia } from "@/utils/format";
 import { normalizeCnpj } from "@/utils/cooperativa";
+import {
+  MENSALIDADE_COOPERADO_VALOR_PADRAO,
+  textoObservacaoMensalidadeApp,
+} from "@/config/contaCoopEconomia";
 
 function newId(prefix: string): string {
   return `${prefix}_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
@@ -520,7 +524,7 @@ function resumoConfigSemRegistros(
       valor: cfg.valorPadrao,
       vencimento,
       status: "atrasada",
-      observacao: "Configuração da cooperativa",
+      observacao: "Configuração da cooperativa — " + textoObservacaoMensalidadeApp(mes),
       createdAt: hoje,
       updatedAt: hoje,
     };
@@ -568,7 +572,7 @@ function mensalidadesSinteticasCooperado(
         valor: cfg.valorPadrao,
         vencimento,
         status: vencimento < hoje ? ("atrasada" as const) : ("pendente" as const),
-        observacao: "Configuração da cooperativa",
+        observacao: "Configuração da cooperativa — " + textoObservacaoMensalidadeApp(mes),
         createdAt: hoje,
         updatedAt: hoje,
       } satisfies Mensalidade;
@@ -633,7 +637,7 @@ function criarMensalidade(
       valor,
       vencimento: vencimentoDoMes(mes, diaVencimento),
       status: "pendente",
-      observacao: "Gerada automaticamente",
+      observacao: textoObservacaoMensalidadeApp(mes),
       createdAt: now,
       updatedAt: now,
     },
@@ -713,6 +717,7 @@ function gerarMensalidadesCooperativaMes(
           ...m,
           valor: cfg.valorPadrao,
           vencimento: vencimentoDoMes(mesReferencia, cfg.diaVencimento),
+          observacao: textoObservacaoMensalidadeApp(mesReferencia),
           updatedAt: now,
         };
         changed = true;

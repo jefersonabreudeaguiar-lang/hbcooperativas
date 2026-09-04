@@ -7,6 +7,7 @@ import type {
   Mensalidade,
   PagamentoCooperadoRegistro,
 } from "@/types";
+import { CONTA_COOP_DESCONTO_SPLIT } from "@/config/contaCoopEconomia";
 import { round2 } from "@/utils/calculations";
 import { getCurrentMesReferencia } from "@/utils/format";
 
@@ -214,7 +215,7 @@ export function lancarMensalidadeNoCaixa(data: AppData, mensalidade: Mensalidade
   });
 }
 
-/** Débito no caixa ao confirmar repasse HB dos 20% Conta Coop (idempotente por origemId). */
+/** Débito no caixa ao confirmar repasse HB dos 30% Conta Coop (idempotente por origemId). */
 export function lancarRepasseHbContaCoopNoCaixa(
   data: AppData,
   input: {
@@ -235,7 +236,7 @@ export function lancarRepasseHbContaCoopNoCaixa(
     mesReferencia: input.mesReferencia,
     tipo: "debito",
     valor: round2(input.valorReais),
-    historico: `Repasse HB · taxa Conta Coop 20% · ${mesCurto}`,
+    historico: `Repasse HB · taxa Conta Coop ${CONTA_COOP_DESCONTO_SPLIT.appPercent}% · ${mesCurto}`,
     origem: "hb_app_repasse",
     origemId: input.origemId,
     categoria: "Conta Coop",
