@@ -16,7 +16,7 @@ import { getUserCooperativaNome } from "@/utils/cooperativa";
 import { PLATFORM_NAME, PLATFORM_TAGLINE } from "@/utils/constants";
 import { AppIcon } from "@/components/ui/AppIcon";
 import { SyncStatusChip, SyncStatusChipLight } from "@/components/sync/SyncStatusChip";
-import { CobrancaSaasPainel } from "@/components/cobranca/CobrancaSaasPainel";
+import { CobrancaSaasPainel } from "@/components/payments/CobrancaSaasPainelWrapper";
 import { ContratoServicoAppGate } from "@/components/cobranca/ContratoServicoAppGate";
 import { cn } from "@/utils/format";
 import { useHbCreditEnabled } from "@/hooks/useHbCreditEnabled";
