@@ -5,8 +5,10 @@ import {
   saveCobrancaSaasPlatformSettings,
 } from "@/lib/supabase/platformSettingsStorage";
 import {
+  COBRANCA_SAAS_DIA_COBRANCA_DEFAULT,
   COBRANCA_SAAS_MINIMO_MES_DEFAULT,
   COBRANCA_SAAS_PRECO_COOPERADO_DEFAULT,
+  resolveDiaCobrancaSaas,
   type CobrancaSaasPricing,
 } from "@/services/cobrancaSaasService";
 import { requireAdminRole, requireApiAuth } from "@/lib/security/apiGuard";
@@ -16,11 +18,18 @@ function parsePricingBody(body: unknown): CobrancaSaasPricing | null {
   const raw = body as Record<string, unknown>;
   const precoCooperado = Number(raw.precoCooperado);
   const minimoMes = Number(raw.minimoMes);
+  const diaRaw = raw.diaCobranca;
   if (!Number.isFinite(precoCooperado) || precoCooperado < 0) return null;
   if (!Number.isFinite(minimoMes) || minimoMes < 0) return null;
+  const diaCobranca =
+    diaRaw == null || diaRaw === ""
+      ? COBRANCA_SAAS_DIA_COBRANCA_DEFAULT
+      : Number(diaRaw);
+  if (!Number.isFinite(diaCobranca) || diaCobranca < 1 || diaCobranca > 28) return null;
   return {
     precoCooperado: Math.round(precoCooperado * 100) / 100,
     minimoMes: Math.round(minimoMes * 100) / 100,
+    diaCobranca: Math.floor(diaCobranca),
   };
 }
 
@@ -37,6 +46,7 @@ export async function GET(request: Request) {
       pricing: {
         precoCooperado: COBRANCA_SAAS_PRECO_COOPERADO_DEFAULT,
         minimoMes: COBRANCA_SAAS_MINIMO_MES_DEFAULT,
+        diaCobranca: COBRANCA_SAAS_DIA_COBRANCA_DEFAULT,
       },
     });
   }
@@ -66,7 +76,10 @@ export async function PUT(request: Request) {
   const pricing = parsePricingBody(body);
   if (!pricing) {
     return NextResponse.json(
-      { ok: false, error: "Informe precoCooperado e minimoMes válidos (≥ 0)." },
+      {
+        ok: false,
+        error: "Informe precoCooperado, minimoMes e diaCobranca válidos (dia 1–28).",
+      },
       { status: 400 }
     );
   }
@@ -75,7 +88,7 @@ export async function PUT(request: Request) {
     return NextResponse.json({
       ok: true,
       source: "local_only",
-      pricing,
+      pricing: { ...pricing, diaCobranca: resolveDiaCobrancaSaas(pricing) },
       warning: "Nuvem não configurada — salve também no navegador pelo painel.",
     });
   }

@@ -42,7 +42,7 @@ import {
 } from "@/services/cobrancaSaasService";
 import { normalizeCnpj } from "@/utils/cooperativa";
 import { generateId } from "@/utils/generateId";
-import { getCurrentMesReferencia } from "@/utils/format";
+import { formatMesReferencia, getCurrentMesReferencia } from "@/utils/format";
 
 export type { HbUnifiedChargeBreakdown } from "@/services/hbAsaasChargeTypes";
 
@@ -62,6 +62,83 @@ function round2(value: number): number {
   return Math.round(value * 100) / 100;
 }
 
+type RepasseAllocRow = {
+  id: string;
+  transaction_id: string;
+  partner_id: string;
+  gross_cents: number;
+  discount_cents: number;
+  app_cents: number;
+  created_at: string;
+  mes_referencia: string;
+};
+
+function isFechamentoQuitadoParaRepasse(
+  operacional: OperacionalSyncPayload | null,
+  cooperativeId: string,
+  mesReferencia: string
+): boolean {
+  return (operacional?.fechamentoSnapshots ?? []).some(
+    (s) => s.cooperativaId === cooperativeId && s.mesReferencia === mesReferencia
+  );
+}
+
+async function resolveRepasseFechamentoDue(
+  supabase: SupabaseClient,
+  cnpj: string,
+  cooperativeId: string,
+  mesHint?: string
+): Promise<{ mesReferencia: string; rows: RepasseAllocRow[] } | null> {
+  const { data: pendingRows } = await supabase
+    .from("hb_credit_discount_allocations")
+    .select(
+      "id, transaction_id, partner_id, gross_cents, discount_cents, app_cents, created_at, mes_referencia"
+    )
+    .eq("cooperative_cnpj", cnpj)
+    .eq("app_pool_status", "LIQUIDATED")
+    .is("app_repasse_id", null)
+    .neq("cashback_status", "REVERSED")
+    .gt("app_cents", 0);
+
+  if (!pendingRows?.length) return null;
+
+  const byMes = new Map<string, RepasseAllocRow[]>();
+  for (const row of pendingRows) {
+    const mes = String(row.mes_referencia);
+    const list = byMes.get(mes) ?? [];
+    list.push(row as RepasseAllocRow);
+    byMes.set(mes, list);
+  }
+
+  const { data: repassesFeitos } = await supabase
+    .from("hb_credit_app_repasse")
+    .select("mes_referencia")
+    .eq("cooperative_cnpj", cnpj);
+  const mesesPagos = new Set((repassesFeitos ?? []).map((r) => String(r.mes_referencia)));
+
+  const operacional = (await fetchOperacionalSync(supabase, cnpj)) as OperacionalSyncPayload | null;
+
+  const candidatos = [...byMes.keys()]
+    .filter((mes) => !mesesPagos.has(mes))
+    .filter((mes) => isFechamentoQuitadoParaRepasse(operacional, cooperativeId, mes))
+    .sort();
+
+  if (mesHint) {
+    const rows = byMes.get(mesHint);
+    if (
+      rows?.length &&
+      !mesesPagos.has(mesHint) &&
+      isFechamentoQuitadoParaRepasse(operacional, cooperativeId, mesHint)
+    ) {
+      return { mesReferencia: mesHint, rows };
+    }
+  }
+
+  const oldest = candidatos[0];
+  if (!oldest) return null;
+  return { mesReferencia: oldest, rows: byMes.get(oldest) ?? [] };
+}
+
 export async function buildUnifiedHbChargeBreakdown(
   supabase: SupabaseClient,
   cooperativeCnpj: string,
@@ -70,7 +147,7 @@ export async function buildUnifiedHbChargeBreakdown(
   const cnpj = normalizeCnpj(cooperativeCnpj);
   if (cnpj.length !== 14) return { ok: false, error: "CNPJ inválido." };
 
-  const mesReferencia = mesReferenciaContaCoop?.trim() || getCurrentMesReferencia();
+  const mesReferenciaHint = mesReferenciaContaCoop?.trim();
 
   const { data: coopRow, error: coopError } = await supabase
     .from("cooperativas")
@@ -118,27 +195,24 @@ export async function buildUnifiedHbChargeBreakdown(
     valorUnitarioCents: unitCents,
   }));
 
-  const { data: repasseAllocRows } = await supabase
-    .from("hb_credit_discount_allocations")
-    .select(
-      "id, transaction_id, partner_id, gross_cents, discount_cents, app_cents, created_at"
-    )
-    .eq("cooperative_cnpj", cnpj)
-    .eq("mes_referencia", mesReferencia)
-    .eq("app_pool_status", "LIQUIDATED")
-    .is("app_repasse_id", null)
-    .neq("cashback_status", "REVERSED")
-    .gt("app_cents", 0)
-    .order("created_at", { ascending: false });
+  const repasseFechamento = await resolveRepasseFechamentoDue(
+    supabase,
+    cnpj,
+    String(coopRow.id),
+    mesReferenciaHint || undefined
+  );
+  const mesReferencia = repasseFechamento?.mesReferencia ?? mesReferenciaHint ?? getCurrentMesReferencia();
 
-  const partnerIds = [...new Set((repasseAllocRows ?? []).map((r) => String(r.partner_id)))];
+  const partnerIds = [
+    ...new Set((repasseFechamento?.rows ?? []).map((r) => String(r.partner_id))),
+  ];
   const partnerNames: Record<string, string> = {};
   if (partnerIds.length) {
     const { data: partners } = await supabase.from("hb_credit_partners").select("id, name").in("id", partnerIds);
     for (const p of partners ?? []) partnerNames[String(p.id)] = String(p.name);
   }
 
-  const repasseCompras: HbChargeRepasseLine[] = (repasseAllocRows ?? []).map((row) => ({
+  const repasseCompras: HbChargeRepasseLine[] = (repasseFechamento?.rows ?? []).map((row) => ({
     allocationId: String(row.id),
     transactionId: String(row.transaction_id),
     partnerNome: partnerNames[String(row.partner_id)] ?? "Mercado",
@@ -149,15 +223,7 @@ export async function buildUnifiedHbChargeBreakdown(
   }));
 
   const repasseSubtotalCents = repasseCompras.reduce((s, r) => s + r.appCents, 0);
-
-  const { data: repasseExisting } = await supabase
-    .from("hb_credit_app_repasse")
-    .select("id")
-    .eq("cooperative_cnpj", cnpj)
-    .eq("mes_referencia", mesReferencia)
-    .maybeSingle();
-
-  const repasseDue = !repasseExisting && repasseSubtotalCents > 0;
+  const repasseDue = Boolean(repasseFechamento) && repasseSubtotalCents > 0;
   const saasSubtotalCents = saasDue ? Math.round(saasCalc.valorTotal * 100) : 0;
   const totalCents = saasSubtotalCents + (repasseDue ? repasseSubtotalCents : 0);
 
@@ -167,7 +233,7 @@ export async function buildUnifiedHbChargeBreakdown(
     lineItems.push({
       kind: "saas_mensalidade",
       label: "Mensalidade HB · cooperados cadastrados",
-      detail: `${cooperadosAtivos.length} cooperado(s) × R$ ${pricing.precoCooperado.toFixed(2).replace(".", ",")} (mín. R$ ${pricing.minimoMes.toFixed(2).replace(".", ",")}) · ciclo ${periodoSaas?.label ?? ""}`,
+      detail: `${cooperadosAtivos.length} cooperado(s) × R$ ${pricing.precoCooperado.toFixed(2).replace(".", ",")} (mín. R$ ${pricing.minimoMes.toFixed(2).replace(".", ",")}) · ciclo adesão ${periodoSaas?.label ?? ""}`,
       amountCents: saasSubtotalCents,
     });
   }
@@ -175,8 +241,8 @@ export async function buildUnifiedHbChargeBreakdown(
   if (repasseDue) {
     lineItems.push({
       kind: "conta_coop_repasse",
-      label: `Conta Coop · repasse HB (${CONTA_COOP_DESCONTO_SPLIT.appPercent}% do desconto)`,
-      detail: `${repasseCompras.length} compra(s) liquidada(s) em ${mesReferencia} — somente movimento real apurado na nuvem`,
+      label: `Conta Coop · taxa HB (${CONTA_COOP_DESCONTO_SPLIT.appPercent}% do desconto)`,
+      detail: `Fechamento ${formatMesReferencia(mesReferencia)} · ${repasseCompras.length} compra(s) após saldos dos cooperados quitados — movimento real na nuvem`,
       amountCents: repasseSubtotalCents,
     });
   }
@@ -187,6 +253,7 @@ export async function buildUnifiedHbChargeBreakdown(
     cooperativeNome: String(coopRow.nome ?? cnpj),
     cooperativeId: String(coopRow.id),
     mesReferenciaContaCoop: mesReferencia,
+    repasseFechamentoLabel: repasseDue ? formatMesReferencia(mesReferencia) : null,
     periodoSaas,
     saasDue,
     repasseDue,

@@ -30,6 +30,7 @@ export interface HbUnifiedChargeBreakdown {
   cooperativeNome: string;
   cooperativeId: string;
   mesReferenciaContaCoop: string;
+  repasseFechamentoLabel?: string | null;
   periodoSaas: {
     periodoId: string;
     label: string;

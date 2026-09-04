@@ -4,8 +4,6 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   Banknote,
   CheckCircle2,
-  ChevronDown,
-  ChevronUp,
   Copy,
   Loader2,
   QrCode,
@@ -31,7 +29,7 @@ import {
   fetchHbChargePreview,
 } from "@/services/hbAsaasApiService";
 import type { HbUnifiedChargeBreakdown } from "@/services/hbAsaasChargeTypes";
-import { CONTA_COOP_DESCONTO_SPLIT } from "@/config/contaCoopEconomia";
+import { HbChargeBreakdownDetail } from "@/components/payments/HbChargeBreakdownDetail";
 import type { CobrancaSaasCooperativa } from "@/types";
 
 type Props = {
@@ -57,8 +55,6 @@ export function HbUnifiedPaymentPanel({ cnpj, mesReferenciaContaCoop, compact, o
   const [chargeId, setChargeId] = useState<string | null>(null);
   const [paid, setPaid] = useState(false);
   const [copied, setCopied] = useState(false);
-  const [showCooperados, setShowCooperados] = useState(false);
-  const [showCompras, setShowCompras] = useState(true);
 
   const coopId = useMemo(
     () => (user && data ? getUserCooperativaId(user, data) : undefined),
@@ -233,11 +229,14 @@ export function HbUnifiedPaymentPanel({ cnpj, mesReferenciaContaCoop, compact, o
             Valores apurados na nuvem em {new Date(breakdown.generatedAt).toLocaleString("pt-BR")}
           </p>
           {breakdown.periodoSaas && (
-            <p className="text-sm text-gray-600">Ciclo mensalidade: {breakdown.periodoSaas.label}</p>
+            <p className="text-sm text-gray-600">Ciclo adesão: {breakdown.periodoSaas.label}</p>
           )}
-          <p className="text-sm text-gray-600">
-            Conta Coop: {formatMesReferencia(breakdown.mesReferenciaContaCoop)}
-          </p>
+          {breakdown.repasseDue && (
+            <p className="text-sm text-gray-600">
+              Fechamento Conta Coop:{" "}
+              {breakdown.repasseFechamentoLabel ?? formatMesReferencia(breakdown.mesReferenciaContaCoop)}
+            </p>
+          )}
         </div>
         <Button variant="secondary" size="sm" onClick={() => void reloadPreview()} disabled={loading}>
           <RefreshCw size={14} /> Atualizar valores
@@ -250,97 +249,9 @@ export function HbUnifiedPaymentPanel({ cnpj, mesReferenciaContaCoop, compact, o
         </AlertBanner>
       )}
 
-      <div className="space-y-3 mb-4">
-        {breakdown.lineItems.map((item) => (
-          <div key={item.kind} className="rounded-xl border border-gray-200 bg-white p-4">
-            <div className="flex justify-between gap-3">
-              <div>
-                <p className="font-semibold text-gray-900">{item.label}</p>
-                <p className="text-xs text-gray-600 mt-1">{item.detail}</p>
-              </div>
-              <p className="text-lg font-bold text-emerald-800 tabular-nums shrink-0">
-                {formatCents(item.amountCents)}
-              </p>
-            </div>
-          </div>
-        ))}
-      </div>
+      <HbChargeBreakdownDetail breakdown={breakdown} showHeader={false} />
 
-      {breakdown.saasDue && breakdown.cooperados.length > 0 && (
-        <div className="mb-4 rounded-xl border border-gray-200 bg-white overflow-hidden">
-          <button
-            type="button"
-            className="w-full flex items-center justify-between px-4 py-3 text-sm font-medium text-gray-800 hover:bg-gray-50"
-            onClick={() => setShowCooperados((v) => !v)}
-          >
-            <span>Mensalidade · {breakdown.cooperados.length} cooperado(s) cadastrado(s)</span>
-            {showCooperados ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
-          </button>
-          {showCooperados && (
-            <ul className="divide-y divide-gray-100 max-h-48 overflow-y-auto text-sm">
-              {breakdown.cooperados.map((c) => (
-                <li key={c.id} className="px-4 py-2 flex justify-between">
-                  <span>{c.nome}</span>
-                  <span className="text-gray-500 tabular-nums">
-                    {formatCents(c.valorUnitarioCents)}
-                  </span>
-                </li>
-              ))}
-            </ul>
-          )}
-          <p className="px-4 py-2 text-xs text-gray-500 border-t border-gray-100">
-            Preço unitário R$ {breakdown.pricing.precoCooperado.toFixed(2).replace(".", ",")} · mínimo cooperativa R${" "}
-            {breakdown.pricing.minimoMes.toFixed(2).replace(".", ",")}
-          </p>
-        </div>
-      )}
-
-      {breakdown.repasseDue && breakdown.repasseCompras.length > 0 && (
-        <div className="mb-4 rounded-xl border border-blue-200 bg-blue-50/30 overflow-hidden">
-          <button
-            type="button"
-            className="w-full flex items-center justify-between px-4 py-3 text-sm font-medium text-blue-950 hover:bg-blue-50/50"
-            onClick={() => setShowCompras((v) => !v)}
-          >
-            <span>
-              Conta Coop · {breakdown.repasseCompras.length} compra(s) · {CONTA_COOP_DESCONTO_SPLIT.appPercent}% HB
-            </span>
-            {showCompras ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
-          </button>
-          {showCompras && (
-            <div className="overflow-x-auto">
-              <table className="w-full text-xs min-w-[520px]">
-                <thead className="bg-white/80 text-gray-500 uppercase">
-                  <tr>
-                    <th className="px-3 py-2 text-left">Mercado</th>
-                    <th className="px-3 py-2 text-right">Compra</th>
-                    <th className="px-3 py-2 text-right">Desconto</th>
-                    <th className="px-3 py-2 text-right">HB 30%</th>
-                    <th className="px-3 py-2 text-left">Data</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-blue-100/80 bg-white/60">
-                  {breakdown.repasseCompras.map((row) => (
-                    <tr key={row.allocationId}>
-                      <td className="px-3 py-2">{row.partnerNome}</td>
-                      <td className="px-3 py-2 text-right tabular-nums">{formatCents(row.grossCents)}</td>
-                      <td className="px-3 py-2 text-right tabular-nums">{formatCents(row.discountCents)}</td>
-                      <td className="px-3 py-2 text-right tabular-nums font-medium text-blue-900">
-                        {formatCents(row.appCents)}
-                      </td>
-                      <td className="px-3 py-2 text-gray-500">
-                        {new Date(row.createdAt).toLocaleDateString("pt-BR")}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </div>
-      )}
-
-      <div className="rounded-lg border border-emerald-200 bg-emerald-50/50 p-3 text-xs text-emerald-950 mb-4">
+      <div className="rounded-lg border border-emerald-200 bg-emerald-50/50 p-3 text-xs text-emerald-950 mb-4 mt-4">
         <Banknote size={14} className="inline mr-1" />
         Pagamento via <strong>Asaas</strong> para o CPF {breakdown.receiver.cpf} ({breakdown.receiver.nome}). Após o PIX,
         a confirmação é <strong>automática</strong> — mensalidade liberada e repasse Conta Coop registrado na nuvem.

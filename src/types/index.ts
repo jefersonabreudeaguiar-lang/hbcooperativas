@@ -869,6 +869,8 @@ export interface AppData {
     cobrancaSaasPrecoCooperado?: number;
     /** Piso mensal da cobrança HB por cooperativa. */
     cobrancaSaasMinimoMes?: number;
+    /** Dia do mês (1–28) para vencimento da cobrança HB. */
+    cobrancaSaasDiaCobranca?: number;
   };
 }
 

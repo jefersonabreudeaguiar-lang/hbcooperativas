@@ -12,6 +12,8 @@ import { formatCurrency } from "@/utils/format";
 export const COBRANCA_SAAS_PRECO_COOPERADO_DEFAULT = 9.9;
 /** Piso mensal padrão por cooperativa. */
 export const COBRANCA_SAAS_MINIMO_MES_DEFAULT = 149;
+/** Dia do mês para vencimento da cobrança HB (1–28). */
+export const COBRANCA_SAAS_DIA_COBRANCA_DEFAULT = 10;
 
 /** @deprecated Use getCobrancaSaasPricing() — mantido para compatibilidade. */
 export const COBRANCA_SAAS_PRECO_COOPERADO = COBRANCA_SAAS_PRECO_COOPERADO_DEFAULT;
@@ -25,6 +27,16 @@ export const COBRANCA_SAAS_MINIMO_LABEL = "R$ 149,00";
 export interface CobrancaSaasPricing {
   precoCooperado: number;
   minimoMes: number;
+  /** Dia do mês (1–28) em que vence a mensalidade HB. */
+  diaCobranca?: number;
+}
+
+export function resolveDiaCobrancaSaas(pricing?: CobrancaSaasPricing | null): number {
+  const d = pricing?.diaCobranca;
+  if (typeof d === "number" && Number.isFinite(d) && d >= 1 && d <= 28) {
+    return Math.floor(d);
+  }
+  return COBRANCA_SAAS_DIA_COBRANCA_DEFAULT;
 }
 
 function normalizePrecoSaas(value: unknown, fallback: number): number {
@@ -34,12 +46,16 @@ function normalizePrecoSaas(value: unknown, fallback: number): number {
 }
 
 export function getCobrancaSaasPricing(data?: Pick<AppData, "config"> | null): CobrancaSaasPricing {
+  const diaRaw = data?.config?.cobrancaSaasDiaCobranca;
+  const diaCobranca =
+    typeof diaRaw === "number" && diaRaw >= 1 && diaRaw <= 28 ? Math.floor(diaRaw) : undefined;
   return {
     precoCooperado: normalizePrecoSaas(
       data?.config?.cobrancaSaasPrecoCooperado,
       COBRANCA_SAAS_PRECO_COOPERADO_DEFAULT
     ),
     minimoMes: normalizePrecoSaas(data?.config?.cobrancaSaasMinimoMes, COBRANCA_SAAS_MINIMO_MES_DEFAULT),
+    diaCobranca,
   };
 }
 
@@ -61,6 +77,7 @@ export function applyCobrancaSaasPricingToData(
       ...data.config,
       cobrancaSaasPrecoCooperado: pricing.precoCooperado,
       cobrancaSaasMinimoMes: pricing.minimoMes,
+      cobrancaSaasDiaCobranca: resolveDiaCobrancaSaas(pricing),
     },
   };
 }
@@ -111,7 +128,7 @@ function toIsoDay(d: Date): string {
   return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
 }
 
-/** Aniversário mensal a partir do 1º cooperado. */
+/** Aniversário mensal a partir do 1º cooperado (dia da adesão ao app). */
 export function getPeriodoCobrancaSaas(
   cicloInicioEm: string,
   ref: Date = new Date()
@@ -556,6 +573,7 @@ export function rejeitarPagamentoCobrancaSaas(
   if (!coop || !cob?.cicloInicioEm) {
     return { data, ok: false, error: "Ciclo não iniciado." };
   }
+  const diaCobranca = resolveDiaCobrancaSaas(getCobrancaSaasPricing(data));
   const periodo = getPeriodoCobrancaSaas(cob.cicloInicioEm);
   const lanc = lancamentoPeriodoAtual(cob, periodo.periodoId);
   if (!lanc || lanc.status !== "aguardando_confirmacao") {

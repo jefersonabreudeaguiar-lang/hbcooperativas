@@ -1,7 +1,9 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import {
+  COBRANCA_SAAS_DIA_COBRANCA_DEFAULT,
   COBRANCA_SAAS_MINIMO_MES_DEFAULT,
   COBRANCA_SAAS_PRECO_COOPERADO_DEFAULT,
+  resolveDiaCobrancaSaas,
   type CobrancaSaasPricing,
 } from "@/services/cobrancaSaasService";
 
@@ -21,9 +23,15 @@ function normalizePricing(raw: unknown): CobrancaSaasPlatformSettings {
     typeof obj.minimoMes === "number" && obj.minimoMes >= 0
       ? Math.round(obj.minimoMes * 100) / 100
       : COBRANCA_SAAS_MINIMO_MES_DEFAULT;
+  const diaRaw = obj.diaCobranca;
+  const diaCobranca =
+    typeof diaRaw === "number" && diaRaw >= 1 && diaRaw <= 28
+      ? Math.floor(diaRaw)
+      : COBRANCA_SAAS_DIA_COBRANCA_DEFAULT;
   return {
     precoCooperado: preco,
     minimoMes: minimo,
+    diaCobranca,
     updatedAt: typeof obj.updatedAt === "string" ? obj.updatedAt : undefined,
   };
 }
@@ -41,6 +49,7 @@ export async function fetchCobrancaSaasPlatformSettings(
     return {
       precoCooperado: COBRANCA_SAAS_PRECO_COOPERADO_DEFAULT,
       minimoMes: COBRANCA_SAAS_MINIMO_MES_DEFAULT,
+      diaCobranca: COBRANCA_SAAS_DIA_COBRANCA_DEFAULT,
     };
   }
 
@@ -54,6 +63,7 @@ export async function saveCobrancaSaasPlatformSettings(
   const payload = {
     precoCooperado: pricing.precoCooperado,
     minimoMes: pricing.minimoMes,
+    diaCobranca: resolveDiaCobrancaSaas(pricing),
     updatedAt: new Date().toISOString(),
   };
 

@@ -40,7 +40,12 @@ import {
 } from "@/services/cobrancaSaasService";
 import { formatCurrency } from "@/utils/format";
 import { cn } from "@/utils/format";
+import { CONTA_COOP_DESCONTO_SPLIT } from "@/config/contaCoopEconomia";
 import { AdminSectionHeader } from "@/components/admin/AdminSectionHeader";
+import { HbChargeBreakdownDetail } from "@/components/payments/HbChargeBreakdownDetail";
+import { fetchAdminHbChargePreview } from "@/services/adminHbChargeApiService";
+import { formatCentsBRL } from "@/modules/hb-credit/engine/money";
+import type { HbUnifiedChargeBreakdown } from "@/services/hbAsaasChargeTypes";
 import type { User } from "@/types";
 
 type AdminUser = Pick<User, "id" | "name">;
@@ -78,6 +83,9 @@ export function AdminCobrancaPanel({ user }: AdminCobrancaPanelProps) {
   const [minimoInput, setMinimoInput] = useState("");
   const [salvandoPrecos, setSalvandoPrecos] = useState(false);
   const [precosCarregados, setPrecosCarregados] = useState(false);
+  const [previewByCoop, setPreviewByCoop] = useState<
+    Record<string, { loading?: boolean; error?: string; breakdown?: HbUnifiedChargeBreakdown }>
+  >({});
 
   const pricing = useMemo(() => getCobrancaSaasPricing(data), [data]);
   const precoLabel = useMemo(() => getCobrancaSaasPrecoLabel(data), [data]);
@@ -112,10 +120,7 @@ export function AdminCobrancaPanel({ user }: AdminCobrancaPanelProps) {
             },
           });
           const local = getCobrancaSaasPricing(data);
-          if (
-            cloud.precoCooperado === local.precoCooperado &&
-            cloud.minimoMes === local.minimoMes
-          ) {
+          if (cloud.precoCooperado === local.precoCooperado && cloud.minimoMes === local.minimoMes) {
             return;
           }
           updateData((d) => applyCobrancaSaasPricingToData(d, cloud));
@@ -144,12 +149,13 @@ export function AdminCobrancaPanel({ user }: AdminCobrancaPanelProps) {
 
     setSalvandoPrecos(true);
     try {
-      updateData((d) => applyCobrancaSaasPricingToData(d, { precoCooperado, minimoMes }));
+      const payload = { precoCooperado, minimoMes };
+      updateData((d) => applyCobrancaSaasPricingToData(d, payload));
 
       const res = await secureApiFetch("/api/admin/cobranca-saas-pricing", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ precoCooperado, minimoMes }),
+        body: JSON.stringify(payload),
       });
       const json = (await res.json()) as { ok?: boolean; error?: string; warning?: string };
       if (!json.ok) {
@@ -163,10 +169,32 @@ export function AdminCobrancaPanel({ user }: AdminCobrancaPanelProps) {
         type: "ok",
         text:
           json.warning ??
-          `Valores atualizados: ${formatCurrency(precoCooperado)} por cooperado · mínimo ${formatCurrency(minimoMes)}.`,
+          `Valores atualizados: ${formatCurrency(precoCooperado)}/cooperado · mín. ${formatCurrency(minimoMes)}. Ciclo de adesão inalterado.`,
       });
     } finally {
       setSalvandoPrecos(false);
+    }
+  };
+
+  const loadCloudPreview = async (cooperativaId: string, cnpj: string) => {
+    setPreviewByCoop((prev) => ({
+      ...prev,
+      [cooperativaId]: { loading: true, error: undefined, breakdown: prev[cooperativaId]?.breakdown },
+    }));
+    try {
+      const breakdown = await fetchAdminHbChargePreview(cnpj);
+      setPreviewByCoop((prev) => ({
+        ...prev,
+        [cooperativaId]: { loading: false, breakdown },
+      }));
+    } catch (e) {
+      setPreviewByCoop((prev) => ({
+        ...prev,
+        [cooperativaId]: {
+          loading: false,
+          error: e instanceof Error ? e.message : "Erro ao carregar cobrança da nuvem.",
+        },
+      }));
     }
   };
 
@@ -187,6 +215,15 @@ export function AdminCobrancaPanel({ user }: AdminCobrancaPanelProps) {
   }, [data?.cooperativas.length, data?.cooperados.length]);
 
   const rows = useMemo(() => (data ? listarCobrancasSaasAdmin(data) : []), [data]);
+
+  useEffect(() => {
+    if (!expandidoId) return;
+    const row = rows.find((r) => r.cooperativaId === expandidoId);
+    if (!row?.cnpj) return;
+    const cached = previewByCoop[expandidoId];
+    if (cached?.loading || cached?.breakdown) return;
+    void loadCloudPreview(expandidoId, row.cnpj);
+  }, [expandidoId, rows, previewByCoop]);
 
   const filtradas = useMemo(() => {
     const q = busca.trim().toLowerCase();
@@ -264,9 +301,14 @@ export function AdminCobrancaPanel({ user }: AdminCobrancaPanelProps) {
         return r.data;
       });
       syncSaasCloud(row.cooperativaId);
+      const preview = previewByCoop[row.cooperativaId]?.breakdown;
+      const totalLabel =
+        preview && preview.totalCents > 0
+          ? formatCentsBRL(preview.totalCents)
+          : row.valorFormatado;
       setFeedback({
         type: "ok",
-        text: `Cobrança registrada para ${row.nome}: ${row.valorFormatado} (${row.qtdCooperados} cooperado${row.qtdCooperados === 1 ? "" : "s"}).`,
+        text: `Cobrança registrada para ${row.nome}: ${totalLabel} (${row.qtdCooperados} cooperado${row.qtdCooperados === 1 ? "" : "s"}${preview?.repasseDue ? ` + repasse Conta Coop ${CONTA_COOP_DESCONTO_SPLIT.appPercent}%` : ""}).`,
       });
     } catch (e) {
       setFeedback({ type: "erro", text: e instanceof Error ? e.message : "Falha ao aplicar ação." });
@@ -360,7 +402,7 @@ export function AdminCobrancaPanel({ user }: AdminCobrancaPanelProps) {
     <div className="space-y-6 pb-8">
       <AdminSectionHeader
         title="Cobrança HB"
-        description={`Mensalidade da plataforma: ${precoLabel} por cooperado cadastrado, mínimo ${minimoLabel} por cooperativa. Fluxo: registrar cobrança → aguardar pagamento → confirmar ou bloquear.`}
+        description={`Mensalidade por cooperado (ciclo da adesão) + taxa Conta Coop (${CONTA_COOP_DESCONTO_SPLIT.appPercent}%) após fechamento mensal quitado. Valores sempre apurados na nuvem.`}
       />
 
       <Card
@@ -390,7 +432,7 @@ export function AdminCobrancaPanel({ user }: AdminCobrancaPanelProps) {
               placeholder="149,00"
             />
           </FormField>
-          <div className="sm:col-span-2 lg:col-span-1">
+          <div className="lg:col-span-1">
             <Button
               type="button"
               className="w-full"
@@ -405,13 +447,15 @@ export function AdminCobrancaPanel({ user }: AdminCobrancaPanelProps) {
             <p className="mt-1">
               10 cooperados → <strong>{formatCurrency(exemplo10)}</strong>
             </p>
+            <p className="text-xs text-slate-500 mt-1">Ciclo conta desde o 1º cooperado</p>
           </div>
         </div>
       </Card>
 
       <div className="rounded-xl border border-emerald-200 bg-emerald-50/60 px-4 py-3 text-sm text-emerald-950">
-        <strong>Como cobrar:</strong> clique em <em>Registrar cobrança</em> no ciclo atual. Quando o responsável
-        informar pagamento, use <em>Confirmar pagamento</em>. Se necessário, envie aviso ou aplique bloqueio temporário.
+        <strong>Como cobrar:</strong> expanda a cooperativa para ver o detalhamento unificado (mensalidade + repasse
+        Conta Coop) calculado na nuvem. A cooperativa paga via PIX Asaas; a confirmação é automática. Use{" "}
+        <em>Registrar cobrança</em> para marcar o ciclo como enviado ou confirme manualmente se necessário.
       </div>
 
       {feedback?.type === "ok" && (
@@ -505,6 +549,8 @@ export function AdminCobrancaPanel({ user }: AdminCobrancaPanelProps) {
             {filtradas.map((row) => {
               const busy = busyId === row.cooperativaId;
               const expandido = expandidoId === row.cooperativaId;
+              const preview = previewByCoop[row.cooperativaId];
+              const cloudTotal = preview?.breakdown?.totalCents ?? 0;
               const proximaAcao =
                 row.aguardandoConfirmacao
                   ? "confirmar"
@@ -529,7 +575,15 @@ export function AdminCobrancaPanel({ user }: AdminCobrancaPanelProps) {
                       </div>
                       <p className="text-sm text-gray-500">CNPJ {row.cnpjFormatado}</p>
                       <p className="text-sm font-medium text-emerald-800 mt-2 tabular-nums">
-                        {row.qtdCooperados} cooperado{row.qtdCooperados === 1 ? "" : "s"} · {row.valorFormatado}
+                        {row.qtdCooperados} cooperado{row.qtdCooperados === 1 ? "" : "s"} · mensalidade{" "}
+                        {row.valorFormatado}
+                        {cloudTotal > 0 && (
+                          <>
+                            {" "}
+                            · total nuvem{" "}
+                            <strong className="text-emerald-900">{formatCentsBRL(cloudTotal)}</strong>
+                          </>
+                        )}
                       </p>
                       <p className="text-xs text-gray-500 mt-1">{row.mesVencimentoLabel}</p>
                       {row.aguardandoConfirmacao && row.informadoPagamentoPor && (
@@ -568,7 +622,31 @@ export function AdminCobrancaPanel({ user }: AdminCobrancaPanelProps) {
                   </div>
 
                   {expandido && (
-                    <div className="border-t border-gray-100 bg-gray-50/80 px-4 py-3 flex flex-wrap gap-2">
+                    <div className="border-t border-gray-100 bg-gray-50/80 px-4 py-4 space-y-4">
+                      <div>
+                        <h4 className="text-sm font-semibold text-gray-900 mb-2">
+                          Cobrança unificada · sincronizada com Conta Coop
+                        </h4>
+                        {preview?.loading && (
+                          <p className="text-sm text-gray-500">Calculando valores reais na nuvem…</p>
+                        )}
+                        {preview?.error && (
+                          <AlertBanner variant="error">{preview.error}</AlertBanner>
+                        )}
+                        {preview?.breakdown && (
+                          <HbChargeBreakdownDetail breakdown={preview.breakdown} compact />
+                        )}
+                        {!preview?.loading && !preview?.breakdown && !preview?.error && (
+                          <Button
+                            size="sm"
+                            variant="secondary"
+                            onClick={() => void loadCloudPreview(row.cooperativaId, row.cnpj)}
+                          >
+                            Atualizar valores da nuvem
+                          </Button>
+                        )}
+                      </div>
+                      <div className="flex flex-wrap gap-2 pt-2 border-t border-gray-200">
                       <Button size="sm" variant="secondary" disabled={busy} onClick={() => handleCobrar(row)}>
                         <Send size={15} /> Cobrar
                       </Button>
@@ -608,6 +686,7 @@ export function AdminCobrancaPanel({ user }: AdminCobrancaPanelProps) {
                           <Lock size={15} /> Bloqueio temp.
                         </Button>
                       )}
+                      </div>
                     </div>
                   )}
                 </li>
