@@ -11,18 +11,22 @@ import {
   Send,
   Users,
   ChevronDown,
+  Settings2,
 } from "lucide-react";
 import { Card, StatCard } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { AlertBanner } from "@/components/ui/AlertBanner";
-import { Input } from "@/components/ui/Form";
+import { Input, FormField } from "@/components/ui/Form";
 import { useAppData } from "@/hooks/useAppData";
 import { updateData, getData } from "@/services/dataStore";
 import { pushCobrancaSaasToCloud } from "@/services/cooperativaCloudService";
+import { secureApiFetch } from "@/lib/security/clientSession";
 import {
-  COBRANCA_SAAS_MINIMO_LABEL,
-  COBRANCA_SAAS_MINIMO_MES,
-  COBRANCA_SAAS_PRECO_LABEL,
+  applyCobrancaSaasPricingToData,
+  calcularValorCobrancaSaas,
+  getCobrancaSaasMinimoLabel,
+  getCobrancaSaasPrecoLabel,
+  getCobrancaSaasPricing,
   bloquearTemporarioCobrancaSaas,
   confirmarPagamentoCobrancaSaas,
   desbloquearCobrancaSaas,
@@ -70,6 +74,101 @@ export function AdminCobrancaPanel({ user }: AdminCobrancaPanelProps) {
   const [expandidoId, setExpandidoId] = useState<string | null>(null);
   const [feedback, setFeedback] = useState<{ type: "ok" | "erro"; text: string } | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
+  const [precoInput, setPrecoInput] = useState("");
+  const [minimoInput, setMinimoInput] = useState("");
+  const [salvandoPrecos, setSalvandoPrecos] = useState(false);
+  const [precosCarregados, setPrecosCarregados] = useState(false);
+
+  const pricing = useMemo(() => getCobrancaSaasPricing(data), [data]);
+  const precoLabel = useMemo(() => getCobrancaSaasPrecoLabel(data), [data]);
+  const minimoLabel = useMemo(() => getCobrancaSaasMinimoLabel(data), [data]);
+  const exemplo10 = useMemo(
+    () => calcularValorCobrancaSaas(10, pricing).valorTotal,
+    [pricing]
+  );
+
+  useEffect(() => {
+    if (!data || precosCarregados) return;
+    setPrecoInput(String(pricing.precoCooperado).replace(".", ","));
+    setMinimoInput(String(pricing.minimoMes).replace(".", ","));
+    setPrecosCarregados(true);
+  }, [data, precosCarregados, pricing.minimoMes, pricing.precoCooperado]);
+
+  useEffect(() => {
+    if (!data) return;
+    void secureApiFetch("/api/admin/cobranca-saas-pricing", { cache: "no-store" })
+      .then((r) => r.json())
+      .then(
+        (json: {
+          ok?: boolean;
+          pricing?: { precoCooperado?: number; minimoMes?: number };
+        }) => {
+          if (!json.ok || !json.pricing) return;
+          const cloud = getCobrancaSaasPricing({
+            config: {
+              descontoPadraoCooperativa: data.config.descontoPadraoCooperativa,
+              cobrancaSaasPrecoCooperado: json.pricing.precoCooperado,
+              cobrancaSaasMinimoMes: json.pricing.minimoMes,
+            },
+          });
+          const local = getCobrancaSaasPricing(data);
+          if (
+            cloud.precoCooperado === local.precoCooperado &&
+            cloud.minimoMes === local.minimoMes
+          ) {
+            return;
+          }
+          updateData((d) => applyCobrancaSaasPricingToData(d, cloud));
+          setPrecoInput(String(cloud.precoCooperado).replace(".", ","));
+          setMinimoInput(String(cloud.minimoMes).replace(".", ","));
+        }
+      )
+      .catch(() => undefined);
+  }, [data]);
+
+  const parseMoneyInput = (value: string): number | null => {
+    const normalized = value.trim().replace(/\./g, "").replace(",", ".");
+    const n = Number(normalized);
+    if (!Number.isFinite(n) || n < 0) return null;
+    return Math.round(n * 100) / 100;
+  };
+
+  const handleSalvarPrecos = async () => {
+    setFeedback(null);
+    const precoCooperado = parseMoneyInput(precoInput);
+    const minimoMes = parseMoneyInput(minimoInput);
+    if (precoCooperado == null || minimoMes == null) {
+      setFeedback({ type: "erro", text: "Informe valores válidos (≥ 0) para cooperado e mínimo mensal." });
+      return;
+    }
+
+    setSalvandoPrecos(true);
+    try {
+      updateData((d) => applyCobrancaSaasPricingToData(d, { precoCooperado, minimoMes }));
+
+      const res = await secureApiFetch("/api/admin/cobranca-saas-pricing", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ precoCooperado, minimoMes }),
+      });
+      const json = (await res.json()) as { ok?: boolean; error?: string; warning?: string };
+      if (!json.ok) {
+        setFeedback({
+          type: "erro",
+          text: json.error ?? "Valores salvos localmente, mas não foi possível gravar na nuvem.",
+        });
+        return;
+      }
+      setFeedback({
+        type: "ok",
+        text:
+          json.warning ??
+          `Valores atualizados: ${formatCurrency(precoCooperado)} por cooperado · mínimo ${formatCurrency(minimoMes)}.`,
+      });
+    } finally {
+      setSalvandoPrecos(false);
+    }
+  };
 
   useEffect(() => {
     if (!data?.cooperativas.length) return;
@@ -261,8 +360,54 @@ export function AdminCobrancaPanel({ user }: AdminCobrancaPanelProps) {
     <div className="space-y-6 pb-8">
       <AdminSectionHeader
         title="Cobrança HB"
-        description={`Mensalidade da plataforma: ${COBRANCA_SAAS_PRECO_LABEL} por cooperado cadastrado, mínimo ${COBRANCA_SAAS_MINIMO_LABEL} por cooperativa. Fluxo: registrar cobrança → aguardar pagamento → confirmar ou bloquear.`}
+        description={`Mensalidade da plataforma: ${precoLabel} por cooperado cadastrado, mínimo ${minimoLabel} por cooperativa. Fluxo: registrar cobrança → aguardar pagamento → confirmar ou bloquear.`}
       />
+
+      <Card
+        title="Valores da cobrança"
+        action={
+          <Settings2 size={18} className="text-emerald-700" aria-hidden />
+        }
+      >
+        <p className="text-sm text-gray-600 mb-4">
+          Defina quanto cada cooperativa paga por cooperado cadastrado no ciclo mensal. Os novos valores
+          passam a valer nas próximas cobranças registradas.
+        </p>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 items-end">
+          <FormField label="Valor por cooperado (R$)">
+            <Input
+              inputMode="decimal"
+              value={precoInput}
+              onChange={(e) => setPrecoInput(e.target.value)}
+              placeholder="9,90"
+            />
+          </FormField>
+          <FormField label="Mínimo mensal por cooperativa (R$)">
+            <Input
+              inputMode="decimal"
+              value={minimoInput}
+              onChange={(e) => setMinimoInput(e.target.value)}
+              placeholder="149,00"
+            />
+          </FormField>
+          <div className="sm:col-span-2 lg:col-span-1">
+            <Button
+              type="button"
+              className="w-full"
+              disabled={salvandoPrecos}
+              onClick={() => void handleSalvarPrecos()}
+            >
+              {salvandoPrecos ? "Salvando…" : "Salvar valores"}
+            </Button>
+          </div>
+          <div className="sm:col-span-2 lg:col-span-1 rounded-xl bg-slate-50 border border-slate-200 px-4 py-3 text-sm text-slate-700">
+            <p className="text-xs uppercase tracking-wide text-slate-500 font-semibold">Exemplo</p>
+            <p className="mt-1">
+              10 cooperados → <strong>{formatCurrency(exemplo10)}</strong>
+            </p>
+          </div>
+        </div>
+      </Card>
 
       <div className="rounded-xl border border-emerald-200 bg-emerald-50/60 px-4 py-3 text-sm text-emerald-950">
         <strong>Como cobrar:</strong> clique em <em>Registrar cobrança</em> no ciclo atual. Quando o responsável
@@ -292,7 +437,7 @@ export function AdminCobrancaPanel({ user }: AdminCobrancaPanelProps) {
         <StatCard
           title="Cooperados (cobrança)"
           value={String(totais.cooperados)}
-          subtitle={`${COBRANCA_SAAS_PRECO_LABEL} / cooperado`}
+          subtitle={`${precoLabel} / cooperado`}
           icon={<Users size={22} />}
         />
         <StatCard

@@ -865,6 +865,10 @@ export interface AppData {
   fechamentoSnapshots?: FechamentoSnapshot[];
   config: {
     descontoPadraoCooperativa: number;
+    /** Mensalidade HB cobrada por cooperado cadastrado (plataforma). */
+    cobrancaSaasPrecoCooperado?: number;
+    /** Piso mensal da cobrança HB por cooperativa. */
+    cobrancaSaasMinimoMes?: number;
   };
 }
 

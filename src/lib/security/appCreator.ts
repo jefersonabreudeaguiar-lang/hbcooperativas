@@ -56,3 +56,9 @@ function matchesCreatorEmail(email: string | undefined): boolean {
   if (!email?.trim()) return false;
   return getAppCreatorEmails().includes(normalizeCreatorEmail(email));
 }
+
+/** Sessão JWT/API do administrador global HB (criador da plataforma). */
+export function isPlatformAdminSession(session: { email?: string | null } | null | undefined): boolean {
+  if (!session?.email?.trim()) return false;
+  return matchesCreatorEmail(session.email);
+}

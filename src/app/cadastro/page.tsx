@@ -15,16 +15,31 @@ import { formatCnpj, normalizeCnpj } from "@/utils/cooperativa";
 import { PLATFORM_NAME } from "@/utils/constants";
 import { cn } from "@/utils/format";
 import {
-  COBRANCA_SAAS_MINIMO_LABEL,
-  COBRANCA_SAAS_PRECO_LABEL,
+  getCobrancaSaasPricing,
   textoTermosCobrancaSaas,
+  type CobrancaSaasPricing,
 } from "@/services/cobrancaSaasService";
+import { formatCurrency } from "@/utils/format";
 import { useHbCreditEnabled } from "@/hooks/useHbCreditEnabled";
 
 type AbaCadastro = "cooperado" | "responsavel" | "parceiro";
 
 export default function CadastroPage() {
   const [aba, setAba] = useState<AbaCadastro>("cooperado");
+  const [cobrancaPricing, setCobrancaPricing] = useState<CobrancaSaasPricing>(() => getCobrancaSaasPricing());
+
+  useEffect(() => {
+    void fetch("/api/public/cobranca-saas-pricing", { cache: "no-store" })
+      .then((r) => r.json())
+      .then((json: { pricing?: CobrancaSaasPricing }) => {
+        if (json.pricing) setCobrancaPricing(getCobrancaSaasPricing({ config: {
+          descontoPadraoCooperativa: 5,
+          cobrancaSaasPrecoCooperado: json.pricing.precoCooperado,
+          cobrancaSaasMinimoMes: json.pricing.minimoMes,
+        }}));
+      })
+      .catch(() => undefined);
+  }, []);
 
   // Cooperado
   const [nomeCompleto, setNomeCompleto] = useState("");
@@ -598,11 +613,12 @@ export default function CadastroPage() {
                           <p className="text-sm font-semibold text-emerald-950">Como funciona a cobrança da plataforma</p>
                           <p className="text-xs text-emerald-900/80 mt-1 leading-relaxed">
                             Antes do primeiro cadastro, leia com atenção. A mensalidade é calculada pelos cooperados
-                            cadastrados no CNPJ ({COBRANCA_SAAS_PRECO_LABEL}/cooperado, mínimo {COBRANCA_SAAS_MINIMO_LABEL}).
+                            cadastrados no CNPJ ({formatCurrency(cobrancaPricing.precoCooperado)}/cooperado, mínimo{" "}
+                            {formatCurrency(cobrancaPricing.minimoMes)}).
                           </p>
                         </div>
                         <ul className="space-y-2 text-xs text-emerald-950/90 leading-relaxed">
-                          {textoTermosCobrancaSaas().map((item) => (
+                          {textoTermosCobrancaSaas(cobrancaPricing).map((item) => (
                             <li key={item} className="flex gap-2">
                               <span className="mt-1.5 h-1.5 w-1.5 rounded-full bg-emerald-600 shrink-0" />
                               <span>{item}</span>

@@ -8,36 +8,93 @@ import { normalizeCnpj } from "@/utils/cooperativa";
 import { PLATFORM_NAME } from "@/utils/constants";
 import { formatCurrency } from "@/utils/format";
 
-/** Preço por cooperado cadastrado / mês (ciclo). */
-export const COBRANCA_SAAS_PRECO_COOPERADO = 9.9;
-/** Piso mensal por cooperativa. */
-export const COBRANCA_SAAS_MINIMO_MES = 149;
+/** Preço padrão por cooperado cadastrado / mês (ciclo). */
+export const COBRANCA_SAAS_PRECO_COOPERADO_DEFAULT = 9.9;
+/** Piso mensal padrão por cooperativa. */
+export const COBRANCA_SAAS_MINIMO_MES_DEFAULT = 149;
+
+/** @deprecated Use getCobrancaSaasPricing() — mantido para compatibilidade. */
+export const COBRANCA_SAAS_PRECO_COOPERADO = COBRANCA_SAAS_PRECO_COOPERADO_DEFAULT;
+/** @deprecated Use getCobrancaSaasPricing() — mantido para compatibilidade. */
+export const COBRANCA_SAAS_MINIMO_MES = COBRANCA_SAAS_MINIMO_MES_DEFAULT;
+/** @deprecated Use getCobrancaSaasPrecoLabel() — mantido para compatibilidade. */
 export const COBRANCA_SAAS_PRECO_LABEL = "R$ 9,90";
+/** @deprecated Use getCobrancaSaasMinimoLabel() — mantido para compatibilidade. */
 export const COBRANCA_SAAS_MINIMO_LABEL = "R$ 149,00";
 
-export function calcularValorCobrancaSaas(qtdCooperados: number): {
+export interface CobrancaSaasPricing {
+  precoCooperado: number;
+  minimoMes: number;
+}
+
+function normalizePrecoSaas(value: unknown, fallback: number): number {
+  const n = typeof value === "number" ? value : Number(value);
+  if (!Number.isFinite(n) || n < 0) return fallback;
+  return Math.round(n * 100) / 100;
+}
+
+export function getCobrancaSaasPricing(data?: Pick<AppData, "config"> | null): CobrancaSaasPricing {
+  return {
+    precoCooperado: normalizePrecoSaas(
+      data?.config?.cobrancaSaasPrecoCooperado,
+      COBRANCA_SAAS_PRECO_COOPERADO_DEFAULT
+    ),
+    minimoMes: normalizePrecoSaas(data?.config?.cobrancaSaasMinimoMes, COBRANCA_SAAS_MINIMO_MES_DEFAULT),
+  };
+}
+
+export function getCobrancaSaasPrecoLabel(data?: Pick<AppData, "config"> | null): string {
+  return formatCurrency(getCobrancaSaasPricing(data).precoCooperado);
+}
+
+export function getCobrancaSaasMinimoLabel(data?: Pick<AppData, "config"> | null): string {
+  return formatCurrency(getCobrancaSaasPricing(data).minimoMes);
+}
+
+export function applyCobrancaSaasPricingToData(
+  data: AppData,
+  pricing: CobrancaSaasPricing
+): AppData {
+  return {
+    ...data,
+    config: {
+      ...data.config,
+      cobrancaSaasPrecoCooperado: pricing.precoCooperado,
+      cobrancaSaasMinimoMes: pricing.minimoMes,
+    },
+  };
+}
+
+export function calcularValorCobrancaSaas(
+  qtdCooperados: number,
+  pricing?: CobrancaSaasPricing
+): {
   qtd: number;
   valorUnitario: number;
   valorMinimo: number;
   valorBruto: number;
   valorTotal: number;
 } {
+  const p = pricing ?? getCobrancaSaasPricing();
   const qtd = Math.max(0, Math.floor(qtdCooperados));
-  const valorBruto = Math.round(qtd * COBRANCA_SAAS_PRECO_COOPERADO * 100) / 100;
-  const valorTotal = qtd === 0 ? 0 : Math.max(COBRANCA_SAAS_MINIMO_MES, valorBruto);
+  const valorBruto = Math.round(qtd * p.precoCooperado * 100) / 100;
+  const valorTotal = qtd === 0 ? 0 : Math.max(p.minimoMes, valorBruto);
   return {
     qtd,
-    valorUnitario: COBRANCA_SAAS_PRECO_COOPERADO,
-    valorMinimo: COBRANCA_SAAS_MINIMO_MES,
+    valorUnitario: p.precoCooperado,
+    valorMinimo: p.minimoMes,
     valorBruto,
     valorTotal,
   };
 }
 
-export function textoTermosCobrancaSaas(): string[] {
+export function textoTermosCobrancaSaas(pricing?: CobrancaSaasPricing): string[] {
+  const p = pricing ?? getCobrancaSaasPricing();
+  const precoLabel = formatCurrency(p.precoCooperado);
+  const minimoLabel = formatCurrency(p.minimoMes);
   return [
     `A mensalidade do ${PLATFORM_NAME} é cobrada por cooperativa, conforme a quantidade de cooperados cadastrados.`,
-    `Valor: ${COBRANCA_SAAS_PRECO_LABEL} por cooperado cadastrado no mês, com mínimo de ${COBRANCA_SAAS_MINIMO_LABEL} por cooperativa.`,
+    `Valor: ${precoLabel} por cooperado cadastrado no mês, com mínimo de ${minimoLabel} por cooperativa.`,
     "Não importa o dia em que o cooperado foi incluído: conta quem estiver cadastrado no ciclo.",
     "O mês de uso começa a contar a partir do dia do cadastro do primeiro cooperado no CNPJ desta cooperativa.",
     "Exemplo: se o 1º cooperado entrar no dia 15, o ciclo vai do dia 15 ao dia 14 do mês seguinte.",
@@ -290,7 +347,7 @@ export function ensureCobrancaPeriodoAtualSaas(
 
   let historico = [...(cob.historico ?? [])];
   let lanc = lancamentoPeriodoAtual(cob, periodo.periodoId);
-  const calc = calcularValorCobrancaSaas(qtd);
+  const calc = calcularValorCobrancaSaas(qtd, getCobrancaSaasPricing(next));
   const now = new Date().toISOString();
 
   if (!lanc) {
@@ -400,7 +457,7 @@ export function getPainelCobrancaSaasResponsavel(
   const cob = coop.cobrancaSaas ?? defaultCobrancaSaas();
   const precisaContrato = precisaAssinarContratoServico(coop);
   const qtd = contarCooperadosCobranca(data, cooperativaId);
-  const calc = calcularValorCobrancaSaas(qtd);
+  const calc = calcularValorCobrancaSaas(qtd, getCobrancaSaasPricing(data));
   const periodo = cob.cicloInicioEm ? getPeriodoCobrancaSaas(cob.cicloInicioEm) : undefined;
   const lanc = periodo ? lancamentoPeriodoAtual(cob, periodo.periodoId) : undefined;
   const atraso = periodo ? diasAtraso(periodo.vencimento) : 0;
@@ -540,7 +597,7 @@ export function listarCobrancasSaasAdmin(data: AppData): CobrancaSaasAdminRow[] 
       const c = synced.cooperativas.find((x) => x.id === coop.id) ?? coop;
       const cob = c.cobrancaSaas ?? defaultCobrancaSaas();
       const qtd = contarCooperadosCobranca(data, c.id);
-      const calc = calcularValorCobrancaSaas(qtd);
+      const calc = calcularValorCobrancaSaas(qtd, getCobrancaSaasPricing(data));
       const periodo = cob.cicloInicioEm ? getPeriodoCobrancaSaas(cob.cicloInicioEm) : undefined;
       const lanc = periodo ? lancamentoPeriodoAtual(cob, periodo.periodoId) : undefined;
       return {
@@ -591,7 +648,7 @@ export function registrarCobrancaSaas(
   if (qtd <= 0) {
     return { data: next, ok: false, error: "Sem cooperados para cobrar neste ciclo." };
   }
-  const calc = calcularValorCobrancaSaas(qtd);
+  const calc = calcularValorCobrancaSaas(qtd, getCobrancaSaasPricing(next));
   const periodo = getPeriodoCobrancaSaas(cob.cicloInicioEm);
   const now = new Date().toISOString();
   const lancamento: CobrancaSaasLancamento = {
@@ -654,7 +711,7 @@ export function confirmarPagamentoCobrancaSaas(
   );
   if (!historico.some((h) => h.periodoId === periodo.periodoId)) {
     const qtd = contarCooperadosCobranca(next, cooperativaId);
-    const calc = calcularValorCobrancaSaas(qtd);
+    const calc = calcularValorCobrancaSaas(qtd, getCobrancaSaasPricing(next));
     historico.push({
       id: gerarId(),
       periodoId: periodo.periodoId,

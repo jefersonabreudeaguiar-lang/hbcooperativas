@@ -5,6 +5,7 @@ import { extractAccessToken, verifyAccessToken, type SessionClaims } from "@/lib
 import { requireCooperativaSaasWritable } from "@/lib/security/saasGuard";
 import { rateLimitApi } from "@/lib/security/rateLimit";
 import { canAccessPainelResponsavelSession } from "@/lib/security/responsavelPanelAccess";
+import { isPlatformAdminSession } from "@/lib/security/appCreator";
 
 export type AuthResult =
   | { ok: true; session: SessionClaims | null; enforced: boolean }
@@ -82,13 +83,13 @@ export function requireStaffRole(
   return null;
 }
 
-/** Apenas administrador global da plataforma HB. */
+/** Apenas administrador global da plataforma HB (criador). */
 export function requireAdminRole(
   session: SessionClaims | null,
   enforced: boolean
 ): NextResponse | null {
   if (!enforced || !session) return null;
-  if (session.role !== "admin") {
+  if (!isPlatformAdminSession(session)) {
     return NextResponse.json({ error: "Acesso restrito ao administrador da plataforma." }, { status: 403 });
   }
   return null;
