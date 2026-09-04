@@ -46,6 +46,14 @@ export interface HbUnifiedChargeBreakdown {
   saasSubtotalCents: number;
   repasseSubtotalCents: number;
   totalCents: number;
+  /** Mensagem contextual quando não há valor a pagar agora. */
+  statusMessage?: string;
+  /** Repasse Conta Coop já apurado, mas bloqueado até fechamento mensal aprovado. */
+  repasseAguardandoFechamento?: {
+    mesReferencia: string;
+    amountCents: number;
+    allocCount: number;
+  } | null;
   receiver: {
     cpf: string;
     nome: string;

@@ -200,11 +200,30 @@ export function HbUnifiedPaymentPanel({ cnpj, mesReferenciaContaCoop, compact, o
 
   if (!breakdown || (breakdown.totalCents <= 0 && !paid)) {
     if (compact) return null;
+    const infoTone =
+      breakdown?.repasseAguardandoFechamento ||
+      breakdown?.statusMessage?.includes("aguardando") ||
+      breakdown?.statusMessage?.includes("aguarda");
     return (
-      <Card className="mb-4 border-green-200 bg-green-50/40">
-        <p className="text-sm text-green-800 flex items-center gap-2">
-          <CheckCircle2 size={18} /> Nenhuma cobrança HB pendente — mensalidade e repasse Conta Coop em dia.
+      <Card
+        className={`mb-4 ${
+          infoTone ? "border-amber-200 bg-amber-50/40" : "border-green-200 bg-green-50/40"
+        }`}
+      >
+        <p
+          className={`text-sm flex items-center gap-2 ${
+            infoTone ? "text-amber-900" : "text-green-800"
+          }`}
+        >
+          <CheckCircle2 size={18} />
+          {breakdown?.statusMessage ??
+            "Nenhuma cobrança HB pendente — mensalidade e repasse Conta Coop em dia."}
         </p>
+        {breakdown && !infoTone && (
+          <div className="mt-3">
+            <HbChargeBreakdownDetail breakdown={breakdown} compact showHeader={false} />
+          </div>
+        )}
       </Card>
     );
   }

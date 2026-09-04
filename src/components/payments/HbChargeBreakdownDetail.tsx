@@ -123,7 +123,16 @@ export function HbChargeBreakdownDetail({ breakdown, compact, showHeader = true 
       )}
 
       {!breakdown.saasDue && !breakdown.repasseDue && (
-        <p className="text-sm text-green-800">Nenhuma cobrança pendente com base nos movimentos reais da nuvem.</p>
+        <p
+          className={`text-sm ${
+            breakdown.repasseAguardandoFechamento || breakdown.statusMessage?.includes("aguarda")
+              ? "text-amber-800"
+              : "text-green-800"
+          }`}
+        >
+          {breakdown.statusMessage ??
+            "Nenhuma cobrança pendente com base nos movimentos reais da nuvem."}
+        </p>
       )}
 
       {breakdown.totalCents > 0 && (

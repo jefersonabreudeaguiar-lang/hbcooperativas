@@ -1,5 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import type { CobrancaSaasCooperativa, LivroCaixaLancamento } from "@/types";
+import type { CobrancaSaasCooperativa, Cooperado, LivroCaixaLancamento } from "@/types";
 import type {
   HbChargeCooperadoLine,
   HbChargeLineItem,
@@ -37,6 +37,7 @@ import {
 import { fetchCobrancaSaasPlatformSettings } from "@/lib/supabase/platformSettingsStorage";
 import {
   calcularValorCobrancaSaas,
+  defaultCobrancaSaas,
   getPeriodoCobrancaSaas,
   type CobrancaSaasPricing,
 } from "@/services/cobrancaSaasService";
@@ -139,6 +140,120 @@ async function resolveRepasseFechamentoDue(
   return { mesReferencia: oldest, rows: byMes.get(oldest) ?? [] };
 }
 
+function deriveCicloInicioEm(
+  cob: CobrancaSaasCooperativa | null,
+  cooperados: Cooperado[]
+): string | undefined {
+  if (cob?.cicloInicioEm) return cob.cicloInicioEm;
+  const dates = cooperados
+    .map((c) => c.createdAt)
+    .filter((d): d is string => Boolean(d))
+    .sort();
+  return dates[0];
+}
+
+async function findRepasseAguardandoFechamento(
+  supabase: SupabaseClient,
+  cnpj: string,
+  cooperativeId: string
+): Promise<{ mesReferencia: string; amountCents: number; allocCount: number } | null> {
+  const { data: pendingRows } = await supabase
+    .from("hb_credit_discount_allocations")
+    .select("app_cents, mes_referencia")
+    .eq("cooperative_cnpj", cnpj)
+    .eq("app_pool_status", "LIQUIDATED")
+    .is("app_repasse_id", null)
+    .neq("cashback_status", "REVERSED")
+    .gt("app_cents", 0);
+
+  if (!pendingRows?.length) return null;
+
+  const { data: repassesFeitos } = await supabase
+    .from("hb_credit_app_repasse")
+    .select("mes_referencia")
+    .eq("cooperative_cnpj", cnpj);
+  const mesesPagos = new Set((repassesFeitos ?? []).map((r) => String(r.mes_referencia)));
+
+  const operacional = (await fetchOperacionalSync(supabase, cnpj)) as OperacionalSyncPayload | null;
+
+  const byMes = new Map<string, { count: number; cents: number }>();
+  for (const row of pendingRows) {
+    const mes = String(row.mes_referencia);
+    if (mesesPagos.has(mes)) continue;
+    if (isFechamentoQuitadoParaRepasse(operacional, cooperativeId, mes)) continue;
+    const cur = byMes.get(mes) ?? { count: 0, cents: 0 };
+    cur.count += 1;
+    cur.cents += Number(row.app_cents);
+    byMes.set(mes, cur);
+  }
+
+  const oldest = [...byMes.keys()].sort()[0];
+  if (!oldest) return null;
+  const agg = byMes.get(oldest)!;
+  return { mesReferencia: oldest, amountCents: agg.cents, allocCount: agg.count };
+}
+
+function lancamentoAguardandoConfirmacao(
+  cob: CobrancaSaasCooperativa | null,
+  cicloInicioEm?: string
+): boolean {
+  if (!cicloInicioEm && !cob?.cicloInicioEm) return false;
+  const ciclo = cicloInicioEm ?? cob!.cicloInicioEm!;
+  const periodo = getPeriodoCobrancaSaas(ciclo);
+  const lanc = (cob?.historico ?? []).find((h) => h.periodoId === periodo.periodoId);
+  return lanc?.status === "aguardando_confirmacao" || cob?.statusMes === "aguardando_confirmacao";
+}
+
+function resolveSaasDue(
+  saasValorTotal: number,
+  cob: CobrancaSaasCooperativa | null,
+  periodo: ReturnType<typeof getPeriodoCobrancaSaas>
+): boolean {
+  if (saasValorTotal <= 0) return false;
+
+  const lancAtual = (cob?.historico ?? []).find((h) => h.periodoId === periodo.periodoId);
+  if (lancAtual?.status === "aguardando_confirmacao" || cob?.statusMes === "aguardando_confirmacao") {
+    return false;
+  }
+
+  const cobrancaReaberta =
+    cob?.statusMes === "cobranca_enviada" ||
+    cob?.statusMes === "aviso_bloqueio" ||
+    cob?.statusMes === "bloqueado" ||
+    lancAtual?.status === "enviada" ||
+    lancAtual?.status === "rejeitada";
+
+  if (lancAtual?.status === "paga") {
+    return cobrancaReaberta;
+  }
+
+  if (cob?.ultimoPeriodoPago === periodo.periodoId) {
+    return cobrancaReaberta || !lancAtual;
+  }
+
+  return true;
+}
+
+async function ensureCloudCobrancaSaasCiclo(
+  supabase: SupabaseClient,
+  cnpj: string,
+  cob: CobrancaSaasCooperativa | null,
+  cicloInicioEm: string
+): Promise<CobrancaSaasCooperativa> {
+  if (cob?.cicloInicioEm) return cob;
+  const nextCob: CobrancaSaasCooperativa = {
+    ...defaultCobrancaSaas(),
+    ...cob,
+    cicloInicioEm,
+    statusMes: cob?.statusMes ?? "aguardando_primeiro_cooperado",
+  };
+  await supabase
+    .from("cooperativas")
+    .update({ cobranca_saas: nextCob, updated_at: new Date().toISOString() })
+    .eq("cnpj", cnpj);
+  return nextCob;
+}
+
 export async function buildUnifiedHbChargeBreakdown(
   supabase: SupabaseClient,
   cooperativeCnpj: string,
@@ -169,22 +284,25 @@ export async function buildUnifiedHbChargeBreakdown(
   const cooperadosAtivos = cooperadosRaw.filter((c) => c.status !== "desligado");
   const saasCalc = calcularValorCobrancaSaas(cooperadosAtivos.length, pricing);
 
-  const cob = (coopRow.cobranca_saas ?? null) as CobrancaSaasCooperativa | null;
+  const cobRaw = (coopRow.cobranca_saas ?? null) as CobrancaSaasCooperativa | null;
+  const cicloInicioEm = deriveCicloInicioEm(cobRaw, cooperadosAtivos);
+  const cob =
+    cicloInicioEm && !cobRaw?.cicloInicioEm
+      ? await ensureCloudCobrancaSaasCiclo(supabase, cnpj, cobRaw, cicloInicioEm)
+      : cobRaw ?? (cicloInicioEm ? defaultCobrancaSaas({ cicloInicioEm }) : null);
+
   let periodoSaas: HbUnifiedChargeBreakdown["periodoSaas"] = null;
   let saasDue = false;
 
-  if (cob?.cicloInicioEm) {
-    const periodo = getPeriodoCobrancaSaas(cob.cicloInicioEm);
+  if (cicloInicioEm) {
+    const periodo = getPeriodoCobrancaSaas(cicloInicioEm);
     periodoSaas = {
       periodoId: periodo.periodoId,
       label: periodo.label,
       vencimento: periodo.vencimento,
       mesReferencia: periodo.mesReferencia,
     };
-    const jaPago = cob.ultimoPeriodoPago === periodo.periodoId;
-    const lancAtual = (cob.historico ?? []).find((h) => h.periodoId === periodo.periodoId);
-    const aguardandoConfirmacao = lancAtual?.status === "aguardando_confirmacao";
-    saasDue = !jaPago && saasCalc.valorTotal > 0 && !aguardandoConfirmacao;
+    saasDue = resolveSaasDue(saasCalc.valorTotal, cob, periodo);
   }
 
   const unitCents = Math.round(pricing.precoCooperado * 100);
@@ -224,8 +342,30 @@ export async function buildUnifiedHbChargeBreakdown(
 
   const repasseSubtotalCents = repasseCompras.reduce((s, r) => s + r.appCents, 0);
   const repasseDue = Boolean(repasseFechamento) && repasseSubtotalCents > 0;
+  const repasseAguardandoFechamento = repasseDue
+    ? null
+    : await findRepasseAguardandoFechamento(supabase, cnpj, String(coopRow.id));
+
   const saasSubtotalCents = saasDue ? Math.round(saasCalc.valorTotal * 100) : 0;
   const totalCents = saasSubtotalCents + (repasseDue ? repasseSubtotalCents : 0);
+
+  let statusMessage: string | undefined;
+  if (totalCents <= 0) {
+    if (!cicloInicioEm) {
+      statusMessage =
+        "Ciclo de mensalidade ainda não iniciado na nuvem — cadastre o primeiro cooperado e sincronize.";
+    } else if (saasCalc.valorTotal <= 0) {
+      statusMessage = "Nenhum cooperado ativo para mensalidade HB neste ciclo.";
+    } else if (lancamentoAguardandoConfirmacao(cob, cicloInicioEm)) {
+      statusMessage = "Pagamento informado — aguardando confirmação do administrador HB.";
+    } else if (repasseAguardandoFechamento) {
+      statusMessage = `Mensalidade em dia. Taxa Conta Coop (${formatMesReferencia(repasseAguardandoFechamento.mesReferencia)}) aguarda aprovação do fechamento mensal na cooperativa.`;
+    } else if (cob?.statusMes === "em_dia") {
+      statusMessage = "Mensalidade HB e taxa Conta Coop em dia na nuvem.";
+    } else {
+      statusMessage = "Nenhuma cobrança pendente com base nos movimentos reais da nuvem.";
+    }
+  }
 
   const lineItems: HbChargeLineItem[] = [];
 
@@ -264,6 +404,14 @@ export async function buildUnifiedHbChargeBreakdown(
     saasSubtotalCents,
     repasseSubtotalCents: repasseDue ? repasseSubtotalCents : 0,
     totalCents,
+    statusMessage,
+    repasseAguardandoFechamento: repasseAguardandoFechamento
+      ? {
+          mesReferencia: repasseAguardandoFechamento.mesReferencia,
+          amountCents: repasseAguardandoFechamento.amountCents,
+          allocCount: repasseAguardandoFechamento.allocCount,
+        }
+      : null,
     receiver: {
       cpf: PROPRIETARIO_APP.pixChave,
       nome: PROPRIETARIO_APP.pixNome,

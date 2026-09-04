@@ -270,11 +270,10 @@ export function AdminCobrancaPanel({ user }: AdminCobrancaPanelProps) {
     };
   }, [rows]);
 
-  const syncSaasCloud = (cooperativaId: string) => {
+  const syncSaasCloud = async (cooperativaId: string): Promise<boolean> => {
     const coop = getData().cooperativas.find((c) => c.id === cooperativaId);
-    if (coop?.cobrancaSaas) {
-      void pushCobrancaSaasToCloud(coop.cnpj, coop.cobrancaSaas);
-    }
+    if (!coop?.cobrancaSaas) return true;
+    return pushCobrancaSaasToCloud(coop.cnpj, coop.cobrancaSaas);
   };
 
   const run = (cooperativaId: string, fn: () => void, okMsg: string) => {
@@ -291,7 +290,7 @@ export function AdminCobrancaPanel({ user }: AdminCobrancaPanelProps) {
     }
   };
 
-  const handleCobrar = (row: CobrancaSaasAdminRow) => {
+  const handleCobrar = async (row: CobrancaSaasAdminRow) => {
     setFeedback(null);
     setBusyId(row.cooperativaId);
     try {
@@ -300,15 +299,17 @@ export function AdminCobrancaPanel({ user }: AdminCobrancaPanelProps) {
         if (!r.ok) throw new Error(r.error ?? "Não foi possível registrar a cobrança.");
         return r.data;
       });
-      syncSaasCloud(row.cooperativaId);
+      const synced = await syncSaasCloud(row.cooperativaId);
       const preview = previewByCoop[row.cooperativaId]?.breakdown;
       const totalLabel =
         preview && preview.totalCents > 0
           ? formatCentsBRL(preview.totalCents)
           : row.valorFormatado;
       setFeedback({
-        type: "ok",
-        text: `Cobrança registrada para ${row.nome}: ${totalLabel} (${row.qtdCooperados} cooperado${row.qtdCooperados === 1 ? "" : "s"}${preview?.repasseDue ? ` + repasse Conta Coop ${CONTA_COOP_DESCONTO_SPLIT.appPercent}%` : ""}).`,
+        type: synced ? "ok" : "erro",
+        text: synced
+          ? `Cobrança registrada para ${row.nome}: ${totalLabel} (${row.qtdCooperados} cooperado${row.qtdCooperados === 1 ? "" : "s"}${preview?.repasseDue ? ` + repasse Conta Coop ${CONTA_COOP_DESCONTO_SPLIT.appPercent}%` : ""}).`
+          : `Cobrança registrada localmente, mas falhou ao publicar na nuvem. O responsável não verá o PIX até sincronizar.`,
       });
     } catch (e) {
       setFeedback({ type: "erro", text: e instanceof Error ? e.message : "Falha ao aplicar ação." });
