@@ -10,6 +10,7 @@ import {
   Search,
   Send,
   Users,
+  ChevronDown,
 } from "lucide-react";
 import { Card, StatCard } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
@@ -35,9 +36,11 @@ import {
 } from "@/services/cobrancaSaasService";
 import { formatCurrency } from "@/utils/format";
 import { cn } from "@/utils/format";
+import { AdminSectionHeader } from "@/components/admin/AdminSectionHeader";
 import type { User } from "@/types";
 
 type AdminUser = Pick<User, "id" | "name">;
+type FiltroCobranca = "todos" | "pendencias" | "bloqueadas" | "em_dia";
 
 interface AdminCobrancaPanelProps {
   user: AdminUser;
@@ -63,6 +66,8 @@ function statusTone(status: CobrancaSaasAdminRow["statusMes"]): string {
 export function AdminCobrancaPanel({ user }: AdminCobrancaPanelProps) {
   const data = useAppData();
   const [busca, setBusca] = useState("");
+  const [filtro, setFiltro] = useState<FiltroCobranca>("todos");
+  const [expandidoId, setExpandidoId] = useState<string | null>(null);
   const [feedback, setFeedback] = useState<{ type: "ok" | "erro"; text: string } | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
 
@@ -86,14 +91,25 @@ export function AdminCobrancaPanel({ user }: AdminCobrancaPanelProps) {
 
   const filtradas = useMemo(() => {
     const q = busca.trim().toLowerCase();
-    if (!q) return rows;
-    return rows.filter(
-      (r) =>
+    return rows.filter((r) => {
+      const matchBusca =
+        !q ||
         r.nome.toLowerCase().includes(q) ||
         r.cnpj.includes(q.replace(/\D/g, "")) ||
-        r.cnpjFormatado.toLowerCase().includes(q)
-    );
-  }, [rows, busca]);
+        r.cnpjFormatado.toLowerCase().includes(q);
+
+      const matchFiltro =
+        filtro === "todos" ||
+        (filtro === "pendencias" &&
+          (r.aguardandoConfirmacao ||
+            r.statusMes === "cobranca_enviada" ||
+            r.statusMes === "aviso_bloqueio")) ||
+        (filtro === "bloqueadas" && r.statusMes === "bloqueado") ||
+        (filtro === "em_dia" && r.statusMes === "em_dia");
+
+      return matchBusca && matchFiltro;
+    });
+  }, [rows, busca, filtro]);
 
   const totais = useMemo(() => {
     const comCiclo = rows.filter((r) => r.cicloInicioEm);
@@ -242,16 +258,15 @@ export function AdminCobrancaPanel({ user }: AdminCobrancaPanelProps) {
   }
 
   return (
-    <div className="space-y-6">
-      <div className="rounded-2xl border border-emerald-200 bg-gradient-to-br from-emerald-50 via-white to-slate-50 p-5 sm:p-6">
-        <h2 className="text-lg font-bold text-gray-900 flex items-center gap-2">
-          <Banknote className="text-emerald-700" size={22} /> Cobrança HB · por cooperado
-        </h2>
-        <p className="mt-2 text-sm text-gray-600 max-w-3xl leading-relaxed">
-          Cada cooperativa paga <strong>{COBRANCA_SAAS_PRECO_LABEL}</strong> por cooperado cadastrado no ciclo,
-          com mínimo de <strong>{COBRANCA_SAAS_MINIMO_LABEL}</strong>. O ciclo mensal começa no dia do cadastro do
-          primeiro cooperado no CNPJ — não importa o dia em que os demais entraram.
-        </p>
+    <div className="space-y-6 pb-8">
+      <AdminSectionHeader
+        title="Cobrança HB"
+        description={`Mensalidade da plataforma: ${COBRANCA_SAAS_PRECO_LABEL} por cooperado cadastrado, mínimo ${COBRANCA_SAAS_MINIMO_LABEL} por cooperativa. Fluxo: registrar cobrança → aguardar pagamento → confirmar ou bloquear.`}
+      />
+
+      <div className="rounded-xl border border-emerald-200 bg-emerald-50/60 px-4 py-3 text-sm text-emerald-950">
+        <strong>Como cobrar:</strong> clique em <em>Registrar cobrança</em> no ciclo atual. Quando o responsável
+        informar pagamento, use <em>Confirmar pagamento</em>. Se necessário, envie aviso ou aplique bloqueio temporário.
       </div>
 
       {feedback?.type === "ok" && (
@@ -296,109 +311,160 @@ export function AdminCobrancaPanel({ user }: AdminCobrancaPanelProps) {
       </div>
 
       <Card
-        title="Cooperativas e vencimentos"
+        title="Cooperativas"
         action={
-          <div className="relative w-full sm:w-64">
-            <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
-            <Input
-              value={busca}
-              onChange={(e) => setBusca(e.target.value)}
-              placeholder="Buscar por nome ou CNPJ"
-              className="pl-9"
-            />
+          <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
+            <div className="relative w-full sm:w-56">
+              <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+              <Input
+                value={busca}
+                onChange={(e) => setBusca(e.target.value)}
+                placeholder="Buscar nome ou CNPJ"
+                className="pl-9"
+              />
+            </div>
           </div>
         }
       >
+        <div className="flex flex-wrap gap-2 mb-4">
+          {(
+            [
+              ["todos", "Todas"],
+              ["pendencias", "Pendências"],
+              ["bloqueadas", "Bloqueadas"],
+              ["em_dia", "Em dia"],
+            ] as const
+          ).map(([id, label]) => (
+            <button
+              key={id}
+              type="button"
+              onClick={() => setFiltro(id)}
+              className={cn(
+                "rounded-full px-3 py-1.5 text-xs font-medium border transition-colors",
+                filtro === id
+                  ? "bg-emerald-700 border-emerald-700 text-white"
+                  : "bg-white border-gray-200 text-gray-700 hover:bg-gray-50"
+              )}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+
         {filtradas.length === 0 ? (
           <p className="text-sm text-gray-500 py-8 text-center">
-            Nenhuma cooperativa neste aparelho. Cadastre ou sincronize cooperativas para cobrar.
+            Nenhuma cooperativa encontrada com os filtros atuais.
           </p>
         ) : (
-          <ul className="divide-y divide-gray-100 -mx-1">
+          <ul className="space-y-3">
             {filtradas.map((row) => {
               const busy = busyId === row.cooperativaId;
+              const expandido = expandidoId === row.cooperativaId;
+              const proximaAcao =
+                row.aguardandoConfirmacao
+                  ? "confirmar"
+                  : row.statusMes === "bloqueado"
+                    ? "desbloquear"
+                    : row.cicloInicioEm && row.qtdCooperados > 0
+                      ? "cobrar"
+                      : "aguardar";
+
               return (
                 <li
                   key={row.cooperativaId}
-                  className="py-4 px-1 flex flex-col xl:flex-row xl:items-center gap-4"
+                  className="rounded-xl border border-gray-200 bg-white overflow-hidden"
                 >
-                  <div className="min-w-0 flex-1">
-                    <div className="flex flex-wrap items-center gap-2 mb-1">
-                      <h3 className="font-semibold text-gray-900 truncate">{row.nome}</h3>
-                      <span className={cn("text-xs px-2 py-0.5 rounded-full font-medium", statusTone(row.statusMes))}>
-                        {row.statusLabel}
-                      </span>
-                    </div>
-                    <p className="text-sm text-gray-500">CNPJ {row.cnpjFormatado}</p>
-                    {!row.contratoAssinado && (
-                      <p className="text-xs text-amber-700 mt-1">Contrato de serviço ainda não assinado</p>
-                    )}
-                    {row.aguardandoConfirmacao && row.informadoPagamentoPor && (
-                      <p className="text-xs text-indigo-700 mt-1">
-                        Pagamento informado por {row.informadoPagamentoPor}
-                        {row.informadoPagamentoEm
-                          ? ` em ${new Date(row.informadoPagamentoEm).toLocaleString("pt-BR")}`
-                          : ""}
+                  <div className="p-4 flex flex-col lg:flex-row lg:items-center gap-4">
+                    <div className="min-w-0 flex-1">
+                      <div className="flex flex-wrap items-center gap-2 mb-1">
+                        <h3 className="font-semibold text-gray-900">{row.nome}</h3>
+                        <span className={cn("text-xs px-2 py-0.5 rounded-full font-medium", statusTone(row.statusMes))}>
+                          {row.statusLabel}
+                        </span>
+                      </div>
+                      <p className="text-sm text-gray-500">CNPJ {row.cnpjFormatado}</p>
+                      <p className="text-sm font-medium text-emerald-800 mt-2 tabular-nums">
+                        {row.qtdCooperados} cooperado{row.qtdCooperados === 1 ? "" : "s"} · {row.valorFormatado}
                       </p>
-                    )}
-                    <p className="text-sm text-gray-700 mt-1">{row.mesVencimentoLabel}</p>
-                    <p className="text-sm font-medium text-emerald-800 mt-1 tabular-nums">
-                      {row.qtdCooperados} cooperado{row.qtdCooperados === 1 ? "" : "s"} · {row.valorFormatado}
-                      {row.qtdCooperados > 0 && row.valorTotal === COBRANCA_SAAS_MINIMO_MES ? " (mínimo)" : ""}
-                    </p>
-                  </div>
+                      <p className="text-xs text-gray-500 mt-1">{row.mesVencimentoLabel}</p>
+                      {row.aguardandoConfirmacao && row.informadoPagamentoPor && (
+                        <p className="text-xs text-indigo-700 mt-2">
+                          Pagamento informado por {row.informadoPagamentoPor}
+                        </p>
+                      )}
+                    </div>
 
-                  <div className="flex flex-wrap gap-2 shrink-0 xl:justify-end">
-                    <Button
-                      size="sm"
-                      disabled={busy || !row.cicloInicioEm || row.qtdCooperados <= 0}
-                      onClick={() => handleCobrar(row)}
-                      title="Registrar cobrança do ciclo atual"
-                    >
-                      <Send size={15} /> Cobrar
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="secondary"
-                      disabled={busy || row.statusMes === "aguardando_primeiro_cooperado"}
-                      onClick={() => handleConfirmarPagamento(row)}
-                    >
-                      <CheckCircle2 size={15} /> Confirmado
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="secondary"
-                      disabled={busy || !row.aguardandoConfirmacao}
-                      onClick={() => handleRejeitarPagamento(row)}
-                      className="border-red-200 text-red-800 hover:bg-red-50"
-                    >
-                      Não confirmado
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="secondary"
-                      disabled={busy || row.statusMes === "bloqueado"}
-                      onClick={() => handleAviso(row)}
-                      className="border-amber-200 text-amber-900 hover:bg-amber-50"
-                    >
-                      <BellRing size={15} /> Aviso bloqueio
-                    </Button>
-                    {row.statusMes === "bloqueado" ? (
-                      <Button size="sm" variant="secondary" disabled={busy} onClick={() => handleDesbloquear(row)}>
-                        <LockOpen size={15} /> Desbloquear
-                      </Button>
-                    ) : (
+                    <div className="flex flex-wrap gap-2 shrink-0">
+                      {proximaAcao === "cobrar" && (
+                        <Button size="sm" disabled={busy} onClick={() => handleCobrar(row)}>
+                          <Send size={15} /> Registrar cobrança
+                        </Button>
+                      )}
+                      {proximaAcao === "confirmar" && (
+                        <Button size="sm" disabled={busy} onClick={() => handleConfirmarPagamento(row)}>
+                          <CheckCircle2 size={15} /> Confirmar pagamento
+                        </Button>
+                      )}
+                      {proximaAcao === "desbloquear" && (
+                        <Button size="sm" variant="secondary" disabled={busy} onClick={() => handleDesbloquear(row)}>
+                          <LockOpen size={15} /> Desbloquear
+                        </Button>
+                      )}
                       <Button
                         size="sm"
                         variant="secondary"
                         disabled={busy}
-                        onClick={() => handleBloquear(row)}
+                        onClick={() => setExpandidoId(expandido ? null : row.cooperativaId)}
+                      >
+                        <ChevronDown size={15} className={cn("transition-transform", expandido && "rotate-180")} />
+                        Mais ações
+                      </Button>
+                    </div>
+                  </div>
+
+                  {expandido && (
+                    <div className="border-t border-gray-100 bg-gray-50/80 px-4 py-3 flex flex-wrap gap-2">
+                      <Button size="sm" variant="secondary" disabled={busy} onClick={() => handleCobrar(row)}>
+                        <Send size={15} /> Cobrar
+                      </Button>
+                      <Button size="sm" variant="secondary" disabled={busy} onClick={() => handleConfirmarPagamento(row)}>
+                        <CheckCircle2 size={15} /> Confirmado
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="secondary"
+                        disabled={busy || !row.aguardandoConfirmacao}
+                        onClick={() => handleRejeitarPagamento(row)}
                         className="border-red-200 text-red-800 hover:bg-red-50"
                       >
-                        <Lock size={15} /> Bloqueio temp.
+                        Não confirmado
                       </Button>
-                    )}
-                  </div>
+                      <Button
+                        size="sm"
+                        variant="secondary"
+                        disabled={busy || row.statusMes === "bloqueado"}
+                        onClick={() => handleAviso(row)}
+                        className="border-amber-200 text-amber-900 hover:bg-amber-50"
+                      >
+                        <BellRing size={15} /> Aviso bloqueio
+                      </Button>
+                      {row.statusMes === "bloqueado" ? (
+                        <Button size="sm" variant="secondary" disabled={busy} onClick={() => handleDesbloquear(row)}>
+                          <LockOpen size={15} /> Desbloquear
+                        </Button>
+                      ) : (
+                        <Button
+                          size="sm"
+                          variant="secondary"
+                          disabled={busy}
+                          onClick={() => handleBloquear(row)}
+                          className="border-red-200 text-red-800 hover:bg-red-50"
+                        >
+                          <Lock size={15} /> Bloqueio temp.
+                        </Button>
+                      )}
+                    </div>
+                  )}
                 </li>
               );
             })}
