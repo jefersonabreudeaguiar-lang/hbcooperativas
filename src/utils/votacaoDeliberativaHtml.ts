@@ -165,16 +165,17 @@ const ATA_STYLES = `
   .col-voto { width: 10%; text-align: center; }
   .col-data { width: 16%; white-space: nowrap; }
   .col-cpf { width: 14%; white-space: nowrap; }
-  .col-sig { width: 11%; text-align: center; padding: 4px 5px; vertical-align: middle; }
+  .col-sig { width: 10%; text-align: center; padding: 3px 4px; vertical-align: middle; }
   .voto-sim { font-weight: 700; color: #14532d; }
   .voto-nao { font-weight: 700; color: #991b1b; }
   .voto-abst { font-weight: 700; color: #475569; }
   .sig-mini {
-    max-height: 17px;
-    max-width: 58px;
-    width: auto;
-    height: auto;
+    width: 44px !important;
+    height: 13px !important;
+    max-width: 44px !important;
+    max-height: 13px !important;
     object-fit: contain;
+    object-position: center;
     display: block;
     margin: 0 auto;
   }
