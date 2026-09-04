@@ -3,6 +3,7 @@ import type { CobrancaSaasCooperativa, Cooperado, LivroCaixaLancamento } from "@
 import type {
   HbChargeCooperadoLine,
   HbChargeLineItem,
+  HbChargeRepasseCooperadoLine,
   HbChargeRepasseLine,
   HbUnifiedChargeBreakdown,
 } from "@/services/hbAsaasChargeTypes";
@@ -68,12 +69,36 @@ type RepasseAllocRow = {
   id: string;
   transaction_id: string;
   partner_id: string;
+  cooperado_id: string;
   gross_cents: number;
   discount_cents: number;
   app_cents: number;
   created_at: string;
   mes_referencia: string;
 };
+
+function buildRepasseCooperadoLines(
+  rows: RepasseAllocRow[],
+  cooperados: Cooperado[]
+): HbChargeRepasseCooperadoLine[] {
+  const nameById = new Map(cooperados.map((c) => [c.id, c.nomeCompleto]));
+  const agg = new Map<string, { appCents: number; comprasCount: number }>();
+  for (const row of rows) {
+    const id = String(row.cooperado_id);
+    const cur = agg.get(id) ?? { appCents: 0, comprasCount: 0 };
+    cur.appCents += Number(row.app_cents);
+    cur.comprasCount += 1;
+    agg.set(id, cur);
+  }
+  return [...agg.entries()]
+    .map(([id, v]) => ({
+      id,
+      nome: nameById.get(id) ?? id,
+      appCents: v.appCents,
+      comprasCount: v.comprasCount,
+    }))
+    .sort((a, b) => b.appCents - a.appCents);
+}
 
 function isFechamentoQuitadoParaRepasse(
   operacional: OperacionalSyncPayload | null,
@@ -94,7 +119,7 @@ async function resolveRepasseFechamentoDue(
   const { data: pendingRows } = await supabase
     .from("hb_credit_discount_allocations")
     .select(
-      "id, transaction_id, partner_id, gross_cents, discount_cents, app_cents, created_at, mes_referencia"
+      "id, transaction_id, partner_id, cooperado_id, gross_cents, discount_cents, app_cents, created_at, mes_referencia"
     )
     .eq("cooperative_cnpj", cnpj)
     .eq("app_pool_status", "LIQUIDATED")
@@ -340,7 +365,8 @@ export async function buildUnifiedHbChargeBreakdown(
     for (const p of partners ?? []) partnerNames[String(p.id)] = String(p.name);
   }
 
-  const repasseCompras: HbChargeRepasseLine[] = (repasseFechamento?.rows ?? []).map((row) => ({
+  const repasseRows = repasseFechamento?.rows ?? [];
+  const repasseCompras: HbChargeRepasseLine[] = repasseRows.map((row) => ({
     allocationId: String(row.id),
     transactionId: String(row.transaction_id),
     partnerNome: partnerNames[String(row.partner_id)] ?? "Mercado",
@@ -349,6 +375,7 @@ export async function buildUnifiedHbChargeBreakdown(
     appCents: Number(row.app_cents),
     createdAt: String(row.created_at),
   }));
+  const repasseCooperados = buildRepasseCooperadoLines(repasseRows, cooperadosRaw);
 
   const repasseSubtotalCents = repasseCompras.reduce((s, r) => s + r.appCents, 0);
   const repasseDue = Boolean(repasseFechamento) && repasseSubtotalCents > 0;
@@ -391,8 +418,8 @@ export async function buildUnifiedHbChargeBreakdown(
   if (repasseDue) {
     lineItems.push({
       kind: "conta_coop_repasse",
-      label: `Conta Coop · taxa HB (${CONTA_COOP_DESCONTO_SPLIT.appPercent}% do desconto)`,
-      detail: `Fechamento ${formatMesReferencia(mesReferencia)} · ${repasseCompras.length} compra(s) após saldos dos cooperados quitados — movimento real na nuvem`,
+      label: `Conta Coop · taxa HB (${CONTA_COOP_DESCONTO_SPLIT.appPercent}%) · por cooperado`,
+      detail: `Fechamento ${formatMesReferencia(mesReferencia)} · ${repasseCooperados.length} cooperado(s) · ${repasseCompras.length} compra(s) — mesmo PIX Asaas da mensalidade HB`,
       amountCents: repasseSubtotalCents,
     });
   }
@@ -409,6 +436,7 @@ export async function buildUnifiedHbChargeBreakdown(
     repasseDue,
     pricing,
     cooperados: cooperadoLines,
+    repasseCooperados,
     repasseCompras,
     lineItems,
     saasSubtotalCents,

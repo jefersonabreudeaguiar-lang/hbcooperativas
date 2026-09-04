@@ -223,6 +223,30 @@ export function mergeMensalidadeConfig(
   };
 }
 
+/** Mescla cobrança SaaS priorizando confirmação na nuvem (ex.: pagamento Asaas). */
+function mergeCobrancaSaas(
+  local: CobrancaSaasCooperativa | undefined,
+  cloud: CobrancaSaasCooperativa | undefined,
+  localUpdatedAt?: string,
+  cloudUpdatedAt?: string
+): CobrancaSaasCooperativa | undefined {
+  if (!local) return cloud;
+  if (!cloud) return local;
+
+  const cloudTs = cloudUpdatedAt ? new Date(cloudUpdatedAt).getTime() : 0;
+  const localTs = localUpdatedAt ? new Date(localUpdatedAt).getTime() : 0;
+
+  const cloudPaid = cloud.statusMes === "em_dia" && Boolean(cloud.ultimoPeriodoPago);
+  const localStillBilling =
+    local.statusMes === "cobranca_enviada" ||
+    local.statusMes === "aviso_bloqueio" ||
+    local.statusMes === "bloqueado";
+
+  if (cloudPaid && localStillBilling) return cloud;
+  if (cloudTs > localTs) return cloud;
+  return local;
+}
+
 /** Sincroniza cooperativa da nuvem para o armazenamento local. */
 export function mergeCooperativaIntoData(
   cooperativas: Cooperativa[],
@@ -253,8 +277,12 @@ export function mergeCooperativaIntoData(
       ...cloudCoop,
       id: cur.id,
       mensalidadeConfig,
-      /** Cobrança HB fica só no aparelho / local — nuvem ainda não versiona esse campo. */
-      cobrancaSaas: cur.cobrancaSaas ?? cloudCoop.cobrancaSaas,
+      cobrancaSaas: mergeCobrancaSaas(
+        cur.cobrancaSaas,
+        cloudCoop.cobrancaSaas,
+        cur.updatedAt,
+        cloudCoop.updatedAt
+      ),
       senhaCadastroCooperado: cur.senhaCadastroCooperado ?? cloudCoop.senhaCadastroCooperado,
       senhaCadastroCooperadoHash:
         cloudCoop.senhaCadastroCooperadoHash ?? cur.senhaCadastroCooperadoHash,

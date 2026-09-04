@@ -817,6 +817,18 @@ export function getCobrancaSaasAvisosResponsavel(
   const painel = getPainelCobrancaSaasResponsavel(data, cooperativaId);
   if (!painel || painel.precisaContrato) return null;
 
+  const coop = data.cooperativas.find((c) => c.id === cooperativaId);
+  const cob = coop?.cobrancaSaas;
+  const periodo = cob?.cicloInicioEm ? getPeriodoCobrancaSaas(cob.cicloInicioEm) : undefined;
+
+  if (
+    (periodo && cob?.ultimoPeriodoPago === periodo.periodoId) ||
+    painel.lancamentoStatus === "paga" ||
+    (painel.statusMes === "em_dia" && !painel.emAtraso)
+  ) {
+    return null;
+  }
+
   if (painel.statusMes === "bloqueado") {
     return {
       tom: "error",

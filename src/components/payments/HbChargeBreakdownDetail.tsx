@@ -20,10 +20,12 @@ function formatCents(cents: number): string {
 
 export function HbChargeBreakdownDetail({ breakdown, compact, showHeader = true }: Props) {
   const [showCooperados, setShowCooperados] = useState(!compact);
-  const [showCompras, setShowCompras] = useState(!compact);
+  const [showRepasseCooperados, setShowRepasseCooperados] = useState(!compact);
+  const [showCompras, setShowCompras] = useState(false);
 
   const repasseLabel =
     breakdown.repasseFechamentoLabel ?? formatMesReferencia(breakdown.mesReferenciaContaCoop);
+  const repasseCooperados = breakdown.repasseCooperados ?? [];
 
   return (
     <div className="space-y-4">
@@ -84,10 +86,10 @@ export function HbChargeBreakdownDetail({ breakdown, compact, showHeader = true 
           <div className="flex items-start justify-between gap-3 mb-3">
             <div>
               <p className="text-xs font-semibold uppercase tracking-wide text-blue-950 flex items-center gap-1">
-                <Percent size={14} /> Conta Coop · {CONTA_COOP_DESCONTO_SPLIT.appPercent}% HB
+                <Percent size={14} /> Conta Coop · {CONTA_COOP_DESCONTO_SPLIT.appPercent}% HB · por cooperado
               </p>
               <p className="text-sm text-gray-700 mt-1">
-                Fechamento {repasseLabel} · após saldos dos cooperados quitados
+                Fechamento {repasseLabel} · mesmo PIX Asaas da mensalidade HB
               </p>
             </div>
             <p className="text-xl font-bold text-blue-950 tabular-nums shrink-0">
@@ -98,26 +100,54 @@ export function HbChargeBreakdownDetail({ breakdown, compact, showHeader = true 
           <button
             type="button"
             className="w-full flex items-center justify-between rounded-lg border border-blue-200 bg-white px-3 py-2.5 text-sm font-medium text-blue-950 hover:bg-blue-50/50"
-            onClick={() => setShowCompras((v) => !v)}
+            onClick={() => setShowRepasseCooperados((v) => !v)}
           >
-            <span>{breakdown.repasseCompras.length} compra(s) no fechamento</span>
-            {showCompras ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+            <span>{repasseCooperados.length} cooperado(s) com compras no fechamento</span>
+            {showRepasseCooperados ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
           </button>
-          {showCompras && (
+          {showRepasseCooperados && (
             <ul className="mt-2 divide-y divide-blue-100 rounded-lg border border-blue-100 bg-white max-h-44 overflow-y-auto text-sm">
-              {breakdown.repasseCompras.map((row) => (
-                <li key={row.allocationId} className="px-3 py-2">
-                  <div className="flex justify-between gap-2 font-medium text-gray-900">
-                    <span className="truncate">{row.partnerNome}</span>
-                    <span className="text-blue-900 tabular-nums shrink-0">{formatCents(row.appCents)}</span>
-                  </div>
-                  <p className="text-xs text-gray-500 mt-0.5">
-                    Compra {formatCents(row.grossCents)} · desconto {formatCents(row.discountCents)} ·{" "}
-                    {new Date(row.createdAt).toLocaleDateString("pt-BR")}
-                  </p>
+              {repasseCooperados.map((c) => (
+                <li key={c.id} className="px-3 py-2 flex justify-between gap-2">
+                  <span className="truncate">
+                    {c.nome}
+                    <span className="text-xs text-gray-500 ml-1">
+                      ({c.comprasCount} compra{c.comprasCount === 1 ? "" : "s"})
+                    </span>
+                  </span>
+                  <span className="text-blue-900 tabular-nums shrink-0">{formatCents(c.appCents)}</span>
                 </li>
               ))}
             </ul>
+          )}
+
+          {breakdown.repasseCompras.length > 0 && (
+            <>
+              <button
+                type="button"
+                className="mt-2 w-full flex items-center justify-between rounded-lg border border-blue-100 bg-white/80 px-3 py-2 text-xs font-medium text-blue-900 hover:bg-blue-50/50"
+                onClick={() => setShowCompras((v) => !v)}
+              >
+                <span>Detalhar por mercado ({breakdown.repasseCompras.length})</span>
+                {showCompras ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+              </button>
+              {showCompras && (
+                <ul className="mt-2 divide-y divide-blue-100 rounded-lg border border-blue-100 bg-white max-h-44 overflow-y-auto text-sm">
+                  {breakdown.repasseCompras.map((row) => (
+                    <li key={row.allocationId} className="px-3 py-2">
+                      <div className="flex justify-between gap-2 font-medium text-gray-900">
+                        <span className="truncate">{row.partnerNome}</span>
+                        <span className="text-blue-900 tabular-nums shrink-0">{formatCents(row.appCents)}</span>
+                      </div>
+                      <p className="text-xs text-gray-500 mt-0.5">
+                        Compra {formatCents(row.grossCents)} · desconto {formatCents(row.discountCents)} ·{" "}
+                        {new Date(row.createdAt).toLocaleDateString("pt-BR")}
+                      </p>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </>
           )}
         </Card>
       )}

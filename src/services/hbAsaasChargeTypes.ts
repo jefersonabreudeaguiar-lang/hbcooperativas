@@ -17,6 +17,14 @@ export interface HbChargeRepasseLine {
   createdAt: string;
 }
 
+/** Taxa HB (30%) agregada por cooperado — mesmo formato da mensalidade SaaS. */
+export interface HbChargeRepasseCooperadoLine {
+  id: string;
+  nome: string;
+  appCents: number;
+  comprasCount: number;
+}
+
 export interface HbChargeLineItem {
   kind: "saas_mensalidade" | "conta_coop_repasse";
   label: string;
@@ -41,6 +49,7 @@ export interface HbUnifiedChargeBreakdown {
   repasseDue: boolean;
   pricing: CobrancaSaasPricing;
   cooperados: HbChargeCooperadoLine[];
+  repasseCooperados: HbChargeRepasseCooperadoLine[];
   repasseCompras: HbChargeRepasseLine[];
   lineItems: HbChargeLineItem[];
   saasSubtotalCents: number;

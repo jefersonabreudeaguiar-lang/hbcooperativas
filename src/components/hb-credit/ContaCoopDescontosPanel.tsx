@@ -109,7 +109,7 @@ export function ContaCoopDescontosPanel({ cnpj, cooperadoNome }: Props) {
                 <p className="text-xs font-medium text-blue-800">{CONTA_COOP_DESCONTO_SPLIT.appPercent}% aplicativo</p>
                 <p className="mt-1 text-xl font-bold text-blue-900">{formatCentsBRL(resumo.totalAppCents)}</p>
                 <p className="mt-1 text-xs text-blue-700">
-                  Repassado: {formatCentsBRL(resumo.appRepassePagoCents)} · A pagar (QR):{" "}
+                  Repassado: {formatCentsBRL(resumo.appRepassePagoCents)} · A pagar (painel HB):{" "}
                   {formatCentsBRL(resumo.appRepassePendenteCents)} · Aguard. mercado:{" "}
                   {formatCentsBRL(resumo.appPendenteCents)}
                 </p>
@@ -124,10 +124,11 @@ export function ContaCoopDescontosPanel({ cnpj, cooperadoNome }: Props) {
               </div>
             </div>
             <p className="text-xs text-gray-500">
-              A parte dos mercados fica elegível após liquidação na aba Liquidar. O repasse dos{" "}
-              {CONTA_COOP_DESCONTO_SPLIT.appPercent}% à HB é feito via QR PIX abaixo, com lançamento automático no livro
-              caixa. A mensalidade fixa de R$ {MENSALIDADE_COOPERADO_VALOR_PADRAO.toFixed(2).replace(".", ",")} por
-              cooperado complementa a taxa do app (descontada na ficha).
+              A parte dos mercados fica elegível após liquidação na aba Liquidar. A taxa HB de{" "}
+              {CONTA_COOP_DESCONTO_SPLIT.appPercent}% é cobrada no <strong>painel HB no topo do app</strong>, no mesmo
+              PIX Asaas da mensalidade por cooperado — some automaticamente após o pagamento. A mensalidade fixa de R${" "}
+              {MENSALIDADE_COOPERADO_VALOR_PADRAO.toFixed(2).replace(".", ",")} por cooperado na ficha complementa o
+              uso do aplicativo.
             </p>
           </Card>
 

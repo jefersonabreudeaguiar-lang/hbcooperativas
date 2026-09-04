@@ -1,15 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import {
-  Banknote,
-  CheckCircle2,
-  Copy,
-  Loader2,
-  QrCode,
-  RefreshCw,
-  ShieldCheck,
-} from "lucide-react";
+import { Banknote, Copy, Loader2, QrCode, RefreshCw, ShieldCheck } from "lucide-react";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { AlertBanner } from "@/components/ui/AlertBanner";
@@ -31,6 +23,7 @@ import {
 import type { HbUnifiedChargeBreakdown } from "@/services/hbAsaasChargeTypes";
 import { HbChargeBreakdownDetail } from "@/components/payments/HbChargeBreakdownDetail";
 import type { CobrancaSaasCooperativa } from "@/types";
+import { CONTA_COOP_DESCONTO_SPLIT } from "@/config/contaCoopEconomia";
 
 type Props = {
   cnpj: string;
@@ -53,7 +46,6 @@ export function HbUnifiedPaymentPanel({ cnpj, mesReferenciaContaCoop, compact, o
   const [pixPayload, setPixPayload] = useState<string | null>(null);
   const [pixImage, setPixImage] = useState<string | null>(null);
   const [chargeId, setChargeId] = useState<string | null>(null);
-  const [paid, setPaid] = useState(false);
   const [copied, setCopied] = useState(false);
 
   const coopId = useMemo(
@@ -63,32 +55,42 @@ export function HbUnifiedPaymentPanel({ cnpj, mesReferenciaContaCoop, compact, o
 
   const mesRef = mesReferenciaContaCoop ?? breakdown?.mesReferenciaContaCoop;
 
-  const reloadPreview = useCallback(async () => {
-    if (!cnpj) return;
-    setLoading(true);
-    setError("");
-    try {
-      const result = await fetchHbChargePreview(cnpj, mesRef, { autoPix: true });
-      setBreakdown(result.breakdown ?? null);
-      if (result.pix?.payload) {
-        setPixPayload(result.pix.payload);
-        setPixImage(result.pix.encodedImage);
-        setChargeId(result.chargeId ?? null);
+  const reloadPreview = useCallback(
+    async (options?: { autoPix?: boolean }) => {
+      if (!cnpj) return;
+      setLoading(true);
+      setError("");
+      try {
+        let result = await fetchHbChargePreview(cnpj, mesRef, { autoPix: false });
+        const wantAutoPix = options?.autoPix !== false && (result.breakdown?.totalCents ?? 0) > 0;
+        if (wantAutoPix) {
+          result = await fetchHbChargePreview(cnpj, mesRef, { autoPix: true });
+        }
+        setBreakdown(result.breakdown ?? null);
+        if (result.pix?.payload && (result.breakdown?.totalCents ?? 0) > 0) {
+          setPixPayload(result.pix.payload);
+          setPixImage(result.pix.encodedImage);
+          setChargeId(result.chargeId ?? null);
+        } else {
+          setPixPayload(null);
+          setPixImage(null);
+          setChargeId(null);
+        }
+        if (result.autoPixError) {
+          setError(result.autoPixError);
+        }
+      } catch (e) {
+        setBreakdown(null);
+        setPixPayload(null);
+        setPixImage(null);
+        setChargeId(null);
+        setError(e instanceof Error ? e.message : "Erro ao calcular cobrança.");
+      } finally {
+        setLoading(false);
       }
-      if (result.autoPixError) {
-        setError(result.autoPixError);
-      }
-    } catch (e) {
-      setBreakdown(null);
-      setError(e instanceof Error ? e.message : "Erro ao calcular cobrança.");
-    } finally {
-      setLoading(false);
-    }
-  }, [cnpj, mesRef]);
-
-  useEffect(() => {
-    void reloadPreview();
-  }, [reloadPreview]);
+    },
+    [cnpj, mesRef]
+  );
 
   const syncLocalFromCloud = useCallback(async (activeChargeId?: string | null) => {
     if (!cnpj || !coopId) return;
@@ -149,23 +151,32 @@ export function HbUnifiedPaymentPanel({ cnpj, mesReferenciaContaCoop, compact, o
   }, [cnpj, coopId, user?.name]);
 
   useEffect(() => {
-    if (!chargeId || paid) return;
+    void (async () => {
+      await syncLocalFromCloud();
+      await reloadPreview({ autoPix: true });
+    })();
+  }, [syncLocalFromCloud, reloadPreview]);
+
+  useEffect(() => {
+    if (!chargeId) return;
     const timer = setInterval(() => {
-      void reloadPreview().then(async () => {
+      void (async () => {
         const qs = new URLSearchParams({ cnpj, chargeId });
         const res = await secureApiFetch(`/api/payments/hb-charge/cloud-state?${qs.toString()}`, {
           cache: "no-store",
         });
         const json = (await res.json()) as { charge?: { status?: string } };
         if (json.charge?.status === "confirmed") {
-          setPaid(true);
           await syncLocalFromCloud(chargeId);
+          await reloadPreview({ autoPix: false });
           onPaid?.();
+        } else {
+          await reloadPreview({ autoPix: false });
         }
-      });
+      })();
     }, 8000);
     return () => clearInterval(timer);
-  }, [chargeId, paid, cnpj, reloadPreview, syncLocalFromCloud, onPaid]);
+  }, [chargeId, cnpj, reloadPreview, syncLocalFromCloud, onPaid]);
 
   const gerarPixAsaas = async () => {
     setBusy(true);
@@ -194,51 +205,18 @@ export function HbUnifiedPaymentPanel({ cnpj, mesReferenciaContaCoop, compact, o
   };
 
   if (loading && !breakdown) {
+    if (compact) return null;
     return (
       <Card className="mb-4">
         <p className="text-sm text-gray-500 flex items-center gap-2 py-4">
-          <Loader2 size={16} className="animate-spin" /> Calculando cobrança e gerando PIX automaticamente…
+          <Loader2 size={16} className="animate-spin" /> Verificando cobrança…
         </p>
       </Card>
     );
   }
 
-  if (!breakdown || (breakdown.totalCents <= 0 && !paid)) {
-    if (compact) return null;
-    const infoTone =
-      breakdown?.repasseAguardandoFechamento ||
-      breakdown?.statusMessage?.includes("aguardando") ||
-      breakdown?.statusMessage?.includes("aguarda");
-    return (
-      <Card
-        className={`mb-4 ${
-          infoTone ? "border-amber-200 bg-amber-50/40" : "border-green-200 bg-green-50/40"
-        }`}
-      >
-        <p
-          className={`text-sm flex items-center gap-2 ${
-            infoTone ? "text-amber-900" : "text-green-800"
-          }`}
-        >
-          <CheckCircle2 size={18} />
-          {breakdown?.statusMessage ??
-            "Nenhuma cobrança HB pendente — mensalidade e repasse Conta Coop em dia."}
-        </p>
-        {breakdown && !infoTone && (
-          <div className="mt-3">
-            <HbChargeBreakdownDetail breakdown={breakdown} compact showHeader={false} />
-          </div>
-        )}
-      </Card>
-    );
-  }
-
-  if (paid) {
-    return (
-      <AlertBanner variant="success" title="Pagamento confirmado automaticamente">
-        A mensalidade e/ou repasse Conta Coop foram creditados via Asaas. O app será liberado em instantes.
-      </AlertBanner>
-    );
+  if (!breakdown || breakdown.totalCents <= 0) {
+    return null;
   }
 
   return (
@@ -262,7 +240,12 @@ export function HbUnifiedPaymentPanel({ cnpj, mesReferenciaContaCoop, compact, o
             </p>
           )}
         </div>
-        <Button variant="secondary" size="sm" onClick={() => void reloadPreview()} disabled={loading}>
+        <Button
+          variant="secondary"
+          size="sm"
+          onClick={() => void reloadPreview({ autoPix: true })}
+          disabled={loading}
+        >
           <RefreshCw size={14} /> Atualizar valores
         </Button>
       </div>
@@ -277,8 +260,9 @@ export function HbUnifiedPaymentPanel({ cnpj, mesReferenciaContaCoop, compact, o
 
       <div className="rounded-lg border border-emerald-200 bg-emerald-50/50 p-3 text-xs text-emerald-950 mb-4 mt-4">
         <Banknote size={14} className="inline mr-1" />
-        Pagamento via <strong>Asaas</strong> para o CPF {breakdown.receiver.cpf} ({breakdown.receiver.nome}). Após o PIX,
-        a confirmação é <strong>automática</strong> — mensalidade liberada e repasse Conta Coop registrado na nuvem.
+        Pagamento via <strong>Asaas</strong> para o CPF {breakdown.receiver.cpf} ({breakdown.receiver.nome}). Mensalidade
+        por cooperado e taxa Conta Coop ({CONTA_COOP_DESCONTO_SPLIT.appPercent}% do desconto) no{" "}
+        <strong>mesmo PIX</strong> — confirmação automática; aviso some após pagamento.
       </div>
 
       {!pixPayload ? (
