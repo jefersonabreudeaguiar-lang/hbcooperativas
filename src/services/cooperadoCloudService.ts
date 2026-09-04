@@ -319,7 +319,8 @@ export function mergeCloudCooperadosIntoData(
       const installMudou =
         merged.appInstaladoEm !== local.appInstaladoEm ||
         merged.ultimoAcessoEm !== local.ultimoAcessoEm ||
-        merged.ultimoAcessoModo !== local.ultimoAcessoModo;
+        merged.ultimoAcessoModo !== local.ultimoAcessoModo ||
+        merged.aberturasAppTotal !== local.aberturasAppTotal;
 
       if (
         cloudMaisRecente ||

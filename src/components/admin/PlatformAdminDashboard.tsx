@@ -20,6 +20,7 @@ import {
   Server,
   UserCheck,
   Package,
+  Smartphone,
 } from "lucide-react";
 import { Card, StatCard } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
@@ -36,6 +37,11 @@ import {
   type CooperativaPlatformRow,
 } from "@/services/platformAdminService";
 import { secureApiFetch } from "@/lib/security/clientSession";
+import {
+  buildLevantamentoFromAppData,
+  mergeLevantamentoComDadosLocais,
+  type LevantamentoAberturasApp,
+} from "@/services/cooperadoAppUsageService";
 import type { User } from "@/types";
 
 type AdminUser = Pick<User, "id" | "name">;
@@ -48,6 +54,8 @@ export function PlatformAdminDashboard({ user }: PlatformAdminDashboardProps) {
   const data = useAppData();
   const [cloud, setCloud] = useState<CloudPlatformOverview | null>(null);
   const [cloudLoading, setCloudLoading] = useState(true);
+  const [appUsage, setAppUsage] = useState<LevantamentoAberturasApp | null>(null);
+  const [appUsageLoading, setAppUsageLoading] = useState(true);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [showSenhaPanel, setShowSenhaPanel] = useState(false);
   const [senhaAtual, setSenhaAtual] = useState("");
@@ -74,6 +82,31 @@ export function PlatformAdminDashboard({ user }: PlatformAdminDashboardProps) {
       cancelled = true;
     };
   }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    setAppUsageLoading(true);
+    secureApiFetch("/api/admin/app-usage", { cache: "no-store" })
+      .then((r) => r.json())
+      .then((json: { levantamento?: LevantamentoAberturasApp }) => {
+        if (!cancelled) setAppUsage(json.levantamento ?? null);
+      })
+      .catch(() => {
+        if (!cancelled) setAppUsage(null);
+      })
+      .finally(() => {
+        if (!cancelled) setAppUsageLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const levantamentoAberturas = useMemo(() => {
+    if (!data) return null;
+    const base = appUsage ?? buildLevantamentoFromAppData(data);
+    return mergeLevantamentoComDadosLocais(base, data);
+  }, [appUsage, data]);
 
   const snapshot = useMemo(
     () => (data ? buildPlatformAdminSnapshot(data, cloud) : null),
@@ -355,6 +388,125 @@ export function PlatformAdminDashboard({ user }: PlatformAdminDashboardProps) {
             </p>
           </div>
         </Card>
+      </section>
+
+      <section>
+        <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3 flex items-center gap-2">
+          <Smartphone size={16} /> Uso do app pelos cooperados
+        </h2>
+        {appUsageLoading && !levantamentoAberturas ? (
+          <Card>
+            <p className="text-sm text-gray-500 py-6 text-center">Carregando levantamento de aberturas…</p>
+          </Card>
+        ) : !levantamentoAberturas || levantamentoAberturas.totalCooperados === 0 ? (
+          <Card>
+            <p className="text-sm text-gray-500 py-6 text-center">
+              Nenhum cooperado elegível encontrado para medir aberturas do app.
+            </p>
+          </Card>
+        ) : (
+          <div className="space-y-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
+              <StatCard
+                title="Média por cooperado"
+                value={String(levantamentoAberturas.mediaAberturasPorCooperado).replace(".", ",")}
+                subtitle="aberturas registradas"
+                icon={<Smartphone size={24} />}
+                variant="gold"
+              />
+              <StatCard
+                title="Média por cooperativa"
+                value={String(levantamentoAberturas.mediaAberturasPorCooperativa).replace(".", ",")}
+                subtitle={`${levantamentoAberturas.cooperativas.length} cooperativa(s)`}
+                icon={<Building2 size={24} />}
+              />
+              <StatCard
+                title="Cooperados com uso"
+                value={String(levantamentoAberturas.cooperadosComAbertura)}
+                subtitle={`de ${levantamentoAberturas.totalCooperados} ativo(s)`}
+                icon={<Users size={24} />}
+                variant="success"
+              />
+              <StatCard
+                title="Total de aberturas"
+                value={String(levantamentoAberturas.totalAberturas)}
+                subtitle="soma na plataforma"
+                icon={<Activity size={24} />}
+              />
+            </div>
+
+            <AlertBanner variant="info" title="Como a contagem funciona">
+              Cada cooperado logado registra no máximo uma abertura a cada 6 horas (app instalado ou
+              navegador). Cooperados que ainda não abriram após esta atualização aparecem com zero.
+            </AlertBanner>
+
+            <Card title="Média por cooperativa">
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead className="bg-gray-50 text-left text-xs text-gray-500 uppercase">
+                    <tr>
+                      <th className="px-3 py-2">Cooperativa</th>
+                      <th className="px-3 py-2 text-right">Cooperados</th>
+                      <th className="px-3 py-2 text-right">Com abertura</th>
+                      <th className="px-3 py-2 text-right">Total</th>
+                      <th className="px-3 py-2 text-right">Média</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100">
+                    {levantamentoAberturas.cooperativas.map((coop) => (
+                      <tr key={coop.cooperativaCnpj}>
+                        <td className="px-3 py-2 font-medium text-gray-900">{coop.cooperativaNome}</td>
+                        <td className="px-3 py-2 text-right tabular-nums">{coop.totalCooperados}</td>
+                        <td className="px-3 py-2 text-right tabular-nums">{coop.cooperadosComAbertura}</td>
+                        <td className="px-3 py-2 text-right tabular-nums">{coop.totalAberturas}</td>
+                        <td className="px-3 py-2 text-right tabular-nums font-semibold">
+                          {String(coop.mediaAberturas).replace(".", ",")}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </Card>
+
+            {levantamentoAberturas.topCooperados.length > 0 && (
+              <Card title="Cooperados com mais aberturas">
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead className="bg-gray-50 text-left text-xs text-gray-500 uppercase">
+                      <tr>
+                        <th className="px-3 py-2">Cooperado</th>
+                        <th className="px-3 py-2">Cooperativa</th>
+                        <th className="px-3 py-2 text-right">Aberturas</th>
+                        <th className="px-3 py-2">Último acesso</th>
+                        <th className="px-3 py-2">Modo</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-100">
+                      {levantamentoAberturas.topCooperados.map((row) => (
+                        <tr key={`${row.cooperativaCnpj}-${row.cooperadoId}`}>
+                          <td className="px-3 py-2 font-medium text-gray-900">{row.nome}</td>
+                          <td className="px-3 py-2 text-gray-600">{row.cooperativaNome}</td>
+                          <td className="px-3 py-2 text-right tabular-nums font-semibold">{row.aberturas}</td>
+                          <td className="px-3 py-2 text-gray-600">
+                            {row.ultimoAcessoEm ? formatDateTime(row.ultimoAcessoEm) : "—"}
+                          </td>
+                          <td className="px-3 py-2 text-gray-600">
+                            {row.ultimoAcessoModo === "app"
+                              ? "App"
+                              : row.ultimoAcessoModo === "navegador"
+                                ? "Navegador"
+                                : "—"}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </Card>
+            )}
+          </div>
+        )}
       </section>
 
       <section>

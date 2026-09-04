@@ -190,6 +190,8 @@ export interface Cooperado {
   ultimoAcessoEm?: string;
   /** Como foi o último acesso detectado. */
   ultimoAcessoModo?: "app" | "navegador";
+  /** Total de aberturas registradas (app ou navegador; no máx. 1 a cada 6 h). */
+  aberturasAppTotal?: number;
   produtos: string[];
   observacoes: string;
   createdAt: string;

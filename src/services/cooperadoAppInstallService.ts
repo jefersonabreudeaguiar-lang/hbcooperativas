@@ -13,7 +13,7 @@ export function isAppStandalone(): boolean {
 /** Mescla campos de instalação/acesso — nunca perde “já instalou” nem o acesso mais recente. */
 export function mergeAppInstallFields(local: Cooperado, cloud: Cooperado): Pick<
   Cooperado,
-  "appInstaladoEm" | "ultimoAcessoEm" | "ultimoAcessoModo"
+  "appInstaladoEm" | "ultimoAcessoEm" | "ultimoAcessoModo" | "aberturasAppTotal"
 > {
   const appInstaladoEm = earlierIso(local.appInstaladoEm, cloud.appInstaladoEm);
   const ultimoAcessoEm = laterIso(local.ultimoAcessoEm, cloud.ultimoAcessoEm);
@@ -24,7 +24,8 @@ export function mergeAppInstallFields(local: Cooperado, cloud: Cooperado): Pick<
       new Date(local.ultimoAcessoEm).getTime() >= new Date(cloud.ultimoAcessoEm ?? 0).getTime();
     ultimoAcessoModo = localIsLater ? local.ultimoAcessoModo ?? cloud.ultimoAcessoModo : cloud.ultimoAcessoModo ?? local.ultimoAcessoModo;
   }
-  return { appInstaladoEm, ultimoAcessoEm, ultimoAcessoModo };
+  const aberturasAppTotal = Math.max(local.aberturasAppTotal ?? 0, cloud.aberturasAppTotal ?? 0);
+  return { appInstaladoEm, ultimoAcessoEm, ultimoAcessoModo, aberturasAppTotal: aberturasAppTotal || undefined };
 }
 
 function earlierIso(a?: string, b?: string): string | undefined {
@@ -120,6 +121,7 @@ export function registrarAcessoCooperadoApp(opts: {
       ultimoAcessoEm: now,
       ultimoAcessoModo: modo,
       appInstaladoEm: atual.appInstaladoEm ?? (modo === "app" ? now : undefined),
+      aberturasAppTotal: (atual.aberturasAppTotal ?? 0) + 1,
       updatedAt: now,
     };
     saved = atualizado;
