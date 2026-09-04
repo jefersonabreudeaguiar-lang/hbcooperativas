@@ -46,6 +46,7 @@ import {
 import { normalizeCnpj } from "@/utils/cooperativa";
 import { generateId } from "@/utils/generateId";
 import { formatMesReferencia, getCurrentMesReferencia } from "@/utils/format";
+import { isCicloEntregasQuitadoParaRepasse, mesCicloEntregasPagamentosCompletos } from "@/services/repasseCicloEntregasGateService";
 
 export type { HbUnifiedChargeBreakdown } from "@/services/hbAsaasChargeTypes";
 
@@ -100,20 +101,20 @@ function buildRepasseCooperadoLines(
     .sort((a, b) => b.appCents - a.appCents);
 }
 
-function isFechamentoQuitadoParaRepasse(
+function isMesQuitadoParaRepasse(
   operacional: OperacionalSyncPayload | null,
   cooperativeId: string,
-  mesReferencia: string
+  mesReferencia: string,
+  cooperadosAtivos: Cooperado[]
 ): boolean {
-  return (operacional?.fechamentoSnapshots ?? []).some(
-    (s) => s.cooperativaId === cooperativeId && s.mesReferencia === mesReferencia
-  );
+  return isCicloEntregasQuitadoParaRepasse(operacional, cooperativeId, mesReferencia, cooperadosAtivos);
 }
 
 async function resolveRepasseFechamentoDue(
   supabase: SupabaseClient,
   cnpj: string,
   cooperativeId: string,
+  cooperadosAtivos: Cooperado[],
   mesHint?: string
 ): Promise<{ mesReferencia: string; rows: RepasseAllocRow[] } | null> {
   const { data: pendingRows } = await supabase
@@ -147,7 +148,7 @@ async function resolveRepasseFechamentoDue(
 
   const candidatos = [...byMes.keys()]
     .filter((mes) => !mesesPagos.has(mes))
-    .filter((mes) => isFechamentoQuitadoParaRepasse(operacional, cooperativeId, mes))
+    .filter((mes) => isMesQuitadoParaRepasse(operacional, cooperativeId, mes, cooperadosAtivos))
     .sort();
 
   if (mesHint) {
@@ -155,7 +156,7 @@ async function resolveRepasseFechamentoDue(
     if (
       rows?.length &&
       !mesesPagos.has(mesHint) &&
-      isFechamentoQuitadoParaRepasse(operacional, cooperativeId, mesHint)
+      isMesQuitadoParaRepasse(operacional, cooperativeId, mesHint, cooperadosAtivos)
     ) {
       return { mesReferencia: mesHint, rows };
     }
@@ -178,11 +179,12 @@ function deriveCicloInicioEm(
   return dates[0];
 }
 
-async function findRepasseAguardandoFechamento(
+async function findRepasseAguardandoPagamentosCooperados(
   supabase: SupabaseClient,
   cnpj: string,
-  cooperativeId: string
-): Promise<{ mesReferencia: string; amountCents: number; allocCount: number } | null> {
+  cooperativeId: string,
+  cooperadosAtivos: Cooperado[]
+): Promise<{ mesReferencia: string; amountCents: number; allocCount: number; cooperadosPendentes: number } | null> {
   const { data: pendingRows } = await supabase
     .from("hb_credit_discount_allocations")
     .select("app_cents, mes_referencia")
@@ -202,21 +204,37 @@ async function findRepasseAguardandoFechamento(
 
   const operacional = (await fetchOperacionalSync(supabase, cnpj)) as OperacionalSyncPayload | null;
 
-  const byMes = new Map<string, { count: number; cents: number }>();
+  const byMes = new Map<string, { count: number; cents: number; cooperadosPendentes: number }>();
   for (const row of pendingRows) {
     const mes = String(row.mes_referencia);
     if (mesesPagos.has(mes)) continue;
-    if (isFechamentoQuitadoParaRepasse(operacional, cooperativeId, mes)) continue;
-    const cur = byMes.get(mes) ?? { count: 0, cents: 0 };
+    if (isMesQuitadoParaRepasse(operacional, cooperativeId, mes, cooperadosAtivos)) continue;
+    const cur = byMes.get(mes) ?? { count: 0, cents: 0, cooperadosPendentes: 0 };
     cur.count += 1;
     cur.cents += Number(row.app_cents);
     byMes.set(mes, cur);
   }
 
+  for (const mes of byMes.keys()) {
+    const { pendentes } = mesCicloEntregasPagamentosCompletos(
+      operacional,
+      cooperativeId,
+      mes,
+      cooperadosAtivos
+    );
+    const cur = byMes.get(mes)!;
+    cur.cooperadosPendentes = pendentes.length;
+  }
+
   const oldest = [...byMes.keys()].sort()[0];
   if (!oldest) return null;
   const agg = byMes.get(oldest)!;
-  return { mesReferencia: oldest, amountCents: agg.cents, allocCount: agg.count };
+  return {
+    mesReferencia: oldest,
+    amountCents: agg.cents,
+    allocCount: agg.count,
+    cooperadosPendentes: agg.cooperadosPendentes,
+  };
 }
 
 function lancamentoAguardandoConfirmacao(
@@ -352,6 +370,7 @@ export async function buildUnifiedHbChargeBreakdown(
     supabase,
     cnpj,
     String(coopRow.id),
+    cooperadosAtivos,
     mesReferenciaHint || undefined
   );
   const mesReferencia = repasseFechamento?.mesReferencia ?? mesReferenciaHint ?? getCurrentMesReferencia();
@@ -379,9 +398,15 @@ export async function buildUnifiedHbChargeBreakdown(
 
   const repasseSubtotalCents = repasseCompras.reduce((s, r) => s + r.appCents, 0);
   const repasseDue = Boolean(repasseFechamento) && repasseSubtotalCents > 0;
-  const repasseAguardandoFechamento = repasseDue
+  const repasseAguardandoPagamentosCooperados = repasseDue
     ? null
-    : await findRepasseAguardandoFechamento(supabase, cnpj, String(coopRow.id));
+    : await findRepasseAguardandoPagamentosCooperados(
+        supabase,
+        cnpj,
+        String(coopRow.id),
+        cooperadosAtivos
+      );
+  const repasseAguardandoFechamento = repasseAguardandoPagamentosCooperados;
 
   const saasSubtotalCents = saasDue ? Math.round(saasCalc.valorTotal * 100) : 0;
   const totalCents = saasSubtotalCents + (repasseDue ? repasseSubtotalCents : 0);
@@ -395,8 +420,8 @@ export async function buildUnifiedHbChargeBreakdown(
       statusMessage = "Nenhum cooperado ativo para mensalidade HB neste ciclo.";
     } else if (lancamentoAguardandoConfirmacao(cob, cicloInicioEm)) {
       statusMessage = "Pagamento informado — aguardando confirmação do administrador HB.";
-    } else if (repasseAguardandoFechamento) {
-      statusMessage = `Mensalidade em dia. Taxa Conta Coop (${formatMesReferencia(repasseAguardandoFechamento.mesReferencia)}) aguarda aprovação do fechamento mensal na cooperativa.`;
+    } else if (repasseAguardandoPagamentosCooperados) {
+      statusMessage = `Mensalidade em dia. Taxa Conta Coop (${formatMesReferencia(repasseAguardandoPagamentosCooperados.mesReferencia)}) aguarda pagamento dos cooperados no ciclo de entregas (${repasseAguardandoPagamentosCooperados.cooperadosPendentes} pendente${repasseAguardandoPagamentosCooperados.cooperadosPendentes === 1 ? "" : "s"}).`;
     } else if (cob?.statusMes === "em_dia") {
       statusMessage = "Mensalidade HB e taxa Conta Coop em dia na nuvem.";
     } else {
@@ -443,11 +468,12 @@ export async function buildUnifiedHbChargeBreakdown(
     repasseSubtotalCents: repasseDue ? repasseSubtotalCents : 0,
     totalCents,
     statusMessage,
-    repasseAguardandoFechamento: repasseAguardandoFechamento
+    repasseAguardandoPagamentosCooperados,
+    repasseAguardandoFechamento: repasseAguardandoPagamentosCooperados
       ? {
-          mesReferencia: repasseAguardandoFechamento.mesReferencia,
-          amountCents: repasseAguardandoFechamento.amountCents,
-          allocCount: repasseAguardandoFechamento.allocCount,
+          mesReferencia: repasseAguardandoPagamentosCooperados.mesReferencia,
+          amountCents: repasseAguardandoPagamentosCooperados.amountCents,
+          allocCount: repasseAguardandoPagamentosCooperados.allocCount,
         }
       : null,
     receiver: {

@@ -57,7 +57,14 @@ export interface HbUnifiedChargeBreakdown {
   totalCents: number;
   /** Mensagem contextual quando não há valor a pagar agora. */
   statusMessage?: string;
-  /** Repasse Conta Coop já apurado, mas bloqueado até fechamento mensal aprovado. */
+  /** Repasse Conta Coop apurado, mas bloqueado até pagamentos dos cooperados no ciclo de entregas. */
+  repasseAguardandoPagamentosCooperados?: {
+    mesReferencia: string;
+    amountCents: number;
+    allocCount: number;
+    cooperadosPendentes: number;
+  } | null;
+  /** @deprecated Use repasseAguardandoPagamentosCooperados */
   repasseAguardandoFechamento?: {
     mesReferencia: string;
     amountCents: number;

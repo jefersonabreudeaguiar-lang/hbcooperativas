@@ -155,7 +155,9 @@ export function HbChargeBreakdownDetail({ breakdown, compact, showHeader = true 
       {!breakdown.saasDue && !breakdown.repasseDue && (
         <p
           className={`text-sm ${
-            breakdown.repasseAguardandoFechamento || breakdown.statusMessage?.includes("aguarda")
+            breakdown.repasseAguardandoPagamentosCooperados ||
+            breakdown.repasseAguardandoFechamento ||
+            breakdown.statusMessage?.includes("aguarda")
               ? "text-amber-800"
               : "text-green-800"
           }`}

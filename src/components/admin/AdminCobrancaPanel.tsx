@@ -414,7 +414,7 @@ export function AdminCobrancaPanel({ user }: AdminCobrancaPanelProps) {
     <div className="space-y-6 pb-8">
       <AdminSectionHeader
         title="Cobrança HB"
-        description={`Mensalidade por cooperado (ciclo da adesão) + taxa Conta Coop (${CONTA_COOP_DESCONTO_SPLIT.appPercent}%) após fechamento mensal quitado. Valores sempre apurados na nuvem.`}
+        description={`Mensalidade por cooperado (ciclo da adesão) + taxa Conta Coop (${CONTA_COOP_DESCONTO_SPLIT.appPercent}%) após pagamentos dos cooperados no ciclo de entregas. Valores apurados na nuvem.`}
       />
 
       <Card

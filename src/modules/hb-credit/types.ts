@@ -297,6 +297,10 @@ export interface ContaCoopAppRepassePreview {
   allocCount: number;
   alreadyPaid: boolean;
   repasse?: ContaCoopAppRepasse | null;
+  /** Taxa apurada, mas bloqueada até pagamentos dos cooperados no ciclo de entregas. */
+  aguardandoPagamentosCooperados?: boolean;
+  cooperadosPendentes?: number;
+  bloqueioMensagem?: string;
 }
 
 export interface ContaCoopDiscountAllocation {

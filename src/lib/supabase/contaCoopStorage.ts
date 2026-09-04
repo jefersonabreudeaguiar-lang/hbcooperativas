@@ -39,6 +39,10 @@ import {
 } from "@/modules/hb-credit/infrastructure/mappers/statusMapper";
 import { humanizeCreditRefundError } from "@/lib/supabase/hbCreditRefundFixSchema";
 import { TERMO_MERCADO_CONTA_COOP_VERSAO } from "@/config/termoUsoMercadoContaCoop";
+import { fetchOperacionalSync } from "@/lib/supabase/cooperativaSyncStorage";
+import { fetchCooperadosFromStorage } from "@/lib/supabase/cooperadosStorage";
+import { cooperadosUnicosParaCobranca } from "@/utils/cooperadoDedupe";
+import { mesCicloEntregasPagamentosCompletos } from "@/services/repasseCicloEntregasGateService";
 
 /** Recebíveis em liquidação ou já pagos ao mercado não podem ser estornados. */
 const NON_REFUNDABLE_RECEIVABLE_DB = new Set(["PROCESSING", "SETTLED"]);
@@ -3122,10 +3126,59 @@ export async function getAppRepassePreview(
     .gt("app_cents", 0);
 
   const amountCents = (rows ?? []).reduce((sum, row) => sum + Number(row.app_cents), 0);
+  const allocCount = rows?.length ?? 0;
+
+  if (amountCents <= 0) {
+    return {
+      mesReferencia,
+      amountCents: 0,
+      allocCount: 0,
+      alreadyPaid: false,
+      repasse: null,
+    };
+  }
+
+  const { data: coopRow } = await supabase.from("cooperativas").select("id").eq("cnpj", digits).maybeSingle();
+  const cooperativeId = coopRow?.id ? String(coopRow.id) : "";
+  const operacional = cooperativeId ? await fetchOperacionalSync(supabase, digits) : null;
+  const cooperadosRaw = cooperativeId ? await fetchCooperadosFromStorage(supabase, digits) : [];
+  const { data: loginRows } = cooperativeId
+    ? await supabase
+        .from("app_users")
+        .select("cooperado_id")
+        .eq("cooperativa_cnpj", digits)
+        .eq("active", true)
+        .not("cooperado_id", "is", null)
+    : { data: [] as { cooperado_id: string }[] };
+  const loginCooperadoIds = new Set(
+    (loginRows ?? []).map((r) => String(r.cooperado_id)).filter(Boolean)
+  );
+  const cooperadosAtivos = cooperadosUnicosParaCobranca(cooperadosRaw, loginCooperadoIds);
+
+  const pagamentos = mesCicloEntregasPagamentosCompletos(
+    operacional,
+    cooperativeId,
+    mesReferencia,
+    cooperadosAtivos
+  );
+
+  if (!pagamentos.ok) {
+    return {
+      mesReferencia,
+      amountCents: 0,
+      allocCount,
+      alreadyPaid: false,
+      repasse: null,
+      aguardandoPagamentosCooperados: true,
+      cooperadosPendentes: pagamentos.pendentes.length,
+      bloqueioMensagem: `Aguardando pagamento de ${pagamentos.pendentes.length} cooperado(s) no ciclo de entregas ${mesReferencia}.`,
+    };
+  }
+
   return {
     mesReferencia,
     amountCents,
-    allocCount: rows?.length ?? 0,
+    allocCount,
     alreadyPaid: false,
     repasse: null,
   };

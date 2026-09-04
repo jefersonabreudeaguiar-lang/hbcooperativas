@@ -64,9 +64,8 @@ export function ContaCoopAppRepassePanel({ cnpj, mesReferencia, resumo, onConfir
           Taxa Conta Coop ({CONTA_COOP_DESCONTO_SPLIT.appPercent}%) · fechamento {formatMesReferencia(mesReferencia)}
         </h3>
         <p className="mt-1 text-sm text-gray-600">
-          Elegível após liquidação dos mercados e fechamento mensal aprovado. Cobrança no{" "}
-          <strong>painel HB no topo</strong> — mesmo PIX Asaas automático da mensalidade por cooperado, com valor
-          apurado por cooperado no fechamento.
+          Elegível após liquidação dos mercados e <strong>pagamento confirmado de todos os cooperados</strong> no ciclo
+          de entregas do mês. Cobrança no <strong>painel HB no topo</strong> — mesmo PIX Asaas da mensalidade.
         </p>
       </div>
 
@@ -93,7 +92,14 @@ export function ContaCoopAppRepassePanel({ cnpj, mesReferencia, resumo, onConfir
         </p>
       )}
 
-      {valorPendente > 0 && (
+      {preview?.aguardandoPagamentosCooperados && (
+        <AlertBanner variant="warning">
+          {preview.bloqueioMensagem ??
+            `Aguardando pagamento dos cooperados no ciclo de entregas ${formatMesReferencia(mesReferencia)}.`}
+        </AlertBanner>
+      )}
+
+      {valorPendente > 0 && !preview?.aguardandoPagamentosCooperados && (
         <AlertBanner variant="info">
           Pague pelo painel HB no topo do app — um único PIX Asaas (mensalidade + taxa Conta Coop, se houver). Após
           confirmado, o aviso some até o próximo fechamento.

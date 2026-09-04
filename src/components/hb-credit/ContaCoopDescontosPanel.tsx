@@ -9,7 +9,7 @@ import { formatCentsBRL } from "@/modules/hb-credit/engine/money";
 import type { ContaCoopDiscountAllocation, ContaCoopDiscountPoolResumo } from "@/modules/hb-credit/types";
 import { fetchDiscountPool, postSweepCashback } from "@/services/creditApiService";
 import { ContaCoopAppRepassePanel } from "@/components/hb-credit/ContaCoopAppRepassePanel";
-import { CONTA_COOP_DESCONTO_SPLIT, MENSALIDADE_COOPERADO_VALOR_PADRAO } from "@/config/contaCoopEconomia";
+import { CONTA_COOP_DESCONTO_SPLIT } from "@/config/contaCoopEconomia";
 
 type Props = {
   cnpj: string;
@@ -125,10 +125,8 @@ export function ContaCoopDescontosPanel({ cnpj, cooperadoNome }: Props) {
             </div>
             <p className="text-xs text-gray-500">
               A parte dos mercados fica elegível após liquidação na aba Liquidar. A taxa HB de{" "}
-              {CONTA_COOP_DESCONTO_SPLIT.appPercent}% é cobrada no <strong>painel HB no topo do app</strong>, no mesmo
-              PIX Asaas da mensalidade por cooperado — some automaticamente após o pagamento. A mensalidade fixa de R${" "}
-              {MENSALIDADE_COOPERADO_VALOR_PADRAO.toFixed(2).replace(".", ",")} por cooperado na ficha complementa o
-              uso do aplicativo.
+              {CONTA_COOP_DESCONTO_SPLIT.appPercent}% só é cobrada após o <strong>pagamento confirmado de todos os
+              cooperados</strong> no ciclo de entregas do mês — no painel HB no topo, mesmo PIX da mensalidade.
             </p>
           </Card>
 
