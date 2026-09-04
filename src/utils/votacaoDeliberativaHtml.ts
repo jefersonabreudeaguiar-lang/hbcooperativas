@@ -1,5 +1,9 @@
 import type { AppData, Cooperado } from "@/types";
-import { CLAUSULAS_ATA_DELIBERATIVA, VOTACAO_DELIBERATIVA_PLATAFORMA } from "@/config/votacaoDeliberativa";
+import {
+  CLAUSULAS_ATA_DELIBERATIVA,
+  FUNDAMENTO_LEGAL_ATA,
+  VOTACAO_DELIBERATIVA_PLATAFORMA,
+} from "@/config/votacaoDeliberativa";
 import type { ResumoVotacaoPauta, VotoCooperadoLinha } from "@/services/votacaoService";
 import {
   formatHorarioReuniao,
@@ -33,11 +37,10 @@ function formatCpfCnpj(valor?: string): string {
   return valor ?? "—";
 }
 
-function formatTelefone(valor?: string): string {
-  const digits = (valor ?? "").replace(/\D/g, "");
-  if (digits.length === 11) return digits.replace(/(\d{2})(\d{5})(\d{4})/, "($1) $2-$3");
-  if (digits.length === 10) return digits.replace(/(\d{2})(\d{4})(\d{4})/, "($1) $2-$3");
-  return valor?.trim() || "—";
+function formatDataPorExtenso(isoDate: string): string {
+  const d = new Date(isoDate.includes("T") ? isoDate : `${isoDate}T12:00:00`);
+  if (Number.isNaN(d.getTime())) return isoDate;
+  return d.toLocaleDateString("pt-BR", { day: "numeric", month: "long", year: "numeric" });
 }
 
 function protocoloDocumento(pautaId: string, geradoEm: string): string {
@@ -46,400 +49,204 @@ function protocoloDocumento(pautaId: string, geradoEm: string): string {
 }
 
 function classeVoto(voto: VotoCooperadoLinha["voto"]): string {
-  if (voto === "sim") return "badge-sim";
-  if (voto === "nao") return "badge-nao";
-  return "badge-abst";
+  if (voto === "sim") return "voto-sim";
+  if (voto === "nao") return "voto-nao";
+  return "voto-abst";
 }
 
 function findCooperado(data: AppData, cooperadoId: string, cooperativaId: string): Cooperado | undefined {
   return data.cooperados.find((c) => c.id === cooperadoId && c.cooperativaId === cooperativaId);
 }
 
-function labelStatusCooperado(status?: Cooperado["status"]): string {
-  switch (status) {
-    case "ativo":
-      return "Ativo";
-    case "suspenso":
-      return "Suspenso";
-    case "desligado":
-      return "Desligado";
-    default:
-      return "—";
-  }
+function renderAssinaturaMini(dataUrl?: string | null): string {
+  if (!dataUrl) return `<span class="sem-assinatura">—</span>`;
+  return `<img src="${dataUrl}" alt="Assinatura" class="sig-mini" />`;
 }
 
 const ATA_STYLES = `
-  @page { margin: 14mm 12mm; }
+  @page { margin: 18mm 15mm 20mm; size: A4; }
   * { box-sizing: border-box; }
   body {
-    font-family: Georgia, "Times New Roman", serif;
-    max-width: 210mm;
+    font-family: "Times New Roman", Times, Georgia, serif;
+    max-width: 180mm;
     margin: 0 auto;
-    color: #0f172a;
+    color: #111;
     padding: 0;
-    line-height: 1.55;
+    line-height: 1.45;
     font-size: 11pt;
     background: #fff;
   }
-  .doc-shell { padding: 8mm 10mm 12mm; }
-  .doc-header {
-    border: 2px solid #14532d;
-    border-radius: 4px;
-    overflow: hidden;
-    margin-bottom: 22px;
-  }
-  .doc-header-top {
-    background: linear-gradient(135deg, #14532d 0%, #166534 55%, #15803d 100%);
-    color: #fff;
-    padding: 18px 22px 14px;
+  .doc-shell { padding: 0; }
+  .letterhead {
     text-align: center;
+    border-bottom: 2px solid #111;
+    padding-bottom: 10px;
+    margin-bottom: 18px;
   }
-  .doc-header-top .coop-nome {
-    font-family: system-ui, -apple-system, sans-serif;
-    font-size: 1.35rem;
-    font-weight: 800;
-    letter-spacing: 0.02em;
-    margin: 0;
+  .letterhead .coop-nome {
+    font-size: 13pt;
+    font-weight: 700;
     text-transform: uppercase;
-  }
-  .doc-header-top .coop-sub {
-    font-family: system-ui, sans-serif;
-    font-size: 0.72rem;
-    opacity: 0.92;
-    margin-top: 6px;
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
-  }
-  .doc-header-body {
-    font-family: system-ui, sans-serif;
-    font-size: 0.78rem;
-    padding: 12px 18px;
-    background: #f8fafc;
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 6px 18px;
-    color: #334155;
-  }
-  .doc-header-body span strong { color: #14532d; }
-  .doc-title-block {
-    text-align: center;
-    margin: 24px 0 20px;
-    padding-bottom: 16px;
-    border-bottom: 1px solid #cbd5e1;
-  }
-  .doc-title-block h1 {
-    font-family: system-ui, sans-serif;
-    font-size: 1.15rem;
-    color: #14532d;
-    margin: 0 0 6px;
-    letter-spacing: 0.06em;
-    text-transform: uppercase;
-  }
-  .doc-title-block .protocolo {
-    font-family: ui-monospace, monospace;
-    font-size: 0.72rem;
-    color: #64748b;
     letter-spacing: 0.04em;
+    margin: 0 0 4px;
   }
-  .doc-title-block .gerado {
-    font-family: system-ui, sans-serif;
-    font-size: 0.75rem;
-    color: #475569;
-    margin-top: 8px;
+  .letterhead .coop-meta {
+    font-size: 9pt;
+    color: #333;
+    line-height: 1.5;
   }
-  h2 {
-    font-family: system-ui, sans-serif;
-    font-size: 0.82rem;
-    color: #14532d;
-    margin: 26px 0 12px;
-    padding-bottom: 6px;
-    border-bottom: 2px solid #dcfce7;
-    text-transform: uppercase;
-    letter-spacing: 0.07em;
-    page-break-after: avoid;
-  }
-  h3 {
-    font-family: system-ui, sans-serif;
-    font-size: 0.78rem;
-    color: #334155;
-    margin: 0 0 8px;
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
-  }
-  .lead {
-    font-family: system-ui, sans-serif;
-    font-size: 0.88rem;
-    color: #334155;
-    text-align: justify;
-    margin: 0 0 18px;
-    line-height: 1.65;
-  }
-  .box {
-    font-family: system-ui, sans-serif;
-    border: 1px solid #e2e8f0;
-    border-radius: 6px;
-    padding: 14px 16px;
-    margin: 12px 0 18px;
-    background: #fafafa;
-  }
-  .box-green { background: #f0fdf4; border-color: #bbf7d0; }
-  .box-indigo { background: #eef2ff; border-color: #c7d2fe; }
-  .box-amber { background: #fffbeb; border-color: #fde68a; }
-  .box p { margin: 5px 0; font-size: 0.82rem; color: #334155; }
-  .box .destaque { font-size: 0.95rem; font-weight: 700; color: #14532d; line-height: 1.45; }
-  .obs { white-space: pre-wrap; }
-  .metrics {
-    display: grid;
-    grid-template-columns: repeat(4, 1fr);
-    gap: 10px;
+  .doc-title {
+    text-align: center;
     margin: 16px 0 20px;
   }
-  .metric {
-    border: 1px solid #e2e8f0;
-    border-radius: 8px;
-    padding: 12px 10px;
-    text-align: center;
-    background: #fff;
-  }
-  .metric .label {
-    font-family: system-ui, sans-serif;
-    font-size: 0.62rem;
-    text-transform: uppercase;
-    letter-spacing: 0.08em;
-    color: #64748b;
+  .doc-title h1 {
+    font-size: 12pt;
     font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    margin: 0 0 6px;
   }
-  .metric .value {
-    font-family: system-ui, sans-serif;
-    font-size: 1.35rem;
-    font-weight: 800;
-    margin-top: 4px;
-    color: #14532d;
+  .doc-title .sub {
+    font-size: 9pt;
+    color: #444;
+    margin: 2px 0;
   }
-  .metric .sub {
-    font-family: system-ui, sans-serif;
-    font-size: 0.68rem;
-    color: #64748b;
-    margin-top: 2px;
+  .paragrafo {
+    text-align: justify;
+    text-indent: 12mm;
+    margin: 0 0 10px;
+    font-size: 11pt;
   }
-  .metric-sim { border-top: 4px solid #16a34a; }
-  .metric-nao { border-top: 4px solid #dc2626; }
-  .metric-abst { border-top: 4px solid #64748b; }
-  .metric-part { border-top: 4px solid #2563eb; }
+  .paragrafo.sem-indent { text-indent: 0; }
+  .secao {
+    font-size: 10pt;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    margin: 20px 0 8px;
+    padding-bottom: 3px;
+    border-bottom: 1px solid #999;
+    page-break-after: avoid;
+  }
+  .quadro {
+    border: 1px solid #bbb;
+    padding: 10px 12px;
+    margin: 10px 0 14px;
+    background: #fafafa;
+    font-size: 10pt;
+  }
+  .quadro .objeto {
+    font-weight: 700;
+    margin-bottom: 8px;
+    line-height: 1.4;
+  }
+  .quadro p { margin: 4px 0; font-size: 10pt; }
+  .quadro .rotulo { font-weight: 700; }
   table {
     width: 100%;
     border-collapse: collapse;
-    font-family: system-ui, sans-serif;
-    font-size: 0.74rem;
-    margin: 10px 0 18px;
+    font-size: 9pt;
+    margin: 10px 0 14px;
   }
-  th, td { border: 1px solid #cbd5e1; padding: 7px 8px; text-align: left; vertical-align: top; }
-  th { background: #14532d; color: #fff; font-weight: 700; font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.04em; }
-  tr:nth-child(even) td { background: #f8fafc; }
-  .badge {
-    display: inline-block;
-    padding: 2px 8px;
-    border-radius: 999px;
-    font-size: 0.65rem;
-    font-weight: 800;
-    letter-spacing: 0.04em;
+  th, td {
+    border: 1px solid #999;
+    padding: 5px 6px;
+    text-align: left;
+    vertical-align: middle;
   }
-  .badge-sim { background: #dcfce7; color: #166534; }
-  .badge-nao { background: #fee2e2; color: #991b1b; }
-  .badge-abst { background: #f1f5f9; color: #475569; }
-  .assinatura-card {
-    border: 1px solid #cbd5e1;
-    border-radius: 8px;
-    margin: 0 0 16px;
-    overflow: hidden;
-    page-break-inside: avoid;
-    background: #fff;
-  }
-  .assinatura-card-head {
-    background: #f1f5f9;
-    border-bottom: 1px solid #cbd5e1;
-    padding: 10px 14px;
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    gap: 12px;
-  }
-  .assinatura-card-head .num {
-    font-family: ui-monospace, monospace;
-    font-size: 0.68rem;
-    color: #64748b;
+  th {
+    background: #eee;
     font-weight: 700;
-  }
-  .assinatura-card-body {
-    padding: 14px 16px;
-    display: grid;
-    grid-template-columns: 1.2fr 1fr;
-    gap: 16px;
-  }
-  .dados-grid {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 8px 14px;
-    font-family: system-ui, sans-serif;
-    font-size: 0.74rem;
-  }
-  .dados-grid .campo .rotulo {
-    font-size: 0.62rem;
+    font-size: 8pt;
     text-transform: uppercase;
-    letter-spacing: 0.06em;
-    color: #64748b;
-    font-weight: 700;
+    letter-spacing: 0.03em;
   }
-  .dados-grid .campo .valor { color: #0f172a; margin-top: 2px; font-weight: 600; }
-  .dados-grid .campo.full { grid-column: 1 / -1; }
-  .assinatura-box {
-    border: 2px dashed #94a3b8;
-    border-radius: 6px;
-    background: #fafafa;
-    min-height: 88px;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    padding: 8px;
-  }
-  .assinatura-box img {
-    max-width: 100%;
-    max-height: 72px;
+  .col-num { width: 6%; text-align: center; }
+  .col-voto { width: 10%; text-align: center; }
+  .col-data { width: 16%; white-space: nowrap; }
+  .col-cpf { width: 14%; white-space: nowrap; }
+  .col-sig { width: 14%; text-align: center; }
+  .voto-sim { font-weight: 700; color: #14532d; }
+  .voto-nao { font-weight: 700; color: #991b1b; }
+  .voto-abst { font-weight: 700; color: #475569; }
+  .sig-mini {
+    max-height: 22px;
+    max-width: 72px;
+    width: auto;
+    height: auto;
     object-fit: contain;
+    display: block;
+    margin: 0 auto;
   }
-  .assinatura-box .legenda {
-    font-family: system-ui, sans-serif;
-    font-size: 0.62rem;
-    color: #64748b;
-    margin-top: 6px;
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
+  .sem-assinatura { color: #999; font-size: 8pt; }
+  .apuracao-resumo {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 12px 0;
+    font-size: 10pt;
   }
-  .anexo-break { page-break-before: always; padding-top: 8mm; }
-  .juridico {
-    font-family: system-ui, sans-serif;
-    font-size: 0.78rem;
-    color: #334155;
-    line-height: 1.6;
+  .apuracao-resumo th, .apuracao-resumo td {
+    border: 1px solid #999;
+    padding: 8px 10px;
+    text-align: center;
   }
-  .juridico ol { padding-left: 18px; margin: 8px 0; }
-  .juridico li { margin-bottom: 8px; }
+  .apuracao-resumo th { background: #f5f5f5; font-weight: 700; }
+  .juridico { font-size: 10pt; line-height: 1.5; }
+  .juridico ol { padding-left: 16px; margin: 6px 0; }
+  .juridico li { margin-bottom: 6px; text-align: justify; }
+  .fundamento { font-size: 9.5pt; color: #222; }
+  .fundamento li { margin-bottom: 5px; }
+  .anexo-break { page-break-before: always; padding-top: 0; }
+  .pendentes { font-size: 9.5pt; margin: 8px 0 0 16px; }
   .dirigentes {
-    margin-top: 36px;
+    margin-top: 28px;
     display: grid;
     grid-template-columns: 1fr 1fr;
-    gap: 48px;
+    gap: 40px;
     page-break-inside: avoid;
   }
-  .dirigente {
-    font-family: system-ui, sans-serif;
-    font-size: 0.78rem;
-    text-align: center;
-  }
+  .dirigente { text-align: center; font-size: 10pt; }
   .dirigente .linha {
-    border-top: 1px solid #0f172a;
-    padding-top: 8px;
-    margin-top: 56px;
+    border-top: 1px solid #111;
+    padding-top: 6px;
+    margin-top: 36px;
     font-weight: 700;
-    color: #0f172a;
   }
-  .dirigente .hint { color: #64748b; font-size: 0.68rem; margin-top: 4px; }
+  .dirigente .hint { font-size: 8.5pt; color: #555; margin-top: 3px; }
+  .local-data {
+    text-align: right;
+    margin: 24px 0 16px;
+    font-size: 10pt;
+  }
   .footer {
-    margin-top: 28px;
-    padding-top: 12px;
-    border-top: 1px solid #e2e8f0;
-    font-family: system-ui, sans-serif;
-    font-size: 0.65rem;
-    color: #64748b;
+    margin-top: 24px;
+    padding-top: 8px;
+    border-top: 1px solid #ccc;
+    font-size: 8pt;
+    color: #666;
     text-align: center;
-    line-height: 1.5;
+    line-height: 1.45;
   }
-  .pendentes-list { margin: 0; padding-left: 18px; font-size: 0.78rem; color: #475569; }
   @media print {
     body { margin: 0; }
-    .doc-shell { padding: 0; }
-    .assinatura-card { break-inside: avoid; }
+    tr { page-break-inside: avoid; }
   }
 `;
 
 function renderCooperativaHeader(coop: ReturnType<typeof getCooperativaById>, protocolo: string): string {
   const nome = coop?.nome ?? "Cooperativa";
-  return `
-    <div class="doc-header">
-      <div class="doc-header-top">
-        <p class="coop-nome">${escapeHtml(nome)}</p>
-        <p class="coop-sub">Ata de deliberação · votação eletrônica</p>
-      </div>
-      <div class="doc-header-body">
-        ${coop?.cnpj ? `<span><strong>CNPJ:</strong> ${escapeHtml(formatCnpj(coop.cnpj))}</span>` : "<span></span>"}
-        <span><strong>Protocolo:</strong> ${escapeHtml(protocolo)}</span>
-        ${coop?.endereco ? `<span class="full" style="grid-column:1/-1"><strong>Endereço:</strong> ${escapeHtml(coop.endereco)}</span>` : ""}
-        ${coop?.telefone ? `<span><strong>Telefone:</strong> ${escapeHtml(coop.telefone)}</span>` : "<span></span>"}
-        ${coop?.email ? `<span><strong>E-mail:</strong> ${escapeHtml(coop.email)}</span>` : ""}
-        ${coop?.responsavel ? `<span><strong>Responsável:</strong> ${escapeHtml(coop.responsavel)}</span>` : ""}
-      </div>
-    </div>`;
-}
-
-function renderAssinaturaCard(
-  data: AppData,
-  cooperativaId: string,
-  voto: VotoCooperadoLinha,
-  indice: number
-): string {
-  const coop = findCooperado(data, voto.cooperadoId, cooperativaId);
-  const assinatura = voto.assinaturaDataUrl
-    ? `<img src="${voto.assinaturaDataUrl}" alt="Assinatura de ${escapeHtml(voto.cooperadoNome)}" />`
-    : `<span style="color:#94a3b8;font-size:0.75rem">Sem imagem arquivada</span>`;
+  const linhas: string[] = [];
+  if (coop?.cnpj) linhas.push(`CNPJ ${escapeHtml(formatCnpj(coop.cnpj))}`);
+  if (coop?.endereco) linhas.push(escapeHtml(coop.endereco));
+  const contato = [coop?.telefone, coop?.email].filter(Boolean).join(" · ");
+  if (contato) linhas.push(escapeHtml(contato));
 
   return `
-    <article class="assinatura-card">
-      <div class="assinatura-card-head">
-        <strong>${escapeHtml(voto.cooperadoNome)}</strong>
-        <span class="num">REGISTRO ${String(indice).padStart(3, "0")} · ${escapeHtml(voto.id)}</span>
-      </div>
-      <div class="assinatura-card-body">
-        <div class="dados-grid">
-          <div class="campo full">
-            <div class="rotulo">Nome completo</div>
-            <div class="valor">${escapeHtml(voto.cooperadoNome)}</div>
-          </div>
-          <div class="campo">
-            <div class="rotulo">CPF / CNPJ</div>
-            <div class="valor">${escapeHtml(formatCpfCnpj(coop?.cpfCnpj))}</div>
-          </div>
-          <div class="campo">
-            <div class="rotulo">Telefone</div>
-            <div class="valor">${escapeHtml(formatTelefone(coop?.telefone))}</div>
-          </div>
-          <div class="campo">
-            <div class="rotulo">Comunidade / localidade</div>
-            <div class="valor">${escapeHtml(coop?.comunidade?.trim() || "—")}</div>
-          </div>
-          <div class="campo">
-            <div class="rotulo">Voto registrado</div>
-            <div class="valor"><span class="badge ${classeVoto(voto.voto)}">${escapeHtml(labelVoto(voto.voto))}</span></div>
-          </div>
-          <div class="campo">
-            <div class="rotulo">Data e hora do registro</div>
-            <div class="valor">${escapeHtml(formatDateTime(voto.createdAt))}</div>
-          </div>
-          <div class="campo">
-            <div class="rotulo">Identificador interno</div>
-            <div class="valor" style="font-family:ui-monospace,monospace;font-size:0.68rem">${escapeHtml(voto.cooperadoId)}</div>
-          </div>
-          <div class="campo">
-            <div class="rotulo">Situação cadastral</div>
-            <div class="valor">${escapeHtml(labelStatusCooperado(coop?.status))}</div>
-          </div>
-        </div>
-        <div class="assinatura-box">
-          ${assinatura}
-          <div class="legenda">Assinatura manuscrita digital do cooperado</div>
-        </div>
-      </div>
-    </article>`;
+    <header class="letterhead">
+      <p class="coop-nome">${escapeHtml(nome)}</p>
+      <p class="coop-meta">${linhas.join("<br/>")}</p>
+      <p class="coop-meta" style="margin-top:6px"><strong>Protocolo:</strong> ${escapeHtml(protocolo)}</p>
+    </header>`;
 }
 
 function renderResultadoTexto(resumo: ResumoVotacaoPauta): string {
@@ -447,8 +254,31 @@ function renderResultadoTexto(resumo: ResumoVotacaoPauta): string {
   if (totalVotos === 0) {
     return "Não houve votos registrados com assinatura no período da consulta.";
   }
-  const maioria = votosSim > votosNao ? "favorável (SIM)" : votosNao > votosSim ? "contrária (NÃO)" : "empatada";
-  return `Apurados ${totalVotos} voto(s) com assinatura: ${votosSim} SIM (${pctSim.toLocaleString("pt-BR")}%), ${votosNao} NÃO (${pctNao.toLocaleString("pt-BR")}%) e ${votosAbstencao} abstenção(ões). A tendência majoritária registrada foi ${maioria}, conforme quadro resumo e registros individuais abaixo.`;
+  const maioria =
+    votosSim > votosNao ? "FAVORÁVEL (SIM)" : votosNao > votosSim ? "CONTRÁRIA (NÃO)" : "EMPATADA";
+  return `Apurados ${totalVotos} voto(s) válido(s): ${votosSim} SIM (${pctSim.toLocaleString("pt-BR")}%), ${votosNao} NÃO (${pctNao.toLocaleString("pt-BR")}%) e ${votosAbstencao} abstenção(ões). Declara-se, para os devidos fins, tendência majoritária ${maioria}, nos termos do quadro de apuração e do rol nominal anexo.`;
+}
+
+function renderLinhaVoto(
+  data: AppData,
+  cooperativaId: string,
+  voto: VotoCooperadoLinha,
+  indice: number,
+  incluirAssinatura: boolean
+): string {
+  const coop = findCooperado(data, voto.cooperadoId, cooperativaId);
+  const assinaturaCol = incluirAssinatura
+    ? `<td class="col-sig">${renderAssinaturaMini(voto.assinaturaDataUrl)}</td>`
+    : "";
+
+  return `<tr>
+    <td class="col-num">${indice}</td>
+    <td>${escapeHtml(voto.cooperadoNome)}</td>
+    <td class="col-cpf">${escapeHtml(formatCpfCnpj(coop?.cpfCnpj))}</td>
+    <td class="col-voto"><span class="${classeVoto(voto.voto)}">${escapeHtml(labelVoto(voto.voto))}</span></td>
+    <td class="col-data">${escapeHtml(formatDateTime(voto.createdAt))}</td>
+    ${assinaturaCol}
+  </tr>`;
 }
 
 export function gerarAtaDeliberacaoVotacaoHtml(
@@ -468,49 +298,41 @@ export function gerarAtaDeliberacaoVotacaoHtml(
     resumo.totalElegiveis > 0
       ? Math.round((resumo.totalVotos / resumo.totalElegiveis) * 1000) / 10
       : 0;
+  const nomeCoop = coop?.nome ?? "Cooperativa";
+  const dataEncerramento = formatDataPorExtenso(pauta.fimEm);
+  const dataAbertura = formatDataPorExtenso(pauta.inicioEm);
 
   const linhasResumo = resumo.votos
-    .map(
-      (v, i) => `<tr>
-        <td>${i + 1}</td>
-        <td>${escapeHtml(v.cooperadoNome)}</td>
-        <td>${escapeHtml(formatCpfCnpj(findCooperado(data, v.cooperadoId, cooperativaId)?.cpfCnpj))}</td>
-        <td><span class="badge ${classeVoto(v.voto)}">${escapeHtml(labelVoto(v.voto))}</span></td>
-        <td>${escapeHtml(formatDateTime(v.createdAt))}</td>
-        <td>${v.assinaturaDataUrl ? "Sim" : "Não"}</td>
-      </tr>`
-    )
+    .map((v, i) => renderLinhaVoto(data, cooperativaId, v, i + 1, false))
     .join("");
 
-  const cartoesAssinatura = resumo.votos
-    .map((v, i) => renderAssinaturaCard(data, cooperativaId, v, i + 1))
+  const linhasAnexo = resumo.votos
+    .map((v, i) => renderLinhaVoto(data, cooperativaId, v, i + 1, true))
     .join("");
 
   const pendentesHtml =
     resumo.pendentes.length > 0
-      ? `<h2>Cooperados elegíveis sem voto registrado</h2>
-         <div class="box box-amber">
-           <p><strong>${resumo.pendentes.length}</strong> cooperado(s) não registraram voto com assinatura nesta pauta:</p>
-           <ul class="pendentes-list">${resumo.pendentes.map((p) => `<li>${escapeHtml(p.nome)}</li>`).join("")}</ul>
-         </div>`
+      ? `<div class="secao">Associados elegíveis sem voto registrado</div>
+         <p class="paragrafo sem-indent">
+           Constam ${resumo.pendentes.length} associado(s) elegível(is) que não registraram voto com assinatura nesta pauta:
+         </p>
+         <ul class="pendentes">${resumo.pendentes.map((p) => `<li>${escapeHtml(p.nome)}</li>`).join("")}</ul>`
       : "";
 
   const clausulas = CLAUSULAS_ATA_DELIBERATIVA.map((c) => `<li>${escapeHtml(c)}</li>`).join("");
+  const fundamentos = FUNDAMENTO_LEGAL_ATA.map((c) => `<li>${escapeHtml(c)}</li>`).join("");
 
   const observacaoHtml = pauta.observacao?.trim()
-    ? `<div class="box box-indigo">
-         <p><strong>Observações da diretoria</strong></p>
-         <p class="obs">${escapeHtml(pauta.observacao.trim())}</p>
-       </div>`
+    ? `<p class="paragrafo sem-indent"><span class="rotulo">Observações da diretoria:</span> ${escapeHtml(pauta.observacao.trim())}</p>`
     : "";
 
   const reuniaoHtml =
     reuniao || horario
-      ? `<div class="box box-indigo">
-           ${reuniao ? `<p><strong>Reunião online (WhatsApp):</strong> ${escapeHtml(reuniao)}</p>` : ""}
-           ${horario ? `<p><strong>Horário previsto:</strong> ${escapeHtml(horario)}</p>` : ""}
-           <p><strong>Forma de deliberação:</strong> votação eletrônica registrada no aplicativo ${escapeHtml(VOTACAO_DELIBERATIVA_PLATAFORMA)}, com autenticação individual e assinatura manuscrita digital.</p>
-         </div>`
+      ? `<p class="paragrafo sem-indent">
+           ${reuniao ? `<span class="rotulo">Reunião complementar (WhatsApp):</span> ${escapeHtml(reuniao)}. ` : ""}
+           ${horario ? `<span class="rotulo">Horário:</span> ${escapeHtml(horario)}. ` : ""}
+           A deliberação principal ocorreu por votação eletrônica no ${escapeHtml(VOTACAO_DELIBERATIVA_PLATAFORMA)}, com autenticação individual e assinatura manuscrita digital.
+         </p>`
       : "";
 
   return `<!DOCTYPE html>
@@ -524,109 +346,123 @@ export function gerarAtaDeliberacaoVotacaoHtml(
   <div class="doc-shell">
     ${renderCooperativaHeader(coop, protocolo)}
 
-    <div class="doc-title-block">
-      <h1>Ata de registro de deliberação cooperativa</h1>
-      <p class="protocolo">${escapeHtml(protocolo)}</p>
-      <p class="gerado">Documento emitido em ${escapeHtml(geradoEm)} · Plataforma ${escapeHtml(VOTACAO_DELIBERATIVA_PLATAFORMA)}</p>
+    <div class="doc-title">
+      <h1>Ata de deliberação cooperativa</h1>
+      <p class="sub">Consulta / deliberação de associados · registro eletrônico</p>
+      <p class="sub">${escapeHtml(protocolo)}</p>
     </div>
 
-    <p class="lead">
-      Aos ${escapeHtml(formatDate(pauta.fimEm))}, encerrado o prazo de votação eletrônica aberto em
-      ${escapeHtml(formatDate(pauta.inicioEm))}, a <strong>${escapeHtml(coop?.nome ?? "cooperativa")}</strong>
-      consolida nesta ata o registro formal da consulta/deliberação abaixo identificada, com apuração nominal,
-      data e hora de cada voto e respectivas assinaturas manuscritas digitais dos cooperados participantes.
+    <p class="paragrafo">
+      Aos ${escapeHtml(dataEncerramento)}, encerrado o prazo da consulta aberta em ${escapeHtml(dataAbertura)},
+      a <strong>${escapeHtml(nomeCoop)}</strong>, sociedade cooperativa regida pela Lei nº 5.764, de 16 de dezembro de 1971,
+      consolida nesta ata o registro formal da deliberação abaixo identificada, em observância ao princípio da
+      democracia cooperativista e às disposições estatutárias aplicáveis.
     </p>
 
-    <h2>I — Objeto da deliberação</h2>
-    <p class="meta"><strong>Eleitorado:</strong> ${escapeHtml(labelEscopoEleitoral(getEscopoEleitoralPauta(pauta)))}</p>
-    <div class="box box-green">
-      <p class="destaque">${escapeHtml(pauta.texto)}</p>
-      <p><strong>Período de votação:</strong> ${escapeHtml(formatDate(pauta.inicioEm))} a ${escapeHtml(formatDate(pauta.fimEm))}</p>
-      <p><strong>Identificador da pauta:</strong> ${escapeHtml(pauta.id)}</p>
-      ${pauta.criadoPorNome ? `<p><strong>Elaborada por:</strong> ${escapeHtml(pauta.criadoPorNome)}</p>` : ""}
-      ${pauta.abertaEm ? `<p><strong>Enquete aberta em:</strong> ${escapeHtml(formatDateTime(pauta.abertaEm))}</p>` : ""}
-      ${pauta.resultadoPublicadoEm ? `<p><strong>Resultado publicado em:</strong> ${escapeHtml(formatDateTime(pauta.resultadoPublicadoEm))}</p>` : ""}
-    </div>
+    <div class="secao">I — Fundamentação legal</div>
+    <ol class="juridico fundamento">${fundamentos}</ol>
 
+    <div class="secao">II — Identificação da deliberação</div>
+    <div class="quadro">
+      <p class="objeto">${escapeHtml(pauta.texto)}</p>
+      <p><span class="rotulo">Eleitorado:</span> ${escapeHtml(labelEscopoEleitoral(getEscopoEleitoralPauta(pauta)))}</p>
+      <p><span class="rotulo">Período de votação:</span> ${escapeHtml(formatDate(pauta.inicioEm))} a ${escapeHtml(formatDate(pauta.fimEm))}</p>
+      <p><span class="rotulo">Identificador:</span> ${escapeHtml(pauta.id)}</p>
+      ${pauta.criadoPorNome ? `<p><span class="rotulo">Elaborada por:</span> ${escapeHtml(pauta.criadoPorNome)}</p>` : ""}
+      ${pauta.abertaEm ? `<p><span class="rotulo">Consulta aberta em:</span> ${escapeHtml(formatDateTime(pauta.abertaEm))}</p>` : ""}
+      ${pauta.resultadoPublicadoEm ? `<p><span class="rotulo">Resultado publicado em:</span> ${escapeHtml(formatDateTime(pauta.resultadoPublicadoEm))}</p>` : ""}
+    </div>
     ${observacaoHtml}
     ${reuniaoHtml}
 
-    <h2>II — Apuração do resultado</h2>
-    <div class="metrics">
-      <div class="metric metric-sim">
-        <div class="label">Sim</div>
-        <div class="value">${resumo.votosSim}</div>
-        <div class="sub">${resumo.pctSim.toLocaleString("pt-BR")}% dos votos</div>
-      </div>
-      <div class="metric metric-nao">
-        <div class="label">Não</div>
-        <div class="value">${resumo.votosNao}</div>
-        <div class="sub">${resumo.pctNao.toLocaleString("pt-BR")}% dos votos</div>
-      </div>
-      <div class="metric metric-abst">
-        <div class="label">Abstenção</div>
-        <div class="value">${resumo.votosAbstencao}</div>
-        <div class="sub">${resumo.pctAbstencao.toLocaleString("pt-BR")}% dos votos</div>
-      </div>
-      <div class="metric metric-part">
-        <div class="label">Participação</div>
-        <div class="value">${resumo.totalVotos}/${resumo.totalElegiveis}</div>
-        <div class="sub">${pctParticipacao.toLocaleString("pt-BR")}% dos elegíveis</div>
-      </div>
-    </div>
+    <div class="secao">III — Apuração do resultado</div>
+    <table class="apuracao-resumo">
+      <thead>
+        <tr>
+          <th>Sim</th>
+          <th>Não</th>
+          <th>Abstenção</th>
+          <th>Total de votos</th>
+          <th>Elegíveis</th>
+          <th>Participação</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>${resumo.votosSim} (${resumo.pctSim.toLocaleString("pt-BR")}%)</td>
+          <td>${resumo.votosNao} (${resumo.pctNao.toLocaleString("pt-BR")}%)</td>
+          <td>${resumo.votosAbstencao} (${resumo.pctAbstencao.toLocaleString("pt-BR")}%)</td>
+          <td>${resumo.totalVotos}</td>
+          <td>${resumo.totalElegiveis}</td>
+          <td>${pctParticipacao.toLocaleString("pt-BR")}%</td>
+        </tr>
+      </tbody>
+    </table>
 
-    <p class="lead">${escapeHtml(renderResultadoTexto(resumo))}</p>
+    <p class="paragrafo">${escapeHtml(renderResultadoTexto(resumo))}</p>
 
     <table>
       <thead>
         <tr>
-          <th>#</th>
-          <th>Cooperado</th>
-          <th>CPF/CNPJ</th>
-          <th>Voto</th>
-          <th>Registrado em</th>
-          <th>Assinatura</th>
+          <th class="col-num">#</th>
+          <th>Associado</th>
+          <th class="col-cpf">CPF/CNPJ</th>
+          <th class="col-voto">Voto</th>
+          <th class="col-data">Registrado em</th>
         </tr>
       </thead>
-      <tbody>${linhasResumo || `<tr><td colspan="6">Nenhum voto registrado.</td></tr>`}</tbody>
+      <tbody>${linhasResumo || `<tr><td colspan="5">Nenhum voto registrado.</td></tr>`}</tbody>
     </table>
 
     ${pendentesHtml}
 
     <div class="anexo-break">
-      <h2>III — Anexo: registro individual de votos e assinaturas</h2>
-      <p class="lead">
-        Segue relação detalhada de cada cooperado que participou da votação, com dados cadastrais,
-        opção registrada, carimbo de data/hora e reprodução fiel da assinatura manuscrita digital
-        capturada no aplicativo no momento do voto.
+      <div class="secao">IV — Anexo: assinaturas dos associados participantes</div>
+      <p class="paragrafo sem-indent">
+        Relação nominal dos associados que registraram voto, com reprodução reduzida da assinatura manuscrita digital
+        capturada no ato do registro, para fins de arquivo e comprovação da manifestação de vontade.
       </p>
-      ${cartoesAssinatura || `<div class="box"><p>Nenhum registro individual disponível.</p></div>`}
+      <table>
+        <thead>
+          <tr>
+            <th class="col-num">#</th>
+            <th>Associado</th>
+            <th class="col-cpf">CPF/CNPJ</th>
+            <th class="col-voto">Voto</th>
+            <th class="col-data">Data e hora</th>
+            <th class="col-sig">Assinatura</th>
+          </tr>
+        </thead>
+        <tbody>${linhasAnexo || `<tr><td colspan="6">Nenhum registro disponível.</td></tr>`}</tbody>
+      </table>
     </div>
 
-    <h2>IV — Disposições sobre o registro eletrônico</h2>
-    <div class="juridico"><ol>${clausulas}</ol></div>
+    <div class="secao">V — Disposições sobre o registro eletrônico</div>
+    <ol class="juridico">${clausulas}</ol>
 
-    <h2>V — Encerramento</h2>
-    <p class="lead">
-      E, para constar, foi gerada a presente ata em meio eletrônico, com validade de registro interno
-      da cooperativa, devendo ser arquivada junto à documentação da entidade e, quando aplicável,
-      ratificada conforme estatuto social e orientação jurídica.
+    <div class="secao">VI — Encerramento</div>
+    <p class="paragrafo">
+      Nada mais havendo a registrar sobre a presente deliberação, lavrou-se a presente ata em meio eletrônico,
+      com validade de registro institucional da cooperativa, a ser arquivada na documentação social da entidade e,
+      quando couber, ratificada conforme estatuto e orientação jurídica.
     </p>
+
+    <p class="local-data">${escapeHtml(coop?.endereco?.split(",")[0]?.trim() || nomeCoop)}, ${escapeHtml(dataEncerramento)}.</p>
 
     <div class="dirigentes">
       <div class="dirigente">
-        <div class="linha">Presidente / Responsável legal</div>
-        <div class="hint">Nome completo e rubrica</div>
+        <div class="linha">Presidente da Assembleia / Diretor-Presidente</div>
+        <div class="hint">Nome completo</div>
       </div>
       <div class="dirigente">
-        <div class="linha">Secretário(a) / Responsável pelo registro</div>
-        <div class="hint">Nome completo e rubrica</div>
+        <div class="linha">Secretário(a) da Assembleia</div>
+        <div class="hint">Nome completo</div>
       </div>
     </div>
 
     <div class="footer">
-      ${escapeHtml(protocolo)} · Pauta ${escapeHtml(pauta.id)} · ${resumo.totalVotos} registro(s) com assinatura<br/>
-      Emitido em ${escapeHtml(geradoEm)} · ${escapeHtml(VOTACAO_DELIBERATIVA_PLATAFORMA)} · Documento gerado automaticamente pelo sistema da cooperativa
+      ${escapeHtml(protocolo)} · Pauta ${escapeHtml(pauta.id)} · ${resumo.totalVotos} voto(s) com assinatura<br/>
+      Documento gerado em ${escapeHtml(geradoEm)} · ${escapeHtml(VOTACAO_DELIBERATIVA_PLATAFORMA)}
     </div>
   </div>
 </body>
