@@ -60,7 +60,7 @@ function findCooperado(data: AppData, cooperadoId: string, cooperativaId: string
 
 function renderAssinaturaMini(dataUrl?: string | null): string {
   if (!dataUrl) return `<span class="sem-assinatura">—</span>`;
-  return `<img src="${dataUrl}" alt="Assinatura" class="sig-mini" width="44" height="13" />`;
+  return `<img src="${dataUrl}" alt="Assinatura" class="sig-mini" width="56" height="16" />`;
 }
 
 const ATA_STYLES = `
