@@ -17,6 +17,7 @@ import {
 } from "@/lib/asaas/client";
 import type { AsaasWebhookPayload } from "@/lib/asaas/types";
 import { fetchCooperadosFromStorage } from "@/lib/supabase/cooperadosStorage";
+import { cooperadosUnicosParaCobranca } from "@/utils/cooperadoDedupe";
 import { confirmAppRepasse } from "@/lib/supabase/contaCoopStorage";
 import {
   fetchOperacionalSync,
@@ -281,7 +282,16 @@ export async function buildUnifiedHbChargeBreakdown(
   };
 
   const cooperadosRaw = await fetchCooperadosFromStorage(supabase, cnpj);
-  const cooperadosAtivos = cooperadosRaw.filter((c) => c.status !== "desligado");
+  const { data: loginRows } = await supabase
+    .from("app_users")
+    .select("cooperado_id")
+    .eq("cooperativa_cnpj", cnpj)
+    .eq("active", true)
+    .not("cooperado_id", "is", null);
+  const loginCooperadoIds = new Set(
+    (loginRows ?? []).map((r) => String(r.cooperado_id)).filter(Boolean)
+  );
+  const cooperadosAtivos = cooperadosUnicosParaCobranca(cooperadosRaw, loginCooperadoIds);
   const saasCalc = calcularValorCobrancaSaas(cooperadosAtivos.length, pricing);
 
   const cobRaw = (coopRow.cobranca_saas ?? null) as CobrancaSaasCooperativa | null;

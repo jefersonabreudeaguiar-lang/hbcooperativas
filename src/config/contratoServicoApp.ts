@@ -1,4 +1,9 @@
 import { PLATFORM_NAME } from "@/utils/constants";
+import {
+  COBRANCA_SAAS_MINIMO_MES_DEFAULT,
+  COBRANCA_SAAS_PRECO_COOPERADO_DEFAULT,
+} from "@/services/cobrancaSaasService";
+import { formatCurrency } from "@/utils/format";
 
 /** Versão do contrato — cooperativas com versão anterior precisam assinar de novo. */
 export const CONTRATO_SERVICO_VERSAO = "2026-03-29";
@@ -41,7 +46,7 @@ export function getClausulasContratoServicoApp(): ClausulaContratoServico[] {
     {
       titulo: "3. Preço e forma de cobrança",
       itens: [
-        `Valor: R$ 9,90 por cooperado ativo cadastrado no ciclo mensal, com mínimo de R$ 149,00 por cooperativa/mês.`,
+        `Valor: ${formatCurrency(COBRANCA_SAAS_PRECO_COOPERADO_DEFAULT)} por cooperado ativo cadastrado no ciclo mensal, com mínimo de ${formatCurrency(COBRANCA_SAAS_MINIMO_MES_DEFAULT)} por cooperativa/mês.`,
         "Contam-se todos os cooperados com status diferente de desligado no momento da apuração do ciclo.",
         "O ciclo mensal inicia na data de cadastro do primeiro cooperado no CNPJ da cooperativa e renova-se a cada mês nessa mesma data (aniversário do ciclo).",
         "A cobrança aparecerá no painel do responsável com PIX (chave CPF do proprietário) e referência para boleto bancário.",

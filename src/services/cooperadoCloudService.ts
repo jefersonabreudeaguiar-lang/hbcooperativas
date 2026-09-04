@@ -10,27 +10,22 @@ import { getData, refreshStoredSession, saveDataSafe } from "@/services/dataStor
 import { fetchCooperativaByCnpjFromCloud, mergeCooperativaIntoData } from "@/services/cooperativaCloudService";
 import { mergeAppInstallFields } from "@/services/cooperadoAppInstallService";
 import { secureApiFetch } from "@/lib/security/clientSession";
+import {
+  cooperadosUnicosParaCobranca,
+  cpfCooperadoDigits,
+  mesmoCooperadoCadastro,
+  nomeNormalizadoCooperado,
+} from "@/utils/cooperadoDedupe";
 
-function cpfDigits(value: string): string {
-  return value.replace(/\D/g, "");
-}
+export {
+  cpfCooperadoDigits,
+  mesmoCooperadoCadastro,
+  cooperadosUnicosParaCobranca,
+  deduplicarCooperadosLista,
+} from "@/utils/cooperadoDedupe";
 
 export function nomeNormalizado(nome: string): string {
-  return nome.trim().toLowerCase().replace(/\s+/g, " ");
-}
-
-export function cpfCooperadoDigits(cpfCnpj?: string): string {
-  return (cpfCnpj ?? "").replace(/\D/g, "");
-}
-
-export function mesmoCooperadoCadastro(
-  a: Pick<Cooperado, "cpfCnpj" | "nomeCompleto">,
-  b: Pick<Cooperado, "cpfCnpj" | "nomeCompleto">
-): boolean {
-  const cpfA = cpfCooperadoDigits(a.cpfCnpj);
-  const cpfB = cpfCooperadoDigits(b.cpfCnpj);
-  if (cpfA.length >= 11 && cpfA === cpfB) return true;
-  return nomeNormalizado(a.nomeCompleto) === nomeNormalizado(b.nomeCompleto);
+  return nomeNormalizadoCooperado(nome);
 }
 
 /** Encontra o cadastro local equivalente (mesmo CPF ou nome). */
@@ -266,11 +261,11 @@ export function mergeCloudCooperadosIntoData(
 
     const idxId = cooperados.findIndex((c) => c.id === cn.id);
     const idxCpf =
-      cn.cpfCnpj && cpfDigits(cn.cpfCnpj)
+      cn.cpfCnpj && cpfCooperadoDigits(cn.cpfCnpj)
         ? cooperados.findIndex(
             (c) =>
               c.cooperativaId === coop.id &&
-              cpfDigits(c.cpfCnpj) === cpfDigits(cn.cpfCnpj)
+              cpfCooperadoDigits(c.cpfCnpj) === cpfCooperadoDigits(cn.cpfCnpj)
           )
         : -1;
     const idxNome = cooperados.findIndex(
@@ -469,8 +464,9 @@ export async function syncCooperadosFromCloud(cnpj: string, preferredCoopId?: st
 export function listCooperadosDaCooperativa(data: AppData, cooperativaId?: string): Cooperado[] {
   if (!cooperativaId) return [];
 
-  const base = data.cooperados
-    .filter((c) => c.cooperativaId === cooperativaId && c.status !== "desligado");
+  const base = cooperadosUnicosParaCobranca(
+    data.cooperados.filter((c) => c.cooperativaId === cooperativaId)
+  );
 
   const ids = new Set(base.map((c) => c.id));
   const nomes = new Set(base.map((c) => nomeNormalizado(c.nomeCompleto)));

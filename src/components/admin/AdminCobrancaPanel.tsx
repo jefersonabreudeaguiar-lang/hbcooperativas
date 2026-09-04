@@ -422,7 +422,7 @@ export function AdminCobrancaPanel({ user }: AdminCobrancaPanelProps) {
               inputMode="decimal"
               value={precoInput}
               onChange={(e) => setPrecoInput(e.target.value)}
-              placeholder="9,90"
+              placeholder="14,90"
             />
           </FormField>
           <FormField label="Mínimo mensal por cooperativa (R$)">

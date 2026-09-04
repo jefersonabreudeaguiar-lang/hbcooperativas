@@ -4,12 +4,13 @@ import {
   gerarReferenciaBoletoSaas,
   PROPRIETARIO_APP,
 } from "@/config/contratoServicoApp";
+import { cooperadosUnicosParaCobranca } from "@/utils/cooperadoDedupe";
 import { normalizeCnpj } from "@/utils/cooperativa";
 import { PLATFORM_NAME } from "@/utils/constants";
 import { formatCurrency } from "@/utils/format";
 
 /** Preço padrão por cooperado cadastrado / mês (ciclo). */
-export const COBRANCA_SAAS_PRECO_COOPERADO_DEFAULT = 9.9;
+export const COBRANCA_SAAS_PRECO_COOPERADO_DEFAULT = 14.9;
 /** Piso mensal padrão por cooperativa. */
 export const COBRANCA_SAAS_MINIMO_MES_DEFAULT = 149;
 /** Dia do mês para vencimento da cobrança HB (1–28). */
@@ -20,7 +21,7 @@ export const COBRANCA_SAAS_PRECO_COOPERADO = COBRANCA_SAAS_PRECO_COOPERADO_DEFAU
 /** @deprecated Use getCobrancaSaasPricing() — mantido para compatibilidade. */
 export const COBRANCA_SAAS_MINIMO_MES = COBRANCA_SAAS_MINIMO_MES_DEFAULT;
 /** @deprecated Use getCobrancaSaasPrecoLabel() — mantido para compatibilidade. */
-export const COBRANCA_SAAS_PRECO_LABEL = "R$ 9,90";
+export const COBRANCA_SAAS_PRECO_LABEL = "R$ 14,90";
 /** @deprecated Use getCobrancaSaasMinimoLabel() — mantido para compatibilidade. */
 export const COBRANCA_SAAS_MINIMO_LABEL = "R$ 149,00";
 
@@ -163,8 +164,8 @@ export function getPeriodoCobrancaSaas(
 }
 
 export function contarCooperadosCobranca(data: AppData, cooperativaId: string): number {
-  return data.cooperados.filter(
-    (c) => c.cooperativaId === cooperativaId && c.status !== "desligado"
+  return cooperadosUnicosParaCobranca(
+    data.cooperados.filter((c) => c.cooperativaId === cooperativaId)
   ).length;
 }
 

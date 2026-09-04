@@ -10,6 +10,8 @@ import {
   HardDrive,
   Server,
   Settings,
+  Gauge,
+  RefreshCw,
 } from "lucide-react";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
@@ -23,6 +25,11 @@ import {
   formatBytes,
   type CloudPlatformOverview,
 } from "@/services/platformAdminService";
+import {
+  capacityStatusClass,
+  capacityStatusLabel,
+  type PlatformCapacitySnapshot,
+} from "@/services/platformCapacityService";
 import { secureApiFetch } from "@/lib/security/clientSession";
 import { AdminSectionHeader } from "@/components/admin/AdminSectionHeader";
 import type { User } from "@/types";
@@ -37,6 +44,8 @@ export function AdminSistemaPanel({ user }: AdminSistemaPanelProps) {
   const data = useAppData();
   const [cloud, setCloud] = useState<CloudPlatformOverview | null>(null);
   const [cloudLoading, setCloudLoading] = useState(true);
+  const [capacity, setCapacity] = useState<PlatformCapacitySnapshot | null>(null);
+  const [capacityLoading, setCapacityLoading] = useState(true);
   const [senhaAtual, setSenhaAtual] = useState("");
   const [novaSenha, setNovaSenha] = useState("");
   const [confirmarSenha, setConfirmarSenha] = useState("");
@@ -60,6 +69,22 @@ export function AdminSistemaPanel({ user }: AdminSistemaPanelProps) {
     return () => {
       cancelled = true;
     };
+  }, []);
+
+  const reloadCapacity = () => {
+    setCapacityLoading(true);
+    secureApiFetch("/api/admin/platform-capacity", { cache: "no-store" })
+      .then((r) => r.json())
+      .then((json: { ok?: boolean; snapshot?: PlatformCapacitySnapshot }) => {
+        if (json.ok && json.snapshot) setCapacity(json.snapshot);
+        else setCapacity(null);
+      })
+      .catch(() => setCapacity(null))
+      .finally(() => setCapacityLoading(false));
+  };
+
+  useEffect(() => {
+    reloadCapacity();
   }, []);
 
   const snapshot = useMemo(
@@ -187,6 +212,148 @@ export function AdminSistemaPanel({ user }: AdminSistemaPanelProps) {
           </div>
         </Card>
       </div>
+
+      <Card
+        title="Capacidade por cooperativa"
+        action={
+          <button
+            type="button"
+            className="inline-flex items-center gap-1 text-xs text-gray-500 hover:text-gray-800"
+            onClick={reloadCapacity}
+            disabled={capacityLoading}
+          >
+            <RefreshCw size={14} className={capacityLoading ? "animate-spin" : ""} /> Atualizar
+          </button>
+        }
+      >
+        <div className="flex items-start gap-2 mb-4 text-sm text-gray-600">
+          <Gauge size={18} className="text-slate-600 shrink-0 mt-0.5" />
+          <p>
+            Monitora limites do modelo atual: <strong>operacional.json</strong> (máx.{" "}
+            {capacity?.limits.operacionalJsonMb ?? 5} MB por CNPJ), listagem de{" "}
+            <strong>{capacity?.limits.cooperadosList ?? 500} cooperados</strong> e referência de{" "}
+            <strong>~{capacity?.limits.browserStorageMb ?? 5} MB</strong> no navegador de cada aparelho.
+            Alerta a partir de {capacity?.limits.warnPercent ?? 80}%.
+          </p>
+        </div>
+
+        {capacityLoading && !capacity ? (
+          <p className="text-sm text-gray-500 py-6 text-center">Medindo uso na nuvem…</p>
+        ) : !capacity?.cooperativas.length ? (
+          <p className="text-sm text-gray-500 py-6 text-center">Nenhuma cooperativa na nuvem.</p>
+        ) : (
+          <div className="space-y-4">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-sm">
+              <div className="rounded-lg bg-gray-50 p-3">
+                <p className="text-gray-500 text-xs">Cooperativas</p>
+                <p className="font-semibold text-lg tabular-nums">{capacity.totais.cooperativas}</p>
+              </div>
+              <div className="rounded-lg bg-gray-50 p-3">
+                <p className="text-gray-500 text-xs">Cooperados (total)</p>
+                <p className="font-semibold text-lg tabular-nums">{capacity.totais.cooperados}</p>
+              </div>
+              <div className="rounded-lg bg-gray-50 p-3">
+                <p className="text-gray-500 text-xs">Operacional (total)</p>
+                <p className="font-semibold text-lg tabular-nums">
+                  {formatBytes(capacity.totais.operacionalBytes)}
+                </p>
+              </div>
+              <div className="rounded-lg bg-gray-50 p-3">
+                <p className="text-gray-500 text-xs">Com alerta</p>
+                <p
+                  className={`font-semibold text-lg tabular-nums ${
+                    capacity.totais.comAlerta > 0 ? "text-amber-700" : "text-green-700"
+                  }`}
+                >
+                  {capacity.totais.comAlerta}
+                </p>
+              </div>
+            </div>
+
+            <div className="overflow-x-auto rounded-lg border border-gray-200">
+              <table className="min-w-full text-sm">
+                <thead className="bg-gray-50 text-left text-xs text-gray-500 uppercase">
+                  <tr>
+                    <th className="px-3 py-2">Cooperativa</th>
+                    <th className="px-3 py-2">Cooperados</th>
+                    <th className="px-3 py-2">operacional.json</th>
+                    <th className="px-3 py-2">Status</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100">
+                  {capacity.cooperativas.map((row) => {
+                    const worstStatus =
+                      row.operacionalStatus === "critico" || row.cooperadosStatus === "critico"
+                        ? "critico"
+                        : row.operacionalStatus === "atencao" || row.cooperadosStatus === "atencao"
+                          ? "atencao"
+                          : "ok";
+                    return (
+                      <tr key={row.cooperativaId}>
+                        <td className="px-3 py-3">
+                          <p className="font-medium text-gray-900">{row.nome}</p>
+                          {row.alertas.length > 0 && (
+                            <ul className="mt-1 text-xs text-amber-800 space-y-0.5">
+                              {row.alertas.map((a) => (
+                                <li key={a}>• {a}</li>
+                              ))}
+                            </ul>
+                          )}
+                        </td>
+                        <td className="px-3 py-3 tabular-nums">
+                          {row.cooperadosCount} / {row.cooperadosLimit}
+                          <div className="mt-1 h-1.5 w-24 rounded-full bg-gray-100 overflow-hidden">
+                            <div
+                              className={`h-full rounded-full ${
+                                row.cooperadosStatus === "critico"
+                                  ? "bg-red-500"
+                                  : row.cooperadosStatus === "atencao"
+                                    ? "bg-amber-500"
+                                    : "bg-green-500"
+                              }`}
+                              style={{ width: `${Math.min(100, row.cooperadosPercent)}%` }}
+                            />
+                          </div>
+                        </td>
+                        <td className="px-3 py-3 tabular-nums">
+                          {row.operacionalMissing
+                            ? "—"
+                            : `${formatBytes(row.operacionalBytes)} / ${formatBytes(row.operacionalLimitBytes)}`}
+                          {!row.operacionalMissing && (
+                            <div className="mt-1 h-1.5 w-28 rounded-full bg-gray-100 overflow-hidden">
+                              <div
+                                className={`h-full rounded-full ${
+                                  row.operacionalStatus === "critico"
+                                    ? "bg-red-500"
+                                    : row.operacionalStatus === "atencao"
+                                      ? "bg-amber-500"
+                                      : "bg-green-500"
+                                }`}
+                                style={{ width: `${Math.min(100, row.operacionalPercent)}%` }}
+                              />
+                            </div>
+                          )}
+                        </td>
+                        <td className="px-3 py-3">
+                          <span
+                            className={`inline-flex rounded-full border px-2 py-0.5 text-xs font-medium ${capacityStatusClass(worstStatus)}`}
+                          >
+                            {capacityStatusLabel(worstStatus)}
+                          </span>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+            <p className="text-xs text-gray-500">
+              Atualizado em {new Date(capacity.generatedAt).toLocaleString("pt-BR")}. Fotos de entrega ficam em
+              arquivos separados e não entram neste limite de 5 MB.
+            </p>
+          </div>
+        )}
+      </Card>
 
       <Card title="Alterar senha do /admin" action={<Settings size={18} className="text-gray-400" />}>
         {msgSenha?.type === "erro" && (

@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Cooperado } from "@/types";
+import { cooperadosUnicosParaCobranca } from "@/utils/cooperadoDedupe";
 
 const BUCKET = "hb-cooperados";
 
@@ -80,5 +81,33 @@ export async function fetchCooperadosFromStorage(
       /* ignore corrupt file */
     }
   }
-  return cooperados.sort((a, b) => a.nomeCompleto.localeCompare(b.nomeCompleto, "pt-BR"));
+  return cooperadosUnicosParaCobranca(cooperados).sort((a, b) =>
+    a.nomeCompleto.localeCompare(b.nomeCompleto, "pt-BR")
+  );
+}
+
+/** Lista bruta (inclui duplicados/desligados) — uso administrativo. */
+export async function fetchAllCooperadosFromStorage(
+  supabase: SupabaseClient,
+  cnpj: string
+): Promise<Cooperado[]> {
+  await ensureCooperadosBucket(supabase);
+  const { data: files, error } = await supabase.storage.from(BUCKET).list(cnpj, { limit: 1000 });
+  if (error || !files?.length) return [];
+
+  const cooperados: Cooperado[] = [];
+  for (const file of files) {
+    if (!file.name.endsWith(".json")) continue;
+    const { data: blob, error: dlErr } = await supabase.storage
+      .from(BUCKET)
+      .download(`${cnpj}/${file.name}`);
+    if (dlErr || !blob) continue;
+    try {
+      const parsed = JSON.parse(await blob.text()) as { cooperado?: Cooperado };
+      if (parsed?.cooperado?.id) cooperados.push(parsed.cooperado);
+    } catch {
+      /* ignore corrupt file */
+    }
+  }
+  return cooperados;
 }
