@@ -59,15 +59,16 @@ export async function findAppUserByEmail(
   supabase: SupabaseClient,
   email: string
 ): Promise<AppUserRow | null> {
-  const canonical = normalizeAuthEmail(email);
   const simple = email.trim().toLowerCase();
+  const canonical = normalizeAuthEmail(email);
 
-  const byCanonical = await queryAppUserByEmailExact(supabase, canonical);
-  if (byCanonical) return byCanonical;
+  // Prioriza o e-mail digitado (ex.: alias +cooperado) antes de colapsar Gmail.
+  const bySimple = await queryAppUserByEmailExact(supabase, simple);
+  if (bySimple) return bySimple;
 
-  if (simple !== canonical) {
-    const bySimple = await queryAppUserByEmailExact(supabase, simple);
-    if (bySimple) return bySimple;
+  if (canonical !== simple) {
+    const byCanonical = await queryAppUserByEmailExact(supabase, canonical);
+    if (byCanonical) return byCanonical;
   }
 
   return null;

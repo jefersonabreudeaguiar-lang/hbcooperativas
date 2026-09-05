@@ -181,12 +181,12 @@ export async function loginViaCloudApi(
   password: string
 ): Promise<{ token: string; user: CloudSessionProfile } | null> {
   try {
-    const normalizedEmail = normalizeAuthEmail(email);
+    const simpleEmail = email.trim().toLowerCase();
     const res = await fetch("/api/auth/login", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       credentials: "include",
-      body: JSON.stringify({ email: normalizedEmail, password }),
+      body: JSON.stringify({ email: simpleEmail, password }),
     });
     const json = (await res.json().catch(() => ({}))) as {
       token?: string;
