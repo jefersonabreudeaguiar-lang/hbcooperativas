@@ -1,7 +1,12 @@
 import type { AppData, User } from "@/types";
 import { resolverCooperadoIdCanonico } from "@/services/cooperadoCloudService";
-import { cooperadoFinanceiroLocalAusente, cooperadoPrecisaFullSyncFinanceiro } from "@/services/fichaSyncGuard";
+import {
+  cooperadoFinanceiroLocalAusente,
+  cooperadoPrecisaFullSyncFinanceiro,
+  limparFichaObsoletaCooperado,
+} from "@/services/fichaSyncGuard";
 import { requestAppSync } from "@/services/syncRequest";
+import { saveDataSafe, getData } from "@/services/dataStore";
 import { getUserCooperativaId } from "@/utils/cooperativa";
 
 const RECOVERY_GAP_MS = 30_000;
@@ -41,6 +46,11 @@ export function avaliarIntegridadeFinanceiroCooperado(
   }
 
   const cooperadoId = resolverCooperadoIdCanonico(data, user.cooperadoId, cooperativaId);
+  const limpo = limparFichaObsoletaCooperado(data, cooperadoId, cooperativaId);
+  if (limpo !== data) {
+    saveDataSafe(limpo);
+    data = getData();
+  }
   if (cooperadoPrecisaFullSyncFinanceiro(data, cooperadoId, cooperativaId)) {
     solicitarRecuperacaoFinanceiroCooperado();
   }

@@ -7,7 +7,7 @@ import { syncCooperadosFromCloud, fetchCooperadosFromCloud, pushCooperadoToCloud
 import { syncNotasPedidoFromCloud, patchNotaPedidoInCloud } from "@/services/notaPedidoCloudService";
 import { fetchCooperativaByCnpjFromCloud, mergeCooperativaIntoData } from "@/services/cooperativaCloudService";
 import { mergeArquivosMensaisFromCloud, reconciliarFichaFromNotasConferidas, dedupeFichaCorridaPorNota, aplicarNotasPedidoExcluidas } from "@/services/notaPedidoService";
-import { operacionalPushSeguro, precisaReparoFullSyncNotas, cooperadoFinanceiroDesatualizado, cooperadoFichaValoresDesalinhados } from "@/services/fichaSyncGuard";
+import { operacionalPushSeguro, precisaReparoFullSyncNotas, cooperadoFinanceiroDesatualizado, cooperadoFichaValoresDesalinhados, limparFichaObsoletaCooperado } from "@/services/fichaSyncGuard";
 import { beginCloudSync, endCloudSync } from "@/services/cloudSyncProgress";
 import { clearNotasSyncMeta, forceNextFullNotasSync } from "@/services/syncMetaService";
 import { sincronizarMensalidadeCooperativa, mensalidadeVisivelNoDispositivo, normalizarMensalidadeCooperadoLocal, mesclarMensalidadesPayloadNuvem, prepararMensalidadesCloud, prepararMensalidadeCloud, reconciliarMensalidadesComCooperadosCloud, mensalidadeCloudEntraNoDispositivo, enriquecerMensalidadeCooperadoSnapshot } from "@/services/mensalidadeService";
@@ -1180,6 +1180,11 @@ export async function syncCooperativaBackground(
         }
       }
       saveDataSafe(reconciliarFichaFromNotasConferidas(getData()));
+      if (cooperadoId && coopId) {
+        const after = getData();
+        const limpo = limparFichaObsoletaCooperado(after, cooperadoId, coopId);
+        if (limpo !== after) saveDataSafe(limpo);
+      }
     });
   } finally {
     endCloudSync();
@@ -1224,6 +1229,11 @@ export async function ensureCooperadoFinanceiroFromCloud(
   if (digits.length !== 14) return false;
 
   let data = getData();
+  const limpoInicial = limparFichaObsoletaCooperado(data, cooperadoId, cooperativaId);
+  if (limpoInicial !== data) {
+    saveDataSafe(limpoInicial);
+    data = getData();
+  }
   if (cooperadoFichaValoresDesalinhados(data, cooperadoId, cooperativaId)) {
     saveDataSafe(reconciliarFichaFromNotasConferidas(data));
     data = getData();
@@ -1245,6 +1255,9 @@ export async function ensureCooperadoFinanceiroFromCloud(
     if (cooperadoFinanceiroDesatualizado(data, cooperadoId, cooperativaId)) {
       await repararIntegridadeFichaNotas(digits, cooperativaId, cooperadoId);
     }
+    data = getData();
+    const limpoFinal = limparFichaObsoletaCooperado(data, cooperadoId, cooperativaId);
+    if (limpoFinal !== data) saveDataSafe(limpoFinal);
     return !cooperadoFinanceiroDesatualizado(getData(), cooperadoId, cooperativaId);
   } finally {
     endCloudSync();

@@ -56,6 +56,71 @@ export function notasSyncProvavelmenteCompleto(data: AppData, cooperativaId: str
   return comNotaConferida / fichasCoop.length >= SYNC_COMPLETO_RATIO;
 }
 
+function fichaObsoletaPosTransferencia(
+  data: AppData,
+  ficha: FichaCorrida,
+  cooperadoId: string,
+  cooperativaId: string
+): boolean {
+  const nota = (data.notasPedido ?? []).find((n) => n.id === ficha.notaPedidoId);
+  if (!nota || (nota.status !== "conferida" && nota.status !== "pago")) return false;
+  return !notaPertenceCooperado(data, nota, cooperadoId, cooperativaId);
+}
+
+function cooperadoSemNotasLocais(
+  data: AppData,
+  cooperadoId: string,
+  cooperativaId: string
+): boolean {
+  return !(data.notasPedido ?? []).some((n) =>
+    notaPertenceCooperado(data, n, cooperadoId, cooperativaId)
+  );
+}
+
+/**
+ * Remove ficha/arquivo local quando a nota já pertence a outro cooperado (ex.: transferência admin).
+ */
+export function limparFichaObsoletaCooperado(
+  data: AppData,
+  cooperadoId: string,
+  cooperativaId: string
+): AppData {
+  const canonico = resolverCooperadoIdCanonico(data, cooperadoId, cooperativaId);
+  const semNotasLocais = cooperadoSemNotasLocais(data, canonico, cooperativaId);
+  let changed = false;
+
+  const fichaCorrida = (data.fichaCorrida ?? []).filter((f) => {
+    if (!fichaPertenceCooperado(data, f, canonico, cooperativaId)) return true;
+    if (fichaObsoletaPosTransferencia(data, f, canonico, cooperativaId)) {
+      changed = true;
+      return false;
+    }
+    if (semNotasLocais && f.status === "pendente") {
+      changed = true;
+      return false;
+    }
+    return true;
+  });
+
+  if (!changed) return data;
+
+  const arquivosMensais = (data.arquivosMensais ?? []).map((a) => {
+    if (a.cooperadoId !== canonico || a.cooperativaId !== cooperativaId) return a;
+    const notaPedidoIds = a.notaPedidoIds.filter((id) =>
+      fichaCorrida.some(
+        (f) =>
+          f.notaPedidoId === id &&
+          fichaPertenceCooperado(data, f, canonico, cooperativaId) &&
+          !fichaObsoletaPosTransferencia(data, f, canonico, cooperativaId)
+      )
+    );
+    if (notaPedidoIds.length === a.notaPedidoIds.length) return a;
+    return { ...a, notaPedidoIds, updatedAt: new Date().toISOString() };
+  });
+
+  return { ...data, fichaCorrida, arquivosMensais };
+}
+
 /** Cooperado sem dados financeiros locais completos (precisa puxar/reparar da nuvem). */
 export function cooperadoFinanceiroLocalAusente(
   data: AppData,
@@ -70,6 +135,16 @@ export function cooperadoFinanceiroLocalAusente(
 
   // Sem ficha e sem entrega conferida = cooperado novo ou só com rascunho — estado válido.
   if (fichasPendentes.length === 0 && conferidas === 0) return false;
+
+  // Ficha local obsoleta (notas transferidas para outro cooperado na nuvem).
+  if (
+    fichasPendentes.length > 0 &&
+    conferidas === 0 &&
+    (fichasPendentes.every((f) => fichaObsoletaPosTransferencia(data, f, canonico, cooperativaId)) ||
+      cooperadoSemNotasLocais(data, canonico, cooperativaId))
+  ) {
+    return false;
+  }
 
   // Ficha veio da nuvem antes das notas conferidas — estado quebrado típico no celular.
   if (fichasPendentes.length > 0 && conferidas === 0) return true;
