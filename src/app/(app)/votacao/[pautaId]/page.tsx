@@ -74,7 +74,10 @@ export default function VotacaoDeliberativaPage() {
     return (
       <div className="max-w-3xl space-y-4">
         <AlertBanner variant="success" title="Voto já registrado">
-          <p>Você já participou desta votação. Obrigado!</p>
+          <p>
+            Você já participou desta votação com sua assinatura cadastrada. Sua firma constará na ata
+            oficial quando a diretoria publicar o resultado.
+          </p>
         </AlertBanner>
       </div>
     );

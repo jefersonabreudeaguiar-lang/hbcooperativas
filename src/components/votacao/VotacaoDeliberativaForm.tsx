@@ -161,7 +161,7 @@ export function VotacaoDeliberativaForm({
               cooperado={cooperado}
               assinatura={assinatura}
               onAssinaturaChange={setAssinatura}
-              contexto="esta votação"
+              contexto="esta votação e a ata oficial"
             />
           </div>
 

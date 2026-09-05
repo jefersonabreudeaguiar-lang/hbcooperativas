@@ -29,12 +29,12 @@ export function AssinarComCadastroBlock({
   onAssinaturaChange,
   contexto = "este documento",
 }: AssinarComCadastroBlockProps) {
-  const usaPilot = cooperadoUsaAssinaturaCadastroPilot(cooperadoId);
+  const usaCadastro = cooperadoUsaAssinaturaCadastroPilot(cooperadoId);
   const cadastroUrl = getAssinaturaCadastroDataUrl(cooperado);
   const precisaCadastro = cooperadoPrecisaCadastrarAssinatura(cooperadoId, cooperado);
   const temCadastro = cooperadoTemAssinaturaCadastrada(cooperado);
 
-  if (!usaPilot) {
+  if (!usaCadastro) {
     return (
       <>
         <p className="text-xs text-gray-500 mb-3">Assine abaixo para confirmar.</p>

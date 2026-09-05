@@ -6,6 +6,7 @@ import { useAppDataSelector } from "@/hooks/useAppData";
 import { useAuth } from "@/modules/auth/AuthProvider";
 import { usePermissions } from "@/hooks/usePermissions";
 import { getUserCooperativaId } from "@/utils/cooperativa";
+import { resolverCooperadoIdCanonico } from "@/services/cooperadoCloudService";
 import { resultadoCooperadoVisivelPorPauta } from "@/services/votacaoService";
 import { VotacaoResultadoDetalheCooperado } from "@/components/votacao/VotacaoResultadoDetalheCooperado";
 import { PageSkeleton } from "@/components/ui/PageSkeleton";
@@ -23,9 +24,14 @@ export default function VotacaoResultadoCooperadoPage() {
       if (!data || !user || !pautaId) return null;
       const coopId = getUserCooperativaId(user, data);
       if (!coopId) return null;
-      return resultadoCooperadoVisivelPorPauta(data, pautaId, coopId);
+      const resultado = resultadoCooperadoVisivelPorPauta(data, pautaId, coopId);
+      if (!resultado) return null;
+      const cooperadoId = user.cooperadoId
+        ? resolverCooperadoIdCanonico(data, user.cooperadoId, coopId)
+        : undefined;
+      return { ...resultado, coopId, cooperadoId };
     },
-    [user?.id, user?.cooperativaId, pautaId]
+    [user?.id, user?.cooperadoId, user?.cooperativaId, pautaId]
   );
 
   useEffect(() => {
@@ -52,5 +58,11 @@ export default function VotacaoResultadoCooperadoPage() {
     );
   }
 
-  return <VotacaoResultadoDetalheCooperado resumo={view.resumo} />;
+  return (
+    <VotacaoResultadoDetalheCooperado
+      resumo={view.resumo}
+      cooperativaId={view.coopId}
+      cooperadoId={view.cooperadoId}
+    />
+  );
 }

@@ -1,23 +1,45 @@
 "use client";
 
+import { useState } from "react";
 import Link from "next/link";
-import { ArrowLeft, BarChart3 } from "lucide-react";
+import { ArrowLeft, BarChart3, FileDown, PenLine } from "lucide-react";
 import type { ResumoVotacaoPauta } from "@/services/votacaoService";
 import { horasRestantesResultadoPublicado, labelVoto } from "@/services/votacaoService";
 import { formatDate } from "@/utils/format";
 import { Card, StatCard } from "@/components/ui/Card";
 import { DataTable } from "@/components/ui/Table";
+import { Button } from "@/components/ui/Button";
+import { getData } from "@/services/dataStore";
+import { baixarAtaDeliberacaoVotacaoPdf } from "@/utils/votacaoDeliberativaHtml";
 
 interface VotacaoResultadoDetalheCooperadoProps {
   resumo: ResumoVotacaoPauta;
+  cooperativaId: string;
+  cooperadoId?: string;
 }
 
-export function VotacaoResultadoDetalheCooperado({ resumo }: VotacaoResultadoDetalheCooperadoProps) {
+export function VotacaoResultadoDetalheCooperado({
+  resumo,
+  cooperativaId,
+  cooperadoId,
+}: VotacaoResultadoDetalheCooperadoProps) {
+  const [gerandoAta, setGerandoAta] = useState(false);
   const { pauta, votos, pctSim, pctNao, pctAbstencao, votosSim, votosNao, votosAbstencao, totalVotos, totalElegiveis } =
     resumo;
   const horasRestantes = pauta.resultadoPublicadoEm
     ? horasRestantesResultadoPublicado(pauta.resultadoPublicadoEm)
     : 0;
+  const meuVoto = cooperadoId ? votos.find((v) => v.cooperadoId === cooperadoId) : undefined;
+  const podeBaixarAta = totalVotos > 0;
+
+  const baixarAta = async () => {
+    setGerandoAta(true);
+    try {
+      await baixarAtaDeliberacaoVotacaoPdf(getData(), pauta.id, cooperativaId);
+    } finally {
+      setGerandoAta(false);
+    }
+  };
 
   return (
     <div className="space-y-6 max-w-3xl">
@@ -43,6 +65,35 @@ export function VotacaoResultadoDetalheCooperado({ resumo }: VotacaoResultadoDet
           {horasRestantes > 0 ? ` (restam cerca de ${horasRestantes} h)` : ""}.
         </p>
       </div>
+
+      {meuVoto?.assinaturaDataUrl && (
+        <Card title="Sua assinatura nesta deliberação">
+          <p className="text-sm text-gray-600 mb-3">
+            Você votou <strong>{labelVoto(meuVoto.voto)}</strong> em {formatDate(meuVoto.createdAt.split("T")[0])}.
+            Esta assinatura está registrada na ata oficial.
+          </p>
+          <div className="rounded-xl border border-green-200 bg-white p-3 flex justify-center">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={meuVoto.assinaturaDataUrl}
+              alt="Sua assinatura na votação"
+              className="max-h-16 max-w-full object-contain"
+            />
+          </div>
+        </Card>
+      )}
+
+      {podeBaixarAta && (
+        <Card title="Ata oficial">
+          <p className="text-sm text-gray-600 mb-4">
+            PDF com apuração, rol nominal e assinaturas de todos os votantes — incluindo a sua, se você participou.
+          </p>
+          <Button type="button" size="lg" onClick={() => void baixarAta()} disabled={gerandoAta}>
+            <FileDown size={18} />
+            {gerandoAta ? "Gerando ata…" : "Baixar ata em PDF"}
+          </Button>
+        </Card>
+      )}
 
       <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
         <StatCard title="SIM" value={`${pctSim.toLocaleString("pt-BR")}%`} subtitle={`${votosSim} voto(s)`} />
@@ -79,6 +130,19 @@ export function VotacaoResultadoDetalheCooperado({ resumo }: VotacaoResultadoDet
                   {labelVoto(v.voto)}
                 </span>
               ),
+            },
+            {
+              key: "assinatura",
+              label: "Assinatura",
+              render: (v) =>
+                v.assinaturaDataUrl ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={v.assinaturaDataUrl} alt="" className="h-8 max-w-[80px] object-contain" />
+                ) : (
+                  <span className="text-xs text-gray-400 inline-flex items-center gap-1">
+                    <PenLine size={12} /> —
+                  </span>
+                ),
             },
             { key: "data", label: "Quando", render: (v) => formatDate(v.createdAt.split("T")[0]) },
           ]}

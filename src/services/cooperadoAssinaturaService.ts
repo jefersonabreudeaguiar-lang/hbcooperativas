@@ -11,7 +11,7 @@ export function cooperadoTemAssinaturaCadastrada(cooperado: Pick<Cooperado, "ass
   return Boolean(getAssinaturaCadastroDataUrl(cooperado));
 }
 
-/** Piloto Orlando: exige cadastro de assinatura como o PIX. */
+/** Exige cadastro de assinatura antes de votar ou assinar recibo (como o PIX). */
 export function cooperadoPrecisaCadastrarAssinatura(
   cooperadoId: string | undefined | null,
   cooperado: Pick<Cooperado, "assinaturaCadastroDataUrl"> | null | undefined
@@ -26,8 +26,8 @@ export function salvarAssinaturaCadastroCooperado(
   payload: { dataUrl: string; hash: string },
   actor: Pick<User, "id" | "name">
 ): { ok: true; data: AppData; cooperado: Cooperado } | { ok: false; error: string } {
-  if (!cooperadoUsaAssinaturaCadastroPilot(cooperadoId)) {
-    return { ok: false, error: "Cadastro de assinatura ainda não disponível para este cooperado." };
+  if (!cooperadoId?.trim()) {
+    return { ok: false, error: "Cooperado não identificado." };
   }
 
   const cooperado = data.cooperados.find((c) => c.id === cooperadoId);

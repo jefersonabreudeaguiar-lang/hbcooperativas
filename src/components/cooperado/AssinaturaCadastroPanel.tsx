@@ -64,7 +64,7 @@ export function AssinaturaCadastroPanel({ data, user, cooperado }: AssinaturaCad
         }
       }
 
-      setOkMsg("Assinatura cadastrada! Use «Assinar com minha assinatura» em votações e recibos.");
+      setOkMsg("Assinatura cadastrada! Use «Assinar com minha assinatura» em votações, atas e recibos.");
     } finally {
       setSalvando(false);
     }
@@ -120,7 +120,8 @@ export function AssinaturaCadastroPanel({ data, user, cooperado }: AssinaturaCad
           <Link href="/votacoes" className="font-semibold text-green-700 underline">
             Votações
           </Link>{" "}
-          ou confirme recibos com o botão <strong>Assinar com minha assinatura</strong>.
+          (sua assinatura entra na ata), confirme recibos ou baixe a ata após o resultado com o botão{" "}
+          <strong>Assinar com minha assinatura</strong>.
         </p>
       )}
     </Card>
