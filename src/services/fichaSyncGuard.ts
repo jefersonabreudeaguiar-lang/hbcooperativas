@@ -4,9 +4,15 @@ import {
   notaPertenceCooperado,
   resolverCooperadoIdCanonico,
 } from "@/services/cooperadoCloudService";
+import {
+  dedupeFichaCorridaPorNota,
+  getTotalAPagarCooperado,
+  reconciliarFichaFromNotasConferidas,
+} from "@/services/notaPedidoService";
 import { getCurrentMesReferencia } from "@/utils/format";
 
 const SYNC_COMPLETO_RATIO = 0.75;
+const TOL_VALOR = 0.02;
 
 function notasConferidasCooperado(
   data: AppData,
@@ -125,6 +131,73 @@ export function cooperadoPrecisaFullSyncFinanceiro(
   return teveAtividade;
 }
 
+function cooperadoTemFichasDuplicadas(
+  data: AppData,
+  cooperadoId: string,
+  cooperativaId: string
+): boolean {
+  const canonico = resolverCooperadoIdCanonico(data, cooperadoId, cooperativaId);
+  const raw = fichasDaCooperativa(data, cooperativaId, canonico);
+  const deduped = dedupeFichaCorridaPorNota(raw, data.notasPedido);
+  return raw.length !== deduped.length;
+}
+
+function cooperadoTotalMudaComReconciliacao(
+  data: AppData,
+  cooperadoId: string,
+  cooperativaId: string
+): boolean {
+  const canonico = resolverCooperadoIdCanonico(data, cooperadoId, cooperativaId);
+  const antes = getTotalAPagarCooperado(data, canonico, undefined, cooperativaId);
+  const depois = getTotalAPagarCooperado(
+    reconciliarFichaFromNotasConferidas(data),
+    canonico,
+    undefined,
+    cooperativaId
+  );
+  return Math.abs(antes - depois) > TOL_VALOR;
+}
+
+function cooperadoConferidasSemFicha(
+  data: AppData,
+  cooperadoId: string,
+  cooperativaId: string
+): boolean {
+  const canonico = resolverCooperadoIdCanonico(data, cooperadoId, cooperativaId);
+  const conferidas = (data.notasPedido ?? []).filter(
+    (n) =>
+      (n.status === "conferida" || n.status === "pago") &&
+      notaPertenceCooperado(data, n, canonico, cooperativaId) &&
+      !notaExcluidaLocal(data, n.id, cooperativaId)
+  );
+  for (const nota of conferidas) {
+    if (nota.valorLiquido <= 0 && (nota.itens ?? []).every((i) => i.quantidade <= 0)) continue;
+    const fichasCoop = dedupeFichaCorridaPorNota(
+      (data.fichaCorrida ?? []).filter(
+        (f) =>
+          f.notaPedidoId === nota.id &&
+          fichaPertenceCooperado(data, f, canonico, cooperativaId)
+      ),
+      data.notasPedido
+    );
+    if (fichasCoop.length === 0) return true;
+  }
+  return false;
+}
+
+/** Valores locais da ficha não batem com notas conferidas (duplicatas, reconciliação pendente). */
+export function cooperadoFichaValoresDesalinhados(
+  data: AppData,
+  cooperadoId: string,
+  cooperativaId: string
+): boolean {
+  return (
+    cooperadoTemFichasDuplicadas(data, cooperadoId, cooperativaId) ||
+    cooperadoTotalMudaComReconciliacao(data, cooperadoId, cooperativaId) ||
+    cooperadoConferidasSemFicha(data, cooperadoId, cooperativaId)
+  );
+}
+
 /** Ficha/notas ausentes ou valor a receber possivelmente incompleto (sync parcial). */
 export function cooperadoFinanceiroDesatualizado(
   data: AppData,
@@ -133,7 +206,8 @@ export function cooperadoFinanceiroDesatualizado(
 ): boolean {
   return (
     cooperadoFinanceiroLocalAusente(data, cooperadoId, cooperativaId) ||
-    cooperadoPrecisaFullSyncFinanceiro(data, cooperadoId, cooperativaId)
+    cooperadoPrecisaFullSyncFinanceiro(data, cooperadoId, cooperativaId) ||
+    cooperadoFichaValoresDesalinhados(data, cooperadoId, cooperativaId)
   );
 }
 
@@ -170,7 +244,8 @@ export function precisaReparoFullSyncNotas(
   if (
     cooperadoId &&
     (cooperadoFinanceiroLocalAusente(data, cooperadoId, cooperativaId) ||
-      cooperadoPrecisaFullSyncFinanceiro(data, cooperadoId, cooperativaId))
+      cooperadoPrecisaFullSyncFinanceiro(data, cooperadoId, cooperativaId) ||
+      cooperadoFichaValoresDesalinhados(data, cooperadoId, cooperativaId))
   ) {
     return true;
   }

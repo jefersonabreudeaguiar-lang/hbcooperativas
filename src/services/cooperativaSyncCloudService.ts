@@ -7,7 +7,7 @@ import { syncCooperadosFromCloud, fetchCooperadosFromCloud, pushCooperadoToCloud
 import { syncNotasPedidoFromCloud, patchNotaPedidoInCloud } from "@/services/notaPedidoCloudService";
 import { fetchCooperativaByCnpjFromCloud, mergeCooperativaIntoData } from "@/services/cooperativaCloudService";
 import { mergeArquivosMensaisFromCloud, reconciliarFichaFromNotasConferidas, dedupeFichaCorridaPorNota, aplicarNotasPedidoExcluidas } from "@/services/notaPedidoService";
-import { operacionalPushSeguro, precisaReparoFullSyncNotas, cooperadoFinanceiroDesatualizado } from "@/services/fichaSyncGuard";
+import { operacionalPushSeguro, precisaReparoFullSyncNotas, cooperadoFinanceiroDesatualizado, cooperadoFichaValoresDesalinhados } from "@/services/fichaSyncGuard";
 import { beginCloudSync, endCloudSync } from "@/services/cloudSyncProgress";
 import { clearNotasSyncMeta, forceNextFullNotasSync } from "@/services/syncMetaService";
 import { sincronizarMensalidadeCooperativa, mensalidadeVisivelNoDispositivo, normalizarMensalidadeCooperadoLocal, mesclarMensalidadesPayloadNuvem, prepararMensalidadesCloud, prepararMensalidadeCloud, reconciliarMensalidadesComCooperadosCloud, mensalidadeCloudEntraNoDispositivo, enriquecerMensalidadeCooperadoSnapshot } from "@/services/mensalidadeService";
@@ -271,41 +271,48 @@ function buildContratosPayload(data: AppData, coopId: string): ContratosSyncPayl
 }
 
 function buildOperacionalPayload(data: AppData, coopId: string): OperacionalSyncPayload {
+  const sanitized = reconciliarFichaFromNotasConferidas(data);
   const now = new Date().toISOString();
-  const cooperadoIds = new Set(data.cooperados.filter((c) => c.cooperativaId === coopId).map((c) => c.id));
+  const cooperadoIds = new Set(
+    sanitized.cooperados.filter((c) => c.cooperativaId === coopId).map((c) => c.id)
+  );
   const excluidasIds = new Set(
-    (data.prestacoesContasExcluidas ?? []).filter((e) => e.cooperativaId === coopId).map((e) => e.id)
+    (sanitized.prestacoesContasExcluidas ?? []).filter((e) => e.cooperativaId === coopId).map((e) => e.id)
+  );
+  const fichaCoop = dedupeFichaCorridaPorNota(
+    sanitized.fichaCorrida.filter((f) => f.cooperativaId === coopId),
+    sanitized.notasPedido
   );
   return {
     updatedAt: now,
     operationalResetVersion: OPERATIONAL_RESET_VERSION,
-    arquivosMensais: data.arquivosMensais.filter((a) => a.cooperativaId === coopId),
-    ajustesFichaMes: (data.ajustesFichaMes ?? []).filter((a) => a.cooperativaId === coopId),
-    pagamentosCooperado: data.pagamentosCooperado.filter((p) => p.cooperativaId === coopId),
-    comunicados: data.comunicados.filter((c) => c.cooperativaId === coopId),
-    mensalidades: data.mensalidades
-      .filter((m) => mensalidadeVisivelNoDispositivo(data, m, coopId))
+    arquivosMensais: sanitized.arquivosMensais.filter((a) => a.cooperativaId === coopId),
+    ajustesFichaMes: (sanitized.ajustesFichaMes ?? []).filter((a) => a.cooperativaId === coopId),
+    pagamentosCooperado: sanitized.pagamentosCooperado.filter((p) => p.cooperativaId === coopId),
+    comunicados: sanitized.comunicados.filter((c) => c.cooperativaId === coopId),
+    mensalidades: sanitized.mensalidades
+      .filter((m) => mensalidadeVisivelNoDispositivo(sanitized, m, coopId))
       .map((m) =>
         enriquecerMensalidadeCooperadoSnapshot(
-          data,
-          normalizarMensalidadeCooperadoLocal(data, m, coopId),
+          sanitized,
+          normalizarMensalidadeCooperadoLocal(sanitized, m, coopId),
           coopId
         )
       ),
-    descontos: data.descontos.filter((d) => cooperadoIds.has(d.cooperadoId)),
-    valoresAvulsosReceber: (data.valoresAvulsosReceber ?? []).filter((v) => v.cooperativaId === coopId),
-    livroCaixa: (data.livroCaixa ?? []).filter((l) => l.cooperativaId === coopId),
-    prestacoesContas: (data.prestacoesContas ?? []).filter(
+    descontos: sanitized.descontos.filter((d) => cooperadoIds.has(d.cooperadoId)),
+    valoresAvulsosReceber: (sanitized.valoresAvulsosReceber ?? []).filter((v) => v.cooperativaId === coopId),
+    livroCaixa: (sanitized.livroCaixa ?? []).filter((l) => l.cooperativaId === coopId),
+    prestacoesContas: (sanitized.prestacoesContas ?? []).filter(
       (p) => p.cooperativaId === coopId && !excluidasIds.has(p.id)
     ),
-    prestacoesContasExcluidas: (data.prestacoesContasExcluidas ?? []).filter((e) => e.cooperativaId === coopId),
-    notasPedidoExcluidas: (data.notasPedidoExcluidas ?? []).filter((e) => e.cooperativaId === coopId),
-    fichaCorrida: data.fichaCorrida.filter((f) => f.cooperativaId === coopId),
-    votacaoPautas: (data.votacaoPautas ?? []).filter((p) => p.cooperativaId === coopId),
-    votacaoVotos: (data.votacaoVotos ?? []).filter((v) => v.cooperativaId === coopId),
-    pareceresContabeis: (data.pareceresContabeis ?? []).filter((p) => p.cooperativaId === coopId),
-    fechamentoSnapshots: (data.fechamentoSnapshots ?? []).filter((s) => s.cooperativaId === coopId),
-    config: { ...data.config },
+    prestacoesContasExcluidas: (sanitized.prestacoesContasExcluidas ?? []).filter((e) => e.cooperativaId === coopId),
+    notasPedidoExcluidas: (sanitized.notasPedidoExcluidas ?? []).filter((e) => e.cooperativaId === coopId),
+    fichaCorrida: fichaCoop,
+    votacaoPautas: (sanitized.votacaoPautas ?? []).filter((p) => p.cooperativaId === coopId),
+    votacaoVotos: (sanitized.votacaoVotos ?? []).filter((v) => v.cooperativaId === coopId),
+    pareceresContabeis: (sanitized.pareceresContabeis ?? []).filter((p) => p.cooperativaId === coopId),
+    fechamentoSnapshots: (sanitized.fechamentoSnapshots ?? []).filter((s) => s.cooperativaId === coopId),
+    config: { ...sanitized.config },
   };
 }
 
@@ -939,6 +946,8 @@ export async function pushOperacionalToCloud(
       saveDataSafe(dataForPayload);
     }
   }
+  dataForPayload = reconciliarFichaFromNotasConferidas(dataForPayload);
+  saveDataSafe(dataForPayload);
   const payloadFinal = buildOperacionalPayload(dataForPayload, cid);
   if (bundle?.operacional) {
     const cloudMens = prepararMensalidadesCloud(
@@ -1163,6 +1172,12 @@ export async function syncCooperativaBackground(
       await syncContratosFromCloud(digits);
       if (coopId) {
         await repararIntegridadeFichaNotas(digits, coopId, cooperadoId);
+        if (
+          cooperadoId &&
+          cooperadoFichaValoresDesalinhados(getData(), cooperadoId, coopId)
+        ) {
+          saveDataSafe(reconciliarFichaFromNotasConferidas(getData()));
+        }
       }
       saveDataSafe(reconciliarFichaFromNotasConferidas(getData()));
     });
@@ -1209,6 +1224,10 @@ export async function ensureCooperadoFinanceiroFromCloud(
   if (digits.length !== 14) return false;
 
   let data = getData();
+  if (cooperadoFichaValoresDesalinhados(data, cooperadoId, cooperativaId)) {
+    saveDataSafe(reconciliarFichaFromNotasConferidas(data));
+    data = getData();
+  }
   if (!cooperadoFinanceiroDesatualizado(data, cooperadoId, cooperativaId)) {
     return true;
   }
