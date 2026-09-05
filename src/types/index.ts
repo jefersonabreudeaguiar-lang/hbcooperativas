@@ -192,6 +192,11 @@ export interface Cooperado {
   ultimoAcessoModo?: "app" | "navegador";
   /** Total de aberturas registradas (app ou navegador; no máx. 1 a cada 6 h). */
   aberturasAppTotal?: number;
+  /** Espécime de firma (foto do papel) — cadastro único, reuso em votação/recibos. */
+  assinaturaCadastroDataUrl?: string;
+  assinaturaCadastradaEm?: string;
+  assinaturaCadastroVersao?: number;
+  assinaturaCadastroHash?: string;
   produtos: string[];
   observacoes: string;
   createdAt: string;

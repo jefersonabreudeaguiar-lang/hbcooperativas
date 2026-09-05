@@ -7,17 +7,26 @@ import type { VotacaoOpcao, VotacaoPauta } from "@/types";
 import { formatHorarioReuniao, formatReuniaoWhatsapp, getEscopoEleitoralPauta, labelVoto } from "@/services/votacaoService";
 import { formatDate } from "@/utils/format";
 import { cn } from "@/utils/format";
-import { SignaturePad } from "@/components/ui/SignaturePad";
+import { AssinarComCadastroBlock } from "@/components/cooperado/AssinarComCadastroBlock";
 import { Button } from "@/components/ui/Button";
 import { AlertBanner } from "@/components/ui/AlertBanner";
+import type { Cooperado } from "@/types";
 
 interface VotacaoDeliberativaFormProps {
   pauta: VotacaoPauta;
+  cooperadoId: string;
+  cooperado?: Cooperado | null;
   onRegistrar: (voto: VotacaoOpcao, assinaturaDataUrl: string) => Promise<{ ok: boolean; error?: string }>;
   processando?: boolean;
 }
 
-export function VotacaoDeliberativaForm({ pauta, onRegistrar, processando }: VotacaoDeliberativaFormProps) {
+export function VotacaoDeliberativaForm({
+  pauta,
+  cooperadoId,
+  cooperado,
+  onRegistrar,
+  processando,
+}: VotacaoDeliberativaFormProps) {
   const [opcao, setOpcao] = useState<VotacaoOpcao | null>(null);
   const [assinatura, setAssinatura] = useState<string | null>(null);
   const [confirmado, setConfirmado] = useState<VotacaoOpcao | null>(null);
@@ -147,10 +156,13 @@ export function VotacaoDeliberativaForm({ pauta, onRegistrar, processando }: Vot
 
           <div className="border-t border-gray-100 pt-4">
             <p className="text-sm font-semibold text-gray-800 mb-2">Assinatura do cooperado</p>
-            <p className="text-xs text-gray-500 mb-3">
-              Assine abaixo para confirmar seu voto. A assinatura compõe o documento de deliberação da cooperativa.
-            </p>
-            <SignaturePad onChange={setAssinatura} />
+            <AssinarComCadastroBlock
+              cooperadoId={cooperadoId}
+              cooperado={cooperado}
+              assinatura={assinatura}
+              onAssinaturaChange={setAssinatura}
+              contexto="esta votação"
+            />
           </div>
 
           {erro && (

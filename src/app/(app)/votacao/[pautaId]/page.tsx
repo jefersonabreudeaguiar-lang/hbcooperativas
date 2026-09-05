@@ -36,17 +36,18 @@ export default function VotacaoDeliberativaPage() {
       const coopId = getUserCooperativaId(user, data);
       if (!coopId) return null;
       const cooperadoId = resolverCooperadoIdCanonico(data, user.cooperadoId, coopId);
+      const cooperado = data.cooperados.find((c) => c.id === cooperadoId && c.cooperativaId === coopId);
       const pauta = getPautaById(data, pautaId, coopId);
       const ctx = getPautaVotacaoCooperado(data, pautaId, coopId, cooperadoId);
-      if (ctx) return { ...ctx, coopId, cooperadoId, motivoIndisponivel: null as string | null };
-      if (!pauta) return { pauta: null, jaVotou: false, coopId, cooperadoId, motivoIndisponivel: "inexistente" };
+      if (ctx) return { ...ctx, coopId, cooperadoId, cooperado, motivoIndisponivel: null as string | null };
+      if (!pauta) return { pauta: null, jaVotou: false, coopId, cooperadoId, cooperado, motivoIndisponivel: "inexistente" };
       if (pauta.status !== "aberta") {
-        return { pauta: null, jaVotou: false, coopId, cooperadoId, motivoIndisponivel: "fechada" };
+        return { pauta: null, jaVotou: false, coopId, cooperadoId, cooperado, motivoIndisponivel: "fechada" };
       }
       if (getEscopoEleitoralPauta(pauta) === "diretoria") {
-        return { pauta: null, jaVotou: false, coopId, cooperadoId, motivoIndisponivel: "diretoria" };
+        return { pauta: null, jaVotou: false, coopId, cooperadoId, cooperado, motivoIndisponivel: "diretoria" };
       }
-      return { pauta: null, jaVotou: false, coopId, cooperadoId, motivoIndisponivel: "fechada" };
+      return { pauta: null, jaVotou: false, coopId, cooperadoId, cooperado, motivoIndisponivel: "fechada" };
     },
     [user?.id, user?.cooperadoId, user?.cooperativaId, pautaId]
   );
@@ -132,6 +133,12 @@ export default function VotacaoDeliberativaPage() {
   };
 
   return (
-    <VotacaoDeliberativaForm pauta={view.pauta} onRegistrar={handleRegistrar} processando={processando} />
+    <VotacaoDeliberativaForm
+      pauta={view.pauta}
+      cooperadoId={view.cooperadoId}
+      cooperado={view.cooperado}
+      onRegistrar={handleRegistrar}
+      processando={processando}
+    />
   );
 }

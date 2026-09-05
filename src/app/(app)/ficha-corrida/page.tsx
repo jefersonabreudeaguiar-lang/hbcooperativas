@@ -57,6 +57,7 @@ import { AlertBanner } from "@/components/ui/AlertBanner";
 import { PixQrModal } from "@/components/pix/PixQrModal";
 import { ConfirmDialog, PromptDialog } from "@/components/ui/ConfirmDialog";
 import { SignaturePad } from "@/components/ui/SignaturePad";
+import { AssinarComCadastroBlock } from "@/components/cooperado/AssinarComCadastroBlock";
 import { PageSkeleton } from "@/components/ui/PageSkeleton";
 import { PagarStepper } from "@/components/ficha/PagarStepper";
 import { ReciboResumoView } from "@/components/ficha/ReciboResumoView";
@@ -1648,7 +1649,17 @@ export default function FichaCorridaPage() {
           )}
           <div className="bg-green-50 border border-green-200 rounded-xl p-3">
             <p className="text-center text-green-900 font-semibold mb-3">Assinatura do cooperado</p>
-            <SignaturePad onChange={setAssinatura} />
+            {isCooperado && cooperadoSelecionado ? (
+              <AssinarComCadastroBlock
+                cooperadoId={cooperadoSelecionado.id}
+                cooperado={cooperadoSelecionado}
+                assinatura={assinatura}
+                onAssinaturaChange={setAssinatura}
+                contexto="este recibo de pagamento"
+              />
+            ) : (
+              <SignaturePad onChange={setAssinatura} />
+            )}
           </div>
         </div>
       </Modal>

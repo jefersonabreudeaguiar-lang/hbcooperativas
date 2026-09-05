@@ -40,6 +40,10 @@ import { PrestacaoContasDashboardBanner } from "@/components/prestacao/Prestacao
 import { InicioResolvidosPanel } from "@/components/cooperado/InicioResolvidosPanel";
 import { listarResolvidosInicioCooperado } from "@/services/cooperadoInicioResolvidosService";
 import { cooperadoPrecisaCadastrarPix } from "@/utils/pix";
+import { cooperadoUsaAssinaturaCadastroPilot } from "@/config/assinaturaCadastroPilot";
+import {
+  cooperadoPrecisaCadastrarAssinatura,
+} from "@/services/cooperadoAssinaturaService";
 import { listPautasAbertasCooperado, resultadoVisivelCooperado } from "@/services/votacaoService";
 import { VotacaoPautasInicioPanel } from "@/components/votacao/VotacaoPautasInicioPanel";
 import { VotacaoResultadoPanel } from "@/components/votacao/VotacaoResultadoPanel";
@@ -138,11 +142,15 @@ function CooperadoDashboard() {
     const pautasAbertas = coopId ? listPautasAbertasCooperado(data, coopId, cooperadoId) : [];
     const resultadoVotacao = coopId ? resultadoVisivelCooperado(data, coopId) : null;
     const resolvidos = listarResolvidosInicioCooperado(data, cooperadoId, coopId);
+    const mostrarAssinaturaPilot = cooperadoUsaAssinaturaCadastroPilot(cooperadoId);
+    const precisaAssinatura =
+      mostrarAssinaturaPilot && cooperadoPrecisaCadastrarAssinatura(cooperadoId, cooperado);
     const temSecaoPendencias =
       rejeitadas.length > 0 ||
       fotosEmAnalise > 0 ||
       valorReceber.exibir ||
       precisaPix ||
+      precisaAssinatura ||
       mensalidadeAberta ||
       prestacaoAberta ||
       exibirCardAvulsosSeparado;
@@ -172,6 +180,8 @@ function CooperadoDashboard() {
       temSecaoPendencias,
       mostrarBaixarApp,
       coopId,
+      mostrarAssinaturaPilot,
+      precisaAssinatura,
     };
   }, [user?.id, user?.cooperadoId, user?.cooperativaId]);
 
@@ -195,6 +205,8 @@ function CooperadoDashboard() {
     temSecaoPendencias,
     mostrarBaixarApp,
     coopId: viewCoopId,
+    mostrarAssinaturaPilot,
+    precisaAssinatura,
   } = view;
 
   return (
@@ -261,7 +273,11 @@ function CooperadoDashboard() {
         <ValoresAvulsosDashboardCard cooperadoId={cooperadoId} cooperativaId={viewCoopId} />
       )}
 
-      <OnboardingChecklist pixOk={!precisaPix} />
+      <OnboardingChecklist
+        pixOk={!precisaPix}
+        mostrarAssinatura={mostrarAssinaturaPilot}
+        assinaturaOk={!precisaAssinatura}
+      />
 
       {temSecaoPendencias && (
         <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">Pendências</p>

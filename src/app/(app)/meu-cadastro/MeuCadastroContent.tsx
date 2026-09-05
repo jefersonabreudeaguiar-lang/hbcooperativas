@@ -21,6 +21,9 @@ import { resolveCooperativaCnpj } from "@/services/notaPedidoCloudService";
 import { formatCPFCNPJ, formatPhone, formatMesReferencia, getCurrentMesReferencia } from "@/utils/format";
 import { getUserCooperativaId, getUserCooperativaNome } from "@/utils/cooperativa";
 import { cooperadoPrecisaCadastrarPix } from "@/utils/pix";
+import { AssinaturaCadastroPanel } from "@/components/cooperado/AssinaturaCadastroPanel";
+import { cooperadoUsaAssinaturaCadastroPilot } from "@/config/assinaturaCadastroPilot";
+import { cooperadoPrecisaCadastrarAssinatura } from "@/services/cooperadoAssinaturaService";
 
 export default function MeuCadastroContent() {
   const data = useAppData();
@@ -144,6 +147,15 @@ export default function MeuCadastroContent() {
           {cooperado.pixInvalidoMotivo ?? "Cadastre sua chave PIX para a cooperativa poder pagar você."}
         </AlertBanner>
       )}
+
+      {cooperadoUsaAssinaturaCadastroPilot(cooperado.id) &&
+        cooperadoPrecisaCadastrarAssinatura(cooperado.id, cooperado) && (
+          <AlertBanner variant="warning" title="Adicione sua assinatura" className="mb-6">
+            Fotografe sua assinatura no papel uma vez. Ela será usada em votações, atas e recibos.
+          </AlertBanner>
+        )}
+
+      <AssinaturaCadastroPanel data={data} user={user} cooperado={cooperado} />
 
       {!precisaPix && (
         <AlertBanner variant="success" className="mb-6">
