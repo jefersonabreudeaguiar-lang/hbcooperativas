@@ -37,7 +37,7 @@ function LoginHero() {
       <h2 className="text-xl lg:text-2xl font-semibold mb-3 lg:mb-4">Cooperativa com Transparência</h2>
       <p className="text-green-200 text-sm lg:text-lg leading-relaxed">
         Portal do cooperado e painel da diretoria para entregas, contratos, pagamentos, mensalidades,
-        Conta Coop, votações e relatórios — pensado para cooperativas de diferentes segmentos.
+        HB Créditos, votações e relatórios — pensado para cooperativas de diferentes segmentos.
       </p>
       <p className="text-green-300 text-xs lg:text-sm font-medium mt-6 lg:mt-8 mb-3 uppercase tracking-wide">
         Segmentos atendidos

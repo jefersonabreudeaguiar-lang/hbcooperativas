@@ -46,7 +46,7 @@ export async function ensureHbCreditPartnersSchema(
   if (!applied.ok) {
     return {
       ok: false,
-      error: "Tabela de mercados parceiros (Conta Coop) não configurada na nuvem.",
+      error: "Tabela de mercados parceiros (HB Créditos) não configurada na nuvem.",
       hint:
         "No Supabase SQL Editor, execute supabase/migrations/APPLY_HB_CREDIT_COMPLETO.sql (ou peça ao admin para rodar POST /api/admin/apply-hb-credit-partners-schema com x-setup-secret).",
     };

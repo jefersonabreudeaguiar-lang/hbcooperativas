@@ -67,7 +67,7 @@ export default function CadastroPage() {
   const [senhaCadastroCooperado, setSenhaCadastroCooperado] = useState("");
   const [aceitouTermosCobranca, setAceitouTermosCobranca] = useState(false);
 
-  // Parceiro / Mercado (Conta Coop — homologação)
+  // Parceiro / Mercado (HB Créditos — homologação)
   const { enabled: creditCadastroEnabled, loading: creditCadastroLoading } = useHbCreditEnabled();
   const [cnpjMercado, setCnpjMercado] = useState("");
   const [nomeMercado, setNomeMercado] = useState("");
@@ -672,7 +672,7 @@ export default function CadastroPage() {
                 ) : aba === "parceiro" && creditCadastroEnabled ? (
                   <>
                     <h2 className="text-xl font-bold text-gray-900 mb-1">Cadastro de mercado parceiro</h2>
-                    <p className="text-sm text-gray-500 mb-6">Conta Coop — status inicial: pendente até aprovação</p>
+                    <p className="text-sm text-gray-500 mb-6">HB Créditos — status inicial: pendente até aprovação</p>
 
                     <form onSubmit={handleParceiroSubmit} className="space-y-4">
                       <div>

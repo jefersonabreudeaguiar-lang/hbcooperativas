@@ -117,7 +117,7 @@ const RELATORIOS: ReportDef[] = [
   { id: "demonstrativo_pagamentos", label: "R2 — Demonstrativo de pagamentos", grupo: "Contabilidade", audience: "contador" },
   { id: "mapa_receitas_contrato", label: "R3 — Mapa receitas por contrato", grupo: "Contabilidade", audience: "contador" },
   { id: "conciliacao_mensal", label: "R4 — Conciliação mensal", grupo: "Contabilidade", audience: "contador" },
-  { id: "extrato_conta_coop", label: "R5 — Extrato Conta Coop", grupo: "Contabilidade", audience: "contador" },
+  { id: "extrato_conta_coop", label: "R5 — Extrato HB Créditos", grupo: "Contabilidade", audience: "contador" },
   { id: "trilha_auditoria", label: "R6 — Trilha de auditoria", grupo: "Contabilidade", audience: "contador" },
   { id: "parecer_contabil", label: "R9 — Parecer contábil mensal", grupo: "Contabilidade", audience: "contador" },
   {
@@ -1781,7 +1781,7 @@ export default function RelatoriosPage() {
         return (
           <>
             <div className="mb-4">
-              <StatCard title="Total Conta Coop" value={formatCurrency(ex.total)} />
+              <StatCard title="Total HB Créditos" value={formatCurrency(ex.total)} />
             </div>
             <DataTable
               data={ex.linhas.map((l, i) => ({ ...l, id: `${l.cooperadoId}_${i}` }))}
@@ -1791,7 +1791,7 @@ export default function RelatoriosPage() {
                 { key: "motivo", label: "Descrição" },
                 { key: "valor", label: "Valor", render: (l) => formatCurrency(l.valor) },
               ]}
-              emptyMessage="Sem compras Conta Coop neste mês."
+              emptyMessage="Sem compras HB Créditos neste mês."
             />
           </>
         );

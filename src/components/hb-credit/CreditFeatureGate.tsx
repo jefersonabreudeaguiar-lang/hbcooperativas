@@ -20,7 +20,7 @@ export function CreditFeatureGate({ children }: { children: React.ReactNode }) {
 
   if (status === "error") {
     return (
-      <AlertBanner variant="warning" title="Conta Coop indisponível">
+      <AlertBanner variant="warning" title="HB Créditos indisponível">
         Não foi possível confirmar o módulo no servidor. Verifique a conexão e tente novamente.
         {errorMessage ? ` (${errorMessage})` : ""}
       </AlertBanner>
@@ -29,7 +29,7 @@ export function CreditFeatureGate({ children }: { children: React.ReactNode }) {
 
   if (!enabled) {
     return (
-      <AlertBanner variant="warning" title="Conta Coop indisponível">
+      <AlertBanner variant="warning" title="HB Créditos indisponível">
         Módulo desativado neste ambiente.
       </AlertBanner>
     );

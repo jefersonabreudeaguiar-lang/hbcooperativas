@@ -17,7 +17,7 @@ function parsePublicFlag(defaultEnabled: boolean): boolean {
 }
 
 /**
- * Conta Coop visível para todos os cooperados por padrão.
+ * HB Créditos visível para todos os cooperados por padrão.
  * NEXT_PUBLIC_CONTA_COOP_UI_PUBLIC=0 desativa temporariamente (rollback).
  */
 export function isContaCoopUiPublic(): boolean {
@@ -31,7 +31,7 @@ export function resolveContaCoopDisplayName(
   return (cooperadoNome ?? user.name ?? user.email?.split("@")[0] ?? "").trim();
 }
 
-/** Visibilidade da Conta Coop na navegação — não altera permissões nem rotas. */
+/** Visibilidade da HB Créditos na navegação — não altera permissões nem rotas. */
 export function isContaCoopUiVisibleForUser(
   user: Pick<User, "role" | "name" | "email" | "cooperadoId">,
   _cooperadoNome?: string
@@ -41,7 +41,7 @@ export function isContaCoopUiVisibleForUser(
 }
 
 /**
- * Abate compras Conta Coop (mercado) no valor a receber — vale para todos os cooperados ativos.
+ * Abate compras HB Créditos (mercado) no valor a receber — vale para todos os cooperados ativos.
  * NEXT_PUBLIC_CONTA_COOP_VALOR_RECEBER_PUBLIC=0 desativa temporariamente (rollback).
  */
 export function isContaCoopValorReceberPilot(cooperadoId?: string, cooperadoNome?: string): boolean {

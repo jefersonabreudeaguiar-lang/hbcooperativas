@@ -43,6 +43,7 @@ import { cooperadoPrecisaCadastrarPix } from "@/utils/pix";
 import { cooperadoUsaAssinaturaCadastroPilot } from "@/config/assinaturaCadastroPilot";
 import {
   cooperadoPrecisaCadastrarAssinatura,
+  resumoAssinaturaCadastroApp,
 } from "@/services/cooperadoAssinaturaService";
 import { listPautasAbertasCooperado, resultadoVisivelCooperado } from "@/services/votacaoService";
 import { VotacaoPautasInicioPanel } from "@/components/votacao/VotacaoPautasInicioPanel";
@@ -52,7 +53,7 @@ import { buildValorExibicaoCooperadoOpts } from "@/services/notaPedidoService";
 import { useSyncContaCoopValorReceberPilot } from "@/hooks/useSyncContaCoopValorReceberPilot";
 import { formatCurrency, formatMesReferencia, getCurrentMesReferencia } from "@/utils/format";
 import { getUserCooperativaId, getUserCooperativaNome, normalizeCnpj } from "@/utils/cooperativa";
-import { Camera, Wallet, ClipboardList, Users, Vote, Download } from "lucide-react";
+import { Camera, Wallet, ClipboardList, Users, Vote, Download, PenLine } from "lucide-react";
 import { usePermissions } from "@/hooks/usePermissions";
 import { cooperadoTemAppInstalado, isAppStandalone, resumoInstalacaoApp } from "@/services/cooperadoAppInstallService";
 import { PageSkeleton } from "@/components/ui/PageSkeleton";
@@ -340,18 +341,19 @@ function AdminDashboard() {
     const mes = getCurrentMesReferencia();
     const fila = getFilaDoDia(data, coopId, mes);
     const instalacao = coopId ? resumoInstalacaoApp(data, coopId) : null;
+    const assinatura = coopId ? resumoAssinaturaCadastroApp(data, coopId) : null;
     let cnpj = "";
     if (user.cooperativaCnpj) cnpj = normalizeCnpj(user.cooperativaCnpj);
     else {
       const coop = data.cooperativas.find((c) => c.id === coopId);
       if (coop?.cnpj) cnpj = normalizeCnpj(coop.cnpj);
     }
-    return { stats, coopNome, fila, mes, instalacao, cnpj };
+    return { stats, coopNome, fila, mes, instalacao, assinatura, cnpj };
   }, [user?.id, user?.cooperativaId, user?.role]);
 
   if (!view) return <PageSkeleton />;
 
-  const { stats, coopNome, fila, mes, instalacao, cnpj } = view;
+  const { stats, coopNome, fila, mes, instalacao, assinatura, cnpj } = view;
 
   return (
     <div className="space-y-6 max-w-3xl">
@@ -377,6 +379,26 @@ function AdminDashboard() {
             </span>
           </span>
           <span className="text-sm font-semibold text-amber-800 shrink-0">Ver →</span>
+        </Link>
+      )}
+
+      {assinatura && assinatura.comApp > 0 && assinatura.semAssinatura > 0 && (
+        <Link
+          href="/cooperados"
+          className="flex items-center gap-4 rounded-2xl border-2 border-indigo-200 bg-gradient-to-r from-indigo-50 to-violet-50 px-5 py-4 hover:border-indigo-300 transition-colors"
+        >
+          <span className="flex h-12 w-12 items-center justify-center rounded-xl bg-indigo-600 text-white shrink-0">
+            <PenLine size={24} />
+          </span>
+          <span className="min-w-0 flex-1">
+            <span className="block font-bold text-gray-900">
+              {assinatura.semAssinatura} cooperado{assinatura.semAssinatura === 1 ? "" : "s"} sem assinatura
+            </span>
+            <span className="block text-sm text-gray-600 mt-0.5">
+              {assinatura.comAssinatura} de {assinatura.comApp} que aderiram ao app já enviaram · peça o cadastro em Meu cadastro
+            </span>
+          </span>
+          <span className="text-sm font-semibold text-indigo-700 shrink-0">Ver →</span>
         </Link>
       )}
 

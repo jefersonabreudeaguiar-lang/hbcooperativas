@@ -54,7 +54,7 @@ export function AdminContaCoopPanel() {
         };
         if (cancelled) return;
         if (!r.ok && !json.overview) {
-          setError(json.error ?? "Não foi possível carregar os dados Conta Coop.");
+          setError(json.error ?? "Não foi possível carregar os dados HB Créditos.");
           setOverview(null);
           return;
         }
@@ -64,7 +64,7 @@ export function AdminContaCoopPanel() {
       })
       .catch(() => {
         if (!cancelled) {
-          setError("Não foi possível carregar os dados Conta Coop.");
+          setError("Não foi possível carregar os dados HB Créditos.");
           setOverview(null);
         }
       })
@@ -97,8 +97,8 @@ export function AdminContaCoopPanel() {
   return (
     <div className="space-y-6 pb-8">
       <AdminSectionHeader
-        title="Conta Coop · visão HB"
-        description="Operação completa da Conta Coop na plataforma: compras, split 60/30/10, liquidação mercado, repasse PIX à HB e mensalidade do cooperado."
+        title="HB Créditos · visão HB"
+        description="Operação completa da HB Créditos na plataforma: compras, split 60/30/10, liquidação mercado, repasse PIX à HB e mensalidade do cooperado."
       />
 
       <div className="flex flex-col sm:flex-row sm:items-end gap-3">
@@ -158,7 +158,7 @@ export function AdminContaCoopPanel() {
           </div>
           <p className="mt-3 text-xs text-gray-500 flex items-start gap-2">
             <Info size={14} className="shrink-0 mt-0.5" />
-            O responsável confirma o repasse na área Conta Coop da cooperativa após liquidar o mês com os mercados.
+            O responsável confirma o repasse na área HB Créditos da cooperativa após liquidar o mês com os mercados.
           </p>
         </Card>
       )}
@@ -176,7 +176,7 @@ export function AdminContaCoopPanel() {
 
       {loading && !overview ? (
         <Card>
-          <p className="text-sm text-gray-500 py-10 text-center">Carregando operação Conta Coop…</p>
+          <p className="text-sm text-gray-500 py-10 text-center">Carregando operação HB Créditos…</p>
         </Card>
       ) : (
         <>
@@ -247,12 +247,12 @@ export function AdminContaCoopPanel() {
             <StatCard
               title="Mensalidade cooperado"
               value={formatCurrency(overview?.mensalidadeCooperado ?? 0)}
-              subtitle="Cobrada na ficha · inclui taxa app + Conta Coop"
+              subtitle="Cobrada na ficha · inclui taxa app + HB Créditos"
               icon={<Smartphone size={22} />}
             />
           </div>
 
-          <Card title="Cooperativas · detalhamento Conta Coop">
+          <Card title="Cooperativas · detalhamento HB Créditos">
             {!overview?.cooperativas.length ? (
               <p className="text-sm text-gray-500 py-8 text-center">
                 Nenhuma cooperativa cadastrada na plataforma.

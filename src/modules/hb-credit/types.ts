@@ -140,6 +140,8 @@ export interface ContaCoopLedgerEntry {
   amountCents: number;
   saldoDisponivelAposCents?: number | null;
   memo?: string | null;
+  /** Nome do mercado parceiro (pagamentos/estornos HB Créditos). */
+  parceiroNome?: string | null;
   referenceType?: string | null;
   referenceId?: string | null;
   createdAt: string;

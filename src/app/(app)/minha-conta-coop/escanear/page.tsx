@@ -34,7 +34,7 @@ function EscanearQrContent() {
           <ArrowLeft size={18} />
         </Button>
         <div>
-          <p className="text-xs font-semibold uppercase tracking-wider text-green-700">Conta Coop</p>
+          <p className="text-xs font-semibold uppercase tracking-wider text-green-700">HB Créditos</p>
           <h1 className="text-xl font-bold text-gray-900">Escanear pagamento</h1>
         </div>
       </div>

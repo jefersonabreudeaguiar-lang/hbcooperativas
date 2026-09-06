@@ -130,7 +130,7 @@ export const MODULOS_ACESSO: ModuloAcesso[] = [
   { resource: "relatorios", label: "Relatórios", href: "/relatorios", actions: VIEW_EXPORT },
   { resource: "fechamento", label: "Fechamento mensal", href: "/fechamento-mensal", actions: ["view", "approve", "export"] },
   { resource: "cooperativas", label: "Perfil da cooperativa", href: "/meu-perfil", actions: ["view", "create", "edit", "export"] },
-  { resource: "conta_coop", label: "Conta Coop", href: "/conta-coop", actions: ["view", "create", "edit", "approve", "export"] },
+  { resource: "conta_coop", label: "HB Créditos", href: "/conta-coop", actions: ["view", "create", "edit", "approve", "export"] },
 ];
 
 export const PRESET_RELATORIOS: Resource[] = ["dashboard", "relatorios"];
@@ -327,7 +327,7 @@ const CONTADOR_MENU: { href: string; label: string; resource: Resource }[] = [
   { href: "/relatorios?tipo=fechamento_mensal", label: "Fechamento mensal", resource: "fechamento" },
   { href: "/ficha-corrida", label: "Ficha corrida", resource: "ficha_corrida" },
   { href: "/livro-caixa", label: "Livro caixa", resource: "livro_caixa" },
-  { href: "/conta-coop", label: "Conta Coop", resource: "conta_coop" },
+  { href: "/conta-coop", label: "HB Créditos", resource: "conta_coop" },
 ];
 
 const ADMIN_HREFS = [
@@ -343,9 +343,9 @@ const ADMIN_HREFS = [
 ];
 
 const CREDIT_MENU_BY_ROLE: Partial<Record<UserRole, { href: string; label: string; resource: Resource }>> = {
-  cooperado: { href: "/minha-conta-coop", label: "Conta Coop", resource: "conta_coop" },
-  responsavel: { href: "/conta-coop", label: "Conta Coop", resource: "conta_coop" },
-  tesoureiro: { href: "/conta-coop", label: "Conta Coop", resource: "conta_coop" },
+  cooperado: { href: "/minha-conta-coop", label: "HB Créditos", resource: "conta_coop" },
+  responsavel: { href: "/conta-coop", label: "HB Créditos", resource: "conta_coop" },
+  tesoureiro: { href: "/conta-coop", label: "HB Créditos", resource: "conta_coop" },
 };
 
 const DIRETORIA_MENU: { href: string; label: string; resource: Resource }[] = [
@@ -397,7 +397,7 @@ function filterMenuForUser(
   return items.filter((item) => canUser(user, item.resource, "view") || item.href === "/meu-cadastro");
 }
 
-/** Menu Conta Coop: módulo confirmado + perfil autorizado + visibilidade de homologação. */
+/** Menu HB Créditos: módulo confirmado + perfil autorizado + visibilidade de homologação. */
 export function isHbCreditNavVisible(
   creditEnabled: boolean,
   canViewContaCoop: boolean,
@@ -515,7 +515,7 @@ export function getMobileNavItems(
       { href: "/dashboard", label: "Início", resource: "dashboard" },
       { href: "/notas-pedido", label: "Conferir", resource: "notas_pedido" },
       { href: "/ficha-corrida", label: "Pagar", resource: "ficha_corrida" },
-      { href: "/conta-coop", label: "Conta Coop", resource: "conta_coop" },
+      { href: "/conta-coop", label: "HB Créditos", resource: "conta_coop" },
       { href: "/votacoes", label: "Votações", resource: "votacoes" },
       { href: "/cooperados", label: "Cooperados", resource: "cooperados" },
       { href: "/contratos", label: "Contratos", resource: "instituicoes" },

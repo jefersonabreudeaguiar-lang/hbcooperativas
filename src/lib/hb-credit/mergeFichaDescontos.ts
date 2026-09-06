@@ -79,7 +79,7 @@ export function descontosContaCoopFromArquivo(
     }));
 }
 
-/** Total líquido usado na Conta Coop no mês (compras − estornos confirmados). */
+/** Total líquido usado na HB Créditos no mês (compras − estornos confirmados). */
 export function liquidoUsoContaCoopMes(descontos: DescontoContaCoopRemoto[]): number {
   let compras = 0;
   let estornos = 0;

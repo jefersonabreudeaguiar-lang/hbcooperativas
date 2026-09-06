@@ -1,5 +1,5 @@
 /**
- * Adaptador: Ficha Corrida → base de crédito Conta Coop.
+ * Adaptador: Ficha Corrida → base de crédito HB Créditos.
  */
 import type { AppData } from "@/types";
 import { buildCreditosBaseMap } from "./creditBaseFromFicha";

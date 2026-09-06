@@ -160,7 +160,7 @@ export function ContaCoopEstornosPanel({ cnpj, parceiros, cooperadoNome }: Conta
     <div className="space-y-4">
       <Card className="space-y-4 !p-5">
         <div>
-          <h3 className="font-semibold text-gray-900">Estornos Conta Coop</h3>
+          <h3 className="font-semibold text-gray-900">Estornos HB Créditos</h3>
           <p className="mt-1 text-sm text-gray-600">
             O mercado pode solicitar estorno; a cooperativa aprova ou nega. Você também pode estornar diretamente
             quando necessário.

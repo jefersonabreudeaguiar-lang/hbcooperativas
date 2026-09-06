@@ -136,7 +136,7 @@ export function ContaCoopDescontosPanel({ cnpj, cooperadoNome }: Props) {
             <div>
               <h3 className="font-semibold text-gray-900">Cashback não usado</h3>
               <p className="text-sm text-gray-600">
-                Converte saldo de cashback restante em crédito Conta Coop para cada cooperado (fechamento do mês).
+                Converte saldo de cashback restante em crédito HB Créditos para cada cooperado (fechamento do mês).
               </p>
             </div>
             <Button onClick={converterCashback} disabled={busy}>

@@ -1,5 +1,5 @@
 /**
- * Adaptador futuro Ficha Corrida → Conta Coop.
+ * Adaptador futuro Ficha Corrida → HB Créditos.
  * Fase 0: stub isolado — não chamar, não integrar, não importar dados operacionais.
  */
 export interface CreditSourceSnapshot {

@@ -86,7 +86,7 @@ export function ContaCoopLiquidacaoPanel({
         <div>
           <h3 className="font-semibold text-gray-900">Liquidar mercado parceiro</h3>
           <p className="mt-1 text-sm text-gray-600">
-            Confira a ficha corrida de compras Conta Coop por cooperado, pague via PIX e aguarde a assinatura do mercado.
+            Confira a ficha corrida de compras HB Créditos por cooperado, pague via PIX e aguarde a assinatura do mercado.
           </p>
         </div>
         <div className="grid gap-3 md:grid-cols-3">

@@ -1,6 +1,10 @@
 import type { AppData, Cooperado, User } from "@/types";
 import { cooperadoUsaAssinaturaCadastroPilot } from "@/config/assinaturaCadastroPilot";
 import { addAuditEntry } from "@/services/dataStore";
+import {
+  listarCooperadosComApp,
+  resumoInstalacaoApp,
+} from "@/services/cooperadoAppInstallService";
 
 export function getAssinaturaCadastroDataUrl(cooperado: Pick<Cooperado, "assinaturaCadastroDataUrl"> | null | undefined): string | null {
   const url = cooperado?.assinaturaCadastroDataUrl?.trim();
@@ -59,4 +63,23 @@ export function salvarAssinaturaCadastroCooperado(
   });
 
   return { ok: true, data: next, cooperado: atualizado };
+}
+
+/** Cooperados que já aderiram ao app (instalado) mas ainda não cadastraram assinatura. */
+export function resumoAssinaturaCadastroApp(data: AppData, cooperativaId: string) {
+  const instalacao = resumoInstalacaoApp(data, cooperativaId);
+  const comApp = listarCooperadosComApp(data, cooperativaId);
+  const listaSemAssinatura = comApp.filter((c) =>
+    cooperadoPrecisaCadastrarAssinatura(c.id, c)
+  );
+  const listaComAssinatura = comApp.filter((c) => cooperadoTemAssinaturaCadastrada(c));
+  return {
+    comApp: instalacao.comApp,
+    comAssinatura: listaComAssinatura.length,
+    semAssinatura: listaSemAssinatura.length,
+    listaSemAssinatura: listaSemAssinatura.sort((a, b) =>
+      a.nomeCompleto.localeCompare(b.nomeCompleto, "pt-BR")
+    ),
+    listaComAssinatura,
+  };
 }

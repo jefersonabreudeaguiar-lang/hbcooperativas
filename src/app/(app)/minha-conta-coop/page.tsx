@@ -24,7 +24,7 @@ import { formatCentsBRL } from "@/modules/hb-credit/engine/money";
 import type { ContaCoopIntent, ContaCoopLedgerEntry, ContaCoopLimiteCooperado } from "@/modules/hb-credit/types";
 import { FINANCIAL_PIN_MIN_LENGTH } from "@/modules/hb-credit/config";
 import { refreshContaCoopValorReceberPilot } from "@/lib/hb-credit/syncContaCoopFichaDescontos";
-import { labelLedgerTipo } from "@/lib/hb-credit/ledgerLabels";
+import { formatLedgerEntryLabel } from "@/lib/hb-credit/ledgerLabels";
 import { getMesPrincipalQuantoVouReceber } from "@/services/cooperadoEntregasService";
 import { isContaCoopValorReceberPilot } from "@/utils/contaCoopUiVisibility";
 import { useSyncContaCoopValorReceberPilot } from "@/hooks/useSyncContaCoopValorReceberPilot";
@@ -238,7 +238,7 @@ function MinhaContaCoopContent() {
   return (
     <div className="mx-auto max-w-lg space-y-5 pb-8">
       <header className="space-y-1">
-        <p className="text-xs font-semibold uppercase tracking-wider text-green-700">Conta Coop</p>
+        <p className="text-xs font-semibold uppercase tracking-wider text-green-700">HB Créditos</p>
         <h1 className="text-2xl font-bold text-gray-900">Seu crédito interno</h1>
         <p className="text-sm text-gray-500">Use nas lojas parceiras da cooperativa</p>
       </header>
@@ -499,9 +499,14 @@ function MinhaContaCoopContent() {
             {ledger.map((entry) => (
               <div key={entry.id} className="flex items-center justify-between gap-3 px-5 py-4">
                 <div className="min-w-0">
-                  <p className="font-medium text-gray-900">{labelLedgerTipo(String(entry.tipo))}</p>
+                  <p className="font-medium text-gray-900">{formatLedgerEntryLabel(entry)}</p>
                   <p className="text-xs text-gray-500">{new Date(entry.createdAt).toLocaleString("pt-BR")}</p>
-                  {entry.memo && <p className="truncate text-xs text-gray-400">{entry.memo}</p>}
+                  {entry.memo && String(entry.tipo) !== "PAYMENT" && (
+                    <p className="truncate text-xs text-gray-400">{entry.memo}</p>
+                  )}
+                  {entry.memo && String(entry.tipo) === "PAYMENT" && !/^\d+$/.test(entry.memo.trim()) && (
+                    <p className="truncate text-xs text-gray-400">{entry.memo}</p>
+                  )}
                 </div>
                 <p
                   className={cn(

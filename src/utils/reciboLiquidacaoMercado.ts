@@ -33,7 +33,7 @@ export function gerarRelatorioLiquidacaoMercadoHtml(params: {
   </style>
 </head>
 <body>
-  <h1>Relatório de liquidação — Conta Coop</h1>
+  <h1>Relatório de liquidação — HB Créditos</h1>
   <p class="meta">${cooperativaNome} · Mercado ${preview.partnerNome} · ${formatMesReferencia(preview.mesReferencia)}</p>
   <div class="box">
     <div>Total pago ao mercado</div>

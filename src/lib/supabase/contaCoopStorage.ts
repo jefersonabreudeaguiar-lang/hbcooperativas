@@ -1304,7 +1304,7 @@ export async function validateIntentForCooperado(
   if (!parceiro || parceiro.status !== "ACTIVE") return { ok: false, error: "Mercado bloqueado ou inativo." };
 
   const limite = await getLimiteCooperado(supabase, digits, cooperadoId);
-  if (!limite) return { ok: false, error: "Sem limite Conta Coop." };
+  if (!limite) return { ok: false, error: "Sem limite HB Créditos." };
   if (limite.bloqueado) return { ok: false, error: "Cooperado bloqueado." };
   const gross = Number(intent.amount_cents);
   const cashback = limite.cashbackDisponivelCents ?? 0;
@@ -1444,9 +1444,41 @@ export async function listLedgerCooperado(
     .order("created_at", { ascending: false })
     .limit(limit);
 
-  return (data ?? []).map((r) => {
+  const rows = data ?? [];
+  const txIds = [...new Set(rows.map((r) => String(r.transaction_id)).filter(Boolean))];
+  const partnerNameByTx = new Map<string, string>();
+
+  if (txIds.length) {
+    const { data: txs } = await supabase
+      .from("hb_credit_transactions")
+      .select("id, partner_id")
+      .eq("cooperative_cnpj", normalizeCnpj(cnpj))
+      .in("id", txIds);
+
+    const partnerIds = [...new Set((txs ?? []).map((t) => String(t.partner_id)).filter(Boolean))];
+    const partnerNameById = new Map<string, string>();
+
+    if (partnerIds.length) {
+      const { data: partners } = await supabase
+        .from("hb_credit_partners")
+        .select("id, name")
+        .eq("cooperative_cnpj", normalizeCnpj(cnpj))
+        .in("id", partnerIds);
+      for (const p of partners ?? []) {
+        partnerNameById.set(String(p.id), String(p.name));
+      }
+    }
+
+    for (const tx of txs ?? []) {
+      const nome = partnerNameById.get(String(tx.partner_id));
+      if (nome) partnerNameByTx.set(String(tx.id), nome);
+    }
+  }
+
+  return rows.map((r) => {
     const meta = (r.metadata ?? {}) as Record<string, unknown>;
     const signed = r.direction === "debit" ? -Number(r.amount_cents) : Number(r.amount_cents);
+    const txId = String(r.transaction_id);
     return {
       id: String(r.id),
       tipo: String(r.entry_type),
@@ -1454,8 +1486,9 @@ export async function listLedgerCooperado(
       saldoDisponivelAposCents:
         r.balance_reference_cents != null ? Number(r.balance_reference_cents) : null,
       memo: meta.memo ? String(meta.memo) : null,
+      parceiroNome: partnerNameByTx.get(txId) ?? null,
       referenceType: "transaction",
-      referenceId: String(r.transaction_id),
+      referenceId: txId,
       createdAt: String(r.created_at),
     };
   });
@@ -2744,7 +2777,7 @@ export async function previewPartnerSettlement(
     pagamentoAprovado = gate.ready && totalCents > 0;
     bloqueioPagamento = gate.message;
   } catch {
-    bloqueioPagamento = "Módulo fiscal indisponível — aplique a migration de NFs Conta Coop.";
+    bloqueioPagamento = "Módulo fiscal indisponível — aplique a migration de NFs HB Créditos.";
   }
 
   return {
@@ -3012,8 +3045,8 @@ async function listCooperadoContaCoopDescontosIntervalo(
     const receipt = t.receipt_code ? ` (${String(t.receipt_code)})` : "";
     return {
       motivo: isRefund
-        ? `Estorno Conta Coop — ${partnerNome}${receipt}`
-        : `Compra Conta Coop — ${partnerNome}${receipt}`,
+        ? `Estorno HB Créditos — ${partnerNome}${receipt}`
+        : `Compra HB Créditos — ${partnerNome}${receipt}`,
       valorReais: cents / 100,
       tipo: "conta_coop" as const,
       createdAt: String(t.created_at),

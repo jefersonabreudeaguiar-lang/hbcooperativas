@@ -3,7 +3,7 @@
 import { useState, useMemo, useEffect } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Plus, ShoppingCart, UserCircle, Pencil, Download, Smartphone } from "lucide-react";
+import { Plus, ShoppingCart, UserCircle, Pencil, Download, Smartphone, PenLine } from "lucide-react";
 import { useAppData } from "@/hooks/useAppData";
 import { usePermissions } from "@/hooks/usePermissions";
 import { PageHeader, DataTable, FilterBar, Modal } from "@/components/ui/Table";
@@ -24,6 +24,7 @@ import {
   cooperadoTemAppInstalado,
   resumoInstalacaoApp,
 } from "@/services/cooperadoAppInstallService";
+import { resumoAssinaturaCadastroApp } from "@/services/cooperadoAssinaturaService";
 import type { Cooperado, CooperadoStatus } from "@/types";
 import { PageSkeleton } from "@/components/ui/PageSkeleton";
 
@@ -44,6 +45,11 @@ export default function CooperadosPage() {
   const instalacao = useMemo(() => {
     if (!data || !coopId) return null;
     return resumoInstalacaoApp(data, coopId);
+  }, [data, coopId]);
+
+  const assinatura = useMemo(() => {
+    if (!data || !coopId) return null;
+    return resumoAssinaturaCadastroApp(data, coopId);
   }, [data, coopId]);
 
   const cooperados = useMemo(() => {
@@ -259,6 +265,63 @@ export default function CooperadosPage() {
               <p className="text-xs text-gray-500">
                 Avulsos ({instalacao.avulsos}) não entram nesta conta — não usam o app.
               </p>
+            </div>
+          </div>
+        </Card>
+      )}
+
+      {assinatura && assinatura.comApp > 0 && (
+        <Card className="mb-6 border-2 border-indigo-200 bg-gradient-to-r from-indigo-50 to-white">
+          <div className="flex flex-col sm:flex-row sm:items-start gap-4">
+            <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-indigo-600 text-white shrink-0">
+              <PenLine size={24} />
+            </div>
+            <div className="flex-1 min-w-0 space-y-3">
+              <div>
+                <h2 className="font-bold text-gray-900">Assinatura no app</h2>
+                <p className="text-sm text-gray-600 mt-0.5">
+                  Cooperados que já aderiram ao aplicativo e cadastraram a firma manuscrita.
+                </p>
+              </div>
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                <div className="rounded-xl bg-white border border-gray-200 px-3 py-2">
+                  <p className="text-xs text-gray-500">Com app</p>
+                  <p className="text-xl font-bold text-indigo-800">{assinatura.comApp}</p>
+                </div>
+                <div className="rounded-xl bg-white border border-green-200 px-3 py-2">
+                  <p className="text-xs text-gray-500">Assinatura ok</p>
+                  <p className="text-xl font-bold text-green-800">{assinatura.comAssinatura}</p>
+                </div>
+                <div className="rounded-xl bg-white border border-amber-200 px-3 py-2 col-span-2 sm:col-span-1">
+                  <p className="text-xs text-gray-500">Falta enviar</p>
+                  <p className="text-xl font-bold text-amber-800">{assinatura.semAssinatura}</p>
+                </div>
+              </div>
+
+              {assinatura.semAssinatura > 0 ? (
+                <AlertBanner variant="warning" title={`${assinatura.semAssinatura} cooperado(s) sem assinatura cadastrada`}>
+                  <p className="mb-2">
+                    Peça para abrir <strong>Meu cadastro</strong> no app, fotografar a assinatura no papel e
+                    confirmar. Quem já aderiu ao app deve completar este passo para votações e recibos.
+                  </p>
+                  <ul className="text-sm space-y-1 max-h-40 overflow-y-auto">
+                    {assinatura.listaSemAssinatura.map((c) => (
+                      <li key={c.id} className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
+                        <span className="font-medium text-gray-900">{c.nomeCompleto}</span>
+                        {c.telefone ? (
+                          <span className="text-gray-500">{formatPhone(c.telefone)}</span>
+                        ) : (
+                          <span className="text-gray-400">sem telefone</span>
+                        )}
+                      </li>
+                    ))}
+                  </ul>
+                </AlertBanner>
+              ) : (
+                <AlertBanner variant="success" title="Todos com assinatura">
+                  Quem aderiu ao app já cadastrou a assinatura manuscrita.
+                </AlertBanner>
+              )}
             </div>
           </div>
         </Card>

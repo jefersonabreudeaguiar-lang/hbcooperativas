@@ -673,7 +673,7 @@ export function evaluatePartnerFiscalSettlementGate(resumo: ContaCoopFiscalNotes
   message: string | null;
 } {
   if (resumo.totalVendas === 0) {
-    return { ready: false, message: "Nenhuma venda Conta Coop neste mês para liquidar." };
+    return { ready: false, message: "Nenhuma venda HB Créditos neste mês para liquidar." };
   }
   if (resumo.pendentesAnexo > 0) {
     return {

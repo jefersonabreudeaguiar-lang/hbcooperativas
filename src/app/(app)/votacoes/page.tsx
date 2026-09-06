@@ -346,7 +346,7 @@ export default function VotacoesPage() {
                 value={texto}
                 onChange={(e) => setTexto(e.target.value)}
                 rows={4}
-                placeholder="Ex.: Aprovar a implementação da Conta Coop com desconto automático na ficha corrida?"
+                placeholder="Ex.: Aprovar a implementação da HB Créditos com desconto automático na ficha corrida?"
                 className="min-h-[100px]"
               />
             </FormField>

@@ -86,7 +86,7 @@ export function AdminInicioPanel({ onNavigate }: AdminInicioPanelProps) {
   }
   if (contaCoop && contaCoop.totais.appRepassePendenteCents > 0) {
     alerts.push({
-      title: "Repasse Conta Coop pendente",
+      title: "Repasse HB Créditos pendente",
       text: `${formatCentsAdmin(contaCoop.totais.appRepassePendenteCents)} aguardando PIX das cooperativas.`,
       action: "conta-coop",
       tone: "warning",
@@ -129,7 +129,7 @@ export function AdminInicioPanel({ onNavigate }: AdminInicioPanelProps) {
           variant="gold"
         />
         <StatCard
-          title="Conta Coop · HB"
+          title="HB Créditos · HB"
           value={formatCentsAdmin(contaCoop?.totais.appCents ?? 0)}
           subtitle="Parte 30% no mês atual"
           icon={<Wallet size={22} />}
@@ -163,7 +163,7 @@ export function AdminInicioPanel({ onNavigate }: AdminInicioPanelProps) {
             {(
               [
                 ["cobranca", "Cobrança mensal HB", Banknote],
-                ["conta-coop", "Operação Conta Coop", Wallet],
+                ["conta-coop", "Operação HB Créditos", Wallet],
                 ["cooperativas", "Cooperativas e engajamento", Building2],
                 ["sistema", "Nuvem e configurações", AlertTriangle],
               ] as const
@@ -195,7 +195,7 @@ export function AdminInicioPanel({ onNavigate }: AdminInicioPanelProps) {
               <dd className="mt-1 text-2xl font-bold text-gray-900">{snapshot.totais.entregas}</dd>
             </div>
             <div className="rounded-xl bg-slate-50 p-4">
-              <dt className="text-gray-500">Compras Conta Coop</dt>
+              <dt className="text-gray-500">Compras HB Créditos</dt>
               <dd className="mt-1 text-2xl font-bold text-gray-900">{contaCoop?.totais.transacoes ?? 0}</dd>
             </div>
             <div className="rounded-xl bg-slate-50 p-4">

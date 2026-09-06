@@ -173,7 +173,7 @@ export function MensalidadeConfigPanel({ cooperativaId, user, canEdit }: Props) 
             Depois de salvar, o valor permanece fixo para todos os cooperados até você alterar aqui.
             É descontado automaticamente nos pagamentos dos meses marcados. O padrão recomendado é R${" "}
             {MENSALIDADE_COOPERADO_VALOR_PADRAO.toFixed(2).replace(".", ",")} (mensalidade + taxa{" "}
-            {CONTA_COOP_DESCONTO_SPLIT.appPercent}% Conta Coop do app).
+            {CONTA_COOP_DESCONTO_SPLIT.appPercent}% HB Créditos do app).
           </p>
         </div>
       </div>
@@ -192,7 +192,7 @@ export function MensalidadeConfigPanel({ cooperativaId, user, canEdit }: Props) 
         <FormField
           label="Valor fixo (R$)"
           required
-          hint={`Padrão HB: R$ ${MENSALIDADE_COOPERADO_VALOR_PADRAO.toFixed(2).replace(".", ",")} (inclui ${CONTA_COOP_DESCONTO_SPLIT.appPercent}% Conta Coop)`}
+          hint={`Padrão HB: R$ ${MENSALIDADE_COOPERADO_VALOR_PADRAO.toFixed(2).replace(".", ",")} (inclui ${CONTA_COOP_DESCONTO_SPLIT.appPercent}% HB Créditos)`}
         >
           <Input
             type="number"

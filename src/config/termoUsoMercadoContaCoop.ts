@@ -24,16 +24,16 @@ export function getClausulasTermoMercadoContaCoop(input: {
     {
       titulo: "1. Objeto e partes",
       itens: [
-        `Este Termo de Uso regula a participação de ${input.nomeMercado} (CNPJ ${input.cnpjMercado}) no programa Conta Coop da cooperativa ${input.nomeCooperativa} (CNPJ ${input.cnpjCooperativa}), por meio do ${PLATFORM_NAME}.`,
-        "O mercado parceiro autorizado poderá receber pagamentos de cooperados mediante crédito interno da cooperativa (Conta Coop), conforme regras operacionais abaixo.",
+        `Este Termo de Uso regula a participação de ${input.nomeMercado} (CNPJ ${input.cnpjMercado}) no programa HB Créditos da cooperativa ${input.nomeCooperativa} (CNPJ ${input.cnpjCooperativa}), por meio do ${PLATFORM_NAME}.`,
+        "O mercado parceiro autorizado poderá receber pagamentos de cooperados mediante crédito interno da cooperativa (HB Créditos), conforme regras operacionais abaixo.",
       ],
     },
     {
       titulo: "2. Desconto contratual acordado",
       itens: [
-        `Foi acordado com a cooperativa um desconto de ${desconto}% sobre o valor de cada venda realizada via Conta Coop neste estabelecimento.`,
+        `Foi acordado com a cooperativa um desconto de ${desconto}% sobre o valor de cada venda realizada via HB Créditos neste estabelecimento.`,
         "Esse percentual é definido pela cooperativa no cadastro do mercado e pode ser alterado pela cooperativa mediante comunicação; o valor vigente consta neste termo no momento do aceite.",
-        "O desconto integra a política comercial do programa Conta Coop entre cooperativa, mercado e cooperados.",
+        "O desconto integra a política comercial do programa HB Créditos entre cooperativa, mercado e cooperados.",
       ],
     },
     {
@@ -49,7 +49,7 @@ export function getClausulasTermoMercadoContaCoop(input: {
       titulo: "4. Repasse do desconto à cooperativa",
       itens: [
         "A diferença entre o valor bruto pago pelo cooperado e o valor líquido repassado ao mercado corresponde ao desconto contratual.",
-        "Esse montante não fica retido pelo mercado: é administrado pela cooperativa no âmbito do programa Conta Coop, conforme regras internas da cooperativa (benefícios aos cooperados, custeio operacional e demais destinações definidas pela cooperativa).",
+        "Esse montante não fica retido pelo mercado: é administrado pela cooperativa no âmbito do programa HB Créditos, conforme regras internas da cooperativa (benefícios aos cooperados, custeio operacional e demais destinações definidas pela cooperativa).",
         "O mercado declara ciência de que o desconto faz parte do acordo comercial com a cooperativa e autoriza o fluxo financeiro descrito neste termo.",
       ],
     },
@@ -90,7 +90,7 @@ export function getClausulasTermoMercadoContaCoop(input: {
     {
       titulo: "9. Aceite eletrônico",
       itens: [
-        `Ao aceitar, o mercado declara ter lido e concordado integralmente com este Termo de Uso Conta Coop (versão ${TERMO_MERCADO_CONTA_COOP_VERSAO}).`,
+        `Ao aceitar, o mercado declara ter lido e concordado integralmente com este Termo de Uso HB Créditos (versão ${TERMO_MERCADO_CONTA_COOP_VERSAO}).`,
         "O aceite é registrado uma única vez por cadastro de mercado, com data, hora, identificação do usuário e snapshot do desconto vigente.",
         "Nova versão deste termo poderá exigir novo aceite, conforme comunicação da cooperativa ou do operador do aplicativo.",
       ],
@@ -103,5 +103,5 @@ export function textoResumoAcordoDescontoMercado(descontoPercent: number): strin
     minimumFractionDigits: 0,
     maximumFractionDigits: 2,
   });
-  return `Desconto acordado: ${desconto}%. O cooperado paga o valor integral da compra; você recebe o líquido na liquidação. A diferença do desconto é repassada à cooperativa conforme o programa Conta Coop.`;
+  return `Desconto acordado: ${desconto}%. O cooperado paga o valor integral da compra; você recebe o líquido na liquidação. A diferença do desconto é repassada à cooperativa conforme o programa HB Créditos.`;
 }

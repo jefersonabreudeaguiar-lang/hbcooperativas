@@ -145,7 +145,7 @@ function ContaCoopContent() {
       setLimites(lim);
       setParceiros(parc);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Erro ao carregar Conta Coop.");
+      setError(e instanceof Error ? e.message : "Erro ao carregar HB Créditos.");
     } finally {
       setLoading(false);
     }
@@ -317,7 +317,7 @@ function ContaCoopContent() {
   return (
     <div className="mx-auto max-w-5xl space-y-5 pb-8">
       <header className="space-y-1">
-        <p className="text-xs font-semibold uppercase tracking-wider text-green-700">Conta Coop</p>
+        <p className="text-xs font-semibold uppercase tracking-wider text-green-700">HB Créditos</p>
         <h1 className="text-2xl font-bold text-gray-900">Gestão do crédito interno</h1>
         <p className="text-sm text-gray-500">Libere limites, acompanhe uso e gerencie mercados parceiros</p>
       </header>
@@ -726,7 +726,7 @@ function ContaCoopContent() {
                   <p className="text-sm font-medium text-green-900">Desconto contratual (%)</p>
                   <p className="mt-0.5 text-xs text-green-800">
                     {p.status === "pendente"
-                      ? "Obrigatório ao aprovar o mercado — percentual que o estabelecimento concede nas vendas Conta Coop."
+                      ? "Obrigatório ao aprovar o mercado — percentual que o estabelecimento concede nas vendas HB Créditos."
                       : "Percentual vigente neste contrato. Altere e clique em Salvar desconto."}
                   </p>
                   <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-end">

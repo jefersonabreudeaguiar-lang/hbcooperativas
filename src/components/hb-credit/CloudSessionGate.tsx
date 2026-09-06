@@ -53,7 +53,7 @@ export function CloudSessionGate({ children }: { children: React.ReactNode }) {
     setError(
       detail
         ? detail
-        : "Não foi possível conectar à nuvem para a Conta Coop. Desconecte, entre de novo e aguarde alguns segundos."
+        : "Não foi possível conectar à nuvem para a HB Créditos. Desconecte, entre de novo e aguarde alguns segundos."
     );
     return false;
   }, [user]);

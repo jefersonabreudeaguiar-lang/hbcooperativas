@@ -1,3 +1,4 @@
+import { isHbCreditMotivo } from "@/config/hbCreditBranding";
 import type { AppData, Desconto } from "@/types";
 
 export const TIPO_DESCONTO_LABELS: Record<Desconto["tipo"], string> = {
@@ -7,10 +8,9 @@ export const TIPO_DESCONTO_LABELS: Record<Desconto["tipo"], string> = {
   manual: "Desconto manual",
 };
 
-/** Desconto manual legado que repete compra já abatida pela Conta Coop. */
+/** Desconto manual legado que repete compra já abatida pela HB Créditos. */
 export function descontoManualDuplicaContaCoop(d: Pick<Desconto, "motivo">): boolean {
-  const m = d.motivo.toLowerCase();
-  return m.includes("conta coop") || m.includes("conta-coop") || m.includes("compra conta coop");
+  return isHbCreditMotivo(d.motivo);
 }
 
 export function descontosDoCooperadoNoMes(

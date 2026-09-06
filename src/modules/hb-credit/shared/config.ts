@@ -45,7 +45,7 @@ export function isHbCreditOperationsEnabled(): boolean {
 export function assertHbCreditOperationsEnabled(): void {
   assertHbCreditEnabledServer();
   if (!isHbCreditOperationsEnabled()) {
-    throw new HbCreditDisabledError("Operações da Conta Coop temporariamente suspensas.");
+    throw new HbCreditDisabledError("Operações da HB Créditos temporariamente suspensas.");
   }
 }
 

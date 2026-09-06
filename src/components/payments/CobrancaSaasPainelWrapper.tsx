@@ -12,7 +12,7 @@ import { getUserCooperativaId, normalizeCnpj } from "@/utils/cooperativa";
 import { isDiretoriaRole } from "@/permissions";
 
 /**
- * Mensalidade HB + repasse Conta Coop unificados via Asaas (valores reais da nuvem).
+ * Mensalidade HB + repasse HB Créditos unificados via Asaas (valores reais da nuvem).
  */
 export function CobrancaSaasPainel() {
   const { user } = useAuth();

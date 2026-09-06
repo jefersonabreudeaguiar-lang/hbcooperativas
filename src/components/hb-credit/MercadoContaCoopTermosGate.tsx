@@ -51,7 +51,7 @@ export function MercadoContaCoopTermosGate({ parceiro, cooperativaNome, onAccept
     <div className="fixed inset-0 z-[60] flex items-end sm:items-center justify-center sm:p-4 bg-black/60">
       <div className="relative flex max-h-[92vh] w-full max-w-2xl flex-col overflow-hidden rounded-t-2xl bg-white shadow-xl sm:max-h-[90vh] sm:rounded-xl">
         <div className="shrink-0 border-b border-gray-200 px-5 py-4">
-          <h2 className="text-lg font-semibold text-gray-900">Termo de Uso — Conta Coop Mercado Parceiro</h2>
+          <h2 className="text-lg font-semibold text-gray-900">Termo de Uso — HB Créditos Mercado Parceiro</h2>
           <p className="mt-1 text-sm text-gray-600">
             Leia e aceite para usar o painel. Este aceite é registrado uma vez para {parceiro.nomeMercado}.
           </p>
@@ -96,7 +96,7 @@ export function MercadoContaCoopTermosGate({ parceiro, cooperativaNome, onAccept
           <label className="flex cursor-pointer items-start gap-3 text-sm">
             <input type="checkbox" checked={aceite} onChange={(e) => setAceite(e.target.checked)} className="mt-1" />
             <span>
-              Li e concordo com o Termo de Uso Conta Coop, incluindo o desconto de{" "}
+              Li e concordo com o Termo de Uso HB Créditos, incluindo o desconto de{" "}
               {desconto.toLocaleString("pt-BR", { minimumFractionDigits: 0, maximumFractionDigits: 2 })}% acordado
               com a cooperativa, o recebimento do valor líquido na liquidação e o repasse do desconto à cooperativa
               conforme descrito acima.

@@ -18,7 +18,7 @@ type HookOpts = {
   user?: Pick<User, "cooperativaCnpj" | "cooperativaId" | "id"> | null;
 };
 
-/** Mantém o abatimento Conta Coop → valor a receber sincronizado (todos os cooperados). */
+/** Mantém o abatimento HB Créditos → valor a receber sincronizado (todos os cooperados). */
 export function useSyncContaCoopValorReceberPilot(opts?: HookOpts) {
   const [cnpj, setCnpj] = useState("");
   const optsRef = useRef<SyncContaCoopValorReceberOpts | undefined>(undefined);

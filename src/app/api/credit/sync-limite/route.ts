@@ -9,7 +9,7 @@ import {
 import { normalizeCnpj } from "@/utils/cooperativa";
 import { validateCreditosBaseCents } from "@/modules/hb-credit/engine/creditBaseValidation";
 
-/** Sincroniza limite Conta Coop = teto% × entregas pendentes na ficha. */
+/** Sincroniza limite HB Créditos = teto% × entregas pendentes na ficha. */
 export async function POST(request: Request) {
   const gate = await requireCreditApi(request);
   if (!gate.ok) return gate.response;

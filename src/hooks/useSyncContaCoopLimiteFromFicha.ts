@@ -19,7 +19,7 @@ type HookOpts = {
   enabled?: boolean;
 };
 
-/** Mantém limite Conta Coop = teto% das entregas pendentes na ficha. */
+/** Mantém limite HB Créditos = teto% das entregas pendentes na ficha. */
 export function useSyncContaCoopLimiteFromFicha(opts?: HookOpts) {
   const [cnpj, setCnpj] = useState("");
   const optsRef = useRef<SyncContaCoopLimiteOpts | undefined>(undefined);

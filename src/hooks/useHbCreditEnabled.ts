@@ -76,5 +76,5 @@ export function useHbCreditEnabled(): HbCreditFlagState {
   };
 }
 
-/** Menu Conta Coop: reexporta regra central de permissions. */
+/** Menu HB Créditos: reexporta regra central de permissions. */
 export { isHbCreditNavVisible } from "@/permissions";

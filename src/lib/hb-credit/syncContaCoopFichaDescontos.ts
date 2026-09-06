@@ -16,7 +16,7 @@ export type SyncContaCoopValorReceberOpts = {
 
 const SYNC_CONCURRENCY = 6;
 
-/** Busca compras Conta Coop na nuvem e grava no arquivo mensal local (abatimento do valor a receber). */
+/** Busca compras HB Créditos na nuvem e grava no arquivo mensal local (abatimento do valor a receber). */
 export async function syncContaCoopDescontosMesLocal(
   data: AppData,
   opts: {
@@ -38,7 +38,7 @@ export async function syncContaCoopDescontosMesLocal(
   return { data: next, descontos };
 }
 
-/** Sincroniza compras Conta Coop na nuvem → arquivo mensal local (abatimento do valor a receber). */
+/** Sincroniza compras HB Créditos na nuvem → arquivo mensal local (abatimento do valor a receber). */
 export async function syncContaCoopDescontosMesSePilot(
   data: AppData,
   opts: SyncContaCoopValorReceberOpts

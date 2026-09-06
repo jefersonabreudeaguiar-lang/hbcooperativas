@@ -279,7 +279,7 @@ function MercadoParceiroContent() {
       return;
     }
     if (needsTermsAcceptance) {
-      setError("Aceite o Termo de Uso Conta Coop antes de solicitar estorno.");
+      setError("Aceite o Termo de Uso HB Créditos antes de solicitar estorno.");
       return;
     }
     setEstornoAlvo(compra);
@@ -438,7 +438,7 @@ function MercadoParceiroContent() {
       )}
 
       <header className="space-y-1">
-        <p className="text-xs font-semibold uppercase tracking-wider text-green-700">Conta Coop · Mercado</p>
+        <p className="text-xs font-semibold uppercase tracking-wider text-green-700">HB Créditos · Mercado</p>
         <h1 className="text-2xl font-bold text-gray-900">{parceiro?.nomeMercado ?? "Mercado parceiro"}</h1>
         <p className="text-sm text-gray-500">Vendas com crédito interno da cooperativa</p>
       </header>
@@ -505,7 +505,7 @@ function MercadoParceiroContent() {
 
           {ativo && (
             <Card className="space-y-2 border-green-200 bg-green-50/40 !p-4">
-              <p className="text-xs font-semibold uppercase tracking-wide text-green-800">Acordo Conta Coop</p>
+              <p className="text-xs font-semibold uppercase tracking-wide text-green-800">Acordo HB Créditos</p>
               <p className="text-sm font-semibold text-gray-900">
                 Desconto contratual:{" "}
                 {(parceiro?.partnerDiscountPercent ?? 0).toLocaleString("pt-BR", {
@@ -610,7 +610,7 @@ function MercadoParceiroContent() {
                     {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img
                       src={cobrancaQr.qrUrl}
-                      alt="QR Code da cobrança Conta Coop"
+                      alt="QR Code da cobrança HB Créditos"
                       className="h-auto w-[min(100vw-4rem,22rem)] max-w-full aspect-square"
                     />
                   </div>
@@ -831,7 +831,7 @@ function MercadoParceiroContent() {
           {ativo && parceiro?.partnerTermsAcceptedAt && (
             <Card className="space-y-3 !p-5">
               <div>
-                <h3 className="font-semibold text-gray-900">Termo de Uso Conta Coop</h3>
+                <h3 className="font-semibold text-gray-900">Termo de Uso HB Créditos</h3>
                 <p className="text-sm text-gray-600">
                   Aceito em {formatDateTime(parceiro.partnerTermsAcceptedAt)} · versão{" "}
                   {parceiro.partnerTermsVersion ?? TERMO_MERCADO_CONTA_COOP_VERSAO}

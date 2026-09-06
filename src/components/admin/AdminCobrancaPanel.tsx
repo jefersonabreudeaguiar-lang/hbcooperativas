@@ -319,7 +319,7 @@ export function AdminCobrancaPanel({ user }: AdminCobrancaPanelProps) {
       setFeedback({
         type: synced ? "ok" : "erro",
         text: synced
-          ? `Cobrança registrada para ${row.nome}: ${totalLabel} (${row.qtdCooperados} cooperado${row.qtdCooperados === 1 ? "" : "s"}${preview?.repasseDue ? ` + repasse Conta Coop ${CONTA_COOP_DESCONTO_SPLIT.appPercent}%` : ""}).${pixMsg}`
+          ? `Cobrança registrada para ${row.nome}: ${totalLabel} (${row.qtdCooperados} cooperado${row.qtdCooperados === 1 ? "" : "s"}${preview?.repasseDue ? ` + repasse HB Créditos ${CONTA_COOP_DESCONTO_SPLIT.appPercent}%` : ""}).${pixMsg}`
           : `Cobrança registrada localmente, mas falhou ao publicar na nuvem. O responsável não verá o PIX até sincronizar.${pixMsg}`,
       });
     } catch (e) {
@@ -414,7 +414,7 @@ export function AdminCobrancaPanel({ user }: AdminCobrancaPanelProps) {
     <div className="space-y-6 pb-8">
       <AdminSectionHeader
         title="Cobrança HB"
-        description={`Mensalidade por cooperado (ciclo da adesão) + taxa Conta Coop (${CONTA_COOP_DESCONTO_SPLIT.appPercent}%) após pagamentos dos cooperados no ciclo de entregas. Valores apurados na nuvem.`}
+        description={`Mensalidade por cooperado (ciclo da adesão) + taxa HB Créditos (${CONTA_COOP_DESCONTO_SPLIT.appPercent}%) após pagamentos dos cooperados no ciclo de entregas. Valores apurados na nuvem.`}
       />
 
       <Card
@@ -466,7 +466,7 @@ export function AdminCobrancaPanel({ user }: AdminCobrancaPanelProps) {
 
       <div className="rounded-xl border border-emerald-200 bg-emerald-50/60 px-4 py-3 text-sm text-emerald-950">
         <strong>Como cobrar:</strong> expanda a cooperativa para ver o detalhamento unificado (mensalidade + repasse
-        Conta Coop) calculado na nuvem. Ao registrar a cobrança, o <strong>PIX Asaas é gerado automaticamente</strong> na
+        HB Créditos) calculado na nuvem. Ao registrar a cobrança, o <strong>PIX Asaas é gerado automaticamente</strong> na
         nuvem; o responsável também vê o QR Code ao abrir o painel. A confirmação do pagamento é automática via webhook.
       </div>
 
@@ -637,7 +637,7 @@ export function AdminCobrancaPanel({ user }: AdminCobrancaPanelProps) {
                     <div className="border-t border-gray-100 bg-gray-50/80 px-4 py-4 space-y-4">
                       <div>
                         <h4 className="text-sm font-semibold text-gray-900 mb-2">
-                          Cobrança unificada · sincronizada com Conta Coop
+                          Cobrança unificada · sincronizada com HB Créditos
                         </h4>
                         {preview?.loading && (
                           <p className="text-sm text-gray-500">Calculando valores reais na nuvem…</p>

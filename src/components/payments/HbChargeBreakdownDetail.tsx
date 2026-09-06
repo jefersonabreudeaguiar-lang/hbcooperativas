@@ -86,7 +86,7 @@ export function HbChargeBreakdownDetail({ breakdown, compact, showHeader = true 
           <div className="flex items-start justify-between gap-3 mb-3">
             <div>
               <p className="text-xs font-semibold uppercase tracking-wide text-blue-950 flex items-center gap-1">
-                <Percent size={14} /> Conta Coop · {CONTA_COOP_DESCONTO_SPLIT.appPercent}% HB · por cooperado
+                <Percent size={14} /> HB Créditos · {CONTA_COOP_DESCONTO_SPLIT.appPercent}% HB · por cooperado
               </p>
               <p className="text-sm text-gray-700 mt-1">
                 Fechamento {repasseLabel} · mesmo PIX Asaas da mensalidade HB

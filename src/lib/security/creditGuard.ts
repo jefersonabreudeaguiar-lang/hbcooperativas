@@ -64,7 +64,7 @@ export function requireCreditResponsavel(ctx: CreditAuthOk): NextResponse | null
   return requireStaffRole(ctx.session, ctx.enforced);
 }
 
-/** Conta Coop / estornos / limites — responsável ou tesoureiro (admin geral não). */
+/** HB Créditos / estornos / limites — responsável ou tesoureiro (admin geral não). */
 export function requireCreditCooperativeFinance(ctx: CreditAuthOk): NextResponse | null {
   if (!ctx.enforced || !ctx.session) return null;
   const role = ctx.session.role;

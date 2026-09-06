@@ -25,7 +25,7 @@ export function TesoureiroAreaGuard({ children }: { children: React.ReactNode })
       <div className="max-w-lg p-4">
         <AlertBanner variant="warning" title="Acesso restrito">
           Esta área é exclusiva da equipe financeira da cooperativa. O perfil administrador geral do app não
-          acessa tesouraria, pagamentos e Conta Coop.
+          acessa tesouraria, pagamentos e HB Créditos.
         </AlertBanner>
       </div>
     );

@@ -34,7 +34,7 @@ export const ADMIN_NAV_ITEMS: AdminNavItem[] = [
   },
   {
     id: "conta-coop",
-    label: "Conta Coop",
+    label: "HB Créditos",
     description: "Descontos e repasses",
     icon: Wallet,
   },
@@ -109,7 +109,7 @@ export function adminSectionDescription(section: AdminSection): string {
     case "cobranca":
       return "Cobrança mensal HB por cooperado cadastrado — registrar, confirmar e bloquear.";
     case "conta-coop":
-      return "Operação Conta Coop na plataforma: descontos, split 60/30/10 e repasses à HB.";
+      return "Operação HB Créditos na plataforma: descontos, split 60/30/10 e repasses à HB.";
     case "cooperativas":
       return "Cooperativas cadastradas, e-mails de acesso e uso do app pelos cooperados.";
     case "sistema":

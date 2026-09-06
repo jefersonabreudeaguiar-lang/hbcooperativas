@@ -22,7 +22,7 @@ const VALID_ROLES: UserRole[] = ["admin", "tesoureiro", "responsavel", "cooperad
 
 /**
  * Unifica login + provision + register em uma única chamada.
- * Usado pelo app após login local para garantir JWT antes da Conta Coop.
+ * Usado pelo app após login local para garantir JWT antes da HB Créditos.
  */
 export async function POST(request: Request) {
   const blocked = ensureAuthInfrastructure(request);

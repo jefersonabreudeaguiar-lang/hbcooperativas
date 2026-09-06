@@ -1,13 +1,20 @@
 "use client";
 
+import { displayHbCreditText, HB_CREDIT_PRODUCT_NAME } from "@/config/hbCreditBranding";
 import { formatCurrency } from "@/utils/format";
 import type { FichaCorridaDesconto } from "@/types";
 
 function labelDescontoExtra(d: FichaCorridaDesconto): string {
   if (d.tipo === "mensalidade") return "Mensalidade";
-  if (d.tipo === "conta_coop") return d.motivo.trim() || "Compra Conta Coop";
+  if (d.tipo === "conta_coop") {
+    const m = d.motivo.trim();
+    return m ? displayHbCreditText(m) : `Compra ${HB_CREDIT_PRODUCT_NAME}`;
+  }
   if (d.tipo === "credito_avulso") {
-    if (d.motivo.toLowerCase().includes("estorno")) return d.motivo.trim() || "Estorno Conta Coop";
+    if (d.motivo.toLowerCase().includes("estorno")) {
+      const m = d.motivo.trim();
+      return m ? displayHbCreditText(m) : `Estorno ${HB_CREDIT_PRODUCT_NAME}`;
+    }
     return d.motivo.trim() || "Valor avulso a receber";
   }
   if (d.tipo === "manual" && d.motivo.trim().toLowerCase() === "desconto avulso") return "Desconto avulso";

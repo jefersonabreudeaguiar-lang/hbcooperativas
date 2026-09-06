@@ -83,7 +83,7 @@ export async function POST(request: Request) {
 
     if (partnerNeedsTermsAcceptance(parceiroGate.parceiro)) {
       return NextResponse.json(
-        { error: "Aceite o Termo de Uso Conta Coop no painel do mercado antes de solicitar estorno." },
+        { error: "Aceite o Termo de Uso HB Créditos no painel do mercado antes de solicitar estorno." },
         { status: 400 }
       );
     }

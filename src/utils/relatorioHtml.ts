@@ -1645,14 +1645,14 @@ export function gerarRelatorioExtratoContaCoopHtml(
     )
     .join("");
   const body = `
-    <h2>R5 — Extrato Conta Coop</h2>
-    <p class="carta">Compras registradas na ficha como desconto Conta Coop no mês.</p>
+    <h2>R5 — Extrato HB Créditos</h2>
+    <p class="carta">Compras registradas na ficha como desconto HB Créditos no mês.</p>
     <table>
       <thead><tr><th>Cooperado</th><th>Descrição</th><th class="num">Valor</th></tr></thead>
-      <tbody>${rows || "<tr><td colspan=\"3\">Sem compras Conta Coop no mês.</td></tr>"}</tbody>
+      <tbody>${rows || "<tr><td colspan=\"3\">Sem compras HB Créditos no mês.</td></tr>"}</tbody>
       <tfoot><tr><td colspan="2">Total</td><td class="num">${formatCurrency(extrato.total)}</td></tr></tfoot>
     </table>`;
-  return documentoShell("Extrato Conta Coop (R5)", body, data, extrato.mesReferencia, undefined, emissor);
+  return documentoShell("Extrato HB Créditos (R5)", body, data, extrato.mesReferencia, undefined, emissor);
 }
 
 export function gerarRelatorioTrilhaAuditoriaHtml(
@@ -1717,7 +1717,7 @@ export function gerarRelatorioIndiceDossieHtml(
     "02-conciliacao-r4.html — Conciliação (R4)",
     "03-demonstrativo-pagamentos-r2.html — Demonstrativo de pagamentos (R2)",
     "04-mapa-receitas-r3.html — Mapa de receitas por contrato (R3)",
-    "05-extrato-conta-coop-r5.html — Extrato Conta Coop (R5)",
+    "05-extrato-conta-coop-r5.html — Extrato HB Créditos (R5)",
     "06-razao-analitico-r1.html — Razão analítico por cooperado (R1)",
     "07-trilha-auditoria-r6.csv — Trilha de auditoria (R6)",
     "08-relatorio-assembleia-r10.html — Relatório para assembleia (R10)",

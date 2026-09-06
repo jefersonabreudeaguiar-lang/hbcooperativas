@@ -312,7 +312,7 @@ export async function refreshCloudSession(): Promise<boolean> {
   return profile !== null || cloudSessionActive;
 }
 
-/** Restaura JWT antes de APIs protegidas (Conta Coop, sync, etc.). */
+/** Restaura JWT antes de APIs protegidas (HB Créditos, sync, etc.). */
 export async function ensureCloudSessionReady(profile?: CloudSessionProfile): Promise<boolean> {
   clearCloudBootstrapCredentials();
 
@@ -345,10 +345,10 @@ export async function ensureAccessTokenForApi(): Promise<boolean> {
 
 export function mensagemErroAuthApi(status: number, error?: string): string {
   if (status === 401 || error === "Autenticação necessária.") {
-    return "Não foi possível conectar à Conta Coop. Saia, entre de novo e aguarde alguns segundos antes de abrir a Conta Coop.";
+    return "Não foi possível conectar à HB Créditos. Saia, entre de novo e aguarde alguns segundos antes de abrir a HB Créditos.";
   }
   if (error === "Sessão inválida ou expirada.") {
-    return "Sessão expirada. Faça login novamente para usar a Conta Coop.";
+    return "Sessão expirada. Faça login novamente para usar a HB Créditos.";
   }
   if (error === "Credenciais inválidas." || error === "Dados inválidos.") {
     return "Conta na nuvem desatualizada. Saia, entre de novo com e-mail e senha atuais.";

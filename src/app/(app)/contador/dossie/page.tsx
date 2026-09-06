@@ -88,7 +88,7 @@ export default function ContadorDossiePage() {
             <ul className="mt-3 text-sm text-gray-600 space-y-1 list-disc pl-5">
               <li>Fechamento mensal e conciliação (R4)</li>
               <li>Demonstrativo de pagamentos (R2), mapa de receitas (R3)</li>
-              <li>Extrato Conta Coop (R5) e razão analítico (R1)</li>
+              <li>Extrato HB Créditos (R5) e razão analítico (R1)</li>
               <li>Trilha de auditoria em CSV (R6)</li>
               <li>Relatório para assembleia (R10)</li>
               <li>Parecer contábil assinado (R9), se existir</li>

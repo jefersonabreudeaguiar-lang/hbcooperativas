@@ -235,7 +235,7 @@ export function HbUnifiedPaymentPanel({ cnpj, mesReferenciaContaCoop, compact, o
           )}
           {breakdown.repasseDue && (
             <p className="text-sm text-gray-600">
-              Fechamento Conta Coop:{" "}
+              Fechamento HB Créditos:{" "}
               {breakdown.repasseFechamentoLabel ?? formatMesReferencia(breakdown.mesReferenciaContaCoop)}
             </p>
           )}
@@ -261,7 +261,7 @@ export function HbUnifiedPaymentPanel({ cnpj, mesReferenciaContaCoop, compact, o
       <div className="rounded-lg border border-emerald-200 bg-emerald-50/50 p-3 text-xs text-emerald-950 mb-4 mt-4">
         <Banknote size={14} className="inline mr-1" />
         Pagamento via <strong>Asaas</strong> para o CPF {breakdown.receiver.cpf} ({breakdown.receiver.nome}). Mensalidade
-        por cooperado e taxa Conta Coop ({CONTA_COOP_DESCONTO_SPLIT.appPercent}% do desconto) no{" "}
+        por cooperado e taxa HB Créditos ({CONTA_COOP_DESCONTO_SPLIT.appPercent}% do desconto) no{" "}
         <strong>mesmo PIX</strong> — confirmação automática; aviso some após pagamento.
       </div>
 

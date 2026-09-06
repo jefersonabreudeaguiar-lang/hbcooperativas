@@ -48,7 +48,7 @@ export function ContaCoopAppRepassePanel({ cnpj, mesReferencia, resumo, onConfir
 
   if (jaPago && preview?.repasse) {
     return (
-      <AlertBanner variant="info" title="Taxa Conta Coop confirmada">
+      <AlertBanner variant="info" title="Taxa HB Créditos confirmada">
         <span className="inline-flex items-center gap-1">
           <CheckCircle2 size={16} />
           {formatCentsBRL(preview.repasse.amountCents)} · fechamento {formatMesReferencia(mesReferencia)}
@@ -61,7 +61,7 @@ export function ContaCoopAppRepassePanel({ cnpj, mesReferencia, resumo, onConfir
     <Card className="space-y-3 !p-5 border-blue-200 bg-blue-50/30">
       <div>
         <h3 className="font-semibold text-gray-900">
-          Taxa Conta Coop ({CONTA_COOP_DESCONTO_SPLIT.appPercent}%) · fechamento {formatMesReferencia(mesReferencia)}
+          Taxa HB Créditos ({CONTA_COOP_DESCONTO_SPLIT.appPercent}%) · fechamento {formatMesReferencia(mesReferencia)}
         </h3>
         <p className="mt-1 text-sm text-gray-600">
           Elegível após liquidação dos mercados e <strong>pagamento confirmado de todos os cooperados</strong> no ciclo
@@ -101,7 +101,7 @@ export function ContaCoopAppRepassePanel({ cnpj, mesReferencia, resumo, onConfir
 
       {valorPendente > 0 && !preview?.aguardandoPagamentosCooperados && (
         <AlertBanner variant="info">
-          Pague pelo painel HB no topo do app — um único PIX Asaas (mensalidade + taxa Conta Coop, se houver). Após
+          Pague pelo painel HB no topo do app — um único PIX Asaas (mensalidade + taxa HB Créditos, se houver). Após
           confirmado, o aviso some até o próximo fechamento.
         </AlertBanner>
       )}

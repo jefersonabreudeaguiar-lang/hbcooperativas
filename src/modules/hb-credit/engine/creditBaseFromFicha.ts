@@ -9,7 +9,7 @@ import { round2 } from "@/utils/calculations";
 import { reaisToCents } from "../shared/money";
 
 /**
- * Crédito base Conta Coop:
+ * Crédito base HB Créditos:
  * — somente meses com ficha pendente de pagamento ao cooperado;
  * — base = valor das entregas (sincronizado com a ficha);
  * — zera após liquidação do cooperado ou do mercado; novas entregas reconstruem a base.
@@ -45,7 +45,7 @@ export function getCreditoBaseContaCoopReais(
   return round2(Math.max(0, total));
 }
 
-/** Crédito base do cooperado para limite Conta Coop (centavos). */
+/** Crédito base do cooperado para limite HB Créditos (centavos). */
 export function getCreditoBaseCooperadoCents(
   data: AppData,
   cooperadoId: string,

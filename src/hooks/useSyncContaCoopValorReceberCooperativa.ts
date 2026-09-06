@@ -14,7 +14,7 @@ type HookOpts = {
   enabled?: boolean;
 };
 
-/** Sincroniza abatimentos Conta Coop em background — só relatórios em aberto, sem bloquear sync principal. */
+/** Sincroniza abatimentos HB Créditos em background — só relatórios em aberto, sem bloquear sync principal. */
 export function useSyncContaCoopValorReceberCooperativa(opts?: HookOpts) {
   const [cnpj, setCnpj] = useState("");
   const runningRef = useRef(false);

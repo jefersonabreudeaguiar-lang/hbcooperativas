@@ -82,7 +82,7 @@ export function listarMesesPendentesQuantoVouReceber(
   return pendentes;
 }
 
-/** Mês mais antigo ainda em aberto — base para abatimento Conta Coop e ficha principal. */
+/** Mês mais antigo ainda em aberto — base para abatimento HB Créditos e ficha principal. */
 export function getMesPrincipalQuantoVouReceber(
   data: AppData,
   cooperadoId: string,

@@ -314,8 +314,8 @@ export function calcularConciliacaoMensal(
     },
     {
       id: "conta_coop",
-      label: "Conta Coop (ficha)",
-      descricao: "Total de descontos Conta Coop lançados na ficha do mês.",
+      label: "HB Créditos (ficha)",
+      descricao: "Total de descontos HB Créditos lançados na ficha do mês.",
       valorA: descontoContaCoop,
       labelA: "Desconto ficha",
       valorB: descontoContaCoop,
@@ -324,12 +324,12 @@ export function calcularConciliacaoMensal(
       status: descontoContaCoop > 0 ? "parcial" : "ausente",
       detalhe:
         descontoContaCoop > 0
-          ? "Conciliação com ledger HB Credit na nuvem — ver aba Conta Coop."
-          : "Sem compras Conta Coop neste mês.",
+          ? "Conciliação com ledger HB Credit na nuvem — ver aba HB Créditos."
+          : "Sem compras HB Créditos neste mês.",
     },
     {
       id: "hb_app_repasse_caixa",
-      label: `Repasse HB (${CONTA_COOP_DESCONTO_SPLIT.appPercent}% Conta Coop)`,
+      label: `Repasse HB (${CONTA_COOP_DESCONTO_SPLIT.appPercent}% HB Créditos)`,
       descricao: `Débito no livro caixa por repasse confirmado à plataforma HB (taxa ${CONTA_COOP_DESCONTO_SPLIT.appPercent}% do desconto).`,
       valorA: debitosHbAppRepasse,
       labelA: "Pago (livro caixa)",
@@ -344,9 +344,9 @@ export function calcularConciliacaoMensal(
             : "ausente",
       detalhe:
         descontoContaCoop > 0 && debitosHbAppRepasse === 0
-          ? `Há movimento Conta Coop na ficha, mas repasse HB ${CONTA_COOP_DESCONTO_SPLIT.appPercent}% ainda não confirmado no livro caixa (aba Conta Coop > Descontos).`
+          ? `Há movimento HB Créditos na ficha, mas repasse HB ${CONTA_COOP_DESCONTO_SPLIT.appPercent}% ainda não confirmado no livro caixa (aba HB Créditos > Descontos).`
           : debitosHbAppRepasse > 0
-            ? "Valor apurado na nuvem — conferir aba Conta Coop > Descontos."
+            ? "Valor apurado na nuvem — conferir aba HB Créditos > Descontos."
             : undefined,
     },
   ];

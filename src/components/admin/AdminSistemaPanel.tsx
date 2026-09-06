@@ -394,7 +394,7 @@ export function AdminSistemaPanel({ user }: AdminSistemaPanelProps) {
         <div className="flex items-start gap-2 mb-4 text-sm text-gray-600">
           <Banknote size={18} className="text-emerald-700 shrink-0 mt-0.5" />
           <p>
-            Cobrança unificada (mensalidade + repasse Conta Coop) com <strong>PIX automático</strong>. O responsável vê o
+            Cobrança unificada (mensalidade + repasse HB Créditos) com <strong>PIX automático</strong>. O responsável vê o
             QR Code ao abrir o painel; o cron diário também gera cobranças pendentes.
           </p>
         </div>

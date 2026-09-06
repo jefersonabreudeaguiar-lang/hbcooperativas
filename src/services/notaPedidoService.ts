@@ -1523,7 +1523,7 @@ export function getResumoPagamentoCooperado(
   };
 }
 
-/** Valor líquido para relatórios e pagamento — inclui abatimento Conta Coop (mesma base da ficha). */
+/** Valor líquido para relatórios e pagamento — inclui abatimento HB Créditos (mesma base da ficha). */
 export function getResumoValorAPagarRelatorio(
   data: AppData,
   cooperadoId: string,
@@ -1534,7 +1534,7 @@ export function getResumoValorAPagarRelatorio(
   return getResumoPagamentoParaRegistro(base, data, cooperadoId, mesReferencia, cooperativaId);
 }
 
-/** Valor exibido ao cooperado — entregas; menos uso Conta Coop no mercado quando houver compras no mês. */
+/** Valor exibido ao cooperado — entregas; menos uso HB Créditos no mercado quando houver compras no mês. */
 export type ValorExibicaoCooperadoOpts = {
   data: AppData;
   cooperadoId: string;
@@ -1583,7 +1583,7 @@ function aplicarDescontosContaCoopMesNoResumo(
   return mergeDescontosContaCoopNoResumo(resumo, descontos);
 }
 
-/** Resumo com abatimento Conta Coop quando houver compras no mercado no mês. */
+/** Resumo com abatimento HB Créditos quando houver compras no mercado no mês. */
 export function getResumoExibicaoCooperadoPilot(
   resumo: ResumoPagamentoCooperado,
   opts?: ValorExibicaoCooperadoOpts
@@ -1618,7 +1618,7 @@ export function getDescontosExtrasExibicaoCooperado(
   return merged.descontosExtras;
 }
 
-/** Registro de pagamento pelo responsável — inclui abatimento Conta Coop (mercado). */
+/** Registro de pagamento pelo responsável — inclui abatimento HB Créditos (mercado). */
 export function getResumoPagamentoParaRegistro(
   resumo: ResumoPagamentoCooperado,
   data: AppData,

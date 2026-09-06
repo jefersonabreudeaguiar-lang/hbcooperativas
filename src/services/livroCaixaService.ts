@@ -119,7 +119,7 @@ function labelDescontoFicha(tipo: FichaCorridaDesconto["tipo"]): string {
     case "cota":
       return "Cota retida na ficha";
     case "conta_coop":
-      return "Conta Coop retida na ficha";
+      return "HB Créditos retida na ficha";
     case "cooperativa":
       return "Desconto cooperativa na ficha";
     case "manual":
@@ -215,7 +215,7 @@ export function lancarMensalidadeNoCaixa(data: AppData, mensalidade: Mensalidade
   });
 }
 
-/** Débito no caixa ao confirmar repasse HB dos 30% Conta Coop (idempotente por origemId). */
+/** Débito no caixa ao confirmar repasse HB dos 30% HB Créditos (idempotente por origemId). */
 export function lancarRepasseHbContaCoopNoCaixa(
   data: AppData,
   input: {
@@ -236,10 +236,10 @@ export function lancarRepasseHbContaCoopNoCaixa(
     mesReferencia: input.mesReferencia,
     tipo: "debito",
     valor: round2(input.valorReais),
-    historico: `Repasse HB · taxa Conta Coop ${CONTA_COOP_DESCONTO_SPLIT.appPercent}% · ${mesCurto}`,
+    historico: `Repasse HB · taxa HB Créditos ${CONTA_COOP_DESCONTO_SPLIT.appPercent}% · ${mesCurto}`,
     origem: "hb_app_repasse",
     origemId: input.origemId,
-    categoria: "Conta Coop",
+    categoria: "HB Créditos",
     responsavel: input.responsavel,
   });
 }

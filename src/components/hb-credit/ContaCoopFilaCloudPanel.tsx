@@ -57,7 +57,7 @@ export function ContaCoopFilaCloudPanel({ cnpj }: ContaCoopFilaCloudPanelProps) 
           </span>
           <span className="flex-1 min-w-0">
             <span className="flex items-center gap-2">
-              <span className="font-semibold text-gray-900">Conferir NFs Conta Coop</span>
+              <span className="font-semibold text-gray-900">Conferir NFs HB Créditos</span>
               <span className="text-xs font-bold bg-gray-900 text-white px-1.5 py-0.5 rounded-full tabular-nums">
                 {conferir}
               </span>

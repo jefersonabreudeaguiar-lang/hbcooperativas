@@ -367,7 +367,7 @@ export async function fetchFichaDescontosContaCoop(cnpj: string, cooperadoId: st
     error?: string;
     descontos?: Array<{ motivo: string; valorReais: number; tipo: "conta_coop"; createdAt: string }>;
   }>(res);
-  if (!res.ok || !data.ok) throw new Error(data.error ?? "Erro ao carregar descontos Conta Coop.");
+  if (!res.ok || !data.ok) throw new Error(data.error ?? "Erro ao carregar descontos HB Créditos.");
   return data.descontos ?? [];
 }
 

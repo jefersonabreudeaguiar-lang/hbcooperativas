@@ -421,9 +421,9 @@ export async function buildUnifiedHbChargeBreakdown(
     } else if (lancamentoAguardandoConfirmacao(cob, cicloInicioEm)) {
       statusMessage = "Pagamento informado — aguardando confirmação do administrador HB.";
     } else if (repasseAguardandoPagamentosCooperados) {
-      statusMessage = `Mensalidade em dia. Taxa Conta Coop (${formatMesReferencia(repasseAguardandoPagamentosCooperados.mesReferencia)}) aguarda pagamento dos cooperados no ciclo de entregas (${repasseAguardandoPagamentosCooperados.cooperadosPendentes} pendente${repasseAguardandoPagamentosCooperados.cooperadosPendentes === 1 ? "" : "s"}).`;
+      statusMessage = `Mensalidade em dia. Taxa HB Créditos (${formatMesReferencia(repasseAguardandoPagamentosCooperados.mesReferencia)}) aguarda pagamento dos cooperados no ciclo de entregas (${repasseAguardandoPagamentosCooperados.cooperadosPendentes} pendente${repasseAguardandoPagamentosCooperados.cooperadosPendentes === 1 ? "" : "s"}).`;
     } else if (cob?.statusMes === "em_dia") {
-      statusMessage = "Mensalidade HB e taxa Conta Coop em dia na nuvem.";
+      statusMessage = "Mensalidade HB e taxa HB Créditos em dia na nuvem.";
     } else {
       statusMessage = "Nenhuma cobrança pendente com base nos movimentos reais da nuvem.";
     }
@@ -443,7 +443,7 @@ export async function buildUnifiedHbChargeBreakdown(
   if (repasseDue) {
     lineItems.push({
       kind: "conta_coop_repasse",
-      label: `Conta Coop · taxa HB (${CONTA_COOP_DESCONTO_SPLIT.appPercent}%) · por cooperado`,
+      label: `HB Créditos · taxa HB (${CONTA_COOP_DESCONTO_SPLIT.appPercent}%) · por cooperado`,
       detail: `Fechamento ${formatMesReferencia(mesReferencia)} · ${repasseCooperados.length} cooperado(s) · ${repasseCompras.length} compra(s) — mesmo PIX Asaas da mensalidade HB`,
       amountCents: repasseSubtotalCents,
     });
@@ -549,7 +549,7 @@ export async function createUnifiedHbAsaasCharge(input: {
       ok: false,
       error: breakdown.saasDue || breakdown.repasseDue
         ? "Não há valor a cobrar no momento."
-        : "Nenhuma mensalidade ou repasse Conta Coop pendente com base nos movimentos reais.",
+        : "Nenhuma mensalidade ou repasse HB Créditos pendente com base nos movimentos reais.",
     };
   }
 
@@ -874,10 +874,10 @@ async function appendRepasseLivroCaixaCloud(
     mesReferencia: breakdown.mesReferenciaContaCoop,
     tipo: "debito",
     valor: round2(valorReais),
-    historico: `Repasse HB · taxa Conta Coop ${CONTA_COOP_DESCONTO_SPLIT.appPercent}% · ${mesCurto} · Asaas`,
+    historico: `Repasse HB · taxa HB Créditos ${CONTA_COOP_DESCONTO_SPLIT.appPercent}% · ${mesCurto} · Asaas`,
     origem: "hb_app_repasse",
     origemId,
-    categoria: "Conta Coop",
+    categoria: "HB Créditos",
     responsavel: responsavelNome,
     createdAt: paidAt,
     updatedAt: paidAt,
