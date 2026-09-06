@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { listRefundablePayments, refundPayment } from "@/lib/supabase/contaCoopStorage";
+import { listRefundablePayments } from "@/lib/supabase/contaCoopStorage";
 import { requireCreditApi, requireCreditCnpj, requireCreditStaff } from "@/lib/security/creditGuard";
 import { normalizeCnpj } from "@/utils/cooperativa";
 
@@ -54,13 +54,11 @@ export async function POST(request: Request) {
   const denyStaff = requireCreditStaff(gate.ctx);
   if (denyStaff) return denyStaff;
 
-  const result = await refundPayment(
-    gate.ctx.supabase,
-    transacaoId,
-    cnpj,
-    gate.ctx.session?.sub ?? "system"
+  return NextResponse.json(
+    {
+      error:
+        "Estorno direto pela cooperativa não está disponível. Aguarde a solicitação do mercado parceiro e aprove na aba Estornos.",
+    },
+    { status: 403 }
   );
-
-  if (!result.ok) return NextResponse.json({ error: result.error }, { status: 400 });
-  return NextResponse.json({ ok: true, disponivelAposCents: result.disponivelAposCents });
 }

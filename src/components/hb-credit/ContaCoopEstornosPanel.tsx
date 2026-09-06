@@ -6,28 +6,14 @@ import { Button } from "@/components/ui/Button";
 import { Label } from "@/components/ui/Form";
 import { AlertBanner } from "@/components/ui/AlertBanner";
 import { formatCentsBRL } from "@/modules/hb-credit/engine/money";
-import type { ContaCoopCompraEstornavel, ContaCoopParceiro, ContaCoopSolicitacaoEstorno } from "@/modules/hb-credit/types";
-import {
-  fetchCreditRefundablePayments,
-  fetchRefundRequests,
-  postCreditRefund,
-  postRefundRequestAction,
-} from "@/services/creditApiService";
+import type { ContaCoopParceiro, ContaCoopSolicitacaoEstorno } from "@/modules/hb-credit/types";
+import { fetchRefundRequests, postRefundRequestAction } from "@/services/creditApiService";
 import { formatDateTime } from "@/utils/format";
 
 interface ContaCoopEstornosPanelProps {
   cnpj: string;
   parceiros: ContaCoopParceiro[];
   cooperadoNome: (id: string) => string;
-}
-
-function labelRecebivel(status?: string): string {
-  if (!status) return "—";
-  if (status === "aberto") return "Em aberto";
-  if (status === "liquidado") return "Liquidado";
-  if (status === "bloqueado_revisao") return "Bloqueado";
-  if (status === "em_processamento") return "Em processamento";
-  return status.replace(/_/g, " ");
 }
 
 function labelSolicitacao(status: ContaCoopSolicitacaoEstorno["status"]): string {
@@ -38,7 +24,6 @@ function labelSolicitacao(status: ContaCoopSolicitacaoEstorno["status"]): string
 }
 
 export function ContaCoopEstornosPanel({ cnpj, parceiros, cooperadoNome }: ContaCoopEstornosPanelProps) {
-  const [compras, setCompras] = useState<ContaCoopCompraEstornavel[]>([]);
   const [solicitacoesPendentes, setSolicitacoesPendentes] = useState<ContaCoopSolicitacaoEstorno[]>([]);
   const [filtroCooperado, setFiltroCooperado] = useState("");
   const [filtroMercado, setFiltroMercado] = useState("");
@@ -48,64 +33,36 @@ export function ContaCoopEstornosPanel({ cnpj, parceiros, cooperadoNome }: Conta
   const [success, setSuccess] = useState("");
 
   const cooperadosUnicos = useMemo(() => {
-    const ids = [
-      ...new Set([
-        ...compras.map((c) => c.cooperadoId),
-        ...solicitacoesPendentes.map((s) => s.cooperadoId),
-      ].filter(Boolean)),
-    ];
+    const ids = [...new Set(solicitacoesPendentes.map((s) => s.cooperadoId).filter(Boolean))];
     return ids.sort((a, b) => cooperadoNome(a).localeCompare(cooperadoNome(b)));
-  }, [compras, solicitacoesPendentes, cooperadoNome]);
+  }, [solicitacoesPendentes, cooperadoNome]);
+
+  const solicitacoesFiltradas = useMemo(() => {
+    return solicitacoesPendentes.filter((s) => {
+      if (filtroCooperado && s.cooperadoId !== filtroCooperado) return false;
+      if (filtroMercado && s.parceiroId !== filtroMercado) return false;
+      return true;
+    });
+  }, [solicitacoesPendentes, filtroCooperado, filtroMercado]);
 
   const carregar = useCallback(async () => {
     if (!cnpj) return;
     setLoading(true);
     setError("");
     try {
-      const [comprasData, pendentes] = await Promise.all([
-        fetchCreditRefundablePayments(cnpj, {
-          cooperadoId: filtroCooperado || undefined,
-          partnerId: filtroMercado || undefined,
-        }),
-        fetchRefundRequests(cnpj, "pendente"),
-      ]);
-      setCompras(comprasData);
+      const pendentes = await fetchRefundRequests(cnpj, "pendente");
       setSolicitacoesPendentes(pendentes);
     } catch (e) {
-      setCompras([]);
       setSolicitacoesPendentes([]);
-      setError(e instanceof Error ? e.message : "Erro ao carregar compras.");
+      setError(e instanceof Error ? e.message : "Erro ao carregar solicitações.");
     } finally {
       setLoading(false);
     }
-  }, [cnpj, filtroCooperado, filtroMercado]);
+  }, [cnpj]);
 
   useEffect(() => {
     void carregar();
   }, [carregar]);
-
-  const estornarDireto = async (compra: ContaCoopCompraEstornavel) => {
-    const nome = cooperadoNome(compra.cooperadoId);
-    const msg =
-      `Estornar ${formatCentsBRL(compra.amountCents)} de ${nome} no mercado ${compra.parceiroNome}?\n\n` +
-      "O limite disponível do cooperado será devolvido. O registro permanece no extrato como estorno.";
-    if (!window.confirm(msg)) return;
-
-    setBusyId(compra.id);
-    setError("");
-    setSuccess("");
-    try {
-      const res = await postCreditRefund(cnpj, compra.id);
-      setSuccess(
-        `Estorno registrado. Limite disponível após estorno: ${formatCentsBRL(res.disponivelAposCents ?? 0)}.`
-      );
-      await carregar();
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Não foi possível estornar.");
-    } finally {
-      setBusyId("");
-    }
-  };
 
   const aprovarSolicitacao = async (solicitacao: ContaCoopSolicitacaoEstorno) => {
     const nome = cooperadoNome(solicitacao.cooperadoId);
@@ -162,8 +119,8 @@ export function ContaCoopEstornosPanel({ cnpj, parceiros, cooperadoNome }: Conta
         <div>
           <h3 className="font-semibold text-gray-900">Estornos HB Créditos</h3>
           <p className="mt-1 text-sm text-gray-600">
-            O mercado pode solicitar estorno; a cooperativa aprova ou nega. Você também pode estornar diretamente
-            quando necessário.
+            Estornos só podem ser iniciados pelo mercado parceiro. A cooperativa analisa, aprova ou nega cada
+            solicitação recebida.
           </p>
         </div>
         <div className="grid gap-3 md:grid-cols-3">
@@ -205,13 +162,21 @@ export function ContaCoopEstornosPanel({ cnpj, parceiros, cooperadoNome }: Conta
         </div>
       </Card>
 
-      {!loading && solicitacoesPendentes.length > 0 && (
+      {loading ? (
+        <Card className="!p-8 text-center text-sm text-gray-500">Carregando solicitações...</Card>
+      ) : !solicitacoesFiltradas.length ? (
+        <Card className="!p-8 text-center text-sm text-gray-500">
+          {solicitacoesPendentes.length
+            ? "Nenhuma solicitação pendente com os filtros selecionados."
+            : "Nenhuma solicitação de estorno pendente. O mercado precisa solicitar o estorno no painel dele."}
+        </Card>
+      ) : (
         <Card className="space-y-3 !p-5 border-amber-200 bg-amber-50/40">
           <div>
             <h3 className="font-semibold text-gray-900">Solicitações pendentes do mercado</h3>
-            <p className="text-sm text-gray-600">{solicitacoesPendentes.length} aguardando sua análise</p>
+            <p className="text-sm text-gray-600">{solicitacoesFiltradas.length} aguardando sua análise</p>
           </div>
-          {solicitacoesPendentes.map((s) => (
+          {solicitacoesFiltradas.map((s) => (
             <div
               key={s.id}
               className="flex flex-col gap-3 rounded-xl border border-amber-200 bg-white p-4 sm:flex-row sm:items-start sm:justify-between"
@@ -224,6 +189,11 @@ export function ContaCoopEstornosPanel({ cnpj, parceiros, cooperadoNome }: Conta
                 <p>
                   <span className="text-gray-500">Cooperado:</span> {cooperadoNome(s.cooperadoId)}
                 </p>
+                {s.receiptCode && (
+                  <p>
+                    <span className="text-gray-500">Recibo:</span> {s.receiptCode}
+                  </p>
+                )}
                 <p>
                   <span className="text-gray-500">Motivo:</span> {s.motivo}
                 </p>
@@ -248,66 +218,6 @@ export function ContaCoopEstornosPanel({ cnpj, parceiros, cooperadoNome }: Conta
             </div>
           ))}
         </Card>
-      )}
-
-      {loading ? (
-        <Card className="!p-8 text-center text-sm text-gray-500">Carregando compras...</Card>
-      ) : !compras.length ? (
-        <Card className="!p-8 text-center text-sm text-gray-500">
-          Nenhuma compra elegível para estorno direto no momento.
-        </Card>
-      ) : (
-        <div className="space-y-3">
-          <h3 className="text-sm font-semibold text-gray-700">Estorno direto pela cooperativa</h3>
-          {compras.map((compra) => (
-            <Card key={compra.id} className="!p-4">
-              <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                <div className="space-y-1 text-sm">
-                  <p className="font-semibold text-gray-900">{formatCentsBRL(compra.amountCents)}</p>
-                  <p>
-                    <span className="text-gray-500">Cooperado:</span> {cooperadoNome(compra.cooperadoId)}
-                  </p>
-                  <p>
-                    <span className="text-gray-500">Mercado:</span> {compra.parceiroNome}
-                  </p>
-                  <p>
-                    <span className="text-gray-500">Data:</span> {formatDateTime(compra.createdAt)}
-                  </p>
-                  {compra.receiptCode && (
-                    <p>
-                      <span className="text-gray-500">Recibo:</span> {compra.receiptCode}
-                    </p>
-                  )}
-                  {compra.descricao && (
-                    <p>
-                      <span className="text-gray-500">Descrição:</span> {compra.descricao}
-                    </p>
-                  )}
-                  <p>
-                    <span className="text-gray-500">Recebível:</span> {labelRecebivel(compra.recebivelStatus)}
-                  </p>
-                  {compra.solicitacaoPendenteId && (
-                    <p className="text-xs font-medium text-amber-700">
-                      Solicitação do mercado aguardando aprovação
-                    </p>
-                  )}
-                </div>
-                <Button
-                  variant="secondary"
-                  size="sm"
-                  disabled={Boolean(busyId) || Boolean(compra.solicitacaoPendenteId)}
-                  onClick={() => void estornarDireto(compra)}
-                >
-                  {compra.solicitacaoPendenteId
-                    ? "Aguardando solicitação"
-                    : busyId === compra.id
-                      ? "Estornando..."
-                      : "Estornar direto"}
-                </Button>
-              </div>
-            </Card>
-          ))}
-        </div>
       )}
 
       <div className="space-y-3">
