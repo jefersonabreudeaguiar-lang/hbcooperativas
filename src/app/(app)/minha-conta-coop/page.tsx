@@ -130,6 +130,14 @@ function MinhaContaCoopContent() {
     reload();
   }, [reload]);
 
+  useEffect(() => {
+    const onVisible = () => {
+      if (document.visibilityState === "visible") void reload();
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => document.removeEventListener("visibilitychange", onVisible);
+  }, [reload]);
+
   const processarQr = useCallback(
     async (payload: string) => {
       if (!cnpj || !cooperadoId || !payload.trim()) return;

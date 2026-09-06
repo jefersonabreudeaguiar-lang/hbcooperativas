@@ -647,6 +647,33 @@ export async function resetContaCoopCooperadoCredit(
   return { ok: true, limite: mapLimiteRow(data as Record<string, unknown>) };
 }
 
+async function cooperadoTemComprasContaCoopAtivas(
+  supabase: SupabaseClient,
+  cnpj: string,
+  cooperadoId: string
+): Promise<boolean> {
+  const digits = normalizeCnpj(cnpj);
+  const { data: payments } = await supabase
+    .from("hb_credit_transactions")
+    .select("amount_cents")
+    .eq("cooperative_cnpj", digits)
+    .eq("cooperado_id", cooperadoId)
+    .eq("event_type", "PAYMENT")
+    .eq("status", "posted");
+
+  const { data: refunds } = await supabase
+    .from("hb_credit_transactions")
+    .select("amount_cents")
+    .eq("cooperative_cnpj", digits)
+    .eq("cooperado_id", cooperadoId)
+    .eq("event_type", "REFUND")
+    .eq("status", "posted");
+
+  const pago = (payments ?? []).reduce((s, r) => s + Number(r.amount_cents), 0);
+  const estornado = (refunds ?? []).reduce((s, r) => s + Number(r.amount_cents), 0);
+  return pago - estornado > 0;
+}
+
 /** Sincroniza limite liberado = teto% × crédito base das entregas pendentes. */
 export async function syncLimiteCooperadoFromCreditoBase(
   supabase: SupabaseClient,
@@ -658,6 +685,13 @@ export async function syncLimiteCooperadoFromCreditoBase(
 ): Promise<{ ok: true; limite: ContaCoopLimiteCooperado } | { ok: false; error: string }> {
   const base = Math.max(0, Math.round(Number(creditoBaseCents) || 0));
   if (base === 0) {
+    const { valorUsadoCents } = await readLimiteAtualCooperado(supabase, cnpj, cooperadoId);
+    const comprasAtivas =
+      valorUsadoCents > 0 || (await cooperadoTemComprasContaCoopAtivas(supabase, cnpj, cooperadoId));
+    if (comprasAtivas) {
+      const atual = await getLimiteCooperado(supabase, cnpj, cooperadoId);
+      if (atual) return { ok: true, limite: atual };
+    }
     return resetContaCoopCooperadoCredit(supabase, cnpj, cooperadoId, actorUserId, {
       source: "sync_from_ficha",
     });
