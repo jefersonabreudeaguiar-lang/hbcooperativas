@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { listParceiros, setParceiroStatus } from "@/lib/supabase/contaCoopStorage";
+import { listParceiros, resetPartnerFinancialPin, setParceiroStatus } from "@/lib/supabase/contaCoopStorage";
 import { requireCreditApi, requireCreditCnpj, requireCreditStaff } from "@/lib/security/creditGuard";
 import { normalizeCnpj } from "@/utils/cooperativa";
 import type { ParceiroStatus } from "@/modules/hb-credit/types";
@@ -27,8 +27,30 @@ export async function POST(request: Request) {
   if (!gate.ok) return gate.response;
 
   const body = await request.json().catch(() => null);
+  const action = String(body?.action ?? "");
   const cnpj = normalizeCnpj(String(body?.cnpj ?? gate.ctx.session?.cooperativaCnpj ?? ""));
   const parceiroId = String(body?.parceiroId ?? "");
+
+  if (action === "reset_pin") {
+    if (cnpj.length !== 14 || !parceiroId) {
+      return NextResponse.json({ error: "Dados inválidos." }, { status: 400 });
+    }
+
+    const denyCoop = requireCreditCnpj(gate.ctx, cnpj);
+    if (denyCoop) return denyCoop;
+    const denyStaff = requireCreditStaff(gate.ctx);
+    if (denyStaff) return denyStaff;
+
+    const result = await resetPartnerFinancialPin(
+      gate.ctx.supabase,
+      cnpj,
+      parceiroId,
+      gate.ctx.session?.sub ?? "system"
+    );
+    if (!result.ok) return NextResponse.json({ error: result.error }, { status: 400 });
+    return NextResponse.json({ ok: true });
+  }
+
   const rawStatus = String(body?.status ?? "");
   const status = apiParceiroStatus(rawStatus);
   const partnerDiscountPercent =

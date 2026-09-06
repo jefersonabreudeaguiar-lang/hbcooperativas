@@ -24,6 +24,7 @@ import {
   postCreditLimites,
   postCreditParceiroStatus,
   postUpdatePartnerDiscount,
+  resetMercadoFinancialPin,
   syncCreditLimiteFromFicha,
 } from "@/services/creditApiService";
 import { formatCentsBRL } from "@/modules/hb-credit/engine/money";
@@ -85,6 +86,7 @@ function ContaCoopContent() {
   });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [success, setSuccess] = useState("");
   const [dashboard, setDashboard] = useState<ContaCoopDashboard | null>(null);
   const [limites, setLimites] = useState<ContaCoopLimiteCooperado[]>([]);
   const [parceiros, setParceiros] = useState<ContaCoopParceiro[]>([]);
@@ -299,6 +301,27 @@ function ContaCoopContent() {
     }
   };
 
+  const resetarPinMercado = async (parceiro: ContaCoopParceiro) => {
+    if (!cnpj) return;
+    const msg =
+      `Resetar o PIN financeiro de estorno de "${parceiro.nomeMercado}"?\n\n` +
+      "O mercado precisará cadastrar um PIN novo na aba Mais do painel do mercado antes de solicitar estornos.";
+    if (!window.confirm(msg)) return;
+
+    setBusy(true);
+    setError("");
+    setSuccess("");
+    try {
+      await resetMercadoFinancialPin(cnpj, parceiro.id);
+      setSuccess(`PIN de estorno resetado para ${parceiro.nomeMercado}. O mercado deve cadastrar um PIN novo.`);
+      await reload();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Erro ao resetar PIN do mercado.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const cooperativaNome = useMemo(() => {
     if (!user || !data) return "Cooperativa";
     const coopId = getUserCooperativaId(user, data);
@@ -312,6 +335,9 @@ function ContaCoopContent() {
     return status;
   };
 
+  const pinMercadoBloqueado = (parceiro: ContaCoopParceiro) =>
+    Boolean(parceiro.pinLockedUntil && new Date(parceiro.pinLockedUntil).getTime() > Date.now());
+
   if (loading && !dashboard) return <PageSkeleton />;
 
   return (
@@ -323,6 +349,11 @@ function ContaCoopContent() {
       </header>
 
       {error && <AlertBanner variant="error">{error}</AlertBanner>}
+      {success && (
+        <AlertBanner variant="success" title="Pronto" onDismiss={() => setSuccess("")}>
+          {success}
+        </AlertBanner>
+      )}
 
       <ContaCoopSegmentTabs
         tabs={[
@@ -694,6 +725,7 @@ function ContaCoopContent() {
             <p className="mt-1 text-sm text-gray-600">
               Informe o percentual de desconto acordado com o mercado parceiro. O cooperado paga o valor integral da
               compra; na liquidação o mercado recebe o líquido e a diferença retorna à cooperativa (aba Descontos).
+              Use o reset de PIN quando o mercado esquecer a senha de estorno ou o PIN estiver bloqueado.
             </p>
           </Card>
 
@@ -767,6 +799,28 @@ function ContaCoopContent() {
                     <p className="mt-2 text-xs text-green-800">
                       Vigente no sistema: <strong>{p.partnerDiscountPercent}%</strong>
                     </p>
+                  )}
+                </div>
+
+                <div className="rounded-xl border border-amber-200 bg-amber-50/70 p-4">
+                  <p className="text-sm font-medium text-amber-950">PIN financeiro (estornos)</p>
+                  <p className="mt-1 text-xs text-amber-900">
+                    {p.hasFinancialPin
+                      ? pinMercadoBloqueado(p)
+                        ? "PIN bloqueado por tentativas incorretas — o mercado não consegue solicitar estornos."
+                        : "PIN cadastrado pelo mercado para autorizar solicitações de estorno."
+                      : "Mercado ainda não cadastrou PIN — estornos ficam indisponíveis até o cadastro."}
+                  </p>
+                  {(p.hasFinancialPin || pinMercadoBloqueado(p)) && (
+                    <Button
+                      size="sm"
+                      variant="secondary"
+                      className="mt-3"
+                      onClick={() => void resetarPinMercado(p)}
+                      disabled={busy}
+                    >
+                      Resetar PIN de estorno
+                    </Button>
                   )}
                 </div>
 

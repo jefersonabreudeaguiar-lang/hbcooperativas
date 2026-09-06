@@ -90,6 +90,17 @@ export async function postCreditParceiroStatus(
   return data;
 }
 
+export async function resetMercadoFinancialPin(cnpj: string, parceiroId: string) {
+  const res = await secureApiFetch("/api/credit/parceiros", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ action: "reset_pin", cnpj, parceiroId }),
+  });
+  const data = await parseJson<{ ok?: boolean; error?: string }>(res);
+  if (!res.ok || !data.ok) throw new Error(data.error ?? "Não foi possível resetar o PIN do mercado.");
+  return data;
+}
+
 export async function fetchCreditAccount(cnpj: string, cooperadoId: string) {
   const res = await secureApiFetch(
     `/api/credit/account?cnpj=${encodeURIComponent(cnpj)}&cooperadoId=${encodeURIComponent(cooperadoId)}`

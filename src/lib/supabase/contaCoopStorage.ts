@@ -944,6 +944,8 @@ function mapParceiroRow(row: Record<string, unknown>): ContaCoopParceiro {
     partnerTermsAcceptedBy: row.partner_terms_accepted_by ? String(row.partner_terms_accepted_by) : null,
     partnerTermsDiscountSnapshot:
       row.partner_terms_discount_snapshot != null ? Number(row.partner_terms_discount_snapshot) : null,
+    hasFinancialPin: Boolean(row.pin_hash),
+    pinLockedUntil: row.pin_locked_until ? String(row.pin_locked_until) : null,
     createdAt: String(row.created_at),
     updatedAt: String(row.updated_at),
   };
@@ -1177,6 +1179,49 @@ export async function setPartnerFinancialPin(
     .eq("id", partnerId);
 
   if (error) return { ok: false, error: error.message };
+  return { ok: true };
+}
+
+export async function resetPartnerFinancialPin(
+  supabase: SupabaseClient,
+  cnpj: string,
+  partnerId: string,
+  actorUserId: string
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const digits = normalizeCnpj(cnpj);
+  const { data: partner } = await supabase
+    .from("hb_credit_partners")
+    .select("id, name")
+    .eq("id", partnerId)
+    .eq("cooperative_cnpj", digits)
+    .maybeSingle();
+
+  if (!partner) return { ok: false, error: "Mercado não encontrado." };
+
+  const now = new Date().toISOString();
+  const { error } = await supabase
+    .from("hb_credit_partners")
+    .update({
+      pin_hash: null,
+      pin_updated_at: null,
+      pin_failed_attempts: 0,
+      pin_locked_until: null,
+      updated_at: now,
+    })
+    .eq("id", partnerId)
+    .eq("cooperative_cnpj", digits);
+
+  if (error) return { ok: false, error: error.message };
+
+  await supabase.from("hb_credit_audit_log").insert({
+    cooperative_cnpj: digits,
+    actor: actorUserId,
+    action: "PARTNER_PIN_RESET",
+    resource_type: "partner",
+    resource_id: partnerId,
+    metadata: { nomeMercado: String(partner.name ?? "") },
+  });
+
   return { ok: true };
 }
 

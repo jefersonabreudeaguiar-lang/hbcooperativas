@@ -63,6 +63,10 @@ export interface ContaCoopParceiro {
   partnerTermsAcceptedAt?: string | null;
   partnerTermsAcceptedBy?: string | null;
   partnerTermsDiscountSnapshot?: number | null;
+  /** PIN numérico cadastrado pelo mercado para solicitar estornos. */
+  hasFinancialPin?: boolean;
+  /** Bloqueio temporário após tentativas incorretas (ISO). */
+  pinLockedUntil?: string | null;
   createdAt: string;
   updatedAt: string;
 }

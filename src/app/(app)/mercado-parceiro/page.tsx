@@ -908,7 +908,12 @@ function MercadoParceiroContent() {
             {hasPin ? (
               <p className="text-sm text-green-700">PIN cadastrado. Você precisará dele ao solicitar estorno.</p>
             ) : (
-              <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
+              <>
+                <p className="text-sm text-amber-800">
+                  Cadastre um PIN numérico para solicitar estornos. Se esqueceu o PIN anterior, peça ao responsável da
+                  cooperativa para resetar (HB Créditos → Mercados).
+                </p>
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
                 <div className="flex-1">
                   <Label>Criar PIN</Label>
                   <Input
@@ -925,6 +930,7 @@ function MercadoParceiroContent() {
                   Salvar PIN
                 </Button>
               </div>
+              </>
             )}
           </Card>
 
