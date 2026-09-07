@@ -25,6 +25,7 @@ import {
   resumoInstalacaoApp,
 } from "@/services/cooperadoAppInstallService";
 import { resumoAssinaturaCadastroApp } from "@/services/cooperadoAssinaturaService";
+import { AssinaturaCadastroGestaoPanel } from "@/components/cooperado/AssinaturaCadastroGestaoPanel";
 import type { Cooperado, CooperadoStatus } from "@/types";
 import { PageSkeleton } from "@/components/ui/PageSkeleton";
 
@@ -270,6 +271,10 @@ export default function CooperadosPage() {
         </Card>
       )}
 
+      {data && user && coopId && (
+        <AssinaturaCadastroGestaoPanel data={data} user={user} cooperativaId={coopId} />
+      )}
+
       {assinatura && assinatura.comApp > 0 && (
         <Card className="mb-6 border-2 border-indigo-200 bg-gradient-to-r from-indigo-50 to-white">
           <div className="flex flex-col sm:flex-row sm:items-start gap-4">
@@ -280,29 +285,39 @@ export default function CooperadosPage() {
               <div>
                 <h2 className="font-bold text-gray-900">Assinatura no app</h2>
                 <p className="text-sm text-gray-600 mt-0.5">
-                  Cooperados que já aderiram ao aplicativo e cadastraram a firma manuscrita.
+                  Envio pelo app, conferência da diretoria e liberação para votações e recibos.
                 </p>
               </div>
-              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                 <div className="rounded-xl bg-white border border-gray-200 px-3 py-2">
                   <p className="text-xs text-gray-500">Com app</p>
                   <p className="text-xl font-bold text-indigo-800">{assinatura.comApp}</p>
                 </div>
+                <div className="rounded-xl bg-white border border-amber-200 px-3 py-2">
+                  <p className="text-xs text-amber-800">Em análise</p>
+                  <p className="text-xl font-bold text-amber-900">{assinatura.emAnalise}</p>
+                </div>
                 <div className="rounded-xl bg-white border border-green-200 px-3 py-2">
-                  <p className="text-xs text-gray-500">Assinatura ok</p>
+                  <p className="text-xs text-green-800">Confirmadas</p>
                   <p className="text-xl font-bold text-green-800">{assinatura.comAssinatura}</p>
                 </div>
-                <div className="rounded-xl bg-white border border-amber-200 px-3 py-2 col-span-2 sm:col-span-1">
+                <div className="rounded-xl bg-white border border-amber-200 px-3 py-2">
                   <p className="text-xs text-gray-500">Falta enviar</p>
                   <p className="text-xl font-bold text-amber-800">{assinatura.semAssinatura}</p>
                 </div>
               </div>
 
+              {assinatura.emAnalise > 0 && (
+                <AlertBanner variant="warning" title={`${assinatura.emAnalise} assinatura(s) aguardando sua análise`}>
+                  Use o painel <strong>Conferir assinaturas</strong> acima para confirmar ou devolver ao cooperado.
+                </AlertBanner>
+              )}
+
               {assinatura.semAssinatura > 0 ? (
-                <AlertBanner variant="warning" title={`${assinatura.semAssinatura} cooperado(s) sem assinatura cadastrada`}>
+                <AlertBanner variant="warning" title={`${assinatura.semAssinatura} cooperado(s) ainda não enviaram assinatura`}>
                   <p className="mb-2">
                     Peça para abrir <strong>Meu cadastro</strong> no app, fotografar a assinatura no papel e
-                    confirmar. Quem já aderiu ao app deve completar este passo para votações e recibos.
+                    aguardar sua confirmação.
                   </p>
                   <ul className="text-sm space-y-1 max-h-40 overflow-y-auto">
                     {assinatura.listaSemAssinatura.map((c) => (
@@ -317,11 +332,11 @@ export default function CooperadosPage() {
                     ))}
                   </ul>
                 </AlertBanner>
-              ) : (
-                <AlertBanner variant="success" title="Todos com assinatura">
-                  Quem aderiu ao app já cadastrou a assinatura manuscrita.
+              ) : assinatura.emAnalise === 0 ? (
+                <AlertBanner variant="success" title="Nenhuma pendência de envio">
+                  Quem aderiu ao app já enviou ou tem assinatura confirmada.
                 </AlertBanner>
-              )}
+              ) : null}
             </div>
           </div>
         </Card>

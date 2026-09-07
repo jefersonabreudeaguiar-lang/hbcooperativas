@@ -101,6 +101,8 @@ export interface CobrancaSaasCooperativa {
 
 export type CooperadoStatus = "ativo" | "suspenso" | "desligado";
 
+export type AssinaturaCadastroStatus = "pendente" | "em_analise" | "confirmada" | "devolvida";
+
 export type PagamentoStatus = "paga" | "pendente" | "atrasada" | "parcelada" | "quitada" | "em_aberto" | "pago" | "parcial";
 
 export type EntregaStatus = "entregue" | "conferido" | "pendente" | "pago" | "cancelado";
@@ -197,6 +199,15 @@ export interface Cooperado {
   assinaturaCadastradaEm?: string;
   assinaturaCadastroVersao?: number;
   assinaturaCadastroHash?: string;
+  /** Fluxo de conferência pela diretoria — pendente → em_analise → confirmada | devolvida. */
+  assinaturaCadastroStatus?: AssinaturaCadastroStatus;
+  /** Quando o responsável aprova a assinatura. */
+  assinaturaConfirmadaEm?: string;
+  assinaturaConfirmadaPorId?: string;
+  assinaturaConfirmadaPorNome?: string;
+  /** Devolução para novo envio pelo cooperado. */
+  assinaturaDevolvidaEm?: string;
+  assinaturaDevolvidaMotivo?: string;
   produtos: string[];
   observacoes: string;
   createdAt: string;

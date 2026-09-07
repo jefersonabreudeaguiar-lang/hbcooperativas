@@ -13,6 +13,7 @@ import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { AlertBanner } from "@/components/ui/AlertBanner";
 import { OnboardingChecklist } from "@/components/cooperado/OnboardingChecklist";
+import { AssinaturaStatusAviso } from "@/components/cooperado/AssinaturaStatusAviso";
 import { CooperadoMensalidadesPagarPanel } from "@/components/cooperado/CooperadoMensalidadesPagarPanel";
 import { ValoresAvulsosDashboardCard } from "@/components/ficha/ValoresAvulsosReceberPanel";
 import { getAdminStats } from "@/services/dashboardService";
@@ -217,6 +218,8 @@ function CooperadoDashboard() {
         <p className="text-sm text-gray-500 mt-1">{coopNome} · {formatMesReferencia(mes)}</p>
       </div>
 
+      {cooperado && <AssinaturaStatusAviso cooperado={cooperado} />}
+
       {financeiroAusente && (
         <AlertBanner
           variant={lastSyncError ? "error" : "info"}
@@ -379,6 +382,26 @@ function AdminDashboard() {
             </span>
           </span>
           <span className="text-sm font-semibold text-amber-800 shrink-0">Ver →</span>
+        </Link>
+      )}
+
+      {assinatura && assinatura.comApp > 0 && assinatura.emAnalise > 0 && (
+        <Link
+          href="/cooperados"
+          className="flex items-center gap-4 rounded-2xl border-2 border-amber-300 bg-gradient-to-r from-amber-50 to-yellow-50 px-5 py-4 hover:border-amber-400 transition-colors"
+        >
+          <span className="flex h-12 w-12 items-center justify-center rounded-xl bg-amber-600 text-white shrink-0">
+            <PenLine size={24} />
+          </span>
+          <span className="min-w-0 flex-1">
+            <span className="block font-bold text-gray-900">
+              {assinatura.emAnalise} assinatura{assinatura.emAnalise === 1 ? "" : "s"} aguardando análise
+            </span>
+            <span className="block text-sm text-gray-600 mt-0.5">
+              Confira em Cooperados se a foto está conforme e confirme ou devolva para reenvio
+            </span>
+          </span>
+          <span className="text-sm font-semibold text-amber-800 shrink-0">Conferir →</span>
         </Link>
       )}
 

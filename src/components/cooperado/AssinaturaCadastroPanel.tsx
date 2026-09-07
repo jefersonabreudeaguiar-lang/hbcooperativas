@@ -2,15 +2,18 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { CheckCircle2, PenLine } from "lucide-react";
+import { CheckCircle2, Clock, PenLine } from "lucide-react";
 import type { Cooperado, User } from "@/types";
 import { Card } from "@/components/ui/Card";
 import { AlertBanner } from "@/components/ui/AlertBanner";
 import { AssinaturaPapelCapture } from "@/components/cooperado/AssinaturaPapelCapture";
+import { AssinaturaStatusAviso } from "@/components/cooperado/AssinaturaStatusAviso";
 import { updateData } from "@/services/dataStore";
 import { pushCooperadoToCloud } from "@/services/cooperadoCloudService";
 import { resolveCooperativaCnpj } from "@/services/notaPedidoCloudService";
 import {
+  cooperadoAssinaturaDevolvida,
+  cooperadoAssinaturaEmAnalise,
   cooperadoPrecisaCadastrarAssinatura,
   cooperadoTemAssinaturaCadastrada,
   getAssinaturaCadastroDataUrl,
@@ -33,9 +36,12 @@ export function AssinaturaCadastroPanel({ data, user, cooperado }: AssinaturaCad
 
   if (!cooperadoUsaAssinaturaCadastroPilot(cooperado.id)) return null;
 
-  const temAssinatura = cooperadoTemAssinaturaCadastrada(cooperado);
+  const temAssinaturaConfirmada = cooperadoTemAssinaturaCadastrada(cooperado);
+  const emAnalise = cooperadoAssinaturaEmAnalise(cooperado);
+  const devolvida = cooperadoAssinaturaDevolvida(cooperado);
   const precisa = cooperadoPrecisaCadastrarAssinatura(cooperado.id, cooperado);
   const previewUrl = getAssinaturaCadastroDataUrl(cooperado);
+  const podeEnviar = precisa && !emAnalise;
 
   const salvar = async (payload: { dataUrl: string; hash: string }) => {
     setErro("");
@@ -64,7 +70,7 @@ export function AssinaturaCadastroPanel({ data, user, cooperado }: AssinaturaCad
         }
       }
 
-      setOkMsg("Assinatura cadastrada! Use «Assinar com minha assinatura» em votações, atas e recibos.");
+      setOkMsg("Assinatura enviada! Já pode usar em recibos e votações. A diretoria também vai conferir e confirmar.");
     } finally {
       setSalvando(false);
     }
@@ -72,14 +78,16 @@ export function AssinaturaCadastroPanel({ data, user, cooperado }: AssinaturaCad
 
   return (
     <Card title="Minha assinatura" className="mb-6">
-      {precisa && (
+      <AssinaturaStatusAviso cooperado={cooperado} className="mb-4" />
+
+      {precisa && !devolvida && (
         <AlertBanner variant="warning" title="Cadastre sua assinatura" className="mb-4">
-          Assine uma vez no papel e fotografe. Será usada em votações, atas e recibos — como a chave PIX.
+          Assine uma vez no papel e fotografe. A diretoria confere antes de liberar para votações e recibos.
         </AlertBanner>
       )}
 
       {okMsg && (
-        <AlertBanner variant="success" title="Salvo" className="mb-4">
+        <AlertBanner variant="success" title="Enviado" className="mb-4">
           <CheckCircle2 size={16} className="inline mr-1" />
           {okMsg}
         </AlertBanner>
@@ -91,37 +99,60 @@ export function AssinaturaCadastroPanel({ data, user, cooperado }: AssinaturaCad
         </AlertBanner>
       )}
 
-      {temAssinatura && previewUrl && (
+      {temAssinaturaConfirmada && previewUrl && (
         <div className="mb-4 rounded-xl border border-green-200 bg-green-50/50 p-4">
           <p className="text-xs font-semibold uppercase tracking-wide text-green-800 mb-2 flex items-center gap-1">
-            <PenLine size={14} /> Assinatura ativa no sistema
+            <PenLine size={14} /> Assinatura confirmada pela diretoria
           </p>
           <div className="bg-white rounded-lg border border-green-100 p-3 flex justify-center">
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img src={previewUrl} alt="Sua assinatura cadastrada" className="max-h-20 max-w-full object-contain" />
           </div>
-          {cooperado.assinaturaCadastradaEm && (
+          {cooperado.assinaturaConfirmadaEm && (
             <p className="text-xs text-gray-500 mt-2">
-              Cadastrada em {formatDateTime(cooperado.assinaturaCadastradaEm)}
-              {cooperado.assinaturaCadastroVersao ? ` · v${cooperado.assinaturaCadastroVersao}` : ""}
+              Confirmada em {formatDateTime(cooperado.assinaturaConfirmadaEm)}
+              {cooperado.assinaturaConfirmadaPorNome ? ` · ${cooperado.assinaturaConfirmadaPorNome}` : ""}
             </p>
           )}
           <p className="text-xs text-gray-600 mt-2">
-            Para trocar, tire uma nova foto abaixo (substitui a anterior).
+            Para trocar, peça à diretoria devolver a assinatura ou envie nova foto após devolução.
           </p>
         </div>
       )}
 
-      <AssinaturaPapelCapture onConfirm={salvar} disabled={salvando} />
+      {emAnalise && previewUrl && (
+        <div className="mb-4 rounded-xl border border-amber-200 bg-amber-50/50 p-4">
+          <p className="text-xs font-semibold uppercase tracking-wide text-amber-900 mb-2 flex items-center gap-1">
+            <Clock size={14} /> Aguardando análise
+          </p>
+          <div className="bg-white rounded-lg border border-amber-100 p-3 flex justify-center opacity-90">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={previewUrl} alt="Assinatura enviada" className="max-h-20 max-w-full object-contain" />
+          </div>
+          {cooperado.assinaturaCadastradaEm && (
+            <p className="text-xs text-gray-500 mt-2">
+              Enviada em {formatDateTime(cooperado.assinaturaCadastradaEm)}
+            </p>
+          )}
+        </div>
+      )}
 
-      {!temAssinatura && (
+      {podeEnviar && <AssinaturaPapelCapture onConfirm={salvar} disabled={salvando} />}
+
+      {emAnalise && (
         <p className="text-xs text-gray-500 mt-3">
-          Depois de cadastrar, acesse{" "}
+          Enquanto a diretoria analisa, você não pode enviar outra foto. Assim que confirmarem, o aviso aparecerá
+          no início do app.
+        </p>
+      )}
+
+      {!temAssinaturaConfirmada && !emAnalise && (
+        <p className="text-xs text-gray-500 mt-3">
+          Depois da confirmação, use{" "}
           <Link href="/votacoes" className="font-semibold text-green-700 underline">
             Votações
           </Link>{" "}
-          (sua assinatura entra na ata), confirme recibos ou baixe a ata após o resultado com o botão{" "}
-          <strong>Assinar com minha assinatura</strong>.
+          e o botão <strong>Assinar com minha assinatura</strong> em recibos e atas.
         </p>
       )}
     </Card>

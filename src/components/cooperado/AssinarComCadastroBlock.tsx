@@ -8,7 +8,7 @@ import { SignaturePad } from "@/components/ui/SignaturePad";
 import { cooperadoUsaAssinaturaCadastroPilot } from "@/config/assinaturaCadastroPilot";
 import {
   cooperadoPrecisaCadastrarAssinatura,
-  cooperadoTemAssinaturaCadastrada,
+  cooperadoPodeUsarAssinaturaEmDocumentos,
   getAssinaturaCadastroDataUrl,
 } from "@/services/cooperadoAssinaturaService";
 import type { Cooperado } from "@/types";
@@ -32,7 +32,7 @@ export function AssinarComCadastroBlock({
   const usaCadastro = cooperadoUsaAssinaturaCadastroPilot(cooperadoId);
   const cadastroUrl = getAssinaturaCadastroDataUrl(cooperado);
   const precisaCadastro = cooperadoPrecisaCadastrarAssinatura(cooperadoId, cooperado);
-  const temCadastro = cooperadoTemAssinaturaCadastrada(cooperado);
+  const podeUsar = cooperadoPodeUsarAssinaturaEmDocumentos(cooperado);
 
   if (!usaCadastro) {
     return (
@@ -77,7 +77,7 @@ export function AssinarComCadastroBlock({
         className="w-full"
         variant={assinatura ? "secondary" : "primary"}
         onClick={() => onAssinaturaChange(cadastroUrl)}
-        disabled={!temCadastro || !cadastroUrl}
+        disabled={!podeUsar || !cadastroUrl}
       >
         <PenLine size={18} />
         {assinatura ? "Assinatura aplicada — toque para refazer" : "Assinar com minha assinatura"}
