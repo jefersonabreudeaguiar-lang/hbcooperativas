@@ -1,7 +1,7 @@
 import { randomBytes } from "crypto";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { normalizeCnpj } from "@/utils/cooperativa";
-import { readStoredField } from "@/lib/security/fieldCrypto";
+import { decryptSensitiveField } from "@/lib/security/fieldCrypto";
 import type { ContaCoopPixChangeRequest } from "@/modules/hb-credit/types";
 
 function genId(prefix: string): string {
@@ -81,7 +81,7 @@ export async function createPartnerPixChangeRequest(
   if (String(partner.cooperative_cnpj) !== normalizeCnpj(params.cooperativeCnpj)) {
     return { ok: false, error: "Mercado não pertence a esta cooperativa." };
   }
-  if (!readStoredField(partner.pix_key as string | undefined)?.trim()) {
+  if (!decryptSensitiveField(String(partner.pix_key ?? "")).trim()) {
     return { ok: false, error: "Cadastre o PIX antes de solicitar mudança." };
   }
 
