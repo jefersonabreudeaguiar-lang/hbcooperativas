@@ -1,10 +1,11 @@
 "use client";
 
 import { useState } from "react";
-import { CheckCircle2, PenLine, RotateCcw } from "lucide-react";
+import { CheckCircle2, Eye, PenLine, RotateCcw } from "lucide-react";
 import type { AppData, Cooperado, User } from "@/types";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
+import { Modal } from "@/components/ui/Table";
 import { AlertBanner } from "@/components/ui/AlertBanner";
 import { Textarea, FormField } from "@/components/ui/Form";
 import { StatusBadge } from "@/components/ui/StatusBadge";
@@ -31,6 +32,9 @@ export function AssinaturaCadastroGestaoPanel({ data, user, cooperativaId }: Ass
   const [busyId, setBusyId] = useState<string | null>(null);
   const [erro, setErro] = useState("");
   const [motivoDevolucao, setMotivoDevolucao] = useState<Record<string, string>>({});
+  const [verAssinatura, setVerAssinatura] = useState<Cooperado | null>(null);
+
+  const previewVerAssinatura = verAssinatura ? getAssinaturaCadastroDataUrl(verAssinatura) : null;
 
   const syncCooperado = async (cooperado: Cooperado) => {
     const cnpj = await resolveCooperativaCnpj(data, cooperado.cooperativaId, user);
@@ -147,13 +151,17 @@ export function AssinaturaCadastroGestaoPanel({ data, user, cooperativaId }: Ass
                 </div>
 
                 {preview && (
-                  <div className="bg-white rounded-lg border border-amber-100 p-4 flex justify-center">
+                  <div className="bg-white rounded-lg border border-amber-100 p-4 flex flex-col items-center gap-2">
                     {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img
                       src={preview}
                       alt={`Assinatura de ${c.nomeCompleto}`}
                       className="max-h-28 max-w-full object-contain"
                     />
+                    <Button size="sm" variant="secondary" onClick={() => setVerAssinatura(c)}>
+                      <Eye size={14} />
+                      Ver assinatura
+                    </Button>
                   </div>
                 )}
 
@@ -195,20 +203,94 @@ export function AssinaturaCadastroGestaoPanel({ data, user, cooperativaId }: Ass
           <p className="text-xs font-semibold uppercase tracking-wide text-gray-500 mb-2 flex items-center gap-1">
             <PenLine size={14} /> Já confirmadas ({resumo.comAssinatura})
           </p>
-          <ul className="text-sm text-gray-600 space-y-1 max-h-32 overflow-y-auto">
-            {resumo.listaComAssinatura.map((c) => (
-              <li key={c.id} className="flex flex-wrap items-center gap-2">
-                <span className="font-medium text-gray-800">{c.nomeCompleto}</span>
-                {c.assinaturaConfirmadaEm && (
-                  <span className="text-xs text-gray-400">
-                    {formatDateTime(c.assinaturaConfirmadaEm)}
-                  </span>
-                )}
-              </li>
-            ))}
+          <ul className="text-sm text-gray-600 space-y-2 max-h-64 overflow-y-auto">
+            {[...resumo.listaComAssinatura]
+              .sort((a, b) => a.nomeCompleto.localeCompare(b.nomeCompleto, "pt-BR"))
+              .map((c) => (
+                <li key={c.id} className="flex flex-wrap items-center justify-between gap-2">
+                  <div className="flex flex-wrap items-center gap-2 min-w-0">
+                    <span className="font-medium text-gray-800">{c.nomeCompleto}</span>
+                    {c.assinaturaConfirmadaEm ? (
+                      <span className="text-xs text-gray-400">
+                        {formatDateTime(c.assinaturaConfirmadaEm)}
+                      </span>
+                    ) : c.assinaturaCadastradaEm ? (
+                      <span className="text-xs text-gray-400">
+                        Cadastro {formatDateTime(c.assinaturaCadastradaEm)}
+                      </span>
+                    ) : (
+                      <span className="text-xs text-gray-400">Cadastro anterior</span>
+                    )}
+                  </div>
+                  {getAssinaturaCadastroDataUrl(c) && (
+                    <Button size="sm" variant="secondary" onClick={() => setVerAssinatura(c)}>
+                      <Eye size={14} />
+                      Ver assinatura
+                    </Button>
+                  )}
+                </li>
+              ))}
           </ul>
         </div>
       )}
+
+      <Modal
+        open={Boolean(verAssinatura)}
+        onClose={() => setVerAssinatura(null)}
+        title={verAssinatura ? `Assinatura — ${verAssinatura.nomeCompleto}` : "Assinatura"}
+        size="md"
+        footer={
+          <Button variant="secondary" onClick={() => setVerAssinatura(null)}>
+            Fechar
+          </Button>
+        }
+      >
+        {verAssinatura && (
+          <div className="space-y-4">
+            <div className="flex flex-wrap items-center gap-2">
+              <StatusBadge status={getAssinaturaCadastroStatus(verAssinatura)} />
+              {verAssinatura.assinaturaCadastroVersao ? (
+                <span className="text-xs text-gray-500">Versão {verAssinatura.assinaturaCadastroVersao}</span>
+              ) : null}
+            </div>
+
+            {previewVerAssinatura ? (
+              <div className="bg-gray-50 rounded-xl border border-gray-200 p-6 flex justify-center">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={previewVerAssinatura}
+                  alt={`Assinatura de ${verAssinatura.nomeCompleto}`}
+                  className="max-h-48 max-w-full object-contain"
+                />
+              </div>
+            ) : (
+              <AlertBanner variant="warning" title="Foto não disponível">
+                Este cooperado não tem imagem de assinatura salva no cadastro.
+              </AlertBanner>
+            )}
+
+            <dl className="grid gap-2 text-sm text-gray-600">
+              {verAssinatura.assinaturaCadastradaEm && (
+                <div>
+                  <dt className="text-xs uppercase tracking-wide text-gray-400">Enviada em</dt>
+                  <dd>{formatDateTime(verAssinatura.assinaturaCadastradaEm)}</dd>
+                </div>
+              )}
+              {verAssinatura.assinaturaConfirmadaEm && (
+                <div>
+                  <dt className="text-xs uppercase tracking-wide text-gray-400">Confirmada em</dt>
+                  <dd>
+                    {formatDateTime(verAssinatura.assinaturaConfirmadaEm)}
+                    {verAssinatura.assinaturaConfirmadaPorNome
+                      ? ` · ${verAssinatura.assinaturaConfirmadaPorNome}`
+                      : ""}
+                  </dd>
+                </div>
+              )}
+            </dl>
+          </div>
+        )}
+      </Modal>
     </Card>
   );
 }
