@@ -42,7 +42,7 @@ export function AssinaturaCadastroGestaoPanel({ data, user, cooperativaId }: Ass
     return pushCooperadoToCloud(cnpj, cooperado, user.email);
   };
 
-  const confirmar = async (cooperadoId: string) => {
+  const confirmar = async (cooperadoId: string): Promise<boolean> => {
     setErro("");
     setBusyId(cooperadoId);
     try {
@@ -56,15 +56,19 @@ export function AssinaturaCadastroGestaoPanel({ data, user, cooperativaId }: Ass
         atualizado = result.cooperado;
         return result.data;
       });
-      if (!atualizado) return;
+      if (!atualizado) return false;
       const push = await syncCooperado(atualizado);
-      if (!push.ok) setErro(push.error ?? "Confirmado localmente, mas falhou na nuvem.");
+      if (!push.ok) {
+        setErro(push.error ?? "Confirmado localmente, mas falhou na nuvem.");
+        return false;
+      }
+      return true;
     } finally {
       setBusyId(null);
     }
   };
 
-  const devolver = async (cooperadoId: string) => {
+  const devolver = async (cooperadoId: string): Promise<boolean> => {
     setErro("");
     setBusyId(cooperadoId);
     try {
@@ -79,20 +83,29 @@ export function AssinaturaCadastroGestaoPanel({ data, user, cooperativaId }: Ass
         atualizado = result.cooperado;
         return result.data;
       });
-      if (!atualizado) return;
+      if (!atualizado) return false;
       const push = await syncCooperado(atualizado);
-      if (!push.ok) setErro(push.error ?? "Devolvido localmente, mas falhou na nuvem.");
-      else {
-        setMotivoDevolucao((prev) => {
-          const next = { ...prev };
-          delete next[cooperadoId];
-          return next;
-        });
+      if (!push.ok) {
+        setErro(push.error ?? "Devolvido localmente, mas falhou na nuvem.");
+        return false;
       }
+      setMotivoDevolucao((prev) => {
+        const next = { ...prev };
+        delete next[cooperadoId];
+        return next;
+      });
+      return true;
     } finally {
       setBusyId(null);
     }
   };
+
+  const statusVerAssinatura = verAssinatura ? getAssinaturaCadastroStatus(verAssinatura) : null;
+  const podeDevolverVerAssinatura =
+    Boolean(verAssinatura) &&
+    Boolean(previewVerAssinatura) &&
+    (statusVerAssinatura === "em_analise" || statusVerAssinatura === "confirmada");
+  const modalBusy = Boolean(verAssinatura && busyId === verAssinatura.id);
 
   if (resumo.comApp === 0) return null;
 
@@ -236,13 +249,44 @@ export function AssinaturaCadastroGestaoPanel({ data, user, cooperativaId }: Ass
 
       <Modal
         open={Boolean(verAssinatura)}
-        onClose={() => setVerAssinatura(null)}
+        onClose={() => !modalBusy && setVerAssinatura(null)}
         title={verAssinatura ? `Assinatura — ${verAssinatura.nomeCompleto}` : "Assinatura"}
         size="md"
         footer={
-          <Button variant="secondary" onClick={() => setVerAssinatura(null)}>
-            Fechar
-          </Button>
+          <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-2">
+            <Button variant="secondary" onClick={() => setVerAssinatura(null)} disabled={modalBusy}>
+              Fechar
+            </Button>
+            {verAssinatura && statusVerAssinatura === "em_analise" && (
+              <Button
+                onClick={() =>
+                  void (async () => {
+                    const ok = await confirmar(verAssinatura.id);
+                    if (ok) setVerAssinatura(null);
+                  })()
+                }
+                disabled={modalBusy}
+              >
+                <CheckCircle2 size={16} />
+                Confirmar assinatura
+              </Button>
+            )}
+            {podeDevolverVerAssinatura && verAssinatura && (
+              <Button
+                variant="danger"
+                onClick={() =>
+                  void (async () => {
+                    const ok = await devolver(verAssinatura.id);
+                    if (ok) setVerAssinatura(null);
+                  })()
+                }
+                disabled={modalBusy}
+              >
+                <RotateCcw size={16} />
+                Solicitar reenvio
+              </Button>
+            )}
+          </div>
         }
       >
         {verAssinatura && (
@@ -267,6 +311,30 @@ export function AssinaturaCadastroGestaoPanel({ data, user, cooperativaId }: Ass
               <AlertBanner variant="warning" title="Foto não disponível">
                 Este cooperado não tem imagem de assinatura salva no cadastro.
               </AlertBanner>
+            )}
+
+            {podeDevolverVerAssinatura && (
+              <>
+                <AlertBanner variant="info" title="Solicitar correção">
+                  {statusVerAssinatura === "confirmada"
+                    ? "A assinatura será removida e o cooperado precisará fotografar de novo em Meu cadastro. Até reenviar e você confirmar, não poderá usá-la em recibos e votações."
+                    : "O cooperado verá seu aviso no app e poderá enviar uma nova foto em Meu cadastro."}
+                </AlertBanner>
+                <FormField
+                  label="Motivo do reenvio (opcional)"
+                  hint="O cooperado verá esta mensagem no app"
+                >
+                  <Textarea
+                    rows={2}
+                    value={motivoDevolucao[verAssinatura.id] ?? ""}
+                    onChange={(e) =>
+                      setMotivoDevolucao((prev) => ({ ...prev, [verAssinatura.id]: e.target.value }))
+                    }
+                    placeholder="Ex.: foto escura, assinatura cortada, nome ilegível…"
+                    disabled={modalBusy}
+                  />
+                </FormField>
+              </>
             )}
 
             <dl className="grid gap-2 text-sm text-gray-600">
