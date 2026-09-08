@@ -23,13 +23,15 @@ import {
   fetchCreditParceiros,
   postCreditLimites,
   postCreditParceiroStatus,
+  postPartnerPixChangeAction,
   postUpdatePartnerDiscount,
+  fetchPartnerPixChangeRequests,
   resetMercadoFinancialPin,
   syncCreditLimiteFromFicha,
 } from "@/services/creditApiService";
 import { formatCentsBRL } from "@/modules/hb-credit/engine/money";
 import { buildCreditosBaseMap } from "@/modules/hb-credit/engine/creditBaseFromFicha";
-import type { ContaCoopDashboard, ContaCoopLimiteCooperado, ContaCoopParceiro } from "@/modules/hb-credit/types";
+import type { ContaCoopDashboard, ContaCoopLimiteCooperado, ContaCoopParceiro, ContaCoopPixChangeRequest } from "@/modules/hb-credit/types";
 import { cn, formatMesReferencia } from "@/utils/format";
 import { PageSkeleton } from "@/components/ui/PageSkeleton";
 
@@ -98,6 +100,7 @@ function ContaCoopContent() {
   const [busy, setBusy] = useState(false);
   const [discountDrafts, setDiscountDrafts] = useState<Record<string, string>>({});
   const [approveDiscountDrafts, setApproveDiscountDrafts] = useState<Record<string, string>>({});
+  const [pixChangeRequests, setPixChangeRequests] = useState<ContaCoopPixChangeRequest[]>([]);
 
   const cnpj = useMemo(() => {
     if (!user || !data) return "";
@@ -138,14 +141,16 @@ function ContaCoopContent() {
           creditosBaseCents: creditosBaseColetivo,
         }).catch(() => {});
       }
-      const [dash, lim, parc] = await Promise.all([
+      const [dash, lim, parc, pixReqs] = await Promise.all([
         fetchCreditDashboard(cnpj, creditosBaseColetivo),
         fetchCreditLimites(cnpj),
         fetchCreditParceiros(cnpj),
+        fetchPartnerPixChangeRequests(cnpj, "pendente").catch(() => []),
       ]);
       setDashboard(dash);
       setLimites(lim);
       setParceiros(parc);
+      setPixChangeRequests(pixReqs);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Erro ao carregar HB Créditos.");
     } finally {
@@ -317,6 +322,50 @@ function ContaCoopContent() {
       await reload();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Erro ao resetar PIN do mercado.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const aprovarMudancaPix = async (solicitacao: ContaCoopPixChangeRequest) => {
+    if (!cnpj) return;
+    const nome = solicitacao.partnerNome ?? solicitacao.partnerId;
+    if (!window.confirm(`Liberar alteração de PIX para "${nome}"?\n\nO mercado poderá cadastrar uma nova chave.`)) return;
+
+    setBusy(true);
+    setError("");
+    setSuccess("");
+    try {
+      await postPartnerPixChangeAction({ cnpj, requestId: solicitacao.id, action: "approve" });
+      setSuccess(`Alteração de PIX liberada para ${nome}.`);
+      await reload();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Erro ao aprovar mudança de PIX.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const negarMudancaPix = async (solicitacao: ContaCoopPixChangeRequest) => {
+    if (!cnpj) return;
+    const nome = solicitacao.partnerNome ?? solicitacao.partnerId;
+    const motivo = window.prompt(`Negar mudança de PIX de "${nome}"?\n\nOpcional: informe o motivo para o mercado.`) ?? "";
+    if (motivo === null) return;
+
+    setBusy(true);
+    setError("");
+    setSuccess("");
+    try {
+      await postPartnerPixChangeAction({
+        cnpj,
+        requestId: solicitacao.id,
+        action: "deny",
+        reviewNote: motivo.trim() || undefined,
+      });
+      setSuccess(`Solicitação de PIX negada para ${nome}.`);
+      await reload();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Erro ao negar mudança de PIX.");
     } finally {
       setBusy(false);
     }
@@ -720,6 +769,32 @@ function ContaCoopContent() {
 
       {tab === "mercados" && (
         <div className="space-y-4">
+          {pixChangeRequests.length > 0 && (
+            <Card className="space-y-3 border-amber-300 bg-amber-50/60 !p-4">
+              <h3 className="font-semibold text-gray-900">Solicitações de mudança de PIX</h3>
+              <p className="text-sm text-gray-600">
+                Mercados pediram autorização para alterar a chave de recebimento da liquidação HB Créditos.
+              </p>
+              {pixChangeRequests.map((req) => (
+                <div key={req.id} className="rounded-xl border border-amber-200 bg-white p-4">
+                  <p className="font-semibold text-gray-900">{req.partnerNome ?? req.partnerId}</p>
+                  <p className="text-xs text-gray-500">
+                    Solicitado em {new Date(req.createdAt).toLocaleString("pt-BR")}
+                  </p>
+                  {req.motivo && <p className="mt-2 text-sm text-gray-700">Motivo: {req.motivo}</p>}
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    <Button size="sm" onClick={() => void aprovarMudancaPix(req)} disabled={busy}>
+                      Aprovar mudança
+                    </Button>
+                    <Button size="sm" variant="secondary" onClick={() => void negarMudancaPix(req)} disabled={busy}>
+                      Negar
+                    </Button>
+                  </div>
+                </div>
+              ))}
+            </Card>
+          )}
+
           <Card className="border-green-200 bg-green-50/50 !p-4">
             <h3 className="font-semibold text-gray-900">Desconto por contrato com cada mercado</h3>
             <p className="mt-1 text-sm text-gray-600">

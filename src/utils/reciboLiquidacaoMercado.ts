@@ -7,9 +7,10 @@ export function gerarRelatorioLiquidacaoMercadoHtml(params: {
   preview: ContaCoopLiquidacaoPreview;
   responsavelNome: string;
   comprovanteMemo?: string;
+  comprovanteAnexado?: boolean;
   pagoEm?: string;
 }): string {
-  const { cooperativaNome, preview, responsavelNome, comprovanteMemo, pagoEm } = params;
+  const { cooperativaNome, preview, responsavelNome, comprovanteMemo, comprovanteAnexado, pagoEm } = params;
   const cooperadosHtml = preview.cooperados
     .map((coop) => renderCooperadoBlock(coop))
     .join("");
@@ -40,12 +41,13 @@ export function gerarRelatorioLiquidacaoMercadoHtml(params: {
     <div class="total">${formatCentsBRL(preview.totalCents)}</div>
     <p class="meta">${preview.transacoesCount} transação(ões) · PIX: ${preview.pixKey ?? "—"} · Titular: ${preview.pixHolderName ?? "—"}</p>
     <p class="meta">Registrado por ${responsavelNome}${pagoEm ? ` em ${formatDate(pagoEm.split("T")[0])}` : ""}</p>
+    ${comprovanteAnexado ? `<p class="meta">Comprovante PIX anexado — disponível no app do mercado.</p>` : ""}
     ${comprovanteMemo ? `<p class="meta">Observação: ${comprovanteMemo}</p>` : ""}
   </div>
   ${cooperadosHtml}
   <div class="assinatura">
-    <p><strong>Assinatura do responsável do mercado</strong></p>
-    <p class="meta">Confirme no aplicativo após conferir todas as transações.</p>
+    <p><strong>Confirmação do mercado</strong></p>
+    <p class="meta">Confirme no aplicativo após conferir o comprovante PIX.</p>
     <div id="assinatura-mercado"></div>
   </div>
 </body>
@@ -75,6 +77,11 @@ function renderCooperadoBlock(coop: ContaCoopCooperadoLiquidacao): string {
     </table>
     <p style="text-align:right;font-weight:bold;margin-top:8px">Subtotal: ${formatCentsBRL(coop.saldoCents)}</p>
   </div>`;
+}
+
+export function injetarConfirmacaoMercadoNoRelatorio(html: string, confirmadoEm: string): string {
+  const bloco = `<p class="meta"><strong>Recebimento confirmado pelo mercado</strong> em ${formatDate(confirmadoEm.split("T")[0])}</p>`;
+  return html.replace('<div id="assinatura-mercado"></div>', bloco);
 }
 
 export function injetarAssinaturaMercadoNoRelatorio(html: string, assinaturaDataUrl: string, confirmadoEm: string): string {

@@ -7,8 +7,12 @@ import {
   previewPartnerSettlement,
   registerPartnerSettlementPayment,
 } from "@/lib/supabase/contaCoopStorage";
-import { gerarRelatorioLiquidacaoMercadoHtml, injetarAssinaturaMercadoNoRelatorio } from "@/utils/reciboLiquidacaoMercado";
+import {
+  getSettlementComprovanteSignedUrl,
+} from "@/lib/supabase/hbCreditSettlementStorage";
+import { gerarRelatorioLiquidacaoMercadoHtml, injetarConfirmacaoMercadoNoRelatorio } from "@/utils/reciboLiquidacaoMercado";
 import { encryptSensitiveField } from "@/lib/security/fieldCrypto";
+import { bufferFromDataUrl } from "@/lib/security/uploadMime";
 import {
   requireCreditApi,
   requireCreditCnpj,
@@ -26,6 +30,7 @@ export async function GET(request: Request) {
   const partnerId = url.searchParams.get("partnerId") ?? "";
   const mesReferencia = url.searchParams.get("mesReferencia") ?? "";
   const settlementId = url.searchParams.get("settlementId") ?? "";
+  const view = url.searchParams.get("view") ?? "";
 
   if (settlementId) {
     const { data: row } = await gate.ctx.supabase
@@ -44,7 +49,16 @@ export async function GET(request: Request) {
 
     const settlement = await getSettlementById(gate.ctx.supabase, settlementId);
     if (!settlement) return NextResponse.json({ error: "Liquidação não encontrada." }, { status: 404 });
-    return NextResponse.json({ ok: true, settlement });
+
+    let comprovanteUrl: string | null = null;
+    if (view === "comprovante" && settlement.comprovanteStoragePath) {
+      comprovanteUrl = await getSettlementComprovanteSignedUrl(
+        gate.ctx.supabase,
+        settlement.comprovanteStoragePath
+      );
+    }
+
+    return NextResponse.json({ ok: true, settlement, comprovanteUrl });
   }
 
   if (gate.ctx.session?.role === "parceiro") {
@@ -80,25 +94,20 @@ export async function POST(request: Request) {
     const parceiroGate = await requireCreditParceiro(gate.ctx);
     if (!parceiroGate.ok) return parceiroGate.response;
     const settlementId = String(body.settlementId ?? "");
-    const assinatura = String(body.assinaturaDataUrl ?? "");
-    if (!settlementId || !assinatura.trim()) {
-      return NextResponse.json({ error: "Assinatura obrigatória." }, { status: 400 });
+    if (!settlementId) {
+      return NextResponse.json({ error: "Liquidação inválida." }, { status: 400 });
     }
     const result = await confirmPartnerSettlement(
       gate.ctx.supabase,
       settlementId,
-      parceiroGate.parceiro.id,
-      assinatura.trim()
+      parceiroGate.parceiro.id
     );
     if (!result.ok) return NextResponse.json({ error: result.error ?? "Confirmação recusada." }, { status: 400 });
 
     const full = await getSettlementById(gate.ctx.supabase, settlementId);
     if (full?.relatorioHtml) {
-      const html = injetarAssinaturaMercadoNoRelatorio(
-        full.relatorioHtml,
-        assinatura.trim(),
-        new Date().toISOString()
-      );
+      const confirmadoEm = new Date().toISOString();
+      const html = injetarConfirmacaoMercadoNoRelatorio(full.relatorioHtml, confirmadoEm);
       await gate.ctx.supabase
         .from("hb_credit_settlements")
         .update({ relatorio_html: encryptSensitiveField(html) })
@@ -115,6 +124,7 @@ export async function POST(request: Request) {
   const partnerId = String(body.partnerId ?? "");
   const mesReferencia = String(body.mesReferencia ?? "");
   const comprovanteMemo = body.comprovanteMemo ? String(body.comprovanteMemo) : undefined;
+  const comprovanteDataUrl = body.comprovanteDataUrl ? String(body.comprovanteDataUrl) : undefined;
   const cooperativaNome = String(body.cooperativaNome ?? "Cooperativa");
 
   const denyCoop = requireCreditCnpj(gate.ctx, cnpj);
@@ -130,12 +140,25 @@ export async function POST(request: Request) {
     const preview = await previewPartnerSettlement(gate.ctx.supabase, cnpj, partnerId, mesReferencia);
     if (!preview) return NextResponse.json({ error: "Mercado não encontrado." }, { status: 404 });
 
+    if (!comprovanteDataUrl?.trim()) {
+      return NextResponse.json(
+        { error: "Anexe o comprovante PIX antes de registrar o pagamento." },
+        { status: 400 }
+      );
+    }
+
+    const comprovanteBuffer = bufferFromDataUrl(comprovanteDataUrl.trim());
+    if (!comprovanteBuffer) {
+      return NextResponse.json({ error: "Comprovante inválido." }, { status: 400 });
+    }
+
     const relatorioHtml = gerarRelatorioLiquidacaoMercadoHtml({
       cooperativaNome,
       preview,
       responsavelNome: gate.ctx.session?.name ?? gate.ctx.session?.email ?? "Responsável",
       comprovanteMemo,
       pagoEm: new Date().toISOString(),
+      comprovanteAnexado: true,
     });
 
     const result = await registerPartnerSettlementPayment(gate.ctx.supabase, {
@@ -145,6 +168,7 @@ export async function POST(request: Request) {
       responsavelUserId: gate.ctx.session?.sub ?? "staff",
       responsavelNome: gate.ctx.session?.name ?? gate.ctx.session?.email ?? "Responsável",
       comprovanteMemo,
+      comprovanteBuffer,
       relatorioHtml,
     });
     if (!result.ok) return NextResponse.json({ error: result.error ?? "Pagamento não registrado." }, { status: 400 });

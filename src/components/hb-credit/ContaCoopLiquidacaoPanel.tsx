@@ -1,21 +1,33 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Input, Label } from "@/components/ui/Form";
 import { AlertBanner } from "@/components/ui/AlertBanner";
+import { Modal } from "@/components/ui/Table";
+import { PixQrModal } from "@/components/pix/PixQrModal";
 import { formatCentsBRL } from "@/modules/hb-credit/engine/money";
 import type { ContaCoopLiquidacaoPreview, ContaCoopParceiro } from "@/modules/hb-credit/types";
 import { fetchLiquidacaoPreview, registrarPagamentoMercado } from "@/services/creditApiService";
 import { formatMesReferencia, getCurrentMesReferencia } from "@/utils/format";
 import Link from "next/link";
+import { Paperclip, QrCode } from "lucide-react";
 
 interface ContaCoopLiquidacaoPanelProps {
   cnpj: string;
   cooperativaNome: string;
   parceiros: ContaCoopParceiro[];
   cooperadoNome: (id: string) => string;
+}
+
+function readFileAsDataUrl(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result ?? ""));
+    reader.onerror = () => reject(new Error("Não foi possível ler o arquivo."));
+    reader.readAsDataURL(file);
+  });
 }
 
 export function ContaCoopLiquidacaoPanel({
@@ -28,14 +40,20 @@ export function ContaCoopLiquidacaoPanel({
   const [mesReferencia, setMesReferencia] = useState(getCurrentMesReferencia());
   const [preview, setPreview] = useState<ContaCoopLiquidacaoPreview | null>(null);
   const [comprovanteMemo, setComprovanteMemo] = useState("");
+  const [comprovantePreview, setComprovantePreview] = useState<string | null>(null);
+  const [pixModalOpen, setPixModalOpen] = useState(false);
+  const [comprovanteModalOpen, setComprovanteModalOpen] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
   const [busy, setBusy] = useState(false);
+  const comprovanteInputRef = useRef<HTMLInputElement>(null);
 
   const parceirosAtivos = useMemo(
     () => parceiros.filter((p) => p.status === "ativo"),
     [parceiros]
   );
+
+  const valorReais = preview ? preview.totalCents / 100 : 0;
 
   const carregarPreview = useCallback(async () => {
     if (!cnpj || !partnerId || !mesReferencia) return;
@@ -57,8 +75,31 @@ export function ContaCoopLiquidacaoPanel({
     if (partnerId) void carregarPreview();
   }, [carregarPreview, partnerId]);
 
+  const abrirComprovante = () => {
+    setPixModalOpen(false);
+    setComprovanteModalOpen(true);
+  };
+
+  const selecionarComprovante = async (file: File | null) => {
+    if (!file) return;
+    if (file.size > 12 * 1024 * 1024) {
+      setError("Arquivo muito grande (máx. 12 MB).");
+      return;
+    }
+    try {
+      const dataUrl = await readFileAsDataUrl(file);
+      setComprovantePreview(dataUrl);
+      setError("");
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Erro ao ler comprovante.");
+    }
+  };
+
   const registrarPagamento = async () => {
-    if (!preview) return;
+    if (!preview || !comprovantePreview) {
+      setError("Anexe o comprovante PIX antes de registrar.");
+      return;
+    }
     setBusy(true);
     setError("");
     setSuccess("");
@@ -69,9 +110,13 @@ export function ContaCoopLiquidacaoPanel({
         mesReferencia: preview.mesReferencia,
         cooperativaNome,
         comprovanteMemo: comprovanteMemo.trim() || undefined,
+        comprovanteDataUrl: comprovantePreview,
       });
-      setSuccess("Pagamento registrado. O mercado precisa assinar o relatório no app dele.");
+      setSuccess("Pagamento registrado com comprovante. O mercado receberá aviso para conferir e confirmar.");
       setComprovanteMemo("");
+      setComprovantePreview(null);
+      setComprovanteModalOpen(false);
+      if (comprovanteInputRef.current) comprovanteInputRef.current.value = "";
       await carregarPreview();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Erro ao registrar pagamento.");
@@ -80,13 +125,19 @@ export function ContaCoopLiquidacaoPanel({
     }
   };
 
+  const pagamentoPronto =
+    Boolean(preview?.pagamentoAprovado) &&
+    preview != null &&
+    preview.totalCents > 0 &&
+    Boolean(preview.pixKey);
+
   return (
     <div className="space-y-4">
       <Card className="space-y-4 !p-5">
         <div>
           <h3 className="font-semibold text-gray-900">Liquidar mercado parceiro</h3>
           <p className="mt-1 text-sm text-gray-600">
-            Confira a ficha corrida de compras HB Créditos por cooperado, pague via PIX e aguarde a assinatura do mercado.
+            Confira as NFs, pague via PIX (QR Code), anexe o comprovante e envie ao mercado para confirmação.
           </p>
         </div>
         <div className="grid gap-3 md:grid-cols-3">
@@ -152,7 +203,7 @@ export function ContaCoopLiquidacaoPanel({
 
               {preview.pagamentoAprovado ? (
                 <AlertBanner variant="info" title="Pagamento aprovado">
-                  Todas as NFs conferidas e valores batendo. Você pode registrar o PIX abaixo.
+                  Todas as NFs conferidas. Use o QR Code PIX abaixo, anexe o comprovante e registre o pagamento.
                 </AlertBanner>
               ) : (
                 <AlertBanner variant="warning" title="Pagamento bloqueado">
@@ -184,22 +235,48 @@ export function ContaCoopLiquidacaoPanel({
               </p>
               {preview.pixHolderName && <p className="text-gray-600">Titular: {preview.pixHolderName}</p>}
             </div>
-            <div>
-              <Label>Observação do comprovante PIX (opcional)</Label>
-              <Input value={comprovanteMemo} onChange={(e) => setComprovanteMemo(e.target.value)} placeholder="Ex.: PIX enviado dia 28/08" />
+
+            <div className="space-y-2 rounded-xl border border-green-200 bg-green-50/50 p-4">
+              <p className="text-sm font-medium text-green-900">Como pagar e confirmar</p>
+              <ol className="list-decimal space-y-1 pl-5 text-sm text-green-900">
+                <li>Toque em <strong>Pagar com PIX (QR Code)</strong> e faça o pagamento no banco.</li>
+                <li>Depois anexe o comprovante e registre — o mercado recebe aviso para conferir.</li>
+              </ol>
             </div>
+
+            <Button
+              className="w-full"
+              size="lg"
+              onClick={() => setPixModalOpen(true)}
+              disabled={busy || !pagamentoPronto}
+            >
+              <QrCode size={18} className="mr-2 inline" />
+              Pagar com PIX (QR Code)
+            </Button>
+
+            {comprovantePreview && (
+              <AlertBanner variant="info" title="Comprovante pronto">
+                Comprovante anexado. Toque em &quot;Registrar pagamento&quot; para enviar ao mercado.
+              </AlertBanner>
+            )}
+
+            <Button
+              variant="secondary"
+              className="w-full"
+              onClick={() => setComprovanteModalOpen(true)}
+              disabled={busy || !pagamentoPronto}
+            >
+              <Paperclip size={16} className="mr-2 inline" />
+              {comprovantePreview ? "Trocar comprovante PIX" : "Anexar comprovante PIX"}
+            </Button>
+
             <Button
               className="w-full"
               size="lg"
               onClick={() => void registrarPagamento()}
-              disabled={
-                busy ||
-                preview.totalCents <= 0 ||
-                !preview.pixKey ||
-                preview.pagamentoAprovado === false
-              }
+              disabled={busy || !pagamentoPronto || !comprovantePreview}
             >
-              Registrar pagamento e enviar relatório ao mercado
+              Registrar pagamento e enviar ao mercado
             </Button>
           </Card>
 
@@ -235,6 +312,83 @@ export function ContaCoopLiquidacaoPanel({
           ))}
         </>
       )}
+
+      {preview?.pixKey && (
+        <PixQrModal
+          open={pixModalOpen}
+          onClose={() => setPixModalOpen(false)}
+          chavePix={preview.pixKey}
+          nome={preview.pixHolderName ?? preview.partnerNome}
+          valor={valorReais}
+          hintAposPagamento="Depois de pagar, anexe o comprovante do banco para enviar ao mercado."
+          confirmLabel="Já paguei — anexar comprovante"
+          onEnviarComprovante={abrirComprovante}
+        />
+      )}
+
+      <Modal
+        open={comprovanteModalOpen}
+        onClose={() => {
+          if (!busy) setComprovanteModalOpen(false);
+        }}
+        title="Anexar comprovante PIX"
+      >
+        <div className="space-y-4">
+          <p className="text-sm text-gray-600">
+            Anexe o print ou PDF do comprovante do PIX enviado ao mercado. O mercado poderá visualizar antes de confirmar.
+          </p>
+          <div>
+            <Label>Observação (opcional)</Label>
+            <Input
+              className="mt-1"
+              value={comprovanteMemo}
+              onChange={(e) => setComprovanteMemo(e.target.value)}
+              placeholder="Ex.: PIX enviado dia 28/08"
+            />
+          </div>
+          <input
+            ref={comprovanteInputRef}
+            type="file"
+            accept="image/*,application/pdf"
+            className="hidden"
+            onChange={(e) => void selecionarComprovante(e.target.files?.[0] ?? null)}
+          />
+          {comprovantePreview ? (
+            <div className="space-y-3">
+              {comprovantePreview.startsWith("data:image") ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={comprovantePreview} alt="Comprovante" className="w-full max-h-64 object-contain rounded-xl border" />
+              ) : (
+                <p className="rounded-xl border bg-gray-50 p-4 text-sm text-gray-700">PDF anexado — pronto para envio.</p>
+              )}
+              <Button variant="secondary" size="sm" onClick={() => comprovanteInputRef.current?.click()}>
+                Trocar arquivo
+              </Button>
+            </div>
+          ) : (
+            <button
+              type="button"
+              className="flex w-full flex-col items-center gap-2 rounded-xl border-2 border-dashed border-green-300 bg-green-50/50 p-8"
+              onClick={() => comprovanteInputRef.current?.click()}
+            >
+              <Paperclip size={28} className="text-green-700" />
+              <span className="text-sm font-medium text-green-800">Toque para anexar comprovante</span>
+            </button>
+          )}
+          <div className="flex gap-2">
+            <Button variant="secondary" className="flex-1" disabled={busy} onClick={() => setComprovanteModalOpen(false)}>
+              Fechar
+            </Button>
+            <Button
+              className="flex-1"
+              disabled={!comprovantePreview || busy}
+              onClick={() => void registrarPagamento()}
+            >
+              {busy ? "Enviando..." : "Registrar pagamento"}
+            </Button>
+          </div>
+        </div>
+      </Modal>
     </div>
   );
 }

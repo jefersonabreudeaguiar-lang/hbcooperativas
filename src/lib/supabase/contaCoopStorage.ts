@@ -1,5 +1,6 @@
 import { randomBytes } from "crypto";
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { uploadSettlementComprovante } from "@/lib/supabase/hbCreditSettlementStorage";
 import { normalizeCnpj } from "@/utils/cooperativa";
 import { hashPassword, verifyPassword } from "@/lib/security/password";
 import type {
@@ -2648,6 +2649,7 @@ function mapSettlementRow(row: Record<string, unknown>, partnerNome?: string): C
     responsavelNome: row.responsavel_nome ? String(row.responsavel_nome) : null,
     pagoEm: row.pago_em ? String(row.pago_em) : null,
     comprovanteMemo: row.comprovante_memo ? String(row.comprovante_memo) : null,
+    comprovanteStoragePath: row.comprovante_storage_path ? String(row.comprovante_storage_path) : null,
     relatorioHtml: readStoredField(row.relatorio_html as string | undefined),
     partnerConfirmadoEm: row.partner_confirmado_em ? String(row.partner_confirmado_em) : null,
     createdAt: String(row.created_at),
@@ -2849,6 +2851,7 @@ export async function registerPartnerSettlementPayment(
     responsavelUserId: string;
     responsavelNome: string;
     comprovanteMemo?: string;
+    comprovanteBuffer?: Buffer;
     relatorioHtml: string;
   }
 ): Promise<{ ok: boolean; error?: string; settlement?: ContaCoopSettlement }> {
@@ -2937,6 +2940,26 @@ export async function registerPartnerSettlementPayment(
     p_actor_user_id: params.responsavelUserId,
   });
 
+  let comprovanteStoragePath: string | null = null;
+  if (params.comprovanteBuffer) {
+    const upload = await uploadSettlementComprovante(supabase, {
+      cnpj: params.cnpj,
+      settlementId,
+      buffer: params.comprovanteBuffer,
+    });
+    if (!upload.ok) {
+      if (openRecebivelIds.length) {
+        await supabase
+          .from("hb_credit_receivables")
+          .update({ status: "ELIGIBLE", settlement_id: null, updated_at: now })
+          .in("id", openRecebivelIds);
+      }
+      await supabase.from("hb_credit_settlements").delete().eq("id", settlementId);
+      return { ok: false, error: upload.error ?? "Erro ao anexar comprovante." };
+    }
+    comprovanteStoragePath = upload.path;
+  }
+
   return {
     ok: true,
     settlement: {
@@ -2950,6 +2973,7 @@ export async function registerPartnerSettlementPayment(
       responsavelNome: params.responsavelNome,
       pagoEm: now,
       comprovanteMemo: params.comprovanteMemo ?? null,
+      comprovanteStoragePath,
       relatorioHtml: params.relatorioHtml,
       createdAt: now,
     },
@@ -2959,8 +2983,7 @@ export async function registerPartnerSettlementPayment(
 export async function confirmPartnerSettlement(
   supabase: SupabaseClient,
   settlementId: string,
-  parceiroId: string,
-  assinaturaDataUrl: string
+  parceiroId: string
 ): Promise<{ ok: boolean; error?: string; settlement?: ContaCoopSettlement }> {
   const { data: row } = await supabase
     .from("hb_credit_settlements")
@@ -2976,7 +2999,6 @@ export async function confirmPartnerSettlement(
     .from("hb_credit_settlements")
     .update({
       status: "CONFIRMED",
-      partner_assinatura_data_url: protectStoredField(assinaturaDataUrl),
       partner_confirmado_em: now,
       updated_at: now,
     })
@@ -2999,7 +3021,6 @@ export async function confirmPartnerSettlement(
   const updatedRow = {
     ...(row as Record<string, unknown>),
     status: "CONFIRMED",
-    partner_assinatura_data_url: protectStoredField(assinaturaDataUrl),
     partner_confirmado_em: now,
     updated_at: now,
   };

@@ -18,6 +18,7 @@ import {
   postRefundRequestAction,
   saveMercadoPix,
   setMercadoFinancialPin,
+  solicitarMudancaPixMercado,
 } from "@/services/creditApiService";
 import { formatCentsBRL } from "@/modules/hb-credit/engine/money";
 import { FINANCIAL_PIN_MIN_LENGTH } from "@/modules/hb-credit/config";
@@ -26,8 +27,8 @@ import { ContaCoopFiscalNotesMercadoPanel } from "@/components/hb-credit/ContaCo
 import { MercadoContaCoopTermosGate } from "@/components/hb-credit/MercadoContaCoopTermosGate";
 import { textoResumoAcordoDescontoMercado, getClausulasTermoMercadoContaCoop, TERMO_MERCADO_CONTA_COOP_VERSAO } from "@/config/termoUsoMercadoContaCoop";
 import { PageSkeleton } from "@/components/ui/PageSkeleton";
-import { SignaturePad } from "@/components/ui/SignaturePad";
 import { formatCpfCnpj, formatDateTime, formatMesReferencia, getCurrentMesReferencia } from "@/utils/format";
+import { Eye } from "lucide-react";
 
 type MercadoTab = "inicio" | "cobrar" | "vendas" | "mais";
 
@@ -78,7 +79,6 @@ function MercadoParceiroContent() {
   const [solicitacoesEstorno, setSolicitacoesEstorno] = useState<ContaCoopSolicitacaoEstorno[]>([]);
   const [pixKey, setPixKey] = useState("");
   const [pixHolderName, setPixHolderName] = useState("");
-  const [assinatura, setAssinatura] = useState<string | null>(null);
   const [success, setSuccess] = useState("");
   const [valorReais, setValorReais] = useState("");
   const [descricao, setDescricao] = useState("");
@@ -88,6 +88,7 @@ function MercadoParceiroContent() {
   const [busy, setBusy] = useState(false);
   const qrDestaqueRef = useRef<HTMLDivElement>(null);
   const comprovanteRef = useRef<HTMLDivElement>(null);
+  const liquidacaoConfirmacaoRef = useRef<HTMLDivElement>(null);
   const [hasPin, setHasPin] = useState(false);
   const [pinSetup, setPinSetup] = useState("");
   const [estornoAlvo, setEstornoAlvo] = useState<ContaCoopCompraEstornavel | null>(null);
@@ -99,6 +100,8 @@ function MercadoParceiroContent() {
   const [fiscalPendentes, setFiscalPendentes] = useState(0);
   const [cooperativaNome, setCooperativaNome] = useState("Cooperativa parceira");
   const [needsTermsAcceptance, setNeedsTermsAcceptance] = useState(false);
+  const [pixChangePending, setPixChangePending] = useState(false);
+  const [pixChangeUnlocked, setPixChangeUnlocked] = useState(false);
   const [tab, setTab] = useState<MercadoTab>("inicio");
 
   const reload = useCallback(async () => {
@@ -114,6 +117,8 @@ function MercadoParceiroContent() {
       setFiscalPendentes(Number(data.fiscalPendentes ?? 0));
       setCooperativaNome(data.cooperativaNome ?? "Cooperativa parceira");
       setNeedsTermsAcceptance(Boolean(data.needsTermsAcceptance));
+      setPixChangePending(Boolean(data.pixChange?.pending));
+      setPixChangeUnlocked(Boolean(data.pixChange?.unlocked));
       if (data.parceiro?.status === "ativo") {
         try {
           const refundData = await fetchPartnerRefundData();
@@ -365,7 +370,7 @@ function MercadoParceiroContent() {
     setSuccess("");
     try {
       await saveMercadoPix(pixKey, pixHolderName);
-      setSuccess("PIX cadastrado com sucesso.");
+      setSuccess(pixChangeUnlocked ? "Novo PIX salvo com sucesso." : "PIX cadastrado com sucesso.");
       await reload();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Erro ao salvar PIX.");
@@ -374,18 +379,28 @@ function MercadoParceiroContent() {
     }
   };
 
-  const confirmarLiquidacao = async (settlementId: string) => {
-    if (!assinatura) {
-      setError("Assine o relatório antes de confirmar.");
-      return;
-    }
+  const solicitarMudancaPix = async () => {
     setBusy(true);
     setError("");
     setSuccess("");
     try {
-      await confirmarLiquidacaoMercado(settlementId, assinatura);
-      setSuccess("Pagamento confirmado e relatório assinado enviado à cooperativa.");
-      setAssinatura(null);
+      await solicitarMudancaPixMercado();
+      setSuccess("Solicitação enviada à cooperativa. Aguarde a liberação para alterar o PIX.");
+      await reload();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Erro ao solicitar mudança.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const confirmarLiquidacao = async (settlementId: string) => {
+    setBusy(true);
+    setError("");
+    setSuccess("");
+    try {
+      await confirmarLiquidacaoMercado(settlementId);
+      setSuccess("Pagamento confirmado. A cooperativa foi notificada.");
       await reload();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Erro ao confirmar.");
@@ -396,6 +411,13 @@ function MercadoParceiroContent() {
 
   const pendenteConfirmacao = settlements.find((s) => s.status === "aguardando_mercado");
   const mesReferencia = getCurrentMesReferencia();
+
+  const irParaConfirmacaoLiquidacao = () => {
+    setTab("mais");
+    requestAnimationFrame(() => {
+      liquidacaoConfirmacaoRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    });
+  };
 
   const resumoMercado = useMemo(() => {
     const abertoCents = recebiveis
@@ -430,6 +452,9 @@ function MercadoParceiroContent() {
 
   const ativo = parceiro?.status === "ativo";
   const pendente = parceiro?.status === "pendente";
+  const pixCadastrado = Boolean(parceiro?.pixKey);
+  const pixBloqueado = pixCadastrado && !pixChangeUnlocked;
+  const pixEditavel = !pixCadastrado || pixChangeUnlocked;
 
   return (
     <div className="mx-auto max-w-lg space-y-5 pb-8">
@@ -453,6 +478,19 @@ function MercadoParceiroContent() {
         active={tab}
         onChange={setTab}
       />
+
+      {pendenteConfirmacao && (
+        <AlertBanner variant="info" title="Pagamento recebido da cooperativa">
+          <p className="text-sm">
+            {formatMesReferencia(pendenteConfirmacao.mesReferencia)} · {formatCentsBRL(pendenteConfirmacao.totalCents)} aguardando
+            sua confirmação. Consulte o comprovante PIX e confirme o recebimento.
+          </p>
+          <Button variant="secondary" size="sm" className="mt-3" onClick={irParaConfirmacaoLiquidacao}>
+            <Eye size={14} className="mr-1 inline" />
+            Consultar comprovante
+          </Button>
+        </AlertBanner>
+      )}
 
       {tab === "inicio" && (
         <>
@@ -478,7 +516,7 @@ function MercadoParceiroContent() {
                   <span>Em liquidação {formatCentsBRL(resumoMercado.emLiquidacaoCents)}</span>
                 )}
                 {resumoMercado.aguardandoAssinaturaCents > 0 && (
-                  <span>Aguardando sua assinatura {formatCentsBRL(resumoMercado.aguardandoAssinaturaCents)}</span>
+                  <span>Aguardando confirmação {formatCentsBRL(resumoMercado.aguardandoAssinaturaCents)}</span>
                 )}
               </div>
             )}
@@ -532,8 +570,8 @@ function MercadoParceiroContent() {
             Cobrar com QR Code
           </Button>
           {pendenteConfirmacao && (
-            <Button variant="secondary" size="lg" className="w-full" onClick={() => setTab("mais")}>
-              Confirmar pagamento da cooperativa
+            <Button variant="secondary" size="lg" className="w-full" onClick={irParaConfirmacaoLiquidacao}>
+              Pagamento recebido — consultar comprovante
             </Button>
           )}
         </>
@@ -806,24 +844,59 @@ function MercadoParceiroContent() {
           <Card className="p-5 space-y-4">
             <div>
               <h3 className="font-semibold text-gray-900">Seu PIX para receber da cooperativa</h3>
-              <p className="text-sm text-gray-600">Cadastre antes do dia de pagamento — igual o cooperado cadastra o PIX na ficha.</p>
+              <p className="text-sm text-gray-600">
+                {pixCadastrado
+                  ? "Após o cadastro, a chave fica bloqueada. Para alterar, solicite autorização à cooperativa."
+                  : "Cadastre antes do dia de pagamento — igual o cooperado cadastra o PIX na ficha."}
+              </p>
             </div>
             <div className="grid gap-3 sm:grid-cols-2">
               <div>
                 <Label>Chave PIX</Label>
-                <Input value={pixKey} onChange={(e) => setPixKey(e.target.value)} placeholder="CPF, CNPJ, e-mail ou telefone" />
+                <Input
+                  value={pixKey}
+                  onChange={(e) => setPixKey(e.target.value)}
+                  placeholder="CPF, CNPJ, e-mail ou telefone"
+                  disabled={!pixEditavel}
+                />
               </div>
               <div>
                 <Label>Titular da chave</Label>
-                <Input value={pixHolderName} onChange={(e) => setPixHolderName(e.target.value)} placeholder="Nome do titular" />
+                <Input
+                  value={pixHolderName}
+                  onChange={(e) => setPixHolderName(e.target.value)}
+                  placeholder="Nome do titular"
+                  disabled={!pixEditavel}
+                />
               </div>
             </div>
-            <Button onClick={() => void salvarPix()} disabled={busy || !pixKey.trim() || !pixHolderName.trim()}>
-              Salvar PIX
-            </Button>
+            {pixChangePending && (
+              <AlertBanner variant="info" title="Mudança solicitada">
+                Aguardando aprovação da cooperativa para alterar o PIX.
+              </AlertBanner>
+            )}
+            {pixChangeUnlocked && (
+              <AlertBanner variant="info" title="Alteração liberada">
+                A cooperativa aprovou a mudança. Informe o novo PIX e salve.
+              </AlertBanner>
+            )}
+            <div className="flex flex-col gap-2 sm:flex-row">
+              <Button
+                onClick={() => void salvarPix()}
+                disabled={busy || !pixEditavel || !pixKey.trim() || !pixHolderName.trim()}
+              >
+                {pixCadastrado && pixChangeUnlocked ? "Salvar novo PIX" : "Salvar PIX"}
+              </Button>
+              {pixBloqueado && (
+                <Button variant="secondary" onClick={() => void solicitarMudancaPix()} disabled={busy || pixChangePending}>
+                  Solicitar mudança
+                </Button>
+              )}
+            </div>
             {parceiro?.pixKey && (
               <p className="text-sm text-green-700">
                 PIX cadastrado: <strong>{parceiro.pixKey}</strong>
+                {parceiro.pixHolderName ? ` · ${parceiro.pixHolderName}` : ""}
               </p>
             )}
           </Card>
@@ -862,6 +935,7 @@ function MercadoParceiroContent() {
           )}
 
           {pendenteConfirmacao && (
+            <div ref={liquidacaoConfirmacaoRef} className="scroll-mt-4">
             <Card className="space-y-4 border-green-300 bg-green-50/50 p-5">
               <div>
                 <h3 className="font-semibold text-gray-900">Confirmar pagamento da cooperativa</h3>
@@ -873,7 +947,29 @@ function MercadoParceiroContent() {
                   Registrado por {pendenteConfirmacao.responsavelNome ?? "cooperativa"}
                   {pendenteConfirmacao.pagoEm ? ` em ${new Date(pendenteConfirmacao.pagoEm).toLocaleString("pt-BR")}` : ""}
                 </p>
+                {pendenteConfirmacao.comprovanteMemo && (
+                  <p className="text-xs text-gray-600 mt-1">Obs.: {pendenteConfirmacao.comprovanteMemo}</p>
+                )}
               </div>
+              {pendenteConfirmacao.comprovanteUrl && (
+                <div className="space-y-2">
+                  <p className="text-sm font-semibold text-green-900">Comprovante PIX enviado pela cooperativa</p>
+                  {pendenteConfirmacao.comprovanteStoragePath?.endsWith(".pdf") ? (
+                    <iframe
+                      title="Comprovante PIX"
+                      src={pendenteConfirmacao.comprovanteUrl}
+                      className="h-80 w-full rounded-xl border bg-white"
+                    />
+                  ) : (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src={pendenteConfirmacao.comprovanteUrl}
+                      alt="Comprovante PIX"
+                      className="max-h-96 w-full rounded-xl border bg-white object-contain"
+                    />
+                  )}
+                </div>
+              )}
               {pendenteConfirmacao.relatorioHtml && (
                 <iframe
                   title="Relatório de liquidação"
@@ -881,19 +977,16 @@ function MercadoParceiroContent() {
                   className="h-72 w-full rounded-xl border bg-white"
                 />
               )}
-              <div>
-                <Label>Assine como responsável do mercado</Label>
-                <SignaturePad onChange={setAssinatura} className="mt-2 h-36 w-full rounded-xl border bg-white" />
-              </div>
               <Button
                 size="lg"
                 className="w-full"
                 onClick={() => void confirmarLiquidacao(pendenteConfirmacao.id)}
-                disabled={busy || !assinatura}
+                disabled={busy}
               >
-                Confirmar recebimento e enviar à cooperativa
+                Confirmar recebimento do pagamento
               </Button>
             </Card>
+            </div>
           )}
 
           {ativo && <ContaCoopFiscalNotesMercadoPanel />}
@@ -944,7 +1037,7 @@ function MercadoParceiroContent() {
                     {s.status === "confirmado"
                       ? "Confirmado"
                       : s.status === "aguardando_mercado"
-                        ? "Aguardando sua assinatura"
+                        ? "Aguardando confirmação"
                         : s.status}
                   </p>
                 </div>

@@ -7,6 +7,7 @@ import type {
   ContaCoopLimiteCooperado,
   ContaCoopLiquidacaoPreview,
   ContaCoopParceiro,
+  ContaCoopPixChangeRequest,
   ContaCoopSettlement,
   ContaCoopSolicitacaoEstorno,
 } from "@/modules/hb-credit/types";
@@ -227,6 +228,12 @@ export async function fetchMercadoParceiroData() {
     fiscalPendentes?: number;
     cooperativaNome?: string;
     needsTermsAcceptance?: boolean;
+    pixChange?: {
+      pending: boolean;
+      unlocked: boolean;
+      pendingRequest?: ContaCoopPixChangeRequest | null;
+      approvedRequest?: ContaCoopPixChangeRequest | null;
+    };
   }>(res);
   if (!res.ok || !data.ok) throw new Error(data.error ?? "Erro ao carregar mercado.");
   return data;
@@ -256,6 +263,42 @@ export async function saveMercadoPix(pixKey: string, pixHolderName: string) {
   return data.parceiro;
 }
 
+export async function solicitarMudancaPixMercado(motivo?: string) {
+  const res = await secureApiFetch("/api/credit/partner-pix-change", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ action: "request", motivo }),
+  });
+  const data = await parseJson<{ ok?: boolean; error?: string; solicitacao?: ContaCoopPixChangeRequest }>(res);
+  if (!res.ok || !data.ok) throw new Error(data.error ?? "Não foi possível solicitar mudança.");
+  return data.solicitacao;
+}
+
+export async function fetchPartnerPixChangeRequests(cnpj: string, status?: "pendente") {
+  const params = new URLSearchParams({ cnpj });
+  if (status) params.set("status", status);
+  const res = await secureApiFetch(`/api/credit/partner-pix-change?${params.toString()}`);
+  const data = await parseJson<{ ok?: boolean; error?: string; solicitacoes?: ContaCoopPixChangeRequest[] }>(res);
+  if (!res.ok || !data.ok) throw new Error(data.error ?? "Erro ao carregar solicitações de PIX.");
+  return data.solicitacoes ?? [];
+}
+
+export async function postPartnerPixChangeAction(input: {
+  cnpj: string;
+  requestId: string;
+  action: "approve" | "deny";
+  reviewNote?: string;
+}) {
+  const res = await secureApiFetch("/api/credit/partner-pix-change", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+  });
+  const data = await parseJson<{ ok?: boolean; error?: string; solicitacao?: ContaCoopPixChangeRequest }>(res);
+  if (!res.ok || !data.ok) throw new Error(data.error ?? "Ação não concluída.");
+  return data.solicitacao;
+}
+
 export async function setMercadoFinancialPin(pin: string) {
   const res = await secureApiFetch("/api/credit/mercado", {
     method: "PATCH",
@@ -282,6 +325,7 @@ export async function registrarPagamentoMercado(input: {
   mesReferencia: string;
   cooperativaNome: string;
   comprovanteMemo?: string;
+  comprovanteDataUrl: string;
 }) {
   const res = await secureApiFetch("/api/credit/settlements", {
     method: "POST",
@@ -293,11 +337,20 @@ export async function registrarPagamentoMercado(input: {
   return data.settlement;
 }
 
-export async function confirmarLiquidacaoMercado(settlementId: string, assinaturaDataUrl: string) {
+export async function fetchSettlementComprovanteUrl(settlementId: string) {
+  const res = await secureApiFetch(
+    `/api/credit/settlements?settlementId=${encodeURIComponent(settlementId)}&view=comprovante`
+  );
+  const data = await parseJson<{ ok?: boolean; error?: string; comprovanteUrl?: string | null }>(res);
+  if (!res.ok || !data.ok) throw new Error(data.error ?? "Erro ao carregar comprovante.");
+  return data.comprovanteUrl ?? null;
+}
+
+export async function confirmarLiquidacaoMercado(settlementId: string) {
   const res = await secureApiFetch("/api/credit/settlements", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ action: "confirm_partner", settlementId, assinaturaDataUrl }),
+    body: JSON.stringify({ action: "confirm_partner", settlementId }),
   });
   const data = await parseJson<{ ok?: boolean; error?: string; settlement?: ContaCoopSettlement }>(res);
   if (!res.ok || !data.ok) throw new Error(data.error ?? "Confirmação recusada.");

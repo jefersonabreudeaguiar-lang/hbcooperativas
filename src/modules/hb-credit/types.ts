@@ -46,6 +46,18 @@ export interface ContaCoopTetoResumo {
   restanteParaLiberarCents: number;
 }
 
+export interface ContaCoopPixChangeRequest {
+  id: string;
+  partnerId: string;
+  partnerNome?: string;
+  status: "pendente" | "aprovado" | "negado" | "cancelado" | "consumido";
+  motivo?: string | null;
+  createdAt: string;
+  reviewedAt?: string | null;
+  reviewedByName?: string | null;
+  reviewNote?: string | null;
+}
+
 export interface ContaCoopParceiro {
   id: string;
   cooperativaCnpj: string;
@@ -263,6 +275,9 @@ export interface ContaCoopSettlement {
   responsavelNome?: string | null;
   pagoEm?: string | null;
   comprovanteMemo?: string | null;
+  comprovanteStoragePath?: string | null;
+  /** URL assinada temporária para visualização (API). */
+  comprovanteUrl?: string | null;
   relatorioHtml?: string | null;
   partnerConfirmadoEm?: string | null;
   createdAt: string;

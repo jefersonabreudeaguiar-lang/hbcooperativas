@@ -12,6 +12,13 @@ import {
   updatePartnerPix,
 } from "@/lib/supabase/contaCoopStorage";
 import { countPartnerFiscalPending } from "@/lib/supabase/hbCreditFiscalNotesStorage";
+import { getSettlementComprovanteSignedUrl } from "@/lib/supabase/hbCreditSettlementStorage";
+import {
+  assertPartnerPixEditable,
+  consumeApprovedPartnerPixChangeRequest,
+  getPartnerPixChangeStatus,
+} from "@/lib/supabase/hbCreditPixChangeStorage";
+import type { ContaCoopSettlement } from "@/modules/hb-credit/types";
 import { requireCreditApi } from "@/lib/security/creditGuard";
 import { FINANCIAL_PIN_MIN_LENGTH } from "@/modules/hb-credit/config";
 import { getCurrentMesReferencia } from "@/utils/format";
@@ -34,7 +41,17 @@ export async function GET(request: Request) {
 
   const intents = await listIntentsParceiro(gate.ctx.supabase, parceiro.id);
   const recebiveis = await listRecebiveisParceiro(gate.ctx.supabase, parceiro.id);
-  const settlements = await listSettlementsForPartner(gate.ctx.supabase, parceiro.id);
+  const settlementsRaw = await listSettlementsForPartner(gate.ctx.supabase, parceiro.id);
+  const settlements: ContaCoopSettlement[] = await Promise.all(
+    settlementsRaw.map(async (s) => {
+      if (!s.comprovanteStoragePath) return s;
+      const comprovanteUrl = await getSettlementComprovanteSignedUrl(
+        gate.ctx.supabase,
+        s.comprovanteStoragePath
+      );
+      return { ...s, comprovanteUrl };
+    })
+  );
   const hasPin = await hasPartnerFinancialPin(gate.ctx.supabase, parceiro.id);
   const mesReferencia = getCurrentMesReferencia();
   let fiscalPendentes = 0;
@@ -47,6 +64,7 @@ export async function GET(request: Request) {
   const cooperativaNome =
     (await getCooperativaNomeByCnpj(gate.ctx.supabase, parceiro.cooperativaCnpj)) ?? "Cooperativa parceira";
   const needsTermsAcceptance = partnerNeedsTermsAcceptance(parceiro);
+  const pixChange = await getPartnerPixChangeStatus(gate.ctx.supabase, parceiro.id);
 
   return NextResponse.json({
     ok: true,
@@ -59,6 +77,7 @@ export async function GET(request: Request) {
     mesReferenciaFiscal: mesReferencia,
     cooperativaNome,
     needsTermsAcceptance,
+    pixChange,
   });
 }
 
@@ -121,7 +140,15 @@ export async function PATCH(request: Request) {
     return NextResponse.json({ error: "Informe o titular da chave PIX." }, { status: 400 });
   }
 
+  const editable = await assertPartnerPixEditable(gate.ctx.supabase, parceiro.id, parceiro.pixKey);
+  if (!editable.ok) return NextResponse.json({ error: editable.error }, { status: 403 });
+
   const updated = await updatePartnerPix(gate.ctx.supabase, parceiro.id, pixKey, pixHolderName);
   if (!updated) return NextResponse.json({ error: "Não foi possível salvar o PIX." }, { status: 400 });
+
+  if (!editable.isFirstRegistration) {
+    await consumeApprovedPartnerPixChangeRequest(gate.ctx.supabase, parceiro.id);
+  }
+
   return NextResponse.json({ ok: true, parceiro: updated });
 }
