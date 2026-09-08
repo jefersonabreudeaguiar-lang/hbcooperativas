@@ -2819,7 +2819,7 @@ export async function previewPartnerSettlement(
     const { summarizeFiscalNotesMonth, evaluatePartnerFiscalSettlementGate } = await import(
       "@/lib/supabase/hbCreditFiscalNotesStorage"
     );
-    fiscalResumo = await summarizeFiscalNotesMonth(supabase, digits, partnerId, mesReferencia);
+    fiscalResumo = await summarizeFiscalNotesMonth(supabase, digits, mesReferencia, partnerId);
     const gate = evaluatePartnerFiscalSettlementGate(fiscalResumo);
     pagamentoAprovado = gate.ready && totalCents > 0;
     bloqueioPagamento = gate.message;

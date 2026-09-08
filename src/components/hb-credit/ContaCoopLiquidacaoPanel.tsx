@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import QRCode from "qrcode";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Input, Label } from "@/components/ui/Form";
@@ -10,9 +11,10 @@ import { PixQrModal } from "@/components/pix/PixQrModal";
 import { formatCentsBRL } from "@/modules/hb-credit/engine/money";
 import type { ContaCoopLiquidacaoPreview, ContaCoopParceiro } from "@/modules/hb-credit/types";
 import { fetchLiquidacaoPreview, registrarPagamentoMercado } from "@/services/creditApiService";
+import { gerarPixCopiaCola } from "@/utils/pix";
 import { formatMesReferencia, getCurrentMesReferencia } from "@/utils/format";
 import Link from "next/link";
-import { Paperclip, QrCode } from "lucide-react";
+import { Copy, Paperclip, QrCode, Smartphone } from "lucide-react";
 
 interface ContaCoopLiquidacaoPanelProps {
   cnpj: string;
@@ -46,6 +48,8 @@ export function ContaCoopLiquidacaoPanel({
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
   const [busy, setBusy] = useState(false);
+  const [qrUrl, setQrUrl] = useState("");
+  const [copiedPix, setCopiedPix] = useState(false);
   const comprovanteInputRef = useRef<HTMLInputElement>(null);
 
   const parceirosAtivos = useMemo(
@@ -54,6 +58,42 @@ export function ContaCoopLiquidacaoPanel({
   );
 
   const valorReais = preview ? preview.totalCents / 100 : 0;
+  const pixPayload = useMemo(() => {
+    if (!preview?.pixKey || preview.totalCents <= 0) return "";
+    return gerarPixCopiaCola({
+      chave: preview.pixKey,
+      valor: valorReais,
+      nome: preview.pixHolderName ?? preview.partnerNome,
+    });
+  }, [preview, valorReais]);
+
+  const pagamentoPronto =
+    Boolean(preview?.pagamentoAprovado) &&
+    preview != null &&
+    preview.totalCents > 0 &&
+    Boolean(preview.pixKey);
+
+  useEffect(() => {
+    if (!pixPayload || !pagamentoPronto) {
+      setQrUrl("");
+      return;
+    }
+    QRCode.toDataURL(pixPayload, { width: 240, margin: 2 })
+      .then(setQrUrl)
+      .catch(() => setQrUrl(""));
+  }, [pixPayload, pagamentoPronto]);
+
+  const motivoPagamentoBloqueado = useMemo(() => {
+    if (!preview) return null;
+    if (preview.totalCents <= 0) return "Não há recebíveis elegíveis neste mês para pagar.";
+    if (!preview.pixKey?.trim()) {
+      return "O mercado ainda não cadastrou a chave PIX (aba Mais no app do mercado).";
+    }
+    if (!preview.pagamentoAprovado) {
+      return preview.bloqueioPagamento ?? "Finalize a conferência fiscal na aba Conferir NFs.";
+    }
+    return null;
+  }, [preview]);
 
   const carregarPreview = useCallback(async () => {
     if (!cnpj || !partnerId || !mesReferencia) return;
@@ -125,11 +165,12 @@ export function ContaCoopLiquidacaoPanel({
     }
   };
 
-  const pagamentoPronto =
-    Boolean(preview?.pagamentoAprovado) &&
-    preview != null &&
-    preview.totalCents > 0 &&
-    Boolean(preview.pixKey);
+  const copiarPix = async () => {
+    if (!pixPayload) return;
+    await navigator.clipboard.writeText(pixPayload);
+    setCopiedPix(true);
+    setTimeout(() => setCopiedPix(false), 2000);
+  };
 
   return (
     <div className="space-y-4">
@@ -170,6 +211,12 @@ export function ContaCoopLiquidacaoPanel({
 
       {error && <AlertBanner variant="error">{error}</AlertBanner>}
       {success && <AlertBanner variant="info" title="Registrado">{success}</AlertBanner>}
+
+      {!partnerId && (
+        <AlertBanner variant="info" title="Selecione um mercado">
+          Escolha o mercado e o mês acima para ver o valor e pagar via PIX.
+        </AlertBanner>
+      )}
 
       {preview && (
         <>
@@ -216,9 +263,10 @@ export function ContaCoopLiquidacaoPanel({
             </Card>
           )}
 
-          <Card className="space-y-3 !p-5">
+          <Card className="space-y-4 !p-5 border-2 border-green-200 bg-green-50/30">
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div>
+                <p className="text-xs font-semibold uppercase tracking-wide text-green-800">Pagamento ao mercado</p>
                 <p className="text-sm text-gray-500">{formatMesReferencia(preview.mesReferencia)}</p>
                 <h4 className="text-xl font-bold text-gray-900">{preview.partnerNome}</h4>
               </div>
@@ -228,36 +276,63 @@ export function ContaCoopLiquidacaoPanel({
                 <p className="text-xs text-gray-500">{preview.transacoesCount} recebível(is) elegível(is)</p>
               </div>
             </div>
-            <div className="rounded-xl bg-gray-50 p-3 text-sm">
-              <p>
-                <span className="text-gray-500">PIX:</span>{" "}
-                <strong>{preview.pixKey ?? "Mercado ainda não cadastrou PIX"}</strong>
-              </p>
-              {preview.pixHolderName && <p className="text-gray-600">Titular: {preview.pixHolderName}</p>}
-            </div>
 
-            <div className="space-y-2 rounded-xl border border-green-200 bg-green-50/50 p-4">
-              <p className="text-sm font-medium text-green-900">Como pagar e confirmar</p>
-              <ol className="list-decimal space-y-1 pl-5 text-sm text-green-900">
-                <li>Toque em <strong>Pagar com PIX (QR Code)</strong> e faça o pagamento no banco.</li>
-                <li>Depois anexe o comprovante e registre — o mercado recebe aviso para conferir.</li>
-              </ol>
-            </div>
-
-            <Button
-              className="w-full"
-              size="lg"
-              onClick={() => setPixModalOpen(true)}
-              disabled={busy || !pagamentoPronto}
-            >
-              <QrCode size={18} className="mr-2 inline" />
-              Pagar com PIX (QR Code)
-            </Button>
-
-            {comprovantePreview && (
-              <AlertBanner variant="info" title="Comprovante pronto">
-                Comprovante anexado. Toque em &quot;Registrar pagamento&quot; para enviar ao mercado.
+            {motivoPagamentoBloqueado && (
+              <AlertBanner variant="warning" title="Pagamento ainda não liberado">
+                {motivoPagamentoBloqueado}{" "}
+                {!preview.pagamentoAprovado && (
+                  <Link href="/conta-coop?tab=conferir_nf" className="font-semibold underline">
+                    Ir para Conferir NFs
+                  </Link>
+                )}
               </AlertBanner>
+            )}
+
+            {pagamentoPronto && (
+              <div className="rounded-2xl border border-green-300 bg-white p-4 space-y-4">
+                <div className="flex items-start gap-3 text-sm text-blue-900 bg-blue-50 rounded-xl p-3">
+                  <Smartphone size={22} className="shrink-0" />
+                  <p>
+                    Escaneie o QR Code no app do banco ou copie o PIX. Depois anexe o comprovante e registre o pagamento.
+                  </p>
+                </div>
+                <div className="grid gap-4 md:grid-cols-[auto,1fr] md:items-center">
+                  {qrUrl ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src={qrUrl}
+                      alt="QR Code PIX para pagamento ao mercado"
+                      className="mx-auto rounded-xl border-4 border-green-100"
+                    />
+                  ) : (
+                    <div className="mx-auto flex h-60 w-60 items-center justify-center rounded-xl border bg-gray-50 text-sm text-gray-400">
+                      Gerando QR Code...
+                    </div>
+                  )}
+                  <div className="space-y-3 text-sm">
+                    <div className="rounded-xl bg-gray-50 p-3">
+                      <p className="text-gray-500">Chave PIX do mercado</p>
+                      <p className="font-semibold break-all">{preview.pixKey}</p>
+                      {preview.pixHolderName && <p className="text-gray-600 mt-1">Titular: {preview.pixHolderName}</p>}
+                    </div>
+                    <Button variant="secondary" className="w-full" onClick={() => void copiarPix()}>
+                      <Copy size={16} /> {copiedPix ? "PIX copiado!" : "Copiar PIX copia e cola"}
+                    </Button>
+                    <Button variant="secondary" className="w-full" onClick={() => setPixModalOpen(true)}>
+                      <QrCode size={16} /> Abrir em tela cheia
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {!pagamentoPronto && preview.pixKey && (
+              <div className="rounded-xl bg-gray-50 p-3 text-sm">
+                <p>
+                  <span className="text-gray-500">PIX cadastrado:</span> <strong>{preview.pixKey}</strong>
+                </p>
+                {preview.pixHolderName && <p className="text-gray-600">Titular: {preview.pixHolderName}</p>}
+              </div>
             )}
 
             <Button
@@ -269,6 +344,12 @@ export function ContaCoopLiquidacaoPanel({
               <Paperclip size={16} className="mr-2 inline" />
               {comprovantePreview ? "Trocar comprovante PIX" : "Anexar comprovante PIX"}
             </Button>
+
+            {comprovantePreview && (
+              <AlertBanner variant="info" title="Comprovante pronto">
+                Comprovante anexado. Toque em &quot;Registrar pagamento&quot; para enviar ao mercado.
+              </AlertBanner>
+            )}
 
             <Button
               className="w-full"
