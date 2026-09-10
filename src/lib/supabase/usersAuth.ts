@@ -1,5 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import type { UserRole } from "@/types";
+import type { Action, ModoAcesso, Resource, UserRole } from "@/types";
 import { normalizeCnpj } from "@/utils/cooperativa";
 import { normalizeAuthEmail } from "@/lib/security/appCreator";
 import { hashPassword, verifyPassword } from "@/lib/security/password";
@@ -15,6 +15,11 @@ export type AppUserRow = {
   cooperado_id: string | null;
   cooperativa_cnpj: string | null;
   active: boolean;
+  funcao?: string | null;
+  responsavel_principal?: boolean | null;
+  modo_acesso?: ModoAcesso | null;
+  permissoes_extras?: Partial<Record<Resource, Action[]>> | null;
+  permissoes_negadas?: Partial<Record<Resource, Action[]>> | null;
   totp_secret_encrypted?: string | null;
   totp_enabled_at?: string | null;
 };
@@ -28,6 +33,12 @@ export interface UpsertAppUserInput {
   cooperativaId?: string;
   cooperadoId?: string;
   cooperativaCnpj?: string;
+  funcao?: string;
+  responsavelPrincipal?: boolean;
+  modoAcesso?: ModoAcesso;
+  permissoesExtras?: Partial<Record<Resource, Action[]>>;
+  permissoesNegadas?: Partial<Record<Resource, Action[]>>;
+  active?: boolean;
 }
 
 function isMissingTable(error: { code?: string; message?: string } | null): boolean {
@@ -82,15 +93,26 @@ function isRoleCheckViolation(error: { code?: string; message?: string } | null)
   return /app_users_role_check|check constraint/i.test(error.message ?? "");
 }
 
-export async function upsertAppUser(
-  supabase: SupabaseClient,
-  input: UpsertAppUserInput
-): Promise<AppUserRow | null> {
-  const email = normalizeAuthEmail(input.email);
-  const password_hash = await hashPassword(input.password);
-  const cooperativa_cnpj = input.cooperativaCnpj ? normalizeCnpj(input.cooperativaCnpj) : null;
+function isMissingColumn(error: { code?: string; message?: string } | null): boolean {
+  if (!error) return false;
+  return error.code === "42703" || /column .* does not exist/i.test(error.message ?? "");
+}
 
-  const row = {
+function buildAppUserRow(input: UpsertAppUserInput, password_hash: string) {
+  return {
+    ...buildLegacyAppUserRow(input, password_hash),
+    funcao: input.funcao?.trim() || null,
+    responsavel_principal: input.responsavelPrincipal ?? false,
+    modo_acesso: input.modoAcesso ?? "total",
+    permissoes_extras: input.permissoesExtras ?? null,
+    permissoes_negadas: input.permissoesNegadas ?? null,
+  };
+}
+
+function buildLegacyAppUserRow(input: UpsertAppUserInput, password_hash: string) {
+  const email = normalizeAuthEmail(input.email);
+  const cooperativa_cnpj = input.cooperativaCnpj ? normalizeCnpj(input.cooperativaCnpj) : null;
+  return {
     id: input.id,
     email,
     password_hash,
@@ -99,10 +121,81 @@ export async function upsertAppUser(
     cooperativa_id: input.cooperativaId ?? null,
     cooperado_id: input.cooperadoId ?? null,
     cooperativa_cnpj: cooperativa_cnpj || null,
-    active: true,
+    active: input.active ?? true,
   };
+}
 
-  const { data, error } = await supabase.from("app_users").upsert(row, { onConflict: "id" }).select().single();
+export function appUserRowToSessionTokenInput(user: AppUserRow) {
+  return {
+    sub: user.id,
+    email: user.email,
+    name: user.name,
+    role: user.role,
+    cooperativaId: user.cooperativa_id ?? undefined,
+    cooperadoId: user.cooperado_id ?? undefined,
+    cooperativaCnpj: user.cooperativa_cnpj ?? undefined,
+    responsavelPrincipal: user.responsavel_principal === true,
+    modoAcesso: user.modo_acesso ?? "total",
+    permissoesExtras: user.permissoes_extras ?? undefined,
+    permissoesNegadas: user.permissoes_negadas ?? undefined,
+    funcao: user.funcao ?? undefined,
+  };
+}
+
+export function appUserRowToAuthUser(user: AppUserRow) {
+  return {
+    id: user.id,
+    email: user.email,
+    name: user.name,
+    role: user.role,
+    cooperativaId: user.cooperativa_id,
+    cooperadoId: user.cooperado_id,
+    cooperativaCnpj: user.cooperativa_cnpj,
+    funcao: user.funcao,
+    responsavelPrincipal: user.responsavel_principal === true,
+    modoAcesso: user.modo_acesso ?? "total",
+    permissoesExtras: user.permissoes_extras ?? undefined,
+    permissoesNegadas: user.permissoes_negadas ?? undefined,
+    active: user.active,
+  };
+}
+
+export async function findAppUserById(
+  supabase: SupabaseClient,
+  userId: string
+): Promise<AppUserRow | null> {
+  const { data, error } = await supabase.from("app_users").select("*").eq("id", userId).maybeSingle();
+  if (error) {
+    if (isMissingTable(error)) return null;
+    throw error;
+  }
+  return data as AppUserRow | null;
+}
+
+export async function upsertAppUser(
+  supabase: SupabaseClient,
+  input: UpsertAppUserInput
+): Promise<AppUserRow | null> {
+  const keepPassword = input.password === "__keep__";
+  let password_hash = keepPassword ? "" : await hashPassword(input.password);
+
+  if (keepPassword) {
+    const existing = await findAppUserById(supabase, input.id);
+    if (!existing) return null;
+    password_hash = existing.password_hash;
+  }
+
+  const row = buildAppUserRow(input, password_hash);
+
+  let { data, error } = await supabase.from("app_users").upsert(row, { onConflict: "id" }).select().single();
+  if (error && isMissingColumn(error)) {
+    ({ data, error } = await supabase
+      .from("app_users")
+      .upsert(buildLegacyAppUserRow(input, password_hash), { onConflict: "id" })
+      .select()
+      .single());
+  }
+
   if (error) {
     if (isMissingTable(error)) return null;
     if (isRoleCheckViolation(error)) {
@@ -148,6 +241,32 @@ export async function updateAppUserPasswordHash(
   const password_hash = await hashPassword(password);
   const { error } = await supabase.from("app_users").update({ password_hash }).eq("id", userId);
   if (error && !isMissingTable(error)) throw error;
+}
+
+export async function updateAppUserProfile(
+  supabase: SupabaseClient,
+  userId: string,
+  patch: Omit<UpsertAppUserInput, "id" | "email" | "password"> & { password?: string }
+): Promise<AppUserRow | null> {
+  const existing = await findAppUserById(supabase, userId);
+  if (!existing) return null;
+
+  return upsertAppUser(supabase, {
+    id: existing.id,
+    email: existing.email,
+    password: patch.password && patch.password.length >= 6 ? patch.password : "__keep__",
+    name: patch.name ?? existing.name,
+    role: patch.role ?? existing.role,
+    cooperativaId: patch.cooperativaId ?? existing.cooperativa_id ?? undefined,
+    cooperadoId: patch.cooperadoId ?? existing.cooperado_id ?? undefined,
+    cooperativaCnpj: patch.cooperativaCnpj ?? existing.cooperativa_cnpj ?? undefined,
+    funcao: patch.funcao ?? existing.funcao ?? undefined,
+    responsavelPrincipal: patch.responsavelPrincipal ?? existing.responsavel_principal === true,
+    modoAcesso: patch.modoAcesso ?? existing.modo_acesso ?? "total",
+    permissoesExtras: patch.permissoesExtras ?? existing.permissoes_extras ?? undefined,
+    permissoesNegadas: patch.permissoesNegadas ?? existing.permissoes_negadas ?? undefined,
+    active: patch.active ?? existing.active,
+  });
 }
 
 export async function logSecurityEvent(

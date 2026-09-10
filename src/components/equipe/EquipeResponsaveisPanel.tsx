@@ -11,11 +11,10 @@ import { Modal } from "@/components/ui/Table";
 import { AlertBanner } from "@/components/ui/AlertBanner";
 import { updateData } from "@/services/dataStore";
 import {
-  aplicarAtualizacaoMembroEquipe,
   aplicarMembroEquipeCriado,
+  atualizarMembroEquipeComNuvem,
   cadastrarMembroEquipeComNuvem,
   listMembrosEquipeIncluindoInativos,
-  sincronizarMembroEquipeNaNuvem,
   modulosDisponiveisParaForm,
   presetModulosRelatorios,
 } from "@/services/equipeService";
@@ -134,7 +133,7 @@ export function EquipeResponsaveisPanel({ cooperativaId, cooperativaCnpj }: Equi
     setSalvando(true);
     try {
       if (editando) {
-        const result = aplicarAtualizacaoMembroEquipe(data, user, editando.id, {
+        const result = await atualizarMembroEquipeComNuvem(data, user, editando.id, {
           name: form.name,
           funcao: form.funcao,
           password: form.password || undefined,
@@ -145,16 +144,6 @@ export function EquipeResponsaveisPanel({ cooperativaId, cooperativaCnpj }: Equi
         if (!result.ok) {
           setErro(result.error);
           return;
-        }
-        if (form.password && form.password.length >= 6) {
-          const updated = result.data.users.find((u) => u.id === editando.id);
-          if (updated) {
-            const cloudOk = await sincronizarMembroEquipeNaNuvem(updated, form.password);
-            if (!cloudOk) {
-              setErro("Alteração salva no aparelho, mas a senha não foi atualizada na nuvem. Tente novamente.");
-              return;
-            }
-          }
         }
         updateData(() => result.data);
         setFeedbackOk("Acesso atualizado.");
@@ -187,14 +176,14 @@ export function EquipeResponsaveisPanel({ cooperativaId, cooperativaCnpj }: Equi
     setTimeout(() => setSalvouFuncao(false), 2500);
   };
 
-  const desativarMembro = (membro: User) => {
+  const desativarMembro = async (membro: User) => {
     if (membro.responsavelPrincipal) return;
-    const result = aplicarAtualizacaoMembroEquipe(data, user, membro.id, { active: false });
+    const result = await atualizarMembroEquipeComNuvem(data, user, membro.id, { active: false });
     if (result.ok) updateData(() => result.data);
   };
 
-  const reativarMembro = (membro: User) => {
-    const result = aplicarAtualizacaoMembroEquipe(data, user, membro.id, { active: true });
+  const reativarMembro = async (membro: User) => {
+    const result = await atualizarMembroEquipeComNuvem(data, user, membro.id, { active: true });
     if (result.ok) updateData(() => result.data);
   };
 

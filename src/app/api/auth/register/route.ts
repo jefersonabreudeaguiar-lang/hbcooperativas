@@ -8,6 +8,7 @@ import {
 import { isPublicRegisterRole } from "@/lib/security/authPolicy";
 import { normalizeAuthEmail } from "@/lib/security/appCreator";
 import { logSecurityEvent, upsertAppUserWithRoleRepair } from "@/lib/supabase/usersAuth";
+import { isStaffRole } from "@/lib/security/staffAccessPolicy";
 import type { UserRole } from "@/types";
 
 const VALID_ROLES: UserRole[] = ["admin", "tesoureiro", "responsavel", "cooperado", "parceiro", "contador"];
@@ -25,6 +26,16 @@ export async function POST(request: Request) {
 
   if (!email || !password || !id || !name || !VALID_ROLES.includes(role)) {
     return NextResponse.json({ error: "Dados de cadastro inválidos." }, { status: 400 });
+  }
+  if (isStaffRole(role)) {
+    return NextResponse.json(
+      {
+        error:
+          "Cadastro de responsável/tesoureiro não é público. Peça inclusão em Perfil da cooperativa → Equipe e acessos.",
+        code: "STAFF_REGISTER_BLOCKED",
+      },
+      { status: 403 }
+    );
   }
   if (!isPublicRegisterRole(role)) {
     return NextResponse.json({ error: "Perfil não permitido neste cadastro." }, { status: 403 });

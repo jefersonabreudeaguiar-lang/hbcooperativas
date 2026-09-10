@@ -5,6 +5,7 @@ import { isApiSecurityEnforced } from "@/lib/security/env";
 import { buildSessionCookieHeader } from "@/lib/security/sessionCookie";
 import { rateLimitAuth } from "@/lib/security/rateLimit";
 import type { AppUserRow } from "@/lib/supabase/usersAuth";
+import { appUserRowToAuthUser, appUserRowToSessionTokenInput } from "@/lib/supabase/usersAuth";
 import type { UserRole } from "@/types";
 
 export function clientIp(request: Request): string {
@@ -27,26 +28,17 @@ export function resolveEffectiveAppUserRole(
 export async function tokenResponseForUser(user: AppUserRow): Promise<NextResponse> {
   const role = resolveEffectiveAppUserRole(user);
   const token = await signAccessToken({
-    sub: user.id,
-    email: user.email,
-    name: user.name,
+    ...appUserRowToSessionTokenInput(user),
     role,
-    cooperativaId: user.cooperativa_id ?? undefined,
-    cooperadoId: user.cooperado_id ?? undefined,
-    cooperativaCnpj: user.cooperativa_cnpj ?? undefined,
     mfaVerified: true,
   });
   const enforced = isApiSecurityEnforced();
+  const authUser = appUserRowToAuthUser(user);
   const response = NextResponse.json({
     ...(enforced ? {} : { token }),
     user: {
-      id: user.id,
-      email: user.email,
-      name: user.name,
+      ...authUser,
       role,
-      cooperativaId: user.cooperativa_id,
-      cooperadoId: user.cooperado_id,
-      cooperativaCnpj: user.cooperativa_cnpj,
     },
   });
   response.headers.append("Set-Cookie", buildSessionCookieHeader(token));

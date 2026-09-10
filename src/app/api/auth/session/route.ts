@@ -1,9 +1,11 @@
 import { NextResponse } from "next/server";
+import { getSupabaseAdmin } from "@/lib/supabase/admin";
 import { extractAccessToken, verifyAccessToken, signAccessToken } from "@/lib/security/jwt";
 import { isApiSecurityEnforced } from "@/lib/security/env";
 import { buildSessionCookieHeader } from "@/lib/security/sessionCookie";
 import { rateLimitAuth } from "@/lib/security/rateLimit";
 import { resolveEffectiveAppUserRole } from "@/lib/security/authRoutes";
+import { findAppUserById, appUserRowToAuthUser, appUserRowToSessionTokenInput } from "@/lib/supabase/usersAuth";
 import type { UserRole } from "@/types";
 
 export async function GET(request: Request) {
@@ -25,23 +27,30 @@ export async function GET(request: Request) {
     return NextResponse.json({ valid: false, enforced: true }, { status: 401 });
   }
 
-  const refreshed = await signAccessToken({
-    sub: session.sub,
+  const supabase = getSupabaseAdmin();
+  const dbUser = supabase ? await findAppUserById(supabase, session.sub) : null;
+  const source = dbUser ?? {
+    id: session.sub,
     email: String(session.email),
     name: String(session.name ?? ""),
-    role: resolveEffectiveAppUserRole({
-      role: session.role as UserRole,
-      cooperado_id: session.cooperadoId ?? null,
-    }),
-    cooperativaId: session.cooperativaId,
-    cooperadoId: session.cooperadoId,
-    cooperativaCnpj: session.cooperativaCnpj,
-    mfaVerified: true,
-  });
-
-  const effectiveRole = resolveEffectiveAppUserRole({
     role: session.role as UserRole,
+    cooperativa_id: session.cooperativaId ?? null,
     cooperado_id: session.cooperadoId ?? null,
+    cooperativa_cnpj: session.cooperativaCnpj ?? null,
+    active: true,
+    responsavel_principal: session.responsavelPrincipal ?? false,
+    modo_acesso: session.modoAcesso ?? "total",
+    permissoes_extras: session.permissoesExtras ?? null,
+    permissoes_negadas: session.permissoesNegadas ?? null,
+    funcao: session.funcao ?? null,
+    password_hash: "",
+  };
+
+  const effectiveRole = resolveEffectiveAppUserRole(source);
+  const refreshed = await signAccessToken({
+    ...appUserRowToSessionTokenInput(source),
+    role: effectiveRole,
+    mfaVerified: true,
   });
 
   const enforced = isApiSecurityEnforced();
@@ -50,13 +59,8 @@ export async function GET(request: Request) {
     enforced: true,
     ...(enforced ? {} : { token: refreshed }),
     user: {
-      id: session.sub,
-      email: session.email,
-      name: session.name,
+      ...appUserRowToAuthUser(source),
       role: effectiveRole,
-      cooperativaId: session.cooperativaId,
-      cooperadoId: session.cooperadoId,
-      cooperativaCnpj: session.cooperativaCnpj,
     },
   });
   response.headers.append("Set-Cookie", buildSessionCookieHeader(refreshed));

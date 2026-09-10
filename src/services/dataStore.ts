@@ -810,6 +810,11 @@ export function applyCloudProfileToLocalSession(profile: CloudSessionProfile): O
       email: profile.email,
       mobileCooperadoId: undefined,
     }),
+    funcao: profile.funcao,
+    responsavelPrincipal: profile.responsavelPrincipal,
+    modoAcesso: profile.modoAcesso,
+    permissoesExtras: profile.permissoesExtras as User["permissoesExtras"],
+    permissoesNegadas: profile.permissoesNegadas as User["permissoesNegadas"],
     active: true,
   });
 
@@ -1569,6 +1574,15 @@ export async function registerCooperativa(input: RegisterCooperativaInput): Prom
       };
     }
     return { success: false, error: "Este e-mail já está em uso." };
+  }
+
+  const existingCloud = await fetchCooperativaByCnpjFromCloud(cnpj);
+  if (existingCloud) {
+    return {
+      success: false,
+      error:
+        "Este CNPJ já possui cooperativa cadastrada. Faça login com sua conta ou peça ao responsável principal para incluí-lo na equipe.",
+    };
   }
 
   const cloudResult = await registerCooperativaInCloud({

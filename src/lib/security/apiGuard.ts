@@ -9,6 +9,8 @@ import { recordCrossTenantBlocked } from "@/lib/security/platformSecurityEvents"
 import { clientIp } from "@/lib/security/authRoutes";
 import { canAccessPainelResponsavelSession } from "@/lib/security/responsavelPanelAccess";
 import { isPlatformAdminSession } from "@/lib/security/appCreator";
+import { requireSessionApiPermission } from "@/lib/security/serverPermissions";
+import { canSessionManageEquipe } from "@/lib/security/staffProvisioningPolicy";
 
 export type AuthResult =
   | { ok: true; session: SessionClaims | null; enforced: boolean }
@@ -162,6 +164,14 @@ export async function guardCooperativaApi(
   if (options?.write) {
     const contadorDenied = requireNotContadorWrite(auth.session, auth.enforced);
     if (contadorDenied) return { ok: false, response: contadorDenied };
+
+    const permDenied = requireSessionApiPermission(
+      auth.session,
+      new URL(request.url).pathname,
+      request.method,
+      auth.enforced
+    );
+    if (permDenied) return { ok: false, response: permDenied };
   }
 
   if (options?.checkSaas) {
@@ -170,4 +180,18 @@ export async function guardCooperativaApi(
   }
 
   return { ok: true, session: auth.session, enforced: auth.enforced };
+}
+
+export function requireEquipeManagementRole(
+  session: SessionClaims | null,
+  enforced: boolean
+): NextResponse | null {
+  if (!enforced || !session) return null;
+  if (!canSessionManageEquipe(session)) {
+    return NextResponse.json(
+      { error: "Somente o responsável principal ou o tesoureiro pode gerenciar a equipe." },
+      { status: 403 }
+    );
+  }
+  return null;
 }

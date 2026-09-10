@@ -3,7 +3,7 @@ import { MODULOS_ACESSO, PRESET_RELATORIOS, negarModulos, resourcesFromModulos }
 import { generateId, addAuditEntry } from "@/services/dataStore";
 import { getUserCooperativaId } from "@/utils/cooperativa";
 import { hashPasswordSync } from "@/lib/security/password";
-import { registerCloudUser, getLastCloudSyncError } from "@/lib/security/clientSession";
+import { getLastCloudSyncError, secureApiFetch } from "@/lib/security/clientSession";
 import { normalizeCnpj } from "@/utils/cooperativa";
 
 type UsuarioActor = Pick<User, "id" | "name">;
@@ -178,16 +178,7 @@ export async function cadastrarContadorEquipeComNuvem(
   const criado = criarContadorEquipe(data, actor, cooperativaId, cooperativaCnpj, input);
   if (!criado.ok) return criado;
 
-  const cnpj = cooperativaCnpj ? normalizeCnpj(cooperativaCnpj) : undefined;
-  const cloudOk = await registerCloudUser({
-    id: criado.user.id,
-    email: criado.user.email,
-    password: input.password,
-    name: criado.user.name,
-    role: "contador",
-    cooperativaId,
-    cooperativaCnpj: cnpj && cnpj.length === 14 ? cnpj : undefined,
-  });
+  const cloudOk = await sincronizarMembroEquipeNaNuvem(criado.user, input.password);
 
   if (!cloudOk) {
     const detail = getLastCloudSyncError();
@@ -212,16 +203,7 @@ export async function sincronizarSenhaContadorNaNuvem(
   plainPassword: string
 ): Promise<boolean> {
   if (contador.role !== "contador" || plainPassword.length < 6) return false;
-  const cnpj = contador.cooperativaCnpj ? normalizeCnpj(contador.cooperativaCnpj) : undefined;
-  return registerCloudUser({
-    id: contador.id,
-    email: contador.email,
-    password: plainPassword,
-    name: contador.name,
-    role: "contador",
-    cooperativaId: contador.cooperativaId,
-    cooperativaCnpj: cnpj && cnpj.length === 14 ? cnpj : undefined,
-  });
+  return atualizarMembroEquipeNaNuvem(contador, plainPassword);
 }
 
 export function aplicarContadorEquipeCriado(
@@ -254,24 +236,107 @@ export function atualizarFuncaoUsuario(
   };
 }
 
-/** Publica responsável/tesoureiro na nuvem (app_users) para login em qualquer aparelho. */
+/** Publica responsável/tesoureiro/contador na nuvem via API autenticada. */
 export async function sincronizarMembroEquipeNaNuvem(
-  membro: Pick<User, "id" | "email" | "name" | "role" | "cooperativaId" | "cooperativaCnpj">,
+  membro: Pick<
+    User,
+    | "id"
+    | "email"
+    | "name"
+    | "role"
+    | "cooperativaId"
+    | "cooperativaCnpj"
+    | "funcao"
+    | "modoAcesso"
+    | "permissoesExtras"
+    | "permissoesNegadas"
+  >,
   plainPassword: string
 ): Promise<boolean> {
-  if ((membro.role !== "responsavel" && membro.role !== "tesoureiro") || plainPassword.length < 6) {
+  if (
+    (membro.role !== "responsavel" && membro.role !== "tesoureiro" && membro.role !== "contador") ||
+    plainPassword.length < 6
+  ) {
     return false;
   }
   const cnpj = membro.cooperativaCnpj ? normalizeCnpj(membro.cooperativaCnpj) : undefined;
-  return registerCloudUser({
-    id: membro.id,
-    email: membro.email,
-    password: plainPassword,
-    name: membro.name,
-    role: membro.role,
-    cooperativaId: membro.cooperativaId,
-    cooperativaCnpj: cnpj && cnpj.length === 14 ? cnpj : undefined,
-  });
+  if (!cnpj || cnpj.length !== 14) return false;
+
+  try {
+    const res = await secureApiFetch("/api/equipe/provision", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        id: membro.id,
+        email: membro.email,
+        password: plainPassword,
+        name: membro.name,
+        role: membro.role,
+        cooperativaId: membro.cooperativaId,
+        cooperativaCnpj: cnpj,
+        funcao: membro.funcao,
+        modoAcesso: membro.modoAcesso ?? "total",
+        permissoesExtras: membro.permissoesExtras,
+        permissoesNegadas: membro.permissoesNegadas,
+        active: true,
+      }),
+    });
+    if (!res.ok) {
+      const json = (await res.json().catch(() => ({}))) as { error?: string };
+      console.warn("[equipe/cloud]", json.error ?? res.status);
+      return false;
+    }
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+export async function atualizarMembroEquipeNaNuvem(
+  membro: Pick<
+    User,
+    | "id"
+    | "email"
+    | "name"
+    | "role"
+    | "cooperativaCnpj"
+    | "funcao"
+    | "modoAcesso"
+    | "permissoesExtras"
+    | "permissoesNegadas"
+  > & { active?: boolean },
+  plainPassword?: string
+): Promise<boolean> {
+  const cnpj = membro.cooperativaCnpj ? normalizeCnpj(membro.cooperativaCnpj) : undefined;
+  if (!cnpj || cnpj.length !== 14) return false;
+
+  try {
+    const res = await secureApiFetch("/api/equipe/provision", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        id: membro.id,
+        email: membro.email,
+        name: membro.name,
+        role: membro.role,
+        cooperativaCnpj: cnpj,
+        funcao: membro.funcao,
+        modoAcesso: membro.modoAcesso ?? "total",
+        permissoesExtras: membro.permissoesExtras,
+        permissoesNegadas: membro.permissoesNegadas,
+        active: membro.active !== false,
+        password: plainPassword && plainPassword.length >= 6 ? plainPassword : undefined,
+      }),
+    });
+    if (!res.ok) {
+      const json = (await res.json().catch(() => ({}))) as { error?: string };
+      console.warn("[equipe/cloud/update]", json.error ?? res.status);
+      return false;
+    }
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 /** Cadastra responsável localmente e publica credenciais na nuvem. */
@@ -321,6 +386,34 @@ export function aplicarMembroEquipeCriado(
     changes: `Acesso criado para ${newUser.name} (${newUser.funcao ?? "responsável"})`,
   });
   return updated;
+}
+
+export async function atualizarMembroEquipeComNuvem(
+  data: AppData,
+  actor: UsuarioActor,
+  membroId: string,
+  input: AtualizarMembroEquipeInput
+): Promise<{ ok: true; data: AppData } | { ok: false; error: string }> {
+  const result = aplicarAtualizacaoMembroEquipe(data, actor, membroId, input);
+  if (!result.ok) return result;
+
+  const membro = result.data.users.find((u) => u.id === membroId);
+  if (!membro) return { ok: false, error: "Usuário não encontrado." };
+
+  const cloudOk = await atualizarMembroEquipeNaNuvem(
+    membro,
+    input.password && input.password.length >= 6 ? input.password : undefined
+  );
+  if (!cloudOk) {
+    return {
+      ok: false,
+      error:
+        getLastCloudSyncError() ||
+        "Não foi possível atualizar o acesso na nuvem. Verifique internet e tente novamente.",
+    };
+  }
+
+  return result;
 }
 
 export function aplicarAtualizacaoMembroEquipe(

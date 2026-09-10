@@ -112,9 +112,11 @@ export async function registerCooperativaInCloud(
     }
 
     if (res.status === 409) {
-      const existing = await fetchCooperativaByCnpjFromCloud(input.cnpj);
-      if (existing) return { success: true, cooperativa: existing };
-      return { success: false, error: json.error ?? "Este CNPJ já está cadastrado na nuvem." };
+      return {
+        success: false,
+        error:
+          "Este CNPJ já está cadastrado. Se você é o responsável, faça login. Para entrar na equipe, peça ao responsável principal em Perfil da cooperativa → Equipe e acessos.",
+      };
     }
 
     if (!res.ok) {

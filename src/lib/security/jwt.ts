@@ -1,5 +1,5 @@
 import { SignJWT, jwtVerify, type JWTPayload } from "jose";
-import type { UserRole } from "@/types";
+import type { Action, ModoAcesso, Resource, UserRole } from "@/types";
 import { getAuthSecret } from "@/lib/security/env";
 import { extractSessionTokenFromCookie } from "@/lib/security/sessionCookie";
 import { resolveAccessTokenTtl } from "@/lib/security/sessionPolicy";
@@ -16,6 +16,11 @@ export interface SessionClaims extends JWTPayload {
   mfaVerified?: boolean;
   /** Conta com TOTP ativo */
   totpEnabled?: boolean;
+  responsavelPrincipal?: boolean;
+  modoAcesso?: ModoAcesso;
+  permissoesExtras?: Partial<Record<Resource, Action[]>>;
+  permissoesNegadas?: Partial<Record<Resource, Action[]>>;
+  funcao?: string;
 }
 
 export type SessionTokenInput = {
@@ -28,6 +33,11 @@ export type SessionTokenInput = {
   cooperativaCnpj?: string;
   mfaVerified?: boolean;
   totpEnabled?: boolean;
+  responsavelPrincipal?: boolean;
+  modoAcesso?: ModoAcesso;
+  permissoesExtras?: Partial<Record<Resource, Action[]>>;
+  permissoesNegadas?: Partial<Record<Resource, Action[]>>;
+  funcao?: string;
 };
 
 const ISSUER = "hb-cooperativas";

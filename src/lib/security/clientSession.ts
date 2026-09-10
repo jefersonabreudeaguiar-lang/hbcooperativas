@@ -58,6 +58,11 @@ export interface CloudSessionProfile {
   cooperativaId?: string;
   cooperadoId?: string;
   cooperativaCnpj?: string;
+  funcao?: string;
+  responsavelPrincipal?: boolean;
+  modoAcesso?: "total" | "parcial";
+  permissoesExtras?: Partial<Record<string, string[]>>;
+  permissoesNegadas?: Partial<Record<string, string[]>>;
 }
 
 let activeCloudProfile: CloudSessionProfile | null = null;
@@ -74,6 +79,11 @@ export function userToCloudProfile(user: {
   cooperativaId?: string;
   cooperadoId?: string;
   cooperativaCnpj?: string;
+  funcao?: string;
+  responsavelPrincipal?: boolean;
+  modoAcesso?: "total" | "parcial";
+  permissoesExtras?: Partial<Record<string, string[]>>;
+  permissoesNegadas?: Partial<Record<string, string[]>>;
 }): CloudSessionProfile {
   return {
     id: user.id,
@@ -83,6 +93,11 @@ export function userToCloudProfile(user: {
     cooperativaId: user.cooperativaId,
     cooperadoId: user.cooperadoId,
     cooperativaCnpj: user.cooperativaCnpj,
+    funcao: user.funcao,
+    responsavelPrincipal: user.responsavelPrincipal,
+    modoAcesso: user.modoAcesso,
+    permissoesExtras: user.permissoesExtras,
+    permissoesNegadas: user.permissoesNegadas,
   };
 }
 
@@ -117,6 +132,11 @@ type CloudAuthUser = {
   cooperativaId?: string | null;
   cooperadoId?: string | null;
   cooperativaCnpj?: string | null;
+  funcao?: string | null;
+  responsavelPrincipal?: boolean;
+  modoAcesso?: "total" | "parcial";
+  permissoesExtras?: Partial<Record<string, string[]>>;
+  permissoesNegadas?: Partial<Record<string, string[]>>;
 };
 
 function profileFromCloudAuthUser(raw: CloudAuthUser): CloudSessionProfile | null {
@@ -134,6 +154,11 @@ function profileFromCloudAuthUser(raw: CloudAuthUser): CloudSessionProfile | nul
     cooperativaId: raw.cooperativaId ?? undefined,
     cooperadoId,
     cooperativaCnpj: raw.cooperativaCnpj ?? undefined,
+    funcao: raw.funcao ?? undefined,
+    responsavelPrincipal: raw.responsavelPrincipal === true,
+    modoAcesso: raw.modoAcesso ?? "total",
+    permissoesExtras: raw.permissoesExtras,
+    permissoesNegadas: raw.permissoesNegadas,
   };
 }
 

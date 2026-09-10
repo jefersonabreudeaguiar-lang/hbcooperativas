@@ -3,6 +3,7 @@ import { getSupabaseAdmin } from "@/lib/supabase/admin";
 import {
   clientIp,
   ensureAuthInfrastructure,
+  resolveEffectiveAppUserRole,
   tokenResponseForUser,
 } from "@/lib/security/authRoutes";
 import {
@@ -16,6 +17,8 @@ import { applyAppUsersSchemaSql } from "@/lib/supabase/appUsersSchema";
 import { isProvisionNewUserRole } from "@/lib/security/authPolicy";
 import { normalizeAuthEmail } from "@/lib/security/appCreator";
 import { normalizeCnpj } from "@/utils/cooperativa";
+import { isStaffRole } from "@/lib/security/staffAccessPolicy";
+import { evaluatePublicStaffRegistration } from "@/lib/security/staffProvisioningPolicy";
 import type { UserRole } from "@/types";
 
 const VALID_ROLES: UserRole[] = ["admin", "tesoureiro", "responsavel", "cooperado", "parceiro", "contador"];
@@ -57,26 +60,26 @@ export async function POST(request: Request) {
     }
   }
 
-  const profilePayload = {
-    id,
-    email,
-    password,
-    name,
-    role,
-    cooperativaId: body?.cooperativaId ? String(body.cooperativaId) : undefined,
-    cooperadoId: body?.cooperadoId ? String(body.cooperadoId) : undefined,
-    cooperativaCnpj: requestCnpj.length === 14 ? requestCnpj : undefined,
-  };
-
   const existing = await findAppUserByEmail(supabase, email);
 
   if (existing) {
     const user = await verifyAppUserPassword(supabase, email, password);
     if (user) {
       const synced = await upsertAppUserWithRoleRepair(supabase, {
-        ...profilePayload,
         id: user.id,
+        email: user.email,
+        password,
         name: name || user.name,
+        role: user.role,
+        cooperativaId: user.cooperativa_id ?? undefined,
+        cooperadoId: user.cooperado_id ?? undefined,
+        cooperativaCnpj: user.cooperativa_cnpj ?? undefined,
+        funcao: user.funcao ?? undefined,
+        responsavelPrincipal: user.responsavel_principal === true,
+        modoAcesso: user.modo_acesso ?? "total",
+        permissoesExtras: user.permissoes_extras ?? undefined,
+        permissoesNegadas: user.permissoes_negadas ?? undefined,
+        active: user.active,
       });
       const finalUser = synced ?? user;
 
@@ -104,11 +107,49 @@ export async function POST(request: Request) {
     );
   }
 
-  if (!isProvisionNewUserRole(role)) {
+  let responsavelPrincipal = false;
+  let modoAcesso: "total" | "parcial" = "total";
+  let permissoesExtras = undefined;
+  let permissoesNegadas = undefined;
+  let funcao = body?.funcao ? String(body.funcao) : undefined;
+
+  if (isStaffRole(role)) {
+    const staffDecision = await evaluatePublicStaffRegistration(
+      supabase,
+      role,
+      requestCnpj.length === 14 ? requestCnpj : undefined
+    );
+    if (!staffDecision.allowed) {
+      await logSecurityEvent(supabase, {
+        action: "auth.sync_session.staff_denied",
+        userEmail: email,
+        cooperativaCnpj: requestCnpj.length === 14 ? requestCnpj : undefined,
+        ip: clientIp(request),
+        metadata: { code: staffDecision.code, role },
+      });
+      return NextResponse.json({ error: staffDecision.error, code: staffDecision.code }, { status: 403 });
+    }
+    responsavelPrincipal = staffDecision.asPrincipal;
+    funcao = funcao || (staffDecision.asPrincipal ? "Responsável principal" : "Responsável");
+  } else if (!isProvisionNewUserRole(role)) {
     return NextResponse.json({ error: "Perfil não permitido na sincronização.", code: "ROLE_DENIED" }, { status: 403 });
   }
 
-  const created = await upsertAppUserWithRoleRepair(supabase, profilePayload);
+  const created = await upsertAppUserWithRoleRepair(supabase, {
+    id,
+    email,
+    password,
+    name,
+    role,
+    cooperativaId: body?.cooperativaId ? String(body.cooperativaId) : undefined,
+    cooperadoId: body?.cooperadoId ? String(body.cooperadoId) : undefined,
+    cooperativaCnpj: requestCnpj.length === 14 ? requestCnpj : undefined,
+    funcao,
+    responsavelPrincipal,
+    modoAcesso,
+    permissoesExtras,
+    permissoesNegadas,
+  });
   if (!created) {
     return NextResponse.json(
       {
@@ -125,6 +166,10 @@ export async function POST(request: Request) {
     userEmail: created.email,
     cooperativaCnpj: created.cooperativa_cnpj ?? undefined,
     ip: clientIp(request),
+    metadata: {
+      role: resolveEffectiveAppUserRole(created),
+      responsavelPrincipal: created.responsavel_principal === true,
+    },
   });
 
   return tokenResponseForUser(created);
