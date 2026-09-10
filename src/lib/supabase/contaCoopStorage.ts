@@ -448,6 +448,8 @@ function mapLimiteRow(row: Record<string, unknown>, cashbackDisponivelCents = 0)
     valorUsadoCents: usado,
     valorDisponivelCents: computeDisponivel(limite, usado),
     bloqueado: status === "blocked",
+    hasFinancialPin: Boolean(row.pin_hash),
+    pinLockedUntil: row.pin_locked_until ? String(row.pin_locked_until) : null,
     cashbackDisponivelCents,
     updatedAt: String(row.updated_at),
   };
@@ -1109,6 +1111,51 @@ export async function verifyFinancialPin(
   }
 
   await resetPinFailures(supabase, cnpj, cooperadoId);
+  return { ok: true };
+}
+
+export async function resetCooperadoFinancialPin(
+  supabase: SupabaseClient,
+  cnpj: string,
+  cooperadoId: string,
+  actorUserId: string
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const digits = normalizeCnpj(cnpj);
+  const { data: account } = await supabase
+    .from("hb_credit_accounts")
+    .select("id, cooperado_id")
+    .eq("cooperative_cnpj", digits)
+    .eq("cooperado_id", cooperadoId)
+    .maybeSingle();
+
+  if (!account) {
+    return { ok: false, error: "Conta HB Créditos do cooperado não encontrada." };
+  }
+
+  const now = new Date().toISOString();
+  const { error } = await supabase
+    .from("hb_credit_accounts")
+    .update({
+      pin_hash: null,
+      pin_updated_at: null,
+      pin_failed_attempts: 0,
+      pin_locked_until: null,
+      updated_at: now,
+    })
+    .eq("cooperative_cnpj", digits)
+    .eq("cooperado_id", cooperadoId);
+
+  if (error) return { ok: false, error: error.message };
+
+  await supabase.from("hb_credit_audit_log").insert({
+    cooperative_cnpj: digits,
+    actor: actorUserId,
+    action: "COOPERADO_PIN_RESET",
+    resource_type: "cooperado",
+    resource_id: cooperadoId,
+    metadata: { cooperadoId },
+  });
+
   return { ok: true };
 }
 

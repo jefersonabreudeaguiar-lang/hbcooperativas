@@ -344,11 +344,20 @@ function MinhaContaCoopContent() {
               >
                 Cadastrar PIN
               </Button>
+              <p className="text-xs text-gray-500">
+                Esqueceu o PIN de pagamento? Peça ao responsável da cooperativa para resetar em{" "}
+                <strong>Conta Coop → Limites</strong>. Depois cadastre um PIN novo aqui.
+              </p>
             </Card>
           ) : (
-            <Button size="lg" className="w-full" onClick={() => router.push("/minha-conta-coop/escanear")} disabled={account?.bloqueado}>
-              Pagar com QR Code
-            </Button>
+            <>
+              <Button size="lg" className="w-full" onClick={() => router.push("/minha-conta-coop/escanear")} disabled={account?.bloqueado}>
+                Pagar com QR Code
+              </Button>
+              <p className="text-xs text-center text-gray-500">
+                Esqueceu o PIN? O responsável da cooperativa pode resetar em Conta Coop → Limites.
+              </p>
+            </>
           )}
         </>
       )}
@@ -427,6 +436,9 @@ function MinhaContaCoopContent() {
                   className="mt-1 text-center text-2xl tracking-[0.4em]"
                   placeholder="••••"
                 />
+                <p className="mt-2 text-xs text-gray-500">
+                  Esqueceu o PIN? Peça ao responsável da cooperativa para resetar em Conta Coop → Limites.
+                </p>
               </div>
               <div className="flex gap-2">
                 <Button variant="secondary" className="flex-1" onClick={() => setPendingIntent(null)} disabled={busy}>

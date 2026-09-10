@@ -102,6 +102,19 @@ export async function resetMercadoFinancialPin(cnpj: string, parceiroId: string)
   return data;
 }
 
+export async function resetCooperadoFinancialPin(cnpj: string, cooperadoId: string) {
+  const res = await secureApiFetch("/api/credit/limites", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ action: "reset_cooperado_pin", cnpj, cooperadoId }),
+  });
+  const data = await parseJson<{ ok?: boolean; error?: string }>(res);
+  if (!res.ok || !data.ok) {
+    throw new Error(data.error ?? "Não foi possível resetar o PIN de pagamento do cooperado.");
+  }
+  return data;
+}
+
 export async function fetchCreditAccount(cnpj: string, cooperadoId: string) {
   const res = await secureApiFetch(
     `/api/credit/account?cnpj=${encodeURIComponent(cnpj)}&cooperadoId=${encodeURIComponent(cooperadoId)}`

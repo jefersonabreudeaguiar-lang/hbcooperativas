@@ -88,6 +88,10 @@ export interface ContaCoopLimiteCooperado extends ContaCoopTresValores {
   cooperativaCnpj: string;
   cooperadoId: string;
   bloqueado: boolean;
+  /** PIN numérico cadastrado pelo cooperado para pagamentos HB Créditos. */
+  hasFinancialPin?: boolean;
+  /** Bloqueio temporário após tentativas incorretas (ISO). */
+  pinLockedUntil?: string | null;
   cashbackDisponivelCents?: number;
   updatedAt: string;
 }
