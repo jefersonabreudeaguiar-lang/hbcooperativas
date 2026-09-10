@@ -26,6 +26,7 @@ import {
 } from "@/services/cooperadoAppInstallService";
 import { resumoAssinaturaCadastroApp } from "@/services/cooperadoAssinaturaService";
 import { AssinaturaCadastroGestaoPanel } from "@/components/cooperado/AssinaturaCadastroGestaoPanel";
+import { CooperadoAcessoLoginPanel } from "@/components/cooperado/CooperadoAcessoLoginPanel";
 import type { Cooperado, CooperadoStatus } from "@/types";
 import { PageSkeleton } from "@/components/ui/PageSkeleton";
 
@@ -530,6 +531,9 @@ export default function CooperadosPage() {
           <div className="md:col-span-2">
             <FormField label="Observações"><Textarea value={form.observacoes ?? ""} onChange={(e) => setForm({ ...form, observacoes: e.target.value })} /></FormField>
           </div>
+          {editing && user && check("cooperados", "edit") && !form.avulso && (
+            <CooperadoAcessoLoginPanel cooperado={editing} user={user} />
+          )}
         </div>
         <div className="flex justify-end gap-2 mt-6">
           <Button variant="secondary" onClick={() => setModalOpen(false)}>Cancelar</Button>

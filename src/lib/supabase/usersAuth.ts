@@ -160,6 +160,23 @@ export function appUserRowToAuthUser(user: AppUserRow) {
   };
 }
 
+export async function findAppUserByCooperadoId(
+  supabase: SupabaseClient,
+  cooperadoId: string
+): Promise<AppUserRow | null> {
+  const { data, error } = await supabase
+    .from("app_users")
+    .select("*")
+    .eq("cooperado_id", cooperadoId)
+    .maybeSingle();
+
+  if (error) {
+    if (isMissingTable(error)) return null;
+    throw error;
+  }
+  return data as AppUserRow | null;
+}
+
 export async function findAppUserById(
   supabase: SupabaseClient,
   userId: string

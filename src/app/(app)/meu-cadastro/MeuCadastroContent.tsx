@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef, useMemo } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { Save, CheckCircle2, Wallet, AlertCircle } from "lucide-react";
+import { Save, CheckCircle2, Wallet, AlertCircle, Lock } from "lucide-react";
 import { useAppData } from "@/hooks/useAppData";
 import { useAuth } from "@/modules/auth/AuthProvider";
 import { useRouter } from "next/navigation";
@@ -24,6 +24,7 @@ import { cooperadoPrecisaCadastrarPix } from "@/utils/pix";
 import { AssinaturaCadastroPanel } from "@/components/cooperado/AssinaturaCadastroPanel";
 import { cooperadoUsaAssinaturaCadastroPilot } from "@/config/assinaturaCadastroPilot";
 import { cooperadoPrecisaCadastrarAssinatura } from "@/services/cooperadoAssinaturaService";
+import { alterarSenhaCooperado } from "@/services/cooperadoLoginService";
 
 export default function MeuCadastroContent() {
   const data = useAppData();
@@ -35,6 +36,11 @@ export default function MeuCadastroContent() {
   const [chavePix, setChavePix] = useState("");
   const [saved, setSaved] = useState(false);
   const [pixError, setPixError] = useState("");
+  const [senhaAtual, setSenhaAtual] = useState("");
+  const [novaSenha, setNovaSenha] = useState("");
+  const [confirmarSenha, setConfirmarSenha] = useState("");
+  const [senhaMsg, setSenhaMsg] = useState<{ type: "ok" | "erro"; text: string } | null>(null);
+  const [salvandoSenha, setSalvandoSenha] = useState(false);
   const pixDirtyRef = useRef(false);
   const loadedForCooperadoRef = useRef<string | null>(null);
 
@@ -125,6 +131,30 @@ export default function MeuCadastroContent() {
     setTimeout(() => setSaved(false), 3000);
   };
 
+  const handleSaveSenha = async () => {
+    if (!user) return;
+    setSenhaMsg(null);
+    if (novaSenha.length < 6) {
+      setSenhaMsg({ type: "erro", text: "A nova senha deve ter no mínimo 6 caracteres." });
+      return;
+    }
+    if (novaSenha !== confirmarSenha) {
+      setSenhaMsg({ type: "erro", text: "A confirmação não coincide com a nova senha." });
+      return;
+    }
+    setSalvandoSenha(true);
+    const result = await alterarSenhaCooperado(user.id, senhaAtual, novaSenha, user);
+    setSalvandoSenha(false);
+    if (!result.success) {
+      setSenhaMsg({ type: "erro", text: result.error ?? "Não foi possível alterar a senha." });
+      return;
+    }
+    setSenhaAtual("");
+    setNovaSenha("");
+    setConfirmarSenha("");
+    setSenhaMsg({ type: "ok", text: "Senha alterada com sucesso. Use a nova senha no próximo login." });
+  };
+
   return (
     <div className="max-w-2xl">
       <PageHeader title="Meu cadastro" subtitle="Seus dados e chave para receber pagamentos" />
@@ -182,6 +212,55 @@ export default function MeuCadastroContent() {
         </FormField>
         <Button className="mt-4 w-full sm:w-auto" size="lg" onClick={handleSavePix}>
           <Save size={18} /> {saved ? "Salvo com sucesso!" : "Salvar minha chave PIX"}
+        </Button>
+      </Card>
+
+      <Card title="Senha de acesso" className="mb-6">
+        <p className="text-sm text-gray-600 mb-4">
+          Troque a senha temporária que a diretoria informou por uma senha só sua.
+        </p>
+        {senhaMsg && (
+          <AlertBanner
+            variant={senhaMsg.type === "ok" ? "success" : "error"}
+            title={senhaMsg.type === "ok" ? "Senha atualizada" : "Não foi possível alterar"}
+            className="mb-4"
+          >
+            {senhaMsg.text}
+          </AlertBanner>
+        )}
+        <div className="space-y-4">
+          <FormField label="Senha atual">
+            <Input
+              type="password"
+              value={senhaAtual}
+              onChange={(e) => setSenhaAtual(e.target.value)}
+              autoComplete="current-password"
+            />
+          </FormField>
+          <FormField label="Nova senha" hint="Mínimo 6 caracteres">
+            <Input
+              type="password"
+              value={novaSenha}
+              onChange={(e) => setNovaSenha(e.target.value)}
+              autoComplete="new-password"
+            />
+          </FormField>
+          <FormField label="Confirmar nova senha">
+            <Input
+              type="password"
+              value={confirmarSenha}
+              onChange={(e) => setConfirmarSenha(e.target.value)}
+              autoComplete="new-password"
+            />
+          </FormField>
+        </div>
+        <Button
+          className="mt-4 w-full sm:w-auto"
+          size="lg"
+          onClick={() => void handleSaveSenha()}
+          disabled={salvandoSenha || !senhaAtual || novaSenha.length < 6 || !confirmarSenha}
+        >
+          <Lock size={18} /> {salvandoSenha ? "Salvando…" : "Salvar nova senha"}
         </Button>
       </Card>
 

@@ -1387,8 +1387,8 @@ export async function registerCooperado(input: RegisterCooperadoInput): Promise<
         success: false,
         error:
           contaDoCooperado.email.toLowerCase() === email
-            ? "Este e-mail já está cadastrado. Use «Esqueci minha senha» ou faça login."
-            : "Este CPF já possui conta de acesso. Use o e-mail cadastrado ou «Esqueci minha senha».",
+            ? "Este e-mail já está cadastrado. Faça login ou peça uma nova senha temporária à diretoria."
+            : "Este CPF já possui conta de acesso. Use o e-mail cadastrado ou peça uma nova senha temporária à diretoria.",
       };
     }
   }
