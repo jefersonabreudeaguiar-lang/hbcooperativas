@@ -66,6 +66,14 @@ export interface ContaCoopPinResetRequest {
   createdAt: string;
 }
 
+/** Cooperado pediu reset do PIN de pagamento — aguarda ação do responsável. */
+export interface ContaCoopCooperadoPinResetRequest {
+  id: string;
+  cooperadoId: string;
+  cooperadoNome?: string;
+  createdAt: string;
+}
+
 export interface ContaCoopParceiro {
   id: string;
   cooperativaCnpj: string;

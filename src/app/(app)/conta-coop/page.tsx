@@ -27,13 +27,14 @@ import {
   postUpdatePartnerDiscount,
   fetchPartnerPixChangeRequests,
   fetchPartnerPinResetRequests,
+  fetchCooperadoPinResetRequests,
   resetMercadoFinancialPin,
   resetCooperadoFinancialPin,
   syncCreditLimiteFromFicha,
 } from "@/services/creditApiService";
 import { formatCentsBRL } from "@/modules/hb-credit/engine/money";
 import { buildCreditosBaseMap } from "@/modules/hb-credit/engine/creditBaseFromFicha";
-import type { ContaCoopDashboard, ContaCoopLimiteCooperado, ContaCoopParceiro, ContaCoopPinResetRequest, ContaCoopPixChangeRequest } from "@/modules/hb-credit/types";
+import type { ContaCoopDashboard, ContaCoopLimiteCooperado, ContaCoopParceiro, ContaCoopPinResetRequest, ContaCoopCooperadoPinResetRequest, ContaCoopPixChangeRequest } from "@/modules/hb-credit/types";
 import { cn, formatMesReferencia } from "@/utils/format";
 import { PageSkeleton } from "@/components/ui/PageSkeleton";
 
@@ -104,6 +105,9 @@ function ContaCoopContent() {
   const [approveDiscountDrafts, setApproveDiscountDrafts] = useState<Record<string, string>>({});
   const [pixChangeRequests, setPixChangeRequests] = useState<ContaCoopPixChangeRequest[]>([]);
   const [pinResetRequests, setPinResetRequests] = useState<ContaCoopPinResetRequest[]>([]);
+  const [cooperadoPinResetRequests, setCooperadoPinResetRequests] = useState<ContaCoopCooperadoPinResetRequest[]>(
+    []
+  );
 
   const cnpj = useMemo(() => {
     if (!user || !data) return "";
@@ -144,18 +148,20 @@ function ContaCoopContent() {
           creditosBaseCents: creditosBaseColetivo,
         }).catch(() => {});
       }
-      const [dash, lim, parc, pixReqs, pinReqs] = await Promise.all([
+      const [dash, lim, parc, pixReqs, pinReqs, coopPinReqs] = await Promise.all([
         fetchCreditDashboard(cnpj, creditosBaseColetivo),
         fetchCreditLimites(cnpj),
         fetchCreditParceiros(cnpj),
         fetchPartnerPixChangeRequests(cnpj, "pendente").catch(() => []),
         fetchPartnerPinResetRequests(cnpj).catch(() => []),
+        fetchCooperadoPinResetRequests(cnpj).catch(() => []),
       ]);
       setDashboard(dash);
       setLimites(lim);
       setParceiros(parc);
       setPixChangeRequests(pixReqs);
       setPinResetRequests(pinReqs);
+      setCooperadoPinResetRequests(coopPinReqs);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Erro ao carregar HB Créditos.");
     } finally {
@@ -590,9 +596,35 @@ function ContaCoopContent() {
       {tab === "limites" && (
         <div className="space-y-6">
           <AlertBanner variant="info">
-            Se o cooperado esquecer o PIN de pagamento HB Créditos, resete aqui na lista abaixo. Depois do reset, ele
-            cadastra um PIN novo em <strong>Minha Conta Coop</strong>.
+            Se o cooperado esquecer o PIN de pagamento, ele pode solicitar reset em Minha Conta Coop. Você confirma
+            aqui em <strong>Resetar PIN de pagamento</strong>; depois ele cadastra um PIN novo.
           </AlertBanner>
+
+          {cooperadoPinResetRequests.length > 0 && (
+            <Card className="space-y-3 border-cyan-300 bg-cyan-50/60 !p-4">
+              <h3 className="font-semibold text-gray-900">Solicitações de reset de PIN (pagamento)</h3>
+              <p className="text-sm text-gray-600">
+                Cooperados pediram reset do PIN de pagamento HB Créditos para cadastrar um novo.
+              </p>
+              {cooperadoPinResetRequests.map((req) => {
+                const limite = limites.find((l) => l.cooperadoId === req.cooperadoId);
+                if (!limite) return null;
+                return (
+                  <div key={req.id} className="rounded-xl border border-cyan-200 bg-white p-4">
+                    <p className="font-semibold text-gray-900">{cooperadoNome(req.cooperadoId)}</p>
+                    <p className="text-xs text-gray-500">
+                      Solicitado em {new Date(req.createdAt).toLocaleString("pt-BR")}
+                    </p>
+                    <div className="mt-3">
+                      <Button size="sm" onClick={() => void resetarPinCooperado(limite)} disabled={busy}>
+                        Resetar PIN de pagamento
+                      </Button>
+                    </div>
+                  </div>
+                );
+              })}
+            </Card>
+          )}
 
           <Card className="space-y-4 !p-5">
             <div>

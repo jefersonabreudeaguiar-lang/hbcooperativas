@@ -16,6 +16,7 @@ import type {
   ContaCoopLiquidacaoPreview,
   ContaCoopParceiro,
   ContaCoopPinResetRequest,
+  ContaCoopCooperadoPinResetRequest,
   ContaCoopSettlement,
   ContaCoopSettlementTransacao,
   ContaCoopSolicitacaoEstorno,
@@ -1158,6 +1159,106 @@ export async function resetCooperadoFinancialPin(
   });
 
   return { ok: true };
+}
+
+export async function requestCooperadoFinancialPinReset(
+  supabase: SupabaseClient,
+  cnpj: string,
+  cooperadoId: string,
+  actorUserId: string
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const digits = normalizeCnpj(cnpj);
+  const { data: account } = await supabase
+    .from("hb_credit_accounts")
+    .select("id, cooperado_id, pin_hash, pin_locked_until")
+    .eq("cooperative_cnpj", digits)
+    .eq("cooperado_id", cooperadoId)
+    .maybeSingle();
+
+  if (!account) {
+    return { ok: false, error: "Conta HB Créditos não encontrada." };
+  }
+
+  const hasPin = Boolean(account.pin_hash);
+  const locked =
+    account.pin_locked_until && new Date(String(account.pin_locked_until)).getTime() > Date.now();
+  if (!hasPin && !locked) {
+    return { ok: false, error: "Cadastre um PIN ou aguarde — não há PIN ativo para resetar." };
+  }
+
+  const pending = await listPendingCooperadoPinResetRequests(supabase, digits);
+  if (pending.some((r) => r.cooperadoId === cooperadoId)) {
+    return { ok: false, error: "Já existe uma solicitação de reset pendente para sua conta." };
+  }
+
+  const { error } = await supabase.from("hb_credit_audit_log").insert({
+    cooperative_cnpj: digits,
+    actor: actorUserId,
+    action: "COOPERADO_PIN_RESET_REQUESTED",
+    resource_type: "cooperado",
+    resource_id: cooperadoId,
+    metadata: { cooperadoId },
+  });
+
+  if (error) return { ok: false, error: error.message };
+  return { ok: true };
+}
+
+export async function listPendingCooperadoPinResetRequests(
+  supabase: SupabaseClient,
+  cnpj: string
+): Promise<ContaCoopCooperadoPinResetRequest[]> {
+  const digits = normalizeCnpj(cnpj);
+  const { data } = await supabase
+    .from("hb_credit_audit_log")
+    .select("id, resource_id, action, created_at, metadata")
+    .eq("cooperative_cnpj", digits)
+    .in("action", ["COOPERADO_PIN_RESET_REQUESTED", "COOPERADO_PIN_RESET"])
+    .order("created_at", { ascending: false })
+    .limit(500);
+
+  const latest = new Map<
+    string,
+    { request?: { id: string; createdAt: string }; resetAt?: string }
+  >();
+
+  for (const row of data ?? []) {
+    const cid = String(row.resource_id ?? "");
+    if (!cid) continue;
+    const cur = latest.get(cid) ?? {};
+    const action = String(row.action);
+    const createdAt = String(row.created_at);
+    if (action === "COOPERADO_PIN_RESET" && !cur.resetAt) {
+      cur.resetAt = createdAt;
+    }
+    if (action === "COOPERADO_PIN_RESET_REQUESTED" && !cur.request) {
+      cur.request = { id: String(row.id), createdAt };
+    }
+    latest.set(cid, cur);
+  }
+
+  const pending: ContaCoopCooperadoPinResetRequest[] = [];
+  for (const [cooperadoId, state] of latest) {
+    if (!state.request) continue;
+    if (state.resetAt && new Date(state.request.createdAt) <= new Date(state.resetAt)) continue;
+    pending.push({
+      id: state.request.id,
+      cooperadoId,
+      createdAt: state.request.createdAt,
+    });
+  }
+
+  pending.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+  return pending;
+}
+
+export async function hasPendingCooperadoPinResetRequest(
+  supabase: SupabaseClient,
+  cnpj: string,
+  cooperadoId: string
+): Promise<boolean> {
+  const pending = await listPendingCooperadoPinResetRequests(supabase, cnpj);
+  return pending.some((r) => r.cooperadoId === cooperadoId);
 }
 
 async function recordPartnerPinFailure(

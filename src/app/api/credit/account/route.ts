@@ -2,7 +2,9 @@ import { NextResponse } from "next/server";
 import {
   getLimiteCooperado,
   hasFinancialPin,
+  hasPendingCooperadoPinResetRequest,
   listLedgerCooperado,
+  requestCooperadoFinancialPinReset,
   setFinancialPin,
 } from "@/lib/supabase/contaCoopStorage";
 import { requireCreditApi, requireCreditCooperado, requireCreditCnpj } from "@/lib/security/creditGuard";
@@ -33,6 +35,11 @@ export async function GET(request: Request) {
   }
 
   const limite = await getLimiteCooperado(gate.ctx.supabase, cnpj, cooperadoId);
+  const pinResetPending = await hasPendingCooperadoPinResetRequest(
+    gate.ctx.supabase,
+    cnpj,
+    cooperadoId
+  );
   return NextResponse.json({
     ok: true,
     account: limite ?? {
@@ -44,6 +51,7 @@ export async function GET(request: Request) {
     },
     updatedAt: limite?.updatedAt ?? null,
     hasPin: limite ? await hasFinancialPin(gate.ctx.supabase, cnpj, cooperadoId) : false,
+    pinResetPending,
   });
 }
 
@@ -73,6 +81,22 @@ export async function POST(request: Request) {
     const result = await setFinancialPin(gate.ctx.supabase, cnpj, cooperadoId, pin);
     if (!result.ok) return NextResponse.json({ error: result.error }, { status: 400 });
     return NextResponse.json({ ok: true });
+  }
+
+  if (action === "request_pin_reset") {
+    const result = await requestCooperadoFinancialPinReset(
+      gate.ctx.supabase,
+      cnpj,
+      cooperadoId,
+      gate.ctx.session?.sub ?? cooperadoId
+    );
+    if (!result.ok) return NextResponse.json({ error: result.error }, { status: 400 });
+    return NextResponse.json({
+      ok: true,
+      message:
+        "Solicitação enviada. O responsável da cooperativa resetará o PIN em Conta Coop → Limites.",
+      pinResetPending: true,
+    });
   }
 
   return NextResponse.json({ error: "Ação inválida." }, { status: 400 });
