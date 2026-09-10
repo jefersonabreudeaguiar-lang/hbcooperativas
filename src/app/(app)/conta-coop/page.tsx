@@ -27,6 +27,7 @@ import {
   postUpdatePartnerDiscount,
   fetchPartnerPixChangeRequests,
   resetMercadoFinancialPin,
+  resetCooperadoFinancialPin,
   syncCreditLimiteFromFicha,
 } from "@/services/creditApiService";
 import { formatCentsBRL } from "@/modules/hb-credit/engine/money";
@@ -327,6 +328,28 @@ function ContaCoopContent() {
     }
   };
 
+  const resetarPinCooperado = async (limite: ContaCoopLimiteCooperado) => {
+    if (!cnpj) return;
+    const nome = cooperadoNome(limite.cooperadoId);
+    const msg =
+      `Resetar o PIN de pagamento HB Créditos de "${nome}"?\n\n` +
+      "O cooperado precisará cadastrar um PIN novo em Minha Conta Coop antes de pagar nos mercados.";
+    if (!window.confirm(msg)) return;
+
+    setBusy(true);
+    setError("");
+    setSuccess("");
+    try {
+      await resetCooperadoFinancialPin(cnpj, limite.cooperadoId);
+      setSuccess(`PIN de pagamento resetado para ${nome}. O cooperado deve cadastrar um PIN novo.`);
+      await reload();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Erro ao resetar PIN do cooperado.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const aprovarMudancaPix = async (solicitacao: ContaCoopPixChangeRequest) => {
     if (!cnpj) return;
     const nome = solicitacao.partnerNome ?? solicitacao.partnerId;
@@ -386,6 +409,9 @@ function ContaCoopContent() {
 
   const pinMercadoBloqueado = (parceiro: ContaCoopParceiro) =>
     Boolean(parceiro.pinLockedUntil && new Date(parceiro.pinLockedUntil).getTime() > Date.now());
+
+  const pinCooperadoBloqueado = (limite: ContaCoopLimiteCooperado) =>
+    Boolean(limite.pinLockedUntil && new Date(limite.pinLockedUntil).getTime() > Date.now());
 
   if (loading && !dashboard) return <PageSkeleton />;
 
@@ -559,6 +585,11 @@ function ContaCoopContent() {
 
       {tab === "limites" && (
         <div className="space-y-6">
+          <AlertBanner variant="info">
+            Se o cooperado esquecer o PIN de pagamento HB Créditos, resete aqui na lista abaixo. Depois do reset, ele
+            cadastra um PIN novo em <strong>Minha Conta Coop</strong>.
+          </AlertBanner>
+
           <Card className="space-y-4 !p-5">
             <div>
               <h3 className="font-semibold text-gray-900">Liberação individual</h3>
@@ -688,9 +719,30 @@ function ContaCoopContent() {
                     <p className="font-medium">{formatCentsBRL(l.valorUsadoCents)}</p>
                   </div>
                 </div>
-                <Button size="sm" variant="secondary" className="w-full" onClick={() => toggleBloqueio(l)} disabled={busy}>
-                  {l.bloqueado ? "Desbloquear cooperado" : "Bloquear pagamentos"}
-                </Button>
+                <p className="text-xs text-gray-600">
+                  PIN pagamento:{" "}
+                  {l.hasFinancialPin
+                    ? pinCooperadoBloqueado(l)
+                      ? "bloqueado por tentativas — pode resetar"
+                      : "cadastrado"
+                    : "não cadastrado"}
+                </p>
+                <div className="flex flex-col gap-2">
+                  <Button size="sm" variant="secondary" className="w-full" onClick={() => toggleBloqueio(l)} disabled={busy}>
+                    {l.bloqueado ? "Desbloquear cooperado" : "Bloquear pagamentos"}
+                  </Button>
+                  {(l.hasFinancialPin || pinCooperadoBloqueado(l)) && (
+                    <Button
+                      size="sm"
+                      variant="secondary"
+                      className="w-full"
+                      onClick={() => void resetarPinCooperado(l)}
+                      disabled={busy}
+                    >
+                      Resetar PIN de pagamento
+                    </Button>
+                  )}
+                </div>
               </Card>
             ))}
             {!limites.length && (
@@ -707,6 +759,7 @@ function ContaCoopContent() {
                   <th className="p-3">Liberado</th>
                   <th className="p-3">Usado</th>
                   <th className="p-3">Disponível</th>
+                  <th className="p-3">PIN pagamento</th>
                   <th className="p-3">Ações</th>
                 </tr>
               </thead>
@@ -723,16 +776,35 @@ function ContaCoopContent() {
                     <td className="p-3">{formatCentsBRL(l.limiteLiberadoCents)}</td>
                     <td className="p-3">{formatCentsBRL(l.valorUsadoCents)}</td>
                     <td className="p-3 font-medium text-green-800">{formatCentsBRL(l.valorDisponivelCents)}</td>
+                    <td className="p-3 text-xs text-gray-600">
+                      {l.hasFinancialPin
+                        ? pinCooperadoBloqueado(l)
+                          ? "Bloqueado"
+                          : "Cadastrado"
+                        : "Não cadastrado"}
+                    </td>
                     <td className="p-3">
-                      <Button size="sm" variant="secondary" onClick={() => toggleBloqueio(l)} disabled={busy}>
-                        {l.bloqueado ? "Desbloquear" : "Bloquear"}
-                      </Button>
+                      <div className="flex flex-wrap gap-2">
+                        <Button size="sm" variant="secondary" onClick={() => toggleBloqueio(l)} disabled={busy}>
+                          {l.bloqueado ? "Desbloquear" : "Bloquear"}
+                        </Button>
+                        {(l.hasFinancialPin || pinCooperadoBloqueado(l)) && (
+                          <Button
+                            size="sm"
+                            variant="secondary"
+                            onClick={() => void resetarPinCooperado(l)}
+                            disabled={busy}
+                          >
+                            Resetar PIN
+                          </Button>
+                        )}
+                      </div>
                     </td>
                   </tr>
                 ))}
                 {!limites.length && (
                   <tr>
-                    <td colSpan={6} className="p-6 text-center text-gray-500">
+                    <td colSpan={7} className="p-6 text-center text-gray-500">
                       Nenhum limite liberado ainda.
                     </td>
                   </tr>

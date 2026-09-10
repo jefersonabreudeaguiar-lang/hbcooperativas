@@ -4,6 +4,7 @@ import {
   previewLimiteAlteracao,
   previewLimiteColetivo,
   previewLimiteColetivoPercentual,
+  resetCooperadoFinancialPin,
   setCooperadoBloqueado,
   setLimiteColetivo,
   setLimiteColetivoPercentual,
@@ -150,6 +151,21 @@ export async function POST(request: Request) {
     const cooperadoId = String(body?.cooperadoId ?? "");
     const bloqueado = Boolean(body?.bloqueado);
     const result = await setCooperadoBloqueado(gate.ctx.supabase, cnpj, cooperadoId, bloqueado, actorId);
+    if (!result.ok) return NextResponse.json({ error: result.error }, { status: 400 });
+    return NextResponse.json({ ok: true });
+  }
+
+  if (action === "reset_cooperado_pin") {
+    const cooperadoId = String(body?.cooperadoId ?? "");
+    if (!cooperadoId) {
+      return NextResponse.json({ error: "Cooperado inválido." }, { status: 400 });
+    }
+    const result = await resetCooperadoFinancialPin(
+      gate.ctx.supabase,
+      cnpj,
+      cooperadoId,
+      actorId
+    );
     if (!result.ok) return NextResponse.json({ error: result.error }, { status: 400 });
     return NextResponse.json({ ok: true });
   }
