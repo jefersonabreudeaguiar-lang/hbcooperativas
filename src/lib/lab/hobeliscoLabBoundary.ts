@@ -230,9 +230,11 @@ export function evaluateHobeliscoLabBoundary(env: NodeJS.ProcessEnv = process.en
     productionRefBlocked &&
     hobeliscoSupabaseHost === productionRefBlocked
   ) {
+    const blockSameProdRef =
+      deployKind !== "local-dev" && (boundaryStrict || deployKind === "lab-mirror");
     tripwires.push({
       id: "PRODUCTION_SUPABASE_REF_MATCH",
-      severity: boundaryStrict || deployKind === "lab-mirror" ? "BLOCK" : "WARN",
+      severity: blockSameProdRef ? "BLOCK" : "WARN",
       message: "Credencial Hobelisco aponta para o mesmo projeto Supabase de produção.",
     });
   }
@@ -245,7 +247,7 @@ export function evaluateHobeliscoLabBoundary(env: NodeJS.ProcessEnv = process.en
   ) {
     tripwires.push({
       id: "APP_AND_HOBELISCO_DB_SAME",
-      severity: "BLOCK",
+      severity: deployKind === "local-dev" ? "WARN" : "BLOCK",
       message: "App e Hobelisco compartilham o mesmo Supabase — isolamento obrigatório no espelho LAB.",
     });
   }
