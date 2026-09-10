@@ -58,6 +58,14 @@ export interface ContaCoopPixChangeRequest {
   reviewNote?: string | null;
 }
 
+/** Mercado pediu reset do PIN de estorno — aguarda ação do responsável. */
+export interface ContaCoopPinResetRequest {
+  id: string;
+  partnerId: string;
+  partnerNome?: string;
+  createdAt: string;
+}
+
 export interface ContaCoopParceiro {
   id: string;
   cooperativaCnpj: string;

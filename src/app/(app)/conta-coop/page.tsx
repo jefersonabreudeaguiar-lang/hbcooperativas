@@ -26,13 +26,14 @@ import {
   postPartnerPixChangeAction,
   postUpdatePartnerDiscount,
   fetchPartnerPixChangeRequests,
+  fetchPartnerPinResetRequests,
   resetMercadoFinancialPin,
   resetCooperadoFinancialPin,
   syncCreditLimiteFromFicha,
 } from "@/services/creditApiService";
 import { formatCentsBRL } from "@/modules/hb-credit/engine/money";
 import { buildCreditosBaseMap } from "@/modules/hb-credit/engine/creditBaseFromFicha";
-import type { ContaCoopDashboard, ContaCoopLimiteCooperado, ContaCoopParceiro, ContaCoopPixChangeRequest } from "@/modules/hb-credit/types";
+import type { ContaCoopDashboard, ContaCoopLimiteCooperado, ContaCoopParceiro, ContaCoopPinResetRequest, ContaCoopPixChangeRequest } from "@/modules/hb-credit/types";
 import { cn, formatMesReferencia } from "@/utils/format";
 import { PageSkeleton } from "@/components/ui/PageSkeleton";
 
@@ -102,6 +103,7 @@ function ContaCoopContent() {
   const [discountDrafts, setDiscountDrafts] = useState<Record<string, string>>({});
   const [approveDiscountDrafts, setApproveDiscountDrafts] = useState<Record<string, string>>({});
   const [pixChangeRequests, setPixChangeRequests] = useState<ContaCoopPixChangeRequest[]>([]);
+  const [pinResetRequests, setPinResetRequests] = useState<ContaCoopPinResetRequest[]>([]);
 
   const cnpj = useMemo(() => {
     if (!user || !data) return "";
@@ -142,16 +144,18 @@ function ContaCoopContent() {
           creditosBaseCents: creditosBaseColetivo,
         }).catch(() => {});
       }
-      const [dash, lim, parc, pixReqs] = await Promise.all([
+      const [dash, lim, parc, pixReqs, pinReqs] = await Promise.all([
         fetchCreditDashboard(cnpj, creditosBaseColetivo),
         fetchCreditLimites(cnpj),
         fetchCreditParceiros(cnpj),
         fetchPartnerPixChangeRequests(cnpj, "pendente").catch(() => []),
+        fetchPartnerPinResetRequests(cnpj).catch(() => []),
       ]);
       setDashboard(dash);
       setLimites(lim);
       setParceiros(parc);
       setPixChangeRequests(pixReqs);
+      setPinResetRequests(pinReqs);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Erro ao carregar HB Créditos.");
     } finally {
@@ -841,6 +845,37 @@ function ContaCoopContent() {
 
       {tab === "mercados" && (
         <div className="space-y-4">
+          <AlertBanner variant="info">
+            Se o mercado esquecer o PIN de estorno, ele pode solicitar reset no painel (aba Mais). Você confirma aqui
+            em <strong>Resetar PIN de estorno</strong>; depois o mercado cadastra um PIN novo.
+          </AlertBanner>
+
+          {pinResetRequests.length > 0 && (
+            <Card className="space-y-3 border-cyan-300 bg-cyan-50/60 !p-4">
+              <h3 className="font-semibold text-gray-900">Solicitações de reset de PIN (estorno)</h3>
+              <p className="text-sm text-gray-600">
+                Mercados pediram reset do PIN financeiro para cadastrar um novo.
+              </p>
+              {pinResetRequests.map((req) => {
+                const parceiro = parceiros.find((p) => p.id === req.partnerId);
+                if (!parceiro) return null;
+                return (
+                  <div key={req.id} className="rounded-xl border border-cyan-200 bg-white p-4">
+                    <p className="font-semibold text-gray-900">{req.partnerNome ?? parceiro.nomeMercado}</p>
+                    <p className="text-xs text-gray-500">
+                      Solicitado em {new Date(req.createdAt).toLocaleString("pt-BR")}
+                    </p>
+                    <div className="mt-3">
+                      <Button size="sm" onClick={() => void resetarPinMercado(parceiro)} disabled={busy}>
+                        Resetar PIN de estorno
+                      </Button>
+                    </div>
+                  </div>
+                );
+              })}
+            </Card>
+          )}
+
           {pixChangeRequests.length > 0 && (
             <Card className="space-y-3 border-amber-300 bg-amber-50/60 !p-4">
               <h3 className="font-semibold text-gray-900">Solicitações de mudança de PIX</h3>

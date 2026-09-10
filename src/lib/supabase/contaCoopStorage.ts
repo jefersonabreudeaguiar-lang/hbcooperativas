@@ -15,6 +15,7 @@ import type {
   ContaCoopLimiteCooperado,
   ContaCoopLiquidacaoPreview,
   ContaCoopParceiro,
+  ContaCoopPinResetRequest,
   ContaCoopSettlement,
   ContaCoopSettlementTransacao,
   ContaCoopSolicitacaoEstorno,
@@ -1228,6 +1229,115 @@ export async function setPartnerFinancialPin(
 
   if (error) return { ok: false, error: error.message };
   return { ok: true };
+}
+
+export async function requestPartnerFinancialPinReset(
+  supabase: SupabaseClient,
+  partnerId: string,
+  actorUserId: string
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const { data: partner } = await supabase
+    .from("hb_credit_partners")
+    .select("id, name, cooperative_cnpj, pin_hash, pin_locked_until")
+    .eq("id", partnerId)
+    .maybeSingle();
+
+  if (!partner) return { ok: false, error: "Mercado não encontrado." };
+
+  const hasPin = Boolean(partner.pin_hash);
+  const locked =
+    partner.pin_locked_until && new Date(String(partner.pin_locked_until)).getTime() > Date.now();
+  if (!hasPin && !locked) {
+    return { ok: false, error: "Cadastre um PIN ou aguarde — não há PIN ativo para resetar." };
+  }
+
+  const digits = String(partner.cooperative_cnpj);
+  const pending = await listPendingPartnerPinResetRequests(supabase, digits);
+  if (pending.some((r) => r.partnerId === partnerId)) {
+    return { ok: false, error: "Já existe uma solicitação de reset pendente para este mercado." };
+  }
+
+  const now = new Date().toISOString();
+  const { data: inserted, error } = await supabase
+    .from("hb_credit_audit_log")
+    .insert({
+      cooperative_cnpj: digits,
+      actor: actorUserId,
+      action: "PARTNER_PIN_RESET_REQUESTED",
+      resource_type: "partner",
+      resource_id: partnerId,
+      metadata: { nomeMercado: String(partner.name ?? "") },
+    })
+    .select("id, created_at")
+    .single();
+
+  if (error) return { ok: false, error: error.message };
+  void inserted;
+  void now;
+  return { ok: true };
+}
+
+export async function listPendingPartnerPinResetRequests(
+  supabase: SupabaseClient,
+  cnpj: string
+): Promise<ContaCoopPinResetRequest[]> {
+  const digits = normalizeCnpj(cnpj);
+  const { data } = await supabase
+    .from("hb_credit_audit_log")
+    .select("id, resource_id, action, created_at, metadata")
+    .eq("cooperative_cnpj", digits)
+    .in("action", ["PARTNER_PIN_RESET_REQUESTED", "PARTNER_PIN_RESET"])
+    .order("created_at", { ascending: false })
+    .limit(500);
+
+  const latest = new Map<
+    string,
+    { request?: { id: string; createdAt: string; nome?: string }; resetAt?: string }
+  >();
+
+  for (const row of data ?? []) {
+    const partnerId = String(row.resource_id ?? "");
+    if (!partnerId) continue;
+    const cur = latest.get(partnerId) ?? {};
+    const action = String(row.action);
+    const createdAt = String(row.created_at);
+    if (action === "PARTNER_PIN_RESET" && !cur.resetAt) {
+      cur.resetAt = createdAt;
+    }
+    if (action === "PARTNER_PIN_RESET_REQUESTED" && !cur.request) {
+      const meta = row.metadata as Record<string, unknown> | null;
+      cur.request = {
+        id: String(row.id),
+        createdAt,
+        nome: meta?.nomeMercado ? String(meta.nomeMercado) : undefined,
+      };
+    }
+    latest.set(partnerId, cur);
+  }
+
+  const pending: ContaCoopPinResetRequest[] = [];
+  for (const [partnerId, state] of latest) {
+    if (!state.request) continue;
+    if (state.resetAt && new Date(state.request.createdAt) <= new Date(state.resetAt)) continue;
+    pending.push({
+      id: state.request.id,
+      partnerId,
+      partnerNome: state.request.nome,
+      createdAt: state.request.createdAt,
+    });
+  }
+
+  pending.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+  return pending;
+}
+
+export async function hasPendingPartnerPinResetRequest(
+  supabase: SupabaseClient,
+  cnpj: string,
+  partnerId: string
+): Promise<boolean> {
+  const pending = await listPendingPartnerPinResetRequests(supabase, cnpj);
+  return pending.some((r) => r.partnerId === partnerId);
 }
 
 export async function resetPartnerFinancialPin(
