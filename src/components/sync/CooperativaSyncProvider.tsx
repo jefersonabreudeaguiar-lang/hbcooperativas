@@ -265,11 +265,6 @@ export function CooperativaSyncProvider({ children }: { children: React.ReactNod
     setLastSyncError("");
     const syncStartedAt = Date.now();
     let completed = false;
-    let fotoUploadBackground: {
-      cnpj: string;
-      cooperadoCanonico: string;
-      cooperadoNome: string;
-    } | null = null;
     try {
       const sessionOk = await ensureCloudSessionReady(userToCloudProfile(currentUser));
       if (!sessionOk) {
@@ -349,16 +344,18 @@ export function CooperativaSyncProvider({ children }: { children: React.ReactNod
 
             const registro = latest.cooperados.find((c) => c.id === cooperadoCanonico);
 
-            if (registro && now - lastCooperadoPushRef.current >= COOPERADO_PUSH_GAP_MS) {
+            if (registro && cooperadoCanonico && now - lastCooperadoPushRef.current >= COOPERADO_PUSH_GAP_MS) {
               await pushCooperadoToCloud(cnpj, registro, currentUser.email);
               lastCooperadoPushRef.current = Date.now();
             }
 
-            fotoUploadBackground = {
-              cnpj,
-              cooperadoCanonico,
-              cooperadoNome: getCooperadoNome(latest.cooperados, cooperadoCanonico),
-            };
+            if (cooperadoCanonico) {
+              void runCooperadoFotoUploadsInBackground(
+                cnpj,
+                cooperadoCanonico,
+                getCooperadoNome(latest.cooperados, cooperadoCanonico)
+              );
+            }
           }
         })(),
         "Sincronização"
@@ -404,14 +401,6 @@ export function CooperativaSyncProvider({ children }: { children: React.ReactNod
       syncingRef.current = false;
       setSyncing(false);
       setLastSyncedAt(Date.now());
-    }
-
-    if (fotoUploadBackground) {
-      void runCooperadoFotoUploadsInBackground(
-        fotoUploadBackground.cnpj,
-        fotoUploadBackground.cooperadoCanonico,
-        fotoUploadBackground.cooperadoNome
-      );
     }
   }, []);
 

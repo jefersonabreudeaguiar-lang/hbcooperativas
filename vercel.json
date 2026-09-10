@@ -15,7 +15,7 @@
     },
     {
       "path": "/api/cron/hobelisco-credit-watch",
-      "schedule": "*/15 * * * *"
+      "schedule": "0 5 * * *"
     }
   ]
 }
