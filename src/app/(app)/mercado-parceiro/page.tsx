@@ -18,6 +18,7 @@ import {
   postRefundRequestAction,
   saveMercadoPix,
   setMercadoFinancialPin,
+  requestMercadoPinReset,
   solicitarMudancaPixMercado,
 } from "@/services/creditApiService";
 import { formatCentsBRL } from "@/modules/hb-credit/engine/money";
@@ -90,6 +91,7 @@ function MercadoParceiroContent() {
   const comprovanteRef = useRef<HTMLDivElement>(null);
   const liquidacaoConfirmacaoRef = useRef<HTMLDivElement>(null);
   const [hasPin, setHasPin] = useState(false);
+  const [pinResetPending, setPinResetPending] = useState(false);
   const [pinSetup, setPinSetup] = useState("");
   const [estornoAlvo, setEstornoAlvo] = useState<ContaCoopCompraEstornavel | null>(null);
   const [estornoMotivo, setEstornoMotivo] = useState("");
@@ -114,6 +116,7 @@ function MercadoParceiroContent() {
       setRecebiveis(data.recebiveis ?? []);
       setSettlements(data.settlements ?? []);
       setHasPin(Boolean(data.hasPin));
+      setPinResetPending(Boolean(data.pinResetPending));
       setFiscalPendentes(Number(data.fiscalPendentes ?? 0));
       setCooperativaNome(data.cooperativaNome ?? "Cooperativa parceira");
       setNeedsTermsAcceptance(Boolean(data.needsTermsAcceptance));
@@ -268,10 +271,32 @@ function MercadoParceiroContent() {
     try {
       await setMercadoFinancialPin(pinSetup);
       setHasPin(true);
+      setPinResetPending(false);
       setPinSetup("");
       setSuccess("PIN financeiro cadastrado.");
     } catch (e) {
       setError(e instanceof Error ? e.message : "Erro ao salvar PIN.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const solicitarResetPin = async () => {
+    const msg =
+      "Solicitar reset do PIN de estorno?\n\n" +
+      "O responsável da cooperativa receberá o pedido em Conta Coop → Mercados e precisará confirmar o reset. " +
+      "Depois você cadastra um PIN novo aqui na aba Mais.";
+    if (!window.confirm(msg)) return;
+
+    setBusy(true);
+    setError("");
+    setSuccess("");
+    try {
+      const data = await requestMercadoPinReset();
+      setPinResetPending(true);
+      setSuccess(data.message ?? "Solicitação enviada à cooperativa.");
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Erro ao solicitar reset do PIN.");
     } finally {
       setBusy(false);
     }
@@ -739,6 +764,10 @@ function MercadoParceiroContent() {
                     if (e.key === "Enter") void enviarEstorno();
                   }}
                 />
+                <p className="mt-2 text-xs text-gray-500">
+                  Esqueceu o PIN? Solicite reset na aba <strong>Mais</strong> — o responsável confirma em Conta Coop →
+                  Mercados.
+                </p>
               </div>
               <div className="flex flex-wrap gap-2">
                 <Button type="button" onClick={() => void enviarEstorno()} disabled={busy}>
@@ -999,12 +1028,24 @@ function MercadoParceiroContent() {
               </p>
             </div>
             {hasPin ? (
-              <p className="text-sm text-green-700">PIN cadastrado. Você precisará dele ao solicitar estorno.</p>
+              <div className="space-y-3">
+                <p className="text-sm text-green-700">PIN cadastrado. Você precisará dele ao solicitar estorno.</p>
+                {pinResetPending ? (
+                  <p className="text-sm text-cyan-800 bg-cyan-50 border border-cyan-200 rounded-lg px-3 py-2">
+                    Solicitação de reset enviada. Aguarde o responsável da cooperativa em Conta Coop → Mercados.
+                  </p>
+                ) : (
+                  <Button variant="secondary" onClick={() => void solicitarResetPin()} disabled={busy}>
+                    Esqueci meu PIN — solicitar reset
+                  </Button>
+                )}
+              </div>
             ) : (
               <>
                 <p className="text-sm text-amber-800">
-                  Cadastre um PIN numérico para solicitar estornos. Se esqueceu o PIN anterior, peça ao responsável da
-                  cooperativa para resetar (HB Créditos → Mercados).
+                  Cadastre um PIN numérico para solicitar estornos. Se esqueceu o PIN anterior, use{" "}
+                  <strong>Esqueci meu PIN</strong> (quando ainda houver PIN ativo) ou aguarde o responsável resetar
+                  após sua solicitação.
                 </p>
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
                 <div className="flex-1">

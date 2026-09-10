@@ -8,6 +8,7 @@ import type {
   ContaCoopLiquidacaoPreview,
   ContaCoopParceiro,
   ContaCoopPixChangeRequest,
+  ContaCoopPinResetRequest,
   ContaCoopSettlement,
   ContaCoopSolicitacaoEstorno,
 } from "@/modules/hb-credit/types";
@@ -238,6 +239,7 @@ export async function fetchMercadoParceiroData() {
     recebiveis?: { id: string; amountCents: number; status: string; createdAt: string }[];
     settlements?: ContaCoopSettlement[];
     hasPin?: boolean;
+    pinResetPending?: boolean;
     fiscalPendentes?: number;
     cooperativaNome?: string;
     needsTermsAcceptance?: boolean;
@@ -296,6 +298,13 @@ export async function fetchPartnerPixChangeRequests(cnpj: string, status?: "pend
   return data.solicitacoes ?? [];
 }
 
+export async function fetchPartnerPinResetRequests(cnpj: string): Promise<ContaCoopPinResetRequest[]> {
+  const res = await secureApiFetch(`/api/credit/partner-pin-reset?cnpj=${encodeURIComponent(cnpj)}`);
+  const data = await parseJson<{ ok?: boolean; error?: string; solicitacoes?: ContaCoopPinResetRequest[] }>(res);
+  if (!res.ok || !data.ok) throw new Error(data.error ?? "Erro ao carregar solicitações de reset de PIN.");
+  return data.solicitacoes ?? [];
+}
+
 export async function postPartnerPixChangeAction(input: {
   cnpj: string;
   requestId: string;
@@ -320,6 +329,19 @@ export async function setMercadoFinancialPin(pin: string) {
   });
   const data = await parseJson<{ ok?: boolean; error?: string; hasPin?: boolean }>(res);
   if (!res.ok || !data.ok) throw new Error(data.error ?? "Não foi possível salvar PIN.");
+  return data;
+}
+
+export async function requestMercadoPinReset() {
+  const res = await secureApiFetch("/api/credit/mercado", {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ action: "request_pin_reset" }),
+  });
+  const data = await parseJson<{ ok?: boolean; error?: string; message?: string; pinResetPending?: boolean }>(res);
+  if (!res.ok || !data.ok) {
+    throw new Error(data.error ?? "Não foi possível solicitar reset do PIN.");
+  }
   return data;
 }
 

@@ -8,7 +8,9 @@ import {
   listRecebiveisParceiro,
   listSettlementsForPartner,
   partnerNeedsTermsAcceptance,
+  requestPartnerFinancialPinReset,
   setPartnerFinancialPin,
+  hasPendingPartnerPinResetRequest,
   updatePartnerPix,
 } from "@/lib/supabase/contaCoopStorage";
 import { countPartnerFiscalPending } from "@/lib/supabase/hbCreditFiscalNotesStorage";
@@ -65,6 +67,11 @@ export async function GET(request: Request) {
     (await getCooperativaNomeByCnpj(gate.ctx.supabase, parceiro.cooperativaCnpj)) ?? "Cooperativa parceira";
   const needsTermsAcceptance = partnerNeedsTermsAcceptance(parceiro);
   const pixChange = await getPartnerPixChangeStatus(gate.ctx.supabase, parceiro.id);
+  const pinResetPending = await hasPendingPartnerPinResetRequest(
+    gate.ctx.supabase,
+    parceiro.cooperativaCnpj,
+    parceiro.id
+  );
 
   return NextResponse.json({
     ok: true,
@@ -73,6 +80,7 @@ export async function GET(request: Request) {
     recebiveis,
     settlements,
     hasPin,
+    pinResetPending,
     fiscalPendentes,
     mesReferenciaFiscal: mesReferencia,
     cooperativaNome,
@@ -114,6 +122,21 @@ export async function PATCH(request: Request) {
     const result = await setPartnerFinancialPin(gate.ctx.supabase, parceiro.id, pin);
     if (!result.ok) return NextResponse.json({ error: result.error }, { status: 400 });
     return NextResponse.json({ ok: true, hasPin: true });
+  }
+
+  if (body.action === "request_pin_reset") {
+    const result = await requestPartnerFinancialPinReset(
+      gate.ctx.supabase,
+      parceiro.id,
+      gate.ctx.session?.sub ?? "system"
+    );
+    if (!result.ok) return NextResponse.json({ error: result.error }, { status: 400 });
+    return NextResponse.json({
+      ok: true,
+      message:
+        "Solicitação enviada. O responsável da cooperativa resetará o PIN em Conta Coop → Mercados.",
+      pinResetPending: true,
+    });
   }
 
   if (body.action === "accept_terms") {
