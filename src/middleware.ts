@@ -2,15 +2,24 @@ import { NextResponse, after, type NextRequest } from "next/server";
 import { getAuthSecret, isApiSecurityEnforced } from "@/lib/security/env";
 import { extractAccessToken, verifyAccessToken } from "@/lib/security/jwt";
 import { hasSetupSecret, isPublicApiRoute } from "@/lib/security/publicApiPaths";
-import { isAutoObserverEnabled, shouldObservePath } from "@/lib/lab/hobeliscoAutoObserver";
 
-import type { HobeliscoIngestPayload } from "@/lib/lab/hobeliscoAutoObserver";
+type HobeliscoIngestPayload = {
+  type: "api" | "auth" | "sync";
+  endpoint: string;
+  method?: string;
+  status?: number;
+  cooperativeId?: string | null;
+  outcome?: "success" | "failure" | "unknown";
+  eventType?: string;
+};
 
 function scheduleObservation(payload: HobeliscoIngestPayload) {
-  if (!isAutoObserverEnabled() || !shouldObservePath(payload.endpoint)) return;
   after(async () => {
     try {
-      const { ingestHobeliscoObservation } = await import("@/lib/lab/hobeliscoAutoObserver");
+      const { isAutoObserverEnabled, shouldObservePath, ingestHobeliscoObservation } = await import(
+        "@/lib/lab/hobeliscoAutoObserver"
+      );
+      if (!isAutoObserverEnabled() || !shouldObservePath(payload.endpoint)) return;
       await ingestHobeliscoObservation(payload);
     } catch {
       /* fail-silent */
