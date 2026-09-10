@@ -6,11 +6,12 @@ import {
   Wallet,
   Building2,
   Settings,
+  Shield,
   type LucideIcon,
 } from "lucide-react";
 import { cn } from "@/utils/format";
 
-export type AdminSection = "inicio" | "cobranca" | "conta-coop" | "cooperativas" | "sistema";
+export type AdminSection = "inicio" | "cobranca" | "conta-coop" | "cooperativas" | "hobelisco" | "sistema";
 
 export interface AdminNavItem {
   id: AdminSection;
@@ -43,6 +44,12 @@ export const ADMIN_NAV_ITEMS: AdminNavItem[] = [
     label: "Cooperativas",
     description: "Cadastros e engajamento",
     icon: Building2,
+  },
+  {
+    id: "hobelisco",
+    label: "Hobelisco",
+    description: "Observador HB Coop",
+    icon: Shield,
   },
   {
     id: "sistema",
@@ -112,6 +119,8 @@ export function adminSectionDescription(section: AdminSection): string {
       return "Operação HB Créditos na plataforma: descontos, split 60/30/10 e repasses à HB.";
     case "cooperativas":
       return "Cooperativas cadastradas, e-mails de acesso e uso do app pelos cooperados.";
+    case "hobelisco":
+      return "Observador read-only: incidentes, alertas e confirmação humana.";
     case "sistema":
       return "Saúde da nuvem, armazenamento local e segurança do painel.";
     default:

@@ -3,7 +3,10 @@ import { normalizeCnpj } from "@/utils/cooperativa";
 import { isApiSecurityEnforced } from "@/lib/security/env";
 import { extractAccessToken, verifyAccessToken, type SessionClaims } from "@/lib/security/jwt";
 import { requireCooperativaSaasWritable } from "@/lib/security/saasGuard";
-import { rateLimitApi } from "@/lib/security/rateLimit";
+import { rateLimitApiDistributed } from "@/lib/security/rateLimit";
+import { staffMfaDeniedResponse } from "@/lib/security/staffAccessPolicy";
+import { recordCrossTenantBlocked } from "@/lib/security/platformSecurityEvents";
+import { clientIp } from "@/lib/security/authRoutes";
 import { canAccessPainelResponsavelSession } from "@/lib/security/responsavelPanelAccess";
 import { isPlatformAdminSession } from "@/lib/security/appCreator";
 
@@ -12,7 +15,7 @@ export type AuthResult =
   | { ok: false; response: NextResponse };
 
 export async function requireApiAuth(request: Request): Promise<AuthResult> {
-  if (!rateLimitApi(request)) {
+  if (!(await rateLimitApiDistributed(request))) {
     return {
       ok: false,
       response: NextResponse.json({ error: "Muitas requisições. Aguarde um momento." }, { status: 429 }),
@@ -36,6 +39,14 @@ export async function requireApiAuth(request: Request): Promise<AuthResult> {
     return {
       ok: false,
       response: NextResponse.json({ error: "Sessão inválida ou expirada." }, { status: 401 }),
+    };
+  }
+
+  const mfaDenied = staffMfaDeniedResponse(session, true);
+  if (mfaDenied) {
+    return {
+      ok: false,
+      response: NextResponse.json({ error: mfaDenied.message, code: "MFA_REQUIRED" }, { status: 403 }),
     };
   }
 
@@ -63,10 +74,17 @@ export function canAccessCooperativaCnpj(session: SessionClaims, cnpj: string): 
 export function requireCooperativaAccess(
   session: SessionClaims | null,
   cnpj: string,
-  enforced: boolean
+  enforced: boolean,
+  request?: Request
 ): NextResponse | null {
   if (!enforced || !session) return null;
   if (!canAccessCooperativaCnpj(session, cnpj)) {
+    recordCrossTenantBlocked({
+      session,
+      requestedCnpj: cnpj,
+      ip: request ? clientIp(request) : undefined,
+      endpoint: request ? new URL(request.url).pathname : undefined,
+    });
     return NextResponse.json({ error: "Sem permissão para esta cooperativa." }, { status: 403 });
   }
   return null;
@@ -133,7 +151,7 @@ export async function guardCooperativaApi(
   const auth = await requireApiAuth(request);
   if (!auth.ok) return { ok: false, response: auth.response };
 
-  const denied = requireCooperativaAccess(auth.session, cnpj, auth.enforced);
+  const denied = requireCooperativaAccess(auth.session, cnpj, auth.enforced, request);
   if (denied) return { ok: false, response: denied };
 
   if (options?.requireManagement) {

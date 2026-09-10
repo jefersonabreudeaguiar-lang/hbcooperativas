@@ -34,6 +34,7 @@ export async function tokenResponseForUser(user: AppUserRow): Promise<NextRespon
     cooperativaId: user.cooperativa_id ?? undefined,
     cooperadoId: user.cooperado_id ?? undefined,
     cooperativaCnpj: user.cooperativa_cnpj ?? undefined,
+    mfaVerified: true,
   });
   const enforced = isApiSecurityEnforced();
   const response = NextResponse.json({

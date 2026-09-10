@@ -1,7 +1,7 @@
 "use client";
 
-import { useState } from "react";
-import { CheckCircle2, Eye, PenLine, RotateCcw } from "lucide-react";
+import { useEffect, useState } from "react";
+import { CheckCircle2, Eye, Pencil, PenLine, RotateCcw } from "lucide-react";
 import type { AppData, Cooperado, User } from "@/types";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
@@ -20,6 +20,7 @@ import {
   resumoAssinaturaCadastroApp,
 } from "@/services/cooperadoAssinaturaService";
 import { formatDateTime } from "@/utils/format";
+import { AssinaturaImageEditor } from "@/components/cooperado/AssinaturaImageEditor";
 
 interface AssinaturaCadastroGestaoPanelProps {
   data: AppData;
@@ -33,8 +34,17 @@ export function AssinaturaCadastroGestaoPanel({ data, user, cooperativaId }: Ass
   const [erro, setErro] = useState("");
   const [motivoDevolucao, setMotivoDevolucao] = useState<Record<string, string>>({});
   const [verAssinatura, setVerAssinatura] = useState<Cooperado | null>(null);
+  const [editandoAssinatura, setEditandoAssinatura] = useState(false);
+  const [assinaturaEditada, setAssinaturaEditada] = useState<{ dataUrl: string; hash: string } | null>(null);
 
-  const previewVerAssinatura = verAssinatura ? getAssinaturaCadastroDataUrl(verAssinatura) : null;
+  const previewVerAssinatura = verAssinatura
+    ? assinaturaEditada?.dataUrl ?? getAssinaturaCadastroDataUrl(verAssinatura)
+    : null;
+
+  useEffect(() => {
+    setEditandoAssinatura(false);
+    setAssinaturaEditada(null);
+  }, [verAssinatura?.id]);
 
   const syncCooperado = async (cooperado: Cooperado) => {
     const cnpj = await resolveCooperativaCnpj(data, cooperado.cooperativaId, user);
@@ -42,13 +52,21 @@ export function AssinaturaCadastroGestaoPanel({ data, user, cooperativaId }: Ass
     return pushCooperadoToCloud(cnpj, cooperado, user.email);
   };
 
-  const confirmar = async (cooperadoId: string): Promise<boolean> => {
+  const confirmar = async (
+    cooperadoId: string,
+    imagemAjustada?: { dataUrl: string; hash: string } | null
+  ): Promise<boolean> => {
     setErro("");
     setBusyId(cooperadoId);
     try {
       let atualizado: Cooperado | null = null;
       updateData((d) => {
-        const result = confirmarAssinaturaCadastroCooperado(d, cooperadoId, user);
+        const result = confirmarAssinaturaCadastroCooperado(
+          d,
+          cooperadoId,
+          user,
+          imagemAjustada ?? undefined
+        );
         if (!result.ok) {
           setErro(result.error);
           return d;
@@ -251,8 +269,9 @@ export function AssinaturaCadastroGestaoPanel({ data, user, cooperativaId }: Ass
         open={Boolean(verAssinatura)}
         onClose={() => !modalBusy && setVerAssinatura(null)}
         title={verAssinatura ? `Assinatura — ${verAssinatura.nomeCompleto}` : "Assinatura"}
-        size="md"
+        size={editandoAssinatura ? "lg" : "md"}
         footer={
+          !editandoAssinatura ? (
           <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-2">
             <Button variant="secondary" onClick={() => setVerAssinatura(null)} disabled={modalBusy}>
               Fechar
@@ -261,11 +280,11 @@ export function AssinaturaCadastroGestaoPanel({ data, user, cooperativaId }: Ass
               <Button
                 onClick={() =>
                   void (async () => {
-                    const ok = await confirmar(verAssinatura.id);
+                    const ok = await confirmar(verAssinatura.id, assinaturaEditada);
                     if (ok) setVerAssinatura(null);
                   })()
                 }
-                disabled={modalBusy}
+                disabled={modalBusy || !previewVerAssinatura}
               >
                 <CheckCircle2 size={16} />
                 Confirmar assinatura
@@ -287,6 +306,7 @@ export function AssinaturaCadastroGestaoPanel({ data, user, cooperativaId }: Ass
               </Button>
             )}
           </div>
+          ) : null
         }
       >
         {verAssinatura && (
@@ -298,14 +318,44 @@ export function AssinaturaCadastroGestaoPanel({ data, user, cooperativaId }: Ass
               ) : null}
             </div>
 
-            {previewVerAssinatura ? (
-              <div className="bg-gray-50 rounded-xl border border-gray-200 p-6 flex justify-center">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                  src={previewVerAssinatura}
-                  alt={`Assinatura de ${verAssinatura.nomeCompleto}`}
-                  className="max-h-48 max-w-full object-contain"
-                />
+            {previewVerAssinatura && editandoAssinatura ? (
+              <AssinaturaImageEditor
+                sourceDataUrl={previewVerAssinatura}
+                disabled={modalBusy}
+                onCancel={() => setEditandoAssinatura(false)}
+                onApply={(payload) => {
+                  setAssinaturaEditada(payload);
+                  setEditandoAssinatura(false);
+                }}
+              />
+            ) : previewVerAssinatura ? (
+              <div className="space-y-3">
+                <div className="bg-gray-50 rounded-xl border border-gray-200 p-6 flex justify-center">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={previewVerAssinatura}
+                    alt={`Assinatura de ${verAssinatura.nomeCompleto}`}
+                    className="max-h-48 max-w-full object-contain"
+                  />
+                </div>
+                {statusVerAssinatura === "em_analise" && (
+                  <div className="flex flex-wrap gap-2">
+                    <Button
+                      size="sm"
+                      variant="secondary"
+                      onClick={() => setEditandoAssinatura(true)}
+                      disabled={modalBusy}
+                    >
+                      <Pencil size={14} />
+                      Editar imagem
+                    </Button>
+                    {assinaturaEditada && (
+                      <span className="text-xs text-green-700 self-center">
+                        Imagem ajustada — confirme abaixo para salvar.
+                      </span>
+                    )}
+                  </div>
+                )}
               </div>
             ) : (
               <AlertBanner variant="warning" title="Foto não disponível">

@@ -46,6 +46,7 @@ import {
   userToCloudProfile,
 } from "@/lib/security/clientSession";
 import { getCooperadoNome } from "@/utils/calculations";
+import { reportHobeliscoSyncEvent } from "@/lib/lab/hobeliscoSyncReporter";
 import { readNotaFotoAtIndex, resolveNotaFotosForUpload } from "@/services/localMediaStore";
 import { compactarFotosNoArmazenamento, contarFotosEnviadasNota } from "@/utils/fotoEntrega";
 import { isDiretoriaRole } from "@/permissions";
@@ -248,6 +249,7 @@ export function CooperativaSyncProvider({ children }: { children: React.ReactNod
     syncingRef.current = true;
     setSyncing(true);
     setLastSyncError("");
+    const syncStartedAt = Date.now();
     let completed = false;
     let fotoUploadBackground: {
       cnpj: string;
@@ -261,6 +263,12 @@ export function CooperativaSyncProvider({ children }: { children: React.ReactNod
           getLastCloudSyncError() ||
             "Não foi possível conectar à nuvem. Saia, entre de novo e aguarde alguns segundos."
         );
+        reportHobeliscoSyncEvent({
+          eventType: "sync_session_failure",
+          cooperativeId: null,
+          outcome: "failure",
+          durationMs: Date.now() - syncStartedAt,
+        });
         return;
       }
 
@@ -269,6 +277,12 @@ export function CooperativaSyncProvider({ children }: { children: React.ReactNod
         if (currentUser.role === "cooperado") {
           setLastSyncError("CNPJ da cooperativa não encontrado. Saia e entre de novo.");
         }
+        reportHobeliscoSyncEvent({
+          eventType: "sync_cnpj_missing",
+          cooperativeId: null,
+          outcome: "failure",
+          durationMs: Date.now() - syncStartedAt,
+        });
         return;
       }
 
@@ -297,6 +311,12 @@ export function CooperativaSyncProvider({ children }: { children: React.ReactNod
               getLastCloudSyncError() ||
                 "Não foi possível baixar sua ficha. Verifique a internet e toque em Atualizar agora."
             );
+            reportHobeliscoSyncEvent({
+              eventType: "sync_ficha_pull_failure",
+              cooperativeId: cnpj,
+              outcome: "failure",
+              durationMs: Date.now() - syncStartedAt,
+            });
           }
         }
       } else {
@@ -342,7 +362,21 @@ export function CooperativaSyncProvider({ children }: { children: React.ReactNod
             prev ||
             "Não foi possível baixar sua ficha. Verifique a internet e toque em Atualizar agora."
           );
+          reportHobeliscoSyncEvent({
+            eventType: "sync_ficha_pull_failure",
+            cooperativeId: cnpj,
+            outcome: "failure",
+            durationMs: Date.now() - syncStartedAt,
+          });
         }
+      }
+      if (completed) {
+        reportHobeliscoSyncEvent({
+          eventType: "sync_success",
+          cooperativeId: cnpj,
+          outcome: "success",
+          durationMs: Date.now() - syncStartedAt,
+        });
       }
     } finally {
       syncingRef.current = false;

@@ -28,12 +28,39 @@ function checkLimit(key: string, max: number, windowMs = WINDOW_MS): boolean {
   return true;
 }
 
+async function checkLimitDistributed(
+  key: string,
+  max: number,
+  windowMs = WINDOW_MS
+): Promise<boolean | null> {
+  const { distributedRateLimitCheck } = await import("@/lib/security/distributedRateLimit");
+  const windowSeconds = Math.max(1, Math.ceil(windowMs / 1000));
+  const result = await distributedRateLimitCheck(`hb:${key}`, max, windowSeconds);
+  if (!result) return null;
+  return result.allowed;
+}
+
+async function checkLimitHybrid(key: string, max: number, windowMs = WINDOW_MS): Promise<boolean> {
+  const distributed = await checkLimitDistributed(key, max, windowMs);
+  if (distributed !== null) return distributed;
+  return checkLimit(key, max, windowMs);
+}
+
 export function rateLimitApi(request: Request): boolean {
   return checkLimit(clientKey(request), MAX_REQUESTS);
 }
 
+/** Versão async com Upstash opcional — use em rotas críticas. */
+export async function rateLimitApiDistributed(request: Request): Promise<boolean> {
+  return checkLimitHybrid(clientKey(request), MAX_REQUESTS);
+}
+
 export function rateLimitAuth(request: Request): boolean {
   return checkLimit(clientKey(request, ":auth"), AUTH_MAX);
+}
+
+export async function rateLimitAuthDistributed(request: Request): Promise<boolean> {
+  return checkLimitHybrid(clientKey(request, ":auth"), AUTH_MAX);
 }
 
 export function rateLimitCadastroSenha(request: Request): boolean {

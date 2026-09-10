@@ -36,6 +36,7 @@ export async function GET(request: Request) {
     cooperativaId: session.cooperativaId,
     cooperadoId: session.cooperadoId,
     cooperativaCnpj: session.cooperativaCnpj,
+    mfaVerified: true,
   });
 
   const effectiveRole = resolveEffectiveAppUserRole({

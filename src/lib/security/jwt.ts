@@ -2,6 +2,7 @@ import { SignJWT, jwtVerify, type JWTPayload } from "jose";
 import type { UserRole } from "@/types";
 import { getAuthSecret } from "@/lib/security/env";
 import { extractSessionTokenFromCookie } from "@/lib/security/sessionCookie";
+import { resolveAccessTokenTtl } from "@/lib/security/sessionPolicy";
 
 export interface SessionClaims extends JWTPayload {
   sub: string;
@@ -11,6 +12,10 @@ export interface SessionClaims extends JWTPayload {
   cooperativaId?: string;
   cooperadoId?: string;
   cooperativaCnpj?: string;
+  /** Verificado quando HB_STAFF_MFA_REQUIRED=true */
+  mfaVerified?: boolean;
+  /** Conta com TOTP ativo */
+  totpEnabled?: boolean;
 }
 
 export type SessionTokenInput = {
@@ -21,24 +26,26 @@ export type SessionTokenInput = {
   cooperativaId?: string;
   cooperadoId?: string;
   cooperativaCnpj?: string;
+  mfaVerified?: boolean;
+  totpEnabled?: boolean;
 };
 
 const ISSUER = "hb-cooperativas";
 const AUDIENCE = "hb-cooperativas-api";
-const TTL = "7d";
 
 function secretKey(): Uint8Array {
   return new TextEncoder().encode(getAuthSecret());
 }
 
 export async function signAccessToken(claims: SessionTokenInput): Promise<string> {
+  const ttl = resolveAccessTokenTtl(claims.role);
   return new SignJWT({ ...claims })
     .setProtectedHeader({ alg: "HS256" })
     .setIssuer(ISSUER)
     .setAudience(AUDIENCE)
     .setSubject(claims.sub)
     .setIssuedAt()
-    .setExpirationTime(TTL)
+    .setExpirationTime(ttl)
     .sign(secretKey());
 }
 

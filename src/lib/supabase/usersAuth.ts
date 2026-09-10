@@ -15,6 +15,8 @@ export type AppUserRow = {
   cooperado_id: string | null;
   cooperativa_cnpj: string | null;
   active: boolean;
+  totp_secret_encrypted?: string | null;
+  totp_enabled_at?: string | null;
 };
 
 export interface UpsertAppUserInput {

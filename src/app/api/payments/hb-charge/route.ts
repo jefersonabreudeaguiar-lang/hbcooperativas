@@ -61,6 +61,14 @@ export async function GET(request: Request) {
     });
   }
 
+  if (!created.pix?.payload?.trim()) {
+    return NextResponse.json({
+      ok: true,
+      breakdown: created.breakdown,
+      autoPixError: "PIX criado sem QR. Clique em «Gerar PIX Asaas» ou atualize a página.",
+    });
+  }
+
   return NextResponse.json({
     ok: true,
     breakdown: created.breakdown,

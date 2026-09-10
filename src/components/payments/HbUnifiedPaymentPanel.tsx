@@ -266,6 +266,12 @@ export function HbUnifiedPaymentPanel({ cnpj, mesReferenciaContaCoop, compact, o
       </div>
 
       {!pixPayload ? (
+        <>
+          {!error && (
+            <AlertBanner variant="info" className="mb-3">
+              Clique no botão abaixo para gerar o QR PIX. Se não aparecer, use «Recalcular» ou atualize a página.
+            </AlertBanner>
+          )}
         <Button onClick={() => void gerarPixAsaas()} disabled={busy || breakdown.totalCents <= 0}>
           {busy ? (
             <>
@@ -277,6 +283,7 @@ export function HbUnifiedPaymentPanel({ cnpj, mesReferenciaContaCoop, compact, o
             </>
           )}
         </Button>
+        </>
       ) : (
         <div className="space-y-4">
           {pixImage && (

@@ -27,6 +27,7 @@ import {
   formatBytes,
   type CloudPlatformOverview,
 } from "@/services/platformAdminService";
+import { AdminSecurityStackCard } from "@/components/admin/AdminSecurityCards";
 import {
   capacityStatusClass,
   capacityStatusLabel,
@@ -441,13 +442,16 @@ export function AdminSistemaPanel({ user }: AdminSistemaPanelProps) {
                 )}
               </dd>
               <p className="text-xs text-gray-500 mt-2">
-                Eventos: <strong>PAYMENT_RECEIVED</strong> e <strong>PAYMENT_CONFIRMED</strong>. Cron:{" "}
-                <code>/api/cron/hb-asaas-charges</code> (variável <code>CRON_SECRET</code> na Vercel).
+                Eventos: <strong>PAYMENT_RECEIVED</strong> e <strong>PAYMENT_CONFIRMED</strong>. Crons:{" "}
+                <code>/api/cron/hb-asaas-charges</code>,{" "}
+                <code>/api/cron/credit-reconciliation</code> (variável <code>CRON_SECRET</code> na Vercel).
               </p>
             </div>
           </dl>
         )}
       </Card>
+
+      <AdminSecurityStackCard />
 
       <Card title="Alterar senha do /admin" action={<Settings size={18} className="text-gray-400" />}>
         {msgSenha?.type === "erro" && (

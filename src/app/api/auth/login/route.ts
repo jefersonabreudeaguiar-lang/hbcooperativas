@@ -35,6 +35,12 @@ export async function POST(request: Request) {
   const user = await verifyAppUserPassword(supabase, email, password);
 
   if (!user) {
+    await logSecurityEvent(supabase, {
+      action: "auth.login_failed",
+      userEmail: email,
+      ip: clientIp(request),
+      metadata: { reason: "invalid_credentials" },
+    });
     return NextResponse.json({ error: "Credenciais inválidas.", code: "INVALID_CREDENTIALS" }, { status: 401 });
   }
 

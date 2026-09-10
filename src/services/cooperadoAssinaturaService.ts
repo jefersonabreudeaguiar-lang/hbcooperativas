@@ -161,7 +161,8 @@ export function salvarAssinaturaCadastroCooperado(
 export function confirmarAssinaturaCadastroCooperado(
   data: AppData,
   cooperadoId: string,
-  actor: Pick<User, "id" | "name">
+  actor: Pick<User, "id" | "name">,
+  imagemAjustada?: { dataUrl: string; hash: string }
 ): { ok: true; data: AppData; cooperado: Cooperado } | { ok: false; error: string } {
   const cooperado = data.cooperados.find((c) => c.id === cooperadoId);
   if (!cooperado) return { ok: false, error: "Cooperado não encontrado." };
@@ -177,6 +178,12 @@ export function confirmarAssinaturaCadastroCooperado(
     data,
     cooperadoId,
     {
+      ...(imagemAjustada
+        ? {
+            assinaturaCadastroDataUrl: imagemAjustada.dataUrl,
+            assinaturaCadastroHash: imagemAjustada.hash,
+          }
+        : {}),
       assinaturaCadastroStatus: "confirmada",
       assinaturaConfirmadaEm: now,
       assinaturaConfirmadaPorId: actor.id,
@@ -187,7 +194,9 @@ export function confirmarAssinaturaCadastroCooperado(
     {
       userId: actor.id,
       userName: actor.name,
-      changes: `Assinatura confirmada pela diretoria`,
+      changes: imagemAjustada
+        ? "Assinatura confirmada pela diretoria (imagem ajustada)"
+        : "Assinatura confirmada pela diretoria",
     }
   );
 }

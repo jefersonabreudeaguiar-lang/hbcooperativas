@@ -560,26 +560,49 @@ export async function createUnifiedHbAsaasCharge(input: {
   );
 
   const existingByKey = await findChargeByKey(input.supabase, chargeKey);
-  const pending = existingByKey && ["draft", "pending"].includes(existingByKey.status) ? existingByKey : null;
+  let pending =
+    existingByKey && ["draft", "pending"].includes(existingByKey.status) ? existingByKey : null;
 
   if (pending && pending.total_cents === breakdown.totalCents && pending.asaas_payment_id) {
-    if (breakdown.saasDue && breakdown.saasSubtotalCents > 0) {
-      await syncSaasCobrancaEnviadaOnCloud(
-        input.supabase,
-        breakdown,
-        input.userName ?? "Asaas · PIX automático"
-      );
+    const cachedPix = pending.pix_payload?.trim();
+    let payload = cachedPix ?? "";
+    let encodedImage = pending.pix_qr_base64 ?? "";
+
+    if (!payload) {
+      const pixResult = await getAsaasPixQrCode(config, pending.asaas_payment_id);
+      if (pixResult.ok && pixResult.pix.payload?.trim()) {
+        payload = pixResult.pix.payload;
+        encodedImage = pixResult.pix.encodedImage;
+        await updateHbAsaasCharge(input.supabase, pending.id, {
+          pix_payload: payload,
+          pix_qr_base64: encodedImage,
+        });
+      } else {
+        await deleteAsaasPayment(config, pending.asaas_payment_id).catch(() => undefined);
+        await updateHbAsaasCharge(input.supabase, pending.id, { status: "cancelled" });
+        pending = null;
+      }
     }
-    return {
-      ok: true,
-      charge: pending,
-      breakdown: pending.breakdown as HbUnifiedChargeBreakdown,
-      pix: {
-        payload: pending.pix_payload ?? "",
-        encodedImage: pending.pix_qr_base64 ?? "",
-        invoiceUrl: pending.asaas_invoice_url ?? undefined,
-      },
-    };
+
+    if (pending && payload) {
+      if (breakdown.saasDue && breakdown.saasSubtotalCents > 0) {
+        await syncSaasCobrancaEnviadaOnCloud(
+          input.supabase,
+          breakdown,
+          input.userName ?? "Asaas · PIX automático"
+        );
+      }
+      return {
+        ok: true,
+        charge: pending,
+        breakdown: pending.breakdown as HbUnifiedChargeBreakdown,
+        pix: {
+          payload,
+          encodedImage,
+          invoiceUrl: pending.asaas_invoice_url ?? undefined,
+        },
+      };
+    }
   }
 
   if (pending?.asaas_payment_id && pending.total_cents !== breakdown.totalCents) {

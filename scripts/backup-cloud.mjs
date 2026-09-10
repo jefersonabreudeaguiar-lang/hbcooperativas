@@ -36,6 +36,43 @@ const supabase = createClient(url, serviceKey, {
 
 const BUCKETS = ["hb-cooperativa-sync", "hb-cooperados", "hb-entregas"];
 
+/** Tabelas Supabase — snapshot completo HB Cooperativas */
+const DB_TABLES = [
+  "cooperativas",
+  "notas_pedido",
+  "app_users",
+  "security_audit_log",
+  "password_reset_tokens",
+  "cooperative_audit_log",
+  "hb_platform_settings",
+  "hb_asaas_customers",
+  "hb_asaas_charges",
+  "hb_asaas_webhook_events",
+  "hb_credit_cooperative_caps",
+  "hb_credit_accounts",
+  "hb_credit_partners",
+  "hb_credit_payment_intents",
+  "hb_credit_transactions",
+  "hb_credit_ledger_entries",
+  "hb_credit_receivables",
+  "hb_credit_refunds",
+  "hb_credit_audit_log",
+  "hb_credit_idempotency_records",
+  "hb_credit_settlements",
+  "hb_credit_refund_requests",
+  "hb_credit_fiscal_notes",
+  "hb_credit_cashback_balances",
+  "hb_credit_discount_allocations",
+  "hb_credit_app_repasse",
+  "hb_credit_partner_pix_change_requests",
+];
+
+const REDACT_FIELDS = {
+  app_users: ["password_hash"],
+  password_reset_tokens: ["token_hash", "token"],
+  hb_credit_partners: ["pin_hash", "pin"],
+};
+
 function normalizeCnpj(value) {
   return String(value ?? "").replace(/\D/g, "");
 }
@@ -90,7 +127,18 @@ async function fetchTable(name) {
     if (error.code === "42P01") return { ok: false, rows: [], error: "tabela inexistente" };
     return { ok: false, rows: [], error: error.message };
   }
-  return { ok: true, rows: data ?? [] };
+  let rows = data ?? [];
+  const redact = REDACT_FIELDS[name];
+  if (redact?.length) {
+    rows = rows.map((row) => {
+      const copy = { ...row };
+      for (const field of redact) {
+        if (copy[field] != null) copy[field] = "[REDACTED]";
+      }
+      return copy;
+    });
+  }
+  return { ok: true, rows };
 }
 
 const backupRoot = resolve(process.cwd(), "backups", timestamp());
@@ -98,23 +146,23 @@ mkdirSync(backupRoot, { recursive: true });
 
 console.log(`Gerando backup em ${backupRoot}...`);
 
-const [cooperativas, notasPedido, appUsers, auditLog] = await Promise.all([
-  fetchTable("cooperativas"),
-  fetchTable("notas_pedido"),
-  fetchTable("app_users"),
-  fetchTable("security_audit_log"),
-]);
-
-writeJson(join(backupRoot, "db"), "cooperativas.json", cooperativas);
-writeJson(join(backupRoot, "db"), "notas_pedido.json", notasPedido);
-writeJson(join(backupRoot, "db"), "app_users.json", {
-  ...appUsers,
-  rows: (appUsers.rows ?? []).map((u) => ({ ...u, password_hash: "[REDACTED]" })),
-});
-writeJson(join(backupRoot, "db"), "security_audit_log.json", auditLog);
+const tableResults = {};
+let cooperativasRows = [];
+for (const table of DB_TABLES) {
+  process.stdout.write(`  db/${table}... `);
+  const result = await fetchTable(table);
+  writeJson(join(backupRoot, "db"), `${table}.json`, result);
+  tableResults[table] = {
+    ok: result.ok,
+    rows: result.rows?.length ?? 0,
+    error: result.error ?? null,
+  };
+  if (table === "cooperativas") cooperativasRows = result.rows ?? [];
+  console.log(result.ok ? `${result.rows?.length ?? 0} linhas` : result.error);
+}
 
 const cnpjSet = new Set();
-for (const row of cooperativas.rows ?? []) {
+for (const row of cooperativasRows) {
   const c = normalizeCnpj(row.cnpj);
   if (c.length === 14) cnpjSet.add(c);
 }
@@ -136,13 +184,9 @@ for (const bucket of BUCKETS) {
 const manifest = {
   createdAt: new Date().toISOString(),
   supabaseUrl: url,
+  purpose: "backup-completo-hb-cooperativas",
   cnpjs: [...cnpjSet].sort(),
-  tables: {
-    cooperativas: cooperativas.rows?.length ?? 0,
-    notas_pedido: notasPedido.rows?.length ?? 0,
-    app_users: appUsers.rows?.length ?? 0,
-    security_audit_log: auditLog.rows?.length ?? 0,
-  },
+  tables: tableResults,
   storageFiles: storageStats,
 };
 

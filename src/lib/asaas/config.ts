@@ -5,6 +5,15 @@ export interface AsaasConfig {
   sandbox: boolean;
 }
 
+function detectAsaasSandbox(apiKey: string, env: NodeJS.ProcessEnv = process.env): boolean {
+  const explicit = env.ASAAS_SANDBOX?.trim().toLowerCase();
+  if (explicit === "true" || explicit === "1" || explicit === "yes") return true;
+  if (explicit === "false" || explicit === "0" || explicit === "no") return false;
+  if (apiKey.includes("_hmlg_") || apiKey.includes("_sandbox")) return true;
+  if (apiKey.includes("_prod_")) return false;
+  return false;
+}
+
 export function isAsaasConfigured(): boolean {
   return Boolean(process.env.ASAAS_API_KEY?.trim());
 }
@@ -13,7 +22,7 @@ export function getAsaasConfig(): AsaasConfig | null {
   const apiKey = process.env.ASAAS_API_KEY?.trim();
   if (!apiKey) return null;
 
-  const sandbox = process.env.ASAAS_SANDBOX === "true" || apiKey.includes("_sandbox") || apiKey.startsWith("$aact_");
+  const sandbox = detectAsaasSandbox(apiKey);
   const baseUrl =
     process.env.ASAAS_API_URL?.trim() ||
     (sandbox ? "https://api-sandbox.asaas.com/v3" : "https://api.asaas.com/v3");
