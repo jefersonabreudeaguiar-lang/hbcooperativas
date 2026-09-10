@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Banknote, Copy, Loader2, QrCode, RefreshCw, ShieldCheck } from "lucide-react";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
@@ -113,14 +113,22 @@ export function HbUnifiedPaymentPanel({ cnpj, mesReferenciaContaCoop, compact, o
     if (!json.ok) return;
 
     if (json.cobrancaSaas) {
+      const beforeJson = JSON.stringify(
+        getData().cooperativas.find((c) => c.id === coopId)?.cobrancaSaas ?? null
+      );
       updateData((d) => {
         let next = patchCobrancaSaas(d, coopId, json.cobrancaSaas!);
         next = sincronizarCicloCobrancaSaas(next, coopId);
         return next;
       });
-      const coop = getData().cooperativas.find((c) => c.id === coopId);
-      if (coop?.cobrancaSaas) {
-        void pushCobrancaSaasToCloud(coop.cnpj, coop.cobrancaSaas);
+      const afterJson = JSON.stringify(
+        getData().cooperativas.find((c) => c.id === coopId)?.cobrancaSaas ?? null
+      );
+      if (beforeJson !== afterJson) {
+        const coop = getData().cooperativas.find((c) => c.id === coopId);
+        if (coop?.cobrancaSaas) {
+          void pushCobrancaSaasToCloud(coop.cnpj, coop.cobrancaSaas);
+        }
       }
     }
 
@@ -150,12 +158,19 @@ export function HbUnifiedPaymentPanel({ cnpj, mesReferenciaContaCoop, compact, o
     }
   }, [cnpj, coopId, user?.name]);
 
+  const initialLoadKeyRef = useRef("");
+
   useEffect(() => {
+    if (!cnpj) return;
+    const loadKey = `${cnpj}:${mesReferenciaContaCoop ?? ""}`;
+    if (initialLoadKeyRef.current === loadKey) return;
+    initialLoadKeyRef.current = loadKey;
+
     void (async () => {
       await syncLocalFromCloud();
       await reloadPreview({ autoPix: true });
     })();
-  }, [syncLocalFromCloud, reloadPreview]);
+  }, [cnpj, mesReferenciaContaCoop, syncLocalFromCloud, reloadPreview]);
 
   useEffect(() => {
     if (!chargeId) return;
@@ -170,8 +185,6 @@ export function HbUnifiedPaymentPanel({ cnpj, mesReferenciaContaCoop, compact, o
           await syncLocalFromCloud(chargeId);
           await reloadPreview({ autoPix: false });
           onPaid?.();
-        } else {
-          await reloadPreview({ autoPix: false });
         }
       })();
     }, 8000);

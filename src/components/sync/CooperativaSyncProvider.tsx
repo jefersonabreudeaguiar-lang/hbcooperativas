@@ -55,6 +55,20 @@ import type { UserRole } from "@/types";
 const COOPERADO_PUSH_GAP_MS = 5 * 60 * 1000;
 /** Intervalo mínimo entre pulls de operacional só para votação (bem menor que sync completa). */
 const VOTACAO_OPERACIONAL_PULL_GAP_MS = 25_000;
+/** Evita sync infinita — libera o chip "Atualizando…" mesmo em cooperativas grandes. */
+const SYNC_TIMEOUT_MS = 90_000;
+
+function withSyncTimeout<T>(promise: Promise<T>, label: string): Promise<T> {
+  return Promise.race([
+    promise,
+    new Promise<T>((_, reject) => {
+      setTimeout(
+        () => reject(new Error(`${label} demorou demais. Tente de novo em instantes.`)),
+        SYNC_TIMEOUT_MS
+      );
+    }),
+  ]);
+}
 
 /** Upload/finalização de fotos do cooperado — roda após liberar o indicador “Atualizando…”. */
 async function runCooperadoFotoUploadsInBackground(
@@ -292,60 +306,64 @@ export function CooperativaSyncProvider({ children }: { children: React.ReactNod
 
       const cooperadoLogado = currentUser.role === "cooperado";
 
-      if (cooperadoLogado) {
-        const cooperadoCanonico =
-          currentUser.cooperadoId &&
-          resolverCooperadoIdCanonico(getData(), currentUser.cooperadoId, currentCoopId);
-        await syncCooperativaBackground(cnpj, currentCoopId, cooperadoCanonico || undefined);
-        if (cooperadoCanonico) {
-          const recovered = await ensureCooperadoFinanceiroFromCloud(
-            cnpj,
-            currentCoopId,
-            cooperadoCanonico
-          );
-          if (
-            !recovered &&
-            cooperadoFinanceiroDesatualizado(getData(), cooperadoCanonico, currentCoopId)
-          ) {
-            setLastSyncError(
-              getLastCloudSyncError() ||
-                "Não foi possível baixar sua ficha. Verifique a internet e toque em Atualizar agora."
-            );
-            reportHobeliscoSyncEvent({
-              eventType: "sync_ficha_pull_failure",
-              cooperativeId: cnpj,
-              outcome: "failure",
-              durationMs: Date.now() - syncStartedAt,
-            });
+      await withSyncTimeout(
+        (async () => {
+          if (cooperadoLogado) {
+            const cooperadoCanonico =
+              currentUser.cooperadoId &&
+              resolverCooperadoIdCanonico(getData(), currentUser.cooperadoId, currentCoopId);
+            await syncCooperativaBackground(cnpj, currentCoopId, cooperadoCanonico || undefined);
+            if (cooperadoCanonico) {
+              const recovered = await ensureCooperadoFinanceiroFromCloud(
+                cnpj,
+                currentCoopId,
+                cooperadoCanonico
+              );
+              if (
+                !recovered &&
+                cooperadoFinanceiroDesatualizado(getData(), cooperadoCanonico, currentCoopId)
+              ) {
+                setLastSyncError(
+                  getLastCloudSyncError() ||
+                    "Não foi possível baixar sua ficha. Verifique a internet e toque em Atualizar agora."
+                );
+                reportHobeliscoSyncEvent({
+                  eventType: "sync_ficha_pull_failure",
+                  cooperativeId: cnpj,
+                  outcome: "failure",
+                  durationMs: Date.now() - syncStartedAt,
+                });
+              }
+            }
+          } else {
+            const pushCatalog = isDiretoriaRole(currentUser.role as UserRole);
+            const pushMensalidades = isDiretoriaRole(currentUser.role as UserRole);
+            await syncCooperativaBidirectional(cnpj, currentCoopId, { pushCatalog, pushMensalidades });
           }
-        }
-      } else {
-        const pushCatalog = isDiretoriaRole(currentUser.role as UserRole);
-        const pushMensalidades = isDiretoriaRole(currentUser.role as UserRole);
-        await syncCooperativaBidirectional(cnpj, currentCoopId, { pushCatalog, pushMensalidades });
-      }
 
-      if (currentUser.role === "cooperado" && currentUser.cooperadoId) {
-        const latest = getData();
-        const cooperadoCanonico = resolverCooperadoIdCanonico(latest, currentUser.cooperadoId, currentCoopId);
-        await refreshCooperadoNotasEmAnalise(cnpj, currentUser.cooperadoId, currentCoopId);
-        // Garante que entregas "em análise" locais estejam publicadas na nuvem
-        // (visíveis para o responsável) após trocar de aba / sync.
-        await republishLocalAguardandoConferencia(cnpj, currentUser.cooperadoId, currentCoopId);
+          if (currentUser.role === "cooperado" && currentUser.cooperadoId) {
+            const latest = getData();
+            const cooperadoCanonico = resolverCooperadoIdCanonico(latest, currentUser.cooperadoId, currentCoopId);
+            await refreshCooperadoNotasEmAnalise(cnpj, currentUser.cooperadoId, currentCoopId);
+            await republishLocalAguardandoConferencia(cnpj, currentUser.cooperadoId, currentCoopId);
 
-        const registro = latest.cooperados.find((c) => c.id === cooperadoCanonico);
+            const registro = latest.cooperados.find((c) => c.id === cooperadoCanonico);
 
-        if (registro && now - lastCooperadoPushRef.current >= COOPERADO_PUSH_GAP_MS) {
-          await pushCooperadoToCloud(cnpj, registro, currentUser.email);
-          lastCooperadoPushRef.current = Date.now();
-        }
+            if (registro && now - lastCooperadoPushRef.current >= COOPERADO_PUSH_GAP_MS) {
+              await pushCooperadoToCloud(cnpj, registro, currentUser.email);
+              lastCooperadoPushRef.current = Date.now();
+            }
 
-        fotoUploadBackground = {
-          cnpj,
-          cooperadoCanonico,
-          cooperadoNome: getCooperadoNome(latest.cooperados, cooperadoCanonico),
-        };
-      }
+            fotoUploadBackground = {
+              cnpj,
+              cooperadoCanonico,
+              cooperadoNome: getCooperadoNome(latest.cooperados, cooperadoCanonico),
+            };
+          }
+        })(),
+        "Sincronização"
+      );
+
       completed = true;
       if (cooperadoLogado && currentUser.cooperadoId) {
         const cooperadoCanonico = resolverCooperadoIdCanonico(
@@ -378,10 +396,14 @@ export function CooperativaSyncProvider({ children }: { children: React.ReactNod
           durationMs: Date.now() - syncStartedAt,
         });
       }
+    } catch (e) {
+      if (!completed) {
+        setLastSyncError(e instanceof Error ? e.message : "Erro na sincronização.");
+      }
     } finally {
       syncingRef.current = false;
       setSyncing(false);
-      if (completed) setLastSyncedAt(Date.now());
+      setLastSyncedAt(Date.now());
     }
 
     if (fotoUploadBackground) {
