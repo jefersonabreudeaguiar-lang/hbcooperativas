@@ -15,6 +15,7 @@ import {
 } from "./hobeliscoLabBoundary";
 import { isHobeliscoLabEnabledServer } from "./hobeliscoLabGate";
 import { isHobeliscoV2ObserverEnabledServer } from "./hobeliscoV2Gate";
+import { getMirrorSyncStatus, MIRROR_STALE_HOURS } from "./hobeliscoMirrorSync";
 
 export interface HobeliscoLabMirrorConfig {
   environment: string;
@@ -34,16 +35,27 @@ export interface HobeliscoLabMirrorConfig {
 
 export interface HobeliscoLabMirrorHealth {
   ok: boolean;
-  phase: "0-foundation";
+  phase: "0-foundation" | "1-mirror-sync";
   mode: "LAB_MIRROR";
   config: HobeliscoLabMirrorConfig;
   boundary: HobeliscoBoundaryReport;
+  mirror: {
+    enabled: boolean;
+    stale: boolean;
+    staleHours: number;
+    codeAligned: boolean;
+    lastSyncedAt: string | null;
+    prodCommitSha: string | null;
+    labCommitSha: string | null;
+    issues: string[];
+  };
   gates: {
     boundaryClear: boolean;
     labEnabled: boolean;
     observerEnabled: boolean;
     notProductionDeploy: boolean;
     mirrorMarker: boolean;
+    mirrorFresh: boolean;
   };
   issues: string[];
   recommendations: string[];
@@ -73,9 +85,12 @@ export function loadHobeliscoLabMirrorConfig(env: NodeJS.ProcessEnv = process.en
   };
 }
 
-export function checkHobeliscoLabMirrorHealth(env: NodeJS.ProcessEnv = process.env): HobeliscoLabMirrorHealth {
+export async function checkHobeliscoLabMirrorHealth(
+  env: NodeJS.ProcessEnv = process.env
+): Promise<HobeliscoLabMirrorHealth> {
   const config = loadHobeliscoLabMirrorConfig(env);
   const boundary = evaluateHobeliscoLabBoundary(env);
+  const mirrorStatus = await getMirrorSyncStatus(env);
   const issues: string[] = [];
   const recommendations: string[] = [];
 
@@ -113,6 +128,20 @@ export function checkHobeliscoLabMirrorHealth(env: NodeJS.ProcessEnv = process.e
     recommendations.push("Defina HB_HOBELISCO_PROBE_COOP_CNPJ para probes read-only.");
   }
 
+  if (mirrorStatus.enabled && !mirrorStatus.lastSnapshot) {
+    recommendations.push("Execute npm run lab:hobelisco:mirror-sync ou aguarde cron diário.");
+  }
+
+  if (mirrorStatus.stale) {
+    issues.push(
+      `Espelho desatualizado há ${mirrorStatus.staleHours}h (limite ${MIRROR_STALE_HOURS}h).`
+    );
+  }
+
+  if (mirrorStatus.lastSnapshot && !mirrorStatus.codeAligned) {
+    issues.push("Código LAB diverge de prod/main — redeploy LAB a partir de main.");
+  }
+
   for (const tripwire of boundary.tripwires.filter((t) => t.severity === "BLOCK")) {
     issues.push(tripwire.message);
   }
@@ -123,7 +152,11 @@ export function checkHobeliscoLabMirrorHealth(env: NodeJS.ProcessEnv = process.e
     observerEnabled: isHobeliscoV2ObserverEnabledServer(env),
     notProductionDeploy: !boundary.productionLocked,
     mirrorMarker: config.mirrorEnabled && config.labDeploy,
+    mirrorFresh: mirrorStatus.enabled && !mirrorStatus.stale && Boolean(mirrorStatus.lastSnapshot),
   };
+
+  const phase: HobeliscoLabMirrorHealth["phase"] =
+    gates.mirrorFresh && gates.boundaryClear ? "1-mirror-sync" : "0-foundation";
 
   const ok =
     gates.boundaryClear &&
@@ -134,21 +167,31 @@ export function checkHobeliscoLabMirrorHealth(env: NodeJS.ProcessEnv = process.e
 
   return {
     ok,
-    phase: "0-foundation",
+    phase,
     mode: "LAB_MIRROR",
     config,
     boundary,
+    mirror: {
+      enabled: mirrorStatus.enabled,
+      stale: mirrorStatus.stale,
+      staleHours: mirrorStatus.staleHours,
+      codeAligned: mirrorStatus.codeAligned,
+      lastSyncedAt: mirrorStatus.lastSnapshot?.syncedAt ?? null,
+      prodCommitSha: mirrorStatus.lastSnapshot?.prodCommitSha ?? null,
+      labCommitSha: mirrorStatus.lastSnapshot?.labCommitSha ?? null,
+      issues: mirrorStatus.issues,
+    },
     gates,
     issues,
     recommendations,
   };
 }
 
-export function assertHobeliscoLabMirrorReady(env: NodeJS.ProcessEnv = process.env): {
+export async function assertHobeliscoLabMirrorReady(env: NodeJS.ProcessEnv = process.env): Promise<{
   ok: boolean;
   health: HobeliscoLabMirrorHealth;
-} {
-  const health = checkHobeliscoLabMirrorHealth(env);
+}> {
+  const health = await checkHobeliscoLabMirrorHealth(env);
   const boundaryAssert = assertHobeliscoLabBoundary(env);
   return { ok: health.ok && boundaryAssert.ok, health };
 }

@@ -15,7 +15,7 @@ export async function GET(request: Request) {
   if (adminDenied) return adminDenied;
 
   const boundary = evaluateHobeliscoLabBoundary();
-  const health = checkHobeliscoLabMirrorHealth();
+  const health = await checkHobeliscoLabMirrorHealth();
 
   if (health.ok) {
     initHobeliscoObserver();

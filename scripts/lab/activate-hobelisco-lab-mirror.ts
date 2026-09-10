@@ -26,7 +26,7 @@ async function main() {
   loadEnvFile(resolve(process.cwd(), ".env.local"));
   loadEnvFile(resolve(process.cwd(), ".env.hobelisco-lab"));
 
-  const health = checkHobeliscoLabMirrorHealth();
+  const health = await checkHobeliscoLabMirrorHealth();
   const { boundary, config, gates } = health;
 
   console.log(`Deploy: ${boundary.deployKind} | Hobelisco env: ${config.environment}`);
@@ -56,7 +56,7 @@ async function main() {
     for (const r of health.recommendations) console.log(`  - ${r}`);
   }
 
-  const ready = assertHobeliscoLabMirrorReady();
+  const ready = await assertHobeliscoLabMirrorReady();
   if (ready.ok) {
     const init = initHobeliscoObserver();
     console.log(`\nObserver init: ${init.enabled ? "RUNNING" : init.reason}`);

@@ -10,6 +10,16 @@ interface LabMirrorHealthResponse {
   ok: boolean;
   phase: string;
   mode: string;
+  mirror?: {
+    enabled: boolean;
+    stale: boolean;
+    staleHours: number;
+    codeAligned: boolean;
+    lastSyncedAt: string | null;
+    prodCommitSha: string | null;
+    labCommitSha: string | null;
+    issues: string[];
+  };
   boundary: {
     deployKind: string;
     safe: boolean;
@@ -66,9 +76,24 @@ export function HobeliscoLabMirrorBadge() {
     );
   }
 
-  const { boundary, ok } = health;
+  const { boundary, ok, mirror } = health;
   const isProdLock = boundary.productionLocked;
-  const Icon = isProdLock ? Shield : ok ? CheckCircle2 : boundary.mirrorMode ? FlaskConical : AlertTriangle;
+  const mirrorOk = mirror && !mirror.stale && mirror.codeAligned;
+  const Icon = isProdLock ? Shield : ok && mirrorOk ? CheckCircle2 : boundary.mirrorMode ? FlaskConical : AlertTriangle;
+
+  const formatSyncedAt = (iso: string | null | undefined) => {
+    if (!iso) return "nunca";
+    try {
+      return new Date(iso).toLocaleString("pt-BR", {
+        day: "2-digit",
+        month: "2-digit",
+        hour: "2-digit",
+        minute: "2-digit",
+      });
+    } catch {
+      return iso;
+    }
+  };
 
   return (
     <Card
@@ -106,13 +131,40 @@ export function HobeliscoLabMirrorBadge() {
             >
               {isProdLock
                 ? "Produção protegida"
-                : ok
+                : ok && mirrorOk
                   ? "Espelho LAB OK"
-                  : "Espelho LAB pendente"}
+                  : mirror?.stale
+                    ? "Espelho desatualizado"
+                    : ok
+                      ? "Espelho LAB OK"
+                      : "Espelho LAB pendente"}
             </span>
             <span className="text-xs text-gray-500">{boundary.deployKind}</span>
+            {health.phase === "1-mirror-sync" && (
+              <span className="text-xs text-cyan-700">Fase 1</span>
+            )}
           </div>
           <p className="text-sm text-gray-700">{boundary.banner.subtitle}</p>
+          {mirror && !isProdLock && (
+            <p className="text-xs text-gray-600">
+              Espelho: {formatSyncedAt(mirror.lastSyncedAt)}
+              {mirror.prodCommitSha && (
+                <>
+                  {" "}
+                  · prod <code className="bg-slate-100 px-1 rounded">{mirror.prodCommitSha}</code>
+                </>
+              )}
+              {mirror.labCommitSha && (
+                <>
+                  {" "}
+                  · lab <code className="bg-slate-100 px-1 rounded">{mirror.labCommitSha}</code>
+                </>
+              )}
+              {mirror.stale && (
+                <span className="text-amber-700"> · atraso {mirror.staleHours}h</span>
+              )}
+            </p>
+          )}
           <dl className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-xs text-gray-600">
             <div>
               <dt className="text-gray-400">App Supabase</dt>

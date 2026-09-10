@@ -48,6 +48,7 @@
     "lab:hobelisco:adaptive-defense": "npx tsx scripts/lab/run-hobelisco-adaptive-defense-audit.ts",
     "lab:hobelisco:10x": "npx tsx scripts/lab/run-hobelisco-10x.ts",
     "lab:hobelisco:10x:quick": "npx tsx scripts/lab/run-hobelisco-10x.ts -- --quick",
+    "lab:hobelisco:mirror-sync": "npx tsx scripts/lab/run-hobelisco-mirror-sync.ts",
     "hobelisco:staging:activate": "npx tsx scripts/lab/activate-hobelisco-staging-observe.ts",
     "hobelisco:lab:activate": "npx tsx scripts/lab/activate-hobelisco-lab-mirror.ts",
     "setup:vercel-lab-preview": "node scripts/setup-vercel-lab-preview.mjs",
