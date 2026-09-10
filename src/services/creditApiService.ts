@@ -9,6 +9,7 @@ import type {
   ContaCoopParceiro,
   ContaCoopPixChangeRequest,
   ContaCoopPinResetRequest,
+  ContaCoopCooperadoPinResetRequest,
   ContaCoopSettlement,
   ContaCoopSolicitacaoEstorno,
 } from "@/modules/hb-credit/types";
@@ -120,8 +121,27 @@ export async function fetchCreditAccount(cnpj: string, cooperadoId: string) {
   const res = await secureApiFetch(
     `/api/credit/account?cnpj=${encodeURIComponent(cnpj)}&cooperadoId=${encodeURIComponent(cooperadoId)}`
   );
-  const data = await parseJson<{ ok?: boolean; account?: ContaCoopLimiteCooperado; updatedAt?: string | null }>(res);
+  const data = await parseJson<{
+    ok?: boolean;
+    account?: ContaCoopLimiteCooperado;
+    updatedAt?: string | null;
+    hasPin?: boolean;
+    pinResetPending?: boolean;
+  }>(res);
   if (!res.ok || !data.ok) throw new Error(data.error ?? "Erro ao carregar conta.");
+  return data;
+}
+
+export async function requestCooperadoPinReset(cnpj: string, cooperadoId: string) {
+  const res = await secureApiFetch("/api/credit/account", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ action: "request_pin_reset", cnpj, cooperadoId }),
+  });
+  const data = await parseJson<{ ok?: boolean; error?: string; message?: string; pinResetPending?: boolean }>(res);
+  if (!res.ok || !data.ok) {
+    throw new Error(data.error ?? "Não foi possível solicitar reset do PIN.");
+  }
   return data;
 }
 
@@ -302,6 +322,21 @@ export async function fetchPartnerPinResetRequests(cnpj: string): Promise<ContaC
   const res = await secureApiFetch(`/api/credit/partner-pin-reset?cnpj=${encodeURIComponent(cnpj)}`);
   const data = await parseJson<{ ok?: boolean; error?: string; solicitacoes?: ContaCoopPinResetRequest[] }>(res);
   if (!res.ok || !data.ok) throw new Error(data.error ?? "Erro ao carregar solicitações de reset de PIN.");
+  return data.solicitacoes ?? [];
+}
+
+export async function fetchCooperadoPinResetRequests(
+  cnpj: string
+): Promise<ContaCoopCooperadoPinResetRequest[]> {
+  const res = await secureApiFetch(`/api/credit/cooperado-pin-reset?cnpj=${encodeURIComponent(cnpj)}`);
+  const data = await parseJson<{
+    ok?: boolean;
+    error?: string;
+    solicitacoes?: ContaCoopCooperadoPinResetRequest[];
+  }>(res);
+  if (!res.ok || !data.ok) {
+    throw new Error(data.error ?? "Erro ao carregar solicitações de reset de PIN do cooperado.");
+  }
   return data.solicitacoes ?? [];
 }
 

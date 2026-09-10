@@ -17,6 +17,7 @@ import {
   authorizeCreditPayment,
   fetchCreditAccount,
   fetchCreditLedger,
+  requestCooperadoPinReset,
   setCreditFinancialPin,
   validateCreditQr,
 } from "@/services/creditApiService";
@@ -55,6 +56,7 @@ function MinhaContaCoopContent() {
   const [account, setAccount] = useState<ContaCoopLimiteCooperado | null>(null);
   const [updatedAt, setUpdatedAt] = useState<string | null>(null);
   const [hasPin, setHasPin] = useState(false);
+  const [pinResetPending, setPinResetPending] = useState(false);
   const [ledger, setLedger] = useState<ContaCoopLedgerEntry[]>([]);
   const [pinSetup, setPinSetup] = useState("");
   const [qrInput, setQrInput] = useState("");
@@ -116,7 +118,8 @@ function MinhaContaCoopContent() {
       const acc = await fetchCreditAccount(cnpj, cooperadoId);
       setAccount((acc.account as ContaCoopLimiteCooperado) ?? null);
       setUpdatedAt(acc.updatedAt ?? null);
-      setHasPin(Boolean((acc as { hasPin?: boolean }).hasPin));
+      setHasPin(Boolean(acc.hasPin));
+      setPinResetPending(Boolean(acc.pinResetPending));
       const lg = await fetchCreditLedger(cnpj, cooperadoId);
       setLedger(lg);
     } catch (e) {
@@ -175,10 +178,33 @@ function MinhaContaCoopContent() {
     try {
       await setCreditFinancialPin(cnpj, cooperadoId, pinSetup);
       setHasPin(true);
+      setPinResetPending(false);
       setPinSetup("");
       setSuccess("PIN cadastrado. Agora você pode pagar nos mercados parceiros.");
     } catch (e) {
       setError(e instanceof Error ? e.message : "Erro ao salvar PIN.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const solicitarResetPin = async () => {
+    if (!cnpj || !cooperadoId) return;
+    const msg =
+      "Solicitar reset do PIN de pagamento?\n\n" +
+      "O responsável da cooperativa receberá o pedido em Conta Coop → Limites e precisará confirmar o reset. " +
+      "Depois você cadastra um PIN novo aqui.";
+    if (!window.confirm(msg)) return;
+
+    setBusy(true);
+    setError("");
+    setSuccess("");
+    try {
+      const data = await requestCooperadoPinReset(cnpj, cooperadoId);
+      setPinResetPending(true);
+      setSuccess(data.message ?? "Solicitação enviada à cooperativa.");
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Erro ao solicitar reset do PIN.");
     } finally {
       setBusy(false);
     }
@@ -344,19 +370,26 @@ function MinhaContaCoopContent() {
               >
                 Cadastrar PIN
               </Button>
-              <p className="text-xs text-gray-500">
-                Esqueceu o PIN de pagamento? Peça ao responsável da cooperativa para resetar em{" "}
-                <strong>Conta Coop → Limites</strong>. Depois cadastre um PIN novo aqui.
-              </p>
+              {pinResetPending && (
+                <p className="text-sm text-cyan-800 bg-cyan-50 border border-cyan-200 rounded-lg px-3 py-2">
+                  Solicitação de reset enviada. Aguarde o responsável em Conta Coop → Limites.
+                </p>
+              )}
             </Card>
           ) : (
             <>
               <Button size="lg" className="w-full" onClick={() => router.push("/minha-conta-coop/escanear")} disabled={account?.bloqueado}>
                 Pagar com QR Code
               </Button>
-              <p className="text-xs text-center text-gray-500">
-                Esqueceu o PIN? O responsável da cooperativa pode resetar em Conta Coop → Limites.
-              </p>
+              {pinResetPending ? (
+                <p className="text-sm text-cyan-800 bg-cyan-50 border border-cyan-200 rounded-lg px-3 py-2">
+                  Solicitação de reset enviada. Aguarde o responsável da cooperativa em Conta Coop → Limites.
+                </p>
+              ) : (
+                <Button variant="secondary" className="w-full" onClick={() => void solicitarResetPin()} disabled={busy}>
+                  Esqueci meu PIN — solicitar reset
+                </Button>
+              )}
             </>
           )}
         </>
@@ -437,7 +470,7 @@ function MinhaContaCoopContent() {
                   placeholder="••••"
                 />
                 <p className="mt-2 text-xs text-gray-500">
-                  Esqueceu o PIN? Peça ao responsável da cooperativa para resetar em Conta Coop → Limites.
+                  Esqueceu o PIN? Use <strong>Esqueci meu PIN — solicitar reset</strong> na aba Início.
                 </p>
               </div>
               <div className="flex gap-2">
