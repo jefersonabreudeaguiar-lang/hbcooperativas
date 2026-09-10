@@ -1,0 +1,747 @@
+{
+  "generatedAt": "2026-09-09T00:47:46.255Z",
+  "scenariosRun": 10,
+  "scenariosPassed": 10,
+  "microSimulations": 1000,
+  "microSimulationsPassed": 1000,
+  "mandatoryTests": [
+    {
+      "category": "financial",
+      "id": "no-ledger",
+      "label": "Nunca altera ledger",
+      "passed": true,
+      "detail": "FinancialGuard ALTER_LEDGER"
+    },
+    {
+      "category": "financial",
+      "id": "no-balance",
+      "label": "Nunca altera saldo",
+      "passed": true,
+      "detail": "FinancialGuard ALTER_BALANCE"
+    },
+    {
+      "category": "financial",
+      "id": "no-credit",
+      "label": "Nunca altera créditos",
+      "passed": true,
+      "detail": "FinancialGuard ALTER_CREDIT"
+    },
+    {
+      "category": "financial",
+      "id": "no-rls",
+      "label": "Nunca altera RLS",
+      "passed": true,
+      "detail": "AutoRepair bloqueia RLS"
+    },
+    {
+      "category": "financial",
+      "id": "no-migration",
+      "label": "Nunca executa migration",
+      "passed": true,
+      "detail": "AutoRepair bloqueia migration"
+    },
+    {
+      "category": "financial",
+      "id": "no-admin",
+      "label": "Nunca cria admin",
+      "passed": true,
+      "detail": "AutoRepair bloqueia admin"
+    },
+    {
+      "category": "financial",
+      "id": "no-history",
+      "label": "Nunca apaga histórico",
+      "passed": true,
+      "detail": "AutoRepair bloqueia histórico"
+    },
+    {
+      "category": "isolation",
+      "id": "coop-isolation",
+      "label": "Isolamento cooperativa",
+      "passed": true,
+      "detail": "Invariante presente"
+    },
+    {
+      "category": "isolation",
+      "id": "invariants-full",
+      "label": "9 invariantes V1",
+      "passed": true,
+      "detail": "9 invariantes"
+    },
+    {
+      "category": "heartbeat",
+      "id": "heartbeat-pulse",
+      "label": "Heartbeat pulsa",
+      "passed": true,
+      "detail": "HEALTH 90|STATE WATCHING|THREATS 0||AUTH OK|SYNC OK|DATABASE OK|API OK|HB CREDIT OK|PERFORMANCE OK||Self-watch OK"
+    },
+    {
+      "category": "heartbeat",
+      "id": "heartbeat-threats",
+      "label": "Heartbeat inclui THREATS",
+      "passed": true,
+      "detail": "THREATS line"
+    },
+    {
+      "category": "sensors",
+      "id": "sensors-count",
+      "label": "10 sensores",
+      "passed": true,
+      "detail": "10 sensores"
+    },
+    {
+      "category": "memory",
+      "id": "memory-layers",
+      "label": "Memória 3 camadas",
+      "passed": true,
+      "detail": "{\"short\":1,\"mid\":4,\"long\":0}"
+    },
+    {
+      "category": "memory",
+      "id": "memory-rich",
+      "label": "Memória com origem/contexto",
+      "passed": true,
+      "detail": "Campos enrich OK"
+    },
+    {
+      "category": "dna",
+      "id": "dna-version",
+      "label": "Defense DNA versionado",
+      "passed": true,
+      "detail": "DNA-0002"
+    },
+    {
+      "category": "rules",
+      "id": "rules-engine",
+      "label": "Rule engine 15 regras",
+      "passed": true,
+      "detail": "15 regras"
+    },
+    {
+      "category": "rules",
+      "id": "rules-active",
+      "label": "Regras ativas",
+      "passed": true,
+      "detail": "15 ativas"
+    },
+    {
+      "category": "risk",
+      "id": "risk-l3",
+      "label": "Crítico → L3",
+      "passed": true,
+      "detail": "L3_HUMAN_REQUIRED"
+    },
+    {
+      "category": "risk",
+      "id": "risk-no-financial-repair",
+      "label": "Sem reparo financeiro auto",
+      "passed": true,
+      "detail": "riskAllowsFinancialRepair=false"
+    },
+    {
+      "category": "antibodies",
+      "id": "antibodies-registry",
+      "label": "Anticorpos registrados",
+      "passed": true,
+      "detail": "5 anticorpos"
+    },
+    {
+      "category": "threat",
+      "id": "threat-fp-format",
+      "label": "Fingerprint THREAT-FP-*",
+      "passed": true,
+      "detail": "THREAT-FP-ACB89B5E"
+    },
+    {
+      "category": "validation",
+      "id": "guardian",
+      "label": "Guardian valida",
+      "passed": true,
+      "detail": "repair"
+    },
+    {
+      "category": "validation",
+      "id": "circuit-breaker",
+      "label": "Circuit breaker abre em 3",
+      "passed": true,
+      "detail": "failures=3"
+    },
+    {
+      "category": "audit",
+      "id": "audit-chain",
+      "label": "Audit chain encadeada",
+      "passed": true,
+      "detail": "hash OK"
+    },
+    {
+      "category": "audit",
+      "id": "audit-evidence",
+      "label": "Preserva evidências",
+      "passed": true,
+      "detail": "core chain OK"
+    },
+    {
+      "category": "fortress",
+      "id": "fortress-mode",
+      "label": "Fortress mode",
+      "passed": true,
+      "detail": "NORMAL"
+    },
+    {
+      "category": "metabolism",
+      "id": "defense-budget",
+      "label": "Defense budget",
+      "passed": true,
+      "detail": "6/10"
+    },
+    {
+      "category": "remediation",
+      "id": "auto-repair-allowed",
+      "label": "Reparo reversível permitido",
+      "passed": true,
+      "detail": "CLEAR_CACHE,REBUILD_LOCAL_INDEX,RESTART_SYNC_QUEUE,REFRESH_SERVICE_WORKER,REBUILD_LOCAL_STATE"
+    },
+    {
+      "category": "organism",
+      "id": "manifesto",
+      "label": "Manifesto 7 princípios",
+      "passed": true,
+      "detail": "7 princípios"
+    },
+    {
+      "category": "learning",
+      "id": "learning-insights",
+      "label": "Learning insights",
+      "passed": true,
+      "detail": "3 insights"
+    },
+    {
+      "category": "organism",
+      "id": "idempotency",
+      "label": "Invariante idempotência",
+      "passed": true,
+      "detail": "INVARIANT_IDEMPOTENCY"
+    }
+  ],
+  "allMandatoryPassed": true,
+  "snapshot": {
+    "version": "HX-0.2.0-lab-v1",
+    "state": "SAFE_MODE",
+    "flags": {
+      "enabled": false,
+      "mode": "observe",
+      "autoRepair": true,
+      "fortress": false,
+      "arena": true
+    },
+    "heart": {
+      "healthScore": 77,
+      "state": "SAFE_MODE",
+      "fortressLevel": "NORMAL",
+      "threatCount": 3,
+      "selfWatchOk": true,
+      "lines": [
+        "HEALTH 77",
+        "STATE SAFE_MODE",
+        "THREATS 3",
+        "",
+        "AUTH WARN",
+        "SYNC WARN",
+        "DATABASE OK",
+        "API OK",
+        "HB CREDIT OK",
+        "PERFORMANCE OK",
+        "",
+        "Self-watch OK"
+      ],
+      "emittedAt": "2026-09-09T00:47:46.255Z"
+    },
+    "health": {
+      "overall": 77,
+      "dimensions": [
+        {
+          "id": "auth",
+          "label": "Auth",
+          "score": 70,
+          "status": "WARN"
+        },
+        {
+          "id": "sync",
+          "label": "Sync",
+          "score": 70,
+          "status": "WARN"
+        },
+        {
+          "id": "database",
+          "label": "Database",
+          "score": 100,
+          "status": "OK"
+        },
+        {
+          "id": "api",
+          "label": "API",
+          "score": 100,
+          "status": "OK"
+        },
+        {
+          "id": "hb_credit",
+          "label": "HB Credits",
+          "score": 100,
+          "status": "OK"
+        },
+        {
+          "id": "performance",
+          "label": "Performance",
+          "score": 100,
+          "status": "OK"
+        },
+        {
+          "id": "integrity",
+          "label": "Integrity",
+          "score": 70,
+          "status": "WARN"
+        },
+        {
+          "id": "cache",
+          "label": "Cache",
+          "score": 100,
+          "status": "OK"
+        },
+        {
+          "id": "device",
+          "label": "Device",
+          "score": 100,
+          "status": "OK"
+        },
+        {
+          "id": "behavior",
+          "label": "Behavior",
+          "score": 30,
+          "status": "CRIT"
+        }
+      ],
+      "cooperatives": [
+        {
+          "cooperativeCnpj": "62351750000165",
+          "cooperativeName": "CoopeagriPla",
+          "score": 92,
+          "status": "OK"
+        },
+        {
+          "cooperativeCnpj": "00000000000000",
+          "cooperativeName": "Coop Simulada B",
+          "score": 78,
+          "status": "WARN"
+        }
+      ],
+      "computedAt": "2026-09-09T00:47:46.255Z"
+    },
+    "fortressLevel": "NORMAL",
+    "defenseBudget": {
+      "level": "NORMAL",
+      "activeSensors": 4,
+      "maxSensors": 10,
+      "description": "Ambiente normal — consumo reduzido"
+    },
+    "circuitBreaker": {
+      "open": false,
+      "failures": 1,
+      "threshold": 3,
+      "lastReason": "repair"
+    },
+    "riskLevel": "L3_HUMAN_REQUIRED",
+    "sensors": [
+      {
+        "sensor": "AUTH",
+        "level": "WARN",
+        "message": "15 falhas auth recentes",
+        "observedAt": "2026-09-09T00:47:46.255Z",
+        "metadata": {
+          "failures": 15
+        }
+      },
+      {
+        "sensor": "SYNC",
+        "level": "WARN",
+        "message": "Push bloqueado por coerência",
+        "observedAt": "2026-09-09T00:47:46.255Z",
+        "metadata": {
+          "blocked": true
+        }
+      },
+      {
+        "sensor": "DATABASE",
+        "level": "OK",
+        "message": "Database OK",
+        "observedAt": "2026-09-09T00:47:46.255Z",
+        "metadata": {
+          "latencyMs": 45
+        }
+      },
+      {
+        "sensor": "API",
+        "level": "OK",
+        "message": "API OK",
+        "observedAt": "2026-09-09T00:47:46.255Z",
+        "metadata": {
+          "rateLimit": "active"
+        }
+      },
+      {
+        "sensor": "HB_CREDIT",
+        "level": "OK",
+        "message": "HB Credits OK",
+        "observedAt": "2026-09-09T00:47:46.255Z",
+        "metadata": {
+          "anomaly": false
+        }
+      },
+      {
+        "sensor": "PERFORMANCE",
+        "level": "OK",
+        "message": "Performance OK",
+        "observedAt": "2026-09-09T00:47:46.255Z",
+        "metadata": {
+          "p95Ms": 120
+        }
+      },
+      {
+        "sensor": "INTEGRITY",
+        "level": "WARN",
+        "message": "Integridade em risco",
+        "observedAt": "2026-09-09T00:47:46.255Z"
+      },
+      {
+        "sensor": "CACHE",
+        "level": "OK",
+        "message": "Cache OK",
+        "observedAt": "2026-09-09T00:47:46.255Z"
+      },
+      {
+        "sensor": "DEVICE",
+        "level": "OK",
+        "message": "Device sensor idle (lab)",
+        "observedAt": "2026-09-09T00:47:46.255Z"
+      },
+      {
+        "sensor": "BEHAVIOR",
+        "level": "CRIT",
+        "message": "Fingerprint comportamental crítico",
+        "observedAt": "2026-09-09T00:47:46.255Z"
+      }
+    ],
+    "memoryStats": {
+      "short": 1,
+      "mid": 4,
+      "long": 3
+    },
+    "recentMemory": [
+      {
+        "id": "mem_1788914866252_eyb819",
+        "layer": "short",
+        "kind": "boot",
+        "summary": "Organismo V1 inicializado no lab",
+        "origin": "core",
+        "context": "arena",
+        "result": "success",
+        "defenseUsed": null,
+        "efficacy": 100,
+        "at": "2026-09-09T00:47:46.252Z"
+      },
+      {
+        "id": "mem_1788914866253_xcuffj",
+        "layer": "mid",
+        "kind": "repair",
+        "summary": "Reparo reversível simulado: RESTART_SYNC_QUEUE",
+        "origin": "auto_repair",
+        "context": "RESTART_SYNC_QUEUE",
+        "result": "success",
+        "defenseUsed": "RESTART_SYNC_QUEUE",
+        "efficacy": 90,
+        "at": "2026-09-09T00:47:46.253Z"
+      },
+      {
+        "id": "mem_1788914866253_smcbaa",
+        "layer": "mid",
+        "kind": "threat",
+        "summary": "THREAT-FP-D1FCDEC8 low",
+        "origin": "threat_classifier",
+        "context": "sync_push→coherence_fail",
+        "result": "antibody ANTIBODY-SYNC-001",
+        "defenseUsed": "ANTIBODY-SYNC-001",
+        "efficacy": 85,
+        "at": "2026-09-09T00:47:46.253Z"
+      },
+      {
+        "id": "mem_1788914866253_ed67x6",
+        "layer": "mid",
+        "kind": "threat",
+        "summary": "THREAT-FP-FBDDB853 critical",
+        "origin": "threat_classifier",
+        "context": "cross_coop_probe→idor",
+        "result": "antibody ANTIBODY-IDOR-001",
+        "defenseUsed": "ANTIBODY-IDOR-001",
+        "efficacy": 85,
+        "at": "2026-09-09T00:47:46.253Z"
+      },
+      {
+        "id": "mem_1788914866252_mo5e4w",
+        "layer": "mid",
+        "kind": "threat",
+        "summary": "THREAT-FP-FCDE8BB1 medium",
+        "origin": "threat_classifier",
+        "context": "login_fail→login_fail→login_fail→login_fail",
+        "result": "antibody ANTIBODY-AUTH-001",
+        "defenseUsed": "ANTIBODY-AUTH-001",
+        "efficacy": 85,
+        "at": "2026-09-09T00:47:46.252Z"
+      },
+      {
+        "id": "mem_1788914866254_cixdsk",
+        "layer": "long",
+        "kind": "financial_incident",
+        "summary": "Ação financeira proibida pelo HOBELISCO: ALTER_CREDIT → limits",
+        "origin": "financial_guard",
+        "context": "limits",
+        "result": "blocked",
+        "defenseUsed": "FINANCIAL_GUARD",
+        "efficacy": 100,
+        "at": "2026-09-09T00:47:46.254Z"
+      },
+      {
+        "id": "mem_1788914866254_o1jz4m",
+        "layer": "long",
+        "kind": "financial_incident",
+        "summary": "Ação financeira proibida pelo HOBELISCO: ALTER_BALANCE → cooperado",
+        "origin": "financial_guard",
+        "context": "cooperado",
+        "result": "blocked",
+        "defenseUsed": "FINANCIAL_GUARD",
+        "efficacy": 100,
+        "at": "2026-09-09T00:47:46.254Z"
+      },
+      {
+        "id": "mem_1788914866254_qsjjgy",
+        "layer": "long",
+        "kind": "financial_incident",
+        "summary": "Ação financeira proibida pelo HOBELISCO: ALTER_LEDGER → hb_credit_transactions",
+        "origin": "financial_guard",
+        "context": "hb_credit_transactions",
+        "result": "blocked",
+        "defenseUsed": "FINANCIAL_GUARD",
+        "efficacy": 100,
+        "at": "2026-09-09T00:47:46.254Z"
+      }
+    ],
+    "auditChainHead": {
+      "id": "evt_1788914866254_cb1f9eb4",
+      "kind": "FINANCIAL_GUARD",
+      "payload": {
+        "action": "ALTER_CREDIT",
+        "allowed": false
+      },
+      "eventHash": "252ef8b13677cfc1d025829726fea177126edb16f517eb6cc94324f2f429f65c",
+      "previousEventHash": "23df816bce6571f242b7a0b2f37da33682bf8831bc04ce666e3d1380a0dd6118",
+      "at": "2026-09-09T00:47:46.254Z"
+    },
+    "auditChainLength": 18,
+    "defenseDnaVersion": "DNA-0002",
+    "invariants": [
+      "INVARIANT_COOPERATIVE_ISOLATION",
+      "INVARIANT_LEDGER_IMMUTABILITY",
+      "INVARIANT_NO_CROSS_COOPERATIVE_ACCESS",
+      "INVARIANT_IDEMPOTENCY",
+      "INVARIANT_NO_NEGATIVE_CREDIT",
+      "INVARIANT_REFUND_SINGLE_EXECUTION",
+      "INVARIANT_AUTHORIZATION_SERVER_SIDE",
+      "INVARIANT_AUDIT_APPEND_ONLY",
+      "INVARIANT_MIGRATION_VERSIONED"
+    ],
+    "rulesActive": 15,
+    "antibodies": [
+      {
+        "id": "ANTIBODY-IDOR-001",
+        "name": "Bloqueio IDOR cooperativa",
+        "bornFrom": "incident:cross-cnpj-probe",
+        "ruleId": "AUTHZ-001",
+        "version": "1.0.0",
+        "reusable": true
+      },
+      {
+        "id": "ANTIBODY-SYNC-001",
+        "name": "Push incoerente ficha",
+        "bornFrom": "incident:thin-snapshot-push",
+        "ruleId": "SYNC-001",
+        "version": "1.0.0",
+        "reusable": true
+      },
+      {
+        "id": "ANTIBODY-AUTH-001",
+        "name": "Bruteforce login",
+        "bornFrom": "incident:auth-rate-spike",
+        "ruleId": "AUTH-001",
+        "version": "1.0.0",
+        "reusable": true
+      },
+      {
+        "id": "ANTIBODY-ASSINATURA-001",
+        "name": "FSM assinatura bypass",
+        "bornFrom": "incident:legacy-signature-push",
+        "ruleId": "SYNC-003",
+        "version": "1.0.0",
+        "reusable": true
+      },
+      {
+        "id": "ANTIBODY-CREDIT-001",
+        "name": "Duplicidade liquidação",
+        "bornFrom": "incident:settlement-duplicate",
+        "ruleId": "CREDIT-001",
+        "version": "1.0.0",
+        "reusable": true
+      }
+    ],
+    "recentThreats": [
+      {
+        "id": "threat_1788914866253_qmeq",
+        "fingerprint": "THREAT-FP-D1FCDEC8",
+        "sequence": [
+          "sync_push",
+          "coherence_fail"
+        ],
+        "severity": "low",
+        "classifiedAt": "2026-09-09T00:47:46.253Z"
+      },
+      {
+        "id": "threat_1788914866253_glpk",
+        "fingerprint": "THREAT-FP-FBDDB853",
+        "sequence": [
+          "cross_coop_probe",
+          "idor"
+        ],
+        "endpoint": "/api/credit/dashboard",
+        "cooperativeCnpj": "00000000000000",
+        "userRole": "parceiro",
+        "severity": "critical",
+        "classifiedAt": "2026-09-09T00:47:46.253Z"
+      },
+      {
+        "id": "threat_1788914866252_fva5",
+        "fingerprint": "THREAT-FP-FCDE8BB1",
+        "sequence": [
+          "login_fail",
+          "login_fail",
+          "login_fail",
+          "login_fail"
+        ],
+        "severity": "medium",
+        "classifiedAt": "2026-09-09T00:47:46.252Z"
+      }
+    ],
+    "recentImmune": [
+      {
+        "phase": "PREVENT",
+        "action": "Pattern watch: login_fail,login_fail,login_fail,login_fail",
+        "approved": true,
+        "requiresHuman": false,
+        "at": "2026-09-09T00:47:46.252Z"
+      },
+      {
+        "phase": "VALIDATE",
+        "action": "Aguardando Guardian — nenhuma defesa autoaprovada",
+        "approved": false,
+        "requiresHuman": true,
+        "at": "2026-09-09T00:47:46.252Z"
+      },
+      {
+        "phase": "PREVENT",
+        "action": "Pattern watch: cross_coop_probe,idor",
+        "approved": true,
+        "requiresHuman": false,
+        "at": "2026-09-09T00:47:46.253Z"
+      },
+      {
+        "phase": "CONTAIN",
+        "action": "Rate limit + Fortress elevate (simulado)",
+        "approved": true,
+        "requiresHuman": true,
+        "at": "2026-09-09T00:47:46.253Z"
+      },
+      {
+        "phase": "VALIDATE",
+        "action": "Aguardando Guardian — nenhuma defesa autoaprovada",
+        "approved": false,
+        "requiresHuman": true,
+        "at": "2026-09-09T00:47:46.253Z"
+      },
+      {
+        "phase": "PREVENT",
+        "action": "Pattern watch: sync_push,coherence_fail",
+        "approved": true,
+        "requiresHuman": false,
+        "at": "2026-09-09T00:47:46.253Z"
+      },
+      {
+        "phase": "VALIDATE",
+        "action": "Aguardando Guardian — nenhuma defesa autoaprovada",
+        "approved": false,
+        "requiresHuman": true,
+        "at": "2026-09-09T00:47:46.253Z"
+      }
+    ],
+    "lastGuardian": {
+      "ok": false,
+      "stage": "repair",
+      "rollback": true,
+      "humanRequired": true,
+      "details": [
+        "before",
+        "repair",
+        "validate",
+        "health check",
+        "invariant check",
+        "compare",
+        "repair failed → rollback"
+      ]
+    },
+    "learningInsights": [
+      {
+        "pattern": "threat",
+        "occurrences": 3,
+        "suggestedRuleId": "AUTHZ-001",
+        "efficacyAvg": 85
+      },
+      {
+        "pattern": "financial_incident",
+        "occurrences": 3,
+        "suggestedRuleId": "CREDIT-001",
+        "efficacyAvg": 100
+      },
+      {
+        "pattern": "boot",
+        "occurrences": 1,
+        "suggestedRuleId": null,
+        "efficacyAvg": 100
+      },
+      {
+        "pattern": "repair",
+        "occurrences": 1,
+        "suggestedRuleId": null,
+        "efficacyAvg": 90
+      }
+    ],
+    "manifestoPrinciples": [
+      "Eu observo antes de agir.",
+      "Eu lembro antes de decidir.",
+      "Eu verifico antes de confiar.",
+      "Eu aprendo antes de repetir.",
+      "Eu morro apenas na Arena.",
+      "Eu renasço mais forte.",
+      "Eu nunca sacrifico a integridade do HB."
+    ]
+  },
+  "notes": [
+    "Defense registered: def_1788914866227",
+    "Micro-simulações: 1000/1000 (10×100)",
+    "Reincarnation: DEFENSE-V2 validated"
+  ]
+}

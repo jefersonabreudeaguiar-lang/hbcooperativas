@@ -1,0 +1,117 @@
+{
+  "generatedAt": "2026-09-06T23:21:31.772Z",
+  "scale": {
+    "cooperativas": 20,
+    "cooperados": 1000
+  },
+  "before": [
+    {
+      "id": "coerencia",
+      "label": "Coerência de dados",
+      "score": 6.5,
+      "max": 10,
+      "notes": "fichaSyncGuard existe; merge mensalidade/operacional testado; mas operacional monolítico aumenta risco de overwrite parcial."
+    },
+    {
+      "id": "eficiencia",
+      "label": "Eficiência Edge/rede",
+      "score": 4.8,
+      "max": 10,
+      "notes": "Gap 25s gestão + pull operacional inteiro na votação; sem slices; sync periódico off (bom p/ Edge, ruim p/ freshness)."
+    },
+    {
+      "id": "escala",
+      "label": "Prontidão escala 1000/20",
+      "score": 4.5,
+      "max": 10,
+      "notes": "Limite 500 cooperados na lista; operacional 5 MB; hoje ~0,85 MB com 27 coop — projeção 1000 coop ~31 MB (inviável)."
+    },
+    {
+      "id": "resiliencia",
+      "label": "Resiliência / recovery",
+      "score": 6,
+      "max": 10,
+      "notes": "Fingerprints por sessão; dedupe ficha no push; sem manifest remoto por slice; retry manual via UI."
+    },
+    {
+      "id": "seguranca",
+      "label": "Segurança sync",
+      "score": 7,
+      "max": 10,
+      "notes": "Push/pull autenticados; sem validação pré-push estruturada além de guards pontuais."
+    },
+    {
+      "id": "observabilidade",
+      "label": "Observabilidade",
+      "score": 4.5,
+      "max": 10,
+      "notes": "Logs console; simulate-sync-flows; sem métricas Edge agregadas nem dashboard de drift."
+    }
+  ],
+  "after": [
+    {
+      "id": "coerencia",
+      "label": "Coerência de dados",
+      "score": 8,
+      "max": 10,
+      "notes": "Validator lab bloqueia push se ficha/pagamentos/mensalidades inconsistentes; slices reduzem blast radius de merge."
+    },
+    {
+      "id": "eficiencia",
+      "label": "Eficiência Edge/rede",
+      "score": 8.5,
+      "max": 10,
+      "notes": "Pull/push por slice; P0 8–15s; skip ~65–75% pulls redundantes na simulação 1000/20."
+    },
+    {
+      "id": "escala",
+      "label": "Prontidão escala 1000/20",
+      "score": 7,
+      "max": 10,
+      "notes": "Manifest por slice permite sharding futuro; lista cooperados paginada (proposta); operacional não cresce monolítico na rede."
+    },
+    {
+      "id": "resiliencia",
+      "label": "Resiliência / recovery",
+      "score": 7.5,
+      "max": 10,
+      "notes": "Fingerprint por slice + lastConfirmed; reconexão puxa só deltas; P0 priorizado em votação/financeiro."
+    },
+    {
+      "id": "seguranca",
+      "label": "Segurança sync",
+      "score": 7.5,
+      "max": 10,
+      "notes": "Mesma auth produção; camada extra coherenceValidator antes de push simulado."
+    },
+    {
+      "id": "observabilidade",
+      "label": "Observabilidade",
+      "score": 6.5,
+      "max": 10,
+      "notes": "Relatório lab scoreAudit + simulate; hook futuro p/ métricas por slice (não implementado no app)."
+    }
+  ],
+  "beforeOverall": 5.6,
+  "afterOverall": 7.5,
+  "delta": 1.9,
+  "simulation": {
+    "baseline": {
+      "edgeRequests": 5400,
+      "bytesTransferredMb": 8106.23,
+      "redundantPullPct": 96.5
+    },
+    "proposed": {
+      "edgeRequests": 4540,
+      "bytesTransferredMb": 605.69,
+      "redundantPullPct": 15.9
+    },
+    "savingsRequestsPct": 15.9,
+    "savingsBytesPct": 92.5
+  },
+  "coherence": {
+    "baselineIssues": 1,
+    "proposedBlocked": 1,
+    "proposedWarnings": 0
+  }
+}

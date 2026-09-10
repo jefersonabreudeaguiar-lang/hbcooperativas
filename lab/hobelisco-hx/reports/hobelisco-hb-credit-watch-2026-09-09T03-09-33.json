@@ -1,0 +1,53 @@
+{
+  "component": "HB Credit Watch + Playbooks",
+  "mode": "LAB-HARDENED",
+  "status": "RED",
+  "readOnlyFinancialProbe": true,
+  "schedulerEnabledByDefault": false,
+  "snapshots": true,
+  "deduplication": true,
+  "correlationEngineReused": true,
+  "playbooksDeterministic": true,
+  "humanConfirmationRequired": true,
+  "humanExecutionRequired": true,
+  "automaticFinancialMutation": false,
+  "tests": {
+    "T1_integrity_ok": true,
+    "T2_divergence": true,
+    "T3_critical": true,
+    "T4_no_duplicate_run": true,
+    "T5_single_active_finding": false,
+    "T6_resolution_observed": true,
+    "T7_probe_error": false,
+    "T8_scheduler_disabled": true,
+    "T9_prod_blocked": true,
+    "T10_playbook_confirmed": true,
+    "T11_no_playbook_candidate": true,
+    "T12_no_financial_mutation_api": true,
+    "T_security_no_mutation_in_probe": true
+  },
+  "securityChecks": {
+    "probeReadOnly": true,
+    "safetyGuard": true
+  },
+  "filesChanged": [
+    "src/lib/lab/hbCreditWatch/",
+    "src/lib/lab/hobeliscoPlaybooks/",
+    "lab/hobelisco-hx/schema/hb_credit_watch_observability.sql"
+  ],
+  "migrations": [
+    "lab/hobelisco-hx/schema/hb_credit_watch_observability.sql"
+  ],
+  "knownLimitations": [
+    "Snapshots/findings persist in-memory until Supabase observability tables applied",
+    "Cron requires CRON_SECRET and HB_HOBELISCO_CREDIT_WATCH_ENABLED=true"
+  ],
+  "config": {
+    "enabled": false,
+    "intervalMinutes": 15,
+    "probeCoops": [
+      "62351750000165"
+    ]
+  },
+  "summary": "11/13 tests passed"
+}

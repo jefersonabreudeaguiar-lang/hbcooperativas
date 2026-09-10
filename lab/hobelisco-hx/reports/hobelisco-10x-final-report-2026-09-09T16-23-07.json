@@ -1,0 +1,274 @@
+{
+  "version": "HX-0.6.0-LAB-10X",
+  "verdict": "LAB-HARDENED-GREEN",
+  "generatedAt": "2026-09-09T16:23:07.588Z",
+  "baseline": {
+    "version": "HX-0.6.0-LAB-10X",
+    "commit": "76556d1",
+    "recordedAt": "2026-09-09T16:22:00.146Z",
+    "priorMetrics": {
+      "detection": 99.6,
+      "prevention": 55,
+      "coverage": 77,
+      "falsePositiveLab": 0,
+      "financialMutations": 0,
+      "gaps": [
+        "T01_AUTH",
+        "T06_SESSION",
+        "T12_HB_CREDIT"
+      ]
+    }
+  },
+  "campaign": {
+    "campaignId": "HB-HARDEN-20260909-7805",
+    "scenariosExecuted": 100000,
+    "blocked": 45599,
+    "detectedOnly": 22229,
+    "missed": 173,
+    "falsePositive": 0,
+    "inconclusive": 31999,
+    "financialMutations": 0,
+    "defenseCoverageScore": 83.4,
+    "preventionRate": 67.06,
+    "detectionRate": 99.75,
+    "durationMs": 64672,
+    "seed": 20260910
+  },
+  "beforeSample": {
+    "scenariosExecuted": 5000,
+    "preventionRate": 66.27,
+    "missed": 11
+  },
+  "delta": {
+    "detection": 0.15,
+    "prevention": 12.06,
+    "coverage": 6.4,
+    "missed": 173,
+    "blocked": 45599
+  },
+  "extendedScore": {
+    "overall": 7.5,
+    "weakestDimension": {
+      "id": "crossTenant",
+      "score": 5.2
+    },
+    "dimensions": [
+      {
+        "id": "detection",
+        "label": "Detection",
+        "score": 9.9,
+        "weight": 0.1,
+        "evidence": "99.75% det, 173 missed"
+      },
+      {
+        "id": "prevention",
+        "label": "Prevention",
+        "score": 6.7,
+        "weight": 0.1,
+        "evidence": "67.06% blocked"
+      },
+      {
+        "id": "coverage",
+        "label": "Coverage",
+        "score": 8.3,
+        "weight": 0.08,
+        "evidence": "83.4%"
+      },
+      {
+        "id": "auth",
+        "label": "Auth",
+        "score": 7.6,
+        "weight": 0.07,
+        "evidence": "T01_AUTH family"
+      },
+      {
+        "id": "authz",
+        "label": "AuthZ",
+        "score": 5.2,
+        "weight": 0.07,
+        "evidence": "T02_AUTHZ family"
+      },
+      {
+        "id": "session",
+        "label": "Session",
+        "score": 7.1,
+        "weight": 0.06,
+        "evidence": "T06_SESSION family"
+      },
+      {
+        "id": "api",
+        "label": "API",
+        "score": 6.6,
+        "weight": 0.05,
+        "evidence": "T04_WEB_API"
+      },
+      {
+        "id": "integrity",
+        "label": "Integrity",
+        "score": 8.2,
+        "weight": 0.05,
+        "evidence": "T05+T10"
+      },
+      {
+        "id": "credit",
+        "label": "HB Credit",
+        "score": 6.5,
+        "weight": 0.08,
+        "evidence": "T12_HB_CREDIT"
+      },
+      {
+        "id": "sync",
+        "label": "Sync",
+        "score": 8,
+        "weight": 0.06,
+        "evidence": "T11_SYNC"
+      },
+      {
+        "id": "crossTenant",
+        "label": "CrossTenant",
+        "score": 5.2,
+        "weight": 0.07,
+        "evidence": "authz+tenant"
+      },
+      {
+        "id": "abuse",
+        "label": "Abuse/Rate",
+        "score": 8,
+        "weight": 0.05,
+        "evidence": "T07_RATE"
+      },
+      {
+        "id": "threatIntel",
+        "label": "ThreatIntel",
+        "score": 6.5,
+        "weight": 0.04,
+        "evidence": "TKB versioned static"
+      },
+      {
+        "id": "incidentResponse",
+        "label": "IR",
+        "score": 6.5,
+        "weight": 0.04,
+        "evidence": "playbooks+human"
+      },
+      {
+        "id": "audit",
+        "label": "Audit",
+        "score": 9,
+        "weight": 0.04,
+        "evidence": "audit chain LAB"
+      },
+      {
+        "id": "resilience",
+        "label": "Resilience",
+        "score": 7.5,
+        "weight": 0.04,
+        "evidence": "fail-open fabric"
+      },
+      {
+        "id": "regression",
+        "label": "Regression",
+        "score": 10,
+        "weight": 0.06,
+        "evidence": "8/8 SEC-REG"
+      },
+      {
+        "id": "performance",
+        "label": "Performance",
+        "score": 8,
+        "weight": 0.04,
+        "evidence": "64672ms campaign"
+      },
+      {
+        "id": "falsePositive",
+        "label": "FP Control",
+        "score": 8.5,
+        "weight": 0.04,
+        "evidence": "FP=0"
+      }
+    ],
+    "criticalGates": {
+      "financialMutations": 0,
+      "criticalBypass": 173,
+      "productionTargets": 0,
+      "auditIntegrity": true
+    },
+    "gatesPass": true
+  },
+  "benchmark": {
+    "labAdaptiveOverall": 6.9,
+    "v2ObserveOverall": 6.1,
+    "incrementalValueWithWafAndRls": 4.4,
+    "honestAppSecurityContribution": 6.2,
+    "verdict": "COMPLEMENTO VALIOSO — nicho forte; active defense imaturo para prod"
+  },
+  "secReg": {
+    "passed": 8,
+    "total": 8,
+    "tests": [
+      {
+        "id": "SEC-REG-000001",
+        "pass": true,
+        "description": "FinancialGuard bloqueia ALTER_BALANCE"
+      },
+      {
+        "id": "SEC-REG-000002",
+        "pass": true,
+        "description": "Simulação bloqueada em PRODUCTION"
+      },
+      {
+        "id": "SEC-REG-000003",
+        "pass": true,
+        "description": "Learning candidate não deploy sem APPROVED"
+      },
+      {
+        "id": "SEC-REG-000004",
+        "pass": true,
+        "description": "AuthRiskEngine detecta authFailureBurst"
+      },
+      {
+        "id": "SEC-REG-000005",
+        "pass": true,
+        "description": "SessionGuard detecta replay"
+      },
+      {
+        "id": "SEC-REG-000006",
+        "pass": true,
+        "description": "SecurityFabric bloqueia cross-tenant em CONTROLLED_BLOCK"
+      },
+      {
+        "id": "SEC-REG-000007",
+        "pass": true,
+        "description": "WhatsApp desabilitado por default"
+      },
+      {
+        "id": "SEC-REG-000008",
+        "pass": true,
+        "description": "Fabric alerta divergência HB Credit"
+      }
+    ]
+  },
+  "whatsApp": {
+    "config": {
+      "enabled": false,
+      "mode": "disabled"
+    },
+    "lastSend": null
+  },
+  "productionImpact": {
+    "recommended": "STAGING observe-only first",
+    "activeDefenseInProd": false,
+    "phases": [
+      "1 — STAGING observe-only (2–4 semanas)",
+      "2 — Credit watch cron staging",
+      "3 — Produção observe-only canary",
+      "4 — LAB nightly + human policy (contínuo)",
+      "5 — Active defense (opcional, futuro)"
+    ]
+  },
+  "weakestDimension": {
+    "id": "crossTenant",
+    "score": 5.2
+  },
+  "excellentMeasured": false
+}

@@ -1,0 +1,490 @@
+{
+  "generatedAt": "2026-09-08T22:46:44.875Z",
+  "scenariosRun": 6,
+  "scenariosPassed": 6,
+  "mandatoryTests": [
+    {
+      "id": "no-ledger",
+      "label": "Hobelisco não altera ledger",
+      "passed": true,
+      "detail": "FinancialGuard deve bloquear ALTER_LEDGER"
+    },
+    {
+      "id": "no-credit",
+      "label": "Hobelisco não altera crédito",
+      "passed": true,
+      "detail": "FinancialGuard deve bloquear ALTER_CREDIT"
+    },
+    {
+      "id": "no-rls",
+      "label": "Hobelisco não altera RLS",
+      "passed": true,
+      "detail": "Lab não expõe APIs de RLS"
+    },
+    {
+      "id": "no-migration",
+      "label": "Hobelisco não executa migration",
+      "passed": true,
+      "detail": "Nenhum módulo lab invoca migrations"
+    },
+    {
+      "id": "no-admin",
+      "label": "Hobelisco não cria admin",
+      "passed": true,
+      "detail": "Nenhum módulo lab cria usuários admin"
+    },
+    {
+      "id": "coop-isolation",
+      "label": "Hobelisco respeita isolamento cooperativa",
+      "passed": true,
+      "detail": "Invariante registrada e verificável"
+    },
+    {
+      "id": "evidence",
+      "label": "Hobelisco preserva evidências",
+      "passed": true,
+      "detail": "Audit chain íntegra"
+    },
+    {
+      "id": "circuit-breaker",
+      "label": "Hobelisco abre circuit breaker",
+      "passed": true,
+      "detail": "Fortress level: NORMAL"
+    },
+    {
+      "id": "validate-repair",
+      "label": "Hobelisco valida correções",
+      "passed": true,
+      "detail": "Guardian stage: success"
+    },
+    {
+      "id": "memory",
+      "label": "Hobelisco possui memória",
+      "passed": true,
+      "detail": "{\"short\":1,\"mid\":4,\"long\":1}"
+    },
+    {
+      "id": "audit-append-only",
+      "label": "Audit append-only encadeado",
+      "passed": true,
+      "detail": "Hash chain independente OK"
+    }
+  ],
+  "allMandatoryPassed": true,
+  "snapshot": {
+    "version": "HX-0.1.0-lab",
+    "state": "SAFE_MODE",
+    "flags": {
+      "enabled": false,
+      "mode": "observe",
+      "autoRepair": false,
+      "fortress": false,
+      "arena": true
+    },
+    "heart": {
+      "healthScore": 87,
+      "state": "SAFE_MODE",
+      "fortressLevel": "NORMAL",
+      "lines": [
+        "HEALTH 87",
+        "STATE SAFE_MODE",
+        "",
+        "AUTH OK",
+        "SYNC WARN",
+        "DATABASE OK",
+        "API OK",
+        "HB_CREDIT CRIT",
+        "PERFORMANCE OK"
+      ],
+      "emittedAt": "2026-09-08T22:46:44.875Z"
+    },
+    "health": {
+      "overall": 87,
+      "dimensions": [
+        {
+          "id": "auth",
+          "label": "Auth",
+          "score": 100,
+          "status": "OK"
+        },
+        {
+          "id": "sync",
+          "label": "Sync",
+          "score": 70,
+          "status": "WARN"
+        },
+        {
+          "id": "database",
+          "label": "Database",
+          "score": 100,
+          "status": "OK"
+        },
+        {
+          "id": "api",
+          "label": "API",
+          "score": 100,
+          "status": "OK"
+        },
+        {
+          "id": "hb_credit",
+          "label": "HB Credits",
+          "score": 30,
+          "status": "CRIT"
+        },
+        {
+          "id": "performance",
+          "label": "Performance",
+          "score": 100,
+          "status": "OK"
+        },
+        {
+          "id": "integrity",
+          "label": "Integrity",
+          "score": 70,
+          "status": "WARN"
+        },
+        {
+          "id": "cache",
+          "label": "Cache",
+          "score": 100,
+          "status": "OK"
+        },
+        {
+          "id": "device",
+          "label": "Device",
+          "score": 100,
+          "status": "OK"
+        },
+        {
+          "id": "behavior",
+          "label": "Behavior",
+          "score": 100,
+          "status": "OK"
+        }
+      ],
+      "computedAt": "2026-09-08T22:46:44.875Z"
+    },
+    "fortressLevel": "NORMAL",
+    "sensors": [
+      {
+        "sensor": "AUTH",
+        "level": "OK",
+        "message": "Auth OK",
+        "observedAt": "2026-09-08T22:46:44.875Z",
+        "metadata": {
+          "failures": 0
+        }
+      },
+      {
+        "sensor": "SYNC",
+        "level": "WARN",
+        "message": "Push bloqueado por coerência",
+        "observedAt": "2026-09-08T22:46:44.875Z",
+        "metadata": {
+          "blocked": true
+        }
+      },
+      {
+        "sensor": "DATABASE",
+        "level": "OK",
+        "message": "Database OK",
+        "observedAt": "2026-09-08T22:46:44.875Z",
+        "metadata": {
+          "latencyMs": 45
+        }
+      },
+      {
+        "sensor": "API",
+        "level": "OK",
+        "message": "API OK",
+        "observedAt": "2026-09-08T22:46:44.875Z",
+        "metadata": {
+          "rateLimit": "active"
+        }
+      },
+      {
+        "sensor": "HB_CREDIT",
+        "level": "CRIT",
+        "message": "Anomalia crédito detectada (simulada)",
+        "observedAt": "2026-09-08T22:46:44.875Z",
+        "metadata": {
+          "anomaly": true
+        }
+      },
+      {
+        "sensor": "PERFORMANCE",
+        "level": "OK",
+        "message": "Performance OK",
+        "observedAt": "2026-09-08T22:46:44.875Z",
+        "metadata": {
+          "p95Ms": 120
+        }
+      },
+      {
+        "sensor": "INTEGRITY",
+        "level": "WARN",
+        "message": "Integridade em risco",
+        "observedAt": "2026-09-08T22:46:44.875Z"
+      },
+      {
+        "sensor": "CACHE",
+        "level": "OK",
+        "message": "Cache OK",
+        "observedAt": "2026-09-08T22:46:44.875Z"
+      },
+      {
+        "sensor": "DEVICE",
+        "level": "OK",
+        "message": "Device sensor idle (lab)",
+        "observedAt": "2026-09-08T22:46:44.875Z"
+      },
+      {
+        "sensor": "BEHAVIOR",
+        "level": "OK",
+        "message": "Behavior OK",
+        "observedAt": "2026-09-08T22:46:44.875Z"
+      }
+    ],
+    "memoryStats": {
+      "short": 1,
+      "mid": 4,
+      "long": 3
+    },
+    "recentMemory": [
+      {
+        "id": "mem_1788907604872_w944gr",
+        "layer": "short",
+        "kind": "boot",
+        "summary": "Organismo inicializado no lab",
+        "at": "2026-09-08T22:46:44.872Z"
+      },
+      {
+        "id": "mem_1788907604874_8fdbpg",
+        "layer": "mid",
+        "kind": "threat",
+        "summary": "low: assinatura_fsm_bypass",
+        "at": "2026-09-08T22:46:44.874Z"
+      },
+      {
+        "id": "mem_1788907604873_p2iuxh",
+        "layer": "mid",
+        "kind": "threat",
+        "summary": "critical: cross_coop_probe→idor",
+        "at": "2026-09-08T22:46:44.873Z"
+      },
+      {
+        "id": "mem_1788907604873_vwlzpf",
+        "layer": "mid",
+        "kind": "threat",
+        "summary": "low: sync_push→coherence_fail",
+        "at": "2026-09-08T22:46:44.873Z"
+      },
+      {
+        "id": "mem_1788907604872_di5wet",
+        "layer": "mid",
+        "kind": "threat",
+        "summary": "low: login_fail→login_fail→login_fail",
+        "at": "2026-09-08T22:46:44.872Z"
+      },
+      {
+        "id": "mem_1788907604875_8ayh5l",
+        "layer": "long",
+        "kind": "financial_incident",
+        "summary": "Ação financeira proibida pelo HOBELISCO: ALTER_CREDIT → limits",
+        "at": "2026-09-08T22:46:44.875Z"
+      },
+      {
+        "id": "mem_1788907604875_sy6lj8",
+        "layer": "long",
+        "kind": "financial_incident",
+        "summary": "Ação financeira proibida pelo HOBELISCO: ALTER_LEDGER → hb_credit_transactions",
+        "at": "2026-09-08T22:46:44.875Z"
+      },
+      {
+        "id": "mem_1788907604874_7xs92z",
+        "layer": "long",
+        "kind": "financial_incident",
+        "summary": "Ação financeira proibida pelo HOBELISCO: ALTER_LEDGER → hb_credit_receivables",
+        "at": "2026-09-08T22:46:44.874Z"
+      }
+    ],
+    "auditChainHead": {
+      "id": "evt_1788907604875_0e886267",
+      "kind": "FINANCIAL_GUARD",
+      "payload": {
+        "action": "ALTER_CREDIT",
+        "allowed": false
+      },
+      "eventHash": "a8cdfff0701900ae3681398b0ed4479b096e98c8baa08c05a176148cb813f876",
+      "previousEventHash": "2c4f4f8996dc89dfc0ec467ed881f946f8ebbc8be2895a60b45b52df667c4adf",
+      "at": "2026-09-08T22:46:44.875Z"
+    },
+    "auditChainLength": 25,
+    "defenseDnaVersion": "DNA-0002",
+    "invariants": [
+      "INVARIANT_COOPERATIVE_ISOLATION",
+      "INVARIANT_LEDGER_IMMUTABILITY",
+      "INVARIANT_NO_CROSS_COOPERATIVE_ACCESS",
+      "INVARIANT_IDEMPOTENCY",
+      "INVARIANT_NO_NEGATIVE_CREDIT",
+      "INVARIANT_REFUND_SINGLE_EXECUTION",
+      "INVARIANT_AUTHORIZATION_SERVER_SIDE",
+      "INVARIANT_AUDIT_APPEND_ONLY"
+    ],
+    "antibodies": [
+      {
+        "id": "ANTIBODY-IDOR-001",
+        "name": "Bloqueio IDOR cooperativa",
+        "bornFrom": "incident:cross-cnpj-probe",
+        "version": "1.0.0",
+        "reusable": true
+      },
+      {
+        "id": "ANTIBODY-SYNC-001",
+        "name": "Push incoerente ficha",
+        "bornFrom": "incident:thin-snapshot-push",
+        "version": "1.0.0",
+        "reusable": true
+      },
+      {
+        "id": "ANTIBODY-AUTH-001",
+        "name": "Bruteforce login",
+        "bornFrom": "incident:auth-rate-spike",
+        "version": "1.0.0",
+        "reusable": true
+      },
+      {
+        "id": "ANTIBODY-ASSINATURA-001",
+        "name": "FSM assinatura bypass",
+        "bornFrom": "incident:legacy-signature-push",
+        "version": "1.0.0",
+        "reusable": true
+      }
+    ],
+    "recentThreats": [
+      {
+        "id": "threat_1788907604874_aoy7",
+        "sequence": [
+          "assinatura_fsm_bypass"
+        ],
+        "severity": "low",
+        "classifiedAt": "2026-09-08T22:46:44.874Z"
+      },
+      {
+        "id": "threat_1788907604873_8lkv",
+        "sequence": [
+          "cross_coop_probe",
+          "idor"
+        ],
+        "endpoint": "/api/credit/dashboard",
+        "severity": "critical",
+        "classifiedAt": "2026-09-08T22:46:44.873Z"
+      },
+      {
+        "id": "threat_1788907604873_8oxg",
+        "sequence": [
+          "sync_push",
+          "coherence_fail"
+        ],
+        "endpoint": "/api/cooperativa-sync",
+        "severity": "low",
+        "classifiedAt": "2026-09-08T22:46:44.873Z"
+      },
+      {
+        "id": "threat_1788907604872_cndm",
+        "sequence": [
+          "login_fail",
+          "login_fail",
+          "login_fail"
+        ],
+        "endpoint": "/api/auth/login",
+        "severity": "low",
+        "classifiedAt": "2026-09-08T22:46:44.872Z"
+      }
+    ],
+    "recentImmune": [
+      {
+        "phase": "PREVENT",
+        "action": "Pattern watch: login_fail,login_fail,login_fail",
+        "approved": true,
+        "requiresHuman": false,
+        "at": "2026-09-08T22:46:44.872Z"
+      },
+      {
+        "phase": "VALIDATE",
+        "action": "Aguardando Guardian — nenhuma defesa autoaprovada",
+        "approved": false,
+        "requiresHuman": true,
+        "at": "2026-09-08T22:46:44.872Z"
+      },
+      {
+        "phase": "PREVENT",
+        "action": "Pattern watch: sync_push,coherence_fail",
+        "approved": true,
+        "requiresHuman": false,
+        "at": "2026-09-08T22:46:44.873Z"
+      },
+      {
+        "phase": "VALIDATE",
+        "action": "Aguardando Guardian — nenhuma defesa autoaprovada",
+        "approved": false,
+        "requiresHuman": true,
+        "at": "2026-09-08T22:46:44.873Z"
+      },
+      {
+        "phase": "PREVENT",
+        "action": "Pattern watch: cross_coop_probe,idor",
+        "approved": true,
+        "requiresHuman": false,
+        "at": "2026-09-08T22:46:44.873Z"
+      },
+      {
+        "phase": "CONTAIN",
+        "action": "Rate limit + Fortress elevate (simulado)",
+        "approved": true,
+        "requiresHuman": true,
+        "at": "2026-09-08T22:46:44.873Z"
+      },
+      {
+        "phase": "VALIDATE",
+        "action": "Aguardando Guardian — nenhuma defesa autoaprovada",
+        "approved": false,
+        "requiresHuman": true,
+        "at": "2026-09-08T22:46:44.873Z"
+      },
+      {
+        "phase": "PREVENT",
+        "action": "Pattern watch: assinatura_fsm_bypass",
+        "approved": true,
+        "requiresHuman": false,
+        "at": "2026-09-08T22:46:44.874Z"
+      },
+      {
+        "phase": "VALIDATE",
+        "action": "Aguardando Guardian — nenhuma defesa autoaprovada",
+        "approved": false,
+        "requiresHuman": true,
+        "at": "2026-09-08T22:46:44.874Z"
+      }
+    ],
+    "lastGuardian": {
+      "ok": true,
+      "stage": "success",
+      "rollback": false,
+      "humanRequired": false,
+      "details": [
+        "before",
+        "repair",
+        "validate",
+        "health check",
+        "invariant check",
+        "compare",
+        "success"
+      ]
+    }
+  },
+  "notes": [
+    "Defense registered: def_1788907604872",
+    "Reincarnation: DEFENSE-V2 validated in arena"
+  ]
+}

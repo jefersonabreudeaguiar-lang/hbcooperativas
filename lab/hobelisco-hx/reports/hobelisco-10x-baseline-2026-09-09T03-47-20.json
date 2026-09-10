@@ -1,0 +1,17 @@
+{
+  "version": "HX-0.6.0-LAB-10X",
+  "commit": "76556d1",
+  "recordedAt": "2026-09-09T03:47:07.268Z",
+  "priorMetrics": {
+    "detection": 99.6,
+    "prevention": 55,
+    "coverage": 77,
+    "falsePositiveLab": 0,
+    "financialMutations": 0,
+    "gaps": [
+      "T01_AUTH",
+      "T06_SESSION",
+      "T12_HB_CREDIT"
+    ]
+  }
+}

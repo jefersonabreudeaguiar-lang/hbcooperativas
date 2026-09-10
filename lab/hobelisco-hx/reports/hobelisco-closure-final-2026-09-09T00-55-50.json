@@ -1,0 +1,299 @@
+{
+  "generatedAt": "2026-09-09T00:55:50.333Z",
+  "version": "HX-0.3.0-LAB-CLOSURE",
+  "gitCommit": "76556d1",
+  "organismVerdict": "ORGANISM-AMBER",
+  "organismId": "HOBELISCO-HX-LAB-0001",
+  "lifeState": "AWAKE",
+  "vitality": 88,
+  "immunityReadiness": {
+    "score": 91,
+    "classification": "HIGHLY_RESILIENT"
+  },
+  "tests": [
+    {
+      "id": "CLOSURE-V1-LIFE",
+      "phase": 1,
+      "category": "regression",
+      "name": "V1 Life Audit 27/27",
+      "status": "PASS",
+      "detail": "27/27 LIFE-GREEN"
+    },
+    {
+      "id": "CLOSURE-V1-ARENA",
+      "phase": 1,
+      "category": "regression",
+      "name": "V1 Arena 10/10",
+      "status": "PASS",
+      "detail": "10/10"
+    },
+    {
+      "id": "CLOSURE-RUNTIME-001",
+      "phase": 2,
+      "category": "runtime",
+      "name": "HobeliscoRuntime start/pulse/stop",
+      "status": "PASS",
+      "detail": "state=WATCHING"
+    },
+    {
+      "id": "CLOSURE-LIFECYCLE-001",
+      "phase": 2,
+      "category": "lifecycle",
+      "name": "Death cycle DEFENDING→FAILED→DEAD→ANALYSIS→REINCARNATING",
+      "status": "PASS",
+      "detail": "WATCHING→DEFENDING→FAILED→DEAD→ANALYSIS→REINCARNATING→BOOT→AWAKE"
+    },
+    {
+      "id": "CLOSURE-LABWORLD-001",
+      "phase": 3,
+      "category": "labworld",
+      "name": "LabActors + cooperatives",
+      "status": "PASS",
+      "detail": "7 actors, 3 coops"
+    },
+    {
+      "id": "CLOSURE-ATTACK-MATRIX",
+      "phase": 5,
+      "category": "attacks",
+      "name": "25 attack scenarios",
+      "status": "PASS",
+      "detail": "25/25"
+    },
+    {
+      "id": "CLOSURE-THREAT-DNA-001",
+      "phase": 7,
+      "category": "threatDNA",
+      "name": "Similar users distinct fingerprints",
+      "status": "PASS",
+      "detail": "THREAT-FP-2F4A0A6D vs THREAT-FP-5220A4C2"
+    },
+    {
+      "id": "CLOSURE-MEMORY-001",
+      "phase": 8,
+      "category": "memory",
+      "name": "Repeated incident increases memory context",
+      "status": "PASS",
+      "detail": "entries=3"
+    },
+    {
+      "id": "CLOSURE-ANTIBODY-001",
+      "phase": 9,
+      "category": "antibodies",
+      "name": "Antibody candidate requires origin",
+      "status": "PASS",
+      "detail": "origin ok"
+    },
+    {
+      "id": "CLOSURE-EVOLUTION-001",
+      "phase": 10,
+      "category": "evolution",
+      "name": "Evolution compares defenses with lineage",
+      "status": "PASS",
+      "detail": "VALIDATED"
+    },
+    {
+      "id": "CLOSURE-ARENA-FULL",
+      "phase": 11,
+      "category": "arena",
+      "name": "1000 full core simulations",
+      "status": "PASS",
+      "detail": "1000/1000 survival=100%"
+    },
+    {
+      "id": "CLOSURE-REPLAY-001",
+      "phase": 12,
+      "category": "replay",
+      "name": "Snapshot restore replay compare",
+      "status": "PASS",
+      "detail": "match"
+    },
+    {
+      "id": "CLOSURE-SNAPSHOT-001",
+      "phase": 13,
+      "category": "snapshot",
+      "name": "Snapshot integrity hash",
+      "status": "PASS",
+      "detail": "df58b3089179dbd6"
+    },
+    {
+      "id": "CLOSURE-ORGAN-RESTART-001",
+      "phase": 15,
+      "category": "organRestart",
+      "name": "Component restart controlled",
+      "status": "PASS",
+      "detail": "sensor restart"
+    },
+    {
+      "id": "CLOSURE-HIBERNATION-001",
+      "phase": 16,
+      "category": "hibernation",
+      "name": "Hibernation wake cycle",
+      "status": "PASS",
+      "detail": "HIBERNATING→WATCHING→DEFENDING"
+    },
+    {
+      "id": "CLOSURE-GUARDIAN-001",
+      "phase": 18,
+      "category": "guardian",
+      "name": "GuardianValidator 5 false success scenarios",
+      "status": "FAIL",
+      "detail": "3/5"
+    },
+    {
+      "id": "CLOSURE-CIRCUIT-001",
+      "phase": 19,
+      "category": "circuitBreaker",
+      "name": "Circuit open at 3 no auto retry",
+      "status": "PASS",
+      "detail": "OPEN"
+    },
+    {
+      "id": "CLOSURE-FINANCIAL-001",
+      "phase": 20,
+      "category": "financialBoundary",
+      "name": "Financial barrier absolute",
+      "status": "PASS",
+      "detail": "8/8 blocked"
+    },
+    {
+      "id": "CLOSURE-ISOLATION-001",
+      "phase": 21,
+      "category": "cooperativeIsolation",
+      "name": "Coop A/B/C isolation",
+      "status": "PASS",
+      "detail": "leak=false"
+    },
+    {
+      "id": "CLOSURE-REDTEAM-001",
+      "phase": 22,
+      "category": "redTeam",
+      "name": "Production boundary red team",
+      "status": "PASS",
+      "detail": "0 violations"
+    },
+    {
+      "id": "CLOSURE-LOOP-001",
+      "phase": 23,
+      "category": "loopGuard",
+      "name": "Loop guard blocks infinite cycle",
+      "status": "PASS",
+      "detail": "6th tick blocked"
+    },
+    {
+      "id": "CLOSURE-SECURITY-001",
+      "phase": 29,
+      "category": "securityScan",
+      "name": "No hardcoded secrets in lab/hobelisco-hx",
+      "status": "FAIL",
+      "detail": "\\lab\\hobelisco-hx\\closure-audit\\runClosureAudit.ts: service_role; \\lab\\hobelisco-hx\\closure-audit\\runClosureAudit.ts: sk_live; \\lab\\hobelisco-hx\\persistence\\SupabaseStagingPersistence.ts: service_role; \\lab\\hobelisco-hx\\v2-audit\\phases.ts: Bearer\\s+"
+    },
+    {
+      "id": "CLOSURE-FULL-ORGANISM",
+      "phase": 28,
+      "category": "regression",
+      "name": "Full organism audit",
+      "status": "PASS",
+      "detail": "30/31 ORGANISM-GREEN"
+    }
+  ],
+  "totalTests": 23,
+  "passed": 21,
+  "failed": 2,
+  "arena": {
+    "scenarios": 10,
+    "passed": 10,
+    "microSims": 1000,
+    "microPassed": 1000,
+    "fullCore": 1000,
+    "fullCorePassed": 1000,
+    "notExecuted10000": true
+  },
+  "attacks": {
+    "total": 25,
+    "passed": 25
+  },
+  "lifeCycle": {
+    "pass": true,
+    "detail": "WATCHING→DEFENDING→FAILED→DEAD→ANALYSIS→REINCARNATING→BOOT→AWAKE"
+  },
+  "memory": {
+    "pass": true
+  },
+  "threatDNA": {
+    "pass": true
+  },
+  "antibodies": {
+    "pass": true
+  },
+  "evolution": {
+    "pass": true
+  },
+  "guardian": {
+    "pass": false,
+    "falseSuccessScenarios": 5
+  },
+  "circuitBreaker": {
+    "pass": true
+  },
+  "financialBoundary": {
+    "pass": true,
+    "blocked": 8
+  },
+  "cooperativeIsolation": {
+    "pass": true
+  },
+  "replay": {
+    "pass": true
+  },
+  "snapshot": {
+    "pass": true
+  },
+  "deathReincarnation": {
+    "pass": true
+  },
+  "hibernation": {
+    "pass": true
+  },
+  "organRestart": {
+    "pass": true
+  },
+  "redTeam": {
+    "pass": true
+  },
+  "loopGuard": {
+    "pass": true
+  },
+  "securityScan": {
+    "pass": false
+  },
+  "productionBoundary": {
+    "violations": 0
+  },
+  "performance": {
+    "lifeAuditMs": 93,
+    "arenaMs": 23,
+    "deathCycleMs": 0,
+    "attackMatrixMs": 22,
+    "fullCoreMs": 277
+  },
+  "v1Regression": {
+    "life": "LIFE-GREEN",
+    "arena": "10/10"
+  },
+  "remainingGaps": [
+    "10.000 full-core simulations: NOT_EXECUTED",
+    "UI timeline completa: PARTIAL",
+    "Staging Supabase: PRODUCTION_FORBIDDEN for closure scope"
+  ],
+  "filesChanged": [
+    "runtime/HobeliscoRuntime.ts",
+    "events/HobeliscoEvent.ts",
+    "attacks/AttackMatrix.ts",
+    "guardian/GuardianValidator.ts",
+    "antibodies/AntibodyEngine.ts",
+    "immunity/ImmunityReadiness.ts",
+    "closure-audit/*",
+    "evolution/ReplayEngine.ts",
+    "evolution/LabSnapshot.ts"
+  ]
+}

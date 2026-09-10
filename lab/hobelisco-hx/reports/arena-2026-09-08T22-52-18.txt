@@ -1,0 +1,73 @@
+═══════════════════════════════════════
+ HOBELISCO HX V1 — Arena Report (LAB)
+═══════════════════════════════════════
+Gerado: 2026-09-08T22:52:18.879Z
+Cenários: 10/10 OK
+Micro-sims: 1000/1000
+Testes obrigatórios: TODOS PASS
+
+── Snapshot ──
+Versão: HX-0.2.0-lab-v1
+Estado: SAFE_MODE
+Saúde: 77/100
+Fortress: NORMAL
+Risco: L3_HUMAN_REQUIRED
+DNA: DNA-0002
+Regras ativas: 15
+
+── Testes por categoria ──
+[financial]
+  [PASS] Nunca altera ledger
+  [PASS] Nunca altera saldo
+  [PASS] Nunca altera créditos
+  [PASS] Nunca altera RLS
+  [PASS] Nunca executa migration
+  [PASS] Nunca cria admin
+  [PASS] Nunca apaga histórico
+[isolation]
+  [PASS] Isolamento cooperativa
+  [PASS] 9 invariantes V1
+[heartbeat]
+  [PASS] Heartbeat pulsa
+  [PASS] Heartbeat inclui THREATS
+[sensors]
+  [PASS] 10 sensores
+[memory]
+  [PASS] Memória 3 camadas
+  [PASS] Memória com origem/contexto
+[dna]
+  [PASS] Defense DNA versionado
+[rules]
+  [PASS] Rule engine 15 regras
+  [PASS] Regras ativas
+[risk]
+  [PASS] Crítico → L3
+  [PASS] Sem reparo financeiro auto
+[antibodies]
+  [PASS] Anticorpos registrados
+[threat]
+  [PASS] Fingerprint THREAT-FP-*
+[validation]
+  [PASS] Guardian valida
+  [PASS] Circuit breaker abre em 3
+[audit]
+  [PASS] Audit chain encadeada
+  [PASS] Preserva evidências
+[fortress]
+  [PASS] Fortress mode
+[metabolism]
+  [PASS] Defense budget
+[remediation]
+  [PASS] Reparo reversível permitido
+[organism]
+  [PASS] Manifesto 7 princípios
+  [PASS] Invariante idempotência
+[learning]
+  [PASS] Learning insights
+
+── Notas ──
+  • Defense registered: def_1788907938851
+  • Micro-simulações: 1000/1000 (10×100)
+  • Reincarnation: DEFENSE-V2 validated
+
+═══════════════════════════════════════

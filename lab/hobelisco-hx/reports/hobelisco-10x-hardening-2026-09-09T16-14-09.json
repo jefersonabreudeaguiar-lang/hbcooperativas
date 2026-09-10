@@ -1,0 +1,108 @@
+{
+  "version": "HX-0.6.0-LAB-10X",
+  "verdict": "LAB-HARDENED-GREEN",
+  "fabricMode": "CONTROLLED_BLOCK",
+  "gaps": [],
+  "learningCandidates": [
+    "chaos_learn",
+    "learn_T12_HB_CREDIT_1788970437039",
+    "learn_T12_HB_CREDIT_1788970449028"
+  ],
+  "coverage": {
+    "T04_WEB_API": {
+      "total": 837,
+      "blocked": 270,
+      "detected": 229,
+      "missed": 0,
+      "fp": 0
+    },
+    "T12_HB_CREDIT": {
+      "total": 849,
+      "blocked": 275,
+      "detected": 242,
+      "missed": 11,
+      "fp": 0
+    },
+    "T05_CRYPTO": {
+      "total": 626,
+      "blocked": 533,
+      "detected": 0,
+      "missed": 0,
+      "fp": 0
+    },
+    "T01_AUTH": {
+      "total": 903,
+      "blocked": 473,
+      "detected": 87,
+      "missed": 0,
+      "fp": 0
+    },
+    "T02_AUTHZ": {
+      "total": 898,
+      "blocked": 57,
+      "detected": 487,
+      "missed": 0,
+      "fp": 0
+    },
+    "T11_SYNC": {
+      "total": 848,
+      "blocked": 496,
+      "detected": 0,
+      "missed": 0,
+      "fp": 0
+    },
+    "T06_SESSION": {
+      "total": 882,
+      "blocked": 330,
+      "detected": 175,
+      "missed": 0,
+      "fp": 0
+    },
+    "T10_INTEGRITY": {
+      "total": 620,
+      "blocked": 283,
+      "detected": 257,
+      "missed": 0,
+      "fp": 0
+    },
+    "T07_RATE": {
+      "total": 838,
+      "blocked": 504,
+      "detected": 0,
+      "missed": 0,
+      "fp": 0
+    },
+    "T13_ADMIN": {
+      "total": 857,
+      "blocked": 252,
+      "detected": 253,
+      "missed": 0,
+      "fp": 0
+    },
+    "T09_CONFIG": {
+      "total": 611,
+      "blocked": 278,
+      "detected": 241,
+      "missed": 0,
+      "fp": 0
+    },
+    "T14_INSIDER": {
+      "total": 634,
+      "blocked": 269,
+      "detected": 263,
+      "missed": 0,
+      "fp": 0
+    },
+    "T03_INJECTION": {
+      "total": 597,
+      "blocked": 509,
+      "detected": 0,
+      "missed": 0,
+      "fp": 0
+    }
+  },
+  "recommendations": [
+    "Reforçar crossTenant",
+    "Review 11 missed scenarios"
+  ]
+}

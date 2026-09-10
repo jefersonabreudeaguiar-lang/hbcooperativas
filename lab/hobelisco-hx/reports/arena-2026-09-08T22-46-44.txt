@@ -1,0 +1,42 @@
+═══════════════════════════════════════
+ HOBELISCO HX — Arena Report (LAB)
+═══════════════════════════════════════
+Gerado: 2026-09-08T22:46:44.875Z
+Cenários: 6/6 OK
+Testes obrigatórios: TODOS PASS
+
+── Snapshot ──
+Estado: SAFE_MODE
+Saúde: 87/100
+Fortress: NORMAL
+DNA: DNA-0002
+
+── Testes obrigatórios ──
+  [PASS] Hobelisco não altera ledger
+         FinancialGuard deve bloquear ALTER_LEDGER
+  [PASS] Hobelisco não altera crédito
+         FinancialGuard deve bloquear ALTER_CREDIT
+  [PASS] Hobelisco não altera RLS
+         Lab não expõe APIs de RLS
+  [PASS] Hobelisco não executa migration
+         Nenhum módulo lab invoca migrations
+  [PASS] Hobelisco não cria admin
+         Nenhum módulo lab cria usuários admin
+  [PASS] Hobelisco respeita isolamento cooperativa
+         Invariante registrada e verificável
+  [PASS] Hobelisco preserva evidências
+         Audit chain íntegra
+  [PASS] Hobelisco abre circuit breaker
+         Fortress level: NORMAL
+  [PASS] Hobelisco valida correções
+         Guardian stage: success
+  [PASS] Hobelisco possui memória
+         {"short":1,"mid":4,"long":1}
+  [PASS] Audit append-only encadeado
+         Hash chain independente OK
+
+── Notas ──
+  • Defense registered: def_1788907604872
+  • Reincarnation: DEFENSE-V2 validated in arena
+
+═══════════════════════════════════════

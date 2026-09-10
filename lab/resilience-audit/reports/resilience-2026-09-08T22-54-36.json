@@ -1,0 +1,308 @@
+{
+  "generatedAt": "2026-09-08T22:54:36.195Z",
+  "rounds": [
+    {
+      "round": 0,
+      "label": "Baseline produção (Build 59)",
+      "enabled": [],
+      "score": 6.8,
+      "passed": 17,
+      "failed": 7,
+      "criticalOpen": 5
+    },
+    {
+      "round": 1,
+      "label": "Coerência + capacidade",
+      "enabled": [
+        "Bloqueio push incoerente",
+        "Preditor capacidade",
+        "Lint segurança estático"
+      ],
+      "score": 8.5,
+      "passed": 21,
+      "failed": 3,
+      "criticalOpen": 3
+    },
+    {
+      "round": 2,
+      "label": "+ Assinatura FSM + duplicatas",
+      "enabled": [
+        "Bloqueio push incoerente",
+        "Gate FSM assinatura",
+        "Preditor capacidade",
+        "Alerta cooperado duplicado",
+        "Lint segurança estático"
+      ],
+      "score": 8.5,
+      "passed": 21,
+      "failed": 3,
+      "criticalOpen": 3
+    },
+    {
+      "round": 3,
+      "label": "+ Sync slices + recovery caos",
+      "enabled": [
+        "Bloqueio push incoerente",
+        "Sync por slices (lab)",
+        "Gate FSM assinatura",
+        "Preditor capacidade",
+        "Recovery pós-caos",
+        "Alerta cooperado duplicado",
+        "Lint segurança estático"
+      ],
+      "score": 9.4,
+      "passed": 24,
+      "failed": 1,
+      "criticalOpen": 1
+    }
+  ],
+  "scenarios": [
+    {
+      "id": "sync-01",
+      "domain": "sync",
+      "title": "Reset nuvem zera mensalidades locais",
+      "severity": "critical",
+      "passed": true,
+      "fixedByRound": 3
+    },
+    {
+      "id": "sync-02",
+      "domain": "sync",
+      "title": "Cooperado recebe mensalidade do responsável",
+      "severity": "high",
+      "passed": true,
+      "fixedByRound": 3
+    },
+    {
+      "id": "sync-03",
+      "domain": "sync",
+      "title": "Fluxo mensalidade: informar → confirmar → paga",
+      "severity": "critical",
+      "passed": true,
+      "fixedByRound": 3
+    },
+    {
+      "id": "sync-04",
+      "domain": "sync",
+      "title": "Nuvem vazia sem fullReset preserva mensalidades locais",
+      "severity": "high",
+      "passed": true,
+      "weakness": "Risco de divergência longa se ambos editarem offline",
+      "mitigation": "Recovery: reconciliar por updatedAt (proposta lab)",
+      "fixedByRound": 3
+    },
+    {
+      "id": "sync-05",
+      "domain": "sync",
+      "title": "Sync slices reduz tráfego ≥50%",
+      "severity": "medium",
+      "passed": true,
+      "mitigation": "Economia 92.5% bytes (lab)",
+      "fixedByRound": 3
+    },
+    {
+      "id": "coh-01",
+      "domain": "coerencia",
+      "title": "Duplicata ficha bloqueia push",
+      "severity": "critical",
+      "passed": true,
+      "weakness": "Produção permite push com ficha duplicada",
+      "mitigation": "coherenceValidator + wouldBlockPush antes de upload",
+      "fixedByRound": 3
+    },
+    {
+      "id": "coh-02",
+      "domain": "coerencia",
+      "title": "Detecta ficha paga ≠ pagamentos",
+      "severity": "high",
+      "passed": true,
+      "mitigation": "Manter warn + painel responsável",
+      "fixedByRound": 3
+    },
+    {
+      "id": "coh-03",
+      "domain": "coerencia",
+      "title": "Recovery pós-injeção duplicata (caos)",
+      "severity": "high",
+      "passed": true,
+      "weakness": "Sem recovery estruturado",
+      "mitigation": "Snapshot limpo + bloqueio push",
+      "fixedByRound": 3
+    },
+    {
+      "id": "ass-01",
+      "domain": "assinatura",
+      "title": "Envio assinatura → em_analise",
+      "severity": "high",
+      "passed": true,
+      "fixedByRound": 3
+    },
+    {
+      "id": "ass-02",
+      "domain": "assinatura",
+      "title": "Responsável confirma assinatura",
+      "severity": "high",
+      "passed": true,
+      "fixedByRound": 3
+    },
+    {
+      "id": "ass-03",
+      "domain": "assinatura",
+      "title": "Devolução limpa foto e exige reenvio",
+      "severity": "high",
+      "passed": true,
+      "fixedByRound": 3
+    },
+    {
+      "id": "ass-04",
+      "domain": "assinatura",
+      "title": "Legado com foto = confirmada implícita",
+      "severity": "medium",
+      "passed": true,
+      "fixedByRound": 3
+    },
+    {
+      "id": "ass-05",
+      "domain": "assinatura",
+      "title": "Gate FSM: em_analise sem foto",
+      "severity": "high",
+      "passed": true,
+      "weakness": "Estado inválido possível se API bypass",
+      "mitigation": "Validar FSM antes de push cooperado",
+      "fixedByRound": 3
+    },
+    {
+      "id": "cap-01",
+      "domain": "capacidade",
+      "title": "CoopeagriPla hoje (27 coop) dentro do limite 5 MB",
+      "severity": "info",
+      "passed": true,
+      "mitigation": "0.85 MB projetado (17%)",
+      "fixedByRound": 3
+    },
+    {
+      "id": "cap-02",
+      "domain": "capacidade",
+      "title": "Preditor alerta antes de estourar 5 MB (~160 coop)",
+      "severity": "medium",
+      "passed": true,
+      "weakness": "~5.02 MB (100%)",
+      "mitigation": "Arquivar meses antigos ou sync por slices",
+      "fixedByRound": 3
+    },
+    {
+      "id": "cap-03",
+      "domain": "capacidade",
+      "title": "Lista cooperados ≤500 (hard cap código)",
+      "severity": "high",
+      "passed": true,
+      "fixedByRound": 3
+    },
+    {
+      "id": "cap-04",
+      "domain": "capacidade",
+      "title": "Alerta antecipado antes de 500 cooperados",
+      "severity": "medium",
+      "passed": true,
+      "weakness": "Sem alerta até 80%",
+      "mitigation": "Admin capacidade (já existe)",
+      "fixedByRound": 3
+    },
+    {
+      "id": "sec-01",
+      "domain": "seguranca",
+      "title": "AUTH_SECRET não hardcoded em vercel.json",
+      "severity": "critical",
+      "passed": false,
+      "weakness": "AUTH_SECRET exposto no repositório/deploy config",
+      "mitigation": "Mover para env Vercel apenas; rotacionar secret"
+    },
+    {
+      "id": "mc-01",
+      "domain": "multi-cooperativa",
+      "title": "Detecta cooperados homônimos duplicados",
+      "severity": "medium",
+      "passed": true,
+      "weakness": "CoopeagriPla tem cadastros duplicados na nuvem",
+      "mitigation": "Painel dedupe + merge cadastro (futuro)",
+      "fixedByRound": 3
+    },
+    {
+      "id": "caos-01",
+      "domain": "caos",
+      "title": "Dois pushes simultâneos (last-write-wins)",
+      "severity": "high",
+      "passed": true,
+      "weakness": "Monolito operacional: último push ganha",
+      "mitigation": "Fingerprints por slice + merge 3-way (lab proposedPolicy)",
+      "fixedByRound": 3
+    },
+    {
+      "id": "caos-02",
+      "domain": "caos",
+      "title": "Payload operacional >5 MB rejeitado",
+      "severity": "critical",
+      "passed": true,
+      "weakness": "Upload falha no limite Supabase",
+      "mitigation": "Preditor + arquivamento antes do limite",
+      "fixedByRound": 3
+    },
+    {
+      "id": "not-01",
+      "domain": "notas-ficha",
+      "title": "Score sync pós-hardening lab ≥7.5",
+      "severity": "medium",
+      "passed": true,
+      "weakness": "Antes 5.6/10 · Depois 7.5/10",
+      "mitigation": "Promover política proposta após test:sync-flows",
+      "fixedByRound": 3
+    },
+    {
+      "id": "cob-01",
+      "domain": "cobranca",
+      "title": "Asaas webhook exige token (env)",
+      "severity": "high",
+      "passed": true,
+      "weakness": "Conta Asaas PF ainda em análise — cobrança manual OK",
+      "mitigation": "Aguardar APPROVED + ASAAS_WEBHOOK_TOKEN",
+      "fixedByRound": 3
+    },
+    {
+      "id": "hb-01",
+      "domain": "hb-credit",
+      "title": "HB Créditos isolado por CNPJ (foundation)",
+      "severity": "high",
+      "passed": true,
+      "weakness": "Homologação mercado OK; escala multi-coop monitorar",
+      "mitigation": "Manter HB_CREDIT_OPERATIONS_ENABLED controlado",
+      "fixedByRound": 3
+    },
+    {
+      "id": "sync-06",
+      "domain": "sync",
+      "title": "Economia slices lab ≥85%",
+      "severity": "low",
+      "passed": true,
+      "mitigation": "85.2% economia simulada",
+      "fixedByRound": 3
+    }
+  ],
+  "finalScore": 9.4,
+  "invulnerable": false,
+  "acceptedRisks": [
+    "Last-write-wins em operacional monolítico até sync por slices ir para produção.",
+    "Cooperados homônimos duplicados exigem limpeza manual (detectado, não auto-merge).",
+    "AUTH_SECRET em vercel.json: risco aceito só até rotação — corrigir antes de escala SaaS.",
+    "Conta Asaas PF em análise: cobrança HB manual temporária.",
+    "100% invulnerável é impossível; meta lab: 0 falhas critical/high com hardening round 3."
+  ],
+  "recommendations": [
+    "P0: Remover AUTH_SECRET de vercel.json; usar variável de ambiente e rotacionar.",
+    "Sync audit lab pós-hardening: 7.5/10 — promover só com PR dedicado.",
+    "Rodar npm run test:sync-flows + lab:resilience-audit antes de cada release major."
+  ],
+  "syncAuditOverall": {
+    "before": 5.6,
+    "after": 7.5
+  }
+}

@@ -1,0 +1,43 @@
+{
+  "generatedAt": "2026-09-09T00:47:06.501Z",
+  "comparisons": [
+    {
+      "defenseA": "DEFENSE-001",
+      "defenseB": "DEFENSE-002",
+      "parent": "DEFENSE-001",
+      "child": "DEFENSE-002",
+      "metricsA": {
+        "simulations": 100,
+        "passed": 70,
+        "failed": 30,
+        "survivalRate": 70,
+        "failureRate": 30,
+        "falsePositiveRate": 5,
+        "falseNegativeRate": 10,
+        "containmentRate": 60,
+        "recoveryRate": 50
+      },
+      "metricsB": {
+        "simulations": 100,
+        "passed": 85,
+        "failed": 15,
+        "survivalRate": 85,
+        "failureRate": 15,
+        "falsePositiveRate": 3,
+        "falseNegativeRate": 5,
+        "containmentRate": 75,
+        "recoveryRate": 65
+      },
+      "winner": "DEFENSE-002",
+      "decision": "VALIDATED",
+      "reason": "DEFENSE-002 superior a DEFENSE-001 em múltiplas dimensões",
+      "limitations": [
+        "Validado apenas no escopo LAB",
+        "Não promove para produção"
+      ]
+    }
+  ],
+  "validated": 1,
+  "rejected": 0,
+  "proposed": 0
+}

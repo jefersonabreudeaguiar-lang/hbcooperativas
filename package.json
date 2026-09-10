@@ -49,6 +49,8 @@
     "lab:hobelisco:10x": "npx tsx scripts/lab/run-hobelisco-10x.ts",
     "lab:hobelisco:10x:quick": "npx tsx scripts/lab/run-hobelisco-10x.ts -- --quick",
     "hobelisco:staging:activate": "npx tsx scripts/lab/activate-hobelisco-staging-observe.ts",
+    "hobelisco:lab:activate": "npx tsx scripts/lab/activate-hobelisco-lab-mirror.ts",
+    "test:hobelisco-lab-boundary": "npx tsx scripts/test-hobelisco-lab-boundary.ts",
     "lab:verify-hobelisco-v2-schema": "npx tsx scripts/lab/verify-hobelisco-v2-schema.ts"
   },
   "dependencies": {

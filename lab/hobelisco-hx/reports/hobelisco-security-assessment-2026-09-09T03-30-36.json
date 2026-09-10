@@ -1,0 +1,604 @@
+{
+  "version": "HX-0.5.0-LAB-ADAPTIVE-DEFENSE",
+  "verdict": "LAB-HARDENED-ADAPTIVE-AMBER",
+  "generatedAt": "2026-09-09T03:30:36.386Z",
+  "benchmark": {
+    "generatedAt": "2026-09-09T03:30:36.385Z",
+    "methodology": "Notas 0–10 por dimensão ponderada. Hobelisco LAB usa métricas reais da campanha. Referências são estimativas conservadoras para app Next.js+Supabase — não benchmark certificado.",
+    "disclaimer": "Isto NÃO afirma que Hobelisco substitui WAF, EDR ou antivírus. AV/EDR operam em camadas diferentes (SO/endpoint). Hobelisco é camada applicativa/domínio.",
+    "hobeliscoLabMetrics": {
+      "defenseCoverageScore": 77.2,
+      "preventionRate": 54.75,
+      "detectionRate": 99.64,
+      "falsePositiveRate": 0,
+      "missedRate": 0.36,
+      "financialMutations": 0,
+      "scenariosExecuted": 1000
+    },
+    "dimensions": [
+      {
+        "id": "detection",
+        "label": "Detecção de ameaças",
+        "weight": 0.15,
+        "note": "Capacidade de identificar padrões maliciosos ou anômalos"
+      },
+      {
+        "id": "prevention",
+        "label": "Prevenção / bloqueio",
+        "weight": 0.15,
+        "note": "Interromper ataques antes do impacto"
+      },
+      {
+        "id": "domainFit",
+        "label": "Aderência ao domínio (coop/crédito/sync)",
+        "weight": 0.12,
+        "note": "Regras específicas HB Credit, cooperativa, offline sync"
+      },
+      {
+        "id": "falsePositiveControl",
+        "label": "Controle de falso positivo",
+        "weight": 0.1,
+        "note": "Não bloquear usuário legítimo"
+      },
+      {
+        "id": "operationalMaturity",
+        "label": "Maturidade operacional",
+        "weight": 0.1,
+        "note": "SLA, equipe, runbooks, anos de mercado"
+      },
+      {
+        "id": "productionReadiness",
+        "label": "Prontidão produção",
+        "weight": 0.12,
+        "note": "Pode ir para prod hoje com risco aceitável?"
+      },
+      {
+        "id": "auditability",
+        "label": "Auditoria / rastreabilidade",
+        "weight": 0.08,
+        "note": "Who/what/when/why/policy"
+      },
+      {
+        "id": "threatIntel",
+        "label": "Inteligência de ameaças",
+        "weight": 0.08,
+        "note": "Feeds, MITRE, CVE, atualização contínua"
+      },
+      {
+        "id": "incidentResponse",
+        "label": "Resposta a incidente",
+        "weight": 0.1,
+        "note": "Playbooks, contenção, human-in-the-loop"
+      }
+    ],
+    "solutions": [
+      {
+        "id": "crowdstrike_edr",
+        "name": "CrowdStrike Falcon (EDR)",
+        "category": "av",
+        "applicableToThisApp": false,
+        "dimensions": {
+          "detection": 9,
+          "prevention": 8,
+          "domainFit": 1.5,
+          "falsePositiveControl": 7.5,
+          "operationalMaturity": 9.5,
+          "productionReadiness": 9,
+          "auditability": 8.5,
+          "threatIntel": 9,
+          "incidentResponse": 8.5
+        },
+        "overall": 7.8,
+        "summary": "EDR líder de mercado — endpoint/process. Complementar, não substituto de WAF/app logic.",
+        "limitations": [
+          "Não protege lógica applicativa",
+          "Não entende tenant cooperativo",
+          "Outro budget/equipe"
+        ]
+      },
+      {
+        "id": "cloudflare_waf",
+        "name": "Cloudflare WAF (gerenciado)",
+        "category": "waf",
+        "applicableToThisApp": true,
+        "dimensions": {
+          "detection": 7.5,
+          "prevention": 8.5,
+          "domainFit": 5,
+          "falsePositiveControl": 6.5,
+          "operationalMaturity": 9.5,
+          "productionReadiness": 9.5,
+          "auditability": 7,
+          "threatIntel": 8,
+          "incidentResponse": 5.5
+        },
+        "overall": 7.5,
+        "summary": "Proteção de borda madura; OWASP, bot, rate limit. Não entende HB Credit nem sync offline.",
+        "limitations": [
+          "Sem contexto de negócio cooperativo",
+          "Regras genéricas podem FP em APIs custom",
+          "Custo por tráfego"
+        ]
+      },
+      {
+        "id": "contrast_rasp",
+        "name": "Contrast / RASP comercial",
+        "category": "rasp",
+        "applicableToThisApp": false,
+        "dimensions": {
+          "detection": 8,
+          "prevention": 7.5,
+          "domainFit": 6,
+          "falsePositiveControl": 6.5,
+          "operationalMaturity": 8.5,
+          "productionReadiness": 7.5,
+          "auditability": 7,
+          "threatIntel": 7,
+          "incidentResponse": 6
+        },
+        "overall": 7.2,
+        "summary": "Runtime app protection — referência RASP. Pouco comum em Next.js serverless.",
+        "limitations": [
+          "Agent/instrumentação pesada",
+          "Compatibilidade Next.js limitada",
+          "Licença cara"
+        ]
+      },
+      {
+        "id": "aws_waf",
+        "name": "AWS WAF + Shield",
+        "category": "waf",
+        "applicableToThisApp": true,
+        "dimensions": {
+          "detection": 7,
+          "prevention": 8,
+          "domainFit": 4.5,
+          "falsePositiveControl": 6,
+          "operationalMaturity": 9,
+          "productionReadiness": 9,
+          "auditability": 7.5,
+          "threatIntel": 7.5,
+          "incidentResponse": 5
+        },
+        "overall": 7.1,
+        "summary": "WAF enterprise integrado à infra AWS. Configuração manual exige expertise.",
+        "limitations": [
+          "Não cobre lógica de crédito",
+          "Tuning complexo",
+          "Depende de arquitetura AWS"
+        ]
+      },
+      {
+        "id": "splunk_siem",
+        "name": "Splunk / Microsoft Sentinel (SIEM)",
+        "category": "siem",
+        "applicableToThisApp": true,
+        "dimensions": {
+          "detection": 8.5,
+          "prevention": 2.5,
+          "domainFit": 5.5,
+          "falsePositiveControl": 6,
+          "operationalMaturity": 9,
+          "productionReadiness": 8,
+          "auditability": 9.5,
+          "threatIntel": 8.5,
+          "incidentResponse": 8
+        },
+        "overall": 7,
+        "summary": "Correlação enterprise e IR. Caro, lento para bloquear inline.",
+        "limitations": [
+          "Não bloqueia request HTTP inline",
+          "Custo",
+          "Requer SOC"
+        ]
+      },
+      {
+        "id": "hobelisco_lab_adaptive",
+        "name": "Hobelisco LAB Adaptive (campanha medida)",
+        "category": "hobelisco",
+        "applicableToThisApp": true,
+        "dimensions": {
+          "detection": 9.89274109263658,
+          "prevention": 5.475,
+          "domainFit": 8.5,
+          "falsePositiveControl": 7.5,
+          "operationalMaturity": 4,
+          "productionReadiness": 3,
+          "auditability": 9.5,
+          "threatIntel": 6,
+          "incidentResponse": 6
+        },
+        "overall": 6.7,
+        "summary": "Simulado: 1000 cenários, 461 blocked, 3 missed, 0 mutação financeira. Não validado em tráfego real.",
+        "limitations": [
+          "Runtime sintético — não prova defesa em prod",
+          "Prevenção ~55% — metade dos ataques simulados só detectados",
+          "17 missed em T12_HB_CREDIT no último run",
+          "Active defense desligado em PRODUCTION"
+        ]
+      },
+      {
+        "id": "supabase_rls_auth",
+        "name": "Supabase Auth + RLS (já no app)",
+        "category": "platform",
+        "applicableToThisApp": true,
+        "dimensions": {
+          "detection": 4,
+          "prevention": 8.5,
+          "domainFit": 8,
+          "falsePositiveControl": 9,
+          "operationalMaturity": 8.5,
+          "productionReadiness": 9,
+          "auditability": 6.5,
+          "threatIntel": 2,
+          "incidentResponse": 3
+        },
+        "overall": 6.6,
+        "summary": "Autorização estrutural no banco. Previne IDOR se RLS correta. Não detecta abuso de padrão.",
+        "limitations": [
+          "Não vê sequência temporal",
+          "Não alerta admin",
+          "Não simula ataques"
+        ]
+      },
+      {
+        "id": "windows_defender",
+        "name": "Windows Defender / antivírus endpoint",
+        "category": "av",
+        "applicableToThisApp": false,
+        "dimensions": {
+          "detection": 8,
+          "prevention": 7.5,
+          "domainFit": 1,
+          "falsePositiveControl": 7,
+          "operationalMaturity": 9.5,
+          "productionReadiness": 9,
+          "auditability": 5,
+          "threatIntel": 8,
+          "incidentResponse": 4
+        },
+        "overall": 6.6,
+        "summary": "Protege SO/arquivo/malware no servidor ou desktop. Não inspeciona lógica de API do app.",
+        "limitations": [
+          "Camada errada para ameaças web/API",
+          "Não vê JWT, sync, crédito",
+          "Comparativo direto enganoso"
+        ]
+      },
+      {
+        "id": "sentry_datadog",
+        "name": "Sentry / Datadog APM",
+        "category": "observability",
+        "applicableToThisApp": true,
+        "dimensions": {
+          "detection": 6,
+          "prevention": 2,
+          "domainFit": 5,
+          "falsePositiveControl": 8,
+          "operationalMaturity": 9,
+          "productionReadiness": 9,
+          "auditability": 8,
+          "threatIntel": 4,
+          "incidentResponse": 6.5
+        },
+        "overall": 6.2,
+        "summary": "Observabilidade e erros. Detecta anomalias de performance, não defende ativamente.",
+        "limitations": [
+          "Observe-only",
+          "Sem política de bloqueio",
+          "Sem domínio HB Credit nativo"
+        ]
+      },
+      {
+        "id": "hobelisco_v2_observe",
+        "name": "Hobelisco V2 Observe-only (path prod viável hoje)",
+        "category": "hobelisco",
+        "applicableToThisApp": true,
+        "dimensions": {
+          "detection": 6,
+          "prevention": 2,
+          "domainFit": 9,
+          "falsePositiveControl": 8.5,
+          "operationalMaturity": 5,
+          "productionReadiness": 6,
+          "auditability": 8,
+          "threatIntel": 5.5,
+          "incidentResponse": 6.5
+        },
+        "overall": 6.1,
+        "summary": "Middleware ingest + CorrelationEngine + incidentes + playbooks HB Credit. Não bloqueia requests.",
+        "limitations": [
+          "HB_HOBELISCO_V2_ENABLED=false por default",
+          "Sem bloqueio inline",
+          "Persistência parcial in-memory até schema aplicado"
+        ]
+      },
+      {
+        "id": "modsecurity_crs",
+        "name": "ModSecurity OWASP CRS",
+        "category": "waf",
+        "applicableToThisApp": true,
+        "dimensions": {
+          "detection": 6.5,
+          "prevention": 7,
+          "domainFit": 4,
+          "falsePositiveControl": 5,
+          "operationalMaturity": 7,
+          "productionReadiness": 7,
+          "auditability": 6,
+          "threatIntel": 6.5,
+          "incidentResponse": 4
+        },
+        "overall": 5.9,
+        "summary": "Open source, regras OWASP. FP frequentes sem tuning pesado.",
+        "limitations": [
+          "Alto FP out-of-box",
+          "Manutenção manual",
+          "Sem correlacionar sessão+crédito"
+        ]
+      }
+    ],
+    "hobeliscoPosition": {
+      "labAdaptiveOverall": 6.7,
+      "v2ObserveOverall": 6.1,
+      "incrementalValueWithWafAndRls": 4.3,
+      "honestAppSecurityContribution": 6.1,
+      "verdict": "FORTE em nicho — ainda imaturo para active defense em prod"
+    },
+    "gapsVsIndustry": [
+      "Prevenção inline ~55% no LAB vs WAF ~80%+ na borda",
+      "Sem feed CVE/KEV ao vivo — TKB estático normalizado",
+      "Sem SOC 24/7 — playbooks exigem humano",
+      "Active defense não wired ao middleware prod",
+      "3 cenários missed (0.36%) — gap T12_HB_CREDIT"
+    ],
+    "notComparable": [
+      "Windows Defender / Kaspersky / Norton — protegem malware/arquivo, não API REST",
+      "CrowdStrike EDR — processo/kernel, não JWT/sync/crédito cooperativo"
+    ]
+  },
+  "productionImpact": {
+    "generatedAt": "2026-09-09T03:30:36.386Z",
+    "currentDefault": "OFF",
+    "modes": {
+      "OFF": {
+        "envFlags": [
+          "HB_HOBELISCO_V2_ENABLED=false",
+          "HB_ADAPTIVE_DEFENSE_ENABLED=false"
+        ],
+        "riskLevel": "LOW",
+        "recommended": true
+      },
+      "OBSERVE_ONLY": {
+        "envFlags": [
+          "HOBELISCO_ENVIRONMENT=STAGING",
+          "HB_HOBELISCO_V2_ENABLED=true",
+          "HB_HOBELISCO_OBSERVE_ONLY=true",
+          "HB_HOBELISCO_STAGING_ENABLED=true"
+        ],
+        "riskLevel": "LOW",
+        "recommended": true
+      },
+      "STAGING_FULL": {
+        "envFlags": [
+          "HOBELISCO_ENVIRONMENT=STAGING",
+          "HB_HOBELISCO_V2_ENABLED=true",
+          "HB_HOBELISCO_CREDIT_WATCH_ENABLED=true",
+          "HB_ADAPTIVE_DEFENSE_ENABLED=true (campanha LAB apenas)"
+        ],
+        "riskLevel": "MEDIUM",
+        "recommended": true
+      },
+      "ACTIVE_DEFENSE_CANARY": {
+        "envFlags": [
+          "ActiveDefenseExecutor em % tráfego",
+          "REJECT/RATE_LIMIT inline",
+          "Human approval + rollback"
+        ],
+        "riskLevel": "HIGH",
+        "recommended": false
+      }
+    },
+    "advantages": [
+      {
+        "title": "Visibilidade de domínio",
+        "items": [
+          "Correlaciona auth + sync + crédito + admin — WAF genérico não faz isso",
+          "HB Credit Watch detecta divergência limit/used/available sem mutar dados",
+          "Incidentes com fingerprint estável e playbooks determinísticos",
+          "Auditoria who/what/when para compliance interno cooperativa"
+        ]
+      },
+      {
+        "title": "Segurança financeira",
+        "items": [
+          "FinancialGuard impede mutação automática de hb_credit_*",
+          "Probe read-only — observe-only by design em V2 prod",
+          "Confirmação humana antes de playbook outcome"
+        ]
+      },
+      {
+        "title": "Evolução controlada",
+        "items": [
+          "Campanhas LAB 10k+ cenários antes de propor política",
+          "Learning candidates sem auto-deploy",
+          "Rollback versionado DEFENSE-POLICY-vN"
+        ]
+      }
+    ],
+    "disadvantages": [
+      {
+        "title": "Operacional",
+        "items": [
+          "Mais uma camada para operar — alertas exigem triagem humana",
+          "Schema observability Supabase ainda necessário para persistência full",
+          "Cron credit-watch precisa CRON_SECRET e tuning de intervalo",
+          "Curva de aprendizado — painel admin + LAB separados"
+        ]
+      },
+      {
+        "title": "Performance",
+        "items": [
+          "Middleware ingest adiciona latência (async schedule, ~1–5ms típico)",
+          "CorrelationEngine em burst pode pressionar memória in-process",
+          "Campanha 10k não roda em prod — mas nightly LAB consome CPU CI"
+        ]
+      },
+      {
+        "title": "Risco se mal configurado",
+        "items": [
+          "ACTIVE_DEFENSE em prod sem canary → FP bloqueia cooperado legítimo",
+          "HB_HOBELISCO_V2 em prod sem STAGING → observação incompleta",
+          "Alert fatigue se threshold confiança baixo demais"
+        ]
+      }
+    ],
+    "functionalFlowImpact": [
+      {
+        "title": "Login / auth",
+        "items": [
+          "Observe: registra falhas, correlaciona burst — usuário não percebe",
+          "Active (não recomendado): RATE_LIMIT após N falhas pode atrasar login legítimo em rede compartilhada"
+        ]
+      },
+      {
+        "title": "Sync offline cooperativa",
+        "items": [
+          "Observe: detecta replay/duplicata/conflict — não rejeita sync válido",
+          "Active: REPLAY_REJECTION mal calibrado pode bloquear reconnect mobile legítimo"
+        ]
+      },
+      {
+        "title": "HB Credit",
+        "items": [
+          "Observe: alerta admin divergência — cooperado continua operando",
+          "Nunca: alteração automática de saldo/limite (bloqueado por design)"
+        ]
+      },
+      {
+        "title": "Admin / responsável",
+        "items": [
+          "Observe: sequência admin anômala gera incidente ≥70% confiança",
+          "Playbook só após CONFIRMED humano — não trava admin automaticamente em V2"
+        ]
+      },
+      {
+        "title": "APIs públicas",
+        "items": [
+          "Middleware observa /api/* exceto /api/lab/hobelisco",
+          "Paths em publicApiPaths continuam isentos de auth — Hobelisco não corrige misconfig"
+        ]
+      }
+    ],
+    "whatWouldBlock": [
+      "Active defense inline sem 30+ dias observe baseline",
+      "HB_ADAPTIVE_DEFENSE_ENABLED=true em NODE_ENV=production (fail-closed hoje)",
+      "Learning candidate → DEPLOYED sem APPROVED humano",
+      "Qualquer mutação financeira detectada em campanha (gate RED)",
+      "Persistência Supabase não aplicada — incidentes voláteis em restart"
+    ],
+    "whatWouldHelp": [
+      "Detecção precoce de abuso credit/sync antes de auditoria manual",
+      "Evidência estruturada para incident response interno",
+      "Regressão contínua LAB — nova release não quebra defesa silenciosamente",
+      "Complemento a RLS — detecta abuso mesmo com token válido"
+    ],
+    "deploymentPhases": [
+      {
+        "phase": "1 — STAGING observe-only (2–4 semanas)",
+        "actions": [
+          "HB_HOBELISCO_V2_ENABLED=true, OBSERVE_ONLY=true",
+          "Aplicar schema hobelisco v2 + credit watch",
+          "Medir FP de alertas, ajustar threshold confiança"
+        ],
+        "gate": "Zero impacto funcional; incidentes revisados manualmente"
+      },
+      {
+        "phase": "2 — Credit watch cron staging",
+        "actions": [
+          "HB_HOBELISCO_CREDIT_WATCH_ENABLED=true",
+          "Intervalo 15min",
+          "Playbooks testados"
+        ],
+        "gate": "Probe read-only confirmado; dedup OK"
+      },
+      {
+        "phase": "3 — Produção observe-only canary",
+        "actions": [
+          "1 cooperativa piloto",
+          "Alertas só admin",
+          "Sem bloqueio inline"
+        ],
+        "gate": "FP < 1/semana; latência p95 < +10ms"
+      },
+      {
+        "phase": "4 — LAB nightly + human policy (contínuo)",
+        "actions": [
+          "npm run lab:hobelisco:adaptive-defense nightly CI",
+          "Review learning candidates"
+        ],
+        "gate": "GREEN + zero financial mutations"
+      },
+      {
+        "phase": "5 — Active defense (opcional, futuro)",
+        "actions": [
+          "CANARY 1% tráfego",
+          "Só REJECT injection/replay",
+          "Rollback automático"
+        ],
+        "gate": "Human approval + regression 10k + FP lab < 0.1%"
+      }
+    ],
+    "benchmarkContext": {
+      "honestAppSecurityContribution": 6.1,
+      "verdict": "FORTE em nicho — ainda imaturo para active defense em prod"
+    }
+  },
+  "maturityScore": {
+    "detection": 99.64,
+    "prevention": 54.75,
+    "coverage": 77.2,
+    "falsePositiveControl": 100,
+    "regression": 85,
+    "learning": 60,
+    "recovery": 80,
+    "auditability": 95,
+    "overall": 81
+  },
+  "notes": {
+    "honestOverallContribution": 6.1,
+    "labAdaptiveScore": 6.7,
+    "v2ObserveScore": 6.1,
+    "topComparables": [
+      {
+        "name": "CrowdStrike Falcon (EDR)",
+        "overall": 7.8,
+        "applicable": false
+      },
+      {
+        "name": "Cloudflare WAF (gerenciado)",
+        "overall": 7.5,
+        "applicable": true
+      },
+      {
+        "name": "Contrast / RASP comercial",
+        "overall": 7.2,
+        "applicable": false
+      },
+      {
+        "name": "AWS WAF + Shield",
+        "overall": 7.1,
+        "applicable": true
+      },
+      {
+        "name": "Splunk / Microsoft Sentinel (SIEM)",
+        "overall": 7,
+        "applicable": true
+      }
+    ],
+    "notAVReplacement": [
+      "Windows Defender / Kaspersky / Norton — protegem malware/arquivo, não API REST",
+      "CrowdStrike EDR — processo/kernel, não JWT/sync/crédito cooperativo"
+    ]
+  }
+}

@@ -1,0 +1,149 @@
+{
+  "overall": 7.6,
+  "weakestDimension": {
+    "id": "crossTenant",
+    "score": 5.3
+  },
+  "dimensions": [
+    {
+      "id": "detection",
+      "label": "Detection",
+      "score": 10,
+      "weight": 0.1,
+      "evidence": "99.84% det, 11 missed"
+    },
+    {
+      "id": "prevention",
+      "label": "Prevention",
+      "score": 6.7,
+      "weight": 0.1,
+      "evidence": "66.86% blocked"
+    },
+    {
+      "id": "coverage",
+      "label": "Coverage",
+      "score": 8.3,
+      "weight": 0.08,
+      "evidence": "83.35%"
+    },
+    {
+      "id": "auth",
+      "label": "Auth",
+      "score": 7.6,
+      "weight": 0.07,
+      "evidence": "T01_AUTH family"
+    },
+    {
+      "id": "authz",
+      "label": "AuthZ",
+      "score": 5.3,
+      "weight": 0.07,
+      "evidence": "T02_AUTHZ family"
+    },
+    {
+      "id": "session",
+      "label": "Session",
+      "score": 6.9,
+      "weight": 0.06,
+      "evidence": "T06_SESSION family"
+    },
+    {
+      "id": "api",
+      "label": "API",
+      "score": 6.6,
+      "weight": 0.05,
+      "evidence": "T04_WEB_API"
+    },
+    {
+      "id": "integrity",
+      "label": "Integrity",
+      "score": 8.3,
+      "weight": 0.05,
+      "evidence": "T05+T10"
+    },
+    {
+      "id": "credit",
+      "label": "HB Credit",
+      "score": 6.6,
+      "weight": 0.08,
+      "evidence": "T12_HB_CREDIT"
+    },
+    {
+      "id": "sync",
+      "label": "Sync",
+      "score": 7.9,
+      "weight": 0.06,
+      "evidence": "T11_SYNC"
+    },
+    {
+      "id": "crossTenant",
+      "label": "CrossTenant",
+      "score": 5.3,
+      "weight": 0.07,
+      "evidence": "authz+tenant"
+    },
+    {
+      "id": "abuse",
+      "label": "Abuse/Rate",
+      "score": 8,
+      "weight": 0.05,
+      "evidence": "T07_RATE"
+    },
+    {
+      "id": "threatIntel",
+      "label": "ThreatIntel",
+      "score": 6.5,
+      "weight": 0.04,
+      "evidence": "TKB versioned static"
+    },
+    {
+      "id": "incidentResponse",
+      "label": "IR",
+      "score": 6.5,
+      "weight": 0.04,
+      "evidence": "playbooks+human"
+    },
+    {
+      "id": "audit",
+      "label": "Audit",
+      "score": 9,
+      "weight": 0.04,
+      "evidence": "audit chain LAB"
+    },
+    {
+      "id": "resilience",
+      "label": "Resilience",
+      "score": 7.5,
+      "weight": 0.04,
+      "evidence": "fail-open fabric"
+    },
+    {
+      "id": "regression",
+      "label": "Regression",
+      "score": 10,
+      "weight": 0.06,
+      "evidence": "8/8 SEC-REG"
+    },
+    {
+      "id": "performance",
+      "label": "Performance",
+      "score": 8,
+      "weight": 0.04,
+      "evidence": "11988ms campaign"
+    },
+    {
+      "id": "falsePositive",
+      "label": "FP Control",
+      "score": 8.5,
+      "weight": 0.04,
+      "evidence": "FP=0"
+    }
+  ],
+  "criticalGates": {
+    "financialMutations": 0,
+    "criticalBypass": 11,
+    "productionTargets": 0,
+    "auditIntegrity": true
+  },
+  "gatesPass": true
+}

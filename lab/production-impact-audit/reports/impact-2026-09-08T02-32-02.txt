@@ -1,0 +1,195 @@
+╔══════════════════════════════════════════════════════════════════════╗
+║  HB COOPERATIVAS — IMPACTO SE IMPLEMENTAR LAB EM PRODUÇÃO            ║
+║  (simulação · zero código alterado em src/)                          ║
+╚══════════════════════════════════════════════════════════════════════╝
+
+Gerado: 2026-09-08T02:32:02.864Z
+Simulação de impacto — NENHUMA alteração em src/ produção. Avalia o que mudaria SE as mitigações do lab fossem implementadas.
+
+─── REGRESSÃO PRODUÇÃO (rodada real) ───
+  ✓ test:sync-flows: OK
+
+─── EVOLUÇÃO DO PLANO (5 iterações simuladas) ───
+     Cada iteração refina ordem, flags e safeguards até ~100% cenários OK.
+
+  Iteração 1: Big bang — tudo junto, sem testes
+    Taxa de sucesso: 34.3% (12/35 cenários)
+    Ordem: M1 → M2 → M3 → M4 → M5 → M6 → M7 → M8
+    Flags: —
+    Bloqueios: S01 Deploy rotação AUTH_SECRET desloga todos; S02 Mercado parceiro 401 após rotação secret; S03 Cooperado não vê mensalidade paga após sync; S04 Dois dispositivos cooperado: status diverge; S05 Push bloqueado por ficha duplicada legítima pós-sync; S06 Conferência nota cria ficha; push bloqueia antes de nuvem ver; S07 Responsável offline acumula push; block ao voltar online; S08 Votação desatualizada enquanto ficha já syncou; S09 Rollback flag slices; manifest órfão na nuvem; S10 Pagamento registrado; slice financeiro atrasado
+
+  Iteração 2: Só P0 isolado (M1 + M2)
+    Taxa de sucesso: 40% (14/35 cenários)
+    Ordem: M2 → M1
+    Flags: test:sync-flows gate
+    Bloqueios: S01 Deploy rotação AUTH_SECRET desloga todos; S02 Mercado parceiro 401 após rotação secret; S05 Push bloqueado por ficha duplicada legítima pós-sync; S06 Conferência nota cria ficha; push bloqueia antes de nuvem ver; S07 Responsável offline acumula push; block ao voltar online; S08 Votação desatualizada enquanto ficha já syncou; S09 Rollback flag slices; manifest órfão na nuvem; S10 Pagamento registrado; slice financeiro atrasado; S11 Contador abre relatório; slice ficha incompleto; S12 Legado com foto bloqueado pelo gate FSM
+
+  Iteração 3: P0 + M3 warn-only + M5
+    Taxa de sucesso: 62.9% (22/35 cenários)
+    Ordem: M2 → M1 → M3 → M5
+    Flags: M3_WARN_ONLY · M5_LEGACY_EXEMPT
+    Bloqueios: S08 Votação desatualizada enquanto ficha já syncou; S09 Rollback flag slices; manifest órfão na nuvem; S10 Pagamento registrado; slice financeiro atrasado; S11 Contador abre relatório; slice ficha incompleto; S15 Push 5 MB rejeitado Supabase mid-operação; S16 Contador não acha mês arquivado; S17 Merge homônimos une pessoas diferentes; S18 Conta Coop limite no ID errado pós-merge; S21 Dois responsáveis editam operacional simultâneo; S27 27 JSONs com 3 Ana Maria duplicadas
+
+  Iteração 4: P1 M4 flag off + M6 alerta
+    Taxa de sucesso: 65.7% (23/35 cenários)
+    Ordem: M2 → M1 → M3 → M5 → M6 → M4
+    Flags: M3_WARN_ONLY · HB_SYNC_SLICES=false · M5_LEGACY_EXEMPT
+    Bloqueios: S08 Votação desatualizada enquanto ficha já syncou; S09 Rollback flag slices; manifest órfão na nuvem; S10 Pagamento registrado; slice financeiro atrasado; S11 Contador abre relatório; slice ficha incompleto; S15 Push 5 MB rejeitado Supabase mid-operação; S16 Contador não acha mês arquivado; S17 Merge homônimos une pessoas diferentes; S18 Conta Coop limite no ID errado pós-merge; S21 Dois responsáveis editam operacional simultâneo; S27 27 JSONs com 3 Ana Maria duplicadas
+
+  Iteração 5: Plano final — ordem + flags + pilot
+    Taxa de sucesso: 97.1% (34/35 cenários)
+    Ordem: M2 → M1 → M3 → M5 → M6 → M4 → M8 → M7
+    Flags: M3_WARN_ONLY→BLOCK após 7d · HB_SYNC_SLICES=pilot 1 CNPJ · M5_LEGACY_EXEMPT · M7 opt-in · M8 manual confirm
+    Bloqueios: S21 Dois responsáveis editam operacional simultâneo
+
+TAXA FINAL (plano refinado iter. 5): 97.1%
+Pronto para implementar em produção: SIM
+
+─── ORDEM RECOMENDADA DE IMPLEMENTAÇÃO ───
+  1. M2
+  2. M1
+  3. M3 (warn)
+  4. M5
+  5. M6
+  6. M4 (flag pilot)
+  7. M8
+  8. M7
+
+─── NÃO FAZER AINDA ───
+  • M4 slices default ON para todos CNPJs
+  • M3 block hard sem warn-only
+  • M7 arquivamento automático sem export
+  • M8 merge automático homônimos
+  • Big bang M1–M8 num único deploy
+
+─── MITIGAÇÕES × O QUE MUDA NO APP ───
+  M1 [P0] AUTH_SECRET só em env Vercel + rotação JWT
+      Arquivos: vercel.json, src/lib/auth/*…
+      Fluxos afetados: Login · JWT · sessão · HB Créditos · mercado parceiro · Conta Coop · limites · repasse · Cobrança HB · Asaas PIX
+      Se apressar: Todos logados deslogados; HB Créditos/API 401 até redeploy coordenado.
+      Safeguard: Deploy com secret novo + grace period 1h dual-secret
+  M2 [P0] Corrigir merge mensalidade cooperado vê status paga
+      Arquivos: cooperativaSyncCloudService.ts (mergeOperacionalIntoData), mensalidadeService.ts
+      Fluxos afetados: Mensalidade cooperado ↔ responsável · Sync offline · push/pull nuvem
+      Se apressar: Regressão em merge de outras entidades operacionais.
+      Safeguard: npm run test:sync-flows 100% verde antes de merge
+  M3 [P1] Bloqueio push incoerente (ficha duplicada)
+      Arquivos: cooperativaSyncCloudService.ts pushOperacionalToCloud, fichaSyncGuard.ts
+      Fluxos afetados: Ficha corrida · pagamentos · recibos · Notas → conferência → ficha · Sync offline · push/pull nuvem
+      Se apressar: Responsável não consegue salvar; dados legítimos bloqueados.
+      Safeguard: Modo warn-only 1 semana (log + banner)
+  M4 [P1] Sync por slices (manifest remoto)
+      Arquivos: cooperativaSyncStorage.ts, cooperativaSyncCloudService.ts…
+      Fluxos afetados: Sync offline · push/pull nuvem · Votação · assinatura cadastro · Ficha corrida · pagamentos · recibos · Mensalidade cooperado ↔ responsável · Livro caixa · fechamento · contador
+      Se apressar: Dados parciais: cooperado vê ficha nova mas votação antiga.
+      Safeguard: Feature flag HB_SYNC_SLICES=false default
+  M5 [P1] Gate FSM assinatura no push cooperado
+      Arquivos: cooperadoAssinaturaService.ts, cooperadoCloudService.ts
+      Fluxos afetados: Votação · assinatura cadastro · Cadastro cooperado · Meu cadastro
+      Se apressar: Cooperado legado com foto bloqueado.
+      Safeguard: Exempt status implícito confirmada (legado)
+  M6 [P2] Preditor capacidade + alerta 80%
+      Arquivos: platformCapacityService.ts, AdminSistemaPanel.tsx…
+      Fluxos afetados: 
+      Se apressar: Nenhum fluxo quebrado — só alertas.
+      Safeguard: Somente leitura/alerta
+  M7 [P2] Arquivamento operacional meses antigos
+      Arquivos: cooperativaSyncStorage.ts, novo job archive
+      Fluxos afetados: Livro caixa · fechamento · contador · Ficha corrida · pagamentos · recibos · Sync offline · push/pull nuvem
+      Se apressar: Relatórios históricos incompletos; contador perde mês arquivado.
+      Safeguard: Arquivar só >12 meses
+  M8 [P2] Painel dedupe cooperados homônimos
+      Arquivos: cooperados/page.tsx, novo serviço mergeCooperado
+      Fluxos afetados: Cadastro cooperado · Meu cadastro · Ficha corrida · pagamentos · recibos · HB Créditos · mercado parceiro
+      Se apressar: Merge errado une fichas de pessoas diferentes.
+      Safeguard: Só admin/responsável confirma
+
+─── CENÁRIOS COM RISCO DE QUEBRAR FLUXO (plano ingênuo → refinado) ───
+  S01 [previsivel] Deploy rotação AUTH_SECRET desloga todos
+      Fluxo: Login · JWT · sessão
+      Ingênuo: ✗ Sessões JWT invalidadas instantaneamente.
+      Refinado: ✓ Dual-secret 1h + redeploy; usuários relogam uma vez.
+      Usuário vê: Todos precisam entrar de novo no app.
+  S02 [imprevisivel] Mercado parceiro 401 após rotação secret
+      Fluxo: HB Créditos · mercado parceiro
+      Ingênuo: ✗ Edge functions com secret velho rejeitam token.
+      Refinado: ✓ Deploy atômico + verificar CRON_SECRET alinhado.
+  S03 [previsivel] Cooperado não vê mensalidade paga após sync
+      Fluxo: Mensalidade cooperado ↔ responsável
+      Ingênuo: ✗ Regressão conhecida — 1/11 testes sync falha hoje.
+      Refinado: ✓ Fix merge + test:sync-flows verde antes de qualquer outro sync change.
+      Usuário vê: Cooperado acha que mensalidade não foi confirmada.
+  S04 [imprevisivel] Dois dispositivos cooperado: status diverge
+      Fluxo: Mensalidade cooperado ↔ responsável
+      Ingênuo: ✗ Celular A paga, B ainda pendente até pull.
+      Refinado: ✓ Merge by newer updatedAt + pull ao abrir app.
+  S05 [previsivel] Push bloqueado por ficha duplicada legítima pós-sync
+      Fluxo: Ficha corrida · pagamentos · recibos
+      Ingênuo: ✗ Duplicata fantasma de sync antigo trava responsável.
+      Refinado: ✓ Warn-only + ferramenta dedupe ficha antes de block.
+      Usuário vê: Responsável vê 'Não foi possível sincronizar'.
+  S06 [imprevisivel] Conferência nota cria ficha; push bloqueia antes de nuvem ver
+      Fluxo: Notas → conferência → ficha
+      Ingênuo: ✗ Falso positivo duplicata na mesma sessão.
+      Refinado: ✓ Dedupe local antes de validate; block só id+mes+notaId iguais.
+  S07 [previsivel] Responsável offline acumula push; block ao voltar online
+      Fluxo: Sync offline · push/pull nuvem
+      Ingênuo: ✗ Dados locais inconsistentes acumulados offline.
+      Refinado: ✓ Banner com lista de conflitos + botão reparar.
+  S08 [previsivel] Votação desatualizada enquanto ficha já syncou
+      Fluxo: Votação · assinatura cadastro
+      Ingênuo: ✗ Slice ficha novo, votacao slice stale.
+      Refinado: ✓ Abrir votação força pull P0 slices; flag off = monolito.
+      Usuário vê: Cooperado vota em pauta que já fechou na nuvem.
+  S09 [imprevisivel] Rollback flag slices; manifest órfão na nuvem
+      Fluxo: Sync offline · push/pull nuvem
+      Ingênuo: ✗ Cliente espera slices; servidor monolito.
+      Refinado: ✓ Fallback: manifest ausente → pull monolito completo.
+  S10 [previsivel] Pagamento registrado; slice financeiro atrasado
+      Fluxo: Ficha corrida · pagamentos · recibos
+      Ingênuo: ✗ Cooperado não vê pagamento 25–120s.
+      Refinado: ✓ Pagamento push inclui slice financeiro dirty imediato.
+  S11 [imprevisivel] Contador abre relatório; slice ficha incompleto
+      Fluxo: Livro caixa · fechamento · contador
+      Ingênuo: ✗ Relatório R3 com totais parciais.
+      Refinado: ✓ Perfil contador sempre pull ficha+financeiro+livro.
+  S12 [previsivel] Legado com foto bloqueado pelo gate FSM
+      Fluxo: Votação · assinatura cadastro
+      Ingênuo: ✗ Ailton/Jeferson/Júlio perdem assinatura em docs.
+      Refinado: ✓ Legado (foto sem status) = confirmada; gate só em transição.
+      Usuário vê: Cooperado não consegue assinar recibo.
+  S13 [imprevisivel] Push assinatura em_analise sem foto (race upload)
+      Fluxo: Cadastro cooperado · Meu cadastro
+      Ingênuo: ✗ Falso block cooperado honesto.
+      Refinado: ✓ Gate só no servidor após blob completo; retry client.
+  S15 [imprevisivel] Push 5 MB rejeitado Supabase mid-operação
+      Fluxo: Sync offline · push/pull nuvem
+      Ingênuo: ✗ Sync falha silencioso; dados só local.
+      Refinado: ✓ M6 alerta + M7 arquivamento antes de 95%.
+      Usuário vê: Cooperados param de receber atualizações.
+  S16 [previsivel] Contador não acha mês arquivado
+      Fluxo: Livro caixa · fechamento · contador
+      Ingênuo: ✗ Dossiê ZIP incompleto.
+      Refinado: ✓ Arquivar só após snapshot fechamento + download oferecido.
+
+─── CENÁRIOS RESIDUAIS (plano refinado ainda ✗) ───
+  S21 — Dois responsáveis editam operacional simultâneo: M4 slices reduz blast radius; 3-way merge futuro. Risco residual aceito.
+
+─── MATRIZ RESUMO POR FLUXO ───
+     % = cenários OK com plano refinado (iter. 5)
+  Login · JWT · sessão: 100% (2/2)
+  HB Créditos · mercado parceiro: 100% (4/4)
+  Mensalidade cooperado ↔ responsável: 100% (3/3)
+  Ficha corrida · pagamentos · recibos: 100% (4/4)
+  Notas → conferência → ficha: 100% (4/4)
+  Sync offline · push/pull nuvem: 80% (4/5)
+  Votação · assinatura cadastro: 100% (3/3)
+  Livro caixa · fechamento · contador: 100% (3/3)
+  Cadastro cooperado · Meu cadastro: 100% (3/3)
+  Admin HB · multi-cooperativa: 100% (2/2)
+  Cobrança HB · Asaas PIX: 100% (1/1)
+  Conta Coop · limites · repasse: 100% (1/1)
+
+─── CONCLUSÃO ───
+  Plano refinado atinge meta. Pode iniciar implementação na ordem goOrder.
+  Implementação real exige 1 PR por mitigação + homologação CoopeagriPla após cada passo.

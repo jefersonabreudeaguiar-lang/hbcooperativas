@@ -1,0 +1,32 @@
+=== HB Cooperativas — Auditoria Sync/Atualização (LAB) ===
+Gerado: 2026-09-06T23:21:31.772Z
+Escala simulada: 1000 cooperados · 20 cooperativas
+
+NOTA GERAL ANTES:  5.6/10
+NOTA GERAL DEPOIS: 7.5/10
+DELTA:             +1.9
+
+--- Dimensões ANTES ---
+  Coerência de dados: 6.5/10
+  Eficiência Edge/rede: 4.8/10
+  Prontidão escala 1000/20: 4.5/10
+  Resiliência / recovery: 6/10
+  Segurança sync: 7/10
+  Observabilidade: 4.5/10
+
+--- Dimensões DEPOIS ---
+  Coerência de dados: 8/10
+  Eficiência Edge/rede: 8.5/10
+  Prontidão escala 1000/20: 7/10
+  Resiliência / recovery: 7.5/10
+  Segurança sync: 7.5/10
+  Observabilidade: 6.5/10
+
+--- Simulação 1 dia ---
+Baseline:  5400 req Edge, 8106.23 MB, 96.5% pulls redundantes
+Proposta:  4540 req Edge, 605.69 MB, 15.9% pulls redundantes
+Economia:  15.9% req, 92.5% bytes
+
+--- Coerência (snapshot sintético c/ duplicata) ---
+Baseline detectaria 1 issue(s); push não bloqueado estruturalmente
+Proposta bloquearia push: SIM; warnings: 0

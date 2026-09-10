@@ -1,0 +1,15 @@
+{
+  "campaignId": "HB-HARDEN-20260909-1915",
+  "scenariosExecuted": 10000,
+  "blocked": 4529,
+  "detectedOnly": 2234,
+  "missed": 11,
+  "falsePositive": 0,
+  "inconclusive": 3226,
+  "financialMutations": 0,
+  "defenseCoverageScore": 83.35,
+  "preventionRate": 66.86,
+  "detectionRate": 99.84,
+  "durationMs": 11988,
+  "seed": 20260910
+}

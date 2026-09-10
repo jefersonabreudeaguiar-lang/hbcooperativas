@@ -1,0 +1,181 @@
+{
+  "version": "HX-0.3.1-LAB-HARDENED",
+  "generatedAt": "2026-09-09T01:31:04.910Z",
+  "verdict": "LAB-HARDENED-GREEN",
+  "organismId": "HOBELISCO-HX-LAB-0001",
+  "lifeState": "AWAKE",
+  "vitality": 88,
+  "immunityReadiness": {
+    "score": 91,
+    "classification": "HIGHLY_RESILIENT"
+  },
+  "tests": {
+    "closure": 23,
+    "fullOrganism": 31,
+    "life": 27
+  },
+  "closure": {
+    "verdict": "ORGANISM-GREEN",
+    "passed": 23,
+    "total": 23
+  },
+  "v1Life": {
+    "verdict": "LIFE-GREEN",
+    "passed": 27
+  },
+  "v1Arena": {
+    "passed": 10,
+    "total": 10
+  },
+  "determinism": {
+    "match": true,
+    "runA": {
+      "passed": 1000,
+      "failed": 0
+    },
+    "runB": {
+      "passed": 1000,
+      "failed": 0
+    },
+    "seedB": {
+      "passed": 1000,
+      "survivalRate": 100
+    }
+  },
+  "arena1000": {
+    "version": "HX-0.3.1-LAB-HARDENED",
+    "seed": 20260909,
+    "count": 1000,
+    "total": 1000,
+    "passed": 1000,
+    "failed": 0,
+    "survivalRate": 100,
+    "containmentRate": 100,
+    "falsePositiveRate": 0,
+    "falseNegativeRate": 0,
+    "recoveryRate": 21.6,
+    "defenseSurvivalRate": 100,
+    "averageLatencyMs": 0.73,
+    "p50Ms": 0.58,
+    "p95Ms": 1.24,
+    "p99Ms": 3.11,
+    "memoryPeakEntries": 4,
+    "eventCount": 1000,
+    "failures": [],
+    "executedAt": "2026-09-09T01:30:23.798Z",
+    "durationMs": 732
+  },
+  "arena10000": {
+    "version": "HX-0.3.1-LAB-HARDENED",
+    "seed": 20260909,
+    "count": 10000,
+    "total": 10000,
+    "passed": 10000,
+    "failed": 0,
+    "survivalRate": 100,
+    "containmentRate": 100,
+    "falsePositiveRate": 0,
+    "falseNegativeRate": 0,
+    "recoveryRate": 20.24,
+    "defenseSurvivalRate": 100,
+    "averageLatencyMs": 0.8,
+    "p50Ms": 0.56,
+    "p95Ms": 1.35,
+    "p99Ms": 3.31,
+    "memoryPeakEntries": 4,
+    "eventCount": 10000,
+    "failures": [],
+    "executedAt": "2026-09-09T01:30:31.816Z",
+    "durationMs": 8018
+  },
+  "performanceComparison": {
+    "arena1000": {
+      "p50": 0.58,
+      "p95": 1.24,
+      "p99": 3.11,
+      "avg": 0.73,
+      "durationMs": 732
+    },
+    "arena10000": {
+      "p50": 0.56,
+      "p95": 1.35,
+      "p99": 3.31,
+      "avg": 0.8,
+      "durationMs": 8018
+    }
+  },
+  "stress": {
+    "ok": true,
+    "eventsProcessed": 10000,
+    "loopBlocked": false,
+    "memoryEntries": 10001,
+    "productionBlocked": true,
+    "detail": "stress completed with boundaries intact"
+  },
+  "fullOrganism": {
+    "verdict": "ORGANISM-GREEN",
+    "passed": 31
+  },
+  "attackMatrix": {
+    "total": 25,
+    "passed": 25
+  },
+  "memory": {
+    "pass": true
+  },
+  "threatDNA": {
+    "pass": true
+  },
+  "antibodies": {
+    "pass": true
+  },
+  "evolution": {
+    "pass": true
+  },
+  "guardian": {
+    "pass": true,
+    "falseSuccessScenarios": 5
+  },
+  "circuitBreaker": {
+    "pass": true
+  },
+  "financialBoundary": {
+    "pass": true,
+    "blocked": 8
+  },
+  "cooperativeIsolation": {
+    "pass": true
+  },
+  "replay": {
+    "pass": true
+  },
+  "snapshot": {
+    "pass": true
+  },
+  "deathReincarnation": {
+    "pass": true
+  },
+  "hibernation": {
+    "pass": true
+  },
+  "organRestart": {
+    "pass": true
+  },
+  "redTeam": {
+    "pass": true
+  },
+  "loopGuard": {
+    "pass": true
+  },
+  "securityScan": {
+    "pass": true
+  },
+  "performance": {
+    "arena1000Ms": 732,
+    "arena10000Ms": 8018,
+    "memoryPeak": 4,
+    "eventCount": 10000
+  },
+  "productionViolations": 0,
+  "remainingGaps": []
+}

@@ -1,0 +1,214 @@
+{
+  "version": "HX-0.5.0-LAB-ADAPTIVE-DEFENSE",
+  "verdict": "LAB-HARDENED-ADAPTIVE-AMBER",
+  "generatedAt": "2026-09-09T03:30:36.386Z",
+  "threatFamilies": [
+    "T03_INJECTION",
+    "T07_RATE",
+    "T12_HB_CREDIT",
+    "T05_CRYPTO",
+    "T06_SESSION",
+    "T13_ADMIN",
+    "T14_INSIDER",
+    "T11_SYNC",
+    "T09_CONFIG",
+    "T02_AUTHZ",
+    "T01_AUTH",
+    "T10_INTEGRITY",
+    "T04_WEB_API"
+  ],
+  "coverage": {
+    "T03_INJECTION": {
+      "total": 80,
+      "blocked": 72,
+      "detected": 0,
+      "missed": 0,
+      "fp": 0
+    },
+    "T07_RATE": {
+      "total": 71,
+      "blocked": 62,
+      "detected": 0,
+      "missed": 0,
+      "fp": 0
+    },
+    "T12_HB_CREDIT": {
+      "total": 85,
+      "blocked": 37,
+      "detected": 28,
+      "missed": 3,
+      "fp": 0
+    },
+    "T05_CRYPTO": {
+      "total": 79,
+      "blocked": 63,
+      "detected": 0,
+      "missed": 0,
+      "fp": 0
+    },
+    "T06_SESSION": {
+      "total": 68,
+      "blocked": 0,
+      "detected": 56,
+      "missed": 0,
+      "fp": 0
+    },
+    "T13_ADMIN": {
+      "total": 87,
+      "blocked": 28,
+      "detected": 41,
+      "missed": 0,
+      "fp": 0
+    },
+    "T14_INSIDER": {
+      "total": 66,
+      "blocked": 26,
+      "detected": 28,
+      "missed": 0,
+      "fp": 0
+    },
+    "T11_SYNC": {
+      "total": 68,
+      "blocked": 60,
+      "detected": 0,
+      "missed": 0,
+      "fp": 0
+    },
+    "T09_CONFIG": {
+      "total": 81,
+      "blocked": 33,
+      "detected": 35,
+      "missed": 0,
+      "fp": 0
+    },
+    "T02_AUTHZ": {
+      "total": 84,
+      "blocked": 6,
+      "detected": 71,
+      "missed": 0,
+      "fp": 0
+    },
+    "T01_AUTH": {
+      "total": 74,
+      "blocked": 0,
+      "detected": 62,
+      "missed": 0,
+      "fp": 0
+    },
+    "T10_INTEGRITY": {
+      "total": 82,
+      "blocked": 38,
+      "detected": 29,
+      "missed": 0,
+      "fp": 0
+    },
+    "T04_WEB_API": {
+      "total": 75,
+      "blocked": 36,
+      "detected": 28,
+      "missed": 0,
+      "fp": 0
+    }
+  },
+  "gaps": [],
+  "policies": [
+    "DEFENSE-POLICY"
+  ],
+  "newCandidates": [
+    "learn_T12_HB_CREDIT_1788924636384"
+  ],
+  "regressions": [],
+  "falsePositives": 0,
+  "recommendations": [],
+  "maturityScore": {
+    "detection": 99.64,
+    "prevention": 54.75,
+    "coverage": 77.2,
+    "falsePositiveControl": 100,
+    "regression": 85,
+    "learning": 60,
+    "recovery": 80,
+    "auditability": 95,
+    "overall": 81
+  },
+  "knownCoverage": 77.2,
+  "knownGaps": 0,
+  "unknownSpace": "residual — not claimed invulnerable",
+  "automaticFinancialMutation": false,
+  "greenCriteria": {
+    "sandboxRequired": true,
+    "targetAllowlist": true,
+    "networkEgressControl": true,
+    "resourceLimits": true,
+    "threatKnowledgeVersioned": true,
+    "scenarioGenerator": true,
+    "initialScenarios10k": false,
+    "deterministicSeed": true,
+    "replayableCampaigns": true,
+    "attackCombinations": true,
+    "unknownVariants": true,
+    "legitimateScenarios": true,
+    "falsePositiveTests": true,
+    "regressionTests": true,
+    "activeDefense": true,
+    "policyVersioning": true,
+    "learningCandidates": true,
+    "humanApproval": true,
+    "rollback": true,
+    "completeAudit": true,
+    "financialMutationGuard": true,
+    "zeroExternalTargets": true,
+    "zeroFinancialMutations": true
+  },
+  "greenScore": "22/23",
+  "tests": {
+    "T_sandbox_required": true,
+    "T_target_allowlist": true,
+    "T_external_target_blocked": true,
+    "T_egress_denied": true,
+    "T_production_sim_blocked": true,
+    "T_threat_knowledge_versioned": true,
+    "T_threat_families": true,
+    "T_auth_knowledge": true,
+    "T_threat_graph_chain": true,
+    "T_scenario_generator": true,
+    "T_legitimate_scenarios": true,
+    "T_unknown_variants": true,
+    "T_mutation_engine": true,
+    "T_defense_layers": true,
+    "T_layer_auth": true,
+    "T_active_defense_reject": true,
+    "T_active_defense_prod_off": true,
+    "T_policy_versioned": true,
+    "T_policy_integrity": true,
+    "T_learning_no_auto_deploy": true,
+    "T_incident_sanitize": true,
+    "T_incident_synthetic": true,
+    "T_cat_T01_AUTH": true,
+    "T_cat_T02_AUTHZ": true,
+    "T_cat_T03_INJECTION": true,
+    "T_cat_T06_SESSION": true,
+    "T_cat_T05_CRYPTO": true,
+    "T_cat_T07_RATE": true,
+    "T_cat_T10_INTEGRITY": true,
+    "T_cat_T11_SYNC": true,
+    "T_cat_T12_HB_CREDIT": true,
+    "T_cat_T13_ADMIN": true,
+    "T_policy_lab_static": true,
+    "T_deterministic_seed": true,
+    "T_adaptive_default_off_prod": true,
+    "FC_production_simulation": true,
+    "FC_sandbox_required": true,
+    "FC_active_defense_prod": true,
+    "FC_financial_mutation_blocked": true,
+    "CHAOS_degraded_defense": true,
+    "CHAOS_learning_isolation": true,
+    "T_campaign_10k": true,
+    "T_campaign_executed": true,
+    "T_zero_financial_mutations": true,
+    "T_zero_external_targets": true,
+    "T_coverage_score": true,
+    "T_reproducibility_seed": true
+  },
+  "summary": "47/47 tests passed"
+}

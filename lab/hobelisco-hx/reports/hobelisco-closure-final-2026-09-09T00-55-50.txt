@@ -1,0 +1,64 @@
+══════════════════════════════════════════════
+ HOBELISCO HX — CLOSURE REPORT
+ Version: HX-0.3.0-LAB-CLOSURE
+══════════════════════════════════════════════
+STATUS: ORGANISM-AMBER
+Organism: HOBELISCO-HX-LAB-0001
+Life State: AWAKE
+Vitality: 88/100
+Immunity: 91/100 (HIGHLY_RESILIENT)
+Tests: 21/23
+V1 Life: LIFE-GREEN
+V1 Arena: 10/10
+Arena Full Core: 1000/1000
+10000 sims: NOT_EXECUTED
+Attacks: 25/25
+Production Violations: 0
+
+── Capabilities ──
+THREAT DNA: PASS
+MEMORY: PASS
+ANTIBODIES: PASS
+EVOLUTION: PASS
+GUARDIAN: FAIL (5 scenarios)
+CIRCUIT BREAKER: PASS
+FINANCIAL BARRIER: PASS (8 blocked)
+COOPERATIVE ISOLATION: PASS
+REPLAY: PASS
+SNAPSHOT: PASS
+DEATH/REINCARNATION: PASS
+HIBERNATION: PASS
+ORGAN RESTART: PASS
+RED TEAM: PASS
+LOOP GUARD: PASS
+SECURITY SCAN: FAIL
+
+── Tests ──
+[PASS] CLOSURE-V1-LIFE — V1 Life Audit 27/27: 27/27 LIFE-GREEN
+[PASS] CLOSURE-V1-ARENA — V1 Arena 10/10: 10/10
+[PASS] CLOSURE-RUNTIME-001 — HobeliscoRuntime start/pulse/stop: state=WATCHING
+[PASS] CLOSURE-LIFECYCLE-001 — Death cycle DEFENDING→FAILED→DEAD→ANALYSIS→REINCARNATING: WATCHING→DEFENDING→FAILED→DEAD→ANALYSIS→REINCARNATING→BOOT→AWAKE
+[PASS] CLOSURE-LABWORLD-001 — LabActors + cooperatives: 7 actors, 3 coops
+[PASS] CLOSURE-ATTACK-MATRIX — 25 attack scenarios: 25/25
+[PASS] CLOSURE-THREAT-DNA-001 — Similar users distinct fingerprints: THREAT-FP-2F4A0A6D vs THREAT-FP-5220A4C2
+[PASS] CLOSURE-MEMORY-001 — Repeated incident increases memory context: entries=3
+[PASS] CLOSURE-ANTIBODY-001 — Antibody candidate requires origin: origin ok
+[PASS] CLOSURE-EVOLUTION-001 — Evolution compares defenses with lineage: VALIDATED
+[PASS] CLOSURE-ARENA-FULL — 1000 full core simulations: 1000/1000 survival=100%
+[PASS] CLOSURE-REPLAY-001 — Snapshot restore replay compare: match
+[PASS] CLOSURE-SNAPSHOT-001 — Snapshot integrity hash: df58b3089179dbd6
+[PASS] CLOSURE-ORGAN-RESTART-001 — Component restart controlled: sensor restart
+[PASS] CLOSURE-HIBERNATION-001 — Hibernation wake cycle: HIBERNATING→WATCHING→DEFENDING
+[FAIL] CLOSURE-GUARDIAN-001 — GuardianValidator 5 false success scenarios: 3/5
+[PASS] CLOSURE-CIRCUIT-001 — Circuit open at 3 no auto retry: OPEN
+[PASS] CLOSURE-FINANCIAL-001 — Financial barrier absolute: 8/8 blocked
+[PASS] CLOSURE-ISOLATION-001 — Coop A/B/C isolation: leak=false
+[PASS] CLOSURE-REDTEAM-001 — Production boundary red team: 0 violations
+[PASS] CLOSURE-LOOP-001 — Loop guard blocks infinite cycle: 6th tick blocked
+[FAIL] CLOSURE-SECURITY-001 — No hardcoded secrets in lab/hobelisco-hx: \lab\hobelisco-hx\closure-audit\runClosureAudit.ts: service_role; \lab\hobelisco-hx\closure-audit\runClosureAudit.ts: sk_live; \lab\hobelisco-hx\persistence\SupabaseStagingPersistence.ts: service_role; \lab\hobelisco-hx\v2-audit\phases.ts: Bearer\s+
+[PASS] CLOSURE-FULL-ORGANISM — Full organism audit: 30/31 ORGANISM-GREEN
+
+── Gaps ──
+- 10.000 full-core simulations: NOT_EXECUTED
+- UI timeline completa: PARTIAL
+- Staging Supabase: PRODUCTION_FORBIDDEN for closure scope

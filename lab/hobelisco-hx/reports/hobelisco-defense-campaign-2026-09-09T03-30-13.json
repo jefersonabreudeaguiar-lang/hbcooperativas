@@ -1,0 +1,138 @@
+{
+  "campaignId": "HB-HARDEN-20260909-8955",
+  "mode": "LAB-HARDENED-ADAPTIVE",
+  "scenariosGenerated": 1000,
+  "scenariosExecuted": 1000,
+  "blocked": 461,
+  "detectedOnly": 378,
+  "missed": 3,
+  "falsePositive": 0,
+  "inconclusive": 158,
+  "errors": 0,
+  "coverage": {
+    "T03_INJECTION": {
+      "total": 80,
+      "blocked": 72,
+      "detected": 0,
+      "missed": 0,
+      "fp": 0
+    },
+    "T07_RATE": {
+      "total": 71,
+      "blocked": 62,
+      "detected": 0,
+      "missed": 0,
+      "fp": 0
+    },
+    "T12_HB_CREDIT": {
+      "total": 85,
+      "blocked": 37,
+      "detected": 28,
+      "missed": 3,
+      "fp": 0
+    },
+    "T05_CRYPTO": {
+      "total": 79,
+      "blocked": 63,
+      "detected": 0,
+      "missed": 0,
+      "fp": 0
+    },
+    "T06_SESSION": {
+      "total": 68,
+      "blocked": 0,
+      "detected": 56,
+      "missed": 0,
+      "fp": 0
+    },
+    "T13_ADMIN": {
+      "total": 87,
+      "blocked": 28,
+      "detected": 41,
+      "missed": 0,
+      "fp": 0
+    },
+    "T14_INSIDER": {
+      "total": 66,
+      "blocked": 26,
+      "detected": 28,
+      "missed": 0,
+      "fp": 0
+    },
+    "T11_SYNC": {
+      "total": 68,
+      "blocked": 60,
+      "detected": 0,
+      "missed": 0,
+      "fp": 0
+    },
+    "T09_CONFIG": {
+      "total": 81,
+      "blocked": 33,
+      "detected": 35,
+      "missed": 0,
+      "fp": 0
+    },
+    "T02_AUTHZ": {
+      "total": 84,
+      "blocked": 6,
+      "detected": 71,
+      "missed": 0,
+      "fp": 0
+    },
+    "T01_AUTH": {
+      "total": 74,
+      "blocked": 0,
+      "detected": 62,
+      "missed": 0,
+      "fp": 0
+    },
+    "T10_INTEGRITY": {
+      "total": 82,
+      "blocked": 38,
+      "detected": 29,
+      "missed": 0,
+      "fp": 0
+    },
+    "T04_WEB_API": {
+      "total": 75,
+      "blocked": 36,
+      "detected": 28,
+      "missed": 0,
+      "fp": 0
+    }
+  },
+  "gaps": [],
+  "learningCandidates": [
+    {
+      "id": "learn_T12_HB_CREDIT_1788924613519",
+      "sourceIncidentIds": [],
+      "sourceScenarioIds": [
+        "SC12_HB_CREDIT-00494",
+        "SC12_HB_CREDIT-00689",
+        "SC12_HB_CREDIT-00933"
+      ],
+      "attackFamily": "T12_HB_CREDIT",
+      "observedPattern": "3 missed scenarios in T12_HB_CREDIT",
+      "proposedDefense": "Strengthen T12_HB_CREDIT correlation threshold + active REJECT",
+      "expectedBenefit": "Reduce missed rate for T12_HB_CREDIT",
+      "falsePositiveRisk": "MEDIUM",
+      "confidence": 0.55,
+      "createdAt": "2026-09-09T03:30:13.519Z",
+      "status": "PROPOSED"
+    }
+  ],
+  "policyVersion": "DEFENSE-POLICY-v1",
+  "threatKnowledgeVersion": "TKB-1.0.0-LAB",
+  "generatorVersion": "SG-1.0.0-LAB",
+  "seed": 20260909,
+  "financialMutations": 0,
+  "externalTargets": 0,
+  "defenseCoverageScore": 77.2,
+  "preventionRate": 54.75,
+  "detectionRate": 99.64,
+  "falsePositiveRate": 0,
+  "status": "GREEN",
+  "executedAt": "2026-09-09T03:30:13.519Z",
+  "durationMs": 844
+}

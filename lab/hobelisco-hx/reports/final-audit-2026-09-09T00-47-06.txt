@@ -1,0 +1,67 @@
+═══════════════════════════════════════════
+ HOBELISCO HX — FULL ORGANISM AUDIT (LAB)
+═══════════════════════════════════════════
+Verdict: ORGANISM-GREEN
+Readiness: 89/100
+Organism: HOBELISCO-HX-LAB-0001
+DNA: DNA-0002 | Gen: 2
+State: WATCHING | Health: 100
+Tests: 31/31 PASS
+V1 Life: 27/27 (OK)
+Arena: 10/10
+Full Core Sims: 1000/1000 (100% survival)
+10000 sims: NOT_EXECUTED
+
+── Tests ──
+- [PASS] **HOBELISCO-LAB-BOOT-001** — Boot sequence with BootReport: checks=11 success=true
+- [PASS] **HOBELISCO-LAB-PULSE-001** — Pulse produces pulseId and dimensions: PULSE-1 health=100
+- [PASS] **HOBELISCO-LAB-SENSORS-001** — Lab events feed sensors: 10 sensors
+- [PASS] **HOBELISCO-LAB-MEMORY-001** — Memory recalls incidents: mem short=1
+- [PASS] **HOBELISCO-LAB-THREAT-001** — Threat DNA fingerprint: THREAT-FP-1849FFA7
+- [PASS] **HOBELISCO-LAB-RISK-001** — Risk engine classifies: L0_OBSERVE
+- [PASS] **HOBELISCO-LAB-DEFENSE-001** — Defense flow on threat: immune actions=2
+- [PASS] **HOBELISCO-LAB-GUARDIAN-001** — Guardian FALSE_SUCCESS: safeMode=true
+- [PASS] **HOBELISCO-LAB-CIRCUIT-001** — Circuit opens at 3 failures: open=true
+- [PASS] **HOBELISCO-LAB-FORTRESS-001** — Fortress mode active: FORTRESS
+- [PASS] **HOBELISCO-LAB-HIBERNATION-001** — Hibernation cycle: HIBERNATING→WATCHING→DEFENDING
+- [PASS] **HOBELISCO-LAB-ORGAN-DEATH-001** — Component death detection: memory OFF → DEAD
+- [PASS] **HOBELISCO-LAB-REINCARNATION-001** — Reincarnation preserves lineage: def_1788914826108
+- [PASS] **HOBELISCO-LAB-DNA-001** — Stable organismId and DNA: HOBELISCO-HX-LAB-0001 DNA-0002
+- [PASS] **HOBELISCO-LAB-ANTIBODY-001** — Antibody requires origin: ANTIBODY-1788914826108
+- [PASS] **HOBELISCO-LAB-LEARNING-001** — Learning insights from memory: 1 insights
+- [PASS] **HOBELISCO-LAB-FINANCIAL-001** — Financial boundary absolute: 6 blocked
+- [PASS] **HOBELISCO-LAB-ISOLATION-001** — Cooperative isolation: leak=false
+- [PASS] **HOBELISCO-LAB-LOOP-001** — Loop guard blocks excess: 4th tick blocked
+- [PASS] **HOBELISCO-LAB-REPLAY-001** — Replay engine: Replay LAB-only — seed=42; deterministic=true
+- [PASS] **HOBELISCO-LAB-SNAPSHOT-001** — Snapshot and restore: SNAP-1788914826119
+- [PASS] **HOBELISCO-LAB-REDTEAM-001** — Self-attack boundary tests: BLOCKED_BY_LAB_BOUNDARY
+- [PASS] **HOBELISCO-LAB-PRODUCTION-BLOCK-001** — Production access blocked: BLOCKED
+- [PASS] **HOBELISCO-LAB-REAL-DATABASE-BLOCK-001** — Real database blocked: REAL_DATABASE
+- [PASS] **HOBELISCO-LAB-REAL-CREDIT-BLOCK-001** — Real HB credit blocked: REAL_HB_CREDIT
+- [PASS] **HOBELISCO-LAB-FULL-CYCLE-001** — Full life cycle scenario: WATCHING→WATCHING→WATCHING→FORTRESS→REINCARNATING→WATCHING
+- [PASS] **HOBELISCO-LAB-SEED-001** — Deterministic lab clock: 2026-09-09T00:47:06.121Z
+- [PASS] **HOBELISCO-LAB-SECRET-SCAN-001** — No hardcoded secrets in config: pattern scan config constants
+- [PASS] **HOBELISCO-LAB-V1-REGRESSION** — V1 Life Audit regression: 27/27
+- [PASS] **HOBELISCO-LAB-ARENA-REGRESSION** — V1 Arena regression: 10/10
+- [PASS] **HOBELISCO-LAB-EVOLUTION-001** — Evolution compares defenses: DEFENSE-002 superior a DEFENSE-001 em múltiplas dimensões
+
+── Metrics ──
+Survival: 100%
+Containment: 100%
+Recovery: 20%
+FP: 0% | FN: 0%
+
+── Boundaries ──
+Production blocked: true
+Financial violations: 0
+
+── Gaps ──
+- 10.000 simulações full-core — NOT_EXECUTED se recursos limitados
+- UI dashboard timeline completa — parcial via API existente
+- Time-travel investigação — snapshot+replay básico implementado
+
+── Limitations ──
+- Validado no escopo do LAB
+- Resiliente nos cenários testados
+- Boundary validated — não implica segurança absoluta
+- IMMUNITY_READINESS é métrica experimental

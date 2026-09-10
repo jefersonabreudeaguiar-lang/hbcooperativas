@@ -1,0 +1,108 @@
+{
+  "version": "HX-0.6.0-LAB-10X",
+  "verdict": "LAB-HARDENED-GREEN",
+  "fabricMode": "CONTROLLED_BLOCK",
+  "gaps": [],
+  "learningCandidates": [
+    "chaos_learn",
+    "learn_T12_HB_CREDIT_1788970922912",
+    "learn_T12_HB_CREDIT_1788970987302"
+  ],
+  "coverage": {
+    "T04_WEB_API": {
+      "total": 8485,
+      "blocked": 2651,
+      "detected": 2446,
+      "missed": 0,
+      "fp": 0
+    },
+    "T12_HB_CREDIT": {
+      "total": 8537,
+      "blocked": 2656,
+      "detected": 2339,
+      "missed": 173,
+      "fp": 0
+    },
+    "T07_RATE": {
+      "total": 8677,
+      "blocked": 5216,
+      "detected": 0,
+      "missed": 0,
+      "fp": 0
+    },
+    "T01_AUTH": {
+      "total": 8686,
+      "blocked": 4498,
+      "detected": 749,
+      "missed": 0,
+      "fp": 0
+    },
+    "T02_AUTHZ": {
+      "total": 8637,
+      "blocked": 424,
+      "detected": 4779,
+      "missed": 0,
+      "fp": 0
+    },
+    "T11_SYNC": {
+      "total": 8674,
+      "blocked": 5213,
+      "detected": 0,
+      "missed": 0,
+      "fp": 0
+    },
+    "T06_SESSION": {
+      "total": 8642,
+      "blocked": 3545,
+      "detected": 1721,
+      "missed": 0,
+      "fp": 0
+    },
+    "T03_INJECTION": {
+      "total": 6184,
+      "blocked": 5290,
+      "detected": 0,
+      "missed": 0,
+      "fp": 0
+    },
+    "T13_ADMIN": {
+      "total": 8717,
+      "blocked": 2735,
+      "detected": 2549,
+      "missed": 0,
+      "fp": 0
+    },
+    "T09_CONFIG": {
+      "total": 5967,
+      "blocked": 2642,
+      "detected": 2410,
+      "missed": 0,
+      "fp": 0
+    },
+    "T10_INTEGRITY": {
+      "total": 6252,
+      "blocked": 2634,
+      "detected": 2680,
+      "missed": 0,
+      "fp": 0
+    },
+    "T05_CRYPTO": {
+      "total": 6409,
+      "blocked": 5436,
+      "detected": 0,
+      "missed": 0,
+      "fp": 0
+    },
+    "T14_INSIDER": {
+      "total": 6133,
+      "blocked": 2659,
+      "detected": 2556,
+      "missed": 0,
+      "fp": 0
+    }
+  },
+  "recommendations": [
+    "Reforçar crossTenant",
+    "Review 173 missed scenarios"
+  ]
+}

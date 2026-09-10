@@ -1,0 +1,99 @@
+════════════════════════════════════════════════════════════
+ HOBELISCO HX V1 — LIFE AUDIT
+════════════════════════════════════════════════════════════
+Veredito: LIFE-GREEN
+Vitality: 88/100
+Tests: 27/27 PASS
+Boundary: OK
+════════════════════════════════════════════════════════════
+# HOBELISCO V1 — Life Audit Report
+
+**Gerado:** 2026-09-09T00:40:09.883Z
+**Versão:** HX-0.2.0-lab-v1
+**Veredito:** LIFE-GREEN
+**Vitality Score:** 88/100
+
+## Resumo executivo
+
+- Testes: **27/27 PASS** (0 FAIL, 0 GAP, 0 NOT_EXECUTED)
+- Boundary lab: **OK**
+- Cenários Arena: 10
+- Micro-simulações: 1000
+
+## Vitality dimensions
+
+- perception: 92/100
+- memory: 88/100
+- integrity: 95/100
+- defense: 90/100
+- recovery: 85/100
+- learning: 80/100
+- selfWatch: 88/100
+
+## Comparação de defesas
+
+- DEFENSE-TEST-001: survival 61%
+- DEFENSE-TEST-002: survival 89%
+- Vencedor: **DEFENSE-TEST-002** — B survival 89% vs A 61% (+28% survival)
+
+## Testes por fase
+
+- [PASS] **LIFE-BIRTH-001** (F2) — Nascimento BIRTH→BOOT→AWAKE→WATCHING: path=BOOT→AWAKE→WATCHING state=WATCHING sensors=10
+- [PASS] **LIFE-HEART-001** (F3) — Múltiplos heartbeats determinísticos: 5 pulses
+- [PASS] **SELF-WATCH-001** (F17) — Self-watch detecta degradação: HEALTH 50|STATE WATCHING|THREATS 2|||Self-watch DEGRADED
+- [PASS] **SENSOR-PERCEIVE-001** (F4) — Sensores sinalizam sem decidir: 10 sensores verificados
+- [PASS] **MEMORY-RECALL-001** (F5) — Memória enriquecida + recall padrão: mem events=2 fp=THREAT-FP-A7071ED7
+- [PASS] **MEMORY-NO-CODE-MUTATION** (F5) — Memória não altera código: MemoryStore append-only; sem import de src/ prod
+- [PASS] **THREAT-FP-COHERENCE** (F6) — Fingerprints coerentes e distintos: a=THREAT-FP-14C12089 c=THREAT-FP-97CB9528 d=THREAT-FP-75D1CA74
+- [PASS] **STATE-TRANSITIONS-001** (F7) — Transições válidas e inválidas: valid=true invalidBlocked=true
+- [PASS] **DEFENSE-FLOW-001** (F8) — WATCHING→DEFENDING em ameaça: state=DEFENDING immune=3
+- [PASS] **DEATH-001** (F9) — Defesa morta permanece registrada: containment_timeout
+- [PASS] **REINCARNATION-001** (F10) — Successor com parent e mutation:  tighten cross-coop deny 
+- [PASS] **SURVIVAL-001** (F11) — Métricas B > A com números: A=61% B=89%
+- [PASS] **ANTIBODY-001** (F12) — Anticorpo em ameaça IDOR: ANTIBODY-IDOR-001
+- [PASS] **ANTIBODY-NO-FP** (F12) — Legítimo não auto-bloqueado por anticorpo: no match
+- [PASS] **GUARDIAN-FALSE-SUCCESS** (F13) — Guardian detecta falso sucesso: FALSE_SUCCESS
+- [PASS] **CIRCUIT-BREAKER-001** (F14) — Circuit abre na 3ª falha: failures=3
+- [PASS] **FINANCIAL-BOUNDARY-001** (F15) — Barreira financeira absoluta: 12 ações bloqueadas
+- [PASS] **COOP-ISOLATION-001** (F16) — Isolamento lógico Coop A/B: scopeOk=true memOk=true
+- [PASS] **LOOP-GUARD-001** (F18) — Proteção contra loop de remediação: max 5 ticks
+- [PASS] **FORTRESS-TEMP-001** (F19) — Escalada NORMAL→FORTRESS: NORMAL→ELEVATED→DEFENSIVE→FORTRESS
+- [PASS] **HIBERNATION-001** (F20) — HIBERNATING→AWAKE→WATCHING: WATCHING
+- [PASS] **AUDIT-CHAIN-100** (F21) — 100 eventos + detecção tamper: verify=true tamperAt=50 reason=eventHash mismatch
+- [PASS] **DNA-LINEAGE-001** (F22) — DNA explicável (por que existe): Versão DNA-TEST-002; parent: DEFENSE-TEST-001; mutation:  tighten cross-coop deny ; expected: +28% survival; survival: 89%
+- [PASS] **LEARNING-001** (F23) — Insights PROPOSED (não produção): 2 insights
+- [PASS] **IMMORTALITY-001** (F24) — Identifica COMPONENT_DEAD / self-watch off: Heart degraded detectado
+- [PASS] **REDTEAM-001** (F25) — Red team inputs malformados: handled=3
+- [PASS] **ARENA-FULL-001** (F11) — Arena 10 cenários + 1000 micro-sims: 10/10 micro=1000/1000
+
+## Correções aplicadas
+
+- guardian/Guardian.ts — detecção FALSE_SUCCESS
+- guardian/Guardian.ts — invariantes >= 9
+- security/cooperativeIsolation.ts — isolamento Coop A/B
+- validation/LoopGuard.ts — anti-loop remediação
+- reincarnation/DefenseRegistry.ts — morte/métricas/sobrevivência
+- financial/FinancialGuard.ts — barreira FASE 15 (12 ações)
+- audit/AuditChain.ts — verifyExportedChain tamper
+- life-audit/boundaryCheck.ts — exclusão self-scan
+- life-audit/phases.ts — LIFE-BIRTH-001 FSM fresh
+- life-audit/* — suíte completa fases 2–25
+
+## Correções NÃO aplicadas (V2+)
+
+- Sensores conectados a logs Supabase reais (V2 observe-only)
+- Persistência hb_hobelisco_* em nuvem (referência SQL apenas)
+- ML / auto-modificação de código
+- Promoção automática pós-Arena
+- Hibernação automática por ambiente estável (parcial — só FSM manual)
+
+## Gaps documentados
+
+- Sensores SIMULADOS — não leem middleware prod
+- Health cooperativa — dados sintéticos fixos
+- 1000 micro-sims full-core — usa micro-sims leves determinísticas
+- COMPONENT_DEAD — detectado via self-watch, não restart automático de órgãos
+
+## Recomendação V2
+
+Prosseguir para observe-only com sensores reais e persistência hb_hobelisco_* em staging.
