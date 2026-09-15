@@ -21,6 +21,9 @@ import { ContratoServicoAppGate } from "@/components/cobranca/ContratoServicoApp
 import { cn } from "@/utils/format";
 import { useHbCreditEnabled } from "@/hooks/useHbCreditEnabled";
 import { isContaCoopUiVisibleForUser } from "@/utils/contaCoopUiVisibility";
+import { useSyncContaCoopValorReceberCooperativa } from "@/hooks/useSyncContaCoopValorReceberCooperativa";
+import { MercadoParceiroPinResetBar } from "@/components/hb-credit/MercadoParceiroPinResetBar";
+import { getUserCooperativaId } from "@/utils/cooperativa";
 import type { Resource } from "@/types";
 
 const ICONS: Record<string, React.ReactNode> = {
@@ -279,12 +282,28 @@ export function MobileNav() {
 }
 
 export function AppShell({ children }: { children: React.ReactNode }) {
+  const { user } = useAuth();
+  const data = useAppData();
+  const { enabled: creditEnabled } = useHbCreditEnabled();
+  const coopId = user && data ? getUserCooperativaId(user, data) : undefined;
+  const staffHbSync =
+    user &&
+    coopId &&
+    (user.role === "responsavel" || user.role === "tesoureiro" || user.role === "admin");
+
+  useSyncContaCoopValorReceberCooperativa(
+    staffHbSync && creditEnabled
+      ? { cooperativaId: coopId, user, enabled: true }
+      : undefined
+  );
+
   return (
     <div className="flex h-screen bg-gray-50">
       <Sidebar />
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
         <MobileNav />
-        <main className="flex-1 overflow-y-auto p-4 lg:p-6 pb-28 lg:pb-6">
+        <MercadoParceiroPinResetBar />
+        <main className="flex-1 overflow-y-auto p-4 lg:p-6 pb-36 lg:pb-6">
           <div className="hidden lg:flex justify-end mb-3">
             <SyncStatusChipLight />
           </div>

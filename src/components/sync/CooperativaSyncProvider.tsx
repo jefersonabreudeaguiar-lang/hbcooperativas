@@ -31,6 +31,7 @@ import {
 } from "@/services/cooperativaSyncCloudService";
 import { cooperadoFinanceiroDesatualizado } from "@/services/fichaSyncGuard";
 import { avaliarIntegridadeFinanceiroCooperado } from "@/services/cooperadoFinanceiroGuard";
+import { refreshContaCoopDescontosAfterOperacionalSync } from "@/lib/hb-credit/syncContaCoopFichaDescontos";
 import { pushCooperadoToCloud, resolverCooperadoIdCanonico, flushPendingCooperadoPushes } from "@/services/cooperadoCloudService";
 import { registerSyncHandler, registerVotacaoOperacionalSyncHandler } from "@/services/syncRequest";
 import {
@@ -394,6 +395,11 @@ export function CooperativaSyncProvider({ children }: { children: React.ReactNod
           cooperativeId: cnpj,
           outcome: "success",
           durationMs: Date.now() - syncStartedAt,
+        });
+        void refreshContaCoopDescontosAfterOperacionalSync({
+          cnpj,
+          cooperativaId: currentCoopId,
+          user: currentUser,
         });
       }
     } catch (e) {

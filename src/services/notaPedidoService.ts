@@ -512,6 +512,23 @@ function mergeCotaIngressoPagaField(
   return undefined;
 }
 
+function mergeContaCoopDescontosField(
+  a: ArquivoMensalCooperado,
+  b: ArquivoMensalCooperado
+): ArquivoMensalCooperado["contaCoopDescontos"] {
+  const items = [...(a.contaCoopDescontos ?? []), ...(b.contaCoopDescontos ?? [])];
+  if (!items.length) return undefined;
+  const seen = new Set<string>();
+  const out: NonNullable<ArquivoMensalCooperado["contaCoopDescontos"]> = [];
+  for (const d of items) {
+    const key = `${d.createdAt ?? ""}|${d.valorReais}|${d.motivo}|${d.tipo}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(d);
+  }
+  return out;
+}
+
 function mergeParArquivoMensal(
   data: AppData,
   a: ArquivoMensalCooperado,
@@ -530,6 +547,7 @@ function mergeParArquivoMensal(
     descontoAvulso: newer.descontoAvulso ?? older.descontoAvulso,
     descontoAvulsoMotivo: newer.descontoAvulsoMotivo ?? older.descontoAvulsoMotivo,
     cotaIngressoPaga: mergeCotaIngressoPagaField(a, b),
+    contaCoopDescontos: mergeContaCoopDescontosField(a, b),
     updatedAt,
   };
 }
