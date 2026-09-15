@@ -283,11 +283,15 @@ function MercadoParceiroContent() {
     }
   };
 
+  const scrollParaPinFinanceiro = () => {
+    document.getElementById("pin-financeiro-mercado")?.scrollIntoView({ behavior: "smooth", block: "start" });
+  };
+
   const solicitarResetPin = async () => {
     const msg =
       "Solicitar reset do PIN de estorno?\n\n" +
       "O responsável da cooperativa receberá o pedido em Conta Coop → Mercados e precisará confirmar o reset. " +
-      "Depois você cadastra um PIN novo aqui na aba Mais.";
+      "Depois você cadastra um PIN novo no card PIN financeiro do mercado (topo desta página).";
     if (!window.confirm(msg)) return;
 
     setBusy(true);
@@ -484,7 +488,7 @@ function MercadoParceiroContent() {
   const pixEditavel = !pixCadastrado || pixChangeUnlocked;
 
   const pinFinanceiroCard = (
-    <Card className="p-5 space-y-4">
+    <Card id="pin-financeiro-mercado" className="scroll-mt-4 p-5 space-y-4 border-amber-200 bg-amber-50/30">
       <div>
         <h3 className="font-semibold text-gray-900">PIN financeiro do mercado</h3>
         <p className="text-sm text-gray-600">
@@ -563,6 +567,8 @@ function MercadoParceiroContent() {
         <p className="text-sm text-gray-500">Vendas com crédito interno da cooperativa</p>
       </header>
 
+      {parceiro && pinFinanceiroCard}
+
       <ContaCoopSegmentTabs
         tabs={[
           { id: "inicio", label: "Início" },
@@ -586,8 +592,6 @@ function MercadoParceiroContent() {
           </Button>
         </AlertBanner>
       )}
-
-      {parceiro && pinFinanceiroCard}
 
       {tab === "inicio" && (
         <>
@@ -820,8 +824,8 @@ function MercadoParceiroContent() {
               <div>
                 <Label>PIN financeiro do mercado</Label>
                 <p className="mt-0.5 text-xs text-gray-600">
-                  Não é a senha de login. Use o PIN numérico cadastrado na aba <strong>Mais</strong> (
-                  {FINANCIAL_PIN_MIN_LENGTH}+ dígitos).
+                  Não é a senha de login. Use o PIN numérico cadastrado no card{" "}
+                  <strong>PIN financeiro do mercado</strong> no topo da página ({FINANCIAL_PIN_MIN_LENGTH}+ dígitos).
                 </p>
                 <Input
                   className="mt-1"
@@ -841,16 +845,27 @@ function MercadoParceiroContent() {
                     Reset solicitado — aguarde o responsável em Conta Coop → Mercados.
                   </p>
                 ) : (
-                  <Button
-                    type="button"
-                    variant="secondary"
-                    size="sm"
-                    className="mt-2"
-                    onClick={() => void solicitarResetPin()}
-                    disabled={busy}
-                  >
-                    Esqueci meu PIN — solicitar reset
-                  </Button>
+                  <>
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      size="sm"
+                      className="mt-2"
+                      onClick={() => void solicitarResetPin()}
+                      disabled={busy}
+                    >
+                      Esqueci meu PIN — solicitar reset
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      size="sm"
+                      className="mt-2 ml-2"
+                      onClick={scrollParaPinFinanceiro}
+                    >
+                      Ver cadastro de PIN
+                    </Button>
+                  </>
                 )}
               </div>
               <div className="flex flex-wrap gap-2">
@@ -954,6 +969,12 @@ function MercadoParceiroContent() {
 
       {tab === "mais" && (
         <div className="space-y-4">
+          <p className="text-sm text-gray-600">
+            PIN de estorno e reset: card <strong>PIN financeiro do mercado</strong> no topo da página.{" "}
+            <button type="button" className="font-medium text-green-800 underline" onClick={scrollParaPinFinanceiro}>
+              Ir para o PIN
+            </button>
+          </p>
           <Card className="p-5 space-y-4">
             <div>
               <h3 className="font-semibold text-gray-900">Seu PIX para receber da cooperativa</h3>

@@ -16,7 +16,7 @@ import { resolveCooperativaCnpj } from "@/services/notaPedidoCloudService";
 
 interface CooperadoAcessoLoginPanelProps {
   cooperado: Cooperado;
-  user: User;
+  user: Omit<User, "password">;
 }
 
 export function CooperadoAcessoLoginPanel({ cooperado, user }: CooperadoAcessoLoginPanelProps) {
