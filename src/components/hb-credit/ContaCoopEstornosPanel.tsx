@@ -8,10 +8,14 @@ import { AlertBanner } from "@/components/ui/AlertBanner";
 import { formatCentsBRL } from "@/modules/hb-credit/engine/money";
 import type { ContaCoopParceiro, ContaCoopSolicitacaoEstorno } from "@/modules/hb-credit/types";
 import { fetchRefundRequests, postRefundRequestAction } from "@/services/creditApiService";
+import { refreshContaCoopValorReceberAfterHbTransaction } from "@/lib/hb-credit/syncContaCoopFichaDescontos";
+import { getMesPrincipalQuantoVouReceber } from "@/services/cooperadoEntregasService";
+import { getData } from "@/services/dataStore";
 import { formatDateTime } from "@/utils/format";
 
 interface ContaCoopEstornosPanelProps {
   cnpj: string;
+  cooperativaId: string;
   parceiros: ContaCoopParceiro[];
   cooperadoNome: (id: string) => string;
 }
@@ -23,7 +27,7 @@ function labelSolicitacao(status: ContaCoopSolicitacaoEstorno["status"]): string
   return "Cancelado";
 }
 
-export function ContaCoopEstornosPanel({ cnpj, parceiros, cooperadoNome }: ContaCoopEstornosPanelProps) {
+export function ContaCoopEstornosPanel({ cnpj, cooperativaId, parceiros, cooperadoNome }: ContaCoopEstornosPanelProps) {
   const [solicitacoesPendentes, setSolicitacoesPendentes] = useState<ContaCoopSolicitacaoEstorno[]>([]);
   const [filtroCooperado, setFiltroCooperado] = useState("");
   const [filtroMercado, setFiltroMercado] = useState("");
@@ -84,6 +88,17 @@ export function ContaCoopEstornosPanel({ cnpj, parceiros, cooperadoNome }: Conta
       setSuccess(
         `Estorno aprovado. Limite disponível após estorno: ${formatCentsBRL(res.disponivelAposCents ?? 0)}.`
       );
+      const mes = getMesPrincipalQuantoVouReceber(
+        getData(),
+        solicitacao.cooperadoId,
+        cooperativaId
+      );
+      await refreshContaCoopValorReceberAfterHbTransaction({
+        cnpj,
+        cooperadoId: solicitacao.cooperadoId,
+        mesReferencia: mes,
+        cooperativaId,
+      }).catch(() => {});
       await carregar();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Não foi possível aprovar.");

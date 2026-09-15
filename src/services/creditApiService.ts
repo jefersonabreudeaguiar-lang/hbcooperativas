@@ -13,6 +13,9 @@ import type {
   ContaCoopSettlement,
   ContaCoopSolicitacaoEstorno,
 } from "@/modules/hb-credit/types";
+import { refreshContaCoopValorReceberAfterHbTransaction } from "@/lib/hb-credit/syncContaCoopFichaDescontos";
+import { getMesPrincipalQuantoVouReceber } from "@/services/cooperadoEntregasService";
+import { getData } from "@/services/dataStore";
 
 async function parseJson<T>(res: Response): Promise<T & { error?: string }> {
   const data = (await res.json()) as T & { error?: string };
@@ -186,6 +189,8 @@ export async function authorizeCreditPayment(input: {
   cnpj: string;
   cooperadoId: string;
   cooperadoNome?: string;
+  cooperativaId?: string;
+  mesReferencia?: string;
   intentId: string;
   nonce: string;
   pin: string;
@@ -199,6 +204,21 @@ export async function authorizeCreditPayment(input: {
   });
   const data = await parseJson<{ ok?: boolean; error?: string; receiptCode?: string; disponivelAposCents?: number }>(res);
   if (!res.ok || !data.ok) throw new Error(data.error ?? "Pagamento recusado.");
+
+  const coopId = input.cooperativaId;
+  if (coopId) {
+    const local = getData();
+    const mes =
+      input.mesReferencia ?? getMesPrincipalQuantoVouReceber(local, input.cooperadoId, coopId);
+    await refreshContaCoopValorReceberAfterHbTransaction({
+      cnpj: input.cnpj,
+      cooperadoId: input.cooperadoId,
+      mesReferencia: mes,
+      cooperativaId: coopId,
+      cooperadoNome: input.cooperadoNome,
+    }).catch(() => {});
+  }
+
   return data;
 }
 

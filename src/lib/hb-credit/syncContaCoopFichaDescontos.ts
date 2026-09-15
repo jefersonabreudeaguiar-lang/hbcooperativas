@@ -2,7 +2,12 @@ import type { AppData } from "@/types";
 import type { DescontoContaCoopRemoto } from "@/lib/hb-credit/mergeFichaDescontos";
 import { dedupeDescontosContaCoopRemotos } from "@/lib/hb-credit/mergeFichaDescontos";
 import { fetchFichaDescontosContaCoop } from "@/services/creditApiService";
-import { listarMesesPendentesPagamentoResponsavel } from "@/services/cooperadoEntregasService";
+import {
+  getMesPrincipalQuantoVouReceber,
+  listarMesesPendentesQuantoVouReceber,
+  listarMesesPendentesPagamentoResponsavel,
+} from "@/services/cooperadoEntregasService";
+import { pushOperacionalToCloud } from "@/services/cooperativaSyncCloudService";
 import { beginSaveBatch, endSaveBatch, getData, updateData } from "@/services/dataStore";
 import { persistDescontosContaCoopNoArquivo } from "@/services/notaPedidoService";
 
@@ -12,6 +17,11 @@ export type SyncContaCoopValorReceberOpts = {
   mesReferencia: string;
   cooperativaId: string;
   cooperadoNome?: string;
+};
+
+type RefreshOpts = SyncContaCoopValorReceberOpts & {
+  /** Envia arquivo mensal atualizado para a nuvem (responsável / outros aparelhos). */
+  pushCloud?: boolean;
 };
 
 const SYNC_CONCURRENCY = 6;
@@ -55,6 +65,48 @@ function arquivosMensaisFingerprint(arquivos: AppData["arquivosMensais"]): strin
   );
 }
 
+function mesesReferenciaParaSyncCooperado(
+  data: AppData,
+  cooperadoId: string,
+  cooperativaId: string,
+  mesFallback: string
+): string[] {
+  const meses = listarMesesPendentesQuantoVouReceber(data, cooperadoId, cooperativaId);
+  if (meses.length) return [...meses].sort();
+  if (mesFallback) return [mesFallback];
+  return [getMesPrincipalQuantoVouReceber(data, cooperadoId, cooperativaId)];
+}
+
+async function syncContaCoopDescontosMesesLocal(
+  data: AppData,
+  opts: SyncContaCoopValorReceberOpts,
+  meses: string[]
+): Promise<{ data: AppData; descontos: DescontoContaCoopRemoto[] }> {
+  let next = data;
+  let descontos: DescontoContaCoopRemoto[] = [];
+  for (const mesReferencia of [...new Set(meses)].sort()) {
+    const synced = await syncContaCoopDescontosMesLocal(next, { ...opts, mesReferencia });
+    next = synced.data;
+    descontos = synced.descontos;
+  }
+  return { data: next, descontos };
+}
+
+async function applyLocalContaCoopDescontosRefresh(
+  opts: RefreshOpts
+): Promise<{ changed: boolean; descontos: DescontoContaCoopRemoto[]; data: AppData }> {
+  const before = getData();
+  const beforeFp = arquivosMensaisFingerprint(before.arquivosMensais);
+  const meses = mesesReferenciaParaSyncCooperado(before, opts.cooperadoId, opts.cooperativaId, opts.mesReferencia);
+  const synced = await syncContaCoopDescontosMesesLocal(before, opts, meses);
+  const afterFp = arquivosMensaisFingerprint(synced.data.arquivosMensais);
+  const changed = afterFp !== beforeFp;
+  if (changed) {
+    updateData(() => synced.data);
+  }
+  return { changed, descontos: synced.descontos, data: synced.data };
+}
+
 async function mapPool<T, R>(items: T[], concurrency: number, fn: (item: T) => Promise<R>): Promise<R[]> {
   const out: R[] = new Array(items.length);
   let index = 0;
@@ -74,6 +126,7 @@ export async function refreshContaCoopDescontosCooperativaPendentes(opts: {
   cnpj: string;
   cooperativaId: string;
   data?: AppData;
+  pushCloud?: boolean;
 }): Promise<boolean> {
   const before = opts.data ?? getData();
   const beforeFp = arquivosMensaisFingerprint(before.arquivosMensais);
@@ -112,6 +165,9 @@ export async function refreshContaCoopDescontosCooperativaPendentes(opts: {
     const afterFp = arquivosMensaisFingerprint(data.arquivosMensais);
     if (afterFp !== beforeFp) {
       updateData(() => data);
+      if (opts.pushCloud !== false) {
+        await pushOperacionalToCloud(opts.cnpj, data, opts.cooperativaId).catch(() => {});
+      }
       return true;
     }
     return false;
@@ -120,16 +176,27 @@ export async function refreshContaCoopDescontosCooperativaPendentes(opts: {
   }
 }
 
-/** Busca compras na nuvem, grava no arquivo mensal e atualiza o store local. */
+/** Atualiza arquivo mensal local a partir das transações HB na nuvem (polling / telas abertas). */
 export async function refreshContaCoopValorReceberPilot(
   opts: SyncContaCoopValorReceberOpts
 ): Promise<{ descontos: DescontoContaCoopRemoto[] }> {
-  const before = getData();
-  const beforeFp = arquivosMensaisFingerprint(before.arquivosMensais);
-  const synced = await syncContaCoopDescontosMesSePilot(before, opts);
-  const afterFp = arquivosMensaisFingerprint(synced.data.arquivosMensais);
-  if (afterFp !== beforeFp) {
-    updateData(() => synced.data);
+  const { descontos } = await applyLocalContaCoopDescontosRefresh({ ...opts, pushCloud: false });
+  return { descontos };
+}
+
+/**
+ * Imediatamente após pagamento ou estorno HB Créditos — abate valor a receber e linhas do resumo.
+ * Sincroniza todos os meses em aberto do cooperado e envia operacional à nuvem.
+ */
+export async function refreshContaCoopValorReceberAfterHbTransaction(
+  opts: SyncContaCoopValorReceberOpts
+): Promise<{ descontos: DescontoContaCoopRemoto[] }> {
+  const { changed, descontos, data } = await applyLocalContaCoopDescontosRefresh({
+    ...opts,
+    pushCloud: true,
+  });
+  if (changed) {
+    await pushOperacionalToCloud(opts.cnpj, data, opts.cooperativaId).catch(() => {});
   }
-  return { descontos: synced.descontos };
+  return { descontos };
 }
