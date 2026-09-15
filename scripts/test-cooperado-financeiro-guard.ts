@@ -8,6 +8,7 @@ import {
   buildValorExibicaoCooperadoOpts,
   getDescontosExtrasExibicaoCooperado,
   getResumoPagamentoCooperado,
+  getResumoPagamentoExibicao,
   getResumoPagamentoParaRegistro,
   getResumoValorAPagarRelatorio,
   getValorExibicaoCooperado,
@@ -15,6 +16,7 @@ import {
   purgarFichasInvalidas,
   reconciliarFichaFromNotasConferidas,
 } from "../src/services/notaPedidoService.ts";
+import { setContaCoopDescontosMemoria } from "../src/lib/hb-credit/contaCoopDescontosMemory.ts";
 import type { AppData, FichaCorrida, NotaPedido } from "../src/types/index.ts";
 
 const COOP = "coop-1";
@@ -107,6 +109,29 @@ function nota(id: string, status: NotaPedido["status"]): NotaPedido {
     "resumo cooperado deve listar compra HB Créditos"
   );
   assert.equal(exibicao, aReceber.valorLiquido, "valor exibido deve igualar valor a receber");
+}
+
+{
+  const MES = "2026-08";
+  let data = baseData({
+    fichaCorrida: [ficha("f1", "n1")],
+    notasPedido: [nota("n1", "conferida")],
+  });
+  setContaCoopDescontosMemoria(COOP, COOPERADO, MES, [
+    {
+      motivo: "Compra HB Créditos — memoria sessao",
+      valorReais: 40,
+      tipo: "conta_coop",
+      createdAt: "2026-08-20T12:00:00.000Z",
+    },
+  ]);
+  const aReceber = getResumoValorAPagarRelatorio(data, COOPERADO, MES, COOP);
+  const exibicao = getResumoPagamentoExibicao(data, COOPERADO, MES, COOP);
+  assert.ok(aReceber.valorLiquido < 100, "cache HB deve abater valor a receber sem arquivo mensal");
+  assert.ok(
+    exibicao.descontosExtras.some((d) => d.tipo === "conta_coop"),
+    "resumo exibicao deve listar HB via cache"
+  );
 }
 
 {

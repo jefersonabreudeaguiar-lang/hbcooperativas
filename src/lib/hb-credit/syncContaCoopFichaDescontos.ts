@@ -3,6 +3,10 @@ import type { DescontoContaCoopRemoto } from "@/lib/hb-credit/mergeFichaDesconto
 import { dedupeDescontosContaCoopRemotos } from "@/lib/hb-credit/mergeFichaDescontos";
 import { fetchFichaDescontosContaCoop } from "@/services/creditApiService";
 import {
+  listCooperadoIdsMesmoTitular,
+  resolverCooperadoIdCanonico,
+} from "@/services/cooperadoCloudService";
+import {
   getMesPrincipalQuantoVouReceber,
   listarMesesPendentesQuantoVouReceber,
   listarMesesPendentesPagamentoResponsavel,
@@ -10,7 +14,7 @@ import {
 import { pushOperacionalToCloud } from "@/services/cooperativaSyncCloudService";
 import { beginSaveBatch, endSaveBatch, getData, updateData } from "@/services/dataStore";
 import { persistDescontosContaCoopNoArquivo } from "@/services/notaPedidoService";
-import { resolverCooperadoIdCanonico } from "@/services/cooperadoCloudService";
+import { setContaCoopDescontosMemoria } from "@/lib/hb-credit/contaCoopDescontosMemory";
 import { isContaCoopValorReceberPilot } from "@/utils/contaCoopUiVisibility";
 import type { User } from "@/types";
 
@@ -46,8 +50,10 @@ export async function syncContaCoopDescontosMesLocal(
     opts.cooperativaId,
     opts.cooperadoNome
   );
-  const raw = await fetchFichaDescontosContaCoop(opts.cnpj, canonico, opts.mesReferencia);
+  const titularIds = listCooperadoIdsMesmoTitular(data, canonico, opts.cooperativaId);
+  const raw = await fetchFichaDescontosContaCoop(opts.cnpj, titularIds, opts.mesReferencia);
   const descontos = dedupeDescontosContaCoopRemotos(raw);
+  setContaCoopDescontosMemoria(opts.cooperativaId, canonico, opts.mesReferencia, descontos);
   const next = persistDescontosContaCoopNoArquivo(
     data,
     opts.cooperadoId,
@@ -156,13 +162,16 @@ export async function refreshContaCoopDescontosCooperativaPendentes(opts: {
   beginSaveBatch();
   try {
     const fetched = await mapPool(jobs, SYNC_CONCURRENCY, async (job) => {
+      const titularIds = listCooperadoIdsMesmoTitular(before, job.cooperadoId, opts.cooperativaId);
       const descontos = dedupeDescontosContaCoopRemotos(
-        await fetchFichaDescontosContaCoop(opts.cnpj, job.cooperadoId, job.mesReferencia)
+        await fetchFichaDescontosContaCoop(opts.cnpj, titularIds, job.mesReferencia)
       );
       return { ...job, descontos };
     });
 
     for (const row of fetched) {
+      const canonico = resolverCooperadoIdCanonico(before, row.cooperadoId, opts.cooperativaId);
+      setContaCoopDescontosMemoria(opts.cooperativaId, canonico, row.mesReferencia, row.descontos);
       data = persistDescontosContaCoopNoArquivo(
         data,
         row.cooperadoId,

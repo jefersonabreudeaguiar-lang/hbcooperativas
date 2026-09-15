@@ -9,22 +9,48 @@ export async function GET(request: Request) {
   const url = new URL(request.url);
   const cnpj = url.searchParams.get("cnpj") ?? "";
   const cooperadoId = url.searchParams.get("cooperadoId") ?? "";
+  const cooperadoIdsParam = url.searchParams.get("cooperadoIds") ?? "";
   const mesReferencia = url.searchParams.get("mesReferencia") ?? "";
 
-  if (!cnpj || !cooperadoId || !mesReferencia) {
+  if (!cnpj || !mesReferencia) {
     return NextResponse.json({ error: "Informe cnpj, cooperadoId e mesReferencia." }, { status: 400 });
+  }
+
+  const cooperadoIds = [
+    ...new Set(
+      [
+        cooperadoId,
+        ...cooperadoIdsParam
+          .split(",")
+          .map((s) => s.trim())
+          .filter(Boolean),
+      ].filter(Boolean)
+    ),
+  ];
+
+  if (!cooperadoIds.length) {
+    return NextResponse.json({ error: "Informe cooperadoId." }, { status: 400 });
   }
 
   const denyCoop = requireCreditCnpj(gate.ctx, cnpj);
   if (denyCoop) return denyCoop;
 
-  const denySelf = requireCreditCooperado(gate.ctx, cooperadoId);
-  if (denySelf) return denySelf;
+  if (gate.ctx.enforced && gate.ctx.session?.role === "cooperado") {
+    const sessionId = gate.ctx.session.cooperadoId ?? "";
+    if (!sessionId || !cooperadoIds.includes(sessionId)) {
+      return NextResponse.json({ error: "Sem permissão." }, { status: 403 });
+    }
+  } else {
+    for (const id of cooperadoIds) {
+      const denySelf = requireCreditCooperado(gate.ctx, id);
+      if (denySelf) return denySelf;
+    }
+  }
 
   const descontos = await listCooperadoContaCoopDescontosAbateValorReceber(
     gate.ctx.supabase,
     cnpj,
-    cooperadoId,
+    cooperadoIds,
     mesReferencia
   );
 

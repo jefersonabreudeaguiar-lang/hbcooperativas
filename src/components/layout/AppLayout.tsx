@@ -24,6 +24,7 @@ import { isContaCoopUiVisibleForUser } from "@/utils/contaCoopUiVisibility";
 import { useSyncContaCoopValorReceberCooperativa } from "@/hooks/useSyncContaCoopValorReceberCooperativa";
 import { MercadoParceiroPinResetBar } from "@/components/hb-credit/MercadoParceiroPinResetBar";
 import { getUserCooperativaId } from "@/utils/cooperativa";
+import { useHbCreditDescontosWarmup } from "@/hooks/useHbCreditDescontosWarmup";
 import type { Resource } from "@/types";
 
 const ICONS: Record<string, React.ReactNode> = {
@@ -296,6 +297,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       ? { cooperativaId: coopId, user, enabled: true }
       : undefined
   );
+
+  useHbCreditDescontosWarmup(user);
 
   return (
     <div className="flex h-screen bg-gray-50">
