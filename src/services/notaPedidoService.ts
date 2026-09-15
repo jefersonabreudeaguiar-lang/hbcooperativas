@@ -1561,7 +1561,8 @@ export function getDescontosContaCoopMesCached(
   cooperativaId?: string
 ): DescontoContaCoopRemoto[] {
   const coopId = cooperativaId ?? data.cooperados.find((c) => c.id === cooperadoId)?.cooperativaId;
-  const arquivo = getArquivoMensalCooperado(data, cooperadoId, mesReferencia, coopId);
+  const canonico = resolverCooperadoIdCanonico(data, cooperadoId, coopId);
+  const arquivo = getArquivoMensalCooperado(data, canonico, mesReferencia, coopId);
   return descontosContaCoopFromArquivo(arquivo);
 }
 
@@ -1573,9 +1574,10 @@ function aplicarDescontosContaCoopMesNoResumo(
   cooperativaId?: string
 ): ResumoPagamentoCooperado {
   const coopId = cooperativaId ?? data.cooperados.find((c) => c.id === cooperadoId)?.cooperativaId;
-  const mesesPendentes = mesesReferenciaComDebitoAberto(data, cooperadoId, coopId);
+  const canonico = resolverCooperadoIdCanonico(data, cooperadoId, coopId);
+  const mesesPendentes = mesesReferenciaComDebitoAberto(data, canonico, coopId);
   const descontos = filtrarDescontosContaCoopParaMesReferencia(
-    getDescontosContaCoopMesCached(data, cooperadoId, mesReferencia, coopId),
+    getDescontosContaCoopMesCached(data, canonico, mesReferencia, coopId),
     mesReferencia,
     mesesPendentes
   );
@@ -1603,19 +1605,28 @@ export function getValorExibicaoCooperado(
   opts?: ValorExibicaoCooperadoOpts
 ): number {
   if (!opts) return resumo.valorEntregas;
-  const merged = getResumoExibicaoCooperadoPilot(resumo, opts);
-  if (merged !== resumo) return merged.valorLiquido;
-  return resumo.valorEntregas;
+  return getResumoPagamentoParaRegistro(
+    resumo,
+    opts.data,
+    opts.cooperadoId,
+    opts.mesReferencia,
+    opts.cooperativaId
+  ).valorLiquido;
 }
 
+/** Linhas do resumo alinhadas ao valor a receber (inclui compras HB Créditos). */
 export function getDescontosExtrasExibicaoCooperado(
   resumo: ResumoPagamentoCooperado,
   opts?: ValorExibicaoCooperadoOpts
 ): FichaCorridaDesconto[] {
-  if (!opts) return [];
-  const merged = getResumoExibicaoCooperadoPilot(resumo, opts);
-  if (merged === resumo) return [];
-  return merged.descontosExtras;
+  if (!opts) return resumo.descontosExtras;
+  return getResumoPagamentoParaRegistro(
+    resumo,
+    opts.data,
+    opts.cooperadoId,
+    opts.mesReferencia,
+    opts.cooperativaId
+  ).descontosExtras;
 }
 
 /** Registro de pagamento pelo responsável — inclui abatimento HB Créditos (mercado). */
