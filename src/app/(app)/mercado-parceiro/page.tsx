@@ -482,7 +482,6 @@ function MercadoParceiroContent() {
   const pixCadastrado = Boolean(parceiro?.pixKey);
   const pixBloqueado = pixCadastrado && !pixChangeUnlocked;
   const pixEditavel = !pixCadastrado || pixChangeUnlocked;
-  const podeSolicitarResetPin = (hasPin || pinLocked) && !pinResetPending;
 
   const pinFinanceiroCard = (
     <Card className="p-5 space-y-4">
@@ -516,9 +515,9 @@ function MercadoParceiroContent() {
           <p className="text-sm text-amber-800">
             {pinLocked
               ? "Seu PIN está bloqueado. Solicite reset para o responsável liberar um PIN novo."
-              : "Cadastre um PIN numérico para solicitar estornos."}
+              : "Cadastre um PIN numérico para solicitar estornos. Se esqueceu o PIN anterior, solicite reset abaixo."}
           </p>
-          {podeSolicitarResetPin && (
+          {!pinResetPending && (
             <Button variant="secondary" className="w-full sm:w-auto" onClick={() => void solicitarResetPin()} disabled={busy}>
               Esqueci meu PIN — solicitar reset
             </Button>
@@ -587,6 +586,8 @@ function MercadoParceiroContent() {
           </Button>
         </AlertBanner>
       )}
+
+      {parceiro && pinFinanceiroCard}
 
       {tab === "inicio" && (
         <>
@@ -661,8 +662,6 @@ function MercadoParceiroContent() {
               )}
             </Card>
           )}
-
-          {ativo && pinFinanceiroCard}
 
           <Button size="lg" className="w-full" onClick={() => setTab("cobrar")} disabled={!ativo || needsTermsAcceptance}>
             Cobrar com QR Code
@@ -794,7 +793,6 @@ function MercadoParceiroContent() {
 
       {tab === "vendas" && (
         <div className="space-y-4">
-          {pinFinanceiroCard}
           {estornoAlvo && (
             <div ref={estornoFormRef} className="scroll-mt-4">
             <Card className="space-y-4 border-amber-300 bg-amber-50/40 !p-5">
@@ -838,7 +836,11 @@ function MercadoParceiroContent() {
                     if (e.key === "Enter") void enviarEstorno();
                   }}
                 />
-                {podeSolicitarResetPin ? (
+                {pinResetPending ? (
+                  <p className="mt-2 text-xs text-cyan-800">
+                    Reset solicitado — aguarde o responsável em Conta Coop → Mercados.
+                  </p>
+                ) : (
                   <Button
                     type="button"
                     variant="secondary"
@@ -849,14 +851,6 @@ function MercadoParceiroContent() {
                   >
                     Esqueci meu PIN — solicitar reset
                   </Button>
-                ) : pinResetPending ? (
-                  <p className="mt-2 text-xs text-cyan-800">
-                    Reset solicitado — aguarde o responsável em Conta Coop → Mercados.
-                  </p>
-                ) : (
-                  <p className="mt-2 text-xs text-gray-500">
-                    Sem PIN cadastrado? Crie um no card acima ou na aba Mais.
-                  </p>
                 )}
               </div>
               <div className="flex flex-wrap gap-2">
@@ -1109,8 +1103,6 @@ function MercadoParceiroContent() {
           )}
 
           {ativo && <ContaCoopFiscalNotesMercadoPanel />}
-
-          {pinFinanceiroCard}
 
           <Card className="p-5 space-y-2">
             <h3 className="font-semibold">Histórico de liquidações</h3>

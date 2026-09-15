@@ -440,6 +440,18 @@ function ContaCoopContent() {
         </AlertBanner>
       )}
 
+      {pinResetRequests.length > 0 && tab !== "mercados" && (
+        <AlertBanner variant="info" title="Mercado pediu reset do PIN de estorno">
+          <p className="text-sm">
+            {pinResetRequests.length} solicitação(ões) aguardando. Confirme em{" "}
+            <strong>Mercados → Resetar PIN de estorno</strong>.
+          </p>
+          <Button size="sm" variant="secondary" className="mt-2" onClick={() => setTab("mercados")}>
+            Abrir Mercados
+          </Button>
+        </AlertBanner>
+      )}
+
       <ContaCoopSegmentTabs
         tabs={[
           { id: "painel", label: "Visão geral" },
