@@ -127,6 +127,11 @@ export function subscribe(listener: Listener): () => void {
   return () => listeners.delete(listener);
 }
 
+/** Re-renderiza telas que leem HB Créditos em cache de sessão (fora do AppData). */
+export function notifyAppDataSubscribers(): void {
+  notifyImmediate();
+}
+
 /** Agrupa várias gravações do sync em uma só (evita travar o celular). */
 export function beginSaveBatch(): void {
   saveBatchDepth++;

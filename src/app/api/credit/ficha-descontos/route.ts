@@ -37,8 +37,11 @@ export async function GET(request: Request) {
 
   if (gate.ctx.enforced && gate.ctx.session?.role === "cooperado") {
     const sessionId = gate.ctx.session.cooperadoId ?? "";
-    if (!sessionId || !cooperadoIds.includes(sessionId)) {
+    if (!sessionId) {
       return NextResponse.json({ error: "Sem permissão." }, { status: 403 });
+    }
+    if (!cooperadoIds.includes(sessionId)) {
+      cooperadoIds.push(sessionId);
     }
   } else {
     for (const id of cooperadoIds) {
