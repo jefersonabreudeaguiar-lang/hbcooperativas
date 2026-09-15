@@ -16,6 +16,7 @@ import type {
 import { refreshContaCoopValorReceberAfterHbTransaction } from "@/lib/hb-credit/syncContaCoopFichaDescontos";
 import { getMesPrincipalQuantoVouReceber } from "@/services/cooperadoEntregasService";
 import { getData } from "@/services/dataStore";
+import { resolverCooperadoIdCanonico } from "@/services/cooperadoCloudService";
 
 async function parseJson<T>(res: Response): Promise<T & { error?: string }> {
   const data = (await res.json()) as T & { error?: string };
@@ -205,14 +206,22 @@ export async function authorizeCreditPayment(input: {
   const data = await parseJson<{ ok?: boolean; error?: string; receiptCode?: string; disponivelAposCents?: number }>(res);
   if (!res.ok || !data.ok) throw new Error(data.error ?? "Pagamento recusado.");
 
-  const coopId = input.cooperativaId;
-  if (coopId) {
-    const local = getData();
+  const local = getData();
+  const coopId =
+    input.cooperativaId ??
+    local.cooperados.find((c) => c.id === input.cooperadoId)?.cooperativaId;
+  if (coopId && input.cnpj) {
+    const canonico = resolverCooperadoIdCanonico(
+      local,
+      input.cooperadoId,
+      coopId,
+      input.cooperadoNome
+    );
     const mes =
-      input.mesReferencia ?? getMesPrincipalQuantoVouReceber(local, input.cooperadoId, coopId);
+      input.mesReferencia ?? getMesPrincipalQuantoVouReceber(local, canonico, coopId);
     await refreshContaCoopValorReceberAfterHbTransaction({
       cnpj: input.cnpj,
-      cooperadoId: input.cooperadoId,
+      cooperadoId: canonico,
       mesReferencia: mes,
       cooperativaId: coopId,
       cooperadoNome: input.cooperadoNome,

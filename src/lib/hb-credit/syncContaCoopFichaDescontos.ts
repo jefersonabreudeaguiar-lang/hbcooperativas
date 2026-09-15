@@ -10,6 +10,9 @@ import {
 import { pushOperacionalToCloud } from "@/services/cooperativaSyncCloudService";
 import { beginSaveBatch, endSaveBatch, getData, updateData } from "@/services/dataStore";
 import { persistDescontosContaCoopNoArquivo } from "@/services/notaPedidoService";
+import { resolverCooperadoIdCanonico } from "@/services/cooperadoCloudService";
+import { isContaCoopValorReceberPilot } from "@/utils/contaCoopUiVisibility";
+import type { User } from "@/types";
 
 export type SyncContaCoopValorReceberOpts = {
   cnpj: string;
@@ -34,9 +37,16 @@ export async function syncContaCoopDescontosMesLocal(
     cooperadoId: string;
     mesReferencia: string;
     cooperativaId: string;
+    cooperadoNome?: string;
   }
 ): Promise<{ data: AppData; descontos: DescontoContaCoopRemoto[] }> {
-  const raw = await fetchFichaDescontosContaCoop(opts.cnpj, opts.cooperadoId, opts.mesReferencia);
+  const canonico = resolverCooperadoIdCanonico(
+    data,
+    opts.cooperadoId,
+    opts.cooperativaId,
+    opts.cooperadoNome
+  );
+  const raw = await fetchFichaDescontosContaCoop(opts.cnpj, canonico, opts.mesReferencia);
   const descontos = dedupeDescontosContaCoopRemotos(raw);
   const next = persistDescontosContaCoopNoArquivo(
     data,
@@ -199,4 +209,37 @@ export async function refreshContaCoopValorReceberAfterHbTransaction(
     await pushOperacionalToCloud(opts.cnpj, data, opts.cooperativaId).catch(() => {});
   }
   return { descontos };
+}
+
+/**
+ * Após sincronizar operacional com a nuvem — recarrega compras HB da Supabase
+ * (fonte da verdade) para arquivo mensal local, valor a receber e resumo.
+ */
+export async function refreshContaCoopDescontosAfterOperacionalSync(opts: {
+  cnpj: string;
+  cooperativaId: string;
+  user: Pick<User, "role" | "cooperadoId">;
+}): Promise<void> {
+  if (!isContaCoopValorReceberPilot()) return;
+
+  const data = getData();
+  if (opts.user.role === "cooperado" && opts.user.cooperadoId) {
+    const canonico = resolverCooperadoIdCanonico(data, opts.user.cooperadoId, opts.cooperativaId);
+    const mesReferencia = getMesPrincipalQuantoVouReceber(data, canonico, opts.cooperativaId);
+    await refreshContaCoopValorReceberPilot({
+      cnpj: opts.cnpj,
+      cooperadoId: canonico,
+      mesReferencia,
+      cooperativaId: opts.cooperativaId,
+    }).catch(() => {});
+    return;
+  }
+
+  if (opts.user.role === "responsavel" || opts.user.role === "tesoureiro" || opts.user.role === "admin") {
+    await refreshContaCoopDescontosCooperativaPendentes({
+      cnpj: opts.cnpj,
+      cooperativaId: opts.cooperativaId,
+      pushCloud: true,
+    }).catch(() => {});
+  }
 }
