@@ -522,10 +522,21 @@ export async function postRefundRequestAction(body: Record<string, unknown>) {
   return data;
 }
 
-export async function fetchFichaDescontosContaCoop(cnpj: string, cooperadoId: string, mesReferencia: string) {
-  const res = await secureApiFetch(
-    `/api/credit/ficha-descontos?cnpj=${encodeURIComponent(cnpj)}&cooperadoId=${encodeURIComponent(cooperadoId)}&mesReferencia=${encodeURIComponent(mesReferencia)}`
-  );
+export async function fetchFichaDescontosContaCoop(
+  cnpj: string,
+  cooperadoId: string | string[],
+  mesReferencia: string
+) {
+  const ids = [...new Set((Array.isArray(cooperadoId) ? cooperadoId : [cooperadoId]).filter(Boolean))];
+  const primary = ids[0] ?? "";
+  const extra = ids.slice(1);
+  const params = new URLSearchParams({
+    cnpj,
+    cooperadoId: primary,
+    mesReferencia,
+  });
+  if (extra.length) params.set("cooperadoIds", extra.join(","));
+  const res = await secureApiFetch(`/api/credit/ficha-descontos?${params.toString()}`);
   const data = await parseJson<{
     ok?: boolean;
     error?: string;

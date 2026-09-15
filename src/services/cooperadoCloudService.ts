@@ -569,6 +569,32 @@ export function resolverCooperadoIdCanonico(
   return cooperadoId;
 }
 
+/** IDs locais que podem ter transações HB na nuvem (mesmo titular — CPF ou nome). */
+export function listCooperadoIdsMesmoTitular(
+  data: AppData,
+  cooperadoId: string,
+  cooperativaId?: string
+): string[] {
+  const canonico = resolverCooperadoIdCanonico(data, cooperadoId, cooperativaId);
+  const ids = new Set<string>([canonico, cooperadoId]);
+  const ref = data.cooperados.find((c) => c.id === canonico);
+  if (!ref) return [...ids];
+
+  const cpf = ref.cpfCnpj ? cpfCooperadoDigits(ref.cpfCnpj) : "";
+  const nome = nomeNormalizado(ref.nomeCompleto);
+
+  for (const c of data.cooperados) {
+    if (cooperativaId && c.cooperativaId !== cooperativaId) continue;
+    if (c.id === canonico) continue;
+    if (cpf && c.cpfCnpj && cpfCooperadoDigits(c.cpfCnpj) === cpf) {
+      ids.add(c.id);
+      continue;
+    }
+    if (nome && nomeNormalizado(c.nomeCompleto) === nome) ids.add(c.id);
+  }
+  return [...ids];
+}
+
 export function getCooperadoNomeResolvido(
   data: AppData,
   cooperadoId: string,

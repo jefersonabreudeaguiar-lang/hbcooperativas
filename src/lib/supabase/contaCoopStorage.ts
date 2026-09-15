@@ -3322,17 +3322,20 @@ type CooperadoContaCoopDescontoRow = {
 async function listCooperadoContaCoopDescontosIntervalo(
   supabase: SupabaseClient,
   cnpj: string,
-  cooperadoId: string,
+  cooperadoIds: string | string[],
   startIso: string,
   endIso: string,
   opts?: { incluirPagamentosEstornados?: boolean }
 ): Promise<CooperadoContaCoopDescontoRow[]> {
   const digits = normalizeCnpj(cnpj);
+  const ids = [...new Set((Array.isArray(cooperadoIds) ? cooperadoIds : [cooperadoIds]).filter(Boolean))];
+  if (!ids.length) return [];
+
   let query = supabase
     .from("hb_credit_transactions")
     .select("id, event_type, amount_cents, created_at, partner_id, receipt_code, status")
     .eq("cooperative_cnpj", digits)
-    .eq("cooperado_id", cooperadoId)
+    .in("cooperado_id", ids)
     .in("event_type", ["PAYMENT", "REFUND"])
     .gte("created_at", startIso)
     .lte("created_at", endIso)
@@ -3389,11 +3392,11 @@ export async function listCooperadoContaCoopDescontosMes(
 export async function listCooperadoContaCoopDescontosAbateValorReceber(
   supabase: SupabaseClient,
   cnpj: string,
-  cooperadoId: string,
+  cooperadoId: string | string[],
   mesReferenciaFicha: string
 ): Promise<CooperadoContaCoopDescontoRow[]> {
   const { start } = mesReferenciaRange(mesReferenciaFicha);
-  return listCooperadoContaCoopDescontosIntervalo(
+  const rows = await listCooperadoContaCoopDescontosIntervalo(
     supabase,
     cnpj,
     cooperadoId,
@@ -3401,6 +3404,13 @@ export async function listCooperadoContaCoopDescontosAbateValorReceber(
     new Date().toISOString(),
     { incluirPagamentosEstornados: true }
   );
+  const seen = new Set<string>();
+  return rows.filter((r) => {
+    const k = `${r.createdAt}|${r.valorReais}|${r.motivo}`;
+    if (seen.has(k)) return false;
+    seen.add(k);
+    return true;
+  });
 }
 
 export async function getDiscountPoolResumo(

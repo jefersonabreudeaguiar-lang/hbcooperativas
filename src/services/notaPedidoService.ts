@@ -27,11 +27,16 @@ import { textoDescontoMensalidadeFicha } from "@/config/contaCoopEconomia";
 import type { DescontoContaCoopRemoto } from "@/lib/hb-credit/mergeFichaDescontos";
 import {
   descontosContaCoopFromArquivo,
+  descontosContaCoopLinhasExibicao,
   dedupeDescontosContaCoopRemotos,
   dedupeDescontosExtrasContaCoop,
   filtrarDescontosContaCoopParaMesReferencia,
   mergeDescontosContaCoopNoResumo,
 } from "@/lib/hb-credit/mergeFichaDescontos";
+import {
+  getContaCoopDescontosMemoria,
+  mergeContaCoopDescontosArquivoEMemoria,
+} from "@/lib/hb-credit/contaCoopDescontosMemory";
 import { formatMesesReferenciaRotulo } from "@/utils/format";
 import { fichaPreservarSemNotaLocal, notasSyncProvavelmenteCompleto } from "@/services/fichaSyncGuard";
 import { isCloudSyncInProgress } from "@/services/cloudSyncProgress";
@@ -1523,6 +1528,9 @@ export function getResumoPagamentoCooperado(
       valor: avulso.valor,
     });
   }
+  for (const line of descontosContaCoopLinhasExibicao(coopMes)) {
+    descontosExtras.push(line);
+  }
   const totalDescontos = round2(
     descontosExtras.filter((d) => d.tipo !== "credito_avulso").reduce((s, d) => s + d.valor, 0)
   );
@@ -1548,8 +1556,7 @@ export function getResumoValorAPagarRelatorio(
   mesReferencia: string,
   cooperativaId?: string
 ): ResumoPagamentoCooperado {
-  const base = getResumoPagamentoCooperado(data, cooperadoId, mesReferencia, cooperativaId);
-  return getResumoPagamentoParaRegistro(base, data, cooperadoId, mesReferencia, cooperativaId);
+  return getResumoPagamentoExibicao(data, cooperadoId, mesReferencia, cooperativaId);
 }
 
 /** Valor exibido ao cooperado — entregas; menos uso HB Créditos no mercado quando houver compras no mês. */
@@ -1581,7 +1588,10 @@ export function getDescontosContaCoopMesCached(
   const coopId = cooperativaId ?? data.cooperados.find((c) => c.id === cooperadoId)?.cooperativaId;
   const canonico = resolverCooperadoIdCanonico(data, cooperadoId, coopId);
   const arquivo = getArquivoMensalCooperado(data, canonico, mesReferencia, coopId);
-  return descontosContaCoopFromArquivo(arquivo);
+  const fromArquivo = descontosContaCoopFromArquivo(arquivo);
+  if (!coopId) return fromArquivo;
+  const fromMemoria = getContaCoopDescontosMemoria(coopId, canonico, mesReferencia);
+  return mergeContaCoopDescontosArquivoEMemoria(fromArquivo, fromMemoria);
 }
 
 function aplicarDescontosContaCoopMesNoResumo(
@@ -1680,10 +1690,12 @@ export function getResumoPagamentoExibicao(
   cooperativaId?: string,
   ajustes?: AjustesResumoPagamento
 ): ResumoPagamentoCooperado {
-  const pagamento = getPagamentoAguardandoCooperado(data, cooperadoId, mesReferencia);
-  if (pagamento) return resumoFromPagamento(pagamento);
   const coopId = cooperativaId ?? data.cooperados.find((c) => c.id === cooperadoId)?.cooperativaId;
-  return getResumoPagamentoCooperado(data, cooperadoId, mesReferencia, coopId, ajustes);
+  const pagamento = getPagamentoAguardandoCooperado(data, cooperadoId, mesReferencia);
+  const base = pagamento
+    ? resumoFromPagamento(pagamento)
+    : getResumoPagamentoCooperado(data, cooperadoId, mesReferencia, coopId, ajustes);
+  return getResumoPagamentoParaRegistro(base, data, cooperadoId, mesReferencia, coopId);
 }
 
 export function getTotalRecebidoCooperado(data: AppData, cooperadoId: string, mesReferencia?: string): number {
