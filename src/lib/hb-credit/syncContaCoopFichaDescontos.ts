@@ -12,7 +12,7 @@ import {
   listarMesesPendentesPagamentoResponsavel,
 } from "@/services/cooperadoEntregasService";
 import { pushOperacionalToCloud } from "@/services/cooperativaSyncCloudService";
-import { beginSaveBatch, endSaveBatch, getData, updateData } from "@/services/dataStore";
+import { beginSaveBatch, endSaveBatch, getData, notifyAppDataSubscribers, updateData } from "@/services/dataStore";
 import { persistDescontosContaCoopNoArquivo } from "@/services/notaPedidoService";
 import { setContaCoopDescontosMemoria } from "@/lib/hb-credit/contaCoopDescontosMemory";
 import { isContaCoopValorReceberPilot } from "@/utils/contaCoopUiVisibility";
@@ -119,6 +119,8 @@ async function applyLocalContaCoopDescontosRefresh(
   const changed = afterFp !== beforeFp;
   if (changed) {
     updateData(() => synced.data);
+  } else if (synced.descontos.length > 0) {
+    notifyAppDataSubscribers();
   }
   return { changed, descontos: synced.descontos, data: synced.data };
 }
@@ -182,12 +184,16 @@ export async function refreshContaCoopDescontosCooperativaPendentes(opts: {
     }
 
     const afterFp = arquivosMensaisFingerprint(data.arquivosMensais);
+    const anyDescontos = fetched.some((row) => row.descontos.length > 0);
     if (afterFp !== beforeFp) {
       updateData(() => data);
       if (opts.pushCloud !== false) {
         await pushOperacionalToCloud(opts.cnpj, data, opts.cooperativaId).catch(() => {});
       }
       return true;
+    }
+    if (anyDescontos) {
+      notifyAppDataSubscribers();
     }
     return false;
   } finally {
