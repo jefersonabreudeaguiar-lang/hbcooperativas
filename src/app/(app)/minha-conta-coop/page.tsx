@@ -24,7 +24,6 @@ import {
 import { formatCentsBRL } from "@/modules/hb-credit/engine/money";
 import type { ContaCoopIntent, ContaCoopLedgerEntry, ContaCoopLimiteCooperado } from "@/modules/hb-credit/types";
 import { FINANCIAL_PIN_MIN_LENGTH } from "@/modules/hb-credit/config";
-import { refreshContaCoopValorReceberPilot } from "@/lib/hb-credit/syncContaCoopFichaDescontos";
 import { formatLedgerEntryLabel } from "@/lib/hb-credit/ledgerLabels";
 import { getMesPrincipalQuantoVouReceber } from "@/services/cooperadoEntregasService";
 import { isContaCoopValorReceberPilot } from "@/utils/contaCoopUiVisibility";
@@ -219,6 +218,8 @@ function MinhaContaCoopContent() {
         cnpj,
         cooperadoId,
         cooperadoNome,
+        cooperativaId: contaCoopSync?.cooperativaId,
+        mesReferencia: contaCoopSync?.mesReferencia,
         intentId: pendingIntent.intent.id,
         nonce: pendingIntent.intent.nonce,
         pin: payPin,
@@ -232,15 +233,6 @@ function MinhaContaCoopContent() {
       setUseCashback(false);
       setTab("extrato");
       await reload();
-      if (contaCoopSync) {
-        await refreshContaCoopValorReceberPilot({
-          cnpj,
-          cooperadoId: contaCoopSync.cooperadoId,
-          mesReferencia: contaCoopSync.mesReferencia,
-          cooperativaId: contaCoopSync.cooperativaId,
-          cooperadoNome: contaCoopSync.cooperadoNome,
-        }).catch(() => {});
-      }
     } catch (e) {
       setError(e instanceof Error ? e.message : "Pagamento recusado.");
     } finally {

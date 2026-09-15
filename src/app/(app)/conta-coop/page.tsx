@@ -912,7 +912,12 @@ function ContaCoopContent() {
       )}
 
       {tab === "estornos" && (
-        <ContaCoopEstornosPanel cnpj={cnpj} parceiros={parceiros} cooperadoNome={cooperadoNome} />
+        <ContaCoopEstornosPanel
+          cnpj={cnpj}
+          cooperativaId={user?.cooperativaId ?? ""}
+          parceiros={parceiros}
+          cooperadoNome={cooperadoNome}
+        />
       )}
 
       {tab === "descontos" && <ContaCoopDescontosPanel cnpj={cnpj} cooperadoNome={cooperadoNome} />}
