@@ -259,6 +259,7 @@ export async function fetchMercadoParceiroData() {
     recebiveis?: { id: string; amountCents: number; status: string; createdAt: string }[];
     settlements?: ContaCoopSettlement[];
     hasPin?: boolean;
+    pinLocked?: boolean;
     pinResetPending?: boolean;
     fiscalPendentes?: number;
     cooperativaNome?: string;

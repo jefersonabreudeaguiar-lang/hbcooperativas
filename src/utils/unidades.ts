@@ -1,4 +1,4 @@
-export type ProdutoUnidade = "kg" | "un" | "mç" | "dz" | "lt";
+export type ProdutoUnidade = "kg" | "un" | "mç" | "dz" | "lt" | "km";
 
 export const UNIDADES_MEDIDA: { value: ProdutoUnidade; label: string }[] = [
   { value: "kg", label: "Quilos (kg)" },
@@ -6,6 +6,7 @@ export const UNIDADES_MEDIDA: { value: ProdutoUnidade; label: string }[] = [
   { value: "mç", label: "Maço (mç)" },
   { value: "dz", label: "Dúzia (dz)" },
   { value: "lt", label: "Litro (lt)" },
+  { value: "km", label: "Quilômetro (km)" },
 ];
 
 export function labelUnidade(unidade: string): string {
@@ -19,5 +20,7 @@ export function normalizarUnidade(unidade: string): ProdutoUnidade {
   if (u === "mç" || u === "mc" || u === "maço" || u === "maco") return "mç";
   if (u === "dz" || u === "duzia" || u === "dúzia" || u === "duzias" || u === "dúzias") return "dz";
   if (u === "lt" || u === "l" || u === "litro" || u === "litros" || u === "ltr") return "lt";
+  if (u === "km" || u === "quilometro" || u === "quilômetro" || u === "quilometros" || u === "quilômetros")
+    return "km";
   return "kg";
 }

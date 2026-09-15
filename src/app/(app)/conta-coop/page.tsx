@@ -456,6 +456,36 @@ function ContaCoopContent() {
 
       {tab === "painel" && dashboard && (
         <div className="space-y-4">
+          {(pinResetRequests.length > 0 || cooperadoPinResetRequests.length > 0) && (
+            <AlertBanner variant="info" title="Solicitações de reset de PIN">
+              <p className="text-sm">
+                {pinResetRequests.length > 0 && (
+                  <>
+                    <strong>{pinResetRequests.length}</strong> mercado(s) aguardando reset do PIN de estorno.{" "}
+                  </>
+                )}
+                {cooperadoPinResetRequests.length > 0 && (
+                  <>
+                    <strong>{cooperadoPinResetRequests.length}</strong> cooperado(s) aguardando reset do PIN de
+                    pagamento.{" "}
+                  </>
+                )}
+                Abra a aba <strong>Mercados</strong> ou <strong>Limites</strong> para confirmar.
+              </p>
+              <div className="mt-3 flex flex-wrap gap-2">
+                {pinResetRequests.length > 0 && (
+                  <Button size="sm" variant="secondary" onClick={() => setTab("mercados")}>
+                    Ver mercados
+                  </Button>
+                )}
+                {cooperadoPinResetRequests.length > 0 && (
+                  <Button size="sm" variant="secondary" onClick={() => setTab("limites")}>
+                    Ver limites
+                  </Button>
+                )}
+              </div>
+            </AlertBanner>
+          )}
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
             <StatCard
               title="Disponível (todos)"
