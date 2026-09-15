@@ -28,11 +28,14 @@ import {
   getResumoPagamentoExibicao,
   getResumoValorAPagarRelatorio,
   getTotalAPagarCooperado,
+  getDescontosExtrasExibicaoCooperado,
+  getDescontosContaCoopMesCached,
   getValorExibicaoCooperado,
   buildValorExibicaoCooperadoOpts,
   reconciliarFichaFromNotasConferidas,
   somaValorBrutoFichasNota,
 } from "../src/services/notaPedidoService";
+import { liquidoUsoContaCoopMes } from "../src/lib/hb-credit/mergeFichaDescontos";
 import {
   calcularConciliacaoMensal,
   listMesesConciliacao,
@@ -222,11 +225,14 @@ function auditCooperadoMes(data: AppData, c: Cooperado, mes: string, coopId: str
   if (!temAtividade) return issues;
 
   const aPagar = getTotalAPagarCooperado(data, c.id, mes, coopId);
-  const relatorio = getResumoValorAPagarRelatorio(data, c.id, mes, coopId).valorLiquido;
+  const relatorioResumo = getResumoValorAPagarRelatorio(data, c.id, mes, coopId);
+  const relatorio = relatorioResumo.valorLiquido;
   const resumo = getResumoPagamentoCooperado(data, c.id, mes, coopId).valorLiquido;
-  const exibicao = getValorExibicaoCooperado(
+  const opts = buildValorExibicaoCooperadoOpts(data, c.id, mes, coopId);
+  const exibicao = getValorExibicaoCooperado(getResumoPagamentoExibicao(data, c.id, mes, coopId), opts);
+  const linhasExibicao = getDescontosExtrasExibicaoCooperado(
     getResumoPagamentoExibicao(data, c.id, mes, coopId),
-    buildValorExibicaoCooperadoOpts(data, c.id, mes, coopId)
+    opts
   );
 
   if (!near(aPagar, relatorio)) {
@@ -243,7 +249,32 @@ function auditCooperadoMes(data: AppData, c: Cooperado, mes: string, coopId: str
       detalhe: `${c.nomeCompleto.split(" ")[0]} | ${mes}: resumo base ${fmt(resumo)} vs relatório ${fmt(relatorio)} (Conta Coop/mensalidade)`,
     });
   }
+  if (!near(exibicao, relatorio)) {
+    issues.push({
+      tipo: "cooperado_exibicao_vs_relatorio",
+      severidade: "critico",
+      detalhe: `${c.nomeCompleto.split(" ")[0]} | ${mes}: exibição cooperado ${fmt(exibicao)} ≠ valor a receber ${fmt(relatorio)}`,
+    });
+  }
 
+  const hbArquivo = liquidoUsoContaCoopMes(getDescontosContaCoopMesCached(data, c.id, mes, coopId));
+  const hbLinhasExibicao = round2(
+    linhasExibicao
+      .filter((d) => d.tipo === "conta_coop")
+      .reduce((s, d) => s + d.valor, 0)
+  );
+  const hbLinhasRelatorio = round2(
+    relatorioResumo.descontosExtras
+      .filter((d) => d.tipo === "conta_coop")
+      .reduce((s, d) => s + d.valor, 0)
+  );
+  if (hbArquivo > TOL && !near(hbLinhasExibicao, hbLinhasRelatorio)) {
+    issues.push({
+      tipo: "cooperado_hb_resumo_oculto",
+      severidade: "critico",
+      detalhe: `${c.nomeCompleto.split(" ")[0]} | ${mes}: HB abate ${fmt(hbArquivo)} mas resumo exibe ${fmt(hbLinhasExibicao)} em linhas conta_coop`,
+    });
+  }
   const itensFicha = agregarItensFichaMes(data, c.id, mes, coopId);
   const itensNotas = agregarItensNotasCooperado(data, c.id, mes, coopId);
   if (itensFicha.totalQuantidade > 0 && itensNotas.totalQuantidade > 0) {
@@ -256,7 +287,6 @@ function auditCooperadoMes(data: AppData, c: Cooperado, mes: string, coopId: str
     }
   }
 
-  void exibicao;
   return issues;
 }
 

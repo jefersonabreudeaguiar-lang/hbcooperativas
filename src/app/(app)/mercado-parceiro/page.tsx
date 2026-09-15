@@ -91,6 +91,7 @@ function MercadoParceiroContent() {
   const comprovanteRef = useRef<HTMLDivElement>(null);
   const liquidacaoConfirmacaoRef = useRef<HTMLDivElement>(null);
   const [hasPin, setHasPin] = useState(false);
+  const [pinLocked, setPinLocked] = useState(false);
   const [pinResetPending, setPinResetPending] = useState(false);
   const [pinSetup, setPinSetup] = useState("");
   const [estornoAlvo, setEstornoAlvo] = useState<ContaCoopCompraEstornavel | null>(null);
@@ -116,6 +117,7 @@ function MercadoParceiroContent() {
       setRecebiveis(data.recebiveis ?? []);
       setSettlements(data.settlements ?? []);
       setHasPin(Boolean(data.hasPin));
+      setPinLocked(Boolean(data.pinLocked));
       setPinResetPending(Boolean(data.pinResetPending));
       setFiscalPendentes(Number(data.fiscalPendentes ?? 0));
       setCooperativaNome(data.cooperativaNome ?? "Cooperativa parceira");
@@ -480,6 +482,75 @@ function MercadoParceiroContent() {
   const pixCadastrado = Boolean(parceiro?.pixKey);
   const pixBloqueado = pixCadastrado && !pixChangeUnlocked;
   const pixEditavel = !pixCadastrado || pixChangeUnlocked;
+  const podeSolicitarResetPin = (hasPin || pinLocked) && !pinResetPending;
+
+  const pinFinanceiroCard = (
+    <Card className="p-5 space-y-4">
+      <div>
+        <h3 className="font-semibold text-gray-900">PIN financeiro do mercado</h3>
+        <p className="text-sm text-gray-600">
+          Obrigatório para solicitar estorno. Use um PIN numérico de {FINANCIAL_PIN_MIN_LENGTH} ou mais dígitos — não
+          é a senha de login.
+        </p>
+      </div>
+      {pinLocked && (
+        <AlertBanner variant="warning" title="PIN bloqueado">
+          Muitas tentativas incorretas. Solicite reset abaixo ou peça ao responsável em Conta Coop → Mercados.
+        </AlertBanner>
+      )}
+      {hasPin ? (
+        <div className="space-y-3">
+          <p className="text-sm text-green-700">PIN cadastrado. Você precisará dele ao solicitar estorno.</p>
+          {pinResetPending ? (
+            <p className="text-sm text-cyan-800 bg-cyan-50 border border-cyan-200 rounded-lg px-3 py-2">
+              Solicitação de reset enviada. Aguarde o responsável da cooperativa em Conta Coop → Mercados.
+            </p>
+          ) : (
+            <Button variant="secondary" className="w-full sm:w-auto" onClick={() => void solicitarResetPin()} disabled={busy}>
+              Esqueci meu PIN — solicitar reset
+            </Button>
+          )}
+        </div>
+      ) : (
+        <>
+          <p className="text-sm text-amber-800">
+            {pinLocked
+              ? "Seu PIN está bloqueado. Solicite reset para o responsável liberar um PIN novo."
+              : "Cadastre um PIN numérico para solicitar estornos."}
+          </p>
+          {podeSolicitarResetPin && (
+            <Button variant="secondary" className="w-full sm:w-auto" onClick={() => void solicitarResetPin()} disabled={busy}>
+              Esqueci meu PIN — solicitar reset
+            </Button>
+          )}
+          {!pinResetPending && (
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
+              <div className="flex-1">
+                <Label>Criar PIN</Label>
+                <Input
+                  className="mt-1"
+                  type="password"
+                  inputMode="numeric"
+                  autoComplete="off"
+                  value={pinSetup}
+                  onChange={(e) => setPinSetup(e.target.value.replace(/\D/g, ""))}
+                  placeholder="Somente números"
+                />
+              </div>
+              <Button onClick={() => void salvarPin()} disabled={busy || pinSetup.length < FINANCIAL_PIN_MIN_LENGTH}>
+                Salvar PIN
+              </Button>
+            </div>
+          )}
+          {pinResetPending && (
+            <p className="text-sm text-cyan-800 bg-cyan-50 border border-cyan-200 rounded-lg px-3 py-2">
+              Solicitação de reset enviada. Aguarde o responsável em Conta Coop → Mercados para cadastrar um PIN novo.
+            </p>
+          )}
+        </>
+      )}
+    </Card>
+  );
 
   return (
     <div className="mx-auto max-w-lg space-y-5 pb-8">
@@ -590,6 +661,8 @@ function MercadoParceiroContent() {
               )}
             </Card>
           )}
+
+          {ativo && pinFinanceiroCard}
 
           <Button size="lg" className="w-full" onClick={() => setTab("cobrar")} disabled={!ativo || needsTermsAcceptance}>
             Cobrar com QR Code
@@ -721,6 +794,7 @@ function MercadoParceiroContent() {
 
       {tab === "vendas" && (
         <div className="space-y-4">
+          {pinFinanceiroCard}
           {estornoAlvo && (
             <div ref={estornoFormRef} className="scroll-mt-4">
             <Card className="space-y-4 border-amber-300 bg-amber-50/40 !p-5">
@@ -764,10 +838,26 @@ function MercadoParceiroContent() {
                     if (e.key === "Enter") void enviarEstorno();
                   }}
                 />
-                <p className="mt-2 text-xs text-gray-500">
-                  Esqueceu o PIN? Solicite reset na aba <strong>Mais</strong> — o responsável confirma em Conta Coop →
-                  Mercados.
-                </p>
+                {podeSolicitarResetPin ? (
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    size="sm"
+                    className="mt-2"
+                    onClick={() => void solicitarResetPin()}
+                    disabled={busy}
+                  >
+                    Esqueci meu PIN — solicitar reset
+                  </Button>
+                ) : pinResetPending ? (
+                  <p className="mt-2 text-xs text-cyan-800">
+                    Reset solicitado — aguarde o responsável em Conta Coop → Mercados.
+                  </p>
+                ) : (
+                  <p className="mt-2 text-xs text-gray-500">
+                    Sem PIN cadastrado? Crie um no card acima ou na aba Mais.
+                  </p>
+                )}
               </div>
               <div className="flex flex-wrap gap-2">
                 <Button type="button" onClick={() => void enviarEstorno()} disabled={busy}>
@@ -1020,53 +1110,7 @@ function MercadoParceiroContent() {
 
           {ativo && <ContaCoopFiscalNotesMercadoPanel />}
 
-          <Card className="p-5 space-y-4">
-            <div>
-              <h3 className="font-semibold text-gray-900">PIN financeiro do mercado</h3>
-              <p className="text-sm text-gray-600">
-                Obrigatório para solicitar estorno. Use um PIN numérico de {FINANCIAL_PIN_MIN_LENGTH} ou mais dígitos.
-              </p>
-            </div>
-            {hasPin ? (
-              <div className="space-y-3">
-                <p className="text-sm text-green-700">PIN cadastrado. Você precisará dele ao solicitar estorno.</p>
-                {pinResetPending ? (
-                  <p className="text-sm text-cyan-800 bg-cyan-50 border border-cyan-200 rounded-lg px-3 py-2">
-                    Solicitação de reset enviada. Aguarde o responsável da cooperativa em Conta Coop → Mercados.
-                  </p>
-                ) : (
-                  <Button variant="secondary" onClick={() => void solicitarResetPin()} disabled={busy}>
-                    Esqueci meu PIN — solicitar reset
-                  </Button>
-                )}
-              </div>
-            ) : (
-              <>
-                <p className="text-sm text-amber-800">
-                  Cadastre um PIN numérico para solicitar estornos. Se esqueceu o PIN anterior, use{" "}
-                  <strong>Esqueci meu PIN</strong> (quando ainda houver PIN ativo) ou aguarde o responsável resetar
-                  após sua solicitação.
-                </p>
-                <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
-                <div className="flex-1">
-                  <Label>Criar PIN</Label>
-                  <Input
-                    className="mt-1"
-                    type="password"
-                    inputMode="numeric"
-                    autoComplete="off"
-                    value={pinSetup}
-                    onChange={(e) => setPinSetup(e.target.value.replace(/\D/g, ""))}
-                    placeholder="Somente números"
-                  />
-                </div>
-                <Button onClick={() => void salvarPin()} disabled={busy || pinSetup.length < FINANCIAL_PIN_MIN_LENGTH}>
-                  Salvar PIN
-                </Button>
-              </div>
-              </>
-            )}
-          </Card>
+          {pinFinanceiroCard}
 
           <Card className="p-5 space-y-2">
             <h3 className="font-semibold">Histórico de liquidações</h3>

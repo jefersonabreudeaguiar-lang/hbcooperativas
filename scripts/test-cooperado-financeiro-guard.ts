@@ -4,7 +4,17 @@
  */
 import assert from "node:assert/strict";
 import { cooperadoFinanceiroLocalAusente, notasSyncProvavelmenteCompleto } from "../src/services/fichaSyncGuard.ts";
-import { purgarFichasInvalidas, reconciliarFichaFromNotasConferidas } from "../src/services/notaPedidoService.ts";
+import {
+  buildValorExibicaoCooperadoOpts,
+  getDescontosExtrasExibicaoCooperado,
+  getResumoPagamentoCooperado,
+  getResumoPagamentoParaRegistro,
+  getResumoValorAPagarRelatorio,
+  getValorExibicaoCooperado,
+  persistDescontosContaCoopNoArquivo,
+  purgarFichasInvalidas,
+  reconciliarFichaFromNotasConferidas,
+} from "../src/services/notaPedidoService.ts";
 import type { AppData, FichaCorrida, NotaPedido } from "../src/types/index.ts";
 
 const COOP = "coop-1";
@@ -38,17 +48,18 @@ function baseData(overrides?: Partial<AppData>): AppData {
   } as AppData;
 }
 
-function ficha(id: string, notaId: string): FichaCorrida {
+function ficha(id: string, notaId: string, mesReferencia = "2026-08"): FichaCorrida {
   return {
     id,
     cooperadoId: COOPERADO,
     cooperativaId: COOP,
     notaPedidoId: notaId,
-    mesReferencia: "2026-08",
+    mesReferencia,
     status: "pendente",
     valorBruto: 100,
     descontos: 0,
     valorLiquido: 100,
+    descricao: `Entrega nota ${notaId}`,
     createdAt: "2026-08-01T00:00:00.000Z",
   };
 }
@@ -69,15 +80,74 @@ function nota(id: string, status: NotaPedido["status"]): NotaPedido {
   };
 }
 
-// 1) Ficha da nuvem sem notas locais = incompleto (deve recuperar)
+// HB Créditos — regressão: total abatido e linhas visíveis no resumo cooperado (executar antes dos demais)
+{
+  const MES = "2026-08";
+  let data = baseData({
+    fichaCorrida: [ficha("f1", "n1")],
+    notasPedido: [nota("n1", "conferida")],
+  });
+  data = persistDescontosContaCoopNoArquivo(data, COOPERADO, MES, COOP, [
+    {
+      motivo: "Compra HB Créditos — mercado teste",
+      valorReais: 50,
+      tipo: "conta_coop",
+      createdAt: "2026-08-15T12:00:00.000Z",
+    },
+  ]);
+  const base = getResumoPagamentoCooperado(data, COOPERADO, MES, COOP);
+  const aReceber = getResumoValorAPagarRelatorio(data, COOPERADO, MES, COOP);
+  const opts = buildValorExibicaoCooperadoOpts(data, COOPERADO, MES, COOP);
+  const linhas = getDescontosExtrasExibicaoCooperado(base, opts);
+  const exibicao = getValorExibicaoCooperado(base, opts);
+
+  assert.ok(aReceber.valorLiquido < base.valorEntregas, "compra HB deve reduzir valor a receber");
+  assert.ok(
+    linhas.some((d) => d.tipo === "conta_coop"),
+    "resumo cooperado deve listar compra HB Créditos"
+  );
+  assert.equal(exibicao, aReceber.valorLiquido, "valor exibido deve igualar valor a receber");
+}
+
+{
+  const MES = "2026-09";
+  let data = baseData({
+    fichaCorrida: [ficha("f1", "n1", MES)],
+    notasPedido: [{ ...nota("n1", "conferida"), mesReferencia: MES }],
+  });
+  data = persistDescontosContaCoopNoArquivo(data, COOPERADO, MES, COOP, [
+    {
+      motivo: "Compra HB Créditos — snapshot",
+      valorReais: 40,
+      tipo: "conta_coop",
+      createdAt: "2026-09-10T10:00:00.000Z",
+    },
+  ]);
+  const base = getResumoPagamentoCooperado(data, COOPERADO, MES, COOP);
+  const snapshot = getResumoPagamentoParaRegistro(base, data, COOPERADO, MES, COOP);
+  const opts = buildValorExibicaoCooperadoOpts(data, COOPERADO, MES, COOP);
+  const linhas = getDescontosExtrasExibicaoCooperado(snapshot, opts);
+
+  assert.ok(
+    snapshot.descontosExtras.some((d) => d.tipo === "conta_coop"),
+    "snapshot de pagamento deve carregar linhas conta_coop"
+  );
+  assert.ok(
+    linhas.some((d) => d.tipo === "conta_coop"),
+    "exibição cooperado não pode ocultar HB quando snapshot já tem desconto"
+  );
+}
+
+// 1) Ficha da nuvem antes das notas conferidas = incompleto (deve recuperar)
 {
   const data = baseData({
     fichaCorrida: [ficha("f1", "n1"), ficha("f2", "n2")],
+    notasPedido: [nota("n1", "aguardando_conferencia"), nota("n2", "aguardando_conferencia")],
   });
   assert.equal(
     cooperadoFinanceiroLocalAusente(data, COOPERADO, COOP),
     true,
-    "ficha sem notas conferidas locais deve ser incompleto"
+    "ficha com notas ainda não conferidas localmente deve ser incompleto"
   );
 }
 

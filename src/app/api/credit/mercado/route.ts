@@ -55,6 +55,9 @@ export async function GET(request: Request) {
     })
   );
   const hasPin = await hasPartnerFinancialPin(gate.ctx.supabase, parceiro.id);
+  const pinLocked = Boolean(
+    parceiro.pinLockedUntil && new Date(parceiro.pinLockedUntil).getTime() > Date.now()
+  );
   const mesReferencia = getCurrentMesReferencia();
   let fiscalPendentes = 0;
   try {
@@ -80,6 +83,7 @@ export async function GET(request: Request) {
     recebiveis,
     settlements,
     hasPin,
+    pinLocked,
     pinResetPending,
     fiscalPendentes,
     mesReferenciaFiscal: mesReferencia,
