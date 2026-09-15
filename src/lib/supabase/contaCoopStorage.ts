@@ -1345,13 +1345,6 @@ export async function requestPartnerFinancialPinReset(
 
   if (!partner) return { ok: false, error: "Mercado não encontrado." };
 
-  const hasPin = Boolean(partner.pin_hash);
-  const locked =
-    partner.pin_locked_until && new Date(String(partner.pin_locked_until)).getTime() > Date.now();
-  if (!hasPin && !locked) {
-    return { ok: false, error: "Cadastre um PIN ou aguarde — não há PIN ativo para resetar." };
-  }
-
   const digits = String(partner.cooperative_cnpj);
   const pending = await listPendingPartnerPinResetRequests(supabase, digits);
   if (pending.some((r) => r.partnerId === partnerId)) {
