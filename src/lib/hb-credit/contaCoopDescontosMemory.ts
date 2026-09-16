@@ -33,6 +33,14 @@ export function getContaCoopDescontosMemoria(
   return store.get(key(cooperativaId, cooperadoId, mesReferencia)) ?? [];
 }
 
+export function hasContaCoopDescontosMemoria(
+  cooperativaId: string,
+  cooperadoId: string,
+  mesReferencia: string
+): boolean {
+  return store.has(key(cooperativaId, cooperadoId, mesReferencia));
+}
+
 export function mergeContaCoopDescontosArquivoEMemoria(
   arquivo: DescontoContaCoopRemoto[],
   memoria: DescontoContaCoopRemoto[]

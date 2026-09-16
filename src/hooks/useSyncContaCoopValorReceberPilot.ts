@@ -8,7 +8,7 @@ import { getData } from "@/services/dataStore";
 import { resolveCooperativaCnpj } from "@/services/notaPedidoCloudService";
 import { isContaCoopValorReceberPilot } from "@/utils/contaCoopUiVisibility";
 
-const SYNC_INTERVAL_MS = 20_000;
+const SYNC_INTERVAL_MS = 12_000;
 
 type HookOpts = {
   cooperadoId?: string;

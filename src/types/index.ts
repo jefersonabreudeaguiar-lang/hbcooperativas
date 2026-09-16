@@ -474,6 +474,8 @@ export interface ArquivoMensalCooperado {
     tipo: "conta_coop" | "credito_avulso";
     createdAt?: string;
   }>;
+  /** Atualizado só ao sincronizar descontos HB — não confundir com `updatedAt` do arquivo. */
+  contaCoopDescontosUpdatedAt?: string;
   updatedAt: string;
 }
 

@@ -15,6 +15,7 @@ import { pushOperacionalToCloud } from "@/services/cooperativaSyncCloudService";
 import { beginSaveBatch, endSaveBatch, getData, notifyAppDataSubscribers, updateData } from "@/services/dataStore";
 import { persistDescontosContaCoopNoArquivo, getDescontosContaCoopMesCached, getResumoValorAPagarRelatorio } from "@/services/notaPedidoService";
 import { setContaCoopDescontosMemoria } from "@/lib/hb-credit/contaCoopDescontosMemory";
+import { bumpContaCoopDescontosRevision } from "@/lib/hb-credit/contaCoopDescontosNotify";
 import { isContaCoopValorReceberPilot } from "@/utils/contaCoopUiVisibility";
 import type { User } from "@/types";
 
@@ -152,6 +153,7 @@ async function applyLocalContaCoopDescontosRefresh(
   if (changed) {
     updateData(() => synced.data);
   } else if (financeChanged) {
+    bumpContaCoopDescontosRevision();
     notifyAppDataSubscribers();
   }
   return { changed, financeChanged, descontos: synced.descontos, data: synced.data };
