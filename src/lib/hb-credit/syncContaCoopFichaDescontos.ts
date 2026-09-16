@@ -137,7 +137,7 @@ function valorReceberHbFingerprint(
 
 async function applyLocalContaCoopDescontosRefresh(
   opts: RefreshOpts
-): Promise<{ changed: boolean; descontos: DescontoContaCoopRemoto[]; data: AppData }> {
+): Promise<{ changed: boolean; financeChanged: boolean; descontos: DescontoContaCoopRemoto[]; data: AppData }> {
   const before = getData();
   const beforeFp = arquivosMensaisFingerprint(before.arquivosMensais);
   const meses = mesesReferenciaParaSyncCooperado(before, opts.cooperadoId, opts.cooperativaId, opts.mesReferencia);
@@ -154,7 +154,7 @@ async function applyLocalContaCoopDescontosRefresh(
   } else if (financeChanged) {
     notifyAppDataSubscribers();
   }
-  return { changed, descontos: synced.descontos, data: synced.data };
+  return { changed, financeChanged, descontos: synced.descontos, data: synced.data };
 }
 
 async function mapPool<T, R>(items: T[], concurrency: number, fn: (item: T) => Promise<R>): Promise<R[]> {
@@ -187,7 +187,11 @@ export async function refreshContaCoopDescontosCooperativaPendentes(opts: {
 
   const jobs: Array<{ cooperadoId: string; mesReferencia: string }> = [];
   for (const c of cooperados) {
-    for (const mes of listarMesesPendentesPagamentoResponsavel(data, c.id, opts.cooperativaId)) {
+    const meses = new Set([
+      ...listarMesesPendentesPagamentoResponsavel(data, c.id, opts.cooperativaId),
+      ...listarMesesPendentesQuantoVouReceber(data, c.id, opts.cooperativaId),
+    ]);
+    for (const mes of meses) {
       jobs.push({ cooperadoId: c.id, mesReferencia: mes });
     }
   }
@@ -237,7 +241,10 @@ export async function refreshContaCoopDescontosCooperativaPendentes(opts: {
 export async function refreshContaCoopValorReceberPilot(
   opts: SyncContaCoopValorReceberOpts
 ): Promise<{ descontos: DescontoContaCoopRemoto[] }> {
-  const { descontos } = await applyLocalContaCoopDescontosRefresh({ ...opts, pushCloud: false });
+  const { changed, descontos, data } = await applyLocalContaCoopDescontosRefresh({ ...opts, pushCloud: false });
+  if (changed) {
+    await pushOperacionalToCloud(opts.cnpj, data, opts.cooperativaId).catch(() => {});
+  }
   return { descontos };
 }
 
@@ -248,11 +255,11 @@ export async function refreshContaCoopValorReceberPilot(
 export async function refreshContaCoopValorReceberAfterHbTransaction(
   opts: SyncContaCoopValorReceberOpts
 ): Promise<{ descontos: DescontoContaCoopRemoto[] }> {
-  const { changed, descontos, data } = await applyLocalContaCoopDescontosRefresh({
+  const { changed, financeChanged, descontos, data } = await applyLocalContaCoopDescontosRefresh({
     ...opts,
     pushCloud: true,
   });
-  if (changed) {
+  if (changed || financeChanged) {
     await pushOperacionalToCloud(opts.cnpj, data, opts.cooperativaId).catch(() => {});
   }
   return { descontos };
