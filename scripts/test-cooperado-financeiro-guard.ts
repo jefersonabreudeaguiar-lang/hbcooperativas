@@ -24,6 +24,7 @@ import {
   subscribeContaCoopDescontos,
 } from "../src/lib/hb-credit/contaCoopDescontosNotify.ts";
 import { getValorQuantoVouReceber } from "../src/services/cooperadoEntregasService.ts";
+import { resolveMobileCooperadoId } from "../src/lib/hb-credit/mobileCooperadoLink.ts";
 import type { AppData, FichaCorrida, NotaPedido } from "../src/types/index.ts";
 
 const COOP = "coop-1";
@@ -383,6 +384,28 @@ function nota(id: string, status: NotaPedido["status"]): NotaPedido {
     cooperadoFinanceiroLocalAusente(next, COOPERADO, COOP),
     false,
     "após reconciliar, financeiro deve estar pronto"
+  );
+}
+
+{
+  const jeferson = "c_1781981564381_w67gg";
+  const orlando = "c_1782263929381_ncp55";
+  assert.equal(
+    resolveMobileCooperadoId({
+      email: "jefersonabreudeaguiar@gmail.com",
+      role: "cooperado",
+      cooperadoId: jeferson,
+    }),
+    jeferson,
+    "conta cooperado real não pode ser trocada pelo vínculo mobile da equipe"
+  );
+  assert.equal(
+    resolveMobileCooperadoId({
+      email: "jefersonabreudeaguiar@gmail.com",
+      role: "responsavel",
+    }),
+    orlando,
+    "responsável no celular mantém vínculo de teste (Orlando)"
   );
 }
 

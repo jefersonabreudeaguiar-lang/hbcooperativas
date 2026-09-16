@@ -273,16 +273,28 @@ export function cooperadoFichaValoresDesalinhados(
   );
 }
 
+/** Reconcilia ficha/notas e remove lançamentos obsoletos — uso após sync operacional. */
+export function aplicarSanidadeFinanceiroCooperadoLocal(
+  data: AppData,
+  cooperadoId: string,
+  cooperativaId: string
+): AppData {
+  let next = reconciliarFichaFromNotasConferidas(data);
+  next = limparFichaObsoletaCooperado(next, cooperadoId, cooperativaId);
+  return next;
+}
+
 /** Ficha/notas ausentes ou valor a receber possivelmente incompleto (sync parcial). */
 export function cooperadoFinanceiroDesatualizado(
   data: AppData,
   cooperadoId: string,
   cooperativaId: string
 ): boolean {
+  const sane = aplicarSanidadeFinanceiroCooperadoLocal(data, cooperadoId, cooperativaId);
   return (
-    cooperadoFinanceiroLocalAusente(data, cooperadoId, cooperativaId) ||
-    cooperadoPrecisaFullSyncFinanceiro(data, cooperadoId, cooperativaId) ||
-    cooperadoFichaValoresDesalinhados(data, cooperadoId, cooperativaId)
+    cooperadoFinanceiroLocalAusente(sane, cooperadoId, cooperativaId) ||
+    cooperadoPrecisaFullSyncFinanceiro(sane, cooperadoId, cooperativaId) ||
+    cooperadoFichaValoresDesalinhados(sane, cooperadoId, cooperativaId)
   );
 }
 

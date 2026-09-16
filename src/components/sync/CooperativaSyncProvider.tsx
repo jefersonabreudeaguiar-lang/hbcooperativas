@@ -29,7 +29,7 @@ import {
   syncCooperativaBidirectional,
   syncOperacionalFromCloud,
 } from "@/services/cooperativaSyncCloudService";
-import { cooperadoFinanceiroDesatualizado } from "@/services/fichaSyncGuard";
+import { cooperadoFinanceiroDesatualizado, aplicarSanidadeFinanceiroCooperadoLocal } from "@/services/fichaSyncGuard";
 import { avaliarIntegridadeFinanceiroCooperado } from "@/services/cooperadoFinanceiroGuard";
 import { refreshContaCoopDescontosAfterOperacionalSync } from "@/lib/hb-credit/syncContaCoopFichaDescontos";
 import { pushCooperadoToCloud, resolverCooperadoIdCanonico, flushPendingCooperadoPushes } from "@/services/cooperadoCloudService";
@@ -40,7 +40,7 @@ import {
   onAppIdleChange,
   startIdleMonitor,
 } from "@/services/idleActivity";
-import { getData, subscribe, updateDataSafe, waitForAppDataWarm } from "@/services/dataStore";
+import { getData, saveDataSafe, subscribe, updateDataSafe, waitForAppDataWarm } from "@/services/dataStore";
 import {
   ensureCloudSessionReady,
   getLastCloudSyncError,
@@ -372,6 +372,12 @@ export function CooperativaSyncProvider({ children }: { children: React.ReactNod
           currentUser.cooperadoId,
           currentCoopId
         );
+        if (cooperadoCanonico) {
+          const healed = aplicarSanidadeFinanceiroCooperadoLocal(getData(), cooperadoCanonico, currentCoopId);
+          if (healed !== getData()) {
+            saveDataSafe(healed);
+          }
+        }
         if (
           cooperadoCanonico &&
           cooperadoFinanceiroDesatualizado(getData(), cooperadoCanonico, currentCoopId)

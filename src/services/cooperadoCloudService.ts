@@ -581,7 +581,7 @@ export function listCooperadoIdsMesmoTitular(
   if (!ref) return [...ids];
 
   const cpf = ref.cpfCnpj ? cpfCooperadoDigits(ref.cpfCnpj) : "";
-  const nome = nomeNormalizado(ref.nomeCompleto);
+  const nome = ref.nomeCompleto?.trim() ? nomeNormalizado(ref.nomeCompleto) : "";
 
   for (const c of data.cooperados) {
     if (cooperativaId && c.cooperativaId !== cooperativaId) continue;
@@ -590,7 +590,7 @@ export function listCooperadoIdsMesmoTitular(
       ids.add(c.id);
       continue;
     }
-    if (nome && nomeNormalizado(c.nomeCompleto) === nome) ids.add(c.id);
+    if (nome && c.nomeCompleto?.trim() && nomeNormalizado(c.nomeCompleto) === nome) ids.add(c.id);
   }
   return [...ids];
 }
