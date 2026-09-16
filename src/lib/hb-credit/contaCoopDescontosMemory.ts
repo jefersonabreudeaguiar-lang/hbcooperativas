@@ -47,3 +47,19 @@ export function mergeContaCoopDescontosArquivoEMemoria(
 ): DescontoContaCoopRemoto[] {
   return dedupeDescontosContaCoopRemotos([...arquivo, ...memoria]);
 }
+
+/**
+ * Fonte HB para valor a receber: memória da API na sessão prevalece quando tem linhas;
+ * memória vazia após poll não apaga descontos já gravados no arquivo mensal (sync/cloud).
+ */
+export function resolveDescontosContaCoopMesParaCalculo(
+  fromArquivo: DescontoContaCoopRemoto[],
+  fromMemoria: DescontoContaCoopRemoto[],
+  temMemoriaSessao: boolean
+): DescontoContaCoopRemoto[] {
+  const arquivo = dedupeDescontosContaCoopRemotos(fromArquivo);
+  if (!temMemoriaSessao) return arquivo;
+  const memoria = dedupeDescontosContaCoopRemotos(fromMemoria);
+  if (memoria.length > 0) return memoria;
+  return arquivo;
+}

@@ -17,6 +17,7 @@
     "backup:cloud": "node scripts/backup-cloud.mjs",
     "test:sync-flows": "npx tsx scripts/simulate-sync-flows.ts",
     "test:cooperado-financeiro": "npx tsx scripts/test-cooperado-financeiro-guard.ts",
+    "test:hb-valor-receber": "npx tsx scripts/test-hb-valor-receber-hybrid.ts",
     "test:crawler-leva1": "npx tsx scripts/test-crawler-policy-leva1.ts",
     "audit:totais": "npx tsx scripts/audit-totais-cooperados.ts",
     "test:hb-credit-foundation": "npx tsx scripts/test-hb-credit-foundation.ts",
