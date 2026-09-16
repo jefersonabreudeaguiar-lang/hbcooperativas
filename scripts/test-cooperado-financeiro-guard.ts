@@ -22,6 +22,7 @@ import {
   getContaCoopDescontosRevision,
   subscribeContaCoopDescontos,
 } from "../src/lib/hb-credit/contaCoopDescontosNotify.ts";
+import { getValorQuantoVouReceber } from "../src/services/cooperadoEntregasService.ts";
 import type { AppData, FichaCorrida, NotaPedido } from "../src/types/index.ts";
 
 const COOP = "coop-1";
@@ -158,6 +159,67 @@ function nota(id: string, status: NotaPedido["status"]): NotaPedido {
   bumpContaCoopDescontosRevision();
   assert.equal(notified, 2, "bump manual deve notificar assinantes");
   unsub();
+}
+
+{
+  const MES = "2026-08";
+  const data = baseData({
+    fichaCorrida: [ficha("f1", "n1")],
+    notasPedido: [nota("n1", "conferida")],
+    pagamentosCooperado: [
+      {
+        id: "pay_aguardando",
+        cooperativaId: COOP,
+        cooperadoId: COOPERADO,
+        mesReferencia: MES,
+        valorBruto: 100,
+        descontoCooperativa: 0,
+        descontosExtras: [],
+        valorLiquido: 100,
+        fichaIds: ["f1"],
+        notaPedidoIds: ["n1"],
+        status: "aguardando_confirmacao",
+        pagoPor: "Responsável teste",
+        pagoEm: "2026-08-20T12:00:00.000Z",
+        createdAt: "2026-08-20T12:00:00.000Z",
+      },
+    ],
+  });
+  setContaCoopDescontosMemoria(COOP, COOPERADO, MES, [
+    {
+      motivo: "Compra HB Créditos — após PIX aguardando",
+      valorReais: 30,
+      tipo: "conta_coop",
+      createdAt: "2026-08-21T12:00:00.000Z",
+    },
+  ]);
+  const inicio = getValorQuantoVouReceber(data, COOPERADO, COOP);
+  assert.equal(inicio.valor, 70, "A receber deve abater HB mesmo aguardando assinatura do recibo");
+  assert.equal(inicio.aguardandoAssinatura, true);
+}
+
+{
+  const MES = "2026-08";
+  const data = baseData({
+    fichaCorrida: [ficha("f1", "n1")],
+    notasPedido: [nota("n1", "conferida")],
+  });
+  setContaCoopDescontosMemoria(COOP, COOPERADO, MES, [
+    {
+      motivo: "Compra HB Créditos",
+      valorReais: 40,
+      tipo: "conta_coop",
+      createdAt: "2026-08-15T12:00:00.000Z",
+    },
+    {
+      motivo: "Estorno HB Créditos — mercado",
+      valorReais: 40,
+      tipo: "conta_coop",
+      createdAt: "2026-08-16T12:00:00.000Z",
+    },
+  ]);
+  const inicio = getValorQuantoVouReceber(data, COOPERADO, COOP);
+  assert.equal(inicio.valor, 100, "estorno HB deve restaurar valor a receber");
 }
 
 {

@@ -108,14 +108,11 @@ export function mergeDescontosContaCoopNoResumo(
   if (!descontos.length) return resumo;
 
   const liquidoContaCoop = liquidoUsoContaCoopMes(descontos);
-  const coopJaAplicado = round2(
-    resumo.descontosExtras.filter((d) => d.tipo === "conta_coop").reduce((s, d) => s + d.valor, 0)
-  );
-  if (coopJaAplicado > 0 && Math.abs(coopJaAplicado - liquidoContaCoop) < 0.02) {
-    return resumo;
-  }
 
-  const extrasBase = resumo.descontosExtras.filter((d) => d.tipo !== "conta_coop");
+  const extrasBase = resumo.descontosExtras.filter(
+    (d) =>
+      d.tipo !== "conta_coop" && !(d.tipo === "credito_avulso" && isEstornoContaCoop(d.motivo))
+  );
   const extras: FichaCorridaDesconto[] = [...extrasBase];
   for (const item of descontos) {
     const isEstorno = isEstornoContaCoop(item.motivo);
