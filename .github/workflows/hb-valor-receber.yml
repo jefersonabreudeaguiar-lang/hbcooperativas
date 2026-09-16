@@ -1,0 +1,26 @@
+name: HB valor a receber
+
+on:
+  push:
+    branches: [main, lab/hobelisco-mirror]
+  pull_request:
+    branches: [main]
+
+jobs:
+  financeiro-hb:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: .
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+      - run: npm ci
+      - run: npm run test:cooperado-financeiro
+      - run: npm run test:hb-valor-receber
+        env:
+          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}

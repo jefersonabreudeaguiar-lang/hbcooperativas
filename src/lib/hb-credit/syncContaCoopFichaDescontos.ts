@@ -16,6 +16,10 @@ import { beginSaveBatch, endSaveBatch, getData, notifyAppDataSubscribers, update
 import { persistDescontosContaCoopNoArquivo, getDescontosContaCoopMesCached, getResumoValorAPagarRelatorio } from "@/services/notaPedidoService";
 import { setContaCoopDescontosMemoria } from "@/lib/hb-credit/contaCoopDescontosMemory";
 import { bumpContaCoopDescontosRevision } from "@/lib/hb-credit/contaCoopDescontosNotify";
+import {
+  markContaCoopDescontosFetchFailed,
+  markContaCoopDescontosFetchOk,
+} from "@/lib/hb-credit/contaCoopDescontosSyncHealth";
 import { isContaCoopValorReceberPilot } from "@/utils/contaCoopUiVisibility";
 import type { User } from "@/types";
 
@@ -56,7 +60,13 @@ export async function syncContaCoopDescontosMesLocal(
   try {
     const raw = await fetchFichaDescontosContaCoop(opts.cnpj, titularIds, opts.mesReferencia);
     descontos = dedupeDescontosContaCoopRemotos(raw);
-  } catch {
+    markContaCoopDescontosFetchOk(opts.cooperativaId, canonico);
+  } catch (e) {
+    markContaCoopDescontosFetchFailed(
+      opts.cooperativaId,
+      canonico,
+      e instanceof Error ? e.message : "ficha_descontos_failed"
+    );
     descontos = getDescontosContaCoopMesCached(data, canonico, opts.mesReferencia, opts.cooperativaId);
     return { data, descontos };
   }
@@ -209,10 +219,21 @@ export async function refreshContaCoopDescontosCooperativaPendentes(opts: {
   try {
     const fetched = await mapPool(jobs, SYNC_CONCURRENCY, async (job) => {
       const titularIds = listCooperadoIdsMesmoTitular(before, job.cooperadoId, opts.cooperativaId);
-      const descontos = dedupeDescontosContaCoopRemotos(
-        await fetchFichaDescontosContaCoop(opts.cnpj, titularIds, job.mesReferencia)
-      );
-      return { ...job, descontos };
+      const canonico = resolverCooperadoIdCanonico(before, job.cooperadoId, opts.cooperativaId);
+      try {
+        const descontos = dedupeDescontosContaCoopRemotos(
+          await fetchFichaDescontosContaCoop(opts.cnpj, titularIds, job.mesReferencia)
+        );
+        markContaCoopDescontosFetchOk(opts.cooperativaId, canonico);
+        return { ...job, descontos };
+      } catch (e) {
+        markContaCoopDescontosFetchFailed(
+          opts.cooperativaId,
+          canonico,
+          e instanceof Error ? e.message : "ficha_descontos_failed"
+        );
+        return { ...job, descontos: [] as DescontoContaCoopRemoto[] };
+      }
     });
 
     for (const row of fetched) {

@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { repairOperacionalContaCoopDescontosForCooperado } from "@/lib/hb-credit/repairOperacionalContaCoopDescontos";
 import { authorizePayment, parseQrPayload } from "@/lib/supabase/contaCoopStorage";
 import { requireCreditApi, requireCreditCnpj, resolveCreditPaymentCooperadoId } from "@/lib/security/creditGuard";
 import { normalizeCnpj } from "@/utils/cooperativa";
@@ -51,5 +52,11 @@ export async function POST(request: Request) {
   });
 
   if (!result.ok) return NextResponse.json({ error: result.error }, { status: 400 });
+
+  const mesReferencia = String(body?.mesReferencia ?? "").trim() || undefined;
+  void repairOperacionalContaCoopDescontosForCooperado(gate.ctx.supabase, cnpj, cooperadoId, {
+    mesReferencia,
+  }).catch(() => {});
+
   return NextResponse.json(result);
 }
