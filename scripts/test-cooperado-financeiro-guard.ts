@@ -14,6 +14,7 @@ import {
   getValorExibicaoCooperado,
   persistDescontosContaCoopNoArquivo,
   purgarFichasInvalidas,
+  mergeArquivosMensaisFromCloud,
   reconciliarFichaFromNotasConferidas,
 } from "../src/services/notaPedidoService.ts";
 import { setContaCoopDescontosMemoria } from "../src/lib/hb-credit/contaCoopDescontosMemory.ts";
@@ -220,6 +221,44 @@ function nota(id: string, status: NotaPedido["status"]): NotaPedido {
   ]);
   const inicio = getValorQuantoVouReceber(data, COOPERADO, COOP);
   assert.equal(inicio.valor, 100, "estorno HB deve restaurar valor a receber");
+}
+
+{
+  const MES = "2026-09";
+  let data = baseData({
+    fichaCorrida: [ficha("f1", "n1", MES)],
+    notasPedido: [{ ...nota("n1", "conferida"), mesReferencia: MES }],
+  });
+  data = persistDescontosContaCoopNoArquivo(data, COOPERADO, MES, COOP, [
+    {
+      motivo: "Compra HB Créditos — nuvem fresca",
+      valorReais: 50,
+      tipo: "conta_coop",
+      createdAt: "2026-09-10T10:00:00.000Z",
+    },
+  ]);
+  const localArquivo = data.arquivosMensais.find(
+    (a) => a.cooperadoId === COOPERADO && a.mesReferencia === MES
+  )!;
+  const cloudStale = {
+    ...localArquivo,
+    updatedAt: "2026-09-01T08:00:00.000Z",
+    contaCoopDescontos: [
+      {
+        motivo: "Compra HB Créditos — lixo antigo sync",
+        valorReais: 999,
+        tipo: "conta_coop" as const,
+        createdAt: "2026-09-02T10:00:00.000Z",
+      },
+    ],
+  };
+  const merged = mergeArquivosMensaisFromCloud(data, [localArquivo], [cloudStale]);
+  const row = merged.find((a) => a.mesReferencia === MES);
+  assert.ok(row?.contaCoopDescontos?.some((d) => d.valorReais === 50), "merge deve preferir arquivo HB mais recente");
+  assert.ok(
+    !row?.contaCoopDescontos?.some((d) => d.valorReais === 999),
+    "merge não deve ressuscitar descontos HB obsoletos da nuvem"
+  );
 }
 
 {

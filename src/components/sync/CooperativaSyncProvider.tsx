@@ -396,12 +396,12 @@ export function CooperativaSyncProvider({ children }: { children: React.ReactNod
           outcome: "success",
           durationMs: Date.now() - syncStartedAt,
         });
-        void refreshContaCoopDescontosAfterOperacionalSync({
-          cnpj,
-          cooperativaId: currentCoopId,
-          user: currentUser,
-        });
       }
+      void refreshContaCoopDescontosAfterOperacionalSync({
+        cnpj,
+        cooperativaId: currentCoopId,
+        user: currentUser,
+      });
     } catch (e) {
       if (!completed) {
         setLastSyncError(e instanceof Error ? e.message : "Erro na sincronização.");

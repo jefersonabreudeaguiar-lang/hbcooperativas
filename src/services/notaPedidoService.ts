@@ -521,8 +521,19 @@ function mergeContaCoopDescontosField(
   a: ArquivoMensalCooperado,
   b: ArquivoMensalCooperado
 ): ArquivoMensalCooperado["contaCoopDescontos"] {
-  const items = [...(a.contaCoopDescontos ?? []), ...(b.contaCoopDescontos ?? [])];
-  if (!items.length) return undefined;
+  const aList = a.contaCoopDescontos ?? [];
+  const bList = b.contaCoopDescontos ?? [];
+  if (!aList.length && !bList.length) return undefined;
+  if (!aList.length) return bList;
+  if (!bList.length) return aList;
+
+  const ta = arquivoMensalTime(a);
+  const tb = arquivoMensalTime(b);
+  if (ta !== tb) {
+    return ta > tb ? aList : bList;
+  }
+
+  const items = [...aList, ...bList];
   const seen = new Set<string>();
   const out: NonNullable<ArquivoMensalCooperado["contaCoopDescontos"]> = [];
   for (const d of items) {
@@ -1764,14 +1775,13 @@ export function getResumoPagamentoConsolidadoCooperado(
     };
   }
   if (meses.length === 1) {
-    const base = getResumoPagamentoCooperado(
+    return getResumoPagamentoExibicao(
       data,
       cooperadoId,
       meses[0],
       cooperativaId,
       ajustesPorMes?.[meses[0]]
     );
-    return getResumoPagamentoParaRegistro(base, data, cooperadoId, meses[0], cooperativaId);
   }
 
   const coopId = cooperativaId ?? data.cooperados.find((c) => c.id === cooperadoId)?.cooperativaId;
@@ -1784,8 +1794,7 @@ export function getResumoPagamentoConsolidadoCooperado(
   const notaPedidoIds: string[] = [];
 
   for (const mes of meses) {
-    const base = getResumoPagamentoCooperado(data, cooperadoId, mes, coopId, ajustesPorMes?.[mes]);
-    const r = getResumoPagamentoParaRegistro(base, data, cooperadoId, mes, coopId);
+    const r = getResumoPagamentoExibicao(data, cooperadoId, mes, coopId, ajustesPorMes?.[mes]);
     valorBruto = round2(valorBruto + r.valorBruto);
     descontoCooperativa = round2(descontoCooperativa + r.descontoCooperativa);
     valorEntregas = round2(valorEntregas + r.valorEntregas);

@@ -3358,7 +3358,13 @@ async function listCooperadoContaCoopDescontosIntervalo(
     for (const p of partners ?? []) partnerNames[String(p.id)] = String(p.name);
   }
 
-  return txs.map((t) => {
+  return txs
+    .filter((t) => {
+      // Pagamento estornado não abate valor a receber — só REFUND posted devolve crédito.
+      if (String(t.event_type) === "PAYMENT" && String(t.status) === "reversed") return false;
+      return true;
+    })
+    .map((t) => {
     const cents = Number(t.amount_cents);
     const partnerNome = partnerNames[String(t.partner_id)] ?? "Mercado parceiro";
     const isRefund = String(t.event_type) === "REFUND";
