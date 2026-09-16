@@ -1,7 +1,8 @@
 import type { UserRole } from "@/types";
 import { normalizeAuthEmail } from "@/lib/security/appCreator";
+import { normalizeUserRole } from "@/permissions";
 
-/** Vínculos fixos: e-mail de gestão no celular → cooperado (ex.: Orlando). */
+/** Vínculos fixos: e-mail de gestão no celular → cooperado (ex.: Orlando). Só para equipe sem cooperadoId próprio. */
 const MOBILE_COOPERADO_BY_EMAIL: Record<string, string> = {
   [normalizeAuthEmail("jefersonabreudeaguiar@gmail.com")]: "c_1782263929381_ncp55",
 };
@@ -14,10 +15,26 @@ export function resolveMobileCooperadoIdFromEmail(email: string | null | undefin
 export function resolveMobileCooperadoId(profile: {
   email?: string | null;
   mobileCooperadoId?: string | null;
+  role?: UserRole | string | null;
+  cooperadoId?: string | null;
 }): string | undefined {
+  const role = normalizeUserRole(profile.role ?? "cooperado");
+  const ownCooperadoId = profile.cooperadoId?.trim();
+  if (role === "cooperado" && ownCooperadoId) {
+    return ownCooperadoId;
+  }
+  if (ownCooperadoId && role !== "responsavel" && role !== "tesoureiro" && role !== "admin") {
+    return ownCooperadoId;
+  }
+
   const fromProfile = profile.mobileCooperadoId?.trim();
   if (fromProfile) return fromProfile;
-  return resolveMobileCooperadoIdFromEmail(profile.email);
+
+  if (role === "responsavel" || role === "tesoureiro" || role === "admin") {
+    return resolveMobileCooperadoIdFromEmail(profile.email);
+  }
+
+  return ownCooperadoId;
 }
 
 /** Detecta app mobile/PWA pelo User-Agent (server-side). */

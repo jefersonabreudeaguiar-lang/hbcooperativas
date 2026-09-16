@@ -40,9 +40,7 @@ export async function GET(request: Request) {
     if (!sessionId) {
       return NextResponse.json({ error: "Sem permissão." }, { status: 403 });
     }
-    if (!cooperadoIds.includes(sessionId)) {
-      cooperadoIds.push(sessionId);
-    }
+    cooperadoIds.splice(0, cooperadoIds.length, sessionId);
   } else {
     for (const id of cooperadoIds) {
       const denySelf = requireCreditCooperado(gate.ctx, id);
