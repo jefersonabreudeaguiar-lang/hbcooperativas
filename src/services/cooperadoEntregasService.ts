@@ -6,9 +6,11 @@ import {
   getResumoPagamentoCooperado,
   getResumoValorAPagarRelatorio,
   getResumoPagamentoConsolidadoCooperado,
+  getResumoPagamentoExibicao,
   pagamentoCobreMesReferencia,
   getMesesReferenciaPagamento,
   fichaValidaNoExtrato,
+  type AjustesResumoPagamento,
 } from "@/services/notaPedidoService";
 import { formatMesReferencia, formatMesesReferenciaRotulo, getCurrentMesReferencia } from "@/utils/format";
 import { mesesComValoresAvulsos, totalValoresAvulsosPendentes } from "@/services/valoresAvulsosReceberService";
@@ -234,30 +236,75 @@ export function getMesQuantoVouReceber(
   return mesAtual;
 }
 
-/** Meses com valor líquido pendente de PIX pelo responsável. */
+/** Meses com valor líquido pendente de PIX pelo responsável (mesma base do cooperado — início/ficha). */
 export function listarMesesPendentesPagamentoResponsavel(
   data: AppData,
   cooperadoId: string,
   cooperativaId?: string
 ): string[] {
-  const pendentes: string[] = [];
-  for (const mes of [...listarMesesEntregasCooperado(data, cooperadoId, cooperativaId)].sort((a, b) =>
-    a.localeCompare(b)
-  )) {
-    if (getPagamentoConfirmadoMes(data, cooperadoId, mes)) continue;
-    if (getPagamentoAguardandoCooperado(data, cooperadoId, mes)) {
-      pendentes.push(mes);
-      continue;
-    }
-    if (getResumoValorAPagarRelatorio(data, cooperadoId, mes, cooperativaId).valorLiquido > 0) {
-      pendentes.push(mes);
-      continue;
-    }
-    if (totalValoresAvulsosPendentes(data, cooperadoId, mes, cooperativaId) > 0) {
-      pendentes.push(mes);
-    }
+  return listarMesesPendentesQuantoVouReceber(data, cooperadoId, cooperativaId);
+}
+
+export type ConsolidadoFinanceiroCooperado = {
+  meses: string[];
+  mesReferenciaPrincipal: string;
+  mesLabel: string;
+  valorLiquido: number;
+  aguardandoAssinatura: boolean;
+  resumo: ReturnType<typeof getResumoPagamentoConsolidadoCooperado>;
+};
+
+/** Fonte única: total a receber, meses em aberto e resumo (responsável ↔ cooperado ↔ início). */
+export function getConsolidadoFinanceiroCooperado(
+  data: AppData,
+  cooperadoId: string,
+  cooperativaId?: string,
+  ajustesPorMes?: Record<string, AjustesResumoPagamento>
+): ConsolidadoFinanceiroCooperado {
+  const meses = listarMesesPendentesQuantoVouReceber(data, cooperadoId, cooperativaId);
+  const { mesLabel, valor, aguardandoAssinatura } = getValorQuantoVouReceber(
+    data,
+    cooperadoId,
+    cooperativaId
+  );
+  const coopId = cooperativaId ?? data.cooperados.find((c) => c.id === cooperadoId)?.cooperativaId;
+  const mesReferenciaPrincipal = getMesPrincipalQuantoVouReceber(data, cooperadoId, cooperativaId);
+
+  let resumo: ConsolidadoFinanceiroCooperado["resumo"];
+  if (meses.length > 1) {
+    resumo = getResumoPagamentoConsolidadoCooperado(data, cooperadoId, meses, coopId, ajustesPorMes);
+  } else if (meses.length === 1) {
+    resumo = getResumoPagamentoExibicao(
+      data,
+      cooperadoId,
+      meses[0],
+      coopId,
+      ajustesPorMes?.[meses[0]]
+    );
+  } else {
+    resumo = {
+      valorBruto: 0,
+      descontoCooperativa: 0,
+      descontosExtras: [],
+      valorEntregas: 0,
+      valorLiquido: 0,
+      fichaIds: [],
+      notaPedidoIds: [],
+    };
   }
-  return pendentes;
+
+  if (round2(resumo.valorLiquido) !== round2(valor)) {
+    resumo = { ...resumo, valorLiquido: round2(valor) };
+  }
+
+  return {
+    meses,
+    mesReferenciaPrincipal,
+    mesLabel,
+    valorLiquido: round2(valor),
+    aguardandoAssinatura,
+    resumo,
+  };
 }
 
 /** Cooperado ainda sem pagamento registrado pelo responsável (um ou mais meses). */

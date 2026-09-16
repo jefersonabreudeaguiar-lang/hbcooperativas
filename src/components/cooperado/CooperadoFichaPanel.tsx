@@ -30,6 +30,7 @@ import { fichaPertenceCooperado, notaPertenceCooperado, pagamentoCooperadoPerten
 import { mensalidadePertenceCooperado } from "@/services/mensalidadeService";
 import { updateData, addAuditEntry } from "@/services/dataStore";
 import { getUserCooperativaId, normalizeCnpj } from "@/utils/cooperativa";
+import { getConsolidadoFinanceiroCooperado } from "@/services/cooperadoEntregasService";
 import { formatCurrency, formatDate, formatMesReferencia, formatCPFCNPJ, formatPhone, getCurrentMesReferencia } from "@/utils/format";
 import { baixarRecibo, nomeArquivoRecibo } from "@/utils/recibo";
 import type { Cooperado } from "@/types";
@@ -138,20 +139,37 @@ export function CooperadoFichaPanel({ cooperado }: { cooperado: Cooperado }) {
     return buildValorExibicaoCooperadoOpts(data, cooperado.id, mesFilter, cooperado.cooperativaId);
   }, [data, cooperado.id, cooperado.cooperativaId, mesFilter]);
 
+  const consolidadoFinanceiro = useMemo(() => {
+    if (!data) return null;
+    return getConsolidadoFinanceiroCooperado(data, cooperado.id, cooperado.cooperativaId);
+  }, [data, cooperado.id, cooperado.cooperativaId, hbDescontosRevision]);
+
+  const multiplosMesesAbertos = (consolidadoFinanceiro?.meses.length ?? 0) > 1;
+
   const resumoPagamento = useMemo(() => {
     if (!data) return null;
+    if (multiplosMesesAbertos && consolidadoFinanceiro) {
+      return consolidadoFinanceiro.resumo;
+    }
     return getResumoPagamentoExibicao(data, cooperado.id, mesFilter, cooperado.cooperativaId);
-  }, [data, cooperado.id, cooperado.cooperativaId, mesFilter, hbDescontosRevision]);
+  }, [data, cooperado.id, cooperado.cooperativaId, mesFilter, hbDescontosRevision, multiplosMesesAbertos, consolidadoFinanceiro]);
 
   const totalPendente = useMemo(() => {
-    if (!resumoPagamento || !exibicaoOptsMes) return 0;
+    if (!resumoPagamento) return 0;
+    if (multiplosMesesAbertos && consolidadoFinanceiro) {
+      return consolidadoFinanceiro.valorLiquido;
+    }
+    if (!exibicaoOptsMes) return resumoPagamento.valorLiquido;
     return getValorExibicaoCooperado(resumoPagamento, exibicaoOptsMes);
-  }, [resumoPagamento, exibicaoOptsMes]);
+  }, [resumoPagamento, exibicaoOptsMes, multiplosMesesAbertos, consolidadoFinanceiro]);
 
   const descontosExtrasExibicao = useMemo(() => {
     if (!resumoPagamento) return [];
+    if (multiplosMesesAbertos) {
+      return resumoPagamento.descontosExtras;
+    }
     return getDescontosExtrasExibicaoCooperado(resumoPagamento, exibicaoOptsMes);
-  }, [resumoPagamento, exibicaoOptsMes]);
+  }, [resumoPagamento, exibicaoOptsMes, multiplosMesesAbertos]);
 
   if (!data || !resumo || !resumoPagamento) return <PageSkeleton compact />;
 
@@ -172,7 +190,12 @@ export function CooperadoFichaPanel({ cooperado }: { cooperado: Cooperado }) {
     <div className="space-y-6">
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <div className="bg-green-700 text-white rounded-2xl p-5 sm:col-span-3">
-          <p className="text-green-100 text-sm">A receber · {formatMesReferencia(mesFilter)}</p>
+          <p className="text-green-100 text-sm">
+            A receber ·{" "}
+            {multiplosMesesAbertos && consolidadoFinanceiro
+              ? consolidadoFinanceiro.mesLabel
+              : formatMesReferencia(mesFilter)}
+          </p>
           <p className="text-3xl font-bold mt-1">{formatCurrency(totalPendente)}</p>
           {(resumoPagamento.valorBruto > 0 || totalPendente > 0) && (
             <ResumoDescontosMes

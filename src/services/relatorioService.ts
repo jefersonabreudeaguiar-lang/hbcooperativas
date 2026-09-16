@@ -2,7 +2,10 @@ import type { AppData, Cooperado, FichaCorrida, FechamentoMensal, Instituicao, N
 import { getCooperadoNome, round2, sumBy } from "@/utils/calculations";
 import { formatMesReferencia, formatMesesReferenciaRotulo, getCurrentMesReferencia } from "@/utils/format";
 import { notaPertenceCooperado } from "@/services/cooperadoCloudService";
-import { listarMesesPendentesPagamentoResponsavel } from "@/services/cooperadoEntregasService";
+import {
+  listarMesesPendentesPagamentoResponsavel,
+  getConsolidadoFinanceiroCooperado,
+} from "@/services/cooperadoEntregasService";
 import {
   agregarItensNotasCooperado,
   getPagamentoAguardandoCooperado,
@@ -384,13 +387,12 @@ export function getRelatorioPagarCooperadoEmAberto(
     )
     .map((c) => {
       const meses = listarMesesPendentesPagamentoResponsavel(data, c.id, cooperativaId);
+      const consolidado = getConsolidadoFinanceiroCooperado(data, c.id, cooperativaId);
       let entregas = 0;
-      let total = 0;
       const porMes: LinhaPagarCooperadoEmAberto["porMes"] = [];
       for (const mes of meses) {
         const resumo = getResumoValorAPagarRelatorio(data, c.id, mes, cooperativaId);
         if (resumo.valorLiquido <= 0) continue;
-        total = round2(total + resumo.valorLiquido);
         entregas += resumo.fichaIds.length;
         porMes.push({
           mes,
@@ -402,10 +404,10 @@ export function getRelatorioPagarCooperadoEmAberto(
       return {
         cooperadoId: c.id,
         cooperado: c.nomeCompleto,
-        meses: porMes.map((m) => m.mes),
-        mesesLabel: porMes.length ? formatMesesReferenciaRotulo(porMes.map((m) => m.mes)) : "",
+        meses,
+        mesesLabel: consolidado.mesLabel,
         entregas,
-        total,
+        total: consolidado.valorLiquido,
         porMes,
       };
     })

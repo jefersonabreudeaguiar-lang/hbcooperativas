@@ -23,7 +23,12 @@ import {
   getContaCoopDescontosRevision,
   subscribeContaCoopDescontos,
 } from "../src/lib/hb-credit/contaCoopDescontosNotify.ts";
-import { getValorQuantoVouReceber } from "../src/services/cooperadoEntregasService.ts";
+import {
+  getValorQuantoVouReceber,
+  getConsolidadoFinanceiroCooperado,
+  listarMesesPendentesPagamentoResponsavel,
+  listarMesesPendentesQuantoVouReceber,
+} from "../src/services/cooperadoEntregasService.ts";
 import { resolveMobileCooperadoId } from "../src/lib/hb-credit/mobileCooperadoLink.ts";
 import type { AppData, FichaCorrida, NotaPedido } from "../src/types/index.ts";
 
@@ -407,6 +412,20 @@ function nota(id: string, status: NotaPedido["status"]): NotaPedido {
     orlando,
     "responsável no celular mantém vínculo de teste (Orlando)"
   );
+}
+
+{
+  const data = baseData({
+    fichaCorrida: [ficha("f1", "n1", "2026-08"), ficha("f2", "n2", "2026-09")],
+    notasPedido: [nota("n1", "conferida"), nota("n2", "conferida")],
+  });
+  const resp = listarMesesPendentesPagamentoResponsavel(data, COOPERADO, COOP);
+  const coop = listarMesesPendentesQuantoVouReceber(data, COOPERADO, COOP);
+  assert.deepEqual(resp, coop, "meses pendentes responsável = cooperado");
+  const fin = getConsolidadoFinanceiroCooperado(data, COOPERADO, COOP);
+  const v = getValorQuantoVouReceber(data, COOPERADO, COOP);
+  assert.equal(fin.valorLiquido, v.valor, "consolidado = quanto vou receber");
+  assert.equal(fin.resumo.valorLiquido, v.valor, "resumo consolidado = total exibido");
 }
 
 console.log("OK — guard financeiro cooperado");
