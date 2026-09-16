@@ -35,7 +35,7 @@ import {
 } from "@/lib/hb-credit/mergeFichaDescontos";
 import {
   getContaCoopDescontosMemoria,
-  mergeContaCoopDescontosArquivoEMemoria,
+  hasContaCoopDescontosMemoria,
 } from "@/lib/hb-credit/contaCoopDescontosMemory";
 import { formatMesesReferenciaRotulo } from "@/utils/format";
 import { fichaPreservarSemNotaLocal, notasSyncProvavelmenteCompleto } from "@/services/fichaSyncGuard";
@@ -436,6 +436,7 @@ export function upsertArquivoMensal(
       | "descontoAvulsoMotivo"
       | "cotaIngressoPaga"
       | "contaCoopDescontos"
+      | "contaCoopDescontosUpdatedAt"
     >
   >
 ): ArquivoMensalCooperado[] {
@@ -455,6 +456,7 @@ export function upsertArquivoMensal(
       descontoAvulsoMotivo: patch.descontoAvulsoMotivo,
       cotaIngressoPaga: patch.cotaIngressoPaga,
       contaCoopDescontos: patch.contaCoopDescontos,
+      contaCoopDescontosUpdatedAt: patch.contaCoopDescontosUpdatedAt,
       updatedAt: now,
     };
     return [...data.arquivosMensais, novo];
@@ -474,6 +476,10 @@ export function upsertArquivoMensal(
     descontoAvulsoMotivo: patch.descontoAvulsoMotivo !== undefined ? patch.descontoAvulsoMotivo : cur.descontoAvulsoMotivo,
     cotaIngressoPaga: patch.cotaIngressoPaga !== undefined ? patch.cotaIngressoPaga : cur.cotaIngressoPaga,
     contaCoopDescontos: patch.contaCoopDescontos !== undefined ? patch.contaCoopDescontos : cur.contaCoopDescontos,
+    contaCoopDescontosUpdatedAt:
+      patch.contaCoopDescontosUpdatedAt !== undefined
+        ? patch.contaCoopDescontosUpdatedAt
+        : cur.contaCoopDescontosUpdatedAt,
     updatedAt: now,
   };
   const next = [...data.arquivosMensais];
@@ -517,6 +523,22 @@ function mergeCotaIngressoPagaField(
   return undefined;
 }
 
+function contaCoopDescontosHbTime(arquivo: ArquivoMensalCooperado): number {
+  const stamp = arquivo.contaCoopDescontosUpdatedAt;
+  if (stamp) {
+    const parsed = Date.parse(stamp);
+    if (!Number.isNaN(parsed)) return parsed;
+  }
+  const list = arquivo.contaCoopDescontos ?? [];
+  if (!list.length) return 0;
+  return Math.max(
+    ...list.map((d) => {
+      const t = d.createdAt ? Date.parse(d.createdAt) : 0;
+      return Number.isNaN(t) ? 0 : t;
+    })
+  );
+}
+
 function mergeContaCoopDescontosField(
   a: ArquivoMensalCooperado,
   b: ArquivoMensalCooperado
@@ -527,10 +549,20 @@ function mergeContaCoopDescontosField(
   if (!aList.length) return bList;
   if (!bList.length) return aList;
 
+  const ha = contaCoopDescontosHbTime(a);
+  const hb = contaCoopDescontosHbTime(b);
+  if (ha !== hb && (ha > 0 || hb > 0)) {
+    const winner = ha >= hb ? a : b;
+    return winner.contaCoopDescontos ?? (ha >= hb ? aList : bList);
+  }
+
   const ta = arquivoMensalTime(a);
   const tb = arquivoMensalTime(b);
   if (ta !== tb) {
-    return ta > tb ? aList : bList;
+    const newerList = ta > tb ? aList : bList;
+    const olderList = ta > tb ? bList : aList;
+    if (!newerList.length && olderList.length) return olderList;
+    return newerList;
   }
 
   const items = [...aList, ...bList];
@@ -564,6 +596,10 @@ function mergeParArquivoMensal(
     descontoAvulsoMotivo: newer.descontoAvulsoMotivo ?? older.descontoAvulsoMotivo,
     cotaIngressoPaga: mergeCotaIngressoPagaField(a, b),
     contaCoopDescontos: mergeContaCoopDescontosField(a, b),
+    contaCoopDescontosUpdatedAt:
+      contaCoopDescontosHbTime(a) >= contaCoopDescontosHbTime(b)
+        ? a.contaCoopDescontosUpdatedAt ?? b.contaCoopDescontosUpdatedAt
+        : b.contaCoopDescontosUpdatedAt ?? a.contaCoopDescontosUpdatedAt,
     updatedAt,
   };
 }
@@ -1601,8 +1637,10 @@ export function getDescontosContaCoopMesCached(
   const arquivo = getArquivoMensalCooperado(data, canonico, mesReferencia, coopId);
   const fromArquivo = descontosContaCoopFromArquivo(arquivo);
   if (!coopId) return fromArquivo;
-  const fromMemoria = getContaCoopDescontosMemoria(coopId, canonico, mesReferencia);
-  return mergeContaCoopDescontosArquivoEMemoria(fromArquivo, fromMemoria);
+  if (hasContaCoopDescontosMemoria(coopId, canonico, mesReferencia)) {
+    return getContaCoopDescontosMemoria(coopId, canonico, mesReferencia);
+  }
+  return fromArquivo;
 }
 
 function aplicarDescontosContaCoopMesNoResumo(
@@ -1727,9 +1765,11 @@ export function persistDescontosContaCoopNoArquivo(
   descontos: DescontoContaCoopRemoto[]
 ): AppData {
   const deduped = dedupeDescontosContaCoopRemotos(descontos);
+  const hbSyncedAt = new Date().toISOString();
   return {
     ...data,
     arquivosMensais: upsertArquivoMensal(data, cooperadoId, cooperativaId, mesReferencia, {
+      contaCoopDescontosUpdatedAt: hbSyncedAt,
       contaCoopDescontos: deduped.map((d) => ({
         motivo: d.motivo,
         valorReais: d.valorReais,

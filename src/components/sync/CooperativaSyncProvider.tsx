@@ -397,7 +397,7 @@ export function CooperativaSyncProvider({ children }: { children: React.ReactNod
           durationMs: Date.now() - syncStartedAt,
         });
       }
-      void refreshContaCoopDescontosAfterOperacionalSync({
+      await refreshContaCoopDescontosAfterOperacionalSync({
         cnpj,
         cooperativaId: currentCoopId,
         user: currentUser,

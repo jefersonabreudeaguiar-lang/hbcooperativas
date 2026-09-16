@@ -269,6 +269,37 @@ function nota(id: string, status: NotaPedido["status"]): NotaPedido {
   });
   data = persistDescontosContaCoopNoArquivo(data, COOPERADO, MES, COOP, [
     {
+      motivo: "Compra HB Créditos — aparelho",
+      valorReais: 50,
+      tipo: "conta_coop",
+      createdAt: "2026-09-10T10:00:00.000Z",
+    },
+  ]);
+  const localArquivo = data.arquivosMensais.find(
+    (a) => a.cooperadoId === COOPERADO && a.mesReferencia === MES
+  )!;
+  const cloudSemHb = {
+    ...localArquivo,
+    updatedAt: "2026-09-20T12:00:00.000Z",
+    contaCoopDescontos: undefined,
+    contaCoopDescontosUpdatedAt: undefined,
+  };
+  const merged = mergeArquivosMensaisFromCloud(data, [localArquivo], [cloudSemHb]);
+  const row = merged.find((a) => a.mesReferencia === MES);
+  assert.ok(
+    row?.contaCoopDescontos?.some((d) => d.valorReais === 50),
+    "nuvem com updatedAt mais novo não pode apagar descontos HB locais"
+  );
+}
+
+{
+  const MES = "2026-09";
+  let data = baseData({
+    fichaCorrida: [ficha("f1", "n1", MES)],
+    notasPedido: [{ ...nota("n1", "conferida"), mesReferencia: MES }],
+  });
+  data = persistDescontosContaCoopNoArquivo(data, COOPERADO, MES, COOP, [
+    {
       motivo: "Compra HB Créditos — snapshot",
       valorReais: 40,
       tipo: "conta_coop",

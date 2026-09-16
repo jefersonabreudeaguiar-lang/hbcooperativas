@@ -6,7 +6,7 @@ import { resolveCooperativaCnpj } from "@/services/notaPedidoCloudService";
 import { getUserCooperativaId } from "@/utils/cooperativa";
 import { isContaCoopValorReceberPilot } from "@/utils/contaCoopUiVisibility";
 
-const WARMUP_INTERVAL_MS = 25_000;
+const WARMUP_INTERVAL_MS = 15_000;
 
 /** Carrega compras HB da Supabase ao abrir o app e mantém valor a receber alinhado (todos os perfis). */
 export function useHbCreditDescontosWarmup(user: Omit<User, "password"> | null) {
