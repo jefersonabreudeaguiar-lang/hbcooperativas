@@ -4,7 +4,7 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
 const MIGRATION_SQL = readFileSync(
-  resolve(process.cwd(), "supabase/migrations/20260901150000_hb_credit_refund_intent_unique_fix.sql"),
+  resolve(process.cwd(), "supabase/migrations/20260916200000_hb_credit_amount_used_reconcile.sql"),
   "utf8"
 );
 
@@ -99,17 +99,24 @@ async function queryPg<T>(sql: string, params: unknown[] = []): Promise<T | null
 
 export async function checkHbCreditRefundFixSchema(_supabase: SupabaseClient): Promise<{
   refundRpcUsesNullIntent: boolean;
+  refundRpcUsesCreditDebitedRestore: boolean;
   ok: boolean;
 }> {
   void _supabase;
-  const rows = await queryPg<{ uses_null: boolean }[]>(
-    `select prosrc like '%v_account.id, null,%' as uses_null
+  const rows = await queryPg<{ uses_null: boolean; uses_credit_restore: boolean }[]>(
+    `select prosrc like '%v_account.id, null,%' as uses_null,
+            prosrc like '%v_credit_restore := coalesce(v_tx.credit_debited_cents%' as uses_credit_restore
      from pg_proc
      where proname = 'hb_credit_refund_payment'
      limit 1`
   );
   const refundRpcUsesNullIntent = Boolean(rows?.[0]?.uses_null);
-  return { refundRpcUsesNullIntent, ok: refundRpcUsesNullIntent };
+  const refundRpcUsesCreditDebitedRestore = Boolean(rows?.[0]?.uses_credit_restore);
+  return {
+    refundRpcUsesNullIntent,
+    refundRpcUsesCreditDebitedRestore,
+    ok: refundRpcUsesNullIntent && refundRpcUsesCreditDebitedRestore,
+  };
 }
 
 export async function applyHbCreditRefundFixSchemaSql(): Promise<{
@@ -165,7 +172,7 @@ export async function applyHbCreditRefundFixSchemaSql(): Promise<{
 
 export function humanizeCreditRefundError(message: string): string {
   if (/payment_intent_id.*already exists|23505|hb_credit_transactions_payment_intent_id_key/i.test(message)) {
-    return "Estorno bloqueado: correção do banco ainda não aplicada. Execute a migration 20260901150000_hb_credit_refund_intent_unique_fix.sql no Supabase SQL Editor.";
+    return "Estorno bloqueado: correção do banco ainda não aplicada. Execute a migration 20260916200000_hb_credit_amount_used_reconcile.sql no Supabase SQL Editor.";
   }
   return message;
 }

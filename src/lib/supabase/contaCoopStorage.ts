@@ -41,6 +41,7 @@ import {
   receivableStatusFromDb,
 } from "@/modules/hb-credit/infrastructure/mappers/statusMapper";
 import { humanizeCreditRefundError } from "@/lib/supabase/hbCreditRefundFixSchema";
+import { reconcileCooperadoAmountUsedCents } from "@/lib/supabase/creditAmountUsedReconcile";
 import { TERMO_MERCADO_CONTA_COOP_VERSAO } from "@/config/termoUsoMercadoContaCoop";
 import { fetchOperacionalSync } from "@/lib/supabase/cooperativaSyncStorage";
 import { fetchCooperadosFromStorage } from "@/lib/supabase/cooperadosStorage";
@@ -962,6 +963,7 @@ export async function getLimiteCooperado(
   cooperadoId: string
 ): Promise<ContaCoopLimiteCooperado | null> {
   const digits = normalizeCnpj(cnpj);
+  await reconcileCooperadoAmountUsedCents(supabase, digits, cooperadoId);
   const { data } = await supabase
     .from("hb_credit_accounts")
     .select("*")
@@ -2488,6 +2490,17 @@ export async function approveRefundRequest(
   const result = data as { ok?: boolean; error?: string; disponivel_apos_centavos?: number };
   if (!result?.ok) return { ok: false, error: humanizeCreditRefundError(result?.error ?? "Aprovação recusada.") };
 
+  if (reqRow?.transaction_id) {
+    const { data: txRow } = await supabase
+      .from("hb_credit_transactions")
+      .select("cooperado_id")
+      .eq("id", String(reqRow.transaction_id))
+      .maybeSingle();
+    if (txRow?.cooperado_id) {
+      await reconcileCooperadoAmountUsedCents(supabase, digits, String(txRow.cooperado_id), reviewerUserId);
+    }
+  }
+
   const transacaoId = reqRow?.transaction_id ? String(reqRow.transaction_id) : null;
   if (transacaoId) {
     try {
@@ -2621,6 +2634,20 @@ export async function refundPayment(
   const result = data as { ok?: boolean; error?: string; disponivel_apos_centavos?: number };
   if (!result?.ok) return { ok: false, error: humanizeCreditRefundError(result?.error ?? "Estorno recusado.") };
 
+  const { data: txRow } = await supabase
+    .from("hb_credit_transactions")
+    .select("cooperado_id")
+    .eq("id", transacaoId)
+    .maybeSingle();
+  if (txRow?.cooperado_id) {
+    await reconcileCooperadoAmountUsedCents(
+      supabase,
+      cooperativaCnpj,
+      String(txRow.cooperado_id),
+      actorUserId
+    );
+  }
+
   try {
     const { cancelFiscalNoteForTransaction } = await import("@/lib/supabase/hbCreditFiscalNotesStorage");
     await cancelFiscalNoteForTransaction(supabase, transacaoId, actorUserId);
@@ -2628,7 +2655,14 @@ export async function refundPayment(
     /* tabela fiscal opcional até migration aplicada */
   }
 
-  return { ok: true, disponivelAposCents: Number(result.disponivel_apos_centavos ?? 0) };
+  const refreshed =
+    txRow?.cooperado_id != null
+      ? await getLimiteCooperado(supabase, cooperativaCnpj, String(txRow.cooperado_id))
+      : null;
+  return {
+    ok: true,
+    disponivelAposCents: refreshed?.valorDisponivelCents ?? Number(result.disponivel_apos_centavos ?? 0),
+  };
 }
 
 export async function listRecebiveisParceiro(

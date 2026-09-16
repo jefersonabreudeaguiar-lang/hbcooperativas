@@ -32,7 +32,7 @@ export async function POST(request: Request) {
     return NextResponse.json(
       {
         error: applied.error,
-        hint: "Configure DATABASE_URL na Vercel ou execute supabase/migrations/20260901150000_hb_credit_refund_intent_unique_fix.sql no SQL Editor.",
+        hint: "Configure DATABASE_URL na Vercel ou execute supabase/migrations/20260916200000_hb_credit_amount_used_reconcile.sql no SQL Editor.",
         schemaBefore: before,
       },
       { status: 503 }
