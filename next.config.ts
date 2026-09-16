@@ -1,4 +1,5 @@
 import type { NextConfig } from "next";
+import { X_ROBOTS_TAG_NOINDEX, isSearchIndexingAllowed } from "./src/lib/security/crawlerPolicy";
 
 const SECURITY_HEADERS = [
   { key: "X-Content-Type-Options", value: "nosniff" },
@@ -41,19 +42,25 @@ const nextConfig: NextConfig = {
     "10.*.*.*:3000",
   ],
   poweredByHeader: false,
-  headers: async () => [
-    {
-      source: "/:path*",
-      headers: SECURITY_HEADERS,
-    },
-    {
-      source: "/api/:path*",
-      headers: [
-        { key: "Cache-Control", value: "no-store" },
-        { key: "X-Content-Type-Options", value: "nosniff" },
-      ],
-    },
-  ],
+  headers: async () => {
+    const pageHeaders = [...SECURITY_HEADERS];
+    if (!isSearchIndexingAllowed()) {
+      pageHeaders.push({ key: "X-Robots-Tag", value: X_ROBOTS_TAG_NOINDEX });
+    }
+    return [
+      {
+        source: "/:path*",
+        headers: pageHeaders,
+      },
+      {
+        source: "/api/:path*",
+        headers: [
+          { key: "Cache-Control", value: "no-store" },
+          { key: "X-Content-Type-Options", value: "nosniff" },
+        ],
+      },
+    ];
+  },
 };
 
 export default nextConfig;
