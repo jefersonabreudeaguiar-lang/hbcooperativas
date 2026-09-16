@@ -22,6 +22,10 @@ import {
 } from "@/lib/hb-credit/contaCoopDescontosSyncHealth";
 import { isContaCoopValorReceberPilot } from "@/utils/contaCoopUiVisibility";
 import type { User } from "@/types";
+import {
+  refreshContaCoopLimiteCooperativaAtivos,
+  refreshContaCoopLimiteFromFicha,
+} from "@/lib/hb-credit/syncContaCoopLimiteFromFicha";
 
 export type SyncContaCoopValorReceberOpts = {
   cnpj: string;
@@ -291,6 +295,12 @@ export async function refreshContaCoopValorReceberAfterHbTransaction(
   if (changed || financeChanged) {
     await pushOperacionalToCloud(opts.cnpj, data, opts.cooperativaId).catch(() => {});
   }
+  await refreshContaCoopLimiteFromFicha({
+    cnpj: opts.cnpj,
+    cooperadoId: opts.cooperadoId,
+    cooperativaId: opts.cooperativaId,
+    cooperadoNome: opts.cooperadoNome,
+  }).catch(() => {});
   return { descontos };
 }
 
@@ -315,6 +325,11 @@ export async function refreshContaCoopDescontosAfterOperacionalSync(opts: {
       mesReferencia,
       cooperativaId: opts.cooperativaId,
     }).catch(() => {});
+    await refreshContaCoopLimiteFromFicha({
+      cnpj: opts.cnpj,
+      cooperadoId: canonico,
+      cooperativaId: opts.cooperativaId,
+    }).catch(() => {});
     return;
   }
 
@@ -324,5 +339,10 @@ export async function refreshContaCoopDescontosAfterOperacionalSync(opts: {
       cooperativaId: opts.cooperativaId,
       pushCloud: true,
     }).catch(() => {});
+    await refreshContaCoopLimiteCooperativaAtivos({
+      cnpj: opts.cnpj,
+      cooperativaId: opts.cooperativaId,
+    }).catch(() => {});
+    return;
   }
 }

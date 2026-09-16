@@ -29,6 +29,10 @@ import {
   listarMesesPendentesPagamentoResponsavel,
   listarMesesPendentesQuantoVouReceber,
 } from "../src/services/cooperadoEntregasService.ts";
+import {
+  getCreditoBaseContaCoopReais,
+  getCreditoBaseCooperadoCents,
+} from "../src/modules/hb-credit/engine/creditBaseFromFicha.ts";
 import { resolveMobileCooperadoId } from "../src/lib/hb-credit/mobileCooperadoLink.ts";
 import type { AppData, FichaCorrida, NotaPedido } from "../src/types/index.ts";
 
@@ -426,6 +430,30 @@ function nota(id: string, status: NotaPedido["status"]): NotaPedido {
   const v = getValorQuantoVouReceber(data, COOPERADO, COOP);
   assert.equal(fin.valorLiquido, v.valor, "consolidado = quanto vou receber");
   assert.equal(fin.resumo.valorLiquido, v.valor, "resumo consolidado = total exibido");
+}
+
+{
+  const data = baseData({
+    fichaCorrida: [ficha("f_mens", "n_mens", "2026-08")],
+    notasPedido: [nota("n_mens", "conferida")],
+    arquivosMensais: [
+      {
+        id: "arq_mens",
+        cooperativaId: COOP,
+        cooperadoId: COOPERADO,
+        mesReferencia: "2026-08",
+        notaPedidoIds: ["n_mens"],
+        pagamentoIds: [],
+        mensalidadeFixa: 60,
+        updatedAt: new Date().toISOString(),
+      },
+    ],
+  });
+  const fin = getConsolidadoFinanceiroCooperado(data, COOPERADO, COOP);
+  const baseReais = getCreditoBaseContaCoopReais(data, COOPERADO, COOP);
+  assert.equal(baseReais, fin.valorLiquido, "crédito base HB = valor a receber (não entregas brutas)");
+  assert.equal(baseReais, 40, "mensalidade R$60 sobre entrega R$100 → base R$40");
+  assert.equal(getCreditoBaseCooperadoCents(data, COOPERADO, COOP), 4000);
 }
 
 console.log("OK — guard financeiro cooperado");

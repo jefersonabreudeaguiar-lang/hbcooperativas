@@ -680,7 +680,7 @@ async function cooperadoTemComprasContaCoopAtivas(
   return pago - estornado > 0;
 }
 
-/** Sincroniza limite liberado = teto% × crédito base das entregas pendentes. */
+/** Sincroniza limite liberado = teto% × crédito base (valor a receber pendente, alinhado ao cooperado). */
 export async function syncLimiteCooperadoFromCreditoBase(
   supabase: SupabaseClient,
   cnpj: string,

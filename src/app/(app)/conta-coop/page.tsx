@@ -572,7 +572,8 @@ function ContaCoopContent() {
               <div>
                 <h3 className="font-semibold text-gray-900">Teto da cooperativa</h3>
                 <p className="mt-1 text-sm text-gray-600">
-                  Limite máximo que a cooperativa pode distribuir entre cooperados, com base na ficha corrida.
+                  Limite máximo que a cooperativa pode distribuir entre cooperados, com base no valor a receber
+                  pendente na ficha (mesmo total exibido ao cooperado).
                 </p>
               </div>
               <div className="rounded-xl bg-gray-50 p-4 text-sm space-y-1">
@@ -583,7 +584,7 @@ function ContaCoopContent() {
                   </strong>
                 </p>
                 <p>
-                  <span className="text-gray-500">Crédito na ficha:</span>{" "}
+                  <span className="text-gray-500">Base HB (a receber pendente):</span>{" "}
                   {formatCentsBRL(dashboard.teto.creditoBaseTotalCents)}
                 </p>
                 <p>

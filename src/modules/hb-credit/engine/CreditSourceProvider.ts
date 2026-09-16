@@ -25,7 +25,7 @@ export function suggestCreditLimitsFromDeliveries(
       cooperadoId,
       suggestedLimitCents,
       source: "ficha_corrida",
-      memo: `${percentual}% do valor das entregas pendentes de pagamento ao cooperado`,
+      memo: `${percentual}% do valor a receber pendente (mesma base do app do cooperado)`,
     };
   });
 }

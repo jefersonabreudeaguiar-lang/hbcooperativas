@@ -1,18 +1,15 @@
 import type { AppData } from "@/types";
-import { fichaPertenceCooperado, resolverCooperadoIdCanonico } from "@/services/cooperadoCloudService";
-import {
-  fichaValidaNoExtrato,
-  getResumoPagamentoCooperado,
-  listarFichasExtratoCooperadoMes,
-} from "@/services/notaPedidoService";
+import { listarMesesPendentesQuantoVouReceber } from "@/services/cooperadoEntregasService";
+import { resolverCooperadoIdCanonico } from "@/services/cooperadoCloudService";
+import { getResumoPagamentoExibicao } from "@/services/notaPedidoService";
 import { round2 } from "@/utils/calculations";
 import { reaisToCents } from "../shared/money";
 
 /**
- * Crédito base HB Créditos:
- * — somente meses com ficha pendente de pagamento ao cooperado;
- * — base = valor das entregas (sincronizado com a ficha);
- * — zera após liquidação do cooperado ou do mercado; novas entregas reconstruem a base.
+ * Crédito base HB Créditos (alinhado ao app do cooperado):
+ * — mesmos meses de listarMesesPendentesQuantoVouReceber;
+ * — base = valor líquido a receber (resumo da ficha: entregas − mensalidade − HB − avulsos + créditos);
+ * — zera após liquidação; novas entregas reconstruem a base.
  */
 export function getCreditoBaseContaCoopReais(
   data: AppData,
@@ -21,25 +18,12 @@ export function getCreditoBaseContaCoopReais(
 ): number {
   const coopId = cooperativaId ?? data.cooperados.find((c) => c.id === cooperadoId)?.cooperativaId;
   const cooperadoCanonico = resolverCooperadoIdCanonico(data, cooperadoId, coopId);
-
-  const meses = [
-    ...new Set(
-      data.fichaCorrida
-        .filter(
-          (f) =>
-            fichaPertenceCooperado(data, f, cooperadoCanonico, coopId) &&
-            fichaValidaNoExtrato(data, f)
-        )
-        .map((f) => f.mesReferencia)
-    ),
-  ].sort();
+  const meses = listarMesesPendentesQuantoVouReceber(data, cooperadoCanonico, coopId);
+  if (!meses.length) return 0;
 
   let total = 0;
   for (const mes of meses) {
-    const fichas = listarFichasExtratoCooperadoMes(data, cooperadoCanonico, mes, coopId);
-    if (!fichas.length || !fichas.some((f) => f.status === "pendente")) continue;
-
-    total += getResumoPagamentoCooperado(data, cooperadoCanonico, mes, coopId).valorEntregas;
+    total += getResumoPagamentoExibicao(data, cooperadoCanonico, mes, coopId).valorLiquido;
   }
 
   return round2(Math.max(0, total));
