@@ -47,6 +47,7 @@ import {
   getValorQuantoVouReceber,
   listarMesesPendentesPagamentoResponsavel,
   listarMesesPendentesQuantoVouReceber,
+  getConsolidadoFinanceiroCooperado,
   getPagamentoConfirmadoMes,
   listarMesesPagosCooperado,
 } from "@/services/cooperadoEntregasService";
@@ -267,6 +268,11 @@ export default function FichaCorridaPage() {
   }, [isCooperado, aba, cooperadoFilter, data, coopId, mesAtivo]);
 
   const cooperadoSelecionadoId = isCooperado ? cooperadoId : cooperadoFilter;
+
+  const financeiroAberto = useMemo(() => {
+    if (!data || !cooperadoSelecionadoId) return null;
+    return getConsolidadoFinanceiroCooperado(data, cooperadoSelecionadoId, coopId);
+  }, [data, cooperadoSelecionadoId, coopId, hbDescontosRevision]);
 
   const mesesPendentesPagamento = useMemo(() => {
     if (!data || !cooperadoSelecionadoId || isCooperado) return [];
@@ -565,6 +571,9 @@ export default function FichaCorridaPage() {
     if (visualizandoHistorico && pagamentoConfirmadoMes) {
       return resumoFromPagamento(pagamentoConfirmadoMes);
     }
+    if (!isCooperado && financeiroAberto && !pagamentoAguardando) {
+      return financeiroAberto.resumo;
+    }
     if (!isCooperado && resumoPagamentoConsolidado) {
       return resumoPagamentoConsolidado;
     }
@@ -596,6 +605,7 @@ export default function FichaCorridaPage() {
     pagamentoConfirmadoMes,
     resumoPagamentoConsolidado,
     mesesPendentesQuantoVouReceber,
+    financeiroAberto,
     hbDescontosRevision,
   ]);
 
@@ -606,10 +616,12 @@ export default function FichaCorridaPage() {
       ? resumoExibicao && exibicaoOpts
         ? getValorExibicaoCooperado(resumoExibicao, exibicaoOpts)
         : 0
-      : (valorReceberConsolidado?.valor ?? 0)
-    : pagamentoAguardando
-      ? pagamentoAguardando.valorLiquido
-      : (resumoPagamentoConsolidado?.valorLiquido ?? 0);
+      : (financeiroAberto?.valorLiquido ?? valorReceberConsolidado?.valor ?? 0)
+    : visualizandoHistorico
+      ? resumoExibicao && exibicaoOpts
+        ? getValorExibicaoCooperado(resumoExibicao, exibicaoOpts)
+        : 0
+      : (financeiroAberto?.valorLiquido ?? 0);
 
   const descontosExtrasCooperado =
     isCooperado && resumoExibicao
