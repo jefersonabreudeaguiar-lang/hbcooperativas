@@ -17,6 +17,11 @@ import {
   reconciliarFichaFromNotasConferidas,
 } from "../src/services/notaPedidoService.ts";
 import { setContaCoopDescontosMemoria } from "../src/lib/hb-credit/contaCoopDescontosMemory.ts";
+import {
+  bumpContaCoopDescontosRevision,
+  getContaCoopDescontosRevision,
+  subscribeContaCoopDescontos,
+} from "../src/lib/hb-credit/contaCoopDescontosNotify.ts";
 import type { AppData, FichaCorrida, NotaPedido } from "../src/types/index.ts";
 
 const COOP = "coop-1";
@@ -132,6 +137,27 @@ function nota(id: string, status: NotaPedido["status"]): NotaPedido {
     exibicao.descontosExtras.some((d) => d.tipo === "conta_coop"),
     "resumo exibicao deve listar HB via cache"
   );
+}
+
+{
+  const before = getContaCoopDescontosRevision();
+  let notified = 0;
+  const unsub = subscribeContaCoopDescontos(() => {
+    notified += 1;
+  });
+  setContaCoopDescontosMemoria(COOP, COOPERADO, "2026-08", [
+    {
+      motivo: "Estorno HB — teste notify",
+      valorReais: -10,
+      tipo: "conta_coop",
+      createdAt: "2026-08-21T12:00:00.000Z",
+    },
+  ]);
+  assert.ok(getContaCoopDescontosRevision() > before, "memória HB deve incrementar revision");
+  assert.equal(notified, 1, "UI deve poder reagir via subscribe");
+  bumpContaCoopDescontosRevision();
+  assert.equal(notified, 2, "bump manual deve notificar assinantes");
+  unsub();
 }
 
 {

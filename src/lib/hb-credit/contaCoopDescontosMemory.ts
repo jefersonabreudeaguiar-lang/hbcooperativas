@@ -1,5 +1,6 @@
 import type { DescontoContaCoopRemoto } from "@/lib/hb-credit/mergeFichaDescontos";
 import { dedupeDescontosContaCoopRemotos } from "@/lib/hb-credit/mergeFichaDescontos";
+import { bumpContaCoopDescontosRevision } from "@/lib/hb-credit/contaCoopDescontosNotify";
 
 /** Cache em memória (sessão) — fonte Supabase entre syncs do arquivo mensal. */
 const store = new Map<string, DescontoContaCoopRemoto[]>();
@@ -14,7 +15,14 @@ export function setContaCoopDescontosMemoria(
   mesReferencia: string,
   descontos: DescontoContaCoopRemoto[]
 ): void {
-  store.set(key(cooperativaId, cooperadoId, mesReferencia), dedupeDescontosContaCoopRemotos(descontos));
+  const k = key(cooperativaId, cooperadoId, mesReferencia);
+  const next = dedupeDescontosContaCoopRemotos(descontos);
+  const prev = store.get(k);
+  const prevJson = prev ? JSON.stringify(prev) : "";
+  const nextJson = JSON.stringify(next);
+  if (prevJson === nextJson) return;
+  store.set(k, next);
+  bumpContaCoopDescontosRevision();
 }
 
 export function getContaCoopDescontosMemoria(

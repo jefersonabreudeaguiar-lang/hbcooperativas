@@ -13,7 +13,7 @@ import {
 } from "@/services/cooperadoEntregasService";
 import { pushOperacionalToCloud } from "@/services/cooperativaSyncCloudService";
 import { beginSaveBatch, endSaveBatch, getData, notifyAppDataSubscribers, updateData } from "@/services/dataStore";
-import { persistDescontosContaCoopNoArquivo } from "@/services/notaPedidoService";
+import { persistDescontosContaCoopNoArquivo, getDescontosContaCoopMesCached, getResumoValorAPagarRelatorio } from "@/services/notaPedidoService";
 import { setContaCoopDescontosMemoria } from "@/lib/hb-credit/contaCoopDescontosMemory";
 import { isContaCoopValorReceberPilot } from "@/utils/contaCoopUiVisibility";
 import type { User } from "@/types";
@@ -108,18 +108,50 @@ async function syncContaCoopDescontosMesesLocal(
   return { data: next, descontos };
 }
 
+function descontosHbFingerprint(
+  data: AppData,
+  cooperadoId: string,
+  cooperativaId: string,
+  meses: string[]
+): string {
+  const canonico = resolverCooperadoIdCanonico(data, cooperadoId, cooperativaId);
+  return [...new Set(meses)]
+    .sort()
+    .map((mes) =>
+      JSON.stringify(getDescontosContaCoopMesCached(data, canonico, mes, cooperativaId))
+    )
+    .join("|");
+}
+
+function valorReceberHbFingerprint(
+  data: AppData,
+  cooperadoId: string,
+  cooperativaId: string,
+  meses: string[]
+): string {
+  return [...new Set(meses)]
+    .sort()
+    .map((mes) => getResumoValorAPagarRelatorio(data, cooperadoId, mes, cooperativaId).valorLiquido.toFixed(2))
+    .join("|");
+}
+
 async function applyLocalContaCoopDescontosRefresh(
   opts: RefreshOpts
 ): Promise<{ changed: boolean; descontos: DescontoContaCoopRemoto[]; data: AppData }> {
   const before = getData();
   const beforeFp = arquivosMensaisFingerprint(before.arquivosMensais);
   const meses = mesesReferenciaParaSyncCooperado(before, opts.cooperadoId, opts.cooperativaId, opts.mesReferencia);
+  const beforeDescontosFp = descontosHbFingerprint(before, opts.cooperadoId, opts.cooperativaId, meses);
+  const beforeValorFp = valorReceberHbFingerprint(before, opts.cooperadoId, opts.cooperativaId, meses);
   const synced = await syncContaCoopDescontosMesesLocal(before, opts, meses);
   const afterFp = arquivosMensaisFingerprint(synced.data.arquivosMensais);
+  const afterDescontosFp = descontosHbFingerprint(synced.data, opts.cooperadoId, opts.cooperativaId, meses);
+  const afterValorFp = valorReceberHbFingerprint(synced.data, opts.cooperadoId, opts.cooperativaId, meses);
   const changed = afterFp !== beforeFp;
+  const financeChanged = beforeDescontosFp !== afterDescontosFp || beforeValorFp !== afterValorFp;
   if (changed) {
     updateData(() => synced.data);
-  } else if (synced.descontos.length > 0) {
+  } else if (financeChanged) {
     notifyAppDataSubscribers();
   }
   return { changed, descontos: synced.descontos, data: synced.data };

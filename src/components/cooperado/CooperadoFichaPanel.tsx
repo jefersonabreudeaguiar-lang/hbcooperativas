@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import Link from "next/link";
 import { Wallet, FileText, Camera, CreditCard, FileDown, PenLine } from "lucide-react";
 import { useAppData } from "@/hooks/useAppData";
+import { useContaCoopDescontosRevision } from "@/hooks/useContaCoopDescontosRevision";
 import { usePermissions } from "@/hooks/usePermissions";
 import { Card } from "@/components/ui/Card";
 import { PageSkeleton } from "@/components/ui/PageSkeleton";
@@ -40,6 +41,7 @@ function getEscolaLabel(nota: { instituicaoId: string; escolaAvulsaNome?: string
 
 export function CooperadoFichaPanel({ cooperado }: { cooperado: Cooperado }) {
   const data = useAppData();
+  const hbDescontosRevision = useContaCoopDescontosRevision();
   const { check, user } = usePermissions();
   const podeEditar = check("cooperados", "edit");
   const [mesFilter, setMesFilter] = useState(getCurrentMesReferencia());
@@ -131,22 +133,28 @@ export function CooperadoFichaPanel({ cooperado }: { cooperado: Cooperado }) {
     [resumo, mesFilter]
   );
 
-  if (!data || !resumo) return <PageSkeleton compact />;
+  const exibicaoOptsMes = useMemo(() => {
+    if (!data) return undefined;
+    return buildValorExibicaoCooperadoOpts(data, cooperado.id, mesFilter, cooperado.cooperativaId);
+  }, [data, cooperado.id, cooperado.cooperativaId, mesFilter]);
 
-  const resumoPagamento = getResumoPagamentoExibicao(
-    data,
-    cooperado.id,
-    mesFilter,
-    cooperado.cooperativaId
-  );
-  const totalPendente = getValorExibicaoCooperado(
-    resumoPagamento,
-    buildValorExibicaoCooperadoOpts(data, cooperado.id, mesFilter, cooperado.cooperativaId)
-  );
-  const descontosExtrasExibicao = getDescontosExtrasExibicaoCooperado(
-    resumoPagamento,
-    buildValorExibicaoCooperadoOpts(data, cooperado.id, mesFilter, cooperado.cooperativaId)
-  );
+  const resumoPagamento = useMemo(() => {
+    if (!data) return null;
+    return getResumoPagamentoExibicao(data, cooperado.id, mesFilter, cooperado.cooperativaId);
+  }, [data, cooperado.id, cooperado.cooperativaId, mesFilter, hbDescontosRevision]);
+
+  const totalPendente = useMemo(() => {
+    if (!resumoPagamento || !exibicaoOptsMes) return 0;
+    return getValorExibicaoCooperado(resumoPagamento, exibicaoOptsMes);
+  }, [resumoPagamento, exibicaoOptsMes]);
+
+  const descontosExtrasExibicao = useMemo(() => {
+    if (!resumoPagamento) return [];
+    return getDescontosExtrasExibicaoCooperado(resumoPagamento, exibicaoOptsMes);
+  }, [resumoPagamento, exibicaoOptsMes]);
+
+  if (!data || !resumo || !resumoPagamento) return <PageSkeleton compact />;
+
   const arquivo = getArquivoMensalCooperado(data, cooperado.id, mesFilter, cooperado.cooperativaId);
   const ajustesCompartilhados = getAjustesCompartilhadosFichaMes(
     data,

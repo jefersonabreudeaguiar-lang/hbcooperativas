@@ -75,9 +75,12 @@ import { putLocalNotaMedia } from "@/services/localMediaStore";
 import { listCooperadosDaCooperativa, pushCooperadoToCloud, resolverCooperadoIdCanonico, getCooperadoNomeResolvido, notaPertenceCooperado } from "@/services/cooperadoCloudService";
 import { pushOperacionalToCloud, syncContratosFromCloud } from "@/services/cooperativaSyncCloudService";
 import { getProdutosContrato } from "@/services/catalogoContratosService";
-import { listarResumosMensaisEntregas, filtrarResumosEntregasPendentes } from "@/services/cooperadoEntregasService";
+import { listarResumosMensaisEntregas, filtrarResumosEntregasPendentes, getMesPrincipalQuantoVouReceber } from "@/services/cooperadoEntregasService";
 import { CooperadoEntregasPorMes } from "@/components/cooperado/CooperadoEntregasPorMes";
 import { CooperadoMinhaFichaTab } from "@/components/cooperado/CooperadoMinhaFichaTab";
+import { useContaCoopDescontosRevision } from "@/hooks/useContaCoopDescontosRevision";
+import { useSyncContaCoopValorReceberPilot } from "@/hooks/useSyncContaCoopValorReceberPilot";
+import { buildValorExibicaoCooperadoOpts } from "@/services/notaPedidoService";
 import { CorrecoesEntregasPanel } from "@/components/notas/CorrecoesEntregasPanel";
 import { getContratoLabel, getContratosEntrega, resolverContratoEntrega } from "@/utils/contratosEntrega";
 import { cn, formatCurrency, formatDate, formatMesReferencia, getCurrentMesReferencia } from "@/utils/format";
@@ -291,6 +294,26 @@ export default function NotasPedidoContent() {
   const [fotosLancadasUi, setFotosLancadasUi] = useState<Set<number>>(() => new Set());
 
   const coopId = user && data ? getUserCooperativaId(user, data) : undefined;
+  const hbDescontosRevision = useContaCoopDescontosRevision();
+  const cooperadoCanonico =
+    isCooperado && data && cooperadoId && coopId
+      ? resolverCooperadoIdCanonico(data, cooperadoId, coopId)
+      : undefined;
+  const mesHbSync =
+    data && cooperadoCanonico && coopId
+      ? getMesPrincipalQuantoVouReceber(data, cooperadoCanonico, coopId)
+      : undefined;
+  useSyncContaCoopValorReceberPilot(
+    isCooperado && cooperadoCanonico && coopId && mesHbSync && user
+      ? {
+          cooperadoId: cooperadoCanonico,
+          mesReferencia: mesHbSync,
+          cooperativaId: coopId,
+          cooperadoNome: data?.cooperados.find((c) => c.id === cooperadoCanonico)?.nomeCompleto,
+          user,
+        }
+      : undefined
+  );
   const ANEXAR_DRAFT_KEY = coopId ? `hb_anexar_draft_${coopId}` : "";
 
   const revokeFotoPreview = useCallback(() => {
@@ -807,12 +830,12 @@ export default function NotasPedidoContent() {
         notas: r.notas.filter((n) => n.status === statusFilter),
       }))
       .filter((r) => r.notas.length > 0);
-  }, [data, cooperadoId, coopId, isCooperado, statusFilter]);
+  }, [data, cooperadoId, coopId, isCooperado, statusFilter, hbDescontosRevision]);
 
   const resumosFichaCooperado = useMemo(() => {
     if (!isCooperado || !data || !cooperadoId) return [];
     return listarResumosMensaisEntregas(data, cooperadoId, coopId);
-  }, [data, cooperadoId, coopId, isCooperado]);
+  }, [data, cooperadoId, coopId, isCooperado, hbDescontosRevision]);
 
   const nomeCooperadoExibicao = useMemo(() => {
     if (!data || !cooperadoId) return user?.name ?? "Cooperado";
