@@ -32,6 +32,7 @@ import { listarPagamentosAguardandoAssinatura } from "@/services/filaDoDiaServic
 import { listCooperadosComFichaNoMes, getCooperadoNomeResolvido, resolverCooperadoParaPagamento, fichaPertenceCooperado, listCooperadosDaCooperativa } from "@/services/cooperadoCloudService";
 import { resolveCooperativaCnpj, patchNotaPedidoInCloud } from "@/services/notaPedidoCloudService";
 import { useSyncContaCoopValorReceberPilot } from "@/hooks/useSyncContaCoopValorReceberPilot";
+import { useContaCoopDescontosRevision } from "@/hooks/useContaCoopDescontosRevision";
 import { refreshContaCoopLimiteFromFicha } from "@/lib/hb-credit/syncContaCoopLimiteFromFicha";
 import {
   pushOperacionalToCloud,
@@ -139,6 +140,7 @@ function TabelaResumoItens({
 
 export default function FichaCorridaPage() {
   const data = useAppData();
+  const hbDescontosRevision = useContaCoopDescontosRevision();
   const { user, isCooperado, cooperadoId, check } = usePermissions();
   const searchParams = useSearchParams();
   const [mesFilter, setMesFilter] = useState(searchParams.get("mes") ?? getCurrentMesReferencia());
@@ -196,17 +198,17 @@ export default function FichaCorridaPage() {
   const mesEmAberto = useMemo(() => {
     if (!data || !cooperadoId) return getCurrentMesReferencia();
     return getMesPrincipalQuantoVouReceber(data, cooperadoId, coopId);
-  }, [data, cooperadoId, coopId]);
+  }, [data, cooperadoId, coopId, hbDescontosRevision]);
 
   const valorReceberConsolidado = useMemo(() => {
     if (!data || !cooperadoId) return null;
     return getValorQuantoVouReceber(data, cooperadoId, coopId);
-  }, [data, cooperadoId, coopId]);
+  }, [data, cooperadoId, coopId, hbDescontosRevision]);
 
   const mesesPendentesQuantoVouReceber = useMemo(() => {
     if (!data || !cooperadoId || !isCooperado) return [];
     return listarMesesPendentesQuantoVouReceber(data, cooperadoId, coopId);
-  }, [cooperadoId, coopId, data, isCooperado]);
+  }, [cooperadoId, coopId, data, isCooperado, hbDescontosRevision]);
 
   const mesesPagosCooperado = useMemo(() => {
     if (!data || !cooperadoId) return [];
@@ -594,6 +596,7 @@ export default function FichaCorridaPage() {
     pagamentoConfirmadoMes,
     resumoPagamentoConsolidado,
     mesesPendentesQuantoVouReceber,
+    hbDescontosRevision,
   ]);
 
   const resumoExibicao = resumo;

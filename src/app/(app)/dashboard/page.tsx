@@ -52,6 +52,7 @@ import { VotacaoResultadoPanel } from "@/components/votacao/VotacaoResultadoPane
 import { getCooperativaCnpj, getPendingNotaDeleteIds } from "@/services/notaPedidoCloudService";
 import { buildValorExibicaoCooperadoOpts } from "@/services/notaPedidoService";
 import { useSyncContaCoopValorReceberPilot } from "@/hooks/useSyncContaCoopValorReceberPilot";
+import { useContaCoopDescontosRevision } from "@/hooks/useContaCoopDescontosRevision";
 import { formatCurrency, formatMesReferencia, getCurrentMesReferencia } from "@/utils/format";
 import { getUserCooperativaId, getUserCooperativaNome, normalizeCnpj } from "@/utils/cooperativa";
 import { Camera, Wallet, ClipboardList, Users, Vote, Download, PenLine } from "lucide-react";
@@ -64,6 +65,7 @@ function CooperadoDashboard() {
   const router = useRouter();
   const { syncing, lastSyncError } = useSyncStatus();
   const recoverySyncRef = useRef(false);
+  const hbDescontosRevision = useContaCoopDescontosRevision();
 
   const financeiroAusente = useAppDataSelector((data) => {
     if (!data || !user?.cooperadoId) return false;
@@ -71,7 +73,7 @@ function CooperadoDashboard() {
     if (!coopId) return false;
     const cooperadoId = resolverCooperadoIdCanonico(data, user.cooperadoId, coopId);
     return cooperadoFinanceiroDesatualizado(data, cooperadoId, coopId);
-  }, [user?.id, user?.cooperadoId, user?.cooperativaId]);
+  }, [user?.id, user?.cooperadoId, user?.cooperativaId, hbDescontosRevision]);
 
   useEffect(() => {
     recoverySyncRef.current = false;
@@ -107,7 +109,7 @@ function CooperadoDashboard() {
       cooperativaId: coopId,
       cooperadoNome: exibicaoOpts.cooperadoNome,
     };
-  }, [user?.id, user?.cooperadoId, user?.cooperativaId]);
+  }, [user?.id, user?.cooperadoId, user?.cooperativaId, hbDescontosRevision]);
 
   useSyncContaCoopValorReceberPilot(contaCoopSync ? { ...contaCoopSync, user } : undefined);
 
@@ -185,7 +187,7 @@ function CooperadoDashboard() {
       mostrarAssinaturaPilot,
       precisaAssinatura,
     };
-  }, [user?.id, user?.cooperadoId, user?.cooperativaId]);
+  }, [user?.id, user?.cooperadoId, user?.cooperativaId, hbDescontosRevision]);
 
   if (!view) return <PageSkeleton />;
 

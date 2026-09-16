@@ -14,6 +14,7 @@ import {
   BookOpen,
 } from "lucide-react";
 import { useAppData } from "@/hooks/useAppData";
+import { useContaCoopDescontosRevision } from "@/hooks/useContaCoopDescontosRevision";
 import { Button } from "@/components/ui/Button";
 import { NotaStatusBadge } from "@/components/ui/NotaStatusBadge";
 import { ResumoDescontosMes } from "@/components/ficha/ResumoDescontosMes";
@@ -66,10 +67,11 @@ function MesFichaAccordion({
   onToggle: () => void;
 }) {
   const data = useAppData();
+  const hbDescontosRevision = useContaCoopDescontosRevision();
   const resumoPagamento = useMemo(() => {
     if (!data) return null;
     return getResumoPagamentoExibicao(data, cooperadoId, resumo.mesReferencia, cooperativaId);
-  }, [data, cooperadoId, resumo.mesReferencia, cooperativaId]);
+  }, [data, cooperadoId, resumo.mesReferencia, cooperativaId, hbDescontosRevision]);
 
   const itensMes = useMemo(() => {
     if (!data) return { itens: [], entregas: 0, valorBruto: 0 };
