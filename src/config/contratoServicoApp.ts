@@ -4,6 +4,7 @@ import {
   COBRANCA_SAAS_PRECO_COOPERADO_DEFAULT,
 } from "@/services/cobrancaSaasService";
 import { formatCurrency } from "@/utils/format";
+import { getClausulasPropriedadeEAcessoAutomatizado } from "@/config/politicaAcessoAutomatizado";
 
 /** Versão do contrato — cooperativas com versão anterior precisam assinar de novo. */
 export const CONTRATO_SERVICO_VERSAO = "2026-03-29";
@@ -103,7 +104,11 @@ export function getClausulasContratoServicoApp(): ClausulaContratoServico[] {
       ],
     },
     {
-      titulo: "10. Aceite",
+      titulo: `10. ${getClausulasPropriedadeEAcessoAutomatizado().titulo}`,
+      itens: getClausulasPropriedadeEAcessoAutomatizado().itens,
+    },
+    {
+      titulo: "11. Aceite",
       itens: [
         `Ao assinar eletronicamente, a cooperativa declara ter lido e concordado com este contrato (versão ${CONTRATO_SERVICO_VERSAO}), vigente a partir de ${CONTRATO_SERVICO_VIGENCIA_INICIO.split("-").reverse().join("/")}.`,
         "O aceite fica registrado com data, hora e identificação do responsável signatário.",

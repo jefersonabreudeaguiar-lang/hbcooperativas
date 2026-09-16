@@ -3,6 +3,7 @@ import type { MetadataRoute } from "next";
 
 /**
  * Leva 1 — anti-indexação (sem impacto em login, sync, HB ou APIs autenticadas).
+ * Leva 2 — rate limit / bloqueio opcional de bots de IA (HB_CRAWLER_DEFENSE_LEVA2, ver crawlerDefenseLeva2.ts).
  * Rollback: HB_ALLOW_SEARCH_INDEXING=1 no ambiente Vercel.
  */
 export function isSearchIndexingAllowed(): boolean {

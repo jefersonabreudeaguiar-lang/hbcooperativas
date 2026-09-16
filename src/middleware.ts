@@ -2,6 +2,7 @@ import { NextResponse, after, type NextRequest } from "next/server";
 import { getAuthSecret, isApiSecurityEnforced } from "@/lib/security/env";
 import { extractAccessToken, verifyAccessToken } from "@/lib/security/jwt";
 import { hasSetupSecret, isPublicApiRoute } from "@/lib/security/publicApiPaths";
+import { evaluateLeva2Defense } from "@/lib/security/crawlerDefenseLeva2";
 
 type HobeliscoIngestPayload = {
   type: "api" | "auth" | "sync";
@@ -27,8 +28,25 @@ function scheduleObservation(payload: HobeliscoIngestPayload) {
   });
 }
 
+function leva2Response(request: NextRequest, pathname: string): NextResponse | null {
+  const verdict = evaluateLeva2Defense(request, pathname);
+  if (verdict.action === "allow") return null;
+  const headers = { "Cache-Control": "no-store" };
+  if (verdict.action === "block_pages" && !pathname.startsWith("/api/")) {
+    return new NextResponse(verdict.message, {
+      status: verdict.status,
+      headers: { ...headers, "Content-Type": "text/plain; charset=utf-8" },
+    });
+  }
+  return NextResponse.json({ error: verdict.message }, { status: verdict.status, headers });
+}
+
 export async function middleware(request: NextRequest) {
   const pathname = request.nextUrl.pathname;
+
+  const blocked = leva2Response(request, pathname);
+  if (blocked) return blocked;
+
   if (!pathname.startsWith("/api/")) {
     return NextResponse.next();
   }
@@ -93,5 +111,8 @@ export async function middleware(request: NextRequest) {
 }
 
 export const config = {
-  matcher: "/api/:path*",
+  matcher: [
+    "/api/:path*",
+    "/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico|woff2?|webmanifest)$).*)",
+  ],
 };

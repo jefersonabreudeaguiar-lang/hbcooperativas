@@ -3,6 +3,7 @@
  *
  * Leva 1 — auditoria (2026-09): cada rota abaixo é intencional; dados sensíveis
  * (HB Créditos, operacional, cooperados) exigem JWT no middleware.
+ * Leva 2 — bots de IA sem sessão podem receber 429 (rate limit) apenas em GET públicos.
  *
  * | Rota | Motivo |
  * |------|--------|
