@@ -1,4 +1,18 @@
-/** Rotas /api públicas (sem JWT) quando a segurança está ativa. */
+/**
+ * Rotas /api públicas (sem JWT) quando a segurança está ativa.
+ *
+ * Leva 1 — auditoria (2026-09): cada rota abaixo é intencional; dados sensíveis
+ * (HB Créditos, operacional, cooperados) exigem JWT no middleware.
+ *
+ * | Rota | Motivo |
+ * |------|--------|
+ * | auth/* | Login, cadastro, sessão, reset senha |
+ * | cooperativas POST/lookup/status/verify | Cadastro cooperativa (sem listar membros) |
+ * | credit/status | Feature flag HB (sem dados financeiros) |
+ * | webhooks/asaas | Webhook assinado no handler |
+ * | cron/* | CRON_SECRET no handler |
+ * | lab/* | 404 se lab desativado |
+ */
 export function isPublicApiRoute(pathname: string, method: string): boolean {
   const m = method.toUpperCase();
 

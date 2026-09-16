@@ -3,6 +3,7 @@ import { Geist } from "next/font/google";
 import "./globals.css";
 import { AuthProvider } from "@/modules/auth/AuthProvider";
 import { PwaProvider } from "@/components/pwa/PwaProvider";
+import { getPrivateAppRobotsMetadata } from "@/lib/security/crawlerPolicy";
 
 const geist = Geist({
   variable: "--font-geist-sans",
@@ -30,6 +31,7 @@ export const metadata: Metadata = {
   formatDetection: {
     telephone: false,
   },
+  robots: getPrivateAppRobotsMetadata(),
 };
 
 export const viewport: Viewport = {
