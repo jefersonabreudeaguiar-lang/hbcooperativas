@@ -36,6 +36,7 @@ import {
 import {
   getContaCoopDescontosMemoria,
   hasContaCoopDescontosMemoria,
+  resolveDescontosContaCoopMesParaCalculo,
 } from "@/lib/hb-credit/contaCoopDescontosMemory";
 import { formatMesesReferenciaRotulo } from "@/utils/format";
 import { fichaPreservarSemNotaLocal, notasSyncProvavelmenteCompleto } from "@/services/fichaSyncGuard";
@@ -1637,10 +1638,12 @@ export function getDescontosContaCoopMesCached(
   const arquivo = getArquivoMensalCooperado(data, canonico, mesReferencia, coopId);
   const fromArquivo = descontosContaCoopFromArquivo(arquivo);
   if (!coopId) return fromArquivo;
-  if (hasContaCoopDescontosMemoria(coopId, canonico, mesReferencia)) {
-    return getContaCoopDescontosMemoria(coopId, canonico, mesReferencia);
-  }
-  return fromArquivo;
+  const fromMemoria = getContaCoopDescontosMemoria(coopId, canonico, mesReferencia);
+  return resolveDescontosContaCoopMesParaCalculo(
+    fromArquivo,
+    fromMemoria,
+    hasContaCoopDescontosMemoria(coopId, canonico, mesReferencia)
+  );
 }
 
 function aplicarDescontosContaCoopMesNoResumo(
@@ -1741,10 +1744,25 @@ export function getResumoPagamentoExibicao(
 ): ResumoPagamentoCooperado {
   const coopId = cooperativaId ?? data.cooperados.find((c) => c.id === cooperadoId)?.cooperativaId;
   const pagamento = getPagamentoAguardandoCooperado(data, cooperadoId, mesReferencia);
-  const base = pagamento
-    ? resumoFromPagamento(pagamento)
-    : getResumoPagamentoCooperado(data, cooperadoId, mesReferencia, coopId, ajustes);
-  return getResumoPagamentoParaRegistro(base, data, cooperadoId, mesReferencia, coopId);
+  const live = getResumoPagamentoCooperado(data, cooperadoId, mesReferencia, coopId, ajustes);
+  if (pagamento) {
+    const snap = resumoFromPagamento(pagamento);
+    const base: ResumoPagamentoCooperado = {
+      ...snap,
+      valorBruto: live.valorBruto,
+      descontoCooperativa: live.descontoCooperativa,
+      valorEntregas: live.valorEntregas,
+      fichaIds: live.fichaIds,
+      notaPedidoIds: live.notaPedidoIds,
+      descontosExtras: snap.descontosExtras.filter(
+        (d) =>
+          d.tipo !== "conta_coop" &&
+          !(d.tipo === "credito_avulso" && d.motivo.toLowerCase().includes("estorno"))
+      ),
+    };
+    return getResumoPagamentoParaRegistro(base, data, cooperadoId, mesReferencia, coopId);
+  }
+  return getResumoPagamentoParaRegistro(live, data, cooperadoId, mesReferencia, coopId);
 }
 
 export function getTotalRecebidoCooperado(data: AppData, cooperadoId: string, mesReferencia?: string): number {

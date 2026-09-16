@@ -52,8 +52,14 @@ export async function syncContaCoopDescontosMesLocal(
     opts.cooperadoNome
   );
   const titularIds = listCooperadoIdsMesmoTitular(data, canonico, opts.cooperativaId);
-  const raw = await fetchFichaDescontosContaCoop(opts.cnpj, titularIds, opts.mesReferencia);
-  const descontos = dedupeDescontosContaCoopRemotos(raw);
+  let descontos: DescontoContaCoopRemoto[];
+  try {
+    const raw = await fetchFichaDescontosContaCoop(opts.cnpj, titularIds, opts.mesReferencia);
+    descontos = dedupeDescontosContaCoopRemotos(raw);
+  } catch {
+    descontos = getDescontosContaCoopMesCached(data, canonico, opts.mesReferencia, opts.cooperativaId);
+    return { data, descontos };
+  }
   setContaCoopDescontosMemoria(opts.cooperativaId, canonico, opts.mesReferencia, descontos);
   const next = persistDescontosContaCoopNoArquivo(
     data,
