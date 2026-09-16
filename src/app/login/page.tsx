@@ -11,6 +11,7 @@ import { AppIcon } from "@/components/ui/AppIcon";
 import { Input, Label } from "@/components/ui/Form";
 
 import { PLATFORM_NAME, PLATFORM_TAGLINE } from "@/utils/constants";
+import { AVISO_ACESSO_AUTOMATIZADO_RESUMO } from "@/config/politicaAcessoAutomatizado";
 
 const SEGMENTOS_ATENDIDOS = [
   "Agrícola e agroindustrial",
@@ -187,6 +188,10 @@ function LoginForm() {
                 >
                   Baixar aplicativo — Android e iPhone
                 </Link>
+              </p>
+
+              <p className="text-xs text-gray-400 mt-6 text-center leading-relaxed px-2">
+                {AVISO_ACESSO_AUTOMATIZADO_RESUMO}
               </p>
             </div>
           </div>

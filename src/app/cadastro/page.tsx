@@ -13,6 +13,7 @@ import { lookupCooperativaByCnpjAsync, subscribe } from "@/services/dataStore";
 import { fetchCloudStatus, type CloudStatus } from "@/services/cooperativaCloudService";
 import { formatCnpj, normalizeCnpj } from "@/utils/cooperativa";
 import { PLATFORM_NAME } from "@/utils/constants";
+import { AVISO_ACESSO_AUTOMATIZADO_RESUMO } from "@/config/politicaAcessoAutomatizado";
 import { cn } from "@/utils/format";
 import {
   getCobrancaSaasPricing,
@@ -721,6 +722,9 @@ export default function CadastroPage() {
                   <Link href="/login" className="text-green-700 font-medium hover:text-green-800">
                     Fazer login
                   </Link>
+                </p>
+                <p className="text-xs text-gray-400 mt-4 text-center leading-relaxed px-2">
+                  {AVISO_ACESSO_AUTOMATIZADO_RESUMO}
                 </p>
               </div>
             </div>

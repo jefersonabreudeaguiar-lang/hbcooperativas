@@ -20,6 +20,8 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run test:cooperado-financeiro
+      - run: npm run test:crawler-leva1
+      - run: npm run test:crawler-leva2
       - run: npm run test:hb-valor-receber
         env:
           NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
