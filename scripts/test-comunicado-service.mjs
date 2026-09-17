@@ -22,6 +22,25 @@ function comunicadoMuralAindaVisivel(c, nowMs = Date.now()) {
   return new Date(expira).getTime() > nowMs;
 }
 
+/** Espelha mergeComunicadosFromCloud (remoção na nuvem). */
+function mergeComunicadosFromCloudTest(localCoop, cloudItems, excluidosIds) {
+  const map = new Map();
+  for (const item of cloudItems) {
+    if (!excluidosIds.has(item.id)) map.set(item.id, item);
+  }
+  for (const local of localCoop) {
+    if (excluidosIds.has(local.id)) continue;
+    const cloud = map.get(local.id);
+    if (!cloud) {
+      if (local.muralPublicadoEm || local.audioStoragePath || local.audioNaNuvem) continue;
+      map.set(local.id, local);
+      continue;
+    }
+    map.set(local.id, local.updatedAt && cloud.updatedAt ? local : cloud);
+  }
+  return [...map.values()];
+}
+
 function getComunicadoAssunto(c) {
   return c.assunto?.trim() || c.titulo?.trim() || "Aviso";
 }
@@ -68,6 +87,36 @@ const tests = [
         comunicadoVisivelParaCooperado(aviso, "c1", cooperados) === false &&
         comunicadoVisivelParaCooperado(aviso, "c2", cooperados) === true
       );
+    },
+  },
+  {
+    name: "merge não ressuscita aviso apagado na nuvem",
+    run: () => {
+      const publicado = {
+        id: "cm1",
+        muralPublicadoEm: "2026-01-01T12:00:00.000Z",
+        muralDuracao: "24h",
+      };
+      const cloud = [];
+      const local = [publicado];
+      const merged = mergeComunicadosFromCloudTest(local, cloud, new Set());
+      return merged.length === 0;
+    },
+  },
+  {
+    name: "merge mantém rascunho local ainda não publicado",
+    run: () => {
+      const rascunho = { id: "cm2", assunto: "Novo" };
+      const merged = mergeComunicadosFromCloudTest([rascunho], [], new Set());
+      return merged.length === 1 && merged[0].id === "cm2";
+    },
+  },
+  {
+    name: "merge respeita lista de excluídos",
+    run: () => {
+      const local = [{ id: "cm3", titulo: "Antigo" }];
+      const merged = mergeComunicadosFromCloudTest(local, [], new Set(["cm3"]));
+      return merged.length === 0;
     },
   },
   {

@@ -628,6 +628,13 @@ export interface Comunicado {
   createdAt: string;
 }
 
+/** IDs de comunicados removidos pelo responsável (sincroniza sumiço no cooperado). */
+export interface ComunicadoExcluidoRef {
+  id: string;
+  cooperativaId?: string;
+  excluidoEm: string;
+}
+
 export interface Reclamacao {
   id: string;
   cooperativaId: string;
@@ -881,6 +888,7 @@ export interface AppData {
   pagamentos: Pagamento[];
   financeiro: FinanceiroMensal[];
   comunicados: Comunicado[];
+  comunicadosExcluidos?: ComunicadoExcluidoRef[];
   reclamacoes: Reclamacao[];
   votacaoPautas: VotacaoPauta[];
   votacaoVotos: VotacaoVoto[];

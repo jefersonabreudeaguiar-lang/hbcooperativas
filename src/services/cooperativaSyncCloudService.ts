@@ -1,4 +1,4 @@
-import type { AppData, Cooperativa, Cooperado, Instituicao, ProdutoInstituicao, Desconto, PrestacaoContasExcluida, NotaPedidoExcluida, InstituicaoExcluida, PagamentoCooperadoRegistro, Comunicado, FichaCorrida, VotacaoPauta, VotacaoVoto, ParecerContabilMensal, FechamentoSnapshot } from "@/types";
+import type { AppData, Cooperativa, Cooperado, Instituicao, ProdutoInstituicao, Desconto, PrestacaoContasExcluida, NotaPedidoExcluida, InstituicaoExcluida, PagamentoCooperadoRegistro, Comunicado, ComunicadoExcluidoRef, FichaCorrida, VotacaoPauta, VotacaoVoto, ParecerContabilMensal, FechamentoSnapshot } from "@/types";
 import { normalizeCnpj } from "@/utils/cooperativa";
 import { secureApiFetch } from "@/lib/security/clientSession";
 import type { ContratosSyncPayload, OperacionalSyncPayload } from "@/lib/supabase/cooperativaSyncStorage";
@@ -144,12 +144,39 @@ function mergePagamentosCooperadoFromCloud(
 }
 
 /** Comunicado desativado localmente (ex.: após assinar recibo) permanece oculto. */
-function mergeComunicadosFromCloud(localCoop: Comunicado[], cloudItems: Comunicado[]): Comunicado[] {
+function mergeComunicadosExcluidosFromCloud(
+  localCoop: ComunicadoExcluidoRef[],
+  cloudItems: ComunicadoExcluidoRef[]
+): ComunicadoExcluidoRef[] {
+  const map = new Map<string, ComunicadoExcluidoRef>();
+  for (const item of localCoop) map.set(item.id, item);
+  for (const cloud of cloudItems) {
+    const local = map.get(cloud.id);
+    if (!local || new Date(cloud.excluidoEm).getTime() >= new Date(local.excluidoEm).getTime()) {
+      map.set(cloud.id, cloud);
+    }
+  }
+  return [...map.values()];
+}
+
+/** Comunicado desativado localmente (ex.: após assinar recibo) permanece oculto. */
+function mergeComunicadosFromCloud(
+  localCoop: Comunicado[],
+  cloudItems: Comunicado[],
+  excluidosIds: Set<string>
+): Comunicado[] {
   const map = new Map<string, Comunicado>();
-  for (const item of cloudItems) map.set(item.id, item);
+  for (const item of cloudItems) {
+    if (!excluidosIds.has(item.id)) map.set(item.id, item);
+  }
   for (const local of localCoop) {
+    if (excluidosIds.has(local.id)) continue;
     const cloud = map.get(local.id);
     if (!cloud) {
+      /** Já publicado na nuvem e removido pelo responsável — não ressuscitar no cooperado. */
+      if (local.muralPublicadoEm || local.audioStoragePath || local.audioNaNuvem) {
+        continue;
+      }
       map.set(local.id, local);
       continue;
     }
@@ -300,6 +327,9 @@ function buildOperacionalPayload(data: AppData, coopId: string): OperacionalSync
     ajustesFichaMes: (sanitized.ajustesFichaMes ?? []).filter((a) => a.cooperativaId === coopId),
     pagamentosCooperado: sanitized.pagamentosCooperado.filter((p) => p.cooperativaId === coopId),
     comunicados: sanitized.comunicados.filter((c) => c.cooperativaId === coopId),
+    comunicadosExcluidos: (sanitized.comunicadosExcluidos ?? []).filter(
+      (e) => !e.cooperativaId || e.cooperativaId === coopId
+    ),
     mensalidades: sanitized.mensalidades
       .filter((m) => mensalidadeVisivelNoDispositivo(sanitized, m, coopId))
       .map((m) =>
@@ -640,6 +670,18 @@ export function mergeOperacionalIntoData(
     ? cloudVotos
     : mergeVotacaoVotosFromCloud(localVotosCoop, cloudVotos, mergedPautasCoop);
 
+  const cloudComunicadosExcluidos = (cloud.comunicadosExcluidos ?? []).map((e) => ({
+    ...e,
+    cooperativaId: e.cooperativaId ?? coopId,
+  }));
+  const mergedComunicadosExcluidosCoop = cloudAuthoritative
+    ? cloudComunicadosExcluidos
+    : mergeComunicadosExcluidosFromCloud(
+        (data.comunicadosExcluidos ?? []).filter((e) => !e.cooperativaId || e.cooperativaId === coopId),
+        cloudComunicadosExcluidos
+      );
+  const comunicadosExcluidosSet = new Set(mergedComunicadosExcluidosCoop.map((e) => e.id));
+
   let next: AppData = {
     ...data,
     arquivosMensais: [
@@ -674,11 +716,16 @@ export function mergeOperacionalIntoData(
     comunicados: [
       ...filterCoop(data.comunicados, (c) => c.cooperativaId === coopId),
       ...(cloudAuthoritative
-        ? cloudComunicados
+        ? cloudComunicados.filter((c) => !comunicadosExcluidosSet.has(c.id))
         : mergeComunicadosFromCloud(
             data.comunicados.filter((c) => c.cooperativaId === coopId),
-            cloudComunicados
+            cloudComunicados,
+            comunicadosExcluidosSet
           )),
+    ],
+    comunicadosExcluidos: [
+      ...(data.comunicadosExcluidos ?? []).filter((e) => e.cooperativaId && e.cooperativaId !== coopId),
+      ...mergedComunicadosExcluidosCoop,
     ],
     mensalidades: [
       ...data.mensalidades.filter((m) => !mensalidadeVisivelNoDispositivo(data, m, coopId)),

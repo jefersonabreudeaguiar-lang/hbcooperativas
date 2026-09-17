@@ -13,7 +13,7 @@ import { AlertBanner } from "@/components/ui/AlertBanner";
 import { updateData, generateId, addAuditEntry, getData } from "@/services/dataStore";
 import { resolveCooperativaCnpj } from "@/services/notaPedidoCloudService";
 import { pushOperacionalToCloud } from "@/services/cooperativaSyncCloudService";
-import { stashComunicadoAudioPending } from "@/lib/comunicado/comunicadoAudioPending";
+import { stashComunicadoAudioPending, clearComunicadoAudioPending } from "@/lib/comunicado/comunicadoAudioPending";
 import { ensureComunicadosAudioUploaded } from "@/services/comunicadoAudioSync";
 import {
   getComunicadosParaExibicao,
@@ -224,13 +224,41 @@ export default function ComunicadosPage() {
     marcarPendente(c.id);
   };
 
-  const handleDelete = (c: Comunicado) => {
-    if (!user || !confirm(`Remover o recado "${getComunicadoAssunto(c)}"?`)) return;
+  const handleDelete = async (c: Comunicado) => {
+    if (!user || !coopId || !confirm(`Remover o recado "${getComunicadoAssunto(c)}"?`)) return;
+    clearComunicadoAudioPending(c.id);
     updateData((d) => ({
       ...d,
       comunicados: d.comunicados.filter((x) => x.id !== c.id),
+      comunicadosExcluidos: [
+        ...(d.comunicadosExcluidos ?? []).filter((x) => x.id !== c.id),
+        { id: c.id, cooperativaId: coopId, excluidoEm: new Date().toISOString() },
+      ],
     }));
-    marcarPendente();
+    setIdsParaPublicar((prev) => {
+      const next = new Set(prev);
+      next.delete(c.id);
+      return next;
+    });
+    setMsgPublicacao("");
+    try {
+      const cnpj = await resolveCooperativaCnpj(getData(), coopId, user);
+      if (!cnpj) {
+        marcarPendente();
+        setMsgPublicacao("Removido aqui. Toque em Enviar aos cooperados quando o CNPJ estiver disponível.");
+        return;
+      }
+      await pushOperacionalToCloud(cnpj, getData(), coopId, { authoritative: true });
+      setAlteracoesPendentes(false);
+      setMsgPublicacao("Recado removido. Cooperados deixam de ver após sincronizar o app.");
+    } catch (e) {
+      marcarPendente();
+      setMsgPublicacao(
+        e instanceof Error
+          ? e.message
+          : "Removido localmente. Use Enviar aos cooperados com internet para sumir no app deles."
+      );
+    }
   };
 
   const handlePublicar = async () => {

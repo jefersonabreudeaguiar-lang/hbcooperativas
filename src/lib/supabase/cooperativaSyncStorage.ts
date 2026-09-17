@@ -6,6 +6,7 @@ import type {
   AjustesFichaMesCooperativa,
   PagamentoCooperadoRegistro,
   Comunicado,
+  ComunicadoExcluidoRef,
   Mensalidade,
   Desconto,
   ValorAvulsoReceber,
@@ -44,6 +45,7 @@ export interface OperacionalSyncPayload {
   ajustesFichaMes?: AjustesFichaMesCooperativa[];
   pagamentosCooperado: PagamentoCooperadoRegistro[];
   comunicados: Comunicado[];
+  comunicadosExcluidos?: ComunicadoExcluidoRef[];
   mensalidades: Mensalidade[];
   descontos: Desconto[];
   valoresAvulsosReceber?: ValorAvulsoReceber[];
