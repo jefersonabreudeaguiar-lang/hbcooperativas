@@ -80,6 +80,23 @@ export function ComunicadoForm({
           </Select>
         </FormField>
         {!form.recorrente && (
+          <FormField
+            label="Tempo no mural do cooperado"
+            hint="Conta a partir de Enviar aos cooperados; depois some do início"
+          >
+            <Select
+              value={form.muralDuracao ?? "24h"}
+              onChange={(e) =>
+                onFormChange({ muralDuracao: e.target.value as Comunicado["muralDuracao"] })
+              }
+            >
+              <option value="24h">24 horas</option>
+              <option value="2d">2 dias</option>
+              <option value="1sem">1 semana</option>
+            </Select>
+          </FormField>
+        )}
+        {!form.recorrente && (
           <FormField label="Data">
             <Input
               type="date"

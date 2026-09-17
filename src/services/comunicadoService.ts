@@ -6,6 +6,7 @@ import {
   type ResumoMensalidadesCooperado,
 } from "@/services/mensalidadeService";
 import { getPagamentoAguardandoCooperado } from "@/services/notaPedidoService";
+import { comunicadoMuralAindaVisivel } from "@/services/comunicadoMuralDuracao";
 import { formatCurrency, formatDate, formatMesReferencia, getCurrentMesReferencia } from "@/utils/format";
 
 export interface ComunicadoExibicao extends Comunicado {
@@ -193,8 +194,8 @@ export function getComunicadosCooperado(
   cooperativaId: string,
   cooperadoId?: string
 ): ComunicadoExibicao[] {
-  return getComunicadosParaExibicao(data, cooperativaId).filter((c) =>
-    comunicadoVisivelParaCooperado(c, cooperadoId, data)
+  return getComunicadosParaExibicao(data, cooperativaId).filter(
+    (c) => comunicadoVisivelParaCooperado(c, cooperadoId, data) && comunicadoMuralAindaVisivel(c)
   );
 }
 
@@ -226,7 +227,10 @@ export function getComunicadosInicioCooperado(
         c.categoria === "financeiro" &&
         c.titulo.trim().toLowerCase() === "pagamento realizado";
       if (avisoPagamentoCooperativa && !pagamentoAguardandoAssinatura) return false;
-      if (mensalidadeResolvida && c.categoria === "financeiro") return false;
+      if (mensalidadeResolvida && c.categoria === "financeiro") {
+        if (c.audioStoragePath || c.audioDataUrl) return true;
+        return false;
+      }
       return true;
     })
     .sort((a, b) => {
@@ -245,5 +249,5 @@ export function getComunicadosMuralInicioCooperado(
 }
 
 export function cooperadoTemConteudoComunicado(c: Comunicado): boolean {
-  return Boolean(c.descricao?.trim() || c.audioDataUrl?.trim());
+  return Boolean(c.descricao?.trim() || c.audioDataUrl?.trim() || c.audioStoragePath?.trim());
 }

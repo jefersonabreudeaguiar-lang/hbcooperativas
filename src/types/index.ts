@@ -109,6 +109,9 @@ export type EntregaStatus = "entregue" | "conferido" | "pendente" | "pago" | "ca
 
 export type ComunicadoCategoria = "financeiro" | "reuniao" | "entrega" | "documentacao" | "aviso_geral";
 
+/** Tempo no mural do cooperado após “Enviar aos cooperados”. */
+export type ComunicadoMuralDuracao = "24h" | "2d" | "1sem";
+
 export type InstituicaoTipo = "PNAE" | "prefeitura" | "escola" | "associacao" | "mercado" | "outro";
 
 export type FinanceiroStatus = "em_dia" | "pendente" | "com_debito";
@@ -601,6 +604,9 @@ export interface Comunicado {
   descricao: string;
   /** Áudio gravado pelo responsável (data URL webm). */
   audioDataUrl?: string;
+  /** Caminho no storage após publicar (cooperados baixam por URL assinada). */
+  audioStoragePath?: string;
+  audioNaNuvem?: boolean;
   data: string;
   responsavel: string;
   categoria: ComunicadoCategoria;
@@ -614,6 +620,10 @@ export interface Comunicado {
   diaDoMes?: number;
   /** Desativar lembrete recorrente sem apagar. */
   ativo?: boolean;
+  /** Tempo no mural após publicar (não se aplica a lembretes mensais). */
+  muralDuracao?: ComunicadoMuralDuracao;
+  /** ISO — definido ao enviar aos cooperados; inicia a contagem do mural. */
+  muralPublicadoEm?: string;
   gruposEspecificos?: UserRole[];
   createdAt: string;
 }

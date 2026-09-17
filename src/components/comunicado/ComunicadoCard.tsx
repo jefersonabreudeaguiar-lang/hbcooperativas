@@ -1,9 +1,19 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import { Pin, Repeat, Volume2 } from "lucide-react";
 import { Card } from "@/components/ui/Card";
 import { formatDate } from "@/utils/format";
 import { getComunicadoAssunto, type ComunicadoExibicao } from "@/services/comunicadoService";
+import { fetchComunicadoAudioPlayUrl } from "@/services/comunicadoAudioSync";
+import {
+  comunicadoMuralAindaVisivel,
+  formatMuralExpiraLabel,
+  MURAL_DURACAO_OPCOES,
+} from "@/services/comunicadoMuralDuracao";
+import { usePermissions } from "@/hooks/usePermissions";
+import { useAppData } from "@/hooks/useAppData";
+import { getUserCooperativaId, normalizeCnpj } from "@/utils/cooperativa";
 import type { ComunicadoCategoria } from "@/types";
 
 const CATEGORIA_LABELS: Record<ComunicadoCategoria, string> = {
@@ -18,10 +28,59 @@ interface ComunicadoCardProps {
   comunicado: ComunicadoExibicao;
   compact?: boolean;
   actions?: React.ReactNode;
+  /** Responsável: mostra duração / expiração no mural. */
+  showMuralMeta?: boolean;
 }
 
-export function ComunicadoCard({ comunicado: c, compact, actions }: ComunicadoCardProps) {
+function ComunicadoAudioPlayer({ c }: { c: ComunicadoExibicao }) {
+  const data = useAppData();
+  const { user } = usePermissions();
+  const [src, setSrc] = useState<string | undefined>(c.audioDataUrl);
+
+  useEffect(() => {
+    if (c.audioDataUrl?.trim()) {
+      setSrc(c.audioDataUrl);
+      return;
+    }
+    if (!c.audioStoragePath || !data || !user) {
+      setSrc(undefined);
+      return;
+    }
+    const coopId = getUserCooperativaId(user, data);
+    const coop = data.cooperativas.find((x) => x.id === coopId);
+    const cnpj = coop?.cnpj ? normalizeCnpj(coop.cnpj) : user.cooperativaCnpj ? normalizeCnpj(user.cooperativaCnpj) : "";
+    if (cnpj.length !== 14) return;
+
+    let cancelled = false;
+    void fetchComunicadoAudioPlayUrl(cnpj, c).then((url) => {
+      if (!cancelled) setSrc(url);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [c, c.audioDataUrl, c.audioStoragePath, c.id, data, user]);
+
+  if (!src && !c.audioStoragePath && !c.audioDataUrl) return null;
+
+  return (
+    <div className="mt-3 rounded-xl border border-green-200 bg-green-50/50 p-3">
+      <p className="text-xs font-medium text-green-800 mb-2 flex items-center gap-1">
+        <Volume2 size={14} /> Ouça o recado da cooperativa
+      </p>
+      {src ? (
+        <audio controls src={src} className="w-full" preload="metadata" />
+      ) : (
+        <p className="text-xs text-gray-500">Carregando áudio…</p>
+      )}
+    </div>
+  );
+}
+
+export function ComunicadoCard({ comunicado: c, compact, actions, showMuralMeta }: ComunicadoCardProps) {
   const assunto = getComunicadoAssunto(c);
+  const muralDuracaoLabel =
+    MURAL_DURACAO_OPCOES.find((o) => o.value === (c.muralDuracao ?? "24h"))?.label ?? "24 horas";
+  const expiraLabel = formatMuralExpiraLabel(c);
 
   return (
     <Card className={c.fixado ? "border-amber-300 bg-amber-50/30" : ""}>
@@ -53,13 +112,20 @@ export function ComunicadoCard({ comunicado: c, compact, actions }: ComunicadoCa
             </p>
           )}
 
-          {c.audioDataUrl && (
-            <div className="mt-3 rounded-xl border border-green-200 bg-green-50/50 p-3">
-              <p className="text-xs font-medium text-green-800 mb-2 flex items-center gap-1">
-                <Volume2 size={14} /> Ouça o recado da cooperativa
-              </p>
-              <audio controls src={c.audioDataUrl} className="w-full" preload="metadata" />
-            </div>
+          {(c.audioDataUrl || c.audioStoragePath) && <ComunicadoAudioPlayer c={c} />}
+
+          {showMuralMeta && !c.recorrente && !c.virtual && (
+            <p
+              className={`text-xs mt-2 ${
+                c.muralPublicadoEm && !comunicadoMuralAindaVisivel(c) ? "text-amber-700" : "text-gray-500"
+              }`}
+            >
+              {c.muralPublicadoEm
+                ? comunicadoMuralAindaVisivel(c)
+                  ? `No mural do cooperado até ${expiraLabel ?? "—"}`
+                  : `Expirou no mural em ${expiraLabel ?? "—"}`
+                : `Permanecerá ${muralDuracaoLabel} no mural após enviar aos cooperados`}
+            </p>
           )}
 
           <p className="text-xs text-gray-400 mt-3">

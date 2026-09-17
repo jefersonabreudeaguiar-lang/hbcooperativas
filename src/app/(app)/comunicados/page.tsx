@@ -13,6 +13,8 @@ import { AlertBanner } from "@/components/ui/AlertBanner";
 import { updateData, generateId, addAuditEntry, getData } from "@/services/dataStore";
 import { resolveCooperativaCnpj } from "@/services/notaPedidoCloudService";
 import { pushOperacionalToCloud } from "@/services/cooperativaSyncCloudService";
+import { stashComunicadoAudioPending } from "@/lib/comunicado/comunicadoAudioPending";
+import { ensureComunicadosAudioUploaded } from "@/services/comunicadoAudioSync";
 import {
   getComunicadosParaExibicao,
   getComunicadosCooperado,
@@ -37,6 +39,7 @@ const FORM_VAZIO = (): Partial<Comunicado> => ({
   titulo: "",
   descricao: "",
   audioDataUrl: undefined,
+  muralDuracao: "24h",
 });
 
 function formTemAssunto(form: Partial<Comunicado>): boolean {
@@ -65,6 +68,7 @@ export default function ComunicadosPage() {
   const [form, setForm] = useState<Partial<Comunicado>>(FORM_VAZIO());
   const [editingId, setEditingId] = useState<string | null>(null);
   const [alteracoesPendentes, setAlteracoesPendentes] = useState(false);
+  const [idsParaPublicar, setIdsParaPublicar] = useState<Set<string>>(() => new Set());
   const [publicando, setPublicando] = useState(false);
   const [msgPublicacao, setMsgPublicacao] = useState("");
 
@@ -91,7 +95,12 @@ export default function ComunicadosPage() {
     );
   }, [data, coopId]);
 
-  const marcarPendente = () => setAlteracoesPendentes(true);
+  const marcarPendente = (comunicadoId?: string) => {
+    setAlteracoesPendentes(true);
+    if (comunicadoId) {
+      setIdsParaPublicar((prev) => new Set(prev).add(comunicadoId));
+    }
+  };
 
   const limparFormulario = () => {
     setForm(FORM_VAZIO());
@@ -113,6 +122,7 @@ export default function ComunicadosPage() {
       recorrente: c.recorrente ?? false,
       diaDoMes: c.diaDoMes ?? 1,
       ativo: c.ativo !== false,
+      muralDuracao: c.muralDuracao ?? "24h",
     });
     setModalOpen(true);
   };
@@ -121,6 +131,8 @@ export default function ComunicadosPage() {
     const assunto = form.assunto?.trim() || form.titulo?.trim();
     if (!assunto || !user || !coopId) return;
     if (!formTemConteudo(form)) return;
+
+    let comunicadoSalvoId = editingId;
 
     updateData((d) => {
       if (editingId) {
@@ -142,6 +154,7 @@ export default function ComunicadosPage() {
                   recorrente: form.recorrente ?? false,
                   diaDoMes: form.recorrente ? Math.min(28, Math.max(1, form.diaDoMes ?? 1)) : undefined,
                   ativo: form.ativo !== false,
+                  muralDuracao: form.recorrente ? undefined : (form.muralDuracao ?? "24h"),
                 }
               : x
           ),
@@ -171,8 +184,10 @@ export default function ComunicadosPage() {
         recorrente: form.recorrente ?? false,
         diaDoMes: form.recorrente ? Math.min(28, Math.max(1, form.diaDoMes ?? 1)) : undefined,
         ativo: true,
+        muralDuracao: form.recorrente ? undefined : (form.muralDuracao ?? "24h"),
         createdAt: new Date().toISOString(),
       };
+      comunicadoSalvoId = newC.id;
       const updated = { ...d, comunicados: [newC, ...d.comunicados] };
       return addAuditEntry(updated, {
         entityType: "comunicado",
@@ -183,7 +198,17 @@ export default function ComunicadosPage() {
       });
     });
 
-    marcarPendente();
+    if (form.audioDataUrl?.startsWith("data:audio/")) {
+      const savedId =
+        comunicadoSalvoId ??
+        getData()
+          .comunicados.filter((c) => c.cooperativaId === coopId)
+          .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())[0]?.id;
+      if (savedId) stashComunicadoAudioPending(savedId, form.audioDataUrl);
+    }
+
+    if (comunicadoSalvoId) marcarPendente(comunicadoSalvoId);
+    else marcarPendente();
     setModalOpen(false);
     limparFormulario();
   };
@@ -196,7 +221,7 @@ export default function ComunicadosPage() {
         x.id === c.id ? { ...x, ativo: x.ativo === false ? true : false } : x
       ),
     }));
-    marcarPendente();
+    marcarPendente(c.id);
   };
 
   const handleDelete = (c: Comunicado) => {
@@ -213,21 +238,36 @@ export default function ComunicadosPage() {
     setPublicando(true);
     setMsgPublicacao("");
     try {
-      const d = getData();
-      const cnpj = await resolveCooperativaCnpj(d, coopId, user);
+      const cnpj = await resolveCooperativaCnpj(getData(), coopId, user);
       if (!cnpj) {
         setMsgPublicacao("CNPJ da cooperativa não encontrado.");
         return;
       }
+      await ensureComunicadosAudioUploaded(cnpj, coopId);
+      const agora = new Date().toISOString();
+      const ids = new Set(idsParaPublicar);
+      if (ids.size) {
+        updateData((d) => ({
+          ...d,
+          comunicados: d.comunicados.map((c) => {
+            if (!ids.has(c.id) || c.recorrente) return c;
+            return { ...c, muralPublicadoEm: agora };
+          }),
+        }));
+      }
+      const d = getData();
       await pushOperacionalToCloud(cnpj, d, coopId, { authoritative: true });
       setAlteracoesPendentes(false);
+      setIdsParaPublicar(new Set());
       setMsgPublicacao(
         d.comunicados.some((c) => c.somenteDiretoria && c.ativo !== false)
           ? "Avisos enviados! Recados da diretoria só aparecem para cooperados marcados como membro da diretoria."
           : "Avisos enviados! Os cooperados verão no início."
       );
-    } catch {
-      setMsgPublicacao("Não foi possível enviar. Verifique a internet e tente de novo.");
+    } catch (e) {
+      setMsgPublicacao(
+        e instanceof Error ? e.message : "Não foi possível enviar. Verifique a internet e tente de novo."
+      );
     } finally {
       setPublicando(false);
     }
@@ -362,6 +402,7 @@ export default function ComunicadosPage() {
           <ComunicadoCard
             key={c.id}
             comunicado={c}
+            showMuralMeta={canManage && !c.virtual}
             actions={
               canManage && !c.virtual ? (
                 <div className="flex gap-1 shrink-0">

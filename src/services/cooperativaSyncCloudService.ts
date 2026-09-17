@@ -7,6 +7,7 @@ import { syncCooperadosFromCloud, fetchCooperadosFromCloud, pushCooperadoToCloud
 import { syncNotasPedidoFromCloud, patchNotaPedidoInCloud } from "@/services/notaPedidoCloudService";
 import { fetchCooperativaByCnpjFromCloud, mergeCooperativaIntoData } from "@/services/cooperativaCloudService";
 import { mergeArquivosMensaisFromCloud, reconciliarFichaFromNotasConferidas, dedupeFichaCorridaPorNota, aplicarNotasPedidoExcluidas } from "@/services/notaPedidoService";
+import { ensureComunicadosAudioUploaded } from "@/services/comunicadoAudioSync";
 import { operacionalPushSeguro, precisaReparoFullSyncNotas, cooperadoFinanceiroDesatualizado, cooperadoFichaValoresDesalinhados, limparFichaObsoletaCooperado } from "@/services/fichaSyncGuard";
 import { beginCloudSync, endCloudSync } from "@/services/cloudSyncProgress";
 import { clearNotasSyncMeta, forceNextFullNotasSync } from "@/services/syncMetaService";
@@ -160,7 +161,16 @@ function mergeComunicadosFromCloud(localCoop: Comunicado[], cloudItems: Comunica
       map.set(local.id, cloud);
       continue;
     }
-    map.set(local.id, itemTime(local) >= itemTime(cloud) ? local : cloud);
+    const pick = itemTime(local) >= itemTime(cloud) ? local : cloud;
+    const other = pick === local ? cloud : local;
+    map.set(local.id, {
+      ...pick,
+      audioStoragePath: pick.audioStoragePath ?? other.audioStoragePath,
+      audioNaNuvem: pick.audioNaNuvem ?? other.audioNaNuvem,
+      audioDataUrl: pick.audioDataUrl ?? other.audioDataUrl,
+      muralDuracao: pick.muralDuracao ?? other.muralDuracao,
+      muralPublicadoEm: pick.muralPublicadoEm ?? other.muralPublicadoEm,
+    });
   }
   return [...map.values()];
 }
@@ -889,6 +899,8 @@ export async function pushOperacionalToCloud(
   const seed = data ?? getData();
   const cid = coopId ?? resolveCoopId(seed, digits);
   if (!cid) return;
+
+  await ensureComunicadosAudioUploaded(digits, cid, getData()).catch(() => {});
 
   let bundle: Awaited<ReturnType<typeof fetchSyncBundle>> | null = await fetchSyncBundle(digits);
   let cloudCooperados: Cooperado[] = (await fetchCooperadosFromCloud(digits)).cooperados;

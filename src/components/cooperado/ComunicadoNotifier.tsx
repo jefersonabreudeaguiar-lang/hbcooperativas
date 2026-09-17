@@ -68,7 +68,7 @@ export function ComunicadoNotifier() {
       gravarVistos(vistosRef.current);
 
       const assunto = getComunicadoAssunto(c);
-      const preview = c.descricao?.trim() || (c.audioDataUrl ? "Ouça o recado em áudio no início." : undefined);
+      const preview = c.descricao?.trim() || (c.audioDataUrl || c.audioStoragePath ? "Ouça o recado em áudio no início." : undefined);
       notificarNovoComunicado(assunto, preview);
       setAlerta({ id: c.id, assunto });
       break;
