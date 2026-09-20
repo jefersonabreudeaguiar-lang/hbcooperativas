@@ -118,9 +118,15 @@ export function getComunicadosParaExibicao(
   opts?: { incluirInativos?: boolean }
 ): ComunicadoExibicao[] {
   const incluirInativos = opts?.incluirInativos ?? false;
+  const excluidosIds = new Set(
+    (data.comunicadosExcluidos ?? [])
+      .filter((e) => !cooperativaId || !e.cooperativaId || e.cooperativaId === cooperativaId)
+      .map((e) => e.id)
+  );
   const lista: ComunicadoExibicao[] = [];
 
   for (const c of data.comunicados) {
+    if (excluidosIds.has(c.id)) continue;
     if (!pertenceCooperativa(c, cooperativaId)) continue;
     if (!incluirInativos && c.ativo === false) continue;
 

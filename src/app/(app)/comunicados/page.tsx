@@ -12,7 +12,7 @@ import { Card } from "@/components/ui/Card";
 import { AlertBanner } from "@/components/ui/AlertBanner";
 import { updateData, generateId, addAuditEntry, getData } from "@/services/dataStore";
 import { resolveCooperativaCnpj } from "@/services/notaPedidoCloudService";
-import { pushOperacionalToCloud } from "@/services/cooperativaSyncCloudService";
+import { pushOperacionalToCloud, clearOperacionalPushFingerprint } from "@/services/cooperativaSyncCloudService";
 import { stashComunicadoAudioPending, clearComunicadoAudioPending } from "@/lib/comunicado/comunicadoAudioPending";
 import { ensureComunicadosAudioUploaded } from "@/services/comunicadoAudioSync";
 import {
@@ -248,7 +248,11 @@ export default function ComunicadosPage() {
         setMsgPublicacao("Removido aqui. Toque em Enviar aos cooperados quando o CNPJ estiver disponível.");
         return;
       }
-      await pushOperacionalToCloud(cnpj, getData(), coopId, { authoritative: true });
+      clearOperacionalPushFingerprint(cnpj, true);
+      await pushOperacionalToCloud(cnpj, getData(), coopId, {
+        authoritative: true,
+        forceOperacionalPush: true,
+      });
       setAlteracoesPendentes(false);
       setMsgPublicacao("Recado removido. Cooperados deixam de ver após sincronizar o app.");
     } catch (e) {

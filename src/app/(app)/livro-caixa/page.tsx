@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Plus, TrendingUp, TrendingDown, Wallet, Send } from "lucide-react";
+import { Plus, TrendingUp, TrendingDown, Wallet, Send, Pencil, Trash2 } from "lucide-react";
 import { useAppData } from "@/hooks/useAppData";
 import { usePermissions } from "@/hooks/usePermissions";
 import { getUserCooperativaId } from "@/utils/cooperativa";
@@ -16,11 +16,15 @@ import { pushOperacionalToCloud } from "@/services/cooperativaSyncCloudService";
 import {
   completarLancamentosContabeisPagamentos,
   criarLancamentoManual,
+  atualizarLancamentoManual,
+  excluirLancamentoLivroCaixa,
+  isLancamentoManualEditavel,
   isOrigemRetencaoContabil,
   mesesLivroCaixa,
   resumoLivroCaixa,
   resumoLivroCaixaGeral,
 } from "@/services/livroCaixaService";
+import type { LivroCaixaLancamento } from "@/types";
 import { formatCurrency, formatDate, formatMesReferencia, getCurrentMesReferencia } from "@/utils/format";
 import { CONTA_COOP_DESCONTO_SPLIT } from "@/config/contaCoopEconomia";
 import type { LivroCaixaOrigem, LivroCaixaTipo } from "@/types";
@@ -53,6 +57,31 @@ export default function LivroCaixaPage() {
   const [dataLanc, setDataLanc] = useState(new Date().toISOString().split("T")[0]);
   const [origem, setOrigem] = useState<LivroCaixaOrigem>("credito_avulso");
   const [publicando, setPublicando] = useState(false);
+  const [editing, setEditing] = useState<LivroCaixaLancamento | null>(null);
+
+  const resetForm = () => {
+    setTipo("credito");
+    setValor("");
+    setHistorico("");
+    setDataLanc(new Date().toISOString().split("T")[0]);
+    setOrigem("credito_avulso");
+    setEditing(null);
+  };
+
+  const openNovo = () => {
+    resetForm();
+    setModalOpen(true);
+  };
+
+  const openEditar = (l: LivroCaixaLancamento) => {
+    setEditing(l);
+    setTipo(l.tipo);
+    setValor(String(l.valor));
+    setHistorico(l.historico);
+    setDataLanc(l.data);
+    setOrigem(l.origem);
+    setModalOpen(true);
+  };
 
   useEffect(() => {
     if (user && !check("livro_caixa", "view")) router.replace("/dashboard");
@@ -83,28 +112,69 @@ export default function LivroCaixaPage() {
   if (!data || !user || !coopId) return null;
 
   const canEdit = check("livro_caixa", "create");
+  const canEditLancamento = check("livro_caixa", "edit");
+  const canDeleteLancamento = check("livro_caixa", "delete");
 
   const salvarLancamento = () => {
     const v = parseFloat(valor.replace(",", "."));
     if (!Number.isFinite(v) || v <= 0 || !historico.trim()) return;
-    updateData((d) => {
-      const next = criarLancamentoManual(d, coopId, tipo, v, historico, {
-        data: dataLanc,
-        origem,
-        responsavel: user.name,
+
+    if (editing) {
+      updateData((d) => {
+        const next = atualizarLancamentoManual(d, coopId, editing.id, {
+          tipo,
+          valor: v,
+          historico,
+          data: dataLanc,
+          origem,
+        });
+        if (next === d) return d;
+        return addAuditEntry(next, {
+          entityType: "financeiro",
+          entityId: editing.id,
+          action: "editar",
+          userId: user.id,
+          userName: user.name,
+          changes: `Livro caixa · ${tipo} ${formatCurrency(v)} · ${historico.trim().slice(0, 80)}`,
+        });
       });
+    } else {
+      updateData((d) => {
+        const next = criarLancamentoManual(d, coopId, tipo, v, historico, {
+          data: dataLanc,
+          origem,
+          responsavel: user.name,
+        });
+        return addAuditEntry(next, {
+          entityType: "financeiro",
+          entityId: coopId,
+          action: "criar",
+          userId: user.id,
+          userName: user.name,
+          changes: `Livro caixa · ${tipo} ${formatCurrency(v)}`,
+        });
+      });
+    }
+
+    setModalOpen(false);
+    resetForm();
+  };
+
+  const excluirLancamento = (l: LivroCaixaLancamento) => {
+    if (!canDeleteLancamento || !isLancamentoManualEditavel(l)) return;
+    if (!confirm(`Remover este lançamento do livro caixa?\n\n${l.historico}\n${formatCurrency(l.valor)}`)) return;
+    updateData((d) => {
+      const next = excluirLancamentoLivroCaixa(d, coopId, l.id);
+      if (next === d) return d;
       return addAuditEntry(next, {
         entityType: "financeiro",
-        entityId: coopId,
-        action: "criar",
+        entityId: l.id,
+        action: "excluir",
         userId: user.id,
         userName: user.name,
-        changes: `Livro caixa · ${tipo} ${formatCurrency(v)}`,
+        changes: `Livro caixa removido · ${l.historico.slice(0, 80)}`,
       });
     });
-    setModalOpen(false);
-    setValor("");
-    setHistorico("");
   };
 
   const publicar = async () => {
@@ -129,7 +199,7 @@ export default function LivroCaixaPage() {
               <Button variant="secondary" onClick={() => void publicar()} disabled={publicando}>
                 <Send size={16} /> {publicando ? "Enviando…" : "Sincronizar"}
               </Button>
-              <Button onClick={() => setModalOpen(true)}>
+              <Button onClick={openNovo}>
                 <Plus size={16} /> Lançamento
               </Button>
             </div>
@@ -173,6 +243,7 @@ export default function LivroCaixaPage() {
         <p className="text-sm text-gray-500 mb-4">
           Pagamentos a cooperados geram saída (líquido) e créditos contábeis de retenção (taxa 5%, mensalidade abatida e outros descontos).
           Mensalidades confirmadas via PIX entram como entrada efetiva. Use lançamento avulso para créditos PNAE e outras entradas.
+          Lançamentos automáticos não podem ser editados aqui — ajuste na ficha, mensalidades ou HB Créditos. Avulsos podem ser editados ou excluídos (ícone ao lado do valor).
         </p>
         <div className="space-y-2">
           {resumoMes.lancamentos.map((l) => (
@@ -194,17 +265,41 @@ export default function LivroCaixaPage() {
                   {l.responsavel ? ` · ${l.responsavel}` : ""}
                 </p>
               </div>
-              <p
-                className={`text-lg font-bold shrink-0 ${
-                  l.tipo === "credito"
-                    ? isOrigemRetencaoContabil(l.origem)
-                      ? "text-blue-700"
-                      : "text-green-700"
-                    : "text-red-700"
-                }`}
-              >
-                {l.tipo === "credito" ? "+" : "−"} {formatCurrency(l.valor)}
-              </p>
+              <div className="flex items-center gap-2 shrink-0">
+                <p
+                  className={`text-lg font-bold ${
+                    l.tipo === "credito"
+                      ? isOrigemRetencaoContabil(l.origem)
+                        ? "text-blue-700"
+                        : "text-green-700"
+                      : "text-red-700"
+                  }`}
+                >
+                  {l.tipo === "credito" ? "+" : "−"} {formatCurrency(l.valor)}
+                </p>
+                {canEditLancamento && isLancamentoManualEditavel(l) && (
+                  <div className="flex gap-1">
+                    <button
+                      type="button"
+                      onClick={() => openEditar(l)}
+                      className="p-2 rounded-lg hover:bg-white/80 text-gray-600"
+                      title="Editar lançamento manual"
+                    >
+                      <Pencil size={16} />
+                    </button>
+                    {canDeleteLancamento && (
+                      <button
+                        type="button"
+                        onClick={() => excluirLancamento(l)}
+                        className="p-2 rounded-lg hover:bg-red-50 text-red-600"
+                        title="Excluir lançamento manual"
+                      >
+                        <Trash2 size={16} />
+                      </button>
+                    )}
+                  </div>
+                )}
+              </div>
             </div>
           ))}
           {resumoMes.lancamentos.length === 0 && (
@@ -229,7 +324,15 @@ export default function LivroCaixaPage() {
         </div>
       </Card>
 
-      <Modal open={modalOpen} onClose={() => setModalOpen(false)} title="Novo lançamento" size="md">
+      <Modal
+        open={modalOpen}
+        onClose={() => {
+          setModalOpen(false);
+          resetForm();
+        }}
+        title={editing ? "Editar lançamento" : "Novo lançamento"}
+        size="md"
+      >
         <div className="space-y-4">
           <FormField label="Tipo">
             <Select
@@ -273,8 +376,16 @@ export default function LivroCaixaPage() {
           </FormField>
         </div>
         <div className="flex justify-end gap-2 mt-6">
-          <Button variant="secondary" onClick={() => setModalOpen(false)}>Cancelar</Button>
-          <Button onClick={salvarLancamento}>Salvar</Button>
+          <Button
+            variant="secondary"
+            onClick={() => {
+              setModalOpen(false);
+              resetForm();
+            }}
+          >
+            Cancelar
+          </Button>
+          <Button onClick={salvarLancamento}>{editing ? "Salvar alterações" : "Salvar"}</Button>
         </div>
       </Modal>
     </div>

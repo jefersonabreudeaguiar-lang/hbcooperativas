@@ -25,8 +25,14 @@ type WithUpdatedAt = { id: string; updatedAt?: string; createdAt?: string };
 /** Evita POST operacional repetido na mesma sessão quando o payload não mudou. */
 const lastOperacionalPushFingerprint = new Map<string, string>();
 
-function operacionalPushCacheKey(cnpj: string, authoritative: boolean): string {
+export function operacionalPushCacheKey(cnpj: string, authoritative: boolean): string {
   return `${cnpj}:${authoritative ? "auth" : "merge"}`;
+}
+
+export function clearOperacionalPushFingerprint(cnpj: string, authoritative = false): void {
+  const digits = normalizeCnpj(cnpj);
+  if (digits.length !== 14) return;
+  lastOperacionalPushFingerprint.delete(operacionalPushCacheKey(digits, authoritative));
 }
 
 function fingerprintOperacionalPayload(payload: OperacionalSyncPayload): string {
@@ -143,7 +149,24 @@ function mergePagamentosCooperadoFromCloud(
   return [...map.values()];
 }
 
-/** Comunicado desativado localmente (ex.: após assinar recibo) permanece oculto. */
+function comunicadosExcluidosIdsCoop(data: AppData, coopId: string): Set<string> {
+  return new Set(
+    (data.comunicadosExcluidos ?? [])
+      .filter((e) => !e.cooperativaId || e.cooperativaId === coopId)
+      .map((e) => e.id)
+  );
+}
+
+/** Remove da lista local recados já excluídos (evita voltar após sync com nuvem desatualizada). */
+export function purgeComunicadosMarcadosExcluidos(data: AppData, coopId: string): AppData {
+  const ids = comunicadosExcluidosIdsCoop(data, coopId);
+  if (!ids.size) return data;
+  return {
+    ...data,
+    comunicados: data.comunicados.filter((c) => !ids.has(c.id)),
+  };
+}
+
 function mergeComunicadosExcluidosFromCloud(
   localCoop: ComunicadoExcluidoRef[],
   cloudItems: ComunicadoExcluidoRef[]
@@ -848,15 +871,21 @@ export function mergeOperacionalIntoData(
     cloud.fullReset === true && (cloud.mensalidades ?? []).length === 0;
 
   if (cloudResetLimpouMensalidades) {
-    return aplicarNotasPedidoExcluidas(
-      aplicarPrestacoesContasExcluidas(reconciliarFichaFromNotasConferidas(next)),
+    return purgeComunicadosMarcadosExcluidos(
+      aplicarNotasPedidoExcluidas(
+        aplicarPrestacoesContasExcluidas(reconciliarFichaFromNotasConferidas(next)),
+        coopId
+      ),
       coopId
     );
   }
 
-  return sincronizarMensalidadeCooperativa(
-    aplicarNotasPedidoExcluidas(
-      aplicarPrestacoesContasExcluidas(reconciliarFichaFromNotasConferidas(next)),
+  return purgeComunicadosMarcadosExcluidos(
+    sincronizarMensalidadeCooperativa(
+      aplicarNotasPedidoExcluidas(
+        aplicarPrestacoesContasExcluidas(reconciliarFichaFromNotasConferidas(next)),
+        coopId
+      ),
       coopId
     ),
     coopId
@@ -932,7 +961,7 @@ export async function pushOperacionalToCloud(
   cnpj: string,
   data?: AppData,
   coopId?: string,
-  options?: { authoritative?: boolean; skipOperationalResetPush?: boolean }
+  options?: { authoritative?: boolean; skipOperationalResetPush?: boolean; forceOperacionalPush?: boolean }
 ): Promise<void> {
   const digits = normalizeCnpj(cnpj);
   if (digits.length !== 14) return;
@@ -1038,6 +1067,8 @@ export async function pushOperacionalToCloud(
   ).length;
   if (
     bundle?.operacional &&
+    !options?.forceOperacionalPush &&
+    !options?.authoritative &&
     !operacionalPushSeguro(
       afterPushCoop,
       cid,
@@ -1046,7 +1077,10 @@ export async function pushOperacionalToCloud(
     )
   ) {
     const repaired = reconciliarFichaFromNotasConferidas(
-      mergeOperacionalIntoData(afterPushCoop, bundle.operacional, cid, cloudCooperados)
+      purgeComunicadosMarcadosExcluidos(
+        mergeOperacionalIntoData(afterPushCoop, bundle.operacional, cid, cloudCooperados),
+        cid
+      )
     );
     saveDataSafe(repaired);
     return;
@@ -1054,7 +1088,7 @@ export async function pushOperacionalToCloud(
 
   const pushKey = operacionalPushCacheKey(digits, !!options?.authoritative);
   const fingerprint = fingerprintOperacionalPayload(payloadFinal);
-  if (lastOperacionalPushFingerprint.get(pushKey) === fingerprint) {
+  if (!options?.forceOperacionalPush && lastOperacionalPushFingerprint.get(pushKey) === fingerprint) {
     return;
   }
 

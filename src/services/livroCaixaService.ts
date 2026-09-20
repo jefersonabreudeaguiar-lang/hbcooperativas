@@ -260,3 +260,65 @@ export function mesesLivroCaixa(data: AppData, cooperativaId: string): string[] 
   set.add(getCurrentMesReferencia());
   return [...set].sort().reverse();
 }
+
+const ORIGENS_LANCAMENTO_MANUAL: LivroCaixaOrigem[] = [
+  "manual",
+  "credito_avulso",
+  "debito_avulso",
+  "pnae",
+  "outro",
+];
+
+/** Lançamentos avulsos (sem origemId de pagamento/mensalidade/HB). */
+export function isLancamentoManualEditavel(l: LivroCaixaLancamento): boolean {
+  if (l.origemId?.trim()) return false;
+  return ORIGENS_LANCAMENTO_MANUAL.includes(l.origem);
+}
+
+export function atualizarLancamentoManual(
+  data: AppData,
+  cooperativaId: string,
+  lancamentoId: string,
+  patch: {
+    tipo: LivroCaixaTipo;
+    valor: number;
+    historico: string;
+    data?: string;
+    origem?: LivroCaixaOrigem;
+  }
+): AppData {
+  const idx = (data.livroCaixa ?? []).findIndex((l) => l.id === lancamentoId && l.cooperativaId === cooperativaId);
+  if (idx < 0) return data;
+  const cur = data.livroCaixa![idx];
+  if (!isLancamentoManualEditavel(cur)) return data;
+
+  const dataLanc = patch.data ?? cur.data;
+  let origem = patch.origem ?? cur.origem;
+  if (patch.tipo === "credito" && origem === "debito_avulso") origem = "credito_avulso";
+  if (patch.tipo === "debito" && (origem === "credito_avulso" || origem === "pnae")) origem = "debito_avulso";
+  if (!ORIGENS_LANCAMENTO_MANUAL.includes(origem)) return data;
+
+  const nextItem: LivroCaixaLancamento = {
+    ...cur,
+    tipo: patch.tipo,
+    valor: Math.abs(patch.valor),
+    historico: patch.historico.trim(),
+    data: dataLanc,
+    mesReferencia: mesFromData(dataLanc),
+    origem,
+    updatedAt: new Date().toISOString(),
+  };
+
+  const livroCaixa = [...(data.livroCaixa ?? [])];
+  livroCaixa[idx] = nextItem;
+  return { ...data, livroCaixa };
+}
+
+export function excluirLancamentoLivroCaixa(data: AppData, cooperativaId: string, lancamentoId: string): AppData {
+  const alvo = (data.livroCaixa ?? []).find((l) => l.id === lancamentoId && l.cooperativaId === cooperativaId);
+  if (!alvo || !isLancamentoManualEditavel(alvo)) return data;
+  return {
+    ...data,
+    livroCaixa: (data.livroCaixa ?? []).filter((l) => l.id !== lancamentoId),
+  };
+}
