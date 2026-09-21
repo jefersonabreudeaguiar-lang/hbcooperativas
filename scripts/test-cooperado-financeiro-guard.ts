@@ -639,10 +639,22 @@ function nota(id: string, status: NotaPedido["status"]): NotaPedido {
   });
   data = persistDescontosContaCoopNoArquivo(data, COOPERADO, MES, COOP, [
     {
+      motivo: "Compra HB Créditos — Mercado teste (estornada)",
+      valorReais: 100,
+      tipo: "conta_coop",
+      createdAt: "2026-09-01T17:31:46.000Z",
+    },
+    {
       motivo: "Estorno HB Créditos — Mercado teste",
       valorReais: 100,
       tipo: "conta_coop",
       createdAt: "2026-09-01T18:00:24.459Z",
+    },
+    {
+      motivo: "Compra HB Créditos — Mercado teste (estornada)",
+      valorReais: 150,
+      tipo: "conta_coop",
+      createdAt: "2026-09-01T18:35:23.000Z",
     },
     {
       motivo: "Estorno HB Créditos — Mercado teste",
@@ -659,8 +671,16 @@ function nota(id: string, status: NotaPedido["status"]): NotaPedido {
   ]);
   const base = getResumoPagamentoCooperado(data, COOPERADO, MES, COOP);
   const aReceber = getResumoValorAPagarRelatorio(data, COOPERADO, MES, COOP);
-  const esperado = round2(ENTREGAS - 79.9 + 100 + 150);
-  assert.equal(base.valorLiquido, esperado, "base deve abater compra e somar estornos HB");
+  const esperado = round2(ENTREGAS - 79.9);
+  assert.equal(base.valorLiquido, esperado, "pares estorno zeram; só compra ativa abate");
+  assert.ok(
+    base.descontosExtras.filter((d) => d.tipo === "conta_coop").length >= 3,
+    "resumo deve listar compras (incl. estornadas) e estornos"
+  );
+  assert.ok(
+    base.descontosExtras.some((d) => d.tipo === "credito_avulso" && d.valor === 100),
+    "estorno visível como crédito"
+  );
   assert.equal(aReceber.valorLiquido, esperado, "exibição/relatório alinhados ao base");
   assert.equal(
     getResumoValorAPagarRelatorio(data, COOPERADO, MES, COOP).valorLiquido,

@@ -27,6 +27,10 @@ function loadEnvFile(path: string) {
   }
 }
 
+function round2(n: number): number {
+  return Math.round(n * 100) / 100;
+}
+
 loadEnvFile(resolve(process.cwd(), ".env.local"));
 
 const CNPJ = "62351750000165";
@@ -60,26 +64,45 @@ async function main() {
     (a) => a.cooperadoId === ORLANDO && a.mesReferencia === MES
   );
   console.log("Arquivo contaCoopDescontos:", arq?.contaCoopDescontos ?? []);
+  console.log("Linhas resumo HB:", rel.descontosExtras.filter((d) => d.tipo === "conta_coop" || d.tipo === "credito_avulso"));
   console.log("valorEntregas:", base.valorEntregas);
-  console.log("getResumoPagamentoCooperado.valorLiquido:", base.valorLiquido);
-  console.log("getResumoValorAPagarRelatorio.valorLiquido:", rel.valorLiquido);
-  console.log("idempotente 2ª chamada:", rel2.valorLiquido);
+  console.log("valorLiquido:", rel.valorLiquido);
 
-  const compra = 79.9;
-  const estornos = 250;
-  const temCompraHb = rel.descontosExtras.some((d) => d.tipo === "conta_coop" && d.valor === compra);
-  const semCompraSeria = Math.round((base.valorEntregas + estornos - (arq?.mensalidadeFixa ?? 0)) * 100) / 100;
-  const abateCompra = temCompraHb && base.valorLiquido < semCompraSeria;
+  const compraAtiva = 79.9;
+  const mens = arq?.mensalidadeFixa ?? 0;
+  const esperado = round2(base.valorEntregas - compraAtiva - mens);
+  const temCompraAtiva = rel.descontosExtras.some(
+    (d) => d.tipo === "conta_coop" && Math.abs(d.valor - compraAtiva) < 0.01
+  );
+  const temDebitoEstornado = rel.descontosExtras.some(
+    (d) => d.tipo === "conta_coop" && d.valor === 100 && /estornada/i.test(d.motivo)
+  );
+  const temCreditoEstorno = rel.descontosExtras.some(
+    (d) => d.tipo === "credito_avulso" && d.valor === 100
+  );
+  const liquidoOk = Math.abs(rel.valorLiquido - esperado) < 0.02;
   const alinhado = rel.valorLiquido === base.valorLiquido;
   const idempotente = rel.valorLiquido === rel2.valorLiquido;
+  const semCreditoOrfao = !(rel.valorLiquido > round2(base.valorEntregas - compraAtiva + 200));
 
   console.log("\n=== CRITÉRIO Orlando ===");
-  console.log("Compra abate a receber:", abateCompra ? "PASS" : "FAIL");
-  console.log("Relatório = base cálculo:", alinhado ? "PASS" : "FAIL");
+  console.log("Compra ativa no resumo:", temCompraAtiva ? "PASS" : "FAIL");
+  console.log("Débito estornado (par estorno):", temDebitoEstornado ? "PASS" : "FAIL");
+  console.log("Crédito estorno no resumo:", temCreditoEstorno ? "PASS" : "FAIL");
+  console.log(`Líquido ≈ entregas − compra − mens (${esperado}):`, liquidoOk ? "PASS" : "FAIL");
+  console.log("Relatório = base:", alinhado ? "PASS" : "FAIL");
   console.log("Idempotência:", idempotente ? "PASS" : "FAIL");
-  console.log("Esperado aprox. (entregas - compra + estornos - mensalidade):", base.valorLiquido);
+  console.log("Sem inflar A receber só com estorno:", semCreditoOrfao ? "PASS" : "FAIL");
 
-  process.exit(abateCompra && alinhado && idempotente ? 0 : 1);
+  const ok =
+    temCompraAtiva &&
+    temDebitoEstornado &&
+    temCreditoEstorno &&
+    liquidoOk &&
+    alinhado &&
+    idempotente &&
+    semCreditoOrfao;
+  process.exit(ok ? 0 : 1);
 }
 
 main().catch((e) => {

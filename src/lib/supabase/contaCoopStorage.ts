@@ -3394,7 +3394,9 @@ async function listCooperadoContaCoopDescontosIntervalo(
 
   return txs
     .filter((t) => {
-      // Pagamento estornado não abate valor a receber — só REFUND posted devolve crédito.
+      // Ficha aberta: mantém compra estornada (reversed) para parear com REFUND no resumo.
+      if (opts?.incluirPagamentosEstornados) return true;
+      // Mês calendário fechado: reversed não abate; só REFUND posted devolve crédito.
       if (String(t.event_type) === "PAYMENT" && String(t.status) === "reversed") return false;
       return true;
     })
@@ -3402,11 +3404,13 @@ async function listCooperadoContaCoopDescontosIntervalo(
     const cents = Number(t.amount_cents);
     const partnerNome = partnerNames[String(t.partner_id)] ?? "Mercado parceiro";
     const isRefund = String(t.event_type) === "REFUND";
+    const isReversedPayment =
+      String(t.event_type) === "PAYMENT" && String(t.status) === "reversed";
     const receipt = t.receipt_code ? ` (${String(t.receipt_code)})` : "";
     return {
       motivo: isRefund
         ? `Estorno HB Créditos — ${partnerNome}${receipt}`
-        : `Compra HB Créditos — ${partnerNome}${receipt}`,
+        : `Compra HB Créditos — ${partnerNome}${receipt}${isReversedPayment ? " (estornada)" : ""}`,
       valorReais: cents / 100,
       tipo: "conta_coop" as const,
       createdAt: String(t.created_at),
