@@ -50,7 +50,7 @@ function listarCooperadosElegiveisAssinatura(data: AppData, cooperativaId: strin
     data.cooperados.filter(
       (c) => c.cooperativaId === cooperativaId && c.status === "ativo" && !c.avulso
     )
-  );
+  ).map(normalizarAssinaturaLegadoCooperado);
 }
 
 /** Aviso “assinatura confirmada” some após 24 h. */
@@ -190,10 +190,29 @@ export function cooperadoPodeUsarAssinaturaEmDocumentos(
   return status === "em_analise" || status === "confirmada";
 }
 
+/** Legado: foto no cadastro sem status — equivalente a confirmada (antes do fluxo de análise). */
+export function normalizarAssinaturaLegadoCooperado(c: Cooperado): Cooperado {
+  const url = getAssinaturaCadastroDataUrl(c);
+  if (!url) return c;
+  if (c.assinaturaCadastroStatus === "em_analise" || c.assinaturaCadastroStatus === "devolvida") {
+    return c;
+  }
+  if (c.assinaturaCadastroStatus === "confirmada" && c.assinaturaConfirmadaEm) return c;
+  const confirmadaEm = c.assinaturaConfirmadaEm ?? c.assinaturaCadastradaEm ?? c.updatedAt;
+  return {
+    ...c,
+    assinaturaCadastroStatus: "confirmada",
+    assinaturaConfirmadaEm: confirmadaEm,
+  };
+}
+
 export function cooperadoTemAssinaturaCadastrada(
   cooperado: CooperadoAssinaturaFields | null | undefined
 ): boolean {
-  return cooperadoAssinaturaConfirmada(cooperado) && Boolean(getAssinaturaCadastroDataUrl(cooperado));
+  if (!cooperado) return false;
+  const c = normalizarAssinaturaLegadoCooperado(cooperado as Cooperado);
+  if (c.assinaturaConfirmadaEm && getAssinaturaCadastroStatus(c) === "confirmada") return true;
+  return cooperadoAssinaturaConfirmada(c) && Boolean(getAssinaturaCadastroDataUrl(c));
 }
 
 /** Exige cadastro (ou reenvio) antes de votar ou assinar recibo. */

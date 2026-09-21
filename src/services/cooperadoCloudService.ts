@@ -12,6 +12,7 @@ import { mergeAppInstallFields } from "@/services/cooperadoAppInstallService";
 import {
   assinaturaCadastroFieldsChanged,
   mergeAssinaturaCadastroFields,
+  normalizarAssinaturaLegadoCooperado,
 } from "@/services/cooperadoAssinaturaService";
 import {
   ASSINATURA_DATAURL_TARGET_CHARS,
@@ -321,23 +322,29 @@ export function mergeCloudCooperadosIntoData(
         updatedAt: cloudMaisRecente ? cn.updatedAt : local.updatedAt,
       };
 
+      const mergedNormalizado = normalizarAssinaturaLegadoCooperado(merged);
+
       const installMudou =
-        merged.appInstaladoEm !== local.appInstaladoEm ||
-        merged.ultimoAcessoEm !== local.ultimoAcessoEm ||
-        merged.ultimoAcessoModo !== local.ultimoAcessoModo ||
-        merged.aberturasAppTotal !== local.aberturasAppTotal;
+        mergedNormalizado.appInstaladoEm !== local.appInstaladoEm ||
+        mergedNormalizado.ultimoAcessoEm !== local.ultimoAcessoEm ||
+        mergedNormalizado.ultimoAcessoModo !== local.ultimoAcessoModo ||
+        mergedNormalizado.aberturasAppTotal !== local.aberturasAppTotal;
       const assinaturaMudou = assinaturaCadastroFieldsChanged(local, assinaturaFields);
+      const legadoMudou =
+        mergedNormalizado.assinaturaCadastroStatus !== merged.assinaturaCadastroStatus ||
+        mergedNormalizado.assinaturaConfirmadaEm !== merged.assinaturaConfirmadaEm;
 
       if (
         cloudMaisRecente ||
-        merged.chavePix !== local.chavePix ||
-        merged.pixValido !== local.pixValido ||
-        merged.membroDiretoria !== local.membroDiretoria ||
-        merged.avulso !== local.avulso ||
+        mergedNormalizado.chavePix !== local.chavePix ||
+        mergedNormalizado.pixValido !== local.pixValido ||
+        mergedNormalizado.membroDiretoria !== local.membroDiretoria ||
+        mergedNormalizado.avulso !== local.avulso ||
         installMudou ||
-        assinaturaMudou
+        assinaturaMudou ||
+        legadoMudou
       ) {
-        cooperados[index] = merged;
+        cooperados[index] = mergedNormalizado;
         changed = true;
       }
     };
