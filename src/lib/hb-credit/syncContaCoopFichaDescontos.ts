@@ -13,7 +13,7 @@ import {
 } from "@/services/cooperadoEntregasService";
 import { pushOperacionalToCloud } from "@/services/cooperativaSyncCloudService";
 import { beginSaveBatch, endSaveBatch, getData, notifyAppDataSubscribers, updateData } from "@/services/dataStore";
-import { persistDescontosContaCoopNoArquivo, getDescontosContaCoopMesCached, getResumoValorAPagarRelatorio } from "@/services/notaPedidoService";
+import { persistDescontosContaCoopNoArquivo, getDescontosContaCoopMesCached, getResumoValorAPagarRelatorio, getMesesReferenciaPagamento } from "@/services/notaPedidoService";
 import { setContaCoopDescontosMemoria } from "@/lib/hb-credit/contaCoopDescontosMemory";
 import { bumpContaCoopDescontosRevision } from "@/lib/hb-credit/contaCoopDescontosNotify";
 import {
@@ -213,6 +213,15 @@ export async function refreshContaCoopDescontosCooperativaPendentes(opts: {
       ...listarMesesPendentesPagamentoResponsavel(data, c.id, opts.cooperativaId),
       ...listarMesesPendentesQuantoVouReceber(data, c.id, opts.cooperativaId),
     ]);
+    for (const p of data.pagamentosCooperado) {
+      if (p.status !== "aguardando_confirmacao") continue;
+      const canonico = resolverCooperadoIdCanonico(data, p.cooperadoId, opts.cooperativaId);
+      const alvo = resolverCooperadoIdCanonico(data, c.id, opts.cooperativaId);
+      if (canonico !== alvo && p.cooperadoId !== c.id) continue;
+      for (const mes of getMesesReferenciaPagamento(p)) {
+        meses.add(mes);
+      }
+    }
     for (const mes of meses) {
       jobs.push({ cooperadoId: c.id, mesReferencia: mes });
     }
