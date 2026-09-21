@@ -7,7 +7,7 @@ import { syncCooperadosFromCloud, fetchCooperadosFromCloud, pushCooperadoToCloud
 import { syncNotasPedidoFromCloud, patchNotaPedidoInCloud } from "@/services/notaPedidoCloudService";
 import { fetchCooperativaByCnpjFromCloud, mergeCooperativaIntoData } from "@/services/cooperativaCloudService";
 import { mergeArquivosMensaisFromCloud, reconciliarFichaFromNotasConferidas, dedupeFichaCorridaPorNota, aplicarNotasPedidoExcluidas } from "@/services/notaPedidoService";
-import { repararIntegridadePagamentosCooperativa } from "@/services/pagamentoIntegridadeService";
+import { posProcessarIntegridadePagamentosCooperativa } from "@/services/pagamentoIntegridadeService";
 import { ensureComunicadosAudioUploaded } from "@/services/comunicadoAudioSync";
 import { operacionalPushSeguro, precisaReparoFullSyncNotas, cooperadoFinanceiroDesatualizado, cooperadoFichaValoresDesalinhados, limparFichaObsoletaCooperado } from "@/services/fichaSyncGuard";
 import { beginCloudSync, endCloudSync } from "@/services/cloudSyncProgress";
@@ -37,6 +37,25 @@ export function clearOperacionalPushFingerprint(cnpj: string, authoritative = fa
   lastOperacionalPushFingerprint.delete(operacionalPushCacheKey(digits, authoritative));
 }
 
+/** Cooperado publica recibo assinado — não usa push operacional (restrição de gestão). */
+export async function confirmarPagamentoCooperadoNaNuvem(
+  cnpj: string,
+  pagamento: PagamentoCooperadoRegistro
+): Promise<boolean> {
+  const digits = normalizeCnpj(cnpj);
+  if (digits.length !== 14 || pagamento.status !== "confirmado") return false;
+  try {
+    const res = await secureApiFetch("/api/cooperativa-sync/confirmar-pagamento", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ cnpj: digits, pagamento }),
+    });
+    return res.ok;
+  } catch {
+    return false;
+  }
+}
+
 function fingerprintOperacionalPayload(payload: OperacionalSyncPayload): string {
   const { updatedAt: _ignored, ...rest } = payload;
   return JSON.stringify(rest);
@@ -52,7 +71,7 @@ function operacionalTemPagamentoAguardandoSoLocal(
   return data.pagamentosCooperado.some(
     (p) =>
       p.cooperativaId === coopId &&
-      p.status === "aguardando_confirmacao" &&
+      (p.status === "aguardando_confirmacao" || p.status === "confirmado") &&
       !cloudIds.has(p.id)
   );
 }
@@ -166,6 +185,8 @@ function mergePagamentoCooperadoRecord(
   local: PagamentoCooperadoRegistro,
   cloud: PagamentoCooperadoRegistro
 ): PagamentoCooperadoRegistro {
+  if (local.status === "confirmado" && cloud.status !== "confirmado") return local;
+  if (cloud.status === "confirmado" && local.status !== "confirmado") return cloud;
   const localRank = PAGAMENTO_STATUS_RANK[local.status] ?? 0;
   const cloudRank = PAGAMENTO_STATUS_RANK[cloud.status] ?? 0;
   if (localRank > cloudRank) return local;
@@ -414,7 +435,7 @@ function buildContratosPayload(data: AppData, coopId: string): ContratosSyncPayl
 }
 
 function buildOperacionalPayload(data: AppData, coopId: string): OperacionalSyncPayload {
-  const sanitized = repararIntegridadePagamentosCooperativa(
+  const sanitized = posProcessarIntegridadePagamentosCooperativa(
     reconciliarFichaFromNotasConferidas(data)
   );
   const now = new Date().toISOString();
@@ -990,7 +1011,7 @@ export function mergeOperacionalIntoData(
     return purgeComunicadosMarcadosExcluidos(
       aplicarNotasPedidoExcluidas(
         aplicarPrestacoesContasExcluidas(
-          repararIntegridadePagamentosCooperativa(reconciliarFichaFromNotasConferidas(next))
+          posProcessarIntegridadePagamentosCooperativa(reconciliarFichaFromNotasConferidas(next))
         ),
         coopId
       ),
@@ -1002,7 +1023,7 @@ export function mergeOperacionalIntoData(
     sincronizarMensalidadeCooperativa(
       aplicarNotasPedidoExcluidas(
         aplicarPrestacoesContasExcluidas(
-          repararIntegridadePagamentosCooperativa(reconciliarFichaFromNotasConferidas(next))
+          posProcessarIntegridadePagamentosCooperativa(reconciliarFichaFromNotasConferidas(next))
         ),
         coopId
       ),
@@ -1165,9 +1186,6 @@ export async function pushOperacionalToCloud(
       saveDataSafe(dataForPayload);
     }
   }
-  dataForPayload = repararIntegridadePagamentosCooperativa(
-    reconciliarFichaFromNotasConferidas(dataForPayload)
-  );
   if (bundle?.operacional) {
     const cloudPag = (bundle.operacional.pagamentosCooperado ?? []).map((p) => ({
       ...p,
@@ -1182,6 +1200,9 @@ export async function pushOperacionalToCloud(
       ],
     };
   }
+  dataForPayload = posProcessarIntegridadePagamentosCooperativa(
+    reconciliarFichaFromNotasConferidas(dataForPayload)
+  );
   saveDataSafe(dataForPayload);
   const payloadFinal = buildOperacionalPayload(dataForPayload, cid);
   if (bundle?.operacional) {
@@ -1224,7 +1245,7 @@ export async function pushOperacionalToCloud(
       payloadFinal.fichaCorrida?.length ?? 0
     )
   ) {
-    const repaired = repararIntegridadePagamentosCooperativa(
+    const repaired = posProcessarIntegridadePagamentosCooperativa(
       reconciliarFichaFromNotasConferidas(
         purgeComunicadosMarcadosExcluidos(
           mergeOperacionalIntoData(afterPushCoop, bundle.operacional, cid, cloudCooperados),
@@ -1420,11 +1441,11 @@ export async function syncCooperativaBackground(
           cooperadoFichaValoresDesalinhados(getData(), cooperadoId, coopId)
         ) {
           saveDataSafe(
-            repararIntegridadePagamentosCooperativa(reconciliarFichaFromNotasConferidas(getData()))
+            posProcessarIntegridadePagamentosCooperativa(reconciliarFichaFromNotasConferidas(getData()))
           );
         }
       }
-      saveDataSafe(repararIntegridadePagamentosCooperativa(reconciliarFichaFromNotasConferidas(getData())));
+      saveDataSafe(posProcessarIntegridadePagamentosCooperativa(reconciliarFichaFromNotasConferidas(getData())));
       if (cooperadoId && coopId) {
         const after = getData();
         const limpo = limparFichaObsoletaCooperado(after, cooperadoId, coopId);
@@ -1458,7 +1479,7 @@ export async function repararIntegridadeFichaNotas(
   clearNotasSyncMeta(digits);
   await syncNotasPedidoFromCloud(digits, { retryFull: true });
   await syncOperacionalFromCloud(digits);
-  saveDataSafe(repararIntegridadePagamentosCooperativa(reconciliarFichaFromNotasConferidas(getData())));
+  saveDataSafe(posProcessarIntegridadePagamentosCooperativa(reconciliarFichaFromNotasConferidas(getData())));
   return true;
 }
 
@@ -1480,7 +1501,7 @@ export async function ensureCooperadoFinanceiroFromCloud(
     data = getData();
   }
   if (cooperadoFichaValoresDesalinhados(data, cooperadoId, cooperativaId)) {
-    saveDataSafe(repararIntegridadePagamentosCooperativa(reconciliarFichaFromNotasConferidas(data)));
+    saveDataSafe(posProcessarIntegridadePagamentosCooperativa(reconciliarFichaFromNotasConferidas(data)));
     data = getData();
   }
   if (!cooperadoFinanceiroDesatualizado(data, cooperadoId, cooperativaId)) {
@@ -1494,7 +1515,7 @@ export async function ensureCooperadoFinanceiroFromCloud(
     await syncCooperadosFromCloud(digits, cooperativaId);
     await syncNotasPedidoFromCloud(digits, { retryFull: true });
     await syncOperacionalFromCloud(digits);
-    saveDataSafe(repararIntegridadePagamentosCooperativa(reconciliarFichaFromNotasConferidas(getData())));
+    saveDataSafe(posProcessarIntegridadePagamentosCooperativa(reconciliarFichaFromNotasConferidas(getData())));
 
     data = getData();
     if (cooperadoFinanceiroDesatualizado(data, cooperadoId, cooperativaId)) {

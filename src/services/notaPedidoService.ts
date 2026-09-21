@@ -2035,6 +2035,14 @@ export function registrarPagamentoCooperado(
   const mesesPagamento = opts?.mesesReferencia?.length
     ? [...opts.mesesReferencia].sort()
     : [mesReferencia];
+  for (const mes of mesesPagamento) {
+    if (
+      getPagamentoConfirmadoCooperadoMes(data, cooperadoId, mes) ||
+      getPagamentoAguardandoCooperado(data, cooperadoId, mes)
+    ) {
+      return data;
+    }
+  }
   const mesPrincipal = mesesPagamento[0] ?? mesReferencia;
   const resumo =
     resumoOverride ??

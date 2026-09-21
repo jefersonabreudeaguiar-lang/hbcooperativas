@@ -1,8 +1,10 @@
-import type { AppData, PagamentoCooperadoRegistro } from "@/types";
+import type { AppData, FichaCorrida, PagamentoCooperadoRegistro } from "@/types";
+import type { OperacionalSyncPayload } from "@/lib/supabase/cooperativaSyncStorage";
 import {
   fichaPertenceCooperado,
   resolverCooperadoIdCanonico,
 } from "@/services/cooperadoCloudService";
+import { getMesesReferenciaPagamento } from "@/services/notaPedidoService";
 
 function pagamentoCobreMes(p: PagamentoCooperadoRegistro, mesReferencia: string): boolean {
   if (p.mesesReferencia?.length) return p.mesesReferencia.includes(mesReferencia);
@@ -83,4 +85,131 @@ export function repararIntegridadePagamentosCooperativa(data: AppData): AppData 
 
   if (!changed) return data;
   return { ...data, fichaCorrida, notasPedido };
+}
+
+/** Com pagamento registrado, ficha do mês fica paga e pendente duplicada da mesma nota some. */
+export function alinharFichaComPagamentosCooperativa(data: AppData): AppData {
+  const now = new Date().toISOString();
+  let fichaCorrida = [...(data.fichaCorrida ?? [])];
+  let changed = false;
+
+  for (const p of data.pagamentosCooperado ?? []) {
+    if (p.status !== "aguardando_confirmacao" && p.status !== "confirmado") continue;
+    const meses = getMesesReferenciaPagamento(p);
+    const coopId = p.cooperativaId;
+    const canonico = data.cooperados?.length
+      ? resolverCooperadoIdCanonico(data, p.cooperadoId, coopId)
+      : p.cooperadoId;
+
+    for (const fid of p.fichaIds ?? []) {
+      fichaCorrida = fichaCorrida.map((f) => {
+        if (f.id !== fid || f.status === "pago") return f;
+        changed = true;
+        return { ...f, status: "pago" as const, updatedAt: now };
+      });
+    }
+
+    for (const mes of meses) {
+      fichaCorrida = fichaCorrida.map((f) => {
+        if (!fichaPertenceCooperado(data, f, canonico, coopId) || f.mesReferencia !== mes) return f;
+        if (f.status === "pago") return f;
+        changed = true;
+        return { ...f, status: "pago" as const, updatedAt: now };
+      });
+    }
+
+    const notaIdsComPago = new Set(
+      fichaCorrida
+        .filter(
+          (f) =>
+            f.status === "pago" &&
+            fichaPertenceCooperado(data, f, canonico, coopId) &&
+            meses.includes(f.mesReferencia)
+        )
+        .map((f) => f.notaPedidoId)
+    );
+    if (notaIdsComPago.size) {
+      const filtered = fichaCorrida.filter((f) => {
+        if (f.status !== "pendente") return true;
+        if (!fichaPertenceCooperado(data, f, canonico, coopId)) return true;
+        if (!meses.includes(f.mesReferencia)) return true;
+        if (!notaIdsComPago.has(f.notaPedidoId)) return true;
+        changed = true;
+        return false;
+      });
+      fichaCorrida = filtered;
+    }
+  }
+
+  if (!changed) return data;
+  return { ...data, fichaCorrida };
+}
+
+/** Reparo + alinhamento — evita voltar para pendente após PIX/assinatura. */
+export function posProcessarIntegridadePagamentosCooperativa(data: AppData): AppData {
+  return alinharFichaComPagamentosCooperativa(repararIntegridadePagamentosCooperativa(data));
+}
+
+function marcarFichasOperacionalPagamento(
+  fichaCorrida: FichaCorrida[],
+  pagamento: PagamentoCooperadoRegistro
+): FichaCorrida[] {
+  const now = new Date().toISOString();
+  const meses = getMesesReferenciaPagamento(pagamento);
+  const coopId = pagamento.cooperativaId;
+  const canonico = pagamento.cooperadoId;
+  const ids = new Set(pagamento.fichaIds ?? []);
+
+  let next = fichaCorrida.map((f) => {
+    const mesOk = meses.includes(f.mesReferencia);
+    const coopOk = f.cooperativaId === coopId && (f.cooperadoId === canonico || ids.has(f.id));
+    if (!mesOk || !coopOk || f.status === "pago") return f;
+    return { ...f, status: "pago" as const, updatedAt: now };
+  });
+
+  const notaIdsComPago = new Set(
+    next
+      .filter(
+        (f) =>
+          f.status === "pago" &&
+          f.cooperativaId === coopId &&
+          f.cooperadoId === canonico &&
+          meses.includes(f.mesReferencia)
+      )
+      .map((f) => f.notaPedidoId)
+  );
+
+  if (!notaIdsComPago.size) return next;
+
+  return next.filter((f) => {
+    if (f.status !== "pendente") return true;
+    if (f.cooperativaId !== coopId || f.cooperadoId !== canonico) return true;
+    if (!meses.includes(f.mesReferencia)) return true;
+    return !notaIdsComPago.has(f.notaPedidoId);
+  });
+}
+
+/** Publica confirmação do cooperado no operacional.json (servidor). */
+export function aplicarPagamentoConfirmadoNoOperacional(
+  operacional: OperacionalSyncPayload,
+  pagamentoConfirmado: PagamentoCooperadoRegistro
+): OperacionalSyncPayload {
+  if (pagamentoConfirmado.status !== "confirmado") return operacional;
+  const map = new Map<string, PagamentoCooperadoRegistro>();
+  for (const p of operacional.pagamentosCooperado ?? []) map.set(p.id, p);
+  const prev = map.get(pagamentoConfirmado.id);
+  if (prev?.status === "confirmado" && prev.reciboHtml && !pagamentoConfirmado.reciboHtml) {
+    return operacional;
+  }
+  map.set(pagamentoConfirmado.id, pagamentoConfirmado);
+  const fichaCorrida = marcarFichasOperacionalPagamento(
+    operacional.fichaCorrida ?? [],
+    pagamentoConfirmado
+  );
+  return {
+    ...operacional,
+    pagamentosCooperado: [...map.values()],
+    fichaCorrida,
+    updatedAt: new Date().toISOString(),
+  };
 }

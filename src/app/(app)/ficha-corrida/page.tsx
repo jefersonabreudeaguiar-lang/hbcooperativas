@@ -38,6 +38,8 @@ import {
   pushOperacionalToCloud,
   pushNotasPagasToCloud,
   clearOperacionalPushFingerprint,
+  confirmarPagamentoCooperadoNaNuvem,
+  syncOperacionalFromCloud,
 } from "@/services/cooperativaSyncCloudService";
 import { pushCooperadoToCloud } from "@/services/cooperadoCloudService";
 import {
@@ -913,10 +915,12 @@ export default function FichaCorridaPage() {
 
   const handleEnviarAssinatura = () => {
     if (!pagamentoAguardando || !assinatura || !user) return;
+    let pagamentoConfirmadoLocal: PagamentoCooperadoRegistro | undefined;
     updateData((d) => {
       const next = confirmarPagamentoCooperado(d, pagamentoAguardando.id, assinatura);
       const pg = next.pagamentosCooperado.find((p) => p.id === pagamentoAguardando.id);
       if (pg) {
+        pagamentoConfirmadoLocal = pg;
         setPagamentoConfirmado(pg);
         const mesesPg = getMesesReferenciaPagamento(pg);
         if (mesesPg.length) setAbaMesCooperado(mesesPg[mesesPg.length - 1]!);
@@ -927,11 +931,11 @@ export default function FichaCorridaPage() {
       });
     });
     void (async () => {
-      const d = getData();
-      const cnpj = await resolveCooperativaCnpj(d, coopId, user);
-      if (cnpj) {
-        clearOperacionalPushFingerprint(cnpj, true);
-        await pushOperacionalToCloud(cnpj, d, coopId, { authoritative: true });
+      const pg = pagamentoConfirmadoLocal ?? getData().pagamentosCooperado.find((p) => p.id === pagamentoAguardando.id);
+      const cnpj = await resolveCooperativaCnpj(getData(), coopId, user);
+      if (cnpj && pg?.status === "confirmado") {
+        const ok = await confirmarPagamentoCooperadoNaNuvem(cnpj, pg);
+        if (ok) await syncOperacionalFromCloud(cnpj);
       }
       requestAppSync();
     })();

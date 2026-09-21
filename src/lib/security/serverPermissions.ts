@@ -23,6 +23,13 @@ const API_RESOURCE_RULES: Array<{
     postAction: "edit",
   },
   { pattern: /^\/api\/notas-pedido/, resource: "notas_pedido", writeActions: ["create", "edit", "approve", "delete"], readActions: ["view"] },
+  {
+    pattern: /^\/api\/cooperativa-sync\/confirmar-pagamento/,
+    resource: "ficha_corrida",
+    writeActions: ["edit"],
+    readActions: ["view"],
+    postAction: "edit",
+  },
   { pattern: /^\/api\/cooperativa-sync/, resource: "cooperados", writeActions: ["edit"], readActions: ["view"] },
   { pattern: /^\/api\/cooperativa-audit/, resource: "cooperados", writeActions: ["create"], readActions: ["view"] },
   { pattern: /^\/api\/cooperativas\/[^/]+/, resource: "cooperativas", writeActions: ["edit"], readActions: ["view"] },
