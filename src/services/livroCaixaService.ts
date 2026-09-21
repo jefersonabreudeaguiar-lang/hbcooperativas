@@ -511,8 +511,7 @@ export function isLancamentoSemSequenciaLegado(l: LivroCaixaLancamento): boolean
 }
 
 export function podeExcluirLancamentoLivroCaixa(l: LivroCaixaLancamento): boolean {
-  if (isLancamentoManualEditavel(l)) return true;
-  return isLancamentoSemSequenciaLegado(l);
+  return isLancamentoManualEditavel(l);
 }
 
 export function atualizarLancamentoManual(

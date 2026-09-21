@@ -199,11 +199,13 @@ export default function LivroCaixaPage() {
 
   const excluirLancamento = (l: LivroCaixaLancamento) => {
     if (!canDeleteLancamento || !podeExcluirLancamentoLivroCaixa(l)) return;
-    const legado = isLancamentoSemSequenciaLegado(l) && !isLancamentoManualEditavel(l);
-    const msg = legado
-      ? `Remover lançamento antigo (sem número de sequência)?\n\n${l.historico}\n${formatCurrency(l.valor)}`
-      : `Remover este lançamento do livro caixa?\n\n${l.historico}\n${formatCurrency(l.valor)}`;
-    if (!confirm(msg)) return;
+    if (
+      !confirm(
+        `Apagar este lançamento avulso?\n\n${l.historico}\n${formatCurrency(l.valor)}\n\nMovimentos automáticos (PIX, pagamentos, retenções) não podem ser apagados aqui.`
+      )
+    ) {
+      return;
+    }
     updateData((d) => {
       const next = excluirLancamentoLivroCaixa(d, coopId, l.id);
       if (next === d) return d;
@@ -445,8 +447,7 @@ export default function LivroCaixaPage() {
         </div>
         <p className="text-sm text-gray-500 mb-4">
           Ordem por número de sequência (ano-livro {controleAnual?.anoLivro ?? "—"}). Pagamentos a cooperados geram saída (líquido) e créditos contábeis de retenção.
-          Mensalidades confirmadas via PIX entram como entrada efetiva. Lançamentos automáticos são somente leitura; avulsos podem ser editados ou excluídos.
-          Lançamentos antigos sem número podem ser excluídos para limpeza (permissão de exclusão).
+          Mensalidades confirmadas via PIX entram como entrada efetiva. Lançamentos automáticos são somente leitura. Lançamentos avulsos (criados em &quot;Lançamento&quot;) podem ser editados ou apagados.
         </p>
         <div className="space-y-2">
           {resumoMes.lancamentos.map((l) => (
@@ -489,33 +490,21 @@ export default function LivroCaixaPage() {
                   {l.tipo === "credito" ? "+" : "−"} {formatCurrency(l.valor)}
                 </p>
                 {canEditLancamento && isLancamentoManualEditavel(l) && (
-                  <div className="flex gap-1">
-                    <button
-                      type="button"
-                      onClick={() => openEditar(l)}
-                      className="p-2 rounded-lg hover:bg-white/80 text-gray-600"
-                      title="Editar lançamento manual"
-                    >
-                      <Pencil size={16} />
-                    </button>
-                    {canDeleteLancamento && (
-                      <button
-                        type="button"
-                        onClick={() => excluirLancamento(l)}
-                        className="p-2 rounded-lg hover:bg-red-50 text-red-600"
-                        title="Excluir lançamento manual"
-                      >
-                        <Trash2 size={16} />
-                      </button>
-                    )}
-                  </div>
+                  <button
+                    type="button"
+                    onClick={() => openEditar(l)}
+                    className="p-2 rounded-lg hover:bg-white/80 text-gray-600"
+                    title="Editar lançamento avulso"
+                  >
+                    <Pencil size={16} />
+                  </button>
                 )}
-                {canDeleteLancamento && !isLancamentoManualEditavel(l) && podeExcluirLancamentoLivroCaixa(l) && (
+                {canDeleteLancamento && isLancamentoManualEditavel(l) && (
                   <button
                     type="button"
                     onClick={() => excluirLancamento(l)}
                     className="p-2 rounded-lg hover:bg-red-50 text-red-600"
-                    title="Excluir lançamento legado (sem sequência)"
+                    title="Apagar lançamento avulso"
                   >
                     <Trash2 size={16} />
                   </button>

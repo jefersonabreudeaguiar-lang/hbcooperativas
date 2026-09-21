@@ -62,7 +62,7 @@ export const PERMISSIONS: PermissionMatrix = {
     votacoes: ["view", "create", "edit", "export"],
     relatorios: VIEW_EXPORT,
     fechamento: ["view", "approve", "export"],
-    livro_caixa: ["view", "create", "edit", "export"],
+    livro_caixa: ["view", "create", "edit", "delete", "export"],
     prestacao_contas: ["view", "create", "edit", "delete", "export"],
     conta_coop: ["view", "create", "edit", "approve", "export"],
   },
