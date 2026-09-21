@@ -10,7 +10,7 @@ import { AlertBanner } from "@/components/ui/AlertBanner";
 import { Textarea, FormField } from "@/components/ui/Form";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import { updateData, getData } from "@/services/dataStore";
-import { pushCooperadoToCloud, queueCooperadoPush } from "@/services/cooperadoCloudService";
+import { pushCooperadoToCloud, queueCooperadoPush, syncCooperadosFromCloud } from "@/services/cooperadoCloudService";
 import { resolveCooperativaCnpj } from "@/services/notaPedidoCloudService";
 import {
   confirmarAssinaturaCadastroCooperado,
@@ -45,6 +45,19 @@ export function AssinaturaCadastroGestaoPanel({ data, user, cooperativaId }: Ass
     setEditandoAssinatura(false);
     setAssinaturaEditada(null);
   }, [verAssinatura?.id]);
+
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      const d = getData();
+      const cnpj = await resolveCooperativaCnpj(d, cooperativaId, user);
+      if (cancelled || !cnpj) return;
+      await syncCooperadosFromCloud(cnpj, cooperativaId);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [cooperativaId, user.id, user.cooperativaCnpj]);
 
   const syncCooperado = async (cooperado: Cooperado) => {
     const cnpj = await resolveCooperativaCnpj(data, cooperado.cooperativaId, user);
@@ -133,7 +146,7 @@ export function AssinaturaCadastroGestaoPanel({ data, user, cooperativaId }: Ass
     (statusVerAssinatura === "em_analise" || statusVerAssinatura === "confirmada");
   const modalBusy = Boolean(verAssinatura && busyId === verAssinatura.id);
 
-  if (resumo.comApp === 0) return null;
+  if (resumo.comApp === 0 && resumo.emAnalise === 0 && resumo.devolvida === 0) return null;
 
   return (
     <Card title="Conferir assinaturas dos cooperados" className="mb-6">

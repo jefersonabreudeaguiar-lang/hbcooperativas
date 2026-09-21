@@ -5,6 +5,15 @@ import {
   listarCooperadosComApp,
   resumoInstalacaoApp,
 } from "@/services/cooperadoAppInstallService";
+import { cooperadosUnicosParaCobranca } from "@/utils/cooperadoDedupe";
+
+function listarCooperadosElegiveisAssinatura(data: AppData, cooperativaId: string): Cooperado[] {
+  return cooperadosUnicosParaCobranca(
+    data.cooperados.filter(
+      (c) => c.cooperativaId === cooperativaId && c.status === "ativo" && !c.avulso
+    )
+  ).sort((a, b) => a.nomeCompleto.localeCompare(b.nomeCompleto, "pt-BR"));
+}
 
 /** Aviso “assinatura confirmada” some após 24 h. */
 export const ASSINATURA_CONFIRMACAO_AVISO_MS = 24 * 60 * 60 * 1000;
@@ -331,11 +340,13 @@ export function devolverAssinaturaCadastroCooperado(
 export function resumoAssinaturaCadastroApp(data: AppData, cooperativaId: string) {
   const instalacao = resumoInstalacaoApp(data, cooperativaId);
   const comApp = listarCooperadosComApp(data, cooperativaId);
+  /** Em análise/devolvida/confirmada: todos os ativos — não só quem tem flag de app instalado. */
+  const elegiveis = listarCooperadosElegiveisAssinatura(data, cooperativaId);
 
   const listaSemAssinatura = comApp.filter((c) => cooperadoPrecisaCadastrarAssinatura(c.id, c));
-  const listaEmAnalise = comApp.filter((c) => cooperadoAssinaturaEmAnalise(c));
-  const listaComAssinatura = comApp.filter((c) => cooperadoTemAssinaturaCadastrada(c));
-  const listaDevolvida = comApp.filter((c) => cooperadoAssinaturaDevolvida(c));
+  const listaEmAnalise = elegiveis.filter((c) => cooperadoAssinaturaEmAnalise(c));
+  const listaComAssinatura = elegiveis.filter((c) => cooperadoTemAssinaturaCadastrada(c));
+  const listaDevolvida = elegiveis.filter((c) => cooperadoAssinaturaDevolvida(c));
 
   return {
     comApp: instalacao.comApp,
