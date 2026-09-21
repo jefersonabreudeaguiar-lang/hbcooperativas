@@ -1370,15 +1370,24 @@ function mesComPagamentoCooperativaRegistrado(
   mesReferencia: string
 ): boolean {
   if (getPagamentoAguardandoCooperado(data, cooperadoId, mesReferencia)) return true;
+  return !!getPagamentoConfirmadoCooperadoMes(data, cooperadoId, mesReferencia);
+}
+
+/** Pagamento com recibo assinado — valores congelados no registro (não recalcular HB/sync). */
+export function getPagamentoConfirmadoCooperadoMes(
+  data: AppData,
+  cooperadoId: string,
+  mesReferencia: string
+): PagamentoCooperadoRegistro | undefined {
   const coopId = data.cooperados.find((c) => c.id === cooperadoId)?.cooperativaId;
   const canonico = resolverCooperadoIdCanonico(data, cooperadoId, coopId);
-  return data.pagamentosCooperado.some(
+  return data.pagamentosCooperado.find(
     (p) =>
-      p.status === "confirmado" &&
       (p.cooperadoId === cooperadoId ||
         p.cooperadoId === canonico ||
         resolverCooperadoIdCanonico(data, p.cooperadoId, p.cooperativaId ?? coopId) === canonico) &&
-      pagamentoCobreMesReferencia(p, mesReferencia)
+      pagamentoCobreMesReferencia(p, mesReferencia) &&
+      p.status === "confirmado"
   );
 }
 
@@ -1765,6 +1774,10 @@ export function getResumoPagamentoExibicao(
   ajustes?: AjustesResumoPagamento
 ): ResumoPagamentoCooperado {
   const coopId = cooperativaId ?? data.cooperados.find((c) => c.id === cooperadoId)?.cooperativaId;
+  const confirmado = getPagamentoConfirmadoCooperadoMes(data, cooperadoId, mesReferencia);
+  if (confirmado) {
+    return resumoFromPagamento(confirmado);
+  }
   const pagamento = getPagamentoAguardandoCooperado(data, cooperadoId, mesReferencia);
   const live = getResumoPagamentoCooperado(data, cooperadoId, mesReferencia, coopId, ajustes);
   if (pagamento) {
@@ -1804,6 +1817,9 @@ export function persistDescontosContaCoopNoArquivo(
   cooperativaId: string,
   descontos: DescontoContaCoopRemoto[]
 ): AppData {
+  if (getPagamentoConfirmadoCooperadoMes(data, cooperadoId, mesReferencia)) {
+    return data;
+  }
   const deduped = dedupeDescontosContaCoopRemotos(descontos);
   const hbSyncedAt = new Date().toISOString();
   return {

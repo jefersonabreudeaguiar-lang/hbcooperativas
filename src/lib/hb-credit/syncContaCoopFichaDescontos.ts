@@ -13,7 +13,7 @@ import {
 } from "@/services/cooperadoEntregasService";
 import { pushOperacionalToCloud } from "@/services/cooperativaSyncCloudService";
 import { beginSaveBatch, endSaveBatch, getData, notifyAppDataSubscribers, updateData } from "@/services/dataStore";
-import { persistDescontosContaCoopNoArquivo, getDescontosContaCoopMesCached, getResumoValorAPagarRelatorio, getMesesReferenciaPagamento } from "@/services/notaPedidoService";
+import { persistDescontosContaCoopNoArquivo, getDescontosContaCoopMesCached, getResumoValorAPagarRelatorio, getMesesReferenciaPagamento, getPagamentoConfirmadoCooperadoMes } from "@/services/notaPedidoService";
 import { setContaCoopDescontosMemoria } from "@/lib/hb-credit/contaCoopDescontosMemory";
 import { bumpContaCoopDescontosRevision } from "@/lib/hb-credit/contaCoopDescontosNotify";
 import {
@@ -223,6 +223,7 @@ export async function refreshContaCoopDescontosCooperativaPendentes(opts: {
       }
     }
     for (const mes of meses) {
+      if (getPagamentoConfirmadoCooperadoMes(data, c.id, mes)) continue;
       jobs.push({ cooperadoId: c.id, mesReferencia: mes });
     }
   }

@@ -161,6 +161,33 @@ const PAGAMENTO_STATUS_RANK: Record<PagamentoCooperadoRegistro["status"], number
 };
 
 /** Pagamento confirmado localmente não volta para aguardando assinatura na nuvem. */
+function mergePagamentoCooperadoRecord(
+  local: PagamentoCooperadoRegistro,
+  cloud: PagamentoCooperadoRegistro
+): PagamentoCooperadoRegistro {
+  const localRank = PAGAMENTO_STATUS_RANK[local.status] ?? 0;
+  const cloudRank = PAGAMENTO_STATUS_RANK[cloud.status] ?? 0;
+  if (localRank > cloudRank) return local;
+  if (cloudRank > localRank) return cloud;
+  if (local.status === "confirmado" && cloud.status === "confirmado") {
+    if (local.reciboHtml && !cloud.reciboHtml) return local;
+    if (cloud.reciboHtml && !local.reciboHtml) return cloud;
+    const localPago = new Date(local.pagoEm).getTime();
+    const cloudPago = new Date(cloud.pagoEm).getTime();
+    if (Number.isFinite(localPago) && Number.isFinite(cloudPago) && localPago !== cloudPago) {
+      return localPago <= cloudPago ? local : cloud;
+    }
+    if (
+      local.valorLiquido !== cloud.valorLiquido ||
+      local.valorBruto !== cloud.valorBruto ||
+      local.descontoCooperativa !== cloud.descontoCooperativa
+    ) {
+      return local;
+    }
+  }
+  return itemTime(local) >= itemTime(cloud) ? local : cloud;
+}
+
 function mergePagamentosCooperadoFromCloud(
   localCoop: PagamentoCooperadoRegistro[],
   cloudItems: PagamentoCooperadoRegistro[]
@@ -173,17 +200,7 @@ function mergePagamentosCooperadoFromCloud(
       map.set(local.id, local);
       continue;
     }
-    const localRank = PAGAMENTO_STATUS_RANK[local.status] ?? 0;
-    const cloudRank = PAGAMENTO_STATUS_RANK[cloud.status] ?? 0;
-    if (localRank > cloudRank) {
-      map.set(local.id, local);
-      continue;
-    }
-    if (cloudRank > localRank) {
-      map.set(local.id, cloud);
-      continue;
-    }
-    map.set(local.id, itemTime(local) >= itemTime(cloud) ? local : cloud);
+    map.set(local.id, mergePagamentoCooperadoRecord(local, cloud));
   }
   return [...map.values()];
 }

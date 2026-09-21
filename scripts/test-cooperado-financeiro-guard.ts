@@ -234,6 +234,51 @@ function nota(id: string, status: NotaPedido["status"]): NotaPedido {
 }
 
 {
+  const MES = "2026-08";
+  const data = baseData({
+    fichaCorrida: [{ ...ficha("f1", "n1", MES), status: "pago" }],
+    notasPedido: [nota("n1", "pago")],
+    pagamentosCooperado: [
+      {
+        id: "pg_confirmado",
+        cooperativaId: COOP,
+        cooperadoId: COOPERADO,
+        mesReferencia: MES,
+        valorBruto: 100,
+        descontoCooperativa: 0,
+        descontosExtras: [{ tipo: "mensalidade", motivo: "Mensalidade ago/2026", valor: 11.5 }],
+        valorLiquido: 88.5,
+        fichaIds: ["f1"],
+        notaPedidoIds: ["n1"],
+        status: "confirmado",
+        pagoPor: "Responsável",
+        pagoEm: "2026-08-25T12:00:00.000Z",
+        assinadoEm: "2026-08-26T12:00:00.000Z",
+        reciboHtml: "<p>recibo</p>",
+        createdAt: "2026-08-25T12:00:00.000Z",
+        updatedAt: "2026-08-26T12:00:00.000Z",
+      },
+    ],
+  });
+  const comHb = persistDescontosContaCoopNoArquivo(data, COOPERADO, MES, COOP, [
+    {
+      motivo: "Compra HB Créditos — não pode alterar mês confirmado",
+      valorReais: 40,
+      tipo: "conta_coop",
+      createdAt: "2026-08-27T12:00:00.000Z",
+    },
+  ]);
+  const resumo = getResumoPagamentoExibicao(comHb, COOPERADO, MES, COOP);
+  assert.equal(resumo.valorLiquido, 88.5, "mês confirmado mantém valor registrado no pagamento");
+  assert.equal(
+    comHb.arquivosMensais.find((a) => a.cooperadoId === COOPERADO && a.mesReferencia === MES)?.contaCoopDescontos
+      ?.length ?? 0,
+    0,
+    "sync HB não sobrescreve arquivo de mês já confirmado"
+  );
+}
+
+{
   const MES = "2026-09";
   let data = baseData({
     fichaCorrida: [ficha("f1", "n1", MES)],
