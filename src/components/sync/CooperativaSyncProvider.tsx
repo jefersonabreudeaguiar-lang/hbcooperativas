@@ -266,11 +266,6 @@ export function CooperativaSyncProvider({ children }: { children: React.ReactNod
     setLastSyncError("");
     const syncStartedAt = Date.now();
     let completed = false;
-    let fotoUploadBackground: {
-      cnpj: string;
-      cooperadoCanonico: string;
-      cooperadoNome: string;
-    } | null = null;
     try {
       const sessionOk = await ensureCloudSessionReady(userToCloudProfile(currentUser));
       if (!sessionOk) {
@@ -355,11 +350,8 @@ export function CooperativaSyncProvider({ children }: { children: React.ReactNod
               lastCooperadoPushRef.current = Date.now();
             }
 
-            fotoUploadBackground = {
-              cnpj,
-              cooperadoCanonico,
-              cooperadoNome: getCooperadoNome(latest.cooperados, cooperadoCanonico),
-            };
+            const cooperadoNome = getCooperadoNome(latest.cooperados, cooperadoCanonico);
+            void runCooperadoFotoUploadsInBackground(cnpj, cooperadoCanonico, cooperadoNome);
           }
         })(),
         "Sincronização"
@@ -416,14 +408,6 @@ export function CooperativaSyncProvider({ children }: { children: React.ReactNod
       syncingRef.current = false;
       setSyncing(false);
       setLastSyncedAt(Date.now());
-    }
-
-    if (fotoUploadBackground) {
-      void runCooperadoFotoUploadsInBackground(
-        fotoUploadBackground.cnpj,
-        fotoUploadBackground.cooperadoCanonico,
-        fotoUploadBackground.cooperadoNome
-      );
     }
   }, []);
 

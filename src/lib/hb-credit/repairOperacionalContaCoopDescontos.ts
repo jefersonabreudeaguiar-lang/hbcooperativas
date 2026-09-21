@@ -18,7 +18,7 @@ function descontosToArquivo(descontos: DescontoContaCoopRemoto[]): NonNullable<A
     motivo: d.motivo,
     valorReais: d.valorReais,
     tipo: d.motivo.toLowerCase().includes("estorno") ? ("credito_avulso" as const) : ("conta_coop" as const),
-    createdAt: d.createdAt,
+    createdAt: d.createdAt ?? "",
   }));
 }
 
@@ -27,7 +27,7 @@ function descontosFingerprint(descontos: DescontoContaCoopRemoto[]): string {
     dedupeDescontosContaCoopRemotos(descontos).map((d) => ({
       motivo: d.motivo,
       valorReais: round2(d.valorReais),
-      createdAt: d.createdAt,
+      createdAt: d.createdAt ?? "",
     }))
   );
 }
@@ -37,7 +37,7 @@ function arquivoDescontosFingerprint(arquivo: ArquivoMensalCooperado | undefined
     motivo: d.motivo,
     valorReais: d.valorReais,
     tipo: "conta_coop",
-    createdAt: d.createdAt,
+    createdAt: d.createdAt ?? "",
   }));
   return descontosFingerprint(rows);
 }
