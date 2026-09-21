@@ -17,6 +17,7 @@ import { formatMesReferencia, formatMesesReferenciaRotulo, getCurrentMesReferenc
 import { mesesComValoresAvulsos, totalValoresAvulsosPendentes } from "@/services/valoresAvulsosReceberService";
 import { contarEntregasNoMes } from "@/services/entregaCooperadoService";
 import { contarFotosEnviadasNota, getFotosExibicaoNota } from "@/utils/fotoEntrega";
+import { cooperadoMesComFichaPagaSemPagamentoCooperativa } from "@/services/pagamentoIntegridadeService";
 
 export interface ResumoMesEntregasCooperado {
   mesReferencia: string;
@@ -84,6 +85,10 @@ export function listarMesesPendentesQuantoVouReceber(
     a.localeCompare(b)
   )) {
     if (cooperadoMesQuitado(data, cooperadoId, mes)) continue;
+    if (cooperadoMesComFichaPagaSemPagamentoCooperativa(data, cooperadoId, mes, cooperativaId)) {
+      pendentes.push(mes);
+      continue;
+    }
     if (getPagamentoAguardandoCooperado(data, cooperadoId, mes)) {
       pendentes.push(mes);
       continue;
@@ -440,7 +445,9 @@ export function listarMesesPagosCooperado(
     ) {
       continue;
     }
-    meses.add(p.mesReferencia);
+    for (const mes of getMesesReferenciaPagamento(p)) {
+      meses.add(mes);
+    }
   }
 
   return [...meses].sort((a, b) => b.localeCompare(a));

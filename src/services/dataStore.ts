@@ -33,6 +33,7 @@ import {
   cpfCooperadoDigits,
 } from "@/services/cooperadoCloudService";
 import { reconciliarFichaFromNotasConferidas, ajustesFichaMesId } from "@/services/notaPedidoService";
+import { repararIntegridadePagamentosCooperativa } from "@/services/pagamentoIntegridadeService";
 import { forceNextFullNotasSync, clearNotasSyncMeta } from "@/services/syncMetaService";
 import { requestAppSync } from "@/services/syncRequest";
 import { normalizarPrestacaoContas, aplicarPrestacoesContasExcluidas } from "@/services/prestacaoContasService";
@@ -422,7 +423,7 @@ function migrateResponsavelPrincipal(data: AppData): AppData {
 function runAutomaticTasks(data: AppData): AppData {
   if (isCloudSyncInProgress()) return data;
   let current = compactarFotosNoArmazenamento(data);
-  current = reconciliarFichaFromNotasConferidas(current);
+  current = repararIntegridadePagamentosCooperativa(reconciliarFichaFromNotasConferidas(current));
   current = sincronizarMensalidadeCooperativa(current);
   const stripped = stripBinaryForPersist(current);
   return stripped;

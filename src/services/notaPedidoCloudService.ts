@@ -6,6 +6,7 @@ import { getNotaCooperativaCnpj, getFotosExibicaoNota, mergeNotaComFotos, contar
 import { getCooperadoNome } from "@/utils/calculations";
 import { getData, saveDataSafe } from "@/services/dataStore";
 import { reconciliarFichaFromNotasConferidas, idsNotasPedidoExcluidas, aplicarNotasPedidoExcluidas } from "@/services/notaPedidoService";
+import { repararIntegridadePagamentosCooperativa } from "@/services/pagamentoIntegridadeService";
 import { getCloudResetAppliedVersion } from "@/services/operationalReset";
 import { readNotaFotoAtIndex } from "@/services/localMediaStore";
 import { slimNotaDraftForUpload } from "@/services/imagePipelineService";
@@ -1171,7 +1172,11 @@ export async function syncNotasPedidoFromCloud(
         return false;
       });
       if (filtered.length !== current.notasPedido.length) {
-        saveDataSafe(reconciliarFichaFromNotasConferidas({ ...current, notasPedido: filtered }));
+        saveDataSafe(
+          repararIntegridadePagamentosCooperativa(
+            reconciliarFichaFromNotasConferidas({ ...current, notasPedido: filtered })
+          )
+        );
       }
     }
     markNotasSyncDone(digits, true, [], serverWatermark);

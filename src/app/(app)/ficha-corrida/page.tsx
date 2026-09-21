@@ -568,8 +568,12 @@ export default function FichaCorridaPage() {
 
   const resumo = useMemo(() => {
     if (!data || !cooperadoSelecionadoId) return null;
+    if (pagamentoConfirmado) return resumoFromPagamento(pagamentoConfirmado);
     if (pagamentoAguardando) return resumoFromPagamento(pagamentoAguardando);
     if (visualizandoHistorico && pagamentoConfirmadoMes) {
+      return resumoFromPagamento(pagamentoConfirmadoMes);
+    }
+    if (!visualizandoHistorico && pagamentoConfirmadoMes && isCooperado) {
       return resumoFromPagamento(pagamentoConfirmadoMes);
     }
     if (!isCooperado && financeiroAberto && !pagamentoAguardando) {
@@ -602,6 +606,7 @@ export default function FichaCorridaPage() {
     isCooperado,
     ajustesCompartilhadosMes,
     pagamentoAguardando,
+    pagamentoConfirmado,
     visualizandoHistorico,
     pagamentoConfirmadoMes,
     resumoPagamentoConsolidado,
@@ -911,7 +916,11 @@ export default function FichaCorridaPage() {
     updateData((d) => {
       const next = confirmarPagamentoCooperado(d, pagamentoAguardando.id, assinatura);
       const pg = next.pagamentosCooperado.find((p) => p.id === pagamentoAguardando.id);
-      if (pg) setPagamentoConfirmado(pg);
+      if (pg) {
+        setPagamentoConfirmado(pg);
+        const mesesPg = getMesesReferenciaPagamento(pg);
+        if (mesesPg.length) setAbaMesCooperado(mesesPg[mesesPg.length - 1]!);
+      }
       return addAuditEntry(next, {
         entityType: "pagamento", entityId: pagamentoAguardando.id, action: "aprovar",
         userId: user.id, userName: user.name, changes: "Cooperado confirmou pagamento com assinatura",
@@ -920,7 +929,10 @@ export default function FichaCorridaPage() {
     void (async () => {
       const d = getData();
       const cnpj = await resolveCooperativaCnpj(d, coopId, user);
-      if (cnpj) await pushOperacionalToCloud(cnpj, d, coopId, { authoritative: true });
+      if (cnpj) {
+        clearOperacionalPushFingerprint(cnpj, true);
+        await pushOperacionalToCloud(cnpj, d, coopId, { authoritative: true });
+      }
       requestAppSync();
     })();
     setAssinaturaModal(false);
@@ -936,12 +948,16 @@ export default function FichaCorridaPage() {
     !isCooperado ||
     (!!data &&
       !!cooperadoId &&
-      (!!pagamentoAguardando || cooperadoTemValorPendente(data, cooperadoId, coopId)));
+      (!!pagamentoAguardando ||
+        !!pagamentoConfirmado ||
+        cooperadoTemValorPendente(data, cooperadoId, coopId)));
 
   const exibirRelatorioMes =
     !!cooperadoSelecionadoId &&
     (isCooperado || aba === "ficha") &&
-    (visualizandoHistorico ? !!pagamentoConfirmadoMes : exibirQuantoVouReceber);
+    (visualizandoHistorico
+      ? !!pagamentoConfirmadoMes || !!pagamentoConfirmado
+      : exibirQuantoVouReceber || !!pagamentoConfirmado);
 
   const exibirPagamento =
     !!cooperadoSelecionadoId &&
