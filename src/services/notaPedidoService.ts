@@ -1280,7 +1280,11 @@ export function fichaNotaElegivelParaPagamento(data: AppData, ficha: FichaCorrid
   if (ficha.status !== "pendente") return false;
   const nota = data.notasPedido.find((n) => n.id === ficha.notaPedidoId);
   if (!nota) return false;
-  return nota.status === "conferida";
+  if (nota.status === "conferida") return true;
+  if (nota.status === "pago") {
+    return !mesComPagamentoCooperativaRegistrado(data, ficha.cooperadoId, ficha.mesReferencia);
+  }
+  return false;
 }
 
 /** Ficha válida no extrato (cooperado e responsável) — amarrada a nota conferida/paga. */
@@ -1436,6 +1440,25 @@ function statusFichaAposConferenciaNota(
   return mesComPagamentoCooperativaRegistrado(data, cooperadoId, nota.mesReferencia) ? "pago" : "pendente";
 }
 
+/** Entrega dividida: titular pago ≠ participante pago — corrige ficha paga fantasma após sync. */
+function alinharStatusFichaComNotasConferidas(
+  data: AppData,
+  fichaCorrida: FichaCorrida[]
+): { fichaCorrida: FichaCorrida[]; changed: boolean } {
+  const notaById = new Map((data.notasPedido ?? []).map((n) => [n.id, n]));
+  const now = new Date().toISOString();
+  let changed = false;
+  const next = fichaCorrida.map((f) => {
+    const nota = notaById.get(f.notaPedidoId);
+    if (!nota || (nota.status !== "conferida" && nota.status !== "pago")) return f;
+    const esperado = statusFichaAposConferenciaNota(data, nota, f.cooperadoId);
+    if (f.status === esperado) return f;
+    changed = true;
+    return { ...f, status: esperado, updatedAt: now };
+  });
+  return { fichaCorrida: next, changed };
+}
+
 /** Pagamento com recibo assinado — valores congelados no registro (não recalcular HB/sync). */
 export function getPagamentoConfirmadoCooperadoMes(
   data: AppData,
@@ -1461,7 +1484,7 @@ export function reconciliarFichaFromNotasConferidas(data: AppData): AppData {
   const fichaNotaIds = new Set(fichaCorrida.map((f) => f.notaPedidoId));
   let arquivosMensais = data.arquivosMensais;
 
-  const notasOrdenadas = [...data.notasPedido].sort(
+  const notasOrdenadas = [...(data.notasPedido ?? [])].sort(
     (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
   );
 
@@ -1527,6 +1550,10 @@ export function reconciliarFichaFromNotasConferidas(data: AppData): AppData {
     changed = true;
   }
 
+  const alinhado = alinharStatusFichaComNotasConferidas({ ...data, fichaCorrida, arquivosMensais }, fichaCorrida);
+  fichaCorrida = alinhado.fichaCorrida;
+  if (alinhado.changed) changed = true;
+
   if (!changed) {
     return purgarFichasInvalidas(data);
   }
@@ -1543,16 +1570,7 @@ export function getTotalAPagarCooperado(
   if (mesReferencia) {
     return getResumoValorAPagarRelatorio(data, cooperadoId, mesReferencia, coopId).valorLiquido;
   }
-  const meses = [
-    ...new Set(
-      data.fichaCorrida
-        .filter(
-          (f) =>
-            fichaPertenceCooperado(data, f, cooperadoId, coopId) && f.status === "pendente"
-        )
-        .map((f) => f.mesReferencia)
-    ),
-  ];
+  const meses = mesesReferenciaComDebitoAberto(data, cooperadoId, coopId);
   return round2(
     meses.reduce(
       (s, mes) => s + getResumoValorAPagarRelatorio(data, cooperadoId, mes, coopId).valorLiquido,

@@ -11,6 +11,7 @@ import type { AppData } from "../src/types/index.ts";
 import { normalizeCnpj } from "../src/utils/cooperativa";
 import { fetchOperacionalSync, uploadOperacionalSync } from "../src/lib/supabase/cooperativaSyncStorage";
 import { posProcessarIntegridadePagamentosCooperativa } from "../src/services/pagamentoIntegridadeService";
+import { reconciliarFichaFromNotasConferidas } from "../src/services/notaPedidoService";
 
 function loadEnvFile(path: string) {
   if (!existsSync(path)) return;
@@ -52,8 +53,17 @@ async function main() {
     process.exit(1);
   }
 
-  const asApp = before as unknown as AppData;
-  let next = posProcessarIntegridadePagamentosCooperativa(asApp);
+  const asApp = {
+    ...(before as unknown as AppData),
+    notasPedido: (before as { notasPedido?: AppData["notasPedido"] }).notasPedido ?? [],
+    fichaCorrida: (before as { fichaCorrida?: AppData["fichaCorrida"] }).fichaCorrida ?? [],
+    pagamentosCooperado: (before as { pagamentosCooperado?: AppData["pagamentosCooperado"] })
+      .pagamentosCooperado ?? [],
+    cooperados: (before as { cooperados?: AppData["cooperados"] }).cooperados ?? [],
+  } as AppData;
+  let next = posProcessarIntegridadePagamentosCooperativa(
+    reconciliarFichaFromNotasConferidas(asApp)
+  );
 
   const pagoAntes = countOrfaos(before);
   const pagoDepois = countOrfaos(next);

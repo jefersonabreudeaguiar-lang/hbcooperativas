@@ -537,4 +537,89 @@ function nota(id: string, status: NotaPedido["status"]): NotaPedido {
   );
 }
 
+{
+  const CLEITO = "c_cleito_div";
+  const IVAN = "c_ivan_div";
+  const NOTA = "n_div";
+  const MES = "2026-08";
+  const data = baseData({
+    cooperados: [
+      {
+        id: CLEITO,
+        cooperativaId: COOP,
+        nomeCompleto: "Cleito",
+        cpf: "11111111111",
+        status: "ativo",
+        createdAt: "",
+      },
+      {
+        id: IVAN,
+        cooperativaId: COOP,
+        nomeCompleto: "Ivan divisão",
+        cpf: "22222222222",
+        status: "ativo",
+        createdAt: "",
+      },
+    ],
+    notasPedido: [
+      {
+        ...nota(NOTA, "pago"),
+        cooperadoId: CLEITO,
+        mesReferencia: MES,
+        divisaoEntrega: {
+          cooperadoOrigemId: CLEITO,
+          cooperadoOrigemNome: "Cleito",
+          participantes: [
+            { cooperadoId: CLEITO, cooperadoNome: "Cleito" },
+            { cooperadoId: IVAN, cooperadoNome: "Ivan divisão" },
+          ],
+          divididoEm: new Date().toISOString(),
+        },
+      },
+    ],
+    pagamentosCooperado: [
+      {
+        id: "pg_cleito",
+        cooperadoId: CLEITO,
+        cooperativaId: COOP,
+        mesReferencia: MES,
+        status: "confirmado",
+        valorLiquido: 100,
+        valorBruto: 100,
+        pagoEm: new Date().toISOString(),
+        pagoPor: "resp",
+        fichaIds: [],
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      },
+    ],
+    fichaCorrida: [
+      {
+        ...ficha("f_cleito_phantom", NOTA, MES),
+        cooperadoId: CLEITO,
+        status: "pago",
+        valorLiquido: 50,
+      },
+      {
+        ...ficha("f_ivan_phantom", NOTA, MES),
+        cooperadoId: IVAN,
+        status: "pago",
+        valorLiquido: 50,
+      },
+    ],
+  });
+  const fixed = reconciliarFichaFromNotasConferidas(data);
+  const ivanFicha = fixed.fichaCorrida.find((f) => f.cooperadoId === IVAN && f.notaPedidoId === NOTA);
+  assert.equal(
+    ivanFicha?.status,
+    "pendente",
+    "divisão: participante sem PIX não permanece pago quando titular quitou"
+  );
+  assert.equal(
+    cooperadoPendentePagamentoResponsavel(fixed, IVAN, undefined, COOP),
+    true,
+    "Ivan divisão: fila Pagar"
+  );
+}
+
 console.log("OK — guard financeiro cooperado");
