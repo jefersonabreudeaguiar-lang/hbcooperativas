@@ -11,6 +11,21 @@ function pagamentoCobreMes(p: PagamentoCooperadoRegistro, mesReferencia: string)
   return p.mesReferencia === mesReferencia;
 }
 
+function fichaPertenceCooperadoSafe(
+  data: AppData,
+  f: FichaCorrida,
+  cooperadoId: string,
+  cooperativaId?: string
+): boolean {
+  if (!data.cooperados?.length) {
+    const coopId = cooperativaId ?? f.cooperativaId;
+    return (
+      f.cooperadoId === cooperadoId && (!coopId || !f.cooperativaId || f.cooperativaId === coopId)
+    );
+  }
+  return fichaPertenceCooperado(data, f, cooperadoId, cooperativaId);
+}
+
 function pagamentoPertenceCooperado(
   data: AppData,
   p: PagamentoCooperadoRegistro,
@@ -53,7 +68,7 @@ export function cooperadoMesComFichaPagaSemPagamentoCooperativa(
     : cooperadoId;
   return (data.fichaCorrida ?? []).some(
     (f) =>
-      fichaPertenceCooperado(data, f, canonico, coopId) &&
+      fichaPertenceCooperadoSafe(data, f, canonico, coopId) &&
       f.mesReferencia === mesReferencia &&
       f.status === "pago" &&
       !cooperadoMesTemPagamentoRegistrado(data, cooperadoId, mesReferencia)
@@ -111,7 +126,7 @@ export function alinharFichaComPagamentosCooperativa(data: AppData): AppData {
 
     for (const mes of meses) {
       fichaCorrida = fichaCorrida.map((f) => {
-        if (!fichaPertenceCooperado(data, f, canonico, coopId) || f.mesReferencia !== mes) return f;
+        if (!fichaPertenceCooperadoSafe(data, f, canonico, coopId) || f.mesReferencia !== mes) return f;
         if (f.status === "pago") return f;
         changed = true;
         return { ...f, status: "pago" as const, updatedAt: now };
@@ -123,7 +138,7 @@ export function alinharFichaComPagamentosCooperativa(data: AppData): AppData {
         .filter(
           (f) =>
             f.status === "pago" &&
-            fichaPertenceCooperado(data, f, canonico, coopId) &&
+            fichaPertenceCooperadoSafe(data, f, canonico, coopId) &&
             meses.includes(f.mesReferencia)
         )
         .map((f) => f.notaPedidoId)
@@ -131,7 +146,7 @@ export function alinharFichaComPagamentosCooperativa(data: AppData): AppData {
     if (notaIdsComPago.size) {
       const filtered = fichaCorrida.filter((f) => {
         if (f.status !== "pendente") return true;
-        if (!fichaPertenceCooperado(data, f, canonico, coopId)) return true;
+        if (!fichaPertenceCooperadoSafe(data, f, canonico, coopId)) return true;
         if (!meses.includes(f.mesReferencia)) return true;
         if (!notaIdsComPago.has(f.notaPedidoId)) return true;
         changed = true;

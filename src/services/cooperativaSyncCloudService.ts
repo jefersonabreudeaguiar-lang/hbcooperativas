@@ -115,7 +115,11 @@ function mergeOperacionalArrayFromCloud<T extends WithUpdatedAt>(
 }
 
 /** Ficha paga localmente não volta para pendente por snapshot desatualizado na nuvem. */
-function mergeFichaCorridaFromCloud(localCoop: FichaCorrida[], cloudItems: FichaCorrida[]): FichaCorrida[] {
+function mergeFichaCorridaFromCloud(
+  localCoop: FichaCorrida[],
+  cloudItems: FichaCorrida[],
+  pagamentosCooperado: PagamentoCooperadoRegistro[] = []
+): FichaCorrida[] {
   const map = new Map<string, FichaCorrida>();
   for (const item of cloudItems) map.set(item.id, item);
   for (const local of localCoop) {
@@ -129,7 +133,14 @@ function mergeFichaCorridaFromCloud(localCoop: FichaCorrida[], cloudItems: Ficha
       continue;
     }
     if (cloud.status === "pago" && local.status === "pendente") {
-      map.set(local.id, cloud);
+      const temPagamento = pagamentosCooperado.some(
+        (p) =>
+          (p.status === "aguardando_confirmacao" || p.status === "confirmado") &&
+          (p.cooperadoId === local.cooperadoId ||
+            p.cooperadoId === cloud.cooperadoId) &&
+          (p.mesesReferencia?.includes(local.mesReferencia) ?? p.mesReferencia === local.mesReferencia)
+      );
+      map.set(local.id, temPagamento ? cloud : local);
       continue;
     }
     map.set(local.id, itemTime(local) >= itemTime(cloud) ? local : cloud);
@@ -951,7 +962,8 @@ export function mergeOperacionalIntoData(
           ? cloudFichas
           : mergeFichaCorridaFromCloud(
               (data.fichaCorrida ?? []).filter((f) => f.cooperativaId === coopId),
-              cloudFichas
+              cloudFichas,
+              [...data.pagamentosCooperado.filter((p) => p.cooperativaId === coopId), ...cloudPagamentos]
             )),
       ],
       data.notasPedido

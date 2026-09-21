@@ -579,6 +579,7 @@ export function resolverCooperadoIdCanonico(
   cooperativaId?: string,
   nomeFallback?: string
 ): string {
+  if (!data.cooperados?.length) return cooperadoId;
   const direct = data.cooperados.find(
     (c) => c.id === cooperadoId && (!cooperativaId || c.cooperativaId === cooperativaId)
   );

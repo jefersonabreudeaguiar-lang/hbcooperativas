@@ -1385,6 +1385,37 @@ export function listarFichasPendentesPagamento(
   );
 }
 
+/** Fichas para calcular PIX — inclui ficha paga fantasma (sem pagamentosCooperado) até reparar/sync. */
+function listarFichasBaseCalculoPagamento(
+  data: AppData,
+  cooperadoId: string,
+  mesReferencia: string,
+  cooperativaId?: string
+): FichaCorrida[] {
+  const pendentes = listarFichasPendentesPagamento(data, cooperadoId, mesReferencia, cooperativaId);
+  if (pendentes.length) return pendentes;
+
+  const coopId = cooperativaId ?? data.cooperados.find((c) => c.id === cooperadoId)?.cooperativaId;
+  const canonico = resolverCooperadoIdCanonico(data, cooperadoId, coopId);
+  const temFantasma = data.fichaCorrida.some(
+    (f) =>
+      fichaPertenceCooperado(data, f, canonico, coopId) &&
+      f.mesReferencia === mesReferencia &&
+      f.status === "pago" &&
+      !mesComPagamentoCooperativaRegistrado(data, cooperadoId, mesReferencia)
+  );
+  if (!temFantasma) return pendentes;
+
+  const candidatas = data.fichaCorrida.filter(
+    (f) =>
+      fichaPertenceCooperado(data, f, canonico, coopId) &&
+      f.mesReferencia === mesReferencia &&
+      f.status === "pago" &&
+      fichaValidaNoExtrato(data, f)
+  );
+  return dedupeFichaCorridaPorNota(candidatas, data.notasPedido);
+}
+
 /** Cria lançamentos na ficha a partir de notas já conferidas (sincronizadas da nuvem). */
 function mesComPagamentoCooperativaRegistrado(
   data: AppData,
@@ -1588,7 +1619,7 @@ export function getResumoPagamentoCooperado(
 } {
   const coopId = cooperativaId ?? data.cooperados.find((c) => c.id === cooperadoId)?.cooperativaId;
   const cooperadoCanonico = resolverCooperadoIdCanonico(data, cooperadoId, coopId);
-  const fichas = listarFichasPendentesPagamento(data, cooperadoId, mesReferencia, coopId);
+  const fichas = listarFichasBaseCalculoPagamento(data, cooperadoId, mesReferencia, coopId);
   const valorBruto = round2(fichas.reduce((s, f) => s + f.valorBruto, 0));
   const descontoCooperativa = round2(fichas.reduce((s, f) => s + f.descontos, 0));
   const valorEntregas = round2(fichas.reduce((s, f) => s + f.valorLiquido, 0));

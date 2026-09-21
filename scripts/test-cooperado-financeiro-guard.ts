@@ -26,6 +26,7 @@ import {
 import {
   getValorQuantoVouReceber,
   getConsolidadoFinanceiroCooperado,
+  cooperadoPendentePagamentoResponsavel,
   listarMesesPendentesPagamentoResponsavel,
   listarMesesPendentesQuantoVouReceber,
 } from "../src/services/cooperadoEntregasService.ts";
@@ -499,6 +500,41 @@ function nota(id: string, status: NotaPedido["status"]): NotaPedido {
   assert.equal(baseReais, fin.valorLiquido, "crédito base HB = valor a receber (não entregas brutas)");
   assert.equal(baseReais, 40, "mensalidade R$60 sobre entrega R$100 → base R$40");
   assert.equal(getCreditoBaseCooperadoCents(data, COOPERADO, COOP), 4000);
+}
+
+{
+  const CLEBER = "c_cleber_phantom";
+  const MES = "2026-08";
+  const data = baseData({
+    cooperados: [
+      {
+        id: CLEBER,
+        cooperativaId: COOP,
+        nomeCompleto: "Cleber phantom",
+        cpf: "54718015200",
+        status: "ativo",
+        createdAt: "",
+      },
+    ],
+    fichaCorrida: [
+      {
+        ...ficha("f_phantom", "n1", MES),
+        cooperadoId: CLEBER,
+        status: "pago",
+        valorBruto: 500,
+        valorLiquido: 500,
+      },
+    ],
+    notasPedido: [{ ...nota("n1", "pago"), cooperadoId: CLEBER }],
+    pagamentosCooperado: [],
+  });
+  const aPagar = getResumoValorAPagarRelatorio(data, CLEBER, MES, COOP).valorLiquido;
+  assert.ok(aPagar > 0, "Cleber: ficha paga sem pagamentoCooperado deve aparecer com valor");
+  assert.equal(
+    cooperadoPendentePagamentoResponsavel(data, CLEBER, undefined, COOP),
+    true,
+    "Cleber: deve constar na fila Pagar"
+  );
 }
 
 console.log("OK — guard financeiro cooperado");

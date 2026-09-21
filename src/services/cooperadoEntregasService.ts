@@ -178,6 +178,14 @@ export function listarMesesEntregasCooperado(
     if (!fichaPertenceCooperado(data, f, cooperadoId, cooperativaId)) continue;
     if (f.status === "pendente" && fichaValidaNoExtrato(data, f)) {
       set.add(f.mesReferencia);
+      continue;
+    }
+    if (
+      f.status === "pago" &&
+      fichaValidaNoExtrato(data, f) &&
+      cooperadoMesComFichaPagaSemPagamentoCooperativa(data, cooperadoId, f.mesReferencia, cooperativaId)
+    ) {
+      set.add(f.mesReferencia);
     }
   }
   set.add(getCurrentMesReferencia());

@@ -10,7 +10,7 @@ import { resolve } from "node:path";
 import type { AppData } from "../src/types/index.ts";
 import { normalizeCnpj } from "../src/utils/cooperativa";
 import { fetchOperacionalSync, uploadOperacionalSync } from "../src/lib/supabase/cooperativaSyncStorage";
-import { repararIntegridadePagamentosCooperativa } from "../src/services/pagamentoIntegridadeService";
+import { posProcessarIntegridadePagamentosCooperativa } from "../src/services/pagamentoIntegridadeService";
 
 function loadEnvFile(path: string) {
   if (!existsSync(path)) return;
@@ -53,7 +53,7 @@ async function main() {
   }
 
   const asApp = before as unknown as AppData;
-  let next = repararIntegridadePagamentosCooperativa(asApp);
+  let next = posProcessarIntegridadePagamentosCooperativa(asApp);
 
   const pagoAntes = countOrfaos(before);
   const pagoDepois = countOrfaos(next);
