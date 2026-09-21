@@ -218,6 +218,7 @@ export default function LivroCaixaPage() {
         changes: `Livro caixa removido · ${l.historico.slice(0, 80)}`,
       });
     });
+    void publicar({ force: true });
   };
 
   const irParaSequencia = () => {
@@ -308,12 +309,17 @@ export default function LivroCaixaPage() {
     });
   };
 
-  const publicar = async () => {
+  const publicar = async (opts?: { force?: boolean }) => {
     setPublicando(true);
     try {
       const d = getData();
       const cnpj = await resolveCooperativaCnpj(d, coopId, permUser);
-      if (cnpj) await pushOperacionalToCloud(cnpj, d, coopId, { authoritative: true });
+      if (cnpj) {
+        await pushOperacionalToCloud(cnpj, d, coopId, {
+          authoritative: true,
+          forceOperacionalPush: opts?.force,
+        });
+      }
     } finally {
       setPublicando(false);
     }

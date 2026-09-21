@@ -1,4 +1,4 @@
-import type { AppData, Cooperativa, Cooperado, Instituicao, ProdutoInstituicao, Desconto, PrestacaoContasExcluida, NotaPedidoExcluida, InstituicaoExcluida, PagamentoCooperadoRegistro, Comunicado, ComunicadoExcluidoRef, FichaCorrida, VotacaoPauta, VotacaoVoto, ParecerContabilMensal, FechamentoSnapshot } from "@/types";
+import type { AppData, Cooperativa, Cooperado, Instituicao, ProdutoInstituicao, Desconto, PrestacaoContasExcluida, NotaPedidoExcluida, InstituicaoExcluida, PagamentoCooperadoRegistro, Comunicado, ComunicadoExcluidoRef, LivroCaixaExcluidoRef, LivroCaixaLancamento, FichaCorrida, VotacaoPauta, VotacaoVoto, ParecerContabilMensal, FechamentoSnapshot } from "@/types";
 import { normalizeCnpj } from "@/utils/cooperativa";
 import { secureApiFetch } from "@/lib/security/clientSession";
 import type { ContratosSyncPayload, OperacionalSyncPayload } from "@/lib/supabase/cooperativaSyncStorage";
@@ -183,6 +183,32 @@ function mergeComunicadosExcluidosFromCloud(
   return [...map.values()];
 }
 
+function mergeLivroCaixaExcluidosFromCloud(
+  localCoop: LivroCaixaExcluidoRef[],
+  cloudItems: LivroCaixaExcluidoRef[]
+): LivroCaixaExcluidoRef[] {
+  const map = new Map<string, LivroCaixaExcluidoRef>();
+  for (const item of localCoop) map.set(item.id, item);
+  for (const cloud of cloudItems) {
+    const local = map.get(cloud.id);
+    if (!local || new Date(cloud.excluidoEm).getTime() >= new Date(local.excluidoEm).getTime()) {
+      map.set(cloud.id, cloud);
+    }
+  }
+  return [...map.values()];
+}
+
+function mergeLivroCaixaFromCloud(
+  localCoop: LivroCaixaLancamento[],
+  cloudItems: LivroCaixaLancamento[],
+  cloudSyncTime: string | undefined,
+  excluidosIds: Set<string>
+): LivroCaixaLancamento[] {
+  const cloudFiltered = cloudItems.filter((l) => !excluidosIds.has(l.id));
+  const localFiltered = localCoop.filter((l) => !excluidosIds.has(l.id));
+  return mergeOperacionalArrayFromCloud(localFiltered, cloudFiltered, cloudSyncTime);
+}
+
 /** Comunicado desativado localmente (ex.: após assinar recibo) permanece oculto. */
 function mergeComunicadosFromCloud(
   localCoop: Comunicado[],
@@ -340,6 +366,10 @@ function buildOperacionalPayload(data: AppData, coopId: string): OperacionalSync
   const excluidasIds = new Set(
     (sanitized.prestacoesContasExcluidas ?? []).filter((e) => e.cooperativaId === coopId).map((e) => e.id)
   );
+  const livroCaixaExcluidosCoop = (sanitized.livroCaixaExcluidos ?? []).filter(
+    (e) => !e.cooperativaId || e.cooperativaId === coopId
+  );
+  const livroCaixaExcluidosIds = new Set(livroCaixaExcluidosCoop.map((e) => e.id));
   const fichaCoop = dedupeFichaCorridaPorNota(
     sanitized.fichaCorrida.filter((f) => f.cooperativaId === coopId),
     sanitized.notasPedido
@@ -365,8 +395,11 @@ function buildOperacionalPayload(data: AppData, coopId: string): OperacionalSync
       ),
     descontos: sanitized.descontos.filter((d) => cooperadoIds.has(d.cooperadoId)),
     valoresAvulsosReceber: (sanitized.valoresAvulsosReceber ?? []).filter((v) => v.cooperativaId === coopId),
-    livroCaixa: (sanitized.livroCaixa ?? []).filter((l) => l.cooperativaId === coopId),
+    livroCaixa: (sanitized.livroCaixa ?? []).filter(
+      (l) => l.cooperativaId === coopId && !livroCaixaExcluidosIds.has(l.id)
+    ),
     livroCaixaControleAnual: (sanitized.livroCaixaControleAnual ?? []).filter((c) => c.cooperativaId === coopId),
+    livroCaixaExcluidos: livroCaixaExcluidosCoop,
     prestacoesContas: (sanitized.prestacoesContas ?? []).filter(
       (p) => p.cooperativaId === coopId && !excluidasIds.has(p.id)
     ),
@@ -710,6 +743,18 @@ export function mergeOperacionalIntoData(
       );
   const comunicadosExcluidosSet = new Set(mergedComunicadosExcluidosCoop.map((e) => e.id));
 
+  const cloudLivroCaixaExcluidos = (cloud.livroCaixaExcluidos ?? []).map((e) => ({
+    ...e,
+    cooperativaId: e.cooperativaId ?? coopId,
+  }));
+  const mergedLivroCaixaExcluidosCoop = cloudAuthoritative
+    ? cloudLivroCaixaExcluidos
+    : mergeLivroCaixaExcluidosFromCloud(
+        (data.livroCaixaExcluidos ?? []).filter((e) => !e.cooperativaId || e.cooperativaId === coopId),
+        cloudLivroCaixaExcluidos
+      );
+  const livroCaixaExcluidosSet = new Set(mergedLivroCaixaExcluidosCoop.map((e) => e.id));
+
   let next: AppData = {
     ...data,
     arquivosMensais: [
@@ -788,16 +833,21 @@ export function mergeOperacionalIntoData(
     livroCaixa: [
       ...filterCoop(data.livroCaixa ?? [], (l) => l.cooperativaId === coopId),
       ...(cloudAuthoritative
-        ? cloudLivro
-        : mergeOperacionalArrayFromCloud(
+        ? cloudLivro.filter((l) => !livroCaixaExcluidosSet.has(l.id))
+        : mergeLivroCaixaFromCloud(
             (data.livroCaixa ?? []).filter((l) => l.cooperativaId === coopId),
             cloudLivro,
-            cloudSyncTime
+            cloudSyncTime,
+            livroCaixaExcluidosSet
           )),
     ],
     livroCaixaControleAnual: [
       ...(data.livroCaixaControleAnual ?? []).filter((c) => c.cooperativaId !== coopId),
       ...(mergedLivroControle ? [mergedLivroControle] : []),
+    ],
+    livroCaixaExcluidos: [
+      ...(data.livroCaixaExcluidos ?? []).filter((e) => e.cooperativaId && e.cooperativaId !== coopId),
+      ...mergedLivroCaixaExcluidosCoop,
     ],
     prestacoesContas: [
       ...filterCoop(data.prestacoesContas ?? [], (p) => p.cooperativaId === coopId),

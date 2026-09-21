@@ -635,6 +635,13 @@ export interface ComunicadoExcluidoRef {
   excluidoEm: string;
 }
 
+/** Lançamentos avulsos removidos do livro caixa (não voltam após sync). */
+export interface LivroCaixaExcluidoRef {
+  id: string;
+  cooperativaId?: string;
+  excluidoEm: string;
+}
+
 export interface Reclamacao {
   id: string;
   cooperativaId: string;
@@ -935,6 +942,7 @@ export interface AppData {
   fechamentos: FechamentoMensal[];
   livroCaixa: LivroCaixaLancamento[];
   livroCaixaControleAnual?: LivroCaixaControleAnual[];
+  livroCaixaExcluidos?: LivroCaixaExcluidoRef[];
   prestacoesContas: PrestacaoContas[];
   prestacoesContasExcluidas?: PrestacaoContasExcluida[];
   notasPedidoExcluidas?: NotaPedidoExcluida[];

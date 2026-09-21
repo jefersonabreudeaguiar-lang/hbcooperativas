@@ -556,9 +556,14 @@ export function atualizarLancamentoManual(
 export function excluirLancamentoLivroCaixa(data: AppData, cooperativaId: string, lancamentoId: string): AppData {
   const alvo = (data.livroCaixa ?? []).find((l) => l.id === lancamentoId && l.cooperativaId === cooperativaId);
   if (!alvo || !podeExcluirLancamentoLivroCaixa(alvo)) return data;
+  const excluidoEm = new Date().toISOString();
   return {
     ...data,
     livroCaixa: (data.livroCaixa ?? []).filter((l) => l.id !== lancamentoId),
+    livroCaixaExcluidos: [
+      ...(data.livroCaixaExcluidos ?? []).filter((e) => e.id !== lancamentoId),
+      { id: lancamentoId, cooperativaId, excluidoEm },
+    ],
   };
 }
 
