@@ -27,6 +27,12 @@ function chaveDedupeCooperado(c: Pick<Cooperado, "cpfCnpj" | "nomeCompleto">): s
 function pontuarCooperadoCanonico(c: Cooperado, loginCooperadoIds?: Set<string>): number {
   let score = 0;
   if (loginCooperadoIds?.has(c.id)) score += 1_000_000;
+  const st = c.assinaturaCadastroStatus;
+  if (st === "em_analise") score += 500_000;
+  else if (st === "confirmada") score += 400_000;
+  else if (st === "devolvida") score += 200_000;
+  if (c.assinaturaCadastroDataUrl?.trim()) score += 50_000;
+  score += (c.assinaturaCadastroVersao ?? 0) * 1_000;
   if (c.status === "ativo") score += 10_000;
   if (c.status === "suspenso") score += 1_000;
   if (c.chavePix?.trim()) score += 100;

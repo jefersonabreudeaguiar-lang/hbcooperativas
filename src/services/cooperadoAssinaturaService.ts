@@ -5,14 +5,52 @@ import {
   listarCooperadosComApp,
   resumoInstalacaoApp,
 } from "@/services/cooperadoAppInstallService";
-import { cooperadosUnicosParaCobranca } from "@/utils/cooperadoDedupe";
+import {
+  cpfCooperadoDigits,
+  escolherCooperadoCanonico,
+  nomeNormalizadoCooperado,
+} from "@/utils/cooperadoDedupe";
+
+function chaveCooperadoDedupe(c: Pick<Cooperado, "cpfCnpj" | "nomeCompleto">): string {
+  const cpf = cpfCooperadoDigits(c.cpfCnpj);
+  if (cpf.length >= 11) return `cpf:${cpf}`;
+  return `nome:${nomeNormalizadoCooperado(c.nomeCompleto)}`;
+}
+
+/** Unifica assinatura quando o mesmo titular tem vários IDs (Ana, Cleones, etc.). */
+export function mergeDuplicatasAssinaturaNaLista(cooperados: Cooperado[]): Cooperado[] {
+  const ativos = cooperados.filter((c) => c.status !== "desligado");
+  const byKey = new Map<string, Cooperado[]>();
+  for (const c of ativos) {
+    const key = chaveCooperadoDedupe(c);
+    if (!key || key === "nome:") continue;
+    const list = byKey.get(key) ?? [];
+    list.push(c);
+    byKey.set(key, list);
+  }
+
+  const out: Cooperado[] = [];
+  for (const grupo of byKey.values()) {
+    const canon = escolherCooperadoCanonico(grupo);
+    let merged: Cooperado = { ...canon };
+    for (const c of grupo) {
+      if (c.id === canon.id) continue;
+      merged = { ...merged, ...mergeAssinaturaCadastroFields(merged, c) };
+      if (c.appInstaladoEm && (!merged.appInstaladoEm || c.appInstaladoEm < merged.appInstaladoEm)) {
+        merged.appInstaladoEm = c.appInstaladoEm;
+      }
+    }
+    out.push(merged);
+  }
+  return out.sort((a, b) => a.nomeCompleto.localeCompare(b.nomeCompleto, "pt-BR"));
+}
 
 function listarCooperadosElegiveisAssinatura(data: AppData, cooperativaId: string): Cooperado[] {
-  return cooperadosUnicosParaCobranca(
+  return mergeDuplicatasAssinaturaNaLista(
     data.cooperados.filter(
       (c) => c.cooperativaId === cooperativaId && c.status === "ativo" && !c.avulso
     )
-  ).sort((a, b) => a.nomeCompleto.localeCompare(b.nomeCompleto, "pt-BR"));
+  );
 }
 
 /** Aviso “assinatura confirmada” some após 24 h. */

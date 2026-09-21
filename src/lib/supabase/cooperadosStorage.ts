@@ -1,7 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Cooperado } from "@/types";
-import { mergeAssinaturaCadastroFields } from "@/services/cooperadoAssinaturaService";
-import { cooperadosUnicosParaCobranca } from "@/utils/cooperadoDedupe";
+import { mergeAssinaturaCadastroFields, mergeDuplicatasAssinaturaNaLista } from "@/services/cooperadoAssinaturaService";
 
 const BUCKET = "hb-cooperados";
 
@@ -111,7 +110,7 @@ export async function fetchCooperadosFromStorage(
       /* ignore corrupt file */
     }
   }
-  return cooperadosUnicosParaCobranca(cooperados).sort((a, b) =>
+  return mergeDuplicatasAssinaturaNaLista(cooperados).sort((a, b) =>
     a.nomeCompleto.localeCompare(b.nomeCompleto, "pt-BR")
   );
 }

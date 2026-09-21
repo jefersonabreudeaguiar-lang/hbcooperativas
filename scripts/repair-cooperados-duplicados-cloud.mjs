@@ -45,10 +45,48 @@ function chave(c) {
 function score(c, loginIds) {
   let s = 0;
   if (loginIds.has(c.id)) s += 1_000_000;
+  const st = c.assinaturaCadastroStatus;
+  if (st === "em_analise") s += 500_000;
+  else if (st === "confirmada") s += 400_000;
+  else if (st === "devolvida") s += 200_000;
+  if (c.assinaturaCadastroDataUrl?.trim()) s += 50_000;
+  s += (c.assinaturaCadastroVersao ?? 0) * 1_000;
   if (c.status === "ativo") s += 10_000;
   if (c.chavePix?.trim()) s += 100;
+  if (c.appInstaladoEm) s += 10;
   s += Math.floor(new Date(c.updatedAt || c.createdAt || 0).getTime() / 1000);
   return s;
+}
+
+const STATUS_RANK = { pendente: 0, devolvida: 1, em_analise: 2, confirmada: 3 };
+
+function assinaturaStatus(c) {
+  if (c.assinaturaCadastroStatus) return c.assinaturaCadastroStatus;
+  if (c.assinaturaCadastroDataUrl?.trim()) return "confirmada";
+  return "pendente";
+}
+
+function mergeAssinaturaFields(a, b) {
+  const vA = a.assinaturaCadastroVersao ?? 0;
+  const vB = b.assinaturaCadastroVersao ?? 0;
+  const pick = (x) => ({
+    assinaturaCadastroDataUrl: x.assinaturaCadastroDataUrl,
+    assinaturaCadastradaEm: x.assinaturaCadastradaEm,
+    assinaturaCadastroVersao: x.assinaturaCadastroVersao,
+    assinaturaCadastroHash: x.assinaturaCadastroHash,
+    assinaturaCadastroStatus: x.assinaturaCadastroStatus,
+    assinaturaConfirmadaEm: x.assinaturaConfirmadaEm,
+    assinaturaConfirmadaPorId: x.assinaturaConfirmadaPorId,
+    assinaturaConfirmadaPorNome: x.assinaturaConfirmadaPorNome,
+    assinaturaDevolvidaEm: x.assinaturaDevolvidaEm,
+    assinaturaDevolvidaMotivo: x.assinaturaDevolvidaMotivo,
+  });
+  if (vB > vA) return pick(b);
+  if (vA > vB) return pick(a);
+  const rA = STATUS_RANK[assinaturaStatus(a)] ?? 0;
+  const rB = STATUS_RANK[assinaturaStatus(b)] ?? 0;
+  if (rA !== rB) return rA > rB ? pick(a) : pick(b);
+  return pick(a);
 }
 
 async function loadCooperados(cnpj) {
@@ -108,6 +146,24 @@ for (const coop of coops ?? []) {
     const dupes = sorted.slice(1);
     console.log(`  ${canon.cooperado.nomeCompleto} (${key})`);
     console.log(`    canônico: ${canon.cooperado.id}`);
+
+    let canonCoop = { ...canon.cooperado };
+    for (const d of dupes) {
+      canonCoop = { ...canonCoop, ...mergeAssinaturaFields(canonCoop, d.cooperado) };
+      if (
+        d.cooperado.appInstaladoEm &&
+        (!canonCoop.appInstaladoEm || d.cooperado.appInstaladoEm < canonCoop.appInstaladoEm)
+      ) {
+        canonCoop.appInstaladoEm = d.cooperado.appInstaladoEm;
+      }
+    }
+    if (JSON.stringify(canonCoop) !== JSON.stringify(canon.cooperado)) {
+      console.log("    mesclou assinatura/dados no canônico");
+      canonCoop.updatedAt = new Date().toISOString();
+      canon.cooperado = canonCoop;
+      canon.parsed.cooperado = canonCoop;
+      await saveCooperado(canon.path, canon.parsed);
+    }
 
     for (const d of dupes) {
       if (d.cooperado.status === "desligado") {

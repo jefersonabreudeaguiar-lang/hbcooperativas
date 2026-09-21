@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { CheckCircle2, Clock, PenLine } from "lucide-react";
 import type { Cooperado, User } from "@/types";
@@ -42,6 +42,23 @@ export function AssinaturaCadastroPanel({ data, user, cooperado }: AssinaturaCad
   const precisa = cooperadoPrecisaCadastrarAssinatura(cooperado.id, cooperado);
   const previewUrl = getAssinaturaCadastroDataUrl(cooperado);
   const podeEnviar = precisa && !emAnalise;
+
+  useEffect(() => {
+    if (!cooperadoAssinaturaEmAnalise(cooperado) || !getAssinaturaCadastroDataUrl(cooperado)) return;
+    void (async () => {
+      const cnpj = await resolveCooperativaCnpj(data, cooperado.cooperativaId, user);
+      if (!cnpj) return;
+      const push = await pushCooperadoToCloud(cnpj, cooperado, user.email);
+      if (!push.ok) queueCooperadoPush(cnpj, cooperado, user.email);
+    })();
+  }, [
+    cooperado.id,
+    cooperado.assinaturaCadastradaEm,
+    cooperado.assinaturaCadastroVersao,
+    cooperado.assinaturaCadastroStatus,
+    data,
+    user,
+  ]);
 
   const salvar = async (payload: { dataUrl: string; hash: string }) => {
     setErro("");
