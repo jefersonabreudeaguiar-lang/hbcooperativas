@@ -1364,6 +1364,24 @@ export function listarFichasPendentesPagamento(
 }
 
 /** Cria lançamentos na ficha a partir de notas já conferidas (sincronizadas da nuvem). */
+function mesComPagamentoCooperativaRegistrado(
+  data: AppData,
+  cooperadoId: string,
+  mesReferencia: string
+): boolean {
+  if (getPagamentoAguardandoCooperado(data, cooperadoId, mesReferencia)) return true;
+  const coopId = data.cooperados.find((c) => c.id === cooperadoId)?.cooperativaId;
+  const canonico = resolverCooperadoIdCanonico(data, cooperadoId, coopId);
+  return data.pagamentosCooperado.some(
+    (p) =>
+      p.status === "confirmado" &&
+      (p.cooperadoId === cooperadoId ||
+        p.cooperadoId === canonico ||
+        resolverCooperadoIdCanonico(data, p.cooperadoId, p.cooperativaId ?? coopId) === canonico) &&
+      pagamentoCobreMesReferencia(p, mesReferencia)
+  );
+}
+
 export function reconciliarFichaFromNotasConferidas(data: AppData): AppData {
   const dedupedInitial = dedupeFichaCorridaPorNota(data.fichaCorrida, data.notasPedido);
   let fichaCorrida = dedupedInitial;
@@ -1378,6 +1396,10 @@ export function reconciliarFichaFromNotasConferidas(data: AppData): AppData {
   for (const nota of notasOrdenadas) {
     if (nota.status !== "conferida" && nota.status !== "pago") continue;
     if (nota.valorLiquido <= 0 && (nota.itens ?? []).every((i) => i.quantidade <= 0)) continue;
+
+    if (mesComPagamentoCooperativaRegistrado(data, nota.cooperadoId, nota.mesReferencia)) {
+      continue;
+    }
 
     const fichasExistentes = fichaCorrida.filter((f) => f.notaPedidoId === nota.id);
     const qtdParticipantes = nota.divisaoEntrega?.participantes.length ?? 1;
@@ -2105,7 +2127,7 @@ export function marcarFichaComoPaga(
     fichaPertenceCooperado(data, f, cooperadoId, coopId) &&
     f.mesReferencia === mesReferencia &&
     f.status === "pendente"
-      ? { ...f, status: "pago" as const }
+      ? { ...f, status: "pago" as const, updatedAt: now }
       : f
   );
   const notaIds = fichaAtualizada

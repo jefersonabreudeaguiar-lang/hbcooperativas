@@ -37,6 +37,7 @@ import { refreshContaCoopLimiteFromFicha } from "@/lib/hb-credit/syncContaCoopLi
 import {
   pushOperacionalToCloud,
   pushNotasPagasToCloud,
+  clearOperacionalPushFingerprint,
 } from "@/services/cooperativaSyncCloudService";
 import { pushCooperadoToCloud } from "@/services/cooperadoCloudService";
 import {
@@ -824,7 +825,8 @@ export default function FichaCorridaPage() {
       descontoAvulso,
       descontoAvulsoMotivo: descontoAvulsoMotivo.trim() || undefined,
     };
-    updateData((d) => {
+    const ajustesPorMes = Object.fromEntries(mesesPagar.map((mes) => [mes, patch]));
+    const nextData = updateData((d) => {
       let comAjustes = d;
       for (const mes of mesesPagar) {
         const ajustesFichaMes = upsertAjustesFichaMesCooperativa(comAjustes, coopId, mes, patch);
@@ -847,16 +849,16 @@ export default function FichaCorridaPage() {
         userName: user.name,
         changes: `Mensalidade e desconto avulso aplicados · ${formatMesesReferenciaRotulo(mesesPagar)}`,
       });
-      const ajustesPorMes = Object.fromEntries(mesesPagar.map((mes) => [mes, patch]));
-      const resumoPag = getResumoPagamentoConsolidadoCooperado(
+      const ajustesPorMesInner = Object.fromEntries(mesesPagar.map((mes) => [mes, patch]));
+      const resumoPagInner = getResumoPagamentoConsolidadoCooperado(
         comAjustes,
         cooperadoSelecionado.id,
         mesesPagar,
         coopId,
-        ajustesPorMes
+        ajustesPorMesInner
       );
       return addAuditEntry(
-        registrarPagamentoCooperado(comAjustes, cooperadoSelecionado.id, mesPrincipal, user.name, resumoPag, {
+        registrarPagamentoCooperado(comAjustes, cooperadoSelecionado.id, mesPrincipal, user.name, resumoPagInner, {
           mesesReferencia: mesesPagar,
         }),
         {
@@ -865,24 +867,29 @@ export default function FichaCorridaPage() {
           action: "aprovar",
           userId: user.id,
           userName: user.name,
-          changes: `Pagamento consolidado (${formatMesesReferenciaRotulo(mesesPagar)}): ${formatCurrency(resumoPag.valorLiquido)}`,
+          changes: `Pagamento consolidado (${formatMesesReferenciaRotulo(mesesPagar)}): ${formatCurrency(resumoPagInner.valorLiquido)}`,
         }
       );
     });
     void (async () => {
-      const d = getData();
-      const cnpj = await resolveCooperativaCnpj(d, coopId, user);
+      const cnpj = await resolveCooperativaCnpj(nextData, coopId, user);
       if (!cnpj) return;
-      const ajustesPorMes = Object.fromEntries(mesesPagar.map((mes) => [mes, patch]));
-      const resumoPag = getResumoPagamentoConsolidadoCooperado(
-        d,
-        cooperadoSelecionado.id,
-        mesesPagar,
-        coopId,
-        ajustesPorMes
+      clearOperacionalPushFingerprint(cnpj, true);
+      await pushOperacionalToCloud(cnpj, nextData, coopId, {
+        authoritative: true,
+        forceOperacionalPush: true,
+      });
+      await pushNotasPagasToCloud(
+        cnpj,
+        getResumoPagamentoConsolidadoCooperado(
+          nextData,
+          cooperadoSelecionado.id,
+          mesesPagar,
+          coopId,
+          ajustesPorMes
+        ).notaPedidoIds,
+        nextData
       );
-      await pushOperacionalToCloud(cnpj, d, coopId, { authoritative: true });
-      await pushNotasPagasToCloud(cnpj, resumoPag.notaPedidoIds, d);
       await refreshContaCoopLimiteFromFicha({
         cnpj,
         cooperadoId: cooperadoSelecionado.id,

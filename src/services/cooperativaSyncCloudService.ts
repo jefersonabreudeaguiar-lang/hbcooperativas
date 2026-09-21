@@ -41,6 +41,21 @@ function fingerprintOperacionalPayload(payload: OperacionalSyncPayload): string 
   return JSON.stringify(rest);
 }
 
+/** Pagamento registrado localmente ainda não publicado — não aplicar merge defensivo que aborta o push. */
+function operacionalTemPagamentoAguardandoSoLocal(
+  data: AppData,
+  coopId: string,
+  cloud: OperacionalSyncPayload
+): boolean {
+  const cloudIds = new Set((cloud.pagamentosCooperado ?? []).map((p) => p.id));
+  return data.pagamentosCooperado.some(
+    (p) =>
+      p.cooperativaId === coopId &&
+      p.status === "aguardando_confirmacao" &&
+      !cloudIds.has(p.id)
+  );
+}
+
 function itemTime(item: WithUpdatedAt): number {
   const t = item.updatedAt ?? item.createdAt;
   return t ? new Date(t).getTime() : 0;
@@ -76,6 +91,29 @@ function mergeOperacionalArrayFromCloud<T extends WithUpdatedAt>(
     map.set(item.id, item);
   }
 
+  return [...map.values()];
+}
+
+/** Ficha paga localmente não volta para pendente por snapshot desatualizado na nuvem. */
+function mergeFichaCorridaFromCloud(localCoop: FichaCorrida[], cloudItems: FichaCorrida[]): FichaCorrida[] {
+  const map = new Map<string, FichaCorrida>();
+  for (const item of cloudItems) map.set(item.id, item);
+  for (const local of localCoop) {
+    const cloud = map.get(local.id);
+    if (!cloud) {
+      map.set(local.id, local);
+      continue;
+    }
+    if (local.status === "pago" && cloud.status === "pendente") {
+      map.set(local.id, local);
+      continue;
+    }
+    if (cloud.status === "pago" && local.status === "pendente") {
+      map.set(local.id, cloud);
+      continue;
+    }
+    map.set(local.id, itemTime(local) >= itemTime(cloud) ? local : cloud);
+  }
   return [...map.values()];
 }
 
@@ -870,10 +908,9 @@ export function mergeOperacionalIntoData(
         ...filterCoop(data.fichaCorrida ?? [], (f) => f.cooperativaId === coopId),
         ...(cloudAuthoritative
           ? cloudFichas
-          : mergeOperacionalArrayFromCloud(
+          : mergeFichaCorridaFromCloud(
               (data.fichaCorrida ?? []).filter((f) => f.cooperativaId === coopId),
-              cloudFichas,
-              cloudSyncTime
+              cloudFichas
             )),
       ],
       data.notasPedido
@@ -1128,6 +1165,7 @@ export async function pushOperacionalToCloud(
     bundle?.operacional &&
     !options?.forceOperacionalPush &&
     !options?.authoritative &&
+    !operacionalTemPagamentoAguardandoSoLocal(afterPushCoop, cid, bundle.operacional) &&
     !operacionalPushSeguro(
       afterPushCoop,
       cid,

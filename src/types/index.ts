@@ -419,6 +419,8 @@ export interface FichaCorrida {
   descontosDetalhe?: FichaCorridaDesconto[];
   divisaoEntrega?: DivisaoEntregaNota;
   createdAt: string;
+  /** Marca pagamento registrado / merge com nuvem — evita voltar para pendente. */
+  updatedAt?: string;
 }
 
 /** Pagamento mensal registrado pela diretoria — aguarda confirmação do cooperado. */
