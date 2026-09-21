@@ -16,10 +16,6 @@
     {
       "path": "/api/cron/operacional-hb-descontos-repair",
       "schedule": "30 6 * * *"
-    },
-    {
-      "path": "/api/cron/hobelisco-credit-watch",
-      "schedule": "*/15 * * * *"
     }
   ]
 }
