@@ -4,7 +4,8 @@ import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Plus, TrendingUp, TrendingDown, Wallet, Send, Pencil, Trash2, FileText, Search } from "lucide-react";
 import { useAppData } from "@/hooks/useAppData";
-import { usePermissions } from "@/hooks/usePermissions";
+import { useAuth } from "@/modules/auth/AuthProvider";
+import { canUser } from "@/permissions";
 import { getUserCooperativaId } from "@/utils/cooperativa";
 import { PageHeader, Modal } from "@/components/ui/Table";
 import { Button } from "@/components/ui/Button";
@@ -33,12 +34,13 @@ import {
   resumoLivroCaixaGeral,
   solicitarEncerramentoAnoLivroCaixa,
 } from "@/services/livroCaixaService";
+import { APP_BUILD_VERSION } from "@/lib/appBuildVersion";
 import { gerarRelatorioLivroCaixaDiaHtml } from "@/utils/livroCaixaRelatorioHtml";
-import { imprimirDocumentoHtml } from "@/utils/relatorioHtml";
 import type { LivroCaixaLancamento } from "@/types";
+import { imprimirDocumentoHtml } from "@/utils/relatorioHtml";
 import { formatCurrency, formatDate, formatMesReferencia, getCurrentMesReferencia } from "@/utils/format";
 import { CONTA_COOP_DESCONTO_SPLIT } from "@/config/contaCoopEconomia";
-import type { LivroCaixaOrigem, LivroCaixaTipo } from "@/types";
+import type { LivroCaixaOrigem, LivroCaixaTipo, Action, Resource } from "@/types";
 
 const ORIGEM_LABELS: Record<LivroCaixaOrigem, string> = {
   manual: "Manual",
@@ -57,9 +59,16 @@ const ORIGEM_LABELS: Record<LivroCaixaOrigem, string> = {
 
 export default function LivroCaixaPage() {
   const data = useAppData();
-  const { check, user } = usePermissions();
+  const { user, accountUser } = useAuth();
+  const permUser = accountUser ?? user;
   const router = useRouter();
-  const coopId = user && data ? getUserCooperativaId(user, data) : undefined;
+  const coopId =
+    (accountUser ?? user) && data ? getUserCooperativaId(accountUser ?? user!, data) : undefined;
+
+  const check = (resource: Resource, action: Action) => {
+    if (!permUser) return false;
+    return canUser(permUser, resource, action);
+  };
   const [mes, setMes] = useState(getCurrentMesReferencia());
   const [modalOpen, setModalOpen] = useState(false);
   const [tipo, setTipo] = useState<LivroCaixaTipo>("credito");
@@ -101,8 +110,8 @@ export default function LivroCaixaPage() {
   };
 
   useEffect(() => {
-    if (user && !check("livro_caixa", "view")) router.replace("/dashboard");
-  }, [user, router, check]);
+    if (permUser && !check("livro_caixa", "view")) router.replace("/dashboard");
+  }, [permUser, router]);
 
   useEffect(() => {
     if (!data || !coopId) return;
@@ -132,12 +141,12 @@ export default function LivroCaixaPage() {
     [data, coopId]
   );
 
-  if (!data || !user || !coopId) return null;
+  if (!data || !permUser || !coopId) return null;
 
   const coopNome = data.cooperativas.find((c) => c.id === coopId)?.nome ?? "Cooperativa";
-  const isContador = user.role === "contador";
+  const isContador = permUser.role === "contador";
   const podeEncerrarResponsavel =
-    user.role === "admin" || user.role === "tesoureiro" || user.role === "responsavel";
+    permUser.role === "admin" || permUser.role === "tesoureiro" || permUser.role === "responsavel";
 
   const canEdit = check("livro_caixa", "create");
   const canEditLancamento = check("livro_caixa", "edit");
@@ -161,8 +170,8 @@ export default function LivroCaixaPage() {
           entityType: "financeiro",
           entityId: editing.id,
           action: "editar",
-          userId: user.id,
-          userName: user.name,
+          userId: permUser.id,
+          userName: permUser.name,
           changes: `Livro caixa · ${tipo} ${formatCurrency(v)} · ${historico.trim().slice(0, 80)}`,
         });
       });
@@ -171,14 +180,14 @@ export default function LivroCaixaPage() {
         const next = criarLancamentoManual(d, coopId, tipo, v, historico, {
           data: dataLanc,
           origem,
-          responsavel: user.name,
+          responsavel: permUser.name,
         });
         return addAuditEntry(next, {
           entityType: "financeiro",
           entityId: coopId,
           action: "criar",
-          userId: user.id,
-          userName: user.name,
+          userId: permUser.id,
+          userName: permUser.name,
           changes: `Livro caixa · ${tipo} ${formatCurrency(v)}`,
         });
       });
@@ -202,8 +211,8 @@ export default function LivroCaixaPage() {
         entityType: "financeiro",
         entityId: l.id,
         action: "excluir",
-        userId: user.id,
-        userName: user.name,
+        userId: permUser.id,
+        userName: permUser.name,
         changes: `Livro caixa removido · ${l.historico.slice(0, 80)}`,
       });
     });
@@ -256,7 +265,7 @@ export default function LivroCaixaPage() {
       return;
     }
     updateData((d) => {
-      const next = solicitarEncerramentoAnoLivroCaixa(d, coopId, user, {
+      const next = solicitarEncerramentoAnoLivroCaixa(d, coopId, permUser, {
         anoEncerrado: controleAnual.anoLivro,
         backupConfirmado: encBackupOk,
         relatoriosImpressosConfirmados: encRelatoriosOk,
@@ -266,8 +275,8 @@ export default function LivroCaixaPage() {
         entityType: "financeiro",
         entityId: coopId,
         action: "editar",
-        userId: user.id,
-        userName: user.name,
+        userId: permUser.id,
+        userName: permUser.name,
         changes: `Livro caixa · encerramento ${controleAnual.anoLivro} solicitado (aguarda contador)`,
       });
     });
@@ -290,8 +299,8 @@ export default function LivroCaixaPage() {
         entityType: "financeiro",
         entityId: coopId,
         action: "aprovar",
-        userId: user.id,
-        userName: user.name,
+        userId: permUser.id,
+        userName: permUser.name,
         changes: `Livro caixa · ano ${p.anoEncerrado} encerrado · contador confirmou`,
       });
     });

@@ -515,6 +515,7 @@ export function getMobileNavItems(
       { href: "/dashboard", label: "Início", resource: "dashboard" },
       { href: "/notas-pedido", label: "Conferir", resource: "notas_pedido" },
       { href: "/ficha-corrida", label: "Pagar", resource: "ficha_corrida" },
+      { href: "/livro-caixa", label: "Caixa", resource: "livro_caixa" },
       { href: "/conta-coop", label: "HB Créditos", resource: "conta_coop" },
       { href: "/votacoes", label: "Votações", resource: "votacoes" },
       { href: "/cooperados", label: "Cooperados", resource: "cooperados" },
