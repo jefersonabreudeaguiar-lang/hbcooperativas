@@ -293,7 +293,7 @@ export default function LivroCaixaPage() {
       return;
     }
     updateData((d) => {
-      const next = confirmarEncerramentoAnoLivroCaixaContador(d, coopId, user);
+      const next = confirmarEncerramentoAnoLivroCaixaContador(d, coopId, permUser);
       if (next === d) return d;
       return addAuditEntry(next, {
         entityType: "financeiro",
@@ -310,7 +310,7 @@ export default function LivroCaixaPage() {
     setPublicando(true);
     try {
       const d = getData();
-      const cnpj = await resolveCooperativaCnpj(d, coopId, user);
+      const cnpj = await resolveCooperativaCnpj(d, coopId, permUser);
       if (cnpj) await pushOperacionalToCloud(cnpj, d, coopId, { authoritative: true });
     } finally {
       setPublicando(false);
@@ -323,8 +323,8 @@ export default function LivroCaixaPage() {
         title="Livro caixa"
         subtitle={
           controleAnual
-            ? `Ano-livro ${controleAnual.anoLivro} · próximo nº ${controleAnual.proximoSequencia}`
-            : "Movimentos automáticos, retenções contábeis e lançamentos avulsos"
+            ? `Ano-livro ${controleAnual.anoLivro} · próximo nº ${controleAnual.proximoSequencia} · v${APP_BUILD_VERSION}`
+            : `Movimentos automáticos e avulsos · v${APP_BUILD_VERSION}`
         }
         action={
           canEdit && (
