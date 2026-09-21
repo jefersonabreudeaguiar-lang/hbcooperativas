@@ -16,6 +16,7 @@ import {
   purgarFichasInvalidas,
   mergeArquivosMensaisFromCloud,
   reconciliarFichaFromNotasConferidas,
+  registrarPagamentoCooperado,
 } from "../src/services/notaPedidoService.ts";
 import { setContaCoopDescontosMemoria } from "../src/lib/hb-credit/contaCoopDescontosMemory.ts";
 import {
@@ -26,6 +27,7 @@ import {
 import {
   getValorQuantoVouReceber,
   getConsolidadoFinanceiroCooperado,
+  cooperadoExibirValorReceberInicio,
   cooperadoPendentePagamentoResponsavel,
   listarMesesPendentesPagamentoResponsavel,
   listarMesesPendentesQuantoVouReceber,
@@ -207,8 +209,86 @@ function nota(id: string, status: NotaPedido["status"]): NotaPedido {
     },
   ]);
   const inicio = getValorQuantoVouReceber(data, COOPERADO, COOP);
-  assert.equal(inicio.valor, 70, "A receber deve abater HB mesmo aguardando assinatura do recibo");
+  assert.equal(inicio.valor, 0, "Após PIX da cooperativa, a receber zera até assinar o recibo");
+  assert.equal(inicio.valorRecibo, 100, "Valor pago fica no registro do recibo");
   assert.equal(inicio.aguardandoAssinatura, true);
+}
+
+{
+  const MES = "2026-08";
+  let data = baseData({
+    fichaCorrida: [ficha("f1", "n1")],
+    notasPedido: [nota("n1", "conferida")],
+  });
+  data = registrarPagamentoCooperado(data, COOPERADO, MES, "Responsável teste");
+  const pg = data.pagamentosCooperado.find((p) => p.status === "aguardando_confirmacao");
+  assert.ok(pg, "registro de pagamento criado");
+  const inicio = cooperadoExibirValorReceberInicio(data, COOPERADO, COOP);
+  assert.equal(inicio.valor, 0, "Início: a receber zero após pagamento registrado");
+  assert.equal(inicio.valorRecibo, pg!.valorLiquido, "Início: mostra valor do recibo");
+  assert.equal(inicio.aguardandoAssinatura, true);
+  const relatorio = getResumoValorAPagarRelatorio(data, COOPERADO, MES, COOP);
+  assert.equal(relatorio.valorLiquido, 0, "Relatório a receber zera com pagamento aguardando assinatura");
+  const fin = getConsolidadoFinanceiroCooperado(data, COOPERADO, COOP);
+  assert.equal(fin.valorLiquido, 0, "Consolidado a receber zera");
+  assert.equal(fin.resumo.valorLiquido, pg!.valorLiquido, "Resumo congelado no snapshot do pagamento");
+}
+
+{
+  const MES = "2026-08";
+  const data = baseData({
+    fichaCorrida: [
+      { ...ficha("f1", "n1", MES), status: "pago" },
+      { ...ficha("f2", "n2", MES), valorBruto: 50, valorLiquido: 50 },
+    ],
+    notasPedido: [
+      nota("n1", "pago"),
+      { ...nota("n2", "conferida"), valorLiquido: 50, valorBruto: 50 },
+    ],
+    pagamentosCooperado: [
+      {
+        id: "pg_confirmado_n2",
+        cooperativaId: COOP,
+        cooperadoId: COOPERADO,
+        mesReferencia: MES,
+        valorBruto: 100,
+        descontoCooperativa: 0,
+        descontosExtras: [],
+        valorLiquido: 100,
+        fichaIds: ["f1"],
+        notaPedidoIds: ["n1"],
+        status: "confirmado",
+        pagoPor: "Resp",
+        pagoEm: "2026-08-25T12:00:00.000Z",
+        assinadoEm: "2026-08-26T12:00:00.000Z",
+        createdAt: "2026-08-25T12:00:00.000Z",
+      },
+    ],
+    arquivosMensais: [
+      {
+        id: "am_ago",
+        cooperativaId: COOP,
+        cooperadoId: COOPERADO,
+        mesReferencia: MES,
+        notaPedidoIds: ["n1"],
+        pagamentoIds: ["pg_confirmado_n2"],
+        mensalidadeFixa: 0,
+        updatedAt: "2026-08-26T12:00:00.000Z",
+      },
+    ],
+  });
+  const aReceber = getResumoValorAPagarRelatorio(data, COOPERADO, MES, COOP).valorLiquido;
+  const card = getValorQuantoVouReceber(data, COOPERADO, COOP);
+  const baseMes = getResumoPagamentoCooperado(data, COOPERADO, MES, COOP);
+  assert.equal(baseMes.valorEntregas, 50, "Resumo vivo considera só a nova ficha pendente");
+  assert.ok(aReceber > 0, "Nova entrega após recibo assinado volta a gerar valor a receber");
+  assert.equal(
+    aReceber,
+    getResumoPagamentoParaRegistro(baseMes, data, COOPERADO, MES, COOP).valorLiquido,
+    "Relatório e resumo alinhados"
+  );
+  assert.equal(card.valor, aReceber, "Início/ficha refletem o pendente novo");
+  assert.equal(card.aguardandoAssinatura, false);
 }
 
 {

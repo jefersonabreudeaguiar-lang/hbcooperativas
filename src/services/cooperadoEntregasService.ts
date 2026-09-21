@@ -9,7 +9,7 @@ import {
   getResumoPagamentoExibicao,
   pagamentoCobreMesReferencia,
   getMesesReferenciaPagamento,
-  netHbAbatePosRegistroPagamento,
+  resumoFromPagamento,
   fichaValidaNoExtrato,
   type AjustesResumoPagamento,
 } from "@/services/notaPedidoService";
@@ -126,23 +126,56 @@ export function cooperadoExibirValorReceberInicio(
   meses: string[];
   mesLabel: string;
   valor: number;
+  valorRecibo: number;
   aguardandoAssinatura: boolean;
 } {
-  const { mes, meses, mesLabel, valor, aguardandoAssinatura } = getValorQuantoVouReceber(
+  const { mes, meses, mesLabel, valor, valorRecibo, aguardandoAssinatura } = getValorQuantoVouReceber(
     data,
     cooperadoId,
     cooperativaId
   );
   if (aguardandoAssinatura) {
-    return { exibir: true, mes, meses, mesLabel, valor, aguardandoAssinatura: true };
+    return {
+      exibir: true,
+      mes,
+      meses,
+      mesLabel,
+      valor: 0,
+      valorRecibo,
+      aguardandoAssinatura: true,
+    };
   }
   if (meses.length === 1 && getPagamentoConfirmadoMes(data, cooperadoId, mes)) {
-    return { exibir: false, mes, meses, mesLabel, valor: 0, aguardandoAssinatura: false };
+    return {
+      exibir: false,
+      mes,
+      meses,
+      mesLabel,
+      valor: 0,
+      valorRecibo: 0,
+      aguardandoAssinatura: false,
+    };
   }
   if (valor <= 0 || meses.length === 0) {
-    return { exibir: false, mes, meses, mesLabel, valor: 0, aguardandoAssinatura: false };
+    return {
+      exibir: false,
+      mes,
+      meses,
+      mesLabel,
+      valor: 0,
+      valorRecibo: 0,
+      aguardandoAssinatura: false,
+    };
   }
-  return { exibir: true, mes, meses, mesLabel, valor, aguardandoAssinatura: false };
+  return {
+    exibir: true,
+    mes,
+    meses,
+    mesLabel,
+    valor,
+    valorRecibo: 0,
+    aguardandoAssinatura: false,
+  };
 }
 
 export function filtrarResumosEntregasPendentes(
@@ -283,9 +316,12 @@ export function getConsolidadoFinanceiroCooperado(
   );
   const coopId = cooperativaId ?? data.cooperados.find((c) => c.id === cooperadoId)?.cooperativaId;
   const mesReferenciaPrincipal = getMesPrincipalQuantoVouReceber(data, cooperadoId, cooperativaId);
+  const pagamentoAguardando = getPagamentoAguardandoCooperado(data, cooperadoId);
 
   let resumo: ConsolidadoFinanceiroCooperado["resumo"];
-  if (meses.length > 1) {
+  if (aguardandoAssinatura && pagamentoAguardando) {
+    resumo = resumoFromPagamento(pagamentoAguardando);
+  } else if (meses.length > 1) {
     resumo = getResumoPagamentoConsolidadoCooperado(data, cooperadoId, meses, coopId, ajustesPorMes);
   } else if (meses.length === 1) {
     resumo = getResumoPagamentoExibicao(
@@ -307,7 +343,7 @@ export function getConsolidadoFinanceiroCooperado(
     };
   }
 
-  if (round2(resumo.valorLiquido) !== round2(valor)) {
+  if (!aguardandoAssinatura && round2(resumo.valorLiquido) !== round2(valor)) {
     resumo = { ...resumo, valorLiquido: round2(valor) };
   }
 
@@ -358,6 +394,7 @@ export function getValorQuantoVouReceber(
   meses: string[];
   mesLabel: string;
   valor: number;
+  valorRecibo: number;
   aguardandoAssinatura: boolean;
 } {
   const mesesPendentes = listarMesesPendentesQuantoVouReceber(data, cooperadoId, cooperativaId);
@@ -370,34 +407,34 @@ export function getValorQuantoVouReceber(
     Boolean(getPagamentoAguardandoCooperado(data, cooperadoId, m))
   );
   const aguardando = getPagamentoAguardandoCooperado(data, cooperadoId);
+  const mesesAguardandoAssinatura = new Set(
+    aguardando ? getMesesReferenciaPagamento(aguardando) : []
+  );
+  const mesesComValorAReceber = mesesPendentes.filter((m) => !mesesAguardandoAssinatura.has(m));
   let valor = 0;
-  if (aguardando) {
-    let hbPosPagamento = 0;
-    for (const mes of getMesesReferenciaPagamento(aguardando)) {
-      hbPosPagamento += netHbAbatePosRegistroPagamento(
-        data,
-        cooperadoId,
-        mes,
-        aguardando.pagoEm,
-        cooperativaId
-      );
-    }
-    valor = round2(Math.max(0, aguardando.valorLiquido - hbPosPagamento));
-  } else if (mesesPendentes.length > 1) {
+  if (mesesComValorAReceber.length > 1) {
     valor = getResumoPagamentoConsolidadoCooperado(
       data,
       cooperadoId,
-      mesesPendentes,
+      mesesComValorAReceber,
       cooperativaId
     ).valorLiquido;
   } else {
-    valor = mesesPendentes.reduce(
+    valor = mesesComValorAReceber.reduce(
       (s, m) => s + valorLiquidoMesQuantoVouReceber(data, cooperadoId, m, cooperativaId),
       0
     );
   }
   valor = round2(valor);
-  return { mes, meses: mesesPendentes, mesLabel, valor, aguardandoAssinatura };
+  const valorRecibo = aguardando ? round2(aguardando.valorLiquido) : 0;
+  return {
+    mes,
+    meses: mesesPendentes,
+    mesLabel,
+    valor,
+    valorRecibo,
+    aguardandoAssinatura,
+  };
 }
 
 export function getResumoMesEntregasCooperado(

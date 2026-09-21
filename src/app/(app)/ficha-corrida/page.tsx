@@ -531,6 +531,11 @@ export default function FichaCorridaPage() {
     return getPagamentoAguardandoCooperado(data, cooperadoSelecionadoId);
   }, [data, cooperadoSelecionadoId]);
 
+  useEffect(() => {
+    if (!isCooperado || searchParams.get("assinar") !== "1") return;
+    if (pagamentoAguardando) setAssinaturaModal(true);
+  }, [isCooperado, searchParams, pagamentoAguardando]);
+
   const resumoItensPagamento = useMemo(() => {
     if (!data || !cooperadoSelecionadoId) return resumoItensMes;
     if (pagamentoAguardando) {

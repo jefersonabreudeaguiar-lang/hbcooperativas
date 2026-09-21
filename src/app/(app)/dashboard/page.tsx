@@ -236,6 +236,25 @@ function CooperadoDashboard() {
 
       {cooperado && <AssinaturaStatusAviso cooperado={cooperado} />}
 
+      {valorReceber.aguardandoAssinatura && valorReceber.valorRecibo > 0 && (
+        <Link
+          href="/ficha-corrida?assinar=1"
+          className="flex items-center gap-4 rounded-2xl border-2 border-emerald-300 bg-gradient-to-r from-emerald-50 to-green-50 px-5 py-4 hover:border-emerald-400 transition-colors shadow-sm"
+        >
+          <span className="flex h-12 w-12 items-center justify-center rounded-xl bg-emerald-600 text-white shrink-0">
+            <PenLine size={24} />
+          </span>
+          <span className="min-w-0 flex-1">
+            <span className="block font-bold text-gray-900">Assine o recibo do pagamento</span>
+            <span className="block text-sm text-gray-600 mt-0.5">
+              {valorReceber.mesLabel} · {formatCurrency(valorReceber.valorRecibo)} já registrado pela cooperativa.
+              Confirme o recebimento para concluir.
+            </span>
+          </span>
+          <span className="text-sm font-semibold text-emerald-800 shrink-0">Assinar →</span>
+        </Link>
+      )}
+
       {financeiroAusente && (
         <AlertBanner
           variant={lastSyncError ? "error" : "info"}
@@ -340,13 +359,30 @@ function CooperadoDashboard() {
 
       <div className={`grid grid-cols-1 gap-4 ${valorReceber.exibir ? "sm:grid-cols-2" : ""}`}>
         {valorReceber.exibir && (
-          <div className="bg-gradient-to-br from-amber-500 to-amber-600 text-white rounded-2xl p-6 shadow-sm">
+          <div
+            className={`rounded-2xl p-6 shadow-sm ${
+              valorReceber.aguardandoAssinatura
+                ? "bg-gradient-to-br from-emerald-600 to-green-700 text-white border border-emerald-500"
+                : "bg-gradient-to-br from-amber-500 to-amber-600 text-white"
+            }`}
+          >
             <Wallet size={28} className="mb-3 opacity-90" />
-            <p className="text-amber-100 text-sm">
-              {valorReceber.aguardandoAssinatura ? "Confirme o recebimento" : "A receber"} · {valorReceber.mesLabel}
-            </p>
-            <p className="text-3xl font-bold mt-1">{formatCurrency(valorReceber.valor)}</p>
-            <Link href="/ficha-corrida" className="inline-block mt-4 text-sm font-medium bg-white/20 hover:bg-white/30 px-4 py-2 rounded-lg">
+            {valorReceber.aguardandoAssinatura ? (
+              <>
+                <p className="text-emerald-100 text-sm">Pagamento registrado · {valorReceber.mesLabel}</p>
+                <p className="text-3xl font-bold mt-1">{formatCurrency(valorReceber.valorRecibo)}</p>
+                <p className="text-sm text-emerald-100 mt-2">A receber agora: {formatCurrency(0)}</p>
+              </>
+            ) : (
+              <>
+                <p className="text-amber-100 text-sm">A receber · {valorReceber.mesLabel}</p>
+                <p className="text-3xl font-bold mt-1">{formatCurrency(valorReceber.valor)}</p>
+              </>
+            )}
+            <Link
+              href={valorReceber.aguardandoAssinatura ? "/ficha-corrida?assinar=1" : "/ficha-corrida"}
+              className="inline-block mt-4 text-sm font-medium bg-white/20 hover:bg-white/30 px-4 py-2 rounded-lg"
+            >
               {valorReceber.aguardandoAssinatura ? "Assinar recibo" : "Ver detalhes"}
             </Link>
           </div>

@@ -1724,7 +1724,18 @@ export function getResumoValorAPagarRelatorio(
   mesReferencia: string,
   cooperativaId?: string
 ): ResumoPagamentoCooperado {
-  return getResumoPagamentoExibicao(data, cooperadoId, mesReferencia, cooperativaId);
+  const coopId = cooperativaId ?? data.cooperados.find((c) => c.id === cooperadoId)?.cooperativaId;
+  const aguardando = getPagamentoAguardandoCooperado(data, cooperadoId, mesReferencia);
+  if (aguardando) {
+    return { ...resumoFromPagamento(aguardando), valorLiquido: 0 };
+  }
+  const confirmado = getPagamentoConfirmadoCooperadoMes(data, cooperadoId, mesReferencia);
+  const pendentes = listarFichasPendentesPagamento(data, cooperadoId, mesReferencia, coopId);
+  if (confirmado && pendentes.length === 0) {
+    return { ...resumoFromPagamento(confirmado), valorLiquido: 0 };
+  }
+  const live = getResumoPagamentoCooperado(data, cooperadoId, mesReferencia, coopId);
+  return getResumoPagamentoParaRegistro(live, data, cooperadoId, mesReferencia, coopId);
 }
 
 /** Valor exibido ao cooperado — entregas; menos uso HB Créditos no mercado quando houver compras no mês. */
@@ -1887,7 +1898,7 @@ export function getResumoPagamentoExibicao(
 ): ResumoPagamentoCooperado {
   const coopId = cooperativaId ?? data.cooperados.find((c) => c.id === cooperadoId)?.cooperativaId;
   const confirmado = getPagamentoConfirmadoCooperadoMes(data, cooperadoId, mesReferencia);
-  if (confirmado) {
+  if (confirmado && listarFichasPendentesPagamento(data, cooperadoId, mesReferencia, coopId).length === 0) {
     return resumoFromPagamento(confirmado);
   }
   const pagamento = getPagamentoAguardandoCooperado(data, cooperadoId, mesReferencia);
