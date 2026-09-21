@@ -61,8 +61,9 @@ export function CooperadoFinanceiroGate({ children }: { children: React.ReactNod
     return <>{children}</>;
   }
 
-  const aguardandoPrimeiraSync = lastSyncedAt == null && !lastSyncError && !syncWaitExceeded;
-  const bloqueado = financeiroIncompleto && (aguardandoPrimeiraSync || syncing);
+  const aguardandoPrimeiraSync = lastSyncedAt == null && !syncWaitExceeded;
+  const bloqueado =
+    aguardandoPrimeiraSync && (syncing || financeiroIncompleto);
 
   if (bloqueado) {
     return (
@@ -75,14 +76,12 @@ export function CooperadoFinanceiroGate({ children }: { children: React.ReactNod
     );
   }
 
-  if (financeiroIncompleto && !syncing && (lastSyncError || lastSyncedAt != null || syncWaitExceeded)) {
+  if (lastSyncedAt == null && syncWaitExceeded && financeiroIncompleto) {
     return (
       <div className="max-w-lg mx-auto py-8 space-y-4">
         <AlertBanner variant="error" title="Não foi possível carregar sua ficha">
           {lastSyncError ||
-            (syncWaitExceeded
-              ? "A sincronização demorou demais. Toque em Tentar novamente. Se persistir, saia, limpe o cache do navegador e entre de novo."
-              : "Não foi possível baixar sua ficha. Verifique a internet e toque em Tentar novamente.")}
+            "A sincronização demorou demais. Toque em Tentar novamente. Se persistir, saia, limpe o cache do navegador e entre de novo."}
         </AlertBanner>
         <div className="flex flex-wrap gap-2">
           <Button onClick={() => solicitarRecuperacaoFinanceiroCooperado()} disabled={syncing}>

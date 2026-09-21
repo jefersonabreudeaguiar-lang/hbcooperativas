@@ -149,12 +149,9 @@ export function cooperadoFinanceiroLocalAusente(
   // Ficha veio da nuvem antes das notas conferidas — estado quebrado típico no celular.
   if (fichasPendentes.length > 0 && conferidas === 0) return true;
 
+  // Conferidas locais: incompleto só se alguma nota ainda não tem ficha (pendente ou pago).
   if (conferidas > 0) {
-    const fichasElegiveis = fichasPendentes.filter((f) => {
-      const nota = (data.notasPedido ?? []).find((n) => n.id === f.notaPedidoId);
-      return nota && (nota.status === "conferida" || nota.status === "pago");
-    }).length;
-    if (fichasElegiveis === 0) return true;
+    return cooperadoConferidasSemFicha(data, canonico, cooperativaId);
   }
 
   return false;

@@ -426,6 +426,38 @@ function nota(id: string, status: NotaPedido["status"]): NotaPedido {
   );
 }
 
+// 4b) Mês quitado (ficha pago + nota pago) ≠ financeiro ausente — evita gate eterno
+{
+  const MES = "2026-08";
+  const data = baseData({
+    fichaCorrida: [{ ...ficha("f1", "n1", MES), status: "pago" }],
+    notasPedido: [nota("n1", "pago")],
+    pagamentosCooperado: [
+      {
+        id: "pg_ok",
+        cooperativaId: COOP,
+        cooperadoId: COOPERADO,
+        mesReferencia: MES,
+        valorBruto: 100,
+        descontoCooperativa: 0,
+        descontosExtras: [],
+        valorLiquido: 100,
+        fichaIds: ["f1"],
+        notaPedidoIds: ["n1"],
+        status: "confirmado",
+        pagoPor: "Resp",
+        pagoEm: "2026-08-20T12:00:00.000Z",
+        createdAt: "2026-08-20T12:00:00.000Z",
+      },
+    ],
+  });
+  assert.equal(
+    cooperadoFinanceiroLocalAusente(data, COOPERADO, COOP),
+    false,
+    "histórico pago com ficha na nuvem não deve bloquear cooperado"
+  );
+}
+
 // 5) reconciliar cria ficha a partir de conferidas antes de purgar
 {
   const data = baseData({
