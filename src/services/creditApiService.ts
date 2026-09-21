@@ -546,6 +546,34 @@ export async function fetchFichaDescontosContaCoop(
   return data.descontos ?? [];
 }
 
+export async function fetchHbUtilizacaoResumoCooperado(
+  cnpj: string,
+  cooperadoId: string | string[],
+  mesReferencia: string,
+  saldoBaseAReceber?: number
+) {
+  const ids = [...new Set((Array.isArray(cooperadoId) ? cooperadoId : [cooperadoId]).filter(Boolean))];
+  const primary = ids[0] ?? "";
+  const extra = ids.slice(1);
+  const params = new URLSearchParams({
+    cnpj,
+    cooperadoId: primary,
+    mesReferencia,
+  });
+  if (extra.length) params.set("cooperadoIds", extra.join(","));
+  if (saldoBaseAReceber != null && Number.isFinite(saldoBaseAReceber)) {
+    params.set("saldoBaseAReceber", saldoBaseAReceber.toFixed(2));
+  }
+  const res = await secureApiFetch(`/api/credit/utilizacao-resumo?${params.toString()}`);
+  const data = await parseJson<{
+    ok?: boolean;
+    error?: string;
+    lancamentos?: import("@/lib/hb-credit/utilizacaoResumo").HbUtilizacaoResumoLancamento[];
+  }>(res);
+  if (!res.ok || !data.ok) throw new Error(data.error ?? "Erro ao carregar histórico HB Créditos.");
+  return data.lancamentos ?? [];
+}
+
 export async function fetchMercadoFiscalVendas(mesReferencia: string) {
   const res = await secureApiFetch(
     `/api/credit/fiscal-notes?mesReferencia=${encodeURIComponent(mesReferencia)}`

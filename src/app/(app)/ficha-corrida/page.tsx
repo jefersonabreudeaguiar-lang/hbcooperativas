@@ -66,6 +66,7 @@ import { AssinarComCadastroBlock } from "@/components/cooperado/AssinarComCadast
 import { PageSkeleton } from "@/components/ui/PageSkeleton";
 import { PagarStepper } from "@/components/ficha/PagarStepper";
 import { ReciboResumoView } from "@/components/ficha/ReciboResumoView";
+import { HistoricoHbCreditosResumo } from "@/components/ficha/HistoricoHbCreditosResumo";
 import { ResumoDescontosMes } from "@/components/ficha/ResumoDescontosMes";
 import { DivisaoEntregaModal } from "@/components/ficha/DivisaoEntregaModal";
 import { ValoresAvulsosReceberPanel } from "@/components/ficha/ValoresAvulsosReceberPanel";
@@ -196,8 +197,23 @@ export default function FichaCorridaPage() {
   const [divisaoSelecionados, setDivisaoSelecionados] = useState<string[]>([]);
   const [divisaoSalvando, setDivisaoSalvando] = useState(false);
   const [lancamentosPagarExpandido, setLancamentosPagarExpandido] = useState(false);
+  const [coopCnpjResumo, setCoopCnpjResumo] = useState("");
 
   const coopId = user && data ? getUserCooperativaId(user, data) : undefined;
+
+  useEffect(() => {
+    if (!data || !coopId || !user) {
+      setCoopCnpjResumo("");
+      return;
+    }
+    let cancel = false;
+    void resolveCooperativaCnpj(data, coopId, user).then((c) => {
+      if (!cancel) setCoopCnpjResumo(c ?? "");
+    });
+    return () => {
+      cancel = true;
+    };
+  }, [data, coopId, user?.id]);
 
   const mesEmAberto = useMemo(() => {
     if (!data || !cooperadoId) return getCurrentMesReferencia();
@@ -1272,6 +1288,18 @@ export default function FichaCorridaPage() {
                 }
               />
             )}
+            {!visualizandoHistorico &&
+              resumoExibicao &&
+              cooperadoSelecionadoId &&
+              coopCnpjResumo && (
+                <HistoricoHbCreditosResumo
+                  cnpj={coopCnpjResumo}
+                  cooperadoId={cooperadoSelecionadoId}
+                  mesReferencia={mesAtivo}
+                  valorEntregas={resumoExibicao.valorEntregas}
+                  descontosExtras={descontosExtrasCooperado}
+                />
+              )}
 
             {!isCooperado && check("ficha_corrida", "edit") && (
               <div className="rounded-xl border border-amber-200 bg-amber-50/70 px-4 py-3 text-sm text-amber-900 mb-4">
@@ -1427,6 +1455,22 @@ export default function FichaCorridaPage() {
                 tema="escuro"
               />
             )}
+            {!visualizandoHistorico &&
+              resumoExibicao &&
+              cooperadoSelecionadoId &&
+              coopCnpjResumo && (
+                <div className="mt-4 text-left">
+                  <HistoricoHbCreditosResumo
+                    cnpj={coopCnpjResumo}
+                    cooperadoId={cooperadoSelecionadoId}
+                    mesReferencia={mesAtivo}
+                    valorEntregas={resumoExibicao.valorEntregas}
+                    descontosExtras={
+                      isCooperado ? descontosExtrasCooperado : resumoExibicao.descontosExtras
+                    }
+                  />
+                </div>
+              )}
           </div>
 
           {!isCooperado &&
