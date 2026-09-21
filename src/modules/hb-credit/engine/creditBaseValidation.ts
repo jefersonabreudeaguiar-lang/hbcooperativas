@@ -81,3 +81,35 @@ export function assertCreditosBaseConsistent(
   }
   return { ok: true, sanitized: confirm };
 }
+
+/**
+ * Impede crédito HB acima do valor a receber na nuvem (fonte autoritativa).
+ * Valores do cliente acima do teto operacional são reduzidos; ausentes usam só a nuvem.
+ */
+export function clampCreditosBaseToAuthoritative(
+  client: Record<string, number>,
+  authoritative: Record<string, number>,
+  cooperadoIds: string[]
+): { sanitized: Record<string, number>; clamped: string[] } {
+  const sanitized: Record<string, number> = {};
+  const clamped: string[] = [];
+  const ids = cooperadoIds.length ? cooperadoIds : [...new Set([...Object.keys(client), ...Object.keys(authoritative)])];
+
+  for (const cooperadoId of ids) {
+    const auth = Math.max(0, Math.round(Number(authoritative[cooperadoId] ?? 0)));
+    const fromClient = client[cooperadoId];
+    if (fromClient === undefined) {
+      sanitized[cooperadoId] = auth;
+      continue;
+    }
+    const requested = Math.max(0, Math.round(Number(fromClient)));
+    if (requested > auth) {
+      clamped.push(cooperadoId);
+      sanitized[cooperadoId] = auth;
+    } else {
+      sanitized[cooperadoId] = requested;
+    }
+  }
+
+  return { sanitized, clamped };
+}

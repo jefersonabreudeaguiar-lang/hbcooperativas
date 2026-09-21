@@ -1,7 +1,7 @@
 import type { AppData } from "@/types";
 import { listarMesesPendentesQuantoVouReceber } from "@/services/cooperadoEntregasService";
 import { resolverCooperadoIdCanonico } from "@/services/cooperadoCloudService";
-import { getResumoPagamentoExibicao } from "@/services/notaPedidoService";
+import { getResumoValorAPagarRelatorio } from "@/services/notaPedidoService";
 import { round2 } from "@/utils/calculations";
 import { reaisToCents } from "../shared/money";
 
@@ -23,7 +23,7 @@ export function getCreditoBaseContaCoopReais(
 
   let total = 0;
   for (const mes of meses) {
-    total += getResumoPagamentoExibicao(data, cooperadoCanonico, mes, coopId).valorLiquido;
+    total += getResumoValorAPagarRelatorio(data, cooperadoCanonico, mes, coopId).valorLiquido;
   }
 
   return round2(Math.max(0, total));

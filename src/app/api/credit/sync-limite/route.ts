@@ -7,7 +7,11 @@ import {
   requireCreditStaff,
 } from "@/lib/security/creditGuard";
 import { normalizeCnpj } from "@/utils/cooperativa";
-import { validateCreditosBaseCents } from "@/modules/hb-credit/engine/creditBaseValidation";
+import {
+  clampCreditosBaseToAuthoritative,
+  validateCreditosBaseCents,
+} from "@/modules/hb-credit/engine/creditBaseValidation";
+import { resolveAuthoritativeCreditosBaseCents } from "@/modules/hb-credit/engine/creditBaseAuthoritative";
 
 /** Sincroniza limite HB Créditos = teto% × valor a receber pendente (ficha / app cooperado). */
 export async function POST(request: Request) {
@@ -25,7 +29,6 @@ export async function POST(request: Request) {
   if (!creditosValidation.ok) {
     return NextResponse.json({ error: creditosValidation.error, code: creditosValidation.code }, { status: 400 });
   }
-  const creditosBaseCents = creditosValidation.sanitized;
 
   const cooperadoIdsRaw = (body?.cooperadoIds ?? []) as unknown;
   const singleId = String(body?.cooperadoId ?? "").trim();
@@ -48,6 +51,20 @@ export async function POST(request: Request) {
     if (denyCooperado) return denyCooperado;
   }
 
+  const authoritative = await resolveAuthoritativeCreditosBaseCents(
+    gate.ctx.supabase,
+    cnpj,
+    cooperadoIds
+  );
+  let creditosBaseCents = creditosValidation.sanitized;
+  let clampedCooperados: string[] = [];
+
+  if (authoritative) {
+    const clamped = clampCreditosBaseToAuthoritative(creditosBaseCents, authoritative, cooperadoIds);
+    creditosBaseCents = clamped.sanitized;
+    clampedCooperados = clamped.clamped;
+  }
+
   const actorId = gate.ctx.session?.sub ?? "system";
   const result = await syncLimitesCooperadosFromCreditoBase(
     gate.ctx.supabase,
@@ -58,5 +75,10 @@ export async function POST(request: Request) {
   );
 
   if (!result.ok) return NextResponse.json({ error: result.error }, { status: 400 });
-  return NextResponse.json({ ok: true, updated: result.updated, errors: result.errors });
+  return NextResponse.json({
+    ok: true,
+    updated: result.updated,
+    errors: result.errors,
+    clampedCooperados: clampedCooperados.length ? clampedCooperados : undefined,
+  });
 }
