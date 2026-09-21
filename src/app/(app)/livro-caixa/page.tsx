@@ -14,6 +14,7 @@ import { updateData, addAuditEntry, getData } from "@/services/dataStore";
 import { resolveCooperativaCnpj } from "@/services/notaPedidoCloudService";
 import { pushOperacionalToCloud } from "@/services/cooperativaSyncCloudService";
 import {
+  ensureControleAnualLivroCaixa,
   completarLancamentosContabeisPagamentos,
   confirmarEncerramentoAnoLivroCaixaContador,
   criarLancamentoManual,
@@ -105,7 +106,8 @@ export default function LivroCaixaPage() {
 
   useEffect(() => {
     if (!data || !coopId) return;
-    const updated = completarLancamentosContabeisPagamentos(data, coopId);
+    let updated = completarLancamentosContabeisPagamentos(data, coopId);
+    updated = ensureControleAnualLivroCaixa(updated, coopId);
     if (updated !== data) updateData(() => updated);
   }, [data, coopId]);
 
