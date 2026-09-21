@@ -12,11 +12,98 @@ export const ASSINATURA_CONFIRMACAO_AVISO_MS = 24 * 60 * 60 * 1000;
 type CooperadoAssinaturaFields = Pick<
   Cooperado,
   | "assinaturaCadastroDataUrl"
+  | "assinaturaCadastradaEm"
+  | "assinaturaCadastroVersao"
+  | "assinaturaCadastroHash"
   | "assinaturaCadastroStatus"
   | "assinaturaConfirmadaEm"
+  | "assinaturaConfirmadaPorId"
+  | "assinaturaConfirmadaPorNome"
   | "assinaturaDevolvidaEm"
   | "assinaturaDevolvidaMotivo"
 >;
+
+export type AssinaturaCadastroMergeFields = CooperadoAssinaturaFields;
+
+const ASSINATURA_STATUS_RANK: Record<AssinaturaCadastroStatus, number> = {
+  pendente: 0,
+  devolvida: 1,
+  em_analise: 2,
+  confirmada: 3,
+};
+
+function assinaturaEventMs(c: CooperadoAssinaturaFields): number {
+  const times = [c.assinaturaConfirmadaEm, c.assinaturaCadastradaEm, c.assinaturaDevolvidaEm].filter(
+    Boolean
+  ) as string[];
+  if (times.length === 0) return 0;
+  return Math.max(...times.map((t) => new Date(t).getTime()).filter((n) => !Number.isNaN(n)));
+}
+
+function pickAssinaturaCadastroFields(c: Cooperado): AssinaturaCadastroMergeFields {
+  return {
+    assinaturaCadastroDataUrl: c.assinaturaCadastroDataUrl,
+    assinaturaCadastradaEm: c.assinaturaCadastradaEm,
+    assinaturaCadastroVersao: c.assinaturaCadastroVersao,
+    assinaturaCadastroHash: c.assinaturaCadastroHash,
+    assinaturaCadastroStatus: c.assinaturaCadastroStatus,
+    assinaturaConfirmadaEm: c.assinaturaConfirmadaEm,
+    assinaturaConfirmadaPorId: c.assinaturaConfirmadaPorId,
+    assinaturaConfirmadaPorNome: c.assinaturaConfirmadaPorNome,
+    assinaturaDevolvidaEm: c.assinaturaDevolvidaEm,
+    assinaturaDevolvidaMotivo: c.assinaturaDevolvidaMotivo,
+  };
+}
+
+/** Evita que sync na nuvem reverta conferência ou apague envio do cooperado. */
+export function mergeAssinaturaCadastroFields(
+  local: Cooperado,
+  cloud: Cooperado
+): AssinaturaCadastroMergeFields {
+  const vLocal = local.assinaturaCadastroVersao ?? 0;
+  const vCloud = cloud.assinaturaCadastroVersao ?? 0;
+  if (vCloud > vLocal) return pickAssinaturaCadastroFields(cloud);
+  if (vLocal > vCloud) return pickAssinaturaCadastroFields(local);
+
+  const rankLocal = ASSINATURA_STATUS_RANK[getAssinaturaCadastroStatus(local)];
+  const rankCloud = ASSINATURA_STATUS_RANK[getAssinaturaCadastroStatus(cloud)];
+  if (rankLocal !== rankCloud) {
+    return rankLocal > rankCloud
+      ? pickAssinaturaCadastroFields(local)
+      : pickAssinaturaCadastroFields(cloud);
+  }
+
+  const tLocal = assinaturaEventMs(local);
+  const tCloud = assinaturaEventMs(cloud);
+  if (tLocal !== tCloud) {
+    return tLocal > tCloud ? pickAssinaturaCadastroFields(local) : pickAssinaturaCadastroFields(cloud);
+  }
+
+  const urlLocal = getAssinaturaCadastroDataUrl(local);
+  const urlCloud = getAssinaturaCadastroDataUrl(cloud);
+  if (urlLocal && !urlCloud) return pickAssinaturaCadastroFields(local);
+  if (urlCloud && !urlLocal) return pickAssinaturaCadastroFields(cloud);
+
+  return pickAssinaturaCadastroFields(local);
+}
+
+export function assinaturaCadastroFieldsChanged(
+  before: CooperadoAssinaturaFields,
+  after: AssinaturaCadastroMergeFields
+): boolean {
+  return (
+    before.assinaturaCadastroDataUrl !== after.assinaturaCadastroDataUrl ||
+    before.assinaturaCadastradaEm !== after.assinaturaCadastradaEm ||
+    before.assinaturaCadastroVersao !== after.assinaturaCadastroVersao ||
+    before.assinaturaCadastroHash !== after.assinaturaCadastroHash ||
+    before.assinaturaCadastroStatus !== after.assinaturaCadastroStatus ||
+    before.assinaturaConfirmadaEm !== after.assinaturaConfirmadaEm ||
+    before.assinaturaConfirmadaPorId !== after.assinaturaConfirmadaPorId ||
+    before.assinaturaConfirmadaPorNome !== after.assinaturaConfirmadaPorNome ||
+    before.assinaturaDevolvidaEm !== after.assinaturaDevolvidaEm ||
+    before.assinaturaDevolvidaMotivo !== after.assinaturaDevolvidaMotivo
+  );
+}
 
 export function getAssinaturaCadastroDataUrl(
   cooperado: Pick<Cooperado, "assinaturaCadastroDataUrl"> | null | undefined

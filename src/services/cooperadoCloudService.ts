@@ -9,6 +9,10 @@ import { notaPertenceCooperativa } from "@/utils/fotoEntrega";
 import { getData, refreshStoredSession, saveDataSafe } from "@/services/dataStore";
 import { fetchCooperativaByCnpjFromCloud, mergeCooperativaIntoData } from "@/services/cooperativaCloudService";
 import { mergeAppInstallFields } from "@/services/cooperadoAppInstallService";
+import {
+  assinaturaCadastroFieldsChanged,
+  mergeAssinaturaCadastroFields,
+} from "@/services/cooperadoAssinaturaService";
 import { secureApiFetch } from "@/lib/security/clientSession";
 import {
   cooperadosUnicosParaCobranca,
@@ -294,6 +298,7 @@ export function mergeCloudCooperadosIntoData(
       }
 
       const installFields = mergeAppInstallFields(local, cn);
+      const assinaturaFields = mergeAssinaturaCadastroFields(local, cn);
 
       const merged: Cooperado = {
         ...local,
@@ -304,6 +309,7 @@ export function mergeCloudCooperadosIntoData(
         pixValido,
         pixInvalidoMotivo,
         ...installFields,
+        ...assinaturaFields,
         membroDiretoria: cloudMaisRecente
           ? Boolean(cn.membroDiretoria ?? local.membroDiretoria)
           : Boolean(local.membroDiretoria ?? cn.membroDiretoria),
@@ -316,6 +322,7 @@ export function mergeCloudCooperadosIntoData(
         merged.ultimoAcessoEm !== local.ultimoAcessoEm ||
         merged.ultimoAcessoModo !== local.ultimoAcessoModo ||
         merged.aberturasAppTotal !== local.aberturasAppTotal;
+      const assinaturaMudou = assinaturaCadastroFieldsChanged(local, assinaturaFields);
 
       if (
         cloudMaisRecente ||
@@ -323,7 +330,8 @@ export function mergeCloudCooperadosIntoData(
         merged.pixValido !== local.pixValido ||
         merged.membroDiretoria !== local.membroDiretoria ||
         merged.avulso !== local.avulso ||
-        installMudou
+        installMudou ||
+        assinaturaMudou
       ) {
         cooperados[index] = merged;
         changed = true;

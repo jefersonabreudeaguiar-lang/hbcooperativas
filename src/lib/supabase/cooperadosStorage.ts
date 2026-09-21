@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Cooperado } from "@/types";
+import { mergeAssinaturaCadastroFields } from "@/services/cooperadoAssinaturaService";
 import { cooperadosUnicosParaCobranca } from "@/utils/cooperadoDedupe";
 
 const BUCKET = "hb-cooperados";
@@ -21,8 +22,18 @@ export async function uploadCooperadoToStorage(
   email?: string
 ): Promise<{ ok: true } | { ok: false; error: string }> {
   await ensureCooperadosBucket(supabase);
+  const existing = await fetchCooperadoFromStorage(supabase, cnpj, cooperado.id);
+  let cooperadoToSave = cooperado;
+  if (existing) {
+    const assinatura = mergeAssinaturaCadastroFields(existing, cooperado);
+    const updatedAt =
+      new Date(existing.updatedAt).getTime() >= new Date(cooperado.updatedAt).getTime()
+        ? existing.updatedAt
+        : cooperado.updatedAt;
+    cooperadoToSave = { ...cooperado, ...assinatura, updatedAt };
+  }
   const payload = JSON.stringify({
-    cooperado: { ...cooperado, cooperativaCnpj: cnpj },
+    cooperado: { ...cooperadoToSave, cooperativaCnpj: cnpj },
     email: email?.trim().toLowerCase() || undefined,
     cooperativaCnpj: cnpj,
   });

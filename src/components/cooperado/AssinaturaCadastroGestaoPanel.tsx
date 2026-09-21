@@ -9,8 +9,8 @@ import { Modal } from "@/components/ui/Table";
 import { AlertBanner } from "@/components/ui/AlertBanner";
 import { Textarea, FormField } from "@/components/ui/Form";
 import { StatusBadge } from "@/components/ui/StatusBadge";
-import { updateData } from "@/services/dataStore";
-import { pushCooperadoToCloud } from "@/services/cooperadoCloudService";
+import { updateData, getData } from "@/services/dataStore";
+import { pushCooperadoToCloud, queueCooperadoPush } from "@/services/cooperadoCloudService";
 import { resolveCooperativaCnpj } from "@/services/notaPedidoCloudService";
 import {
   confirmarAssinaturaCadastroCooperado,
@@ -75,9 +75,13 @@ export function AssinaturaCadastroGestaoPanel({ data, user, cooperativaId }: Ass
         return result.data;
       });
       if (!atualizado) return false;
-      const push = await syncCooperado(atualizado);
+      const salvo = getData().cooperados.find((c) => c.id === cooperadoId) ?? null;
+      if (!salvo) return false;
+      const push = await syncCooperado(salvo);
       if (!push.ok) {
-        setErro(push.error ?? "Confirmado localmente, mas falhou na nuvem.");
+        const cnpj = await resolveCooperativaCnpj(data, salvo.cooperativaId, user);
+        if (cnpj) queueCooperadoPush(cnpj, salvo, user.email);
+        setErro(push.error ?? "Confirmado localmente, mas falhou na nuvem — tentaremos enviar de novo.");
         return false;
       }
       return true;
@@ -102,9 +106,13 @@ export function AssinaturaCadastroGestaoPanel({ data, user, cooperativaId }: Ass
         return result.data;
       });
       if (!atualizado) return false;
-      const push = await syncCooperado(atualizado);
+      const salvo = getData().cooperados.find((c) => c.id === cooperadoId) ?? null;
+      if (!salvo) return false;
+      const push = await syncCooperado(salvo);
       if (!push.ok) {
-        setErro(push.error ?? "Devolvido localmente, mas falhou na nuvem.");
+        const cnpj = await resolveCooperativaCnpj(data, salvo.cooperativaId, user);
+        if (cnpj) queueCooperadoPush(cnpj, salvo, user.email);
+        setErro(push.error ?? "Devolvido localmente, mas falhou na nuvem — tentaremos enviar de novo.");
         return false;
       }
       setMotivoDevolucao((prev) => {

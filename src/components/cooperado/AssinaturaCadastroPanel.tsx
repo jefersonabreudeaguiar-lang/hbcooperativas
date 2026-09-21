@@ -9,7 +9,7 @@ import { AlertBanner } from "@/components/ui/AlertBanner";
 import { AssinaturaPapelCapture } from "@/components/cooperado/AssinaturaPapelCapture";
 import { AssinaturaStatusAviso } from "@/components/cooperado/AssinaturaStatusAviso";
 import { updateData } from "@/services/dataStore";
-import { pushCooperadoToCloud } from "@/services/cooperadoCloudService";
+import { pushCooperadoToCloud, queueCooperadoPush } from "@/services/cooperadoCloudService";
 import { resolveCooperativaCnpj } from "@/services/notaPedidoCloudService";
 import {
   cooperadoAssinaturaDevolvida,
@@ -65,7 +65,11 @@ export function AssinaturaCadastroPanel({ data, user, cooperado }: AssinaturaCad
       if (cnpj) {
         const push = await pushCooperadoToCloud(cnpj, cooperadoAtualizado, user.email);
         if (!push.ok) {
-          setErro(push.error ?? "Assinatura salva no aparelho, mas não sincronizou na nuvem.");
+          queueCooperadoPush(cnpj, cooperadoAtualizado, user.email);
+          setErro(
+            push.error ??
+              "Assinatura salva no aparelho. A sincronização com a nuvem falhou — tentaremos de novo automaticamente."
+          );
           return;
         }
       }
