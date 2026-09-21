@@ -7,7 +7,7 @@ import { syncCooperadosFromCloud, fetchCooperadosFromCloud, pushCooperadoToCloud
 import { syncNotasPedidoFromCloud, patchNotaPedidoInCloud } from "@/services/notaPedidoCloudService";
 import { fetchCooperativaByCnpjFromCloud, mergeCooperativaIntoData } from "@/services/cooperativaCloudService";
 import { mergeArquivosMensaisFromCloud, reconciliarFichaFromNotasConferidas, dedupeFichaCorridaPorNota, aplicarNotasPedidoExcluidas } from "@/services/notaPedidoService";
-import { posProcessarIntegridadePagamentosCooperativa } from "@/services/pagamentoIntegridadeService";
+import { posProcessarIntegridadePagamentosCooperativa, cooperadoMesTemPagamentoNaLista } from "@/services/pagamentoIntegridadeService";
 import { ensureComunicadosAudioUploaded } from "@/services/comunicadoAudioSync";
 import { operacionalPushSeguro, precisaReparoFullSyncNotas, cooperadoFinanceiroDesatualizado, cooperadoFichaValoresDesalinhados, limparFichaObsoletaCooperado } from "@/services/fichaSyncGuard";
 import { beginCloudSync, endCloudSync } from "@/services/cloudSyncProgress";
@@ -121,29 +121,43 @@ function mergeFichaCorridaFromCloud(
   pagamentosCooperado: PagamentoCooperadoRegistro[] = []
 ): FichaCorrida[] {
   const map = new Map<string, FichaCorrida>();
-  for (const item of cloudItems) map.set(item.id, item);
+
+  const fichaPagoLegitima = (f: FichaCorrida): boolean =>
+    f.status !== "pago" ||
+    cooperadoMesTemPagamentoNaLista(pagamentosCooperado, f.cooperadoId, f.mesReferencia);
+
+  const normalizarFicha = (f: FichaCorrida): FichaCorrida => {
+    if (fichaPagoLegitima(f)) return f;
+    return { ...f, status: "pendente" as const };
+  };
+
+  for (const item of cloudItems) map.set(item.id, normalizarFicha(item));
   for (const local of localCoop) {
     const cloud = map.get(local.id);
     if (!cloud) {
-      map.set(local.id, local);
+      map.set(local.id, normalizarFicha(local));
       continue;
     }
     if (local.status === "pago" && cloud.status === "pendente") {
-      map.set(local.id, local);
+      const temPagamento = cooperadoMesTemPagamentoNaLista(
+        pagamentosCooperado,
+        local.cooperadoId,
+        local.mesReferencia
+      );
+      map.set(local.id, temPagamento ? local : cloud);
       continue;
     }
     if (cloud.status === "pago" && local.status === "pendente") {
-      const temPagamento = pagamentosCooperado.some(
-        (p) =>
-          (p.status === "aguardando_confirmacao" || p.status === "confirmado") &&
-          (p.cooperadoId === local.cooperadoId ||
-            p.cooperadoId === cloud.cooperadoId) &&
-          (p.mesesReferencia?.includes(local.mesReferencia) ?? p.mesReferencia === local.mesReferencia)
+      const temPagamento = cooperadoMesTemPagamentoNaLista(
+        pagamentosCooperado,
+        local.cooperadoId,
+        local.mesReferencia
       );
       map.set(local.id, temPagamento ? cloud : local);
       continue;
     }
-    map.set(local.id, itemTime(local) >= itemTime(cloud) ? local : cloud);
+    const chosen = itemTime(local) >= itemTime(cloud) ? local : cloud;
+    map.set(local.id, normalizarFicha(chosen));
   }
   return [...map.values()];
 }

@@ -12,6 +12,8 @@ import {
   type OperacionalSyncPayload,
 } from "@/lib/supabase/cooperativaSyncStorage";
 import { deleteAllNotasForCnpj } from "@/lib/supabase/notasStorage";
+import { sanitizarOperacionalSyncPayload } from "@/services/pagamentoIntegridadeService";
+import { reconciliarFichaFromNotasConferidas } from "@/services/notaPedidoService";
 
 export async function GET(request: Request) {
   if (!isSupabaseConfigured()) {
@@ -83,7 +85,8 @@ export async function POST(request: Request) {
   }
 
   if (section === "operacional") {
-    const payload = body.payload as OperacionalSyncPayload;
+    const raw = body.payload as OperacionalSyncPayload;
+    const payload = sanitizarOperacionalSyncPayload(raw, reconciliarFichaFromNotasConferidas);
     if (payload.wipeNotas === true) {
       await deleteAllNotasForCnpj(supabase, cnpj);
     }

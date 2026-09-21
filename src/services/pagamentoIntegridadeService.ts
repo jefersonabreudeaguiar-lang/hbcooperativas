@@ -40,6 +40,38 @@ function pagamentoPertenceCooperado(
   return p.cooperadoId === cooperadoId || p.cooperadoId === canonico || pCanon === canonico;
 }
 
+/** Mês com pagamento na lista (merge/sync sem cadastro cooperados). */
+export function cooperadoMesTemPagamentoNaLista(
+  pagamentos: PagamentoCooperadoRegistro[],
+  cooperadoId: string,
+  mesReferencia: string
+): boolean {
+  return pagamentos.some(
+    (p) =>
+      p.cooperadoId === cooperadoId &&
+      (p.status === "aguardando_confirmacao" || p.status === "confirmado") &&
+      pagamentoCobreMes(p, mesReferencia)
+  );
+}
+
+/** Sanitiza operacional antes de gravar na nuvem (anti ficha paga fantasma). */
+export function sanitizarOperacionalSyncPayload(
+  payload: OperacionalSyncPayload,
+  reconciliar: (data: AppData) => AppData
+): OperacionalSyncPayload {
+  const stub = {
+    cooperados: [],
+    notasPedido: [],
+    fichaCorrida: payload.fichaCorrida ?? [],
+    pagamentosCooperado: payload.pagamentosCooperado ?? [],
+  } as unknown as AppData;
+  const next = posProcessarIntegridadePagamentosCooperativa(reconciliar(stub));
+  return {
+    ...payload,
+    fichaCorrida: next.fichaCorrida ?? payload.fichaCorrida,
+  };
+}
+
 /** Mês com pagamento registrado pela cooperativa (aguardando ou confirmado). */
 export function cooperadoMesTemPagamentoRegistrado(
   data: AppData,

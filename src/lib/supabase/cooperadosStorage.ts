@@ -19,7 +19,7 @@ export async function ensureCooperadosBucket(supabase: SupabaseClient): Promise<
     await supabase.storage.createBucket(BUCKET, { public: false, fileSizeLimit: limit });
     return;
   }
-  const currentLimit = existing.file_size_limit ?? existing.fileSizeLimit ?? 0;
+  const currentLimit = existing.file_size_limit ?? 0;
   if (currentLimit < limit) {
     await supabase.storage.updateBucket(BUCKET, { public: false, fileSizeLimit: limit });
   }

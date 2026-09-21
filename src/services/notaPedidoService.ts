@@ -1782,8 +1782,7 @@ export function netHbAbatePosRegistroPagamento(
   for (const d of descontos) {
     const ts = new Date(d.createdAt).getTime();
     if (!Number.isFinite(ts) || ts < pagoTs) continue;
-    const isRefund =
-      d.motivo.toLowerCase().includes("estorno") || d.tipo === "credito_avulso";
+    const isRefund = d.motivo.toLowerCase().includes("estorno");
     if (isRefund) estornos += d.valorReais;
     else compras += d.valorReais;
   }
