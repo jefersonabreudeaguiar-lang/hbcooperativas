@@ -3,19 +3,5 @@
     "HB_CREDIT_ENABLED": "true",
     "NEXT_PUBLIC_HB_CREDIT_ENABLED": "true",
     "AUTH_SECRET": "hb-cooperativas-prod-jwt-secret-2026-stable"
-  },
-  "crons": [
-    {
-      "path": "/api/cron/hb-asaas-charges",
-      "schedule": "0 10 * * *"
-    },
-    {
-      "path": "/api/cron/credit-reconciliation",
-      "schedule": "0 6 * * *"
-    },
-    {
-      "path": "/api/cron/operacional-hb-descontos-repair",
-      "schedule": "30 6 * * *"
-    }
-  ]
+  }
 }
