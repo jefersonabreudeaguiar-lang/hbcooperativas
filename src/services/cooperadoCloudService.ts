@@ -13,6 +13,10 @@ import {
   assinaturaCadastroFieldsChanged,
   mergeAssinaturaCadastroFields,
 } from "@/services/cooperadoAssinaturaService";
+import {
+  ASSINATURA_DATAURL_TARGET_CHARS,
+  compressAssinaturaDataUrlForStorage,
+} from "@/utils/assinaturaPapelProcess";
 import { secureApiFetch } from "@/lib/security/clientSession";
 import {
   cooperadosUnicosParaCobranca,
@@ -375,6 +379,28 @@ export async function fetchCooperadosFromCloud(
   }
 }
 
+async function cooperadoComAssinaturaCompactada(cooperado: Cooperado): Promise<Cooperado> {
+  const url = cooperado.assinaturaCadastroDataUrl?.trim();
+  if (
+    typeof window === "undefined" ||
+    !url ||
+    url.length <= ASSINATURA_DATAURL_TARGET_CHARS
+  ) {
+    return cooperado;
+  }
+  try {
+    const { dataUrl, hash } = await compressAssinaturaDataUrlForStorage(url);
+    if (dataUrl === url) return cooperado;
+    return {
+      ...cooperado,
+      assinaturaCadastroDataUrl: dataUrl,
+      assinaturaCadastroHash: hash,
+    };
+  } catch {
+    return cooperado;
+  }
+}
+
 export async function pushCooperadoToCloud(
   cnpj: string,
   cooperado: Cooperado,
@@ -385,11 +411,13 @@ export async function pushCooperadoToCloud(
     return { ok: false, error: "CNPJ da cooperativa inválido." };
   }
 
+  const cooperadoEnvio = await cooperadoComAssinaturaCompactada(cooperado);
+
   try {
     const res = await secureApiFetch("/api/cooperados", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ cnpj: digits, cooperado, email }),
+      body: JSON.stringify({ cnpj: digits, cooperado: cooperadoEnvio, email }),
     });
     const json = await res.json().catch(() => ({}));
     if (res.status === 503) {

@@ -1,4 +1,4 @@
-import { hashAssinaturaDataUrl } from "@/utils/assinaturaPapelProcess";
+import { compressAssinaturaDataUrlForStorage } from "@/utils/assinaturaPapelProcess";
 
 function loadImage(src: string): Promise<HTMLImageElement> {
   return new Promise((resolve, reject) => {
@@ -125,23 +125,6 @@ export async function trimAssinaturaInk(dataUrl: string): Promise<string> {
   });
 }
 
-/** Padroniza largura para uso em documentos (mesmo padrão do cadastro por foto). */
-export async function normalizeAssinaturaOutput(dataUrl: string, outWidth = 480): Promise<string> {
-  const img = await loadImage(dataUrl);
-  const outH = Math.max(48, Math.round((img.height / img.width) * outWidth));
-  const canvas = document.createElement("canvas");
-  canvas.width = outWidth;
-  canvas.height = outH;
-  const ctx = canvas.getContext("2d");
-  if (!ctx) throw new Error("Canvas indisponível.");
-  ctx.fillStyle = "#ffffff";
-  ctx.fillRect(0, 0, outWidth, outH);
-  ctx.drawImage(img, 0, 0, outWidth, outH);
-  return canvasToPng(canvas);
-}
-
 export async function finalizeAssinaturaEdit(dataUrl: string): Promise<{ dataUrl: string; hash: string }> {
-  const normalized = await normalizeAssinaturaOutput(dataUrl);
-  const hash = await hashAssinaturaDataUrl(normalized);
-  return { dataUrl: normalized, hash };
+  return compressAssinaturaDataUrlForStorage(dataUrl);
 }

@@ -5,10 +5,21 @@ import { cooperadosUnicosParaCobranca } from "@/utils/cooperadoDedupe";
 
 const BUCKET = "hb-cooperados";
 
+/** JSON do cooperado + assinatura em base64 — 512 KB era insuficiente para PNG grande. */
+export const COOPERADOS_BUCKET_FILE_SIZE_LIMIT = 2 * 1024 * 1024;
+
 export async function ensureCooperadosBucket(supabase: SupabaseClient): Promise<void> {
+  const limit = COOPERADOS_BUCKET_FILE_SIZE_LIMIT;
   const { data: buckets } = await supabase.storage.listBuckets();
-  if (buckets?.some((b) => b.name === BUCKET)) return;
-  await supabase.storage.createBucket(BUCKET, { public: false, fileSizeLimit: 512 * 1024 });
+  const existing = buckets?.find((b) => b.name === BUCKET);
+  if (!existing) {
+    await supabase.storage.createBucket(BUCKET, { public: false, fileSizeLimit: limit });
+    return;
+  }
+  const currentLimit = existing.file_size_limit ?? existing.fileSizeLimit ?? 0;
+  if (currentLimit < limit) {
+    await supabase.storage.updateBucket(BUCKET, { public: false, fileSizeLimit: limit });
+  }
 }
 
 function storagePath(cnpj: string, cooperadoId: string): string {
@@ -37,6 +48,14 @@ export async function uploadCooperadoToStorage(
     email: email?.trim().toLowerCase() || undefined,
     cooperativaCnpj: cnpj,
   });
+  if (payload.length > COOPERADOS_BUCKET_FILE_SIZE_LIMIT) {
+    console.error("[cooperados-storage/upload] payload too large", payload.length);
+    return {
+      ok: false,
+      error:
+        "Cadastro excede o limite na nuvem. Peça ao cooperado reenviar a assinatura (foto mais próxima ou menos zoom).",
+    };
+  }
   const { error } = await supabase.storage
     .from(BUCKET)
     .upload(storagePath(cnpj, cooperado.id), payload, {
