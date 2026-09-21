@@ -13,6 +13,7 @@ import { beginCloudSync, endCloudSync } from "@/services/cloudSyncProgress";
 import { clearNotasSyncMeta, forceNextFullNotasSync } from "@/services/syncMetaService";
 import { sincronizarMensalidadeCooperativa, mensalidadeVisivelNoDispositivo, normalizarMensalidadeCooperadoLocal, mesclarMensalidadesPayloadNuvem, prepararMensalidadesCloud, prepararMensalidadeCloud, reconciliarMensalidadesComCooperadosCloud, mensalidadeCloudEntraNoDispositivo, enriquecerMensalidadeCooperadoSnapshot } from "@/services/mensalidadeService";
 import { aplicarPrestacoesContasExcluidas } from "@/services/prestacaoContasService";
+import { mergeLivroCaixaControleAnualFromCloud } from "@/services/livroCaixaService";
 import { aplicarInstituicoesExcluidas } from "@/services/instituicaoContratoService";
 import {
   OPERATIONAL_RESET_VERSION,
@@ -365,6 +366,7 @@ function buildOperacionalPayload(data: AppData, coopId: string): OperacionalSync
     descontos: sanitized.descontos.filter((d) => cooperadoIds.has(d.cooperadoId)),
     valoresAvulsosReceber: (sanitized.valoresAvulsosReceber ?? []).filter((v) => v.cooperativaId === coopId),
     livroCaixa: (sanitized.livroCaixa ?? []).filter((l) => l.cooperativaId === coopId),
+    livroCaixaControleAnual: (sanitized.livroCaixaControleAnual ?? []).filter((c) => c.cooperativaId === coopId),
     prestacoesContas: (sanitized.prestacoesContas ?? []).filter(
       (p) => p.cooperativaId === coopId && !excluidasIds.has(p.id)
     ),
@@ -654,6 +656,9 @@ export function mergeOperacionalIntoData(
   const cloudDescontos = (cloud.descontos ?? []).filter((d) => cooperadoIds.has(d.cooperadoId));
   const cloudAvulsos = (cloud.valoresAvulsosReceber ?? []).map((v) => ({ ...v, cooperativaId: coopId }));
   const cloudLivro = (cloud.livroCaixa ?? []).map((l) => ({ ...l, cooperativaId: coopId }));
+  const cloudLivroControle = (cloud.livroCaixaControleAnual ?? []).find((c) => c.cooperativaId === coopId);
+  const localLivroControle = (data.livroCaixaControleAnual ?? []).find((c) => c.cooperativaId === coopId);
+  const mergedLivroControle = mergeLivroCaixaControleAnualFromCloud(localLivroControle, cloudLivroControle);
   const cloudExcluidasNotas = (cloud.notasPedidoExcluidas ?? []).map((e) => ({ ...e, cooperativaId: coopId }));
   const mergedNotasExcluidasCoop = mergeNotasPedidoExcluidasByNewer(
     (data.notasPedidoExcluidas ?? []).filter((e) => e.cooperativaId === coopId),
@@ -789,6 +794,10 @@ export function mergeOperacionalIntoData(
             cloudLivro,
             cloudSyncTime
           )),
+    ],
+    livroCaixaControleAnual: [
+      ...(data.livroCaixaControleAnual ?? []).filter((c) => c.cooperativaId !== coopId),
+      ...(mergedLivroControle ? [mergedLivroControle] : []),
     ],
     prestacoesContas: [
       ...filterCoop(data.prestacoesContas ?? [], (p) => p.cooperativaId === coopId),

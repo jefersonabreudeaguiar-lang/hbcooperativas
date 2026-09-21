@@ -11,6 +11,7 @@ import type {
   Desconto,
   ValorAvulsoReceber,
   LivroCaixaLancamento,
+  LivroCaixaControleAnual,
   PrestacaoContas,
   PrestacaoContasExcluida,
   NotaPedidoExcluida,
@@ -50,6 +51,7 @@ export interface OperacionalSyncPayload {
   descontos: Desconto[];
   valoresAvulsosReceber?: ValorAvulsoReceber[];
   livroCaixa?: LivroCaixaLancamento[];
+  livroCaixaControleAnual?: LivroCaixaControleAnual[];
   prestacoesContas?: PrestacaoContas[];
   prestacoesContasExcluidas?: PrestacaoContasExcluida[];
   notasPedidoExcluidas?: NotaPedidoExcluida[];

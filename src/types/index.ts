@@ -781,10 +781,48 @@ export interface LivroCaixaLancamento {
   origem: LivroCaixaOrigem;
   /** Evita duplicar lançamento automático. */
   origemId?: string;
+  /** Número sequencial do evento no livro (reinicia após encerramento anual autorizado). */
+  numeroSequencia?: number;
+  /** Ano civil do livro ao qual pertence a sequência. */
+  anoSequencia?: number;
+  /** Agrupa linhas do mesmo evento (ex.: pagamento + retenções). */
+  grupoEventoId?: string;
   categoria?: string;
   responsavel?: string;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface LivroCaixaEncerramentoAnoRegistro {
+  anoEncerrado: number;
+  encerradoEm: string;
+  responsavelUserId: string;
+  responsavelNome: string;
+  contadorUserId: string;
+  contadorNome: string;
+  backupConfirmado: boolean;
+  relatoriosImpressosConfirmados: boolean;
+}
+
+/** Encerramento aguardando confirmação do contador. */
+export interface LivroCaixaEncerramentoPendente {
+  anoEncerrado: number;
+  novoAnoLivro: number;
+  backupConfirmado: boolean;
+  relatoriosImpressosConfirmados: boolean;
+  responsavelUserId: string;
+  responsavelNome: string;
+  responsavelConfirmadoEm: string;
+}
+
+export interface LivroCaixaControleAnual {
+  cooperativaId: string;
+  /** Ano civil vigente da numeração (ex.: 2026 → sequência 1, 2, 3…). */
+  anoLivro: number;
+  proximoSequencia: number;
+  encerramentoPendente?: LivroCaixaEncerramentoPendente;
+  historicoEncerramentos?: LivroCaixaEncerramentoAnoRegistro[];
+  updatedAt?: string;
 }
 
 export type TipoRepassePrestacao = "despesa" | "emprestimo" | "ajuda_custo" | "diversos";
@@ -896,6 +934,7 @@ export interface AppData {
   veiculos: Veiculo[];
   fechamentos: FechamentoMensal[];
   livroCaixa: LivroCaixaLancamento[];
+  livroCaixaControleAnual?: LivroCaixaControleAnual[];
   prestacoesContas: PrestacaoContas[];
   prestacoesContasExcluidas?: PrestacaoContasExcluida[];
   notasPedidoExcluidas?: NotaPedidoExcluida[];

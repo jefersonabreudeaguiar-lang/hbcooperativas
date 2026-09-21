@@ -369,6 +369,7 @@ function migrateData(raw: Partial<AppData> & Record<string, unknown>): AppData {
     veiculos: base.veiculos ?? [],
     fechamentos: base.fechamentos ?? [],
     livroCaixa: base.livroCaixa ?? [],
+    livroCaixaControleAnual: base.livroCaixaControleAnual ?? [],
     prestacoesContas: (base.prestacoesContas ?? [])
       .filter((p): p is PrestacaoContas => Boolean(p && typeof p === "object"))
       .map(normalizarPrestacaoContas),

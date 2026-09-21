@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Plus, TrendingUp, TrendingDown, Wallet, Send, Pencil, Trash2 } from "lucide-react";
+import { Plus, TrendingUp, TrendingDown, Wallet, Send, Pencil, Trash2, FileText, Search } from "lucide-react";
 import { useAppData } from "@/hooks/useAppData";
 import { usePermissions } from "@/hooks/usePermissions";
 import { getUserCooperativaId } from "@/utils/cooperativa";
@@ -15,15 +15,25 @@ import { resolveCooperativaCnpj } from "@/services/notaPedidoCloudService";
 import { pushOperacionalToCloud } from "@/services/cooperativaSyncCloudService";
 import {
   completarLancamentosContabeisPagamentos,
+  confirmarEncerramentoAnoLivroCaixaContador,
   criarLancamentoManual,
   atualizarLancamentoManual,
   excluirLancamentoLivroCaixa,
+  findLancamentosPorSequencia,
+  formatNumeroSequenciaExibicao,
+  getControleAnualLivroCaixa,
   isLancamentoManualEditavel,
+  isLancamentoSemSequenciaLegado,
   isOrigemRetencaoContabil,
   mesesLivroCaixa,
+  parseNumeroSequenciaInput,
+  podeExcluirLancamentoLivroCaixa,
   resumoLivroCaixa,
   resumoLivroCaixaGeral,
+  solicitarEncerramentoAnoLivroCaixa,
 } from "@/services/livroCaixaService";
+import { gerarRelatorioLivroCaixaDiaHtml } from "@/utils/livroCaixaRelatorioHtml";
+import { imprimirDocumentoHtml } from "@/utils/relatorioHtml";
 import type { LivroCaixaLancamento } from "@/types";
 import { formatCurrency, formatDate, formatMesReferencia, getCurrentMesReferencia } from "@/utils/format";
 import { CONTA_COOP_DESCONTO_SPLIT } from "@/config/contaCoopEconomia";
@@ -58,6 +68,12 @@ export default function LivroCaixaPage() {
   const [origem, setOrigem] = useState<LivroCaixaOrigem>("credito_avulso");
   const [publicando, setPublicando] = useState(false);
   const [editing, setEditing] = useState<LivroCaixaLancamento | null>(null);
+  const [buscaSequencia, setBuscaSequencia] = useState("");
+  const [destaqueSeqId, setDestaqueSeqId] = useState<string | null>(null);
+  const [dataRelatorio, setDataRelatorio] = useState(new Date().toISOString().split("T")[0]);
+  const [incluirFichaRelatorio, setIncluirFichaRelatorio] = useState(false);
+  const [encBackupOk, setEncBackupOk] = useState(false);
+  const [encRelatoriosOk, setEncRelatoriosOk] = useState(false);
 
   const resetForm = () => {
     setTipo("credito");
@@ -109,7 +125,17 @@ export default function LivroCaixaPage() {
     [data, coopId]
   );
 
+  const controleAnual = useMemo(
+    () => (data && coopId ? getControleAnualLivroCaixa(data, coopId) : undefined),
+    [data, coopId]
+  );
+
   if (!data || !user || !coopId) return null;
+
+  const coopNome = data.cooperativas.find((c) => c.id === coopId)?.nome ?? "Cooperativa";
+  const isContador = user.role === "contador";
+  const podeEncerrarResponsavel =
+    user.role === "admin" || user.role === "tesoureiro" || user.role === "responsavel";
 
   const canEdit = check("livro_caixa", "create");
   const canEditLancamento = check("livro_caixa", "edit");
@@ -161,8 +187,12 @@ export default function LivroCaixaPage() {
   };
 
   const excluirLancamento = (l: LivroCaixaLancamento) => {
-    if (!canDeleteLancamento || !isLancamentoManualEditavel(l)) return;
-    if (!confirm(`Remover este lançamento do livro caixa?\n\n${l.historico}\n${formatCurrency(l.valor)}`)) return;
+    if (!canDeleteLancamento || !podeExcluirLancamentoLivroCaixa(l)) return;
+    const legado = isLancamentoSemSequenciaLegado(l) && !isLancamentoManualEditavel(l);
+    const msg = legado
+      ? `Remover lançamento antigo (sem número de sequência)?\n\n${l.historico}\n${formatCurrency(l.valor)}`
+      : `Remover este lançamento do livro caixa?\n\n${l.historico}\n${formatCurrency(l.valor)}`;
+    if (!confirm(msg)) return;
     updateData((d) => {
       const next = excluirLancamentoLivroCaixa(d, coopId, l.id);
       if (next === d) return d;
@@ -173,6 +203,94 @@ export default function LivroCaixaPage() {
         userId: user.id,
         userName: user.name,
         changes: `Livro caixa removido · ${l.historico.slice(0, 80)}`,
+      });
+    });
+  };
+
+  const irParaSequencia = () => {
+    const n = parseNumeroSequenciaInput(buscaSequencia);
+    if (n == null) {
+      alert("Informe um número de sequência válido (ex.: 1, 01 ou 10).");
+      return;
+    }
+    const linhas = findLancamentosPorSequencia(data, coopId, n, controleAnual?.anoLivro);
+    if (linhas.length === 0) {
+      alert(`Nenhum lançamento com sequência ${n} no ano ${controleAnual?.anoLivro ?? "—"}.`);
+      return;
+    }
+    const principal =
+      linhas.find((l) => isLancamentoManualEditavel(l)) ??
+      linhas.find((l) => l.origem === "pagamento_cooperado") ??
+      linhas[0];
+    if (principal.mesReferencia !== mes) setMes(principal.mesReferencia);
+    setDestaqueSeqId(principal.id);
+    if (isLancamentoManualEditavel(principal) && canEditLancamento) {
+      openEditar(principal);
+    } else {
+      alert(
+        `Sequência ${formatNumeroSequenciaExibicao(n)} · ${linhas.length} linha(s). Lançamento automático — somente leitura.`
+      );
+    }
+  };
+
+  const imprimirRelatorioDia = () => {
+    const html = gerarRelatorioLivroCaixaDiaHtml(data, coopId, coopNome, dataRelatorio, {
+      incluirExtratoFicha: incluirFichaRelatorio,
+    });
+    imprimirDocumentoHtml(html);
+  };
+
+  const solicitarEncerramento = () => {
+    if (!podeEncerrarResponsavel || !controleAnual) return;
+    if (!encBackupOk || !encRelatoriosOk) {
+      alert("Marque backup e relatórios impressos antes de solicitar o encerramento.");
+      return;
+    }
+    if (
+      !confirm(
+        `Solicitar encerramento do livro caixa ${controleAnual.anoLivro}? O contador precisará confirmar no app para reiniciar a sequência em ${controleAnual.anoLivro + 1}.`
+      )
+    ) {
+      return;
+    }
+    updateData((d) => {
+      const next = solicitarEncerramentoAnoLivroCaixa(d, coopId, user, {
+        anoEncerrado: controleAnual.anoLivro,
+        backupConfirmado: encBackupOk,
+        relatoriosImpressosConfirmados: encRelatoriosOk,
+      });
+      if (next === d) return d;
+      return addAuditEntry(next, {
+        entityType: "financeiro",
+        entityId: coopId,
+        action: "editar",
+        userId: user.id,
+        userName: user.name,
+        changes: `Livro caixa · encerramento ${controleAnual.anoLivro} solicitado (aguarda contador)`,
+      });
+    });
+  };
+
+  const confirmarEncerramentoContador = () => {
+    if (!isContador || !controleAnual?.encerramentoPendente) return;
+    const p = controleAnual.encerramentoPendente;
+    if (
+      !confirm(
+        `Confirmar encerramento do ano ${p.anoEncerrado}? Próximo livro: ano ${p.novoAnoLivro}, sequência reinicia em 1.`
+      )
+    ) {
+      return;
+    }
+    updateData((d) => {
+      const next = confirmarEncerramentoAnoLivroCaixaContador(d, coopId, user);
+      if (next === d) return d;
+      return addAuditEntry(next, {
+        entityType: "financeiro",
+        entityId: coopId,
+        action: "aprovar",
+        userId: user.id,
+        userName: user.name,
+        changes: `Livro caixa · ano ${p.anoEncerrado} encerrado · contador confirmou`,
       });
     });
   };
@@ -192,7 +310,11 @@ export default function LivroCaixaPage() {
     <div className="max-w-4xl space-y-6">
       <PageHeader
         title="Livro caixa"
-        subtitle="Movimentos automáticos, retenções contábeis e lançamentos avulsos"
+        subtitle={
+          controleAnual
+            ? `Ano-livro ${controleAnual.anoLivro} · próximo nº ${controleAnual.proximoSequencia}`
+            : "Movimentos automáticos, retenções contábeis e lançamentos avulsos"
+        }
         action={
           canEdit && (
             <div className="flex gap-2">
@@ -232,6 +354,76 @@ export default function LivroCaixaPage() {
         </div>
       </div>
 
+      <Card title="Conferência rápida">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="space-y-3">
+            <FormField label="Ir para sequência" hint="Aceita 1, 01, 010… Avulsos abrem para editar; automáticos só leitura.">
+              <div className="flex gap-2">
+                <Input
+                  value={buscaSequencia}
+                  onChange={(e) => setBuscaSequencia(e.target.value)}
+                  placeholder="Nº"
+                  className="max-w-[120px]"
+                />
+                <Button type="button" variant="secondary" onClick={irParaSequencia}>
+                  <Search size={16} /> Localizar
+                </Button>
+              </div>
+            </FormField>
+          </div>
+          <div className="space-y-3">
+            <FormField label="Relatório do dia">
+              <Input type="date" value={dataRelatorio} onChange={(e) => setDataRelatorio(e.target.value)} />
+            </FormField>
+            <label className="flex items-center gap-2 text-sm text-gray-700">
+              <input
+                type="checkbox"
+                checked={incluirFichaRelatorio}
+                onChange={(e) => setIncluirFichaRelatorio(e.target.checked)}
+              />
+              Incluir extrato da ficha corrida (pagamentos do dia)
+            </label>
+            <Button type="button" variant="secondary" onClick={imprimirRelatorioDia}>
+              <FileText size={16} /> Imprimir / PDF do dia
+            </Button>
+          </div>
+        </div>
+      </Card>
+
+      {(podeEncerrarResponsavel || isContador) && controleAnual && (
+        <Card title={`Encerramento anual · ${controleAnual.anoLivro}`}>
+          {controleAnual.encerramentoPendente ? (
+            <div className="space-y-3 text-sm">
+              <p>
+                Encerramento solicitado por <strong>{controleAnual.encerramentoPendente.responsavelNome}</strong> em{" "}
+                {formatDate(controleAnual.encerramentoPendente.responsavelConfirmadoEm.split("T")[0])}. Aguardando
+                confirmação do contador.
+              </p>
+              {isContador && (
+                <Button onClick={confirmarEncerramentoContador}>Confirmar encerramento (contador)</Button>
+              )}
+            </div>
+          ) : podeEncerrarResponsavel ? (
+            <div className="space-y-3 text-sm">
+              <p>Após backup e impressão dos relatórios, solicite o encerramento. O contador confirma no app para reiniciar a sequência.</p>
+              <label className="flex items-center gap-2">
+                <input type="checkbox" checked={encBackupOk} onChange={(e) => setEncBackupOk(e.target.checked)} />
+                Backup realizado
+              </label>
+              <label className="flex items-center gap-2">
+                <input type="checkbox" checked={encRelatoriosOk} onChange={(e) => setEncRelatoriosOk(e.target.checked)} />
+                Relatórios necessários impressos/exportados
+              </label>
+              <Button variant="secondary" onClick={solicitarEncerramento}>
+                Solicitar encerramento do ano
+              </Button>
+            </div>
+          ) : (
+            <p className="text-sm text-gray-500">Nenhum encerramento pendente.</p>
+          )}
+        </Card>
+      )}
+
       <Card title={`Movimentos · ${formatMesReferencia(mes)}`}>
         <div className="mb-4">
           <Select value={mes} onChange={(e) => setMes(e.target.value)} className="max-w-xs">
@@ -241,15 +433,18 @@ export default function LivroCaixaPage() {
           </Select>
         </div>
         <p className="text-sm text-gray-500 mb-4">
-          Pagamentos a cooperados geram saída (líquido) e créditos contábeis de retenção (taxa 5%, mensalidade abatida e outros descontos).
-          Mensalidades confirmadas via PIX entram como entrada efetiva. Use lançamento avulso para créditos PNAE e outras entradas.
-          Lançamentos automáticos não podem ser editados aqui — ajuste na ficha, mensalidades ou HB Créditos. Avulsos podem ser editados ou excluídos (ícone ao lado do valor).
+          Ordem por número de sequência (ano-livro {controleAnual?.anoLivro ?? "—"}). Pagamentos a cooperados geram saída (líquido) e créditos contábeis de retenção.
+          Mensalidades confirmadas via PIX entram como entrada efetiva. Lançamentos automáticos são somente leitura; avulsos podem ser editados ou excluídos.
+          Lançamentos antigos sem número podem ser excluídos para limpeza (permissão de exclusão).
         </p>
         <div className="space-y-2">
           {resumoMes.lancamentos.map((l) => (
             <div
               key={l.id}
+              id={`lc-row-${l.id}`}
               className={`flex flex-col sm:flex-row sm:items-center justify-between gap-2 p-4 rounded-xl border ${
+                destaqueSeqId === l.id ? "ring-2 ring-amber-400" : ""
+              } ${
                 l.tipo === "credito"
                   ? isOrigemRetencaoContabil(l.origem)
                     ? "border-blue-100 bg-blue-50/40"
@@ -257,13 +452,18 @@ export default function LivroCaixaPage() {
                   : "border-red-100 bg-red-50/40"
               }`}
             >
-              <div className="min-w-0">
+              <div className="min-w-0 flex gap-3">
+                <div className="shrink-0 w-10 text-center font-mono font-bold text-gray-700 pt-0.5">
+                  {formatNumeroSequenciaExibicao(l.numeroSequencia)}
+                </div>
+                <div>
                 <p className="font-medium text-gray-900">{l.historico}</p>
                 <p className="text-xs text-gray-500 mt-1">
                   {formatDate(l.data)} · {ORIGEM_LABELS[l.origem]}
                   {isOrigemRetencaoContabil(l.origem) ? " · retenção contábil" : ""}
                   {l.responsavel ? ` · ${l.responsavel}` : ""}
                 </p>
+                </div>
               </div>
               <div className="flex items-center gap-2 shrink-0">
                 <p
@@ -299,6 +499,16 @@ export default function LivroCaixaPage() {
                     )}
                   </div>
                 )}
+                {canDeleteLancamento && !isLancamentoManualEditavel(l) && podeExcluirLancamentoLivroCaixa(l) && (
+                  <button
+                    type="button"
+                    onClick={() => excluirLancamento(l)}
+                    className="p-2 rounded-lg hover:bg-red-50 text-red-600"
+                    title="Excluir lançamento legado (sem sequência)"
+                  >
+                    <Trash2 size={16} />
+                  </button>
+                )}
               </div>
             </div>
           ))}
@@ -330,7 +540,7 @@ export default function LivroCaixaPage() {
           setModalOpen(false);
           resetForm();
         }}
-        title={editing ? "Editar lançamento" : "Novo lançamento"}
+        title={editing ? `Editar lançamento · nº ${formatNumeroSequenciaExibicao(editing.numeroSequencia)}` : "Novo lançamento"}
         size="md"
       >
         <div className="space-y-4">
