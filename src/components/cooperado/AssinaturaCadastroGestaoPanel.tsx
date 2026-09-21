@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { CheckCircle2, Eye, Pencil, PenLine, RotateCcw } from "lucide-react";
+import { CheckCircle2, Eye, Pencil, PenLine, RotateCcw, RotateCw } from "lucide-react";
 import type { AppData, Cooperado, User } from "@/types";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
@@ -10,16 +10,18 @@ import { AlertBanner } from "@/components/ui/AlertBanner";
 import { Textarea, FormField } from "@/components/ui/Form";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import { updateData, getData } from "@/services/dataStore";
-import { pushCooperadoToCloud, queueCooperadoPush, syncCooperadosFromCloud } from "@/services/cooperadoCloudService";
+import { pushCooperadoToCloud, queueCooperadoPush, syncCooperadosFromCloud, encontrarCooperadoLocalEquivalente } from "@/services/cooperadoCloudService";
 import { resolveCooperativaCnpj } from "@/services/notaPedidoCloudService";
 import {
   confirmarAssinaturaCadastroCooperado,
   devolverAssinaturaCadastroCooperado,
   getAssinaturaCadastroDataUrl,
   getAssinaturaCadastroStatus,
+  mergeAssinaturaCadastroFields,
   resumoAssinaturaCadastroApp,
 } from "@/services/cooperadoAssinaturaService";
 import { formatDateTime } from "@/utils/format";
+import { finalizeAssinaturaEdit, rotateAssinaturaDataUrl } from "@/utils/assinaturaImageEdit";
 import { AssinaturaImageEditor } from "@/components/cooperado/AssinaturaImageEditor";
 
 interface AssinaturaCadastroGestaoPanelProps {
@@ -36,10 +38,52 @@ export function AssinaturaCadastroGestaoPanel({ data, user, cooperativaId }: Ass
   const [verAssinatura, setVerAssinatura] = useState<Cooperado | null>(null);
   const [editandoAssinatura, setEditandoAssinatura] = useState(false);
   const [assinaturaEditada, setAssinaturaEditada] = useState<{ dataUrl: string; hash: string } | null>(null);
+  const [ajustesLista, setAjustesLista] = useState<Record<string, { dataUrl: string; hash: string }>>({});
+  const [girandoId, setGirandoId] = useState<string | null>(null);
+  const [syncando, setSyncando] = useState(false);
 
-  const previewVerAssinatura = verAssinatura
-    ? assinaturaEditada?.dataUrl ?? getAssinaturaCadastroDataUrl(verAssinatura)
-    : null;
+  const cooperadoIdLocal = (c: Cooperado) =>
+    encontrarCooperadoLocalEquivalente(getData(), cooperativaId, c)?.id ?? c.id;
+
+  const imagemAjustadaPara = (c: Cooperado) => {
+    if (verAssinatura?.id === c.id && assinaturaEditada) return assinaturaEditada;
+    return ajustesLista[c.id] ?? null;
+  };
+
+  const previewCooperado = (c: Cooperado) =>
+    imagemAjustadaPara(c)?.dataUrl ?? getAssinaturaCadastroDataUrl(c);
+
+  const girarImagem = async (c: Cooperado, graus: number) => {
+    const src = previewCooperado(c);
+    if (!src) return;
+    setGirandoId(c.id);
+    setErro("");
+    try {
+      const rotated = await rotateAssinaturaDataUrl(src, graus);
+      const payload = await finalizeAssinaturaEdit(rotated);
+      if (verAssinatura?.id === c.id) {
+        setAssinaturaEditada(payload);
+      } else {
+        setAjustesLista((prev) => ({ ...prev, [c.id]: payload }));
+      }
+    } catch (e) {
+      setErro(e instanceof Error ? e.message : "Não foi possível girar a imagem.");
+    } finally {
+      setGirandoId(null);
+    }
+  };
+
+  const sincronizarNuvem = async () => {
+    setSyncando(true);
+    setErro("");
+    try {
+      const d = getData();
+      const cnpj = await resolveCooperativaCnpj(d, cooperativaId, user);
+      if (cnpj) await syncCooperadosFromCloud(cnpj, cooperativaId);
+    } finally {
+      setSyncando(false);
+    }
+  };
 
   useEffect(() => {
     setEditandoAssinatura(false);
@@ -59,6 +103,8 @@ export function AssinaturaCadastroGestaoPanel({ data, user, cooperativaId }: Ass
     };
   }, [cooperativaId, user.id, user.cooperativaCnpj]);
 
+  const previewVerAssinatura = verAssinatura ? previewCooperado(verAssinatura) : null;
+
   const syncCooperado = async (cooperado: Cooperado) => {
     const cnpj = await resolveCooperativaCnpj(data, cooperado.cooperativaId, user);
     if (!cnpj) return { ok: false as const, error: "CNPJ da cooperativa não encontrado." };
@@ -66,17 +112,29 @@ export function AssinaturaCadastroGestaoPanel({ data, user, cooperativaId }: Ass
   };
 
   const confirmar = async (
-    cooperadoId: string,
+    ref: Cooperado,
     imagemAjustada?: { dataUrl: string; hash: string } | null
   ): Promise<boolean> => {
+    const localId = cooperadoIdLocal(ref);
     setErro("");
-    setBusyId(cooperadoId);
+    setBusyId(ref.id);
     try {
       let atualizado: Cooperado | null = null;
       updateData((d) => {
+        const idx = d.cooperados.findIndex((c) => c.id === localId);
+        let base = d;
+        if (idx >= 0) {
+          const fields = mergeAssinaturaCadastroFields(d.cooperados[idx], ref);
+          base = {
+            ...d,
+            cooperados: d.cooperados.map((c, i) =>
+              i === idx ? { ...c, ...fields, id: localId } : c
+            ),
+          };
+        }
         const result = confirmarAssinaturaCadastroCooperado(
-          d,
-          cooperadoId,
+          base,
+          localId,
           user,
           imagemAjustada ?? undefined
         );
@@ -88,7 +146,7 @@ export function AssinaturaCadastroGestaoPanel({ data, user, cooperativaId }: Ass
         return result.data;
       });
       if (!atualizado) return false;
-      const salvo = getData().cooperados.find((c) => c.id === cooperadoId) ?? null;
+      const salvo = getData().cooperados.find((c) => c.id === localId) ?? null;
       if (!salvo) return false;
       const push = await syncCooperado(salvo);
       if (!push.ok) {
@@ -97,20 +155,37 @@ export function AssinaturaCadastroGestaoPanel({ data, user, cooperativaId }: Ass
         setErro(push.error ?? "Confirmado localmente, mas falhou na nuvem — tentaremos enviar de novo.");
         return false;
       }
+      setAjustesLista((prev) => {
+        const next = { ...prev };
+        delete next[ref.id];
+        return next;
+      });
       return true;
     } finally {
       setBusyId(null);
     }
   };
 
-  const devolver = async (cooperadoId: string): Promise<boolean> => {
+  const devolver = async (ref: Cooperado): Promise<boolean> => {
+    const localId = cooperadoIdLocal(ref);
     setErro("");
-    setBusyId(cooperadoId);
+    setBusyId(ref.id);
     try {
       let atualizado: Cooperado | null = null;
-      const motivo = motivoDevolucao[cooperadoId];
+      const motivo = motivoDevolucao[ref.id] ?? motivoDevolucao[localId];
       updateData((d) => {
-        const result = devolverAssinaturaCadastroCooperado(d, cooperadoId, user, motivo);
+        const idx = d.cooperados.findIndex((c) => c.id === localId);
+        let base = d;
+        if (idx >= 0) {
+          const fields = mergeAssinaturaCadastroFields(d.cooperados[idx], ref);
+          base = {
+            ...d,
+            cooperados: d.cooperados.map((c, i) =>
+              i === idx ? { ...c, ...fields, id: localId } : c
+            ),
+          };
+        }
+        const result = devolverAssinaturaCadastroCooperado(base, localId, user, motivo);
         if (!result.ok) {
           setErro(result.error);
           return d;
@@ -119,7 +194,7 @@ export function AssinaturaCadastroGestaoPanel({ data, user, cooperativaId }: Ass
         return result.data;
       });
       if (!atualizado) return false;
-      const salvo = getData().cooperados.find((c) => c.id === cooperadoId) ?? null;
+      const salvo = getData().cooperados.find((c) => c.id === localId) ?? null;
       if (!salvo) return false;
       const push = await syncCooperado(salvo);
       if (!push.ok) {
@@ -130,7 +205,8 @@ export function AssinaturaCadastroGestaoPanel({ data, user, cooperativaId }: Ass
       }
       setMotivoDevolucao((prev) => {
         const next = { ...prev };
-        delete next[cooperadoId];
+        delete next[ref.id];
+        delete next[localId];
         return next;
       });
       return true;
@@ -151,9 +227,15 @@ export function AssinaturaCadastroGestaoPanel({ data, user, cooperativaId }: Ass
   return (
     <Card title="Conferir assinaturas dos cooperados" className="mb-6">
       <p className="text-sm text-gray-600 mb-4">
-        Analise a foto da assinatura enviada pelo app. Confirme se está legível e conforme, ou devolva para o
-        cooperado reenviar.
+        Analise a foto da assinatura enviada pelo app. Use <strong>Girar</strong> se a foto estiver de lado,
+        confirme ou devolva para reenvio.
       </p>
+
+      <div className="flex flex-wrap gap-2 mb-4">
+        <Button size="sm" variant="secondary" onClick={() => void sincronizarNuvem()} disabled={syncando}>
+          {syncando ? "Sincronizando…" : "Atualizar da nuvem"}
+        </Button>
+      </div>
 
       {erro && (
         <AlertBanner variant="error" title="Não foi possível concluir" className="mb-4">
@@ -187,8 +269,9 @@ export function AssinaturaCadastroGestaoPanel({ data, user, cooperativaId }: Ass
       ) : (
         <div className="space-y-4">
           {resumo.listaEmAnalise.map((c) => {
-            const preview = getAssinaturaCadastroDataUrl(c);
+            const preview = previewCooperado(c);
             const busy = busyId === c.id;
+            const girando = girandoId === c.id;
             return (
               <div key={c.id} className="rounded-xl border border-amber-200 bg-amber-50/40 p-4 space-y-3">
                 <div className="flex flex-wrap items-start justify-between gap-2">
@@ -202,7 +285,7 @@ export function AssinaturaCadastroGestaoPanel({ data, user, cooperativaId }: Ass
                   <StatusBadge status={getAssinaturaCadastroStatus(c)} />
                 </div>
 
-                {preview && (
+                {preview ? (
                   <div className="bg-white rounded-lg border border-amber-100 p-4 flex flex-col items-center gap-2">
                     {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img
@@ -210,11 +293,39 @@ export function AssinaturaCadastroGestaoPanel({ data, user, cooperativaId }: Ass
                       alt={`Assinatura de ${c.nomeCompleto}`}
                       className="max-h-28 max-w-full object-contain"
                     />
-                    <Button size="sm" variant="secondary" onClick={() => setVerAssinatura(c)}>
-                      <Eye size={14} />
-                      Ver assinatura
-                    </Button>
+                    <div className="flex flex-wrap gap-2 justify-center">
+                      <Button
+                        size="sm"
+                        variant="secondary"
+                        disabled={busy || girando}
+                        onClick={() => void girarImagem(c, -90)}
+                      >
+                        <RotateCcw size={14} />
+                        Girar esq.
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="secondary"
+                        disabled={busy || girando}
+                        onClick={() => void girarImagem(c, 90)}
+                      >
+                        <RotateCw size={14} />
+                        Girar dir.
+                      </Button>
+                      <Button size="sm" variant="secondary" onClick={() => setVerAssinatura(c)}>
+                        <Eye size={14} />
+                        Ver / editar
+                      </Button>
+                    </div>
+                    {ajustesLista[c.id] && (
+                      <span className="text-xs text-green-700">Imagem girada — confirme para salvar.</span>
+                    )}
                   </div>
+                ) : (
+                  <AlertBanner variant="warning" title="Foto ainda não carregou neste aparelho">
+                    Toque em <strong>Atualizar da nuvem</strong>. Se o cooperado acabou de enviar, aguarde alguns
+                    segundos e atualize de novo.
+                  </AlertBanner>
                 )}
 
                 <FormField label="Motivo da devolução (opcional)" hint="O cooperado verá esta mensagem no app">
@@ -230,16 +341,15 @@ export function AssinaturaCadastroGestaoPanel({ data, user, cooperativaId }: Ass
                 </FormField>
 
                 <div className="flex flex-wrap gap-2">
-                  <Button size="sm" onClick={() => void confirmar(c.id)} disabled={busy}>
+                  <Button
+                    size="sm"
+                    onClick={() => void confirmar(c, imagemAjustadaPara(c))}
+                    disabled={busy || !preview}
+                  >
                     <CheckCircle2 size={16} />
                     Confirmar assinatura
                   </Button>
-                  <Button
-                    size="sm"
-                    variant="secondary"
-                    onClick={() => void devolver(c.id)}
-                    disabled={busy}
-                  >
+                  <Button size="sm" variant="secondary" onClick={() => void devolver(c)} disabled={busy}>
                     <RotateCcw size={16} />
                     Devolver para reenvio
                   </Button>
@@ -301,7 +411,7 @@ export function AssinaturaCadastroGestaoPanel({ data, user, cooperativaId }: Ass
               <Button
                 onClick={() =>
                   void (async () => {
-                    const ok = await confirmar(verAssinatura.id, assinaturaEditada);
+                    const ok = await confirmar(verAssinatura, imagemAjustadaPara(verAssinatura));
                     if (ok) setVerAssinatura(null);
                   })()
                 }
@@ -316,7 +426,7 @@ export function AssinaturaCadastroGestaoPanel({ data, user, cooperativaId }: Ass
                 variant="danger"
                 onClick={() =>
                   void (async () => {
-                    const ok = await devolver(verAssinatura.id);
+                    const ok = await devolver(verAssinatura);
                     if (ok) setVerAssinatura(null);
                   })()
                 }
@@ -364,13 +474,31 @@ export function AssinaturaCadastroGestaoPanel({ data, user, cooperativaId }: Ass
                     <Button
                       size="sm"
                       variant="secondary"
+                      disabled={modalBusy || girandoId === verAssinatura.id}
+                      onClick={() => void girarImagem(verAssinatura, -90)}
+                    >
+                      <RotateCcw size={14} />
+                      Girar esquerda
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="secondary"
+                      disabled={modalBusy || girandoId === verAssinatura.id}
+                      onClick={() => void girarImagem(verAssinatura, 90)}
+                    >
+                      <RotateCw size={14} />
+                      Girar direita
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="secondary"
                       onClick={() => setEditandoAssinatura(true)}
                       disabled={modalBusy}
                     >
                       <Pencil size={14} />
-                      Editar imagem
+                      Editar (recortar)
                     </Button>
-                    {assinaturaEditada && (
+                    {(assinaturaEditada || ajustesLista[verAssinatura.id]) && (
                       <span className="text-xs text-green-700 self-center">
                         Imagem ajustada — confirme abaixo para salvar.
                       </span>
