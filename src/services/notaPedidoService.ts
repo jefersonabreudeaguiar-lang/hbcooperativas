@@ -1677,6 +1677,30 @@ export function getDescontosContaCoopMesCached(
   );
 }
 
+/** Compras HB após o responsável registrar o pagamento — abate o que o cooperado ainda “vê” até assinar. */
+export function netHbAbatePosRegistroPagamento(
+  data: AppData,
+  cooperadoId: string,
+  mesReferencia: string,
+  pagoEm: string,
+  cooperativaId?: string
+): number {
+  const descontos = getDescontosContaCoopMesCached(data, cooperadoId, mesReferencia, cooperativaId);
+  const pagoTs = new Date(pagoEm).getTime();
+  if (!Number.isFinite(pagoTs)) return 0;
+  let compras = 0;
+  let estornos = 0;
+  for (const d of descontos) {
+    const ts = new Date(d.createdAt).getTime();
+    if (!Number.isFinite(ts) || ts < pagoTs) continue;
+    const isRefund =
+      d.motivo.toLowerCase().includes("estorno") || d.tipo === "credito_avulso";
+    if (isRefund) estornos += d.valorReais;
+    else compras += d.valorReais;
+  }
+  return round2(Math.max(0, compras - estornos));
+}
+
 function aplicarDescontosContaCoopMesNoResumo(
   resumo: ResumoPagamentoCooperado,
   data: AppData,
@@ -1779,24 +1803,10 @@ export function getResumoPagamentoExibicao(
     return resumoFromPagamento(confirmado);
   }
   const pagamento = getPagamentoAguardandoCooperado(data, cooperadoId, mesReferencia);
-  const live = getResumoPagamentoCooperado(data, cooperadoId, mesReferencia, coopId, ajustes);
   if (pagamento) {
-    const snap = resumoFromPagamento(pagamento);
-    const base: ResumoPagamentoCooperado = {
-      ...snap,
-      valorBruto: live.valorBruto,
-      descontoCooperativa: live.descontoCooperativa,
-      valorEntregas: live.valorEntregas,
-      fichaIds: live.fichaIds,
-      notaPedidoIds: live.notaPedidoIds,
-      descontosExtras: snap.descontosExtras.filter(
-        (d) =>
-          d.tipo !== "conta_coop" &&
-          !(d.tipo === "credito_avulso" && d.motivo.toLowerCase().includes("estorno"))
-      ),
-    };
-    return getResumoPagamentoParaRegistro(base, data, cooperadoId, mesReferencia, coopId);
+    return resumoFromPagamento(pagamento);
   }
+  const live = getResumoPagamentoCooperado(data, cooperadoId, mesReferencia, coopId, ajustes);
   return getResumoPagamentoParaRegistro(live, data, cooperadoId, mesReferencia, coopId);
 }
 

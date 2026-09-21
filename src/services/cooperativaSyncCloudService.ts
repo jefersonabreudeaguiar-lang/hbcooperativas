@@ -7,6 +7,7 @@ import { syncCooperadosFromCloud, fetchCooperadosFromCloud, pushCooperadoToCloud
 import { syncNotasPedidoFromCloud, patchNotaPedidoInCloud } from "@/services/notaPedidoCloudService";
 import { fetchCooperativaByCnpjFromCloud, mergeCooperativaIntoData } from "@/services/cooperativaCloudService";
 import { mergeArquivosMensaisFromCloud, reconciliarFichaFromNotasConferidas, dedupeFichaCorridaPorNota, aplicarNotasPedidoExcluidas } from "@/services/notaPedidoService";
+import { repararIntegridadePagamentosCooperativa } from "@/services/pagamentoIntegridadeService";
 import { ensureComunicadosAudioUploaded } from "@/services/comunicadoAudioSync";
 import { operacionalPushSeguro, precisaReparoFullSyncNotas, cooperadoFinanceiroDesatualizado, cooperadoFichaValoresDesalinhados, limparFichaObsoletaCooperado } from "@/services/fichaSyncGuard";
 import { beginCloudSync, endCloudSync } from "@/services/cloudSyncProgress";
@@ -188,7 +189,7 @@ function mergePagamentoCooperadoRecord(
   return itemTime(local) >= itemTime(cloud) ? local : cloud;
 }
 
-function mergePagamentosCooperadoFromCloud(
+export function mergePagamentosCooperadoFromCloud(
   localCoop: PagamentoCooperadoRegistro[],
   cloudItems: PagamentoCooperadoRegistro[]
 ): PagamentoCooperadoRegistro[] {
@@ -413,7 +414,9 @@ function buildContratosPayload(data: AppData, coopId: string): ContratosSyncPayl
 }
 
 function buildOperacionalPayload(data: AppData, coopId: string): OperacionalSyncPayload {
-  const sanitized = reconciliarFichaFromNotasConferidas(data);
+  const sanitized = repararIntegridadePagamentosCooperativa(
+    reconciliarFichaFromNotasConferidas(data)
+  );
   const now = new Date().toISOString();
   const cooperadoIds = new Set(
     sanitized.cooperados.filter((c) => c.cooperativaId === coopId).map((c) => c.id)
@@ -986,7 +989,9 @@ export function mergeOperacionalIntoData(
   if (cloudResetLimpouMensalidades) {
     return purgeComunicadosMarcadosExcluidos(
       aplicarNotasPedidoExcluidas(
-        aplicarPrestacoesContasExcluidas(reconciliarFichaFromNotasConferidas(next)),
+        aplicarPrestacoesContasExcluidas(
+          repararIntegridadePagamentosCooperativa(reconciliarFichaFromNotasConferidas(next))
+        ),
         coopId
       ),
       coopId
@@ -996,7 +1001,9 @@ export function mergeOperacionalIntoData(
   return purgeComunicadosMarcadosExcluidos(
     sincronizarMensalidadeCooperativa(
       aplicarNotasPedidoExcluidas(
-        aplicarPrestacoesContasExcluidas(reconciliarFichaFromNotasConferidas(next)),
+        aplicarPrestacoesContasExcluidas(
+          repararIntegridadePagamentosCooperativa(reconciliarFichaFromNotasConferidas(next))
+        ),
         coopId
       ),
       coopId
@@ -1099,7 +1106,18 @@ export async function pushOperacionalToCloud(
   if (bundle?.operacional) {
     const fromCloud = mergeOperacionalIntoData(fresh, bundle.operacional, cid, cloudCooperados);
     merged = options?.authoritative
-      ? { ...fresh, votacaoPautas: fromCloud.votacaoPautas, votacaoVotos: fromCloud.votacaoVotos }
+      ? {
+          ...fresh,
+          pagamentosCooperado: [
+            ...fresh.pagamentosCooperado.filter((p) => p.cooperativaId !== cid),
+            ...mergePagamentosCooperadoFromCloud(
+              fresh.pagamentosCooperado.filter((p) => p.cooperativaId === cid),
+              fromCloud.pagamentosCooperado.filter((p) => p.cooperativaId === cid)
+            ),
+          ],
+          votacaoPautas: fromCloud.votacaoPautas,
+          votacaoVotos: fromCloud.votacaoVotos,
+        }
       : fromCloud;
   }
   saveDataSafe(merged);
@@ -1147,7 +1165,23 @@ export async function pushOperacionalToCloud(
       saveDataSafe(dataForPayload);
     }
   }
-  dataForPayload = reconciliarFichaFromNotasConferidas(dataForPayload);
+  dataForPayload = repararIntegridadePagamentosCooperativa(
+    reconciliarFichaFromNotasConferidas(dataForPayload)
+  );
+  if (bundle?.operacional) {
+    const cloudPag = (bundle.operacional.pagamentosCooperado ?? []).map((p) => ({
+      ...p,
+      cooperativaId: cid,
+    }));
+    const localPag = dataForPayload.pagamentosCooperado.filter((p) => p.cooperativaId === cid);
+    dataForPayload = {
+      ...dataForPayload,
+      pagamentosCooperado: [
+        ...dataForPayload.pagamentosCooperado.filter((p) => p.cooperativaId !== cid),
+        ...mergePagamentosCooperadoFromCloud(localPag, cloudPag),
+      ],
+    };
+  }
   saveDataSafe(dataForPayload);
   const payloadFinal = buildOperacionalPayload(dataForPayload, cid);
   if (bundle?.operacional) {

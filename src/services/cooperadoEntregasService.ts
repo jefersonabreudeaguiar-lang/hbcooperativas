@@ -9,6 +9,7 @@ import {
   getResumoPagamentoExibicao,
   pagamentoCobreMesReferencia,
   getMesesReferenciaPagamento,
+  netHbAbatePosRegistroPagamento,
   fichaValidaNoExtrato,
   type AjustesResumoPagamento,
 } from "@/services/notaPedidoService";
@@ -358,13 +359,17 @@ export function getValorQuantoVouReceber(
   const aguardando = getPagamentoAguardandoCooperado(data, cooperadoId);
   let valor = 0;
   if (aguardando) {
-    const cobertos = new Set(getMesesReferenciaPagamento(aguardando));
-    const mesesCobertos = mesesPendentes.filter((m) => cobertos.has(m));
-    const mesesSemCobertura = mesesPendentes.filter((m) => !cobertos.has(m));
-    const alvoCobertos =
-      mesesCobertos.length > 0 ? mesesCobertos : [...cobertos].sort((a, b) => a.localeCompare(b));
-    valor += valorLiquidoMesesQuantoVouReceber(data, cooperadoId, alvoCobertos, cooperativaId);
-    valor += valorLiquidoMesesQuantoVouReceber(data, cooperadoId, mesesSemCobertura, cooperativaId);
+    let hbPosPagamento = 0;
+    for (const mes of getMesesReferenciaPagamento(aguardando)) {
+      hbPosPagamento += netHbAbatePosRegistroPagamento(
+        data,
+        cooperadoId,
+        mes,
+        aguardando.pagoEm,
+        cooperativaId
+      );
+    }
+    valor = round2(Math.max(0, aguardando.valorLiquido - hbPosPagamento));
   } else if (mesesPendentes.length > 1) {
     valor = getResumoPagamentoConsolidadoCooperado(
       data,
