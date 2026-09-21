@@ -34,10 +34,14 @@ export async function GET(request: Request) {
     return NextResponse.json({ configured: false, contratos: null, operacional: null });
   }
 
-  const [contratos, operacional] = await Promise.all([
+  const [contratos, operacionalRaw] = await Promise.all([
     fetchContratosSync(supabase, cnpj),
     fetchOperacionalSync(supabase, cnpj),
   ]);
+
+  const operacional = operacionalRaw
+    ? sanitizarOperacionalSyncPayload(operacionalRaw, reconciliarFichaFromNotasConferidas)
+    : null;
 
   return NextResponse.json({ configured: true, contratos, operacional });
 }

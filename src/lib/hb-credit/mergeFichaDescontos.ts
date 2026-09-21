@@ -107,8 +107,6 @@ export function mergeDescontosContaCoopNoResumo(
   const descontos = dedupeDescontosContaCoopRemotos(descontosRemotos);
   if (!descontos.length) return resumo;
 
-  const liquidoContaCoop = liquidoUsoContaCoopMes(descontos);
-
   const extrasBase = resumo.descontosExtras.filter(
     (d) =>
       d.tipo !== "conta_coop" && !(d.tipo === "credito_avulso" && isEstornoContaCoop(d.motivo))
@@ -123,15 +121,13 @@ export function mergeDescontosContaCoopNoResumo(
     });
   }
 
-  const totalDescontosSemCoop = round2(
-    extrasBase.filter((d) => d.tipo !== "credito_avulso").reduce((s, d) => s + d.valor, 0)
+  const totalDescontos = round2(
+    extras.filter((d) => d.tipo !== "credito_avulso").reduce((s, d) => s + d.valor, 0)
   );
-  const totalCreditosSemCoop = round2(
-    extrasBase.filter((d) => d.tipo === "credito_avulso").reduce((s, d) => s + d.valor, 0)
+  const totalCreditos = round2(
+    extras.filter((d) => d.tipo === "credito_avulso").reduce((s, d) => s + d.valor, 0)
   );
-  const valorLiquido = round2(
-    Math.max(0, resumo.valorEntregas - totalDescontosSemCoop - liquidoContaCoop + totalCreditosSemCoop)
-  );
+  const valorLiquido = round2(Math.max(0, resumo.valorEntregas - totalDescontos + totalCreditos));
 
   return {
     ...resumo,

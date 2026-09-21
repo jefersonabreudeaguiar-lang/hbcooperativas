@@ -35,6 +35,7 @@ import {
   getCreditoBaseCooperadoCents,
 } from "../src/modules/hb-credit/engine/creditBaseFromFicha.ts";
 import { resolveMobileCooperadoId } from "../src/lib/hb-credit/mobileCooperadoLink.ts";
+import { sanitizarOperacionalSyncPayload } from "../src/services/pagamentoIntegridadeService.ts";
 import type { AppData, FichaCorrida, NotaPedido } from "../src/types/index.ts";
 
 const COOP = "coop-1";
@@ -620,6 +621,81 @@ function nota(id: string, status: NotaPedido["status"]): NotaPedido {
     true,
     "Ivan divisão: fila Pagar"
   );
+}
+
+{
+  const MES = "2026-09";
+  const ENTREGAS = 233.32;
+  let data = baseData({
+    fichaCorrida: [
+      {
+        ...ficha("f_set", "n_set", MES),
+        valorBruto: ENTREGAS,
+        valorLiquido: ENTREGAS,
+        descontos: 0,
+      },
+    ],
+    notasPedido: [{ ...nota("n_set", "conferida"), mesReferencia: MES, valorLiquido: ENTREGAS }],
+  });
+  data = persistDescontosContaCoopNoArquivo(data, COOPERADO, MES, COOP, [
+    {
+      motivo: "Estorno HB Créditos — Mercado teste",
+      valorReais: 100,
+      tipo: "conta_coop",
+      createdAt: "2026-09-01T18:00:24.459Z",
+    },
+    {
+      motivo: "Estorno HB Créditos — Mercado teste",
+      valorReais: 150,
+      tipo: "conta_coop",
+      createdAt: "2026-09-01T18:41:54.581Z",
+    },
+    {
+      motivo: "Compra HB Créditos — Casa do Cacau (009AEE5F)",
+      valorReais: 79.9,
+      tipo: "conta_coop",
+      createdAt: "2026-09-01T19:22:36.725Z",
+    },
+  ]);
+  const base = getResumoPagamentoCooperado(data, COOPERADO, MES, COOP);
+  const aReceber = getResumoValorAPagarRelatorio(data, COOPERADO, MES, COOP);
+  const esperado = round2(ENTREGAS - 79.9 + 100 + 150);
+  assert.equal(base.valorLiquido, esperado, "base deve abater compra e somar estornos HB");
+  assert.equal(aReceber.valorLiquido, esperado, "exibição/relatório alinhados ao base");
+  assert.equal(
+    getResumoValorAPagarRelatorio(data, COOPERADO, MES, COOP).valorLiquido,
+    esperado,
+    "idempotência: segundo cálculo igual"
+  );
+}
+
+function round2(n: number): number {
+  return Math.round(n * 100) / 100;
+}
+
+{
+  const CLEBER = "c_cleber_sanitize";
+  const payload = {
+    updatedAt: new Date().toISOString(),
+    fichaCorrida: [
+      {
+        id: "fc_phantom",
+        cooperativaId: COOP,
+        cooperadoId: CLEBER,
+        notaPedidoId: "n1",
+        mesReferencia: "2026-08",
+        status: "pago" as const,
+        valorLiquido: 100,
+        valorBruto: 100,
+        descontos: 0,
+        createdAt: new Date().toISOString(),
+      },
+    ],
+    pagamentosCooperado: [],
+    arquivosMensais: [],
+  };
+  const sanitized = sanitizarOperacionalSyncPayload(payload, reconciliarFichaFromNotasConferidas);
+  assert.equal(sanitized.fichaCorrida?.[0]?.status, "pendente", "sync API deve reverter pago fantasma");
 }
 
 console.log("OK — guard financeiro cooperado");

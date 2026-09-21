@@ -65,7 +65,13 @@ export function sanitizarOperacionalSyncPayload(
     fichaCorrida: payload.fichaCorrida ?? [],
     pagamentosCooperado: payload.pagamentosCooperado ?? [],
   } as unknown as AppData;
-  const next = posProcessarIntegridadePagamentosCooperativa(reconciliar(stub));
+  let next = posProcessarIntegridadePagamentosCooperativa(stub);
+  const notasPedido = (payload as { notasPedido?: AppData["notasPedido"] }).notasPedido;
+  if (notasPedido?.length) {
+    next = posProcessarIntegridadePagamentosCooperativa(
+      reconciliar({ ...stub, notasPedido })
+    );
+  }
   return {
     ...payload,
     fichaCorrida: next.fichaCorrida ?? payload.fichaCorrida,

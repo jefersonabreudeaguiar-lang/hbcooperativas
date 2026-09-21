@@ -5,7 +5,7 @@
  */
 import ws from "ws";
 import { createClient } from "@supabase/supabase-js";
-import { readFileSync, existsSync } from "node:fs";
+import { readFileSync, existsSync, writeFileSync, mkdirSync } from "node:fs";
 import { resolve } from "node:path";
 import type { AppData } from "../src/types/index.ts";
 import { normalizeCnpj } from "../src/utils/cooperativa";
@@ -81,6 +81,30 @@ async function main() {
   if (JSON.stringify(before.fichaCorrida) === JSON.stringify(next.fichaCorrida)) {
     console.log("✓ Nenhuma ficha orphan — nuvem já ok");
     return;
+  }
+
+  const backupDir = resolve(process.cwd(), "scripts/backups");
+  mkdirSync(backupDir, { recursive: true });
+  const backupPath = resolve(backupDir, `pre-repair-pagamentos-integridade-${Date.now()}.json`);
+  writeFileSync(backupPath, JSON.stringify(before, null, 2), "utf8");
+  console.log("Backup local:", backupPath);
+
+  const cleber = "c_1782257422774_9chl9";
+  const ivan = "c_1787100313994_dg7sj";
+  for (const [label, id] of [
+    ["Cleber", cleber],
+    ["Ivan", ivan],
+  ] as const) {
+    const st = (next.fichaCorrida ?? [])
+      .filter((f) => f.cooperadoId === id)
+      .reduce(
+        (acc, f) => {
+          acc[f.status] = (acc[f.status] ?? 0) + 1;
+          return acc;
+        },
+        {} as Record<string, number>
+      );
+    console.log(`${label} fichas status:`, st);
   }
 
   await uploadOperacionalSync(supabase, CNPJ, payload);
