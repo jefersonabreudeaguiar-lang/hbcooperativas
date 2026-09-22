@@ -175,12 +175,18 @@ export type SyncStatusValue = {
   lastSyncedAt: number | null;
   /** Erro da última tentativa (sessão nuvem, permissão, etc.). */
   lastSyncError: string;
+  /**
+   * Cooperado: primeira tentativa de puxar operacional (pagamentos/recibos) na sessão terminou.
+   * Responsável/outros papéis: sempre true.
+   */
+  cooperadoPagamentosHydrated: boolean;
 };
 
 const SyncStatusContext = createContext<SyncStatusValue>({
   syncing: false,
   lastSyncedAt: null,
   lastSyncError: "",
+  cooperadoPagamentosHydrated: true,
 });
 
 export function useSyncStatus(): SyncStatusValue {
@@ -207,34 +213,69 @@ export function CooperativaSyncProvider({ children }: { children: React.ReactNod
   const [syncing, setSyncing] = useState(false);
   const [lastSyncedAt, setLastSyncedAt] = useState<number | null>(null);
   const [lastSyncError, setLastSyncError] = useState("");
+  const [cooperadoPagamentosHydrated, setCooperadoPagamentosHydrated] = useState(
+    () => user?.role !== "cooperado"
+  );
 
   const coopId = useAppDataSelector(
     (data) => (user ? getUserCooperativaId(user, data) : undefined),
     [user?.id, user?.cooperadoId, user?.cooperativaId, user?.role]
   );
 
-  const pullVotacaoOperacionalCooperado = useCallback(async () => {
+  useEffect(() => {
+    setCooperadoPagamentosHydrated(user?.role !== "cooperado");
+  }, [user?.id, user?.role]);
+
+  const markCooperadoPagamentosHydrated = useCallback(() => {
+    setCooperadoPagamentosHydrated(true);
+  }, []);
+
+  /** Pull operacional cedo — alinha status confirmado/aguardando antes da UI financeira. */
+  const hydrateCooperadoPagamentosFromCloud = useCallback(async (opts?: { ignoreGap?: boolean }) => {
     const currentUser = userRef.current;
-    if (!currentUser || currentUser.role !== "cooperado") return;
-    if (typeof navigator !== "undefined" && !navigator.onLine) return;
+    if (!currentUser || currentUser.role !== "cooperado") {
+      markCooperadoPagamentosHydrated();
+      return;
+    }
+    if (typeof navigator !== "undefined" && !navigator.onLine) {
+      markCooperadoPagamentosHydrated();
+      return;
+    }
     if (typeof document !== "undefined" && document.hidden) return;
     if (votacaoOperacionalPullRef.current) return;
 
     const now = Date.now();
-    if (now - lastVotacaoOperacionalPullRef.current < VOTACAO_OPERACIONAL_PULL_GAP_MS) return;
+    if (
+      !opts?.ignoreGap &&
+      now - lastVotacaoOperacionalPullRef.current < VOTACAO_OPERACIONAL_PULL_GAP_MS
+    ) {
+      return;
+    }
 
     const warm = await waitForAppDataWarm();
-    if (!warm) return;
+    if (!warm) {
+      markCooperadoPagamentosHydrated();
+      return;
+    }
 
     const data = getData();
     const currentCoopId = getUserCooperativaId(currentUser, data);
-    if (!currentCoopId) return;
+    if (!currentCoopId) {
+      markCooperadoPagamentosHydrated();
+      return;
+    }
 
     const sessionOk = await ensureCloudSessionReady(userToCloudProfile(currentUser));
-    if (!sessionOk) return;
+    if (!sessionOk) {
+      markCooperadoPagamentosHydrated();
+      return;
+    }
 
     const cnpj = await resolveCooperativaCnpj(data, currentCoopId, currentUser);
-    if (!cnpj) return;
+    if (!cnpj) {
+      markCooperadoPagamentosHydrated();
+      return;
+    }
 
     votacaoOperacionalPullRef.current = true;
     lastVotacaoOperacionalPullRef.current = now;
@@ -244,8 +285,13 @@ export function CooperativaSyncProvider({ children }: { children: React.ReactNod
       /* offline / retry na próxima abertura */
     } finally {
       votacaoOperacionalPullRef.current = false;
+      markCooperadoPagamentosHydrated();
     }
-  }, []);
+  }, [markCooperadoPagamentosHydrated]);
+
+  const pullVotacaoOperacionalCooperado = useCallback(async () => {
+    await hydrateCooperadoPagamentosFromCloud();
+  }, [hydrateCooperadoPagamentosFromCloud]);
 
   const runSync = useCallback(async (opts?: { force?: boolean }) => {
     const currentUser = userRef.current;
@@ -427,8 +473,11 @@ export function CooperativaSyncProvider({ children }: { children: React.ReactNod
       syncingRef.current = false;
       setSyncing(false);
       setLastSyncedAt(Date.now());
+      if (userRef.current?.role === "cooperado") {
+        markCooperadoPagamentosHydrated();
+      }
     }
-  }, []);
+  }, [markCooperadoPagamentosHydrated]);
 
   useEffect(() => {
     if (!user?.id || !coopId) return;
@@ -449,8 +498,13 @@ export function CooperativaSyncProvider({ children }: { children: React.ReactNod
     const initialDelay = setTimeout(() => {
       if (!document.hidden) {
         markUserActivity();
-        if (user?.role === "cooperado") void pullVotacaoOperacionalCooperado();
-        void runSync();
+        if (user?.role === "cooperado") {
+          void hydrateCooperadoPagamentosFromCloud({ ignoreGap: true }).finally(() => {
+            void runSync();
+          });
+        } else {
+          void runSync();
+        }
       }
     }, user?.role === "cooperado" ? 0 : 400);
 
@@ -487,7 +541,7 @@ export function CooperativaSyncProvider({ children }: { children: React.ReactNod
       document.removeEventListener("visibilitychange", onVisible);
       window.removeEventListener("online", onOnline);
     };
-  }, [coopId, user?.id, user?.role, runSync, pullVotacaoOperacionalCooperado]);
+  }, [coopId, user?.id, user?.role, runSync, pullVotacaoOperacionalCooperado, hydrateCooperadoPagamentosFromCloud]);
 
   useEffect(() => {
     if (!user?.id || user.role !== "cooperado") return;
@@ -499,8 +553,8 @@ export function CooperativaSyncProvider({ children }: { children: React.ReactNod
   }, [user?.id, user?.role]);
 
   const status = useMemo(
-    () => ({ syncing, lastSyncedAt, lastSyncError }),
-    [syncing, lastSyncedAt, lastSyncError]
+    () => ({ syncing, lastSyncedAt, lastSyncError, cooperadoPagamentosHydrated }),
+    [syncing, lastSyncedAt, lastSyncError, cooperadoPagamentosHydrated]
   );
 
   return (

@@ -85,6 +85,7 @@ import { cooperadoPrecisaCadastrarPix } from "@/utils/pix";
 import { baixarRecibo, resumoReciboFromPagamento, nomeArquivoRecibo } from "@/utils/recibo";
 import { updateData, addAuditEntry, getData } from "@/services/dataStore";
 import { requestAppSync } from "@/services/syncRequest";
+import { useCooperadoExibirAguardandoAssinatura } from "@/hooks/useCooperadoExibirAguardandoAssinatura";
 import { formatCurrency, formatDate, formatMesReferencia, formatMesesReferenciaRotulo, getCurrentMesReferencia, cn } from "@/utils/format";
 import type { PagamentoCooperadoRegistro, FichaCorrida, NotaPedido } from "@/types";
 
@@ -534,18 +535,27 @@ export default function FichaCorridaPage() {
     return getPagamentoAguardandoCooperado(data, cooperadoSelecionadoId);
   }, [data, cooperadoSelecionadoId]);
 
+  const { exibirAguardandoAssinatura, conferindoPagamentoNuvem } =
+    useCooperadoExibirAguardandoAssinatura(isCooperado && !!pagamentoAguardando);
+
+  const pagamentoAguardandoExibicao = useMemo(() => {
+    if (!isCooperado) return pagamentoAguardando;
+    if (!pagamentoAguardando || !exibirAguardandoAssinatura) return undefined;
+    return pagamentoAguardando;
+  }, [isCooperado, pagamentoAguardando, exibirAguardandoAssinatura]);
+
   useEffect(() => {
     if (!isCooperado || searchParams.get("assinar") !== "1") return;
-    if (pagamentoAguardando) setAssinaturaModal(true);
-  }, [isCooperado, searchParams, pagamentoAguardando]);
+    if (pagamentoAguardandoExibicao) setAssinaturaModal(true);
+  }, [isCooperado, searchParams, pagamentoAguardandoExibicao]);
 
   const resumoItensPagamento = useMemo(() => {
     if (!data || !cooperadoSelecionadoId) return resumoItensMes;
-    if (pagamentoAguardando) {
+    if (pagamentoAguardandoExibicao) {
       return agregarItensFichaMeses(
         data,
         cooperadoSelecionadoId,
-        getMesesReferenciaPagamento(pagamentoAguardando),
+        getMesesReferenciaPagamento(pagamentoAguardandoExibicao),
         coopId
       );
     }
@@ -566,7 +576,7 @@ export default function FichaCorridaPage() {
     cooperadoSelecionadoId,
     isCooperado,
     mesesPendentesPagamento,
-    pagamentoAguardando,
+    pagamentoAguardandoExibicao,
     resumoItensMes,
   ]);
 
@@ -597,23 +607,36 @@ export default function FichaCorridaPage() {
 
   const resumo = useMemo(() => {
     if (!data || !cooperadoSelecionadoId) return null;
+    if (isCooperado && !visualizandoHistorico && conferindoPagamentoNuvem) {
+      if (financeiroAberto && (financeiroAberto.valorLiquido ?? 0) > 0) {
+        return financeiroAberto.resumo;
+      }
+      return getResumoPagamentoExibicao(
+        data,
+        cooperadoSelecionadoId,
+        mesAtivo,
+        coopId,
+        ajustesCompartilhadosMes
+      );
+    }
     if (isCooperado && !visualizandoHistorico && financeiroAberto) {
       if ((financeiroAberto.valorLiquido ?? 0) > 0) {
         return financeiroAberto.resumo;
       }
-      if (financeiroAberto.aguardandoAssinatura && pagamentoAguardando) {
-        return resumoFromPagamento(pagamentoAguardando);
+      if (financeiroAberto.aguardandoAssinatura && pagamentoAguardandoExibicao) {
+        return resumoFromPagamento(pagamentoAguardandoExibicao);
       }
     }
     if (pagamentoConfirmado && (!isCooperado || visualizandoHistorico)) {
       return resumoFromPagamento(pagamentoConfirmado);
     }
-    if (pagamentoAguardando) {
+    const aguardandoResumo = isCooperado ? pagamentoAguardandoExibicao : pagamentoAguardando;
+    if (aguardandoResumo) {
       const temEntregaNova =
         isCooperado &&
         !visualizandoHistorico &&
         (valorReceberConsolidado?.valor ?? 0) > 0;
-      if (!temEntregaNova) return resumoFromPagamento(pagamentoAguardando);
+      if (!temEntregaNova) return resumoFromPagamento(aguardandoResumo);
     }
     if (visualizandoHistorico && pagamentoConfirmadoMes) {
       return resumoFromPagamento(pagamentoConfirmadoMes);
@@ -643,6 +666,7 @@ export default function FichaCorridaPage() {
     isCooperado,
     ajustesCompartilhadosMes,
     pagamentoAguardando,
+    pagamentoAguardandoExibicao,
     pagamentoConfirmado,
     visualizandoHistorico,
     pagamentoConfirmadoMes,
@@ -651,6 +675,7 @@ export default function FichaCorridaPage() {
     financeiroAberto,
     hbDescontosRevision,
     valorReceberConsolidado?.valor,
+    conferindoPagamentoNuvem,
   ]);
 
   const resumoExibicao = resumo;
@@ -678,7 +703,7 @@ export default function FichaCorridaPage() {
             : resumoExibicao.descontosExtras
       : [];
 
-  const pagarStep: 1 | 2 | 3 | 4 = pagamentoAguardando
+  const pagarStep: 1 | 2 | 3 | 4 = (isCooperado ? pagamentoAguardandoExibicao : pagamentoAguardando)
     ? 4
     : confirmPagamento
       ? 3
@@ -701,7 +726,7 @@ export default function FichaCorridaPage() {
     if (
       !visualizandoHistorico &&
       (pendentePagamentoResponsavel ||
-        pagamentoAguardando ||
+        (isCooperado ? pagamentoAguardandoExibicao : pagamentoAguardando) ||
         (isCooperado && (valorReceberConsolidado?.valor ?? 0) > 0))
     ) {
       if (isCooperado && mesesPendentesQuantoVouReceber.length > 1) {
@@ -727,6 +752,7 @@ export default function FichaCorridaPage() {
     mesesPendentesPagamento,
     mesesPendentesQuantoVouReceber,
     pagamentoAguardando,
+    pagamentoAguardandoExibicao,
     pendentePagamentoResponsavel,
     resumoItensMes,
     resumoItensPagamento,
@@ -743,9 +769,10 @@ export default function FichaCorridaPage() {
   }, [data, cooperadoSelecionadoId, mesAtivo, resumoExibicao?.descontosExtras]);
 
   const resumoReciboPagamento = useMemo(() => {
-    if (!pagamentoAguardando) return null;
-    return resumoReciboFromPagamento(pagamentoAguardando, resumoItensPagamento);
-  }, [pagamentoAguardando, resumoItensPagamento]);
+    const pg = isCooperado ? pagamentoAguardandoExibicao : pagamentoAguardando;
+    if (!pg) return null;
+    return resumoReciboFromPagamento(pg, resumoItensPagamento);
+  }, [isCooperado, pagamentoAguardando, pagamentoAguardandoExibicao, resumoItensPagamento]);
 
   const handlePixInvalido = () => {
     if (!cooperadoSelecionado || !user || !motivoPix.trim()) return;
@@ -995,7 +1022,8 @@ export default function FichaCorridaPage() {
     !isCooperado ||
     (!!data &&
       !!cooperadoId &&
-      (!!pagamentoAguardando ||
+      (!!pagamentoAguardandoExibicao ||
+        conferindoPagamentoNuvem ||
         !!pagamentoConfirmado ||
         cooperadoTemValorPendente(data, cooperadoId, coopId)));
 
@@ -1045,9 +1073,15 @@ export default function FichaCorridaPage() {
 
       {pagoMsg && <AlertBanner variant="success" className="mb-4" onDismiss={() => setPagoMsg("")}>{pagoMsg}</AlertBanner>}
 
-      {isCooperado && !visualizandoHistorico && pagamentoAguardando && (
+      {isCooperado && !visualizandoHistorico && conferindoPagamentoNuvem && (
+        <AlertBanner variant="info" title="Conferindo pagamento na nuvem" className="mb-4">
+          Aguarde alguns segundos com internet — atualizamos o status do recibo antes de pedir assinatura.
+        </AlertBanner>
+      )}
+
+      {isCooperado && !visualizandoHistorico && pagamentoAguardandoExibicao && (
         <AlertBanner variant="success" title="Pagamento realizado pela cooperativa" className="mb-4">
-          Valor: <strong>{formatCurrency(pagamentoAguardando.valorLiquido)}</strong>. Confira o recibo abaixo e confirme o recebimento assinando.
+          Valor: <strong>{formatCurrency(pagamentoAguardandoExibicao.valorLiquido)}</strong>. Confira o recibo abaixo e confirme o recebimento assinando.
           <Button className="mt-3 w-full sm:w-auto" size="lg" onClick={() => setAssinaturaModal(true)}>
             <CheckCircle2 size={18} /> Confirmar recebimento
           </Button>
@@ -1115,7 +1149,7 @@ export default function FichaCorridaPage() {
         </div>
       )}
 
-      {isCooperado && !visualizandoHistorico && mesQuitadoCooperado && !pagamentoAguardando && (
+      {isCooperado && !visualizandoHistorico && mesQuitadoCooperado && !pagamentoAguardandoExibicao && (
         <div className="text-center py-14 px-6 bg-white rounded-2xl border border-emerald-200 mb-6">
           <CheckCircle2 size={52} className="mx-auto text-emerald-600 mb-4" />
           <h2 className="text-xl font-bold text-gray-900">Pagamento confirmado</h2>
@@ -1502,8 +1536,10 @@ export default function FichaCorridaPage() {
               ·{" "}
               {isCooperado && !visualizandoHistorico
                 ? valorReceberConsolidado?.mesLabel ?? formatMesReferencia(mesAtivo)
-                : pagamentoAguardando
-                  ? formatMesesReferenciaRotulo(getMesesReferenciaPagamento(pagamentoAguardando))
+                : pagamentoAguardandoExibicao ?? pagamentoAguardando
+                  ? formatMesesReferenciaRotulo(
+                      getMesesReferenciaPagamento((pagamentoAguardandoExibicao ?? pagamentoAguardando)!)
+                    )
                   : mesesPendentesPagamento.length
                     ? formatMesesReferenciaRotulo(mesesPendentesPagamento)
                     : formatMesReferencia(mesAtivo)}
@@ -1805,10 +1841,10 @@ export default function FichaCorridaPage() {
           <p className="text-sm text-gray-600">
             Confira se os valores abaixo estão corretos. Em seguida, assine para confirmar que recebeu o pagamento.
           </p>
-          {resumoReciboPagamento && pagamentoAguardando && (
+          {resumoReciboPagamento && (pagamentoAguardandoExibicao ?? pagamentoAguardando) && (
             <ReciboResumoView
               resumo={resumoReciboPagamento}
-              mesReferencia={pagamentoAguardando.mesReferencia}
+              mesReferencia={(pagamentoAguardandoExibicao ?? pagamentoAguardando)!.mesReferencia}
               descontoPadraoPct={data.config.descontoPadraoCooperativa}
               compact
             />
