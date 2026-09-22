@@ -68,6 +68,7 @@ import { PagarStepper } from "@/components/ficha/PagarStepper";
 import { ReciboResumoView } from "@/components/ficha/ReciboResumoView";
 import { HistoricoHbCreditosResumo } from "@/components/ficha/HistoricoHbCreditosResumo";
 import { ResumoDescontosMes } from "@/components/ficha/ResumoDescontosMes";
+import { CooperadoHistoricoPagamentoMes } from "@/components/cooperado/CooperadoHistoricoPagamentoMes";
 import { DivisaoEntregaModal } from "@/components/ficha/DivisaoEntregaModal";
 import { ValoresAvulsosReceberPanel } from "@/components/ficha/ValoresAvulsosReceberPanel";
 import {
@@ -197,6 +198,7 @@ export default function FichaCorridaPage() {
   const [divisaoSelecionados, setDivisaoSelecionados] = useState<string[]>([]);
   const [divisaoSalvando, setDivisaoSalvando] = useState(false);
   const [lancamentosPagarExpandido, setLancamentosPagarExpandido] = useState(false);
+  const [historicoEntregasExpandido, setHistoricoEntregasExpandido] = useState(false);
   const [coopCnpjResumo, setCoopCnpjResumo] = useState("");
 
   const coopId = user && data ? getUserCooperativaId(user, data) : undefined;
@@ -305,6 +307,7 @@ export default function FichaCorridaPage() {
 
   useEffect(() => {
     setLancamentosPagarExpandido(false);
+    setHistoricoEntregasExpandido(false);
   }, [cooperadoSelecionadoId, mesAtivo, aba]);
 
   const cooperadoSelecionado = useMemo(() => {
@@ -571,6 +574,9 @@ export default function FichaCorridaPage() {
     if (!data || !cooperadoSelecionadoId) return undefined;
     return getPagamentoConfirmadoMes(data, cooperadoSelecionadoId, mesAtivo);
   }, [data, cooperadoSelecionadoId, mesAtivo]);
+
+  const cooperadoVistaMesPago =
+    isCooperado && visualizandoHistorico && !!pagamentoConfirmadoMes;
 
   const exibicaoOpts = useMemo(() => {
     if (!data || !cooperadoSelecionadoId) return undefined;
@@ -1005,12 +1011,18 @@ export default function FichaCorridaPage() {
     (isCooperado || aba === "pagar") &&
     (isCooperado
       ? visualizandoHistorico
-        ? !!pagamentoConfirmadoMes
+        ? false
         : exibirQuantoVouReceber
       : pendentePagamentoResponsavel);
 
   const baixarReciboAtual = () => {
     const pg = reciboAtual;
+    if (!pg?.reciboHtml) return;
+    void baixarRecibo(pg.reciboHtml, nomeArquivoRecibo(pg.mesReferencia, nomeCooperado || "cooperado"));
+  };
+
+  const baixarReciboMesHistorico = () => {
+    const pg = pagamentoConfirmadoMes;
     if (!pg?.reciboHtml) return;
     void baixarRecibo(pg.reciboHtml, nomeArquivoRecibo(pg.mesReferencia, nomeCooperado || "cooperado"));
   };
@@ -1208,7 +1220,7 @@ export default function FichaCorridaPage() {
         </div>
       )}
 
-      {cooperadoSelecionadoId && (
+      {cooperadoSelecionadoId && !cooperadoVistaMesPago && (
         <ValoresAvulsosReceberPanel
           cooperadoId={cooperadoSelecionadoId}
           cooperativaId={coopId}
@@ -1257,7 +1269,51 @@ export default function FichaCorridaPage() {
         </AlertBanner>
       )}
 
-      {exibirRelatorioMes && (
+      {cooperadoVistaMesPago && pagamentoConfirmadoMes && cooperadoSelecionadoId && (
+        <CooperadoHistoricoPagamentoMes
+          pagamento={pagamentoConfirmadoMes}
+          mesReferencia={mesAtivo}
+          descontoPadraoPct={data.config.descontoPadraoCooperativa}
+          cnpj={coopCnpjResumo}
+          cooperadoId={cooperadoSelecionadoId}
+          cooperadoNome={nomeCooperado}
+          onBaixarRecibo={pagamentoConfirmadoMes.reciboHtml ? baixarReciboMesHistorico : undefined}
+          detalheEntregas={
+            resumoItensMes.entregas > 0 ? (
+              <div className="rounded-2xl border border-gray-200 bg-white overflow-hidden shadow-sm">
+                <button
+                  type="button"
+                  onClick={() => setHistoricoEntregasExpandido((v) => !v)}
+                  className="w-full flex items-center justify-between gap-3 px-5 py-4 text-left hover:bg-gray-50 transition-colors"
+                  aria-expanded={historicoEntregasExpandido}
+                >
+                  <div>
+                    <p className="font-semibold text-gray-900">Detalhe das entregas</p>
+                    <p className="text-sm text-gray-500 mt-0.5">
+                      {resumoItensMes.entregas} entrega{resumoItensMes.entregas !== 1 ? "s" : ""} ·{" "}
+                      {historicoEntregasExpandido ? "ocultar" : "ver lista"}
+                    </p>
+                  </div>
+                  <ChevronDown
+                    size={20}
+                    className={cn(
+                      "text-gray-400 shrink-0 transition-transform",
+                      historicoEntregasExpandido && "rotate-180"
+                    )}
+                  />
+                </button>
+                {historicoEntregasExpandido && (
+                  <div className="border-t border-gray-200 px-5 pb-5 pt-3">
+                    <TabelaResumoItens itens={resumoItensMes.itens} entregas={resumoItensMes.entregas} />
+                  </div>
+                )}
+              </div>
+            ) : undefined
+          }
+        />
+      )}
+
+      {exibirRelatorioMes && !cooperadoVistaMesPago && (
         <>
           <Card
             title={

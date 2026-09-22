@@ -27,6 +27,8 @@ type Props = {
   valorEntregas: number;
   descontosExtras: FichaCorridaDesconto[];
   titularCooperadoIds?: string[];
+  /** Vista enxuta na aba de mês pago do cooperado. */
+  variant?: "default" | "cooperado";
 };
 
 export function HistoricoHbCreditosResumo({
@@ -36,6 +38,7 @@ export function HistoricoHbCreditosResumo({
   valorEntregas,
   descontosExtras,
   titularCooperadoIds,
+  variant = "default",
 }: Props) {
   const [lancamentos, setLancamentos] = useState<HbUtilizacaoResumoLancamento[]>([]);
   const [erro, setErro] = useState<string | null>(null);
@@ -78,25 +81,51 @@ export function HistoricoHbCreditosResumo({
     );
   }
 
-  if (!lancamentos.length) return null;
+  if (!lancamentos.length) {
+    if (variant === "cooperado") {
+      return (
+        <p className="text-sm text-gray-500">
+          Nenhuma compra com {HB_CREDIT_PRODUCT_NAME} neste mês.
+        </p>
+      );
+    }
+    return null;
+  }
+
+  const compacto = variant === "cooperado";
 
   return (
-    <div className="mt-4 border-t pt-4 space-y-3">
+    <div className={compacto ? "space-y-3" : "mt-4 border-t pt-4 space-y-3"}>
       <h4 className="text-sm font-semibold text-gray-900">
-        Histórico de utilização — {HB_CREDIT_PRODUCT_NAME}
+        {HB_CREDIT_PRODUCT_NAME} — utilização no mês
       </h4>
-      <p className="text-xs text-gray-500">
-        Lançamentos confirmados na nuvem (mesma base do abatimento do A receber). Autorização pendente não
-        aparece até a confirmação do pagamento.
-      </p>
+      {!compacto && (
+        <p className="text-xs text-gray-500">
+          Lançamentos confirmados na nuvem (mesma base do abatimento do A receber). Autorização pendente não
+          aparece até a confirmação do pagamento.
+        </p>
+      )}
+      {compacto && (
+        <p className="text-xs text-gray-500">
+          Mesmos lançamentos que o responsável vê no abatimento do pagamento.
+        </p>
+      )}
       <ul className="space-y-3">
         {lancamentos.map((l) => (
-          <li key={l.hbTransactionId} className="rounded-lg border bg-white p-3 text-sm space-y-1">
+          <li key={l.hbTransactionId} className="rounded-lg border bg-gray-50/80 p-3 text-sm space-y-1">
             <div className="flex flex-wrap justify-between gap-2 font-medium text-gray-900">
               <span>{l.partnerNome}</span>
               <span className="text-gray-600">{formatDataHora(l.createdAt)}</span>
             </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-1 text-gray-700">
+            {compacto ? (
+              <div className="flex flex-wrap justify-between gap-2 text-gray-700 pt-1">
+                <span>Abatido do recebimento</span>
+                <span className="font-medium text-red-700">
+                  - {formatCurrency(l.valorHbUtilizadoReais || l.valorImpactoAReceberReais)}
+                </span>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-1 text-gray-700">
               <span>Compra (bruto)</span>
               <span className="text-right">{formatCurrency(l.valorCompraReais)}</span>
               {l.valorDescontoReais > 0 && (
@@ -143,6 +172,10 @@ export function HistoricoHbCreditosResumo({
                 {l.hbTransactionId}
               </span>
             </div>
+            )}
+            {!compacto && l.statusResumo !== "CONFIRMED" && (
+              <p className="text-xs text-gray-600 pt-1">{statusLabel(l.statusResumo)}</p>
+            )}
             {l.observacao && <p className="text-xs text-gray-500 pt-1">{l.observacao}</p>}
           </li>
         ))}
