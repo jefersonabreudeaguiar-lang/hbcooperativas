@@ -343,7 +343,11 @@ export function CooperativaSyncProvider({ children }: { children: React.ReactNod
           } else {
             const pushCatalog = isDiretoriaRole(currentUser.role as UserRole);
             const pushMensalidades = isDiretoriaRole(currentUser.role as UserRole);
-            await syncCooperativaBidirectional(cnpj, currentCoopId, { pushCatalog, pushMensalidades });
+            if (opts?.force) {
+              await syncCooperativaBidirectional(cnpj, currentCoopId, { pushCatalog, pushMensalidades });
+            } else {
+              await syncCooperativaBackground(cnpj, currentCoopId);
+            }
           }
 
           if (currentUser.role === "cooperado" && currentUser.cooperadoId) {
@@ -404,11 +408,17 @@ export function CooperativaSyncProvider({ children }: { children: React.ReactNod
           durationMs: Date.now() - syncStartedAt,
         });
       }
-      await refreshContaCoopDescontosAfterOperacionalSync({
-        cnpj,
-        cooperativaId: currentCoopId,
-        user: currentUser,
-      });
+      const refreshHb = () =>
+        refreshContaCoopDescontosAfterOperacionalSync({
+          cnpj,
+          cooperativaId: currentCoopId,
+          user: currentUser,
+        });
+      if (cooperadoLogado || opts?.force) {
+        await refreshHb();
+      } else {
+        window.setTimeout(() => void refreshHb(), 2500);
+      }
     } catch (e) {
       if (!completed) {
         setLastSyncError(e instanceof Error ? e.message : "Erro na sincronização.");

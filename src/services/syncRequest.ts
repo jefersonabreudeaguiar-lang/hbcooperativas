@@ -19,6 +19,15 @@ export function registerSyncHandler(handler: SyncHandler): () => void {
   };
 }
 
+/** Sync leve (respeita intervalo mínimo; pull sem push autoritativo na gestão). */
+export function requestAppSyncLight(): void {
+  if (debounceTimer) clearTimeout(debounceTimer);
+  debounceTimer = setTimeout(() => {
+    debounceTimer = null;
+    dispatchSync(false);
+  }, SYNC_DEBOUNCE_MS);
+}
+
 /** Dispara sync após ação do usuário (agrupa chamadas rápidas; força atualização). */
 export function requestAppSync(): void {
   if (debounceTimer) clearTimeout(debounceTimer);

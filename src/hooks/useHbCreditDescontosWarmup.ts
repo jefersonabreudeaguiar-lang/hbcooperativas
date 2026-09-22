@@ -35,7 +35,8 @@ export function useHbCreditDescontosWarmup(user: Omit<User, "password"> | null) 
       });
     };
 
-    run();
+    const staffDelay = user.role === "cooperado" ? 0 : 4_000;
+    const initialTimer = window.setTimeout(run, staffDelay);
 
     const onVisible = () => {
       if (document.visibilityState === "visible") run();
@@ -45,6 +46,7 @@ export function useHbCreditDescontosWarmup(user: Omit<User, "password"> | null) 
 
     return () => {
       cancelled = true;
+      window.clearTimeout(initialTimer);
       document.removeEventListener("visibilitychange", onVisible);
       window.clearInterval(interval);
     };

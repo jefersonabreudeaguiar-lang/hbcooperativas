@@ -19,8 +19,8 @@ import { PromptDialog, ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { Card } from "@/components/ui/Card";
 import { NotaFotoImg } from "@/components/ui/NotaFotoImg";
 import { updateData, updateDataSafe, generateId, addAuditEntry, getData } from "@/services/dataStore";
-import { requestAppSync } from "@/services/syncRequest";
-import { forceNextFullNotasSync } from "@/services/syncMetaService";
+import { requestAppSync, requestAppSyncLight } from "@/services/syncRequest";
+import { forceNextFullNotasSync, shouldResponsavelForceFullNotasOnEntry } from "@/services/syncMetaService";
 import { useSyncStatus } from "@/components/sync/CooperativaSyncProvider";
 import {
   calcularItensNota,
@@ -1161,15 +1161,19 @@ export default function NotasPedidoContent() {
     requestAppSync();
   }, [isCooperado, data]);
 
-  // Responsável: ao abrir Conferir entregas, força full sync uma vez (não depende só de delta).
-  const responsavelFullSyncRef = useRef(false);
+  // Responsável: full de notas no máximo 1× por sessão; sync leve ao entrar na tela (1× por mount).
+  const responsavelMountSyncRef = useRef(false);
   useEffect(() => {
     if (isCooperado || !data || !coopId) return;
-    if (responsavelFullSyncRef.current) return;
-    responsavelFullSyncRef.current = true;
+    if (responsavelMountSyncRef.current) return;
+    responsavelMountSyncRef.current = true;
     const cnpj = getCooperativaCnpj(data, coopId);
-    if (cnpj) forceNextFullNotasSync(cnpj);
-    requestAppSync();
+    if (cnpj && shouldResponsavelForceFullNotasOnEntry(cnpj)) {
+      forceNextFullNotasSync(cnpj);
+      requestAppSync();
+    } else {
+      requestAppSyncLight();
+    }
   }, [isCooperado, data, coopId]);
 
   useEffect(() => {

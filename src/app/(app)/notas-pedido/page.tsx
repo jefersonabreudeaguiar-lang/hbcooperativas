@@ -1,9 +1,14 @@
 import { Suspense } from "react";
-import NotasPedidoPage from "./NotasPedidoContent";
+import dynamic from "next/dynamic";
+import { RouteLoadingFallback } from "@/components/ui/RouteLoadingFallback";
+
+const NotasPedidoPage = dynamic(() => import("./NotasPedidoContent"), {
+  loading: () => <RouteLoadingFallback label="Carregando entregas…" />,
+});
 
 export default function Page() {
   return (
-    <Suspense fallback={<div className="p-8 text-center text-gray-500">Carregando...</div>}>
+    <Suspense fallback={<RouteLoadingFallback label="Carregando entregas…" />}>
       <NotasPedidoPage />
     </Suspense>
   );

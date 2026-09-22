@@ -144,7 +144,8 @@ export function endSaveBatch(): void {
   if (saveBatchDepth === 0 && saveBatchPending) {
     const pending = saveBatchPending;
     saveBatchPending = null;
-    persistDataToStorage(pending, { skipNotify: true });
+    const saved = persistDataToStorage(pending, { skipNotify: true });
+    if (saved.ok) notify();
   }
 }
 
@@ -595,7 +596,6 @@ export function saveDataSafe(data: AppData): { ok: true } | { ok: false; error: 
   if (saveBatchDepth > 0) {
     memoryCache = data;
     saveBatchPending = data;
-    notifyImmediate();
     return { ok: true };
   }
 
@@ -647,7 +647,7 @@ export function updateDataSafe(
 
   if (saveBatchDepth > 0) {
     saveBatchPending = updated;
-    notifyImmediate();
+    memoryCache = updated;
     return { ok: true, data: updated };
   }
 
