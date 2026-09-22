@@ -51,7 +51,7 @@ export async function POST(request: Request) {
     useCashback: Boolean(body?.useCashback),
   });
 
-  if (!result.ok) return NextResponse.json({ error: result.error }, { status: 400 });
+  if (!result.ok) return NextResponse.json({ error: result.error, code: result.code }, { status: 400 });
 
   const mesReferencia = String(body?.mesReferencia ?? "").trim() || undefined;
   void repairOperacionalContaCoopDescontosForCooperado(gate.ctx.supabase, cnpj, cooperadoId, {

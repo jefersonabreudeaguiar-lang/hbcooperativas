@@ -14,6 +14,7 @@ import {
 import { deleteAllNotasForCnpj } from "@/lib/supabase/notasStorage";
 import { sanitizarOperacionalSyncPayload } from "@/services/pagamentoIntegridadeService";
 import { reconciliarFichaFromNotasConferidas } from "@/services/notaPedidoService";
+import { markHbStaleBeforeOperacionalUpload } from "@/modules/hb-credit/engine/operationalAuthoritativeCreditBaseChange";
 
 export async function GET(request: Request) {
   if (!isSupabaseConfigured()) {
@@ -94,6 +95,21 @@ export async function POST(request: Request) {
     if (payload.wipeNotas === true) {
       await deleteAllNotasForCnpj(supabase, cnpj);
     }
+
+    const staleGuard = await markHbStaleBeforeOperacionalUpload(supabase, {
+      cnpj,
+      nextOperacionalSanitized: payload,
+      actorUserId: guard.session?.sub ?? "operacional_sync",
+      staleReason: "pix_operacional_sync_upload",
+      auditSession: guard.session,
+    });
+    if (!staleGuard.ok) {
+      return NextResponse.json(
+        { error: staleGuard.error, code: staleGuard.code ?? "HB_STALE_GUARD_FAILED" },
+        { status: 503 }
+      );
+    }
+
     const uploaded = await uploadOperacionalSync(supabase, cnpj, payload);
     if (!uploaded.ok) return NextResponse.json({ error: uploaded.error }, { status: 500 });
     if (guard.session) {

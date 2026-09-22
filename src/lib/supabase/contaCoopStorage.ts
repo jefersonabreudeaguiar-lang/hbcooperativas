@@ -28,6 +28,7 @@ import type {
   SettlementStatus,
   IntentStatus,
 } from "@/modules/hb-credit/types";
+import { mapAuthorizeRpcError } from "@/modules/hb-credit/engine/hbCreditLimitSyncState";
 import { computeDisponivel, formatCentsBRL } from "@/modules/hb-credit/engine/money";
 import { calcLimiteFromPercentual, calcTetoGlobalCents, sumCreditosBaseCents } from "@/modules/hb-credit/engine/creditBaseFromFicha";
 import { INTENT_EXPIRY_MINUTES } from "@/modules/hb-credit/config";
@@ -1768,7 +1769,7 @@ export async function authorizePayment(
       cashbackAppliedCents?: number;
       duplicate?: boolean;
     }
-  | { ok: false; error: string }
+  | { ok: false; error: string; code?: string }
 > {
   const pinCheck = await verifyFinancialPin(
     supabase,
@@ -1809,8 +1810,18 @@ export async function authorizePayment(
     return { ok: false, error: error.message };
   }
 
-  const result = data as { ok?: boolean; error?: string; duplicate?: boolean; transacao_id?: string; disponivel_apos_centavos?: number };
-  if (!result?.ok) return { ok: false, error: result?.error ?? "Pagamento recusado." };
+  const result = data as {
+    ok?: boolean;
+    error?: string;
+    error_code?: string;
+    duplicate?: boolean;
+    transacao_id?: string;
+    disponivel_apos_centavos?: number;
+  };
+  if (!result?.ok) {
+    const mapped = mapAuthorizeRpcError(result);
+    return { ok: false, error: mapped.error, code: mapped.code };
+  }
 
   const txId = result.transacao_id ?? transacaoId;
   let finalReceiptCode = receiptCode;

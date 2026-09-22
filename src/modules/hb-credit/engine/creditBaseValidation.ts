@@ -85,31 +85,60 @@ export function assertCreditosBaseConsistent(
 /**
  * Impede crédito HB acima do valor a receber na nuvem (fonte autoritativa).
  * Valores do cliente acima do teto operacional são reduzidos; ausentes usam só a nuvem.
+ * @deprecated Prefer {@link pickCreditosBaseForLimitSync} — sync de limite usa só a nuvem.
  */
 export function clampCreditosBaseToAuthoritative(
   client: Record<string, number>,
   authoritative: Record<string, number>,
   cooperadoIds: string[]
 ): { sanitized: Record<string, number>; clamped: string[] } {
-  const sanitized: Record<string, number> = {};
-  const clamped: string[] = [];
-  const ids = cooperadoIds.length ? cooperadoIds : [...new Set([...Object.keys(client), ...Object.keys(authoritative)])];
+  const picked = pickCreditosBaseForLimitSync({ authoritative, cooperadoIds, clientPreview: client });
+  return { sanitized: picked.creditosBaseCents, clamped: picked.inflatedByClient };
+}
 
-  for (const cooperadoId of ids) {
-    const auth = Math.max(0, Math.round(Number(authoritative[cooperadoId] ?? 0)));
-    const fromClient = client[cooperadoId];
-    if (fromClient === undefined) {
-      sanitized[cooperadoId] = auth;
-      continue;
-    }
-    const requested = Math.max(0, Math.round(Number(fromClient)));
-    if (requested > auth) {
-      clamped.push(cooperadoId);
-      sanitized[cooperadoId] = auth;
-    } else {
-      sanitized[cooperadoId] = requested;
+export type CreditBaseClientDivergence = {
+  cooperadoId: string;
+  clientCents: number;
+  authoritativeCents: number;
+  deltaCents: number;
+};
+
+/**
+ * Fase 1 — limite HB: crédito-base vem exclusivamente do snapshot servidor (operacional + notas).
+ * O mapa do cliente, se enviado, serve só para auditoria de divergência.
+ */
+export function pickCreditosBaseForLimitSync(opts: {
+  authoritative: Record<string, number>;
+  cooperadoIds: string[];
+  clientPreview?: Record<string, number>;
+}): {
+  creditosBaseCents: Record<string, number>;
+  inflatedByClient: string[];
+  divergences: CreditBaseClientDivergence[];
+} {
+  const creditosBaseCents: Record<string, number> = {};
+  const inflatedByClient: string[] = [];
+  const divergences: CreditBaseClientDivergence[] = [];
+  const preview = opts.clientPreview ?? {};
+
+  for (const cooperadoId of opts.cooperadoIds) {
+    const authoritativeCents = Math.max(0, Math.round(Number(opts.authoritative[cooperadoId] ?? 0)));
+    creditosBaseCents[cooperadoId] = authoritativeCents;
+
+    if (preview[cooperadoId] === undefined) continue;
+    const clientCents = Math.max(0, Math.round(Number(preview[cooperadoId])));
+    if (clientCents === authoritativeCents) continue;
+
+    divergences.push({
+      cooperadoId,
+      clientCents,
+      authoritativeCents,
+      deltaCents: clientCents - authoritativeCents,
+    });
+    if (clientCents > authoritativeCents) {
+      inflatedByClient.push(cooperadoId);
     }
   }
 
-  return { sanitized, clamped };
+  return { creditosBaseCents, inflatedByClient, divergences };
 }

@@ -73,21 +73,49 @@ export function buildCreditosBaseAuthoritativeFromCloud(
   return buildCreditosBaseMap(data, cooperadoIds, cooperativaId);
 }
 
-/** Crédito-base autoritativo a partir do operacional.json + notas na nuvem. */
-export async function resolveAuthoritativeCreditosBaseCents(
+export type AuthoritativeCreditBaseFailureCode =
+  | "INVALID_CNPJ"
+  | "EMPTY_COOPERADOS"
+  | "OPERACIONAL_UNAVAILABLE"
+  | "COOPERATIVA_NOT_FOUND";
+
+export type AuthoritativeCreditBaseResult =
+  | {
+      ok: true;
+      cooperativeCnpj: string;
+      cooperativaId: string;
+      creditosBaseCents: Record<string, number>;
+    }
+  | { ok: false; code: AuthoritativeCreditBaseFailureCode; message: string };
+
+/** Crédito-base autoritativo — operacional.json + notas na nuvem + mesmas regras da ficha. */
+export async function resolveAuthoritativeCreditBase(
   supabase: SupabaseClient,
   cnpj: string,
   cooperadoIds: string[]
-): Promise<Record<string, number> | null> {
+): Promise<AuthoritativeCreditBaseResult> {
   const digits = normalizeCnpj(cnpj);
-  if (digits.length !== 14 || !cooperadoIds.length) return null;
+  if (digits.length !== 14) {
+    return { ok: false, code: "INVALID_CNPJ", message: "CNPJ inválido." };
+  }
+  if (!cooperadoIds.length) {
+    return { ok: false, code: "EMPTY_COOPERADOS", message: "Informe ao menos um cooperado." };
+  }
 
   const operacional = await fetchOperacionalSync(supabase, digits);
-  if (!operacional) return null;
+  if (!operacional) {
+    return {
+      ok: false,
+      code: "OPERACIONAL_UNAVAILABLE",
+      message: "Snapshot operacional indisponível na nuvem.",
+    };
+  }
 
   const { data: coopRow } = await supabase.from("cooperativas").select("id").eq("cnpj", digits).maybeSingle();
   const cooperativaId = coopRow?.id ? String(coopRow.id) : "";
-  if (!cooperativaId) return null;
+  if (!cooperativaId) {
+    return { ok: false, code: "COOPERATIVA_NOT_FOUND", message: "Cooperativa não encontrada." };
+  }
 
   const cooperados = await fetchCooperadosFromStorage(supabase, digits);
   const [tableResult, storageNotas] = await Promise.all([
@@ -99,7 +127,7 @@ export async function resolveAuthoritativeCreditosBaseCents(
     cooperativaId: n.cooperativaId ?? cooperativaId,
   }));
 
-  return buildCreditosBaseAuthoritativeFromCloud(
+  const creditosBaseCents = buildCreditosBaseAuthoritativeFromCloud(
     operacional,
     cooperativaId,
     digits,
@@ -107,4 +135,21 @@ export async function resolveAuthoritativeCreditosBaseCents(
     cooperados,
     notas
   );
+
+  return {
+    ok: true,
+    cooperativeCnpj: digits,
+    cooperativaId,
+    creditosBaseCents,
+  };
+}
+
+/** Compat — retorna null se snapshot autoritativo indisponível. */
+export async function resolveAuthoritativeCreditosBaseCents(
+  supabase: SupabaseClient,
+  cnpj: string,
+  cooperadoIds: string[]
+): Promise<Record<string, number> | null> {
+  const result = await resolveAuthoritativeCreditBase(supabase, cnpj, cooperadoIds);
+  return result.ok ? result.creditosBaseCents : null;
 }

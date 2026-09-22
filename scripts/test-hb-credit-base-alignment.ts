@@ -3,7 +3,7 @@
  * npx tsx scripts/test-hb-credit-base-alignment.ts
  */
 import assert from "node:assert/strict";
-import { clampCreditosBaseToAuthoritative } from "../src/modules/hb-credit/engine/creditBaseValidation.ts";
+import { clampCreditosBaseToAuthoritative, pickCreditosBaseForLimitSync } from "../src/modules/hb-credit/engine/creditBaseValidation.ts";
 import { getCreditoBaseContaCoopReais } from "../src/modules/hb-credit/engine/creditBaseFromFicha.ts";
 import { registrarPagamentoCooperado } from "../src/services/notaPedidoService.ts";
 import type { AppData, FichaCorrida, NotaPedido } from "../src/types/index.ts";
@@ -86,13 +86,25 @@ function nota(id: string): NotaPedido {
 }
 
 {
+  const picked = pickCreditosBaseForLimitSync({
+    authoritative: { c_a: 20_000, c_b: 15_000 },
+    cooperadoIds: ["c_a", "c_b"],
+    clientPreview: { c_a: 50_000, c_b: 10_000 },
+  });
+  assert.equal(picked.creditosBaseCents.c_a, 20_000);
+  assert.equal(picked.creditosBaseCents.c_b, 15_000);
+  assert.deepEqual(picked.inflatedByClient, ["c_a"]);
+  assert.equal(picked.divergences.length, 2);
+}
+
+{
   const { sanitized, clamped } = clampCreditosBaseToAuthoritative(
     { c_a: 50_000, c_b: 10_000 },
     { c_a: 20_000, c_b: 15_000 },
     ["c_a", "c_b"]
   );
   assert.equal(sanitized.c_a, 20_000);
-  assert.equal(sanitized.c_b, 10_000);
+  assert.equal(sanitized.c_b, 15_000);
   assert.deepEqual(clamped, ["c_a"]);
 }
 

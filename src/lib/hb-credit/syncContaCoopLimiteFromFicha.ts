@@ -12,7 +12,7 @@ export type SyncContaCoopLimiteOpts = {
   cooperadoIds?: string[];
 };
 
-/** Envia crédito base (valor a receber pendente) para sincronizar limite na nuvem. */
+/** Envia cooperados para sincronizar limite na nuvem (base calculada no servidor). */
 export async function refreshContaCoopLimiteFromFicha(opts: SyncContaCoopLimiteOpts): Promise<void> {
   if (!opts.cooperadoIds?.length && !isContaCoopValorReceberPilot(opts.cooperadoId, opts.cooperadoNome)) {
     return;
@@ -20,6 +20,7 @@ export async function refreshContaCoopLimiteFromFicha(opts: SyncContaCoopLimiteO
 
   const data = getData();
   const ids = opts.cooperadoIds?.length ? opts.cooperadoIds : [opts.cooperadoId];
+  /** Prévia local — enviada só para auditoria de divergência; o servidor ignora como autoridade. */
   const creditosBaseCents = buildCreditosBaseMap(data, ids, opts.cooperativaId);
 
   await syncCreditLimiteFromFicha({

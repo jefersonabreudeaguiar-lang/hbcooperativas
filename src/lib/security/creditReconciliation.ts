@@ -9,7 +9,9 @@ import {
   filterActionableFindings,
 } from "@/lib/lab/hbCreditWatch/rules";
 import type { CreditAccountRow } from "@/lib/lab/hbCreditWatch/types";
+import { runOperationalLimitReconciliation } from "@/modules/hb-credit/engine/creditOperationalReconciliation";
 import { recordCreditReconciliationAlerts } from "@/lib/security/platformSecurityEvents";
+import { fetchCooperadosFromStorage } from "@/lib/supabase/cooperadosStorage";
 
 const TABLE = "hb_credit_accounts";
 
@@ -35,6 +37,17 @@ export interface CreditReconciliationResult {
     observedCents: number | null;
     differenceCents: number | null;
   }>;
+  operational?: {
+    snapshotOk: boolean;
+    cooperadosChecked: number;
+    tetoPercent: number | null;
+    issues: Array<{
+      cooperadoId: string;
+      kind: string;
+      differenceCents: number | null;
+      message: string;
+    }>;
+  };
 }
 
 export async function runCreditReconciliationForCoop(
@@ -96,9 +109,44 @@ export async function runCreditReconciliationForCoop(
     );
   }
 
+  const cooperados = await fetchCooperadosFromStorage(supabase, digits);
+  const cooperadoIds = cooperados.filter((c) => c.status === "ativo").map((c) => c.id);
+  const operational =
+    cooperadoIds.length > 0
+      ? await runOperationalLimitReconciliation(supabase, digits, cooperadoIds)
+      : undefined;
+
+  const operationalIssues =
+    operational?.issues.map((i) => ({
+      cooperadoId: i.cooperadoId,
+      kind: i.kind,
+      differenceCents: i.differenceCents,
+      message: i.message,
+    })) ?? [];
+
+  if (operationalIssues.length > 0) {
+    await recordCreditReconciliationAlerts(
+      supabase,
+      digits,
+      operationalIssues.map((i) => ({
+        eventType: `operational_${i.kind}`,
+        accountId: i.cooperadoId,
+        differenceCents: i.differenceCents,
+      }))
+    );
+  }
+
   return {
     cooperativeCnpj: digits,
     accountsChecked: data?.length ?? 0,
     issues,
+    operational: operational
+      ? {
+          snapshotOk: operational.snapshotOk,
+          cooperadosChecked: operational.cooperadosChecked,
+          tetoPercent: operational.tetoPercent,
+          issues: operationalIssues,
+        }
+      : undefined,
   };
 }

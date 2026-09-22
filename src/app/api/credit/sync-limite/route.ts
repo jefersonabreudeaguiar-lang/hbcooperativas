@@ -8,12 +8,16 @@ import {
 } from "@/lib/security/creditGuard";
 import { normalizeCnpj } from "@/utils/cooperativa";
 import {
-  clampCreditosBaseToAuthoritative,
+  pickCreditosBaseForLimitSync,
   validateCreditosBaseCents,
 } from "@/modules/hb-credit/engine/creditBaseValidation";
-import { resolveAuthoritativeCreditosBaseCents } from "@/modules/hb-credit/engine/creditBaseAuthoritative";
+import { resolveAuthoritativeCreditBase } from "@/modules/hb-credit/engine/creditBaseAuthoritative";
+import { markHbCreditLimitSynced } from "@/modules/hb-credit/engine/hbCreditLimitSyncState";
 
-/** Sincroniza limite HB Créditos = teto% × valor a receber pendente (ficha / app cooperado). */
+/**
+ * Sincroniza limite HB = teto% × crédito-base.
+ * Fase 1: crédito-base é sempre reconstruído no servidor (operacional + notas); cliente não decide o valor.
+ */
 export async function POST(request: Request) {
   const gate = await requireCreditApi(request);
   if (!gate.ok) return gate.response;
@@ -24,11 +28,6 @@ export async function POST(request: Request) {
 
   const denyCoop = requireCreditCnpj(gate.ctx, cnpj);
   if (denyCoop) return denyCoop;
-
-  const creditosValidation = validateCreditosBaseCents(body?.creditosBaseCents ?? {});
-  if (!creditosValidation.ok) {
-    return NextResponse.json({ error: creditosValidation.error, code: creditosValidation.code }, { status: 400 });
-  }
 
   const cooperadoIdsRaw = (body?.cooperadoIds ?? []) as unknown;
   const singleId = String(body?.cooperadoId ?? "").trim();
@@ -51,38 +50,74 @@ export async function POST(request: Request) {
     if (denyCooperado) return denyCooperado;
   }
 
-  const authoritative = await resolveAuthoritativeCreditosBaseCents(
+  let clientPreview: Record<string, number> | undefined;
+  if (body?.creditosBaseCents != null) {
+    const creditosValidation = validateCreditosBaseCents(body.creditosBaseCents, {
+      allowedCooperadoIds: cooperadoIds,
+    });
+    if (!creditosValidation.ok) {
+      return NextResponse.json({ error: creditosValidation.error, code: creditosValidation.code }, { status: 400 });
+    }
+    clientPreview = creditosValidation.sanitized;
+  }
+
+  const authoritativeResult = await resolveAuthoritativeCreditBase(
     gate.ctx.supabase,
     cnpj,
     cooperadoIds
   );
-  let creditosBaseCents = creditosValidation.sanitized;
-  let clampedCooperados: string[] = [];
 
-  if (authoritative) {
-    const clamped = clampCreditosBaseToAuthoritative(creditosBaseCents, authoritative, cooperadoIds);
-    creditosBaseCents = clamped.sanitized;
-    clampedCooperados = clamped.clamped;
+  if (!authoritativeResult.ok) {
+    return NextResponse.json(
+      {
+        error: authoritativeResult.message,
+        code: authoritativeResult.code,
+      },
+      { status: authoritativeResult.code === "OPERACIONAL_UNAVAILABLE" ? 503 : 400 }
+    );
   }
+
+  const picked = pickCreditosBaseForLimitSync({
+    authoritative: authoritativeResult.creditosBaseCents,
+    cooperadoIds,
+    clientPreview,
+  });
 
   const actorId = gate.ctx.session?.sub ?? "system";
   const result = await syncLimitesCooperadosFromCreditoBase(
     gate.ctx.supabase,
     cnpj,
     cooperadoIds,
-    creditosBaseCents,
+    picked.creditosBaseCents,
     actorId
   );
 
   if (!result.ok) return NextResponse.json({ error: result.error }, { status: 400 });
+
+  for (const cooperadoId of cooperadoIds) {
+    const mark = await markHbCreditLimitSynced(gate.ctx.supabase, {
+      cnpj,
+      cooperadoId,
+      actorUserId: actorId,
+    });
+    if (!mark.ok) {
+      return NextResponse.json({ error: mark.error, code: "HB_LIMIT_SYNC_STATE_UPDATE_FAILED" }, { status: 503 });
+    }
+  }
+
   return NextResponse.json({
     ok: true,
+    source: "authoritative_server" as const,
+    creditosBaseAuthoritativeCents: picked.creditosBaseCents,
+    clientDivergences: picked.divergences.length ? picked.divergences : undefined,
+    clientInflatedCooperados: picked.inflatedByClient.length ? picked.inflatedByClient : undefined,
     updated: result.updated,
     reset: result.reset,
     tightened: result.tightened,
     synced: result.synced,
     unchanged: result.unchanged,
     errors: result.errors,
-    clampedCooperados: clampedCooperados.length ? clampedCooperados : undefined,
+    /** @deprecated use clientInflatedCooperados */
+    clampedCooperados: picked.inflatedByClient.length ? picked.inflatedByClient : undefined,
   });
 }
