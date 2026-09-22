@@ -34,6 +34,8 @@ export async function GET(
   const guard = await guardCooperativaApi(request, cnpj);
   if (!guard.ok) return guard.response;
 
+  const tableOnly = searchParams.get("tableOnly") === "1";
+
   const supabase = getSupabaseAdmin();
   if (!supabase) {
     return NextResponse.json({ nota: null, configured: false });
@@ -58,15 +60,24 @@ export async function GET(
     const sqlStatus = data.status as NotaPedido["status"] | null;
     const sqlUpdatedAt = typeof data.updated_at === "string" ? data.updated_at : undefined;
     if (nota?.id) {
+      const status =
+        tableOnly && sqlStatus
+          ? sqlStatus
+          : sqlStatus && sqlStatus !== "rascunho"
+            ? sqlStatus
+            : nota.status;
       fromTable = {
         ...nota,
-        status:
-          sqlStatus && sqlStatus !== "rascunho" ? sqlStatus : nota.status,
+        status,
         updatedAt: sqlUpdatedAt ?? nota.updatedAt,
       };
     }
   } else if (error && !isNotasPedidoTableMissing(error)) {
     console.error("[notas-pedido/get]", error.message);
+  }
+
+  if (tableOnly) {
+    return NextResponse.json({ nota: fromTable });
   }
 
   const fromStorage = await fetchNotaFromStorage(

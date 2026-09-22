@@ -457,6 +457,29 @@ export async function fetchNotasPedidoFromCloud(
   }
 }
 
+/** Metadados só da tabela SQL (sem merge com storage) — valida publicação na fila do responsável. */
+export async function fetchNotaPedidoTableMetaFromCloud(
+  cnpj: string,
+  notaId: string
+): Promise<{ status: NotaPedido["status"]; updatedAt?: string } | null> {
+  const digits = normalizeCnpj(cnpj);
+  if (digits.length !== 14) return null;
+
+  try {
+    const res = await secureApiFetch(
+      `/api/notas-pedido/${encodeURIComponent(notaId)}?cnpj=${digits}&tableOnly=1`,
+      { cache: "no-store" }
+    );
+    if (!res.ok) return null;
+    const json = await res.json().catch(() => ({}));
+    const nota = json.nota as NotaPedido | undefined;
+    if (!nota?.id) return null;
+    return { status: nota.status, updatedAt: nota.updatedAt };
+  } catch {
+    return null;
+  }
+}
+
 export async function fetchNotaPedidoFromCloud(
   cnpj: string,
   notaId: string,
@@ -888,9 +911,8 @@ export async function finalizeNotaEntregaNaNuvem(
     if (isNotaStatusTerminalConferencia(existing.status) || existing.status === "rejeitada") {
       return { ok: true };
     }
-    if (existing.status === "aguardando_conferencia") {
-      return { ok: true };
-    }
+    // Não retornar cedo em aguardando_conferencia: storage pode estar publicado
+    // enquanto a coluna/payload SQL ainda está em rascunho (lista do responsável ignora).
   }
 
   const finalNota: NotaPedido = {
@@ -910,13 +932,21 @@ export async function finalizeNotaEntregaNaNuvem(
 
   // Confirma que a nuvem realmente saiu de rascunho (PATCH antigo podia
   // "suceder" com 0 linhas e a entrega sumia da lista do responsável).
-  const cloud = await fetchNotaPedidoFromCloud(digits, finalNota.id, { metaOnly: true });
-  if (cloud && cloud.status === "rascunho") {
+  const tableMeta = await fetchNotaPedidoTableMetaFromCloud(digits, finalNota.id);
+  const sqlStatus = tableMeta?.status;
+  if (!sqlStatus || sqlStatus === "rascunho") {
     const retry = await pushNotasPedidoToCloud(digits, [finalNota], cooperadoNome);
     if (!retry.ok) {
       return {
         ok: false,
         error: retry.error ?? "Entrega não publicou na nuvem. Tente Enviar de novo.",
+      };
+    }
+    const afterPost = await fetchNotaPedidoTableMetaFromCloud(digits, finalNota.id);
+    if (!afterPost?.status || afterPost.status === "rascunho") {
+      return {
+        ok: false,
+        error: "Entrega não publicou na nuvem. Tente Enviar de novo.",
       };
     }
   }

@@ -33,7 +33,7 @@ import {
 import { cooperadoFinanceiroDesatualizado, aplicarSanidadeFinanceiroCooperadoLocal } from "@/services/fichaSyncGuard";
 import { avaliarIntegridadeFinanceiroCooperado } from "@/services/cooperadoFinanceiroGuard";
 import { refreshContaCoopDescontosAfterOperacionalSync } from "@/lib/hb-credit/syncContaCoopFichaDescontos";
-import { pushCooperadoToCloud, resolverCooperadoIdCanonico, flushPendingCooperadoPushes } from "@/services/cooperadoCloudService";
+import { pushCooperadoToCloud, resolverCooperadoIdCanonico, flushPendingCooperadoPushes, notaPertenceCooperado } from "@/services/cooperadoCloudService";
 import { registerSyncHandler, registerVotacaoOperacionalSyncHandler } from "@/services/syncRequest";
 import {
   isAppIdle,
@@ -76,13 +76,17 @@ function withSyncTimeout<T>(promise: Promise<T>, label: string): Promise<T> {
 async function runCooperadoFotoUploadsInBackground(
   cnpj: string,
   cooperadoCanonico: string,
-  cooperadoNome: string
+  cooperadoNome: string,
+  cooperativaId?: string
 ): Promise<void> {
   const latest = getData();
 
+  const pertence = (n: { cooperadoId: string; cooperadoNomeSnapshot?: string }) =>
+    notaPertenceCooperado(latest, n, cooperadoCanonico, cooperativaId);
+
   const pendentes = latest.notasPedido.filter(
     (n) =>
-      n.cooperadoId === cooperadoCanonico &&
+      pertence(n) &&
       n.status === "aguardando_conferencia" &&
       !n.fotoNaNuvem
   );
@@ -120,9 +124,11 @@ async function runCooperadoFotoUploadsInBackground(
   }
 
   const afterUpload = getData();
+  const pertenceAfter = (n: { cooperadoId: string; cooperadoNomeSnapshot?: string }) =>
+    notaPertenceCooperado(afterUpload, n, cooperadoCanonico, cooperativaId);
   const aguardandoLocal = afterUpload.notasPedido.filter(
     (n) =>
-      n.cooperadoId === cooperadoCanonico &&
+      pertenceAfter(n) &&
       n.status === "aguardando_conferencia" &&
       n.fotoNaNuvem
   );
@@ -136,9 +142,11 @@ async function runCooperadoFotoUploadsInBackground(
   }
 
   const afterFinalize = getData();
+  const pertenceFinal = (n: { cooperadoId: string; cooperadoNomeSnapshot?: string }) =>
+    notaPertenceCooperado(afterFinalize, n, cooperadoCanonico, cooperativaId);
   const incompletasNaNuvem = afterFinalize.notasPedido.filter(
     (n) =>
-      n.cooperadoId === cooperadoCanonico &&
+      pertenceFinal(n) &&
       n.status === "aguardando_conferencia" &&
       n.fotoNaNuvem &&
       (n.fotosEnviadasCount ?? 0) > 0
@@ -352,7 +360,7 @@ export function CooperativaSyncProvider({ children }: { children: React.ReactNod
             }
 
             const cooperadoNome = getCooperadoNome(latest.cooperados, cooperadoCanonico);
-            void runCooperadoFotoUploadsInBackground(cnpj, cooperadoCanonico, cooperadoNome);
+            void runCooperadoFotoUploadsInBackground(cnpj, cooperadoCanonico, cooperadoNome, currentCoopId);
           }
         })(),
         "Sincronização"

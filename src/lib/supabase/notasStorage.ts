@@ -442,14 +442,84 @@ export async function fetchNotasFromTable(
   cnpj: string,
   since?: string
 ): Promise<{ notas: NotaPedido[]; tableMissing: boolean; serverWatermark?: string }> {
+  const mapRows = (
+    data: { payload: unknown; status: unknown; updated_at: unknown }[] | null
+  ): { notas: NotaPedido[]; serverWatermark?: string } => {
+    let serverWatermark: string | undefined;
+    const notas = (data ?? [])
+      .map((row) => {
+        const payload = row.payload as NotaPedido | null;
+        if (!payload?.id) return null;
+        const sqlStatus = row.status as NotaPedido["status"] | null;
+        const sqlUpdatedAt = typeof row.updated_at === "string" ? row.updated_at : undefined;
+        if (sqlUpdatedAt) {
+          const t = new Date(sqlUpdatedAt).getTime();
+          const prev = serverWatermark ? new Date(serverWatermark).getTime() : 0;
+          if (Number.isFinite(t) && t >= prev) serverWatermark = sqlUpdatedAt;
+        }
+        const status =
+          sqlStatus && sqlStatus !== "rascunho"
+            ? sqlStatus
+            : payload.status;
+        return {
+          ...payload,
+          status,
+          updatedAt: sqlUpdatedAt ?? payload.updatedAt,
+          serverUpdatedAt: sqlUpdatedAt,
+        } as NotaPedido & { serverUpdatedAt?: string };
+      })
+      .filter((n): n is NotaPedido & { serverUpdatedAt?: string } => Boolean(n));
+    return { notas, serverWatermark };
+  };
+
+  if (since) {
+    const [deltaRes, filaRes] = await Promise.all([
+      supabase
+        .from("notas_pedido")
+        .select("payload, status, updated_at")
+        .eq("cooperativa_cnpj", cnpj)
+        .gte("updated_at", since)
+        .order("updated_at", { ascending: false }),
+      supabase
+        .from("notas_pedido")
+        .select("payload, status, updated_at")
+        .eq("cooperativa_cnpj", cnpj)
+        .in("status", ["aguardando_conferencia", "entregue"])
+        .order("updated_at", { ascending: false }),
+    ]);
+
+    if (deltaRes.error) {
+      if (isNotasPedidoTableMissing(deltaRes.error)) {
+        return { notas: [], tableMissing: true };
+      }
+      console.error("[notas-pedido/list]", deltaRes.error.message);
+      return { notas: [], tableMissing: false };
+    }
+    if (filaRes.error && !isNotasPedidoTableMissing(filaRes.error)) {
+      console.error("[notas-pedido/list-fila]", filaRes.error.message);
+    }
+
+    const byId = new Map<string, NotaPedido & { serverUpdatedAt?: string }>();
+    for (const n of mapRows(deltaRes.data ?? []).notas) byId.set(n.id, n);
+    for (const n of mapRows(filaRes.error ? [] : (filaRes.data ?? [])).notas) {
+      if (!byId.has(n.id)) byId.set(n.id, n);
+    }
+    const merged = [...byId.values()];
+    let serverWatermark: string | undefined;
+    for (const n of merged) {
+      const t = n.serverUpdatedAt ?? n.updatedAt;
+      if (!t) continue;
+      const ms = new Date(t).getTime();
+      const prev = serverWatermark ? new Date(serverWatermark).getTime() : 0;
+      if (Number.isFinite(ms) && ms >= prev) serverWatermark = t;
+    }
+    return { notas: merged, tableMissing: false, serverWatermark };
+  }
+
   let query = supabase
     .from("notas_pedido")
     .select("payload, status, updated_at")
     .eq("cooperativa_cnpj", cnpj);
-
-  if (since) {
-    query = query.gte("updated_at", since);
-  }
 
   const { data, error } = await query.order("updated_at", { ascending: false });
 
@@ -461,32 +531,7 @@ export async function fetchNotasFromTable(
     return { notas: [], tableMissing: false };
   }
 
-  let serverWatermark: string | undefined;
-  const notas = (data ?? [])
-    .map((row) => {
-      const payload = row.payload as NotaPedido | null;
-      if (!payload?.id) return null;
-      const sqlStatus = row.status as NotaPedido["status"] | null;
-      const sqlUpdatedAt = typeof row.updated_at === "string" ? row.updated_at : undefined;
-      if (sqlUpdatedAt) {
-        const t = new Date(sqlUpdatedAt).getTime();
-        const prev = serverWatermark ? new Date(serverWatermark).getTime() : 0;
-        if (Number.isFinite(t) && t >= prev) serverWatermark = sqlUpdatedAt;
-      }
-      // Coluna SQL status ganha se payload ainda estiver em rascunho (desync).
-      const status =
-        sqlStatus && sqlStatus !== "rascunho"
-          ? sqlStatus
-          : payload.status;
-      return {
-        ...payload,
-        status,
-        updatedAt: sqlUpdatedAt ?? payload.updatedAt,
-        serverUpdatedAt: sqlUpdatedAt,
-      } as NotaPedido & { serverUpdatedAt?: string };
-    })
-    .filter((n): n is NotaPedido & { serverUpdatedAt?: string } => Boolean(n));
-
+  const { notas, serverWatermark } = mapRows(data ?? []);
   return { notas, tableMissing: false, serverWatermark };
 }
 

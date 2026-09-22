@@ -1692,8 +1692,8 @@ export default function NotasPedidoContent() {
 
   const handleAnexarEntrega = async () => {
     if (!data || !user || !coopId || enviando || processandoFoto) return;
-    const cid = cooperadoId ?? user.cooperadoId;
-    if (!cid) {
+    const cidRaw = cooperadoId ?? user.cooperadoId;
+    if (!cidRaw) {
       setErroEnvio("Conta sem vínculo de cooperado. Faça login novamente ou fale com a cooperativa.");
       return;
     }
@@ -1714,6 +1714,8 @@ export default function NotasPedidoContent() {
       setContratoInstId(contratoId);
       setInstituicaoPadraoId(coopId, contratoId);
     }
+
+    const cid = resolverCooperadoIdCanonico(workingData, cidRaw, coopId);
 
     const errors: typeof formErrors = {};
     if (usarEscolaAvulsa && !escolaAvulsaNome.trim()) {
