@@ -1171,13 +1171,7 @@ export function alinharFichaUnicaComNota(
   const list = fichas.filter((f) => f.notaPedidoId === nota.id);
   if (list.length !== 1) return fichas;
   const f = list[0];
-  if (
-    Math.abs((f.valorBruto ?? 0) - nota.valorBruto) <= 0.02 &&
-    Math.abs((f.descontos ?? 0) - nota.valorDesconto) <= 0.01 &&
-    Math.abs((f.valorLiquido ?? 0) - nota.valorLiquido) <= 0.01
-  ) {
-    return fichas;
-  }
+  if (fichasValoresAlinhadosComNota(fichas, nota)) return fichas;
   if (Math.abs((f.valorBruto ?? 0) - nota.valorBruto) > 0.02) return fichas;
   const descontosDetalhe =
     nota.valorDesconto > 0
@@ -1193,11 +1187,54 @@ export function alinharFichaUnicaComNota(
     entry.id === f.id
       ? {
           ...entry,
+          valorBruto: nota.valorBruto,
           descontos: nota.valorDesconto,
           valorLiquido: nota.valorLiquido,
           descontosDetalhe,
         }
       : entry
+  );
+}
+
+/** Ajusta a última ficha da nota quando a soma difere só por centavos (multi-foto / divisão). */
+export function alinharSomaFichasComNota(
+  fichas: FichaCorrida[],
+  nota: NotaPedido
+): FichaCorrida[] {
+  if (fichasValoresAlinhadosComNota(fichas, nota)) return fichas;
+  const list = fichas.filter((f) => f.notaPedidoId === nota.id);
+  if (!list.length) return fichas;
+
+  const tot = somaTotaisFichasNota(fichas, nota.id);
+  const dBruto = round2(nota.valorBruto - tot.valorBruto);
+  const dLiq = round2(nota.valorLiquido - tot.valorLiquido);
+  const dDesc = round2(nota.valorDesconto - tot.valorDesconto);
+  const maxDrift = list.length > 1 ? 0.15 : 0.05;
+  if (Math.abs(dBruto) > maxDrift || Math.abs(dLiq) > maxDrift || Math.abs(dDesc) > maxDrift) {
+    return fichas;
+  }
+
+  const target = list[list.length - 1];
+  const newDesc = round2((target.descontos ?? 0) + dDesc);
+  return fichas.map((f) =>
+    f.id === target.id
+      ? {
+          ...f,
+          valorBruto: round2((f.valorBruto ?? 0) + dBruto),
+          descontos: newDesc,
+          valorLiquido: round2((f.valorLiquido ?? 0) + dLiq),
+          descontosDetalhe:
+            newDesc > 0
+              ? [
+                  {
+                    tipo: "cooperativa" as const,
+                    motivo: `Taxa cooperativa (${nota.percentualDescontoCooperativa}%)`,
+                    valor: newDesc,
+                  },
+                ]
+              : [],
+        }
+      : f
   );
 }
 
@@ -1517,6 +1554,14 @@ export function reconciliarFichaFromNotasConferidas(data: AppData): AppData {
 
     if (fichasExistentes.length > 0) {
       if (fichasValoresAlinhadosComNota(fichaCorrida, nota)) continue;
+      let ajustadas = alinharFichaUnicaComNota(fichaCorrida, nota);
+      ajustadas = alinharSomaFichasComNota(ajustadas, nota);
+      if (fichasValoresAlinhadosComNota(ajustadas, nota)) {
+        fichaCorrida = ajustadas;
+        changed = true;
+        continue;
+      }
+      fichaCorrida = ajustadas;
       const ctx = { ...data, fichaCorrida, arquivosMensais };
       const rebuilt = rebuildFichasNota(ctx, nota);
       fichaCorrida = rebuilt.fichaCorrida;

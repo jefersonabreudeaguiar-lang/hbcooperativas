@@ -572,8 +572,8 @@ function nota(id: string, status: NotaPedido["status"]): NotaPedido {
       email: "jefersonabreudeaguiar@gmail.com",
       role: "responsavel",
     }),
-    orlando,
-    "responsável no celular mantém vínculo de teste (Orlando)"
+    jeferson,
+    "responsável no celular usa vínculo do próprio cooperado (Jeferson)"
   );
 }
 

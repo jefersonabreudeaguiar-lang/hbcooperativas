@@ -4,8 +4,8 @@ export function cpfCooperadoDigits(cpfCnpj?: string): string {
   return (cpfCnpj ?? "").replace(/\D/g, "");
 }
 
-export function nomeNormalizadoCooperado(nome: string): string {
-  return nome.trim().toLowerCase().replace(/\s+/g, " ");
+export function nomeNormalizadoCooperado(nome: string | undefined | null): string {
+  return (nome ?? "").trim().toLowerCase().replace(/\s+/g, " ");
 }
 
 export function mesmoCooperadoCadastro(

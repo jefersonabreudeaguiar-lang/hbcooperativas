@@ -27,6 +27,7 @@ import { mergeCloudCooperadosIntoData } from "../src/services/cooperadoCloudServ
 import { mergeContratosIntoData, mergeOperacionalIntoData } from "../src/services/cooperativaSyncCloudService";
 import {
   alinharFichaUnicaComNota,
+  alinharSomaFichasComNota,
   aplicarItensNaNota,
   calcularItensNota,
   fichasValoresAlinhadosComNota,
@@ -155,8 +156,9 @@ function corrigirPar(
 
   let fichaCorrida = data.fichaCorrida;
   const fichaNext = alinharFichaUnicaComNota(fichaCorrida, corrigida);
-  const fichaChanged = fichaNext !== fichaCorrida;
-  if (fichaChanged) fichaCorrida = fichaNext;
+  let fichaAligned = alinharSomaFichasComNota(fichaNext, corrigida);
+  const fichaChanged = fichaAligned !== fichaCorrida;
+  if (fichaChanged) fichaCorrida = fichaAligned;
 
   const notaMudou =
     Math.abs(corrigida.valorBruto - nota.valorBruto) >= 0.005 ||

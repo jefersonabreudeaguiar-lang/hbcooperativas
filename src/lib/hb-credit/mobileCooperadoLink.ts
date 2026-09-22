@@ -2,9 +2,9 @@ import type { UserRole } from "@/types";
 import { normalizeAuthEmail } from "@/lib/security/appCreator";
 import { normalizeUserRole } from "@/permissions";
 
-/** Vínculos fixos: e-mail de gestão no celular → cooperado (ex.: Orlando). Só para equipe sem cooperadoId próprio. */
+/** Vínculos fixos: e-mail de gestão no celular → cooperado (preview no app). */
 const MOBILE_COOPERADO_BY_EMAIL: Record<string, string> = {
-  [normalizeAuthEmail("jefersonabreudeaguiar@gmail.com")]: "c_1782263929381_ncp55",
+  [normalizeAuthEmail("jefersonabreudeaguiar@gmail.com")]: "c_1781981564381_w67gg",
 };
 
 export function resolveMobileCooperadoIdFromEmail(email: string | null | undefined): string | undefined {

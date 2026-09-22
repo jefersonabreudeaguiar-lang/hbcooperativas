@@ -2,9 +2,10 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { AppData, Cooperado, NotaPedido } from "@/types";
 import type { OperacionalSyncPayload } from "@/lib/supabase/cooperativaSyncStorage";
 import { fetchCooperadosFromStorage } from "@/lib/supabase/cooperadosStorage";
-import { fetchNotasFromTable } from "@/lib/supabase/notasStorage";
+import { fetchNotasFromTable, fetchNotasFromStorage, mergeNotasSources } from "@/lib/supabase/notasStorage";
 import { fetchOperacionalSync } from "@/lib/supabase/cooperativaSyncStorage";
-import { posProcessarIntegridadePagamentosCooperativa } from "@/services/pagamentoIntegridadeService";
+import { mergeCloudCooperadosIntoData } from "@/services/cooperadoCloudService";
+import { mergeOperacionalIntoData } from "@/services/cooperativaSyncCloudService";
 import { reconciliarFichaFromNotasConferidas } from "@/services/notaPedidoService";
 import { normalizeCnpj } from "@/utils/cooperativa";
 import { buildCreditosBaseMap } from "./creditBaseFromFicha";
@@ -13,40 +14,51 @@ import { buildCreditosBaseMap } from "./creditBaseFromFicha";
 export function buildMinimalAppDataForCreditBase(opts: {
   operacional: OperacionalSyncPayload;
   cooperativaId: string;
+  cnpj: string;
   cooperados: Cooperado[];
   notasPedido: NotaPedido[];
 }): AppData {
-  const base = {
+  const digits = normalizeCnpj(opts.cnpj);
+  let data = {
     cooperativas: [
       {
         id: opts.cooperativaId,
         nome: "",
-        cnpj: "",
+        cnpj: digits,
         createdAt: "",
         updatedAt: "",
       },
     ],
-    cooperados: opts.cooperados,
+    cooperados: [],
     users: [],
-    notasPedido: opts.notasPedido,
-    fichaCorrida: opts.operacional.fichaCorrida ?? [],
-    pagamentosCooperado: opts.operacional.pagamentosCooperado ?? [],
-    arquivosMensais: opts.operacional.arquivosMensais ?? [],
-    mensalidades: opts.operacional.mensalidades ?? [],
-    descontos: opts.operacional.descontos ?? [],
-    valoresAvulsosReceber: opts.operacional.valoresAvulsosReceber ?? [],
-    comunicados: opts.operacional.comunicados ?? [],
+    notasPedido: opts.notasPedido.map((n) => ({
+      ...n,
+      cooperativaId: n.cooperativaId ?? opts.cooperativaId,
+    })),
+    fichaCorrida: [],
+    pagamentosCooperado: [],
+    arquivosMensais: [],
+    ajustesFichaMes: [],
+    mensalidades: [],
+    descontos: [],
+    valoresAvulsosReceber: [],
+    comunicados: [],
     instituicoes: [],
     produtosInstituicao: [],
     config: opts.operacional.config ?? { descontoPadraoCooperativa: 0 },
   } as unknown as AppData;
 
-  return posProcessarIntegridadePagamentosCooperativa(reconciliarFichaFromNotasConferidas(base));
+  data = mergeCloudCooperadosIntoData(data, opts.cooperados, digits, opts.cooperativaId);
+  data = mergeOperacionalIntoData(data, opts.operacional, opts.cooperativaId, opts.cooperados);
+
+  /** Mesma base do app após sync (reconciliar); posProcessar aqui zera indevidamente o a receber no servidor. */
+  return reconciliarFichaFromNotasConferidas(data);
 }
 
 export function buildCreditosBaseAuthoritativeFromCloud(
   operacional: OperacionalSyncPayload,
   cooperativaId: string,
+  cnpj: string,
   cooperadoIds: string[],
   cooperados: Cooperado[],
   notasPedido: NotaPedido[]
@@ -54,6 +66,7 @@ export function buildCreditosBaseAuthoritativeFromCloud(
   const data = buildMinimalAppDataForCreditBase({
     operacional,
     cooperativaId,
+    cnpj,
     cooperados,
     notasPedido,
   });
@@ -77,11 +90,19 @@ export async function resolveAuthoritativeCreditosBaseCents(
   if (!cooperativaId) return null;
 
   const cooperados = await fetchCooperadosFromStorage(supabase, digits);
-  const { notas } = await fetchNotasFromTable(supabase, digits);
+  const [tableResult, storageNotas] = await Promise.all([
+    fetchNotasFromTable(supabase, digits),
+    fetchNotasFromStorage(supabase, digits),
+  ]);
+  const notas = mergeNotasSources(tableResult.notas, storageNotas).map((n) => ({
+    ...n,
+    cooperativaId: n.cooperativaId ?? cooperativaId,
+  }));
 
   return buildCreditosBaseAuthoritativeFromCloud(
     operacional,
     cooperativaId,
+    digits,
     cooperadoIds,
     cooperados,
     notas

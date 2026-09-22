@@ -33,7 +33,7 @@ export {
   deduplicarCooperadosLista,
 } from "@/utils/cooperadoDedupe";
 
-export function nomeNormalizado(nome: string): string {
+export function nomeNormalizado(nome: string | undefined | null): string {
   return nomeNormalizadoCooperado(nome);
 }
 
