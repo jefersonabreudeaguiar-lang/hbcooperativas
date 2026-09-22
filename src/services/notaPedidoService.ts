@@ -1468,6 +1468,13 @@ function mesComPagamentoCooperativaRegistrado(
 }
 
 /** Nota já incluída em PIX/registro — não recriar ficha pendente após conferência posterior. */
+function notaReferenciaTemporalEscopoPagamento(nota: NotaPedido): number {
+  const stamps = [nota.dataConferencia, nota.updatedAt, nota.createdAt]
+    .map((s) => Date.parse(s ?? ""))
+    .filter((t) => Number.isFinite(t));
+  return stamps.length ? Math.max(...stamps) : Number.NaN;
+}
+
 function notaQuitadaPorPagamentoCooperativaRegistrado(
   data: AppData,
   nota: NotaPedido,
@@ -1502,12 +1509,21 @@ function notaQuitadaPorPagamentoCooperativaRegistrado(
       continue;
     }
 
-    const notaTs = Date.parse(nota.createdAt ?? "");
+    const notaTs = notaReferenciaTemporalEscopoPagamento(nota);
     const pagoTs = Date.parse(p.pagoEm ?? p.createdAt ?? "");
     if (!Number.isNaN(notaTs) && !Number.isNaN(pagoTs) && notaTs <= pagoTs) return true;
   }
 
   return false;
+}
+
+/** Meses com débito aberto na ficha (mesma base do total a pagar do responsável). */
+export function listarMesesDebitoAbertoCooperado(
+  data: AppData,
+  cooperadoId: string,
+  cooperativaId?: string
+): string[] {
+  return mesesReferenciaComDebitoAberto(data, cooperadoId, cooperativaId);
 }
 
 function statusFichaAposConferenciaNota(

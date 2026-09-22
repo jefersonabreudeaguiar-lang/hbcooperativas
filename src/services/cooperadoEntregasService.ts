@@ -13,6 +13,7 @@ import {
   resumoComplementaresPosPagamento,
   fichaValidaNoExtrato,
   listarFichasPendentesPagamento,
+  listarMesesDebitoAbertoCooperado,
   type AjustesResumoPagamento,
 } from "@/services/notaPedidoService";
 import { formatMesReferencia, formatMesesReferenciaRotulo, getCurrentMesReferencia } from "@/utils/format";
@@ -438,12 +439,6 @@ export function getValorQuantoVouReceber(
   const mesesPendentes = listarMesesPendentesQuantoVouReceber(data, cooperadoId, cooperativaId);
   const mesesComValor = listarMesesComValorQuantoVouReceber(data, cooperadoId, cooperativaId);
   const mes = mesesComValor[mesesComValor.length - 1] ?? mesesPendentes[mesesPendentes.length - 1] ?? getMesQuantoVouReceber(data, cooperadoId, cooperativaId);
-  const mesLabel =
-    mesesComValor.length > 0
-      ? formatMesesReferenciaRotulo(mesesComValor)
-      : mesesPendentes.length > 0
-        ? formatMesesReferenciaRotulo(mesesPendentes)
-        : formatMesReferencia(mes);
   const aguardandoAssinatura = mesesPendentes.some((m) =>
     Boolean(getPagamentoAguardandoCooperado(data, cooperadoId, m))
   );
@@ -453,7 +448,9 @@ export function getValorQuantoVouReceber(
   );
   const mesesComValorAReceber = mesesPendentes.filter((m) => !mesesAguardandoAssinatura.has(m));
   let valor = 0;
-  if (mesesComValorAReceber.length > 1) {
+  if (!aguardandoAssinatura) {
+    valor = round2(getTotalAPagarCooperado(data, cooperadoId, undefined, cooperativaId));
+  } else if (mesesComValorAReceber.length > 1) {
     valor = getResumoPagamentoConsolidadoCooperado(
       data,
       cooperadoId,
@@ -465,13 +462,25 @@ export function getValorQuantoVouReceber(
       (s, m) => s + valorLiquidoMesQuantoVouReceber(data, cooperadoId, m, cooperativaId),
       0
     );
+    valor = round2(valor);
   }
-  valor = round2(valor);
+  const mesesParaRotulo =
+    mesesComValor.length > 0
+      ? mesesComValor
+      : mesesPendentes.length > 0
+        ? mesesPendentes
+        : valor > 0
+          ? listarMesesDebitoAbertoCooperado(data, cooperadoId, cooperativaId)
+          : [];
+  const mesLabelFinal =
+    mesesParaRotulo.length > 0
+      ? formatMesesReferenciaRotulo(mesesParaRotulo)
+      : formatMesReferencia(mes);
   const valorRecibo = aguardando ? round2(aguardando.valorLiquido) : 0;
   return {
     mes,
-    meses: mesesPendentes,
-    mesLabel,
+    meses: mesesPendentes.length ? mesesPendentes : mesesParaRotulo,
+    mesLabel: mesLabelFinal,
     valor,
     valorRecibo,
     aguardandoAssinatura,

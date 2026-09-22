@@ -975,4 +975,45 @@ function round2(n: number): number {
   );
 }
 
+{
+  const MES = "2026-09";
+  const data = baseData({
+    notasPedido: [
+      {
+        ...nota("n_foto_antiga", "conferida"),
+        mesReferencia: MES,
+        createdAt: "2026-09-01T10:00:00.000Z",
+        updatedAt: "2026-09-22T18:00:00.000Z",
+        dataConferencia: "2026-09-22T18:00:00.000Z",
+      },
+    ],
+    pagamentosCooperado: [
+      {
+        id: "pg_mes_implicito",
+        cooperativaId: COOP,
+        cooperadoId: COOPERADO,
+        mesReferencia: MES,
+        mesesReferencia: [MES],
+        valorBruto: 500,
+        descontoCooperativa: 0,
+        descontosExtras: [],
+        valorLiquido: 500,
+        fichaIds: [],
+        notaPedidoIds: [],
+        status: "confirmado",
+        pagoPor: "resp",
+        pagoEm: "2026-09-21T12:00:00.000Z",
+        createdAt: "2026-09-21T12:00:00.000Z",
+      },
+    ],
+  });
+  const rec = reconciliarFichaFromNotasConferidas(data);
+  const fichaNova = rec.fichaCorrida.find((f) => f.notaPedidoId === "n_foto_antiga");
+  assert.equal(fichaNova?.status, "pendente", "conferência após PIX não usa só createdAt da foto");
+  const total = getTotalAPagarCooperado(rec, COOPERADO, undefined, COOP);
+  const card = getValorQuantoVouReceber(rec, COOPERADO, COOP);
+  assert.ok(total > 0, "total responsável inclui nota conferida após pagamento");
+  assert.equal(card.valor, total, "card cooperado usa mesma base do responsável");
+}
+
 console.log("OK — guard financeiro cooperado");
