@@ -1510,14 +1510,16 @@ function notaQuitadaPorPagamentoCooperativaRegistrado(
   return false;
 }
 
-/** Nota “pago” só vira ficha paga se existir registro em pagamentosCooperado. */
 function statusFichaAposConferenciaNota(
   data: AppData,
   nota: NotaPedido,
   cooperadoId: string
 ): FichaCorrida["status"] {
-  if (nota.status !== "pago") return "pendente";
-  return notaQuitadaPorPagamentoCooperativaRegistrado(data, nota, cooperadoId) ? "pago" : "pendente";
+  if (notaQuitadaPorPagamentoCooperativaRegistrado(data, nota, cooperadoId)) {
+    return "pago";
+  }
+  if (nota.status === "pago") return "pendente";
+  return "pendente";
 }
 
 /** Entrega dividida: titular pago ≠ participante pago — corrige ficha paga fantasma após sync. */
@@ -1572,11 +1574,11 @@ export function reconciliarFichaFromNotasConferidas(data: AppData): AppData {
     if (nota.status !== "conferida" && nota.status !== "pago") continue;
     if (nota.valorLiquido <= 0 && (nota.itens ?? []).every((i) => i.quantidade <= 0)) continue;
 
-    if (notaQuitadaPorPagamentoCooperativaRegistrado(data, nota, nota.cooperadoId)) {
-      continue;
-    }
+    const quitadaRegistrada = notaQuitadaPorPagamentoCooperativaRegistrado(data, nota, nota.cooperadoId);
+    const fichasDestaNota = fichaCorrida.filter((f) => f.notaPedidoId === nota.id);
+    if (quitadaRegistrada && fichasDestaNota.length > 0) continue;
 
-    const fichasExistentes = fichaCorrida.filter((f) => f.notaPedidoId === nota.id);
+    const fichasExistentes = fichasDestaNota;
     const qtdParticipantes = nota.divisaoEntrega?.participantes.length ?? 1;
 
     if (nota.divisaoEntrega && qtdParticipantes > 1) {
@@ -1642,10 +1644,8 @@ export function reconciliarFichaFromNotasConferidas(data: AppData): AppData {
   fichaCorrida = alinhado.fichaCorrida;
   if (alinhado.changed) changed = true;
 
-  if (!changed) {
-    return purgarFichasInvalidas(data);
-  }
-  return purgarFichasInvalidas({ ...data, fichaCorrida, arquivosMensais });
+  const merged = { ...data, fichaCorrida, arquivosMensais };
+  return purgarFichasInvalidas(merged);
 }
 
 export function getTotalAPagarCooperado(
