@@ -50,14 +50,9 @@ import {
 import { listPautasAbertasCooperado, resultadoVisivelCooperado } from "@/services/votacaoService";
 import { VotacaoPautasInicioPanel } from "@/components/votacao/VotacaoPautasInicioPanel";
 import { VotacaoResultadoPanel } from "@/components/votacao/VotacaoResultadoPanel";
-import { getCooperativaCnpj, getPendingNotaDeleteIds, resolveCooperativaCnpj } from "@/services/notaPedidoCloudService";
+import { getCooperativaCnpj, getPendingNotaDeleteIds } from "@/services/notaPedidoCloudService";
 import { buildValorExibicaoCooperadoOpts } from "@/services/notaPedidoService";
 import { useSyncContaCoopValorReceberPilot } from "@/hooks/useSyncContaCoopValorReceberPilot";
-import {
-  useCooperadoHbDescontosSyncFalhou,
-  useCooperadoHbDescontosSyncFailureMessage,
-} from "@/hooks/useContaCoopDescontosSyncHealth";
-import { refreshContaCoopValorReceberPilot } from "@/lib/hb-credit/syncContaCoopFichaDescontos";
 import { useContaCoopDescontosRevision } from "@/hooks/useContaCoopDescontosRevision";
 import { formatCurrency, formatMesReferencia, getCurrentMesReferencia } from "@/utils/format";
 import { getUserCooperativaId, getUserCooperativaNome, normalizeCnpj } from "@/utils/cooperativa";
@@ -118,15 +113,6 @@ function CooperadoDashboard() {
   }, [user?.id, user?.cooperadoId, user?.cooperativaId, hbDescontosRevision]);
 
   useSyncContaCoopValorReceberPilot(contaCoopSync ? { ...contaCoopSync, user } : undefined);
-
-  const hbDescontosSyncFalhou = useCooperadoHbDescontosSyncFalhou(
-    contaCoopSync?.cooperativaId,
-    contaCoopSync?.cooperadoId
-  );
-  const hbDescontosSyncErro = useCooperadoHbDescontosSyncFailureMessage(
-    contaCoopSync?.cooperativaId,
-    contaCoopSync?.cooperadoId
-  );
 
   const aguardandoAssinaturaLocal = useAppDataSelector((data) => {
     if (!data || !user?.cooperadoId) return false;
@@ -294,28 +280,6 @@ function CooperadoDashboard() {
               Atualizar agora
             </button>
           )}
-        </AlertBanner>
-      )}
-
-      {hbDescontosSyncFalhou && !financeiroAusente && contaCoopSync && (
-        <AlertBanner variant="error" title="Compras HB ainda não atualizaram o valor a receber">
-          {hbDescontosSyncErro
-            ? `${hbDescontosSyncErro} `
-            : "Não foi possível buscar os descontos HB na nuvem. "}
-          Seu saldo local pode estar desatualizado.
-          <button
-            type="button"
-            className="ml-2 font-semibold underline"
-            onClick={() => {
-              if (!user || !contaCoopSync) return;
-              void resolveCooperativaCnpj(getData(), contaCoopSync.cooperativaId, user).then((cnpj) => {
-                if (!cnpj) return;
-                void refreshContaCoopValorReceberPilot({ ...contaCoopSync, cnpj });
-              });
-            }}
-          >
-            Tentar de novo
-          </button>
         </AlertBanner>
       )}
 
