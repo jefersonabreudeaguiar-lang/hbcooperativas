@@ -78,6 +78,10 @@ export async function POST(request: Request) {
   return NextResponse.json({
     ok: true,
     updated: result.updated,
+    reset: result.reset,
+    tightened: result.tightened,
+    synced: result.synced,
+    unchanged: result.unchanged,
     errors: result.errors,
     clampedCooperados: clampedCooperados.length ? clampedCooperados : undefined,
   });

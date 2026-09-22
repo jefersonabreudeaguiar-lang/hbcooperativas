@@ -694,19 +694,61 @@ export async function syncLimiteCooperadoFromCreditoBase(
   creditoBaseCents: number,
   actorUserId: string,
   creditosBaseCents: Record<string, number> = {}
-): Promise<{ ok: true; limite: ContaCoopLimiteCooperado } | { ok: false; error: string }> {
+): Promise<
+  | { ok: true; limite: ContaCoopLimiteCooperado; action?: "reset" | "tightened" | "synced" | "unchanged" }
+  | { ok: false; error: string }
+> {
   const base = Math.max(0, Math.round(Number(creditoBaseCents) || 0));
   if (base === 0) {
-    const { valorUsadoCents } = await readLimiteAtualCooperado(supabase, cnpj, cooperadoId);
+    const { limiteAtualCents, valorUsadoCents } = await readLimiteAtualCooperado(
+      supabase,
+      cnpj,
+      cooperadoId
+    );
     const comprasAtivas =
       valorUsadoCents > 0 || (await cooperadoTemComprasContaCoopAtivas(supabase, cnpj, cooperadoId));
-    if (comprasAtivas) {
+
+    if (!comprasAtivas && valorUsadoCents === 0 && limiteAtualCents === 0) {
       const atual = await getLimiteCooperado(supabase, cnpj, cooperadoId);
-      if (atual) return { ok: true, limite: atual };
+      if (atual) return { ok: true, limite: atual, action: "unchanged" };
+      const reset = await resetContaCoopCooperadoCredit(supabase, cnpj, cooperadoId, actorUserId, {
+        source: "sync_from_ficha",
+      });
+      if (!reset.ok) return reset;
+      return { ...reset, action: "reset" };
     }
-    return resetContaCoopCooperadoCredit(supabase, cnpj, cooperadoId, actorUserId, {
+
+    if (!comprasAtivas && valorUsadoCents === 0) {
+      const reset = await resetContaCoopCooperadoCredit(supabase, cnpj, cooperadoId, actorUserId, {
+        source: "sync_from_ficha",
+      });
+      if (!reset.ok) return reset;
+      return { ...reset, action: "reset" as const };
+    }
+
+    const alvo = Math.max(valorUsadoCents, 0);
+    if (limiteAtualCents > alvo) {
+      const teto = await requireConfiguredTeto(supabase, cnpj, creditosBaseCents);
+      if (!teto.ok) return { ok: false, error: teto.error };
+      const tight = await setLimiteCooperado(
+        supabase,
+        cnpj,
+        cooperadoId,
+        alvo,
+        actorUserId,
+        creditosBaseCents
+      );
+      if (!tight.ok) return tight;
+      return { ...tight, action: "tightened" as const };
+    }
+
+    const atual = await getLimiteCooperado(supabase, cnpj, cooperadoId);
+    if (atual) return { ok: true, limite: atual, action: "unchanged" };
+    const reset = await resetContaCoopCooperadoCredit(supabase, cnpj, cooperadoId, actorUserId, {
       source: "sync_from_ficha",
     });
+    if (!reset.ok) return reset;
+    return { ...reset, action: "reset" as const };
   }
 
   const teto = await requireConfiguredTeto(supabase, cnpj, creditosBaseCents);
@@ -718,7 +760,16 @@ export async function syncLimiteCooperadoFromCreditoBase(
     novoLimiteCents = valorUsadoCents;
   }
 
-  return setLimiteCooperado(supabase, cnpj, cooperadoId, novoLimiteCents, actorUserId, creditosBaseCents);
+  const synced = await setLimiteCooperado(
+    supabase,
+    cnpj,
+    cooperadoId,
+    novoLimiteCents,
+    actorUserId,
+    creditosBaseCents
+  );
+  if (!synced.ok) return synced;
+  return { ...synced, action: "synced" as const };
 }
 
 export async function syncLimitesCooperadosFromCreditoBase(
@@ -727,33 +778,92 @@ export async function syncLimitesCooperadosFromCreditoBase(
   cooperadoIds: string[],
   creditosBaseCents: Record<string, number>,
   actorUserId: string
-): Promise<{ ok: true; updated: number; errors: string[] } | { ok: false; error: string }> {
+): Promise<
+  | {
+      ok: true;
+      updated: number;
+      reset: number;
+      tightened: number;
+      synced: number;
+      unchanged: number;
+      errors: string[];
+    }
+  | { ok: false; error: string }
+> {
   if (!cooperadoIds.length) return { ok: false, error: "Informe ao menos um cooperado." };
 
+  const digits = normalizeCnpj(cnpj);
+  const bases: Record<string, number> = { ...creditosBaseCents };
+  const selected = new Set(cooperadoIds);
+
+  const { data: accountRows } = await supabase
+    .from("hb_credit_accounts")
+    .select("cooperado_id")
+    .eq("cooperative_cnpj", digits);
+
+  const orphanIds: string[] = [];
+  for (const row of accountRows ?? []) {
+    const id = String(row.cooperado_id ?? "");
+    if (!id || selected.has(id)) continue;
+    orphanIds.push(id);
+    if (bases[id] === undefined) bases[id] = 0;
+  }
+
+  const allIds = [...new Set([...orphanIds, ...cooperadoIds])];
+  const ordered = allIds.sort((a, b) => {
+    const ba = Math.max(0, Math.round(Number(bases[a] ?? 0)));
+    const bb = Math.max(0, Math.round(Number(bases[b] ?? 0)));
+    if (ba === 0 && bb > 0) return -1;
+    if (bb === 0 && ba > 0) return 1;
+    return 0;
+  });
+
   let updated = 0;
+  let reset = 0;
+  let tightened = 0;
+  let synced = 0;
+  let unchanged = 0;
   const errors: string[] = [];
-  for (const cooperadoId of cooperadoIds) {
-    const base = Math.max(0, Math.round(Number(creditosBaseCents[cooperadoId] ?? 0)));
+  for (const cooperadoId of ordered) {
+    const base = Math.max(0, Math.round(Number(bases[cooperadoId] ?? 0)));
     const result = await syncLimiteCooperadoFromCreditoBase(
       supabase,
       cnpj,
       cooperadoId,
       base,
       actorUserId,
-      creditosBaseCents
+      bases
     );
     if (!result.ok) {
       errors.push(`${cooperadoId}: ${result.error}`);
       continue;
     }
     updated++;
+    switch (result.action) {
+      case "reset":
+        reset++;
+        break;
+      case "tightened":
+        tightened++;
+        break;
+      case "synced":
+        synced++;
+        break;
+      case "unchanged":
+        unchanged++;
+        break;
+      default:
+        if (base > 0) synced++;
+        else reset++;
+        break;
+    }
   }
 
   if (updated === 0 && errors.length) {
     return { ok: false, error: errors[0] };
   }
 
-  return { ok: true, updated, errors };
+  return { ok: true, updated, reset, tightened, synced, unchanged, errors };
 }
 
 /** Zera crédito dos cooperados envolvidos numa liquidação de mercado confirmada. */

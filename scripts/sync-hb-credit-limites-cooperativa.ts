@@ -101,7 +101,13 @@ async function main() {
     console.error("Falha:", result.error);
     process.exit(1);
   }
-  console.log("OK — atualizados:", result.updated, result.errors?.length ? `avisos: ${result.errors.join("; ")}` : "");
+  console.log("OK — atualizados:", result.updated);
+  console.log(
+    `   reset: ${result.reset} | apertados: ${result.tightened} | sync base>0: ${result.synced} | inalterados: ${result.unchanged}`
+  );
+  if (result.errors?.length) {
+    console.log("   avisos:", result.errors.join("; "));
+  }
 }
 
 main().catch((e) => {
