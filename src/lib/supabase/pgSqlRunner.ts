@@ -24,7 +24,10 @@ function buildConnectionCandidates(projectRef: string, password: string): string
   }
   const enc = encodeURIComponent(password);
   const regions = ["us-east-1", "sa-east-1", "us-east-2", "us-west-1", "eu-west-1"];
-  const list: string[] = [`postgresql://postgres:${enc}@db.${projectRef}.supabase.co:5432/postgres`];
+  const list: string[] = [
+    `postgresql://postgres.${projectRef}:${enc}@aws-1-us-east-1.pooler.supabase.com:5432/postgres`,
+    `postgresql://postgres:${enc}@db.${projectRef}.supabase.co:5432/postgres`,
+  ];
   for (const region of regions) {
     for (const aws of ["aws-0", "aws-1"]) {
       list.push(

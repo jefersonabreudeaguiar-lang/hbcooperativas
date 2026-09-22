@@ -8,6 +8,7 @@ import {
   fetchNotasFromStorage,
   fetchNotasFromTable,
   mergeNotasSources,
+  mergeStorageFilaOrphansIntoTableNotas,
   notaPayloadForTable,
   uploadNotaToStorage,
   upsertNotasInTable,
@@ -65,9 +66,13 @@ export async function GET(request: Request) {
     ? ([] as NotaPedido[])
     : await fetchNotasFromStorage(supabase, cnpj);
 
-  const merged = visiveis(
-    delta ? fromTable.notas : mergeNotasSources(fromTable.notas, fromStorage)
-  );
+  let tableMerged = delta
+    ? fromTable.notas
+    : mergeNotasSources(fromTable.notas, fromStorage);
+
+  tableMerged = await mergeStorageFilaOrphansIntoTableNotas(supabase, cnpj, tableMerged);
+
+  const merged = visiveis(tableMerged);
   const notas =
     lite && !withPreviews
       ? merged
@@ -140,6 +145,27 @@ export async function POST(request: Request) {
     if (!uploaded.ok) {
       return NextResponse.json({ error: uploaded.error }, { status: 500 });
     }
+  }
+
+  const retryTable = await upsertNotasInTable(
+    supabase,
+    cnpj,
+    notas.map(notaPayloadForTable),
+    cooperadoNome
+  );
+  if (retryTable.ok) {
+    if (guard.session) {
+      await logServerMutationAudit(supabase, guard.session, cnpj, {
+        action: "criar",
+        entityType: "nota_pedido",
+        entityId: notas[0]?.id ?? "lote",
+        summary: `${notas.length} entrega(s) publicada(s) na nuvem (storage + SQL reparo).`,
+      });
+    }
+    return NextResponse.json(
+      { success: true, count: notas.length, source: "storage+table" },
+      { status: 201 }
+    );
   }
 
   if (guard.session) {

@@ -34,6 +34,7 @@
     "test:owner-security": "npx tsx scripts/test-owner-security-foundation.ts",
     "security:health": "npx tsx scripts/security-health-check.ts",
     "apply:hb-credit-migrations": "npx tsx scripts/apply-hb-credit-migrations.ts",
+    "apply:notas-pedido-backfill": "npx tsx scripts/apply-notas-pedido-migration-and-backfill.ts",
     "apply:app-users": "npx tsx scripts/apply-app-users-schema.ts",
     "apply:password-reset": "npx tsx scripts/apply-password-reset-schema.ts",
     "homologate:hb-credit": "npx tsx scripts/homologate-hb-credit.ts",

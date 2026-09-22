@@ -1,7 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { NotaPedido } from "@/types";
 import { isNotasPedidoTableMissing } from "@/lib/supabase/errors";
-import { protectNotaAgainstStatusDowngrade } from "@/utils/notaStatus";
+import { protectNotaAgainstStatusDowngrade, isNotaNaFilaConferenciaResponsavel } from "@/utils/notaStatus";
 import { mergeNotaComFotos } from "@/utils/fotoEntrega";
 
 const BUCKET = "hb-entregas";
@@ -533,6 +533,34 @@ export async function fetchNotasFromTable(
 
   const { notas, serverWatermark } = mapRows(data ?? []);
   return { notas, tableMissing: false, serverWatermark };
+}
+
+/**
+ * Entregas publicadas só no JSON do storage entram na fila do responsável
+ * e são replicadas na tabela SQL (delta não as puxaria sozinho).
+ */
+export async function mergeStorageFilaOrphansIntoTableNotas(
+  supabase: SupabaseClient,
+  cnpj: string,
+  tableNotas: NotaPedido[]
+): Promise<NotaPedido[]> {
+  const tableIds = new Set(tableNotas.map((n) => n.id));
+  const storageNotas = await fetchNotasFromStorage(supabase, cnpj);
+  const orphans = storageNotas.filter(
+    (n) =>
+      n.status !== "rascunho" &&
+      isNotaNaFilaConferenciaResponsavel(n.status) &&
+      !tableIds.has(n.id)
+  );
+  if (orphans.length === 0) return tableNotas;
+
+  const payloads = orphans.map(notaPayloadForTable);
+  const upsert = await upsertNotasInTable(supabase, cnpj, payloads);
+  if (!upsert.ok && !upsert.tableMissing) {
+    console.error("[notas-pedido/repair-storage-fila]", upsert.error ?? "upsert failed");
+  }
+
+  return mergeNotasSources(tableNotas, orphans);
 }
 
 export async function upsertNotasInTable(
