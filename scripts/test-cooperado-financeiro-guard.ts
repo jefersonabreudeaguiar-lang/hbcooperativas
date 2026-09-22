@@ -3,7 +3,7 @@
  * Uso: npm run test:cooperado-financeiro
  */
 import assert from "node:assert/strict";
-import { cooperadoFinanceiroLocalAusente, notasSyncProvavelmenteCompleto } from "../src/services/fichaSyncGuard.ts";
+import { cooperadoFinanceiroLocalAusente, cooperadoFinanceiroBloqueiaEntradaApp, notasSyncProvavelmenteCompleto } from "../src/services/fichaSyncGuard.ts";
 import {
   buildValorExibicaoCooperadoOpts,
   getDescontosExtrasExibicaoCooperado,
@@ -472,6 +472,29 @@ function nota(id: string, status: NotaPedido["status"]): NotaPedido {
     cooperadoFinanceiroLocalAusente(data, COOPERADO, COOP),
     true,
     "ficha com notas ainda não conferidas localmente deve ser incompleto"
+  );
+  assert.equal(
+    cooperadoFinanceiroBloqueiaEntradaApp(data, COOPERADO, COOP),
+    false,
+    "com notas locais o app não deve travar em tela cheia"
+  );
+}
+
+// 1b) Ficha órfã (nota ainda não baixada) ≠ financeiro ausente
+{
+  const data = baseData({
+    fichaCorrida: [ficha("f1", "n_só_nuvem"), ficha("f2", "n2_nuvem")],
+    notasPedido: [],
+  });
+  assert.equal(
+    cooperadoFinanceiroLocalAusente(data, COOPERADO, COOP),
+    false,
+    "ficha sem nota local durante sync não deve marcar ausente"
+  );
+  assert.equal(
+    cooperadoFinanceiroBloqueiaEntradaApp(data, COOPERADO, COOP),
+    false,
+    "ficha parcial da nuvem deve liberar navegação"
   );
 }
 

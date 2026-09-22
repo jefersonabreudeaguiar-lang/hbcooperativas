@@ -2,6 +2,7 @@ import type { AppData, FichaCorrida } from "@/types";
 import {
   fichaPertenceCooperado,
   notaPertenceCooperado,
+  pagamentoCooperadoPertenceCooperado,
   resolverCooperadoIdCanonico,
 } from "@/services/cooperadoCloudService";
 import {
@@ -147,8 +148,21 @@ export function cooperadoFinanceiroLocalAusente(
     return false;
   }
 
-  // Ficha veio da nuvem antes das notas conferidas — estado quebrado típico no celular.
-  if (fichasPendentes.length > 0 && conferidas === 0) return true;
+  // Ficha veio da nuvem antes das notas — sync de notas ainda em curso (não marcar como ausente).
+  if (fichasPendentes.length > 0 && conferidas === 0) {
+    const notaIds = new Set((data.notasPedido ?? []).map((n) => n.id));
+    const fichasAguardandoNotas = fichasPendentes.filter(
+      (f) =>
+        !notaIds.has(f.notaPedidoId) && !notaExcluidaLocal(data, f.notaPedidoId, cooperativaId)
+    );
+    if (
+      fichasAguardandoNotas.length > 0 &&
+      !notasSyncProvavelmenteCompleto(data, cooperativaId)
+    ) {
+      return false;
+    }
+    return true;
+  }
 
   // Conferidas locais: incompleto só se alguma nota ainda não tem ficha (pendente ou pago).
   if (conferidas > 0) {
@@ -280,6 +294,41 @@ export function aplicarSanidadeFinanceiroCooperadoLocal(
   let next = reconciliarFichaFromNotasConferidas(data);
   next = limparFichaObsoletaCooperado(next, cooperadoId, cooperativaId);
   return next;
+}
+
+/** Cooperado já tem algo local para exibir enquanto a nuvem termina de baixar. */
+export function cooperadoTemDadosFinanceirosMinimos(
+  data: AppData,
+  cooperadoId: string,
+  cooperativaId: string
+): boolean {
+  const canonico = resolverCooperadoIdCanonico(data, cooperadoId, cooperativaId);
+  const temNotas = (data.notasPedido ?? []).some((n) =>
+    notaPertenceCooperado(data, n, canonico, cooperativaId)
+  );
+  if (temNotas) return true;
+  const temPagamentos = (data.pagamentosCooperado ?? []).some((p) =>
+    pagamentoCooperadoPertenceCooperado(data, p, canonico, cooperativaId)
+  );
+  if (temPagamentos) return true;
+  if (fichasDaCooperativa(data, cooperativaId, canonico).length > 0) return true;
+  return (data.arquivosMensais ?? []).some(
+    (a) => a.cooperadoId === canonico && a.cooperativaId === cooperativaId
+  );
+}
+
+/**
+ * Tela cheia “Baixando da nuvem” só quando não há nada local útil.
+ * Com ficha/notas/pagamentos parciais, o app abre e o sync continua em segundo plano.
+ */
+export function cooperadoFinanceiroBloqueiaEntradaApp(
+  data: AppData,
+  cooperadoId: string,
+  cooperativaId: string
+): boolean {
+  const sane = aplicarSanidadeFinanceiroCooperadoLocal(data, cooperadoId, cooperativaId);
+  if (!cooperadoFinanceiroLocalAusente(sane, cooperadoId, cooperativaId)) return false;
+  return !cooperadoTemDadosFinanceirosMinimos(sane, cooperadoId, cooperativaId);
 }
 
 /** Ficha/notas ausentes ou valor a receber possivelmente incompleto (sync parcial). */

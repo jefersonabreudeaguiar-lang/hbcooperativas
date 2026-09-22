@@ -4,7 +4,11 @@ import { useEffect, useState } from "react";
 import { useAuth } from "@/modules/auth/AuthProvider";
 import { useAppDataSelector } from "@/hooks/useAppData";
 import { useSyncStatus } from "@/components/sync/CooperativaSyncProvider";
-import { cooperadoFinanceiroLocalAusente, limparFichaObsoletaCooperado } from "@/services/fichaSyncGuard";
+import {
+  cooperadoFinanceiroBloqueiaEntradaApp,
+  cooperadoFinanceiroDesatualizado,
+  limparFichaObsoletaCooperado,
+} from "@/services/fichaSyncGuard";
 import { solicitarRecuperacaoFinanceiroCooperado } from "@/services/cooperadoFinanceiroGuard";
 import { requestAppSyncImmediate } from "@/services/syncRequest";
 import { resolverCooperadoIdCanonico } from "@/services/cooperadoCloudService";
@@ -14,24 +18,32 @@ import { PageSkeleton } from "@/components/ui/PageSkeleton";
 import { AlertBanner } from "@/components/ui/AlertBanner";
 import { Button } from "@/components/ui/Button";
 
-/** Deve ser maior que SYNC_TIMEOUT_MS do CooperativaSyncProvider (90s). */
-const SYNC_WAIT_MS = 95_000;
+/** Bloqueio máximo da tela cheia; sync segue em background depois disso. */
+const SYNC_BLOCK_MAX_MS = 18_000;
 
 /**
- * Cooperado só vê o app após a 1ª tentativa de baixar ficha/notas da nuvem.
- * Impede tela vazia silenciosa quando sync falha ou ainda não rodou.
+ * Cooperado: sync financeiro na nuvem sem prender o app por minutos.
+ * Só ocupa a tela inteira quando não há dados locais; caso contrário, banner + navegação.
  */
 export function CooperadoFinanceiroGate({ children }: { children: React.ReactNode }) {
   const { user, logout } = useAuth();
   const { syncing, lastSyncError, lastSyncedAt } = useSyncStatus();
   const [syncWaitExceeded, setSyncWaitExceeded] = useState(false);
 
-  const financeiroIncompleto = useAppDataSelector((data) => {
+  const bloqueiaEntrada = useAppDataSelector((data) => {
     if (!data || !user?.cooperadoId || user.role !== "cooperado") return false;
     const coopId = getUserCooperativaId(user, data);
     if (!coopId) return true;
     const cooperadoId = resolverCooperadoIdCanonico(data, user.cooperadoId, coopId);
-    return cooperadoFinanceiroLocalAusente(data, cooperadoId, coopId);
+    return cooperadoFinanceiroBloqueiaEntradaApp(data, cooperadoId, coopId);
+  }, [user?.id, user?.cooperadoId, user?.cooperativaId, user?.role]);
+
+  const financeiroDesatualizado = useAppDataSelector((data) => {
+    if (!data || !user?.cooperadoId || user.role !== "cooperado") return false;
+    const coopId = getUserCooperativaId(user, data);
+    if (!coopId) return true;
+    const cooperadoId = resolverCooperadoIdCanonico(data, user.cooperadoId, coopId);
+    return cooperadoFinanceiroDesatualizado(data, cooperadoId, coopId);
   }, [user?.id, user?.cooperadoId, user?.cooperativaId, user?.role]);
 
   useEffect(() => {
@@ -44,6 +56,7 @@ export function CooperadoFinanceiroGate({ children }: { children: React.ReactNod
     const limpo = limparFichaObsoletaCooperado(data, cooperadoId, coopId);
     if (limpo !== data) saveDataSafe(limpo);
     solicitarRecuperacaoFinanceiroCooperado();
+    requestAppSyncImmediate();
   }, [user?.id, user?.cooperadoId, user?.role]);
 
   useEffect(() => {
@@ -51,21 +64,20 @@ export function CooperadoFinanceiroGate({ children }: { children: React.ReactNod
       setSyncWaitExceeded(false);
       return;
     }
-    if (lastSyncedAt != null) {
+    if (!bloqueiaEntrada || lastSyncedAt != null) {
       setSyncWaitExceeded(false);
       return;
     }
-    const timer = window.setTimeout(() => setSyncWaitExceeded(true), SYNC_WAIT_MS);
+    const timer = window.setTimeout(() => setSyncWaitExceeded(true), SYNC_BLOCK_MAX_MS);
     return () => window.clearTimeout(timer);
-  }, [user?.role, lastSyncedAt, user?.id]);
+  }, [user?.role, bloqueiaEntrada, lastSyncedAt, user?.id]);
 
   if (!user || user.role !== "cooperado") {
     return <>{children}</>;
   }
 
   const carregandoFinanceiro =
-    financeiroIncompleto &&
-    (syncing || (lastSyncedAt == null && !syncWaitExceeded));
+    bloqueiaEntrada && (syncing || (lastSyncedAt == null && !syncWaitExceeded));
 
   if (carregandoFinanceiro) {
     return (
@@ -79,7 +91,7 @@ export function CooperadoFinanceiroGate({ children }: { children: React.ReactNod
   }
 
   const falhaCarregarFicha =
-    financeiroIncompleto &&
+    bloqueiaEntrada &&
     !syncing &&
     (Boolean(lastSyncError) || lastSyncedAt != null || syncWaitExceeded);
 
@@ -108,5 +120,23 @@ export function CooperadoFinanceiroGate({ children }: { children: React.ReactNod
     );
   }
 
-  return <>{children}</>;
+  const bannerAtualizando =
+    financeiroDesatualizado && (syncing || lastSyncedAt == null || Boolean(lastSyncError));
+
+  return (
+    <>
+      {bannerAtualizando && (
+        <div className="max-w-lg mx-auto px-4 pt-2">
+          <AlertBanner variant="info" title="Atualizando seus dados">
+            {syncing
+              ? "Baixando ficha e entregas da nuvem. Os valores podem ajustar em instantes."
+              : lastSyncError
+                ? "Última sincronização falhou; exibindo o que há no aparelho. Toque em sincronizar se algo faltar."
+                : "Preparando sua ficha e entregas…"}
+          </AlertBanner>
+        </div>
+      )}
+      {children}
+    </>
+  );
 }
