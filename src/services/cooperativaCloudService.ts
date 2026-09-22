@@ -238,6 +238,8 @@ function mergeCobrancaSaas(
   const cloudTs = cloudUpdatedAt ? new Date(cloudUpdatedAt).getTime() : 0;
   const localTs = localUpdatedAt ? new Date(localUpdatedAt).getTime() : 0;
 
+  if (cloud.statusMes === "em_dia" && local.statusMes !== "em_dia") return cloud;
+
   const cloudPaid = cloud.statusMes === "em_dia" && Boolean(cloud.ultimoPeriodoPago);
   const localStillBilling =
     local.statusMes === "aguardando_confirmacao" ||

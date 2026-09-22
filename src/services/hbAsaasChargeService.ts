@@ -14,6 +14,7 @@ import {
   createAsaasCustomer,
   createAsaasPixPayment,
   deleteAsaasPayment,
+  getAsaasPayment,
   getAsaasPixQrCode,
 } from "@/lib/asaas/client";
 import type { AsaasWebhookPayload } from "@/lib/asaas/types";
@@ -29,6 +30,7 @@ import {
   findChargeByAsaasPaymentId,
   findChargeById,
   findChargeByKey,
+  findLatestPendingChargeForCoop,
   getAsaasCustomerId,
   insertHbAsaasCharge,
   markWebhookEventProcessed,
@@ -819,7 +821,7 @@ async function confirmSaasOnCloud(
   breakdown: HbUnifiedChargeBreakdown,
   confirmedBy: string
 ): Promise<{ ok: boolean; error?: string }> {
-  if (!breakdown.saasDue || breakdown.saasSubtotalCents <= 0) return { ok: true };
+  if (breakdown.saasSubtotalCents <= 0) return { ok: true };
 
   const { data: coopRow } = await supabase
     .from("cooperativas")
@@ -828,15 +830,34 @@ async function confirmSaasOnCloud(
     .maybeSingle();
 
   const cob = (coopRow?.cobranca_saas ?? {}) as CobrancaSaasCooperativa;
-  if (!cob.cicloInicioEm || !breakdown.periodoSaas) return { ok: false, error: "Ciclo SaaS não iniciado." };
+  if (!cob.cicloInicioEm) return { ok: false, error: "Ciclo SaaS não iniciado." };
 
-  const now = new Date().toISOString();
-  const periodo = breakdown.periodoSaas;
+  const periodoCalc = getPeriodoCobrancaSaas(cob.cicloInicioEm);
+  const periodo =
+    breakdown.periodoSaas ??
+    ({
+      periodoId: periodoCalc.periodoId,
+      label: periodoCalc.label,
+      vencimento: periodoCalc.vencimento,
+      mesReferencia: periodoCalc.mesReferencia,
+    } satisfies NonNullable<HbUnifiedChargeBreakdown["periodoSaas"]>);
+
   const historico = [...(cob.historico ?? [])];
   const idx = historico.findIndex((h) => h.periodoId === periodo.periodoId);
+  const lancExistente = idx >= 0 ? historico[idx] : undefined;
+
+  if (
+    cob.statusMes === "em_dia" &&
+    cob.ultimoPeriodoPago === periodo.periodoId &&
+    lancExistente?.status === "paga"
+  ) {
+    return { ok: true };
+  }
+
+  const now = new Date().toISOString();
 
   const lancamento = {
-    id: idx >= 0 ? historico[idx].id : generateId("cs"),
+    id: lancExistente?.id ?? generateId("cs"),
     periodoId: periodo.periodoId,
     mesReferencia: periodo.mesReferencia,
     qtdCooperados: breakdown.cooperados.length,
@@ -844,7 +865,7 @@ async function confirmSaasOnCloud(
     valorMinimo: breakdown.pricing.minimoMes,
     valorTotal: breakdown.saasSubtotalCents / 100,
     status: "paga" as const,
-    criadaEm: idx >= 0 ? historico[idx].criadaEm : now,
+    criadaEm: lancExistente?.criadaEm ?? now,
     pagaEm: now,
     confirmadoPor: confirmedBy,
     observacao: "Confirmado automaticamente via Asaas",
@@ -920,6 +941,119 @@ async function appendRepasseLivroCaixaCloud(
   await uploadOperacionalSync(supabase, cnpj, payload);
 }
 
+function asaasPaymentSettled(status: string | undefined | null): boolean {
+  const s = (status ?? "").toUpperCase();
+  return s === "RECEIVED" || s === "CONFIRMED" || s === "RECEIVED_IN_CASH";
+}
+
+async function applyConfirmedAsaasPaymentForCharge(
+  supabase: SupabaseClient,
+  charge: HbAsaasChargeRow,
+  payment: { id: string; paymentDate?: string | null; confirmedDate?: string | null }
+): Promise<{ ok: boolean; error?: string }> {
+  if (charge.status === "confirmed") {
+    return backfillSaasEmDiaFromCharge(supabase, charge);
+  }
+
+  const breakdown = charge.breakdown as HbUnifiedChargeBreakdown;
+  const paidAt = payment.paymentDate ?? payment.confirmedDate ?? new Date().toISOString();
+  const confirmedBy = "Asaas · confirmação automática";
+
+  const saasLineCents =
+    breakdown.lineItems?.find((l) => l.kind === "saas_mensalidade")?.amountCents ??
+    breakdown.saasSubtotalCents ??
+    charge.saas_subtotal_cents ??
+    0;
+  let saasToConfirm = saasLineCents;
+  if (saasToConfirm <= 0) {
+    const rebuilt = await buildUnifiedHbChargeBreakdown(
+      supabase,
+      normalizeCnpj(charge.cooperative_cnpj),
+      charge.mes_referencia_conta_coop
+    );
+    if (rebuilt.ok) saasToConfirm = rebuilt.breakdown.saasSubtotalCents;
+  }
+
+  if (saasToConfirm > 0) {
+    const saas = await confirmSaasOnCloud(
+      supabase,
+      { ...breakdown, saasSubtotalCents: saasToConfirm, saasDue: true },
+      confirmedBy
+    );
+    if (!saas.ok) return saas;
+  }
+
+  let livroCaixaOrigemId: string | undefined;
+  if (breakdown.repasseDue && breakdown.repasseSubtotalCents > 0 && !charge.repasse_confirmed_at) {
+    const repasse = await confirmAppRepasse(supabase, {
+      cnpj: breakdown.cooperativeCnpj,
+      mesReferencia: breakdown.mesReferenciaContaCoop,
+      responsavelUserId: charge.created_by_user_id ?? "asaas",
+      responsavelNome: charge.created_by_name ?? confirmedBy,
+      comprovanteMemo: `Asaas ${payment.id}`,
+    });
+    if (!repasse.ok) return repasse;
+    livroCaixaOrigemId = repasse.livroCaixaOrigemId ?? repasse.repasse?.livroCaixaOrigemId;
+    if (livroCaixaOrigemId) {
+      await appendRepasseLivroCaixaCloud(
+        supabase,
+        breakdown,
+        livroCaixaOrigemId,
+        breakdown.repasseSubtotalCents / 100,
+        charge.created_by_name ?? confirmedBy,
+        paidAt
+      );
+    }
+  }
+
+  await updateHbAsaasCharge(supabase, charge.id, {
+    status: "confirmed",
+    paid_at: paidAt,
+    saas_confirmed_at: saasToConfirm > 0 ? paidAt : charge.saas_confirmed_at,
+    repasse_confirmed_at:
+      breakdown.repasseDue && breakdown.repasseSubtotalCents > 0 ? paidAt : charge.repasse_confirmed_at,
+  });
+
+  return { ok: true };
+}
+
+async function backfillSaasEmDiaFromCharge(
+  supabase: SupabaseClient,
+  charge: HbAsaasChargeRow
+): Promise<{ ok: boolean; error?: string }> {
+  const saasCents = charge.saas_subtotal_cents ?? 0;
+  if (saasCents <= 0) return { ok: true };
+
+  const breakdown = charge.breakdown as HbUnifiedChargeBreakdown;
+  const { data: coopRow } = await supabase
+    .from("cooperativas")
+    .select("cobranca_saas")
+    .eq("cnpj", normalizeCnpj(charge.cooperative_cnpj))
+    .maybeSingle();
+  const cob = (coopRow?.cobranca_saas ?? null) as CobrancaSaasCooperativa | null;
+  if (cob?.statusMes === "em_dia") return { ok: true };
+
+  return confirmSaasOnCloud(
+    supabase,
+    { ...breakdown, saasSubtotalCents: saasCents, saasDue: true },
+    "Asaas · reconciliação"
+  );
+}
+
+async function reconcilePendingChargeFromAsaasApi(
+  supabase: SupabaseClient,
+  charge: HbAsaasChargeRow
+): Promise<void> {
+  if (charge.status !== "pending" || !charge.asaas_payment_id) return;
+  const config = getAsaasConfig();
+  if (!config) return;
+
+  const remote = await getAsaasPayment(config, charge.asaas_payment_id);
+  if (!remote.ok || !asaasPaymentSettled(remote.payment.status)) return;
+
+  await applyConfirmedAsaasPaymentForCharge(supabase, charge, remote.payment);
+}
+
 export async function processAsaasWebhookPayment(
   supabase: SupabaseClient,
   payload: AsaasWebhookPayload
@@ -946,63 +1080,8 @@ export async function processAsaasWebhookPayment(
   if (!isNew) return { ok: true, duplicate: true };
   if (!charge) return { ok: false, error: "Cobrança HB não encontrada para este pagamento." };
 
-  const breakdown = charge.breakdown as HbUnifiedChargeBreakdown;
-  const paidAt = payment.paymentDate ?? payment.confirmedDate ?? new Date().toISOString();
-  const confirmedBy = "Asaas · confirmação automática";
-
-  const saasLineCents =
-    breakdown.lineItems?.find((l) => l.kind === "saas_mensalidade")?.amountCents ??
-    breakdown.saasSubtotalCents ??
-    0;
-  let saasToConfirm = saasLineCents;
-  if (saasToConfirm <= 0) {
-    const rebuilt = await buildUnifiedHbChargeBreakdown(
-      supabase,
-      normalizeCnpj(charge.cooperative_cnpj),
-      charge.mes_referencia_conta_coop
-    );
-    if (rebuilt.ok) saasToConfirm = rebuilt.breakdown.saasSubtotalCents;
-  }
-
-  if (saasToConfirm > 0 && breakdown.periodoSaas) {
-    const saas = await confirmSaasOnCloud(
-      supabase,
-      { ...breakdown, saasSubtotalCents: saasToConfirm, saasDue: true },
-      confirmedBy
-    );
-    if (!saas.ok) return saas;
-  }
-
-  let livroCaixaOrigemId: string | undefined;
-  if (breakdown.repasseDue && breakdown.repasseSubtotalCents > 0) {
-    const repasse = await confirmAppRepasse(supabase, {
-      cnpj: breakdown.cooperativeCnpj,
-      mesReferencia: breakdown.mesReferenciaContaCoop,
-      responsavelUserId: charge.created_by_user_id ?? "asaas",
-      responsavelNome: charge.created_by_name ?? confirmedBy,
-      comprovanteMemo: `Asaas ${payment.id}`,
-    });
-    if (!repasse.ok) return repasse;
-    livroCaixaOrigemId = repasse.livroCaixaOrigemId ?? repasse.repasse?.livroCaixaOrigemId;
-    if (livroCaixaOrigemId) {
-      await appendRepasseLivroCaixaCloud(
-        supabase,
-        breakdown,
-        livroCaixaOrigemId,
-        breakdown.repasseSubtotalCents / 100,
-        charge.created_by_name ?? confirmedBy,
-        paidAt
-      );
-    }
-  }
-
-  await updateHbAsaasCharge(supabase, charge.id, {
-    status: "confirmed",
-    paid_at: paidAt,
-    saas_confirmed_at: saasToConfirm > 0 ? paidAt : charge.saas_confirmed_at,
-    repasse_confirmed_at: breakdown.repasseDue ? paidAt : charge.repasse_confirmed_at,
-  });
-
+  const applied = await applyConfirmedAsaasPaymentForCharge(supabase, charge, payment);
+  if (!applied.ok) return applied;
   return { ok: true };
 }
 
@@ -1016,6 +1095,33 @@ export async function syncLocalFromCloudCharge(
   livroCaixaOrigemId?: string;
 }> {
   const cnpj = normalizeCnpj(cooperativeCnpj);
+
+  let reconcileTarget: HbAsaasChargeRow | null = null;
+  if (chargeId) {
+    reconcileTarget = await findChargeById(supabase, chargeId);
+    if (reconcileTarget && normalizeCnpj(reconcileTarget.cooperative_cnpj) !== cnpj) {
+      reconcileTarget = null;
+    }
+  } else {
+    reconcileTarget = await findLatestPendingChargeForCoop(supabase, cnpj);
+  }
+
+  if (reconcileTarget) {
+    await reconcilePendingChargeFromAsaasApi(supabase, reconcileTarget);
+  }
+
+  const { data: confirmedRow } = await supabase
+    .from("hb_asaas_charges")
+    .select("*")
+    .eq("cooperative_cnpj", cnpj)
+    .eq("status", "confirmed")
+    .order("paid_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (confirmedRow) {
+    await backfillSaasEmDiaFromCharge(supabase, confirmedRow as HbAsaasChargeRow);
+  }
+
   const { data: coopRow } = await supabase
     .from("cooperativas")
     .select("cobranca_saas")
@@ -1027,15 +1133,7 @@ export async function syncLocalFromCloudCharge(
     charge = await findChargeById(supabase, chargeId);
     if (charge && normalizeCnpj(charge.cooperative_cnpj) !== cnpj) charge = null;
   } else {
-    const { data } = await supabase
-      .from("hb_asaas_charges")
-      .select("*")
-      .eq("cooperative_cnpj", cnpj)
-      .eq("status", "confirmed")
-      .order("paid_at", { ascending: false })
-      .limit(1)
-      .maybeSingle();
-    charge = data ? (data as HbAsaasChargeRow) : null;
+    charge = confirmedRow ? (confirmedRow as HbAsaasChargeRow) : null;
   }
 
   let livroCaixaOrigemId: string | undefined;

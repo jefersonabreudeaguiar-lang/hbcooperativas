@@ -160,10 +160,11 @@ export function HbUnifiedPaymentPanel({ cnpj, mesReferenciaContaCoop, compact, o
   }, [cnpj, mesReferenciaContaCoop, syncLocalFromCloud, reloadPreview]);
 
   useEffect(() => {
-    if (!chargeId) return;
+    if (!chargeId && !pixPayload) return;
     const timer = setInterval(() => {
       void (async () => {
-        const qs = new URLSearchParams({ cnpj, chargeId });
+        const qs = new URLSearchParams({ cnpj });
+        if (chargeId) qs.set("chargeId", chargeId);
         const res = await secureApiFetch(`/api/payments/hb-charge/cloud-state?${qs.toString()}`, {
           cache: "no-store",
         });
@@ -175,11 +176,21 @@ export function HbUnifiedPaymentPanel({ cnpj, mesReferenciaContaCoop, compact, o
           setPixImage(null);
           setChargeId(null);
           onPaid?.();
+          return;
+        }
+        const preview = await fetchHbChargePreview(cnpj, mesRef, { autoPix: false });
+        if ((preview.breakdown?.totalCents ?? 0) <= 0) {
+          await syncLocalFromCloud(chargeId);
+          setBreakdown(preview.breakdown ?? null);
+          setPixPayload(null);
+          setPixImage(null);
+          setChargeId(null);
+          onPaid?.();
         }
       })();
-    }, 8000);
+    }, 5000);
     return () => clearInterval(timer);
-  }, [chargeId, cnpj, reloadPreview, syncLocalFromCloud, onPaid]);
+  }, [chargeId, cnpj, mesRef, pixPayload, reloadPreview, syncLocalFromCloud, onPaid]);
 
   useEffect(() => {
     if (!cnpj || !coopId) return;
