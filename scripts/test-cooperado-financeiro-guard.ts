@@ -17,6 +17,7 @@ import {
   mergeArquivosMensaisFromCloud,
   reconciliarFichaFromNotasConferidas,
   registrarPagamentoCooperado,
+  resumoComplementaresPosPagamento,
   getTotalAPagarCooperado,
 } from "../src/services/notaPedidoService.ts";
 import { setContaCoopDescontosMemoria } from "../src/lib/hb-credit/contaCoopDescontosMemory.ts";
@@ -32,6 +33,7 @@ import {
   cooperadoPendentePagamentoResponsavel,
   listarMesesPendentesPagamentoResponsavel,
   listarMesesPendentesQuantoVouReceber,
+  getConsolidadoFinanceiroCooperado,
 } from "../src/services/cooperadoEntregasService.ts";
 import {
   getCreditoBaseContaCoopReais,
@@ -286,11 +288,9 @@ function nota(id: string, status: NotaPedido["status"]): NotaPedido {
   const baseMes = getResumoPagamentoCooperado(data, COOPERADO, MES, COOP);
   assert.equal(baseMes.valorEntregas, 50, "Resumo vivo considera só a nova ficha pendente");
   assert.ok(aReceber > 0, "Nova entrega após recibo assinado volta a gerar valor a receber");
-  assert.equal(
-    aReceber,
-    getResumoPagamentoParaRegistro(baseMes, data, COOPERADO, MES, COOP).valorLiquido,
-    "Relatório e resumo alinhados"
-  );
+  const complementar = resumoComplementaresPosPagamento(data, COOPERADO, MES, COOP);
+  assert.ok(complementar, "Resumo complementar pós-PIX");
+  assert.equal(aReceber, complementar.valorLiquido, "Relatório e resumo alinhados");
   assert.equal(card.valor, aReceber, "Início/ficha refletem o pendente novo");
   assert.equal(card.aguardandoAssinatura, false);
 }
@@ -913,6 +913,43 @@ function round2(n: number): number {
   );
   const cardPos = getValorQuantoVouReceber(pos, COOPERADO, COOP);
   assert.ok(cardPos.valor > 0, "card Quanto vou receber deve refletir nota pós-PIX");
+}
+
+{
+  const data = baseData({
+    notasPedido: [
+      { ...nota("n_no_pix", "conferida"), mesReferencia: "2026-09" },
+      { ...nota("n_pos_pix", "conferida"), mesReferencia: "2026-09", createdAt: "2026-09-22T10:00:00.000Z" },
+    ],
+    pagamentosCooperado: [
+      {
+        id: "pg_mes",
+        cooperativaId: COOP,
+        cooperadoId: COOPERADO,
+        mesReferencia: "2026-09",
+        valorBruto: 100,
+        descontoCooperativa: 0,
+        descontosExtras: [{ tipo: "mensalidade", motivo: "Mensalidade", valor: 60 }],
+        valorLiquido: 40,
+        fichaIds: ["f_no_pix"],
+        notaPedidoIds: ["n_no_pix"],
+        status: "confirmado",
+        pagoPor: "resp",
+        pagoEm: "2026-09-21T12:00:00.000Z",
+        createdAt: "2026-09-21T12:00:00.000Z",
+      },
+    ],
+    fichaCorrida: [ficha("f_no_pix", "n_no_pix", "2026-09")],
+  });
+  const rec = reconciliarFichaFromNotasConferidas(data);
+  const pos = posProcessarIntegridadePagamentosCooperativa(rec);
+  const fin = getConsolidadoFinanceiroCooperado(pos, COOPERADO, COOP);
+  assert.ok(fin.valorLiquido > 0, "consolidado cooperado deve mostrar complemento pós-PIX");
+  assert.equal(
+    fin.resumo.descontosExtras.filter((d) => d.tipo === "mensalidade").length,
+    0,
+    "complemento pós-PIX não repete mensalidade do pagamento antigo"
+  );
 }
 
 console.log("OK — guard financeiro cooperado");

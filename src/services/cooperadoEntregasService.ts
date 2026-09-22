@@ -10,6 +10,7 @@ import {
   pagamentoCobreMesReferencia,
   getMesesReferenciaPagamento,
   resumoFromPagamento,
+  resumoComplementaresPosPagamento,
   fichaValidaNoExtrato,
   listarFichasPendentesPagamento,
   type AjustesResumoPagamento,
@@ -116,6 +117,30 @@ export function getMesPrincipalQuantoVouReceber(
   return getMesQuantoVouReceber(data, cooperadoId, cooperativaId);
 }
 
+/** Meses com valor líquido pendente (exclui mês só aguardando assinatura de PIX já quitado). */
+export function listarMesesComValorQuantoVouReceber(
+  data: AppData,
+  cooperadoId: string,
+  cooperativaId?: string
+): string[] {
+  const out: string[] = [];
+  for (const mes of listarMesesPendentesQuantoVouReceber(data, cooperadoId, cooperativaId)) {
+    const aguardando = getPagamentoAguardandoCooperado(data, cooperadoId, mes);
+    const confirmado = getPagamentoConfirmadoMes(data, cooperadoId, mes);
+    if (aguardando && !confirmado) {
+      out.push(mes);
+      continue;
+    }
+    if (valorLiquidoMesQuantoVouReceber(data, cooperadoId, mes, cooperativaId) > 0) {
+      out.push(mes);
+      continue;
+    }
+    const coopId = cooperativaId ?? data.cooperados.find((c) => c.id === cooperadoId)?.cooperativaId;
+    if (totalValoresAvulsosPendentes(data, cooperadoId, mes, coopId) > 0) out.push(mes);
+  }
+  return out;
+}
+
 /** Valor a receber no início — oculta mês quitado ou sem valor pendente. */
 export function cooperadoExibirValorReceberInicio(
   data: AppData,
@@ -146,7 +171,7 @@ export function cooperadoExibirValorReceberInicio(
       aguardandoAssinatura: true,
     };
   }
-  if (meses.length === 1 && getPagamentoConfirmadoMes(data, cooperadoId, mes)) {
+  if (meses.length === 1 && getPagamentoConfirmadoMes(data, cooperadoId, mes) && valor <= 0) {
     return {
       exibir: false,
       mes,
@@ -317,6 +342,7 @@ export function getConsolidadoFinanceiroCooperado(
   ajustesPorMes?: Record<string, AjustesResumoPagamento>
 ): ConsolidadoFinanceiroCooperado {
   const meses = listarMesesPendentesQuantoVouReceber(data, cooperadoId, cooperativaId);
+  const mesesComValor = listarMesesComValorQuantoVouReceber(data, cooperadoId, cooperativaId);
   const { mesLabel, valor, aguardandoAssinatura } = getValorQuantoVouReceber(
     data,
     cooperadoId,
@@ -327,10 +353,14 @@ export function getConsolidadoFinanceiroCooperado(
   const pagamentoAguardando = getPagamentoAguardandoCooperado(data, cooperadoId);
 
   let resumo: ConsolidadoFinanceiroCooperado["resumo"];
-  if (aguardandoAssinatura && pagamentoAguardando) {
+  if (aguardandoAssinatura && pagamentoAguardando && valor <= 0) {
     resumo = resumoFromPagamento(pagamentoAguardando);
-  } else if (meses.length > 1) {
-    resumo = getResumoPagamentoConsolidadoCooperado(data, cooperadoId, meses, coopId, ajustesPorMes);
+  } else if (mesesComValor.length === 1) {
+    resumo =
+      resumoComplementaresPosPagamento(data, cooperadoId, mesesComValor[0], coopId) ??
+      getResumoPagamentoExibicao(data, cooperadoId, mesesComValor[0], coopId, ajustesPorMes?.[mesesComValor[0]]);
+  } else if (mesesComValor.length > 1) {
+    resumo = getResumoPagamentoConsolidadoCooperado(data, cooperadoId, mesesComValor, coopId, ajustesPorMes);
   } else if (meses.length === 1) {
     resumo = getResumoPagamentoExibicao(
       data,
@@ -406,11 +436,14 @@ export function getValorQuantoVouReceber(
   aguardandoAssinatura: boolean;
 } {
   const mesesPendentes = listarMesesPendentesQuantoVouReceber(data, cooperadoId, cooperativaId);
-  const mes = mesesPendentes[mesesPendentes.length - 1] ?? getMesQuantoVouReceber(data, cooperadoId, cooperativaId);
+  const mesesComValor = listarMesesComValorQuantoVouReceber(data, cooperadoId, cooperativaId);
+  const mes = mesesComValor[mesesComValor.length - 1] ?? mesesPendentes[mesesPendentes.length - 1] ?? getMesQuantoVouReceber(data, cooperadoId, cooperativaId);
   const mesLabel =
-    mesesPendentes.length > 0
-      ? formatMesesReferenciaRotulo(mesesPendentes)
-      : formatMesReferencia(mes);
+    mesesComValor.length > 0
+      ? formatMesesReferenciaRotulo(mesesComValor)
+      : mesesPendentes.length > 0
+        ? formatMesesReferenciaRotulo(mesesPendentes)
+        : formatMesReferencia(mes);
   const aguardandoAssinatura = mesesPendentes.some((m) =>
     Boolean(getPagamentoAguardandoCooperado(data, cooperadoId, m))
   );

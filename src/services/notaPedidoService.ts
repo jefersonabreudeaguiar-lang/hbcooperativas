@@ -1709,7 +1709,7 @@ function mesesReferenciaComDebitoAberto(
 }
 
 /** Fichas pendentes de entregas conferidas depois do PIX já registrado (nota fora do escopo do pagamento). */
-function fichasPendentesComplementaresPosPagamento(
+export function fichasPendentesComplementaresPosPagamento(
   data: AppData,
   cooperadoId: string,
   mesReferencia: string,
@@ -1872,11 +1872,35 @@ export function getResumoValorAPagarRelatorio(
     );
     if (complementares.length > 0 && complementares.length === pendentes.length) {
       const base = getResumoSomenteFichasComplementares(complementares);
-      return getResumoPagamentoParaRegistro(base, data, cooperadoId, mesReferencia, coopId);
+      return getResumoPagamentoParaRegistro(base, data, cooperadoId, mesReferencia, coopId, {
+        omitirDescontosContaCoop: true,
+      });
     }
   }
   const live = getResumoPagamentoCooperado(data, cooperadoId, mesReferencia, coopId);
   return getResumoPagamentoParaRegistro(live, data, cooperadoId, mesReferencia, coopId);
+}
+
+export function resumoComplementaresPosPagamento(
+  data: AppData,
+  cooperadoId: string,
+  mesReferencia: string,
+  cooperativaId?: string
+): ResumoPagamentoCooperado | null {
+  const coopId = cooperativaId ?? data.cooperados.find((c) => c.id === cooperadoId)?.cooperativaId;
+  const complementares = fichasPendentesComplementaresPosPagamento(
+    data,
+    cooperadoId,
+    mesReferencia,
+    coopId
+  );
+  if (!complementares.length) return null;
+  const pendentes = listarFichasPendentesPagamento(data, cooperadoId, mesReferencia, coopId);
+  if (complementares.length !== pendentes.length) return null;
+  const base = getResumoSomenteFichasComplementares(complementares);
+  return getResumoPagamentoParaRegistro(base, data, cooperadoId, mesReferencia, coopId, {
+    omitirDescontosContaCoop: true,
+  });
 }
 
 /** Valor exibido ao cooperado — entregas; menos uso HB Créditos no mercado quando houver compras no mês. */
@@ -2010,8 +2034,10 @@ export function getResumoPagamentoParaRegistro(
   data: AppData,
   cooperadoId: string,
   mesReferencia: string,
-  cooperativaId?: string
+  cooperativaId?: string,
+  opts?: { omitirDescontosContaCoop?: boolean }
 ): ResumoPagamentoCooperado {
+  if (opts?.omitirDescontosContaCoop) return resumo;
   return aplicarDescontosContaCoopMesNoResumo(resumo, data, cooperadoId, mesReferencia, cooperativaId);
 }
 
@@ -2044,16 +2070,8 @@ export function getResumoPagamentoExibicao(
     return resumoFromPagamento(confirmado);
   }
   if (confirmado && pendentes.length > 0) {
-    const complementares = fichasPendentesComplementaresPosPagamento(
-      data,
-      cooperadoId,
-      mesReferencia,
-      coopId
-    );
-    if (complementares.length > 0 && complementares.length === pendentes.length) {
-      const base = getResumoSomenteFichasComplementares(complementares);
-      return getResumoPagamentoParaRegistro(base, data, cooperadoId, mesReferencia, coopId);
-    }
+    const complementar = resumoComplementaresPosPagamento(data, cooperadoId, mesReferencia, coopId);
+    if (complementar) return complementar;
   }
   const pagamento = getPagamentoAguardandoCooperado(data, cooperadoId, mesReferencia);
   if (pagamento) {

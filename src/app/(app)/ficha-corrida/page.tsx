@@ -591,12 +591,25 @@ export default function FichaCorridaPage() {
 
   const resumo = useMemo(() => {
     if (!data || !cooperadoSelecionadoId) return null;
-    if (pagamentoConfirmado) return resumoFromPagamento(pagamentoConfirmado);
-    if (pagamentoAguardando) return resumoFromPagamento(pagamentoAguardando);
-    if (visualizandoHistorico && pagamentoConfirmadoMes) {
-      return resumoFromPagamento(pagamentoConfirmadoMes);
+    if (isCooperado && !visualizandoHistorico && financeiroAberto) {
+      if ((financeiroAberto.valorLiquido ?? 0) > 0) {
+        return financeiroAberto.resumo;
+      }
+      if (financeiroAberto.aguardandoAssinatura && pagamentoAguardando) {
+        return resumoFromPagamento(pagamentoAguardando);
+      }
     }
-    if (!visualizandoHistorico && pagamentoConfirmadoMes && isCooperado) {
+    if (pagamentoConfirmado && (!isCooperado || visualizandoHistorico)) {
+      return resumoFromPagamento(pagamentoConfirmado);
+    }
+    if (pagamentoAguardando) {
+      const temEntregaNova =
+        isCooperado &&
+        !visualizandoHistorico &&
+        (valorReceberConsolidado?.valor ?? 0) > 0;
+      if (!temEntregaNova) return resumoFromPagamento(pagamentoAguardando);
+    }
+    if (visualizandoHistorico && pagamentoConfirmadoMes) {
       return resumoFromPagamento(pagamentoConfirmadoMes);
     }
     if (!isCooperado && financeiroAberto && !pagamentoAguardando) {
@@ -605,13 +618,8 @@ export default function FichaCorridaPage() {
     if (!isCooperado && resumoPagamentoConsolidado) {
       return resumoPagamentoConsolidado;
     }
-    if (isCooperado && !visualizandoHistorico && mesesPendentesQuantoVouReceber.length > 1) {
-      return getResumoPagamentoConsolidadoCooperado(
-        data,
-        cooperadoSelecionadoId,
-        mesesPendentesQuantoVouReceber,
-        coopId
-      );
+    if (isCooperado && !visualizandoHistorico && financeiroAberto) {
+      return financeiroAberto.resumo;
     }
     return getResumoPagamentoExibicao(
       data,
@@ -636,6 +644,7 @@ export default function FichaCorridaPage() {
     mesesPendentesQuantoVouReceber,
     financeiroAberto,
     hbDescontosRevision,
+    valorReceberConsolidado?.valor,
   ]);
 
   const resumoExibicao = resumo;
@@ -654,11 +663,13 @@ export default function FichaCorridaPage() {
 
   const descontosExtrasCooperado =
     isCooperado && resumoExibicao
-      ? !visualizandoHistorico && mesesPendentesQuantoVouReceber.length > 1
-        ? resumoExibicao.descontosExtras
-        : exibicaoOpts
-          ? getDescontosExtrasExibicaoCooperado(resumoExibicao, exibicaoOpts)
-          : []
+      ? !visualizandoHistorico && financeiroAberto?.resumo
+        ? financeiroAberto.resumo.descontosExtras
+        : visualizandoHistorico
+          ? resumoExibicao.descontosExtras
+          : exibicaoOpts
+            ? getDescontosExtrasExibicaoCooperado(resumoExibicao, exibicaoOpts)
+            : resumoExibicao.descontosExtras
       : [];
 
   const pagarStep: 1 | 2 | 3 | 4 = pagamentoAguardando
@@ -942,9 +953,14 @@ export default function FichaCorridaPage() {
       const pg = next.pagamentosCooperado.find((p) => p.id === pagamentoAguardando.id);
       if (pg) {
         pagamentoConfirmadoLocal = pg;
-        setPagamentoConfirmado(pg);
         const mesesPg = getMesesReferenciaPagamento(pg);
-        if (mesesPg.length) setAbaMesCooperado(mesesPg[mesesPg.length - 1]!);
+        const aindaTemValor = cooperadoTemValorPendente(next, pg.cooperadoId, coopId);
+        if (!aindaTemValor) {
+          setPagamentoConfirmado(pg);
+          if (mesesPg.length) setAbaMesCooperado(mesesPg[mesesPg.length - 1]!);
+        } else {
+          setPagamentoConfirmado(null);
+        }
       }
       return addAuditEntry(next, {
         entityType: "pagamento", entityId: pagamentoAguardando.id, action: "aprovar",
@@ -1270,7 +1286,7 @@ export default function FichaCorridaPage() {
               )}
             </div>
 
-            {isCooperado && resumoExibicao && (
+            {isCooperado && resumoExibicao && visualizandoHistorico && (
               <ResumoDescontosMes
                 valorBruto={resumoExibicao.valorBruto}
                 descontoCooperativa={resumoExibicao.descontoCooperativa}
@@ -1293,7 +1309,7 @@ export default function FichaCorridaPage() {
                 }
               />
             )}
-            {!visualizandoHistorico &&
+            {visualizandoHistorico &&
               resumoExibicao &&
               cooperadoSelecionadoId &&
               coopCnpjResumo && (
@@ -1442,7 +1458,9 @@ export default function FichaCorridaPage() {
             {!isCooperado && nomeCooperado && (
               <p className="text-green-100 text-sm mt-2">{nomeCooperado}</p>
             )}
-            {resumoExibicao && (resumoExibicao.valorBruto > 0 || totalPendente > 0 || resumoExibicao.descontosExtras.length > 0) && (
+            {resumoExibicao &&
+              !(isCooperado && visualizandoHistorico) &&
+              (resumoExibicao.valorBruto > 0 || totalPendente > 0 || descontosExtrasCooperado.length > 0) && (
               <ResumoDescontosMes
                 valorBruto={resumoExibicao.valorBruto}
                 descontoCooperativa={resumoExibicao.descontoCooperativa}
@@ -1463,7 +1481,8 @@ export default function FichaCorridaPage() {
             {!visualizandoHistorico &&
               resumoExibicao &&
               cooperadoSelecionadoId &&
-              coopCnpjResumo && (
+              coopCnpjResumo &&
+              descontosExtrasCooperado.some((d) => d.tipo === "conta_coop") && (
                 <div className="mt-4 text-left">
                   <HistoricoHbCreditosResumo
                     cnpj={coopCnpjResumo}
