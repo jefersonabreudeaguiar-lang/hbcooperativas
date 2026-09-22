@@ -11,6 +11,7 @@ import {
   getMesesReferenciaPagamento,
   resumoFromPagamento,
   fichaValidaNoExtrato,
+  listarFichasPendentesPagamento,
   type AjustesResumoPagamento,
 } from "@/services/notaPedidoService";
 import { formatMesReferencia, formatMesesReferenciaRotulo, getCurrentMesReferencia } from "@/utils/format";
@@ -259,6 +260,13 @@ export function cooperadoMesQuitado(
 ): boolean {
   const coopId = data.cooperados.find((c) => c.id === cooperadoId)?.cooperativaId;
   if (getPagamentoAguardandoCooperado(data, cooperadoId, mesReferencia)) return false;
+  if (
+    listarFichasPendentesPagamento(data, cooperadoId, mesReferencia, coopId).some((f) =>
+      fichaValidaNoExtrato(data, f)
+    )
+  ) {
+    return false;
+  }
   if (getTotalAPagarCooperado(data, cooperadoId, mesReferencia) > 0) return false;
   if (totalValoresAvulsosPendentes(data, cooperadoId, mesReferencia, coopId) > 0) return false;
   return !!getPagamentoConfirmadoMes(data, cooperadoId, mesReferencia);

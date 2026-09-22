@@ -6,6 +6,7 @@ import { useAppDataSelector } from "@/hooks/useAppData";
 import { useSyncStatus } from "@/components/sync/CooperativaSyncProvider";
 import { cooperadoFinanceiroLocalAusente, limparFichaObsoletaCooperado } from "@/services/fichaSyncGuard";
 import { solicitarRecuperacaoFinanceiroCooperado } from "@/services/cooperadoFinanceiroGuard";
+import { requestAppSyncImmediate } from "@/services/syncRequest";
 import { resolverCooperadoIdCanonico } from "@/services/cooperadoCloudService";
 import { getUserCooperativaId } from "@/utils/cooperativa";
 import { getData, saveDataSafe } from "@/services/dataStore";
@@ -13,7 +14,8 @@ import { PageSkeleton } from "@/components/ui/PageSkeleton";
 import { AlertBanner } from "@/components/ui/AlertBanner";
 import { Button } from "@/components/ui/Button";
 
-const SYNC_WAIT_MS = 45_000;
+/** Deve ser maior que SYNC_TIMEOUT_MS do CooperativaSyncProvider (90s). */
+const SYNC_WAIT_MS = 95_000;
 
 /**
  * Cooperado só vê o app após a 1ª tentativa de baixar ficha/notas da nuvem.
@@ -49,23 +51,23 @@ export function CooperadoFinanceiroGate({ children }: { children: React.ReactNod
       setSyncWaitExceeded(false);
       return;
     }
-    if (lastSyncedAt != null || lastSyncError) {
+    if (lastSyncedAt != null) {
       setSyncWaitExceeded(false);
       return;
     }
     const timer = window.setTimeout(() => setSyncWaitExceeded(true), SYNC_WAIT_MS);
     return () => window.clearTimeout(timer);
-  }, [user?.role, lastSyncedAt, lastSyncError, user?.id]);
+  }, [user?.role, lastSyncedAt, user?.id]);
 
   if (!user || user.role !== "cooperado") {
     return <>{children}</>;
   }
 
-  const aguardandoPrimeiraSync = lastSyncedAt == null && !syncWaitExceeded;
-  const bloqueado =
-    aguardandoPrimeiraSync && (syncing || financeiroIncompleto);
+  const carregandoFinanceiro =
+    financeiroIncompleto &&
+    (syncing || (lastSyncedAt == null && !syncWaitExceeded));
 
-  if (bloqueado) {
+  if (carregandoFinanceiro) {
     return (
       <div className="max-w-lg mx-auto py-12 space-y-4">
         <PageSkeleton />
@@ -76,7 +78,12 @@ export function CooperadoFinanceiroGate({ children }: { children: React.ReactNod
     );
   }
 
-  if (lastSyncedAt == null && syncWaitExceeded && financeiroIncompleto) {
+  const falhaCarregarFicha =
+    financeiroIncompleto &&
+    !syncing &&
+    (Boolean(lastSyncError) || lastSyncedAt != null || syncWaitExceeded);
+
+  if (falhaCarregarFicha) {
     return (
       <div className="max-w-lg mx-auto py-8 space-y-4">
         <AlertBanner variant="error" title="Não foi possível carregar sua ficha">
@@ -84,7 +91,13 @@ export function CooperadoFinanceiroGate({ children }: { children: React.ReactNod
             "A sincronização demorou demais. Toque em Tentar novamente. Se persistir, saia, limpe o cache do navegador e entre de novo."}
         </AlertBanner>
         <div className="flex flex-wrap gap-2">
-          <Button onClick={() => solicitarRecuperacaoFinanceiroCooperado()} disabled={syncing}>
+          <Button
+            onClick={() => {
+              solicitarRecuperacaoFinanceiroCooperado();
+              requestAppSyncImmediate();
+            }}
+            disabled={syncing}
+          >
             {syncing ? "Baixando…" : "Tentar novamente"}
           </Button>
           <Button variant="secondary" onClick={() => logout()}>

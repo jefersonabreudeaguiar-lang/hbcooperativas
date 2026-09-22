@@ -10,6 +10,7 @@ import {
   useState,
 } from "react";
 import { useAuth } from "@/modules/auth/AuthProvider";
+import { useAppDataSelector } from "@/hooks/useAppData";
 import { getUserCooperativaId, normalizeCnpj } from "@/utils/cooperativa";
 import {
   resolveCooperativaCnpj,
@@ -199,10 +200,10 @@ export function CooperativaSyncProvider({ children }: { children: React.ReactNod
   const [lastSyncedAt, setLastSyncedAt] = useState<number | null>(null);
   const [lastSyncError, setLastSyncError] = useState("");
 
-  const coopId =
-    user && typeof window !== "undefined"
-      ? getUserCooperativaId(user, getData())
-      : user?.cooperativaId;
+  const coopId = useAppDataSelector(
+    (data) => (user ? getUserCooperativaId(user, data) : undefined),
+    [user?.id, user?.cooperadoId, user?.cooperativaId, user?.role]
+  );
 
   const pullVotacaoOperacionalCooperado = useCallback(async () => {
     const currentUser = userRef.current;

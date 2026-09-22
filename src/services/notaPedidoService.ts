@@ -1317,9 +1317,9 @@ export function fichaNotaElegivelParaPagamento(data: AppData, ficha: FichaCorrid
   if (ficha.status !== "pendente") return false;
   const nota = data.notasPedido.find((n) => n.id === ficha.notaPedidoId);
   if (!nota) return false;
-  if (nota.status === "conferida") return true;
-  if (nota.status === "pago") {
-    return !mesComPagamentoCooperativaRegistrado(data, ficha.cooperadoId, ficha.mesReferencia);
+  if (nota.status === "rejeitada" || nota.status === "rascunho") return false;
+  if (nota.status === "conferida" || nota.status === "pago") {
+    return !notaQuitadaPorPagamentoCooperativaRegistrado(data, nota, ficha.cooperadoId);
   }
   return false;
 }
@@ -1467,6 +1467,49 @@ function mesComPagamentoCooperativaRegistrado(
   return !!getPagamentoConfirmadoCooperadoMes(data, cooperadoId, mesReferencia);
 }
 
+/** Nota já incluída em PIX/registro — não recriar ficha pendente após conferência posterior. */
+function notaQuitadaPorPagamentoCooperativaRegistrado(
+  data: AppData,
+  nota: NotaPedido,
+  cooperadoId?: string
+): boolean {
+  const alvo = cooperadoId ?? nota.cooperadoId;
+  const coopId =
+    nota.cooperativaId ?? data.cooperados.find((c) => c.id === alvo)?.cooperativaId;
+  const canonico = resolverCooperadoIdCanonico(data, alvo, coopId);
+
+  for (const p of data.pagamentosCooperado ?? []) {
+    if (p.status !== "aguardando_confirmacao" && p.status !== "confirmado") continue;
+    const pCanon = resolverCooperadoIdCanonico(data, p.cooperadoId, p.cooperativaId);
+    if (pCanon !== canonico) continue;
+    if (coopId && p.cooperativaId && p.cooperativaId !== coopId) continue;
+
+    if (p.notaPedidoIds?.includes(nota.id)) return true;
+
+    const meses = getMesesReferenciaPagamento(p);
+    if (!meses.includes(nota.mesReferencia)) continue;
+
+    const escopoExplicito = (p.fichaIds?.length ?? 0) > 0 || (p.notaPedidoIds?.length ?? 0) > 0;
+    if (escopoExplicito) {
+      const fichaIdsPagamento = new Set(p.fichaIds ?? []);
+      if (
+        (data.fichaCorrida ?? []).some(
+          (f) => fichaIdsPagamento.has(f.id) && f.notaPedidoId === nota.id
+        )
+      ) {
+        return true;
+      }
+      continue;
+    }
+
+    const notaTs = Date.parse(nota.createdAt ?? "");
+    const pagoTs = Date.parse(p.pagoEm ?? p.createdAt ?? "");
+    if (!Number.isNaN(notaTs) && !Number.isNaN(pagoTs) && notaTs <= pagoTs) return true;
+  }
+
+  return false;
+}
+
 /** Nota “pago” só vira ficha paga se existir registro em pagamentosCooperado. */
 function statusFichaAposConferenciaNota(
   data: AppData,
@@ -1474,7 +1517,7 @@ function statusFichaAposConferenciaNota(
   cooperadoId: string
 ): FichaCorrida["status"] {
   if (nota.status !== "pago") return "pendente";
-  return mesComPagamentoCooperativaRegistrado(data, cooperadoId, nota.mesReferencia) ? "pago" : "pendente";
+  return notaQuitadaPorPagamentoCooperativaRegistrado(data, nota, cooperadoId) ? "pago" : "pendente";
 }
 
 /** Entrega dividida: titular pago ≠ participante pago — corrige ficha paga fantasma após sync. */
@@ -1529,7 +1572,7 @@ export function reconciliarFichaFromNotasConferidas(data: AppData): AppData {
     if (nota.status !== "conferida" && nota.status !== "pago") continue;
     if (nota.valorLiquido <= 0 && (nota.itens ?? []).every((i) => i.quantidade <= 0)) continue;
 
-    if (mesComPagamentoCooperativaRegistrado(data, nota.cooperadoId, nota.mesReferencia)) {
+    if (notaQuitadaPorPagamentoCooperativaRegistrado(data, nota, nota.cooperadoId)) {
       continue;
     }
 
@@ -1665,6 +1708,47 @@ function mesesReferenciaComDebitoAberto(
   return [...meses].sort();
 }
 
+/** Fichas pendentes de entregas conferidas depois do PIX já registrado (nota fora do escopo do pagamento). */
+function fichasPendentesComplementaresPosPagamento(
+  data: AppData,
+  cooperadoId: string,
+  mesReferencia: string,
+  cooperativaId?: string
+): FichaCorrida[] {
+  const coopId = cooperativaId ?? data.cooperados.find((c) => c.id === cooperadoId)?.cooperativaId;
+  const confirmado = getPagamentoConfirmadoCooperadoMes(data, cooperadoId, mesReferencia);
+  if (!confirmado) return [];
+  const notaIds = new Set(confirmado.notaPedidoIds ?? []);
+  const fichaIds = new Set(confirmado.fichaIds ?? []);
+  if (notaIds.size === 0 && fichaIds.size === 0) return [];
+  return listarFichasPendentesPagamento(data, cooperadoId, mesReferencia, coopId).filter(
+    (f) => !notaIds.has(f.notaPedidoId) && !fichaIds.has(f.id)
+  );
+}
+
+function getResumoSomenteFichasComplementares(fichas: FichaCorrida[]): {
+  valorBruto: number;
+  descontoCooperativa: number;
+  descontosExtras: FichaCorridaDesconto[];
+  valorEntregas: number;
+  valorLiquido: number;
+  fichaIds: string[];
+  notaPedidoIds: string[];
+} {
+  const valorBruto = round2(fichas.reduce((s, f) => s + f.valorBruto, 0));
+  const descontoCooperativa = round2(fichas.reduce((s, f) => s + f.descontos, 0));
+  const valorEntregas = round2(fichas.reduce((s, f) => s + f.valorLiquido, 0));
+  return {
+    valorBruto,
+    descontoCooperativa,
+    descontosExtras: [],
+    valorEntregas,
+    valorLiquido: valorEntregas,
+    fichaIds: fichas.map((f) => f.id),
+    notaPedidoIds: fichas.map((f) => f.notaPedidoId),
+  };
+}
+
 export function getResumoPagamentoCooperado(
   data: AppData,
   cooperadoId: string,
@@ -1778,6 +1862,18 @@ export function getResumoValorAPagarRelatorio(
   const pendentes = listarFichasPendentesPagamento(data, cooperadoId, mesReferencia, coopId);
   if (confirmado && pendentes.length === 0) {
     return { ...resumoFromPagamento(confirmado), valorLiquido: 0 };
+  }
+  if (confirmado && pendentes.length > 0) {
+    const complementares = fichasPendentesComplementaresPosPagamento(
+      data,
+      cooperadoId,
+      mesReferencia,
+      coopId
+    );
+    if (complementares.length > 0 && complementares.length === pendentes.length) {
+      const base = getResumoSomenteFichasComplementares(complementares);
+      return getResumoPagamentoParaRegistro(base, data, cooperadoId, mesReferencia, coopId);
+    }
   }
   const live = getResumoPagamentoCooperado(data, cooperadoId, mesReferencia, coopId);
   return getResumoPagamentoParaRegistro(live, data, cooperadoId, mesReferencia, coopId);
@@ -1943,8 +2039,21 @@ export function getResumoPagamentoExibicao(
 ): ResumoPagamentoCooperado {
   const coopId = cooperativaId ?? data.cooperados.find((c) => c.id === cooperadoId)?.cooperativaId;
   const confirmado = getPagamentoConfirmadoCooperadoMes(data, cooperadoId, mesReferencia);
-  if (confirmado && listarFichasPendentesPagamento(data, cooperadoId, mesReferencia, coopId).length === 0) {
+  const pendentes = listarFichasPendentesPagamento(data, cooperadoId, mesReferencia, coopId);
+  if (confirmado && pendentes.length === 0) {
     return resumoFromPagamento(confirmado);
+  }
+  if (confirmado && pendentes.length > 0) {
+    const complementares = fichasPendentesComplementaresPosPagamento(
+      data,
+      cooperadoId,
+      mesReferencia,
+      coopId
+    );
+    if (complementares.length > 0 && complementares.length === pendentes.length) {
+      const base = getResumoSomenteFichasComplementares(complementares);
+      return getResumoPagamentoParaRegistro(base, data, cooperadoId, mesReferencia, coopId);
+    }
   }
   const pagamento = getPagamentoAguardandoCooperado(data, cooperadoId, mesReferencia);
   if (pagamento) {

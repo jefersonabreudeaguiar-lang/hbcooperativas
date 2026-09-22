@@ -17,6 +17,7 @@ import {
   mergeArquivosMensaisFromCloud,
   reconciliarFichaFromNotasConferidas,
   registrarPagamentoCooperado,
+  getTotalAPagarCooperado,
 } from "../src/services/notaPedidoService.ts";
 import { setContaCoopDescontosMemoria } from "../src/lib/hb-credit/contaCoopDescontosMemory.ts";
 import {
@@ -37,7 +38,10 @@ import {
   getCreditoBaseCooperadoCents,
 } from "../src/modules/hb-credit/engine/creditBaseFromFicha.ts";
 import { resolveMobileCooperadoId } from "../src/lib/hb-credit/mobileCooperadoLink.ts";
-import { sanitizarOperacionalSyncPayload } from "../src/services/pagamentoIntegridadeService.ts";
+import {
+  posProcessarIntegridadePagamentosCooperativa,
+  sanitizarOperacionalSyncPayload,
+} from "../src/services/pagamentoIntegridadeService.ts";
 import type { AppData, FichaCorrida, NotaPedido } from "../src/types/index.ts";
 
 const COOP = "coop-1";
@@ -828,6 +832,87 @@ function round2(n: number): number {
   };
   const sanitized = sanitizarOperacionalSyncPayload(payload, reconciliarFichaFromNotasConferidas);
   assert.equal(sanitized.fichaCorrida?.[0]?.status, "pendente", "sync API deve reverter pago fantasma");
+}
+
+{
+  const data = baseData({
+    notasPedido: [nota("n_antiga", "conferida"), { ...nota("n_nova", "conferida"), mesReferencia: "2026-09" }],
+    fichaCorrida: [
+      ficha("f_antiga", "n_antiga", "2026-08"),
+      ficha("f_nova", "n_nova", "2026-09"),
+    ],
+    pagamentosCooperado: [
+      {
+        id: "pg_1",
+        cooperativaId: COOP,
+        cooperadoId: COOPERADO,
+        mesReferencia: "2026-08",
+        valorBruto: 100,
+        descontoCooperativa: 0,
+        descontosExtras: [],
+        valorLiquido: 100,
+        fichaIds: ["f_antiga"],
+        notaPedidoIds: ["n_antiga"],
+        status: "confirmado",
+        pagoPor: "resp",
+        pagoEm: "2026-08-10T12:00:00.000Z",
+        createdAt: "2026-08-10T12:00:00.000Z",
+      },
+    ],
+  });
+  const pos = posProcessarIntegridadePagamentosCooperativa(reconciliarFichaFromNotasConferidas(data));
+  const novaPendente = pos.fichaCorrida.find((f) => f.id === "f_nova");
+  assert.equal(novaPendente?.status, "pendente", "nota nova no mesmo mês calendário não pode herdar PIX antigo");
+  assert.ok(
+    getTotalAPagarCooperado(pos, COOPERADO, undefined, COOP) > 0,
+    "valor a receber deve incluir notas lançadas após pagamento"
+  );
+}
+
+{
+  const data = baseData({
+    notasPedido: [
+      { ...nota("n_no_pix", "conferida"), mesReferencia: "2026-09" },
+      { ...nota("n_pos_pix", "conferida"), mesReferencia: "2026-09", createdAt: "2026-09-22T10:00:00.000Z" },
+    ],
+    pagamentosCooperado: [
+      {
+        id: "pg_mes",
+        cooperativaId: COOP,
+        cooperadoId: COOPERADO,
+        mesReferencia: "2026-09",
+        mesesReferencia: ["2026-09"],
+        valorBruto: 100,
+        descontoCooperativa: 0,
+        descontosExtras: [],
+        valorLiquido: 100,
+        fichaIds: ["f_no_pix"],
+        notaPedidoIds: ["n_no_pix"],
+        status: "confirmado",
+        pagoPor: "resp",
+        pagoEm: "2026-09-21T12:00:00.000Z",
+        createdAt: "2026-09-21T12:00:00.000Z",
+      },
+    ],
+    fichaCorrida: [ficha("f_no_pix", "n_no_pix", "2026-09")],
+  });
+  const rec = reconciliarFichaFromNotasConferidas(data);
+  assert.ok(
+    rec.fichaCorrida.some((f) => f.notaPedidoId === "n_pos_pix" && f.status === "pendente"),
+    "nota conferida após PIX do mês deve gerar ficha pendente"
+  );
+  const pos = posProcessarIntegridadePagamentosCooperativa(rec);
+  assert.equal(
+    pos.fichaCorrida.find((f) => f.notaPedidoId === "n_pos_pix")?.status,
+    "pendente",
+    "posProcessar não pode marcar como pago nota fora do PIX"
+  );
+  assert.ok(
+    getTotalAPagarCooperado(pos, COOPERADO, undefined, COOP) > 0,
+    "cooperado deve ver valor da nota pós-pagamento"
+  );
+  const cardPos = getValorQuantoVouReceber(pos, COOPERADO, COOP);
+  assert.ok(cardPos.valor > 0, "card Quanto vou receber deve refletir nota pós-PIX");
 }
 
 console.log("OK — guard financeiro cooperado");

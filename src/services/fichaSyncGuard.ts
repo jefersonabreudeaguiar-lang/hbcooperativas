@@ -96,6 +96,7 @@ export function limparFichaObsoletaCooperado(
       return false;
     }
     if (semNotasLocais && f.status === "pendente") {
+      if (fichaPreservarSemNotaLocal(data, f)) return true;
       changed = true;
       return false;
     }
