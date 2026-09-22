@@ -256,6 +256,15 @@ function resolveSaasDue(
   if (saasValorTotal <= 0) return false;
 
   const lancAtual = (cob?.historico ?? []).find((h) => h.periodoId === periodo.periodoId);
+
+  if (cob?.ultimoPeriodoPago === periodo.periodoId) {
+    if (lancAtual?.status === "paga" || cob.statusMes === "em_dia") return false;
+  }
+
+  if (lancAtual?.status === "paga" && cob?.ultimoPeriodoPago === periodo.periodoId) {
+    return false;
+  }
+
   if (lancAtual?.status === "aguardando_confirmacao" || cob?.statusMes === "aguardando_confirmacao") {
     return false;
   }
@@ -941,8 +950,26 @@ export async function processAsaasWebhookPayment(
   const paidAt = payment.paymentDate ?? payment.confirmedDate ?? new Date().toISOString();
   const confirmedBy = "Asaas · confirmação automática";
 
-  if (breakdown.saasDue && breakdown.saasSubtotalCents > 0) {
-    const saas = await confirmSaasOnCloud(supabase, breakdown, confirmedBy);
+  const saasLineCents =
+    breakdown.lineItems?.find((l) => l.kind === "saas_mensalidade")?.amountCents ??
+    breakdown.saasSubtotalCents ??
+    0;
+  let saasToConfirm = saasLineCents;
+  if (saasToConfirm <= 0) {
+    const rebuilt = await buildUnifiedHbChargeBreakdown(
+      supabase,
+      normalizeCnpj(charge.cooperative_cnpj),
+      charge.mes_referencia_conta_coop
+    );
+    if (rebuilt.ok) saasToConfirm = rebuilt.breakdown.saasSubtotalCents;
+  }
+
+  if (saasToConfirm > 0 && breakdown.periodoSaas) {
+    const saas = await confirmSaasOnCloud(
+      supabase,
+      { ...breakdown, saasSubtotalCents: saasToConfirm, saasDue: true },
+      confirmedBy
+    );
     if (!saas.ok) return saas;
   }
 
@@ -972,7 +999,7 @@ export async function processAsaasWebhookPayment(
   await updateHbAsaasCharge(supabase, charge.id, {
     status: "confirmed",
     paid_at: paidAt,
-    saas_confirmed_at: breakdown.saasDue ? paidAt : charge.saas_confirmed_at,
+    saas_confirmed_at: saasToConfirm > 0 ? paidAt : charge.saas_confirmed_at,
     repasse_confirmed_at: breakdown.repasseDue ? paidAt : charge.repasse_confirmed_at,
   });
 

@@ -9,7 +9,6 @@ import { useAuth } from "@/modules/auth/AuthProvider";
 import { useAppData } from "@/hooks/useAppData";
 import { getUserCooperativaId } from "@/utils/cooperativa";
 import { updateData, getData } from "@/services/dataStore";
-import { pushCobrancaSaasToCloud } from "@/services/cooperativaCloudService";
 import { patchCobrancaSaas, sincronizarCicloCobrancaSaas } from "@/services/cobrancaSaasService";
 import { lancarRepasseHbContaCoopNoCaixa } from "@/services/livroCaixaService";
 import { pushOperacionalToCloud } from "@/services/cooperativaSyncCloudService";
@@ -113,23 +112,11 @@ export function HbUnifiedPaymentPanel({ cnpj, mesReferenciaContaCoop, compact, o
     if (!json.ok) return;
 
     if (json.cobrancaSaas) {
-      const beforeJson = JSON.stringify(
-        getData().cooperativas.find((c) => c.id === coopId)?.cobrancaSaas ?? null
-      );
       updateData((d) => {
         let next = patchCobrancaSaas(d, coopId, json.cobrancaSaas!);
         next = sincronizarCicloCobrancaSaas(next, coopId);
         return next;
       });
-      const afterJson = JSON.stringify(
-        getData().cooperativas.find((c) => c.id === coopId)?.cobrancaSaas ?? null
-      );
-      if (beforeJson !== afterJson) {
-        const coop = getData().cooperativas.find((c) => c.id === coopId);
-        if (coop?.cobrancaSaas) {
-          void pushCobrancaSaasToCloud(coop.cnpj, coop.cobrancaSaas);
-        }
-      }
     }
 
     const chargeBreakdown = json.charge?.breakdown as HbUnifiedChargeBreakdown | undefined;
@@ -184,12 +171,27 @@ export function HbUnifiedPaymentPanel({ cnpj, mesReferenciaContaCoop, compact, o
         if (json.charge?.status === "confirmed") {
           await syncLocalFromCloud(chargeId);
           await reloadPreview({ autoPix: false });
+          setPixPayload(null);
+          setPixImage(null);
+          setChargeId(null);
           onPaid?.();
         }
       })();
     }, 8000);
     return () => clearInterval(timer);
   }, [chargeId, cnpj, reloadPreview, syncLocalFromCloud, onPaid]);
+
+  useEffect(() => {
+    if (!cnpj || !coopId) return;
+    if (!breakdown || breakdown.totalCents <= 0) return;
+    const timer = setInterval(() => {
+      void (async () => {
+        await syncLocalFromCloud(chargeId);
+        await reloadPreview({ autoPix: false });
+      })();
+    }, 20000);
+    return () => clearInterval(timer);
+  }, [breakdown?.totalCents, chargeId, cnpj, coopId, reloadPreview, syncLocalFromCloud]);
 
   const gerarPixAsaas = async () => {
     setBusy(true);

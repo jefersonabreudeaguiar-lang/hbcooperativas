@@ -240,11 +240,19 @@ function mergeCobrancaSaas(
 
   const cloudPaid = cloud.statusMes === "em_dia" && Boolean(cloud.ultimoPeriodoPago);
   const localStillBilling =
+    local.statusMes === "aguardando_confirmacao" ||
     local.statusMes === "cobranca_enviada" ||
     local.statusMes === "aviso_bloqueio" ||
     local.statusMes === "bloqueado";
 
   if (cloudPaid && localStillBilling) return cloud;
+  if (local.statusMes === "aguardando_confirmacao" && cloud.statusMes === "em_dia") return cloud;
+
+  if (cloud.ultimoPeriodoPago && cloud.ultimoPeriodoPago === local.ultimoPeriodoPago && cloudPaid) {
+    return cloud;
+  }
+  if (cloud.ultimoPeriodoPago && cloudPaid && !local.ultimoPeriodoPago) return cloud;
+
   if (cloudTs > localTs) return cloud;
   return local;
 }
