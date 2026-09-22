@@ -333,6 +333,7 @@ export default function NotasPedidoContent() {
 
   const loadConferenciaFoto = useCallback(
     async (nota: NotaPedido, index: number): Promise<string | null> => {
+      setConferenciaFotoErro("");
       const cached = conferenciaFotoCacheRef.current.get(index);
       if (cached) {
         setConferenciaFotoAtualUrl(cached);
@@ -346,21 +347,33 @@ export default function NotasPedidoContent() {
         return localFotos[index];
       }
 
-      if (!nota.fotoNaNuvem) return null;
+      if (!nota.fotoNaNuvem) {
+        setConferenciaFotoAtualUrl(null);
+        return null;
+      }
       const cnpj =
         nota.cooperativaCnpj ??
         (data && coopId ? getCooperativaCnpj(data, coopId) : undefined) ??
         (user && coopId ? await resolveCooperativaCnpj(data ?? getData(), coopId, user) : undefined);
-      if (!cnpj) return null;
+      if (!cnpj) {
+        setConferenciaFotoErro("CNPJ da cooperativa não encontrado para carregar fotos.");
+        setConferenciaFotoAtualUrl(null);
+        return null;
+      }
 
+      setConferenciaFotoAtualUrl(null);
       setConferenciaFotoCarregando(true);
       try {
         const url = await fetchNotaFotoPartBlobUrl(cnpj, nota.id, index);
         if (url) {
           conferenciaFotoCacheRef.current.set(index, url);
           setConferenciaFotoAtualUrl(url);
+          return url;
         }
-        return url;
+        setConferenciaFotoErro(
+          "Não foi possível carregar esta foto da nuvem. Verifique a conexão e toque em «Tentar de novo»."
+        );
+        return null;
       } finally {
         setConferenciaFotoCarregando(false);
       }
@@ -1959,25 +1972,15 @@ export default function NotasPedidoContent() {
     setConferenciaFotoErro("");
     setConferenciaFotoIdx(0);
     resetConferenciaPorFoto();
+    if (opts?.transicao) {
+      revokeConferenciaFotoCache();
+    }
 
     let notaComFoto = nota;
     if (d && coopId) {
       notaComFoto = await ensureNotaComFoto(d, nota, coopId);
     }
     const totalFotos = contarFotosEnviadasNota(notaComFoto);
-    if (
-      notaComFoto.fotoNaNuvem &&
-      totalFotos > 0 &&
-      getFotosExibicaoNota(notaComFoto).length === 0
-    ) {
-      revokeConferenciaFotoCache();
-      const primeira = await loadConferenciaFoto(notaComFoto, 0);
-      if (!primeira) {
-        setConferenciaFotoErro(
-          "Não foi possível carregar as fotos da nuvem. Verifique a conexão e abra esta entrega de novo."
-        );
-      }
-    }
     setSelectedNota(
       nota.status === "aguardando_conferencia"
         ? {
@@ -2036,7 +2039,7 @@ export default function NotasPedidoContent() {
     setConferenciaTransicao(false);
   };
 
-  const openConferir = async (nota: NotaPedido) => {
+  const openConferir = (nota: NotaPedido) => {
     const d = getData() ?? data;
     if (!isCooperado && d && coopId) {
       const chave = getChaveGrupoConferencia(nota, d, coopId);
@@ -2049,8 +2052,11 @@ export default function NotasPedidoContent() {
       setFilaConferenciaPos(0);
       setFilaConferenciaTotal(0);
     }
-    await prepararConferenciaNota(nota);
+    revokeConferenciaFotoCache();
+    setSelectedNota(nota);
     setConferirModal(true);
+    setConferenciaTransicao(true);
+    void prepararConferenciaNota(nota);
   };
 
   const listarPendentesConferencia = (
@@ -3196,7 +3202,7 @@ export default function NotasPedidoContent() {
                                 <Trash2 size={14} />
                               </Button>
                             )}
-                          {getFotoExibicaoNota(n) && (
+                          {getFotoExibicaoNota(n) ? (
                             <div className="w-full h-52 sm:h-60 bg-gray-100 border-b border-amber-200 flex items-center justify-center p-2">
                               <NotaFotoImg
                                 src={getFotoExibicaoNota(n)}
@@ -3204,7 +3210,15 @@ export default function NotasPedidoContent() {
                                 className="max-w-full max-h-full w-auto h-auto object-contain"
                               />
                             </div>
-                          )}
+                          ) : qtdFotosCard > 0 ? (
+                            <div className="w-full h-52 sm:h-60 bg-gray-100 border-b border-amber-200 flex flex-col items-center justify-center gap-2 text-gray-600 px-4 text-center">
+                              <Camera size={28} className="text-amber-700/80" />
+                              <p className="text-sm font-medium">
+                                {qtdFotosCard} foto{qtdFotosCard === 1 ? "" : "s"} na nuvem
+                              </p>
+                              <p className="text-xs text-gray-500">Toque para abrir e carregar</p>
+                            </div>
+                          ) : null}
                           {qtdFotosCard > 1 && (
                             <span className="absolute top-2 right-2 bg-black/70 text-white text-xs font-bold px-2 py-0.5 rounded-full">
                               {qtdFotosCard} fotos
@@ -4074,16 +4088,46 @@ export default function NotasPedidoContent() {
                           <p className="text-white/70 text-sm text-center py-12">Carregando foto…</p>
                         ) : conferenciaFotoAtualUrl ? (
                           <div className="w-full flex items-center justify-center">
-                            <div className="inline-block max-w-full rounded-xl border-2 border-white/25 bg-black/30 p-2 shadow-lg">
+                            <div className="inline-block max-w-full rounded-xl border-2 border-white/25 bg-white/5 p-2 shadow-lg">
                               {/* eslint-disable-next-line @next/next/no-img-element */}
                               <img
                                 src={conferenciaFotoAtualUrl}
                                 alt={`Pedido ${idx + 1} de ${totalFotos}`}
-                                className="block max-w-full max-h-[75vh] lg:max-h-[calc(100dvh-11rem)] object-contain mx-auto"
+                                className="block max-w-full max-h-[75vh] lg:max-h-[calc(100dvh-11rem)] object-contain mx-auto bg-white/10"
+                                onError={() => {
+                                  setConferenciaFotoErro(
+                                    "A foto não pôde ser exibida neste aparelho. Toque em «Tentar de novo»."
+                                  );
+                                  setConferenciaFotoAtualUrl(null);
+                                }}
                               />
                             </div>
                           </div>
-                        ) : null}
+                        ) : (
+                          <div className="text-center py-10 px-4 space-y-3 max-w-md mx-auto">
+                            <p className="text-amber-200 text-sm">
+                              {conferenciaFotoErro ||
+                                "Foto ainda não carregou. Aguarde ou tente de novo."}
+                            </p>
+                            <Button
+                              type="button"
+                              variant="secondary"
+                              size="sm"
+                              onClick={() =>
+                                selectedNota &&
+                                void loadConferenciaFoto(selectedNota, idx).then((url) => {
+                                  if (!url && !conferenciaFotoErro) {
+                                    setConferenciaFotoErro(
+                                      "Não foi possível carregar a foto da nuvem."
+                                    );
+                                  }
+                                })
+                              }
+                            >
+                              Tentar de novo
+                            </Button>
+                          </div>
+                        )}
                         {totalFotos > 1 && (
                           <>
                             <div className="flex flex-wrap items-center justify-center gap-2">
