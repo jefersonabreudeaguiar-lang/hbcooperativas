@@ -272,6 +272,7 @@ export default function NotasPedidoContent() {
   const uploadFilaRef = useRef(Promise.resolve());
   const lastFotoFileRef = useRef<File | null>(null);
   const lancandoRef = useRef(false);
+  const [conferenciaLancando, setConferenciaLancando] = useState(false);
   const filaConferenciaRef = useRef<{ total: number; concluidas: number; chave: string } | null>(null);
   const [filaConferenciaPos, setFilaConferenciaPos] = useState(0);
   const [filaConferenciaTotal, setFilaConferenciaTotal] = useState(0);
@@ -456,7 +457,8 @@ export default function NotasPedidoContent() {
         selectedNota.cooperadoNomeSnapshot?.trim() ||
         getCooperadoNomeResolvido(d0, conferenciaCooperadoId, coopId);
 
-      updateData((d) => {
+      let itensSalvosFoto: NotaPedidoItem[] | undefined;
+      const saved = updateDataSafe((d) => {
         const cooperadoIdCanonico = resolverCooperadoIdCanonico(
           d,
           conferenciaCooperadoId,
@@ -475,9 +477,7 @@ export default function NotasPedidoContent() {
           conferenciaItens.map((i) => ({ ...i, valorBruto: 0 })),
           conferenciaDescontoPct
         );
-        lancamentosFotoConferenciaRef.current.set(fotoIdx, base.itens);
-        fotosLancadasConferenciaRef.current.add(fotoIdx);
-        setFotosLancadasUi(new Set(fotosLancadasConferenciaRef.current));
+        itensSalvosFoto = base.itens;
 
         const divisao = resolverDivisaoConferencia(d, selectedNota);
         const fotoTag = `foto ${fotoIdx + 1}/`;
@@ -554,6 +554,12 @@ export default function NotasPedidoContent() {
         );
       });
 
+      if (!saved.ok) return { ok: false, error: saved.error };
+      if (itensSalvosFoto) {
+        lancamentosFotoConferenciaRef.current.set(fotoIdx, itensSalvosFoto);
+      }
+      fotosLancadasConferenciaRef.current.add(fotoIdx);
+      setFotosLancadasUi(new Set(fotosLancadasConferenciaRef.current));
       return { ok: true };
     },
     [
@@ -1947,6 +1953,8 @@ export default function NotasPedidoContent() {
   };
 
   const fecharConferirModal = () => {
+    lancandoRef.current = false;
+    setConferenciaLancando(false);
     if (lancamentoSequenciaTimerRef.current) {
       clearTimeout(lancamentoSequenciaTimerRef.current);
       lancamentoSequenciaTimerRef.current = null;
@@ -1977,6 +1985,21 @@ export default function NotasPedidoContent() {
       notaComFoto = await ensureNotaComFoto(d, nota, coopId);
     }
     const totalFotos = contarFotosEnviadasNota(notaComFoto);
+    if (d && coopId && totalFotos > 1) {
+      for (let i = 0; i < totalFotos; i++) {
+        const tag = `foto ${i + 1}/`;
+        if (
+          d.fichaCorrida.some(
+            (f) => f.notaPedidoId === notaComFoto.id && f.descricao.includes(tag)
+          )
+        ) {
+          fotosLancadasConferenciaRef.current.add(i);
+        }
+      }
+      if (fotosLancadasConferenciaRef.current.size > 0) {
+        setFotosLancadasUi(new Set(fotosLancadasConferenciaRef.current));
+      }
+    }
     if (
       notaComFoto.fotoNaNuvem &&
       totalFotos > 0 &&
@@ -2170,7 +2193,13 @@ export default function NotasPedidoContent() {
 
   const handleLancarNota = () => {
     if (lancamentoSequencia) return;
-    if (lancandoRef.current || !user || !data || !selectedNota) return;
+    if (lancandoRef.current) {
+      setConferirErrors({
+        itens: "Conclusão em andamento. Aguarde alguns segundos ou feche e abra a entrega de novo.",
+      });
+      return;
+    }
+    if (!user || !data || !selectedNota) return;
     const errors: typeof conferirErrors = {};
     if (conferenciaDivisaoQtd >= 2) {
       const ids = conferenciaDivisaoIds.slice(0, conferenciaDivisaoQtd);
@@ -2247,6 +2276,7 @@ export default function NotasPedidoContent() {
     }
 
     lancandoRef.current = true;
+    setConferenciaLancando(true);
     let notaAtualizada: NotaPedido | null = null;
     const notaId = selectedNota.id;
     const chaveAtual = getChaveGrupoConferencia(selectedNota, data, coopId);
@@ -2271,7 +2301,7 @@ export default function NotasPedidoContent() {
         ? valorAprovado / divisaoPreview.participantes.length
         : valorAprovado;
 
-    updateData((d) => {
+    const persisted = updateDataSafe((d) => {
       const now = new Date().toISOString();
       if (coopId && conferenciaInstId) setInstituicaoPadraoId(coopId, conferenciaInstId);
       const coopSel = cooperadosCoop.find((c) => c.id === conferenciaCooperadoId);
@@ -2432,6 +2462,13 @@ export default function NotasPedidoContent() {
       );
     });
 
+    if (!persisted.ok) {
+      setConferirErrors({ itens: persisted.error });
+      lancandoRef.current = false;
+      setConferenciaLancando(false);
+      return;
+    }
+
     void (async () => {
       try {
         if (notaAtualizada && coopId) {
@@ -2462,6 +2499,7 @@ export default function NotasPedidoContent() {
 
     const finalizarPosAprovacaoUi = () => {
       lancandoRef.current = false;
+      setConferenciaLancando(false);
     };
 
     if (proxima) {
@@ -4036,12 +4074,13 @@ export default function NotasPedidoContent() {
             <Button variant="danger" onClick={() => { setMotivoRejeicao(""); setRejectModal(true); }} disabled={conferenciaTransicao || Boolean(lancamentoSequencia)}>
               <XCircle size={18} /> Pedir correção
             </Button>
-            <Button size="lg" onClick={handleLancarNota} disabled={conferenciaTransicao || Boolean(lancamentoSequencia)}>
+            <Button size="lg" onClick={handleLancarNota} disabled={conferenciaTransicao || Boolean(lancamentoSequencia) || conferenciaLancando}>
               <CheckCircle size={18} />
               {(() => {
                 if (lancamentoSequencia) {
                   return `Lançando foto ${lancamentoSequencia.displayIdx + 1} de ${lancamentoSequencia.total}…`;
                 }
+                if (conferenciaLancando) return "Concluindo entrega…";
                 if (conferenciaTransicao) return "Carregando próxima entrega…";
                 if (!selectedNota) return "Aprovar e lançar na ficha";
                 const qtdFotosBtn = contarFotosEnviadasNota(selectedNota);
