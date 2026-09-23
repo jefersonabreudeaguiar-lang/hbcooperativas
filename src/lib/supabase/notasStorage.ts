@@ -417,23 +417,6 @@ export async function downloadFotoPartBuffer(
   return { buffer, contentType };
 }
 
-/** URL assinada para leitura direta no browser (evita proxy de bytes pela Vercel). */
-export async function createNotaFotoPartSignedUrl(
-  supabase: SupabaseClient,
-  cnpj: string,
-  notaId: string,
-  index: number,
-  expiresInSec = 3600
-): Promise<string | null> {
-  const path = fotoPartPath(cnpj, notaId, index);
-  const { data, error } = await supabase.storage.from(BUCKET).createSignedUrl(path, expiresInSec);
-  if (error || !data?.signedUrl) {
-    if (error) console.error("[notas-storage/signed-url]", error.message);
-    return null;
-  }
-  return data.signedUrl;
-}
-
 /** Une notas da tabela SQL e do storage, mantendo metadados recentes e o maior conjunto de fotos. */
 export function mergeNotasSources(tableNotas: NotaPedido[], storageNotas: NotaPedido[]): NotaPedido[] {
   const byId = new Map<string, NotaPedido>();

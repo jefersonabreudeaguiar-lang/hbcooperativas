@@ -539,7 +539,7 @@ export async function resolveFotosNotaParaExibicao(
   return out;
 }
 
-/** Carrega foto da nuvem: prefer URL assinada Supabase (sem proxy Vercel); fallback blob local. */
+/** Carrega uma foto da nuvem como blob URL (libera com revokePreviewUrl). */
 export async function fetchNotaFotoPartBlobUrl(
   cnpj: string,
   notaId: string,
@@ -547,21 +547,6 @@ export async function fetchNotaFotoPartBlobUrl(
 ): Promise<string | null> {
   const digits = normalizeCnpj(cnpj);
   if (digits.length !== 14) return null;
-
-  try {
-    const signedRes = await secureApiFetch(
-      `/api/notas-pedido/${encodeURIComponent(notaId)}/foto-signed?cnpj=${digits}&index=${index}`,
-      { cache: "default" }
-    );
-    if (signedRes.ok) {
-      const json = (await signedRes.json().catch(() => null)) as { url?: string } | null;
-      if (json?.url && /^https?:\/\//i.test(json.url)) {
-        return json.url;
-      }
-    }
-  } catch {
-    /* fallback abaixo */
-  }
 
   try {
     const res = await secureApiFetch(

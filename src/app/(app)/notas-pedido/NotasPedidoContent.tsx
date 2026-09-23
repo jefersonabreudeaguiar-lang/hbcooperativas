@@ -1972,15 +1972,25 @@ export default function NotasPedidoContent() {
     setConferenciaFotoErro("");
     setConferenciaFotoIdx(0);
     resetConferenciaPorFoto();
-    if (opts?.transicao) {
-      revokeConferenciaFotoCache();
-    }
 
     let notaComFoto = nota;
     if (d && coopId) {
       notaComFoto = await ensureNotaComFoto(d, nota, coopId);
     }
     const totalFotos = contarFotosEnviadasNota(notaComFoto);
+    if (
+      notaComFoto.fotoNaNuvem &&
+      totalFotos > 0 &&
+      getFotosExibicaoNota(notaComFoto).length === 0
+    ) {
+      revokeConferenciaFotoCache();
+      const primeira = await loadConferenciaFoto(notaComFoto, 0);
+      if (!primeira) {
+        setConferenciaFotoErro(
+          "Não foi possível carregar as fotos da nuvem. Verifique a conexão e abra esta entrega de novo."
+        );
+      }
+    }
     setSelectedNota(
       nota.status === "aguardando_conferencia"
         ? {
@@ -2039,7 +2049,7 @@ export default function NotasPedidoContent() {
     setConferenciaTransicao(false);
   };
 
-  const openConferir = (nota: NotaPedido) => {
+  const openConferir = async (nota: NotaPedido) => {
     const d = getData() ?? data;
     if (!isCooperado && d && coopId) {
       const chave = getChaveGrupoConferencia(nota, d, coopId);
@@ -2052,11 +2062,8 @@ export default function NotasPedidoContent() {
       setFilaConferenciaPos(0);
       setFilaConferenciaTotal(0);
     }
-    revokeConferenciaFotoCache();
-    setSelectedNota(nota);
+    await prepararConferenciaNota(nota);
     setConferirModal(true);
-    setConferenciaTransicao(true);
-    void prepararConferenciaNota(nota);
   };
 
   const listarPendentesConferencia = (
