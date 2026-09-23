@@ -2444,49 +2444,53 @@ export default function NotasPedidoContent() {
                   "Entrega lançada aqui, mas não sincronizou com a nuvem. Verifique a conexão."
               );
             } else {
-              const d = getData();
-              await pushOperacionalToCloud(cnpj, d, coopId, { authoritative: true });
-              requestAppSync();
+              await pushOperacionalToCloud(cnpj, getData(), coopId, { authoritative: true });
             }
           }
-        } else {
-          requestAppSync();
-        }
-
-        await aguardarSequenciaLancamentoFotos(selectedNota, qtdFotosAprovadas);
-
-        const proxima = obterProximaNotaConferencia(chaveAtual, notaId);
-
-        if (proxima) {
-          const mesmoGrupo = filaConferenciaRef.current?.chave === chaveAtual;
-          if (filaConferenciaRef.current && mesmoGrupo) {
-            filaConferenciaRef.current.concluidas += 1;
-            setFilaConferenciaPos(filaConferenciaRef.current.concluidas + 1);
-          } else if (filaConferenciaRef.current) {
-            setFilaConferenciaPos(1);
-          }
-          setLancadoMsg(
-            divisaoPreview
-              ? `Nota aprovada! ${formatCurrency(valorPorCooperado)} para cada (${msgBeneficiarios}). Abrindo a próxima entrega…`
-              : `Nota aprovada! ${formatCurrency(valorAprovado)} na ficha de ${msgBeneficiarios}. Abrindo a próxima entrega…`
-          );
-          setTimeout(() => setLancadoMsg(""), 4000);
-          await prepararConferenciaNota(proxima, { transicao: true });
-        } else {
-          fecharConferirModal();
-          setLancadoMsg(
-            divisaoPreview
-              ? `Nota aprovada! ${formatCurrency(valorPorCooperado)} para cada (${msgBeneficiarios}). Fila concluída!`
-              : `Nota aprovada! ${formatCurrency(valorAprovado)} na ficha de ${msgBeneficiarios}. Fila concluída!`
-          );
-          setTimeout(() => setLancadoMsg(""), 6000);
         }
       } catch {
         /* ignore */
       } finally {
-        lancandoRef.current = false;
+        requestAppSync();
       }
     })();
+
+    const proxima = obterProximaNotaConferencia(chaveAtual, notaId);
+    const msgAprovada = divisaoPreview
+      ? `Nota aprovada! ${formatCurrency(valorPorCooperado)} para cada (${msgBeneficiarios}).`
+      : `Nota aprovada! ${formatCurrency(valorAprovado)} na ficha de ${msgBeneficiarios}.`;
+
+    const finalizarPosAprovacaoUi = () => {
+      lancandoRef.current = false;
+    };
+
+    if (proxima) {
+      const mesmoGrupo = filaConferenciaRef.current?.chave === chaveAtual;
+      if (filaConferenciaRef.current && mesmoGrupo) {
+        filaConferenciaRef.current.concluidas += 1;
+        setFilaConferenciaPos(filaConferenciaRef.current.concluidas + 1);
+      } else if (filaConferenciaRef.current) {
+        setFilaConferenciaPos(1);
+      }
+      setLancadoMsg(`${msgAprovada} Abrindo a próxima entrega…`);
+      setTimeout(() => setLancadoMsg(""), 4000);
+      void prepararConferenciaNota(proxima, { transicao: true }).finally(finalizarPosAprovacaoUi);
+      if (!multiFoto) {
+        void aguardarSequenciaLancamentoFotos(selectedNota, qtdFotosAprovadas);
+      }
+    } else if (multiFoto) {
+      fecharConferirModal();
+      setLancadoMsg(`${msgAprovada} Fila concluída!`);
+      setTimeout(() => setLancadoMsg(""), 6000);
+      finalizarPosAprovacaoUi();
+    } else {
+      void aguardarSequenciaLancamentoFotos(selectedNota, qtdFotosAprovadas).finally(() => {
+        fecharConferirModal();
+        setLancadoMsg(`${msgAprovada} Fila concluída!`);
+        setTimeout(() => setLancadoMsg(""), 6000);
+        finalizarPosAprovacaoUi();
+      });
+    }
   };
 
   const handleRejeitarNota = () => {
