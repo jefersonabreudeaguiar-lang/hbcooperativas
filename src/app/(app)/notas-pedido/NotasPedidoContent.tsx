@@ -48,7 +48,6 @@ import {
   syncOfflineDeliveryImages,
   finalizeNotaEntregaNaNuvem,
   deleteFotoRascunhoFromCloud,
-  confirmNotaDeletedFromCloud,
   deleteNotaPedidoFromCloud,
   queueNotaDelete,
   unqueueNotaDelete,
@@ -2576,18 +2575,6 @@ export default function NotasPedidoContent() {
     filaStickyIdsRef.current.delete(alvo.id);
     filaStickySnapshotRef.current.delete(alvo.id);
 
-    const d = getData();
-    const cnpjSync = await resolveCooperativaCnpj(d, coopId, user);
-    if (cnpjSync) {
-      const del = await deleteNotaPedidoFromCloud(cnpjSync, alvo.id);
-      if (del.ok && (await confirmNotaDeletedFromCloud(cnpjSync, alvo.id))) {
-        unqueueNotaDelete(cnpjSync, alvo.id);
-      }
-      await flushPendingNotaDeletes(cnpjSync);
-      await pushOperacionalToCloud(cnpjSync, d, coopId, { authoritative: true });
-    }
-    requestAppSync();
-
     setViewModal(false);
     setConferirModal(false);
     setSelectedNota(null);
@@ -2596,6 +2583,27 @@ export default function NotasPedidoContent() {
         ? `Entrega ${alvo.numeroNota} excluída e removida da ficha do cooperado.`
         : "Entrega excluída."
     );
+
+    const cnpjSync = cnpj ?? (await resolveCooperativaCnpj(getData(), coopId, user));
+    if (cnpjSync) {
+      void (async () => {
+        try {
+          const del = await deleteNotaPedidoFromCloud(cnpjSync, alvo.id);
+          if (del.ok) {
+            unqueueNotaDelete(cnpjSync, alvo.id);
+          } else {
+            await flushPendingNotaDeletes(cnpjSync);
+          }
+          await pushOperacionalToCloud(cnpjSync, getData(), coopId, { authoritative: true });
+        } catch {
+          await flushPendingNotaDeletes(cnpjSync).catch(() => {});
+        } finally {
+          requestAppSync();
+        }
+      })();
+    } else {
+      requestAppSync();
+    }
   };
 
   const executarRelancarEntregaResponsavel = async (alvo: NotaPedido) => {
@@ -2676,21 +2684,17 @@ export default function NotasPedidoContent() {
     const cnpj = await resolveCooperativaCnpj(data, coopId, user);
     if (cnpj) {
       queueNotaDelete(cnpj, excluirNotaTarget.id);
-      const del = await deleteNotaPedidoFromCloud(cnpj, excluirNotaTarget.id);
-      if (del.ok && (await confirmNotaDeletedFromCloud(cnpj, excluirNotaTarget.id))) {
-        unqueueNotaDelete(cnpj, excluirNotaTarget.id);
-      }
-      await flushPendingNotaDeletes(cnpj);
     }
 
     const eraRejeitada = excluirNotaTarget.status === "rejeitada";
+    const notaIdExcluir = excluirNotaTarget.id;
 
     updateData((d) =>
       addAuditEntry(
-        { ...d, notasPedido: d.notasPedido.filter((n) => n.id !== excluirNotaTarget.id) },
+        { ...d, notasPedido: d.notasPedido.filter((n) => n.id !== notaIdExcluir) },
         {
           entityType: "nota_pedido",
-          entityId: excluirNotaTarget.id,
+          entityId: notaIdExcluir,
           action: "excluir",
           userId: user.id,
           userName: user.name,
@@ -2710,6 +2714,25 @@ export default function NotasPedidoContent() {
         ? "Entrega excluída. Você pode enviar uma nova foto quando quiser."
         : "Entrega excluída. O responsável não verá mais esta foto."
     );
+
+    if (cnpj) {
+      void (async () => {
+        try {
+          const del = await deleteNotaPedidoFromCloud(cnpj, notaIdExcluir);
+          if (del.ok) {
+            unqueueNotaDelete(cnpj, notaIdExcluir);
+          } else {
+            await flushPendingNotaDeletes(cnpj);
+          }
+        } catch {
+          await flushPendingNotaDeletes(cnpj).catch(() => {});
+        } finally {
+          requestAppSync();
+        }
+      })();
+    } else {
+      requestAppSync();
+    }
   };
 
   const enviarOutraFoto = () => {
