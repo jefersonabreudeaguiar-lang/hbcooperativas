@@ -1,3 +1,4 @@
+import { assertNotProductionTarget } from "./lib/assertNotProductionTarget.mjs";
 import { createClient } from "@supabase/supabase-js";
 import ws from "ws";
 import { readFileSync, existsSync } from "node:fs";
@@ -17,6 +18,8 @@ function loadEnvFile(path) {
 }
 
 loadEnvFile(resolve(process.cwd(), ".env.local"));
+assertNotProductionTarget();
+
 
 const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -106,7 +109,7 @@ async function resetOperacional(cnpj) {
 
   const payload = {
     updatedAt: new Date().toISOString(),
-    operationalResetVersion: 10,
+    operationalResetVersion: 11,
     fullReset: true,
     wipeNotas: true,
     arquivosMensais: [],
