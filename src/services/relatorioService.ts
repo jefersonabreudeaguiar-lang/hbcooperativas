@@ -17,6 +17,8 @@ import {
   listarFichasExtratoCooperadoMes,
   listarFichasPendentesPagamento,
   pagamentoCobreMesReferencia,
+  pagamentoRegistradoParaRelatorio,
+  somaValorPagamentosRegistrados,
 } from "@/services/notaPedidoService";
 
 export interface ResumoFinanceiroMes {
@@ -181,7 +183,7 @@ export function calcularFechamentoMensalLive(mesReferencia: string, data: AppDat
 
   const pagamentosConfirmados = pagamentosMes.filter((p) => p.status === "confirmado");
   const pagamentosAguardando = pagamentosMes.filter((p) => p.status === "aguardando_confirmacao");
-  const totalPagamentos = sumBy(pagamentosConfirmados, (p) => p.valorLiquido);
+  const totalPagamentos = somaValorPagamentosRegistrados(pagamentosMes);
   const totalMensalidades = sumBy(mensalidadesPagas, (m) => m.valor);
   const totalCotas = sumBy(cotasMes, (c) => c.valor);
 
@@ -284,7 +286,10 @@ function linhaCooperado(
     valorBruto,
     valorLiquido,
     aPagar,
-    pago: pg?.status === "confirmado" ? pg.valorLiquido : sumBy(notas.filter((n) => n.status === "pago"), (n) => n.valorLiquido),
+    pago:
+      pg && pagamentoRegistradoParaRelatorio(pg)
+        ? pg.valorLiquido
+        : sumBy(notas.filter((n) => n.status === "pago"), (n) => n.valorLiquido),
     statusPagamento,
   };
 }

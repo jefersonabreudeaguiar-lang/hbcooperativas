@@ -5,6 +5,7 @@ import {
   resolverCooperadoIdCanonico,
 } from "@/services/cooperadoCloudService";
 import { getMesesReferenciaPagamento } from "@/services/notaPedidoService";
+import { completarLancamentosContabeisPagamentos } from "@/services/livroCaixaService";
 
 function pagamentoCobreMes(p: PagamentoCooperadoRegistro, mesReferencia: string): boolean {
   if (p.mesesReferencia?.length) return p.mesesReferencia.includes(mesReferencia);
@@ -218,7 +219,12 @@ export function alinharFichaComPagamentosCooperativa(data: AppData): AppData {
 
 /** Reparo + alinhamento — evita voltar para pendente após PIX/assinatura. */
 export function posProcessarIntegridadePagamentosCooperativa(data: AppData): AppData {
-  return alinharFichaComPagamentosCooperativa(repararIntegridadePagamentosCooperativa(data));
+  let next = alinharFichaComPagamentosCooperativa(repararIntegridadePagamentosCooperativa(data));
+  const coopIds = [...new Set(next.cooperativas.map((c) => c.id))];
+  for (const coopId of coopIds) {
+    next = completarLancamentosContabeisPagamentos(next, coopId);
+  }
+  return next;
 }
 
 function marcarFichasOperacionalPagamento(

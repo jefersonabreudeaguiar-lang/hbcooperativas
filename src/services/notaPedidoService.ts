@@ -2210,6 +2210,17 @@ export function getResumoPagamentoConsolidadoCooperado(
   };
 }
 
+/** Pagamento já registrado pelo responsável (PIX feito), mesmo aguardando assinatura do recibo. */
+export function pagamentoRegistradoParaRelatorio(p: PagamentoCooperadoRegistro): boolean {
+  return p.status === "confirmado" || p.status === "aguardando_confirmacao";
+}
+
+export function somaValorPagamentosRegistrados(pagamentos: PagamentoCooperadoRegistro[]): number {
+  return round2(
+    pagamentos.filter(pagamentoRegistradoParaRelatorio).reduce((s, p) => s + p.valorLiquido, 0)
+  );
+}
+
 export function getPagamentoAguardandoCooperado(
   data: AppData,
   cooperadoId: string,
@@ -2437,6 +2448,124 @@ export function confirmarPagamentoCooperado(
   };
 
   return next;
+}
+
+const TITULO_COMUNICADO_PAGAMENTO = "pagamento realizado";
+
+function comunicadoAvisoPagamentoCooperado(
+  c: { cooperativaId?: string; cooperadoId?: string; categoria?: string; titulo: string },
+  coopId: string,
+  cooperadoId: string,
+  cooperadoCanonico: string
+): boolean {
+  if (!c.cooperativaId || c.cooperativaId !== coopId) return false;
+  const paraCooperado =
+    !c.cooperadoId || c.cooperadoId === cooperadoId || c.cooperadoId === cooperadoCanonico;
+  return (
+    paraCooperado &&
+    c.categoria === "financeiro" &&
+    c.titulo.trim().toLowerCase() === TITULO_COMUNICADO_PAGAMENTO
+  );
+}
+
+/** Reabre o fluxo de assinatura do recibo (cooperado vê de novo no início do app). */
+export function reenviarSolicitacaoAssinaturaRecibo(
+  data: AppData,
+  pagamentoId: string,
+  responsavel: string
+): AppData {
+  const pagamento = data.pagamentosCooperado.find((p) => p.id === pagamentoId);
+  if (!pagamento || pagamento.status !== "aguardando_confirmacao") return data;
+
+  const now = new Date().toISOString();
+  const mesLabel = formatMesesReferenciaRotulo(getMesesReferenciaPagamento(pagamento));
+  const cooperadoCanonico = resolverCooperadoIdCanonico(
+    data,
+    pagamento.cooperadoId,
+    pagamento.cooperativaId
+  );
+  const valorTxt = pagamento.valorLiquido.toFixed(2).replace(".", ",");
+  const descricao = `A cooperativa registrou o pagamento de ${valorTxt} referente a ${mesLabel}. Abra Quanto vou receber, confirme o recebimento e assine o recibo.`;
+
+  const pagamentosCooperado = data.pagamentosCooperado.map((p) =>
+    p.id === pagamentoId
+      ? {
+          ...p,
+          assinaturaCooperado: undefined,
+          assinadoEm: undefined,
+          reciboHtml: undefined,
+          updatedAt: now,
+        }
+      : p
+  );
+
+  let reativouComunicado = false;
+  let comunicados = data.comunicados.map((c) => {
+    if (!comunicadoAvisoPagamentoCooperado(c, pagamento.cooperativaId, pagamento.cooperadoId, cooperadoCanonico)) {
+      return c;
+    }
+    reativouComunicado = true;
+    return {
+      ...c,
+      ativo: true,
+      fixado: true,
+      descricao,
+      data: now.split("T")[0],
+      responsavel,
+    };
+  });
+
+  if (!reativouComunicado) {
+    comunicados = [
+      ...comunicados,
+      {
+        id: `cm_${Date.now()}`,
+        cooperativaId: pagamento.cooperativaId,
+        cooperadoId: cooperadoCanonico,
+        titulo: "Pagamento realizado",
+        descricao,
+        data: now.split("T")[0],
+        responsavel,
+        categoria: "financeiro" as const,
+        fixado: true,
+        visivelParaTodos: false,
+        ativo: true,
+        createdAt: now,
+      },
+    ];
+  }
+
+  return { ...data, pagamentosCooperado, comunicados };
+}
+
+/** Responsável marca recibo assinado como conferido. */
+export function marcarReciboPagamentoVerificadoResponsavel(
+  data: AppData,
+  pagamentoId: string,
+  responsavelId: string,
+  responsavelNome: string
+): AppData {
+  const pagamento = data.pagamentosCooperado.find((p) => p.id === pagamentoId);
+  if (!pagamento || pagamento.status !== "confirmado" || !pagamento.assinaturaCooperado?.trim()) {
+    return data;
+  }
+  if (pagamento.reciboConferidoPorResponsavelEm) return data;
+
+  const now = new Date().toISOString();
+  return {
+    ...data,
+    pagamentosCooperado: data.pagamentosCooperado.map((p) =>
+      p.id === pagamentoId
+        ? {
+            ...p,
+            reciboConferidoPorResponsavelEm: now,
+            reciboConferidoPorId: responsavelId,
+            reciboConferidoPorNome: responsavelNome,
+            updatedAt: now,
+          }
+        : p
+    ),
+  };
 }
 
 export function marcarFichaComoPaga(

@@ -443,6 +443,10 @@ export interface PagamentoCooperadoRegistro {
   assinaturaCooperado?: string;
   assinadoEm?: string;
   reciboHtml?: string;
+  /** Responsável conferiu recibo após assinatura do cooperado. */
+  reciboConferidoPorResponsavelEm?: string;
+  reciboConferidoPorId?: string;
+  reciboConferidoPorNome?: string;
   createdAt: string;
   updatedAt?: string;
 }

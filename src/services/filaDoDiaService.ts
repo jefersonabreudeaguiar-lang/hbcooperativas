@@ -38,6 +38,14 @@ export function getFilaDoDia(data: AppData, coopId: string | undefined, mes = ge
     (p) => p.cooperativaId === coopId && p.status === "aguardando_confirmacao"
   ).length;
 
+  const recibosVerificar = data.pagamentosCooperado.filter(
+    (p) =>
+      p.cooperativaId === coopId &&
+      p.status === "confirmado" &&
+      Boolean(p.assinaturaCooperado?.trim()) &&
+      !p.reciboConferidoPorResponsavelEm
+  ).length;
+
   const cooperadosPagar = listCooperadosDaCooperativa(data, coopId).filter((c) =>
     cooperadoPendentePagamentoResponsavel(data, c.id, undefined, coopId)
   ).length;
@@ -100,6 +108,20 @@ export function getFilaDoDia(data: AppData, coopId: string | undefined, mes = ge
     });
   }
 
+  if (recibosVerificar > 0) {
+    items.push({
+      id: "verificar-recibos",
+      titulo: "Verificar recibos assinados",
+      detalhe:
+        recibosVerificar === 1
+          ? "1 cooperado assinou — confira o recibo"
+          : `${recibosVerificar} recibos assinados aguardando conferência`,
+      href: "/ficha-corrida?fila=verificar-recibos",
+      count: recibosVerificar,
+      urgencia: "media",
+    });
+  }
+
   if (publicarPrecos > 0) {
     items.push({
       id: "contratos",
@@ -128,4 +150,21 @@ export function listarPagamentosAguardandoAssinatura(
         (!mes || pagamentoCobreMesReferencia(p, mes))
     )
     .sort((a, b) => b.pagoEm.localeCompare(a.pagoEm));
+}
+
+/** Recibo assinado pelo cooperado — aguarda conferência do responsável. */
+export function listarPagamentosReciboAguardandoVerificacao(
+  data: AppData,
+  coopId: string | undefined
+): PagamentoCooperadoRegistro[] {
+  if (!coopId) return [];
+  return data.pagamentosCooperado
+    .filter(
+      (p) =>
+        p.cooperativaId === coopId &&
+        p.status === "confirmado" &&
+        Boolean(p.assinaturaCooperado?.trim()) &&
+        !p.reciboConferidoPorResponsavelEm
+    )
+    .sort((a, b) => (b.assinadoEm ?? b.updatedAt ?? b.pagoEm).localeCompare(a.assinadoEm ?? a.updatedAt ?? a.pagoEm));
 }

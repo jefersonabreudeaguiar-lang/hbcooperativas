@@ -239,7 +239,7 @@ function CooperadoDashboard() {
         </AlertBanner>
       )}
 
-      {exibirAguardandoAssinatura && valorReceber.valorRecibo > 0 && (
+      {exibirAguardandoAssinatura && valorReceber.aguardandoAssinatura && (
         <Link
           href="/ficha-corrida?assinar=1"
           className="flex items-center gap-4 rounded-2xl border-2 border-emerald-300 bg-gradient-to-r from-emerald-50 to-green-50 px-5 py-4 hover:border-emerald-400 transition-colors shadow-sm"

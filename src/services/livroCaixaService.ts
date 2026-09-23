@@ -481,8 +481,8 @@ export function completarLancamentosContabeisPagamentos(data: AppData, cooperati
   let next = data;
   const pagamentos = data.pagamentosCooperado.filter((p) => !cooperativaId || p.cooperativaId === cooperativaId);
   for (const pagamento of pagamentos) {
-    const atualizado = lancarRetencoesPagamentoNoCaixa(next, pagamento);
-    if (atualizado !== next) next = atualizado;
+    if (pagamento.status !== "confirmado" && pagamento.status !== "aguardando_confirmacao") continue;
+    next = lancarPagamentoCooperadoNoCaixa(next, pagamento);
   }
   return next;
 }

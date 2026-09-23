@@ -1,6 +1,12 @@
 import type { AppData, FechamentoMensal, FinanceiroMensal } from "@/types";
 import { getData } from "@/services/dataStore";
-import { getTotalAPagarCooperado, getTotalRecebidoCooperado, idsNotasPedidoExcluidas } from "@/services/notaPedidoService";
+import {
+  getTotalAPagarCooperado,
+  getTotalRecebidoCooperado,
+  idsNotasPedidoExcluidas,
+  pagamentoCobreMesReferencia,
+  pagamentoRegistradoParaRelatorio,
+} from "@/services/notaPedidoService";
 import { round2, sumBy } from "@/utils/calculations";
 import { getCurrentMesReferencia } from "@/utils/format";
 import { isNotaNaFilaConferenciaResponsavel } from "@/utils/notaStatus";
@@ -170,14 +176,14 @@ export function calcularFechamentoMensal(mesReferencia: string, data?: AppData):
 export function getRelatorioResumoFinanceiro(mesReferencia: string, data?: AppData) {
   const d = data ?? getData();
   const r = getResumoFinanceiroMes(mesReferencia, d);
-  const pagamentosMes = d.pagamentosCooperado.filter((p) => p.mesReferencia === mesReferencia);
+  const pagamentosMes = d.pagamentosCooperado.filter((p) => pagamentoCobreMesReferencia(p, mesReferencia));
   return {
     mesReferencia,
     financeiro: d.financeiro.find((f) => f.mesReferencia === mesReferencia),
     totalVendas: r.totalVendasBruto,
     totalLiquido: r.totalVendasLiquido,
     pagamentosPendentes: pagamentosMes.filter((p) => p.status === "aguardando_confirmacao"),
-    pagamentosRealizados: pagamentosMes.filter((p) => p.status === "confirmado"),
+    pagamentosRealizados: pagamentosMes.filter((p) => pagamentoRegistradoParaRelatorio(p)),
     resumo: r,
   };
 }

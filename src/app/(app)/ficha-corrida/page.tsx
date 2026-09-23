@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useMemo, useState, useEffect, useCallback } from "react";
 import { useSearchParams } from "next/navigation";
-import { QrCode, XCircle, Wallet, CheckCircle2, FileDown, PenLine, BookOpen, CreditCard, History, Users, ChevronDown, Pencil } from "lucide-react";
+import { QrCode, XCircle, Wallet, CheckCircle2, FileDown, PenLine, BookOpen, CreditCard, History, Users, ChevronDown, Pencil, RefreshCw, Eye } from "lucide-react";
 import { useAppData } from "@/hooks/useAppData";
 import { usePermissions } from "@/hooks/usePermissions";
 import { getUserCooperativaId } from "@/utils/cooperativa";
@@ -15,6 +15,8 @@ import {
   buildValorExibicaoCooperadoOpts,
   registrarPagamentoCooperado,
   confirmarPagamentoCooperado,
+  reenviarSolicitacaoAssinaturaRecibo,
+  marcarReciboPagamentoVerificadoResponsavel,
   getPagamentoAguardandoCooperado,
   getMensalidadeFixaMes,
   getStatusCotaCooperado,
@@ -28,7 +30,7 @@ import {
   getResumoPagamentoConsolidadoCooperado,
   getMesesReferenciaPagamento,
 } from "@/services/notaPedidoService";
-import { listarPagamentosAguardandoAssinatura } from "@/services/filaDoDiaService";
+import { listarPagamentosAguardandoAssinatura, listarPagamentosReciboAguardandoVerificacao } from "@/services/filaDoDiaService";
 import { listCooperadosComFichaNoMes, getCooperadoNomeResolvido, resolverCooperadoParaPagamento, fichaPertenceCooperado, listCooperadosDaCooperativa } from "@/services/cooperadoCloudService";
 import { resolveCooperativaCnpj, patchNotaPedidoInCloud } from "@/services/notaPedidoCloudService";
 import { useSyncContaCoopValorReceberPilot } from "@/hooks/useSyncContaCoopValorReceberPilot";
@@ -152,9 +154,13 @@ export default function FichaCorridaPage() {
   const searchParams = useSearchParams();
   const [mesFilter, setMesFilter] = useState(searchParams.get("mes") ?? getCurrentMesReferencia());
   const [cooperadoFilter, setCooperadoFilter] = useState(searchParams.get("cooperado") ?? "");
-  const [aba, setAba] = useState<"ficha" | "pagar">(
-    searchParams.get("aba") === "pagar" || searchParams.get("fila") === "assinaturas" ? "pagar" : "ficha"
-  );
+  const [aba, setAba] = useState<"ficha" | "pagar">(() => {
+    const fila = searchParams.get("fila");
+    if (searchParams.get("aba") === "pagar" || fila === "assinaturas" || fila === "verificar-recibos") {
+      return "pagar";
+    }
+    return "ficha";
+  });
   const [abaMesCooperado, setAbaMesCooperado] = useState<"aberto" | string>("aberto");
   const [pixStepVisited, setPixStepVisited] = useState(false);
 
@@ -170,7 +176,7 @@ export default function FichaCorridaPage() {
     const fila = searchParams.get("fila");
     if (c && !isCooperado) setCooperadoFilter(c);
     if (m) setMesFilter(m);
-    if (!isCooperado && (a === "pagar" || fila === "assinaturas")) setAba("pagar");
+    if (!isCooperado && (a === "pagar" || fila === "assinaturas" || fila === "verificar-recibos")) setAba("pagar");
   }, [searchParams, isCooperado]);
 
   useEffect(() => {
@@ -200,6 +206,7 @@ export default function FichaCorridaPage() {
   const [divisaoSalvando, setDivisaoSalvando] = useState(false);
   const [lancamentosPagarExpandido, setLancamentosPagarExpandido] = useState(false);
   const [historicoEntregasExpandido, setHistoricoEntregasExpandido] = useState(false);
+  const [assinaturaBusyId, setAssinaturaBusyId] = useState<string | null>(null);
   const [coopCnpjResumo, setCoopCnpjResumo] = useState("");
 
   const coopId = user && data ? getUserCooperativaId(user, data) : undefined;
@@ -278,6 +285,11 @@ export default function FichaCorridaPage() {
   const pagamentosAguardandoAssinatura = useMemo(() => {
     if (!data || !coopId) return [];
     return listarPagamentosAguardandoAssinatura(data, coopId);
+  }, [data, coopId]);
+
+  const pagamentosAguardandoVerificacao = useMemo(() => {
+    if (!data || !coopId) return [];
+    return listarPagamentosReciboAguardandoVerificacao(data, coopId);
   }, [data, coopId]);
 
   const cooperadosNoSelect = !isCooperado && aba === "pagar" ? cooperadosParaPagar : cooperadosComFicha;
@@ -1014,6 +1026,65 @@ export default function FichaCorridaPage() {
     setReciboSucessoOpen(true);
   };
 
+  const syncPagamentoOperacional = async () => {
+    if (!user || !coopId) return;
+    const cnpj = await resolveCooperativaCnpj(getData(), coopId, user);
+    if (!cnpj) return;
+    clearOperacionalPushFingerprint(cnpj, true);
+    await pushOperacionalToCloud(cnpj, getData(), coopId, { authoritative: true, forceOperacionalPush: true });
+    requestAppSync();
+  };
+
+  const handleReenviarAssinaturaRecibo = (pagamento: PagamentoCooperadoRegistro) => {
+    if (!user || !coopId || !data) return;
+    setAssinaturaBusyId(pagamento.id);
+    updateData((d) => {
+      const next = reenviarSolicitacaoAssinaturaRecibo(d, pagamento.id, user.name);
+      return addAuditEntry(next, {
+        entityType: "pagamento",
+        entityId: pagamento.id,
+        action: "editar",
+        userId: user.id,
+        userName: user.name,
+        changes: "Solicitação de assinatura do recibo reenviada ao cooperado",
+      });
+    });
+    const nome = getCooperadoNomeResolvido(data, pagamento.cooperadoId, coopId).split(" ")[0];
+    void syncPagamentoOperacional()
+      .then(() => {
+        setPagoMsg(`${nome} verá de novo o pedido de assinatura no início do app.`);
+      })
+      .finally(() => setAssinaturaBusyId(null));
+  };
+
+  const abrirReciboPagamentoResponsavel = (pagamento: PagamentoCooperadoRegistro) => {
+    if (!data) return;
+    setAba("ficha");
+    setCooperadoFilter(pagamento.cooperadoId);
+    setMesFilter(pagamento.mesReferencia);
+    if (pagamento.reciboHtml) {
+      const nome = getCooperadoNomeResolvido(data, pagamento.cooperadoId, coopId);
+      void baixarRecibo(pagamento.reciboHtml, nomeArquivoRecibo(pagamento.mesReferencia, nome));
+    }
+  };
+
+  const handleVerificarReciboAssinado = (pagamento: PagamentoCooperadoRegistro) => {
+    if (!user || !coopId || !data) return;
+    setAssinaturaBusyId(pagamento.id);
+    updateData((d) => {
+      const next = marcarReciboPagamentoVerificadoResponsavel(d, pagamento.id, user.id, user.name);
+      return addAuditEntry(next, {
+        entityType: "pagamento",
+        entityId: pagamento.id,
+        action: "aprovar",
+        userId: user.id,
+        userName: user.name,
+        changes: "Recibo assinado conferido pelo responsável",
+      });
+    });
+    void syncPagamentoOperacional().finally(() => setAssinaturaBusyId(null));
+  };
+
   const reciboAtual = pagamentoConfirmado ?? pagamentoConfirmadoMes;
 
   const mesQuitadoCooperado =
@@ -1194,9 +1265,13 @@ export default function FichaCorridaPage() {
             className={`px-4 py-2.5 text-sm font-medium border-b-2 -mb-px flex items-center gap-2 ${aba === "pagar" ? "border-green-600 text-green-700" : "border-transparent text-gray-500 hover:text-gray-700"}`}
           >
             <CreditCard size={16} /> Pagar
-            {(cooperadosParaPagar.length > 0 || pagamentosAguardandoAssinatura.length > 0) && (
+            {(cooperadosParaPagar.length > 0 ||
+              pagamentosAguardandoAssinatura.length > 0 ||
+              pagamentosAguardandoVerificacao.length > 0) && (
               <span className="bg-amber-500 text-white text-xs font-bold px-1.5 py-0.5 rounded-full">
-                {cooperadosParaPagar.length + pagamentosAguardandoAssinatura.length}
+                {cooperadosParaPagar.length +
+                  pagamentosAguardandoAssinatura.length +
+                  pagamentosAguardandoVerificacao.length}
               </span>
             )}
           </button>
@@ -1215,7 +1290,8 @@ export default function FichaCorridaPage() {
               className="border-violet-200"
             >
               <p className="text-sm text-gray-600 mb-3">
-                Pagamento já registrado — o cooperado precisa abrir o app e confirmar o recibo.
+                Pagamento já registrado — o cooperado precisa abrir o app e confirmar o recibo. Use{" "}
+                <strong>Reenviar ao cooperado</strong> se ele não estiver vendo o aviso no início do app.
               </p>
               <ul className="space-y-2">
                 {pagamentosAguardandoAssinatura.map((p) => {
@@ -1231,8 +1307,16 @@ export default function FichaCorridaPage() {
                           {formatMesReferencia(p.mesReferencia)} · pago em {formatDate(p.pagoEm)}
                         </p>
                       </div>
-                      <div className="flex items-center gap-2 shrink-0">
+                      <div className="flex flex-wrap items-center gap-2 shrink-0">
                         <span className="text-sm font-bold text-violet-800">{formatCurrency(p.valorLiquido)}</span>
+                        <Button
+                          size="sm"
+                          variant="secondary"
+                          disabled={assinaturaBusyId === p.id}
+                          onClick={() => handleReenviarAssinaturaRecibo(p)}
+                        >
+                          <RefreshCw size={14} /> Reenviar ao cooperado
+                        </Button>
                         <Button
                           size="sm"
                           variant="secondary"
@@ -1243,6 +1327,46 @@ export default function FichaCorridaPage() {
                           }}
                         >
                           <PenLine size={14} /> Ver ficha
+                        </Button>
+                      </div>
+                    </li>
+                  );
+                })}
+              </ul>
+            </Card>
+          )}
+
+          {pagamentosAguardandoVerificacao.length > 0 && (
+            <Card title={`Verificar recibo (${pagamentosAguardandoVerificacao.length})`} className="border-emerald-200">
+              <p className="text-sm text-gray-600 mb-3">
+                O cooperado já assinou. Confira o recibo e marque como verificado.
+              </p>
+              <ul className="space-y-2">
+                {pagamentosAguardandoVerificacao.map((p) => {
+                  const nome = getCooperadoNomeResolvido(data!, p.cooperadoId, coopId);
+                  return (
+                    <li
+                      key={p.id}
+                      className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 rounded-xl border border-emerald-100 bg-emerald-50/50 px-3 py-2.5"
+                    >
+                      <div className="min-w-0">
+                        <p className="font-medium text-gray-900 truncate">{nome}</p>
+                        <p className="text-xs text-gray-500">
+                          {formatMesReferencia(p.mesReferencia)}
+                          {p.assinadoEm ? ` · assinado em ${formatDate(p.assinadoEm.split("T")[0])}` : ""}
+                        </p>
+                      </div>
+                      <div className="flex flex-wrap items-center gap-2 shrink-0">
+                        <span className="text-sm font-bold text-emerald-800">{formatCurrency(p.valorLiquido)}</span>
+                        <Button size="sm" variant="secondary" onClick={() => abrirReciboPagamentoResponsavel(p)}>
+                          <Eye size={14} /> Ver recibo
+                        </Button>
+                        <Button
+                          size="sm"
+                          disabled={assinaturaBusyId === p.id}
+                          onClick={() => handleVerificarReciboAssinado(p)}
+                        >
+                          <CheckCircle2 size={14} /> Marcar verificado
                         </Button>
                       </div>
                     </li>

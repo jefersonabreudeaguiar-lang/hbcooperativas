@@ -6,6 +6,9 @@ import {
   dedupeFichaCorridaPorNota,
   fichaValidaNoExtrato,
   getTotalAPagarCooperado,
+  pagamentoCobreMesReferencia,
+  pagamentoRegistradoParaRelatorio,
+  somaValorPagamentosRegistrados,
 } from "@/services/notaPedidoService";
 import { calcularFechamentoMensalLive, listMesesComLancamentos } from "@/services/relatorioService";
 import { resumoLivroCaixa } from "@/services/livroCaixaService";
@@ -118,7 +121,12 @@ export function calcularConciliacaoMensal(
   const descontoCoopFicha = sumDescontosPorTipo(data, mesReferencia, "cooperativa");
   const descontoCoopPagamentos = round2(
     sumBy(
-      data.pagamentosCooperado.filter((p) => p.mesReferencia === mesReferencia),
+      data.pagamentosCooperado.filter(
+        (p) =>
+          p.cooperativaId === coopId &&
+          pagamentoCobreMesReferencia(p, mesReferencia) &&
+          pagamentoRegistradoParaRelatorio(p)
+      ),
       (p) => p.descontoCooperativa
     )
   );
@@ -143,9 +151,10 @@ export function calcularConciliacaoMensal(
 
   const descontoContaCoop = sumDescontosPorTipo(data, mesReferencia, "conta_coop");
 
-  const pagamentosMes = data.pagamentosCooperado.filter((p) => p.mesReferencia === mesReferencia);
-  const pagamentosConfirmados = pagamentosMes.filter((p) => p.status === "confirmado");
-  const totalPagoCooperados = round2(sumBy(pagamentosConfirmados, (p) => p.valorLiquido));
+  const pagamentosMes = data.pagamentosCooperado.filter(
+    (p) => p.cooperativaId === coopId && pagamentoCobreMesReferencia(p, mesReferencia)
+  );
+  const totalPagoCooperados = somaValorPagamentosRegistrados(pagamentosMes);
 
   const caixaMes = resumoLivroCaixa(data, coopId, mesReferencia);
   const debitosPagamentoCaixa = round2(
@@ -234,9 +243,9 @@ export function calcularConciliacaoMensal(
     {
       id: "pagamentos_caixa",
       label: "Pagamentos × Livro caixa",
-      descricao: "Pagamentos confirmados aos cooperados versus débitos no livro caixa.",
+      descricao: "Pagamentos registrados aos cooperados (PIX) versus débitos no livro caixa.",
       valorA: totalPagoCooperados,
-      labelA: "Pagamentos confirmados",
+      labelA: "Pagamentos registrados",
       valorB: debitosPagamentoCaixa,
       labelB: "Débitos no caixa",
       diferenca: round2(totalPagoCooperados - debitosPagamentoCaixa),
@@ -300,11 +309,11 @@ export function calcularConciliacaoMensal(
     {
       id: "obrigacao_pagamento",
       label: "Obrigação × Pagamentos",
-      descricao: "Total a pagar aos cooperados versus total efetivamente pago (confirmado).",
+      descricao: "Total a pagar aos cooperados versus total registrado pelo responsável (PIX).",
       valorA: totalAPagar,
       labelA: "A pagar (ficha)",
       valorB: totalPagoCooperados,
-      labelB: "Pago confirmado",
+      labelB: "Pago registrado",
       diferenca: round2(totalAPagar - totalPagoCooperados),
       status: totalAPagar >= totalPagoCooperados - TOLERANCIA ? "ok" : "divergencia",
       detalhe:
