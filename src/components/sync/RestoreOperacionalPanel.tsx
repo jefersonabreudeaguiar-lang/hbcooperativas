@@ -80,8 +80,7 @@ export function RestoreOperacionalPanel({ cnpj, coopId, compact }: Props) {
   const restoreAtivo = stats?.cloudFullReset === true;
   const showPanel = restoreAtivo && (stats?.desalinhado || resultMsg || apiFailed);
 
-  if (!restoreAtivo && !resultMsg) return null;
-  if (!showPanel && !resultMsg && compact) return null;
+  if (!showPanel && !resultMsg) return null;
 
   return (
     <AlertBanner

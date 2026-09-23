@@ -236,10 +236,6 @@ function CooperadoDashboard() {
         <p className="text-sm text-gray-500 mt-1">{coopNome} · {formatMesReferencia(mes)}</p>
       </div>
 
-      {viewCoopId && cnpjDigits.length === 14 && (
-        <RestoreOperacionalPanel cnpj={cnpjDigits} coopId={viewCoopId} />
-      )}
-
       {cooperado && <AssinaturaStatusAviso cooperado={cooperado} />}
 
       {conferindoPagamentoNuvem && (

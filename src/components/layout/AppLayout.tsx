@@ -220,7 +220,7 @@ export function MobileNav() {
       <header className="lg:hidden flex items-center justify-between gap-2 px-4 py-3 bg-green-900 text-white sticky top-0 z-40">
         <BrandHeader compact />
         <div className="flex items-center gap-1.5 shrink-0">
-          <SyncStatusChip />
+          {user.role !== "cooperado" && <SyncStatusChip />}
           <button onClick={() => setOpen(true)} className="p-2 hover:bg-green-800 rounded-lg" aria-label="Abrir menu">
             <Menu size={22} />
           </button>
@@ -309,9 +309,11 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         <MobileNav />
         <MercadoParceiroPinResetBar />
         <main className="flex-1 overflow-y-auto p-4 lg:p-6 pb-36 lg:pb-6">
-          <div className="hidden lg:flex justify-end mb-3">
-            <SyncStatusChipLight />
-          </div>
+          {user?.role !== "cooperado" && (
+            <div className="hidden lg:flex justify-end mb-3">
+              <SyncStatusChipLight />
+            </div>
+          )}
           <ContratoServicoAppGate />
           <CobrancaSaasPainel />
           {children}
