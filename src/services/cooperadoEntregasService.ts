@@ -115,7 +115,7 @@ export function getMesPrincipalQuantoVouReceber(
   cooperadoId: string,
   cooperativaId?: string
 ): string {
-  const pendentes = listarMesesPendentesQuantoVouReceber(data, cooperadoId, cooperativaId);
+  const pendentes = listarMesesPendentesFinanceiroCooperado(data, cooperadoId, cooperativaId);
   if (pendentes.length) return pendentes[0];
   return getMesQuantoVouReceber(data, cooperadoId, cooperativaId);
 }
@@ -127,7 +127,7 @@ export function listarMesesComValorQuantoVouReceber(
   cooperativaId?: string
 ): string[] {
   const out: string[] = [];
-  for (const mes of listarMesesPendentesQuantoVouReceber(data, cooperadoId, cooperativaId)) {
+  for (const mes of listarMesesPendentesFinanceiroCooperado(data, cooperadoId, cooperativaId)) {
     const aguardando = getPagamentoAguardandoCooperado(data, cooperadoId, mes);
     const confirmado = getPagamentoConfirmadoMes(data, cooperadoId, mes);
     if (aguardando && !confirmado) {
@@ -332,6 +332,18 @@ function cooperativaCnpjFromData(
   return digits.length === 14 ? digits : null;
 }
 
+function listarMesesPendentesFinanceiroCooperado(
+  data: AppData,
+  cooperadoId: string,
+  cooperativaId?: string
+): string[] {
+  const cnpj = cooperativaCnpjFromData(data, cooperativaId, cooperadoId);
+  if (cnpj && isOperacionalCloudAuthoritative(cnpj)) {
+    return listarMesesPendentesPagamentoResponsavelOperacional(data, cooperadoId, cooperativaId);
+  }
+  return listarMesesPendentesQuantoVouReceber(data, cooperadoId, cooperativaId);
+}
+
 /** Após restore na nuvem: fila Pagar segue ficha/pagamentos do operacional, sem inflar por notas soltas. */
 function listarMesesPendentesPagamentoResponsavelOperacional(
   data: AppData,
@@ -406,7 +418,7 @@ export function getConsolidadoFinanceiroCooperado(
   cooperativaId?: string,
   ajustesPorMes?: Record<string, AjustesResumoPagamento>
 ): ConsolidadoFinanceiroCooperado {
-  const meses = listarMesesPendentesQuantoVouReceber(data, cooperadoId, cooperativaId);
+  const meses = listarMesesPendentesFinanceiroCooperado(data, cooperadoId, cooperativaId);
   const mesesComValor = listarMesesComValorQuantoVouReceber(data, cooperadoId, cooperativaId);
   const { mesLabel, valor, aguardandoAssinatura } = getValorQuantoVouReceber(
     data,
@@ -500,7 +512,7 @@ export function getValorQuantoVouReceber(
   valorRecibo: number;
   aguardandoAssinatura: boolean;
 } {
-  const mesesPendentes = listarMesesPendentesQuantoVouReceber(data, cooperadoId, cooperativaId);
+  const mesesPendentes = listarMesesPendentesFinanceiroCooperado(data, cooperadoId, cooperativaId);
   const mesesComValor = listarMesesComValorQuantoVouReceber(data, cooperadoId, cooperativaId);
   const mes = mesesComValor[mesesComValor.length - 1] ?? mesesPendentes[mesesPendentes.length - 1] ?? getMesQuantoVouReceber(data, cooperadoId, cooperativaId);
   const aguardandoAssinatura = mesesPendentes.some((m) =>

@@ -10,6 +10,9 @@ export const OPERATIONAL_RESET_CLOUD_KEY = "coopeagriplla_operational_reset_clou
 const CLOUD_RESET_APPLIED_PREFIX = "coopeagriplla_cloud_reset_applied_";
 const CLOUD_OPERACIONAL_AUTHORITATIVE_PREFIX = "coopeagriplla_cloud_operacional_authoritative_";
 
+/** Restore ativo nesta aba — definido no 1º fetch da nuvem (antes do merge local). */
+let sessionOperacionalRestore: { cnpj: string; version: number } | null = null;
+
 export function needsOperationalResetCloudPush(): boolean {
   if (typeof window === "undefined") return false;
   return localStorage.getItem(OPERATIONAL_RESET_CLOUD_KEY) === "pending";
@@ -41,17 +44,44 @@ function markCloudResetApplied(cnpj: string, version: number): void {
 export function markOperacionalCloudAuthoritative(cnpj: string, version: number): void {
   if (typeof window === "undefined") return;
   if (version <= 0) return;
-  localStorage.setItem(`${CLOUD_OPERACIONAL_AUTHORITATIVE_PREFIX}${normalizeCnpj(cnpj)}`, String(version));
+  const digits = normalizeCnpj(cnpj);
+  sessionOperacionalRestore = { cnpj: digits, version };
+  localStorage.setItem(`${CLOUD_OPERACIONAL_AUTHORITATIVE_PREFIX}${digits}`, String(version));
 }
 
 export function clearOperacionalCloudAuthoritative(cnpj: string): void {
   if (typeof window === "undefined") return;
-  localStorage.removeItem(`${CLOUD_OPERACIONAL_AUTHORITATIVE_PREFIX}${normalizeCnpj(cnpj)}`);
+  const digits = normalizeCnpj(cnpj);
+  if (sessionOperacionalRestore?.cnpj === digits) sessionOperacionalRestore = null;
+  localStorage.removeItem(`${CLOUD_OPERACIONAL_AUTHORITATIVE_PREFIX}${digits}`);
+}
+
+/** Chamado ao receber operacional da API — fila Pagar usa nuvem antes do merge terminar. */
+export function noteOperacionalCloudRestoreFromFetch(
+  cnpj: string,
+  cloud: CloudOperationalResetSignal | null | undefined
+): void {
+  if (typeof window === "undefined") return;
+  const digits = normalizeCnpj(cnpj);
+  if (digits.length !== 14) return;
+  if (cloud?.fullReset && (cloud.operationalResetVersion ?? 0) > 0) {
+    markOperacionalCloudAuthoritative(digits, cloud.operationalResetVersion ?? 1);
+    return;
+  }
+  if (sessionOperacionalRestore?.cnpj === digits) sessionOperacionalRestore = null;
+  clearOperacionalCloudAuthoritative(digits);
 }
 
 export function isOperacionalCloudAuthoritative(cnpj: string): boolean {
   if (typeof window === "undefined") return false;
-  const raw = localStorage.getItem(`${CLOUD_OPERACIONAL_AUTHORITATIVE_PREFIX}${normalizeCnpj(cnpj)}`);
+  const digits = normalizeCnpj(cnpj);
+  if (
+    sessionOperacionalRestore?.cnpj === digits &&
+    (sessionOperacionalRestore.version ?? 0) > 0
+  ) {
+    return true;
+  }
+  const raw = localStorage.getItem(`${CLOUD_OPERACIONAL_AUTHORITATIVE_PREFIX}${digits}`);
   const n = Number(raw);
   return Number.isFinite(n) && n > 0;
 }
@@ -165,6 +195,52 @@ export function applyCloudOperationalResetIfNeeded(
   if (getCloudResetAppliedVersion(digits) >= cloudVer) return { data, changed: false };
 
   markCloudResetApplied(digits, cloudVer);
+  markOperacionalCloudAuthoritative(digits, cloudVer);
+  clearNotasSyncMeta(digits);
+  return { data: clearOperationalDataForCooperativa(data, coopId), changed: true };
+}
+
+/** Versão do reset já aplicada, mas operacional local ainda difere da nuvem (PWA/sync parcial). */
+export function reapplyCloudOperationalSliceIfStale(
+  data: AppData,
+  cnpj: string,
+  coopId: string,
+  cloud: CloudOperationalResetSignal & { pagamentosCooperado?: { id: string; cooperativaId?: string }[]; fichaCorrida?: { id: string; cooperativaId?: string }[] }
+): { data: AppData; changed: boolean } {
+  if (typeof window === "undefined") return { data, changed: false };
+  if (!cloud.fullReset) return { data, changed: false };
+
+  const digits = normalizeCnpj(cnpj);
+  const cloudVer = cloud.operationalResetVersion ?? 0;
+  if (cloudVer <= 0) return { data, changed: false };
+  if (getCloudResetAppliedVersion(digits) < cloudVer) return { data, changed: false };
+
+  const localPag = (data.pagamentosCooperado ?? [])
+    .filter((p) => p.cooperativaId === coopId)
+    .map((p) => p.id)
+    .sort()
+    .join("\n");
+  const cloudPag = (cloud.pagamentosCooperado ?? [])
+    .map((p) => ({ ...p, cooperativaId: p.cooperativaId ?? coopId }))
+    .filter((p) => p.cooperativaId === coopId)
+    .map((p) => p.id)
+    .sort()
+    .join("\n");
+  const localFicha = (data.fichaCorrida ?? [])
+    .filter((f) => f.cooperativaId === coopId)
+    .map((f) => f.id)
+    .sort()
+    .join("\n");
+  const cloudFicha = (cloud.fichaCorrida ?? [])
+    .map((f) => ({ ...f, cooperativaId: f.cooperativaId ?? coopId }))
+    .filter((f) => f.cooperativaId === coopId)
+    .map((f) => f.id)
+    .sort()
+    .join("\n");
+
+  if (localPag === cloudPag && localFicha === cloudFicha) return { data, changed: false };
+
+  markOperacionalCloudAuthoritative(digits, cloudVer);
   clearNotasSyncMeta(digits);
   return { data: clearOperationalDataForCooperativa(data, coopId), changed: true };
 }

@@ -6,6 +6,7 @@ import { getNotaCooperativaCnpj, getFotosExibicaoNota, mergeNotaComFotos, contar
 import { getCooperadoNome } from "@/utils/calculations";
 import { getData, saveDataSafe } from "@/services/dataStore";
 import { reconciliarFichaFromNotasConferidas, idsNotasPedidoExcluidas, aplicarNotasPedidoExcluidas } from "@/services/notaPedidoService";
+import { posProcessarFinanceiroLocal } from "@/services/operacionalLocalPostProcess";
 import { posProcessarIntegridadePagamentosCooperativa } from "@/services/pagamentoIntegridadeService";
 import { getCloudResetAppliedVersion } from "@/services/operationalReset";
 import { readNotaFotoAtIndex } from "@/services/localMediaStore";
@@ -1265,7 +1266,7 @@ export async function syncNotasPedidoFromCloud(
     merged = { ...merged, notasPedido: notas };
   }
 
-  const reconciled = reconciliarFichaFromNotasConferidas(merged);
+  const reconciled = posProcessarFinanceiroLocal(merged, digits);
   if (reconciled !== current) {
     saveDataSafe(reconciled);
   }
@@ -1317,7 +1318,7 @@ export async function refreshCooperadoNotasEmAnalise(
 
   if (atualizadas.length === 0) return 0;
 
-  const reconciled = reconciliarFichaFromNotasConferidas(merged);
+  const reconciled = posProcessarFinanceiroLocal(merged, digits);
   if (reconciled !== data) {
     saveDataSafe(reconciled);
   }

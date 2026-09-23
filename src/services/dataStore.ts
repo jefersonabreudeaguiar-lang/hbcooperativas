@@ -8,7 +8,7 @@ import { findCooperativaByCnpj, getCooperativaById, getUserCooperativaId, normal
 import { migrateInlinePhotosToIdb } from "@/services/localMediaMigration";
 import { compactarFotosNoArmazenamento, liberarEspacoArmazenamento, stripBinaryForPersist, buildSnapshotEmergenciaPersistencia } from "@/utils/fotoEntrega";
 import { ensureMensalidadesDoMes, ensureMensalidadeCooperado, sincronizarMensalidadeCooperativa } from "@/services/mensalidadeService";
-import { applyOperationalResetIfNeeded, clearOperationalData, isOperacionalCloudAuthoritative } from "@/services/operationalReset";
+import { applyOperationalResetIfNeeded, clearOperationalData } from "@/services/operationalReset";
 import { isCloudSyncInProgress } from "@/services/cloudSyncProgress";
 import { normalizeCreatorEmail, normalizeAuthEmail } from "@/lib/security/appCreator";
 import {
@@ -32,8 +32,8 @@ import {
   fetchCooperadosFromCloud,
   cpfCooperadoDigits,
 } from "@/services/cooperadoCloudService";
-import { reconciliarFichaFromNotasConferidas, ajustesFichaMesId } from "@/services/notaPedidoService";
-import { posProcessarIntegridadePagamentosCooperativa } from "@/services/pagamentoIntegridadeService";
+import { posProcessarFinanceiroLocal } from "@/services/operacionalLocalPostProcess";
+import { ajustesFichaMesId } from "@/services/notaPedidoService";
 import { forceNextFullNotasSync, clearNotasSyncMeta } from "@/services/syncMetaService";
 import { requestAppSync } from "@/services/syncRequest";
 import { normalizarPrestacaoContas, aplicarPrestacoesContasExcluidas } from "@/services/prestacaoContasService";
@@ -498,10 +498,7 @@ function runAutomaticTasks(data: AppData): AppData {
   const coopCnpj = data.cooperativas
     .map((c) => normalizeCnpj(c.cnpj ?? ""))
     .find((d) => d.length === 14);
-  const skipNotaReconciliar = coopCnpj ? isOperacionalCloudAuthoritative(coopCnpj) : false;
-  current = skipNotaReconciliar
-    ? posProcessarIntegridadePagamentosCooperativa(current)
-    : posProcessarIntegridadePagamentosCooperativa(reconciliarFichaFromNotasConferidas(current));
+  current = posProcessarFinanceiroLocal(current, coopCnpj);
   current = sincronizarMensalidadeCooperativa(current);
   const stripped = stripBinaryForPersist(current);
   return stripped;

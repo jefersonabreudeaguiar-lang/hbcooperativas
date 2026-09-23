@@ -24,7 +24,10 @@ import {
   markOperacionalCloudAuthoritative,
   clearOperacionalCloudAuthoritative,
   isOperacionalCloudAuthoritative,
+  noteOperacionalCloudRestoreFromFetch,
+  reapplyCloudOperationalSliceIfStale,
 } from "@/services/operationalReset";
+import { posProcessarFinanceiroLocal } from "@/services/operacionalLocalPostProcess";
 type WithUpdatedAt = { id: string; updatedAt?: string; createdAt?: string };
 
 /** Evita POST operacional repetido na mesma sessão quando o payload não mudou. */
@@ -49,12 +52,10 @@ export function cloudOperacionalRestoreAtivo(
 
 function finalizeOperacionalPullLocalState(
   data: AppData,
-  operacional?: OperacionalSyncPayload | null
+  operacional?: OperacionalSyncPayload | null,
+  cnpj?: string
 ): AppData {
-  if (cloudOperacionalRestoreAtivo(operacional)) {
-    return posProcessarIntegridadePagamentosCooperativa(data);
-  }
-  return posProcessarIntegridadePagamentosCooperativa(reconciliarFichaFromNotasConferidas(data));
+  return posProcessarFinanceiroLocal(data, cnpj);
 }
 
 /** Cooperado publica recibo assinado — não usa push operacional (restrição de gestão). */
@@ -1090,9 +1091,11 @@ async function fetchSyncBundle(cnpj: string): Promise<{
     if (!res.ok) return null;
     const json = await res.json();
     if (!json.configured) return null;
+    const operacional = json.operacional ?? null;
+    noteOperacionalCloudRestoreFromFetch(digits, operacional);
     return {
       contratos: json.contratos ?? null,
-      operacional: json.operacional ?? null,
+      operacional,
     };
   } catch {
     return null;
@@ -1382,6 +1385,9 @@ export async function syncOperacionalFromCloud(cnpj: string): Promise<boolean> {
   const coopId = resolveCoopId(current, cnpj);
   if (!coopId) return false;
 
+  const stale = reapplyCloudOperationalSliceIfStale(current, cnpj, coopId, bundle.operacional);
+  if (stale.changed) current = stale.data;
+
   const reset = applyCloudOperationalResetIfNeeded(current, cnpj, coopId, bundle.operacional);
   if (reset.changed) current = reset.data;
 
@@ -1461,11 +1467,17 @@ export async function ensureCloudOperationalResetApplied(
   const coopId = preferredCoopId ?? resolveCoopId(current, digits);
   if (!coopId) return false;
 
-  const reset = applyCloudOperationalResetIfNeeded(current, digits, coopId, bundle.operacional);
-  if (!reset.changed) return false;
+  let working = current;
+  const stale = reapplyCloudOperationalSliceIfStale(working, digits, coopId, bundle.operacional);
+  if (stale.changed) working = stale.data;
 
-  saveDataSafe(reset.data);
-  return true;
+  const reset = applyCloudOperationalResetIfNeeded(working, digits, coopId, bundle.operacional);
+  if (reset.changed || stale.changed) {
+    saveDataSafe(reset.changed ? reset.data : working);
+    return true;
+  }
+
+  return false;
 }
 
 /** Sync leve em background (cooperado no celular): perfil, cooperados, notas e operacional. */
@@ -1481,26 +1493,26 @@ export async function syncCooperativaBackground(
   try {
     await ensureCloudOperationalResetApplied(digits, preferredCoopId);
 
+    const bundleHint = await fetchSyncBundle(digits);
+    const restoreAtivo = cloudOperacionalRestoreAtivo(bundleHint?.operacional);
+
     await runWithBatchedSaveAsync(async () => {
       await syncCooperativaProfileFromCloud(digits);
       const coopId = preferredCoopId ?? resolveCoopId(getData(), digits);
       await syncCooperadosFromCloud(digits, coopId);
-      // Notas antes do operacional — ficha exige nota conferida local; senão purgarFichasInvalidas apaga tudo.
-      // Delta por padrão; full a cada 2 min ou quando repararIntegridade/ensureFinanceiro forçam.
-      await syncNotasPedidoFromCloud(digits);
-      await syncOperacionalFromCloud(digits);
+      if (restoreAtivo) {
+        await syncOperacionalFromCloud(digits);
+        await syncNotasPedidoFromCloud(digits);
+      } else {
+        await syncNotasPedidoFromCloud(digits);
+        await syncOperacionalFromCloud(digits);
+      }
       await syncContratosFromCloud(digits);
       const operacionalCloud = (await fetchSyncBundle(digits))?.operacional ?? null;
-      if (coopId) {
+      if (coopId && !isOperacionalCloudAuthoritative(digits)) {
         await repararIntegridadeFichaNotas(digits, coopId, cooperadoId);
-        if (
-          cooperadoId &&
-          cooperadoFichaValoresDesalinhados(getData(), cooperadoId, coopId)
-        ) {
-          saveDataSafe(finalizeOperacionalPullLocalState(getData(), operacionalCloud));
-        }
       }
-      saveDataSafe(finalizeOperacionalPullLocalState(getData(), operacionalCloud));
+      saveDataSafe(finalizeOperacionalPullLocalState(getData(), operacionalCloud, digits));
       if (cooperadoId && coopId) {
         const after = getData();
         const limpo = limparFichaObsoletaCooperado(after, cooperadoId, coopId);
@@ -1534,7 +1546,7 @@ export async function repararIntegridadeFichaNotas(
   clearNotasSyncMeta(digits);
   await syncNotasPedidoFromCloud(digits, { retryFull: true });
   await syncOperacionalFromCloud(digits);
-  saveDataSafe(posProcessarIntegridadePagamentosCooperativa(reconciliarFichaFromNotasConferidas(getData())));
+  saveDataSafe(posProcessarFinanceiroLocal(getData(), digits));
   return true;
 }
 
@@ -1556,7 +1568,9 @@ export async function ensureCooperadoFinanceiroFromCloud(
     data = getData();
   }
   if (cooperadoFichaValoresDesalinhados(data, cooperadoId, cooperativaId)) {
-    saveDataSafe(posProcessarIntegridadePagamentosCooperativa(reconciliarFichaFromNotasConferidas(data)));
+    if (!isOperacionalCloudAuthoritative(digits)) {
+      saveDataSafe(posProcessarFinanceiroLocal(data, digits));
+    }
     data = getData();
   }
   if (!cooperadoFinanceiroDesatualizado(data, cooperadoId, cooperativaId)) {
@@ -1570,10 +1584,13 @@ export async function ensureCooperadoFinanceiroFromCloud(
     await syncCooperadosFromCloud(digits, cooperativaId);
     await syncNotasPedidoFromCloud(digits, { retryFull: true });
     await syncOperacionalFromCloud(digits);
-    saveDataSafe(posProcessarIntegridadePagamentosCooperativa(reconciliarFichaFromNotasConferidas(getData())));
+    saveDataSafe(posProcessarFinanceiroLocal(getData(), digits));
 
     data = getData();
-    if (cooperadoFinanceiroDesatualizado(data, cooperadoId, cooperativaId)) {
+    if (
+      !isOperacionalCloudAuthoritative(digits) &&
+      cooperadoFinanceiroDesatualizado(data, cooperadoId, cooperativaId)
+    ) {
       await repararIntegridadeFichaNotas(digits, cooperativaId, cooperadoId);
     }
     data = getData();
@@ -1619,7 +1636,7 @@ export async function syncAllCooperativaFromCloud(cnpj: string, preferredCoopId?
     await syncContratosFromCloud(digits);
     await syncNotasPedidoFromCloud(digits);
     const operacionalCloud = (await fetchSyncBundle(digits))?.operacional ?? null;
-    saveDataSafe(finalizeOperacionalPullLocalState(getData(), operacionalCloud));
+    saveDataSafe(finalizeOperacionalPullLocalState(getData(), operacionalCloud, digits));
   });
 }
 

@@ -10,10 +10,18 @@ import {
   getTotalAPagarCooperado,
   reconciliarFichaFromNotasConferidas,
 } from "@/services/notaPedidoService";
+import { posProcessarFinanceiroLocal } from "@/services/operacionalLocalPostProcess";
+import { isOperacionalCloudAuthoritative } from "@/services/operationalReset";
+import { normalizeCnpj } from "@/utils/cooperativa";
 import { getCurrentMesReferencia } from "@/utils/format";
 
 const SYNC_COMPLETO_RATIO = 0.75;
 const TOL_VALOR = 0.02;
+
+function cnpjFromCooperativaId(data: AppData, cooperativaId: string): string {
+  const coop = data.cooperativas.find((c) => c.id === cooperativaId);
+  return coop ? normalizeCnpj(coop.cnpj ?? "") : "";
+}
 
 function notasConferidasCooperado(
   data: AppData,
@@ -291,7 +299,8 @@ export function aplicarSanidadeFinanceiroCooperadoLocal(
   cooperadoId: string,
   cooperativaId: string
 ): AppData {
-  let next = reconciliarFichaFromNotasConferidas(data);
+  const cnpj = cnpjFromCooperativaId(data, cooperativaId);
+  let next = posProcessarFinanceiroLocal(data, cnpj || undefined);
   next = limparFichaObsoletaCooperado(next, cooperadoId, cooperativaId);
   return next;
 }
@@ -337,6 +346,10 @@ export function cooperadoFinanceiroDesatualizado(
   cooperadoId: string,
   cooperativaId: string
 ): boolean {
+  const cnpj = cnpjFromCooperativaId(data, cooperativaId);
+  if (cnpj.length === 14 && isOperacionalCloudAuthoritative(cnpj)) {
+    return cooperadoFinanceiroLocalAusente(data, cooperadoId, cooperativaId);
+  }
   const sane = aplicarSanidadeFinanceiroCooperadoLocal(data, cooperadoId, cooperativaId);
   return (
     cooperadoFinanceiroLocalAusente(sane, cooperadoId, cooperativaId) ||

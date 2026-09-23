@@ -31,6 +31,7 @@ import {
   getMesesReferenciaPagamento,
 } from "@/services/notaPedidoService";
 import { listarPagamentosAguardandoAssinatura, listarPagamentosReciboAguardandoVerificacao } from "@/services/filaDoDiaService";
+import { isOperacionalCloudAuthoritative } from "@/services/operationalReset";
 import { listCooperadosComFichaNoMes, getCooperadoNomeResolvido, resolverCooperadoParaPagamento, fichaPertenceCooperado, listCooperadosDaCooperativa } from "@/services/cooperadoCloudService";
 import { resolveCooperativaCnpj, patchNotaPedidoInCloud } from "@/services/notaPedidoCloudService";
 import { useSyncContaCoopValorReceberPilot } from "@/hooks/useSyncContaCoopValorReceberPilot";
@@ -290,6 +291,23 @@ export default function FichaCorridaPage() {
     if (!data || !coopId) return [];
     return listarPagamentosReciboAguardandoVerificacao(data, coopId);
   }, [data, coopId]);
+
+  const totalBadgeFilaPagar = useMemo(() => {
+    const aguard = pagamentosAguardandoAssinatura.length;
+    const verif = pagamentosAguardandoVerificacao.length;
+    const restoreAtivo = Boolean(coopCnpjResumo && isOperacionalCloudAuthoritative(coopCnpjResumo));
+    if (restoreAtivo) {
+      const idsAguardando = new Set(pagamentosAguardandoAssinatura.map((p) => p.cooperadoId));
+      const paraPagarSemDuplicata = cooperadosParaPagar.filter((c) => !idsAguardando.has(c.id)).length;
+      return paraPagarSemDuplicata + aguard + verif;
+    }
+    return cooperadosParaPagar.length + aguard + verif;
+  }, [
+    coopCnpjResumo,
+    cooperadosParaPagar,
+    pagamentosAguardandoAssinatura,
+    pagamentosAguardandoVerificacao,
+  ]);
 
   const cooperadosNoSelect = !isCooperado && aba === "pagar" ? cooperadosParaPagar : cooperadosComFicha;
 
@@ -1268,9 +1286,7 @@ export default function FichaCorridaPage() {
               pagamentosAguardandoAssinatura.length > 0 ||
               pagamentosAguardandoVerificacao.length > 0) && (
               <span className="bg-amber-500 text-white text-xs font-bold px-1.5 py-0.5 rounded-full">
-                {cooperadosParaPagar.length +
-                  pagamentosAguardandoAssinatura.length +
-                  pagamentosAguardandoVerificacao.length}
+                {totalBadgeFilaPagar}
               </span>
             )}
           </button>
