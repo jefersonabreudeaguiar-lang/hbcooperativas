@@ -18,7 +18,7 @@ import { AlertBanner } from "@/components/ui/AlertBanner";
 import { PromptDialog, ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { Card } from "@/components/ui/Card";
 import { NotaFotoImg } from "@/components/ui/NotaFotoImg";
-import { migrateInlinePhotosToIdb } from "@/services/localMediaMigration";
+import { updateData, updateDataSafe, generateId, addAuditEntry, getData } from "@/services/dataStore";
 import { requestAppSync, requestAppSyncLight } from "@/services/syncRequest";
 import { forceNextFullNotasSync, shouldResponsavelForceFullNotasOnEntry } from "@/services/syncMetaService";
 import { useSyncStatus } from "@/components/sync/CooperativaSyncProvider";
@@ -48,6 +48,7 @@ import {
   syncOfflineDeliveryImages,
   finalizeNotaEntregaNaNuvem,
   deleteFotoRascunhoFromCloud,
+  confirmNotaDeletedFromCloud,
   deleteNotaPedidoFromCloud,
   queueNotaDelete,
   unqueueNotaDelete,
@@ -272,7 +273,6 @@ export default function NotasPedidoContent() {
   const uploadFilaRef = useRef(Promise.resolve());
   const lastFotoFileRef = useRef<File | null>(null);
   const lancandoRef = useRef(false);
-  const [conferenciaLancando, setConferenciaLancando] = useState(false);
   const filaConferenciaRef = useRef<{ total: number; concluidas: number; chave: string } | null>(null);
   const [filaConferenciaPos, setFilaConferenciaPos] = useState(0);
   const [filaConferenciaTotal, setFilaConferenciaTotal] = useState(0);
@@ -457,8 +457,7 @@ export default function NotasPedidoContent() {
         selectedNota.cooperadoNomeSnapshot?.trim() ||
         getCooperadoNomeResolvido(d0, conferenciaCooperadoId, coopId);
 
-      let itensSalvosFoto: NotaPedidoItem[] | undefined;
-      const saved = updateDataSafe((d) => {
+      updateData((d) => {
         const cooperadoIdCanonico = resolverCooperadoIdCanonico(
           d,
           conferenciaCooperadoId,
@@ -477,7 +476,9 @@ export default function NotasPedidoContent() {
           conferenciaItens.map((i) => ({ ...i, valorBruto: 0 })),
           conferenciaDescontoPct
         );
-        itensSalvosFoto = base.itens;
+        lancamentosFotoConferenciaRef.current.set(fotoIdx, base.itens);
+        fotosLancadasConferenciaRef.current.add(fotoIdx);
+        setFotosLancadasUi(new Set(fotosLancadasConferenciaRef.current));
 
         const divisao = resolverDivisaoConferencia(d, selectedNota);
         const fotoTag = `foto ${fotoIdx + 1}/`;
@@ -554,12 +555,6 @@ export default function NotasPedidoContent() {
         );
       });
 
-      if (!saved.ok) return { ok: false, error: saved.error };
-      if (itensSalvosFoto) {
-        lancamentosFotoConferenciaRef.current.set(fotoIdx, itensSalvosFoto);
-      }
-      fotosLancadasConferenciaRef.current.add(fotoIdx);
-      setFotosLancadasUi(new Set(fotosLancadasConferenciaRef.current));
       return { ok: true };
     },
     [
@@ -1953,8 +1948,6 @@ export default function NotasPedidoContent() {
   };
 
   const fecharConferirModal = () => {
-    lancandoRef.current = false;
-    setConferenciaLancando(false);
     if (lancamentoSequenciaTimerRef.current) {
       clearTimeout(lancamentoSequenciaTimerRef.current);
       lancamentoSequenciaTimerRef.current = null;
@@ -1985,21 +1978,6 @@ export default function NotasPedidoContent() {
       notaComFoto = await ensureNotaComFoto(d, nota, coopId);
     }
     const totalFotos = contarFotosEnviadasNota(notaComFoto);
-    if (d && coopId && totalFotos > 1) {
-      for (let i = 0; i < totalFotos; i++) {
-        const tag = `foto ${i + 1}/`;
-        if (
-          d.fichaCorrida.some(
-            (f) => f.notaPedidoId === notaComFoto.id && f.descricao.includes(tag)
-          )
-        ) {
-          fotosLancadasConferenciaRef.current.add(i);
-        }
-      }
-      if (fotosLancadasConferenciaRef.current.size > 0) {
-        setFotosLancadasUi(new Set(fotosLancadasConferenciaRef.current));
-      }
-    }
     if (
       notaComFoto.fotoNaNuvem &&
       totalFotos > 0 &&
@@ -2085,15 +2063,6 @@ export default function NotasPedidoContent() {
       setFilaConferenciaTotal(0);
     }
     await prepararConferenciaNota(nota);
-    if (!isCooperado) {
-      const liberar = () =>
-        updateDataSafe((d) => compactarFotosNoArmazenamento(liberarEspacoArmazenamento(d, 1)));
-      if (typeof requestIdleCallback !== "undefined") {
-        requestIdleCallback(() => void liberar(), { timeout: 800 });
-      } else {
-        setTimeout(() => void liberar(), 0);
-      }
-    }
     setConferirModal(true);
   };
 
@@ -2200,15 +2169,9 @@ export default function NotasPedidoContent() {
     [loadConferenciaFoto]
   );
 
-  const handleLancarNota = async () => {
+  const handleLancarNota = () => {
     if (lancamentoSequencia) return;
-    if (lancandoRef.current) {
-      setConferirErrors({
-        itens: "Conclusão em andamento. Aguarde alguns segundos ou feche e abra a entrega de novo.",
-      });
-      return;
-    }
-    if (!user || !data || !selectedNota) return;
+    if (lancandoRef.current || !user || !data || !selectedNota) return;
     const errors: typeof conferirErrors = {};
     if (conferenciaDivisaoQtd >= 2) {
       const ids = conferenciaDivisaoIds.slice(0, conferenciaDivisaoQtd);
@@ -2223,20 +2186,6 @@ export default function NotasPedidoContent() {
     if (Object.keys(errors).length) {
       setConferirErrors(errors);
       return;
-    }
-
-    try {
-      const base = getData() ?? data;
-      const migrated = await migrateInlinePhotosToIdb(base);
-      if (migrated !== base) {
-        const prep = updateDataSafe(() => migrated);
-        if (!prep.ok) {
-          setConferirErrors({ itens: prep.error });
-          return;
-        }
-      }
-    } catch {
-      /* IndexedDB indisponível — persistência ainda remove base64 no disco */
     }
 
     const qtdFotosAprovadas = contarFotosEnviadasNota(selectedNota);
@@ -2299,7 +2248,6 @@ export default function NotasPedidoContent() {
     }
 
     lancandoRef.current = true;
-    setConferenciaLancando(true);
     let notaAtualizada: NotaPedido | null = null;
     const notaId = selectedNota.id;
     const chaveAtual = getChaveGrupoConferencia(selectedNota, data, coopId);
@@ -2324,7 +2272,7 @@ export default function NotasPedidoContent() {
         ? valorAprovado / divisaoPreview.participantes.length
         : valorAprovado;
 
-    const persisted = updateDataSafe((d) => {
+    updateData((d) => {
       const now = new Date().toISOString();
       if (coopId && conferenciaInstId) setInstituicaoPadraoId(coopId, conferenciaInstId);
       const coopSel = cooperadosCoop.find((c) => c.id === conferenciaCooperadoId);
@@ -2485,13 +2433,6 @@ export default function NotasPedidoContent() {
       );
     });
 
-    if (!persisted.ok) {
-      setConferirErrors({ itens: persisted.error });
-      lancandoRef.current = false;
-      setConferenciaLancando(false);
-      return;
-    }
-
     void (async () => {
       try {
         if (notaAtualizada && coopId) {
@@ -2504,54 +2445,49 @@ export default function NotasPedidoContent() {
                   "Entrega lançada aqui, mas não sincronizou com a nuvem. Verifique a conexão."
               );
             } else {
-              await pushOperacionalToCloud(cnpj, getData(), coopId, { authoritative: true });
+              const d = getData();
+              await pushOperacionalToCloud(cnpj, d, coopId, { authoritative: true });
+              requestAppSync();
             }
           }
+        } else {
+          requestAppSync();
+        }
+
+        await aguardarSequenciaLancamentoFotos(selectedNota, qtdFotosAprovadas);
+
+        const proxima = obterProximaNotaConferencia(chaveAtual, notaId);
+
+        if (proxima) {
+          const mesmoGrupo = filaConferenciaRef.current?.chave === chaveAtual;
+          if (filaConferenciaRef.current && mesmoGrupo) {
+            filaConferenciaRef.current.concluidas += 1;
+            setFilaConferenciaPos(filaConferenciaRef.current.concluidas + 1);
+          } else if (filaConferenciaRef.current) {
+            setFilaConferenciaPos(1);
+          }
+          setLancadoMsg(
+            divisaoPreview
+              ? `Nota aprovada! ${formatCurrency(valorPorCooperado)} para cada (${msgBeneficiarios}). Abrindo a próxima entrega…`
+              : `Nota aprovada! ${formatCurrency(valorAprovado)} na ficha de ${msgBeneficiarios}. Abrindo a próxima entrega…`
+          );
+          setTimeout(() => setLancadoMsg(""), 4000);
+          await prepararConferenciaNota(proxima, { transicao: true });
+        } else {
+          fecharConferirModal();
+          setLancadoMsg(
+            divisaoPreview
+              ? `Nota aprovada! ${formatCurrency(valorPorCooperado)} para cada (${msgBeneficiarios}). Fila concluída!`
+              : `Nota aprovada! ${formatCurrency(valorAprovado)} na ficha de ${msgBeneficiarios}. Fila concluída!`
+          );
+          setTimeout(() => setLancadoMsg(""), 6000);
         }
       } catch {
         /* ignore */
       } finally {
-        requestAppSync();
+        lancandoRef.current = false;
       }
     })();
-
-    const proxima = obterProximaNotaConferencia(chaveAtual, notaId);
-    const msgAprovada = divisaoPreview
-      ? `Nota aprovada! ${formatCurrency(valorPorCooperado)} para cada (${msgBeneficiarios}).`
-      : `Nota aprovada! ${formatCurrency(valorAprovado)} na ficha de ${msgBeneficiarios}.`;
-
-    const finalizarPosAprovacaoUi = () => {
-      lancandoRef.current = false;
-      setConferenciaLancando(false);
-    };
-
-    if (proxima) {
-      const mesmoGrupo = filaConferenciaRef.current?.chave === chaveAtual;
-      if (filaConferenciaRef.current && mesmoGrupo) {
-        filaConferenciaRef.current.concluidas += 1;
-        setFilaConferenciaPos(filaConferenciaRef.current.concluidas + 1);
-      } else if (filaConferenciaRef.current) {
-        setFilaConferenciaPos(1);
-      }
-      setLancadoMsg(`${msgAprovada} Abrindo a próxima entrega…`);
-      setTimeout(() => setLancadoMsg(""), 4000);
-      void prepararConferenciaNota(proxima, { transicao: true }).finally(finalizarPosAprovacaoUi);
-      if (!multiFoto) {
-        void aguardarSequenciaLancamentoFotos(selectedNota, qtdFotosAprovadas);
-      }
-    } else if (multiFoto) {
-      fecharConferirModal();
-      setLancadoMsg(`${msgAprovada} Fila concluída!`);
-      setTimeout(() => setLancadoMsg(""), 6000);
-      finalizarPosAprovacaoUi();
-    } else {
-      void aguardarSequenciaLancamentoFotos(selectedNota, qtdFotosAprovadas).finally(() => {
-        fecharConferirModal();
-        setLancadoMsg(`${msgAprovada} Fila concluída!`);
-        setTimeout(() => setLancadoMsg(""), 6000);
-        finalizarPosAprovacaoUi();
-      });
-    }
   };
 
   const handleRejeitarNota = () => {
@@ -2640,6 +2576,18 @@ export default function NotasPedidoContent() {
     filaStickyIdsRef.current.delete(alvo.id);
     filaStickySnapshotRef.current.delete(alvo.id);
 
+    const d = getData();
+    const cnpjSync = await resolveCooperativaCnpj(d, coopId, user);
+    if (cnpjSync) {
+      const del = await deleteNotaPedidoFromCloud(cnpjSync, alvo.id);
+      if (del.ok && (await confirmNotaDeletedFromCloud(cnpjSync, alvo.id))) {
+        unqueueNotaDelete(cnpjSync, alvo.id);
+      }
+      await flushPendingNotaDeletes(cnpjSync);
+      await pushOperacionalToCloud(cnpjSync, d, coopId, { authoritative: true });
+    }
+    requestAppSync();
+
     setViewModal(false);
     setConferirModal(false);
     setSelectedNota(null);
@@ -2648,27 +2596,6 @@ export default function NotasPedidoContent() {
         ? `Entrega ${alvo.numeroNota} excluída e removida da ficha do cooperado.`
         : "Entrega excluída."
     );
-
-    const cnpjSync = cnpj ?? (await resolveCooperativaCnpj(getData(), coopId, user));
-    if (cnpjSync) {
-      void (async () => {
-        try {
-          const del = await deleteNotaPedidoFromCloud(cnpjSync, alvo.id);
-          if (del.ok) {
-            unqueueNotaDelete(cnpjSync, alvo.id);
-          } else {
-            await flushPendingNotaDeletes(cnpjSync);
-          }
-          await pushOperacionalToCloud(cnpjSync, getData(), coopId, { authoritative: true });
-        } catch {
-          await flushPendingNotaDeletes(cnpjSync).catch(() => {});
-        } finally {
-          requestAppSync();
-        }
-      })();
-    } else {
-      requestAppSync();
-    }
   };
 
   const executarRelancarEntregaResponsavel = async (alvo: NotaPedido) => {
@@ -2749,17 +2676,21 @@ export default function NotasPedidoContent() {
     const cnpj = await resolveCooperativaCnpj(data, coopId, user);
     if (cnpj) {
       queueNotaDelete(cnpj, excluirNotaTarget.id);
+      const del = await deleteNotaPedidoFromCloud(cnpj, excluirNotaTarget.id);
+      if (del.ok && (await confirmNotaDeletedFromCloud(cnpj, excluirNotaTarget.id))) {
+        unqueueNotaDelete(cnpj, excluirNotaTarget.id);
+      }
+      await flushPendingNotaDeletes(cnpj);
     }
 
     const eraRejeitada = excluirNotaTarget.status === "rejeitada";
-    const notaIdExcluir = excluirNotaTarget.id;
 
     updateData((d) =>
       addAuditEntry(
-        { ...d, notasPedido: d.notasPedido.filter((n) => n.id !== notaIdExcluir) },
+        { ...d, notasPedido: d.notasPedido.filter((n) => n.id !== excluirNotaTarget.id) },
         {
           entityType: "nota_pedido",
-          entityId: notaIdExcluir,
+          entityId: excluirNotaTarget.id,
           action: "excluir",
           userId: user.id,
           userName: user.name,
@@ -2779,25 +2710,6 @@ export default function NotasPedidoContent() {
         ? "Entrega excluída. Você pode enviar uma nova foto quando quiser."
         : "Entrega excluída. O responsável não verá mais esta foto."
     );
-
-    if (cnpj) {
-      void (async () => {
-        try {
-          const del = await deleteNotaPedidoFromCloud(cnpj, notaIdExcluir);
-          if (del.ok) {
-            unqueueNotaDelete(cnpj, notaIdExcluir);
-          } else {
-            await flushPendingNotaDeletes(cnpj);
-          }
-        } catch {
-          await flushPendingNotaDeletes(cnpj).catch(() => {});
-        } finally {
-          requestAppSync();
-        }
-      })();
-    } else {
-      requestAppSync();
-    }
   };
 
   const enviarOutraFoto = () => {
@@ -4097,13 +4009,12 @@ export default function NotasPedidoContent() {
             <Button variant="danger" onClick={() => { setMotivoRejeicao(""); setRejectModal(true); }} disabled={conferenciaTransicao || Boolean(lancamentoSequencia)}>
               <XCircle size={18} /> Pedir correção
             </Button>
-            <Button size="lg" onClick={() => void handleLancarNota()} disabled={conferenciaTransicao || Boolean(lancamentoSequencia) || conferenciaLancando}>
+            <Button size="lg" onClick={handleLancarNota} disabled={conferenciaTransicao || Boolean(lancamentoSequencia)}>
               <CheckCircle size={18} />
               {(() => {
                 if (lancamentoSequencia) {
                   return `Lançando foto ${lancamentoSequencia.displayIdx + 1} de ${lancamentoSequencia.total}…`;
                 }
-                if (conferenciaLancando) return "Concluindo entrega…";
                 if (conferenciaTransicao) return "Carregando próxima entrega…";
                 if (!selectedNota) return "Aprovar e lançar na ficha";
                 const qtdFotosBtn = contarFotosEnviadasNota(selectedNota);
