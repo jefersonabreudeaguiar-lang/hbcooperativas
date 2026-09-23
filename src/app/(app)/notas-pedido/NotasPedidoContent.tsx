@@ -4047,27 +4047,29 @@ export default function NotasPedidoContent() {
           </div>
         )}
         {selectedNota && (
-          <div className="flex flex-col lg:flex-row min-h-[calc(100dvh-8.5rem)]">
-            <div className="lg:w-[48%] xl:w-1/2 bg-gray-900 flex flex-col shrink-0 lg:min-h-[calc(100dvh-8.5rem)]">
-              <div className="flex-1 flex items-center justify-center p-4 min-h-[40vh] lg:min-h-0 overflow-y-auto">
+          <div className="flex flex-col lg:flex-row h-[calc(100dvh-8.5rem)] max-h-[calc(100dvh-8.5rem)] overflow-hidden">
+            <div className="flex flex-col w-full lg:w-[48%] xl:w-1/2 bg-gray-900 shrink-0 lg:h-full lg:min-h-0 overflow-hidden border-b border-gray-800 lg:border-b-0">
+              <div className="flex flex-col shrink-0 max-h-[48dvh] lg:max-h-none lg:flex-1 lg:min-h-0 overflow-hidden">
+                <div className="flex-1 min-h-0 flex items-center justify-center p-3 overflow-hidden">
                 {(() => {
                   if (lancamentoSequencia) {
                     const { url, displayIdx, total } = lancamentoSequencia;
                     return (
-                      <div className="w-full space-y-4 text-center">
-                        {/* eslint-disable-next-line @next/next/no-img-element */}
-                        <div className="inline-block max-w-full rounded-xl border-2 border-green-400/40 bg-black/30 p-2 shadow-lg ring-4 ring-green-500/50">
-                          {/* eslint-disable-next-line @next/next/no-img-element */}
-                          <img
-                            src={url}
-                            alt={`Lançada ${displayIdx + 1} de ${total}`}
-                            className="block max-w-full max-h-[75vh] lg:max-h-[calc(100dvh-11rem)] object-contain mx-auto"
-                          />
+                      <div className="w-full h-full flex flex-col items-center justify-center text-center min-h-0">
+                        <div className="flex-1 min-h-0 w-full flex items-center justify-center">
+                          <div className="inline-block max-w-full max-h-full rounded-xl border-2 border-green-400/40 bg-white/5 p-1.5 shadow-lg ring-4 ring-green-500/50">
+                            {/* eslint-disable-next-line @next/next/no-img-element */}
+                            <img
+                              src={url}
+                              alt={`Lançada ${displayIdx + 1} de ${total}`}
+                              className="block max-h-full max-w-full w-auto h-auto object-contain mx-auto lg:max-h-[calc(100dvh-15rem)]"
+                            />
+                          </div>
                         </div>
-                        <p className="text-green-400 font-semibold text-base">
+                        <p className="shrink-0 text-green-400 font-semibold text-sm mt-2 px-2">
                           Foto {displayIdx + 1} de {total} · Lançada na ficha ✓
                         </p>
-                        <div className="flex flex-wrap items-center justify-center gap-2">
+                        <div className="shrink-0 flex flex-wrap items-center justify-center gap-2 py-2 px-2">
                           {Array.from({ length: total }, (_, i) => (
                             <span
                               key={i}
@@ -4089,99 +4091,46 @@ export default function NotasPedidoContent() {
                   const totalFotos = contarFotosEnviadasNota(selectedNota);
                   const idx = Math.min(conferenciaFotoIdx, Math.max(0, totalFotos - 1));
                   if (totalFotos > 0) {
-                    return (
-                      <div className="w-full space-y-3">
-                        {conferenciaFotoCarregando && !conferenciaFotoAtualUrl ? (
-                          <p className="text-white/70 text-sm text-center py-12">Carregando foto…</p>
-                        ) : conferenciaFotoAtualUrl ? (
-                          <div className="w-full flex items-center justify-center">
-                            <div className="inline-block max-w-full rounded-xl border-2 border-white/25 bg-white/5 p-2 shadow-lg">
-                              {/* eslint-disable-next-line @next/next/no-img-element */}
-                              <img
-                                src={conferenciaFotoAtualUrl}
-                                alt={`Pedido ${idx + 1} de ${totalFotos}`}
-                                className="block max-w-full max-h-[75vh] lg:max-h-[calc(100dvh-11rem)] object-contain mx-auto bg-white/10"
-                                onError={() => {
-                                  setConferenciaFotoErro(
-                                    "A foto não pôde ser exibida neste aparelho. Toque em «Tentar de novo»."
-                                  );
-                                  setConferenciaFotoAtualUrl(null);
-                                }}
-                              />
-                            </div>
-                          </div>
-                        ) : (
-                          <div className="text-center py-10 px-4 space-y-3 max-w-md mx-auto">
-                            <p className="text-amber-200 text-sm">
-                              {conferenciaFotoErro ||
-                                "Foto ainda não carregou. Aguarde ou tente de novo."}
-                            </p>
-                            <Button
-                              type="button"
-                              variant="secondary"
-                              size="sm"
-                              onClick={() =>
-                                selectedNota &&
-                                void loadConferenciaFoto(selectedNota, idx).then((url) => {
-                                  if (!url && !conferenciaFotoErro) {
-                                    setConferenciaFotoErro(
-                                      "Não foi possível carregar a foto da nuvem."
-                                    );
-                                  }
-                                })
+                    return conferenciaFotoCarregando && !conferenciaFotoAtualUrl ? (
+                      <p className="text-white/70 text-sm text-center">Carregando foto…</p>
+                    ) : conferenciaFotoAtualUrl ? (
+                      <div className="inline-block max-w-full max-h-full rounded-xl border-2 border-white/25 bg-white/5 p-1.5 shadow-lg">
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img
+                          src={conferenciaFotoAtualUrl}
+                          alt={`Pedido ${idx + 1} de ${totalFotos}`}
+                          className="block max-h-full max-w-full w-auto h-auto object-contain mx-auto lg:max-h-[calc(100dvh-15rem)]"
+                          onError={() => {
+                            setConferenciaFotoErro(
+                              "A foto não pôde ser exibida neste aparelho. Toque em «Tentar de novo»."
+                            );
+                            setConferenciaFotoAtualUrl(null);
+                          }}
+                        />
+                      </div>
+                    ) : (
+                      <div className="text-center py-6 px-4 space-y-3 max-w-md mx-auto">
+                        <p className="text-amber-200 text-sm">
+                          {conferenciaFotoErro ||
+                            "Foto ainda não carregou. Aguarde ou tente de novo."}
+                        </p>
+                        <Button
+                          type="button"
+                          variant="secondary"
+                          size="sm"
+                          onClick={() =>
+                            selectedNota &&
+                            void loadConferenciaFoto(selectedNota, idx).then((url) => {
+                              if (!url && !conferenciaFotoErro) {
+                                setConferenciaFotoErro(
+                                  "Não foi possível carregar a foto da nuvem."
+                                );
                               }
-                            >
-                              Tentar de novo
-                            </Button>
-                          </div>
-                        )}
-                        {totalFotos > 1 && (
-                          <>
-                            <div className="flex flex-wrap items-center justify-center gap-2">
-                              {Array.from({ length: totalFotos }, (_, i) => (
-                                <button
-                                  key={i}
-                                  type="button"
-                                  onClick={() => irParaFotoConferencia(i)}
-                                  className={cn(
-                                    "text-xs font-semibold px-3 py-1.5 rounded-full border transition-all",
-                                    i === idx
-                                      ? "border-green-400 bg-green-500/20 text-green-100"
-                                      : fotosLancadasUi.has(i)
-                                        ? "border-green-600/60 bg-green-900/30 text-green-200"
-                                        : "border-white/20 text-white/70 hover:border-white/40"
-                                  )}
-                                >
-                                  Foto {i + 1}
-                                  {fotosLancadasUi.has(i) ? " ✓" : ""}
-                                </button>
-                              ))}
-                            </div>
-                            <div className="flex items-center justify-center gap-3 text-white/90 text-sm">
-                              <Button
-                                type="button"
-                                variant="secondary"
-                                size="sm"
-                                disabled={idx <= 0}
-                                onClick={() => irParaFotoConferencia(idx - 1)}
-                              >
-                                Anterior
-                              </Button>
-                              <span className="font-medium tabular-nums">
-                                Foto {idx + 1} de {totalFotos}
-                              </span>
-                              <Button
-                                type="button"
-                                variant="secondary"
-                                size="sm"
-                                disabled={idx >= totalFotos - 1}
-                                onClick={() => irParaFotoConferencia(idx + 1)}
-                              >
-                                Próxima foto
-                              </Button>
-                            </div>
-                          </>
-                        )}
+                            })
+                          }
+                        >
+                          Tentar de novo
+                        </Button>
                       </div>
                     );
                   }
@@ -4222,6 +4171,62 @@ export default function NotasPedidoContent() {
                   }
                   return <p className="text-gray-400 text-center py-12">Sem foto</p>;
                 })()}
+                </div>
+                {(() => {
+                  const totalFotosNav = contarFotosEnviadasNota(selectedNota);
+                  if (totalFotosNav <= 1) return null;
+                  const idxNav = Math.min(
+                    conferenciaFotoIdx,
+                    Math.max(0, totalFotosNav - 1)
+                  );
+                  return (
+                    <div className="shrink-0 border-t border-white/10 px-2 py-2 space-y-2 bg-gray-900/95">
+                      <div className="flex flex-wrap items-center justify-center gap-2">
+                        {Array.from({ length: totalFotosNav }, (_, i) => (
+                          <button
+                            key={i}
+                            type="button"
+                            onClick={() => irParaFotoConferencia(i)}
+                            className={cn(
+                              "text-xs font-semibold px-3 py-1.5 rounded-full border transition-all",
+                              i === idxNav
+                                ? "border-green-400 bg-green-500/20 text-green-100"
+                                : fotosLancadasUi.has(i)
+                                  ? "border-green-600/60 bg-green-900/30 text-green-200"
+                                  : "border-white/20 text-white/70 hover:border-white/40"
+                            )}
+                          >
+                            Foto {i + 1}
+                            {fotosLancadasUi.has(i) ? " ✓" : ""}
+                          </button>
+                        ))}
+                      </div>
+                      <div className="flex items-center justify-center gap-3 text-white/90 text-sm">
+                        <Button
+                          type="button"
+                          variant="secondary"
+                          size="sm"
+                          disabled={idxNav <= 0}
+                          onClick={() => irParaFotoConferencia(idxNav - 1)}
+                        >
+                          Anterior
+                        </Button>
+                        <span className="font-medium tabular-nums">
+                          Foto {idxNav + 1} de {totalFotosNav}
+                        </span>
+                        <Button
+                          type="button"
+                          variant="secondary"
+                          size="sm"
+                          disabled={idxNav >= totalFotosNav - 1}
+                          onClick={() => irParaFotoConferencia(idxNav + 1)}
+                        >
+                          Próxima foto
+                        </Button>
+                      </div>
+                    </div>
+                  );
+                })()}
               </div>
               <div className="shrink-0 px-4 py-3 bg-black/40 text-white text-sm space-y-0.5">
                 <p><strong>{getCooperadoNomeResolvido(data, selectedNota.cooperadoId, coopId)}</strong> · {formatDate(selectedNota.dataEntrega)}</p>
@@ -4235,7 +4240,7 @@ export default function NotasPedidoContent() {
               </div>
             </div>
 
-            <div className="flex-1 overflow-y-auto p-4 lg:p-6 space-y-4 bg-gray-50">
+            <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain p-4 lg:p-6 space-y-4 bg-gray-50">
               {filaConferenciaTotal > 1 && (
                 <AlertBanner variant="info" title={`Fila: ${filaConferenciaPos} de ${filaConferenciaTotal} entregas`}>
                   Ao aprovar, a próxima entrega abre aqui mesmo — sem fechar a tela — até lançar todas.
