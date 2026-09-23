@@ -8,7 +8,7 @@ import { getData } from "@/services/dataStore";
 import { resolveCooperativaCnpj } from "@/services/notaPedidoCloudService";
 import { isContaCoopValorReceberPilot } from "@/utils/contaCoopUiVisibility";
 
-const SYNC_INTERVAL_MS = 12_000;
+const SYNC_INTERVAL_MS = 60_000;
 
 type HookOpts = {
   cooperadoId?: string;
@@ -56,7 +56,15 @@ export function useSyncContaCoopValorReceberPilot(opts?: HookOpts) {
 
     const run = () => {
       const current = optsRef.current;
-      if (!current?.cnpj || cancelled || typeof navigator === "undefined" || !navigator.onLine) return;
+      if (
+        !current?.cnpj ||
+        cancelled ||
+        typeof navigator === "undefined" ||
+        !navigator.onLine ||
+        document.visibilityState !== "visible"
+      ) {
+        return;
+      }
       void refreshContaCoopValorReceberPilot(current).catch(() => {
         /* offline ou HB indisponível */
       });

@@ -56,7 +56,7 @@ import type { UserRole } from "@/types";
 
 const COOPERADO_PUSH_GAP_MS = 5 * 60 * 1000;
 /** Intervalo mínimo entre pulls de operacional só para votação (bem menor que sync completa). */
-const VOTACAO_OPERACIONAL_PULL_GAP_MS = 25_000;
+const VOTACAO_OPERACIONAL_PULL_GAP_MS = 45_000;
 /** Evita sync infinita — libera o chip "Atualizando…" mesmo em cooperativas grandes. */
 const SYNC_TIMEOUT_MS = 90_000;
 

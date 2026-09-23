@@ -8,7 +8,7 @@ import { getData } from "@/services/dataStore";
 import { resolveCooperativaCnpj } from "@/services/notaPedidoCloudService";
 import { isContaCoopValorReceberPilot } from "@/utils/contaCoopUiVisibility";
 
-const SYNC_INTERVAL_MS = 45_000;
+const SYNC_INTERVAL_MS = 90_000;
 
 type HookOpts = {
   cooperadoId?: string;
@@ -61,7 +61,15 @@ export function useSyncContaCoopLimiteFromFicha(opts?: HookOpts) {
 
     const run = () => {
       const current = optsRef.current;
-      if (!current?.cnpj || cancelled || typeof navigator === "undefined" || !navigator.onLine) return;
+      if (
+        !current?.cnpj ||
+        cancelled ||
+        typeof navigator === "undefined" ||
+        !navigator.onLine ||
+        document.visibilityState !== "visible"
+      ) {
+        return;
+      }
       void refreshContaCoopLimiteFromFicha(current).catch(() => {
         /* offline ou HB indisponível */
       });

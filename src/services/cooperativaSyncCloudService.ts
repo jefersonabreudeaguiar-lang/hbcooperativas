@@ -1387,7 +1387,7 @@ export const SYNC_INTERVAL_DESKTOP_MS = 15 * 60_000;
 export const SYNC_MIN_GAP_MS = 2 * 60_000;
 export const SYNC_MIN_GAP_MOBILE_MS = 2 * 60_000;
 /** Responsável / diretoria — permite nova sync mais cedo após salvar ou abrir tela. */
-export const SYNC_MIN_GAP_GESTAO_MS = 25_000;
+export const SYNC_MIN_GAP_GESTAO_MS = 45_000;
 
 export function isMobileDevice(): boolean {
   if (typeof window === "undefined") return false;
