@@ -503,7 +503,7 @@ export function CooperativaSyncProvider({ children }: { children: React.ReactNod
             void runSync();
           });
         } else {
-          void runSync();
+          void runSync({ force: true });
         }
       }
     }, user?.role === "cooperado" ? 0 : 400);

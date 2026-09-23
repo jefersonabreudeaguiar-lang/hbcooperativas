@@ -45,7 +45,7 @@ const supabase = createClient(url, serviceKey, {
 const ENTREGAS_BUCKET = "hb-entregas";
 const SYNC_BUCKET = "hb-cooperativa-sync";
 const COOPERADOS_BUCKET = "hb-cooperados";
-const OPERATIONAL_RESET_VERSION = 11;
+const OPERATIONAL_RESET_VERSION = 12;
 
 const MENSALIDADE_CONFIG_ZERADA = {
   valorPadrao: 0,

@@ -3,7 +3,7 @@ import { normalizeCnpj } from "@/utils/cooperativa";
 import { clearNotasSyncMeta } from "@/services/syncMetaService";
 
 /** Incremente ao publicar uma limpeza global de lançamentos nos dispositivos. */
-export const OPERATIONAL_RESET_VERSION = 11;
+export const OPERATIONAL_RESET_VERSION = 12;
 
 export const OPERATIONAL_RESET_STORAGE_KEY = "coopeagriplla_operational_reset_v";
 export const OPERATIONAL_RESET_CLOUD_KEY = "coopeagriplla_operational_reset_cloud_v";

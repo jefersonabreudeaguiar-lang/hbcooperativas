@@ -43,7 +43,7 @@ if (APPLY && projectRef && PRODUCTION_SUPABASE_PROJECT_REFS.includes(projectRef)
 }
 
 /** Deve bater com src/services/operationalReset.ts após deploy; nuvem pode ir 1 acima do app em produção. */
-const TARGET_RESET_VERSION = 11;
+const TARGET_RESET_VERSION = 12;
 const CNPJ = "62351750000165";
 
 const sb = createClient(url, serviceKey, {
