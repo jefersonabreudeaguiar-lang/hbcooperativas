@@ -369,11 +369,7 @@ export function CooperativaSyncProvider({ children }: { children: React.ReactNod
           } else {
             const pushCatalog = isDiretoriaRole(currentUser.role as UserRole);
             const pushMensalidades = isDiretoriaRole(currentUser.role as UserRole);
-            if (opts?.force) {
-              await syncCooperativaBidirectional(cnpj, currentCoopId, { pushCatalog, pushMensalidades });
-            } else {
-              await syncCooperativaBackground(cnpj, currentCoopId);
-            }
+            await syncCooperativaBidirectional(cnpj, currentCoopId, { pushCatalog, pushMensalidades });
           }
 
           if (currentUser.role === "cooperado" && currentUser.cooperadoId) {
@@ -466,7 +462,7 @@ export function CooperativaSyncProvider({ children }: { children: React.ReactNod
         markUserActivity();
         if (user?.role === "cooperado") {
           void hydrateCooperadoPagamentosFromCloud({ ignoreGap: true }).finally(() => {
-            void runSync();
+            void runSync({ force: true });
           });
         } else {
           void runSync({ force: true });

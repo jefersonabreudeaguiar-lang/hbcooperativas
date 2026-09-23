@@ -26,6 +26,7 @@ import {
   isOperacionalCloudAuthoritative,
   noteOperacionalCloudRestoreFromFetch,
   reapplyCloudOperationalSliceIfStale,
+  clearOperacionalFinanceiroForCooperativa,
 } from "@/services/operationalReset";
 import { posProcessarFinanceiroLocal } from "@/services/operacionalLocalPostProcess";
 type WithUpdatedAt = { id: string; updatedAt?: string; createdAt?: string };
@@ -540,6 +541,7 @@ function buildOperacionalPayload(data: AppData, coopId: string): OperacionalSync
 }
 
 function normalizeCloudOperacional(cloud: OperacionalSyncPayload): OperacionalSyncPayload {
+  if (cloud.fullReset === true) return cloud;
   if ((cloud.operationalResetVersion ?? 0) >= OPERATIONAL_RESET_VERSION) return cloud;
   return {
     ...cloud,
@@ -1390,6 +1392,10 @@ export async function syncOperacionalFromCloud(cnpj: string): Promise<boolean> {
 
   const reset = applyCloudOperationalResetIfNeeded(current, cnpj, coopId, bundle.operacional);
   if (reset.changed) current = reset.data;
+
+  if (cloudOperacionalRestoreAtivo(bundle.operacional)) {
+    current = clearOperacionalFinanceiroForCooperativa(current, coopId);
+  }
 
   const cloudCooperados = (await fetchCooperadosFromCloud(cnpj)).cooperados;
   const merged = mergeOperacionalIntoData(current, bundle.operacional, coopId, cloudCooperados);

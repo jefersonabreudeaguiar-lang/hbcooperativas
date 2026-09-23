@@ -3,7 +3,7 @@ import { normalizeCnpj } from "@/utils/cooperativa";
 import { clearNotasSyncMeta } from "@/services/syncMetaService";
 
 /** Incremente ao publicar uma limpeza global de lançamentos nos dispositivos. */
-export const OPERATIONAL_RESET_VERSION = 14;
+export const OPERATIONAL_RESET_VERSION = 15;
 
 export const OPERATIONAL_RESET_STORAGE_KEY = "coopeagriplla_operational_reset_v";
 export const OPERATIONAL_RESET_CLOUD_KEY = "coopeagriplla_operational_reset_cloud_v";
@@ -170,6 +170,36 @@ export function clearOperationalDataForCooperativa(data: AppData, coopId: string
     prestacoesContasExcluidas: (data.prestacoesContasExcluidas ?? []).filter((e) => !belongsToCoop(e)),
     comunicados: data.comunicados.filter((c) => !belongsToCoop(c)),
     reclamacoes: (data.reclamacoes ?? []).filter((r) => r.cooperativaId !== coopId),
+  };
+}
+
+/** Limpa ficha/pagamentos/arquivos da cooperativa — mantém notasPedido (pull operacional sem apagar entregas locais). */
+export function clearOperacionalFinanceiroForCooperativa(data: AppData, coopId: string): AppData {
+  const cooperadoIds = new Set(
+    data.cooperados.filter((c) => c.cooperativaId === coopId).map((c) => c.id)
+  );
+  const belongsToCoop = <T extends { cooperativaId?: string }>(item: T) =>
+    item.cooperativaId === coopId;
+  const belongsToCoopCooperado = <T extends { cooperadoId?: string }>(item: T) =>
+    Boolean(item.cooperadoId && cooperadoIds.has(item.cooperadoId));
+
+  return {
+    ...data,
+    fichaCorrida: data.fichaCorrida.filter((f) => !cooperadoIds.has(f.cooperadoId)),
+    pagamentosCooperado: data.pagamentosCooperado.filter((p) => !belongsToCoop(p)),
+    arquivosMensais: data.arquivosMensais.filter((a) => !belongsToCoop(a)),
+    ajustesFichaMes: (data.ajustesFichaMes ?? []).filter((a) => !belongsToCoop(a)),
+    mensalidades: data.mensalidades.filter((m) => !cooperadoIds.has(m.cooperadoId)),
+    cotas: data.cotas.filter((c) => !belongsToCoopCooperado(c)),
+    descontos: data.descontos.filter((d) => !cooperadoIds.has(d.cooperadoId)),
+    valoresAvulsosReceber: (data.valoresAvulsosReceber ?? []).filter((v) => !belongsToCoop(v)),
+    pagamentos: data.pagamentos.filter((p) => !belongsToCoopCooperado(p)),
+    financeiro: [],
+    fechamentos: [],
+    livroCaixa: (data.livroCaixa ?? []).filter((l) => !belongsToCoop(l)),
+    prestacoesContas: (data.prestacoesContas ?? []).filter((p) => !belongsToCoop(p)),
+    prestacoesContasExcluidas: (data.prestacoesContasExcluidas ?? []).filter((e) => !belongsToCoop(e)),
+    comunicados: data.comunicados.filter((c) => !belongsToCoop(c)),
   };
 }
 
