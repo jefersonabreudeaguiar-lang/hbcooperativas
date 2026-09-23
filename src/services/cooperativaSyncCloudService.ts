@@ -7,7 +7,7 @@ import { syncCooperadosFromCloud, fetchCooperadosFromCloud, pushCooperadoToCloud
 import { syncNotasPedidoFromCloud, patchNotaPedidoInCloud } from "@/services/notaPedidoCloudService";
 import { fetchCooperativaByCnpjFromCloud, mergeCooperativaIntoData } from "@/services/cooperativaCloudService";
 import { mergeArquivosMensaisFromCloud, reconciliarFichaFromNotasConferidas, dedupeFichaCorridaPorNota, aplicarNotasPedidoExcluidas } from "@/services/notaPedidoService";
-import { posProcessarIntegridadePagamentosCooperativa, cooperadoMesTemPagamentoNaLista } from "@/services/pagamentoIntegridadeService";
+import { posProcessarIntegridadePagamentosCooperativa, cooperadoMesTemPagamentoNaLista, type RegistroPagamentoResponsavelPatch } from "@/services/pagamentoIntegridadeService";
 import { ensureComunicadosAudioUploaded } from "@/services/comunicadoAudioSync";
 import { operacionalPushSeguro, precisaReparoFullSyncNotas, cooperadoFinanceiroDesatualizado, cooperadoFichaValoresDesalinhados, limparFichaObsoletaCooperado } from "@/services/fichaSyncGuard";
 import { beginCloudSync, endCloudSync } from "@/services/cloudSyncProgress";
@@ -75,6 +75,33 @@ export async function confirmarPagamentoCooperadoNaNuvem(
     return res.ok;
   } catch {
     return false;
+  }
+}
+
+/** Responsável publica pagamento registrado — contorna lock do POST operacional (fullReset). */
+export async function registrarPagamentoCooperadoNaNuvem(
+  cnpj: string,
+  patch: RegistroPagamentoResponsavelPatch
+): Promise<{ ok: boolean; error?: string; code?: string }> {
+  const digits = normalizeCnpj(cnpj);
+  if (digits.length !== 14) return { ok: false, error: "CNPJ inválido." };
+  try {
+    const res = await secureApiFetch("/api/cooperativa-sync/registrar-pagamento", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ cnpj: digits, ...patch }),
+    });
+    const json = (await res.json().catch(() => ({}))) as { error?: string; code?: string };
+    if (!res.ok) {
+      return {
+        ok: false,
+        error: json.error ?? "Não foi possível salvar o pagamento na nuvem.",
+        code: json.code,
+      };
+    }
+    return { ok: true };
+  } catch {
+    return { ok: false, error: "Sem conexão. Pagamento ficou só neste aparelho." };
   }
 }
 
@@ -848,6 +875,8 @@ export function mergeOperacionalIntoData(
 
   const cloudSyncTime = cloud.updatedAt;
   const cloudAuthoritative = cloud.fullReset === true;
+  const localPagCoop = data.pagamentosCooperado.filter((p) => p.cooperativaId === coopId);
+  const mergedPagamentosCoop = mergePagamentosCooperadoFromCloud(localPagCoop, cloudPagamentos);
 
   const localPautasCoop = (data.votacaoPautas ?? []).filter((p) => p.cooperativaId === coopId);
   const localVotosCoop = (data.votacaoVotos ?? []).filter((v) => v.cooperativaId === coopId);
@@ -906,12 +935,7 @@ export function mergeOperacionalIntoData(
     ],
     pagamentosCooperado: [
       ...filterCoop(data.pagamentosCooperado, (p) => p.cooperativaId === coopId),
-      ...(cloudAuthoritative
-        ? cloudPagamentos
-        : mergePagamentosCooperadoFromCloud(
-            data.pagamentosCooperado.filter((p) => p.cooperativaId === coopId),
-            cloudPagamentos
-          )),
+      ...mergedPagamentosCoop,
     ],
     comunicados: [
       ...filterCoop(data.comunicados, (c) => c.cooperativaId === coopId),
@@ -996,11 +1020,15 @@ export function mergeOperacionalIntoData(
       [
         ...filterCoop(data.fichaCorrida ?? [], (f) => f.cooperativaId === coopId),
         ...(cloudAuthoritative
-          ? cloudFichas
+          ? mergeFichaCorridaFromCloud(
+              (data.fichaCorrida ?? []).filter((f) => f.cooperativaId === coopId),
+              cloudFichas,
+              mergedPagamentosCoop
+            )
           : mergeFichaCorridaFromCloud(
               (data.fichaCorrida ?? []).filter((f) => f.cooperativaId === coopId),
               cloudFichas,
-              [...data.pagamentosCooperado.filter((p) => p.cooperativaId === coopId), ...cloudPagamentos]
+              [...localPagCoop, ...cloudPagamentos]
             )),
       ],
       data.notasPedido
@@ -1321,11 +1349,16 @@ export async function pushOperacionalToCloud(
   }
 
   try {
-    await secureApiFetch("/api/cooperativa-sync", {
+    const res = await secureApiFetch("/api/cooperativa-sync", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ cnpj: digits, section: "operacional", payload: payloadFinal }),
     });
+    if (!res.ok) {
+      const json = (await res.json().catch(() => ({}))) as { error?: string; code?: string };
+      console.warn("[operacional-push]", res.status, json.code ?? json.error ?? res.statusText);
+      return;
+    }
     lastOperacionalPushFingerprint.set(pushKey, fingerprint);
   } catch {
     /* offline */

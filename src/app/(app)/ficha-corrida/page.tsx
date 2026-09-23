@@ -42,6 +42,7 @@ import {
   pushNotasPagasToCloud,
   clearOperacionalPushFingerprint,
   confirmarPagamentoCooperadoNaNuvem,
+  registrarPagamentoCooperadoNaNuvem,
   syncOperacionalFromCloud,
 } from "@/services/cooperativaSyncCloudService";
 import { pushCooperadoToCloud } from "@/services/cooperadoCloudService";
@@ -190,6 +191,7 @@ export default function FichaCorridaPage() {
   const [pixEditarOpen, setPixEditarOpen] = useState(false);
   const [chavePixEdit, setChavePixEdit] = useState("");
   const [pagoMsg, setPagoMsg] = useState("");
+  const [pagoMsgVariant, setPagoMsgVariant] = useState<"success" | "error">("success");
   const [assinaturaModal, setAssinaturaModal] = useState(false);
   const [reciboSucessoOpen, setReciboSucessoOpen] = useState(false);
   const [assinatura, setAssinatura] = useState<string | null>(null);
@@ -972,12 +974,63 @@ export default function FichaCorridaPage() {
     });
     void (async () => {
       const cnpj = await resolveCooperativaCnpj(nextData, coopId, user);
-      if (!cnpj) return;
-      clearOperacionalPushFingerprint(cnpj, true);
-      await pushOperacionalToCloud(cnpj, nextData, coopId, {
-        authoritative: true,
-        forceOperacionalPush: true,
+      if (!cnpj) {
+        setPagoMsgVariant("error");
+        setPagoMsg(
+          "Pagamento salvo neste aparelho, mas o CNPJ da cooperativa não foi encontrado — não foi possível publicar na nuvem."
+        );
+        return;
+      }
+      const pagamento = [...nextData.pagamentosCooperado]
+        .filter(
+          (p) =>
+            p.cooperadoId === cooperadoSelecionado.id &&
+            p.cooperativaId === coopId &&
+            p.status === "aguardando_confirmacao"
+        )
+        .sort(
+          (a, b) =>
+            new Date(b.createdAt ?? 0).getTime() - new Date(a.createdAt ?? 0).getTime()
+        )[0];
+      if (!pagamento) {
+        setPagoMsgVariant("error");
+        setPagoMsg("Pagamento local registrado, mas não foi possível identificar o registro para enviar à nuvem.");
+        return;
+      }
+      const comunicado = [...nextData.comunicados]
+        .filter((c) => c.cooperadoId === cooperadoSelecionado.id && c.titulo === "Pagamento realizado")
+        .sort(
+          (a, b) =>
+            new Date(b.createdAt ?? 0).getTime() - new Date(a.createdAt ?? 0).getTime()
+        )[0];
+      const arquivosMensais = nextData.arquivosMensais.filter(
+        (a) =>
+          a.cooperadoId === cooperadoSelecionado.id &&
+          a.cooperativaId === coopId &&
+          mesesPagar.includes(a.mesReferencia)
+      );
+      const ajustesFichaMes = nextData.ajustesFichaMes.filter(
+        (a) => a.cooperativaId === coopId && mesesPagar.includes(a.mesReferencia)
+      );
+      const livroCaixa = (nextData.livroCaixa ?? []).filter((l) =>
+        l.origemId?.includes(pagamento.id)
+      );
+      const nuvem = await registrarPagamentoCooperadoNaNuvem(cnpj, {
+        pagamento,
+        comunicado,
+        arquivosMensais: arquivosMensais.length ? arquivosMensais : undefined,
+        ajustesFichaMes: ajustesFichaMes.length ? ajustesFichaMes : undefined,
+        livroCaixa: livroCaixa.length ? livroCaixa : undefined,
       });
+      if (!nuvem.ok) {
+        setPagoMsgVariant("error");
+        setPagoMsg(
+          nuvem.error ??
+            "Pagamento ficou neste aparelho. A nuvem não aceitou o registro — tente de novo ou fale com o suporte."
+        );
+        return;
+      }
+      clearOperacionalPushFingerprint(cnpj, true);
       await pushNotasPagasToCloud(
         cnpj,
         getResumoPagamentoConsolidadoCooperado(
@@ -989,20 +1042,23 @@ export default function FichaCorridaPage() {
         ).notaPedidoIds,
         nextData
       );
+      await syncOperacionalFromCloud(cnpj);
       await refreshContaCoopLimiteFromFicha({
         cnpj,
         cooperadoId: cooperadoSelecionado.id,
         cooperativaId: coopId,
         cooperadoNome: cooperadoSelecionado.nomeCompleto,
       }).catch(() => {});
+      requestAppSync();
+      setPagoMsgVariant("success");
+      setPagoMsg(
+        `Pagamento registrado! ${nomeCooperado.split(" ")[0]} foi notificado(a). Aguardando assinatura do recibo — veja a lista abaixo.`
+      );
     })();
     setConfirmPagamento(false);
     setCooperadoFilter("");
     setAba("pagar");
     setPixStepVisited(false);
-    setPagoMsg(
-      `Pagamento registrado! ${nomeCooperado.split(" ")[0]} foi notificado(a). Aguardando assinatura do recibo — veja a lista abaixo.`
-    );
   };
 
   const handleEnviarAssinatura = () => {
@@ -1067,6 +1123,7 @@ export default function FichaCorridaPage() {
     const nome = getCooperadoNomeResolvido(data, pagamento.cooperadoId, coopId).split(" ")[0];
     void syncPagamentoOperacional()
       .then(() => {
+        setPagoMsgVariant("success");
         setPagoMsg(`${nome} verá de novo o pedido de assinatura no início do app.`);
       })
       .finally(() => setAssinaturaBusyId(null));
@@ -1157,7 +1214,11 @@ export default function FichaCorridaPage() {
         }
       />
 
-      {pagoMsg && <AlertBanner variant="success" className="mb-4" onDismiss={() => setPagoMsg("")}>{pagoMsg}</AlertBanner>}
+      {pagoMsg && (
+        <AlertBanner variant={pagoMsgVariant} className="mb-4" onDismiss={() => setPagoMsg("")}>
+          {pagoMsg}
+        </AlertBanner>
+      )}
 
       {isCooperado && !visualizandoHistorico && conferindoPagamentoNuvem && (
         <AlertBanner variant="info" title="Conferindo pagamento na nuvem" className="mb-4">

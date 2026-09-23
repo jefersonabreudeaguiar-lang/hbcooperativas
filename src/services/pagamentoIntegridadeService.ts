@@ -1,4 +1,12 @@
-import type { AppData, FichaCorrida, PagamentoCooperadoRegistro } from "@/types";
+import type {
+  AppData,
+  ArquivoMensalCooperado,
+  AjustesFichaMesCooperativa,
+  Comunicado,
+  FichaCorrida,
+  LivroCaixaLancamento,
+  PagamentoCooperadoRegistro,
+} from "@/types";
 import type { OperacionalSyncPayload } from "@/lib/supabase/cooperativaSyncStorage";
 import {
   fichaPertenceCooperado,
@@ -287,6 +295,81 @@ export function aplicarPagamentoConfirmadoNoOperacional(
     ...operacional,
     pagamentosCooperado: [...map.values()],
     fichaCorrida,
+    updatedAt: new Date().toISOString(),
+  };
+}
+
+export type RegistroPagamentoResponsavelPatch = {
+  pagamento: PagamentoCooperadoRegistro;
+  comunicado?: Comunicado;
+  arquivosMensais?: ArquivoMensalCooperado[];
+  ajustesFichaMes?: AjustesFichaMesCooperativa[];
+  livroCaixa?: LivroCaixaLancamento[];
+};
+
+function mergeById<T extends { id: string }>(base: T[], incoming: T[] | undefined): T[] {
+  if (!incoming?.length) return base;
+  const map = new Map(base.map((x) => [x.id, x]));
+  for (const item of incoming) map.set(item.id, item);
+  return [...map.values()];
+}
+
+const PAGAMENTO_STATUS_RANK: Record<PagamentoCooperadoRegistro["status"], number> = {
+  aguardando_confirmacao: 0,
+  confirmado: 1,
+};
+
+function mergePagamentoRegistro(
+  prev: PagamentoCooperadoRegistro | undefined,
+  incoming: PagamentoCooperadoRegistro
+): PagamentoCooperadoRegistro {
+  if (!prev) return incoming;
+  if (prev.status === "confirmado" && incoming.status !== "confirmado") return prev;
+  if (incoming.status === "confirmado" && prev.status !== "confirmado") return incoming;
+  const prevRank = PAGAMENTO_STATUS_RANK[prev.status] ?? 0;
+  const incRank = PAGAMENTO_STATUS_RANK[incoming.status] ?? 0;
+  if (incRank > prevRank) return incoming;
+  if (prevRank > incRank) return prev;
+  const prevT = new Date(prev.updatedAt ?? prev.createdAt ?? 0).getTime();
+  const incT = new Date(incoming.updatedAt ?? incoming.createdAt ?? 0).getTime();
+  return incT >= prevT ? incoming : prev;
+}
+
+/** Responsável registra pagamento — mescla no operacional.json sem substituir o backup inteiro. */
+export function aplicarRegistroPagamentoResponsavelNoOperacional(
+  operacional: OperacionalSyncPayload,
+  patch: RegistroPagamentoResponsavelPatch
+): OperacionalSyncPayload {
+  const pagamento = patch.pagamento;
+  if (pagamento.status !== "aguardando_confirmacao") return operacional;
+
+  const pagMap = new Map<string, PagamentoCooperadoRegistro>();
+  for (const p of operacional.pagamentosCooperado ?? []) pagMap.set(p.id, p);
+  pagMap.set(pagamento.id, mergePagamentoRegistro(pagMap.get(pagamento.id), pagamento));
+
+  let fichaCorrida = marcarFichasOperacionalPagamento(operacional.fichaCorrida ?? [], pagamento);
+  const stub = {
+    cooperativas: [],
+    cooperados: [],
+    notasPedido: [],
+    fichaCorrida,
+    pagamentosCooperado: [...pagMap.values()],
+  } as unknown as AppData;
+  fichaCorrida = posProcessarIntegridadePagamentosCooperativa(stub).fichaCorrida ?? fichaCorrida;
+
+  let comunicados = operacional.comunicados ?? [];
+  if (patch.comunicado) {
+    comunicados = mergeById(comunicados, [patch.comunicado]);
+  }
+
+  return {
+    ...operacional,
+    pagamentosCooperado: [...pagMap.values()],
+    fichaCorrida,
+    comunicados,
+    arquivosMensais: mergeById(operacional.arquivosMensais ?? [], patch.arquivosMensais),
+    ajustesFichaMes: mergeById(operacional.ajustesFichaMes ?? [], patch.ajustesFichaMes),
+    livroCaixa: mergeById(operacional.livroCaixa ?? [], patch.livroCaixa),
     updatedAt: new Date().toISOString(),
   };
 }
