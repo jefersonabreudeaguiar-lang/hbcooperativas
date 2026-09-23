@@ -448,6 +448,54 @@ export async function listLimitesCooperados(
   return (data ?? []).map(mapLimiteRow);
 }
 
+/** Lista de limites exibida ao responsável — capada pela base autoritativa e re-sync se DB inflado. */
+export async function listLimitesCooperadosAlinhadosAEntregas(
+  supabase: SupabaseClient,
+  cnpj: string,
+  opts?: { resyncIfInflated?: boolean; actorUserId?: string }
+): Promise<ContaCoopLimiteCooperado[]> {
+  const limites = await listLimitesCooperados(supabase, cnpj);
+  if (!limites.length) return limites;
+
+  const cooperadoIds = limites.map((l) => l.cooperadoId);
+  const authoritative = await resolveAuthoritativeCreditBase(supabase, cnpj, cooperadoIds);
+  if (!authoritative.ok) return limites;
+
+  const teto = await resolveTetoGlobal(supabase, cnpj, authoritative.creditosBaseCents);
+  const tetoPercent = teto.configured ? teto.percent : 0;
+
+  const capped = limites.map((limite) =>
+    capContaCoopLimiteToAuthoritativeBase(
+      limite,
+      authoritative.creditosBaseCents[limite.cooperadoId] ?? 0,
+      tetoPercent
+    )
+  );
+
+  if (opts?.resyncIfInflated && opts.actorUserId) {
+    const toSync: string[] = [];
+    const creditosBaseCents: Record<string, number> = {};
+    for (let i = 0; i < limites.length; i++) {
+      const raw = limites[i];
+      const cap = capped[i];
+      if (cap.limiteLiberadoCents >= raw.limiteLiberadoCents) continue;
+      toSync.push(raw.cooperadoId);
+      creditosBaseCents[raw.cooperadoId] = authoritative.creditosBaseCents[raw.cooperadoId] ?? 0;
+    }
+    if (toSync.length) {
+      void syncLimitesCooperadosFromCreditoBase(
+        supabase,
+        cnpj,
+        toSync,
+        creditosBaseCents,
+        opts.actorUserId
+      ).catch(() => {});
+    }
+  }
+
+  return capped;
+}
+
 function mapLimiteRow(row: Record<string, unknown>, cashbackDisponivelCents = 0): ContaCoopLimiteCooperado {
   const limite = Number(row.limit_released_cents);
   const usado = Number(row.amount_used_cents);

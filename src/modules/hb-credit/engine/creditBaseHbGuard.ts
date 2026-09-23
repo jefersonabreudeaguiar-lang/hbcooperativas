@@ -8,6 +8,7 @@ import {
   purgarFichasInvalidas,
   reconciliarFichaFromNotasConferidas,
 } from "@/services/notaPedidoService";
+import { cooperadoExibirValorReceberInicio } from "@/services/cooperadoEntregasService";
 import { calcLimiteFromPercentual } from "./creditBaseFromFicha";
 import type { ContaCoopLimiteCooperado } from "../types";
 
@@ -68,6 +69,12 @@ export function blindarCreditoBaseCentsHb(
     return 0;
   }
   if (coopId && cooperadoFichaValoresDesalinhados(sane, cooperadoId, coopId)) {
+    return 0;
+  }
+
+  const canonico = resolverCooperadoIdCanonico(sane, cooperadoId, coopId);
+  const inicio = cooperadoExibirValorReceberInicio(sane, canonico, coopId);
+  if (!inicio.exibir || inicio.aguardandoAssinatura || inicio.valor <= 0) {
     return 0;
   }
 
