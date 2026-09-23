@@ -56,6 +56,15 @@ export function clearOperacionalCloudAuthoritative(cnpj: string): void {
   localStorage.removeItem(`${CLOUD_OPERACIONAL_AUTHORITATIVE_PREFIX}${digits}`);
 }
 
+/** Aparelho ignora novo reset na nuvem — use antes de “Restaurar da nuvem”. */
+export function resetCloudSyncMarkersForRestore(cnpj: string): void {
+  if (typeof window === "undefined") return;
+  const digits = normalizeCnpj(cnpj);
+  localStorage.removeItem(`${CLOUD_RESET_APPLIED_PREFIX}${digits}`);
+  clearOperacionalCloudAuthoritative(digits);
+  clearNotasSyncMeta(digits);
+}
+
 /** Chamado ao receber operacional da API — fila Pagar usa nuvem antes do merge terminar. */
 export function noteOperacionalCloudRestoreFromFetch(
   cnpj: string,

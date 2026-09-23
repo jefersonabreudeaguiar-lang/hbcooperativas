@@ -1166,6 +1166,9 @@ export async function pushOperacionalToCloud(
   if (cloudOperacionalRestoreAtivo(bundle?.operacional) && !options?.forceOperacionalPush) {
     return;
   }
+  if (!bundle?.operacional && !options?.forceOperacionalPush) {
+    return;
+  }
 
   // Snapshot inicial só para resolver CNPJ/coop; após awaits sempre reler getData()
   // para não sobrescrever ações do responsável feitas durante o fetch.
@@ -1256,9 +1259,7 @@ export async function pushOperacionalToCloud(
       ],
     };
   }
-  dataForPayload = posProcessarIntegridadePagamentosCooperativa(
-    reconciliarFichaFromNotasConferidas(dataForPayload)
-  );
+  dataForPayload = posProcessarFinanceiroLocal(dataForPayload, digits);
   saveDataSafe(dataForPayload);
   const payloadFinal = buildOperacionalPayload(dataForPayload, cid);
   if (bundle?.operacional) {
@@ -1301,13 +1302,12 @@ export async function pushOperacionalToCloud(
       payloadFinal.fichaCorrida?.length ?? 0
     )
   ) {
-    const repaired = posProcessarIntegridadePagamentosCooperativa(
-      reconciliarFichaFromNotasConferidas(
-        purgeComunicadosMarcadosExcluidos(
-          mergeOperacionalIntoData(afterPushCoop, bundle.operacional, cid, cloudCooperados),
-          cid
-        )
-      )
+    const repaired = posProcessarFinanceiroLocal(
+      purgeComunicadosMarcadosExcluidos(
+        mergeOperacionalIntoData(afterPushCoop, bundle.operacional, cid, cloudCooperados),
+        cid
+      ),
+      digits
     );
     saveDataSafe(repaired);
     return;

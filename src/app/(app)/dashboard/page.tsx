@@ -60,6 +60,7 @@ import { Camera, Wallet, ClipboardList, Users, Vote, Download, PenLine } from "l
 import { usePermissions } from "@/hooks/usePermissions";
 import { cooperadoTemAppInstalado, isAppStandalone, resumoInstalacaoApp } from "@/services/cooperadoAppInstallService";
 import { PageSkeleton } from "@/components/ui/PageSkeleton";
+import { RestoreOperacionalPanel } from "@/components/sync/RestoreOperacionalPanel";
 
 function CooperadoDashboard() {
   const { user } = useAuth();
@@ -175,6 +176,8 @@ function CooperadoDashboard() {
       !isAppStandalone() &&
       !cooperadoTemAppInstalado(cooperado!);
 
+    const cnpjDigits = cnpj ? normalizeCnpj(cnpj) : "";
+
     return {
       cooperadoId,
       mes,
@@ -197,6 +200,7 @@ function CooperadoDashboard() {
       coopId,
       mostrarAssinaturaPilot,
       precisaAssinatura,
+      cnpjDigits,
     };
   }, [user?.id, user?.cooperadoId, user?.cooperativaId, hbDescontosRevision]);
 
@@ -222,6 +226,7 @@ function CooperadoDashboard() {
     coopId: viewCoopId,
     mostrarAssinaturaPilot,
     precisaAssinatura,
+    cnpjDigits,
   } = view;
 
   return (
@@ -230,6 +235,10 @@ function CooperadoDashboard() {
         <h1 className="text-2xl font-bold text-gray-900">Olá, {cooperado?.nomeCompleto.split(" ")[0]}!</h1>
         <p className="text-sm text-gray-500 mt-1">{coopNome} · {formatMesReferencia(mes)}</p>
       </div>
+
+      {viewCoopId && cnpjDigits.length === 14 && (
+        <RestoreOperacionalPanel cnpj={cnpjDigits} coopId={viewCoopId} />
+      )}
 
       {cooperado && <AssinaturaStatusAviso cooperado={cooperado} />}
 
@@ -410,12 +419,12 @@ function AdminDashboard() {
       const coop = data.cooperativas.find((c) => c.id === coopId);
       if (coop?.cnpj) cnpj = normalizeCnpj(coop.cnpj);
     }
-    return { stats, coopNome, fila, mes, instalacao, assinatura, cnpj };
+    return { stats, coopNome, fila, mes, instalacao, assinatura, cnpj, coopId: coopId ?? "" };
   }, [user?.id, user?.cooperativaId, user?.role]);
 
   if (!view) return <PageSkeleton />;
 
-  const { stats, coopNome, fila, mes, instalacao, assinatura, cnpj } = view;
+  const { stats, coopNome, fila, mes, instalacao, assinatura, cnpj, coopId } = view;
 
   return (
     <div className="space-y-6 max-w-3xl">
@@ -423,6 +432,10 @@ function AdminDashboard() {
         <h1 className="text-2xl font-bold text-gray-900">Painel da cooperativa</h1>
         <p className="text-sm text-gray-500 mt-1">{coopNome} · {formatMesReferencia(mes)}</p>
       </div>
+
+      {cnpj.length === 14 && coopId && (
+        <RestoreOperacionalPanel cnpj={cnpj} coopId={coopId} />
+      )}
 
       {instalacao && instalacao.semApp > 0 && (
         <Link
