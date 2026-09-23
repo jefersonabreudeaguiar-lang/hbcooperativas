@@ -82,6 +82,26 @@ export type ForceRestoreOperacionalResult = {
   stats: OperacionalAlinhamentoStats;
 };
 
+export async function fetchOperacionalViaApi(cnpj: string): Promise<OperacionalSyncPayload | null> {
+  return fetchOperacionalFromApi(cnpj);
+}
+
+/** Após sync normal: se a nuvem está em restore e o aparelho diverge, força restauração completa. */
+export async function ensureOperacionalAlinhadoComNuvem(
+  cnpj: string,
+  coopId: string
+): Promise<ForceRestoreOperacionalResult> {
+  const operacional = await fetchOperacionalFromApi(cnpj);
+  const stats = medirOperacionalLocalVsNuvem(getData(), coopId, operacional);
+  if (!stats.cloudFullReset) {
+    return { ok: true, message: "Modo normal (sem restore na nuvem).", stats };
+  }
+  if (!stats.desalinhado) {
+    return { ok: true, message: "Aparelho alinhado ao backup na nuvem.", stats };
+  }
+  return forceRestoreOperacionalFromCloud(cnpj, coopId);
+}
+
 /** Limpa financeiro local da cooperativa e baixa operacional + notas da nuvem (backup publicado). */
 export async function forceRestoreOperacionalFromCloud(
   cnpj: string,

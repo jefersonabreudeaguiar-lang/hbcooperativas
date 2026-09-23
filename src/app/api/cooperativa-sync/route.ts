@@ -41,7 +41,9 @@ export async function GET(request: Request) {
   ]);
 
   const operacional = operacionalRaw
-    ? sanitizarOperacionalSyncPayload(operacionalRaw, reconciliarFichaFromNotasConferidas)
+    ? operacionalRaw.fullReset === true
+      ? operacionalRaw
+      : sanitizarOperacionalSyncPayload(operacionalRaw, reconciliarFichaFromNotasConferidas)
     : null;
 
   return NextResponse.json({ configured: true, contratos, operacional });
@@ -90,7 +92,24 @@ export async function POST(request: Request) {
   }
 
   if (section === "operacional") {
+    const existing = await fetchOperacionalSync(supabase, cnpj);
     const raw = body.payload as OperacionalSyncPayload;
+    if (existing?.fullReset === true) {
+      const prevVer = existing.operationalResetVersion ?? 0;
+      const nextVer = raw.operationalResetVersion ?? 0;
+      const restoreScriptPublish = raw.fullReset === true && nextVer > prevVer;
+      if (!restoreScriptPublish) {
+        return NextResponse.json(
+          {
+            error:
+              "A nuvem está com backup restaurado (somente leitura). No app, use Início → Restaurar da nuvem.",
+            code: "OPERACIONAL_RESTORE_LOCK",
+          },
+          { status: 423 }
+        );
+      }
+    }
+
     const payload = sanitizarOperacionalSyncPayload(raw, reconciliarFichaFromNotasConferidas);
     if (payload.wipeNotas === true) {
       await deleteAllNotasForCnpj(supabase, cnpj);

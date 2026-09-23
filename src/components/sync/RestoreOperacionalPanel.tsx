@@ -9,10 +9,9 @@ import { getData } from "@/services/dataStore";
 import {
   forceRestoreOperacionalFromCloud,
   medirOperacionalLocalVsNuvem,
+  fetchOperacionalViaApi,
   type OperacionalAlinhamentoStats,
 } from "@/services/operacionalRestoreService";
-import { secureApiFetch } from "@/lib/security/clientSession";
-import type { OperacionalSyncPayload } from "@/lib/supabase/cooperativaSyncStorage";
 import { APP_BUILD_VERSION } from "@/lib/appBuildVersion";
 
 type Props = {
@@ -21,19 +20,9 @@ type Props = {
   compact?: boolean;
 };
 
-async function fetchOperacional(cnpj: string): Promise<OperacionalSyncPayload | null> {
-  try {
-    const res = await secureApiFetch(`/api/cooperativa-sync?cnpj=${cnpj}`, { cache: "no-store" });
-    if (!res.ok) return null;
-    const json = (await res.json()) as { operacional?: OperacionalSyncPayload | null };
-    return json.operacional ?? null;
-  } catch {
-    return null;
-  }
-}
-
 export function RestoreOperacionalPanel({ cnpj, coopId, compact }: Props) {
-  const [cloudOp, setCloudOp] = useState<OperacionalSyncPayload | null>(null);
+  const [cloudOp, setCloudOp] = useState<Awaited<ReturnType<typeof fetchOperacionalViaApi>>>(null);
+  const [apiFailed, setApiFailed] = useState(false);
   const [stats, setStats] = useState<OperacionalAlinhamentoStats | null>(null);
   const [loadingCloud, setLoadingCloud] = useState(true);
   const [restoring, setRestoring] = useState(false);
@@ -50,7 +39,8 @@ export function RestoreOperacionalPanel({ cnpj, coopId, compact }: Props) {
 
   const refreshCloudStats = useCallback(async () => {
     setLoadingCloud(true);
-    const op = await fetchOperacional(cnpj);
+    const op = await fetchOperacionalViaApi(cnpj);
+    setApiFailed(!op);
     setCloudOp(op);
     setStats(medirOperacionalLocalVsNuvem(getData(), coopId, op));
     setLoadingCloud(false);
@@ -76,8 +66,19 @@ export function RestoreOperacionalPanel({ cnpj, coopId, compact }: Props) {
 
   if (loadingCloud && !stats) return null;
 
+  if (!loadingCloud && apiFailed && !stats) {
+    return (
+      <AlertBanner variant="error" title="Não foi possível ler o backup na nuvem">
+        <p className="text-sm">
+          Login ou internet pode ter falhado (build {APP_BUILD_VERSION}). Saia, entre de novo e aguarde a
+          sincronização terminar.
+        </p>
+      </AlertBanner>
+    );
+  }
+
   const restoreAtivo = stats?.cloudFullReset === true;
-  const showPanel = restoreAtivo && (stats?.desalinhado || resultMsg);
+  const showPanel = restoreAtivo && (stats?.desalinhado || resultMsg || apiFailed);
 
   if (!restoreAtivo && !resultMsg) return null;
   if (!showPanel && !resultMsg && compact) return null;

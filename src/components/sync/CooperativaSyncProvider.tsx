@@ -32,6 +32,7 @@ import {
 } from "@/services/cooperativaSyncCloudService";
 import { cooperadoFinanceiroDesatualizado, aplicarSanidadeFinanceiroCooperadoLocal } from "@/services/fichaSyncGuard";
 import { avaliarIntegridadeFinanceiroCooperado } from "@/services/cooperadoFinanceiroGuard";
+import { ensureOperacionalAlinhadoComNuvem } from "@/services/operacionalRestoreService";
 import { refreshContaCoopDescontosAfterOperacionalSync } from "@/lib/hb-credit/syncContaCoopFichaDescontos";
 import { pushCooperadoToCloud, resolverCooperadoIdCanonico, flushPendingCooperadoPushes, notaPertenceCooperado } from "@/services/cooperadoCloudService";
 import { registerSyncHandler, registerVotacaoOperacionalSyncHandler } from "@/services/syncRequest";
@@ -393,6 +394,12 @@ export function CooperativaSyncProvider({ children }: { children: React.ReactNod
       );
 
       completed = true;
+
+      const align = await ensureOperacionalAlinhadoComNuvem(cnpj, currentCoopId);
+      if (!align.ok) {
+        setLastSyncError(align.message);
+      }
+
       if (cooperadoLogado && currentUser.cooperadoId) {
         const cooperadoCanonico = resolverCooperadoIdCanonico(
           getData(),
