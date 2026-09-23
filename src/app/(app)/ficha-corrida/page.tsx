@@ -297,9 +297,7 @@ export default function FichaCorridaPage() {
     const verif = pagamentosAguardandoVerificacao.length;
     const restoreAtivo = Boolean(coopCnpjResumo && isOperacionalCloudAuthoritative(coopCnpjResumo));
     if (restoreAtivo) {
-      const idsAguardando = new Set(pagamentosAguardandoAssinatura.map((p) => p.cooperadoId));
-      const paraPagarSemDuplicata = cooperadosParaPagar.filter((c) => !idsAguardando.has(c.id)).length;
-      return paraPagarSemDuplicata + aguard + verif;
+      return aguard + verif;
     }
     return cooperadosParaPagar.length + aguard + verif;
   }, [

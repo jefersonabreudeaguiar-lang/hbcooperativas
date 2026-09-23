@@ -1056,12 +1056,15 @@ export function mergeOperacionalIntoData(
   const cloudResetLimpouMensalidades =
     cloud.fullReset === true && (cloud.mensalidades ?? []).length === 0;
 
+  const posMergeFinanceiro = (draft: AppData): AppData =>
+    cloudAuthoritative
+      ? posProcessarIntegridadePagamentosCooperativa(draft)
+      : posProcessarIntegridadePagamentosCooperativa(reconciliarFichaFromNotasConferidas(draft));
+
   if (cloudResetLimpouMensalidades) {
     return purgeComunicadosMarcadosExcluidos(
       aplicarNotasPedidoExcluidas(
-        aplicarPrestacoesContasExcluidas(
-          posProcessarIntegridadePagamentosCooperativa(reconciliarFichaFromNotasConferidas(next))
-        ),
+        aplicarPrestacoesContasExcluidas(posMergeFinanceiro(next)),
         coopId
       ),
       coopId
@@ -1071,9 +1074,7 @@ export function mergeOperacionalIntoData(
   return purgeComunicadosMarcadosExcluidos(
     sincronizarMensalidadeCooperativa(
       aplicarNotasPedidoExcluidas(
-        aplicarPrestacoesContasExcluidas(
-          posProcessarIntegridadePagamentosCooperativa(reconciliarFichaFromNotasConferidas(next))
-        ),
+        aplicarPrestacoesContasExcluidas(posMergeFinanceiro(next)),
         coopId
       ),
       coopId

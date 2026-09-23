@@ -1005,8 +1005,7 @@ export async function republishLocalAguardandoConferencia(
   }
 
   if (adoptedChanged) {
-    const reconciled = reconciliarFichaFromNotasConferidas(adopted);
-    saveDataSafe(reconciled);
+    saveDataSafe(posProcessarFinanceiroLocal(adopted, digits));
   }
 
   return okCount;
@@ -1199,11 +1198,7 @@ export async function syncNotasPedidoFromCloud(
         return false;
       });
       if (filtered.length !== current.notasPedido.length) {
-        saveDataSafe(
-          posProcessarIntegridadePagamentosCooperativa(
-            reconciliarFichaFromNotasConferidas({ ...current, notasPedido: filtered })
-          )
-        );
+        saveDataSafe(posProcessarFinanceiroLocal({ ...current, notasPedido: filtered }, digits));
       }
     }
     markNotasSyncDone(digits, true, [], serverWatermark);
