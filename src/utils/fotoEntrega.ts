@@ -456,6 +456,26 @@ export function stripBinaryForPersist(data: AppData): AppData {
       };
     }
 
+    /** Responsável: entrega na fila não precisa de base64 local — foto vem da nuvem na conferência. */
+    if (n.status === "aguardando_conferencia") {
+      const keepRef = (v?: string) => (v && isLocalMediaRef(v) ? v : undefined);
+      const fotosPedido = n.fotosPedido
+        ?.map((f) => (isLocalMediaRef(f) ? f : undefined))
+        .filter((f): f is string => !!f);
+      return {
+        ...n,
+        fotoPedido: keepRef(n.fotoPedido) ?? fotosPedido?.[0],
+        fotosPedido: fotosPedido?.length ? fotosPedido : undefined,
+        fotoPedidoMiniatura: undefined,
+        fotosPedidoMiniaturas: undefined,
+        fotosMeta: n.fotosMeta?.map((f) => ({
+          ...f,
+          url: isInlineDataUrl(f.url) ? undefined : f.url,
+          thumbnailUrl: isInlineDataUrl(f.thumbnailUrl) ? undefined : f.thumbnailUrl,
+        })),
+      };
+    }
+
     const keepRef = (v?: string) => (v && isLocalMediaRef(v) ? v : undefined);
 
     const fotosPedido = n.fotosPedido

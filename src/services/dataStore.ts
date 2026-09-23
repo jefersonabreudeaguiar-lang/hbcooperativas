@@ -158,19 +158,29 @@ export async function runWithBatchedSaveAsync(fn: () => Promise<void>): Promise<
   }
 }
 
+const STORAGE_FULL_MESSAGE =
+  "Armazenamento do navegador cheio. Com internet, tente lançar de novo — o app remove fotos antigas já salvas na nuvem para liberar espaço.";
+
+function buildPersistCandidates(data: AppData): AppData[] {
+  const stripped = stripBinaryForPersist(data);
+  const nivel1 = liberarEspacoArmazenamento(stripped, 1);
+  const nivel2 = liberarEspacoArmazenamento(stripped, 2);
+  return [
+    stripped,
+    nivel1,
+    nivel2,
+    { ...nivel2, auditLog: nivel2.auditLog.slice(0, 15) },
+  ];
+}
+
 function persistDataToStorage(
   data: AppData,
   options?: { skipNotify?: boolean }
 ): { ok: true } | { ok: false; error: string } {
   if (typeof window === "undefined") return { ok: true };
 
-  const stripped = stripBinaryForPersist(data);
   const previousCache = memoryCache;
-  const candidates = [
-    stripped,
-    liberarEspacoArmazenamento(stripped, 1),
-    liberarEspacoArmazenamento(stripped, 2),
-  ];
+  const candidates = buildPersistCandidates(data);
 
   for (let i = 0; i < candidates.length; i++) {
     const candidate = candidates[i];
@@ -197,8 +207,7 @@ function persistDataToStorage(
   memoryCache = previousCache ?? memoryCache;
   return {
     ok: false,
-    error:
-      "Memória do navegador cheia. Envie a entrega agora (com internet) ou remova fotos antigas antes de anexar mais.",
+    error: STORAGE_FULL_MESSAGE,
   };
 }
 
@@ -656,7 +665,7 @@ export function updateDataSafe(
   if (!saved.ok) {
     memoryCache = current;
     notifyImmediate();
-    return saved;
+    return { ok: false, error: saved.error };
   }
   return { ok: true, data: memoryCache ?? updated };
 }

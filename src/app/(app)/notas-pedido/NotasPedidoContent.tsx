@@ -2085,6 +2085,15 @@ export default function NotasPedidoContent() {
       setFilaConferenciaTotal(0);
     }
     await prepararConferenciaNota(nota);
+    if (!isCooperado) {
+      const liberar = () =>
+        updateDataSafe((d) => compactarFotosNoArmazenamento(liberarEspacoArmazenamento(d, 1)));
+      if (typeof requestIdleCallback !== "undefined") {
+        requestIdleCallback(() => void liberar(), { timeout: 800 });
+      } else {
+        setTimeout(() => void liberar(), 0);
+      }
+    }
     setConferirModal(true);
   };
 
