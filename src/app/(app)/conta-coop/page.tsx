@@ -142,29 +142,33 @@ function ContaCoopContent() {
     setError("");
     try {
       if (cooperadosAtivos.length) {
-        await syncCreditLimiteFromFicha({
+        void syncCreditLimiteFromFicha({
           cnpj,
           cooperadoIds: cooperadosAtivos.map((c) => c.id),
           creditosBaseCents: creditosBaseColetivo,
         }).catch(() => {});
       }
-      const [dash, lim, parc, pixReqs, pinReqs, coopPinReqs] = await Promise.all([
-        fetchCreditDashboard(cnpj, creditosBaseColetivo),
-        fetchCreditLimites(cnpj),
-        fetchCreditParceiros(cnpj),
+
+      const dash = await fetchCreditDashboard(cnpj, creditosBaseColetivo);
+      setDashboard(dash);
+      setLoading(false);
+
+      void Promise.all([fetchCreditLimites(cnpj), fetchCreditParceiros(cnpj)]).then(([lim, parc]) => {
+        setLimites(lim);
+        setParceiros(parc);
+      });
+
+      void Promise.all([
         fetchPartnerPixChangeRequests(cnpj, "pendente").catch(() => []),
         fetchPartnerPinResetRequests(cnpj).catch(() => []),
         fetchCooperadoPinResetRequests(cnpj).catch(() => []),
-      ]);
-      setDashboard(dash);
-      setLimites(lim);
-      setParceiros(parc);
-      setPixChangeRequests(pixReqs);
-      setPinResetRequests(pinReqs);
-      setCooperadoPinResetRequests(coopPinReqs);
+      ]).then(([pixReqs, pinReqs, coopPinReqs]) => {
+        setPixChangeRequests(pixReqs);
+        setPinResetRequests(pinReqs);
+        setCooperadoPinResetRequests(coopPinReqs);
+      });
     } catch (e) {
       setError(e instanceof Error ? e.message : "Erro ao carregar HB Créditos.");
-    } finally {
       setLoading(false);
     }
   }, [cnpj, creditosBaseColetivo, cooperadosAtivos]);
@@ -423,7 +427,7 @@ function ContaCoopContent() {
   const pinCooperadoBloqueado = (limite: ContaCoopLimiteCooperado) =>
     Boolean(limite.pinLockedUntil && new Date(limite.pinLockedUntil).getTime() > Date.now());
 
-  if (loading && !dashboard) return <PageSkeleton />;
+  if (!cnpj || (loading && !dashboard)) return <PageSkeleton />;
 
   return (
     <div className="mx-auto max-w-5xl space-y-5 pb-8">

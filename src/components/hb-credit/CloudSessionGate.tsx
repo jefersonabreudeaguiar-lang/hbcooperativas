@@ -6,6 +6,7 @@ import { useAuth } from "@/modules/auth/AuthProvider";
 import {
   ensureCloudSessionReady,
   getLastCloudSyncError,
+  isCloudSessionActive,
   userToCloudProfile,
 } from "@/lib/security/clientSession";
 import { PageSkeleton } from "@/components/ui/PageSkeleton";
@@ -23,23 +24,25 @@ export function CloudSessionGate({ children }: { children: React.ReactNode }) {
     if (!user) return false;
     setError("");
 
-    try {
-      const schemaRes = await fetch("/api/auth/schema-status", { cache: "no-store" });
-      const schemaJson = (await schemaRes.json().catch(() => ({}))) as {
-        appUsersTableOk?: boolean;
-        message?: string;
-        code?: string;
-      };
-      if (schemaJson.appUsersTableOk === false) {
-        setReady(false);
-        setError(
-          schemaJson.message ??
-            "Conta na nuvem não configurada (tabela app_users). Fale com o suporte HB Cooperativas."
-        );
-        return false;
+    if (!isCloudSessionActive()) {
+      try {
+        const schemaRes = await fetch("/api/auth/schema-status", { cache: "no-store" });
+        const schemaJson = (await schemaRes.json().catch(() => ({}))) as {
+          appUsersTableOk?: boolean;
+          message?: string;
+          code?: string;
+        };
+        if (schemaJson.appUsersTableOk === false) {
+          setReady(false);
+          setError(
+            schemaJson.message ??
+              "Conta na nuvem não configurada (tabela app_users). Fale com o suporte HB Cooperativas."
+          );
+          return false;
+        }
+      } catch {
+        /* segue tentando sync */
       }
-    } catch {
-      /* segue tentando sync */
     }
 
     const profile = userToCloudProfile(user);
@@ -62,6 +65,11 @@ export function CloudSessionGate({ children }: { children: React.ReactNode }) {
     if (authLoading) return;
     if (!user) {
       router.replace("/login");
+      return;
+    }
+    if (isCloudSessionActive()) {
+      setReady(true);
+      void sync();
       return;
     }
     void sync();
