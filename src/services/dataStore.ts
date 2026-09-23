@@ -8,7 +8,7 @@ import { findCooperativaByCnpj, getCooperativaById, getUserCooperativaId, normal
 import { migrateInlinePhotosToIdb } from "@/services/localMediaMigration";
 import { compactarFotosNoArmazenamento, liberarEspacoArmazenamento, stripBinaryForPersist, buildSnapshotEmergenciaPersistencia } from "@/utils/fotoEntrega";
 import { ensureMensalidadesDoMes, ensureMensalidadeCooperado, sincronizarMensalidadeCooperativa } from "@/services/mensalidadeService";
-import { applyOperationalResetIfNeeded, clearOperationalData } from "@/services/operationalReset";
+import { applyOperationalResetIfNeeded, clearOperationalData, isOperacionalCloudAuthoritative } from "@/services/operationalReset";
 import { isCloudSyncInProgress } from "@/services/cloudSyncProgress";
 import { normalizeCreatorEmail, normalizeAuthEmail } from "@/lib/security/appCreator";
 import {
@@ -495,7 +495,13 @@ function migrateResponsavelPrincipal(data: AppData): AppData {
 function runAutomaticTasks(data: AppData): AppData {
   if (isCloudSyncInProgress()) return data;
   let current = compactarFotosNoArmazenamento(data);
-  current = posProcessarIntegridadePagamentosCooperativa(reconciliarFichaFromNotasConferidas(current));
+  const coopCnpj = data.cooperativas
+    .map((c) => normalizeCnpj(c.cnpj ?? ""))
+    .find((d) => d.length === 14);
+  const skipNotaReconciliar = coopCnpj ? isOperacionalCloudAuthoritative(coopCnpj) : false;
+  current = skipNotaReconciliar
+    ? posProcessarIntegridadePagamentosCooperativa(current)
+    : posProcessarIntegridadePagamentosCooperativa(reconciliarFichaFromNotasConferidas(current));
   current = sincronizarMensalidadeCooperativa(current);
   const stripped = stripBinaryForPersist(current);
   return stripped;

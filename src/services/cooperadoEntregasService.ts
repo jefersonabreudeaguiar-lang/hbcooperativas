@@ -21,6 +21,8 @@ import { mesesComValoresAvulsos, totalValoresAvulsosPendentes } from "@/services
 import { contarEntregasNoMes } from "@/services/entregaCooperadoService";
 import { contarFotosEnviadasNota, getFotosExibicaoNota } from "@/utils/fotoEntrega";
 import { cooperadoMesComFichaPagaSemPagamentoCooperativa } from "@/services/pagamentoIntegridadeService";
+import { isOperacionalCloudAuthoritative } from "@/services/operationalReset";
+import { normalizeCnpj } from "@/utils/cooperativa";
 
 export interface ResumoMesEntregasCooperado {
   mesReferencia: string;
@@ -318,11 +320,73 @@ export function getMesQuantoVouReceber(
 }
 
 /** Meses com valor líquido pendente de PIX pelo responsável (mesma base do cooperado — início/ficha). */
+function cooperativaCnpjFromData(
+  data: AppData,
+  cooperativaId?: string,
+  cooperadoId?: string
+): string | null {
+  const coopId = cooperativaId ?? data.cooperados.find((c) => c.id === cooperadoId)?.cooperativaId;
+  const coop = data.cooperativas.find((c) => c.id === coopId);
+  if (!coop?.cnpj) return null;
+  const digits = normalizeCnpj(coop.cnpj);
+  return digits.length === 14 ? digits : null;
+}
+
+/** Após restore na nuvem: fila Pagar segue ficha/pagamentos do operacional, sem inflar por notas soltas. */
+function listarMesesPendentesPagamentoResponsavelOperacional(
+  data: AppData,
+  cooperadoId: string,
+  cooperativaId?: string
+): string[] {
+  const mesesSet = new Set<string>();
+  for (const f of data.fichaCorrida) {
+    if (!fichaPertenceCooperado(data, f, cooperadoId, cooperativaId)) continue;
+    if (!fichaValidaNoExtrato(data, f)) continue;
+    if (f.status === "pendente" || f.status === "pago") {
+      mesesSet.add(f.mesReferencia);
+    }
+  }
+  for (const mes of mesesComValoresAvulsos(data, cooperadoId, cooperativaId)) {
+    mesesSet.add(mes);
+  }
+  const pendentes: string[] = [];
+  for (const mes of [...mesesSet].sort((a, b) => a.localeCompare(b))) {
+    if (cooperadoMesQuitado(data, cooperadoId, mes)) continue;
+    if (cooperadoMesComFichaPagaSemPagamentoCooperativa(data, cooperadoId, mes, cooperativaId)) {
+      pendentes.push(mes);
+      continue;
+    }
+    if (getPagamentoAguardandoCooperado(data, cooperadoId, mes)) {
+      pendentes.push(mes);
+      continue;
+    }
+    const temFichaPendente = data.fichaCorrida.some(
+      (f) =>
+        fichaPertenceCooperado(data, f, cooperadoId, cooperativaId) &&
+        f.mesReferencia === mes &&
+        f.status === "pendente" &&
+        fichaValidaNoExtrato(data, f)
+    );
+    if (temFichaPendente) {
+      pendentes.push(mes);
+      continue;
+    }
+    if (totalValoresAvulsosPendentes(data, cooperadoId, mes, cooperativaId) > 0) {
+      pendentes.push(mes);
+    }
+  }
+  return pendentes;
+}
+
 export function listarMesesPendentesPagamentoResponsavel(
   data: AppData,
   cooperadoId: string,
   cooperativaId?: string
 ): string[] {
+  const cnpj = cooperativaCnpjFromData(data, cooperativaId, cooperadoId);
+  if (cnpj && isOperacionalCloudAuthoritative(cnpj)) {
+    return listarMesesPendentesPagamentoResponsavelOperacional(data, cooperadoId, cooperativaId);
+  }
   return listarMesesPendentesQuantoVouReceber(data, cooperadoId, cooperativaId);
 }
 

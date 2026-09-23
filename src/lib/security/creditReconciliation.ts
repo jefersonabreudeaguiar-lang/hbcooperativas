@@ -7,8 +7,8 @@ import {
   buildCreditObservation,
   evaluateCreditObservation,
   filterActionableFindings,
-} from "@/lib/lab/hbCreditWatch/rules";
-import type { CreditAccountRow } from "@/lib/lab/hbCreditWatch/types";
+} from "@/lib/security/hbCreditReconciliation/rules";
+import type { CreditAccountRow } from "@/lib/security/hbCreditReconciliation/types";
 import { runOperationalLimitReconciliation } from "@/modules/hb-credit/engine/creditOperationalReconciliation";
 import { recordCreditReconciliationAlerts } from "@/lib/security/platformSecurityEvents";
 import { fetchCooperadosFromStorage } from "@/lib/supabase/cooperadosStorage";

@@ -165,7 +165,6 @@ export default function FichaCorridaPage() {
   const [pixStepVisited, setPixStepVisited] = useState(false);
 
   useEffect(() => {
-    if (!isCooperado) return;
     requestAppSync();
   }, [isCooperado]);
 

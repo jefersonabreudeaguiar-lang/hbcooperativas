@@ -21,6 +21,9 @@ import {
   applyCloudOperationalResetIfNeeded,
   needsOperationalResetCloudPush,
   markOperationalResetCloudDone,
+  markOperacionalCloudAuthoritative,
+  clearOperacionalCloudAuthoritative,
+  isOperacionalCloudAuthoritative,
 } from "@/services/operationalReset";
 type WithUpdatedAt = { id: string; updatedAt?: string; createdAt?: string };
 
@@ -1385,6 +1388,11 @@ export async function syncOperacionalFromCloud(cnpj: string): Promise<boolean> {
   const cloudCooperados = (await fetchCooperadosFromCloud(cnpj)).cooperados;
   const merged = mergeOperacionalIntoData(current, bundle.operacional, coopId, cloudCooperados);
   saveDataSafe(merged);
+  if (cloudOperacionalRestoreAtivo(bundle.operacional)) {
+    markOperacionalCloudAuthoritative(cnpj, bundle.operacional.operationalResetVersion ?? 1);
+  } else {
+    clearOperacionalCloudAuthoritative(cnpj);
+  }
   return true;
 }
 
@@ -1610,6 +1618,8 @@ export async function syncAllCooperativaFromCloud(cnpj: string, preferredCoopId?
     await syncOperacionalFromCloud(digits);
     await syncContratosFromCloud(digits);
     await syncNotasPedidoFromCloud(digits);
+    const operacionalCloud = (await fetchSyncBundle(digits))?.operacional ?? null;
+    saveDataSafe(finalizeOperacionalPullLocalState(getData(), operacionalCloud));
   });
 }
 

@@ -13,7 +13,6 @@ import { AdminInicioPanel } from "@/components/admin/AdminInicioPanel";
 import { AdminCobrancaPanel } from "@/components/admin/AdminCobrancaPanel";
 import { AdminContaCoopPanel } from "@/components/admin/AdminContaCoopPanel";
 import { AdminCooperativasPanel } from "@/components/admin/AdminCooperativasPanel";
-import { AdminHobeliscoPanel } from "@/components/admin/AdminHobeliscoPanel";
 import { AdminSistemaPanel } from "@/components/admin/AdminSistemaPanel";
 import { AdminPortalShell } from "@/components/admin/AdminPortalShell";
 import { AdminPortalLogin } from "@/components/admin/AdminPortalLogin";
@@ -27,7 +26,6 @@ export default function AdminPortalPage() {
   const data = useAppData();
   const [section, setSection] = useState<AdminSection>("inicio");
   const [contaCoopPendentes, setContaCoopPendentes] = useState(0);
-  const [hobeliscoAlerts, setHobeliscoAlerts] = useState(0);
 
   useEffect(() => {
     if (!user || !isAppCreator(user)) return;
@@ -47,10 +45,6 @@ export default function AdminPortalPage() {
         setContaCoopPendentes(pendentes);
       })
       .catch(() => setContaCoopPendentes(0));
-    void secureApiFetch("/api/admin/hobelisco/overview", { cache: "no-store" })
-      .then((r) => r.json())
-      .then((json: { alertCount?: number }) => setHobeliscoAlerts(json.alertCount ?? 0))
-      .catch(() => setHobeliscoAlerts(0));
   }, [user]);
 
   const badges = useMemo(() => {
@@ -60,9 +54,8 @@ export default function AdminPortalPage() {
     return {
       cobranca: cobrancaPendente > 0 ? cobrancaPendente : undefined,
       "conta-coop": contaCoopPendentes > 0 ? contaCoopPendentes : undefined,
-      hobelisco: hobeliscoAlerts > 0 ? hobeliscoAlerts : undefined,
     } satisfies Partial<Record<AdminSection, number>>;
-  }, [contaCoopPendentes, data, hobeliscoAlerts]);
+  }, [contaCoopPendentes, data]);
 
   if (authLoading) {
     return (
@@ -120,7 +113,6 @@ export default function AdminPortalPage() {
       {section === "cobranca" && <AdminCobrancaPanel user={user} />}
       {section === "conta-coop" && <AdminContaCoopPanel />}
       {section === "cooperativas" && <AdminCooperativasPanel />}
-      {section === "hobelisco" && <AdminHobeliscoPanel />}
       {section === "sistema" && <AdminSistemaPanel user={user} />}
     </AdminPortalShell>
   );

@@ -3,11 +3,12 @@ import { normalizeCnpj } from "@/utils/cooperativa";
 import { clearNotasSyncMeta } from "@/services/syncMetaService";
 
 /** Incremente ao publicar uma limpeza global de lançamentos nos dispositivos. */
-export const OPERATIONAL_RESET_VERSION = 12;
+export const OPERATIONAL_RESET_VERSION = 14;
 
 export const OPERATIONAL_RESET_STORAGE_KEY = "coopeagriplla_operational_reset_v";
 export const OPERATIONAL_RESET_CLOUD_KEY = "coopeagriplla_operational_reset_cloud_v";
 const CLOUD_RESET_APPLIED_PREFIX = "coopeagriplla_cloud_reset_applied_";
+const CLOUD_OPERACIONAL_AUTHORITATIVE_PREFIX = "coopeagriplla_cloud_operacional_authoritative_";
 
 export function needsOperationalResetCloudPush(): boolean {
   if (typeof window === "undefined") return false;
@@ -34,6 +35,25 @@ export function getCloudResetAppliedVersion(cnpj: string): number {
 function markCloudResetApplied(cnpj: string, version: number): void {
   if (typeof window === "undefined") return;
   localStorage.setItem(`${CLOUD_RESET_APPLIED_PREFIX}${normalizeCnpj(cnpj)}`, String(version));
+}
+
+/** Nuvem publicou operacional autoritativo (fullReset) — não recalcular fila Pagar a partir de notas locais. */
+export function markOperacionalCloudAuthoritative(cnpj: string, version: number): void {
+  if (typeof window === "undefined") return;
+  if (version <= 0) return;
+  localStorage.setItem(`${CLOUD_OPERACIONAL_AUTHORITATIVE_PREFIX}${normalizeCnpj(cnpj)}`, String(version));
+}
+
+export function clearOperacionalCloudAuthoritative(cnpj: string): void {
+  if (typeof window === "undefined") return;
+  localStorage.removeItem(`${CLOUD_OPERACIONAL_AUTHORITATIVE_PREFIX}${normalizeCnpj(cnpj)}`);
+}
+
+export function isOperacionalCloudAuthoritative(cnpj: string): boolean {
+  if (typeof window === "undefined") return false;
+  const raw = localStorage.getItem(`${CLOUD_OPERACIONAL_AUTHORITATIVE_PREFIX}${normalizeCnpj(cnpj)}`);
+  const n = Number(raw);
+  return Number.isFinite(n) && n > 0;
 }
 
 /** Remove entregas, fichas, pagamentos, mensalidades e avisos; mantém cadastros e contratos. */

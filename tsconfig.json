@@ -31,5 +31,18 @@
     ".next/dev/types/**/*.ts",
     "**/*.mts"
   ],
-  "exclude": ["node_modules", "scripts", "lab"]
+  "exclude": [
+    "node_modules",
+    "scripts",
+    "lab",
+    "archived",
+    "FASE-1-DUAL-MOTOR-READONLY",
+    "FASE-3-POST-DEPLOY-READONLY",
+    "FASE-4-FUNCIONAL-READONLY",
+    "FASE-5-DIVERGENCIAS-HB-READONLY",
+    "FASE-6-2-CASOS-REAIS-READONLY",
+    "FASE-7-FINAL-GO-NO-GO",
+    "FASE-8-AUTOMATIC-PROCESSES-READONLY",
+    "FASE-9-PREVENTIVE-AUDIT-READONLY"
+  ]
 }
