@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import {
   getLimiteCooperado,
+  getLimiteCooperadoAlinhadoAEntregas,
   hasFinancialPin,
   hasPendingCooperadoPinResetRequest,
   listLedgerCooperado,
@@ -34,12 +35,17 @@ export async function GET(request: Request) {
     return NextResponse.json({ ok: true, ledger });
   }
 
-  const limite = await getLimiteCooperado(gate.ctx.supabase, cnpj, cooperadoId);
+  const actorId = gate.ctx.session?.sub ?? cooperadoId;
+  const limite = await getLimiteCooperadoAlinhadoAEntregas(gate.ctx.supabase, cnpj, cooperadoId, {
+    resyncIfInflated: true,
+    actorUserId: actorId,
+  });
   const pinResetPending = await hasPendingCooperadoPinResetRequest(
     gate.ctx.supabase,
     cnpj,
     cooperadoId
   );
+
   return NextResponse.json({
     ok: true,
     account: limite ?? {

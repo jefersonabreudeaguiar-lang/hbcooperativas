@@ -4,6 +4,10 @@ import { resolverCooperadoIdCanonico } from "@/services/cooperadoCloudService";
 import { getResumoValorAPagarRelatorio } from "@/services/notaPedidoService";
 import { round2 } from "@/utils/calculations";
 import { reaisToCents } from "../shared/money";
+import {
+  blindarCreditoBaseCentsHb,
+  prepararAppDataParaCreditoBaseHb,
+} from "./creditBaseHbGuard";
 
 /**
  * Crédito base HB Créditos (alinhado ao app do cooperado):
@@ -16,14 +20,15 @@ export function getCreditoBaseContaCoopReais(
   cooperadoId: string,
   cooperativaId?: string
 ): number {
-  const coopId = cooperativaId ?? data.cooperados.find((c) => c.id === cooperadoId)?.cooperativaId;
-  const cooperadoCanonico = resolverCooperadoIdCanonico(data, cooperadoId, coopId);
-  const meses = listarMesesPendentesQuantoVouReceber(data, cooperadoCanonico, coopId);
+  const sane = prepararAppDataParaCreditoBaseHb(data);
+  const coopId = cooperativaId ?? sane.cooperados.find((c) => c.id === cooperadoId)?.cooperativaId;
+  const cooperadoCanonico = resolverCooperadoIdCanonico(sane, cooperadoId, coopId);
+  const meses = listarMesesPendentesQuantoVouReceber(sane, cooperadoCanonico, coopId);
   if (!meses.length) return 0;
 
   let total = 0;
   for (const mes of meses) {
-    total += getResumoValorAPagarRelatorio(data, cooperadoCanonico, mes, coopId).valorLiquido;
+    total += getResumoValorAPagarRelatorio(sane, cooperadoCanonico, mes, coopId).valorLiquido;
   }
 
   return round2(Math.max(0, total));
@@ -35,7 +40,14 @@ export function getCreditoBaseCooperadoCents(
   cooperadoId: string,
   cooperativaId?: string
 ): number {
-  return reaisToCents(getCreditoBaseContaCoopReais(data, cooperadoId, cooperativaId));
+  const reais = getCreditoBaseContaCoopReais(data, cooperadoId, cooperativaId);
+  const coopId = cooperativaId ?? data.cooperados.find((c) => c.id === cooperadoId)?.cooperativaId;
+  return blindarCreditoBaseCentsHb(
+    prepararAppDataParaCreditoBaseHb(data),
+    cooperadoId,
+    coopId,
+    reaisToCents(reais)
+  );
 }
 
 export function buildCreditosBaseMap(

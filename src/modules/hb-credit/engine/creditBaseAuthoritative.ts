@@ -9,6 +9,7 @@ import { mergeOperacionalIntoData } from "@/services/cooperativaSyncCloudService
 import { reconciliarFichaFromNotasConferidas } from "@/services/notaPedidoService";
 import { normalizeCnpj } from "@/utils/cooperativa";
 import { buildCreditosBaseMap } from "./creditBaseFromFicha";
+import { blindarMapaCreditoBaseCentsHb, purgarFichasParaCreditoBaseCloud } from "./creditBaseHbGuard";
 
 /** Snapshot operacional + notas — mesma base que responsável/cooperado (valor a receber pendente). */
 export function buildMinimalAppDataForCreditBase(opts: {
@@ -51,8 +52,8 @@ export function buildMinimalAppDataForCreditBase(opts: {
   data = mergeCloudCooperadosIntoData(data, opts.cooperados, digits, opts.cooperativaId);
   data = mergeOperacionalIntoData(data, opts.operacional, opts.cooperativaId, opts.cooperados);
 
-  /** Mesma base do app após sync (reconciliar); posProcessar aqui zera indevidamente o a receber no servidor. */
-  return reconciliarFichaFromNotasConferidas(data);
+  /** Mesma base do app após sync; só fichas amarradas a nota conferida/paga entram no HB. */
+  return purgarFichasParaCreditoBaseCloud(data);
 }
 
 export function buildCreditosBaseAuthoritativeFromCloud(
@@ -70,7 +71,8 @@ export function buildCreditosBaseAuthoritativeFromCloud(
     cooperados,
     notasPedido,
   });
-  return buildCreditosBaseMap(data, cooperadoIds, cooperativaId);
+  const map = buildCreditosBaseMap(data, cooperadoIds, cooperativaId);
+  return blindarMapaCreditoBaseCentsHb(data, cooperativaId, map);
 }
 
 export type AuthoritativeCreditBaseFailureCode =

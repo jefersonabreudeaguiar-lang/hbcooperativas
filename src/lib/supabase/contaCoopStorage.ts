@@ -31,6 +31,8 @@ import type {
 import { mapAuthorizeRpcError } from "@/modules/hb-credit/engine/hbCreditLimitSyncState";
 import { computeDisponivel, formatCentsBRL } from "@/modules/hb-credit/engine/money";
 import { calcLimiteFromPercentual, calcTetoGlobalCents, sumCreditosBaseCents } from "@/modules/hb-credit/engine/creditBaseFromFicha";
+import { resolveAuthoritativeCreditBase } from "@/modules/hb-credit/engine/creditBaseAuthoritative";
+import { capContaCoopLimiteToAuthoritativeBase } from "@/modules/hb-credit/engine/creditBaseHbGuard";
 import { INTENT_EXPIRY_MINUTES } from "@/modules/hb-credit/config";
 import { getCurrentMesReferencia } from "@/utils/format";
 import {
@@ -1092,6 +1094,41 @@ export async function getLimiteCooperado(
   return mapLimiteRow(data as Record<string, unknown>, cashback);
 }
 
+/** Limite exibido/usado no HB — nunca acima do crédito-base das entregas conferidas na nuvem. */
+export async function getLimiteCooperadoAlinhadoAEntregas(
+  supabase: SupabaseClient,
+  cnpj: string,
+  cooperadoId: string,
+  opts?: { resyncIfInflated?: boolean; actorUserId?: string }
+): Promise<ContaCoopLimiteCooperado | null> {
+  const limite = await getLimiteCooperado(supabase, cnpj, cooperadoId);
+  if (!limite) return null;
+
+  const authoritative = await resolveAuthoritativeCreditBase(supabase, cnpj, [cooperadoId]);
+  if (!authoritative.ok) return limite;
+
+  const creditoBaseCents = authoritative.creditosBaseCents[cooperadoId] ?? 0;
+  const teto = await resolveTetoGlobal(supabase, cnpj, authoritative.creditosBaseCents);
+  const tetoPercent = teto.configured ? teto.percent : 0;
+  const capped = capContaCoopLimiteToAuthoritativeBase(limite, creditoBaseCents, tetoPercent);
+
+  if (
+    opts?.resyncIfInflated &&
+    capped.limiteLiberadoCents < limite.limiteLiberadoCents &&
+    opts.actorUserId
+  ) {
+    void syncLimitesCooperadosFromCreditoBase(
+      supabase,
+      cnpj,
+      [cooperadoId],
+      { [cooperadoId]: creditoBaseCents },
+      opts.actorUserId
+    ).catch(() => {});
+  }
+
+  return capped;
+}
+
 export async function setFinancialPin(
   supabase: SupabaseClient,
   cnpj: string,
@@ -1719,7 +1756,7 @@ export async function validateIntentForCooperado(
   const { data: parceiro } = await supabase.from("hb_credit_partners").select("*").eq("id", intent.partner_id).maybeSingle();
   if (!parceiro || parceiro.status !== "ACTIVE") return { ok: false, error: "Mercado bloqueado ou inativo." };
 
-  const limite = await getLimiteCooperado(supabase, digits, cooperadoId);
+  const limite = await getLimiteCooperadoAlinhadoAEntregas(supabase, digits, cooperadoId);
   if (!limite) return { ok: false, error: "Sem limite HB Créditos." };
   if (limite.bloqueado) return { ok: false, error: "Cooperado bloqueado." };
   const gross = Number(intent.amount_cents);
