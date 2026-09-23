@@ -427,12 +427,109 @@ export function liberarEspacoArmazenamento(data: AppData, nivel: 1 | 2 = 1): App
   return next;
 }
 
+export function isPerfilOperacionalSemFotosLocais(role?: string): boolean {
+  return role === "responsavel" || role === "tesoureiro" || role === "admin" || role === "contador";
+}
+
+/** Responsável/tesoureiro: fotos vêm da nuvem na conferência — zero binário de nota no disco local. */
+export function stripNotasParaPersistenciaOperacional(data: AppData): AppData {
+  const notasPedido = data.notasPedido.map((n) => ({
+    ...n,
+    fotoPedido: undefined,
+    fotosPedido: undefined,
+    fotoPedidoMiniatura: undefined,
+    fotosPedidoMiniaturas: undefined,
+    fotosMeta: n.fotosMeta?.map((f) => ({
+      ...f,
+      url: undefined,
+      thumbnailUrl: undefined,
+    })),
+  }));
+  return notasPedido === data.notasPedido ? data : { ...data, notasPedido };
+}
+
 /**
- * Remove binários pesados antes de gravar no localStorage.
+ * Nunca gravar data: URLs no localStorage (causa quota ao conferir/lançar).
+ * Mantém refs idb: para rascunho do cooperado; URLs http(s) leves permanecem.
+ */
+export function removerBinariosInlineDoAppData(data: AppData): AppData {
+  const sanitizeRef = (v?: string) => {
+    if (!v) return undefined;
+    if (isInlineDataUrl(v)) return undefined;
+    return v;
+  };
+
+  let changed = false;
+  const notasPedido = data.notasPedido.map((n) => {
+    const fotoPedido = sanitizeRef(n.fotoPedido);
+    const fotosPedido = n.fotosPedido?.map(sanitizeRef).filter((f): f is string => Boolean(f));
+    const fotoPedidoMiniatura = sanitizeRef(n.fotoPedidoMiniatura);
+    const fotosPedidoMiniaturas = n.fotosPedidoMiniaturas?.map(sanitizeRef).filter((f): f is string => Boolean(f));
+    const fotosMeta = n.fotosMeta?.map((f) => ({
+      ...f,
+      url: sanitizeRef(f.url),
+      thumbnailUrl: sanitizeRef(f.thumbnailUrl),
+    }));
+    const next = {
+      ...n,
+      fotoPedido,
+      fotosPedido: fotosPedido?.length ? fotosPedido : undefined,
+      fotoPedidoMiniatura,
+      fotosPedidoMiniaturas: fotosPedidoMiniaturas?.length ? fotosPedidoMiniaturas : undefined,
+      fotosMeta,
+    };
+    if (
+      next.fotoPedido !== n.fotoPedido ||
+      next.fotosPedido !== n.fotosPedido ||
+      next.fotoPedidoMiniatura !== n.fotoPedidoMiniatura ||
+      next.fotosPedidoMiniaturas !== n.fotosPedidoMiniaturas ||
+      next.fotosMeta !== n.fotosMeta
+    ) {
+      changed = true;
+    }
+    return next;
+  });
+
+  const mensalidades = data.mensalidades.map((m) => {
+    if (!m.comprovante || !isInlineDataUrl(m.comprovante)) return m;
+    changed = true;
+    return { ...m, comprovante: undefined };
+  });
+
+  const comunicados = data.comunicados.map((c) => {
+    if (!c.audioDataUrl || !isInlineDataUrl(c.audioDataUrl)) return c;
+    changed = true;
+    return { ...c, audioDataUrl: undefined };
+  });
+
+  if (!changed) return data;
+  return { ...data, notasPedido, mensalidades, comunicados };
+}
+
+/** Último recurso antes de falhar quota — preserva financeiro, remove mídia e auditoria antiga. */
+export function buildSnapshotEmergenciaPersistencia(data: AppData, role?: string): AppData {
+  let next = stripNotasParaPersistenciaOperacional(
+    liberarEspacoArmazenamento(removerBinariosInlineDoAppData(data), 2)
+  );
+  if (!isPerfilOperacionalSemFotosLocais(role)) {
+    next = liberarEspacoArmazenamento(removerBinariosInlineDoAppData(next), 2);
+  }
+  return {
+    ...next,
+    auditLog: next.auditLog.slice(0, 8),
+    comunicados: next.comunicados.map((c) => ({ ...c, audioDataUrl: undefined })),
+  };
+}
+
+/** Remove binários pesados antes de gravar no localStorage.
  * Mantém fotos pendentes de envio (refs idb: ou base64); remove o que já está na nuvem.
  */
-export function stripBinaryForPersist(data: AppData): AppData {
+export function stripBinaryForPersist(data: AppData, opts?: { role?: string }): AppData {
   let next = compactarFotosNoArmazenamento(data);
+  next = removerBinariosInlineDoAppData(next);
+  if (isPerfilOperacionalSemFotosLocais(opts?.role)) {
+    next = stripNotasParaPersistenciaOperacional(next);
+  }
 
   const notasPedido = next.notasPedido.map((n) => {
     const uploaded = Boolean(n.fotoNaNuvem && (n.fotosEnviadasCount ?? 0) > 0);

@@ -6,7 +6,7 @@ import type { AppData, AuditAction, User, Cooperado, Cooperativa, PrestacaoConta
 import { emptyInitialData, DEMO_ENTITY_IDS, DEMO_EMAILS, DEMO_CNPJ } from "@/mock/data";
 import { findCooperativaByCnpj, getCooperativaById, getUserCooperativaId, normalizeCnpj } from "@/utils/cooperativa";
 import { migrateInlinePhotosToIdb } from "@/services/localMediaMigration";
-import { compactarFotosNoArmazenamento, liberarEspacoArmazenamento, stripBinaryForPersist } from "@/utils/fotoEntrega";
+import { compactarFotosNoArmazenamento, liberarEspacoArmazenamento, stripBinaryForPersist, buildSnapshotEmergenciaPersistencia } from "@/utils/fotoEntrega";
 import { ensureMensalidadesDoMes, ensureMensalidadeCooperado, sincronizarMensalidadeCooperativa } from "@/services/mensalidadeService";
 import { applyOperationalResetIfNeeded, clearOperationalData } from "@/services/operationalReset";
 import { isCloudSyncInProgress } from "@/services/cloudSyncProgress";
@@ -161,15 +161,75 @@ export async function runWithBatchedSaveAsync(fn: () => Promise<void>): Promise<
 const STORAGE_FULL_MESSAGE =
   "Armazenamento do navegador cheio. Com internet, tente lançar de novo — o app remove fotos antigas já salvas na nuvem para liberar espaço.";
 
+const LOCAL_KEYS_PRESERVE = new Set([
+  STORAGE_KEY,
+  SESSION_KEY,
+  DEMO_PURGED_KEY,
+  "coopeagriplla_access_token",
+  "coopeagriplla_cloud_bootstrap",
+]);
+
+function persistRoleFromSession(): string | undefined {
+  try {
+    return getSession()?.role;
+  } catch {
+    return undefined;
+  }
+}
+
+/** Libera quota removendo caches auxiliares antes de gravar o operacional. */
+function pruneAuxiliaryLocalStorage(): void {
+  if (typeof localStorage === "undefined") return;
+  const keys: string[] = [];
+  for (let i = 0; i < localStorage.length; i++) {
+    const key = localStorage.key(i);
+    if (key && !LOCAL_KEYS_PRESERVE.has(key)) keys.push(key);
+  }
+  for (const key of keys) {
+    try {
+      localStorage.removeItem(key);
+    } catch {
+      /* ignore */
+    }
+  }
+}
+
+function writeStoragePayload(serialized: string): boolean {
+  try {
+    localStorage.setItem(STORAGE_KEY, serialized);
+    return true;
+  } catch (e) {
+    if (!isStorageQuotaError(e)) return false;
+  }
+  try {
+    localStorage.removeItem(STORAGE_KEY);
+    localStorage.setItem(STORAGE_KEY, serialized);
+    return true;
+  } catch (e) {
+    if (!isStorageQuotaError(e)) return false;
+  }
+  pruneAuxiliaryLocalStorage();
+  try {
+    localStorage.removeItem(STORAGE_KEY);
+    localStorage.setItem(STORAGE_KEY, serialized);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 function buildPersistCandidates(data: AppData): AppData[] {
-  const stripped = stripBinaryForPersist(data);
+  const role = persistRoleFromSession();
+  const stripped = stripBinaryForPersist(data, { role });
   const nivel1 = liberarEspacoArmazenamento(stripped, 1);
   const nivel2 = liberarEspacoArmazenamento(stripped, 2);
+  const emergencia = buildSnapshotEmergenciaPersistencia(data, role);
   return [
     stripped,
     nivel1,
     nivel2,
     { ...nivel2, auditLog: nivel2.auditLog.slice(0, 15) },
+    emergencia,
   ];
 }
 
@@ -191,7 +251,9 @@ function persistDataToStorage(
         if (!options?.skipNotify) notify();
         return { ok: true };
       }
-      localStorage.setItem(STORAGE_KEY, serialized);
+      if (!writeStoragePayload(serialized)) {
+        continue;
+      }
       lastPersistedSerialized = serialized;
       memoryCache = candidate;
       if (!options?.skipNotify) notify();
@@ -571,6 +633,14 @@ function loadData(forceReload = false): AppData {
       return memoryCache;
     }
 
+    if (stored.length >= 2_000_000) {
+      const slim = stripBinaryForPersist(data, { role: persistRoleFromSession() });
+      const saved = saveDataSafe(slim);
+      if (saved.ok) {
+        data = memoryCache ?? slim;
+      }
+    }
+
     memoryCache = data;
     scheduleAutomaticTasksIfNeeded(data);
     return data;
@@ -661,7 +731,12 @@ export function updateDataSafe(
   }
 
   notifyImmediate();
-  const saved = persistDataToStorage(updated, { skipNotify: true });
+  let saved = persistDataToStorage(updated, { skipNotify: true });
+  if (!saved.ok) {
+    const role = persistRoleFromSession();
+    memoryCache = buildSnapshotEmergenciaPersistencia(updated, role);
+    saved = persistDataToStorage(memoryCache, { skipNotify: true });
+  }
   if (!saved.ok) {
     memoryCache = current;
     notifyImmediate();

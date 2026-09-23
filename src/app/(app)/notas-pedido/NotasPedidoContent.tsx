@@ -18,7 +18,7 @@ import { AlertBanner } from "@/components/ui/AlertBanner";
 import { PromptDialog, ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { Card } from "@/components/ui/Card";
 import { NotaFotoImg } from "@/components/ui/NotaFotoImg";
-import { updateData, updateDataSafe, generateId, addAuditEntry, getData } from "@/services/dataStore";
+import { migrateInlinePhotosToIdb } from "@/services/localMediaMigration";
 import { requestAppSync, requestAppSyncLight } from "@/services/syncRequest";
 import { forceNextFullNotasSync, shouldResponsavelForceFullNotasOnEntry } from "@/services/syncMetaService";
 import { useSyncStatus } from "@/components/sync/CooperativaSyncProvider";
@@ -2200,7 +2200,7 @@ export default function NotasPedidoContent() {
     [loadConferenciaFoto]
   );
 
-  const handleLancarNota = () => {
+  const handleLancarNota = async () => {
     if (lancamentoSequencia) return;
     if (lancandoRef.current) {
       setConferirErrors({
@@ -2223,6 +2223,20 @@ export default function NotasPedidoContent() {
     if (Object.keys(errors).length) {
       setConferirErrors(errors);
       return;
+    }
+
+    try {
+      const base = getData() ?? data;
+      const migrated = await migrateInlinePhotosToIdb(base);
+      if (migrated !== base) {
+        const prep = updateDataSafe(() => migrated);
+        if (!prep.ok) {
+          setConferirErrors({ itens: prep.error });
+          return;
+        }
+      }
+    } catch {
+      /* IndexedDB indisponível — persistência ainda remove base64 no disco */
     }
 
     const qtdFotosAprovadas = contarFotosEnviadasNota(selectedNota);
@@ -4083,7 +4097,7 @@ export default function NotasPedidoContent() {
             <Button variant="danger" onClick={() => { setMotivoRejeicao(""); setRejectModal(true); }} disabled={conferenciaTransicao || Boolean(lancamentoSequencia)}>
               <XCircle size={18} /> Pedir correção
             </Button>
-            <Button size="lg" onClick={handleLancarNota} disabled={conferenciaTransicao || Boolean(lancamentoSequencia) || conferenciaLancando}>
+            <Button size="lg" onClick={() => void handleLancarNota()} disabled={conferenciaTransicao || Boolean(lancamentoSequencia) || conferenciaLancando}>
               <CheckCircle size={18} />
               {(() => {
                 if (lancamentoSequencia) {
