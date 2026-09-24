@@ -431,7 +431,23 @@ export function getConsolidadoFinanceiroCooperado(
 
   let resumo: ConsolidadoFinanceiroCooperado["resumo"];
   if (aguardandoAssinatura && pagamentoAguardando && valor <= 0) {
-    resumo = resumoFromPagamento(pagamentoAguardando);
+    const mesesPix = getMesesReferenciaPagamento(pagamentoAguardando);
+    resumo =
+      mesesPix.length === 1
+        ? getResumoPagamentoExibicao(
+            data,
+            cooperadoId,
+            mesesPix[0],
+            coopId,
+            ajustesPorMes?.[mesesPix[0]]
+          )
+        : getResumoPagamentoConsolidadoCooperado(
+            data,
+            cooperadoId,
+            mesesPix,
+            coopId,
+            ajustesPorMes
+          );
   } else if (mesesComValor.length === 1) {
     resumo =
       resumoComplementaresPosPagamento(data, cooperadoId, mesesComValor[0], coopId) ??
