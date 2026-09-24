@@ -2091,7 +2091,42 @@ export function getResumoPagamentoExibicao(
   }
   const pagamento = getPagamentoAguardandoCooperado(data, cooperadoId, mesReferencia);
   if (pagamento) {
-    return resumoFromPagamento(pagamento);
+    const snap = resumoFromPagamento(pagamento);
+    const live = getResumoPagamentoCooperado(data, cooperadoId, mesReferencia, coopId, ajustes);
+    if (live.valorEntregas <= 0) {
+      const fichasSnap = snap.fichaIds
+        .map((id) => data.fichaCorrida.find((f) => f.id === id))
+        .filter((f): f is FichaCorrida => f != null);
+      if (fichasSnap.some((f) => f.status === "pago")) {
+        return snap;
+      }
+      if (fichasSnap.some((f) => f.status === "pendente")) {
+        const base: ResumoPagamentoCooperado = {
+          ...snap,
+          descontosExtras: snap.descontosExtras.filter(
+            (d) =>
+              d.tipo !== "conta_coop" &&
+              !(d.tipo === "credito_avulso" && d.motivo.toLowerCase().includes("estorno"))
+          ),
+        };
+        return getResumoPagamentoParaRegistro(base, data, cooperadoId, mesReferencia, coopId);
+      }
+      return snap;
+    }
+    const base: ResumoPagamentoCooperado = {
+      ...snap,
+      valorBruto: live.valorBruto,
+      descontoCooperativa: live.descontoCooperativa,
+      valorEntregas: live.valorEntregas,
+      fichaIds: live.fichaIds,
+      notaPedidoIds: live.notaPedidoIds,
+      descontosExtras: snap.descontosExtras.filter(
+        (d) =>
+          d.tipo !== "conta_coop" &&
+          !(d.tipo === "credito_avulso" && d.motivo.toLowerCase().includes("estorno"))
+      ),
+    };
+    return getResumoPagamentoParaRegistro(base, data, cooperadoId, mesReferencia, coopId);
   }
   const live = getResumoPagamentoCooperado(data, cooperadoId, mesReferencia, coopId, ajustes);
   return getResumoPagamentoParaRegistro(live, data, cooperadoId, mesReferencia, coopId);

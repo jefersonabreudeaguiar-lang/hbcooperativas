@@ -69,6 +69,7 @@ export function sanitizarOperacionalSyncPayload(
   reconciliar: (data: AppData) => AppData
 ): OperacionalSyncPayload {
   const stub = {
+    cooperativas: [],
     cooperados: [],
     notasPedido: [],
     fichaCorrida: payload.fichaCorrida ?? [],
