@@ -1,4 +1,9 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import {
+  aplicarPreservacaoPagamentosConfirmadosNoOperacional,
+  type PagamentoDowngradeBloqueado,
+} from "@/services/pagamentoRegistroMerge";
+import { aplicarPreservacaoFichasReferenciadasPorPagamentosNoOperacional } from "@/services/fichaCorridaPagamentoGuard";
 import type {
   Instituicao,
   ProdutoInstituicao,
@@ -120,12 +125,48 @@ export async function fetchContratosSync(
   return fetchJson<ContratosSyncPayload>(supabase, cnpj, "contratos.json");
 }
 
+export type UploadOperacionalSyncOptions = {
+  /** Evita segundo download quando o caller já leu operacional.json. */
+  existingOperacional?: OperacionalSyncPayload | null;
+  /** Uso interno / break-glass futuro — não usar no fluxo normal. */
+  skipPagamentoConfirmadoProtection?: boolean;
+};
+
+export type UploadOperacionalSyncResult =
+  | { ok: true; blockedDowngrades: PagamentoDowngradeBloqueado[] }
+  | { ok: false; error: string };
+
 export async function uploadOperacionalSync(
   supabase: SupabaseClient,
   cnpj: string,
-  payload: OperacionalSyncPayload
-): Promise<{ ok: true } | { ok: false; error: string }> {
-  return uploadJson(supabase, cnpj, "operacional.json", payload);
+  payload: OperacionalSyncPayload,
+  options?: UploadOperacionalSyncOptions
+): Promise<UploadOperacionalSyncResult> {
+  let toUpload = payload;
+  let blockedDowngrades: PagamentoDowngradeBloqueado[] = [];
+
+  const existing =
+    options?.existingOperacional !== undefined
+      ? options.existingOperacional
+      : await fetchOperacionalSync(supabase, cnpj);
+
+  if (!options?.skipPagamentoConfirmadoProtection) {
+    const preserved = aplicarPreservacaoPagamentosConfirmadosNoOperacional(existing, payload);
+    toUpload = preserved.payload;
+    blockedDowngrades = preserved.blockedDowngrades;
+  }
+
+  if (existing) {
+    const fichaPreserved = aplicarPreservacaoFichasReferenciadasPorPagamentosNoOperacional(
+      existing,
+      toUpload
+    );
+    toUpload = fichaPreserved.payload;
+  }
+
+  const uploaded = await uploadJson(supabase, cnpj, "operacional.json", toUpload);
+  if (!uploaded.ok) return uploaded;
+  return { ok: true, blockedDowngrades };
 }
 
 export async function fetchOperacionalSync(

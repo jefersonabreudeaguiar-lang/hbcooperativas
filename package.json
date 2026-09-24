@@ -17,6 +17,8 @@
     "backup:cloud": "node scripts/backup-cloud.mjs",
     "test:sync-flows": "npx tsx scripts/simulate-sync-flows.ts",
     "test:cooperado-financeiro": "npx tsx scripts/test-cooperado-financeiro-guard.ts",
+    "test:ficha-corrida-pagamento-guard-h8935": "npx tsx scripts/test-ficha-corrida-pagamento-guard-h8935.ts",
+    "test:ficha-corrida-upload-integracao-h8936": "npx tsx scripts/test-ficha-corrida-upload-integracao-h8936.ts",
     "test:e2e-alignment": "npx tsx scripts/test-e2e-alignment-invariants.ts",
     "alignment:command": "npx tsx scripts/run-alignment-command.ts",
     "test:concurrency-payment-hb": "npx tsx scripts/test-concurrency-payment-hb.ts",
