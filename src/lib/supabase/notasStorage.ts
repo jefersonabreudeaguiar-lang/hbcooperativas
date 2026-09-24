@@ -484,7 +484,7 @@ export async function fetchNotasFromTable(
         .from("notas_pedido")
         .select("payload, status, updated_at")
         .eq("cooperativa_cnpj", cnpj)
-        .in("status", ["aguardando_conferencia", "entregue"])
+        .in("status", ["aguardando_conferencia", "entregue", "rejeitada"])
         .order("updated_at", { ascending: false }),
     ]);
 

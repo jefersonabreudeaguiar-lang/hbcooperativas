@@ -30,6 +30,44 @@ import {
 
 const STATUS_RANK = NOTA_STATUS_RANK;
 
+function parseNotaIsoTime(iso?: string): number | null {
+  if (!iso) return null;
+  const t = new Date(iso).getTime();
+  return Number.isNaN(t) ? null : t;
+}
+
+/** Reenvio cooperado pós-rejeição — marcador explícito `reenviadaEm` (≠ relancadaEm). */
+export function isReenvioCooperadoLegitimo(
+  incoming: Pick<NotaPedido, "status" | "reenviadaEm">
+): boolean {
+  if (incoming.status !== "aguardando_conferencia") return false;
+  return parseNotaIsoTime(incoming.reenviadaEm) !== null;
+}
+
+function cloudRejeicaoReferenciaMs(cloud: Pick<NotaPedido, "dataRejeicao" | "updatedAt">): number {
+  return parseNotaIsoTime(cloud.dataRejeicao) ?? parseNotaIsoTime(cloud.updatedAt) ?? 0;
+}
+
+/** Local em reenvio não deve ser sobrescrito por rejeição obsoleta na nuvem. */
+export function isReenvioLocalStickySobreRejeicaoCloud(local: NotaPedido, cloud: NotaPedido): boolean {
+  if (local.status !== "aguardando_conferencia") return false;
+  if (cloud.status !== "rejeitada") return false;
+  const reenvMs = parseNotaIsoTime(local.reenviadaEm);
+  if (reenvMs === null) return false;
+  return reenvMs > cloudRejeicaoReferenciaMs(cloud);
+}
+
+/** Early return em finalizeNotaEntregaNaNuvem — true = não executar PATCH. */
+export function shouldFinalizeEntregaSkipCloudPatch(
+  existing: Pick<NotaPedido, "status">,
+  incoming: NotaPedido
+): boolean {
+  if (!existing.status) return false;
+  if (isNotaStatusTerminalConferencia(existing.status)) return true;
+  if (existing.status === "rejeitada" && !isReenvioCooperadoLegitimo(incoming)) return true;
+  return false;
+}
+
 /**
  * Evita sumiço na fila do responsável: nota em análise local só sai por
  * rejeição/conferência/pagamento — nunca por rascunho, lista incompleta ou sync.
@@ -56,8 +94,13 @@ function shouldApplyCloudNota(local: NotaPedido | undefined, cloud: NotaPedido):
       const localFotos = contarFotosEnviadasNota(local);
       return cloudTime > localTime || cloudFotos > localFotos;
     }
+    if (cloud.status === "rejeitada") {
+      if (isReenvioLocalStickySobreRejeicaoCloud(local, cloud)) {
+        return false;
+      }
+      return true;
+    }
     if (
-      cloud.status === "rejeitada" ||
       cloud.status === "conferida" ||
       cloud.status === "pago" ||
       cloud.status === "cancelado"
@@ -332,6 +375,20 @@ export function mergeCloudNotasIntoData(
           mergedNota = {
             ...mergedNota,
             status: "aguardando_conferencia",
+            updatedAt: local.updatedAt,
+          };
+        } else if (
+          local.status === "aguardando_conferencia" &&
+          cloudNota.status === "rejeitada" &&
+          isReenvioLocalStickySobreRejeicaoCloud(local, cloudNota)
+        ) {
+          mergedNota = {
+            ...mergedNota,
+            status: "aguardando_conferencia",
+            rejeitadaPor: undefined,
+            dataRejeicao: undefined,
+            motivoRejeicao: undefined,
+            reenviadaEm: local.reenviadaEm,
             updatedAt: local.updatedAt,
           };
         } else if (
@@ -902,15 +959,14 @@ export async function finalizeNotaEntregaNaNuvem(
   const digits = normalizeCnpj(cnpj);
   if (digits.length !== 14) return { ok: false, error: "CNPJ inválido." };
 
-  // Nunca rebaixar se a nuvem já avançou (conferida/pago/rejeitada).
+  // Nunca rebaixar se a nuvem já avançou (conferida/pago/rejeitada sem reenvio legítimo).
   const existing = await fetchNotaPedidoFromCloud(digits, nota.id, { metaOnly: true });
-  if (existing?.status) {
-    if (isNotaStatusTerminalConferencia(existing.status) || existing.status === "rejeitada") {
-      return { ok: true };
-    }
-    // Não retornar cedo em aguardando_conferencia: storage pode estar publicado
-    // enquanto a coluna/payload SQL ainda está em rascunho (lista do responsável ignora).
+  if (existing?.status && shouldFinalizeEntregaSkipCloudPatch(existing, nota)) {
+    return { ok: true };
   }
+
+  const reenvioPosRejeicao =
+    existing?.status === "rejeitada" && isReenvioCooperadoLegitimo(nota);
 
   const finalNota: NotaPedido = {
     ...nota,
@@ -921,7 +977,8 @@ export async function finalizeNotaEntregaNaNuvem(
     fotoPedidoMiniatura: undefined,
     fotosPedidoMiniaturas: undefined,
     cooperadoNomeSnapshot: nota.cooperadoNomeSnapshot ?? cooperadoNome,
-    updatedAt: new Date().toISOString(),
+    updatedAt:
+      reenvioPosRejeicao && nota.updatedAt ? nota.updatedAt : new Date().toISOString(),
   };
 
   const patched = await patchNotaPedidoInCloud(digits, finalNota);
