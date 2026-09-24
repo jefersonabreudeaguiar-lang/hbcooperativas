@@ -4,6 +4,7 @@
  * npx tsx scripts/repair-conta-coop-descontos-cooperativa.ts
  * npx tsx scripts/repair-conta-coop-descontos-cooperativa.ts --cooperado c_1782263929381_ncp55
  */
+import { assertNotProductionTarget } from "./lib/assertNotProductionTarget.mjs";
 import ws from "ws";
 import { createClient } from "@supabase/supabase-js";
 import { readFileSync, existsSync } from "node:fs";
@@ -30,6 +31,8 @@ function loadEnvFile(path: string) {
 }
 
 loadEnvFile(resolve(process.cwd(), ".env.local"));
+assertNotProductionTarget();
+
 
 const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;

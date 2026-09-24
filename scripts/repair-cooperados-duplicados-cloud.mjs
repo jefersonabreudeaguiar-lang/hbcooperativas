@@ -5,6 +5,7 @@
  * node scripts/repair-cooperados-duplicados-cloud.mjs
  * node scripts/repair-cooperados-duplicados-cloud.mjs --dry-run
  */
+import { assertNotProductionTarget } from "./lib/assertNotProductionTarget.mjs";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { createClient } from "@supabase/supabase-js";
@@ -22,6 +23,7 @@ for (const line of readFileSync(resolve(process.cwd(), ".env.local"), "utf8").sp
   if (!process.env[k]) process.env[k] = v;
 }
 
+if (!process.argv.includes("--dry-run")) assertNotProductionTarget();
 const sb = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY, {
   realtime: { transport: ws },
 });

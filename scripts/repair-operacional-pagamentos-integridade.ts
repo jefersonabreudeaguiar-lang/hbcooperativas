@@ -3,6 +3,7 @@
  *
  * npx tsx scripts/repair-operacional-pagamentos-integridade.ts
  */
+import { assertNotProductionTarget } from "./lib/assertNotProductionTarget.mjs";
 import ws from "ws";
 import { createClient } from "@supabase/supabase-js";
 import { readFileSync, existsSync, writeFileSync, mkdirSync } from "node:fs";
@@ -27,6 +28,8 @@ function loadEnvFile(path: string) {
 }
 
 loadEnvFile(resolve(process.cwd(), ".env.local"));
+assertNotProductionTarget();
+
 
 const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;

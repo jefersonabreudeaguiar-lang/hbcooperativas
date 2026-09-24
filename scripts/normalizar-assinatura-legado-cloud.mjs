@@ -3,6 +3,7 @@
  * node scripts/normalizar-assinatura-legado-cloud.mjs
  * node scripts/normalizar-assinatura-legado-cloud.mjs --dry-run
  */
+import { assertNotProductionTarget } from "./lib/assertNotProductionTarget.mjs";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import ws from "ws";
@@ -20,6 +21,7 @@ for (const line of readFileSync(resolve(process.cwd(), ".env.local"), "utf8").sp
   if (!process.env[k]) process.env[k] = v;
 }
 
+if (!process.argv.includes("--dry-run")) assertNotProductionTarget();
 const CNPJ = "62351750000165";
 
 function precisaNormalizar(c) {

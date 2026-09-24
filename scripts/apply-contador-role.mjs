@@ -2,6 +2,7 @@
  * Aplica constraint app_users com papel contador.
  * Uso: npx tsx scripts/apply-contador-role.mjs
  */
+import { assertNotProductionTarget } from "./lib/assertNotProductionTarget.mjs";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import pg from "pg";
@@ -16,6 +17,7 @@ for (const line of readFileSync(resolve(process.cwd(), ".env.local"), "utf8").sp
   if (!process.env[k]) process.env[k] = v;
 }
 
+assertNotProductionTarget();
 const sql = readFileSync(
   resolve(process.cwd(), "supabase/migrations/APPLY_APP_USERS_CONTADOR_ROLE.sql"),
   "utf8"

@@ -3,6 +3,7 @@
  * npx tsx scripts/repair-jeferson-amount-used.ts
  * npx tsx scripts/repair-jeferson-amount-used.ts --apply
  */
+import { assertNotProductionTarget } from "./lib/assertNotProductionTarget.mjs";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import ws from "ws";
@@ -20,6 +21,7 @@ for (const line of readFileSync(resolve(process.cwd(), ".env.local"), "utf8").sp
   process.env[t.slice(0, eq).trim()] = t.slice(eq + 1).trim().replace(/^["']|["']$/g, "");
 }
 
+assertNotProductionTarget();
 const APPLY = process.argv.includes("--apply");
 const CNPJ = "62351750000165";
 const J = "c_1781981564381_w67gg";

@@ -2,6 +2,7 @@
  * Cria conta cooperado para Orlando Fetisch (sem app_users).
  * Uso: node scripts/provision-orlando-login.mjs
  */
+import { assertNotProductionTarget } from "./lib/assertNotProductionTarget.mjs";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import bcrypt from "bcryptjs";
@@ -18,6 +19,7 @@ for (const line of readFileSync(resolve(process.cwd(), ".env.local"), "utf8").sp
   if (!process.env[k]) process.env[k] = v;
 }
 
+assertNotProductionTarget();
 const ORLANDO = {
   id: "u_orlando_fetisch_coop",
   email: "coopeagri2024@gmail.com",

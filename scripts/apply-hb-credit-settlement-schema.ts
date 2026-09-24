@@ -3,6 +3,7 @@
  * Uso: npx tsx scripts/apply-hb-credit-settlement-schema.ts
  */
 
+import { assertNotProductionTarget } from "./lib/assertNotProductionTarget.mjs";
 import { readFileSync, existsSync } from "node:fs";
 import { resolve } from "node:path";
 import pg from "pg";
@@ -100,6 +101,7 @@ async function checkSchema(client: pg.Client) {
 }
 
 async function main() {
+  assertNotProductionTarget();
   console.log("HB Credit — migration liquidação mercado\n");
 
   if (!supabaseUrl || !dbPassword) {

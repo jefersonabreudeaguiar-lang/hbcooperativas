@@ -2,6 +2,7 @@
  * Desliga duplicatas ativas e consolida assinatura no canônico (CoopeagriPla).
  * node scripts/fix-duplicados-assinatura-coop.mjs
  */
+import { assertNotProductionTarget } from "./lib/assertNotProductionTarget.mjs";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import ws from "ws";
@@ -17,6 +18,7 @@ for (const line of readFileSync(resolve(process.cwd(), ".env.local"), "utf8").sp
   if (!process.env[k]) process.env[k] = v;
 }
 
+assertNotProductionTarget();
 const CNPJ = "62351750000165";
 const DESLIGAR = [
   "c_1786721968441_xgsuz",

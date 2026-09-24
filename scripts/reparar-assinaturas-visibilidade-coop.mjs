@@ -2,6 +2,7 @@
  * Garante visibilidade das assinaturas para o responsável (CoopeagriPla).
  * node scripts/reparar-assinaturas-visibilidade-coop.mjs
  */
+import { assertNotProductionTarget } from "./lib/assertNotProductionTarget.mjs";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import ws from "ws";
@@ -63,6 +64,7 @@ function mergeAssinatura(a, b) {
   const lenB = b.assinaturaCadastroDataUrl?.length ?? 0;
   return lenB > lenA ? pick(b) : pick(a);
 }
+assertNotProductionTarget();
 
 const sb = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY, {
   realtime: { transport: ws },

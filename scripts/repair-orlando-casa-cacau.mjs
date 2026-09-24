@@ -6,6 +6,7 @@
  * Dry-run: node scripts/repair-orlando-casa-cacau.mjs
  * Aplicar:  node scripts/repair-orlando-casa-cacau.mjs --apply
  */
+import { assertNotProductionTarget } from "./lib/assertNotProductionTarget.mjs";
 import { readFileSync, writeFileSync, mkdirSync, existsSync } from "node:fs";
 import { resolve } from "node:path";
 import { randomUUID } from "node:crypto";
@@ -21,6 +22,7 @@ for (const line of readFileSync(resolve(process.cwd(), ".env.local"), "utf8").sp
 }
 
 const APPLY = process.argv.includes("--apply");
+if (APPLY) assertNotProductionTarget();
 const sb = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY, {
   realtime: { transport: ws },
 });

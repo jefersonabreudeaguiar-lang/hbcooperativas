@@ -2,9 +2,11 @@
  * Cria tabela password_reset_tokens no Supabase.
  * Uso: npm run apply:password-reset
  */
+import { assertNotProductionTarget } from "./lib/assertNotProductionTarget.mjs";
 import { applyPasswordResetSchemaSql } from "../src/lib/supabase/passwordResetSchema";
 
 async function main() {
+  assertNotProductionTarget();
   console.log("Aplicando password_reset_tokens...\n");
   const result = await applyPasswordResetSchemaSql();
   if (!result.ok) {

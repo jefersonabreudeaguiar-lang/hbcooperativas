@@ -33,6 +33,7 @@ import {
   sincronizarTotaisNotaComFichas,
 } from "../src/services/notaPedidoService";
 import { round2 } from "../src/utils/calculations";
+import { assertNotProductionTarget } from "./lib/assertNotProductionTarget.mjs";
 
 function loadEnvFile(path: string) {
   if (!existsSync(path)) return;
@@ -141,6 +142,7 @@ function resumoNota(data: AppData, nota: NotaPedido, coopId: string) {
 }
 
 async function main() {
+  if (!DRY_RUN) assertNotProductionTarget();
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
   if (!url || !serviceKey) {

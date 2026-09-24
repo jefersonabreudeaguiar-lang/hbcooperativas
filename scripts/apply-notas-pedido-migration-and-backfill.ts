@@ -13,6 +13,7 @@ import {
   upsertNotasInTable,
 } from "../src/lib/supabase/notasStorage";
 import { isNotaNaFilaConferenciaResponsavel } from "../src/utils/notaStatus";
+import { assertNotProductionTarget } from "./lib/assertNotProductionTarget.mjs";
 
 function loadEnvFile(path: string) {
   if (!existsSync(path)) return;
@@ -33,6 +34,7 @@ const DRY = process.argv.includes("--dry-run");
 const SKIP_MIGRATION = process.argv.includes("--skip-migration");
 
 async function main() {
+  if (!DRY) assertNotProductionTarget();
   if (CNPJ.length !== 14) {
     console.error("CNPJ inválido");
     process.exit(1);

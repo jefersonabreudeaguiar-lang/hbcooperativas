@@ -2,6 +2,7 @@
  * Repara dados da Mailda que bloqueavam o app (mensalidades duplicadas + rascunho órfão).
  * Uso: npx tsx scripts/repair-mailda-tela-branca.ts
  */
+import { assertNotProductionTarget } from "./lib/assertNotProductionTarget.mjs";
 import ws from "ws";
 import { createClient } from "@supabase/supabase-js";
 import { readFileSync, existsSync } from "node:fs";
@@ -31,6 +32,8 @@ function loadEnvFile(path: string) {
   }
 }
 loadEnvFile(resolve(process.cwd(), ".env.local"));
+assertNotProductionTarget();
+
 
 const CNPJ = normalizeCnpj("62351750000165");
 const MAILDA_ID = "c_1787062473525_7isbg";

@@ -10,6 +10,7 @@
  * Uso: npx tsx scripts/apply-hb-credit-migrations.ts
  */
 
+import { assertNotProductionTarget } from "./lib/assertNotProductionTarget.mjs";
 import { readFileSync, existsSync } from "node:fs";
 import { resolve } from "node:path";
 import pg from "pg";
@@ -137,6 +138,7 @@ async function ensurePrerequisites(client: pg.Client) {
 }
 
 async function main() {
+  assertNotProductionTarget();
   console.log("HB Credit — aplicar migrations\n");
   const client = await connectPg(dbPassword);
 
