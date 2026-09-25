@@ -55,10 +55,18 @@ function notifyHbCreditStatusListeners() {
   statusListeners.forEach((l) => l());
 }
 
-function seedSharedFromCache() {
-  if (shared.serverEnabled !== null) return;
+function seedSharedFromCache(): boolean {
+  if (shared.serverEnabled !== null) return false;
   const cached = readCachedHbCreditStatus();
-  if (cached !== null) shared.serverEnabled = cached;
+  if (cached !== null) {
+    shared.serverEnabled = cached;
+    return true;
+  }
+  return false;
+}
+
+if (typeof window !== "undefined") {
+  seedSharedFromCache();
 }
 
 async function fetchHbCreditStatusOnce(signal: AbortSignal) {
@@ -100,7 +108,9 @@ export function useHbCreditEnabled(): HbCreditFlagState {
   const [, bump] = useState(0);
 
   useEffect(() => {
-    seedSharedFromCache();
+    if (seedSharedFromCache()) {
+      bump((n) => n + 1);
+    }
     const listener = () => bump((n) => n + 1);
     statusListeners.add(listener);
     void ensureHbCreditStatusFetch();

@@ -16,6 +16,8 @@ type HookOpts = {
   cooperativaId?: string;
   cooperadoNome?: string;
   user?: Pick<User, "cooperativaCnpj" | "cooperativaId" | "id"> | null;
+  /** Quando false, não dispara sync (ex.: aguardando fetchCreditAccount na HB). */
+  enabled?: boolean;
 };
 
 /** Mantém o abatimento HB Créditos → valor a receber sincronizado (todos os cooperados). */
@@ -38,7 +40,7 @@ export function useSyncContaCoopValorReceberPilot(opts?: HookOpts) {
   }, [opts?.cooperativaId, opts?.user?.id]);
 
   optsRef.current =
-    opts?.cooperadoId && opts.mesReferencia && opts.cooperativaId && cnpj
+    opts?.cooperadoId && opts.mesReferencia && opts.cooperativaId && cnpj && opts.enabled !== false
       ? {
           cnpj,
           cooperadoId: opts.cooperadoId,
@@ -89,5 +91,6 @@ export function useSyncContaCoopValorReceberPilot(opts?: HookOpts) {
     opts?.cooperadoNome,
     opts?.cooperativaId,
     opts?.mesReferencia,
+    opts?.enabled,
   ]);
 }

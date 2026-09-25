@@ -26,6 +26,11 @@ import {
   refreshContaCoopLimiteCooperativaAtivos,
   refreshContaCoopLimiteFromFicha,
 } from "@/lib/hb-credit/syncContaCoopLimiteFromFicha";
+import {
+  coalesceContaCoopAuxSync,
+  contaCoopAuxSyncKeyValorReceber,
+  contaCoopAuxSyncKeyWarmupBundle,
+} from "@/lib/hb-credit/contaCoopAuxSyncDedupe";
 
 export type SyncContaCoopValorReceberOpts = {
   cnpj: string;
@@ -284,11 +289,16 @@ export async function refreshContaCoopDescontosCooperativaPendentes(opts: {
 export async function refreshContaCoopValorReceberPilot(
   opts: SyncContaCoopValorReceberOpts
 ): Promise<{ descontos: DescontoContaCoopRemoto[] }> {
-  const { changed, descontos, data } = await applyLocalContaCoopDescontosRefresh({ ...opts, pushCloud: false });
-  if (changed) {
-    await pushOperacionalToCloud(opts.cnpj, data, opts.cooperativaId).catch(() => {});
-  }
-  return { descontos };
+  return coalesceContaCoopAuxSync(
+    contaCoopAuxSyncKeyValorReceber(opts.cnpj, opts.cooperadoId),
+    async () => {
+      const { changed, descontos, data } = await applyLocalContaCoopDescontosRefresh({ ...opts, pushCloud: false });
+      if (changed) {
+        await pushOperacionalToCloud(opts.cnpj, data, opts.cooperativaId).catch(() => {});
+      }
+      return { descontos };
+    }
+  );
 }
 
 /**
@@ -321,38 +331,41 @@ export async function refreshContaCoopValorReceberAfterHbTransaction(
 export async function refreshContaCoopDescontosAfterOperacionalSync(opts: {
   cnpj: string;
   cooperativaId: string;
-  user: Pick<User, "role" | "cooperadoId">;
+  user: Pick<User, "role" | "cooperadoId" | "id">;
 }): Promise<void> {
   if (!isContaCoopValorReceberPilot()) return;
 
-  const data = getData();
-  if (opts.user.role === "cooperado" && opts.user.cooperadoId) {
-    const canonico = resolverCooperadoIdCanonico(data, opts.user.cooperadoId, opts.cooperativaId);
-    const mesReferencia = getMesPrincipalQuantoVouReceber(data, canonico, opts.cooperativaId);
-    await refreshContaCoopValorReceberPilot({
-      cnpj: opts.cnpj,
-      cooperadoId: canonico,
-      mesReferencia,
-      cooperativaId: opts.cooperativaId,
-    }).catch(() => {});
-    await refreshContaCoopLimiteFromFicha({
-      cnpj: opts.cnpj,
-      cooperadoId: canonico,
-      cooperativaId: opts.cooperativaId,
-    }).catch(() => {});
-    return;
-  }
+  const warmupKey = contaCoopAuxSyncKeyWarmupBundle(opts.cnpj, opts.user.id);
 
-  if (opts.user.role === "responsavel" || opts.user.role === "tesoureiro" || opts.user.role === "admin") {
-    await refreshContaCoopDescontosCooperativaPendentes({
-      cnpj: opts.cnpj,
-      cooperativaId: opts.cooperativaId,
-      pushCloud: true,
-    }).catch(() => {});
-    await refreshContaCoopLimiteCooperativaAtivos({
-      cnpj: opts.cnpj,
-      cooperativaId: opts.cooperativaId,
-    }).catch(() => {});
-    return;
-  }
+  await coalesceContaCoopAuxSync(warmupKey, async () => {
+    const data = getData();
+    if (opts.user.role === "cooperado" && opts.user.cooperadoId) {
+      const canonico = resolverCooperadoIdCanonico(data, opts.user.cooperadoId, opts.cooperativaId);
+      const mesReferencia = getMesPrincipalQuantoVouReceber(data, canonico, opts.cooperativaId);
+      await refreshContaCoopValorReceberPilot({
+        cnpj: opts.cnpj,
+        cooperadoId: canonico,
+        mesReferencia,
+        cooperativaId: opts.cooperativaId,
+      }).catch(() => {});
+      await refreshContaCoopLimiteFromFicha({
+        cnpj: opts.cnpj,
+        cooperadoId: canonico,
+        cooperativaId: opts.cooperativaId,
+      }).catch(() => {});
+      return;
+    }
+
+    if (opts.user.role === "responsavel" || opts.user.role === "tesoureiro" || opts.user.role === "admin") {
+      await refreshContaCoopDescontosCooperativaPendentes({
+        cnpj: opts.cnpj,
+        cooperativaId: opts.cooperativaId,
+        pushCloud: true,
+      }).catch(() => {});
+      await refreshContaCoopLimiteCooperativaAtivos({
+        cnpj: opts.cnpj,
+        cooperativaId: opts.cooperativaId,
+      }).catch(() => {});
+    }
+  });
 }

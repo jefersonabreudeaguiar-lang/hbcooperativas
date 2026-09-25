@@ -3,6 +3,10 @@ import { syncCreditLimiteFromFicha } from "@/services/creditApiService";
 import { getData } from "@/services/dataStore";
 import { isContaCoopValorReceberPilot } from "@/utils/contaCoopUiVisibility";
 import type { AppData } from "@/types";
+import {
+  coalesceContaCoopAuxSync,
+  contaCoopAuxSyncKeyLimite,
+} from "@/lib/hb-credit/contaCoopAuxSyncDedupe";
 
 export type SyncContaCoopLimiteOpts = {
   cnpj: string;
@@ -18,15 +22,20 @@ export async function refreshContaCoopLimiteFromFicha(opts: SyncContaCoopLimiteO
     return;
   }
 
-  const data = getData();
-  const ids = opts.cooperadoIds?.length ? opts.cooperadoIds : [opts.cooperadoId];
-  /** Prévia local — enviada só para auditoria de divergência; o servidor ignora como autoridade. */
-  const creditosBaseCents = buildCreditosBaseMap(data, ids, opts.cooperativaId);
+  const primaryId = opts.cooperadoId ?? opts.cooperadoIds?.[0] ?? "";
+  if (!primaryId || !opts.cnpj) return;
 
-  await syncCreditLimiteFromFicha({
-    cnpj: opts.cnpj,
-    cooperadoIds: ids,
-    creditosBaseCents,
+  await coalesceContaCoopAuxSync(contaCoopAuxSyncKeyLimite(opts.cnpj, primaryId), async () => {
+    const data = getData();
+    const ids = opts.cooperadoIds?.length ? opts.cooperadoIds : [opts.cooperadoId];
+    /** Prévia local — enviada só para auditoria de divergência; o servidor ignora como autoridade. */
+    const creditosBaseCents = buildCreditosBaseMap(data, ids, opts.cooperativaId);
+
+    await syncCreditLimiteFromFicha({
+      cnpj: opts.cnpj,
+      cooperadoIds: ids,
+      creditosBaseCents,
+    });
   });
 }
 

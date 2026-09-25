@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { CreditFeatureGate } from "@/components/hb-credit/CreditFeatureGate";
 import { CloudSessionGate } from "@/components/hb-credit/CloudSessionGate";
@@ -27,6 +27,7 @@ import { FINANCIAL_PIN_MIN_LENGTH } from "@/modules/hb-credit/config";
 import { formatLedgerEntryLabel } from "@/lib/hb-credit/ledgerLabels";
 import { getMesPrincipalQuantoVouReceber } from "@/services/cooperadoEntregasService";
 import { isContaCoopValorReceberPilot } from "@/utils/contaCoopUiVisibility";
+import { notifyHbCreditAccountLoaded } from "@/lib/hb-credit/hbCreditEntryEvents";
 import { useSyncContaCoopValorReceberPilot } from "@/hooks/useSyncContaCoopValorReceberPilot";
 import { useSyncContaCoopLimiteFromFicha } from "@/hooks/useSyncContaCoopLimiteFromFicha";
 import { PageSkeleton } from "@/components/ui/PageSkeleton";
@@ -57,6 +58,8 @@ function MinhaContaCoopContent() {
   const [hasPin, setHasPin] = useState(false);
   const [pinResetPending, setPinResetPending] = useState(false);
   const [ledger, setLedger] = useState<ContaCoopLedgerEntry[]>([]);
+  const [ledgerLoading, setLedgerLoading] = useState(false);
+  const [ledgerLoaded, setLedgerLoaded] = useState(false);
   const [pinSetup, setPinSetup] = useState("");
   const [qrInput, setQrInput] = useState("");
   const [showManualQr, setShowManualQr] = useState(false);
@@ -69,6 +72,9 @@ function MinhaContaCoopContent() {
   const [useCashback, setUseCashback] = useState(false);
   const [busy, setBusy] = useState(false);
   const [isOffline, setIsOffline] = useState(false);
+  /** Aux syncs (ficha / limite) só após o primeiro fetchCreditAccount — não competem na entrada. */
+  const [auxSyncEnabled, setAuxSyncEnabled] = useState(false);
+  const auxEntrySignaledRef = useRef(false);
 
   const cnpj = useMemo(() => {
     if (!user || !data) return "";
@@ -83,7 +89,7 @@ function MinhaContaCoopContent() {
   }, [data, cooperadoId, user?.name]);
 
   const contaCoopSync = useMemo(() => {
-    if (!data || !cooperadoId || !user || !cnpj) return undefined;
+    if (!auxSyncEnabled || !data || !cooperadoId || !user || !cnpj) return undefined;
     const coopId = getUserCooperativaId(user, data);
     if (!coopId || !isContaCoopValorReceberPilot(cooperadoId, cooperadoNome)) return undefined;
     return {
@@ -92,8 +98,9 @@ function MinhaContaCoopContent() {
       cooperativaId: coopId,
       cooperadoNome,
       user,
+      enabled: true as const,
     };
-  }, [cnpj, cooperadoId, cooperadoNome, data, user]);
+  }, [auxSyncEnabled, cnpj, cooperadoId, cooperadoNome, data, user]);
 
   useSyncContaCoopValorReceberPilot(contaCoopSync);
   useSyncContaCoopLimiteFromFicha(contaCoopSync);
@@ -109,9 +116,24 @@ function MinhaContaCoopContent() {
     };
   }, []);
 
+  const loadLedger = useCallback(async () => {
+    if (!cnpj || !cooperadoId) return;
+    setLedgerLoading(true);
+    try {
+      const lg = await fetchCreditLedger(cnpj, cooperadoId);
+      setLedger(lg);
+      setLedgerLoaded(true);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Erro ao carregar extrato.");
+    } finally {
+      setLedgerLoading(false);
+    }
+  }, [cnpj, cooperadoId]);
+
   const reload = useCallback(async () => {
     if (!cnpj || !cooperadoId) return;
     setLoading(true);
+    setLedgerLoaded(false);
     setError("");
     try {
       const acc = await fetchCreditAccount(cnpj, cooperadoId);
@@ -119,18 +141,27 @@ function MinhaContaCoopContent() {
       setUpdatedAt(acc.updatedAt ?? null);
       setHasPin(Boolean(acc.hasPin));
       setPinResetPending(Boolean(acc.pinResetPending));
-      const lg = await fetchCreditLedger(cnpj, cooperadoId);
-      setLedger(lg);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Erro ao carregar conta.");
     } finally {
       setLoading(false);
+      if (!auxEntrySignaledRef.current) {
+        auxEntrySignaledRef.current = true;
+        setAuxSyncEnabled(true);
+        notifyHbCreditAccountLoaded();
+      }
     }
   }, [cnpj, cooperadoId]);
 
   useEffect(() => {
     reload();
   }, [reload]);
+
+  useEffect(() => {
+    if (tab !== "extrato" || ledgerLoaded || ledgerLoading) return;
+    if (!cnpj || !cooperadoId) return;
+    void loadLedger();
+  }, [tab, ledgerLoaded, ledgerLoading, cnpj, cooperadoId, loadLedger]);
 
   useEffect(() => {
     const onVisible = () => {
@@ -532,6 +563,11 @@ function MinhaContaCoopContent() {
             <h3 className="font-semibold text-gray-900">Movimentações</h3>
             <p className="text-xs text-gray-500">Pagamentos e ajustes do seu crédito</p>
           </div>
+          {ledgerLoading && !ledgerLoaded ? (
+            <div className="px-5 py-10">
+              <PageSkeleton />
+            </div>
+          ) : (
           <div className="divide-y divide-gray-100">
             {ledger.map((entry) => (
               <div key={entry.id} className="flex items-center justify-between gap-3 px-5 py-4">
@@ -559,6 +595,7 @@ function MinhaContaCoopContent() {
               <p className="px-5 py-10 text-center text-sm text-gray-500">Nenhuma movimentação ainda.</p>
             )}
           </div>
+          )}
         </Card>
       )}
     </div>

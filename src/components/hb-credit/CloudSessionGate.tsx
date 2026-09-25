@@ -13,10 +13,15 @@ import { PageSkeleton } from "@/components/ui/PageSkeleton";
 import { AlertBanner } from "@/components/ui/AlertBanner";
 import { Button } from "@/components/ui/Button";
 
+function initialCloudGateReady(): boolean {
+  if (typeof window === "undefined") return false;
+  return isCloudSessionActive();
+}
+
 export function CloudSessionGate({ children }: { children: React.ReactNode }) {
   const { user, loading: authLoading, logout } = useAuth();
   const router = useRouter();
-  const [ready, setReady] = useState(false);
+  const [ready, setReady] = useState(initialCloudGateReady);
   const [error, setError] = useState("");
   const [retrying, setRetrying] = useState(false);
 
