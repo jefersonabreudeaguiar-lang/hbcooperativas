@@ -29,10 +29,27 @@ import {
   clearOperacionalFinanceiroForCooperativa,
 } from "@/services/operationalReset";
 import { posProcessarFinanceiroLocal } from "@/services/operacionalLocalPostProcess";
+import {
+  enqueueOperacionalPush,
+  isOperacionalPushSingleFlightEnabled,
+} from "@/services/operacionalPushSingleFlight";
 type WithUpdatedAt = { id: string; updatedAt?: string; createdAt?: string };
 
 /** Evita POST operacional repetido na mesma sessão quando o payload não mudou. */
 const lastOperacionalPushFingerprint = new Map<string, string>();
+
+/** Somente testes H8.9.62 — serialização / erro na fila (sem rede). */
+let pushOperacionalInternalTestEnterHook: ((ctx: { cnpj: string }) => Promise<void>) | null = null;
+
+export function setPushOperacionalInternalTestEnterHookForTests(
+  hook: typeof pushOperacionalInternalTestEnterHook
+): void {
+  pushOperacionalInternalTestEnterHook = hook;
+}
+
+export function clearOperacionalPushFingerprintForTests(cnpj: string, authoritative = false): void {
+  clearOperacionalPushFingerprint(cnpj, authoritative);
+}
 
 export function operacionalPushCacheKey(cnpj: string, authoritative: boolean): string {
   return `${cnpj}:${authoritative ? "auth" : "merge"}`;
@@ -1186,6 +1203,23 @@ export async function pushOperacionalToCloud(
 ): Promise<void> {
   const digits = normalizeCnpj(cnpj);
   if (digits.length !== 14) return;
+  if (!isOperacionalPushSingleFlightEnabled()) {
+    return pushOperacionalToCloudInternal(cnpj, data, coopId, options);
+  }
+  return enqueueOperacionalPush(digits, () => pushOperacionalToCloudInternal(cnpj, data, coopId, options));
+}
+
+/** Corpo operacional (POST, dedupe, merge). Não chama a API pública nem `enqueueOperacionalPush`. */
+export async function pushOperacionalToCloudInternal(
+  cnpj: string,
+  data?: AppData,
+  coopId?: string,
+  options?: { authoritative?: boolean; skipOperationalResetPush?: boolean; forceOperacionalPush?: boolean }
+): Promise<void> {
+  const digits = normalizeCnpj(cnpj);
+  if (digits.length !== 14) return;
+
+  await pushOperacionalInternalTestEnterHook?.({ cnpj: digits });
 
   if (!options?.skipOperationalResetPush && needsOperationalResetCloudPush()) {
     await pushOperationalResetToCloud(digits, coopId);

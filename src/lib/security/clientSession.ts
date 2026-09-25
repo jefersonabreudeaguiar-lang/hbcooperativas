@@ -410,7 +410,20 @@ export function mensagemErroAuthApi(status: number, error?: string): string {
   return error ?? "Erro ao comunicar com o servidor.";
 }
 
+/** Somente testes — intercepta rede sem alterar call sites. */
+let secureApiFetchTestOverride: ((input: RequestInfo | URL, init?: RequestInit) => Promise<Response>) | null =
+  null;
+
+export function setSecureApiFetchTestOverrideForTests(
+  fn: typeof secureApiFetchTestOverride
+): void {
+  secureApiFetchTestOverride = fn;
+}
+
 export async function secureApiFetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
+  if (secureApiFetchTestOverride) {
+    return secureApiFetchTestOverride(input, init);
+  }
   const profile = activeCloudProfile ?? loadStoredSessionProfile();
   const sessionReady = await ensureCloudSessionReady(profile ?? undefined);
 
