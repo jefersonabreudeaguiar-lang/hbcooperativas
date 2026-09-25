@@ -95,6 +95,9 @@ function ContaCoopContent() {
   const [dashboard, setDashboard] = useState<ContaCoopDashboard | null>(null);
   const [limites, setLimites] = useState<ContaCoopLimiteCooperado[]>([]);
   const [parceiros, setParceiros] = useState<ContaCoopParceiro[]>([]);
+  const [parceirosLoaded, setParceirosLoaded] = useState(false);
+  const [parceirosLoading, setParceirosLoading] = useState(false);
+  const [parceirosError, setParceirosError] = useState("");
   const [tetoPercentual, setTetoPercentual] = useState("");
   const [cooperadoId, setCooperadoId] = useState("");
   const [novoLimiteReais, setNovoLimiteReais] = useState("");
@@ -136,6 +139,24 @@ function ContaCoopContent() {
     );
   }, [data, cooperadosAtivos, user?.cooperativaId]);
 
+  const loadParceiros = useCallback(async () => {
+    if (!cnpj || cnpj.length !== 14) return;
+    setParceirosLoading(true);
+    setParceirosError("");
+    setParceirosLoaded(false);
+    try {
+      const parc = await fetchCreditParceiros(cnpj);
+      setParceiros(parc);
+      setParceirosError("");
+      setParceirosLoaded(true);
+    } catch {
+      setParceirosError("Não foi possível carregar os mercados parceiros.");
+      setParceirosLoaded(true);
+    } finally {
+      setParceirosLoading(false);
+    }
+  }, [cnpj]);
+
   const reload = useCallback(async () => {
     if (!cnpj) return;
     setLoading(true);
@@ -153,10 +174,10 @@ function ContaCoopContent() {
       setDashboard(dash);
       setLoading(false);
 
-      void Promise.all([fetchCreditLimites(cnpj), fetchCreditParceiros(cnpj)]).then(([lim, parc]) => {
-        setLimites(lim);
-        setParceiros(parc);
-      });
+      void loadParceiros();
+      void fetchCreditLimites(cnpj)
+        .then(setLimites)
+        .catch(() => {});
 
       void Promise.all([
         fetchPartnerPixChangeRequests(cnpj, "pendente").catch(() => []),
@@ -171,7 +192,7 @@ function ContaCoopContent() {
       setError(e instanceof Error ? e.message : "Erro ao carregar HB Créditos.");
       setLoading(false);
     }
-  }, [cnpj, creditosBaseColetivo, cooperadosAtivos]);
+  }, [cnpj, creditosBaseColetivo, cooperadosAtivos, loadParceiros]);
 
   useEffect(() => {
     reload();
@@ -986,6 +1007,19 @@ function ContaCoopContent() {
             </Card>
           )}
 
+          {!parceirosLoaded || parceirosLoading ? (
+            <Card className="!p-8 text-center text-sm text-gray-500">Carregando mercados parceiros…</Card>
+          ) : parceirosError ? (
+            <Card className="space-y-4 !p-6">
+              <AlertBanner variant="error" title="Mercados parceiros">
+                {parceirosError}
+              </AlertBanner>
+              <Button onClick={() => void loadParceiros()} disabled={parceirosLoading}>
+                Recarregar mercados
+              </Button>
+            </Card>
+          ) : (
+            <>
           <Card className="border-green-200 bg-green-50/50 !p-4">
             <h3 className="font-semibold text-gray-900">Desconto por contrato com cada mercado</h3>
             <p className="mt-1 text-sm text-gray-600">
@@ -1107,6 +1141,8 @@ function ContaCoopContent() {
           })}
           {!parceiros.length && (
             <Card className="!p-8 text-center text-sm text-gray-500">Nenhum mercado parceiro cadastrado.</Card>
+          )}
+            </>
           )}
         </div>
       )}
