@@ -126,6 +126,11 @@ function shouldApplyCloudNota(local: NotaPedido | undefined, cloud: NotaPedido):
     return false;
   }
 
+  // Conferida local não regride para snapshot legado "entregue" (mesmo rank, cloud mais novo).
+  if (local.status === "conferida" && cloud.status === "entregue") {
+    return false;
+  }
+
   // Responsável rejeitou — cooperado precisa ver o status na hora.
   if (local.status === "rejeitada" && cloud.status === "aguardando_conferencia") {
     return true;
