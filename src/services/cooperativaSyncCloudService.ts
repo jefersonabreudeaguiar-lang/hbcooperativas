@@ -30,13 +30,22 @@ import {
 } from "@/services/operationalReset";
 import { posProcessarFinanceiroLocal } from "@/services/operacionalLocalPostProcess";
 import {
-  enqueueOperacionalPush,
+  enqueueOperacionalCoordination,
   isOperacionalPushSingleFlightEnabled,
 } from "@/services/operacionalPushSingleFlight";
 type WithUpdatedAt = { id: string; updatedAt?: string; createdAt?: string };
 
 /** Evita POST operacional repetido na mesma sessão quando o payload não mudou. */
 const lastOperacionalPushFingerprint = new Map<string, string>();
+
+/** Somente testes H8.9.62 / H8.9.88 — detectar chamada à API pública de push. */
+let pushOperacionalPublicTestEnterHook: (() => void) | null = null;
+
+export function setPushOperacionalPublicTestEnterHookForTests(
+  hook: typeof pushOperacionalPublicTestEnterHook
+): void {
+  pushOperacionalPublicTestEnterHook = hook;
+}
 
 /** Somente testes H8.9.62 — serialização / erro na fila (sem rede). */
 let pushOperacionalInternalTestEnterHook: ((ctx: { cnpj: string }) => Promise<void>) | null = null;
@@ -1203,10 +1212,13 @@ export async function pushOperacionalToCloud(
 ): Promise<void> {
   const digits = normalizeCnpj(cnpj);
   if (digits.length !== 14) return;
+  pushOperacionalPublicTestEnterHook?.();
   if (!isOperacionalPushSingleFlightEnabled()) {
     return pushOperacionalToCloudInternal(cnpj, data, coopId, options);
   }
-  return enqueueOperacionalPush(digits, () => pushOperacionalToCloudInternal(cnpj, data, coopId, options));
+  return enqueueOperacionalCoordination(digits, () =>
+    pushOperacionalToCloudInternal(cnpj, data, coopId, options)
+  );
 }
 
 /** Corpo operacional (POST, dedupe, merge). Não chama a API pública nem `enqueueOperacionalPush`. */
@@ -1715,10 +1727,10 @@ export async function syncAllCooperativaFromCloud(cnpj: string, preferredCoopId?
 }
 
 /**
- * Puxa da nuvem e envia alterações locais (operacional + catálogo quando houver itens).
- * Usado pelo sync global para manter responsável e cooperado sempre atualizados.
+ * Corpo do sync bidirectional (gestão). Deve rodar dentro de `enqueueOperacionalCoordination`
+ * quando a coordenação estiver ON — não chama `pushOperacionalToCloud` público.
  */
-export async function syncCooperativaBidirectional(
+export async function syncCooperativaBidirectionalInternal(
   cnpj: string,
   coopId?: string,
   options?: { pushCatalog?: boolean; pushMensalidades?: boolean }
@@ -1726,7 +1738,8 @@ export async function syncCooperativaBidirectional(
   const digits = normalizeCnpj(cnpj);
   if (digits.length !== 14) return;
 
-  if (needsOperationalResetCloudPush()) {
+  const resetExecutedInJob = needsOperationalResetCloudPush();
+  if (resetExecutedInJob) {
     await pushOperationalResetToCloud(digits, coopId);
   }
 
@@ -1746,7 +1759,10 @@ export async function syncCooperativaBidirectional(
   if (options?.pushMensalidades !== false) {
     // Já puxamos a nuvem acima; push autoritativo com getData() fresco evita
     // segundo merge com snapshot antigo apagar ação do responsável.
-    await pushOperacionalToCloud(digits, undefined, cid, { authoritative: true });
+    await pushOperacionalToCloudInternal(digits, undefined, cid, {
+      authoritative: true,
+      skipOperationalResetPush: resetExecutedInJob,
+    });
   }
 
   if (options?.pushCatalog) {
@@ -1757,6 +1773,25 @@ export async function syncCooperativaBidirectional(
       await pushContratosToCloud(digits, getData(), cid, { authoritative: true });
     }
   }
+}
+
+/**
+ * Puxa da nuvem e envia alterações locais (operacional + catálogo quando houver itens).
+ * Usado pelo sync global para manter responsável e cooperado sempre atualizados.
+ */
+export async function syncCooperativaBidirectional(
+  cnpj: string,
+  coopId?: string,
+  options?: { pushCatalog?: boolean; pushMensalidades?: boolean }
+): Promise<void> {
+  const digits = normalizeCnpj(cnpj);
+  if (digits.length !== 14) return;
+  if (!isOperacionalPushSingleFlightEnabled()) {
+    return syncCooperativaBidirectionalInternal(cnpj, coopId, options);
+  }
+  return enqueueOperacionalCoordination(digits, () =>
+    syncCooperativaBidirectionalInternal(cnpj, coopId, options)
+  );
 }
 
 /** Envia contratos + operacional + perfil após alterações locais. */

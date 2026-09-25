@@ -37,10 +37,14 @@ function queueKey(cnpj: string): string {
 const tails = new Map<string, Promise<void>>();
 
 /**
+ * H8.9.88 — coordenação exclusiva por CNPJ (push, bidirectional, etc.).
  * Enfileira `operation` após todas as operações anteriores do mesmo CNPJ.
  * Retorna a Promise dessa operação (sucesso ou erro propagado ao chamador).
  */
-export function enqueueOperacionalPush<T>(cnpj: string, operation: OperacionalPushOperation<T>): Promise<T> {
+export function enqueueOperacionalCoordination<T>(
+  cnpj: string,
+  operation: OperacionalPushOperation<T>
+): Promise<T> {
   const key = queueKey(cnpj);
   const previous = tails.get(key) ?? Promise.resolve();
 
@@ -58,6 +62,11 @@ export function enqueueOperacionalPush<T>(cnpj: string, operation: OperacionalPu
   });
 
   return run;
+}
+
+/** Compat H8.9.60 — push operacional na mesma fila de coordenação. */
+export function enqueueOperacionalPush<T>(cnpj: string, operation: OperacionalPushOperation<T>): Promise<T> {
+  return enqueueOperacionalCoordination(cnpj, operation);
 }
 
 /** Somente testes — zera filas in-memory. */
