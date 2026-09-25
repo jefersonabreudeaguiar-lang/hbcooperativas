@@ -2336,6 +2336,7 @@ export default function NotasPedidoContent() {
         notaAtualizada = sincronizarTotaisNotaComFichas(notaAtualizada!, d.fichaCorrida, {
           forcarDescontoLiquido: true,
           sincronizarBruto: fichasExistentes.length > 1,
+          preservarTotaisDoLancamentoAtual: true,
         });
       }
       const notasPedido = d.notasPedido.map((n) => (n.id === selectedNota.id ? notaAtualizada! : n));
