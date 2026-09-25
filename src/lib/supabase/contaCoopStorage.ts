@@ -41,6 +41,7 @@ import {
   valorReaisLinhaResumoCooperado,
   type HbUtilizacaoResumoLancamento,
 } from "@/lib/hb-credit/utilizacaoResumo";
+import { dedupeDescontosContaCoopRemotos } from "@/lib/hb-credit/mergeFichaDescontos";
 import { decryptSensitiveField, encryptSensitiveField } from "@/lib/security/fieldCrypto";
 import {
   intentStatusFromDb,
@@ -3563,6 +3564,7 @@ type CooperadoContaCoopDescontoRow = {
   valorReais: number;
   tipo: "conta_coop";
   createdAt: string;
+  hbTransactionId?: string;
 };
 
 const HB_TX_FICHA_SELECT =
@@ -3598,6 +3600,7 @@ function mapHbTxToDescontoRow(t: HbTxFichaRow, partnerNames: Record<string, stri
     valorReais,
     tipo: "conta_coop" as const,
     createdAt: String(t.created_at),
+    hbTransactionId: String(t.id),
   };
 }
 
@@ -3759,13 +3762,21 @@ export async function listCooperadoContaCoopDescontosAbateValorReceber(
     new Date().toISOString(),
     { incluirPagamentosEstornados: true }
   );
-  const seen = new Set<string>();
-  return rows.filter((r) => {
-    const k = `${r.createdAt}|${r.valorReais}|${r.motivo}`;
-    if (seen.has(k)) return false;
-    seen.add(k);
-    return true;
-  });
+  const remotos = rows.map((r) => ({
+    motivo: r.motivo,
+    valorReais: r.valorReais,
+    tipo: "conta_coop" as const,
+    createdAt: r.createdAt,
+    hbTransactionId: r.hbTransactionId,
+  }));
+  const deduped = dedupeDescontosContaCoopRemotos(remotos);
+  return deduped.map((d) => ({
+    motivo: d.motivo,
+    valorReais: d.valorReais,
+    tipo: "conta_coop" as const,
+    createdAt: d.createdAt,
+    hbTransactionId: d.hbTransactionId,
+  }));
 }
 
 export async function getDiscountPoolResumo(

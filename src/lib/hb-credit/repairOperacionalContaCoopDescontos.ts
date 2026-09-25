@@ -20,6 +20,7 @@ function descontosToArquivo(descontos: DescontoContaCoopRemoto[]): NonNullable<A
     valorReais: d.valorReais,
     tipo: d.motivo.toLowerCase().includes("estorno") ? ("credito_avulso" as const) : ("conta_coop" as const),
     createdAt: d.createdAt ?? "",
+    ...(d.hbTransactionId ? { hbTransactionId: d.hbTransactionId } : {}),
   }));
 }
 

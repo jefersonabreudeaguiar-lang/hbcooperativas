@@ -540,7 +540,13 @@ export async function fetchFichaDescontosContaCoop(
   const data = await parseJson<{
     ok?: boolean;
     error?: string;
-    descontos?: Array<{ motivo: string; valorReais: number; tipo: "conta_coop"; createdAt: string }>;
+    descontos?: Array<{
+      motivo: string;
+      valorReais: number;
+      tipo: "conta_coop";
+      createdAt: string;
+      hbTransactionId?: string;
+    }>;
   }>(res);
   if (!res.ok || !data.ok) throw new Error(data.error ?? "Erro ao carregar descontos HB Créditos.");
   return data.descontos ?? [];

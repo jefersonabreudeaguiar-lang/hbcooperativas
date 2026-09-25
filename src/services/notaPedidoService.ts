@@ -29,6 +29,7 @@ import {
   descontosContaCoopFromArquivo,
   descontosContaCoopLinhasExibicao,
   dedupeDescontosContaCoopRemotos,
+  dedupeArquivoContaCoopDescontos,
   dedupeDescontosExtrasContaCoop,
   filtrarDescontosContaCoopParaMesReferencia,
   mergeDescontosContaCoopNoResumo,
@@ -569,14 +570,15 @@ function mergeContaCoopDescontosField(
   const aList = a.contaCoopDescontos ?? [];
   const bList = b.contaCoopDescontos ?? [];
   if (!aList.length && !bList.length) return undefined;
-  if (!aList.length) return bList;
-  if (!bList.length) return aList;
+  if (!aList.length) return dedupeArquivoContaCoopDescontos(bList);
+  if (!bList.length) return dedupeArquivoContaCoopDescontos(aList);
 
   const ha = contaCoopDescontosHbTime(a);
   const hb = contaCoopDescontosHbTime(b);
   if (ha !== hb && (ha > 0 || hb > 0)) {
     const winner = ha >= hb ? a : b;
-    return winner.contaCoopDescontos ?? (ha >= hb ? aList : bList);
+    const winnerList = winner.contaCoopDescontos ?? (ha >= hb ? aList : bList);
+    return dedupeArquivoContaCoopDescontos(winnerList);
   }
 
   const ta = arquivoMensalTime(a);
@@ -584,20 +586,11 @@ function mergeContaCoopDescontosField(
   if (ta !== tb) {
     const newerList = ta > tb ? aList : bList;
     const olderList = ta > tb ? bList : aList;
-    if (!newerList.length && olderList.length) return olderList;
-    return newerList;
+    if (!newerList.length && olderList.length) return dedupeArquivoContaCoopDescontos(olderList);
+    return dedupeArquivoContaCoopDescontos(newerList);
   }
 
-  const items = [...aList, ...bList];
-  const seen = new Set<string>();
-  const out: NonNullable<ArquivoMensalCooperado["contaCoopDescontos"]> = [];
-  for (const d of items) {
-    const key = `${d.createdAt ?? ""}|${d.valorReais}|${d.motivo}|${d.tipo}`;
-    if (seen.has(key)) continue;
-    seen.add(key);
-    out.push(d);
-  }
-  return out;
+  return dedupeArquivoContaCoopDescontos([...aList, ...bList]);
 }
 
 function mergeParArquivoMensal(
@@ -2219,6 +2212,7 @@ export function persistDescontosContaCoopNoArquivo(
         valorReais: d.valorReais,
         tipo: d.motivo.toLowerCase().includes("estorno") ? ("credito_avulso" as const) : ("conta_coop" as const),
         createdAt: d.createdAt,
+        ...(d.hbTransactionId ? { hbTransactionId: d.hbTransactionId } : {}),
       })),
     }),
   };

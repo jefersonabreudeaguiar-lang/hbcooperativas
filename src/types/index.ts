@@ -482,6 +482,8 @@ export interface ArquivoMensalCooperado {
     valorReais: number;
     tipo: "conta_coop" | "credito_avulso";
     createdAt?: string;
+    /** hb_credit_transactions.id — dedupe no A receber (opcional, legado). */
+    hbTransactionId?: string;
   }>;
   /** Atualizado só ao sincronizar descontos HB — não confundir com `updatedAt` do arquivo. */
   contaCoopDescontosUpdatedAt?: string;
