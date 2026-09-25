@@ -8,12 +8,54 @@ import type {
   PagamentoCooperadoRegistro,
 } from "@/types";
 import type { OperacionalSyncPayload } from "@/lib/supabase/cooperativaSyncStorage";
+import type { SupabaseClient } from "@supabase/supabase-js";
+import { fetchPagamentoConfirmacaoAuditEvidenceBatch } from "@/lib/supabase/cooperativeAuditStorage";
 import {
   fichaPertenceCooperado,
   resolverCooperadoIdCanonico,
 } from "@/services/cooperadoCloudService";
 import { getMesesReferenciaPagamento } from "@/services/notaPedidoService";
 import { completarLancamentosContabeisPagamentos } from "@/services/livroCaixaService";
+import {
+  aplicarPreservacaoPagamentosConfirmadosNoOperacional,
+  mergePagamentoRegistro,
+  pagamentoIdsPotencialmenteRegressivos,
+  type PagamentoDowngradeBloqueado,
+} from "@/services/pagamentoRegistroMerge";
+
+export {
+  aplicarPreservacaoPagamentosConfirmadosNoOperacional,
+  mergePagamentoRegistro,
+  pagamentoIdsPotencialmenteRegressivos,
+  preservarPagamentosConfirmados,
+  type PagamentoDowngradeBloqueado,
+  type PreservarPagamentosConfirmadosOptions,
+} from "@/services/pagamentoRegistroMerge";
+
+/** H8.9.106 — preservação monotônica com evidência em cooperative_audit_log (consulta em lote). */
+export async function aplicarPreservacaoPagamentosConfirmadosNoOperacionalComAudit<
+  T extends { pagamentosCooperado: PagamentoCooperadoRegistro[] },
+>(
+  supabase: SupabaseClient,
+  cooperativeCnpj: string,
+  cloudOperacional: T | null | undefined,
+  incomingOperacional: T
+): Promise<{ payload: T; blockedDowngrades: PagamentoDowngradeBloqueado[] }> {
+  const cloudPag = cloudOperacional?.pagamentosCooperado ?? [];
+  const incomingPag = incomingOperacional.pagamentosCooperado ?? [];
+  const candidateIds = pagamentoIdsPotencialmenteRegressivos(cloudPag, incomingPag);
+  let auditConfirmacao: Map<string, { pagamentoId: string; confirmedAt: string }> | undefined;
+  if (candidateIds.length > 0) {
+    auditConfirmacao = await fetchPagamentoConfirmacaoAuditEvidenceBatch(
+      supabase,
+      cooperativeCnpj,
+      candidateIds
+    );
+  }
+  return aplicarPreservacaoPagamentosConfirmadosNoOperacional(cloudOperacional, incomingOperacional, {
+    auditConfirmacao,
+  });
+}
 
 function pagamentoCobreMes(p: PagamentoCooperadoRegistro, mesReferencia: string): boolean {
   if (p.mesesReferencia?.length) return p.mesesReferencia.includes(mesReferencia);
@@ -313,27 +355,6 @@ function mergeById<T extends { id: string }>(base: T[], incoming: T[] | undefine
   const map = new Map(base.map((x) => [x.id, x]));
   for (const item of incoming) map.set(item.id, item);
   return [...map.values()];
-}
-
-const PAGAMENTO_STATUS_RANK: Record<PagamentoCooperadoRegistro["status"], number> = {
-  aguardando_confirmacao: 0,
-  confirmado: 1,
-};
-
-function mergePagamentoRegistro(
-  prev: PagamentoCooperadoRegistro | undefined,
-  incoming: PagamentoCooperadoRegistro
-): PagamentoCooperadoRegistro {
-  if (!prev) return incoming;
-  if (prev.status === "confirmado" && incoming.status !== "confirmado") return prev;
-  if (incoming.status === "confirmado" && prev.status !== "confirmado") return incoming;
-  const prevRank = PAGAMENTO_STATUS_RANK[prev.status] ?? 0;
-  const incRank = PAGAMENTO_STATUS_RANK[incoming.status] ?? 0;
-  if (incRank > prevRank) return incoming;
-  if (prevRank > incRank) return prev;
-  const prevT = new Date(prev.updatedAt ?? prev.createdAt ?? 0).getTime();
-  const incT = new Date(incoming.updatedAt ?? incoming.createdAt ?? 0).getTime();
-  return incT >= prevT ? incoming : prev;
 }
 
 /** Responsável registra pagamento — mescla no operacional.json sem substituir o backup inteiro. */

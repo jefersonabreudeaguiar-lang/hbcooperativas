@@ -12,7 +12,10 @@ import {
   type OperacionalSyncPayload,
 } from "@/lib/supabase/cooperativaSyncStorage";
 import { deleteAllNotasForCnpj } from "@/lib/supabase/notasStorage";
-import { sanitizarOperacionalSyncPayload } from "@/services/pagamentoIntegridadeService";
+import {
+  aplicarPreservacaoPagamentosConfirmadosNoOperacionalComAudit,
+  sanitizarOperacionalSyncPayload,
+} from "@/services/pagamentoIntegridadeService";
 import { reconciliarFichaFromNotasConferidas } from "@/services/notaPedidoService";
 import { markHbStaleBeforeOperacionalUpload } from "@/modules/hb-credit/engine/operationalAuthoritativeCreditBaseChange";
 
@@ -110,7 +113,24 @@ export async function POST(request: Request) {
       }
     }
 
-    const payload = sanitizarOperacionalSyncPayload(raw, reconciliarFichaFromNotasConferidas);
+    let payload = sanitizarOperacionalSyncPayload(raw, reconciliarFichaFromNotasConferidas);
+    const preservacao = await aplicarPreservacaoPagamentosConfirmadosNoOperacionalComAudit(
+      supabase,
+      cnpj,
+      existing,
+      payload
+    );
+    payload = preservacao.payload;
+    if (guard.session) {
+      for (const blocked of preservacao.blockedDowngrades) {
+        await logServerMutationAudit(supabase, guard.session, cnpj, {
+          action: "bloquear",
+          entityType: "pagamento",
+          entityId: blocked.pagamentoId,
+          summary: `Sync operacional: downgrade protegido (${blocked.incomingStatus} → mantido ${blocked.cloudStatus}). Motivo: ${blocked.motivo}.`,
+        });
+      }
+    }
     if (payload.wipeNotas === true) {
       await deleteAllNotasForCnpj(supabase, cnpj);
     }
@@ -129,7 +149,10 @@ export async function POST(request: Request) {
       );
     }
 
-    const uploaded = await uploadOperacionalSync(supabase, cnpj, payload);
+    const uploaded = await uploadOperacionalSync(supabase, cnpj, payload, {
+      existingOperacional: existing,
+      skipPagamentoConfirmadoProtection: true,
+    });
     if (!uploaded.ok) return NextResponse.json({ error: uploaded.error }, { status: 500 });
     if (guard.session) {
       await logServerMutationAudit(supabase, guard.session, cnpj, {

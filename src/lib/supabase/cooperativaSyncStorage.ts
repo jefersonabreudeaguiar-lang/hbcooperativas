@@ -1,8 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import {
-  aplicarPreservacaoPagamentosConfirmadosNoOperacional,
-  type PagamentoDowngradeBloqueado,
-} from "@/services/pagamentoRegistroMerge";
+import type { PagamentoDowngradeBloqueado } from "@/services/pagamentoRegistroMerge";
+import { aplicarPreservacaoPagamentosConfirmadosNoOperacionalComAudit } from "@/services/pagamentoIntegridadeService";
 import { aplicarPreservacaoFichasReferenciadasPorPagamentosNoOperacional } from "@/services/fichaCorridaPagamentoGuard";
 import type {
   Instituicao,
@@ -151,7 +149,12 @@ export async function uploadOperacionalSync(
       : await fetchOperacionalSync(supabase, cnpj);
 
   if (!options?.skipPagamentoConfirmadoProtection) {
-    const preserved = aplicarPreservacaoPagamentosConfirmadosNoOperacional(existing, payload);
+    const preserved = await aplicarPreservacaoPagamentosConfirmadosNoOperacionalComAudit(
+      supabase,
+      cnpj,
+      existing,
+      payload
+    );
     toUpload = preserved.payload;
     blockedDowngrades = preserved.blockedDowngrades;
   }

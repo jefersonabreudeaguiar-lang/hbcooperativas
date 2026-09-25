@@ -33,13 +33,61 @@ export type PagamentoDowngradeBloqueado = {
   occurredAt: string;
 };
 
+export type PagamentoConfirmacaoAuditEvidence = {
+  pagamentoId: string;
+  confirmedAt: string;
+};
+
+export type PreservarPagamentosConfirmadosOptions = {
+  /** Confirmação válida registrada em cooperative_audit_log (blob já regredido). */
+  auditConfirmacao?: Map<string, PagamentoConfirmacaoAuditEvidence>;
+};
+
+/**
+ * Pagamentos cujo incoming pode regredir confirmação e a nuvem atual não está confirmada
+ * (H8.9.21 já cobre cloud confirmado — evita consulta de audit desnecessária).
+ */
+export function pagamentoIdsPotencialmenteRegressivos(
+  cloudPagamentos: PagamentoCooperadoRegistro[],
+  incomingPagamentos: PagamentoCooperadoRegistro[]
+): string[] {
+  const cloudMap = new Map(cloudPagamentos.map((p) => [p.id, p]));
+  const ids: string[] = [];
+  for (const incoming of incomingPagamentos) {
+    if (incoming.status === "confirmado") continue;
+    const cloud = cloudMap.get(incoming.id);
+    if (cloud?.status === "confirmado") continue;
+    if (incoming.status === "aguardando_confirmacao") {
+      ids.push(incoming.id);
+    }
+  }
+  return ids;
+}
+
+function anchorConfirmadoFromAuditEvidence(
+  cloudPay: PagamentoCooperadoRegistro | undefined,
+  incomingPay: PagamentoCooperadoRegistro,
+  evidence: PagamentoConfirmacaoAuditEvidence
+): PagamentoCooperadoRegistro {
+  const merged = cloudPay ? mergePagamentoRegistro(cloudPay, incomingPay) : incomingPay;
+  return {
+    ...merged,
+    status: "confirmado",
+    assinaturaCooperado: merged.assinaturaCooperado ?? cloudPay?.assinaturaCooperado,
+    reciboHtml: merged.reciboHtml ?? cloudPay?.reciboHtml,
+    assinadoEm: merged.assinadoEm ?? cloudPay?.assinadoEm ?? evidence.confirmedAt,
+  };
+}
+
 /** Mescla lista de pagamentos impedindo regressão de status confirmado na nuvem. */
 export function preservarPagamentosConfirmados(
   cloudPagamentos: PagamentoCooperadoRegistro[],
-  incomingPagamentos: PagamentoCooperadoRegistro[]
+  incomingPagamentos: PagamentoCooperadoRegistro[],
+  options?: PreservarPagamentosConfirmadosOptions
 ): { pagamentos: PagamentoCooperadoRegistro[]; blockedDowngrades: PagamentoDowngradeBloqueado[] } {
   const cloudMap = new Map(cloudPagamentos.map((p) => [p.id, p]));
   const incomingMap = new Map(incomingPagamentos.map((p) => [p.id, p]));
+  const auditMap = options?.auditConfirmacao ?? new Map<string, PagamentoConfirmacaoAuditEvidence>();
   const blockedDowngrades: PagamentoDowngradeBloqueado[] = [];
   const outMap = new Map(incomingMap);
 
@@ -60,6 +108,23 @@ export function preservarPagamentosConfirmados(
     outMap.set(id, mergePagamentoRegistro(cloudPay, incomingPay));
   }
 
+  for (const [id, evidence] of auditMap) {
+    const incomingPay = outMap.get(id) ?? incomingMap.get(id);
+    if (!incomingPay || incomingPay.status === "confirmado") continue;
+    const cloudPay = cloudMap.get(id);
+    const anchor = anchorConfirmadoFromAuditEvidence(cloudPay, incomingPay, evidence);
+    const merged = mergePagamentoRegistro(anchor, incomingPay);
+    if (merged.status !== "confirmado") continue;
+    blockedDowngrades.push({
+      pagamentoId: id,
+      cloudStatus: "confirmado",
+      incomingStatus: incomingPay.status,
+      motivo: "downgrade protegido",
+      occurredAt: new Date().toISOString(),
+    });
+    outMap.set(id, merged);
+  }
+
   return { pagamentos: [...outMap.values()], blockedDowngrades };
 }
 
@@ -68,11 +133,13 @@ export function aplicarPreservacaoPagamentosConfirmadosNoOperacional<
   T extends OperacionalPagamentosSlice,
 >(
   cloudOperacional: T | null | undefined,
-  incomingOperacional: T
+  incomingOperacional: T,
+  options?: PreservarPagamentosConfirmadosOptions
 ): { payload: T; blockedDowngrades: PagamentoDowngradeBloqueado[] } {
   const { pagamentos, blockedDowngrades } = preservarPagamentosConfirmados(
     cloudOperacional?.pagamentosCooperado ?? [],
-    incomingOperacional.pagamentosCooperado ?? []
+    incomingOperacional.pagamentosCooperado ?? [],
+    options
   );
   return {
     payload: { ...incomingOperacional, pagamentosCooperado: pagamentos },
