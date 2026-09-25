@@ -6,7 +6,7 @@ import { getData, saveDataSafe, runWithBatchedSaveAsync } from "@/services/dataS
 import { syncCooperadosFromCloud, fetchCooperadosFromCloud, pushCooperadoToCloud } from "@/services/cooperadoCloudService";
 import { syncNotasPedidoFromCloud, patchNotaPedidoInCloud } from "@/services/notaPedidoCloudService";
 import { fetchCooperativaByCnpjFromCloud, mergeCooperativaIntoData } from "@/services/cooperativaCloudService";
-import { mergeArquivosMensaisFromCloud, reconciliarFichaFromNotasConferidas, dedupeFichaCorridaPorNota, aplicarNotasPedidoExcluidas } from "@/services/notaPedidoService";
+import { mergeArquivosMensaisFromCloud, reconciliarFichaFromNotasConferidas, dedupeFichaCorridaPorNota, aplicarNotasPedidoExcluidas, idsNotasPedidoExcluidas } from "@/services/notaPedidoService";
 import { posProcessarIntegridadePagamentosCooperativa, cooperadoMesTemPagamentoNaLista, type RegistroPagamentoResponsavelPatch } from "@/services/pagamentoIntegridadeService";
 import { ensureComunicadosAudioUploaded } from "@/services/comunicadoAudioSync";
 import { operacionalPushSeguro, precisaReparoFullSyncNotas, cooperadoFinanceiroDesatualizado, cooperadoFichaValoresDesalinhados, limparFichaObsoletaCooperado } from "@/services/fichaSyncGuard";
@@ -549,9 +549,13 @@ function buildOperacionalPayload(data: AppData, coopId: string): OperacionalSync
     (e) => !e.cooperativaId || e.cooperativaId === coopId
   );
   const livroCaixaExcluidosIds = new Set(livroCaixaExcluidosCoop.map((e) => e.id));
-  const fichaCoop = dedupeFichaCorridaPorNota(
+  const idsNotasExcluidasCoop = idsNotasPedidoExcluidas(sanitized, coopId);
+  const fichaCoopDeduped = dedupeFichaCorridaPorNota(
     sanitized.fichaCorrida.filter((f) => f.cooperativaId === coopId),
     sanitized.notasPedido
+  );
+  const fichaCoop = fichaCoopDeduped.filter(
+    (ficha) => !ficha.notaPedidoId || !idsNotasExcluidasCoop.has(ficha.notaPedidoId)
   );
   return {
     updatedAt: now,
@@ -591,6 +595,11 @@ function buildOperacionalPayload(data: AppData, coopId: string): OperacionalSync
     fechamentoSnapshots: (sanitized.fechamentoSnapshots ?? []).filter((s) => s.cooperativaId === coopId),
     config: { ...sanitized.config },
   };
+}
+
+/** Expõe montagem do payload operacional para testes de regressão (H8.9.129). */
+export function buildOperacionalPayloadForTests(data: AppData, coopId: string): OperacionalSyncPayload {
+  return buildOperacionalPayload(data, coopId);
 }
 
 function normalizeCloudOperacional(cloud: OperacionalSyncPayload): OperacionalSyncPayload {
@@ -937,6 +946,16 @@ export function mergeOperacionalIntoData(
       );
   const livroCaixaExcluidosSet = new Set(mergedLivroCaixaExcluidosCoop.map((e) => e.id));
 
+  const notasExcluidasCoopEffectivas = cloudAuthoritative
+    ? cloudExcluidasNotas
+    : mergedNotasExcluidasCoop;
+  const idsNotasExcluidasCoopMerge = idsNotasPedidoExcluidas(
+    { notasPedidoExcluidas: notasExcluidasCoopEffectivas } as AppData,
+    coopId
+  );
+  const fichaEntraNoMergeOperacional = (f: FichaCorrida) =>
+    !f.notaPedidoId || !idsNotasExcluidasCoopMerge.has(f.notaPedidoId);
+
   let next: AppData = {
     ...data,
     arquivosMensais: [
@@ -1047,13 +1066,17 @@ export function mergeOperacionalIntoData(
         ...filterCoop(data.fichaCorrida ?? [], (f) => f.cooperativaId === coopId),
         ...(cloudAuthoritative
           ? mergeFichaCorridaFromCloud(
-              (data.fichaCorrida ?? []).filter((f) => f.cooperativaId === coopId),
-              cloudFichas,
+              (data.fichaCorrida ?? [])
+                .filter((f) => f.cooperativaId === coopId)
+                .filter(fichaEntraNoMergeOperacional),
+              cloudFichas.filter(fichaEntraNoMergeOperacional),
               mergedPagamentosCoop
             )
           : mergeFichaCorridaFromCloud(
-              (data.fichaCorrida ?? []).filter((f) => f.cooperativaId === coopId),
-              cloudFichas,
+              (data.fichaCorrida ?? [])
+                .filter((f) => f.cooperativaId === coopId)
+                .filter(fichaEntraNoMergeOperacional),
+              cloudFichas.filter(fichaEntraNoMergeOperacional),
               [...localPagCoop, ...cloudPagamentos]
             )),
       ],
