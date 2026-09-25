@@ -2,11 +2,20 @@ import { normalizeCnpj } from "@/utils/cooperativa";
 
 /**
  * H8.9.60 Fase 1A — single-flight por CNPJ para push operacional.
- * Integração em `pushOperacionalToCloud` virá em etapa posterior; **default OFF**.
+ * Integração em `pushOperacionalToCloud`; default OFF (env ausente / inválida).
  */
+const CLIENT_FLAG = "NEXT_PUBLIC_OPERACIONAL_PUSH_SINGLE_FLIGHT_ENABLED";
+const ALLOWED_ON = new Set(["true", "1"]);
+
+function parsePublicOperacionalPushFlag(raw: string | undefined): boolean {
+  if (raw == null || raw.trim() === "") return false;
+  return ALLOWED_ON.has(raw.trim().toLowerCase());
+}
+
+/** Valor legado/documental. O runtime efetivo é determinado por `isOperacionalPushSingleFlightEnabled()`. */
 export const OPERACIONAL_PUSH_SINGLE_FLIGHT_ENABLED = false as const;
 
-/** Somente testes — não altera a constante de produção. */
+/** Somente testes — não altera a leitura de env de produção. */
 let enabledOverrideForTests: boolean | null = null;
 
 export function setOperacionalPushSingleFlightEnabledForTests(enabled: boolean | null): void {
@@ -15,7 +24,7 @@ export function setOperacionalPushSingleFlightEnabledForTests(enabled: boolean |
 
 export function isOperacionalPushSingleFlightEnabled(): boolean {
   if (enabledOverrideForTests !== null) return enabledOverrideForTests;
-  return OPERACIONAL_PUSH_SINGLE_FLIGHT_ENABLED;
+  return parsePublicOperacionalPushFlag(process.env[CLIENT_FLAG]);
 }
 
 export type OperacionalPushOperation<T> = () => Promise<T>;
