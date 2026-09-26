@@ -1,4 +1,4 @@
-import type { AppData, Cooperativa, Cooperado, Instituicao, ProdutoInstituicao, Desconto, PrestacaoContasExcluida, NotaPedidoExcluida, InstituicaoExcluida, PagamentoCooperadoRegistro, Comunicado, ComunicadoExcluidoRef, LivroCaixaExcluidoRef, LivroCaixaLancamento, FichaCorrida, VotacaoPauta, VotacaoVoto, ParecerContabilMensal, FechamentoSnapshot } from "@/types";
+import type { AppData, Cooperativa, Cooperado, Instituicao, ProdutoInstituicao, Desconto, PrestacaoContasExcluida, NotaPedidoExcluida, InstituicaoExcluida, PagamentoCooperadoRegistro, Comunicado, ComunicadoExcluidoRef, LivroCaixaExcluidoRef, LivroCaixaLancamento, FichaCorrida, NotaPedido, VotacaoPauta, VotacaoVoto, ParecerContabilMensal, FechamentoSnapshot } from "@/types";
 import { normalizeCnpj } from "@/utils/cooperativa";
 import { secureApiFetch } from "@/lib/security/clientSession";
 import type { ContratosSyncPayload, OperacionalSyncPayload } from "@/lib/supabase/cooperativaSyncStorage";
@@ -201,40 +201,65 @@ function mergeFichaCorridaFromCloud(
     f.status !== "pago" ||
     cooperadoMesTemPagamentoNaLista(pagamentosCooperado, f.cooperadoId, f.mesReferencia);
 
-  const normalizarFicha = (f: FichaCorrida): FichaCorrida => {
+  const normalizarFichaLocal = (f: FichaCorrida): FichaCorrida => {
     if (fichaPagoLegitima(f)) return f;
     return { ...f, status: "pendente" as const };
   };
 
-  for (const item of cloudItems) map.set(item.id, normalizarFicha(item));
+  /** Cloud pago: não rebaixar só porque pagamentosCooperado não veio na lista do merge (H8.9.184). */
+  const normalizarFichaCloud = (f: FichaCorrida): FichaCorrida =>
+    f.status === "pago" ? f : normalizarFichaLocal(f);
+
+  for (const item of cloudItems) map.set(item.id, normalizarFichaCloud(item));
   for (const local of localCoop) {
     const cloud = map.get(local.id);
     if (!cloud) {
-      map.set(local.id, normalizarFicha(local));
+      map.set(local.id, normalizarFichaLocal(local));
       continue;
     }
     if (local.status === "pago" && cloud.status === "pendente") {
-      const temPagamento = cooperadoMesTemPagamentoNaLista(
-        pagamentosCooperado,
-        local.cooperadoId,
-        local.mesReferencia
-      );
-      map.set(local.id, temPagamento ? local : cloud);
+      map.set(local.id, local);
       continue;
     }
     if (cloud.status === "pago" && local.status === "pendente") {
-      const temPagamento = cooperadoMesTemPagamentoNaLista(
-        pagamentosCooperado,
-        local.cooperadoId,
-        local.mesReferencia
-      );
-      map.set(local.id, temPagamento ? cloud : local);
+      map.set(local.id, cloud);
+      continue;
+    }
+    if (local.status === "pago" && cloud.status === "pago") {
+      map.set(local.id, itemTime(local) >= itemTime(cloud) ? local : cloud);
       continue;
     }
     const chosen = itemTime(local) >= itemTime(cloud) ? local : cloud;
-    map.set(local.id, normalizarFicha(chosen));
+    map.set(local.id, normalizarFichaLocal(chosen));
   }
   return [...map.values()];
+}
+
+/** posProcessar/reparar rebaixa ficha paga sem pg — restaura status pago decidido no merge (H8.9.184). */
+function reaplicarFichaPagoMergePosIntegridade(
+  antesPosProcessar: AppData,
+  depoisPosProcessar: AppData,
+  coopId: string
+): AppData {
+  const pagoAntes = new Map(
+    (antesPosProcessar.fichaCorrida ?? [])
+      .filter((f) => f.cooperativaId === coopId && f.status === "pago")
+      .map((f) => [f.id, f])
+  );
+  if (!pagoAntes.size) return depoisPosProcessar;
+  let changed = false;
+  const fichaCorrida = (depoisPosProcessar.fichaCorrida ?? []).map((f) => {
+    if (f.cooperativaId !== coopId || f.status !== "pendente") return f;
+    const prev = pagoAntes.get(f.id);
+    if (!prev) return f;
+    changed = true;
+    return {
+      ...f,
+      status: "pago" as const,
+      updatedAt: prev.updatedAt ?? f.updatedAt,
+    };
+  });
+  return changed ? { ...depoisPosProcessar, fichaCorrida } : depoisPosProcessar;
 }
 
 function snapshotCapturedAt(snapshot: FechamentoSnapshot): number {
@@ -855,6 +880,164 @@ export function mergeContratosIntoData(data: AppData, cloud: ContratosSyncPayloa
   });
 }
 
+export type FullResetCompletudeVerdict = "allow" | "block" | "indeterminate";
+
+function notaConferidaParaFullResetGuard(nota: NotaPedido): boolean {
+  if (nota.status !== "conferida" && nota.status !== "pago") return false;
+  if (nota.valorLiquido <= 0 && (nota.itens ?? []).every((i) => i.quantidade <= 0)) return false;
+  return true;
+}
+
+/** Notas conferidas/pagas usadas na proteção fullReset parcial (POST + merge). */
+export function notasConferidasParaFullResetGuard(
+  notas: NotaPedido[],
+  coopId?: string,
+  excludedNotaIds?: Set<string>
+): NotaPedido[] {
+  return notas.filter((n) => {
+    if (excludedNotaIds?.has(n.id)) return false;
+    if (coopId && n.cooperativaId !== coopId) return false;
+    return notaConferidaParaFullResetGuard(n);
+  });
+}
+
+function fichaNotaPedidoIds(fichas: FichaCorrida[] | undefined, coopId?: string): Set<string> {
+  const ids = new Set<string>();
+  for (const f of fichas ?? []) {
+    if (!f.notaPedidoId) continue;
+    if (coopId && f.cooperativaId && f.cooperativaId !== coopId) continue;
+    ids.add(f.notaPedidoId);
+  }
+  return ids;
+}
+
+function operacionalPayloadVazioLegitimo(
+  payload: Pick<OperacionalSyncPayload, "fichaCorrida" | "pagamentosCooperado">
+): boolean {
+  const fichas = payload.fichaCorrida ?? [];
+  const pags = payload.pagamentosCooperado ?? [];
+  const sumFichas = fichas.reduce((s, f) => s + (f.valorLiquido ?? 0), 0);
+  return fichas.length === 0 && pags.length === 0 && sumFichas < 0.01;
+}
+
+/** PATCH A — avalia completude de publicação `fullReset` vs notas conferidas conhecidas (identidade por ID). */
+export function avaliarFullResetOperacionalCompletude(input: {
+  fullReset: boolean;
+  payload: Pick<OperacionalSyncPayload, "fichaCorrida" | "pagamentosCooperado">;
+  conferidasNotas: NotaPedido[];
+  coopId?: string;
+  excludedNotaIds?: Set<string>;
+}): { verdict: FullResetCompletudeVerdict; motivo: string } {
+  if (!input.fullReset) {
+    return { verdict: "allow", motivo: "fullReset false" };
+  }
+
+  const conferidas = notasConferidasParaFullResetGuard(
+    input.conferidasNotas,
+    input.coopId,
+    input.excludedNotaIds
+  );
+  const contextIds = new Set(conferidas.map((n) => n.id));
+  const payloadFichaIds = fichaNotaPedidoIds(input.payload.fichaCorrida, input.coopId);
+
+  if (contextIds.size === 0) {
+    return { verdict: "allow", motivo: "indeterminate: sem notas conferidas para comparar" };
+  }
+
+  if (operacionalPayloadVazioLegitimo(input.payload)) {
+    return { verdict: "allow", motivo: "reset legítimo — payload operacional vazio" };
+  }
+
+  const allPayloadInContext = [...payloadFichaIds].every((id) => contextIds.has(id));
+  if (!allPayloadInContext) {
+    return {
+      verdict: "indeterminate",
+      motivo: "IDs de ficha não mapeiam ao conjunto conferido (sem equivalência automática)",
+    };
+  }
+
+  const sameSet =
+    contextIds.size === payloadFichaIds.size &&
+    [...contextIds].every((id) => payloadFichaIds.has(id));
+  if (sameSet) {
+    return { verdict: "allow", motivo: "fullReset completo — conjunto de notaPedidoId alinhado" };
+  }
+
+  if (payloadFichaIds.size < contextIds.size) {
+    return {
+      verdict: "block",
+      motivo: "fullReset parcial — fichas strict subset das notas conferidas conhecidas",
+    };
+  }
+
+  return { verdict: "indeterminate", motivo: "cloud/payload superset ou ambíguo" };
+}
+
+export type FullResetMergeReconciliarGuard = {
+  reconciliarApesarFullReset: boolean;
+  motivo: string;
+};
+
+/** PATCH B — reconciliar após merge fullReset quando cloud parcial e notas locais sustentam reconstrução. */
+export function computeFullResetMergeReconciliarGuard(
+  data: AppData,
+  cloud: OperacionalSyncPayload,
+  coopId: string,
+  excludedNotaIds: Set<string>
+): FullResetMergeReconciliarGuard {
+  if (cloud.fullReset !== true) {
+    return { reconciliarApesarFullReset: false, motivo: "sem fullReset na nuvem" };
+  }
+
+  const conferidas = notasConferidasParaFullResetGuard(data.notasPedido ?? [], coopId, excludedNotaIds);
+  const contextIds = new Set(conferidas.map((n) => n.id));
+  if (contextIds.size === 0) {
+    return { reconciliarApesarFullReset: false, motivo: "indeterminate: notas conferidas locais insuficientes" };
+  }
+
+  const cloudFichaIds = fichaNotaPedidoIds(cloud.fichaCorrida, coopId);
+  if (cloudFichaIds.size === 0) {
+    return { reconciliarApesarFullReset: false, motivo: "cloud operacional vazio — reset legítimo" };
+  }
+
+  const allCloudInContext = [...cloudFichaIds].every((id) => contextIds.has(id));
+  if (!allCloudInContext) {
+    return {
+      reconciliarApesarFullReset: false,
+      motivo: "indeterminate: fichas cloud com notaPedidoId fora do conjunto conferido local",
+    };
+  }
+
+  if (cloudFichaIds.size >= contextIds.size) {
+    return { reconciliarApesarFullReset: false, motivo: "cloud completo ou superset por IDs — autoritativo" };
+  }
+
+  const cloudTime = cloud.updatedAt ? new Date(cloud.updatedAt).getTime() : 0;
+  const maxLocalNotaTime = conferidas.reduce(
+    (max, n) => Math.max(max, new Date(n.updatedAt ?? n.dataConferencia ?? 0).getTime()),
+    0
+  );
+  const localCoopFichaIds = fichaNotaPedidoIds(
+    (data.fichaCorrida ?? []).filter((f) => f.cooperativaId === coopId || !f.cooperativaId),
+    coopId
+  );
+  const localCoversContext = [...contextIds].every((id) => localCoopFichaIds.has(id));
+  if (
+    localCoversContext &&
+    cloudTime > 0 &&
+    maxLocalNotaTime > 0 &&
+    cloudTime >= maxLocalNotaTime &&
+    cloudFichaIds.size === contextIds.size
+  ) {
+    return { reconciliarApesarFullReset: false, motivo: "cloud mais recente e completo por IDs" };
+  }
+
+  return {
+    reconciliarApesarFullReset: true,
+    motivo: "cloud fullReset parcial — reconciliar pelas notas conferidas locais",
+  };
+}
+
 export function mergeOperacionalIntoData(
   data: AppData,
   cloud: OperacionalSyncPayload,
@@ -955,6 +1138,13 @@ export function mergeOperacionalIntoData(
   );
   const fichaEntraNoMergeOperacional = (f: FichaCorrida) =>
     !f.notaPedidoId || !idsNotasExcluidasCoopMerge.has(f.notaPedidoId);
+
+  const fullResetMergeReconciliarGuard = computeFullResetMergeReconciliarGuard(
+    data,
+    cloud,
+    coopId,
+    idsNotasExcluidasCoopMerge
+  );
 
   let next: AppData = {
     ...data,
@@ -1133,10 +1323,14 @@ export function mergeOperacionalIntoData(
   const cloudResetLimpouMensalidades =
     cloud.fullReset === true && (cloud.mensalidades ?? []).length === 0;
 
-  const posMergeFinanceiro = (draft: AppData): AppData =>
-    cloudAuthoritative
-      ? posProcessarIntegridadePagamentosCooperativa(draft)
-      : posProcessarIntegridadePagamentosCooperativa(reconciliarFichaFromNotasConferidas(draft));
+  const posMergeFinanceiro = (draft: AppData): AppData => {
+    const runReconciliar =
+      !cloudAuthoritative || fullResetMergeReconciliarGuard.reconciliarApesarFullReset;
+    const pos = runReconciliar
+      ? posProcessarIntegridadePagamentosCooperativa(reconciliarFichaFromNotasConferidas(draft))
+      : posProcessarIntegridadePagamentosCooperativa(draft);
+    return reaplicarFichaPagoMergePosIntegridade(draft, pos, coopId);
+  };
 
   if (cloudResetLimpouMensalidades) {
     return purgeComunicadosMarcadosExcluidos(

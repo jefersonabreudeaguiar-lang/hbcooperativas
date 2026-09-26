@@ -16,6 +16,7 @@ import {
   type RegistroPagamentoResponsavelPatch,
 } from "@/services/pagamentoIntegridadeService";
 import { markHbStaleBeforeOperacionalUpload } from "@/modules/hb-credit/engine/operationalAuthoritativeCreditBaseChange";
+import { OPERATIONAL_RESET_VERSION } from "@/services/operationalReset";
 
 export async function POST(request: Request) {
   if (!isSupabaseConfigured()) {
@@ -75,7 +76,10 @@ export async function POST(request: Request) {
     );
   }
 
-  const next = aplicarRegistroPagamentoResponsavelNoOperacional(operacional, patch);
+  const next = {
+    ...aplicarRegistroPagamentoResponsavelNoOperacional(operacional, patch),
+    operationalResetVersion: OPERATIONAL_RESET_VERSION,
+  };
   const uploaded = await uploadOperacionalSync(supabase, cnpj, next);
   if (!uploaded.ok) {
     return NextResponse.json({ error: uploaded.error }, { status: 500 });

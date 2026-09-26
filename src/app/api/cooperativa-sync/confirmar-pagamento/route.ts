@@ -9,6 +9,7 @@ import { aplicarPagamentoConfirmadoNoOperacional } from "@/services/pagamentoInt
 import { resolveAuthoritativeCreditBase } from "@/modules/hb-credit/engine/creditBaseAuthoritative";
 import { syncHbLimitAfterCooperadoPayment } from "@/modules/hb-credit/engine/syncHbLimitAfterCooperadoPayment";
 import { markHbCreditLimitStale } from "@/modules/hb-credit/engine/hbCreditLimitSyncState";
+import { OPERATIONAL_RESET_VERSION } from "@/services/operationalReset";
 
 export async function POST(request: Request) {
   if (!isSupabaseConfigured()) {
@@ -75,7 +76,10 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: staleMark.error, code: "HB_LIMIT_STALE_MARK_FAILED" }, { status: 503 });
     }
 
-    const next = aplicarPagamentoConfirmadoNoOperacional(operacional, pagamento);
+    const next = {
+      ...aplicarPagamentoConfirmadoNoOperacional(operacional, pagamento),
+      operationalResetVersion: OPERATIONAL_RESET_VERSION,
+    };
     const uploaded = await uploadOperacionalSync(supabase, cnpj, next);
     if (!uploaded.ok) {
       return NextResponse.json({ error: uploaded.error }, { status: 500 });

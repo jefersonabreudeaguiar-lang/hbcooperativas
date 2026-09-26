@@ -9,6 +9,70 @@ const PAGAMENTO_STATUS_RANK: Record<PagamentoCooperadoRegistro["status"], number
   confirmado: 1,
 };
 
+const PAGAMENTO_STATUS_FINANCEIRO_FULLRESET: ReadonlySet<PagamentoCooperadoRegistro["status"]> =
+  new Set(["confirmado", "aguardando_confirmacao"]);
+
+export function isPagamentoStatusFinanceiroFullReset(
+  status: PagamentoCooperadoRegistro["status"]
+): boolean {
+  return PAGAMENTO_STATUS_FINANCEIRO_FULLRESET.has(status);
+}
+
+/** Mesmo critério de `operacionalPayloadVazioLegitimo` (PATCH A H8.9.197) para ramo financeiro. */
+export function operacionalFullResetFinanceiroVazio(payload: {
+  fichaCorrida?: { valorLiquido?: number }[];
+  pagamentosCooperado?: PagamentoCooperadoRegistro[];
+}): boolean {
+  const fichas = payload.fichaCorrida ?? [];
+  const pags = payload.pagamentosCooperado ?? [];
+  const sumFichas = fichas.reduce((s, f) => s + (f.valorLiquido ?? 0), 0);
+  return fichas.length === 0 && pags.length === 0 && sumFichas < 0.01;
+}
+
+/**
+ * H8.9.201 / H8.9.203 — fullReset: reinjeta da cloud pagamentos financeiros ausentes no incoming, por ID.
+ */
+export function preservarPagamentosFinanceirosFullReset(
+  cloudPagamentos: PagamentoCooperadoRegistro[],
+  incomingPagamentos: PagamentoCooperadoRegistro[]
+): PagamentoCooperadoRegistro[] {
+  const incomingMap = new Map(incomingPagamentos.map((p) => [p.id, p]));
+  const outMap = new Map(incomingMap);
+
+  for (const cloudPay of cloudPagamentos) {
+    if (!isPagamentoStatusFinanceiroFullReset(cloudPay.status)) continue;
+    if (incomingMap.has(cloudPay.id)) continue;
+    outMap.set(cloudPay.id, cloudPay);
+  }
+
+  return [...outMap.values()];
+}
+
+/** @deprecated alias — mesma semântica que `preservarPagamentosFinanceirosFullReset` */
+export function preservarPagamentosFinanceirosFullResetVazio(
+  cloudPagamentos: PagamentoCooperadoRegistro[],
+  incomingPagamentos: PagamentoCooperadoRegistro[]
+): PagamentoCooperadoRegistro[] {
+  return preservarPagamentosFinanceirosFullReset(cloudPagamentos, incomingPagamentos);
+}
+
+export function aplicarPreservacaoFinanceiraFullResetNoOperacional<
+  T extends OperacionalPagamentosSlice & { fichaCorrida?: { valorLiquido?: number }[] },
+>(cloudOperacional: T | null | undefined, incomingOperacional: T): T {
+  const pagamentos = preservarPagamentosFinanceirosFullReset(
+    cloudOperacional?.pagamentosCooperado ?? [],
+    incomingOperacional.pagamentosCooperado ?? []
+  );
+  return { ...incomingOperacional, pagamentosCooperado: pagamentos };
+}
+
+/** @deprecated alias — use `aplicarPreservacaoFinanceiraFullResetNoOperacional` */
+export function aplicarPreservacaoFinanceiraFullResetVazioNoOperacional<
+  T extends OperacionalPagamentosSlice & { fichaCorrida?: { valorLiquido?: number }[] },
+>(cloudOperacional: T | null | undefined, incomingOperacional: T): T {
+  return aplicarPreservacaoFinanceiraFullResetNoOperacional(cloudOperacional, incomingOperacional);
+}
+
 export function mergePagamentoRegistro(
   prev: PagamentoCooperadoRegistro | undefined,
   incoming: PagamentoCooperadoRegistro

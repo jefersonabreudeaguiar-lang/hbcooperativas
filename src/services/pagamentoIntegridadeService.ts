@@ -286,32 +286,48 @@ function marcarFichasOperacionalPagamento(
   const meses = getMesesReferenciaPagamento(pagamento);
   const coopId = pagamento.cooperativaId;
   const canonico = pagamento.cooperadoId;
-  const ids = new Set(pagamento.fichaIds ?? []);
+  const fichaIdsPagamento = new Set(pagamento.fichaIds ?? []);
+  const notaIdsPagamento = new Set(pagamento.notaPedidoIds ?? []);
+  const escopoExplicito = fichaIdsPagamento.size > 0 || notaIdsPagamento.size > 0;
+
+  const pertenceCooperado = (f: FichaCorrida): boolean =>
+    f.cooperativaId === coopId && f.cooperadoId === canonico;
 
   let next = fichaCorrida.map((f) => {
+    if (f.status === "pago") return f;
+
+    if (escopoExplicito) {
+      const porFichaId = fichaIdsPagamento.has(f.id) && pertenceCooperado(f);
+      const porNotaId =
+        notaIdsPagamento.has(f.notaPedidoId) &&
+        pertenceCooperado(f) &&
+        meses.includes(f.mesReferencia);
+      if (!porFichaId && !porNotaId) return f;
+      return { ...f, status: "pago" as const, updatedAt: now };
+    }
+
     const mesOk = meses.includes(f.mesReferencia);
-    const coopOk = f.cooperativaId === coopId && (f.cooperadoId === canonico || ids.has(f.id));
-    if (!mesOk || !coopOk || f.status === "pago") return f;
+    if (!mesOk || !pertenceCooperado(f)) return f;
     return { ...f, status: "pago" as const, updatedAt: now };
   });
 
-  const notaIdsComPago = new Set(
-    next
-      .filter(
-        (f) =>
-          f.status === "pago" &&
-          f.cooperativaId === coopId &&
-          f.cooperadoId === canonico &&
-          meses.includes(f.mesReferencia)
-      )
-      .map((f) => f.notaPedidoId)
-  );
+  const notaIdsComPago = new Set<string>();
+  for (const f of next) {
+    if (f.status !== "pago" || !pertenceCooperado(f)) continue;
+    if (escopoExplicito) {
+      if (fichaIdsPagamento.has(f.id) || notaIdsPagamento.has(f.notaPedidoId)) {
+        notaIdsComPago.add(f.notaPedidoId);
+      }
+    } else if (meses.includes(f.mesReferencia)) {
+      notaIdsComPago.add(f.notaPedidoId);
+    }
+  }
 
   if (!notaIdsComPago.size) return next;
 
   return next.filter((f) => {
     if (f.status !== "pendente") return true;
-    if (f.cooperativaId !== coopId || f.cooperadoId !== canonico) return true;
+    if (!pertenceCooperado(f)) return true;
     if (!meses.includes(f.mesReferencia)) return true;
     return !notaIdsComPago.has(f.notaPedidoId);
   });

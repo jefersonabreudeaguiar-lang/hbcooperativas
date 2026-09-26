@@ -11,11 +11,20 @@ import {
   type ContratosSyncPayload,
   type OperacionalSyncPayload,
 } from "@/lib/supabase/cooperativaSyncStorage";
-import { deleteAllNotasForCnpj } from "@/lib/supabase/notasStorage";
+import {
+  deleteAllNotasForCnpj,
+  fetchNotasFromStorage,
+  fetchNotasFromTable,
+  mergeNotasSources,
+} from "@/lib/supabase/notasStorage";
+import { avaliarFullResetOperacionalCompletude } from "@/services/cooperativaSyncCloudService";
 import {
   aplicarPreservacaoPagamentosConfirmadosNoOperacionalComAudit,
   sanitizarOperacionalSyncPayload,
 } from "@/services/pagamentoIntegridadeService";
+import {
+  aplicarPreservacaoFinanceiraFullResetNoOperacional,
+} from "@/services/pagamentoRegistroMerge";
 import { reconciliarFichaFromNotasConferidas } from "@/services/notaPedidoService";
 import { markHbStaleBeforeOperacionalUpload } from "@/modules/hb-credit/engine/operationalAuthoritativeCreditBaseChange";
 
@@ -113,6 +122,29 @@ export async function POST(request: Request) {
       }
     }
 
+    if (raw.fullReset === true) {
+      const [{ notas: tableNotas }, storageNotas] = await Promise.all([
+        fetchNotasFromTable(supabase, cnpj),
+        fetchNotasFromStorage(supabase, cnpj),
+      ]);
+      const conferidasContext = mergeNotasSources(tableNotas, storageNotas);
+      const completude = avaliarFullResetOperacionalCompletude({
+        fullReset: true,
+        payload: raw,
+        conferidasNotas: conferidasContext,
+      });
+      if (completude.verdict === "block") {
+        return NextResponse.json(
+          {
+            error:
+              "Publicação operacional com fullReset não persistida: snapshot incompleto em relação às notas conferidas conhecidas (identidade nota↔ficha).",
+            code: "OPERACIONAL_FULLRESET_INCOMPLETO",
+          },
+          { status: 409 }
+        );
+      }
+    }
+
     let payload = sanitizarOperacionalSyncPayload(raw, reconciliarFichaFromNotasConferidas);
     const preservacao = await aplicarPreservacaoPagamentosConfirmadosNoOperacionalComAudit(
       supabase,
@@ -121,6 +153,9 @@ export async function POST(request: Request) {
       payload
     );
     payload = preservacao.payload;
+    if (raw.fullReset === true) {
+      payload = aplicarPreservacaoFinanceiraFullResetNoOperacional(existing, payload);
+    }
     if (guard.session) {
       for (const blocked of preservacao.blockedDowngrades) {
         await logServerMutationAudit(supabase, guard.session, cnpj, {
