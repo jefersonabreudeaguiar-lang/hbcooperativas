@@ -74,6 +74,12 @@ import {
 import { putLocalNotaMedia } from "@/services/localMediaStore";
 import { listCooperadosDaCooperativa, pushCooperadoToCloud, resolverCooperadoIdCanonico, getCooperadoNomeResolvido, notaPertenceCooperado } from "@/services/cooperadoCloudService";
 import { pushOperacionalToCloud, syncContratosFromCloud } from "@/services/cooperativaSyncCloudService";
+import {
+  enqueueConferenciaAprovacaoSync,
+  getConferenciaPatchSyncedSnapshot,
+  markConferenciaPatchSyncedForOperacionalPush,
+} from "@/services/conferenciaAprovacaoSyncQueue";
+import { withConferenciaOperacionalPushScope } from "@/services/conferenciaOperacionalPushScope";
 import { getProdutosContrato } from "@/services/catalogoContratosService";
 import { listarResumosMensaisEntregas, filtrarResumosEntregasPendentes, getMesPrincipalQuantoVouReceber } from "@/services/cooperadoEntregasService";
 import { CooperadoEntregasPorMes } from "@/components/cooperado/CooperadoEntregasPorMes";
@@ -2434,26 +2440,40 @@ export default function NotasPedidoContent() {
       );
     });
 
+    const notaPatchSnapshot = notaAtualizada;
+
     void (async () => {
       try {
-        if (notaAtualizada && coopId) {
-          const cnpj = await resolveCooperativaCnpj(getData(), coopId, user);
-          if (cnpj) {
-            const patched = await patchNotaPedidoInCloud(cnpj, notaAtualizada);
+        enqueueConferenciaAprovacaoSync(notaId, async () => {
+          if (notaPatchSnapshot && coopId) {
+            const cnpj = await resolveCooperativaCnpj(getData(), coopId, user);
+            if (!cnpj) {
+              console.warn("[conferencia-aprovacao-sync]", notaId, "CNPJ não resolvido para sync.");
+              requestAppSyncLight();
+              return;
+            }
+            const patched = await patchNotaPedidoInCloud(cnpj, notaPatchSnapshot);
             if (!patched.ok) {
+              console.warn(
+                "[conferencia-aprovacao-sync]",
+                notaId,
+                patched.error ?? "patch nota falhou"
+              );
               setSuccessMsg(
                 patched.error ??
                   "Entrega lançada aqui, mas não sincronizou com a nuvem. Verifique a conexão."
               );
-            } else {
-              const d = getData();
-              await pushOperacionalToCloud(cnpj, d, coopId, { authoritative: true });
-              requestAppSync();
+              return;
             }
+            markConferenciaPatchSyncedForOperacionalPush(notaId);
+            await withConferenciaOperacionalPushScope(coopId, getConferenciaPatchSyncedSnapshot(), async () => {
+              await pushOperacionalToCloud(cnpj, getData(), coopId, { authoritative: true });
+            });
+            requestAppSyncLight();
+          } else {
+            requestAppSync();
           }
-        } else {
-          requestAppSync();
-        }
+        });
 
         await aguardarSequenciaLancamentoFotos(selectedNota, qtdFotosAprovadas);
 

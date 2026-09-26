@@ -56,6 +56,11 @@ import {
   type CloudSessionProfile,
 } from "@/lib/security/clientSession";
 import { generateId } from "@/utils/generateId";
+import {
+  applyConferenciaOperacionalPushViewIfActive,
+  isConferenciaOperacionalPushScopeActive,
+  preserveOperationalTruthDuringConferenciaPushSave,
+} from "@/services/conferenciaOperacionalPushScope";
 
 export { generateId };
 
@@ -691,6 +696,10 @@ function isStorageQuotaError(e: unknown): boolean {
 export function saveDataSafe(data: AppData): { ok: true } | { ok: false; error: string } {
   if (typeof window === "undefined") return { ok: true };
 
+  if (isConferenciaOperacionalPushScopeActive() && memoryCache) {
+    data = preserveOperationalTruthDuringConferenciaPushSave(data, memoryCache);
+  }
+
   if (saveBatchDepth > 0) {
     memoryCache = data;
     saveBatchPending = data;
@@ -703,7 +712,7 @@ export function saveDataSafe(data: AppData): { ok: true } | { ok: false; error: 
 export function getData(): AppData {
   if (typeof window === "undefined") return emptyInitialData;
   attachStorageListener();
-  if (memoryCache) return memoryCache;
+  if (memoryCache) return applyConferenciaOperacionalPushViewIfActive(memoryCache);
   scheduleDataWarmIfNeeded();
   return emptyInitialData;
 }
