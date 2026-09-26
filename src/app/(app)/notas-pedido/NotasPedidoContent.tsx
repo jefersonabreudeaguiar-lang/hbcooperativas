@@ -3182,19 +3182,19 @@ export default function NotasPedidoContent() {
               )}
 
               {vistaResponsavel === "cooperado" && grupoAbaAtiva && (
-                <div>
+                <div className="max-w-4xl w-full">
                   <button
                     type="button"
                     onClick={voltarFilaResponsavel}
-                    className="inline-flex items-center gap-1.5 text-sm font-medium text-gray-600 hover:text-gray-900 mb-3"
+                    className="inline-flex items-center gap-1 text-sm font-medium text-gray-600 hover:text-gray-900 mb-2"
                   >
-                    <ChevronRight size={16} className="rotate-180" />
+                    <ChevronRight size={15} className="rotate-180" />
                     Todos os cooperados
                   </button>
-                  <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-2 mb-3">
+                  <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-1 mb-2">
                     <div>
-                      <h2 className="text-lg font-bold text-gray-900">{grupoAbaAtiva.nome}</h2>
-                      <p className="text-sm text-gray-600 mt-0.5">
+                      <h2 className="text-base font-semibold text-gray-900">{grupoAbaAtiva.nome}</h2>
+                      <p className="text-xs text-gray-600 mt-0.5">
                         {fotosAbaAtiva} {fotosAbaAtiva === 1 ? "foto" : "fotos"}
                         {pendentesAbaAtiva.length > 1
                           ? ` · ${pendentesAbaAtiva.length} notas`
@@ -3203,15 +3203,17 @@ export default function NotasPedidoContent() {
                       </p>
                     </div>
                   </div>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                  <div className="rounded-lg border border-amber-200 bg-white shadow-sm max-h-[min(65vh,28rem)] sm:max-h-[min(72vh,36rem)] overflow-y-auto overscroll-contain divide-y divide-amber-100/90">
                     {pendentesAbaAtiva.map((n) => {
                       const qtdFotosCard = contarFotosEnviadasNota(n);
+                      const fotoThumb = getFotoExibicaoNota(n);
+                      const qtdItens = n.itens?.length ?? 0;
                       return (
                         <button
                           key={n.id}
                           type="button"
                           onClick={() => void openConferir(n)}
-                          className="text-left border-2 border-amber-300 bg-amber-50 rounded-xl overflow-hidden hover:border-amber-500 relative"
+                          className="relative w-full flex items-center gap-2 px-2 py-1.5 sm:px-2.5 sm:py-2 text-left hover:bg-amber-50/90 active:bg-amber-100/70 transition-colors"
                         >
                           {check("notas_pedido", "edit") &&
                             coopId &&
@@ -3220,46 +3222,67 @@ export default function NotasPedidoContent() {
                                 type="button"
                                 variant="danger"
                                 size="sm"
-                                className="absolute top-2 left-2 z-10 h-8 w-8 p-0"
+                                className="absolute top-1 left-1 z-10 h-6 w-6 p-0"
                                 aria-label="Excluir entrega"
                                 onClick={(e) => {
                                   e.stopPropagation();
                                   solicitarExclusaoNota(n, true);
                                 }}
                               >
-                                <Trash2 size={14} />
+                                <Trash2 size={12} />
                               </Button>
                             )}
-                          {getFotoExibicaoNota(n) ? (
-                            <div className="w-full h-52 sm:h-60 bg-gray-100 border-b border-amber-200 flex items-center justify-center p-2">
+                          <div
+                            className={cn(
+                              "shrink-0 w-10 h-10 sm:w-11 sm:h-11 rounded border border-amber-200/80 bg-gray-50 flex items-center justify-center overflow-hidden",
+                              check("notas_pedido", "edit") &&
+                                coopId &&
+                                podeExcluirEntregaNota(data, n.id, coopId).ok &&
+                                "ml-7 sm:ml-8"
+                            )}
+                          >
+                            {fotoThumb ? (
                               <NotaFotoImg
-                                src={getFotoExibicaoNota(n)}
+                                src={fotoThumb}
                                 alt=""
                                 className="max-w-full max-h-full w-auto h-auto object-contain"
                               />
+                            ) : qtdFotosCard > 0 ? (
+                              <Camera size={18} className="text-amber-700/80" />
+                            ) : (
+                              <Camera size={18} className="text-amber-700/50" />
+                            )}
+                          </div>
+                          <div className="flex-1 min-w-0 grid grid-cols-[minmax(0,1fr)_auto] gap-x-2 gap-y-0.5 items-center">
+                            <div className="min-w-0 flex flex-wrap items-center gap-x-1.5 gap-y-0.5 col-span-2 sm:col-span-1">
+                              <span className="font-semibold text-xs sm:text-sm text-gray-900 truncate">
+                                {n.numeroNota}
+                              </span>
+                              <span className="text-[11px] sm:text-xs text-gray-500 shrink-0">
+                                {formatDate(n.dataEntrega)}
+                              </span>
+                              <span className="shrink-0 scale-[0.85] origin-left">
+                                <NotaStatusBadge status={n.status} />
+                              </span>
+                              {qtdFotosCard > 1 && (
+                                <span className="shrink-0 bg-amber-800/90 text-white text-[9px] font-bold px-1.5 py-px rounded-full">
+                                  {qtdFotosCard} fotos
+                                </span>
+                              )}
                             </div>
-                          ) : qtdFotosCard > 0 ? (
-                            <div className="w-full h-52 sm:h-60 bg-gray-100 border-b border-amber-200 flex flex-col items-center justify-center gap-2 text-gray-600 px-4 text-center">
-                              <Camera size={28} className="text-amber-700/80" />
-                              <p className="text-sm font-medium">
-                                {qtdFotosCard} foto{qtdFotosCard === 1 ? "" : "s"} na nuvem
-                              </p>
-                              <p className="text-xs text-gray-500">Toque para abrir e carregar</p>
-                            </div>
-                          ) : null}
-                          {qtdFotosCard > 1 && (
-                            <span className="absolute top-2 right-2 bg-black/70 text-white text-xs font-bold px-2 py-0.5 rounded-full">
-                              {qtdFotosCard} fotos
-                            </span>
-                          )}
-                          <div className="p-3">
-                            <p className="font-medium text-sm">
-                              {formatDate(n.dataEntrega)} · {n.numeroNota}
+                            <p className="text-xs sm:text-sm font-semibold text-green-700 tabular-nums text-right col-span-2 sm:col-span-1 sm:row-start-1 sm:col-start-2">
+                              {formatCurrency(n.valorLiquido)}
                             </p>
-                            <p className="text-xs text-gray-600 mt-0.5">
+                            <p className="col-span-2 text-[11px] sm:text-xs text-gray-600 truncate leading-tight">
+                              {qtdItens} {qtdItens === 1 ? "item" : "itens"}
+                              <span className="text-gray-400 mx-1">·</span>
                               {getEscolaNotaLabel(n, data.instituicoes)}
+                              {!fotoThumb && qtdFotosCard > 0 && (
+                                <span className="text-gray-400"> · toque para carregar foto</span>
+                              )}
                             </p>
                           </div>
+                          <ChevronRight size={16} className="shrink-0 text-gray-400 hidden sm:block" aria-hidden />
                         </button>
                       );
                     })}
