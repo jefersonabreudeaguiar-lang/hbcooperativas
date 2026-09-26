@@ -134,23 +134,39 @@ export function notifyAppDataSubscribers(): void {
 }
 
 /** Agrupa várias gravações do sync em uma só (evita travar o celular). */
-export function beginSaveBatch(): void {
+let batchPersistGate: (() => boolean) | null = null;
+
+export function beginSaveBatch(opts?: { shouldPersist?: () => boolean }): void {
   saveBatchDepth++;
+  if (saveBatchDepth === 1 && opts?.shouldPersist) {
+    batchPersistGate = opts.shouldPersist;
+  }
 }
 
 export function endSaveBatch(): void {
   if (saveBatchDepth <= 0) return;
   saveBatchDepth--;
-  if (saveBatchDepth === 0 && saveBatchPending) {
-    const pending = saveBatchPending;
-    saveBatchPending = null;
-    const saved = persistDataToStorage(pending, { skipNotify: true });
-    if (saved.ok) notify();
+  if (saveBatchDepth === 0) {
+    if (saveBatchPending) {
+      const shouldPersist = batchPersistGate ? batchPersistGate() : true;
+      if (shouldPersist) {
+        const pending = saveBatchPending;
+        saveBatchPending = null;
+        const saved = persistDataToStorage(pending, { skipNotify: true });
+        if (saved.ok) notify();
+      } else {
+        saveBatchPending = null;
+      }
+    }
+    batchPersistGate = null;
   }
 }
 
-export async function runWithBatchedSaveAsync(fn: () => Promise<void>): Promise<void> {
-  beginSaveBatch();
+export async function runWithBatchedSaveAsync(
+  fn: () => Promise<void>,
+  opts?: { shouldPersistBatch?: () => boolean }
+): Promise<void> {
+  beginSaveBatch({ shouldPersist: opts?.shouldPersistBatch });
   try {
     await fn();
   } finally {

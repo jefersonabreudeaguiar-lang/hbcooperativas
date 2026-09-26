@@ -22,6 +22,10 @@ import {
 } from "@/services/syncMetaService";
 import { precisaReparoFullSyncNotas } from "@/services/fichaSyncGuard";
 import {
+  saveAppDataIfSyncLeaseCurrent,
+  type CooperativaSyncSessionLease,
+} from "@/services/operacionalPullLease";
+import {
   isNotaStatusDowngrade,
   isNotaStatusTerminalConferencia,
   protectNotaAgainstStatusDowngrade,
@@ -1230,7 +1234,7 @@ export async function pushNotaComFotosEmLotes(
 
 export async function syncNotasPedidoFromCloud(
   cnpj: string,
-  options?: { retryFull?: boolean }
+  options?: { retryFull?: boolean; sessionLease?: CooperativaSyncSessionLease }
 ): Promise<number> {
   // Pull nunca bloqueado por reset pendente — só push de responsável usa essa flag.
   await flushPendingNotaDeletes(cnpj);
@@ -1260,7 +1264,10 @@ export async function syncNotasPedidoFromCloud(
         return false;
       });
       if (filtered.length !== current.notasPedido.length) {
-        saveDataSafe(posProcessarFinanceiroLocal({ ...current, notasPedido: filtered }, digits));
+        saveAppDataIfSyncLeaseCurrent(
+          options?.sessionLease,
+          posProcessarFinanceiroLocal({ ...current, notasPedido: filtered }, digits)
+        );
       }
     }
     markNotasSyncDone(digits, true, [], serverWatermark);
@@ -1278,7 +1285,10 @@ export async function syncNotasPedidoFromCloud(
       if (precisaReparoFullSyncNotas(current, coopId) || conferidasCoop === 0) {
         forceNextFullNotasSync(digits);
         clearNotasSyncMeta(digits);
-        return syncNotasPedidoFromCloud(cnpj, { retryFull: true });
+        return syncNotasPedidoFromCloud(cnpj, {
+          retryFull: true,
+          sessionLease: options?.sessionLease,
+        });
       }
     }
     markNotasSyncDone(digits, false, [], serverWatermark);
@@ -1325,7 +1335,7 @@ export async function syncNotasPedidoFromCloud(
 
   const reconciled = posProcessarFinanceiroLocal(merged, digits);
   if (reconciled !== current) {
-    saveDataSafe(reconciled);
+    saveAppDataIfSyncLeaseCurrent(options?.sessionLease, reconciled);
   }
   markNotasSyncDone(digits, treatAsFull, cloudNotas, serverWatermark);
   return cloudNotas.filter((n) => n.status === "aguardando_conferencia").length;
@@ -1338,7 +1348,8 @@ export async function syncNotasPedidoFromCloud(
 export async function refreshCooperadoNotasEmAnalise(
   cnpj: string,
   cooperadoId: string,
-  cooperativaId?: string
+  cooperativaId?: string,
+  opts?: { sessionLease?: CooperativaSyncSessionLease }
 ): Promise<number> {
   const digits = normalizeCnpj(cnpj);
   if (digits.length !== 14) return 0;
@@ -1377,7 +1388,9 @@ export async function refreshCooperadoNotasEmAnalise(
 
   const reconciled = posProcessarFinanceiroLocal(merged, digits);
   if (reconciled !== data) {
-    saveDataSafe(reconciled);
+    if (!saveAppDataIfSyncLeaseCurrent(opts?.sessionLease, reconciled)) {
+      return 0;
+    }
   }
   markNotasSyncDone(digits, false, atualizadas);
   return atualizadas.length;
