@@ -9,9 +9,22 @@ export const OPERATIONAL_RESET_STORAGE_KEY = "coopeagriplla_operational_reset_v"
 export const OPERATIONAL_RESET_CLOUD_KEY = "coopeagriplla_operational_reset_cloud_v";
 const CLOUD_RESET_APPLIED_PREFIX = "coopeagriplla_cloud_reset_applied_";
 const CLOUD_OPERACIONAL_AUTHORITATIVE_PREFIX = "coopeagriplla_cloud_operacional_authoritative_";
+const OPERACIONAL_PULL_MERGED_AT_PREFIX = "coopeagriplla_operacional_pull_merged_at_";
+
+/** Testes H8.14E — watermark de merge sem localStorage. */
+const operacionalPullMergedAtMsTest = new Map<string, number>();
 
 /** Restore ativo nesta aba — definido no 1º fetch da nuvem (antes do merge local). */
 let sessionOperacionalRestore: { cnpj: string; version: number } | null = null;
+/** Somente testes — simula authoritative sem localStorage. */
+let testOperacionalAuthoritativeCnpj: string | null = null;
+
+export function setOperacionalCloudAuthoritativeForTests(cnpj: string | null, version = 15): void {
+  const digits = cnpj ? normalizeCnpj(cnpj) : "";
+  testOperacionalAuthoritativeCnpj = digits.length === 14 ? digits : null;
+  sessionOperacionalRestore =
+    digits.length === 14 ? { cnpj: digits, version: version > 0 ? version : 15 } : null;
+}
 
 export function needsOperationalResetCloudPush(): boolean {
   if (typeof window === "undefined") return false;
@@ -65,7 +78,36 @@ export function resetCloudSyncMarkersForRestore(cnpj: string): void {
   clearNotasSyncMeta(digits);
 }
 
-/** Chamado ao receber operacional da API — fila Pagar usa nuvem antes do merge terminar. */
+/** Último `updatedAt` operacional aplicado com merge autoritativo comprovado (H8.14E). */
+export function getLastOperacionalPullMergedUpdatedAtMs(cnpj: string): number {
+  const digits = normalizeCnpj(cnpj);
+  if (digits.length !== 14) return 0;
+  const fromTest = operacionalPullMergedAtMsTest.get(digits);
+  if (fromTest != null && fromTest > 0) return fromTest;
+  if (typeof window === "undefined") return 0;
+  const raw = localStorage.getItem(`${OPERACIONAL_PULL_MERGED_AT_PREFIX}${digits}`);
+  const n = Number(raw);
+  return Number.isFinite(n) && n > 0 ? n : 0;
+}
+
+export function noteOperacionalPullMergedUpdatedAt(cnpj: string, updatedAt?: string): void {
+  const digits = normalizeCnpj(cnpj);
+  if (digits.length !== 14) return;
+  const ms = updatedAt ? new Date(updatedAt).getTime() : Date.now();
+  if (!Number.isFinite(ms) || ms <= 0) return;
+  operacionalPullMergedAtMsTest.set(digits, ms);
+  if (typeof window === "undefined") return;
+  localStorage.setItem(`${OPERACIONAL_PULL_MERGED_AT_PREFIX}${digits}`, String(ms));
+}
+
+export function clearOperacionalPullMergedWatermarkForTests(cnpj: string): void {
+  const digits = normalizeCnpj(cnpj);
+  operacionalPullMergedAtMsTest.delete(digits);
+  if (typeof window === "undefined") return;
+  localStorage.removeItem(`${OPERACIONAL_PULL_MERGED_AT_PREFIX}${digits}`);
+}
+
+/** Chamado ao receber operacional da API — H8.14E: não marcar authoritative no fetch (guard no sync). */
 export function noteOperacionalCloudRestoreFromFetch(
   cnpj: string,
   cloud: CloudOperationalResetSignal | null | undefined
@@ -74,7 +116,6 @@ export function noteOperacionalCloudRestoreFromFetch(
   const digits = normalizeCnpj(cnpj);
   if (digits.length !== 14) return;
   if (cloud?.fullReset && (cloud.operationalResetVersion ?? 0) > 0) {
-    markOperacionalCloudAuthoritative(digits, cloud.operationalResetVersion ?? 1);
     return;
   }
   if (sessionOperacionalRestore?.cnpj === digits) sessionOperacionalRestore = null;
@@ -82,8 +123,11 @@ export function noteOperacionalCloudRestoreFromFetch(
 }
 
 export function isOperacionalCloudAuthoritative(cnpj: string): boolean {
-  if (typeof window === "undefined") return false;
   const digits = normalizeCnpj(cnpj);
+  if (digits.length !== 14) return false;
+  if (typeof window === "undefined") {
+    return testOperacionalAuthoritativeCnpj === digits;
+  }
   if (
     sessionOperacionalRestore?.cnpj === digits &&
     (sessionOperacionalRestore.version ?? 0) > 0
