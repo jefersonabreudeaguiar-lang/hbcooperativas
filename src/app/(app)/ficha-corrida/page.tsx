@@ -52,6 +52,7 @@ import {
   cooperadoPendentePagamentoResponsavel,
   getMesPrincipalQuantoVouReceber,
   getValorQuantoVouReceber,
+  getResumoQuantoVouReceberCooperado,
   listarMesesPendentesPagamentoResponsavel,
   listarMesesPendentesQuantoVouReceber,
   getConsolidadoFinanceiroCooperado,
@@ -73,6 +74,8 @@ import { ReciboResumoView } from "@/components/ficha/ReciboResumoView";
 import { HistoricoHbCreditosResumo } from "@/components/ficha/HistoricoHbCreditosResumo";
 import { ResumoDescontosMes } from "@/components/ficha/ResumoDescontosMes";
 import { CooperadoHistoricoPagamentoMes } from "@/components/cooperado/CooperadoHistoricoPagamentoMes";
+import { CooperadoQuantoVouReceberPainel } from "@/components/cooperado/CooperadoQuantoVouReceberPainel";
+import { useSyncStatus } from "@/components/sync/CooperativaSyncProvider";
 import { DivisaoEntregaModal } from "@/components/ficha/DivisaoEntregaModal";
 import { ValoresAvulsosReceberPanel } from "@/components/ficha/ValoresAvulsosReceberPanel";
 import {
@@ -566,6 +569,7 @@ export default function FichaCorridaPage() {
 
   const { exibirAguardandoAssinatura, conferindoPagamentoNuvem } =
     useCooperadoExibirAguardandoAssinatura(isCooperado && !!pagamentoAguardando);
+  const { syncing: syncCooperadoFinanceiro, cooperadoPagamentosHydrated } = useSyncStatus();
 
   const pagamentoAguardandoExibicao = useMemo(() => {
     if (!isCooperado) return pagamentoAguardando;
@@ -743,6 +747,23 @@ export default function FichaCorridaPage() {
     visualizandoHistorico && pagamentoConfirmadoMes
       ? pagamentoConfirmadoMes.valorLiquido
       : totalPendente;
+
+  const resumoQuantoVouReceber = useMemo(() => {
+    if (!data || !cooperadoId || !isCooperado) return null;
+    return getResumoQuantoVouReceberCooperado(data, cooperadoId, coopId, {
+      carregandoNuvem: conferindoPagamentoNuvem,
+      financeiroSincronizando: syncCooperadoFinanceiro || !cooperadoPagamentosHydrated,
+    });
+  }, [
+    data,
+    cooperadoId,
+    coopId,
+    isCooperado,
+    conferindoPagamentoNuvem,
+    syncCooperadoFinanceiro,
+    cooperadoPagamentosHydrated,
+    hbDescontosRevision,
+  ]);
 
   const pendentePagamentoResponsavel = useMemo(() => {
     if (!data || !cooperadoSelecionadoId) return false;
@@ -1087,8 +1108,14 @@ export default function FichaCorridaPage() {
       const pg = pagamentoConfirmadoLocal ?? getData().pagamentosCooperado.find((p) => p.id === pagamentoAguardando.id);
       const cnpj = await resolveCooperativaCnpj(getData(), coopId, user);
       if (cnpj && pg?.status === "confirmado") {
-        const ok = await confirmarPagamentoCooperadoNaNuvem(cnpj, pg);
-        if (ok) await syncOperacionalFromCloud(cnpj);
+        const confirmNuvem = await confirmarPagamentoCooperadoNaNuvem(cnpj, pg);
+        console.info("[H8.17I] confirmação nuvem", {
+          ok: confirmNuvem.ok,
+          status: confirmNuvem.status,
+          code: confirmNuvem.code,
+          error: confirmNuvem.error,
+        });
+        if (confirmNuvem.ok) await syncOperacionalFromCloud(cnpj);
       }
       requestAppSync();
     })();
@@ -1226,15 +1253,6 @@ export default function FichaCorridaPage() {
         </AlertBanner>
       )}
 
-      {isCooperado && !visualizandoHistorico && pagamentoAguardandoExibicao && (
-        <AlertBanner variant="success" title="Pagamento realizado pela cooperativa" className="mb-4">
-          Valor: <strong>{formatCurrency(pagamentoAguardandoExibicao.valorLiquido)}</strong>. Confira o recibo abaixo e confirme o recebimento assinando.
-          <Button className="mt-3 w-full sm:w-auto" size="lg" onClick={() => setAssinaturaModal(true)}>
-            <CheckCircle2 size={18} /> Confirmar recebimento
-          </Button>
-        </AlertBanner>
-      )}
-
       <FilterBar>
         {!isCooperado && (
           <FormField label="Cooperado">
@@ -1313,7 +1331,26 @@ export default function FichaCorridaPage() {
         </div>
       )}
 
-      {isCooperado && !visualizandoHistorico && !exibirQuantoVouReceber && !mesQuitadoCooperado && (
+      {isCooperado &&
+        !visualizandoHistorico &&
+        resumoQuantoVouReceber?.estado === "carregando" &&
+        !mesQuitadoCooperado &&
+        !exibirPagamento && (
+          <CooperadoQuantoVouReceberPainel
+            estado={resumoQuantoVouReceber.estado}
+            mesLabel={resumoQuantoVouReceber.mesLabel}
+            valorDestaque={0}
+            tituloValor={resumoQuantoVouReceber.tituloValor}
+            subtitulo={resumoQuantoVouReceber.subtitulo}
+            acaoRotulo={null}
+          />
+        )}
+
+      {isCooperado &&
+        !visualizandoHistorico &&
+        !exibirQuantoVouReceber &&
+        !mesQuitadoCooperado &&
+        resumoQuantoVouReceber?.estado !== "carregando" && (
         <div className="text-center py-14 px-6 bg-white rounded-2xl border border-dashed border-gray-300 mb-6">
           <Wallet size={48} className="mx-auto text-gray-300 mb-4" />
           <h2 className="text-lg font-semibold text-gray-800">Nada a receber agora</h2>
@@ -1724,68 +1761,85 @@ export default function FichaCorridaPage() {
 
       {cooperadoSelecionadoId && exibirPagamento && (
         <>
-          <div className="bg-gradient-to-br from-green-700 to-green-800 text-white rounded-2xl p-6 mb-6 shadow-sm">
-            <p className="text-green-100 text-sm">
-              {isCooperado
-                ? visualizandoHistorico
-                  ? "Total recebido"
-                  : "Total a receber"
-                : "Valor a pagar"}{" "}
-              ·{" "}
-              {isCooperado && !visualizandoHistorico
-                ? valorReceberConsolidado?.mesLabel ?? formatMesReferencia(mesAtivo)
-                : pagamentoAguardandoExibicao ?? pagamentoAguardando
+          {isCooperado && resumoQuantoVouReceber ? (
+            <>
+              <CooperadoQuantoVouReceberPainel
+                estado={resumoQuantoVouReceber.estado}
+                mesLabel={resumoQuantoVouReceber.mesLabel}
+                valorDestaque={
+                  resumoQuantoVouReceber.estado === "carregando"
+                    ? 0
+                    : resumoQuantoVouReceber.estado === "aguardando_assinatura"
+                      ? resumoQuantoVouReceber.valorDestaque
+                      : totalExibido
+                }
+                tituloValor={resumoQuantoVouReceber.tituloValor}
+                subtitulo={resumoQuantoVouReceber.subtitulo}
+                acaoRotulo={resumoQuantoVouReceber.acaoRotulo}
+                onAcao={() => setAssinaturaModal(true)}
+                mostrarDetalheCalculo={Boolean(
+                  resumoExibicao &&
+                    (resumoExibicao.valorBruto > 0 ||
+                      totalPendente > 0 ||
+                      descontosExtrasCooperado.length > 0)
+                )}
+                detalheCalculo={
+                  resumoExibicao
+                    ? {
+                        valorBruto: resumoExibicao.valorBruto,
+                        descontoCooperativa: resumoExibicao.descontoCooperativa,
+                        descontoPadraoPct: data.config.descontoPadraoCooperativa,
+                        valorEntregas: resumoExibicao.valorEntregas,
+                        descontosExtras: descontosExtrasCooperado,
+                        totalLiquido: totalExibido,
+                      }
+                    : undefined
+                }
+              />
+              {resumoExibicao &&
+                cooperadoSelecionadoId &&
+                coopCnpjResumo &&
+                descontosExtrasCooperado.some((d) => d.tipo === "conta_coop") && (
+                  <div className="-mt-4 mb-6">
+                    <HistoricoHbCreditosResumo
+                      cnpj={coopCnpjResumo}
+                      cooperadoId={cooperadoSelecionadoId}
+                      mesReferencia={mesAtivo}
+                      valorEntregas={resumoExibicao.valorEntregas}
+                      descontosExtras={descontosExtrasCooperado}
+                    />
+                  </div>
+                )}
+            </>
+          ) : (
+            <div className="bg-gradient-to-br from-green-700 to-green-800 text-white rounded-2xl p-6 mb-6 shadow-sm">
+              <p className="text-green-100 text-sm">
+                Valor a pagar ·{" "}
+                {pagamentoAguardandoExibicao ?? pagamentoAguardando
                   ? formatMesesReferenciaRotulo(
                       getMesesReferenciaPagamento((pagamentoAguardandoExibicao ?? pagamentoAguardando)!)
                     )
                   : mesesPendentesPagamento.length
                     ? formatMesesReferenciaRotulo(mesesPendentesPagamento)
                     : formatMesReferencia(mesAtivo)}
-            </p>
-            <p className="text-3xl sm:text-4xl font-bold mt-2">
-              {formatCurrency(totalExibido)}
-            </p>
-            {!isCooperado && nomeCooperado && (
-              <p className="text-green-100 text-sm mt-2">{nomeCooperado}</p>
-            )}
-            {resumoExibicao &&
-              !(isCooperado && visualizandoHistorico) &&
-              (resumoExibicao.valorBruto > 0 || totalPendente > 0 || descontosExtrasCooperado.length > 0) && (
-              <ResumoDescontosMes
-                valorBruto={resumoExibicao.valorBruto}
-                descontoCooperativa={resumoExibicao.descontoCooperativa}
-                descontoPadraoPct={data.config.descontoPadraoCooperativa}
-                valorEntregas={resumoExibicao.valorEntregas}
-                descontosExtras={isCooperado ? descontosExtrasCooperado : resumoExibicao.descontosExtras}
-                totalLiquido={totalExibido}
-                rotuloTotal={
-                  isCooperado
-                    ? visualizandoHistorico
-                      ? "Total recebido"
-                      : "Total a receber"
-                    : "Total líquido a pagar"
-                }
-                tema="escuro"
-              />
-            )}
-            {!visualizandoHistorico &&
-              resumoExibicao &&
-              cooperadoSelecionadoId &&
-              coopCnpjResumo &&
-              descontosExtrasCooperado.some((d) => d.tipo === "conta_coop") && (
-                <div className="mt-4 text-left">
-                  <HistoricoHbCreditosResumo
-                    cnpj={coopCnpjResumo}
-                    cooperadoId={cooperadoSelecionadoId}
-                    mesReferencia={mesAtivo}
+              </p>
+              <p className="text-3xl sm:text-4xl font-bold mt-2">{formatCurrency(totalExibido)}</p>
+              {nomeCooperado && <p className="text-green-100 text-sm mt-2">{nomeCooperado}</p>}
+              {resumoExibicao &&
+                (resumoExibicao.valorBruto > 0 || totalPendente > 0 || descontosExtrasCooperado.length > 0) && (
+                  <ResumoDescontosMes
+                    valorBruto={resumoExibicao.valorBruto}
+                    descontoCooperativa={resumoExibicao.descontoCooperativa}
+                    descontoPadraoPct={data.config.descontoPadraoCooperativa}
                     valorEntregas={resumoExibicao.valorEntregas}
-                    descontosExtras={
-                      isCooperado ? descontosExtrasCooperado : resumoExibicao.descontosExtras
-                    }
+                    descontosExtras={resumoExibicao.descontosExtras}
+                    totalLiquido={totalExibido}
+                    rotuloTotal="Total líquido a pagar"
+                    tema="escuro"
                   />
-                </div>
-              )}
-          </div>
+                )}
+            </div>
+          )}
 
           {!isCooperado &&
             aba === "pagar" &&

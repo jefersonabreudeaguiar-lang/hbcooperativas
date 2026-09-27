@@ -29,10 +29,12 @@ import {
   syncCooperativaBackground,
   syncCooperativaBidirectional,
   syncOperacionalFromCloud,
+  type SyncOperacionalFromCloudResult,
 } from "@/services/cooperativaSyncCloudService";
 import {
   acquireCooperativaSyncSessionLease,
   bindCooperadoRunSyncSessionLease,
+  getCooperadoRunSyncSessionLease,
   saveAppDataIfSyncLeaseCurrent,
   type CooperativaSyncSessionLease,
 } from "@/services/operacionalPullLease";
@@ -65,6 +67,22 @@ const COOPERADO_PUSH_GAP_MS = 5 * 60 * 1000;
 const VOTACAO_OPERACIONAL_PULL_GAP_MS = 45_000;
 /** Evita sync infinita — libera o chip "Atualizando…" mesmo em cooperativas grandes. */
 const SYNC_TIMEOUT_MS = 90_000;
+
+function mensagemErroPullOperacionalCooperado(result: SyncOperacionalFromCloudResult): string | null {
+  if (result.ok && (result.code === "ok" || result.code === "stale_discarded")) return null;
+  switch (result.code) {
+    case "fetch_failed":
+      return "Não foi possível baixar seus pagamentos da nuvem. Verifique a internet e toque em Atualizar.";
+    case "no_operacional":
+      return "Financeiro da cooperativa indisponível na nuvem. Aguarde e toque em Atualizar.";
+    case "no_coop_id":
+      return "Cadastro da cooperativa incompleto neste aparelho. Saia e entre de novo.";
+    case "invalid_cnpj":
+      return "CNPJ da cooperativa inválido neste aparelho. Saia e entre de novo.";
+    default:
+      return null;
+  }
+}
 
 function withSyncTimeout<T>(promise: Promise<T>, label: string): Promise<T> {
   return Promise.race([
@@ -273,6 +291,10 @@ export function CooperativaSyncProvider({ children }: { children: React.ReactNod
 
     const sessionOk = await ensureCloudSessionReady(userToCloudProfile(currentUser));
     if (!sessionOk) {
+      setLastSyncError(
+        getLastCloudSyncError() ||
+          "Não foi possível conectar à nuvem. Saia, entre de novo e aguarde alguns segundos."
+      );
       markCooperadoPagamentosHydrated();
       return;
     }
@@ -286,14 +308,23 @@ export function CooperativaSyncProvider({ children }: { children: React.ReactNod
     votacaoOperacionalPullRef.current = true;
     lastVotacaoOperacionalPullRef.current = now;
     try {
-      await syncOperacionalFromCloud(cnpj);
+      const boundLease = getCooperadoRunSyncSessionLease();
+      const result = await syncOperacionalFromCloud(cnpj, {
+        sessionLease: boundLease ?? undefined,
+      });
+      const msg = mensagemErroPullOperacionalCooperado(result);
+      if (msg && !boundLease) {
+        setLastSyncError(msg);
+      }
     } catch {
       /* offline / retry na próxima abertura */
     } finally {
       votacaoOperacionalPullRef.current = false;
-      markCooperadoPagamentosHydrated();
+      if (!getCooperadoRunSyncSessionLease()) {
+        markCooperadoPagamentosHydrated();
+      }
     }
-  }, [markCooperadoPagamentosHydrated]);
+  }, [markCooperadoPagamentosHydrated, setLastSyncError]);
 
   const pullVotacaoOperacionalCooperado = useCallback(async () => {
     await hydrateCooperadoPagamentosFromCloud();
@@ -350,6 +381,10 @@ export function CooperativaSyncProvider({ children }: { children: React.ReactNod
 
       const cooperadoLogado = currentUser.role === "cooperado";
       let cooperadoSyncSession: CooperativaSyncSessionLease | undefined;
+
+      if (cooperadoLogado) {
+        setCooperadoPagamentosHydrated(false);
+      }
 
       await withSyncTimeout(
         (async () => {
@@ -483,9 +518,7 @@ export function CooperativaSyncProvider({ children }: { children: React.ReactNod
       if (!document.hidden) {
         markUserActivity();
         if (user?.role === "cooperado") {
-          void hydrateCooperadoPagamentosFromCloud({ ignoreGap: true }).finally(() => {
-            void runSync({ force: true });
-          });
+          void runSync({ force: true });
         } else {
           void runSync({ force: true });
         }

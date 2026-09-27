@@ -65,7 +65,7 @@ import { RestoreOperacionalPanel } from "@/components/sync/RestoreOperacionalPan
 function CooperadoDashboard() {
   const { user } = useAuth();
   const router = useRouter();
-  const { syncing, lastSyncError } = useSyncStatus();
+  const { syncing, lastSyncError, cooperadoPagamentosHydrated } = useSyncStatus();
   const recoverySyncRef = useRef(false);
   const hbDescontosRevision = useContaCoopDescontosRevision();
 
@@ -229,6 +229,8 @@ function CooperadoDashboard() {
     cnpjDigits,
   } = view;
 
+  const carregandoValoresFinanceiros = syncing || !cooperadoPagamentosHydrated;
+
   return (
     <div className="space-y-6 max-w-3xl">
       <div>
@@ -345,11 +347,19 @@ function CooperadoDashboard() {
 
       <div
         className={`grid grid-cols-1 gap-4 ${
-          valorReceber.exibir && (exibirAguardandoAssinatura || !valorReceber.aguardandoAssinatura)
+          (valorReceber.exibir || carregandoValoresFinanceiros) &&
+          (exibirAguardandoAssinatura || !valorReceber.aguardandoAssinatura || carregandoValoresFinanceiros)
             ? "sm:grid-cols-2"
             : ""
         }`}
       >
+        {carregandoValoresFinanceiros && !valorReceber.exibir && !exibirAguardandoAssinatura && (
+          <div className="rounded-2xl p-6 shadow-sm bg-white border-2 border-amber-200">
+            <Wallet size={28} className="mb-3 text-amber-600" />
+            <p className="text-sm font-semibold text-gray-900">Atualizando valores a receber</p>
+            <p className="text-sm text-gray-500 mt-2">Aguarde alguns segundos com internet.</p>
+          </div>
+        )}
         {valorReceber.exibir && exibirAguardandoAssinatura && (
           <div className="rounded-2xl p-6 shadow-sm bg-gradient-to-br from-emerald-600 to-green-700 text-white border border-emerald-500">
             <Wallet size={28} className="mb-3 opacity-90" />

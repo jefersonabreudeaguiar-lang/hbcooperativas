@@ -579,6 +579,87 @@ export function getValorQuantoVouReceber(
   };
 }
 
+export type EstadoQuantoVouReceberCooperado =
+  | "carregando"
+  | "nada_pendente"
+  | "a_receber"
+  | "aguardando_assinatura";
+
+/** Facade UI cooperado — uma leitura estável para Início e Quanto vou receber (Fase 3). */
+export function getResumoQuantoVouReceberCooperado(
+  data: AppData,
+  cooperadoId: string,
+  cooperativaId: string | undefined,
+  opts?: { carregandoNuvem?: boolean; financeiroSincronizando?: boolean }
+): {
+  estado: EstadoQuantoVouReceberCooperado;
+  mesLabel: string;
+  valorDestaque: number;
+  valorRecibo: number;
+  aguardandoAssinatura: boolean;
+  valorAberto: number;
+  tituloValor: string;
+  subtitulo: string;
+  acaoRotulo: string | null;
+} {
+  const base = getValorQuantoVouReceber(data, cooperadoId, cooperativaId);
+  const carregando = Boolean(opts?.carregandoNuvem || opts?.financeiroSincronizando);
+
+  if (carregando) {
+    return {
+      estado: "carregando",
+      mesLabel: base.mesLabel,
+      valorDestaque: 0,
+      valorRecibo: base.valorRecibo,
+      aguardandoAssinatura: base.aguardandoAssinatura,
+      valorAberto: base.valor,
+      tituloValor: "Atualizando",
+      subtitulo: "Baixando pagamentos e valores da cooperativa…",
+      acaoRotulo: null,
+    };
+  }
+
+  if (base.aguardandoAssinatura && base.valorRecibo > 0) {
+    return {
+      estado: "aguardando_assinatura",
+      mesLabel: base.mesLabel,
+      valorDestaque: base.valorRecibo,
+      valorRecibo: base.valorRecibo,
+      aguardandoAssinatura: true,
+      valorAberto: base.valor,
+      tituloValor: "PIX registrado — falta assinar",
+      subtitulo: "Confira o valor e confirme o recebimento assinando o recibo.",
+      acaoRotulo: "Confirmar recebimento",
+    };
+  }
+
+  if (base.valor > 0) {
+    return {
+      estado: "a_receber",
+      mesLabel: base.mesLabel,
+      valorDestaque: base.valor,
+      valorRecibo: base.valorRecibo,
+      aguardandoAssinatura: false,
+      valorAberto: base.valor,
+      tituloValor: "Total a receber",
+      subtitulo: "Valor líquido das entregas conferidas (antes do pagamento da cooperativa).",
+      acaoRotulo: null,
+    };
+  }
+
+  return {
+    estado: "nada_pendente",
+    mesLabel: base.mesLabel,
+    valorDestaque: 0,
+    valorRecibo: 0,
+    aguardandoAssinatura: false,
+    valorAberto: 0,
+    tituloValor: "Nada a receber agora",
+    subtitulo: "Quando a cooperativa aprovar suas entregas, o valor aparece aqui.",
+    acaoRotulo: null,
+  };
+}
+
 export function getResumoMesEntregasCooperado(
   data: AppData,
   cooperadoId: string,

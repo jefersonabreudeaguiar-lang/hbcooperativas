@@ -94,22 +94,58 @@ function finalizeOperacionalPullLocalState(
   return posProcessarFinanceiroLocal(data, cnpj);
 }
 
+export type ConfirmarPagamentoCooperadoNaNuvemResult = {
+  ok: boolean;
+  status: number | null;
+  code?: string;
+  error?: string;
+};
+
+const CONFIRMAR_PAGAMENTO_REDE_ERROR = "Erro de rede ao confirmar pagamento.";
+const CONFIRMAR_PAGAMENTO_HTTP_ERROR = "Não foi possível confirmar o pagamento na nuvem.";
+
+/** Extrai status/code/error do Response — sem payload, tokens ou PII. */
+export async function confirmarPagamentoCooperadoNaNuvemResultFromResponse(
+  res: Response
+): Promise<ConfirmarPagamentoCooperadoNaNuvemResult> {
+  const status = res.status;
+  const ok = res.ok;
+  let code: string | undefined;
+  let error: string | undefined;
+  try {
+    const json = (await res.json()) as { code?: unknown; error?: unknown };
+    if (typeof json.code === "string" && json.code.trim()) code = json.code.trim();
+    if (typeof json.error === "string" && json.error.trim()) error = json.error.trim();
+  } catch {
+    if (!ok) error = CONFIRMAR_PAGAMENTO_HTTP_ERROR;
+  }
+  if (!ok && !error) error = CONFIRMAR_PAGAMENTO_HTTP_ERROR;
+  return {
+    ok,
+    status,
+    ...(code ? { code } : {}),
+    ...(error ? { error } : {}),
+  };
+}
+
 /** Cooperado publica recibo assinado — não usa push operacional (restrição de gestão). */
 export async function confirmarPagamentoCooperadoNaNuvem(
   cnpj: string,
   pagamento: PagamentoCooperadoRegistro
-): Promise<boolean> {
+): Promise<ConfirmarPagamentoCooperadoNaNuvemResult> {
   const digits = normalizeCnpj(cnpj);
-  if (digits.length !== 14 || pagamento.status !== "confirmado") return false;
+  if (digits.length !== 14 || pagamento.status !== "confirmado") {
+    return { ok: false, status: null, error: CONFIRMAR_PAGAMENTO_HTTP_ERROR };
+  }
   try {
     const res = await secureApiFetch("/api/cooperativa-sync/confirmar-pagamento", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ cnpj: digits, pagamento }),
     });
-    return res.ok;
+    return await confirmarPagamentoCooperadoNaNuvemResultFromResponse(res);
   } catch {
-    return false;
+    return { ok: false, status: null, error: CONFIRMAR_PAGAMENTO_REDE_ERROR };
   }
 }
 
@@ -1826,16 +1862,67 @@ export async function publicarCatalogoContratos(cnpj: string, data?: AppData, co
   return true;
 }
 
+export type CooperadoOperacionalPullCode =
+  | "ok"
+  | "invalid_cnpj"
+  | "fetch_failed"
+  | "no_operacional"
+  | "no_coop_id"
+  | "stale_discarded";
+
+export type SyncOperacionalFromCloudResult = {
+  ok: boolean;
+  code: CooperadoOperacionalPullCode;
+  /** Pagamentos da cooperativa no AppData após tentativa (0 se não persistiu). */
+  pagamentosCoopCount: number;
+};
+
+function countPagamentosCooperativa(data: AppData, coopId: string): number {
+  return (data.pagamentosCooperado ?? []).filter((p) => p.cooperativaId === coopId).length;
+}
+
+function countPagamentosCooperativaCloud(
+  operacional: OperacionalSyncPayload,
+  coopId: string
+): number {
+  return (operacional.pagamentosCooperado ?? []).filter(
+    (p) => !p.cooperativaId || p.cooperativaId === coopId
+  ).length;
+}
+
+/** Diagnóstico cooperado: nuvem tinha pagamentos e local ficou vazio após merge+save. */
+export function detectCooperadoPagamentosNaoMaterializados(
+  coopId: string,
+  operacional: OperacionalSyncPayload,
+  data: AppData
+): boolean {
+  const cloudN = countPagamentosCooperativaCloud(operacional, coopId);
+  const localN = countPagamentosCooperativa(data, coopId);
+  return cloudN > 0 && localN === 0;
+}
+
 export async function syncOperacionalFromCloud(
   cnpj: string,
   opts?: { sessionLease?: CooperativaSyncSessionLease }
-): Promise<boolean> {
-  const pullLease = opts?.sessionLease ?? acquireOperacionalPullLease(cnpj);
-  const bundle = await fetchSyncBundle(cnpj);
-  if (!bundle?.operacional) return false;
+): Promise<SyncOperacionalFromCloudResult> {
+  const digits = normalizeCnpj(cnpj);
+  if (digits.length !== 14) {
+    return { ok: false, code: "invalid_cnpj", pagamentosCoopCount: 0 };
+  }
+
+  const pullLease = opts?.sessionLease ?? acquireOperacionalPullLease(digits);
+  const bundle = await fetchSyncBundle(digits);
+  if (!bundle) {
+    return { ok: false, code: "fetch_failed", pagamentosCoopCount: 0 };
+  }
+  if (!bundle.operacional) {
+    return { ok: false, code: "no_operacional", pagamentosCoopCount: 0 };
+  }
   let current = getData();
-  const coopId = resolveCoopId(current, cnpj);
-  if (!coopId) return false;
+  const coopId = resolveCoopId(current, digits);
+  if (!coopId) {
+    return { ok: false, code: "no_coop_id", pagamentosCoopCount: 0 };
+  }
 
   const pullSeguro = avaliarFullResetOperacionalPullSeguro(
     current,
@@ -1869,17 +1956,33 @@ export async function syncOperacionalFromCloud(
       cnpj: pullLease.cnpj,
       generation: pullLease.generation,
     });
-    return true;
+    return {
+      ok: true,
+      code: "stale_discarded",
+      pagamentosCoopCount: countPagamentosCooperativa(getData(), coopId),
+    };
   }
 
   saveDataSafe(merged);
-  if (pullSeguro.permitirCloudAuthoritative && cloudOperacionalRestoreAtivo(bundle.operacional)) {
-    markOperacionalCloudAuthoritative(cnpj, bundle.operacional.operationalResetVersion ?? 1);
-    noteOperacionalPullMergedUpdatedAt(cnpj, bundle.operacional.updatedAt);
-  } else {
-    clearOperacionalCloudAuthoritative(cnpj);
+  const after = getData();
+  if (detectCooperadoPagamentosNaoMaterializados(coopId, bundle.operacional, after)) {
+    console.warn("[COOP_FIN_SYNC] pagamentos da nuvem não materializados no AppData após merge", {
+      cnpj: digits,
+      coopId,
+      cloudPagamentos: countPagamentosCooperativaCloud(bundle.operacional, coopId),
+    });
   }
-  return true;
+  if (pullSeguro.permitirCloudAuthoritative && cloudOperacionalRestoreAtivo(bundle.operacional)) {
+    markOperacionalCloudAuthoritative(digits, bundle.operacional.operationalResetVersion ?? 1);
+    noteOperacionalPullMergedUpdatedAt(digits, bundle.operacional.updatedAt);
+  } else {
+    clearOperacionalCloudAuthoritative(digits);
+  }
+  return {
+    ok: true,
+    code: "ok",
+    pagamentosCoopCount: countPagamentosCooperativa(after, coopId),
+  };
 }
 
 export async function syncCooperativaProfileFromCloud(cnpj: string): Promise<boolean> {
