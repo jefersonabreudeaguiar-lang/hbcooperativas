@@ -1755,6 +1755,7 @@ function mesesReferenciaComDebitoAberto(
   for (const p of data.pagamentosCooperado) {
     const pCanonico = resolverCooperadoIdCanonico(data, p.cooperadoId, p.cooperativaId ?? coopId);
     if (pCanonico !== canonico || p.status !== "aguardando_confirmacao") continue;
+    if (pagamentoAguardandoSupersedidoPorConfirmado(data, cooperadoId, p)) continue;
     for (const mes of getMesesReferenciaPagamento(p)) {
       meses.add(mes);
     }
@@ -2306,6 +2307,20 @@ export function somaValorPagamentosRegistrados(pagamentos: PagamentoCooperadoReg
   );
 }
 
+/**
+ * Cooperado — antes de exibir “aguardando assinatura”, compara com pagamento confirmado no mesmo mês.
+ * Evita recibo/valor fantasma quando merge deixou `aguardando_confirmacao` stale ao lado de `confirmado`.
+ */
+function pagamentoAguardandoSupersedidoPorConfirmado(
+  data: AppData,
+  cooperadoId: string,
+  aguardando: PagamentoCooperadoRegistro
+): boolean {
+  const meses = getMesesReferenciaPagamento(aguardando);
+  if (!meses.length) return false;
+  return meses.every((mes) => !!getPagamentoConfirmadoCooperadoMes(data, cooperadoId, mes));
+}
+
 export function getPagamentoAguardandoCooperado(
   data: AppData,
   cooperadoId: string,
@@ -2319,7 +2334,8 @@ export function getPagamentoAguardandoCooperado(
         p.cooperadoId === canonico ||
         resolverCooperadoIdCanonico(data, p.cooperadoId, coopId ?? p.cooperativaId) === canonico) &&
       p.status === "aguardando_confirmacao" &&
-      (!mesReferencia || pagamentoCobreMesReferencia(p, mesReferencia))
+      (!mesReferencia || pagamentoCobreMesReferencia(p, mesReferencia)) &&
+      !pagamentoAguardandoSupersedidoPorConfirmado(data, cooperadoId, p)
   );
 }
 
@@ -3025,4 +3041,33 @@ export function listarEntregasCorrecaoCooperado(
       return podeExcluirEntregaNota(data, n.id, cooperativaId).ok;
     })
     .sort((a, b) => new Date(b.dataEntrega).getTime() - new Date(a.dataEntrega).getTime());
+}
+
+/** Cooperados com ao menos uma entrega elegível para apagar ou re-lançar (aba Correções). */
+export function listarCooperadosEntregasCorrecao(
+  data: AppData,
+  cooperativaId: string,
+  acao: "apagar" | "relancar"
+): { id: string; nomeCompleto: string }[] {
+  const ids = new Set<string>();
+  for (const n of data.notasPedido) {
+    if (n.cooperativaId !== cooperativaId) continue;
+    const elegivel =
+      acao === "relancar"
+        ? podeRelancarEntregaNota(data, n.id, cooperativaId).ok
+        : podeExcluirEntregaNota(data, n.id, cooperativaId).ok;
+    if (!elegivel) continue;
+    ids.add(
+      resolverCooperadoIdCanonico(data, n.cooperadoId, cooperativaId, n.cooperadoNomeSnapshot)
+    );
+    for (const p of n.divisaoEntrega?.participantes ?? []) {
+      ids.add(resolverCooperadoIdCanonico(data, p.cooperadoId, cooperativaId));
+    }
+  }
+  return [...ids]
+    .map((id) => ({
+      id,
+      nomeCompleto: getCooperadoNomeResolvido(data, id, cooperativaId),
+    }))
+    .sort((a, b) => a.nomeCompleto.localeCompare(b.nomeCompleto, "pt-BR"));
 }

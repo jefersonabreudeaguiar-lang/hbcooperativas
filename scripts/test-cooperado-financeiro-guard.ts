@@ -19,6 +19,7 @@ import {
   registrarPagamentoCooperado,
   resumoComplementaresPosPagamento,
   getTotalAPagarCooperado,
+  getPagamentoAguardandoCooperado,
 } from "../src/services/notaPedidoService.ts";
 import { setContaCoopDescontosMemoria } from "../src/lib/hb-credit/contaCoopDescontosMemory.ts";
 import {
@@ -1014,6 +1015,59 @@ function round2(n: number): number {
   const card = getValorQuantoVouReceber(rec, COOPERADO, COOP);
   assert.ok(total > 0, "total responsável inclui nota conferida após pagamento");
   assert.equal(card.valor, total, "card cooperado usa mesma base do responsável");
+}
+
+{
+  const MES = "2026-09";
+  const data = baseData({
+    fichaCorrida: [{ ...ficha("f1", "n1", MES), status: "pago" }],
+    notasPedido: [{ ...nota("n1", "pago"), mesReferencia: MES }],
+    pagamentosCooperado: [
+      {
+        id: "pg_stale_aguardando",
+        cooperativaId: COOP,
+        cooperadoId: COOPERADO,
+        mesReferencia: MES,
+        mesesReferencia: [MES],
+        valorBruto: 123.42,
+        descontoCooperativa: 0,
+        descontosExtras: [],
+        valorLiquido: 123.42,
+        fichaIds: ["f1"],
+        notaPedidoIds: ["n1"],
+        status: "aguardando_confirmacao",
+        pagoPor: "Resp",
+        pagoEm: "2026-09-20T12:00:00.000Z",
+        createdAt: "2026-09-20T12:00:00.000Z",
+      },
+      {
+        id: "pg_confirmado_orlando",
+        cooperativaId: COOP,
+        cooperadoId: COOPERADO,
+        mesReferencia: MES,
+        mesesReferencia: [MES],
+        valorBruto: 123.42,
+        descontoCooperativa: 0,
+        descontosExtras: [],
+        valorLiquido: 123.42,
+        fichaIds: ["f1"],
+        notaPedidoIds: ["n1"],
+        status: "confirmado",
+        assinadoEm: "2026-09-21T14:00:00.000Z",
+        assinaturaCooperado: "data:image/png;base64,abc",
+        pagoPor: "Resp",
+        pagoEm: "2026-09-20T12:00:00.000Z",
+        createdAt: "2026-09-21T14:00:00.000Z",
+      },
+    ],
+  });
+  assert.equal(getPagamentoAguardandoCooperado(data, COOPERADO, MES), undefined);
+  const inicio = cooperadoExibirValorReceberInicio(data, COOPERADO, COOP);
+  assert.equal(inicio.exibir, false, "Início não exibe recibo/valor após confirmado+assinado");
+  assert.equal(inicio.aguardandoAssinatura, false);
+  const card = getValorQuantoVouReceber(data, COOPERADO, COOP);
+  assert.equal(card.aguardandoAssinatura, false);
+  assert.equal(card.valorRecibo, 0);
 }
 
 console.log("OK — guard financeiro cooperado");
