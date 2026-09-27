@@ -230,6 +230,10 @@ function CooperadoDashboard() {
   } = view;
 
   const carregandoValoresFinanceiros = syncing || !cooperadoPagamentosHydrated;
+  const mostrarCardAReceber = valorReceber.exibir && !valorReceber.aguardandoAssinatura;
+  const mostrarCardReciboAssinatura = valorReceber.exibir && exibirAguardandoAssinatura;
+  const mostrarCardCarregandoFinanceiro =
+    carregandoValoresFinanceiros && !mostrarCardAReceber && !mostrarCardReciboAssinatura;
 
   return (
     <div className="space-y-6 max-w-3xl">
@@ -347,20 +351,23 @@ function CooperadoDashboard() {
 
       <div
         className={`grid grid-cols-1 gap-4 ${
-          (valorReceber.exibir || carregandoValoresFinanceiros) &&
-          (exibirAguardandoAssinatura || !valorReceber.aguardandoAssinatura || carregandoValoresFinanceiros)
+          (mostrarCardAReceber || mostrarCardReciboAssinatura || mostrarCardCarregandoFinanceiro)
             ? "sm:grid-cols-2"
             : ""
         }`}
       >
-        {carregandoValoresFinanceiros && !valorReceber.exibir && !exibirAguardandoAssinatura && (
+        {mostrarCardCarregandoFinanceiro && (
           <div className="rounded-2xl p-6 shadow-sm bg-white border-2 border-amber-200">
             <Wallet size={28} className="mb-3 text-amber-600" />
             <p className="text-sm font-semibold text-gray-900">Atualizando valores a receber</p>
-            <p className="text-sm text-gray-500 mt-2">Aguarde alguns segundos com internet.</p>
+            <p className="text-sm text-gray-500 mt-2">
+              {valorReceber.aguardandoAssinatura
+                ? "Conferindo pagamento na nuvem antes de mostrar o recibo."
+                : "Aguarde alguns segundos com internet."}
+            </p>
           </div>
         )}
-        {valorReceber.exibir && exibirAguardandoAssinatura && (
+        {mostrarCardReciboAssinatura && (
           <div className="rounded-2xl p-6 shadow-sm bg-gradient-to-br from-emerald-600 to-green-700 text-white border border-emerald-500">
             <Wallet size={28} className="mb-3 opacity-90" />
             <p className="text-emerald-100 text-sm">Pagamento registrado · {valorReceber.mesLabel}</p>
@@ -374,7 +381,7 @@ function CooperadoDashboard() {
             </Link>
           </div>
         )}
-        {valorReceber.exibir && !valorReceber.aguardandoAssinatura && (
+        {mostrarCardAReceber && (
           <div className="rounded-2xl p-6 shadow-sm bg-gradient-to-br from-amber-500 to-amber-600 text-white">
             <Wallet size={28} className="mb-3 opacity-90" />
             <p className="text-amber-100 text-sm">A receber · {valorReceber.mesLabel}</p>

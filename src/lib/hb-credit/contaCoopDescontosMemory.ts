@@ -60,6 +60,6 @@ export function resolveDescontosContaCoopMesParaCalculo(
   const arquivo = dedupeDescontosContaCoopRemotos(fromArquivo);
   if (!temMemoriaSessao) return arquivo;
   const memoria = dedupeDescontosContaCoopRemotos(fromMemoria);
-  if (memoria.length > 0) return dedupeDescontosContaCoopRemotos([...arquivo, ...memoria]);
+  if (memoria.length > 0) return memoria;
   return arquivo;
 }
