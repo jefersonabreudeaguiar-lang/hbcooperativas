@@ -46,13 +46,12 @@ import {
   syncOperacionalFromCloud,
 } from "@/services/cooperativaSyncCloudService";
 import { pushCooperadoToCloud } from "@/services/cooperadoCloudService";
+import { getProjecaoFinanceiraCooperadoBIC } from "@/services/bicProjecaoFinanceiraCooperado";
 import {
   cooperadoMesQuitado,
   cooperadoTemValorPendente,
   cooperadoPendentePagamentoResponsavel,
   getMesPrincipalQuantoVouReceber,
-  getValorQuantoVouReceber,
-  getResumoQuantoVouReceberCooperado,
   listarMesesPendentesPagamentoResponsavel,
   listarMesesPendentesQuantoVouReceber,
   getConsolidadoFinanceiroCooperado,
@@ -237,7 +236,7 @@ export default function FichaCorridaPage() {
 
   const valorReceberConsolidado = useMemo(() => {
     if (!data || !cooperadoId) return null;
-    return getValorQuantoVouReceber(data, cooperadoId, coopId);
+    return getProjecaoFinanceiraCooperadoBIC(data, cooperadoId, coopId).quantoVouReceber;
   }, [data, cooperadoId, coopId, hbDescontosRevision]);
 
   const mesesPendentesQuantoVouReceber = useMemo(() => {
@@ -750,10 +749,10 @@ export default function FichaCorridaPage() {
 
   const resumoQuantoVouReceber = useMemo(() => {
     if (!data || !cooperadoId || !isCooperado) return null;
-    return getResumoQuantoVouReceberCooperado(data, cooperadoId, coopId, {
+    return getProjecaoFinanceiraCooperadoBIC(data, cooperadoId, coopId, {
       carregandoNuvem: conferindoPagamentoNuvem,
       financeiroSincronizando: syncCooperadoFinanceiro || !cooperadoPagamentosHydrated,
-    });
+    }).painelQuantoVouReceber;
   }, [
     data,
     cooperadoId,

@@ -22,12 +22,11 @@ import { FilaDoDiaPanel } from "@/components/dashboard/FilaDoDiaPanel";
 import { ContaCoopFilaCloudPanel } from "@/components/hb-credit/ContaCoopFilaCloudPanel";
 import { useHbCreditEnabled } from "@/hooks/useHbCreditEnabled";
 import {
-  cooperadoExibirValorReceberInicio,
   contarFotosEmAnaliseCooperado,
   getMesPrincipalQuantoVouReceber,
-  getValorQuantoVouReceber,
   listarNotasPendentesCooperado,
 } from "@/services/cooperadoEntregasService";
+import { getProjecaoFinanceiraCooperadoBIC } from "@/services/bicProjecaoFinanceiraCooperado";
 import { resolverCooperadoIdCanonico } from "@/services/cooperadoCloudService";
 import { cooperadoFinanceiroDesatualizado } from "@/services/fichaSyncGuard";
 import { requestAppSyncImmediate, requestVotacaoOperacionalSync } from "@/services/syncRequest";
@@ -119,7 +118,7 @@ function CooperadoDashboard() {
     if (!data || !user?.cooperadoId) return false;
     const coopId = getUserCooperativaId(user, data);
     const cooperadoId = resolverCooperadoIdCanonico(data, user.cooperadoId, coopId);
-    return cooperadoExibirValorReceberInicio(data, cooperadoId, coopId).aguardandoAssinatura;
+    return getProjecaoFinanceiraCooperadoBIC(data, cooperadoId, coopId).inicio.aguardandoAssinatura;
   }, [user?.id, user?.cooperadoId, user?.cooperativaId, hbDescontosRevision]);
 
   const { exibirAguardandoAssinatura, conferindoPagamentoNuvem } =
@@ -133,7 +132,7 @@ function CooperadoDashboard() {
     const mes = getCurrentMesReferencia();
     const cooperado = data.cooperados.find((c) => c.id === cooperadoId);
     const coopNome = getUserCooperativaNome(user, data);
-    const valorReceber = cooperadoExibirValorReceberInicio(data, cooperadoId, coopId);
+    const valorReceber = getProjecaoFinanceiraCooperadoBIC(data, cooperadoId, coopId).inicio;
     const precisaPix = cooperado ? cooperadoPrecisaCadastrarPix(cooperado.chavePix, cooperado.pixValido) : false;
     const notasPendentes = listarNotasPendentesCooperado(data, cooperadoId, coopId);
     const rejeitadas = notasPendentes.filter((n) => n.status === "rejeitada");
