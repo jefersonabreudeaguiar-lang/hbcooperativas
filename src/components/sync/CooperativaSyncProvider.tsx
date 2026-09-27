@@ -30,6 +30,12 @@ import {
   syncCooperativaBidirectional,
   syncOperacionalFromCloud,
 } from "@/services/cooperativaSyncCloudService";
+import {
+  acquireCooperativaSyncSessionLease,
+  bindCooperadoRunSyncSessionLease,
+  saveAppDataIfSyncLeaseCurrent,
+  type CooperativaSyncSessionLease,
+} from "@/services/operacionalPullLease";
 import { cooperadoFinanceiroDesatualizado, aplicarSanidadeFinanceiroCooperadoLocal } from "@/services/fichaSyncGuard";
 import { avaliarIntegridadeFinanceiroCooperado } from "@/services/cooperadoFinanceiroGuard";
 import { ensureOperacionalAlinhadoComNuvem } from "@/services/operacionalRestoreService";
@@ -343,6 +349,7 @@ export function CooperativaSyncProvider({ children }: { children: React.ReactNod
       await flushPendingNotaDeletes(cnpj);
 
       const cooperadoLogado = currentUser.role === "cooperado";
+      let cooperadoSyncSession: CooperativaSyncSessionLease | undefined;
 
       await withSyncTimeout(
         (async () => {
@@ -350,12 +357,17 @@ export function CooperativaSyncProvider({ children }: { children: React.ReactNod
             const cooperadoCanonico =
               currentUser.cooperadoId &&
               resolverCooperadoIdCanonico(getData(), currentUser.cooperadoId, currentCoopId);
-            await syncCooperativaBackground(cnpj, currentCoopId, cooperadoCanonico || undefined);
+            cooperadoSyncSession = acquireCooperativaSyncSessionLease(cnpj);
+            bindCooperadoRunSyncSessionLease(cooperadoSyncSession);
+            await syncCooperativaBackground(cnpj, currentCoopId, cooperadoCanonico || undefined, {
+              sessionLease: cooperadoSyncSession,
+            });
             if (cooperadoCanonico) {
               const recovered = await ensureCooperadoFinanceiroFromCloud(
                 cnpj,
                 currentCoopId,
-                cooperadoCanonico
+                cooperadoCanonico,
+                { sessionLease: cooperadoSyncSession }
               );
               if (
                 !recovered &&
@@ -376,7 +388,9 @@ export function CooperativaSyncProvider({ children }: { children: React.ReactNod
           if (currentUser.role === "cooperado" && currentUser.cooperadoId) {
             const latest = getData();
             const cooperadoCanonico = resolverCooperadoIdCanonico(latest, currentUser.cooperadoId, currentCoopId);
-            await refreshCooperadoNotasEmAnalise(cnpj, currentUser.cooperadoId, currentCoopId);
+            await refreshCooperadoNotasEmAnalise(cnpj, currentUser.cooperadoId, currentCoopId, {
+              sessionLease: cooperadoSyncSession,
+            });
             await republishLocalAguardandoConferencia(cnpj, currentUser.cooperadoId, currentCoopId);
 
             const registro = latest.cooperados.find((c) => c.id === cooperadoCanonico);
@@ -409,7 +423,7 @@ export function CooperativaSyncProvider({ children }: { children: React.ReactNod
         if (cooperadoCanonico) {
           const healed = aplicarSanidadeFinanceiroCooperadoLocal(getData(), cooperadoCanonico, currentCoopId);
           if (healed !== getData()) {
-            saveDataSafe(healed);
+            saveAppDataIfSyncLeaseCurrent(cooperadoSyncSession, healed);
           }
         }
         if (
@@ -439,6 +453,7 @@ export function CooperativaSyncProvider({ children }: { children: React.ReactNod
         setLastSyncError(e instanceof Error ? e.message : "Erro na sincronização.");
       }
     } finally {
+      bindCooperadoRunSyncSessionLease(null);
       syncingRef.current = false;
       setSyncing(false);
       setLastSyncedAt(Date.now());

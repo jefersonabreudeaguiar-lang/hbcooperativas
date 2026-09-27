@@ -33,6 +33,12 @@ import {
 } from "@/services/operationalReset";
 import { posProcessarFinanceiroLocal } from "@/services/operacionalLocalPostProcess";
 import {
+  acquireCooperativaSyncSessionLease,
+  acquireOperacionalPullLease,
+  saveAppDataIfSyncLeaseCurrent,
+  type CooperativaSyncSessionLease,
+} from "@/services/operacionalPullLease";
+import {
   enqueueOperacionalCoordination,
   isOperacionalPushSingleFlightEnabled,
 } from "@/services/operacionalPushSingleFlight";
@@ -1820,7 +1826,11 @@ export async function publicarCatalogoContratos(cnpj: string, data?: AppData, co
   return true;
 }
 
-export async function syncOperacionalFromCloud(cnpj: string): Promise<boolean> {
+export async function syncOperacionalFromCloud(
+  cnpj: string,
+  opts?: { sessionLease?: CooperativaSyncSessionLease }
+): Promise<boolean> {
+  const pullLease = opts?.sessionLease ?? acquireOperacionalPullLease(cnpj);
   const bundle = await fetchSyncBundle(cnpj);
   if (!bundle?.operacional) return false;
   let current = getData();
@@ -1854,6 +1864,14 @@ export async function syncOperacionalFromCloud(cnpj: string): Promise<boolean> {
     cloudCooperados,
     pullSeguro
   );
+  if (!pullLease.isCurrent()) {
+    console.info("[OPERACIONAL_PULL] resultado obsoleto descartado", {
+      cnpj: pullLease.cnpj,
+      generation: pullLease.generation,
+    });
+    return true;
+  }
+
   saveDataSafe(merged);
   if (pullSeguro.permitirCloudAuthoritative && cloudOperacionalRestoreAtivo(bundle.operacional)) {
     markOperacionalCloudAuthoritative(cnpj, bundle.operacional.operationalResetVersion ?? 1);
@@ -1917,7 +1935,8 @@ export function getSyncMinGapMs(role?: string): number {
 
 export async function ensureCloudOperationalResetApplied(
   cnpj: string,
-  preferredCoopId?: string
+  preferredCoopId?: string,
+  sessionLease?: CooperativaSyncSessionLease
 ): Promise<boolean> {
   const digits = normalizeCnpj(cnpj);
   if (digits.length !== 14) return false;
@@ -1943,52 +1962,66 @@ export async function ensureCloudOperationalResetApplied(
 
   const reset = applyCloudOperationalResetIfNeeded(working, digits, coopId, bundle.operacional);
   if (reset.changed || stale.changed) {
-    saveDataSafe(reset.changed ? reset.data : working);
+    saveAppDataIfSyncLeaseCurrent(sessionLease, reset.changed ? reset.data : working);
     return true;
   }
 
   return false;
 }
 
+export type SyncCooperativaBackgroundOpts = {
+  sessionLease?: CooperativaSyncSessionLease;
+};
+
 /** Sync leve em background (cooperado no celular): perfil, cooperados, notas e operacional. */
 export async function syncCooperativaBackground(
   cnpj: string,
   preferredCoopId?: string,
-  cooperadoId?: string
+  cooperadoId?: string,
+  opts?: SyncCooperativaBackgroundOpts
 ): Promise<void> {
   const digits = normalizeCnpj(cnpj);
   if (digits.length !== 14) return;
 
+  const session = opts?.sessionLease ?? acquireCooperativaSyncSessionLease(digits);
+
   beginCloudSync();
   try {
-    await ensureCloudOperationalResetApplied(digits, preferredCoopId);
+    await ensureCloudOperationalResetApplied(digits, preferredCoopId, session);
 
     const bundleHint = await fetchSyncBundle(digits);
     const restoreAtivo = cloudOperacionalRestoreAtivo(bundleHint?.operacional);
 
-    await runWithBatchedSaveAsync(async () => {
-      await syncCooperativaProfileFromCloud(digits);
-      const coopId = preferredCoopId ?? resolveCoopId(getData(), digits);
-      await syncCooperadosFromCloud(digits, coopId);
-      if (restoreAtivo) {
-        await syncOperacionalFromCloud(digits);
-        await syncNotasPedidoFromCloud(digits);
-      } else {
-        await syncNotasPedidoFromCloud(digits);
-        await syncOperacionalFromCloud(digits);
-      }
-      await syncContratosFromCloud(digits);
-      const operacionalCloud = (await fetchSyncBundle(digits))?.operacional ?? null;
-      if (coopId && !isOperacionalCloudAuthoritative(digits)) {
-        await repararIntegridadeFichaNotas(digits, coopId, cooperadoId);
-      }
-      saveDataSafe(finalizeOperacionalPullLocalState(getData(), operacionalCloud, digits));
-      if (cooperadoId && coopId) {
-        const after = getData();
-        const limpo = limparFichaObsoletaCooperado(after, cooperadoId, coopId);
-        if (limpo !== after) saveDataSafe(limpo);
-      }
-    });
+    await runWithBatchedSaveAsync(
+      async () => {
+        await syncCooperativaProfileFromCloud(digits);
+        const coopId = preferredCoopId ?? resolveCoopId(getData(), digits);
+        await syncCooperadosFromCloud(digits, coopId);
+        const notasOpts = { sessionLease: session };
+        if (restoreAtivo) {
+          await syncOperacionalFromCloud(digits, { sessionLease: session });
+          await syncNotasPedidoFromCloud(digits, notasOpts);
+        } else {
+          await syncNotasPedidoFromCloud(digits, notasOpts);
+          await syncOperacionalFromCloud(digits, { sessionLease: session });
+        }
+        await syncContratosFromCloud(digits);
+        const operacionalCloud = (await fetchSyncBundle(digits))?.operacional ?? null;
+        if (coopId && !isOperacionalCloudAuthoritative(digits)) {
+          await repararIntegridadeFichaNotas(digits, coopId, cooperadoId, { sessionLease: session });
+        }
+        saveAppDataIfSyncLeaseCurrent(
+          session,
+          finalizeOperacionalPullLocalState(getData(), operacionalCloud, digits)
+        );
+        if (cooperadoId && coopId) {
+          const after = getData();
+          const limpo = limparFichaObsoletaCooperado(after, cooperadoId, coopId);
+          if (limpo !== after) saveAppDataIfSyncLeaseCurrent(session, limpo);
+        }
+      },
+      { shouldPersistBatch: () => session.isCurrent() }
+    );
   } finally {
     endCloudSync();
   }
@@ -2000,7 +2033,8 @@ export async function syncCooperativaBackground(
 export async function repararIntegridadeFichaNotas(
   cnpj: string,
   cooperativaId: string,
-  cooperadoId?: string
+  cooperadoId?: string,
+  opts?: { sessionLease?: CooperativaSyncSessionLease }
 ): Promise<boolean> {
   const digits = normalizeCnpj(cnpj);
   if (digits.length !== 14) return false;
@@ -2014,9 +2048,9 @@ export async function repararIntegridadeFichaNotas(
 
   forceNextFullNotasSync(digits);
   clearNotasSyncMeta(digits);
-  await syncNotasPedidoFromCloud(digits, { retryFull: true });
-  await syncOperacionalFromCloud(digits);
-  saveDataSafe(posProcessarFinanceiroLocal(getData(), digits));
+  await syncNotasPedidoFromCloud(digits, { retryFull: true, sessionLease: opts?.sessionLease });
+  await syncOperacionalFromCloud(digits, { sessionLease: opts?.sessionLease });
+  saveAppDataIfSyncLeaseCurrent(opts?.sessionLease, posProcessarFinanceiroLocal(getData(), digits));
   return true;
 }
 
@@ -2026,7 +2060,8 @@ export async function repararIntegridadeFichaNotas(
 export async function ensureCooperadoFinanceiroFromCloud(
   cnpj: string,
   cooperativaId: string,
-  cooperadoId: string
+  cooperadoId: string,
+  opts?: { sessionLease?: CooperativaSyncSessionLease }
 ): Promise<boolean> {
   const digits = normalizeCnpj(cnpj);
   if (digits.length !== 14) return false;
@@ -2034,12 +2069,12 @@ export async function ensureCooperadoFinanceiroFromCloud(
   let data = getData();
   const limpoInicial = limparFichaObsoletaCooperado(data, cooperadoId, cooperativaId);
   if (limpoInicial !== data) {
-    saveDataSafe(limpoInicial);
+    saveAppDataIfSyncLeaseCurrent(opts?.sessionLease, limpoInicial);
     data = getData();
   }
   if (cooperadoFichaValoresDesalinhados(data, cooperadoId, cooperativaId)) {
     if (!isOperacionalCloudAuthoritative(digits)) {
-      saveDataSafe(posProcessarFinanceiroLocal(data, digits));
+      saveAppDataIfSyncLeaseCurrent(opts?.sessionLease, posProcessarFinanceiroLocal(data, digits));
     }
     data = getData();
   }
@@ -2052,20 +2087,20 @@ export async function ensureCooperadoFinanceiroFromCloud(
     clearNotasSyncMeta(digits);
     forceNextFullNotasSync(digits);
     await syncCooperadosFromCloud(digits, cooperativaId);
-    await syncNotasPedidoFromCloud(digits, { retryFull: true });
-    await syncOperacionalFromCloud(digits);
-    saveDataSafe(posProcessarFinanceiroLocal(getData(), digits));
+    await syncNotasPedidoFromCloud(digits, { retryFull: true, sessionLease: opts?.sessionLease });
+    await syncOperacionalFromCloud(digits, { sessionLease: opts?.sessionLease });
+    saveAppDataIfSyncLeaseCurrent(opts?.sessionLease, posProcessarFinanceiroLocal(getData(), digits));
 
     data = getData();
     if (
       !isOperacionalCloudAuthoritative(digits) &&
       cooperadoFinanceiroDesatualizado(data, cooperadoId, cooperativaId)
     ) {
-      await repararIntegridadeFichaNotas(digits, cooperativaId, cooperadoId);
+      await repararIntegridadeFichaNotas(digits, cooperativaId, cooperadoId, opts);
     }
     data = getData();
     const limpoFinal = limparFichaObsoletaCooperado(data, cooperadoId, cooperativaId);
-    if (limpoFinal !== data) saveDataSafe(limpoFinal);
+    if (limpoFinal !== data) saveAppDataIfSyncLeaseCurrent(opts?.sessionLease, limpoFinal);
     return !cooperadoFinanceiroDesatualizado(getData(), cooperadoId, cooperativaId);
   } finally {
     endCloudSync();

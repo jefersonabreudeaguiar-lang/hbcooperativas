@@ -14,6 +14,10 @@ import { requestAppSyncImmediate } from "@/services/syncRequest";
 import { resolverCooperadoIdCanonico } from "@/services/cooperadoCloudService";
 import { getUserCooperativaId } from "@/utils/cooperativa";
 import { getData, saveDataSafe } from "@/services/dataStore";
+import {
+  getCooperadoRunSyncSessionLease,
+  saveAppDataIfSyncLeaseCurrent,
+} from "@/services/operacionalPullLease";
 import { PageSkeleton } from "@/components/ui/PageSkeleton";
 import { AlertBanner } from "@/components/ui/AlertBanner";
 import { Button } from "@/components/ui/Button";
@@ -54,7 +58,9 @@ export function CooperadoFinanceiroGate({ children }: { children: React.ReactNod
     if (!coopId) return;
     const cooperadoId = resolverCooperadoIdCanonico(data, user.cooperadoId, coopId);
     const limpo = limparFichaObsoletaCooperado(data, cooperadoId, coopId);
-    if (limpo !== data) saveDataSafe(limpo);
+    if (limpo !== data) {
+      saveAppDataIfSyncLeaseCurrent(getCooperadoRunSyncSessionLease() ?? undefined, limpo);
+    }
     solicitarRecuperacaoFinanceiroCooperado();
     requestAppSyncImmediate();
   }, [user?.id, user?.cooperadoId, user?.role]);
