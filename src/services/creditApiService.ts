@@ -14,7 +14,7 @@ import type {
   ContaCoopSolicitacaoEstorno,
 } from "@/modules/hb-credit/types";
 import { refreshContaCoopValorReceberAfterHbTransaction } from "@/lib/hb-credit/syncContaCoopFichaDescontos";
-import { getMesPrincipalQuantoVouReceber } from "@/services/cooperadoEntregasService";
+import { bicCentralMesPrincipalQuantoVouReceber } from "@/services/bicLeituraCentralCooperado";
 import { getData } from "@/services/dataStore";
 import { resolverCooperadoIdCanonico } from "@/services/cooperadoCloudService";
 
@@ -218,7 +218,7 @@ export async function authorizeCreditPayment(input: {
       input.cooperadoNome
     );
     const mes =
-      input.mesReferencia ?? getMesPrincipalQuantoVouReceber(local, canonico, coopId);
+      input.mesReferencia ?? bicCentralMesPrincipalQuantoVouReceber(local, canonico, coopId);
     await refreshContaCoopValorReceberAfterHbTransaction({
       cnpj: input.cnpj,
       cooperadoId: canonico,

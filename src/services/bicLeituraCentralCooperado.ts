@@ -15,12 +15,23 @@ import {
   type BicProjecaoFinanceiraCooperadoOpts,
 } from "@/services/bicProjecaoFinanceiraCooperado";
 import {
+  getConsolidadoFinanceiroCooperado,
   getMesPrincipalQuantoVouReceber,
   getResumoQuantoVouReceberCooperado,
   getValorQuantoVouReceber,
+  listarMesesComValorQuantoVouReceber,
   listarMesesPendentesQuantoVouReceber,
+  listarResumosMensaisEntregas,
+  getResumoMesEntregasCooperado,
+  type ConsolidadoFinanceiroCooperado,
   type EstadoQuantoVouReceberCooperado,
+  type ResumoMesEntregasCooperado,
 } from "@/services/cooperadoEntregasService";
+import {
+  getResumoPagamentoConsolidadoCooperado,
+  getResumoPagamentoExibicao,
+  type AjustesResumoPagamento,
+} from "@/services/notaPedidoService";
 import { formatMesesReferenciaRotulo } from "@/utils/format";
 import {
   cooperadoInicioParaCardsDefinitivos,
@@ -38,6 +49,7 @@ function cooperadoTemPendenciaFinanceiraVisivel(
   cooperativaId: string | undefined
 ): boolean {
   const raw = getValorQuantoVouReceber(data, cooperadoId, cooperativaId);
+  if (isBicCentralReadAuthorityEnabled()) return raw.valor > 0;
   return raw.valor > 0 || raw.aguardandoAssinatura || raw.valorRecibo > 0;
 }
 
@@ -353,4 +365,101 @@ export function bicCentralResolvePainelParaExibicao(
   return { ...painel, mesLabel: m6.mesLabel };
 }
 
-export type { EstadoQuantoVouReceberCooperado };
+/** Pendência financeira visível na UI cooperado (BIC: só valor líquido aberto na ficha). */
+export function bicCentralCooperadoTemValorPendente(
+  data: AppData,
+  cooperadoId: string,
+  cooperativaId?: string
+): boolean {
+  return bicCentralResolveValorQuantoVouReceber(data, cooperadoId, cooperativaId).valor > 0;
+}
+
+/** Consolidado ficha/início — delega legado; com BIC sobrescreve totais e desliga recibo. */
+export function bicCentralGetConsolidadoFinanceiroCooperado(
+  data: AppData,
+  cooperadoId: string,
+  cooperativaId?: string,
+  ajustesPorMes?: Record<string, AjustesResumoPagamento>
+): ConsolidadoFinanceiroCooperado {
+  if (!isBicCentralReadAuthorityEnabled()) {
+    return getConsolidadoFinanceiroCooperado(data, cooperadoId, cooperativaId, ajustesPorMes);
+  }
+
+  const m6 = bicCentralValorAReceberAgregado(data, cooperadoId, cooperativaId);
+  const coopId = cooperativaId ?? data.cooperados.find((c) => c.id === cooperadoId)?.cooperativaId;
+  const mesesPendentes = bicCentralListarMesesPendentesQuantoVouReceber(data, cooperadoId, cooperativaId);
+  const mesReferenciaPrincipal = bicCentralMesPrincipalQuantoVouReceber(data, cooperadoId, cooperativaId);
+  const mesesComValor =
+    m6.meses.length > 0 ? [...m6.meses] : listarMesesComValorQuantoVouReceber(data, cooperadoId, cooperativaId);
+
+  const resumoVazio: ConsolidadoFinanceiroCooperado["resumo"] = {
+    valorBruto: 0,
+    descontoCooperativa: 0,
+    descontosExtras: [],
+    valorEntregas: 0,
+    valorLiquido: 0,
+    fichaIds: [],
+    notaPedidoIds: [],
+  };
+
+  let resumo = resumoVazio;
+  if (m6.valor > 0) {
+    if (mesesComValor.length === 1) {
+      resumo = getResumoPagamentoExibicao(
+        data,
+        cooperadoId,
+        mesesComValor[0]!,
+        coopId,
+        ajustesPorMes?.[mesesComValor[0]!]
+      );
+    } else if (mesesComValor.length > 1) {
+      resumo = getResumoPagamentoConsolidadoCooperado(
+        data,
+        cooperadoId,
+        mesesComValor,
+        coopId,
+        ajustesPorMes
+      );
+    }
+    resumo = { ...resumo, valorLiquido: m6.valor };
+  }
+
+  return {
+    meses: mesesPendentes.length > 0 ? mesesPendentes : mesesComValor,
+    mesReferenciaPrincipal,
+    mesLabel: m6.mesLabel,
+    valorLiquido: m6.valor,
+    aguardandoAssinatura: false,
+    resumo,
+  };
+}
+
+/** Resumo mensal notas/ficha — sem expor pagamento aguardando assinatura quando BIC UI. */
+export function bicCentralGetResumoMesEntregasCooperado(
+  data: AppData,
+  cooperadoId: string,
+  mesReferencia: string,
+  cooperativaId?: string
+): ResumoMesEntregasCooperado {
+  const base = getResumoMesEntregasCooperado(data, cooperadoId, mesReferencia, cooperativaId);
+  if (!isBicCentralReadAuthorityEnabled()) return base;
+  return {
+    ...base,
+    pagamentoAguardando: undefined,
+  };
+}
+
+export function bicCentralListarResumosMensaisEntregas(
+  data: AppData,
+  cooperadoId: string,
+  cooperativaId?: string
+): ResumoMesEntregasCooperado[] {
+  if (!isBicCentralReadAuthorityEnabled()) {
+    return listarResumosMensaisEntregas(data, cooperadoId, cooperativaId);
+  }
+  return listarResumosMensaisEntregas(data, cooperadoId, cooperativaId).map((r) =>
+    bicCentralGetResumoMesEntregasCooperado(data, cooperadoId, r.mesReferencia, cooperativaId)
+  );
+}
+
+export type { EstadoQuantoVouReceberCooperado, ConsolidadoFinanceiroCooperado, ResumoMesEntregasCooperado };

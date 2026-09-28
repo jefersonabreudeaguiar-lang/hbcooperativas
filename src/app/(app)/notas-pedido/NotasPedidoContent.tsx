@@ -82,7 +82,10 @@ import {
 import { withConferenciaOperacionalPushScope } from "@/services/conferenciaOperacionalPushScope";
 import { getProdutosContrato } from "@/services/catalogoContratosService";
 import { listarResumosMensaisEntregas, filtrarResumosEntregasPendentes } from "@/services/cooperadoEntregasService";
-import { bicCentralMesPrincipalQuantoVouReceber } from "@/services/bicLeituraCentralCooperado";
+import {
+  bicCentralListarResumosMensaisEntregas,
+  bicCentralMesPrincipalQuantoVouReceber,
+} from "@/services/bicLeituraCentralCooperado";
 import { CooperadoEntregasPorMes } from "@/components/cooperado/CooperadoEntregasPorMes";
 import { CooperadoMinhaFichaTab } from "@/components/cooperado/CooperadoMinhaFichaTab";
 import { useContaCoopDescontosRevision } from "@/hooks/useContaCoopDescontosRevision";
@@ -840,7 +843,7 @@ export default function NotasPedidoContent() {
 
   const resumosMensaisCooperado = useMemo(() => {
     if (!isCooperado || !data || !cooperadoId) return [];
-    const base = listarResumosMensaisEntregas(data, cooperadoId, coopId);
+    const base = bicCentralListarResumosMensaisEntregas(data, cooperadoId, coopId);
     if (statusFilter === "pendentes") return filtrarResumosEntregasPendentes(base);
     if (!statusFilter) return base;
     return base
@@ -853,7 +856,7 @@ export default function NotasPedidoContent() {
 
   const resumosFichaCooperado = useMemo(() => {
     if (!isCooperado || !data || !cooperadoId) return [];
-    return listarResumosMensaisEntregas(data, cooperadoId, coopId);
+    return bicCentralListarResumosMensaisEntregas(data, cooperadoId, coopId);
   }, [data, cooperadoId, coopId, isCooperado, hbDescontosRevision]);
 
   const nomeCooperadoExibicao = useMemo(() => {

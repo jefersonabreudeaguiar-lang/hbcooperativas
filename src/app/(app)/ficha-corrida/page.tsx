@@ -49,6 +49,8 @@ import {
 } from "@/services/cooperativaSyncCloudService";
 import { pushCooperadoToCloud } from "@/services/cooperadoCloudService";
 import {
+  bicCentralCooperadoTemValorPendente,
+  bicCentralGetConsolidadoFinanceiroCooperado,
   bicCentralListarMesesPendentesQuantoVouReceber,
   bicCentralMesPrincipalQuantoVouReceber,
   bicCentralQuantoVouReceberParaExibicao,
@@ -57,10 +59,8 @@ import {
 import { cooperadoUsarFluxoReciboAssinaturaNaUi } from "@/lib/bic/cooperadoBicCentralUi";
 import {
   cooperadoMesQuitado,
-  cooperadoTemValorPendente,
   cooperadoPendentePagamentoResponsavel,
   listarMesesPendentesPagamentoResponsavel,
-  getConsolidadoFinanceiroCooperado,
   getPagamentoConfirmadoMes,
   listarMesesPagosCooperado,
 } from "@/services/cooperadoEntregasService";
@@ -339,7 +339,7 @@ export default function FichaCorridaPage() {
 
   const financeiroAberto = useMemo(() => {
     if (!data || !cooperadoSelecionadoId) return null;
-    return getConsolidadoFinanceiroCooperado(data, cooperadoSelecionadoId, coopId);
+    return bicCentralGetConsolidadoFinanceiroCooperado(data, cooperadoSelecionadoId, coopId);
   }, [data, cooperadoSelecionadoId, coopId, hbDescontosRevision]);
 
   const mesesPendentesPagamento = useMemo(() => {
@@ -1118,7 +1118,7 @@ export default function FichaCorridaPage() {
       if (pg) {
         pagamentoConfirmadoLocal = pg;
         const mesesPg = getMesesReferenciaPagamento(pg);
-        const aindaTemValor = cooperadoTemValorPendente(next, pg.cooperadoId, coopId);
+        const aindaTemValor = bicCentralCooperadoTemValorPendente(next, pg.cooperadoId, coopId);
         if (!aindaTemValor) {
           setPagamentoConfirmado(pg);
           if (mesesPg.length) setAbaMesCooperado(mesesPg[mesesPg.length - 1]!);
@@ -1223,7 +1223,7 @@ export default function FichaCorridaPage() {
         (fluxoReciboAssinatura && !!pagamentoAguardandoExibicao) ||
         (fluxoReciboAssinatura && conferindoPagamentoNuvem) ||
         !!pagamentoConfirmado ||
-        cooperadoTemValorPendente(data, cooperadoId, coopId) ||
+        bicCentralCooperadoTemValorPendente(data, cooperadoId, coopId) ||
         (!fluxoReciboAssinatura && (valorReceberConsolidado?.valor ?? 0) > 0)));
 
   const exibirRelatorioMes =

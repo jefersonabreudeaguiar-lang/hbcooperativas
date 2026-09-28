@@ -32,7 +32,7 @@ import { fichaPertenceCooperado, notaPertenceCooperado, pagamentoCooperadoPerten
 import { mensalidadePertenceCooperado } from "@/services/mensalidadeService";
 import { updateData, addAuditEntry } from "@/services/dataStore";
 import { getUserCooperativaId, normalizeCnpj } from "@/utils/cooperativa";
-import { getConsolidadoFinanceiroCooperado } from "@/services/cooperadoEntregasService";
+import { bicCentralGetConsolidadoFinanceiroCooperado } from "@/services/bicLeituraCentralCooperado";
 import { formatCurrency, formatDate, formatMesReferencia, formatCPFCNPJ, formatPhone, getCurrentMesReferencia } from "@/utils/format";
 import { baixarRecibo, nomeArquivoRecibo } from "@/utils/recibo";
 import type { Cooperado } from "@/types";
@@ -143,7 +143,7 @@ export function CooperadoFichaPanel({ cooperado }: { cooperado: Cooperado }) {
 
   const consolidadoFinanceiro = useMemo(() => {
     if (!data) return null;
-    return getConsolidadoFinanceiroCooperado(data, cooperado.id, cooperado.cooperativaId);
+    return bicCentralGetConsolidadoFinanceiroCooperado(data, cooperado.id, cooperado.cooperativaId);
   }, [data, cooperado.id, cooperado.cooperativaId, hbDescontosRevision]);
 
   const multiplosMesesAbertos = (consolidadoFinanceiro?.meses.length ?? 0) > 1;

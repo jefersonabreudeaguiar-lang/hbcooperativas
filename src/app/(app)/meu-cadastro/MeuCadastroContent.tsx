@@ -15,7 +15,7 @@ import { Input, FormField } from "@/components/ui/Form";
 import { AlertBanner } from "@/components/ui/AlertBanner";
 import { updateData, addAuditEntry } from "@/services/dataStore";
 import { pushCooperadoToCloud } from "@/services/cooperadoCloudService";
-import { getMesQuantoVouReceber } from "@/services/cooperadoEntregasService";
+import { bicCentralMesPrincipalQuantoVouReceber } from "@/services/bicLeituraCentralCooperado";
 import { getStatusCotaCooperado } from "@/services/notaPedidoService";
 import { resolveCooperativaCnpj } from "@/services/notaPedidoCloudService";
 import { formatCPFCNPJ, formatPhone, formatMesReferencia, getCurrentMesReferencia } from "@/utils/format";
@@ -64,7 +64,7 @@ export default function MeuCadastroContent() {
 
   const mesReferencia = useMemo(() => {
     if (!data || !cooperadoId) return getCurrentMesReferencia();
-    return getMesQuantoVouReceber(data, cooperadoId, coopId);
+    return bicCentralMesPrincipalQuantoVouReceber(data, cooperadoId, coopId);
   }, [data, cooperadoId, coopId]);
 
   const statusCota = useMemo(() => {
