@@ -13,8 +13,8 @@ import { Card, StatCard } from "@/components/ui/Card";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import { updateData, addAuditEntry } from "@/services/dataStore";
 import { requestAppSync } from "@/services/syncRequest";
-import { calcularFechamentoMensal, listMesesComLancamentos } from "@/services/dashboardService";
-import { calcularFechamentoMensalLive } from "@/services/relatorioService";
+import { calcularFechamentoMensal, listMesesComLancamentos } from "@/services/bicLeituraCentralGestao";
+import { calcularFechamentoMensalLive } from "@/services/bicLeituraCentralGestao";
 import { capturarSnapshotFechamento, getSnapshotFechamentoMes } from "@/services/fechamentoSnapshotService";
 import {
   baixarDocumento,

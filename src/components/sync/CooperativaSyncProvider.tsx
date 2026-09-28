@@ -43,6 +43,7 @@ import { cooperadoFinanceiroDesatualizado, aplicarSanidadeFinanceiroCooperadoLoc
 import { avaliarIntegridadeFinanceiroCooperado } from "@/services/cooperadoFinanceiroGuard";
 import { ensureOperacionalAlinhadoComNuvem } from "@/services/operacionalRestoreService";
 import { refreshContaCoopDescontosAfterOperacionalSync } from "@/lib/hb-credit/syncContaCoopFichaDescontos";
+import { persistirInicioCardValorReceberCooperado } from "@/services/cooperadoInicioCardPersistenciaService";
 import { pushCooperadoToCloud, resolverCooperadoIdCanonico, flushPendingCooperadoPushes, notaPertenceCooperado } from "@/services/cooperadoCloudService";
 import { registerSyncHandler, registerVotacaoOperacionalSyncHandler } from "@/services/syncRequest";
 import {
@@ -558,6 +559,7 @@ export function CooperativaSyncProvider({ children }: { children: React.ReactNod
       }
       if (userRef.current?.role === "cooperado") {
         markCooperadoPagamentosHydrated();
+        persistirInicioCardValorReceberCooperado(userRef.current);
       }
     }
   }, [markCooperadoPagamentosHydrated]);

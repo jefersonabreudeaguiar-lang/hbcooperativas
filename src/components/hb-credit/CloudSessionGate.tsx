@@ -74,7 +74,6 @@ export function CloudSessionGate({ children }: { children: React.ReactNode }) {
     }
     if (isCloudSessionActive()) {
       setReady(true);
-      void sync();
       return;
     }
     void sync();

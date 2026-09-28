@@ -7,6 +7,7 @@ import { getData } from "@/services/dataStore";
 import { resolveCooperativaCnpj } from "@/services/notaPedidoCloudService";
 import { getUserCooperativaId } from "@/utils/cooperativa";
 import { isContaCoopValorReceberPilot } from "@/utils/contaCoopUiVisibility";
+import { scheduleContaCoopAuxSync } from "@/lib/hb-credit/contaCoopAuxSyncSchedule";
 
 const WARMUP_INTERVAL_MS = 60_000;
 const HB_PAGE_PREFIX = "/minha-conta-coop";
@@ -23,9 +24,10 @@ export function useHbCreditDescontosWarmup(user: Omit<User, "password"> | null) 
     if (!coopId) return;
 
     let cancelled = false;
+    const idleCleanups: Array<() => void> = [];
     let hbAccountGatePending = pathname === HB_PAGE_PREFIX || pathname.startsWith(`${HB_PAGE_PREFIX}/`);
 
-    const run = () => {
+    const runCore = () => {
       const current = userRef.current;
       if (
         !current ||
@@ -49,6 +51,11 @@ export function useHbCreditDescontosWarmup(user: Omit<User, "password"> | null) 
       });
     };
 
+    const run = () => {
+      const cancelIdle = scheduleContaCoopAuxSync(runCore, { idleTimeoutMs: 16_000, fallbackMs: 5_000 });
+      idleCleanups.push(cancelIdle);
+    };
+
     const releaseHbAccountGate = () => {
       hbAccountGatePending = false;
       run();
@@ -59,7 +66,7 @@ export function useHbCreditDescontosWarmup(user: Omit<User, "password"> | null) 
       window.addEventListener(HB_CREDIT_ACCOUNT_LOADED_EVENT, onAccountLoaded, { once: true });
     }
 
-    const staffDelay = user.role === "cooperado" ? 0 : 4_000;
+    const staffDelay = user.role === "cooperado" ? 10_000 : 15_000;
     const initialTimer = window.setTimeout(run, staffDelay);
 
     const onVisible = () => {
@@ -74,6 +81,7 @@ export function useHbCreditDescontosWarmup(user: Omit<User, "password"> | null) 
       window.clearTimeout(initialTimer);
       document.removeEventListener("visibilitychange", onVisible);
       window.clearInterval(interval);
+      for (const cleanup of idleCleanups) cleanup();
     };
   }, [user?.id, user?.role, user?.cooperadoId, user?.cooperativaId, pathname]);
 }

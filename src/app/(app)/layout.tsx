@@ -6,6 +6,9 @@ import { EntregaAprovadaNotifier } from "@/components/cooperado/EntregaAprovadaN
 import { ComunicadoNotifier } from "@/components/cooperado/ComunicadoNotifier";
 import { CooperativaSyncProvider } from "@/components/sync/CooperativaSyncProvider";
 import { CooperadoFinanceiroGate } from "@/components/cooperado/CooperadoFinanceiroGate";
+import { CooperadoInicioCardPersistBootstrap } from "@/components/cooperado/CooperadoInicioCardPersistBootstrap";
+import { HbCreditAccountPersistBootstrap } from "@/components/hb-credit/HbCreditAccountPersistBootstrap";
+import { HbCreditNavPrefetch } from "@/hooks/useHbCreditNavPrefetch";
 
 import { GestaoAccessGuard } from "@/components/permissions/GestaoAccessGuard";
 
@@ -18,6 +21,9 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   return (
     <ProtectedRoute>
       <CooperativaSyncProvider>
+        <CooperadoInicioCardPersistBootstrap />
+        <HbCreditNavPrefetch />
+        <HbCreditAccountPersistBootstrap />
         <CooperadoFinanceiroGate>
           <GestaoAccessGuard>
             <EntregaAprovadaNotifier />

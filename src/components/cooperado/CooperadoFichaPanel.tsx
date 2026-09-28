@@ -13,10 +13,7 @@ import { NotaStatusBadge } from "@/components/ui/NotaStatusBadge";
 import { Button } from "@/components/ui/Button";
 import { Select, FormField } from "@/components/ui/Form";
 import {
-  getResumoPagamentoExibicao,
-  getValorExibicaoCooperado,
   getDescontosExtrasExibicaoCooperado,
-  buildValorExibicaoCooperadoOpts,
   getStatusCotaCooperado,
   getMensalidadeFixaMes,
   getArquivoMensalCooperado,
@@ -24,6 +21,11 @@ import {
   listarFichasExtratoCooperadoMes,
   agregarItensFichaMes,
 } from "@/services/notaPedidoService";
+import {
+  bicCentralBuildValorExibicaoCooperadoOpts,
+  bicCentralGetResumoPagamentoExibicao,
+  bicCentralGetValorExibicaoCooperado,
+} from "@/services/bicLeituraCentralFicha";
 import { ResumoDescontosMes } from "@/components/ficha/ResumoDescontosMes";
 import { ValoresAvulsosReceberPanel } from "@/components/ficha/ValoresAvulsosReceberPanel";
 import { fichaPertenceCooperado, notaPertenceCooperado, pagamentoCooperadoPertenceCooperado, pushCooperadoToCloud } from "@/services/cooperadoCloudService";
@@ -136,7 +138,7 @@ export function CooperadoFichaPanel({ cooperado }: { cooperado: Cooperado }) {
 
   const exibicaoOptsMes = useMemo(() => {
     if (!data) return undefined;
-    return buildValorExibicaoCooperadoOpts(data, cooperado.id, mesFilter, cooperado.cooperativaId);
+    return bicCentralBuildValorExibicaoCooperadoOpts(data, cooperado.id, mesFilter, cooperado.cooperativaId);
   }, [data, cooperado.id, cooperado.cooperativaId, mesFilter]);
 
   const consolidadoFinanceiro = useMemo(() => {
@@ -151,7 +153,7 @@ export function CooperadoFichaPanel({ cooperado }: { cooperado: Cooperado }) {
     if (multiplosMesesAbertos && consolidadoFinanceiro) {
       return consolidadoFinanceiro.resumo;
     }
-    return getResumoPagamentoExibicao(data, cooperado.id, mesFilter, cooperado.cooperativaId);
+    return bicCentralGetResumoPagamentoExibicao(data, cooperado.id, mesFilter, cooperado.cooperativaId);
   }, [data, cooperado.id, cooperado.cooperativaId, mesFilter, hbDescontosRevision, multiplosMesesAbertos, consolidadoFinanceiro]);
 
   const totalPendente = useMemo(() => {
@@ -160,7 +162,7 @@ export function CooperadoFichaPanel({ cooperado }: { cooperado: Cooperado }) {
       return consolidadoFinanceiro.valorLiquido;
     }
     if (!exibicaoOptsMes) return resumoPagamento.valorLiquido;
-    return getValorExibicaoCooperado(resumoPagamento, exibicaoOptsMes);
+    return bicCentralGetValorExibicaoCooperado(resumoPagamento, exibicaoOptsMes);
   }, [resumoPagamento, exibicaoOptsMes, multiplosMesesAbertos, consolidadoFinanceiro]);
 
   const descontosExtrasExibicao = useMemo(() => {

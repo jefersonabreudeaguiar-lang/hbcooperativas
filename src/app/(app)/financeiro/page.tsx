@@ -11,7 +11,7 @@ import { Input, Textarea, FormField } from "@/components/ui/Form";
 import { StatCard, Card } from "@/components/ui/Card";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import { updateData, generateId, addAuditEntry } from "@/services/dataStore";
-import { getFinanceiroResumoCooperado } from "@/services/dashboardService";
+import { getFinanceiroResumoCooperado } from "@/services/bicLeituraCentralGestao";
 import { formatCurrency, formatDateTime, formatMesReferencia, getCurrentMesReferencia } from "@/utils/format";
 import type { FinanceiroMensal } from "@/types";
 

@@ -8,11 +8,8 @@ import { useAppData } from "@/hooks/useAppData";
 import { usePermissions } from "@/hooks/usePermissions";
 import { getUserCooperativaId } from "@/utils/cooperativa";
 import {
-  getResumoPagamentoExibicao,
   resumoFromPagamento,
-  getValorExibicaoCooperado,
   getDescontosExtrasExibicaoCooperado,
-  buildValorExibicaoCooperadoOpts,
   registrarPagamentoCooperado,
   confirmarPagamentoCooperado,
   reenviarSolicitacaoAssinaturaRecibo,
@@ -30,6 +27,11 @@ import {
   getResumoPagamentoConsolidadoCooperado,
   getMesesReferenciaPagamento,
 } from "@/services/notaPedidoService";
+import {
+  bicCentralBuildValorExibicaoCooperadoOpts,
+  bicCentralGetResumoPagamentoExibicao,
+  bicCentralGetValorExibicaoCooperado,
+} from "@/services/bicLeituraCentralFicha";
 import { listarPagamentosAguardandoAssinatura, listarPagamentosReciboAguardandoVerificacao } from "@/services/filaDoDiaService";
 import { isOperacionalCloudAuthoritative } from "@/services/operationalReset";
 import { listCooperadosComFichaNoMes, getCooperadoNomeResolvido, resolverCooperadoParaPagamento, fichaPertenceCooperado, listCooperadosDaCooperativa } from "@/services/cooperadoCloudService";
@@ -47,16 +49,16 @@ import {
 } from "@/services/cooperativaSyncCloudService";
 import { pushCooperadoToCloud } from "@/services/cooperadoCloudService";
 import {
-  getPainelQuantoVouReceberCooperadoParaExibicao,
-  getQuantoVouReceberCooperadoParaExibicao,
-} from "@/services/bicProjecaoFinanceiraCooperado";
+  bicCentralListarMesesPendentesQuantoVouReceber,
+  bicCentralMesPrincipalQuantoVouReceber,
+  bicCentralQuantoVouReceberParaExibicao,
+  bicCentralResolvePainelParaExibicao,
+} from "@/services/bicLeituraCentralCooperado";
 import {
   cooperadoMesQuitado,
   cooperadoTemValorPendente,
   cooperadoPendentePagamentoResponsavel,
-  getMesPrincipalQuantoVouReceber,
   listarMesesPendentesPagamentoResponsavel,
-  listarMesesPendentesQuantoVouReceber,
   getConsolidadoFinanceiroCooperado,
   getPagamentoConfirmadoMes,
   listarMesesPagosCooperado,
@@ -238,19 +240,21 @@ export default function FichaCorridaPage() {
 
   const mesEmAberto = useMemo(() => {
     if (!data || !cooperadoId) return getCurrentMesReferencia();
-    return getMesPrincipalQuantoVouReceber(data, cooperadoId, coopId);
-  }, [data, cooperadoId, coopId, hbDescontosRevision]);
+    return bicCentralMesPrincipalQuantoVouReceber(data, cooperadoId, coopId, { apresentacaoConsolidada });
+  }, [data, cooperadoId, coopId, hbDescontosRevision, apresentacaoConsolidada]);
 
   const valorReceberConsolidado = useMemo(() => {
     if (!data || !cooperadoId) return null;
-    return getQuantoVouReceberCooperadoParaExibicao(data, cooperadoId, coopId, {
+    return bicCentralQuantoVouReceberParaExibicao(data, cooperadoId, coopId, {
       apresentacaoConsolidada,
     }).value;
   }, [data, cooperadoId, coopId, apresentacaoConsolidada, hbDescontosRevision]);
 
   const mesesPendentesQuantoVouReceber = useMemo(() => {
     if (!data || !cooperadoId || !isCooperado) return [];
-    return listarMesesPendentesQuantoVouReceber(data, cooperadoId, coopId);
+    return bicCentralListarMesesPendentesQuantoVouReceber(data, cooperadoId, coopId, {
+      apresentacaoConsolidada,
+    });
   }, [cooperadoId, coopId, data, isCooperado, hbDescontosRevision]);
 
   const mesesPagosCooperado = useMemo(() => {
@@ -631,7 +635,7 @@ export default function FichaCorridaPage() {
 
   const exibicaoOpts = useMemo(() => {
     if (!data || !cooperadoSelecionadoId) return undefined;
-    return buildValorExibicaoCooperadoOpts(data, cooperadoSelecionadoId, mesAtivo, coopId);
+    return bicCentralBuildValorExibicaoCooperadoOpts(data, cooperadoSelecionadoId, mesAtivo, coopId);
   }, [data, cooperadoSelecionadoId, mesAtivo, coopId]);
 
   useSyncContaCoopValorReceberPilot(
@@ -652,7 +656,7 @@ export default function FichaCorridaPage() {
       if (financeiroAberto && (financeiroAberto.valorLiquido ?? 0) > 0) {
         return financeiroAberto.resumo;
       }
-      return getResumoPagamentoExibicao(
+      return bicCentralGetResumoPagamentoExibicao(
         data,
         cooperadoSelecionadoId,
         mesAtivo,
@@ -691,7 +695,7 @@ export default function FichaCorridaPage() {
     if (isCooperado && !visualizandoHistorico && financeiroAberto) {
       return financeiroAberto.resumo;
     }
-    return getResumoPagamentoExibicao(
+    return bicCentralGetResumoPagamentoExibicao(
       data,
       cooperadoSelecionadoId,
       mesAtivo,
@@ -724,14 +728,14 @@ export default function FichaCorridaPage() {
   const totalPendente = isCooperado
     ? visualizandoHistorico
       ? resumoExibicao && exibicaoOpts
-        ? getValorExibicaoCooperado(resumoExibicao, exibicaoOpts)
+        ? bicCentralGetValorExibicaoCooperado(resumoExibicao, exibicaoOpts)
         : 0
       : !apresentacaoConsolidada
         ? 0
         : (financeiroAberto?.valorLiquido ?? valorReceberConsolidado?.valor ?? 0)
     : visualizandoHistorico
       ? resumoExibicao && exibicaoOpts
-        ? getValorExibicaoCooperado(resumoExibicao, exibicaoOpts)
+        ? bicCentralGetValorExibicaoCooperado(resumoExibicao, exibicaoOpts)
         : 0
       : (financeiroAberto?.valorLiquido ?? 0);
 
@@ -760,14 +764,15 @@ export default function FichaCorridaPage() {
 
   const resumoQuantoVouReceber = useMemo(() => {
     if (!data || !cooperadoId || !isCooperado) return null;
-    return getPainelQuantoVouReceberCooperadoParaExibicao(data, cooperadoId, coopId, {
+    return bicCentralResolvePainelParaExibicao(data, cooperadoId, coopId, {
       ...cooperadoFluxoPainelProjecaoOpts({
         role: user?.role,
         syncing: syncCooperadoFinanceiro,
         cooperadoPagamentosHydrated,
         conferindoPagamentoNuvem: conferindoPagamentoNuvem,
       }),
-    }).value;
+      apresentacaoConsolidada,
+    });
   }, [
     data,
     cooperadoId,
@@ -1637,7 +1642,7 @@ export default function FichaCorridaPage() {
                 totalLiquido={
                   visualizandoHistorico
                     ? exibicaoOpts
-                      ? getValorExibicaoCooperado(resumoExibicao, exibicaoOpts)
+                      ? bicCentralGetValorExibicaoCooperado(resumoExibicao, exibicaoOpts)
                       : resumoExibicao.valorEntregas
                     : mesesPendentesQuantoVouReceber.length > 1
                       ? resumoExibicao.valorLiquido

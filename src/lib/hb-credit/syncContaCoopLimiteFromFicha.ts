@@ -7,6 +7,7 @@ import {
   coalesceContaCoopAuxSync,
   contaCoopAuxSyncKeyLimite,
 } from "@/lib/hb-credit/contaCoopAuxSyncDedupe";
+import { notifyHbCreditLimiteSynced } from "@/lib/hb-credit/hbCreditLimiteSyncEvents";
 
 export type SyncContaCoopLimiteOpts = {
   cnpj: string;
@@ -36,6 +37,7 @@ export async function refreshContaCoopLimiteFromFicha(opts: SyncContaCoopLimiteO
       cooperadoIds: ids,
       creditosBaseCents,
     });
+    notifyHbCreditLimiteSynced();
   });
 }
 

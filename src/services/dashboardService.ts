@@ -1,4 +1,6 @@
 import type { AppData, FechamentoMensal, FinanceiroMensal } from "@/types";
+import { bicCentralValorAReceberAgregado } from "@/services/bicLeituraCentralCooperado";
+import { isBicCentralReadAuthorityEnabled } from "@/lib/bic/bicCentralReadAuthority";
 import { getData } from "@/services/dataStore";
 import {
   getTotalAPagarCooperado,
@@ -74,7 +76,9 @@ export function getCooperadoStats(cooperadoId: string, data?: AppData): Cooperad
   const descontos = d.descontos.filter((dc) => dc.cooperadoId === cooperadoId);
   const coopId = d.cooperados.find((c) => c.id === cooperadoId)?.cooperativaId;
 
-  const valorAReceber = getTotalAPagarCooperado(d, cooperadoId, mes, coopId);
+  const valorAReceber = isBicCentralReadAuthorityEnabled()
+    ? bicCentralValorAReceberAgregado(d, cooperadoId, coopId).valor
+    : getTotalAPagarCooperado(d, cooperadoId, mes, coopId);
   const valorRecebido = getTotalRecebidoCooperado(d, cooperadoId, mes);
   const valorPendente = valorAReceber;
 
@@ -147,10 +151,12 @@ export function getAdminStats(data?: AppData): AdminDashboardStats {
   const cotasAbertas = d.cotas.filter((c) => c.status !== "quitada");
 
   const valoresAPagar = round2(
-    d.cooperados.reduce(
-      (s, c) => s + getTotalAPagarCooperado(d, c.id, undefined, c.cooperativaId),
-      0
-    )
+    d.cooperados.reduce((s, c) => {
+      if (isBicCentralReadAuthorityEnabled()) {
+        return s + bicCentralValorAReceberAgregado(d, c.id, c.cooperativaId).valor;
+      }
+      return s + getTotalAPagarCooperado(d, c.id, undefined, c.cooperativaId);
+    }, 0)
   );
 
   return {

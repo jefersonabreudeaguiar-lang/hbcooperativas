@@ -10,7 +10,10 @@ import { AlertBanner } from "@/components/ui/AlertBanner";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { NotaStatusBadge } from "@/components/ui/NotaStatusBadge";
 import { NotaFotoImg } from "@/components/ui/NotaFotoImg";
-import { listarEntregasCorrecaoCooperado } from "@/services/notaPedidoService";
+import {
+  listarCooperadosEntregasCorrecao,
+  listarEntregasCorrecaoCooperado,
+} from "@/services/notaPedidoService";
 import { getFotoExibicaoNota, contarFotosEnviadasNota } from "@/utils/fotoEntrega";
 import { cn, formatCurrency, formatDate, formatMesReferencia } from "@/utils/format";
 
@@ -29,7 +32,6 @@ interface CorrecoesEntregasPanelProps {
 export function CorrecoesEntregasPanel({
   data,
   coopId,
-  cooperados,
   getEscolaLabel,
   onApagar,
   onRelancar,
@@ -41,10 +43,20 @@ export function CorrecoesEntregasPanel({
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [processando, setProcessando] = useState(false);
 
+  const cooperadosElegiveis = useMemo(
+    () => listarCooperadosEntregasCorrecao(data, coopId, acao),
+    [data, coopId, acao]
+  );
+
+  const cooperadoIdAtivo = useMemo(() => {
+    if (!cooperadoId) return "";
+    return cooperadosElegiveis.some((c) => c.id === cooperadoId) ? cooperadoId : "";
+  }, [cooperadoId, cooperadosElegiveis]);
+
   const entregas = useMemo(() => {
-    if (!cooperadoId) return [];
-    return listarEntregasCorrecaoCooperado(data, cooperadoId, coopId, acao);
-  }, [data, cooperadoId, coopId, acao]);
+    if (!cooperadoIdAtivo) return [];
+    return listarEntregasCorrecaoCooperado(data, cooperadoIdAtivo, coopId, acao);
+  }, [data, cooperadoIdAtivo, coopId, acao]);
 
   const notaSelecionada = entregas.find((n) => n.id === notaSelecionadaId) ?? null;
 
@@ -86,9 +98,9 @@ export function CorrecoesEntregasPanel({
       <Card className="p-4 space-y-4">
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <FormField label="Cooperado" required>
-            <Select value={cooperadoId} onChange={(e) => handleCooperadoChange(e.target.value)}>
+            <Select value={cooperadoIdAtivo} onChange={(e) => handleCooperadoChange(e.target.value)}>
               <option value="">Selecione o cooperado…</option>
-              {cooperados.map((c) => (
+              {cooperadosElegiveis.map((c) => (
                 <option key={c.id} value={c.id}>
                   {c.nomeCompleto}
                 </option>
@@ -107,7 +119,7 @@ export function CorrecoesEntregasPanel({
           </FormField>
         </div>
 
-        {cooperadoId && entregas.length === 0 && (
+        {cooperadoIdAtivo && entregas.length === 0 && (
           <div className="rounded-xl border border-gray-200 bg-gray-50 px-4 py-8 text-center text-sm text-gray-600">
             {acao === "relancar"
               ? "Nenhuma entrega conferida ou devolvida para correção neste cooperado."

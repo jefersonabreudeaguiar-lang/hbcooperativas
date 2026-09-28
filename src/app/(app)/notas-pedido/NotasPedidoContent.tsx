@@ -81,12 +81,12 @@ import {
 } from "@/services/conferenciaAprovacaoSyncQueue";
 import { withConferenciaOperacionalPushScope } from "@/services/conferenciaOperacionalPushScope";
 import { getProdutosContrato } from "@/services/catalogoContratosService";
-import { listarResumosMensaisEntregas, filtrarResumosEntregasPendentes, getMesPrincipalQuantoVouReceber } from "@/services/cooperadoEntregasService";
+import { listarResumosMensaisEntregas, filtrarResumosEntregasPendentes } from "@/services/cooperadoEntregasService";
+import { bicCentralMesPrincipalQuantoVouReceber } from "@/services/bicLeituraCentralCooperado";
 import { CooperadoEntregasPorMes } from "@/components/cooperado/CooperadoEntregasPorMes";
 import { CooperadoMinhaFichaTab } from "@/components/cooperado/CooperadoMinhaFichaTab";
 import { useContaCoopDescontosRevision } from "@/hooks/useContaCoopDescontosRevision";
 import { useSyncContaCoopValorReceberPilot } from "@/hooks/useSyncContaCoopValorReceberPilot";
-import { buildValorExibicaoCooperadoOpts } from "@/services/notaPedidoService";
 import { CorrecoesEntregasPanel } from "@/components/notas/CorrecoesEntregasPanel";
 import { getContratoLabel, getContratosEntrega, resolverContratoEntrega } from "@/utils/contratosEntrega";
 import { cn, formatCurrency, formatDate, formatMesReferencia, getCurrentMesReferencia } from "@/utils/format";
@@ -307,7 +307,7 @@ export default function NotasPedidoContent() {
       : undefined;
   const mesHbSync =
     data && cooperadoCanonico && coopId
-      ? getMesPrincipalQuantoVouReceber(data, cooperadoCanonico, coopId)
+      ? bicCentralMesPrincipalQuantoVouReceber(data, cooperadoCanonico, coopId)
       : undefined;
   useSyncContaCoopValorReceberPilot(
     isCooperado && cooperadoCanonico && coopId && mesHbSync && user
@@ -1981,10 +1981,23 @@ export default function NotasPedidoContent() {
 
     let notaComFoto = nota;
     if (d && coopId) {
-      notaComFoto = await ensureNotaComFoto(d, nota, coopId);
+      if (opts?.transicao) {
+        notaComFoto = d.notasPedido.find((n) => n.id === nota.id) ?? nota;
+        void ensureNotaComFoto(d, notaComFoto, coopId).then((enriched) => {
+          setSelectedNota((prev) => {
+            if (!prev || prev.id !== enriched.id) return prev;
+            return prev.status === "aguardando_conferencia"
+              ? { ...enriched, status: "aguardando_conferencia" as const }
+              : enriched;
+          });
+        });
+      } else {
+        notaComFoto = await ensureNotaComFoto(d, nota, coopId);
+      }
     }
     const totalFotos = contarFotosEnviadasNota(notaComFoto);
     if (
+      !opts?.transicao &&
       notaComFoto.fotoNaNuvem &&
       totalFotos > 0 &&
       getFotosExibicaoNota(notaComFoto).length === 0
@@ -2135,13 +2148,15 @@ export default function NotasPedidoContent() {
   };
 
   const aguardarSequenciaLancamentoFotos = useCallback(
-    async (nota: NotaPedido, total: number): Promise<void> => {
-      if (total === 0) return;
+    async (nota: NotaPedido, total: number, opts?: { rapido?: boolean }): Promise<void> => {
+      if (total === 0 || opts?.rapido) return;
 
       if (lancamentoSequenciaTimerRef.current) {
         clearTimeout(lancamentoSequenciaTimerRef.current);
         lancamentoSequenciaTimerRef.current = null;
       }
+
+      const slideMs = total === 1 ? 550 : 650;
 
       return new Promise((resolve) => {
         let idx = 0;
@@ -2166,10 +2181,10 @@ export default function NotasPedidoContent() {
             return;
           }
           void mostrar();
-          lancamentoSequenciaTimerRef.current = setTimeout(avancar, 1400);
+          lancamentoSequenciaTimerRef.current = setTimeout(avancar, slideMs);
         };
 
-        lancamentoSequenciaTimerRef.current = setTimeout(avancar, total === 1 ? 1000 : 1400);
+        lancamentoSequenciaTimerRef.current = setTimeout(avancar, slideMs);
       });
     },
     [loadConferenciaFoto]
@@ -2349,20 +2364,8 @@ export default function NotasPedidoContent() {
 
       if (multiFoto) {
         const baseData = { ...d, notasPedido };
-        if (fichasExistentes.length > 0 && fichasValoresAlinhadosComNota(d.fichaCorrida, notaAtualizada!)) {
-          return addAuditEntry(baseData, {
-            entityType: "nota_pedido",
-            entityId: selectedNota.id,
-            action: "aprovar",
-            userId: user.id,
-            userName: user.name,
-            changes: divisao
-              ? `Entrega conferida (${qtdFotosAprovadas} fotos) · dividida entre ${divisao.participantes.length} cooperados`
-              : qtdFotosAprovadas > 1
-                ? `Entrega conferida (${qtdFotosAprovadas} fotos)`
-                : "Entrega conferida",
-          });
-        }
+        // Sempre reconstrói fichas no fechamento multi-foto: total consolidado da nota
+        // (itens de todas as fotos) deve ir para ficha, app e relatórios — não a soma das fatias parciais.
         const next = rebuildFichasNota(baseData, notaAtualizada!);
         return addAuditEntry(next, {
           entityType: "nota_pedido",
@@ -2442,43 +2445,42 @@ export default function NotasPedidoContent() {
 
     const notaPatchSnapshot = notaAtualizada;
 
+    const notaAprovadaRef = selectedNota;
+    const proxima = obterProximaNotaConferencia(chaveAtual, notaId);
+
+    enqueueConferenciaAprovacaoSync(notaId, async () => {
+      if (notaPatchSnapshot && coopId) {
+        const cnpj = await resolveCooperativaCnpj(getData(), coopId, user);
+        if (!cnpj) {
+          console.warn("[conferencia-aprovacao-sync]", notaId, "CNPJ não resolvido para sync.");
+          requestAppSyncLight();
+          return;
+        }
+        const patched = await patchNotaPedidoInCloud(cnpj, notaPatchSnapshot);
+        if (!patched.ok) {
+          console.warn(
+            "[conferencia-aprovacao-sync]",
+            notaId,
+            patched.error ?? "patch nota falhou"
+          );
+          setSuccessMsg(
+            patched.error ??
+              "Entrega lançada aqui, mas não sincronizou com a nuvem. Verifique a conexão."
+          );
+          return;
+        }
+        markConferenciaPatchSyncedForOperacionalPush(notaId);
+        await withConferenciaOperacionalPushScope(coopId, getConferenciaPatchSyncedSnapshot(), async () => {
+          await pushOperacionalToCloud(cnpj, getData(), coopId, { authoritative: true });
+        });
+        requestAppSyncLight();
+      } else {
+        requestAppSync();
+      }
+    });
+
     void (async () => {
       try {
-        enqueueConferenciaAprovacaoSync(notaId, async () => {
-          if (notaPatchSnapshot && coopId) {
-            const cnpj = await resolveCooperativaCnpj(getData(), coopId, user);
-            if (!cnpj) {
-              console.warn("[conferencia-aprovacao-sync]", notaId, "CNPJ não resolvido para sync.");
-              requestAppSyncLight();
-              return;
-            }
-            const patched = await patchNotaPedidoInCloud(cnpj, notaPatchSnapshot);
-            if (!patched.ok) {
-              console.warn(
-                "[conferencia-aprovacao-sync]",
-                notaId,
-                patched.error ?? "patch nota falhou"
-              );
-              setSuccessMsg(
-                patched.error ??
-                  "Entrega lançada aqui, mas não sincronizou com a nuvem. Verifique a conexão."
-              );
-              return;
-            }
-            markConferenciaPatchSyncedForOperacionalPush(notaId);
-            await withConferenciaOperacionalPushScope(coopId, getConferenciaPatchSyncedSnapshot(), async () => {
-              await pushOperacionalToCloud(cnpj, getData(), coopId, { authoritative: true });
-            });
-            requestAppSyncLight();
-          } else {
-            requestAppSync();
-          }
-        });
-
-        await aguardarSequenciaLancamentoFotos(selectedNota, qtdFotosAprovadas);
-
-        const proxima = obterProximaNotaConferencia(chaveAtual, notaId);
-
         if (proxima) {
           const mesmoGrupo = filaConferenciaRef.current?.chave === chaveAtual;
           if (filaConferenciaRef.current && mesmoGrupo) {
@@ -2495,6 +2497,7 @@ export default function NotasPedidoContent() {
           setTimeout(() => setLancadoMsg(""), 4000);
           await prepararConferenciaNota(proxima, { transicao: true });
         } else {
+          await aguardarSequenciaLancamentoFotos(notaAprovadaRef, qtdFotosAprovadas);
           fecharConferirModal();
           setLancadoMsg(
             divisaoPreview
@@ -2643,8 +2646,10 @@ export default function NotasPedidoContent() {
     }
 
     const cnpj = await resolveCooperativaCnpj(getData(), coopId, user);
+    let patchCloudOk = true;
     if (cnpj) {
-      await patchNotaPedidoInCloud(cnpj, notaRelancada);
+      const patchResult = await patchNotaPedidoInCloud(cnpj, notaRelancada);
+      patchCloudOk = patchResult.ok;
       const d = getData();
       await pushOperacionalToCloud(cnpj, d, coopId, { authoritative: true });
     }
@@ -2652,6 +2657,13 @@ export default function NotasPedidoContent() {
 
     filaStickyIdsRef.current.add(notaRelancada.id);
     filaStickySnapshotRef.current.set(notaRelancada.id, notaRelancada);
+
+    if (patchCloudOk) {
+      voltarFilaResponsavel();
+      if (statusFilter !== "aguardando_conferencia") {
+        setStatusFilter("aguardando_conferencia");
+      }
+    }
 
     setSuccessMsg(
       `Entrega ${alvo.numeroNota} re-lançada. Ela voltou para «Conferir entregas» — você pode re-lançar outra entrega aqui.`
