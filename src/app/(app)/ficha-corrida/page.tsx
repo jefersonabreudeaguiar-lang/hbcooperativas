@@ -62,7 +62,8 @@ import {
   cooperadoPendentePagamentoResponsavel,
   listarMesesPendentesPagamentoResponsavel,
   getPagamentoConfirmadoMes,
-  listarMesesPagosCooperado,
+  getPagamentoRegistradoMes,
+  listarMesesComPagamentoRegistradoCooperado,
 } from "@/services/cooperadoEntregasService";
 import { PageHeader, FilterBar, Modal } from "@/components/ui/Table";
 import { Select, FormField, Input, Textarea } from "@/components/ui/Form";
@@ -174,6 +175,7 @@ export default function FichaCorridaPage() {
     return "ficha";
   });
   const [abaMesCooperado, setAbaMesCooperado] = useState<"aberto" | string>("aberto");
+  const [abaMesPagamentoResponsavel, setAbaMesPagamentoResponsavel] = useState<"pendente" | string>("pendente");
   const [pixStepVisited, setPixStepVisited] = useState(false);
 
   useEffect(() => {
@@ -259,28 +261,39 @@ export default function FichaCorridaPage() {
     });
   }, [cooperadoId, coopId, data, isCooperado, hbDescontosRevision]);
 
-  const mesesPagosCooperado = useMemo(() => {
+  const mesesHistoricoPagamentoCooperado = useMemo(() => {
     if (!data || !cooperadoId) return [];
-    return listarMesesPagosCooperado(data, cooperadoId, coopId);
+    return listarMesesComPagamentoRegistradoCooperado(data, cooperadoId, coopId);
   }, [data, cooperadoId, coopId]);
 
+  const mesesHistoricoPagamentoResponsavel = useMemo(() => {
+    if (!data || !coopId || isCooperado || !cooperadoFilter) return [];
+    return listarMesesComPagamentoRegistradoCooperado(data, cooperadoFilter, coopId);
+  }, [coopId, cooperadoFilter, data, isCooperado]);
+
   const visualizandoHistorico = isCooperado && abaMesCooperado !== "aberto";
+  const visualizandoHistoricoPagamentoResponsavel =
+    !isCooperado && aba === "pagar" && abaMesPagamentoResponsavel !== "pendente";
 
   const mesAtivo = isCooperado
     ? visualizandoHistorico
       ? abaMesCooperado
       : mesEmAberto
-    : mesFilter;
+    : visualizandoHistoricoPagamentoResponsavel
+      ? abaMesPagamentoResponsavel
+      : mesFilter;
+
+  const mesAtivoExibicao = mesAtivo;
 
   useEffect(() => {
     if (!isCooperado) return;
     if (searchParams.get("mes")) {
       const m = searchParams.get("mes")!;
-      if (mesesPagosCooperado.includes(m)) {
+      if (mesesHistoricoPagamentoCooperado.includes(m)) {
         setAbaMesCooperado(m);
       }
     }
-  }, [isCooperado, searchParams, mesesPagosCooperado]);
+  }, [isCooperado, searchParams, mesesHistoricoPagamentoCooperado]);
 
   const meses = useMemo(() => {
     if (!data) return [getCurrentMesReferencia()];
@@ -334,6 +347,10 @@ export default function FichaCorridaPage() {
       setCooperadoFilter("");
     }
   }, [isCooperado, aba, cooperadoFilter, data, coopId, mesAtivo]);
+
+  useEffect(() => {
+    setAbaMesPagamentoResponsavel("pendente");
+  }, [cooperadoFilter, aba]);
 
   const cooperadoSelecionadoId = isCooperado ? cooperadoId : cooperadoFilter;
 
@@ -587,10 +604,23 @@ export default function FichaCorridaPage() {
 
   const pagamentoAguardandoExibicao = useMemo(() => {
     if (!fluxoReciboAssinatura) return undefined;
-    if (!isCooperado) return pagamentoAguardando;
+    if (!isCooperado) {
+      if (visualizandoHistoricoPagamentoResponsavel) return undefined;
+      return pagamentoAguardando;
+    }
     if (!pagamentoAguardando || !exibirAguardandoAssinatura) return undefined;
+    if (abaMesCooperado === "aberto") return undefined;
+    const mesesPg = getMesesReferenciaPagamento(pagamentoAguardando);
+    if (!mesesPg.includes(abaMesCooperado)) return undefined;
     return pagamentoAguardando;
-  }, [fluxoReciboAssinatura, isCooperado, pagamentoAguardando, exibirAguardandoAssinatura]);
+  }, [
+    fluxoReciboAssinatura,
+    isCooperado,
+    pagamentoAguardando,
+    exibirAguardandoAssinatura,
+    abaMesCooperado,
+    visualizandoHistoricoPagamentoResponsavel,
+  ]);
 
   useEffect(() => {
     if (!isCooperado || searchParams.get("assinar") !== "1") return;
@@ -630,11 +660,17 @@ export default function FichaCorridaPage() {
 
   const pagamentoConfirmadoMes = useMemo(() => {
     if (!data || !cooperadoSelecionadoId) return undefined;
-    return getPagamentoConfirmadoMes(data, cooperadoSelecionadoId, mesAtivo);
-  }, [data, cooperadoSelecionadoId, mesAtivo]);
+    return getPagamentoConfirmadoMes(data, cooperadoSelecionadoId, mesAtivoExibicao);
+  }, [data, cooperadoSelecionadoId, mesAtivoExibicao]);
 
-  const cooperadoVistaMesPago =
-    isCooperado && visualizandoHistorico && !!pagamentoConfirmadoMes;
+  const pagamentoRegistradoMes = useMemo(() => {
+    if (!data || !cooperadoSelecionadoId) return undefined;
+    return getPagamentoRegistradoMes(data, cooperadoSelecionadoId, mesAtivoExibicao);
+  }, [data, cooperadoSelecionadoId, mesAtivoExibicao]);
+
+  const cooperadoVistaMesHistorico =
+    (isCooperado && visualizandoHistorico && !!pagamentoRegistradoMes) ||
+    (visualizandoHistoricoPagamentoResponsavel && !!pagamentoRegistradoMes);
 
   const exibicaoOpts = useMemo(() => {
     if (!data || !cooperadoSelecionadoId) return undefined;
@@ -1104,7 +1140,7 @@ export default function FichaCorridaPage() {
       );
     })();
     setConfirmPagamento(false);
-    setCooperadoFilter("");
+    setAbaMesPagamentoResponsavel(mesPrincipal);
     setAba("pagar");
     setPixStepVisited(false);
   };
@@ -1240,7 +1276,9 @@ export default function FichaCorridaPage() {
       ? visualizandoHistorico
         ? false
         : exibirQuantoVouReceber
-      : pendentePagamentoResponsavel);
+      : visualizandoHistoricoPagamentoResponsavel
+        ? false
+        : pendentePagamentoResponsavel);
 
   const baixarReciboAtual = () => {
     const pg = reciboAtual;
@@ -1326,7 +1364,7 @@ export default function FichaCorridaPage() {
           >
             <Wallet size={16} /> Mês em aberto
           </button>
-          {mesesPagosCooperado.map((m) => (
+          {mesesHistoricoPagamentoCooperado.map((m) => (
             <button
               key={m}
               type="button"
@@ -1343,7 +1381,21 @@ export default function FichaCorridaPage() {
         </div>
       )}
 
-      {isCooperado && !visualizandoHistorico && mesQuitadoCooperado && (!pagamentoAguardandoExibicao || !fluxoReciboAssinatura) && (
+      {isCooperado &&
+        !visualizandoHistorico &&
+        pagamentoAguardando &&
+        fluxoReciboAssinatura &&
+        exibirAguardandoAssinatura && (
+          <AlertBanner variant="info" className="mb-6" title="Valor pago neste período">
+            O PIX já foi registrado. Abra a aba{" "}
+            <strong>
+              {formatMesReferencia(getMesesReferenciaPagamento(pagamentoAguardando)[0] ?? mesEmAberto)}
+            </strong>{" "}
+            para ver o valor pago e assinar o recibo.
+          </AlertBanner>
+        )}
+
+      {isCooperado && !visualizandoHistorico && mesQuitadoCooperado && (!pagamentoAguardando || !fluxoReciboAssinatura) && (
         <div className="text-center py-14 px-6 bg-white rounded-2xl border border-emerald-200 mb-6">
           <CheckCircle2 size={52} className="mx-auto text-emerald-600 mb-4" />
           <h2 className="text-xl font-bold text-gray-900">Pagamento confirmado</h2>
@@ -1415,6 +1467,36 @@ export default function FichaCorridaPage() {
               </span>
             )}
           </button>
+        </div>
+      )}
+
+      {!isCooperado && aba === "pagar" && cooperadoFilter && mesesHistoricoPagamentoResponsavel.length > 0 && (
+        <div className="flex flex-wrap gap-2 mb-6 border-b border-gray-200">
+          <button
+            type="button"
+            onClick={() => setAbaMesPagamentoResponsavel("pendente")}
+            className={`px-4 py-2.5 text-sm font-medium border-b-2 -mb-px flex items-center gap-2 ${
+              abaMesPagamentoResponsavel === "pendente"
+                ? "border-green-600 text-green-700"
+                : "border-transparent text-gray-500 hover:text-gray-700"
+            }`}
+          >
+            <CreditCard size={16} /> A pagar
+          </button>
+          {mesesHistoricoPagamentoResponsavel.map((m) => (
+            <button
+              key={m}
+              type="button"
+              onClick={() => setAbaMesPagamentoResponsavel(m)}
+              className={`px-4 py-2.5 text-sm font-medium border-b-2 -mb-px flex items-center gap-2 ${
+                abaMesPagamentoResponsavel === m
+                  ? "border-green-600 text-green-700"
+                  : "border-transparent text-gray-500 hover:text-gray-700"
+              }`}
+            >
+              <History size={16} /> Pago · {formatMesReferencia(m)}
+            </button>
+          ))}
         </div>
       )}
 
@@ -1518,7 +1600,7 @@ export default function FichaCorridaPage() {
         </div>
       )}
 
-      {cooperadoSelecionadoId && !cooperadoVistaMesPago && (
+      {cooperadoSelecionadoId && !cooperadoVistaMesHistorico && (
         <ValoresAvulsosReceberPanel
           cooperadoId={cooperadoSelecionadoId}
           cooperativaId={coopId}
@@ -1567,15 +1649,27 @@ export default function FichaCorridaPage() {
         </AlertBanner>
       )}
 
-      {cooperadoVistaMesPago && pagamentoConfirmadoMes && cooperadoSelecionadoId && (
+      {cooperadoVistaMesHistorico && pagamentoRegistradoMes && cooperadoSelecionadoId && (
         <CooperadoHistoricoPagamentoMes
-          pagamento={pagamentoConfirmadoMes}
-          mesReferencia={mesAtivo}
+          pagamento={pagamentoRegistradoMes}
+          mesReferencia={mesAtivoExibicao}
           descontoPadraoPct={data.config.descontoPadraoCooperativa}
           cnpj={coopCnpjResumo}
           cooperadoId={cooperadoSelecionadoId}
           cooperadoNome={nomeCooperado}
-          onBaixarRecibo={pagamentoConfirmadoMes.reciboHtml ? baixarReciboMesHistorico : undefined}
+          onBaixarRecibo={
+            pagamentoRegistradoMes.status === "confirmado" && pagamentoRegistradoMes.reciboHtml
+              ? baixarReciboMesHistorico
+              : undefined
+          }
+          aguardandoAssinatura={
+            isCooperado &&
+            fluxoReciboAssinatura &&
+            pagamentoRegistradoMes.status === "aguardando_confirmacao"
+          }
+          onAssinarRecibo={
+            isCooperado && fluxoReciboAssinatura ? () => setAssinaturaModal(true) : undefined
+          }
           detalheEntregas={
             resumoItensMes.entregas > 0 ? (
               <div className="rounded-2xl border border-gray-200 bg-white overflow-hidden shadow-sm">
@@ -1611,7 +1705,7 @@ export default function FichaCorridaPage() {
         />
       )}
 
-      {exibirRelatorioMes && !cooperadoVistaMesPago && (
+      {exibirRelatorioMes && !cooperadoVistaMesHistorico && (
         <>
           <Card
             title={

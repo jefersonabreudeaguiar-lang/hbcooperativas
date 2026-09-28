@@ -803,6 +803,46 @@ export function listarMesesPagosCooperado(
   return [...meses].sort((a, b) => b.localeCompare(a));
 }
 
+/** Meses com PIX registrado (aguardando assinatura ou confirmado) — abas de histórico por mês. */
+export function listarMesesComPagamentoRegistradoCooperado(
+  data: AppData,
+  cooperadoId: string,
+  cooperativaId?: string
+): string[] {
+  const coopId = cooperativaId ?? data.cooperados.find((c) => c.id === cooperadoId)?.cooperativaId;
+  const canonico = resolverCooperadoIdCanonico(data, cooperadoId, coopId);
+  const meses = new Set<string>();
+
+  for (const p of data.pagamentosCooperado) {
+    if (p.status !== "confirmado" && p.status !== "aguardando_confirmacao") continue;
+    const pCanon = resolverCooperadoIdCanonico(data, p.cooperadoId, coopId ?? p.cooperativaId);
+    if (
+      p.cooperadoId !== cooperadoId &&
+      p.cooperadoId !== canonico &&
+      pCanon !== canonico
+    ) {
+      continue;
+    }
+    for (const mes of getMesesReferenciaPagamento(p)) {
+      meses.add(mes);
+    }
+  }
+
+  return [...meses].sort((a, b) => b.localeCompare(a));
+}
+
+/** Pagamento registrado naquele mês (confirmado tem prioridade sobre aguardando assinatura). */
+export function getPagamentoRegistradoMes(
+  data: AppData,
+  cooperadoId: string,
+  mesReferencia: string
+): PagamentoCooperadoRegistro | undefined {
+  return (
+    getPagamentoConfirmadoMes(data, cooperadoId, mesReferencia) ??
+    getPagamentoAguardandoCooperado(data, cooperadoId, mesReferencia)
+  );
+}
+
 /** Foto de fato anexada — ignora flags obsoletas (fotoNaNuvem/fotoEnviadaEm sem arquivo). */
 function notaTemConteudoFotoReal(nota: NotaPedido): boolean {
   if (getFotosExibicaoNota(nota).length > 0) return true;

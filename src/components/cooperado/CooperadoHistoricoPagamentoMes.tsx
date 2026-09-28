@@ -18,6 +18,9 @@ type Props = {
   cooperadoNome: string;
   onBaixarRecibo?: () => void;
   detalheEntregas?: ReactNode;
+  /** Cooperado: PIX já enviado, falta assinar recibo nesta aba do mês. */
+  aguardandoAssinatura?: boolean;
+  onAssinarRecibo?: () => void;
 };
 
 export function CooperadoHistoricoPagamentoMes({
@@ -29,22 +32,35 @@ export function CooperadoHistoricoPagamentoMes({
   cooperadoNome,
   onBaixarRecibo,
   detalheEntregas,
+  aguardandoAssinatura,
+  onAssinarRecibo,
 }: Props) {
   const resumo = resumoFromPagamento(pagamento);
   const mesesPg = getMesesReferenciaPagamento(pagamento);
   const rotuloPeriodo =
     mesesPg.length > 1 ? formatMesesReferenciaRotulo(mesesPg) : formatMesReferencia(mesReferencia);
+  const confirmado = pagamento.status === "confirmado";
 
   return (
     <div className="space-y-6 mb-6">
-      <div className="bg-gradient-to-br from-green-700 to-green-800 text-white rounded-2xl p-6 shadow-sm">
-        <div className="flex items-start gap-2 text-green-100 text-sm">
+      <div
+        className={`rounded-2xl p-6 shadow-sm text-white ${
+          aguardandoAssinatura
+            ? "bg-gradient-to-br from-violet-700 to-violet-800"
+            : "bg-gradient-to-br from-green-700 to-green-800"
+        }`}
+      >
+        <div className="flex items-start gap-2 text-sm opacity-90">
           <CheckCircle2 size={18} className="shrink-0 mt-0.5" />
-          <span>Pagamento confirmado · {rotuloPeriodo}</span>
+          <span>
+            {aguardandoAssinatura
+              ? `PIX registrado · ${rotuloPeriodo} · falta assinar recibo`
+              : `Pagamento confirmado · ${rotuloPeriodo}`}
+          </span>
         </div>
-        <p className="text-green-100 text-sm mt-3">Total recebido</p>
+        <p className="text-sm mt-3 opacity-90">{confirmado ? "Total recebido" : "Valor pago neste mês"}</p>
         <p className="text-3xl sm:text-4xl font-bold mt-1">{formatCurrency(pagamento.valorLiquido)}</p>
-        <p className="text-green-100/90 text-sm mt-3 space-y-0.5">
+        <p className="text-sm mt-3 space-y-0.5 opacity-90">
           {pagamento.pagoEm && (
             <span className="block">Pago pela cooperativa em {formatDate(pagamento.pagoEm.split("T")[0])}</span>
           )}
@@ -52,7 +68,17 @@ export function CooperadoHistoricoPagamentoMes({
             <span className="block">Recibo assinado em {formatDate(pagamento.assinadoEm.split("T")[0])}</span>
           )}
         </p>
-        {onBaixarRecibo && pagamento.reciboHtml && (
+        {aguardandoAssinatura && onAssinarRecibo && (
+          <Button
+            type="button"
+            size="lg"
+            className="mt-4 bg-white text-violet-900 hover:bg-violet-50"
+            onClick={onAssinarRecibo}
+          >
+            Assinar recibo
+          </Button>
+        )}
+        {!aguardandoAssinatura && onBaixarRecibo && pagamento.reciboHtml && (
           <Button
             type="button"
             variant="secondary"
@@ -77,7 +103,7 @@ export function CooperadoHistoricoPagamentoMes({
           valorEntregas={resumo.valorEntregas}
           descontosExtras={resumo.descontosExtras}
           totalLiquido={pagamento.valorLiquido}
-          rotuloTotal="Total recebido"
+          rotuloTotal={confirmado ? "Total recebido" : "Total pago (PIX)"}
         />
       </div>
 
