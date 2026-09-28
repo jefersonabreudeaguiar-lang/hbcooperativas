@@ -27,6 +27,7 @@
     "test:bic-b3.2-real-readonly": "npx tsx scripts/test-bic-b3.2-real-readonly.ts",
     "test:bic-lab-boundary": "npx tsx scripts/test-bic-lab-boundary.ts",
     "test:bic-lab-b4-wiring": "npx tsx scripts/test-bic-lab-b4-wiring.ts",
+    "test:bic-official-motor": "npx tsx scripts/test-bic-official-motor-delegation.ts",
     "test:bic-lab-full-wiring": "npx tsx scripts/test-bic-lab-full-wiring.ts",
     "test:cooperado-inicio-card-policy": "npx tsx scripts/test-cooperado-inicio-card-policy.ts",
     "audit:bic-hbcoop-integration": "npx tsx scripts/lab/run-bic-hbcoop-integration-audit.ts",

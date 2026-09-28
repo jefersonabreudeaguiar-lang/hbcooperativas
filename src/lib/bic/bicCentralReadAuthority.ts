@@ -18,6 +18,7 @@ function parseFlag(raw: string | undefined): boolean {
 /** Leitura financeira cooperado via bicLeituraCentral* (substitui ramos legados na UI). */
 export function isBicCentralReadAuthorityEnabled(env: NodeJS.ProcessEnv = process.env): boolean {
   if (parseFlag(env.NEXT_PUBLIC_BIC_CENTRAL_READ_OFFICIAL)) return true;
+  if (parseFlag(env.NEXT_PUBLIC_BIC_CENTRAL_READ_FULL_OFFICIAL)) return true;
   if (isBicLabB4AuthorityEnabled(env)) return true;
 
   const boundary = evaluateBicLabBoundary(env);

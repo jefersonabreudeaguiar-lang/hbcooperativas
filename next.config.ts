@@ -35,7 +35,9 @@ const nextConfig: NextConfig = {
       process.env.NEXT_PUBLIC_HB_CREDIT_ENABLED ?? process.env.HB_CREDIT_ENABLED ?? "false",
     /** Garante inline no bundle cliente (Vercel vercel.json + dashboard). */
     NEXT_PUBLIC_HB_BIC_PRODUCTION_LOCK: process.env.NEXT_PUBLIC_HB_BIC_PRODUCTION_LOCK ?? "false",
-    NEXT_PUBLIC_BIC_CENTRAL_READ_OFFICIAL: process.env.NEXT_PUBLIC_BIC_CENTRAL_READ_OFFICIAL ?? "false",
+    NEXT_PUBLIC_BIC_CENTRAL_READ_OFFICIAL:
+      process.env.NEXT_PUBLIC_BIC_CENTRAL_READ_OFFICIAL ??
+      (process.env.VERCEL_ENV === "production" ? "true" : "false"),
     NEXT_PUBLIC_BIC_CENTRAL_READ_FULL_OFFICIAL:
       process.env.NEXT_PUBLIC_BIC_CENTRAL_READ_FULL_OFFICIAL ?? "false",
     NEXT_PUBLIC_BIC_CENTRAL_READ: process.env.NEXT_PUBLIC_BIC_CENTRAL_READ ?? "false",

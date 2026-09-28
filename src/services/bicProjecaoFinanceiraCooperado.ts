@@ -17,7 +17,8 @@ import { validateBicTenantContext } from "@/services/bicTenantGuard";
 import {
   cooperadoExibirValorReceberInicio,
   getResumoQuantoVouReceberCooperado,
-  getValorQuantoVouReceber,
+  getResumoQuantoVouReceberCooperadoMotorLegado,
+  getValorQuantoVouReceberMotorLegado,
   type EstadoQuantoVouReceberCooperado,
 } from "@/services/cooperadoEntregasService";
 
@@ -48,7 +49,7 @@ export type BicFacadeTenantGate =
 export type BicProjecaoFinanceiraCooperado = {
   tenant: BicFacadeTenantGate;
   bicProjectionAuthorized: boolean;
-  quantoVouReceber?: ReturnType<typeof getValorQuantoVouReceber>;
+  quantoVouReceber?: ReturnType<typeof getValorQuantoVouReceberMotorLegado>;
   inicio?: ReturnType<typeof cooperadoExibirValorReceberInicio>;
   painelQuantoVouReceber?: ReturnType<typeof getResumoQuantoVouReceberCooperado>;
 };
@@ -118,9 +119,9 @@ export function getProjecaoFinanceiraCooperadoBIC(
     return blockedProjection(validation.status, validation.message);
   }
 
-  const quantoVouReceber = getValorQuantoVouReceber(data, cooperadoId, cooperativaId);
+  const quantoVouReceber = getValorQuantoVouReceberMotorLegado(data, cooperadoId, cooperativaId);
   const inicio = cooperadoExibirValorReceberInicio(data, cooperadoId, cooperativaId);
-  const painelQuantoVouReceber = getResumoQuantoVouReceberCooperado(
+  const painelQuantoVouReceber = getResumoQuantoVouReceberCooperadoMotorLegado(
     data,
     cooperadoId,
     cooperativaId,
@@ -166,7 +167,7 @@ export function getQuantoVouReceberCooperadoParaExibicao(
   const raw =
     proj.bicProjectionAuthorized && proj.quantoVouReceber
       ? proj.quantoVouReceber
-      : getValorQuantoVouReceber(data, cooperadoId, cooperativaId);
+      : getValorQuantoVouReceberMotorLegado(data, cooperadoId, cooperativaId);
   const value = cooperadoQuantoVouReceberParaApresentacao(raw, apresentacaoConsolidada);
   if (proj.bicProjectionAuthorized && proj.quantoVouReceber) {
     return envelope(value, proj, "bic");

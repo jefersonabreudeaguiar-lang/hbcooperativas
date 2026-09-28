@@ -1,4 +1,5 @@
 import type { AppData, NotaPedido, PagamentoCooperadoRegistro } from "@/types";
+import { isBicCentralReadAuthorityEnabled } from "@/lib/bic/bicCentralReadAuthority";
 import { notaPertenceCooperado, fichaPertenceCooperado, resolverCooperadoIdCanonico } from "@/services/cooperadoCloudService";
 import {
   getPagamentoAguardandoCooperado,
@@ -158,11 +159,8 @@ export function cooperadoExibirValorReceberInicio(
   valorRecibo: number;
   aguardandoAssinatura: boolean;
 } {
-  const { mes, meses, mesLabel, valor, valorRecibo, aguardandoAssinatura } = getValorQuantoVouReceber(
-    data,
-    cooperadoId,
-    cooperativaId
-  );
+  const { mes, meses, mesLabel, valor, valorRecibo, aguardandoAssinatura } =
+    getValorQuantoVouReceberMotorLegado(data, cooperadoId, cooperativaId);
   const mesesCanon =
     meses.length > 0 ? meses : valor > 0 && mes ? [mes] : meses;
   const mesLabelCanon =
@@ -171,6 +169,39 @@ export function cooperadoExibirValorReceberInicio(
         ? mesLabel
         : formatMesReferencia(mes)
       : mesLabel;
+
+  if (isBicCentralReadAuthorityEnabled()) {
+    const bicVal = getValorQuantoVouReceber(data, cooperadoId, cooperativaId);
+    const mesesBic =
+      bicVal.meses.length > 0 ? bicVal.meses : bicVal.valor > 0 && bicVal.mes ? [bicVal.mes] : [];
+    const mesLabelBic =
+      mesesBic.length > 0
+        ? mesesBic.length === bicVal.meses.length
+          ? bicVal.mesLabel
+          : formatMesReferencia(bicVal.mes)
+        : bicVal.mesLabel;
+    if (bicVal.valor <= 0 || mesesBic.length === 0) {
+      return {
+        exibir: false,
+        mes: bicVal.mes,
+        meses: mesesBic,
+        mesLabel: mesLabelBic,
+        valor: 0,
+        valorRecibo: 0,
+        aguardandoAssinatura: false,
+      };
+    }
+    return {
+      exibir: true,
+      mes: bicVal.mes,
+      meses: mesesBic,
+      mesLabel: mesLabelBic,
+      valor: bicVal.valor,
+      valorRecibo: 0,
+      aguardandoAssinatura: false,
+    };
+  }
+
   if (aguardandoAssinatura) {
     return {
       exibir: true,
@@ -420,7 +451,7 @@ export type ConsolidadoFinanceiroCooperado = {
 };
 
 /** Fonte única: total a receber, meses em aberto e resumo (responsável ↔ cooperado ↔ início). */
-export function getConsolidadoFinanceiroCooperado(
+export function getConsolidadoFinanceiroCooperadoMotorLegado(
   data: AppData,
   cooperadoId: string,
   cooperativaId?: string,
@@ -428,7 +459,7 @@ export function getConsolidadoFinanceiroCooperado(
 ): ConsolidadoFinanceiroCooperado {
   const meses = listarMesesPendentesFinanceiroCooperado(data, cooperadoId, cooperativaId);
   const mesesComValor = listarMesesComValorQuantoVouReceber(data, cooperadoId, cooperativaId);
-  const { mesLabel, valor, aguardandoAssinatura } = getValorQuantoVouReceber(
+  const { mesLabel, valor, aguardandoAssinatura } = getValorQuantoVouReceberMotorLegado(
     data,
     cooperadoId,
     cooperativaId
@@ -496,6 +527,20 @@ export function getConsolidadoFinanceiroCooperado(
   };
 }
 
+export function getConsolidadoFinanceiroCooperado(
+  data: AppData,
+  cooperadoId: string,
+  cooperativaId?: string,
+  ajustesPorMes?: Record<string, AjustesResumoPagamento>
+): ConsolidadoFinanceiroCooperado {
+  if (isBicCentralReadAuthorityEnabled()) {
+    const { bicCentralGetConsolidadoFinanceiroCooperado } =
+      require("@/services/bicLeituraCentralCooperado") as typeof import("@/services/bicLeituraCentralCooperado");
+    return bicCentralGetConsolidadoFinanceiroCooperado(data, cooperadoId, cooperativaId, ajustesPorMes);
+  }
+  return getConsolidadoFinanceiroCooperadoMotorLegado(data, cooperadoId, cooperativaId, ajustesPorMes);
+}
+
 /** Cooperado ainda sem pagamento registrado pelo responsável (um ou mais meses). */
 export function cooperadoPendentePagamentoResponsavel(
   data: AppData,
@@ -524,7 +569,7 @@ export function cooperadoTemValorPendente(
   return getValorQuantoVouReceber(data, cooperadoId, cooperativaId).valor > 0;
 }
 
-export function getValorQuantoVouReceber(
+export function getValorQuantoVouReceberMotorLegado(
   data: AppData,
   cooperadoId: string,
   cooperativaId?: string
@@ -587,6 +632,20 @@ export function getValorQuantoVouReceber(
   };
 }
 
+/** Entrada única do app — com BIC oficial/LAB delega ao hub central (paridade LAB). */
+export function getValorQuantoVouReceber(
+  data: AppData,
+  cooperadoId: string,
+  cooperativaId?: string
+): ReturnType<typeof getValorQuantoVouReceberMotorLegado> {
+  if (isBicCentralReadAuthorityEnabled()) {
+    const { bicCentralValorAReceberAgregado } =
+      require("@/services/bicLeituraCentralCooperado") as typeof import("@/services/bicLeituraCentralCooperado");
+    return bicCentralValorAReceberAgregado(data, cooperadoId, cooperativaId);
+  }
+  return getValorQuantoVouReceberMotorLegado(data, cooperadoId, cooperativaId);
+}
+
 export type EstadoQuantoVouReceberCooperado =
   | "carregando"
   | "nada_pendente"
@@ -594,7 +653,7 @@ export type EstadoQuantoVouReceberCooperado =
   | "aguardando_assinatura";
 
 /** Facade UI cooperado — uma leitura estável para Início e Quanto vou receber (Fase 3). */
-export function getResumoQuantoVouReceberCooperado(
+export function getResumoQuantoVouReceberCooperadoMotorLegado(
   data: AppData,
   cooperadoId: string,
   cooperativaId: string | undefined,
@@ -610,7 +669,7 @@ export function getResumoQuantoVouReceberCooperado(
   subtitulo: string;
   acaoRotulo: string | null;
 } {
-  const base = getValorQuantoVouReceber(data, cooperadoId, cooperativaId);
+  const base = getValorQuantoVouReceberMotorLegado(data, cooperadoId, cooperativaId);
   const carregando = Boolean(opts?.carregandoNuvem || opts?.financeiroSincronizando);
 
   if (carregando) {
@@ -666,6 +725,21 @@ export function getResumoQuantoVouReceberCooperado(
     subtitulo: "Quando a cooperativa aprovar suas entregas, o valor aparece aqui.",
     acaoRotulo: null,
   };
+}
+
+export function getResumoQuantoVouReceberCooperado(
+  data: AppData,
+  cooperadoId: string,
+  cooperativaId: string | undefined,
+  opts?: { carregandoNuvem?: boolean; financeiroSincronizando?: boolean }
+): ReturnType<typeof getResumoQuantoVouReceberCooperadoMotorLegado> {
+  if (isBicCentralReadAuthorityEnabled()) {
+    const { bicCentralResumoQuantoVouReceberCooperado } =
+      require("@/services/bicLeituraCentralCooperado") as typeof import("@/services/bicLeituraCentralCooperado");
+    return bicCentralResumoQuantoVouReceberCooperado(data, cooperadoId, cooperativaId, opts);
+  }
+
+  return getResumoQuantoVouReceberCooperadoMotorLegado(data, cooperadoId, cooperativaId, opts);
 }
 
 export function getResumoMesEntregasCooperado(

@@ -15,10 +15,11 @@ import {
   type BicProjecaoFinanceiraCooperadoOpts,
 } from "@/services/bicProjecaoFinanceiraCooperado";
 import {
-  getConsolidadoFinanceiroCooperado,
+  getConsolidadoFinanceiroCooperadoMotorLegado,
   getMesPrincipalQuantoVouReceber,
   getResumoQuantoVouReceberCooperado,
   getValorQuantoVouReceber,
+  getValorQuantoVouReceberMotorLegado,
   listarMesesComValorQuantoVouReceber,
   listarMesesPendentesQuantoVouReceber,
   listarResumosMensaisEntregas,
@@ -48,7 +49,7 @@ function cooperadoTemPendenciaFinanceiraVisivel(
   cooperadoId: string,
   cooperativaId: string | undefined
 ): boolean {
-  const raw = getValorQuantoVouReceber(data, cooperadoId, cooperativaId);
+  const raw = getValorQuantoVouReceberMotorLegado(data, cooperadoId, cooperativaId);
   if (isBicCentralReadAuthorityEnabled()) return raw.valor > 0;
   return raw.valor > 0 || raw.aguardandoAssinatura || raw.valorRecibo > 0;
 }
@@ -73,7 +74,7 @@ function painelOptsComValorPersistente(
   opts?: BicCentralProjecaoOpts
 ): BicCentralProjecaoOpts | undefined {
   if (!opts || !isBicCentralReadAuthorityEnabled()) return opts;
-  const raw = getValorQuantoVouReceber(data, cooperadoId, cooperativaId);
+  const raw = getValorQuantoVouReceberMotorLegado(data, cooperadoId, cooperativaId);
   if (raw.valor <= 0 && !raw.aguardandoAssinatura) return opts;
   return {
     ...opts,
@@ -121,28 +122,46 @@ export function bicCentralInicioParaExibicao(
   opts?: Pick<BicCentralProjecaoOpts, "apresentacaoConsolidada">
 ): BicExibicaoEnvelope<ReturnType<typeof getInicioCooperadoParaExibicao>["value"]> {
   const consolidated = effectiveApresentacaoConsolidada(data, cooperadoId, cooperativaId, opts);
-  const envelope = getInicioCooperadoParaExibicao(data, cooperadoId, cooperativaId, {
-    apresentacaoConsolidada: consolidated,
-  });
-  if (!isBicCentralReadAuthorityEnabled()) return envelope;
+  if (!isBicCentralReadAuthorityEnabled()) {
+    return getInicioCooperadoParaExibicao(data, cooperadoId, cooperativaId, {
+      apresentacaoConsolidada: consolidated,
+    });
+  }
   const raw = bicCentralNormalizarValorM6(
-    bicCentralSincronizarRotuloMeses(getValorQuantoVouReceber(data, cooperadoId, cooperativaId))
+    bicCentralSincronizarRotuloMeses(getValorQuantoVouReceberMotorLegado(data, cooperadoId, cooperativaId))
   );
   if (raw.valor > 0) {
     return {
-      ...envelope,
-      value: {
-        exibir: true,
+      value: cooperadoInicioParaCardsDefinitivos(
+        {
+          exibir: true,
+          mes: raw.mes,
+          meses: raw.meses,
+          mesLabel: raw.mesLabel,
+          valor: raw.valor,
+          valorRecibo: 0,
+          aguardandoAssinatura: false,
+        },
+        consolidated
+      ),
+      observability: { source: "bic", fallback: false, bicProjectionAuthorized: true },
+    };
+  }
+  return {
+    value: cooperadoInicioParaCardsDefinitivos(
+      {
+        exibir: false,
         mes: raw.mes,
         meses: raw.meses,
         mesLabel: raw.mesLabel,
-        valor: raw.valor,
+        valor: 0,
         valorRecibo: 0,
         aguardandoAssinatura: false,
       },
-    };
-  }
-  return envelope;
+      consolidated
+    ),
+    observability: { source: "bic", fallback: false, bicProjectionAuthorized: true },
+  };
 }
 
 export function bicCentralQuantoVouReceberParaExibicao(
@@ -152,14 +171,18 @@ export function bicCentralQuantoVouReceberParaExibicao(
   opts?: Pick<BicCentralProjecaoOpts, "apresentacaoConsolidada">
 ): BicExibicaoEnvelope<ReturnType<typeof getValorQuantoVouReceber>> {
   const consolidated = effectiveApresentacaoConsolidada(data, cooperadoId, cooperativaId, opts);
-  const envelope = getQuantoVouReceberCooperadoParaExibicao(data, cooperadoId, cooperativaId, {
-    apresentacaoConsolidada: consolidated,
-  });
-  if (!isBicCentralReadAuthorityEnabled()) return envelope;
-  const raw = bicCentralSincronizarRotuloMeses(getValorQuantoVouReceber(data, cooperadoId, cooperativaId));
+  if (!isBicCentralReadAuthorityEnabled()) {
+    return getQuantoVouReceberCooperadoParaExibicao(data, cooperadoId, cooperativaId, {
+      apresentacaoConsolidada: consolidated,
+    });
+  }
+  const raw = bicCentralSincronizarRotuloMeses(getValorQuantoVouReceberMotorLegado(data, cooperadoId, cooperativaId));
   const normalized = bicCentralNormalizarValorM6(raw);
   const value = cooperadoQuantoVouReceberParaApresentacao(normalized, consolidated);
-  return { ...envelope, value };
+  return {
+    value,
+    observability: { source: "bic", fallback: false, bicProjectionAuthorized: true },
+  };
 }
 
 function bicCentralNormalizarValorM6(
@@ -382,7 +405,7 @@ export function bicCentralGetConsolidadoFinanceiroCooperado(
   ajustesPorMes?: Record<string, AjustesResumoPagamento>
 ): ConsolidadoFinanceiroCooperado {
   if (!isBicCentralReadAuthorityEnabled()) {
-    return getConsolidadoFinanceiroCooperado(data, cooperadoId, cooperativaId, ajustesPorMes);
+    return getConsolidadoFinanceiroCooperadoMotorLegado(data, cooperadoId, cooperativaId, ajustesPorMes);
   }
 
   const m6 = bicCentralValorAReceberAgregado(data, cooperadoId, cooperativaId);

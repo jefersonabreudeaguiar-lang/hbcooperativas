@@ -4,6 +4,7 @@ import Link from "next/link";
 import { Wallet } from "lucide-react";
 import { formatCurrency } from "@/utils/format";
 import type { InicioCardMotorSnapshot } from "@/lib/cooperadoInicioCardPolicy";
+import { isCooperadoBicCentralUiEnabled } from "@/lib/bic/cooperadoBicCentralUi";
 
 type Props = {
   snapshot: InicioCardMotorSnapshot;
@@ -13,6 +14,7 @@ type Props = {
 };
 
 function temPendencia(s: InicioCardMotorSnapshot): boolean {
+  if (isCooperadoBicCentralUiEnabled()) return s.valor > 0;
   return s.valor > 0 || s.aguardandoAssinatura || s.valorRecibo > 0;
 }
 
