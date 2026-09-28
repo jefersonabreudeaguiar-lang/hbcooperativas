@@ -12,6 +12,11 @@ import { bicCentralResolveInicioParaExibicao, bicCentralSincronizarRotuloMeses, 
 import { isBicCentralReadAuthorityEnabled } from "@/lib/bic/bicCentralReadAuthority";
 import { formatMesReferencia, getCurrentMesReferencia } from "@/utils/format";
 
+function persistidoDisplayCompativelBic(display: InicioCardMotorSnapshot): boolean {
+  if (!isBicCentralReadAuthorityEnabled()) return true;
+  return !display.aguardandoAssinatura && display.valorRecibo <= 0;
+}
+
 export type InicioCardMotorSnapshot = {
   mesLabel: string;
   valor: number;
@@ -231,7 +236,7 @@ export function resolverCardInicioEndurecido(input: ResolverCardInicioInput): In
   }
 
   if (!data) {
-    if (persistido) {
+    if (persistido && persistidoDisplayCompativelBic(persistido.display)) {
       const latch: InicioCardLatchState = {
         motorRevision: persistido.motorRevision,
         display: persistido.display,
@@ -262,7 +267,8 @@ export function resolverCardInicioEndurecido(input: ResolverCardInicioInput): In
     !prevLatch &&
     persistido &&
     persistido.motorRevision === revision &&
-    cooperadoMotorTemObrigacaoReceber(persistido.display)
+    cooperadoMotorTemObrigacaoReceber(persistido.display) &&
+    persistidoDisplayCompativelBic(persistido.display)
   ) {
     prevLatch = {
       motorRevision: revision,
@@ -288,6 +294,7 @@ export function resolverCardInicioEndurecido(input: ResolverCardInicioInput): In
     persistido &&
     persistido.motorRevision === revision &&
     cooperadoMotorTemObrigacaoReceber(persistido.display) &&
+    persistidoDisplayCompativelBic(persistido.display) &&
     !cooperadoMotorTemObrigacaoReceber(motor) &&
     input.carregandoFinanceiro
   ) {
