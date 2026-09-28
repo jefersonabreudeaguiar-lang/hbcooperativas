@@ -113,21 +113,9 @@ export function bicCentralInicioParaExibicao(
     apresentacaoConsolidada: consolidated,
   });
   if (!isBicCentralReadAuthorityEnabled()) return envelope;
-  const raw = bicCentralSincronizarRotuloMeses(getValorQuantoVouReceber(data, cooperadoId, cooperativaId));
-  if (raw.aguardandoAssinatura) {
-    return {
-      ...envelope,
-      value: {
-        exibir: true,
-        mes: raw.mes,
-        meses: raw.meses,
-        mesLabel: raw.mesLabel,
-        valor: raw.valor,
-        valorRecibo: raw.valorRecibo,
-        aguardandoAssinatura: true,
-      },
-    };
-  }
+  const raw = bicCentralNormalizarValorM6(
+    bicCentralSincronizarRotuloMeses(getValorQuantoVouReceber(data, cooperadoId, cooperativaId))
+  );
   if (raw.valor > 0) {
     return {
       ...envelope,
@@ -158,21 +146,18 @@ export function bicCentralQuantoVouReceberParaExibicao(
   if (!isBicCentralReadAuthorityEnabled()) return envelope;
   const raw = bicCentralSincronizarRotuloMeses(getValorQuantoVouReceber(data, cooperadoId, cooperativaId));
   const normalized = bicCentralNormalizarValorM6(raw);
-  const value =
-    normalized.valor > 0
-      ? cooperadoQuantoVouReceberParaApresentacao(normalized, consolidated)
-      : cooperadoQuantoVouReceberParaApresentacao(envelope.value, consolidated);
-  return { ...envelope, value: bicCentralNormalizarValorM6(value) };
+  const value = cooperadoQuantoVouReceberParaApresentacao(normalized, consolidated);
+  return { ...envelope, value };
 }
 
 function bicCentralNormalizarValorM6(
   raw: ReturnType<typeof getValorQuantoVouReceber>
 ): ReturnType<typeof getValorQuantoVouReceber> {
   if (!isBicCentralReadAuthorityEnabled()) return raw;
-  const valor = raw.valor > 0 ? raw.valor : raw.valorRecibo > 0 ? raw.valorRecibo : 0;
+  /** Só valor líquido pendente na ficha — nunca valorRecibo (PIX já registrado / recibo). */
   return {
     ...raw,
-    valor,
+    valor: raw.valor > 0 ? raw.valor : 0,
     valorRecibo: 0,
     aguardandoAssinatura: false,
   };
@@ -204,7 +189,7 @@ export function bicCentralResumoQuantoVouReceberCooperado(
     };
   }
 
-  const valorDestaque = m6.valor > 0 ? m6.valor : m6.valorRecibo > 0 ? m6.valorRecibo : 0;
+  const valorDestaque = m6.valor > 0 ? m6.valor : 0;
   if (valorDestaque > 0) {
     return {
       estado: "a_receber",
@@ -212,7 +197,7 @@ export function bicCentralResumoQuantoVouReceberCooperado(
       valorDestaque,
       valorRecibo: 0,
       aguardandoAssinatura: false,
-      valorAberto: m6.valor > 0 ? m6.valor : valorDestaque,
+      valorAberto: m6.valor,
       tituloValor: "Total a receber",
       subtitulo: "Valor líquido das entregas conferidas (antes do pagamento da cooperativa).",
       acaoRotulo: null,
@@ -316,39 +301,9 @@ export function bicCentralResolveInicioParaExibicao(
 ): ReturnType<typeof getInicioCooperadoParaExibicao>["value"] {
   const consolidated = effectiveApresentacaoConsolidada(data, cooperadoId, cooperativaId, opts);
   const optsEff = { ...opts, apresentacaoConsolidada: consolidated };
-  const m6 = bicCentralSincronizarRotuloMeses(
-    bicCentralValorAReceberAgregado(data, cooperadoId, cooperativaId, optsEff)
-  );
+  const m6 = bicCentralValorAReceberAgregado(data, cooperadoId, cooperativaId, optsEff);
 
   if (isBicCentralReadAuthorityEnabled()) {
-    if (m6.aguardandoAssinatura && m6.valor > 0) {
-      return cooperadoInicioParaCardsDefinitivos(
-        {
-          exibir: true,
-          mes: m6.mes,
-          meses: m6.meses,
-          mesLabel: m6.mesLabel,
-          valor: m6.valor,
-          valorRecibo: 0,
-          aguardandoAssinatura: false,
-        },
-        consolidated
-      );
-    }
-    if (m6.aguardandoAssinatura) {
-      return cooperadoInicioParaCardsDefinitivos(
-        {
-          exibir: true,
-          mes: m6.mes,
-          meses: m6.meses,
-          mesLabel: m6.mesLabel,
-          valor: m6.valorRecibo > 0 ? m6.valorRecibo : m6.valor,
-          valorRecibo: 0,
-          aguardandoAssinatura: false,
-        },
-        consolidated
-      );
-    }
     if (m6.valor > 0) {
       return cooperadoInicioParaCardsDefinitivos(
         {
@@ -363,11 +318,21 @@ export function bicCentralResolveInicioParaExibicao(
         consolidated
       );
     }
+    return cooperadoInicioParaCardsDefinitivos(
+      {
+        exibir: false,
+        mes: m6.mes,
+        meses: m6.meses,
+        mesLabel: m6.mesLabel,
+        valor: 0,
+        valorRecibo: 0,
+        aguardandoAssinatura: false,
+      },
+      consolidated
+    );
   }
 
-  const inicio = isBicCentralReadAuthorityEnabled()
-    ? bicCentralInicioParaExibicao(data, cooperadoId, cooperativaId, optsEff).value
-    : getInicioCooperadoParaExibicao(data, cooperadoId, cooperativaId, optsEff).value;
+  const inicio = getInicioCooperadoParaExibicao(data, cooperadoId, cooperativaId, optsEff).value;
 
   return cooperadoInicioParaCardsDefinitivos(
     { ...inicio, mes: m6.mes, meses: m6.meses, mesLabel: m6.mesLabel },

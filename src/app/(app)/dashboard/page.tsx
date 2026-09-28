@@ -296,13 +296,13 @@ function CooperadoDashboard() {
 
       {cooperado && <AssinaturaStatusAviso cooperado={cooperado} />}
 
-      {conferindoPagamentoNuvem && (
+      {conferindoPagamentoNuvem && exibirModoReciboAssinatura && (
         <AlertBanner variant="info" title="Conferindo pagamento na nuvem">
           Aguarde alguns segundos com internet — evitamos pedir assinatura de recibo já confirmado.
         </AlertBanner>
       )}
 
-      {exibirAguardandoAssinatura && valorReceber.aguardandoAssinatura && (
+      {exibirModoReciboAssinatura && valorReceber.aguardandoAssinatura && (
         <Link
           href="/ficha-corrida?assinar=1"
           className="flex items-center gap-4 rounded-2xl border-2 border-emerald-300 bg-gradient-to-r from-emerald-50 to-green-50 px-5 py-4 hover:border-emerald-400 transition-colors shadow-sm"

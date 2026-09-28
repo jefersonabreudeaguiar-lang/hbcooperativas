@@ -4,7 +4,7 @@
 import type { InicioCardMotorSnapshot } from "@/lib/cooperadoInicioCardPolicy";
 import { cooperadoMotorTemObrigacaoReceber } from "@/lib/cooperadoInicioCardPolicy";
 
-export const INICIO_CARD_STORAGE_VERSION = 5;
+export const INICIO_CARD_STORAGE_VERSION = 6;
 
 export type InicioCardPersistido = {
   v: number;

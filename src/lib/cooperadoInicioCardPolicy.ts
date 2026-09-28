@@ -39,6 +39,7 @@ export type InicioCardPoliticaResult = {
 };
 
 export function cooperadoMotorTemObrigacaoReceber(motor: InicioCardMotorSnapshot): boolean {
+  if (isBicCentralReadAuthorityEnabled()) return motor.valor > 0;
   return motor.valor > 0 || motor.aguardandoAssinatura || motor.valorRecibo > 0;
 }
 
@@ -84,12 +85,12 @@ export function resolverInicioCardMotorFromAppData(
       apresentacaoConsolidada,
     });
     const mesFallback = inicio.mes || getCurrentMesReferencia();
-    return {
+    return sanitizeMotorSnapshotBicUi({
       mesLabel: inicio.mesLabel?.trim() || formatMesReferencia(mesFallback),
       valor: inicio.valor,
       valorRecibo: inicio.valorRecibo,
       aguardandoAssinatura: inicio.aguardandoAssinatura,
-    };
+    });
   }
 
   const raw = bicCentralSincronizarRotuloMeses(
@@ -121,8 +122,17 @@ export function resolverInicioCardMotorFromAppData(
   };
 }
 
+function sanitizeMotorSnapshotBicUi(motor: InicioCardMotorSnapshot): InicioCardMotorSnapshot {
+  if (!isBicCentralReadAuthorityEnabled()) return motor;
+  return {
+    ...motor,
+    valor: motor.valor > 0 ? motor.valor : 0,
+    valorRecibo: 0,
+    aguardandoAssinatura: false,
+  };
+}
+
 /**
- * Aplica latch: durante sync, se o motor ler zero sem mudança operacional, mantém último valor.
  * Nova revisão operacional → aceita motor (lançamento / pagamento / nota).
  */
 export function aplicarPoliticaCardInicioEndurecida(
@@ -195,6 +205,10 @@ export function aplicarSubstituicaoMonotonaDisplay(
   motor: InicioCardMotorSnapshot,
   revisionChanged: boolean
 ): InicioCardMotorSnapshot {
+  if (isBicCentralReadAuthorityEnabled()) {
+    if (!revisionChanged) return anterior;
+    return sanitizeMotorSnapshotBicUi(motor);
+  }
   if (!revisionChanged) return anterior;
   if (!cooperadoMotorTemObrigacaoReceber(motor)) return motor;
   if (!cooperadoMotorTemObrigacaoReceber(anterior)) return motor;
@@ -312,5 +326,8 @@ export function resolverCardInicioEndurecido(input: ResolverCardInicioInput): In
 
   const gravarPersistencia = Boolean(cooperativaId);
 
-  return { ...applied, gravarPersistencia };
+  const display = sanitizeMotorSnapshotBicUi(applied.display);
+  const latch = { ...applied.latch, display };
+
+  return { ...applied, display, latch, gravarPersistencia };
 }
