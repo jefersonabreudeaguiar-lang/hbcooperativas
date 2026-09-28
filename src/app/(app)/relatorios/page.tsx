@@ -30,8 +30,11 @@ import {
   getRelatorioSobrasPerdas,
   getRelatorioAtingimentoCronograma,
   calcularFechamentoMensal,
-} from "@/services/dashboardService";
-import { calcularFechamentoMensalLive, flattenLinhasPagarCooperadoEmAberto } from "@/services/relatorioService";
+} from "@/services/bicLeituraCentralGestao";
+import {
+  calcularFechamentoMensalLive,
+  flattenLinhasPagarCooperadoEmAberto,
+} from "@/services/bicLeituraCentralGestao";
 import {
   baixarDocumento,
   gerarRelatorioEntregasPorItensPeriodoHtml,

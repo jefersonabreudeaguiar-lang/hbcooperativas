@@ -163,34 +163,42 @@ export function cooperadoExibirValorReceberInicio(
     cooperadoId,
     cooperativaId
   );
+  const mesesCanon =
+    meses.length > 0 ? meses : valor > 0 && mes ? [mes] : meses;
+  const mesLabelCanon =
+    mesesCanon.length > 0
+      ? mesesCanon.length === meses.length
+        ? mesLabel
+        : formatMesReferencia(mes)
+      : mesLabel;
   if (aguardandoAssinatura) {
     return {
       exibir: true,
       mes,
-      meses,
-      mesLabel,
+      meses: mesesCanon,
+      mesLabel: mesLabelCanon,
       valor: 0,
       valorRecibo,
       aguardandoAssinatura: true,
     };
   }
-  if (meses.length === 1 && getPagamentoConfirmadoMes(data, cooperadoId, mes) && valor <= 0) {
+  if (mesesCanon.length === 1 && getPagamentoConfirmadoMes(data, cooperadoId, mes) && valor <= 0) {
     return {
       exibir: false,
       mes,
-      meses,
-      mesLabel,
+      meses: mesesCanon,
+      mesLabel: mesLabelCanon,
       valor: 0,
       valorRecibo: 0,
       aguardandoAssinatura: false,
     };
   }
-  if (valor <= 0 || meses.length === 0) {
+  if (valor <= 0 || mesesCanon.length === 0) {
     return {
       exibir: false,
       mes,
-      meses,
-      mesLabel,
+      meses: mesesCanon,
+      mesLabel: mesLabelCanon,
       valor: 0,
       valorRecibo: 0,
       aguardandoAssinatura: false,
@@ -199,8 +207,8 @@ export function cooperadoExibirValorReceberInicio(
   return {
     exibir: true,
     mes,
-    meses,
-    mesLabel,
+    meses: mesesCanon,
+    mesLabel: mesLabelCanon,
     valor,
     valorRecibo: 0,
     aguardandoAssinatura: false,

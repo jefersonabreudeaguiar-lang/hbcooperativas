@@ -8,11 +8,8 @@ import { useAppData } from "@/hooks/useAppData";
 import { usePermissions } from "@/hooks/usePermissions";
 import { getUserCooperativaId } from "@/utils/cooperativa";
 import {
-  getResumoPagamentoExibicao,
   resumoFromPagamento,
-  getValorExibicaoCooperado,
   getDescontosExtrasExibicaoCooperado,
-  buildValorExibicaoCooperadoOpts,
   registrarPagamentoCooperado,
   confirmarPagamentoCooperado,
   reenviarSolicitacaoAssinaturaRecibo,
@@ -30,6 +27,11 @@ import {
   getResumoPagamentoConsolidadoCooperado,
   getMesesReferenciaPagamento,
 } from "@/services/notaPedidoService";
+import {
+  bicCentralBuildValorExibicaoCooperadoOpts,
+  bicCentralGetResumoPagamentoExibicao,
+  bicCentralGetValorExibicaoCooperado,
+} from "@/services/bicLeituraCentralFicha";
 import { listarPagamentosAguardandoAssinatura, listarPagamentosReciboAguardandoVerificacao } from "@/services/filaDoDiaService";
 import { isOperacionalCloudAuthoritative } from "@/services/operationalReset";
 import { listCooperadosComFichaNoMes, getCooperadoNomeResolvido, resolverCooperadoParaPagamento, fichaPertenceCooperado, listCooperadosDaCooperativa } from "@/services/cooperadoCloudService";
@@ -47,14 +49,16 @@ import {
 } from "@/services/cooperativaSyncCloudService";
 import { pushCooperadoToCloud } from "@/services/cooperadoCloudService";
 import {
+  bicCentralListarMesesPendentesQuantoVouReceber,
+  bicCentralMesPrincipalQuantoVouReceber,
+  bicCentralQuantoVouReceberParaExibicao,
+  bicCentralResolvePainelParaExibicao,
+} from "@/services/bicLeituraCentralCooperado";
+import {
   cooperadoMesQuitado,
   cooperadoTemValorPendente,
   cooperadoPendentePagamentoResponsavel,
-  getMesPrincipalQuantoVouReceber,
-  getValorQuantoVouReceber,
-  getResumoQuantoVouReceberCooperado,
   listarMesesPendentesPagamentoResponsavel,
-  listarMesesPendentesQuantoVouReceber,
   getConsolidadoFinanceiroCooperado,
   getPagamentoConfirmadoMes,
   listarMesesPagosCooperado,
@@ -93,6 +97,8 @@ import { baixarRecibo, resumoReciboFromPagamento, nomeArquivoRecibo } from "@/ut
 import { updateData, addAuditEntry, getData } from "@/services/dataStore";
 import { requestAppSync } from "@/services/syncRequest";
 import { useCooperadoExibirAguardandoAssinatura } from "@/hooks/useCooperadoExibirAguardandoAssinatura";
+import { useCooperadoApresentacaoFinanceiraConsolidada } from "@/hooks/useCooperadoApresentacaoFinanceiraConsolidada";
+import { cooperadoFluxoPainelProjecaoOpts } from "@/lib/cooperadoFluxoFinanceiroGlobal";
 import { formatCurrency, formatDate, formatMesReferencia, formatMesesReferenciaRotulo, getCurrentMesReferencia, cn } from "@/utils/format";
 import type { PagamentoCooperadoRegistro, FichaCorrida, NotaPedido } from "@/types";
 
@@ -215,6 +221,8 @@ export default function FichaCorridaPage() {
   const [coopCnpjResumo, setCoopCnpjResumo] = useState("");
 
   const coopId = user && data ? getUserCooperativaId(user, data) : undefined;
+  const { apresentacaoConsolidada, carregandoValoresFinanceiros } =
+    useCooperadoApresentacaoFinanceiraConsolidada();
 
   useEffect(() => {
     if (!data || !coopId || !user) {
@@ -232,17 +240,21 @@ export default function FichaCorridaPage() {
 
   const mesEmAberto = useMemo(() => {
     if (!data || !cooperadoId) return getCurrentMesReferencia();
-    return getMesPrincipalQuantoVouReceber(data, cooperadoId, coopId);
-  }, [data, cooperadoId, coopId, hbDescontosRevision]);
+    return bicCentralMesPrincipalQuantoVouReceber(data, cooperadoId, coopId, { apresentacaoConsolidada });
+  }, [data, cooperadoId, coopId, hbDescontosRevision, apresentacaoConsolidada]);
 
   const valorReceberConsolidado = useMemo(() => {
     if (!data || !cooperadoId) return null;
-    return getValorQuantoVouReceber(data, cooperadoId, coopId);
-  }, [data, cooperadoId, coopId, hbDescontosRevision]);
+    return bicCentralQuantoVouReceberParaExibicao(data, cooperadoId, coopId, {
+      apresentacaoConsolidada,
+    }).value;
+  }, [data, cooperadoId, coopId, apresentacaoConsolidada, hbDescontosRevision]);
 
   const mesesPendentesQuantoVouReceber = useMemo(() => {
     if (!data || !cooperadoId || !isCooperado) return [];
-    return listarMesesPendentesQuantoVouReceber(data, cooperadoId, coopId);
+    return bicCentralListarMesesPendentesQuantoVouReceber(data, cooperadoId, coopId, {
+      apresentacaoConsolidada,
+    });
   }, [cooperadoId, coopId, data, isCooperado, hbDescontosRevision]);
 
   const mesesPagosCooperado = useMemo(() => {
@@ -623,7 +635,7 @@ export default function FichaCorridaPage() {
 
   const exibicaoOpts = useMemo(() => {
     if (!data || !cooperadoSelecionadoId) return undefined;
-    return buildValorExibicaoCooperadoOpts(data, cooperadoSelecionadoId, mesAtivo, coopId);
+    return bicCentralBuildValorExibicaoCooperadoOpts(data, cooperadoSelecionadoId, mesAtivo, coopId);
   }, [data, cooperadoSelecionadoId, mesAtivo, coopId]);
 
   useSyncContaCoopValorReceberPilot(
@@ -644,7 +656,7 @@ export default function FichaCorridaPage() {
       if (financeiroAberto && (financeiroAberto.valorLiquido ?? 0) > 0) {
         return financeiroAberto.resumo;
       }
-      return getResumoPagamentoExibicao(
+      return bicCentralGetResumoPagamentoExibicao(
         data,
         cooperadoSelecionadoId,
         mesAtivo,
@@ -683,7 +695,7 @@ export default function FichaCorridaPage() {
     if (isCooperado && !visualizandoHistorico && financeiroAberto) {
       return financeiroAberto.resumo;
     }
-    return getResumoPagamentoExibicao(
+    return bicCentralGetResumoPagamentoExibicao(
       data,
       cooperadoSelecionadoId,
       mesAtivo,
@@ -716,12 +728,14 @@ export default function FichaCorridaPage() {
   const totalPendente = isCooperado
     ? visualizandoHistorico
       ? resumoExibicao && exibicaoOpts
-        ? getValorExibicaoCooperado(resumoExibicao, exibicaoOpts)
+        ? bicCentralGetValorExibicaoCooperado(resumoExibicao, exibicaoOpts)
         : 0
-      : (financeiroAberto?.valorLiquido ?? valorReceberConsolidado?.valor ?? 0)
+      : !apresentacaoConsolidada
+        ? 0
+        : (financeiroAberto?.valorLiquido ?? valorReceberConsolidado?.valor ?? 0)
     : visualizandoHistorico
       ? resumoExibicao && exibicaoOpts
-        ? getValorExibicaoCooperado(resumoExibicao, exibicaoOpts)
+        ? bicCentralGetValorExibicaoCooperado(resumoExibicao, exibicaoOpts)
         : 0
       : (financeiroAberto?.valorLiquido ?? 0);
 
@@ -750,9 +764,14 @@ export default function FichaCorridaPage() {
 
   const resumoQuantoVouReceber = useMemo(() => {
     if (!data || !cooperadoId || !isCooperado) return null;
-    return getResumoQuantoVouReceberCooperado(data, cooperadoId, coopId, {
-      carregandoNuvem: conferindoPagamentoNuvem,
-      financeiroSincronizando: syncCooperadoFinanceiro || !cooperadoPagamentosHydrated,
+    return bicCentralResolvePainelParaExibicao(data, cooperadoId, coopId, {
+      ...cooperadoFluxoPainelProjecaoOpts({
+        role: user?.role,
+        syncing: syncCooperadoFinanceiro,
+        cooperadoPagamentosHydrated,
+        conferindoPagamentoNuvem: conferindoPagamentoNuvem,
+      }),
+      apresentacaoConsolidada,
     });
   }, [
     data,
@@ -762,6 +781,7 @@ export default function FichaCorridaPage() {
     conferindoPagamentoNuvem,
     syncCooperadoFinanceiro,
     cooperadoPagamentosHydrated,
+    user?.role,
     hbDescontosRevision,
   ]);
 
@@ -1192,7 +1212,8 @@ export default function FichaCorridaPage() {
     !isCooperado ||
     (!!data &&
       !!cooperadoId &&
-      (!!pagamentoAguardandoExibicao ||
+      (carregandoValoresFinanceiros ||
+        !!pagamentoAguardandoExibicao ||
         conferindoPagamentoNuvem ||
         !!pagamentoConfirmado ||
         cooperadoTemValorPendente(data, cooperadoId, coopId)));
@@ -1621,7 +1642,7 @@ export default function FichaCorridaPage() {
                 totalLiquido={
                   visualizandoHistorico
                     ? exibicaoOpts
-                      ? getValorExibicaoCooperado(resumoExibicao, exibicaoOpts)
+                      ? bicCentralGetValorExibicaoCooperado(resumoExibicao, exibicaoOpts)
                       : resumoExibicao.valorEntregas
                     : mesesPendentesQuantoVouReceber.length > 1
                       ? resumoExibicao.valorLiquido

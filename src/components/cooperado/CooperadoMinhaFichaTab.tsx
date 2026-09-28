@@ -20,11 +20,13 @@ import { NotaStatusBadge } from "@/components/ui/NotaStatusBadge";
 import { ResumoDescontosMes } from "@/components/ficha/ResumoDescontosMes";
 import {
   agregarItensFichaMes,
-  getResumoPagamentoExibicao,
-  getValorExibicaoCooperado,
   getDescontosExtrasExibicaoCooperado,
-  buildValorExibicaoCooperadoOpts,
 } from "@/services/notaPedidoService";
+import {
+  bicCentralBuildValorExibicaoCooperadoOpts,
+  bicCentralGetResumoPagamentoExibicao,
+  bicCentralGetValorExibicaoCooperado,
+} from "@/services/bicLeituraCentralFicha";
 import type { ResumoMesEntregasCooperado } from "@/services/cooperadoEntregasService";
 import { listarResumosFotosCooperado } from "@/services/cooperadoEntregasService";
 import {
@@ -36,7 +38,7 @@ import {
 } from "@/services/entregaCooperadoService";
 import { ValoresAvulsosReceberPanel } from "@/components/ficha/ValoresAvulsosReceberPanel";
 import { CooperadoFichaFotosPanel } from "@/components/cooperado/CooperadoFichaFotosPanel";
-import { totalValoresAvulsosPendentes } from "@/services/valoresAvulsosReceberService";
+import { bicCentralTotalValoresAvulsosPendentes } from "@/services/bicLeituraCentralDominios";
 import { formatCurrency, formatDate, formatMesReferencia } from "@/utils/format";
 import { cn } from "@/utils/format";
 import { baixarRecibo, nomeArquivoRecibo } from "@/utils/recibo";
@@ -70,7 +72,7 @@ function MesFichaAccordion({
   const hbDescontosRevision = useContaCoopDescontosRevision();
   const resumoPagamento = useMemo(() => {
     if (!data) return null;
-    return getResumoPagamentoExibicao(data, cooperadoId, resumo.mesReferencia, cooperativaId);
+    return bicCentralGetResumoPagamentoExibicao(data, cooperadoId, resumo.mesReferencia, cooperativaId);
   }, [data, cooperadoId, resumo.mesReferencia, cooperativaId, hbDescontosRevision]);
 
   const itensMes = useMemo(() => {
@@ -88,12 +90,12 @@ function MesFichaAccordion({
 
   const avulsosPendentes = useMemo(() => {
     if (!data) return 0;
-    return totalValoresAvulsosPendentes(data, cooperadoId, resumo.mesReferencia, cooperativaId);
+    return bicCentralTotalValoresAvulsosPendentes(data, cooperadoId, resumo.mesReferencia, cooperativaId);
   }, [data, cooperadoId, resumo.mesReferencia, cooperativaId]);
 
   const exibicaoOpts = useMemo(() => {
     if (!data) return undefined;
-    return buildValorExibicaoCooperadoOpts(data, cooperadoId, resumo.mesReferencia, cooperativaId);
+    return bicCentralBuildValorExibicaoCooperadoOpts(data, cooperadoId, resumo.mesReferencia, cooperativaId);
   }, [data, cooperadoId, resumo.mesReferencia, cooperativaId]);
 
   const descontosExtrasExibicao = useMemo(
@@ -176,7 +178,7 @@ function MesFichaAccordion({
                 totalLiquido={
                   quitado
                     ? resumo.valorRecebido
-                    : getValorExibicaoCooperado(resumoPagamento, exibicaoOpts)
+                    : bicCentralGetValorExibicaoCooperado(resumoPagamento, exibicaoOpts!)
                 }
                 rotuloTotal={quitado ? "Total recebido" : "Total líquido"}
               />

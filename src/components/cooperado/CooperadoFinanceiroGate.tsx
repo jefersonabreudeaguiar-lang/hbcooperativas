@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
 import { useAuth } from "@/modules/auth/AuthProvider";
 import { useAppDataSelector } from "@/hooks/useAppData";
 import { useSyncStatus } from "@/components/sync/CooperativaSyncProvider";
@@ -14,6 +14,10 @@ import { requestAppSyncImmediate } from "@/services/syncRequest";
 import { resolverCooperadoIdCanonico } from "@/services/cooperadoCloudService";
 import { getUserCooperativaId } from "@/utils/cooperativa";
 import { getData, saveDataSafe } from "@/services/dataStore";
+import {
+  inicioCardCacheProntoParaAbertura,
+  lerInicioCardPersistidoFlex,
+} from "@/lib/cooperadoInicioCardPersistencia";
 import {
   getCooperadoRunSyncSessionLease,
   saveAppDataIfSyncLeaseCurrent,
@@ -33,6 +37,15 @@ export function CooperadoFinanceiroGate({ children }: { children: React.ReactNod
   const { user, logout } = useAuth();
   const { syncing, lastSyncError, lastSyncedAt } = useSyncStatus();
   const [syncWaitExceeded, setSyncWaitExceeded] = useState(false);
+
+  const cacheInicioCard = useMemo(() => {
+    if (!user?.cooperadoId || user.role !== "cooperado") return null;
+    const data = getData();
+    const coopId = getUserCooperativaId(user, data) ?? user.cooperativaId;
+    if (!coopId) return null;
+    const cooperadoId = resolverCooperadoIdCanonico(data, user.cooperadoId, coopId);
+    return lerInicioCardPersistidoFlex(cooperadoId, coopId);
+  }, [user?.id, user?.cooperadoId, user?.cooperativaId, user?.role]);
 
   const bloqueiaEntrada = useAppDataSelector((data) => {
     if (!data || !user?.cooperadoId || user.role !== "cooperado") return false;
@@ -85,7 +98,9 @@ export function CooperadoFinanceiroGate({ children }: { children: React.ReactNod
   const carregandoFinanceiro =
     bloqueiaEntrada && (syncing || (lastSyncedAt == null && !syncWaitExceeded));
 
-  if (carregandoFinanceiro) {
+  const abrirComCacheInicio = inicioCardCacheProntoParaAbertura(cacheInicioCard);
+
+  if (carregandoFinanceiro && !abrirComCacheInicio) {
     return (
       <div className="max-w-lg mx-auto py-12 space-y-4">
         <PageSkeleton />

@@ -26,6 +26,7 @@ import { MercadoParceiroPinResetBar } from "@/components/hb-credit/MercadoParcei
 import { AppUpdateBanner } from "@/components/pwa/AppUpdateBanner";
 import { getUserCooperativaId } from "@/utils/cooperativa";
 import { useHbCreditDescontosWarmup } from "@/hooks/useHbCreditDescontosWarmup";
+import { shouldPrefetchHbCreditNav } from "@/lib/hb-credit/hbCreditNavPrefetch";
 import type { Resource } from "@/types";
 
 const ICONS: Record<string, React.ReactNode> = {
@@ -155,6 +156,7 @@ export function Sidebar({ mobile = false, onClose }: { mobile?: boolean; onClose
             <Link
               key={item.href}
               href={item.href}
+              prefetch={shouldPrefetchHbCreditNav(item.href)}
               onClick={onClose}
               className={cn(
                 "flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors",
@@ -244,6 +246,7 @@ export function MobileNav() {
             <Link
               key={item.href}
               href={item.href}
+              prefetch={shouldPrefetchHbCreditNav(item.href)}
               className={cn(
                 "flex-1 flex flex-col items-center justify-center min-w-0 px-0.5 transition-colors",
                 isCooperadoNav ? "min-h-[72px] py-2 gap-1" : "py-2 text-[10px] sm:text-xs gap-0.5",
@@ -284,6 +287,7 @@ export function MobileNav() {
 }
 
 export function AppShell({ children }: { children: React.ReactNode }) {
+  const pathname = usePathname();
   const { user } = useAuth();
   const data = useAppData();
   const { enabled: creditEnabled } = useHbCreditEnabled();
@@ -292,9 +296,12 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     user &&
     coopId &&
     (user.role === "responsavel" || user.role === "tesoureiro" || user.role === "admin");
+  /** Sync pesado só nas telas HB / relatórios — não compete com Início e demais abas. */
+  const staffCoopSyncRoute =
+    pathname.startsWith("/conta-coop") || pathname.startsWith("/relatorios");
 
   useSyncContaCoopValorReceberCooperativa(
-    staffHbSync && creditEnabled
+    staffHbSync && creditEnabled && staffCoopSyncRoute
       ? { cooperativaId: coopId, user, enabled: true }
       : undefined
   );

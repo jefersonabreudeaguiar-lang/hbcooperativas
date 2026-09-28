@@ -6,14 +6,14 @@ import {
   listCooperadoIdsMesmoTitular,
   resolverCooperadoIdCanonico,
 } from "@/services/cooperadoCloudService";
-import {
-  getMesPrincipalQuantoVouReceber,
-  listarMesesPendentesQuantoVouReceber,
-  listarMesesPendentesPagamentoResponsavel,
-} from "@/services/cooperadoEntregasService";
 import { pushOperacionalToCloud } from "@/services/cooperativaSyncCloudService";
 import { beginSaveBatch, endSaveBatch, getData, notifyAppDataSubscribers, updateData } from "@/services/dataStore";
-import { persistDescontosContaCoopNoArquivo, getDescontosContaCoopMesCached, getResumoValorAPagarRelatorio, getMesesReferenciaPagamento, getPagamentoConfirmadoCooperadoMes } from "@/services/notaPedidoService";
+import { persistDescontosContaCoopNoArquivo, getDescontosContaCoopMesCached } from "@/services/notaPedidoService";
+import {
+  hbCreditMesPrincipal,
+  hbCreditMesesReferenciaUnificados,
+  hbCreditValorLiquidoMes,
+} from "@/lib/hb-credit/hbCreditLeituraBic";
 import { setContaCoopDescontosMemoria } from "@/lib/hb-credit/contaCoopDescontosMemory";
 import { bumpContaCoopDescontosRevision } from "@/lib/hb-credit/contaCoopDescontosNotify";
 import {
@@ -113,10 +113,7 @@ function mesesReferenciaParaSyncCooperado(
   cooperativaId: string,
   mesFallback: string
 ): string[] {
-  const meses = listarMesesPendentesQuantoVouReceber(data, cooperadoId, cooperativaId);
-  if (meses.length) return [...meses].sort();
-  if (mesFallback) return [mesFallback];
-  return [getMesPrincipalQuantoVouReceber(data, cooperadoId, cooperativaId)];
+  return hbCreditMesesReferenciaUnificados(data, cooperadoId, cooperativaId, mesFallback);
 }
 
 async function syncContaCoopDescontosMesesLocal(
@@ -157,7 +154,7 @@ function valorReceberHbFingerprint(
 ): string {
   return [...new Set(meses)]
     .sort()
-    .map((mes) => getResumoValorAPagarRelatorio(data, cooperadoId, mes, cooperativaId).valorLiquido.toFixed(2))
+    .map((mes) => hbCreditValorLiquidoMes(data, cooperadoId, mes, cooperativaId).toFixed(2))
     .join("|");
 }
 
@@ -214,22 +211,8 @@ export async function refreshContaCoopDescontosCooperativaPendentes(opts: {
 
   const jobs: Array<{ cooperadoId: string; mesReferencia: string }> = [];
   for (const c of cooperados) {
-    const meses = new Set([
-      ...listarMesesPendentesPagamentoResponsavel(data, c.id, opts.cooperativaId),
-      ...listarMesesPendentesQuantoVouReceber(data, c.id, opts.cooperativaId),
-    ]);
-    for (const p of data.pagamentosCooperado) {
-      if (p.status !== "aguardando_confirmacao") continue;
-      const canonico = resolverCooperadoIdCanonico(data, p.cooperadoId, opts.cooperativaId);
-      const alvo = resolverCooperadoIdCanonico(data, c.id, opts.cooperativaId);
-      if (canonico !== alvo && p.cooperadoId !== c.id) continue;
-      for (const mes of getMesesReferenciaPagamento(p)) {
-        meses.add(mes);
-      }
-    }
-    for (const mes of meses) {
-      if (getPagamentoConfirmadoCooperadoMes(data, c.id, mes)) continue;
-      jobs.push({ cooperadoId: c.id, mesReferencia: mes });
+    for (const mesReferencia of hbCreditMesesReferenciaUnificados(data, c.id, opts.cooperativaId)) {
+      jobs.push({ cooperadoId: c.id, mesReferencia });
     }
   }
   if (!jobs.length) return false;
@@ -341,7 +324,7 @@ export async function refreshContaCoopDescontosAfterOperacionalSync(opts: {
     const data = getData();
     if (opts.user.role === "cooperado" && opts.user.cooperadoId) {
       const canonico = resolverCooperadoIdCanonico(data, opts.user.cooperadoId, opts.cooperativaId);
-      const mesReferencia = getMesPrincipalQuantoVouReceber(data, canonico, opts.cooperativaId);
+      const mesReferencia = hbCreditMesPrincipal(data, canonico, opts.cooperativaId);
       await refreshContaCoopValorReceberPilot({
         cnpj: opts.cnpj,
         cooperadoId: canonico,

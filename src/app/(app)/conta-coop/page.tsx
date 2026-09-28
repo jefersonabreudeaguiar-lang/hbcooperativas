@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import { useSearchParams } from "next/navigation";
 import { CreditFeatureGate } from "@/components/hb-credit/CreditFeatureGate";
 import { CloudSessionGate } from "@/components/hb-credit/CloudSessionGate";
@@ -19,7 +19,6 @@ import { usePermissions } from "@/hooks/usePermissions";
 import { getUserCooperativaId, normalizeCnpj } from "@/utils/cooperativa";
 import {
   fetchCreditDashboard,
-  fetchCreditLimites,
   fetchCreditParceiros,
   postCreditLimites,
   postCreditParceiroStatus,
@@ -30,13 +29,25 @@ import {
   fetchCooperadoPinResetRequests,
   resetMercadoFinancialPin,
   resetCooperadoFinancialPin,
-  syncCreditLimiteFromFicha,
 } from "@/services/creditApiService";
 import { formatCentsBRL } from "@/modules/hb-credit/engine/money";
 import { buildCreditosBaseMap } from "@/modules/hb-credit/engine/creditBaseFromFicha";
 import type { ContaCoopDashboard, ContaCoopLimiteCooperado, ContaCoopParceiro, ContaCoopPinResetRequest, ContaCoopCooperadoPinResetRequest, ContaCoopPixChangeRequest } from "@/modules/hb-credit/types";
 import { cn, formatMesReferencia } from "@/utils/format";
 import { PageSkeleton } from "@/components/ui/PageSkeleton";
+import {
+  gravarHbCreditDashboardPersistido,
+  lerHbCreditDashboardPersistido,
+} from "@/lib/hb-credit/hbCreditDashboardPersistencia";
+import { lerHbCreditLimitesPersistidos } from "@/lib/hb-credit/hbCreditLimitesPersistencia";
+import { refreshHbCreditLimitesStaff } from "@/lib/hb-credit/hbCreditLimitesRefresh";
+import { ensureHbCreditLabLiberacaoPadrao } from "@/lib/hb-credit/ensureHbCreditLabLiberacaoPadrao";
+import {
+  HB_CREDIT_LAB_LIBERACAO_PERCENT_DEFAULT,
+  isHbCreditLabLiberacaoAutoEnabled,
+} from "@/lib/hb-credit/hbCreditLabPolicy";
+import { useSyncContaCoopLimiteFromFicha } from "@/hooks/useSyncContaCoopLimiteFromFicha";
+import { getDataRevision, subscribe } from "@/services/dataStore";
 
 type PreviewColetivo = {
   ok?: boolean;
@@ -90,6 +101,8 @@ function ContaCoopContent() {
     return "painel";
   });
   const [loading, setLoading] = useState(true);
+  const [dashboardRefreshing, setDashboardRefreshing] = useState(false);
+  const [limitesRefreshing, setLimitesRefreshing] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
   const [dashboard, setDashboard] = useState<ContaCoopDashboard | null>(null);
@@ -98,10 +111,14 @@ function ContaCoopContent() {
   const [parceirosLoaded, setParceirosLoaded] = useState(false);
   const [parceirosLoading, setParceirosLoading] = useState(false);
   const [parceirosError, setParceirosError] = useState("");
-  const [tetoPercentual, setTetoPercentual] = useState("");
+  const [tetoPercentual, setTetoPercentual] = useState(() =>
+    isHbCreditLabLiberacaoAutoEnabled() ? String(HB_CREDIT_LAB_LIBERACAO_PERCENT_DEFAULT) : ""
+  );
   const [cooperadoId, setCooperadoId] = useState("");
   const [novoLimiteReais, setNovoLimiteReais] = useState("");
-  const [percentualColetivo, setPercentualColetivo] = useState("");
+  const [percentualColetivo, setPercentualColetivo] = useState(() =>
+    isHbCreditLabLiberacaoAutoEnabled() ? String(HB_CREDIT_LAB_LIBERACAO_PERCENT_DEFAULT) : ""
+  );
   const [previewColetivo, setPreviewColetivo] = useState<PreviewColetivo | null>(null);
   const [busy, setBusy] = useState(false);
   const [discountDrafts, setDiscountDrafts] = useState<Record<string, string>>({});
@@ -130,6 +147,8 @@ function ContaCoopContent() {
     [cooperadosAtivos]
   );
 
+  const dataRevision = useSyncExternalStore(subscribe, getDataRevision, () => 0);
+
   const creditosBaseColetivo = useMemo(() => {
     if (!data || !cooperadosAtivos.length) return {};
     return buildCreditosBaseMap(
@@ -137,7 +156,49 @@ function ContaCoopContent() {
       cooperadosAtivos.map((c) => c.id),
       user?.cooperativaId
     );
-  }, [data, cooperadosAtivos, user?.cooperativaId]);
+  }, [data, cooperadosAtivos, user?.cooperativaId, dataRevision]);
+
+  const cooperadoIdsAtivos = useMemo(
+    () => cooperadosAtivos.map((c) => c.id),
+    [cooperadosAtivos]
+  );
+
+  const limiteSyncOpts = useMemo(() => {
+    if (!user?.cooperativaId || !cooperadoIdsAtivos.length) return undefined;
+    return {
+      cooperadoId: cooperadoIdsAtivos[0],
+      cooperativaId: user.cooperativaId,
+      cooperadoIds: cooperadoIdsAtivos,
+      user,
+      enabled: true as const,
+    };
+  }, [user, cooperadoIdsAtivos]);
+
+  useSyncContaCoopLimiteFromFicha({
+    ...limiteSyncOpts,
+    enabled: false,
+  });
+
+  const syncLimitesComFicha = useCallback(
+    async (opts?: { background?: boolean }) => {
+      if (!cnpj || !user?.cooperativaId || !cooperadoIdsAtivos.length) return [];
+      if (!opts?.background) setLimitesRefreshing(true);
+      try {
+        const fresh = await refreshHbCreditLimitesStaff({
+          cnpj,
+          cooperativaId: user.cooperativaId,
+          cooperadoIds: cooperadoIdsAtivos,
+        });
+        setLimites(fresh);
+        return fresh;
+      } catch {
+        return [];
+      } finally {
+        setLimitesRefreshing(false);
+      }
+    },
+    [cnpj, cooperadoIdsAtivos, user?.cooperativaId]
+  );
 
   const loadParceiros = useCallback(async () => {
     if (!cnpj || cnpj.length !== 14) return;
@@ -157,27 +218,37 @@ function ContaCoopContent() {
     }
   }, [cnpj]);
 
-  const reload = useCallback(async () => {
+  const reload = useCallback(async (opts?: { background?: boolean }) => {
     if (!cnpj) return;
-    setLoading(true);
+    const background = opts?.background ?? false;
+    if (!background) setLoading(true);
+    else setDashboardRefreshing(true);
     setError("");
     try {
-      if (cooperadosAtivos.length) {
-        void syncCreditLimiteFromFicha({
-          cnpj,
-          cooperadoIds: cooperadosAtivos.map((c) => c.id),
-          creditosBaseCents: creditosBaseColetivo,
-        }).catch(() => {});
-      }
-
-      const dash = await fetchCreditDashboard(cnpj, creditosBaseColetivo);
+      const coopId = user?.cooperativaId ?? "";
+      const [dash] = await Promise.all([
+        fetchCreditDashboard(cnpj, creditosBaseColetivo),
+        cooperadoIdsAtivos.length && coopId
+          ? syncLimitesComFicha({ background: true })
+          : Promise.resolve([]),
+      ]);
       setDashboard(dash);
+      if (dash) gravarHbCreditDashboardPersistido(cnpj, dash);
       setLoading(false);
 
+      if (dash && cooperadoIdsAtivos.length && coopId) {
+        void ensureHbCreditLabLiberacaoPadrao({
+          cnpj,
+          cooperadoIds: cooperadoIdsAtivos,
+          creditosBaseCents: creditosBaseColetivo,
+          tetoGlobalPercent: dash.teto.tetoGlobalPercent,
+          limiteDistribuidoCents: dash.teto.limiteDistribuidoCents,
+        }).then((seeded) => {
+          if (seeded) void reload({ background: true });
+        });
+      }
+
       void loadParceiros();
-      void fetchCreditLimites(cnpj)
-        .then(setLimites)
-        .catch(() => {});
 
       void Promise.all([
         fetchPartnerPixChangeRequests(cnpj, "pendente").catch(() => []),
@@ -189,14 +260,40 @@ function ContaCoopContent() {
         setCooperadoPinResetRequests(coopPinReqs);
       });
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Erro ao carregar HB Créditos.");
+      if (!background) {
+        setError(e instanceof Error ? e.message : "Erro ao carregar HB Créditos.");
+      }
       setLoading(false);
+    } finally {
+      setDashboardRefreshing(false);
     }
-  }, [cnpj, creditosBaseColetivo, cooperadosAtivos, loadParceiros]);
+  }, [cnpj, creditosBaseColetivo, cooperadoIdsAtivos, loadParceiros, syncLimitesComFicha, user?.cooperativaId]);
 
   useEffect(() => {
-    reload();
-  }, [reload]);
+    if (!cnpj) return;
+    const snapDash = lerHbCreditDashboardPersistido(cnpj);
+    const snapLimites = lerHbCreditLimitesPersistidos(cnpj);
+    let background = false;
+    if (snapDash?.dashboard) {
+      setDashboard(snapDash.dashboard);
+      setLoading(false);
+      background = true;
+    }
+    if (snapLimites?.limites.length) {
+      setLimites(snapLimites.limites);
+    }
+    void reload({ background });
+  }, [cnpj, reload]);
+
+  useEffect(() => {
+    if (tab !== "limites" || !cnpj || !user?.cooperativaId || !cooperadoIdsAtivos.length) return;
+    void syncLimitesComFicha({ background: true });
+  }, [tab, cnpj, user?.cooperativaId, cooperadoIdsAtivos.length, dataRevision, syncLimitesComFicha]);
+
+  useEffect(() => {
+    const p = dashboard?.teto.tetoGlobalPercent;
+    if (p != null && p > 0) setTetoPercentual(String(p));
+  }, [dashboard?.teto.tetoGlobalPercent]);
 
   const salvarTeto = async () => {
     if (!cnpj) return;
@@ -493,6 +590,9 @@ function ContaCoopContent() {
 
       {tab === "painel" && dashboard && (
         <div className="space-y-4">
+          {dashboardRefreshing && (
+            <p className="text-xs text-gray-500">Atualizando painel com a nuvem…</p>
+          )}
           {(pinResetRequests.length > 0 || cooperadoPinResetRequests.length > 0) && (
             <AlertBanner variant="info" title="Solicitações de reset de PIN">
               <p className="text-sm">
@@ -663,6 +763,11 @@ function ContaCoopContent() {
 
       {tab === "limites" && (
         <div className="space-y-6">
+          {limitesRefreshing && (
+            <p className="text-xs text-gray-500">
+              Sincronizando crédito da ficha (BIC) com limites na nuvem…
+            </p>
+          )}
           <AlertBanner variant="info">
             Se o cooperado esquecer o PIN de pagamento, ele pode solicitar reset em Minha Conta Coop. Você confirma
             aqui em <strong>Resetar PIN de pagamento</strong>; depois ele cadastra um PIN novo.

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef } from "react";
+import type { AppData } from "@/types";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useAppDataSelector } from "@/hooks/useAppData";
@@ -16,27 +17,34 @@ import { OnboardingChecklist } from "@/components/cooperado/OnboardingChecklist"
 import { AssinaturaStatusAviso } from "@/components/cooperado/AssinaturaStatusAviso";
 import { CooperadoMensalidadesPagarPanel } from "@/components/cooperado/CooperadoMensalidadesPagarPanel";
 import { ValoresAvulsosDashboardCard } from "@/components/ficha/ValoresAvulsosReceberPanel";
-import { getAdminStats } from "@/services/dashboardService";
+import { getAdminStats } from "@/services/bicLeituraCentralGestao";
 import { getFilaDoDia } from "@/services/filaDoDiaService";
 import { FilaDoDiaPanel } from "@/components/dashboard/FilaDoDiaPanel";
 import { ContaCoopFilaCloudPanel } from "@/components/hb-credit/ContaCoopFilaCloudPanel";
 import { useHbCreditEnabled } from "@/hooks/useHbCreditEnabled";
 import {
-  cooperadoExibirValorReceberInicio,
   contarFotosEmAnaliseCooperado,
-  getMesPrincipalQuantoVouReceber,
-  getValorQuantoVouReceber,
   listarNotasPendentesCooperado,
 } from "@/services/cooperadoEntregasService";
+import {
+  bicCentralAguardandoAssinatura,
+  bicCentralMesPrincipalQuantoVouReceber,
+  bicCentralResolveInicioParaExibicao,
+} from "@/services/bicLeituraCentralCooperado";
 import { resolverCooperadoIdCanonico } from "@/services/cooperadoCloudService";
 import { cooperadoFinanceiroDesatualizado } from "@/services/fichaSyncGuard";
 import { requestAppSyncImmediate, requestVotacaoOperacionalSync } from "@/services/syncRequest";
 import { useSyncStatus } from "@/components/sync/CooperativaSyncProvider";
 import { useCooperadoExibirAguardandoAssinatura } from "@/hooks/useCooperadoExibirAguardandoAssinatura";
+import { useCooperadoApresentacaoFinanceiraConsolidada } from "@/hooks/useCooperadoApresentacaoFinanceiraConsolidada";
+import { useCooperadoInicioValorReceberCardState } from "@/hooks/useCooperadoInicioValorReceberCardState";
+import { useCooperadoInicioCardContext } from "@/hooks/useCooperadoInicioCardContext";
 import { getComunicadosInicioCooperado } from "@/services/comunicadoService";
-import { getResumoMensalidadesCooperado } from "@/services/mensalidadeService";
+import {
+  bicCentralGetResumoMensalidadesCooperado,
+  bicCentralTotalValoresAvulsosPendentes,
+} from "@/services/bicLeituraCentralDominios";
 import { prestacaoPrincipalCooperado, prestacaoExigeAtencaoCooperado } from "@/services/prestacaoContasService";
-import { totalValoresAvulsosPendentes } from "@/services/valoresAvulsosReceberService";
 import { AvisosInicioSection } from "@/components/comunicado/AvisosInicioSection";
 import { PrestacaoContasDashboardBanner } from "@/components/prestacao/PrestacaoContasDashboardBanner";
 import { InicioResolvidosPanel } from "@/components/cooperado/InicioResolvidosPanel";
@@ -51,7 +59,7 @@ import { listPautasAbertasCooperado, resultadoVisivelCooperado } from "@/service
 import { VotacaoPautasInicioPanel } from "@/components/votacao/VotacaoPautasInicioPanel";
 import { VotacaoResultadoPanel } from "@/components/votacao/VotacaoResultadoPanel";
 import { getCooperativaCnpj, getPendingNotaDeleteIds } from "@/services/notaPedidoCloudService";
-import { buildValorExibicaoCooperadoOpts } from "@/services/notaPedidoService";
+import { bicCentralBuildValorExibicaoCooperadoOpts } from "@/services/bicLeituraCentralFicha";
 import { useSyncContaCoopValorReceberPilot } from "@/hooks/useSyncContaCoopValorReceberPilot";
 import { useContaCoopDescontosRevision } from "@/hooks/useContaCoopDescontosRevision";
 import { formatCurrency, formatMesReferencia, getCurrentMesReferencia } from "@/utils/format";
@@ -61,11 +69,14 @@ import { usePermissions } from "@/hooks/usePermissions";
 import { cooperadoTemAppInstalado, isAppStandalone, resumoInstalacaoApp } from "@/services/cooperadoAppInstallService";
 import { PageSkeleton } from "@/components/ui/PageSkeleton";
 import { RestoreOperacionalPanel } from "@/components/sync/RestoreOperacionalPanel";
+import { CooperadoInicioValorReceberCard } from "@/components/cooperado/CooperadoInicioValorReceberCard";
 
 function CooperadoDashboard() {
   const { user } = useAuth();
   const router = useRouter();
-  const { syncing, lastSyncError, cooperadoPagamentosHydrated } = useSyncStatus();
+  const { syncing, lastSyncError } = useSyncStatus();
+  const { apresentacaoConsolidada, carregandoValoresFinanceiros } =
+    useCooperadoApresentacaoFinanceiraConsolidada();
   const recoverySyncRef = useRef(false);
   const hbDescontosRevision = useContaCoopDescontosRevision();
 
@@ -99,10 +110,10 @@ function CooperadoDashboard() {
     const coopId = getUserCooperativaId(user, data);
     if (!coopId) return null;
     const cooperadoId = resolverCooperadoIdCanonico(data, user.cooperadoId, coopId);
-    const exibicaoOpts = buildValorExibicaoCooperadoOpts(
+    const exibicaoOpts = bicCentralBuildValorExibicaoCooperadoOpts(
       data,
       cooperadoId,
-      getMesPrincipalQuantoVouReceber(data, cooperadoId, coopId),
+      bicCentralMesPrincipalQuantoVouReceber(data, cooperadoId, coopId, { apresentacaoConsolidada }),
       coopId
     );
     return {
@@ -113,17 +124,30 @@ function CooperadoDashboard() {
     };
   }, [user?.id, user?.cooperadoId, user?.cooperativaId, hbDescontosRevision]);
 
-  useSyncContaCoopValorReceberPilot(contaCoopSync ? { ...contaCoopSync, user } : undefined);
+  useSyncContaCoopValorReceberPilot(
+    contaCoopSync ? { ...contaCoopSync, user, initialDelayMs: 20_000 } : undefined
+  );
 
   const aguardandoAssinaturaLocal = useAppDataSelector((data) => {
     if (!data || !user?.cooperadoId) return false;
     const coopId = getUserCooperativaId(user, data);
     const cooperadoId = resolverCooperadoIdCanonico(data, user.cooperadoId, coopId);
-    return cooperadoExibirValorReceberInicio(data, cooperadoId, coopId).aguardandoAssinatura;
-  }, [user?.id, user?.cooperadoId, user?.cooperativaId, hbDescontosRevision]);
+    return bicCentralAguardandoAssinatura(data, cooperadoId, coopId, { apresentacaoConsolidada });
+  }, [user?.id, user?.cooperadoId, user?.cooperativaId, hbDescontosRevision, apresentacaoConsolidada]);
 
   const { exibirAguardandoAssinatura, conferindoPagamentoNuvem } =
     useCooperadoExibirAguardandoAssinatura(Boolean(aguardandoAssinaturaLocal));
+
+  const inicioCardCtx = useCooperadoInicioCardContext(user);
+
+  const { snapshot: valorReceberCard, atualizando: cardFinanceiroAtualizando } =
+    useCooperadoInicioValorReceberCardState({
+      data: inicioCardCtx?.data ?? null,
+      cooperadoId: inicioCardCtx?.cooperadoId,
+      cooperativaId: inicioCardCtx?.cooperativaId,
+      dataReady: inicioCardCtx?.dataReady ?? false,
+      syncing,
+    });
 
   const view = useAppDataSelector((data) => {
     if (!data || !user?.cooperadoId) return null;
@@ -133,7 +157,9 @@ function CooperadoDashboard() {
     const mes = getCurrentMesReferencia();
     const cooperado = data.cooperados.find((c) => c.id === cooperadoId);
     const coopNome = getUserCooperativaNome(user, data);
-    const valorReceber = cooperadoExibirValorReceberInicio(data, cooperadoId, coopId);
+    const valorReceber = bicCentralResolveInicioParaExibicao(data, cooperadoId, coopId, {
+      apresentacaoConsolidada,
+    });
     const precisaPix = cooperado ? cooperadoPrecisaCadastrarPix(cooperado.chavePix, cooperado.pixValido) : false;
     const notasPendentes = listarNotasPendentesCooperado(data, cooperadoId, coopId);
     const rejeitadas = notasPendentes.filter((n) => n.status === "rejeitada");
@@ -143,16 +169,16 @@ function CooperadoDashboard() {
       (n) => n.status === "aguardando_conferencia" && !pendingDeletes.has(n.id)
     );
     const fotosEmAnalise = contarFotosEmAnaliseCooperado(notasEmAnalise);
-    const resumoMens = getResumoMensalidadesCooperado(data, cooperadoId, coopId);
+    const resumoMens = bicCentralGetResumoMensalidadesCooperado(data, cooperadoId, coopId);
     const mensalidadeAberta = resumoMens.situacao === "atrasada";
     const prestacao = coopId ? prestacaoPrincipalCooperado(data, cooperadoId, coopId) : undefined;
     const prestacaoAberta = prestacao ? prestacaoExigeAtencaoCooperado(prestacao) : false;
-    const avulsosPendentesTotal = totalValoresAvulsosPendentes(data, cooperadoId, undefined, coopId);
+    const avulsosPendentesTotal = bicCentralTotalValoresAvulsosPendentes(data, cooperadoId, undefined, coopId);
     const avulsosJaNoCardPrincipal =
       valorReceber.exibir &&
       (valorReceber.meses.length > 0
-        ? valorReceber.meses.some((m) => totalValoresAvulsosPendentes(data, cooperadoId, m, coopId) > 0)
-        : totalValoresAvulsosPendentes(data, cooperadoId, valorReceber.mes, coopId) > 0);
+        ? valorReceber.meses.some((m) => bicCentralTotalValoresAvulsosPendentes(data, cooperadoId, m, coopId) > 0)
+        : bicCentralTotalValoresAvulsosPendentes(data, cooperadoId, valorReceber.mes, coopId) > 0);
     const exibirCardAvulsosSeparado = avulsosPendentesTotal > 0 && !avulsosJaNoCardPrincipal;
     const comunicados = coopId ? getComunicadosInicioCooperado(data, coopId, cooperadoId) : [];
     const pautasAbertas = coopId ? listPautasAbertasCooperado(data, coopId, cooperadoId) : [];
@@ -165,6 +191,9 @@ function CooperadoDashboard() {
       rejeitadas.length > 0 ||
       fotosEmAnalise > 0 ||
       valorReceber.exibir ||
+      valorReceber.valor > 0 ||
+      valorReceber.aguardandoAssinatura ||
+      valorReceber.valorRecibo > 0 ||
       precisaPix ||
       precisaAssinatura ||
       mensalidadeAberta ||
@@ -202,9 +231,34 @@ function CooperadoDashboard() {
       precisaAssinatura,
       cnpjDigits,
     };
-  }, [user?.id, user?.cooperadoId, user?.cooperativaId, hbDescontosRevision]);
+  }, [user?.id, user?.cooperadoId, user?.cooperativaId, hbDescontosRevision, apresentacaoConsolidada]);
 
-  if (!view) return <PageSkeleton />;
+  const mesAtual = getCurrentMesReferencia();
+  const nomeCurto =
+    view?.cooperado?.nomeCompleto.split(" ")[0] ?? user?.name?.split(" ")[0] ?? "Cooperado";
+  const coopNomeEarly = view?.coopNome ?? "";
+
+  if (!view) {
+    return (
+      <div className="space-y-6 max-w-3xl">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900">Olá, {nomeCurto}!</h1>
+          <p className="text-sm text-gray-500 mt-1">
+            {coopNomeEarly ? `${coopNomeEarly} · ` : ""}
+            {formatMesReferencia(mesAtual)}
+          </p>
+        </div>
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <CooperadoInicioValorReceberCard
+            snapshot={valorReceberCard}
+            atualizando={cardFinanceiroAtualizando}
+            exibirReciboAssinatura={exibirAguardandoAssinatura}
+          />
+          <div className="rounded-2xl border border-gray-200 bg-gray-50 p-6 animate-pulse min-h-[12rem]" />
+        </div>
+      </div>
+    );
+  }
 
   const {
     cooperadoId,
@@ -228,12 +282,6 @@ function CooperadoDashboard() {
     precisaAssinatura,
     cnpjDigits,
   } = view;
-
-  const carregandoValoresFinanceiros = syncing || !cooperadoPagamentosHydrated;
-  const mostrarCardAReceber = valorReceber.exibir && !valorReceber.aguardandoAssinatura;
-  const mostrarCardReciboAssinatura = valorReceber.exibir && exibirAguardandoAssinatura;
-  const mostrarCardCarregandoFinanceiro =
-    carregandoValoresFinanceiros && !mostrarCardAReceber && !mostrarCardReciboAssinatura;
 
   return (
     <div className="space-y-6 max-w-3xl">
@@ -349,53 +397,14 @@ function CooperadoDashboard() {
         </AlertBanner>
       )}
 
-      <div
-        className={`grid grid-cols-1 gap-4 ${
-          (mostrarCardAReceber || mostrarCardReciboAssinatura || mostrarCardCarregandoFinanceiro)
-            ? "sm:grid-cols-2"
-            : ""
-        }`}
-      >
-        {mostrarCardCarregandoFinanceiro && (
-          <div className="rounded-2xl p-6 shadow-sm bg-white border-2 border-amber-200">
-            <Wallet size={28} className="mb-3 text-amber-600" />
-            <p className="text-sm font-semibold text-gray-900">Atualizando valores a receber</p>
-            <p className="text-sm text-gray-500 mt-2">
-              {valorReceber.aguardandoAssinatura
-                ? "Conferindo pagamento na nuvem antes de mostrar o recibo."
-                : "Aguarde alguns segundos com internet."}
-            </p>
-          </div>
-        )}
-        {mostrarCardReciboAssinatura && (
-          <div className="rounded-2xl p-6 shadow-sm bg-gradient-to-br from-emerald-600 to-green-700 text-white border border-emerald-500">
-            <Wallet size={28} className="mb-3 opacity-90" />
-            <p className="text-emerald-100 text-sm">Pagamento registrado · {valorReceber.mesLabel}</p>
-            <p className="text-3xl font-bold mt-1">{formatCurrency(valorReceber.valorRecibo)}</p>
-            <p className="text-sm text-emerald-100 mt-2">A receber agora: {formatCurrency(0)}</p>
-            <Link
-              href="/ficha-corrida?assinar=1"
-              className="inline-block mt-4 text-sm font-medium bg-white/20 hover:bg-white/30 px-4 py-2 rounded-lg"
-            >
-              Assinar recibo
-            </Link>
-          </div>
-        )}
-        {mostrarCardAReceber && (
-          <div className="rounded-2xl p-6 shadow-sm bg-gradient-to-br from-amber-500 to-amber-600 text-white">
-            <Wallet size={28} className="mb-3 opacity-90" />
-            <p className="text-amber-100 text-sm">A receber · {valorReceber.mesLabel}</p>
-            <p className="text-3xl font-bold mt-1">{formatCurrency(valorReceber.valor)}</p>
-            <Link
-              href="/ficha-corrida"
-              className="inline-block mt-4 text-sm font-medium bg-white/20 hover:bg-white/30 px-4 py-2 rounded-lg"
-            >
-              Ver detalhes
-            </Link>
-          </div>
-        )}
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+        <CooperadoInicioValorReceberCard
+          snapshot={valorReceberCard}
+          atualizando={cardFinanceiroAtualizando}
+          exibirReciboAssinatura={exibirAguardandoAssinatura}
+        />
 
-        <div className={`bg-white border-2 border-green-200 rounded-2xl p-6 flex flex-col justify-between ${!valorReceber.exibir ? "sm:max-w-md" : ""}`}>
+        <div className="bg-white border-2 border-green-200 rounded-2xl p-6 flex flex-col justify-between">
           <div>
             <Camera size={28} className="text-green-700 mb-3" />
             <p className="font-semibold text-gray-900">Registrar entrega na escola</p>

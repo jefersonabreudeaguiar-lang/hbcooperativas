@@ -25,9 +25,16 @@ import { formatCentsBRL } from "@/modules/hb-credit/engine/money";
 import type { ContaCoopIntent, ContaCoopLedgerEntry, ContaCoopLimiteCooperado } from "@/modules/hb-credit/types";
 import { FINANCIAL_PIN_MIN_LENGTH } from "@/modules/hb-credit/config";
 import { formatLedgerEntryLabel } from "@/lib/hb-credit/ledgerLabels";
-import { getMesPrincipalQuantoVouReceber } from "@/services/cooperadoEntregasService";
+import { bicCentralMesPrincipalQuantoVouReceber } from "@/services/bicLeituraCentralCooperado";
 import { isContaCoopValorReceberPilot } from "@/utils/contaCoopUiVisibility";
 import { notifyHbCreditAccountLoaded } from "@/lib/hb-credit/hbCreditEntryEvents";
+import { HB_CREDIT_LIMITE_SYNCED_EVENT } from "@/lib/hb-credit/hbCreditLimiteSyncEvents";
+import {
+  aplicarHbCreditAccountPersistido,
+  gravarHbCreditAccountPersistido,
+  HB_CREDIT_ACCOUNT_STORAGE_VERSION,
+  lerHbCreditAccountPersistido,
+} from "@/lib/hb-credit/hbCreditAccountPersistencia";
 import { useSyncContaCoopValorReceberPilot } from "@/hooks/useSyncContaCoopValorReceberPilot";
 import { useSyncContaCoopLimiteFromFicha } from "@/hooks/useSyncContaCoopLimiteFromFicha";
 import { PageSkeleton } from "@/components/ui/PageSkeleton";
@@ -72,9 +79,14 @@ function MinhaContaCoopContent() {
   const [useCashback, setUseCashback] = useState(false);
   const [busy, setBusy] = useState(false);
   const [isOffline, setIsOffline] = useState(false);
+  const [accountRefreshing, setAccountRefreshing] = useState(false);
   /** Aux syncs (ficha / limite) só após o primeiro fetchCreditAccount — não competem na entrada. */
   const [auxSyncEnabled, setAuxSyncEnabled] = useState(false);
   const auxEntrySignaledRef = useRef(false);
+
+  /** Sync-limite na nuvem só depois da UI montada (evita travar navegação Início ↔ HB). */
+  const LIMITE_SYNC_DEFER_MS = 10_000;
+  const VALOR_RECEBER_SYNC_DEFER_MS = 4_000;
 
   const cnpj = useMemo(() => {
     if (!user || !data) return "";
@@ -88,13 +100,13 @@ function MinhaContaCoopContent() {
     return data.cooperados.find((c) => c.id === cooperadoId)?.nomeCompleto ?? user?.name ?? "";
   }, [data, cooperadoId, user?.name]);
 
-  const contaCoopSync = useMemo(() => {
+  const contaCoopValorSync = useMemo(() => {
     if (!auxSyncEnabled || !data || !cooperadoId || !user || !cnpj) return undefined;
     const coopId = getUserCooperativaId(user, data);
     if (!coopId || !isContaCoopValorReceberPilot(cooperadoId, cooperadoNome)) return undefined;
     return {
       cooperadoId,
-      mesReferencia: getMesPrincipalQuantoVouReceber(data, cooperadoId, coopId),
+      mesReferencia: bicCentralMesPrincipalQuantoVouReceber(data, cooperadoId, coopId),
       cooperativaId: coopId,
       cooperadoNome,
       user,
@@ -102,8 +114,18 @@ function MinhaContaCoopContent() {
     };
   }, [auxSyncEnabled, cnpj, cooperadoId, cooperadoNome, data, user]);
 
-  useSyncContaCoopValorReceberPilot(contaCoopSync);
-  useSyncContaCoopLimiteFromFicha(contaCoopSync);
+  const contaCoopLimiteSync = useMemo(() => {
+    if (!contaCoopValorSync) return undefined;
+    return {
+      ...contaCoopValorSync,
+      initialDelayMs: LIMITE_SYNC_DEFER_MS,
+    };
+  }, [contaCoopValorSync]);
+
+  useSyncContaCoopValorReceberPilot(
+    contaCoopValorSync ? { ...contaCoopValorSync, initialDelayMs: VALOR_RECEBER_SYNC_DEFER_MS } : undefined
+  );
+  useSyncContaCoopLimiteFromFicha(contaCoopLimiteSync);
 
   useEffect(() => {
     const sync = () => setIsOffline(!navigator.onLine);
@@ -130,21 +152,35 @@ function MinhaContaCoopContent() {
     }
   }, [cnpj, cooperadoId]);
 
-  const reload = useCallback(async () => {
+  const reload = useCallback(async (opts?: { background?: boolean }) => {
     if (!cnpj || !cooperadoId) return;
-    setLoading(true);
-    setLedgerLoaded(false);
+    const background = opts?.background ?? false;
+    if (!background) setLoading(true);
+    else setAccountRefreshing(true);
+    if (!background) setLedgerLoaded(false);
     setError("");
     try {
       const acc = await fetchCreditAccount(cnpj, cooperadoId);
-      setAccount((acc.account as ContaCoopLimiteCooperado) ?? null);
+      const accObj = (acc.account as ContaCoopLimiteCooperado) ?? null;
+      setAccount(accObj);
       setUpdatedAt(acc.updatedAt ?? null);
       setHasPin(Boolean(acc.hasPin));
       setPinResetPending(Boolean(acc.pinResetPending));
+      gravarHbCreditAccountPersistido(cnpj, cooperadoId, {
+        v: HB_CREDIT_ACCOUNT_STORAGE_VERSION,
+        account: accObj,
+        updatedAt: acc.updatedAt ?? null,
+        hasPin: Boolean(acc.hasPin),
+        pinResetPending: Boolean(acc.pinResetPending),
+        savedAt: new Date().toISOString(),
+      });
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Erro ao carregar conta.");
+      if (!background) {
+        setError(e instanceof Error ? e.message : "Erro ao carregar conta.");
+      }
     } finally {
       setLoading(false);
+      setAccountRefreshing(false);
       if (!auxEntrySignaledRef.current) {
         auxEntrySignaledRef.current = true;
         setAuxSyncEnabled(true);
@@ -154,7 +190,32 @@ function MinhaContaCoopContent() {
   }, [cnpj, cooperadoId]);
 
   useEffect(() => {
-    reload();
+    if (!cnpj || !cooperadoId) return;
+    const snap = lerHbCreditAccountPersistido(cnpj, cooperadoId);
+    let background = false;
+    if (snap?.account) {
+      const applied = aplicarHbCreditAccountPersistido(snap);
+      setAccount(applied.account);
+      setUpdatedAt(applied.updatedAt);
+      setHasPin(applied.hasPin);
+      setPinResetPending(applied.pinResetPending);
+      setLoading(false);
+      background = true;
+      if (!auxEntrySignaledRef.current) {
+        auxEntrySignaledRef.current = true;
+        setAuxSyncEnabled(true);
+        notifyHbCreditAccountLoaded();
+      }
+    }
+    void reload({ background });
+  }, [cnpj, cooperadoId, reload]);
+
+  useEffect(() => {
+    const onLimiteSynced = () => {
+      void reload({ background: true });
+    };
+    window.addEventListener(HB_CREDIT_LIMITE_SYNCED_EVENT, onLimiteSynced);
+    return () => window.removeEventListener(HB_CREDIT_LIMITE_SYNCED_EVENT, onLimiteSynced);
   }, [reload]);
 
   useEffect(() => {
@@ -165,7 +226,7 @@ function MinhaContaCoopContent() {
 
   useEffect(() => {
     const onVisible = () => {
-      if (document.visibilityState === "visible") void reload();
+      if (document.visibilityState === "visible") void reload({ background: true });
     };
     document.addEventListener("visibilitychange", onVisible);
     return () => document.removeEventListener("visibilitychange", onVisible);
@@ -249,8 +310,8 @@ function MinhaContaCoopContent() {
         cnpj,
         cooperadoId,
         cooperadoNome,
-        cooperativaId: contaCoopSync?.cooperativaId,
-        mesReferencia: contaCoopSync?.mesReferencia,
+        cooperativaId: contaCoopValorSync?.cooperativaId,
+        mesReferencia: contaCoopValorSync?.mesReferencia,
         intentId: pendingIntent.intent.id,
         nonce: pendingIntent.intent.nonce,
         pin: payPin,
@@ -271,7 +332,14 @@ function MinhaContaCoopContent() {
     }
   };
 
-  if (loading && !account) return <PageSkeleton />;
+  if (loading && !account) {
+    return (
+      <div className="mx-auto max-w-lg space-y-3 pb-8">
+        <PageSkeleton />
+        <p className="text-center text-xs text-gray-500">Carregando HB Créditos…</p>
+      </div>
+    );
+  }
 
   const disponivel = account?.valorDisponivelCents ?? 0;
   const cashback = account?.cashbackDisponivelCents ?? 0;

@@ -7,6 +7,7 @@ import {
 import { getData } from "@/services/dataStore";
 import { resolveCooperativaCnpj } from "@/services/notaPedidoCloudService";
 import { isContaCoopValorReceberPilot } from "@/utils/contaCoopUiVisibility";
+import { scheduleContaCoopAuxSync } from "@/lib/hb-credit/contaCoopAuxSyncSchedule";
 
 const SYNC_INTERVAL_MS = 90_000;
 
@@ -17,6 +18,8 @@ type HookOpts = {
   cooperadoIds?: string[];
   user?: Pick<User, "cooperativaCnpj" | "cooperativaId" | "id"> | null;
   enabled?: boolean;
+  /** Cooperado: adia sync pesado na nuvem para não travar abertura da aba. */
+  initialDelayMs?: number;
 };
 
 /** Mantém limite HB Créditos = teto% do valor a receber pendente (mesma base do cooperado). */
@@ -58,6 +61,9 @@ export function useSyncContaCoopLimiteFromFicha(opts?: HookOpts) {
     if (!syncOpts?.cnpj || !syncOpts.cooperadoId) return;
 
     let cancelled = false;
+    let intervalId = 0;
+    let delayId = 0;
+    const idleCleanups: Array<() => void> = [];
 
     const run = () => {
       const current = optsRef.current;
@@ -70,23 +76,42 @@ export function useSyncContaCoopLimiteFromFicha(opts?: HookOpts) {
       ) {
         return;
       }
-      void refreshContaCoopLimiteFromFicha(current).catch(() => {
-        /* offline ou HB indisponível */
-      });
+      const cancelIdle = scheduleContaCoopAuxSync(
+        () => {
+          if (cancelled) return;
+          void refreshContaCoopLimiteFromFicha(current).catch(() => {
+            /* offline ou HB indisponível */
+          });
+        },
+        { idleTimeoutMs: 15_000, fallbackMs: 5_000 }
+      );
+      idleCleanups.push(cancelIdle);
     };
 
-    run();
+    const startInterval = () => {
+      if (cancelled) return;
+      run();
+      intervalId = window.setInterval(run, SYNC_INTERVAL_MS);
+    };
+
+    const delay = Math.max(0, opts?.initialDelayMs ?? 0);
+    if (delay > 0) {
+      delayId = window.setTimeout(startInterval, delay);
+    } else {
+      startInterval();
+    }
 
     const onVisible = () => {
       if (document.visibilityState === "visible") run();
     };
     document.addEventListener("visibilitychange", onVisible);
-    const interval = window.setInterval(run, SYNC_INTERVAL_MS);
 
     return () => {
       cancelled = true;
       document.removeEventListener("visibilitychange", onVisible);
-      window.clearInterval(interval);
+      if (delayId) window.clearTimeout(delayId);
+      if (intervalId) window.clearInterval(intervalId);
+      for (const cleanup of idleCleanups) cleanup();
     };
   }, [
     cnpj,
@@ -95,6 +120,7 @@ export function useSyncContaCoopLimiteFromFicha(opts?: HookOpts) {
     opts?.cooperadoNome,
     opts?.cooperativaId,
     opts?.enabled,
+    opts?.initialDelayMs,
     pilotOrBulk,
   ]);
 }

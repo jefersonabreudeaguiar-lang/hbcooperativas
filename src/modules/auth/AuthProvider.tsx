@@ -26,7 +26,9 @@ import {
   preloadAppData,
   applyCloudProfileToLocalSession,
   getData,
+  waitForAppDataWarm,
 } from "@/services/dataStore";
+import { persistirInicioCardValorReceberCooperado } from "@/services/cooperadoInicioCardPersistenciaService";
 import {
   ensureCloudSessionReady,
   setActiveCloudProfile,
@@ -161,6 +163,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setAccountUser(safeUser);
       setActiveCloudProfile(userToCloudProfile(safeUser));
       await ensureCloudSessionReady(userToCloudProfile(safeUser));
+      await waitForAppDataWarm(4000);
+      if (resolveAppUserRole(safeUser, getData()) === "cooperado") {
+        persistirInicioCardValorReceberCooperado(safeUser);
+      }
       const redirectTo = resolveAppUserRole(safeUser, getData()) === "parceiro" ? "/mercado-parceiro" : "/dashboard";
       return { ok: true as const, redirectTo };
     }

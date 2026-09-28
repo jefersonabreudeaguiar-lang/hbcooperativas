@@ -1,20 +1,10 @@
 import type { AppData } from "@/types";
-import {
-  cooperadoExibirValorReceberInicio,
-  cooperadoMesQuitado,
-  listarMesesComValorQuantoVouReceber,
-} from "@/services/cooperadoEntregasService";
-import { resolverCooperadoIdCanonico } from "@/services/cooperadoCloudService";
-import {
-  getResumoValorAPagarRelatorio,
-  listarFichasPendentesPagamento,
-} from "@/services/notaPedidoService";
-import { round2 } from "@/utils/calculations";
 import { reaisToCents } from "../shared/money";
 import {
   blindarCreditoBaseCentsHb,
   prepararAppDataParaCreditoBaseHb,
 } from "./creditBaseHbGuard";
+import { hbCreditCreditoBaseReais } from "@/lib/hb-credit/hbCreditLeituraBic";
 
 /**
  * Crédito base HB = o que o cooperado vê em “A receber”, com fichas pendentes válidas por mês.
@@ -27,25 +17,7 @@ export function getCreditoBaseContaCoopReais(
 ): number {
   const sane = prepararAppDataParaCreditoBaseHb(data);
   const coopId = cooperativaId ?? sane.cooperados.find((c) => c.id === cooperadoId)?.cooperativaId;
-  const cooperadoCanonico = resolverCooperadoIdCanonico(sane, cooperadoId, coopId);
-
-  const inicio = cooperadoExibirValorReceberInicio(sane, cooperadoCanonico, coopId);
-  if (!inicio.exibir || inicio.aguardandoAssinatura || inicio.valor <= 0) return 0;
-
-  const meses = listarMesesComValorQuantoVouReceber(sane, cooperadoCanonico, coopId);
-  if (!meses.length) return 0;
-
-  let total = 0;
-  for (const mes of meses) {
-    if (cooperadoMesQuitado(sane, cooperadoCanonico, mes)) continue;
-    if (!listarFichasPendentesPagamento(sane, cooperadoCanonico, mes, coopId).length) continue;
-    const valorMes = getResumoValorAPagarRelatorio(sane, cooperadoCanonico, mes, coopId).valorLiquido;
-    if (valorMes <= 0) continue;
-    total += valorMes;
-  }
-
-  if (total <= 0) return 0;
-  return round2(Math.max(0, Math.min(inicio.valor, total)));
+  return hbCreditCreditoBaseReais(sane, cooperadoId, coopId);
 }
 
 /** Crédito base do cooperado para limite HB Créditos (centavos). */
