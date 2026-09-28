@@ -164,18 +164,75 @@ export function bicCentralQuantoVouReceberParaExibicao(
   return { ...envelope, value };
 }
 
+/** Quanto vou receber — UI LAB/BIC: sempre “Total a receber”, sem modo recibo/assinar. */
+export function bicCentralResumoQuantoVouReceberCooperado(
+  data: AppData,
+  cooperadoId: string,
+  cooperativaId: string | undefined,
+  opts?: BicCentralProjecaoOpts
+): ReturnType<typeof getResumoQuantoVouReceberCooperado> {
+  const carregando = Boolean(opts?.carregandoNuvem || opts?.financeiroSincronizando);
+  const m6 = bicCentralSincronizarRotuloMeses(
+    bicCentralValorAReceberAgregado(data, cooperadoId, cooperativaId, opts)
+  );
+
+  if (carregando) {
+    return {
+      estado: "carregando",
+      mesLabel: m6.mesLabel,
+      valorDestaque: 0,
+      valorRecibo: 0,
+      aguardandoAssinatura: false,
+      valorAberto: m6.valor,
+      tituloValor: "Atualizando",
+      subtitulo: "Baixando pagamentos e valores da cooperativa…",
+      acaoRotulo: null,
+    };
+  }
+
+  const valorDestaque = m6.valor > 0 ? m6.valor : m6.valorRecibo > 0 ? m6.valorRecibo : 0;
+  if (valorDestaque > 0) {
+    return {
+      estado: "a_receber",
+      mesLabel: m6.mesLabel,
+      valorDestaque,
+      valorRecibo: 0,
+      aguardandoAssinatura: false,
+      valorAberto: m6.valor > 0 ? m6.valor : valorDestaque,
+      tituloValor: "Total a receber",
+      subtitulo: "Valor líquido das entregas conferidas (antes do pagamento da cooperativa).",
+      acaoRotulo: null,
+    };
+  }
+
+  return {
+    estado: "nada_pendente",
+    mesLabel: m6.mesLabel,
+    valorDestaque: 0,
+    valorRecibo: 0,
+    aguardandoAssinatura: false,
+    valorAberto: 0,
+    tituloValor: "Nada a receber agora",
+    subtitulo: "Quando a cooperativa aprovar suas entregas, o valor aparece aqui.",
+    acaoRotulo: null,
+  };
+}
+
 export function bicCentralPainelQuantoVouReceberParaExibicao(
   data: AppData,
   cooperadoId: string,
   cooperativaId: string | undefined,
   opts?: BicCentralProjecaoOpts
 ): BicExibicaoEnvelope<ReturnType<typeof getResumoQuantoVouReceberCooperado>> {
-  return getPainelQuantoVouReceberCooperadoParaExibicao(
-    data,
-    cooperadoId,
-    cooperativaId,
-    painelOptsComValorPersistente(data, cooperadoId, cooperativaId, opts)
-  );
+  const optsEff = painelOptsComValorPersistente(data, cooperadoId, cooperativaId, opts);
+  if (isBicCentralReadAuthorityEnabled()) {
+    const proj = getProjecaoFinanceiraCooperadoBIC(data, cooperadoId, cooperativaId, optsEff);
+    const value = bicCentralResumoQuantoVouReceberCooperado(data, cooperadoId, cooperativaId, optsEff);
+    if (proj.bicProjectionAuthorized) {
+      return { value, observability: { source: "bic", fallback: false, bicProjectionAuthorized: true } };
+    }
+  }
+  return getPainelQuantoVouReceberCooperadoParaExibicao(data, cooperadoId, cooperativaId, optsEff);
 }
 
 /** Valor agregado M6 — único número “a receber” no LAB B4. */
@@ -250,7 +307,7 @@ export function bicCentralResolveInicioParaExibicao(
   );
 
   if (isBicCentralReadAuthorityEnabled()) {
-    if (m6.aguardandoAssinatura) {
+    if (m6.aguardandoAssinatura && m6.valor > 0) {
       return cooperadoInicioParaCardsDefinitivos(
         {
           exibir: true,
@@ -258,8 +315,22 @@ export function bicCentralResolveInicioParaExibicao(
           meses: m6.meses,
           mesLabel: m6.mesLabel,
           valor: m6.valor,
-          valorRecibo: m6.valorRecibo,
-          aguardandoAssinatura: true,
+          valorRecibo: 0,
+          aguardandoAssinatura: false,
+        },
+        consolidated
+      );
+    }
+    if (m6.aguardandoAssinatura) {
+      return cooperadoInicioParaCardsDefinitivos(
+        {
+          exibir: true,
+          mes: m6.mes,
+          meses: m6.meses,
+          mesLabel: m6.mesLabel,
+          valor: m6.valorRecibo > 0 ? m6.valorRecibo : m6.valor,
+          valorRecibo: 0,
+          aguardandoAssinatura: false,
         },
         consolidated
       );

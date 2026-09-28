@@ -70,6 +70,7 @@ import { cooperadoTemAppInstalado, isAppStandalone, resumoInstalacaoApp } from "
 import { PageSkeleton } from "@/components/ui/PageSkeleton";
 import { RestoreOperacionalPanel } from "@/components/sync/RestoreOperacionalPanel";
 import { CooperadoInicioValorReceberCard } from "@/components/cooperado/CooperadoInicioValorReceberCard";
+import { isBicCentralReadAuthorityEnabled } from "@/lib/bic/bicCentralReadAuthority";
 
 function CooperadoDashboard() {
   const { user } = useAuth();
@@ -148,6 +149,9 @@ function CooperadoDashboard() {
       dataReady: inicioCardCtx?.dataReady ?? false,
       syncing,
     });
+
+  const exibirModoReciboAssinatura =
+    exibirAguardandoAssinatura && !isBicCentralReadAuthorityEnabled();
 
   const view = useAppDataSelector((data) => {
     if (!data || !user?.cooperadoId) return null;
@@ -252,7 +256,7 @@ function CooperadoDashboard() {
           <CooperadoInicioValorReceberCard
             snapshot={valorReceberCard}
             atualizando={cardFinanceiroAtualizando}
-            exibirReciboAssinatura={exibirAguardandoAssinatura}
+            exibirReciboAssinatura={exibirModoReciboAssinatura}
           />
           <div className="rounded-2xl border border-gray-200 bg-gray-50 p-6 animate-pulse min-h-[12rem]" />
         </div>
@@ -401,7 +405,7 @@ function CooperadoDashboard() {
         <CooperadoInicioValorReceberCard
           snapshot={valorReceberCard}
           atualizando={cardFinanceiroAtualizando}
-          exibirReciboAssinatura={exibirAguardandoAssinatura}
+          exibirReciboAssinatura={exibirModoReciboAssinatura}
         />
 
         <div className="bg-white border-2 border-green-200 rounded-2xl p-6 flex flex-col justify-between">

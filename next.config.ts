@@ -33,6 +33,15 @@ const nextConfig: NextConfig = {
   env: {
     NEXT_PUBLIC_HB_CREDIT_ENABLED:
       process.env.NEXT_PUBLIC_HB_CREDIT_ENABLED ?? process.env.HB_CREDIT_ENABLED ?? "false",
+    /** Garante inline no bundle cliente (Vercel vercel.json + dashboard). */
+    NEXT_PUBLIC_HB_BIC_PRODUCTION_LOCK: process.env.NEXT_PUBLIC_HB_BIC_PRODUCTION_LOCK ?? "false",
+    NEXT_PUBLIC_BIC_CENTRAL_READ_OFFICIAL: process.env.NEXT_PUBLIC_BIC_CENTRAL_READ_OFFICIAL ?? "false",
+    NEXT_PUBLIC_BIC_CENTRAL_READ_FULL_OFFICIAL:
+      process.env.NEXT_PUBLIC_BIC_CENTRAL_READ_FULL_OFFICIAL ?? "false",
+    NEXT_PUBLIC_BIC_CENTRAL_READ: process.env.NEXT_PUBLIC_BIC_CENTRAL_READ ?? "false",
+    NEXT_PUBLIC_CONTA_COOP_UI_PUBLIC: process.env.NEXT_PUBLIC_CONTA_COOP_UI_PUBLIC ?? "0",
+    NEXT_PUBLIC_CONTA_COOP_VALOR_RECEBER_PUBLIC:
+      process.env.NEXT_PUBLIC_CONTA_COOP_VALOR_RECEBER_PUBLIC ?? "0",
   },
   // Permite abrir o dev server pelo celular (IP da rede, ex.: 192.168.1.7:3000)
   allowedDevOrigins: [
