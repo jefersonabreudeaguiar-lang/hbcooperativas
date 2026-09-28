@@ -161,7 +161,7 @@ export function getQuantoVouReceberCooperadoParaExibicao(
   cooperadoId: string,
   cooperativaId: string | undefined,
   opts?: Pick<BicProjecaoFinanceiraCooperadoOpts, "apresentacaoConsolidada">
-): BicExibicaoEnvelope<ReturnType<typeof getValorQuantoVouReceber>> {
+): BicExibicaoEnvelope<ReturnType<typeof getValorQuantoVouReceberMotorLegado>> {
   const proj = getProjecaoFinanceiraCooperadoBIC(data, cooperadoId, cooperativaId);
   const apresentacaoConsolidada = opts?.apresentacaoConsolidada !== false;
   const raw =
