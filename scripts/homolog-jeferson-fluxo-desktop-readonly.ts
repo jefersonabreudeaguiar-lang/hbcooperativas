@@ -78,6 +78,8 @@ async function main() {
     mensalidades: [],
     comunicados: [],
     descontos: [],
+    instituicoes: [],
+    produtosInstituicao: [],
     config: { descontoPadraoCooperativa: 5 },
     auditLog: [],
   } as AppData;
