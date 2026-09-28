@@ -689,6 +689,21 @@ export function contarFotosUnicas(notas: NotaPedido[], cooperadoId: string, mesR
   ).length;
 }
 
+/** Indica que as fotos devem existir no bucket hb-entregas (mesmo se fotoNaNuvem sumiu no merge operacional). */
+export function notaTemFotoArmazenadaNaNuvem(nota: NotaPedido): boolean {
+  if (nota.fotoNaNuvem) return true;
+  if ((nota.fotosEnviadasCount ?? 0) > 0) return true;
+  if (nota.fotoEnviadaEm) return true;
+  if (
+    nota.fotosMeta?.some(
+      (f) => Boolean(f.storagePath) || f.status === "uploaded" || Boolean(f.url || f.thumbnailUrl)
+    )
+  ) {
+    return true;
+  }
+  return false;
+}
+
 /** Quantidade de fotos enviadas em uma nota (várias fotos = 1 entrega). */
 export function contarFotosEnviadasNota(nota: NotaPedido): number {
   const declarado = nota.fotosEnviadasCount ?? 0;

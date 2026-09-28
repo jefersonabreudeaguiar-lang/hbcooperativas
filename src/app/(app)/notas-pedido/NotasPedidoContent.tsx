@@ -57,6 +57,7 @@ import {
   ensureNotaComFoto,
   resolveCooperativaCnpj,
   fetchNotaFotoPartBlobUrl,
+  resolveFotosNotaParaExibicao,
 } from "@/services/notaPedidoCloudService";
 import {
   processDeliveryImage,
@@ -113,6 +114,7 @@ import {
   notaPertenceGrupoConferencia,
   contarFotosEnviadasNota,
   contarFotosEnviadasNotas,
+  notaTemFotoArmazenadaNaNuvem,
   resolverAbaConferenciaAtiva,
   MAX_FOTOS_POR_SESSAO_ENTREGA,
   AVISO_FOTOS_SESSAO_EM,
@@ -210,6 +212,8 @@ export default function NotasPedidoContent() {
   const [conferirModal, setConferirModal] = useState(false);
   const [rejectModal, setRejectModal] = useState(false);
   const [viewModal, setViewModal] = useState(false);
+  const [viewFotoUrls, setViewFotoUrls] = useState<string[]>([]);
+  const [viewFotosCarregando, setViewFotosCarregando] = useState(false);
   const [successMsg, setSuccessMsg] = useState("");
   const [lancadoMsg, setLancadoMsg] = useState("");
 
@@ -356,7 +360,7 @@ export default function NotasPedidoContent() {
         return localFotos[index];
       }
 
-      if (!nota.fotoNaNuvem) {
+      if (!notaTemFotoArmazenadaNaNuvem(nota)) {
         setConferenciaFotoAtualUrl(null);
         return null;
       }
@@ -2001,7 +2005,7 @@ export default function NotasPedidoContent() {
     const totalFotos = contarFotosEnviadasNota(notaComFoto);
     if (
       !opts?.transicao &&
-      notaComFoto.fotoNaNuvem &&
+      notaTemFotoArmazenadaNaNuvem(notaComFoto) &&
       totalFotos > 0 &&
       getFotosExibicaoNota(notaComFoto).length === 0
     ) {
@@ -2138,12 +2142,42 @@ export default function NotasPedidoContent() {
 
   const openView = async (nota: NotaPedido) => {
     let notaComFoto = nota;
-    if (getFotosExibicaoNota(nota).length === 0 && data && coopId) {
+    if (data && coopId) {
       notaComFoto = await ensureNotaComFoto(data, nota, coopId);
     }
     setSelectedNota(notaComFoto);
+    setViewFotoUrls(getFotosExibicaoNota(notaComFoto));
+    setViewFotosCarregando(false);
     setViewModal(true);
+
+    const total = contarFotosEnviadasNota(notaComFoto);
+    const inline = getFotosExibicaoNota(notaComFoto);
+    if (inline.length >= total && total > 0) return;
+    if (!notaTemFotoArmazenadaNaNuvem(notaComFoto) && total <= 0) return;
+
+    setViewFotosCarregando(true);
+    try {
+      const d = data ?? getData();
+      const cnpj =
+        notaComFoto.cooperativaCnpj ??
+        (d && coopId ? getCooperativaCnpj(d, coopId) : undefined) ??
+        (user && d && coopId ? await resolveCooperativaCnpj(d, coopId, user) : undefined);
+      if (!cnpj) return;
+      const urls = await resolveFotosNotaParaExibicao(notaComFoto, cnpj);
+      if (urls.length > 0) setViewFotoUrls(urls);
+    } finally {
+      setViewFotosCarregando(false);
+    }
   };
+
+  const fecharViewModal = useCallback(() => {
+    for (const url of viewFotoUrls) {
+      revokePreviewUrl(url);
+    }
+    setViewFotoUrls([]);
+    setViewFotosCarregando(false);
+    setViewModal(false);
+  }, [viewFotoUrls]);
 
   const updateConferenciaQty = (idx: number, qty: number) => {
     setConferenciaItens((prev) => prev.map((item, i) => (i === idx ? { ...item, quantidade: qty } : item)));
@@ -4211,7 +4245,7 @@ export default function NotasPedidoContent() {
                   if (conferenciaTransicao) {
                     return <p className="text-gray-400 text-center py-12">Carregando fotos da nuvem...</p>;
                   }
-                  if (selectedNota.fotoNaNuvem && contarFotosEnviadasNota(selectedNota) > 0) {
+                  if (notaTemFotoArmazenadaNaNuvem(selectedNota) && contarFotosEnviadasNota(selectedNota) > 0) {
                     return (
                       <div className="text-center py-12 px-4 space-y-3">
                         <p className="text-red-300 text-sm">
@@ -4558,7 +4592,7 @@ export default function NotasPedidoContent() {
         onConfirm={handleRejeitarNota}
       />
 
-      <Modal open={viewModal} onClose={() => setViewModal(false)} title="Detalhes da entrega" size="md">
+      <Modal open={viewModal} onClose={fecharViewModal} title="Detalhes da entrega" size="md">
         {selectedNota && (
           <div className="space-y-4">
             <NotaStatusBadge status={selectedNota.status} />
@@ -4614,20 +4648,29 @@ export default function NotasPedidoContent() {
             {selectedNota.motivoRejeicao && (
               <AlertBanner variant="error" title="Motivo da correção">{selectedNota.motivoRejeicao}</AlertBanner>
             )}
-            {getFotosExibicaoNota(selectedNota).length > 0 && (
-              <div className={cn("grid gap-2", getFotosExibicaoNota(selectedNota).length > 1 ? "grid-cols-1 sm:grid-cols-2" : "grid-cols-1")}>
-                {getFotosExibicaoNota(selectedNota).map((foto, i) => (
-                  <div
-                    key={i}
-                    className="w-full min-h-[12rem] max-h-96 rounded-xl border border-gray-200 bg-gray-100 flex items-center justify-center p-2"
-                  >
-                    <NotaFotoImg
-                      src={foto}
-                      alt={`Pedido ${i + 1}`}
-                      className="max-w-full max-h-[22rem] object-contain"
-                    />
-                  </div>
-                ))}
+            {(viewFotosCarregando || viewFotoUrls.length > 0) && (
+              <div
+                className={cn(
+                  "grid gap-2",
+                  viewFotoUrls.length > 1 ? "grid-cols-1 sm:grid-cols-2" : "grid-cols-1"
+                )}
+              >
+                {viewFotosCarregando && viewFotoUrls.length === 0 ? (
+                  <p className="text-sm text-gray-500 py-8 text-center">Carregando fotos da nuvem…</p>
+                ) : (
+                  viewFotoUrls.map((foto, i) => (
+                    <div
+                      key={i}
+                      className="w-full min-h-[12rem] max-h-96 rounded-xl border border-gray-200 bg-gray-100 flex items-center justify-center p-2"
+                    >
+                      <NotaFotoImg
+                        src={foto}
+                        alt={`Pedido ${i + 1}`}
+                        className="max-w-full max-h-[22rem] object-contain"
+                      />
+                    </div>
+                  ))
+                )}
               </div>
             )}
             {isCooperado && selectedNota.status === "rejeitada" && (

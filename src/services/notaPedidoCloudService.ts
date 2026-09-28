@@ -2,7 +2,7 @@ import type { AppData, NotaPedido, User } from "@/types";
 import { normalizeCnpj, findCooperativaByCnpj } from "@/utils/cooperativa";
 import { fetchCooperativaByCnpjFromCloud } from "@/services/cooperativaCloudService";
 import { notaPertenceCooperado, resolverCooperadoIdCanonico } from "@/services/cooperadoCloudService";
-import { getNotaCooperativaCnpj, getFotosExibicaoNota, mergeNotaComFotos, contarFotosEnviadasNota, FOTOS_UPLOAD_LOTE } from "@/utils/fotoEntrega";
+import { getNotaCooperativaCnpj, getFotosExibicaoNota, mergeNotaComFotos, contarFotosEnviadasNota, notaTemFotoArmazenadaNaNuvem, FOTOS_UPLOAD_LOTE } from "@/utils/fotoEntrega";
 import { getCooperadoNome } from "@/utils/calculations";
 import { getData, saveDataSafe } from "@/services/dataStore";
 import { reconciliarFichaFromNotasConferidas, idsNotasPedidoExcluidas, aplicarNotasPedidoExcluidas } from "@/services/notaPedidoService";
@@ -1416,7 +1416,7 @@ export async function ensureNotaComFoto(
   const cnpj = getCooperativaCnpj(data, coopId ?? nota.cooperativaId);
   if (!cnpj) return nota;
 
-  if (!nota.fotoNaNuvem && fullResCount === 0 && localFotos.length === 0) return nota;
+  if (!notaTemFotoArmazenadaNaNuvem(nota) && fullResCount === 0 && localFotos.length === 0) return nota;
 
   const cloud = await fetchNotaPedidoFromCloud(cnpj, nota.id, { metaOnly: true });
   if (!cloud) return nota;
