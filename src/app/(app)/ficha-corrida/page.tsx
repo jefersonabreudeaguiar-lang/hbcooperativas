@@ -54,6 +54,7 @@ import {
   bicCentralQuantoVouReceberParaExibicao,
   bicCentralResolvePainelParaExibicao,
 } from "@/services/bicLeituraCentralCooperado";
+import { cooperadoUsarFluxoReciboAssinaturaNaUi } from "@/lib/bic/cooperadoBicCentralUi";
 import {
   cooperadoMesQuitado,
   cooperadoTemValorPendente,
@@ -221,6 +222,7 @@ export default function FichaCorridaPage() {
   const [coopCnpjResumo, setCoopCnpjResumo] = useState("");
 
   const coopId = user && data ? getUserCooperativaId(user, data) : undefined;
+  const fluxoReciboAssinatura = cooperadoUsarFluxoReciboAssinaturaNaUi();
   const { apresentacaoConsolidada, carregandoValoresFinanceiros } =
     useCooperadoApresentacaoFinanceiraConsolidada();
 
@@ -584,10 +586,11 @@ export default function FichaCorridaPage() {
   const { syncing: syncCooperadoFinanceiro, cooperadoPagamentosHydrated } = useSyncStatus();
 
   const pagamentoAguardandoExibicao = useMemo(() => {
+    if (!fluxoReciboAssinatura) return undefined;
     if (!isCooperado) return pagamentoAguardando;
     if (!pagamentoAguardando || !exibirAguardandoAssinatura) return undefined;
     return pagamentoAguardando;
-  }, [isCooperado, pagamentoAguardando, exibirAguardandoAssinatura]);
+  }, [fluxoReciboAssinatura, isCooperado, pagamentoAguardando, exibirAguardandoAssinatura]);
 
   useEffect(() => {
     if (!isCooperado || searchParams.get("assinar") !== "1") return;
@@ -668,14 +671,18 @@ export default function FichaCorridaPage() {
       if ((financeiroAberto.valorLiquido ?? 0) > 0) {
         return financeiroAberto.resumo;
       }
-      if (financeiroAberto.aguardandoAssinatura && pagamentoAguardandoExibicao) {
+      if (financeiroAberto.aguardandoAssinatura && pagamentoAguardandoExibicao && fluxoReciboAssinatura) {
         return resumoFromPagamento(pagamentoAguardandoExibicao);
       }
     }
     if (pagamentoConfirmado && (!isCooperado || visualizandoHistorico)) {
       return resumoFromPagamento(pagamentoConfirmado);
     }
-    const aguardandoResumo = isCooperado ? pagamentoAguardandoExibicao : pagamentoAguardando;
+    const aguardandoResumo = fluxoReciboAssinatura
+      ? isCooperado
+        ? pagamentoAguardandoExibicao
+        : pagamentoAguardando
+      : undefined;
     if (aguardandoResumo) {
       const temEntregaNova =
         isCooperado &&
@@ -1213,10 +1220,11 @@ export default function FichaCorridaPage() {
     (!!data &&
       !!cooperadoId &&
       (carregandoValoresFinanceiros ||
-        !!pagamentoAguardandoExibicao ||
-        conferindoPagamentoNuvem ||
+        (fluxoReciboAssinatura && !!pagamentoAguardandoExibicao) ||
+        (fluxoReciboAssinatura && conferindoPagamentoNuvem) ||
         !!pagamentoConfirmado ||
-        cooperadoTemValorPendente(data, cooperadoId, coopId)));
+        cooperadoTemValorPendente(data, cooperadoId, coopId) ||
+        (!fluxoReciboAssinatura && (valorReceberConsolidado?.valor ?? 0) > 0)));
 
   const exibirRelatorioMes =
     !!cooperadoSelecionadoId &&
@@ -1268,7 +1276,7 @@ export default function FichaCorridaPage() {
         </AlertBanner>
       )}
 
-      {isCooperado && !visualizandoHistorico && conferindoPagamentoNuvem && (
+      {isCooperado && fluxoReciboAssinatura && !visualizandoHistorico && conferindoPagamentoNuvem && (
         <AlertBanner variant="info" title="Conferindo pagamento na nuvem" className="mb-4">
           Aguarde alguns segundos com internet — atualizamos o status do recibo antes de pedir assinatura.
         </AlertBanner>
@@ -1335,7 +1343,7 @@ export default function FichaCorridaPage() {
         </div>
       )}
 
-      {isCooperado && !visualizandoHistorico && mesQuitadoCooperado && !pagamentoAguardandoExibicao && (
+      {isCooperado && !visualizandoHistorico && mesQuitadoCooperado && (!pagamentoAguardandoExibicao || !fluxoReciboAssinatura) && (
         <div className="text-center py-14 px-6 bg-white rounded-2xl border border-emerald-200 mb-6">
           <CheckCircle2 size={52} className="mx-auto text-emerald-600 mb-4" />
           <h2 className="text-xl font-bold text-gray-900">Pagamento confirmado</h2>
@@ -1790,14 +1798,18 @@ export default function FichaCorridaPage() {
                 valorDestaque={
                   resumoQuantoVouReceber.estado === "carregando"
                     ? 0
-                    : resumoQuantoVouReceber.estado === "aguardando_assinatura"
-                      ? resumoQuantoVouReceber.valorDestaque
-                      : totalExibido
+                    : !fluxoReciboAssinatura || resumoQuantoVouReceber.estado !== "aguardando_assinatura"
+                      ? totalExibido
+                      : resumoQuantoVouReceber.valorDestaque
                 }
                 tituloValor={resumoQuantoVouReceber.tituloValor}
                 subtitulo={resumoQuantoVouReceber.subtitulo}
-                acaoRotulo={resumoQuantoVouReceber.acaoRotulo}
-                onAcao={() => setAssinaturaModal(true)}
+                acaoRotulo={fluxoReciboAssinatura ? resumoQuantoVouReceber.acaoRotulo : null}
+                onAcao={
+                  fluxoReciboAssinatura && resumoQuantoVouReceber.acaoRotulo
+                    ? () => setAssinaturaModal(true)
+                    : undefined
+                }
                 mostrarDetalheCalculo={Boolean(
                   resumoExibicao &&
                     (resumoExibicao.valorBruto > 0 ||

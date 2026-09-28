@@ -157,11 +157,25 @@ export function bicCentralQuantoVouReceberParaExibicao(
   });
   if (!isBicCentralReadAuthorityEnabled()) return envelope;
   const raw = bicCentralSincronizarRotuloMeses(getValorQuantoVouReceber(data, cooperadoId, cooperativaId));
+  const normalized = bicCentralNormalizarValorM6(raw);
   const value =
-    raw.valor > 0 || raw.aguardandoAssinatura
-      ? cooperadoQuantoVouReceberParaApresentacao(raw, consolidated)
+    normalized.valor > 0
+      ? cooperadoQuantoVouReceberParaApresentacao(normalized, consolidated)
       : cooperadoQuantoVouReceberParaApresentacao(envelope.value, consolidated);
-  return { ...envelope, value };
+  return { ...envelope, value: bicCentralNormalizarValorM6(value) };
+}
+
+function bicCentralNormalizarValorM6(
+  raw: ReturnType<typeof getValorQuantoVouReceber>
+): ReturnType<typeof getValorQuantoVouReceber> {
+  if (!isBicCentralReadAuthorityEnabled()) return raw;
+  const valor = raw.valor > 0 ? raw.valor : raw.valorRecibo > 0 ? raw.valorRecibo : 0;
+  return {
+    ...raw,
+    valor,
+    valorRecibo: 0,
+    aguardandoAssinatura: false,
+  };
 }
 
 /** Quanto vou receber — UI LAB/BIC: sempre “Total a receber”, sem modo recibo/assinar. */
@@ -243,7 +257,7 @@ export function bicCentralValorAReceberAgregado(
   opts?: Pick<BicCentralProjecaoOpts, "apresentacaoConsolidada">
 ): ReturnType<typeof getValorQuantoVouReceber> {
   const envelope = bicCentralQuantoVouReceberParaExibicao(data, cooperadoId, cooperativaId, opts);
-  return bicCentralSincronizarRotuloMeses(envelope.value);
+  return bicCentralSincronizarRotuloMeses(bicCentralNormalizarValorM6(envelope.value));
 }
 
 export function bicCentralAguardandoAssinatura(

@@ -70,7 +70,7 @@ import { cooperadoTemAppInstalado, isAppStandalone, resumoInstalacaoApp } from "
 import { PageSkeleton } from "@/components/ui/PageSkeleton";
 import { RestoreOperacionalPanel } from "@/components/sync/RestoreOperacionalPanel";
 import { CooperadoInicioValorReceberCard } from "@/components/cooperado/CooperadoInicioValorReceberCard";
-import { isBicCentralReadAuthorityEnabled } from "@/lib/bic/bicCentralReadAuthority";
+import { cooperadoUsarFluxoReciboAssinaturaNaUi } from "@/lib/bic/cooperadoBicCentralUi";
 
 function CooperadoDashboard() {
   const { user } = useAuth();
@@ -151,7 +151,7 @@ function CooperadoDashboard() {
     });
 
   const exibirModoReciboAssinatura =
-    exibirAguardandoAssinatura && !isBicCentralReadAuthorityEnabled();
+    exibirAguardandoAssinatura && cooperadoUsarFluxoReciboAssinaturaNaUi();
 
   const view = useAppDataSelector((data) => {
     if (!data || !user?.cooperadoId) return null;
