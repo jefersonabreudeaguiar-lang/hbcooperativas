@@ -8,6 +8,7 @@ import {
   useMemo,
   useRef,
   useState,
+  type MutableRefObject,
 } from "react";
 import { useAuth } from "@/modules/auth/AuthProvider";
 import { useAppDataSelector } from "@/hooks/useAppData";
@@ -61,12 +62,30 @@ import { readNotaFotoAtIndex, resolveNotaFotosForUpload } from "@/services/local
 import { compactarFotosNoArmazenamento, contarFotosEnviadasNota } from "@/utils/fotoEntrega";
 import { isDiretoriaRole } from "@/permissions";
 import type { UserRole } from "@/types";
+import {
+  h197ObserveLifecycleEvent,
+  installH197WindowExport,
+  isH197CaptureEnabled,
+  type H197CaptureContext,
+} from "@/lib/diagnostic/h197PairedCapture";
 
 const COOPERADO_PUSH_GAP_MS = 5 * 60 * 1000;
 /** Intervalo mínimo entre pulls de operacional só para votação (bem menor que sync completa). */
 const VOTACAO_OPERACIONAL_PULL_GAP_MS = 45_000;
 /** Evita sync infinita — libera o chip "Atualizando…" mesmo em cooperativas grandes. */
 const SYNC_TIMEOUT_MS = 90_000;
+
+function h197PassiveContext(
+  user: ReturnType<typeof useAuth>["user"],
+  cooperadoPagamentosHydratedRef: MutableRefObject<boolean>,
+  syncingFlag: boolean
+): H197CaptureContext {
+  return {
+    user,
+    cooperadoPagamentosHydrated: cooperadoPagamentosHydratedRef.current,
+    syncing: syncingFlag,
+  };
+}
 
 function mensagemErroPullOperacionalCooperado(result: SyncOperacionalFromCloudResult): string | null {
   if (result.ok && (result.code === "ok" || result.code === "stale_discarded")) return null;
@@ -240,6 +259,8 @@ export function CooperativaSyncProvider({ children }: { children: React.ReactNod
   const [cooperadoPagamentosHydrated, setCooperadoPagamentosHydrated] = useState(
     () => user?.role !== "cooperado"
   );
+  const cooperadoPagamentosHydratedRef = useRef(cooperadoPagamentosHydrated);
+  cooperadoPagamentosHydratedRef.current = cooperadoPagamentosHydrated;
 
   const coopId = useAppDataSelector(
     (data) => (user ? getUserCooperativaId(user, data) : undefined),
@@ -282,6 +303,13 @@ export function CooperativaSyncProvider({ children }: { children: React.ReactNod
       return;
     }
 
+    if (isH197CaptureEnabled()) {
+      h197ObserveLifecycleEvent(
+        "warm_pre_sync",
+        h197PassiveContext(currentUser, cooperadoPagamentosHydratedRef, syncingRef.current)
+      );
+    }
+
     const data = getData();
     const currentCoopId = getUserCooperativaId(currentUser, data);
     if (!currentCoopId) {
@@ -295,18 +323,23 @@ export function CooperativaSyncProvider({ children }: { children: React.ReactNod
         getLastCloudSyncError() ||
           "Não foi possível conectar à nuvem. Saia, entre de novo e aguarde alguns segundos."
       );
-      markCooperadoPagamentosHydrated();
+      /* H204: readiness financeiro só após runSync completo — não liberar UI aqui. */
       return;
     }
 
     const cnpj = await resolveCooperativaCnpj(data, currentCoopId, currentUser);
     if (!cnpj) {
-      markCooperadoPagamentosHydrated();
       return;
     }
 
     votacaoOperacionalPullRef.current = true;
     lastVotacaoOperacionalPullRef.current = now;
+    if (isH197CaptureEnabled()) {
+      h197ObserveLifecycleEvent(
+        "hydrate_start",
+        h197PassiveContext(currentUser, cooperadoPagamentosHydratedRef, syncingRef.current)
+      );
+    }
     try {
       const boundLease = getCooperadoRunSyncSessionLease();
       const result = await syncOperacionalFromCloud(cnpj, {
@@ -320,9 +353,13 @@ export function CooperativaSyncProvider({ children }: { children: React.ReactNod
       /* offline / retry na próxima abertura */
     } finally {
       votacaoOperacionalPullRef.current = false;
-      if (!getCooperadoRunSyncSessionLease()) {
-        markCooperadoPagamentosHydrated();
+      if (isH197CaptureEnabled()) {
+        h197ObserveLifecycleEvent(
+          "hydrate_end",
+          h197PassiveContext(userRef.current, cooperadoPagamentosHydratedRef, syncingRef.current)
+        );
       }
+      /* H204: pull operacional parcial (votação) não marca apresentação pronta — só runSync. */
     }
   }, [markCooperadoPagamentosHydrated, setLastSyncError]);
 
@@ -340,6 +377,13 @@ export function CooperativaSyncProvider({ children }: { children: React.ReactNod
     const warm = await waitForAppDataWarm();
     if (!warm) return;
 
+    if (isH197CaptureEnabled()) {
+      h197ObserveLifecycleEvent(
+        "warm_pre_sync",
+        h197PassiveContext(currentUser, cooperadoPagamentosHydratedRef, syncingRef.current)
+      );
+    }
+
     const data = getData();
     const currentCoopId = getUserCooperativaId(currentUser, data);
     if (!currentCoopId) {
@@ -356,6 +400,12 @@ export function CooperativaSyncProvider({ children }: { children: React.ReactNod
     syncingRef.current = true;
     setSyncing(true);
     setLastSyncError("");
+    if (isH197CaptureEnabled()) {
+      h197ObserveLifecycleEvent(
+        "run_sync_start",
+        h197PassiveContext(currentUser, cooperadoPagamentosHydratedRef, true)
+      );
+    }
     let completed = false;
     try {
       const sessionOk = await ensureCloudSessionReady(userToCloudProfile(currentUser));
@@ -492,6 +542,20 @@ export function CooperativaSyncProvider({ children }: { children: React.ReactNod
       syncingRef.current = false;
       setSyncing(false);
       setLastSyncedAt(Date.now());
+      if (isH197CaptureEnabled()) {
+        h197ObserveLifecycleEvent(
+          "run_sync_end",
+          h197PassiveContext(userRef.current, cooperadoPagamentosHydratedRef, false)
+        );
+        if (userRef.current?.role === "cooperado") {
+          window.setTimeout(() => {
+            h197ObserveLifecycleEvent(
+              "steady_timer",
+              h197PassiveContext(userRef.current, cooperadoPagamentosHydratedRef, false)
+            );
+          }, 3000);
+        }
+      }
       if (userRef.current?.role === "cooperado") {
         markCooperadoPagamentosHydrated();
       }
@@ -499,7 +563,18 @@ export function CooperativaSyncProvider({ children }: { children: React.ReactNod
   }, [markCooperadoPagamentosHydrated]);
 
   useEffect(() => {
+    installH197WindowExport();
+  }, []);
+
+  useEffect(() => {
     if (!user?.id || !coopId) return;
+
+    if (isH197CaptureEnabled() && user.role === "cooperado") {
+      h197ObserveLifecycleEvent(
+        "provider_mount_pre_warm",
+        h197PassiveContext(user, cooperadoPagamentosHydratedRef, syncingRef.current)
+      );
+    }
 
     const stopIdle = startIdleMonitor();
 

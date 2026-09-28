@@ -46,7 +46,10 @@ import {
   syncOperacionalFromCloud,
 } from "@/services/cooperativaSyncCloudService";
 import { pushCooperadoToCloud } from "@/services/cooperadoCloudService";
-import { getProjecaoFinanceiraCooperadoBIC } from "@/services/bicProjecaoFinanceiraCooperado";
+import {
+  getPainelQuantoVouReceberCooperadoParaExibicao,
+  getQuantoVouReceberCooperadoParaExibicao,
+} from "@/services/bicProjecaoFinanceiraCooperado";
 import {
   cooperadoMesQuitado,
   cooperadoTemValorPendente,
@@ -92,6 +95,8 @@ import { baixarRecibo, resumoReciboFromPagamento, nomeArquivoRecibo } from "@/ut
 import { updateData, addAuditEntry, getData } from "@/services/dataStore";
 import { requestAppSync } from "@/services/syncRequest";
 import { useCooperadoExibirAguardandoAssinatura } from "@/hooks/useCooperadoExibirAguardandoAssinatura";
+import { useCooperadoApresentacaoFinanceiraConsolidada } from "@/hooks/useCooperadoApresentacaoFinanceiraConsolidada";
+import { cooperadoFluxoPainelProjecaoOpts } from "@/lib/cooperadoFluxoFinanceiroGlobal";
 import { formatCurrency, formatDate, formatMesReferencia, formatMesesReferenciaRotulo, getCurrentMesReferencia, cn } from "@/utils/format";
 import type { PagamentoCooperadoRegistro, FichaCorrida, NotaPedido } from "@/types";
 
@@ -214,6 +219,8 @@ export default function FichaCorridaPage() {
   const [coopCnpjResumo, setCoopCnpjResumo] = useState("");
 
   const coopId = user && data ? getUserCooperativaId(user, data) : undefined;
+  const { apresentacaoConsolidada, carregandoValoresFinanceiros } =
+    useCooperadoApresentacaoFinanceiraConsolidada();
 
   useEffect(() => {
     if (!data || !coopId || !user) {
@@ -236,8 +243,10 @@ export default function FichaCorridaPage() {
 
   const valorReceberConsolidado = useMemo(() => {
     if (!data || !cooperadoId) return null;
-    return getProjecaoFinanceiraCooperadoBIC(data, cooperadoId, coopId).quantoVouReceber;
-  }, [data, cooperadoId, coopId, hbDescontosRevision]);
+    return getQuantoVouReceberCooperadoParaExibicao(data, cooperadoId, coopId, {
+      apresentacaoConsolidada,
+    }).value;
+  }, [data, cooperadoId, coopId, apresentacaoConsolidada, hbDescontosRevision]);
 
   const mesesPendentesQuantoVouReceber = useMemo(() => {
     if (!data || !cooperadoId || !isCooperado) return [];
@@ -717,7 +726,9 @@ export default function FichaCorridaPage() {
       ? resumoExibicao && exibicaoOpts
         ? getValorExibicaoCooperado(resumoExibicao, exibicaoOpts)
         : 0
-      : (financeiroAberto?.valorLiquido ?? valorReceberConsolidado?.valor ?? 0)
+      : !apresentacaoConsolidada
+        ? 0
+        : (financeiroAberto?.valorLiquido ?? valorReceberConsolidado?.valor ?? 0)
     : visualizandoHistorico
       ? resumoExibicao && exibicaoOpts
         ? getValorExibicaoCooperado(resumoExibicao, exibicaoOpts)
@@ -749,10 +760,14 @@ export default function FichaCorridaPage() {
 
   const resumoQuantoVouReceber = useMemo(() => {
     if (!data || !cooperadoId || !isCooperado) return null;
-    return getProjecaoFinanceiraCooperadoBIC(data, cooperadoId, coopId, {
-      carregandoNuvem: conferindoPagamentoNuvem,
-      financeiroSincronizando: syncCooperadoFinanceiro || !cooperadoPagamentosHydrated,
-    }).painelQuantoVouReceber;
+    return getPainelQuantoVouReceberCooperadoParaExibicao(data, cooperadoId, coopId, {
+      ...cooperadoFluxoPainelProjecaoOpts({
+        role: user?.role,
+        syncing: syncCooperadoFinanceiro,
+        cooperadoPagamentosHydrated,
+        conferindoPagamentoNuvem: conferindoPagamentoNuvem,
+      }),
+    }).value;
   }, [
     data,
     cooperadoId,
@@ -761,6 +776,7 @@ export default function FichaCorridaPage() {
     conferindoPagamentoNuvem,
     syncCooperadoFinanceiro,
     cooperadoPagamentosHydrated,
+    user?.role,
     hbDescontosRevision,
   ]);
 
@@ -1191,7 +1207,8 @@ export default function FichaCorridaPage() {
     !isCooperado ||
     (!!data &&
       !!cooperadoId &&
-      (!!pagamentoAguardandoExibicao ||
+      (carregandoValoresFinanceiros ||
+        !!pagamentoAguardandoExibicao ||
         conferindoPagamentoNuvem ||
         !!pagamentoConfirmado ||
         cooperadoTemValorPendente(data, cooperadoId, coopId)));

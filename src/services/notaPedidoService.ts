@@ -2321,6 +2321,126 @@ function pagamentoAguardandoSupersedidoPorConfirmado(
   return meses.every((mes) => !!getPagamentoConfirmadoCooperadoMes(data, cooperadoId, mes));
 }
 
+function notaCobertaPorPagamentoCooperadoEspecifico(
+  data: AppData,
+  pagamento: PagamentoCooperadoRegistro,
+  nota: NotaPedido
+): boolean {
+  if (pagamento.notaPedidoIds?.includes(nota.id)) return true;
+
+  const meses = getMesesReferenciaPagamento(pagamento);
+  if (!meses.includes(nota.mesReferencia)) return false;
+
+  const escopoExplicito =
+    (pagamento.fichaIds?.length ?? 0) > 0 || (pagamento.notaPedidoIds?.length ?? 0) > 0;
+  if (!escopoExplicito) return false;
+
+  const fichaIdsPagamento = new Set(pagamento.fichaIds ?? []);
+  if (
+    (data.fichaCorrida ?? []).some(
+      (f) => fichaIdsPagamento.has(f.id) && f.notaPedidoId === nota.id
+    )
+  ) {
+    return true;
+  }
+  return false;
+}
+
+function pagamentoAguardandoTemEscopoEstruturalSuficiente(
+  pagamento: PagamentoCooperadoRegistro
+): boolean {
+  return (pagamento.fichaIds?.length ?? 0) > 0 || (pagamento.notaPedidoIds?.length ?? 0) > 0;
+}
+
+function fichasReferenciadasDoPagamentoTodasPagasNoMes(
+  data: AppData,
+  pagamento: PagamentoCooperadoRegistro,
+  cooperadoId: string,
+  mes: string,
+  canonico: string,
+  coopId?: string
+): boolean {
+  const refFichaIds = new Set(pagamento.fichaIds ?? []);
+  const refNotaIds = new Set(pagamento.notaPedidoIds ?? []);
+  const fichasMes = data.fichaCorrida.filter(
+    (f) =>
+      fichaPertenceCooperado(data, f, canonico, coopId) && f.mesReferencia === mes
+  );
+
+  if (refFichaIds.size > 0) {
+    const fichasReferenciadas = fichasMes.filter((f) => refFichaIds.has(f.id));
+    if (!fichasReferenciadas.length) return false;
+    return fichasReferenciadas.every((f) => f.status === "pago");
+  }
+
+  if (refNotaIds.size > 0) {
+    let checouAlguma = false;
+    for (const notaId of refNotaIds) {
+      const nota = data.notasPedido.find((n) => n.id === notaId);
+      if (!nota || nota.mesReferencia !== mes) continue;
+      checouAlguma = true;
+      const fichasNota = fichasMes.filter((f) => f.notaPedidoId === notaId);
+      if (fichasNota.length) {
+        if (!fichasNota.every((f) => f.status === "pago")) return false;
+      } else if (nota.status !== "pago") {
+        return false;
+      }
+    }
+    return checouAlguma;
+  }
+
+  return false;
+}
+
+/**
+ * Aguardando obsoleto para recibo: escopo do pagamento quitado na ficha e nova entrega
+ * elegível fora desse escopo (mesma lógica de cobertura que notaQuitada…, por pagamento p).
+ */
+function pagamentoAguardandoObsoletoPorNovaEntregaForaDoEscopo(
+  data: AppData,
+  cooperadoId: string,
+  pagamento: PagamentoCooperadoRegistro
+): boolean {
+  if (!pagamentoAguardandoTemEscopoEstruturalSuficiente(pagamento)) return false;
+
+  const coopId = data.cooperados.find((c) => c.id === cooperadoId)?.cooperativaId;
+  const canonico = resolverCooperadoIdCanonico(data, cooperadoId, coopId);
+  const refFichaIds = new Set(pagamento.fichaIds ?? []);
+  const refNotaIds = new Set(pagamento.notaPedidoIds ?? []);
+
+  for (const mes of getMesesReferenciaPagamento(pagamento)) {
+    if (
+      !fichasReferenciadasDoPagamentoTodasPagasNoMes(
+        data,
+        pagamento,
+        cooperadoId,
+        mes,
+        canonico,
+        coopId ?? undefined
+      )
+    ) {
+      continue;
+    }
+
+    const fichasMes = data.fichaCorrida.filter(
+      (f) =>
+        fichaPertenceCooperado(data, f, canonico, coopId ?? undefined) &&
+        f.mesReferencia === mes
+    );
+
+    for (const f of fichasMes) {
+      if (refFichaIds.has(f.id)) continue;
+      if (!fichaNotaElegivelParaPagamento(data, f)) continue;
+      const nota = data.notasPedido.find((n) => n.id === f.notaPedidoId);
+      if (!nota) continue;
+      if (refNotaIds.has(nota.id)) continue;
+      if (notaCobertaPorPagamentoCooperadoEspecifico(data, pagamento, nota)) continue;
+      return true;
+    }
+  }
+  return false;
+}
+
 export function getPagamentoAguardandoCooperado(
   data: AppData,
   cooperadoId: string,
@@ -2335,7 +2455,8 @@ export function getPagamentoAguardandoCooperado(
         resolverCooperadoIdCanonico(data, p.cooperadoId, coopId ?? p.cooperativaId) === canonico) &&
       p.status === "aguardando_confirmacao" &&
       (!mesReferencia || pagamentoCobreMesReferencia(p, mesReferencia)) &&
-      !pagamentoAguardandoSupersedidoPorConfirmado(data, cooperadoId, p)
+      !pagamentoAguardandoSupersedidoPorConfirmado(data, cooperadoId, p) &&
+      !pagamentoAguardandoObsoletoPorNovaEntregaForaDoEscopo(data, cooperadoId, p)
   );
 }
 

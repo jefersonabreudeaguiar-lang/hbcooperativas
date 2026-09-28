@@ -25,13 +25,15 @@ import {
   contarFotosEmAnaliseCooperado,
   getMesPrincipalQuantoVouReceber,
   listarNotasPendentesCooperado,
+  getValorQuantoVouReceber,
 } from "@/services/cooperadoEntregasService";
-import { getProjecaoFinanceiraCooperadoBIC } from "@/services/bicProjecaoFinanceiraCooperado";
+import { getInicioCooperadoParaExibicao } from "@/services/bicProjecaoFinanceiraCooperado";
 import { resolverCooperadoIdCanonico } from "@/services/cooperadoCloudService";
 import { cooperadoFinanceiroDesatualizado } from "@/services/fichaSyncGuard";
 import { requestAppSyncImmediate, requestVotacaoOperacionalSync } from "@/services/syncRequest";
 import { useSyncStatus } from "@/components/sync/CooperativaSyncProvider";
 import { useCooperadoExibirAguardandoAssinatura } from "@/hooks/useCooperadoExibirAguardandoAssinatura";
+import { useCooperadoApresentacaoFinanceiraConsolidada } from "@/hooks/useCooperadoApresentacaoFinanceiraConsolidada";
 import { getComunicadosInicioCooperado } from "@/services/comunicadoService";
 import { getResumoMensalidadesCooperado } from "@/services/mensalidadeService";
 import { prestacaoPrincipalCooperado, prestacaoExigeAtencaoCooperado } from "@/services/prestacaoContasService";
@@ -64,7 +66,9 @@ import { RestoreOperacionalPanel } from "@/components/sync/RestoreOperacionalPan
 function CooperadoDashboard() {
   const { user } = useAuth();
   const router = useRouter();
-  const { syncing, lastSyncError, cooperadoPagamentosHydrated } = useSyncStatus();
+  const { syncing, lastSyncError } = useSyncStatus();
+  const { apresentacaoConsolidada, carregandoValoresFinanceiros } =
+    useCooperadoApresentacaoFinanceiraConsolidada();
   const recoverySyncRef = useRef(false);
   const hbDescontosRevision = useContaCoopDescontosRevision();
 
@@ -118,7 +122,7 @@ function CooperadoDashboard() {
     if (!data || !user?.cooperadoId) return false;
     const coopId = getUserCooperativaId(user, data);
     const cooperadoId = resolverCooperadoIdCanonico(data, user.cooperadoId, coopId);
-    return getProjecaoFinanceiraCooperadoBIC(data, cooperadoId, coopId).inicio.aguardandoAssinatura;
+    return getValorQuantoVouReceber(data, cooperadoId, coopId).aguardandoAssinatura;
   }, [user?.id, user?.cooperadoId, user?.cooperativaId, hbDescontosRevision]);
 
   const { exibirAguardandoAssinatura, conferindoPagamentoNuvem } =
@@ -132,7 +136,9 @@ function CooperadoDashboard() {
     const mes = getCurrentMesReferencia();
     const cooperado = data.cooperados.find((c) => c.id === cooperadoId);
     const coopNome = getUserCooperativaNome(user, data);
-    const valorReceber = getProjecaoFinanceiraCooperadoBIC(data, cooperadoId, coopId).inicio;
+    const valorReceber = getInicioCooperadoParaExibicao(data, cooperadoId, coopId, {
+      apresentacaoConsolidada,
+    }).value;
     const precisaPix = cooperado ? cooperadoPrecisaCadastrarPix(cooperado.chavePix, cooperado.pixValido) : false;
     const notasPendentes = listarNotasPendentesCooperado(data, cooperadoId, coopId);
     const rejeitadas = notasPendentes.filter((n) => n.status === "rejeitada");
@@ -201,7 +207,7 @@ function CooperadoDashboard() {
       precisaAssinatura,
       cnpjDigits,
     };
-  }, [user?.id, user?.cooperadoId, user?.cooperativaId, hbDescontosRevision]);
+  }, [user?.id, user?.cooperadoId, user?.cooperativaId, hbDescontosRevision, apresentacaoConsolidada]);
 
   if (!view) return <PageSkeleton />;
 
@@ -228,11 +234,9 @@ function CooperadoDashboard() {
     cnpjDigits,
   } = view;
 
-  const carregandoValoresFinanceiros = syncing || !cooperadoPagamentosHydrated;
   const mostrarCardAReceber = valorReceber.exibir && !valorReceber.aguardandoAssinatura;
   const mostrarCardReciboAssinatura = valorReceber.exibir && exibirAguardandoAssinatura;
-  const mostrarCardCarregandoFinanceiro =
-    carregandoValoresFinanceiros && !mostrarCardAReceber && !mostrarCardReciboAssinatura;
+  const mostrarCardCarregandoFinanceiro = carregandoValoresFinanceiros;
 
   return (
     <div className="space-y-6 max-w-3xl">
