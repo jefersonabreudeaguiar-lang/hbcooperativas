@@ -1,5 +1,5 @@
 /** Bump junto com APP_BUILD_VERSION quando mudar estratégia de cache offline. */
-const CACHE_VERSION = "hb-coop-v37";
+const CACHE_VERSION = "hb-coop-v38";
 /** Shell HTML não vai para precache — evita mobile preso em deployment antigo (dpl_Eoe9…). */
 const PRECACHE = ["/manifest.webmanifest", "/icons/icon-192.png", "/icons/icon-512.png"];
 

@@ -1,6 +1,9 @@
 import { NextResponse } from "next/server";
 import { APP_BUILD_VERSION } from "@/lib/appBuildVersion";
 
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+
 /** Release oficial servido por esta instância (sem auth — metadados públicos). */
 export async function GET() {
   const deploymentId = (process.env.VERCEL_DEPLOYMENT_ID ?? "").trim();
@@ -15,7 +18,10 @@ export async function GET() {
     {
       headers: {
         "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0",
+        "CDN-Cache-Control": "no-store",
         Pragma: "no-cache",
+        "x-hb-deployment-id": deploymentId,
+        "x-hb-app-build": String(APP_BUILD_VERSION),
       },
     }
   );

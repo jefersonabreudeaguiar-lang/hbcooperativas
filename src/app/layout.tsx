@@ -6,14 +6,22 @@ import { PwaProvider } from "@/components/pwa/PwaProvider";
 import { ClientDeploymentGuard } from "@/components/pwa/ClientDeploymentGuard";
 import { getPrivateAppRobotsMetadata } from "@/lib/security/crawlerPolicy";
 import { APP_BUILD_VERSION } from "@/lib/appBuildVersion";
-import { buildInlineDeploymentBootScript } from "@/lib/pwa/clientRelease";
+import {
+  buildInlineDeploymentBootScript,
+  buildInlinePageReleaseBootstrap,
+  type ClientReleaseInfo,
+} from "@/lib/pwa/clientRelease";
 
 const geist = Geist({
   variable: "--font-geist-sans",
   subsets: ["latin"],
 });
 
-const VERCEL_DEPLOYMENT_ID = (process.env.VERCEL_DEPLOYMENT_ID ?? "").trim();
+const pageRelease: ClientReleaseInfo = {
+  build: APP_BUILD_VERSION,
+  deploymentId: (process.env.VERCEL_DEPLOYMENT_ID ?? "").trim(),
+  gitCommitSha: (process.env.VERCEL_GIT_COMMIT_SHA ?? "").trim(),
+};
 
 export const metadata: Metadata = {
   title: "HB Cooperativas — Gestão de Cooperativas",
@@ -51,11 +59,12 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <html
       lang="pt-BR"
       className={`${geist.variable} h-full`}
-      data-dpl-id={VERCEL_DEPLOYMENT_ID}
-      data-app-build={String(APP_BUILD_VERSION)}
+      data-dpl-id={pageRelease.deploymentId}
+      data-app-build={String(pageRelease.build)}
     >
       <head>
-        <script dangerouslySetInnerHTML={{ __html: buildInlineDeploymentBootScript() }} />
+        <script dangerouslySetInnerHTML={{ __html: buildInlinePageReleaseBootstrap(pageRelease) }} />
+        <script dangerouslySetInnerHTML={{ __html: buildInlineDeploymentBootScript(pageRelease) }} />
       </head>
       <body className="min-h-full antialiased">
         <ClientDeploymentGuard />

@@ -24,7 +24,12 @@ export async function middleware(request: NextRequest) {
   if (blocked) return blocked;
 
   if (!pathname.startsWith("/api/")) {
-    return NextResponse.next();
+    const response = NextResponse.next();
+    response.headers.set("Cache-Control", "private, no-cache, must-revalidate");
+    response.headers.set("CDN-Cache-Control", "no-store");
+    const dpl = (process.env.VERCEL_DEPLOYMENT_ID ?? "").trim();
+    if (dpl) response.headers.set("x-hb-deployment-id", dpl);
+    return response;
   }
 
   if (!isApiSecurityEnforced()) {

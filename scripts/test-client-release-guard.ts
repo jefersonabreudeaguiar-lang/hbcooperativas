@@ -1,55 +1,50 @@
 import assert from "node:assert/strict";
 import {
   BLOCKED_VERCEL_DEPLOYMENT_IDS,
-  evaluateDeploymentGuard,
+  evaluateClientReleaseAlignment,
   shouldAllowHardReload,
 } from "../src/lib/pwa/clientRelease";
 
-const OFFICIAL = {
-  build: 94,
+const CANONICAL = {
+  build: 95,
   deploymentId: "dpl_7MX5cFF9VD1mryPm3bK1em6kXxCs",
   gitCommitSha: "0cea0c1",
 };
 
 {
-  const d = evaluateDeploymentGuard({
-    official: OFFICIAL,
+  const d = evaluateClientReleaseAlignment({
+    canonical: CANONICAL,
+    pageRelease: CANONICAL,
     loadedDeploymentIds: ["dpl_Eoe9gz7YBsqYNhY1LMM79ofEDrKZ"],
   });
-  assert.equal(d.action, "reload");
-  assert.match(d.reason, /blocked_deployment/);
+  assert.equal(d.action, "align");
+  assert.match(d.reason, /blocked/);
 }
 
 {
-  const d = evaluateDeploymentGuard({
-    official: OFFICIAL,
+  const d = evaluateClientReleaseAlignment({
+    canonical: CANONICAL,
+    pageRelease: CANONICAL,
     loadedDeploymentIds: [],
   });
   assert.equal(d.action, "pending");
 }
 
 {
-  const d = evaluateDeploymentGuard({
-    official: OFFICIAL,
-    loadedDeploymentIds: [OFFICIAL.deploymentId],
-    htmlDeploymentId: "dpl_outro_antigo",
+  const d = evaluateClientReleaseAlignment({
+    canonical: CANONICAL,
+    pageRelease: { ...CANONICAL, deploymentId: "dpl_html_antigo" },
+    loadedDeploymentIds: [CANONICAL.deploymentId],
   });
-  assert.equal(d.action, "ok");
+  assert.equal(d.action, "align");
+  assert.match(d.reason, /page_dpl/);
 }
 
 {
-  const d = evaluateDeploymentGuard({
-    official: OFFICIAL,
-    loadedDeploymentIds: ["dpl_Eoe9gz7YBsqYNhY1LMM79ofEDrKZ"],
-    htmlDeploymentId: "dpl_Eoe9gz7YBsqYNhY1LMM79ofEDrKZ",
-  });
-  assert.equal(d.action, "reload");
-}
-
-{
-  const d = evaluateDeploymentGuard({
-    official: OFFICIAL,
-    loadedDeploymentIds: [OFFICIAL.deploymentId],
+  const d = evaluateClientReleaseAlignment({
+    canonical: CANONICAL,
+    pageRelease: CANONICAL,
+    loadedDeploymentIds: [CANONICAL.deploymentId],
   });
   assert.equal(d.action, "ok");
 }
