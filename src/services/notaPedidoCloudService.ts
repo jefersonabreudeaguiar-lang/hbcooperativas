@@ -622,17 +622,26 @@ export async function fetchNotaFotoPartBlobUrl(
   const digits = normalizeCnpj(cnpj);
   if (digits.length !== 14) return null;
 
-  try {
-    const res = await secureApiFetch(
-      `/api/notas-pedido/${encodeURIComponent(notaId)}/foto?cnpj=${digits}&index=${index}`,
-      { cache: "no-store" }
-    );
-    if (!res.ok) return null;
-    const blob = await res.blob();
-    return URL.createObjectURL(blob);
-  } catch {
-    return null;
+  const tryIndices = [index, 0];
+  for (let i = 0; i < 8; i++) {
+    if (!tryIndices.includes(i)) tryIndices.push(i);
   }
+
+  for (const idx of tryIndices) {
+    try {
+      const res = await secureApiFetch(
+        `/api/notas-pedido/${encodeURIComponent(notaId)}/foto?cnpj=${digits}&index=${idx}`,
+        { cache: "no-store" }
+      );
+      if (!res.ok) continue;
+      const blob = await res.blob();
+      if (blob.size <= 0) continue;
+      return URL.createObjectURL(blob);
+    } catch {
+      continue;
+    }
+  }
+  return null;
 }
 
 export function getCooperativaCnpj(data: AppData, cooperativaId?: string): string | undefined {

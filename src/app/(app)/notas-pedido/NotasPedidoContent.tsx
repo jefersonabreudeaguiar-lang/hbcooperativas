@@ -399,16 +399,28 @@ export default function NotasPedidoContent() {
       setConferenciaFotoAtualUrl(null);
       setConferenciaFotoCarregando(true);
       try {
-        let url = await fetchNotaFotoPartBlobUrl(cnpj, nota.id, index);
+        const baseData = data ?? getData();
+        const notaEnriquecida =
+          baseData && coopId ? await ensureNotaComFoto(baseData, nota, coopId) : nota;
+
+        const enrichedLocal = getFotosExibicaoNota(notaEnriquecida);
+        if (enrichedLocal[index]) {
+          conferenciaFotoCacheRef.current.set(cacheKey, enrichedLocal[index]);
+          setConferenciaFotoAtualUrl(enrichedLocal[index]);
+          return enrichedLocal[index];
+        }
+
+        let url = await fetchNotaFotoPartBlobUrl(cnpj, notaEnriquecida.id, index);
         if (!url) {
-          const resolved = await resolveFotosNotaParaExibicao(nota, cnpj);
-          url = resolved[index] ?? null;
+          const resolved = await resolveFotosNotaParaExibicao(notaEnriquecida, cnpj);
+          url = resolved[index] ?? resolved[0] ?? null;
         }
         if (url) {
           conferenciaFotoCacheRef.current.set(cacheKey, url);
           setConferenciaFotoAtualUrl(url);
           return url;
         }
+        conferenciaFotoCacheRef.current.delete(cacheKey);
         setConferenciaFotoErro(
           "Não foi possível carregar esta foto da nuvem. Verifique a conexão e toque em «Tentar de novo»."
         );
@@ -4306,6 +4318,9 @@ export default function NotasPedidoContent() {
                           alt={`Pedido ${idx + 1} de ${totalFotos}`}
                           className="block max-h-full max-w-full w-auto h-auto object-contain mx-auto lg:max-h-[calc(100dvh-15rem)]"
                           onError={() => {
+                            const key = conferenciaFotoCacheKey(selectedNota.id, idx);
+                            conferenciaFotoCacheRef.current.delete(key);
+                            revokePreviewUrl(conferenciaFotoAtualUrl);
                             setConferenciaFotoErro(
                               "A foto não pôde ser exibida neste aparelho. Toque em «Tentar de novo»."
                             );

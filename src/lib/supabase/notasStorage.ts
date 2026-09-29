@@ -185,11 +185,16 @@ export async function assembleNotaFotosFromParts(
   nota: NotaPedido
 ): Promise<NotaPedido> {
   if (nota.fotosPedido?.length) return nota;
-  const count = nota.fotosEnviadasCount ?? 0;
+  const count = Math.max(
+    nota.fotosEnviadasCount ?? 0,
+    await countUploadedFotoParts(supabase, cnpj, nota.id)
+  );
   if (count <= 0) return nota;
 
+  const partNames = await listFotoPartFileNames(supabase, cnpj, nota.id);
   const fotos: string[] = [];
-  for (let i = 0; i < count; i++) {
+  const limit = partNames.length > 0 ? partNames.length : count;
+  for (let i = 0; i < limit; i++) {
     const part = await downloadFotoPartAsDataUrl(supabase, cnpj, nota.id, i);
     if (part) fotos.push(part);
   }
@@ -402,6 +407,42 @@ export async function fetchNotaFromStorage(
   }
 }
 
+async function listFotoPartFileNames(
+  supabase: SupabaseClient,
+  cnpj: string,
+  notaId: string
+): Promise<string[]> {
+  const folder = `${cnpj}/${notaId}`;
+  const { data: files } = await supabase.storage.from(BUCKET).list(folder, { limit: 500 });
+  if (!files?.length) return [];
+  return files
+    .filter((f) => /^foto-\d+\.jpg$/i.test(f.name))
+    .map((f) => f.name)
+    .sort((a, b) => a.localeCompare(b));
+}
+
+async function downloadStoragePathBuffer(
+  supabase: SupabaseClient,
+  objectPath: string
+): Promise<{ buffer: Buffer; contentType: string } | null> {
+  const { data: blob, error } = await supabase.storage.from(BUCKET).download(objectPath);
+  if (error || !blob) return null;
+  return {
+    buffer: Buffer.from(await blob.arrayBuffer()),
+    contentType: blob.type || "image/jpeg",
+  };
+}
+
+function inlineFotoFromNotaMeta(nota: NotaPedido, index: number): string | undefined {
+  const fromArray = nota.fotosPedido?.[index];
+  if (fromArray && isInlineDataUrl(fromArray)) return fromArray;
+  if (index === 0 && nota.fotoPedido && isInlineDataUrl(nota.fotoPedido)) return nota.fotoPedido;
+  const firstArray = nota.fotosPedido?.find((f) => isInlineDataUrl(f));
+  if (firstArray) return firstArray;
+  if (nota.fotoPedido && isInlineDataUrl(nota.fotoPedido)) return nota.fotoPedido;
+  return undefined;
+}
+
 /** Baixa uma foto da nuvem (stream) — sem base64 na RAM. */
 export async function downloadFotoPartBuffer(
   supabase: SupabaseClient,
@@ -409,31 +450,40 @@ export async function downloadFotoPartBuffer(
   notaId: string,
   index: number
 ): Promise<{ buffer: Buffer; contentType: string } | null> {
-  const { data: blob, error } = await supabase.storage
-    .from(BUCKET)
-    .download(fotoPartPath(cnpj, notaId, index));
-  if (!error && blob) {
-    const buffer = Buffer.from(await blob.arrayBuffer());
-    const contentType = blob.type || "image/jpeg";
-    return { buffer, contentType };
+  const direct = await downloadStoragePathBuffer(supabase, fotoPartPath(cnpj, notaId, index));
+  if (direct) return direct;
+
+  const partNames = await listFotoPartFileNames(supabase, cnpj, notaId);
+  if (partNames.length > 0) {
+    const safeIndex = Math.min(Math.max(0, index), partNames.length - 1);
+    const byIndex = await downloadStoragePathBuffer(
+      supabase,
+      `${cnpj}/${notaId}/${partNames[safeIndex]}`
+    );
+    if (byIndex) return byIndex;
+    for (const name of partNames) {
+      const part = await downloadStoragePathBuffer(supabase, `${cnpj}/${notaId}/${name}`);
+      if (part) return part;
+    }
   }
 
   const meta = await fetchNotaMetaFromStorage(supabase, cnpj, notaId);
-  if (!meta) return null;
+  const inlineSources: NotaPedido[] = [];
+  if (meta) inlineSources.push(meta);
 
-  const inline =
-    meta.fotosPedido?.[index] ??
-    (index === 0 ? meta.fotoPedido : undefined);
-  if (inline && isInlineDataUrl(inline)) {
-    return { buffer: dataUrlToBuffer(inline), contentType: "image/jpeg" };
-  }
+  const { data: tableRow } = await supabase
+    .from("notas_pedido")
+    .select("payload")
+    .eq("id", notaId)
+    .eq("cooperativa_cnpj", cnpj)
+    .maybeSingle();
+  const tablePayload = tableRow?.payload as NotaPedido | undefined;
+  if (tablePayload?.id) inlineSources.push(tablePayload);
 
-  const uploaded = await countUploadedFotoParts(supabase, cnpj, notaId);
-  if (uploaded > 0 && index < uploaded) {
-    const retry = await supabase.storage.from(BUCKET).download(fotoPartPath(cnpj, notaId, index));
-    if (!retry.error && retry.data) {
-      const buffer = Buffer.from(await retry.data.arrayBuffer());
-      return { buffer, contentType: retry.data.type || "image/jpeg" };
+  for (const src of inlineSources) {
+    const inline = inlineFotoFromNotaMeta(src, index);
+    if (inline) {
+      return { buffer: dataUrlToBuffer(inline), contentType: "image/jpeg" };
     }
   }
 

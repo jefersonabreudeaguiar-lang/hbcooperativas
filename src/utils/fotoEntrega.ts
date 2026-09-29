@@ -774,6 +774,11 @@ export function mergeNotaComFotos(a: NotaPedido, b: NotaPedido): NotaPedido {
     richFotos.length
   );
 
+  const fotosMeta =
+    (meta.fotosMeta?.length ?? 0) >= (other.fotosMeta?.length ?? 0)
+      ? meta.fotosMeta ?? other.fotosMeta
+      : other.fotosMeta ?? meta.fotosMeta;
+
   return {
     ...meta,
     status,
@@ -781,7 +786,17 @@ export function mergeNotaComFotos(a: NotaPedido, b: NotaPedido): NotaPedido {
     fotosPedido,
     fotosPedidoMiniaturas,
     fotoPedidoMiniatura: rich.fotoPedidoMiniatura ?? fotosPedidoMiniaturas?.[0] ?? meta.fotoPedidoMiniatura,
-    fotoNaNuvem: meta.fotoNaNuvem ?? rich.fotoNaNuvem ?? richFotos.length > 0,
+    fotoNaNuvem: Boolean(
+      a.fotoNaNuvem ||
+        b.fotoNaNuvem ||
+        meta.fotoNaNuvem ||
+        rich.fotoNaNuvem ||
+        countEsperado > 0 ||
+        a.fotoEnviadaEm ||
+        b.fotoEnviadaEm
+    ),
     fotosEnviadasCount: countEsperado > 0 ? countEsperado : undefined,
+    fotoEnviadaEm: meta.fotoEnviadaEm ?? other.fotoEnviadaEm ?? rich.fotoEnviadaEm,
+    fotosMeta,
   };
 }
