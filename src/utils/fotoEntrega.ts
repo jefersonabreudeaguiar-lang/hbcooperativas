@@ -1,5 +1,6 @@
 import type { AppData, NotaPedido } from "@/types";
 import { normalizeCnpj } from "@/utils/cooperativa";
+import { cpfCooperadoDigits, escolherCooperadoCanonico, nomeNormalizadoCooperado } from "@/utils/cooperadoDedupe";
 import { isInlineDataUrl } from "@/utils/mediaHelpers";
 import { isNotaRelancamentoIntencional } from "@/utils/notaStatus";
 
@@ -246,8 +247,40 @@ export interface GrupoConferenciaEntrega {
   notas: NotaPedido[];
 }
 
-function normalizeNomeGrupo(nome: string): string {
-  return nome.trim().toLowerCase().replace(/\s+/g, " ");
+/** ID estável do cooperado na fila — une IDs duplicados e snapshot da nuvem. */
+export function resolverCooperadoIdGrupoConferencia(
+  data: AppData,
+  nota: NotaPedido,
+  cooperativaId?: string
+): string {
+  const coopId = cooperativaId ?? nota.cooperativaId;
+  if (!coopId) return nota.cooperadoId;
+
+  const canonizarPorTitular = (cooperadoId: string): string => {
+    const ref = data.cooperados.find((c) => c.id === cooperadoId && c.cooperativaId === coopId);
+    const cpf = cpfCooperadoDigits(ref?.cpfCnpj);
+    if (cpf.length >= 11) {
+      const siblings = data.cooperados.filter(
+        (c) => c.cooperativaId === coopId && cpfCooperadoDigits(c.cpfCnpj) === cpf
+      );
+      if (siblings.length > 0) return escolherCooperadoCanonico(siblings).id;
+    }
+    return cooperadoId;
+  };
+
+  const direct = data.cooperados.find((c) => c.id === nota.cooperadoId && c.cooperativaId === coopId);
+  if (direct) return canonizarPorTitular(direct.id);
+
+  const snapshot = nota.cooperadoNomeSnapshot?.trim();
+  if (snapshot) {
+    const snapNorm = nomeNormalizadoCooperado(snapshot);
+    const byName = data.cooperados.find(
+      (c) => c.cooperativaId === coopId && nomeNormalizadoCooperado(c.nomeCompleto) === snapNorm
+    );
+    if (byName) return canonizarPorTitular(byName.id);
+  }
+
+  return canonizarPorTitular(nota.cooperadoId);
 }
 
 /** Agrupa entregas pendentes pelo cooperado (nome salvo na nuvem ou cadastro local). */
@@ -256,26 +289,7 @@ export function getChaveGrupoConferencia(
   data: AppData,
   cooperativaId?: string
 ): string {
-  const coopId = cooperativaId ?? nota.cooperativaId;
-  const snapshot = nota.cooperadoNomeSnapshot?.trim();
-
-  if (snapshot && coopId) {
-    const nomeKey = normalizeNomeGrupo(snapshot);
-    const byName = data.cooperados.find(
-      (c) =>
-        c.cooperativaId === coopId &&
-        normalizeNomeGrupo(c.nomeCompleto) === nomeKey
-    );
-    if (byName) return `id:${byName.id}`;
-    return `nome:${nomeKey}`;
-  }
-
-  const local = data.cooperados.find(
-    (c) => c.id === nota.cooperadoId && (!coopId || c.cooperativaId === coopId)
-  );
-  if (local) return `id:${local.id}`;
-
-  return `id:${nota.cooperadoId}`;
+  return `id:${resolverCooperadoIdGrupoConferencia(data, nota, cooperativaId)}`;
 }
 
 export function getNomeGrupoConferencia(notas: NotaPedido[], data: AppData): string {
@@ -292,22 +306,9 @@ export function resolverCooperadoIdDoGrupo(
   data: AppData,
   cooperativaId?: string
 ): string {
-  for (const nota of notas) {
-    const c = data.cooperados.find(
-      (x) => x.id === nota.cooperadoId && (!cooperativaId || x.cooperativaId === cooperativaId)
-    );
-    if (c) return c.id;
-  }
-  const snapshot = notas[0]?.cooperadoNomeSnapshot?.trim().toLowerCase();
-  if (snapshot && cooperativaId) {
-    const c = data.cooperados.find(
-      (x) =>
-        x.cooperativaId === cooperativaId &&
-        x.nomeCompleto.trim().toLowerCase() === snapshot
-    );
-    if (c) return c.id;
-  }
-  return notas[0]?.cooperadoId ?? "";
+  const first = notas[0];
+  if (!first) return "";
+  return resolverCooperadoIdGrupoConferencia(data, first, cooperativaId);
 }
 
 export function agruparPendentesPorCooperado(
@@ -345,6 +346,8 @@ export function resolverAbaConferenciaAtiva(
   if (filtroCooperadoId) {
     const porId = grupos.find((g) => g.cooperadoId === filtroCooperadoId);
     if (porId) return { chave: porId.chave, grupo: porId };
+    // Cooperado selecionado sem grupo na fila — não cair no primeiro da lista.
+    return { chave: abaConferenciaKey, grupo: undefined };
   }
   if (abaConferenciaKey) {
     const direta = grupos.find((g) => g.chave === abaConferenciaKey);

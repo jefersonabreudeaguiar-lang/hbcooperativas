@@ -5,7 +5,12 @@ export function cpfCooperadoDigits(cpfCnpj?: string): string {
 }
 
 export function nomeNormalizadoCooperado(nome: string | undefined | null): string {
-  return (nome ?? "").trim().toLowerCase().replace(/\s+/g, " ");
+  return (nome ?? "")
+    .trim()
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/\p{M}/gu, "")
+    .replace(/\s+/g, " ");
 }
 
 export function mesmoCooperadoCadastro(

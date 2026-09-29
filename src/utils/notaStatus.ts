@@ -35,6 +35,18 @@ export function isNotaNaFilaConferenciaResponsavel(status: NotaPedidoStatus | un
   return status === "aguardando_conferencia" || status === "entregue";
 }
 
+/** Filtro da lista em Conferir entregas — «Em análise» inclui entregue (mesma fila operacional). */
+export function notaPassaFiltroStatusListaConferencia(
+  status: NotaPedidoStatus,
+  statusFilter: string
+): boolean {
+  if (!statusFilter) return true;
+  if (statusFilter === "aguardando_conferencia") {
+    return isNotaNaFilaConferenciaResponsavel(status);
+  }
+  return status === statusFilter;
+}
+
 /** Sai da fila do responsável — só após lançamento, rejeição ou cancelamento. */
 export function isNotaSaiuDaFilaConferencia(status: NotaPedidoStatus | undefined | null): boolean {
   return (

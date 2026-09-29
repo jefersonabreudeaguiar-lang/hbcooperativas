@@ -3,6 +3,7 @@ import type { NotaPedido } from "@/types";
 import { isNotasPedidoTableMissing } from "@/lib/supabase/errors";
 import { protectNotaAgainstStatusDowngrade, isNotaNaFilaConferenciaResponsavel } from "@/utils/notaStatus";
 import { mergeNotaComFotos } from "@/utils/fotoEntrega";
+import { isInlineDataUrl } from "@/utils/mediaHelpers";
 
 const BUCKET = "hb-entregas";
 export const FOTOS_STORAGE_PARTS = "parts";
@@ -411,10 +412,32 @@ export async function downloadFotoPartBuffer(
   const { data: blob, error } = await supabase.storage
     .from(BUCKET)
     .download(fotoPartPath(cnpj, notaId, index));
-  if (error || !blob) return null;
-  const buffer = Buffer.from(await blob.arrayBuffer());
-  const contentType = blob.type || "image/jpeg";
-  return { buffer, contentType };
+  if (!error && blob) {
+    const buffer = Buffer.from(await blob.arrayBuffer());
+    const contentType = blob.type || "image/jpeg";
+    return { buffer, contentType };
+  }
+
+  const meta = await fetchNotaMetaFromStorage(supabase, cnpj, notaId);
+  if (!meta) return null;
+
+  const inline =
+    meta.fotosPedido?.[index] ??
+    (index === 0 ? meta.fotoPedido : undefined);
+  if (inline && isInlineDataUrl(inline)) {
+    return { buffer: dataUrlToBuffer(inline), contentType: "image/jpeg" };
+  }
+
+  const uploaded = await countUploadedFotoParts(supabase, cnpj, notaId);
+  if (uploaded > 0 && index < uploaded) {
+    const retry = await supabase.storage.from(BUCKET).download(fotoPartPath(cnpj, notaId, index));
+    if (!retry.error && retry.data) {
+      const buffer = Buffer.from(await retry.data.arrayBuffer());
+      return { buffer, contentType: retry.data.type || "image/jpeg" };
+    }
+  }
+
+  return null;
 }
 
 /** Une notas da tabela SQL e do storage, mantendo metadados recentes e o maior conjunto de fotos. */

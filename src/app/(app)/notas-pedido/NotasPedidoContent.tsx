@@ -129,6 +129,7 @@ import {
   isNotaNaFilaConferenciaResponsavel,
   isNotaRelancamentoPayload,
   isNotaSaiuDaFilaConferencia,
+  notaPassaFiltroStatusListaConferencia,
 } from "@/utils/notaStatus";
 import {
   loadFotoDraftMeta,
@@ -397,7 +398,11 @@ export default function NotasPedidoContent() {
       setConferenciaFotoAtualUrl(null);
       setConferenciaFotoCarregando(true);
       try {
-        const url = await fetchNotaFotoPartBlobUrl(cnpj, nota.id, index);
+        let url = await fetchNotaFotoPartBlobUrl(cnpj, nota.id, index);
+        if (!url) {
+          const resolved = await resolveFotosNotaParaExibicao(nota, cnpj);
+          url = resolved[index] ?? null;
+        }
         if (url) {
           conferenciaFotoCacheRef.current.set(cacheKey, url);
           setConferenciaFotoAtualUrl(url);
@@ -1149,7 +1154,7 @@ export default function NotasPedidoContent() {
           if (!notaPertenceCooperado(data, n, filtroCooperadoId, coopId)) return false;
         }
 
-        if (statusFilter && n.status !== statusFilter) return false;
+        if (statusFilter && !notaPassaFiltroStatusListaConferencia(n.status, statusFilter)) return false;
         return true;
       })
       .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
