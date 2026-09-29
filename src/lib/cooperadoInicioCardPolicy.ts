@@ -256,10 +256,15 @@ export function resolverCardInicioEndurecido(input: ResolverCardInicioInput): In
         display: persistido.display,
         hadPendencia: cooperadoMotorTemObrigacaoReceber(persistido.display),
       };
+      /** Boot sem AppData: não exibir valor do cache como definitivo (motor BIC valida após warm). */
+      const aguardandoMotor = persistido.display.valor > 0;
+      const display: InicioCardMotorSnapshot = aguardandoMotor
+        ? { ...persistido.display, valor: 0 }
+        : persistido.display;
       return {
-        display: persistido.display,
+        display,
         latch,
-        atualizando: input.carregandoFinanceiro,
+        atualizando: aguardandoMotor || input.carregandoFinanceiro,
         gravarPersistencia: false,
       };
     }
