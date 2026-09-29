@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import {
   isNotaNaFilaConferenciaResponsavel,
   notaPassaFiltroStatusListaConferencia,
+  notaElegivelParaFilaConferenciaResponsavel,
 } from "../src/utils/notaStatus";
 import {
   getChaveGrupoConferencia,
@@ -13,6 +14,15 @@ assert.equal(isNotaNaFilaConferenciaResponsavel("entregue"), true);
 assert.equal(notaPassaFiltroStatusListaConferencia("entregue", "aguardando_conferencia"), true);
 assert.equal(notaPassaFiltroStatusListaConferencia("conferida", "aguardando_conferencia"), false);
 assert.equal(notaPassaFiltroStatusListaConferencia("conferida", "conferida"), true);
+
+assert.equal(
+  notaElegivelParaFilaConferenciaResponsavel({
+    status: "aguardando_conferencia",
+    conferidaPor: "Maria",
+    dataConferencia: "2026-09-01",
+  }),
+  false
+);
 
 const coopId = "coop1";
 const altonId = "c_alton";

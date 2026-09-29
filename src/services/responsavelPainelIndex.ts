@@ -8,7 +8,7 @@ import { listCooperadosDaCooperativa } from "@/services/cooperadoCloudService";
 import { getDataRevision } from "@/services/dataStore";
 import { idsNotasPedidoExcluidas } from "@/services/notaPedidoService";
 import { notaPertenceCooperativa } from "@/utils/fotoEntrega";
-import { isNotaNaFilaConferenciaResponsavel } from "@/utils/notaStatus";
+import { notaElegivelParaFilaConferenciaResponsavel } from "@/utils/notaStatus";
 
 type PainelCache = {
   revision: number;
@@ -53,7 +53,7 @@ function buildPainelCache(data: AppData, coopId: string): PainelCache {
   const excluidas = idsNotasPedidoExcluidas(data, coopId);
   const filaNotas: NotaPedido[] = [];
   for (const n of data.notasPedido) {
-    if (!isNotaNaFilaConferenciaResponsavel(n.status)) continue;
+    if (!notaElegivelParaFilaConferenciaResponsavel(n)) continue;
     if (!notaPertenceCooperativa(data, n, coopId)) continue;
     if (excluidas.has(n.id)) continue;
     filaNotas.push(n);

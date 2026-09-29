@@ -129,6 +129,7 @@ import {
   isNotaNaFilaConferenciaResponsavel,
   isNotaRelancamentoPayload,
   isNotaSaiuDaFilaConferencia,
+  notaElegivelParaFilaConferenciaResponsavel,
   notaPassaFiltroStatusListaConferencia,
 } from "@/utils/notaStatus";
 import {
@@ -928,8 +929,14 @@ export default function NotasPedidoContent() {
   const filaStickyIdsRef = useRef<Set<string>>(new Set());
   const filaStickySnapshotRef = useRef<Map<string, NotaPedido>>(new Map());
 
+  const removerNotaDaFilaSticky = useCallback((notaId: string) => {
+    filaStickyIdsRef.current.delete(notaId);
+    filaStickySnapshotRef.current.delete(notaId);
+  }, []);
+
   useEffect(() => {
     for (const n of pendentesTodas) {
+      if (!notaElegivelParaFilaConferenciaResponsavel(n)) continue;
       filaStickyIdsRef.current.add(n.id);
       filaStickySnapshotRef.current.set(n.id, n);
     }
@@ -967,7 +974,6 @@ export default function NotasPedidoContent() {
       if (pendingDeleteIds.has(id)) continue;
       if (byId.has(id)) continue;
       const atual = notasById.get(id);
-      const snap = filaStickySnapshotRef.current.get(id);
       if (!atual || (coopId && isNotaPedidoExcluida(data, id, coopId))) {
         // Excluída localmente — não ressuscitar pelo snapshot da fila sticky.
         filaStickyIdsRef.current.delete(id);
@@ -976,15 +982,14 @@ export default function NotasPedidoContent() {
       }
       if (isNotaSaiuDaFilaConferencia(atual.status)) continue;
       if (isNotaNaFilaConferenciaResponsavel(atual.status)) {
+        if (!notaElegivelParaFilaConferenciaResponsavel(atual)) {
+          filaStickyIdsRef.current.delete(id);
+          filaStickySnapshotRef.current.delete(id);
+          continue;
+        }
         byId.set(id, atual);
         filaStickySnapshotRef.current.set(id, atual);
         continue;
-      }
-      if (snap) {
-        byId.set(id, {
-          ...mergeNotaComFotos(snap, atual),
-          status: "aguardando_conferencia",
-        });
       }
     }
 
@@ -2055,6 +2060,14 @@ export default function NotasPedidoContent() {
               : enriched;
           });
         });
+        const fotosTransicao = contarFotosEnviadasNota(notaComFoto);
+        if (
+          notaTemFotoArmazenadaNaNuvem(notaComFoto) &&
+          fotosTransicao > 0 &&
+          getFotosExibicaoNota(notaComFoto).length === 0
+        ) {
+          void loadConferenciaFoto(notaComFoto, 0);
+        }
       } else {
         notaComFoto = await ensureNotaComFoto(d, nota, coopId);
       }
@@ -2138,10 +2151,33 @@ export default function NotasPedidoContent() {
     setConferenciaTransicao(false);
   };
 
+  const listarPendentesConferencia = (
+    d: AppData,
+    coopIdLocal: string,
+    chaveGrupo?: string,
+    excludeId?: string
+  ) =>
+    d.notasPedido
+      .filter((n) => {
+        if (!notaElegivelParaFilaConferenciaResponsavel(n)) return false;
+        if (excludeId && n.id === excludeId) return false;
+        if (!notaPertenceCooperativa(d, n, coopIdLocal)) return false;
+        if (chaveGrupo && getChaveGrupoConferencia(n, d, coopIdLocal) !== chaveGrupo) return false;
+        return true;
+      })
+      .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+
   const openConferir = async (nota: NotaPedido) => {
+    const fresh = getData()?.notasPedido.find((n) => n.id === nota.id) ?? nota;
+    if (!notaElegivelParaFilaConferenciaResponsavel(fresh)) {
+      removerNotaDaFilaSticky(fresh.id);
+      setSuccessMsg("Esta entrega já foi lançada. A lista foi atualizada.");
+      requestAppSyncLight();
+      return;
+    }
     const d = getData() ?? data;
     if (!isCooperado && d && coopId) {
-      const chave = getChaveGrupoConferencia(nota, d, coopId);
+      const chave = getChaveGrupoConferencia(fresh, d, coopId);
       const fila = listarPendentesConferencia(d, coopId, chave);
       filaConferenciaRef.current = { total: fila.length, concluidas: 0, chave };
       setFilaConferenciaPos(1);
@@ -2151,25 +2187,9 @@ export default function NotasPedidoContent() {
       setFilaConferenciaPos(0);
       setFilaConferenciaTotal(0);
     }
-    await prepararConferenciaNota(nota);
+    await prepararConferenciaNota(fresh);
     setConferirModal(true);
   };
-
-  const listarPendentesConferencia = (
-    d: AppData,
-    coopIdLocal: string,
-    chaveGrupo?: string,
-    excludeId?: string
-  ) =>
-    d.notasPedido
-      .filter((n) => {
-        if (!isNotaNaFilaConferenciaResponsavel(n.status)) return false;
-        if (excludeId && n.id === excludeId) return false;
-        if (!notaPertenceCooperativa(d, n, coopIdLocal)) return false;
-        if (chaveGrupo && getChaveGrupoConferencia(n, d, coopIdLocal) !== chaveGrupo) return false;
-        return true;
-      })
-      .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
 
   const obterProximaNotaConferencia = (chaveGrupo: string, notaConcluidaId: string): NotaPedido | null => {
     if (!coopId) return null;
@@ -2544,6 +2564,8 @@ export default function NotasPedidoContent() {
       );
     });
 
+    removerNotaDaFilaSticky(notaId);
+
     const notaPatchSnapshot = notaAtualizada;
 
     const notaAprovadaRef = selectedNota;
@@ -2574,7 +2596,6 @@ export default function NotasPedidoContent() {
         await withConferenciaOperacionalPushScope(coopId, getConferenciaPatchSyncedSnapshot(), async () => {
           await pushOperacionalToCloud(cnpj, getData(), coopId, { authoritative: true });
         });
-        requestAppSyncLight();
       } else {
         requestAppSync();
       }
@@ -2598,7 +2619,6 @@ export default function NotasPedidoContent() {
           setTimeout(() => setLancadoMsg(""), 4000);
           await prepararConferenciaNota(proxima, { transicao: true });
         } else {
-          await aguardarSequenciaLancamentoFotos(notaAprovadaRef, qtdFotosAprovadas);
           fecharConferirModal();
           setLancadoMsg(
             divisaoPreview
@@ -2606,6 +2626,7 @@ export default function NotasPedidoContent() {
               : `Nota aprovada! ${formatCurrency(valorAprovado)} na ficha de ${msgBeneficiarios}. Fila concluída!`
           );
           setTimeout(() => setLancadoMsg(""), 6000);
+          requestAppSyncLight();
         }
       } catch {
         /* ignore */
@@ -2634,6 +2655,8 @@ export default function NotasPedidoContent() {
         { entityType: "nota_pedido", entityId: selectedNota.id, action: "editar", userId: user.id, userName: user.name }
       );
     });
+
+    removerNotaDaFilaSticky(selectedNota.id);
 
     if (notaAtualizada && coopId && data) {
       const cnpj = getCooperativaCnpj(data, coopId);
@@ -2928,7 +2951,13 @@ export default function NotasPedidoContent() {
       <button
         type="button"
         id={recémEnviada ? `nota-enviada-${n.id}` : undefined}
-        onClick={() => (isCooperado ? openView(n) : n.status === "aguardando_conferencia" ? void openConferir(n) : openView(n))}
+        onClick={() =>
+          isCooperado
+            ? openView(n)
+            : notaElegivelParaFilaConferenciaResponsavel(n)
+              ? void openConferir(n)
+              : openView(n)
+        }
         className={cn(
           "w-full text-left bg-white border rounded-xl p-4 transition-colors",
           recémEnviada
@@ -3619,7 +3648,9 @@ export default function NotasPedidoContent() {
           { key: "valor", label: "Valor", render: (n) => (n.valorLiquido > 0 ? formatCurrency(n.valorLiquido) : "—") },
           { key: "status", label: "Status", render: (n) => <NotaStatusBadge status={n.status} /> },
         ]}
-        onView={(n) => (n.status === "aguardando_conferencia" ? void openConferir(n) : openView(n))}
+        onView={(n) =>
+          notaElegivelParaFilaConferenciaResponsavel(n) ? void openConferir(n) : openView(n)
+        }
         viewLabel="Conferir"
         onDelete={
           check("notas_pedido", "edit")

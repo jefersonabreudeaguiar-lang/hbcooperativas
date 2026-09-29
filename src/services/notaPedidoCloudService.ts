@@ -135,6 +135,13 @@ function shouldApplyCloudNota(local: NotaPedido | undefined, cloud: NotaPedido):
     return false;
   }
 
+  if (
+    (local.status === "conferida" || local.status === "pago") &&
+    (cloud.status === "aguardando_conferencia" || cloud.status === "entregue" || cloud.status === "rascunho")
+  ) {
+    return false;
+  }
+
   // Responsável rejeitou — cooperado precisa ver o status na hora.
   if (local.status === "rejeitada" && cloud.status === "aguardando_conferencia") {
     return true;

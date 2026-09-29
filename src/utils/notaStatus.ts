@@ -47,6 +47,19 @@ export function notaPassaFiltroStatusListaConferencia(
   return status === statusFilter;
 }
 
+/**
+ * Nota que ainda deve aparecer na fila do responsável — exclui “zombies”
+ * (status em análise com marca de conferência / valores órfãos pós-lançamento).
+ */
+export function notaElegivelParaFilaConferenciaResponsavel(nota: Pick<
+  NotaPedido,
+  "status" | "conferidaPor" | "dataConferencia"
+>): boolean {
+  if (!isNotaNaFilaConferenciaResponsavel(nota.status)) return false;
+  if (nota.conferidaPor?.trim() || nota.dataConferencia) return false;
+  return true;
+}
+
 /** Sai da fila do responsável — só após lançamento, rejeição ou cancelamento. */
 export function isNotaSaiuDaFilaConferencia(status: NotaPedidoStatus | undefined | null): boolean {
   return (
