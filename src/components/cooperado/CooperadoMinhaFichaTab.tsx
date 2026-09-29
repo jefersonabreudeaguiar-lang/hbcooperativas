@@ -13,7 +13,7 @@ import {
   Camera,
   BookOpen,
 } from "lucide-react";
-import { useAppData } from "@/hooks/useAppData";
+import { useAppData, useAppDataSelector } from "@/hooks/useAppData";
 import { useContaCoopDescontosRevision } from "@/hooks/useContaCoopDescontosRevision";
 import { Button } from "@/components/ui/Button";
 import { NotaStatusBadge } from "@/components/ui/NotaStatusBadge";
@@ -28,7 +28,12 @@ import {
   bicCentralGetValorExibicaoCooperado,
 } from "@/services/bicLeituraCentralFicha";
 import type { ResumoMesEntregasCooperado } from "@/services/cooperadoEntregasService";
-import { listarResumosFotosCooperado } from "@/services/cooperadoEntregasService";
+import {
+  listarResumosFotosCooperado,
+  listarResumosExtratoHistoricoCooperado,
+  somarTotalRecebidoConfirmadoCooperado,
+  notaTemFotoEnviadaCooperado,
+} from "@/services/cooperadoEntregasService";
 import {
   agruparEntregasPorSemanaNoMes,
   agruparNotasEmEntregas,
@@ -59,6 +64,7 @@ function MesFichaAccordion({
   getEscolaLabel,
   expandido,
   onToggle,
+  onVerFotosMes,
 }: {
   resumo: ResumoMesEntregasCooperado;
   cooperadoId: string;
@@ -67,6 +73,7 @@ function MesFichaAccordion({
   getEscolaLabel: CooperadoMinhaFichaTabProps["getEscolaLabel"];
   expandido: boolean;
   onToggle: () => void;
+  onVerFotosMes?: (mesReferencia: string) => void;
 }) {
   const data = useAppData();
   const hbDescontosRevision = useContaCoopDescontosRevision();
@@ -336,6 +343,11 @@ function MesFichaAccordion({
                   : formatDate(resumo.pagamentoConfirmado.pagoEm.split("T")[0])}
               </div>
             )}
+            {quitado && onVerFotosMes && resumo.notas.some(notaTemFotoEnviadaCooperado) && (
+              <Button size="sm" variant="secondary" onClick={() => onVerFotosMes(resumo.mesReferencia)}>
+                <Camera size={16} /> Fotos do mês
+              </Button>
+            )}
             {!quitado && resumo.valorAReceber > 0 && (
               <Link href="/ficha-corrida">
                 <Button size="sm">
@@ -359,12 +371,25 @@ export function CooperadoMinhaFichaTab({
 }: CooperadoMinhaFichaTabProps) {
   const data = useAppData();
   const [mesExpandido, setMesExpandido] = useState<string | null>(resumos[0]?.mesReferencia ?? null);
+  const [mesExpandidoHistorico, setMesExpandidoHistorico] = useState<string | null>(null);
   const [subAba, setSubAba] = useState<"extrato" | "fotos">("extrato");
+  const [fotosMesFocus, setFotosMesFocus] = useState<string | null>(null);
 
-  const totalRecebido = useMemo(
-    () => resumos.reduce((s, r) => s + r.valorRecebido, 0),
-    [resumos]
-  );
+  const resumosHistorico =
+    useAppDataSelector(
+      (d) => listarResumosExtratoHistoricoCooperado(d, cooperadoId, cooperativaId),
+      [cooperadoId, cooperativaId]
+    ) ?? [];
+
+  const totalRecebido = useAppDataSelector(
+    (d) => somarTotalRecebidoConfirmadoCooperado(d, cooperadoId, cooperativaId),
+    [cooperadoId, cooperativaId]
+  ) ?? 0;
+
+  const abrirFotosDoMes = (mesReferencia: string) => {
+    setFotosMesFocus(mesReferencia);
+    setSubAba("fotos");
+  };
 
   const totalPendente = useMemo(
     () => resumos.reduce((s, r) => s + (r.pagamentoConfirmado ? 0 : r.valorAReceber), 0),
@@ -376,7 +401,7 @@ export function CooperadoMinhaFichaTab({
     return listarResumosFotosCooperado(data, cooperadoId, cooperativaId);
   }, [data, cooperadoId, cooperativaId]);
 
-  if (resumos.length === 0) {
+  if (resumos.length === 0 && resumosHistorico.length === 0) {
     return (
       <div className="space-y-6">
         <div className="flex gap-2 border-b border-gray-200">
@@ -411,6 +436,7 @@ export function CooperadoMinhaFichaTab({
             resumos={resumosFotos}
             getEscolaLabel={getEscolaLabel}
             cooperativaId={cooperativaId}
+            mesReferenciaInicial={fotosMesFocus}
           />
         ) : (
           <>
@@ -466,6 +492,7 @@ export function CooperadoMinhaFichaTab({
           resumos={resumosFotos}
           getEscolaLabel={getEscolaLabel}
           cooperativaId={cooperativaId}
+          mesReferenciaInicial={fotosMesFocus}
         />
       ) : (
         <>
@@ -473,7 +500,7 @@ export function CooperadoMinhaFichaTab({
         <div className="rounded-2xl bg-gradient-to-br from-emerald-700 to-emerald-800 text-white p-5">
           <p className="text-emerald-100 text-sm">Total já recebido</p>
           <p className="text-3xl font-bold mt-1">{formatCurrency(totalRecebido)}</p>
-          <p className="text-emerald-100/90 text-xs mt-2">Soma dos meses quitados com recibo assinado</p>
+          <p className="text-emerald-100/90 text-xs mt-2">Pagamentos confirmados pela cooperativa</p>
         </div>
         <div className="rounded-2xl bg-white border-2 border-green-200 p-5">
           <p className="text-gray-500 text-sm">Pendente de recebimento</p>
@@ -490,22 +517,62 @@ export function CooperadoMinhaFichaTab({
         Extrato por mês com valores, descontos e cada entrega listada separadamente. Toque no mês para expandir.
       </p>
 
-      <div className="space-y-3">
-        {resumos.map((resumo) => (
-          <MesFichaAccordion
-            key={resumo.mesReferencia}
-            resumo={resumo}
-            cooperadoId={cooperadoId}
-            cooperativaId={cooperativaId}
-            nomeCooperado={nomeCooperado}
-            getEscolaLabel={getEscolaLabel}
-            expandido={mesExpandido === resumo.mesReferencia}
-            onToggle={() =>
-              setMesExpandido((cur) => (cur === resumo.mesReferencia ? null : resumo.mesReferencia))
-            }
-          />
-        ))}
-      </div>
+      {resumos.length > 0 && (
+        <>
+          <p className="text-sm font-semibold text-gray-800">Em aberto e a receber</p>
+          <div className="space-y-3">
+            {resumos.map((resumo) => (
+              <MesFichaAccordion
+                key={resumo.mesReferencia}
+                resumo={resumo}
+                cooperadoId={cooperadoId}
+                cooperativaId={cooperativaId}
+                nomeCooperado={nomeCooperado}
+                getEscolaLabel={getEscolaLabel}
+                expandido={mesExpandido === resumo.mesReferencia}
+                onToggle={() =>
+                  setMesExpandido((cur) => (cur === resumo.mesReferencia ? null : resumo.mesReferencia))
+                }
+              />
+            ))}
+          </div>
+        </>
+      )}
+
+      {resumosHistorico.length > 0 && (
+        <>
+          <p className="text-sm font-semibold text-gray-800 pt-2">Pagamentos realizados</p>
+          <p className="text-xs text-gray-500">
+            Valores congelados no momento do PIX confirmado — consulte também em Quanto vou receber (histórico).
+          </p>
+          <div className="space-y-3">
+            {resumosHistorico.map((resumo) => (
+              <MesFichaAccordion
+                key={`hist-${resumo.mesReferencia}`}
+                resumo={resumo}
+                cooperadoId={cooperadoId}
+                cooperativaId={cooperativaId}
+                nomeCooperado={nomeCooperado}
+                getEscolaLabel={getEscolaLabel}
+                expandido={mesExpandidoHistorico === resumo.mesReferencia}
+                onToggle={() =>
+                  setMesExpandidoHistorico((cur) =>
+                    cur === resumo.mesReferencia ? null : resumo.mesReferencia
+                  )
+                }
+                onVerFotosMes={abrirFotosDoMes}
+              />
+            ))}
+          </div>
+        </>
+      )}
+
+      {resumos.length === 0 && resumosHistorico.length === 0 && (
+        <div className="text-center py-8 text-gray-500 bg-white rounded-2xl border border-dashed">
+          <Wallet size={40} className="mx-auto mb-3 text-gray-300" />
+          <p className="font-medium text-gray-800">Nenhum lançamento em aberto</p>
+        </div>
+      )}
 
       <ValoresAvulsosReceberPanel
         cooperadoId={cooperadoId}

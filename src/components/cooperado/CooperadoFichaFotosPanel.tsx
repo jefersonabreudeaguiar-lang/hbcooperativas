@@ -28,6 +28,8 @@ interface CooperadoFichaFotosPanelProps {
   resumos: ResumoMesEntregasCooperado[];
   getEscolaLabel: (nota: NotaPedido) => string;
   cooperativaId?: string;
+  /** Abre expandido ao trocar de aba (ex.: link a partir do extrato quitado). */
+  mesReferenciaInicial?: string | null;
 }
 
 function EntregaFotosGrid({
@@ -238,6 +240,7 @@ export function CooperadoFichaFotosPanel({
   resumos,
   getEscolaLabel,
   cooperativaId,
+  mesReferenciaInicial,
 }: CooperadoFichaFotosPanelProps) {
   const data = useAppData();
   const { user } = useAuth();
@@ -273,10 +276,14 @@ export function CooperadoFichaFotosPanel({
   );
 
   useEffect(() => {
+    if (mesReferenciaInicial && mesesComFoto.some((m) => m.mesReferencia === mesReferenciaInicial)) {
+      setMesExpandido(mesReferenciaInicial);
+      return;
+    }
     if (mesesComFoto.length > 0 && !mesesComFoto.some((m) => m.mesReferencia === mesExpandido)) {
       setMesExpandido(mesesComFoto[0]?.mesReferencia ?? null);
     }
-  }, [mesesComFoto, mesExpandido]);
+  }, [mesesComFoto, mesExpandido, mesReferenciaInicial]);
 
   const totalFotos = useMemo(
     () => mesesComFoto.reduce((s, r) => s + contarFotosEnviadasNotas(r.notas), 0),

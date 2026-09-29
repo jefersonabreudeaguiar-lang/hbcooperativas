@@ -837,6 +837,45 @@ export function listarMesesPagosCooperado(
   return [...meses].sort((a, b) => b.localeCompare(a));
 }
 
+/**
+ * Extrato histórico na Minha ficha — meses com pagamento confirmado.
+ * Valores vêm do registro PIX (`pagamentoConfirmado`), sem recalcular M6/BIC.
+ */
+export function listarResumosExtratoHistoricoCooperado(
+  data: AppData,
+  cooperadoId: string,
+  cooperativaId?: string
+): ResumoMesEntregasCooperado[] {
+  return listarMesesPagosCooperado(data, cooperadoId, cooperativaId)
+    .map((mes) => getResumoMesEntregasCooperado(data, cooperadoId, mes, cooperativaId))
+    .filter(
+      (r) =>
+        r.pagamentoConfirmado != null &&
+        cooperadoMesQuitado(data, cooperadoId, r.mesReferencia)
+    );
+}
+
+/** Total recebido — soma pagamentos confirmados (sem duplicar PIX que cobre vários meses). */
+export function somarTotalRecebidoConfirmadoCooperado(
+  data: AppData,
+  cooperadoId: string,
+  cooperativaId?: string
+): number {
+  const coopId = cooperativaId ?? data.cooperados.find((c) => c.id === cooperadoId)?.cooperativaId;
+  const canonico = resolverCooperadoIdCanonico(data, cooperadoId, coopId);
+  const vistos = new Set<string>();
+  let total = 0;
+  for (const p of data.pagamentosCooperado) {
+    if (p.status !== "confirmado") continue;
+    const pCanon = resolverCooperadoIdCanonico(data, p.cooperadoId, coopId ?? p.cooperativaId);
+    if (p.cooperadoId !== cooperadoId && p.cooperadoId !== canonico && pCanon !== canonico) continue;
+    if (vistos.has(p.id)) continue;
+    vistos.add(p.id);
+    total += Number(p.valorLiquido) || 0;
+  }
+  return round2(total);
+}
+
 /** Meses com PIX registrado (aguardando assinatura ou confirmado) — abas de histórico por mês. */
 export function listarMesesComPagamentoRegistradoCooperado(
   data: AppData,
