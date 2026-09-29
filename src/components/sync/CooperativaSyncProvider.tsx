@@ -39,7 +39,11 @@ import {
   saveAppDataIfSyncLeaseCurrent,
   type CooperativaSyncSessionLease,
 } from "@/services/operacionalPullLease";
-import { cooperadoFinanceiroDesatualizado, aplicarSanidadeFinanceiroCooperadoLocal } from "@/services/fichaSyncGuard";
+import {
+  cooperadoFinanceiroBloqueiaEntradaApp,
+  cooperadoFinanceiroDesatualizado,
+  aplicarSanidadeFinanceiroCooperadoLocal,
+} from "@/services/fichaSyncGuard";
 import { avaliarIntegridadeFinanceiroCooperado } from "@/services/cooperadoFinanceiroGuard";
 import { ensureOperacionalAlinhadoComNuvem } from "@/services/operacionalRestoreService";
 import { refreshContaCoopDescontosAfterOperacionalSync } from "@/lib/hb-credit/syncContaCoopFichaDescontos";
@@ -435,7 +439,22 @@ export function CooperativaSyncProvider({ children }: { children: React.ReactNod
       let cooperadoSyncSession: CooperativaSyncSessionLease | undefined;
 
       if (cooperadoLogado) {
-        setCooperadoPagamentosHydrated(false);
+        const cooperadoCanonicoHydration =
+          currentUser.cooperadoId &&
+          resolverCooperadoIdCanonico(getData(), currentUser.cooperadoId, currentCoopId);
+        const mustClearFinancePresentation =
+          Boolean(opts?.force) ||
+          !cooperadoPagamentosHydratedRef.current ||
+          (cooperadoCanonicoHydration
+            ? cooperadoFinanceiroBloqueiaEntradaApp(
+                getData(),
+                cooperadoCanonicoHydration,
+                currentCoopId
+              )
+            : true);
+        if (mustClearFinancePresentation) {
+          setCooperadoPagamentosHydrated(false);
+        }
       }
 
       await withSyncTimeout(

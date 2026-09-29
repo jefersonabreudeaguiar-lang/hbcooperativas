@@ -1224,13 +1224,17 @@ export default function NotasPedidoContent() {
     }
   };
 
+  const cooperadoMountSyncRef = useRef(false);
+  const responsavelMountSyncRef = useRef(false);
+
   useEffect(() => {
     if (!isCooperado || !data) return;
-    requestAppSync();
+    if (cooperadoMountSyncRef.current) return;
+    cooperadoMountSyncRef.current = true;
+    requestAppSyncLight();
   }, [isCooperado, data]);
 
   // Responsável: full de notas no máximo 1× por sessão; sync leve ao entrar na tela (1× por mount).
-  const responsavelMountSyncRef = useRef(false);
   useEffect(() => {
     if (isCooperado || !data || !coopId) return;
     if (responsavelMountSyncRef.current) return;

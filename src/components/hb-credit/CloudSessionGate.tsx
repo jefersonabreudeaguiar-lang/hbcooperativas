@@ -18,7 +18,14 @@ function initialCloudGateReady(): boolean {
   return isCloudSessionActive();
 }
 
-export function CloudSessionGate({ children }: { children: React.ReactNode }) {
+export function CloudSessionGate({
+  children,
+  /** Mostra conteúdo imediatamente (cache local) enquanto valida sessão — gestão HB. */
+  optimistic = false,
+}: {
+  children: React.ReactNode;
+  optimistic?: boolean;
+}) {
   const { user, loading: authLoading, logout } = useAuth();
   const router = useRouter();
   const [ready, setReady] = useState(initialCloudGateReady);
@@ -85,8 +92,21 @@ export function CloudSessionGate({ children }: { children: React.ReactNode }) {
     setRetrying(false);
   };
 
-  if (authLoading || (!ready && !error)) {
-    return <PageSkeleton />;
+  if (authLoading || (!ready && !error && !(optimistic && user))) {
+    return <PageSkeleton compact={optimistic} />;
+  }
+
+  if (!ready && optimistic && user && !error) {
+    return (
+      <>
+        {!isCloudSessionActive() && (
+          <p className="mb-2 text-xs text-gray-500" aria-live="polite">
+            Conectando HB Créditos na nuvem…
+          </p>
+        )}
+        {children}
+      </>
+    );
   }
 
   if (!ready) {

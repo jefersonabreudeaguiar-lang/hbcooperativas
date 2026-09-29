@@ -33,6 +33,13 @@ function loadEnvLocal() {
 }
 
 loadEnvLocal();
+if (
+  !process.env.NEXT_PUBLIC_BIC_CENTRAL_READ_OFFICIAL &&
+  !process.env.NEXT_PUBLIC_BIC_CENTRAL_READ &&
+  !process.env.HB_BIC_LAB_B4_AUTHORITY
+) {
+  process.env.NEXT_PUBLIC_BIC_CENTRAL_READ_OFFICIAL = "true";
+}
 
 const url = process.env.NEXT_PUBLIC_SUPABASE_URL ?? "";
 const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY ?? "";

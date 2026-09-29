@@ -15,7 +15,6 @@ import {
   requireCreditStaff,
 } from "@/lib/security/creditGuard";
 import { normalizeCnpj } from "@/utils/cooperativa";
-import { FINANCIAL_PIN_MIN_LENGTH } from "@/modules/hb-credit/config";
 
 export async function GET(request: Request) {
   const gate = await requireCreditApi(request);
@@ -73,12 +72,9 @@ export async function POST(request: Request) {
 
     const transactionId = String(body?.transactionId ?? "");
     const motivo = String(body?.motivo ?? "");
-    const pin = String(body?.pin ?? "");
+    const pin = body?.pin != null ? String(body.pin) : undefined;
     if (!transactionId) {
       return NextResponse.json({ error: "Compra inválida." }, { status: 400 });
-    }
-    if (pin.length < FINANCIAL_PIN_MIN_LENGTH) {
-      return NextResponse.json({ error: "Informe seu PIN financeiro." }, { status: 400 });
     }
 
     if (partnerNeedsTermsAcceptance(parceiroGate.parceiro)) {

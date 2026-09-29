@@ -57,6 +57,14 @@ function MinhaContaCoopContent() {
   const { user, cooperadoId } = usePermissions();
   const data = useAppData();
   const [tab, setTab] = useState<Tab>("inicio");
+  const [tabEverOpened, setTabEverOpened] = useState<Partial<Record<Tab, boolean>>>({ inicio: true });
+
+  const handleTabChange = useCallback((next: Tab) => {
+    setTabEverOpened((prev) => (prev[next] ? prev : { ...prev, [next]: true }));
+    setTab(next);
+  }, []);
+
+  const tabPanelHidden = useCallback((id: Tab) => (id !== tab ? "hidden" : undefined), [tab]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
@@ -239,6 +247,7 @@ function MinhaContaCoopContent() {
       setError("");
       setSuccess("");
       setQrInput(payload.trim());
+      setTabEverOpened((prev) => ({ ...prev, pagar: true }));
       setTab("pagar");
       try {
         const res = await validateCreditQr(cnpj, cooperadoId, payload.trim());
@@ -323,7 +332,7 @@ function MinhaContaCoopContent() {
       setQrInput("");
       setPayPin("");
       setUseCashback(false);
-      setTab("extrato");
+      handleTabChange("extrato");
       await reload();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Pagamento recusado.");
@@ -385,11 +394,11 @@ function MinhaContaCoopContent() {
           { id: "extrato", label: "Extrato" },
         ]}
         active={tab}
-        onChange={setTab}
+        onChange={handleTabChange}
       />
 
-      {tab === "inicio" && (
-        <>
+      {tabEverOpened.inicio && (
+        <div className={tabPanelHidden("inicio")}>
           <div className="overflow-hidden rounded-2xl bg-gradient-to-br from-green-800 via-green-700 to-emerald-600 p-4 text-white shadow-md">
             <div className="flex items-start justify-between gap-2">
               <div>
@@ -483,15 +492,15 @@ function MinhaContaCoopContent() {
               )}
             </>
           )}
-        </>
+        </div>
       )}
 
-      {tab === "pagar" && (
-        <div className="space-y-4">
+      {tabEverOpened.pagar && (
+        <div className={cn("space-y-4", tabPanelHidden("pagar"))}>
           {!hasPin ? (
             <Card className="!p-5 text-center text-sm text-gray-600">
               Cadastre seu PIN na aba Início antes de pagar.
-              <Button variant="secondary" className="mt-3 w-full" onClick={() => setTab("inicio")}>
+              <Button variant="secondary" className="mt-3 w-full" onClick={() => handleTabChange("inicio")}>
                 Ir para Início
               </Button>
             </Card>
@@ -625,7 +634,8 @@ function MinhaContaCoopContent() {
         </div>
       )}
 
-      {tab === "extrato" && (
+      {tabEverOpened.extrato && (
+        <div className={tabPanelHidden("extrato")}>
         <Card className="!p-0 overflow-hidden">
           <div className="border-b border-gray-100 px-5 py-4">
             <h3 className="font-semibold text-gray-900">Movimentações</h3>
@@ -665,6 +675,7 @@ function MinhaContaCoopContent() {
           </div>
           )}
         </Card>
+        </div>
       )}
     </div>
   );

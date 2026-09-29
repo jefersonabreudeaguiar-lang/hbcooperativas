@@ -4,6 +4,7 @@ import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/modules/auth/AuthProvider";
 import { useHbCreditEnabled } from "@/hooks/useHbCreditEnabled";
+import { COOPERADO_MOBILE_PREFETCH_HREFS } from "@/lib/hb-credit/hbCreditNavPrefetch";
 
 const PREFETCH_INICIO = "/dashboard";
 
@@ -11,18 +12,20 @@ const PREFETCH_INICIO = "/dashboard";
 export function HbCreditNavPrefetch() {
   const router = useRouter();
   const { user } = useAuth();
-  const hbOn = useHbCreditEnabled();
+  const hbState = useHbCreditEnabled();
 
   useEffect(() => {
-    if (!hbOn || !user) return;
+    if (!user) return;
 
     let cancelled = false;
     const prefetch = () => {
       if (cancelled) return;
       const routes =
         user.role === "cooperado"
-          ? ["/minha-conta-coop", PREFETCH_INICIO]
-          : ["/conta-coop", PREFETCH_INICIO];
+          ? [...COOPERADO_MOBILE_PREFETCH_HREFS]
+          : hbState.enabled
+            ? ["/conta-coop", PREFETCH_INICIO]
+            : [PREFETCH_INICIO];
       for (const href of routes) {
         try {
           router.prefetch(href);
@@ -45,7 +48,7 @@ export function HbCreditNavPrefetch() {
       cancelled = true;
       cancelIdle?.();
     };
-  }, [hbOn, user?.id, user?.role, router]);
+  }, [hbState.enabled, user?.id, user?.role, router]);
 
   return null;
 }

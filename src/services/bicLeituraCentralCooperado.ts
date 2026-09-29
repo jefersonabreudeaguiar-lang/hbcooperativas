@@ -373,12 +373,13 @@ export function bicCentralResolveInicioParaExibicao(
     { ...inicio, mes: m6.mes, meses: m6.meses, mesLabel: m6.mesLabel },
     consolidated
   );
+  const valorM6 = m6.valor > 0 ? m6.valor : 0;
   return {
     ...merged,
     valorRecibo: 0,
-    aguardandoAssinatura: false,
-    exibir: merged.valor > 0,
-    valor: merged.valor > 0 ? merged.valor : 0,
+    aguardandoAssinatura: m6.aguardandoAssinatura,
+    exibir: valorM6 > 0 && !m6.aguardandoAssinatura,
+    valor: valorM6,
   };
 }
 

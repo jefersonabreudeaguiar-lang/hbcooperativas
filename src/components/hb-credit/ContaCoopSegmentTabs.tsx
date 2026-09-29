@@ -1,5 +1,6 @@
 "use client";
 
+import { startTransition } from "react";
 import { cn } from "@/utils/format";
 
 interface TabItem<T extends string> {
@@ -28,7 +29,7 @@ export function ContaCoopSegmentTabs<T extends string>({
           type="button"
           role="tab"
           aria-selected={active === tab.id}
-          onClick={() => onChange(tab.id)}
+          onClick={() => startTransition(() => onChange(tab.id))}
           className={cn(
             "flex-1 rounded-xl px-3 py-2.5 text-sm font-semibold transition-all",
             active === tab.id

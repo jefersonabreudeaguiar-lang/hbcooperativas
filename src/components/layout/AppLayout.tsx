@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import {
   LayoutDashboard, Users, CreditCard, PieChart, Truck, Wallet,
   Percent, Building2,   Landmark, Megaphone, MapPin, Car, FileText,
@@ -22,7 +22,6 @@ import { cn } from "@/utils/format";
 import { useHbCreditEnabled } from "@/hooks/useHbCreditEnabled";
 import { isContaCoopUiVisibleForUser } from "@/utils/contaCoopUiVisibility";
 import { useSyncContaCoopValorReceberCooperativa } from "@/hooks/useSyncContaCoopValorReceberCooperativa";
-import { MercadoParceiroPinResetBar } from "@/components/hb-credit/MercadoParceiroPinResetBar";
 import { AppUpdateBanner } from "@/components/pwa/AppUpdateBanner";
 import { getUserCooperativaId } from "@/utils/cooperativa";
 import { useHbCreditDescontosWarmup } from "@/hooks/useHbCreditDescontosWarmup";
@@ -204,6 +203,7 @@ export function Sidebar({ mobile = false, onClose }: { mobile?: boolean; onClose
 export function MobileNav() {
   const [open, setOpen] = useState(false);
   const pathname = usePathname();
+  const router = useRouter();
   const { user } = useAuth();
   const data = useAppData();
   const credit = useHbCreditEnabled(user);
@@ -226,6 +226,14 @@ export function MobileNav() {
   );
   const contaCoopUiVisible = isContaCoopUiVisibleForUser(user, cooperadoNome || undefined);
   const mobileItems = getMobileNavItems(user, credit.enabled, contaCoopUiVisible, data, cooperadoNavEligible);
+
+  const prefetchNavRoute = (href: string) => {
+    try {
+      router.prefetch(href);
+    } catch {
+      /* ignore */
+    }
+  };
 
   return (
     <>
@@ -257,6 +265,12 @@ export function MobileNav() {
               key={item.href}
               href={item.href}
               prefetch={shouldPrefetchHbCreditNav(item.href)}
+              onPointerEnter={() => {
+                if (isCooperadoNav) prefetchNavRoute(item.href);
+              }}
+              onTouchStart={() => {
+                if (isCooperadoNav) prefetchNavRoute(item.href);
+              }}
               className={cn(
                 "flex-1 flex flex-col items-center justify-center min-w-0 px-0.5 transition-colors",
                 isCooperadoNav ? "min-h-[72px] py-2 gap-1" : "py-2 text-[10px] sm:text-xs gap-0.5",
@@ -326,7 +340,6 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       <Sidebar />
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
         <MobileNav />
-        <MercadoParceiroPinResetBar />
         <main className="flex-1 overflow-y-auto p-4 lg:p-6 pb-36 lg:pb-6">
           {user?.role !== "cooperado" && (
             <div className="hidden lg:flex justify-end mb-3">

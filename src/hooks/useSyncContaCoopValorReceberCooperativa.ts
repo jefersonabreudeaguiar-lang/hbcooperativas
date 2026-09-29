@@ -7,7 +7,7 @@ import { isContaCoopValorReceberPilot } from "@/utils/contaCoopUiVisibility";
 import { scheduleContaCoopAuxSync } from "@/lib/hb-credit/contaCoopAuxSyncSchedule";
 
 const SYNC_INTERVAL_MS = 120_000;
-const SYNC_INITIAL_DELAY_MS = 28_000;
+const SYNC_INITIAL_DELAY_MS = 90_000;
 
 type HookOpts = {
   cooperativaId?: string;

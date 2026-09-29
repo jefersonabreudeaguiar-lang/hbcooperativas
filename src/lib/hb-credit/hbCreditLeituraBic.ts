@@ -101,13 +101,13 @@ export function hbCreditValorLiquidoMes(
   return getResumoValorAPagarRelatorio(data, canonico, mesReferencia, cooperativaId).valorLiquido;
 }
 
-/** Crédito-base HB (R$) = mesmo “A receber” do hub BIC (card Início / M6). */
+/** Crédito-base HB (R$) = M6 agregado BIC (mesmo número do consolidado / “Quanto vou receber”). */
 export function hbCreditCreditoBaseReais(
   data: AppData,
   cooperadoId: string,
   cooperativaId: string | undefined
 ): number {
-  const inicio = hbCreditInicioParaBase(data, cooperadoId, cooperativaId);
-  if (!inicio.exibir || inicio.valor <= 0) return 0;
-  return round2(inicio.valor);
+  const m6 = hbCreditValorAReceberAgregado(data, cooperadoId, cooperativaId);
+  if (m6.valor <= 0) return 0;
+  return round2(m6.valor);
 }

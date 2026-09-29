@@ -17,12 +17,9 @@ import {
   pollCreditIntentPayment,
   postRefundRequestAction,
   saveMercadoPix,
-  setMercadoFinancialPin,
-  requestMercadoPinReset,
   solicitarMudancaPixMercado,
 } from "@/services/creditApiService";
 import { formatCentsBRL } from "@/modules/hb-credit/engine/money";
-import { FINANCIAL_PIN_MIN_LENGTH } from "@/modules/hb-credit/config";
 import type { ContaCoopCompraEstornavel, ContaCoopIntent, ContaCoopParceiro, ContaCoopSettlement, ContaCoopSolicitacaoEstorno } from "@/modules/hb-credit/types";
 import { ContaCoopFiscalNotesMercadoPanel } from "@/components/hb-credit/ContaCoopFiscalNotesMercadoPanel";
 import { MercadoContaCoopTermosGate } from "@/components/hb-credit/MercadoContaCoopTermosGate";
@@ -90,13 +87,8 @@ function MercadoParceiroContent() {
   const qrDestaqueRef = useRef<HTMLDivElement>(null);
   const comprovanteRef = useRef<HTMLDivElement>(null);
   const liquidacaoConfirmacaoRef = useRef<HTMLDivElement>(null);
-  const [hasPin, setHasPin] = useState(false);
-  const [pinLocked, setPinLocked] = useState(false);
-  const [pinResetPending, setPinResetPending] = useState(false);
-  const [pinSetup, setPinSetup] = useState("");
   const [estornoAlvo, setEstornoAlvo] = useState<ContaCoopCompraEstornavel | null>(null);
   const [estornoMotivo, setEstornoMotivo] = useState("");
-  const [estornoPin, setEstornoPin] = useState("");
   const [estornoFormError, setEstornoFormError] = useState("");
   const [estornoFormSuccess, setEstornoFormSuccess] = useState("");
   const estornoFormRef = useRef<HTMLDivElement>(null);
@@ -116,9 +108,6 @@ function MercadoParceiroContent() {
       setIntents(data.intents ?? []);
       setRecebiveis(data.recebiveis ?? []);
       setSettlements(data.settlements ?? []);
-      setHasPin(Boolean(data.hasPin));
-      setPinLocked(Boolean(data.pinLocked));
-      setPinResetPending(Boolean(data.pinResetPending));
       setFiscalPendentes(Number(data.fiscalPendentes ?? 0));
       setCooperativaNome(data.cooperativaNome ?? "Cooperativa parceira");
       setNeedsTermsAcceptance(Boolean(data.needsTermsAcceptance));
@@ -266,61 +255,13 @@ function MercadoParceiroContent() {
     }
   };
 
-  const salvarPin = async () => {
-    setBusy(true);
-    setError("");
-    setSuccess("");
-    try {
-      await setMercadoFinancialPin(pinSetup);
-      setHasPin(true);
-      setPinResetPending(false);
-      setPinSetup("");
-      setSuccess("PIN financeiro cadastrado.");
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Erro ao salvar PIN.");
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const scrollParaPinFinanceiro = () => {
-    document.getElementById("pin-financeiro-mercado")?.scrollIntoView({ behavior: "smooth", block: "start" });
-  };
-
-  const solicitarResetPin = async () => {
-    const msg =
-      "Solicitar reset do PIN de estorno?\n\n" +
-      "O responsável da cooperativa receberá o pedido em Conta Coop → Mercados e precisará confirmar o reset. " +
-      "Depois você cadastra um PIN novo no card PIN financeiro do mercado (topo desta página).";
-    if (!window.confirm(msg)) return;
-
-    setBusy(true);
-    setError("");
-    setSuccess("");
-    try {
-      const data = await requestMercadoPinReset();
-      setPinResetPending(true);
-      setSuccess(data.message ?? "Solicitação enviada à cooperativa.");
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Erro ao solicitar reset do PIN.");
-    } finally {
-      setBusy(false);
-    }
-  };
-
   const abrirEstorno = (compra: ContaCoopCompraEstornavel) => {
-    if (!hasPin) {
-      setError("Cadastre seu PIN financeiro na aba Mais antes de solicitar estorno.");
-      setTab("mais");
-      return;
-    }
     if (needsTermsAcceptance) {
       setError("Aceite o Termo de Uso HB Créditos antes de solicitar estorno.");
       return;
     }
     setEstornoAlvo(compra);
     setEstornoMotivo("");
-    setEstornoPin("");
     setEstornoFormError("");
     setEstornoFormSuccess("");
     setError("");
@@ -337,13 +278,6 @@ function MercadoParceiroContent() {
       estornoFormRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
       return;
     }
-    if (estornoPin.length < FINANCIAL_PIN_MIN_LENGTH) {
-      setEstornoFormError(
-        `Informe o PIN financeiro do mercado (${FINANCIAL_PIN_MIN_LENGTH}+ dígitos). Não use a senha de login — cadastre ou consulte na aba Mais.`
-      );
-      estornoFormRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
-      return;
-    }
     setBusy(true);
     setEstornoFormError("");
     setEstornoFormSuccess("");
@@ -354,13 +288,11 @@ function MercadoParceiroContent() {
         action: "create",
         transactionId: estornoAlvo.id,
         motivo: estornoMotivo.trim(),
-        pin: estornoPin,
       });
       setEstornoFormSuccess("Solicitação enviada à cooperativa. Aguarde aprovação na aba Estornos do responsável.");
       setSuccess("Solicitação de estorno enviada.");
       setEstornoAlvo(null);
       setEstornoMotivo("");
-      setEstornoPin("");
       await reload();
     } catch (e) {
       const msg = e instanceof Error ? e.message : "Erro ao solicitar estorno.";
@@ -487,74 +419,6 @@ function MercadoParceiroContent() {
   const pixBloqueado = pixCadastrado && !pixChangeUnlocked;
   const pixEditavel = !pixCadastrado || pixChangeUnlocked;
 
-  const pinFinanceiroCard = (
-    <Card id="pin-financeiro-mercado" className="scroll-mt-4 p-5 space-y-4 border-amber-200 bg-amber-50/30">
-      <div>
-        <h3 className="font-semibold text-gray-900">PIN financeiro do mercado</h3>
-        <p className="text-sm text-gray-600">
-          Obrigatório para solicitar estorno. Use um PIN numérico de {FINANCIAL_PIN_MIN_LENGTH} ou mais dígitos — não
-          é a senha de login.
-        </p>
-      </div>
-      {pinLocked && (
-        <AlertBanner variant="warning" title="PIN bloqueado">
-          Muitas tentativas incorretas. Solicite reset abaixo ou peça ao responsável em Conta Coop → Mercados.
-        </AlertBanner>
-      )}
-      {hasPin ? (
-        <div className="space-y-3">
-          <p className="text-sm text-green-700">PIN cadastrado. Você precisará dele ao solicitar estorno.</p>
-          {pinResetPending ? (
-            <p className="text-sm text-cyan-800 bg-cyan-50 border border-cyan-200 rounded-lg px-3 py-2">
-              Solicitação de reset enviada. Aguarde o responsável da cooperativa em Conta Coop → Mercados.
-            </p>
-          ) : (
-            <Button variant="secondary" className="w-full sm:w-auto" onClick={() => void solicitarResetPin()} disabled={busy}>
-              Esqueci meu PIN — solicitar reset
-            </Button>
-          )}
-        </div>
-      ) : (
-        <>
-          <p className="text-sm text-amber-800">
-            {pinLocked
-              ? "Seu PIN está bloqueado. Solicite reset para o responsável liberar um PIN novo."
-              : "Cadastre um PIN numérico para solicitar estornos. Se esqueceu o PIN anterior, solicite reset abaixo."}
-          </p>
-          {!pinResetPending && (
-            <Button variant="secondary" className="w-full sm:w-auto" onClick={() => void solicitarResetPin()} disabled={busy}>
-              Esqueci meu PIN — solicitar reset
-            </Button>
-          )}
-          {!pinResetPending && (
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
-              <div className="flex-1">
-                <Label>Criar PIN</Label>
-                <Input
-                  className="mt-1"
-                  type="password"
-                  inputMode="numeric"
-                  autoComplete="off"
-                  value={pinSetup}
-                  onChange={(e) => setPinSetup(e.target.value.replace(/\D/g, ""))}
-                  placeholder="Somente números"
-                />
-              </div>
-              <Button onClick={() => void salvarPin()} disabled={busy || pinSetup.length < FINANCIAL_PIN_MIN_LENGTH}>
-                Salvar PIN
-              </Button>
-            </div>
-          )}
-          {pinResetPending && (
-            <p className="text-sm text-cyan-800 bg-cyan-50 border border-cyan-200 rounded-lg px-3 py-2">
-              Solicitação de reset enviada. Aguarde o responsável em Conta Coop → Mercados para cadastrar um PIN novo.
-            </p>
-          )}
-        </>
-      )}
-    </Card>
-  );
-
   return (
     <div className="mx-auto max-w-lg space-y-5 pb-8">
       {ativo && needsTermsAcceptance && parceiro && (
@@ -566,8 +430,6 @@ function MercadoParceiroContent() {
         <h1 className="text-2xl font-bold text-gray-900">{parceiro?.nomeMercado ?? "Mercado parceiro"}</h1>
         <p className="text-sm text-gray-500">Vendas com crédito interno da cooperativa</p>
       </header>
-
-      {parceiro && pinFinanceiroCard}
 
       <ContaCoopSegmentTabs
         tabs={[
@@ -821,53 +683,6 @@ function MercadoParceiroContent() {
                   placeholder="Ex.: compra de teste, produto devolvido..."
                 />
               </div>
-              <div>
-                <Label>PIN financeiro do mercado</Label>
-                <p className="mt-0.5 text-xs text-gray-600">
-                  Não é a senha de login. Use o PIN numérico cadastrado no card{" "}
-                  <strong>PIN financeiro do mercado</strong> no topo da página ({FINANCIAL_PIN_MIN_LENGTH}+ dígitos).
-                </p>
-                <Input
-                  className="mt-1"
-                  type="password"
-                  inputMode="numeric"
-                  autoComplete="off"
-                  maxLength={8}
-                  value={estornoPin}
-                  onChange={(e) => setEstornoPin(e.target.value.replace(/\D/g, ""))}
-                  placeholder="••••"
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter") void enviarEstorno();
-                  }}
-                />
-                {pinResetPending ? (
-                  <p className="mt-2 text-xs text-cyan-800">
-                    Reset solicitado — aguarde o responsável em Conta Coop → Mercados.
-                  </p>
-                ) : (
-                  <>
-                    <Button
-                      type="button"
-                      variant="secondary"
-                      size="sm"
-                      className="mt-2"
-                      onClick={() => void solicitarResetPin()}
-                      disabled={busy}
-                    >
-                      Esqueci meu PIN — solicitar reset
-                    </Button>
-                    <Button
-                      type="button"
-                      variant="secondary"
-                      size="sm"
-                      className="mt-2 ml-2"
-                      onClick={scrollParaPinFinanceiro}
-                    >
-                      Ver cadastro de PIN
-                    </Button>
-                  </>
-                )}
-              </div>
               <div className="flex flex-wrap gap-2">
                 <Button type="button" onClick={() => void enviarEstorno()} disabled={busy}>
                   {busy ? "Enviando..." : "Enviar solicitação"}
@@ -905,7 +720,7 @@ function MercadoParceiroContent() {
                   )}
                 </div>
                 {!compra.solicitacaoPendenteId ? (
-                  <Button size="sm" variant="secondary" onClick={() => abrirEstorno(compra)} disabled={busy || !ativo || !hasPin}>
+                  <Button size="sm" variant="secondary" onClick={() => abrirEstorno(compra)} disabled={busy || !ativo}>
                     Solicitar estorno
                   </Button>
                 ) : (
@@ -969,12 +784,6 @@ function MercadoParceiroContent() {
 
       {tab === "mais" && (
         <div className="space-y-4">
-          <p className="text-sm text-gray-600">
-            PIN de estorno e reset: card <strong>PIN financeiro do mercado</strong> no topo da página.{" "}
-            <button type="button" className="font-medium text-green-800 underline" onClick={scrollParaPinFinanceiro}>
-              Ir para o PIN
-            </button>
-          </p>
           <Card className="p-5 space-y-4">
             <div>
               <h3 className="font-semibold text-gray-900">Seu PIX para receber da cooperativa</h3>

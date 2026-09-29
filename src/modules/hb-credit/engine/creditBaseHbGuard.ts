@@ -8,7 +8,7 @@ import {
   purgarFichasInvalidas,
   reconciliarFichaFromNotasConferidas,
 } from "@/services/notaPedidoService";
-import { hbCreditInicioParaBase } from "@/lib/hb-credit/hbCreditLeituraBic";
+import { hbCreditValorAReceberAgregado } from "@/lib/hb-credit/hbCreditLeituraBic";
 import { calcLimiteFromPercentual } from "./creditBaseFromFicha";
 import type { ContaCoopLimiteCooperado } from "../types";
 
@@ -73,8 +73,8 @@ export function blindarCreditoBaseCentsHb(
   }
 
   const canonico = resolverCooperadoIdCanonico(sane, cooperadoId, coopId);
-  const inicio = hbCreditInicioParaBase(sane, canonico, coopId);
-  if (!inicio.exibir || inicio.valor <= 0) {
+  const m6 = hbCreditValorAReceberAgregado(sane, canonico, coopId);
+  if (m6.valor <= 0) {
     return 0;
   }
 

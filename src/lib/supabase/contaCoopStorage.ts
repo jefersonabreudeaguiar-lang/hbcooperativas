@@ -2545,7 +2545,7 @@ export async function createRefundRequest(
     partnerId: string;
     transactionId: string;
     motivo: string;
-    pin: string;
+    pin?: string;
     requestedByUserId: string;
   }
 ): Promise<{ ok: true; solicitacao: ContaCoopSolicitacaoEstorno } | { ok: false; error: string }> {
@@ -2554,13 +2554,16 @@ export async function createRefundRequest(
     return { ok: false, error: "Descreva o motivo do estorno (mínimo 5 caracteres)." };
   }
 
-  const pinCheck = await verifyPartnerFinancialPin(
-    supabase,
-    params.partnerId,
-    params.pin,
-    params.requestedByUserId
-  );
-  if (!pinCheck.ok) return pinCheck;
+  const pin = String(params.pin ?? "").trim();
+  if (pin.length > 0) {
+    const pinCheck = await verifyPartnerFinancialPin(
+      supabase,
+      params.partnerId,
+      pin,
+      params.requestedByUserId
+    );
+    if (!pinCheck.ok) return pinCheck;
+  }
 
   const { data: tx, error: txError } = await supabase
     .from("hb_credit_transactions")
