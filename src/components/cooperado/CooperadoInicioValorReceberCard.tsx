@@ -4,7 +4,7 @@ import Link from "next/link";
 import { Wallet } from "lucide-react";
 import { formatCurrency } from "@/utils/format";
 import type { InicioCardMotorSnapshot } from "@/lib/cooperadoInicioCardPolicy";
-import { isCooperadoBicCentralUiEnabled } from "@/lib/bic/cooperadoBicCentralUi";
+import { cooperadoUsarFluxoReciboAssinaturaNaUi, isCooperadoBicCentralUiEnabled } from "@/lib/bic/cooperadoBicCentralUi";
 
 type Props = {
   snapshot: InicioCardMotorSnapshot;
@@ -14,8 +14,7 @@ type Props = {
 };
 
 function temPendencia(s: InicioCardMotorSnapshot): boolean {
-  if (isCooperadoBicCentralUiEnabled()) return s.valor > 0;
-  return s.valor > 0 || s.aguardandoAssinatura || s.valorRecibo > 0;
+  return s.valor > 0;
 }
 
 /** Modos visuais do card — exportado para testes de blindagem BIC. */
@@ -28,7 +27,7 @@ export function resolveCooperadoInicioValorReceberCardModos(
   acao: string;
 } {
   const bicCentral = isCooperadoBicCentralUiEnabled();
-  const fluxoReciboUi = !bicCentral && exibirReciboAssinatura;
+  const fluxoReciboUi = cooperadoUsarFluxoReciboAssinaturaNaUi() && exibirReciboAssinatura;
 
   const modoRecibo =
     fluxoReciboUi && base.aguardandoAssinatura && base.valorRecibo > 0 && base.valor <= 0;
@@ -46,7 +45,7 @@ export function resolveCooperadoInicioValorReceberCardModos(
 export function CooperadoInicioValorReceberCard({
   snapshot,
   atualizando = false,
-  exibirReciboAssinatura = true,
+  exibirReciboAssinatura = false,
 }: Props) {
   const base = snapshot;
 

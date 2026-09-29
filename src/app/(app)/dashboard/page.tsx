@@ -26,7 +26,6 @@ import {
   listarNotasPendentesCooperado,
 } from "@/services/cooperadoEntregasService";
 import {
-  bicCentralAguardandoAssinatura,
   bicCentralMesPrincipalQuantoVouReceber,
   bicCentralResolveInicioParaExibicao,
 } from "@/services/bicLeituraCentralCooperado";
@@ -34,7 +33,6 @@ import { resolverCooperadoIdCanonico } from "@/services/cooperadoCloudService";
 import { cooperadoFinanceiroDesatualizado } from "@/services/fichaSyncGuard";
 import { requestAppSyncImmediate, requestVotacaoOperacionalSync } from "@/services/syncRequest";
 import { useSyncStatus } from "@/components/sync/CooperativaSyncProvider";
-import { useCooperadoExibirAguardandoAssinatura } from "@/hooks/useCooperadoExibirAguardandoAssinatura";
 import { useCooperadoApresentacaoFinanceiraConsolidada } from "@/hooks/useCooperadoApresentacaoFinanceiraConsolidada";
 import { useCooperadoInicioValorReceberCardState } from "@/hooks/useCooperadoInicioValorReceberCardState";
 import { useCooperadoInicioCardContext } from "@/hooks/useCooperadoInicioCardContext";
@@ -69,7 +67,6 @@ import { cooperadoTemAppInstalado, isAppStandalone, resumoInstalacaoApp } from "
 import { PageSkeleton } from "@/components/ui/PageSkeleton";
 import { RestoreOperacionalPanel } from "@/components/sync/RestoreOperacionalPanel";
 import { CooperadoInicioValorReceberCard } from "@/components/cooperado/CooperadoInicioValorReceberCard";
-import { cooperadoUsarFluxoReciboAssinaturaNaUi } from "@/lib/bic/cooperadoBicCentralUi";
 
 function CooperadoDashboard() {
   const { user } = useAuth();
@@ -128,16 +125,6 @@ function CooperadoDashboard() {
     contaCoopSync ? { ...contaCoopSync, user, initialDelayMs: 20_000 } : undefined
   );
 
-  const aguardandoAssinaturaLocal = useAppDataSelector((data) => {
-    if (!data || !user?.cooperadoId) return false;
-    const coopId = getUserCooperativaId(user, data);
-    const cooperadoId = resolverCooperadoIdCanonico(data, user.cooperadoId, coopId);
-    return bicCentralAguardandoAssinatura(data, cooperadoId, coopId, { apresentacaoConsolidada });
-  }, [user?.id, user?.cooperadoId, user?.cooperativaId, hbDescontosRevision, apresentacaoConsolidada]);
-
-  const { exibirAguardandoAssinatura, conferindoPagamentoNuvem } =
-    useCooperadoExibirAguardandoAssinatura(Boolean(aguardandoAssinaturaLocal));
-
   const inicioCardCtx = useCooperadoInicioCardContext(user);
 
   const { snapshot: valorReceberCard, atualizando: cardFinanceiroAtualizando } =
@@ -148,9 +135,6 @@ function CooperadoDashboard() {
       dataReady: inicioCardCtx?.dataReady ?? false,
       syncing,
     });
-
-  const exibirModoReciboAssinatura =
-    exibirAguardandoAssinatura && cooperadoUsarFluxoReciboAssinaturaNaUi();
 
   const view = useAppDataSelector((data) => {
     if (!data || !user?.cooperadoId) return null;
@@ -195,8 +179,6 @@ function CooperadoDashboard() {
       fotosEmAnalise > 0 ||
       valorReceber.exibir ||
       valorReceber.valor > 0 ||
-      valorReceber.aguardandoAssinatura ||
-      valorReceber.valorRecibo > 0 ||
       precisaPix ||
       precisaAssinatura ||
       mensalidadeAberta ||
@@ -255,7 +237,6 @@ function CooperadoDashboard() {
           <CooperadoInicioValorReceberCard
             snapshot={valorReceberCard}
             atualizando={cardFinanceiroAtualizando}
-            exibirReciboAssinatura={exibirModoReciboAssinatura}
           />
           <div className="rounded-2xl border border-gray-200 bg-gray-50 p-6 animate-pulse min-h-[12rem]" />
         </div>
@@ -294,31 +275,6 @@ function CooperadoDashboard() {
       </div>
 
       {cooperado && <AssinaturaStatusAviso cooperado={cooperado} />}
-
-      {conferindoPagamentoNuvem && exibirModoReciboAssinatura && (
-        <AlertBanner variant="info" title="Conferindo pagamento na nuvem">
-          Aguarde alguns segundos com internet — evitamos pedir assinatura de recibo já confirmado.
-        </AlertBanner>
-      )}
-
-      {exibirModoReciboAssinatura && valorReceber.aguardandoAssinatura && (
-        <Link
-          href="/ficha-corrida?assinar=1"
-          className="flex items-center gap-4 rounded-2xl border-2 border-emerald-300 bg-gradient-to-r from-emerald-50 to-green-50 px-5 py-4 hover:border-emerald-400 transition-colors shadow-sm"
-        >
-          <span className="flex h-12 w-12 items-center justify-center rounded-xl bg-emerald-600 text-white shrink-0">
-            <PenLine size={24} />
-          </span>
-          <span className="min-w-0 flex-1">
-            <span className="block font-bold text-gray-900">Assine o recibo do pagamento</span>
-            <span className="block text-sm text-gray-600 mt-0.5">
-              {valorReceber.mesLabel} · {formatCurrency(valorReceber.valorRecibo)} já registrado pela cooperativa.
-              Confirme o recebimento para concluir.
-            </span>
-          </span>
-          <span className="text-sm font-semibold text-emerald-800 shrink-0">Assinar →</span>
-        </Link>
-      )}
 
       {financeiroAusente && (
         <AlertBanner
@@ -404,7 +360,6 @@ function CooperadoDashboard() {
         <CooperadoInicioValorReceberCard
           snapshot={valorReceberCard}
           atualizando={cardFinanceiroAtualizando}
-          exibirReciboAssinatura={exibirModoReciboAssinatura}
         />
 
         <div className="bg-white border-2 border-green-200 rounded-2xl p-6 flex flex-col justify-between">

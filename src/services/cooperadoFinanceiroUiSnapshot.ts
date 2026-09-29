@@ -166,7 +166,7 @@ function buildLegadoSnapshot(
     financeiroSincronizando: opts?.financeiroSincronizando,
   });
 
-  const reciboAtivo = !carregando && motor.aguardandoAssinatura && motor.valorRecibo > 0;
+  const reciboAtivo = false;
   const revision = cooperadoMotorRevisionOperacional(data, cooperadoId, cooperativaId);
 
   return {

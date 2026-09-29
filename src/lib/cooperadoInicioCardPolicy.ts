@@ -61,8 +61,7 @@ export type InicioCardPoliticaResult = {
 };
 
 export function cooperadoMotorTemObrigacaoReceber(motor: InicioCardMotorSnapshot): boolean {
-  if (isBicCentralReadAuthorityEnabled()) return motor.valor > 0;
-  return motor.valor > 0 || motor.aguardandoAssinatura || motor.valorRecibo > 0;
+  return motor.valor > 0;
 }
 
 /** Revisão só de dados operacionais — não depende de máscara H203 de apresentação. */
@@ -136,17 +135,16 @@ export function resolverInicioCardMotorFromAppData(
   const valorRecibo = raw.valorRecibo > 0 ? raw.valorRecibo : inicio.valorRecibo;
   const aguardandoAssinatura = raw.aguardandoAssinatura || inicio.aguardandoAssinatura;
 
-  return {
+  return sanitizeInicioCardSnapshotFluxoBic({
     mesLabel,
     valor: aguardandoAssinatura && valorRecibo > 0 && valor <= 0 ? 0 : valor,
     valorRecibo,
     aguardandoAssinatura,
-  };
+  });
 }
 
-/** Exibição + latch do card quando BIC central tem autoridade. */
+/** Card início — nunca exibir fluxo PIX registrado / assinar recibo. */
 export function sanitizeInicioCardSnapshotFluxoBic(motor: InicioCardMotorSnapshot): InicioCardMotorSnapshot {
-  if (!isBicCentralReadAuthorityEnabled()) return motor;
   return {
     ...motor,
     valor: motor.valor > 0 ? motor.valor : 0,
@@ -165,7 +163,6 @@ export function sanitizeInicioCardSnapshotParaPersistenciaBic(
 function finalizarResultadoCardBic(
   result: InicioCardPoliticaResult & { gravarPersistencia: boolean }
 ): InicioCardPoliticaResult & { gravarPersistencia: boolean } {
-  if (!isBicCentralReadAuthorityEnabled()) return result;
   const display = sanitizeInicioCardSnapshotFluxoBic(result.display);
   const latchDisplay = sanitizeInicioCardSnapshotFluxoBic(result.latch.display);
   return {

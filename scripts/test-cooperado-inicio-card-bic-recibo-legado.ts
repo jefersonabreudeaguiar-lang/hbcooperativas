@@ -162,7 +162,7 @@ withBicOfficial(() => {
   assertSemReciboNaUi(result.display);
 });
 
-// CASO E — BIC OFF preserva legado recibo na UI (modo recibo)
+// CASO E — fluxo recibo desligado na UI do cooperado (BIC OFF ou ON)
 withBicOff(() => {
   const legacy = {
     mesLabel: "Set/2026",
@@ -171,8 +171,8 @@ withBicOff(() => {
     aguardandoAssinatura: true,
   };
   const modos = resolveCooperadoInicioValorReceberCardModos(legacy, true);
-  assert.equal(modos.modoRecibo, true);
-  assert.equal(modos.acao, "Assinar recibo");
+  assert.equal(modos.modoRecibo, false);
+  assert.equal(modos.acao, "Ver detalhes");
   const filtrado = filtrarInicioCardPersistidoLeituraBic(persistido(legacy));
   assert.ok(filtrado);
   assert.deepEqual(filtrado!.display, legacy);

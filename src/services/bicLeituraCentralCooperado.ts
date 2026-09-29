@@ -369,10 +369,17 @@ export function bicCentralResolveInicioParaExibicao(
 
   const inicio = getInicioCooperadoParaExibicao(data, cooperadoId, cooperativaId, optsEff).value;
 
-  return cooperadoInicioParaCardsDefinitivos(
+  const merged = cooperadoInicioParaCardsDefinitivos(
     { ...inicio, mes: m6.mes, meses: m6.meses, mesLabel: m6.mesLabel },
     consolidated
   );
+  return {
+    ...merged,
+    valorRecibo: 0,
+    aguardandoAssinatura: false,
+    exibir: merged.valor > 0,
+    valor: merged.valor > 0 ? merged.valor : 0,
+  };
 }
 
 export function bicCentralResolvePainelParaExibicao(

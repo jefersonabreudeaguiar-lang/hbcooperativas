@@ -623,9 +623,9 @@ export default function FichaCorridaPage() {
   ]);
 
   useEffect(() => {
-    if (!isCooperado || searchParams.get("assinar") !== "1") return;
+    if (!isCooperado || !fluxoReciboAssinatura || searchParams.get("assinar") !== "1") return;
     if (pagamentoAguardandoExibicao) setAssinaturaModal(true);
-  }, [isCooperado, searchParams, pagamentoAguardandoExibicao]);
+  }, [isCooperado, fluxoReciboAssinatura, searchParams, pagamentoAguardandoExibicao]);
 
   const resumoItensPagamento = useMemo(() => {
     if (!data || !cooperadoSelecionadoId) return resumoItensMes;
