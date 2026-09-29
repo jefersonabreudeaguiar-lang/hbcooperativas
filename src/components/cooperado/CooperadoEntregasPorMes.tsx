@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, memo } from "react";
 import Link from "next/link";
 import {
   Camera,
@@ -330,7 +330,7 @@ function EntregaSemanaItem({
   );
 }
 
-export function CooperadoEntregasPorMes({
+export const CooperadoEntregasPorMes = memo(function CooperadoEntregasPorMes({
   resumos,
   nomeCooperado,
   ultimaNotaEnviadaIds = [],
@@ -419,4 +419,4 @@ export function CooperadoEntregasPorMes({
       })}
     </div>
   );
-}
+});

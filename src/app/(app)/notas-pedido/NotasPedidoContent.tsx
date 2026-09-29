@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo, useEffect, useRef, useCallback } from "react";
+import { useState, useMemo, useEffect, useRef, useCallback, startTransition } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import {
@@ -273,6 +273,21 @@ export default function NotasPedidoContent() {
     "fila" | "cooperado" | "historico" | "correcoes"
   >("fila");
   const [abaCooperado, setAbaCooperado] = useState<"entregas" | "ficha">("entregas");
+  const [cooperadoAbaEntregasMontada, setCooperadoAbaEntregasMontada] = useState(true);
+  const [cooperadoAbaFichaMontada, setCooperadoAbaFichaMontada] = useState(false);
+
+  const trocarAbaCooperado = useCallback((aba: "entregas" | "ficha") => {
+    startTransition(() => {
+      setAbaCooperado(aba);
+      if (aba === "entregas") setCooperadoAbaEntregasMontada(true);
+      else setCooperadoAbaFichaMontada(true);
+    });
+  }, []);
+
+  useEffect(() => {
+    if (abaCooperado === "ficha") setCooperadoAbaFichaMontada(true);
+    if (abaCooperado === "entregas") setCooperadoAbaEntregasMontada(true);
+  }, [abaCooperado]);
   const [contratoInstId, setContratoInstId] = useState("");
   const [anexarSucesso, setAnexarSucesso] = useState(false);
   const [ultimaNotaEnviadaIds, setUltimaNotaEnviadaIds] = useState<string[]>([]);
@@ -852,7 +867,7 @@ export default function NotasPedidoContent() {
   }, [isCooperado, searchParams]);
 
   const resumosMensaisCooperado = useMemo(() => {
-    if (!isCooperado || !data || !cooperadoId) return [];
+    if (!isCooperado || !cooperadoAbaEntregasMontada || !data || !cooperadoId) return [];
     const base = filtrarResumosMesesNaoQuitados(
       data,
       cooperadoId,
@@ -866,12 +881,17 @@ export default function NotasPedidoContent() {
         notas: r.notas.filter((n) => n.status === statusFilter),
       }))
       .filter((r) => r.notas.length > 0);
-  }, [data, cooperadoId, coopId, isCooperado, statusFilter, hbDescontosRevision]);
+  }, [data, cooperadoId, coopId, isCooperado, statusFilter, hbDescontosRevision, cooperadoAbaEntregasMontada]);
 
   const resumosFichaCooperado = useMemo(() => {
-    if (!isCooperado || !data || !cooperadoId) return [];
+    if (!isCooperado || !cooperadoAbaFichaMontada || !data || !cooperadoId) return [];
     return listarResumosFichaEmAbertoCooperado(data, cooperadoId, coopId);
-  }, [data, cooperadoId, coopId, isCooperado, hbDescontosRevision]);
+  }, [data, cooperadoId, coopId, isCooperado, hbDescontosRevision, cooperadoAbaFichaMontada]);
+
+  const getEscolaLabelCooperado = useCallback(
+    (n: NotaPedido) => getEscolaNotaLabel(n, data?.instituicoes ?? []),
+    [data?.instituicoes]
+  );
 
   const nomeCooperadoExibicao = useMemo(() => {
     if (!data || !cooperadoId) return user?.name ?? "Cooperado";
@@ -2837,7 +2857,7 @@ export default function NotasPedidoContent() {
   const concluirSessaoEntregas = () => {
     const ids = ultimaNotaEnviadaIds;
     fecharAnexarModal(true);
-    setAbaCooperado("entregas");
+    trocarAbaCooperado("entregas");
     const lastId = ids[ids.length - 1];
     if (lastId) {
       requestAnimationFrame(() => {
@@ -3399,7 +3419,7 @@ export default function NotasPedidoContent() {
           {abaCooperado === "entregas" ? (
             <>
               Cada mês lista Entrega 1, 2, 3… Toque na entrega para abrir a foto. Valores consolidados ficam em{" "}
-              <button type="button" onClick={() => setAbaCooperado("ficha")} className="text-green-700 font-semibold underline">
+              <button type="button" onClick={() => trocarAbaCooperado("ficha")} className="text-green-700 font-semibold underline">
                 Minha ficha
               </button>
               .
@@ -3417,7 +3437,7 @@ export default function NotasPedidoContent() {
         <div className="flex gap-2 mb-6 border-b border-gray-200">
           <button
             type="button"
-            onClick={() => setAbaCooperado("entregas")}
+            onClick={() => trocarAbaCooperado("entregas")}
             className={cn(
               "px-4 py-2.5 text-sm font-medium border-b-2 -mb-px flex items-center gap-2",
               abaCooperado === "entregas"
@@ -3429,7 +3449,7 @@ export default function NotasPedidoContent() {
           </button>
           <button
             type="button"
-            onClick={() => setAbaCooperado("ficha")}
+            onClick={() => trocarAbaCooperado("ficha")}
             className={cn(
               "px-4 py-2.5 text-sm font-medium border-b-2 -mb-px flex items-center gap-2",
               abaCooperado === "ficha"
@@ -3525,36 +3545,45 @@ export default function NotasPedidoContent() {
       )}
 
       {isCooperado ? (
-        abaCooperado === "ficha" ? (
-          <CooperadoMinhaFichaTab
-            cooperadoId={cooperadoId!}
-            cooperativaId={coopId}
-            nomeCooperado={nomeCooperadoExibicao}
-            resumos={resumosFichaCooperado}
-            getEscolaLabel={(n) => getEscolaNotaLabel(n, data.instituicoes)}
-          />
-        ) : statusFilter && resumosMensaisCooperado.length === 0 ? (
-          <div className="text-center py-12 text-gray-500 bg-white rounded-2xl border">
-            <Camera size={40} className="mx-auto mb-3 text-gray-300" />
-            <p className="font-medium">
-              {statusFilter === "pendentes" ? "Nenhuma entrega pendente" : "Nenhuma entrega com este filtro"}
-            </p>
-            <p className="text-sm mt-1">
-              {statusFilter === "pendentes"
-                ? "Entregas aprovadas ou pagas ficam no histórico completo."
-                : "Toque em Histórico completo para ver todas as entregas."}
-            </p>
-          </div>
-        ) : (
-          <CooperadoEntregasPorMes
-            resumos={resumosMensaisCooperado}
-            nomeCooperado={nomeCooperadoExibicao}
-            ultimaNotaEnviadaIds={ultimaNotaEnviadaIds}
-            onReenviar={(n) => openAnexar(n, { abrirCamera: true })}
-            onExcluir={(n) => solicitarExclusaoNota(n, false)}
-            getEscolaLabel={(n) => getEscolaNotaLabel(n, data.instituicoes)}
-          />
-        )
+        <>
+          {cooperadoAbaFichaMontada && (
+            <div className={abaCooperado === "ficha" ? undefined : "hidden"} aria-hidden={abaCooperado !== "ficha"}>
+              <CooperadoMinhaFichaTab
+                cooperadoId={cooperadoId!}
+                cooperativaId={coopId}
+                nomeCooperado={nomeCooperadoExibicao}
+                resumos={resumosFichaCooperado}
+                getEscolaLabel={getEscolaLabelCooperado}
+              />
+            </div>
+          )}
+          {cooperadoAbaEntregasMontada && (
+            <div className={abaCooperado === "entregas" ? undefined : "hidden"} aria-hidden={abaCooperado !== "entregas"}>
+              {statusFilter && resumosMensaisCooperado.length === 0 ? (
+                <div className="text-center py-12 text-gray-500 bg-white rounded-2xl border">
+                  <Camera size={40} className="mx-auto mb-3 text-gray-300" />
+                  <p className="font-medium">
+                    {statusFilter === "pendentes" ? "Nenhuma entrega pendente" : "Nenhuma entrega com este filtro"}
+                  </p>
+                  <p className="text-sm mt-1">
+                    {statusFilter === "pendentes"
+                      ? "Entregas aprovadas ou pagas ficam no histórico completo."
+                      : "Toque em Histórico completo para ver todas as entregas."}
+                  </p>
+                </div>
+              ) : (
+                <CooperadoEntregasPorMes
+                  resumos={resumosMensaisCooperado}
+                  nomeCooperado={nomeCooperadoExibicao}
+                  ultimaNotaEnviadaIds={ultimaNotaEnviadaIds}
+                  onReenviar={(n) => openAnexar(n, { abrirCamera: true })}
+                  onExcluir={(n) => solicitarExclusaoNota(n, false)}
+                  getEscolaLabel={getEscolaLabelCooperado}
+                />
+              )}
+            </div>
+          )}
+        </>
       ) : mostrarTabelaResponsavel ? (
       <>
         {check("notas_pedido", "edit") && (

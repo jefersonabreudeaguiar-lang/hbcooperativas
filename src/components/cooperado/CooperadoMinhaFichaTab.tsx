@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, useEffect } from "react";
+import { useMemo, useState, useEffect, memo } from "react";
 import Link from "next/link";
 import {
   CheckCircle2,
@@ -90,13 +90,13 @@ function MesFichaAccordion({
   }, [expandido]);
 
   const resumoFotosMes = useMemo(() => {
-    if (!data) return null;
+    if (!data || !expandido) return null;
     return (
       listarResumosFotosCooperado(data, cooperadoId, cooperativaId).find(
         (r) => r.mesReferencia === resumo.mesReferencia
       ) ?? null
     );
-  }, [data, cooperadoId, cooperativaId, resumo.mesReferencia]);
+  }, [data, cooperadoId, cooperativaId, resumo.mesReferencia, expandido]);
 
   const temFotosMes =
     !!resumoFotosMes && resumo.notas.some((n) => notaTemFotoEnviadaCooperado(n));
@@ -105,13 +105,15 @@ function MesFichaAccordion({
     modo === "cooperado"
       ? "/ficha-corrida"
       : `/ficha-corrida?cooperado=${encodeURIComponent(cooperadoId)}`;
+  const precisaDetalhesExpandido = expandido && viewInterna === "detalhes";
+
   const resumoPagamento = useMemo(() => {
-    if (!data) return null;
+    if (!data || !precisaDetalhesExpandido) return null;
     return bicCentralGetResumoPagamentoExibicao(data, cooperadoId, resumo.mesReferencia, cooperativaId);
-  }, [data, cooperadoId, resumo.mesReferencia, cooperativaId, hbDescontosRevision]);
+  }, [data, cooperadoId, resumo.mesReferencia, cooperativaId, hbDescontosRevision, precisaDetalhesExpandido]);
 
   const itensMes = useMemo(() => {
-    if (!data) return { itens: [], entregas: 0, valorBruto: 0 };
+    if (!data || !precisaDetalhesExpandido) return { itens: [], entregas: 0, valorBruto: 0 };
     const apenasPendentes = !resumo.pagamentoConfirmado && !resumo.pagamentoAguardando;
     return agregarItensFichaMes(data, cooperadoId, resumo.mesReferencia, cooperativaId, { apenasPendentes });
   }, [
@@ -121,24 +123,25 @@ function MesFichaAccordion({
     cooperativaId,
     resumo.pagamentoConfirmado,
     resumo.pagamentoAguardando,
+    precisaDetalhesExpandido,
   ]);
 
   const avulsosPendentes = useMemo(() => {
-    if (!data) return 0;
+    if (!data || !precisaDetalhesExpandido) return 0;
     return bicCentralTotalValoresAvulsosPendentes(data, cooperadoId, resumo.mesReferencia, cooperativaId);
-  }, [data, cooperadoId, resumo.mesReferencia, cooperativaId]);
+  }, [data, cooperadoId, resumo.mesReferencia, cooperativaId, precisaDetalhesExpandido]);
 
   const exibicaoOpts = useMemo(() => {
-    if (!data) return undefined;
+    if (!data || !precisaDetalhesExpandido) return undefined;
     return bicCentralBuildValorExibicaoCooperadoOpts(data, cooperadoId, resumo.mesReferencia, cooperativaId);
-  }, [data, cooperadoId, resumo.mesReferencia, cooperativaId]);
+  }, [data, cooperadoId, resumo.mesReferencia, cooperativaId, precisaDetalhesExpandido]);
 
   const descontosExtrasExibicao = useMemo(
     () => (resumoPagamento ? getDescontosExtrasExibicaoCooperado(resumoPagamento, exibicaoOpts) : []),
     [resumoPagamento, exibicaoOpts]
   );
 
-  if (!data || !resumoPagamento) return null;
+  if (!data) return null;
 
   const quitado = !!resumo.pagamentoConfirmado;
   const aguardando = !!resumo.pagamentoAguardando;
@@ -209,6 +212,8 @@ function MesFichaAccordion({
             />
           ) : (
             <>
+          {resumoPagamento && (
+          <>
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
             <div className="rounded-xl bg-white border border-gray-200 p-3">
               <p className="text-xs text-gray-500 uppercase tracking-wide">Entregas</p>
@@ -422,6 +427,8 @@ function MesFichaAccordion({
               </Link>
             )}
           </div>
+          </>
+          )}
             </>
           )}
         </div>
@@ -430,7 +437,7 @@ function MesFichaAccordion({
   );
 }
 
-export function CooperadoMinhaFichaTab({
+export const CooperadoMinhaFichaTab = memo(function CooperadoMinhaFichaTab({
   cooperadoId,
   cooperativaId,
   nomeCooperado,
@@ -659,4 +666,4 @@ export function CooperadoMinhaFichaTab({
       )}
     </div>
   );
-}
+});
