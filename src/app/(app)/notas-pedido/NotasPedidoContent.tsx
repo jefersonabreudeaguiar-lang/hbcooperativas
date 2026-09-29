@@ -318,6 +318,8 @@ export default function NotasPedidoContent() {
   } | null>(null);
   const lancamentoSequenciaTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const conferenciaFotoCacheRef = useRef<Map<string, string>>(new Map());
+  const conferenciaFotoLoadGenRef = useRef(0);
+  const conferenciaNotaEnriquecidaRef = useRef<{ notaId: string; nota: NotaPedido } | null>(null);
 
   const conferenciaFotoCacheKey = (notaId: string, index: number) => `${notaId}:${index}`;
   const fotosLancadasConferenciaRef = useRef<Set<number>>(new Set());
@@ -361,17 +363,22 @@ export default function NotasPedidoContent() {
       revokePreviewUrl(url);
     }
     conferenciaFotoCacheRef.current.clear();
+    conferenciaNotaEnriquecidaRef.current = null;
     setConferenciaFotoAtualUrl(null);
     setConferenciaFotoCarregando(false);
   }, []);
 
   const loadConferenciaFoto = useCallback(
     async (nota: NotaPedido, index: number): Promise<string | null> => {
+      const loadGen = ++conferenciaFotoLoadGenRef.current;
+      const stillActive = () => loadGen === conferenciaFotoLoadGenRef.current;
+
       setConferenciaFotoErro("");
       const cacheKey = conferenciaFotoCacheKey(nota.id, index);
       const cached = conferenciaFotoCacheRef.current.get(cacheKey);
       if (cached) {
         setConferenciaFotoAtualUrl(cached);
+        setConferenciaFotoCarregando(false);
         return cached;
       }
 
@@ -379,11 +386,13 @@ export default function NotasPedidoContent() {
       if (localFotos[index]) {
         conferenciaFotoCacheRef.current.set(cacheKey, localFotos[index]);
         setConferenciaFotoAtualUrl(localFotos[index]);
+        setConferenciaFotoCarregando(false);
         return localFotos[index];
       }
 
       if (!notaTemFotoArmazenadaNaNuvem(nota)) {
         setConferenciaFotoAtualUrl(null);
+        setConferenciaFotoCarregando(false);
         return null;
       }
       const cnpj =
@@ -391,17 +400,30 @@ export default function NotasPedidoContent() {
         (data && coopId ? getCooperativaCnpj(data, coopId) : undefined) ??
         (user && coopId ? await resolveCooperativaCnpj(data ?? getData(), coopId, user) : undefined);
       if (!cnpj) {
+        if (!stillActive()) return null;
         setConferenciaFotoErro("CNPJ da cooperativa não encontrado para carregar fotos.");
         setConferenciaFotoAtualUrl(null);
+        setConferenciaFotoCarregando(false);
         return null;
       }
 
+      if (!stillActive()) return null;
       setConferenciaFotoAtualUrl(null);
       setConferenciaFotoCarregando(true);
       try {
-        const baseData = data ?? getData();
-        const notaEnriquecida =
-          baseData && coopId ? await ensureNotaComFoto(baseData, nota, coopId) : nota;
+        let notaEnriquecida = nota;
+        const cachedEnriched = conferenciaNotaEnriquecidaRef.current;
+        if (cachedEnriched?.notaId === nota.id) {
+          notaEnriquecida = cachedEnriched.nota;
+        } else {
+          const baseData = data ?? getData();
+          if (baseData && coopId) {
+            notaEnriquecida = await ensureNotaComFoto(baseData, nota, coopId);
+            conferenciaNotaEnriquecidaRef.current = { notaId: nota.id, nota: notaEnriquecida };
+          }
+        }
+
+        if (!stillActive()) return null;
 
         const enrichedLocal = getFotosExibicaoNota(notaEnriquecida);
         if (enrichedLocal[index]) {
@@ -410,14 +432,30 @@ export default function NotasPedidoContent() {
           return enrichedLocal[index];
         }
 
-        let url = await fetchNotaFotoPartBlobUrl(cnpj, notaEnriquecida.id, index);
-        if (!url) {
-          const resolved = await resolveFotosNotaParaExibicao(notaEnriquecida, cnpj);
-          url = resolved[index] ?? resolved[0] ?? null;
+        let url = await fetchNotaFotoPartBlobUrl(cnpj, notaEnriquecida.id, index, { compact: true });
+        if (!url && index !== 0) {
+          url = await fetchNotaFotoPartBlobUrl(cnpj, notaEnriquecida.id, 0, { compact: true });
+        }
+        if (!stillActive()) {
+          if (url) revokePreviewUrl(url);
+          return null;
         }
         if (url) {
           conferenciaFotoCacheRef.current.set(cacheKey, url);
           setConferenciaFotoAtualUrl(url);
+          const total = contarFotosEnviadasNota(notaEnriquecida);
+          const nextIdx = index + 1;
+          if (nextIdx < total && !conferenciaFotoCacheRef.current.has(conferenciaFotoCacheKey(nota.id, nextIdx))) {
+            void fetchNotaFotoPartBlobUrl(cnpj, notaEnriquecida.id, nextIdx, { compact: true }).then((prefetch) => {
+              if (!prefetch) return;
+              const pk = conferenciaFotoCacheKey(nota.id, nextIdx);
+              if (!conferenciaFotoCacheRef.current.has(pk)) {
+                conferenciaFotoCacheRef.current.set(pk, prefetch);
+              } else {
+                revokePreviewUrl(prefetch);
+              }
+            });
+          }
           return url;
         }
         conferenciaFotoCacheRef.current.delete(cacheKey);
@@ -426,7 +464,9 @@ export default function NotasPedidoContent() {
         );
         return null;
       } finally {
-        setConferenciaFotoCarregando(false);
+        if (stillActive()) {
+          setConferenciaFotoCarregando(false);
+        }
       }
     },
     [data, coopId, user]
@@ -661,6 +701,7 @@ export default function NotasPedidoContent() {
       setConferirErrors({});
       setConferenciaFotoIdx(clamped);
       setLancamentoSequencia(null);
+      conferenciaFotoLoadGenRef.current += 1;
       carregarItensParaFotoConferencia(clamped);
     },
     [
@@ -2048,8 +2089,9 @@ export default function NotasPedidoContent() {
   };
 
   const prepararConferenciaNota = async (nota: NotaPedido, opts?: { transicao?: boolean }) => {
-    const d = getData() ?? data;
     if (opts?.transicao) setConferenciaTransicao(true);
+    try {
+    const d = getData() ?? data;
     if (lancamentoSequenciaTimerRef.current) {
       clearTimeout(lancamentoSequenciaTimerRef.current);
       lancamentoSequenciaTimerRef.current = null;
@@ -2065,6 +2107,7 @@ export default function NotasPedidoContent() {
       if (opts?.transicao) {
         notaComFoto = d.notasPedido.find((n) => n.id === nota.id) ?? nota;
         void ensureNotaComFoto(d, notaComFoto, coopId).then((enriched) => {
+          conferenciaNotaEnriquecidaRef.current = { notaId: enriched.id, nota: enriched };
           setSelectedNota((prev) => {
             if (!prev || prev.id !== enriched.id) return prev;
             return prev.status === "aguardando_conferencia"
@@ -2082,6 +2125,7 @@ export default function NotasPedidoContent() {
         }
       } else {
         notaComFoto = await ensureNotaComFoto(d, nota, coopId);
+        conferenciaNotaEnriquecidaRef.current = { notaId: notaComFoto.id, nota: notaComFoto };
       }
     }
     const totalFotos = contarFotosEnviadasNota(notaComFoto);
@@ -2154,13 +2198,16 @@ export default function NotasPedidoContent() {
       setFiltroCooperadoId(coopDonoId);
     }
     if (
+      !opts?.transicao &&
       notaTemFotoArmazenadaNaNuvem(notaComFoto) &&
       totalFotos > 0 &&
       getFotosExibicaoNota(notaComFoto).length === 0
     ) {
       await loadConferenciaFoto(notaComFoto, 0);
     }
-    setConferenciaTransicao(false);
+    } finally {
+      setConferenciaTransicao(false);
+    }
   };
 
   const listarPendentesConferencia = (

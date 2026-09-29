@@ -617,14 +617,18 @@ export async function resolveFotosNotaParaExibicao(
 export async function fetchNotaFotoPartBlobUrl(
   cnpj: string,
   notaId: string,
-  index: number
+  index: number,
+  options?: { compact?: boolean }
 ): Promise<string | null> {
   const digits = normalizeCnpj(cnpj);
   if (digits.length !== 14) return null;
 
-  const tryIndices = [index, 0];
-  for (let i = 0; i < 8; i++) {
-    if (!tryIndices.includes(i)) tryIndices.push(i);
+  const tryIndices: number[] = [index];
+  if (index !== 0) tryIndices.push(0);
+  if (!options?.compact) {
+    for (let i = 0; i < 8; i++) {
+      if (!tryIndices.includes(i)) tryIndices.push(i);
+    }
   }
 
   for (const idx of tryIndices) {
