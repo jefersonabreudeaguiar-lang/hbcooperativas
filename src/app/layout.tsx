@@ -3,6 +3,7 @@ import { Geist } from "next/font/google";
 import "./globals.css";
 import { AuthProvider } from "@/modules/auth/AuthProvider";
 import { PwaProvider } from "@/components/pwa/PwaProvider";
+import { ClientDeploymentGuard } from "@/components/pwa/ClientDeploymentGuard";
 import { getPrivateAppRobotsMetadata } from "@/lib/security/crawlerPolicy";
 
 const geist = Geist({
@@ -47,6 +48,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <body className="min-h-full antialiased">
         <AuthProvider>
           {children}
+          <ClientDeploymentGuard />
           <PwaProvider />
         </AuthProvider>
       </body>

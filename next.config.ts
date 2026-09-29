@@ -44,6 +44,8 @@ const nextConfig: NextConfig = {
     NEXT_PUBLIC_CONTA_COOP_UI_PUBLIC: process.env.NEXT_PUBLIC_CONTA_COOP_UI_PUBLIC ?? "0",
     NEXT_PUBLIC_CONTA_COOP_VALOR_RECEBER_PUBLIC:
       process.env.NEXT_PUBLIC_CONTA_COOP_VALOR_RECEBER_PUBLIC ?? "0",
+    NEXT_PUBLIC_VERCEL_DEPLOYMENT_ID: process.env.VERCEL_DEPLOYMENT_ID ?? "",
+    NEXT_PUBLIC_VERCEL_GIT_COMMIT_SHA: process.env.VERCEL_GIT_COMMIT_SHA ?? "",
   },
   // Permite abrir o dev server pelo celular (IP da rede, ex.: 192.168.1.7:3000)
   allowedDevOrigins: [
@@ -69,6 +71,14 @@ const nextConfig: NextConfig = {
           { key: "Cache-Control", value: "no-store" },
           { key: "X-Content-Type-Options", value: "nosniff" },
         ],
+      },
+      {
+        source: "/sw.js",
+        headers: [{ key: "Cache-Control", value: "no-cache, no-store, must-revalidate" }],
+      },
+      {
+        source: "/manifest.webmanifest",
+        headers: [{ key: "Cache-Control", value: "no-cache, must-revalidate" }],
       },
     ];
   },

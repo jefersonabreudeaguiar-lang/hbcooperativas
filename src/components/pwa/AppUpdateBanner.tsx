@@ -5,6 +5,8 @@ import { RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { APP_BUILD_VERSION } from "@/lib/appBuildVersion";
 import { useAuth } from "@/modules/auth/AuthProvider";
+import { BUILD_SEEN_KEY } from "@/lib/pwa/clientRelease";
+import { markClientReleaseSeen } from "@/lib/pwa/fetchOfficialClientRelease";
 
 function activateWaitingWorker(reg: ServiceWorkerRegistration) {
   const worker = reg.waiting ?? reg.installing;
@@ -21,12 +23,15 @@ export function AppUpdateBanner() {
   useEffect(() => {
     if (typeof window === "undefined" || !("serviceWorker" in navigator)) return;
 
-    const key = "hb-coop-app-build-seen";
-    const seen = localStorage.getItem(key);
+    const seen = localStorage.getItem(BUILD_SEEN_KEY);
     if (seen !== String(APP_BUILD_VERSION)) {
-      localStorage.setItem(key, String(APP_BUILD_VERSION));
       if (seen != null) {
         if (autoUpdate) {
+          markClientReleaseSeen({
+            build: APP_BUILD_VERSION,
+            deploymentId: "",
+            gitCommitSha: "",
+          });
           window.location.reload();
           return;
         }

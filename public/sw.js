@@ -1,5 +1,7 @@
-const CACHE_VERSION = "hb-coop-v34";
-const PRECACHE = ["/", "/dashboard", "/manifest.webmanifest", "/icons/icon-192.png", "/icons/icon-512.png"];
+/** Bump junto com APP_BUILD_VERSION quando mudar estratégia de cache offline. */
+const CACHE_VERSION = "hb-coop-v35";
+/** Shell HTML não vai para precache — evita mobile preso em deployment antigo (dpl_Eoe9…). */
+const PRECACHE = ["/manifest.webmanifest", "/icons/icon-192.png", "/icons/icon-512.png"];
 
 self.addEventListener("install", (event) => {
   event.waitUntil(
@@ -27,9 +29,15 @@ self.addEventListener("fetch", (event) => {
   const url = new URL(event.request.url);
   if (url.origin !== self.location.origin) return;
 
+  if (url.pathname.startsWith("/_next/") || url.pathname.startsWith("/api/")) {
+    return;
+  }
+
   if (event.request.mode === "navigate") {
     event.respondWith(
-      fetch(event.request).catch(() => caches.match("/dashboard").then((r) => r || caches.match("/")))
+      fetch(event.request, { cache: "no-store" }).catch(() =>
+        Response.error()
+      )
     );
     return;
   }
