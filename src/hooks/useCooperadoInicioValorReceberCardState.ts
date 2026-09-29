@@ -70,11 +70,15 @@ export function useCooperadoInicioValorReceberCardState(input: {
       carregandoFinanceiro,
       prevLatch: latchRef.current,
       persistido,
+      dataReady: input.dataReady,
+      syncing: input.syncing,
     });
   }, [
     input.data,
     input.cooperadoId,
     input.cooperativaId,
+    input.dataReady,
+    input.syncing,
     carregandoFinanceiro,
     persistido,
   ]);

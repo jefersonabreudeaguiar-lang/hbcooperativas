@@ -6,12 +6,14 @@ import assert from "node:assert/strict";
 import type { AppData } from "../src/types";
 import {
   filtrarInicioCardPersistidoLeituraBic,
+  inicioCardMotorFromFinanceiroUiSnapshot,
   persistidoDisplayCompativelBic,
   resolverCardInicioEndurecido,
   resolverInicioCardMotorFromAppData,
   sanitizeInicioCardSnapshotParaPersistenciaBic,
   type InicioCardMotorSnapshot,
 } from "../src/lib/cooperadoInicioCardPolicy";
+import { buildCooperadoFinanceiroUiSnapshot } from "../src/services/cooperadoFinanceiroUiSnapshot";
 import type { InicioCardPersistido } from "../src/lib/cooperadoInicioCardPersistencia";
 import { resolveCooperadoInicioValorReceberCardModos } from "../src/components/cooperado/CooperadoInicioValorReceberCard";
 
@@ -176,4 +178,136 @@ withBicOff(() => {
   assert.deepEqual(filtrado!.display, legacy);
 });
 
-console.log("OK — cooperado inicio card BIC recibo legado (casos A–E)");
+// PASSO 26 — card consome snapshot como autoridade (BIC ON)
+withBicOfficial(() => {
+  const data = miniDataMotorZero();
+  data.fichaCorrida = [
+    {
+      id: "f-open",
+      cooperadoId: COOPERADO,
+      cooperativaId: COOP,
+      mesReferencia: MES,
+      valorLiquido: 250,
+      valorBruto: 250,
+      valorDesconto: 0,
+      status: "pendente",
+      descricao: "Aberto",
+    },
+  ] as AppData["fichaCorrida"];
+  const financeiro = buildCooperadoFinanceiroUiSnapshot({
+    data,
+    cooperadoId: COOPERADO,
+    cooperativaId: COOP,
+    opts: { dataReady: true },
+  });
+  assert.equal(financeiro.status, "CONFIRMADO");
+  const card = resolverCardInicioEndurecido({
+    data,
+    cooperadoId: COOPERADO,
+    cooperativaId: COOP,
+    apresentacaoConsolidada: true,
+    carregandoFinanceiro: false,
+    prevLatch: null,
+    persistido: null,
+    dataReady: true,
+  });
+  assert.equal(card.display.valor, financeiro.valorAReceber);
+  assert.equal(card.display.valor, 250);
+});
+
+withBicOfficial(() => {
+  const snap = persistido({
+    mesLabel: "Set/2026",
+    valor: 500,
+    valorRecibo: 0,
+    aguardandoAssinatura: false,
+  });
+  const result = resolverCardInicioEndurecido({
+    data: null,
+    cooperadoId: COOPERADO,
+    cooperativaId: COOP,
+    apresentacaoConsolidada: true,
+    carregandoFinanceiro: false,
+    prevLatch: null,
+    persistido: snap,
+    dataReady: false,
+  });
+  assert.equal(result.display.valor, 0, "AGUARDANDO_BIC não usa cache como definitivo");
+});
+
+withBicOfficial(() => {
+  const data = miniDataMotorZero();
+  const result = resolverCardInicioEndurecido({
+    data,
+    cooperadoId: COOPERADO,
+    cooperativaId: "coop-tenant-wrong",
+    apresentacaoConsolidada: true,
+    carregandoFinanceiro: false,
+    prevLatch: null,
+    persistido: null,
+    dataReady: true,
+  });
+  assert.equal(result.display.valor, 0, "INCONSISTENTE sem fallback legado");
+});
+
+withBicOfficial(() => {
+  const data = miniDataMotorZero();
+  data.pagamentosCooperado = [
+    {
+      id: "pg1",
+      cooperadoId: COOPERADO,
+      cooperativaId: COOP,
+      mesReferencia: MES,
+      valorLiquido: 123.42,
+      status: "aguardando_confirmacao",
+      mesesReferencia: [MES],
+    },
+  ] as AppData["pagamentosCooperado"];
+  const financeiro = buildCooperadoFinanceiroUiSnapshot({
+    data,
+    cooperadoId: COOPERADO,
+    cooperativaId: COOP,
+    opts: { dataReady: true },
+  });
+  const motor = inicioCardMotorFromFinanceiroUiSnapshot(financeiro);
+  assertSemReciboNaUi(motor);
+  const result = resolverCardInicioEndurecido({
+    data,
+    cooperadoId: COOPERADO,
+    cooperativaId: COOP,
+    apresentacaoConsolidada: true,
+    carregandoFinanceiro: false,
+    prevLatch: null,
+    persistido: null,
+    dataReady: true,
+  });
+  assertSemReciboNaUi(result.display);
+  assert.equal(result.display.valor, 0);
+  const modos = resolveCooperadoInicioValorReceberCardModos(result.display, true);
+  assert.equal(modos.acao, "Ver detalhes");
+});
+
+withBicOfficial(() => {
+  const snap = persistido({
+    mesLabel: "Setembro 2026",
+    valor: 0,
+    valorRecibo: 123.42,
+    aguardandoAssinatura: true,
+  });
+  const result = resolverCardInicioEndurecido({
+    data: null,
+    cooperadoId: COOPERADO,
+    cooperativaId: COOP,
+    apresentacaoConsolidada: true,
+    carregandoFinanceiro: false,
+    prevLatch: null,
+    persistido: snap,
+    dataReady: false,
+  });
+  assertSemReciboNaUi(result.display);
+  assert.equal(result.display.valor, 0);
+  const modos = resolveCooperadoInicioValorReceberCardModos(result.display, true);
+  assert.notEqual(modos.acao, "Assinar recibo");
+});
+
+console.log("OK — cooperado inicio card BIC recibo legado (casos A–E + PASSO 26)");

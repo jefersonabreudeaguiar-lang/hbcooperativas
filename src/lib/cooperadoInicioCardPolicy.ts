@@ -9,6 +9,10 @@
 import type { AppData } from "@/types";
 import { notaPertenceCooperado, fichaPertenceCooperado, pagamentoCooperadoPertenceCooperado } from "@/services/cooperadoCloudService";
 import { bicCentralResolveInicioParaExibicao, bicCentralSincronizarRotuloMeses, bicCentralValorAReceberAgregado } from "@/services/bicLeituraCentralCooperado";
+import {
+  buildCooperadoFinanceiroUiSnapshot,
+  type CooperadoFinanceiroUiSnapshot,
+} from "@/services/cooperadoFinanceiroUiSnapshot";
 import { isBicCentralReadAuthorityEnabled } from "@/lib/bic/bicCentralReadAuthority";
 import { formatMesReferencia, getCurrentMesReferencia } from "@/utils/format";
 
@@ -266,11 +270,89 @@ export type ResolverCardInicioInput = {
   carregandoFinanceiro: boolean;
   prevLatch: InicioCardLatchState | null;
   persistido: import("@/lib/cooperadoInicioCardPersistencia").InicioCardPersistido | null;
+  /** Warm AppData — obrigatório para projeção BIC no snapshot (PASSO 26). */
+  dataReady?: boolean;
+  syncing?: boolean;
 };
+
+/** Card BIC ON — display derivado somente do CooperadoFinanceiroUiSnapshot. */
+export function inicioCardMotorFromFinanceiroUiSnapshot(
+  financeiro: CooperadoFinanceiroUiSnapshot
+): InicioCardMotorSnapshot {
+  const mesLabel = financeiro.mesLabel?.trim() || "—";
+  const valor =
+    financeiro.status === "CONFIRMADO" && financeiro.exibirValorNoCard
+      ? financeiro.valorAReceber
+      : 0;
+  return {
+    mesLabel,
+    valor,
+    valorRecibo: 0,
+    aguardandoAssinatura: false,
+  };
+}
+
+function resolverCardInicioEndurecidoFinanceiroUiSnapshot(
+  input: ResolverCardInicioInput
+): InicioCardPoliticaResult & { gravarPersistencia: boolean } {
+  const { data, cooperadoId, cooperativaId } = input;
+  const dataReady = input.dataReady ?? Boolean(data);
+
+  const financeiro = buildCooperadoFinanceiroUiSnapshot({
+    data,
+    cooperadoId,
+    cooperativaId,
+    opts: {
+      apresentacaoConsolidada: input.apresentacaoConsolidada,
+      dataReady,
+      financeiroSincronizando: Boolean(input.syncing || input.carregandoFinanceiro),
+    },
+  });
+
+  const motor = inicioCardMotorFromFinanceiroUiSnapshot(financeiro);
+  const revision =
+    financeiro.observability.motorRevision ??
+    (data && cooperadoId && cooperativaId
+      ? cooperadoMotorRevisionOperacional(data, cooperadoId, cooperativaId)
+      : "");
+
+  if (financeiro.status === "AGUARDANDO_BIC" || financeiro.status === "INCONSISTENTE") {
+    const latch: InicioCardLatchState = {
+      motorRevision: revision,
+      display: motor,
+      hadPendencia: cooperadoMotorTemObrigacaoReceber(motor),
+    };
+    return finalizarResultadoCardBic({
+      display: motor,
+      latch,
+      atualizando:
+        financeiro.status === "AGUARDANDO_BIC" ||
+        financeiro.cardAtualizando ||
+        input.carregandoFinanceiro,
+      gravarPersistencia: false,
+    });
+  }
+
+  const applied = aplicarPoliticaCardInicioEndurecida(motor, revision, input.prevLatch, {
+    carregandoFinanceiro: input.carregandoFinanceiro,
+  });
+
+  const atualizando = applied.atualizando || financeiro.cardAtualizando;
+
+  return finalizarResultadoCardBic({
+    ...applied,
+    atualizando,
+    gravarPersistencia: Boolean(cooperativaId),
+  });
+}
 
 export function resolverCardInicioEndurecido(input: ResolverCardInicioInput): InicioCardPoliticaResult & {
   gravarPersistencia: boolean;
 } {
+  if (isBicCentralReadAuthorityEnabled()) {
+    return resolverCardInicioEndurecidoFinanceiroUiSnapshot(input);
+  }
+
   const { data, cooperadoId, cooperativaId, persistido } = input;
   const vazio: InicioCardMotorSnapshot = {
     mesLabel: "—",

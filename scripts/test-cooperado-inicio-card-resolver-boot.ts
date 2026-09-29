@@ -165,7 +165,7 @@ const dataMotorPositivo = miniData({
   assert.equal(result.display.valor, 0);
   assert.equal(result.atualizando, true);
   assert.equal(result.gravarPersistencia, false);
-  assert.equal(result.latch.display.valor, 123.42);
+  assert.equal(result.latch.display.valor, 0, "latch BIC snapshot não promove cache");
 }
 
 // TESTE 2 — boot cache zero

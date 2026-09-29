@@ -32,6 +32,7 @@
     "test:cooperado-inicio-card-policy": "npx tsx scripts/test-cooperado-inicio-card-policy.ts",
     "test:cooperado-inicio-card-resolver-boot": "npx tsx scripts/test-cooperado-inicio-card-resolver-boot.ts",
     "test:cooperado-inicio-card-bic-recibo-legado": "npx tsx scripts/test-cooperado-inicio-card-bic-recibo-legado.ts",
+    "test:cooperado-financeiro-ui-snapshot": "npx tsx scripts/test-cooperado-financeiro-ui-snapshot.ts",
     "audit:bic-hbcoop-integration": "npx tsx scripts/lab/run-bic-hbcoop-integration-audit.ts",
     "lab:bic-activate": "npx tsx scripts/lab/run-bic-lab-activate.ts",
     "lab:bic-full-audit": "npx tsx scripts/lab/run-bic-lab-full-audit.ts",
