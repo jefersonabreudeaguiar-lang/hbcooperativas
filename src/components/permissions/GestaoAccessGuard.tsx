@@ -3,7 +3,7 @@
 import { useEffect } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { useAuth } from "@/modules/auth/AuthProvider";
-import { useAppData } from "@/hooks/useAppData";
+import { useAppDataSelector } from "@/hooks/useAppData";
 import {
   canAccessPainelResponsavel,
   isGestaoOnlyRoute,
@@ -11,16 +11,20 @@ import {
 
 export function GestaoAccessGuard({ children }: { children: React.ReactNode }) {
   const { accountUser } = useAuth();
-  const data = useAppData();
   const pathname = usePathname();
   const router = useRouter();
 
+  const canGestao = useAppDataSelector(
+    (data) => (accountUser ? canAccessPainelResponsavel(accountUser, data) : false),
+    [accountUser?.id, accountUser?.email, accountUser?.role, accountUser?.cooperadoId]
+  );
+
   useEffect(() => {
-    if (!accountUser || !data) return;
+    if (!accountUser) return;
     if (!isGestaoOnlyRoute(pathname)) return;
-    if (canAccessPainelResponsavel(accountUser, data)) return;
+    if (canGestao) return;
     router.replace("/dashboard");
-  }, [accountUser, data, pathname, router]);
+  }, [accountUser, canGestao, pathname, router]);
 
   return <>{children}</>;
 }

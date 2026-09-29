@@ -390,20 +390,20 @@ function MinhaContaCoopContent() {
 
       {tab === "inicio" && (
         <>
-          <div className="overflow-hidden rounded-3xl bg-gradient-to-br from-green-800 via-green-700 to-emerald-600 p-6 text-white shadow-lg">
-            <div className="flex items-start justify-between gap-3">
+          <div className="overflow-hidden rounded-2xl bg-gradient-to-br from-green-800 via-green-700 to-emerald-600 p-4 text-white shadow-md">
+            <div className="flex items-start justify-between gap-2">
               <div>
-                <p className="text-sm font-medium text-green-100">Disponível para usar</p>
-                <p className="mt-1 text-4xl font-bold tracking-tight">{formatCentsBRL(disponivel)}</p>
+                <p className="text-xs font-medium text-green-100">Disponível para usar</p>
+                <p className="mt-0.5 text-2xl font-bold tracking-tight">{formatCentsBRL(disponivel)}</p>
               </div>
               {cashback > 0 && (
-                <div className="rounded-2xl bg-white/15 px-3 py-2 text-right backdrop-blur-sm">
+                <div className="rounded-xl bg-white/15 px-2.5 py-1.5 text-right backdrop-blur-sm">
                   <p className="text-[10px] font-medium uppercase tracking-wide text-green-100">Cashback</p>
-                  <p className="text-lg font-bold">{formatCentsBRL(cashback)}</p>
+                  <p className="text-sm font-bold">{formatCentsBRL(cashback)}</p>
                 </div>
               )}
             </div>
-            <div className="mt-5 space-y-2">
+            <div className="mt-3 space-y-1.5">
               <div className="flex justify-between text-xs text-green-100">
                 <span>Usado {formatCentsBRL(usado)}</span>
                 <span>Limite {formatCentsBRL(limite)}</span>
@@ -416,25 +416,25 @@ function MinhaContaCoopContent() {
               </div>
             </div>
             {updatedAt && (
-              <p className="mt-4 text-xs text-green-200/80">
+              <p className="mt-2 text-[11px] text-green-200/80">
                 Atualizado {new Date(updatedAt).toLocaleString("pt-BR")}
               </p>
             )}
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
-            <Card className="!p-4 text-center">
-              <p className="text-xs text-gray-500">Crédito liberado</p>
-              <p className="mt-1 text-lg font-bold text-gray-900">{formatCentsBRL(limite)}</p>
+          <div className="grid grid-cols-2 gap-2">
+            <Card className="!p-3 text-center">
+              <p className="text-[11px] text-gray-500">Crédito liberado</p>
+              <p className="mt-0.5 text-base font-bold text-gray-900">{formatCentsBRL(limite)}</p>
             </Card>
-            <Card className="!p-4 text-center">
-              <p className="text-xs text-gray-500">Já utilizado</p>
-              <p className="mt-1 text-lg font-bold text-gray-900">{formatCentsBRL(usado)}</p>
+            <Card className="!p-3 text-center">
+              <p className="text-[11px] text-gray-500">Já utilizado</p>
+              <p className="mt-0.5 text-base font-bold text-gray-900">{formatCentsBRL(usado)}</p>
             </Card>
           </div>
 
           {!hasPin ? (
-            <Card className="space-y-4 border-amber-200 bg-amber-50/40 !p-5">
+            <Card className="space-y-3 border-amber-200 bg-amber-50/40 !p-4">
               <div>
                 <h3 className="font-semibold text-gray-900">Crie seu PIN de pagamento</h3>
                 <p className="mt-1 text-sm text-gray-600">
@@ -496,15 +496,15 @@ function MinhaContaCoopContent() {
               </Button>
             </Card>
           ) : pendingIntent ? (
-            <Card className="space-y-4 border-green-300 bg-green-50/60 !p-5">
+            <Card className="space-y-3 border-green-300 bg-green-50/60 !p-4">
               <div className="text-center">
-                <p className="text-sm text-gray-600">Pagando em</p>
-                <p className="text-xl font-bold text-gray-900">{pendingIntent.parceiroNome}</p>
-                <p className="mt-2 text-3xl font-bold text-green-800">
+                <p className="text-xs text-gray-600">Pagando em</p>
+                <p className="text-lg font-bold text-gray-900">{pendingIntent.parceiroNome}</p>
+                <p className="mt-1 text-2xl font-bold text-green-800">
                   {formatCentsBRL(pendingIntent.intent.amountCents)}
                 </p>
               </div>
-              <div className="rounded-xl bg-white/80 p-3 text-sm">
+              <div className="rounded-lg bg-white/80 p-2.5 text-sm">
                 <div className="flex justify-between py-1">
                   <span className="text-gray-600">Valor da compra</span>
                   <span className="font-medium">{formatCentsBRL(pendingIntent.intent.amountCents)}</span>

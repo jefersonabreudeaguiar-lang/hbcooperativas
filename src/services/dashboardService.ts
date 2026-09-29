@@ -14,6 +14,9 @@ import { getCurrentMesReferencia } from "@/utils/format";
 import { isNotaNaFilaConferenciaResponsavel } from "@/utils/notaStatus";
 import { notaPertenceCooperativa } from "@/utils/fotoEntrega";
 import {
+  countNotasFilaConferenciaResponsavel,
+} from "@/services/responsavelPainelIndex";
+import {
   calcularFechamentoMensalLive,
   fechamentoToPartial,
   getRelatorioEntregasInstituicaoLive,
@@ -123,7 +126,11 @@ export function getCooperadoStats(cooperadoId: string, data?: AppData): Cooperad
   };
 }
 
-export function getAdminStats(data?: AppData, cooperativaId?: string): AdminDashboardStats {
+export function getAdminStats(
+  data?: AppData,
+  cooperativaId?: string,
+  opts?: { skipValoresAPagar?: boolean }
+): AdminDashboardStats {
   const d = data ?? getData();
   const mes = getCurrentMesReferencia();
   const ano = mes.split("-")[0];
@@ -160,26 +167,30 @@ export function getAdminStats(data?: AppData, cooperativaId?: string): AdminDash
     (f) => f.status === "pago" && pertenceCoop(f.cooperadoId)
   );
   const excluidas = idsNotasPedidoExcluidas(d, cooperativaId);
-  const notasAguardando = d.notasPedido.filter(
-    (n) =>
-      isNotaNaFilaConferenciaResponsavel(n.status) &&
-      notaNoEscopo(n) &&
-      !excluidas.has(n.id)
-  );
+  const entregasPendentes = cooperativaId
+    ? countNotasFilaConferenciaResponsavel(d, cooperativaId)
+    : d.notasPedido.filter(
+        (n) =>
+          isNotaNaFilaConferenciaResponsavel(n.status) &&
+          notaNoEscopo(n) &&
+          !excluidas.has(n.id)
+      ).length;
 
   const mensalidadesAbertas = d.mensalidades.filter(
     (m) => (m.status === "pendente" || m.status === "atrasada") && pertenceCoop(m.cooperadoId)
   );
   const cotasAbertas = d.cotas.filter((c) => c.status !== "quitada" && pertenceCoop(c.cooperadoId));
 
-  const valoresAPagar = round2(
-    cooperadosEscopo.reduce((s, c) => {
-      if (isBicCentralReadAuthorityEnabled()) {
-        return s + bicCentralValorAReceberAgregado(d, c.id, c.cooperativaId).valor;
-      }
-      return s + getTotalAPagarCooperado(d, c.id, undefined, c.cooperativaId);
-    }, 0)
-  );
+  const valoresAPagar = opts?.skipValoresAPagar
+    ? 0
+    : round2(
+        cooperadosEscopo.reduce((s, c) => {
+          if (isBicCentralReadAuthorityEnabled()) {
+            return s + bicCentralValorAReceberAgregado(d, c.id, c.cooperativaId).valor;
+          }
+          return s + getTotalAPagarCooperado(d, c.id, undefined, c.cooperativaId);
+        }, 0)
+      );
 
   return {
     totalVendidoMes: sumBy(entregasMes, (e) => e.valorBruto),
@@ -191,7 +202,7 @@ export function getAdminStats(data?: AppData, cooperativaId?: string): AdminDash
     cotasRecebidas: financeiroMes?.cotasRecebidas ?? 0,
     debitosAbertos: sumBy(mensalidadesAbertas, (m) => m.valor) + sumBy(cotasAbertas, (c) => c.valorParcela * c.parcelasPendentes),
     cooperadosAtivos: cooperadosEscopo.filter((c) => c.status === "ativo").length,
-    entregasPendentes: notasAguardando.length,
+    entregasPendentes,
     pagamentosPendentes: pagamentosPendentes.length,
   };
 }

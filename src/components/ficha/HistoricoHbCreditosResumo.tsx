@@ -95,8 +95,8 @@ export function HistoricoHbCreditosResumo({
   const compacto = variant === "cooperado";
 
   return (
-    <div className={compacto ? "space-y-3" : "mt-4 border-t pt-4 space-y-3"}>
-      <h4 className="text-sm font-semibold text-gray-900">
+    <div className={compacto ? "space-y-2" : "mt-3 border-t pt-3 space-y-2"}>
+      <h4 className="text-xs font-semibold text-gray-900">
         {HB_CREDIT_PRODUCT_NAME} — utilização no mês
       </h4>
       {!compacto && (
@@ -112,7 +112,7 @@ export function HistoricoHbCreditosResumo({
       )}
       <ul className="space-y-3">
         {lancamentos.map((l) => (
-          <li key={l.hbTransactionId} className="rounded-lg border bg-gray-50/80 p-3 text-sm space-y-1">
+          <li key={l.hbTransactionId} className="rounded-lg border bg-gray-50/80 p-2.5 text-sm space-y-1">
             <div className="flex flex-wrap justify-between gap-2 font-medium text-gray-900">
               <span>{l.partnerNome}</span>
               <span className="text-gray-600">{formatDataHora(l.createdAt)}</span>

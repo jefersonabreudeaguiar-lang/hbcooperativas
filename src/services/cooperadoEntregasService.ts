@@ -584,6 +584,31 @@ export function getValorQuantoVouReceberMotorLegado(
   const mesesPendentes = listarMesesPendentesFinanceiroCooperado(data, cooperadoId, cooperativaId);
   const mesesComValor = listarMesesComValorQuantoVouReceber(data, cooperadoId, cooperativaId);
   const mes = mesesComValor[mesesComValor.length - 1] ?? mesesPendentes[mesesPendentes.length - 1] ?? getMesQuantoVouReceber(data, cooperadoId, cooperativaId);
+
+  if (isBicCentralReadAuthorityEnabled()) {
+    const valor = round2(getTotalAPagarCooperado(data, cooperadoId, undefined, cooperativaId));
+    const mesesParaRotulo =
+      mesesComValor.length > 0
+        ? mesesComValor
+        : mesesPendentes.length > 0
+          ? mesesPendentes
+          : valor > 0
+            ? listarMesesDebitoAbertoCooperado(data, cooperadoId, cooperativaId)
+            : [];
+    const mesLabelFinal =
+      mesesParaRotulo.length > 0
+        ? formatMesesReferenciaRotulo(mesesParaRotulo)
+        : formatMesReferencia(mes);
+    return {
+      mes,
+      meses: mesesPendentes.length ? mesesPendentes : mesesParaRotulo,
+      mesLabel: mesLabelFinal,
+      valor,
+      valorRecibo: 0,
+      aguardandoAssinatura: false,
+    };
+  }
+
   const aguardandoAssinatura = mesesPendentes.some((m) =>
     Boolean(getPagamentoAguardandoCooperado(data, cooperadoId, m))
   );

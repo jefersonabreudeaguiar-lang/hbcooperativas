@@ -33,6 +33,7 @@ import {
   bicCentralGetValorExibicaoCooperado,
 } from "@/services/bicLeituraCentralFicha";
 import { listarPagamentosAguardandoAssinatura, listarPagamentosReciboAguardandoVerificacao } from "@/services/filaDoDiaService";
+import { listCooperadosPagamentoPendenteResponsavel } from "@/services/responsavelPainelIndex";
 import { isOperacionalCloudAuthoritative } from "@/services/operationalReset";
 import { listCooperadosComFichaNoMes, getCooperadoNomeResolvido, resolverCooperadoParaPagamento, fichaPertenceCooperado, listCooperadosDaCooperativa } from "@/services/cooperadoCloudService";
 import { resolveCooperativaCnpj, patchNotaPedidoInCloud } from "@/services/notaPedidoCloudService";
@@ -309,9 +310,7 @@ export default function FichaCorridaPage() {
 
   const cooperadosParaPagar = useMemo(() => {
     if (!data || !coopId) return [];
-    return listCooperadosDaCooperativa(data, coopId).filter((c) =>
-      cooperadoPendentePagamentoResponsavel(data, c.id, undefined, coopId)
-    );
+    return listCooperadosPagamentoPendenteResponsavel(data, coopId);
   }, [data, coopId]);
 
   const pagamentosAguardandoAssinatura = useMemo(() => {

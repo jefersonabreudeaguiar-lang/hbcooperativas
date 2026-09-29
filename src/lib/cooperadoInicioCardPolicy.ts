@@ -278,7 +278,7 @@ export function inicioCardMotorFromFinanceiroUiSnapshot(
 ): InicioCardMotorSnapshot {
   const mesLabel = financeiro.mesLabel?.trim() || "—";
   const valor =
-    financeiro.status === "CONFIRMADO" && financeiro.exibirValorNoCard
+    financeiro.status === "CONFIRMADO" && financeiro.valorAReceber > 0
       ? financeiro.valorAReceber
       : 0;
   return {

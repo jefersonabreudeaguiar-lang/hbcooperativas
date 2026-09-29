@@ -1,11 +1,11 @@
 import type { AppData, PagamentoCooperadoRegistro } from "@/types";
-import { notaPertenceCooperativa } from "@/utils/fotoEntrega";
 import { contarItensCatalogo } from "@/services/catalogoContratosService";
-import { cooperadoPendentePagamentoResponsavel } from "@/services/cooperadoEntregasService";
-import { listCooperadosDaCooperativa } from "@/services/cooperadoCloudService";
 import { getCurrentMesReferencia } from "@/utils/format";
-import { idsNotasPedidoExcluidas, pagamentoCobreMesReferencia } from "@/services/notaPedidoService";
-import { isNotaNaFilaConferenciaResponsavel } from "@/utils/notaStatus";
+import { pagamentoCobreMesReferencia } from "@/services/notaPedidoService";
+import {
+  countCooperadosPagamentoPendenteResponsavel,
+  countNotasFilaConferenciaResponsavel,
+} from "@/services/responsavelPainelIndex";
 
 export type FilaDoDiaItem = {
   id: string;
@@ -20,13 +20,7 @@ export type FilaDoDiaItem = {
 export function getFilaDoDia(data: AppData, coopId: string | undefined, mes = getCurrentMesReferencia()): FilaDoDiaItem[] {
   if (!coopId) return [];
 
-  const excluidas = idsNotasPedidoExcluidas(data, coopId);
-  const conferir = data.notasPedido.filter(
-    (n) =>
-      isNotaNaFilaConferenciaResponsavel(n.status) &&
-      notaPertenceCooperativa(data, n, coopId) &&
-      !excluidas.has(n.id)
-  ).length;
+  const conferir = countNotasFilaConferenciaResponsavel(data, coopId);
 
   const mensalidades = data.mensalidades.filter((m) => {
     if (m.status !== "aguardando_confirmacao") return false;
@@ -46,9 +40,7 @@ export function getFilaDoDia(data: AppData, coopId: string | undefined, mes = ge
       !p.reciboConferidoPorResponsavelEm
   ).length;
 
-  const cooperadosPagar = listCooperadosDaCooperativa(data, coopId).filter((c) =>
-    cooperadoPendentePagamentoResponsavel(data, c.id, undefined, coopId)
-  ).length;
+  const cooperadosPagar = countCooperadosPagamentoPendenteResponsavel(data, coopId);
 
   const itensCatalogo = contarItensCatalogo(data, coopId);
   const publicarPrecos = itensCatalogo === 0 ? 1 : 0;

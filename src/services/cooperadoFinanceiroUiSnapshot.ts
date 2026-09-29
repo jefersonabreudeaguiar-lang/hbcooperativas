@@ -11,7 +11,6 @@ import { isBicCentralReadAuthorityEnabled } from "@/lib/bic/bicCentralReadAuthor
 import { cooperadoMotorRevisionOperacional } from "@/lib/cooperadoInicioCardPolicy";
 import { validateBicTenantContext } from "@/services/bicTenantGuard";
 import {
-  bicCentralResolveInicioParaExibicao,
   bicCentralResolvePainelParaExibicao,
   bicCentralValorAReceberAgregado,
 } from "@/services/bicLeituraCentralCooperado";
@@ -259,7 +258,6 @@ export function buildCooperadoFinanceiroUiSnapshot(
   };
 
   const m6 = bicCentralValorAReceberAgregado(data, coopadoId, coopId, { apresentacaoConsolidada });
-  const inicio = bicCentralResolveInicioParaExibicao(data, coopadoId, coopId, { apresentacaoConsolidada });
   const painel = bicCentralResolvePainelParaExibicao(data, coopadoId, coopId, bicOpts);
   const revision = cooperadoMotorRevisionOperacional(data, coopadoId, coopId);
   const carregando = Boolean(opts?.carregandoNuvem || opts?.financeiroSincronizando);
@@ -272,13 +270,13 @@ export function buildCooperadoFinanceiroUiSnapshot(
     mesPrincipal: m6.mes || null,
     mesLabel: m6.mesLabel || null,
     mesesReferencia: m6.meses.length ? [...m6.meses] : m6.mes ? [m6.mes] : [],
-    exibirValorNoCard: Boolean(inicio.exibir && inicio.valor > 0),
+    exibirValorNoCard: m6.valor > 0,
     cardAtualizando: carregando,
     podeAssinarRecibo: false,
     podeExibirBannerRecibo: false,
     conferindoPagamentoNuvem: conferindo,
     painelEstado: mapPainelEstado(painel.estado),
-    painelValorDestaque: painel.valorDestaque,
+    painelValorDestaque: m6.valor > 0 ? m6.valor : painel.valorDestaque,
     observability: {
       source: "bic",
       fallback: false,
