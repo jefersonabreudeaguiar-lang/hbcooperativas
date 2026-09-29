@@ -374,6 +374,8 @@ export default function NotasPedidoContent() {
       const stillActive = () => loadGen === conferenciaFotoLoadGenRef.current;
 
       setConferenciaFotoErro("");
+      /** Limpa spinner de fetch cancelado (loadGen anterior). */
+      setConferenciaFotoCarregando(false);
       const cacheKey = conferenciaFotoCacheKey(nota.id, index);
       const cached = conferenciaFotoCacheRef.current.get(cacheKey);
       if (cached) {
@@ -569,7 +571,6 @@ export default function NotasPedidoContent() {
         );
         lancamentosFotoConferenciaRef.current.set(fotoIdx, base.itens);
         fotosLancadasConferenciaRef.current.add(fotoIdx);
-        setFotosLancadasUi(new Set(fotosLancadasConferenciaRef.current));
 
         const divisao = resolverDivisaoConferencia(d, selectedNota);
         const fotoTag = `foto ${fotoIdx + 1}/`;
@@ -646,6 +647,7 @@ export default function NotasPedidoContent() {
         );
       });
 
+      setFotosLancadasUi(new Set(fotosLancadasConferenciaRef.current));
       return { ok: true };
     },
     [
@@ -701,7 +703,6 @@ export default function NotasPedidoContent() {
       setConferirErrors({});
       setConferenciaFotoIdx(clamped);
       setLancamentoSequencia(null);
-      conferenciaFotoLoadGenRef.current += 1;
       carregarItensParaFotoConferencia(clamped);
     },
     [
@@ -2115,33 +2116,12 @@ export default function NotasPedidoContent() {
               : enriched;
           });
         });
-        const fotosTransicao = contarFotosEnviadasNota(notaComFoto);
-        if (
-          notaTemFotoArmazenadaNaNuvem(notaComFoto) &&
-          fotosTransicao > 0 &&
-          getFotosExibicaoNota(notaComFoto).length === 0
-        ) {
-          void loadConferenciaFoto(notaComFoto, 0);
-        }
       } else {
         notaComFoto = await ensureNotaComFoto(d, nota, coopId);
         conferenciaNotaEnriquecidaRef.current = { notaId: notaComFoto.id, nota: notaComFoto };
       }
     }
     const totalFotos = contarFotosEnviadasNota(notaComFoto);
-    if (
-      !opts?.transicao &&
-      notaTemFotoArmazenadaNaNuvem(notaComFoto) &&
-      totalFotos > 0 &&
-      getFotosExibicaoNota(notaComFoto).length === 0
-    ) {
-      const primeira = await loadConferenciaFoto(notaComFoto, 0);
-      if (!primeira) {
-        setConferenciaFotoErro(
-          "Não foi possível carregar as fotos da nuvem. Verifique a conexão e abra esta entrega de novo."
-        );
-      }
-    }
     setSelectedNota(
       nota.status === "aguardando_conferencia"
         ? {
@@ -2196,14 +2176,6 @@ export default function NotasPedidoContent() {
       const chave = getChaveGrupoConferencia(nota, d, coopId);
       setAbaConferenciaKey(chave);
       setFiltroCooperadoId(coopDonoId);
-    }
-    if (
-      !opts?.transicao &&
-      notaTemFotoArmazenadaNaNuvem(notaComFoto) &&
-      totalFotos > 0 &&
-      getFotosExibicaoNota(notaComFoto).length === 0
-    ) {
-      await loadConferenciaFoto(notaComFoto, 0);
     }
     } finally {
       setConferenciaTransicao(false);
@@ -2407,7 +2379,7 @@ export default function NotasPedidoContent() {
       setConferirErrors({});
       setLancadoMsg(`Foto ${fotoAtual + 1} lançada na ficha. Preencha a foto ${fotoAtual + 2}.`);
       setTimeout(() => setLancadoMsg(""), 3500);
-      irParaFotoConferencia(fotoAtual + 1);
+      queueMicrotask(() => irParaFotoConferencia(fotoAtual + 1));
       return;
     }
 
