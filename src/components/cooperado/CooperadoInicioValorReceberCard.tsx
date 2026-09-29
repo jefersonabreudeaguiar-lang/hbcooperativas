@@ -18,6 +18,30 @@ function temPendencia(s: InicioCardMotorSnapshot): boolean {
   return s.valor > 0 || s.aguardandoAssinatura || s.valorRecibo > 0;
 }
 
+/** Modos visuais do card — exportado para testes de blindagem BIC. */
+export function resolveCooperadoInicioValorReceberCardModos(
+  base: InicioCardMotorSnapshot,
+  exibirReciboAssinatura: boolean
+): {
+  modoRecibo: boolean;
+  modoAssinaturaComAberto: boolean;
+  acao: string;
+} {
+  const bicCentral = isCooperadoBicCentralUiEnabled();
+  const fluxoReciboUi = !bicCentral && exibirReciboAssinatura;
+
+  const modoRecibo =
+    fluxoReciboUi && base.aguardandoAssinatura && base.valorRecibo > 0 && base.valor <= 0;
+  const modoAssinaturaComAberto =
+    fluxoReciboUi && base.aguardandoAssinatura && base.valorRecibo > 0 && base.valor > 0;
+  const acao =
+    fluxoReciboUi && base.aguardandoAssinatura && (modoRecibo || modoAssinaturaComAberto)
+      ? "Assinar recibo"
+      : "Ver detalhes";
+
+  return { modoRecibo, modoAssinaturaComAberto, acao };
+}
+
 /** Card fixo do início — shell sempre visível; valor vem da política endurecida + motor BIC. */
 export function CooperadoInicioValorReceberCard({
   snapshot,
@@ -26,11 +50,11 @@ export function CooperadoInicioValorReceberCard({
 }: Props) {
   const base = snapshot;
 
-  const modoRecibo =
-    base.aguardandoAssinatura && exibirReciboAssinatura && base.valorRecibo > 0 && base.valor <= 0;
+  const { modoRecibo, modoAssinaturaComAberto, acao } = resolveCooperadoInicioValorReceberCardModos(
+    base,
+    exibirReciboAssinatura
+  );
   const modoValor = base.valor > 0;
-  const modoAssinaturaComAberto =
-    base.aguardandoAssinatura && base.valorRecibo > 0 && base.valor > 0;
   const mesLabel = base.mesLabel.trim() || "—";
   const visualPendencia = temPendencia(base);
 
@@ -63,11 +87,7 @@ export function CooperadoInicioValorReceberCard({
           : "Nenhum valor pendente no momento.";
 
   const href =
-    base.aguardandoAssinatura && (modoRecibo || modoAssinaturaComAberto)
-      ? "/ficha-corrida?assinar=1"
-      : "/ficha-corrida";
-  const acao =
-    base.aguardandoAssinatura && (modoRecibo || modoAssinaturaComAberto) ? "Assinar recibo" : "Ver detalhes";
+    modoRecibo || modoAssinaturaComAberto ? "/ficha-corrida?assinar=1" : "/ficha-corrida";
 
   return (
     <div className={`rounded-2xl p-6 shadow-sm flex flex-col ${shellClass}`}>

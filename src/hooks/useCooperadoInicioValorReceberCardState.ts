@@ -4,7 +4,9 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type { AppData } from "@/types";
 import {
   cooperadoMotorTemObrigacaoReceber,
+  filtrarInicioCardPersistidoLeituraBic,
   resolverCardInicioEndurecido,
+  sanitizeInicioCardSnapshotParaPersistenciaBic,
   type InicioCardLatchState,
   type InicioCardMotorSnapshot,
 } from "@/lib/cooperadoInicioCardPolicy";
@@ -42,12 +44,18 @@ export function useCooperadoInicioValorReceberCardState(input: {
 
   const [bootPersistido] = useState(() => {
     if (!input.cooperadoId) return null;
-    return lerInicioCardPersistidoFlex(input.cooperadoId, input.cooperativaId);
+    return filtrarInicioCardPersistidoLeituraBic(
+      lerInicioCardPersistidoFlex(input.cooperadoId, input.cooperativaId)
+    );
   });
 
   const persistido = useMemo(() => {
     if (!input.cooperadoId) return bootPersistido;
-    return lerInicioCardPersistidoFlex(input.cooperadoId, input.cooperativaId) ?? bootPersistido;
+    return (
+      filtrarInicioCardPersistidoLeituraBic(
+        lerInicioCardPersistidoFlex(input.cooperadoId, input.cooperativaId)
+      ) ?? bootPersistido
+    );
   }, [input.cooperadoId, input.cooperativaId, bootPersistido]);
 
   const carregandoFinanceiro =
@@ -78,7 +86,7 @@ export function useCooperadoInicioValorReceberCardState(input: {
     gravarInicioCardPersistidoFlex(input.cooperadoId, input.cooperativaId, {
       v: INICIO_CARD_STORAGE_VERSION,
       motorRevision: resolved.latch.motorRevision,
-      display: resolved.display,
+      display: sanitizeInicioCardSnapshotParaPersistenciaBic(resolved.display),
       savedAt: new Date().toISOString(),
     });
   }, [

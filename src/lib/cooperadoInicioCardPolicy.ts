@@ -12,9 +12,27 @@ import { bicCentralResolveInicioParaExibicao, bicCentralSincronizarRotuloMeses, 
 import { isBicCentralReadAuthorityEnabled } from "@/lib/bic/bicCentralReadAuthority";
 import { formatMesReferencia, getCurrentMesReferencia } from "@/utils/format";
 
-function persistidoDisplayCompativelBic(display: InicioCardMotorSnapshot): boolean {
+/** Snapshot de localStorage contém fluxo legado “assinar recibo” (não é autoridade BIC). */
+export function inicioCardSnapshotTemEstadoReciboLegado(display: InicioCardMotorSnapshot): boolean {
+  return display.aguardandoAssinatura || display.valorRecibo > 0;
+}
+
+export function persistidoDisplayCompativelBic(display: InicioCardMotorSnapshot): boolean {
   if (!isBicCentralReadAuthorityEnabled()) return true;
-  return !display.aguardandoAssinatura && display.valorRecibo <= 0;
+  return !inicioCardSnapshotTemEstadoReciboLegado(display);
+}
+
+/** Leitura do card: descarta cache incompatível com BIC; neutraliza recibo legado no restante. */
+export function filtrarInicioCardPersistidoLeituraBic(
+  persistido: import("@/lib/cooperadoInicioCardPersistencia").InicioCardPersistido | null
+): import("@/lib/cooperadoInicioCardPersistencia").InicioCardPersistido | null {
+  if (!persistido) return null;
+  if (!isBicCentralReadAuthorityEnabled()) return persistido;
+  if (!persistidoDisplayCompativelBic(persistido.display)) return null;
+  return {
+    ...persistido,
+    display: sanitizeInicioCardSnapshotFluxoBic(persistido.display),
+  };
 }
 
 export type InicioCardMotorSnapshot = {
@@ -85,7 +103,7 @@ export function resolverInicioCardMotorFromAppData(
       apresentacaoConsolidada,
     });
     const mesFallback = inicio.mes || getCurrentMesReferencia();
-    return sanitizeMotorSnapshotBicUi({
+    return sanitizeInicioCardSnapshotFluxoBic({
       mesLabel: inicio.mesLabel?.trim() || formatMesReferencia(mesFallback),
       valor: inicio.valor,
       valorRecibo: inicio.valorRecibo,
@@ -122,13 +140,34 @@ export function resolverInicioCardMotorFromAppData(
   };
 }
 
-function sanitizeMotorSnapshotBicUi(motor: InicioCardMotorSnapshot): InicioCardMotorSnapshot {
+/** Exibição + latch do card quando BIC central tem autoridade. */
+export function sanitizeInicioCardSnapshotFluxoBic(motor: InicioCardMotorSnapshot): InicioCardMotorSnapshot {
   if (!isBicCentralReadAuthorityEnabled()) return motor;
   return {
     ...motor,
     valor: motor.valor > 0 ? motor.valor : 0,
     valorRecibo: 0,
     aguardandoAssinatura: false,
+  };
+}
+
+/** Gravação localStorage v7 — nunca persistir estado de recibo legado com BIC ON. */
+export function sanitizeInicioCardSnapshotParaPersistenciaBic(
+  motor: InicioCardMotorSnapshot
+): InicioCardMotorSnapshot {
+  return sanitizeInicioCardSnapshotFluxoBic(motor);
+}
+
+function finalizarResultadoCardBic(
+  result: InicioCardPoliticaResult & { gravarPersistencia: boolean }
+): InicioCardPoliticaResult & { gravarPersistencia: boolean } {
+  if (!isBicCentralReadAuthorityEnabled()) return result;
+  const display = sanitizeInicioCardSnapshotFluxoBic(result.display);
+  const latchDisplay = sanitizeInicioCardSnapshotFluxoBic(result.latch.display);
+  return {
+    ...result,
+    display,
+    latch: { ...result.latch, display: latchDisplay },
   };
 }
 
@@ -207,7 +246,7 @@ export function aplicarSubstituicaoMonotonaDisplay(
 ): InicioCardMotorSnapshot {
   if (isBicCentralReadAuthorityEnabled()) {
     if (!revisionChanged) return anterior;
-    return sanitizeMotorSnapshotBicUi(motor);
+    return sanitizeInicioCardSnapshotFluxoBic(motor);
   }
   if (!revisionChanged) return anterior;
   if (!cooperadoMotorTemObrigacaoReceber(motor)) return motor;
@@ -241,39 +280,41 @@ export function resolverCardInicioEndurecido(input: ResolverCardInicioInput): In
   };
 
   if (!cooperadoId) {
-    return {
+    return finalizarResultadoCardBic({
       display: vazio,
       latch: { motorRevision: "", display: vazio, hadPendencia: false },
       atualizando: input.carregandoFinanceiro,
       gravarPersistencia: false,
-    };
+    });
   }
 
+  const persistidoLeitura = filtrarInicioCardPersistidoLeituraBic(persistido);
+
   if (!data) {
-    if (persistido && persistidoDisplayCompativelBic(persistido.display)) {
+    if (persistidoLeitura) {
       const latch: InicioCardLatchState = {
-        motorRevision: persistido.motorRevision,
-        display: persistido.display,
-        hadPendencia: cooperadoMotorTemObrigacaoReceber(persistido.display),
+        motorRevision: persistidoLeitura.motorRevision,
+        display: persistidoLeitura.display,
+        hadPendencia: cooperadoMotorTemObrigacaoReceber(persistidoLeitura.display),
       };
       /** Boot sem AppData: não exibir valor do cache como definitivo (motor BIC valida após warm). */
-      const aguardandoMotor = persistido.display.valor > 0;
+      const aguardandoMotor = persistidoLeitura.display.valor > 0;
       const display: InicioCardMotorSnapshot = aguardandoMotor
-        ? { ...persistido.display, valor: 0 }
-        : persistido.display;
-      return {
+        ? { ...persistidoLeitura.display, valor: 0 }
+        : persistidoLeitura.display;
+      return finalizarResultadoCardBic({
         display,
         latch,
         atualizando: aguardandoMotor || input.carregandoFinanceiro,
         gravarPersistencia: false,
-      };
+      });
     }
-    return {
+    return finalizarResultadoCardBic({
       display: vazio,
       latch: { motorRevision: "", display: vazio, hadPendencia: false },
       atualizando: input.carregandoFinanceiro,
       gravarPersistencia: false,
-    };
+    });
   }
 
   const motor = resolverInicioCardMotorFromAppData(data, cooperadoId, cooperativaId, {
@@ -284,14 +325,13 @@ export function resolverCardInicioEndurecido(input: ResolverCardInicioInput): In
   let prevLatch = input.prevLatch;
   if (
     !prevLatch &&
-    persistido &&
-    persistido.motorRevision === revision &&
-    cooperadoMotorTemObrigacaoReceber(persistido.display) &&
-    persistidoDisplayCompativelBic(persistido.display)
+    persistidoLeitura &&
+    persistidoLeitura.motorRevision === revision &&
+    cooperadoMotorTemObrigacaoReceber(persistidoLeitura.display)
   ) {
     prevLatch = {
       motorRevision: revision,
-      display: persistido.display,
+      display: persistidoLeitura.display,
       hadPendencia: true,
     };
   }
@@ -310,19 +350,18 @@ export function resolverCardInicioEndurecido(input: ResolverCardInicioInput): In
   }
 
   if (
-    persistido &&
-    persistido.motorRevision === revision &&
-    cooperadoMotorTemObrigacaoReceber(persistido.display) &&
-    persistidoDisplayCompativelBic(persistido.display) &&
+    persistidoLeitura &&
+    persistidoLeitura.motorRevision === revision &&
+    cooperadoMotorTemObrigacaoReceber(persistidoLeitura.display) &&
     !cooperadoMotorTemObrigacaoReceber(motor) &&
     input.carregandoFinanceiro
   ) {
     applied = {
       ...applied,
-      display: persistido.display,
+      display: persistidoLeitura.display,
       latch: {
         motorRevision: revision,
-        display: persistido.display,
+        display: persistidoLeitura.display,
         hadPendencia: true,
       },
       atualizando: true,
@@ -331,8 +370,5 @@ export function resolverCardInicioEndurecido(input: ResolverCardInicioInput): In
 
   const gravarPersistencia = Boolean(cooperativaId);
 
-  const display = sanitizeMotorSnapshotBicUi(applied.display);
-  const latch = { ...applied.latch, display };
-
-  return { ...applied, display, latch, gravarPersistencia };
+  return finalizarResultadoCardBic({ ...applied, gravarPersistencia });
 }

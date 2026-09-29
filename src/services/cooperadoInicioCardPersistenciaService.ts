@@ -4,8 +4,10 @@
 import {
   cooperadoMotorRevisionOperacional,
   cooperadoMotorTemObrigacaoReceber,
+  filtrarInicioCardPersistidoLeituraBic,
   resolverCardInicioEndurecido,
   resolverInicioCardMotorFromAppData,
+  sanitizeInicioCardSnapshotParaPersistenciaBic,
 } from "@/lib/cooperadoInicioCardPolicy";
 import {
   INICIO_CARD_STORAGE_VERSION,
@@ -42,7 +44,9 @@ export function persistirInicioCardValorReceberCooperado(
 
   const { cooperadoId, cooperativaId } = tenant;
   const data = getData();
-  const persistido = lerInicioCardPersistidoFlex(cooperadoId, cooperativaId);
+  const persistido = filtrarInicioCardPersistidoLeituraBic(
+    lerInicioCardPersistidoFlex(cooperadoId, cooperativaId)
+  );
   const resolved = resolverCardInicioEndurecido({
     data,
     cooperadoId,
@@ -56,7 +60,7 @@ export function persistirInicioCardValorReceberCooperado(
   gravarInicioCardPersistidoFlex(cooperadoId, cooperativaId, {
     v: INICIO_CARD_STORAGE_VERSION,
     motorRevision: resolved.latch.motorRevision,
-    display: resolved.display,
+    display: sanitizeInicioCardSnapshotParaPersistenciaBic(resolved.display),
     savedAt: new Date().toISOString(),
   });
 
