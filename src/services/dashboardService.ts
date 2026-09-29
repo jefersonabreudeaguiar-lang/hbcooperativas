@@ -12,6 +12,7 @@ import {
 import { round2, sumBy } from "@/utils/calculations";
 import { getCurrentMesReferencia } from "@/utils/format";
 import { isNotaNaFilaConferenciaResponsavel } from "@/utils/notaStatus";
+import { notaPertenceCooperativa } from "@/utils/fotoEntrega";
 import {
   calcularFechamentoMensalLive,
   fechamentoToPartial,
@@ -122,36 +123,57 @@ export function getCooperadoStats(cooperadoId: string, data?: AppData): Cooperad
   };
 }
 
-export function getAdminStats(data?: AppData): AdminDashboardStats {
+export function getAdminStats(data?: AppData, cooperativaId?: string): AdminDashboardStats {
   const d = data ?? getData();
   const mes = getCurrentMesReferencia();
   const ano = mes.split("-")[0];
 
+  const cooperadosEscopo = cooperativaId
+    ? d.cooperados.filter((c) => c.cooperativaId === cooperativaId)
+    : d.cooperados;
+  const coopCooperadoIds = cooperativaId ? new Set(cooperadosEscopo.map((c) => c.id)) : null;
+  const notaNoEscopo = (n: (typeof d.notasPedido)[number]) =>
+    !cooperativaId || notaPertenceCooperativa(d, n, cooperativaId);
+  const pertenceCoop = (cooperadoId: string) => !coopCooperadoIds || coopCooperadoIds.has(cooperadoId);
+
   const entregasMes = filterByMes(
-    d.notasPedido.filter((n) => n.status === "conferida" || n.status === "pago"),
+    d.notasPedido.filter(
+      (n) => (n.status === "conferida" || n.status === "pago") && notaNoEscopo(n)
+    ),
     (n) => n.dataEntrega,
     mes
   );
   const entregasAno = filterByAno(
-    d.notasPedido.filter((n) => n.status === "conferida" || n.status === "pago"),
+    d.notasPedido.filter(
+      (n) => (n.status === "conferida" || n.status === "pago") && notaNoEscopo(n)
+    ),
     (n) => n.dataEntrega,
     ano
   );
 
   const financeiroMes = d.financeiro.find((f) => f.mesReferencia === mes);
 
-  const pagamentosPendentes = d.fichaCorrida.filter((f) => f.status === "pendente");
-  const pagamentosPagos = d.fichaCorrida.filter((f) => f.status === "pago");
-  const excluidas = idsNotasPedidoExcluidas(d);
+  const pagamentosPendentes = d.fichaCorrida.filter(
+    (f) => f.status === "pendente" && pertenceCoop(f.cooperadoId)
+  );
+  const pagamentosPagos = d.fichaCorrida.filter(
+    (f) => f.status === "pago" && pertenceCoop(f.cooperadoId)
+  );
+  const excluidas = idsNotasPedidoExcluidas(d, cooperativaId);
   const notasAguardando = d.notasPedido.filter(
-    (n) => isNotaNaFilaConferenciaResponsavel(n.status) && !excluidas.has(n.id)
+    (n) =>
+      isNotaNaFilaConferenciaResponsavel(n.status) &&
+      notaNoEscopo(n) &&
+      !excluidas.has(n.id)
   );
 
-  const mensalidadesAbertas = d.mensalidades.filter((m) => m.status === "pendente" || m.status === "atrasada");
-  const cotasAbertas = d.cotas.filter((c) => c.status !== "quitada");
+  const mensalidadesAbertas = d.mensalidades.filter(
+    (m) => (m.status === "pendente" || m.status === "atrasada") && pertenceCoop(m.cooperadoId)
+  );
+  const cotasAbertas = d.cotas.filter((c) => c.status !== "quitada" && pertenceCoop(c.cooperadoId));
 
   const valoresAPagar = round2(
-    d.cooperados.reduce((s, c) => {
+    cooperadosEscopo.reduce((s, c) => {
       if (isBicCentralReadAuthorityEnabled()) {
         return s + bicCentralValorAReceberAgregado(d, c.id, c.cooperativaId).valor;
       }
@@ -168,7 +190,7 @@ export function getAdminStats(data?: AppData): AdminDashboardStats {
     mensalidadesRecebidas: financeiroMes?.mensalidadesRecebidas ?? 0,
     cotasRecebidas: financeiroMes?.cotasRecebidas ?? 0,
     debitosAbertos: sumBy(mensalidadesAbertas, (m) => m.valor) + sumBy(cotasAbertas, (c) => c.valorParcela * c.parcelasPendentes),
-    cooperadosAtivos: d.cooperados.filter((c) => c.status === "ativo").length,
+    cooperadosAtivos: cooperadosEscopo.filter((c) => c.status === "ativo").length,
     entregasPendentes: notasAguardando.length,
     pagamentosPendentes: pagamentosPendentes.length,
   };

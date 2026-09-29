@@ -1095,6 +1095,9 @@ export default function NotasPedidoContent() {
 
   const notas = useMemo(() => {
     if (!data) return [];
+    if (!isCooperado && vistaResponsavel === "fila" && pendentesEstaveis.length > 0) {
+      return [];
+    }
     const filtrarPorGrupoAtivo =
       !isCooperado &&
       vistaResponsavel === "cooperado" &&
@@ -1125,6 +1128,7 @@ export default function NotasPedidoContent() {
     statusFilter,
     abaConferenciaEfetiva,
     pendentesTodas.length,
+    pendentesEstaveis.length,
     vistaResponsavel,
   ]);
 

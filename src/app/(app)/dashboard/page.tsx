@@ -6,7 +6,6 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useAppDataSelector } from "@/hooks/useAppData";
 import { useAuth } from "@/modules/auth/AuthProvider";
-import { getData } from "@/services/dataStore";
 import { isCooperadoAppUser, isDiretoriaRole } from "@/permissions";
 import { canAccessPainelResponsavel } from "@/lib/security/responsavelPanelAccess";
 import { StatCard } from "@/components/ui/Card";
@@ -433,7 +432,7 @@ function AdminDashboard() {
   const view = useAppDataSelector((data) => {
     if (!data || !user) return null;
     const coopId = getUserCooperativaId(user, data);
-    const stats = getAdminStats(data);
+    const stats = getAdminStats(data, coopId ?? undefined);
     const coopNome = getUserCooperativaNome(user, data);
     const mes = getCurrentMesReferencia();
     const fila = getFilaDoDia(data, coopId, mes);
@@ -556,10 +555,14 @@ function AdminDashboard() {
 
 export default function DashboardPage() {
   const { user, accountUser } = useAuth();
-  if (!user) return null;
-
   const authSubject = accountUser ?? user;
-  const canGestao = canAccessPainelResponsavel(authSubject, getData());
+  const canGestao = useAppDataSelector(
+    (data) => (authSubject ? canAccessPainelResponsavel(authSubject, data) : false),
+    [authSubject?.id, authSubject?.role, authSubject?.cooperadoId, authSubject?.cooperativaId]
+  );
+
+  if (!user) return null;
+  if (canGestao === null) return <PageSkeleton />;
 
   if (isCooperadoAppUser(user) || !canGestao) {
     return <CooperadoDashboard />;
