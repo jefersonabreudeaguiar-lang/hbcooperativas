@@ -2925,6 +2925,20 @@ function recalcularSaldosFichaCooperadoMes(
   });
 }
 
+/** Pagamento ativo (aguardando ou confirmado) que cobre a entrega — mesma regra do recibo/valor a receber. */
+function entregaReferenciadaEmPagamentoCooperativoAtivo(
+  data: AppData,
+  nota: NotaPedido,
+  cooperativaId: string
+): boolean {
+  for (const p of data.pagamentosCooperado) {
+    if (p.cooperativaId !== cooperativaId) continue;
+    if (p.status !== "aguardando_confirmacao" && p.status !== "confirmado") continue;
+    if (notaCobertaPorPagamentoCooperadoEspecifico(data, p, nota)) return true;
+  }
+  return false;
+}
+
 /** Verifica se a entrega pode ser excluída pela cooperativa (responsável). */
 export function podeExcluirEntregaNota(
   data: AppData,
@@ -2939,7 +2953,7 @@ export function podeExcluirEntregaNota(
   const fichas = data.fichaCorrida.filter((f) => f.notaPedidoId === notaId);
   if (fichas.some((f) => f.status === "pago")) return { ok: false, reason: "ficha_paga" };
 
-  if (data.pagamentosCooperado.some((p) => p.notaPedidoIds.includes(notaId))) {
+  if (entregaReferenciadaEmPagamentoCooperativoAtivo(data, nota, cooperativaId)) {
     return { ok: false, reason: "em_pagamento" };
   }
 
@@ -3149,6 +3163,61 @@ export function notaEnvolveCooperadoCorrecao(
   );
 }
 
+function notaTemLancamentoVisivelCorrecao(data: AppData, nota: NotaPedido): boolean {
+  if (nota.status === "conferida" || nota.status === "rejeitada" || nota.status === "aguardando_conferencia") {
+    return true;
+  }
+  return data.fichaCorrida.some(
+    (f) => f.notaPedidoId === nota.id && f.status === "pendente" && f.valorLiquido > 0
+  );
+}
+
+/** Valor exibido na lista de correções (nota ou ficha pendente vinculada). */
+export function valorLiquidoEntregaCorrecaoExibicao(data: AppData, nota: NotaPedido): number {
+  if (nota.valorLiquido > 0) return nota.valorLiquido;
+  let total = 0;
+  for (const f of data.fichaCorrida) {
+    if (f.notaPedidoId !== nota.id || f.status !== "pendente") continue;
+    total += Math.max(0, Number(f.valorLiquido) || 0);
+  }
+  return Math.round(total * 100) / 100;
+}
+
+export type StatusCorrecaoEntregaCooperado = {
+  visivel: boolean;
+  executavel: boolean;
+  reason?: MotivoBloqueioExclusaoEntrega;
+};
+
+/** Lista Correções — inclui entregas bloqueadas (ex.: em pagamento) para bater com valor na ficha do cooperado. */
+export function statusCorrecaoEntregaCooperado(
+  data: AppData,
+  notaId: string,
+  cooperativaId: string,
+  acao: "apagar" | "relancar"
+): StatusCorrecaoEntregaCooperado {
+  const nota = data.notasPedido.find((n) => n.id === notaId);
+  if (!nota) return { visivel: false, executavel: false, reason: "not_found" };
+  if (nota.cooperativaId !== cooperativaId) return { visivel: false, executavel: false, reason: "wrong_coop" };
+  if (nota.status === "pago") return { visivel: false, executavel: false, reason: "pago" };
+
+  if (acao === "relancar") {
+    if (nota.status !== "conferida" && nota.status !== "rejeitada") {
+      return { visivel: false, executavel: false, reason: "not_found" };
+    }
+    const rel = podeRelancarEntregaNota(data, notaId, cooperativaId);
+    if (rel.ok) return { visivel: true, executavel: true };
+    return { visivel: true, executavel: false, reason: rel.reason };
+  }
+
+  const ex = podeExcluirEntregaNota(data, notaId, cooperativaId);
+  if (ex.ok) return { visivel: true, executavel: true };
+  const visivel =
+    notaTemLancamentoVisivelCorrecao(data, nota) &&
+    (ex.reason === "em_pagamento" || ex.reason === "ficha_paga");
+  return { visivel, executavel: false, reason: ex.reason };
+}
+
 export function listarEntregasCorrecaoCooperado(
   data: AppData,
   cooperadoId: string,
@@ -3159,10 +3228,7 @@ export function listarEntregasCorrecaoCooperado(
     .filter((n) => {
       if (n.cooperativaId !== cooperativaId) return false;
       if (!notaEnvolveCooperadoCorrecao(data, n, cooperadoId, cooperativaId)) return false;
-      if (acao === "relancar") {
-        return podeRelancarEntregaNota(data, n.id, cooperativaId).ok;
-      }
-      return podeExcluirEntregaNota(data, n.id, cooperativaId).ok;
+      return statusCorrecaoEntregaCooperado(data, n.id, cooperativaId, acao).visivel;
     })
     .sort((a, b) => new Date(b.dataEntrega).getTime() - new Date(a.dataEntrega).getTime());
 }
@@ -3176,16 +3242,15 @@ export function listarCooperadosEntregasCorrecao(
   const ids = new Set<string>();
   for (const n of data.notasPedido) {
     if (n.cooperativaId !== cooperativaId) continue;
-    const elegivel =
-      acao === "relancar"
-        ? podeRelancarEntregaNota(data, n.id, cooperativaId).ok
-        : podeExcluirEntregaNota(data, n.id, cooperativaId).ok;
-    if (!elegivel) continue;
-    ids.add(
-      resolverCooperadoIdCanonico(data, n.cooperadoId, cooperativaId, n.cooperadoNomeSnapshot)
-    );
+    const donoId = resolverCooperadoIdCanonico(data, n.cooperadoId, cooperativaId, n.cooperadoNomeSnapshot);
+    const candidatos = new Set<string>([donoId]);
     for (const p of n.divisaoEntrega?.participantes ?? []) {
-      ids.add(resolverCooperadoIdCanonico(data, p.cooperadoId, cooperativaId));
+      candidatos.add(resolverCooperadoIdCanonico(data, p.cooperadoId, cooperativaId));
+    }
+    for (const cid of candidatos) {
+      if (!notaEnvolveCooperadoCorrecao(data, n, cid, cooperativaId)) continue;
+      if (!statusCorrecaoEntregaCooperado(data, n.id, cooperativaId, acao).visivel) continue;
+      ids.add(cid);
     }
   }
   return [...ids]
