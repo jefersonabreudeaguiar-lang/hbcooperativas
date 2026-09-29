@@ -2648,9 +2648,11 @@ export default function NotasPedidoContent() {
       return;
     }
 
-    const cnpj = await resolveCooperativaCnpj(data, coopId, user);
+    let cnpj = getCooperativaCnpj(data, coopId);
+    if (!cnpj) {
+      cnpj = (await resolveCooperativaCnpj(data, coopId, user)) ?? undefined;
+    }
     if (cnpj) {
-      // Tombstone local: impede que o sync traga a nota de volta da nuvem antes do DELETE concluir.
       queueNotaDelete(cnpj, alvo.id);
     }
 
@@ -2675,18 +2677,6 @@ export default function NotasPedidoContent() {
     filaStickyIdsRef.current.delete(alvo.id);
     filaStickySnapshotRef.current.delete(alvo.id);
 
-    const d = getData();
-    const cnpjSync = await resolveCooperativaCnpj(d, coopId, user);
-    if (cnpjSync) {
-      const del = await deleteNotaPedidoFromCloud(cnpjSync, alvo.id);
-      if (del.ok && (await confirmNotaDeletedFromCloud(cnpjSync, alvo.id))) {
-        unqueueNotaDelete(cnpjSync, alvo.id);
-      }
-      await flushPendingNotaDeletes(cnpjSync);
-      await pushOperacionalToCloud(cnpjSync, d, coopId, { authoritative: true });
-    }
-    requestAppSync();
-
     setViewModal(false);
     setConferirModal(false);
     setSelectedNota(null);
@@ -2695,6 +2685,21 @@ export default function NotasPedidoContent() {
         ? `Entrega ${alvo.numeroNota} excluída e removida da ficha do cooperado.`
         : "Entrega excluída."
     );
+
+    if (cnpj) {
+      const notaId = alvo.id;
+      void (async () => {
+        const del = await deleteNotaPedidoFromCloud(cnpj, notaId);
+        if (del.ok) {
+          unqueueNotaDelete(cnpj, notaId);
+        }
+        await flushPendingNotaDeletes(cnpj);
+        await pushOperacionalToCloud(cnpj, getData(), coopId, { authoritative: true });
+        requestAppSyncLight();
+      })();
+    } else {
+      requestAppSyncLight();
+    }
   };
 
   const executarRelancarEntregaResponsavel = async (alvo: NotaPedido) => {
@@ -2720,29 +2725,32 @@ export default function NotasPedidoContent() {
       return;
     }
 
-    const cnpj = await resolveCooperativaCnpj(getData(), coopId, user);
-    let patchCloudOk = true;
-    if (cnpj) {
-      const patchResult = await patchNotaPedidoInCloud(cnpj, notaRelancada);
-      patchCloudOk = patchResult.ok;
-      const d = getData();
-      await pushOperacionalToCloud(cnpj, d, coopId, { authoritative: true });
-    }
-    requestAppSync();
-
     filaStickyIdsRef.current.add(notaRelancada.id);
     filaStickySnapshotRef.current.set(notaRelancada.id, notaRelancada);
 
-    if (patchCloudOk) {
-      voltarFilaResponsavel();
-      if (statusFilter !== "aguardando_conferencia") {
-        setStatusFilter("aguardando_conferencia");
-      }
+    voltarFilaResponsavel();
+    if (statusFilter !== "aguardando_conferencia") {
+      setStatusFilter("aguardando_conferencia");
     }
 
     setSuccessMsg(
       `Entrega ${alvo.numeroNota} re-lançada. Ela voltou para «Conferir entregas» — você pode re-lançar outra entrega aqui.`
     );
+
+    const notaCloud = notaRelancada;
+    void (async () => {
+      let cnpj = getCooperativaCnpj(getData(), coopId);
+      if (!cnpj) {
+        cnpj = (await resolveCooperativaCnpj(getData(), coopId, user)) ?? undefined;
+      }
+      if (!cnpj) {
+        requestAppSyncLight();
+        return;
+      }
+      await patchNotaPedidoInCloud(cnpj, notaCloud);
+      await pushOperacionalToCloud(cnpj, getData(), coopId, { authoritative: true });
+      requestAppSyncLight();
+    })();
   };
 
   const solicitarExclusaoNota = (nota: NotaPedido, comoResponsavel: boolean) => {
