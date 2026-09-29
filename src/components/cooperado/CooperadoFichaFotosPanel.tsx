@@ -30,6 +30,8 @@ interface CooperadoFichaFotosPanelProps {
   cooperativaId?: string;
   /** Abre expandido ao trocar de aba (ex.: link a partir do extrato quitado). */
   mesReferenciaInicial?: string | null;
+  /** Dentro do accordion do mês — só o conteúdo de fotos, sem lista de meses. */
+  modoInline?: boolean;
 }
 
 function EntregaFotosGrid({
@@ -162,6 +164,47 @@ function EntregaFotoCard({
   );
 }
 
+function MesFotosConteudo({
+  resumo,
+  getEscolaLabel,
+  cnpj,
+}: {
+  resumo: ResumoMesEntregasCooperado;
+  getEscolaLabel: (nota: NotaPedido) => string;
+  cnpj?: string;
+}) {
+  const entregas = useMemo(() => agruparNotasEmEntregas(resumo.notas), [resumo.notas]);
+  const entregasComFoto = entregas.filter((e) =>
+    e.notas.some((n) => contarFotosEnviadasNota(n) > 0)
+  );
+  const semanas = useMemo(
+    () => agruparEntregasPorSemanaNoMes(entregasComFoto, resumo.mesReferencia),
+    [entregasComFoto, resumo.mesReferencia]
+  );
+
+  return (
+    <div className="space-y-5">
+      {semanas.map((semana) => (
+        <div key={`${resumo.mesReferencia}-foto-s${semana.indice}`}>
+          <p className="text-xs font-bold uppercase tracking-wide text-green-800 bg-green-50 border border-green-100 rounded-lg px-3 py-2 mb-3 inline-flex items-center gap-2">
+            {semana.rotulo}
+          </p>
+          <div className="space-y-4">
+            {semana.entregas.map((entrega) => (
+              <EntregaFotoCard
+                key={entrega.id}
+                entrega={entrega}
+                getEscolaLabel={getEscolaLabel}
+                cnpj={cnpj}
+              />
+            ))}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function MesFotosSection({
   resumo,
   getEscolaLabel,
@@ -175,14 +218,10 @@ function MesFotosSection({
   expandido: boolean;
   onToggle: () => void;
 }) {
+  const qtdFotos = contarFotosEnviadasNotas(resumo.notas);
   const entregas = useMemo(() => agruparNotasEmEntregas(resumo.notas), [resumo.notas]);
   const entregasComFoto = entregas.filter((e) =>
     e.notas.some((n) => contarFotosEnviadasNota(n) > 0)
-  );
-  const qtdFotos = contarFotosEnviadasNotas(resumo.notas);
-  const semanas = useMemo(
-    () => agruparEntregasPorSemanaNoMes(entregasComFoto, resumo.mesReferencia),
-    [entregasComFoto, resumo.mesReferencia]
   );
 
   if (qtdFotos === 0) return null;
@@ -212,24 +251,8 @@ function MesFotosSection({
       </button>
 
       {expandido && (
-        <div className="border-t border-gray-100 px-4 sm:px-5 pb-5 pt-4 space-y-5 bg-gray-50/40">
-          {semanas.map((semana) => (
-            <div key={`${resumo.mesReferencia}-foto-s${semana.indice}`}>
-              <p className="text-xs font-bold uppercase tracking-wide text-green-800 bg-green-50 border border-green-100 rounded-lg px-3 py-2 mb-3 inline-flex items-center gap-2">
-                {semana.rotulo}
-              </p>
-              <div className="space-y-4">
-                {semana.entregas.map((entrega) => (
-                  <EntregaFotoCard
-                    key={entrega.id}
-                    entrega={entrega}
-                    getEscolaLabel={getEscolaLabel}
-                    cnpj={cnpj}
-                  />
-                ))}
-              </div>
-            </div>
-          ))}
+        <div className="border-t border-gray-100 px-4 sm:px-5 pb-5 pt-4 bg-gray-50/40">
+          <MesFotosConteudo resumo={resumo} getEscolaLabel={getEscolaLabel} cnpj={cnpj} />
         </div>
       )}
     </div>
@@ -241,6 +264,7 @@ export function CooperadoFichaFotosPanel({
   getEscolaLabel,
   cooperativaId,
   mesReferenciaInicial,
+  modoInline,
 }: CooperadoFichaFotosPanelProps) {
   const data = useAppData();
   const { user } = useAuth();
@@ -289,6 +313,18 @@ export function CooperadoFichaFotosPanel({
     () => mesesComFoto.reduce((s, r) => s + contarFotosEnviadasNotas(r.notas), 0),
     [mesesComFoto]
   );
+
+  if (modoInline && mesesComFoto.length === 1) {
+    const resumo = mesesComFoto[0]!;
+    if (contarFotosEnviadasNotas(resumo.notas) === 0) {
+      return (
+        <p className="text-sm text-gray-500 py-4 text-center">
+          Nenhuma foto neste mês.
+        </p>
+      );
+    }
+    return <MesFotosConteudo resumo={resumo} getEscolaLabel={getEscolaLabel} cnpj={cnpj} />;
+  }
 
   if (mesesComFoto.length === 0) {
     return (

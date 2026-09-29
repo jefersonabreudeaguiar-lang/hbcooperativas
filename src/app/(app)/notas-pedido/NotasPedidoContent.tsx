@@ -84,6 +84,7 @@ import { withConferenciaOperacionalPushScope } from "@/services/conferenciaOpera
 import { getProdutosContrato } from "@/services/catalogoContratosService";
 import { listNotasFilaConferenciaResponsavel } from "@/services/responsavelPainelIndex";
 import { listarResumosMensaisEntregas, filtrarResumosEntregasPendentes, filtrarResumosMesesNaoQuitados } from "@/services/cooperadoEntregasService";
+import { listarResumosFichaEmAbertoCooperado } from "@/services/cooperadoFichaTimelineService";
 import {
   bicCentralListarResumosMensaisEntregas,
   bicCentralMesPrincipalQuantoVouReceber,
@@ -869,11 +870,7 @@ export default function NotasPedidoContent() {
 
   const resumosFichaCooperado = useMemo(() => {
     if (!isCooperado || !data || !cooperadoId) return [];
-    return filtrarResumosMesesNaoQuitados(
-      data,
-      cooperadoId,
-      bicCentralListarResumosMensaisEntregas(data, cooperadoId, coopId)
-    );
+    return listarResumosFichaEmAbertoCooperado(data, cooperadoId, coopId);
   }, [data, cooperadoId, coopId, isCooperado, hbDescontosRevision]);
 
   const nomeCooperadoExibicao = useMemo(() => {
