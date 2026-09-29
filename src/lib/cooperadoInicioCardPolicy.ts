@@ -297,10 +297,48 @@ export function inicioCardMotorFromFinanceiroUiSnapshot(
   };
 }
 
+function resultadoCardBridgePersistidoBic(
+  persistidoLeitura: NonNullable<ReturnType<typeof filtrarInicioCardPersistidoLeituraBic>>,
+  opts: { gravarPersistencia: boolean; atualizando?: boolean }
+): InicioCardPoliticaResult & { gravarPersistencia: boolean } {
+  const latch: InicioCardLatchState = {
+    motorRevision: persistidoLeitura.motorRevision,
+    display: persistidoLeitura.display,
+    hadPendencia: cooperadoMotorTemObrigacaoReceber(persistidoLeitura.display),
+  };
+  return finalizarResultadoCardBic({
+    display: persistidoLeitura.display,
+    latch,
+    atualizando: opts.atualizando ?? true,
+    gravarPersistencia: opts.gravarPersistencia,
+  });
+}
+
 function resolverCardInicioEndurecidoFinanceiroUiSnapshot(
   input: ResolverCardInicioInput
 ): InicioCardPoliticaResult & { gravarPersistencia: boolean } {
   const { data, cooperadoId, cooperativaId } = input;
+  const persistidoLeitura = filtrarInicioCardPersistidoLeituraBic(input.persistido);
+  const financeiroCarregando = Boolean(input.syncing || input.carregandoFinanceiro);
+  const vazio: InicioCardMotorSnapshot = {
+    mesLabel: "—",
+    valor: 0,
+    valorRecibo: 0,
+    aguardandoAssinatura: false,
+  };
+
+  if (!data) {
+    if (persistidoLeitura && cooperadoMotorTemObrigacaoReceber(persistidoLeitura.display)) {
+      return resultadoCardBridgePersistidoBic(persistidoLeitura, { gravarPersistencia: false });
+    }
+    return finalizarResultadoCardBic({
+      display: vazio,
+      latch: { motorRevision: "", display: vazio, hadPendencia: false },
+      atualizando: financeiroCarregando,
+      gravarPersistencia: false,
+    });
+  }
+
   const dataReady = input.dataReady ?? Boolean(data);
 
   const financeiro = buildCooperadoFinanceiroUiSnapshot({
@@ -310,18 +348,33 @@ function resolverCardInicioEndurecidoFinanceiroUiSnapshot(
     opts: {
       apresentacaoConsolidada: input.apresentacaoConsolidada,
       dataReady,
-      financeiroSincronizando: Boolean(input.syncing || input.carregandoFinanceiro),
+      financeiroSincronizando: financeiroCarregando,
     },
   });
 
   const motor = inicioCardMotorFromFinanceiroUiSnapshot(financeiro);
   const revision =
     financeiro.observability.motorRevision ??
-    (data && cooperadoId && cooperativaId
-      ? cooperadoMotorRevisionOperacional(data, cooperadoId, cooperativaId)
-      : "");
+    (cooperadoId && cooperativaId ? cooperadoMotorRevisionOperacional(data, cooperadoId, cooperativaId) : "");
 
-  if (financeiro.status === "AGUARDANDO_BIC" || financeiro.status === "INCONSISTENTE") {
+  if (financeiro.status === "AGUARDANDO_BIC") {
+    if (persistidoLeitura && cooperadoMotorTemObrigacaoReceber(persistidoLeitura.display)) {
+      return resultadoCardBridgePersistidoBic(persistidoLeitura, { gravarPersistencia: false });
+    }
+    const latch: InicioCardLatchState = {
+      motorRevision: revision,
+      display: motor,
+      hadPendencia: false,
+    };
+    return finalizarResultadoCardBic({
+      display: motor,
+      latch,
+      atualizando: financeiro.cardAtualizando || financeiroCarregando,
+      gravarPersistencia: false,
+    });
+  }
+
+  if (financeiro.status === "INCONSISTENTE") {
     const latch: InicioCardLatchState = {
       motorRevision: revision,
       display: motor,
@@ -330,17 +383,56 @@ function resolverCardInicioEndurecidoFinanceiroUiSnapshot(
     return finalizarResultadoCardBic({
       display: motor,
       latch,
-      atualizando:
-        financeiro.status === "AGUARDANDO_BIC" ||
-        financeiro.cardAtualizando ||
-        input.carregandoFinanceiro,
+      atualizando: financeiro.cardAtualizando || financeiroCarregando,
       gravarPersistencia: false,
     });
   }
 
-  const applied = aplicarPoliticaCardInicioEndurecida(motor, revision, input.prevLatch, {
-    carregandoFinanceiro: input.carregandoFinanceiro,
+  let prevLatch = input.prevLatch;
+  if (
+    !prevLatch &&
+    persistidoLeitura &&
+    persistidoLeitura.motorRevision === revision &&
+    cooperadoMotorTemObrigacaoReceber(persistidoLeitura.display)
+  ) {
+    prevLatch = {
+      motorRevision: revision,
+      display: persistidoLeitura.display,
+      hadPendencia: true,
+    };
+  }
+
+  let applied = aplicarPoliticaCardInicioEndurecida(motor, revision, prevLatch, {
+    carregandoFinanceiro: financeiroCarregando,
   });
+
+  if (prevLatch && prevLatch.motorRevision !== revision) {
+    const display = aplicarSubstituicaoMonotonaDisplay(prevLatch.display, applied.display, true);
+    applied = {
+      ...applied,
+      display,
+      latch: { ...applied.latch, display },
+    };
+  }
+
+  if (
+    persistidoLeitura &&
+    persistidoLeitura.motorRevision === revision &&
+    cooperadoMotorTemObrigacaoReceber(persistidoLeitura.display) &&
+    !cooperadoMotorTemObrigacaoReceber(motor) &&
+    financeiroCarregando
+  ) {
+    applied = {
+      ...applied,
+      display: persistidoLeitura.display,
+      latch: {
+        motorRevision: revision,
+        display: persistidoLeitura.display,
+        hadPendencia: true,
+      },
+      atualizando: true,
+    };
+  }
 
   const atualizando = applied.atualizando || financeiro.cardAtualizando;
 

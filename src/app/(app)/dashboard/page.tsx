@@ -135,6 +135,8 @@ function CooperadoDashboard() {
       cooperativaId: inicioCardCtx?.cooperativaId,
       dataReady: inicioCardCtx?.dataReady ?? false,
       syncing,
+      apresentacaoConsolidada,
+      carregandoValoresFinanceiros,
     });
 
   const view = useAppDataSelector((data) => {

@@ -117,7 +117,7 @@ withBicOfficial(() => {
     prevLatch: null,
     persistido: snap,
   });
-  assert.equal(result.display.valor, 0, "valor cache não é definitivo antes do BIC");
+  assert.equal(result.display.valor, 500, "cache BIC-compatível mantém valor até motor confirmar");
   assert.equal(result.atualizando, true);
   assertSemReciboNaUi(result.display);
 });
@@ -232,7 +232,8 @@ withBicOfficial(() => {
     persistido: snap,
     dataReady: false,
   });
-  assert.equal(result.display.valor, 0, "AGUARDANDO_BIC não usa cache como definitivo");
+  assert.equal(result.display.valor, 500, "cache BIC-compatível segura valor até warm/sync");
+  assert.equal(result.atualizando, true);
 });
 
 withBicOfficial(() => {

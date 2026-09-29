@@ -29,6 +29,8 @@ export function useCooperadoInicioValorReceberCardState(input: {
   cooperativaId: string | undefined;
   dataReady: boolean;
   syncing: boolean;
+  apresentacaoConsolidada?: boolean;
+  carregandoValoresFinanceiros?: boolean;
 }): {
   snapshot: InicioCardMotorSnapshot;
   atualizando: boolean;
@@ -59,14 +61,16 @@ export function useCooperadoInicioValorReceberCardState(input: {
   }, [input.cooperadoId, input.cooperativaId, bootPersistido]);
 
   const carregandoFinanceiro =
-    !input.dataReady && !cooperadoMotorTemObrigacaoReceber(persistido?.display ?? SNAPSHOT_VAZIO);
+    Boolean(input.carregandoValoresFinanceiros) ||
+    Boolean(input.syncing) ||
+    (!input.dataReady && !cooperadoMotorTemObrigacaoReceber(persistido?.display ?? SNAPSHOT_VAZIO));
 
   const resolved = useMemo(() => {
     return resolverCardInicioEndurecido({
       data: input.data,
       cooperadoId: input.cooperadoId,
       cooperativaId: input.cooperativaId,
-      apresentacaoConsolidada: true,
+      apresentacaoConsolidada: input.apresentacaoConsolidada !== false,
       carregandoFinanceiro,
       prevLatch: latchRef.current,
       persistido,
@@ -79,6 +83,8 @@ export function useCooperadoInicioValorReceberCardState(input: {
     input.cooperativaId,
     input.dataReady,
     input.syncing,
+    input.apresentacaoConsolidada,
+    input.carregandoValoresFinanceiros,
     carregandoFinanceiro,
     persistido,
   ]);

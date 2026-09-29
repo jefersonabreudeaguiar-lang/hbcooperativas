@@ -61,7 +61,11 @@ function main() {
   assert.equal(aplicarSubstituicaoMonotonaDisplay(anterior, { ...anterior, valor: 250 }, true).valor, 250);
   assert.equal(aplicarSubstituicaoMonotonaDisplay(anterior, { mesLabel: "Set", valor: 0, valorRecibo: 0, aguardandoAssinatura: false }, true).valor, 0);
 
-  assert.equal(cooperadoMotorTemObrigacaoReceber({ mesLabel: "x", valor: 0, valorRecibo: 10, aguardandoAssinatura: true }), true);
+  assert.equal(
+    cooperadoMotorTemObrigacaoReceber({ mesLabel: "x", valor: 0, valorRecibo: 10, aguardandoAssinatura: true }),
+    false,
+    "obrigação do card = valor líquido M6, não recibo legado"
+  );
 
   const data = miniData();
   const revEmpty = cooperadoMotorRevisionOperacional(data, COOPERADO, COOP);
