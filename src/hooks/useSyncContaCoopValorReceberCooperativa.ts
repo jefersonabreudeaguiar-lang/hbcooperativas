@@ -7,7 +7,7 @@ import { isContaCoopValorReceberPilot } from "@/utils/contaCoopUiVisibility";
 import { scheduleContaCoopAuxSync } from "@/lib/hb-credit/contaCoopAuxSyncSchedule";
 
 const SYNC_INTERVAL_MS = 120_000;
-const SYNC_INITIAL_DELAY_MS = 12_000;
+const SYNC_INITIAL_DELAY_MS = 28_000;
 
 type HookOpts = {
   cooperativaId?: string;
@@ -69,7 +69,7 @@ export function useSyncContaCoopValorReceberCooperativa(opts?: HookOpts) {
               runningRef.current = false;
             });
         },
-        { idleTimeoutMs: 18_000, fallbackMs: 6_000 }
+        { idleTimeoutMs: 22_000, fallbackMs: 8_000 }
       );
       idleCleanups.push(cancelIdle);
     };

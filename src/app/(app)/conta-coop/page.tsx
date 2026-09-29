@@ -1,20 +1,17 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from "react";
+import dynamic from "next/dynamic";
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { useSearchParams } from "next/navigation";
 import { CreditFeatureGate } from "@/components/hb-credit/CreditFeatureGate";
 import { CloudSessionGate } from "@/components/hb-credit/CloudSessionGate";
 import { TesoureiroAreaGuard } from "@/components/permissions/TesoureiroAreaGuard";
 import { ContaCoopSegmentTabs } from "@/components/hb-credit/ContaCoopSegmentTabs";
-import { ContaCoopLiquidacaoPanel } from "@/components/hb-credit/ContaCoopLiquidacaoPanel";
-import { ContaCoopFiscalNotesConferenciaPanel } from "@/components/hb-credit/ContaCoopFiscalNotesConferenciaPanel";
-import { ContaCoopEstornosPanel } from "@/components/hb-credit/ContaCoopEstornosPanel";
-import { ContaCoopDescontosPanel } from "@/components/hb-credit/ContaCoopDescontosPanel";
 import { Card, StatCard } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Input, Label } from "@/components/ui/Form";
 import { AlertBanner } from "@/components/ui/AlertBanner";
-import { useAppData } from "@/hooks/useAppData";
+import { useAppDataSelector } from "@/hooks/useAppData";
 import { usePermissions } from "@/hooks/usePermissions";
 import { getUserCooperativaId, normalizeCnpj } from "@/utils/cooperativa";
 import {
@@ -31,7 +28,7 @@ import {
   resetCooperadoFinancialPin,
 } from "@/services/creditApiService";
 import { formatCentsBRL } from "@/modules/hb-credit/engine/money";
-import { buildCreditosBaseMap } from "@/modules/hb-credit/engine/creditBaseFromFicha";
+import { buildCreditosBaseMapCached } from "@/modules/hb-credit/engine/creditBaseFromFicha";
 import type { ContaCoopDashboard, ContaCoopLimiteCooperado, ContaCoopParceiro, ContaCoopPinResetRequest, ContaCoopCooperadoPinResetRequest, ContaCoopPixChangeRequest } from "@/modules/hb-credit/types";
 import { cn, formatMesReferencia } from "@/utils/format";
 import { PageSkeleton } from "@/components/ui/PageSkeleton";
@@ -47,7 +44,39 @@ import {
   isHbCreditLabLiberacaoAutoEnabled,
 } from "@/lib/hb-credit/hbCreditLabPolicy";
 import { useSyncContaCoopLimiteFromFicha } from "@/hooks/useSyncContaCoopLimiteFromFicha";
+import { scheduleContaCoopAuxSync } from "@/lib/hb-credit/contaCoopAuxSyncSchedule";
 import { getDataRevision, subscribe } from "@/services/dataStore";
+
+const panelFallback = () => <PageSkeleton compact />;
+
+const ContaCoopLiquidacaoPanel = dynamic(
+  () =>
+    import("@/components/hb-credit/ContaCoopLiquidacaoPanel").then((m) => ({
+      default: m.ContaCoopLiquidacaoPanel,
+    })),
+  { loading: panelFallback, ssr: false }
+);
+const ContaCoopFiscalNotesConferenciaPanel = dynamic(
+  () =>
+    import("@/components/hb-credit/ContaCoopFiscalNotesConferenciaPanel").then((m) => ({
+      default: m.ContaCoopFiscalNotesConferenciaPanel,
+    })),
+  { loading: panelFallback, ssr: false }
+);
+const ContaCoopEstornosPanel = dynamic(
+  () =>
+    import("@/components/hb-credit/ContaCoopEstornosPanel").then((m) => ({
+      default: m.ContaCoopEstornosPanel,
+    })),
+  { loading: panelFallback, ssr: false }
+);
+const ContaCoopDescontosPanel = dynamic(
+  () =>
+    import("@/components/hb-credit/ContaCoopDescontosPanel").then((m) => ({
+      default: m.ContaCoopDescontosPanel,
+    })),
+  { loading: panelFallback, ssr: false }
+);
 
 type PreviewColetivo = {
   ok?: boolean;
@@ -83,7 +112,6 @@ export default function ContaCoopPage() {
 }
 
 function ContaCoopContent() {
-  const data = useAppData();
   const { user } = usePermissions();
   const searchParams = useSearchParams();
   const initialTab = searchParams.get("tab");
@@ -129,18 +157,28 @@ function ContaCoopContent() {
     []
   );
 
-  const cnpj = useMemo(() => {
-    if (!user || !data) return "";
+  const cnpj = useAppDataSelector((data) => {
+    if (!user) return "";
     if (user.cooperativaCnpj) return normalizeCnpj(user.cooperativaCnpj);
     const coopId = getUserCooperativaId(user, data);
     const coop = data.cooperativas.find((c) => c.id === coopId);
     return coop?.cnpj ? normalizeCnpj(coop.cnpj) : "";
-  }, [user, data]);
+  }, [user?.id, user?.cooperativaCnpj, user?.cooperativaId]);
 
-  const cooperadosAtivos = useMemo(() => {
-    if (!data || !user?.cooperativaId) return [];
+  const cooperadosAtivos = useAppDataSelector((data) => {
+    if (!user?.cooperativaId) return [];
     return data.cooperados.filter((c) => c.cooperativaId === user.cooperativaId && c.status === "ativo");
-  }, [data, user?.cooperativaId]);
+  }, [user?.cooperativaId]) ?? [];
+
+  const cooperadoIdsKey = useMemo(
+    () => cooperadosAtivos.map((c) => c.id).join("\u001f"),
+    [cooperadosAtivos]
+  );
+
+  const cooperadoIdsAtivos = useMemo(() => {
+    if (!cooperadoIdsKey) return [];
+    return cooperadoIdsKey.split("\u001f").filter(Boolean);
+  }, [cooperadoIdsKey]);
 
   const cooperadoNome = useCallback(
     (id: string) => cooperadosAtivos.find((c) => c.id === id)?.nomeCompleto ?? id,
@@ -149,19 +187,20 @@ function ContaCoopContent() {
 
   const dataRevision = useSyncExternalStore(subscribe, getDataRevision, () => 0);
 
-  const creditosBaseColetivo = useMemo(() => {
-    if (!data || !cooperadosAtivos.length) return {};
-    return buildCreditosBaseMap(
-      data,
-      cooperadosAtivos.map((c) => c.id),
-      user?.cooperativaId
-    );
-  }, [data, cooperadosAtivos, user?.cooperativaId, dataRevision]);
+  const creditosBaseColetivo =
+    useAppDataSelector(
+      (data) => {
+        if (!user?.cooperativaId || !cooperadoIdsAtivos.length) return {};
+        return buildCreditosBaseMapCached(data, cooperadoIdsAtivos, user.cooperativaId);
+      },
+      [user?.cooperativaId, cooperadoIdsKey]
+    ) ?? {};
 
-  const cooperadoIdsAtivos = useMemo(
-    () => cooperadosAtivos.map((c) => c.id),
-    [cooperadosAtivos]
-  );
+  const creditosBaseRef = useRef(creditosBaseColetivo);
+  creditosBaseRef.current = creditosBaseColetivo;
+
+  const cooperadoIdsAtivosRef = useRef(cooperadoIdsAtivos);
+  cooperadoIdsAtivosRef.current = cooperadoIdsAtivos;
 
   const limiteSyncOpts = useMemo(() => {
     if (!user?.cooperativaId || !cooperadoIdsAtivos.length) return undefined;
@@ -218,6 +257,18 @@ function ContaCoopContent() {
     }
   }, [cnpj]);
 
+  const loadPinAndPixRequests = useCallback(async () => {
+    if (!cnpj || cnpj.length !== 14) return;
+    const [pixReqs, pinReqs, coopPinReqs] = await Promise.all([
+      fetchPartnerPixChangeRequests(cnpj, "pendente").catch(() => []),
+      fetchPartnerPinResetRequests(cnpj).catch(() => []),
+      fetchCooperadoPinResetRequests(cnpj).catch(() => []),
+    ]);
+    setPixChangeRequests(pixReqs);
+    setPinResetRequests(pinReqs);
+    setCooperadoPinResetRequests(coopPinReqs);
+  }, [cnpj]);
+
   const reload = useCallback(async (opts?: { background?: boolean }) => {
     if (!cnpj) return;
     const background = opts?.background ?? false;
@@ -226,34 +277,23 @@ function ContaCoopContent() {
     setError("");
     try {
       const coopId = user?.cooperativaId ?? "";
-      const [dash] = await Promise.all([fetchCreditDashboard(cnpj, creditosBaseColetivo)]);
+      const ids = cooperadoIdsAtivosRef.current;
+      const dash = await fetchCreditDashboard(cnpj, creditosBaseRef.current);
       setDashboard(dash);
       if (dash) gravarHbCreditDashboardPersistido(cnpj, dash);
       setLoading(false);
 
-      if (dash && cooperadoIdsAtivos.length && coopId) {
+      if (dash && ids.length && coopId) {
         void ensureHbCreditLabLiberacaoPadrao({
           cnpj,
-          cooperadoIds: cooperadoIdsAtivos,
-          creditosBaseCents: creditosBaseColetivo,
+          cooperadoIds: ids,
+          creditosBaseCents: creditosBaseRef.current,
           tetoGlobalPercent: dash.teto.tetoGlobalPercent,
           limiteDistribuidoCents: dash.teto.limiteDistribuidoCents,
         }).then((seeded) => {
           if (seeded) void reload({ background: true });
         });
       }
-
-      void loadParceiros();
-
-      void Promise.all([
-        fetchPartnerPixChangeRequests(cnpj, "pendente").catch(() => []),
-        fetchPartnerPinResetRequests(cnpj).catch(() => []),
-        fetchCooperadoPinResetRequests(cnpj).catch(() => []),
-      ]).then(([pixReqs, pinReqs, coopPinReqs]) => {
-        setPixChangeRequests(pixReqs);
-        setPinResetRequests(pinReqs);
-        setCooperadoPinResetRequests(coopPinReqs);
-      });
     } catch (e) {
       if (!background) {
         setError(e instanceof Error ? e.message : "Erro ao carregar HB Créditos.");
@@ -262,7 +302,10 @@ function ContaCoopContent() {
     } finally {
       setDashboardRefreshing(false);
     }
-  }, [cnpj, creditosBaseColetivo, cooperadoIdsAtivos, loadParceiros, syncLimitesComFicha, user?.cooperativaId]);
+  }, [cnpj, user?.cooperativaId]);
+
+  const reloadRef = useRef(reload);
+  reloadRef.current = reload;
 
   useEffect(() => {
     if (!cnpj) return;
@@ -277,13 +320,38 @@ function ContaCoopContent() {
     if (snapLimites?.limites.length) {
       setLimites(snapLimites.limites);
     }
-    void reload({ background });
-  }, [cnpj, reload]);
+    void reloadRef.current({ background });
+  }, [cnpj]);
+
+  useEffect(() => {
+    if (!cnpj || !dashboard) return;
+    if (tab !== "painel" && tab !== "limites") return;
+    const timer = window.setTimeout(() => void reloadRef.current({ background: true }), 3_500);
+    return () => window.clearTimeout(timer);
+  }, [dataRevision, cnpj, tab, dashboard]);
+
+  const parceirosTabs: Tab[] = ["mercados", "conferir_nf", "liquidar", "estornos"];
+  useEffect(() => {
+    if (!cnpj || !parceirosTabs.includes(tab)) return;
+    if (parceirosLoaded && !parceirosLoading) return;
+    void loadParceiros();
+  }, [tab, cnpj, loadParceiros, parceirosLoaded, parceirosLoading]);
+
+  useEffect(() => {
+    if (!cnpj) return;
+    if (tab !== "painel" && tab !== "limites" && tab !== "mercados") return;
+    const cancelIdle = scheduleContaCoopAuxSync(() => void loadPinAndPixRequests(), {
+      idleTimeoutMs: 6_000,
+      fallbackMs: 14_000,
+    });
+    return cancelIdle;
+  }, [tab, cnpj, loadPinAndPixRequests]);
 
   useEffect(() => {
     if (tab !== "limites" || !cnpj || !user?.cooperativaId || !cooperadoIdsAtivos.length) return;
-    void syncLimitesComFicha({ background: true });
-  }, [tab, cnpj, user?.cooperativaId, cooperadoIdsAtivos.length, dataRevision, syncLimitesComFicha]);
+    const timer = window.setTimeout(() => void syncLimitesComFicha({ background: true }), 2_000);
+    return () => window.clearTimeout(timer);
+  }, [tab, cnpj, user?.cooperativaId, cooperadoIdsKey, dataRevision, syncLimitesComFicha, cooperadoIdsAtivos.length]);
 
   useEffect(() => {
     const p = dashboard?.teto.tetoGlobalPercent;
@@ -521,11 +589,11 @@ function ContaCoopContent() {
     }
   };
 
-  const cooperativaNome = useMemo(() => {
-    if (!user || !data) return "Cooperativa";
+  const cooperativaNome = useAppDataSelector((data) => {
+    if (!user) return "Cooperativa";
     const coopId = getUserCooperativaId(user, data);
     return data.cooperativas.find((c) => c.id === coopId)?.nome ?? "Cooperativa";
-  }, [user, data]);
+  }, [user?.id, user?.cooperativaId]) ?? "Cooperativa";
 
   const statusMercadoLabel = (status: string) => {
     if (status === "ativo") return "Ativo";

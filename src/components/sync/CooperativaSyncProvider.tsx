@@ -43,6 +43,7 @@ import { cooperadoFinanceiroDesatualizado, aplicarSanidadeFinanceiroCooperadoLoc
 import { avaliarIntegridadeFinanceiroCooperado } from "@/services/cooperadoFinanceiroGuard";
 import { ensureOperacionalAlinhadoComNuvem } from "@/services/operacionalRestoreService";
 import { refreshContaCoopDescontosAfterOperacionalSync } from "@/lib/hb-credit/syncContaCoopFichaDescontos";
+import { isStaffHbCoopWideSyncRoute } from "@/lib/hb-credit/staffHbSyncRoute";
 import { persistirInicioCardValorReceberCooperado } from "@/services/cooperadoInicioCardPersistenciaService";
 import { pushCooperadoToCloud, resolverCooperadoIdCanonico, flushPendingCooperadoPushes, notaPertenceCooperado } from "@/services/cooperadoCloudService";
 import { registerSyncHandler, registerVotacaoOperacionalSyncHandler } from "@/services/syncRequest";
@@ -523,16 +524,22 @@ export function CooperativaSyncProvider({ children }: { children: React.ReactNod
           );
         }
       }
-      const refreshHb = () =>
-        refreshContaCoopDescontosAfterOperacionalSync({
+      const staffUser =
+        currentUser.role === "responsavel" ||
+        currentUser.role === "tesoureiro" ||
+        currentUser.role === "admin";
+      const refreshHb = () => {
+        if (staffUser && !isStaffHbCoopWideSyncRoute()) return;
+        void refreshContaCoopDescontosAfterOperacionalSync({
           cnpj,
           cooperativaId: currentCoopId,
           user: currentUser,
         });
+      };
       if (cooperadoLogado || opts?.force) {
         await refreshHb();
       } else {
-        window.setTimeout(() => void refreshHb(), 2500);
+        window.setTimeout(refreshHb, staffUser ? 8_000 : 2_500);
       }
     } catch (e) {
       if (!completed) {

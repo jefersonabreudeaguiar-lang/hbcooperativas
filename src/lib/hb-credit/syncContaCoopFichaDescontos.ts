@@ -21,6 +21,7 @@ import {
   markContaCoopDescontosFetchOk,
 } from "@/lib/hb-credit/contaCoopDescontosSyncHealth";
 import { isContaCoopValorReceberPilot } from "@/utils/contaCoopUiVisibility";
+import { isStaffHbCoopWideSyncRoute } from "@/lib/hb-credit/staffHbSyncRoute";
 import type { User } from "@/types";
 import {
   refreshContaCoopLimiteCooperativaAtivos,
@@ -342,6 +343,7 @@ export async function refreshContaCoopDescontosAfterOperacionalSync(opts: {
     }
 
     if (opts.user.role === "responsavel" || opts.user.role === "tesoureiro" || opts.user.role === "admin") {
+      if (!isStaffHbCoopWideSyncRoute()) return;
       await refreshContaCoopDescontosCooperativaPendentes({
         cnpj: opts.cnpj,
         cooperativaId: opts.cooperativaId,

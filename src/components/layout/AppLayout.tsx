@@ -299,9 +299,11 @@ export function MobileNav() {
 export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const { user } = useAuth();
-  const data = useAppData();
+  const coopId = useAppDataSelector(
+    (data) => (user ? getUserCooperativaId(user, data) : undefined),
+    [user?.id, user?.cooperativaId, user?.role]
+  );
   const credit = useHbCreditEnabled(user);
-  const coopId = user && data ? getUserCooperativaId(user, data) : undefined;
   const staffHbSync =
     user &&
     coopId &&
