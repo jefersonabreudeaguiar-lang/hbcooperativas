@@ -5,7 +5,9 @@ import { RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { APP_BUILD_VERSION } from "@/lib/appBuildVersion";
 import { useAuth } from "@/modules/auth/AuthProvider";
+import { isCooperadoAppUser } from "@/permissions";
 import { BUILD_SEEN_KEY } from "@/lib/pwa/clientRelease";
+import { ensureCooperadoReleaseUpgrade } from "@/lib/pwa/fetchOfficialClientRelease";
 
 function activateWaitingWorker(reg: ServiceWorkerRegistration) {
   const worker = reg.waiting ?? reg.installing;
@@ -15,12 +17,16 @@ function activateWaitingWorker(reg: ServiceWorkerRegistration) {
 
 /** Cooperado: atualiza PWA sozinho. Equipe: banner opcional para recarregar. */
 export function AppUpdateBanner() {
-  const { user } = useAuth();
-  const autoUpdate = user?.role === "cooperado";
+  const { user, accountUser } = useAuth();
+  const autoUpdate = isCooperadoAppUser(accountUser ?? user);
   const [show, setShow] = useState(false);
 
   useEffect(() => {
     if (typeof window === "undefined" || !("serviceWorker" in navigator)) return;
+
+    if (autoUpdate) {
+      void ensureCooperadoReleaseUpgrade(true);
+    }
 
     const seen = localStorage.getItem(BUILD_SEEN_KEY);
     if (seen !== String(APP_BUILD_VERSION) && seen != null && !autoUpdate) {

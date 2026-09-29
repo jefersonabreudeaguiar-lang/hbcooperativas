@@ -40,6 +40,21 @@ export function markClientReleaseSeen(official: ClientReleaseInfo): void {
   }
 }
 
+export async function ensureCooperadoReleaseUpgrade(isCooperadoExperience: boolean): Promise<"ok" | "aligning"> {
+  if (!isCooperadoExperience || typeof window === "undefined") return "ok";
+  const canonical = await fetchOfficialClientRelease();
+  const seenDpl = localStorage.getItem(DEPLOYMENT_SEEN_KEY);
+  const seenBuild = localStorage.getItem(BUILD_SEEN_KEY);
+  const dplChanged = Boolean(canonical.deploymentId && seenDpl && seenDpl !== canonical.deploymentId);
+  const buildChanged = Boolean(seenBuild && String(canonical.build) !== seenBuild);
+  if (!dplChanged && !buildChanged) return "ok";
+  await alignClientRuntimeToRelease(
+    dplChanged ? `cooperado_dpl:${seenDpl}->${canonical.deploymentId}` : `cooperado_build:${seenBuild}->${canonical.build}`,
+    canonical.deploymentId
+  );
+  return "aligning";
+}
+
 export async function runClientReleaseAlignment(): Promise<"ok" | "pending" | "aligning"> {
   const canonical = await fetchOfficialClientRelease();
   const pageRelease = getPageEmbeddedReleaseFromDom();

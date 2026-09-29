@@ -258,6 +258,18 @@ export function buildCooperadoFinanceiroUiSnapshot(
   };
 
   const m6 = bicCentralValorAReceberAgregado(data, coopadoId, coopId, { apresentacaoConsolidada });
+  const motorFicha = getValorQuantoVouReceberMotorLegado(data, coopadoId, coopId);
+  const valorAReceber = motorFicha.valor > 0 ? motorFicha.valor : m6.valor;
+  const mesLabel = motorFicha.mesLabel?.trim() || m6.mesLabel || null;
+  const mesPrincipal = motorFicha.mes || m6.mes || null;
+  const mesesReferencia =
+    motorFicha.meses.length > 0
+      ? [...motorFicha.meses]
+      : m6.meses.length
+        ? [...m6.meses]
+        : mesPrincipal
+          ? [mesPrincipal]
+          : [];
   const painel = bicCentralResolvePainelParaExibicao(data, coopadoId, coopId, bicOpts);
   const revision = cooperadoMotorRevisionOperacional(data, coopadoId, coopId);
   const carregando = Boolean(opts?.carregandoNuvem || opts?.financeiroSincronizando);
@@ -266,17 +278,17 @@ export function buildCooperadoFinanceiroUiSnapshot(
     status: "CONFIRMADO",
     autoridade: "BIC",
     bicAuthoritative: true,
-    valorAReceber: m6.valor,
-    mesPrincipal: m6.mes || null,
-    mesLabel: m6.mesLabel || null,
-    mesesReferencia: m6.meses.length ? [...m6.meses] : m6.mes ? [m6.mes] : [],
-    exibirValorNoCard: m6.valor > 0,
+    valorAReceber,
+    mesPrincipal,
+    mesLabel,
+    mesesReferencia,
+    exibirValorNoCard: valorAReceber > 0,
     cardAtualizando: carregando,
     podeAssinarRecibo: false,
     podeExibirBannerRecibo: false,
     conferindoPagamentoNuvem: conferindo,
     painelEstado: mapPainelEstado(painel.estado),
-    painelValorDestaque: m6.valor > 0 ? m6.valor : painel.valorDestaque,
+    painelValorDestaque: valorAReceber > 0 ? valorAReceber : painel.valorDestaque,
     observability: {
       source: "bic",
       fallback: false,

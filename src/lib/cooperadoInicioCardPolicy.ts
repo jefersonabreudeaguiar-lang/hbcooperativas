@@ -277,8 +277,16 @@ export function inicioCardMotorFromFinanceiroUiSnapshot(
   financeiro: CooperadoFinanceiroUiSnapshot
 ): InicioCardMotorSnapshot {
   const mesLabel = financeiro.mesLabel?.trim() || "—";
+  if (financeiro.status === "AGUARDANDO_BIC" || financeiro.status === "INCONSISTENTE") {
+    return {
+      mesLabel,
+      valor: 0,
+      valorRecibo: 0,
+      aguardandoAssinatura: false,
+    };
+  }
   const valor =
-    financeiro.status === "CONFIRMADO" && financeiro.valorAReceber > 0
+    financeiro.valorAReceber > 0 && (financeiro.exibirValorNoCard || financeiro.status === "CONFIRMADO" || financeiro.status === "LEGADO")
       ? financeiro.valorAReceber
       : 0;
   return {

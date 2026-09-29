@@ -1,18 +1,29 @@
 "use client";
 
 import { useEffect, useRef } from "react";
-import { runClientReleaseAlignment } from "@/lib/pwa/fetchOfficialClientRelease";
+import { useAuth } from "@/modules/auth/AuthProvider";
+import { isCooperadoAppUser } from "@/permissions";
+import { ensureCooperadoReleaseUpgrade, runClientReleaseAlignment } from "@/lib/pwa/fetchOfficialClientRelease";
 
 const RETRY_MS = [300, 700, 1400, 2800, 5000];
 
 export function ClientDeploymentGuard() {
   const aligningRef = useRef(false);
+  const { user, accountUser } = useAuth();
+  const cooperadoExperience = isCooperadoAppUser(accountUser ?? user);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
 
     const run = async (): Promise<"stop" | "retry"> => {
       if (aligningRef.current) return "stop";
+      if (cooperadoExperience) {
+        const coopUpgrade = await ensureCooperadoReleaseUpgrade(true);
+        if (coopUpgrade === "aligning") {
+          aligningRef.current = true;
+          return "stop";
+        }
+      }
       const result = await runClientReleaseAlignment();
       if (result === "aligning") {
         aligningRef.current = true;
@@ -50,7 +61,7 @@ export function ClientDeploymentGuard() {
       window.clearInterval(interval);
       for (const id of timeouts) window.clearTimeout(id);
     };
-  }, []);
+  }, [cooperadoExperience]);
 
   return null;
 }
