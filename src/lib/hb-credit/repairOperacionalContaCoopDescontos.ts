@@ -194,6 +194,51 @@ export async function repairOperacionalContaCoopDescontosForCooperado(
   return patchOperacionalDescontos(supabase, digits, op, jobs, cooperadosCadastro);
 }
 
+export type HbAuthorizeProjecaoAReceberResult = {
+  status: "synced" | "unchanged" | "pending";
+  patched: number;
+  checked: number;
+  error?: string;
+};
+
+/**
+ * Pós-authorize (servidor): projeta transações HB → contaCoopDescontos no operacional.json.
+ * Idempotente — reprocessar duplicate RPC só re-sincroniza (dedupe hbTransactionId na nuvem).
+ */
+export async function projectContaCoopDescontosAfterHbAuthorize(
+  supabase: SupabaseClient,
+  cnpj: string,
+  cooperadoId: string,
+  opts?: { mesReferencia?: string }
+): Promise<HbAuthorizeProjecaoAReceberResult> {
+  const run = () =>
+    repairOperacionalContaCoopDescontosForCooperado(supabase, cnpj, cooperadoId, {
+      mesReferencia: opts?.mesReferencia,
+    });
+
+  try {
+    const first = await run();
+    const status = first.patched > 0 ? "synced" : "unchanged";
+    return { status, patched: first.patched, checked: first.checked };
+  } catch (e1) {
+    const msg1 = e1 instanceof Error ? e1.message : "projecao_failed";
+    try {
+      await new Promise((r) => setTimeout(r, 350));
+      const second = await run();
+      const status = second.patched > 0 ? "synced" : "unchanged";
+      return { status, patched: second.patched, checked: second.checked };
+    } catch (e2) {
+      const msg2 = e2 instanceof Error ? e2.message : msg1;
+      return {
+        status: "pending",
+        patched: 0,
+        checked: 0,
+        error: msg2,
+      };
+    }
+  }
+}
+
 /** Reconcilia operacional.json × HB para todos os cooperados com ficha pendente. */
 export async function repairOperacionalContaCoopDescontosCooperativa(
   supabase: SupabaseClient,

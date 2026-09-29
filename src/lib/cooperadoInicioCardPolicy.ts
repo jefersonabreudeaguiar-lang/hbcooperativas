@@ -8,6 +8,7 @@
  */
 import type { AppData } from "@/types";
 import { notaPertenceCooperado, fichaPertenceCooperado, pagamentoCooperadoPertenceCooperado } from "@/services/cooperadoCloudService";
+import { getContaCoopDescontosRevision } from "@/lib/hb-credit/contaCoopDescontosNotify";
 import { bicCentralResolveInicioParaExibicao, bicCentralSincronizarRotuloMeses, bicCentralValorAReceberAgregado } from "@/services/bicLeituraCentralCooperado";
 import {
   buildCooperadoFinanceiroUiSnapshot,
@@ -90,7 +91,8 @@ export function cooperadoMotorRevisionOperacional(
   }
 
   chunks.sort();
-  return chunks.join("|");
+  const hbDescontosRev = getContaCoopDescontosRevision();
+  return `${chunks.join("|")}|hbDescontosRev:${hbDescontosRev}`;
 }
 
 export function resolverInicioCardMotorFromAppData(

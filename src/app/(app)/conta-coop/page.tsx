@@ -384,7 +384,8 @@ function ContaCoopContent() {
   }, [tab, cnpj, loadPinAndPixRequests]);
 
   useEffect(() => {
-    if (tab !== "limites" || !cnpj || !user?.cooperativaId || !cooperadoIdsAtivos.length) return;
+    if (tab !== "limites" && tab !== "painel") return;
+    if (!cnpj || !user?.cooperativaId || !cooperadoIdsAtivos.length) return;
     const timer = window.setTimeout(() => void syncLimitesComFicha({ background: true }), 2_000);
     return () => window.clearTimeout(timer);
   }, [tab, cnpj, user?.cooperativaId, cooperadoIdsKey, syncLimitesComFicha, cooperadoIdsAtivos.length]);
@@ -406,6 +407,7 @@ function ContaCoopContent() {
         creditosBaseCents: creditosBaseColetivo,
       });
       await reload();
+      await syncLimitesComFicha({ background: true });
     } catch (e) {
       setError(e instanceof Error ? e.message : "Erro ao salvar teto.");
     } finally {
@@ -426,6 +428,7 @@ function ContaCoopContent() {
         creditosBaseCents: creditosBaseColetivo,
       });
       await reload();
+      await syncLimitesComFicha({ background: true });
     } catch (e) {
       setError(e instanceof Error ? e.message : "Erro ao liberar limite.");
     } finally {
@@ -477,6 +480,7 @@ function ContaCoopContent() {
       });
       setPreviewColetivo(null);
       await reload();
+      await syncLimitesComFicha({ background: true });
     } catch (e) {
       setError(e instanceof Error ? e.message : "Erro ao liberar limites.");
     } finally {

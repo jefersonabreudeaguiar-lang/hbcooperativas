@@ -10,6 +10,7 @@ import {
   type InicioCardLatchState,
   type InicioCardMotorSnapshot,
 } from "@/lib/cooperadoInicioCardPolicy";
+import { useContaCoopDescontosRevision } from "@/hooks/useContaCoopDescontosRevision";
 import {
   INICIO_CARD_STORAGE_VERSION,
   gravarInicioCardPersistidoFlex,
@@ -60,6 +61,8 @@ export function useCooperadoInicioValorReceberCardState(input: {
     );
   }, [input.cooperadoId, input.cooperativaId, bootPersistido]);
 
+  const hbDescontosRevision = useContaCoopDescontosRevision();
+
   const carregandoFinanceiro =
     Boolean(input.carregandoValoresFinanceiros) ||
     Boolean(input.syncing) ||
@@ -87,6 +90,7 @@ export function useCooperadoInicioValorReceberCardState(input: {
     input.carregandoValoresFinanceiros,
     carregandoFinanceiro,
     persistido,
+    hbDescontosRevision,
   ]);
 
   latchRef.current = resolved.latch;

@@ -294,19 +294,21 @@ export async function refreshContaCoopValorReceberPilot(
 export async function refreshContaCoopValorReceberAfterHbTransaction(
   opts: SyncContaCoopValorReceberOpts
 ): Promise<{ descontos: DescontoContaCoopRemoto[] }> {
-  const { changed, financeChanged, descontos, data } = await applyLocalContaCoopDescontosRefresh({
+  /** Servidor já projetou contaCoopDescontos no operacional (authorize) — só puxar ficha e atualizar local. */
+  const { changed, financeChanged, descontos } = await applyLocalContaCoopDescontosRefresh({
     ...opts,
-    pushCloud: true,
+    pushCloud: false,
   });
-  if (changed || financeChanged) {
-    await pushOperacionalToCloud(opts.cnpj, data, opts.cooperativaId).catch(() => {});
-  }
   await refreshContaCoopLimiteFromFicha({
     cnpj: opts.cnpj,
     cooperadoId: opts.cooperadoId,
     cooperativaId: opts.cooperativaId,
     cooperadoNome: opts.cooperadoNome,
   }).catch(() => {});
+  if (financeChanged && !changed) {
+    bumpContaCoopDescontosRevision();
+    notifyAppDataSubscribers();
+  }
   return { descontos };
 }
 

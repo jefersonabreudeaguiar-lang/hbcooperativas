@@ -1148,7 +1148,7 @@ export async function getLimiteCooperadoAlinhadoAEntregas(
   supabase: SupabaseClient,
   cnpj: string,
   cooperadoId: string,
-  opts?: { resyncIfInflated?: boolean; actorUserId?: string }
+  opts?: { resyncIfInflated?: boolean; awaitResync?: boolean; actorUserId?: string }
 ): Promise<ContaCoopLimiteCooperado | null> {
   const limite = await getLimiteCooperado(supabase, cnpj, cooperadoId);
   if (!limite) return null;
@@ -1161,18 +1161,32 @@ export async function getLimiteCooperadoAlinhadoAEntregas(
   const tetoPercent = teto.configured ? teto.percent : 0;
   const capped = capContaCoopLimiteToAuthoritativeBase(limite, creditoBaseCents, tetoPercent);
 
-  if (
+  const inflated =
     opts?.resyncIfInflated &&
     capped.limiteLiberadoCents < limite.limiteLiberadoCents &&
-    opts.actorUserId
-  ) {
-    void syncLimitesCooperadosFromCreditoBase(
+    opts.actorUserId;
+
+  if (inflated) {
+    const syncPromise = syncLimitesCooperadosFromCreditoBase(
       supabase,
       cnpj,
       [cooperadoId],
       { [cooperadoId]: creditoBaseCents },
-      opts.actorUserId
-    ).catch(() => {});
+      opts.actorUserId!
+    );
+    if (opts.awaitResync) {
+      try {
+        await syncPromise;
+      } catch {
+        /* exibe cap enquanto re-sync falha */
+      }
+      return getLimiteCooperadoAlinhadoAEntregas(supabase, cnpj, cooperadoId, {
+        resyncIfInflated: false,
+        awaitResync: false,
+        actorUserId: opts.actorUserId,
+      });
+    }
+    void syncPromise.catch(() => {});
   }
 
   return capped;

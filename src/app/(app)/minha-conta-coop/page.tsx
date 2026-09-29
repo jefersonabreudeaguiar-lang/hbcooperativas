@@ -40,6 +40,10 @@ import { useSyncContaCoopLimiteFromFicha } from "@/hooks/useSyncContaCoopLimiteF
 import { PageSkeleton } from "@/components/ui/PageSkeleton";
 import { cn } from "@/utils/format";
 
+function sleepMs(ms: number): Promise<void> {
+  return new Promise((r) => setTimeout(r, ms));
+}
+
 type Tab = "inicio" | "pagar" | "extrato";
 
 export default function MinhaContaCoopPage() {
@@ -92,9 +96,9 @@ function MinhaContaCoopContent() {
   const [auxSyncEnabled, setAuxSyncEnabled] = useState(false);
   const auxEntrySignaledRef = useRef(false);
 
-  /** Sync-limite na nuvem só depois da UI montada (evita travar navegação Início ↔ HB). */
-  const LIMITE_SYNC_DEFER_MS = 10_000;
-  const VALOR_RECEBER_SYNC_DEFER_MS = 4_000;
+  /** Sync-limite na nuvem após conta carregar — alinhado ao BIC sem bloquear a abertura. */
+  const LIMITE_SYNC_DEFER_MS = 2_000;
+  const VALOR_RECEBER_SYNC_DEFER_MS = 1_500;
 
   const cnpj = useMemo(() => {
     if (!user || !data) return "";
@@ -327,13 +331,21 @@ function MinhaContaCoopContent() {
         idempotencyKey: `pay:${pendingIntent.intent.id}:${cooperadoId}`,
         useCashback,
       });
-      setSuccess(`Pagamento aprovado! Comprovante ${res.receiptCode}`);
+      setSuccess(
+        res.syncContaCoop === "pending"
+          ? `Pagamento aprovado! Comprovante ${res.receiptCode}. O valor a receber pode levar alguns instantes para atualizar.`
+          : `Pagamento aprovado! Comprovante ${res.receiptCode}`
+      );
       setPendingIntent(null);
       setQrInput("");
       setPayPin("");
       setUseCashback(false);
       handleTabChange("extrato");
-      await reload();
+      await reload({ background: false });
+      if (res.syncContaCoop === "pending") {
+        await sleepMs(400);
+        await reload({ background: true });
+      }
     } catch (e) {
       setError(e instanceof Error ? e.message : "Pagamento recusado.");
     } finally {
@@ -515,8 +527,18 @@ function MinhaContaCoopContent() {
               </div>
               <div className="rounded-lg bg-white/80 p-2.5 text-sm">
                 <div className="flex justify-between py-1">
+                  <span className="text-gray-600">Mercado parceiro</span>
+                  <span className="font-medium text-right">{pendingIntent.parceiroNome}</span>
+                </div>
+                <div className="flex justify-between py-1">
                   <span className="text-gray-600">Valor da compra</span>
                   <span className="font-medium">{formatCentsBRL(pendingIntent.intent.amountCents)}</span>
+                </div>
+                <div className="flex justify-between py-1 text-xs text-gray-500">
+                  <span>Código da cobrança</span>
+                  <span className="font-mono truncate max-w-[55%] text-right" title={pendingIntent.intent.id}>
+                    {pendingIntent.intent.id.slice(-12)}
+                  </span>
                 </div>
                 <div className="flex justify-between py-1">
                   <span className="text-gray-600">Crédito disponível</span>
