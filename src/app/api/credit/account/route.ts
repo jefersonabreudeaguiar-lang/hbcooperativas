@@ -36,9 +36,10 @@ export async function GET(request: Request) {
   }
 
   const actorId = gate.ctx.session?.sub ?? cooperadoId;
+  /** Não bloquear a abertura: exibe cap imediato e re-sync inflado em background (POST sync-limite). */
   const limite = await getLimiteCooperadoAlinhadoAEntregas(gate.ctx.supabase, cnpj, cooperadoId, {
     resyncIfInflated: true,
-    awaitResync: true,
+    awaitResync: false,
     actorUserId: actorId,
   });
   const pinResetPending = await hasPendingCooperadoPinResetRequest(

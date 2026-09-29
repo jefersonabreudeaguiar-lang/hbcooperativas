@@ -49,7 +49,7 @@ type Tab = "inicio" | "pagar" | "extrato";
 export default function MinhaContaCoopPage() {
   return (
     <CreditFeatureGate>
-      <CloudSessionGate>
+      <CloudSessionGate optimistic>
         <MinhaContaCoopContent />
       </CloudSessionGate>
     </CreditFeatureGate>

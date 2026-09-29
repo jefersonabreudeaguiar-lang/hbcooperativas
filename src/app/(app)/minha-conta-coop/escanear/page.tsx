@@ -12,7 +12,7 @@ import { storeHbCreditScanResult } from "@/lib/hb-credit/scanSession";
 export default function EscanearQrContaCoopPage() {
   return (
     <CreditFeatureGate>
-      <CloudSessionGate>
+      <CloudSessionGate optimistic>
         <EscanearQrContent />
       </CloudSessionGate>
     </CreditFeatureGate>
