@@ -67,8 +67,8 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <script dangerouslySetInnerHTML={{ __html: buildInlineDeploymentBootScript(pageRelease) }} />
       </head>
       <body className="min-h-full antialiased">
-        <ClientDeploymentGuard />
         <AuthProvider>
+          <ClientDeploymentGuard />
           {children}
           <PwaProvider />
         </AuthProvider>
