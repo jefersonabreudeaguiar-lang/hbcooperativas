@@ -2,12 +2,15 @@
 
 import { useEffect, useState } from "react";
 import { isHbCreditEnabledClient } from "@/modules/hb-credit/config";
+import { isHbCreditCooperadoNavEligible } from "@/permissions";
 
 export type HbCreditFlagStatus = "loading" | "enabled" | "disabled" | "error";
 
 export interface HbCreditFlagState {
-  /** Módulo habilitado e confirmado pelo servidor — use para menu e gates. */
+  /** Módulo habilitado e confirmado pelo servidor — APIs e painel da diretoria. */
   enabled: boolean;
+  /** Menu / atalhos cooperado — inclui UI pública antes do status remoto. */
+  navEnabled: boolean;
   status: HbCreditFlagStatus;
   loading: boolean;
   clientFlag: boolean;
@@ -27,7 +30,10 @@ function readCachedHbCreditStatus(): boolean | null {
     const parsed = JSON.parse(raw) as { enabled?: boolean; at?: number };
     if (!parsed.at || Date.now() - parsed.at > STATUS_CACHE_TTL_MS) return null;
     if (parsed.enabled === true) return true;
-    if (parsed.enabled === false) return false;
+    if (parsed.enabled === false) {
+      if (isHbCreditEnabledClient()) return null;
+      return false;
+    }
     return null;
   } catch {
     return null;
@@ -103,7 +109,9 @@ function ensureHbCreditStatusFetch() {
   return statusFetchInFlight;
 }
 
-export function useHbCreditEnabled(): HbCreditFlagState {
+export function useHbCreditEnabled(
+  user?: Pick<import("@/types").User, "role" | "cooperadoId"> | null
+): HbCreditFlagState {
   const clientFlag = isHbCreditEnabledClient();
   const [, bump] = useState(0);
 
@@ -133,11 +141,16 @@ export function useHbCreditEnabled(): HbCreditFlagState {
     status = "disabled";
   }
 
-  /** Visibilidade exige confirmação explícita do servidor — fail-closed. */
+  /** Operações exigem confirmação explícita do servidor — fail-closed. */
   const enabled = status === "enabled";
+  const cooperadoNavEligible = user
+    ? isHbCreditCooperadoNavEligible(user, status, serverEnabled === true)
+    : false;
+  const navEnabled = enabled || cooperadoNavEligible;
 
   return {
     enabled,
+    navEnabled,
     status,
     loading: status === "loading",
     clientFlag,
@@ -147,4 +160,4 @@ export function useHbCreditEnabled(): HbCreditFlagState {
 }
 
 /** Menu HB Créditos: reexporta regra central de permissions. */
-export { isHbCreditNavVisible } from "@/permissions";
+export { isHbCreditCooperadoNavEligible, isHbCreditNavVisible } from "@/permissions";

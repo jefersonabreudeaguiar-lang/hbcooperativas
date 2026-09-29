@@ -1,7 +1,7 @@
 import type { Action, AppData, ModoAcesso, Resource, User, UserRole } from "@/types";
 import { canAccessPainelResponsavel } from "@/lib/security/responsavelPanelAccess";
 export { canAccessPainelResponsavel } from "@/lib/security/responsavelPanelAccess";
-import { filterContaCoopNavItems } from "@/utils/contaCoopUiVisibility";
+import { filterContaCoopNavItems, isContaCoopUiPublic } from "@/utils/contaCoopUiVisibility";
 
 type PermissionMatrix = Record<UserRole, Partial<Record<Resource, Action[]>>>;
 
@@ -397,27 +397,52 @@ function filterMenuForUser(
   return items.filter((item) => canUser(user, item.resource, "view") || item.href === "/meu-cadastro");
 }
 
+/** Cooperado: HB Créditos no menu para todos quando a UI pública está ativa (não depende só do fetch /api/credit/status). */
+export function isHbCreditCooperadoNavEligible(
+  user: Pick<User, "role" | "cooperadoId">,
+  creditStatus: "loading" | "enabled" | "disabled" | "error",
+  serverConfirmed: boolean
+): boolean {
+  if (!isContaCoopUiPublic()) return false;
+  if (!isCooperadoAppUser(user)) return false;
+  if (creditStatus === "disabled") return false;
+  return serverConfirmed || creditStatus === "loading" || creditStatus === "error" || creditStatus === "enabled";
+}
+
+/** HB Créditos no menu do cooperado — todos com perfil cooperado quando UI pública. */
+export function canViewHbCreditMenu(user: PermissionSubject): boolean {
+  const role = normalizeUserRole(user.role);
+  if (role === "cooperado" && isContaCoopUiPublic()) return true;
+  return canUser(user, "conta_coop", "view");
+}
+
 /** Menu HB Créditos: módulo confirmado + perfil autorizado + visibilidade de homologação. */
 export function isHbCreditNavVisible(
   creditEnabled: boolean,
   canViewContaCoop: boolean,
-  contaCoopUiVisible = false
+  contaCoopUiVisible = false,
+  cooperadoNavEligible = false
 ): boolean {
-  return creditEnabled && canViewContaCoop && contaCoopUiVisible;
+  if (!contaCoopUiVisible || !canViewContaCoop) return false;
+  if (cooperadoNavEligible) return true;
+  return creditEnabled;
 }
 
 export function appendHbCreditMenuItem(
   items: { href: string; label: string; resource: Resource }[],
   user: PermissionSubject,
   creditEnabled: boolean,
-  contaCoopUiVisible = false
+  contaCoopUiVisible = false,
+  cooperadoNavEligible = false
 ): { href: string; label: string; resource: Resource }[] {
-  const extra = CREDIT_MENU_BY_ROLE[user.role];
+  const role = normalizeUserRole(user.role);
+  const extra = CREDIT_MENU_BY_ROLE[role];
   if (
     !isHbCreditNavVisible(
       creditEnabled,
-      Boolean(extra && canUser(user, extra.resource, "view")),
-      contaCoopUiVisible
+      Boolean(extra && canViewHbCreditMenu(user)),
+      contaCoopUiVisible,
+      cooperadoNavEligible
     )
   ) {
     return items;
@@ -430,7 +455,8 @@ export function getMenuItems(
   user: PermissionSubject,
   creditEnabled = false,
   contaCoopUiVisible = false,
-  data?: AppData | null
+  data?: AppData | null,
+  cooperadoNavEligible = false
 ): { href: string; label: string; resource: Resource }[] {
   const navSubject = user as Pick<User, "id" | "email" | "role" | "cooperadoId" | "cooperativaId" | "active">;
   const effectiveRole = resolveAppUserRole(navSubject, data);
@@ -442,11 +468,17 @@ export function getMenuItems(
 
   if (effectiveRole === "contador") {
     const menu = filterContaCoopNavItems(CONTADOR_MENU, contaCoopUiVisible);
-    return appendHbCreditMenuItem(filterMenuForUser(menu, navUser), navUser, creditEnabled, contaCoopUiVisible);
+    return appendHbCreditMenuItem(filterMenuForUser(menu, navUser), navUser, creditEnabled, contaCoopUiVisible, cooperadoNavEligible);
   }
 
   if (effectiveRole === "cooperado") {
-    return appendHbCreditMenuItem(filterMenuForUser(COOPERADO_MENU, navUser), navUser, creditEnabled, contaCoopUiVisible);
+    return appendHbCreditMenuItem(
+      filterMenuForUser(COOPERADO_MENU, navUser),
+      navUser,
+      creditEnabled,
+      contaCoopUiVisible,
+      cooperadoNavEligible
+    );
   }
 
   if (isCooperativePlatformAdminRole(user.role)) {
@@ -459,25 +491,27 @@ export function getMenuItems(
     source = DIRETORIA_MENU.filter((i) => RESPONSAVEL_HREFS.includes(i.href));
   }
 
-  return appendHbCreditMenuItem(filterMenuForUser(source, user), user, creditEnabled, contaCoopUiVisible);
+  return appendHbCreditMenuItem(filterMenuForUser(source, user), user, creditEnabled, contaCoopUiVisible, cooperadoNavEligible);
 }
 
 export function getCooperadoDrawerMenuItems(
   user: PermissionSubject,
   creditEnabled = false,
   contaCoopUiVisible = false,
-  data?: AppData | null
+  data?: AppData | null,
+  cooperadoNavEligible = false
 ): { href: string; label: string; resource: Resource }[] {
   const navSubject = user as Pick<User, "id" | "email" | "role" | "cooperadoId" | "cooperativaId" | "active">;
   if (!isCooperadoAppUser(navSubject) && resolveAppUserRole(navSubject, data) !== "cooperado") {
-    return getMenuItems(user, creditEnabled, contaCoopUiVisible, data);
+    return getMenuItems(user, creditEnabled, contaCoopUiVisible, data, cooperadoNavEligible);
   }
   const navUser = { ...user, role: "cooperado" as UserRole };
   return appendHbCreditMenuItem(
     filterMenuForUser(COOPERADO_DRAWER_MENU, navUser),
     navUser,
     creditEnabled,
-    contaCoopUiVisible
+    contaCoopUiVisible,
+    cooperadoNavEligible
   );
 }
 
@@ -497,7 +531,8 @@ export function getMobileNavItems(
   user: PermissionSubject,
   creditEnabled = false,
   contaCoopUiVisible = false,
-  data?: AppData | null
+  data?: AppData | null,
+  cooperadoNavEligible = false
 ): { href: string; label: string; resource: Resource }[] {
   const navSubject = user as Pick<User, "id" | "email" | "role" | "cooperadoId" | "cooperativaId" | "active">;
   const effectiveRole = resolveAppUserRole(navSubject, data);
@@ -507,7 +542,13 @@ export function getMobileNavItems(
     const baseItems = COOPERADO_MENU.filter((i) =>
       COOPERADO_MOBILE_NAV_HREFS.includes(i.href)
     );
-    return appendHbCreditMenuItem(filterMenuForUser(baseItems, navUser), navUser, creditEnabled, contaCoopUiVisible);
+    return appendHbCreditMenuItem(
+      filterMenuForUser(baseItems, navUser),
+      navUser,
+      creditEnabled,
+      contaCoopUiVisible,
+      cooperadoNavEligible
+    );
   }
 
   if (isResponsavelRole(effectiveRole)) {
