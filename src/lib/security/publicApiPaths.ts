@@ -10,6 +10,7 @@
  * | auth/* | Login, cadastro, sessão, reset senha |
  * | cooperativas POST/lookup/status/verify | Cadastro cooperativa (sem listar membros) |
  * | credit/status | Feature flag HB (sem dados financeiros) |
+ * | client-release | Metadados build/deployment (PWA anti-rollback) |
  * | webhooks/asaas | Webhook assinado no handler |
  * | cron/* | CRON_SECRET no handler |
  */
@@ -18,6 +19,7 @@ export function isPublicApiRoute(pathname: string, method: string): boolean {
 
   if (pathname === "/api/cooperativas" && m === "POST") return true;
   if (pathname === "/api/credit/status" && m === "GET") return true;
+  if (pathname === "/api/client-release" && m === "GET") return true;
 
   /** Webhook Asaas — auth no handler (asaas-access-token). */
   if (pathname === "/api/webhooks/asaas" && m === "POST") return true;
