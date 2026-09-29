@@ -3,6 +3,8 @@ import { APP_BUILD_VERSION } from "@/lib/appBuildVersion";
 /** Persistido após confirmar que o bundle carregado bate com o release oficial. */
 export const DEPLOYMENT_SEEN_KEY = "hb-coop-app-deployment-seen";
 export const BUILD_SEEN_KEY = "hb-coop-app-build-seen";
+/** Evita loop infinito de reload quando CDN/HTML demoram a alinhar. */
+export const RELOAD_BURST_KEY = "hb-coop-release-reload-burst";
 
 /**
  * Deployments com UI cooperado legada (recibo 123,42 / assinar recibo).
@@ -44,14 +46,6 @@ export function getHtmlEmbeddedDeploymentId(): string {
   return (document.documentElement.getAttribute("data-dpl-id") ?? "").trim();
 }
 
-export function getHtmlEmbeddedAppBuild(): number | null {
-  if (typeof document === "undefined") return null;
-  const raw = (document.documentElement.getAttribute("data-app-build") ?? "").trim();
-  if (!raw) return null;
-  const n = parseInt(raw, 10);
-  return Number.isFinite(n) ? n : null;
-}
-
 export type DeploymentGuardDecision =
   | { action: "ok"; reason: string }
   | { action: "pending"; reason: string }
@@ -65,13 +59,12 @@ function hasBlockedDeployment(ids: string[]): string | null {
 }
 
 /**
- * Se o HTML/JS carregado pertence a outro deployment Vercel que o release atual, força reload.
- * Não apaga AppData — só substitui o runtime.
+ * Se chunks carregados ≠ release oficial (ou blocklist), força reload.
+ * Quando os scripts já batem com /api/client-release, considera OK — não exige localStorage atualizado.
  */
 export function evaluateDeploymentGuard(input: {
   official: ClientReleaseInfo;
   loadedDeploymentIds: string[];
-  previouslySeenDeploymentId: string | null;
   htmlDeploymentId?: string | null;
 }): DeploymentGuardDecision {
   const officialId = input.official.deploymentId;
@@ -95,61 +88,44 @@ export function evaluateDeploymentGuard(input: {
   }
 
   const allMatchOfficial = loaded.every((id) => id === officialId);
-  if (!allMatchOfficial) {
-    return {
-      action: "reload",
-      reason: `loaded_dpl_mismatch:${loaded.join(",")}!=${officialId}`,
-    };
+  if (allMatchOfficial) {
+    return { action: "ok", reason: "deployment_aligned" };
   }
 
-  if (htmlDpl && htmlDpl !== officialId) {
-    return {
-      action: "reload",
-      reason: `html_dpl_stale:${htmlDpl}!=${officialId}`,
-    };
-  }
-
-  if (
-    input.previouslySeenDeploymentId &&
-    input.previouslySeenDeploymentId !== officialId
-  ) {
-    return {
-      action: "reload",
-      reason: `seen_deployment_changed:${input.previouslySeenDeploymentId}->${officialId}`,
-    };
-  }
-
-  return { action: "ok", reason: "deployment_aligned" };
+  return {
+    action: "reload",
+    reason: `loaded_dpl_mismatch:${loaded.join(",")}!=${officialId}`,
+  };
 }
 
-export function evaluateBuildGuard(input: {
-  officialBuild: number;
-  htmlBuild: number | null;
-  previouslySeenBuild: string | null;
-}): DeploymentGuardDecision {
-  if (input.previouslySeenBuild != null && input.previouslySeenBuild !== String(input.officialBuild)) {
-    return {
-      action: "reload",
-      reason: `build_changed:${input.previouslySeenBuild}->${input.officialBuild}`,
-    };
+const MAX_RELOADS_PER_MINUTE = 3;
+
+/** Retorna false se já houve recargas demais — evita tela piscando para sempre. */
+export function shouldAllowHardReload(reason: string): boolean {
+  if (typeof sessionStorage === "undefined") return true;
+  try {
+    const raw = sessionStorage.getItem(RELOAD_BURST_KEY);
+    const now = Date.now();
+    let entries: { t: number; r: string }[] = raw ? (JSON.parse(raw) as { t: number; r: string }[]) : [];
+    entries = entries.filter((e) => now - e.t < 60_000);
+    if (entries.length >= MAX_RELOADS_PER_MINUTE) return false;
+    entries.push({ t: now, r: reason });
+    sessionStorage.setItem(RELOAD_BURST_KEY, JSON.stringify(entries));
+    return true;
+  } catch {
+    return true;
   }
-  if (input.htmlBuild != null && input.htmlBuild !== input.officialBuild) {
-    return {
-      action: "reload",
-      reason: `html_build_stale:${input.htmlBuild}!=${input.officialBuild}`,
-    };
-  }
-  return { action: "ok", reason: "build_aligned" };
 }
 
-export function hardReloadForNewRelease(): void {
+export function hardReloadForNewRelease(reason = "guard"): void {
+  if (!shouldAllowHardReload(reason)) return;
   const url = new URL(window.location.href);
   url.searchParams.set("_hbRelease", String(Date.now()));
   window.location.replace(url.toString());
 }
 
-/** Script inline no <head> — roda antes do React; tira mobile do dpl_Eoe9… */
+/** Script inline no <head> — bloqueia dpl_Eoe9 e chunks ≠ release oficial. */
 export function buildInlineDeploymentBootScript(): string {
   const blockedJson = JSON.stringify([...BLOCKED_VERCEL_DEPLOYMENT_IDS]);
-  return `(function(){var BLOCK=${blockedJson};function collect(){var ids=[];var seen={};document.querySelectorAll('script[src*="dpl="],link[href*="dpl="]').forEach(function(el){var u=el.src||el.href||"";var m=u.match(/[?&]dpl=([^&]+)/);if(m&&m[1]&&!seen[m[1]]){seen[m[1]]=1;ids.push(m[1]);}});return ids;}function blocked(ids){for(var i=0;i<ids.length;i++){if(BLOCK.indexOf(ids[i])>=0)return ids[i];}return null;}function reload(reason){try{sessionStorage.setItem("hb-coop-last-release-reload",reason||"boot");}catch(e){}var u=new URL(location.href);u.searchParams.set("_hbRelease",String(Date.now()));location.replace(u.toString());}function checkLoaded(officialId,officialBuild){var htmlDpl=(document.documentElement.getAttribute("data-dpl-id")||"").trim();var htmlBuild=parseInt(document.documentElement.getAttribute("data-app-build")||"",10);var ids=collect();var b=blocked(ids)||(htmlDpl&&blocked([htmlDpl]));if(b){if("serviceWorker" in navigator){navigator.serviceWorker.getRegistrations().then(function(regs){regs.forEach(function(r){r.unregister();});});}return reload("blocked:"+b);}if(officialId&&ids.length){for(var j=0;j<ids.length;j++){if(ids[j]!==officialId)return reload("api_mismatch:"+ids[j]);}}if(officialId&&htmlDpl&&htmlDpl!==officialId)return reload("html_api:"+htmlDpl);if(officialBuild&&ids.length===0&&Number.isFinite(htmlBuild)&&htmlBuild!==officialBuild)return reload("html_build:"+htmlBuild);}var attempts=0;var poll=setInterval(function(){attempts++;var ids=collect();if(ids.length||attempts>=16){clearInterval(poll);fetch("/api/client-release",{cache:"no-store",credentials:"same-origin"}).then(function(r){return r.ok?r.json():null;}).then(function(j){if(!j)return;var officialId=(j.deploymentId||"").trim();var officialBuild=typeof j.build==="number"?j.build:0;checkLoaded(officialId,officialBuild);}).catch(function(){});}},400);fetch("/api/client-release",{cache:"no-store",credentials:"same-origin"}).then(function(r){return r.ok?r.json():null;}).then(function(j){if(!j)return;var officialId=(j.deploymentId||"").trim();var officialBuild=typeof j.build==="number"?j.build:0;checkLoaded(officialId,officialBuild);}).catch(function(){});})();`;
+  return `(function(){var BLOCK=${blockedJson};var BURST_KEY=${JSON.stringify(RELOAD_BURST_KEY)};var MAX=${MAX_RELOADS_PER_MINUTE};function collect(){var ids=[];var seen={};document.querySelectorAll('script[src*="dpl="],link[href*="dpl="]').forEach(function(el){var u=el.src||el.href||"";var m=u.match(/[?&]dpl=([^&]+)/);if(m&&m[1]&&!seen[m[1]]){seen[m[1]]=1;ids.push(m[1]);}});return ids;}function blocked(ids){for(var i=0;i<ids.length;i++){if(BLOCK.indexOf(ids[i])>=0)return ids[i];}return null;}function allowReload(reason){try{var now=Date.now();var raw=sessionStorage.getItem(BURST_KEY);var entries=raw?JSON.parse(raw):[];entries=entries.filter(function(e){return now-e.t<60000;});if(entries.length>=MAX)return false;entries.push({t:now,r:reason});sessionStorage.setItem(BURST_KEY,JSON.stringify(entries));return true;}catch(e){return true;}}function reload(reason){if(!allowReload(reason||"boot"))return;try{sessionStorage.setItem("hb-coop-last-release-reload",reason||"boot");}catch(e){}var u=new URL(location.href);u.searchParams.set("_hbRelease",String(Date.now()));location.replace(u.toString());}function checkLoaded(officialId){var htmlDpl=(document.documentElement.getAttribute("data-dpl-id")||"").trim();var ids=collect();var b=blocked(ids)||(htmlDpl&&blocked([htmlDpl]));if(b){if("serviceWorker" in navigator){navigator.serviceWorker.getRegistrations().then(function(regs){regs.forEach(function(r){r.unregister();});});}return reload("blocked:"+b);}if(!officialId||!ids.length)return;for(var j=0;j<ids.length;j++){if(ids[j]!==officialId)return reload("api_mismatch:"+ids[j]);}}fetch("/api/client-release",{cache:"no-store",credentials:"same-origin"}).then(function(r){return r.ok?r.json():null;}).then(function(j){if(!j)return;var officialId=(j.deploymentId||"").trim();checkLoaded(officialId);setTimeout(function(){checkLoaded(officialId);},800);setTimeout(function(){checkLoaded(officialId);},2400);}).catch(function(){});})();`;
 }

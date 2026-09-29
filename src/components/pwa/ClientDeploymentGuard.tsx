@@ -1,20 +1,15 @@
 "use client";
 
 import { useEffect, useRef } from "react";
-import { APP_BUILD_VERSION } from "@/lib/appBuildVersion";
 import {
-  BUILD_SEEN_KEY,
-  DEPLOYMENT_SEEN_KEY,
   collectLoadedDeploymentIdsFromDom,
-  evaluateBuildGuard,
   evaluateDeploymentGuard,
-  getHtmlEmbeddedAppBuild,
   getHtmlEmbeddedDeploymentId,
   hardReloadForNewRelease,
 } from "@/lib/pwa/clientRelease";
 import { fetchOfficialClientRelease, markClientReleaseSeen } from "@/lib/pwa/fetchOfficialClientRelease";
 
-const RETRY_MS = [0, 400, 900, 1600, 2500, 4000, 6500, 10000];
+const RETRY_MS = [400, 900, 1600, 2500, 4000];
 
 /**
  * Impede permanência em chunks de deployment antigo (ex.: dpl_Eoe9… vs produção atual).
@@ -27,10 +22,10 @@ export function ClientDeploymentGuard() {
   useEffect(() => {
     if (typeof window === "undefined") return;
 
-    const triggerReload = () => {
+    const triggerReload = (reason: string) => {
       if (reloadTriggeredRef.current) return;
       reloadTriggeredRef.current = true;
-      hardReloadForNewRelease();
+      hardReloadForNewRelease(reason);
     };
 
     const run = async (): Promise<"done" | "retry"> => {
@@ -40,29 +35,15 @@ export function ClientDeploymentGuard() {
         const official = await fetchOfficialClientRelease();
         const loaded = collectLoadedDeploymentIdsFromDom();
         const htmlDpl = getHtmlEmbeddedDeploymentId();
-        const htmlBuild = getHtmlEmbeddedAppBuild();
-        const prevDep = localStorage.getItem(DEPLOYMENT_SEEN_KEY);
-        const prevBuild = localStorage.getItem(BUILD_SEEN_KEY);
-
-        const buildDecision = evaluateBuildGuard({
-          officialBuild: official.build,
-          htmlBuild,
-          previouslySeenBuild: prevBuild,
-        });
-        if (buildDecision.action === "reload") {
-          triggerReload();
-          return "done";
-        }
 
         const decision = evaluateDeploymentGuard({
           official,
           loadedDeploymentIds: loaded,
-          previouslySeenDeploymentId: prevDep,
           htmlDeploymentId: htmlDpl,
         });
 
         if (decision.action === "reload") {
-          triggerReload();
+          triggerReload(decision.reason);
           return "done";
         }
 
@@ -70,7 +51,7 @@ export function ClientDeploymentGuard() {
           return "retry";
         }
 
-        if (loaded.length > 0 && official.build === APP_BUILD_VERSION) {
+        if (loaded.length > 0) {
           markClientReleaseSeen(official);
         }
 
@@ -105,7 +86,7 @@ export function ClientDeploymentGuard() {
     document.addEventListener("visibilitychange", onVisible);
     const interval = window.setInterval(() => {
       if (!reloadTriggeredRef.current) void run();
-    }, 3 * 60 * 1000);
+    }, 5 * 60 * 1000);
 
     return () => {
       cancelled = true;

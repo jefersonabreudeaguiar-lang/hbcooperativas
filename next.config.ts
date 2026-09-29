@@ -77,10 +77,6 @@ const nextConfig: NextConfig = {
         headers: [{ key: "Cache-Control", value: "no-cache, no-store, must-revalidate" }],
       },
       {
-        source: "/((?!_next/static|_next/image|icons/|favicon.ico).*)",
-        headers: [{ key: "Cache-Control", value: "no-cache, must-revalidate" }],
-      },
-      {
         source: "/manifest.webmanifest",
         headers: [{ key: "Cache-Control", value: "no-cache, must-revalidate" }],
       },

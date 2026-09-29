@@ -23,14 +23,8 @@ export function AppUpdateBanner() {
     if (typeof window === "undefined" || !("serviceWorker" in navigator)) return;
 
     const seen = localStorage.getItem(BUILD_SEEN_KEY);
-    if (seen !== String(APP_BUILD_VERSION)) {
-      if (seen != null) {
-        if (autoUpdate) {
-          window.location.reload();
-          return;
-        }
-        setShow(true);
-      }
+    if (seen !== String(APP_BUILD_VERSION) && seen != null && !autoUpdate) {
+      setShow(true);
     }
 
     let reloaded = false;
