@@ -6,7 +6,6 @@ import { Button } from "@/components/ui/Button";
 import { APP_BUILD_VERSION } from "@/lib/appBuildVersion";
 import { useAuth } from "@/modules/auth/AuthProvider";
 import { BUILD_SEEN_KEY } from "@/lib/pwa/clientRelease";
-import { markClientReleaseSeen } from "@/lib/pwa/fetchOfficialClientRelease";
 
 function activateWaitingWorker(reg: ServiceWorkerRegistration) {
   const worker = reg.waiting ?? reg.installing;
@@ -27,11 +26,6 @@ export function AppUpdateBanner() {
     if (seen !== String(APP_BUILD_VERSION)) {
       if (seen != null) {
         if (autoUpdate) {
-          markClientReleaseSeen({
-            build: APP_BUILD_VERSION,
-            deploymentId: "",
-            gitCommitSha: "",
-          });
           window.location.reload();
           return;
         }

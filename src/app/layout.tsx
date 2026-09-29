@@ -5,11 +5,15 @@ import { AuthProvider } from "@/modules/auth/AuthProvider";
 import { PwaProvider } from "@/components/pwa/PwaProvider";
 import { ClientDeploymentGuard } from "@/components/pwa/ClientDeploymentGuard";
 import { getPrivateAppRobotsMetadata } from "@/lib/security/crawlerPolicy";
+import { APP_BUILD_VERSION } from "@/lib/appBuildVersion";
+import { buildInlineDeploymentBootScript } from "@/lib/pwa/clientRelease";
 
 const geist = Geist({
   variable: "--font-geist-sans",
   subsets: ["latin"],
 });
+
+const VERCEL_DEPLOYMENT_ID = (process.env.VERCEL_DEPLOYMENT_ID ?? "").trim();
 
 export const metadata: Metadata = {
   title: "HB Cooperativas — Gestão de Cooperativas",
@@ -44,11 +48,19 @@ export const viewport: Viewport = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="pt-BR" className={`${geist.variable} h-full`}>
+    <html
+      lang="pt-BR"
+      className={`${geist.variable} h-full`}
+      data-dpl-id={VERCEL_DEPLOYMENT_ID}
+      data-app-build={String(APP_BUILD_VERSION)}
+    >
+      <head>
+        <script dangerouslySetInnerHTML={{ __html: buildInlineDeploymentBootScript() }} />
+      </head>
       <body className="min-h-full antialiased">
+        <ClientDeploymentGuard />
         <AuthProvider>
           {children}
-          <ClientDeploymentGuard />
           <PwaProvider />
         </AuthProvider>
       </body>
