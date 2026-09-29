@@ -82,6 +82,14 @@ function mapPainelEstado(estado: EstadoQuantoVouReceberCooperado | string): Coop
   return "indeterminado";
 }
 
+/** Observabilidade UI: indeterminate (BIC shadow) → unknown no contrato do snapshot. */
+function tenantStatusObservabilidadeSnapshot(
+  fallbackReason: BicExibicaoFallbackReason
+): NonNullable<CooperadoFinanceiroUiSnapshot["observability"]["tenantStatus"]> {
+  const shadow = bicShadowTenantStatusFromValidation(fallbackReason);
+  return shadow === "indeterminate" ? "unknown" : shadow;
+}
+
 function aguardandoBicSnapshot(conferindo: boolean, painelEstado: CooperadoFinanceiroUiSnapshot["painelEstado"]): CooperadoFinanceiroUiSnapshot {
   return {
     status: "AGUARDANDO_BIC",
@@ -131,7 +139,7 @@ function inconsistenteBicSnapshot(
       fallback: true,
       fallbackReason,
       motorRevision,
-      tenantStatus: bicShadowTenantStatusFromValidation(fallbackReason),
+      tenantStatus: tenantStatusObservabilidadeSnapshot(fallbackReason),
     },
   };
 }
