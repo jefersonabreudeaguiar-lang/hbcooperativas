@@ -468,7 +468,7 @@ export function listMesesConciliacao(data: AppData): string[] {
 
 export function getDemonstrativoPagamentosMes(data: AppData, mesReferencia: string) {
   const pagamentos = data.pagamentosCooperado
-    .filter((p) => p.mesReferencia === mesReferencia)
+    .filter((p) => pagamentoCobreMesReferencia(p, mesReferencia))
     .sort((a, b) => new Date(b.pagoEm).getTime() - new Date(a.pagoEm).getTime());
 
   return pagamentos.map((p) => {

@@ -39,6 +39,13 @@ export function useHbCreditDescontosWarmup(user: Omit<User, "password"> | null) 
         return;
       }
       if (hbAccountGatePending) return;
+      if (
+        pathname.startsWith("/conta-coop") &&
+        current &&
+        (current.role === "responsavel" || current.role === "tesoureiro" || current.role === "admin")
+      ) {
+        return;
+      }
       const cid = getUserCooperativaId(current, getData());
       if (!cid) return;
       void resolveCooperativaCnpj(getData(), cid, current).then((cnpj) => {

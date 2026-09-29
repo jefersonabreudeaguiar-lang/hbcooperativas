@@ -26,6 +26,7 @@ import {
   refreshContaCoopLimiteCooperativaAtivos,
   refreshContaCoopLimiteFromFicha,
 } from "@/lib/hb-credit/syncContaCoopLimiteFromFicha";
+import { cooperadoMesQuitado } from "@/services/cooperadoEntregasService";
 import {
   coalesceContaCoopAuxSync,
   contaCoopAuxSyncKeyValorReceber,
@@ -212,6 +213,7 @@ export async function refreshContaCoopDescontosCooperativaPendentes(opts: {
   const jobs: Array<{ cooperadoId: string; mesReferencia: string }> = [];
   for (const c of cooperados) {
     for (const mesReferencia of hbCreditMesesReferenciaUnificados(data, c.id, opts.cooperativaId)) {
+      if (cooperadoMesQuitado(data, c.id, mesReferencia)) continue;
       jobs.push({ cooperadoId: c.id, mesReferencia });
     }
   }

@@ -257,6 +257,15 @@ export function filtrarResumosEntregasPendentes(
     .filter((r) => r.notas.length > 0);
 }
 
+/** Remove meses já quitados (PIX confirmado, sem débito) — Início, entregas e HB operacional. */
+export function filtrarResumosMesesNaoQuitados(
+  data: AppData,
+  cooperadoId: string,
+  resumos: ResumoMesEntregasCooperado[]
+): ResumoMesEntregasCooperado[] {
+  return resumos.filter((r) => !cooperadoMesQuitado(data, cooperadoId, r.mesReferencia));
+}
+
 function notasDoCooperado(data: AppData, cooperadoId: string, cooperativaId?: string): NotaPedido[] {
   return data.notasPedido
     .filter((n) => notaPertenceCooperado(data, n, cooperadoId, cooperativaId))

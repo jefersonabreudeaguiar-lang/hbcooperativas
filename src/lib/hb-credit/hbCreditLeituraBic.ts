@@ -69,6 +69,7 @@ export function hbCreditMesesReferenciaUnificados(
   }
 
   const abertos = [...meses]
+    .filter((mes) => !cooperadoMesQuitado(data, canonico, mes))
     .filter((mes) => !getPagamentoConfirmadoCooperadoMes(data, canonico, mes))
     .sort();
 

@@ -1249,7 +1249,7 @@ export default function FichaCorridaPage() {
   const reciboAtual = pagamentoConfirmado ?? pagamentoConfirmadoMes;
 
   const mesQuitadoCooperado =
-    isCooperado && cooperadoId && data ? cooperadoMesQuitado(data, cooperadoId, mesAtivo) : false;
+    data && cooperadoSelecionadoId ? cooperadoMesQuitado(data, cooperadoSelecionadoId, mesAtivo) : false;
   const exibirQuantoVouReceber =
     !isCooperado ||
     (!!data &&
@@ -1925,6 +1925,8 @@ export default function FichaCorridaPage() {
               {resumoExibicao &&
                 cooperadoSelecionadoId &&
                 coopCnpjResumo &&
+                !mesQuitadoCooperado &&
+                totalExibido > 0 &&
                 descontosExtrasCooperado.some((d) => d.tipo === "conta_coop") && (
                   <div className="-mt-4 mb-6">
                     <HistoricoHbCreditosResumo

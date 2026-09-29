@@ -348,7 +348,11 @@ export function cooperadoFinanceiroDesatualizado(
 ): boolean {
   const cnpj = cnpjFromCooperativaId(data, cooperativaId);
   if (cnpj.length === 14 && isOperacionalCloudAuthoritative(cnpj)) {
-    return cooperadoFinanceiroLocalAusente(data, cooperadoId, cooperativaId);
+    const sane = aplicarSanidadeFinanceiroCooperadoLocal(data, cooperadoId, cooperativaId);
+    return (
+      cooperadoFinanceiroLocalAusente(sane, cooperadoId, cooperativaId) ||
+      cooperadoFichaValoresDesalinhados(sane, cooperadoId, cooperativaId)
+    );
   }
   const sane = aplicarSanidadeFinanceiroCooperadoLocal(data, cooperadoId, cooperativaId);
   return (

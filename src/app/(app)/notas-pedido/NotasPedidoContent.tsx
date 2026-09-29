@@ -83,7 +83,7 @@ import {
 import { withConferenciaOperacionalPushScope } from "@/services/conferenciaOperacionalPushScope";
 import { getProdutosContrato } from "@/services/catalogoContratosService";
 import { listNotasFilaConferenciaResponsavel } from "@/services/responsavelPainelIndex";
-import { listarResumosMensaisEntregas, filtrarResumosEntregasPendentes } from "@/services/cooperadoEntregasService";
+import { listarResumosMensaisEntregas, filtrarResumosEntregasPendentes, filtrarResumosMesesNaoQuitados } from "@/services/cooperadoEntregasService";
 import {
   bicCentralListarResumosMensaisEntregas,
   bicCentralMesPrincipalQuantoVouReceber,
@@ -207,7 +207,7 @@ export default function NotasPedidoContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
 
-  const [statusFilter, setStatusFilter] = useState(isCooperado ? "" : "");
+  const [statusFilter, setStatusFilter] = useState(isCooperado ? "pendentes" : "");
   const filtroResponsavelIniciado = useRef(false);
   const [anexarModal, setAnexarModal] = useState(false);
   const [conferirModal, setConferirModal] = useState(false);
@@ -852,7 +852,11 @@ export default function NotasPedidoContent() {
 
   const resumosMensaisCooperado = useMemo(() => {
     if (!isCooperado || !data || !cooperadoId) return [];
-    const base = bicCentralListarResumosMensaisEntregas(data, cooperadoId, coopId);
+    const base = filtrarResumosMesesNaoQuitados(
+      data,
+      cooperadoId,
+      bicCentralListarResumosMensaisEntregas(data, cooperadoId, coopId)
+    );
     if (statusFilter === "pendentes") return filtrarResumosEntregasPendentes(base);
     if (!statusFilter) return base;
     return base
@@ -865,7 +869,11 @@ export default function NotasPedidoContent() {
 
   const resumosFichaCooperado = useMemo(() => {
     if (!isCooperado || !data || !cooperadoId) return [];
-    return bicCentralListarResumosMensaisEntregas(data, cooperadoId, coopId);
+    return filtrarResumosMesesNaoQuitados(
+      data,
+      cooperadoId,
+      bicCentralListarResumosMensaisEntregas(data, cooperadoId, coopId)
+    );
   }, [data, cooperadoId, coopId, isCooperado, hbDescontosRevision]);
 
   const nomeCooperadoExibicao = useMemo(() => {

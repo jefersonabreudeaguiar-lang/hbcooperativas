@@ -1583,6 +1583,9 @@ function statusFichaAposConferenciaNota(
   if (notaQuitadaPorPagamentoCooperativaRegistrado(data, nota, cooperadoId)) {
     return "pago";
   }
+  if (getPagamentoConfirmadoCooperadoMes(data, cooperadoId, nota.mesReferencia)) {
+    return "pago";
+  }
   if (nota.status === "pago") return "pendente";
   return "pendente";
 }

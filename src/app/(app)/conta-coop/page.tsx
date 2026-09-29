@@ -226,12 +226,7 @@ function ContaCoopContent() {
     setError("");
     try {
       const coopId = user?.cooperativaId ?? "";
-      const [dash] = await Promise.all([
-        fetchCreditDashboard(cnpj, creditosBaseColetivo),
-        cooperadoIdsAtivos.length && coopId
-          ? syncLimitesComFicha({ background: true })
-          : Promise.resolve([]),
-      ]);
+      const [dash] = await Promise.all([fetchCreditDashboard(cnpj, creditosBaseColetivo)]);
       setDashboard(dash);
       if (dash) gravarHbCreditDashboardPersistido(cnpj, dash);
       setLoading(false);
