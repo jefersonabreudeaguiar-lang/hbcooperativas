@@ -37,23 +37,29 @@ export async function GET(request: Request) {
     .split(",")
     .map((id) => id.trim())
     .filter(Boolean);
-  const { limites, creditosBaseCents, authoritativeError } = await listLimitesCooperadosAlinhadosComBase(
-    gate.ctx.supabase,
-    cnpj,
-    {
-      resyncIfInflated: resyncInflated,
-      persistFichaSync,
-      actorUserId: actorId,
-      fast,
-      authoritativeCooperadoIds: authoritativeCooperadoIds.length ? authoritativeCooperadoIds : undefined,
-    }
-  );
-  return NextResponse.json({
-    ok: true,
-    limites,
-    creditosBaseAuthoritativeCents: creditosBaseCents,
-    authoritativeError: authoritativeError ?? undefined,
-  });
+  try {
+    const { limites, creditosBaseCents, authoritativeError } = await listLimitesCooperadosAlinhadosComBase(
+      gate.ctx.supabase,
+      cnpj,
+      {
+        resyncIfInflated: resyncInflated,
+        persistFichaSync,
+        actorUserId: actorId,
+        fast,
+        authoritativeCooperadoIds: authoritativeCooperadoIds.length ? authoritativeCooperadoIds : undefined,
+      }
+    );
+    return NextResponse.json({
+      ok: true,
+      limites,
+      creditosBaseAuthoritativeCents: creditosBaseCents,
+      authoritativeError: authoritativeError ?? undefined,
+    });
+  } catch (e) {
+    console.error("[GET /api/credit/limites]", e);
+    const message = e instanceof Error ? e.message : "Erro ao carregar limites.";
+    return NextResponse.json({ ok: false, error: message }, { status: 503 });
+  }
 }
 
 export async function POST(request: Request) {

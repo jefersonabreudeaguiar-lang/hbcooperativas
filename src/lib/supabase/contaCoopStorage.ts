@@ -531,9 +531,9 @@ export async function listLimitesCooperadosAlinhadosComBase(
     actorUserId?: string;
     /** Só contas HB na nuvem — sem operacional/notas (resposta rápida). */
     fast?: boolean;
-    /** Reconcilia “usado” e persiste liberado = teto% × base (GET explícito ou pós-sync). */
+    /** Reconcilia “usado” e persiste liberado = teto% × base (somente com persist=1). */
     persistFichaSync?: boolean;
-    /** Alinha amount_used à ficha quitada (GET padrão; desligar só em fast). */
+    /** Força reconcile de usado (só quando persistFichaSync). */
     reconcileUsed?: boolean;
     /** Inclui bases autoritativas para todos os ativos (valor a receber na nuvem). */
     authoritativeCooperadoIds?: string[];
@@ -550,7 +550,8 @@ export async function listLimitesCooperadosAlinhadosComBase(
   }
 
   const persistFichaSync = opts?.persistFichaSync === true;
-  const reconcileUsed = !opts?.fast && opts?.reconcileUsed !== false;
+  /** Reconcile em lote só no sync explícito — GET leve evita timeout/resposta vazia. */
+  const reconcileUsed = persistFichaSync;
 
   const idsReconcile = [
     ...new Set([

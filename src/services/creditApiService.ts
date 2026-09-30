@@ -22,7 +22,23 @@ import { getData } from "@/services/dataStore";
 import { resolverCooperadoIdCanonico } from "@/services/cooperadoCloudService";
 
 async function parseJson<T>(res: Response): Promise<T & { error?: string }> {
-  const data = (await res.json()) as T & { error?: string };
+  const raw = await res.text();
+  if (!raw.trim()) {
+    if (!res.ok) {
+      throw new Error(mensagemErroAuthApi(res.status, undefined));
+    }
+    throw new Error(
+      "Resposta vazia do servidor. A operação pode ter demorado demais — tente de novo ou use «Atualizar limites»."
+    );
+  }
+  let data: T & { error?: string };
+  try {
+    data = JSON.parse(raw) as T & { error?: string };
+  } catch {
+    throw new Error(
+      "Resposta inválida do servidor. Tente de novo; se persistir, use «Atualizar limites»."
+    );
+  }
   if (!res.ok) {
     throw new Error(mensagemErroAuthApi(res.status, data.error));
   }

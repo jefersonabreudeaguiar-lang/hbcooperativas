@@ -538,9 +538,7 @@ function ContaCoopContent() {
       const ids = cooperadoIdsAtivosRef.current;
       const t0 = contaCoopPerfStart("GET /api/credit/limites");
       try {
-        const full = await fetchCreditLimites(cnpj, {
-          cooperadoIds: ids.length ? ids : undefined,
-        });
+        const full = await fetchCreditLimites(cnpj, { fast: true });
         applyLimitesFetchResult(full, ids);
       } catch (e) {
         setLimitesListaAviso(
