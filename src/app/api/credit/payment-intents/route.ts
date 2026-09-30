@@ -81,7 +81,8 @@ export async function POST(request: Request) {
       parsed.intentId,
       parsed.nonce,
       resolved.cooperadoId,
-      cnpj
+      cnpj,
+      { fast: true }
     );
     if (!result.ok) return NextResponse.json({ error: result.error }, { status: 400 });
     return NextResponse.json({

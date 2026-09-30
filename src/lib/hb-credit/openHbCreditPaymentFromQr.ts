@@ -1,29 +1,28 @@
 import type { AppRouterInstance } from "next/dist/shared/lib/app-router-context.shared-runtime";
-import { storeHbCreditPaymentDraft, type HbCreditPaymentDraft } from "@/lib/hb-credit/hbCreditPaymentDraft";
-import { validateCreditQr } from "@/services/creditApiService";
+import { parseHbCreditQrPayload } from "@/lib/hb-credit/hbCreditQrPayload";
+import { storeHbCreditPendingQrScan } from "@/lib/hb-credit/hbCreditPaymentDraft";
 
-export async function openHbCreditPaymentFromQr(
+export function openHbCreditPaymentFromQrScan(
   router: AppRouterInstance,
   opts: { cnpj: string; cooperadoId: string; qrPayload: string }
-): Promise<void> {
+): void {
   const payload = opts.qrPayload.trim();
   if (!payload || opts.cnpj.length !== 14 || !opts.cooperadoId) {
     throw new Error("Não foi possível ler o QR Code.");
   }
-
-  const res = await validateCreditQr(opts.cnpj, opts.cooperadoId, payload);
-  if (!res.intent || !res.limite || !res.parceiroNome) {
-    throw new Error("Cobrança inválida ou expirada.");
+  if (!parseHbCreditQrPayload(payload)) {
+    throw new Error("QR Code inválido.");
   }
 
-  const draft: HbCreditPaymentDraft = {
+  storeHbCreditPendingQrScan({
     v: 1,
     qrPayload: payload,
-    intent: res.intent,
-    parceiroNome: res.parceiroNome,
-    limite: res.limite,
+    cnpj: opts.cnpj,
+    cooperadoId: opts.cooperadoId,
     savedAt: new Date().toISOString(),
-  };
-  storeHbCreditPaymentDraft(draft);
+  });
   router.replace("/minha-conta-coop/pagar");
 }
+
+/** @deprecated use openHbCreditPaymentFromQrScan */
+export const openHbCreditPaymentFromQr = openHbCreditPaymentFromQrScan;

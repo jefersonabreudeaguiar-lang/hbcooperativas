@@ -92,21 +92,18 @@ export function resolveLimiteHbCooperadoEfetivo(
   if (base === 0) {
     effectiveReleased = Math.min(released, usado);
   } else {
-    const caps: number[] = [];
-    if (Number.isFinite(tetoPercent) && tetoPercent > 0 && tetoPercent <= 100) {
-      caps.push(calcLimiteFromPercentual(base, tetoPercent));
-    }
-    if (
+    const tetoPct =
+      Number.isFinite(tetoPercent) && tetoPercent > 0 && tetoPercent <= 100 ? tetoPercent : 100;
+    const libPct =
       liberacaoPercent != null &&
       Number.isFinite(liberacaoPercent) &&
       liberacaoPercent > 0 &&
       liberacaoPercent <= 100
-    ) {
-      caps.push(calcLimiteFromPercentual(base, liberacaoPercent));
-    }
-    if (caps.length) {
-      effectiveReleased = Math.min(released, ...caps);
-    }
+        ? liberacaoPercent
+        : tetoPct;
+    const releasePct = Math.min(tetoPct, libPct);
+    const capCents = calcLimiteFromPercentual(base, releasePct);
+    effectiveReleased = Math.min(released, capCents);
   }
 
   return {

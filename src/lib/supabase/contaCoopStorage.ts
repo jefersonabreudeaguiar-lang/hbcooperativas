@@ -50,6 +50,7 @@ import {
   type HbUtilizacaoResumoLancamento,
 } from "@/lib/hb-credit/utilizacaoResumo";
 import { dedupeDescontosContaCoopRemotos } from "@/lib/hb-credit/mergeFichaDescontos";
+import { buildHbCreditQrPayload, parseHbCreditQrPayload } from "@/lib/hb-credit/hbCreditQrPayload";
 import { decryptSensitiveField, encryptSensitiveField } from "@/lib/security/fieldCrypto";
 import {
   intentStatusFromDb,
@@ -101,37 +102,11 @@ function readStoredField(value: string | null | undefined): string | null {
 }
 
 export function buildQrPayload(intentId: string, nonce: string): string {
-  return `${"hb-credit"}://pay/${intentId}?nonce=${encodeURIComponent(nonce)}`;
+  return buildHbCreditQrPayload(intentId, nonce);
 }
 
 export function parseQrPayload(raw: string): { intentId: string; nonce: string } | null {
-  const trimmed = raw.replace(/\uFEFF/g, "").trim();
-  if (!trimmed) return null;
-  try {
-    if (trimmed.startsWith("{")) {
-      const json = JSON.parse(trimmed) as { scheme?: string; intentId?: string; nonce?: string };
-      if (json.scheme === "hb-credit" && json.intentId && json.nonce) {
-        return { intentId: json.intentId, nonce: decodeURIComponent(json.nonce) };
-      }
-    }
-
-    let urlLike = trimmed;
-    if (trimmed.startsWith("hb-credit://")) {
-      urlLike = trimmed.replace("hb-credit://", "https://credit.local/");
-    } else if (!trimmed.includes("://") && trimmed.includes("nonce=")) {
-      urlLike = `https://credit.local/${trimmed.replace(/^\/*/, "")}`;
-    }
-
-    const url = new URL(urlLike);
-    const parts = url.pathname.split("/").filter(Boolean);
-    const intentId = parts[parts.length - 1];
-    const nonceRaw = url.searchParams.get("nonce") ?? "";
-    const nonce = decodeURIComponent(nonceRaw);
-    if (!intentId || !nonce) return null;
-    return { intentId, nonce };
-  } catch {
-    return null;
-  }
+  return parseHbCreditQrPayload(raw);
 }
 
 const PIN_MAX_ATTEMPTS = 5;
@@ -201,8 +176,10 @@ async function persistCooperativaLiberacaoPercent(
   cnpj: string,
   percent: number,
   actorUserId: string
-): Promise<void> {
-  if (!Number.isFinite(percent) || percent < 0 || percent > 100) return;
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  if (!Number.isFinite(percent) || percent < 0 || percent > 100) {
+    return { ok: false, error: "Percentual de liberação inválido." };
+  }
   const digits = normalizeCnpj(cnpj);
   const { error } = await supabase
     .from("hb_credit_cooperative_caps")
@@ -212,9 +189,31 @@ async function persistCooperativaLiberacaoPercent(
       updated_at: new Date().toISOString(),
     })
     .eq("cooperative_cnpj", digits);
-  if (error && !/cooperativa_liberacao_percent/i.test(error.message ?? "")) {
-    throw error;
+  if (error) {
+    if (/cooperativa_liberacao_percent/i.test(error.message ?? "")) {
+      return {
+        ok: false,
+        error: "Migration HB (cooperativa_liberacao_percent) não aplicada na nuvem.",
+      };
+    }
+    return { ok: false, error: error.message };
   }
+  return { ok: true };
+}
+
+async function resolveCreditosBaseForLiberacaoColetiva(
+  supabase: SupabaseClient,
+  cnpj: string,
+  cooperadoIds: string[],
+  clientBases: Record<string, number>
+): Promise<Record<string, number>> {
+  const auth = await resolveAuthoritativeCreditBase(supabase, cnpj, cooperadoIds);
+  if (!auth.ok) return clientBases;
+  return pickCreditosBaseForLimitSync({
+    authoritative: auth.creditosBaseCents,
+    cooperadoIds,
+    clientPreview: clientBases,
+  }).creditosBaseCents;
 }
 
 /** @deprecated leitura legada — não usar para novas liberações */
@@ -301,17 +300,17 @@ export async function setTetoGlobalPercent(
     };
   }
 
+  /** Não altera cooperativa_liberacao_percent — liberação coletiva persiste o % de compra. */
   const row = {
     cooperative_cnpj: digits,
     global_credit_cap_percent: tetoPercent,
     global_credit_cap_cents: tetoCents,
-    cooperativa_liberacao_percent: tetoPercent,
     updated_by: actorUserId,
     updated_at: new Date().toISOString(),
   };
   const { error } = await supabase.from("hb_credit_cooperative_caps").upsert(row);
   if (error && /global_credit_cap_percent|cooperativa_liberacao_percent/i.test(error.message ?? "")) {
-    const { global_credit_cap_percent: _p, cooperativa_liberacao_percent: _l, ...legacyRow } = row;
+    const { global_credit_cap_percent: _p, ...legacyRow } = row;
     const retry = await supabase.from("hb_credit_cooperative_caps").upsert(legacyRow);
     if (retry.error) return { ok: false, error: retry.error.message };
   } else if (error) {
@@ -867,22 +866,31 @@ async function writeLimiteCooperadoCents(
   }
 
   const now = new Date().toISOString();
-  const { data, error } = await supabase
+  const upsertPayload: Record<string, unknown> = {
+    cooperative_cnpj: digits,
+    cooperado_id: cooperadoId,
+    limit_released_cents: novoLimiteCents,
+    financial_limit_cap_cents: novoLimiteCents,
+    amount_used_cents: usado,
+    status: existing?.status ?? "active",
+    updated_at: now,
+    updated_by: actorUserId,
+  };
+
+  let { data, error } = await supabase
     .from("hb_credit_accounts")
-    .upsert(
-      {
-        cooperative_cnpj: digits,
-        cooperado_id: cooperadoId,
-        limit_released_cents: novoLimiteCents,
-        amount_used_cents: usado,
-        status: existing?.status ?? "active",
-        updated_at: now,
-        updated_by: actorUserId,
-      },
-      { onConflict: "cooperative_cnpj,cooperado_id" }
-    )
+    .upsert(upsertPayload, { onConflict: "cooperative_cnpj,cooperado_id" })
     .select()
     .single();
+
+  if (error && /financial_limit_cap_cents/i.test(error.message ?? "")) {
+    const { financial_limit_cap_cents: _c, ...legacyPayload } = upsertPayload;
+    ({ data, error } = await supabase
+      .from("hb_credit_accounts")
+      .upsert(legacyPayload, { onConflict: "cooperative_cnpj,cooperado_id" })
+      .select()
+      .single());
+  }
 
   if (error) return { ok: false, error: error.message };
 
@@ -1061,6 +1069,10 @@ export async function syncLimiteCooperadoFromCreditoBase(
     (await getCooperativaLiberacaoPercentConfigured(supabase, cnpj)) ?? teto.percent;
 
   let novoLimiteCents = calcLimiteFromPercentual(base, releasePercent);
+  const tetoMaxCents = calcLimiteFromPercentual(base, teto.percent);
+  if (novoLimiteCents > tetoMaxCents) {
+    novoLimiteCents = tetoMaxCents;
+  }
   const { valorUsadoCents } = await readLimiteAtualCooperado(supabase, cnpj, cooperadoId);
   if (novoLimiteCents < valorUsadoCents) {
     novoLimiteCents = valorUsadoCents;
@@ -1472,12 +1484,15 @@ async function markHbCreditLimitSyncedBestEffort(
 export async function getLimiteCooperado(
   supabase: SupabaseClient,
   cnpj: string,
-  cooperadoId: string
+  cooperadoId: string,
+  opts?: { skipAmountUsedReconcile?: boolean }
 ): Promise<ContaCoopLimiteCooperado | null> {
   const digits = normalizeCnpj(cnpj);
   const cooperados = await fetchCooperadosFromStorage(supabase, digits).catch(() => []);
   const titularIds = cooperados.length ? titularCooperadoIds(cooperados, cooperadoId) : [cooperadoId];
-  await reconcileCooperadosAmountUsedCentsBatch(supabase, digits, titularIds).catch(() => {});
+  if (!opts?.skipAmountUsedReconcile) {
+    await reconcileCooperadosAmountUsedCentsBatch(supabase, digits, titularIds).catch(() => {});
+  }
 
   const found = await fetchHbCreditAccountRowForCooperado(supabase, cnpj, cooperadoId);
   if (!found) return null;
@@ -2223,7 +2238,7 @@ export async function validateIntentForCooperado(
   nonce: string,
   cooperadoId: string,
   cooperativaCnpj: string,
-  opts?: { useCashback?: boolean; forAuthorize?: boolean }
+  opts?: { useCashback?: boolean; forAuthorize?: boolean; fast?: boolean }
 ): Promise<
   | { ok: true; intent: ContaCoopIntent; limite: ContaCoopLimiteCooperado; parceiroNome: string }
   | { ok: false; error: string }
@@ -2239,7 +2254,9 @@ export async function validateIntentForCooperado(
   const { data: parceiro } = await supabase.from("hb_credit_partners").select("*").eq("id", intent.partner_id).maybeSingle();
   if (!parceiro || parceiro.status !== "ACTIVE") return { ok: false, error: "Mercado bloqueado ou inativo." };
 
-  const limite = await getLimiteCooperado(supabase, digits, cooperadoId);
+  const limite = await getLimiteCooperado(supabase, digits, cooperadoId, {
+    skipAmountUsedReconcile: opts?.fast === true,
+  });
   if (!limite) return { ok: false, error: "Sem limite HB Créditos." };
   if (limite.bloqueado) return { ok: false, error: "Cooperado bloqueado." };
   const gross = Number(intent.amount_cents);
@@ -2284,7 +2301,6 @@ export async function prepareHbCreditPaymentAuthorize(
   if (!found) return;
   const accountCooperadoId = found.accountCooperadoId;
   const syncState = String(found.row.financial_limit_sync_state ?? "SYNCED");
-
   if (syncState !== "SYNCED") {
     const auth = await resolveAuthoritativeCreditBase(supabase, digits, titularIds);
     if (auth.ok) {
@@ -2740,7 +2756,13 @@ export async function previewLimiteColetivoPercentual(
   itens: LimiteColetivoPreviewItem[];
 }> {
   const digits = normalizeCnpj(cnpj);
-  const tetoReq = await requireConfiguredTeto(supabase, digits, creditosBaseCents);
+  const basesEfetivas = await resolveCreditosBaseForLiberacaoColetiva(
+    supabase,
+    cnpj,
+    cooperadoIds,
+    creditosBaseCents
+  );
+  const tetoReq = await requireConfiguredTeto(supabase, digits, basesEfetivas);
   if (!tetoReq.ok) {
     return {
       limiteAtualTotal: 0,
@@ -2791,7 +2813,7 @@ export async function previewLimiteColetivoPercentual(
   const limitesAtuais = await readLimitesAtuaisCooperadosMap(supabase, digits, cooperadoIds);
 
   for (const cooperadoId of cooperadoIds) {
-    const creditoBaseCents = Math.max(0, Math.round(Number(creditosBaseCents[cooperadoId] ?? 0)));
+    const creditoBaseCents = Math.max(0, Math.round(Number(basesEfetivas[cooperadoId] ?? 0)));
     const { limiteAtualCents, valorUsadoCents } =
       limitesAtuais.get(cooperadoId) ?? { limiteAtualCents: 0, valorUsadoCents: 0 };
 
@@ -2879,11 +2901,8 @@ export async function setLimiteColetivoPercentual(
     if (!result.ok) return result;
     updated++;
   }
-  try {
-    await persistCooperativaLiberacaoPercent(supabase, cnpj, percentual, actorUserId);
-  } catch (e) {
-    return { ok: false, error: e instanceof Error ? e.message : "Falha ao persistir percentual." };
-  }
+  const persisted = await persistCooperativaLiberacaoPercent(supabase, cnpj, percentual, actorUserId);
+  if (!persisted.ok) return persisted;
   return { ok: true, updated };
 }
 

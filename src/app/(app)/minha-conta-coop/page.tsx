@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { CreditFeatureGate } from "@/components/hb-credit/CreditFeatureGate";
 import { CloudSessionGate } from "@/components/hb-credit/CloudSessionGate";
 import { ContaCoopSegmentTabs } from "@/components/hb-credit/ContaCoopSegmentTabs";
-import { openHbCreditPaymentFromQr } from "@/lib/hb-credit/openHbCreditPaymentFromQr";
+import { openHbCreditPaymentFromQrScan } from "@/lib/hb-credit/openHbCreditPaymentFromQr";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Input, Label } from "@/components/ui/Form";
@@ -263,7 +263,7 @@ function MinhaContaCoopContent() {
       setError("");
       setSuccess("");
       try {
-        await openHbCreditPaymentFromQr(router, { cnpj, cooperadoId, qrPayload: payload.trim() });
+        openHbCreditPaymentFromQrScan(router, { cnpj, cooperadoId, qrPayload: payload.trim() });
       } catch (e) {
         setError(e instanceof Error ? e.message : "Código inválido ou expirado.");
       } finally {

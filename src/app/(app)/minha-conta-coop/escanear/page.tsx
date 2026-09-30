@@ -11,7 +11,7 @@ import { Button } from "@/components/ui/Button";
 import { usePermissions } from "@/hooks/usePermissions";
 import { useAppData } from "@/hooks/useAppData";
 import { getUserCooperativaId, normalizeCnpj } from "@/utils/cooperativa";
-import { openHbCreditPaymentFromQr } from "@/lib/hb-credit/openHbCreditPaymentFromQr";
+import { openHbCreditPaymentFromQrScan } from "@/lib/hb-credit/openHbCreditPaymentFromQr";
 
 export default function EscanearQrContaCoopPage() {
   return (
@@ -44,7 +44,7 @@ function EscanearQrContent() {
       setValidating(true);
       setScanError("");
       try {
-        await openHbCreditPaymentFromQr(router, { cnpj, cooperadoId, qrPayload: payload });
+        openHbCreditPaymentFromQrScan(router, { cnpj, cooperadoId, qrPayload: payload });
       } catch (e) {
         setScanError(e instanceof Error ? e.message : "Não foi possível usar este QR Code.");
         setValidating(false);
@@ -67,9 +67,9 @@ function EscanearQrContent() {
 
       <div className="relative">
         {validating && (
-          <div className="absolute inset-0 z-20 flex flex-col items-center justify-center rounded-3xl bg-zinc-950/85 text-white">
-            <div className="h-10 w-10 animate-spin rounded-full border-2 border-white/30 border-t-white" />
-            <p className="mt-4 text-sm font-medium">Carregando pagamento…</p>
+          <div className="absolute inset-0 z-20 flex flex-col items-center justify-center rounded-3xl bg-emerald-50/95 text-emerald-950">
+            <div className="h-10 w-10 animate-spin rounded-full border-2 border-emerald-300 border-t-emerald-700" />
+            <p className="mt-4 text-sm font-medium">Abrindo pagamento…</p>
           </div>
         )}
         <HbCreditScannerErrorBoundary onReset={() => router.refresh()}>

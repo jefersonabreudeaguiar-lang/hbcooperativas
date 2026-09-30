@@ -15,7 +15,7 @@ import { resolveAuthoritativeCreditBase } from "@/modules/hb-credit/engine/credi
 import { markHbCreditLimitSynced } from "@/modules/hb-credit/engine/hbCreditLimitSyncState";
 
 /**
- * Sincroniza limite HB = teto% × crédito-base.
+ * Sincroniza limite HB = % de liberação persistido × crédito-base (não sobrescreve o % de compra ao alterar só o teto).
  * Fase 1: crédito-base é sempre reconstruído no servidor (operacional + notas); cliente não decide o valor.
  */
 export async function POST(request: Request) {
