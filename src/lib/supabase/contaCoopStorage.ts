@@ -458,12 +458,21 @@ export async function listLimitesCooperadosAlinhadosAEntregas(
   cnpj: string,
   opts?: { resyncIfInflated?: boolean; actorUserId?: string }
 ): Promise<ContaCoopLimiteCooperado[]> {
+  const { limites } = await listLimitesCooperadosAlinhadosComBase(supabase, cnpj, opts);
+  return limites;
+}
+
+export async function listLimitesCooperadosAlinhadosComBase(
+  supabase: SupabaseClient,
+  cnpj: string,
+  opts?: { resyncIfInflated?: boolean; actorUserId?: string }
+): Promise<{ limites: ContaCoopLimiteCooperado[]; creditosBaseCents: Record<string, number> }> {
   const limites = await listLimitesCooperados(supabase, cnpj);
-  if (!limites.length) return limites;
+  if (!limites.length) return { limites, creditosBaseCents: {} };
 
   const cooperadoIds = limites.map((l) => l.cooperadoId);
   const authoritative = await resolveAuthoritativeCreditBase(supabase, cnpj, cooperadoIds);
-  if (!authoritative.ok) return limites;
+  if (!authoritative.ok) return { limites, creditosBaseCents: {} };
 
   const teto = await resolveTetoGlobal(supabase, cnpj, authoritative.creditosBaseCents);
   const tetoPercent = teto.configured ? teto.percent : 0;
@@ -497,7 +506,7 @@ export async function listLimitesCooperadosAlinhadosAEntregas(
     }
   }
 
-  return capped;
+  return { limites: capped, creditosBaseCents: authoritative.creditosBaseCents };
 }
 
 function mapLimiteRow(row: Record<string, unknown>, cashbackDisponivelCents = 0): ContaCoopLimiteCooperado {

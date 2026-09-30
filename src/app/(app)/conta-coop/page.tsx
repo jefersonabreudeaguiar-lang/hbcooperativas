@@ -29,7 +29,7 @@ import {
   resetCooperadoFinancialPin,
 } from "@/services/creditApiService";
 import { formatCentsBRL } from "@/modules/hb-credit/engine/money";
-import { buildCreditosBaseMapCached, buildCreditosBaseMapCachedAsync } from "@/modules/hb-credit/engine/creditBaseFromFicha";
+import { buildCreditosBaseMapCached } from "@/modules/hb-credit/engine/creditBaseFromFicha";
 import type { ContaCoopDashboard, ContaCoopLimiteCooperado, ContaCoopParceiro, ContaCoopCooperadoPinResetRequest, ContaCoopPixChangeRequest } from "@/modules/hb-credit/types";
 import { cn, formatMesReferencia } from "@/utils/format";
 import { PageSkeleton } from "@/components/ui/PageSkeleton";
@@ -151,7 +151,7 @@ function ContaCoopContent() {
   });
 
   const handleTabChange = useCallback((next: Tab) => {
-    setTab(next);
+    startTransition(() => setTab(next));
   }, []);
   const [loading, setLoading] = useState(true);
   const [dashboardRefreshing, setDashboardRefreshing] = useState(false);
@@ -240,9 +240,6 @@ function ContaCoopContent() {
   );
 
   const [creditosBaseColetivo, setCreditosBaseColetivo] = useState<Record<string, number>>({});
-  const [creditosBaseProgress, setCreditosBaseProgress] = useState<{ done: number; total: number } | null>(
-    null
-  );
   const creditosBaseContextRef = useRef("");
   const creditosBaseComputeGenRef = useRef(0);
   const limitesListaPendingRef = useRef(false);
@@ -250,87 +247,37 @@ function ContaCoopContent() {
 
   const recomputeCreditosBaseLocal = useCallback(
     (opts?: { immediate?: boolean }) => {
+      if (!opts?.immediate) return;
       if (!user?.cooperativaId || !cooperadoIdsAtivos.length) {
         creditosBaseComputeGenRef.current += 1;
         setCreditosBaseColetivo({});
-        setCreditosBaseProgress(null);
         creditosBaseContextRef.current = "";
         creditosBaseRef.current = {};
         return;
       }
 
       const contextKey = `${user.cooperativaId}:${cooperadoIdsKey}`;
-
-      if (opts?.immediate) {
-        const t0 = contaCoopPerfStart("buildCreditosBaseMapCached");
-        const map = buildCreditosBaseMapCached(getData(), cooperadoIdsAtivos, user.cooperativaId);
-        contaCoopPerfEnd("buildCreditosBaseMapCached", t0);
-        creditosBaseContextRef.current = contextKey;
-        creditosBaseRef.current = map;
-        setCreditosBaseColetivo(map);
-        setCreditosBaseProgress(null);
-        return;
-      }
-
-      const gen = ++creditosBaseComputeGenRef.current;
-      setCreditosBaseProgress({ done: 0, total: cooperadoIdsAtivos.length });
-
-      const start = () => {
-        void buildCreditosBaseMapCachedAsync(getData(), cooperadoIdsAtivos, user.cooperativaId, {
-          onBatch: (partial, done, total) => {
-            if (creditosBaseComputeGenRef.current !== gen) return;
-            creditosBaseRef.current = partial;
-            startTransition(() => {
-              setCreditosBaseColetivo(partial);
-              setCreditosBaseProgress({ done, total });
-            });
-          },
-          shouldContinue: () => creditosBaseComputeGenRef.current === gen,
-        }).then((map) => {
-          if (creditosBaseComputeGenRef.current !== gen) return;
-          creditosBaseContextRef.current = contextKey;
-          creditosBaseRef.current = map;
-          startTransition(() => {
-            setCreditosBaseColetivo(map);
-            setCreditosBaseProgress(null);
-          });
-        });
-      };
-
-      scheduleContaCoopAuxSync(start, {
-        idleTimeoutMs: cooperadoIdsAtivos.length > 20 ? 2_000 : 600,
-        fallbackMs: cooperadoIdsAtivos.length > 20 ? 5_000 : 1_500,
-      });
+      const t0 = contaCoopPerfStart("buildCreditosBaseMapCached");
+      const map = buildCreditosBaseMapCached(getData(), cooperadoIdsAtivos, user.cooperativaId);
+      contaCoopPerfEnd("buildCreditosBaseMapCached", t0);
+      creditosBaseContextRef.current = contextKey;
+      creditosBaseRef.current = map;
+      setCreditosBaseColetivo(map);
     },
     [user?.cooperativaId, cooperadoIdsAtivos, cooperadoIdsKey]
   );
 
-  /** Crédito-base local (LASTRO/M6) — só aba Limites; painel usa dashboard da nuvem. */
-  useEffect(() => {
-    if (tab !== "limites") return;
-    if (!user?.cooperativaId || !cooperadoIdsAtivos.length) {
-      setCreditosBaseColetivo({});
-      creditosBaseContextRef.current = "";
-      return;
-    }
-    const contextKey = `${user.cooperativaId}:${cooperadoIdsKey}`;
-    if (creditosBaseContextRef.current === contextKey) {
-      return;
-    }
-    let cancelled = false;
-    const cancelIdle = scheduleContaCoopAuxSync(
-      () => {
-        if (cancelled) return;
-        recomputeCreditosBaseLocal();
-      },
-      { idleTimeoutMs: 1_500, fallbackMs: 4_000 }
-    );
-    return () => {
-      cancelled = true;
-      creditosBaseComputeGenRef.current += 1;
-      cancelIdle();
-    };
-  }, [tab, user?.cooperativaId, cooperadoIdsKey, cooperadoIdsAtivos.length, recomputeCreditosBaseLocal]);
+  const applyCreditosBaseFromServer = useCallback(
+    (map: Record<string, number> | undefined) => {
+      if (!map || !Object.keys(map).length) return;
+      if (!user?.cooperativaId) return;
+      const contextKey = `${user.cooperativaId}:${cooperadoIdsKey}`;
+      creditosBaseContextRef.current = contextKey;
+      creditosBaseRef.current = map;
+      startTransition(() => setCreditosBaseColetivo(map));
+    },
+    [user?.cooperativaId, cooperadoIdsKey]
+  );
 
   const creditosBaseRef = useRef(creditosBaseColetivo);
   creditosBaseRef.current = creditosBaseColetivo;
@@ -362,12 +309,13 @@ function ContaCoopContent() {
       limitesListaPendingRef.current = true;
       const t0 = contaCoopPerfStart("sync-limite+limites");
       try {
-        const fresh = await refreshHbCreditLimitesStaff({
+        const { limites: fresh, creditosBaseAuthoritativeCents } = await refreshHbCreditLimitesStaff({
           cnpj,
           cooperativaId: user.cooperativaId,
           cooperadoIds: cooperadoIdsAtivos,
         });
         setLimites(fresh);
+        applyCreditosBaseFromServer(creditosBaseAuthoritativeCents);
         limitesListaFetchedAtRef.current = Date.now();
         return fresh;
       } catch {
@@ -378,7 +326,7 @@ function ContaCoopContent() {
         setLimitesRefreshing(false);
       }
     },
-    [cnpj, cooperadoIdsAtivos, user?.cooperativaId]
+    [cnpj, cooperadoIdsAtivos, user?.cooperativaId, applyCreditosBaseFromServer]
   );
 
   const revalidateLimitesLista = useCallback(
@@ -396,8 +344,9 @@ function ContaCoopContent() {
       if (!opts?.background) setLimitesRefreshing(true);
       const t0 = contaCoopPerfStart("GET /api/credit/limites");
       try {
-        const fresh = await fetchCreditLimites(cnpj);
+        const { limites: fresh, creditosBaseAuthoritativeCents } = await fetchCreditLimites(cnpj);
         setLimites(fresh);
+        applyCreditosBaseFromServer(creditosBaseAuthoritativeCents);
         gravarHbCreditLimitesPersistidos(cnpj, fresh);
         limitesListaFetchedAtRef.current = Date.now();
       } catch {
@@ -408,7 +357,7 @@ function ContaCoopContent() {
         setLimitesRefreshing(false);
       }
     },
-    [cnpj]
+    [cnpj, applyCreditosBaseFromServer]
   );
 
   const loadParceiros = useCallback(async () => {
@@ -507,7 +456,7 @@ function ContaCoopContent() {
 
   useEffect(() => {
     if (!cnpj) return;
-    if (tab !== "painel" && tab !== "limites" && tab !== "mercados") return;
+    if (tab !== "painel" && tab !== "mercados") return;
     const cancelIdle = scheduleContaCoopAuxSync(() => void loadPinAndPixRequests(), {
       idleTimeoutMs: 6_000,
       fallbackMs: 14_000,
@@ -515,11 +464,22 @@ function ContaCoopContent() {
     return cancelIdle;
   }, [tab, cnpj, loadPinAndPixRequests]);
 
-  /** GET /limites — só na aba Limites (evita competir com abertura do painel). */
+  /** GET /limites — só na aba Limites, após idle (não compete com paint da aba). */
   useEffect(() => {
     if (tab !== "limites") return;
     if (!cnpj) return;
-    void revalidateLimitesLista({ background: true });
+    let cancelled = false;
+    const cancelIdle = scheduleContaCoopAuxSync(
+      () => {
+        if (cancelled) return;
+        void revalidateLimitesLista({ background: true });
+      },
+      { idleTimeoutMs: 400, fallbackMs: 1_200 }
+    );
+    return () => {
+      cancelled = true;
+      cancelIdle();
+    };
   }, [tab, cnpj, revalidateLimitesLista]);
 
   useEffect(() => {
@@ -1000,11 +960,6 @@ function ContaCoopContent() {
         <div className="space-y-6">
           {limitesRefreshing && (
             <p className="text-xs text-gray-500">Atualizando limites na nuvem…</p>
-          )}
-          {creditosBaseProgress && creditosBaseProgress.done < creditosBaseProgress.total && (
-            <p className="text-xs text-gray-500" aria-live="polite">
-              Calculando crédito na ficha… {creditosBaseProgress.done}/{creditosBaseProgress.total}
-            </p>
           )}
           <AlertBanner variant="info">
             Se o cooperado esquecer o PIN de pagamento, ele pode solicitar reset em Minha Conta Coop. Você confirma

@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import {
-  listLimitesCooperadosAlinhadosAEntregas,
+  listLimitesCooperadosAlinhadosComBase,
   previewLimiteAlteracao,
   previewLimiteColetivo,
   previewLimiteColetivoPercentual,
@@ -30,11 +30,20 @@ export async function GET(request: Request) {
   if (denyStaff) return denyStaff;
 
   const actorId = gate.ctx.session?.sub ?? "system";
-  const limites = await listLimitesCooperadosAlinhadosAEntregas(gate.ctx.supabase, cnpj, {
-    resyncIfInflated: true,
-    actorUserId: actorId,
+  const resyncInflated = searchParams.get("resync") === "1";
+  const { limites, creditosBaseCents } = await listLimitesCooperadosAlinhadosComBase(
+    gate.ctx.supabase,
+    cnpj,
+    {
+      resyncIfInflated: resyncInflated,
+      actorUserId: actorId,
+    }
+  );
+  return NextResponse.json({
+    ok: true,
+    limites,
+    creditosBaseAuthoritativeCents: creditosBaseCents,
   });
-  return NextResponse.json({ ok: true, limites });
 }
 
 export async function POST(request: Request) {

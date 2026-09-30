@@ -136,8 +136,12 @@ for (const bruto of [12.5, 49.99, 100, 333.33, 169.24, 4135.78, 1992.3]) {
   assertParidadeCooperadoResponsavel(data, "2026-09", "antes pagamento");
   data = registrarPagamentoCooperado(data, COOPERADO, "2026-09", "Resp");
   const v = getValorQuantoVouReceber(data, COOPERADO, "2026-09", COOP).valor;
+  const baseAfterPay = getCreditoBaseCooperadoCents(data, COOPERADO, COOP);
   ok("após PIX: a receber = 0", v === 0);
-  ok("após PIX: HB base = 0", getCreditoBaseCooperadoCents(data, COOPERADO, COOP) === 0);
+  ok(
+    "após PIX: HB base mantém lastro (limite liberado não zera só por quitação)",
+    baseAfterPay > 0
+  );
   const resp = getResumoValorAPagarRelatorio(data, COOPERADO, "2026-09", COOP).valorLiquido;
   ok("após PIX: responsável a pagar = 0", resp === 0);
 }

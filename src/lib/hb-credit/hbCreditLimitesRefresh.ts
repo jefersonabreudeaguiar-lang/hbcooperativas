@@ -12,10 +12,15 @@ export type RefreshHbCreditLimitesStaffOpts = {
   cooperadoIds: string[];
 };
 
+export type RefreshHbCreditLimitesStaffResult = {
+  limites: ContaCoopLimiteCooperado[];
+  creditosBaseAuthoritativeCents?: Record<string, number>;
+};
+
 export async function refreshHbCreditLimitesStaff(
   opts: RefreshHbCreditLimitesStaffOpts
-): Promise<ContaCoopLimiteCooperado[]> {
-  if (!opts.cnpj || !opts.cooperadoIds.length) return [];
+): Promise<RefreshHbCreditLimitesStaffResult> {
+  if (!opts.cnpj || !opts.cooperadoIds.length) return { limites: [] };
 
   await refreshContaCoopLimiteFromFicha({
     cnpj: opts.cnpj,
@@ -24,7 +29,7 @@ export async function refreshHbCreditLimitesStaff(
     cooperadoIds: opts.cooperadoIds,
   });
 
-  const limites = await fetchCreditLimites(opts.cnpj);
-  gravarHbCreditLimitesPersistidos(opts.cnpj, limites);
-  return limites;
+  const payload = await fetchCreditLimites(opts.cnpj, { resyncInflated: true });
+  gravarHbCreditLimitesPersistidos(opts.cnpj, payload.limites);
+  return payload;
 }

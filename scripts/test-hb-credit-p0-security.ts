@@ -17,7 +17,7 @@ import {
   getMobileNavItems,
   isHbCreditNavVisible,
 } from "../src/permissions";
-import type { User } from "../src/types";
+import type { AppData, User } from "../src/types";
 import { TETO_NAO_CONFIGURADO } from "../src/lib/supabase/contaCoopStorage";
 
 let passed = 0;
@@ -66,31 +66,48 @@ const responsavelUser: User = {
   responsavelPrincipal: true,
 };
 
+const responsavelNavData = {
+  cooperativas: [{ id: "coop-1", nome: "Coop teste", cnpj: "62351750000165", createdAt: "", updatedAt: "" }],
+  cooperados: [],
+  users: [responsavelUser],
+  notasPedido: [],
+  fichaCorrida: [],
+  pagamentosCooperado: [],
+  arquivosMensais: [],
+  mensalidades: [],
+  comunicados: [],
+  instituicoes: [],
+  produtosInstituicao: [],
+  descontos: [],
+  config: {},
+} as AppData;
+
 function testVisibility() {
   console.log("\n[visibilidade]");
-  ok("nav visível: server ON + role cooperado", isHbCreditNavVisible(true, true));
-  ok("nav oculto: server OFF", !isHbCreditNavVisible(false, true));
-  ok("nav oculto: sem permissão", !isHbCreditNavVisible(true, false));
+  ok("nav visível: server ON + UI pública + permissão", isHbCreditNavVisible(true, true, true));
+  ok("nav oculto: server OFF", !isHbCreditNavVisible(false, true, true));
+  ok("nav oculto: sem permissão", !isHbCreditNavVisible(true, false, true));
+  ok("nav oculto: UI HB desligada", !isHbCreditNavVisible(true, true, false));
 
-  const cooperadoMobileOn = getMobileNavItems(cooperadoUser, true);
+  const cooperadoMobileOn = getMobileNavItems(cooperadoUser, true, true);
   ok(
     "cooperado bottom nav inclui Conta Coop quando habilitado",
     cooperadoMobileOn.some((i) => i.href === "/minha-conta-coop")
   );
 
-  const cooperadoMobileOff = getMobileNavItems(cooperadoUser, false);
+  const cooperadoMobileOff = getMobileNavItems(cooperadoUser, false, true);
   ok(
     "cooperado bottom nav oculta Conta Coop quando desabilitado",
     !cooperadoMobileOff.some((i) => i.href === "/minha-conta-coop")
   );
 
-  const respMobileOn = getMobileNavItems(responsavelUser, true);
+  const respMobileOn = getMobileNavItems(responsavelUser, true, true, responsavelNavData);
   ok(
     "responsável mobile inclui /conta-coop",
     respMobileOn.some((i) => i.href === "/conta-coop")
   );
 
-  const drawer = appendHbCreditMenuItem([], cooperadoUser, true);
+  const drawer = appendHbCreditMenuItem([], cooperadoUser, true, true);
   ok("drawer cooperado inclui minha-conta-coop", drawer.some((i) => i.href === "/minha-conta-coop"));
 }
 

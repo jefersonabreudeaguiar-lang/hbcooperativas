@@ -53,6 +53,8 @@
     "test:hb-pix-stale": "npx tsx scripts/test-hb-pix-stale-phase24.ts",
     "test:post-payment-hb-sync": "npx tsx scripts/test-post-payment-hb-sync.ts",
     "test:hb-credit-base": "npx tsx scripts/test-hb-credit-base-alignment.ts",
+    "test:hb-credit-limites-get": "npx tsx scripts/test-hb-credit-limites-get-contract.ts",
+    "test:precommit-hb-limites-tab": "npm run test:cooperado-financeiro && npm run test:crawler-leva1 && npm run test:crawler-leva2 && npm run test:hb-credit-foundation && npm run test:hb-credit-p0 && npm run test:hb-credit-base && npm run test:e2e-alignment && npm run test:hb-credit-limites-get && npx tsx scripts/test-hb-credit-limite-autoridade.ts && npx tsx scripts/test-hb-credit-sync-limite-base-zero.ts && npx tsx scripts/test-hb-payment-affordability.ts",
     "test:hb-valor-receber": "npx tsx scripts/test-hb-valor-receber-hybrid.ts",
     "test:crawler-leva1": "npx tsx scripts/test-crawler-policy-leva1.ts",
     "test:crawler-leva2": "npx tsx scripts/test-crawler-policy-leva2.ts",

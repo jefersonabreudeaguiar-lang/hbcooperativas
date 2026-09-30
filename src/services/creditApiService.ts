@@ -42,11 +42,31 @@ export async function fetchCreditDashboard(
   return data.dashboard ?? null;
 }
 
-export async function fetchCreditLimites(cnpj: string): Promise<ContaCoopLimiteCooperado[]> {
-  const res = await secureApiFetch(`/api/credit/limites?cnpj=${encodeURIComponent(cnpj)}`);
-  const data = await parseJson<{ ok?: boolean; limites?: ContaCoopLimiteCooperado[] }>(res);
+export function buildCreditLimitesRequestQuery(
+  cnpj: string,
+  opts?: { resyncInflated?: boolean }
+): string {
+  const params = new URLSearchParams({ cnpj });
+  if (opts?.resyncInflated) params.set("resync", "1");
+  return params.toString();
+}
+
+export async function fetchCreditLimites(
+  cnpj: string,
+  opts?: { resyncInflated?: boolean }
+): Promise<{ limites: ContaCoopLimiteCooperado[]; creditosBaseAuthoritativeCents?: Record<string, number> }> {
+  const res = await secureApiFetch(`/api/credit/limites?${buildCreditLimitesRequestQuery(cnpj, opts)}`);
+  const data = await parseJson<{
+    ok?: boolean;
+    error?: string;
+    limites?: ContaCoopLimiteCooperado[];
+    creditosBaseAuthoritativeCents?: Record<string, number>;
+  }>(res);
   if (!res.ok || !data.ok) throw new Error(data.error ?? "Erro ao carregar limites.");
-  return data.limites ?? [];
+  return {
+    limites: data.limites ?? [],
+    creditosBaseAuthoritativeCents: data.creditosBaseAuthoritativeCents,
+  };
 }
 
 export async function fetchCreditParceiros(cnpj: string): Promise<ContaCoopParceiro[]> {
