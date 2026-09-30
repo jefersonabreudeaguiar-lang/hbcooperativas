@@ -31,6 +31,7 @@ import {
 import {
   gravarHbCreditAccountPersistido,
   HB_CREDIT_ACCOUNT_STORAGE_VERSION,
+  lerHbCreditAccountPersistido,
 } from "@/lib/hb-credit/hbCreditAccountPersistencia";
 import type { ContaCoopLimiteCooperado } from "@/modules/hb-credit/types";
 import {
@@ -143,10 +144,18 @@ function HbCreditPagarContent() {
   }, [cnpj, cooperadoId, router]);
 
   useEffect(() => {
+    if (!cnpj || !cooperadoId) return;
+    const cached = lerHbCreditAccountPersistido(cnpj, cooperadoId);
+    if (cached?.hasPin) setHasPin(true);
+  }, [cnpj, cooperadoId]);
+
+  useEffect(() => {
     if (!cnpj || !cooperadoId || loadingQr) return;
     void fetchCreditAccount(cnpj, cooperadoId)
       .then((acc) => setHasPin(Boolean(acc.hasPin)))
-      .catch(() => setHasPin(null));
+      .catch(() => {
+        /* Rede lenta: não assumir “sem PIN” — authorize valida o PIN na nuvem. */
+      });
   }, [cnpj, cooperadoId, loadingQr]);
 
   const limite = draft?.limite;
@@ -166,8 +175,8 @@ function HbCreditPagarContent() {
 
   const confirmar = async () => {
     if (!draft || !cnpj || !cooperadoId || !intent || !limite) return;
-    if (!hasPin) {
-      setError("Cadastre sua senha de pagamento em HB Créditos antes de continuar.");
+    if (hasPin === false) {
+      setError("Cadastre seu PIN de pagamento em HB Créditos → Início antes de continuar.");
       return;
     }
     setBusy(true);
@@ -313,8 +322,8 @@ function HbCreditPagarContent() {
             onChange={setPayPin}
             disabled={busy || hasPin === false}
             autoFocus
-            label="Senha de pagamento"
-            hint="Toque nas bolinhas e digite sua senha no teclado"
+            label="PIN de pagamento"
+            hint="Toque nas bolinhas e digite seu PIN no teclado"
           />
         </div>
 
@@ -359,7 +368,7 @@ function HbCreditPagarContent() {
 
         {hasPin === false && (
           <p className="mt-4 rounded-2xl bg-amber-50 px-4 py-3 text-sm text-amber-900 border border-amber-200">
-            Antes de pagar, cadastre sua senha na tela HB Créditos → Início.
+            Antes de pagar, cadastre seu PIN na tela HB Créditos → Início.
           </p>
         )}
 

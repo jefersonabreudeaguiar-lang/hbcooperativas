@@ -23,8 +23,8 @@ export function HbCreditPinDotsInput({
   onChange,
   maxLength = 8,
   disabled,
-  label = "Senha de pagamento",
-  hint = "Toque aqui e digite no teclado numérico",
+  label = "PIN de pagamento",
+  hint = "Toque aqui e digite seu PIN no teclado numérico",
   autoFocus,
   variant = "dark",
 }: Props) {
