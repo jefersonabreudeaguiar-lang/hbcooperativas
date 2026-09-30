@@ -29,7 +29,10 @@ export async function refreshHbCreditLimitesStaff(
     cooperadoIds: opts.cooperadoIds,
   });
 
-  const payload = await fetchCreditLimites(opts.cnpj, { resyncInflated: true });
+  const payload = await fetchCreditLimites(opts.cnpj, {
+    resyncInflated: true,
+    cooperadoIds: opts.cooperadoIds,
+  });
   gravarHbCreditLimitesPersistidos(opts.cnpj, payload.limites);
   return payload;
 }

@@ -465,13 +465,32 @@ export async function listLimitesCooperadosAlinhadosAEntregas(
 export async function listLimitesCooperadosAlinhadosComBase(
   supabase: SupabaseClient,
   cnpj: string,
-  opts?: { resyncIfInflated?: boolean; actorUserId?: string }
+  opts?: {
+    resyncIfInflated?: boolean;
+    actorUserId?: string;
+    /** Só contas HB na nuvem — sem operacional/notas (resposta rápida). */
+    fast?: boolean;
+    /** Inclui bases autoritativas para todos os ativos (valor a receber na nuvem). */
+    authoritativeCooperadoIds?: string[];
+  }
 ): Promise<{ limites: ContaCoopLimiteCooperado[]; creditosBaseCents: Record<string, number> }> {
   const limites = await listLimitesCooperados(supabase, cnpj);
-  if (!limites.length) return { limites, creditosBaseCents: {} };
+  if (opts?.fast) {
+    return { limites, creditosBaseCents: {} };
+  }
 
-  const cooperadoIds = limites.map((l) => l.cooperadoId);
-  const authoritative = await resolveAuthoritativeCreditBase(supabase, cnpj, cooperadoIds);
+  const idsParaBase = [
+    ...new Set([
+      ...limites.map((l) => l.cooperadoId),
+      ...(opts?.authoritativeCooperadoIds ?? []),
+    ]),
+  ].filter(Boolean);
+
+  if (!idsParaBase.length) {
+    return { limites, creditosBaseCents: {} };
+  }
+
+  const authoritative = await resolveAuthoritativeCreditBase(supabase, cnpj, idsParaBase);
   if (!authoritative.ok) return { limites, creditosBaseCents: {} };
 
   const teto = await resolveTetoGlobal(supabase, cnpj, authoritative.creditosBaseCents);

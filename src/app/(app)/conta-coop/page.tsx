@@ -69,6 +69,7 @@ function contaCoopPerfEnd(label: string, startedAt: number | null): void {
 const CREDITOS_BASE_SYNC_MAX_COOPERADOS = 25;
 
 const PREVIEW_COLETIVO_ITENS_RENDER = 50;
+const LIMITES_TABELA_PAGE = 40;
 
 /** Lista GET /limites — revalidação leve (sem sync-limite). */
 const LIMITES_LISTA_STALE_MS = 120_000;
@@ -122,6 +123,26 @@ type PreviewColetivo = {
     ajustadoPorUso?: boolean;
   }>;
 };
+
+function limitePlaceholderCooperado(cooperadoId: string, cooperativaCnpj: string): ContaCoopLimiteCooperado {
+  return {
+    id: `sem-conta-${cooperadoId}`,
+    cooperativaCnpj,
+    cooperadoId,
+    limiteLiberadoCents: 0,
+    valorUsadoCents: 0,
+    valorDisponivelCents: 0,
+    bloqueado: false,
+    hasFinancialPin: false,
+    pinLockedUntil: null,
+    cashbackDisponivelCents: 0,
+    updatedAt: "",
+  };
+}
+
+function limiteTemContaHb(limite: ContaCoopLimiteCooperado): boolean {
+  return !limite.id.startsWith("sem-conta-");
+}
 
 type Tab = "painel" | "limites" | "mercados" | "descontos" | "conferir_nf" | "liquidar" | "estornos";
 
@@ -312,9 +333,31 @@ function ContaCoopContent() {
   }, [recomputeCreditosBaseLocal]);
 
   const [limitesUiReady, setLimitesUiReady] = useState(false);
+  const [coletivaUiReady, setColetivaUiReady] = useState(false);
+  const [limitesTabelaVisiveis, setLimitesTabelaVisiveis] = useState(LIMITES_TABELA_PAGE);
   const deferredLimites = useDeferredValue(limites);
   const deferredCreditosBase = useDeferredValue(creditosBaseColetivo);
   const limitesTabPaintPending = tab === "limites" && limites !== deferredLimites;
+
+  const limitesPorCooperado = useMemo(() => {
+    const map = new Map<string, ContaCoopLimiteCooperado>();
+    for (const l of deferredLimites) map.set(l.cooperadoId, l);
+    return map;
+  }, [deferredLimites]);
+
+  const limitesLinhasCooperados = useMemo(() => {
+    if (!cnpj) return [];
+    return cooperadosAtivos.map((c) => {
+      const existente = limitesPorCooperado.get(c.id);
+      if (existente) return existente;
+      return limitePlaceholderCooperado(c.id, cnpj);
+    });
+  }, [cooperadosAtivos, limitesPorCooperado, cnpj]);
+
+  const limitesLinhasPagina = useMemo(
+    () => limitesLinhasCooperados.slice(0, limitesTabelaVisiveis),
+    [limitesLinhasCooperados, limitesTabelaVisiveis]
+  );
 
   const cooperadoIdsAtivosRef = useRef(cooperadoIdsAtivos);
   cooperadoIdsAtivosRef.current = cooperadoIdsAtivos;
@@ -376,12 +419,20 @@ function ContaCoopContent() {
       }
       limitesListaPendingRef.current = true;
       if (!opts?.background) setLimitesRefreshing(true);
+      const ids = cooperadoIdsAtivosRef.current;
       const t0 = contaCoopPerfStart("GET /api/credit/limites");
       try {
-        const { limites: fresh, creditosBaseAuthoritativeCents } = await fetchCreditLimites(cnpj);
-        setLimites(fresh);
-        applyCreditosBaseFromServer(creditosBaseAuthoritativeCents);
-        gravarHbCreditLimitesPersistidos(cnpj, fresh);
+        const fast = await fetchCreditLimites(cnpj, { fast: true });
+        startTransition(() => setLimites(fast.limites));
+
+        const full = await fetchCreditLimites(cnpj, {
+          cooperadoIds: ids.length ? ids : undefined,
+        });
+        startTransition(() => {
+          setLimites(full.limites);
+          applyCreditosBaseFromServer(full.creditosBaseAuthoritativeCents);
+        });
+        gravarHbCreditLimitesPersistidos(cnpj, full.limites);
         limitesListaFetchedAtRef.current = Date.now();
       } catch {
         /* mantém cache/persistidos */
@@ -519,6 +570,8 @@ function ContaCoopContent() {
   useEffect(() => {
     if (tab !== "limites") {
       setLimitesUiReady(false);
+      setColetivaUiReady(false);
+      setLimitesTabelaVisiveis(LIMITES_TABELA_PAGE);
       return;
     }
     let cancelled = false;
@@ -532,6 +585,25 @@ function ContaCoopContent() {
       cancelAnimationFrame(raf);
     };
   }, [tab]);
+
+  useEffect(() => {
+    if (tab !== "limites" || !limitesUiReady) {
+      setColetivaUiReady(false);
+      return;
+    }
+    let cancelled = false;
+    const cancelIdle = scheduleContaCoopAuxSync(
+      () => {
+        if (cancelled) return;
+        startTransition(() => setColetivaUiReady(true));
+      },
+      { idleTimeoutMs: 800, fallbackMs: 2_500 }
+    );
+    return () => {
+      cancelled = true;
+      cancelIdle();
+    };
+  }, [tab, limitesUiReady]);
 
   useEffect(() => {
     const p = dashboard?.teto.tetoGlobalPercent;
@@ -1036,8 +1108,8 @@ function ContaCoopContent() {
                 Cooperados pediram reset do PIN de pagamento HB Créditos para cadastrar um novo.
               </p>
               {cooperadoPinResetRequests.map((req) => {
-                const limite = limites.find((l) => l.cooperadoId === req.cooperadoId);
-                if (!limite) return null;
+                const limite = limitesPorCooperado.get(req.cooperadoId);
+                if (!limite || !limiteTemContaHb(limite)) return null;
                 return (
                   <div key={req.id} className="rounded-xl border border-cyan-200 bg-white p-4">
                     <p className="font-semibold text-gray-900">{cooperadoNome(req.cooperadoId)}</p>
@@ -1055,6 +1127,107 @@ function ContaCoopContent() {
             </Card>
           )}
 
+          <Card className="overflow-hidden !p-0">
+            <div className="border-b bg-gray-50 px-4 py-3 text-sm text-gray-600">
+              <strong className="text-gray-900">Crédito (ficha)</strong> = valor a receber em aberto na nuvem
+              (operacional + notas), mesma base do painel HB e da tela do cooperado após sync.
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[720px] text-sm">
+                <thead className="bg-gray-50 text-left">
+                  <tr>
+                    <th className="p-3">Cooperado</th>
+                    <th className="p-3">Crédito (ficha)</th>
+                    <th className="p-3">Liberado</th>
+                    <th className="p-3">Usado</th>
+                    <th className="p-3">Disponível</th>
+                    <th className="p-3">PIN pagamento</th>
+                    <th className="p-3">Ações</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {limitesLinhasPagina.map((l) => (
+                    <tr key={l.cooperadoId} className="border-t">
+                      <td className="p-3">
+                        {cooperadoNome(l.cooperadoId)}
+                        {!limiteTemContaHb(l) && (
+                          <span className="ml-2 rounded-full bg-gray-100 px-2 py-0.5 text-xs text-gray-600">
+                            Sem conta HB
+                          </span>
+                        )}
+                        {l.bloqueado && (
+                          <span className="ml-2 rounded-full bg-red-100 px-2 py-0.5 text-xs text-red-700">
+                            Bloqueado
+                          </span>
+                        )}
+                      </td>
+                      <td className="p-3">{formatCentsBRL(deferredCreditosBase[l.cooperadoId] ?? 0)}</td>
+                      <td className="p-3">{formatCentsBRL(l.limiteLiberadoCents)}</td>
+                      <td className="p-3">{formatCentsBRL(l.valorUsadoCents)}</td>
+                      <td className="p-3 font-medium text-green-800">
+                        {formatCentsBRL(l.valorDisponivelCents)}
+                      </td>
+                      <td className="p-3 text-xs text-gray-600">
+                        {!limiteTemContaHb(l)
+                          ? "—"
+                          : l.hasFinancialPin
+                            ? pinCooperadoBloqueado(l)
+                              ? "Bloqueado"
+                              : "Cadastrado"
+                            : "Não cadastrado"}
+                      </td>
+                      <td className="p-3">
+                        {limiteTemContaHb(l) ? (
+                          <div className="flex flex-wrap gap-2">
+                            <Button size="sm" variant="secondary" onClick={() => toggleBloqueio(l)} disabled={busy}>
+                              {l.bloqueado ? "Desbloquear" : "Bloquear"}
+                            </Button>
+                            {(l.hasFinancialPin || pinCooperadoBloqueado(l)) && (
+                              <Button
+                                size="sm"
+                                variant="secondary"
+                                onClick={() => void resetarPinCooperado(l)}
+                                disabled={busy}
+                              >
+                                Resetar PIN
+                              </Button>
+                            )}
+                          </div>
+                        ) : (
+                          <span className="text-xs text-gray-400">Libere via coletivo</span>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                  {!limitesLinhasCooperados.length && (
+                    <tr>
+                      <td colSpan={7} className="p-6 text-center text-gray-500">
+                        Nenhum cooperado ativo.
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+            {limitesLinhasCooperados.length > limitesTabelaVisiveis && (
+              <div className="border-t p-3 text-center">
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={() =>
+                    setLimitesTabelaVisiveis((n) => Math.min(n + LIMITES_TABELA_PAGE, limitesLinhasCooperados.length))
+                  }
+                >
+                  Mostrar mais ({limitesLinhasCooperados.length - limitesTabelaVisiveis} restantes)
+                </Button>
+              </div>
+            )}
+          </Card>
+
+          {!coletivaUiReady ? (
+            <p className="text-xs text-gray-500">Carregando liberação coletiva…</p>
+          ) : (
+            <>
           <Card className="space-y-4 !p-5">
             <div>
               <h3 className="font-semibold text-gray-900">Liberação individual</h3>
@@ -1161,75 +1334,8 @@ function ContaCoopContent() {
               </div>
             )}
           </Card>
-
-          <Card className="overflow-hidden !p-0">
-            <div className="overflow-x-auto">
-              <table className="w-full min-w-[720px] text-sm">
-                <thead className="bg-gray-50 text-left">
-                  <tr>
-                    <th className="p-3">Cooperado</th>
-                    <th className="p-3">Crédito (ficha)</th>
-                    <th className="p-3">Liberado</th>
-                    <th className="p-3">Usado</th>
-                    <th className="p-3">Disponível</th>
-                    <th className="p-3">PIN pagamento</th>
-                    <th className="p-3">Ações</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {deferredLimites.map((l) => (
-                    <tr key={l.id} className="border-t">
-                      <td className="p-3">
-                        {cooperadoNome(l.cooperadoId)}
-                        {l.bloqueado && (
-                          <span className="ml-2 rounded-full bg-red-100 px-2 py-0.5 text-xs text-red-700">
-                            Bloqueado
-                          </span>
-                        )}
-                      </td>
-                      <td className="p-3">{formatCentsBRL(deferredCreditosBase[l.cooperadoId] ?? 0)}</td>
-                      <td className="p-3">{formatCentsBRL(l.limiteLiberadoCents)}</td>
-                      <td className="p-3">{formatCentsBRL(l.valorUsadoCents)}</td>
-                      <td className="p-3 font-medium text-green-800">
-                        {formatCentsBRL(l.valorDisponivelCents)}
-                      </td>
-                      <td className="p-3 text-xs text-gray-600">
-                        {l.hasFinancialPin
-                          ? pinCooperadoBloqueado(l)
-                            ? "Bloqueado"
-                            : "Cadastrado"
-                          : "Não cadastrado"}
-                      </td>
-                      <td className="p-3">
-                        <div className="flex flex-wrap gap-2">
-                          <Button size="sm" variant="secondary" onClick={() => toggleBloqueio(l)} disabled={busy}>
-                            {l.bloqueado ? "Desbloquear" : "Bloquear"}
-                          </Button>
-                          {(l.hasFinancialPin || pinCooperadoBloqueado(l)) && (
-                            <Button
-                              size="sm"
-                              variant="secondary"
-                              onClick={() => void resetarPinCooperado(l)}
-                              disabled={busy}
-                            >
-                              Resetar PIN
-                            </Button>
-                          )}
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
-                  {!deferredLimites.length && (
-                    <tr>
-                      <td colSpan={7} className="p-6 text-center text-gray-500">
-                        Nenhum limite liberado ainda.
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
-          </Card>
+            </>
+          )}
             </>
           )}
         </div>

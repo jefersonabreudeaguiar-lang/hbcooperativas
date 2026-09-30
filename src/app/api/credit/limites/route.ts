@@ -31,12 +31,19 @@ export async function GET(request: Request) {
 
   const actorId = gate.ctx.session?.sub ?? "system";
   const resyncInflated = searchParams.get("resync") === "1";
+  const fast = searchParams.get("fast") === "1";
+  const authoritativeCooperadoIds = (searchParams.get("cooperadoIds") ?? "")
+    .split(",")
+    .map((id) => id.trim())
+    .filter(Boolean);
   const { limites, creditosBaseCents } = await listLimitesCooperadosAlinhadosComBase(
     gate.ctx.supabase,
     cnpj,
     {
       resyncIfInflated: resyncInflated,
       actorUserId: actorId,
+      fast,
+      authoritativeCooperadoIds: authoritativeCooperadoIds.length ? authoritativeCooperadoIds : undefined,
     }
   );
   return NextResponse.json({

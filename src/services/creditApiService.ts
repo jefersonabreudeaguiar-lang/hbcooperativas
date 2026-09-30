@@ -44,16 +44,18 @@ export async function fetchCreditDashboard(
 
 export function buildCreditLimitesRequestQuery(
   cnpj: string,
-  opts?: { resyncInflated?: boolean }
+  opts?: { resyncInflated?: boolean; fast?: boolean; cooperadoIds?: string[] }
 ): string {
   const params = new URLSearchParams({ cnpj });
   if (opts?.resyncInflated) params.set("resync", "1");
+  if (opts?.fast) params.set("fast", "1");
+  if (opts?.cooperadoIds?.length) params.set("cooperadoIds", opts.cooperadoIds.join(","));
   return params.toString();
 }
 
 export async function fetchCreditLimites(
   cnpj: string,
-  opts?: { resyncInflated?: boolean }
+  opts?: { resyncInflated?: boolean; fast?: boolean; cooperadoIds?: string[] }
 ): Promise<{ limites: ContaCoopLimiteCooperado[]; creditosBaseAuthoritativeCents?: Record<string, number> }> {
   const res = await secureApiFetch(`/api/credit/limites?${buildCreditLimitesRequestQuery(cnpj, opts)}`);
   const data = await parseJson<{
