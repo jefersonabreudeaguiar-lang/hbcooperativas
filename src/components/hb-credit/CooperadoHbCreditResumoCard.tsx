@@ -9,13 +9,19 @@ import {
   lerHbCreditAccountPersistidoFlex,
   type HbCreditAccountPersistido,
 } from "@/lib/hb-credit/hbCreditAccountPersistencia";
-import { HB_CREDIT_LIMITE_SYNCED_EVENT } from "@/lib/hb-credit/hbCreditLimiteSyncEvents";
+import {
+  HB_CREDIT_ACCOUNT_CACHE_EVENT,
+  HB_CREDIT_LIMITE_SYNCED_EVENT,
+} from "@/lib/hb-credit/hbCreditLimiteSyncEvents";
+import { useAuth } from "@/modules/auth/AuthProvider";
+import { persistirHbCreditAccountCooperado } from "@/services/hbCreditAccountPersistenciaService";
 
 type Props = {
   cnpj: string;
 };
 
 export function CooperadoHbCreditResumoCard({ cnpj }: Props) {
+  const { user } = useAuth();
   const { cooperadoId } = usePermissions();
   const [snap, setSnap] = useState<HbCreditAccountPersistido | null>(null);
 
@@ -24,11 +30,20 @@ export function CooperadoHbCreditResumoCard({ cnpj }: Props) {
       setSnap(null);
       return;
     }
-    const refresh = () => setSnap(lerHbCreditAccountPersistidoFlex(cooperadoId, cnpj));
-    refresh();
-    window.addEventListener(HB_CREDIT_LIMITE_SYNCED_EVENT, refresh);
-    return () => window.removeEventListener(HB_CREDIT_LIMITE_SYNCED_EVENT, refresh);
-  }, [cooperadoId, cnpj]);
+    const refreshFromCache = () => setSnap(lerHbCreditAccountPersistidoFlex(cooperadoId, cnpj));
+    refreshFromCache();
+    const onCache = () => refreshFromCache();
+    const onCloud = () => {
+      refreshFromCache();
+      if (user?.role === "cooperado") void persistirHbCreditAccountCooperado(user);
+    };
+    window.addEventListener(HB_CREDIT_ACCOUNT_CACHE_EVENT, onCache);
+    window.addEventListener(HB_CREDIT_LIMITE_SYNCED_EVENT, onCloud);
+    return () => {
+      window.removeEventListener(HB_CREDIT_ACCOUNT_CACHE_EVENT, onCache);
+      window.removeEventListener(HB_CREDIT_LIMITE_SYNCED_EVENT, onCloud);
+    };
+  }, [cooperadoId, cnpj, user]);
 
   const totals = useMemo(() => {
     const acc = snap?.account;

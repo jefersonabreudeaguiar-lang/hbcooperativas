@@ -1427,6 +1427,36 @@ export async function getHbCreditAccountRevision(
   };
 }
 
+export type HbCreditLimitesRevision = {
+  revision: string;
+  accountCount: number;
+};
+
+/** Assinatura leve para poll do responsável (pagamentos cooperado, liberações, usado). */
+export async function getHbCreditLimitesRevision(
+  supabase: SupabaseClient,
+  cnpj: string
+): Promise<HbCreditLimitesRevision> {
+  const digits = normalizeCnpj(cnpj);
+  const { data, error } = await supabase
+    .from("hb_credit_accounts")
+    .select("cooperado_id, updated_at, limit_released_cents, amount_used_cents")
+    .eq("cooperative_cnpj", digits);
+  if (error || !data?.length) {
+    return { revision: error ? `err:${error.message}` : "empty", accountCount: 0 };
+  }
+  const parts = [...data]
+    .sort((a, b) => String(a.cooperado_id).localeCompare(String(b.cooperado_id)))
+    .map((row) => {
+      const id = String(row.cooperado_id ?? "");
+      const at = row.updated_at ? String(row.updated_at) : "";
+      const lim = Math.max(0, Math.round(Number(row.limit_released_cents ?? 0)));
+      const used = Math.max(0, Math.round(Number(row.amount_used_cents ?? 0)));
+      return `${id}:${at}:${lim}:${used}`;
+    });
+  return { revision: parts.join(";"), accountCount: data.length };
+}
+
 async function markHbCreditLimitSyncedBestEffort(
   supabase: SupabaseClient,
   cnpj: string,

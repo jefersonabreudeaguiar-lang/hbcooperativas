@@ -50,7 +50,8 @@ import {
 } from "@/lib/hb-credit/hbCreditLabPolicy";
 import { useSyncContaCoopLimiteFromFicha } from "@/hooks/useSyncContaCoopLimiteFromFicha";
 import { scheduleContaCoopAuxSync } from "@/lib/hb-credit/contaCoopAuxSyncSchedule";
-import { notifyHbCreditLimiteSynced } from "@/lib/hb-credit/hbCreditLimiteSyncEvents";
+import { HB_CREDIT_LIMITE_SYNCED_EVENT, notifyHbCreditLimiteSynced } from "@/lib/hb-credit/hbCreditLimiteSyncEvents";
+import { useHbCreditLimitesRevisionPoll } from "@/hooks/useHbCreditLimitesRevisionPoll";
 
 /** Marcações de performance — dev ou NEXT_PUBLIC_HB_CREDIT_PERF=true */
 function contaCoopPerfEnabled(): boolean {
@@ -75,8 +76,8 @@ const CREDITOS_BASE_SYNC_MAX_COOPERADOS = 25;
 
 const PREVIEW_COLETIVO_ITENS_RENDER = 50;
 
-/** Lista GET /limites — revalidação leve (sem sync-limite). */
-const LIMITES_LISTA_STALE_MS = 120_000;
+/** Lista GET /limites — revalidação leve (poll + eventos complementam). */
+const LIMITES_LISTA_STALE_MS = 45_000;
 
 const panelFallback = () => <PageSkeleton compact />;
 
@@ -511,7 +512,7 @@ function ContaCoopContent() {
           cooperadoIds: cooperadoIdsAtivos,
         });
         applyLimitesFetchResult(result, cooperadoIdsAtivos);
-        notifyHbCreditLimiteSynced();
+        notifyHbCreditLimiteSynced({ immediate: true });
         return limitesRef.current;
       } catch (e) {
         setLimitesListaAviso(mensagemErroListaLimitesStaff(e));
@@ -642,10 +643,27 @@ function ContaCoopContent() {
   }, [cnpj, user?.cooperativaId]);
 
   const refreshLimitesAposLiberacao = useCallback(() => {
-    notifyHbCreditLimiteSynced();
+    notifyHbCreditLimiteSynced({ immediate: true });
     void reload({ background: true });
     void revalidateLimitesLista({ force: true, background: true });
   }, [reload, revalidateLimitesLista]);
+
+  const refreshHbNuvemEmBackground = useCallback(() => {
+    void reload({ background: true });
+    void revalidateLimitesLista({ force: true, background: true });
+  }, [reload, revalidateLimitesLista]);
+
+  useEffect(() => {
+    const onLimiteSynced = () => refreshHbNuvemEmBackground();
+    window.addEventListener(HB_CREDIT_LIMITE_SYNCED_EVENT, onLimiteSynced);
+    return () => window.removeEventListener(HB_CREDIT_LIMITE_SYNCED_EVENT, onLimiteSynced);
+  }, [refreshHbNuvemEmBackground]);
+
+  useHbCreditLimitesRevisionPoll({
+    cnpj: cnpj ?? "",
+    enabled: cnpj.length === 14,
+    onRevisionChange: refreshHbNuvemEmBackground,
+  });
 
   const reloadRef = useRef(reload);
   reloadRef.current = reload;

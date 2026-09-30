@@ -38,7 +38,7 @@ import { formatLedgerEntryLabel } from "@/lib/hb-credit/ledgerLabels";
 import { bicCentralMesPrincipalQuantoVouReceber } from "@/services/bicLeituraCentralCooperado";
 import { isContaCoopValorReceberPilot } from "@/utils/contaCoopUiVisibility";
 import { notifyHbCreditAccountLoaded } from "@/lib/hb-credit/hbCreditEntryEvents";
-import { HB_CREDIT_LIMITE_SYNCED_EVENT, notifyHbCreditLimiteSynced } from "@/lib/hb-credit/hbCreditLimiteSyncEvents";
+import { HB_CREDIT_LIMITE_SYNCED_EVENT, notifyHbCreditAccountCacheUpdated } from "@/lib/hb-credit/hbCreditLimiteSyncEvents";
 import {
   aplicarHbCreditAccountPersistido,
   gravarHbCreditAccountPersistido,
@@ -199,7 +199,7 @@ function MinhaContaCoopContent() {
         pinResetPending: Boolean(acc.pinResetPending),
         savedAt: new Date().toISOString(),
       });
-      notifyHbCreditLimiteSynced();
+      notifyHbCreditAccountCacheUpdated();
     } catch (e) {
       if (!background) {
         setError(e instanceof Error ? e.message : "Erro ao carregar conta.");

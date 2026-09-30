@@ -10,7 +10,7 @@ import { fetchCreditAccount } from "@/services/creditApiService";
 import { getData, isAppDataWarm } from "@/services/dataStore";
 import { resolveCooperativaCnpj } from "@/services/notaPedidoCloudService";
 import { getUserCooperativaId } from "@/utils/cooperativa";
-import { notifyHbCreditLimiteSynced } from "@/lib/hb-credit/hbCreditLimiteSyncEvents";
+import { notifyHbCreditAccountCacheUpdated, notifyHbCreditLimiteSynced } from "@/lib/hb-credit/hbCreditLimiteSyncEvents";
 import type { User } from "@/types";
 
 export async function persistirHbCreditAccountCooperado(
@@ -38,6 +38,7 @@ export async function persistirHbCreditAccountCooperado(
       pinResetPending: Boolean(acc.pinResetPending),
       savedAt: new Date().toISOString(),
     });
+    notifyHbCreditAccountCacheUpdated();
     notifyHbCreditLimiteSynced();
     return Boolean(acc.account);
   } catch {

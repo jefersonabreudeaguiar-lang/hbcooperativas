@@ -107,6 +107,18 @@ export async function fetchCreditLimites(
   };
 }
 
+export async function fetchCreditLimitesRevision(cnpj: string) {
+  const res = await secureApiFetch(
+    `/api/credit/limites?cnpj=${encodeURIComponent(cnpj)}&view=revision`
+  );
+  const data = await parseJson<{
+    ok?: boolean;
+    revision?: { revision: string; accountCount?: number };
+  }>(res);
+  if (!res.ok || !data.ok) return null;
+  return data.revision ?? null;
+}
+
 export async function fetchCreditParceiros(cnpj: string): Promise<ContaCoopParceiro[]> {
   const res = await secureApiFetch(`/api/credit/parceiros?cnpj=${encodeURIComponent(cnpj)}`);
   const data = await parseJson<{ ok?: boolean; parceiros?: ContaCoopParceiro[] }>(res);
@@ -371,7 +383,7 @@ export async function authorizeCreditPayment(input: {
         await refreshContaCoopValorReceberAfterHbTransaction(refreshOpts);
         syncContaCoop = "ok";
         syncContaCoopError = undefined;
-        notifyHbCreditLimiteSynced();
+        notifyHbCreditLimiteSynced({ immediate: true });
         break;
       } catch (e) {
         syncContaCoopError = e instanceof Error ? e.message : "refresh_conta_coop_failed";

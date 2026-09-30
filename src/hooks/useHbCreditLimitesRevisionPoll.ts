@@ -1,30 +1,26 @@
 import { useEffect, useRef } from "react";
-import { fetchCreditAccountRevision } from "@/services/creditApiService";
+import { fetchCreditLimitesRevision } from "@/services/creditApiService";
 
 const POLL_INTERVAL_MS = 20_000;
 
 type Opts = {
   cnpj: string;
-  cooperadoId: string;
   enabled?: boolean;
-  /** Chamado quando a nuvem mudou (ex.: responsável liberou na aba Limites). */
   onRevisionChange: () => void;
 };
 
-/**
- * Poll leve da revisão HB na nuvem — alinha app cooperado com alterações do responsável (outro dispositivo).
- */
-export function useHbCreditAccountRevisionPoll(opts?: Opts) {
+/** Poll leve — responsável vê pagamentos/liberações de outro dispositivo ou do app cooperado. */
+export function useHbCreditLimitesRevisionPoll(opts?: Opts) {
   const revisionRef = useRef<string | null>(null);
   const onChangeRef = useRef(opts?.onRevisionChange);
   onChangeRef.current = opts?.onRevisionChange;
 
   useEffect(() => {
     revisionRef.current = null;
-  }, [opts?.cnpj, opts?.cooperadoId]);
+  }, [opts?.cnpj]);
 
   useEffect(() => {
-    if (!opts?.cnpj || !opts.cooperadoId || opts.enabled === false) return;
+    if (!opts?.cnpj || opts.cnpj.length !== 14 || opts.enabled === false) return;
 
     let cancelled = false;
     let intervalId = 0;
@@ -39,7 +35,7 @@ export function useHbCreditAccountRevisionPoll(opts?: Opts) {
         return;
       }
       try {
-        const rev = await fetchCreditAccountRevision(opts.cnpj, opts.cooperadoId);
+        const rev = await fetchCreditLimitesRevision(opts.cnpj);
         if (cancelled || !rev?.revision) return;
         const prev = revisionRef.current;
         revisionRef.current = rev.revision;
@@ -64,5 +60,5 @@ export function useHbCreditAccountRevisionPoll(opts?: Opts) {
       document.removeEventListener("visibilitychange", onVisible);
       if (intervalId) window.clearInterval(intervalId);
     };
-  }, [opts?.cnpj, opts?.cooperadoId, opts?.enabled]);
+  }, [opts?.cnpj, opts?.enabled]);
 }

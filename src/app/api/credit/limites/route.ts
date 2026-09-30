@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import {
+  getHbCreditLimitesRevision,
   listLimitesCooperadosAlinhadosComBase,
   previewLimiteAlteracao,
   previewLimiteColetivo,
@@ -31,6 +32,11 @@ export async function GET(request: Request) {
   if (denyCoop) return denyCoop;
   const denyStaff = requireCreditStaff(gate.ctx);
   if (denyStaff) return denyStaff;
+
+  if (searchParams.get("view") === "revision") {
+    const revision = await getHbCreditLimitesRevision(gate.ctx.supabase, cnpj);
+    return NextResponse.json({ ok: true, revision });
+  }
 
   const actorId = gate.ctx.session?.sub ?? "system";
   const resyncInflated = searchParams.get("resync") === "1";
