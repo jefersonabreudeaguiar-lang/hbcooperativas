@@ -725,6 +725,66 @@ export async function previewLimiteAlteracao(
   };
 }
 
+/** Rebaixa limit_released após quitação (base M6 = 0) — bypass teto global; só reduz ou mantém ≥ usado. */
+async function persistLimiteReleasedAfterCreditoBaseZero(
+  supabase: SupabaseClient,
+  cnpj: string,
+  cooperadoId: string,
+  novoLimiteCents: number,
+  actorUserId: string
+): Promise<{ ok: true; limite: ContaCoopLimiteCooperado } | { ok: false; error: string }> {
+  const digits = normalizeCnpj(cnpj);
+  const alvo = Math.max(0, Math.round(novoLimiteCents));
+  const { data: existing } = await supabase
+    .from("hb_credit_accounts")
+    .select("*")
+    .eq("cooperative_cnpj", digits)
+    .eq("cooperado_id", cooperadoId)
+    .maybeSingle();
+
+  const usado = existing ? Number(existing.amount_used_cents) : 0;
+  if (alvo < usado) {
+    return { ok: false, error: "Novo limite não pode ser menor que o valor já usado." };
+  }
+
+  const anterior = existing ? Number(existing.limit_released_cents) : 0;
+  const now = new Date().toISOString();
+
+  const { data, error } = await supabase
+    .from("hb_credit_accounts")
+    .upsert(
+      {
+        cooperative_cnpj: digits,
+        cooperado_id: cooperadoId,
+        limit_released_cents: alvo,
+        financial_limit_cap_cents: alvo,
+        amount_used_cents: usado,
+        status: existing?.status ?? "active",
+        updated_at: now,
+        updated_by: actorUserId,
+      },
+      { onConflict: "cooperative_cnpj,cooperado_id" }
+    )
+    .select()
+    .single();
+
+  if (error) return { ok: false, error: error.message };
+
+  await supabase.from("hb_credit_audit_log").insert({
+    cooperative_cnpj: digits,
+    actor: actorUserId,
+    action: "LIMIT_TIGHTENED_BASE_ZERO",
+    resource_type: "account",
+    resource_id: cooperadoId,
+    metadata: {
+      anterior: { limiteLiberadoCents: anterior, valorUsadoCents: usado },
+      novo: { limiteLiberadoCents: alvo },
+    },
+  });
+
+  return { ok: true, limite: mapLimiteRow(data as Record<string, unknown>) };
+}
+
 export async function setLimiteCooperado(
   supabase: SupabaseClient,
   cnpj: string,
@@ -872,29 +932,47 @@ export async function syncLimiteCooperadoFromCreditoBase(
 > {
   const base = Math.max(0, Math.round(Number(creditoBaseCents) || 0));
   if (base === 0) {
-    /** Lastro zero na sync automática não revoga nem reduz limit_released_cents já liberado. */
     const atual = await getLimiteCooperado(supabase, cnpj, cooperadoId);
-    if (atual) {
-      return { ok: true, limite: atual, action: "unchanged" };
+    if (!atual) {
+      const digits = normalizeCnpj(cnpj);
+      return {
+        ok: true,
+        limite: {
+          id: "",
+          cooperativaCnpj: digits,
+          cooperadoId,
+          limiteLiberadoCents: 0,
+          valorUsadoCents: 0,
+          valorDisponivelCents: 0,
+          bloqueado: false,
+          hasFinancialPin: false,
+          pinLockedUntil: null,
+          cashbackDisponivelCents: 0,
+          updatedAt: new Date().toISOString(),
+        },
+        action: "unchanged",
+      };
     }
-    const digits = normalizeCnpj(cnpj);
-    return {
-      ok: true,
-      limite: {
-        id: "",
-        cooperativaCnpj: digits,
-        cooperadoId,
-        limiteLiberadoCents: 0,
-        valorUsadoCents: 0,
-        valorDisponivelCents: 0,
-        bloqueado: false,
-        hasFinancialPin: false,
-        pinLockedUntil: null,
-        cashbackDisponivelCents: 0,
-        updatedAt: new Date().toISOString(),
-      },
-      action: "unchanged",
-    };
+    const alvoCents = Math.max(0, atual.valorUsadoCents);
+    if (atual.limiteLiberadoCents === alvoCents) {
+      return {
+        ok: true,
+        limite: {
+          ...atual,
+          valorDisponivelCents: computeDisponivel(atual.limiteLiberadoCents, atual.valorUsadoCents),
+        },
+        action: "unchanged",
+      };
+    }
+    const tightened = await persistLimiteReleasedAfterCreditoBaseZero(
+      supabase,
+      cnpj,
+      cooperadoId,
+      alvoCents,
+      actorUserId
+    );
+    if (!tightened.ok) return tightened;
+    return { ...tightened, action: "tightened" as const };
   }
 
   const teto = await requireConfiguredTeto(supabase, cnpj, creditosBaseCents);

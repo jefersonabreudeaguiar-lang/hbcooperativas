@@ -3,7 +3,7 @@
  */
 import type { ContaCoopLimiteCooperado } from "@/modules/hb-credit/types";
 
-export const HB_CREDIT_LIMITES_STORAGE_VERSION = 3;
+export const HB_CREDIT_LIMITES_STORAGE_VERSION = 4;
 
 export type HbCreditLimitesPersistido = {
   v: number;
@@ -26,6 +26,7 @@ export function lerHbCreditLimitesPersistidos(cnpj: string): HbCreditLimitesPers
     const parsed = JSON.parse(raw) as HbCreditLimitesPersistido;
     if (
       parsed.v !== HB_CREDIT_LIMITES_STORAGE_VERSION &&
+      parsed.v !== 3 &&
       parsed.v !== 2 &&
       parsed.v !== 1
     ) {

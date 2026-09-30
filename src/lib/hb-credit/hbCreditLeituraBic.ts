@@ -126,8 +126,9 @@ export function hbCreditCreditoBaseLastroEntregasReais(
 }
 
 /**
- * Crédito-base HB para teto/cap — M6 quando há valor a receber; senão lastro de entregas conferidas.
- * M6 = 0 após pagamento NÃO implica base HB = 0 se ainda há lastro conferido.
+ * Crédito-base HB (limite/teto) — somente valor a receber em aberto (M6).
+ * Após quitação confirmada na ficha, base = 0 até nova entrega gerar pendência.
+ * Lastro conferido sem M6 não libera crédito na aba Limites.
  */
 export function hbCreditCreditoBaseReais(
   data: AppData,
@@ -135,6 +136,5 @@ export function hbCreditCreditoBaseReais(
   cooperativaId: string | undefined
 ): number {
   const m6 = hbCreditValorAReceberAgregado(data, cooperadoId, cooperativaId);
-  if (m6.valor > 0) return round2(m6.valor);
-  return hbCreditCreditoBaseLastroEntregasReais(data, cooperadoId, cooperativaId);
+  return m6.valor > 0 ? round2(m6.valor) : 0;
 }

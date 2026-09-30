@@ -87,17 +87,52 @@ function miniData(overrides: Partial<AppData> = {}): AppData {
   assert.equal(eff.valorDisponivelCents, 50_000);
 }
 
-// CENÁRIO 2 — A receber quitado (base lastro mantém; released intacto)
+// CENÁRIO 2 — A receber quitado (M6 zero): base e limite efetivo zeram sem compra HB
 {
-  const data = miniData();
+  const data = miniData({
+    pagamentosCooperado: [
+      {
+        id: "pg1",
+        cooperativaId: COOP,
+        cooperadoId: COOPERADO,
+        mesReferencia: "2026-09",
+        valorBruto: 500,
+        descontoCooperativa: 0,
+        descontosExtras: [],
+        valorLiquido: 500,
+        fichaIds: [],
+        notaPedidoIds: ["n1"],
+        status: "confirmado",
+        pagoPor: "Resp",
+        pagoEm: "2026-09-15T12:00:00.000Z",
+        createdAt: "2026-09-15T12:00:00.000Z",
+        updatedAt: "2026-09-15T12:00:00.000Z",
+      },
+    ],
+    notasPedido: [
+      {
+        id: "n1",
+        cooperadoId: COOPERADO,
+        cooperativaId: COOP,
+        mesReferencia: "2026-09",
+        status: "pago",
+        valorLiquido: 500,
+        valorBruto: 500,
+        instituicaoId: "i1",
+        itens: [{ produtoId: "p1", quantidade: 1, precoUnitario: 500 }],
+        createdAt: "2026-09-01T00:00:00.000Z",
+        updatedAt: "2026-09-15T12:00:00.000Z",
+      },
+    ],
+  });
   assert.ok(cooperadoTemEntregasConferidasParaHb(data, COOPERADO, COOP));
   const lastro = hbCreditCreditoBaseLastroEntregasReais(data, COOPERADO, COOP);
-  assert.equal(lastro, 500, "lastro de entregas conferidas permanece após M6 zero");
+  assert.equal(lastro, 500, "lastro histórico permanece para diagnóstico");
   const baseReais = hbCreditCreditoBaseReais(data, COOPERADO, COOP);
-  assert.equal(baseReais, 500, "crédito-base HB não zera só porque M6=0");
-  const eff = resolveLimiteHbCooperadoEfetivo(limiteRow(50_000, 0), 50_000, 100);
-  assert.equal(eff.limiteLiberadoCents, 50_000);
-  assert.equal(eff.valorDisponivelCents, 50_000);
+  assert.equal(baseReais, 0, "crédito-base HB = só valor a receber em aberto");
+  const eff = resolveLimiteHbCooperadoEfetivo(limiteRow(50_000, 0), 0, 100);
+  assert.equal(eff.limiteLiberadoCents, 0);
+  assert.equal(eff.valorDisponivelCents, 0);
 }
 
 // CENÁRIO 3 — compra

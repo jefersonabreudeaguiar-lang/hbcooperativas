@@ -8,9 +8,7 @@ import {
 import { hbCreditCreditoBaseReais } from "@/lib/hb-credit/hbCreditLeituraBic";
 import { resolverCooperadoIdCanonico } from "@/services/cooperadoCloudService";
 
-/**
- * Crédito base HB — valor a receber (M6) ou lastro de entregas conferidas; blindagem anti-fantasma separada.
- */
+/** Crédito base HB — valor a receber (M6) em aberto; blindagem anti-fantasma separada. */
 export function getCreditoBaseContaCoopReais(
   data: AppData,
   cooperadoId: string,

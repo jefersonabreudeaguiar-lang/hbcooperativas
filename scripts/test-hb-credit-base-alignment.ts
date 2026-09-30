@@ -80,8 +80,8 @@ function nota(id: string): NotaPedido {
   data = registrarPagamentoCooperado(data, COOPERADO, "2026-09", "Resp");
   assert.equal(
     getCreditoBaseContaCoopReais(data, COOPERADO, COOP),
-    200,
-    "PIX aguardando assinatura não zera lastro HB — limite liberado permanece válido"
+    0,
+    "após PIX aguardando confirmação, M6 zera — base HB só reflete valor a receber"
   );
 }
 

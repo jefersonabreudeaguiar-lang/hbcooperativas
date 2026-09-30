@@ -74,8 +74,8 @@ export function blindarCreditoBaseCentsHb(
 }
 
 /**
- * Limite HB efetivo para UI/API — autoridade = limit_released_cents no Supabase.
- * Teto percentual só reduz acima do liberado (anti-inflação); quitou “A receber” não zera limite.
+ * Limite HB efetivo para UI/API — alinhado ao valor a receber (base M6).
+ * Sem base em aberto, liberado exibido = no máximo o já utilizado (compras HB pendentes de lastro).
  */
 export function resolveLimiteHbCooperadoEfetivo(
   limite: ContaCoopLimiteCooperado,
@@ -88,8 +88,9 @@ export function resolveLimiteHbCooperadoEfetivo(
 
   let effectiveReleased = released;
 
-  if (
-    base > 0 &&
+  if (base === 0) {
+    effectiveReleased = Math.min(released, usado);
+  } else if (
     Number.isFinite(tetoPercent) &&
     tetoPercent > 0 &&
     tetoPercent <= 100
