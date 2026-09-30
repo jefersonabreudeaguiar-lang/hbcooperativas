@@ -2232,6 +2232,60 @@ export async function createPaymentIntent(
   return mapRow(data as Record<string, unknown>);
 }
 
+/** Reserva cobrança ao cooperado que vai pagar (evita dois cooperados pagarem o mesmo QR). */
+async function reservePaymentIntentForCooperado(
+  supabase: SupabaseClient,
+  intentId: string,
+  cooperadoId: string,
+  cooperativeCnpj: string
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const digits = normalizeCnpj(cooperativeCnpj);
+  const { data: intent } = await supabase
+    .from("hb_credit_payment_intents")
+    .select("cooperado_id, status, cooperative_cnpj")
+    .eq("id", intentId)
+    .maybeSingle();
+
+  if (!intent) return { ok: false, error: "Cobrança não encontrada." };
+  if (String(intent.cooperative_cnpj) !== digits) return { ok: false, error: "Cooperativa inválida." };
+  if (!["PENDING", "CREATED"].includes(String(intent.status))) {
+    return { ok: false, error: "Cobrança já utilizada." };
+  }
+
+  const bound = intent.cooperado_id ? String(intent.cooperado_id) : "";
+  if (bound && bound !== cooperadoId) {
+    return { ok: false, error: "Esta cobrança já foi vinculada a outro cooperado." };
+  }
+  if (bound === cooperadoId) return { ok: true };
+
+  const now = new Date().toISOString();
+  const { data: claimed } = await supabase
+    .from("hb_credit_payment_intents")
+    .update({ cooperado_id: cooperadoId, updated_at: now })
+    .eq("id", intentId)
+    .eq("cooperative_cnpj", digits)
+    .in("status", ["PENDING", "CREATED"])
+    .is("cooperado_id", null)
+    .select("id")
+    .maybeSingle();
+
+  if (claimed) return { ok: true };
+
+  const { data: again } = await supabase
+    .from("hb_credit_payment_intents")
+    .select("cooperado_id, status")
+    .eq("id", intentId)
+    .maybeSingle();
+  if (!again) return { ok: false, error: "Cobrança não encontrada." };
+  if (!["PENDING", "CREATED"].includes(String(again.status))) {
+    return { ok: false, error: "Cobrança já utilizada." };
+  }
+  const rebound = again.cooperado_id ? String(again.cooperado_id) : "";
+  if (rebound === cooperadoId) return { ok: true };
+  if (rebound) return { ok: false, error: "Esta cobrança já foi vinculada a outro cooperado." };
+  return { ok: false, error: "Não foi possível reservar esta cobrança. Tente novamente." };
+}
+
 export async function validateIntentForCooperado(
   supabase: SupabaseClient,
   intentId: string,
@@ -2248,6 +2302,10 @@ export async function validateIntentForCooperado(
   if (!intent) return { ok: false, error: "Cobrança não encontrada." };
   if (intent.cooperative_cnpj !== digits) return { ok: false, error: "Cooperativa inválida." };
   if (intent.nonce !== nonce) return { ok: false, error: "QR inválido." };
+  const intentCooperadoId = intent.cooperado_id ? String(intent.cooperado_id) : "";
+  if (intentCooperadoId && intentCooperadoId !== cooperadoId) {
+    return { ok: false, error: "Esta cobrança já foi vinculada a outro cooperado." };
+  }
   if (!["PENDING", "CREATED"].includes(intent.status)) return { ok: false, error: "Cobrança já utilizada." };
   if (new Date(intent.expires_at).getTime() < Date.now()) return { ok: false, error: "Cobrança expirada." };
 
@@ -2353,6 +2411,14 @@ export async function authorizePayment(
     input.actorUserId
   );
   if (!pinCheck.ok) return { ok: false, error: pinCheck.error };
+
+  const reserve = await reservePaymentIntentForCooperado(
+    supabase,
+    input.intentId,
+    input.cooperadoId,
+    input.cooperativaCnpj
+  );
+  if (!reserve.ok) return { ok: false, error: reserve.error };
 
   const intentCheck = await validateIntentForCooperado(
     supabase,
