@@ -22,6 +22,7 @@ import { cn } from "@/utils/format";
 import { useHbCreditEnabled } from "@/hooks/useHbCreditEnabled";
 import { isContaCoopUiVisibleForUser } from "@/utils/contaCoopUiVisibility";
 import { useSyncContaCoopValorReceberCooperativa } from "@/hooks/useSyncContaCoopValorReceberCooperativa";
+import { isStaffHbCoopBackgroundSyncRoute } from "@/lib/hb-credit/staffHbSyncRoute";
 import { AppUpdateBanner } from "@/components/pwa/AppUpdateBanner";
 import { getUserCooperativaId } from "@/utils/cooperativa";
 import { useHbCreditDescontosWarmup } from "@/hooks/useHbCreditDescontosWarmup";
@@ -326,12 +327,11 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     user &&
     coopId &&
     (user.role === "responsavel" || user.role === "tesoureiro" || user.role === "admin");
-  /** Sync pesado só nas telas HB / relatórios — não compete com Início e demais abas. */
-  const staffCoopSyncRoute =
-    pathname.startsWith("/conta-coop") || pathname.startsWith("/relatorios");
+  /** Ficha-descontos em lote — só relatórios; `/conta-coop` usa APIs próprias da página HB. */
+  const staffCoopBackgroundSync = isStaffHbCoopBackgroundSyncRoute(pathname);
 
   useSyncContaCoopValorReceberCooperativa(
-    staffHbSync && credit.enabled && staffCoopSyncRoute
+    staffHbSync && credit.enabled && staffCoopBackgroundSync
       ? { cooperativaId: coopId, user, enabled: true }
       : undefined
   );
