@@ -2249,17 +2249,39 @@ async function readLimiteAtualCooperado(
   cnpj: string,
   cooperadoId: string
 ): Promise<{ limiteAtualCents: number; valorUsadoCents: number }> {
+  const map = await readLimitesAtuaisCooperadosMap(supabase, cnpj, [cooperadoId]);
+  return map.get(cooperadoId) ?? { limiteAtualCents: 0, valorUsadoCents: 0 };
+}
+
+async function readLimitesAtuaisCooperadosMap(
+  supabase: SupabaseClient,
+  cnpj: string,
+  cooperadoIds: string[]
+): Promise<Map<string, { limiteAtualCents: number; valorUsadoCents: number }>> {
   const digits = normalizeCnpj(cnpj);
-  const { data } = await supabase
+  const map = new Map<string, { limiteAtualCents: number; valorUsadoCents: number }>();
+  if (!cooperadoIds.length) return map;
+
+  const uniqueIds = [...new Set(cooperadoIds.filter(Boolean))];
+  const { data, error } = await supabase
     .from("hb_credit_accounts")
-    .select("limit_released_cents, amount_used_cents")
+    .select("cooperado_id, limit_released_cents, amount_used_cents")
     .eq("cooperative_cnpj", digits)
-    .eq("cooperado_id", cooperadoId)
-    .maybeSingle();
-  return {
-    limiteAtualCents: data ? Number(data.limit_released_cents) : 0,
-    valorUsadoCents: data ? Number(data.amount_used_cents) : 0,
-  };
+    .in("cooperado_id", uniqueIds);
+
+  if (error) throw error;
+
+  for (const row of data ?? []) {
+    const id = String(row.cooperado_id);
+    map.set(id, {
+      limiteAtualCents: Number(row.limit_released_cents),
+      valorUsadoCents: Number(row.amount_used_cents),
+    });
+  }
+  for (const id of uniqueIds) {
+    if (!map.has(id)) map.set(id, { limiteAtualCents: 0, valorUsadoCents: 0 });
+  }
+  return map;
 }
 
 export async function previewLimiteColetivoPercentual(
@@ -2328,9 +2350,12 @@ export async function previewLimiteColetivoPercentual(
   const itens: LimiteColetivoPreviewItem[] = [];
   let novoLimiteTotal = 0;
 
+  const limitesAtuais = await readLimitesAtuaisCooperadosMap(supabase, digits, cooperadoIds);
+
   for (const cooperadoId of cooperadoIds) {
     const creditoBaseCents = Math.max(0, Math.round(Number(creditosBaseCents[cooperadoId] ?? 0)));
-    const { limiteAtualCents, valorUsadoCents } = await readLimiteAtualCooperado(supabase, digits, cooperadoId);
+    const { limiteAtualCents, valorUsadoCents } =
+      limitesAtuais.get(cooperadoId) ?? { limiteAtualCents: 0, valorUsadoCents: 0 };
 
     let novoLimiteCents = calcLimiteFromPercentual(creditoBaseCents, percentual);
     let ajustadoPorUso = false;

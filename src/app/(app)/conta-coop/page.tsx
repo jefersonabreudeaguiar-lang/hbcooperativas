@@ -1,7 +1,7 @@
 "use client";
 
 import dynamic from "next/dynamic";
-import { useCallback, useEffect, useMemo, useRef, useState, startTransition } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, startTransition, useDeferredValue } from "react";
 import { useSearchParams } from "next/navigation";
 import { getData } from "@/services/dataStore";
 import { resolveCooperativaCnpj } from "@/services/notaPedidoCloudService";
@@ -64,6 +64,11 @@ function contaCoopPerfEnd(label: string, startedAt: number | null): void {
   if (startedAt == null || !contaCoopPerfEnabled()) return;
   console.debug(`[conta-coop] ${label} ${Date.now() - startedAt}ms`);
 }
+
+/** Acima disso não recalculamos crédito-base síncrono no browser (trava UI). */
+const CREDITOS_BASE_SYNC_MAX_COOPERADOS = 25;
+
+const PREVIEW_COLETIVO_ITENS_RENDER = 50;
 
 /** Lista GET /limites — revalidação leve (sem sync-limite). */
 const LIMITES_LISTA_STALE_MS = 120_000;
@@ -282,6 +287,35 @@ function ContaCoopContent() {
   const creditosBaseRef = useRef(creditosBaseColetivo);
   creditosBaseRef.current = creditosBaseColetivo;
 
+  /** Base vinda do GET /limites (ref) — evita buildCreditosBaseMapCached síncrono na liberação coletiva. */
+  const pickCreditosBaseForPost = useCallback((): Record<string, number> | null => {
+    const fromServer = creditosBaseRef.current;
+    if (Object.keys(fromServer).length > 0) return fromServer;
+
+    if (limitesListaPendingRef.current) {
+      setError("Aguarde a atualização dos limites na nuvem.");
+      return null;
+    }
+
+    const ids = cooperadoIdsAtivosRef.current;
+    if (ids.length > CREDITOS_BASE_SYNC_MAX_COOPERADOS) {
+      setError(
+        "Crédito na ficha ainda não carregou para todos os cooperados. Aguarde alguns segundos e tente de novo."
+      );
+      return null;
+    }
+
+    recomputeCreditosBaseLocal({ immediate: true });
+    if (Object.keys(creditosBaseRef.current).length > 0) return creditosBaseRef.current;
+    setError("Não foi possível obter o crédito na ficha. Atualize a aba Limites e tente novamente.");
+    return null;
+  }, [recomputeCreditosBaseLocal]);
+
+  const [limitesUiReady, setLimitesUiReady] = useState(false);
+  const deferredLimites = useDeferredValue(limites);
+  const deferredCreditosBase = useDeferredValue(creditosBaseColetivo);
+  const limitesTabPaintPending = tab === "limites" && limites !== deferredLimites;
+
   const cooperadoIdsAtivosRef = useRef(cooperadoIdsAtivos);
   cooperadoIdsAtivosRef.current = cooperadoIdsAtivos;
 
@@ -483,13 +517,31 @@ function ContaCoopContent() {
   }, [tab, cnpj, revalidateLimitesLista]);
 
   useEffect(() => {
+    if (tab !== "limites") {
+      setLimitesUiReady(false);
+      return;
+    }
+    let cancelled = false;
+    const raf = requestAnimationFrame(() => {
+      startTransition(() => {
+        if (!cancelled) setLimitesUiReady(true);
+      });
+    });
+    return () => {
+      cancelled = true;
+      cancelAnimationFrame(raf);
+    };
+  }, [tab]);
+
+  useEffect(() => {
     const p = dashboard?.teto.tetoGlobalPercent;
     if (p != null && p > 0) setTetoPercentual(String(p));
   }, [dashboard?.teto.tetoGlobalPercent]);
 
   const salvarTeto = async () => {
     if (!cnpj) return;
-    recomputeCreditosBaseLocal({ immediate: true });
+    const creditosBaseCents = pickCreditosBaseForPost();
+    if (!creditosBaseCents) return;
     setBusy(true);
     setError("");
     try {
@@ -497,7 +549,7 @@ function ContaCoopContent() {
         action: "set_teto",
         cnpj,
         tetoPercentual: Number(tetoPercentual.replace(",", ".")),
-        creditosBaseCents: creditosBaseColetivo,
+        creditosBaseCents,
       });
       await reload();
       await syncLimitesComFicha({ background: true });
@@ -510,7 +562,8 @@ function ContaCoopContent() {
 
   const salvarLimiteIndividual = async () => {
     if (!cnpj || !cooperadoId) return;
-    recomputeCreditosBaseLocal({ immediate: true });
+    const creditosBaseCents = pickCreditosBaseForPost();
+    if (!creditosBaseCents) return;
     setBusy(true);
     setError("");
     try {
@@ -519,7 +572,7 @@ function ContaCoopContent() {
         cnpj,
         cooperadoId,
         novoLimiteReais: Number(novoLimiteReais.replace(",", ".")),
-        creditosBaseCents: creditosBaseColetivo,
+        creditosBaseCents,
       });
       await reload();
       await syncLimitesComFicha({ background: true });
@@ -540,15 +593,17 @@ function ContaCoopContent() {
     setBusy(true);
     setError("");
     try {
-      recomputeCreditosBaseLocal({ immediate: true });
+      const creditosBaseCents = pickCreditosBaseForPost();
+      if (!creditosBaseCents) return;
       const res = await postCreditLimites({
         action: "preview_coletivo",
         cnpj,
         cooperadoIds: cooperadosAtivos.map((c) => c.id),
         percentual,
-        creditosBaseCents: creditosBaseColetivo,
+        creditosBaseCents,
       });
-      setPreviewColetivo((res as { preview?: PreviewColetivo }).preview ?? null);
+      const preview = (res as { preview?: PreviewColetivo }).preview ?? null;
+      startTransition(() => setPreviewColetivo(preview));
     } catch (e) {
       setError(e instanceof Error ? e.message : "Erro na prévia.");
     } finally {
@@ -566,13 +621,14 @@ function ContaCoopContent() {
     setBusy(true);
     setError("");
     try {
-      recomputeCreditosBaseLocal({ immediate: true });
+      const creditosBaseCents = pickCreditosBaseForPost();
+      if (!creditosBaseCents) return;
       await postCreditLimites({
         action: "set_coletivo",
         cnpj,
         cooperadoIds: cooperadosAtivos.map((c) => c.id),
         percentual,
-        creditosBaseCents: creditosBaseColetivo,
+        creditosBaseCents,
       });
       setPreviewColetivo(null);
       await reload();
@@ -961,6 +1017,13 @@ function ContaCoopContent() {
           {limitesRefreshing && (
             <p className="text-xs text-gray-500">Atualizando limites na nuvem…</p>
           )}
+          {limitesTabPaintPending && (
+            <p className="text-xs text-gray-500">Atualizando tabela…</p>
+          )}
+          {!limitesUiReady ? (
+            <PageSkeleton compact />
+          ) : (
+            <>
           <AlertBanner variant="info">
             Se o cooperado esquecer o PIN de pagamento, ele pode solicitar reset em Minha Conta Coop. Você confirma
             aqui em <strong>Resetar PIN de pagamento</strong>; depois ele cadastra um PIN novo.
@@ -1073,7 +1136,7 @@ function ContaCoopContent() {
                         </tr>
                       </thead>
                       <tbody>
-                        {previewColetivo.itens.map((item) => (
+                        {previewColetivo.itens.slice(0, PREVIEW_COLETIVO_ITENS_RENDER).map((item) => (
                           <tr key={item.cooperadoId} className="border-t">
                             <td className="p-2">{cooperadoNome(item.cooperadoId)}</td>
                             <td className="p-2">{formatCentsBRL(item.creditoBaseCents)}</td>
@@ -1087,6 +1150,12 @@ function ContaCoopContent() {
                         ))}
                       </tbody>
                     </table>
+                    {previewColetivo.itens.length > PREVIEW_COLETIVO_ITENS_RENDER && (
+                      <p className="p-2 text-xs text-gray-500 border-t">
+                        Mostrando {PREVIEW_COLETIVO_ITENS_RENDER} de {previewColetivo.itens.length} cooperados na
+                        prévia.
+                      </p>
+                    )}
                   </div>
                 )}
               </div>
@@ -1108,7 +1177,7 @@ function ContaCoopContent() {
                   </tr>
                 </thead>
                 <tbody>
-                  {limites.map((l) => (
+                  {deferredLimites.map((l) => (
                     <tr key={l.id} className="border-t">
                       <td className="p-3">
                         {cooperadoNome(l.cooperadoId)}
@@ -1118,7 +1187,7 @@ function ContaCoopContent() {
                           </span>
                         )}
                       </td>
-                      <td className="p-3">{formatCentsBRL(creditosBaseColetivo[l.cooperadoId] ?? 0)}</td>
+                      <td className="p-3">{formatCentsBRL(deferredCreditosBase[l.cooperadoId] ?? 0)}</td>
                       <td className="p-3">{formatCentsBRL(l.limiteLiberadoCents)}</td>
                       <td className="p-3">{formatCentsBRL(l.valorUsadoCents)}</td>
                       <td className="p-3 font-medium text-green-800">
@@ -1150,7 +1219,7 @@ function ContaCoopContent() {
                       </td>
                     </tr>
                   ))}
-                  {!limites.length && (
+                  {!deferredLimites.length && (
                     <tr>
                       <td colSpan={7} className="p-6 text-center text-gray-500">
                         Nenhum limite liberado ainda.
@@ -1161,6 +1230,8 @@ function ContaCoopContent() {
               </table>
             </div>
           </Card>
+            </>
+          )}
         </div>
       )}
 
