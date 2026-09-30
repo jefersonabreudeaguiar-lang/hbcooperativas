@@ -378,7 +378,12 @@ export function lancarRetencoesPagamentoNoCaixa(
   }
 
   const outrosDescontos = (pagamento.descontosExtras ?? []).filter(
-    (d) => d.tipo !== "mensalidade" && d.tipo !== "credito_avulso" && d.tipo !== "cooperativa" && d.valor > 0
+    (d) =>
+      d.tipo !== "mensalidade" &&
+      d.tipo !== "credito_avulso" &&
+      d.tipo !== "cooperativa" &&
+      d.valor > 0 &&
+      !/\(estornada\)/i.test(d.motivo ?? "")
   );
   outrosDescontos.forEach((d, i) => {
     next = appendLivroCaixaLancamento(
@@ -481,8 +486,8 @@ export function completarLancamentosContabeisPagamentos(data: AppData, cooperati
   let next = data;
   const pagamentos = data.pagamentosCooperado.filter((p) => !cooperativaId || p.cooperativaId === cooperativaId);
   for (const pagamento of pagamentos) {
-    const atualizado = lancarRetencoesPagamentoNoCaixa(next, pagamento);
-    if (atualizado !== next) next = atualizado;
+    if (pagamento.status !== "confirmado" && pagamento.status !== "aguardando_confirmacao") continue;
+    next = lancarPagamentoCooperadoNoCaixa(next, pagamento);
   }
   return next;
 }
@@ -511,8 +516,7 @@ export function isLancamentoSemSequenciaLegado(l: LivroCaixaLancamento): boolean
 }
 
 export function podeExcluirLancamentoLivroCaixa(l: LivroCaixaLancamento): boolean {
-  if (isLancamentoManualEditavel(l)) return true;
-  return isLancamentoSemSequenciaLegado(l);
+  return isLancamentoManualEditavel(l);
 }
 
 export function atualizarLancamentoManual(
@@ -557,9 +561,14 @@ export function atualizarLancamentoManual(
 export function excluirLancamentoLivroCaixa(data: AppData, cooperativaId: string, lancamentoId: string): AppData {
   const alvo = (data.livroCaixa ?? []).find((l) => l.id === lancamentoId && l.cooperativaId === cooperativaId);
   if (!alvo || !podeExcluirLancamentoLivroCaixa(alvo)) return data;
+  const excluidoEm = new Date().toISOString();
   return {
     ...data,
     livroCaixa: (data.livroCaixa ?? []).filter((l) => l.id !== lancamentoId),
+    livroCaixaExcluidos: [
+      ...(data.livroCaixaExcluidos ?? []).filter((e) => e.id !== lancamentoId),
+      { id: lancamentoId, cooperativaId, excluidoEm },
+    ],
   };
 }
 

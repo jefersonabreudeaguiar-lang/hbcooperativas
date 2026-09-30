@@ -28,10 +28,20 @@ import type {
   SettlementStatus,
   IntentStatus,
 } from "@/modules/hb-credit/types";
+import { mapAuthorizeRpcError } from "@/modules/hb-credit/engine/hbCreditLimitSyncState";
 import { computeDisponivel, formatCentsBRL } from "@/modules/hb-credit/engine/money";
 import { calcLimiteFromPercentual, calcTetoGlobalCents, sumCreditosBaseCents } from "@/modules/hb-credit/engine/creditBaseFromFicha";
+import { resolveAuthoritativeCreditBase } from "@/modules/hb-credit/engine/creditBaseAuthoritative";
+import { capContaCoopLimiteToAuthoritativeBase } from "@/modules/hb-credit/engine/creditBaseHbGuard";
 import { INTENT_EXPIRY_MINUTES } from "@/modules/hb-credit/config";
 import { getCurrentMesReferencia } from "@/utils/format";
+import {
+  impactoAReceberReais,
+  statusResumoFromTx,
+  valorReaisLinhaResumoCooperado,
+  type HbUtilizacaoResumoLancamento,
+} from "@/lib/hb-credit/utilizacaoResumo";
+import { dedupeDescontosContaCoopRemotos } from "@/lib/hb-credit/mergeFichaDescontos";
 import { decryptSensitiveField, encryptSensitiveField } from "@/lib/security/fieldCrypto";
 import {
   intentStatusFromDb,
@@ -306,16 +316,15 @@ export async function getDashboardResumo(
   const creditoBaseTotalCents = tetoResult.configured
     ? tetoResult.creditoBaseTotalCents
     : sumCreditosBaseCents(creditosBaseCents);
-  const { data: limites } = await supabase
-    .from("hb_credit_accounts")
-    .select("limit_released_cents, amount_used_cents")
-    .eq("cooperative_cnpj", digits);
 
+  const limitesEfetivos = await listLimitesCooperadosAlinhadosAEntregas(supabase, digits, {
+    resyncIfInflated: false,
+  });
   let limiteDistribuido = 0;
   let usadoTotal = 0;
-  for (const row of limites ?? []) {
-    limiteDistribuido += Number(row.limit_released_cents);
-    usadoTotal += Number(row.amount_used_cents);
+  for (const l of limitesEfetivos) {
+    limiteDistribuido += l.limiteLiberadoCents;
+    usadoTotal += l.valorUsadoCents;
   }
 
   const { count: pendentes } = await supabase
@@ -437,6 +446,54 @@ export async function listLimitesCooperados(
     .order("updated_at", { ascending: false });
 
   return (data ?? []).map(mapLimiteRow);
+}
+
+/** Lista de limites exibida ao responsável — capada pela base autoritativa e re-sync se DB inflado. */
+export async function listLimitesCooperadosAlinhadosAEntregas(
+  supabase: SupabaseClient,
+  cnpj: string,
+  opts?: { resyncIfInflated?: boolean; actorUserId?: string }
+): Promise<ContaCoopLimiteCooperado[]> {
+  const limites = await listLimitesCooperados(supabase, cnpj);
+  if (!limites.length) return limites;
+
+  const cooperadoIds = limites.map((l) => l.cooperadoId);
+  const authoritative = await resolveAuthoritativeCreditBase(supabase, cnpj, cooperadoIds);
+  if (!authoritative.ok) return limites;
+
+  const teto = await resolveTetoGlobal(supabase, cnpj, authoritative.creditosBaseCents);
+  const tetoPercent = teto.configured ? teto.percent : 0;
+
+  const capped = limites.map((limite) =>
+    capContaCoopLimiteToAuthoritativeBase(
+      limite,
+      authoritative.creditosBaseCents[limite.cooperadoId] ?? 0,
+      tetoPercent
+    )
+  );
+
+  if (opts?.resyncIfInflated && opts.actorUserId) {
+    const toSync: string[] = [];
+    const creditosBaseCents: Record<string, number> = {};
+    for (let i = 0; i < limites.length; i++) {
+      const raw = limites[i];
+      const cap = capped[i];
+      if (cap.limiteLiberadoCents >= raw.limiteLiberadoCents) continue;
+      toSync.push(raw.cooperadoId);
+      creditosBaseCents[raw.cooperadoId] = authoritative.creditosBaseCents[raw.cooperadoId] ?? 0;
+    }
+    if (toSync.length) {
+      void syncLimitesCooperadosFromCreditoBase(
+        supabase,
+        cnpj,
+        toSync,
+        creditosBaseCents,
+        opts.actorUserId
+      ).catch(() => {});
+    }
+  }
+
+  return capped;
 }
 
 function mapLimiteRow(row: Record<string, unknown>, cashbackDisponivelCents = 0): ContaCoopLimiteCooperado {
@@ -688,19 +745,35 @@ export async function syncLimiteCooperadoFromCreditoBase(
   creditoBaseCents: number,
   actorUserId: string,
   creditosBaseCents: Record<string, number> = {}
-): Promise<{ ok: true; limite: ContaCoopLimiteCooperado } | { ok: false; error: string }> {
+): Promise<
+  | { ok: true; limite: ContaCoopLimiteCooperado; action?: "reset" | "tightened" | "synced" | "unchanged" }
+  | { ok: false; error: string }
+> {
   const base = Math.max(0, Math.round(Number(creditoBaseCents) || 0));
   if (base === 0) {
-    const { valorUsadoCents } = await readLimiteAtualCooperado(supabase, cnpj, cooperadoId);
-    const comprasAtivas =
-      valorUsadoCents > 0 || (await cooperadoTemComprasContaCoopAtivas(supabase, cnpj, cooperadoId));
-    if (comprasAtivas) {
-      const atual = await getLimiteCooperado(supabase, cnpj, cooperadoId);
-      if (atual) return { ok: true, limite: atual };
+    /** Lastro zero na sync automática não revoga nem reduz limit_released_cents já liberado. */
+    const atual = await getLimiteCooperado(supabase, cnpj, cooperadoId);
+    if (atual) {
+      return { ok: true, limite: atual, action: "unchanged" };
     }
-    return resetContaCoopCooperadoCredit(supabase, cnpj, cooperadoId, actorUserId, {
-      source: "sync_from_ficha",
-    });
+    const digits = normalizeCnpj(cnpj);
+    return {
+      ok: true,
+      limite: {
+        id: "",
+        cooperativaCnpj: digits,
+        cooperadoId,
+        limiteLiberadoCents: 0,
+        valorUsadoCents: 0,
+        valorDisponivelCents: 0,
+        bloqueado: false,
+        hasFinancialPin: false,
+        pinLockedUntil: null,
+        cashbackDisponivelCents: 0,
+        updatedAt: new Date().toISOString(),
+      },
+      action: "unchanged",
+    };
   }
 
   const teto = await requireConfiguredTeto(supabase, cnpj, creditosBaseCents);
@@ -712,7 +785,16 @@ export async function syncLimiteCooperadoFromCreditoBase(
     novoLimiteCents = valorUsadoCents;
   }
 
-  return setLimiteCooperado(supabase, cnpj, cooperadoId, novoLimiteCents, actorUserId, creditosBaseCents);
+  const synced = await setLimiteCooperado(
+    supabase,
+    cnpj,
+    cooperadoId,
+    novoLimiteCents,
+    actorUserId,
+    creditosBaseCents
+  );
+  if (!synced.ok) return synced;
+  return { ...synced, action: "synced" as const };
 }
 
 export async function syncLimitesCooperadosFromCreditoBase(
@@ -721,33 +803,92 @@ export async function syncLimitesCooperadosFromCreditoBase(
   cooperadoIds: string[],
   creditosBaseCents: Record<string, number>,
   actorUserId: string
-): Promise<{ ok: true; updated: number; errors: string[] } | { ok: false; error: string }> {
+): Promise<
+  | {
+      ok: true;
+      updated: number;
+      reset: number;
+      tightened: number;
+      synced: number;
+      unchanged: number;
+      errors: string[];
+    }
+  | { ok: false; error: string }
+> {
   if (!cooperadoIds.length) return { ok: false, error: "Informe ao menos um cooperado." };
 
+  const digits = normalizeCnpj(cnpj);
+  const bases: Record<string, number> = { ...creditosBaseCents };
+  const selected = new Set(cooperadoIds);
+
+  const { data: accountRows } = await supabase
+    .from("hb_credit_accounts")
+    .select("cooperado_id")
+    .eq("cooperative_cnpj", digits);
+
+  const orphanIds: string[] = [];
+  for (const row of accountRows ?? []) {
+    const id = String(row.cooperado_id ?? "");
+    if (!id || selected.has(id)) continue;
+    orphanIds.push(id);
+    if (bases[id] === undefined) bases[id] = 0;
+  }
+
+  const allIds = [...new Set([...orphanIds, ...cooperadoIds])];
+  const ordered = allIds.sort((a, b) => {
+    const ba = Math.max(0, Math.round(Number(bases[a] ?? 0)));
+    const bb = Math.max(0, Math.round(Number(bases[b] ?? 0)));
+    if (ba === 0 && bb > 0) return -1;
+    if (bb === 0 && ba > 0) return 1;
+    return 0;
+  });
+
   let updated = 0;
+  let reset = 0;
+  let tightened = 0;
+  let synced = 0;
+  let unchanged = 0;
   const errors: string[] = [];
-  for (const cooperadoId of cooperadoIds) {
-    const base = Math.max(0, Math.round(Number(creditosBaseCents[cooperadoId] ?? 0)));
+  for (const cooperadoId of ordered) {
+    const base = Math.max(0, Math.round(Number(bases[cooperadoId] ?? 0)));
     const result = await syncLimiteCooperadoFromCreditoBase(
       supabase,
       cnpj,
       cooperadoId,
       base,
       actorUserId,
-      creditosBaseCents
+      bases
     );
     if (!result.ok) {
       errors.push(`${cooperadoId}: ${result.error}`);
       continue;
     }
     updated++;
+    switch (result.action) {
+      case "reset":
+        reset++;
+        break;
+      case "tightened":
+        tightened++;
+        break;
+      case "synced":
+        synced++;
+        break;
+      case "unchanged":
+        unchanged++;
+        break;
+      default:
+        if (base > 0) synced++;
+        else reset++;
+        break;
+    }
   }
 
   if (updated === 0 && errors.length) {
     return { ok: false, error: errors[0] };
   }
 
-  return { ok: true, updated, errors };
+  return { ok: true, updated, reset, tightened, synced, unchanged, errors };
 }
 
 /** Zera crédito dos cooperados envolvidos numa liquidação de mercado confirmada. */
@@ -973,6 +1114,55 @@ export async function getLimiteCooperado(
   if (!data) return null;
   const cashback = await getCashbackDisponivel(supabase, digits, cooperadoId);
   return mapLimiteRow(data as Record<string, unknown>, cashback);
+}
+
+/** Limite exibido/usado no HB — nunca acima do crédito-base das entregas conferidas na nuvem. */
+export async function getLimiteCooperadoAlinhadoAEntregas(
+  supabase: SupabaseClient,
+  cnpj: string,
+  cooperadoId: string,
+  opts?: { resyncIfInflated?: boolean; awaitResync?: boolean; actorUserId?: string }
+): Promise<ContaCoopLimiteCooperado | null> {
+  const limite = await getLimiteCooperado(supabase, cnpj, cooperadoId);
+  if (!limite) return null;
+
+  const authoritative = await resolveAuthoritativeCreditBase(supabase, cnpj, [cooperadoId]);
+  if (!authoritative.ok) return limite;
+
+  const creditoBaseCents = authoritative.creditosBaseCents[cooperadoId] ?? 0;
+  const teto = await resolveTetoGlobal(supabase, cnpj, authoritative.creditosBaseCents);
+  const tetoPercent = teto.configured ? teto.percent : 0;
+  const capped = capContaCoopLimiteToAuthoritativeBase(limite, creditoBaseCents, tetoPercent);
+
+  const inflated =
+    opts?.resyncIfInflated &&
+    capped.limiteLiberadoCents < limite.limiteLiberadoCents &&
+    opts.actorUserId;
+
+  if (inflated) {
+    const syncPromise = syncLimitesCooperadosFromCreditoBase(
+      supabase,
+      cnpj,
+      [cooperadoId],
+      { [cooperadoId]: creditoBaseCents },
+      opts.actorUserId!
+    );
+    if (opts.awaitResync) {
+      try {
+        await syncPromise;
+      } catch {
+        /* exibe cap enquanto re-sync falha */
+      }
+      return getLimiteCooperadoAlinhadoAEntregas(supabase, cnpj, cooperadoId, {
+        resyncIfInflated: false,
+        awaitResync: false,
+        actorUserId: opts.actorUserId,
+      });
+    }
+    void syncPromise.catch(() => {});
+  }
+
+  return capped;
 }
 
 export async function setFinancialPin(
@@ -1602,7 +1792,7 @@ export async function validateIntentForCooperado(
   const { data: parceiro } = await supabase.from("hb_credit_partners").select("*").eq("id", intent.partner_id).maybeSingle();
   if (!parceiro || parceiro.status !== "ACTIVE") return { ok: false, error: "Mercado bloqueado ou inativo." };
 
-  const limite = await getLimiteCooperado(supabase, digits, cooperadoId);
+  const limite = await getLimiteCooperadoAlinhadoAEntregas(supabase, digits, cooperadoId);
   if (!limite) return { ok: false, error: "Sem limite HB Créditos." };
   if (limite.bloqueado) return { ok: false, error: "Cooperado bloqueado." };
   const gross = Number(intent.amount_cents);
@@ -1652,7 +1842,7 @@ export async function authorizePayment(
       cashbackAppliedCents?: number;
       duplicate?: boolean;
     }
-  | { ok: false; error: string }
+  | { ok: false; error: string; code?: string }
 > {
   const pinCheck = await verifyFinancialPin(
     supabase,
@@ -1693,8 +1883,18 @@ export async function authorizePayment(
     return { ok: false, error: error.message };
   }
 
-  const result = data as { ok?: boolean; error?: string; duplicate?: boolean; transacao_id?: string; disponivel_apos_centavos?: number };
-  if (!result?.ok) return { ok: false, error: result?.error ?? "Pagamento recusado." };
+  const result = data as {
+    ok?: boolean;
+    error?: string;
+    error_code?: string;
+    duplicate?: boolean;
+    transacao_id?: string;
+    disponivel_apos_centavos?: number;
+  };
+  if (!result?.ok) {
+    const mapped = mapAuthorizeRpcError(result);
+    return { ok: false, error: mapped.error, code: mapped.code };
+  }
 
   const txId = result.transacao_id ?? transacaoId;
   let finalReceiptCode = receiptCode;
@@ -2332,7 +2532,7 @@ export async function createRefundRequest(
     partnerId: string;
     transactionId: string;
     motivo: string;
-    pin: string;
+    pin?: string;
     requestedByUserId: string;
   }
 ): Promise<{ ok: true; solicitacao: ContaCoopSolicitacaoEstorno } | { ok: false; error: string }> {
@@ -2341,13 +2541,16 @@ export async function createRefundRequest(
     return { ok: false, error: "Descreva o motivo do estorno (mínimo 5 caracteres)." };
   }
 
-  const pinCheck = await verifyPartnerFinancialPin(
-    supabase,
-    params.partnerId,
-    params.pin,
-    params.requestedByUserId
-  );
-  if (!pinCheck.ok) return pinCheck;
+  const pin = String(params.pin ?? "").trim();
+  if (pin.length > 0) {
+    const pinCheck = await verifyPartnerFinancialPin(
+      supabase,
+      params.partnerId,
+      pin,
+      params.requestedByUserId
+    );
+    if (!pinCheck.ok) return pinCheck;
+  }
 
   const { data: tx, error: txError } = await supabase
     .from("hb_credit_transactions")
@@ -3351,23 +3554,101 @@ type CooperadoContaCoopDescontoRow = {
   valorReais: number;
   tipo: "conta_coop";
   createdAt: string;
+  hbTransactionId?: string;
 };
 
-async function listCooperadoContaCoopDescontosIntervalo(
+const HB_TX_FICHA_SELECT =
+  "id, payment_intent_id, cooperado_id, event_type, amount_cents, gross_amount_cents, discount_cents, partner_discount_percent, credit_debited_cents, net_receivable_cents, created_at, partner_id, receipt_code, status";
+
+type HbTxFichaRow = {
+  id: string;
+  payment_intent_id?: string | null;
+  cooperado_id: string;
+  event_type: string;
+  amount_cents: number;
+  gross_amount_cents?: number | null;
+  discount_cents?: number | null;
+  partner_discount_percent?: number | null;
+  credit_debited_cents?: number | null;
+  net_receivable_cents?: number | null;
+  created_at: string;
+  partner_id: string;
+  receipt_code?: string | null;
+  status: string;
+};
+
+function mapHbTxToDescontoRow(t: HbTxFichaRow, partnerNames: Record<string, string>): CooperadoContaCoopDescontoRow {
+  const partnerNome = partnerNames[String(t.partner_id)] ?? "Mercado parceiro";
+  const isRefund = String(t.event_type) === "REFUND";
+  const isReversedPayment = String(t.event_type) === "PAYMENT" && String(t.status) === "reversed";
+  const receipt = t.receipt_code ? ` (${String(t.receipt_code)})` : "";
+  const valorReais = valorReaisLinhaResumoCooperado(t);
+  return {
+    motivo: isRefund
+      ? `Estorno HB Créditos — ${partnerNome}${receipt}`
+      : `Compra HB Créditos — ${partnerNome}${receipt}${isReversedPayment ? " (estornada)" : ""}`,
+    valorReais,
+    tipo: "conta_coop" as const,
+    createdAt: String(t.created_at),
+    hbTransactionId: String(t.id),
+  };
+}
+
+function mapHbTxToUtilizacaoLancamento(
+  t: HbTxFichaRow,
+  partnerNames: Record<string, string>
+): HbUtilizacaoResumoLancamento {
+  const grossCents = Number(t.gross_amount_cents ?? t.amount_cents);
+  const discountCents = Number(t.discount_cents ?? 0);
+  const netCents = Number(t.net_receivable_cents ?? t.amount_cents);
+  const debitedCents = Number(t.credit_debited_cents ?? t.amount_cents);
+  const partnerNome = partnerNames[String(t.partner_id)] ?? "Mercado parceiro";
+  const pct =
+    t.partner_discount_percent != null
+      ? Number(t.partner_discount_percent)
+      : grossCents > 0
+        ? Math.round((discountCents / grossCents) * 10000) / 100
+        : undefined;
+
+  return {
+    hbTransactionId: String(t.id),
+    paymentIntentId: t.payment_intent_id ? String(t.payment_intent_id) : undefined,
+    cooperadoId: String(t.cooperado_id),
+    partnerId: String(t.partner_id),
+    partnerNome,
+    receiptCode: t.receipt_code ? String(t.receipt_code) : undefined,
+    eventType: String(t.event_type) === "REFUND" ? "REFUND" : "PAYMENT",
+    transactionStatus: String(t.status),
+    statusResumo: statusResumoFromTx(String(t.event_type), String(t.status)),
+    createdAt: String(t.created_at),
+    valorCompraReais: grossCents / 100,
+    descontoMercadoPercent: pct,
+    valorDescontoReais: discountCents / 100,
+    valorFinalCompraReais: netCents / 100,
+    valorHbUtilizadoReais: debitedCents / 100,
+    valorImpactoAReceberReais: impactoAReceberReais(t),
+    observacao:
+      String(t.event_type) === "PAYMENT" && String(t.status) === "reversed"
+        ? "Compra estornada — par com crédito de estorno no resumo."
+        : undefined,
+  };
+}
+
+async function queryHbTransacoesFichaIntervalo(
   supabase: SupabaseClient,
   cnpj: string,
   cooperadoIds: string | string[],
   startIso: string,
   endIso: string,
   opts?: { incluirPagamentosEstornados?: boolean }
-): Promise<CooperadoContaCoopDescontoRow[]> {
+): Promise<HbTxFichaRow[]> {
   const digits = normalizeCnpj(cnpj);
   const ids = [...new Set((Array.isArray(cooperadoIds) ? cooperadoIds : [cooperadoIds]).filter(Boolean))];
   if (!ids.length) return [];
 
   let query = supabase
     .from("hb_credit_transactions")
-    .select("id, event_type, amount_cents, created_at, partner_id, receipt_code, status")
+    .select(HB_TX_FICHA_SELECT)
     .eq("cooperative_cnpj", digits)
     .in("cooperado_id", ids)
     .in("event_type", ["PAYMENT", "REFUND"])
@@ -3381,37 +3662,64 @@ async function listCooperadoContaCoopDescontosIntervalo(
     query = query.eq("status", "posted");
   }
 
-  const { data: txs } = await query;
+  const { data: txs, error } = await query;
+  if (error) throw new Error(error.message);
+  return (txs ?? []) as HbTxFichaRow[];
+}
 
-  if (!txs?.length) return [];
-
+async function partnerNamesById(
+  supabase: SupabaseClient,
+  txs: HbTxFichaRow[]
+): Promise<Record<string, string>> {
   const partnerIds = [...new Set(txs.map((t) => String(t.partner_id)).filter(Boolean))];
   const partnerNames: Record<string, string> = {};
-  if (partnerIds.length) {
-    const { data: partners } = await supabase.from("hb_credit_partners").select("id, name").in("id", partnerIds);
-    for (const p of partners ?? []) partnerNames[String(p.id)] = String(p.name);
-  }
+  if (!partnerIds.length) return partnerNames;
+  const { data: partners } = await supabase.from("hb_credit_partners").select("id, name").in("id", partnerIds);
+  for (const p of partners ?? []) partnerNames[String(p.id)] = String(p.name);
+  return partnerNames;
+}
+
+async function listCooperadoContaCoopDescontosIntervalo(
+  supabase: SupabaseClient,
+  cnpj: string,
+  cooperadoIds: string | string[],
+  startIso: string,
+  endIso: string,
+  opts?: { incluirPagamentosEstornados?: boolean }
+): Promise<CooperadoContaCoopDescontoRow[]> {
+  const txs = await queryHbTransacoesFichaIntervalo(supabase, cnpj, cooperadoIds, startIso, endIso, opts);
+  if (!txs.length) return [];
+
+  const partnerNames = await partnerNamesById(supabase, txs);
 
   return txs
     .filter((t) => {
-      // Pagamento estornado não abate valor a receber — só REFUND posted devolve crédito.
+      if (opts?.incluirPagamentosEstornados) return true;
       if (String(t.event_type) === "PAYMENT" && String(t.status) === "reversed") return false;
       return true;
     })
-    .map((t) => {
-    const cents = Number(t.amount_cents);
-    const partnerNome = partnerNames[String(t.partner_id)] ?? "Mercado parceiro";
-    const isRefund = String(t.event_type) === "REFUND";
-    const receipt = t.receipt_code ? ` (${String(t.receipt_code)})` : "";
-    return {
-      motivo: isRefund
-        ? `Estorno HB Créditos — ${partnerNome}${receipt}`
-        : `Compra HB Créditos — ${partnerNome}${receipt}`,
-      valorReais: cents / 100,
-      tipo: "conta_coop" as const,
-      createdAt: String(t.created_at),
-    };
-  });
+    .map((t) => mapHbTxToDescontoRow(t, partnerNames));
+}
+
+/** Histórico auditável HB → resumo cooperado (fonte: hb_credit_transactions). */
+export async function listCooperadoHbUtilizacaoResumoAbateValorReceber(
+  supabase: SupabaseClient,
+  cnpj: string,
+  cooperadoIds: string | string[],
+  mesReferenciaFicha: string
+): Promise<HbUtilizacaoResumoLancamento[]> {
+  const { start } = mesReferenciaRange(mesReferenciaFicha);
+  const txs = await queryHbTransacoesFichaIntervalo(
+    supabase,
+    cnpj,
+    cooperadoIds,
+    start,
+    new Date().toISOString(),
+    { incluirPagamentosEstornados: true }
+  );
+  if (!txs.length) return [];
+  const partnerNames = await partnerNamesById(supabase, txs);
+  return txs.map((t) => mapHbTxToUtilizacaoLancamento(t, partnerNames));
 }
 
 /** Compras/estornos confirmados no mês calendário (liquidação mercado, relatórios). */
@@ -3444,13 +3752,21 @@ export async function listCooperadoContaCoopDescontosAbateValorReceber(
     new Date().toISOString(),
     { incluirPagamentosEstornados: true }
   );
-  const seen = new Set<string>();
-  return rows.filter((r) => {
-    const k = `${r.createdAt}|${r.valorReais}|${r.motivo}`;
-    if (seen.has(k)) return false;
-    seen.add(k);
-    return true;
-  });
+  const remotos = rows.map((r) => ({
+    motivo: r.motivo,
+    valorReais: r.valorReais,
+    tipo: "conta_coop" as const,
+    createdAt: r.createdAt,
+    hbTransactionId: r.hbTransactionId,
+  }));
+  const deduped = dedupeDescontosContaCoopRemotos(remotos);
+  return deduped.map((d) => ({
+    motivo: d.motivo,
+    valorReais: d.valorReais,
+    tipo: "conta_coop" as const,
+    createdAt: d.createdAt,
+    hbTransactionId: d.hbTransactionId,
+  }));
 }
 
 export async function getDiscountPoolResumo(

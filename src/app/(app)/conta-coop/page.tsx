@@ -1,20 +1,19 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import dynamic from "next/dynamic";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
+import { getData } from "@/services/dataStore";
+import { resolveCooperativaCnpj } from "@/services/notaPedidoCloudService";
 import { CreditFeatureGate } from "@/components/hb-credit/CreditFeatureGate";
 import { CloudSessionGate } from "@/components/hb-credit/CloudSessionGate";
 import { TesoureiroAreaGuard } from "@/components/permissions/TesoureiroAreaGuard";
 import { ContaCoopSegmentTabs } from "@/components/hb-credit/ContaCoopSegmentTabs";
-import { ContaCoopLiquidacaoPanel } from "@/components/hb-credit/ContaCoopLiquidacaoPanel";
-import { ContaCoopFiscalNotesConferenciaPanel } from "@/components/hb-credit/ContaCoopFiscalNotesConferenciaPanel";
-import { ContaCoopEstornosPanel } from "@/components/hb-credit/ContaCoopEstornosPanel";
-import { ContaCoopDescontosPanel } from "@/components/hb-credit/ContaCoopDescontosPanel";
 import { Card, StatCard } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Input, Label } from "@/components/ui/Form";
 import { AlertBanner } from "@/components/ui/AlertBanner";
-import { useAppData } from "@/hooks/useAppData";
+import { useAppDataSelector } from "@/hooks/useAppData";
 import { usePermissions } from "@/hooks/usePermissions";
 import { getUserCooperativaId, normalizeCnpj } from "@/utils/cooperativa";
 import {
@@ -26,17 +25,79 @@ import {
   postPartnerPixChangeAction,
   postUpdatePartnerDiscount,
   fetchPartnerPixChangeRequests,
-  fetchPartnerPinResetRequests,
   fetchCooperadoPinResetRequests,
-  resetMercadoFinancialPin,
   resetCooperadoFinancialPin,
-  syncCreditLimiteFromFicha,
 } from "@/services/creditApiService";
 import { formatCentsBRL } from "@/modules/hb-credit/engine/money";
-import { buildCreditosBaseMap } from "@/modules/hb-credit/engine/creditBaseFromFicha";
-import type { ContaCoopDashboard, ContaCoopLimiteCooperado, ContaCoopParceiro, ContaCoopPinResetRequest, ContaCoopCooperadoPinResetRequest, ContaCoopPixChangeRequest } from "@/modules/hb-credit/types";
+import { buildCreditosBaseMapCached } from "@/modules/hb-credit/engine/creditBaseFromFicha";
+import type { ContaCoopDashboard, ContaCoopLimiteCooperado, ContaCoopParceiro, ContaCoopCooperadoPinResetRequest, ContaCoopPixChangeRequest } from "@/modules/hb-credit/types";
 import { cn, formatMesReferencia } from "@/utils/format";
 import { PageSkeleton } from "@/components/ui/PageSkeleton";
+import {
+  gravarHbCreditDashboardPersistido,
+  lerHbCreditDashboardPersistido,
+} from "@/lib/hb-credit/hbCreditDashboardPersistencia";
+import { lerHbCreditLimitesPersistidos, gravarHbCreditLimitesPersistidos } from "@/lib/hb-credit/hbCreditLimitesPersistencia";
+import { refreshHbCreditLimitesStaff } from "@/lib/hb-credit/hbCreditLimitesRefresh";
+import { ensureHbCreditLabLiberacaoPadrao } from "@/lib/hb-credit/ensureHbCreditLabLiberacaoPadrao";
+import {
+  HB_CREDIT_LAB_LIBERACAO_PERCENT_DEFAULT,
+  isHbCreditLabLiberacaoAutoEnabled,
+} from "@/lib/hb-credit/hbCreditLabPolicy";
+import { useSyncContaCoopLimiteFromFicha } from "@/hooks/useSyncContaCoopLimiteFromFicha";
+import { scheduleContaCoopAuxSync } from "@/lib/hb-credit/contaCoopAuxSyncSchedule";
+
+/** Marcações de performance — dev ou NEXT_PUBLIC_HB_CREDIT_PERF=true */
+function contaCoopPerfEnabled(): boolean {
+  if (typeof process !== "undefined" && process.env.NEXT_PUBLIC_HB_CREDIT_PERF === "true") return true;
+  return process.env.NODE_ENV === "development";
+}
+
+function contaCoopPerfStart(label: string): number | null {
+  if (!contaCoopPerfEnabled()) return null;
+  const t = Date.now();
+  console.debug(`[conta-coop] ${label} start`);
+  return t;
+}
+
+function contaCoopPerfEnd(label: string, startedAt: number | null): void {
+  if (startedAt == null || !contaCoopPerfEnabled()) return;
+  console.debug(`[conta-coop] ${label} ${Date.now() - startedAt}ms`);
+}
+
+/** Lista GET /limites — revalidação leve (sem sync-limite). */
+const LIMITES_LISTA_STALE_MS = 120_000;
+
+const panelFallback = () => <PageSkeleton compact />;
+
+const ContaCoopLiquidacaoPanel = dynamic(
+  () =>
+    import("@/components/hb-credit/ContaCoopLiquidacaoPanel").then((m) => ({
+      default: m.ContaCoopLiquidacaoPanel,
+    })),
+  { loading: panelFallback, ssr: false }
+);
+const ContaCoopFiscalNotesConferenciaPanel = dynamic(
+  () =>
+    import("@/components/hb-credit/ContaCoopFiscalNotesConferenciaPanel").then((m) => ({
+      default: m.ContaCoopFiscalNotesConferenciaPanel,
+    })),
+  { loading: panelFallback, ssr: false }
+);
+const ContaCoopEstornosPanel = dynamic(
+  () =>
+    import("@/components/hb-credit/ContaCoopEstornosPanel").then((m) => ({
+      default: m.ContaCoopEstornosPanel,
+    })),
+  { loading: panelFallback, ssr: false }
+);
+const ContaCoopDescontosPanel = dynamic(
+  () =>
+    import("@/components/hb-credit/ContaCoopDescontosPanel").then((m) => ({
+      default: m.ContaCoopDescontosPanel,
+    })),
+  { loading: panelFallback, ssr: false }
+);
 
 type PreviewColetivo = {
   ok?: boolean;
@@ -62,7 +123,7 @@ type Tab = "painel" | "limites" | "mercados" | "descontos" | "conferir_nf" | "li
 export default function ContaCoopPage() {
   return (
     <CreditFeatureGate>
-      <CloudSessionGate>
+      <CloudSessionGate optimistic>
         <TesoureiroAreaGuard>
           <ContaCoopContent />
         </TesoureiroAreaGuard>
@@ -72,7 +133,6 @@ export default function ContaCoopPage() {
 }
 
 function ContaCoopContent() {
-  const data = useAppData();
   const { user } = usePermissions();
   const searchParams = useSearchParams();
   const initialTab = searchParams.get("tab");
@@ -89,92 +149,340 @@ function ContaCoopContent() {
     }
     return "painel";
   });
+
+  const handleTabChange = useCallback((next: Tab) => {
+    setTab(next);
+  }, []);
   const [loading, setLoading] = useState(true);
+  const [dashboardRefreshing, setDashboardRefreshing] = useState(false);
+  const [limitesRefreshing, setLimitesRefreshing] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
   const [dashboard, setDashboard] = useState<ContaCoopDashboard | null>(null);
   const [limites, setLimites] = useState<ContaCoopLimiteCooperado[]>([]);
   const [parceiros, setParceiros] = useState<ContaCoopParceiro[]>([]);
-  const [tetoPercentual, setTetoPercentual] = useState("");
+  const [parceirosLoaded, setParceirosLoaded] = useState(false);
+  const [parceirosLoading, setParceirosLoading] = useState(false);
+  const [parceirosError, setParceirosError] = useState("");
+  const [tetoPercentual, setTetoPercentual] = useState(() =>
+    isHbCreditLabLiberacaoAutoEnabled() ? String(HB_CREDIT_LAB_LIBERACAO_PERCENT_DEFAULT) : ""
+  );
   const [cooperadoId, setCooperadoId] = useState("");
   const [novoLimiteReais, setNovoLimiteReais] = useState("");
-  const [percentualColetivo, setPercentualColetivo] = useState("");
+  const [percentualColetivo, setPercentualColetivo] = useState(() =>
+    isHbCreditLabLiberacaoAutoEnabled() ? String(HB_CREDIT_LAB_LIBERACAO_PERCENT_DEFAULT) : ""
+  );
   const [previewColetivo, setPreviewColetivo] = useState<PreviewColetivo | null>(null);
   const [busy, setBusy] = useState(false);
   const [discountDrafts, setDiscountDrafts] = useState<Record<string, string>>({});
   const [approveDiscountDrafts, setApproveDiscountDrafts] = useState<Record<string, string>>({});
   const [pixChangeRequests, setPixChangeRequests] = useState<ContaCoopPixChangeRequest[]>([]);
-  const [pinResetRequests, setPinResetRequests] = useState<ContaCoopPinResetRequest[]>([]);
   const [cooperadoPinResetRequests, setCooperadoPinResetRequests] = useState<ContaCoopCooperadoPinResetRequest[]>(
     []
   );
 
-  const cnpj = useMemo(() => {
-    if (!user || !data) return "";
-    if (user.cooperativaCnpj) return normalizeCnpj(user.cooperativaCnpj);
-    const coopId = getUserCooperativaId(user, data);
-    const coop = data.cooperativas.find((c) => c.id === coopId);
-    return coop?.cnpj ? normalizeCnpj(coop.cnpj) : "";
-  }, [user, data]);
+  const cnpjFromData =
+    useAppDataSelector((data) => {
+      if (!user) return "";
+      if (user.cooperativaCnpj) return normalizeCnpj(user.cooperativaCnpj);
+      const coopId = getUserCooperativaId(user, data);
+      const coop = data.cooperativas.find((c) => c.id === coopId);
+      return coop?.cnpj ? normalizeCnpj(coop.cnpj) : "";
+    }, [user?.id, user?.cooperativaCnpj, user?.cooperativaId]) ?? "";
 
-  const cooperadosAtivos = useMemo(() => {
-    if (!data || !user?.cooperativaId) return [];
+  const [cnpjResolved, setCnpjResolved] = useState("");
+  const [cnpjResolving, setCnpjResolving] = useState(false);
+
+  useEffect(() => {
+    if (cnpjFromData.length === 14) {
+      setCnpjResolved(cnpjFromData);
+      setCnpjResolving(false);
+      return;
+    }
+    if (!user?.cooperativaId) {
+      setCnpjResolved("");
+      setCnpjResolving(false);
+      return;
+    }
+    if (cnpjResolved.length === 14) return;
+    let cancelled = false;
+    setCnpjResolving(true);
+    void resolveCooperativaCnpj(getData(), user.cooperativaId, user).then((resolved) => {
+      if (cancelled) return;
+      setCnpjResolved(resolved ?? "");
+      setCnpjResolving(false);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [cnpjFromData, cnpjResolved.length, user?.cooperativaId, user?.id, user?.cooperativaCnpj]);
+
+  const cnpj = cnpjFromData.length === 14 ? cnpjFromData : cnpjResolved;
+
+  const cooperadosAtivos = useAppDataSelector((data) => {
+    if (!user?.cooperativaId) return [];
     return data.cooperados.filter((c) => c.cooperativaId === user.cooperativaId && c.status === "ativo");
-  }, [data, user?.cooperativaId]);
+  }, [user?.cooperativaId]) ?? [];
+
+  const cooperadoIdsKey = useMemo(
+    () => cooperadosAtivos.map((c) => c.id).join("\u001f"),
+    [cooperadosAtivos]
+  );
+
+  const cooperadoIdsAtivos = useMemo(() => {
+    if (!cooperadoIdsKey) return [];
+    return cooperadoIdsKey.split("\u001f").filter(Boolean);
+  }, [cooperadoIdsKey]);
 
   const cooperadoNome = useCallback(
     (id: string) => cooperadosAtivos.find((c) => c.id === id)?.nomeCompleto ?? id,
     [cooperadosAtivos]
   );
 
-  const creditosBaseColetivo = useMemo(() => {
-    if (!data || !cooperadosAtivos.length) return {};
-    return buildCreditosBaseMap(
-      data,
-      cooperadosAtivos.map((c) => c.id),
-      user?.cooperativaId
-    );
-  }, [data, cooperadosAtivos, user?.cooperativaId]);
+  const [creditosBaseColetivo, setCreditosBaseColetivo] = useState<Record<string, number>>({});
+  const creditosBaseContextRef = useRef("");
+  const limitesListaPendingRef = useRef(false);
+  const limitesListaFetchedAtRef = useRef(0);
 
-  const reload = useCallback(async () => {
-    if (!cnpj) return;
-    setLoading(true);
-    setError("");
-    try {
-      if (cooperadosAtivos.length) {
-        await syncCreditLimiteFromFicha({
-          cnpj,
-          cooperadoIds: cooperadosAtivos.map((c) => c.id),
-          creditosBaseCents: creditosBaseColetivo,
-        }).catch(() => {});
-      }
-      const [dash, lim, parc, pixReqs, pinReqs, coopPinReqs] = await Promise.all([
-        fetchCreditDashboard(cnpj, creditosBaseColetivo),
-        fetchCreditLimites(cnpj),
-        fetchCreditParceiros(cnpj),
-        fetchPartnerPixChangeRequests(cnpj, "pendente").catch(() => []),
-        fetchPartnerPinResetRequests(cnpj).catch(() => []),
-        fetchCooperadoPinResetRequests(cnpj).catch(() => []),
-      ]);
-      setDashboard(dash);
-      setLimites(lim);
-      setParceiros(parc);
-      setPixChangeRequests(pixReqs);
-      setPinResetRequests(pinReqs);
-      setCooperadoPinResetRequests(coopPinReqs);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Erro ao carregar HB Créditos.");
-    } finally {
-      setLoading(false);
+  const recomputeCreditosBaseLocal = useCallback(() => {
+    if (!user?.cooperativaId || !cooperadoIdsAtivos.length) {
+      setCreditosBaseColetivo({});
+      creditosBaseContextRef.current = "";
+      return;
     }
-  }, [cnpj, creditosBaseColetivo, cooperadosAtivos]);
+    const t0 = contaCoopPerfStart("buildCreditosBaseMapCached");
+    const map = buildCreditosBaseMapCached(getData(), cooperadoIdsAtivos, user.cooperativaId);
+    contaCoopPerfEnd("buildCreditosBaseMapCached", t0);
+    creditosBaseContextRef.current = `${user.cooperativaId}:${cooperadoIdsKey}`;
+    creditosBaseRef.current = map;
+    setCreditosBaseColetivo(map);
+  }, [user?.cooperativaId, cooperadoIdsAtivos, cooperadoIdsKey]);
+
+  /** Crédito-base local (LASTRO/M6) — só abas painel/limites; não reage a sync global do AppData. */
+  useEffect(() => {
+    if (tab !== "painel" && tab !== "limites") return;
+    if (!user?.cooperativaId || !cooperadoIdsAtivos.length) {
+      setCreditosBaseColetivo({});
+      creditosBaseContextRef.current = "";
+      return;
+    }
+    const contextKey = `${user.cooperativaId}:${cooperadoIdsKey}`;
+    if (creditosBaseContextRef.current === contextKey) {
+      return;
+    }
+    let cancelled = false;
+    const cancelIdle = scheduleContaCoopAuxSync(
+      () => {
+        if (cancelled) return;
+        recomputeCreditosBaseLocal();
+      },
+      { idleTimeoutMs: 1_500, fallbackMs: 4_000 }
+    );
+    return () => {
+      cancelled = true;
+      cancelIdle();
+    };
+  }, [tab, user?.cooperativaId, cooperadoIdsKey, cooperadoIdsAtivos.length, recomputeCreditosBaseLocal]);
+
+  const creditosBaseRef = useRef(creditosBaseColetivo);
+  creditosBaseRef.current = creditosBaseColetivo;
+
+  const cooperadoIdsAtivosRef = useRef(cooperadoIdsAtivos);
+  cooperadoIdsAtivosRef.current = cooperadoIdsAtivos;
+
+  const limiteSyncOpts = useMemo(() => {
+    if (!user?.cooperativaId || !cooperadoIdsAtivos.length) return undefined;
+    return {
+      cooperadoId: cooperadoIdsAtivos[0],
+      cooperativaId: user.cooperativaId,
+      cooperadoIds: cooperadoIdsAtivos,
+      user,
+      enabled: true as const,
+    };
+  }, [user, cooperadoIdsAtivos]);
+
+  useSyncContaCoopLimiteFromFicha({
+    ...limiteSyncOpts,
+    enabled: false,
+  });
+
+  const syncLimitesComFicha = useCallback(
+    async (opts?: { background?: boolean }) => {
+      if (!cnpj || !user?.cooperativaId || !cooperadoIdsAtivos.length) return [];
+      if (limitesListaPendingRef.current) return [];
+      if (!opts?.background) setLimitesRefreshing(true);
+      limitesListaPendingRef.current = true;
+      const t0 = contaCoopPerfStart("sync-limite+limites");
+      try {
+        const fresh = await refreshHbCreditLimitesStaff({
+          cnpj,
+          cooperativaId: user.cooperativaId,
+          cooperadoIds: cooperadoIdsAtivos,
+        });
+        setLimites(fresh);
+        limitesListaFetchedAtRef.current = Date.now();
+        return fresh;
+      } catch {
+        return [];
+      } finally {
+        contaCoopPerfEnd("sync-limite+limites", t0);
+        limitesListaPendingRef.current = false;
+        setLimitesRefreshing(false);
+      }
+    },
+    [cnpj, cooperadoIdsAtivos, user?.cooperativaId]
+  );
+
+  const revalidateLimitesLista = useCallback(
+    async (opts?: { background?: boolean; force?: boolean }) => {
+      if (!cnpj || cnpj.length !== 14) return;
+      if (limitesListaPendingRef.current) return;
+      if (
+        !opts?.force &&
+        limitesListaFetchedAtRef.current > 0 &&
+        Date.now() - limitesListaFetchedAtRef.current < LIMITES_LISTA_STALE_MS
+      ) {
+        return;
+      }
+      limitesListaPendingRef.current = true;
+      if (!opts?.background) setLimitesRefreshing(true);
+      const t0 = contaCoopPerfStart("GET /api/credit/limites");
+      try {
+        const fresh = await fetchCreditLimites(cnpj);
+        setLimites(fresh);
+        gravarHbCreditLimitesPersistidos(cnpj, fresh);
+        limitesListaFetchedAtRef.current = Date.now();
+      } catch {
+        /* mantém cache/persistidos */
+      } finally {
+        contaCoopPerfEnd("GET /api/credit/limites", t0);
+        limitesListaPendingRef.current = false;
+        setLimitesRefreshing(false);
+      }
+    },
+    [cnpj]
+  );
+
+  const loadParceiros = useCallback(async () => {
+    if (!cnpj || cnpj.length !== 14) return;
+    setParceirosLoading(true);
+    setParceirosError("");
+    setParceirosLoaded(false);
+    try {
+      const parc = await fetchCreditParceiros(cnpj);
+      setParceiros(parc);
+      setParceirosError("");
+      setParceirosLoaded(true);
+    } catch {
+      setParceirosError("Não foi possível carregar os mercados parceiros.");
+      setParceirosLoaded(true);
+    } finally {
+      setParceirosLoading(false);
+    }
+  }, [cnpj]);
+
+  const loadPinAndPixRequests = useCallback(async () => {
+    if (!cnpj || cnpj.length !== 14) return;
+    const [pixReqs, coopPinReqs] = await Promise.all([
+      fetchPartnerPixChangeRequests(cnpj, "pendente").catch(() => []),
+      fetchCooperadoPinResetRequests(cnpj).catch(() => []),
+    ]);
+    setPixChangeRequests(pixReqs);
+    setCooperadoPinResetRequests(coopPinReqs);
+  }, [cnpj]);
+
+  const reload = useCallback(async (opts?: { background?: boolean }) => {
+    if (!cnpj) return;
+    const background = opts?.background ?? false;
+    if (!background) setLoading(true);
+    else setDashboardRefreshing(true);
+    setError("");
+    const t0 = contaCoopPerfStart("POST /api/credit/dashboard");
+    try {
+      const coopId = user?.cooperativaId ?? "";
+      const ids = cooperadoIdsAtivosRef.current;
+      const dash = await fetchCreditDashboard(cnpj, creditosBaseRef.current);
+      setDashboard(dash);
+      if (dash) gravarHbCreditDashboardPersistido(cnpj, dash);
+      setLoading(false);
+
+      if (dash && ids.length && coopId) {
+        void ensureHbCreditLabLiberacaoPadrao({
+          cnpj,
+          cooperadoIds: ids,
+          creditosBaseCents: creditosBaseRef.current,
+          tetoGlobalPercent: dash.teto.tetoGlobalPercent,
+          limiteDistribuidoCents: dash.teto.limiteDistribuidoCents,
+        }).then((seeded) => {
+          if (seeded) void reload({ background: true });
+        });
+      }
+    } catch (e) {
+      if (!background) {
+        setError(e instanceof Error ? e.message : "Erro ao carregar HB Créditos.");
+      }
+      setLoading(false);
+    } finally {
+      contaCoopPerfEnd("POST /api/credit/dashboard", t0);
+      setDashboardRefreshing(false);
+    }
+  }, [cnpj, user?.cooperativaId]);
+
+  const reloadRef = useRef(reload);
+  reloadRef.current = reload;
 
   useEffect(() => {
-    reload();
-  }, [reload]);
+    if (!cnpj) return;
+    const snapDash = lerHbCreditDashboardPersistido(cnpj);
+    const snapLimites = lerHbCreditLimitesPersistidos(cnpj);
+    let background = false;
+    if (snapDash?.dashboard) {
+      setDashboard(snapDash.dashboard);
+      setLoading(false);
+      background = true;
+    }
+    if (snapLimites?.limites.length) {
+      setLimites(snapLimites.limites);
+      limitesListaFetchedAtRef.current = snapLimites.savedAt
+        ? Date.parse(snapLimites.savedAt) || Date.now()
+        : Date.now();
+    }
+    void reloadRef.current({ background });
+    void revalidateLimitesLista({ background: true, force: !snapLimites?.limites.length });
+  }, [cnpj, revalidateLimitesLista]);
+
+  const parceirosTabs: Tab[] = ["mercados", "conferir_nf", "liquidar", "estornos"];
+  useEffect(() => {
+    if (!cnpj || !parceirosTabs.includes(tab)) return;
+    if (parceirosLoaded && !parceirosLoading) return;
+    void loadParceiros();
+  }, [tab, cnpj, loadParceiros, parceirosLoaded, parceirosLoading]);
+
+  useEffect(() => {
+    if (!cnpj) return;
+    if (tab !== "painel" && tab !== "limites" && tab !== "mercados") return;
+    const cancelIdle = scheduleContaCoopAuxSync(() => void loadPinAndPixRequests(), {
+      idleTimeoutMs: 6_000,
+      fallbackMs: 14_000,
+    });
+    return cancelIdle;
+  }, [tab, cnpj, loadPinAndPixRequests]);
+
+  /** Revalidação leve da lista (GET limites) — coalescida e só se stale; sem sync-limite automático. */
+  useEffect(() => {
+    if (tab !== "limites" && tab !== "painel") return;
+    if (!cnpj) return;
+    void revalidateLimitesLista({ background: true });
+  }, [tab, cnpj, revalidateLimitesLista]);
+
+  useEffect(() => {
+    const p = dashboard?.teto.tetoGlobalPercent;
+    if (p != null && p > 0) setTetoPercentual(String(p));
+  }, [dashboard?.teto.tetoGlobalPercent]);
 
   const salvarTeto = async () => {
     if (!cnpj) return;
+    recomputeCreditosBaseLocal();
     setBusy(true);
     setError("");
     try {
@@ -185,6 +493,7 @@ function ContaCoopContent() {
         creditosBaseCents: creditosBaseColetivo,
       });
       await reload();
+      await syncLimitesComFicha({ background: true });
     } catch (e) {
       setError(e instanceof Error ? e.message : "Erro ao salvar teto.");
     } finally {
@@ -194,6 +503,7 @@ function ContaCoopContent() {
 
   const salvarLimiteIndividual = async () => {
     if (!cnpj || !cooperadoId) return;
+    recomputeCreditosBaseLocal();
     setBusy(true);
     setError("");
     try {
@@ -205,6 +515,7 @@ function ContaCoopContent() {
         creditosBaseCents: creditosBaseColetivo,
       });
       await reload();
+      await syncLimitesComFicha({ background: true });
     } catch (e) {
       setError(e instanceof Error ? e.message : "Erro ao liberar limite.");
     } finally {
@@ -222,6 +533,7 @@ function ContaCoopContent() {
     setBusy(true);
     setError("");
     try {
+      recomputeCreditosBaseLocal();
       const res = await postCreditLimites({
         action: "preview_coletivo",
         cnpj,
@@ -247,6 +559,7 @@ function ContaCoopContent() {
     setBusy(true);
     setError("");
     try {
+      recomputeCreditosBaseLocal();
       await postCreditLimites({
         action: "set_coletivo",
         cnpj,
@@ -256,6 +569,7 @@ function ContaCoopContent() {
       });
       setPreviewColetivo(null);
       await reload();
+      await syncLimitesComFicha({ background: true });
     } catch (e) {
       setError(e instanceof Error ? e.message : "Erro ao liberar limites.");
     } finally {
@@ -284,9 +598,31 @@ function ContaCoopContent() {
   const atualizarMercado = async (parceiroId: string, status: "ativo" | "bloqueado", partnerDiscountPercent?: number) => {
     if (!cnpj) return;
     setBusy(true);
+    setError("");
+    setSuccess("");
     try {
       await postCreditParceiroStatus(cnpj, parceiroId, status, partnerDiscountPercent);
-      await reload();
+      await loadParceiros();
+      const nome = parceiros.find((p) => p.id === parceiroId)?.nomeMercado ?? "Mercado";
+      if (status === "ativo") {
+        const pct =
+          partnerDiscountPercent != null && Number.isFinite(partnerDiscountPercent)
+            ? `${partnerDiscountPercent}%`
+            : null;
+        setSuccess(
+          pct
+            ? `${nome} autorizado com desconto contratual de ${pct} nas vendas HB Créditos.`
+            : `${nome} autorizado.`
+        );
+        setApproveDiscountDrafts((prev) => {
+          const next = { ...prev };
+          delete next[parceiroId];
+          return next;
+        });
+      } else if (status === "bloqueado") {
+        setSuccess(`${nome} bloqueado — não poderá cobrar até reativar.`);
+      }
+      void reload({ background: true });
     } catch (e) {
       setError(e instanceof Error ? e.message : "Erro ao atualizar mercado.");
     } finally {
@@ -307,32 +643,19 @@ function ContaCoopContent() {
     }
     setBusy(true);
     setError("");
-    try {
-      await postUpdatePartnerDiscount(cnpj, parceiroId, percent);
-      await reload();
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Erro ao salvar desconto.");
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const resetarPinMercado = async (parceiro: ContaCoopParceiro) => {
-    if (!cnpj) return;
-    const msg =
-      `Resetar o PIN financeiro de estorno de "${parceiro.nomeMercado}"?\n\n` +
-      "O mercado precisará cadastrar um PIN novo na aba Mais do painel do mercado antes de solicitar estornos.";
-    if (!window.confirm(msg)) return;
-
-    setBusy(true);
-    setError("");
     setSuccess("");
     try {
-      await resetMercadoFinancialPin(cnpj, parceiro.id);
-      setSuccess(`PIN de estorno resetado para ${parceiro.nomeMercado}. O mercado deve cadastrar um PIN novo.`);
-      await reload();
+      await postUpdatePartnerDiscount(cnpj, parceiroId, percent);
+      await loadParceiros();
+      const nome = parceiros.find((p) => p.id === parceiroId)?.nomeMercado ?? "Mercado";
+      setSuccess(`Desconto de ${percent}% salvo para ${nome}.`);
+      setDiscountDrafts((prev) => {
+        const next = { ...prev };
+        delete next[parceiroId];
+        return next;
+      });
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Erro ao resetar PIN do mercado.");
+      setError(e instanceof Error ? e.message : "Erro ao salvar desconto.");
     } finally {
       setBusy(false);
     }
@@ -404,11 +727,11 @@ function ContaCoopContent() {
     }
   };
 
-  const cooperativaNome = useMemo(() => {
-    if (!user || !data) return "Cooperativa";
+  const cooperativaNome = useAppDataSelector((data) => {
+    if (!user) return "Cooperativa";
     const coopId = getUserCooperativaId(user, data);
     return data.cooperativas.find((c) => c.id === coopId)?.nome ?? "Cooperativa";
-  }, [user, data]);
+  }, [user?.id, user?.cooperativaId]) ?? "Cooperativa";
 
   const statusMercadoLabel = (status: string) => {
     if (status === "ativo") return "Ativo";
@@ -417,13 +740,24 @@ function ContaCoopContent() {
     return status;
   };
 
-  const pinMercadoBloqueado = (parceiro: ContaCoopParceiro) =>
-    Boolean(parceiro.pinLockedUntil && new Date(parceiro.pinLockedUntil).getTime() > Date.now());
-
   const pinCooperadoBloqueado = (limite: ContaCoopLimiteCooperado) =>
     Boolean(limite.pinLockedUntil && new Date(limite.pinLockedUntil).getTime() > Date.now());
 
-  if (loading && !dashboard) return <PageSkeleton />;
+  if (cnpjResolving && !cnpj) return <PageSkeleton />;
+
+  if (!cnpj) {
+    return (
+      <div className="mx-auto max-w-lg space-y-4 pb-8">
+        <AlertBanner variant="warning" title="Cooperativa não identificada">
+          Não foi possível obter o CNPJ da cooperativa para carregar a HB Créditos. Aguarde a sincronização na nuvem
+          ou atualize a página.
+        </AlertBanner>
+        <Button variant="secondary" onClick={() => window.location.reload()}>
+          Atualizar página
+        </Button>
+      </div>
+    );
+  }
 
   return (
     <div className="mx-auto max-w-5xl space-y-5 pb-8">
@@ -440,17 +774,6 @@ function ContaCoopContent() {
         </AlertBanner>
       )}
 
-      {pinResetRequests.length > 0 && tab !== "mercados" && (
-        <AlertBanner variant="info" title="Mercado pediu reset do PIN de estorno">
-          <p className="text-sm">
-            {pinResetRequests.length} solicitação(ões) aguardando. Confirme em{" "}
-            <strong>Mercados → Resetar PIN de estorno</strong>.
-          </p>
-          <Button size="sm" variant="secondary" className="mt-2" onClick={() => setTab("mercados")}>
-            Abrir Mercados
-          </Button>
-        </AlertBanner>
-      )}
 
       <ContaCoopSegmentTabs
         tabs={[
@@ -463,39 +786,27 @@ function ContaCoopContent() {
           { id: "estornos", label: "Estornos" },
         ]}
         active={tab}
-        onChange={setTab}
+        onChange={handleTabChange}
       />
 
-      {tab === "painel" && dashboard && (
+      {tab === "painel" && (
+        <>
+          {loading && !dashboard ? (
+            <PageSkeleton compact />
+          ) : dashboard ? (
         <div className="space-y-4">
-          {(pinResetRequests.length > 0 || cooperadoPinResetRequests.length > 0) && (
-            <AlertBanner variant="info" title="Solicitações de reset de PIN">
+          {dashboardRefreshing && (
+            <p className="text-xs text-gray-500">Atualizando painel com a nuvem…</p>
+          )}
+          {cooperadoPinResetRequests.length > 0 && (
+            <AlertBanner variant="info" title="Cooperados pediram reset do PIN de pagamento">
               <p className="text-sm">
-                {pinResetRequests.length > 0 && (
-                  <>
-                    <strong>{pinResetRequests.length}</strong> mercado(s) aguardando reset do PIN de estorno.{" "}
-                  </>
-                )}
-                {cooperadoPinResetRequests.length > 0 && (
-                  <>
-                    <strong>{cooperadoPinResetRequests.length}</strong> cooperado(s) aguardando reset do PIN de
-                    pagamento.{" "}
-                  </>
-                )}
-                Abra a aba <strong>Mercados</strong> ou <strong>Limites</strong> para confirmar.
+                <strong>{cooperadoPinResetRequests.length}</strong> cooperado(s) aguardando reset do PIN de pagamento
+                HB Créditos. Confirme na aba <strong>Limites</strong>.
               </p>
-              <div className="mt-3 flex flex-wrap gap-2">
-                {pinResetRequests.length > 0 && (
-                  <Button size="sm" variant="secondary" onClick={() => setTab("mercados")}>
-                    Ver mercados
-                  </Button>
-                )}
-                {cooperadoPinResetRequests.length > 0 && (
-                  <Button size="sm" variant="secondary" onClick={() => setTab("limites")}>
-                    Ver limites
-                  </Button>
-                )}
-              </div>
+              <Button size="sm" variant="secondary" className="mt-3" onClick={() => handleTabChange("limites")}>
+                Ver limites
+              </Button>
             </AlertBanner>
           )}
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
@@ -634,10 +945,15 @@ function ContaCoopContent() {
             </Card>
           </div>
         </div>
+          ) : null}
+        </>
       )}
 
       {tab === "limites" && (
         <div className="space-y-6">
+          {limitesRefreshing && (
+            <p className="text-xs text-gray-500">Atualizando limites na nuvem…</p>
+          )}
           <AlertBanner variant="info">
             Se o cooperado esquecer o PIN de pagamento, ele pode solicitar reset em Minha Conta Coop. Você confirma
             aqui em <strong>Resetar PIN de pagamento</strong>; depois ele cadastra um PIN novo.
@@ -895,67 +1211,46 @@ function ContaCoopContent() {
       )}
 
       {tab === "conferir_nf" && (
-        <ContaCoopFiscalNotesConferenciaPanel
-          cnpj={cnpj}
-          parceiros={parceiros}
-          cooperadoNome={cooperadoNome}
-          responsavelNome={user?.name ?? "Responsável"}
-        />
+        <div>
+          <ContaCoopFiscalNotesConferenciaPanel
+            cnpj={cnpj}
+            parceiros={parceiros}
+            cooperadoNome={cooperadoNome}
+            responsavelNome={user?.name ?? "Responsável"}
+          />
+        </div>
       )}
 
       {tab === "liquidar" && (
-        <ContaCoopLiquidacaoPanel
-          cnpj={cnpj}
-          cooperativaNome={cooperativaNome}
-          parceiros={parceiros}
-          cooperadoNome={cooperadoNome}
-        />
+        <div>
+          <ContaCoopLiquidacaoPanel
+            cnpj={cnpj}
+            cooperativaNome={cooperativaNome}
+            parceiros={parceiros}
+            cooperadoNome={cooperadoNome}
+          />
+        </div>
       )}
 
       {tab === "estornos" && (
-        <ContaCoopEstornosPanel
-          cnpj={cnpj}
-          cooperativaId={user?.cooperativaId ?? ""}
-          parceiros={parceiros}
-          cooperadoNome={cooperadoNome}
-        />
+        <div>
+          <ContaCoopEstornosPanel
+            cnpj={cnpj}
+            cooperativaId={user?.cooperativaId ?? ""}
+            parceiros={parceiros}
+            cooperadoNome={cooperadoNome}
+          />
+        </div>
       )}
 
-      {tab === "descontos" && <ContaCoopDescontosPanel cnpj={cnpj} cooperadoNome={cooperadoNome} />}
+      {tab === "descontos" && (
+        <div>
+          <ContaCoopDescontosPanel cnpj={cnpj} cooperadoNome={cooperadoNome} />
+        </div>
+      )}
 
       {tab === "mercados" && (
         <div className="space-y-4">
-          <AlertBanner variant="info">
-            Se o mercado esquecer o PIN de estorno, ele pode solicitar reset no painel (aba Mais). Você confirma aqui
-            em <strong>Resetar PIN de estorno</strong>; depois o mercado cadastra um PIN novo.
-          </AlertBanner>
-
-          {pinResetRequests.length > 0 && (
-            <Card className="space-y-3 border-cyan-300 bg-cyan-50/60 !p-4">
-              <h3 className="font-semibold text-gray-900">Solicitações de reset de PIN (estorno)</h3>
-              <p className="text-sm text-gray-600">
-                Mercados pediram reset do PIN financeiro para cadastrar um novo.
-              </p>
-              {pinResetRequests.map((req) => {
-                const parceiro = parceiros.find((p) => p.id === req.partnerId);
-                if (!parceiro) return null;
-                return (
-                  <div key={req.id} className="rounded-xl border border-cyan-200 bg-white p-4">
-                    <p className="font-semibold text-gray-900">{req.partnerNome ?? parceiro.nomeMercado}</p>
-                    <p className="text-xs text-gray-500">
-                      Solicitado em {new Date(req.createdAt).toLocaleString("pt-BR")}
-                    </p>
-                    <div className="mt-3">
-                      <Button size="sm" onClick={() => void resetarPinMercado(parceiro)} disabled={busy}>
-                        Resetar PIN de estorno
-                      </Button>
-                    </div>
-                  </div>
-                );
-              })}
-            </Card>
-          )}
-
           {pixChangeRequests.length > 0 && (
             <Card className="space-y-3 border-amber-300 bg-amber-50/60 !p-4">
               <h3 className="font-semibold text-gray-900">Solicitações de mudança de PIX</h3>
@@ -982,12 +1277,24 @@ function ContaCoopContent() {
             </Card>
           )}
 
+          {!parceirosLoaded || parceirosLoading ? (
+            <Card className="!p-8 text-center text-sm text-gray-500">Carregando mercados parceiros…</Card>
+          ) : parceirosError ? (
+            <Card className="space-y-4 !p-6">
+              <AlertBanner variant="error" title="Mercados parceiros">
+                {parceirosError}
+              </AlertBanner>
+              <Button onClick={() => void loadParceiros()} disabled={parceirosLoading}>
+                Recarregar mercados
+              </Button>
+            </Card>
+          ) : (
+            <>
           <Card className="border-green-200 bg-green-50/50 !p-4">
             <h3 className="font-semibold text-gray-900">Desconto por contrato com cada mercado</h3>
             <p className="mt-1 text-sm text-gray-600">
               Informe o percentual de desconto acordado com o mercado parceiro. O cooperado paga o valor integral da
               compra; na liquidação o mercado recebe o líquido e a diferença retorna à cooperativa (aba Descontos).
-              Use o reset de PIN quando o mercado esquecer a senha de estorno ou o PIN estiver bloqueado.
             </p>
           </Card>
 
@@ -1064,28 +1371,6 @@ function ContaCoopContent() {
                   )}
                 </div>
 
-                <div className="rounded-xl border border-amber-200 bg-amber-50/70 p-4">
-                  <p className="text-sm font-medium text-amber-950">PIN financeiro (estornos)</p>
-                  <p className="mt-1 text-xs text-amber-900">
-                    {p.hasFinancialPin
-                      ? pinMercadoBloqueado(p)
-                        ? "PIN bloqueado por tentativas incorretas — o mercado não consegue solicitar estornos."
-                        : "PIN cadastrado pelo mercado para autorizar solicitações de estorno."
-                      : "Mercado ainda não cadastrou PIN — estornos ficam indisponíveis até o cadastro."}
-                  </p>
-                  {(p.hasFinancialPin || pinMercadoBloqueado(p)) && (
-                    <Button
-                      size="sm"
-                      variant="secondary"
-                      className="mt-3"
-                      onClick={() => void resetarPinMercado(p)}
-                      disabled={busy}
-                    >
-                      Resetar PIN de estorno
-                    </Button>
-                  )}
-                </div>
-
                 <div className="flex flex-wrap gap-2">
                   {p.status === "ativo" && (
                     <Button size="sm" variant="secondary" onClick={() => atualizarMercado(p.id, "bloqueado")} disabled={busy}>
@@ -1103,6 +1388,8 @@ function ContaCoopContent() {
           })}
           {!parceiros.length && (
             <Card className="!p-8 text-center text-sm text-gray-500">Nenhum mercado parceiro cadastrado.</Card>
+          )}
+            </>
           )}
         </div>
       )}

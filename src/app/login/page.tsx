@@ -12,6 +12,7 @@ import { Input, Label } from "@/components/ui/Form";
 
 import { PLATFORM_NAME, PLATFORM_TAGLINE } from "@/utils/constants";
 import { AVISO_ACESSO_AUTOMATIZADO_RESUMO } from "@/config/politicaAcessoAutomatizado";
+import { isBicLabEnabledClient } from "@/lib/lab/bicLabGate";
 
 const SEGMENTOS_ATENDIDOS = [
   "Agrícola e agroindustrial",
@@ -84,6 +85,7 @@ function LoginForm() {
   const senhaRedefinida = searchParams.get("senha") === "redefinida";
   const redirectTo =
     nextPath && nextPath.startsWith("/") && !nextPath.startsWith("//") ? nextPath : "/dashboard";
+  const bicLabLogin = isBicLabEnabledClient();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -120,6 +122,14 @@ function LoginForm() {
             <div className="bg-white rounded-2xl shadow-lg border border-gray-200 p-8">
               <h2 className="text-2xl font-bold text-gray-900 mb-1">Entrar</h2>
               <p className="text-sm text-gray-500 mb-6">Acesse com seu e-mail e senha</p>
+
+              {bicLabLogin && (
+                <p className="text-sm text-amber-900 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 mb-4 leading-relaxed">
+                  Modo <strong>BIC LAB</strong> (homolog): use o login cadastrado neste ambiente de testes. A senha do app
+                  oficial em hbcooperativas.vercel.app <strong>não</strong> vale aqui, salvo se o responsável tiver
+                  recriado o mesmo usuário na homolog.
+                </p>
+              )}
 
               {senhaRedefinida && (
                 <p className="text-sm text-green-800 bg-green-50 border border-green-200 rounded-lg px-3 py-2 mb-4">

@@ -8,6 +8,7 @@ import {
   useState,
   useCallback,
   useMemo,
+  useRef,
   type ReactNode,
 } from "react";
 import { useRouter } from "next/navigation";
@@ -26,7 +27,9 @@ import {
   preloadAppData,
   applyCloudProfileToLocalSession,
   getData,
+  waitForAppDataWarm,
 } from "@/services/dataStore";
+import { persistirInicioCardValorReceberCooperado } from "@/services/cooperadoInicioCardPersistenciaService";
 import {
   ensureCloudSessionReady,
   setActiveCloudProfile,
@@ -68,6 +71,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [dataTick, setDataTick] = useState(0);
   const [loading, setLoading] = useState(true);
   const router = useRouter();
+  const experienceSigRef = useRef("");
 
   const user = useMemo(
     () => resolveExperienceUser(accountUser, getData()),
@@ -102,7 +106,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     const unsub = subscribe(() => {
       refresh();
-      setDataTick((t) => t + 1);
+      const session = getSession();
+      if (!session) return;
+      const data = getData();
+      const enriched = enrichAccountSession(session);
+      const effective = resolveExperienceUser(enriched, data);
+      if (!effective) return;
+      const sig = [
+        enriched.role,
+        enriched.cooperadoId ?? "",
+        enriched.mobileCooperadoId ?? "",
+        effective.cooperadoId ?? "",
+        effective.role,
+      ].join("|");
+      if (sig !== experienceSigRef.current) {
+        experienceSigRef.current = sig;
+        setDataTick((t) => t + 1);
+      }
     });
     return unsub;
   }, [refresh]);
@@ -161,6 +181,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setAccountUser(safeUser);
       setActiveCloudProfile(userToCloudProfile(safeUser));
       await ensureCloudSessionReady(userToCloudProfile(safeUser));
+      await waitForAppDataWarm(4000);
+      if (resolveAppUserRole(safeUser, getData()) === "cooperado") {
+        persistirInicioCardValorReceberCooperado(safeUser);
+      }
       const redirectTo = resolveAppUserRole(safeUser, getData()) === "parceiro" ? "/mercado-parceiro" : "/dashboard";
       return { ok: true as const, redirectTo };
     }

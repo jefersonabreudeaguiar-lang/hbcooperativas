@@ -6,16 +6,29 @@ import { useAuth } from "@/modules/auth/AuthProvider";
 import {
   ensureCloudSessionReady,
   getLastCloudSyncError,
+  isCloudSessionActive,
   userToCloudProfile,
 } from "@/lib/security/clientSession";
 import { PageSkeleton } from "@/components/ui/PageSkeleton";
 import { AlertBanner } from "@/components/ui/AlertBanner";
 import { Button } from "@/components/ui/Button";
 
-export function CloudSessionGate({ children }: { children: React.ReactNode }) {
+function initialCloudGateReady(): boolean {
+  if (typeof window === "undefined") return false;
+  return isCloudSessionActive();
+}
+
+export function CloudSessionGate({
+  children,
+  /** Mostra conteúdo imediatamente (cache local) enquanto valida sessão — gestão HB. */
+  optimistic = false,
+}: {
+  children: React.ReactNode;
+  optimistic?: boolean;
+}) {
   const { user, loading: authLoading, logout } = useAuth();
   const router = useRouter();
-  const [ready, setReady] = useState(false);
+  const [ready, setReady] = useState(initialCloudGateReady);
   const [error, setError] = useState("");
   const [retrying, setRetrying] = useState(false);
 
@@ -23,23 +36,25 @@ export function CloudSessionGate({ children }: { children: React.ReactNode }) {
     if (!user) return false;
     setError("");
 
-    try {
-      const schemaRes = await fetch("/api/auth/schema-status", { cache: "no-store" });
-      const schemaJson = (await schemaRes.json().catch(() => ({}))) as {
-        appUsersTableOk?: boolean;
-        message?: string;
-        code?: string;
-      };
-      if (schemaJson.appUsersTableOk === false) {
-        setReady(false);
-        setError(
-          schemaJson.message ??
-            "Conta na nuvem não configurada (tabela app_users). Fale com o suporte HB Cooperativas."
-        );
-        return false;
+    if (!isCloudSessionActive()) {
+      try {
+        const schemaRes = await fetch("/api/auth/schema-status", { cache: "no-store" });
+        const schemaJson = (await schemaRes.json().catch(() => ({}))) as {
+          appUsersTableOk?: boolean;
+          message?: string;
+          code?: string;
+        };
+        if (schemaJson.appUsersTableOk === false) {
+          setReady(false);
+          setError(
+            schemaJson.message ??
+              "Conta na nuvem não configurada (tabela app_users). Fale com o suporte HB Cooperativas."
+          );
+          return false;
+        }
+      } catch {
+        /* segue tentando sync */
       }
-    } catch {
-      /* segue tentando sync */
     }
 
     const profile = userToCloudProfile(user);
@@ -64,6 +79,10 @@ export function CloudSessionGate({ children }: { children: React.ReactNode }) {
       router.replace("/login");
       return;
     }
+    if (isCloudSessionActive()) {
+      setReady(true);
+      return;
+    }
     void sync();
   }, [authLoading, user, router, sync]);
 
@@ -73,8 +92,21 @@ export function CloudSessionGate({ children }: { children: React.ReactNode }) {
     setRetrying(false);
   };
 
-  if (authLoading || (!ready && !error)) {
-    return <PageSkeleton />;
+  if (authLoading || (!ready && !error && !(optimistic && user))) {
+    return <PageSkeleton compact={optimistic} />;
+  }
+
+  if (!ready && optimistic && user && !error) {
+    return (
+      <>
+        {!isCloudSessionActive() && (
+          <p className="mb-2 text-xs text-gray-500" aria-live="polite">
+            Conectando HB Créditos na nuvem…
+          </p>
+        )}
+        {children}
+      </>
+    );
   }
 
   if (!ready) {

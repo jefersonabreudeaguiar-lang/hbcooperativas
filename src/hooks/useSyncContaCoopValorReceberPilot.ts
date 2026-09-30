@@ -7,8 +7,10 @@ import {
 import { getData } from "@/services/dataStore";
 import { resolveCooperativaCnpj } from "@/services/notaPedidoCloudService";
 import { isContaCoopValorReceberPilot } from "@/utils/contaCoopUiVisibility";
+import { scheduleContaCoopAuxSync } from "@/lib/hb-credit/contaCoopAuxSyncSchedule";
 
-const SYNC_INTERVAL_MS = 12_000;
+const SYNC_INTERVAL_MS = 90_000;
+const DEFAULT_INITIAL_DELAY_MS = 8_000;
 
 type HookOpts = {
   cooperadoId?: string;
@@ -16,6 +18,9 @@ type HookOpts = {
   cooperativaId?: string;
   cooperadoNome?: string;
   user?: Pick<User, "cooperativaCnpj" | "cooperativaId" | "id"> | null;
+  /** Quando false, não dispara sync (ex.: aguardando fetchCreditAccount na HB). */
+  enabled?: boolean;
+  initialDelayMs?: number;
 };
 
 /** Mantém o abatimento HB Créditos → valor a receber sincronizado (todos os cooperados). */
@@ -38,7 +43,7 @@ export function useSyncContaCoopValorReceberPilot(opts?: HookOpts) {
   }, [opts?.cooperativaId, opts?.user?.id]);
 
   optsRef.current =
-    opts?.cooperadoId && opts.mesReferencia && opts.cooperativaId && cnpj
+    opts?.cooperadoId && opts.mesReferencia && opts.cooperativaId && cnpj && opts.enabled !== false
       ? {
           cnpj,
           cooperadoId: opts.cooperadoId,
@@ -53,27 +58,53 @@ export function useSyncContaCoopValorReceberPilot(opts?: HookOpts) {
     if (!syncOpts || !isContaCoopValorReceberPilot(syncOpts.cooperadoId, syncOpts.cooperadoNome)) return;
 
     let cancelled = false;
+    let intervalId = 0;
+    let delayId = 0;
+    const idleCleanups: Array<() => void> = [];
 
     const run = () => {
       const current = optsRef.current;
-      if (!current?.cnpj || cancelled || typeof navigator === "undefined" || !navigator.onLine) return;
-      void refreshContaCoopValorReceberPilot(current).catch(() => {
-        /* offline ou HB indisponível */
-      });
+      if (
+        !current?.cnpj ||
+        cancelled ||
+        typeof navigator === "undefined" ||
+        !navigator.onLine ||
+        document.visibilityState !== "visible"
+      ) {
+        return;
+      }
+      const cancelIdle = scheduleContaCoopAuxSync(
+        () => {
+          if (cancelled) return;
+          void refreshContaCoopValorReceberPilot(current).catch(() => {
+            /* offline ou HB indisponível */
+          });
+        },
+        { idleTimeoutMs: 12_000, fallbackMs: 4_000 }
+      );
+      idleCleanups.push(cancelIdle);
     };
 
-    run();
+    const startInterval = () => {
+      if (cancelled) return;
+      run();
+      intervalId = window.setInterval(run, SYNC_INTERVAL_MS);
+    };
+
+    const delay = Math.max(0, opts?.initialDelayMs ?? DEFAULT_INITIAL_DELAY_MS);
+    delayId = window.setTimeout(startInterval, delay);
 
     const onVisible = () => {
       if (document.visibilityState === "visible") run();
     };
     document.addEventListener("visibilitychange", onVisible);
-    const interval = window.setInterval(run, SYNC_INTERVAL_MS);
 
     return () => {
       cancelled = true;
       document.removeEventListener("visibilitychange", onVisible);
-      window.clearInterval(interval);
+      if (delayId) window.clearTimeout(delayId);
+      if (intervalId) window.clearInterval(intervalId);
+      for (const cleanup of idleCleanups) cleanup();
     };
   }, [
     cnpj,
@@ -81,5 +112,7 @@ export function useSyncContaCoopValorReceberPilot(opts?: HookOpts) {
     opts?.cooperadoNome,
     opts?.cooperativaId,
     opts?.mesReferencia,
+    opts?.enabled,
+    opts?.initialDelayMs,
   ]);
 }

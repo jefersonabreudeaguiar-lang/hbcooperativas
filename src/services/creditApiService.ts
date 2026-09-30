@@ -14,7 +14,9 @@ import type {
   ContaCoopSolicitacaoEstorno,
 } from "@/modules/hb-credit/types";
 import { refreshContaCoopValorReceberAfterHbTransaction } from "@/lib/hb-credit/syncContaCoopFichaDescontos";
-import { getMesPrincipalQuantoVouReceber } from "@/services/cooperadoEntregasService";
+import type { HbAuthorizeProjecaoAReceberResult } from "@/lib/hb-credit/repairOperacionalContaCoopDescontos";
+import { notifyHbCreditLimiteSynced } from "@/lib/hb-credit/hbCreditLimiteSyncEvents";
+import { bicCentralMesPrincipalQuantoVouReceber } from "@/services/bicLeituraCentralCooperado";
 import { getData } from "@/services/dataStore";
 import { resolverCooperadoIdCanonico } from "@/services/cooperadoCloudService";
 
@@ -186,6 +188,25 @@ export async function validateCreditQr(cnpj: string, cooperadoId: string, qrPayl
   return data;
 }
 
+export type AuthorizeCreditPaymentResult = {
+  ok?: boolean;
+  error?: string;
+  receiptCode?: string;
+  disponivelAposCents?: number;
+  financeiroConfirmado?: boolean;
+  projecaoPendente?: boolean;
+  projecaoAReceber?: HbAuthorizeProjecaoAReceberResult;
+  /** Propagação AppData pós-compra HB — não altera validade da autorização. */
+  syncContaCoop?: "ok" | "pending";
+  syncContaCoopError?: string;
+};
+
+const HB_REFRESH_RETRY_MS = 350;
+
+async function sleepMs(ms: number): Promise<void> {
+  await new Promise((r) => setTimeout(r, ms));
+}
+
 export async function authorizeCreditPayment(input: {
   cnpj: string;
   cooperadoId: string;
@@ -197,20 +218,27 @@ export async function authorizeCreditPayment(input: {
   pin: string;
   idempotencyKey: string;
   useCashback?: boolean;
-}) {
+}): Promise<AuthorizeCreditPaymentResult> {
   const res = await secureApiFetch("/api/credit/authorize", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(input),
   });
-  const data = await parseJson<{ ok?: boolean; error?: string; receiptCode?: string; disponivelAposCents?: number }>(res);
+  const data = await parseJson<
+    AuthorizeCreditPaymentResult & { ok?: boolean; error?: string }
+  >(res);
   if (!res.ok || !data.ok) throw new Error(data.error ?? "Pagamento recusado.");
 
   const local = getData();
   const coopId =
     input.cooperativaId ??
     local.cooperados.find((c) => c.id === input.cooperadoId)?.cooperativaId;
+
+  let syncContaCoop: AuthorizeCreditPaymentResult["syncContaCoop"];
+  let syncContaCoopError: string | undefined;
+
   if (coopId && input.cnpj) {
+    syncContaCoop = "pending";
     const canonico = resolverCooperadoIdCanonico(
       local,
       input.cooperadoId,
@@ -218,17 +246,45 @@ export async function authorizeCreditPayment(input: {
       input.cooperadoNome
     );
     const mes =
-      input.mesReferencia ?? getMesPrincipalQuantoVouReceber(local, canonico, coopId);
-    await refreshContaCoopValorReceberAfterHbTransaction({
+      input.mesReferencia ?? bicCentralMesPrincipalQuantoVouReceber(local, canonico, coopId);
+
+    const refreshOpts = {
       cnpj: input.cnpj,
       cooperadoId: canonico,
       mesReferencia: mes,
       cooperativaId: coopId,
       cooperadoNome: input.cooperadoNome,
-    }).catch(() => {});
+    };
+
+    const maxAttempts = data.projecaoPendente ? 3 : 1;
+
+    for (let attempt = 0; attempt < maxAttempts; attempt++) {
+      if (attempt > 0) {
+        await sleepMs(HB_REFRESH_RETRY_MS);
+      }
+      try {
+        await refreshContaCoopValorReceberAfterHbTransaction(refreshOpts);
+        syncContaCoop = "ok";
+        syncContaCoopError = undefined;
+        notifyHbCreditLimiteSynced();
+        break;
+      } catch (e) {
+        syncContaCoopError = e instanceof Error ? e.message : "refresh_conta_coop_failed";
+        if (attempt === maxAttempts - 1) {
+          syncContaCoop = "pending";
+        }
+      }
+    }
+  } else {
+    syncContaCoop = "pending";
+    syncContaCoopError = "refresh_not_executed_missing_cooperativa_or_cnpj";
   }
 
-  return data;
+  return {
+    ...data,
+    syncContaCoop,
+    ...(syncContaCoopError ? { syncContaCoopError } : {}),
+  };
 }
 
 export async function createCreditIntent(amountReais: number, descricao?: string) {
@@ -540,10 +596,44 @@ export async function fetchFichaDescontosContaCoop(
   const data = await parseJson<{
     ok?: boolean;
     error?: string;
-    descontos?: Array<{ motivo: string; valorReais: number; tipo: "conta_coop"; createdAt: string }>;
+    descontos?: Array<{
+      motivo: string;
+      valorReais: number;
+      tipo: "conta_coop";
+      createdAt: string;
+      hbTransactionId?: string;
+    }>;
   }>(res);
   if (!res.ok || !data.ok) throw new Error(data.error ?? "Erro ao carregar descontos HB Créditos.");
   return data.descontos ?? [];
+}
+
+export async function fetchHbUtilizacaoResumoCooperado(
+  cnpj: string,
+  cooperadoId: string | string[],
+  mesReferencia: string,
+  saldoBaseAReceber?: number
+) {
+  const ids = [...new Set((Array.isArray(cooperadoId) ? cooperadoId : [cooperadoId]).filter(Boolean))];
+  const primary = ids[0] ?? "";
+  const extra = ids.slice(1);
+  const params = new URLSearchParams({
+    cnpj,
+    cooperadoId: primary,
+    mesReferencia,
+  });
+  if (extra.length) params.set("cooperadoIds", extra.join(","));
+  if (saldoBaseAReceber != null && Number.isFinite(saldoBaseAReceber)) {
+    params.set("saldoBaseAReceber", saldoBaseAReceber.toFixed(2));
+  }
+  const res = await secureApiFetch(`/api/credit/utilizacao-resumo?${params.toString()}`);
+  const data = await parseJson<{
+    ok?: boolean;
+    error?: string;
+    lancamentos?: import("@/lib/hb-credit/utilizacaoResumo").HbUtilizacaoResumoLancamento[];
+  }>(res);
+  if (!res.ok || !data.ok) throw new Error(data.error ?? "Erro ao carregar histórico HB Créditos.");
+  return data.lancamentos ?? [];
 }
 
 export async function fetchMercadoFiscalVendas(mesReferencia: string) {

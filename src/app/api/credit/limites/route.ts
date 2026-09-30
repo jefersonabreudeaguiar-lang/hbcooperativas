@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import {
-  listLimitesCooperados,
+  listLimitesCooperadosAlinhadosAEntregas,
   previewLimiteAlteracao,
   previewLimiteColetivo,
   previewLimiteColetivoPercentual,
@@ -29,7 +29,11 @@ export async function GET(request: Request) {
   const denyStaff = requireCreditStaff(gate.ctx);
   if (denyStaff) return denyStaff;
 
-  const limites = await listLimitesCooperados(gate.ctx.supabase, cnpj);
+  const actorId = gate.ctx.session?.sub ?? "system";
+  const limites = await listLimitesCooperadosAlinhadosAEntregas(gate.ctx.supabase, cnpj, {
+    resyncIfInflated: true,
+    actorUserId: actorId,
+  });
   return NextResponse.json({ ok: true, limites });
 }
 

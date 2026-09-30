@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { RefreshCw, Check } from "lucide-react";
 import { useSyncStatus } from "@/components/sync/CooperativaSyncProvider";
 import { cn } from "@/utils/format";
+import { APP_BUILD_VERSION } from "@/lib/appBuildVersion";
 
 function formatRelativo(msAgo: number): string {
   if (msAgo < 15_000) return "agora";
@@ -101,6 +102,7 @@ export function SyncStatusChipLight({ className }: { className?: string }) {
     >
       <Check size={12} className="shrink-0 text-green-700" aria-hidden />
       Atualizado {label}
+      <span className="text-gray-400 font-normal">· v{APP_BUILD_VERSION}</span>
     </span>
   );
 }

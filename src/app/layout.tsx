@@ -3,12 +3,25 @@ import { Geist } from "next/font/google";
 import "./globals.css";
 import { AuthProvider } from "@/modules/auth/AuthProvider";
 import { PwaProvider } from "@/components/pwa/PwaProvider";
+import { ClientDeploymentGuard } from "@/components/pwa/ClientDeploymentGuard";
 import { getPrivateAppRobotsMetadata } from "@/lib/security/crawlerPolicy";
+import { APP_BUILD_VERSION } from "@/lib/appBuildVersion";
+import {
+  buildInlineDeploymentBootScript,
+  buildInlinePageReleaseBootstrap,
+  type ClientReleaseInfo,
+} from "@/lib/pwa/clientRelease";
 
 const geist = Geist({
   variable: "--font-geist-sans",
   subsets: ["latin"],
 });
+
+const pageRelease: ClientReleaseInfo = {
+  build: APP_BUILD_VERSION,
+  deploymentId: (process.env.VERCEL_DEPLOYMENT_ID ?? "").trim(),
+  gitCommitSha: (process.env.VERCEL_GIT_COMMIT_SHA ?? "").trim(),
+};
 
 export const metadata: Metadata = {
   title: "HB Cooperativas — Gestão de Cooperativas",
@@ -43,9 +56,19 @@ export const viewport: Viewport = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="pt-BR" className={`${geist.variable} h-full`}>
+    <html
+      lang="pt-BR"
+      className={`${geist.variable} h-full`}
+      data-dpl-id={pageRelease.deploymentId}
+      data-app-build={String(pageRelease.build)}
+    >
+      <head>
+        <script dangerouslySetInnerHTML={{ __html: buildInlinePageReleaseBootstrap(pageRelease) }} />
+        <script dangerouslySetInnerHTML={{ __html: buildInlineDeploymentBootScript(pageRelease) }} />
+      </head>
       <body className="min-h-full antialiased">
         <AuthProvider>
+          <ClientDeploymentGuard />
           {children}
           <PwaProvider />
         </AuthProvider>

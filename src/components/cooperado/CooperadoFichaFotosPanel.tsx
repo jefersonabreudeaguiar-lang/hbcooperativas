@@ -18,7 +18,7 @@ import {
 import { useAppData } from "@/hooks/useAppData";
 import { useAuth } from "@/modules/auth/AuthProvider";
 import { NotaStatusBadge } from "@/components/ui/NotaStatusBadge";
-import { NotaFotoImg } from "@/components/ui/NotaFotoImg";
+import { FotoLightbox, FotoLightboxTrigger } from "@/components/ui/FotoLightbox";
 import { contarFotosEnviadasNota, contarFotosEnviadasNotas } from "@/utils/fotoEntrega";
 import { normalizeCnpj } from "@/utils/cooperativa";
 import { formatDate, formatMesReferencia } from "@/utils/format";
@@ -28,6 +28,10 @@ interface CooperadoFichaFotosPanelProps {
   resumos: ResumoMesEntregasCooperado[];
   getEscolaLabel: (nota: NotaPedido) => string;
   cooperativaId?: string;
+  /** Abre expandido ao trocar de aba (ex.: link a partir do extrato quitado). */
+  mesReferenciaInicial?: string | null;
+  /** Dentro do accordion do mês — só o conteúdo de fotos, sem lista de meses. */
+  modoInline?: boolean;
 }
 
 function EntregaFotosGrid({
@@ -41,6 +45,7 @@ function EntregaFotosGrid({
 }) {
   const [urls, setUrls] = useState<string[]>([]);
   const [erro, setErro] = useState(false);
+  const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
   const blobUrlsRef = useRef<string[]>([]);
 
   useEffect(() => {
@@ -76,6 +81,10 @@ function EntregaFotosGrid({
   }, [nota.id, nota.updatedAt, nota.fotoNaNuvem, nota.fotosEnviadasCount, cnpj, qtdFotos]);
 
   useEffect(() => {
+    setLightboxIndex(null);
+  }, [nota.id, urls.length]);
+
+  useEffect(() => {
     return () => {
       for (const url of blobUrlsRef.current) {
         if (url.startsWith("blob:")) URL.revokeObjectURL(url);
@@ -95,21 +104,34 @@ function EntregaFotosGrid({
   }
 
   return (
-    <div
-      className={cn(
-        "grid gap-1 p-1",
-        urls.length > 1 ? "grid-cols-1 sm:grid-cols-2" : "grid-cols-1"
-      )}
-    >
-      {urls.map((foto, i) => (
-        <NotaFotoImg
-          key={`${nota.id}-foto-${i}`}
-          src={foto}
-          alt={`Foto ${i + 1} — ${nota.numeroNota}`}
-          className="w-full rounded-lg object-cover max-h-80 bg-gray-100 min-h-[8rem]"
-        />
-      ))}
-    </div>
+    <>
+      <div
+        className={cn(
+          "grid gap-1 p-1",
+          urls.length > 1 ? "grid-cols-1 sm:grid-cols-2" : "grid-cols-1"
+        )}
+      >
+        {urls.map((foto, i) => (
+          <FotoLightboxTrigger
+            key={`${nota.id}-foto-${i}`}
+            src={foto}
+            alt={`Foto ${i + 1} — ${nota.numeroNota}`}
+            imgClassName="w-full rounded-lg object-cover max-h-80 bg-gray-100 min-h-[8rem]"
+            onOpen={() => setLightboxIndex(i)}
+          />
+        ))}
+      </div>
+      <FotoLightbox
+        open={lightboxIndex !== null}
+        items={urls.map((src, i) => ({
+          src,
+          alt: `Foto ${i + 1} — ${nota.numeroNota}`,
+        }))}
+        index={lightboxIndex ?? 0}
+        onClose={() => setLightboxIndex(null)}
+        onIndexChange={setLightboxIndex}
+      />
+    </>
   );
 }
 
@@ -160,6 +182,47 @@ function EntregaFotoCard({
   );
 }
 
+function MesFotosConteudo({
+  resumo,
+  getEscolaLabel,
+  cnpj,
+}: {
+  resumo: ResumoMesEntregasCooperado;
+  getEscolaLabel: (nota: NotaPedido) => string;
+  cnpj?: string;
+}) {
+  const entregas = useMemo(() => agruparNotasEmEntregas(resumo.notas), [resumo.notas]);
+  const entregasComFoto = entregas.filter((e) =>
+    e.notas.some((n) => contarFotosEnviadasNota(n) > 0)
+  );
+  const semanas = useMemo(
+    () => agruparEntregasPorSemanaNoMes(entregasComFoto, resumo.mesReferencia),
+    [entregasComFoto, resumo.mesReferencia]
+  );
+
+  return (
+    <div className="space-y-5">
+      {semanas.map((semana) => (
+        <div key={`${resumo.mesReferencia}-foto-s${semana.indice}`}>
+          <p className="text-xs font-bold uppercase tracking-wide text-green-800 bg-green-50 border border-green-100 rounded-lg px-3 py-2 mb-3 inline-flex items-center gap-2">
+            {semana.rotulo}
+          </p>
+          <div className="space-y-4">
+            {semana.entregas.map((entrega) => (
+              <EntregaFotoCard
+                key={entrega.id}
+                entrega={entrega}
+                getEscolaLabel={getEscolaLabel}
+                cnpj={cnpj}
+              />
+            ))}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function MesFotosSection({
   resumo,
   getEscolaLabel,
@@ -173,14 +236,10 @@ function MesFotosSection({
   expandido: boolean;
   onToggle: () => void;
 }) {
+  const qtdFotos = contarFotosEnviadasNotas(resumo.notas);
   const entregas = useMemo(() => agruparNotasEmEntregas(resumo.notas), [resumo.notas]);
   const entregasComFoto = entregas.filter((e) =>
     e.notas.some((n) => contarFotosEnviadasNota(n) > 0)
-  );
-  const qtdFotos = contarFotosEnviadasNotas(resumo.notas);
-  const semanas = useMemo(
-    () => agruparEntregasPorSemanaNoMes(entregasComFoto, resumo.mesReferencia),
-    [entregasComFoto, resumo.mesReferencia]
   );
 
   if (qtdFotos === 0) return null;
@@ -210,24 +269,8 @@ function MesFotosSection({
       </button>
 
       {expandido && (
-        <div className="border-t border-gray-100 px-4 sm:px-5 pb-5 pt-4 space-y-5 bg-gray-50/40">
-          {semanas.map((semana) => (
-            <div key={`${resumo.mesReferencia}-foto-s${semana.indice}`}>
-              <p className="text-xs font-bold uppercase tracking-wide text-green-800 bg-green-50 border border-green-100 rounded-lg px-3 py-2 mb-3 inline-flex items-center gap-2">
-                {semana.rotulo}
-              </p>
-              <div className="space-y-4">
-                {semana.entregas.map((entrega) => (
-                  <EntregaFotoCard
-                    key={entrega.id}
-                    entrega={entrega}
-                    getEscolaLabel={getEscolaLabel}
-                    cnpj={cnpj}
-                  />
-                ))}
-              </div>
-            </div>
-          ))}
+        <div className="border-t border-gray-100 px-4 sm:px-5 pb-5 pt-4 bg-gray-50/40">
+          <MesFotosConteudo resumo={resumo} getEscolaLabel={getEscolaLabel} cnpj={cnpj} />
         </div>
       )}
     </div>
@@ -238,6 +281,8 @@ export function CooperadoFichaFotosPanel({
   resumos,
   getEscolaLabel,
   cooperativaId,
+  mesReferenciaInicial,
+  modoInline,
 }: CooperadoFichaFotosPanelProps) {
   const data = useAppData();
   const { user } = useAuth();
@@ -273,15 +318,31 @@ export function CooperadoFichaFotosPanel({
   );
 
   useEffect(() => {
+    if (mesReferenciaInicial && mesesComFoto.some((m) => m.mesReferencia === mesReferenciaInicial)) {
+      setMesExpandido(mesReferenciaInicial);
+      return;
+    }
     if (mesesComFoto.length > 0 && !mesesComFoto.some((m) => m.mesReferencia === mesExpandido)) {
       setMesExpandido(mesesComFoto[0]?.mesReferencia ?? null);
     }
-  }, [mesesComFoto, mesExpandido]);
+  }, [mesesComFoto, mesExpandido, mesReferenciaInicial]);
 
   const totalFotos = useMemo(
     () => mesesComFoto.reduce((s, r) => s + contarFotosEnviadasNotas(r.notas), 0),
     [mesesComFoto]
   );
+
+  if (modoInline && mesesComFoto.length === 1) {
+    const resumo = mesesComFoto[0]!;
+    if (contarFotosEnviadasNotas(resumo.notas) === 0) {
+      return (
+        <p className="text-sm text-gray-500 py-4 text-center">
+          Nenhuma foto neste mês.
+        </p>
+      );
+    }
+    return <MesFotosConteudo resumo={resumo} getEscolaLabel={getEscolaLabel} cnpj={cnpj} />;
+  }
 
   if (mesesComFoto.length === 0) {
     return (
@@ -301,7 +362,8 @@ export function CooperadoFichaFotosPanel({
       <div className="rounded-xl bg-green-50 border border-green-200 px-4 py-3 text-sm text-green-900">
         <strong>{totalFotos}</strong> foto{totalFotos !== 1 ? "s" : ""} em{" "}
         <strong>{mesesComFoto.length}</strong> mês{mesesComFoto.length !== 1 ? "es" : ""}. Toque no mês
-        para ver todas as imagens — incluindo entregas aguardando conferência e as já lançadas.
+        para ver as imagens; toque em qualquer foto para ampliar em tela cheia — incluindo entregas aguardando
+        conferência e as já lançadas.
       </div>
 
       <div className="space-y-3">

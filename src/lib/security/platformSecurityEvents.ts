@@ -8,7 +8,8 @@ export type PlatformSecurityAction =
   | "auth.login_failed"
   | "auth.cross_tenant_blocked"
   | "admin.access"
-  | "credit.reconciliation_alert";
+  | "credit.reconciliation_alert"
+  | "credit.post_payment_hb_sync";
 
 export async function recordPlatformSecurityEvent(input: {
   action: PlatformSecurityAction;
@@ -60,6 +61,36 @@ export async function recordCreditReconciliationAlerts(
     metadata: {
       count: findings.length,
       findings: findings.slice(0, 20),
+    },
+  });
+}
+
+export async function recordPostPaymentHbSyncAudit(
+  supabase: SupabaseClient,
+  cooperativeCnpj: string,
+  payload: {
+    event: "HB_LIMIT_SYNC_FAILED" | "POST_PAYMENT_HB_SYNC_ALIGNED" | "POST_PAYMENT_HB_SYNC_DIVERGENT";
+    paymentId: string;
+    cooperadoId: string;
+    status: string;
+    reconciliationStatus: string;
+    creditoBaseBeforeCents?: number | null;
+    creditoBaseAfterCents?: number | null;
+    limiteBeforeCents?: number | null;
+    limiteExpectedCents?: number | null;
+    limiteAfterCents?: number | null;
+    errorCode?: string;
+    errorMessage?: string;
+  }
+): Promise<void> {
+  const priority =
+    payload.event === "POST_PAYMENT_HB_SYNC_ALIGNED" ? "info" : "high";
+  await logSecurityEvent(supabase, {
+    action: "credit.post_payment_hb_sync",
+    cooperativaCnpj: cooperativeCnpj,
+    metadata: {
+      priority,
+      ...payload,
     },
   });
 }

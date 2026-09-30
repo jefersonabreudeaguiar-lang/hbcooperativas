@@ -35,6 +35,48 @@ export function isNotaNaFilaConferenciaResponsavel(status: NotaPedidoStatus | un
   return status === "aguardando_conferencia" || status === "entregue";
 }
 
+/** Filtro da lista em Conferir entregas — «Em análise» inclui entregue (mesma fila operacional). */
+export function notaPassaFiltroStatusListaConferencia(
+  status: NotaPedidoStatus,
+  statusFilter: string
+): boolean {
+  if (!statusFilter) return true;
+  if (statusFilter === "aguardando_conferencia") {
+    return isNotaNaFilaConferenciaResponsavel(status);
+  }
+  return status === statusFilter;
+}
+
+/**
+ * Nota que ainda deve aparecer na fila do responsável — exclui “zombies”
+ * (status em análise com marca de conferência / valores órfãos pós-lançamento).
+ */
+export function notaElegivelParaFilaConferenciaResponsavel(nota: Pick<
+  NotaPedido,
+  "status" | "conferidaPor" | "dataConferencia"
+>): boolean {
+  if (!isNotaNaFilaConferenciaResponsavel(nota.status)) return false;
+  if (nota.conferidaPor?.trim() || nota.dataConferencia) return false;
+  return true;
+}
+
+/** Em análise com marca de conferência órfã — some da fila sem ter sido lançada. */
+export function isNotaZombieNaFilaConferencia(
+  nota: Pick<NotaPedido, "status" | "conferidaPor" | "dataConferencia">
+): boolean {
+  return isNotaNaFilaConferenciaResponsavel(nota.status) && !notaElegivelParaFilaConferenciaResponsavel(nota);
+}
+
+/** Remove marcas de conferência inconsistentes com status ainda em análise. */
+export function sanitizarNotaParaFilaConferencia(nota: NotaPedido): NotaPedido {
+  if (!isNotaZombieNaFilaConferencia(nota)) return nota;
+  return {
+    ...nota,
+    conferidaPor: undefined,
+    dataConferencia: undefined,
+  };
+}
+
 /** Sai da fila do responsável — só após lançamento, rejeição ou cancelamento. */
 export function isNotaSaiuDaFilaConferencia(status: NotaPedidoStatus | undefined | null): boolean {
   return (

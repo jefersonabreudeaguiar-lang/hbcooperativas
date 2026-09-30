@@ -1,12 +1,12 @@
 "use client";
 
-import { useState, useMemo, useEffect, useRef, useCallback } from "react";
+import { useState, useMemo, useEffect, useRef, useCallback, startTransition } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import {
   Camera, CheckCircle, FileText, XCircle, RefreshCw, ChevronRight, Eye, Building2, Pencil, UserPlus, X, ImagePlus, Trash2, FileSignature, BookOpen, Package, Users,
 } from "lucide-react";
-import { useAppData } from "@/hooks/useAppData";
+import { useAppData, useAppDataSelector } from "@/hooks/useAppData";
 import { usePermissions } from "@/hooks/usePermissions";
 import { getUserCooperativaId } from "@/utils/cooperativa";
 import { PageHeader, DataTable, FilterBar, Modal } from "@/components/ui/Table";
@@ -19,8 +19,8 @@ import { PromptDialog, ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { Card } from "@/components/ui/Card";
 import { NotaFotoImg } from "@/components/ui/NotaFotoImg";
 import { updateData, updateDataSafe, generateId, addAuditEntry, getData } from "@/services/dataStore";
-import { requestAppSync } from "@/services/syncRequest";
-import { forceNextFullNotasSync } from "@/services/syncMetaService";
+import { requestAppSync, requestAppSyncLight } from "@/services/syncRequest";
+import { forceNextFullNotasSync, shouldResponsavelForceFullNotasOnEntry } from "@/services/syncMetaService";
 import { useSyncStatus } from "@/components/sync/CooperativaSyncProvider";
 import {
   calcularItensNota,
@@ -40,6 +40,7 @@ import {
   podeExcluirEntregaNota,
   mensagemBloqueioExclusaoEntrega,
   relancarEntregaNota,
+  normalizarTotaisNotaDesdeItens,
 } from "@/services/notaPedidoService";
 import {
   getCooperativaCnpj,
@@ -57,6 +58,7 @@ import {
   ensureNotaComFoto,
   resolveCooperativaCnpj,
   fetchNotaFotoPartBlobUrl,
+  resolveFotosNotaParaExibicao,
 } from "@/services/notaPedidoCloudService";
 import {
   processDeliveryImage,
@@ -74,13 +76,24 @@ import {
 import { putLocalNotaMedia } from "@/services/localMediaStore";
 import { listCooperadosDaCooperativa, pushCooperadoToCloud, resolverCooperadoIdCanonico, getCooperadoNomeResolvido, notaPertenceCooperado } from "@/services/cooperadoCloudService";
 import { pushOperacionalToCloud, syncContratosFromCloud } from "@/services/cooperativaSyncCloudService";
+import {
+  enqueueConferenciaAprovacaoSync,
+  getConferenciaPatchSyncedSnapshot,
+  markConferenciaPatchSyncedForOperacionalPush,
+} from "@/services/conferenciaAprovacaoSyncQueue";
+import { withConferenciaOperacionalPushScope } from "@/services/conferenciaOperacionalPushScope";
 import { getProdutosContrato } from "@/services/catalogoContratosService";
-import { listarResumosMensaisEntregas, filtrarResumosEntregasPendentes, getMesPrincipalQuantoVouReceber } from "@/services/cooperadoEntregasService";
+import { listNotasFilaConferenciaResponsavel } from "@/services/responsavelPainelIndex";
+import { listarResumosMensaisEntregas, filtrarResumosEntregasPendentes, filtrarResumosMesesNaoQuitados } from "@/services/cooperadoEntregasService";
+import { listarResumosFichaEmAbertoCooperado } from "@/services/cooperadoFichaTimelineService";
+import {
+  bicCentralListarResumosMensaisEntregas,
+  bicCentralMesPrincipalQuantoVouReceber,
+} from "@/services/bicLeituraCentralCooperado";
 import { CooperadoEntregasPorMes } from "@/components/cooperado/CooperadoEntregasPorMes";
 import { CooperadoMinhaFichaTab } from "@/components/cooperado/CooperadoMinhaFichaTab";
 import { useContaCoopDescontosRevision } from "@/hooks/useContaCoopDescontosRevision";
 import { useSyncContaCoopValorReceberPilot } from "@/hooks/useSyncContaCoopValorReceberPilot";
-import { buildValorExibicaoCooperadoOpts } from "@/services/notaPedidoService";
 import { CorrecoesEntregasPanel } from "@/components/notas/CorrecoesEntregasPanel";
 import { getContratoLabel, getContratosEntrega, resolverContratoEntrega } from "@/utils/contratosEntrega";
 import { cn, formatCurrency, formatDate, formatMesReferencia, getCurrentMesReferencia } from "@/utils/format";
@@ -104,6 +117,7 @@ import {
   notaPertenceGrupoConferencia,
   contarFotosEnviadasNota,
   contarFotosEnviadasNotas,
+  notaTemFotoArmazenadaNaNuvem,
   resolverAbaConferenciaAtiva,
   MAX_FOTOS_POR_SESSAO_ENTREGA,
   AVISO_FOTOS_SESSAO_EM,
@@ -116,7 +130,11 @@ import {
   isNotaNaFilaConferenciaResponsavel,
   isNotaRelancamentoPayload,
   isNotaSaiuDaFilaConferencia,
+  notaElegivelParaFilaConferenciaResponsavel,
+  notaPassaFiltroStatusListaConferencia,
+  sanitizarNotaParaFilaConferencia,
 } from "@/utils/notaStatus";
+import { repararNotasPedidoFilaConferencia } from "@/services/conferenciaFilaRepair";
 import {
   loadFotoDraftMeta,
   clearFotoDraft,
@@ -195,12 +213,14 @@ export default function NotasPedidoContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
 
-  const [statusFilter, setStatusFilter] = useState(isCooperado ? "" : "");
+  const [statusFilter, setStatusFilter] = useState(isCooperado ? "pendentes" : "");
   const filtroResponsavelIniciado = useRef(false);
   const [anexarModal, setAnexarModal] = useState(false);
   const [conferirModal, setConferirModal] = useState(false);
   const [rejectModal, setRejectModal] = useState(false);
   const [viewModal, setViewModal] = useState(false);
+  const [viewFotoUrls, setViewFotoUrls] = useState<string[]>([]);
+  const [viewFotosCarregando, setViewFotosCarregando] = useState(false);
   const [successMsg, setSuccessMsg] = useState("");
   const [lancadoMsg, setLancadoMsg] = useState("");
 
@@ -258,6 +278,21 @@ export default function NotasPedidoContent() {
     "fila" | "cooperado" | "historico" | "correcoes"
   >("fila");
   const [abaCooperado, setAbaCooperado] = useState<"entregas" | "ficha">("entregas");
+  const [cooperadoAbaEntregasMontada, setCooperadoAbaEntregasMontada] = useState(true);
+  const [cooperadoAbaFichaMontada, setCooperadoAbaFichaMontada] = useState(false);
+
+  const trocarAbaCooperado = useCallback((aba: "entregas" | "ficha") => {
+    startTransition(() => {
+      setAbaCooperado(aba);
+      if (aba === "entregas") setCooperadoAbaEntregasMontada(true);
+      else setCooperadoAbaFichaMontada(true);
+    });
+  }, []);
+
+  useEffect(() => {
+    if (abaCooperado === "ficha") setCooperadoAbaFichaMontada(true);
+    if (abaCooperado === "entregas") setCooperadoAbaEntregasMontada(true);
+  }, [abaCooperado]);
   const [contratoInstId, setContratoInstId] = useState("");
   const [anexarSucesso, setAnexarSucesso] = useState(false);
   const [ultimaNotaEnviadaIds, setUltimaNotaEnviadaIds] = useState<string[]>([]);
@@ -285,7 +320,11 @@ export default function NotasPedidoContent() {
     total: number;
   } | null>(null);
   const lancamentoSequenciaTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const conferenciaFotoCacheRef = useRef<Map<number, string>>(new Map());
+  const conferenciaFotoCacheRef = useRef<Map<string, string>>(new Map());
+  const conferenciaFotoLoadGenRef = useRef(0);
+  const conferenciaNotaEnriquecidaRef = useRef<{ notaId: string; nota: NotaPedido } | null>(null);
+
+  const conferenciaFotoCacheKey = (notaId: string, index: number) => `${notaId}:${index}`;
   const fotosLancadasConferenciaRef = useRef<Set<number>>(new Set());
   const lancamentosFotoConferenciaRef = useRef<Map<number, NotaPedidoItem[]>>(new Map());
   const [conferenciaFotoAtualUrl, setConferenciaFotoAtualUrl] = useState<string | null>(null);
@@ -301,7 +340,7 @@ export default function NotasPedidoContent() {
       : undefined;
   const mesHbSync =
     data && cooperadoCanonico && coopId
-      ? getMesPrincipalQuantoVouReceber(data, cooperadoCanonico, coopId)
+      ? bicCentralMesPrincipalQuantoVouReceber(data, cooperadoCanonico, coopId)
       : undefined;
   useSyncContaCoopValorReceberPilot(
     isCooperado && cooperadoCanonico && coopId && mesHbSync && user
@@ -327,42 +366,112 @@ export default function NotasPedidoContent() {
       revokePreviewUrl(url);
     }
     conferenciaFotoCacheRef.current.clear();
+    conferenciaNotaEnriquecidaRef.current = null;
     setConferenciaFotoAtualUrl(null);
     setConferenciaFotoCarregando(false);
   }, []);
 
   const loadConferenciaFoto = useCallback(
     async (nota: NotaPedido, index: number): Promise<string | null> => {
-      const cached = conferenciaFotoCacheRef.current.get(index);
+      const loadGen = ++conferenciaFotoLoadGenRef.current;
+      const stillActive = () => loadGen === conferenciaFotoLoadGenRef.current;
+
+      setConferenciaFotoErro("");
+      /** Limpa spinner de fetch cancelado (loadGen anterior). */
+      setConferenciaFotoCarregando(false);
+      const cacheKey = conferenciaFotoCacheKey(nota.id, index);
+      const cached = conferenciaFotoCacheRef.current.get(cacheKey);
       if (cached) {
         setConferenciaFotoAtualUrl(cached);
+        setConferenciaFotoCarregando(false);
         return cached;
       }
 
       const localFotos = getFotosExibicaoNota(nota);
       if (localFotos[index]) {
-        conferenciaFotoCacheRef.current.set(index, localFotos[index]);
+        conferenciaFotoCacheRef.current.set(cacheKey, localFotos[index]);
         setConferenciaFotoAtualUrl(localFotos[index]);
+        setConferenciaFotoCarregando(false);
         return localFotos[index];
       }
 
-      if (!nota.fotoNaNuvem) return null;
+      if (!notaTemFotoArmazenadaNaNuvem(nota)) {
+        setConferenciaFotoAtualUrl(null);
+        setConferenciaFotoCarregando(false);
+        return null;
+      }
       const cnpj =
         nota.cooperativaCnpj ??
         (data && coopId ? getCooperativaCnpj(data, coopId) : undefined) ??
         (user && coopId ? await resolveCooperativaCnpj(data ?? getData(), coopId, user) : undefined);
-      if (!cnpj) return null;
+      if (!cnpj) {
+        if (!stillActive()) return null;
+        setConferenciaFotoErro("CNPJ da cooperativa não encontrado para carregar fotos.");
+        setConferenciaFotoAtualUrl(null);
+        setConferenciaFotoCarregando(false);
+        return null;
+      }
 
+      if (!stillActive()) return null;
+      setConferenciaFotoAtualUrl(null);
       setConferenciaFotoCarregando(true);
       try {
-        const url = await fetchNotaFotoPartBlobUrl(cnpj, nota.id, index);
-        if (url) {
-          conferenciaFotoCacheRef.current.set(index, url);
-          setConferenciaFotoAtualUrl(url);
+        let notaEnriquecida = nota;
+        const cachedEnriched = conferenciaNotaEnriquecidaRef.current;
+        if (cachedEnriched?.notaId === nota.id) {
+          notaEnriquecida = cachedEnriched.nota;
+        } else {
+          const baseData = data ?? getData();
+          if (baseData && coopId) {
+            notaEnriquecida = await ensureNotaComFoto(baseData, nota, coopId);
+            conferenciaNotaEnriquecidaRef.current = { notaId: nota.id, nota: notaEnriquecida };
+          }
         }
-        return url;
+
+        if (!stillActive()) return null;
+
+        const enrichedLocal = getFotosExibicaoNota(notaEnriquecida);
+        if (enrichedLocal[index]) {
+          conferenciaFotoCacheRef.current.set(cacheKey, enrichedLocal[index]);
+          setConferenciaFotoAtualUrl(enrichedLocal[index]);
+          return enrichedLocal[index];
+        }
+
+        let url = await fetchNotaFotoPartBlobUrl(cnpj, notaEnriquecida.id, index, { compact: true });
+        if (!url && index !== 0) {
+          url = await fetchNotaFotoPartBlobUrl(cnpj, notaEnriquecida.id, 0, { compact: true });
+        }
+        if (!stillActive()) {
+          if (url) revokePreviewUrl(url);
+          return null;
+        }
+        if (url) {
+          conferenciaFotoCacheRef.current.set(cacheKey, url);
+          setConferenciaFotoAtualUrl(url);
+          const total = contarFotosEnviadasNota(notaEnriquecida);
+          const nextIdx = index + 1;
+          if (nextIdx < total && !conferenciaFotoCacheRef.current.has(conferenciaFotoCacheKey(nota.id, nextIdx))) {
+            void fetchNotaFotoPartBlobUrl(cnpj, notaEnriquecida.id, nextIdx, { compact: true }).then((prefetch) => {
+              if (!prefetch) return;
+              const pk = conferenciaFotoCacheKey(nota.id, nextIdx);
+              if (!conferenciaFotoCacheRef.current.has(pk)) {
+                conferenciaFotoCacheRef.current.set(pk, prefetch);
+              } else {
+                revokePreviewUrl(prefetch);
+              }
+            });
+          }
+          return url;
+        }
+        conferenciaFotoCacheRef.current.delete(cacheKey);
+        setConferenciaFotoErro(
+          "Não foi possível carregar esta foto da nuvem. Verifique a conexão e toque em «Tentar de novo»."
+        );
+        return null;
       } finally {
-        setConferenciaFotoCarregando(false);
+        if (stillActive()) {
+          setConferenciaFotoCarregando(false);
+        }
       }
     },
     [data, coopId, user]
@@ -465,7 +574,6 @@ export default function NotasPedidoContent() {
         );
         lancamentosFotoConferenciaRef.current.set(fotoIdx, base.itens);
         fotosLancadasConferenciaRef.current.add(fotoIdx);
-        setFotosLancadasUi(new Set(fotosLancadasConferenciaRef.current));
 
         const divisao = resolverDivisaoConferencia(d, selectedNota);
         const fotoTag = `foto ${fotoIdx + 1}/`;
@@ -542,6 +650,7 @@ export default function NotasPedidoContent() {
         );
       });
 
+      setFotosLancadasUi(new Set(fotosLancadasConferenciaRef.current));
       return { ok: true };
     },
     [
@@ -596,6 +705,7 @@ export default function NotasPedidoContent() {
 
       setConferirErrors({});
       setConferenciaFotoIdx(clamped);
+      setLancamentoSequencia(null);
       carregarItensParaFotoConferencia(clamped);
     },
     [
@@ -820,8 +930,12 @@ export default function NotasPedidoContent() {
   }, [isCooperado, searchParams]);
 
   const resumosMensaisCooperado = useMemo(() => {
-    if (!isCooperado || !data || !cooperadoId) return [];
-    const base = listarResumosMensaisEntregas(data, cooperadoId, coopId);
+    if (!isCooperado || !cooperadoAbaEntregasMontada || !data || !cooperadoId) return [];
+    const base = filtrarResumosMesesNaoQuitados(
+      data,
+      cooperadoId,
+      bicCentralListarResumosMensaisEntregas(data, cooperadoId, coopId)
+    );
     if (statusFilter === "pendentes") return filtrarResumosEntregasPendentes(base);
     if (!statusFilter) return base;
     return base
@@ -830,12 +944,17 @@ export default function NotasPedidoContent() {
         notas: r.notas.filter((n) => n.status === statusFilter),
       }))
       .filter((r) => r.notas.length > 0);
-  }, [data, cooperadoId, coopId, isCooperado, statusFilter, hbDescontosRevision]);
+  }, [data, cooperadoId, coopId, isCooperado, statusFilter, hbDescontosRevision, cooperadoAbaEntregasMontada]);
 
   const resumosFichaCooperado = useMemo(() => {
-    if (!isCooperado || !data || !cooperadoId) return [];
-    return listarResumosMensaisEntregas(data, cooperadoId, coopId);
-  }, [data, cooperadoId, coopId, isCooperado, hbDescontosRevision]);
+    if (!isCooperado || !cooperadoAbaFichaMontada || !data || !cooperadoId) return [];
+    return listarResumosFichaEmAbertoCooperado(data, cooperadoId, coopId);
+  }, [data, cooperadoId, coopId, isCooperado, hbDescontosRevision, cooperadoAbaFichaMontada]);
+
+  const getEscolaLabelCooperado = useCallback(
+    (n: NotaPedido) => getEscolaNotaLabel(n, data?.instituicoes ?? []),
+    [data?.instituicoes]
+  );
 
   const nomeCooperadoExibicao = useMemo(() => {
     if (!data || !cooperadoId) return user?.name ?? "Cooperado";
@@ -849,28 +968,42 @@ export default function NotasPedidoContent() {
     return cnpj ? getPendingNotaDeleteIds(cnpj) : new Set<string>();
   }, [data, coopId]);
 
-  const pendentesTodas = useMemo(() => {
-    if (!data || isCooperado) return [];
-    return data.notasPedido
-      .filter((n) => {
-        if (coopId && !notaPertenceCooperativa(data, n, coopId)) return false;
-        if (coopId && isNotaPedidoExcluida(data, n.id, coopId)) return false;
-        if (pendingDeleteIds.has(n.id)) return false;
-        return isNotaNaFilaConferenciaResponsavel(n.status);
-      })
-      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-  }, [data, coopId, isCooperado, pendingDeleteIds]);
+  const pendentesTodasBase =
+    useAppDataSelector(
+      (d) => {
+        if (isCooperado || !coopId) return [] as NotaPedido[];
+        return listNotasFilaConferenciaResponsavel(d, coopId);
+      },
+      [coopId, isCooperado]
+    ) ?? [];
 
-  // Fila estável: permanece até lançar/rejeitar — não some no sync nem por status transitório.
+  const pendentesTodas = useMemo(() => {
+    if (pendingDeleteIds.size === 0) return pendentesTodasBase;
+    return pendentesTodasBase.filter((n) => !pendingDeleteIds.has(n.id));
+  }, [pendentesTodasBase, pendingDeleteIds]);
+
+  // Fila estável durante sync — some assim que sair da fila (lançada/rejeitada/paga).
   const filaStickyIdsRef = useRef<Set<string>>(new Set());
   const filaStickySnapshotRef = useRef<Map<string, NotaPedido>>(new Map());
-  const pendentesEstaveis = useMemo(() => {
-    if (!data) return pendentesTodas;
 
+  const removerNotaDaFilaSticky = useCallback((notaId: string) => {
+    filaStickyIdsRef.current.delete(notaId);
+    filaStickySnapshotRef.current.delete(notaId);
+  }, []);
+
+  useEffect(() => {
     for (const n of pendentesTodas) {
+      if (!notaElegivelParaFilaConferenciaResponsavel(n)) continue;
       filaStickyIdsRef.current.add(n.id);
       filaStickySnapshotRef.current.set(n.id, n);
     }
+  }, [pendentesTodas]);
+
+  const pendentesEstaveis = useMemo(() => {
+    if (!data) return pendentesTodas;
+
+    const notasById = new Map<string, NotaPedido>();
+    for (const n of data.notasPedido) notasById.set(n.id, n);
 
     for (const id of [...filaStickyIdsRef.current]) {
       if (coopId && isNotaPedidoExcluida(data, id, coopId)) {
@@ -883,10 +1016,19 @@ export default function NotasPedidoContent() {
         filaStickySnapshotRef.current.delete(id);
         continue;
       }
-      const atual = data.notasPedido.find((x) => x.id === id);
+      const atual = notasById.get(id);
       if (atual && isNotaSaiuDaFilaConferencia(atual.status)) {
         filaStickyIdsRef.current.delete(id);
         filaStickySnapshotRef.current.delete(id);
+        continue;
+      }
+      if (atual) {
+        const candAtual = sanitizarNotaParaFilaConferencia(atual);
+        if (!notaElegivelParaFilaConferenciaResponsavel(candAtual)) {
+          filaStickyIdsRef.current.delete(id);
+          filaStickySnapshotRef.current.delete(id);
+          continue;
+        }
       }
     }
 
@@ -897,29 +1039,38 @@ export default function NotasPedidoContent() {
       if (coopId && isNotaPedidoExcluida(data, id, coopId)) continue;
       if (pendingDeleteIds.has(id)) continue;
       if (byId.has(id)) continue;
-      const atual = data.notasPedido.find((x) => x.id === id);
-      const snap = filaStickySnapshotRef.current.get(id);
+      const atual = notasById.get(id);
       if (!atual || (coopId && isNotaPedidoExcluida(data, id, coopId))) {
         // Excluída localmente — não ressuscitar pelo snapshot da fila sticky.
         filaStickyIdsRef.current.delete(id);
         filaStickySnapshotRef.current.delete(id);
         continue;
       }
-      if (isNotaSaiuDaFilaConferencia(atual.status)) continue;
-      if (isNotaNaFilaConferenciaResponsavel(atual.status)) {
-        byId.set(id, atual);
-        filaStickySnapshotRef.current.set(id, atual);
+      if (isNotaSaiuDaFilaConferencia(atual.status)) {
+        filaStickyIdsRef.current.delete(id);
+        filaStickySnapshotRef.current.delete(id);
         continue;
       }
-      if (snap) {
-        byId.set(id, {
-          ...mergeNotaComFotos(snap, atual),
-          status: "aguardando_conferencia",
-        });
+      if (isNotaNaFilaConferenciaResponsavel(atual.status)) {
+        const candidata = sanitizarNotaParaFilaConferencia(atual);
+        if (!notaElegivelParaFilaConferenciaResponsavel(candidata)) {
+          filaStickyIdsRef.current.delete(id);
+          filaStickySnapshotRef.current.delete(id);
+          continue;
+        }
+        byId.set(id, candidata);
+        filaStickySnapshotRef.current.set(id, candidata);
+        continue;
       }
     }
 
-    return Array.from(byId.values()).sort(
+    return Array.from(byId.values())
+      .filter((n) => {
+        const live = notasById.get(n.id) ?? n;
+        const candidata = sanitizarNotaParaFilaConferencia(live);
+        return notaElegivelParaFilaConferenciaResponsavel(candidata);
+      })
+      .sort(
       (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
     );
   }, [data, pendentesTodas, pendingDeleteIds, coopId]);
@@ -1059,12 +1210,13 @@ export default function NotasPedidoContent() {
   const mostrarCorrecoesResponsavel = isDiretoria && vistaResponsavel === "correcoes";
 
   const mostrarTabelaResponsavel =
-    !isCooperado &&
-    vistaResponsavel !== "correcoes" &&
-    (vistaResponsavel === "historico" || pendentesEstaveis.length === 0);
+    !isCooperado && vistaResponsavel !== "correcoes" && vistaResponsavel === "historico";
 
   const notas = useMemo(() => {
     if (!data) return [];
+    if (!isCooperado && vistaResponsavel === "fila" && pendentesEstaveis.length > 0) {
+      return [];
+    }
     const filtrarPorGrupoAtivo =
       !isCooperado &&
       vistaResponsavel === "cooperado" &&
@@ -1082,7 +1234,7 @@ export default function NotasPedidoContent() {
           if (!notaPertenceCooperado(data, n, filtroCooperadoId, coopId)) return false;
         }
 
-        if (statusFilter && n.status !== statusFilter) return false;
+        if (statusFilter && !notaPassaFiltroStatusListaConferencia(n.status, statusFilter)) return false;
         return true;
       })
       .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
@@ -1095,6 +1247,7 @@ export default function NotasPedidoContent() {
     statusFilter,
     abaConferenciaEfetiva,
     pendentesTodas.length,
+    pendentesEstaveis.length,
     vistaResponsavel,
   ]);
 
@@ -1156,21 +1309,40 @@ export default function NotasPedidoContent() {
     }
   };
 
+  const cooperadoMountSyncRef = useRef(false);
+  const responsavelMountSyncRef = useRef(false);
+
   useEffect(() => {
     if (!isCooperado || !data) return;
-    requestAppSync();
+    if (cooperadoMountSyncRef.current) return;
+    cooperadoMountSyncRef.current = true;
+    requestAppSyncLight();
   }, [isCooperado, data]);
 
-  // Responsável: ao abrir Conferir entregas, força full sync uma vez (não depende só de delta).
-  const responsavelFullSyncRef = useRef(false);
+  // Responsável: full de notas no máximo 1× por sessão; sync leve ao entrar na tela (1× por mount).
   useEffect(() => {
     if (isCooperado || !data || !coopId) return;
-    if (responsavelFullSyncRef.current) return;
-    responsavelFullSyncRef.current = true;
+    if (responsavelMountSyncRef.current) return;
+    responsavelMountSyncRef.current = true;
     const cnpj = getCooperativaCnpj(data, coopId);
-    if (cnpj) forceNextFullNotasSync(cnpj);
-    requestAppSync();
+    if (cnpj && shouldResponsavelForceFullNotasOnEntry(cnpj)) {
+      forceNextFullNotasSync(cnpj);
+      requestAppSync();
+    } else {
+      requestAppSyncLight();
+    }
   }, [isCooperado, data, coopId]);
+
+  const filaReparoLocalRef = useRef(false);
+  useEffect(() => {
+    if (isCooperado || !coopId || !data) return;
+    if (filaReparoLocalRef.current) return;
+    filaReparoLocalRef.current = true;
+    const reparo = repararNotasPedidoFilaConferencia(getData() ?? data, coopId);
+    if (reparo.repaired > 0) {
+      updateData(() => reparo.data);
+    }
+  }, [isCooperado, coopId, data]);
 
   useEffect(() => {
     if (searchParams.get("anexar") !== "1" || !isCooperado || !data || anexarParamHandledRef.current) return;
@@ -1692,8 +1864,8 @@ export default function NotasPedidoContent() {
 
   const handleAnexarEntrega = async () => {
     if (!data || !user || !coopId || enviando || processandoFoto) return;
-    const cid = cooperadoId ?? user.cooperadoId;
-    if (!cid) {
+    const cidRaw = cooperadoId ?? user.cooperadoId;
+    if (!cidRaw) {
       setErroEnvio("Conta sem vínculo de cooperado. Faça login novamente ou fale com a cooperativa.");
       return;
     }
@@ -1714,6 +1886,8 @@ export default function NotasPedidoContent() {
       setContratoInstId(contratoId);
       setInstituicaoPadraoId(coopId, contratoId);
     }
+
+    const cid = resolverCooperadoIdCanonico(workingData, cidRaw, coopId);
 
     const errors: typeof formErrors = {};
     if (usarEscolaAvulsa && !escolaAvulsaNome.trim()) {
@@ -1948,30 +2122,38 @@ export default function NotasPedidoContent() {
   };
 
   const prepararConferenciaNota = async (nota: NotaPedido, opts?: { transicao?: boolean }) => {
-    const d = getData() ?? data;
     if (opts?.transicao) setConferenciaTransicao(true);
+    try {
+    const d = getData() ?? data;
+    if (lancamentoSequenciaTimerRef.current) {
+      clearTimeout(lancamentoSequenciaTimerRef.current);
+      lancamentoSequenciaTimerRef.current = null;
+    }
+    setLancamentoSequencia(null);
+    revokeConferenciaFotoCache();
     setConferenciaFotoErro("");
     setConferenciaFotoIdx(0);
     resetConferenciaPorFoto();
 
     let notaComFoto = nota;
     if (d && coopId) {
-      notaComFoto = await ensureNotaComFoto(d, nota, coopId);
-    }
-    const totalFotos = contarFotosEnviadasNota(notaComFoto);
-    if (
-      notaComFoto.fotoNaNuvem &&
-      totalFotos > 0 &&
-      getFotosExibicaoNota(notaComFoto).length === 0
-    ) {
-      revokeConferenciaFotoCache();
-      const primeira = await loadConferenciaFoto(notaComFoto, 0);
-      if (!primeira) {
-        setConferenciaFotoErro(
-          "Não foi possível carregar as fotos da nuvem. Verifique a conexão e abra esta entrega de novo."
-        );
+      if (opts?.transicao) {
+        notaComFoto = d.notasPedido.find((n) => n.id === nota.id) ?? nota;
+        void ensureNotaComFoto(d, notaComFoto, coopId).then((enriched) => {
+          conferenciaNotaEnriquecidaRef.current = { notaId: enriched.id, nota: enriched };
+          setSelectedNota((prev) => {
+            if (!prev || prev.id !== enriched.id) return prev;
+            return prev.status === "aguardando_conferencia"
+              ? { ...enriched, status: "aguardando_conferencia" as const }
+              : enriched;
+          });
+        });
+      } else {
+        notaComFoto = await ensureNotaComFoto(d, nota, coopId);
+        conferenciaNotaEnriquecidaRef.current = { notaId: notaComFoto.id, nota: notaComFoto };
       }
     }
+    const totalFotos = contarFotosEnviadasNota(notaComFoto);
     setSelectedNota(
       nota.status === "aguardando_conferencia"
         ? {
@@ -2027,24 +2209,9 @@ export default function NotasPedidoContent() {
       setAbaConferenciaKey(chave);
       setFiltroCooperadoId(coopDonoId);
     }
-    setConferenciaTransicao(false);
-  };
-
-  const openConferir = async (nota: NotaPedido) => {
-    const d = getData() ?? data;
-    if (!isCooperado && d && coopId) {
-      const chave = getChaveGrupoConferencia(nota, d, coopId);
-      const fila = listarPendentesConferencia(d, coopId, chave);
-      filaConferenciaRef.current = { total: fila.length, concluidas: 0, chave };
-      setFilaConferenciaPos(1);
-      setFilaConferenciaTotal(fila.length);
-    } else {
-      filaConferenciaRef.current = null;
-      setFilaConferenciaPos(0);
-      setFilaConferenciaTotal(0);
+    } finally {
+      setConferenciaTransicao(false);
     }
-    await prepararConferenciaNota(nota);
-    setConferirModal(true);
   };
 
   const listarPendentesConferencia = (
@@ -2055,13 +2222,37 @@ export default function NotasPedidoContent() {
   ) =>
     d.notasPedido
       .filter((n) => {
-        if (!isNotaNaFilaConferenciaResponsavel(n.status)) return false;
+        if (!notaElegivelParaFilaConferenciaResponsavel(n)) return false;
         if (excludeId && n.id === excludeId) return false;
         if (!notaPertenceCooperativa(d, n, coopIdLocal)) return false;
         if (chaveGrupo && getChaveGrupoConferencia(n, d, coopIdLocal) !== chaveGrupo) return false;
         return true;
       })
       .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+
+  const openConferir = async (nota: NotaPedido) => {
+    const fresh = getData()?.notasPedido.find((n) => n.id === nota.id) ?? nota;
+    if (!notaElegivelParaFilaConferenciaResponsavel(fresh)) {
+      removerNotaDaFilaSticky(fresh.id);
+      setSuccessMsg("Esta entrega já foi lançada. A lista foi atualizada.");
+      requestAppSyncLight();
+      return;
+    }
+    const d = getData() ?? data;
+    if (!isCooperado && d && coopId) {
+      const chave = getChaveGrupoConferencia(fresh, d, coopId);
+      const fila = listarPendentesConferencia(d, coopId, chave);
+      filaConferenciaRef.current = { total: fila.length, concluidas: 0, chave };
+      setFilaConferenciaPos(1);
+      setFilaConferenciaTotal(fila.length);
+    } else {
+      filaConferenciaRef.current = null;
+      setFilaConferenciaPos(0);
+      setFilaConferenciaTotal(0);
+    }
+    await prepararConferenciaNota(fresh);
+    setConferirModal(true);
+  };
 
   const obterProximaNotaConferencia = (chaveGrupo: string, notaConcluidaId: string): NotaPedido | null => {
     if (!coopId) return null;
@@ -2097,12 +2288,42 @@ export default function NotasPedidoContent() {
 
   const openView = async (nota: NotaPedido) => {
     let notaComFoto = nota;
-    if (getFotosExibicaoNota(nota).length === 0 && data && coopId) {
+    if (data && coopId) {
       notaComFoto = await ensureNotaComFoto(data, nota, coopId);
     }
     setSelectedNota(notaComFoto);
+    setViewFotoUrls(getFotosExibicaoNota(notaComFoto));
+    setViewFotosCarregando(false);
     setViewModal(true);
+
+    const total = contarFotosEnviadasNota(notaComFoto);
+    const inline = getFotosExibicaoNota(notaComFoto);
+    if (inline.length >= total && total > 0) return;
+    if (!notaTemFotoArmazenadaNaNuvem(notaComFoto) && total <= 0) return;
+
+    setViewFotosCarregando(true);
+    try {
+      const d = data ?? getData();
+      const cnpj =
+        notaComFoto.cooperativaCnpj ??
+        (d && coopId ? getCooperativaCnpj(d, coopId) : undefined) ??
+        (user && d && coopId ? await resolveCooperativaCnpj(d, coopId, user) : undefined);
+      if (!cnpj) return;
+      const urls = await resolveFotosNotaParaExibicao(notaComFoto, cnpj);
+      if (urls.length > 0) setViewFotoUrls(urls);
+    } finally {
+      setViewFotosCarregando(false);
+    }
   };
+
+  const fecharViewModal = useCallback(() => {
+    for (const url of viewFotoUrls) {
+      revokePreviewUrl(url);
+    }
+    setViewFotoUrls([]);
+    setViewFotosCarregando(false);
+    setViewModal(false);
+  }, [viewFotoUrls]);
 
   const updateConferenciaQty = (idx: number, qty: number) => {
     setConferenciaItens((prev) => prev.map((item, i) => (i === idx ? { ...item, quantidade: qty } : item)));
@@ -2110,20 +2331,23 @@ export default function NotasPedidoContent() {
   };
 
   const aguardarSequenciaLancamentoFotos = useCallback(
-    async (nota: NotaPedido, total: number): Promise<void> => {
-      if (total === 0) return;
+    async (nota: NotaPedido, total: number, opts?: { rapido?: boolean }): Promise<void> => {
+      if (total === 0 || opts?.rapido) return;
 
       if (lancamentoSequenciaTimerRef.current) {
         clearTimeout(lancamentoSequenciaTimerRef.current);
         lancamentoSequenciaTimerRef.current = null;
       }
 
+      const slideMs = total === 1 ? 550 : 650;
+
       return new Promise((resolve) => {
         let idx = 0;
 
         const mostrar = async () => {
+          const cacheKey = conferenciaFotoCacheKey(nota.id, idx);
           const url =
-            conferenciaFotoCacheRef.current.get(idx) ??
+            conferenciaFotoCacheRef.current.get(cacheKey) ??
             (await loadConferenciaFoto(nota, idx));
           if (url) {
             setLancamentoSequencia({ url, displayIdx: idx, total });
@@ -2141,10 +2365,10 @@ export default function NotasPedidoContent() {
             return;
           }
           void mostrar();
-          lancamentoSequenciaTimerRef.current = setTimeout(avancar, 1400);
+          lancamentoSequenciaTimerRef.current = setTimeout(avancar, slideMs);
         };
 
-        lancamentoSequenciaTimerRef.current = setTimeout(avancar, total === 1 ? 1000 : 1400);
+        lancamentoSequenciaTimerRef.current = setTimeout(avancar, slideMs);
       });
     },
     [loadConferenciaFoto]
@@ -2187,7 +2411,7 @@ export default function NotasPedidoContent() {
       setConferirErrors({});
       setLancadoMsg(`Foto ${fotoAtual + 1} lançada na ficha. Preencha a foto ${fotoAtual + 2}.`);
       setTimeout(() => setLancadoMsg(""), 3500);
-      irParaFotoConferencia(fotoAtual + 1);
+      queueMicrotask(() => irParaFotoConferencia(fotoAtual + 1));
       return;
     }
 
@@ -2308,6 +2532,7 @@ export default function NotasPedidoContent() {
         dataConferencia: now.split("T")[0],
         relancadaEm: undefined,
       };
+      notaAtualizada = normalizarTotaisNotaDesdeItens(notaAtualizada);
       const divisao = resolverDivisaoConferencia(d, notaAtualizada);
       if (divisao) {
         notaAtualizada = { ...notaAtualizada, divisaoEntrega: divisao };
@@ -2317,26 +2542,15 @@ export default function NotasPedidoContent() {
         notaAtualizada = sincronizarTotaisNotaComFichas(notaAtualizada!, d.fichaCorrida, {
           forcarDescontoLiquido: true,
           sincronizarBruto: fichasExistentes.length > 1,
+          preservarTotaisDoLancamentoAtual: true,
         });
       }
       const notasPedido = d.notasPedido.map((n) => (n.id === selectedNota.id ? notaAtualizada! : n));
 
       if (multiFoto) {
         const baseData = { ...d, notasPedido };
-        if (fichasExistentes.length > 0 && fichasValoresAlinhadosComNota(d.fichaCorrida, notaAtualizada!)) {
-          return addAuditEntry(baseData, {
-            entityType: "nota_pedido",
-            entityId: selectedNota.id,
-            action: "aprovar",
-            userId: user.id,
-            userName: user.name,
-            changes: divisao
-              ? `Entrega conferida (${qtdFotosAprovadas} fotos) · dividida entre ${divisao.participantes.length} cooperados`
-              : qtdFotosAprovadas > 1
-                ? `Entrega conferida (${qtdFotosAprovadas} fotos)`
-                : "Entrega conferida",
-          });
-        }
+        // Sempre reconstrói fichas no fechamento multi-foto: total consolidado da nota
+        // (itens de todas as fotos) deve ir para ficha, app e relatórios — não a soma das fatias parciais.
         const next = rebuildFichasNota(baseData, notaAtualizada!);
         return addAuditEntry(next, {
           entityType: "nota_pedido",
@@ -2414,31 +2628,45 @@ export default function NotasPedidoContent() {
       );
     });
 
+    removerNotaDaFilaSticky(notaId);
+
+    const notaPatchSnapshot = notaAtualizada;
+
+    const notaAprovadaRef = selectedNota;
+    const proxima = obterProximaNotaConferencia(chaveAtual, notaId);
+
+    enqueueConferenciaAprovacaoSync(notaId, async () => {
+      if (notaPatchSnapshot && coopId) {
+        const cnpj = await resolveCooperativaCnpj(getData(), coopId, user);
+        if (!cnpj) {
+          console.warn("[conferencia-aprovacao-sync]", notaId, "CNPJ não resolvido para sync.");
+          requestAppSyncLight();
+          return;
+        }
+        const patched = await patchNotaPedidoInCloud(cnpj, notaPatchSnapshot);
+        if (!patched.ok) {
+          console.warn(
+            "[conferencia-aprovacao-sync]",
+            notaId,
+            patched.error ?? "patch nota falhou"
+          );
+          setSuccessMsg(
+            patched.error ??
+              "Entrega lançada aqui, mas não sincronizou com a nuvem. Verifique a conexão."
+          );
+          return;
+        }
+        markConferenciaPatchSyncedForOperacionalPush(notaId);
+        await withConferenciaOperacionalPushScope(coopId, getConferenciaPatchSyncedSnapshot(), async () => {
+          await pushOperacionalToCloud(cnpj, getData(), coopId, { authoritative: true });
+        });
+      } else {
+        requestAppSync();
+      }
+    });
+
     void (async () => {
       try {
-        if (notaAtualizada && coopId) {
-          const cnpj = await resolveCooperativaCnpj(getData(), coopId, user);
-          if (cnpj) {
-            const patched = await patchNotaPedidoInCloud(cnpj, notaAtualizada);
-            if (!patched.ok) {
-              setSuccessMsg(
-                patched.error ??
-                  "Entrega lançada aqui, mas não sincronizou com a nuvem. Verifique a conexão."
-              );
-            } else {
-              const d = getData();
-              await pushOperacionalToCloud(cnpj, d, coopId, { authoritative: true });
-              requestAppSync();
-            }
-          }
-        } else {
-          requestAppSync();
-        }
-
-        await aguardarSequenciaLancamentoFotos(selectedNota, qtdFotosAprovadas);
-
-        const proxima = obterProximaNotaConferencia(chaveAtual, notaId);
-
         if (proxima) {
           const mesmoGrupo = filaConferenciaRef.current?.chave === chaveAtual;
           if (filaConferenciaRef.current && mesmoGrupo) {
@@ -2462,6 +2690,7 @@ export default function NotasPedidoContent() {
               : `Nota aprovada! ${formatCurrency(valorAprovado)} na ficha de ${msgBeneficiarios}. Fila concluída!`
           );
           setTimeout(() => setLancadoMsg(""), 6000);
+          requestAppSyncLight();
         }
       } catch {
         /* ignore */
@@ -2490,6 +2719,8 @@ export default function NotasPedidoContent() {
         { entityType: "nota_pedido", entityId: selectedNota.id, action: "editar", userId: user.id, userName: user.name }
       );
     });
+
+    removerNotaDaFilaSticky(selectedNota.id);
 
     if (notaAtualizada && coopId && data) {
       const cnpj = getCooperativaCnpj(data, coopId);
@@ -2530,9 +2761,11 @@ export default function NotasPedidoContent() {
       return;
     }
 
-    const cnpj = await resolveCooperativaCnpj(data, coopId, user);
+    let cnpj = getCooperativaCnpj(data, coopId);
+    if (!cnpj) {
+      cnpj = (await resolveCooperativaCnpj(data, coopId, user)) ?? undefined;
+    }
     if (cnpj) {
-      // Tombstone local: impede que o sync traga a nota de volta da nuvem antes do DELETE concluir.
       queueNotaDelete(cnpj, alvo.id);
     }
 
@@ -2557,18 +2790,6 @@ export default function NotasPedidoContent() {
     filaStickyIdsRef.current.delete(alvo.id);
     filaStickySnapshotRef.current.delete(alvo.id);
 
-    const d = getData();
-    const cnpjSync = await resolveCooperativaCnpj(d, coopId, user);
-    if (cnpjSync) {
-      const del = await deleteNotaPedidoFromCloud(cnpjSync, alvo.id);
-      if (del.ok && (await confirmNotaDeletedFromCloud(cnpjSync, alvo.id))) {
-        unqueueNotaDelete(cnpjSync, alvo.id);
-      }
-      await flushPendingNotaDeletes(cnpjSync);
-      await pushOperacionalToCloud(cnpjSync, d, coopId, { authoritative: true });
-    }
-    requestAppSync();
-
     setViewModal(false);
     setConferirModal(false);
     setSelectedNota(null);
@@ -2577,6 +2798,21 @@ export default function NotasPedidoContent() {
         ? `Entrega ${alvo.numeroNota} excluída e removida da ficha do cooperado.`
         : "Entrega excluída."
     );
+
+    if (cnpj) {
+      const notaId = alvo.id;
+      void (async () => {
+        const del = await deleteNotaPedidoFromCloud(cnpj, notaId);
+        if (del.ok) {
+          unqueueNotaDelete(cnpj, notaId);
+        }
+        await flushPendingNotaDeletes(cnpj);
+        await pushOperacionalToCloud(cnpj, getData(), coopId, { authoritative: true });
+        requestAppSyncLight();
+      })();
+    } else {
+      requestAppSyncLight();
+    }
   };
 
   const executarRelancarEntregaResponsavel = async (alvo: NotaPedido) => {
@@ -2602,20 +2838,32 @@ export default function NotasPedidoContent() {
       return;
     }
 
-    const cnpj = await resolveCooperativaCnpj(getData(), coopId, user);
-    if (cnpj) {
-      await patchNotaPedidoInCloud(cnpj, notaRelancada);
-      const d = getData();
-      await pushOperacionalToCloud(cnpj, d, coopId, { authoritative: true });
-    }
-    requestAppSync();
-
     filaStickyIdsRef.current.add(notaRelancada.id);
     filaStickySnapshotRef.current.set(notaRelancada.id, notaRelancada);
+
+    voltarFilaResponsavel();
+    if (statusFilter !== "aguardando_conferencia") {
+      setStatusFilter("aguardando_conferencia");
+    }
 
     setSuccessMsg(
       `Entrega ${alvo.numeroNota} re-lançada. Ela voltou para «Conferir entregas» — você pode re-lançar outra entrega aqui.`
     );
+
+    const notaCloud = notaRelancada;
+    void (async () => {
+      let cnpj = getCooperativaCnpj(getData(), coopId);
+      if (!cnpj) {
+        cnpj = (await resolveCooperativaCnpj(getData(), coopId, user)) ?? undefined;
+      }
+      if (!cnpj) {
+        requestAppSyncLight();
+        return;
+      }
+      await patchNotaPedidoInCloud(cnpj, notaCloud);
+      await pushOperacionalToCloud(cnpj, getData(), coopId, { authoritative: true });
+      requestAppSyncLight();
+    })();
   };
 
   const solicitarExclusaoNota = (nota: NotaPedido, comoResponsavel: boolean) => {
@@ -2705,7 +2953,7 @@ export default function NotasPedidoContent() {
   const concluirSessaoEntregas = () => {
     const ids = ultimaNotaEnviadaIds;
     fecharAnexarModal(true);
-    setAbaCooperado("entregas");
+    trocarAbaCooperado("entregas");
     const lastId = ids[ids.length - 1];
     if (lastId) {
       requestAnimationFrame(() => {
@@ -2767,7 +3015,13 @@ export default function NotasPedidoContent() {
       <button
         type="button"
         id={recémEnviada ? `nota-enviada-${n.id}` : undefined}
-        onClick={() => (isCooperado ? openView(n) : n.status === "aguardando_conferencia" ? void openConferir(n) : openView(n))}
+        onClick={() =>
+          isCooperado
+            ? openView(n)
+            : notaElegivelParaFilaConferenciaResponsavel(n)
+              ? void openConferir(n)
+              : openView(n)
+        }
         className={cn(
           "w-full text-left bg-white border rounded-xl p-4 transition-colors",
           recémEnviada
@@ -2879,8 +3133,8 @@ export default function NotasPedidoContent() {
               ? "Extrato financeiro mensal com valores recebidos e detalhamento de cada entrega"
               : "Toque no botão verde para fotografar sua entrega — histórico por mês abaixo"
             : pendentesEstaveis.length > 0
-              ? `${pendentesEstaveis.length} ${pendentesEstaveis.length === 1 ? "nota" : "notas"} a conferir e lançar · só quem enviou foto aparece abaixo`
-              : "Nenhuma nota pendente — histórico e lançamento avulso continuam disponíveis"
+              ? `${pendentesEstaveis.length} ${pendentesEstaveis.length === 1 ? "nota" : "notas"} aguardando conferência e lançamento`
+              : "Nenhuma pendente — use Histórico para entregas já lançadas ou Lançar entrega (avulso)"
         }
         action={isCooperado ? (
           <div className="hidden sm:block">
@@ -3064,7 +3318,7 @@ export default function NotasPedidoContent() {
                       {totalFotosPendentes > pendentesEstaveis.length
                         ? ` · ${totalFotosPendentes} fotos`
                         : ""}
-                      . Ficam na fila até você lançar — não somem no sync.
+                      . Ao lançar, a nota sai da conferência; histórico fica na aba Histórico.
                     </p>
                   </div>
                   {vistaResponsavel !== "historico" ? (
@@ -3142,19 +3396,19 @@ export default function NotasPedidoContent() {
               )}
 
               {vistaResponsavel === "cooperado" && grupoAbaAtiva && (
-                <div>
+                <div className="max-w-4xl w-full">
                   <button
                     type="button"
                     onClick={voltarFilaResponsavel}
-                    className="inline-flex items-center gap-1.5 text-sm font-medium text-gray-600 hover:text-gray-900 mb-3"
+                    className="inline-flex items-center gap-1 text-sm font-medium text-gray-600 hover:text-gray-900 mb-2"
                   >
-                    <ChevronRight size={16} className="rotate-180" />
+                    <ChevronRight size={15} className="rotate-180" />
                     Todos os cooperados
                   </button>
-                  <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-2 mb-3">
+                  <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-1 mb-2">
                     <div>
-                      <h2 className="text-lg font-bold text-gray-900">{grupoAbaAtiva.nome}</h2>
-                      <p className="text-sm text-gray-600 mt-0.5">
+                      <h2 className="text-base font-semibold text-gray-900">{grupoAbaAtiva.nome}</h2>
+                      <p className="text-xs text-gray-600 mt-0.5">
                         {fotosAbaAtiva} {fotosAbaAtiva === 1 ? "foto" : "fotos"}
                         {pendentesAbaAtiva.length > 1
                           ? ` · ${pendentesAbaAtiva.length} notas`
@@ -3163,15 +3417,17 @@ export default function NotasPedidoContent() {
                       </p>
                     </div>
                   </div>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                  <div className="rounded-lg border border-amber-200 bg-white shadow-sm max-h-[min(65vh,28rem)] sm:max-h-[min(72vh,36rem)] overflow-y-auto overscroll-contain divide-y divide-amber-100/90">
                     {pendentesAbaAtiva.map((n) => {
                       const qtdFotosCard = contarFotosEnviadasNota(n);
+                      const fotoThumb = getFotoExibicaoNota(n);
+                      const qtdItens = n.itens?.length ?? 0;
                       return (
                         <button
                           key={n.id}
                           type="button"
                           onClick={() => void openConferir(n)}
-                          className="text-left border-2 border-amber-300 bg-amber-50 rounded-xl overflow-hidden hover:border-amber-500 relative"
+                          className="relative w-full flex items-center gap-2 px-2 py-1.5 sm:px-2.5 sm:py-2 text-left hover:bg-amber-50/90 active:bg-amber-100/70 transition-colors"
                         >
                           {check("notas_pedido", "edit") &&
                             coopId &&
@@ -3180,38 +3436,67 @@ export default function NotasPedidoContent() {
                                 type="button"
                                 variant="danger"
                                 size="sm"
-                                className="absolute top-2 left-2 z-10 h-8 w-8 p-0"
+                                className="absolute top-1 left-1 z-10 h-6 w-6 p-0"
                                 aria-label="Excluir entrega"
                                 onClick={(e) => {
                                   e.stopPropagation();
                                   solicitarExclusaoNota(n, true);
                                 }}
                               >
-                                <Trash2 size={14} />
+                                <Trash2 size={12} />
                               </Button>
                             )}
-                          {getFotoExibicaoNota(n) && (
-                            <div className="w-full h-52 sm:h-60 bg-gray-100 border-b border-amber-200 flex items-center justify-center p-2">
+                          <div
+                            className={cn(
+                              "shrink-0 w-10 h-10 sm:w-11 sm:h-11 rounded border border-amber-200/80 bg-gray-50 flex items-center justify-center overflow-hidden",
+                              check("notas_pedido", "edit") &&
+                                coopId &&
+                                podeExcluirEntregaNota(data, n.id, coopId).ok &&
+                                "ml-7 sm:ml-8"
+                            )}
+                          >
+                            {fotoThumb ? (
                               <NotaFotoImg
-                                src={getFotoExibicaoNota(n)}
+                                src={fotoThumb}
                                 alt=""
                                 className="max-w-full max-h-full w-auto h-auto object-contain"
                               />
+                            ) : qtdFotosCard > 0 ? (
+                              <Camera size={18} className="text-amber-700/80" />
+                            ) : (
+                              <Camera size={18} className="text-amber-700/50" />
+                            )}
+                          </div>
+                          <div className="flex-1 min-w-0 grid grid-cols-[minmax(0,1fr)_auto] gap-x-2 gap-y-0.5 items-center">
+                            <div className="min-w-0 flex flex-wrap items-center gap-x-1.5 gap-y-0.5 col-span-2 sm:col-span-1">
+                              <span className="font-semibold text-xs sm:text-sm text-gray-900 truncate">
+                                {n.numeroNota}
+                              </span>
+                              <span className="text-[11px] sm:text-xs text-gray-500 shrink-0">
+                                {formatDate(n.dataEntrega)}
+                              </span>
+                              <span className="shrink-0 scale-[0.85] origin-left">
+                                <NotaStatusBadge status={n.status} />
+                              </span>
+                              {qtdFotosCard > 1 && (
+                                <span className="shrink-0 bg-amber-800/90 text-white text-[9px] font-bold px-1.5 py-px rounded-full">
+                                  {qtdFotosCard} fotos
+                                </span>
+                              )}
                             </div>
-                          )}
-                          {qtdFotosCard > 1 && (
-                            <span className="absolute top-2 right-2 bg-black/70 text-white text-xs font-bold px-2 py-0.5 rounded-full">
-                              {qtdFotosCard} fotos
-                            </span>
-                          )}
-                          <div className="p-3">
-                            <p className="font-medium text-sm">
-                              {formatDate(n.dataEntrega)} · {n.numeroNota}
+                            <p className="text-xs sm:text-sm font-semibold text-green-700 tabular-nums text-right col-span-2 sm:col-span-1 sm:row-start-1 sm:col-start-2">
+                              {formatCurrency(n.valorLiquido)}
                             </p>
-                            <p className="text-xs text-gray-600 mt-0.5">
+                            <p className="col-span-2 text-[11px] sm:text-xs text-gray-600 truncate leading-tight">
+                              {qtdItens} {qtdItens === 1 ? "item" : "itens"}
+                              <span className="text-gray-400 mx-1">·</span>
                               {getEscolaNotaLabel(n, data.instituicoes)}
+                              {!fotoThumb && qtdFotosCard > 0 && (
+                                <span className="text-gray-400"> · toque para carregar foto</span>
+                              )}
                             </p>
                           </div>
+                          <ChevronRight size={16} className="shrink-0 text-gray-400 hidden sm:block" aria-hidden />
                         </button>
                       );
                     })}
@@ -3236,7 +3521,7 @@ export default function NotasPedidoContent() {
           {abaCooperado === "entregas" ? (
             <>
               Cada mês lista Entrega 1, 2, 3… Toque na entrega para abrir a foto. Valores consolidados ficam em{" "}
-              <button type="button" onClick={() => setAbaCooperado("ficha")} className="text-green-700 font-semibold underline">
+              <button type="button" onClick={() => trocarAbaCooperado("ficha")} className="text-green-700 font-semibold underline">
                 Minha ficha
               </button>
               .
@@ -3254,7 +3539,7 @@ export default function NotasPedidoContent() {
         <div className="flex gap-2 mb-6 border-b border-gray-200">
           <button
             type="button"
-            onClick={() => setAbaCooperado("entregas")}
+            onClick={() => trocarAbaCooperado("entregas")}
             className={cn(
               "px-4 py-2.5 text-sm font-medium border-b-2 -mb-px flex items-center gap-2",
               abaCooperado === "entregas"
@@ -3266,7 +3551,7 @@ export default function NotasPedidoContent() {
           </button>
           <button
             type="button"
-            onClick={() => setAbaCooperado("ficha")}
+            onClick={() => trocarAbaCooperado("ficha")}
             className={cn(
               "px-4 py-2.5 text-sm font-medium border-b-2 -mb-px flex items-center gap-2",
               abaCooperado === "ficha"
@@ -3362,36 +3647,45 @@ export default function NotasPedidoContent() {
       )}
 
       {isCooperado ? (
-        abaCooperado === "ficha" ? (
-          <CooperadoMinhaFichaTab
-            cooperadoId={cooperadoId!}
-            cooperativaId={coopId}
-            nomeCooperado={nomeCooperadoExibicao}
-            resumos={resumosFichaCooperado}
-            getEscolaLabel={(n) => getEscolaNotaLabel(n, data.instituicoes)}
-          />
-        ) : statusFilter && resumosMensaisCooperado.length === 0 ? (
-          <div className="text-center py-12 text-gray-500 bg-white rounded-2xl border">
-            <Camera size={40} className="mx-auto mb-3 text-gray-300" />
-            <p className="font-medium">
-              {statusFilter === "pendentes" ? "Nenhuma entrega pendente" : "Nenhuma entrega com este filtro"}
-            </p>
-            <p className="text-sm mt-1">
-              {statusFilter === "pendentes"
-                ? "Entregas aprovadas ou pagas ficam no histórico completo."
-                : "Toque em Histórico completo para ver todas as entregas."}
-            </p>
-          </div>
-        ) : (
-          <CooperadoEntregasPorMes
-            resumos={resumosMensaisCooperado}
-            nomeCooperado={nomeCooperadoExibicao}
-            ultimaNotaEnviadaIds={ultimaNotaEnviadaIds}
-            onReenviar={(n) => openAnexar(n, { abrirCamera: true })}
-            onExcluir={(n) => solicitarExclusaoNota(n, false)}
-            getEscolaLabel={(n) => getEscolaNotaLabel(n, data.instituicoes)}
-          />
-        )
+        <>
+          {cooperadoAbaFichaMontada && (
+            <div className={abaCooperado === "ficha" ? undefined : "hidden"} aria-hidden={abaCooperado !== "ficha"}>
+              <CooperadoMinhaFichaTab
+                cooperadoId={cooperadoId!}
+                cooperativaId={coopId}
+                nomeCooperado={nomeCooperadoExibicao}
+                resumos={resumosFichaCooperado}
+                getEscolaLabel={getEscolaLabelCooperado}
+              />
+            </div>
+          )}
+          {cooperadoAbaEntregasMontada && (
+            <div className={abaCooperado === "entregas" ? undefined : "hidden"} aria-hidden={abaCooperado !== "entregas"}>
+              {statusFilter && resumosMensaisCooperado.length === 0 ? (
+                <div className="text-center py-12 text-gray-500 bg-white rounded-2xl border">
+                  <Camera size={40} className="mx-auto mb-3 text-gray-300" />
+                  <p className="font-medium">
+                    {statusFilter === "pendentes" ? "Nenhuma entrega pendente" : "Nenhuma entrega com este filtro"}
+                  </p>
+                  <p className="text-sm mt-1">
+                    {statusFilter === "pendentes"
+                      ? "Entregas aprovadas ou pagas ficam no histórico completo."
+                      : "Toque em Histórico completo para ver todas as entregas."}
+                  </p>
+                </div>
+              ) : (
+                <CooperadoEntregasPorMes
+                  resumos={resumosMensaisCooperado}
+                  nomeCooperado={nomeCooperadoExibicao}
+                  ultimaNotaEnviadaIds={ultimaNotaEnviadaIds}
+                  onReenviar={(n) => openAnexar(n, { abrirCamera: true })}
+                  onExcluir={(n) => solicitarExclusaoNota(n, false)}
+                  getEscolaLabel={getEscolaLabelCooperado}
+                />
+              )}
+            </div>
+          )}
+        </>
       ) : mostrarTabelaResponsavel ? (
       <>
         {check("notas_pedido", "edit") && (
@@ -3418,8 +3712,10 @@ export default function NotasPedidoContent() {
           { key: "valor", label: "Valor", render: (n) => (n.valorLiquido > 0 ? formatCurrency(n.valorLiquido) : "—") },
           { key: "status", label: "Status", render: (n) => <NotaStatusBadge status={n.status} /> },
         ]}
-        onView={(n) => (n.status === "aguardando_conferencia" ? void openConferir(n) : openView(n))}
-        viewLabel="Conferir"
+        onView={(n) =>
+          notaElegivelParaFilaConferenciaResponsavel(n) ? void openConferir(n) : openView(n)
+        }
+        viewLabel="Ver"
         onDelete={
           check("notas_pedido", "edit")
             ? (n) => solicitarExclusaoNota(n, true)
@@ -4020,27 +4316,29 @@ export default function NotasPedidoContent() {
           </div>
         )}
         {selectedNota && (
-          <div className="flex flex-col lg:flex-row min-h-[calc(100dvh-8.5rem)]">
-            <div className="lg:w-[48%] xl:w-1/2 bg-gray-900 flex flex-col shrink-0 lg:min-h-[calc(100dvh-8.5rem)]">
-              <div className="flex-1 flex items-center justify-center p-4 min-h-[40vh] lg:min-h-0 overflow-y-auto">
+          <div className="flex flex-col lg:flex-row h-[calc(100dvh-8.5rem)] max-h-[calc(100dvh-8.5rem)] overflow-hidden">
+            <div className="flex flex-col w-full lg:w-[48%] xl:w-1/2 bg-gray-900 shrink-0 lg:h-full lg:min-h-0 overflow-hidden border-b border-gray-800 lg:border-b-0">
+              <div className="flex flex-col shrink-0 max-h-[48dvh] lg:max-h-none lg:flex-1 lg:min-h-0 overflow-hidden">
+                <div className="flex-1 min-h-0 flex items-center justify-center p-3 overflow-hidden">
                 {(() => {
                   if (lancamentoSequencia) {
                     const { url, displayIdx, total } = lancamentoSequencia;
                     return (
-                      <div className="w-full space-y-4 text-center">
-                        {/* eslint-disable-next-line @next/next/no-img-element */}
-                        <div className="inline-block max-w-full rounded-xl border-2 border-green-400/40 bg-black/30 p-2 shadow-lg ring-4 ring-green-500/50">
-                          {/* eslint-disable-next-line @next/next/no-img-element */}
-                          <img
-                            src={url}
-                            alt={`Lançada ${displayIdx + 1} de ${total}`}
-                            className="block max-w-full max-h-[75vh] lg:max-h-[calc(100dvh-11rem)] object-contain mx-auto"
-                          />
+                      <div className="w-full h-full flex flex-col items-center justify-center text-center min-h-0">
+                        <div className="flex-1 min-h-0 w-full flex items-center justify-center">
+                          <div className="inline-block max-w-full max-h-full rounded-xl border-2 border-green-400/40 bg-white/5 p-1.5 shadow-lg ring-4 ring-green-500/50">
+                            {/* eslint-disable-next-line @next/next/no-img-element */}
+                            <img
+                              src={url}
+                              alt={`Lançada ${displayIdx + 1} de ${total}`}
+                              className="block max-h-full max-w-full w-auto h-auto object-contain mx-auto lg:max-h-[calc(100dvh-15rem)]"
+                            />
+                          </div>
                         </div>
-                        <p className="text-green-400 font-semibold text-base">
+                        <p className="shrink-0 text-green-400 font-semibold text-sm mt-2 px-2">
                           Foto {displayIdx + 1} de {total} · Lançada na ficha ✓
                         </p>
-                        <div className="flex flex-wrap items-center justify-center gap-2">
+                        <div className="shrink-0 flex flex-wrap items-center justify-center gap-2 py-2 px-2">
                           {Array.from({ length: total }, (_, i) => (
                             <span
                               key={i}
@@ -4062,69 +4360,49 @@ export default function NotasPedidoContent() {
                   const totalFotos = contarFotosEnviadasNota(selectedNota);
                   const idx = Math.min(conferenciaFotoIdx, Math.max(0, totalFotos - 1));
                   if (totalFotos > 0) {
-                    return (
-                      <div className="w-full space-y-3">
-                        {conferenciaFotoCarregando && !conferenciaFotoAtualUrl ? (
-                          <p className="text-white/70 text-sm text-center py-12">Carregando foto…</p>
-                        ) : conferenciaFotoAtualUrl ? (
-                          <div className="w-full flex items-center justify-center">
-                            <div className="inline-block max-w-full rounded-xl border-2 border-white/25 bg-black/30 p-2 shadow-lg">
-                              {/* eslint-disable-next-line @next/next/no-img-element */}
-                              <img
-                                src={conferenciaFotoAtualUrl}
-                                alt={`Pedido ${idx + 1} de ${totalFotos}`}
-                                className="block max-w-full max-h-[75vh] lg:max-h-[calc(100dvh-11rem)] object-contain mx-auto"
-                              />
-                            </div>
-                          </div>
-                        ) : null}
-                        {totalFotos > 1 && (
-                          <>
-                            <div className="flex flex-wrap items-center justify-center gap-2">
-                              {Array.from({ length: totalFotos }, (_, i) => (
-                                <button
-                                  key={i}
-                                  type="button"
-                                  onClick={() => irParaFotoConferencia(i)}
-                                  className={cn(
-                                    "text-xs font-semibold px-3 py-1.5 rounded-full border transition-all",
-                                    i === idx
-                                      ? "border-green-400 bg-green-500/20 text-green-100"
-                                      : fotosLancadasUi.has(i)
-                                        ? "border-green-600/60 bg-green-900/30 text-green-200"
-                                        : "border-white/20 text-white/70 hover:border-white/40"
-                                  )}
-                                >
-                                  Foto {i + 1}
-                                  {fotosLancadasUi.has(i) ? " ✓" : ""}
-                                </button>
-                              ))}
-                            </div>
-                            <div className="flex items-center justify-center gap-3 text-white/90 text-sm">
-                              <Button
-                                type="button"
-                                variant="secondary"
-                                size="sm"
-                                disabled={idx <= 0}
-                                onClick={() => irParaFotoConferencia(idx - 1)}
-                              >
-                                Anterior
-                              </Button>
-                              <span className="font-medium tabular-nums">
-                                Foto {idx + 1} de {totalFotos}
-                              </span>
-                              <Button
-                                type="button"
-                                variant="secondary"
-                                size="sm"
-                                disabled={idx >= totalFotos - 1}
-                                onClick={() => irParaFotoConferencia(idx + 1)}
-                              >
-                                Próxima foto
-                              </Button>
-                            </div>
-                          </>
-                        )}
+                    return conferenciaFotoCarregando && !conferenciaFotoAtualUrl ? (
+                      <p className="text-white/70 text-sm text-center">Carregando foto…</p>
+                    ) : conferenciaFotoAtualUrl ? (
+                      <div className="inline-block max-w-full max-h-full rounded-xl border-2 border-white/25 bg-white/5 p-1.5 shadow-lg">
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img
+                          src={conferenciaFotoAtualUrl}
+                          alt={`Pedido ${idx + 1} de ${totalFotos}`}
+                          className="block max-h-full max-w-full w-auto h-auto object-contain mx-auto lg:max-h-[calc(100dvh-15rem)]"
+                          onError={() => {
+                            const key = conferenciaFotoCacheKey(selectedNota.id, idx);
+                            conferenciaFotoCacheRef.current.delete(key);
+                            revokePreviewUrl(conferenciaFotoAtualUrl);
+                            setConferenciaFotoErro(
+                              "A foto não pôde ser exibida neste aparelho. Toque em «Tentar de novo»."
+                            );
+                            setConferenciaFotoAtualUrl(null);
+                          }}
+                        />
+                      </div>
+                    ) : (
+                      <div className="text-center py-6 px-4 space-y-3 max-w-md mx-auto">
+                        <p className="text-amber-200 text-sm">
+                          {conferenciaFotoErro ||
+                            "Foto ainda não carregou. Aguarde ou tente de novo."}
+                        </p>
+                        <Button
+                          type="button"
+                          variant="secondary"
+                          size="sm"
+                          onClick={() =>
+                            selectedNota &&
+                            void loadConferenciaFoto(selectedNota, idx).then((url) => {
+                              if (!url && !conferenciaFotoErro) {
+                                setConferenciaFotoErro(
+                                  "Não foi possível carregar a foto da nuvem."
+                                );
+                              }
+                            })
+                          }
+                        >
+                          Tentar de novo
+                        </Button>
                       </div>
                     );
                   }
@@ -4146,7 +4424,7 @@ export default function NotasPedidoContent() {
                   if (conferenciaTransicao) {
                     return <p className="text-gray-400 text-center py-12">Carregando fotos da nuvem...</p>;
                   }
-                  if (selectedNota.fotoNaNuvem && contarFotosEnviadasNota(selectedNota) > 0) {
+                  if (notaTemFotoArmazenadaNaNuvem(selectedNota) && contarFotosEnviadasNota(selectedNota) > 0) {
                     return (
                       <div className="text-center py-12 px-4 space-y-3">
                         <p className="text-red-300 text-sm">
@@ -4165,6 +4443,62 @@ export default function NotasPedidoContent() {
                   }
                   return <p className="text-gray-400 text-center py-12">Sem foto</p>;
                 })()}
+                </div>
+                {(() => {
+                  const totalFotosNav = contarFotosEnviadasNota(selectedNota);
+                  if (totalFotosNav <= 1) return null;
+                  const idxNav = Math.min(
+                    conferenciaFotoIdx,
+                    Math.max(0, totalFotosNav - 1)
+                  );
+                  return (
+                    <div className="shrink-0 border-t border-white/10 px-2 py-2 space-y-2 bg-gray-900/95">
+                      <div className="flex flex-wrap items-center justify-center gap-2">
+                        {Array.from({ length: totalFotosNav }, (_, i) => (
+                          <button
+                            key={i}
+                            type="button"
+                            onClick={() => irParaFotoConferencia(i)}
+                            className={cn(
+                              "text-xs font-semibold px-3 py-1.5 rounded-full border transition-all",
+                              i === idxNav
+                                ? "border-green-400 bg-green-500/20 text-green-100"
+                                : fotosLancadasUi.has(i)
+                                  ? "border-green-600/60 bg-green-900/30 text-green-200"
+                                  : "border-white/20 text-white/70 hover:border-white/40"
+                            )}
+                          >
+                            Foto {i + 1}
+                            {fotosLancadasUi.has(i) ? " ✓" : ""}
+                          </button>
+                        ))}
+                      </div>
+                      <div className="flex items-center justify-center gap-3 text-white/90 text-sm">
+                        <Button
+                          type="button"
+                          variant="secondary"
+                          size="sm"
+                          disabled={idxNav <= 0}
+                          onClick={() => irParaFotoConferencia(idxNav - 1)}
+                        >
+                          Anterior
+                        </Button>
+                        <span className="font-medium tabular-nums">
+                          Foto {idxNav + 1} de {totalFotosNav}
+                        </span>
+                        <Button
+                          type="button"
+                          variant="secondary"
+                          size="sm"
+                          disabled={idxNav >= totalFotosNav - 1}
+                          onClick={() => irParaFotoConferencia(idxNav + 1)}
+                        >
+                          Próxima foto
+                        </Button>
+                      </div>
+                    </div>
+                  );
+                })()}
               </div>
               <div className="shrink-0 px-4 py-3 bg-black/40 text-white text-sm space-y-0.5">
                 <p><strong>{getCooperadoNomeResolvido(data, selectedNota.cooperadoId, coopId)}</strong> · {formatDate(selectedNota.dataEntrega)}</p>
@@ -4178,7 +4512,7 @@ export default function NotasPedidoContent() {
               </div>
             </div>
 
-            <div className="flex-1 overflow-y-auto p-4 lg:p-6 space-y-4 bg-gray-50">
+            <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain p-4 lg:p-6 space-y-4 bg-gray-50">
               {filaConferenciaTotal > 1 && (
                 <AlertBanner variant="info" title={`Fila: ${filaConferenciaPos} de ${filaConferenciaTotal} entregas`}>
                   Ao aprovar, a próxima entrega abre aqui mesmo — sem fechar a tela — até lançar todas.
@@ -4437,7 +4771,7 @@ export default function NotasPedidoContent() {
         onConfirm={handleRejeitarNota}
       />
 
-      <Modal open={viewModal} onClose={() => setViewModal(false)} title="Detalhes da entrega" size="md">
+      <Modal open={viewModal} onClose={fecharViewModal} title="Detalhes da entrega" size="md">
         {selectedNota && (
           <div className="space-y-4">
             <NotaStatusBadge status={selectedNota.status} />
@@ -4493,20 +4827,29 @@ export default function NotasPedidoContent() {
             {selectedNota.motivoRejeicao && (
               <AlertBanner variant="error" title="Motivo da correção">{selectedNota.motivoRejeicao}</AlertBanner>
             )}
-            {getFotosExibicaoNota(selectedNota).length > 0 && (
-              <div className={cn("grid gap-2", getFotosExibicaoNota(selectedNota).length > 1 ? "grid-cols-1 sm:grid-cols-2" : "grid-cols-1")}>
-                {getFotosExibicaoNota(selectedNota).map((foto, i) => (
-                  <div
-                    key={i}
-                    className="w-full min-h-[12rem] max-h-96 rounded-xl border border-gray-200 bg-gray-100 flex items-center justify-center p-2"
-                  >
-                    <NotaFotoImg
-                      src={foto}
-                      alt={`Pedido ${i + 1}`}
-                      className="max-w-full max-h-[22rem] object-contain"
-                    />
-                  </div>
-                ))}
+            {(viewFotosCarregando || viewFotoUrls.length > 0) && (
+              <div
+                className={cn(
+                  "grid gap-2",
+                  viewFotoUrls.length > 1 ? "grid-cols-1 sm:grid-cols-2" : "grid-cols-1"
+                )}
+              >
+                {viewFotosCarregando && viewFotoUrls.length === 0 ? (
+                  <p className="text-sm text-gray-500 py-8 text-center">Carregando fotos da nuvem…</p>
+                ) : (
+                  viewFotoUrls.map((foto, i) => (
+                    <div
+                      key={i}
+                      className="w-full min-h-[12rem] max-h-96 rounded-xl border border-gray-200 bg-gray-100 flex items-center justify-center p-2"
+                    >
+                      <NotaFotoImg
+                        src={foto}
+                        alt={`Pedido ${i + 1}`}
+                        className="max-w-full max-h-[22rem] object-contain"
+                      />
+                    </div>
+                  ))
+                )}
               </div>
             )}
             {isCooperado && selectedNota.status === "rejeitada" && (

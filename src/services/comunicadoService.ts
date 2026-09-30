@@ -5,8 +5,10 @@ import {
   getResumoMensalidadesCooperado,
   type ResumoMensalidadesCooperado,
 } from "@/services/mensalidadeService";
+import { bicCentralAguardandoAssinatura } from "@/services/bicLeituraCentralCooperado";
 import { getPagamentoAguardandoCooperado } from "@/services/notaPedidoService";
 import { comunicadoMuralAindaVisivel } from "@/services/comunicadoMuralDuracao";
+import { isBicCentralReadAuthorityEnabled } from "@/lib/bic/bicCentralReadAuthority";
 import { formatCurrency, formatDate, formatMesReferencia, getCurrentMesReferencia } from "@/utils/format";
 
 export interface ComunicadoExibicao extends Comunicado {
@@ -221,7 +223,9 @@ export function getComunicadosInicioCooperado(
     resumoMens.situacao === "aguardando_confirmacao";
 
   const pagamentoAguardandoAssinatura = cooperadoId
-    ? !!getPagamentoAguardandoCooperado(data, cooperadoId)
+    ? isBicCentralReadAuthorityEnabled()
+      ? bicCentralAguardandoAssinatura(data, cooperadoId, cooperativaId)
+      : !!getPagamentoAguardandoCooperado(data, cooperadoId)
     : false;
 
   return getComunicadosCooperado(data, cooperativaId, cooperadoId)

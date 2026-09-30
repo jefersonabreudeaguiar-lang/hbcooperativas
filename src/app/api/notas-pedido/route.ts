@@ -8,11 +8,14 @@ import {
   fetchNotasFromStorage,
   fetchNotasFromTable,
   mergeNotasSources,
+  mergeStorageFilaOrphansIntoTableNotas,
   notaPayloadForTable,
   uploadNotaToStorage,
   upsertNotasInTable,
   enrichNotasListWithPreviews,
+  repairFilaConferenciaNotasNaNuvem,
 } from "@/lib/supabase/notasStorage";
+import { sanitizarNotaParaFilaConferencia } from "@/utils/notaStatus";
 
 export async function GET(request: Request) {
   if (!isSupabaseConfigured()) {
@@ -47,7 +50,7 @@ export async function GET(request: Request) {
   // Sempre lista o storage completo — nunca retornar [] por causa de `since`.
   if (fromTable.tableMissing) {
     const fromStorage = await fetchNotasFromStorage(supabase, cnpj);
-    const merged = visiveis(fromStorage);
+    const merged = visiveis(fromStorage).map(sanitizarNotaParaFilaConferencia);
     const notas =
       lite && !withPreviews
         ? merged
@@ -65,9 +68,24 @@ export async function GET(request: Request) {
     ? ([] as NotaPedido[])
     : await fetchNotasFromStorage(supabase, cnpj);
 
-  const merged = visiveis(
-    delta ? fromTable.notas : mergeNotasSources(fromTable.notas, fromStorage)
-  );
+  let tableMerged = delta
+    ? fromTable.notas
+    : mergeNotasSources(fromTable.notas, fromStorage);
+
+  tableMerged = await mergeStorageFilaOrphansIntoTableNotas(supabase, cnpj, tableMerged);
+
+  if (searchParams.get("repairFila") === "1" && guard.session?.role !== "cooperado") {
+    await repairFilaConferenciaNotasNaNuvem(supabase, cnpj);
+    const refreshed = await fetchNotasFromTable(supabase, cnpj, since);
+    if (!refreshed.tableMissing) {
+      tableMerged = delta
+        ? refreshed.notas
+        : mergeNotasSources(refreshed.notas, fromStorage);
+      tableMerged = await mergeStorageFilaOrphansIntoTableNotas(supabase, cnpj, tableMerged);
+    }
+  }
+
+  const merged = visiveis(tableMerged).map(sanitizarNotaParaFilaConferencia);
   const notas =
     lite && !withPreviews
       ? merged
@@ -140,6 +158,27 @@ export async function POST(request: Request) {
     if (!uploaded.ok) {
       return NextResponse.json({ error: uploaded.error }, { status: 500 });
     }
+  }
+
+  const retryTable = await upsertNotasInTable(
+    supabase,
+    cnpj,
+    notas.map(notaPayloadForTable),
+    cooperadoNome
+  );
+  if (retryTable.ok) {
+    if (guard.session) {
+      await logServerMutationAudit(supabase, guard.session, cnpj, {
+        action: "criar",
+        entityType: "nota_pedido",
+        entityId: notas[0]?.id ?? "lote",
+        summary: `${notas.length} entrega(s) publicada(s) na nuvem (storage + SQL reparo).`,
+      });
+    }
+    return NextResponse.json(
+      { success: true, count: notas.length, source: "storage+table" },
+      { status: 201 }
+    );
   }
 
   if (guard.session) {

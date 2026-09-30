@@ -3,22 +3,30 @@
 import { useRouter } from "next/navigation";
 import { useEffect } from "react";
 import { useHbCreditEnabled } from "@/hooks/useHbCreditEnabled";
+import { useAuth } from "@/modules/auth/AuthProvider";
+import { isCooperadoAppUser, canAccessTesoureiroArea } from "@/permissions";
 import { PageSkeleton } from "@/components/ui/PageSkeleton";
 import { AlertBanner } from "@/components/ui/AlertBanner";
 
 export function CreditFeatureGate({ children }: { children: React.ReactNode }) {
-  const { enabled, loading, status, errorMessage } = useHbCreditEnabled();
+  const { user } = useAuth();
+  const { enabled, navEnabled, loading, status, errorMessage } = useHbCreditEnabled(user);
   const router = useRouter();
+  const cooperadoExperience = Boolean(user && isCooperadoAppUser(user));
+  const canEnterHbArea =
+    Boolean(user) &&
+    (cooperadoExperience || (user ? canAccessTesoureiroArea(user) : false));
+  const pageAllowed = navEnabled && canEnterHbArea;
 
   useEffect(() => {
-    if (status === "disabled") {
+    if (status === "disabled" && !pageAllowed) {
       router.replace("/dashboard");
     }
-  }, [status, router]);
+  }, [status, router, pageAllowed]);
 
-  if (loading) return <PageSkeleton />;
+  if (loading && !pageAllowed) return <PageSkeleton />;
 
-  if (status === "error") {
+  if (status === "error" && !pageAllowed) {
     return (
       <AlertBanner variant="warning" title="HB Créditos indisponível">
         Não foi possível confirmar o módulo no servidor. Verifique a conexão e tente novamente.
@@ -27,7 +35,7 @@ export function CreditFeatureGate({ children }: { children: React.ReactNode }) {
     );
   }
 
-  if (!enabled) {
+  if (!pageAllowed) {
     return (
       <AlertBanner variant="warning" title="HB Créditos indisponível">
         Módulo desativado neste ambiente.
@@ -35,5 +43,16 @@ export function CreditFeatureGate({ children }: { children: React.ReactNode }) {
     );
   }
 
-  return <>{children}</>;
+  return (
+    <>
+      {status === "error" && pageAllowed && (
+        <AlertBanner variant="warning" title="Conexão com o módulo">
+          Não foi possível confirmar o status remoto agora. Você pode usar a HB Créditos; se algo falhar, atualize a
+          página.
+          {errorMessage ? ` (${errorMessage})` : ""}
+        </AlertBanner>
+      )}
+      {children}
+    </>
+  );
 }

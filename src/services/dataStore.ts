@@ -6,7 +6,7 @@ import type { AppData, AuditAction, User, Cooperado, Cooperativa, PrestacaoConta
 import { emptyInitialData, DEMO_ENTITY_IDS, DEMO_EMAILS, DEMO_CNPJ } from "@/mock/data";
 import { findCooperativaByCnpj, getCooperativaById, getUserCooperativaId, normalizeCnpj } from "@/utils/cooperativa";
 import { migrateInlinePhotosToIdb } from "@/services/localMediaMigration";
-import { compactarFotosNoArmazenamento, liberarEspacoArmazenamento, stripBinaryForPersist } from "@/utils/fotoEntrega";
+import { compactarFotosNoArmazenamento, liberarEspacoArmazenamento, stripBinaryForPersist, buildSnapshotEmergenciaPersistencia } from "@/utils/fotoEntrega";
 import { ensureMensalidadesDoMes, ensureMensalidadeCooperado, sincronizarMensalidadeCooperativa } from "@/services/mensalidadeService";
 import { applyOperationalResetIfNeeded, clearOperationalData } from "@/services/operationalReset";
 import { isCloudSyncInProgress } from "@/services/cloudSyncProgress";
@@ -32,7 +32,8 @@ import {
   fetchCooperadosFromCloud,
   cpfCooperadoDigits,
 } from "@/services/cooperadoCloudService";
-import { reconciliarFichaFromNotasConferidas, ajustesFichaMesId } from "@/services/notaPedidoService";
+import { posProcessarFinanceiroLocal } from "@/services/operacionalLocalPostProcess";
+import { ajustesFichaMesId } from "@/services/notaPedidoService";
 import { forceNextFullNotasSync, clearNotasSyncMeta } from "@/services/syncMetaService";
 import { requestAppSync } from "@/services/syncRequest";
 import { normalizarPrestacaoContas, aplicarPrestacoesContasExcluidas } from "@/services/prestacaoContasService";
@@ -55,6 +56,11 @@ import {
   type CloudSessionProfile,
 } from "@/lib/security/clientSession";
 import { generateId } from "@/utils/generateId";
+import {
+  applyConferenciaOperacionalPushViewIfActive,
+  isConferenciaOperacionalPushScopeActive,
+  preserveOperationalTruthDuringConferenciaPushSave,
+} from "@/services/conferenciaOperacionalPushScope";
 
 export { generateId };
 
@@ -133,27 +139,119 @@ export function notifyAppDataSubscribers(): void {
 }
 
 /** Agrupa várias gravações do sync em uma só (evita travar o celular). */
-export function beginSaveBatch(): void {
+let batchPersistGate: (() => boolean) | null = null;
+
+export function beginSaveBatch(opts?: { shouldPersist?: () => boolean }): void {
   saveBatchDepth++;
+  if (saveBatchDepth === 1 && opts?.shouldPersist) {
+    batchPersistGate = opts.shouldPersist;
+  }
 }
 
 export function endSaveBatch(): void {
   if (saveBatchDepth <= 0) return;
   saveBatchDepth--;
-  if (saveBatchDepth === 0 && saveBatchPending) {
-    const pending = saveBatchPending;
-    saveBatchPending = null;
-    persistDataToStorage(pending, { skipNotify: true });
+  if (saveBatchDepth === 0) {
+    if (saveBatchPending) {
+      const shouldPersist = batchPersistGate ? batchPersistGate() : true;
+      if (shouldPersist) {
+        const pending = saveBatchPending;
+        saveBatchPending = null;
+        const saved = persistDataToStorage(pending, { skipNotify: true });
+        if (saved.ok) notify();
+      } else {
+        saveBatchPending = null;
+      }
+    }
+    batchPersistGate = null;
   }
 }
 
-export async function runWithBatchedSaveAsync(fn: () => Promise<void>): Promise<void> {
-  beginSaveBatch();
+export async function runWithBatchedSaveAsync(
+  fn: () => Promise<void>,
+  opts?: { shouldPersistBatch?: () => boolean }
+): Promise<void> {
+  beginSaveBatch({ shouldPersist: opts?.shouldPersistBatch });
   try {
     await fn();
   } finally {
     endSaveBatch();
   }
+}
+
+const STORAGE_FULL_MESSAGE =
+  "Armazenamento do navegador cheio. Com internet, tente lançar de novo — o app remove fotos antigas já salvas na nuvem para liberar espaço.";
+
+const LOCAL_KEYS_PRESERVE = new Set([
+  STORAGE_KEY,
+  SESSION_KEY,
+  DEMO_PURGED_KEY,
+  "coopeagriplla_access_token",
+  "coopeagriplla_cloud_bootstrap",
+]);
+
+function persistRoleFromSession(): string | undefined {
+  try {
+    return getSession()?.role;
+  } catch {
+    return undefined;
+  }
+}
+
+/** Libera quota removendo caches auxiliares antes de gravar o operacional. */
+function pruneAuxiliaryLocalStorage(): void {
+  if (typeof localStorage === "undefined") return;
+  const keys: string[] = [];
+  for (let i = 0; i < localStorage.length; i++) {
+    const key = localStorage.key(i);
+    if (key && !LOCAL_KEYS_PRESERVE.has(key)) keys.push(key);
+  }
+  for (const key of keys) {
+    try {
+      localStorage.removeItem(key);
+    } catch {
+      /* ignore */
+    }
+  }
+}
+
+function writeStoragePayload(serialized: string): boolean {
+  try {
+    localStorage.setItem(STORAGE_KEY, serialized);
+    return true;
+  } catch (e) {
+    if (!isStorageQuotaError(e)) return false;
+  }
+  try {
+    localStorage.removeItem(STORAGE_KEY);
+    localStorage.setItem(STORAGE_KEY, serialized);
+    return true;
+  } catch (e) {
+    if (!isStorageQuotaError(e)) return false;
+  }
+  pruneAuxiliaryLocalStorage();
+  try {
+    localStorage.removeItem(STORAGE_KEY);
+    localStorage.setItem(STORAGE_KEY, serialized);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function buildPersistCandidates(data: AppData): AppData[] {
+  const role = persistRoleFromSession();
+  const stripped = stripBinaryForPersist(data, { role });
+  const nivel1 = liberarEspacoArmazenamento(stripped, 1);
+  const nivel2 = liberarEspacoArmazenamento(stripped, 2);
+  const emergencia = buildSnapshotEmergenciaPersistencia(data, role);
+  return [
+    stripped,
+    nivel1,
+    nivel2,
+    { ...nivel2, auditLog: nivel2.auditLog.slice(0, 15) },
+    emergencia,
+  ];
 }
 
 function persistDataToStorage(
@@ -162,13 +260,8 @@ function persistDataToStorage(
 ): { ok: true } | { ok: false; error: string } {
   if (typeof window === "undefined") return { ok: true };
 
-  const stripped = stripBinaryForPersist(data);
   const previousCache = memoryCache;
-  const candidates = [
-    stripped,
-    liberarEspacoArmazenamento(stripped, 1),
-    liberarEspacoArmazenamento(stripped, 2),
-  ];
+  const candidates = buildPersistCandidates(data);
 
   for (let i = 0; i < candidates.length; i++) {
     const candidate = candidates[i];
@@ -179,7 +272,9 @@ function persistDataToStorage(
         if (!options?.skipNotify) notify();
         return { ok: true };
       }
-      localStorage.setItem(STORAGE_KEY, serialized);
+      if (!writeStoragePayload(serialized)) {
+        continue;
+      }
       lastPersistedSerialized = serialized;
       memoryCache = candidate;
       if (!options?.skipNotify) notify();
@@ -195,8 +290,7 @@ function persistDataToStorage(
   memoryCache = previousCache ?? memoryCache;
   return {
     ok: false,
-    error:
-      "Memória do navegador cheia. Envie a entrega agora (com internet) ou remova fotos antigas antes de anexar mais.",
+    error: STORAGE_FULL_MESSAGE,
   };
 }
 
@@ -370,6 +464,7 @@ function migrateData(raw: Partial<AppData> & Record<string, unknown>): AppData {
     fechamentos: base.fechamentos ?? [],
     livroCaixa: base.livroCaixa ?? [],
     livroCaixaControleAnual: base.livroCaixaControleAnual ?? [],
+    livroCaixaExcluidos: base.livroCaixaExcluidos ?? [],
     prestacoesContas: (base.prestacoesContas ?? [])
       .filter((p): p is PrestacaoContas => Boolean(p && typeof p === "object"))
       .map(normalizarPrestacaoContas),
@@ -421,7 +516,10 @@ function migrateResponsavelPrincipal(data: AppData): AppData {
 function runAutomaticTasks(data: AppData): AppData {
   if (isCloudSyncInProgress()) return data;
   let current = compactarFotosNoArmazenamento(data);
-  current = reconciliarFichaFromNotasConferidas(current);
+  const coopCnpj = data.cooperativas
+    .map((c) => normalizeCnpj(c.cnpj ?? ""))
+    .find((d) => d.length === 14);
+  current = posProcessarFinanceiroLocal(current, coopCnpj);
   current = sincronizarMensalidadeCooperativa(current);
   const stripped = stripBinaryForPersist(current);
   return stripped;
@@ -559,6 +657,14 @@ function loadData(forceReload = false): AppData {
       return memoryCache;
     }
 
+    if (stored.length >= 2_000_000) {
+      const slim = stripBinaryForPersist(data, { role: persistRoleFromSession() });
+      const saved = saveDataSafe(slim);
+      if (saved.ok) {
+        data = memoryCache ?? slim;
+      }
+    }
+
     memoryCache = data;
     scheduleAutomaticTasksIfNeeded(data);
     return data;
@@ -590,10 +696,13 @@ function isStorageQuotaError(e: unknown): boolean {
 export function saveDataSafe(data: AppData): { ok: true } | { ok: false; error: string } {
   if (typeof window === "undefined") return { ok: true };
 
+  if (isConferenciaOperacionalPushScopeActive() && memoryCache) {
+    data = preserveOperationalTruthDuringConferenciaPushSave(data, memoryCache);
+  }
+
   if (saveBatchDepth > 0) {
     memoryCache = data;
     saveBatchPending = data;
-    notifyImmediate();
     return { ok: true };
   }
 
@@ -603,7 +712,7 @@ export function saveDataSafe(data: AppData): { ok: true } | { ok: false; error: 
 export function getData(): AppData {
   if (typeof window === "undefined") return emptyInitialData;
   attachStorageListener();
-  if (memoryCache) return memoryCache;
+  if (memoryCache) return applyConferenciaOperacionalPushViewIfActive(memoryCache);
   scheduleDataWarmIfNeeded();
   return emptyInitialData;
 }
@@ -645,16 +754,21 @@ export function updateDataSafe(
 
   if (saveBatchDepth > 0) {
     saveBatchPending = updated;
-    notifyImmediate();
+    memoryCache = updated;
     return { ok: true, data: updated };
   }
 
   notifyImmediate();
-  const saved = persistDataToStorage(updated, { skipNotify: true });
+  let saved = persistDataToStorage(updated, { skipNotify: true });
+  if (!saved.ok) {
+    const role = persistRoleFromSession();
+    memoryCache = buildSnapshotEmergenciaPersistencia(updated, role);
+    saved = persistDataToStorage(memoryCache, { skipNotify: true });
+  }
   if (!saved.ok) {
     memoryCache = current;
     notifyImmediate();
-    return saved;
+    return { ok: false, error: saved.error };
   }
   return { ok: true, data: memoryCache ?? updated };
 }

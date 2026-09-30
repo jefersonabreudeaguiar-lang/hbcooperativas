@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { CheckCircle2, Clock, PenLine } from "lucide-react";
 import type { Cooperado, User } from "@/types";
@@ -9,7 +9,7 @@ import { AlertBanner } from "@/components/ui/AlertBanner";
 import { AssinaturaPapelCapture } from "@/components/cooperado/AssinaturaPapelCapture";
 import { AssinaturaStatusAviso } from "@/components/cooperado/AssinaturaStatusAviso";
 import { updateData } from "@/services/dataStore";
-import { pushCooperadoToCloud } from "@/services/cooperadoCloudService";
+import { pushCooperadoToCloud, queueCooperadoPush } from "@/services/cooperadoCloudService";
 import { resolveCooperativaCnpj } from "@/services/notaPedidoCloudService";
 import {
   cooperadoAssinaturaDevolvida,
@@ -43,6 +43,23 @@ export function AssinaturaCadastroPanel({ data, user, cooperado }: AssinaturaCad
   const previewUrl = getAssinaturaCadastroDataUrl(cooperado);
   const podeEnviar = precisa && !emAnalise;
 
+  useEffect(() => {
+    if (!cooperadoAssinaturaEmAnalise(cooperado) || !getAssinaturaCadastroDataUrl(cooperado)) return;
+    void (async () => {
+      const cnpj = await resolveCooperativaCnpj(data, cooperado.cooperativaId, user);
+      if (!cnpj) return;
+      const push = await pushCooperadoToCloud(cnpj, cooperado, user.email);
+      if (!push.ok) queueCooperadoPush(cnpj, cooperado, user.email);
+    })();
+  }, [
+    cooperado.id,
+    cooperado.assinaturaCadastradaEm,
+    cooperado.assinaturaCadastroVersao,
+    cooperado.assinaturaCadastroStatus,
+    data,
+    user,
+  ]);
+
   const salvar = async (payload: { dataUrl: string; hash: string }) => {
     setErro("");
     setOkMsg("");
@@ -65,7 +82,11 @@ export function AssinaturaCadastroPanel({ data, user, cooperado }: AssinaturaCad
       if (cnpj) {
         const push = await pushCooperadoToCloud(cnpj, cooperadoAtualizado, user.email);
         if (!push.ok) {
-          setErro(push.error ?? "Assinatura salva no aparelho, mas não sincronizou na nuvem.");
+          queueCooperadoPush(cnpj, cooperadoAtualizado, user.email);
+          setErro(
+            push.error ??
+              "Assinatura salva no aparelho. A sincronização com a nuvem falhou — tentaremos de novo automaticamente."
+          );
           return;
         }
       }

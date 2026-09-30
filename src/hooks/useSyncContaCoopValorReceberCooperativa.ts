@@ -4,9 +4,10 @@ import { refreshContaCoopDescontosCooperativaPendentes } from "@/lib/hb-credit/s
 import { getData } from "@/services/dataStore";
 import { resolveCooperativaCnpj } from "@/services/notaPedidoCloudService";
 import { isContaCoopValorReceberPilot } from "@/utils/contaCoopUiVisibility";
+import { scheduleContaCoopAuxSync } from "@/lib/hb-credit/contaCoopAuxSyncSchedule";
 
 const SYNC_INTERVAL_MS = 120_000;
-const SYNC_INITIAL_DELAY_MS = 2_000;
+const SYNC_INITIAL_DELAY_MS = 90_000;
 
 type HookOpts = {
   cooperativaId?: string;
@@ -44,6 +45,7 @@ export function useSyncContaCoopValorReceberCooperativa(opts?: HookOpts) {
     if (!syncOpts?.cnpj) return;
 
     let cancelled = false;
+    const idleCleanups: Array<() => void> = [];
 
     const run = () => {
       const current = optsRef.current;
@@ -57,13 +59,19 @@ export function useSyncContaCoopValorReceberCooperativa(opts?: HookOpts) {
         return;
       }
       runningRef.current = true;
-      void refreshContaCoopDescontosCooperativaPendentes(current)
-        .catch(() => {
-          /* offline ou HB indisponível */
-        })
-        .finally(() => {
-          runningRef.current = false;
-        });
+      const cancelIdle = scheduleContaCoopAuxSync(
+        () => {
+          void refreshContaCoopDescontosCooperativaPendentes(current)
+            .catch(() => {
+              /* offline ou HB indisponível */
+            })
+            .finally(() => {
+              runningRef.current = false;
+            });
+        },
+        { idleTimeoutMs: 22_000, fallbackMs: 8_000 }
+      );
+      idleCleanups.push(cancelIdle);
     };
 
     const onVisible = () => {
@@ -78,6 +86,7 @@ export function useSyncContaCoopValorReceberCooperativa(opts?: HookOpts) {
       document.removeEventListener("visibilitychange", onVisible);
       window.clearInterval(interval);
       window.clearTimeout(initial);
+      for (const cleanup of idleCleanups) cleanup();
     };
   }, [cnpj, opts?.cooperativaId, opts?.enabled]);
 }

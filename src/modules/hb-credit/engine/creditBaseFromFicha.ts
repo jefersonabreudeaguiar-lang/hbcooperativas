@@ -1,32 +1,24 @@
 import type { AppData } from "@/types";
-import { listarMesesPendentesQuantoVouReceber } from "@/services/cooperadoEntregasService";
-import { resolverCooperadoIdCanonico } from "@/services/cooperadoCloudService";
-import { getResumoPagamentoExibicao } from "@/services/notaPedidoService";
-import { round2 } from "@/utils/calculations";
+import { getDataRevision } from "@/services/dataStore";
 import { reaisToCents } from "../shared/money";
+import {
+  blindarCreditoBaseCentsHb,
+  prepararAppDataParaCreditoBaseHb,
+} from "./creditBaseHbGuard";
+import { hbCreditCreditoBaseReais } from "@/lib/hb-credit/hbCreditLeituraBic";
+import { resolverCooperadoIdCanonico } from "@/services/cooperadoCloudService";
 
 /**
- * Crédito base HB Créditos (alinhado ao app do cooperado):
- * — mesmos meses de listarMesesPendentesQuantoVouReceber;
- * — base = valor líquido a receber (resumo da ficha: entregas − mensalidade − HB − avulsos + créditos);
- * — zera após liquidação; novas entregas reconstruem a base.
+ * Crédito base HB — valor a receber (M6) ou lastro de entregas conferidas; blindagem anti-fantasma separada.
  */
 export function getCreditoBaseContaCoopReais(
   data: AppData,
   cooperadoId: string,
   cooperativaId?: string
 ): number {
-  const coopId = cooperativaId ?? data.cooperados.find((c) => c.id === cooperadoId)?.cooperativaId;
-  const cooperadoCanonico = resolverCooperadoIdCanonico(data, cooperadoId, coopId);
-  const meses = listarMesesPendentesQuantoVouReceber(data, cooperadoCanonico, coopId);
-  if (!meses.length) return 0;
-
-  let total = 0;
-  for (const mes of meses) {
-    total += getResumoPagamentoExibicao(data, cooperadoCanonico, mes, coopId).valorLiquido;
-  }
-
-  return round2(Math.max(0, total));
+  const sane = prepararAppDataParaCreditoBaseHb(data);
+  const coopId = cooperativaId ?? sane.cooperados.find((c) => c.id === cooperadoId)?.cooperativaId;
+  return hbCreditCreditoBaseReais(sane, cooperadoId, coopId);
 }
 
 /** Crédito base do cooperado para limite HB Créditos (centavos). */
@@ -35,7 +27,14 @@ export function getCreditoBaseCooperadoCents(
   cooperadoId: string,
   cooperativaId?: string
 ): number {
-  return reaisToCents(getCreditoBaseContaCoopReais(data, cooperadoId, cooperativaId));
+  const reais = getCreditoBaseContaCoopReais(data, cooperadoId, cooperativaId);
+  const coopId = cooperativaId ?? data.cooperados.find((c) => c.id === cooperadoId)?.cooperativaId;
+  return blindarCreditoBaseCentsHb(
+    prepararAppDataParaCreditoBaseHb(data),
+    cooperadoId,
+    coopId,
+    reaisToCents(reais)
+  );
 }
 
 export function buildCreditosBaseMap(
@@ -43,11 +42,56 @@ export function buildCreditosBaseMap(
   cooperadoIds: string[],
   cooperativaId?: string
 ): Record<string, number> {
+  const sane = prepararAppDataParaCreditoBaseHb(data);
   const map: Record<string, number> = {};
   for (const id of cooperadoIds) {
-    map[id] = getCreditoBaseCooperadoCents(data, id, cooperativaId);
+    const coopId = cooperativaId ?? sane.cooperados.find((c) => c.id === id)?.cooperativaId;
+    const canonico = resolverCooperadoIdCanonico(sane, id, coopId);
+    const reais = hbCreditCreditoBaseReais(sane, canonico, coopId);
+    map[id] = blindarCreditoBaseCentsHb(sane, id, coopId, reaisToCents(reais), sane);
   }
   return map;
+}
+
+type CreditosBaseCache = {
+  revision: number;
+  coopId: string;
+  idsKey: string;
+  map: Record<string, number>;
+};
+
+let creditosBaseCache: CreditosBaseCache | null = null;
+
+function cooperadoIdsCacheKey(ids: string[]): string {
+  if (ids.length <= 1) return String(ids.length) + ids[0];
+  return `${ids.length}:${ids.join("\u001f")}`;
+}
+
+/** Mesma regra de buildCreditosBaseMap, reutilizado entre revisões iguais do AppData. */
+export function buildCreditosBaseMapCached(
+  data: AppData,
+  cooperadoIds: string[],
+  cooperativaId?: string
+): Record<string, number> {
+  const revision = getDataRevision();
+  const coopId = cooperativaId ?? "";
+  const idsKey = cooperadoIdsCacheKey(cooperadoIds);
+  if (
+    creditosBaseCache &&
+    creditosBaseCache.revision === revision &&
+    creditosBaseCache.coopId === coopId &&
+    creditosBaseCache.idsKey === idsKey
+  ) {
+    return creditosBaseCache.map;
+  }
+  const map = buildCreditosBaseMap(data, cooperadoIds, cooperativaId);
+  creditosBaseCache = { revision, coopId, idsKey, map };
+  return map;
+}
+
+/** Invalida cache (testes). */
+export function resetCreditosBaseMapCache(): void {
+  creditosBaseCache = null;
 }
 
 export function calcLimiteFromPercentual(creditoBaseCents: number, percentual: number): number {

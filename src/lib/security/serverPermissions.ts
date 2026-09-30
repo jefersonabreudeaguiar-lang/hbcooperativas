@@ -12,9 +12,24 @@ const API_RESOURCE_RULES: Array<{
   resource: Resource;
   writeActions?: Action[];
   readActions?: Action[];
+  /** POST de upsert (ex.: sync na nuvem) — usa edit em vez de create. */
+  postAction?: Action;
 }> = [
-  { pattern: /^\/api\/cooperados/, resource: "cooperados", writeActions: ["create", "edit", "delete"], readActions: ["view"] },
+  {
+    pattern: /^\/api\/cooperados/,
+    resource: "cooperados",
+    writeActions: ["create", "edit", "delete"],
+    readActions: ["view"],
+    postAction: "edit",
+  },
   { pattern: /^\/api\/notas-pedido/, resource: "notas_pedido", writeActions: ["create", "edit", "approve", "delete"], readActions: ["view"] },
+  {
+    pattern: /^\/api\/cooperativa-sync\/confirmar-pagamento/,
+    resource: "ficha_corrida",
+    writeActions: ["edit"],
+    readActions: ["view"],
+    postAction: "edit",
+  },
   { pattern: /^\/api\/cooperativa-sync/, resource: "cooperados", writeActions: ["edit"], readActions: ["view"] },
   { pattern: /^\/api\/cooperativa-audit/, resource: "cooperados", writeActions: ["create"], readActions: ["view"] },
   { pattern: /^\/api\/cooperativas\/[^/]+/, resource: "cooperativas", writeActions: ["edit"], readActions: ["view"] },
@@ -42,11 +57,15 @@ export function inferApiPermission(
     if (!rule.pattern.test(pathname)) continue;
     if (isWrite) {
       const action =
-        m === "POST"
-          ? (rule.writeActions?.includes("create") ? "create" : rule.writeActions?.[0])
-          : rule.writeActions?.includes("edit")
-            ? "edit"
-            : rule.writeActions?.[0];
+        m === "POST" && rule.postAction
+          ? rule.postAction
+          : m === "POST"
+            ? rule.writeActions?.includes("create")
+              ? "create"
+              : rule.writeActions?.[0]
+            : rule.writeActions?.includes("edit")
+              ? "edit"
+              : rule.writeActions?.[0];
       if (action) return { resource: rule.resource, action };
     } else if (m === "GET") {
       return { resource: rule.resource, action: "view" };

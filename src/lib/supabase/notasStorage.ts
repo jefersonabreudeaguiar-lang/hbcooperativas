@@ -1,8 +1,9 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { NotaPedido } from "@/types";
 import { isNotasPedidoTableMissing } from "@/lib/supabase/errors";
-import { protectNotaAgainstStatusDowngrade } from "@/utils/notaStatus";
+import { protectNotaAgainstStatusDowngrade, isNotaNaFilaConferenciaResponsavel, sanitizarNotaParaFilaConferencia } from "@/utils/notaStatus";
 import { mergeNotaComFotos } from "@/utils/fotoEntrega";
+import { isInlineDataUrl } from "@/utils/mediaHelpers";
 
 const BUCKET = "hb-entregas";
 export const FOTOS_STORAGE_PARTS = "parts";
@@ -184,11 +185,16 @@ export async function assembleNotaFotosFromParts(
   nota: NotaPedido
 ): Promise<NotaPedido> {
   if (nota.fotosPedido?.length) return nota;
-  const count = nota.fotosEnviadasCount ?? 0;
+  const count = Math.max(
+    nota.fotosEnviadasCount ?? 0,
+    await countUploadedFotoParts(supabase, cnpj, nota.id)
+  );
   if (count <= 0) return nota;
 
+  const partNames = await listFotoPartFileNames(supabase, cnpj, nota.id);
   const fotos: string[] = [];
-  for (let i = 0; i < count; i++) {
+  const limit = partNames.length > 0 ? partNames.length : count;
+  for (let i = 0; i < limit; i++) {
     const part = await downloadFotoPartAsDataUrl(supabase, cnpj, nota.id, i);
     if (part) fotos.push(part);
   }
@@ -401,6 +407,42 @@ export async function fetchNotaFromStorage(
   }
 }
 
+async function listFotoPartFileNames(
+  supabase: SupabaseClient,
+  cnpj: string,
+  notaId: string
+): Promise<string[]> {
+  const folder = `${cnpj}/${notaId}`;
+  const { data: files } = await supabase.storage.from(BUCKET).list(folder, { limit: 500 });
+  if (!files?.length) return [];
+  return files
+    .filter((f) => /^foto-\d+\.jpg$/i.test(f.name))
+    .map((f) => f.name)
+    .sort((a, b) => a.localeCompare(b));
+}
+
+async function downloadStoragePathBuffer(
+  supabase: SupabaseClient,
+  objectPath: string
+): Promise<{ buffer: Buffer; contentType: string } | null> {
+  const { data: blob, error } = await supabase.storage.from(BUCKET).download(objectPath);
+  if (error || !blob) return null;
+  return {
+    buffer: Buffer.from(await blob.arrayBuffer()),
+    contentType: blob.type || "image/jpeg",
+  };
+}
+
+function inlineFotoFromNotaMeta(nota: NotaPedido, index: number): string | undefined {
+  const fromArray = nota.fotosPedido?.[index];
+  if (fromArray && isInlineDataUrl(fromArray)) return fromArray;
+  if (index === 0 && nota.fotoPedido && isInlineDataUrl(nota.fotoPedido)) return nota.fotoPedido;
+  const firstArray = nota.fotosPedido?.find((f) => isInlineDataUrl(f));
+  if (firstArray) return firstArray;
+  if (nota.fotoPedido && isInlineDataUrl(nota.fotoPedido)) return nota.fotoPedido;
+  return undefined;
+}
+
 /** Baixa uma foto da nuvem (stream) — sem base64 na RAM. */
 export async function downloadFotoPartBuffer(
   supabase: SupabaseClient,
@@ -408,13 +450,44 @@ export async function downloadFotoPartBuffer(
   notaId: string,
   index: number
 ): Promise<{ buffer: Buffer; contentType: string } | null> {
-  const { data: blob, error } = await supabase.storage
-    .from(BUCKET)
-    .download(fotoPartPath(cnpj, notaId, index));
-  if (error || !blob) return null;
-  const buffer = Buffer.from(await blob.arrayBuffer());
-  const contentType = blob.type || "image/jpeg";
-  return { buffer, contentType };
+  const direct = await downloadStoragePathBuffer(supabase, fotoPartPath(cnpj, notaId, index));
+  if (direct) return direct;
+
+  const partNames = await listFotoPartFileNames(supabase, cnpj, notaId);
+  if (partNames.length > 0) {
+    const safeIndex = Math.min(Math.max(0, index), partNames.length - 1);
+    const byIndex = await downloadStoragePathBuffer(
+      supabase,
+      `${cnpj}/${notaId}/${partNames[safeIndex]}`
+    );
+    if (byIndex) return byIndex;
+    for (const name of partNames) {
+      const part = await downloadStoragePathBuffer(supabase, `${cnpj}/${notaId}/${name}`);
+      if (part) return part;
+    }
+  }
+
+  const meta = await fetchNotaMetaFromStorage(supabase, cnpj, notaId);
+  const inlineSources: NotaPedido[] = [];
+  if (meta) inlineSources.push(meta);
+
+  const { data: tableRow } = await supabase
+    .from("notas_pedido")
+    .select("payload")
+    .eq("id", notaId)
+    .eq("cooperativa_cnpj", cnpj)
+    .maybeSingle();
+  const tablePayload = tableRow?.payload as NotaPedido | undefined;
+  if (tablePayload?.id) inlineSources.push(tablePayload);
+
+  for (const src of inlineSources) {
+    const inline = inlineFotoFromNotaMeta(src, index);
+    if (inline) {
+      return { buffer: dataUrlToBuffer(inline), contentType: "image/jpeg" };
+    }
+  }
+
+  return null;
 }
 
 /** Une notas da tabela SQL e do storage, mantendo metadados recentes e o maior conjunto de fotos. */
@@ -442,14 +515,84 @@ export async function fetchNotasFromTable(
   cnpj: string,
   since?: string
 ): Promise<{ notas: NotaPedido[]; tableMissing: boolean; serverWatermark?: string }> {
+  const mapRows = (
+    data: { payload: unknown; status: unknown; updated_at: unknown }[] | null
+  ): { notas: NotaPedido[]; serverWatermark?: string } => {
+    let serverWatermark: string | undefined;
+    const notas = (data ?? [])
+      .map((row) => {
+        const payload = row.payload as NotaPedido | null;
+        if (!payload?.id) return null;
+        const sqlStatus = row.status as NotaPedido["status"] | null;
+        const sqlUpdatedAt = typeof row.updated_at === "string" ? row.updated_at : undefined;
+        if (sqlUpdatedAt) {
+          const t = new Date(sqlUpdatedAt).getTime();
+          const prev = serverWatermark ? new Date(serverWatermark).getTime() : 0;
+          if (Number.isFinite(t) && t >= prev) serverWatermark = sqlUpdatedAt;
+        }
+        const status =
+          sqlStatus && sqlStatus !== "rascunho"
+            ? sqlStatus
+            : payload.status;
+        return {
+          ...payload,
+          status,
+          updatedAt: sqlUpdatedAt ?? payload.updatedAt,
+          serverUpdatedAt: sqlUpdatedAt,
+        } as NotaPedido & { serverUpdatedAt?: string };
+      })
+      .filter((n): n is NotaPedido & { serverUpdatedAt?: string } => Boolean(n));
+    return { notas, serverWatermark };
+  };
+
+  if (since) {
+    const [deltaRes, filaRes] = await Promise.all([
+      supabase
+        .from("notas_pedido")
+        .select("payload, status, updated_at")
+        .eq("cooperativa_cnpj", cnpj)
+        .gte("updated_at", since)
+        .order("updated_at", { ascending: false }),
+      supabase
+        .from("notas_pedido")
+        .select("payload, status, updated_at")
+        .eq("cooperativa_cnpj", cnpj)
+        .in("status", ["aguardando_conferencia", "entregue", "rejeitada"])
+        .order("updated_at", { ascending: false }),
+    ]);
+
+    if (deltaRes.error) {
+      if (isNotasPedidoTableMissing(deltaRes.error)) {
+        return { notas: [], tableMissing: true };
+      }
+      console.error("[notas-pedido/list]", deltaRes.error.message);
+      return { notas: [], tableMissing: false };
+    }
+    if (filaRes.error && !isNotasPedidoTableMissing(filaRes.error)) {
+      console.error("[notas-pedido/list-fila]", filaRes.error.message);
+    }
+
+    const byId = new Map<string, NotaPedido & { serverUpdatedAt?: string }>();
+    for (const n of mapRows(deltaRes.data ?? []).notas) byId.set(n.id, n);
+    for (const n of mapRows(filaRes.error ? [] : (filaRes.data ?? [])).notas) {
+      if (!byId.has(n.id)) byId.set(n.id, n);
+    }
+    const merged = [...byId.values()];
+    let serverWatermark: string | undefined;
+    for (const n of merged) {
+      const t = n.serverUpdatedAt ?? n.updatedAt;
+      if (!t) continue;
+      const ms = new Date(t).getTime();
+      const prev = serverWatermark ? new Date(serverWatermark).getTime() : 0;
+      if (Number.isFinite(ms) && ms >= prev) serverWatermark = t;
+    }
+    return { notas: merged, tableMissing: false, serverWatermark };
+  }
+
   let query = supabase
     .from("notas_pedido")
     .select("payload, status, updated_at")
     .eq("cooperativa_cnpj", cnpj);
-
-  if (since) {
-    query = query.gte("updated_at", since);
-  }
 
   const { data, error } = await query.order("updated_at", { ascending: false });
 
@@ -461,33 +604,36 @@ export async function fetchNotasFromTable(
     return { notas: [], tableMissing: false };
   }
 
-  let serverWatermark: string | undefined;
-  const notas = (data ?? [])
-    .map((row) => {
-      const payload = row.payload as NotaPedido | null;
-      if (!payload?.id) return null;
-      const sqlStatus = row.status as NotaPedido["status"] | null;
-      const sqlUpdatedAt = typeof row.updated_at === "string" ? row.updated_at : undefined;
-      if (sqlUpdatedAt) {
-        const t = new Date(sqlUpdatedAt).getTime();
-        const prev = serverWatermark ? new Date(serverWatermark).getTime() : 0;
-        if (Number.isFinite(t) && t >= prev) serverWatermark = sqlUpdatedAt;
-      }
-      // Coluna SQL status ganha se payload ainda estiver em rascunho (desync).
-      const status =
-        sqlStatus && sqlStatus !== "rascunho"
-          ? sqlStatus
-          : payload.status;
-      return {
-        ...payload,
-        status,
-        updatedAt: sqlUpdatedAt ?? payload.updatedAt,
-        serverUpdatedAt: sqlUpdatedAt,
-      } as NotaPedido & { serverUpdatedAt?: string };
-    })
-    .filter((n): n is NotaPedido & { serverUpdatedAt?: string } => Boolean(n));
-
+  const { notas, serverWatermark } = mapRows(data ?? []);
   return { notas, tableMissing: false, serverWatermark };
+}
+
+/**
+ * Entregas publicadas só no JSON do storage entram na fila do responsável
+ * e são replicadas na tabela SQL (delta não as puxaria sozinho).
+ */
+export async function mergeStorageFilaOrphansIntoTableNotas(
+  supabase: SupabaseClient,
+  cnpj: string,
+  tableNotas: NotaPedido[]
+): Promise<NotaPedido[]> {
+  const tableIds = new Set(tableNotas.map((n) => n.id));
+  const storageNotas = await fetchNotasFromStorage(supabase, cnpj);
+  const orphans = storageNotas.filter(
+    (n) =>
+      n.status !== "rascunho" &&
+      isNotaNaFilaConferenciaResponsavel(n.status) &&
+      !tableIds.has(n.id)
+  );
+  if (orphans.length === 0) return tableNotas;
+
+  const payloads = orphans.map(notaPayloadForTable);
+  const upsert = await upsertNotasInTable(supabase, cnpj, payloads);
+  if (!upsert.ok && !upsert.tableMissing) {
+    console.error("[notas-pedido/repair-storage-fila]", upsert.error ?? "upsert failed");
+  }
+
+  return mergeNotasSources(tableNotas, orphans);
 }
 
 export async function upsertNotasInTable(
@@ -524,11 +670,14 @@ export async function upsertNotasInTable(
 
   const protectedNotas = notas.map((nota) => {
     const ex = existingById.get(nota.id);
-    if (!ex?.status) return nota;
-    return protectNotaAgainstStatusDowngrade(
-      { ...(ex.payload ?? {}), status: ex.status },
-      nota
-    );
+    let next = nota;
+    if (ex?.status) {
+      next = protectNotaAgainstStatusDowngrade(
+        { ...(ex.payload ?? {}), status: ex.status },
+        nota
+      );
+    }
+    return sanitizarNotaParaFilaConferencia(next);
   });
 
   const rows = protectedNotas.map((nota) => ({
@@ -627,4 +776,30 @@ export async function deleteAllNotasForCnpj(
   }
 
   return { removed: removed + (count ?? 0), tableMissing: false };
+}
+
+/** Repara payloads na tabela SQL (zombies) e replica órfãos do storage → fila. */
+export async function repairFilaConferenciaNotasNaNuvem(
+  supabase: SupabaseClient,
+  cnpj: string
+): Promise<{ zombiesFixed: number; orphansMerged: number }> {
+  const digits = cnpj.replace(/\D/g, "");
+  if (digits.length !== 14) return { zombiesFixed: 0, orphansMerged: 0 };
+
+  const fromTable = await fetchNotasFromTable(supabase, digits);
+  if (fromTable.tableMissing) return { zombiesFixed: 0, orphansMerged: 0 };
+
+  let zombiesFixed = 0;
+  for (const nota of fromTable.notas) {
+    const fixed = sanitizarNotaParaFilaConferencia(nota);
+    if (fixed === nota) continue;
+    const upsert = await upsertNotasInTable(supabase, digits, [fixed]);
+    if (upsert.ok) zombiesFixed += 1;
+  }
+
+  const beforeOrphans = fromTable.notas.length;
+  const merged = await mergeStorageFilaOrphansIntoTableNotas(supabase, digits, fromTable.notas);
+  const orphansMerged = Math.max(0, merged.length - beforeOrphans);
+
+  return { zombiesFixed, orphansMerged };
 }

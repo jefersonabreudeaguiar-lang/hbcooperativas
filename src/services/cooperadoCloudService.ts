@@ -9,6 +9,15 @@ import { notaPertenceCooperativa } from "@/utils/fotoEntrega";
 import { getData, refreshStoredSession, saveDataSafe } from "@/services/dataStore";
 import { fetchCooperativaByCnpjFromCloud, mergeCooperativaIntoData } from "@/services/cooperativaCloudService";
 import { mergeAppInstallFields } from "@/services/cooperadoAppInstallService";
+import {
+  assinaturaCadastroFieldsChanged,
+  mergeAssinaturaCadastroFields,
+  normalizarAssinaturaLegadoCooperado,
+} from "@/services/cooperadoAssinaturaService";
+import {
+  ASSINATURA_DATAURL_TARGET_CHARS,
+  compressAssinaturaDataUrlForStorage,
+} from "@/utils/assinaturaPapelProcess";
 import { secureApiFetch } from "@/lib/security/clientSession";
 import {
   cooperadosUnicosParaCobranca,
@@ -24,7 +33,7 @@ export {
   deduplicarCooperadosLista,
 } from "@/utils/cooperadoDedupe";
 
-export function nomeNormalizado(nome: string): string {
+export function nomeNormalizado(nome: string | undefined | null): string {
   return nomeNormalizadoCooperado(nome);
 }
 
@@ -294,6 +303,7 @@ export function mergeCloudCooperadosIntoData(
       }
 
       const installFields = mergeAppInstallFields(local, cn);
+      const assinaturaFields = mergeAssinaturaCadastroFields(local, cn);
 
       const merged: Cooperado = {
         ...local,
@@ -304,6 +314,7 @@ export function mergeCloudCooperadosIntoData(
         pixValido,
         pixInvalidoMotivo,
         ...installFields,
+        ...assinaturaFields,
         membroDiretoria: cloudMaisRecente
           ? Boolean(cn.membroDiretoria ?? local.membroDiretoria)
           : Boolean(local.membroDiretoria ?? cn.membroDiretoria),
@@ -311,21 +322,29 @@ export function mergeCloudCooperadosIntoData(
         updatedAt: cloudMaisRecente ? cn.updatedAt : local.updatedAt,
       };
 
+      const mergedNormalizado = normalizarAssinaturaLegadoCooperado(merged);
+
       const installMudou =
-        merged.appInstaladoEm !== local.appInstaladoEm ||
-        merged.ultimoAcessoEm !== local.ultimoAcessoEm ||
-        merged.ultimoAcessoModo !== local.ultimoAcessoModo ||
-        merged.aberturasAppTotal !== local.aberturasAppTotal;
+        mergedNormalizado.appInstaladoEm !== local.appInstaladoEm ||
+        mergedNormalizado.ultimoAcessoEm !== local.ultimoAcessoEm ||
+        mergedNormalizado.ultimoAcessoModo !== local.ultimoAcessoModo ||
+        mergedNormalizado.aberturasAppTotal !== local.aberturasAppTotal;
+      const assinaturaMudou = assinaturaCadastroFieldsChanged(local, assinaturaFields);
+      const legadoMudou =
+        mergedNormalizado.assinaturaCadastroStatus !== merged.assinaturaCadastroStatus ||
+        mergedNormalizado.assinaturaConfirmadaEm !== merged.assinaturaConfirmadaEm;
 
       if (
         cloudMaisRecente ||
-        merged.chavePix !== local.chavePix ||
-        merged.pixValido !== local.pixValido ||
-        merged.membroDiretoria !== local.membroDiretoria ||
-        merged.avulso !== local.avulso ||
-        installMudou
+        mergedNormalizado.chavePix !== local.chavePix ||
+        mergedNormalizado.pixValido !== local.pixValido ||
+        mergedNormalizado.membroDiretoria !== local.membroDiretoria ||
+        mergedNormalizado.avulso !== local.avulso ||
+        installMudou ||
+        assinaturaMudou ||
+        legadoMudou
       ) {
-        cooperados[index] = merged;
+        cooperados[index] = mergedNormalizado;
         changed = true;
       }
     };
@@ -367,6 +386,28 @@ export async function fetchCooperadosFromCloud(
   }
 }
 
+async function cooperadoComAssinaturaCompactada(cooperado: Cooperado): Promise<Cooperado> {
+  const url = cooperado.assinaturaCadastroDataUrl?.trim();
+  if (
+    typeof window === "undefined" ||
+    !url ||
+    url.length <= ASSINATURA_DATAURL_TARGET_CHARS
+  ) {
+    return cooperado;
+  }
+  try {
+    const { dataUrl, hash } = await compressAssinaturaDataUrlForStorage(url);
+    if (dataUrl === url) return cooperado;
+    return {
+      ...cooperado,
+      assinaturaCadastroDataUrl: dataUrl,
+      assinaturaCadastroHash: hash,
+    };
+  } catch {
+    return cooperado;
+  }
+}
+
 export async function pushCooperadoToCloud(
   cnpj: string,
   cooperado: Cooperado,
@@ -377,11 +418,13 @@ export async function pushCooperadoToCloud(
     return { ok: false, error: "CNPJ da cooperativa inválido." };
   }
 
+  const cooperadoEnvio = await cooperadoComAssinaturaCompactada(cooperado);
+
   try {
     const res = await secureApiFetch("/api/cooperados", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ cnpj: digits, cooperado, email }),
+      body: JSON.stringify({ cnpj: digits, cooperado: cooperadoEnvio, email }),
     });
     const json = await res.json().catch(() => ({}));
     if (res.status === 503) {
@@ -536,6 +579,7 @@ export function resolverCooperadoIdCanonico(
   cooperativaId?: string,
   nomeFallback?: string
 ): string {
+  if (!data.cooperados?.length) return cooperadoId;
   const direct = data.cooperados.find(
     (c) => c.id === cooperadoId && (!cooperativaId || c.cooperativaId === cooperativaId)
   );

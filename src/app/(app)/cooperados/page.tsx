@@ -271,7 +271,7 @@ export default function CooperadosPage() {
         </Card>
       )}
 
-      {data && user && coopId && (
+      {data && user && coopId && check("cooperados", "edit") && (
         <AssinaturaCadastroGestaoPanel data={data} user={user} cooperativaId={coopId} />
       )}
 

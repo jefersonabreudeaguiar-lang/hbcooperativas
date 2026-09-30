@@ -10,7 +10,14 @@ import { AlertBanner } from "@/components/ui/AlertBanner";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { NotaStatusBadge } from "@/components/ui/NotaStatusBadge";
 import { NotaFotoImg } from "@/components/ui/NotaFotoImg";
-import { listarEntregasCorrecaoCooperado } from "@/services/notaPedidoService";
+import {
+  listarCooperadosEntregasCorrecao,
+  listarEntregasCorrecaoCooperado,
+  mensagemBloqueioExclusaoEntrega,
+  statusCorrecaoEntregaCooperado,
+  valorLiquidoEntregaCorrecaoExibicao,
+} from "@/services/notaPedidoService";
+import { auditarCorrecoesEntregasCooperativa } from "@/services/cooperadoCorrecoesEntregasAuditoria";
 import { getFotoExibicaoNota, contarFotosEnviadasNota } from "@/utils/fotoEntrega";
 import { cn, formatCurrency, formatDate, formatMesReferencia } from "@/utils/format";
 
@@ -29,7 +36,6 @@ interface CorrecoesEntregasPanelProps {
 export function CorrecoesEntregasPanel({
   data,
   coopId,
-  cooperados,
   getEscolaLabel,
   onApagar,
   onRelancar,
@@ -41,12 +47,32 @@ export function CorrecoesEntregasPanel({
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [processando, setProcessando] = useState(false);
 
+  const cooperadosElegiveis = useMemo(
+    () => listarCooperadosEntregasCorrecao(data, coopId, acao),
+    [data, coopId, acao]
+  );
+
+  const resumoAuditoria = useMemo(
+    () => auditarCorrecoesEntregasCooperativa(data, coopId),
+    [data, coopId]
+  );
+
+  const cooperadoIdAtivo = useMemo(() => {
+    if (!cooperadoId) return "";
+    return cooperadosElegiveis.some((c) => c.id === cooperadoId) ? cooperadoId : "";
+  }, [cooperadoId, cooperadosElegiveis]);
+
   const entregas = useMemo(() => {
-    if (!cooperadoId) return [];
-    return listarEntregasCorrecaoCooperado(data, cooperadoId, coopId, acao);
-  }, [data, cooperadoId, coopId, acao]);
+    if (!cooperadoIdAtivo) return [];
+    return listarEntregasCorrecaoCooperado(data, cooperadoIdAtivo, coopId, acao);
+  }, [data, cooperadoIdAtivo, coopId, acao]);
 
   const notaSelecionada = entregas.find((n) => n.id === notaSelecionadaId) ?? null;
+
+  const statusSelecionada = useMemo(() => {
+    if (!notaSelecionada) return null;
+    return statusCorrecaoEntregaCooperado(data, notaSelecionada.id, coopId, acao);
+  }, [data, notaSelecionada, coopId, acao]);
 
   const handleAcaoChange = (next: AcaoCorrecaoEntrega) => {
     setAcao(next);
@@ -60,6 +86,8 @@ export function CorrecoesEntregasPanel({
 
   const executarAcao = async () => {
     if (!notaSelecionada) return;
+    const st = statusCorrecaoEntregaCooperado(data, notaSelecionada.id, coopId, acao);
+    if (!st.executavel) return;
     setProcessando(true);
     try {
       if (acao === "apagar") {
@@ -79,16 +107,31 @@ export function CorrecoesEntregasPanel({
       <AlertBanner variant="info" title="Correções de entregas">
         Use esta aba para <strong>apagar</strong> uma entrega por completo ou{" "}
         <strong>re-lançar</strong> uma entrega conferida ou devolvida para correção — ela volta
-        para a fila de conferência com as mesmas fotos. Entregas <strong>pagas</strong> ou em
-        pagamento não aparecem aqui.
+        para a fila de conferência com as mesmas fotos. Entregas já <strong>pagas</strong> não aparecem.
+        Entregas em <strong>pagamento registrado</strong> aparecem com aviso — resolva em Ficha / Pagar antes de apagar.
       </AlertBanner>
+
+      {resumoAuditoria.entregasBloqueadas > 0 && (
+        <AlertBanner variant="warning" title="Varredura cooperativa (Correções × ficha do cooperado)">
+          {resumoAuditoria.entregasBloqueadas}{" "}
+          {resumoAuditoria.entregasBloqueadas === 1 ? "entrega aparece" : "entregas aparecem"} na ficha do cooperado
+          mas está bloqueada aqui (pagamento ou ficha paga).{" "}
+          {resumoAuditoria.cooperadosComValorSemCorrecaoExecutavel > 0 && (
+            <>
+              Em {resumoAuditoria.cooperadosComValorSemCorrecaoExecutavel}{" "}
+              {resumoAuditoria.cooperadosComValorSemCorrecaoExecutavel === 1 ? "cooperado" : "cooperados"} há valor
+              visível sem ação executável nesta aba — use Ficha / Pagar antes de corrigir a entrega.
+            </>
+          )}
+        </AlertBanner>
+      )}
 
       <Card className="p-4 space-y-4">
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <FormField label="Cooperado" required>
-            <Select value={cooperadoId} onChange={(e) => handleCooperadoChange(e.target.value)}>
+            <Select value={cooperadoIdAtivo} onChange={(e) => handleCooperadoChange(e.target.value)}>
               <option value="">Selecione o cooperado…</option>
-              {cooperados.map((c) => (
+              {cooperadosElegiveis.map((c) => (
                 <option key={c.id} value={c.id}>
                   {c.nomeCompleto}
                 </option>
@@ -107,7 +150,7 @@ export function CorrecoesEntregasPanel({
           </FormField>
         </div>
 
-        {cooperadoId && entregas.length === 0 && (
+        {cooperadoIdAtivo && entregas.length === 0 && (
           <div className="rounded-xl border border-gray-200 bg-gray-50 px-4 py-8 text-center text-sm text-gray-600">
             {acao === "relancar"
               ? "Nenhuma entrega conferida ou devolvida para correção neste cooperado."
@@ -126,6 +169,8 @@ export function CorrecoesEntregasPanel({
                 const selected = n.id === notaSelecionadaId;
                 const foto = getFotoExibicaoNota(n);
                 const qtdFotos = contarFotosEnviadasNota(n);
+                const st = statusCorrecaoEntregaCooperado(data, n.id, coopId, acao);
+                const valorExib = valorLiquidoEntregaCorrecaoExibicao(data, n);
                 return (
                   <li key={n.id}>
                     <button
@@ -160,10 +205,11 @@ export function CorrecoesEntregasPanel({
                         <span className="block text-xs text-gray-500 mt-1">
                           {formatDate(n.dataEntrega)} · {n.numeroNota} · {formatMesReferencia(n.mesReferencia)}
                           {qtdFotos > 1 ? ` · ${qtdFotos} fotos` : ""}
+                          {!st.executavel && st.reason ? " · bloqueada" : ""}
                         </span>
-                        {n.valorLiquido > 0 && (
+                        {valorExib > 0 && (
                           <span className="block text-sm font-semibold text-green-700 mt-1">
-                            {formatCurrency(n.valorLiquido)}
+                            {formatCurrency(valorExib)}
                           </span>
                         )}
                       </span>
@@ -173,11 +219,25 @@ export function CorrecoesEntregasPanel({
               })}
             </ul>
 
+            {notaSelecionada && statusSelecionada && !statusSelecionada.executavel && statusSelecionada.reason && (
+              <AlertBanner variant="warning" title="Esta entrega não pode ser alterada agora">
+                {mensagemBloqueioExclusaoEntrega(statusSelecionada.reason)}
+                {statusSelecionada.reason === "em_pagamento" && (
+                  <span className="block mt-1 text-sm">
+                    O valor ainda aparece para o cooperado porque está em um pagamento registrado. Conclua ou cancele o
+                    pagamento em <strong>Ficha / Pagar</strong> antes de apagar ou re-lançar aqui.
+                  </span>
+                )}
+              </AlertBanner>
+            )}
+
             <Button
               type="button"
               size="lg"
               className="w-full sm:w-auto"
-              disabled={!notaSelecionada || disabled || processando}
+              disabled={
+                !notaSelecionada || disabled || processando || !statusSelecionada?.executavel
+              }
               variant={acao === "apagar" ? "danger" : "primary"}
               onClick={() => setConfirmOpen(true)}
             >

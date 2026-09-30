@@ -14,6 +14,7 @@ export function markCloudSessionActive(): void {
 
 export function markCloudSessionInactive(): void {
   cloudSessionActive = false;
+  lastSessionReadyAt = 0;
 }
 
 export function isCloudSessionActive(): boolean {
@@ -337,8 +338,11 @@ export async function refreshCloudSession(): Promise<boolean> {
   return profile !== null || cloudSessionActive;
 }
 
-/** Restaura JWT antes de APIs protegidas (HB Créditos, sync, etc.). */
-export async function ensureCloudSessionReady(profile?: CloudSessionProfile): Promise<boolean> {
+const SESSION_READY_TTL_MS = 20_000;
+let lastSessionReadyAt = 0;
+let sessionReadyInFlight: Promise<boolean> | null = null;
+
+async function ensureCloudSessionReadyOnce(profile?: CloudSessionProfile): Promise<boolean> {
   clearCloudBootstrapCredentials();
 
   const active = profile ?? activeCloudProfile ?? loadStoredSessionProfile();
@@ -361,6 +365,25 @@ export async function ensureCloudSessionReady(profile?: CloudSessionProfile): Pr
     lastCloudSyncError ||
     "Sessão na nuvem expirada ou desalinhada. Saia, entre de novo e aguarde alguns segundos.";
   return false;
+}
+
+/** Restaura JWT antes de APIs protegidas (HB Créditos, sync, etc.). */
+export async function ensureCloudSessionReady(profile?: CloudSessionProfile): Promise<boolean> {
+  if (isCloudSessionActive() && Date.now() - lastSessionReadyAt < SESSION_READY_TTL_MS) {
+    return true;
+  }
+  if (sessionReadyInFlight) return sessionReadyInFlight;
+
+  sessionReadyInFlight = ensureCloudSessionReadyOnce(profile)
+    .then((ok) => {
+      if (ok) lastSessionReadyAt = Date.now();
+      return ok;
+    })
+    .finally(() => {
+      sessionReadyInFlight = null;
+    });
+
+  return sessionReadyInFlight;
 }
 
 /** @deprecated use ensureCloudSessionReady */
@@ -387,7 +410,20 @@ export function mensagemErroAuthApi(status: number, error?: string): string {
   return error ?? "Erro ao comunicar com o servidor.";
 }
 
+/** Somente testes — intercepta rede sem alterar call sites. */
+let secureApiFetchTestOverride: ((input: RequestInfo | URL, init?: RequestInit) => Promise<Response>) | null =
+  null;
+
+export function setSecureApiFetchTestOverrideForTests(
+  fn: typeof secureApiFetchTestOverride
+): void {
+  secureApiFetchTestOverride = fn;
+}
+
 export async function secureApiFetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
+  if (secureApiFetchTestOverride) {
+    return secureApiFetchTestOverride(input, init);
+  }
   const profile = activeCloudProfile ?? loadStoredSessionProfile();
   const sessionReady = await ensureCloudSessionReady(profile ?? undefined);
 

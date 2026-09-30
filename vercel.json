@@ -1,25 +1,14 @@
 {
   "env": {
+    "APP_ENV": "production",
+    "BIC_ENVIRONMENT": "PRODUCTION",
     "HB_CREDIT_ENABLED": "true",
     "NEXT_PUBLIC_HB_CREDIT_ENABLED": "true",
+    "NEXT_PUBLIC_HB_BIC_PRODUCTION_LOCK": "true",
+    "NEXT_PUBLIC_BIC_CENTRAL_READ_OFFICIAL": "true",
+    "NEXT_PUBLIC_BIC_CENTRAL_READ_FULL_OFFICIAL": "true",
+    "NEXT_PUBLIC_CONTA_COOP_UI_PUBLIC": "1",
+    "NEXT_PUBLIC_CONTA_COOP_VALOR_RECEBER_PUBLIC": "1",
     "AUTH_SECRET": "hb-cooperativas-prod-jwt-secret-2026-stable"
-  },
-  "crons": [
-    {
-      "path": "/api/cron/hb-asaas-charges",
-      "schedule": "0 10 * * *"
-    },
-    {
-      "path": "/api/cron/credit-reconciliation",
-      "schedule": "0 6 * * *"
-    },
-    {
-      "path": "/api/cron/operacional-hb-descontos-repair",
-      "schedule": "30 6 * * *"
-    },
-    {
-      "path": "/api/cron/hobelisco-credit-watch",
-      "schedule": "*/15 * * * *"
-    }
-  ]
+  }
 }

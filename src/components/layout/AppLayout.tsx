@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import {
   LayoutDashboard, Users, CreditCard, PieChart, Truck, Wallet,
   Percent, Building2,   Landmark, Megaphone, MapPin, Car, FileText,
@@ -11,7 +11,7 @@ import {
 import { useState } from "react";
 import { useAuth } from "@/modules/auth/AuthProvider";
 import { useAppData, useAppDataSelector } from "@/hooks/useAppData";
-import { getMenuItems, getMobileNavItems, getCooperadoDrawerMenuItems, getUserFuncaoLabel } from "@/permissions";
+import { getMenuItems, getMobileNavItems, getCooperadoDrawerMenuItems, getUserFuncaoLabel, isCooperadoAppUser, isHbCreditCooperadoNavEligible, isHbCreditStaffNavEligible } from "@/permissions";
 import { getUserCooperativaNome } from "@/utils/cooperativa";
 import { PLATFORM_NAME, PLATFORM_TAGLINE } from "@/utils/constants";
 import { AppIcon } from "@/components/ui/AppIcon";
@@ -22,10 +22,10 @@ import { cn } from "@/utils/format";
 import { useHbCreditEnabled } from "@/hooks/useHbCreditEnabled";
 import { isContaCoopUiVisibleForUser } from "@/utils/contaCoopUiVisibility";
 import { useSyncContaCoopValorReceberCooperativa } from "@/hooks/useSyncContaCoopValorReceberCooperativa";
-import { MercadoParceiroPinResetBar } from "@/components/hb-credit/MercadoParceiroPinResetBar";
 import { AppUpdateBanner } from "@/components/pwa/AppUpdateBanner";
 import { getUserCooperativaId } from "@/utils/cooperativa";
 import { useHbCreditDescontosWarmup } from "@/hooks/useHbCreditDescontosWarmup";
+import { shouldPrefetchHbCreditNav } from "@/lib/hb-credit/hbCreditNavPrefetch";
 import type { Resource } from "@/types";
 
 const ICONS: Record<string, React.ReactNode> = {
@@ -114,7 +114,7 @@ export function Sidebar({ mobile = false, onClose }: { mobile?: boolean; onClose
   const pathname = usePathname();
   const { user, logout } = useAuth();
   const data = useAppData();
-  const { enabled: creditEnabled } = useHbCreditEnabled();
+  const credit = useHbCreditEnabled(user);
   const cooperadoNome = useAppDataSelector(
     (data) => {
       if (!user) return "";
@@ -127,12 +127,19 @@ export function Sidebar({ mobile = false, onClose }: { mobile?: boolean; onClose
   );
   if (!user) return null;
 
+  const cooperadoNavEligible = isHbCreditCooperadoNavEligible(
+    user,
+    credit.status,
+    credit.serverConfirmed
+  );
+  const staffNavEligible = isHbCreditStaffNavEligible(user, credit.status, credit.serverConfirmed);
+  const moduleNavEligible = cooperadoNavEligible || staffNavEligible;
   const contaCoopUiVisible = isContaCoopUiVisibleForUser(user, cooperadoNome || undefined);
 
   const menuItems =
-    mobile && user.role === "cooperado"
-      ? getCooperadoDrawerMenuItems(user, creditEnabled, contaCoopUiVisible, data)
-      : getMenuItems(user, creditEnabled, contaCoopUiVisible, data);
+    mobile && isCooperadoAppUser(user)
+      ? getCooperadoDrawerMenuItems(user, credit.enabled, contaCoopUiVisible, data, moduleNavEligible)
+      : getMenuItems(user, credit.enabled, contaCoopUiVisible, data, moduleNavEligible);
 
   return (
     <aside className={cn(
@@ -155,6 +162,7 @@ export function Sidebar({ mobile = false, onClose }: { mobile?: boolean; onClose
             <Link
               key={item.href}
               href={item.href}
+              prefetch={shouldPrefetchHbCreditNav(item.href)}
               onClick={onClose}
               className={cn(
                 "flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors",
@@ -197,9 +205,10 @@ export function Sidebar({ mobile = false, onClose }: { mobile?: boolean; onClose
 export function MobileNav() {
   const [open, setOpen] = useState(false);
   const pathname = usePathname();
+  const router = useRouter();
   const { user } = useAuth();
   const data = useAppData();
-  const { enabled: creditEnabled } = useHbCreditEnabled();
+  const credit = useHbCreditEnabled(user);
   const cooperadoNome = useAppDataSelector(
     (data) => {
       if (!user) return "";
@@ -212,15 +221,30 @@ export function MobileNav() {
   );
   if (!user) return null;
 
+  const cooperadoNavEligible = isHbCreditCooperadoNavEligible(
+    user,
+    credit.status,
+    credit.serverConfirmed
+  );
+  const staffNavEligible = isHbCreditStaffNavEligible(user, credit.status, credit.serverConfirmed);
+  const moduleNavEligible = cooperadoNavEligible || staffNavEligible;
   const contaCoopUiVisible = isContaCoopUiVisibleForUser(user, cooperadoNome || undefined);
-  const mobileItems = getMobileNavItems(user, creditEnabled, contaCoopUiVisible, data);
+  const mobileItems = getMobileNavItems(user, credit.enabled, contaCoopUiVisible, data, moduleNavEligible);
+
+  const prefetchNavRoute = (href: string) => {
+    try {
+      router.prefetch(href);
+    } catch {
+      /* ignore */
+    }
+  };
 
   return (
     <>
       <header className="lg:hidden flex items-center justify-between gap-2 px-4 py-3 bg-green-900 text-white sticky top-0 z-40">
         <BrandHeader compact />
         <div className="flex items-center gap-1.5 shrink-0">
-          <SyncStatusChip />
+          {user.role !== "cooperado" && <SyncStatusChip />}
           <button onClick={() => setOpen(true)} className="p-2 hover:bg-green-800 rounded-lg" aria-label="Abrir menu">
             <Menu size={22} />
           </button>
@@ -239,11 +263,18 @@ export function MobileNav() {
       <nav className="lg:hidden fixed bottom-0 left-0 right-0 z-40 flex safe-area-pb bg-white border-t-2 border-green-200 shadow-[0_-6px_24px_rgba(0,0,0,0.12)]">
         {mobileItems.map((item) => {
           const active = pathname === item.href || (item.href !== "/dashboard" && pathname.startsWith(item.href));
-          const isCooperadoNav = user.role === "cooperado";
+          const isCooperadoNav = isCooperadoAppUser(user);
           return (
             <Link
               key={item.href}
               href={item.href}
+              prefetch={shouldPrefetchHbCreditNav(item.href)}
+              onPointerEnter={() => {
+                if (isCooperadoNav) prefetchNavRoute(item.href);
+              }}
+              onTouchStart={() => {
+                if (isCooperadoNav) prefetchNavRoute(item.href);
+              }}
               className={cn(
                 "flex-1 flex flex-col items-center justify-center min-w-0 px-0.5 transition-colors",
                 isCooperadoNav ? "min-h-[72px] py-2 gap-1" : "py-2 text-[10px] sm:text-xs gap-0.5",
@@ -284,17 +315,23 @@ export function MobileNav() {
 }
 
 export function AppShell({ children }: { children: React.ReactNode }) {
+  const pathname = usePathname();
   const { user } = useAuth();
-  const data = useAppData();
-  const { enabled: creditEnabled } = useHbCreditEnabled();
-  const coopId = user && data ? getUserCooperativaId(user, data) : undefined;
+  const coopId = useAppDataSelector(
+    (data) => (user ? getUserCooperativaId(user, data) : undefined),
+    [user?.id, user?.cooperativaId, user?.role]
+  );
+  const credit = useHbCreditEnabled(user);
   const staffHbSync =
     user &&
     coopId &&
     (user.role === "responsavel" || user.role === "tesoureiro" || user.role === "admin");
+  /** Sync pesado só nas telas HB / relatórios — não compete com Início e demais abas. */
+  const staffCoopSyncRoute =
+    pathname.startsWith("/conta-coop") || pathname.startsWith("/relatorios");
 
   useSyncContaCoopValorReceberCooperativa(
-    staffHbSync && creditEnabled
+    staffHbSync && credit.enabled && staffCoopSyncRoute
       ? { cooperativaId: coopId, user, enabled: true }
       : undefined
   );
@@ -307,11 +344,12 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       <Sidebar />
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
         <MobileNav />
-        <MercadoParceiroPinResetBar />
         <main className="flex-1 overflow-y-auto p-4 lg:p-6 pb-36 lg:pb-6">
-          <div className="hidden lg:flex justify-end mb-3">
-            <SyncStatusChipLight />
-          </div>
+          {user?.role !== "cooperado" && (
+            <div className="hidden lg:flex justify-end mb-3">
+              <SyncStatusChipLight />
+            </div>
+          )}
           <ContratoServicoAppGate />
           <CobrancaSaasPainel />
           {children}

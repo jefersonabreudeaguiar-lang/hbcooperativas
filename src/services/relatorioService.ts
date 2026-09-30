@@ -1,19 +1,24 @@
 import type { AppData, Cooperado, FichaCorrida, FechamentoMensal, Instituicao, NotaPedido, NotaPedidoItem } from "@/types";
 import { getCooperadoNome, round2, sumBy } from "@/utils/calculations";
 import { formatMesReferencia, formatMesesReferenciaRotulo, getCurrentMesReferencia } from "@/utils/format";
-import { notaPertenceCooperado } from "@/services/cooperadoCloudService";
+import { notaPertenceCooperado, resolverCooperadoIdCanonico } from "@/services/cooperadoCloudService";
 import {
   listarMesesPendentesPagamentoResponsavel,
   getConsolidadoFinanceiroCooperado,
+  cooperadoPendentePagamentoResponsavel,
 } from "@/services/cooperadoEntregasService";
 import {
   agregarItensNotasCooperado,
   getPagamentoAguardandoCooperado,
+  getPagamentoConfirmadoCooperadoMes,
   getResumoPagamentoCooperado,
   getResumoValorAPagarRelatorio,
   getTotalAPagarCooperado,
   listarFichasExtratoCooperadoMes,
   listarFichasPendentesPagamento,
+  pagamentoCobreMesReferencia,
+  pagamentoRegistradoParaRelatorio,
+  somaValorPagamentosRegistrados,
 } from "@/services/notaPedidoService";
 
 export interface ResumoFinanceiroMes {
@@ -157,7 +162,9 @@ export function calcularFechamentoMensalLive(mesReferencia: string, data: AppDat
   const notasMes = notasDoMes(data, mesReferencia);
   const notasOk = notasConferidasOuPagas(data, mesReferencia);
   const fichasMes = data.fichaCorrida.filter((f) => f.mesReferencia === mesReferencia);
-  const pagamentosMes = data.pagamentosCooperado.filter((p) => p.mesReferencia === mesReferencia);
+  const pagamentosMes = data.pagamentosCooperado.filter((p) =>
+    pagamentoCobreMesReferencia(p, mesReferencia)
+  );
   const mensalidadesPagas = data.mensalidades.filter(
     (m) => m.mesReferencia === mesReferencia && m.status === "paga"
   );
@@ -176,7 +183,7 @@ export function calcularFechamentoMensalLive(mesReferencia: string, data: AppDat
 
   const pagamentosConfirmados = pagamentosMes.filter((p) => p.status === "confirmado");
   const pagamentosAguardando = pagamentosMes.filter((p) => p.status === "aguardando_confirmacao");
-  const totalPagamentos = sumBy(pagamentosConfirmados, (p) => p.valorLiquido);
+  const totalPagamentos = somaValorPagamentosRegistrados(pagamentosMes);
   const totalMensalidades = sumBy(mensalidadesPagas, (m) => m.valor);
   const totalCotas = sumBy(cotasMes, (c) => c.valor);
 
@@ -224,7 +231,11 @@ export function calcularFechamentoMensalLive(mesReferencia: string, data: AppDat
     saldoCooperativa,
     qtdEntregas: notasOk.length,
     qtdCooperadosPagos: pagamentosConfirmados.length,
-    qtdCooperadosAPagar: data.cooperados.filter((c) => getTotalAPagarCooperado(data, c.id, mesReferencia) > 0).length,
+    qtdCooperadosAPagar: data.cooperados.filter(
+      (c) =>
+        c.status === "ativo" &&
+        cooperadoPendentePagamentoResponsavel(data, c.id, mesReferencia, c.cooperativaId)
+    ).length,
     linhasCooperado,
     linhasInstituicao: [...instMap.values()].sort((a, b) => a.instituicaoNome.localeCompare(b.instituicaoNome, "pt-BR")),
   };
@@ -251,14 +262,22 @@ function linhaCooperado(
     fichas.reduce((s, f) => s + f.valorLiquido, 0) + semFicha.reduce((s, n) => s + n.valorLiquido, 0)
   );
 
-  const pg = pagamentosMes.find((p) => p.cooperadoId === cooperado.id);
-  const aPagar = getTotalAPagarCooperado(data, cooperado.id, mes);
+  const pg =
+    pagamentosMes.find(
+      (p) =>
+        pagamentoCobreMesReferencia(p, mes) &&
+        (p.cooperadoId === cooperado.id ||
+          resolverCooperadoIdCanonico(data, p.cooperadoId, cooperado.cooperativaId) ===
+            resolverCooperadoIdCanonico(data, cooperado.id, cooperado.cooperativaId))
+    ) ??
+    getPagamentoConfirmadoCooperadoMes(data, cooperado.id, mes) ??
+    getPagamentoAguardandoCooperado(data, cooperado.id, mes);
+  const aPagar = getResumoValorAPagarRelatorio(data, cooperado.id, mes, cooperado.cooperativaId).valorLiquido;
   let statusPagamento: LinhaCooperadoFechamento["statusPagamento"] = "sem_entrega";
-  if (entregas === 0) statusPagamento = "sem_entrega";
+  if (entregas === 0 && aPagar <= 0) statusPagamento = "sem_entrega";
   else if (pg?.status === "confirmado") statusPagamento = "pago";
   else if (pg?.status === "aguardando_confirmacao") statusPagamento = "aguardando_assinatura";
   else if (aPagar > 0) statusPagamento = "pendente";
-  else if (notas.some((n) => n.status === "pago")) statusPagamento = "pago";
 
   return {
     cooperadoId: cooperado.id,
@@ -267,14 +286,19 @@ function linhaCooperado(
     valorBruto,
     valorLiquido,
     aPagar,
-    pago: pg?.status === "confirmado" ? pg.valorLiquido : sumBy(notas.filter((n) => n.status === "pago"), (n) => n.valorLiquido),
+    pago:
+      pg && pagamentoRegistradoParaRelatorio(pg)
+        ? pg.valorLiquido
+        : sumBy(notas.filter((n) => n.status === "pago"), (n) => n.valorLiquido),
     statusPagamento,
   };
 }
 
 export function getResumoFinanceiroMes(mesReferencia: string, data: AppData): ResumoFinanceiroMes {
   const calc = calcularFechamentoMensalLive(mesReferencia, data);
-  const pagamentosMes = data.pagamentosCooperado.filter((p) => p.mesReferencia === mesReferencia);
+  const pagamentosMes = data.pagamentosCooperado.filter((p) =>
+    pagamentoCobreMesReferencia(p, mesReferencia)
+  );
   const mensAbertas = data.mensalidades.filter(
     (m) => m.mesReferencia === mesReferencia && m.status !== "paga"
   );

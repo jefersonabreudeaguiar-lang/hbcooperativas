@@ -1,5 +1,6 @@
 import type { AppData, NotaPedido } from "@/types";
 import { normalizeCnpj } from "@/utils/cooperativa";
+import { cpfCooperadoDigits, escolherCooperadoCanonico, nomeNormalizadoCooperado } from "@/utils/cooperadoDedupe";
 import { isInlineDataUrl } from "@/utils/mediaHelpers";
 import { isNotaRelancamentoIntencional } from "@/utils/notaStatus";
 
@@ -246,8 +247,40 @@ export interface GrupoConferenciaEntrega {
   notas: NotaPedido[];
 }
 
-function normalizeNomeGrupo(nome: string): string {
-  return nome.trim().toLowerCase().replace(/\s+/g, " ");
+/** ID estável do cooperado na fila — une IDs duplicados e snapshot da nuvem. */
+export function resolverCooperadoIdGrupoConferencia(
+  data: AppData,
+  nota: NotaPedido,
+  cooperativaId?: string
+): string {
+  const coopId = cooperativaId ?? nota.cooperativaId;
+  if (!coopId) return nota.cooperadoId;
+
+  const canonizarPorTitular = (cooperadoId: string): string => {
+    const ref = data.cooperados.find((c) => c.id === cooperadoId && c.cooperativaId === coopId);
+    const cpf = cpfCooperadoDigits(ref?.cpfCnpj);
+    if (cpf.length >= 11) {
+      const siblings = data.cooperados.filter(
+        (c) => c.cooperativaId === coopId && cpfCooperadoDigits(c.cpfCnpj) === cpf
+      );
+      if (siblings.length > 0) return escolherCooperadoCanonico(siblings).id;
+    }
+    return cooperadoId;
+  };
+
+  const direct = data.cooperados.find((c) => c.id === nota.cooperadoId && c.cooperativaId === coopId);
+  if (direct) return canonizarPorTitular(direct.id);
+
+  const snapshot = nota.cooperadoNomeSnapshot?.trim();
+  if (snapshot) {
+    const snapNorm = nomeNormalizadoCooperado(snapshot);
+    const byName = data.cooperados.find(
+      (c) => c.cooperativaId === coopId && nomeNormalizadoCooperado(c.nomeCompleto) === snapNorm
+    );
+    if (byName) return canonizarPorTitular(byName.id);
+  }
+
+  return canonizarPorTitular(nota.cooperadoId);
 }
 
 /** Agrupa entregas pendentes pelo cooperado (nome salvo na nuvem ou cadastro local). */
@@ -256,26 +289,7 @@ export function getChaveGrupoConferencia(
   data: AppData,
   cooperativaId?: string
 ): string {
-  const coopId = cooperativaId ?? nota.cooperativaId;
-  const snapshot = nota.cooperadoNomeSnapshot?.trim();
-
-  if (snapshot && coopId) {
-    const nomeKey = normalizeNomeGrupo(snapshot);
-    const byName = data.cooperados.find(
-      (c) =>
-        c.cooperativaId === coopId &&
-        normalizeNomeGrupo(c.nomeCompleto) === nomeKey
-    );
-    if (byName) return `id:${byName.id}`;
-    return `nome:${nomeKey}`;
-  }
-
-  const local = data.cooperados.find(
-    (c) => c.id === nota.cooperadoId && (!coopId || c.cooperativaId === coopId)
-  );
-  if (local) return `id:${local.id}`;
-
-  return `id:${nota.cooperadoId}`;
+  return `id:${resolverCooperadoIdGrupoConferencia(data, nota, cooperativaId)}`;
 }
 
 export function getNomeGrupoConferencia(notas: NotaPedido[], data: AppData): string {
@@ -292,22 +306,9 @@ export function resolverCooperadoIdDoGrupo(
   data: AppData,
   cooperativaId?: string
 ): string {
-  for (const nota of notas) {
-    const c = data.cooperados.find(
-      (x) => x.id === nota.cooperadoId && (!cooperativaId || x.cooperativaId === cooperativaId)
-    );
-    if (c) return c.id;
-  }
-  const snapshot = notas[0]?.cooperadoNomeSnapshot?.trim().toLowerCase();
-  if (snapshot && cooperativaId) {
-    const c = data.cooperados.find(
-      (x) =>
-        x.cooperativaId === cooperativaId &&
-        x.nomeCompleto.trim().toLowerCase() === snapshot
-    );
-    if (c) return c.id;
-  }
-  return notas[0]?.cooperadoId ?? "";
+  const first = notas[0];
+  if (!first) return "";
+  return resolverCooperadoIdGrupoConferencia(data, first, cooperativaId);
 }
 
 export function agruparPendentesPorCooperado(
@@ -345,6 +346,8 @@ export function resolverAbaConferenciaAtiva(
   if (filtroCooperadoId) {
     const porId = grupos.find((g) => g.cooperadoId === filtroCooperadoId);
     if (porId) return { chave: porId.chave, grupo: porId };
+    // Cooperado selecionado sem grupo na fila — não cair no primeiro da lista.
+    return { chave: abaConferenciaKey, grupo: undefined };
   }
   if (abaConferenciaKey) {
     const direta = grupos.find((g) => g.chave === abaConferenciaKey);
@@ -427,12 +430,109 @@ export function liberarEspacoArmazenamento(data: AppData, nivel: 1 | 2 = 1): App
   return next;
 }
 
+export function isPerfilOperacionalSemFotosLocais(role?: string): boolean {
+  return role === "responsavel" || role === "tesoureiro" || role === "admin" || role === "contador";
+}
+
+/** Responsável/tesoureiro: fotos vêm da nuvem na conferência — zero binário de nota no disco local. */
+export function stripNotasParaPersistenciaOperacional(data: AppData): AppData {
+  const notasPedido = data.notasPedido.map((n) => ({
+    ...n,
+    fotoPedido: undefined,
+    fotosPedido: undefined,
+    fotoPedidoMiniatura: undefined,
+    fotosPedidoMiniaturas: undefined,
+    fotosMeta: n.fotosMeta?.map((f) => ({
+      ...f,
+      url: undefined,
+      thumbnailUrl: undefined,
+    })),
+  }));
+  return notasPedido === data.notasPedido ? data : { ...data, notasPedido };
+}
+
 /**
- * Remove binários pesados antes de gravar no localStorage.
+ * Nunca gravar data: URLs no localStorage (causa quota ao conferir/lançar).
+ * Mantém refs idb: para rascunho do cooperado; URLs http(s) leves permanecem.
+ */
+export function removerBinariosInlineDoAppData(data: AppData): AppData {
+  const sanitizeRef = (v?: string) => {
+    if (!v) return undefined;
+    if (isInlineDataUrl(v)) return undefined;
+    return v;
+  };
+
+  let changed = false;
+  const notasPedido = data.notasPedido.map((n) => {
+    const fotoPedido = sanitizeRef(n.fotoPedido);
+    const fotosPedido = n.fotosPedido?.map(sanitizeRef).filter((f): f is string => Boolean(f));
+    const fotoPedidoMiniatura = sanitizeRef(n.fotoPedidoMiniatura);
+    const fotosPedidoMiniaturas = n.fotosPedidoMiniaturas?.map(sanitizeRef).filter((f): f is string => Boolean(f));
+    const fotosMeta = n.fotosMeta?.map((f) => ({
+      ...f,
+      url: sanitizeRef(f.url),
+      thumbnailUrl: sanitizeRef(f.thumbnailUrl),
+    }));
+    const next = {
+      ...n,
+      fotoPedido,
+      fotosPedido: fotosPedido?.length ? fotosPedido : undefined,
+      fotoPedidoMiniatura,
+      fotosPedidoMiniaturas: fotosPedidoMiniaturas?.length ? fotosPedidoMiniaturas : undefined,
+      fotosMeta,
+    };
+    if (
+      next.fotoPedido !== n.fotoPedido ||
+      next.fotosPedido !== n.fotosPedido ||
+      next.fotoPedidoMiniatura !== n.fotoPedidoMiniatura ||
+      next.fotosPedidoMiniaturas !== n.fotosPedidoMiniaturas ||
+      next.fotosMeta !== n.fotosMeta
+    ) {
+      changed = true;
+    }
+    return next;
+  });
+
+  const mensalidades = data.mensalidades.map((m) => {
+    if (!m.comprovante || !isInlineDataUrl(m.comprovante)) return m;
+    changed = true;
+    return { ...m, comprovante: undefined };
+  });
+
+  const comunicados = data.comunicados.map((c) => {
+    if (!c.audioDataUrl || !isInlineDataUrl(c.audioDataUrl)) return c;
+    changed = true;
+    return { ...c, audioDataUrl: undefined };
+  });
+
+  if (!changed) return data;
+  return { ...data, notasPedido, mensalidades, comunicados };
+}
+
+/** Último recurso antes de falhar quota — preserva financeiro, remove mídia e auditoria antiga. */
+export function buildSnapshotEmergenciaPersistencia(data: AppData, role?: string): AppData {
+  let next = stripNotasParaPersistenciaOperacional(
+    liberarEspacoArmazenamento(removerBinariosInlineDoAppData(data), 2)
+  );
+  if (!isPerfilOperacionalSemFotosLocais(role)) {
+    next = liberarEspacoArmazenamento(removerBinariosInlineDoAppData(next), 2);
+  }
+  return {
+    ...next,
+    auditLog: next.auditLog.slice(0, 8),
+    comunicados: next.comunicados.map((c) => ({ ...c, audioDataUrl: undefined })),
+  };
+}
+
+/** Remove binários pesados antes de gravar no localStorage.
  * Mantém fotos pendentes de envio (refs idb: ou base64); remove o que já está na nuvem.
  */
-export function stripBinaryForPersist(data: AppData): AppData {
+export function stripBinaryForPersist(data: AppData, opts?: { role?: string }): AppData {
   let next = compactarFotosNoArmazenamento(data);
+  next = removerBinariosInlineDoAppData(next);
+  if (isPerfilOperacionalSemFotosLocais(opts?.role)) {
+    next = stripNotasParaPersistenciaOperacional(next);
+  }
 
   const notasPedido = next.notasPedido.map((n) => {
     const uploaded = Boolean(n.fotoNaNuvem && (n.fotosEnviadasCount ?? 0) > 0);
@@ -446,6 +546,26 @@ export function stripBinaryForPersist(data: AppData): AppData {
         ...n,
         fotoPedido: undefined,
         fotosPedido: undefined,
+        fotoPedidoMiniatura: undefined,
+        fotosPedidoMiniaturas: undefined,
+        fotosMeta: n.fotosMeta?.map((f) => ({
+          ...f,
+          url: isInlineDataUrl(f.url) ? undefined : f.url,
+          thumbnailUrl: isInlineDataUrl(f.thumbnailUrl) ? undefined : f.thumbnailUrl,
+        })),
+      };
+    }
+
+    /** Responsável: entrega na fila não precisa de base64 local — foto vem da nuvem na conferência. */
+    if (n.status === "aguardando_conferencia") {
+      const keepRef = (v?: string) => (v && isLocalMediaRef(v) ? v : undefined);
+      const fotosPedido = n.fotosPedido
+        ?.map((f) => (isLocalMediaRef(f) ? f : undefined))
+        .filter((f): f is string => !!f);
+      return {
+        ...n,
+        fotoPedido: keepRef(n.fotoPedido) ?? fotosPedido?.[0],
+        fotosPedido: fotosPedido?.length ? fotosPedido : undefined,
         fotoPedidoMiniatura: undefined,
         fotosPedidoMiniaturas: undefined,
         fotosMeta: n.fotosMeta?.map((f) => ({
@@ -572,6 +692,21 @@ export function contarFotosUnicas(notas: NotaPedido[], cooperadoId: string, mesR
   ).length;
 }
 
+/** Indica que as fotos devem existir no bucket hb-entregas (mesmo se fotoNaNuvem sumiu no merge operacional). */
+export function notaTemFotoArmazenadaNaNuvem(nota: NotaPedido): boolean {
+  if (nota.fotoNaNuvem) return true;
+  if ((nota.fotosEnviadasCount ?? 0) > 0) return true;
+  if (nota.fotoEnviadaEm) return true;
+  if (
+    nota.fotosMeta?.some(
+      (f) => Boolean(f.storagePath) || f.status === "uploaded" || Boolean(f.url || f.thumbnailUrl)
+    )
+  ) {
+    return true;
+  }
+  return false;
+}
+
 /** Quantidade de fotos enviadas em uma nota (várias fotos = 1 entrega). */
 export function contarFotosEnviadasNota(nota: NotaPedido): number {
   const declarado = nota.fotosEnviadasCount ?? 0;
@@ -639,6 +774,11 @@ export function mergeNotaComFotos(a: NotaPedido, b: NotaPedido): NotaPedido {
     richFotos.length
   );
 
+  const fotosMeta =
+    (meta.fotosMeta?.length ?? 0) >= (other.fotosMeta?.length ?? 0)
+      ? meta.fotosMeta ?? other.fotosMeta
+      : other.fotosMeta ?? meta.fotosMeta;
+
   return {
     ...meta,
     status,
@@ -646,7 +786,17 @@ export function mergeNotaComFotos(a: NotaPedido, b: NotaPedido): NotaPedido {
     fotosPedido,
     fotosPedidoMiniaturas,
     fotoPedidoMiniatura: rich.fotoPedidoMiniatura ?? fotosPedidoMiniaturas?.[0] ?? meta.fotoPedidoMiniatura,
-    fotoNaNuvem: meta.fotoNaNuvem ?? rich.fotoNaNuvem ?? richFotos.length > 0,
+    fotoNaNuvem: Boolean(
+      a.fotoNaNuvem ||
+        b.fotoNaNuvem ||
+        meta.fotoNaNuvem ||
+        rich.fotoNaNuvem ||
+        countEsperado > 0 ||
+        a.fotoEnviadaEm ||
+        b.fotoEnviadaEm
+    ),
     fotosEnviadasCount: countEsperado > 0 ? countEsperado : undefined,
+    fotoEnviadaEm: meta.fotoEnviadaEm ?? other.fotoEnviadaEm ?? rich.fotoEnviadaEm,
+    fotosMeta,
   };
 }

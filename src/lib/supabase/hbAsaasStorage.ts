@@ -103,6 +103,21 @@ export async function findChargeByAsaasPaymentId(
   return data ? (data as HbAsaasChargeRow) : null;
 }
 
+export async function findLatestPendingChargeForCoop(
+  supabase: SupabaseClient,
+  cooperativeCnpj: string
+): Promise<HbAsaasChargeRow | null> {
+  const { data } = await supabase
+    .from("hb_asaas_charges")
+    .select("*")
+    .eq("cooperative_cnpj", cooperativeCnpj)
+    .eq("status", "pending")
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  return data ? (data as HbAsaasChargeRow) : null;
+}
+
 export async function insertHbAsaasCharge(
   supabase: SupabaseClient,
   row: Omit<HbAsaasChargeRow, "created_at" | "updated_at" | "saas_confirmed_at" | "repasse_confirmed_at" | "paid_at"> & {

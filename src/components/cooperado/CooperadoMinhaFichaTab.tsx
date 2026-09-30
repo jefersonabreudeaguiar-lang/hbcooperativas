@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, useEffect, memo } from "react";
 import Link from "next/link";
 import {
   CheckCircle2,
@@ -13,20 +13,27 @@ import {
   Camera,
   BookOpen,
 } from "lucide-react";
-import { useAppData } from "@/hooks/useAppData";
+import { useAppData, useAppDataSelector } from "@/hooks/useAppData";
 import { useContaCoopDescontosRevision } from "@/hooks/useContaCoopDescontosRevision";
 import { Button } from "@/components/ui/Button";
 import { NotaStatusBadge } from "@/components/ui/NotaStatusBadge";
 import { ResumoDescontosMes } from "@/components/ficha/ResumoDescontosMes";
 import {
   agregarItensFichaMes,
-  getResumoPagamentoExibicao,
-  getValorExibicaoCooperado,
   getDescontosExtrasExibicaoCooperado,
-  buildValorExibicaoCooperadoOpts,
 } from "@/services/notaPedidoService";
+import {
+  bicCentralBuildValorExibicaoCooperadoOpts,
+  bicCentralGetResumoPagamentoExibicao,
+  bicCentralGetValorExibicaoCooperado,
+} from "@/services/bicLeituraCentralFicha";
 import type { ResumoMesEntregasCooperado } from "@/services/cooperadoEntregasService";
-import { listarResumosFotosCooperado } from "@/services/cooperadoEntregasService";
+import {
+  listarResumosFotosCooperado,
+  listarResumosExtratoHistoricoCooperado,
+  somarTotalRecebidoConfirmadoCooperado,
+  notaTemFotoEnviadaCooperado,
+} from "@/services/cooperadoEntregasService";
 import {
   agruparEntregasPorSemanaNoMes,
   agruparNotasEmEntregas,
@@ -36,10 +43,13 @@ import {
 } from "@/services/entregaCooperadoService";
 import { ValoresAvulsosReceberPanel } from "@/components/ficha/ValoresAvulsosReceberPanel";
 import { CooperadoFichaFotosPanel } from "@/components/cooperado/CooperadoFichaFotosPanel";
-import { totalValoresAvulsosPendentes } from "@/services/valoresAvulsosReceberService";
+import { bicCentralTotalValoresAvulsosPendentes } from "@/services/bicLeituraCentralDominios";
 import { formatCurrency, formatDate, formatMesReferencia } from "@/utils/format";
 import { cn } from "@/utils/format";
+import { valorPendenteRecebimentoFichaCooperado } from "@/services/cooperadoFichaTimelineService";
 import { baixarRecibo, nomeArquivoRecibo } from "@/utils/recibo";
+
+export type ModoFichaExtrato = "cooperado" | "responsavel";
 
 interface CooperadoMinhaFichaTabProps {
   cooperadoId: string;
@@ -47,6 +57,7 @@ interface CooperadoMinhaFichaTabProps {
   nomeCooperado: string;
   resumos: ResumoMesEntregasCooperado[];
   getEscolaLabel: (nota: import("@/types").NotaPedido) => string;
+  modo?: ModoFichaExtrato;
 }
 
 function MesFichaAccordion({
@@ -57,6 +68,8 @@ function MesFichaAccordion({
   getEscolaLabel,
   expandido,
   onToggle,
+  onVerFotosMes,
+  modo = "cooperado",
 }: {
   resumo: ResumoMesEntregasCooperado;
   cooperadoId: string;
@@ -65,16 +78,42 @@ function MesFichaAccordion({
   getEscolaLabel: CooperadoMinhaFichaTabProps["getEscolaLabel"];
   expandido: boolean;
   onToggle: () => void;
+  onVerFotosMes?: (mesReferencia: string) => void;
+  modo?: ModoFichaExtrato;
 }) {
   const data = useAppData();
   const hbDescontosRevision = useContaCoopDescontosRevision();
+  const [viewInterna, setViewInterna] = useState<"detalhes" | "fotos">("detalhes");
+
+  useEffect(() => {
+    if (!expandido) setViewInterna("detalhes");
+  }, [expandido]);
+
+  const resumoFotosMes = useMemo(() => {
+    if (!data || !expandido) return null;
+    return (
+      listarResumosFotosCooperado(data, cooperadoId, cooperativaId).find(
+        (r) => r.mesReferencia === resumo.mesReferencia
+      ) ?? null
+    );
+  }, [data, cooperadoId, cooperativaId, resumo.mesReferencia, expandido]);
+
+  const temFotosMes =
+    !!resumoFotosMes && resumo.notas.some((n) => notaTemFotoEnviadaCooperado(n));
+
+  const linkQuantoVouReceber =
+    modo === "cooperado"
+      ? "/ficha-corrida"
+      : `/ficha-corrida?cooperado=${encodeURIComponent(cooperadoId)}`;
+  const precisaDetalhesExpandido = expandido && viewInterna === "detalhes";
+
   const resumoPagamento = useMemo(() => {
-    if (!data) return null;
-    return getResumoPagamentoExibicao(data, cooperadoId, resumo.mesReferencia, cooperativaId);
-  }, [data, cooperadoId, resumo.mesReferencia, cooperativaId, hbDescontosRevision]);
+    if (!data || !precisaDetalhesExpandido) return null;
+    return bicCentralGetResumoPagamentoExibicao(data, cooperadoId, resumo.mesReferencia, cooperativaId);
+  }, [data, cooperadoId, resumo.mesReferencia, cooperativaId, hbDescontosRevision, precisaDetalhesExpandido]);
 
   const itensMes = useMemo(() => {
-    if (!data) return { itens: [], entregas: 0, valorBruto: 0 };
+    if (!data || !precisaDetalhesExpandido) return { itens: [], entregas: 0, valorBruto: 0 };
     const apenasPendentes = !resumo.pagamentoConfirmado && !resumo.pagamentoAguardando;
     return agregarItensFichaMes(data, cooperadoId, resumo.mesReferencia, cooperativaId, { apenasPendentes });
   }, [
@@ -84,24 +123,25 @@ function MesFichaAccordion({
     cooperativaId,
     resumo.pagamentoConfirmado,
     resumo.pagamentoAguardando,
+    precisaDetalhesExpandido,
   ]);
 
   const avulsosPendentes = useMemo(() => {
-    if (!data) return 0;
-    return totalValoresAvulsosPendentes(data, cooperadoId, resumo.mesReferencia, cooperativaId);
-  }, [data, cooperadoId, resumo.mesReferencia, cooperativaId]);
+    if (!data || !precisaDetalhesExpandido) return 0;
+    return bicCentralTotalValoresAvulsosPendentes(data, cooperadoId, resumo.mesReferencia, cooperativaId);
+  }, [data, cooperadoId, resumo.mesReferencia, cooperativaId, precisaDetalhesExpandido]);
 
   const exibicaoOpts = useMemo(() => {
-    if (!data) return undefined;
-    return buildValorExibicaoCooperadoOpts(data, cooperadoId, resumo.mesReferencia, cooperativaId);
-  }, [data, cooperadoId, resumo.mesReferencia, cooperativaId]);
+    if (!data || !precisaDetalhesExpandido) return undefined;
+    return bicCentralBuildValorExibicaoCooperadoOpts(data, cooperadoId, resumo.mesReferencia, cooperativaId);
+  }, [data, cooperadoId, resumo.mesReferencia, cooperativaId, precisaDetalhesExpandido]);
 
   const descontosExtrasExibicao = useMemo(
     () => (resumoPagamento ? getDescontosExtrasExibicaoCooperado(resumoPagamento, exibicaoOpts) : []),
     [resumoPagamento, exibicaoOpts]
   );
 
-  if (!data || !resumoPagamento) return null;
+  if (!data) return null;
 
   const quitado = !!resumo.pagamentoConfirmado;
   const aguardando = !!resumo.pagamentoAguardando;
@@ -134,6 +174,46 @@ function MesFichaAccordion({
 
       {expandido && (
         <div className="border-t border-gray-100 px-4 sm:px-5 pb-5 pt-4 space-y-5 bg-gray-50/40">
+          {temFotosMes && (
+            <div className="flex gap-2 border-b border-gray-200 pb-2">
+              <button
+                type="button"
+                onClick={() => setViewInterna("detalhes")}
+                className={cn(
+                  "px-3 py-1.5 text-sm font-medium rounded-lg",
+                  viewInterna === "detalhes"
+                    ? "bg-green-100 text-green-800"
+                    : "text-gray-600 hover:bg-gray-100"
+                )}
+              >
+                Detalhes
+              </button>
+              <button
+                type="button"
+                onClick={() => setViewInterna("fotos")}
+                className={cn(
+                  "px-3 py-1.5 text-sm font-medium rounded-lg inline-flex items-center gap-1.5",
+                  viewInterna === "fotos"
+                    ? "bg-green-100 text-green-800"
+                    : "text-gray-600 hover:bg-gray-100"
+                )}
+              >
+                <Camera size={14} /> Fotos
+              </button>
+            </div>
+          )}
+
+          {viewInterna === "fotos" && temFotosMes && resumoFotosMes ? (
+            <CooperadoFichaFotosPanel
+              resumos={[resumoFotosMes]}
+              getEscolaLabel={getEscolaLabel}
+              cooperativaId={cooperativaId}
+              modoInline
+            />
+          ) : (
+            <>
+          {resumoPagamento && (
+          <>
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
             <div className="rounded-xl bg-white border border-gray-200 p-3">
               <p className="text-xs text-gray-500 uppercase tracking-wide">Entregas</p>
@@ -176,7 +256,7 @@ function MesFichaAccordion({
                 totalLiquido={
                   quitado
                     ? resumo.valorRecebido
-                    : getValorExibicaoCooperado(resumoPagamento, exibicaoOpts)
+                    : bicCentralGetValorExibicaoCooperado(resumoPagamento, exibicaoOpts!)
                 }
                 rotuloTotal={quitado ? "Total recebido" : "Total líquido"}
               />
@@ -334,47 +414,75 @@ function MesFichaAccordion({
                   : formatDate(resumo.pagamentoConfirmado.pagoEm.split("T")[0])}
               </div>
             )}
+            {temFotosMes && (
+              <Button size="sm" variant="secondary" onClick={() => setViewInterna("fotos")}>
+                <Camera size={16} /> Fotos do mês
+              </Button>
+            )}
             {!quitado && resumo.valorAReceber > 0 && (
-              <Link href="/ficha-corrida">
+              <Link href={linkQuantoVouReceber}>
                 <Button size="sm">
                   <Wallet size={16} /> Quanto vou receber
                 </Button>
               </Link>
             )}
           </div>
+          </>
+          )}
+            </>
+          )}
         </div>
       )}
     </div>
   );
 }
 
-export function CooperadoMinhaFichaTab({
+export const CooperadoMinhaFichaTab = memo(function CooperadoMinhaFichaTab({
   cooperadoId,
   cooperativaId,
   nomeCooperado,
   resumos,
   getEscolaLabel,
+  modo = "cooperado",
 }: CooperadoMinhaFichaTabProps) {
   const data = useAppData();
   const [mesExpandido, setMesExpandido] = useState<string | null>(resumos[0]?.mesReferencia ?? null);
+  const [mesExpandidoHistorico, setMesExpandidoHistorico] = useState<string | null>(null);
   const [subAba, setSubAba] = useState<"extrato" | "fotos">("extrato");
+  const [fotosMesFocus, setFotosMesFocus] = useState<string | null>(null);
 
-  const totalRecebido = useMemo(
-    () => resumos.reduce((s, r) => s + r.valorRecebido, 0),
-    [resumos]
-  );
+  const resumosHistorico =
+    useAppDataSelector(
+      (d) => listarResumosExtratoHistoricoCooperado(d, cooperadoId, cooperativaId),
+      [cooperadoId, cooperativaId]
+    ) ?? [];
 
-  const totalPendente = useMemo(
-    () => resumos.reduce((s, r) => s + (r.pagamentoConfirmado ? 0 : r.valorAReceber), 0),
-    [resumos]
-  );
+  const totalRecebido = useAppDataSelector(
+    (d) => somarTotalRecebidoConfirmadoCooperado(d, cooperadoId, cooperativaId),
+    [cooperadoId, cooperativaId]
+  ) ?? 0;
+
+  const abrirFotosDoMes = (mesReferencia: string) => {
+    setFotosMesFocus(mesReferencia);
+    setSubAba("fotos");
+  };
+
+  const totalPendente = useAppDataSelector(
+    (d) => valorPendenteRecebimentoFichaCooperado(d, cooperadoId, cooperativaId),
+    [cooperadoId, cooperativaId]
+  ) ?? 0;
+
+  const linkQuantoVouReceber =
+    modo === "cooperado"
+      ? "/ficha-corrida"
+      : `/ficha-corrida?cooperado=${encodeURIComponent(cooperadoId)}`;
 
   const resumosFotos = useMemo(() => {
     if (!data) return [];
     return listarResumosFotosCooperado(data, cooperadoId, cooperativaId);
   }, [data, cooperadoId, cooperativaId]);
 
-  if (resumos.length === 0) {
+  if (resumos.length === 0 && resumosHistorico.length === 0) {
     return (
       <div className="space-y-6">
         <div className="flex gap-2 border-b border-gray-200">
@@ -409,6 +517,7 @@ export function CooperadoMinhaFichaTab({
             resumos={resumosFotos}
             getEscolaLabel={getEscolaLabel}
             cooperativaId={cooperativaId}
+            mesReferenciaInicial={fotosMesFocus}
           />
         ) : (
           <>
@@ -422,7 +531,7 @@ export function CooperadoMinhaFichaTab({
             <ValoresAvulsosReceberPanel
               cooperadoId={cooperadoId}
               cooperativaId={cooperativaId}
-              modo="cooperado"
+              modo={modo === "responsavel" ? "responsavel" : "cooperado"}
             />
           </>
         )}
@@ -464,6 +573,7 @@ export function CooperadoMinhaFichaTab({
           resumos={resumosFotos}
           getEscolaLabel={getEscolaLabel}
           cooperativaId={cooperativaId}
+          mesReferenciaInicial={fotosMesFocus}
         />
       ) : (
         <>
@@ -471,13 +581,13 @@ export function CooperadoMinhaFichaTab({
         <div className="rounded-2xl bg-gradient-to-br from-emerald-700 to-emerald-800 text-white p-5">
           <p className="text-emerald-100 text-sm">Total já recebido</p>
           <p className="text-3xl font-bold mt-1">{formatCurrency(totalRecebido)}</p>
-          <p className="text-emerald-100/90 text-xs mt-2">Soma dos meses quitados com recibo assinado</p>
+          <p className="text-emerald-100/90 text-xs mt-2">Pagamentos confirmados pela cooperativa</p>
         </div>
         <div className="rounded-2xl bg-white border-2 border-green-200 p-5">
           <p className="text-gray-500 text-sm">Pendente de recebimento</p>
           <p className="text-3xl font-bold text-green-800 mt-1">{formatCurrency(totalPendente)}</p>
           {totalPendente > 0 && (
-            <Link href="/ficha-corrida" className="inline-block mt-3 text-sm font-medium text-green-700 hover:underline">
+            <Link href={linkQuantoVouReceber} className="inline-block mt-3 text-sm font-medium text-green-700 hover:underline">
               Ver em Quanto vou receber →
             </Link>
           )}
@@ -488,30 +598,72 @@ export function CooperadoMinhaFichaTab({
         Extrato por mês com valores, descontos e cada entrega listada separadamente. Toque no mês para expandir.
       </p>
 
-      <div className="space-y-3">
-        {resumos.map((resumo) => (
-          <MesFichaAccordion
-            key={resumo.mesReferencia}
-            resumo={resumo}
-            cooperadoId={cooperadoId}
-            cooperativaId={cooperativaId}
-            nomeCooperado={nomeCooperado}
-            getEscolaLabel={getEscolaLabel}
-            expandido={mesExpandido === resumo.mesReferencia}
-            onToggle={() =>
-              setMesExpandido((cur) => (cur === resumo.mesReferencia ? null : resumo.mesReferencia))
-            }
-          />
-        ))}
-      </div>
+      {resumos.length > 0 && (
+        <>
+          <p className="text-sm font-semibold text-gray-800">Em aberto e a receber</p>
+          <div className="space-y-3">
+            {resumos.map((resumo) => (
+              <MesFichaAccordion
+                key={resumo.mesReferencia}
+                resumo={resumo}
+                cooperadoId={cooperadoId}
+                cooperativaId={cooperativaId}
+                nomeCooperado={nomeCooperado}
+                getEscolaLabel={getEscolaLabel}
+                expandido={mesExpandido === resumo.mesReferencia}
+                onToggle={() =>
+                  setMesExpandido((cur) => (cur === resumo.mesReferencia ? null : resumo.mesReferencia))
+                }
+                modo={modo}
+              />
+            ))}
+          </div>
+        </>
+      )}
+
+      {resumosHistorico.length > 0 && (
+        <>
+          <p className="text-sm font-semibold text-gray-800 pt-2">Pagamentos realizados</p>
+          <p className="text-xs text-gray-500">
+            Valores congelados no momento do PIX confirmado — consulte também em Quanto vou receber (histórico).
+          </p>
+          <div className="space-y-3">
+            {resumosHistorico.map((resumo) => (
+              <MesFichaAccordion
+                key={`hist-${resumo.mesReferencia}`}
+                resumo={resumo}
+                cooperadoId={cooperadoId}
+                cooperativaId={cooperativaId}
+                nomeCooperado={nomeCooperado}
+                getEscolaLabel={getEscolaLabel}
+                expandido={mesExpandidoHistorico === resumo.mesReferencia}
+                onToggle={() =>
+                  setMesExpandidoHistorico((cur) =>
+                    cur === resumo.mesReferencia ? null : resumo.mesReferencia
+                  )
+                }
+                onVerFotosMes={abrirFotosDoMes}
+                modo={modo}
+              />
+            ))}
+          </div>
+        </>
+      )}
+
+      {resumos.length === 0 && resumosHistorico.length === 0 && (
+        <div className="text-center py-8 text-gray-500 bg-white rounded-2xl border border-dashed">
+          <Wallet size={40} className="mx-auto mb-3 text-gray-300" />
+          <p className="font-medium text-gray-800">Nenhum lançamento em aberto</p>
+        </div>
+      )}
 
       <ValoresAvulsosReceberPanel
         cooperadoId={cooperadoId}
         cooperativaId={cooperativaId}
-        modo="cooperado"
+        modo={modo === "responsavel" ? "responsavel" : "cooperado"}
       />
         </>
       )}
     </div>
   );
-}
+});

@@ -1,11 +1,11 @@
 import type { AppData, PagamentoCooperadoRegistro } from "@/types";
-import { notaPertenceCooperativa } from "@/utils/fotoEntrega";
 import { contarItensCatalogo } from "@/services/catalogoContratosService";
-import { cooperadoPendentePagamentoResponsavel } from "@/services/cooperadoEntregasService";
-import { listCooperadosDaCooperativa } from "@/services/cooperadoCloudService";
 import { getCurrentMesReferencia } from "@/utils/format";
-import { idsNotasPedidoExcluidas, pagamentoCobreMesReferencia } from "@/services/notaPedidoService";
-import { isNotaNaFilaConferenciaResponsavel } from "@/utils/notaStatus";
+import { pagamentoCobreMesReferencia } from "@/services/notaPedidoService";
+import {
+  countCooperadosPagamentoPendenteResponsavel,
+  countNotasFilaConferenciaResponsavel,
+} from "@/services/responsavelPainelIndex";
 
 export type FilaDoDiaItem = {
   id: string;
@@ -20,13 +20,7 @@ export type FilaDoDiaItem = {
 export function getFilaDoDia(data: AppData, coopId: string | undefined, mes = getCurrentMesReferencia()): FilaDoDiaItem[] {
   if (!coopId) return [];
 
-  const excluidas = idsNotasPedidoExcluidas(data, coopId);
-  const conferir = data.notasPedido.filter(
-    (n) =>
-      isNotaNaFilaConferenciaResponsavel(n.status) &&
-      notaPertenceCooperativa(data, n, coopId) &&
-      !excluidas.has(n.id)
-  ).length;
+  const conferir = countNotasFilaConferenciaResponsavel(data, coopId);
 
   const mensalidades = data.mensalidades.filter((m) => {
     if (m.status !== "aguardando_confirmacao") return false;
@@ -38,9 +32,15 @@ export function getFilaDoDia(data: AppData, coopId: string | undefined, mes = ge
     (p) => p.cooperativaId === coopId && p.status === "aguardando_confirmacao"
   ).length;
 
-  const cooperadosPagar = listCooperadosDaCooperativa(data, coopId).filter((c) =>
-    cooperadoPendentePagamentoResponsavel(data, c.id, undefined, coopId)
+  const recibosVerificar = data.pagamentosCooperado.filter(
+    (p) =>
+      p.cooperativaId === coopId &&
+      p.status === "confirmado" &&
+      Boolean(p.assinaturaCooperado?.trim()) &&
+      !p.reciboConferidoPorResponsavelEm
   ).length;
+
+  const cooperadosPagar = countCooperadosPagamentoPendenteResponsavel(data, coopId);
 
   const itensCatalogo = contarItensCatalogo(data, coopId);
   const publicarPrecos = itensCatalogo === 0 ? 1 : 0;
@@ -100,6 +100,20 @@ export function getFilaDoDia(data: AppData, coopId: string | undefined, mes = ge
     });
   }
 
+  if (recibosVerificar > 0) {
+    items.push({
+      id: "verificar-recibos",
+      titulo: "Verificar recibos assinados",
+      detalhe:
+        recibosVerificar === 1
+          ? "1 cooperado assinou — confira o recibo"
+          : `${recibosVerificar} recibos assinados aguardando conferência`,
+      href: "/ficha-corrida?fila=verificar-recibos",
+      count: recibosVerificar,
+      urgencia: "media",
+    });
+  }
+
   if (publicarPrecos > 0) {
     items.push({
       id: "contratos",
@@ -128,4 +142,21 @@ export function listarPagamentosAguardandoAssinatura(
         (!mes || pagamentoCobreMesReferencia(p, mes))
     )
     .sort((a, b) => b.pagoEm.localeCompare(a.pagoEm));
+}
+
+/** Recibo assinado pelo cooperado — aguarda conferência do responsável. */
+export function listarPagamentosReciboAguardandoVerificacao(
+  data: AppData,
+  coopId: string | undefined
+): PagamentoCooperadoRegistro[] {
+  if (!coopId) return [];
+  return data.pagamentosCooperado
+    .filter(
+      (p) =>
+        p.cooperativaId === coopId &&
+        p.status === "confirmado" &&
+        Boolean(p.assinaturaCooperado?.trim()) &&
+        !p.reciboConferidoPorResponsavelEm
+    )
+    .sort((a, b) => (b.assinadoEm ?? b.updatedAt ?? b.pagoEm).localeCompare(a.assinadoEm ?? a.updatedAt ?? a.pagoEm));
 }

@@ -2,10 +2,12 @@ import type { AppData, NotaPedido, User } from "@/types";
 import { normalizeCnpj, findCooperativaByCnpj } from "@/utils/cooperativa";
 import { fetchCooperativaByCnpjFromCloud } from "@/services/cooperativaCloudService";
 import { notaPertenceCooperado, resolverCooperadoIdCanonico } from "@/services/cooperadoCloudService";
-import { getNotaCooperativaCnpj, getFotosExibicaoNota, mergeNotaComFotos, contarFotosEnviadasNota, FOTOS_UPLOAD_LOTE } from "@/utils/fotoEntrega";
+import { getNotaCooperativaCnpj, getFotosExibicaoNota, mergeNotaComFotos, contarFotosEnviadasNota, notaTemFotoArmazenadaNaNuvem, FOTOS_UPLOAD_LOTE } from "@/utils/fotoEntrega";
 import { getCooperadoNome } from "@/utils/calculations";
 import { getData, saveDataSafe } from "@/services/dataStore";
 import { reconciliarFichaFromNotasConferidas, idsNotasPedidoExcluidas, aplicarNotasPedidoExcluidas } from "@/services/notaPedidoService";
+import { posProcessarFinanceiroLocal } from "@/services/operacionalLocalPostProcess";
+import { posProcessarIntegridadePagamentosCooperativa } from "@/services/pagamentoIntegridadeService";
 import { getCloudResetAppliedVersion } from "@/services/operationalReset";
 import { readNotaFotoAtIndex } from "@/services/localMediaStore";
 import { slimNotaDraftForUpload } from "@/services/imagePipelineService";
@@ -20,13 +22,58 @@ import {
 } from "@/services/syncMetaService";
 import { precisaReparoFullSyncNotas } from "@/services/fichaSyncGuard";
 import {
+  saveAppDataIfSyncLeaseCurrent,
+  type CooperativaSyncSessionLease,
+} from "@/services/operacionalPullLease";
+import {
   isNotaStatusDowngrade,
   isNotaStatusTerminalConferencia,
+  isNotaNaFilaConferenciaResponsavel,
   protectNotaAgainstStatusDowngrade,
   NOTA_STATUS_RANK,
+  sanitizarNotaParaFilaConferencia,
 } from "@/utils/notaStatus";
+import { repararNotasPedidoFilaConferencia } from "@/services/conferenciaFilaRepair";
 
 const STATUS_RANK = NOTA_STATUS_RANK;
+
+function parseNotaIsoTime(iso?: string): number | null {
+  if (!iso) return null;
+  const t = new Date(iso).getTime();
+  return Number.isNaN(t) ? null : t;
+}
+
+/** Reenvio cooperado pós-rejeição — marcador explícito `reenviadaEm` (≠ relancadaEm). */
+export function isReenvioCooperadoLegitimo(
+  incoming: Pick<NotaPedido, "status" | "reenviadaEm">
+): boolean {
+  if (incoming.status !== "aguardando_conferencia") return false;
+  return parseNotaIsoTime(incoming.reenviadaEm) !== null;
+}
+
+function cloudRejeicaoReferenciaMs(cloud: Pick<NotaPedido, "dataRejeicao" | "updatedAt">): number {
+  return parseNotaIsoTime(cloud.dataRejeicao) ?? parseNotaIsoTime(cloud.updatedAt) ?? 0;
+}
+
+/** Local em reenvio não deve ser sobrescrito por rejeição obsoleta na nuvem. */
+export function isReenvioLocalStickySobreRejeicaoCloud(local: NotaPedido, cloud: NotaPedido): boolean {
+  if (local.status !== "aguardando_conferencia") return false;
+  if (cloud.status !== "rejeitada") return false;
+  const reenvMs = parseNotaIsoTime(local.reenviadaEm);
+  if (reenvMs === null) return false;
+  return reenvMs > cloudRejeicaoReferenciaMs(cloud);
+}
+
+/** Early return em finalizeNotaEntregaNaNuvem — true = não executar PATCH. */
+export function shouldFinalizeEntregaSkipCloudPatch(
+  existing: Pick<NotaPedido, "status">,
+  incoming: NotaPedido
+): boolean {
+  if (!existing.status) return false;
+  if (isNotaStatusTerminalConferencia(existing.status)) return true;
+  if (existing.status === "rejeitada" && !isReenvioCooperadoLegitimo(incoming)) return true;
+  return false;
+}
 
 /**
  * Evita sumiço na fila do responsável: nota em análise local só sai por
@@ -54,8 +101,13 @@ function shouldApplyCloudNota(local: NotaPedido | undefined, cloud: NotaPedido):
       const localFotos = contarFotosEnviadasNota(local);
       return cloudTime > localTime || cloudFotos > localFotos;
     }
+    if (cloud.status === "rejeitada") {
+      if (isReenvioLocalStickySobreRejeicaoCloud(local, cloud)) {
+        return false;
+      }
+      return true;
+    }
     if (
-      cloud.status === "rejeitada" ||
       cloud.status === "conferida" ||
       cloud.status === "pago" ||
       cloud.status === "cancelado"
@@ -77,6 +129,18 @@ function shouldApplyCloudNota(local: NotaPedido | undefined, cloud: NotaPedido):
   if (
     isNotaStatusTerminalConferencia(local.status) &&
     isNotaStatusDowngrade(local.status, cloud.status)
+  ) {
+    return false;
+  }
+
+  // Conferida local não regride para snapshot legado "entregue" (mesmo rank, cloud mais novo).
+  if (local.status === "conferida" && cloud.status === "entregue") {
+    return false;
+  }
+
+  if (
+    (local.status === "conferida" || local.status === "pago") &&
+    (cloud.status === "aguardando_conferencia" || cloud.status === "entregue" || cloud.status === "rascunho")
   ) {
     return false;
   }
@@ -327,10 +391,26 @@ export function mergeCloudNotasIntoData(
           cloudNota.status === "entregue"
         ) {
           // Legacy “entregue” na nuvem — mescla fotos, fila permanece em análise.
-          mergedNota = {
+          mergedNota = sanitizarNotaParaFilaConferencia({
             ...mergedNota,
             status: "aguardando_conferencia",
             updatedAt: local.updatedAt,
+          });
+        } else if (
+          local.status === "aguardando_conferencia" &&
+          cloudNota.status === "rejeitada" &&
+          isReenvioLocalStickySobreRejeicaoCloud(local, cloudNota)
+        ) {
+          mergedNota = {
+            ...mergedNota,
+            status: "aguardando_conferencia",
+            rejeitadaPor: undefined,
+            dataRejeicao: undefined,
+            motivoRejeicao: undefined,
+            reenviadaEm: local.reenviadaEm,
+            updatedAt: local.updatedAt,
+            conferidaPor: undefined,
+            dataConferencia: undefined,
           };
         } else if (
           local.relancadaEm &&
@@ -386,10 +466,10 @@ export function mergeCloudNotasIntoData(
         }
       } else if (local?.status === "aguardando_conferencia" || local?.status === "entregue") {
         // Merge de fotos não pode tirar da fila.
-        mergedNota = {
+        mergedNota = sanitizarNotaParaFilaConferencia({
           ...mergedNota,
           status: local.status === "entregue" ? "entregue" : "aguardando_conferencia",
-        };
+        });
       }
       byId.set(mergedNota.id, mergedNota);
       changed = true;
@@ -434,6 +514,13 @@ export async function fetchNotasPedidoFromCloud(
   try {
     const qs = new URLSearchParams({ cnpj: digits, lite: "1" });
     if (since) qs.set("since", since);
+    if (forceFull && typeof sessionStorage !== "undefined") {
+      const repairKey = `hb_repair_fila_done:${digits}`;
+      if (!sessionStorage.getItem(repairKey)) {
+        qs.set("repairFila", "1");
+        sessionStorage.setItem(repairKey, "1");
+      }
+    }
     const res = await secureApiFetch(`/api/notas-pedido?${qs.toString()}`, { cache: "no-store" });
     if (!res.ok) return { ok: false, notas: [], delta: Boolean(since) };
     const json = await res.json().catch(() => ({}));
@@ -453,6 +540,29 @@ export async function fetchNotasPedidoFromCloud(
     };
   } catch {
     return { ok: false, notas: [], delta: Boolean(since) };
+  }
+}
+
+/** Metadados só da tabela SQL (sem merge com storage) — valida publicação na fila do responsável. */
+export async function fetchNotaPedidoTableMetaFromCloud(
+  cnpj: string,
+  notaId: string
+): Promise<{ status: NotaPedido["status"]; updatedAt?: string } | null> {
+  const digits = normalizeCnpj(cnpj);
+  if (digits.length !== 14) return null;
+
+  try {
+    const res = await secureApiFetch(
+      `/api/notas-pedido/${encodeURIComponent(notaId)}?cnpj=${digits}&tableOnly=1`,
+      { cache: "no-store" }
+    );
+    if (!res.ok) return null;
+    const json = await res.json().catch(() => ({}));
+    const nota = json.nota as NotaPedido | undefined;
+    if (!nota?.id) return null;
+    return { status: nota.status, updatedAt: nota.updatedAt };
+  } catch {
+    return null;
   }
 }
 
@@ -515,26 +625,39 @@ export async function resolveFotosNotaParaExibicao(
   return out;
 }
 
-/** Carrega uma foto da nuvem como blob: URL (libera com revokePreviewUrl). */
+/** Carrega uma foto da nuvem como blob URL (libera com revokePreviewUrl). */
 export async function fetchNotaFotoPartBlobUrl(
   cnpj: string,
   notaId: string,
-  index: number
+  index: number,
+  options?: { compact?: boolean }
 ): Promise<string | null> {
   const digits = normalizeCnpj(cnpj);
   if (digits.length !== 14) return null;
 
-  try {
-    const res = await secureApiFetch(
-      `/api/notas-pedido/${encodeURIComponent(notaId)}/foto?cnpj=${digits}&index=${index}`,
-      { cache: "no-store" }
-    );
-    if (!res.ok) return null;
-    const blob = await res.blob();
-    return URL.createObjectURL(blob);
-  } catch {
-    return null;
+  const tryIndices: number[] = [index];
+  if (index !== 0) tryIndices.push(0);
+  if (!options?.compact) {
+    for (let i = 0; i < 8; i++) {
+      if (!tryIndices.includes(i)) tryIndices.push(i);
+    }
   }
+
+  for (const idx of tryIndices) {
+    try {
+      const res = await secureApiFetch(
+        `/api/notas-pedido/${encodeURIComponent(notaId)}/foto?cnpj=${digits}&index=${idx}`,
+        { cache: "no-store" }
+      );
+      if (!res.ok) continue;
+      const blob = await res.blob();
+      if (blob.size <= 0) continue;
+      return URL.createObjectURL(blob);
+    } catch {
+      continue;
+    }
+  }
+  return null;
 }
 
 export function getCooperativaCnpj(data: AppData, cooperativaId?: string): string | undefined {
@@ -699,17 +822,13 @@ export async function deleteNotaPedidoFromCloud(
   }
 }
 
-/** Confirma ausência na nuvem (GET + lista) antes de remover tombstone local. */
+/** Confirma ausência na nuvem antes de remover tombstone local (leve — sem listar todas as notas). */
 export async function confirmNotaDeletedFromCloud(cnpj: string, notaId: string): Promise<boolean> {
   const digits = normalizeCnpj(cnpj);
   if (digits.length !== 14 || !notaId) return false;
 
-  const single = await fetchNotaPedidoFromCloud(digits, notaId);
-  if (single) return false;
-
-  const list = await fetchNotasPedidoFromCloud(digits, { forceFull: true });
-  if (!list.ok) return false;
-  return !list.notas.some((n) => n.id === notaId);
+  const single = await fetchNotaPedidoFromCloud(digits, notaId, { metaOnly: true });
+  return !single;
 }
 
 export async function patchNotaPedidoInCloud(
@@ -881,16 +1000,14 @@ export async function finalizeNotaEntregaNaNuvem(
   const digits = normalizeCnpj(cnpj);
   if (digits.length !== 14) return { ok: false, error: "CNPJ inválido." };
 
-  // Nunca rebaixar se a nuvem já avançou (conferida/pago/rejeitada).
+  // Nunca rebaixar se a nuvem já avançou (conferida/pago/rejeitada sem reenvio legítimo).
   const existing = await fetchNotaPedidoFromCloud(digits, nota.id, { metaOnly: true });
-  if (existing?.status) {
-    if (isNotaStatusTerminalConferencia(existing.status) || existing.status === "rejeitada") {
-      return { ok: true };
-    }
-    if (existing.status === "aguardando_conferencia") {
-      return { ok: true };
-    }
+  if (existing?.status && shouldFinalizeEntregaSkipCloudPatch(existing, nota)) {
+    return { ok: true };
   }
+
+  const reenvioPosRejeicao =
+    existing?.status === "rejeitada" && isReenvioCooperadoLegitimo(nota);
 
   const finalNota: NotaPedido = {
     ...nota,
@@ -901,7 +1018,8 @@ export async function finalizeNotaEntregaNaNuvem(
     fotoPedidoMiniatura: undefined,
     fotosPedidoMiniaturas: undefined,
     cooperadoNomeSnapshot: nota.cooperadoNomeSnapshot ?? cooperadoNome,
-    updatedAt: new Date().toISOString(),
+    updatedAt:
+      reenvioPosRejeicao && nota.updatedAt ? nota.updatedAt : new Date().toISOString(),
   };
 
   const patched = await patchNotaPedidoInCloud(digits, finalNota);
@@ -909,13 +1027,21 @@ export async function finalizeNotaEntregaNaNuvem(
 
   // Confirma que a nuvem realmente saiu de rascunho (PATCH antigo podia
   // "suceder" com 0 linhas e a entrega sumia da lista do responsável).
-  const cloud = await fetchNotaPedidoFromCloud(digits, finalNota.id, { metaOnly: true });
-  if (cloud && cloud.status === "rascunho") {
+  const tableMeta = await fetchNotaPedidoTableMetaFromCloud(digits, finalNota.id);
+  const sqlStatus = tableMeta?.status;
+  if (!sqlStatus || sqlStatus === "rascunho") {
     const retry = await pushNotasPedidoToCloud(digits, [finalNota], cooperadoNome);
     if (!retry.ok) {
       return {
         ok: false,
         error: retry.error ?? "Entrega não publicou na nuvem. Tente Enviar de novo.",
+      };
+    }
+    const afterPost = await fetchNotaPedidoTableMetaFromCloud(digits, finalNota.id);
+    if (!afterPost?.status || afterPost.status === "rascunho") {
+      return {
+        ok: false,
+        error: "Entrega não publicou na nuvem. Tente Enviar de novo.",
       };
     }
   }
@@ -951,12 +1077,6 @@ export async function republishLocalAguardandoConferencia(
   for (const nota of pendentes) {
     const cloud = await fetchNotaPedidoFromCloud(digits, nota.id, { metaOnly: true });
     if (!cloud) {
-      // Excluída na nuvem pelo responsável — remove cópia local, não republicar.
-      adopted = {
-        ...adopted,
-        notasPedido: adopted.notasPedido.filter((n) => n.id !== nota.id),
-      };
-      adoptedChanged = true;
       continue;
     }
     // Já publicada e visível — não precisa republicar.
@@ -977,8 +1097,7 @@ export async function republishLocalAguardandoConferencia(
   }
 
   if (adoptedChanged) {
-    const reconciled = reconciliarFichaFromNotasConferidas(adopted);
-    saveDataSafe(reconciled);
+    saveDataSafe(posProcessarFinanceiroLocal(adopted, digits));
   }
 
   return okCount;
@@ -1141,7 +1260,7 @@ export async function pushNotaComFotosEmLotes(
 
 export async function syncNotasPedidoFromCloud(
   cnpj: string,
-  options?: { retryFull?: boolean }
+  options?: { retryFull?: boolean; sessionLease?: CooperativaSyncSessionLease }
 ): Promise<number> {
   // Pull nunca bloqueado por reset pendente — só push de responsável usa essa flag.
   await flushPendingNotaDeletes(cnpj);
@@ -1171,7 +1290,10 @@ export async function syncNotasPedidoFromCloud(
         return false;
       });
       if (filtered.length !== current.notasPedido.length) {
-        saveDataSafe(reconciliarFichaFromNotasConferidas({ ...current, notasPedido: filtered }));
+        saveAppDataIfSyncLeaseCurrent(
+          options?.sessionLease,
+          posProcessarFinanceiroLocal({ ...current, notasPedido: filtered }, digits)
+        );
       }
     }
     markNotasSyncDone(digits, true, [], serverWatermark);
@@ -1189,7 +1311,10 @@ export async function syncNotasPedidoFromCloud(
       if (precisaReparoFullSyncNotas(current, coopId) || conferidasCoop === 0) {
         forceNextFullNotasSync(digits);
         clearNotasSyncMeta(digits);
-        return syncNotasPedidoFromCloud(cnpj, { retryFull: true });
+        return syncNotasPedidoFromCloud(cnpj, {
+          retryFull: true,
+          sessionLease: options?.sessionLease,
+        });
       }
     }
     markNotasSyncDone(digits, false, [], serverWatermark);
@@ -1218,7 +1343,11 @@ export async function syncNotasPedidoFromCloud(
     if (blocked.has(before.id)) continue;
     const after = afterById.get(before.id);
     if (!after) {
-      // Não ressuscita entregas removidas localmente (ex.: exclusão pelo responsável).
+      // Delta incompleto ou merge falhou — não apagar entrega em análise local.
+      if (isNotaNaFilaConferenciaResponsavel(before.status)) {
+        notas.push(before);
+        invariantFixed = true;
+      }
       continue;
     }
     if (after.status === "rascunho") {
@@ -1234,9 +1363,14 @@ export async function syncNotasPedidoFromCloud(
     merged = { ...merged, notasPedido: notas };
   }
 
-  const reconciled = reconciliarFichaFromNotasConferidas(merged);
+  const reparo = repararNotasPedidoFilaConferencia(merged, coopId);
+  if (reparo.repaired > 0) {
+    merged = reparo.data;
+  }
+
+  const reconciled = posProcessarFinanceiroLocal(merged, digits);
   if (reconciled !== current) {
-    saveDataSafe(reconciled);
+    saveAppDataIfSyncLeaseCurrent(options?.sessionLease, reconciled);
   }
   markNotasSyncDone(digits, treatAsFull, cloudNotas, serverWatermark);
   return cloudNotas.filter((n) => n.status === "aguardando_conferencia").length;
@@ -1249,7 +1383,8 @@ export async function syncNotasPedidoFromCloud(
 export async function refreshCooperadoNotasEmAnalise(
   cnpj: string,
   cooperadoId: string,
-  cooperativaId?: string
+  cooperativaId?: string,
+  opts?: { sessionLease?: CooperativaSyncSessionLease }
 ): Promise<number> {
   const digits = normalizeCnpj(cnpj);
   if (digits.length !== 14) return 0;
@@ -1271,10 +1406,6 @@ export async function refreshCooperadoNotasEmAnalise(
   for (const nota of emAnalise) {
     const cloud = await fetchNotaPedidoFromCloud(digits, nota.id);
     if (!cloud) {
-      merged = {
-        ...merged,
-        notasPedido: merged.notasPedido.filter((n) => n.id !== nota.id),
-      };
       continue;
     }
     if (cloud.status === nota.status || cloud.status === "rascunho") continue;
@@ -1286,9 +1417,11 @@ export async function refreshCooperadoNotasEmAnalise(
 
   if (atualizadas.length === 0) return 0;
 
-  const reconciled = reconciliarFichaFromNotasConferidas(merged);
+  const reconciled = posProcessarFinanceiroLocal(merged, digits);
   if (reconciled !== data) {
-    saveDataSafe(reconciled);
+    if (!saveAppDataIfSyncLeaseCurrent(opts?.sessionLease, reconciled)) {
+      return 0;
+    }
   }
   markNotasSyncDone(digits, false, atualizadas);
   return atualizadas.length;
@@ -1314,7 +1447,7 @@ export async function ensureNotaComFoto(
   const cnpj = getCooperativaCnpj(data, coopId ?? nota.cooperativaId);
   if (!cnpj) return nota;
 
-  if (!nota.fotoNaNuvem && fullResCount === 0 && localFotos.length === 0) return nota;
+  if (!notaTemFotoArmazenadaNaNuvem(nota) && fullResCount === 0 && localFotos.length === 0) return nota;
 
   const cloud = await fetchNotaPedidoFromCloud(cnpj, nota.id, { metaOnly: true });
   if (!cloud) return nota;

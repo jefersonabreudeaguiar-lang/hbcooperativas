@@ -6,7 +6,8 @@ import {
   uploadOperacionalSync,
   type OperacionalSyncPayload,
 } from "@/lib/supabase/cooperativaSyncStorage";
-import type { ArquivoMensalCooperado } from "@/types";
+import { fetchAllCooperadosFromStorage } from "@/lib/supabase/cooperadosStorage";
+import type { ArquivoMensalCooperado, Cooperado, PagamentoCooperadoRegistro } from "@/types";
 import { normalizeCnpj } from "@/utils/cooperativa";
 
 function round2(v: number): number {
@@ -18,7 +19,8 @@ function descontosToArquivo(descontos: DescontoContaCoopRemoto[]): NonNullable<A
     motivo: d.motivo,
     valorReais: d.valorReais,
     tipo: d.motivo.toLowerCase().includes("estorno") ? ("credito_avulso" as const) : ("conta_coop" as const),
-    createdAt: d.createdAt,
+    createdAt: d.createdAt ?? "",
+    ...(d.hbTransactionId ? { hbTransactionId: d.hbTransactionId } : {}),
   }));
 }
 
@@ -27,7 +29,7 @@ function descontosFingerprint(descontos: DescontoContaCoopRemoto[]): string {
     dedupeDescontosContaCoopRemotos(descontos).map((d) => ({
       motivo: d.motivo,
       valorReais: round2(d.valorReais),
-      createdAt: d.createdAt,
+      createdAt: d.createdAt ?? "",
     }))
   );
 }
@@ -37,37 +39,76 @@ function arquivoDescontosFingerprint(arquivo: ArquivoMensalCooperado | undefined
     motivo: d.motivo,
     valorReais: d.valorReais,
     tipo: "conta_coop",
-    createdAt: d.createdAt,
+    createdAt: d.createdAt ?? "",
   }));
   return descontosFingerprint(rows);
 }
 
-function mesesPendentesOperacional(
-  op: OperacionalSyncPayload,
-  cooperadoId?: string
-): Array<{ cooperadoId: string; mesReferencia: string; cooperativaId: string }> {
-  const seen = new Set<string>();
-  const jobs: Array<{ cooperadoId: string; mesReferencia: string; cooperativaId: string }> = [];
-  for (const f of op.fichaCorrida ?? []) {
-    if (f.status !== "pendente" || !f.cooperadoId || !f.mesReferencia) continue;
-    if (cooperadoId && f.cooperadoId !== cooperadoId) continue;
-    const k = `${f.cooperadoId}|${f.mesReferencia}`;
-    if (seen.has(k)) continue;
-    seen.add(k);
-    jobs.push({
-      cooperadoId: f.cooperadoId,
-      mesReferencia: f.mesReferencia,
-      cooperativaId: f.cooperativaId ?? "",
-    });
+function cpfDigits(cpf?: string): string {
+  return (cpf ?? "").replace(/\D/g, "");
+}
+
+function nomeNorm(n: string): string {
+  return n.trim().toLowerCase().replace(/\s+/g, " ");
+}
+
+/** Mesmo titular (CPF/nome) — compras HB podem estar em ID duplicado. */
+export function titularCooperadoIds(cooperados: Cooperado[], cooperadoId: string): string[] {
+  const ids = new Set<string>([cooperadoId]);
+  const ref = cooperados.find((c) => c.id === cooperadoId);
+  if (!ref) return [...ids];
+  const cpf = cpfDigits(ref.cpfCnpj);
+  const nome = nomeNorm(ref.nomeCompleto);
+  for (const c of cooperados) {
+    if (cpf.length >= 11 && cpfDigits(c.cpfCnpj) === cpf) ids.add(c.id);
+    else if (nome && nomeNorm(c.nomeCompleto) === nome) ids.add(c.id);
   }
-  return jobs.sort((a, b) => a.mesReferencia.localeCompare(b.mesReferencia));
+  return [...ids];
+}
+
+function mesesPagamentoOp(p: PagamentoCooperadoRegistro): string[] {
+  if (p.mesesReferencia?.length) return [...p.mesesReferencia].sort();
+  return [p.mesReferencia];
+}
+
+/** Meses em aberto que devem refletir compras HB na ficha (nuvem). */
+export function collectContaCoopSyncJobs(
+  op: OperacionalSyncPayload,
+  cooperadoIdFilter?: string
+): Array<{ cooperadoId: string; mesReferencia: string; cooperativaId: string }> {
+  const map = new Map<string, { cooperadoId: string; mesReferencia: string; cooperativaId: string }>();
+  const add = (cooperadoId: string, mesReferencia: string, cooperativaId: string) => {
+    if (!cooperadoId?.trim() || !mesReferencia?.trim()) return;
+    if (cooperadoIdFilter && cooperadoId !== cooperadoIdFilter) return;
+    const k = `${cooperadoId}|${mesReferencia}`;
+    if (!map.has(k)) {
+      map.set(k, { cooperadoId, mesReferencia, cooperativaId: cooperativaId ?? "" });
+    }
+  };
+
+  for (const f of op.fichaCorrida ?? []) {
+    if (f.status !== "pendente") continue;
+    add(f.cooperadoId, f.mesReferencia, f.cooperativaId ?? "");
+  }
+
+  for (const p of op.pagamentosCooperado ?? []) {
+    if (p.status !== "aguardando_confirmacao") continue;
+    for (const mes of mesesPagamentoOp(p)) {
+      add(p.cooperadoId, mes, p.cooperativaId ?? "");
+    }
+  }
+
+  return [...map.values()].sort(
+    (a, b) => a.mesReferencia.localeCompare(b.mesReferencia) || a.cooperadoId.localeCompare(b.cooperadoId)
+  );
 }
 
 async function patchOperacionalDescontos(
   supabase: SupabaseClient,
   cnpj: string,
   op: OperacionalSyncPayload,
-  jobs: Array<{ cooperadoId: string; mesReferencia: string; cooperativaId: string }>
+  jobs: Array<{ cooperadoId: string; mesReferencia: string; cooperativaId: string }>,
+  cooperadosCadastro: Cooperado[]
 ): Promise<{ patched: number; checked: number }> {
   const digits = normalizeCnpj(cnpj);
   let patched = 0;
@@ -75,10 +116,11 @@ async function patchOperacionalDescontos(
   const arquivos = [...(op.arquivosMensais ?? [])];
 
   for (const job of jobs) {
+    const titularIds = titularCooperadoIds(cooperadosCadastro, job.cooperadoId);
     const remote = await listCooperadoContaCoopDescontosAbateValorReceber(
       supabase,
       digits,
-      job.cooperadoId,
+      titularIds,
       job.mesReferencia
     );
     const descontos = dedupeDescontosContaCoopRemotos(remote);
@@ -139,7 +181,8 @@ export async function repairOperacionalContaCoopDescontosForCooperado(
   const op = await fetchOperacionalSync(supabase, digits);
   if (!op) return { patched: 0, checked: 0 };
 
-  let jobs = mesesPendentesOperacional(op, cooperadoId);
+  const cooperadosCadastro = await fetchAllCooperadosFromStorage(supabase, digits);
+  let jobs = collectContaCoopSyncJobs(op, cooperadoId);
   if (opts?.mesReferencia) {
     jobs = jobs.filter((j) => j.mesReferencia === opts.mesReferencia);
     if (!jobs.length) {
@@ -148,7 +191,52 @@ export async function repairOperacionalContaCoopDescontosForCooperado(
   }
   if (!jobs.length) return { patched: 0, checked: 0 };
 
-  return patchOperacionalDescontos(supabase, digits, op, jobs);
+  return patchOperacionalDescontos(supabase, digits, op, jobs, cooperadosCadastro);
+}
+
+export type HbAuthorizeProjecaoAReceberResult = {
+  status: "synced" | "unchanged" | "pending";
+  patched: number;
+  checked: number;
+  error?: string;
+};
+
+/**
+ * Pós-authorize (servidor): projeta transações HB → contaCoopDescontos no operacional.json.
+ * Idempotente — reprocessar duplicate RPC só re-sincroniza (dedupe hbTransactionId na nuvem).
+ */
+export async function projectContaCoopDescontosAfterHbAuthorize(
+  supabase: SupabaseClient,
+  cnpj: string,
+  cooperadoId: string,
+  opts?: { mesReferencia?: string }
+): Promise<HbAuthorizeProjecaoAReceberResult> {
+  const run = () =>
+    repairOperacionalContaCoopDescontosForCooperado(supabase, cnpj, cooperadoId, {
+      mesReferencia: opts?.mesReferencia,
+    });
+
+  try {
+    const first = await run();
+    const status = first.patched > 0 ? "synced" : "unchanged";
+    return { status, patched: first.patched, checked: first.checked };
+  } catch (e1) {
+    const msg1 = e1 instanceof Error ? e1.message : "projecao_failed";
+    try {
+      await new Promise((r) => setTimeout(r, 350));
+      const second = await run();
+      const status = second.patched > 0 ? "synced" : "unchanged";
+      return { status, patched: second.patched, checked: second.checked };
+    } catch (e2) {
+      const msg2 = e2 instanceof Error ? e2.message : msg1;
+      return {
+        status: "pending",
+        patched: 0,
+        checked: 0,
+        error: msg2,
+      };
+    }
+  }
 }
 
 /** Reconcilia operacional.json × HB para todos os cooperados com ficha pendente. */
@@ -160,8 +248,9 @@ export async function repairOperacionalContaCoopDescontosCooperativa(
   const op = await fetchOperacionalSync(supabase, digits);
   if (!op) return { patched: 0, checked: 0 };
 
-  const jobs = mesesPendentesOperacional(op);
+  const cooperadosCadastro = await fetchAllCooperadosFromStorage(supabase, digits);
+  const jobs = collectContaCoopSyncJobs(op);
   if (!jobs.length) return { patched: 0, checked: 0 };
 
-  return patchOperacionalDescontos(supabase, digits, op, jobs);
+  return patchOperacionalDescontos(supabase, digits, op, jobs, cooperadosCadastro);
 }

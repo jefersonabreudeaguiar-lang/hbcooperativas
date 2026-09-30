@@ -4,7 +4,6 @@ import { useAuth } from "@/modules/auth/AuthProvider";
 import { useAppDataSelector } from "@/hooks/useAppData";
 import { canUser, canGerenciarEquipe, getUserFuncaoLabel, isDiretoriaRole, isResponsavelRole } from "@/permissions";
 import { canAccessPainelResponsavel } from "@/lib/security/responsavelPanelAccess";
-import { getData } from "@/services/dataStore";
 import { resolverCooperadoIdCanonico } from "@/services/cooperadoCloudService";
 import { getUserCooperativaId } from "@/utils/cooperativa";
 import type { Action, Resource } from "@/types";
@@ -34,9 +33,15 @@ export function usePermissions() {
   const isCooperado = user?.role === "cooperado";
   const isResponsavel = authSubject ? isResponsavelRole(authSubject.role) : false;
   /** Responsável, tesoureiro ou admin — quem opera conferência/correções na diretoria. */
-  const isDiretoria = authSubject
-    ? isDiretoriaRole(authSubject.role) && canAccessPainelResponsavel(authSubject, getData())
-    : false;
+  const isDiretoria = useAppDataSelector(
+    (data) =>
+      Boolean(
+        authSubject &&
+          isDiretoriaRole(authSubject.role) &&
+          canAccessPainelResponsavel(authSubject, data)
+      ),
+    [authSubject?.id, authSubject?.email, authSubject?.role, authSubject?.cooperadoId, authSubject?.cooperativaId]
+  );
   const podeGerenciarEquipe = authSubject ? canGerenciarEquipe(authSubject) : false;
   const funcaoLabel = user ? getUserFuncaoLabel(user) : "";
 

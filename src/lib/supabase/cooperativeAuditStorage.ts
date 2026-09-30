@@ -127,3 +127,62 @@ export async function checkCooperativeAuditSchema(supabase: SupabaseClient): Pro
   const { error } = await supabase.from("cooperative_audit_log").select("id").limit(1);
   return !error || !/cooperative_audit_log/i.test(error.message ?? "");
 }
+
+/** Evidência de confirmação de pagamento pelo cooperado (monotonicidade H8.9.106). */
+export type PagamentoConfirmacaoAuditEvidence = {
+  pagamentoId: string;
+  confirmedAt: string;
+};
+
+const PAGAMENTO_CONFIRMACAO_APROVAR =
+  /confirmou pagamento(?: e assinou recibo| com assinatura)/i;
+
+/** Não estabelece confirmação inicial — só conferência pós-assinatura. */
+const PAGAMENTO_APROVAR_RECIBO_CONFERIDO = /recibo assinado conferido/i;
+
+function isAuditConfirmacaoCooperadoPagamento(row: {
+  action: string;
+  summary: string;
+}): boolean {
+  if (row.action !== "aprovar") return false;
+  if (PAGAMENTO_APROVAR_RECIBO_CONFERIDO.test(row.summary)) return false;
+  return PAGAMENTO_CONFIRMACAO_APROVAR.test(row.summary);
+}
+
+/**
+ * Consulta em lote eventos de confirmação de pagamento (cooperado).
+ * Usado somente quando o payload pode regredir um pagamento já confirmado.
+ */
+export async function fetchPagamentoConfirmacaoAuditEvidenceBatch(
+  supabase: SupabaseClient,
+  cooperativeCnpj: string,
+  pagamentoIds: string[]
+): Promise<Map<string, PagamentoConfirmacaoAuditEvidence>> {
+  const out = new Map<string, PagamentoConfirmacaoAuditEvidence>();
+  const uniqueIds = [...new Set(pagamentoIds.filter(Boolean))];
+  if (uniqueIds.length === 0) return out;
+
+  const { data, error } = await supabase
+    .from("cooperative_audit_log")
+    .select("entity_id, action, summary, occurred_at")
+    .eq("cooperative_cnpj", cooperativeCnpj)
+    .eq("entity_type", "pagamento")
+    .in("entity_id", uniqueIds)
+    .order("occurred_at", { ascending: false });
+
+  if (error || !data?.length) return out;
+
+  for (const row of data as {
+    entity_id: string;
+    action: string;
+    summary: string;
+    occurred_at: string;
+  }[]) {
+    const id = row.entity_id;
+    if (!id || out.has(id)) continue;
+    if (!isAuditConfirmacaoCooperadoPagamento(row)) continue;
+    out.set(id, { pagamentoId: id, confirmedAt: row.occurred_at });
+  }
+
+  return out;
+}

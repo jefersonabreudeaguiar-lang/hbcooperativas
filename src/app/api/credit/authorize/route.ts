@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { repairOperacionalContaCoopDescontosForCooperado } from "@/lib/hb-credit/repairOperacionalContaCoopDescontos";
+import { projectContaCoopDescontosAfterHbAuthorize } from "@/lib/hb-credit/repairOperacionalContaCoopDescontos";
 import { authorizePayment, parseQrPayload } from "@/lib/supabase/contaCoopStorage";
 import { requireCreditApi, requireCreditCnpj, resolveCreditPaymentCooperadoId } from "@/lib/security/creditGuard";
 import { normalizeCnpj } from "@/utils/cooperativa";
@@ -51,12 +51,20 @@ export async function POST(request: Request) {
     useCashback: Boolean(body?.useCashback),
   });
 
-  if (!result.ok) return NextResponse.json({ error: result.error }, { status: 400 });
+  if (!result.ok) return NextResponse.json({ error: result.error, code: result.code }, { status: 400 });
 
   const mesReferencia = String(body?.mesReferencia ?? "").trim() || undefined;
-  void repairOperacionalContaCoopDescontosForCooperado(gate.ctx.supabase, cnpj, cooperadoId, {
-    mesReferencia,
-  }).catch(() => {});
+  const projecaoAReceber = await projectContaCoopDescontosAfterHbAuthorize(
+    gate.ctx.supabase,
+    cnpj,
+    cooperadoId,
+    { mesReferencia }
+  );
 
-  return NextResponse.json(result);
+  return NextResponse.json({
+    ...result,
+    projecaoAReceber,
+    financeiroConfirmado: true,
+    projecaoPendente: projecaoAReceber.status === "pending",
+  });
 }

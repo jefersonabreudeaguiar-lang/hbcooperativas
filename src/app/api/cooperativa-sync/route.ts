@@ -11,7 +11,22 @@ import {
   type ContratosSyncPayload,
   type OperacionalSyncPayload,
 } from "@/lib/supabase/cooperativaSyncStorage";
-import { deleteAllNotasForCnpj } from "@/lib/supabase/notasStorage";
+import {
+  deleteAllNotasForCnpj,
+  fetchNotasFromStorage,
+  fetchNotasFromTable,
+  mergeNotasSources,
+} from "@/lib/supabase/notasStorage";
+import { avaliarFullResetOperacionalCompletude } from "@/services/cooperativaSyncCloudService";
+import {
+  aplicarPreservacaoPagamentosConfirmadosNoOperacionalComAudit,
+  sanitizarOperacionalSyncPayload,
+} from "@/services/pagamentoIntegridadeService";
+import {
+  aplicarPreservacaoFinanceiraFullResetNoOperacional,
+} from "@/services/pagamentoRegistroMerge";
+import { reconciliarFichaFromNotasConferidas } from "@/services/notaPedidoService";
+import { markHbStaleBeforeOperacionalUpload } from "@/modules/hb-credit/engine/operationalAuthoritativeCreditBaseChange";
 
 export async function GET(request: Request) {
   if (!isSupabaseConfigured()) {
@@ -32,10 +47,16 @@ export async function GET(request: Request) {
     return NextResponse.json({ configured: false, contratos: null, operacional: null });
   }
 
-  const [contratos, operacional] = await Promise.all([
+  const [contratos, operacionalRaw] = await Promise.all([
     fetchContratosSync(supabase, cnpj),
     fetchOperacionalSync(supabase, cnpj),
   ]);
+
+  const operacional = operacionalRaw
+    ? operacionalRaw.fullReset === true
+      ? operacionalRaw
+      : sanitizarOperacionalSyncPayload(operacionalRaw, reconciliarFichaFromNotasConferidas)
+    : null;
 
   return NextResponse.json({ configured: true, contratos, operacional });
 }
@@ -83,11 +104,90 @@ export async function POST(request: Request) {
   }
 
   if (section === "operacional") {
-    const payload = body.payload as OperacionalSyncPayload;
+    const existing = await fetchOperacionalSync(supabase, cnpj);
+    const raw = body.payload as OperacionalSyncPayload;
+    if (existing?.fullReset === true) {
+      const prevVer = existing.operationalResetVersion ?? 0;
+      const nextVer = raw.operationalResetVersion ?? 0;
+      const restoreScriptPublish = raw.fullReset === true && nextVer > prevVer;
+      if (!restoreScriptPublish) {
+        return NextResponse.json(
+          {
+            error:
+              "A nuvem está com backup restaurado (somente leitura). No app, use Início → Restaurar da nuvem.",
+            code: "OPERACIONAL_RESTORE_LOCK",
+          },
+          { status: 423 }
+        );
+      }
+    }
+
+    if (raw.fullReset === true) {
+      const [{ notas: tableNotas }, storageNotas] = await Promise.all([
+        fetchNotasFromTable(supabase, cnpj),
+        fetchNotasFromStorage(supabase, cnpj),
+      ]);
+      const conferidasContext = mergeNotasSources(tableNotas, storageNotas);
+      const completude = avaliarFullResetOperacionalCompletude({
+        fullReset: true,
+        payload: raw,
+        conferidasNotas: conferidasContext,
+      });
+      if (completude.verdict === "block") {
+        return NextResponse.json(
+          {
+            error:
+              "Publicação operacional com fullReset não persistida: snapshot incompleto em relação às notas conferidas conhecidas (identidade nota↔ficha).",
+            code: "OPERACIONAL_FULLRESET_INCOMPLETO",
+          },
+          { status: 409 }
+        );
+      }
+    }
+
+    let payload = sanitizarOperacionalSyncPayload(raw, reconciliarFichaFromNotasConferidas);
+    const preservacao = await aplicarPreservacaoPagamentosConfirmadosNoOperacionalComAudit(
+      supabase,
+      cnpj,
+      existing,
+      payload
+    );
+    payload = preservacao.payload;
+    if (raw.fullReset === true) {
+      payload = aplicarPreservacaoFinanceiraFullResetNoOperacional(existing, payload);
+    }
+    if (guard.session) {
+      for (const blocked of preservacao.blockedDowngrades) {
+        await logServerMutationAudit(supabase, guard.session, cnpj, {
+          action: "bloquear",
+          entityType: "pagamento",
+          entityId: blocked.pagamentoId,
+          summary: `Sync operacional: downgrade protegido (${blocked.incomingStatus} → mantido ${blocked.cloudStatus}). Motivo: ${blocked.motivo}.`,
+        });
+      }
+    }
     if (payload.wipeNotas === true) {
       await deleteAllNotasForCnpj(supabase, cnpj);
     }
-    const uploaded = await uploadOperacionalSync(supabase, cnpj, payload);
+
+    const staleGuard = await markHbStaleBeforeOperacionalUpload(supabase, {
+      cnpj,
+      nextOperacionalSanitized: payload,
+      actorUserId: guard.session?.sub ?? "operacional_sync",
+      staleReason: "pix_operacional_sync_upload",
+      auditSession: guard.session,
+    });
+    if (!staleGuard.ok) {
+      return NextResponse.json(
+        { error: staleGuard.error, code: staleGuard.code ?? "HB_STALE_GUARD_FAILED" },
+        { status: 503 }
+      );
+    }
+
+    const uploaded = await uploadOperacionalSync(supabase, cnpj, payload, {
+      existingOperacional: existing,
+      skipPagamentoConfirmadoProtection: true,
+    });
     if (!uploaded.ok) return NextResponse.json({ error: uploaded.error }, { status: 500 });
     if (guard.session) {
       await logServerMutationAudit(supabase, guard.session, cnpj, {

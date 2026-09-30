@@ -62,17 +62,7 @@ export function listarResolvidosInicioCooperado(
 
   for (const p of data.pagamentosCooperado) {
     if (!pertencePagamento(p.cooperadoId) || p.status !== "confirmado") continue;
-    if (mesesPagamentoConfirmadoExibido.has(p.mesReferencia)) continue;
     mesesPagamentoConfirmadoExibido.add(p.mesReferencia);
-    const resolvidoEm = p.assinadoEm ?? p.updatedAt ?? p.pagoEm;
-    pushItem(lista, vistos, {
-      id: `pagamento_${p.id}`,
-      tipo: "pagamento",
-      titulo: "Recebimento confirmado",
-      subtitulo: `${formatMesReferencia(p.mesReferencia)} · ${formatCurrency(p.valorLiquido)}`,
-      resolvidoEm,
-      href: "/ficha-corrida",
-    });
   }
 
   for (const m of data.mensalidades.filter((x) => x.cooperadoId === cooperadoId || x.cooperadoId === canonico)) {

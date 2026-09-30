@@ -1,6 +1,64 @@
 /** Fração da altura da foto acima da linha guia (área da assinatura no papel). */
 export const ASSINATURA_GUIA_CORTE_RATIO = 0.68;
 
+/** Tamanho alvo do data URL (caracteres) — margem para o restante do JSON no Storage. */
+export const ASSINATURA_DATAURL_TARGET_CHARS = 180_000;
+
+export function encodeAssinaturaCanvas(canvas: HTMLCanvasElement, quality = 0.85): string {
+  return canvas.toDataURL("image/jpeg", quality);
+}
+
+async function renderNormalizedAssinaturaCanvas(
+  dataUrl: string,
+  outWidth: number
+): Promise<HTMLCanvasElement> {
+  const img = await loadImage(dataUrl);
+  const outH = Math.max(48, Math.round((img.height / img.width) * outWidth));
+  const canvas = document.createElement("canvas");
+  canvas.width = outWidth;
+  canvas.height = outH;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) throw new Error("Canvas indisponível.");
+  ctx.fillStyle = "#ffffff";
+  ctx.fillRect(0, 0, outWidth, outH);
+  ctx.drawImage(img, 0, 0, outWidth, outH);
+  return canvas;
+}
+
+/** Reduz JPEG (largura/qualidade) para caber na nuvem sem perder legibilidade da firma. */
+export async function compressAssinaturaDataUrlForStorage(
+  dataUrl: string,
+  targetChars = ASSINATURA_DATAURL_TARGET_CHARS
+): Promise<{ dataUrl: string; hash: string }> {
+  if (typeof document === "undefined") {
+    const hash = await hashAssinaturaDataUrl(dataUrl);
+    return { dataUrl, hash };
+  }
+
+  let width = 480;
+  let quality = 0.88;
+
+  for (let attempt = 0; attempt < 10; attempt += 1) {
+    const canvas = await renderNormalizedAssinaturaCanvas(dataUrl, width);
+    const encoded = encodeAssinaturaCanvas(canvas, quality);
+    if (encoded.length <= targetChars || (width <= 300 && quality <= 0.52)) {
+      const hash = await hashAssinaturaDataUrl(encoded);
+      return { dataUrl: encoded, hash };
+    }
+    if (quality > 0.58) {
+      quality = Math.max(0.52, quality - 0.08);
+    } else {
+      width = Math.max(300, Math.floor(width * 0.88));
+      quality = 0.82;
+    }
+  }
+
+  const canvas = await renderNormalizedAssinaturaCanvas(dataUrl, 300);
+  const encoded = encodeAssinaturaCanvas(canvas, 0.52);
+  const hash = await hashAssinaturaDataUrl(encoded);
+  return { dataUrl: encoded, hash };
+}
+
 export async function hashAssinaturaDataUrl(dataUrl: string): Promise<string> {
   const base64 = dataUrl.split(",")[1] ?? "";
   const binary = atob(base64);
@@ -21,7 +79,7 @@ function loadImage(src: string): Promise<HTMLImageElement> {
   });
 }
 
-/** Recorta região acima da linha guia, normaliza e gera PNG para uso nos documentos. */
+/** Recorta região acima da linha guia, normaliza e gera JPEG para uso nos documentos. */
 export async function processarFotoAssinaturaPapel(
   file: File,
   corteRatio = ASSINATURA_GUIA_CORTE_RATIO
@@ -88,9 +146,7 @@ export async function processarFotoAssinaturaPapel(
     octx.fillRect(0, 0, outW, outH);
     octx.drawImage(work, minX, minY, trimW, trimH, 0, 0, outW, outH);
 
-    const dataUrl = out.toDataURL("image/png");
-    const hash = await hashAssinaturaDataUrl(dataUrl);
-    return { dataUrl, hash };
+    return compressAssinaturaDataUrlForStorage(encodeAssinaturaCanvas(out, 0.88));
   } finally {
     URL.revokeObjectURL(objectUrl);
   }

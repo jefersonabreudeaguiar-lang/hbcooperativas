@@ -15,12 +15,12 @@ import { Input, FormField } from "@/components/ui/Form";
 import { AlertBanner } from "@/components/ui/AlertBanner";
 import { updateData, addAuditEntry } from "@/services/dataStore";
 import { pushCooperadoToCloud } from "@/services/cooperadoCloudService";
-import { getMesQuantoVouReceber } from "@/services/cooperadoEntregasService";
+import { bicCentralMesPrincipalQuantoVouReceber } from "@/services/bicLeituraCentralCooperado";
 import { getStatusCotaCooperado } from "@/services/notaPedidoService";
 import { resolveCooperativaCnpj } from "@/services/notaPedidoCloudService";
 import { formatCPFCNPJ, formatPhone, formatMesReferencia, getCurrentMesReferencia } from "@/utils/format";
 import { getUserCooperativaId, getUserCooperativaNome } from "@/utils/cooperativa";
-import { cooperadoPrecisaCadastrarPix } from "@/utils/pix";
+import { cooperadoPrecisaCadastrarPix, normalizarChavePixBrCode } from "@/utils/pix";
 import { AssinaturaCadastroPanel } from "@/components/cooperado/AssinaturaCadastroPanel";
 import { cooperadoUsaAssinaturaCadastroPilot } from "@/config/assinaturaCadastroPilot";
 import { cooperadoPrecisaCadastrarAssinatura } from "@/services/cooperadoAssinaturaService";
@@ -64,7 +64,7 @@ export default function MeuCadastroContent() {
 
   const mesReferencia = useMemo(() => {
     if (!data || !cooperadoId) return getCurrentMesReferencia();
-    return getMesQuantoVouReceber(data, cooperadoId, coopId);
+    return bicCentralMesPrincipalQuantoVouReceber(data, cooperadoId, coopId);
   }, [data, cooperadoId, coopId]);
 
   const statusCota = useMemo(() => {
@@ -91,9 +91,10 @@ export default function MeuCadastroContent() {
     if (!user) return;
     setPixError("");
     const now = new Date().toISOString();
+    const chaveNormalizada = normalizarChavePixBrCode(chavePix);
     const cooperadoAtualizado: typeof cooperado = {
       ...cooperado,
-      chavePix: chavePix.trim(),
+      chavePix: chaveNormalizada,
       pixValido: true,
       pixInvalidoMotivo: undefined,
       updatedAt: now,

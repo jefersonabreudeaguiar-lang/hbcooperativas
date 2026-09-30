@@ -3,7 +3,7 @@
  * Uso: npm run test:cooperado-financeiro
  */
 import assert from "node:assert/strict";
-import { cooperadoFinanceiroLocalAusente, notasSyncProvavelmenteCompleto } from "../src/services/fichaSyncGuard.ts";
+import { cooperadoFinanceiroLocalAusente, cooperadoFinanceiroBloqueiaEntradaApp, notasSyncProvavelmenteCompleto } from "../src/services/fichaSyncGuard.ts";
 import {
   buildValorExibicaoCooperadoOpts,
   getDescontosExtrasExibicaoCooperado,
@@ -16,6 +16,10 @@ import {
   purgarFichasInvalidas,
   mergeArquivosMensaisFromCloud,
   reconciliarFichaFromNotasConferidas,
+  registrarPagamentoCooperado,
+  resumoComplementaresPosPagamento,
+  getTotalAPagarCooperado,
+  getPagamentoAguardandoCooperado,
 } from "../src/services/notaPedidoService.ts";
 import { setContaCoopDescontosMemoria } from "../src/lib/hb-credit/contaCoopDescontosMemory.ts";
 import {
@@ -26,14 +30,21 @@ import {
 import {
   getValorQuantoVouReceber,
   getConsolidadoFinanceiroCooperado,
+  cooperadoExibirValorReceberInicio,
+  cooperadoPendentePagamentoResponsavel,
   listarMesesPendentesPagamentoResponsavel,
   listarMesesPendentesQuantoVouReceber,
+  getConsolidadoFinanceiroCooperado,
 } from "../src/services/cooperadoEntregasService.ts";
 import {
   getCreditoBaseContaCoopReais,
   getCreditoBaseCooperadoCents,
 } from "../src/modules/hb-credit/engine/creditBaseFromFicha.ts";
 import { resolveMobileCooperadoId } from "../src/lib/hb-credit/mobileCooperadoLink.ts";
+import {
+  posProcessarIntegridadePagamentosCooperativa,
+  sanitizarOperacionalSyncPayload,
+} from "../src/services/pagamentoIntegridadeService.ts";
 import type { AppData, FichaCorrida, NotaPedido } from "../src/types/index.ts";
 
 const COOP = "coop-1";
@@ -205,8 +216,84 @@ function nota(id: string, status: NotaPedido["status"]): NotaPedido {
     },
   ]);
   const inicio = getValorQuantoVouReceber(data, COOPERADO, COOP);
-  assert.equal(inicio.valor, 70, "A receber deve abater HB mesmo aguardando assinatura do recibo");
+  assert.equal(inicio.valor, 0, "Após PIX da cooperativa, a receber zera até assinar o recibo");
+  assert.equal(inicio.valorRecibo, 100, "Valor pago fica no registro do recibo");
   assert.equal(inicio.aguardandoAssinatura, true);
+}
+
+{
+  const MES = "2026-08";
+  let data = baseData({
+    fichaCorrida: [ficha("f1", "n1")],
+    notasPedido: [nota("n1", "conferida")],
+  });
+  data = registrarPagamentoCooperado(data, COOPERADO, MES, "Responsável teste");
+  const pg = data.pagamentosCooperado.find((p) => p.status === "aguardando_confirmacao");
+  assert.ok(pg, "registro de pagamento criado");
+  const inicio = cooperadoExibirValorReceberInicio(data, COOPERADO, COOP);
+  assert.equal(inicio.valor, 0, "Início: a receber zero após pagamento registrado");
+  assert.equal(inicio.valorRecibo, pg!.valorLiquido, "Início: mostra valor do recibo");
+  assert.equal(inicio.aguardandoAssinatura, true);
+  const relatorio = getResumoValorAPagarRelatorio(data, COOPERADO, MES, COOP);
+  assert.equal(relatorio.valorLiquido, 0, "Relatório a receber zera com pagamento aguardando assinatura");
+  const fin = getConsolidadoFinanceiroCooperado(data, COOPERADO, COOP);
+  assert.equal(fin.valorLiquido, 0, "Consolidado a receber zera");
+  assert.equal(fin.resumo.valorLiquido, pg!.valorLiquido, "Resumo congelado no snapshot do pagamento");
+}
+
+{
+  const MES = "2026-08";
+  const data = baseData({
+    fichaCorrida: [
+      { ...ficha("f1", "n1", MES), status: "pago" },
+      { ...ficha("f2", "n2", MES), valorBruto: 50, valorLiquido: 50 },
+    ],
+    notasPedido: [
+      nota("n1", "pago"),
+      { ...nota("n2", "conferida"), valorLiquido: 50, valorBruto: 50 },
+    ],
+    pagamentosCooperado: [
+      {
+        id: "pg_confirmado_n2",
+        cooperativaId: COOP,
+        cooperadoId: COOPERADO,
+        mesReferencia: MES,
+        valorBruto: 100,
+        descontoCooperativa: 0,
+        descontosExtras: [],
+        valorLiquido: 100,
+        fichaIds: ["f1"],
+        notaPedidoIds: ["n1"],
+        status: "confirmado",
+        pagoPor: "Resp",
+        pagoEm: "2026-08-25T12:00:00.000Z",
+        assinadoEm: "2026-08-26T12:00:00.000Z",
+        createdAt: "2026-08-25T12:00:00.000Z",
+      },
+    ],
+    arquivosMensais: [
+      {
+        id: "am_ago",
+        cooperativaId: COOP,
+        cooperadoId: COOPERADO,
+        mesReferencia: MES,
+        notaPedidoIds: ["n1"],
+        pagamentoIds: ["pg_confirmado_n2"],
+        mensalidadeFixa: 0,
+        updatedAt: "2026-08-26T12:00:00.000Z",
+      },
+    ],
+  });
+  const aReceber = getResumoValorAPagarRelatorio(data, COOPERADO, MES, COOP).valorLiquido;
+  const card = getValorQuantoVouReceber(data, COOPERADO, COOP);
+  const baseMes = getResumoPagamentoCooperado(data, COOPERADO, MES, COOP);
+  assert.equal(baseMes.valorEntregas, 50, "Resumo vivo considera só a nova ficha pendente");
+  assert.ok(aReceber > 0, "Nova entrega após recibo assinado volta a gerar valor a receber");
+  const complementar = resumoComplementaresPosPagamento(data, COOPERADO, MES, COOP);
+  assert.ok(complementar, "Resumo complementar pós-PIX");
+  assert.equal(aReceber, complementar.valorLiquido, "Relatório e resumo alinhados");
+  assert.equal(card.valor, aReceber, "Início/ficha refletem o pendente novo");
+  assert.equal(card.aguardandoAssinatura, false);
 }
 
 {
@@ -231,6 +318,51 @@ function nota(id: string, status: NotaPedido["status"]): NotaPedido {
   ]);
   const inicio = getValorQuantoVouReceber(data, COOPERADO, COOP);
   assert.equal(inicio.valor, 100, "estorno HB deve restaurar valor a receber");
+}
+
+{
+  const MES = "2026-08";
+  const data = baseData({
+    fichaCorrida: [{ ...ficha("f1", "n1", MES), status: "pago" }],
+    notasPedido: [nota("n1", "pago")],
+    pagamentosCooperado: [
+      {
+        id: "pg_confirmado",
+        cooperativaId: COOP,
+        cooperadoId: COOPERADO,
+        mesReferencia: MES,
+        valorBruto: 100,
+        descontoCooperativa: 0,
+        descontosExtras: [{ tipo: "mensalidade", motivo: "Mensalidade ago/2026", valor: 11.5 }],
+        valorLiquido: 88.5,
+        fichaIds: ["f1"],
+        notaPedidoIds: ["n1"],
+        status: "confirmado",
+        pagoPor: "Responsável",
+        pagoEm: "2026-08-25T12:00:00.000Z",
+        assinadoEm: "2026-08-26T12:00:00.000Z",
+        reciboHtml: "<p>recibo</p>",
+        createdAt: "2026-08-25T12:00:00.000Z",
+        updatedAt: "2026-08-26T12:00:00.000Z",
+      },
+    ],
+  });
+  const comHb = persistDescontosContaCoopNoArquivo(data, COOPERADO, MES, COOP, [
+    {
+      motivo: "Compra HB Créditos — não pode alterar mês confirmado",
+      valorReais: 40,
+      tipo: "conta_coop",
+      createdAt: "2026-08-27T12:00:00.000Z",
+    },
+  ]);
+  const resumo = getResumoPagamentoExibicao(comHb, COOPERADO, MES, COOP);
+  assert.equal(resumo.valorLiquido, 88.5, "mês confirmado mantém valor registrado no pagamento");
+  assert.equal(
+    comHb.arquivosMensais.find((a) => a.cooperadoId === COOPERADO && a.mesReferencia === MES)?.contaCoopDescontos
+      ?.length ?? 0,
+    0,
+    "sync HB não sobrescreve arquivo de mês já confirmado"
+  );
 }
 
 {
@@ -342,6 +474,29 @@ function nota(id: string, status: NotaPedido["status"]): NotaPedido {
     true,
     "ficha com notas ainda não conferidas localmente deve ser incompleto"
   );
+  assert.equal(
+    cooperadoFinanceiroBloqueiaEntradaApp(data, COOPERADO, COOP),
+    false,
+    "com notas locais o app não deve travar em tela cheia"
+  );
+}
+
+// 1b) Ficha órfã (nota ainda não baixada) ≠ financeiro ausente
+{
+  const data = baseData({
+    fichaCorrida: [ficha("f1", "n_só_nuvem"), ficha("f2", "n2_nuvem")],
+    notasPedido: [],
+  });
+  assert.equal(
+    cooperadoFinanceiroLocalAusente(data, COOPERADO, COOP),
+    false,
+    "ficha sem nota local durante sync não deve marcar ausente"
+  );
+  assert.equal(
+    cooperadoFinanceiroBloqueiaEntradaApp(data, COOPERADO, COOP),
+    false,
+    "ficha parcial da nuvem deve liberar navegação"
+  );
 }
 
 // 2) notasSyncProvavelmenteCompleto só conta conferida/pago
@@ -379,6 +534,38 @@ function nota(id: string, status: NotaPedido["status"]): NotaPedido {
   );
 }
 
+// 4b) Mês quitado (ficha pago + nota pago) ≠ financeiro ausente — evita gate eterno
+{
+  const MES = "2026-08";
+  const data = baseData({
+    fichaCorrida: [{ ...ficha("f1", "n1", MES), status: "pago" }],
+    notasPedido: [nota("n1", "pago")],
+    pagamentosCooperado: [
+      {
+        id: "pg_ok",
+        cooperativaId: COOP,
+        cooperadoId: COOPERADO,
+        mesReferencia: MES,
+        valorBruto: 100,
+        descontoCooperativa: 0,
+        descontosExtras: [],
+        valorLiquido: 100,
+        fichaIds: ["f1"],
+        notaPedidoIds: ["n1"],
+        status: "confirmado",
+        pagoPor: "Resp",
+        pagoEm: "2026-08-20T12:00:00.000Z",
+        createdAt: "2026-08-20T12:00:00.000Z",
+      },
+    ],
+  });
+  assert.equal(
+    cooperadoFinanceiroLocalAusente(data, COOPERADO, COOP),
+    false,
+    "histórico pago com ficha na nuvem não deve bloquear cooperado"
+  );
+}
+
 // 5) reconciliar cria ficha a partir de conferidas antes de purgar
 {
   const data = baseData({
@@ -413,8 +600,8 @@ function nota(id: string, status: NotaPedido["status"]): NotaPedido {
       email: "jefersonabreudeaguiar@gmail.com",
       role: "responsavel",
     }),
-    orlando,
-    "responsável no celular mantém vínculo de teste (Orlando)"
+    jeferson,
+    "responsável no celular usa vínculo do próprio cooperado (Jeferson)"
   );
 }
 
@@ -454,6 +641,433 @@ function nota(id: string, status: NotaPedido["status"]): NotaPedido {
   assert.equal(baseReais, fin.valorLiquido, "crédito base HB = valor a receber (não entregas brutas)");
   assert.equal(baseReais, 40, "mensalidade R$60 sobre entrega R$100 → base R$40");
   assert.equal(getCreditoBaseCooperadoCents(data, COOPERADO, COOP), 4000);
+}
+
+{
+  const CLEBER = "c_cleber_phantom";
+  const MES = "2026-08";
+  const data = baseData({
+    cooperados: [
+      {
+        id: CLEBER,
+        cooperativaId: COOP,
+        nomeCompleto: "Cleber phantom",
+        cpf: "54718015200",
+        status: "ativo",
+        createdAt: "",
+      },
+    ],
+    fichaCorrida: [
+      {
+        ...ficha("f_phantom", "n1", MES),
+        cooperadoId: CLEBER,
+        status: "pago",
+        valorBruto: 500,
+        valorLiquido: 500,
+      },
+    ],
+    notasPedido: [{ ...nota("n1", "pago"), cooperadoId: CLEBER }],
+    pagamentosCooperado: [],
+  });
+  const aPagar = getResumoValorAPagarRelatorio(data, CLEBER, MES, COOP).valorLiquido;
+  assert.ok(aPagar > 0, "Cleber: ficha paga sem pagamentoCooperado deve aparecer com valor");
+  assert.equal(
+    cooperadoPendentePagamentoResponsavel(data, CLEBER, undefined, COOP),
+    true,
+    "Cleber: deve constar na fila Pagar"
+  );
+}
+
+{
+  const CLEITO = "c_cleito_div";
+  const IVAN = "c_ivan_div";
+  const NOTA = "n_div";
+  const MES = "2026-08";
+  const data = baseData({
+    cooperados: [
+      {
+        id: CLEITO,
+        cooperativaId: COOP,
+        nomeCompleto: "Cleito",
+        cpf: "11111111111",
+        status: "ativo",
+        createdAt: "",
+      },
+      {
+        id: IVAN,
+        cooperativaId: COOP,
+        nomeCompleto: "Ivan divisão",
+        cpf: "22222222222",
+        status: "ativo",
+        createdAt: "",
+      },
+    ],
+    notasPedido: [
+      {
+        ...nota(NOTA, "pago"),
+        cooperadoId: CLEITO,
+        mesReferencia: MES,
+        divisaoEntrega: {
+          cooperadoOrigemId: CLEITO,
+          cooperadoOrigemNome: "Cleito",
+          participantes: [
+            { cooperadoId: CLEITO, cooperadoNome: "Cleito" },
+            { cooperadoId: IVAN, cooperadoNome: "Ivan divisão" },
+          ],
+          divididoEm: new Date().toISOString(),
+        },
+      },
+    ],
+    pagamentosCooperado: [
+      {
+        id: "pg_cleito",
+        cooperadoId: CLEITO,
+        cooperativaId: COOP,
+        mesReferencia: MES,
+        status: "confirmado",
+        valorLiquido: 100,
+        valorBruto: 100,
+        pagoEm: new Date().toISOString(),
+        pagoPor: "resp",
+        fichaIds: [],
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      },
+    ],
+    fichaCorrida: [
+      {
+        ...ficha("f_cleito_phantom", NOTA, MES),
+        cooperadoId: CLEITO,
+        status: "pago",
+        valorLiquido: 50,
+      },
+      {
+        ...ficha("f_ivan_phantom", NOTA, MES),
+        cooperadoId: IVAN,
+        status: "pago",
+        valorLiquido: 50,
+      },
+    ],
+  });
+  const fixed = reconciliarFichaFromNotasConferidas(data);
+  const ivanFicha = fixed.fichaCorrida.find((f) => f.cooperadoId === IVAN && f.notaPedidoId === NOTA);
+  assert.equal(
+    ivanFicha?.status,
+    "pendente",
+    "divisão: participante sem PIX não permanece pago quando titular quitou"
+  );
+  assert.equal(
+    cooperadoPendentePagamentoResponsavel(fixed, IVAN, undefined, COOP),
+    true,
+    "Ivan divisão: fila Pagar"
+  );
+}
+
+{
+  const MES = "2026-09";
+  const ENTREGAS = 233.32;
+  let data = baseData({
+    fichaCorrida: [
+      {
+        ...ficha("f_set", "n_set", MES),
+        valorBruto: ENTREGAS,
+        valorLiquido: ENTREGAS,
+        descontos: 0,
+      },
+    ],
+    notasPedido: [{ ...nota("n_set", "conferida"), mesReferencia: MES, valorLiquido: ENTREGAS }],
+  });
+  data = persistDescontosContaCoopNoArquivo(data, COOPERADO, MES, COOP, [
+    {
+      motivo: "Compra HB Créditos — Mercado teste (estornada)",
+      valorReais: 100,
+      tipo: "conta_coop",
+      createdAt: "2026-09-01T17:31:46.000Z",
+    },
+    {
+      motivo: "Estorno HB Créditos — Mercado teste",
+      valorReais: 100,
+      tipo: "conta_coop",
+      createdAt: "2026-09-01T18:00:24.459Z",
+    },
+    {
+      motivo: "Compra HB Créditos — Mercado teste (estornada)",
+      valorReais: 150,
+      tipo: "conta_coop",
+      createdAt: "2026-09-01T18:35:23.000Z",
+    },
+    {
+      motivo: "Estorno HB Créditos — Mercado teste",
+      valorReais: 150,
+      tipo: "conta_coop",
+      createdAt: "2026-09-01T18:41:54.581Z",
+    },
+    {
+      motivo: "Compra HB Créditos — Casa do Cacau (009AEE5F)",
+      valorReais: 79.9,
+      tipo: "conta_coop",
+      createdAt: "2026-09-01T19:22:36.725Z",
+    },
+  ]);
+  const base = getResumoPagamentoCooperado(data, COOPERADO, MES, COOP);
+  const aReceber = getResumoValorAPagarRelatorio(data, COOPERADO, MES, COOP);
+  const esperado = round2(ENTREGAS - 79.9);
+  assert.equal(base.valorLiquido, esperado, "pares estorno zeram; só compra ativa abate");
+  assert.ok(
+    base.descontosExtras.filter((d) => d.tipo === "conta_coop").length >= 3,
+    "resumo deve listar compras (incl. estornadas) e estornos"
+  );
+  assert.ok(
+    base.descontosExtras.some((d) => d.tipo === "credito_avulso" && d.valor === 100),
+    "estorno visível como crédito"
+  );
+  assert.equal(aReceber.valorLiquido, esperado, "exibição/relatório alinhados ao base");
+  assert.equal(
+    getResumoValorAPagarRelatorio(data, COOPERADO, MES, COOP).valorLiquido,
+    esperado,
+    "idempotência: segundo cálculo igual"
+  );
+}
+
+function round2(n: number): number {
+  return Math.round(n * 100) / 100;
+}
+
+{
+  const CLEBER = "c_cleber_sanitize";
+  const payload = {
+    updatedAt: new Date().toISOString(),
+    fichaCorrida: [
+      {
+        id: "fc_phantom",
+        cooperativaId: COOP,
+        cooperadoId: CLEBER,
+        notaPedidoId: "n1",
+        mesReferencia: "2026-08",
+        status: "pago" as const,
+        valorLiquido: 100,
+        valorBruto: 100,
+        descontos: 0,
+        createdAt: new Date().toISOString(),
+      },
+    ],
+    pagamentosCooperado: [],
+    arquivosMensais: [],
+  };
+  const sanitized = sanitizarOperacionalSyncPayload(payload, reconciliarFichaFromNotasConferidas);
+  assert.equal(sanitized.fichaCorrida?.[0]?.status, "pendente", "sync API deve reverter pago fantasma");
+}
+
+{
+  const data = baseData({
+    notasPedido: [nota("n_antiga", "conferida"), { ...nota("n_nova", "conferida"), mesReferencia: "2026-09" }],
+    fichaCorrida: [
+      ficha("f_antiga", "n_antiga", "2026-08"),
+      ficha("f_nova", "n_nova", "2026-09"),
+    ],
+    pagamentosCooperado: [
+      {
+        id: "pg_1",
+        cooperativaId: COOP,
+        cooperadoId: COOPERADO,
+        mesReferencia: "2026-08",
+        valorBruto: 100,
+        descontoCooperativa: 0,
+        descontosExtras: [],
+        valorLiquido: 100,
+        fichaIds: ["f_antiga"],
+        notaPedidoIds: ["n_antiga"],
+        status: "confirmado",
+        pagoPor: "resp",
+        pagoEm: "2026-08-10T12:00:00.000Z",
+        createdAt: "2026-08-10T12:00:00.000Z",
+      },
+    ],
+  });
+  const pos = posProcessarIntegridadePagamentosCooperativa(reconciliarFichaFromNotasConferidas(data));
+  const novaPendente = pos.fichaCorrida.find((f) => f.id === "f_nova");
+  assert.equal(novaPendente?.status, "pendente", "nota nova no mesmo mês calendário não pode herdar PIX antigo");
+  assert.ok(
+    getTotalAPagarCooperado(pos, COOPERADO, undefined, COOP) > 0,
+    "valor a receber deve incluir notas lançadas após pagamento"
+  );
+}
+
+{
+  const data = baseData({
+    notasPedido: [
+      { ...nota("n_no_pix", "conferida"), mesReferencia: "2026-09" },
+      { ...nota("n_pos_pix", "conferida"), mesReferencia: "2026-09", createdAt: "2026-09-22T10:00:00.000Z" },
+    ],
+    pagamentosCooperado: [
+      {
+        id: "pg_mes",
+        cooperativaId: COOP,
+        cooperadoId: COOPERADO,
+        mesReferencia: "2026-09",
+        mesesReferencia: ["2026-09"],
+        valorBruto: 100,
+        descontoCooperativa: 0,
+        descontosExtras: [],
+        valorLiquido: 100,
+        fichaIds: ["f_no_pix"],
+        notaPedidoIds: ["n_no_pix"],
+        status: "confirmado",
+        pagoPor: "resp",
+        pagoEm: "2026-09-21T12:00:00.000Z",
+        createdAt: "2026-09-21T12:00:00.000Z",
+      },
+    ],
+    fichaCorrida: [ficha("f_no_pix", "n_no_pix", "2026-09")],
+  });
+  const rec = reconciliarFichaFromNotasConferidas(data);
+  assert.ok(
+    rec.fichaCorrida.some((f) => f.notaPedidoId === "n_pos_pix" && f.status === "pendente"),
+    "nota conferida após PIX do mês deve gerar ficha pendente"
+  );
+  const pos = posProcessarIntegridadePagamentosCooperativa(rec);
+  assert.equal(
+    pos.fichaCorrida.find((f) => f.notaPedidoId === "n_pos_pix")?.status,
+    "pendente",
+    "posProcessar não pode marcar como pago nota fora do PIX"
+  );
+  assert.ok(
+    getTotalAPagarCooperado(pos, COOPERADO, undefined, COOP) > 0,
+    "cooperado deve ver valor da nota pós-pagamento"
+  );
+  const cardPos = getValorQuantoVouReceber(pos, COOPERADO, COOP);
+  assert.ok(cardPos.valor > 0, "card Quanto vou receber deve refletir nota pós-PIX");
+}
+
+{
+  const data = baseData({
+    notasPedido: [
+      { ...nota("n_no_pix", "conferida"), mesReferencia: "2026-09" },
+      { ...nota("n_pos_pix", "conferida"), mesReferencia: "2026-09", createdAt: "2026-09-22T10:00:00.000Z" },
+    ],
+    pagamentosCooperado: [
+      {
+        id: "pg_mes",
+        cooperativaId: COOP,
+        cooperadoId: COOPERADO,
+        mesReferencia: "2026-09",
+        valorBruto: 100,
+        descontoCooperativa: 0,
+        descontosExtras: [{ tipo: "mensalidade", motivo: "Mensalidade", valor: 60 }],
+        valorLiquido: 40,
+        fichaIds: ["f_no_pix"],
+        notaPedidoIds: ["n_no_pix"],
+        status: "confirmado",
+        pagoPor: "resp",
+        pagoEm: "2026-09-21T12:00:00.000Z",
+        createdAt: "2026-09-21T12:00:00.000Z",
+      },
+    ],
+    fichaCorrida: [ficha("f_no_pix", "n_no_pix", "2026-09")],
+  });
+  const rec = reconciliarFichaFromNotasConferidas(data);
+  const pos = posProcessarIntegridadePagamentosCooperativa(rec);
+  const fin = getConsolidadoFinanceiroCooperado(pos, COOPERADO, COOP);
+  assert.ok(fin.valorLiquido > 0, "consolidado cooperado deve mostrar complemento pós-PIX");
+  assert.equal(
+    fin.resumo.descontosExtras.filter((d) => d.tipo === "mensalidade").length,
+    0,
+    "complemento pós-PIX não repete mensalidade do pagamento antigo"
+  );
+}
+
+{
+  const MES = "2026-09";
+  const data = baseData({
+    notasPedido: [
+      {
+        ...nota("n_foto_antiga", "conferida"),
+        mesReferencia: MES,
+        createdAt: "2026-09-01T10:00:00.000Z",
+        updatedAt: "2026-09-22T18:00:00.000Z",
+        dataConferencia: "2026-09-22T18:00:00.000Z",
+      },
+    ],
+    pagamentosCooperado: [
+      {
+        id: "pg_mes_implicito",
+        cooperativaId: COOP,
+        cooperadoId: COOPERADO,
+        mesReferencia: MES,
+        mesesReferencia: [MES],
+        valorBruto: 500,
+        descontoCooperativa: 0,
+        descontosExtras: [],
+        valorLiquido: 500,
+        fichaIds: [],
+        notaPedidoIds: [],
+        status: "confirmado",
+        pagoPor: "resp",
+        pagoEm: "2026-09-21T12:00:00.000Z",
+        createdAt: "2026-09-21T12:00:00.000Z",
+      },
+    ],
+  });
+  const rec = reconciliarFichaFromNotasConferidas(data);
+  const fichaNova = rec.fichaCorrida.find((f) => f.notaPedidoId === "n_foto_antiga");
+  assert.equal(fichaNova?.status, "pendente", "conferência após PIX não usa só createdAt da foto");
+  const total = getTotalAPagarCooperado(rec, COOPERADO, undefined, COOP);
+  const card = getValorQuantoVouReceber(rec, COOPERADO, COOP);
+  assert.ok(total > 0, "total responsável inclui nota conferida após pagamento");
+  assert.equal(card.valor, total, "card cooperado usa mesma base do responsável");
+}
+
+{
+  const MES = "2026-09";
+  const data = baseData({
+    fichaCorrida: [{ ...ficha("f1", "n1", MES), status: "pago" }],
+    notasPedido: [{ ...nota("n1", "pago"), mesReferencia: MES }],
+    pagamentosCooperado: [
+      {
+        id: "pg_stale_aguardando",
+        cooperativaId: COOP,
+        cooperadoId: COOPERADO,
+        mesReferencia: MES,
+        mesesReferencia: [MES],
+        valorBruto: 123.42,
+        descontoCooperativa: 0,
+        descontosExtras: [],
+        valorLiquido: 123.42,
+        fichaIds: ["f1"],
+        notaPedidoIds: ["n1"],
+        status: "aguardando_confirmacao",
+        pagoPor: "Resp",
+        pagoEm: "2026-09-20T12:00:00.000Z",
+        createdAt: "2026-09-20T12:00:00.000Z",
+      },
+      {
+        id: "pg_confirmado_orlando",
+        cooperativaId: COOP,
+        cooperadoId: COOPERADO,
+        mesReferencia: MES,
+        mesesReferencia: [MES],
+        valorBruto: 123.42,
+        descontoCooperativa: 0,
+        descontosExtras: [],
+        valorLiquido: 123.42,
+        fichaIds: ["f1"],
+        notaPedidoIds: ["n1"],
+        status: "confirmado",
+        assinadoEm: "2026-09-21T14:00:00.000Z",
+        assinaturaCooperado: "data:image/png;base64,abc",
+        pagoPor: "Resp",
+        pagoEm: "2026-09-20T12:00:00.000Z",
+        createdAt: "2026-09-21T14:00:00.000Z",
+      },
+    ],
+  });
+  assert.equal(getPagamentoAguardandoCooperado(data, COOPERADO, MES), undefined);
+  const inicio = cooperadoExibirValorReceberInicio(data, COOPERADO, COOP);
+  assert.equal(inicio.exibir, false, "Início não exibe recibo/valor após confirmado+assinado");
+  assert.equal(inicio.aguardandoAssinatura, false);
+  const card = getValorQuantoVouReceber(data, COOPERADO, COOP);
+  assert.equal(card.aguardandoAssinatura, false);
+  assert.equal(card.valorRecibo, 0);
 }
 
 console.log("OK — guard financeiro cooperado");

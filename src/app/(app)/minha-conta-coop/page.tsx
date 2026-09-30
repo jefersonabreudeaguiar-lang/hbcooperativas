@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { CreditFeatureGate } from "@/components/hb-credit/CreditFeatureGate";
 import { CloudSessionGate } from "@/components/hb-credit/CloudSessionGate";
@@ -25,19 +25,31 @@ import { formatCentsBRL } from "@/modules/hb-credit/engine/money";
 import type { ContaCoopIntent, ContaCoopLedgerEntry, ContaCoopLimiteCooperado } from "@/modules/hb-credit/types";
 import { FINANCIAL_PIN_MIN_LENGTH } from "@/modules/hb-credit/config";
 import { formatLedgerEntryLabel } from "@/lib/hb-credit/ledgerLabels";
-import { getMesPrincipalQuantoVouReceber } from "@/services/cooperadoEntregasService";
+import { bicCentralMesPrincipalQuantoVouReceber } from "@/services/bicLeituraCentralCooperado";
 import { isContaCoopValorReceberPilot } from "@/utils/contaCoopUiVisibility";
+import { notifyHbCreditAccountLoaded } from "@/lib/hb-credit/hbCreditEntryEvents";
+import { HB_CREDIT_LIMITE_SYNCED_EVENT } from "@/lib/hb-credit/hbCreditLimiteSyncEvents";
+import {
+  aplicarHbCreditAccountPersistido,
+  gravarHbCreditAccountPersistido,
+  HB_CREDIT_ACCOUNT_STORAGE_VERSION,
+  lerHbCreditAccountPersistido,
+} from "@/lib/hb-credit/hbCreditAccountPersistencia";
 import { useSyncContaCoopValorReceberPilot } from "@/hooks/useSyncContaCoopValorReceberPilot";
 import { useSyncContaCoopLimiteFromFicha } from "@/hooks/useSyncContaCoopLimiteFromFicha";
 import { PageSkeleton } from "@/components/ui/PageSkeleton";
 import { cn } from "@/utils/format";
+
+function sleepMs(ms: number): Promise<void> {
+  return new Promise((r) => setTimeout(r, ms));
+}
 
 type Tab = "inicio" | "pagar" | "extrato";
 
 export default function MinhaContaCoopPage() {
   return (
     <CreditFeatureGate>
-      <CloudSessionGate>
+      <CloudSessionGate optimistic>
         <MinhaContaCoopContent />
       </CloudSessionGate>
     </CreditFeatureGate>
@@ -49,6 +61,14 @@ function MinhaContaCoopContent() {
   const { user, cooperadoId } = usePermissions();
   const data = useAppData();
   const [tab, setTab] = useState<Tab>("inicio");
+  const [tabEverOpened, setTabEverOpened] = useState<Partial<Record<Tab, boolean>>>({ inicio: true });
+
+  const handleTabChange = useCallback((next: Tab) => {
+    setTabEverOpened((prev) => (prev[next] ? prev : { ...prev, [next]: true }));
+    setTab(next);
+  }, []);
+
+  const tabPanelHidden = useCallback((id: Tab) => (id !== tab ? "hidden" : undefined), [tab]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
@@ -57,6 +77,8 @@ function MinhaContaCoopContent() {
   const [hasPin, setHasPin] = useState(false);
   const [pinResetPending, setPinResetPending] = useState(false);
   const [ledger, setLedger] = useState<ContaCoopLedgerEntry[]>([]);
+  const [ledgerLoading, setLedgerLoading] = useState(false);
+  const [ledgerLoaded, setLedgerLoaded] = useState(false);
   const [pinSetup, setPinSetup] = useState("");
   const [qrInput, setQrInput] = useState("");
   const [showManualQr, setShowManualQr] = useState(false);
@@ -69,6 +91,14 @@ function MinhaContaCoopContent() {
   const [useCashback, setUseCashback] = useState(false);
   const [busy, setBusy] = useState(false);
   const [isOffline, setIsOffline] = useState(false);
+  const [accountRefreshing, setAccountRefreshing] = useState(false);
+  /** Aux syncs (ficha / limite) só após o primeiro fetchCreditAccount — não competem na entrada. */
+  const [auxSyncEnabled, setAuxSyncEnabled] = useState(false);
+  const auxEntrySignaledRef = useRef(false);
+
+  /** Sync-limite na nuvem após conta carregar — alinhado ao BIC sem bloquear a abertura. */
+  const LIMITE_SYNC_DEFER_MS = 2_000;
+  const VALOR_RECEBER_SYNC_DEFER_MS = 1_500;
 
   const cnpj = useMemo(() => {
     if (!user || !data) return "";
@@ -82,21 +112,32 @@ function MinhaContaCoopContent() {
     return data.cooperados.find((c) => c.id === cooperadoId)?.nomeCompleto ?? user?.name ?? "";
   }, [data, cooperadoId, user?.name]);
 
-  const contaCoopSync = useMemo(() => {
-    if (!data || !cooperadoId || !user || !cnpj) return undefined;
+  const contaCoopValorSync = useMemo(() => {
+    if (!auxSyncEnabled || !data || !cooperadoId || !user || !cnpj) return undefined;
     const coopId = getUserCooperativaId(user, data);
     if (!coopId || !isContaCoopValorReceberPilot(cooperadoId, cooperadoNome)) return undefined;
     return {
       cooperadoId,
-      mesReferencia: getMesPrincipalQuantoVouReceber(data, cooperadoId, coopId),
+      mesReferencia: bicCentralMesPrincipalQuantoVouReceber(data, cooperadoId, coopId),
       cooperativaId: coopId,
       cooperadoNome,
       user,
+      enabled: true as const,
     };
-  }, [cnpj, cooperadoId, cooperadoNome, data, user]);
+  }, [auxSyncEnabled, cnpj, cooperadoId, cooperadoNome, data, user]);
 
-  useSyncContaCoopValorReceberPilot(contaCoopSync);
-  useSyncContaCoopLimiteFromFicha(contaCoopSync);
+  const contaCoopLimiteSync = useMemo(() => {
+    if (!contaCoopValorSync) return undefined;
+    return {
+      ...contaCoopValorSync,
+      initialDelayMs: LIMITE_SYNC_DEFER_MS,
+    };
+  }, [contaCoopValorSync]);
+
+  useSyncContaCoopValorReceberPilot(
+    contaCoopValorSync ? { ...contaCoopValorSync, initialDelayMs: VALOR_RECEBER_SYNC_DEFER_MS } : undefined
+  );
+  useSyncContaCoopLimiteFromFicha(contaCoopLimiteSync);
 
   useEffect(() => {
     const sync = () => setIsOffline(!navigator.onLine);
@@ -109,32 +150,95 @@ function MinhaContaCoopContent() {
     };
   }, []);
 
-  const reload = useCallback(async () => {
+  const loadLedger = useCallback(async () => {
     if (!cnpj || !cooperadoId) return;
-    setLoading(true);
+    setLedgerLoading(true);
+    try {
+      const lg = await fetchCreditLedger(cnpj, cooperadoId);
+      setLedger(lg);
+      setLedgerLoaded(true);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Erro ao carregar extrato.");
+    } finally {
+      setLedgerLoading(false);
+    }
+  }, [cnpj, cooperadoId]);
+
+  const reload = useCallback(async (opts?: { background?: boolean }) => {
+    if (!cnpj || !cooperadoId) return;
+    const background = opts?.background ?? false;
+    if (!background) setLoading(true);
+    else setAccountRefreshing(true);
+    if (!background) setLedgerLoaded(false);
     setError("");
     try {
       const acc = await fetchCreditAccount(cnpj, cooperadoId);
-      setAccount((acc.account as ContaCoopLimiteCooperado) ?? null);
+      const accObj = (acc.account as ContaCoopLimiteCooperado) ?? null;
+      setAccount(accObj);
       setUpdatedAt(acc.updatedAt ?? null);
       setHasPin(Boolean(acc.hasPin));
       setPinResetPending(Boolean(acc.pinResetPending));
-      const lg = await fetchCreditLedger(cnpj, cooperadoId);
-      setLedger(lg);
+      gravarHbCreditAccountPersistido(cnpj, cooperadoId, {
+        v: HB_CREDIT_ACCOUNT_STORAGE_VERSION,
+        account: accObj,
+        updatedAt: acc.updatedAt ?? null,
+        hasPin: Boolean(acc.hasPin),
+        pinResetPending: Boolean(acc.pinResetPending),
+        savedAt: new Date().toISOString(),
+      });
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Erro ao carregar conta.");
+      if (!background) {
+        setError(e instanceof Error ? e.message : "Erro ao carregar conta.");
+      }
     } finally {
       setLoading(false);
+      setAccountRefreshing(false);
+      if (!auxEntrySignaledRef.current) {
+        auxEntrySignaledRef.current = true;
+        setAuxSyncEnabled(true);
+        notifyHbCreditAccountLoaded();
+      }
     }
   }, [cnpj, cooperadoId]);
 
   useEffect(() => {
-    reload();
+    if (!cnpj || !cooperadoId) return;
+    const snap = lerHbCreditAccountPersistido(cnpj, cooperadoId);
+    let background = false;
+    if (snap?.account) {
+      const applied = aplicarHbCreditAccountPersistido(snap);
+      setAccount(applied.account);
+      setUpdatedAt(applied.updatedAt);
+      setHasPin(applied.hasPin);
+      setPinResetPending(applied.pinResetPending);
+      setLoading(false);
+      background = true;
+      if (!auxEntrySignaledRef.current) {
+        auxEntrySignaledRef.current = true;
+        setAuxSyncEnabled(true);
+        notifyHbCreditAccountLoaded();
+      }
+    }
+    void reload({ background });
+  }, [cnpj, cooperadoId, reload]);
+
+  useEffect(() => {
+    const onLimiteSynced = () => {
+      void reload({ background: true });
+    };
+    window.addEventListener(HB_CREDIT_LIMITE_SYNCED_EVENT, onLimiteSynced);
+    return () => window.removeEventListener(HB_CREDIT_LIMITE_SYNCED_EVENT, onLimiteSynced);
   }, [reload]);
 
   useEffect(() => {
+    if (tab !== "extrato" || ledgerLoaded || ledgerLoading) return;
+    if (!cnpj || !cooperadoId) return;
+    void loadLedger();
+  }, [tab, ledgerLoaded, ledgerLoading, cnpj, cooperadoId, loadLedger]);
+
+  useEffect(() => {
     const onVisible = () => {
-      if (document.visibilityState === "visible") void reload();
+      if (document.visibilityState === "visible") void reload({ background: true });
     };
     document.addEventListener("visibilitychange", onVisible);
     return () => document.removeEventListener("visibilitychange", onVisible);
@@ -147,6 +251,7 @@ function MinhaContaCoopContent() {
       setError("");
       setSuccess("");
       setQrInput(payload.trim());
+      setTabEverOpened((prev) => ({ ...prev, pagar: true }));
       setTab("pagar");
       try {
         const res = await validateCreditQr(cnpj, cooperadoId, payload.trim());
@@ -218,21 +323,29 @@ function MinhaContaCoopContent() {
         cnpj,
         cooperadoId,
         cooperadoNome,
-        cooperativaId: contaCoopSync?.cooperativaId,
-        mesReferencia: contaCoopSync?.mesReferencia,
+        cooperativaId: contaCoopValorSync?.cooperativaId,
+        mesReferencia: contaCoopValorSync?.mesReferencia,
         intentId: pendingIntent.intent.id,
         nonce: pendingIntent.intent.nonce,
         pin: payPin,
         idempotencyKey: `pay:${pendingIntent.intent.id}:${cooperadoId}`,
         useCashback,
       });
-      setSuccess(`Pagamento aprovado! Comprovante ${res.receiptCode}`);
+      setSuccess(
+        res.syncContaCoop === "pending"
+          ? `Pagamento aprovado! Comprovante ${res.receiptCode}. O valor a receber pode levar alguns instantes para atualizar.`
+          : `Pagamento aprovado! Comprovante ${res.receiptCode}`
+      );
       setPendingIntent(null);
       setQrInput("");
       setPayPin("");
       setUseCashback(false);
-      setTab("extrato");
-      await reload();
+      handleTabChange("extrato");
+      await reload({ background: false });
+      if (res.syncContaCoop === "pending") {
+        await sleepMs(400);
+        await reload({ background: true });
+      }
     } catch (e) {
       setError(e instanceof Error ? e.message : "Pagamento recusado.");
     } finally {
@@ -240,7 +353,14 @@ function MinhaContaCoopContent() {
     }
   };
 
-  if (loading && !account) return <PageSkeleton />;
+  if (loading && !account) {
+    return (
+      <div className="mx-auto max-w-lg space-y-3 pb-8">
+        <PageSkeleton />
+        <p className="text-center text-xs text-gray-500">Carregando HB Créditos…</p>
+      </div>
+    );
+  }
 
   const disponivel = account?.valorDisponivelCents ?? 0;
   const cashback = account?.cashbackDisponivelCents ?? 0;
@@ -286,25 +406,25 @@ function MinhaContaCoopContent() {
           { id: "extrato", label: "Extrato" },
         ]}
         active={tab}
-        onChange={setTab}
+        onChange={handleTabChange}
       />
 
-      {tab === "inicio" && (
-        <>
-          <div className="overflow-hidden rounded-3xl bg-gradient-to-br from-green-800 via-green-700 to-emerald-600 p-6 text-white shadow-lg">
-            <div className="flex items-start justify-between gap-3">
+      {tabEverOpened.inicio && (
+        <div className={tabPanelHidden("inicio")}>
+          <div className="overflow-hidden rounded-2xl bg-gradient-to-br from-green-800 via-green-700 to-emerald-600 p-4 text-white shadow-md">
+            <div className="flex items-start justify-between gap-2">
               <div>
-                <p className="text-sm font-medium text-green-100">Disponível para usar</p>
-                <p className="mt-1 text-4xl font-bold tracking-tight">{formatCentsBRL(disponivel)}</p>
+                <p className="text-xs font-medium text-green-100">Disponível para usar</p>
+                <p className="mt-0.5 text-2xl font-bold tracking-tight">{formatCentsBRL(disponivel)}</p>
               </div>
               {cashback > 0 && (
-                <div className="rounded-2xl bg-white/15 px-3 py-2 text-right backdrop-blur-sm">
+                <div className="rounded-xl bg-white/15 px-2.5 py-1.5 text-right backdrop-blur-sm">
                   <p className="text-[10px] font-medium uppercase tracking-wide text-green-100">Cashback</p>
-                  <p className="text-lg font-bold">{formatCentsBRL(cashback)}</p>
+                  <p className="text-sm font-bold">{formatCentsBRL(cashback)}</p>
                 </div>
               )}
             </div>
-            <div className="mt-5 space-y-2">
+            <div className="mt-3 space-y-1.5">
               <div className="flex justify-between text-xs text-green-100">
                 <span>Usado {formatCentsBRL(usado)}</span>
                 <span>Limite {formatCentsBRL(limite)}</span>
@@ -317,25 +437,25 @@ function MinhaContaCoopContent() {
               </div>
             </div>
             {updatedAt && (
-              <p className="mt-4 text-xs text-green-200/80">
+              <p className="mt-2 text-[11px] text-green-200/80">
                 Atualizado {new Date(updatedAt).toLocaleString("pt-BR")}
               </p>
             )}
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
-            <Card className="!p-4 text-center">
-              <p className="text-xs text-gray-500">Crédito liberado</p>
-              <p className="mt-1 text-lg font-bold text-gray-900">{formatCentsBRL(limite)}</p>
+          <div className="grid grid-cols-2 gap-2">
+            <Card className="!p-3 text-center">
+              <p className="text-[11px] text-gray-500">Crédito liberado</p>
+              <p className="mt-0.5 text-base font-bold text-gray-900">{formatCentsBRL(limite)}</p>
             </Card>
-            <Card className="!p-4 text-center">
-              <p className="text-xs text-gray-500">Já utilizado</p>
-              <p className="mt-1 text-lg font-bold text-gray-900">{formatCentsBRL(usado)}</p>
+            <Card className="!p-3 text-center">
+              <p className="text-[11px] text-gray-500">Já utilizado</p>
+              <p className="mt-0.5 text-base font-bold text-gray-900">{formatCentsBRL(usado)}</p>
             </Card>
           </div>
 
           {!hasPin ? (
-            <Card className="space-y-4 border-amber-200 bg-amber-50/40 !p-5">
+            <Card className="space-y-3 border-amber-200 bg-amber-50/40 !p-4">
               <div>
                 <h3 className="font-semibold text-gray-900">Crie seu PIN de pagamento</h3>
                 <p className="mt-1 text-sm text-gray-600">
@@ -384,31 +504,41 @@ function MinhaContaCoopContent() {
               )}
             </>
           )}
-        </>
+        </div>
       )}
 
-      {tab === "pagar" && (
-        <div className="space-y-4">
+      {tabEverOpened.pagar && (
+        <div className={cn("space-y-4", tabPanelHidden("pagar"))}>
           {!hasPin ? (
             <Card className="!p-5 text-center text-sm text-gray-600">
               Cadastre seu PIN na aba Início antes de pagar.
-              <Button variant="secondary" className="mt-3 w-full" onClick={() => setTab("inicio")}>
+              <Button variant="secondary" className="mt-3 w-full" onClick={() => handleTabChange("inicio")}>
                 Ir para Início
               </Button>
             </Card>
           ) : pendingIntent ? (
-            <Card className="space-y-4 border-green-300 bg-green-50/60 !p-5">
+            <Card className="space-y-3 border-green-300 bg-green-50/60 !p-4">
               <div className="text-center">
-                <p className="text-sm text-gray-600">Pagando em</p>
-                <p className="text-xl font-bold text-gray-900">{pendingIntent.parceiroNome}</p>
-                <p className="mt-2 text-3xl font-bold text-green-800">
+                <p className="text-xs text-gray-600">Pagando em</p>
+                <p className="text-lg font-bold text-gray-900">{pendingIntent.parceiroNome}</p>
+                <p className="mt-1 text-2xl font-bold text-green-800">
                   {formatCentsBRL(pendingIntent.intent.amountCents)}
                 </p>
               </div>
-              <div className="rounded-xl bg-white/80 p-3 text-sm">
+              <div className="rounded-lg bg-white/80 p-2.5 text-sm">
+                <div className="flex justify-between py-1">
+                  <span className="text-gray-600">Mercado parceiro</span>
+                  <span className="font-medium text-right">{pendingIntent.parceiroNome}</span>
+                </div>
                 <div className="flex justify-between py-1">
                   <span className="text-gray-600">Valor da compra</span>
                   <span className="font-medium">{formatCentsBRL(pendingIntent.intent.amountCents)}</span>
+                </div>
+                <div className="flex justify-between py-1 text-xs text-gray-500">
+                  <span>Código da cobrança</span>
+                  <span className="font-mono truncate max-w-[55%] text-right" title={pendingIntent.intent.id}>
+                    {pendingIntent.intent.id.slice(-12)}
+                  </span>
                 </div>
                 <div className="flex justify-between py-1">
                   <span className="text-gray-600">Crédito disponível</span>
@@ -526,12 +656,18 @@ function MinhaContaCoopContent() {
         </div>
       )}
 
-      {tab === "extrato" && (
+      {tabEverOpened.extrato && (
+        <div className={tabPanelHidden("extrato")}>
         <Card className="!p-0 overflow-hidden">
           <div className="border-b border-gray-100 px-5 py-4">
             <h3 className="font-semibold text-gray-900">Movimentações</h3>
             <p className="text-xs text-gray-500">Pagamentos e ajustes do seu crédito</p>
           </div>
+          {ledgerLoading && !ledgerLoaded ? (
+            <div className="px-5 py-10">
+              <PageSkeleton />
+            </div>
+          ) : (
           <div className="divide-y divide-gray-100">
             {ledger.map((entry) => (
               <div key={entry.id} className="flex items-center justify-between gap-3 px-5 py-4">
@@ -559,7 +695,9 @@ function MinhaContaCoopContent() {
               <p className="px-5 py-10 text-center text-sm text-gray-500">Nenhuma movimentação ainda.</p>
             )}
           </div>
+          )}
         </Card>
+        </div>
       )}
     </div>
   );

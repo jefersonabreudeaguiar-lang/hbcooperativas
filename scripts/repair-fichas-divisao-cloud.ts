@@ -25,6 +25,7 @@ import { mergeContratosIntoData, mergeOperacionalIntoData } from "../src/service
 import {
   dedupeFichaCorridaPorNota,
   divisaoFichasCobremParticipantes,
+  fichasDivisaoEntregaConsistentes,
   reconciliarFichaFromNotasConferidas,
   rebuildFichasNota,
 } from "../src/services/notaPedidoService";
@@ -144,13 +145,14 @@ async function main() {
       data.fichaCorrida.filter((f) => f.notaPedidoId === nota.id),
       data.notasPedido
     );
-    const mergedOk = divisaoFichasCobremParticipantes(data, mergedFichas, nota);
+    const mergedOk = fichasDivisaoEntregaConsistentes(data, data.fichaCorrida, nota);
+    const rawConsistent = fichasDivisaoEntregaConsistentes(merged, rawFichas, nota);
 
     console.log(
-      `Nota ${nota.id.slice(0, 22)} | nuvem=${rawFichas.length} ok=${rawOk} | memória=${mergedFichas.length} ok=${mergedOk}`
+      `Nota ${nota.id.slice(0, 22)} | nuvem=${rawFichas.length} ok=${rawConsistent} | memória=${mergedFichas.length} ok=${mergedOk}`
     );
 
-    if (!rawOk) precisaUpload = true;
+    if (!rawConsistent) precisaUpload = true;
 
     if (!mergedOk) {
       data = rebuildFichasNota(data, nota);

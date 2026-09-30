@@ -1,16 +1,16 @@
 import type { FichaCorridaDesconto } from "@/types";
 import type { ResumoPagamentoCooperado } from "@/services/notaPedidoService";
+import {
+  dedupeIncidenciaHbDescontosContaCoop,
+  isEstornoMotivoContaCoop,
+  type DescontoContaCoopRemoto,
+} from "@/lib/hb-credit/dedupeIncidenciaHbDesconto";
+
+export type { DescontoContaCoopRemoto };
 
 function isEstornoContaCoop(motivo: string): boolean {
-  return motivo.toLowerCase().includes("estorno");
+  return isEstornoMotivoContaCoop(motivo);
 }
-
-export type DescontoContaCoopRemoto = {
-  motivo: string;
-  valorReais: number;
-  tipo: "conta_coop";
-  createdAt: string;
-};
 
 function round2(value: number): number {
   return Math.round(value * 100) / 100;
@@ -23,15 +23,39 @@ export function mesReferenciaFromIso(iso: string): string {
 export function dedupeDescontosContaCoopRemotos(
   descontos: DescontoContaCoopRemoto[]
 ): DescontoContaCoopRemoto[] {
-  const seen = new Set<string>();
-  const out: DescontoContaCoopRemoto[] = [];
-  for (const d of descontos) {
-    const key = `${d.createdAt}|${round2(d.valorReais)}|${d.motivo}`;
-    if (seen.has(key)) continue;
-    seen.add(key);
-    out.push(d);
-  }
-  return out;
+  return dedupeIncidenciaHbDescontosContaCoop(descontos);
+}
+
+/** Dedupe incidência HB em linhas persistidas no arquivo mensal (somente projeção; não reescreve histórico). */
+export function dedupeArquivoContaCoopDescontos<
+  T extends {
+    motivo: string;
+    valorReais: number;
+    tipo: "conta_coop" | "credito_avulso";
+    createdAt?: string;
+    hbTransactionId?: string;
+  },
+>(list: T[]): T[] {
+  if (!list.length) return list;
+  const deduped = dedupeDescontosContaCoopRemotos(
+    list.map((d) => ({
+      motivo: d.motivo,
+      valorReais: d.valorReais,
+      tipo: "conta_coop" as const,
+      createdAt: d.createdAt ?? "",
+      hbTransactionId: d.hbTransactionId,
+    }))
+  );
+  return deduped.map(
+    (d) =>
+      ({
+        motivo: d.motivo,
+        valorReais: d.valorReais,
+        tipo: d.motivo.toLowerCase().includes("estorno") ? ("credito_avulso" as const) : ("conta_coop" as const),
+        createdAt: d.createdAt,
+        ...(d.hbTransactionId ? { hbTransactionId: d.hbTransactionId } : {}),
+      }) as T
+  );
 }
 
 /**
@@ -67,7 +91,15 @@ export function dedupeDescontosExtrasContaCoop(extras: FichaCorridaDesconto[]): 
 }
 
 export function descontosContaCoopFromArquivo(
-  arquivo?: { contaCoopDescontos?: Array<{ motivo: string; valorReais: number; tipo: "conta_coop" | "credito_avulso"; createdAt?: string }> }
+  arquivo?: {
+    contaCoopDescontos?: Array<{
+      motivo: string;
+      valorReais: number;
+      tipo: "conta_coop" | "credito_avulso";
+      createdAt?: string;
+      hbTransactionId?: string;
+    }>;
+  }
 ): DescontoContaCoopRemoto[] {
   return (arquivo?.contaCoopDescontos ?? [])
     .filter((d) => d.valorReais > 0)
@@ -76,6 +108,7 @@ export function descontosContaCoopFromArquivo(
       valorReais: d.valorReais,
       tipo: "conta_coop" as const,
       createdAt: d.createdAt ?? new Date().toISOString(),
+      hbTransactionId: d.hbTransactionId,
     }));
 }
 
@@ -107,8 +140,6 @@ export function mergeDescontosContaCoopNoResumo(
   const descontos = dedupeDescontosContaCoopRemotos(descontosRemotos);
   if (!descontos.length) return resumo;
 
-  const liquidoContaCoop = liquidoUsoContaCoopMes(descontos);
-
   const extrasBase = resumo.descontosExtras.filter(
     (d) =>
       d.tipo !== "conta_coop" && !(d.tipo === "credito_avulso" && isEstornoContaCoop(d.motivo))
@@ -123,15 +154,13 @@ export function mergeDescontosContaCoopNoResumo(
     });
   }
 
-  const totalDescontosSemCoop = round2(
-    extrasBase.filter((d) => d.tipo !== "credito_avulso").reduce((s, d) => s + d.valor, 0)
+  const totalDescontos = round2(
+    extras.filter((d) => d.tipo !== "credito_avulso").reduce((s, d) => s + d.valor, 0)
   );
-  const totalCreditosSemCoop = round2(
-    extrasBase.filter((d) => d.tipo === "credito_avulso").reduce((s, d) => s + d.valor, 0)
+  const totalCreditos = round2(
+    extras.filter((d) => d.tipo === "credito_avulso").reduce((s, d) => s + d.valor, 0)
   );
-  const valorLiquido = round2(
-    Math.max(0, resumo.valorEntregas - totalDescontosSemCoop - liquidoContaCoop + totalCreditosSemCoop)
-  );
+  const valorLiquido = round2(Math.max(0, resumo.valorEntregas - totalDescontos + totalCreditos));
 
   return {
     ...resumo,

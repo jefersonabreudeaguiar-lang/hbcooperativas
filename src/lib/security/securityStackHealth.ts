@@ -64,11 +64,6 @@ export function buildSecurityStackHealth(env: NodeJS.ProcessEnv = process.env): 
         schedule: "0 6 * * *",
         description: "Reconciliação read-only HB Créditos",
       },
-      {
-        path: "/api/cron/hobelisco-credit-watch",
-        schedule: "*/15 * * * *",
-        description: "Hobelisco Credit Watch (se flag ON)",
-      },
     ],
     recommendations,
   };

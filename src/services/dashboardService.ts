@@ -1,9 +1,21 @@
 import type { AppData, FechamentoMensal, FinanceiroMensal } from "@/types";
+import { bicCentralValorAReceberAgregado } from "@/services/bicLeituraCentralCooperado";
+import { isBicCentralReadAuthorityEnabled } from "@/lib/bic/bicCentralReadAuthority";
 import { getData } from "@/services/dataStore";
-import { getTotalAPagarCooperado, getTotalRecebidoCooperado, idsNotasPedidoExcluidas } from "@/services/notaPedidoService";
+import {
+  getTotalAPagarCooperado,
+  getTotalRecebidoCooperado,
+  idsNotasPedidoExcluidas,
+  pagamentoCobreMesReferencia,
+  pagamentoRegistradoParaRelatorio,
+} from "@/services/notaPedidoService";
 import { round2, sumBy } from "@/utils/calculations";
 import { getCurrentMesReferencia } from "@/utils/format";
 import { isNotaNaFilaConferenciaResponsavel } from "@/utils/notaStatus";
+import { notaPertenceCooperativa } from "@/utils/fotoEntrega";
+import {
+  countNotasFilaConferenciaResponsavel,
+} from "@/services/responsavelPainelIndex";
 import {
   calcularFechamentoMensalLive,
   fechamentoToPartial,
@@ -68,7 +80,9 @@ export function getCooperadoStats(cooperadoId: string, data?: AppData): Cooperad
   const descontos = d.descontos.filter((dc) => dc.cooperadoId === cooperadoId);
   const coopId = d.cooperados.find((c) => c.id === cooperadoId)?.cooperativaId;
 
-  const valorAReceber = getTotalAPagarCooperado(d, cooperadoId, mes, coopId);
+  const valorAReceber = isBicCentralReadAuthorityEnabled()
+    ? bicCentralValorAReceberAgregado(d, cooperadoId, coopId).valor
+    : getTotalAPagarCooperado(d, cooperadoId, mes, coopId);
   const valorRecebido = getTotalRecebidoCooperado(d, cooperadoId, mes);
   const valorPendente = valorAReceber;
 
@@ -112,40 +126,71 @@ export function getCooperadoStats(cooperadoId: string, data?: AppData): Cooperad
   };
 }
 
-export function getAdminStats(data?: AppData): AdminDashboardStats {
+export function getAdminStats(
+  data?: AppData,
+  cooperativaId?: string,
+  opts?: { skipValoresAPagar?: boolean }
+): AdminDashboardStats {
   const d = data ?? getData();
   const mes = getCurrentMesReferencia();
   const ano = mes.split("-")[0];
 
+  const cooperadosEscopo = cooperativaId
+    ? d.cooperados.filter((c) => c.cooperativaId === cooperativaId)
+    : d.cooperados;
+  const coopCooperadoIds = cooperativaId ? new Set(cooperadosEscopo.map((c) => c.id)) : null;
+  const notaNoEscopo = (n: (typeof d.notasPedido)[number]) =>
+    !cooperativaId || notaPertenceCooperativa(d, n, cooperativaId);
+  const pertenceCoop = (cooperadoId: string) => !coopCooperadoIds || coopCooperadoIds.has(cooperadoId);
+
   const entregasMes = filterByMes(
-    d.notasPedido.filter((n) => n.status === "conferida" || n.status === "pago"),
+    d.notasPedido.filter(
+      (n) => (n.status === "conferida" || n.status === "pago") && notaNoEscopo(n)
+    ),
     (n) => n.dataEntrega,
     mes
   );
   const entregasAno = filterByAno(
-    d.notasPedido.filter((n) => n.status === "conferida" || n.status === "pago"),
+    d.notasPedido.filter(
+      (n) => (n.status === "conferida" || n.status === "pago") && notaNoEscopo(n)
+    ),
     (n) => n.dataEntrega,
     ano
   );
 
   const financeiroMes = d.financeiro.find((f) => f.mesReferencia === mes);
 
-  const pagamentosPendentes = d.fichaCorrida.filter((f) => f.status === "pendente");
-  const pagamentosPagos = d.fichaCorrida.filter((f) => f.status === "pago");
-  const excluidas = idsNotasPedidoExcluidas(d);
-  const notasAguardando = d.notasPedido.filter(
-    (n) => isNotaNaFilaConferenciaResponsavel(n.status) && !excluidas.has(n.id)
+  const pagamentosPendentes = d.fichaCorrida.filter(
+    (f) => f.status === "pendente" && pertenceCoop(f.cooperadoId)
   );
-
-  const mensalidadesAbertas = d.mensalidades.filter((m) => m.status === "pendente" || m.status === "atrasada");
-  const cotasAbertas = d.cotas.filter((c) => c.status !== "quitada");
-
-  const valoresAPagar = round2(
-    d.cooperados.reduce(
-      (s, c) => s + getTotalAPagarCooperado(d, c.id, undefined, c.cooperativaId),
-      0
-    )
+  const pagamentosPagos = d.fichaCorrida.filter(
+    (f) => f.status === "pago" && pertenceCoop(f.cooperadoId)
   );
+  const excluidas = idsNotasPedidoExcluidas(d, cooperativaId);
+  const entregasPendentes = cooperativaId
+    ? countNotasFilaConferenciaResponsavel(d, cooperativaId)
+    : d.notasPedido.filter(
+        (n) =>
+          isNotaNaFilaConferenciaResponsavel(n.status) &&
+          notaNoEscopo(n) &&
+          !excluidas.has(n.id)
+      ).length;
+
+  const mensalidadesAbertas = d.mensalidades.filter(
+    (m) => (m.status === "pendente" || m.status === "atrasada") && pertenceCoop(m.cooperadoId)
+  );
+  const cotasAbertas = d.cotas.filter((c) => c.status !== "quitada" && pertenceCoop(c.cooperadoId));
+
+  const valoresAPagar = opts?.skipValoresAPagar
+    ? 0
+    : round2(
+        cooperadosEscopo.reduce((s, c) => {
+          if (isBicCentralReadAuthorityEnabled()) {
+            return s + bicCentralValorAReceberAgregado(d, c.id, c.cooperativaId).valor;
+          }
+          return s + getTotalAPagarCooperado(d, c.id, undefined, c.cooperativaId);
+        }, 0)
+      );
 
   return {
     totalVendidoMes: sumBy(entregasMes, (e) => e.valorBruto),
@@ -156,8 +201,8 @@ export function getAdminStats(data?: AppData): AdminDashboardStats {
     mensalidadesRecebidas: financeiroMes?.mensalidadesRecebidas ?? 0,
     cotasRecebidas: financeiroMes?.cotasRecebidas ?? 0,
     debitosAbertos: sumBy(mensalidadesAbertas, (m) => m.valor) + sumBy(cotasAbertas, (c) => c.valorParcela * c.parcelasPendentes),
-    cooperadosAtivos: d.cooperados.filter((c) => c.status === "ativo").length,
-    entregasPendentes: notasAguardando.length,
+    cooperadosAtivos: cooperadosEscopo.filter((c) => c.status === "ativo").length,
+    entregasPendentes,
     pagamentosPendentes: pagamentosPendentes.length,
   };
 }
@@ -170,14 +215,14 @@ export function calcularFechamentoMensal(mesReferencia: string, data?: AppData):
 export function getRelatorioResumoFinanceiro(mesReferencia: string, data?: AppData) {
   const d = data ?? getData();
   const r = getResumoFinanceiroMes(mesReferencia, d);
-  const pagamentosMes = d.pagamentosCooperado.filter((p) => p.mesReferencia === mesReferencia);
+  const pagamentosMes = d.pagamentosCooperado.filter((p) => pagamentoCobreMesReferencia(p, mesReferencia));
   return {
     mesReferencia,
     financeiro: d.financeiro.find((f) => f.mesReferencia === mesReferencia),
     totalVendas: r.totalVendasBruto,
     totalLiquido: r.totalVendasLiquido,
     pagamentosPendentes: pagamentosMes.filter((p) => p.status === "aguardando_confirmacao"),
-    pagamentosRealizados: pagamentosMes.filter((p) => p.status === "confirmado"),
+    pagamentosRealizados: pagamentosMes.filter((p) => pagamentoRegistradoParaRelatorio(p)),
     resumo: r,
   };
 }

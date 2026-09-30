@@ -35,6 +35,14 @@ function loadEnv() {
     if (eq <= 0) continue;
     process.env[t.slice(0, eq).trim()] = t.slice(eq + 1).trim().replace(/^["']|["']$/g, "");
   }
+  /** Scripts espelham produção — base HB = M6 BIC. */
+  if (
+    !process.env.NEXT_PUBLIC_BIC_CENTRAL_READ_OFFICIAL &&
+    !process.env.NEXT_PUBLIC_BIC_CENTRAL_READ &&
+    !process.env.HB_BIC_LAB_B4_AUTHORITY
+  ) {
+    process.env.NEXT_PUBLIC_BIC_CENTRAL_READ_OFFICIAL = "true";
+  }
 }
 
 function round2(v: number) {

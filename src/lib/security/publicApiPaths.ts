@@ -10,32 +10,22 @@
  * | auth/* | Login, cadastro, sessão, reset senha |
  * | cooperativas POST/lookup/status/verify | Cadastro cooperativa (sem listar membros) |
  * | credit/status | Feature flag HB (sem dados financeiros) |
+ * | client-release | Metadados build/deployment (PWA anti-rollback) |
  * | webhooks/asaas | Webhook assinado no handler |
  * | cron/* | CRON_SECRET no handler |
- * | lab/* | 404 se lab desativado |
  */
 export function isPublicApiRoute(pathname: string, method: string): boolean {
   const m = method.toUpperCase();
 
   if (pathname === "/api/cooperativas" && m === "POST") return true;
   if (pathname === "/api/credit/status" && m === "GET") return true;
+  if (pathname === "/api/client-release" && m === "GET") return true;
 
   /** Webhook Asaas — auth no handler (asaas-access-token). */
   if (pathname === "/api/webhooks/asaas" && m === "POST") return true;
 
   /** Crons Vercel — auth no handler (Bearer CRON_SECRET). */
   if (pathname.startsWith("/api/cron/") && (m === "GET" || m === "POST")) return true;
-
-  /** Lab sync — dados sintéticos; handler retorna 404 se lab desativado. */
-  if (pathname === "/api/lab/sync-audit" && m === "GET") return true;
-
-  /** Lab HOBELISCO HX — snapshot/arena/diálogo; handler retorna 404 se lab desativado. */
-  if (pathname === "/api/lab/hobelisco" && (m === "GET" || m === "POST")) return true;
-  if (pathname.startsWith("/api/lab/hobelisco/v2") && (m === "GET" || m === "POST")) return true;
-  if (pathname === "/api/lab/hobelisco/credit-watch" && m === "POST") return true;
-  if (pathname === "/api/lab/hobelisco/adaptive-defense" && m === "POST") return true;
-  if (pathname === "/api/lab/hobelisco/whatsapp" && (m === "GET" || m === "POST")) return true;
-  if (pathname === "/api/lab/hobelisco/dialogue" && m === "POST") return true;
 
   const publicPaths = new Set([
     "/api/auth/login",

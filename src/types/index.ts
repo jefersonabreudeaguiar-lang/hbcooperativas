@@ -419,6 +419,8 @@ export interface FichaCorrida {
   descontosDetalhe?: FichaCorridaDesconto[];
   divisaoEntrega?: DivisaoEntregaNota;
   createdAt: string;
+  /** Marca pagamento registrado / merge com nuvem — evita voltar para pendente. */
+  updatedAt?: string;
 }
 
 /** Pagamento mensal registrado pela diretoria — aguarda confirmação do cooperado. */
@@ -441,6 +443,10 @@ export interface PagamentoCooperadoRegistro {
   assinaturaCooperado?: string;
   assinadoEm?: string;
   reciboHtml?: string;
+  /** Responsável conferiu recibo após assinatura do cooperado. */
+  reciboConferidoPorResponsavelEm?: string;
+  reciboConferidoPorId?: string;
+  reciboConferidoPorNome?: string;
   createdAt: string;
   updatedAt?: string;
 }
@@ -476,6 +482,8 @@ export interface ArquivoMensalCooperado {
     valorReais: number;
     tipo: "conta_coop" | "credito_avulso";
     createdAt?: string;
+    /** hb_credit_transactions.id — dedupe no A receber (opcional, legado). */
+    hbTransactionId?: string;
   }>;
   /** Atualizado só ao sincronizar descontos HB — não confundir com `updatedAt` do arquivo. */
   contaCoopDescontosUpdatedAt?: string;
@@ -630,6 +638,13 @@ export interface Comunicado {
 
 /** IDs de comunicados removidos pelo responsável (sincroniza sumiço no cooperado). */
 export interface ComunicadoExcluidoRef {
+  id: string;
+  cooperativaId?: string;
+  excluidoEm: string;
+}
+
+/** Lançamentos avulsos removidos do livro caixa (não voltam após sync). */
+export interface LivroCaixaExcluidoRef {
   id: string;
   cooperativaId?: string;
   excluidoEm: string;
@@ -935,6 +950,7 @@ export interface AppData {
   fechamentos: FechamentoMensal[];
   livroCaixa: LivroCaixaLancamento[];
   livroCaixaControleAnual?: LivroCaixaControleAnual[];
+  livroCaixaExcluidos?: LivroCaixaExcluidoRef[];
   prestacoesContas: PrestacaoContas[];
   prestacoesContasExcluidas?: PrestacaoContasExcluida[];
   notasPedidoExcluidas?: NotaPedidoExcluida[];

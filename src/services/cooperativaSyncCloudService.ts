@@ -1,4 +1,4 @@
-import type { AppData, Cooperativa, Cooperado, Instituicao, ProdutoInstituicao, Desconto, PrestacaoContasExcluida, NotaPedidoExcluida, InstituicaoExcluida, PagamentoCooperadoRegistro, Comunicado, ComunicadoExcluidoRef, FichaCorrida, VotacaoPauta, VotacaoVoto, ParecerContabilMensal, FechamentoSnapshot } from "@/types";
+import type { AppData, Cooperativa, Cooperado, Instituicao, ProdutoInstituicao, Desconto, PrestacaoContasExcluida, NotaPedidoExcluida, InstituicaoExcluida, PagamentoCooperadoRegistro, Comunicado, ComunicadoExcluidoRef, LivroCaixaExcluidoRef, LivroCaixaLancamento, FichaCorrida, NotaPedido, VotacaoPauta, VotacaoVoto, ParecerContabilMensal, FechamentoSnapshot } from "@/types";
 import { normalizeCnpj } from "@/utils/cooperativa";
 import { secureApiFetch } from "@/lib/security/clientSession";
 import type { ContratosSyncPayload, OperacionalSyncPayload } from "@/lib/supabase/cooperativaSyncStorage";
@@ -6,7 +6,8 @@ import { getData, saveDataSafe, runWithBatchedSaveAsync } from "@/services/dataS
 import { syncCooperadosFromCloud, fetchCooperadosFromCloud, pushCooperadoToCloud } from "@/services/cooperadoCloudService";
 import { syncNotasPedidoFromCloud, patchNotaPedidoInCloud } from "@/services/notaPedidoCloudService";
 import { fetchCooperativaByCnpjFromCloud, mergeCooperativaIntoData } from "@/services/cooperativaCloudService";
-import { mergeArquivosMensaisFromCloud, reconciliarFichaFromNotasConferidas, dedupeFichaCorridaPorNota, aplicarNotasPedidoExcluidas } from "@/services/notaPedidoService";
+import { mergeArquivosMensaisFromCloud, reconciliarFichaFromNotasConferidas, dedupeFichaCorridaPorNota, aplicarNotasPedidoExcluidas, idsNotasPedidoExcluidas } from "@/services/notaPedidoService";
+import { posProcessarIntegridadePagamentosCooperativa, cooperadoMesTemPagamentoNaLista, type RegistroPagamentoResponsavelPatch } from "@/services/pagamentoIntegridadeService";
 import { ensureComunicadosAudioUploaded } from "@/services/comunicadoAudioSync";
 import { operacionalPushSeguro, precisaReparoFullSyncNotas, cooperadoFinanceiroDesatualizado, cooperadoFichaValoresDesalinhados, limparFichaObsoletaCooperado } from "@/services/fichaSyncGuard";
 import { beginCloudSync, endCloudSync } from "@/services/cloudSyncProgress";
@@ -20,11 +21,53 @@ import {
   applyCloudOperationalResetIfNeeded,
   needsOperationalResetCloudPush,
   markOperationalResetCloudDone,
+  markOperacionalCloudAuthoritative,
+  clearOperacionalCloudAuthoritative,
+  isOperacionalCloudAuthoritative,
+  noteOperacionalCloudRestoreFromFetch,
+  reapplyCloudOperationalSliceIfStale,
+  clearOperacionalFinanceiroForCooperativa,
+  getLastOperacionalPullMergedUpdatedAtMs,
+  noteOperacionalPullMergedUpdatedAt,
+  setOperacionalCloudAuthoritativeForTests,
 } from "@/services/operationalReset";
+import { posProcessarFinanceiroLocal } from "@/services/operacionalLocalPostProcess";
+import {
+  acquireCooperativaSyncSessionLease,
+  acquireOperacionalPullLease,
+  saveAppDataIfSyncLeaseCurrent,
+  type CooperativaSyncSessionLease,
+} from "@/services/operacionalPullLease";
+import {
+  enqueueOperacionalCoordination,
+  isOperacionalPushSingleFlightEnabled,
+} from "@/services/operacionalPushSingleFlight";
 type WithUpdatedAt = { id: string; updatedAt?: string; createdAt?: string };
 
 /** Evita POST operacional repetido na mesma sessão quando o payload não mudou. */
 const lastOperacionalPushFingerprint = new Map<string, string>();
+
+/** Somente testes H8.9.62 / H8.9.88 — detectar chamada à API pública de push. */
+let pushOperacionalPublicTestEnterHook: (() => void) | null = null;
+
+export function setPushOperacionalPublicTestEnterHookForTests(
+  hook: typeof pushOperacionalPublicTestEnterHook
+): void {
+  pushOperacionalPublicTestEnterHook = hook;
+}
+
+/** Somente testes H8.9.62 — serialização / erro na fila (sem rede). */
+let pushOperacionalInternalTestEnterHook: ((ctx: { cnpj: string }) => Promise<void>) | null = null;
+
+export function setPushOperacionalInternalTestEnterHookForTests(
+  hook: typeof pushOperacionalInternalTestEnterHook
+): void {
+  pushOperacionalInternalTestEnterHook = hook;
+}
+
+export function clearOperacionalPushFingerprintForTests(cnpj: string, authoritative = false): void {
+  clearOperacionalPushFingerprint(cnpj, authoritative);
+}
 
 export function operacionalPushCacheKey(cnpj: string, authoritative: boolean): string {
   return `${cnpj}:${authoritative ? "auth" : "merge"}`;
@@ -36,9 +79,121 @@ export function clearOperacionalPushFingerprint(cnpj: string, authoritative = fa
   lastOperacionalPushFingerprint.delete(operacionalPushCacheKey(digits, authoritative));
 }
 
+/** Nuvem publicou restore (fullReset) — aparelho só puxa; não recalcula ficha local nem sobrescreve a nuvem. */
+export function cloudOperacionalRestoreAtivo(
+  operacional?: Pick<OperacionalSyncPayload, "fullReset"> | null
+): boolean {
+  return operacional?.fullReset === true;
+}
+
+function finalizeOperacionalPullLocalState(
+  data: AppData,
+  operacional?: OperacionalSyncPayload | null,
+  cnpj?: string
+): AppData {
+  return posProcessarFinanceiroLocal(data, cnpj);
+}
+
+export type ConfirmarPagamentoCooperadoNaNuvemResult = {
+  ok: boolean;
+  status: number | null;
+  code?: string;
+  error?: string;
+};
+
+const CONFIRMAR_PAGAMENTO_REDE_ERROR = "Erro de rede ao confirmar pagamento.";
+const CONFIRMAR_PAGAMENTO_HTTP_ERROR = "Não foi possível confirmar o pagamento na nuvem.";
+
+/** Extrai status/code/error do Response — sem payload, tokens ou PII. */
+export async function confirmarPagamentoCooperadoNaNuvemResultFromResponse(
+  res: Response
+): Promise<ConfirmarPagamentoCooperadoNaNuvemResult> {
+  const status = res.status;
+  const ok = res.ok;
+  let code: string | undefined;
+  let error: string | undefined;
+  try {
+    const json = (await res.json()) as { code?: unknown; error?: unknown };
+    if (typeof json.code === "string" && json.code.trim()) code = json.code.trim();
+    if (typeof json.error === "string" && json.error.trim()) error = json.error.trim();
+  } catch {
+    if (!ok) error = CONFIRMAR_PAGAMENTO_HTTP_ERROR;
+  }
+  if (!ok && !error) error = CONFIRMAR_PAGAMENTO_HTTP_ERROR;
+  return {
+    ok,
+    status,
+    ...(code ? { code } : {}),
+    ...(error ? { error } : {}),
+  };
+}
+
+/** Cooperado publica recibo assinado — não usa push operacional (restrição de gestão). */
+export async function confirmarPagamentoCooperadoNaNuvem(
+  cnpj: string,
+  pagamento: PagamentoCooperadoRegistro
+): Promise<ConfirmarPagamentoCooperadoNaNuvemResult> {
+  const digits = normalizeCnpj(cnpj);
+  if (digits.length !== 14 || pagamento.status !== "confirmado") {
+    return { ok: false, status: null, error: CONFIRMAR_PAGAMENTO_HTTP_ERROR };
+  }
+  try {
+    const res = await secureApiFetch("/api/cooperativa-sync/confirmar-pagamento", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ cnpj: digits, pagamento }),
+    });
+    return await confirmarPagamentoCooperadoNaNuvemResultFromResponse(res);
+  } catch {
+    return { ok: false, status: null, error: CONFIRMAR_PAGAMENTO_REDE_ERROR };
+  }
+}
+
+/** Responsável publica pagamento registrado — contorna lock do POST operacional (fullReset). */
+export async function registrarPagamentoCooperadoNaNuvem(
+  cnpj: string,
+  patch: RegistroPagamentoResponsavelPatch
+): Promise<{ ok: boolean; error?: string; code?: string }> {
+  const digits = normalizeCnpj(cnpj);
+  if (digits.length !== 14) return { ok: false, error: "CNPJ inválido." };
+  try {
+    const res = await secureApiFetch("/api/cooperativa-sync/registrar-pagamento", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ cnpj: digits, ...patch }),
+    });
+    const json = (await res.json().catch(() => ({}))) as { error?: string; code?: string };
+    if (!res.ok) {
+      return {
+        ok: false,
+        error: json.error ?? "Não foi possível salvar o pagamento na nuvem.",
+        code: json.code,
+      };
+    }
+    return { ok: true };
+  } catch {
+    return { ok: false, error: "Sem conexão. Pagamento ficou só neste aparelho." };
+  }
+}
+
 function fingerprintOperacionalPayload(payload: OperacionalSyncPayload): string {
   const { updatedAt: _ignored, ...rest } = payload;
   return JSON.stringify(rest);
+}
+
+/** Pagamento registrado localmente ainda não publicado — não aplicar merge defensivo que aborta o push. */
+function operacionalTemPagamentoAguardandoSoLocal(
+  data: AppData,
+  coopId: string,
+  cloud: OperacionalSyncPayload
+): boolean {
+  const cloudIds = new Set((cloud.pagamentosCooperado ?? []).map((p) => p.id));
+  return data.pagamentosCooperado.some(
+    (p) =>
+      p.cooperativaId === coopId &&
+      (p.status === "aguardando_confirmacao" || p.status === "confirmado") &&
+      !cloudIds.has(p.id)
+  );
 }
 
 function itemTime(item: WithUpdatedAt): number {
@@ -77,6 +232,79 @@ function mergeOperacionalArrayFromCloud<T extends WithUpdatedAt>(
   }
 
   return [...map.values()];
+}
+
+/** Ficha paga localmente não volta para pendente por snapshot desatualizado na nuvem. */
+function mergeFichaCorridaFromCloud(
+  localCoop: FichaCorrida[],
+  cloudItems: FichaCorrida[],
+  pagamentosCooperado: PagamentoCooperadoRegistro[] = []
+): FichaCorrida[] {
+  const map = new Map<string, FichaCorrida>();
+
+  const fichaPagoLegitima = (f: FichaCorrida): boolean =>
+    f.status !== "pago" ||
+    cooperadoMesTemPagamentoNaLista(pagamentosCooperado, f.cooperadoId, f.mesReferencia);
+
+  const normalizarFichaLocal = (f: FichaCorrida): FichaCorrida => {
+    if (fichaPagoLegitima(f)) return f;
+    return { ...f, status: "pendente" as const };
+  };
+
+  /** Cloud pago: não rebaixar só porque pagamentosCooperado não veio na lista do merge (H8.9.184). */
+  const normalizarFichaCloud = (f: FichaCorrida): FichaCorrida =>
+    f.status === "pago" ? f : normalizarFichaLocal(f);
+
+  for (const item of cloudItems) map.set(item.id, normalizarFichaCloud(item));
+  for (const local of localCoop) {
+    const cloud = map.get(local.id);
+    if (!cloud) {
+      map.set(local.id, normalizarFichaLocal(local));
+      continue;
+    }
+    if (local.status === "pago" && cloud.status === "pendente") {
+      map.set(local.id, local);
+      continue;
+    }
+    if (cloud.status === "pago" && local.status === "pendente") {
+      map.set(local.id, cloud);
+      continue;
+    }
+    if (local.status === "pago" && cloud.status === "pago") {
+      map.set(local.id, itemTime(local) >= itemTime(cloud) ? local : cloud);
+      continue;
+    }
+    const chosen = itemTime(local) >= itemTime(cloud) ? local : cloud;
+    map.set(local.id, normalizarFichaLocal(chosen));
+  }
+  return [...map.values()];
+}
+
+/** posProcessar/reparar rebaixa ficha paga sem pg — restaura status pago decidido no merge (H8.9.184). */
+function reaplicarFichaPagoMergePosIntegridade(
+  antesPosProcessar: AppData,
+  depoisPosProcessar: AppData,
+  coopId: string
+): AppData {
+  const pagoAntes = new Map(
+    (antesPosProcessar.fichaCorrida ?? [])
+      .filter((f) => f.cooperativaId === coopId && f.status === "pago")
+      .map((f) => [f.id, f])
+  );
+  if (!pagoAntes.size) return depoisPosProcessar;
+  let changed = false;
+  const fichaCorrida = (depoisPosProcessar.fichaCorrida ?? []).map((f) => {
+    if (f.cooperativaId !== coopId || f.status !== "pendente") return f;
+    const prev = pagoAntes.get(f.id);
+    if (!prev) return f;
+    changed = true;
+    return {
+      ...f,
+      status: "pago" as const,
+      updatedAt: prev.updatedAt ?? f.updatedAt,
+    };
+  });
+  return changed ? { ...depoisPosProcessar, fichaCorrida } : depoisPosProcessar;
 }
 
 function snapshotCapturedAt(snapshot: FechamentoSnapshot): number {
@@ -123,7 +351,36 @@ const PAGAMENTO_STATUS_RANK: Record<PagamentoCooperadoRegistro["status"], number
 };
 
 /** Pagamento confirmado localmente não volta para aguardando assinatura na nuvem. */
-function mergePagamentosCooperadoFromCloud(
+function mergePagamentoCooperadoRecord(
+  local: PagamentoCooperadoRegistro,
+  cloud: PagamentoCooperadoRegistro
+): PagamentoCooperadoRegistro {
+  if (local.status === "confirmado" && cloud.status !== "confirmado") return local;
+  if (cloud.status === "confirmado" && local.status !== "confirmado") return cloud;
+  const localRank = PAGAMENTO_STATUS_RANK[local.status] ?? 0;
+  const cloudRank = PAGAMENTO_STATUS_RANK[cloud.status] ?? 0;
+  if (localRank > cloudRank) return local;
+  if (cloudRank > localRank) return cloud;
+  if (local.status === "confirmado" && cloud.status === "confirmado") {
+    if (local.reciboHtml && !cloud.reciboHtml) return local;
+    if (cloud.reciboHtml && !local.reciboHtml) return cloud;
+    const localPago = new Date(local.pagoEm).getTime();
+    const cloudPago = new Date(cloud.pagoEm).getTime();
+    if (Number.isFinite(localPago) && Number.isFinite(cloudPago) && localPago !== cloudPago) {
+      return localPago <= cloudPago ? local : cloud;
+    }
+    if (
+      local.valorLiquido !== cloud.valorLiquido ||
+      local.valorBruto !== cloud.valorBruto ||
+      local.descontoCooperativa !== cloud.descontoCooperativa
+    ) {
+      return local;
+    }
+  }
+  return itemTime(local) >= itemTime(cloud) ? local : cloud;
+}
+
+export function mergePagamentosCooperadoFromCloud(
   localCoop: PagamentoCooperadoRegistro[],
   cloudItems: PagamentoCooperadoRegistro[]
 ): PagamentoCooperadoRegistro[] {
@@ -135,17 +392,7 @@ function mergePagamentosCooperadoFromCloud(
       map.set(local.id, local);
       continue;
     }
-    const localRank = PAGAMENTO_STATUS_RANK[local.status] ?? 0;
-    const cloudRank = PAGAMENTO_STATUS_RANK[cloud.status] ?? 0;
-    if (localRank > cloudRank) {
-      map.set(local.id, local);
-      continue;
-    }
-    if (cloudRank > localRank) {
-      map.set(local.id, cloud);
-      continue;
-    }
-    map.set(local.id, itemTime(local) >= itemTime(cloud) ? local : cloud);
+    map.set(local.id, mergePagamentoCooperadoRecord(local, cloud));
   }
   return [...map.values()];
 }
@@ -181,6 +428,32 @@ function mergeComunicadosExcluidosFromCloud(
     }
   }
   return [...map.values()];
+}
+
+function mergeLivroCaixaExcluidosFromCloud(
+  localCoop: LivroCaixaExcluidoRef[],
+  cloudItems: LivroCaixaExcluidoRef[]
+): LivroCaixaExcluidoRef[] {
+  const map = new Map<string, LivroCaixaExcluidoRef>();
+  for (const item of localCoop) map.set(item.id, item);
+  for (const cloud of cloudItems) {
+    const local = map.get(cloud.id);
+    if (!local || new Date(cloud.excluidoEm).getTime() >= new Date(local.excluidoEm).getTime()) {
+      map.set(cloud.id, cloud);
+    }
+  }
+  return [...map.values()];
+}
+
+function mergeLivroCaixaFromCloud(
+  localCoop: LivroCaixaLancamento[],
+  cloudItems: LivroCaixaLancamento[],
+  cloudSyncTime: string | undefined,
+  excluidosIds: Set<string>
+): LivroCaixaLancamento[] {
+  const cloudFiltered = cloudItems.filter((l) => !excluidosIds.has(l.id));
+  const localFiltered = localCoop.filter((l) => !excluidosIds.has(l.id));
+  return mergeOperacionalArrayFromCloud(localFiltered, cloudFiltered, cloudSyncTime);
 }
 
 /** Comunicado desativado localmente (ex.: após assinar recibo) permanece oculto. */
@@ -332,7 +605,9 @@ function buildContratosPayload(data: AppData, coopId: string): ContratosSyncPayl
 }
 
 function buildOperacionalPayload(data: AppData, coopId: string): OperacionalSyncPayload {
-  const sanitized = reconciliarFichaFromNotasConferidas(data);
+  const sanitized = posProcessarIntegridadePagamentosCooperativa(
+    reconciliarFichaFromNotasConferidas(data)
+  );
   const now = new Date().toISOString();
   const cooperadoIds = new Set(
     sanitized.cooperados.filter((c) => c.cooperativaId === coopId).map((c) => c.id)
@@ -340,9 +615,17 @@ function buildOperacionalPayload(data: AppData, coopId: string): OperacionalSync
   const excluidasIds = new Set(
     (sanitized.prestacoesContasExcluidas ?? []).filter((e) => e.cooperativaId === coopId).map((e) => e.id)
   );
-  const fichaCoop = dedupeFichaCorridaPorNota(
+  const livroCaixaExcluidosCoop = (sanitized.livroCaixaExcluidos ?? []).filter(
+    (e) => !e.cooperativaId || e.cooperativaId === coopId
+  );
+  const livroCaixaExcluidosIds = new Set(livroCaixaExcluidosCoop.map((e) => e.id));
+  const idsNotasExcluidasCoop = idsNotasPedidoExcluidas(sanitized, coopId);
+  const fichaCoopDeduped = dedupeFichaCorridaPorNota(
     sanitized.fichaCorrida.filter((f) => f.cooperativaId === coopId),
     sanitized.notasPedido
+  );
+  const fichaCoop = fichaCoopDeduped.filter(
+    (ficha) => !ficha.notaPedidoId || !idsNotasExcluidasCoop.has(ficha.notaPedidoId)
   );
   return {
     updatedAt: now,
@@ -365,8 +648,11 @@ function buildOperacionalPayload(data: AppData, coopId: string): OperacionalSync
       ),
     descontos: sanitized.descontos.filter((d) => cooperadoIds.has(d.cooperadoId)),
     valoresAvulsosReceber: (sanitized.valoresAvulsosReceber ?? []).filter((v) => v.cooperativaId === coopId),
-    livroCaixa: (sanitized.livroCaixa ?? []).filter((l) => l.cooperativaId === coopId),
+    livroCaixa: (sanitized.livroCaixa ?? []).filter(
+      (l) => l.cooperativaId === coopId && !livroCaixaExcluidosIds.has(l.id)
+    ),
     livroCaixaControleAnual: (sanitized.livroCaixaControleAnual ?? []).filter((c) => c.cooperativaId === coopId),
+    livroCaixaExcluidos: livroCaixaExcluidosCoop,
     prestacoesContas: (sanitized.prestacoesContas ?? []).filter(
       (p) => p.cooperativaId === coopId && !excluidasIds.has(p.id)
     ),
@@ -381,7 +667,13 @@ function buildOperacionalPayload(data: AppData, coopId: string): OperacionalSync
   };
 }
 
+/** Expõe montagem do payload operacional para testes de regressão (H8.9.129). */
+export function buildOperacionalPayloadForTests(data: AppData, coopId: string): OperacionalSyncPayload {
+  return buildOperacionalPayload(data, coopId);
+}
+
 function normalizeCloudOperacional(cloud: OperacionalSyncPayload): OperacionalSyncPayload {
+  if (cloud.fullReset === true) return cloud;
   if ((cloud.operationalResetVersion ?? 0) >= OPERATIONAL_RESET_VERSION) return cloud;
   return {
     ...cloud,
@@ -633,14 +925,304 @@ export function mergeContratosIntoData(data: AppData, cloud: ContratosSyncPayloa
   });
 }
 
+export type FullResetCompletudeVerdict = "allow" | "block" | "indeterminate";
+
+function notaConferidaParaFullResetGuard(nota: NotaPedido): boolean {
+  if (nota.status !== "conferida" && nota.status !== "pago") return false;
+  if (nota.valorLiquido <= 0 && (nota.itens ?? []).every((i) => i.quantidade <= 0)) return false;
+  return true;
+}
+
+/** Notas conferidas/pagas usadas na proteção fullReset parcial (POST + merge). */
+export function notasConferidasParaFullResetGuard(
+  notas: NotaPedido[],
+  coopId?: string,
+  excludedNotaIds?: Set<string>
+): NotaPedido[] {
+  return notas.filter((n) => {
+    if (excludedNotaIds?.has(n.id)) return false;
+    if (coopId && n.cooperativaId !== coopId) return false;
+    return notaConferidaParaFullResetGuard(n);
+  });
+}
+
+function fichaNotaPedidoIds(fichas: FichaCorrida[] | undefined, coopId?: string): Set<string> {
+  const ids = new Set<string>();
+  for (const f of fichas ?? []) {
+    if (!f.notaPedidoId) continue;
+    if (coopId && f.cooperativaId && f.cooperativaId !== coopId) continue;
+    ids.add(f.notaPedidoId);
+  }
+  return ids;
+}
+
+function operacionalPayloadVazioLegitimo(
+  payload: Pick<OperacionalSyncPayload, "fichaCorrida" | "pagamentosCooperado">
+): boolean {
+  const fichas = payload.fichaCorrida ?? [];
+  const pags = payload.pagamentosCooperado ?? [];
+  const sumFichas = fichas.reduce((s, f) => s + (f.valorLiquido ?? 0), 0);
+  return fichas.length === 0 && pags.length === 0 && sumFichas < 0.01;
+}
+
+/** PATCH A — avalia completude de publicação `fullReset` vs notas conferidas conhecidas (identidade por ID). */
+export function avaliarFullResetOperacionalCompletude(input: {
+  fullReset: boolean;
+  payload: Pick<OperacionalSyncPayload, "fichaCorrida" | "pagamentosCooperado">;
+  conferidasNotas: NotaPedido[];
+  coopId?: string;
+  excludedNotaIds?: Set<string>;
+}): { verdict: FullResetCompletudeVerdict; motivo: string } {
+  if (!input.fullReset) {
+    return { verdict: "allow", motivo: "fullReset false" };
+  }
+
+  const conferidas = notasConferidasParaFullResetGuard(
+    input.conferidasNotas,
+    input.coopId,
+    input.excludedNotaIds
+  );
+  const contextIds = new Set(conferidas.map((n) => n.id));
+  const payloadFichaIds = fichaNotaPedidoIds(input.payload.fichaCorrida, input.coopId);
+
+  if (contextIds.size === 0) {
+    return { verdict: "allow", motivo: "indeterminate: sem notas conferidas para comparar" };
+  }
+
+  if (operacionalPayloadVazioLegitimo(input.payload)) {
+    return { verdict: "allow", motivo: "reset legítimo — payload operacional vazio" };
+  }
+
+  const allPayloadInContext = [...payloadFichaIds].every((id) => contextIds.has(id));
+  if (!allPayloadInContext) {
+    return {
+      verdict: "indeterminate",
+      motivo: "IDs de ficha não mapeiam ao conjunto conferido (sem equivalência automática)",
+    };
+  }
+
+  const sameSet =
+    contextIds.size === payloadFichaIds.size &&
+    [...contextIds].every((id) => payloadFichaIds.has(id));
+  if (sameSet) {
+    return { verdict: "allow", motivo: "fullReset completo — conjunto de notaPedidoId alinhado" };
+  }
+
+  if (payloadFichaIds.size < contextIds.size) {
+    return {
+      verdict: "block",
+      motivo: "fullReset parcial — fichas strict subset das notas conferidas conhecidas",
+    };
+  }
+
+  return { verdict: "indeterminate", motivo: "cloud/payload superset ou ambíguo" };
+}
+
+export type FullResetMergeReconciliarGuard = {
+  reconciliarApesarFullReset: boolean;
+  motivo: string;
+};
+
+/** PATCH B — reconciliar após merge fullReset quando cloud parcial e notas locais sustentam reconstrução. */
+export function computeFullResetMergeReconciliarGuard(
+  data: AppData,
+  cloud: OperacionalSyncPayload,
+  coopId: string,
+  excludedNotaIds: Set<string>
+): FullResetMergeReconciliarGuard {
+  if (cloud.fullReset !== true) {
+    return { reconciliarApesarFullReset: false, motivo: "sem fullReset na nuvem" };
+  }
+
+  const conferidas = notasConferidasParaFullResetGuard(data.notasPedido ?? [], coopId, excludedNotaIds);
+  const contextIds = new Set(conferidas.map((n) => n.id));
+  if (contextIds.size === 0) {
+    return { reconciliarApesarFullReset: false, motivo: "indeterminate: notas conferidas locais insuficientes" };
+  }
+
+  const cloudFichaIds = fichaNotaPedidoIds(cloud.fichaCorrida, coopId);
+  if (cloudFichaIds.size === 0) {
+    return { reconciliarApesarFullReset: false, motivo: "cloud operacional vazio — reset legítimo" };
+  }
+
+  const allCloudInContext = [...cloudFichaIds].every((id) => contextIds.has(id));
+  if (!allCloudInContext) {
+    return {
+      reconciliarApesarFullReset: false,
+      motivo: "indeterminate: fichas cloud com notaPedidoId fora do conjunto conferido local",
+    };
+  }
+
+  if (cloudFichaIds.size >= contextIds.size) {
+    return { reconciliarApesarFullReset: false, motivo: "cloud completo ou superset por IDs — autoritativo" };
+  }
+
+  const cloudTime = cloud.updatedAt ? new Date(cloud.updatedAt).getTime() : 0;
+  const maxLocalNotaTime = conferidas.reduce(
+    (max, n) => Math.max(max, new Date(n.updatedAt ?? n.dataConferencia ?? 0).getTime()),
+    0
+  );
+  const localCoopFichaIds = fichaNotaPedidoIds(
+    (data.fichaCorrida ?? []).filter((f) => f.cooperativaId === coopId || !f.cooperativaId),
+    coopId
+  );
+  const localCoversContext = [...contextIds].every((id) => localCoopFichaIds.has(id));
+  if (
+    localCoversContext &&
+    cloudTime > 0 &&
+    maxLocalNotaTime > 0 &&
+    cloudTime >= maxLocalNotaTime &&
+    cloudFichaIds.size === contextIds.size
+  ) {
+    return { reconciliarApesarFullReset: false, motivo: "cloud mais recente e completo por IDs" };
+  }
+
+  return {
+    reconciliarApesarFullReset: true,
+    motivo: "cloud fullReset parcial — reconciliar pelas notas conferidas locais",
+  };
+}
+
+/** H8.14E — pull client: fullReset destrutivo só com prova explícita (não fullReset/versão/vazio isolados). */
+export type FullResetOperacionalPullSeguro = {
+  permitirClearFinanceiro: boolean;
+  permitirCloudAuthoritative: boolean;
+  permitirMergeAutoritativo: boolean;
+  permitirAplicarResetLegado: boolean;
+  motivo: string;
+};
+
+function negarFullResetPullSeguro(motivo: string): FullResetOperacionalPullSeguro {
+  return {
+    permitirClearFinanceiro: false,
+    permitirCloudAuthoritative: false,
+    permitirMergeAutoritativo: false,
+    permitirAplicarResetLegado: false,
+    motivo,
+  };
+}
+
+export function avaliarFullResetOperacionalPullSeguro(
+  data: AppData,
+  cloud: OperacionalSyncPayload,
+  coopId: string,
+  cnpj?: string
+): FullResetOperacionalPullSeguro {
+  if (cloud.fullReset !== true) {
+    return negarFullResetPullSeguro("sem fullReset na nuvem");
+  }
+
+  const digits = cnpj ? normalizeCnpj(cnpj) : "";
+  const cloudTime = cloud.updatedAt ? new Date(cloud.updatedAt).getTime() : 0;
+  if (digits.length === 14 && cloudTime > 0) {
+    const lastMerged = getLastOperacionalPullMergedUpdatedAtMs(digits);
+    if (lastMerged > 0 && cloudTime < lastMerged) {
+      return negarFullResetPullSeguro(
+        "H814E: payload operacional mais antigo que último merge autoritativo aplicado"
+      );
+    }
+  }
+
+  const excludedNotaIds = idsNotasPedidoExcluidas(data, coopId);
+  const completude = avaliarFullResetOperacionalCompletude({
+    fullReset: true,
+    payload: cloud,
+    conferidasNotas: data.notasPedido ?? [],
+    coopId,
+    excludedNotaIds,
+  });
+
+  if (completude.verdict === "block") {
+    return negarFullResetPullSeguro(`completude block: ${completude.motivo}`);
+  }
+
+  if (completude.verdict === "indeterminate") {
+    return negarFullResetPullSeguro(`completude indeterminate: ${completude.motivo}`);
+  }
+
+  const conferidas = notasConferidasParaFullResetGuard(data.notasPedido ?? [], coopId, excludedNotaIds);
+  const contextIds = new Set(conferidas.map((n) => n.id));
+
+  if (completude.motivo.includes("payload operacional vazio")) {
+    if (contextIds.size > 0) {
+      return negarFullResetPullSeguro(
+        "H814E: operacional vazio com notas conferidas locais — sem prova de completude"
+      );
+    }
+    const cooperadoIds = new Set(
+      data.cooperados.filter((c) => c.cooperativaId === coopId).map((c) => c.id)
+    );
+    const localFichaNotaIds = fichaNotaPedidoIds(
+      (data.fichaCorrida ?? []).filter((f) => cooperadoIds.has(f.cooperadoId)),
+      coopId
+    );
+    if (localFichaNotaIds.size > 0) {
+      return negarFullResetPullSeguro(
+        "H814E: operacional vazio com fichas locais — sem prova de completude"
+      );
+    }
+    return {
+      permitirClearFinanceiro: true,
+      permitirCloudAuthoritative: true,
+      permitirMergeAutoritativo: true,
+      permitirAplicarResetLegado: true,
+      motivo: "reset vazio comprovado — sem conferidas/fichas locais",
+    };
+  }
+
+  if (completude.motivo.includes("conjunto de notaPedidoId alinhado")) {
+    return {
+      permitirClearFinanceiro: true,
+      permitirCloudAuthoritative: true,
+      permitirMergeAutoritativo: true,
+      permitirAplicarResetLegado: true,
+      motivo: completude.motivo,
+    };
+  }
+
+  if (completude.motivo.includes("sem notas conferidas para comparar")) {
+    return negarFullResetPullSeguro(
+      "H814E: sem conferidas para comparar — não destruir financeiro local"
+    );
+  }
+
+  return negarFullResetPullSeguro(`allow não comprovado: ${completude.motivo}`);
+}
+
+/** Testes H8.14E — merge operacional in-memory (sem rede/store). */
+export function aplicarOperacionalPullLocalForTests(
+  data: AppData,
+  cloud: OperacionalSyncPayload,
+  coopId: string,
+  cnpj: string,
+  cloudCooperados: Cooperado[] = []
+): { data: AppData; pullSeguro: FullResetOperacionalPullSeguro } {
+  const pullSeguro = avaliarFullResetOperacionalPullSeguro(data, cloud, coopId, cnpj);
+  let current = data;
+  if (pullSeguro.permitirClearFinanceiro) {
+    current = clearOperacionalFinanceiroForCooperativa(current, coopId);
+  }
+  const merged = mergeOperacionalIntoData(current, cloud, coopId, cloudCooperados, pullSeguro);
+  if (pullSeguro.permitirCloudAuthoritative) {
+    setOperacionalCloudAuthoritativeForTests(cnpj, cloud.operationalResetVersion ?? 15);
+  } else {
+    setOperacionalCloudAuthoritativeForTests(null);
+  }
+  return { data: posProcessarFinanceiroLocal(merged, cnpj), pullSeguro };
+}
+
 export function mergeOperacionalIntoData(
   data: AppData,
   cloud: OperacionalSyncPayload,
   coopId: string,
-  cloudCooperados: Cooperado[] = []
+  cloudCooperados: Cooperado[] = [],
+  pullSeguro?: FullResetOperacionalPullSeguro
 ): AppData {
   cloud = normalizeCloudOperacional(cloud);
   const cooperadoIds = new Set(data.cooperados.filter((c) => c.cooperativaId === coopId).map((c) => c.id));
+
+  const resolvedPullSeguro =
+    pullSeguro ?? avaliarFullResetOperacionalPullSeguro(data, cloud, coopId);
 
   const mensalidadesLocaisVisiveis = data.mensalidades
     .filter((m) => mensalidadeVisivelNoDispositivo(data, m, coopId))
@@ -687,7 +1269,10 @@ export function mergeOperacionalIntoData(
   ) => items.filter((i) => !isCoop(i));
 
   const cloudSyncTime = cloud.updatedAt;
-  const cloudAuthoritative = cloud.fullReset === true;
+  const cloudAuthoritative =
+    cloud.fullReset === true && resolvedPullSeguro.permitirMergeAutoritativo;
+  const localPagCoop = data.pagamentosCooperado.filter((p) => p.cooperativaId === coopId);
+  const mergedPagamentosCoop = mergePagamentosCooperadoFromCloud(localPagCoop, cloudPagamentos);
 
   const localPautasCoop = (data.votacaoPautas ?? []).filter((p) => p.cooperativaId === coopId);
   const localVotosCoop = (data.votacaoVotos ?? []).filter((v) => v.cooperativaId === coopId);
@@ -709,6 +1294,42 @@ export function mergeOperacionalIntoData(
         cloudComunicadosExcluidos
       );
   const comunicadosExcluidosSet = new Set(mergedComunicadosExcluidosCoop.map((e) => e.id));
+
+  const cloudLivroCaixaExcluidos = (cloud.livroCaixaExcluidos ?? []).map((e) => ({
+    ...e,
+    cooperativaId: e.cooperativaId ?? coopId,
+  }));
+  const mergedLivroCaixaExcluidosCoop = cloudAuthoritative
+    ? cloudLivroCaixaExcluidos
+    : mergeLivroCaixaExcluidosFromCloud(
+        (data.livroCaixaExcluidos ?? []).filter((e) => !e.cooperativaId || e.cooperativaId === coopId),
+        cloudLivroCaixaExcluidos
+      );
+  const livroCaixaExcluidosSet = new Set(mergedLivroCaixaExcluidosCoop.map((e) => e.id));
+
+  const notasExcluidasCoopEffectivas = cloudAuthoritative
+    ? cloudExcluidasNotas
+    : mergedNotasExcluidasCoop;
+  const idsNotasExcluidasCoopMerge = idsNotasPedidoExcluidas(
+    { notasPedidoExcluidas: notasExcluidasCoopEffectivas } as AppData,
+    coopId
+  );
+  const fichaEntraNoMergeOperacional = (f: FichaCorrida) =>
+    !f.notaPedidoId || !idsNotasExcluidasCoopMerge.has(f.notaPedidoId);
+
+  const fullResetMergeReconciliarGuard = computeFullResetMergeReconciliarGuard(
+    data,
+    cloud,
+    coopId,
+    idsNotasExcluidasCoopMerge
+  );
+  const reconciliarGuard =
+    cloud.fullReset === true && !resolvedPullSeguro.permitirMergeAutoritativo
+      ? {
+          reconciliarApesarFullReset: true,
+          motivo: "H814E: fullReset sem completude — reconciliar para preservar fichas locais",
+        }
+      : fullResetMergeReconciliarGuard;
 
   let next: AppData = {
     ...data,
@@ -734,12 +1355,7 @@ export function mergeOperacionalIntoData(
     ],
     pagamentosCooperado: [
       ...filterCoop(data.pagamentosCooperado, (p) => p.cooperativaId === coopId),
-      ...(cloudAuthoritative
-        ? cloudPagamentos
-        : mergePagamentosCooperadoFromCloud(
-            data.pagamentosCooperado.filter((p) => p.cooperativaId === coopId),
-            cloudPagamentos
-          )),
+      ...mergedPagamentosCoop,
     ],
     comunicados: [
       ...filterCoop(data.comunicados, (c) => c.cooperativaId === coopId),
@@ -788,16 +1404,21 @@ export function mergeOperacionalIntoData(
     livroCaixa: [
       ...filterCoop(data.livroCaixa ?? [], (l) => l.cooperativaId === coopId),
       ...(cloudAuthoritative
-        ? cloudLivro
-        : mergeOperacionalArrayFromCloud(
+        ? cloudLivro.filter((l) => !livroCaixaExcluidosSet.has(l.id))
+        : mergeLivroCaixaFromCloud(
             (data.livroCaixa ?? []).filter((l) => l.cooperativaId === coopId),
             cloudLivro,
-            cloudSyncTime
+            cloudSyncTime,
+            livroCaixaExcluidosSet
           )),
     ],
     livroCaixaControleAnual: [
       ...(data.livroCaixaControleAnual ?? []).filter((c) => c.cooperativaId !== coopId),
       ...(mergedLivroControle ? [mergedLivroControle] : []),
+    ],
+    livroCaixaExcluidos: [
+      ...(data.livroCaixaExcluidos ?? []).filter((e) => e.cooperativaId && e.cooperativaId !== coopId),
+      ...mergedLivroCaixaExcluidosCoop,
     ],
     prestacoesContas: [
       ...filterCoop(data.prestacoesContas ?? [], (p) => p.cooperativaId === coopId),
@@ -819,11 +1440,19 @@ export function mergeOperacionalIntoData(
       [
         ...filterCoop(data.fichaCorrida ?? [], (f) => f.cooperativaId === coopId),
         ...(cloudAuthoritative
-          ? cloudFichas
-          : mergeOperacionalArrayFromCloud(
-              (data.fichaCorrida ?? []).filter((f) => f.cooperativaId === coopId),
-              cloudFichas,
-              cloudSyncTime
+          ? mergeFichaCorridaFromCloud(
+              (data.fichaCorrida ?? [])
+                .filter((f) => f.cooperativaId === coopId)
+                .filter(fichaEntraNoMergeOperacional),
+              cloudFichas.filter(fichaEntraNoMergeOperacional),
+              mergedPagamentosCoop
+            )
+          : mergeFichaCorridaFromCloud(
+              (data.fichaCorrida ?? [])
+                .filter((f) => f.cooperativaId === coopId)
+                .filter(fichaEntraNoMergeOperacional),
+              cloudFichas.filter(fichaEntraNoMergeOperacional),
+              [...localPagCoop, ...cloudPagamentos]
             )),
       ],
       data.notasPedido
@@ -879,10 +1508,19 @@ export function mergeOperacionalIntoData(
   const cloudResetLimpouMensalidades =
     cloud.fullReset === true && (cloud.mensalidades ?? []).length === 0;
 
+  const posMergeFinanceiro = (draft: AppData): AppData => {
+    const runReconciliar =
+      !cloudAuthoritative || reconciliarGuard.reconciliarApesarFullReset;
+    const pos = runReconciliar
+      ? posProcessarIntegridadePagamentosCooperativa(reconciliarFichaFromNotasConferidas(draft))
+      : posProcessarIntegridadePagamentosCooperativa(draft);
+    return reaplicarFichaPagoMergePosIntegridade(draft, pos, coopId);
+  };
+
   if (cloudResetLimpouMensalidades) {
     return purgeComunicadosMarcadosExcluidos(
       aplicarNotasPedidoExcluidas(
-        aplicarPrestacoesContasExcluidas(reconciliarFichaFromNotasConferidas(next)),
+        aplicarPrestacoesContasExcluidas(posMergeFinanceiro(next)),
         coopId
       ),
       coopId
@@ -892,7 +1530,7 @@ export function mergeOperacionalIntoData(
   return purgeComunicadosMarcadosExcluidos(
     sincronizarMensalidadeCooperativa(
       aplicarNotasPedidoExcluidas(
-        aplicarPrestacoesContasExcluidas(reconciliarFichaFromNotasConferidas(next)),
+        aplicarPrestacoesContasExcluidas(posMergeFinanceiro(next)),
         coopId
       ),
       coopId
@@ -912,9 +1550,11 @@ async function fetchSyncBundle(cnpj: string): Promise<{
     if (!res.ok) return null;
     const json = await res.json();
     if (!json.configured) return null;
+    const operacional = json.operacional ?? null;
+    noteOperacionalCloudRestoreFromFetch(digits, operacional);
     return {
       contratos: json.contratos ?? null,
-      operacional: json.operacional ?? null,
+      operacional,
     };
   } catch {
     return null;
@@ -974,9 +1614,37 @@ export async function pushOperacionalToCloud(
 ): Promise<void> {
   const digits = normalizeCnpj(cnpj);
   if (digits.length !== 14) return;
+  pushOperacionalPublicTestEnterHook?.();
+  if (!isOperacionalPushSingleFlightEnabled()) {
+    return pushOperacionalToCloudInternal(cnpj, data, coopId, options);
+  }
+  return enqueueOperacionalCoordination(digits, () =>
+    pushOperacionalToCloudInternal(cnpj, data, coopId, options)
+  );
+}
+
+/** Corpo operacional (POST, dedupe, merge). Não chama a API pública nem `enqueueOperacionalPush`. */
+export async function pushOperacionalToCloudInternal(
+  cnpj: string,
+  data?: AppData,
+  coopId?: string,
+  options?: { authoritative?: boolean; skipOperationalResetPush?: boolean; forceOperacionalPush?: boolean }
+): Promise<void> {
+  const digits = normalizeCnpj(cnpj);
+  if (digits.length !== 14) return;
+
+  await pushOperacionalInternalTestEnterHook?.({ cnpj: digits });
 
   if (!options?.skipOperationalResetPush && needsOperationalResetCloudPush()) {
     await pushOperationalResetToCloud(digits, coopId);
+  }
+
+  let bundle: Awaited<ReturnType<typeof fetchSyncBundle>> | null = await fetchSyncBundle(digits);
+  if (cloudOperacionalRestoreAtivo(bundle?.operacional) && !options?.forceOperacionalPush) {
+    return;
+  }
+  if (!bundle?.operacional && !options?.forceOperacionalPush) {
+    return;
   }
 
   // Snapshot inicial só para resolver CNPJ/coop; após awaits sempre reler getData()
@@ -987,7 +1655,7 @@ export async function pushOperacionalToCloud(
 
   await ensureComunicadosAudioUploaded(digits, cid, getData()).catch(() => {});
 
-  let bundle: Awaited<ReturnType<typeof fetchSyncBundle>> | null = await fetchSyncBundle(digits);
+  bundle = await fetchSyncBundle(digits);
   let cloudCooperados: Cooperado[] = (await fetchCooperadosFromCloud(digits)).cooperados;
 
   const fresh = aplicarPrestacoesContasExcluidas(getData());
@@ -995,7 +1663,18 @@ export async function pushOperacionalToCloud(
   if (bundle?.operacional) {
     const fromCloud = mergeOperacionalIntoData(fresh, bundle.operacional, cid, cloudCooperados);
     merged = options?.authoritative
-      ? { ...fresh, votacaoPautas: fromCloud.votacaoPautas, votacaoVotos: fromCloud.votacaoVotos }
+      ? {
+          ...fresh,
+          pagamentosCooperado: [
+            ...fresh.pagamentosCooperado.filter((p) => p.cooperativaId !== cid),
+            ...mergePagamentosCooperadoFromCloud(
+              fresh.pagamentosCooperado.filter((p) => p.cooperativaId === cid),
+              fromCloud.pagamentosCooperado.filter((p) => p.cooperativaId === cid)
+            ),
+          ],
+          votacaoPautas: fromCloud.votacaoPautas,
+          votacaoVotos: fromCloud.votacaoVotos,
+        }
       : fromCloud;
   }
   saveDataSafe(merged);
@@ -1043,7 +1722,21 @@ export async function pushOperacionalToCloud(
       saveDataSafe(dataForPayload);
     }
   }
-  dataForPayload = reconciliarFichaFromNotasConferidas(dataForPayload);
+  if (bundle?.operacional) {
+    const cloudPag = (bundle.operacional.pagamentosCooperado ?? []).map((p) => ({
+      ...p,
+      cooperativaId: cid,
+    }));
+    const localPag = dataForPayload.pagamentosCooperado.filter((p) => p.cooperativaId === cid);
+    dataForPayload = {
+      ...dataForPayload,
+      pagamentosCooperado: [
+        ...dataForPayload.pagamentosCooperado.filter((p) => p.cooperativaId !== cid),
+        ...mergePagamentosCooperadoFromCloud(localPag, cloudPag),
+      ],
+    };
+  }
+  dataForPayload = posProcessarFinanceiroLocal(dataForPayload, digits);
   saveDataSafe(dataForPayload);
   const payloadFinal = buildOperacionalPayload(dataForPayload, cid);
   if (bundle?.operacional) {
@@ -1078,6 +1771,7 @@ export async function pushOperacionalToCloud(
     bundle?.operacional &&
     !options?.forceOperacionalPush &&
     !options?.authoritative &&
+    !operacionalTemPagamentoAguardandoSoLocal(afterPushCoop, cid, bundle.operacional) &&
     !operacionalPushSeguro(
       afterPushCoop,
       cid,
@@ -1085,11 +1779,12 @@ export async function pushOperacionalToCloud(
       payloadFinal.fichaCorrida?.length ?? 0
     )
   ) {
-    const repaired = reconciliarFichaFromNotasConferidas(
+    const repaired = posProcessarFinanceiroLocal(
       purgeComunicadosMarcadosExcluidos(
         mergeOperacionalIntoData(afterPushCoop, bundle.operacional, cid, cloudCooperados),
         cid
-      )
+      ),
+      digits
     );
     saveDataSafe(repaired);
     return;
@@ -1102,11 +1797,16 @@ export async function pushOperacionalToCloud(
   }
 
   try {
-    await secureApiFetch("/api/cooperativa-sync", {
+    const res = await secureApiFetch("/api/cooperativa-sync", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ cnpj: digits, section: "operacional", payload: payloadFinal }),
     });
+    if (!res.ok) {
+      const json = (await res.json().catch(() => ({}))) as { error?: string; code?: string };
+      console.warn("[operacional-push]", res.status, json.code ?? json.error ?? res.statusText);
+      return;
+    }
     lastOperacionalPushFingerprint.set(pushKey, fingerprint);
   } catch {
     /* offline */
@@ -1162,20 +1862,127 @@ export async function publicarCatalogoContratos(cnpj: string, data?: AppData, co
   return true;
 }
 
-export async function syncOperacionalFromCloud(cnpj: string): Promise<boolean> {
-  const bundle = await fetchSyncBundle(cnpj);
-  if (!bundle?.operacional) return false;
-  let current = getData();
-  const coopId = resolveCoopId(current, cnpj);
-  if (!coopId) return false;
+export type CooperadoOperacionalPullCode =
+  | "ok"
+  | "invalid_cnpj"
+  | "fetch_failed"
+  | "no_operacional"
+  | "no_coop_id"
+  | "stale_discarded";
 
-  const reset = applyCloudOperationalResetIfNeeded(current, cnpj, coopId, bundle.operacional);
-  if (reset.changed) current = reset.data;
+export type SyncOperacionalFromCloudResult = {
+  ok: boolean;
+  code: CooperadoOperacionalPullCode;
+  /** Pagamentos da cooperativa no AppData após tentativa (0 se não persistiu). */
+  pagamentosCoopCount: number;
+};
+
+function countPagamentosCooperativa(data: AppData, coopId: string): number {
+  return (data.pagamentosCooperado ?? []).filter((p) => p.cooperativaId === coopId).length;
+}
+
+function countPagamentosCooperativaCloud(
+  operacional: OperacionalSyncPayload,
+  coopId: string
+): number {
+  return (operacional.pagamentosCooperado ?? []).filter(
+    (p) => !p.cooperativaId || p.cooperativaId === coopId
+  ).length;
+}
+
+/** Diagnóstico cooperado: nuvem tinha pagamentos e local ficou vazio após merge+save. */
+export function detectCooperadoPagamentosNaoMaterializados(
+  coopId: string,
+  operacional: OperacionalSyncPayload,
+  data: AppData
+): boolean {
+  const cloudN = countPagamentosCooperativaCloud(operacional, coopId);
+  const localN = countPagamentosCooperativa(data, coopId);
+  return cloudN > 0 && localN === 0;
+}
+
+export async function syncOperacionalFromCloud(
+  cnpj: string,
+  opts?: { sessionLease?: CooperativaSyncSessionLease }
+): Promise<SyncOperacionalFromCloudResult> {
+  const digits = normalizeCnpj(cnpj);
+  if (digits.length !== 14) {
+    return { ok: false, code: "invalid_cnpj", pagamentosCoopCount: 0 };
+  }
+
+  const pullLease = opts?.sessionLease ?? acquireOperacionalPullLease(digits);
+  const bundle = await fetchSyncBundle(digits);
+  if (!bundle) {
+    return { ok: false, code: "fetch_failed", pagamentosCoopCount: 0 };
+  }
+  if (!bundle.operacional) {
+    return { ok: false, code: "no_operacional", pagamentosCoopCount: 0 };
+  }
+  let current = getData();
+  const coopId = resolveCoopId(current, digits);
+  if (!coopId) {
+    return { ok: false, code: "no_coop_id", pagamentosCoopCount: 0 };
+  }
+
+  const pullSeguro = avaliarFullResetOperacionalPullSeguro(
+    current,
+    bundle.operacional,
+    coopId,
+    cnpj
+  );
+
+  if (pullSeguro.permitirAplicarResetLegado) {
+    const stale = reapplyCloudOperationalSliceIfStale(current, cnpj, coopId, bundle.operacional);
+    if (stale.changed) current = stale.data;
+
+    const reset = applyCloudOperationalResetIfNeeded(current, cnpj, coopId, bundle.operacional);
+    if (reset.changed) current = reset.data;
+  }
+
+  if (pullSeguro.permitirClearFinanceiro && cloudOperacionalRestoreAtivo(bundle.operacional)) {
+    current = clearOperacionalFinanceiroForCooperativa(current, coopId);
+  }
 
   const cloudCooperados = (await fetchCooperadosFromCloud(cnpj)).cooperados;
-  const merged = mergeOperacionalIntoData(current, bundle.operacional, coopId, cloudCooperados);
+  const merged = mergeOperacionalIntoData(
+    current,
+    bundle.operacional,
+    coopId,
+    cloudCooperados,
+    pullSeguro
+  );
+  if (!pullLease.isCurrent()) {
+    console.info("[OPERACIONAL_PULL] resultado obsoleto descartado", {
+      cnpj: pullLease.cnpj,
+      generation: pullLease.generation,
+    });
+    return {
+      ok: true,
+      code: "stale_discarded",
+      pagamentosCoopCount: countPagamentosCooperativa(getData(), coopId),
+    };
+  }
+
   saveDataSafe(merged);
-  return true;
+  const after = getData();
+  if (detectCooperadoPagamentosNaoMaterializados(coopId, bundle.operacional, after)) {
+    console.warn("[COOP_FIN_SYNC] pagamentos da nuvem não materializados no AppData após merge", {
+      cnpj: digits,
+      coopId,
+      cloudPagamentos: countPagamentosCooperativaCloud(bundle.operacional, coopId),
+    });
+  }
+  if (pullSeguro.permitirCloudAuthoritative && cloudOperacionalRestoreAtivo(bundle.operacional)) {
+    markOperacionalCloudAuthoritative(digits, bundle.operacional.operationalResetVersion ?? 1);
+    noteOperacionalPullMergedUpdatedAt(digits, bundle.operacional.updatedAt);
+  } else {
+    clearOperacionalCloudAuthoritative(digits);
+  }
+  return {
+    ok: true,
+    code: "ok",
+    pagamentosCoopCount: countPagamentosCooperativa(after, coopId),
+  };
 }
 
 export async function syncCooperativaProfileFromCloud(cnpj: string): Promise<boolean> {
@@ -1199,7 +2006,7 @@ export const SYNC_INTERVAL_DESKTOP_MS = 15 * 60_000;
 export const SYNC_MIN_GAP_MS = 2 * 60_000;
 export const SYNC_MIN_GAP_MOBILE_MS = 2 * 60_000;
 /** Responsável / diretoria — permite nova sync mais cedo após salvar ou abrir tela. */
-export const SYNC_MIN_GAP_GESTAO_MS = 25_000;
+export const SYNC_MIN_GAP_GESTAO_MS = 45_000;
 
 export function isMobileDevice(): boolean {
   if (typeof window === "undefined") return false;
@@ -1231,7 +2038,8 @@ export function getSyncMinGapMs(role?: string): number {
 
 export async function ensureCloudOperationalResetApplied(
   cnpj: string,
-  preferredCoopId?: string
+  preferredCoopId?: string,
+  sessionLease?: CooperativaSyncSessionLease
 ): Promise<boolean> {
   const digits = normalizeCnpj(cnpj);
   if (digits.length !== 14) return false;
@@ -1243,51 +2051,80 @@ export async function ensureCloudOperationalResetApplied(
   const coopId = preferredCoopId ?? resolveCoopId(current, digits);
   if (!coopId) return false;
 
-  const reset = applyCloudOperationalResetIfNeeded(current, digits, coopId, bundle.operacional);
-  if (!reset.changed) return false;
+  const pullSeguro = avaliarFullResetOperacionalPullSeguro(
+    current,
+    bundle.operacional,
+    coopId,
+    digits
+  );
+  if (!pullSeguro.permitirAplicarResetLegado) return false;
 
-  saveDataSafe(reset.data);
-  return true;
+  let working = current;
+  const stale = reapplyCloudOperationalSliceIfStale(working, digits, coopId, bundle.operacional);
+  if (stale.changed) working = stale.data;
+
+  const reset = applyCloudOperationalResetIfNeeded(working, digits, coopId, bundle.operacional);
+  if (reset.changed || stale.changed) {
+    saveAppDataIfSyncLeaseCurrent(sessionLease, reset.changed ? reset.data : working);
+    return true;
+  }
+
+  return false;
 }
+
+export type SyncCooperativaBackgroundOpts = {
+  sessionLease?: CooperativaSyncSessionLease;
+};
 
 /** Sync leve em background (cooperado no celular): perfil, cooperados, notas e operacional. */
 export async function syncCooperativaBackground(
   cnpj: string,
   preferredCoopId?: string,
-  cooperadoId?: string
+  cooperadoId?: string,
+  opts?: SyncCooperativaBackgroundOpts
 ): Promise<void> {
   const digits = normalizeCnpj(cnpj);
   if (digits.length !== 14) return;
 
+  const session = opts?.sessionLease ?? acquireCooperativaSyncSessionLease(digits);
+
   beginCloudSync();
   try {
-    await ensureCloudOperationalResetApplied(digits, preferredCoopId);
+    await ensureCloudOperationalResetApplied(digits, preferredCoopId, session);
 
-    await runWithBatchedSaveAsync(async () => {
-      await syncCooperativaProfileFromCloud(digits);
-      const coopId = preferredCoopId ?? resolveCoopId(getData(), digits);
-      await syncCooperadosFromCloud(digits, coopId);
-      // Notas antes do operacional — ficha exige nota conferida local; senão purgarFichasInvalidas apaga tudo.
-      // Delta por padrão; full a cada 2 min ou quando repararIntegridade/ensureFinanceiro forçam.
-      await syncNotasPedidoFromCloud(digits);
-      await syncOperacionalFromCloud(digits);
-      await syncContratosFromCloud(digits);
-      if (coopId) {
-        await repararIntegridadeFichaNotas(digits, coopId, cooperadoId);
-        if (
-          cooperadoId &&
-          cooperadoFichaValoresDesalinhados(getData(), cooperadoId, coopId)
-        ) {
-          saveDataSafe(reconciliarFichaFromNotasConferidas(getData()));
+    const bundleHint = await fetchSyncBundle(digits);
+    const restoreAtivo = cloudOperacionalRestoreAtivo(bundleHint?.operacional);
+
+    await runWithBatchedSaveAsync(
+      async () => {
+        await syncCooperativaProfileFromCloud(digits);
+        const coopId = preferredCoopId ?? resolveCoopId(getData(), digits);
+        await syncCooperadosFromCloud(digits, coopId);
+        const notasOpts = { sessionLease: session };
+        if (restoreAtivo) {
+          await syncOperacionalFromCloud(digits, { sessionLease: session });
+          await syncNotasPedidoFromCloud(digits, notasOpts);
+        } else {
+          await syncNotasPedidoFromCloud(digits, notasOpts);
+          await syncOperacionalFromCloud(digits, { sessionLease: session });
         }
-      }
-      saveDataSafe(reconciliarFichaFromNotasConferidas(getData()));
-      if (cooperadoId && coopId) {
-        const after = getData();
-        const limpo = limparFichaObsoletaCooperado(after, cooperadoId, coopId);
-        if (limpo !== after) saveDataSafe(limpo);
-      }
-    });
+        await syncContratosFromCloud(digits);
+        const operacionalCloud = (await fetchSyncBundle(digits))?.operacional ?? null;
+        if (coopId && !isOperacionalCloudAuthoritative(digits)) {
+          await repararIntegridadeFichaNotas(digits, coopId, cooperadoId, { sessionLease: session });
+        }
+        saveAppDataIfSyncLeaseCurrent(
+          session,
+          finalizeOperacionalPullLocalState(getData(), operacionalCloud, digits)
+        );
+        if (cooperadoId && coopId) {
+          const after = getData();
+          const limpo = limparFichaObsoletaCooperado(after, cooperadoId, coopId);
+          if (limpo !== after) saveAppDataIfSyncLeaseCurrent(session, limpo);
+        }
+      },
+      { shouldPersistBatch: () => session.isCurrent() }
+    );
   } finally {
     endCloudSync();
   }
@@ -1299,7 +2136,8 @@ export async function syncCooperativaBackground(
 export async function repararIntegridadeFichaNotas(
   cnpj: string,
   cooperativaId: string,
-  cooperadoId?: string
+  cooperadoId?: string,
+  opts?: { sessionLease?: CooperativaSyncSessionLease }
 ): Promise<boolean> {
   const digits = normalizeCnpj(cnpj);
   if (digits.length !== 14) return false;
@@ -1313,9 +2151,9 @@ export async function repararIntegridadeFichaNotas(
 
   forceNextFullNotasSync(digits);
   clearNotasSyncMeta(digits);
-  await syncNotasPedidoFromCloud(digits, { retryFull: true });
-  await syncOperacionalFromCloud(digits);
-  saveDataSafe(reconciliarFichaFromNotasConferidas(getData()));
+  await syncNotasPedidoFromCloud(digits, { retryFull: true, sessionLease: opts?.sessionLease });
+  await syncOperacionalFromCloud(digits, { sessionLease: opts?.sessionLease });
+  saveAppDataIfSyncLeaseCurrent(opts?.sessionLease, posProcessarFinanceiroLocal(getData(), digits));
   return true;
 }
 
@@ -1325,7 +2163,8 @@ export async function repararIntegridadeFichaNotas(
 export async function ensureCooperadoFinanceiroFromCloud(
   cnpj: string,
   cooperativaId: string,
-  cooperadoId: string
+  cooperadoId: string,
+  opts?: { sessionLease?: CooperativaSyncSessionLease }
 ): Promise<boolean> {
   const digits = normalizeCnpj(cnpj);
   if (digits.length !== 14) return false;
@@ -1333,11 +2172,13 @@ export async function ensureCooperadoFinanceiroFromCloud(
   let data = getData();
   const limpoInicial = limparFichaObsoletaCooperado(data, cooperadoId, cooperativaId);
   if (limpoInicial !== data) {
-    saveDataSafe(limpoInicial);
+    saveAppDataIfSyncLeaseCurrent(opts?.sessionLease, limpoInicial);
     data = getData();
   }
   if (cooperadoFichaValoresDesalinhados(data, cooperadoId, cooperativaId)) {
-    saveDataSafe(reconciliarFichaFromNotasConferidas(data));
+    if (!isOperacionalCloudAuthoritative(digits)) {
+      saveAppDataIfSyncLeaseCurrent(opts?.sessionLease, posProcessarFinanceiroLocal(data, digits));
+    }
     data = getData();
   }
   if (!cooperadoFinanceiroDesatualizado(data, cooperadoId, cooperativaId)) {
@@ -1349,17 +2190,20 @@ export async function ensureCooperadoFinanceiroFromCloud(
     clearNotasSyncMeta(digits);
     forceNextFullNotasSync(digits);
     await syncCooperadosFromCloud(digits, cooperativaId);
-    await syncNotasPedidoFromCloud(digits, { retryFull: true });
-    await syncOperacionalFromCloud(digits);
-    saveDataSafe(reconciliarFichaFromNotasConferidas(getData()));
+    await syncNotasPedidoFromCloud(digits, { retryFull: true, sessionLease: opts?.sessionLease });
+    await syncOperacionalFromCloud(digits, { sessionLease: opts?.sessionLease });
+    saveAppDataIfSyncLeaseCurrent(opts?.sessionLease, posProcessarFinanceiroLocal(getData(), digits));
 
     data = getData();
-    if (cooperadoFinanceiroDesatualizado(data, cooperadoId, cooperativaId)) {
-      await repararIntegridadeFichaNotas(digits, cooperativaId, cooperadoId);
+    if (
+      !isOperacionalCloudAuthoritative(digits) &&
+      cooperadoFinanceiroDesatualizado(data, cooperadoId, cooperativaId)
+    ) {
+      await repararIntegridadeFichaNotas(digits, cooperativaId, cooperadoId, opts);
     }
     data = getData();
     const limpoFinal = limparFichaObsoletaCooperado(data, cooperadoId, cooperativaId);
-    if (limpoFinal !== data) saveDataSafe(limpoFinal);
+    if (limpoFinal !== data) saveAppDataIfSyncLeaseCurrent(opts?.sessionLease, limpoFinal);
     return !cooperadoFinanceiroDesatualizado(getData(), cooperadoId, cooperativaId);
   } finally {
     endCloudSync();
@@ -1399,7 +2243,58 @@ export async function syncAllCooperativaFromCloud(cnpj: string, preferredCoopId?
     await syncOperacionalFromCloud(digits);
     await syncContratosFromCloud(digits);
     await syncNotasPedidoFromCloud(digits);
+    const operacionalCloud = (await fetchSyncBundle(digits))?.operacional ?? null;
+    saveDataSafe(finalizeOperacionalPullLocalState(getData(), operacionalCloud, digits));
   });
+}
+
+/**
+ * Corpo do sync bidirectional (gestão). Deve rodar dentro de `enqueueOperacionalCoordination`
+ * quando a coordenação estiver ON — não chama `pushOperacionalToCloud` público.
+ */
+export async function syncCooperativaBidirectionalInternal(
+  cnpj: string,
+  coopId?: string,
+  options?: { pushCatalog?: boolean; pushMensalidades?: boolean }
+): Promise<void> {
+  const digits = normalizeCnpj(cnpj);
+  if (digits.length !== 14) return;
+
+  const resetExecutedInJob = needsOperationalResetCloudPush();
+  if (resetExecutedInJob) {
+    await pushOperationalResetToCloud(digits, coopId);
+  }
+
+  await runWithBatchedSaveAsync(async () => {
+    await syncAllCooperativaFromCloud(digits, coopId);
+  });
+
+  const bundleAfterPull = await fetchSyncBundle(digits);
+  if (cloudOperacionalRestoreAtivo(bundleAfterPull?.operacional)) {
+    return;
+  }
+
+  const d = getData();
+  const cid = coopId ?? resolveCoopId(d, digits);
+  if (!cid) return;
+
+  if (options?.pushMensalidades !== false) {
+    // Já puxamos a nuvem acima; push autoritativo com getData() fresco evita
+    // segundo merge com snapshot antigo apagar ação do responsável.
+    await pushOperacionalToCloudInternal(digits, undefined, cid, {
+      authoritative: true,
+      skipOperationalResetPush: resetExecutedInJob,
+    });
+  }
+
+  if (options?.pushCatalog) {
+    const itensCatalogo = getData().produtosInstituicao.filter(
+      (p) => p.cooperativaId === cid && p.ativo && p.precoUnitario > 0
+    ).length;
+    if (itensCatalogo > 0) {
+      await pushContratosToCloud(digits, getData(), cid, { authoritative: true });
+    }
+  }
 }
 
 /**
@@ -1413,33 +2308,12 @@ export async function syncCooperativaBidirectional(
 ): Promise<void> {
   const digits = normalizeCnpj(cnpj);
   if (digits.length !== 14) return;
-
-  if (needsOperationalResetCloudPush()) {
-    await pushOperationalResetToCloud(digits, coopId);
+  if (!isOperacionalPushSingleFlightEnabled()) {
+    return syncCooperativaBidirectionalInternal(cnpj, coopId, options);
   }
-
-  await runWithBatchedSaveAsync(async () => {
-    await syncAllCooperativaFromCloud(digits, coopId);
-  });
-
-  const d = getData();
-  const cid = coopId ?? resolveCoopId(d, digits);
-  if (!cid) return;
-
-  if (options?.pushMensalidades !== false) {
-    // Já puxamos a nuvem acima; push autoritativo com getData() fresco evita
-    // segundo merge com snapshot antigo apagar ação do responsável.
-    await pushOperacionalToCloud(digits, undefined, cid, { authoritative: true });
-  }
-
-  if (options?.pushCatalog) {
-    const itensCatalogo = getData().produtosInstituicao.filter(
-      (p) => p.cooperativaId === cid && p.ativo && p.precoUnitario > 0
-    ).length;
-    if (itensCatalogo > 0) {
-      await pushContratosToCloud(digits, getData(), cid, { authoritative: true });
-    }
-  }
+  return enqueueOperacionalCoordination(digits, () =>
+    syncCooperativaBidirectionalInternal(cnpj, coopId, options)
+  );
 }
 
 /** Envia contratos + operacional + perfil após alterações locais. */

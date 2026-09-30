@@ -130,3 +130,18 @@ export function clearNotasSyncMeta(cnpj?: string): void {
   delete store.notas[cnpj];
   writeStore(store);
 }
+
+const RESP_FULL_NOTAS_SESSION = "hb_resp_full_notas_session_v1";
+
+function sessionKeyForCnpj(cnpj: string): string {
+  return `${RESP_FULL_NOTAS_SESSION}:${cnpj.replace(/\D/g, "")}`;
+}
+
+/** Full de notas ao abrir Conferir entregas — no máximo uma vez por sessão do browser. */
+export function shouldResponsavelForceFullNotasOnEntry(cnpj: string): boolean {
+  if (typeof sessionStorage === "undefined") return false;
+  const key = sessionKeyForCnpj(cnpj);
+  if (sessionStorage.getItem(key)) return false;
+  sessionStorage.setItem(key, "1");
+  return true;
+}

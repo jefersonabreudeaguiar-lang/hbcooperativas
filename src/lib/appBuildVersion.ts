@@ -1,2 +1,2 @@
-/** Incrementar a cada deploy relevante — força atualização do PWA/service worker. */
-export const APP_BUILD_VERSION = 60;
+/** Incrementar a cada release que cooperados precisam receber no PWA (SW + banner). */
+export const APP_BUILD_VERSION = 98;
