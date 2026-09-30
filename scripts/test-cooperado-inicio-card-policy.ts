@@ -51,15 +51,29 @@ function main() {
   const motorQuitado = { mesLabel: "Set/2026", valor: 0, valorRecibo: 0, aguardandoAssinatura: false };
   r = aplicarPoliticaCardInicioEndurecida(motorQuitado, revB, r.latch, {
     carregandoFinanceiro: false,
+    autorizaZerarValor: false,
   });
-  assert.equal(r.display.valor, 0, "nova revisão operacional aplica motor");
+  assert.equal(r.display.valor, 150, "PIX aguardando não zera card — só pagamento confirmado (BIC)");
+
+  const revC = `${revB}|p:2:confirmado`;
+  r = aplicarPoliticaCardInicioEndurecida(motorQuitado, revC, r.latch, {
+    carregandoFinanceiro: false,
+    autorizaZerarValor: true,
+  });
+  assert.equal(r.display.valor, 0, "pagamento confirmado autoriza zerar");
   assert.equal(r.latch.hadPendencia, false);
 
   const anterior = { mesLabel: "Set", valor: 200, valorRecibo: 0, aguardandoAssinatura: false };
   const menor = { mesLabel: "Set", valor: 50, valorRecibo: 0, aguardandoAssinatura: false };
   assert.equal(aplicarSubstituicaoMonotonaDisplay(anterior, menor, true).valor, 200);
   assert.equal(aplicarSubstituicaoMonotonaDisplay(anterior, { ...anterior, valor: 250 }, true).valor, 250);
-  assert.equal(aplicarSubstituicaoMonotonaDisplay(anterior, { mesLabel: "Set", valor: 0, valorRecibo: 0, aguardandoAssinatura: false }, true).valor, 0);
+  assert.equal(aplicarSubstituicaoMonotonaDisplay(anterior, { mesLabel: "Set", valor: 0, valorRecibo: 0, aguardandoAssinatura: false }, true, { autorizaZerarValor: true }).valor, 0);
+  assert.equal(
+    aplicarSubstituicaoMonotonaDisplay(anterior, { mesLabel: "Set", valor: 0, valorRecibo: 0, aguardandoAssinatura: false }, true, {
+      autorizaZerarValor: false,
+    }).valor,
+    200
+  );
 
   assert.equal(
     cooperadoMotorTemObrigacaoReceber({ mesLabel: "x", valor: 0, valorRecibo: 10, aguardandoAssinatura: true }),

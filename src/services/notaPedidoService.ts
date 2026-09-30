@@ -66,7 +66,9 @@ function valorBrutoItemLinha(item: NotaPedidoItem): number {
 function mesclarItemResumo(map: Map<string, ItemResumoFichaMes>, item: NotaPedidoItem) {
   if (item.quantidade <= 0) return;
   const valorLinha = valorBrutoItemLinha(item);
-  const key = item.produtoInstituicaoId || `${item.produtoNome.trim()}::${item.unidade.trim()}`;
+  const key =
+    item.produtoInstituicaoId ||
+    `${(item.produtoNome ?? "").trim()}::${(item.unidade ?? "").trim()}`;
   const existente = map.get(key);
   if (existente) {
     existente.quantidade = round2(existente.quantidade + item.quantidade);
@@ -148,7 +150,9 @@ export function agregarItensFichaMeses(
     const parcial = agregarItensFichaMes(data, cooperadoId, mes, cooperativaId, opts);
     entregas += parcial.entregas;
     for (const item of parcial.itens) {
-      const key = item.produtoInstituicaoId || `${item.produtoNome.trim()}::${item.unidade.trim()}`;
+      const key =
+        item.produtoInstituicaoId ||
+        `${(item.produtoNome ?? "").trim()}::${(item.unidade ?? "").trim()}`;
       const existente = map.get(key);
       if (existente) {
         existente.quantidade = round2(existente.quantidade + item.quantidade);
@@ -200,7 +204,9 @@ export function agregarItensNotasCooperado(
 
     for (const item of itensFonte) {
       if (item.quantidade <= 0) continue;
-      const key = item.produtoInstituicaoId || `${item.produtoNome.trim()}::${item.unidade.trim()}`;
+      const key =
+        item.produtoInstituicaoId ||
+        `${(item.produtoNome ?? "").trim()}::${(item.unidade ?? "").trim()}`;
       const valorLinha = valorBrutoItemLinha(item);
       const existente = map.get(key);
       if (existente) {
@@ -234,6 +240,82 @@ export function calcularItensNota(
   const valorLiquido = round2(valorBruto - valorDesconto);
 
   return { itens: calculados, valorBruto, valorDesconto, valorLiquido };
+}
+
+const TOL_NOTA_TOTAIS_ITENS = 0.02;
+
+/** Totais da nota batem com quantidade × preço e desconto por linha (tolerância de centavos). */
+export function notaTotaisCoerentesComItens(
+  nota: Pick<
+    NotaPedido,
+    "itens" | "valorBruto" | "valorLiquido" | "valorDesconto" | "percentualDescontoCooperativa"
+  >
+): boolean {
+  const itens = nota.itens ?? [];
+  if (!itens.some((i) => (i.quantidade ?? 0) > 0)) return true;
+  const calc = calcularItensNota(itens, nota.percentualDescontoCooperativa ?? 0);
+  return (
+    Math.abs(calc.valorBruto - (nota.valorBruto ?? 0)) <= TOL_NOTA_TOTAIS_ITENS &&
+    Math.abs(calc.valorLiquido - (nota.valorLiquido ?? 0)) <= TOL_NOTA_TOTAIS_ITENS &&
+    Math.abs(calc.valorDesconto - (nota.valorDesconto ?? 0)) <= TOL_NOTA_TOTAIS_ITENS
+  );
+}
+
+/** Recalcula bruto/desconto/líquido e valorBruto das linhas a partir dos itens (fonte única). */
+export function normalizarTotaisNotaDesdeItens(nota: NotaPedido): NotaPedido {
+  const itens = nota.itens ?? [];
+  if (!itens.some((i) => (i.quantidade ?? 0) > 0)) return nota;
+  const pct = nota.percentualDescontoCooperativa ?? 0;
+  const calc = calcularItensNota(itens, pct);
+  const sameTotals = notaTotaisCoerentesComItens(nota);
+  const sameItems = JSON.stringify(calc.itens) === JSON.stringify(nota.itens);
+  if (sameTotals && sameItems) return nota;
+  return {
+    ...nota,
+    itens: calc.itens,
+    valorBruto: calc.valorBruto,
+    valorDesconto: calc.valorDesconto,
+    valorLiquido: calc.valorLiquido,
+    percentualDescontoCooperativa: pct,
+    updatedAt: new Date().toISOString(),
+  };
+}
+
+/** Notas conferidas/pagas: totais desde itens; se itens vazios, recupera da ficha. */
+export function normalizarIntegridadeNotasLancadas(data: AppData): AppData {
+  let changed = false;
+  const notasPedido = data.notasPedido.map((nota) => {
+    if (nota.status !== "conferida" && nota.status !== "pago") return nota;
+    let next = normalizarTotaisNotaDesdeItens(nota);
+    const semItens = !(next.itens ?? []).some((i) => (i.quantidade ?? 0) > 0);
+    const fichas = data.fichaCorrida.filter((f) => f.notaPedidoId === nota.id);
+    if (semItens && fichas.length > 0) {
+      next = sincronizarTotaisNotaComFichas(next, fichas, {
+        sincronizarItens: true,
+        forcarDescontoLiquido: true,
+        sincronizarBruto: true,
+      });
+      const aindaSemItens = !(next.itens ?? []).some((i) => (i.quantidade ?? 0) > 0);
+      if (aindaSemItens) {
+        const itensFicha = consolidarItensDeFichasNota(fichas, nota.id);
+        if (itensFicha.length > 0) {
+          next = aplicarItensNaNota(next, itensFicha, next.percentualDescontoCooperativa ?? 0);
+        }
+      }
+      next = normalizarTotaisNotaDesdeItens(next);
+    }
+    if (
+      next.valorBruto !== nota.valorBruto ||
+      next.valorLiquido !== nota.valorLiquido ||
+      next.valorDesconto !== nota.valorDesconto ||
+      JSON.stringify(next.itens) !== JSON.stringify(nota.itens)
+    ) {
+      changed = true;
+    }
+    return next;
+  });
+  if (!changed) return data;
+  return { ...data, notasPedido };
 }
 
 export function gerarNumeroNota(data: AppData, cooperativaId: string): string {
@@ -1121,7 +1203,9 @@ export function consolidarItensDeFichasNota(
   for (const f of fichas.filter((x) => x.notaPedidoId === notaId)) {
     for (const item of f.itens ?? []) {
       if ((item.quantidade ?? 0) <= 0) continue;
-      const key = item.produtoInstituicaoId || `${item.produtoNome.trim()}::${item.unidade.trim()}`;
+      const key =
+        item.produtoInstituicaoId ||
+        `${(item.produtoNome ?? "").trim()}::${(item.unidade ?? "").trim()}`;
       const valorLinha = valorBrutoItemLinha(item);
       const existente = map.get(key);
       if (existente) {
@@ -1132,7 +1216,9 @@ export function consolidarItensDeFichasNota(
       }
     }
   }
-  return [...map.values()].sort((a, b) => a.produtoNome.localeCompare(b.produtoNome, "pt-BR"));
+  return [...map.values()].sort((a, b) =>
+    (a.produtoNome ?? "").localeCompare(b.produtoNome ?? "", "pt-BR")
+  );
 }
 
 export type SincronizarTotaisNotaComFichasOpts = {
@@ -1668,12 +1754,15 @@ export function getPagamentoConfirmadoCooperadoMes(
 }
 
 export function reconciliarFichaFromNotasConferidas(data: AppData): AppData {
-  const dedupedInitial = dedupeFichaCorridaPorNota(data.fichaCorrida, data.notasPedido);
+  const dataNorm = normalizarIntegridadeNotasLancadas(data);
+  const dedupedInitial = dedupeFichaCorridaPorNota(dataNorm.fichaCorrida, dataNorm.notasPedido);
   let fichaCorrida = dedupedInitial;
-  let changed = dedupedInitial.length !== data.fichaCorrida.length;
+  let changed =
+    dedupedInitial.length !== dataNorm.fichaCorrida.length ||
+    dataNorm.notasPedido !== data.notasPedido;
   const fichaNotaIds = new Set(fichaCorrida.map((f) => f.notaPedidoId));
-  let arquivosMensais = data.arquivosMensais;
-  let notasPedido = data.notasPedido ?? [];
+  let arquivosMensais = dataNorm.arquivosMensais;
+  let notasPedido = dataNorm.notasPedido ?? [];
 
   const notasOrdenadas = [...notasPedido].sort(
     (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
@@ -1760,7 +1849,7 @@ export function reconciliarFichaFromNotasConferidas(data: AppData): AppData {
   fichaCorrida = alinhado.fichaCorrida;
   if (alinhado.changed) changed = true;
 
-  const merged = { ...data, fichaCorrida, arquivosMensais, notasPedido };
+  const merged = { ...dataNorm, fichaCorrida, arquivosMensais, notasPedido };
   return purgarFichasInvalidas(merged);
 }
 

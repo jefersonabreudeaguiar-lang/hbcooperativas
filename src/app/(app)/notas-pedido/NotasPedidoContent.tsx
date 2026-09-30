@@ -40,6 +40,7 @@ import {
   podeExcluirEntregaNota,
   mensagemBloqueioExclusaoEntrega,
   relancarEntregaNota,
+  normalizarTotaisNotaDesdeItens,
 } from "@/services/notaPedidoService";
 import {
   getCooperativaCnpj,
@@ -981,7 +982,7 @@ export default function NotasPedidoContent() {
     return pendentesTodasBase.filter((n) => !pendingDeleteIds.has(n.id));
   }, [pendentesTodasBase, pendingDeleteIds]);
 
-  // Fila estável: permanece até lançar/rejeitar — não some no sync nem por status transitório.
+  // Fila estável durante sync — some assim que sair da fila (lançada/rejeitada/paga).
   const filaStickyIdsRef = useRef<Set<string>>(new Set());
   const filaStickySnapshotRef = useRef<Map<string, NotaPedido>>(new Map());
 
@@ -1019,6 +1020,15 @@ export default function NotasPedidoContent() {
       if (atual && isNotaSaiuDaFilaConferencia(atual.status)) {
         filaStickyIdsRef.current.delete(id);
         filaStickySnapshotRef.current.delete(id);
+        continue;
+      }
+      if (atual) {
+        const candAtual = sanitizarNotaParaFilaConferencia(atual);
+        if (!notaElegivelParaFilaConferenciaResponsavel(candAtual)) {
+          filaStickyIdsRef.current.delete(id);
+          filaStickySnapshotRef.current.delete(id);
+          continue;
+        }
       }
     }
 
@@ -1036,10 +1046,16 @@ export default function NotasPedidoContent() {
         filaStickySnapshotRef.current.delete(id);
         continue;
       }
-      if (isNotaSaiuDaFilaConferencia(atual.status)) continue;
+      if (isNotaSaiuDaFilaConferencia(atual.status)) {
+        filaStickyIdsRef.current.delete(id);
+        filaStickySnapshotRef.current.delete(id);
+        continue;
+      }
       if (isNotaNaFilaConferenciaResponsavel(atual.status)) {
         const candidata = sanitizarNotaParaFilaConferencia(atual);
         if (!notaElegivelParaFilaConferenciaResponsavel(candidata)) {
+          filaStickyIdsRef.current.delete(id);
+          filaStickySnapshotRef.current.delete(id);
           continue;
         }
         byId.set(id, candidata);
@@ -1048,7 +1064,13 @@ export default function NotasPedidoContent() {
       }
     }
 
-    return Array.from(byId.values()).sort(
+    return Array.from(byId.values())
+      .filter((n) => {
+        const live = notasById.get(n.id) ?? n;
+        const candidata = sanitizarNotaParaFilaConferencia(live);
+        return notaElegivelParaFilaConferenciaResponsavel(candidata);
+      })
+      .sort(
       (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
     );
   }, [data, pendentesTodas, pendingDeleteIds, coopId]);
@@ -1188,9 +1210,7 @@ export default function NotasPedidoContent() {
   const mostrarCorrecoesResponsavel = isDiretoria && vistaResponsavel === "correcoes";
 
   const mostrarTabelaResponsavel =
-    !isCooperado &&
-    vistaResponsavel !== "correcoes" &&
-    (vistaResponsavel === "historico" || pendentesEstaveis.length === 0);
+    !isCooperado && vistaResponsavel !== "correcoes" && vistaResponsavel === "historico";
 
   const notas = useMemo(() => {
     if (!data) return [];
@@ -2512,6 +2532,7 @@ export default function NotasPedidoContent() {
         dataConferencia: now.split("T")[0],
         relancadaEm: undefined,
       };
+      notaAtualizada = normalizarTotaisNotaDesdeItens(notaAtualizada);
       const divisao = resolverDivisaoConferencia(d, notaAtualizada);
       if (divisao) {
         notaAtualizada = { ...notaAtualizada, divisaoEntrega: divisao };
@@ -3112,8 +3133,8 @@ export default function NotasPedidoContent() {
               ? "Extrato financeiro mensal com valores recebidos e detalhamento de cada entrega"
               : "Toque no botão verde para fotografar sua entrega — histórico por mês abaixo"
             : pendentesEstaveis.length > 0
-              ? `${pendentesEstaveis.length} ${pendentesEstaveis.length === 1 ? "nota" : "notas"} a conferir e lançar · só quem enviou foto aparece abaixo`
-              : "Nenhuma nota pendente — histórico e lançamento avulso continuam disponíveis"
+              ? `${pendentesEstaveis.length} ${pendentesEstaveis.length === 1 ? "nota" : "notas"} aguardando conferência e lançamento`
+              : "Nenhuma pendente — use Histórico para entregas já lançadas ou Lançar entrega (avulso)"
         }
         action={isCooperado ? (
           <div className="hidden sm:block">
@@ -3297,7 +3318,7 @@ export default function NotasPedidoContent() {
                       {totalFotosPendentes > pendentesEstaveis.length
                         ? ` · ${totalFotosPendentes} fotos`
                         : ""}
-                      . Ficam na fila até você lançar — não somem no sync.
+                      . Ao lançar, a nota sai da conferência; histórico fica na aba Histórico.
                     </p>
                   </div>
                   {vistaResponsavel !== "historico" ? (
@@ -3694,7 +3715,7 @@ export default function NotasPedidoContent() {
         onView={(n) =>
           notaElegivelParaFilaConferenciaResponsavel(n) ? void openConferir(n) : openView(n)
         }
-        viewLabel="Conferir"
+        viewLabel="Ver"
         onDelete={
           check("notas_pedido", "edit")
             ? (n) => solicitarExclusaoNota(n, true)

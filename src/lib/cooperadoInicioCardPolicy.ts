@@ -3,11 +3,17 @@
  *
  * Invariantes:
  * 1. O card (shell) nunca some da UI cooperado.
- * 2. Enquanto o motor operacional indicar obrigação a receber, o valor exibido não zera por sync/H203.
- * 3. O valor só muda quando a revisão operacional muda (lançamentos, ficha, pagamentos, notas).
+ * 2. Enquanto houver valor a receber, o card não zera por sync/H203 — só atualiza (aumento ou recálculo).
+ * 3. O valor só zera quando a BIC/operacional comprova pagamento (mês quitado + pagamento confirmado).
+ * 4. Revisão operacional (lançamentos, ficha, pagamentos, notas) atualiza o valor; queda a zero exige prova de pagamento.
  */
 import type { AppData } from "@/types";
 import { notaPertenceCooperado, fichaPertenceCooperado, pagamentoCooperadoPertenceCooperado } from "@/services/cooperadoCloudService";
+import {
+  getValorQuantoVouReceber,
+  listarMesesComValorQuantoVouReceber,
+} from "@/services/cooperadoEntregasService";
+import { getTotalAPagarCooperado } from "@/services/notaPedidoService";
 import { getContaCoopDescontosRevision } from "@/lib/hb-credit/contaCoopDescontosNotify";
 import { bicCentralResolveInicioParaExibicao, bicCentralSincronizarRotuloMeses, bicCentralValorAReceberAgregado } from "@/services/bicLeituraCentralCooperado";
 import {
@@ -63,6 +69,49 @@ export type InicioCardPoliticaResult = {
 
 export function cooperadoMotorTemObrigacaoReceber(motor: InicioCardMotorSnapshot): boolean {
   return motor.valor > 0;
+}
+
+/**
+ * BIC ON — autoriza exibir R$ 0 no card início.
+ * Sync parcial (motor 0 sem pagamento confirmado) retorna false.
+ */
+export function cooperadoBicAutorizaZerarCardInicio(
+  data: AppData,
+  cooperadoId: string,
+  cooperativaId: string | undefined,
+  opts?: { tinhaValorExibido?: boolean }
+): boolean {
+  const motor = getValorQuantoVouReceber(data, cooperadoId, cooperativaId);
+  if (motor.valor > 0) return false;
+  if (listarMesesComValorQuantoVouReceber(data, cooperadoId, cooperativaId).length > 0) return false;
+  if (getTotalAPagarCooperado(data, cooperadoId, undefined, cooperativaId) > 0) return false;
+
+  if (!opts?.tinhaValorExibido) return true;
+
+  return data.pagamentosCooperado.some(
+    (p) =>
+      pagamentoCooperadoPertenceCooperado(data, p, cooperadoId, cooperativaId) &&
+      p.status === "confirmado"
+  );
+}
+
+/** Mantém valor exibido se motor veio zerado sem prova de pagamento BIC. */
+export function aplicarMotorCardComGateZeroBic(
+  anterior: InicioCardMotorSnapshot | null | undefined,
+  motor: InicioCardMotorSnapshot,
+  autorizaZerar: boolean
+): InicioCardMotorSnapshot {
+  const sanitized = sanitizeInicioCardSnapshotFluxoBic(motor);
+  if (sanitized.valor > 0) return sanitized;
+  if (anterior && anterior.valor > 0 && !autorizaZerar) {
+    return sanitizeInicioCardSnapshotFluxoBic({
+      ...sanitized,
+      mesLabel:
+        sanitized.mesLabel.trim() && sanitized.mesLabel !== "—" ? sanitized.mesLabel : anterior.mesLabel,
+      valor: anterior.valor,
+    });
+  }
+  return sanitized;
 }
 
 /** Revisão só de dados operacionais — não depende de máscara H203 de apresentação. */
@@ -181,21 +230,24 @@ export function aplicarPoliticaCardInicioEndurecida(
   motor: InicioCardMotorSnapshot,
   motorRevision: string,
   prev: InicioCardLatchState | null,
-  opts: { carregandoFinanceiro: boolean }
+  opts: { carregandoFinanceiro: boolean; autorizaZerarValor?: boolean }
 ): InicioCardPoliticaResult {
   const pendenciaMotor = cooperadoMotorTemObrigacaoReceber(motor);
   const revisionChanged = !prev || prev.motorRevision !== motorRevision;
+  const autorizaZerar = opts.autorizaZerarValor ?? true;
 
   if (revisionChanged) {
+    const display = aplicarMotorCardComGateZeroBic(prev?.display, motor, autorizaZerar);
+    const pendenciaDisplay = cooperadoMotorTemObrigacaoReceber(display);
     const latch: InicioCardLatchState = {
       motorRevision,
-      display: motor,
-      hadPendencia: pendenciaMotor,
+      display,
+      hadPendencia: pendenciaDisplay,
     };
     return {
-      display: motor,
+      display,
       latch,
-      atualizando: opts.carregandoFinanceiro && !pendenciaMotor,
+      atualizando: opts.carregandoFinanceiro && !pendenciaDisplay,
     };
   }
 
@@ -221,12 +273,13 @@ export function aplicarPoliticaCardInicioEndurecida(
   }
 
   if (prev.hadPendencia && !opts.carregandoFinanceiro && !pendenciaMotor) {
+    const display = aplicarMotorCardComGateZeroBic(prev.display, motor, autorizaZerar);
     const latch: InicioCardLatchState = {
       motorRevision,
-      display: motor,
-      hadPendencia: false,
+      display,
+      hadPendencia: cooperadoMotorTemObrigacaoReceber(display),
     };
-    return { display: motor, latch, atualizando: false };
+    return { display, latch, atualizando: false };
   }
 
   const latch: InicioCardLatchState = {
@@ -245,14 +298,21 @@ export function aplicarPoliticaCardInicioEndurecida(
 export function aplicarSubstituicaoMonotonaDisplay(
   anterior: InicioCardMotorSnapshot,
   motor: InicioCardMotorSnapshot,
-  revisionChanged: boolean
+  revisionChanged: boolean,
+  opts?: { autorizaZerarValor?: boolean }
 ): InicioCardMotorSnapshot {
+  const autorizaZerar = opts?.autorizaZerarValor ?? true;
   if (isBicCentralReadAuthorityEnabled()) {
     if (!revisionChanged) return anterior;
-    return sanitizeInicioCardSnapshotFluxoBic(motor);
+    if (motor.valor > anterior.valor) {
+      return sanitizeInicioCardSnapshotFluxoBic(motor);
+    }
+    return aplicarMotorCardComGateZeroBic(anterior, motor, autorizaZerar);
   }
   if (!revisionChanged) return anterior;
-  if (!cooperadoMotorTemObrigacaoReceber(motor)) return motor;
+  if (!cooperadoMotorTemObrigacaoReceber(motor)) {
+    return aplicarMotorCardComGateZeroBic(anterior, motor, autorizaZerar);
+  }
   if (!cooperadoMotorTemObrigacaoReceber(anterior)) return motor;
   if (motor.valor > anterior.valor) return motor;
   if (motor.valorRecibo > anterior.valorRecibo) return motor;
@@ -288,9 +348,11 @@ export function inicioCardMotorFromFinanceiroUiSnapshot(
     };
   }
   const valor =
-    financeiro.valorAReceber > 0 && (financeiro.exibirValorNoCard || financeiro.status === "CONFIRMADO" || financeiro.status === "LEGADO")
+    financeiro.valorAReceber > 0
       ? financeiro.valorAReceber
-      : 0;
+      : financeiro.status === "CONFIRMADO" || financeiro.status === "LEGADO"
+        ? financeiro.valorAReceber
+        : 0;
   return {
     mesLabel,
     valor,
@@ -377,6 +439,12 @@ function resolverCardInicioEndurecidoFinanceiroUiSnapshot(
   }
 
   if (financeiro.status === "INCONSISTENTE") {
+    if (persistidoLeitura && cooperadoMotorTemObrigacaoReceber(persistidoLeitura.display)) {
+      return resultadoCardBridgePersistidoBic(persistidoLeitura, {
+        gravarPersistencia: false,
+        atualizando: financeiroCarregando,
+      });
+    }
     const latch: InicioCardLatchState = {
       motorRevision: revision,
       display: motor,
@@ -404,12 +472,24 @@ function resolverCardInicioEndurecidoFinanceiroUiSnapshot(
     };
   }
 
+  const tinhaValorExibido = Boolean(
+    prevLatch?.hadPendencia ||
+      (persistidoLeitura && cooperadoMotorTemObrigacaoReceber(persistidoLeitura.display))
+  );
+  const autorizaZerar =
+    cooperadoId && data
+      ? cooperadoBicAutorizaZerarCardInicio(data, cooperadoId, cooperativaId, { tinhaValorExibido })
+      : !tinhaValorExibido;
+
   let applied = aplicarPoliticaCardInicioEndurecida(motor, revision, prevLatch, {
     carregandoFinanceiro: financeiroCarregando,
+    autorizaZerarValor: autorizaZerar,
   });
 
   if (prevLatch && prevLatch.motorRevision !== revision) {
-    const display = aplicarSubstituicaoMonotonaDisplay(prevLatch.display, applied.display, true);
+    const display = aplicarSubstituicaoMonotonaDisplay(prevLatch.display, applied.display, true, {
+      autorizaZerarValor: autorizaZerar,
+    });
     applied = {
       ...applied,
       display,
@@ -422,7 +502,7 @@ function resolverCardInicioEndurecidoFinanceiroUiSnapshot(
     persistidoLeitura.motorRevision === revision &&
     cooperadoMotorTemObrigacaoReceber(persistidoLeitura.display) &&
     !cooperadoMotorTemObrigacaoReceber(motor) &&
-    financeiroCarregando
+    (financeiroCarregando || !autorizaZerar)
   ) {
     applied = {
       ...applied,

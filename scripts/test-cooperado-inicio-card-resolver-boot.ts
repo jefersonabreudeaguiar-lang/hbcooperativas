@@ -162,10 +162,10 @@ const dataMotorPositivo = miniData({
     prevLatch: null,
     persistido: snap,
   });
-  assert.equal(result.display.valor, 0);
+  assert.equal(result.display.valor, 123.42, "boot mantém valor a receber do cache até BIC validar");
   assert.equal(result.atualizando, true);
   assert.equal(result.gravarPersistencia, false);
-  assert.equal(result.latch.display.valor, 0, "latch BIC snapshot não promove cache");
+  assert.equal(result.latch.display.valor, 123.42);
 }
 
 // TESTE 2 — boot cache zero
