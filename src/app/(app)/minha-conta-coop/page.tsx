@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { CreditFeatureGate } from "@/components/hb-credit/CreditFeatureGate";
 import { CloudSessionGate } from "@/components/hb-credit/CloudSessionGate";
 import { ContaCoopSegmentTabs } from "@/components/hb-credit/ContaCoopSegmentTabs";
-import { consumeHbCreditScanResult } from "@/lib/hb-credit/scanSession";
+import { openHbCreditPaymentFromQr } from "@/lib/hb-credit/openHbCreditPaymentFromQr";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Input, Label } from "@/components/ui/Form";
@@ -14,13 +14,11 @@ import { usePermissions } from "@/hooks/usePermissions";
 import { useAppData } from "@/hooks/useAppData";
 import { getUserCooperativaId, normalizeCnpj } from "@/utils/cooperativa";
 import {
-  authorizeCreditPayment,
   convertCreditCashbackToReceivable,
   fetchCreditAccount,
   fetchCreditLedger,
   requestCooperadoPinReset,
   setCreditFinancialPin,
-  validateCreditQr,
 } from "@/services/creditApiService";
 import { formatCentsBRL } from "@/modules/hb-credit/engine/money";
 import { round2 } from "@/utils/calculations";
@@ -32,7 +30,7 @@ import {
   criarValorAvulsoReceber,
   temCashbackHbCreditoPendenteMes,
 } from "@/services/valoresAvulsosReceberService";
-import type { ContaCoopIntent, ContaCoopLedgerEntry, ContaCoopLimiteCooperado } from "@/modules/hb-credit/types";
+import type { ContaCoopLedgerEntry, ContaCoopLimiteCooperado } from "@/modules/hb-credit/types";
 import { FINANCIAL_PIN_MIN_LENGTH } from "@/modules/hb-credit/config";
 import { formatLedgerEntryLabel } from "@/lib/hb-credit/ledgerLabels";
 import { bicCentralMesPrincipalQuantoVouReceber } from "@/services/bicLeituraCentralCooperado";
@@ -50,10 +48,6 @@ import { useSyncContaCoopValorReceberPilot } from "@/hooks/useSyncContaCoopValor
 import { useHbCreditAccountRevisionPoll } from "@/hooks/useHbCreditAccountRevisionPoll";
 import { PageSkeleton } from "@/components/ui/PageSkeleton";
 import { cn } from "@/utils/format";
-
-function sleepMs(ms: number): Promise<void> {
-  return new Promise((r) => setTimeout(r, ms));
-}
 
 type Tab = "inicio" | "pagar" | "extrato";
 
@@ -93,13 +87,6 @@ function MinhaContaCoopContent() {
   const [pinSetup, setPinSetup] = useState("");
   const [qrInput, setQrInput] = useState("");
   const [showManualQr, setShowManualQr] = useState(false);
-  const [pendingIntent, setPendingIntent] = useState<{
-    intent: ContaCoopIntent;
-    parceiroNome: string;
-    limite: ContaCoopLimiteCooperado;
-  } | null>(null);
-  const [payPin, setPayPin] = useState("");
-  const [useCashback, setUseCashback] = useState(false);
   const [busy, setBusy] = useState(false);
   const [isOffline, setIsOffline] = useState(false);
   const [accountRefreshing, setAccountRefreshing] = useState(false);
@@ -275,30 +262,16 @@ function MinhaContaCoopContent() {
       setBusy(true);
       setError("");
       setSuccess("");
-      setQrInput(payload.trim());
-      setTabEverOpened((prev) => ({ ...prev, pagar: true }));
-      setTab("pagar");
       try {
-        const res = await validateCreditQr(cnpj, cooperadoId, payload.trim());
-        if (res.intent && res.limite && res.parceiroNome) {
-          setPendingIntent({ intent: res.intent, limite: res.limite, parceiroNome: res.parceiroNome });
-        }
+        await openHbCreditPaymentFromQr(router, { cnpj, cooperadoId, qrPayload: payload.trim() });
       } catch (e) {
         setError(e instanceof Error ? e.message : "Código inválido ou expirado.");
-        setPendingIntent(null);
       } finally {
         setBusy(false);
       }
     },
-    [cnpj, cooperadoId]
+    [cnpj, cooperadoId, router]
   );
-
-  useEffect(() => {
-    const payload = consumeHbCreditScanResult();
-    if (payload) {
-      void processarQr(payload);
-    }
-  }, [processarQr]);
 
   const salvarPin = async () => {
     if (!cnpj || !cooperadoId) return;
@@ -334,65 +307,6 @@ function MinhaContaCoopContent() {
       setSuccess(data.message ?? "Solicitação enviada à cooperativa.");
     } catch (e) {
       setError(e instanceof Error ? e.message : "Erro ao solicitar reset do PIN.");
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const confirmarPagamento = async () => {
-    if (!pendingIntent || !cnpj || !cooperadoId) return;
-    setBusy(true);
-    setError("");
-    try {
-      const res = await authorizeCreditPayment({
-        cnpj,
-        cooperadoId,
-        cooperadoNome,
-        cooperativaId: contaCoopValorSync?.cooperativaId,
-        mesReferencia: contaCoopValorSync?.mesReferencia,
-        intentId: pendingIntent.intent.id,
-        nonce: pendingIntent.intent.nonce,
-        pin: payPin,
-        idempotencyKey: `pay:${pendingIntent.intent.id}:${cooperadoId}`,
-        useCashback,
-      });
-      if (account && typeof res.disponivelAposCents === "number") {
-        const nextDisponivel = Math.max(0, res.disponivelAposCents);
-        const creditDebit = creditDebitPreview;
-        const nextUsado = Math.min(
-          account.limiteLiberadoCents,
-          account.valorUsadoCents + creditDebit
-        );
-        const nextAccount = {
-          ...account,
-          valorDisponivelCents: nextDisponivel,
-          valorUsadoCents: nextUsado,
-          cashbackDisponivelCents: useCashback
-            ? Math.max(0, (account.cashbackDisponivelCents ?? 0) - Math.min(cashback, pendingIntent.intent.amountCents))
-            : account.cashbackDisponivelCents,
-        };
-        setAccount(nextAccount);
-        gravarHbCreditAccountPersistido(cnpj, cooperadoId, {
-          v: HB_CREDIT_ACCOUNT_STORAGE_VERSION,
-          account: nextAccount,
-          updatedAt: new Date().toISOString(),
-          hasPin,
-          pinResetPending,
-          savedAt: new Date().toISOString(),
-        });
-        notifyHbCreditAccountCacheUpdated();
-      }
-      setSuccess(`Pagamento aprovado · comprovante ${res.receiptCode}`);
-      setPendingIntent(null);
-      setQrInput("");
-      setPayPin("");
-      setUseCashback(false);
-      handleTabChange("extrato");
-      setLedgerLoaded(false);
-      void reload({ background: true });
-      void loadLedger();
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Pagamento recusado.");
     } finally {
       setBusy(false);
     }
@@ -463,10 +377,6 @@ function MinhaContaCoopContent() {
   const podeLiberarCashback =
     cashback > 0 && !cashbackJaNaFicha && Boolean(mesReferenciaReceber) && !isOffline && !busy;
   const pagamentoBloqueado = !hasPin || account?.bloqueado || isOffline;
-  const effectiveDisponivel = disponivel + (useCashback ? cashback : 0);
-  const creditDebitPreview = pendingIntent
-    ? Math.max(0, pendingIntent.intent.amountCents - (useCashback ? Math.min(cashback, pendingIntent.intent.amountCents) : 0))
-    : 0;
 
   return (
     <div className="mx-auto max-w-lg space-y-5 pb-8">
@@ -615,67 +525,6 @@ function MinhaContaCoopContent() {
                 Ir para Início
               </Button>
             </Card>
-          ) : pendingIntent ? (
-            <Card className="space-y-4 border-green-200 bg-white !p-5 shadow-sm">
-              <div className="text-center border-b border-gray-100 pb-4">
-                <p className="text-sm text-gray-500">{pendingIntent.parceiroNome}</p>
-                <p className="mt-1 text-3xl font-bold text-gray-900">
-                  {formatCentsBRL(pendingIntent.intent.amountCents)}
-                </p>
-              </div>
-              {(pendingIntent.limite.cashbackDisponivelCents ?? 0) > 0 && (
-                <Button
-                  type="button"
-                  variant={useCashback ? "primary" : "secondary"}
-                  className="w-full"
-                  onClick={() => setUseCashback((v) => !v)}
-                  disabled={busy}
-                >
-                  {useCashback ? "Usando cashback nesta compra" : "Incluir cashback nesta compra"}
-                </Button>
-              )}
-              <div>
-                <Label>PIN de pagamento</Label>
-                <Input
-                  type="password"
-                  inputMode="numeric"
-                  autoComplete="off"
-                  value={payPin}
-                  onChange={(e) => setPayPin(e.target.value.replace(/\D/g, ""))}
-                  maxLength={8}
-                  className="mt-1 text-center text-2xl tracking-[0.4em]"
-                  placeholder="••••"
-                />
-              </div>
-              <p className="text-xs text-gray-500 text-center">
-                Saldo após pagamento:{" "}
-                <span className="font-semibold text-gray-800">
-                  {formatCentsBRL(
-                    Math.max(
-                      0,
-                      effectiveDisponivel -
-                        Math.max(0, pendingIntent.intent.amountCents - (useCashback ? Math.min(cashback, pendingIntent.intent.amountCents) : 0))
-                    )
-                  )}
-                </span>
-              </p>
-              <div className="flex gap-2">
-                <Button variant="secondary" className="flex-1" onClick={() => setPendingIntent(null)} disabled={busy}>
-                  Cancelar
-                </Button>
-                <Button
-                  className="flex-1"
-                  onClick={confirmarPagamento}
-                  disabled={
-                    busy ||
-                    payPin.length < FINANCIAL_PIN_MIN_LENGTH ||
-                    effectiveDisponivel < pendingIntent.intent.amountCents
-                  }
-                >
-                  {busy ? "Processando…" : "Confirmar pagamento"}
-                </Button>
-              </div>
-            </Card>
           ) : (
             <Card className="space-y-4 !p-5">
               <div className="text-center space-y-2">
@@ -686,7 +535,7 @@ function MinhaContaCoopContent() {
                   onClick={() => router.push("/minha-conta-coop/escanear")}
                   disabled={pagamentoBloqueado || busy}
                 >
-                  Abrir câmera para pagar
+                  Escanear QR Code
                 </Button>
               </div>
 
@@ -711,7 +560,7 @@ function MinhaContaCoopContent() {
                     onClick={() => void processarQr(qrInput)}
                     disabled={busy || pagamentoBloqueado || !qrInput.trim()}
                   >
-                    Verificar cobrança
+                    Continuar para pagamento
                   </Button>
                 </div>
               )}
