@@ -4,6 +4,7 @@ import dynamic from "next/dynamic";
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { useSearchParams } from "next/navigation";
 import { getData } from "@/services/dataStore";
+import { resolveCooperativaCnpj } from "@/services/notaPedidoCloudService";
 import { CreditFeatureGate } from "@/components/hb-credit/CreditFeatureGate";
 import { CloudSessionGate } from "@/components/hb-credit/CloudSessionGate";
 import { TesoureiroAreaGuard } from "@/components/permissions/TesoureiroAreaGuard";
@@ -114,21 +115,6 @@ function ContaCoopContent() {
   const { user } = usePermissions();
   const searchParams = useSearchParams();
   const initialTab = searchParams.get("tab");
-  const [tabEverOpened, setTabEverOpened] = useState<Partial<Record<Tab, boolean>>>(() => {
-    const open: Partial<Record<Tab, boolean>> = { painel: true };
-    if (
-      initialTab === "conferir_nf" ||
-      initialTab === "liquidar" ||
-      initialTab === "estornos" ||
-      initialTab === "limites" ||
-      initialTab === "mercados" ||
-      initialTab === "descontos"
-    ) {
-      open[initialTab] = true;
-    }
-    return open;
-  });
-
   const [tab, setTab] = useState<Tab>(() => {
     if (
       initialTab === "conferir_nf" ||
@@ -144,11 +130,8 @@ function ContaCoopContent() {
   });
 
   const handleTabChange = useCallback((next: Tab) => {
-    setTabEverOpened((prev) => (prev[next] ? prev : { ...prev, [next]: true }));
     setTab(next);
   }, []);
-
-  const tabPanelHidden = useCallback((id: Tab) => (id !== tab ? "hidden" : undefined), [tab]);
   const [loading, setLoading] = useState(true);
   const [dashboardRefreshing, setDashboardRefreshing] = useState(false);
   const [limitesRefreshing, setLimitesRefreshing] = useState(false);
@@ -177,13 +160,45 @@ function ContaCoopContent() {
     []
   );
 
-  const cnpj = useAppDataSelector((data) => {
-    if (!user) return "";
-    if (user.cooperativaCnpj) return normalizeCnpj(user.cooperativaCnpj);
-    const coopId = getUserCooperativaId(user, data);
-    const coop = data.cooperativas.find((c) => c.id === coopId);
-    return coop?.cnpj ? normalizeCnpj(coop.cnpj) : "";
-  }, [user?.id, user?.cooperativaCnpj, user?.cooperativaId]);
+  const dataRevision = useSyncExternalStore(subscribe, getDataRevision, () => 0);
+
+  const cnpjFromData =
+    useAppDataSelector((data) => {
+      if (!user) return "";
+      if (user.cooperativaCnpj) return normalizeCnpj(user.cooperativaCnpj);
+      const coopId = getUserCooperativaId(user, data);
+      const coop = data.cooperativas.find((c) => c.id === coopId);
+      return coop?.cnpj ? normalizeCnpj(coop.cnpj) : "";
+    }, [user?.id, user?.cooperativaCnpj, user?.cooperativaId]) ?? "";
+
+  const [cnpjResolved, setCnpjResolved] = useState("");
+  const [cnpjResolving, setCnpjResolving] = useState(false);
+
+  useEffect(() => {
+    if (cnpjFromData.length === 14) {
+      setCnpjResolved(cnpjFromData);
+      setCnpjResolving(false);
+      return;
+    }
+    if (!user?.cooperativaId) {
+      setCnpjResolved("");
+      setCnpjResolving(false);
+      return;
+    }
+    if (cnpjResolved.length === 14) return;
+    let cancelled = false;
+    setCnpjResolving(true);
+    void resolveCooperativaCnpj(getData(), user.cooperativaId, user).then((resolved) => {
+      if (cancelled) return;
+      setCnpjResolved(resolved ?? "");
+      setCnpjResolving(false);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [cnpjFromData, cnpjResolved.length, user?.cooperativaId, user?.id, user?.cooperativaCnpj]);
+
+  const cnpj = cnpjFromData.length === 14 ? cnpjFromData : cnpjResolved;
 
   const cooperadosAtivos = useAppDataSelector((data) => {
     if (!user?.cooperativaId) return [];
@@ -205,7 +220,6 @@ function ContaCoopContent() {
     [cooperadosAtivos]
   );
 
-  const dataRevision = useSyncExternalStore(subscribe, getDataRevision, () => 0);
   const lastDashboardRevisionReloadRef = useRef(0);
 
   const [creditosBaseColetivo, setCreditosBaseColetivo] = useState<Record<string, number>>({});
@@ -386,8 +400,12 @@ function ContaCoopContent() {
   useEffect(() => {
     if (tab !== "limites" && tab !== "painel") return;
     if (!cnpj || !user?.cooperativaId || !cooperadoIdsAtivos.length) return;
-    const timer = window.setTimeout(() => void syncLimitesComFicha({ background: true }), 2_000);
-    return () => window.clearTimeout(timer);
+    return scheduleContaCoopAuxSync(
+      () => {
+        void syncLimitesComFicha({ background: true });
+      },
+      { idleTimeoutMs: 2_500, fallbackMs: 6_000 }
+    );
   }, [tab, cnpj, user?.cooperativaId, cooperadoIdsKey, syncLimitesComFicha, cooperadoIdsAtivos.length]);
 
   useEffect(() => {
@@ -654,7 +672,24 @@ function ContaCoopContent() {
   const pinCooperadoBloqueado = (limite: ContaCoopLimiteCooperado) =>
     Boolean(limite.pinLockedUntil && new Date(limite.pinLockedUntil).getTime() > Date.now());
 
-  if (!cnpj || (loading && !dashboard)) return <PageSkeleton />;
+  if (cnpjResolving && !cnpj) return <PageSkeleton />;
+  if (loading && !dashboard && Boolean(cnpj)) return <PageSkeleton />;
+
+  if (!cnpj) {
+    return (
+      <div className="mx-auto max-w-lg space-y-4 pb-8">
+        <AlertBanner variant="warning" title="Cooperativa não identificada">
+          Não foi possível obter o CNPJ da cooperativa para carregar a HB Créditos. Aguarde a sincronização na nuvem
+          ou atualize a página.
+        </AlertBanner>
+        <Button variant="secondary" onClick={() => window.location.reload()}>
+          Atualizar página
+        </Button>
+      </div>
+    );
+  }
+
+  if (loading && !dashboard) return <PageSkeleton />;
 
   return (
     <div className="mx-auto max-w-5xl space-y-5 pb-8">
@@ -686,8 +721,8 @@ function ContaCoopContent() {
         onChange={handleTabChange}
       />
 
-      {tabEverOpened.painel && dashboard && (
-        <div className={cn("space-y-4", tabPanelHidden("painel"))}>
+      {tab === "painel" && dashboard && (
+        <div className="space-y-4">
           {dashboardRefreshing && (
             <p className="text-xs text-gray-500">Atualizando painel com a nuvem…</p>
           )}
@@ -840,8 +875,8 @@ function ContaCoopContent() {
         </div>
       )}
 
-      {tabEverOpened.limites && (
-        <div className={cn("space-y-6", tabPanelHidden("limites"))}>
+      {tab === "limites" && (
+        <div className="space-y-6">
           {limitesRefreshing && (
             <p className="text-xs text-gray-500">
               Sincronizando crédito da ficha (BIC) com limites na nuvem…
@@ -1103,8 +1138,8 @@ function ContaCoopContent() {
         </div>
       )}
 
-      {tabEverOpened.conferir_nf && (
-        <div className={tabPanelHidden("conferir_nf")}>
+      {tab === "conferir_nf" && (
+        <div>
           <ContaCoopFiscalNotesConferenciaPanel
             cnpj={cnpj}
             parceiros={parceiros}
@@ -1114,8 +1149,8 @@ function ContaCoopContent() {
         </div>
       )}
 
-      {tabEverOpened.liquidar && (
-        <div className={tabPanelHidden("liquidar")}>
+      {tab === "liquidar" && (
+        <div>
           <ContaCoopLiquidacaoPanel
             cnpj={cnpj}
             cooperativaNome={cooperativaNome}
@@ -1125,8 +1160,8 @@ function ContaCoopContent() {
         </div>
       )}
 
-      {tabEverOpened.estornos && (
-        <div className={tabPanelHidden("estornos")}>
+      {tab === "estornos" && (
+        <div>
           <ContaCoopEstornosPanel
             cnpj={cnpj}
             cooperativaId={user?.cooperativaId ?? ""}
@@ -1136,14 +1171,14 @@ function ContaCoopContent() {
         </div>
       )}
 
-      {tabEverOpened.descontos && (
-        <div className={tabPanelHidden("descontos")}>
+      {tab === "descontos" && (
+        <div>
           <ContaCoopDescontosPanel cnpj={cnpj} cooperadoNome={cooperadoNome} />
         </div>
       )}
 
-      {tabEverOpened.mercados && (
-        <div className={cn("space-y-4", tabPanelHidden("mercados"))}>
+      {tab === "mercados" && (
+        <div className="space-y-4">
           {pixChangeRequests.length > 0 && (
             <Card className="space-y-3 border-amber-300 bg-amber-50/60 !p-4">
               <h3 className="font-semibold text-gray-900">Solicitações de mudança de PIX</h3>

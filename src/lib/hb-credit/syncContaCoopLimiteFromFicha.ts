@@ -1,4 +1,4 @@
-import { buildCreditosBaseMap } from "@/modules/hb-credit/engine/creditBaseFromFicha";
+import { buildCreditosBaseMapCached } from "@/modules/hb-credit/engine/creditBaseFromFicha";
 import { syncCreditLimiteFromFicha } from "@/services/creditApiService";
 import { getData } from "@/services/dataStore";
 import { isContaCoopValorReceberPilot } from "@/utils/contaCoopUiVisibility";
@@ -30,7 +30,7 @@ export async function refreshContaCoopLimiteFromFicha(opts: SyncContaCoopLimiteO
     const data = getData();
     const ids = opts.cooperadoIds?.length ? opts.cooperadoIds : [opts.cooperadoId];
     /** Prévia local — enviada só para auditoria de divergência; o servidor ignora como autoridade. */
-    const creditosBaseCents = buildCreditosBaseMap(data, ids, opts.cooperativaId);
+    const creditosBaseCents = buildCreditosBaseMapCached(data, ids, opts.cooperativaId);
 
     await syncCreditLimiteFromFicha({
       cnpj: opts.cnpj,

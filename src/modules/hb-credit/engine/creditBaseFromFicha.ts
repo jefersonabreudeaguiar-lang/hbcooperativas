@@ -49,7 +49,7 @@ export function buildCreditosBaseMap(
     const coopId = cooperativaId ?? sane.cooperados.find((c) => c.id === id)?.cooperativaId;
     const canonico = resolverCooperadoIdCanonico(sane, id, coopId);
     const reais = hbCreditCreditoBaseReais(sane, canonico, coopId);
-    map[id] = blindarCreditoBaseCentsHb(sane, id, coopId, reaisToCents(reais));
+    map[id] = blindarCreditoBaseCentsHb(sane, id, coopId, reaisToCents(reais), sane);
   }
   return map;
 }

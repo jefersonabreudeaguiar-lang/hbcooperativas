@@ -57,13 +57,15 @@ export function blindarCreditoBaseCentsHb(
   data: AppData,
   cooperadoId: string,
   cooperativaId: string | undefined,
-  creditoBaseCents: number
+  creditoBaseCents: number,
+  /** AppData já passado por prepararAppDataParaCreditoBaseHb — evita reconciliar ficha N vezes. */
+  prepared?: AppData
 ): number {
   const cents = Math.max(0, Math.round(Number(creditoBaseCents) || 0));
   if (cents <= 0) return 0;
 
   const coopId = cooperativaId ?? data.cooperados.find((c) => c.id === cooperadoId)?.cooperativaId;
-  const sane = prepararAppDataParaCreditoBaseHb(data);
+  const sane = prepared ?? prepararAppDataParaCreditoBaseHb(data);
 
   if (!cooperadoTemEntregasConferidasParaHb(sane, cooperadoId, coopId)) {
     return 0;
@@ -117,9 +119,10 @@ export function blindarMapaCreditoBaseCentsHb(
   cooperativaId: string | undefined,
   creditosBaseCents: Record<string, number>
 ): Record<string, number> {
+  const sane = prepararAppDataParaCreditoBaseHb(data);
   const out: Record<string, number> = {};
   for (const [cooperadoId, value] of Object.entries(creditosBaseCents)) {
-    out[cooperadoId] = blindarCreditoBaseCentsHb(data, cooperadoId, cooperativaId, value);
+    out[cooperadoId] = blindarCreditoBaseCentsHb(sane, cooperadoId, cooperativaId, value, sane);
   }
   return out;
 }
