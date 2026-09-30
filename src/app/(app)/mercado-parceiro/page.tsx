@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import QRCode from "qrcode";
+import { useRouter } from "next/navigation";
 import { CreditFeatureGate } from "@/components/hb-credit/CreditFeatureGate";
 import { ContaCoopSegmentTabs } from "@/components/hb-credit/ContaCoopSegmentTabs";
 import { Card } from "@/components/ui/Card";
@@ -14,7 +14,6 @@ import {
   createCreditIntent,
   fetchMercadoParceiroData,
   fetchPartnerRefundData,
-  pollCreditIntentPayment,
   postRefundRequestAction,
   saveMercadoPix,
   solicitarMudancaPixMercado,
@@ -27,17 +26,13 @@ import { textoResumoAcordoDescontoMercado, getClausulasTermoMercadoContaCoop, TE
 import { PageSkeleton } from "@/components/ui/PageSkeleton";
 import { formatCpfCnpj, formatDateTime, formatMesReferencia, getCurrentMesReferencia } from "@/utils/format";
 import { Eye } from "lucide-react";
+import { gerarQrDataUrl } from "@/lib/hb-credit/gerarQrDataUrl";
+import {
+  peekHbCreditMercadoCobrancaDraft,
+  storeHbCreditMercadoCobrancaDraft,
+} from "@/lib/hb-credit/hbCreditMercadoCobrancaDraft";
 
 type MercadoTab = "inicio" | "cobrar" | "vendas" | "mais";
-
-type CobrancaQrAtiva = {
-  qrUrl: string;
-  qrPayload: string;
-  amountCents: number;
-  descricao?: string;
-  intentId: string;
-  expiresAt: string;
-};
 
 type ComprovantePagamentoMercado = {
   amountCents: number;
@@ -49,15 +44,6 @@ type ComprovantePagamentoMercado = {
   transacaoId: string;
 };
 
-async function gerarQrDataUrl(payload: string): Promise<string> {
-  return QRCode.toDataURL(payload, {
-    width: 480,
-    margin: 4,
-    errorCorrectionLevel: "H",
-    color: { dark: "#000000", light: "#ffffff" },
-  });
-}
-
 export default function MercadoParceiroPage() {
   return (
     <CreditFeatureGate>
@@ -67,6 +53,7 @@ export default function MercadoParceiroPage() {
 }
 
 function MercadoParceiroContent() {
+  const router = useRouter();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [parceiro, setParceiro] = useState<ContaCoopParceiro | null>(null);
@@ -80,12 +67,9 @@ function MercadoParceiroContent() {
   const [success, setSuccess] = useState("");
   const [valorReais, setValorReais] = useState("");
   const [descricao, setDescricao] = useState("");
-  const [cobrancaQr, setCobrancaQr] = useState<CobrancaQrAtiva | null>(null);
   const [comprovante, setComprovante] = useState<ComprovantePagamentoMercado | null>(null);
-  const [aguardandoPagamento, setAguardandoPagamento] = useState(false);
   const [busy, setBusy] = useState(false);
   const createIntentIdempotencyRef = useRef<string | null>(null);
-  const qrDestaqueRef = useRef<HTMLDivElement>(null);
   const comprovanteRef = useRef<HTMLDivElement>(null);
   const liquidacaoConfirmacaoRef = useRef<HTMLDivElement>(null);
   const [estornoAlvo, setEstornoAlvo] = useState<ContaCoopCompraEstornavel | null>(null);
@@ -140,75 +124,11 @@ function MercadoParceiroContent() {
     reload();
   }, [reload]);
 
-  useEffect(() => {
-    if (!cobrancaQr) {
-      setAguardandoPagamento(false);
-      return;
-    }
-
-    let cancelled = false;
-    setAguardandoPagamento(true);
-
-    const verificar = async () => {
-      try {
-        const status = await pollCreditIntentPayment(cobrancaQr.intentId);
-        if (cancelled) return;
-
-        if (status.payment || status.status === "confirmada") {
-          const pay = status.payment;
-          setComprovante({
-            amountCents: status.amountCents,
-            descricao: status.descricao,
-            cooperadoNome: pay?.cooperadoNome ?? "Cooperado",
-            cooperadoCpf: pay?.cooperadoCpf ?? "",
-            receiptCode: pay?.receiptCode ?? null,
-            paidAt: pay?.paidAt ?? new Date().toISOString(),
-            transacaoId: pay?.transacaoId ?? cobrancaQr.intentId,
-          });
-          if (pay?.transacaoId) {
-            setRecebiveis((prev) => [
-              {
-                id: pay.transacaoId,
-                amountCents: status.amountCents,
-                status: "aberto",
-                createdAt: pay.paidAt,
-              },
-              ...prev.filter((r) => r.id !== pay.transacaoId),
-            ]);
-          }
-          setCobrancaQr(null);
-          setAguardandoPagamento(false);
-          setSuccess("Pagamento confirmado!");
-          setTab("cobrar");
-          requestAnimationFrame(() => {
-            comprovanteRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
-          });
-          void reload();
-          return;
-        }
-
-        if (status.status === "expirada" || status.status === "cancelada") {
-          setCobrancaQr(null);
-          setAguardandoPagamento(false);
-          setError(status.status === "expirada" ? "Cobrança expirada." : "Cobrança cancelada.");
-        }
-      } catch {
-        /* rede momentânea — continua polling */
-      }
-    };
-
-    void verificar();
-    const timer = window.setInterval(() => void verificar(), 800);
-    return () => {
-      cancelled = true;
-      window.clearInterval(timer);
-    };
-  }, [cobrancaQr, reload]);
+  const cobrancaAberta = peekHbCreditMercadoCobrancaDraft();
 
   const criarCobranca = async () => {
     setBusy(true);
     setError("");
-    setCobrancaQr(null);
     setComprovante(null);
     try {
       const amount = Number(valorReais.replace(",", "."));
@@ -222,20 +142,19 @@ function MercadoParceiroContent() {
       createIntentIdempotencyRef.current = null;
       if (res.qrPayload && res.intent) {
         const url = await gerarQrDataUrl(res.qrPayload);
-        setCobrancaQr({
+        const nomeMercado = parceiro?.nomeMercado || "Mercado parceiro";
+        storeHbCreditMercadoCobrancaDraft({
+          v: 1,
           qrUrl: url,
           qrPayload: res.qrPayload,
           amountCents: res.intent.amountCents,
           descricao: res.intent.descricao,
           intentId: res.intent.id,
           expiresAt: res.intent.expiresAt,
+          parceiroNome: nomeMercado,
         });
-        setTab("cobrar");
-        requestAnimationFrame(() => {
-          qrDestaqueRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
-        });
+        router.replace("/mercado-parceiro/cobrar");
       }
-      await reload();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Erro ao criar cobrança.");
     } finally {
@@ -248,21 +167,6 @@ function MercadoParceiroContent() {
     setValorReais("");
     setDescricao("");
     createIntentIdempotencyRef.current = null;
-  };
-
-  const cancelarCobrancaAtiva = async () => {
-    if (!cobrancaQr) return;
-    setBusy(true);
-    try {
-      await cancelCreditIntent(cobrancaQr.intentId);
-      setCobrancaQr(null);
-      createIntentIdempotencyRef.current = null;
-      await reload();
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Erro ao cancelar.");
-    } finally {
-      setBusy(false);
-    }
   };
 
   const cancelar = async (intentId: string) => {
@@ -603,59 +507,16 @@ function MercadoParceiroContent() {
             </div>
           )}
 
-          {cobrancaQr && !comprovante && (
-            <div ref={qrDestaqueRef} className="scroll-mt-4">
-              <Card className="overflow-hidden border-2 border-green-600 bg-gradient-to-b from-green-50 to-white p-0 shadow-lg ring-4 ring-green-600/15">
-                <div className="bg-green-700 px-5 py-4 text-center text-white">
-                  <p className="text-xs font-semibold uppercase tracking-widest text-green-100">Cobrança aberta</p>
-                  <p className="mt-1 text-3xl font-bold tabular-nums sm:text-4xl">
-                    {formatCentsBRL(cobrancaQr.amountCents)}
-                  </p>
-                  {cobrancaQr.descricao && (
-                    <p className="mt-1 text-sm text-green-100">{cobrancaQr.descricao}</p>
-                  )}
-                  <p className="mt-2 text-xs text-green-200">
-                    Peça ao cooperado escanear este QR · expira{" "}
-                    {new Date(cobrancaQr.expiresAt).toLocaleTimeString("pt-BR", {
-                      hour: "2-digit",
-                      minute: "2-digit",
-                    })}
-                  </p>
-                  {aguardandoPagamento && (
-                    <p className="mt-3 inline-flex items-center gap-2 rounded-full bg-green-800/80 px-3 py-1 text-xs font-medium text-green-50">
-                      <span className="h-2 w-2 animate-pulse rounded-full bg-lime-300" />
-                      Aguardando pagamento do cooperado…
-                    </p>
-                  )}
-                </div>
-                <div className="flex flex-col items-center gap-4 px-5 py-6">
-                  <div className="rounded-2xl border-4 border-gray-900 bg-white p-4 shadow-inner">
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img
-                      src={cobrancaQr.qrUrl}
-                      alt="QR Code da cobrança HB Créditos"
-                      className="h-auto w-[min(100vw-4rem,22rem)] max-w-full aspect-square"
-                    />
-                  </div>
-                  <p className="text-center text-sm font-medium text-gray-800">
-                    Aponte a câmera do cooperado para o quadrado preto
-                  </p>
-                  <div className="flex w-full max-w-sm flex-col gap-2 sm:flex-row">
-                    <Button
-                      variant="secondary"
-                      className="flex-1 border-red-200 text-red-700 hover:bg-red-50"
-                      onClick={() => void cancelarCobrancaAtiva()}
-                      disabled={busy}
-                    >
-                      Cancelar cobrança
-                    </Button>
-                  </div>
-                </div>
-              </Card>
-            </div>
+          {cobrancaAberta && !comprovante && (
+            <Card className="border-violet-200 bg-violet-50/50 !p-4">
+              <p className="text-sm text-gray-700">Você tem uma cobrança aberta aguardando pagamento.</p>
+              <Button className="mt-3 w-full" onClick={() => router.push("/mercado-parceiro/cobrar")}>
+                Ver QR Code · {formatCentsBRL(cobrancaAberta.amountCents)}
+              </Button>
+            </Card>
           )}
 
-          {!comprovante && !cobrancaQr && (
+          {!comprovante && (
             <Card className="space-y-4 !p-5">
               <div>
                 <h3 className="font-semibold text-gray-900">Nova cobrança</h3>
