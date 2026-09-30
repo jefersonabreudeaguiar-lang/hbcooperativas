@@ -769,7 +769,8 @@ function getUltimoDiaMes(mesReferencia: string): string {
   return `${mesReferencia}-${String(lastDay).padStart(2, "0")}`;
 }
 
-function dividirValorEntrega(total: number, index: number, count: number): number {
+/** Rateio igual do valor da entrega (mesma regra das fichas divididas). */
+export function dividirValorEntrega(total: number, index: number, count: number): number {
   if (count <= 1) return round2(total);
   if (index === count - 1) {
     const parte = round2(total / count);
@@ -1299,6 +1300,40 @@ function inferirQtdPartesFichaNota(fichas: FichaCorrida[], nota: NotaPedido): nu
   return maxTotal > 1 ? maxTotal : 1;
 }
 
+/** Divisão N-way: cobertura, soma das fichas e fatia esperada por participante. */
+export function fichasDivisaoEntregaConsistentes(
+  data: AppData,
+  fichaCorrida: FichaCorrida[],
+  nota: NotaPedido
+): boolean {
+  const participantes = nota.divisaoEntrega?.participantes ?? [];
+  if (participantes.length <= 1) return true;
+
+  const fichas = dedupeFichaCorridaPorNota(
+    fichaCorrida.filter((f) => f.notaPedidoId === nota.id),
+    data.notasPedido
+  );
+  if (!divisaoFichasCobremParticipantes(data, fichas, nota)) return false;
+  if (!fichasValoresAlinhadosComNota(fichas, nota)) return false;
+
+  const N = participantes.length;
+  for (let i = 0; i < N; i++) {
+    const p = participantes[i];
+    const esperado = dividirValorEntrega(nota.valorLiquido, i, N);
+    const canonP = resolverCooperadoIdCanonico(data, p.cooperadoId, nota.cooperativaId);
+    const soma = round2(
+      fichas
+        .filter(
+          (f) =>
+            resolverCooperadoIdCanonico(data, f.cooperadoId, nota.cooperativaId) === canonP
+        )
+        .reduce((s, f) => s + f.valorLiquido, 0)
+    );
+    if (Math.abs(soma - esperado) >= 0.02) return false;
+  }
+  return true;
+}
+
 /** Verifica se cada participante da divisão tem ao menos uma ficha na nota. */
 export function divisaoFichasCobremParticipantes(
   data: AppData,
@@ -1329,8 +1364,11 @@ export function dedupeFichaCorridaPorNota(
     byNota.set(f.notaPedidoId, list);
   }
 
+  const notaById = new Map((notas ?? []).map((n) => [n.id, n]));
   const out: FichaCorrida[] = [];
   for (const [notaId, list] of byNota) {
+    const notaRef = notaById.get(notaId);
+    const divN = notaRef?.divisaoEntrega?.participantes.length ?? 0;
     const parts = list.map((f) => ({ f, part: chaveParteFichaCorrida(f) }));
     const hasFotoParts = parts.some((p) => p.part.startsWith("foto:"));
     const best = new Map<string, FichaCorrida>();
@@ -1342,7 +1380,12 @@ export function dedupeFichaCorridaPorNota(
         best.set(part, f);
         continue;
       }
-      const target = notaValor.get(notaId);
+      let target = notaValor.get(notaId);
+      if (notaRef && divN > 1 && part.startsWith("div:")) {
+        const coopPart = part.split(":")[1];
+        const idx = notaRef.divisaoEntrega!.participantes.findIndex((p) => p.cooperadoId === coopPart);
+        if (idx >= 0) target = dividirValorEntrega(notaRef.valorLiquido, idx, divN);
+      }
       const curMatch = target != null && Math.abs(cur.valorLiquido - target) < 0.01;
       const newMatch = target != null && Math.abs(f.valorLiquido - target) < 0.01;
       if (newMatch && !curMatch) {
@@ -1630,8 +1673,9 @@ export function reconciliarFichaFromNotasConferidas(data: AppData): AppData {
   let changed = dedupedInitial.length !== data.fichaCorrida.length;
   const fichaNotaIds = new Set(fichaCorrida.map((f) => f.notaPedidoId));
   let arquivosMensais = data.arquivosMensais;
+  let notasPedido = data.notasPedido ?? [];
 
-  const notasOrdenadas = [...(data.notasPedido ?? [])].sort(
+  const notasOrdenadas = [...notasPedido].sort(
     (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
   );
 
@@ -1639,28 +1683,35 @@ export function reconciliarFichaFromNotasConferidas(data: AppData): AppData {
     if (nota.status !== "conferida" && nota.status !== "pago") continue;
     if (nota.valorLiquido <= 0 && (nota.itens ?? []).every((i) => i.quantidade <= 0)) continue;
 
-    const quitadaRegistrada = notaQuitadaPorPagamentoCooperativaRegistrado(data, nota, nota.cooperadoId);
     const fichasDestaNota = fichaCorrida.filter((f) => f.notaPedidoId === nota.id);
-    if (quitadaRegistrada && fichasDestaNota.length > 0) continue;
-
-    const fichasExistentes = fichasDestaNota;
     const qtdParticipantes = nota.divisaoEntrega?.participantes.length ?? 1;
 
     if (nota.divisaoEntrega && qtdParticipantes > 1) {
-      if (
-        divisaoFichasCobremParticipantes({ ...data, fichaCorrida }, fichasExistentes, nota) &&
-        fichasValoresAlinhadosComNota(fichaCorrida, nota)
-      ) {
+      const ctxData = { ...data, fichaCorrida, arquivosMensais, notasPedido };
+      if (fichasDivisaoEntregaConsistentes(ctxData, fichaCorrida, nota)) {
         continue;
       }
-      const ctx = { ...data, fichaCorrida, arquivosMensais };
-      const rebuilt = rebuildFichasNota(ctx, nota);
+      const rebuilt = rebuildFichasNota(ctxData, nota);
       fichaCorrida = rebuilt.fichaCorrida;
       arquivosMensais = rebuilt.arquivosMensais;
+      const fichasNota = dedupeFichaCorridaPorNota(
+        fichaCorrida.filter((f) => f.notaPedidoId === nota.id),
+        notasPedido
+      );
+      const notaSync = sincronizarTotaisNotaComFichas(nota, fichasNota, {
+        forcarDescontoLiquido: true,
+        sincronizarBruto: true,
+      });
+      notasPedido = notasPedido.map((n) => (n.id === nota.id ? notaSync : n));
       fichaNotaIds.add(nota.id);
       changed = true;
       continue;
     }
+
+    const quitadaRegistrada = notaQuitadaPorPagamentoCooperativaRegistrado(data, nota, nota.cooperadoId);
+    if (quitadaRegistrada && fichasDestaNota.length > 0) continue;
+
+    const fichasExistentes = fichasDestaNota;
 
     if (fichasExistentes.length > 0) {
       if (fichasValoresAlinhadosComNota(fichaCorrida, nota)) continue;
@@ -1709,7 +1760,7 @@ export function reconciliarFichaFromNotasConferidas(data: AppData): AppData {
   fichaCorrida = alinhado.fichaCorrida;
   if (alinhado.changed) changed = true;
 
-  const merged = { ...data, fichaCorrida, arquivosMensais };
+  const merged = { ...data, fichaCorrida, arquivosMensais, notasPedido };
   return purgarFichasInvalidas(merged);
 }
 
