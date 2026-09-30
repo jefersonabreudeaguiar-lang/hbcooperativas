@@ -65,7 +65,10 @@ import {
 import { TERMO_MERCADO_CONTA_COOP_VERSAO } from "@/config/termoUsoMercadoContaCoop";
 import { fetchOperacionalSync } from "@/lib/supabase/cooperativaSyncStorage";
 import { fetchCooperadosFromStorage } from "@/lib/supabase/cooperadosStorage";
-import { titularCooperadoIds } from "@/lib/hb-credit/repairOperacionalContaCoopDescontos";
+import {
+  pickBestHbCreditAccountRow,
+  titularCooperadoIds,
+} from "@/lib/hb-credit/repairOperacionalContaCoopDescontos";
 import { cooperadosUnicosParaCobranca } from "@/utils/cooperadoDedupe";
 import { mesCicloEntregasPagamentosCompletos } from "@/services/repasseCicloEntregasGateService";
 
@@ -1378,20 +1381,8 @@ async function fetchHbCreditAccountRowForCooperado(
   cooperadoId: string
 ): Promise<{ row: Record<string, unknown>; accountCooperadoId: string } | null> {
   const digits = normalizeCnpj(cnpj);
-  const { data: direct } = await supabase
-    .from("hb_credit_accounts")
-    .select("*")
-    .eq("cooperative_cnpj", digits)
-    .eq("cooperado_id", cooperadoId)
-    .maybeSingle();
-  if (direct) {
-    return { row: direct as Record<string, unknown>, accountCooperadoId: cooperadoId };
-  }
-
   const cooperados = await fetchCooperadosFromStorage(supabase, digits).catch(() => []);
-  if (!cooperados.length) return null;
-  const titularIds = titularCooperadoIds(cooperados, cooperadoId);
-  if (titularIds.length <= 1) return null;
+  const titularIds = cooperados.length ? titularCooperadoIds(cooperados, cooperadoId) : [cooperadoId];
 
   const { data: rows } = await supabase
     .from("hb_credit_accounts")
@@ -1401,12 +1392,8 @@ async function fetchHbCreditAccountRowForCooperado(
 
   if (!rows?.length) return null;
 
-  let best = rows[0] as Record<string, unknown>;
-  for (const row of rows) {
-    const released = Number((row as { limit_released_cents?: number }).limit_released_cents ?? 0);
-    const bestReleased = Number(best.limit_released_cents ?? 0);
-    if (released > bestReleased) best = row as Record<string, unknown>;
-  }
+  const best = pickBestHbCreditAccountRow(rows as Record<string, unknown>[]);
+  if (!best) return null;
   return {
     row: best,
     accountCooperadoId: String(best.cooperado_id ?? cooperadoId),
@@ -1454,7 +1441,9 @@ export async function getLimiteCooperado(
   cooperadoId: string
 ): Promise<ContaCoopLimiteCooperado | null> {
   const digits = normalizeCnpj(cnpj);
-  await reconcileCooperadoAmountUsedCents(supabase, digits, cooperadoId);
+  const foundPre = await fetchHbCreditAccountRowForCooperado(supabase, cnpj, cooperadoId);
+  const reconcileId = foundPre?.accountCooperadoId ?? cooperadoId;
+  await reconcileCooperadoAmountUsedCents(supabase, digits, reconcileId).catch(() => {});
   const found = await fetchHbCreditAccountRowForCooperado(supabase, cnpj, cooperadoId);
   if (!found) return null;
   const cashback = await getCashbackDisponivel(supabase, digits, found.accountCooperadoId);
@@ -1648,11 +1637,13 @@ export async function verifyFinancialPin(
   actorUserId = cooperadoId
 ): Promise<{ ok: true } | { ok: false; error: string }> {
   const digits = normalizeCnpj(cnpj);
+  const found = await fetchHbCreditAccountRowForCooperado(supabase, cnpj, cooperadoId);
+  const accountCooperadoId = found?.accountCooperadoId ?? cooperadoId;
   const { data } = await supabase
     .from("hb_credit_accounts")
     .select("pin_hash, pin_locked_until")
     .eq("cooperative_cnpj", digits)
-    .eq("cooperado_id", cooperadoId)
+    .eq("cooperado_id", accountCooperadoId)
     .maybeSingle();
 
   if (!data?.pin_hash) {
@@ -1668,11 +1659,11 @@ export async function verifyFinancialPin(
 
   const valid = await verifyPassword(pin, String(data.pin_hash));
   if (!valid) {
-    await recordPinFailure(supabase, cnpj, cooperadoId, actorUserId);
+    await recordPinFailure(supabase, cnpj, accountCooperadoId, actorUserId);
     return { ok: false, error: "PIN financeiro inválido." };
   }
 
-  await resetPinFailures(supabase, cnpj, cooperadoId);
+  await resetPinFailures(supabase, cnpj, accountCooperadoId);
   return { ok: true };
 }
 
@@ -2201,7 +2192,7 @@ export async function validateIntentForCooperado(
   const { data: parceiro } = await supabase.from("hb_credit_partners").select("*").eq("id", intent.partner_id).maybeSingle();
   if (!parceiro || parceiro.status !== "ACTIVE") return { ok: false, error: "Mercado bloqueado ou inativo." };
 
-  const limite = await getLimiteCooperadoAlinhadoAEntregas(supabase, digits, cooperadoId);
+  const limite = await getLimiteCooperado(supabase, digits, cooperadoId);
   if (!limite) return { ok: false, error: "Sem limite HB Créditos." };
   if (limite.bloqueado) return { ok: false, error: "Cooperado bloqueado." };
   const gross = Number(intent.amount_cents);
@@ -3491,13 +3482,9 @@ export async function hasFinancialPin(
   cnpj: string,
   cooperadoId: string
 ): Promise<boolean> {
-  const { data } = await supabase
-    .from("hb_credit_accounts")
-    .select("pin_hash")
-    .eq("cooperative_cnpj", normalizeCnpj(cnpj))
-    .eq("cooperado_id", cooperadoId)
-    .maybeSingle();
-  return Boolean(data?.pin_hash);
+  const found = await fetchHbCreditAccountRowForCooperado(supabase, cnpj, cooperadoId);
+  if (!found) return false;
+  return Boolean(found.row.pin_hash);
 }
 
 export type CreditIntegrityReport = {

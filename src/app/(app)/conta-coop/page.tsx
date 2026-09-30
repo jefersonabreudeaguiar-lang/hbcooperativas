@@ -33,7 +33,7 @@ import { buildCreditosBaseMapCached, calcLimiteFromPercentual } from "@/modules/
 import type { AuthoritativeCreditBaseErrorPayload } from "@/modules/hb-credit/engine/creditBaseAuthoritative";
 import type { ContaCoopDashboard, ContaCoopLimiteCooperado, ContaCoopParceiro, ContaCoopCooperadoPinResetRequest, ContaCoopPixChangeRequest } from "@/modules/hb-credit/types";
 import type { Cooperado } from "@/types";
-import { titularCooperadoIds } from "@/lib/hb-credit/repairOperacionalContaCoopDescontos";
+import { melhorLimiteCooperadoTitular } from "@/lib/hb-credit/repairOperacionalContaCoopDescontos";
 import { cn, formatMesReferencia } from "@/utils/format";
 import { PageSkeleton } from "@/components/ui/PageSkeleton";
 import {
@@ -163,14 +163,7 @@ function resolveLimiteExibicaoCooperado(
   limites: ContaCoopLimiteCooperado[],
   cooperados: Cooperado[]
 ): ContaCoopLimiteCooperado {
-  const direct = limites.find((l) => l.cooperadoId === cooperadoId);
-  if (direct) return direct;
-  const titularIds = new Set(titularCooperadoIds(cooperados, cooperadoId));
-  let best: ContaCoopLimiteCooperado | undefined;
-  for (const l of limites) {
-    if (!titularIds.has(l.cooperadoId)) continue;
-    if (!best || l.limiteLiberadoCents > best.limiteLiberadoCents) best = l;
-  }
+  const best = melhorLimiteCooperadoTitular(limites, cooperados, cooperadoId);
   if (best) return { ...best, cooperadoId };
   return limitePlaceholderCooperado(cooperadoId, cooperativaCnpj);
 }

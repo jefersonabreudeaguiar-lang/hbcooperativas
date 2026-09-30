@@ -20,8 +20,12 @@ function assert(cond: boolean, msg: string) {
 
 const accountRoute = read("src/app/api/credit/account/route.ts");
 assert(
-  accountRoute.includes("getLimiteCooperadoAlinhadoAEntregas"),
-  "GET /api/credit/account mantém getLimiteCooperadoAlinhadoAEntregas"
+  accountRoute.includes("getLimiteCooperado"),
+  "GET /api/credit/account usa getLimiteCooperado (mesma regra da aba Limites)"
+);
+assert(
+  !accountRoute.includes("getLimiteCooperadoAlinhadoAEntregas"),
+  "GET /api/credit/account não capa limite liberado na UI"
 );
 assert(!accountRoute.includes("light read"), "account route sem fast/light read adicionado");
 

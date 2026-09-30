@@ -7,6 +7,7 @@ import {
   type OperacionalSyncPayload,
 } from "@/lib/supabase/cooperativaSyncStorage";
 import { fetchAllCooperadosFromStorage } from "@/lib/supabase/cooperadosStorage";
+import type { ContaCoopLimiteCooperado } from "@/modules/hb-credit/types";
 import type { ArquivoMensalCooperado, Cooperado, PagamentoCooperadoRegistro } from "@/types";
 import { normalizeCnpj } from "@/utils/cooperativa";
 
@@ -64,6 +65,58 @@ export function titularCooperadoIds(cooperados: Cooperado[], cooperadoId: string
     else if (nome && nomeNorm(c.nomeCompleto) === nome) ids.add(c.id);
   }
   return [...ids];
+}
+
+function hbAccountReleasedCents(row: Record<string, unknown>): number {
+  return Math.max(0, Math.round(Number(row.limit_released_cents ?? 0)));
+}
+
+function hbAccountUpdatedMs(row: Record<string, unknown>): number {
+  const t = Date.parse(String(row.updated_at ?? ""));
+  return Number.isFinite(t) ? t : 0;
+}
+
+/** Conta HB na nuvem quando há IDs duplicados (mesmo titular) — maior limite liberado. */
+export function pickBestHbCreditAccountRow(
+  rows: Record<string, unknown>[]
+): Record<string, unknown> | null {
+  if (!rows.length) return null;
+  let best = rows[0];
+  for (const row of rows) {
+    const released = hbAccountReleasedCents(row);
+    const bestReleased = hbAccountReleasedCents(best);
+    if (released > bestReleased) {
+      best = row;
+      continue;
+    }
+    if (released === bestReleased && hbAccountUpdatedMs(row) > hbAccountUpdatedMs(best)) {
+      best = row;
+    }
+  }
+  return best;
+}
+
+/** Mesma regra da API GET /credit/account para a aba Limites (staff). */
+export function melhorLimiteCooperadoTitular(
+  limites: ContaCoopLimiteCooperado[],
+  cooperados: Cooperado[],
+  cooperadoId: string
+): ContaCoopLimiteCooperado | null {
+  const titularIds = new Set(titularCooperadoIds(cooperados, cooperadoId));
+  let best: ContaCoopLimiteCooperado | undefined;
+  for (const l of limites) {
+    if (!titularIds.has(l.cooperadoId)) continue;
+    if (!best || l.limiteLiberadoCents > best.limiteLiberadoCents) {
+      best = l;
+      continue;
+    }
+    if (l.limiteLiberadoCents === best.limiteLiberadoCents) {
+      const tu = Date.parse(l.updatedAt || "") || 0;
+      const bu = Date.parse(best.updatedAt || "") || 0;
+      if (tu > bu) best = l;
+    }
+  }
+  return best ?? null;
 }
 
 function mesesPagamentoOp(p: PagamentoCooperadoRegistro): string[] {
