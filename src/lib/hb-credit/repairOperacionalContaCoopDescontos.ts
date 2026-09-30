@@ -76,7 +76,7 @@ function hbAccountUpdatedMs(row: Record<string, unknown>): number {
   return Number.isFinite(t) ? t : 0;
 }
 
-/** Conta HB na nuvem quando há IDs duplicados (mesmo titular) — maior limite liberado. */
+/** Conta HB na nuvem quando há IDs duplicados (mesmo titular) — maior crédito disponível. */
 export function pickBestHbCreditAccountRow(
   rows: Record<string, unknown>[]
 ): Record<string, unknown> | null {
@@ -84,12 +84,21 @@ export function pickBestHbCreditAccountRow(
   let best = rows[0];
   for (const row of rows) {
     const released = hbAccountReleasedCents(row);
+    const used = Math.max(0, Math.round(Number(row.amount_used_cents ?? 0)));
+    const disponivel = Math.max(0, released - used);
     const bestReleased = hbAccountReleasedCents(best);
-    if (released > bestReleased) {
+    const bestUsed = Math.max(0, Math.round(Number(best.amount_used_cents ?? 0)));
+    const bestDisponivel = Math.max(0, bestReleased - bestUsed);
+
+    if (disponivel > bestDisponivel) {
       best = row;
       continue;
     }
-    if (released === bestReleased && hbAccountUpdatedMs(row) > hbAccountUpdatedMs(best)) {
+    if (disponivel === bestDisponivel && released > bestReleased) {
+      best = row;
+      continue;
+    }
+    if (disponivel === bestDisponivel && released === bestReleased && hbAccountUpdatedMs(row) > hbAccountUpdatedMs(best)) {
       best = row;
     }
   }
@@ -106,11 +115,22 @@ export function melhorLimiteCooperadoTitular(
   let best: ContaCoopLimiteCooperado | undefined;
   for (const l of limites) {
     if (!titularIds.has(l.cooperadoId)) continue;
-    if (!best || l.limiteLiberadoCents > best.limiteLiberadoCents) {
+    if (!best) {
       best = l;
       continue;
     }
-    if (l.limiteLiberadoCents === best.limiteLiberadoCents) {
+    if (l.valorDisponivelCents > best.valorDisponivelCents) {
+      best = l;
+      continue;
+    }
+    if (l.valorDisponivelCents === best.valorDisponivelCents && l.limiteLiberadoCents > best.limiteLiberadoCents) {
+      best = l;
+      continue;
+    }
+    if (
+      l.valorDisponivelCents === best.valorDisponivelCents &&
+      l.limiteLiberadoCents === best.limiteLiberadoCents
+    ) {
       const tu = Date.parse(l.updatedAt || "") || 0;
       const bu = Date.parse(best.updatedAt || "") || 0;
       if (tu > bu) best = l;

@@ -9,8 +9,8 @@ import { isCloudSessionActive } from "@/lib/security/clientSession";
 import { fetchCreditAccount } from "@/services/creditApiService";
 import { getData, isAppDataWarm } from "@/services/dataStore";
 import { resolveCooperativaCnpj } from "@/services/notaPedidoCloudService";
-import { resolverCooperadoIdCanonico } from "@/services/cooperadoCloudService";
 import { getUserCooperativaId } from "@/utils/cooperativa";
+import { notifyHbCreditLimiteSynced } from "@/lib/hb-credit/hbCreditLimiteSyncEvents";
 import type { User } from "@/types";
 
 export async function persistirHbCreditAccountCooperado(
@@ -27,7 +27,7 @@ export async function persistirHbCreditAccountCooperado(
   const cnpj = await resolveCooperativaCnpj(data, cooperativaId, user);
   if (!cnpj) return false;
 
-  const cooperadoId = resolverCooperadoIdCanonico(data, user.cooperadoId, cooperativaId);
+  const cooperadoId = user.cooperadoId;
   try {
     const acc = await fetchCreditAccount(cnpj, cooperadoId);
     gravarHbCreditAccountPersistido(cnpj, cooperadoId, {
@@ -38,6 +38,7 @@ export async function persistirHbCreditAccountCooperado(
       pinResetPending: Boolean(acc.pinResetPending),
       savedAt: new Date().toISOString(),
     });
+    notifyHbCreditLimiteSynced();
     return Boolean(acc.account);
   } catch {
     return false;

@@ -61,6 +61,7 @@ import { humanizeCreditRefundError } from "@/lib/supabase/hbCreditRefundFixSchem
 import {
   reconcileCooperadoAmountUsedCents,
   reconcileCooperadosAmountUsedCentsBatch,
+  resolveExpectedAmountUsedCentsForCooperado,
 } from "@/lib/supabase/creditAmountUsedReconcile";
 import { TERMO_MERCADO_CONTA_COOP_VERSAO } from "@/config/termoUsoMercadoContaCoop";
 import { fetchOperacionalSync } from "@/lib/supabase/cooperativaSyncStorage";
@@ -1441,17 +1442,28 @@ export async function getLimiteCooperado(
   cooperadoId: string
 ): Promise<ContaCoopLimiteCooperado | null> {
   const digits = normalizeCnpj(cnpj);
-  const foundPre = await fetchHbCreditAccountRowForCooperado(supabase, cnpj, cooperadoId);
-  const reconcileId = foundPre?.accountCooperadoId ?? cooperadoId;
-  await reconcileCooperadoAmountUsedCents(supabase, digits, reconcileId).catch(() => {});
+  const cooperados = await fetchCooperadosFromStorage(supabase, digits).catch(() => []);
+  const titularIds = cooperados.length ? titularCooperadoIds(cooperados, cooperadoId) : [cooperadoId];
+  await reconcileCooperadosAmountUsedCentsBatch(supabase, digits, titularIds).catch(() => {});
+
   const found = await fetchHbCreditAccountRowForCooperado(supabase, cnpj, cooperadoId);
   if (!found) return null;
   const cashback = await getCashbackDisponivel(supabase, digits, found.accountCooperadoId);
   const mapped = mapLimiteRow(found.row, cashback);
-  if (mapped.cooperadoId !== cooperadoId) {
-    return { ...mapped, cooperadoId };
+
+  const expectedUsado = await resolveExpectedAmountUsedCentsForCooperado(supabase, digits, cooperadoId);
+  const liberado = mapped.limiteLiberadoCents;
+  const usado = Math.min(Math.max(0, expectedUsado), liberado >= 0 ? liberado : expectedUsado);
+  const withUsado = {
+    ...mapped,
+    valorUsadoCents: usado,
+    valorDisponivelCents: computeDisponivel(liberado, usado),
+  };
+
+  if (withUsado.cooperadoId !== cooperadoId) {
+    return { ...withUsado, cooperadoId };
   }
-  return mapped;
+  return withUsado;
 }
 
 /** Limite exibido/usado no HB — nunca acima do crédito-base das entregas conferidas na nuvem. */

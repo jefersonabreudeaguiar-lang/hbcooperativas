@@ -1,6 +1,12 @@
 -- =============================================================================
 -- HB CREDIT — SCRIPT UNICO (passos 1 a 8)
 -- CoopeagriPla / Conta Coop — cole inteiro no Supabase SQL Editor e execute.
+--
+-- IMPORTANTE: use o projeto Supabase cujo URL = NEXT_PUBLIC_SUPABASE_URL do deploy.
+-- Se der "hb_credit_accounts does not exist" em migration posterior, este script
+-- ainda nao foi executado neste projeto (ou voce colou no projeto errado).
+--
+-- Depois deste arquivo, rode: APPLY_HB_CREDIT_POS_TUDO.sql
 -- Idempotente: seguro reexecutar se algo ja existir (IF NOT EXISTS / OR REPLACE).
 -- Tempo estimado: 1-3 minutos.
 -- =============================================================================

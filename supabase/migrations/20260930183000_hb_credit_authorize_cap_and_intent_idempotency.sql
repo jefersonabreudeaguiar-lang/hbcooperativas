@@ -1,5 +1,18 @@
 -- Teto authoritative persistido no sync-limite; authorize usa min(limit_released, cap).
 -- Idempotência duplicate authorize devolve disponivel_apos_centavos.
+--
+-- PRÉ-REQUISITO: tabela public.hb_credit_accounts (erro 42P01 = HB ainda não instalado).
+--   1) Rode APPLY_HB_CREDIT_00_DIAGNOSTICO.sql
+--   2) Se hb_credit_accounts = false → execute APPLY_HB_CREDIT_TUDO.sql (inteiro)
+--   3) Depois APPLY_HB_CREDIT_POS_TUDO.sql
+--   4) Então execute este arquivo (ou ele já está incluído no PASSO 3).
+
+do $$
+begin
+  if to_regclass('public.hb_credit_accounts') is null then
+    raise exception E'hb_credit_accounts não existe neste projeto Supabase.\nExecute ANTES o arquivo migrations/APPLY_HB_CREDIT_TUDO.sql (inteiro) no SQL Editor.\nConfira se o Project URL é o mesmo do app (NEXT_PUBLIC_SUPABASE_URL).';
+  end if;
+end $$;
 
 alter table public.hb_credit_accounts
   add column if not exists financial_limit_cap_cents bigint

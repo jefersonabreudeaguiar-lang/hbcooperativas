@@ -145,6 +145,36 @@ export async function reconcileCooperadoAmountUsedCents(
   return applyAmountUsedCorrection(supabase, digits, account, cooperadoId, expected, actorUserId);
 }
 
+/** “Utilizado” exibido — compras HB menos as já quitadas na ficha (mesmo titular). */
+export async function resolveExpectedAmountUsedCentsForCooperado(
+  supabase: SupabaseClient,
+  cnpj: string,
+  cooperadoId: string
+): Promise<number> {
+  const digits = normalizeCnpj(cnpj);
+  if (!cooperadoId) return 0;
+
+  const ctxLoad = await loadFichaQuitadaContext(supabase, digits, cooperadoId);
+  if (!ctxLoad.ok) return 0;
+
+  let txQuery = supabase
+    .from("hb_credit_transactions")
+    .select(PAYMENT_TX_SELECT)
+    .eq("cooperative_cnpj", digits)
+    .eq("event_type", "PAYMENT");
+  txQuery =
+    ctxLoad.titularIds.length === 1
+      ? txQuery.eq("cooperado_id", ctxLoad.titularIds[0])
+      : txQuery.in("cooperado_id", ctxLoad.titularIds);
+  const { data: txs, error: txErr } = await txQuery;
+  if (txErr) return 0;
+
+  return computeAmountUsedCentsFromPayments(
+    (txs ?? []) as PaymentRowForUsed[],
+    ctxLoad.fichaQuitada
+  );
+}
+
 /** Alinha amount_used de vários cooperados (aba Limites / pós-pagamento) — uma leitura do operacional. */
 export async function reconcileCooperadosAmountUsedCentsBatch(
   supabase: SupabaseClient,
