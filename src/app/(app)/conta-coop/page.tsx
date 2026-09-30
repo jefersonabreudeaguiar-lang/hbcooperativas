@@ -1,7 +1,7 @@
 "use client";
 
 import dynamic from "next/dynamic";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, startTransition } from "react";
 import { useSearchParams } from "next/navigation";
 import { getData } from "@/services/dataStore";
 import { resolveCooperativaCnpj } from "@/services/notaPedidoCloudService";
@@ -244,23 +244,60 @@ function ContaCoopContent() {
   const limitesListaPendingRef = useRef(false);
   const limitesListaFetchedAtRef = useRef(0);
 
-  const recomputeCreditosBaseLocal = useCallback(() => {
+  const applyCreditosBaseMap = useCallback(
+    (map: Record<string, number>) => {
+      creditosBaseRef.current = map;
+      startTransition(() => {
+        setCreditosBaseColetivo(map);
+      });
+    },
+    []
+  );
+
+  const computeCreditosBaseMap = useCallback(() => {
     if (!user?.cooperativaId || !cooperadoIdsAtivos.length) {
-      setCreditosBaseColetivo({});
-      creditosBaseContextRef.current = "";
-      return;
+      return {} as Record<string, number>;
     }
     const t0 = contaCoopPerfStart("buildCreditosBaseMapCached");
     const map = buildCreditosBaseMapCached(getData(), cooperadoIdsAtivos, user.cooperativaId);
     contaCoopPerfEnd("buildCreditosBaseMapCached", t0);
     creditosBaseContextRef.current = `${user.cooperativaId}:${cooperadoIdsKey}`;
-    creditosBaseRef.current = map;
-    setCreditosBaseColetivo(map);
+    return map;
   }, [user?.cooperativaId, cooperadoIdsAtivos, cooperadoIdsKey]);
 
-  /** Crédito-base local (LASTRO/M6) — só abas painel/limites; não reage a sync global do AppData. */
+  const recomputeCreditosBaseLocal = useCallback(
+    (opts?: { immediate?: boolean }) => {
+      if (!user?.cooperativaId || !cooperadoIdsAtivos.length) {
+        setCreditosBaseColetivo({});
+        creditosBaseContextRef.current = "";
+        creditosBaseRef.current = {};
+        return;
+      }
+      const run = () => {
+        const map = computeCreditosBaseMap();
+        if (opts?.immediate) {
+          creditosBaseRef.current = map;
+          setCreditosBaseColetivo(map);
+        } else {
+          applyCreditosBaseMap(map);
+        }
+      };
+      if (opts?.immediate) {
+        run();
+        return;
+      }
+      if (cooperadoIdsAtivos.length > 20) {
+        scheduleContaCoopAuxSync(run, { idleTimeoutMs: 2_500, fallbackMs: 6_000 });
+      } else {
+        scheduleContaCoopAuxSync(run, { idleTimeoutMs: 800, fallbackMs: 2_000 });
+      }
+    },
+    [user?.cooperativaId, cooperadoIdsAtivos.length, computeCreditosBaseMap, applyCreditosBaseMap]
+  );
+
+  /** Crédito-base local (LASTRO/M6) — só aba Limites; painel usa dashboard da nuvem. */
   useEffect(() => {
-    if (tab !== "painel" && tab !== "limites") return;
+    if (tab !== "limites") return;
     if (!user?.cooperativaId || !cooperadoIdsAtivos.length) {
       setCreditosBaseColetivo({});
       creditosBaseContextRef.current = "";
@@ -448,8 +485,7 @@ function ContaCoopContent() {
         : Date.now();
     }
     void reloadRef.current({ background });
-    void revalidateLimitesLista({ background: true, force: !snapLimites?.limites.length });
-  }, [cnpj, revalidateLimitesLista]);
+  }, [cnpj]);
 
   const parceirosTabs: Tab[] = ["mercados", "conferir_nf", "liquidar", "estornos"];
   useEffect(() => {
@@ -468,9 +504,9 @@ function ContaCoopContent() {
     return cancelIdle;
   }, [tab, cnpj, loadPinAndPixRequests]);
 
-  /** Revalidação leve da lista (GET limites) — coalescida e só se stale; sem sync-limite automático. */
+  /** GET /limites — só na aba Limites (evita competir com abertura do painel). */
   useEffect(() => {
-    if (tab !== "limites" && tab !== "painel") return;
+    if (tab !== "limites") return;
     if (!cnpj) return;
     void revalidateLimitesLista({ background: true });
   }, [tab, cnpj, revalidateLimitesLista]);
@@ -482,7 +518,7 @@ function ContaCoopContent() {
 
   const salvarTeto = async () => {
     if (!cnpj) return;
-    recomputeCreditosBaseLocal();
+    recomputeCreditosBaseLocal({ immediate: true });
     setBusy(true);
     setError("");
     try {
@@ -503,7 +539,7 @@ function ContaCoopContent() {
 
   const salvarLimiteIndividual = async () => {
     if (!cnpj || !cooperadoId) return;
-    recomputeCreditosBaseLocal();
+    recomputeCreditosBaseLocal({ immediate: true });
     setBusy(true);
     setError("");
     try {
@@ -533,7 +569,7 @@ function ContaCoopContent() {
     setBusy(true);
     setError("");
     try {
-      recomputeCreditosBaseLocal();
+      recomputeCreditosBaseLocal({ immediate: true });
       const res = await postCreditLimites({
         action: "preview_coletivo",
         cnpj,
@@ -559,7 +595,7 @@ function ContaCoopContent() {
     setBusy(true);
     setError("");
     try {
-      recomputeCreditosBaseLocal();
+      recomputeCreditosBaseLocal({ immediate: true });
       await postCreditLimites({
         action: "set_coletivo",
         cnpj,
