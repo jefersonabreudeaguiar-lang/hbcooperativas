@@ -836,23 +836,16 @@ async function persistLimiteReleasedAfterCreditoBaseZero(
   return { ok: true, limite: mapLimiteRow(data as Record<string, unknown>) };
 }
 
-export async function setLimiteCooperado(
+/** Grava limite na nuvem (sem revalidar teto — use após preview coletivo ou preview individual). */
+async function writeLimiteCooperadoCents(
   supabase: SupabaseClient,
   cnpj: string,
   cooperadoId: string,
   novoLimiteCents: number,
   actorUserId: string,
-  creditosBaseCents: Record<string, number> = {}
+  auditMetadata: { anterior?: ContaCoopTresValores; novo: { limiteLiberadoCents: number } },
+  auditAction: "LIMIT_CHANGED" | "LIMIT_COLLECTIVE" = "LIMIT_CHANGED"
 ): Promise<{ ok: true; limite: ContaCoopLimiteCooperado } | { ok: false; error: string }> {
-  const preview = await previewLimiteAlteracao(
-    supabase,
-    cnpj,
-    cooperadoId,
-    novoLimiteCents,
-    creditosBaseCents
-  );
-  if (!preview.ok) return { ok: false, error: preview.error! };
-
   const digits = normalizeCnpj(cnpj);
   const { data: existing } = await supabase
     .from("hb_credit_accounts")
@@ -862,8 +855,11 @@ export async function setLimiteCooperado(
     .maybeSingle();
 
   const usado = existing ? Number(existing.amount_used_cents) : 0;
-  const now = new Date().toISOString();
+  if (novoLimiteCents < usado) {
+    return { ok: false, error: "Novo limite não pode ser menor que o valor já usado." };
+  }
 
+  const now = new Date().toISOString();
   const { data, error } = await supabase
     .from("hb_credit_accounts")
     .upsert(
@@ -886,18 +882,43 @@ export async function setLimiteCooperado(
   await supabase.from("hb_credit_audit_log").insert({
     cooperative_cnpj: digits,
     actor: actorUserId,
-    action: "LIMIT_CHANGED",
+    action: auditAction,
     resource_type: "account",
     resource_id: cooperadoId,
-    metadata: {
-      anterior: preview.atual,
-      novo: { limiteLiberadoCents: novoLimiteCents },
-    },
+    metadata: auditMetadata,
   });
 
   await markHbCreditLimitSyncedBestEffort(supabase, cnpj, cooperadoId, actorUserId);
 
   return { ok: true, limite: mapLimiteRow(data as Record<string, unknown>) };
+}
+
+export async function setLimiteCooperado(
+  supabase: SupabaseClient,
+  cnpj: string,
+  cooperadoId: string,
+  novoLimiteCents: number,
+  actorUserId: string,
+  creditosBaseCents: Record<string, number> = {}
+): Promise<{ ok: true; limite: ContaCoopLimiteCooperado } | { ok: false; error: string }> {
+  const preview = await previewLimiteAlteracao(
+    supabase,
+    cnpj,
+    cooperadoId,
+    novoLimiteCents,
+    creditosBaseCents
+  );
+  if (!preview.ok) return { ok: false, error: preview.error! };
+
+  return writeLimiteCooperadoCents(
+    supabase,
+    cnpj,
+    cooperadoId,
+    novoLimiteCents,
+    actorUserId,
+    { anterior: preview.atual, novo: { limiteLiberadoCents: novoLimiteCents } },
+    "LIMIT_CHANGED"
+  );
 }
 
 /** Zera limite e valor usado após liquidação (cooperado ou mercado). */
@@ -2754,13 +2775,21 @@ export async function setLimiteColetivoPercentual(
 
   let updated = 0;
   for (const item of preview.itens) {
-    const result = await setLimiteCooperado(
+    const result = await writeLimiteCooperadoCents(
       supabase,
       cnpj,
       item.cooperadoId,
       item.novoLimiteCents,
       actorUserId,
-      creditosBaseCents
+      {
+        anterior: {
+          limiteLiberadoCents: item.limiteAtualCents,
+          valorUsadoCents: item.valorUsadoCents,
+          valorDisponivelCents: computeDisponivel(item.limiteAtualCents, item.valorUsadoCents),
+        },
+        novo: { limiteLiberadoCents: item.novoLimiteCents },
+      },
+      "LIMIT_COLLECTIVE"
     );
     if (!result.ok) return result;
     updated++;

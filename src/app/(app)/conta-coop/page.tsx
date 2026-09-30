@@ -629,6 +629,12 @@ function ContaCoopContent() {
     }
   }, [cnpj, user?.cooperativaId]);
 
+  const refreshLimitesAposLiberacao = useCallback(() => {
+    notifyHbCreditLimiteSynced();
+    void reload({ background: true });
+    void revalidateLimitesLista({ force: true, background: true });
+  }, [reload, revalidateLimitesLista]);
+
   const reloadRef = useRef(reload);
   reloadRef.current = reload;
 
@@ -734,6 +740,7 @@ function ContaCoopContent() {
     }
     setBusy(true);
     setError("");
+    setSuccess("");
     try {
       const cooperadoIds = cooperadosAtivos.map((c) => c.id);
       const tetoAtual = dashboard?.teto.tetoGlobalPercent ?? 100;
@@ -750,9 +757,8 @@ function ContaCoopContent() {
       setPercentualColetivo(String(pct));
       setPreviewColetivo(null);
       gravarHbCreditLimitesPersistidos(cnpj, limitesRef.current, creditosBaseRef.current, pct);
-      await reload();
-      await revalidateLimitesLista({ force: true, background: true });
-      notifyHbCreditLimiteSynced();
+      setSuccess("Percentual salvo na nuvem. A lista atualiza em segundo plano.");
+      refreshLimitesAposLiberacao();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Erro ao salvar percentual.");
     } finally {
@@ -774,9 +780,8 @@ function ContaCoopContent() {
         novoLimiteReais: Number(novoLimiteReais.replace(",", ".")),
         creditosBaseCents,
       });
-      await reload();
-      await revalidateLimitesLista({ force: true, background: true });
-      notifyHbCreditLimiteSynced();
+      setSuccess("Limite individual salvo. Atualizando lista…");
+      refreshLimitesAposLiberacao();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Erro ao liberar limite.");
     } finally {
@@ -819,11 +824,12 @@ function ContaCoopContent() {
       setError("Informe um percentual entre 0 e 100.");
       return;
     }
+    const creditosBaseCents = pickCreditosBaseForPost();
+    if (!creditosBaseCents) return;
     setBusy(true);
     setError("");
+    setSuccess("");
     try {
-      const creditosBaseCents = pickCreditosBaseForPost();
-      if (!creditosBaseCents) return;
       await postCreditLimites({
         action: "set_coletivo",
         cnpj,
@@ -833,9 +839,8 @@ function ContaCoopContent() {
       });
       setPreviewColetivo(null);
       gravarHbCreditLimitesPersistidos(cnpj, limitesRef.current, creditosBaseRef.current, percentual);
-      await reload();
-      await revalidateLimitesLista({ force: true, background: true });
-      notifyHbCreditLimiteSynced();
+      setSuccess("Limites liberados na nuvem. A lista atualiza em segundo plano.");
+      refreshLimitesAposLiberacao();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Erro ao liberar limites.");
     } finally {
@@ -1219,6 +1224,12 @@ function ContaCoopContent() {
           {limitesRefreshing && (
             <p className="text-xs text-gray-500">Atualizando valores na nuvem…</p>
           )}
+          {busy && tab === "limites" && (
+            <p className="text-xs text-gray-500">
+              Gravando liberação na nuvem… Com muitos cooperados pode levar até 1–2 minutos; a página continua
+              responsiva após confirmar.
+            </p>
+          )}
 
           <Card className="space-y-4 !p-5">
             <div>
@@ -1442,7 +1453,9 @@ function ContaCoopContent() {
                 />
               </div>
               <Button variant="secondary" onClick={previewColetivoAction} disabled={busy}>Prévia</Button>
-              <Button onClick={salvarColetivo} disabled={busy}>Liberar todos</Button>
+              <Button onClick={salvarColetivo} disabled={busy}>
+                {busy ? "Liberando…" : "Liberar todos"}
+              </Button>
             </div>
             {previewColetivo && (
               <div className="text-sm bg-gray-50 border rounded-lg p-3 space-y-3">
