@@ -4,6 +4,7 @@ import { useCallback, useEffect } from "react";
 import { createPortal } from "react-dom";
 import { ChevronLeft, ChevronRight, X } from "lucide-react";
 import { NotaFotoImg } from "@/components/ui/NotaFotoImg";
+import { FOTO_ENTREGA_LIGHTBOX_IMG } from "@/components/notas/fotoEntregaDisplay";
 import { cn } from "@/utils/format";
 
 export type FotoLightboxItem = {
@@ -104,11 +105,7 @@ export function FotoLightbox({ open, items, index, onClose, onIndexChange }: Fot
           className="w-full h-full max-h-[calc(100dvh-7rem)] flex items-center justify-center"
           onClick={(e) => e.stopPropagation()}
         >
-          <NotaFotoImg
-            src={item.src}
-            alt={item.alt}
-            className="max-w-full max-h-[calc(100dvh-7rem)] w-auto h-auto object-contain select-none touch-manipulation"
-          />
+          <NotaFotoImg src={item.src} alt={item.alt} className={FOTO_ENTREGA_LIGHTBOX_IMG} />
         </div>
 
         {hasMultiple && (

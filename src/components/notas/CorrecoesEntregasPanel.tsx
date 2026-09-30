@@ -10,6 +10,7 @@ import { AlertBanner } from "@/components/ui/AlertBanner";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { NotaStatusBadge } from "@/components/ui/NotaStatusBadge";
 import { NotaFotoImg } from "@/components/ui/NotaFotoImg";
+import { FOTO_ENTREGA_THUMB_IMG } from "@/components/notas/fotoEntregaDisplay";
 import {
   listarCooperadosEntregasCorrecao,
   listarEntregasCorrecaoCooperado,
@@ -189,7 +190,7 @@ export function CorrecoesEntregasPanel({
                           <NotaFotoImg
                             src={foto}
                             alt=""
-                            className="max-w-full max-h-full object-contain"
+                            className={FOTO_ENTREGA_THUMB_IMG}
                           />
                         </div>
                       ) : (

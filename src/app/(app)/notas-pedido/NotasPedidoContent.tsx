@@ -18,6 +18,13 @@ import { AlertBanner } from "@/components/ui/AlertBanner";
 import { PromptDialog, ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { Card } from "@/components/ui/Card";
 import { NotaFotoImg } from "@/components/ui/NotaFotoImg";
+import { FotoLightbox } from "@/components/ui/FotoLightbox";
+import {
+  FOTO_ENTREGA_CONFERENCIA_IMG,
+  FOTO_ENTREGA_CONFERENCIA_PANEL,
+  FOTO_ENTREGA_THUMB_IMG,
+  FOTO_ENTREGA_VIEW_MODAL_IMG,
+} from "@/components/notas/fotoEntregaDisplay";
 import { updateData, updateDataSafe, generateId, addAuditEntry, getData } from "@/services/dataStore";
 import { requestAppSync, requestAppSyncLight } from "@/services/syncRequest";
 import { forceNextFullNotasSync, shouldResponsavelForceFullNotasOnEntry } from "@/services/syncMetaService";
@@ -3058,7 +3065,7 @@ export default function NotasPedidoContent() {
               <NotaFotoImg
                 src={getFotoExibicaoNota(n)}
                 alt=""
-                className="max-w-full max-h-full object-contain"
+                className={FOTO_ENTREGA_THUMB_IMG}
               />
             </div>
           ) : (
@@ -3482,7 +3489,7 @@ export default function NotasPedidoContent() {
                               <NotaFotoImg
                                 src={fotoThumb}
                                 alt=""
-                                className="max-w-full max-h-full w-auto h-auto object-contain"
+                                className={FOTO_ENTREGA_THUMB_IMG}
                               />
                             ) : qtdFotosCard > 0 ? (
                               <Camera size={18} className="text-amber-700/80" />
@@ -4339,10 +4346,10 @@ export default function NotasPedidoContent() {
           </div>
         )}
         {selectedNota && (
-          <div className="flex flex-col lg:flex-row h-[calc(100dvh-8.5rem)] max-h-[calc(100dvh-8.5rem)] overflow-hidden">
-            <div className="flex flex-col w-full lg:w-[48%] xl:w-1/2 bg-gray-900 shrink-0 lg:h-full lg:min-h-0 overflow-hidden border-b border-gray-800 lg:border-b-0">
-              <div className="flex flex-col shrink-0 min-h-[52dvh] max-h-[min(78dvh,calc(100dvh-10rem))] lg:max-h-none lg:flex-1 lg:min-h-0 overflow-hidden">
-                <div className="flex-1 min-h-0 overflow-auto flex items-start justify-center p-2 sm:p-3 touch-pan-x touch-pan-y">
+          <div className="flex flex-col lg:flex-row h-[calc(100dvh-8.5rem)] max-h-[calc(100dvh-8.5rem)] min-h-0 overflow-hidden">
+            <div className="flex flex-col w-full lg:w-[48%] xl:w-1/2 bg-gray-900 shrink-0 lg:h-full lg:min-h-0 min-h-0 border-b border-gray-800 lg:border-b-0">
+              <div className={cn("flex flex-col min-h-0", FOTO_ENTREGA_CONFERENCIA_PANEL)}>
+                <div className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden flex items-center justify-center p-2 sm:p-3">
                 {(() => {
                   if (lancamentoSequencia) {
                     const { url, displayIdx, total } = lancamentoSequencia;
@@ -4354,7 +4361,7 @@ export default function NotasPedidoContent() {
                             <img
                               src={url}
                               alt={`Lançada ${displayIdx + 1} de ${total}`}
-                              className="block max-h-full max-w-full w-auto h-auto object-contain mx-auto lg:max-h-[calc(100dvh-15rem)]"
+                              className={FOTO_ENTREGA_CONFERENCIA_IMG}
                             />
                           </div>
                         </div>
@@ -4397,7 +4404,7 @@ export default function NotasPedidoContent() {
                           <img
                             src={conferenciaFotoAtualUrl}
                             alt={`Pedido ${idx + 1} de ${totalFotos}`}
-                            className="block w-auto max-w-[min(100%,42rem)] h-auto object-contain mx-auto"
+                            className={FOTO_ENTREGA_CONFERENCIA_IMG}
                             onError={() => {
                             const key = conferenciaFotoCacheKey(selectedNota.id, idx);
                             conferenciaFotoCacheRef.current.delete(key);
@@ -4409,7 +4416,7 @@ export default function NotasPedidoContent() {
                           }}
                         />
                         </button>
-                        <p className="mt-1.5 text-center text-[11px] text-white/60">Toque na foto para ampliar · role se precisar</p>
+                        <p className="mt-1.5 text-center text-[11px] text-white/60">Toque na foto para ampliar · imagem inteira visível</p>
                       </div>
                     ) : (
                       <div className="text-center py-6 px-4 space-y-3 max-w-md mx-auto">
@@ -4787,20 +4794,19 @@ export default function NotasPedidoContent() {
           </div>
         )}
         </div>
-        {conferenciaFotoAmpliada && conferenciaFotoAtualUrl && (
-          <button
-            type="button"
-            className="fixed inset-0 z-[100] flex items-center justify-center bg-black/95 p-4"
-            onClick={() => setConferenciaFotoAmpliada(false)}
-            aria-label="Fechar foto ampliada"
-          >
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              src={conferenciaFotoAtualUrl}
-              alt="Pedido ampliado"
-              className="max-h-[96dvh] max-w-[96vw] w-auto h-auto object-contain"
-            />
-          </button>
+        {conferenciaFotoAmpliada && conferenciaFotoAtualUrl && selectedNota && (
+          <FotoLightbox
+            open={conferenciaFotoAmpliada}
+            items={[
+              {
+                src: conferenciaFotoAtualUrl,
+                alt: `Pedido ${Math.min(conferenciaFotoIdx, Math.max(0, contarFotosEnviadasNota(selectedNota) - 1)) + 1}`,
+              },
+            ]}
+            index={0}
+            onClose={() => setConferenciaFotoAmpliada(false)}
+            onIndexChange={() => {}}
+          />
         )}
       </Modal>
 
@@ -4891,7 +4897,7 @@ export default function NotasPedidoContent() {
                       <NotaFotoImg
                         src={foto}
                         alt={`Pedido ${i + 1}`}
-                        className="max-w-full max-h-[22rem] object-contain"
+                        className={FOTO_ENTREGA_VIEW_MODAL_IMG}
                       />
                     </div>
                   ))
