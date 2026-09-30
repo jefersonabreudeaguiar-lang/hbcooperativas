@@ -203,6 +203,35 @@ export function getFotoExibicaoNota(nota: NotaPedido): string | undefined {
   return meta?.url ?? meta?.thumbnailUrl;
 }
 
+/** Conferência do responsável — prioriza foto cheia; miniatura só se for a única inline. */
+export function resolveFotoInlineConferenciaNota(nota: NotaPedido, index: number): string | undefined {
+  const metas = (nota.fotosMeta ?? []).slice().sort((a, b) => (a.index ?? 0) - (b.index ?? 0));
+  const meta = metas.find((f) => (f.index ?? 0) === index) ?? metas[index];
+  if (meta?.url) return meta.url;
+
+  const full =
+    nota.fotosPedido?.[index] ?? (index === 0 ? nota.fotoPedido : undefined);
+  if (full) return full;
+
+  if (meta?.thumbnailUrl) return meta.thumbnailUrl;
+  return (
+    nota.fotosPedidoMiniaturas?.[index] ??
+    (index === 0 ? nota.fotoPedidoMiniatura : undefined)
+  );
+}
+
+/** True quando o ref é só miniatura (conferência deve buscar foto cheia na nuvem/IDB). */
+export function isFotoInlineMiniaturaFallback(nota: NotaPedido, index: number, ref: string): boolean {
+  if (!ref) return false;
+  const metas = (nota.fotosMeta ?? []).slice().sort((a, b) => (a.index ?? 0) - (b.index ?? 0));
+  const meta = metas.find((f) => (f.index ?? 0) === index) ?? metas[index];
+  if (meta?.url && ref === meta.url) return false;
+  const full =
+    nota.fotosPedido?.[index] ?? (index === 0 ? nota.fotoPedido : undefined);
+  if (full && ref === full) return false;
+  return true;
+}
+
 export function getFotosExibicaoNota(nota: NotaPedido): string[] {
   const fromMeta = (nota.fotosMeta ?? [])
     .filter((f) => f.url || f.thumbnailUrl)

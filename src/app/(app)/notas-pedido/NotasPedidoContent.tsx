@@ -73,7 +73,7 @@ import {
   enqueuePendingDeliveryImage,
   buildPendingImageId,
 } from "@/services/offlineImageQueueService";
-import { putLocalNotaMedia } from "@/services/localMediaStore";
+import { putLocalNotaMedia, readNotaFotoAtIndex } from "@/services/localMediaStore";
 import { listCooperadosDaCooperativa, pushCooperadoToCloud, resolverCooperadoIdCanonico, getCooperadoNomeResolvido, notaPertenceCooperado } from "@/services/cooperadoCloudService";
 import { pushOperacionalToCloud, syncContratosFromCloud } from "@/services/cooperativaSyncCloudService";
 import {
@@ -125,6 +125,8 @@ import {
   fotosRestantesNaSessao,
   mensagemLimiteFotosSessao,
   mergeNotaComFotos,
+  resolveFotoInlineConferenciaNota,
+  isFotoInlineMiniaturaFallback,
 } from "@/utils/fotoEntrega";
 import {
   isNotaNaFilaConferenciaResponsavel,
@@ -330,6 +332,7 @@ export default function NotasPedidoContent() {
   const [conferenciaFotoAtualUrl, setConferenciaFotoAtualUrl] = useState<string | null>(null);
   const [conferenciaFotoCarregando, setConferenciaFotoCarregando] = useState(false);
   const [conferenciaFotoSomenteLeitura, setConferenciaFotoSomenteLeitura] = useState(false);
+  const [conferenciaFotoAmpliada, setConferenciaFotoAmpliada] = useState(false);
   const [fotosLancadasUi, setFotosLancadasUi] = useState<Set<number>>(() => new Set());
 
   const coopId = user && data ? getUserCooperativaId(user, data) : undefined;
@@ -387,15 +390,29 @@ export default function NotasPedidoContent() {
         return cached;
       }
 
-      const localFotos = getFotosExibicaoNota(nota);
-      if (localFotos[index]) {
-        conferenciaFotoCacheRef.current.set(cacheKey, localFotos[index]);
-        setConferenciaFotoAtualUrl(localFotos[index]);
+      const idbFoto = await readNotaFotoAtIndex(nota, index);
+      if (idbFoto) {
+        conferenciaFotoCacheRef.current.set(cacheKey, idbFoto);
+        setConferenciaFotoAtualUrl(idbFoto);
         setConferenciaFotoCarregando(false);
-        return localFotos[index];
+        return idbFoto;
+      }
+
+      const localInline = resolveFotoInlineConferenciaNota(nota, index);
+      if (localInline && !isFotoInlineMiniaturaFallback(nota, index, localInline)) {
+        conferenciaFotoCacheRef.current.set(cacheKey, localInline);
+        setConferenciaFotoAtualUrl(localInline);
+        setConferenciaFotoCarregando(false);
+        return localInline;
       }
 
       if (!notaTemFotoArmazenadaNaNuvem(nota)) {
+        if (localInline) {
+          conferenciaFotoCacheRef.current.set(cacheKey, localInline);
+          setConferenciaFotoAtualUrl(localInline);
+          setConferenciaFotoCarregando(false);
+          return localInline;
+        }
         setConferenciaFotoAtualUrl(null);
         setConferenciaFotoCarregando(false);
         return null;
@@ -430,16 +447,16 @@ export default function NotasPedidoContent() {
 
         if (!stillActive()) return null;
 
-        const enrichedLocal = getFotosExibicaoNota(notaEnriquecida);
-        if (enrichedLocal[index]) {
-          conferenciaFotoCacheRef.current.set(cacheKey, enrichedLocal[index]);
-          setConferenciaFotoAtualUrl(enrichedLocal[index]);
-          return enrichedLocal[index];
+        const enrichedInline = resolveFotoInlineConferenciaNota(notaEnriquecida, index);
+        if (enrichedInline && !isFotoInlineMiniaturaFallback(notaEnriquecida, index, enrichedInline)) {
+          conferenciaFotoCacheRef.current.set(cacheKey, enrichedInline);
+          setConferenciaFotoAtualUrl(enrichedInline);
+          return enrichedInline;
         }
 
-        let url = await fetchNotaFotoPartBlobUrl(cnpj, notaEnriquecida.id, index, { compact: true });
-        if (!url && index !== 0) {
-          url = await fetchNotaFotoPartBlobUrl(cnpj, notaEnriquecida.id, 0, { compact: true });
+        let url = await fetchNotaFotoPartBlobUrl(cnpj, notaEnriquecida.id, index);
+        if (!url && index === 0 && contarFotosEnviadasNota(notaEnriquecida) <= 1) {
+          url = await fetchNotaFotoPartBlobUrl(cnpj, notaEnriquecida.id, 0);
         }
         if (!stillActive()) {
           if (url) revokePreviewUrl(url);
@@ -451,7 +468,7 @@ export default function NotasPedidoContent() {
           const total = contarFotosEnviadasNota(notaEnriquecida);
           const nextIdx = index + 1;
           if (nextIdx < total && !conferenciaFotoCacheRef.current.has(conferenciaFotoCacheKey(nota.id, nextIdx))) {
-            void fetchNotaFotoPartBlobUrl(cnpj, notaEnriquecida.id, nextIdx, { compact: true }).then((prefetch) => {
+            void fetchNotaFotoPartBlobUrl(cnpj, notaEnriquecida.id, nextIdx).then((prefetch) => {
               if (!prefetch) return;
               const pk = conferenciaFotoCacheKey(nota.id, nextIdx);
               if (!conferenciaFotoCacheRef.current.has(pk)) {
@@ -464,6 +481,11 @@ export default function NotasPedidoContent() {
           return url;
         }
         conferenciaFotoCacheRef.current.delete(cacheKey);
+        if (localInline) {
+          conferenciaFotoCacheRef.current.set(cacheKey, localInline);
+          setConferenciaFotoAtualUrl(localInline);
+          return localInline;
+        }
         setConferenciaFotoErro(
           "Não foi possível carregar esta foto da nuvem. Verifique a conexão e toque em «Tentar de novo»."
         );
@@ -2117,6 +2139,7 @@ export default function NotasPedidoContent() {
     setConferenciaFotoErro("");
     setConferenciaDivisaoQtd(0);
     setConferenciaDivisaoIds([]);
+    setConferenciaFotoAmpliada(false);
     setConferirModal(false);
     setSelectedNota(null);
   };
@@ -4318,8 +4341,8 @@ export default function NotasPedidoContent() {
         {selectedNota && (
           <div className="flex flex-col lg:flex-row h-[calc(100dvh-8.5rem)] max-h-[calc(100dvh-8.5rem)] overflow-hidden">
             <div className="flex flex-col w-full lg:w-[48%] xl:w-1/2 bg-gray-900 shrink-0 lg:h-full lg:min-h-0 overflow-hidden border-b border-gray-800 lg:border-b-0">
-              <div className="flex flex-col shrink-0 max-h-[48dvh] lg:max-h-none lg:flex-1 lg:min-h-0 overflow-hidden">
-                <div className="flex-1 min-h-0 flex items-center justify-center p-3 overflow-hidden">
+              <div className="flex flex-col shrink-0 min-h-[52dvh] max-h-[min(78dvh,calc(100dvh-10rem))] lg:max-h-none lg:flex-1 lg:min-h-0 overflow-hidden">
+                <div className="flex-1 min-h-0 overflow-auto flex items-start justify-center p-2 sm:p-3 touch-pan-x touch-pan-y">
                 {(() => {
                   if (lancamentoSequencia) {
                     const { url, displayIdx, total } = lancamentoSequencia;
@@ -4363,13 +4386,19 @@ export default function NotasPedidoContent() {
                     return conferenciaFotoCarregando && !conferenciaFotoAtualUrl ? (
                       <p className="text-white/70 text-sm text-center">Carregando foto…</p>
                     ) : conferenciaFotoAtualUrl ? (
-                      <div className="inline-block max-w-full max-h-full rounded-xl border-2 border-white/25 bg-white/5 p-1.5 shadow-lg">
+                      <div className="inline-block max-w-full rounded-xl border-2 border-white/25 bg-white/5 p-1.5 shadow-lg">
                         {/* eslint-disable-next-line @next/next/no-img-element */}
-                        <img
-                          src={conferenciaFotoAtualUrl}
-                          alt={`Pedido ${idx + 1} de ${totalFotos}`}
-                          className="block max-h-full max-w-full w-auto h-auto object-contain mx-auto lg:max-h-[calc(100dvh-15rem)]"
-                          onError={() => {
+                        <button
+                          type="button"
+                          className="block max-w-full cursor-zoom-in focus:outline-none focus-visible:ring-2 focus-visible:ring-green-400 rounded-lg"
+                          onClick={() => setConferenciaFotoAmpliada(true)}
+                          title="Toque para ver a foto em tela cheia"
+                        >
+                          <img
+                            src={conferenciaFotoAtualUrl}
+                            alt={`Pedido ${idx + 1} de ${totalFotos}`}
+                            className="block w-auto max-w-[min(100%,42rem)] h-auto object-contain mx-auto"
+                            onError={() => {
                             const key = conferenciaFotoCacheKey(selectedNota.id, idx);
                             conferenciaFotoCacheRef.current.delete(key);
                             revokePreviewUrl(conferenciaFotoAtualUrl);
@@ -4379,6 +4408,8 @@ export default function NotasPedidoContent() {
                             setConferenciaFotoAtualUrl(null);
                           }}
                         />
+                        </button>
+                        <p className="mt-1.5 text-center text-[11px] text-white/60">Toque na foto para ampliar · role se precisar</p>
                       </div>
                     ) : (
                       <div className="text-center py-6 px-4 space-y-3 max-w-md mx-auto">
@@ -4756,6 +4787,21 @@ export default function NotasPedidoContent() {
           </div>
         )}
         </div>
+        {conferenciaFotoAmpliada && conferenciaFotoAtualUrl && (
+          <button
+            type="button"
+            className="fixed inset-0 z-[100] flex items-center justify-center bg-black/95 p-4"
+            onClick={() => setConferenciaFotoAmpliada(false)}
+            aria-label="Fechar foto ampliada"
+          >
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={conferenciaFotoAtualUrl}
+              alt="Pedido ampliado"
+              className="max-h-[96dvh] max-w-[96vw] w-auto h-auto object-contain"
+            />
+          </button>
+        )}
       </Modal>
 
       <PromptDialog

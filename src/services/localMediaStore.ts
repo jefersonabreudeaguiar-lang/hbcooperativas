@@ -118,9 +118,17 @@ export async function readNotaFotoAtIndex(
     if (blob) return blobToDataUrl(blob);
   }
 
-  // Após compactar o JSON, a foto pode continuar só no IndexedDB.
-  const idbUrl = await getLocalMediaBlobUrl(buildLocalMediaRef(nota.id, index));
-  if (idbUrl) return idbUrl;
+  // Após compactar o JSON, a foto pode continuar só no IndexedDB (sempre blob cheio).
+  const ref = buildLocalMediaRef(nota.id, index);
+  const blob = await getLocalMediaBlob(ref);
+  if (blob) {
+    const cacheKey = `${ref}#full`;
+    const cached = blobUrlCache.get(cacheKey);
+    if (cached) return cached;
+    const url = URL.createObjectURL(blob);
+    blobUrlCache.set(cacheKey, url);
+    return url;
+  }
 
   return undefined;
 }
