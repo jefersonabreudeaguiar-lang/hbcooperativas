@@ -65,6 +65,7 @@ import {
 import { TERMO_MERCADO_CONTA_COOP_VERSAO } from "@/config/termoUsoMercadoContaCoop";
 import { fetchOperacionalSync } from "@/lib/supabase/cooperativaSyncStorage";
 import { fetchCooperadosFromStorage } from "@/lib/supabase/cooperadosStorage";
+import { titularCooperadoIds } from "@/lib/hb-credit/repairOperacionalContaCoopDescontos";
 import { cooperadosUnicosParaCobranca } from "@/utils/cooperadoDedupe";
 import { mesCicloEntregasPagamentosCompletos } from "@/services/repasseCicloEntregasGateService";
 
@@ -532,6 +533,8 @@ export async function listLimitesCooperadosAlinhadosComBase(
     fast?: boolean;
     /** Reconcilia “usado” e persiste liberado = teto% × base (GET explícito ou pós-sync). */
     persistFichaSync?: boolean;
+    /** Alinha amount_used à ficha quitada (GET padrão; desligar só em fast). */
+    reconcileUsed?: boolean;
     /** Inclui bases autoritativas para todos os ativos (valor a receber na nuvem). */
     authoritativeCooperadoIds?: string[];
   }
@@ -547,6 +550,7 @@ export async function listLimitesCooperadosAlinhadosComBase(
   }
 
   const persistFichaSync = opts?.persistFichaSync === true;
+  const reconcileUsed = !opts?.fast && opts?.reconcileUsed !== false;
 
   const idsReconcile = [
     ...new Set([
@@ -554,13 +558,13 @@ export async function listLimitesCooperadosAlinhadosComBase(
       ...(opts?.authoritativeCooperadoIds ?? []),
     ]),
   ].filter(Boolean);
-  if (persistFichaSync && idsReconcile.length) {
+  if (reconcileUsed && idsReconcile.length) {
     const actor = opts?.actorUserId ?? "system:hb_limites_amount_used_sync";
     await reconcileCooperadosAmountUsedCentsBatch(supabase, digits, idsReconcile, actor);
   }
 
   let limitesPosSync =
-    persistFichaSync && idsReconcile.length
+    reconcileUsed && idsReconcile.length
       ? await listLimitesCooperados(supabase, cnpj)
       : limitesRaw;
 
@@ -1335,6 +1339,47 @@ function mapParceiroRow(row: Record<string, unknown>): ContaCoopParceiro {
   };
 }
 
+async function fetchHbCreditAccountRowForCooperado(
+  supabase: SupabaseClient,
+  cnpj: string,
+  cooperadoId: string
+): Promise<{ row: Record<string, unknown>; accountCooperadoId: string } | null> {
+  const digits = normalizeCnpj(cnpj);
+  const { data: direct } = await supabase
+    .from("hb_credit_accounts")
+    .select("*")
+    .eq("cooperative_cnpj", digits)
+    .eq("cooperado_id", cooperadoId)
+    .maybeSingle();
+  if (direct) {
+    return { row: direct as Record<string, unknown>, accountCooperadoId: cooperadoId };
+  }
+
+  const cooperados = await fetchCooperadosFromStorage(supabase, digits).catch(() => []);
+  if (!cooperados.length) return null;
+  const titularIds = titularCooperadoIds(cooperados, cooperadoId);
+  if (titularIds.length <= 1) return null;
+
+  const { data: rows } = await supabase
+    .from("hb_credit_accounts")
+    .select("*")
+    .eq("cooperative_cnpj", digits)
+    .in("cooperado_id", titularIds);
+
+  if (!rows?.length) return null;
+
+  let best = rows[0] as Record<string, unknown>;
+  for (const row of rows) {
+    const released = Number((row as { limit_released_cents?: number }).limit_released_cents ?? 0);
+    const bestReleased = Number(best.limit_released_cents ?? 0);
+    if (released > bestReleased) best = row as Record<string, unknown>;
+  }
+  return {
+    row: best,
+    accountCooperadoId: String(best.cooperado_id ?? cooperadoId),
+  };
+}
+
 export async function getLimiteCooperado(
   supabase: SupabaseClient,
   cnpj: string,
@@ -1342,15 +1387,14 @@ export async function getLimiteCooperado(
 ): Promise<ContaCoopLimiteCooperado | null> {
   const digits = normalizeCnpj(cnpj);
   await reconcileCooperadoAmountUsedCents(supabase, digits, cooperadoId);
-  const { data } = await supabase
-    .from("hb_credit_accounts")
-    .select("*")
-    .eq("cooperative_cnpj", digits)
-    .eq("cooperado_id", cooperadoId)
-    .maybeSingle();
-  if (!data) return null;
-  const cashback = await getCashbackDisponivel(supabase, digits, cooperadoId);
-  return mapLimiteRow(data as Record<string, unknown>, cashback);
+  const found = await fetchHbCreditAccountRowForCooperado(supabase, cnpj, cooperadoId);
+  if (!found) return null;
+  const cashback = await getCashbackDisponivel(supabase, digits, found.accountCooperadoId);
+  const mapped = mapLimiteRow(found.row, cashback);
+  if (mapped.cooperadoId !== cooperadoId) {
+    return { ...mapped, cooperadoId };
+  }
+  return mapped;
 }
 
 /** Limite exibido/usado no HB — nunca acima do crédito-base das entregas conferidas na nuvem. */
@@ -1366,10 +1410,21 @@ export async function getLimiteCooperadoAlinhadoAEntregas(
   const authoritative = await resolveAuthoritativeCreditBase(supabase, cnpj, [cooperadoId]);
   if (!authoritative.ok) return limite;
 
-  const creditoBaseCents = authoritative.creditosBaseCents[cooperadoId] ?? 0;
+  const canon = resolverCooperadoIdCanonico(
+    authoritative.creditoBaseAppData,
+    cooperadoId,
+    authoritative.cooperativaId
+  );
+  const creditoBaseCents = Math.max(
+    authoritative.creditosBaseCents[cooperadoId] ?? 0,
+    authoritative.creditosBaseCents[canon] ?? 0
+  );
   const teto = await resolveTetoGlobal(supabase, cnpj, authoritative.creditosBaseCents);
   const tetoPercent = teto.configured ? teto.percent : 0;
   const capped = capContaCoopLimiteToAuthoritativeBase(limite, creditoBaseCents, tetoPercent);
+
+  const accountRow = await fetchHbCreditAccountRowForCooperado(supabase, cnpj, cooperadoId);
+  const syncCooperadoId = accountRow?.accountCooperadoId ?? cooperadoId;
 
   const inflated =
     opts?.resyncIfInflated &&
@@ -1380,8 +1435,8 @@ export async function getLimiteCooperadoAlinhadoAEntregas(
     const syncPromise = syncLimitesCooperadosFromCreditoBase(
       supabase,
       cnpj,
-      [cooperadoId],
-      { [cooperadoId]: creditoBaseCents },
+      [syncCooperadoId],
+      { [syncCooperadoId]: creditoBaseCents, [cooperadoId]: creditoBaseCents },
       opts.actorUserId!
     );
     if (opts.awaitResync) {

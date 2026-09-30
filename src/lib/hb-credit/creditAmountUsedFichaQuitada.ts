@@ -23,6 +23,7 @@ export function mesReferenciaRangeUtc(mesReferencia: string): { startMs: number;
 type FichaQuitadaWindow = {
   mesReferencia: string;
   startMs: number;
+  endMs: number;
   quitadoAteMs: number;
 };
 
@@ -48,8 +49,8 @@ export function buildFichaQuitadaWindowsForTitularIds(
     const quitadoAteMs = pagamentoQuitadoAteMs(p);
     for (const mes of getMesesReferenciaPagamento(p)) {
       mesConfirmado.add(`${p.cooperadoId}|${mes}`);
-      const { startMs } = mesReferenciaRangeUtc(mes);
-      windows.push({ mesReferencia: mes, startMs, quitadoAteMs });
+      const { startMs, endMs } = mesReferenciaRangeUtc(mes);
+      windows.push({ mesReferencia: mes, startMs, endMs, quitadoAteMs });
     }
   }
 
@@ -93,7 +94,7 @@ export function isHbPaymentQuitadoNaFicha(
   const createdMs = row.created_at ? Date.parse(row.created_at) : NaN;
   if (!Number.isFinite(createdMs)) return false;
   for (const w of ctx.windows) {
-    if (createdMs >= w.startMs && createdMs <= w.quitadoAteMs) return true;
+    if (createdMs >= w.startMs && createdMs < w.endMs) return true;
   }
   return false;
 }

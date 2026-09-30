@@ -561,25 +561,12 @@ function ContaCoopContent() {
   }, [cnpj, dashboard?.teto.liberacaoColetivaPercent, dashboard?.teto.tetoGlobalPercent]);
 
   const valoresLimiteExibidos = useCallback(
-    (limite: ContaCoopLimiteCooperado, creditoBaseCents: number) => {
-      const pct = percentualLiberacaoHb;
-      if (
-        pct != null &&
-        pct > 0 &&
-        creditoBaseCents > 0 &&
-        limite.limiteLiberadoCents === 0 &&
-        limite.valorUsadoCents === 0
-      ) {
-        const liberado = calcLimiteFromPercentual(creditoBaseCents, pct);
-        return { liberado, usado: 0, disponivel: liberado };
-      }
-      return {
-        liberado: limite.limiteLiberadoCents,
-        usado: limite.valorUsadoCents,
-        disponivel: limite.valorDisponivelCents,
-      };
-    },
-    [percentualLiberacaoHb]
+    (limite: ContaCoopLimiteCooperado, _creditoBaseCents: number) => ({
+      liberado: limite.limiteLiberadoCents,
+      usado: limite.valorUsadoCents,
+      disponivel: limite.valorDisponivelCents,
+    }),
+    []
   );
 
   const loadParceiros = useCallback(async () => {
