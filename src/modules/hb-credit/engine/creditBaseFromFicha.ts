@@ -45,10 +45,7 @@ export function buildCreditosBaseMap(
   const sane = prepararAppDataParaCreditoBaseHb(data);
   const map: Record<string, number> = {};
   for (const id of cooperadoIds) {
-    const coopId = cooperativaId ?? sane.cooperados.find((c) => c.id === id)?.cooperativaId;
-    const canonico = resolverCooperadoIdCanonico(sane, id, coopId);
-    const reais = hbCreditCreditoBaseReais(sane, canonico, coopId);
-    map[id] = blindarCreditoBaseCentsHb(sane, id, coopId, reaisToCents(reais), sane);
+    map[id] = creditoBaseCentsForCooperado(sane, id, cooperativaId);
   }
   return map;
 }
@@ -86,6 +83,79 @@ export function buildCreditosBaseMapCached(
   }
   const map = buildCreditosBaseMap(data, cooperadoIds, cooperativaId);
   creditosBaseCache = { revision, coopId, idsKey, map };
+  return map;
+}
+
+const DEFAULT_CREDITOS_BASE_BATCH_SIZE = 6;
+
+function yieldCreditosBaseMainThread(): Promise<void> {
+  return new Promise((resolve) => {
+    if (typeof requestAnimationFrame === "function") {
+      requestAnimationFrame(() => resolve());
+    } else {
+      setTimeout(resolve, 0);
+    }
+  });
+}
+
+function creditoBaseCentsForCooperado(
+  sane: AppData,
+  cooperadoId: string,
+  cooperativaId?: string
+): number {
+  const coopId = cooperativaId ?? sane.cooperados.find((c) => c.id === cooperadoId)?.cooperativaId;
+  const canonico = resolverCooperadoIdCanonico(sane, cooperadoId, coopId);
+  const reais = hbCreditCreditoBaseReais(sane, canonico, coopId);
+  return blindarCreditoBaseCentsHb(sane, cooperadoId, coopId, reaisToCents(reais), sane);
+}
+
+/** Mesma regra que buildCreditosBaseMapCached, em lotes para não travar a UI. */
+export async function buildCreditosBaseMapCachedAsync(
+  data: AppData,
+  cooperadoIds: string[],
+  cooperativaId?: string,
+  opts?: {
+    batchSize?: number;
+    onBatch?: (mapSoFar: Record<string, number>, done: number, total: number) => void;
+    shouldContinue?: () => boolean;
+  }
+): Promise<Record<string, number>> {
+  const revision = getDataRevision();
+  const coopId = cooperativaId ?? "";
+  const idsKey = cooperadoIdsCacheKey(cooperadoIds);
+  if (
+    creditosBaseCache &&
+    creditosBaseCache.revision === revision &&
+    creditosBaseCache.coopId === coopId &&
+    creditosBaseCache.idsKey === idsKey
+  ) {
+    opts?.onBatch?.(creditosBaseCache.map, cooperadoIds.length, cooperadoIds.length);
+    return creditosBaseCache.map;
+  }
+
+  const sane = prepararAppDataParaCreditoBaseHb(data);
+  const map: Record<string, number> = {};
+  const batchSize = Math.max(1, opts?.batchSize ?? DEFAULT_CREDITOS_BASE_BATCH_SIZE);
+  const total = cooperadoIds.length;
+
+  for (let i = 0; i < total; i += batchSize) {
+    if (opts?.shouldContinue && !opts.shouldContinue()) {
+      break;
+    }
+    const end = Math.min(i + batchSize, total);
+    for (let j = i; j < end; j++) {
+      const id = cooperadoIds[j];
+      map[id] = creditoBaseCentsForCooperado(sane, id, cooperativaId);
+    }
+    opts?.onBatch?.({ ...map }, end, total);
+    if (end < total) {
+      await yieldCreditosBaseMainThread();
+    }
+  }
+
+  if (!opts?.shouldContinue || opts.shouldContinue()) {
+    creditosBaseCache = { revision, coopId, idsKey, map: { ...map } };
+  }
   return map;
 }
 
