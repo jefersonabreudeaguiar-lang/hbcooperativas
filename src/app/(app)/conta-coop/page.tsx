@@ -40,7 +40,7 @@ import {
 } from "@/lib/hb-credit/hbCreditDashboardPersistencia";
 import { lerHbCreditLimitesPersistidos, gravarHbCreditLimitesPersistidos } from "@/lib/hb-credit/hbCreditLimitesPersistencia";
 import { refreshHbCreditLimitesStaff } from "@/lib/hb-credit/hbCreditLimitesRefresh";
-import { mensagemAvisoBaseAuthoritativeLimites } from "@/lib/hb-credit/hbCreditLimitesStaffMessages";
+import { mensagemAvisoBaseAuthoritativeLimites, mensagemErroListaLimitesStaff } from "@/lib/hb-credit/hbCreditLimitesStaffMessages";
 import { ensureHbCreditLabLiberacaoPadrao } from "@/lib/hb-credit/ensureHbCreditLabLiberacaoPadrao";
 import {
   HB_CREDIT_LAB_LIBERACAO_PERCENT_DEFAULT,
@@ -501,9 +501,7 @@ function ContaCoopContent() {
         applyLimitesFetchResult(result, cooperadoIdsAtivos);
         return limitesRef.current;
       } catch (e) {
-        setLimitesListaAviso(
-          e instanceof Error ? e.message : "Não foi possível sincronizar limites com a ficha."
-        );
+        setLimitesListaAviso(mensagemErroListaLimitesStaff(e));
         return [];
       } finally {
         contaCoopPerfEnd("sync-limite+limites", t0);
@@ -541,9 +539,7 @@ function ContaCoopContent() {
         const full = await fetchCreditLimites(cnpj, { fast: true });
         applyLimitesFetchResult(full, ids);
       } catch (e) {
-        setLimitesListaAviso(
-          e instanceof Error ? e.message : "Não foi possível carregar limites da nuvem."
-        );
+        setLimitesListaAviso(mensagemErroListaLimitesStaff(e));
       } finally {
         contaCoopPerfEnd("GET /api/credit/limites", t0);
         limitesListaPendingRef.current = false;

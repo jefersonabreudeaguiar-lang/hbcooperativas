@@ -97,7 +97,9 @@ export async function fetchCreditLimites(
     creditosBaseAuthoritativeCents?: Record<string, number>;
     authoritativeError?: AuthoritativeCreditBaseErrorPayload;
   }>(res);
-  if (!res.ok || !data.ok) throw new Error(data.error ?? "Erro ao carregar limites.");
+  if (!res.ok || (data.ok === false && !Array.isArray(data.limites))) {
+    throw new Error(data.error ?? "Erro ao carregar limites.");
+  }
   return {
     limites: data.limites ?? [],
     creditosBaseAuthoritativeCents: data.creditosBaseAuthoritativeCents,

@@ -16,6 +16,9 @@ import { normalizeCnpj } from "@/utils/cooperativa";
 import { validateCreditosBaseCents } from "@/modules/hb-credit/engine/creditBaseValidation";
 import { reaisToCents } from "@/modules/hb-credit/engine/money";
 
+/** Sync completo (persist/resync) pode chamar BIC para muitos cooperados. */
+export const maxDuration = 300;
+
 export async function GET(request: Request) {
   const gate = await requireCreditApi(request);
   if (!gate.ok) return gate.response;

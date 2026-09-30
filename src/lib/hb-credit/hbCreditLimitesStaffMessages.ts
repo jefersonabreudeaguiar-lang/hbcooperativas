@@ -13,3 +13,18 @@ export function mensagemAvisoBaseAuthoritativeLimites(
   }
   return error.message;
 }
+
+/** Erro ao refetch da lista na aba Limites (nunca expor mensagem crua de JSON.parse). */
+export function mensagemErroListaLimitesStaff(error: unknown): string {
+  const msg = error instanceof Error ? error.message : "";
+  if (
+    /unexpected end of json/i.test(msg) ||
+    /failed to execute 'json'/i.test(msg) ||
+    /resposta vazia/i.test(msg) ||
+    /resposta inv[aá]lida/i.test(msg)
+  ) {
+    return "Não foi possível atualizar a lista agora (servidor demorou ou resposta incompleta). Os valores em cache continuam visíveis — use «Atualizar limites».";
+  }
+  if (msg.trim()) return msg.trim();
+  return "Não foi possível carregar limites da nuvem.";
+}

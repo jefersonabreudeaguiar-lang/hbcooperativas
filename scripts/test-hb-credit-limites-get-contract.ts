@@ -1,5 +1,5 @@
 /**
- * GET limites leve (padrão) só cap na resposta; persist=reconcile+sync ficha opt-in.
+ * GET limites leve (padrão) só lê hb_credit_accounts; persist/resync = BIC + reconcile opt-in.
  * npx tsx scripts/test-hb-credit-limites-get-contract.ts
  */
 import assert from "node:assert/strict";

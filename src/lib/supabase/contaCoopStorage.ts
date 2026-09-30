@@ -550,6 +550,12 @@ export async function listLimitesCooperadosAlinhadosComBase(
   }
 
   const persistFichaSync = opts?.persistFichaSync === true;
+  const heavyListSync = persistFichaSync || opts?.resyncIfInflated === true;
+  /** GET padrão = só hb_credit_accounts (rápido). BIC/autoritativo só em persist/resync explícitos. */
+  if (!heavyListSync) {
+    return { limites: limitesRaw, creditosBaseCents: {} };
+  }
+
   /** Reconcile em lote só no sync explícito — GET leve evita timeout/resposta vazia. */
   const reconcileUsed = persistFichaSync;
 
