@@ -123,6 +123,18 @@ type PreviewColetivo = {
   }>;
 };
 
+function percentualHbPersistido(
+  dashboard: ContaCoopDashboard | null,
+  snap?: ReturnType<typeof lerHbCreditLimitesPersistidos>
+): number | null {
+  const fromDash =
+    dashboard?.teto.liberacaoColetivaPercent ?? dashboard?.teto.tetoGlobalPercent ?? null;
+  const fromSnap = snap?.liberacaoColetivaPercent ?? null;
+  const p = fromDash ?? fromSnap;
+  if (p == null || !Number.isFinite(p) || p <= 0) return null;
+  return p;
+}
+
 function limitePlaceholderCooperado(cooperadoId: string, cooperativaCnpj: string): ContaCoopLimiteCooperado {
   return {
     id: `sem-conta-${cooperadoId}`,
@@ -567,6 +579,12 @@ function ContaCoopContent() {
       setCreditosBaseColetivo(snapLimites.creditosBaseCents);
       creditosBaseRef.current = snapLimites.creditosBaseCents;
     }
+    const snapPct = percentualHbPersistido(null, snapLimites);
+    if (snapPct != null) {
+      const s = String(snapPct);
+      setTetoPercentual(s);
+      setPercentualColetivo(s);
+    }
     void reloadRef.current({ background });
   }, [cnpj]);
 
@@ -606,23 +624,31 @@ function ContaCoopContent() {
   }, [tab, cnpj, revalidateLimitesLista]);
 
   useEffect(() => {
-    const p = dashboard?.teto.tetoGlobalPercent;
-    if (p != null && p > 0) setTetoPercentual(String(p));
-  }, [dashboard?.teto.tetoGlobalPercent]);
+    if (!cnpj) return;
+    const snap = lerHbCreditLimitesPersistidos(cnpj);
+    const pref = percentualHbPersistido(dashboard, snap);
+    if (pref == null) return;
+    const s = String(pref);
+    setTetoPercentual(s);
+    setPercentualColetivo(s);
+  }, [cnpj, dashboard?.teto.liberacaoColetivaPercent, dashboard?.teto.tetoGlobalPercent]);
 
   const salvarTeto = async () => {
     if (!cnpj) return;
     const creditosBaseCents = pickCreditosBaseForPost();
     if (!creditosBaseCents) return;
+    const pct = Number(tetoPercentual.replace(",", "."));
     setBusy(true);
     setError("");
     try {
       await postCreditLimites({
         action: "set_teto",
         cnpj,
-        tetoPercentual: Number(tetoPercentual.replace(",", ".")),
+        tetoPercentual: pct,
         creditosBaseCents,
       });
+      setPercentualColetivo(String(pct));
+      gravarHbCreditLimitesPersistidos(cnpj, limitesRef.current, creditosBaseRef.current, pct);
       await reload();
       await syncLimitesComFicha({ background: true });
     } catch (e) {
@@ -703,6 +729,7 @@ function ContaCoopContent() {
         creditosBaseCents,
       });
       setPreviewColetivo(null);
+      gravarHbCreditLimitesPersistidos(cnpj, limitesRef.current, creditosBaseRef.current, percentual);
       await reload();
       await syncLimitesComFicha({ background: true });
     } catch (e) {
@@ -1024,7 +1051,13 @@ function ContaCoopContent() {
               </div>
               <div className="rounded-xl bg-gray-50 p-4 text-sm space-y-1">
                 <p>
-                  <span className="text-gray-500">Teto atual:</span>{" "}
+                  <span className="text-gray-500">Percentual de compra (liberação):</span>{" "}
+                  <strong>
+                    {dashboard.teto.liberacaoColetivaPercent ?? dashboard.teto.tetoGlobalPercent}%
+                  </strong>
+                </p>
+                <p>
+                  <span className="text-gray-500">Teto máximo cooperativa:</span>{" "}
                   <strong>
                     {dashboard.teto.tetoGlobalPercent}% = {formatCentsBRL(dashboard.teto.tetoGlobalCents)}
                   </strong>
@@ -1037,21 +1070,9 @@ function ContaCoopContent() {
                   <span className="text-gray-500">Já distribuído:</span>{" "}
                   {formatCentsBRL(dashboard.teto.limiteDistribuidoCents)}
                 </p>
-              </div>
-              <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
-                <div className="flex-1">
-                  <Label htmlFor="teto">Alterar teto (%)</Label>
-                  <Input
-                    id="teto"
-                    value={tetoPercentual}
-                    onChange={(e) => setTetoPercentual(e.target.value)}
-                    placeholder={String(dashboard.teto.tetoGlobalPercent)}
-                    inputMode="decimal"
-                  />
-                </div>
-                <Button onClick={salvarTeto} disabled={busy}>
-                  Salvar teto
-                </Button>
+                <p className="text-xs text-gray-500 pt-1">
+                  Para alterar o percentual de compra, use a aba <strong>Limites</strong>.
+                </p>
               </div>
             </Card>
 
@@ -1062,7 +1083,7 @@ function ContaCoopContent() {
                   <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-green-100 text-xs font-bold text-green-800">
                     1
                   </span>
-                  <span>Defina o teto e libere crédito para os cooperados</span>
+                  <span>Defina o percentual de compra na aba Limites e libere crédito para os cooperados</span>
                 </li>
                 <li className="flex gap-3">
                   <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-green-100 text-xs font-bold text-green-800">
@@ -1089,6 +1110,46 @@ function ContaCoopContent() {
           {limitesRefreshing && (
             <p className="text-xs text-gray-500">Atualizando valores na nuvem…</p>
           )}
+
+          <Card className="space-y-4 !p-5">
+            <div>
+              <h3 className="font-semibold text-gray-900">Percentual de compra HB</h3>
+              <p className="text-sm text-gray-600">
+                Salvo na nuvem — usado na liberação coletiva e na sincronização automática dos limites com a ficha.
+                Só precisa informar de novo se quiser alterar.
+              </p>
+            </div>
+            <div className="flex flex-wrap gap-2 items-end">
+              <div>
+                <Label htmlFor="percentual-compra-hb">Percentual (%)</Label>
+                <Input
+                  id="percentual-compra-hb"
+                  value={tetoPercentual}
+                  onChange={(e) => {
+                    setTetoPercentual(e.target.value);
+                    setPercentualColetivo(e.target.value);
+                  }}
+                  className="w-40"
+                  placeholder={
+                    dashboard?.teto.liberacaoColetivaPercent != null
+                      ? String(dashboard.teto.liberacaoColetivaPercent)
+                      : "50"
+                  }
+                  inputMode="decimal"
+                />
+              </div>
+              <Button onClick={salvarTeto} disabled={busy}>
+                Salvar percentual
+              </Button>
+            </div>
+            {dashboard && (
+              <p className="text-xs text-gray-500">
+                Atual na nuvem: liberação {dashboard.teto.liberacaoColetivaPercent}% · teto máximo{" "}
+                {dashboard.teto.tetoGlobalPercent}%
+              </p>
+            )}
+          </Card>
+
           <AlertBanner variant="info">
             Se o cooperado esquecer o PIN de pagamento, ele pode solicitar reset em Minha Conta Coop. Você confirma
             aqui em <strong>Resetar PIN de pagamento</strong>; depois ele cadastra um PIN novo.
@@ -1239,15 +1300,18 @@ function ContaCoopContent() {
                 Liberação coletiva · {cooperadosAtivos.length} cooperados
               </h3>
               <p className="text-sm text-gray-600">
-                Aplica o mesmo percentual do crédito na ficha para todos de uma vez. Use Prévia antes de confirmar.
+                Aplica o percentual salvo acima para todos de uma vez. Use Prévia antes de confirmar.
               </p>
             </div>
             <div className="flex flex-wrap gap-2 items-end">
               <div>
-                <Label>Percentual do crédito (%)</Label>
+                <Label>Percentual (mesmo valor salvo acima)</Label>
                 <Input
                   value={percentualColetivo}
-                  onChange={(e) => setPercentualColetivo(e.target.value)}
+                  onChange={(e) => {
+                    setPercentualColetivo(e.target.value);
+                    setTetoPercentual(e.target.value);
+                  }}
                   className="w-40"
                   placeholder="50"
                   inputMode="decimal"

@@ -3,12 +3,14 @@
  */
 import type { ContaCoopLimiteCooperado } from "@/modules/hb-credit/types";
 
-export const HB_CREDIT_LIMITES_STORAGE_VERSION = 2;
+export const HB_CREDIT_LIMITES_STORAGE_VERSION = 3;
 
 export type HbCreditLimitesPersistido = {
   v: number;
   limites: ContaCoopLimiteCooperado[];
   creditosBaseCents?: Record<string, number>;
+  /** Último percentual de liberação confirmado (espelho local do servidor). */
+  liberacaoColetivaPercent?: number;
   savedAt: string;
 };
 
@@ -24,6 +26,7 @@ export function lerHbCreditLimitesPersistidos(cnpj: string): HbCreditLimitesPers
     const parsed = JSON.parse(raw) as HbCreditLimitesPersistido;
     if (
       parsed.v !== HB_CREDIT_LIMITES_STORAGE_VERSION &&
+      parsed.v !== 2 &&
       parsed.v !== 1
     ) {
       return null;
@@ -38,15 +41,21 @@ export function lerHbCreditLimitesPersistidos(cnpj: string): HbCreditLimitesPers
 export function gravarHbCreditLimitesPersistidos(
   cnpj: string,
   limites: ContaCoopLimiteCooperado[],
-  creditosBaseCents?: Record<string, number>
+  creditosBaseCents?: Record<string, number>,
+  liberacaoColetivaPercent?: number
 ): void {
   if (typeof localStorage === "undefined") return;
   try {
+    const prev = lerHbCreditLimitesPersistidos(cnpj);
     const payload: HbCreditLimitesPersistido = {
       v: HB_CREDIT_LIMITES_STORAGE_VERSION,
       limites,
       creditosBaseCents:
         creditosBaseCents && Object.keys(creditosBaseCents).length ? creditosBaseCents : undefined,
+      liberacaoColetivaPercent:
+        liberacaoColetivaPercent != null && liberacaoColetivaPercent > 0
+          ? liberacaoColetivaPercent
+          : prev?.liberacaoColetivaPercent,
       savedAt: new Date().toISOString(),
     };
     localStorage.setItem(hbCreditLimitesStorageKey(cnpj), JSON.stringify(payload));

@@ -130,7 +130,7 @@ const PIN_MAX_ATTEMPTS = 5;
 const PIN_LOCK_MINUTES = 15;
 
 export const TETO_NAO_CONFIGURADO =
-  "Configuração financeira da cooperativa ausente. Defina o teto percentual na aba Painel antes de liberar crédito.";
+  "Configuração financeira da cooperativa ausente. Defina o percentual de compra na aba Limites antes de liberar crédito.";
 
 /** Lê percentual configurado — fail-closed: não cria fallback nem auto-insert. */
 export async function getTetoPercentConfigured(
@@ -159,6 +159,54 @@ export async function getTetoPercentConfigured(
   }
 
   return stored;
+}
+
+/** Percentual persistido de liberação/compra HB (fallback: teto global). */
+export async function getCooperativaLiberacaoPercentConfigured(
+  supabase: SupabaseClient,
+  cnpj: string
+): Promise<number | null> {
+  const cap = await getTetoPercentConfigured(supabase, cnpj);
+  if (cap == null) return null;
+  const digits = normalizeCnpj(cnpj);
+  const { data, error } = await supabase
+    .from("hb_credit_cooperative_caps")
+    .select("cooperativa_liberacao_percent")
+    .eq("cooperative_cnpj", digits)
+    .maybeSingle();
+
+  if (error) {
+    if (/cooperativa_liberacao_percent/i.test(error.message ?? "")) {
+      return cap;
+    }
+    throw error;
+  }
+
+  if (!data || data.cooperativa_liberacao_percent == null) return cap;
+  const lib = Number(data.cooperativa_liberacao_percent);
+  if (!Number.isFinite(lib) || lib <= 0 || lib > 100) return cap;
+  return lib;
+}
+
+async function persistCooperativaLiberacaoPercent(
+  supabase: SupabaseClient,
+  cnpj: string,
+  percent: number,
+  actorUserId: string
+): Promise<void> {
+  if (!Number.isFinite(percent) || percent < 0 || percent > 100) return;
+  const digits = normalizeCnpj(cnpj);
+  const { error } = await supabase
+    .from("hb_credit_cooperative_caps")
+    .update({
+      cooperativa_liberacao_percent: percent,
+      updated_by: actorUserId,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("cooperative_cnpj", digits);
+  if (error && !/cooperativa_liberacao_percent/i.test(error.message ?? "")) {
+    throw error;
+  }
 }
 
 /** @deprecated leitura legada — não usar para novas liberações */
@@ -249,12 +297,13 @@ export async function setTetoGlobalPercent(
     cooperative_cnpj: digits,
     global_credit_cap_percent: tetoPercent,
     global_credit_cap_cents: tetoCents,
+    cooperativa_liberacao_percent: tetoPercent,
     updated_by: actorUserId,
     updated_at: new Date().toISOString(),
   };
   const { error } = await supabase.from("hb_credit_cooperative_caps").upsert(row);
-  if (error && /global_credit_cap_percent/i.test(error.message ?? "")) {
-    const { global_credit_cap_percent: _drop, ...legacyRow } = row;
+  if (error && /global_credit_cap_percent|cooperativa_liberacao_percent/i.test(error.message ?? "")) {
+    const { global_credit_cap_percent: _p, cooperativa_liberacao_percent: _l, ...legacyRow } = row;
     const retry = await supabase.from("hb_credit_cooperative_caps").upsert(legacyRow);
     if (retry.error) return { ok: false, error: retry.error.message };
   } else if (error) {
@@ -282,7 +331,7 @@ function mensagemUltrapassaTeto(
   tetoCents: number,
   totalAposCents: number
 ): string {
-  return `Ultrapassa o teto global (${tetoPercent}% = ${formatCentsBRL(tetoCents)}). Total após liberação: ${formatCentsBRL(totalAposCents)}. Aumente o percentual do teto na aba Painel.`;
+  return `Ultrapassa o teto global (${tetoPercent}% = ${formatCentsBRL(tetoCents)}). Total após liberação: ${formatCentsBRL(totalAposCents)}. Aumente o percentual na aba Limites.`;
 }
 
 async function sumLimitesDistribuidos(supabase: SupabaseClient, cnpj: string): Promise<number> {
@@ -324,6 +373,10 @@ export async function getDashboardResumo(
   const creditoBaseTotalCents = tetoResult.configured
     ? tetoResult.creditoBaseTotalCents
     : sumCreditosBaseCents(creditosBaseCents);
+  const liberacaoColetivaPercent =
+    tetoResult.configured
+      ? (await getCooperativaLiberacaoPercentConfigured(supabase, digits)) ?? tetoPercent
+      : 0;
 
   const limitesEfetivos = await listLimitesCooperadosAlinhadosAEntregas(supabase, digits, {
     resyncIfInflated: false,
@@ -424,6 +477,7 @@ export async function getDashboardResumo(
   return {
     teto: {
       tetoGlobalPercent: tetoPercent,
+      liberacaoColetivaPercent,
       tetoGlobalCents: tetoCents,
       creditoBaseTotalCents,
       limiteDistribuidoCents: limiteDistribuido,
@@ -846,7 +900,10 @@ export async function syncLimiteCooperadoFromCreditoBase(
   const teto = await requireConfiguredTeto(supabase, cnpj, creditosBaseCents);
   if (!teto.ok) return { ok: false, error: teto.error };
 
-  let novoLimiteCents = calcLimiteFromPercentual(base, teto.percent);
+  const releasePercent =
+    (await getCooperativaLiberacaoPercentConfigured(supabase, cnpj)) ?? teto.percent;
+
+  let novoLimiteCents = calcLimiteFromPercentual(base, releasePercent);
   const { valorUsadoCents } = await readLimiteAtualCooperado(supabase, cnpj, cooperadoId);
   if (novoLimiteCents < valorUsadoCents) {
     novoLimiteCents = valorUsadoCents;
@@ -2484,6 +2541,11 @@ export async function setLimiteColetivoPercentual(
     );
     if (!result.ok) return result;
     updated++;
+  }
+  try {
+    await persistCooperativaLiberacaoPercent(supabase, cnpj, percentual, actorUserId);
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : "Falha ao persistir percentual." };
   }
   return { ok: true, updated };
 }
