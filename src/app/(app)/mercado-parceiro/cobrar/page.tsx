@@ -96,12 +96,7 @@ function MercadoCobrarQrContent() {
           paidAt: pay?.paidAt ?? new Date().toISOString(),
         });
         setAguardando(false);
-        if (
-          !full &&
-          pay &&
-          pay.cooperadoNome === "Cooperado" &&
-          !pay.cooperadoCpf
-        ) {
+        if (!full && pay && pay.cooperadoNome === "Cooperado") {
           void pollCreditIntentPayment(draft.intentId, { full: true })
             .then((detalhe) => {
               if (cancelled || !detalhe.payment) return;

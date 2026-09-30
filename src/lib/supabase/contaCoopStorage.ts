@@ -3592,6 +3592,42 @@ export type PartnerIntentPaymentStatus = {
   };
 };
 
+async function resolvePartnerPaymentCooperadoDisplay(
+  supabase: SupabaseClient,
+  cooperativeCnpj: string,
+  cooperadoId: string,
+  txId: string | undefined,
+  opts?: { includeCpf?: boolean }
+): Promise<{ cooperadoNome: string; cooperadoCpf: string }> {
+  let cooperadoNome = "Cooperado";
+  let cooperadoCpf = "";
+  const id = cooperadoId.trim();
+  if (!id) return { cooperadoNome, cooperadoCpf };
+
+  const { fetchCooperadoFromStorage } = await import("@/lib/supabase/cooperadosStorage");
+  const cooperado = await fetchCooperadoFromStorage(supabase, String(cooperativeCnpj), id);
+  if (cooperado) {
+    const nome = cooperado.nomeCompleto?.trim();
+    if (nome) cooperadoNome = nome;
+    if (opts?.includeCpf !== false) {
+      cooperadoCpf = cooperado.cpfCnpj ?? "";
+    }
+    return { cooperadoNome, cooperadoCpf };
+  }
+
+  if (txId) {
+    const { data: fiscal } = await supabase
+      .from("hb_credit_fiscal_notes")
+      .select("cooperado_nome_snapshot")
+      .eq("transaction_id", txId)
+      .maybeSingle();
+    const snap = fiscal?.cooperado_nome_snapshot ? String(fiscal.cooperado_nome_snapshot).trim() : "";
+    if (snap) cooperadoNome = snap;
+  }
+
+  return { cooperadoNome, cooperadoCpf };
+}
+
 export async function getPartnerPaymentIntentStatus(
   supabase: SupabaseClient,
   parceiroId: string,
@@ -3634,55 +3670,23 @@ export async function getPartnerPaymentIntentStatus(
     .maybeSingle();
 
   const cooperadoId = String(tx?.cooperado_id ?? intent.cooperado_id ?? "");
+  const txId = tx?.id ? String(tx.id) : undefined;
+  const cooperativeCnpj = String(intent.cooperative_cnpj);
 
-  if (opts?.lite) {
-    return {
-      ok: true,
-      data: {
-        ...base,
-        payment: {
-          transacaoId: String(tx?.id ?? ""),
-          receiptCode: tx?.receipt_code ? String(tx.receipt_code) : null,
-          paidAt: String(tx?.created_at ?? intent.confirmed_at ?? new Date().toISOString()),
-          cooperadoId,
-          cooperadoNome: "Cooperado",
-          cooperadoCpf: "",
-        },
-      },
-    };
-  }
-
-  let cooperadoNome = "Cooperado";
-  let cooperadoCpf = "";
-
-  if (cooperadoId) {
-    const { fetchCooperadoFromStorage } = await import("@/lib/supabase/cooperadosStorage");
-    const cooperado = await fetchCooperadoFromStorage(
-      supabase,
-      String(intent.cooperative_cnpj),
-      cooperadoId
-    );
-    if (cooperado) {
-      cooperadoNome = cooperado.nomeCompleto;
-      cooperadoCpf = cooperado.cpfCnpj ?? "";
-    } else {
-      const { data: fiscal } = await supabase
-        .from("hb_credit_fiscal_notes")
-        .select("cooperado_nome_snapshot")
-        .eq("transaction_id", tx?.id ?? "")
-        .maybeSingle();
-      if (fiscal?.cooperado_nome_snapshot) {
-        cooperadoNome = String(fiscal.cooperado_nome_snapshot);
-      }
-    }
-  }
+  const { cooperadoNome, cooperadoCpf } = await resolvePartnerPaymentCooperadoDisplay(
+    supabase,
+    cooperativeCnpj,
+    cooperadoId,
+    txId,
+    { includeCpf: !opts?.lite }
+  );
 
   return {
     ok: true,
     data: {
       ...base,
       payment: {
-        transacaoId: String(tx?.id ?? ""),
+        transacaoId: txId ?? "",
         receiptCode: tx?.receipt_code ? String(tx.receipt_code) : null,
         paidAt: String(tx?.created_at ?? intent.confirmed_at ?? new Date().toISOString()),
         cooperadoId,
