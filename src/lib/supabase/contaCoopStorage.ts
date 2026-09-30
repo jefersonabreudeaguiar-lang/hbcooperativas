@@ -34,7 +34,8 @@ import { calcLimiteFromPercentual, calcTetoGlobalCents, sumCreditosBaseCents } f
 import type { AuthoritativeCreditBaseErrorPayload } from "@/modules/hb-credit/engine/creditBaseAuthoritative";
 import { resolveAuthoritativeCreditBase } from "@/modules/hb-credit/engine/creditBaseAuthoritative";
 import { pickCreditosBaseForLimitSync } from "@/modules/hb-credit/engine/creditBaseValidation";
-import { capContaCoopLimiteToAuthoritativeBase } from "@/modules/hb-credit/engine/creditBaseHbGuard";
+import { capContaCoopLimiteToAuthoritativeBase, projetarLimitesListaCooperados } from "@/modules/hb-credit/engine/creditBaseHbGuard";
+import { resolverCooperadoIdCanonico } from "@/services/cooperadoCloudService";
 import {
   canAffordHbPaymentScanPreview,
   canAffordHbPaymentWithLimite,
@@ -594,13 +595,28 @@ export async function listLimitesCooperadosAlinhadosComBase(
   const teto = await resolveTetoGlobal(supabase, cnpj, authoritative.creditosBaseCents);
   const tetoPercent = teto.configured ? teto.percent : 0;
 
-  const capped = limitesPosSync.map((limite) =>
-    capContaCoopLimiteToAuthoritativeBase(
-      limite,
+  const resolverCanonico = (id: string) =>
+    resolverCooperadoIdCanonico(authoritative.creditoBaseAppData, id, authoritative.cooperativaId);
+
+  const capped = limitesPosSync.map((limite) => {
+    const canon = resolverCanonico(limite.cooperadoId);
+    const base = Math.max(
       authoritative.creditosBaseCents[limite.cooperadoId] ?? 0,
-      tetoPercent
-    )
-  );
+      authoritative.creditosBaseCents[canon] ?? 0
+    );
+    return capContaCoopLimiteToAuthoritativeBase(limite, base, tetoPercent);
+  });
+
+  let limitesParaUi = capped;
+  if (opts?.authoritativeCooperadoIds?.length) {
+    limitesParaUi = projetarLimitesListaCooperados(
+      capped,
+      opts.authoritativeCooperadoIds,
+      authoritative.creditosBaseCents,
+      tetoPercent,
+      resolverCanonico
+    );
+  }
 
   if (opts?.resyncIfInflated && opts.actorUserId) {
     const toSync: string[] = [];
@@ -623,7 +639,7 @@ export async function listLimitesCooperadosAlinhadosComBase(
     }
   }
 
-  return { limites: capped, creditosBaseCents: authoritative.creditosBaseCents };
+  return { limites: limitesParaUi, creditosBaseCents: authoritative.creditosBaseCents };
 }
 
 function mapLimiteRow(row: Record<string, unknown>, cashbackDisponivelCents = 0): ContaCoopLimiteCooperado {

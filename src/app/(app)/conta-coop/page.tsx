@@ -29,7 +29,7 @@ import {
   resetCooperadoFinancialPin,
 } from "@/services/creditApiService";
 import { formatCentsBRL } from "@/modules/hb-credit/engine/money";
-import { buildCreditosBaseMapCached } from "@/modules/hb-credit/engine/creditBaseFromFicha";
+import { buildCreditosBaseMapCached, calcLimiteFromPercentual } from "@/modules/hb-credit/engine/creditBaseFromFicha";
 import type { AuthoritativeCreditBaseErrorPayload } from "@/modules/hb-credit/engine/creditBaseAuthoritative";
 import type { ContaCoopDashboard, ContaCoopLimiteCooperado, ContaCoopParceiro, ContaCoopCooperadoPinResetRequest, ContaCoopPixChangeRequest } from "@/modules/hb-credit/types";
 import { cn, formatMesReferencia } from "@/utils/format";
@@ -462,7 +462,9 @@ function ContaCoopContent() {
         setLimitesListaAviso("");
         applyCreditosBaseFromServer(full.creditosBaseAuthoritativeCents);
       }
-      const merged = mergeLimitesCooperado(limitesRef.current, full.limites, ids);
+      const merged = full.authoritativeError
+        ? mergeLimitesCooperado(limitesRef.current, full.limites, ids)
+        : mergeLimitesCooperado([], full.limites, ids);
       setLimites(merged);
       gravarHbCreditLimitesPersistidos(cnpj, merged, full.creditosBaseAuthoritativeCents);
       limitesListaFetchedAtRef.current = Date.now();
@@ -539,6 +541,39 @@ function ContaCoopContent() {
     },
     [cnpj, applyLimitesFetchResult]
   );
+
+  const percentualLiberacaoHb = useMemo(() => {
+    const snap = cnpj ? lerHbCreditLimitesPersistidos(cnpj) : null;
+    return percentualHbPersistido(dashboard, snap);
+  }, [cnpj, dashboard?.teto.liberacaoColetivaPercent, dashboard?.teto.tetoGlobalPercent]);
+
+  const valoresLimiteExibidos = useCallback(
+    (limite: ContaCoopLimiteCooperado, creditoBaseCents: number) => {
+      const pct = percentualLiberacaoHb;
+      if (
+        pct != null &&
+        pct > 0 &&
+        creditoBaseCents > 0 &&
+        limite.limiteLiberadoCents === 0 &&
+        limite.valorUsadoCents === 0
+      ) {
+        const liberado = calcLimiteFromPercentual(creditoBaseCents, pct);
+        return { liberado, usado: 0, disponivel: liberado };
+      }
+      return {
+        liberado: limite.limiteLiberadoCents,
+        usado: limite.valorUsadoCents,
+        disponivel: limite.valorDisponivelCents,
+      };
+    },
+    [percentualLiberacaoHb]
+  );
+
+  useEffect(() => {
+    if (tab !== "limites") return;
+    if (!user?.cooperativaId || !cooperadoIdsAtivos.length) return;
+    recomputeCreditosBaseLocal({ immediate: true });
+  }, [tab, user?.cooperativaId, cooperadoIdsAtivos.length, cooperadoIdsKey, recomputeCreditosBaseLocal]);
 
   const loadParceiros = useCallback(async () => {
     if (!cnpj || cnpj.length !== 14) return;
@@ -1266,11 +1301,14 @@ function ContaCoopContent() {
                   </tr>
                 </thead>
                 <tbody>
-                  {limitesLinhasCooperados.map((l) => (
+                  {limitesLinhasCooperados.map((l) => {
+                    const baseCents = creditosBaseColetivo[l.cooperadoId] ?? 0;
+                    const exib = valoresLimiteExibidos(l, baseCents);
+                    return (
                     <tr key={l.cooperadoId} className="border-t">
                       <td className="p-3">
                         {cooperadoNome(l.cooperadoId)}
-                        {exibirBadgeSemContaHb(l, creditosBaseColetivo[l.cooperadoId] ?? 0) && (
+                        {exibirBadgeSemContaHb(l, baseCents) && (
                           <span className="ml-2 rounded-full bg-gray-100 px-2 py-0.5 text-xs text-gray-600">
                             Sem conta HB
                           </span>
@@ -1281,11 +1319,11 @@ function ContaCoopContent() {
                           </span>
                         )}
                       </td>
-                      <td className="p-3">{formatCentsBRL(creditosBaseColetivo[l.cooperadoId] ?? 0)}</td>
-                      <td className="p-3">{formatCentsBRL(l.limiteLiberadoCents)}</td>
-                      <td className="p-3">{formatCentsBRL(l.valorUsadoCents)}</td>
+                      <td className="p-3">{formatCentsBRL(baseCents)}</td>
+                      <td className="p-3">{formatCentsBRL(exib.liberado)}</td>
+                      <td className="p-3">{formatCentsBRL(exib.usado)}</td>
                       <td className="p-3 font-medium text-green-800">
-                        {formatCentsBRL(l.valorDisponivelCents)}
+                        {formatCentsBRL(exib.disponivel)}
                       </td>
                       <td className="p-3 text-xs text-gray-600">
                         {!limiteTemContaHb(l)
@@ -1318,7 +1356,8 @@ function ContaCoopContent() {
                         )}
                       </td>
                     </tr>
-                  ))}
+                    );
+                  })}
                   {!limitesLinhasCooperados.length && (
                     <tr>
                       <td colSpan={7} className="p-6 text-center text-gray-500">

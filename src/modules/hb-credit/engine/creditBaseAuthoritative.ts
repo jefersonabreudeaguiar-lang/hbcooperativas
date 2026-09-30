@@ -4,7 +4,7 @@ import type { OperacionalSyncPayload } from "@/lib/supabase/cooperativaSyncStora
 import { fetchCooperadosFromStorage } from "@/lib/supabase/cooperadosStorage";
 import { fetchNotasFromTable, fetchNotasFromStorage, mergeNotasSources } from "@/lib/supabase/notasStorage";
 import { fetchOperacionalSync } from "@/lib/supabase/cooperativaSyncStorage";
-import { mergeCloudCooperadosIntoData } from "@/services/cooperadoCloudService";
+import { mergeCloudCooperadosIntoData, listCooperadoIdsMesmoTitular } from "@/services/cooperadoCloudService";
 import { mergeOperacionalIntoData } from "@/services/cooperativaSyncCloudService";
 import { reconciliarFichaFromNotasConferidas } from "@/services/notaPedidoService";
 import { normalizeCnpj } from "@/utils/cooperativa";
@@ -72,7 +72,25 @@ export function buildCreditosBaseAuthoritativeFromCloud(
     notasPedido,
   });
   const map = buildCreditosBaseMap(data, cooperadoIds, cooperativaId);
-  return blindarMapaCreditoBaseCentsHb(data, cooperativaId, map);
+  const blinded = blindarMapaCreditoBaseCentsHb(data, cooperativaId, map);
+  return expandCreditosBaseMapCooperadoIds(data, cooperativaId, blinded);
+}
+
+/** Replica crédito-base para ids do mesmo titular — contas HB e UI podem usar ids diferentes. */
+export function expandCreditosBaseMapCooperadoIds(
+  data: AppData,
+  cooperativaId: string,
+  creditosBaseCents: Record<string, number>
+): Record<string, number> {
+  const out: Record<string, number> = { ...creditosBaseCents };
+  for (const c of data.cooperados ?? []) {
+    if (c.cooperativaId !== cooperativaId) continue;
+    const ids = listCooperadoIdsMesmoTitular(data, c.id, cooperativaId);
+    const max = ids.reduce((m, id) => Math.max(m, out[id] ?? 0), 0);
+    if (max <= 0) continue;
+    for (const id of ids) out[id] = max;
+  }
+  return out;
 }
 
 export type AuthoritativeCreditBaseFailureCode =
@@ -93,6 +111,7 @@ export type AuthoritativeCreditBaseResult =
       cooperativeCnpj: string;
       cooperativaId: string;
       creditosBaseCents: Record<string, number>;
+      creditoBaseAppData: AppData;
     }
   | { ok: false; code: AuthoritativeCreditBaseFailureCode; message: string };
 
@@ -144,11 +163,20 @@ export async function resolveAuthoritativeCreditBase(
     notas
   );
 
+  const creditoBaseAppData = buildMinimalAppDataForCreditBase({
+    operacional,
+    cooperativaId,
+    cnpj: digits,
+    cooperados,
+    notasPedido: notas,
+  });
+
   return {
     ok: true,
     cooperativeCnpj: digits,
     cooperativaId,
     creditosBaseCents,
+    creditoBaseAppData,
   };
 }
 

@@ -115,6 +115,52 @@ export function capContaCoopLimiteToAuthoritativeBase(
   return resolveLimiteHbCooperadoEfetivo(limite, creditoBaseAuthoritativeCents, tetoPercent);
 }
 
+function findContaHbParaCooperadoId(
+  contas: ContaCoopLimiteCooperado[],
+  cooperadoId: string,
+  resolverCanonico: (id: string) => string
+): ContaCoopLimiteCooperado | undefined {
+  const direct = contas.find((l) => l.cooperadoId === cooperadoId);
+  if (direct) return direct;
+  const canon = resolverCanonico(cooperadoId);
+  const byCanon = contas.find((l) => l.cooperadoId === canon);
+  if (byCanon) return byCanon;
+  return contas.find((l) => resolverCanonico(l.cooperadoId) === canon);
+}
+
+/** Alinha linhas da aba Limites aos ids solicitados (UI local) com contas HB por titular/canônico. */
+export function projetarLimitesListaCooperados(
+  contasCapadas: ContaCoopLimiteCooperado[],
+  cooperadoIds: string[],
+  creditosBaseCents: Record<string, number>,
+  tetoPercent: number,
+  resolverCanonico: (id: string) => string
+): ContaCoopLimiteCooperado[] {
+  if (!cooperadoIds.length) return contasCapadas;
+  const consumidas = new Set<string>();
+  const out: ContaCoopLimiteCooperado[] = [];
+
+  for (const id of cooperadoIds) {
+    const conta = findContaHbParaCooperadoId(contasCapadas, id, resolverCanonico);
+    if (!conta) continue;
+    consumidas.add(conta.id);
+    const canon = resolverCanonico(id);
+    const base = Math.max(
+      creditosBaseCents[id] ?? 0,
+      creditosBaseCents[conta.cooperadoId] ?? 0,
+      creditosBaseCents[canon] ?? 0
+    );
+    out.push(
+      resolveLimiteHbCooperadoEfetivo({ ...conta, cooperadoId: id }, base, tetoPercent)
+    );
+  }
+
+  for (const row of contasCapadas) {
+    if (!consumidas.has(row.id)) out.push(row);
+  }
+  return out;
+}
+
 export function blindarMapaCreditoBaseCentsHb(
   data: AppData,
   cooperativaId: string | undefined,
