@@ -32,6 +32,7 @@ import { mapAuthorizeRpcError } from "@/modules/hb-credit/engine/hbCreditLimitSy
 import { computeDisponivel, formatCentsBRL } from "@/modules/hb-credit/engine/money";
 import { calcLimiteFromPercentual, calcTetoGlobalCents, sumCreditosBaseCents } from "@/modules/hb-credit/engine/creditBaseFromFicha";
 import { resolveAuthoritativeCreditBase } from "@/modules/hb-credit/engine/creditBaseAuthoritative";
+import { pickCreditosBaseForLimitSync } from "@/modules/hb-credit/engine/creditBaseValidation";
 import { capContaCoopLimiteToAuthoritativeBase } from "@/modules/hb-credit/engine/creditBaseHbGuard";
 import {
   canAffordHbPaymentScanPreview,
@@ -510,10 +511,25 @@ export async function listLimitesCooperadosAlinhadosComBase(
   const authoritative = await resolveAuthoritativeCreditBase(supabase, cnpj, idsParaBase);
   if (!authoritative.ok) return { limites, creditosBaseCents: {} };
 
+  const actorSync = opts?.actorUserId ?? "system:hb_limites_ficha_sync";
+  const pickedBase = pickCreditosBaseForLimitSync({
+    authoritative: authoritative.creditosBaseCents,
+    cooperadoIds: idsParaBase,
+  });
+  await syncLimitesCooperadosFromCreditoBase(
+    supabase,
+    cnpj,
+    idsParaBase,
+    pickedBase.creditosBaseCents,
+    actorSync
+  );
+
+  let limitesPosSync = await listLimitesCooperados(supabase, cnpj);
+
   const teto = await resolveTetoGlobal(supabase, cnpj, authoritative.creditosBaseCents);
   const tetoPercent = teto.configured ? teto.percent : 0;
 
-  const capped = limites.map((limite) =>
+  const capped = limitesPosSync.map((limite) =>
     capContaCoopLimiteToAuthoritativeBase(
       limite,
       authoritative.creditosBaseCents[limite.cooperadoId] ?? 0,
@@ -524,8 +540,8 @@ export async function listLimitesCooperadosAlinhadosComBase(
   if (opts?.resyncIfInflated && opts.actorUserId) {
     const toSync: string[] = [];
     const creditosBaseCents: Record<string, number> = {};
-    for (let i = 0; i < limites.length; i++) {
-      const raw = limites[i];
+    for (let i = 0; i < limitesPosSync.length; i++) {
+      const raw = limitesPosSync[i];
       const cap = capped[i];
       if (cap.limiteLiberadoCents >= raw.limiteLiberadoCents) continue;
       toSync.push(raw.cooperadoId);

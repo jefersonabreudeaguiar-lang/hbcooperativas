@@ -595,7 +595,7 @@ function ContaCoopContent() {
     const cancelIdle = scheduleContaCoopAuxSync(
       () => {
         if (cancelled) return;
-        void revalidateLimitesLista({ background: true });
+        void revalidateLimitesLista({ background: true, force: true });
       },
       { idleTimeoutMs: 400, fallbackMs: 1_200 }
     );

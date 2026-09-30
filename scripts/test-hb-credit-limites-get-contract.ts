@@ -1,5 +1,5 @@
 /**
- * GET /api/credit/limites — resync pesado só com ?resync=1 (aba Limites leve).
+ * GET limites completo (sem fast) reconcilia utilizado e persiste liberado = teto% × crédito-base da ficha.
  * npx tsx scripts/test-hb-credit-limites-get-contract.ts
  */
 import assert from "node:assert/strict";
