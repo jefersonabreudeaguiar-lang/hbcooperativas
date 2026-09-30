@@ -2282,20 +2282,27 @@ export async function prepareHbCreditPaymentAuthorize(
 
   const found = await fetchHbCreditAccountRowForCooperado(supabase, cnpj, cooperadoId);
   if (!found) return;
+  const accountCooperadoId = found.accountCooperadoId;
   const syncState = String(found.row.financial_limit_sync_state ?? "SYNCED");
-  if (syncState === "SYNCED") return;
 
-  const auth = await resolveAuthoritativeCreditBase(supabase, digits, [cooperadoId]);
-  if (auth.ok) {
-    await syncLimitesCooperadosFromCreditoBase(
-      supabase,
-      digits,
-      [cooperadoId],
-      auth.creditosBaseCents,
-      actorUserId
-    ).catch(() => {});
+  if (syncState !== "SYNCED") {
+    const auth = await resolveAuthoritativeCreditBase(supabase, digits, titularIds);
+    if (auth.ok) {
+      await syncLimitesCooperadosFromCreditoBase(
+        supabase,
+        digits,
+        titularIds,
+        auth.creditosBaseCents,
+        actorUserId
+      ).catch(() => {});
+    }
   }
-  await markHbCreditLimitSynced(supabase, { cnpj: digits, cooperadoId, actorUserId }).catch(() => {});
+
+  await markHbCreditLimitSynced(supabase, {
+    cnpj: digits,
+    cooperadoId: accountCooperadoId,
+    actorUserId,
+  }).catch(() => {});
 }
 
 export async function authorizePayment(
@@ -2341,6 +2348,16 @@ export async function authorizePayment(
   );
   if (!intentCheck.ok) return { ok: false, error: intentCheck.error };
 
+  const accountFound = await fetchHbCreditAccountRowForCooperado(
+    supabase,
+    input.cooperativaCnpj,
+    input.cooperadoId
+  );
+  if (!accountFound) {
+    return { ok: false, error: "Cooperado sem limite Conta Coop." };
+  }
+  const accountCooperadoId = accountFound.accountCooperadoId;
+
   let cashbackAppliedCents = 0;
   if (input.useCashback) {
     cashbackAppliedCents = intentCheck.limite.cashbackDisponivelCents ?? 0;
@@ -2353,7 +2370,7 @@ export async function authorizePayment(
   const { data, error } = await supabase.rpc("hb_credit_authorize_payment", {
     p_intent_id: input.intentId,
     p_nonce: input.nonce,
-    p_cooperado_id: input.cooperadoId,
+    p_cooperado_id: accountCooperadoId,
     p_cooperative_cnpj: normalizeCnpj(input.cooperativaCnpj),
     p_idempotency_key: input.idempotencyKey,
     p_transaction_id: transacaoId,

@@ -57,17 +57,13 @@ export async function POST(request: Request) {
   if (!result.ok) return NextResponse.json({ error: result.error, code: result.code }, { status: 400 });
 
   const mesReferencia = String(body?.mesReferencia ?? "").trim() || undefined;
-  const projecaoAReceber = await projectContaCoopDescontosAfterHbAuthorize(
-    gate.ctx.supabase,
-    cnpj,
-    cooperadoId,
-    { mesReferencia }
-  );
+  void projectContaCoopDescontosAfterHbAuthorize(gate.ctx.supabase, cnpj, cooperadoId, {
+    mesReferencia,
+  }).catch(() => {});
 
   return NextResponse.json({
     ...result,
-    projecaoAReceber,
     financeiroConfirmado: true,
-    projecaoPendente: projecaoAReceber.status === "pending",
+    projecaoPendente: true,
   });
 }
