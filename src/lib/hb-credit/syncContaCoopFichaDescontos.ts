@@ -230,19 +230,26 @@ export async function refreshContaCoopDescontosCooperativaPendentes(opts: {
           await fetchFichaDescontosContaCoop(opts.cnpj, titularIds, job.mesReferencia)
         );
         markContaCoopDescontosFetchOk(opts.cooperativaId, canonico);
-        return { ...job, descontos };
+        return { ...job, descontos, fetchFailed: false as const };
       } catch (e) {
         markContaCoopDescontosFetchFailed(
           opts.cooperativaId,
           canonico,
           e instanceof Error ? e.message : "ficha_descontos_failed"
         );
-        return { ...job, descontos: [] as DescontoContaCoopRemoto[] };
+        const descontos = getDescontosContaCoopMesCached(
+          before,
+          canonico,
+          job.mesReferencia,
+          opts.cooperativaId
+        );
+        return { ...job, descontos, fetchFailed: true as const };
       }
     });
 
     for (const row of fetched) {
       const canonico = resolverCooperadoIdCanonico(before, row.cooperadoId, opts.cooperativaId);
+      if (row.fetchFailed && row.descontos.length === 0) continue;
       setContaCoopDescontosMemoria(opts.cooperativaId, canonico, row.mesReferencia, row.descontos);
       data = persistDescontosContaCoopNoArquivo(
         data,

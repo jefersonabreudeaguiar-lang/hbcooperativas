@@ -94,7 +94,14 @@ export async function POST(request: Request) {
 
   if (!result.ok) return NextResponse.json({ error: result.error }, { status: 400 });
 
+  const failedCooperadoIds = new Set(
+    (result.errors ?? [])
+      .map((line) => line.split(":")[0]?.trim())
+      .filter(Boolean)
+  );
+
   for (const cooperadoId of cooperadoIds) {
+    if (failedCooperadoIds.has(cooperadoId)) continue;
     const mark = await markHbCreditLimitSynced(gate.ctx.supabase, {
       cnpj,
       cooperadoId,

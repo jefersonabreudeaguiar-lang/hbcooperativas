@@ -396,22 +396,24 @@ function MinhaContaCoopContent() {
         valorAvulsoId,
       });
       const amountCents = res.amountCents ?? 0;
-      if (amountCents <= 0) throw new Error("Não há cashback disponível.");
-      updateData((d) =>
-        criarValorAvulsoReceber(d, {
-          id: valorAvulsoId,
-          cooperativaId: coopId,
-          cooperadoId,
-          mesReferencia: mesReferenciaReceber,
-          motivo: CASHBACK_HB_CREDITO_MOTIVO_AVULSO,
-          valor: round2(amountCents / 100),
-          responsavel: cooperadoNome || user.name,
-        })
-      );
-      const d = getData();
-      const cnpjSync = await resolveCooperativaCnpj(d, coopId, user);
-      if (cnpjSync) {
-        await pushOperacionalToCloud(cnpjSync, d, coopId, { authoritative: true });
+      if (amountCents <= 0 && !res.idempotent) throw new Error("Não há cashback disponível.");
+      if (amountCents > 0 && !cashbackJaNaFicha) {
+        updateData((d) =>
+          criarValorAvulsoReceber(d, {
+            id: valorAvulsoId,
+            cooperativaId: coopId,
+            cooperadoId,
+            mesReferencia: mesReferenciaReceber,
+            motivo: CASHBACK_HB_CREDITO_MOTIVO_AVULSO,
+            valor: round2(amountCents / 100),
+            responsavel: cooperadoNome || user.name,
+          })
+        );
+        const d = getData();
+        const cnpjSync = await resolveCooperativaCnpj(d, coopId, user);
+        if (cnpjSync) {
+          await pushOperacionalToCloud(cnpjSync, d, coopId, { authoritative: true });
+        }
       }
       setSuccess(
         `${formatCentsBRL(amountCents)} somado ao valor a receber (${mesReferenciaReceber}). Histórico: ${CASHBACK_HB_CREDITO_MOTIVO_AVULSO}.`

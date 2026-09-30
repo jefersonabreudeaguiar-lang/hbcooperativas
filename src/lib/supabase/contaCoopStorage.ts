@@ -33,6 +33,10 @@ import { computeDisponivel, formatCentsBRL } from "@/modules/hb-credit/engine/mo
 import { calcLimiteFromPercentual, calcTetoGlobalCents, sumCreditosBaseCents } from "@/modules/hb-credit/engine/creditBaseFromFicha";
 import { resolveAuthoritativeCreditBase } from "@/modules/hb-credit/engine/creditBaseAuthoritative";
 import { capContaCoopLimiteToAuthoritativeBase } from "@/modules/hb-credit/engine/creditBaseHbGuard";
+import {
+  canAffordHbPaymentScanPreview,
+  canAffordHbPaymentWithLimite,
+} from "@/modules/hb-credit/engine/paymentAffordability";
 import { INTENT_EXPIRY_MINUTES } from "@/modules/hb-credit/config";
 import { getCurrentMesReferencia } from "@/utils/format";
 import {
@@ -1776,7 +1780,8 @@ export async function validateIntentForCooperado(
   intentId: string,
   nonce: string,
   cooperadoId: string,
-  cooperativaCnpj: string
+  cooperativaCnpj: string,
+  opts?: { useCashback?: boolean; forAuthorize?: boolean }
 ): Promise<
   | { ok: true; intent: ContaCoopIntent; limite: ContaCoopLimiteCooperado; parceiroNome: string }
   | { ok: false; error: string }
@@ -1796,9 +1801,10 @@ export async function validateIntentForCooperado(
   if (!limite) return { ok: false, error: "Sem limite HB Créditos." };
   if (limite.bloqueado) return { ok: false, error: "Cooperado bloqueado." };
   const gross = Number(intent.amount_cents);
-  const cashback = limite.cashbackDisponivelCents ?? 0;
-  const effective = limite.valorDisponivelCents + cashback;
-  if (effective < gross) {
+  const affordOk = opts?.forAuthorize
+    ? canAffordHbPaymentWithLimite(limite, gross, Boolean(opts.useCashback))
+    : canAffordHbPaymentScanPreview(limite, gross);
+  if (!affordOk) {
     return { ok: false, error: "Limite insuficiente." };
   }
 
@@ -1853,10 +1859,19 @@ export async function authorizePayment(
   );
   if (!pinCheck.ok) return { ok: false, error: pinCheck.error };
 
+  const intentCheck = await validateIntentForCooperado(
+    supabase,
+    input.intentId,
+    input.nonce,
+    input.cooperadoId,
+    input.cooperativaCnpj,
+    { useCashback: Boolean(input.useCashback), forAuthorize: true }
+  );
+  if (!intentCheck.ok) return { ok: false, error: intentCheck.error };
+
   let cashbackAppliedCents = 0;
   if (input.useCashback) {
-    const limite = await getLimiteCooperado(supabase, input.cooperativaCnpj, input.cooperadoId);
-    cashbackAppliedCents = limite?.cashbackDisponivelCents ?? 0;
+    cashbackAppliedCents = intentCheck.limite.cashbackDisponivelCents ?? 0;
   }
 
   const transacaoId = genId("tx");
@@ -1898,6 +1913,7 @@ export async function authorizePayment(
 
   const txId = result.transacao_id ?? transacaoId;
   let finalReceiptCode = receiptCode;
+  let disponivelAposCents = Number(result.disponivel_apos_centavos ?? 0);
   if (result.duplicate) {
     const { data: existingTx } = await supabase
       .from("hb_credit_transactions")
@@ -1906,6 +1922,14 @@ export async function authorizePayment(
       .maybeSingle();
     if (existingTx?.receipt_code) {
       finalReceiptCode = String(existingTx.receipt_code);
+    }
+    if (!Number.isFinite(disponivelAposCents) || disponivelAposCents <= 0) {
+      const limiteDup = await getLimiteCooperadoAlinhadoAEntregas(
+        supabase,
+        input.cooperativaCnpj,
+        input.cooperadoId
+      );
+      disponivelAposCents = limiteDup?.valorDisponivelCents ?? 0;
     }
   } else {
     try {
@@ -1920,7 +1944,7 @@ export async function authorizePayment(
     ok: true,
     transacaoId: txId,
     receiptCode: finalReceiptCode,
-    disponivelAposCents: Number(result.disponivel_apos_centavos ?? 0),
+    disponivelAposCents,
     cashbackAppliedCents: Number((result as { cashback_applied_cents?: number }).cashback_applied_cents ?? 0),
     duplicate: Boolean(result.duplicate),
   };
@@ -2653,7 +2677,9 @@ export async function approveRefundRequest(
   cooperativeCnpj: string,
   reviewerUserId: string,
   reviewNote?: string
-): Promise<{ ok: true; disponivelAposCents: number } | { ok: false; error: string }> {
+): Promise<
+  { ok: true; disponivelAposCents: number; cooperadoId?: string } | { ok: false; error: string }
+> {
   const digits = normalizeCnpj(cooperativeCnpj);
   const refundTxId = genId("tx");
   const refundId = genId("refund");
@@ -2705,7 +2731,14 @@ export async function approveRefundRequest(
   }
 
   const transacaoId = reqRow?.transaction_id ? String(reqRow.transaction_id) : null;
+  let cooperadoId: string | undefined;
   if (transacaoId) {
+    const { data: txRow } = await supabase
+      .from("hb_credit_transactions")
+      .select("cooperado_id")
+      .eq("id", transacaoId)
+      .maybeSingle();
+    if (txRow?.cooperado_id) cooperadoId = String(txRow.cooperado_id);
     try {
       const { cancelFiscalNoteForTransaction } = await import("@/lib/supabase/hbCreditFiscalNotesStorage");
       await cancelFiscalNoteForTransaction(supabase, transacaoId, reviewerUserId);
@@ -2714,7 +2747,11 @@ export async function approveRefundRequest(
     }
   }
 
-  return { ok: true, disponivelAposCents: Number(result.disponivel_apos_centavos ?? 0) };
+  return {
+    ok: true,
+    disponivelAposCents: Number(result.disponivel_apos_centavos ?? 0),
+    cooperadoId,
+  };
 }
 
 export async function denyRefundRequest(

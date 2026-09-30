@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { projectContaCoopDescontosAfterHbAuthorize } from "@/lib/hb-credit/repairOperacionalContaCoopDescontos";
 import {
   approveRefundRequest,
   cancelRefundRequest,
@@ -130,7 +131,19 @@ export async function POST(request: Request) {
       reviewNote
     );
     if (!result.ok) return NextResponse.json({ error: result.error }, { status: 400 });
-    return NextResponse.json({ ok: true, disponivelAposCents: result.disponivelAposCents });
+    let projecaoAReceber;
+    if (result.cooperadoId) {
+      projecaoAReceber = await projectContaCoopDescontosAfterHbAuthorize(
+        gate.ctx.supabase,
+        cnpj,
+        result.cooperadoId
+      );
+    }
+    return NextResponse.json({
+      ok: true,
+      disponivelAposCents: result.disponivelAposCents,
+      projecaoAReceber,
+    });
   }
 
   if (action === "deny") {

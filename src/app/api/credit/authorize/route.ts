@@ -28,7 +28,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Dados incompletos." }, { status: 400 });
   }
 
-  if (pin.length < FINANCIAL_PIN_MIN_LENGTH) {
+  if (pin.length < FINANCIAL_PIN_MIN_LENGTH || !/^\d+$/.test(pin)) {
     return NextResponse.json({ error: "Informe o PIN financeiro." }, { status: 400 });
   }
 

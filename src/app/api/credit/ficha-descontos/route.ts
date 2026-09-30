@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { listCooperadoContaCoopDescontosAbateValorReceber } from "@/lib/supabase/contaCoopStorage";
-import { requireCreditApi, requireCreditCnpj, requireCreditCooperado, requireCreditSettlementAccess } from "@/lib/security/creditGuard";
+import { requireCreditApi, requireCreditCnpj, requireCreditCooperado, requireCreditStaff } from "@/lib/security/creditGuard";
 
 export async function GET(request: Request) {
   const gate = await requireCreditApi(request);
