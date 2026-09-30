@@ -64,7 +64,6 @@ export function useCooperadoInicioValorReceberCardState(input: {
   const hbDescontosRevision = useContaCoopDescontosRevision();
 
   const carregandoFinanceiro =
-    Boolean(input.carregandoValoresFinanceiros) ||
     Boolean(input.syncing) ||
     (!input.dataReady && !cooperadoMotorTemObrigacaoReceber(persistido?.display ?? SNAPSHOT_VAZIO));
 
@@ -73,7 +72,7 @@ export function useCooperadoInicioValorReceberCardState(input: {
       data: input.data,
       cooperadoId: input.cooperadoId,
       cooperativaId: input.cooperativaId,
-      apresentacaoConsolidada: input.apresentacaoConsolidada !== false,
+      apresentacaoConsolidada: true,
       carregandoFinanceiro,
       prevLatch: latchRef.current,
       persistido,
@@ -86,8 +85,6 @@ export function useCooperadoInicioValorReceberCardState(input: {
     input.cooperativaId,
     input.dataReady,
     input.syncing,
-    input.apresentacaoConsolidada,
-    input.carregandoValoresFinanceiros,
     carregandoFinanceiro,
     persistido,
     hbDescontosRevision,
@@ -112,7 +109,10 @@ export function useCooperadoInicioValorReceberCardState(input: {
   ]);
 
   const atualizando =
-    resolved.atualizando || (input.syncing && !cooperadoMotorTemObrigacaoReceber(resolved.display));
+    resolved.atualizando ||
+    (Boolean(input.carregandoValoresFinanceiros) &&
+      cooperadoMotorTemObrigacaoReceber(resolved.display)) ||
+    (input.syncing && !cooperadoMotorTemObrigacaoReceber(resolved.display));
 
   return {
     snapshot: resolved.display,
