@@ -44,7 +44,7 @@ export function useHbCreditAccountRevisionPoll(opts?: Opts) {
         const prev = revisionRef.current;
         revisionRef.current = rev.revision;
         if (prev != null && prev !== rev.revision) {
-          onChangeRef.current();
+          onChangeRef.current?.();
         }
       } catch {
         /* offline / sessão */

@@ -69,7 +69,7 @@ import { fetchCooperadosFromStorage } from "@/lib/supabase/cooperadosStorage";
 import {
   pickBestHbCreditAccountRow,
   titularCooperadoIds,
-} from "@/lib/hb-credit/repairOperacionalContaCoopDescontos";
+} from "@/lib/hb-credit/hbCreditLimiteTitularPick";
 import { cooperadosUnicosParaCobranca } from "@/utils/cooperadoDedupe";
 import { mesCicloEntregasPagamentosCompletos } from "@/services/repasseCicloEntregasGateService";
 

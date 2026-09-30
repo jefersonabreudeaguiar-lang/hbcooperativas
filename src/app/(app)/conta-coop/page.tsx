@@ -33,7 +33,7 @@ import { buildCreditosBaseMapCached, calcLimiteFromPercentual } from "@/modules/
 import type { AuthoritativeCreditBaseErrorPayload } from "@/modules/hb-credit/engine/creditBaseAuthoritative";
 import type { ContaCoopDashboard, ContaCoopLimiteCooperado, ContaCoopParceiro, ContaCoopCooperadoPinResetRequest, ContaCoopPixChangeRequest } from "@/modules/hb-credit/types";
 import type { Cooperado } from "@/types";
-import { melhorLimiteCooperadoTitular } from "@/lib/hb-credit/repairOperacionalContaCoopDescontos";
+import { melhorLimiteCooperadoTitular } from "@/lib/hb-credit/hbCreditLimiteTitularPick";
 import { cn, formatMesReferencia } from "@/utils/format";
 import { PageSkeleton } from "@/components/ui/PageSkeleton";
 import {
