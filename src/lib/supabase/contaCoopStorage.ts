@@ -55,7 +55,10 @@ import {
   receivableStatusFromDb,
 } from "@/modules/hb-credit/infrastructure/mappers/statusMapper";
 import { humanizeCreditRefundError } from "@/lib/supabase/hbCreditRefundFixSchema";
-import { reconcileCooperadoAmountUsedCents } from "@/lib/supabase/creditAmountUsedReconcile";
+import {
+  reconcileCooperadoAmountUsedCents,
+  reconcileCooperadosAmountUsedCentsBatch,
+} from "@/lib/supabase/creditAmountUsedReconcile";
 import { TERMO_MERCADO_CONTA_COOP_VERSAO } from "@/config/termoUsoMercadoContaCoop";
 import { fetchOperacionalSync } from "@/lib/supabase/cooperativaSyncStorage";
 import { fetchCooperadosFromStorage } from "@/lib/supabase/cooperadosStorage";
@@ -474,10 +477,24 @@ export async function listLimitesCooperadosAlinhadosComBase(
     authoritativeCooperadoIds?: string[];
   }
 ): Promise<{ limites: ContaCoopLimiteCooperado[]; creditosBaseCents: Record<string, number> }> {
-  const limites = await listLimitesCooperados(supabase, cnpj);
+  const digits = normalizeCnpj(cnpj);
+  const limitesRaw = await listLimitesCooperados(supabase, cnpj);
   if (opts?.fast) {
-    return { limites, creditosBaseCents: {} };
+    return { limites: limitesRaw, creditosBaseCents: {} };
   }
+
+  const idsReconcile = [
+    ...new Set([
+      ...limitesRaw.map((l) => l.cooperadoId),
+      ...(opts?.authoritativeCooperadoIds ?? []),
+    ]),
+  ].filter(Boolean);
+  if (idsReconcile.length) {
+    const actor = opts?.actorUserId ?? "system:hb_limites_amount_used_sync";
+    await reconcileCooperadosAmountUsedCentsBatch(supabase, digits, idsReconcile, actor);
+  }
+
+  const limites = await listLimitesCooperados(supabase, cnpj);
 
   const idsParaBase = [
     ...new Set([
