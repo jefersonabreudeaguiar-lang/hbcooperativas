@@ -191,6 +191,14 @@ function miniData(overrides: Partial<AppData> = {}): AppData {
   assert.equal(computeDisponivel(sumLimite, sumUsado), 28_000);
 }
 
+// CENÁRIO 7 — teto global 100% mas liberação coletiva 70% capa exibição
+{
+  const base = 10_000;
+  const releasedFull = 10_000;
+  const eff = resolveLimiteHbCooperadoEfetivo(limiteRow(releasedFull, 0), base, 100, 70);
+  assert.equal(eff.limiteLiberadoCents, 7_000);
+}
+
 // VISIBILIDADE — responsável mantém menu em erro transitório
 {
   assert.equal(

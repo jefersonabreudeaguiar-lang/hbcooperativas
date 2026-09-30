@@ -606,6 +606,9 @@ export async function listLimitesCooperadosAlinhadosComBase(
 
   const teto = await resolveTetoGlobal(supabase, cnpj, authoritative.creditosBaseCents);
   const tetoPercent = teto.configured ? teto.percent : 0;
+  const liberacaoPercent = teto.configured
+    ? (await getCooperativaLiberacaoPercentConfigured(supabase, cnpj)) ?? tetoPercent
+    : null;
 
   const resolverCanonico = (id: string) =>
     resolverCooperadoIdCanonico(authoritative.creditoBaseAppData, id, authoritative.cooperativaId);
@@ -616,7 +619,7 @@ export async function listLimitesCooperadosAlinhadosComBase(
       authoritative.creditosBaseCents[limite.cooperadoId] ?? 0,
       authoritative.creditosBaseCents[canon] ?? 0
     );
-    return capContaCoopLimiteToAuthoritativeBase(limite, base, tetoPercent);
+    return capContaCoopLimiteToAuthoritativeBase(limite, base, tetoPercent, liberacaoPercent);
   });
 
   let limitesParaUi = capped;
@@ -626,7 +629,8 @@ export async function listLimitesCooperadosAlinhadosComBase(
       opts.authoritativeCooperadoIds,
       authoritative.creditosBaseCents,
       tetoPercent,
-      resolverCanonico
+      resolverCanonico,
+      liberacaoPercent
     );
   }
 
@@ -1421,7 +1425,15 @@ export async function getLimiteCooperadoAlinhadoAEntregas(
   );
   const teto = await resolveTetoGlobal(supabase, cnpj, authoritative.creditosBaseCents);
   const tetoPercent = teto.configured ? teto.percent : 0;
-  const capped = capContaCoopLimiteToAuthoritativeBase(limite, creditoBaseCents, tetoPercent);
+  const liberacaoPercent = teto.configured
+    ? (await getCooperativaLiberacaoPercentConfigured(supabase, cnpj)) ?? tetoPercent
+    : null;
+  const capped = capContaCoopLimiteToAuthoritativeBase(
+    limite,
+    creditoBaseCents,
+    tetoPercent,
+    liberacaoPercent
+  );
 
   const accountRow = await fetchHbCreditAccountRowForCooperado(supabase, cnpj, cooperadoId);
   const syncCooperadoId = accountRow?.accountCooperadoId ?? cooperadoId;

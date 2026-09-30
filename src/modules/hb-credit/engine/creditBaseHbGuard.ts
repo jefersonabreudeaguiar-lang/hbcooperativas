@@ -80,7 +80,8 @@ export function blindarCreditoBaseCentsHb(
 export function resolveLimiteHbCooperadoEfetivo(
   limite: ContaCoopLimiteCooperado,
   creditoBaseAuthoritativeCents: number,
-  tetoPercent: number
+  tetoPercent: number,
+  liberacaoPercent?: number | null
 ): ContaCoopLimiteCooperado {
   const released = Math.max(0, Math.round(limite.limiteLiberadoCents));
   const usado = Math.max(0, Math.round(limite.valorUsadoCents));
@@ -90,13 +91,22 @@ export function resolveLimiteHbCooperadoEfetivo(
 
   if (base === 0) {
     effectiveReleased = Math.min(released, usado);
-  } else if (
-    Number.isFinite(tetoPercent) &&
-    tetoPercent > 0 &&
-    tetoPercent <= 100
-  ) {
-    const maxLimite = calcLimiteFromPercentual(base, tetoPercent);
-    effectiveReleased = Math.min(released, maxLimite);
+  } else {
+    const caps: number[] = [];
+    if (Number.isFinite(tetoPercent) && tetoPercent > 0 && tetoPercent <= 100) {
+      caps.push(calcLimiteFromPercentual(base, tetoPercent));
+    }
+    if (
+      liberacaoPercent != null &&
+      Number.isFinite(liberacaoPercent) &&
+      liberacaoPercent > 0 &&
+      liberacaoPercent <= 100
+    ) {
+      caps.push(calcLimiteFromPercentual(base, liberacaoPercent));
+    }
+    if (caps.length) {
+      effectiveReleased = Math.min(released, ...caps);
+    }
   }
 
   return {
@@ -110,9 +120,15 @@ export function resolveLimiteHbCooperadoEfetivo(
 export function capContaCoopLimiteToAuthoritativeBase(
   limite: ContaCoopLimiteCooperado,
   creditoBaseAuthoritativeCents: number,
-  tetoPercent: number
+  tetoPercent: number,
+  liberacaoPercent?: number | null
 ): ContaCoopLimiteCooperado {
-  return resolveLimiteHbCooperadoEfetivo(limite, creditoBaseAuthoritativeCents, tetoPercent);
+  return resolveLimiteHbCooperadoEfetivo(
+    limite,
+    creditoBaseAuthoritativeCents,
+    tetoPercent,
+    liberacaoPercent
+  );
 }
 
 function findContaHbParaCooperadoId(
@@ -134,7 +150,8 @@ export function projetarLimitesListaCooperados(
   cooperadoIds: string[],
   creditosBaseCents: Record<string, number>,
   tetoPercent: number,
-  resolverCanonico: (id: string) => string
+  resolverCanonico: (id: string) => string,
+  liberacaoPercent?: number | null
 ): ContaCoopLimiteCooperado[] {
   if (!cooperadoIds.length) return contasCapadas;
   const consumidas = new Set<string>();
@@ -151,7 +168,7 @@ export function projetarLimitesListaCooperados(
       creditosBaseCents[canon] ?? 0
     );
     out.push(
-      resolveLimiteHbCooperadoEfetivo({ ...conta, cooperadoId: id }, base, tetoPercent)
+      resolveLimiteHbCooperadoEfetivo({ ...conta, cooperadoId: id }, base, tetoPercent, liberacaoPercent)
     );
   }
 

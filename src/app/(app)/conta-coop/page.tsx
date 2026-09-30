@@ -733,21 +733,33 @@ function ContaCoopContent() {
     const creditosBaseCents = pickCreditosBaseForPost();
     if (!creditosBaseCents) return;
     const pct = Number(tetoPercentual.replace(",", "."));
+    if (!Number.isFinite(pct) || pct < 0 || pct > 100) {
+      setError("Informe um percentual entre 0 e 100.");
+      return;
+    }
     setBusy(true);
     setError("");
     try {
-      await postCreditLimites({
-        action: "set_teto",
-        cnpj,
-        tetoPercentual: pct,
-        creditosBaseCents,
-      });
+      const cooperadoIds = cooperadosAtivos.map((c) => c.id);
+      const tetoAtual = dashboard?.teto.tetoGlobalPercent ?? 100;
+      const bodyBase = { cnpj, creditosBaseCents, cooperadoIds, percentual: pct };
+
+      if (pct > tetoAtual) {
+        await postCreditLimites({ action: "set_teto", cnpj, tetoPercentual: pct, creditosBaseCents });
+        await postCreditLimites({ action: "set_coletivo", ...bodyBase });
+      } else {
+        await postCreditLimites({ action: "set_coletivo", ...bodyBase });
+        await postCreditLimites({ action: "set_teto", cnpj, tetoPercentual: pct, creditosBaseCents });
+      }
+
       setPercentualColetivo(String(pct));
+      setPreviewColetivo(null);
       gravarHbCreditLimitesPersistidos(cnpj, limitesRef.current, creditosBaseRef.current, pct);
       await reload();
-      await syncLimitesComFicha({ background: true });
+      await revalidateLimitesLista({ force: true, background: true });
+      notifyHbCreditLimiteSynced();
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Erro ao salvar teto.");
+      setError(e instanceof Error ? e.message : "Erro ao salvar percentual.");
     } finally {
       setBusy(false);
     }
@@ -1217,8 +1229,8 @@ function ContaCoopContent() {
             <div>
               <h3 className="font-semibold text-gray-900">Percentual de compra HB</h3>
               <p className="text-sm text-gray-600">
-                Salvo na nuvem — usado na liberação coletiva e na sincronização automática dos limites com a ficha.
-                Só precisa informar de novo se quiser alterar.
+                Salvo na nuvem — aplica o percentual em todos os cooperados (mesmo efeito de «Liberar todos») e
+                limita o crédito HB ao % do valor a receber na ficha.
               </p>
             </div>
             <div className="flex flex-wrap gap-2 items-end">
