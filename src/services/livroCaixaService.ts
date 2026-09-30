@@ -378,7 +378,12 @@ export function lancarRetencoesPagamentoNoCaixa(
   }
 
   const outrosDescontos = (pagamento.descontosExtras ?? []).filter(
-    (d) => d.tipo !== "mensalidade" && d.tipo !== "credito_avulso" && d.tipo !== "cooperativa" && d.valor > 0
+    (d) =>
+      d.tipo !== "mensalidade" &&
+      d.tipo !== "credito_avulso" &&
+      d.tipo !== "cooperativa" &&
+      d.valor > 0 &&
+      !/\(estornada\)/i.test(d.motivo ?? "")
   );
   outrosDescontos.forEach((d, i) => {
     next = appendLivroCaixaLancamento(
