@@ -60,25 +60,51 @@ function MercadoCobrarQrContent() {
     let cancelled = false;
     setAguardando(true);
 
-    const verificar = async () => {
-      try {
-        const status = await pollCreditIntentPayment(draft.intentId);
-        if (cancelled) return;
-
-        if (status.payment || status.status === "confirmada") {
-          const pay = status.payment;
-          clearHbCreditMercadoCobrancaDraft();
-          setPago({
-            amountCents: status.amountCents,
-            descricao: status.descricao ?? draft.descricao,
-            cooperadoNome: pay?.cooperadoNome ?? "Cooperado",
-            cooperadoCpf: pay?.cooperadoCpf ?? "",
-            receiptCode: pay?.receiptCode ?? null,
-            paidAt: pay?.paidAt ?? new Date().toISOString(),
-          });
-          setAguardando(false);
-          return;
+    const aplicarPago = (status: Awaited<ReturnType<typeof pollCreditIntentPayment>>, full = false) => {
+      if (status.payment || status.status === "confirmada") {
+        const pay = status.payment;
+        clearHbCreditMercadoCobrancaDraft();
+        setPago({
+          amountCents: status.amountCents,
+          descricao: status.descricao ?? draft.descricao,
+          cooperadoNome: pay?.cooperadoNome ?? "Cooperado",
+          cooperadoCpf: pay?.cooperadoCpf ?? "",
+          receiptCode: pay?.receiptCode ?? null,
+          paidAt: pay?.paidAt ?? new Date().toISOString(),
+        });
+        setAguardando(false);
+        if (
+          !full &&
+          pay &&
+          pay.cooperadoNome === "Cooperado" &&
+          !pay.cooperadoCpf
+        ) {
+          void pollCreditIntentPayment(draft.intentId, { full: true })
+            .then((detalhe) => {
+              if (cancelled || !detalhe.payment) return;
+              setPago((prev) =>
+                prev
+                  ? {
+                      ...prev,
+                      cooperadoNome: detalhe.payment!.cooperadoNome || prev.cooperadoNome,
+                      cooperadoCpf: detalhe.payment!.cooperadoCpf || prev.cooperadoCpf,
+                      receiptCode: detalhe.payment!.receiptCode ?? prev.receiptCode,
+                    }
+                  : prev
+              );
+            })
+            .catch(() => {});
         }
+        return true;
+      }
+      return false;
+    };
+
+    const verificar = async (full = false) => {
+      try {
+        const status = await pollCreditIntentPayment(draft.intentId, { lite: !full, full });
+        if (cancelled) return;
+        if (aplicarPago(status, full)) return;
 
         if (status.status === "expirada" || status.status === "cancelada") {
           clearHbCreditMercadoCobrancaDraft();
@@ -90,10 +116,17 @@ function MercadoCobrarQrContent() {
       }
     };
 
-    void verificar();
-    const timer = window.setInterval(() => void verificar(), 800);
+    void verificar(false);
+    const fastTicks = [150, 300, 500, 800];
+    const fastTimers = fastTicks.map((ms) =>
+      window.setTimeout(() => {
+        if (!cancelled) void verificar(false);
+      }, ms)
+    );
+    const timer = window.setInterval(() => void verificar(false), 350);
     return () => {
       cancelled = true;
+      fastTimers.forEach((t) => window.clearTimeout(t));
       window.clearInterval(timer);
     };
   }, [draft, pago]);

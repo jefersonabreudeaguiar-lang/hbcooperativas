@@ -11,7 +11,7 @@ import { Button } from "@/components/ui/Button";
 import { usePermissions } from "@/hooks/usePermissions";
 import { useAppData } from "@/hooks/useAppData";
 import { getUserCooperativaId, normalizeCnpj } from "@/utils/cooperativa";
-import { openHbCreditPaymentFromQrScan } from "@/lib/hb-credit/openHbCreditPaymentFromQr";
+import { prepareAndOpenHbCreditPaymentFromQrScan } from "@/lib/hb-credit/openHbCreditPaymentFromQr";
 
 export default function EscanearQrContaCoopPage() {
   return (
@@ -44,7 +44,7 @@ function EscanearQrContent() {
       setValidating(true);
       setScanError("");
       try {
-        openHbCreditPaymentFromQrScan(router, { cnpj, cooperadoId, qrPayload: payload });
+        await prepareAndOpenHbCreditPaymentFromQrScan(router, { cnpj, cooperadoId, qrPayload: payload });
       } catch (e) {
         setScanError(e instanceof Error ? e.message : "Não foi possível usar este QR Code.");
         setValidating(false);

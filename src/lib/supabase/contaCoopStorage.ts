@@ -1485,12 +1485,12 @@ export async function getLimiteCooperado(
   supabase: SupabaseClient,
   cnpj: string,
   cooperadoId: string,
-  opts?: { skipAmountUsedReconcile?: boolean }
+  opts?: { skipAmountUsedReconcile?: boolean; fastPreview?: boolean }
 ): Promise<ContaCoopLimiteCooperado | null> {
   const digits = normalizeCnpj(cnpj);
   const cooperados = await fetchCooperadosFromStorage(supabase, digits).catch(() => []);
   const titularIds = cooperados.length ? titularCooperadoIds(cooperados, cooperadoId) : [cooperadoId];
-  if (!opts?.skipAmountUsedReconcile) {
+  if (!opts?.skipAmountUsedReconcile && !opts?.fastPreview) {
     await reconcileCooperadosAmountUsedCentsBatch(supabase, digits, titularIds).catch(() => {});
   }
 
@@ -1499,9 +1499,13 @@ export async function getLimiteCooperado(
   const cashback = await getCashbackDisponivel(supabase, digits, found.accountCooperadoId);
   const mapped = mapLimiteRow(found.row, cashback);
 
-  const expectedUsado = await resolveExpectedAmountUsedCentsForCooperado(supabase, digits, cooperadoId);
   const liberado = mapped.limiteLiberadoCents;
-  const usado = Math.min(Math.max(0, expectedUsado), liberado >= 0 ? liberado : expectedUsado);
+  const usado = opts?.fastPreview
+    ? Math.max(0, Math.round(Number(found.row.amount_used_cents ?? 0)))
+    : Math.min(
+        Math.max(0, await resolveExpectedAmountUsedCentsForCooperado(supabase, digits, cooperadoId)),
+        liberado >= 0 ? liberado : Math.max(0, Math.round(Number(found.row.amount_used_cents ?? 0)))
+      );
   const capRaw = found.row.financial_limit_cap_cents;
   const cap = capRaw == null || capRaw === "" ? null : Number(capRaw);
   const withUsado = {
@@ -2309,11 +2313,16 @@ export async function validateIntentForCooperado(
   if (!["PENDING", "CREATED"].includes(intent.status)) return { ok: false, error: "Cobrança já utilizada." };
   if (new Date(intent.expires_at).getTime() < Date.now()) return { ok: false, error: "Cobrança expirada." };
 
-  const { data: parceiro } = await supabase.from("hb_credit_partners").select("*").eq("id", intent.partner_id).maybeSingle();
+  const { data: parceiro } = await supabase
+    .from("hb_credit_partners")
+    .select("name, status")
+    .eq("id", intent.partner_id)
+    .maybeSingle();
   if (!parceiro || parceiro.status !== "ACTIVE") return { ok: false, error: "Mercado bloqueado ou inativo." };
 
   const limite = await getLimiteCooperado(supabase, digits, cooperadoId, {
     skipAmountUsedReconcile: opts?.fast === true,
+    fastPreview: opts?.fast === true,
   });
   if (!limite) return { ok: false, error: "Sem limite HB Créditos." };
   if (limite.bloqueado) return { ok: false, error: "Cooperado bloqueado." };
@@ -2351,14 +2360,19 @@ export async function prepareHbCreditPaymentAuthorize(
   actorUserId: string
 ): Promise<void> {
   const digits = normalizeCnpj(cnpj);
+  const found = await fetchHbCreditAccountRowForCooperado(supabase, cnpj, cooperadoId);
+  if (!found) return;
+
+  const syncState = String(found.row.financial_limit_sync_state ?? "SYNCED");
+  if (syncState === "SYNCED") {
+    return;
+  }
+
   const cooperados = await fetchCooperadosFromStorage(supabase, digits).catch(() => []);
   const titularIds = cooperados.length ? titularCooperadoIds(cooperados, cooperadoId) : [cooperadoId];
   await reconcileCooperadosAmountUsedCentsBatch(supabase, digits, titularIds).catch(() => {});
 
-  const found = await fetchHbCreditAccountRowForCooperado(supabase, cnpj, cooperadoId);
-  if (!found) return;
   const accountCooperadoId = found.accountCooperadoId;
-  const syncState = String(found.row.financial_limit_sync_state ?? "SYNCED");
   if (syncState !== "SYNCED") {
     const auth = await resolveAuthoritativeCreditBase(supabase, digits, titularIds);
     if (auth.ok) {
@@ -2426,7 +2440,7 @@ export async function authorizePayment(
     input.nonce,
     input.cooperadoId,
     input.cooperativaCnpj,
-    { useCashback: Boolean(input.useCashback), forAuthorize: true }
+    { useCashback: Boolean(input.useCashback), forAuthorize: true, fast: true }
   );
   if (!intentCheck.ok) return { ok: false, error: intentCheck.error };
 
@@ -2510,12 +2524,11 @@ export async function authorizePayment(
       disponivelAposCents = limiteDup?.valorDisponivelCents ?? 0;
     }
   } else {
-    try {
-      const { ensureFiscalNoteForTransaction } = await import("@/lib/supabase/hbCreditFiscalNotesStorage");
-      await ensureFiscalNoteForTransaction(supabase, txId, input.cooperadoNome);
-    } catch {
-      /* tabela fiscal opcional até migration aplicada */
-    }
+    void import("@/lib/supabase/hbCreditFiscalNotesStorage")
+      .then(({ ensureFiscalNoteForTransaction }) =>
+        ensureFiscalNoteForTransaction(supabase, txId, input.cooperadoNome)
+      )
+      .catch(() => {});
   }
 
   return {
@@ -3563,11 +3576,14 @@ export type PartnerIntentPaymentStatus = {
 export async function getPartnerPaymentIntentStatus(
   supabase: SupabaseClient,
   parceiroId: string,
-  intentId: string
+  intentId: string,
+  opts?: { lite?: boolean }
 ): Promise<{ ok: true; data: PartnerIntentPaymentStatus } | { ok: false; error: string }> {
   const { data: intent, error } = await supabase
     .from("hb_credit_payment_intents")
-    .select("*")
+    .select(
+      "id, status, amount_cents, description, expires_at, cooperative_cnpj, cooperado_id, confirmed_at"
+    )
     .eq("id", intentId)
     .eq("partner_id", parceiroId)
     .maybeSingle();
@@ -3599,6 +3615,24 @@ export async function getPartnerPaymentIntentStatus(
     .maybeSingle();
 
   const cooperadoId = String(tx?.cooperado_id ?? intent.cooperado_id ?? "");
+
+  if (opts?.lite) {
+    return {
+      ok: true,
+      data: {
+        ...base,
+        payment: {
+          transacaoId: String(tx?.id ?? ""),
+          receiptCode: tx?.receipt_code ? String(tx.receipt_code) : null,
+          paidAt: String(tx?.created_at ?? intent.confirmed_at ?? new Date().toISOString()),
+          cooperadoId,
+          cooperadoNome: "Cooperado",
+          cooperadoCpf: "",
+        },
+      },
+    };
+  }
+
   let cooperadoNome = "Cooperado";
   let cooperadoCpf = "";
 

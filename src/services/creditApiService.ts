@@ -288,11 +288,16 @@ export async function convertCreditCashbackToReceivable(params: {
   return data;
 }
 
-export async function validateCreditQr(cnpj: string, cooperadoId: string, qrPayload: string) {
+export async function validateCreditQr(
+  cnpj: string,
+  cooperadoId: string,
+  qrPayload: string,
+  opts?: { fast?: boolean }
+) {
   const res = await secureApiFetch("/api/credit/payment-intents", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ action: "validate", cnpj, cooperadoId, qrPayload }),
+    body: JSON.stringify({ action: "validate", cnpj, cooperadoId, qrPayload, fast: opts?.fast !== false }),
   });
   const data = await parseJson<{
     ok?: boolean;
@@ -452,10 +457,17 @@ export type CreditIntentPaymentPoll = {
   };
 };
 
-export async function pollCreditIntentPayment(intentId: string): Promise<CreditIntentPaymentPoll> {
-  const res = await secureApiFetch(
-    `/api/credit/payment-intents?intentId=${encodeURIComponent(intentId)}`
-  );
+export async function pollCreditIntentPayment(
+  intentId: string,
+  opts?: { lite?: boolean; full?: boolean }
+): Promise<CreditIntentPaymentPoll> {
+  const params = new URLSearchParams({ intentId });
+  if (opts?.full) {
+    params.delete("lite");
+  } else {
+    params.set("lite", "1");
+  }
+  const res = await secureApiFetch(`/api/credit/payment-intents?${params.toString()}`);
   const data = await parseJson<CreditIntentPaymentPoll & { ok?: boolean; error?: string }>(res);
   if (!res.ok || !data.ok) throw new Error(data.error ?? "Erro ao consultar cobrança.");
   return data;

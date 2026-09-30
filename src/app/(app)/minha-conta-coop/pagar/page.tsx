@@ -57,7 +57,9 @@ function HbCreditPagarContent() {
   const { user, cooperadoId } = usePermissions();
   const data = useAppData();
   const [draft, setDraft] = useState<HbCreditPaymentDraft | null>(null);
-  const [loadingQr, setLoadingQr] = useState(true);
+  const [loadingQr, setLoadingQr] = useState(() =>
+    typeof window === "undefined" ? true : !peekHbCreditPaymentDraft()
+  );
   const [hasPin, setHasPin] = useState<boolean | null>(null);
   const [payPin, setPayPin] = useState("");
   const [useCashback, setUseCashback] = useState(false);
@@ -112,7 +114,7 @@ function HbCreditPagarContent() {
     let cancelled = false;
     setLoadingQr(true);
     setError("");
-    void validateCreditQr(pending.cnpj, pending.cooperadoId, pending.qrPayload)
+    void validateCreditQr(pending.cnpj, pending.cooperadoId, pending.qrPayload, { fast: true })
       .then((res) => {
         if (cancelled) return;
         if (!res.intent || !res.limite || !res.parceiroNome) {
