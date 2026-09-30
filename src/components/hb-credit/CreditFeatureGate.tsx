@@ -4,7 +4,7 @@ import { useRouter } from "next/navigation";
 import { useEffect } from "react";
 import { useHbCreditEnabled } from "@/hooks/useHbCreditEnabled";
 import { useAuth } from "@/modules/auth/AuthProvider";
-import { isCooperadoAppUser } from "@/permissions";
+import { isCooperadoAppUser, canAccessTesoureiroArea } from "@/permissions";
 import { PageSkeleton } from "@/components/ui/PageSkeleton";
 import { AlertBanner } from "@/components/ui/AlertBanner";
 
@@ -13,7 +13,10 @@ export function CreditFeatureGate({ children }: { children: React.ReactNode }) {
   const { enabled, navEnabled, loading, status, errorMessage } = useHbCreditEnabled(user);
   const router = useRouter();
   const cooperadoExperience = Boolean(user && isCooperadoAppUser(user));
-  const pageAllowed = enabled || (cooperadoExperience && navEnabled);
+  const canEnterHbArea =
+    Boolean(user) &&
+    (cooperadoExperience || (user ? canAccessTesoureiroArea(user) : false));
+  const pageAllowed = navEnabled && canEnterHbArea;
 
   useEffect(() => {
     if (status === "disabled" && !pageAllowed) {
@@ -42,7 +45,7 @@ export function CreditFeatureGate({ children }: { children: React.ReactNode }) {
 
   return (
     <>
-      {status === "error" && cooperadoExperience && (
+      {status === "error" && pageAllowed && (
         <AlertBanner variant="warning" title="Conexão com o módulo">
           Não foi possível confirmar o status remoto agora. Você pode usar a HB Créditos; se algo falhar, atualize a
           página.

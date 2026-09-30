@@ -1,6 +1,7 @@
 import type { Action, AppData, ModoAcesso, Resource, User, UserRole } from "@/types";
 import { canAccessPainelResponsavel } from "@/lib/security/responsavelPanelAccess";
 export { canAccessPainelResponsavel } from "@/lib/security/responsavelPanelAccess";
+import { isHbCreditEnabledClient } from "@/modules/hb-credit/config";
 import { filterContaCoopNavItems, isContaCoopUiPublic } from "@/utils/contaCoopUiVisibility";
 
 type PermissionMatrix = Record<UserRole, Partial<Record<Resource, Action[]>>>;
@@ -409,6 +410,22 @@ export function isHbCreditCooperadoNavEligible(
   return serverConfirmed || creditStatus === "loading" || creditStatus === "error" || creditStatus === "enabled";
 }
 
+/** Responsável/tesoureiro — módulo habilitado no build; falha transitória de status não esconde o menu. */
+export function isHbCreditStaffNavEligible(
+  user: Pick<User, "role">,
+  creditStatus: "loading" | "enabled" | "disabled" | "error",
+  serverConfirmed: boolean
+): boolean {
+  const clientFlagRaw = (process.env.NEXT_PUBLIC_HB_CREDIT_ENABLED ?? "").trim().toLowerCase();
+  const clientConfigured =
+    typeof window !== "undefined" ? isHbCreditEnabledClient() : clientFlagRaw === "true" || clientFlagRaw === "1";
+  if (!clientConfigured) return false;
+  const role = normalizeUserRole(user.role);
+  if (role !== "responsavel" && role !== "tesoureiro") return false;
+  if (creditStatus === "disabled") return false;
+  return serverConfirmed || creditStatus === "loading" || creditStatus === "error" || creditStatus === "enabled";
+}
+
 /** HB Créditos no menu do cooperado — todos com perfil cooperado quando UI pública. */
 export function canViewHbCreditMenu(user: PermissionSubject): boolean {
   const role = normalizeUserRole(user.role);
@@ -416,15 +433,15 @@ export function canViewHbCreditMenu(user: PermissionSubject): boolean {
   return canUser(user, "conta_coop", "view");
 }
 
-/** Menu HB Créditos: módulo confirmado + perfil autorizado + visibilidade de homologação. */
+/** Menu HB Créditos: módulo confirmado ou elegível (cooperado/staff) + perfil autorizado. */
 export function isHbCreditNavVisible(
   creditEnabled: boolean,
   canViewContaCoop: boolean,
   contaCoopUiVisible = false,
-  cooperadoNavEligible = false
+  moduleNavEligible = false
 ): boolean {
   if (!contaCoopUiVisible || !canViewContaCoop) return false;
-  if (cooperadoNavEligible) return true;
+  if (moduleNavEligible) return true;
   return creditEnabled;
 }
 
@@ -433,7 +450,7 @@ export function appendHbCreditMenuItem(
   user: PermissionSubject,
   creditEnabled: boolean,
   contaCoopUiVisible = false,
-  cooperadoNavEligible = false
+  moduleNavEligible = false
 ): { href: string; label: string; resource: Resource }[] {
   const role = normalizeUserRole(user.role);
   const extra = CREDIT_MENU_BY_ROLE[role];
@@ -442,7 +459,7 @@ export function appendHbCreditMenuItem(
       creditEnabled,
       Boolean(extra && canViewHbCreditMenu(user)),
       contaCoopUiVisible,
-      cooperadoNavEligible
+      moduleNavEligible
     )
   ) {
     return items;
@@ -568,7 +585,8 @@ export function getMobileNavItems(
     const showContaCoop = isHbCreditNavVisible(
       creditEnabled,
       canUser(user, "conta_coop", "view"),
-      contaCoopUiVisible
+      contaCoopUiVisible,
+      cooperadoNavEligible
     );
     return filterMenuForUser(
       showContaCoop ? filtered : filtered.filter((i) => i.href !== "/conta-coop"),

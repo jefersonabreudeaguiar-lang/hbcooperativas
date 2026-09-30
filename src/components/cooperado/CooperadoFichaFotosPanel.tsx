@@ -18,7 +18,7 @@ import {
 import { useAppData } from "@/hooks/useAppData";
 import { useAuth } from "@/modules/auth/AuthProvider";
 import { NotaStatusBadge } from "@/components/ui/NotaStatusBadge";
-import { NotaFotoImg } from "@/components/ui/NotaFotoImg";
+import { FotoLightbox, FotoLightboxTrigger } from "@/components/ui/FotoLightbox";
 import { contarFotosEnviadasNota, contarFotosEnviadasNotas } from "@/utils/fotoEntrega";
 import { normalizeCnpj } from "@/utils/cooperativa";
 import { formatDate, formatMesReferencia } from "@/utils/format";
@@ -45,6 +45,7 @@ function EntregaFotosGrid({
 }) {
   const [urls, setUrls] = useState<string[]>([]);
   const [erro, setErro] = useState(false);
+  const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
   const blobUrlsRef = useRef<string[]>([]);
 
   useEffect(() => {
@@ -80,6 +81,10 @@ function EntregaFotosGrid({
   }, [nota.id, nota.updatedAt, nota.fotoNaNuvem, nota.fotosEnviadasCount, cnpj, qtdFotos]);
 
   useEffect(() => {
+    setLightboxIndex(null);
+  }, [nota.id, urls.length]);
+
+  useEffect(() => {
     return () => {
       for (const url of blobUrlsRef.current) {
         if (url.startsWith("blob:")) URL.revokeObjectURL(url);
@@ -99,21 +104,34 @@ function EntregaFotosGrid({
   }
 
   return (
-    <div
-      className={cn(
-        "grid gap-1 p-1",
-        urls.length > 1 ? "grid-cols-1 sm:grid-cols-2" : "grid-cols-1"
-      )}
-    >
-      {urls.map((foto, i) => (
-        <NotaFotoImg
-          key={`${nota.id}-foto-${i}`}
-          src={foto}
-          alt={`Foto ${i + 1} — ${nota.numeroNota}`}
-          className="w-full rounded-lg object-cover max-h-80 bg-gray-100 min-h-[8rem]"
-        />
-      ))}
-    </div>
+    <>
+      <div
+        className={cn(
+          "grid gap-1 p-1",
+          urls.length > 1 ? "grid-cols-1 sm:grid-cols-2" : "grid-cols-1"
+        )}
+      >
+        {urls.map((foto, i) => (
+          <FotoLightboxTrigger
+            key={`${nota.id}-foto-${i}`}
+            src={foto}
+            alt={`Foto ${i + 1} — ${nota.numeroNota}`}
+            imgClassName="w-full rounded-lg object-cover max-h-80 bg-gray-100 min-h-[8rem]"
+            onOpen={() => setLightboxIndex(i)}
+          />
+        ))}
+      </div>
+      <FotoLightbox
+        open={lightboxIndex !== null}
+        items={urls.map((src, i) => ({
+          src,
+          alt: `Foto ${i + 1} — ${nota.numeroNota}`,
+        }))}
+        index={lightboxIndex ?? 0}
+        onClose={() => setLightboxIndex(null)}
+        onIndexChange={setLightboxIndex}
+      />
+    </>
   );
 }
 
@@ -344,7 +362,8 @@ export function CooperadoFichaFotosPanel({
       <div className="rounded-xl bg-green-50 border border-green-200 px-4 py-3 text-sm text-green-900">
         <strong>{totalFotos}</strong> foto{totalFotos !== 1 ? "s" : ""} em{" "}
         <strong>{mesesComFoto.length}</strong> mês{mesesComFoto.length !== 1 ? "es" : ""}. Toque no mês
-        para ver todas as imagens — incluindo entregas aguardando conferência e as já lançadas.
+        para ver as imagens; toque em qualquer foto para ampliar em tela cheia — incluindo entregas aguardando
+        conferência e as já lançadas.
       </div>
 
       <div className="space-y-3">

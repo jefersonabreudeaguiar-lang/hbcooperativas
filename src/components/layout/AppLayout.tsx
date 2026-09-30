@@ -11,7 +11,7 @@ import {
 import { useState } from "react";
 import { useAuth } from "@/modules/auth/AuthProvider";
 import { useAppData, useAppDataSelector } from "@/hooks/useAppData";
-import { getMenuItems, getMobileNavItems, getCooperadoDrawerMenuItems, getUserFuncaoLabel, isCooperadoAppUser, isHbCreditCooperadoNavEligible } from "@/permissions";
+import { getMenuItems, getMobileNavItems, getCooperadoDrawerMenuItems, getUserFuncaoLabel, isCooperadoAppUser, isHbCreditCooperadoNavEligible, isHbCreditStaffNavEligible } from "@/permissions";
 import { getUserCooperativaNome } from "@/utils/cooperativa";
 import { PLATFORM_NAME, PLATFORM_TAGLINE } from "@/utils/constants";
 import { AppIcon } from "@/components/ui/AppIcon";
@@ -132,12 +132,14 @@ export function Sidebar({ mobile = false, onClose }: { mobile?: boolean; onClose
     credit.status,
     credit.serverConfirmed
   );
+  const staffNavEligible = isHbCreditStaffNavEligible(user, credit.status, credit.serverConfirmed);
+  const moduleNavEligible = cooperadoNavEligible || staffNavEligible;
   const contaCoopUiVisible = isContaCoopUiVisibleForUser(user, cooperadoNome || undefined);
 
   const menuItems =
     mobile && isCooperadoAppUser(user)
-      ? getCooperadoDrawerMenuItems(user, credit.enabled, contaCoopUiVisible, data, cooperadoNavEligible)
-      : getMenuItems(user, credit.enabled, contaCoopUiVisible, data, cooperadoNavEligible);
+      ? getCooperadoDrawerMenuItems(user, credit.enabled, contaCoopUiVisible, data, moduleNavEligible)
+      : getMenuItems(user, credit.enabled, contaCoopUiVisible, data, moduleNavEligible);
 
   return (
     <aside className={cn(
@@ -224,8 +226,10 @@ export function MobileNav() {
     credit.status,
     credit.serverConfirmed
   );
+  const staffNavEligible = isHbCreditStaffNavEligible(user, credit.status, credit.serverConfirmed);
+  const moduleNavEligible = cooperadoNavEligible || staffNavEligible;
   const contaCoopUiVisible = isContaCoopUiVisibleForUser(user, cooperadoNome || undefined);
-  const mobileItems = getMobileNavItems(user, credit.enabled, contaCoopUiVisible, data, cooperadoNavEligible);
+  const mobileItems = getMobileNavItems(user, credit.enabled, contaCoopUiVisible, data, moduleNavEligible);
 
   const prefetchNavRoute = (href: string) => {
     try {

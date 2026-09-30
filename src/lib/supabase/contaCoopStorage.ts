@@ -316,16 +316,15 @@ export async function getDashboardResumo(
   const creditoBaseTotalCents = tetoResult.configured
     ? tetoResult.creditoBaseTotalCents
     : sumCreditosBaseCents(creditosBaseCents);
-  const { data: limites } = await supabase
-    .from("hb_credit_accounts")
-    .select("limit_released_cents, amount_used_cents")
-    .eq("cooperative_cnpj", digits);
 
+  const limitesEfetivos = await listLimitesCooperadosAlinhadosAEntregas(supabase, digits, {
+    resyncIfInflated: false,
+  });
   let limiteDistribuido = 0;
   let usadoTotal = 0;
-  for (const row of limites ?? []) {
-    limiteDistribuido += Number(row.limit_released_cents);
-    usadoTotal += Number(row.amount_used_cents);
+  for (const l of limitesEfetivos) {
+    limiteDistribuido += l.limiteLiberadoCents;
+    usadoTotal += l.valorUsadoCents;
   }
 
   const { count: pendentes } = await supabase
@@ -752,55 +751,29 @@ export async function syncLimiteCooperadoFromCreditoBase(
 > {
   const base = Math.max(0, Math.round(Number(creditoBaseCents) || 0));
   if (base === 0) {
-    const { limiteAtualCents, valorUsadoCents } = await readLimiteAtualCooperado(
-      supabase,
-      cnpj,
-      cooperadoId
-    );
-    const comprasAtivas =
-      valorUsadoCents > 0 || (await cooperadoTemComprasContaCoopAtivas(supabase, cnpj, cooperadoId));
-
-    if (!comprasAtivas && valorUsadoCents === 0 && limiteAtualCents === 0) {
-      const atual = await getLimiteCooperado(supabase, cnpj, cooperadoId);
-      if (atual) return { ok: true, limite: atual, action: "unchanged" };
-      const reset = await resetContaCoopCooperadoCredit(supabase, cnpj, cooperadoId, actorUserId, {
-        source: "sync_from_ficha",
-      });
-      if (!reset.ok) return reset;
-      return { ...reset, action: "reset" };
-    }
-
-    if (!comprasAtivas && valorUsadoCents === 0) {
-      const reset = await resetContaCoopCooperadoCredit(supabase, cnpj, cooperadoId, actorUserId, {
-        source: "sync_from_ficha",
-      });
-      if (!reset.ok) return reset;
-      return { ...reset, action: "reset" as const };
-    }
-
-    const alvo = Math.max(valorUsadoCents, 0);
-    if (limiteAtualCents > alvo) {
-      const teto = await requireConfiguredTeto(supabase, cnpj, creditosBaseCents);
-      if (!teto.ok) return { ok: false, error: teto.error };
-      const tight = await setLimiteCooperado(
-        supabase,
-        cnpj,
-        cooperadoId,
-        alvo,
-        actorUserId,
-        creditosBaseCents
-      );
-      if (!tight.ok) return tight;
-      return { ...tight, action: "tightened" as const };
-    }
-
+    /** Lastro zero na sync automática não revoga nem reduz limit_released_cents já liberado. */
     const atual = await getLimiteCooperado(supabase, cnpj, cooperadoId);
-    if (atual) return { ok: true, limite: atual, action: "unchanged" };
-    const reset = await resetContaCoopCooperadoCredit(supabase, cnpj, cooperadoId, actorUserId, {
-      source: "sync_from_ficha",
-    });
-    if (!reset.ok) return reset;
-    return { ...reset, action: "reset" as const };
+    if (atual) {
+      return { ok: true, limite: atual, action: "unchanged" };
+    }
+    const digits = normalizeCnpj(cnpj);
+    return {
+      ok: true,
+      limite: {
+        id: "",
+        cooperativaCnpj: digits,
+        cooperadoId,
+        limiteLiberadoCents: 0,
+        valorUsadoCents: 0,
+        valorDisponivelCents: 0,
+        bloqueado: false,
+        hasFinancialPin: false,
+        pinLockedUntil: null,
+        cashbackDisponivelCents: 0,
+        updatedAt: new Date().toISOString(),
+      },
+      action: "unchanged",
+    };
   }
 
   const teto = await requireConfiguredTeto(supabase, cnpj, creditosBaseCents);

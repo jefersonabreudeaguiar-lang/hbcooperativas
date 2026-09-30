@@ -8,13 +8,9 @@ import {
   purgarFichasInvalidas,
   reconciliarFichaFromNotasConferidas,
 } from "@/services/notaPedidoService";
-import { hbCreditValorAReceberAgregado } from "@/lib/hb-credit/hbCreditLeituraBic";
 import { calcLimiteFromPercentual } from "./creditBaseFromFicha";
 import type { ContaCoopLimiteCooperado } from "../types";
-
-function computeDisponivel(limiteCents: number, usadoCents: number): number {
-  return Math.max(0, Math.round(limiteCents) - Math.round(usadoCents));
-}
+import { computeDisponivel } from "./money";
 
 /** Remove fichas que não têm nota conferida/paga — crédito HB exige entrega real. */
 export function purgarFichasParaCreditoBaseCloud(data: AppData): AppData {
@@ -74,44 +70,48 @@ export function blindarCreditoBaseCentsHb(
     return 0;
   }
 
-  const canonico = resolverCooperadoIdCanonico(sane, cooperadoId, coopId);
-  const m6 = hbCreditValorAReceberAgregado(sane, canonico, coopId);
-  if (m6.valor <= 0) {
-    return 0;
-  }
-
   return cents;
 }
 
-/** Limita o que o cooperado vê no HB ao teto derivado da base autoritativa (anti-crédito fantasma no DB). */
+/**
+ * Limite HB efetivo para UI/API — autoridade = limit_released_cents no Supabase.
+ * Teto percentual só reduz acima do liberado (anti-inflação); quitou “A receber” não zera limite.
+ */
+export function resolveLimiteHbCooperadoEfetivo(
+  limite: ContaCoopLimiteCooperado,
+  creditoBaseAuthoritativeCents: number,
+  tetoPercent: number
+): ContaCoopLimiteCooperado {
+  const released = Math.max(0, Math.round(limite.limiteLiberadoCents));
+  const usado = Math.max(0, Math.round(limite.valorUsadoCents));
+  const base = Math.max(0, Math.round(creditoBaseAuthoritativeCents));
+
+  let effectiveReleased = released;
+
+  if (
+    base > 0 &&
+    Number.isFinite(tetoPercent) &&
+    tetoPercent > 0 &&
+    tetoPercent <= 100
+  ) {
+    const maxLimite = calcLimiteFromPercentual(base, tetoPercent);
+    effectiveReleased = Math.min(released, maxLimite);
+  }
+
+  return {
+    ...limite,
+    limiteLiberadoCents: effectiveReleased,
+    valorDisponivelCents: computeDisponivel(effectiveReleased, usado),
+  };
+}
+
+/** @deprecated alias — use resolveLimiteHbCooperadoEfetivo */
 export function capContaCoopLimiteToAuthoritativeBase(
   limite: ContaCoopLimiteCooperado,
   creditoBaseAuthoritativeCents: number,
   tetoPercent: number
 ): ContaCoopLimiteCooperado {
-  const usado = Math.max(0, Math.round(limite.valorUsadoCents));
-  const base = Math.max(0, Math.round(creditoBaseAuthoritativeCents));
-
-  if (base <= 0) {
-    const cappedReleased = Math.min(Math.max(0, limite.limiteLiberadoCents), usado);
-    return {
-      ...limite,
-      limiteLiberadoCents: cappedReleased,
-      valorDisponivelCents: computeDisponivel(cappedReleased, usado),
-    };
-  }
-
-  if (!Number.isFinite(tetoPercent) || tetoPercent <= 0 || tetoPercent > 100) {
-    return limite;
-  }
-
-  const maxLimite = calcLimiteFromPercentual(base, tetoPercent);
-  const cappedReleased = Math.min(Math.max(0, limite.limiteLiberadoCents), maxLimite);
-  return {
-    ...limite,
-    limiteLiberadoCents: cappedReleased,
-    valorDisponivelCents: computeDisponivel(cappedReleased, usado),
-  };
+  return resolveLimiteHbCooperadoEfetivo(limite, creditoBaseAuthoritativeCents, tetoPercent);
 }
 
 export function blindarMapaCreditoBaseCentsHb(

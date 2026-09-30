@@ -518,6 +518,24 @@ function AdminDashboard() {
 
       <FilaDoDiaPanel items={fila} />
 
+      {creditFlag.navEnabled && check("conta_coop", "view") && cnpj.length === 14 && (
+        <Link
+          href="/conta-coop"
+          className="flex items-center gap-4 rounded-2xl border-2 border-emerald-200 bg-gradient-to-r from-emerald-50 to-green-50 px-5 py-4 hover:border-emerald-300 transition-colors"
+        >
+          <span className="flex h-12 w-12 items-center justify-center rounded-xl bg-emerald-700 text-white shrink-0">
+            <Wallet size={24} />
+          </span>
+          <span className="min-w-0 flex-1">
+            <span className="block font-bold text-gray-900">HB Créditos</span>
+            <span className="block text-sm text-gray-600 mt-0.5">
+              Limites, mercados parceiros, liquidação e estornos
+            </span>
+          </span>
+          <span className="text-sm font-semibold text-emerald-800 shrink-0">Abrir →</span>
+        </Link>
+      )}
+
       {creditFlag.enabled && cnpj.length === 14 && <ContaCoopFilaCloudPanel cnpj={cnpj} />}
 
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">

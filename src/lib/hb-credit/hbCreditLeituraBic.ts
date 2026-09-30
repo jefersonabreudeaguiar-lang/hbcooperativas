@@ -16,6 +16,7 @@ import { listarFichasPendentesPagamento } from "@/services/notaPedidoService";
 import { round2 } from "@/utils/calculations";
 import {
   listCooperadoIdsMesmoTitular,
+  notaPertenceCooperado,
   resolverCooperadoIdCanonico,
 } from "@/services/cooperadoCloudService";
 import { listarMesesPendentesPagamentoResponsavel } from "@/services/cooperadoEntregasService";
@@ -101,13 +102,39 @@ export function hbCreditValorLiquidoMes(
   return getResumoValorAPagarRelatorio(data, canonico, mesReferencia, cooperativaId).valorLiquido;
 }
 
-/** Crédito-base HB (R$) = M6 agregado BIC (mesmo número do consolidado / “Quanto vou receber”). */
+/**
+ * Lastro HB (R$) a partir de entregas conferidas/pagas — independe do “A receber” pendente (M6).
+ * Usado para teto/cap; não zera quando o mês foi quitado.
+ */
+export function hbCreditCreditoBaseLastroEntregasReais(
+  data: AppData,
+  cooperadoId: string,
+  cooperativaId: string | undefined
+): number {
+  const coopId = cooperativaId ?? data.cooperados.find((c) => c.id === cooperadoId)?.cooperativaId;
+  const canonico = resolverCooperadoIdCanonico(data, cooperadoId, coopId);
+  let temConferida = false;
+  let total = 0;
+  for (const nota of data.notasPedido ?? []) {
+    if (nota.status !== "conferida" && nota.status !== "pago") continue;
+    if (!notaPertenceCooperado(data, nota, canonico, coopId)) continue;
+    temConferida = true;
+    total += Math.max(0, Number(nota.valorLiquido) || 0);
+  }
+  if (!temConferida) return 0;
+  return round2(total);
+}
+
+/**
+ * Crédito-base HB para teto/cap — M6 quando há valor a receber; senão lastro de entregas conferidas.
+ * M6 = 0 após pagamento NÃO implica base HB = 0 se ainda há lastro conferido.
+ */
 export function hbCreditCreditoBaseReais(
   data: AppData,
   cooperadoId: string,
   cooperativaId: string | undefined
 ): number {
   const m6 = hbCreditValorAReceberAgregado(data, cooperadoId, cooperativaId);
-  if (m6.valor <= 0) return 0;
-  return round2(m6.valor);
+  if (m6.valor > 0) return round2(m6.valor);
+  return hbCreditCreditoBaseLastroEntregasReais(data, cooperadoId, cooperativaId);
 }

@@ -1,7 +1,7 @@
 "use client";
 
 import dynamic from "next/dynamic";
-import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { getData } from "@/services/dataStore";
 import { resolveCooperativaCnpj } from "@/services/notaPedidoCloudService";
@@ -18,6 +18,7 @@ import { usePermissions } from "@/hooks/usePermissions";
 import { getUserCooperativaId, normalizeCnpj } from "@/utils/cooperativa";
 import {
   fetchCreditDashboard,
+  fetchCreditLimites,
   fetchCreditParceiros,
   postCreditLimites,
   postCreditParceiroStatus,
@@ -36,7 +37,7 @@ import {
   gravarHbCreditDashboardPersistido,
   lerHbCreditDashboardPersistido,
 } from "@/lib/hb-credit/hbCreditDashboardPersistencia";
-import { lerHbCreditLimitesPersistidos } from "@/lib/hb-credit/hbCreditLimitesPersistencia";
+import { lerHbCreditLimitesPersistidos, gravarHbCreditLimitesPersistidos } from "@/lib/hb-credit/hbCreditLimitesPersistencia";
 import { refreshHbCreditLimitesStaff } from "@/lib/hb-credit/hbCreditLimitesRefresh";
 import { ensureHbCreditLabLiberacaoPadrao } from "@/lib/hb-credit/ensureHbCreditLabLiberacaoPadrao";
 import {
@@ -45,7 +46,27 @@ import {
 } from "@/lib/hb-credit/hbCreditLabPolicy";
 import { useSyncContaCoopLimiteFromFicha } from "@/hooks/useSyncContaCoopLimiteFromFicha";
 import { scheduleContaCoopAuxSync } from "@/lib/hb-credit/contaCoopAuxSyncSchedule";
-import { getDataRevision, subscribe } from "@/services/dataStore";
+
+/** Marcações de performance — dev ou NEXT_PUBLIC_HB_CREDIT_PERF=true */
+function contaCoopPerfEnabled(): boolean {
+  if (typeof process !== "undefined" && process.env.NEXT_PUBLIC_HB_CREDIT_PERF === "true") return true;
+  return process.env.NODE_ENV === "development";
+}
+
+function contaCoopPerfStart(label: string): number | null {
+  if (!contaCoopPerfEnabled()) return null;
+  const t = Date.now();
+  console.debug(`[conta-coop] ${label} start`);
+  return t;
+}
+
+function contaCoopPerfEnd(label: string, startedAt: number | null): void {
+  if (startedAt == null || !contaCoopPerfEnabled()) return;
+  console.debug(`[conta-coop] ${label} ${Date.now() - startedAt}ms`);
+}
+
+/** Lista GET /limites — revalidação leve (sem sync-limite). */
+const LIMITES_LISTA_STALE_MS = 120_000;
 
 const panelFallback = () => <PageSkeleton compact />;
 
@@ -160,8 +181,6 @@ function ContaCoopContent() {
     []
   );
 
-  const dataRevision = useSyncExternalStore(subscribe, getDataRevision, () => 0);
-
   const cnpjFromData =
     useAppDataSelector((data) => {
       if (!user) return "";
@@ -220,28 +239,50 @@ function ContaCoopContent() {
     [cooperadosAtivos]
   );
 
-  const lastDashboardRevisionReloadRef = useRef(0);
-
   const [creditosBaseColetivo, setCreditosBaseColetivo] = useState<Record<string, number>>({});
+  const creditosBaseContextRef = useRef("");
+  const limitesListaPendingRef = useRef(false);
+  const limitesListaFetchedAtRef = useRef(0);
 
-  useEffect(() => {
+  const recomputeCreditosBaseLocal = useCallback(() => {
     if (!user?.cooperativaId || !cooperadoIdsAtivos.length) {
       setCreditosBaseColetivo({});
+      creditosBaseContextRef.current = "";
+      return;
+    }
+    const t0 = contaCoopPerfStart("buildCreditosBaseMapCached");
+    const map = buildCreditosBaseMapCached(getData(), cooperadoIdsAtivos, user.cooperativaId);
+    contaCoopPerfEnd("buildCreditosBaseMapCached", t0);
+    creditosBaseContextRef.current = `${user.cooperativaId}:${cooperadoIdsKey}`;
+    creditosBaseRef.current = map;
+    setCreditosBaseColetivo(map);
+  }, [user?.cooperativaId, cooperadoIdsAtivos, cooperadoIdsKey]);
+
+  /** Crédito-base local (LASTRO/M6) — só abas painel/limites; não reage a sync global do AppData. */
+  useEffect(() => {
+    if (tab !== "painel" && tab !== "limites") return;
+    if (!user?.cooperativaId || !cooperadoIdsAtivos.length) {
+      setCreditosBaseColetivo({});
+      creditosBaseContextRef.current = "";
+      return;
+    }
+    const contextKey = `${user.cooperativaId}:${cooperadoIdsKey}`;
+    if (creditosBaseContextRef.current === contextKey) {
       return;
     }
     let cancelled = false;
-    const coopId = user.cooperativaId;
-    const ids = cooperadoIdsAtivos;
-    const compute = () => {
-      if (cancelled) return;
-      setCreditosBaseColetivo(buildCreditosBaseMapCached(getData(), ids, coopId));
-    };
-    const cancelIdle = scheduleContaCoopAuxSync(compute, { idleTimeoutMs: 80, fallbackMs: 500 });
+    const cancelIdle = scheduleContaCoopAuxSync(
+      () => {
+        if (cancelled) return;
+        recomputeCreditosBaseLocal();
+      },
+      { idleTimeoutMs: 1_500, fallbackMs: 4_000 }
+    );
     return () => {
       cancelled = true;
       cancelIdle();
     };
-  }, [user?.cooperativaId, cooperadoIdsKey, dataRevision, cooperadoIdsAtivos]);
+  }, [tab, user?.cooperativaId, cooperadoIdsKey, cooperadoIdsAtivos.length, recomputeCreditosBaseLocal]);
 
   const creditosBaseRef = useRef(creditosBaseColetivo);
   creditosBaseRef.current = creditosBaseColetivo;
@@ -268,7 +309,10 @@ function ContaCoopContent() {
   const syncLimitesComFicha = useCallback(
     async (opts?: { background?: boolean }) => {
       if (!cnpj || !user?.cooperativaId || !cooperadoIdsAtivos.length) return [];
+      if (limitesListaPendingRef.current) return [];
       if (!opts?.background) setLimitesRefreshing(true);
+      limitesListaPendingRef.current = true;
+      const t0 = contaCoopPerfStart("sync-limite+limites");
       try {
         const fresh = await refreshHbCreditLimitesStaff({
           cnpj,
@@ -276,14 +320,47 @@ function ContaCoopContent() {
           cooperadoIds: cooperadoIdsAtivos,
         });
         setLimites(fresh);
+        limitesListaFetchedAtRef.current = Date.now();
         return fresh;
       } catch {
         return [];
       } finally {
+        contaCoopPerfEnd("sync-limite+limites", t0);
+        limitesListaPendingRef.current = false;
         setLimitesRefreshing(false);
       }
     },
     [cnpj, cooperadoIdsAtivos, user?.cooperativaId]
+  );
+
+  const revalidateLimitesLista = useCallback(
+    async (opts?: { background?: boolean; force?: boolean }) => {
+      if (!cnpj || cnpj.length !== 14) return;
+      if (limitesListaPendingRef.current) return;
+      if (
+        !opts?.force &&
+        limitesListaFetchedAtRef.current > 0 &&
+        Date.now() - limitesListaFetchedAtRef.current < LIMITES_LISTA_STALE_MS
+      ) {
+        return;
+      }
+      limitesListaPendingRef.current = true;
+      if (!opts?.background) setLimitesRefreshing(true);
+      const t0 = contaCoopPerfStart("GET /api/credit/limites");
+      try {
+        const fresh = await fetchCreditLimites(cnpj);
+        setLimites(fresh);
+        gravarHbCreditLimitesPersistidos(cnpj, fresh);
+        limitesListaFetchedAtRef.current = Date.now();
+      } catch {
+        /* mantém cache/persistidos */
+      } finally {
+        contaCoopPerfEnd("GET /api/credit/limites", t0);
+        limitesListaPendingRef.current = false;
+        setLimitesRefreshing(false);
+      }
+    },
+    [cnpj]
   );
 
   const loadParceiros = useCallback(async () => {
@@ -320,6 +397,7 @@ function ContaCoopContent() {
     if (!background) setLoading(true);
     else setDashboardRefreshing(true);
     setError("");
+    const t0 = contaCoopPerfStart("POST /api/credit/dashboard");
     try {
       const coopId = user?.cooperativaId ?? "";
       const ids = cooperadoIdsAtivosRef.current;
@@ -345,6 +423,7 @@ function ContaCoopContent() {
       }
       setLoading(false);
     } finally {
+      contaCoopPerfEnd("POST /api/credit/dashboard", t0);
       setDashboardRefreshing(false);
     }
   }, [cnpj, user?.cooperativaId]);
@@ -364,21 +443,13 @@ function ContaCoopContent() {
     }
     if (snapLimites?.limites.length) {
       setLimites(snapLimites.limites);
+      limitesListaFetchedAtRef.current = snapLimites.savedAt
+        ? Date.parse(snapLimites.savedAt) || Date.now()
+        : Date.now();
     }
     void reloadRef.current({ background });
-  }, [cnpj]);
-
-  useEffect(() => {
-    if (!cnpj || !dashboard) return;
-    if (tab !== "painel" && tab !== "limites") return;
-    const timer = window.setTimeout(() => {
-      const now = Date.now();
-      if (now - lastDashboardRevisionReloadRef.current < 15_000) return;
-      lastDashboardRevisionReloadRef.current = now;
-      void reloadRef.current({ background: true });
-    }, 8_000);
-    return () => window.clearTimeout(timer);
-  }, [dataRevision, cnpj, tab, dashboard]);
+    void revalidateLimitesLista({ background: true, force: !snapLimites?.limites.length });
+  }, [cnpj, revalidateLimitesLista]);
 
   const parceirosTabs: Tab[] = ["mercados", "conferir_nf", "liquidar", "estornos"];
   useEffect(() => {
@@ -397,16 +468,12 @@ function ContaCoopContent() {
     return cancelIdle;
   }, [tab, cnpj, loadPinAndPixRequests]);
 
+  /** Revalidação leve da lista (GET limites) — coalescida e só se stale; sem sync-limite automático. */
   useEffect(() => {
     if (tab !== "limites" && tab !== "painel") return;
-    if (!cnpj || !user?.cooperativaId || !cooperadoIdsAtivos.length) return;
-    return scheduleContaCoopAuxSync(
-      () => {
-        void syncLimitesComFicha({ background: true });
-      },
-      { idleTimeoutMs: 2_500, fallbackMs: 6_000 }
-    );
-  }, [tab, cnpj, user?.cooperativaId, cooperadoIdsKey, syncLimitesComFicha, cooperadoIdsAtivos.length]);
+    if (!cnpj) return;
+    void revalidateLimitesLista({ background: true });
+  }, [tab, cnpj, revalidateLimitesLista]);
 
   useEffect(() => {
     const p = dashboard?.teto.tetoGlobalPercent;
@@ -415,6 +482,7 @@ function ContaCoopContent() {
 
   const salvarTeto = async () => {
     if (!cnpj) return;
+    recomputeCreditosBaseLocal();
     setBusy(true);
     setError("");
     try {
@@ -435,6 +503,7 @@ function ContaCoopContent() {
 
   const salvarLimiteIndividual = async () => {
     if (!cnpj || !cooperadoId) return;
+    recomputeCreditosBaseLocal();
     setBusy(true);
     setError("");
     try {
@@ -464,6 +533,7 @@ function ContaCoopContent() {
     setBusy(true);
     setError("");
     try {
+      recomputeCreditosBaseLocal();
       const res = await postCreditLimites({
         action: "preview_coletivo",
         cnpj,
@@ -489,6 +559,7 @@ function ContaCoopContent() {
     setBusy(true);
     setError("");
     try {
+      recomputeCreditosBaseLocal();
       await postCreditLimites({
         action: "set_coletivo",
         cnpj,
@@ -673,7 +744,6 @@ function ContaCoopContent() {
     Boolean(limite.pinLockedUntil && new Date(limite.pinLockedUntil).getTime() > Date.now());
 
   if (cnpjResolving && !cnpj) return <PageSkeleton />;
-  if (loading && !dashboard && Boolean(cnpj)) return <PageSkeleton />;
 
   if (!cnpj) {
     return (
@@ -688,8 +758,6 @@ function ContaCoopContent() {
       </div>
     );
   }
-
-  if (loading && !dashboard) return <PageSkeleton />;
 
   return (
     <div className="mx-auto max-w-5xl space-y-5 pb-8">
@@ -721,7 +789,11 @@ function ContaCoopContent() {
         onChange={handleTabChange}
       />
 
-      {tab === "painel" && dashboard && (
+      {tab === "painel" && (
+        <>
+          {loading && !dashboard ? (
+            <PageSkeleton compact />
+          ) : dashboard ? (
         <div className="space-y-4">
           {dashboardRefreshing && (
             <p className="text-xs text-gray-500">Atualizando painel com a nuvem…</p>
@@ -873,14 +945,14 @@ function ContaCoopContent() {
             </Card>
           </div>
         </div>
+          ) : null}
+        </>
       )}
 
       {tab === "limites" && (
         <div className="space-y-6">
           {limitesRefreshing && (
-            <p className="text-xs text-gray-500">
-              Sincronizando crédito da ficha (BIC) com limites na nuvem…
-            </p>
+            <p className="text-xs text-gray-500">Atualizando limites na nuvem…</p>
           )}
           <AlertBanner variant="info">
             Se o cooperado esquecer o PIN de pagamento, ele pode solicitar reset em Minha Conta Coop. Você confirma

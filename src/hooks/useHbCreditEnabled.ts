@@ -2,7 +2,10 @@
 
 import { useEffect, useState } from "react";
 import { isHbCreditEnabledClient } from "@/modules/hb-credit/config";
-import { isHbCreditCooperadoNavEligible } from "@/permissions";
+import {
+  isHbCreditCooperadoNavEligible,
+  isHbCreditStaffNavEligible,
+} from "@/permissions";
 
 export type HbCreditFlagStatus = "loading" | "enabled" | "disabled" | "error";
 
@@ -11,6 +14,8 @@ export interface HbCreditFlagState {
   enabled: boolean;
   /** Menu / atalhos cooperado — inclui UI pública antes do status remoto. */
   navEnabled: boolean;
+  cooperadoNavEligible: boolean;
+  staffNavEligible: boolean;
   status: HbCreditFlagStatus;
   loading: boolean;
   clientFlag: boolean;
@@ -146,11 +151,16 @@ export function useHbCreditEnabled(
   const cooperadoNavEligible = user
     ? isHbCreditCooperadoNavEligible(user, status, serverEnabled === true)
     : false;
-  const navEnabled = enabled || cooperadoNavEligible;
+  const staffNavEligible = user
+    ? isHbCreditStaffNavEligible(user, status, serverEnabled === true)
+    : false;
+  const navEnabled = enabled || cooperadoNavEligible || staffNavEligible;
 
   return {
     enabled,
     navEnabled,
+    cooperadoNavEligible,
+    staffNavEligible,
     status,
     loading: status === "loading",
     clientFlag,
@@ -160,4 +170,8 @@ export function useHbCreditEnabled(
 }
 
 /** Menu HB Créditos: reexporta regra central de permissions. */
-export { isHbCreditCooperadoNavEligible, isHbCreditNavVisible } from "@/permissions";
+export {
+  isHbCreditCooperadoNavEligible,
+  isHbCreditStaffNavEligible,
+  isHbCreditNavVisible,
+} from "@/permissions";

@@ -9,8 +9,7 @@ import { hbCreditCreditoBaseReais } from "@/lib/hb-credit/hbCreditLeituraBic";
 import { resolverCooperadoIdCanonico } from "@/services/cooperadoCloudService";
 
 /**
- * Crédito base HB = o que o cooperado vê em “A receber”, com fichas pendentes válidas por mês.
- * Exclui meses quitados, PIX aguardando assinatura e meses só com resumo fantasma (sem ficha pendente).
+ * Crédito base HB — valor a receber (M6) ou lastro de entregas conferidas; blindagem anti-fantasma separada.
  */
 export function getCreditoBaseContaCoopReais(
   data: AppData,
