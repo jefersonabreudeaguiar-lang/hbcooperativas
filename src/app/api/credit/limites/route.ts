@@ -32,6 +32,7 @@ export async function GET(request: Request) {
   const actorId = gate.ctx.session?.sub ?? "system";
   const resyncInflated = searchParams.get("resync") === "1";
   const fast = searchParams.get("fast") === "1";
+  const persistFichaSync = searchParams.get("persist") === "1";
   const authoritativeCooperadoIds = (searchParams.get("cooperadoIds") ?? "")
     .split(",")
     .map((id) => id.trim())
@@ -41,6 +42,7 @@ export async function GET(request: Request) {
     cnpj,
     {
       resyncIfInflated: resyncInflated,
+      persistFichaSync,
       actorUserId: actorId,
       fast,
       authoritativeCooperadoIds: authoritativeCooperadoIds.length ? authoritativeCooperadoIds : undefined,

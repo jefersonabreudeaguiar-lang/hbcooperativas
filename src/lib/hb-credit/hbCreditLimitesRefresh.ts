@@ -6,6 +6,7 @@ import type { AuthoritativeCreditBaseErrorPayload } from "@/modules/hb-credit/en
 import { gravarHbCreditLimitesPersistidos } from "@/lib/hb-credit/hbCreditLimitesPersistencia";
 import { refreshContaCoopLimiteFromFicha } from "@/lib/hb-credit/syncContaCoopLimiteFromFicha";
 import { fetchCreditLimites } from "@/services/creditApiService";
+import { notifyHbCreditLimiteSynced } from "@/lib/hb-credit/hbCreditLimiteSyncEvents";
 
 export type RefreshHbCreditLimitesStaffOpts = {
   cnpj: string;
@@ -33,8 +34,10 @@ export async function refreshHbCreditLimitesStaff(
 
   const payload = await fetchCreditLimites(opts.cnpj, {
     resyncInflated: true,
+    persistFichaSync: true,
     cooperadoIds: opts.cooperadoIds,
   });
   gravarHbCreditLimitesPersistidos(opts.cnpj, payload.limites, payload.creditosBaseAuthoritativeCents);
+  notifyHbCreditLimiteSynced();
   return payload;
 }

@@ -1,5 +1,5 @@
 /**
- * GET limites completo (sem fast) reconcilia utilizado e persiste liberado = teto% × crédito-base da ficha.
+ * GET limites leve (padrão) só cap na resposta; persist=reconcile+sync ficha opt-in.
  * npx tsx scripts/test-hb-credit-limites-get-contract.ts
  */
 import assert from "node:assert/strict";
@@ -27,5 +27,8 @@ assert.ok(fast.includes("fast=1"), "GET rápido envia fast=1");
 
 const withIds = buildCreditLimitesRequestQuery(CNPJ, { cooperadoIds: ["c1", "c2"] });
 assert.ok(withIds.includes("cooperadoIds=c1%2Cc2"), "lista de ativos na query");
+
+const persist = buildCreditLimitesRequestQuery(CNPJ, { persistFichaSync: true });
+assert.ok(persist.includes("persist=1"), "sync ficha explícito envia persist=1");
 
 console.log("OK — limites GET contract (resync opt-in)");

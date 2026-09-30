@@ -530,6 +530,8 @@ export async function listLimitesCooperadosAlinhadosComBase(
     actorUserId?: string;
     /** Só contas HB na nuvem — sem operacional/notas (resposta rápida). */
     fast?: boolean;
+    /** Reconcilia “usado” e persiste liberado = teto% × base (GET explícito ou pós-sync). */
+    persistFichaSync?: boolean;
     /** Inclui bases autoritativas para todos os ativos (valor a receber na nuvem). */
     authoritativeCooperadoIds?: string[];
   }
@@ -544,53 +546,59 @@ export async function listLimitesCooperadosAlinhadosComBase(
     return { limites: limitesRaw, creditosBaseCents: {} };
   }
 
+  const persistFichaSync = opts?.persistFichaSync === true;
+
   const idsReconcile = [
     ...new Set([
       ...limitesRaw.map((l) => l.cooperadoId),
       ...(opts?.authoritativeCooperadoIds ?? []),
     ]),
   ].filter(Boolean);
-  if (idsReconcile.length) {
+  if (persistFichaSync && idsReconcile.length) {
     const actor = opts?.actorUserId ?? "system:hb_limites_amount_used_sync";
     await reconcileCooperadosAmountUsedCentsBatch(supabase, digits, idsReconcile, actor);
   }
 
-  const limites = await listLimitesCooperados(supabase, cnpj);
+  let limitesPosSync =
+    persistFichaSync && idsReconcile.length
+      ? await listLimitesCooperados(supabase, cnpj)
+      : limitesRaw;
 
   const idsParaBase = [
     ...new Set([
-      ...limites.map((l) => l.cooperadoId),
+      ...limitesPosSync.map((l) => l.cooperadoId),
       ...(opts?.authoritativeCooperadoIds ?? []),
     ]),
   ].filter(Boolean);
 
   if (!idsParaBase.length) {
-    return { limites, creditosBaseCents: {} };
+    return { limites: limitesPosSync, creditosBaseCents: {} };
   }
 
   const authoritative = await resolveAuthoritativeCreditBase(supabase, cnpj, idsParaBase);
   if (!authoritative.ok) {
     return {
-      limites,
+      limites: limitesPosSync,
       creditosBaseCents: {},
       authoritativeError: { code: authoritative.code, message: authoritative.message },
     };
   }
 
-  const actorSync = opts?.actorUserId ?? "system:hb_limites_ficha_sync";
-  const pickedBase = pickCreditosBaseForLimitSync({
-    authoritative: authoritative.creditosBaseCents,
-    cooperadoIds: idsParaBase,
-  });
-  await syncLimitesCooperadosFromCreditoBase(
-    supabase,
-    cnpj,
-    idsParaBase,
-    pickedBase.creditosBaseCents,
-    actorSync
-  );
-
-  let limitesPosSync = await listLimitesCooperados(supabase, cnpj);
+  if (persistFichaSync) {
+    const actorSync = opts?.actorUserId ?? "system:hb_limites_ficha_sync";
+    const pickedBase = pickCreditosBaseForLimitSync({
+      authoritative: authoritative.creditosBaseCents,
+      cooperadoIds: idsParaBase,
+    });
+    await syncLimitesCooperadosFromCreditoBase(
+      supabase,
+      cnpj,
+      idsParaBase,
+      pickedBase.creditosBaseCents,
+      actorSync
+    );
+    limitesPosSync = await listLimitesCooperados(supabase, cnpj);
+  }
 
   const teto = await resolveTetoGlobal(supabase, cnpj, authoritative.creditosBaseCents);
   const tetoPercent = teto.configured ? teto.percent : 0;

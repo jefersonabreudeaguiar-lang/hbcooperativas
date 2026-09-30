@@ -439,6 +439,8 @@ function MinhaContaCoopContent() {
   const cashback = account?.cashbackDisponivelCents ?? 0;
   const limite = account?.limiteLiberadoCents ?? 0;
   const usado = account?.valorUsadoCents ?? 0;
+  const podeLiberarCashback =
+    cashback > 0 && !cashbackJaNaFicha && Boolean(mesReferenciaReceber) && !isOffline && !busy;
   const usoPercent = limite > 0 ? Math.min(100, Math.round((usado / limite) * 100)) : 0;
   const pagamentoBloqueado = !hasPin || account?.bloqueado || isOffline;
   const effectiveDisponivel = disponivel + (useCashback ? cashback : 0);
@@ -485,18 +487,45 @@ function MinhaContaCoopContent() {
       {tabEverOpened.inicio && (
         <div className={tabPanelHidden("inicio")}>
           <div className="overflow-hidden rounded-2xl bg-gradient-to-br from-green-800 via-green-700 to-emerald-600 p-4 text-white shadow-md">
-            <div className="flex items-start justify-between gap-2">
-              <div>
-                <p className="text-xs font-medium text-green-100">Disponível para usar</p>
-                <p className="mt-0.5 text-2xl font-bold tracking-tight">{formatCentsBRL(disponivel)}</p>
-              </div>
-              {cashback > 0 && (
-                <div className="rounded-xl bg-white/15 px-2.5 py-1.5 text-right backdrop-blur-sm">
-                  <p className="text-[10px] font-medium uppercase tracking-wide text-green-100">Cashback</p>
-                  <p className="text-sm font-bold">{formatCentsBRL(cashback)}</p>
-                </div>
-              )}
+            <div>
+              <p className="text-xs font-medium text-green-100">Disponível para usar</p>
+              <p className="mt-0.5 text-2xl font-bold tracking-tight">{formatCentsBRL(disponivel)}</p>
             </div>
+            {(cashback > 0 || limite > 0) && (
+              <div className="mt-3 flex flex-wrap items-stretch gap-2">
+                {cashback > 0 && (
+                  <div className="flex min-w-0 flex-1 items-center gap-1.5 rounded-xl bg-white/15 px-2 py-1.5 backdrop-blur-sm sm:flex-none">
+                    <div className="min-w-0 flex-1">
+                      <p className="text-[10px] font-medium uppercase tracking-wide text-green-100">Cashback</p>
+                      <p className="text-sm font-bold">{formatCentsBRL(cashback)}</p>
+                    </div>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="inverse"
+                      className="!px-2 !py-1 text-[11px] shrink-0"
+                      disabled={!podeLiberarCashback}
+                      title={
+                        cashbackJaNaFicha
+                          ? "Cashback já somado ao valor a receber"
+                          : !mesReferenciaReceber
+                            ? "Aguardando mês de recebimento"
+                            : "Somar cashback ao valor a receber"
+                      }
+                      onClick={() => void handleCashbackParaReceber()}
+                    >
+                      {cashbackJaNaFicha ? "Liberado" : "Liberar"}
+                    </Button>
+                  </div>
+                )}
+                <div className="flex min-w-0 flex-1 items-center gap-1.5 rounded-xl bg-white/10 px-2 py-1.5 sm:flex-none">
+                  <div className="min-w-0 flex-1">
+                    <p className="text-[10px] font-medium uppercase tracking-wide text-green-100">Crédito</p>
+                    <p className="text-sm font-bold">{formatCentsBRL(limite)}</p>
+                  </div>
+                </div>
+              </div>
+            )}
             <div className="mt-3 space-y-1.5">
               <div className="flex justify-between text-xs text-green-100">
                 <span>Usado {formatCentsBRL(usado)}</span>
@@ -516,31 +545,14 @@ function MinhaContaCoopContent() {
             )}
           </div>
 
-          {cashback > 0 && (
-            <Card className="space-y-3 border-emerald-200 bg-emerald-50/50 !p-4">
-              <div>
-                <h3 className="font-semibold text-gray-900">Cashback HB Crédito</h3>
-                <p className="mt-1 text-sm text-gray-600">
-                  Você tem {formatCentsBRL(cashback)} de cashback. Pode somar ao valor a receber do mês{" "}
-                  {mesReferenciaReceber ? `(${mesReferenciaReceber})` : ""} — aparece na ficha como entrada{" "}
-                  <span className="font-medium">{CASHBACK_HB_CREDITO_MOTIVO_AVULSO}</span>.
-                </p>
-              </div>
-              <Button
-                className="w-full"
-                variant="secondary"
-                disabled={busy || isOffline || cashbackJaNaFicha || !mesReferenciaReceber}
-                onClick={() => void handleCashbackParaReceber()}
-              >
-                {cashbackJaNaFicha ? "Cashback já no valor a receber" : "Somar cashback ao valor a receber"}
-              </Button>
-            </Card>
-          )}
-
           <div className="grid grid-cols-2 gap-2">
-            <Card className="!p-3 text-center">
-              <p className="text-[11px] text-gray-500">Crédito liberado</p>
-              <p className="mt-0.5 text-base font-bold text-gray-900">{formatCentsBRL(limite)}</p>
+            <Card className="!p-3">
+              <div className="flex items-center justify-between gap-2">
+                <div className="min-w-0 text-left">
+                  <p className="text-[11px] text-gray-500">Crédito liberado</p>
+                  <p className="mt-0.5 text-base font-bold text-gray-900">{formatCentsBRL(limite)}</p>
+                </div>
+              </div>
             </Card>
             <Card className="!p-3 text-center">
               <p className="text-[11px] text-gray-500">Já utilizado</p>

@@ -1,7 +1,7 @@
 "use client";
 
 import dynamic from "next/dynamic";
-import { useCallback, useEffect, useMemo, useRef, useState, startTransition } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, startTransition, useDeferredValue } from "react";
 import { useSearchParams } from "next/navigation";
 import { getData } from "@/services/dataStore";
 import { resolveCooperativaCnpj } from "@/services/notaPedidoCloudService";
@@ -48,6 +48,7 @@ import {
 } from "@/lib/hb-credit/hbCreditLabPolicy";
 import { useSyncContaCoopLimiteFromFicha } from "@/hooks/useSyncContaCoopLimiteFromFicha";
 import { scheduleContaCoopAuxSync } from "@/lib/hb-credit/contaCoopAuxSyncSchedule";
+import { notifyHbCreditLimiteSynced } from "@/lib/hb-credit/hbCreditLimiteSyncEvents";
 
 /** Marcações de performance — dev ou NEXT_PUBLIC_HB_CREDIT_PERF=true */
 function contaCoopPerfEnabled(): boolean {
@@ -340,9 +341,15 @@ function ContaCoopContent() {
       if (!opts?.immediate) return;
       if (!user?.cooperativaId || !cooperadoIdsAtivos.length) {
         creditosBaseComputeGenRef.current += 1;
-        setCreditosBaseColetivo({});
-        creditosBaseContextRef.current = "";
-        creditosBaseRef.current = {};
+        startTransition(() => {
+          setCreditosBaseColetivo({});
+          creditosBaseContextRef.current = "";
+          creditosBaseRef.current = {};
+        });
+        return;
+      }
+
+      if (cooperadoIdsAtivos.length > CREDITOS_BASE_SYNC_MAX_COOPERADOS) {
         return;
       }
 
@@ -352,7 +359,9 @@ function ContaCoopContent() {
       contaCoopPerfEnd("buildCreditosBaseMapCached", t0);
       creditosBaseContextRef.current = contextKey;
       creditosBaseRef.current = map;
-      setCreditosBaseColetivo(map);
+      startTransition(() => {
+        setCreditosBaseColetivo(map);
+      });
     },
     [user?.cooperativaId, cooperadoIdsAtivos, cooperadoIdsKey]
   );
@@ -417,6 +426,8 @@ function ContaCoopContent() {
     });
   }, [cooperadosAtivos, limitesPorCooperado, cnpj]);
 
+  const limitesLinhasRender = useDeferredValue(limitesLinhasCooperados);
+
   useEffect(() => {
     if (!cooperadoIdsAtivos.length) return;
     setLimites((prev) => mergeLimitesCooperado(prev, [], cooperadoIdsAtivos));
@@ -465,7 +476,9 @@ function ContaCoopContent() {
       const merged = full.authoritativeError
         ? mergeLimitesCooperado(limitesRef.current, full.limites, ids)
         : mergeLimitesCooperado([], full.limites, ids);
-      setLimites(merged);
+      startTransition(() => {
+        setLimites(merged);
+      });
       gravarHbCreditLimitesPersistidos(cnpj, merged, full.creditosBaseAuthoritativeCents);
       limitesListaFetchedAtRef.current = Date.now();
     },
@@ -568,12 +581,6 @@ function ContaCoopContent() {
     },
     [percentualLiberacaoHb]
   );
-
-  useEffect(() => {
-    if (tab !== "limites") return;
-    if (!user?.cooperativaId || !cooperadoIdsAtivos.length) return;
-    recomputeCreditosBaseLocal({ immediate: true });
-  }, [tab, user?.cooperativaId, cooperadoIdsAtivos.length, cooperadoIdsKey, recomputeCreditosBaseLocal]);
 
   const loadParceiros = useCallback(async () => {
     if (!cnpj || cnpj.length !== 14) return;
@@ -689,7 +696,7 @@ function ContaCoopContent() {
     return cancelIdle;
   }, [tab, cnpj, loadPinAndPixRequests]);
 
-  /** GET /limites — só na aba Limites, após idle (não compete com paint da aba). */
+  /** GET /limites — aba Limites: paint com cache, depois nuvem (sem persist em massa). */
   useEffect(() => {
     if (tab !== "limites") return;
     if (!cnpj) return;
@@ -698,9 +705,25 @@ function ContaCoopContent() {
     const cancelIdle = scheduleContaCoopAuxSync(
       () => {
         if (cancelled) return;
-        void revalidateLimitesLista({ background: true, force: true });
+        void (async () => {
+          const ids = cooperadoIdsAtivosRef.current;
+          if (!limitesRef.current.length && ids.length) {
+            try {
+              const fast = await fetchCreditLimites(cnpj, { fast: true, cooperadoIds: ids });
+              if (!cancelled && fast.limites.length) {
+                startTransition(() => {
+                  setLimites((prev) => mergeLimitesCooperado(prev, fast.limites, ids));
+                });
+              }
+            } catch {
+              /* mantém cache local */
+            }
+          }
+          if (cancelled) return;
+          await revalidateLimitesLista({ background: true });
+        })();
       },
-      { idleTimeoutMs: 400, fallbackMs: 1_200 }
+      { idleTimeoutMs: 300, fallbackMs: 1_500 }
     );
     return () => {
       cancelled = true;
@@ -758,7 +781,8 @@ function ContaCoopContent() {
         creditosBaseCents,
       });
       await reload();
-      await syncLimitesComFicha({ background: true });
+      await revalidateLimitesLista({ force: true, background: true });
+      notifyHbCreditLimiteSynced();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Erro ao liberar limite.");
     } finally {
@@ -816,7 +840,8 @@ function ContaCoopContent() {
       setPreviewColetivo(null);
       gravarHbCreditLimitesPersistidos(cnpj, limitesRef.current, creditosBaseRef.current, percentual);
       await reload();
-      await syncLimitesComFicha({ background: true });
+      await revalidateLimitesLista({ force: true, background: true });
+      notifyHbCreditLimiteSynced();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Erro ao liberar limites.");
     } finally {
@@ -1301,7 +1326,7 @@ function ContaCoopContent() {
                   </tr>
                 </thead>
                 <tbody>
-                  {limitesLinhasCooperados.map((l) => {
+                  {limitesLinhasRender.map((l) => {
                     const baseCents = creditosBaseColetivo[l.cooperadoId] ?? 0;
                     const exib = valoresLimiteExibidos(l, baseCents);
                     return (
@@ -1358,7 +1383,7 @@ function ContaCoopContent() {
                     </tr>
                     );
                   })}
-                  {!limitesLinhasCooperados.length && (
+                  {!limitesLinhasRender.length && (
                     <tr>
                       <td colSpan={7} className="p-6 text-center text-gray-500">
                         Nenhum cooperado ativo.
