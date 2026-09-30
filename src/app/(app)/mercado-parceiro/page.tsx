@@ -154,16 +154,28 @@ function MercadoParceiroContent() {
         const status = await pollCreditIntentPayment(cobrancaQr.intentId);
         if (cancelled) return;
 
-        if (status.payment) {
+        if (status.payment || status.status === "confirmada") {
+          const pay = status.payment;
           setComprovante({
             amountCents: status.amountCents,
             descricao: status.descricao,
-            cooperadoNome: status.payment.cooperadoNome,
-            cooperadoCpf: status.payment.cooperadoCpf,
-            receiptCode: status.payment.receiptCode,
-            paidAt: status.payment.paidAt,
-            transacaoId: status.payment.transacaoId,
+            cooperadoNome: pay?.cooperadoNome ?? "Cooperado",
+            cooperadoCpf: pay?.cooperadoCpf ?? "",
+            receiptCode: pay?.receiptCode ?? null,
+            paidAt: pay?.paidAt ?? new Date().toISOString(),
+            transacaoId: pay?.transacaoId ?? cobrancaQr.intentId,
           });
+          if (pay?.transacaoId) {
+            setRecebiveis((prev) => [
+              {
+                id: pay.transacaoId,
+                amountCents: status.amountCents,
+                status: "aberto",
+                createdAt: pay.paidAt,
+              },
+              ...prev.filter((r) => r.id !== pay.transacaoId),
+            ]);
+          }
           setCobrancaQr(null);
           setAguardandoPagamento(false);
           setSuccess("Pagamento confirmado!");
@@ -186,7 +198,7 @@ function MercadoParceiroContent() {
     };
 
     void verificar();
-    const timer = window.setInterval(() => void verificar(), 2000);
+    const timer = window.setInterval(() => void verificar(), 800);
     return () => {
       cancelled = true;
       window.clearInterval(timer);

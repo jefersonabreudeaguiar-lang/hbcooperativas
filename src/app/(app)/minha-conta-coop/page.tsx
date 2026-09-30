@@ -356,21 +356,41 @@ function MinhaContaCoopContent() {
         idempotencyKey: `pay:${pendingIntent.intent.id}:${cooperadoId}`,
         useCashback,
       });
-      setSuccess(
-        res.syncContaCoop === "pending"
-          ? `Pagamento aprovado! Comprovante ${res.receiptCode}. O valor a receber pode levar alguns instantes para atualizar.`
-          : `Pagamento aprovado! Comprovante ${res.receiptCode}`
-      );
+      if (account && typeof res.disponivelAposCents === "number") {
+        const nextDisponivel = Math.max(0, res.disponivelAposCents);
+        const creditDebit = creditDebitPreview;
+        const nextUsado = Math.min(
+          account.limiteLiberadoCents,
+          account.valorUsadoCents + creditDebit
+        );
+        const nextAccount = {
+          ...account,
+          valorDisponivelCents: nextDisponivel,
+          valorUsadoCents: nextUsado,
+          cashbackDisponivelCents: useCashback
+            ? Math.max(0, (account.cashbackDisponivelCents ?? 0) - Math.min(cashback, pendingIntent.intent.amountCents))
+            : account.cashbackDisponivelCents,
+        };
+        setAccount(nextAccount);
+        gravarHbCreditAccountPersistido(cnpj, cooperadoId, {
+          v: HB_CREDIT_ACCOUNT_STORAGE_VERSION,
+          account: nextAccount,
+          updatedAt: new Date().toISOString(),
+          hasPin,
+          pinResetPending,
+          savedAt: new Date().toISOString(),
+        });
+        notifyHbCreditAccountCacheUpdated();
+      }
+      setSuccess(`Pagamento aprovado · comprovante ${res.receiptCode}`);
       setPendingIntent(null);
       setQrInput("");
       setPayPin("");
       setUseCashback(false);
       handleTabChange("extrato");
-      await reload({ background: false });
-      if (res.syncContaCoop === "pending") {
-        await sleepMs(400);
-        await reload({ background: true });
-      }
+      setLedgerLoaded(false);
+      void reload({ background: true });
+      void loadLedger();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Pagamento recusado.");
     } finally {
@@ -439,12 +459,9 @@ function MinhaContaCoopContent() {
 
   const disponivel = account?.valorDisponivelCents ?? 0;
   const cashback = account?.cashbackDisponivelCents ?? 0;
-  const limite = account?.limiteLiberadoCents ?? 0;
-  const usado = account?.valorUsadoCents ?? 0;
   const paraPagar = disponivel + cashback;
   const podeLiberarCashback =
     cashback > 0 && !cashbackJaNaFicha && Boolean(mesReferenciaReceber) && !isOffline && !busy;
-  const usoPercent = limite > 0 ? Math.min(100, Math.round((usado / limite) * 100)) : 0;
   const pagamentoBloqueado = !hasPin || account?.bloqueado || isOffline;
   const effectiveDisponivel = disponivel + (useCashback ? cashback : 0);
   const creditDebitPreview = pendingIntent
@@ -455,8 +472,8 @@ function MinhaContaCoopContent() {
     <div className="mx-auto max-w-lg space-y-5 pb-8">
       <header className="space-y-1">
         <p className="text-xs font-semibold uppercase tracking-wider text-green-700">HB Créditos</p>
-        <h1 className="text-2xl font-bold text-gray-900">Pagamento nas lojas parceiras</h1>
-        <p className="text-sm text-gray-500">Limite liberado pela cooperativa · QR Code e PIN</p>
+        <h1 className="text-2xl font-bold text-gray-900">Pagar nas lojas parceiras</h1>
+        <p className="text-sm text-gray-500">Escaneie o QR do mercado e confirme com seu PIN</p>
       </header>
 
       {error && <AlertBanner variant="error">{error}</AlertBanner>}
@@ -483,39 +500,12 @@ function MinhaContaCoopContent() {
             Atualizando…
           </span>
         )}
-        <p className="text-sm font-medium text-green-100">Disponível para pagar</p>
+        <p className="text-sm font-medium text-green-100">Crédito disponível para pagar</p>
         <p className="mt-1 text-4xl font-bold tracking-tight sm:text-5xl">{formatCentsBRL(paraPagar)}</p>
-        <p className="mt-2 text-sm text-green-100/90">
-          Crédito HB {formatCentsBRL(disponivel)}
-          {cashback > 0 ? ` · Cashback ${formatCentsBRL(cashback)}` : ""}
-        </p>
-
-        <div className="mt-5 grid grid-cols-2 gap-3 text-sm">
-          <div className="rounded-2xl bg-white/10 px-3 py-2.5 backdrop-blur-sm">
-            <p className="text-[11px] font-medium uppercase tracking-wide text-green-100/80">Limite liberado</p>
-            <p className="mt-0.5 text-lg font-semibold">{formatCentsBRL(limite)}</p>
-          </div>
-          <div className="rounded-2xl bg-white/10 px-3 py-2.5 backdrop-blur-sm">
-            <p className="text-[11px] font-medium uppercase tracking-wide text-green-100/80">
-              {usado > 0 ? "Em uso" : "Nada em uso"}
-            </p>
-            <p className="mt-0.5 text-lg font-semibold">{usado > 0 ? formatCentsBRL(usado) : formatCentsBRL(0)}</p>
-          </div>
-        </div>
-
-        {limite > 0 && usado > 0 && (
-          <div className="mt-4 space-y-1.5">
-            <div className="flex justify-between text-xs text-green-100/90">
-              <span>Uso do limite</span>
-              <span>{usoPercent}%</span>
-            </div>
-            <div className="h-2 overflow-hidden rounded-full bg-green-950/40">
-              <div
-                className="h-full rounded-full bg-white/90 transition-all"
-                style={{ width: `${usoPercent}%` }}
-              />
-            </div>
-          </div>
+        {cashback > 0 && (
+          <p className="mt-2 text-sm text-green-100/90">
+            Inclui cashback {formatCentsBRL(cashback)} · crédito HB {formatCentsBRL(disponivel)}
+          </p>
         )}
 
         {cashback > 0 && (
@@ -626,56 +616,12 @@ function MinhaContaCoopContent() {
               </Button>
             </Card>
           ) : pendingIntent ? (
-            <Card className="space-y-3 border-green-300 bg-green-50/60 !p-4">
-              <div className="text-center">
-                <p className="text-xs text-gray-600">Pagando em</p>
-                <p className="text-lg font-bold text-gray-900">{pendingIntent.parceiroNome}</p>
-                <p className="mt-1 text-2xl font-bold text-green-800">
+            <Card className="space-y-4 border-green-200 bg-white !p-5 shadow-sm">
+              <div className="text-center border-b border-gray-100 pb-4">
+                <p className="text-sm text-gray-500">{pendingIntent.parceiroNome}</p>
+                <p className="mt-1 text-3xl font-bold text-gray-900">
                   {formatCentsBRL(pendingIntent.intent.amountCents)}
                 </p>
-              </div>
-              <div className="rounded-lg bg-white/80 p-2.5 text-sm">
-                <div className="flex justify-between py-1">
-                  <span className="text-gray-600">Mercado parceiro</span>
-                  <span className="font-medium text-right">{pendingIntent.parceiroNome}</span>
-                </div>
-                <div className="flex justify-between py-1">
-                  <span className="text-gray-600">Valor da compra</span>
-                  <span className="font-medium">{formatCentsBRL(pendingIntent.intent.amountCents)}</span>
-                </div>
-                <div className="flex justify-between py-1 text-xs text-gray-500">
-                  <span>Código da cobrança</span>
-                  <span className="font-mono truncate max-w-[55%] text-right" title={pendingIntent.intent.id}>
-                    {pendingIntent.intent.id.slice(-12)}
-                  </span>
-                </div>
-                <div className="flex justify-between py-1">
-                  <span className="text-gray-600">Crédito disponível</span>
-                  <span>{formatCentsBRL(pendingIntent.limite.valorDisponivelCents)}</span>
-                </div>
-                {(pendingIntent.limite.cashbackDisponivelCents ?? 0) > 0 && (
-                  <div className="flex justify-between py-1 text-green-800">
-                    <span>Cashback disponível</span>
-                    <span>{formatCentsBRL(pendingIntent.limite.cashbackDisponivelCents ?? 0)}</span>
-                  </div>
-                )}
-                {useCashback && (pendingIntent.limite.cashbackDisponivelCents ?? 0) > 0 && (
-                  <div className="flex justify-between py-1 text-green-800">
-                    <span>Cashback aplicado</span>
-                    <span>
-                      −
-                      {formatCentsBRL(
-                        Math.min(pendingIntent.limite.cashbackDisponivelCents ?? 0, pendingIntent.intent.amountCents)
-                      )}
-                    </span>
-                  </div>
-                )}
-                <div className="flex justify-between py-1 font-semibold text-green-800">
-                  <span>Crédito após pagamento</span>
-                  <span>
-                    {formatCentsBRL(pendingIntent.limite.valorDisponivelCents - creditDebitPreview)}
-                  </span>
-                </div>
               </div>
               {(pendingIntent.limite.cashbackDisponivelCents ?? 0) > 0 && (
                 <Button
@@ -685,11 +631,11 @@ function MinhaContaCoopContent() {
                   onClick={() => setUseCashback((v) => !v)}
                   disabled={busy}
                 >
-                  {useCashback ? "Cashback somado ao pagamento ✓" : "Usar cashback neste pagamento"}
+                  {useCashback ? "Usando cashback nesta compra" : "Incluir cashback nesta compra"}
                 </Button>
               )}
               <div>
-                <Label>Digite seu PIN</Label>
+                <Label>PIN de pagamento</Label>
                 <Input
                   type="password"
                   inputMode="numeric"
@@ -700,10 +646,19 @@ function MinhaContaCoopContent() {
                   className="mt-1 text-center text-2xl tracking-[0.4em]"
                   placeholder="••••"
                 />
-                <p className="mt-2 text-xs text-gray-500">
-                  Esqueceu o PIN? Use <strong>Esqueci meu PIN — solicitar reset</strong> na aba Início.
-                </p>
               </div>
+              <p className="text-xs text-gray-500 text-center">
+                Saldo após pagamento:{" "}
+                <span className="font-semibold text-gray-800">
+                  {formatCentsBRL(
+                    Math.max(
+                      0,
+                      effectiveDisponivel -
+                        Math.max(0, pendingIntent.intent.amountCents - (useCashback ? Math.min(cashback, pendingIntent.intent.amountCents) : 0))
+                    )
+                  )}
+                </span>
+              </p>
               <div className="flex gap-2">
                 <Button variant="secondary" className="flex-1" onClick={() => setPendingIntent(null)} disabled={busy}>
                   Cancelar
@@ -717,7 +672,7 @@ function MinhaContaCoopContent() {
                     effectiveDisponivel < pendingIntent.intent.amountCents
                   }
                 >
-                  Confirmar
+                  {busy ? "Processando…" : "Confirmar pagamento"}
                 </Button>
               </div>
             </Card>

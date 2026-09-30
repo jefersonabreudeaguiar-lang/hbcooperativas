@@ -39,6 +39,7 @@ import { resolverCooperadoIdCanonico } from "@/services/cooperadoCloudService";
 import {
   canAffordHbPaymentScanPreview,
   canAffordHbPaymentWithLimite,
+  hbCreditEffectiveDisponivelCents,
 } from "@/modules/hb-credit/engine/paymentAffordability";
 import { INTENT_EXPIRY_MINUTES } from "@/modules/hb-credit/config";
 import { getCurrentMesReferencia } from "@/utils/format";
@@ -672,6 +673,8 @@ export async function listLimitesCooperadosAlinhadosComBase(
 function mapLimiteRow(row: Record<string, unknown>, cashbackDisponivelCents = 0): ContaCoopLimiteCooperado {
   const limite = Number(row.limit_released_cents);
   const usado = Number(row.amount_used_cents);
+  const capRaw = row.financial_limit_cap_cents;
+  const cap = capRaw == null || capRaw === "" ? null : Number(capRaw);
   const status = String(row.status ?? "active");
   return {
     id: String(row.id),
@@ -679,7 +682,7 @@ function mapLimiteRow(row: Record<string, unknown>, cashbackDisponivelCents = 0)
     cooperadoId: String(row.cooperado_id),
     limiteLiberadoCents: limite,
     valorUsadoCents: usado,
-    valorDisponivelCents: computeDisponivel(limite, usado),
+    valorDisponivelCents: hbCreditEffectiveDisponivelCents(limite, cap, usado),
     bloqueado: status === "blocked",
     hasFinancialPin: Boolean(row.pin_hash),
     pinLockedUntil: row.pin_locked_until ? String(row.pin_locked_until) : null,
@@ -1484,10 +1487,12 @@ export async function getLimiteCooperado(
   const expectedUsado = await resolveExpectedAmountUsedCentsForCooperado(supabase, digits, cooperadoId);
   const liberado = mapped.limiteLiberadoCents;
   const usado = Math.min(Math.max(0, expectedUsado), liberado >= 0 ? liberado : expectedUsado);
+  const capRaw = found.row.financial_limit_cap_cents;
+  const cap = capRaw == null || capRaw === "" ? null : Number(capRaw);
   const withUsado = {
     ...mapped,
     valorUsadoCents: usado,
-    valorDisponivelCents: computeDisponivel(liberado, usado),
+    valorDisponivelCents: hbCreditEffectiveDisponivelCents(liberado, cap, usado),
   };
 
   if (withUsado.cooperadoId !== cooperadoId) {
@@ -2261,6 +2266,36 @@ export async function validateIntentForCooperado(
     limite,
     parceiroNome: String(parceiro.name),
   };
+}
+
+/** Reconcile + sync-limite se STALE — pagamento não trava na fila operacional. */
+export async function prepareHbCreditPaymentAuthorize(
+  supabase: SupabaseClient,
+  cnpj: string,
+  cooperadoId: string,
+  actorUserId: string
+): Promise<void> {
+  const digits = normalizeCnpj(cnpj);
+  const cooperados = await fetchCooperadosFromStorage(supabase, digits).catch(() => []);
+  const titularIds = cooperados.length ? titularCooperadoIds(cooperados, cooperadoId) : [cooperadoId];
+  await reconcileCooperadosAmountUsedCentsBatch(supabase, digits, titularIds).catch(() => {});
+
+  const found = await fetchHbCreditAccountRowForCooperado(supabase, cnpj, cooperadoId);
+  if (!found) return;
+  const syncState = String(found.row.financial_limit_sync_state ?? "SYNCED");
+  if (syncState === "SYNCED") return;
+
+  const auth = await resolveAuthoritativeCreditBase(supabase, digits, [cooperadoId]);
+  if (auth.ok) {
+    await syncLimitesCooperadosFromCreditoBase(
+      supabase,
+      digits,
+      [cooperadoId],
+      auth.creditosBaseCents,
+      actorUserId
+    ).catch(() => {});
+  }
+  await markHbCreditLimitSynced(supabase, { cnpj: digits, cooperadoId, actorUserId }).catch(() => {});
 }
 
 export async function authorizePayment(
@@ -3431,16 +3466,18 @@ export async function getPartnerPaymentIntentStatus(
   if (error) return { ok: false, error: error.message };
   if (!intent) return { ok: false, error: "Cobrança não encontrada." };
 
-  const status = intentStatusFromDb(String(intent.status));
+  const rawStatus = String(intent.status ?? "");
+  const status = intentStatusFromDb(rawStatus);
+  const paid = status === "confirmada" || rawStatus.toUpperCase() === "CONFIRMED";
   const base: PartnerIntentPaymentStatus = {
-    status,
+    status: paid ? "confirmada" : status,
     intentId: String(intent.id),
     amountCents: Number(intent.amount_cents),
     descricao: intent.description ? String(intent.description) : undefined,
     expiresAt: String(intent.expires_at),
   };
 
-  if (status !== "confirmada") {
+  if (!paid) {
     return { ok: true, data: base };
   }
 

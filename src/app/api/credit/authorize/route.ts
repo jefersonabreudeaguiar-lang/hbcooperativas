@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { projectContaCoopDescontosAfterHbAuthorize } from "@/lib/hb-credit/repairOperacionalContaCoopDescontos";
-import { authorizePayment, parseQrPayload } from "@/lib/supabase/contaCoopStorage";
+import { authorizePayment, parseQrPayload, prepareHbCreditPaymentAuthorize } from "@/lib/supabase/contaCoopStorage";
 import { requireCreditApi, requireCreditCnpj, resolveCreditPaymentCooperadoId } from "@/lib/security/creditGuard";
 import { normalizeCnpj } from "@/utils/cooperativa";
 import { FINANCIAL_PIN_MIN_LENGTH } from "@/modules/hb-credit/config";
@@ -38,6 +38,9 @@ export async function POST(request: Request) {
   const resolved = resolveCreditPaymentCooperadoId(gate.ctx, request, cooperadoId);
   if ("response" in resolved) return resolved.response;
   cooperadoId = resolved.cooperadoId;
+
+  const actorId = gate.ctx.session?.sub ?? cooperadoId;
+  await prepareHbCreditPaymentAuthorize(gate.ctx.supabase, cnpj, cooperadoId, actorId);
 
   const result = await authorizePayment(gate.ctx.supabase, {
     intentId,

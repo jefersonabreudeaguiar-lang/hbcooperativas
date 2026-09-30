@@ -1,5 +1,19 @@
 import type { ContaCoopLimiteCooperado } from "@/modules/hb-credit/types";
 
+/** Espelha hb_credit_effective_disponivel_cents (cap × usado). */
+export function hbCreditEffectiveDisponivelCents(
+  limitReleasedCents: number,
+  financialLimitCapCents: number | null | undefined,
+  amountUsedCents: number
+): number {
+  const released = Math.max(0, Math.round(limitReleasedCents));
+  const cap =
+    financialLimitCapCents == null ? released : Math.max(0, Math.round(financialLimitCapCents));
+  const effectiveLimit = Math.min(released, cap);
+  const usado = Math.max(0, Math.round(amountUsedCents));
+  return Math.max(0, effectiveLimit - usado);
+}
+
 /** Débito de crédito HB após aplicar cashback (espelha hb_credit_authorize_payment). */
 export function hbCreditDebitFromGrossCents(grossCents: number, useCashback: boolean, cashbackAvailableCents: number): number {
   const gross = Math.max(0, Math.round(grossCents));

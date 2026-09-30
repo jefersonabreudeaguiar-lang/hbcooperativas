@@ -91,9 +91,7 @@ export function CooperadoHbCreditResumoCard({ cnpj }: Props) {
           <p className="mt-1 text-sm text-emerald-50/90">Disponível para pagar nos mercados parceiros</p>
           <p className="mt-2 text-3xl font-bold tracking-tight sm:text-4xl">{formatCentsBRL(totals.paraPagar)}</p>
           <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-xs text-emerald-100/90">
-            <span>Crédito {formatCentsBRL(totals.credito)}</span>
             {totals.cashback > 0 && <span>Cashback {formatCentsBRL(totals.cashback)}</span>}
-            {totals.usado > 0 && <span>Em uso {formatCentsBRL(totals.usado)}</span>}
           </div>
         </div>
         <span className="shrink-0 text-sm font-semibold text-white/90 pt-1">Detalhes →</span>

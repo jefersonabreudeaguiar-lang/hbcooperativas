@@ -346,6 +346,8 @@ export async function authorizeCreditPayment(input: {
   >(res);
   if (!res.ok || !data.ok) throw new Error(data.error ?? "Pagamento recusado.");
 
+  notifyHbCreditLimiteSynced({ immediate: true });
+
   const local = getData();
   const coopId =
     input.cooperativaId ??
@@ -375,23 +377,22 @@ export async function authorizeCreditPayment(input: {
 
     const maxAttempts = data.projecaoPendente ? 3 : 1;
 
-    for (let attempt = 0; attempt < maxAttempts; attempt++) {
-      if (attempt > 0) {
-        await sleepMs(HB_REFRESH_RETRY_MS);
-      }
-      try {
-        await refreshContaCoopValorReceberAfterHbTransaction(refreshOpts);
-        syncContaCoop = "ok";
-        syncContaCoopError = undefined;
-        notifyHbCreditLimiteSynced({ immediate: true });
-        break;
-      } catch (e) {
-        syncContaCoopError = e instanceof Error ? e.message : "refresh_conta_coop_failed";
-        if (attempt === maxAttempts - 1) {
-          syncContaCoop = "pending";
+    void (async () => {
+      for (let attempt = 0; attempt < maxAttempts; attempt++) {
+        if (attempt > 0) {
+          await sleepMs(HB_REFRESH_RETRY_MS);
+        }
+        try {
+          await refreshContaCoopValorReceberAfterHbTransaction(refreshOpts);
+          notifyHbCreditLimiteSynced({ immediate: true });
+          return;
+        } catch {
+          if (attempt === maxAttempts - 1) {
+            /* ficha operacional — pagamento HB já confirmado na nuvem */
+          }
         }
       }
-    }
+    })();
   } else {
     syncContaCoop = "pending";
     syncContaCoopError = "refresh_not_executed_missing_cooperativa_or_cnpj";
