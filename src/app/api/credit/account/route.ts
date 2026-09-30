@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
 import {
   getLimiteCooperado,
-  getLimiteCooperadoAlinhadoAEntregas,
   getHbCreditAccountRevision,
   hasFinancialPin,
   hasPendingCooperadoPinResetRequest,
@@ -42,13 +41,8 @@ export async function GET(request: Request) {
     return NextResponse.json({ ok: true, revision });
   }
 
-  const actorId = gate.ctx.session?.sub ?? cooperadoId;
-  /** Não bloquear a abertura: exibe cap imediato e re-sync inflado em background (POST sync-limite). */
-  const limite = await getLimiteCooperadoAlinhadoAEntregas(gate.ctx.supabase, cnpj, cooperadoId, {
-    resyncIfInflated: true,
-    awaitResync: false,
-    actorUserId: actorId,
-  });
+  /** Mesmos valores da aba Limites (nuvem + titular); cap M6 só no pagamento (authorize/QR). */
+  const limite = await getLimiteCooperado(gate.ctx.supabase, cnpj, cooperadoId);
   const pinResetPending = await hasPendingCooperadoPinResetRequest(
     gate.ctx.supabase,
     cnpj,

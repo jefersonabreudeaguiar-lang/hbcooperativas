@@ -32,6 +32,8 @@ import { formatCentsBRL } from "@/modules/hb-credit/engine/money";
 import { buildCreditosBaseMapCached, calcLimiteFromPercentual } from "@/modules/hb-credit/engine/creditBaseFromFicha";
 import type { AuthoritativeCreditBaseErrorPayload } from "@/modules/hb-credit/engine/creditBaseAuthoritative";
 import type { ContaCoopDashboard, ContaCoopLimiteCooperado, ContaCoopParceiro, ContaCoopCooperadoPinResetRequest, ContaCoopPixChangeRequest } from "@/modules/hb-credit/types";
+import type { Cooperado } from "@/types";
+import { titularCooperadoIds } from "@/lib/hb-credit/repairOperacionalContaCoopDescontos";
 import { cn, formatMesReferencia } from "@/utils/format";
 import { PageSkeleton } from "@/components/ui/PageSkeleton";
 import {
@@ -152,6 +154,25 @@ function limitePlaceholderCooperado(cooperadoId: string, cooperativaCnpj: string
     cashbackDisponivelCents: 0,
     updatedAt: "",
   };
+}
+
+/** Conta HB na nuvem — mesma regra do app cooperado (titular / maior liberado). */
+function resolveLimiteExibicaoCooperado(
+  cooperadoId: string,
+  cooperativaCnpj: string,
+  limites: ContaCoopLimiteCooperado[],
+  cooperados: Cooperado[]
+): ContaCoopLimiteCooperado {
+  const direct = limites.find((l) => l.cooperadoId === cooperadoId);
+  if (direct) return direct;
+  const titularIds = new Set(titularCooperadoIds(cooperados, cooperadoId));
+  let best: ContaCoopLimiteCooperado | undefined;
+  for (const l of limites) {
+    if (!titularIds.has(l.cooperadoId)) continue;
+    if (!best || l.limiteLiberadoCents > best.limiteLiberadoCents) best = l;
+  }
+  if (best) return { ...best, cooperadoId };
+  return limitePlaceholderCooperado(cooperadoId, cooperativaCnpj);
 }
 
 function limiteTemContaHb(limite: ContaCoopLimiteCooperado): boolean {
@@ -419,12 +440,10 @@ function ContaCoopContent() {
 
   const limitesLinhasCooperados = useMemo(() => {
     if (!cnpj) return [];
-    return cooperadosAtivos.map((c) => {
-      const existente = limitesPorCooperado.get(c.id);
-      if (existente) return existente;
-      return limitePlaceholderCooperado(c.id, cnpj);
-    });
-  }, [cooperadosAtivos, limitesPorCooperado, cnpj]);
+    return cooperadosAtivos.map((c) =>
+      resolveLimiteExibicaoCooperado(c.id, cnpj, limites, cooperadosAtivos)
+    );
+  }, [cooperadosAtivos, limites, cnpj]);
 
   const limitesLinhasRender = useDeferredValue(limitesLinhasCooperados);
 
