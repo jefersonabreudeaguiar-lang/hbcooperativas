@@ -30,6 +30,7 @@ import {
 } from "@/services/creditApiService";
 import { formatCentsBRL } from "@/modules/hb-credit/engine/money";
 import { buildCreditosBaseMapCached } from "@/modules/hb-credit/engine/creditBaseFromFicha";
+import type { AuthoritativeCreditBaseErrorPayload } from "@/modules/hb-credit/engine/creditBaseAuthoritative";
 import type { ContaCoopDashboard, ContaCoopLimiteCooperado, ContaCoopParceiro, ContaCoopCooperadoPinResetRequest, ContaCoopPixChangeRequest } from "@/modules/hb-credit/types";
 import { cn, formatMesReferencia } from "@/utils/format";
 import { PageSkeleton } from "@/components/ui/PageSkeleton";
@@ -39,6 +40,7 @@ import {
 } from "@/lib/hb-credit/hbCreditDashboardPersistencia";
 import { lerHbCreditLimitesPersistidos, gravarHbCreditLimitesPersistidos } from "@/lib/hb-credit/hbCreditLimitesPersistencia";
 import { refreshHbCreditLimitesStaff } from "@/lib/hb-credit/hbCreditLimitesRefresh";
+import { mensagemAvisoBaseAuthoritativeLimites } from "@/lib/hb-credit/hbCreditLimitesStaffMessages";
 import { ensureHbCreditLabLiberacaoPadrao } from "@/lib/hb-credit/ensureHbCreditLabLiberacaoPadrao";
 import {
   HB_CREDIT_LAB_LIBERACAO_PERCENT_DEFAULT,
@@ -155,11 +157,21 @@ function limiteTemContaHb(limite: ContaCoopLimiteCooperado): boolean {
   return !limite.id.startsWith("sem-conta-");
 }
 
+function exibirBadgeSemContaHb(limite: ContaCoopLimiteCooperado, creditoBaseCents: number): boolean {
+  if (limiteTemContaHb(limite)) return false;
+  if (creditoBaseCents > 0) return false;
+  if (limite.limiteLiberadoCents > 0 || limite.valorUsadoCents > 0) return false;
+  return true;
+}
+
 function mergeLimitesCooperado(
   prev: ContaCoopLimiteCooperado[],
   fresh: ContaCoopLimiteCooperado[],
   cooperadoIdsAtivosOrdem: string[]
 ): ContaCoopLimiteCooperado[] {
+  if (!cooperadoIdsAtivosOrdem.length) {
+    return fresh.length ? fresh : prev;
+  }
   const ativos = new Set(cooperadoIdsAtivosOrdem);
   const map = new Map<string, ContaCoopLimiteCooperado>();
   for (const l of prev) {
@@ -228,6 +240,7 @@ function ContaCoopContent() {
   const [loading, setLoading] = useState(true);
   const [dashboardRefreshing, setDashboardRefreshing] = useState(false);
   const [limitesRefreshing, setLimitesRefreshing] = useState(false);
+  const [limitesListaAviso, setLimitesListaAviso] = useState("");
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
   const [dashboard, setDashboard] = useState<ContaCoopDashboard | null>(null);
@@ -426,6 +439,37 @@ function ContaCoopContent() {
     enabled: false,
   });
 
+  const applyLimitesFetchResult = useCallback(
+    (
+      full: {
+        limites: ContaCoopLimiteCooperado[];
+        creditosBaseAuthoritativeCents?: Record<string, number>;
+        authoritativeError?: AuthoritativeCreditBaseErrorPayload;
+      },
+      ids: string[]
+    ) => {
+      if (full.authoritativeError) {
+        setLimitesListaAviso(mensagemAvisoBaseAuthoritativeLimites(full.authoritativeError));
+        startTransition(() => {
+          setCreditosBaseColetivo((prev) => {
+            const next = { ...prev };
+            for (const id of ids) next[id] = 0;
+            creditosBaseRef.current = next;
+            return next;
+          });
+        });
+      } else {
+        setLimitesListaAviso("");
+        applyCreditosBaseFromServer(full.creditosBaseAuthoritativeCents);
+      }
+      const merged = mergeLimitesCooperado(limitesRef.current, full.limites, ids);
+      setLimites(merged);
+      gravarHbCreditLimitesPersistidos(cnpj, merged, full.creditosBaseAuthoritativeCents);
+      limitesListaFetchedAtRef.current = Date.now();
+    },
+    [cnpj, applyCreditosBaseFromServer]
+  );
+
   const syncLimitesComFicha = useCallback(
     async (opts?: { background?: boolean }) => {
       if (!cnpj || !user?.cooperativaId || !cooperadoIdsAtivos.length) return [];
@@ -434,18 +478,17 @@ function ContaCoopContent() {
       limitesListaPendingRef.current = true;
       const t0 = contaCoopPerfStart("sync-limite+limites");
       try {
-        const { limites: fresh, creditosBaseAuthoritativeCents } = await refreshHbCreditLimitesStaff({
+        const result = await refreshHbCreditLimitesStaff({
           cnpj,
           cooperativaId: user.cooperativaId,
           cooperadoIds: cooperadoIdsAtivos,
         });
-        applyCreditosBaseFromServer(creditosBaseAuthoritativeCents);
-        const merged = mergeLimitesCooperado(limitesRef.current, fresh, cooperadoIdsAtivos);
-        setLimites(merged);
-        gravarHbCreditLimitesPersistidos(cnpj, merged, creditosBaseAuthoritativeCents);
-        limitesListaFetchedAtRef.current = Date.now();
-        return merged;
-      } catch {
+        applyLimitesFetchResult(result, cooperadoIdsAtivos);
+        return limitesRef.current;
+      } catch (e) {
+        setLimitesListaAviso(
+          e instanceof Error ? e.message : "Não foi possível sincronizar limites com a ficha."
+        );
         return [];
       } finally {
         contaCoopPerfEnd("sync-limite+limites", t0);
@@ -453,12 +496,20 @@ function ContaCoopContent() {
         setLimitesRefreshing(false);
       }
     },
-    [cnpj, cooperadoIdsAtivos, user?.cooperativaId, applyCreditosBaseFromServer]
+    [cnpj, cooperadoIdsAtivos, user?.cooperativaId, applyLimitesFetchResult]
   );
+
+  const atualizarLimitesNaNuvem = useCallback(async () => {
+    if (!cnpj || !user?.cooperativaId || !cooperadoIdsAtivos.length) return;
+    setLimitesListaAviso("");
+    limitesListaFetchedAtRef.current = 0;
+    await syncLimitesComFicha({ background: false });
+  }, [cnpj, user?.cooperativaId, cooperadoIdsAtivos.length, syncLimitesComFicha]);
 
   const revalidateLimitesLista = useCallback(
     async (opts?: { background?: boolean; force?: boolean }) => {
       if (!cnpj || cnpj.length !== 14) return;
+      if (!cooperadoIdsAtivosRef.current.length) return;
       if (limitesListaPendingRef.current) return;
       if (
         !opts?.force &&
@@ -475,20 +526,18 @@ function ContaCoopContent() {
         const full = await fetchCreditLimites(cnpj, {
           cooperadoIds: ids.length ? ids : undefined,
         });
-        applyCreditosBaseFromServer(full.creditosBaseAuthoritativeCents);
-        const merged = mergeLimitesCooperado(limitesRef.current, full.limites, ids);
-        setLimites(merged);
-        gravarHbCreditLimitesPersistidos(cnpj, merged, full.creditosBaseAuthoritativeCents);
-        limitesListaFetchedAtRef.current = Date.now();
-      } catch {
-        /* mantém cache/persistidos */
+        applyLimitesFetchResult(full, ids);
+      } catch (e) {
+        setLimitesListaAviso(
+          e instanceof Error ? e.message : "Não foi possível carregar limites da nuvem."
+        );
       } finally {
         contaCoopPerfEnd("GET /api/credit/limites", t0);
         limitesListaPendingRef.current = false;
         setLimitesRefreshing(false);
       }
     },
-    [cnpj, applyCreditosBaseFromServer]
+    [cnpj, applyLimitesFetchResult]
   );
 
   const loadParceiros = useCallback(async () => {
@@ -609,6 +658,7 @@ function ContaCoopContent() {
   useEffect(() => {
     if (tab !== "limites") return;
     if (!cnpj) return;
+    if (!cooperadoIdsAtivos.length) return;
     let cancelled = false;
     const cancelIdle = scheduleContaCoopAuxSync(
       () => {
@@ -621,7 +671,7 @@ function ContaCoopContent() {
       cancelled = true;
       cancelIdle();
     };
-  }, [tab, cnpj, revalidateLimitesLista]);
+  }, [tab, cnpj, cooperadoIdsAtivos.length, revalidateLimitesLista]);
 
   useEffect(() => {
     if (!cnpj) return;
@@ -1107,6 +1157,11 @@ function ContaCoopContent() {
 
       {tab === "limites" && (
         <div className="space-y-6">
+          {limitesListaAviso ? (
+            <AlertBanner variant="warning" title="Limites desatualizados">
+              {limitesListaAviso}
+            </AlertBanner>
+          ) : null}
           {limitesRefreshing && (
             <p className="text-xs text-gray-500">Atualizando valores na nuvem…</p>
           )}
@@ -1182,9 +1237,20 @@ function ContaCoopContent() {
           )}
 
           <Card className="overflow-hidden !p-0">
-            <div className="border-b bg-gray-50 px-4 py-3 text-sm text-gray-600">
-              <strong className="text-gray-900">Crédito (ficha)</strong> = valor a receber em aberto na nuvem
-              (operacional + notas), mesma base do painel HB e da tela do cooperado após sync.
+            <div className="flex flex-wrap items-center justify-between gap-3 border-b bg-gray-50 px-4 py-3 text-sm text-gray-600">
+              <p>
+                <strong className="text-gray-900">Crédito (ficha)</strong> = valor a receber em aberto na nuvem
+                (operacional + notas), mesma base do painel HB e da tela do cooperado após sync.
+              </p>
+              <Button
+                type="button"
+                size="sm"
+                variant="secondary"
+                disabled={busy || limitesRefreshing}
+                onClick={() => void atualizarLimitesNaNuvem()}
+              >
+                Atualizar limites
+              </Button>
             </div>
             <div className="overflow-x-auto">
               <table className="w-full min-w-[720px] text-sm">
@@ -1204,7 +1270,7 @@ function ContaCoopContent() {
                     <tr key={l.cooperadoId} className="border-t">
                       <td className="p-3">
                         {cooperadoNome(l.cooperadoId)}
-                        {!limiteTemContaHb(l) && (
+                        {exibirBadgeSemContaHb(l, creditosBaseColetivo[l.cooperadoId] ?? 0) && (
                           <span className="ml-2 rounded-full bg-gray-100 px-2 py-0.5 text-xs text-gray-600">
                             Sem conta HB
                           </span>

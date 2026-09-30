@@ -2,6 +2,7 @@
  * Responsável — sincroniza crédito-base (ficha/BIC) → nuvem → lista de limites.
  */
 import type { ContaCoopLimiteCooperado } from "@/modules/hb-credit/types";
+import type { AuthoritativeCreditBaseErrorPayload } from "@/modules/hb-credit/engine/creditBaseAuthoritative";
 import { gravarHbCreditLimitesPersistidos } from "@/lib/hb-credit/hbCreditLimitesPersistencia";
 import { refreshContaCoopLimiteFromFicha } from "@/lib/hb-credit/syncContaCoopLimiteFromFicha";
 import { fetchCreditLimites } from "@/services/creditApiService";
@@ -15,6 +16,7 @@ export type RefreshHbCreditLimitesStaffOpts = {
 export type RefreshHbCreditLimitesStaffResult = {
   limites: ContaCoopLimiteCooperado[];
   creditosBaseAuthoritativeCents?: Record<string, number>;
+  authoritativeError?: AuthoritativeCreditBaseErrorPayload;
 };
 
 export async function refreshHbCreditLimitesStaff(

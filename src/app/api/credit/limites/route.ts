@@ -36,7 +36,7 @@ export async function GET(request: Request) {
     .split(",")
     .map((id) => id.trim())
     .filter(Boolean);
-  const { limites, creditosBaseCents } = await listLimitesCooperadosAlinhadosComBase(
+  const { limites, creditosBaseCents, authoritativeError } = await listLimitesCooperadosAlinhadosComBase(
     gate.ctx.supabase,
     cnpj,
     {
@@ -50,6 +50,7 @@ export async function GET(request: Request) {
     ok: true,
     limites,
     creditosBaseAuthoritativeCents: creditosBaseCents,
+    authoritativeError: authoritativeError ?? undefined,
   });
 }
 

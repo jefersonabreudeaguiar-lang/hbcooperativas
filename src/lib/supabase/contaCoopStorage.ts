@@ -31,6 +31,7 @@ import type {
 import { mapAuthorizeRpcError } from "@/modules/hb-credit/engine/hbCreditLimitSyncState";
 import { computeDisponivel, formatCentsBRL } from "@/modules/hb-credit/engine/money";
 import { calcLimiteFromPercentual, calcTetoGlobalCents, sumCreditosBaseCents } from "@/modules/hb-credit/engine/creditBaseFromFicha";
+import type { AuthoritativeCreditBaseErrorPayload } from "@/modules/hb-credit/engine/creditBaseAuthoritative";
 import { resolveAuthoritativeCreditBase } from "@/modules/hb-credit/engine/creditBaseAuthoritative";
 import { pickCreditosBaseForLimitSync } from "@/modules/hb-credit/engine/creditBaseValidation";
 import { capContaCoopLimiteToAuthoritativeBase } from "@/modules/hb-credit/engine/creditBaseHbGuard";
@@ -531,7 +532,11 @@ export async function listLimitesCooperadosAlinhadosComBase(
     /** Inclui bases autoritativas para todos os ativos (valor a receber na nuvem). */
     authoritativeCooperadoIds?: string[];
   }
-): Promise<{ limites: ContaCoopLimiteCooperado[]; creditosBaseCents: Record<string, number> }> {
+): Promise<{
+  limites: ContaCoopLimiteCooperado[];
+  creditosBaseCents: Record<string, number>;
+  authoritativeError?: AuthoritativeCreditBaseErrorPayload;
+}> {
   const digits = normalizeCnpj(cnpj);
   const limitesRaw = await listLimitesCooperados(supabase, cnpj);
   if (opts?.fast) {
@@ -563,7 +568,13 @@ export async function listLimitesCooperadosAlinhadosComBase(
   }
 
   const authoritative = await resolveAuthoritativeCreditBase(supabase, cnpj, idsParaBase);
-  if (!authoritative.ok) return { limites, creditosBaseCents: {} };
+  if (!authoritative.ok) {
+    return {
+      limites,
+      creditosBaseCents: {},
+      authoritativeError: { code: authoritative.code, message: authoritative.message },
+    };
+  }
 
   const actorSync = opts?.actorUserId ?? "system:hb_limites_ficha_sync";
   const pickedBase = pickCreditosBaseForLimitSync({

@@ -5,6 +5,14 @@
 import assert from "node:assert/strict";
 import { buildCreditLimitesRequestQuery } from "../src/services/creditApiService";
 
+/** Resposta GET /limites inclui authoritativeError quando M6 na nuvem falha (ok HTTP 200). */
+export type CreditLimitesGetResponseShape = {
+  ok: boolean;
+  limites: unknown[];
+  creditosBaseAuthoritativeCents: Record<string, number>;
+  authoritativeError?: { code: string; message: string };
+};
+
 const CNPJ = "62351750000165";
 
 const light = buildCreditLimitesRequestQuery(CNPJ);

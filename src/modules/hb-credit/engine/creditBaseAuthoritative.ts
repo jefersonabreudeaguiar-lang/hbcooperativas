@@ -81,6 +81,12 @@ export type AuthoritativeCreditBaseFailureCode =
   | "OPERACIONAL_UNAVAILABLE"
   | "COOPERATIVA_NOT_FOUND";
 
+/** Erro exposto ao cliente quando a base autoritativa (M6) não pôde ser calculada. */
+export type AuthoritativeCreditBaseErrorPayload = {
+  code: AuthoritativeCreditBaseFailureCode;
+  message: string;
+};
+
 export type AuthoritativeCreditBaseResult =
   | {
       ok: true;

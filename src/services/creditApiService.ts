@@ -14,6 +14,7 @@ import type {
   ContaCoopSolicitacaoEstorno,
 } from "@/modules/hb-credit/types";
 import { refreshContaCoopValorReceberAfterHbTransaction } from "@/lib/hb-credit/syncContaCoopFichaDescontos";
+import type { AuthoritativeCreditBaseErrorPayload } from "@/modules/hb-credit/engine/creditBaseAuthoritative";
 import type { HbAuthorizeProjecaoAReceberResult } from "@/lib/hb-credit/repairOperacionalContaCoopDescontos";
 import { notifyHbCreditLimiteSynced } from "@/lib/hb-credit/hbCreditLimiteSyncEvents";
 import { bicCentralMesPrincipalQuantoVouReceber } from "@/services/bicLeituraCentralCooperado";
@@ -56,18 +57,24 @@ export function buildCreditLimitesRequestQuery(
 export async function fetchCreditLimites(
   cnpj: string,
   opts?: { resyncInflated?: boolean; fast?: boolean; cooperadoIds?: string[] }
-): Promise<{ limites: ContaCoopLimiteCooperado[]; creditosBaseAuthoritativeCents?: Record<string, number> }> {
+): Promise<{
+  limites: ContaCoopLimiteCooperado[];
+  creditosBaseAuthoritativeCents?: Record<string, number>;
+  authoritativeError?: AuthoritativeCreditBaseErrorPayload;
+}> {
   const res = await secureApiFetch(`/api/credit/limites?${buildCreditLimitesRequestQuery(cnpj, opts)}`);
   const data = await parseJson<{
     ok?: boolean;
     error?: string;
     limites?: ContaCoopLimiteCooperado[];
     creditosBaseAuthoritativeCents?: Record<string, number>;
+    authoritativeError?: AuthoritativeCreditBaseErrorPayload;
   }>(res);
   if (!res.ok || !data.ok) throw new Error(data.error ?? "Erro ao carregar limites.");
   return {
     limites: data.limites ?? [],
     creditosBaseAuthoritativeCents: data.creditosBaseAuthoritativeCents,
+    authoritativeError: data.authoritativeError,
   };
 }
 
