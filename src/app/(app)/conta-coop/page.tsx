@@ -1,7 +1,7 @@
 "use client";
 
 import dynamic from "next/dynamic";
-import { useCallback, useEffect, useMemo, useRef, useState, startTransition, useDeferredValue } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, startTransition } from "react";
 import { useSearchParams } from "next/navigation";
 import { getData } from "@/services/dataStore";
 import { resolveCooperativaCnpj } from "@/services/notaPedidoCloudService";
@@ -69,7 +69,6 @@ function contaCoopPerfEnd(label: string, startedAt: number | null): void {
 const CREDITOS_BASE_SYNC_MAX_COOPERADOS = 25;
 
 const PREVIEW_COLETIVO_ITENS_RENDER = 50;
-const LIMITES_TABELA_PAGE = 40;
 
 /** Lista GET /limites — revalidação leve (sem sync-limite). */
 const LIMITES_LISTA_STALE_MS = 120_000;
@@ -144,6 +143,41 @@ function limiteTemContaHb(limite: ContaCoopLimiteCooperado): boolean {
   return !limite.id.startsWith("sem-conta-");
 }
 
+function mergeLimitesCooperado(
+  prev: ContaCoopLimiteCooperado[],
+  fresh: ContaCoopLimiteCooperado[],
+  cooperadoIdsAtivosOrdem: string[]
+): ContaCoopLimiteCooperado[] {
+  const ativos = new Set(cooperadoIdsAtivosOrdem);
+  const map = new Map<string, ContaCoopLimiteCooperado>();
+  for (const l of prev) {
+    if (ativos.has(l.cooperadoId)) map.set(l.cooperadoId, l);
+  }
+  for (const l of fresh) {
+    if (ativos.has(l.cooperadoId)) map.set(l.cooperadoId, l);
+  }
+  return cooperadoIdsAtivosOrdem
+    .map((id) => map.get(id))
+    .filter((l): l is ContaCoopLimiteCooperado => Boolean(l));
+}
+
+function mergeCreditosBaseMaps(
+  prev: Record<string, number>,
+  fresh: Record<string, number> | undefined,
+  cooperadoIdsAtivosOrdem: string[]
+): Record<string, number> {
+  if (!fresh || !Object.keys(fresh).length) return prev;
+  const ativos = new Set(cooperadoIdsAtivosOrdem);
+  const next = { ...prev };
+  for (const [id, cents] of Object.entries(fresh)) {
+    if (ativos.has(id)) next[id] = cents;
+  }
+  for (const id of Object.keys(next)) {
+    if (!ativos.has(id)) delete next[id];
+  }
+  return next;
+}
+
 type Tab = "painel" | "limites" | "mercados" | "descontos" | "conferir_nf" | "liquidar" | "estornos";
 
 export default function ContaCoopPage() {
@@ -186,6 +220,8 @@ function ContaCoopContent() {
   const [success, setSuccess] = useState("");
   const [dashboard, setDashboard] = useState<ContaCoopDashboard | null>(null);
   const [limites, setLimites] = useState<ContaCoopLimiteCooperado[]>([]);
+  const limitesRef = useRef(limites);
+  limitesRef.current = limites;
   const [parceiros, setParceiros] = useState<ContaCoopParceiro[]>([]);
   const [parceirosLoaded, setParceirosLoaded] = useState(false);
   const [parceirosLoading, setParceirosLoading] = useState(false);
@@ -260,6 +296,9 @@ function ContaCoopContent() {
     return cooperadoIdsKey.split("\u001f").filter(Boolean);
   }, [cooperadoIdsKey]);
 
+  const cooperadoIdsAtivosRef = useRef(cooperadoIdsAtivos);
+  cooperadoIdsAtivosRef.current = cooperadoIdsAtivos;
+
   const cooperadoNome = useCallback(
     (id: string) => cooperadosAtivos.find((c) => c.id === id)?.nomeCompleto ?? id,
     [cooperadosAtivos]
@@ -298,9 +337,15 @@ function ContaCoopContent() {
       if (!map || !Object.keys(map).length) return;
       if (!user?.cooperativaId) return;
       const contextKey = `${user.cooperativaId}:${cooperadoIdsKey}`;
-      creditosBaseContextRef.current = contextKey;
-      creditosBaseRef.current = map;
-      startTransition(() => setCreditosBaseColetivo(map));
+      const ids = cooperadoIdsAtivosRef.current;
+      startTransition(() => {
+        setCreditosBaseColetivo((prev) => {
+          const merged = mergeCreditosBaseMaps(prev, map, ids);
+          creditosBaseRef.current = merged;
+          creditosBaseContextRef.current = contextKey;
+          return merged;
+        });
+      });
     },
     [user?.cooperativaId, cooperadoIdsKey]
   );
@@ -332,18 +377,11 @@ function ContaCoopContent() {
     return null;
   }, [recomputeCreditosBaseLocal]);
 
-  const [limitesUiReady, setLimitesUiReady] = useState(false);
-  const [coletivaUiReady, setColetivaUiReady] = useState(false);
-  const [limitesTabelaVisiveis, setLimitesTabelaVisiveis] = useState(LIMITES_TABELA_PAGE);
-  const deferredLimites = useDeferredValue(limites);
-  const deferredCreditosBase = useDeferredValue(creditosBaseColetivo);
-  const limitesTabPaintPending = tab === "limites" && limites !== deferredLimites;
-
   const limitesPorCooperado = useMemo(() => {
     const map = new Map<string, ContaCoopLimiteCooperado>();
-    for (const l of deferredLimites) map.set(l.cooperadoId, l);
+    for (const l of limites) map.set(l.cooperadoId, l);
     return map;
-  }, [deferredLimites]);
+  }, [limites]);
 
   const limitesLinhasCooperados = useMemo(() => {
     if (!cnpj) return [];
@@ -354,13 +392,11 @@ function ContaCoopContent() {
     });
   }, [cooperadosAtivos, limitesPorCooperado, cnpj]);
 
-  const limitesLinhasPagina = useMemo(
-    () => limitesLinhasCooperados.slice(0, limitesTabelaVisiveis),
-    [limitesLinhasCooperados, limitesTabelaVisiveis]
-  );
-
-  const cooperadoIdsAtivosRef = useRef(cooperadoIdsAtivos);
-  cooperadoIdsAtivosRef.current = cooperadoIdsAtivos;
+  useEffect(() => {
+    if (!cooperadoIdsAtivos.length) return;
+    setLimites((prev) => mergeLimitesCooperado(prev, [], cooperadoIdsAtivos));
+    setCreditosBaseColetivo((prev) => mergeCreditosBaseMaps(prev, prev, cooperadoIdsAtivos));
+  }, [cooperadoIdsKey, cooperadoIdsAtivos]);
 
   const limiteSyncOpts = useMemo(() => {
     if (!user?.cooperativaId || !cooperadoIdsAtivos.length) return undefined;
@@ -391,10 +427,12 @@ function ContaCoopContent() {
           cooperativaId: user.cooperativaId,
           cooperadoIds: cooperadoIdsAtivos,
         });
-        setLimites(fresh);
         applyCreditosBaseFromServer(creditosBaseAuthoritativeCents);
+        const merged = mergeLimitesCooperado(limitesRef.current, fresh, cooperadoIdsAtivos);
+        setLimites(merged);
+        gravarHbCreditLimitesPersistidos(cnpj, merged, creditosBaseAuthoritativeCents);
         limitesListaFetchedAtRef.current = Date.now();
-        return fresh;
+        return merged;
       } catch {
         return [];
       } finally {
@@ -422,17 +460,13 @@ function ContaCoopContent() {
       const ids = cooperadoIdsAtivosRef.current;
       const t0 = contaCoopPerfStart("GET /api/credit/limites");
       try {
-        const fast = await fetchCreditLimites(cnpj, { fast: true });
-        startTransition(() => setLimites(fast.limites));
-
         const full = await fetchCreditLimites(cnpj, {
           cooperadoIds: ids.length ? ids : undefined,
         });
-        startTransition(() => {
-          setLimites(full.limites);
-          applyCreditosBaseFromServer(full.creditosBaseAuthoritativeCents);
-        });
-        gravarHbCreditLimitesPersistidos(cnpj, full.limites);
+        applyCreditosBaseFromServer(full.creditosBaseAuthoritativeCents);
+        const merged = mergeLimitesCooperado(limitesRef.current, full.limites, ids);
+        setLimites(merged);
+        gravarHbCreditLimitesPersistidos(cnpj, merged, full.creditosBaseAuthoritativeCents);
         limitesListaFetchedAtRef.current = Date.now();
       } catch {
         /* mantém cache/persistidos */
@@ -529,6 +563,10 @@ function ContaCoopContent() {
         ? Date.parse(snapLimites.savedAt) || Date.now()
         : Date.now();
     }
+    if (snapLimites?.creditosBaseCents && Object.keys(snapLimites.creditosBaseCents).length) {
+      setCreditosBaseColetivo(snapLimites.creditosBaseCents);
+      creditosBaseRef.current = snapLimites.creditosBaseCents;
+    }
     void reloadRef.current({ background });
   }, [cnpj]);
 
@@ -566,44 +604,6 @@ function ContaCoopContent() {
       cancelIdle();
     };
   }, [tab, cnpj, revalidateLimitesLista]);
-
-  useEffect(() => {
-    if (tab !== "limites") {
-      setLimitesUiReady(false);
-      setColetivaUiReady(false);
-      setLimitesTabelaVisiveis(LIMITES_TABELA_PAGE);
-      return;
-    }
-    let cancelled = false;
-    const raf = requestAnimationFrame(() => {
-      startTransition(() => {
-        if (!cancelled) setLimitesUiReady(true);
-      });
-    });
-    return () => {
-      cancelled = true;
-      cancelAnimationFrame(raf);
-    };
-  }, [tab]);
-
-  useEffect(() => {
-    if (tab !== "limites" || !limitesUiReady) {
-      setColetivaUiReady(false);
-      return;
-    }
-    let cancelled = false;
-    const cancelIdle = scheduleContaCoopAuxSync(
-      () => {
-        if (cancelled) return;
-        startTransition(() => setColetivaUiReady(true));
-      },
-      { idleTimeoutMs: 800, fallbackMs: 2_500 }
-    );
-    return () => {
-      cancelled = true;
-      cancelIdle();
-    };
-  }, [tab, limitesUiReady]);
 
   useEffect(() => {
     const p = dashboard?.teto.tetoGlobalPercent;
@@ -1087,15 +1087,8 @@ function ContaCoopContent() {
       {tab === "limites" && (
         <div className="space-y-6">
           {limitesRefreshing && (
-            <p className="text-xs text-gray-500">Atualizando limites na nuvem…</p>
+            <p className="text-xs text-gray-500">Atualizando valores na nuvem…</p>
           )}
-          {limitesTabPaintPending && (
-            <p className="text-xs text-gray-500">Atualizando tabela…</p>
-          )}
-          {!limitesUiReady ? (
-            <PageSkeleton compact />
-          ) : (
-            <>
           <AlertBanner variant="info">
             Se o cooperado esquecer o PIN de pagamento, ele pode solicitar reset em Minha Conta Coop. Você confirma
             aqui em <strong>Resetar PIN de pagamento</strong>; depois ele cadastra um PIN novo.
@@ -1146,7 +1139,7 @@ function ContaCoopContent() {
                   </tr>
                 </thead>
                 <tbody>
-                  {limitesLinhasPagina.map((l) => (
+                  {limitesLinhasCooperados.map((l) => (
                     <tr key={l.cooperadoId} className="border-t">
                       <td className="p-3">
                         {cooperadoNome(l.cooperadoId)}
@@ -1161,7 +1154,7 @@ function ContaCoopContent() {
                           </span>
                         )}
                       </td>
-                      <td className="p-3">{formatCentsBRL(deferredCreditosBase[l.cooperadoId] ?? 0)}</td>
+                      <td className="p-3">{formatCentsBRL(creditosBaseColetivo[l.cooperadoId] ?? 0)}</td>
                       <td className="p-3">{formatCentsBRL(l.limiteLiberadoCents)}</td>
                       <td className="p-3">{formatCentsBRL(l.valorUsadoCents)}</td>
                       <td className="p-3 font-medium text-green-800">
@@ -1209,25 +1202,8 @@ function ContaCoopContent() {
                 </tbody>
               </table>
             </div>
-            {limitesLinhasCooperados.length > limitesTabelaVisiveis && (
-              <div className="border-t p-3 text-center">
-                <Button
-                  variant="secondary"
-                  size="sm"
-                  onClick={() =>
-                    setLimitesTabelaVisiveis((n) => Math.min(n + LIMITES_TABELA_PAGE, limitesLinhasCooperados.length))
-                  }
-                >
-                  Mostrar mais ({limitesLinhasCooperados.length - limitesTabelaVisiveis} restantes)
-                </Button>
-              </div>
-            )}
           </Card>
 
-          {!coletivaUiReady ? (
-            <p className="text-xs text-gray-500">Carregando liberação coletiva…</p>
-          ) : (
-            <>
           <Card className="space-y-4 !p-5">
             <div>
               <h3 className="font-semibold text-gray-900">Liberação individual</h3>
@@ -1334,10 +1310,6 @@ function ContaCoopContent() {
               </div>
             )}
           </Card>
-            </>
-          )}
-            </>
-          )}
         </div>
       )}
 

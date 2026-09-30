@@ -33,6 +33,6 @@ export async function refreshHbCreditLimitesStaff(
     resyncInflated: true,
     cooperadoIds: opts.cooperadoIds,
   });
-  gravarHbCreditLimitesPersistidos(opts.cnpj, payload.limites);
+  gravarHbCreditLimitesPersistidos(opts.cnpj, payload.limites, payload.creditosBaseAuthoritativeCents);
   return payload;
 }
