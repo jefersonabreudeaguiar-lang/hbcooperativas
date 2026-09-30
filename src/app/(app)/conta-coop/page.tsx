@@ -499,6 +499,7 @@ function ContaCoopContent() {
           cooperadoIds: cooperadoIdsAtivos,
         });
         applyLimitesFetchResult(result, cooperadoIdsAtivos);
+        notifyHbCreditLimiteSynced();
         return limitesRef.current;
       } catch (e) {
         setLimitesListaAviso(mensagemErroListaLimitesStaff(e));

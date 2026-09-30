@@ -1,4 +1,4 @@
-/** Limite HB sincronizado na nuvem (cooperado pode refetch conta). */
+/** Limite HB sincronizado na nuvem (mesmo aparelho: evento; outro aparelho: poll revision no cooperado). */
 export const HB_CREDIT_LIMITE_SYNCED_EVENT = "hb-credit-limite-synced";
 
 const NOTIFY_MIN_INTERVAL_MS = 12_000;

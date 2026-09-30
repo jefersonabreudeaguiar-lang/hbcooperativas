@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import {
   getLimiteCooperado,
   getLimiteCooperadoAlinhadoAEntregas,
+  getHbCreditAccountRevision,
   hasFinancialPin,
   hasPendingCooperadoPinResetRequest,
   listLedgerCooperado,
@@ -34,6 +35,11 @@ export async function GET(request: Request) {
   if (view === "ledger") {
     const ledger = await listLedgerCooperado(gate.ctx.supabase, cnpj, cooperadoId);
     return NextResponse.json({ ok: true, ledger });
+  }
+
+  if (view === "revision") {
+    const revision = await getHbCreditAccountRevision(gate.ctx.supabase, cnpj, cooperadoId);
+    return NextResponse.json({ ok: true, revision });
   }
 
   const actorId = gate.ctx.session?.sub ?? cooperadoId;

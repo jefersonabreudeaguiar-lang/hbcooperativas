@@ -28,7 +28,7 @@ import type {
   SettlementStatus,
   IntentStatus,
 } from "@/modules/hb-credit/types";
-import { mapAuthorizeRpcError } from "@/modules/hb-credit/engine/hbCreditLimitSyncState";
+import { mapAuthorizeRpcError, markHbCreditLimitSynced } from "@/modules/hb-credit/engine/hbCreditLimitSyncState";
 import { computeDisponivel, formatCentsBRL } from "@/modules/hb-credit/engine/money";
 import { calcLimiteFromPercentual, calcTetoGlobalCents, sumCreditosBaseCents } from "@/modules/hb-credit/engine/creditBaseFromFicha";
 import type { AuthoritativeCreditBaseErrorPayload } from "@/modules/hb-credit/engine/creditBaseAuthoritative";
@@ -832,6 +832,8 @@ async function persistLimiteReleasedAfterCreditoBaseZero(
     },
   });
 
+  await markHbCreditLimitSyncedBestEffort(supabase, cnpj, cooperadoId, actorUserId);
+
   return { ok: true, limite: mapLimiteRow(data as Record<string, unknown>) };
 }
 
@@ -894,6 +896,8 @@ export async function setLimiteCooperado(
       novo: { limiteLiberadoCents: novoLimiteCents },
     },
   });
+
+  await markHbCreditLimitSyncedBestEffort(supabase, cnpj, cooperadoId, actorUserId);
 
   return { ok: true, limite: mapLimiteRow(data as Record<string, unknown>) };
 }
@@ -1389,6 +1393,41 @@ async function fetchHbCreditAccountRowForCooperado(
     row: best,
     accountCooperadoId: String(best.cooperado_id ?? cooperadoId),
   };
+}
+
+export type HbCreditAccountRevision = {
+  updatedAt: string | null;
+  limitReleasedCents: number;
+  amountUsedCents: number;
+  /** Assinatura estável para poll cross-device (responsável → cooperado). */
+  revision: string;
+};
+
+export async function getHbCreditAccountRevision(
+  supabase: SupabaseClient,
+  cnpj: string,
+  cooperadoId: string
+): Promise<HbCreditAccountRevision | null> {
+  const found = await fetchHbCreditAccountRowForCooperado(supabase, cnpj, cooperadoId);
+  if (!found) return null;
+  const updatedAt = found.row.updated_at ? String(found.row.updated_at) : null;
+  const limitReleasedCents = Math.max(0, Math.round(Number(found.row.limit_released_cents ?? 0)));
+  const amountUsedCents = Math.max(0, Math.round(Number(found.row.amount_used_cents ?? 0)));
+  return {
+    updatedAt,
+    limitReleasedCents,
+    amountUsedCents,
+    revision: `${updatedAt ?? ""}|${limitReleasedCents}|${amountUsedCents}`,
+  };
+}
+
+async function markHbCreditLimitSyncedBestEffort(
+  supabase: SupabaseClient,
+  cnpj: string,
+  cooperadoId: string,
+  actorUserId: string
+): Promise<void> {
+  await markHbCreditLimitSynced(supabase, { cnpj, cooperadoId, actorUserId }).catch(() => {});
 }
 
 export async function getLimiteCooperado(

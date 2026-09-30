@@ -196,6 +196,24 @@ export async function fetchCreditAccount(cnpj: string, cooperadoId: string) {
   return data;
 }
 
+export async function fetchCreditAccountRevision(cnpj: string, cooperadoId: string) {
+  const res = await secureApiFetch(
+    `/api/credit/account?cnpj=${encodeURIComponent(cnpj)}&cooperadoId=${encodeURIComponent(cooperadoId)}&view=revision`
+  );
+  const data = await parseJson<{
+    ok?: boolean;
+    error?: string;
+    revision?: {
+      updatedAt: string | null;
+      limitReleasedCents: number;
+      amountUsedCents: number;
+      revision: string;
+    } | null;
+  }>(res);
+  if (!res.ok || !data.ok) throw new Error(data.error ?? "Erro ao verificar limite.");
+  return data.revision ?? null;
+}
+
 export async function requestCooperadoPinReset(cnpj: string, cooperadoId: string) {
   const res = await secureApiFetch("/api/credit/account", {
     method: "POST",

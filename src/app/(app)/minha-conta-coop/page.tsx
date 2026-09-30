@@ -46,7 +46,7 @@ import {
   lerHbCreditAccountPersistido,
 } from "@/lib/hb-credit/hbCreditAccountPersistencia";
 import { useSyncContaCoopValorReceberPilot } from "@/hooks/useSyncContaCoopValorReceberPilot";
-import { useSyncContaCoopLimiteFromFicha } from "@/hooks/useSyncContaCoopLimiteFromFicha";
+import { useHbCreditAccountRevisionPoll } from "@/hooks/useHbCreditAccountRevisionPoll";
 import { PageSkeleton } from "@/components/ui/PageSkeleton";
 import { cn } from "@/utils/format";
 
@@ -102,12 +102,10 @@ function MinhaContaCoopContent() {
   const [busy, setBusy] = useState(false);
   const [isOffline, setIsOffline] = useState(false);
   const [accountRefreshing, setAccountRefreshing] = useState(false);
-  /** Aux syncs (ficha / limite) só após o primeiro fetchCreditAccount — não competem na entrada. */
+  /** Aux syncs (ficha) só após o primeiro fetchCreditAccount — limite vem da nuvem + poll (aba Limites do responsável). */
   const [auxSyncEnabled, setAuxSyncEnabled] = useState(false);
   const auxEntrySignaledRef = useRef(false);
 
-  /** Sync-limite na nuvem após conta carregar — alinhado ao BIC sem bloquear a abertura. */
-  const LIMITE_SYNC_DEFER_MS = 2_000;
   const VALOR_RECEBER_SYNC_DEFER_MS = 1_500;
 
   const cnpj = useMemo(() => {
@@ -149,18 +147,9 @@ function MinhaContaCoopContent() {
     return temCashbackHbCreditoPendenteMes(data, cooperadoId, mesReferenciaReceber, coopId);
   }, [data, cooperadoId, mesReferenciaReceber, user]);
 
-  const contaCoopLimiteSync = useMemo(() => {
-    if (!contaCoopValorSync) return undefined;
-    return {
-      ...contaCoopValorSync,
-      initialDelayMs: LIMITE_SYNC_DEFER_MS,
-    };
-  }, [contaCoopValorSync]);
-
   useSyncContaCoopValorReceberPilot(
     contaCoopValorSync ? { ...contaCoopValorSync, initialDelayMs: VALOR_RECEBER_SYNC_DEFER_MS } : undefined
   );
-  useSyncContaCoopLimiteFromFicha(contaCoopLimiteSync);
 
   useEffect(() => {
     const sync = () => setIsOffline(!navigator.onLine);
@@ -252,6 +241,15 @@ function MinhaContaCoopContent() {
     window.addEventListener(HB_CREDIT_LIMITE_SYNCED_EVENT, onLimiteSynced);
     return () => window.removeEventListener(HB_CREDIT_LIMITE_SYNCED_EVENT, onLimiteSynced);
   }, [reload]);
+
+  useHbCreditAccountRevisionPoll({
+    cnpj,
+    cooperadoId: cooperadoId ?? "",
+    enabled: auxSyncEnabled && Boolean(cnpj && cooperadoId),
+    onRevisionChange: () => {
+      void reload({ background: true });
+    },
+  });
 
   useEffect(() => {
     if (tab !== "extrato" || ledgerLoaded || ledgerLoading) return;
