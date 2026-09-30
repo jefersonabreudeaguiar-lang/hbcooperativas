@@ -117,6 +117,7 @@ export async function POST(request: Request) {
       amountCents,
       descricao: body?.descricao ? String(body.descricao) : undefined,
       idempotencyKey: body?.idempotencyKey ? String(body.idempotencyKey) : undefined,
+      parceiroNome: parceiro.nomeMercado,
     });
     return NextResponse.json({
       ok: true,

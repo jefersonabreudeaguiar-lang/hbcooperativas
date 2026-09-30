@@ -26,7 +26,6 @@ import { textoResumoAcordoDescontoMercado, getClausulasTermoMercadoContaCoop, TE
 import { PageSkeleton } from "@/components/ui/PageSkeleton";
 import { formatCpfCnpj, formatDateTime, formatMesReferencia, getCurrentMesReferencia } from "@/utils/format";
 import { Eye } from "lucide-react";
-import { gerarQrDataUrl } from "@/lib/hb-credit/gerarQrDataUrl";
 import {
   clearHbCreditMercadoCobrancaDraft,
   peekHbCreditMercadoCobrancaDraft,
@@ -127,6 +126,7 @@ function MercadoParceiroContent() {
 
   useEffect(() => {
     reload();
+    void import("@/lib/hb-credit/gerarQrDataUrl");
   }, [reload]);
 
   const cobrancaAberta = peekHbCreditMercadoCobrancaDraft();
@@ -166,11 +166,9 @@ function MercadoParceiroContent() {
       const res = await createCreditIntent(amount, descricao.trim() || undefined, idempotencyKey);
       createIntentIdempotencyRef.current = null;
       if (res.qrPayload && res.intent) {
-        const url = await gerarQrDataUrl(res.qrPayload);
         const nomeMercado = parceiro?.nomeMercado || "Mercado parceiro";
         storeHbCreditMercadoCobrancaDraft({
           v: 1,
-          qrUrl: url,
           qrPayload: res.qrPayload,
           amountCents: res.intent.amountCents,
           descricao: res.intent.descricao,

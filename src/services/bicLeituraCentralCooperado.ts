@@ -60,10 +60,10 @@ function effectiveApresentacaoConsolidada(
   cooperativaId: string | undefined,
   opts?: Pick<BicCentralProjecaoOpts, "apresentacaoConsolidada">
 ): boolean {
-  if (opts?.apresentacaoConsolidada === false) return false;
   if (isBicCentralReadAuthorityEnabled() && cooperadoTemPendenciaFinanceiraVisivel(data, cooperadoId, cooperativaId)) {
     return true;
   }
+  if (opts?.apresentacaoConsolidada === false) return false;
   return opts?.apresentacaoConsolidada ?? true;
 }
 
@@ -339,14 +339,21 @@ export function bicCentralResolveInicioParaExibicao(
   const m6 = bicCentralValorAReceberAgregado(data, cooperadoId, cooperativaId, optsEff);
 
   if (isBicCentralReadAuthorityEnabled()) {
-    if (m6.valor > 0) {
+    const raw = bicCentralNormalizarValorM6(
+      bicCentralSincronizarRotuloMeses(getValorQuantoVouReceberMotorLegado(data, cooperadoId, cooperativaId))
+    );
+    const valor = raw.valor > 0 ? raw.valor : m6.valor;
+    const mes = raw.valor > 0 ? raw.mes : m6.mes;
+    const meses = raw.valor > 0 ? raw.meses : m6.meses;
+    const mesLabel = raw.valor > 0 ? raw.mesLabel : m6.mesLabel;
+    if (valor > 0) {
       return cooperadoInicioParaCardsDefinitivos(
         {
           exibir: true,
-          mes: m6.mes,
-          meses: m6.meses,
-          mesLabel: m6.mesLabel,
-          valor: m6.valor,
+          mes,
+          meses,
+          mesLabel,
+          valor,
           valorRecibo: 0,
           aguardandoAssinatura: false,
         },
@@ -356,9 +363,9 @@ export function bicCentralResolveInicioParaExibicao(
     return cooperadoInicioParaCardsDefinitivos(
       {
         exibir: false,
-        mes: m6.mes,
-        meses: m6.meses,
-        mesLabel: m6.mesLabel,
+        mes: m6.mes || raw.mes,
+        meses: m6.meses.length ? m6.meses : raw.meses,
+        mesLabel: m6.mesLabel || raw.mesLabel,
         valor: 0,
         valorRecibo: 0,
         aguardandoAssinatura: false,

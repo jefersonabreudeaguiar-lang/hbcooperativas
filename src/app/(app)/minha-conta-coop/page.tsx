@@ -257,21 +257,18 @@ function MinhaContaCoopContent() {
   }, [reload]);
 
   const processarQr = useCallback(
-    async (payload: string) => {
+    (payload: string) => {
       if (!cnpj || !cooperadoId || !payload.trim()) return;
-      setBusy(true);
       setError("");
       setSuccess("");
       try {
-        await prepareAndOpenHbCreditPaymentFromQrScan(router, {
+        prepareAndOpenHbCreditPaymentFromQrScan(router, {
           cnpj,
           cooperadoId,
           qrPayload: payload.trim(),
         });
       } catch (e) {
         setError(e instanceof Error ? e.message : "Código inválido ou expirado.");
-      } finally {
-        setBusy(false);
       }
     },
     [cnpj, cooperadoId, router]

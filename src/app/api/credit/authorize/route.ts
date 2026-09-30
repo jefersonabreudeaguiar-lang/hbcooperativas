@@ -40,7 +40,7 @@ export async function POST(request: Request) {
   cooperadoId = resolved.cooperadoId;
 
   const actorId = gate.ctx.session?.sub ?? cooperadoId;
-  await prepareHbCreditPaymentAuthorize(gate.ctx.supabase, cnpj, cooperadoId, actorId);
+  void prepareHbCreditPaymentAuthorize(gate.ctx.supabase, cnpj, cooperadoId, actorId);
 
   const result = await authorizePayment(gate.ctx.supabase, {
     intentId,

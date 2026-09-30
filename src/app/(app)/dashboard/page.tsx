@@ -124,7 +124,7 @@ function CooperadoDashboard() {
   }, [user?.id, user?.cooperadoId, user?.cooperativaId, hbDescontosRevision]);
 
   useSyncContaCoopValorReceberPilot(
-    contaCoopSync ? { ...contaCoopSync, user, initialDelayMs: 20_000 } : undefined
+    contaCoopSync ? { ...contaCoopSync, user, initialDelayMs: 3_000 } : undefined
   );
 
   const inicioCardCtx = useCooperadoInicioCardContext(user);
@@ -305,6 +305,24 @@ function CooperadoDashboard() {
         </AlertBanner>
       )}
 
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+        <CooperadoInicioValorReceberCard
+          snapshot={valorReceberCard}
+          atualizando={cardFinanceiroAtualizando}
+        />
+
+        <div className="bg-white border-2 border-green-200 rounded-2xl p-6 flex flex-col justify-between">
+          <div>
+            <Camera size={28} className="text-green-700 mb-3" />
+            <p className="font-semibold text-gray-900">Registrar entrega na escola</p>
+            <p className="text-sm text-gray-500 mt-1">Tire foto do pedido assinado e envie para a cooperativa.</p>
+          </div>
+          <Button className="mt-4 w-full" size="lg" onClick={() => router.push("/notas-pedido?anexar=1")}>
+            Enviar foto da entrega
+          </Button>
+        </div>
+      </div>
+
       {mostrarBaixarApp && (
         <Link
           href="/baixar-app"
@@ -363,24 +381,6 @@ function CooperadoDashboard() {
       {hbCredit.navEnabled && cnpjDigits.length === 14 && (
         <CooperadoHbCreditResumoCard cnpj={cnpjDigits} />
       )}
-
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-        <CooperadoInicioValorReceberCard
-          snapshot={valorReceberCard}
-          atualizando={cardFinanceiroAtualizando}
-        />
-
-        <div className="bg-white border-2 border-green-200 rounded-2xl p-6 flex flex-col justify-between">
-          <div>
-            <Camera size={28} className="text-green-700 mb-3" />
-            <p className="font-semibold text-gray-900">Registrar entrega na escola</p>
-            <p className="text-sm text-gray-500 mt-1">Tire foto do pedido assinado e envie para a cooperativa.</p>
-          </div>
-          <Button className="mt-4 w-full" size="lg" onClick={() => router.push("/notas-pedido?anexar=1")}>
-            Enviar foto da entrega
-          </Button>
-        </div>
-      </div>
 
       <InicioResolvidosPanel itens={resolvidos} />
     </div>

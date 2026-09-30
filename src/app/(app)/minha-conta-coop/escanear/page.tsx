@@ -39,12 +39,11 @@ function EscanearQrContent() {
   }, [user, data]);
 
   const handleScan = useCallback(
-    async (payload: string) => {
+    (payload: string) => {
       if (validating || !cooperadoId || cnpj.length !== 14) return;
-      setValidating(true);
       setScanError("");
       try {
-        await prepareAndOpenHbCreditPaymentFromQrScan(router, { cnpj, cooperadoId, qrPayload: payload });
+        prepareAndOpenHbCreditPaymentFromQrScan(router, { cnpj, cooperadoId, qrPayload: payload });
       } catch (e) {
         setScanError(e instanceof Error ? e.message : "Não foi possível usar este QR Code.");
         setValidating(false);

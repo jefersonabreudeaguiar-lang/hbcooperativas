@@ -2,7 +2,8 @@ const DRAFT_KEY = "hb-credit-mercado-cobranca-v1";
 
 export type HbCreditMercadoCobrancaDraft = {
   v: 1;
-  qrUrl: string;
+  /** Preenchido na hora na tela /cobrar se vazio (criação mais rápida). */
+  qrUrl?: string;
   qrPayload: string;
   amountCents: number;
   descricao?: string;
@@ -22,7 +23,7 @@ export function peekHbCreditMercadoCobrancaDraft(): HbCreditMercadoCobrancaDraft
   if (!raw) return null;
   try {
     const parsed = JSON.parse(raw) as HbCreditMercadoCobrancaDraft;
-    if (parsed?.v !== 1 || !parsed.intentId || !parsed.qrUrl) return null;
+    if (parsed?.v !== 1 || !parsed.intentId || !parsed.qrPayload) return null;
     return parsed;
   } catch {
     return null;

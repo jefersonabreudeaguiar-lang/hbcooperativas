@@ -13,8 +13,8 @@ import { getUserCooperativaId, normalizeCnpj } from "@/utils/cooperativa";
 import {
   authorizeCreditPayment,
   fetchCreditAccount,
-  validateCreditQr,
 } from "@/services/creditApiService";
+import { kickHbCreditQrValidation } from "@/lib/hb-credit/openHbCreditPaymentFromQr";
 import { formatCentsBRL } from "@/modules/hb-credit/engine/money";
 import { FINANCIAL_PIN_MIN_LENGTH } from "@/modules/hb-credit/config";
 import { bicCentralMesPrincipalQuantoVouReceber } from "@/services/bicLeituraCentralCooperado";
@@ -25,7 +25,6 @@ import {
   clearHbCreditPendingQrScan,
   peekHbCreditPaymentDraft,
   peekHbCreditPendingQrScan,
-  storeHbCreditPaymentDraft,
   type HbCreditPaymentDraft,
 } from "@/lib/hb-credit/hbCreditPaymentDraft";
 import {
@@ -114,21 +113,16 @@ function HbCreditPagarContent() {
     let cancelled = false;
     setLoadingQr(true);
     setError("");
-    void validateCreditQr(pending.cnpj, pending.cooperadoId, pending.qrPayload, { fast: true })
-      .then((res) => {
+    void kickHbCreditQrValidation({
+      cnpj: pending.cnpj,
+      cooperadoId: pending.cooperadoId,
+      qrPayload: pending.qrPayload,
+    })
+      .then((next) => {
         if (cancelled) return;
-        if (!res.intent || !res.limite || !res.parceiroNome) {
+        if (!next) {
           throw new Error("Cobrança inválida ou expirada.");
         }
-        const next: HbCreditPaymentDraft = {
-          v: 1,
-          qrPayload: pending.qrPayload,
-          intent: res.intent,
-          parceiroNome: res.parceiroNome,
-          limite: res.limite,
-          savedAt: new Date().toISOString(),
-        };
-        storeHbCreditPaymentDraft(next);
         setDraft(next);
       })
       .catch((e) => {

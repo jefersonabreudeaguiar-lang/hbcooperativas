@@ -1488,10 +1488,13 @@ export async function getLimiteCooperado(
   opts?: { skipAmountUsedReconcile?: boolean; fastPreview?: boolean }
 ): Promise<ContaCoopLimiteCooperado | null> {
   const digits = normalizeCnpj(cnpj);
-  const cooperados = await fetchCooperadosFromStorage(supabase, digits).catch(() => []);
-  const titularIds = cooperados.length ? titularCooperadoIds(cooperados, cooperadoId) : [cooperadoId];
-  if (!opts?.skipAmountUsedReconcile && !opts?.fastPreview) {
-    await reconcileCooperadosAmountUsedCentsBatch(supabase, digits, titularIds).catch(() => {});
+  let titularIds = [cooperadoId];
+  if (!opts?.fastPreview) {
+    const cooperados = await fetchCooperadosFromStorage(supabase, digits).catch(() => []);
+    titularIds = cooperados.length ? titularCooperadoIds(cooperados, cooperadoId) : [cooperadoId];
+    if (!opts?.skipAmountUsedReconcile) {
+      await reconcileCooperadosAmountUsedCentsBatch(supabase, digits, titularIds).catch(() => {});
+    }
   }
 
   const found = await fetchHbCreditAccountRowForCooperado(supabase, cnpj, cooperadoId);
@@ -2147,21 +2150,26 @@ export async function createPaymentIntent(
     amountCents: number;
     descricao?: string;
     idempotencyKey?: string;
+    /** Evita SELECT extra quando o parceiro já foi validado na API. */
+    parceiroNome?: string;
   }
 ): Promise<ContaCoopIntent> {
-  const { data: parceiro } = await supabase
-    .from("hb_credit_partners")
-    .select("*")
-    .eq("id", input.parceiroId)
-    .maybeSingle();
-
-  if (!parceiro || parceiro.status !== "ACTIVE") {
-    throw new Error("Mercado não autorizado a criar cobranças.");
-  }
-
   const digits = normalizeCnpj(input.cooperativaCnpj);
   const idempotencyKey = input.idempotencyKey?.trim() || null;
-  const parceiroNome = String(parceiro.name);
+  let parceiroNome = input.parceiroNome?.trim() || "";
+
+  if (!parceiroNome) {
+    const { data: parceiro } = await supabase
+      .from("hb_credit_partners")
+      .select("*")
+      .eq("id", input.parceiroId)
+      .maybeSingle();
+
+    if (!parceiro || parceiro.status !== "ACTIVE") {
+      throw new Error("Mercado não autorizado a criar cobranças.");
+    }
+    parceiroNome = String(parceiro.name);
+  }
 
   const mapRow = (row: Record<string, unknown>): ContaCoopIntent => ({
     id: String(row.id),
@@ -2313,17 +2321,28 @@ export async function validateIntentForCooperado(
   if (!["PENDING", "CREATED"].includes(intent.status)) return { ok: false, error: "Cobrança já utilizada." };
   if (new Date(intent.expires_at).getTime() < Date.now()) return { ok: false, error: "Cobrança expirada." };
 
-  const { data: parceiro } = await supabase
+  if (opts?.fast === true) {
+    const reserve = await reservePaymentIntentForCooperado(
+      supabase,
+      intentId,
+      cooperadoId,
+      digits
+    );
+    if (!reserve.ok) return { ok: false, error: reserve.error };
+  }
+
+  const parceiroQuery = supabase
     .from("hb_credit_partners")
     .select("name, status")
     .eq("id", intent.partner_id)
     .maybeSingle();
-  if (!parceiro || parceiro.status !== "ACTIVE") return { ok: false, error: "Mercado bloqueado ou inativo." };
-
-  const limite = await getLimiteCooperado(supabase, digits, cooperadoId, {
+  const limiteQuery = getLimiteCooperado(supabase, digits, cooperadoId, {
     skipAmountUsedReconcile: opts?.fast === true,
     fastPreview: opts?.fast === true,
   });
+
+  const [{ data: parceiro }, limite] = await Promise.all([parceiroQuery, limiteQuery]);
+  if (!parceiro || parceiro.status !== "ACTIVE") return { ok: false, error: "Mercado bloqueado ou inativo." };
   if (!limite) return { ok: false, error: "Sem limite HB Créditos." };
   if (limite.bloqueado) return { ok: false, error: "Cooperado bloqueado." };
   const gross = Number(intent.amount_cents);

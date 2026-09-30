@@ -172,7 +172,7 @@ function buildLegadoSnapshot(
     status: "LEGADO",
     autoridade: "LEGADO",
     bicAuthoritative: false,
-    valorAReceber: carregando ? 0 : motor.valor,
+    valorAReceber: motor.valor,
     mesPrincipal: motor.mes || null,
     mesLabel: motor.mesLabel || null,
     mesesReferencia: motor.meses.length ? [...motor.meses] : motor.mes ? [motor.mes] : [],

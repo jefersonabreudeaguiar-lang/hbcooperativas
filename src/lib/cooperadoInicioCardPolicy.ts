@@ -410,13 +410,23 @@ function resolverCardInicioEndurecidoFinanceiroUiSnapshot(
     cooperadoId,
     cooperativaId,
     opts: {
-      apresentacaoConsolidada: input.apresentacaoConsolidada,
+      /** Card início usa motor operacional — política endurecida não aplica máscara H203. */
+      apresentacaoConsolidada: true,
       dataReady,
       financeiroSincronizando: financeiroCarregando,
     },
   });
 
-  const motor = inicioCardMotorFromFinanceiroUiSnapshot(financeiro);
+  let motor = inicioCardMotorFromFinanceiroUiSnapshot(financeiro);
+  if (
+    !cooperadoMotorTemObrigacaoReceber(motor) &&
+    financeiro.status !== "CONFIRMADO" &&
+    cooperadoId
+  ) {
+    motor = resolverInicioCardMotorFromAppData(data, cooperadoId, cooperativaId, {
+      apresentacaoConsolidada: true,
+    });
+  }
   const revision =
     financeiro.observability.motorRevision ??
     (cooperadoId && cooperativaId ? cooperadoMotorRevisionOperacional(data, cooperadoId, cooperativaId) : "");
@@ -558,15 +568,10 @@ export function resolverCardInicioEndurecido(input: ResolverCardInicioInput): In
         display: persistidoLeitura.display,
         hadPendencia: cooperadoMotorTemObrigacaoReceber(persistidoLeitura.display),
       };
-      /** Boot sem AppData: não exibir valor do cache como definitivo (motor BIC valida após warm). */
-      const aguardandoMotor = persistidoLeitura.display.valor > 0;
-      const display: InicioCardMotorSnapshot = aguardandoMotor
-        ? { ...persistidoLeitura.display, valor: 0 }
-        : persistidoLeitura.display;
       return finalizarResultadoCardBic({
-        display,
+        display: persistidoLeitura.display,
         latch,
-        atualizando: aguardandoMotor || input.carregandoFinanceiro,
+        atualizando: input.carregandoFinanceiro,
         gravarPersistencia: false,
       });
     }

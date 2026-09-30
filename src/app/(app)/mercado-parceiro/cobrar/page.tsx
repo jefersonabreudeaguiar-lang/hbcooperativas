@@ -13,8 +13,10 @@ import { formatCentsBRL } from "@/modules/hb-credit/engine/money";
 import {
   clearHbCreditMercadoCobrancaDraft,
   peekHbCreditMercadoCobrancaDraft,
+  storeHbCreditMercadoCobrancaDraft,
   type HbCreditMercadoCobrancaDraft,
 } from "@/lib/hb-credit/hbCreditMercadoCobrancaDraft";
+import { gerarQrDataUrl } from "@/lib/hb-credit/gerarQrDataUrl";
 import { formatCpfCnpj, formatDateTime, cn } from "@/utils/format";
 
 const pageBg =
@@ -40,6 +42,8 @@ export default function MercadoCobrarQrPage() {
 function MercadoCobrarQrContent() {
   const router = useRouter();
   const [draft, setDraft] = useState<HbCreditMercadoCobrancaDraft | null>(null);
+  const [qrUrl, setQrUrl] = useState("");
+  const [qrGerando, setQrGerando] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [aguardando, setAguardando] = useState(true);
@@ -52,7 +56,26 @@ function MercadoCobrarQrContent() {
       return;
     }
     setDraft(d);
+    if (d.qrUrl) setQrUrl(d.qrUrl);
   }, [router]);
+
+  useEffect(() => {
+    if (!draft?.qrPayload || qrUrl) return;
+    let cancelled = false;
+    setQrGerando(true);
+    void gerarQrDataUrl(draft.qrPayload)
+      .then((url) => {
+        if (cancelled) return;
+        setQrUrl(url);
+        storeHbCreditMercadoCobrancaDraft({ ...draft, qrUrl: url });
+      })
+      .finally(() => {
+        if (!cancelled) setQrGerando(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [draft, qrUrl]);
 
   useEffect(() => {
     if (!draft || pago) return;
@@ -222,12 +245,21 @@ function MercadoCobrarQrContent() {
         {draft!.descricao ? <p className="mt-2 max-w-xs text-sm text-gray-600">{draft!.descricao}</p> : null}
 
         <div className="relative mt-10 rounded-3xl bg-white p-5 shadow-lg ring-1 ring-emerald-900/10">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
-            src={draft!.qrUrl}
-            alt="QR Code para pagamento HB Créditos"
-            className="mx-auto aspect-square w-[min(72vw,18rem)] max-w-full"
-          />
+          {qrUrl ? (
+            /* eslint-disable-next-line @next/next/no-img-element */
+            <img
+              src={qrUrl}
+              alt="QR Code para pagamento HB Créditos"
+              className="mx-auto aspect-square w-[min(72vw,18rem)] max-w-full"
+            />
+          ) : (
+            <div
+              className="mx-auto flex aspect-square w-[min(72vw,18rem)] max-w-full items-center justify-center rounded-2xl bg-emerald-50/80"
+              aria-busy={qrGerando}
+            >
+              <Loader2 className="h-10 w-10 animate-spin text-emerald-600" />
+            </div>
+          )}
         </div>
 
         <p className="mt-8 max-w-xs text-sm text-gray-600">
