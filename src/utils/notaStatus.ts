@@ -60,6 +60,23 @@ export function notaElegivelParaFilaConferenciaResponsavel(nota: Pick<
   return true;
 }
 
+/** Em análise com marca de conferência órfã — some da fila sem ter sido lançada. */
+export function isNotaZombieNaFilaConferencia(
+  nota: Pick<NotaPedido, "status" | "conferidaPor" | "dataConferencia">
+): boolean {
+  return isNotaNaFilaConferenciaResponsavel(nota.status) && !notaElegivelParaFilaConferenciaResponsavel(nota);
+}
+
+/** Remove marcas de conferência inconsistentes com status ainda em análise. */
+export function sanitizarNotaParaFilaConferencia(nota: NotaPedido): NotaPedido {
+  if (!isNotaZombieNaFilaConferencia(nota)) return nota;
+  return {
+    ...nota,
+    conferidaPor: undefined,
+    dataConferencia: undefined,
+  };
+}
+
 /** Sai da fila do responsável — só após lançamento, rejeição ou cancelamento. */
 export function isNotaSaiuDaFilaConferencia(status: NotaPedidoStatus | undefined | null): boolean {
   return (

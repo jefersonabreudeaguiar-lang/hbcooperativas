@@ -1,7 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { NotaPedido } from "@/types";
 import { isNotasPedidoTableMissing } from "@/lib/supabase/errors";
-import { protectNotaAgainstStatusDowngrade, isNotaNaFilaConferenciaResponsavel } from "@/utils/notaStatus";
+import { protectNotaAgainstStatusDowngrade, isNotaNaFilaConferenciaResponsavel, sanitizarNotaParaFilaConferencia } from "@/utils/notaStatus";
 import { mergeNotaComFotos } from "@/utils/fotoEntrega";
 import { isInlineDataUrl } from "@/utils/mediaHelpers";
 
@@ -670,11 +670,14 @@ export async function upsertNotasInTable(
 
   const protectedNotas = notas.map((nota) => {
     const ex = existingById.get(nota.id);
-    if (!ex?.status) return nota;
-    return protectNotaAgainstStatusDowngrade(
-      { ...(ex.payload ?? {}), status: ex.status },
-      nota
-    );
+    let next = nota;
+    if (ex?.status) {
+      next = protectNotaAgainstStatusDowngrade(
+        { ...(ex.payload ?? {}), status: ex.status },
+        nota
+      );
+    }
+    return sanitizarNotaParaFilaConferencia(next);
   });
 
   const rows = protectedNotas.map((nota) => ({
@@ -773,4 +776,30 @@ export async function deleteAllNotasForCnpj(
   }
 
   return { removed: removed + (count ?? 0), tableMissing: false };
+}
+
+/** Repara payloads na tabela SQL (zombies) e replica órfãos do storage → fila. */
+export async function repairFilaConferenciaNotasNaNuvem(
+  supabase: SupabaseClient,
+  cnpj: string
+): Promise<{ zombiesFixed: number; orphansMerged: number }> {
+  const digits = cnpj.replace(/\D/g, "");
+  if (digits.length !== 14) return { zombiesFixed: 0, orphansMerged: 0 };
+
+  const fromTable = await fetchNotasFromTable(supabase, digits);
+  if (fromTable.tableMissing) return { zombiesFixed: 0, orphansMerged: 0 };
+
+  let zombiesFixed = 0;
+  for (const nota of fromTable.notas) {
+    const fixed = sanitizarNotaParaFilaConferencia(nota);
+    if (fixed === nota) continue;
+    const upsert = await upsertNotasInTable(supabase, digits, [fixed]);
+    if (upsert.ok) zombiesFixed += 1;
+  }
+
+  const beforeOrphans = fromTable.notas.length;
+  const merged = await mergeStorageFilaOrphansIntoTableNotas(supabase, digits, fromTable.notas);
+  const orphansMerged = Math.max(0, merged.length - beforeOrphans);
+
+  return { zombiesFixed, orphansMerged };
 }

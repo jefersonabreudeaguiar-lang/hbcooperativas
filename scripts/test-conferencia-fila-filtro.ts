@@ -3,7 +3,9 @@ import {
   isNotaNaFilaConferenciaResponsavel,
   notaPassaFiltroStatusListaConferencia,
   notaElegivelParaFilaConferenciaResponsavel,
+  sanitizarNotaParaFilaConferencia,
 } from "../src/utils/notaStatus";
+import { repararNotasPedidoFilaConferencia } from "../src/services/conferenciaFilaRepair";
 import {
   getChaveGrupoConferencia,
   resolverCooperadoIdGrupoConferencia,
@@ -72,6 +74,22 @@ const data = {
   ],
   notasPedido: [],
 } as unknown as AppData;
+
+const zombie = {
+  id: "z1",
+  status: "aguardando_conferencia" as const,
+  conferidaPor: "X",
+  dataConferencia: "2026-01-01",
+  cooperadoId: altonId,
+  cooperativaId: coopId,
+  createdAt: "",
+  updatedAt: "",
+} as unknown as NotaPedido;
+const fixed = sanitizarNotaParaFilaConferencia(zombie);
+assert.equal(fixed.conferidaPor, undefined);
+assert.equal(notaElegivelParaFilaConferenciaResponsavel(fixed), true);
+const reparo = repararNotasPedidoFilaConferencia({ ...data, notasPedido: [zombie] }, coopId);
+assert.equal(reparo.repaired, 1);
 
 const notaNuvem: NotaPedido = {
   id: "n1",

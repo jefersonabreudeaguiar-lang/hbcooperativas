@@ -13,7 +13,9 @@ import {
   uploadNotaToStorage,
   upsertNotasInTable,
   enrichNotasListWithPreviews,
+  repairFilaConferenciaNotasNaNuvem,
 } from "@/lib/supabase/notasStorage";
+import { sanitizarNotaParaFilaConferencia } from "@/utils/notaStatus";
 
 export async function GET(request: Request) {
   if (!isSupabaseConfigured()) {
@@ -48,7 +50,7 @@ export async function GET(request: Request) {
   // Sempre lista o storage completo — nunca retornar [] por causa de `since`.
   if (fromTable.tableMissing) {
     const fromStorage = await fetchNotasFromStorage(supabase, cnpj);
-    const merged = visiveis(fromStorage);
+    const merged = visiveis(fromStorage).map(sanitizarNotaParaFilaConferencia);
     const notas =
       lite && !withPreviews
         ? merged
@@ -72,7 +74,18 @@ export async function GET(request: Request) {
 
   tableMerged = await mergeStorageFilaOrphansIntoTableNotas(supabase, cnpj, tableMerged);
 
-  const merged = visiveis(tableMerged);
+  if (searchParams.get("repairFila") === "1" && guard.session?.role !== "cooperado") {
+    await repairFilaConferenciaNotasNaNuvem(supabase, cnpj);
+    const refreshed = await fetchNotasFromTable(supabase, cnpj, since);
+    if (!refreshed.tableMissing) {
+      tableMerged = delta
+        ? refreshed.notas
+        : mergeNotasSources(refreshed.notas, fromStorage);
+      tableMerged = await mergeStorageFilaOrphansIntoTableNotas(supabase, cnpj, tableMerged);
+    }
+  }
+
+  const merged = visiveis(tableMerged).map(sanitizarNotaParaFilaConferencia);
   const notas =
     lite && !withPreviews
       ? merged

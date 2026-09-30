@@ -28,9 +28,12 @@ import {
 import {
   isNotaStatusDowngrade,
   isNotaStatusTerminalConferencia,
+  isNotaNaFilaConferenciaResponsavel,
   protectNotaAgainstStatusDowngrade,
   NOTA_STATUS_RANK,
+  sanitizarNotaParaFilaConferencia,
 } from "@/utils/notaStatus";
+import { repararNotasPedidoFilaConferencia } from "@/services/conferenciaFilaRepair";
 
 const STATUS_RANK = NOTA_STATUS_RANK;
 
@@ -388,11 +391,11 @@ export function mergeCloudNotasIntoData(
           cloudNota.status === "entregue"
         ) {
           // Legacy “entregue” na nuvem — mescla fotos, fila permanece em análise.
-          mergedNota = {
+          mergedNota = sanitizarNotaParaFilaConferencia({
             ...mergedNota,
             status: "aguardando_conferencia",
             updatedAt: local.updatedAt,
-          };
+          });
         } else if (
           local.status === "aguardando_conferencia" &&
           cloudNota.status === "rejeitada" &&
@@ -406,6 +409,8 @@ export function mergeCloudNotasIntoData(
             motivoRejeicao: undefined,
             reenviadaEm: local.reenviadaEm,
             updatedAt: local.updatedAt,
+            conferidaPor: undefined,
+            dataConferencia: undefined,
           };
         } else if (
           local.relancadaEm &&
@@ -461,10 +466,10 @@ export function mergeCloudNotasIntoData(
         }
       } else if (local?.status === "aguardando_conferencia" || local?.status === "entregue") {
         // Merge de fotos não pode tirar da fila.
-        mergedNota = {
+        mergedNota = sanitizarNotaParaFilaConferencia({
           ...mergedNota,
           status: local.status === "entregue" ? "entregue" : "aguardando_conferencia",
-        };
+        });
       }
       byId.set(mergedNota.id, mergedNota);
       changed = true;
@@ -509,6 +514,13 @@ export async function fetchNotasPedidoFromCloud(
   try {
     const qs = new URLSearchParams({ cnpj: digits, lite: "1" });
     if (since) qs.set("since", since);
+    if (forceFull && typeof sessionStorage !== "undefined") {
+      const repairKey = `hb_repair_fila_done:${digits}`;
+      if (!sessionStorage.getItem(repairKey)) {
+        qs.set("repairFila", "1");
+        sessionStorage.setItem(repairKey, "1");
+      }
+    }
     const res = await secureApiFetch(`/api/notas-pedido?${qs.toString()}`, { cache: "no-store" });
     if (!res.ok) return { ok: false, notas: [], delta: Boolean(since) };
     const json = await res.json().catch(() => ({}));
@@ -1065,12 +1077,6 @@ export async function republishLocalAguardandoConferencia(
   for (const nota of pendentes) {
     const cloud = await fetchNotaPedidoFromCloud(digits, nota.id, { metaOnly: true });
     if (!cloud) {
-      // Excluída na nuvem pelo responsável — remove cópia local, não republicar.
-      adopted = {
-        ...adopted,
-        notasPedido: adopted.notasPedido.filter((n) => n.id !== nota.id),
-      };
-      adoptedChanged = true;
       continue;
     }
     // Já publicada e visível — não precisa republicar.
@@ -1337,7 +1343,11 @@ export async function syncNotasPedidoFromCloud(
     if (blocked.has(before.id)) continue;
     const after = afterById.get(before.id);
     if (!after) {
-      // Não ressuscita entregas removidas localmente (ex.: exclusão pelo responsável).
+      // Delta incompleto ou merge falhou — não apagar entrega em análise local.
+      if (isNotaNaFilaConferenciaResponsavel(before.status)) {
+        notas.push(before);
+        invariantFixed = true;
+      }
       continue;
     }
     if (after.status === "rascunho") {
@@ -1351,6 +1361,11 @@ export async function syncNotasPedidoFromCloud(
   }
   if (invariantFixed) {
     merged = { ...merged, notasPedido: notas };
+  }
+
+  const reparo = repararNotasPedidoFilaConferencia(merged, coopId);
+  if (reparo.repaired > 0) {
+    merged = reparo.data;
   }
 
   const reconciled = posProcessarFinanceiroLocal(merged, digits);
@@ -1391,10 +1406,6 @@ export async function refreshCooperadoNotasEmAnalise(
   for (const nota of emAnalise) {
     const cloud = await fetchNotaPedidoFromCloud(digits, nota.id);
     if (!cloud) {
-      merged = {
-        ...merged,
-        notasPedido: merged.notasPedido.filter((n) => n.id !== nota.id),
-      };
       continue;
     }
     if (cloud.status === nota.status || cloud.status === "rascunho") continue;

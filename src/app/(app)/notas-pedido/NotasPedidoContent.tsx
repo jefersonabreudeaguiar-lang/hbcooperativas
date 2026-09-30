@@ -131,7 +131,9 @@ import {
   isNotaSaiuDaFilaConferencia,
   notaElegivelParaFilaConferenciaResponsavel,
   notaPassaFiltroStatusListaConferencia,
+  sanitizarNotaParaFilaConferencia,
 } from "@/utils/notaStatus";
+import { repararNotasPedidoFilaConferencia } from "@/services/conferenciaFilaRepair";
 import {
   loadFotoDraftMeta,
   clearFotoDraft,
@@ -1036,13 +1038,12 @@ export default function NotasPedidoContent() {
       }
       if (isNotaSaiuDaFilaConferencia(atual.status)) continue;
       if (isNotaNaFilaConferenciaResponsavel(atual.status)) {
-        if (!notaElegivelParaFilaConferenciaResponsavel(atual)) {
-          filaStickyIdsRef.current.delete(id);
-          filaStickySnapshotRef.current.delete(id);
+        const candidata = sanitizarNotaParaFilaConferencia(atual);
+        if (!notaElegivelParaFilaConferenciaResponsavel(candidata)) {
           continue;
         }
-        byId.set(id, atual);
-        filaStickySnapshotRef.current.set(id, atual);
+        byId.set(id, candidata);
+        filaStickySnapshotRef.current.set(id, candidata);
         continue;
       }
     }
@@ -1311,6 +1312,17 @@ export default function NotasPedidoContent() {
       requestAppSyncLight();
     }
   }, [isCooperado, data, coopId]);
+
+  const filaReparoLocalRef = useRef(false);
+  useEffect(() => {
+    if (isCooperado || !coopId || !data) return;
+    if (filaReparoLocalRef.current) return;
+    filaReparoLocalRef.current = true;
+    const reparo = repararNotasPedidoFilaConferencia(getData() ?? data, coopId);
+    if (reparo.repaired > 0) {
+      updateData(() => reparo.data);
+    }
+  }, [isCooperado, coopId, data]);
 
   useEffect(() => {
     if (searchParams.get("anexar") !== "1" || !isCooperado || !data || anexarParamHandledRef.current) return;
