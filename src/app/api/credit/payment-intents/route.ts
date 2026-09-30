@@ -113,6 +113,7 @@ export async function POST(request: Request) {
       cooperativaCnpj: cnpj,
       amountCents,
       descricao: body?.descricao ? String(body.descricao) : undefined,
+      idempotencyKey: body?.idempotencyKey ? String(body.idempotencyKey) : undefined,
     });
     return NextResponse.json({
       ok: true,

@@ -316,11 +316,20 @@ export async function authorizeCreditPayment(input: {
   };
 }
 
-export async function createCreditIntent(amountReais: number, descricao?: string) {
+export async function createCreditIntent(
+  amountReais: number,
+  descricao?: string,
+  idempotencyKey?: string
+) {
   const res = await secureApiFetch("/api/credit/payment-intents", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ action: "create", amountReais, descricao }),
+    body: JSON.stringify({
+      action: "create",
+      amountReais,
+      descricao,
+      idempotencyKey: idempotencyKey?.trim() || undefined,
+    }),
   });
   const data = await parseJson<{ ok?: boolean; error?: string; intent?: ContaCoopIntent; qrPayload?: string }>(res);
   if (!res.ok || !data.ok) throw new Error(data.error ?? "Erro ao criar cobrança.");

@@ -84,6 +84,7 @@ function MercadoParceiroContent() {
   const [comprovante, setComprovante] = useState<ComprovantePagamentoMercado | null>(null);
   const [aguardandoPagamento, setAguardandoPagamento] = useState(false);
   const [busy, setBusy] = useState(false);
+  const createIntentIdempotencyRef = useRef<string | null>(null);
   const qrDestaqueRef = useRef<HTMLDivElement>(null);
   const comprovanteRef = useRef<HTMLDivElement>(null);
   const liquidacaoConfirmacaoRef = useRef<HTMLDivElement>(null);
@@ -199,7 +200,14 @@ function MercadoParceiroContent() {
     setComprovante(null);
     try {
       const amount = Number(valorReais.replace(",", "."));
-      const res = await createCreditIntent(amount, descricao.trim() || undefined);
+      const idempotencyKey =
+        createIntentIdempotencyRef.current ??
+        (createIntentIdempotencyRef.current =
+          typeof crypto !== "undefined" && crypto.randomUUID
+            ? `mp_${crypto.randomUUID()}`
+            : `mp_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`);
+      const res = await createCreditIntent(amount, descricao.trim() || undefined, idempotencyKey);
+      createIntentIdempotencyRef.current = null;
       if (res.qrPayload && res.intent) {
         const url = await gerarQrDataUrl(res.qrPayload);
         setCobrancaQr({
@@ -227,6 +235,7 @@ function MercadoParceiroContent() {
     setComprovante(null);
     setValorReais("");
     setDescricao("");
+    createIntentIdempotencyRef.current = null;
   };
 
   const cancelarCobrancaAtiva = async () => {
@@ -235,6 +244,7 @@ function MercadoParceiroContent() {
     try {
       await cancelCreditIntent(cobrancaQr.intentId);
       setCobrancaQr(null);
+      createIntentIdempotencyRef.current = null;
       await reload();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Erro ao cancelar.");

@@ -645,6 +645,7 @@ export async function setLimiteCooperado(
         cooperative_cnpj: digits,
         cooperado_id: cooperadoId,
         limit_released_cents: novoLimiteCents,
+        financial_limit_cap_cents: novoLimiteCents,
         amount_used_cents: usado,
         status: existing?.status ?? "active",
         updated_at: now,
@@ -690,6 +691,7 @@ export async function resetContaCoopCooperadoCredit(
         cooperative_cnpj: digits,
         cooperado_id: cooperadoId,
         limit_released_cents: 0,
+        financial_limit_cap_cents: 0,
         amount_used_cents: 0,
         status: "active",
         updated_at: now,
@@ -1725,6 +1727,7 @@ export async function createPaymentIntent(
     cooperativaCnpj: string;
     amountCents: number;
     descricao?: string;
+    idempotencyKey?: string;
   }
 ): Promise<ContaCoopIntent> {
   const { data: parceiro } = await supabase
@@ -1737,6 +1740,44 @@ export async function createPaymentIntent(
     throw new Error("Mercado não autorizado a criar cobranças.");
   }
 
+  const digits = normalizeCnpj(input.cooperativaCnpj);
+  const idempotencyKey = input.idempotencyKey?.trim() || null;
+  const parceiroNome = String(parceiro.name);
+
+  const mapRow = (row: Record<string, unknown>): ContaCoopIntent => ({
+    id: String(row.id),
+    cooperativaCnpj: String(row.cooperative_cnpj),
+    parceiroId: input.parceiroId,
+    parceiroNome,
+    amountCents: Number(row.amount_cents),
+    descricao: row.description ? String(row.description) : undefined,
+    status: intentStatusFromDb(String(row.status)),
+    nonce: String(row.nonce),
+    expiresAt: String(row.expires_at),
+    createdAt: String(row.created_at),
+  });
+
+  if (idempotencyKey) {
+    const { data: existing } = await supabase
+      .from("hb_credit_payment_intents")
+      .select("*")
+      .eq("cooperative_cnpj", digits)
+      .eq("idempotency_key", idempotencyKey)
+      .maybeSingle();
+    if (existing) {
+      if (String(existing.partner_id) !== input.parceiroId) {
+        throw new Error("Chave de idempotência já usada por outro mercado.");
+      }
+      if (Number(existing.amount_cents) !== input.amountCents) {
+        throw new Error("Chave de idempotência já usada com outro valor.");
+      }
+      if (!["PENDING", "CREATED"].includes(String(existing.status))) {
+        throw new Error("Cobrança idempotente já utilizada ou encerrada.");
+      }
+      return mapRow(existing as Record<string, unknown>);
+    }
+  }
+
   const id = genId("intent");
   const nonce = secureNonce();
   const expiresAt = new Date(Date.now() + INTENT_EXPIRY_MINUTES * 60_000).toISOString();
@@ -1746,33 +1787,34 @@ export async function createPaymentIntent(
     .from("hb_credit_payment_intents")
     .insert({
       id,
-      cooperative_cnpj: normalizeCnpj(input.cooperativaCnpj),
+      cooperative_cnpj: digits,
       partner_id: input.parceiroId,
       amount_cents: input.amountCents,
       description: input.descricao?.trim() || null,
       status: "PENDING",
       nonce,
       expires_at: expiresAt,
+      idempotency_key: idempotencyKey,
       created_at: now,
       updated_at: now,
     })
     .select()
     .single();
 
-  if (error) throw new Error(error.message);
+  if (error) {
+    if (idempotencyKey && /23505|duplicate/i.test(error.message)) {
+      const { data: raced } = await supabase
+        .from("hb_credit_payment_intents")
+        .select("*")
+        .eq("cooperative_cnpj", digits)
+        .eq("idempotency_key", idempotencyKey)
+        .maybeSingle();
+      if (raced) return mapRow(raced as Record<string, unknown>);
+    }
+    throw new Error(error.message);
+  }
 
-  return {
-    id,
-    cooperativaCnpj: String(data.cooperative_cnpj),
-    parceiroId: input.parceiroId,
-    parceiroNome: String(parceiro.name),
-    amountCents: input.amountCents,
-    descricao: input.descricao,
-    status: "pendente",
-    nonce,
-    expiresAt,
-    createdAt: now,
-  };
+  return mapRow(data as Record<string, unknown>);
 }
 
 export async function validateIntentForCooperado(
