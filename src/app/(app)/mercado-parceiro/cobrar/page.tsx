@@ -18,7 +18,7 @@ import {
 import { formatCpfCnpj, formatDateTime, cn } from "@/utils/format";
 
 const pageBg =
-  "min-h-[calc(100vh-4rem)] flex flex-col bg-gradient-to-b from-emerald-50 via-green-50/95 to-emerald-100/80 text-gray-900";
+  "min-h-[100dvh] flex flex-col bg-gradient-to-b from-emerald-50 via-green-50/95 to-emerald-100/80 text-gray-900";
 
 type PagamentoOk = {
   amountCents: number;

@@ -410,6 +410,29 @@ export function isHbCreditCooperadoNavEligible(
   return serverConfirmed || creditStatus === "loading" || creditStatus === "error" || creditStatus === "enabled";
 }
 
+/** Mercado parceiro — login dedicado ao painel HB Créditos do mercado. */
+export function isParceiroAppUser(
+  user: Pick<User, "role"> | null | undefined
+): boolean {
+  if (!user) return false;
+  return normalizeUserRole(user.role) === "parceiro";
+}
+
+/** Mercado parceiro — mesmo critério de resiliência do menu staff (status remoto instável). */
+export function isHbCreditParceiroNavEligible(
+  user: Pick<User, "role">,
+  creditStatus: "loading" | "enabled" | "disabled" | "error",
+  serverConfirmed: boolean
+): boolean {
+  const clientFlagRaw = (process.env.NEXT_PUBLIC_HB_CREDIT_ENABLED ?? "").trim().toLowerCase();
+  const clientConfigured =
+    typeof window !== "undefined" ? isHbCreditEnabledClient() : clientFlagRaw === "true" || clientFlagRaw === "1";
+  if (!clientConfigured) return false;
+  if (!isParceiroAppUser(user)) return false;
+  if (creditStatus === "disabled") return false;
+  return serverConfirmed || creditStatus === "loading" || creditStatus === "error" || creditStatus === "enabled";
+}
+
 /** Responsável/tesoureiro — módulo habilitado no build; falha transitória de status não esconde o menu. */
 export function isHbCreditStaffNavEligible(
   user: Pick<User, "role">,
@@ -632,6 +655,10 @@ export function getMobileNavItems(
       ],
       user
     );
+  }
+
+  if (effectiveRole === "parceiro") {
+    return filterMenuForUser(PARCEIRO_MENU, navUser);
   }
 
   return [];

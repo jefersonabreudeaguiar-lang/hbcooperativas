@@ -317,6 +317,7 @@ export function MobileNav() {
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
+  const mercadoQrImmersive = pathname === "/mercado-parceiro/cobrar";
   const { user } = useAuth();
   const coopId = useAppDataSelector(
     (data) => (user ? getUserCooperativaId(user, data) : undefined),
@@ -343,8 +344,13 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       <AppUpdateBanner />
       <Sidebar />
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
-        <MobileNav />
-        <main className="flex-1 overflow-y-auto p-4 lg:p-6 pb-36 lg:pb-6">
+        {!mercadoQrImmersive && <MobileNav />}
+        <main
+          className={cn(
+            "flex-1 overflow-y-auto",
+            mercadoQrImmersive ? "p-0 pb-0" : "p-4 lg:p-6 pb-36 lg:pb-6"
+          )}
+        >
           {user?.role !== "cooperado" && (
             <div className="hidden lg:flex justify-end mb-3">
               <SyncStatusChipLight />

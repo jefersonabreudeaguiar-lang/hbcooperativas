@@ -4,7 +4,7 @@ import { useRouter } from "next/navigation";
 import { useEffect } from "react";
 import { useHbCreditEnabled } from "@/hooks/useHbCreditEnabled";
 import { useAuth } from "@/modules/auth/AuthProvider";
-import { isCooperadoAppUser, canAccessTesoureiroArea } from "@/permissions";
+import { isCooperadoAppUser, canAccessTesoureiroArea, isParceiroAppUser } from "@/permissions";
 import { PageSkeleton } from "@/components/ui/PageSkeleton";
 import { AlertBanner } from "@/components/ui/AlertBanner";
 
@@ -13,9 +13,10 @@ export function CreditFeatureGate({ children }: { children: React.ReactNode }) {
   const { enabled, navEnabled, loading, status, errorMessage } = useHbCreditEnabled(user);
   const router = useRouter();
   const cooperadoExperience = Boolean(user && isCooperadoAppUser(user));
+  const parceiroExperience = Boolean(user && isParceiroAppUser(user));
   const canEnterHbArea =
     Boolean(user) &&
-    (cooperadoExperience || (user ? canAccessTesoureiroArea(user) : false));
+    (cooperadoExperience || parceiroExperience || (user ? canAccessTesoureiroArea(user) : false));
   const pageAllowed = navEnabled && canEnterHbArea;
 
   useEffect(() => {
