@@ -12,6 +12,22 @@ update public.hb_credit_accounts
 set financial_limit_cap_cents = limit_released_cents
 where financial_limit_cap_cents is null;
 
+create or replace function public.hb_credit_sync_financial_limit_cap()
+returns trigger
+language plpgsql
+as $$
+begin
+  NEW.financial_limit_cap_cents := NEW.limit_released_cents;
+  return NEW;
+end;
+$$;
+
+drop trigger if exists hb_credit_accounts_sync_financial_cap on public.hb_credit_accounts;
+create trigger hb_credit_accounts_sync_financial_cap
+  before insert or update of limit_released_cents on public.hb_credit_accounts
+  for each row
+  execute function public.hb_credit_sync_financial_limit_cap();
+
 create or replace function public.hb_credit_effective_disponivel_cents(
   p_limit_released bigint,
   p_cap bigint,
