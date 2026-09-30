@@ -2,6 +2,20 @@ import type { AppData, ValorAvulsoReceber } from "@/types";
 import { resolverCooperadoIdCanonico } from "@/services/cooperadoCloudService";
 import { round2 } from "@/utils/calculations";
 
+/** Motivo fixo quando o cooperado dilui cashback HB no resumo “a receber”. */
+export const CASHBACK_HB_CREDITO_MOTIVO_AVULSO = "Cashback HB Crédito";
+
+export function temCashbackHbCreditoPendenteMes(
+  data: AppData,
+  cooperadoId: string,
+  mesReferencia: string,
+  cooperativaId?: string
+): boolean {
+  return valoresAvulsosPendentesMes(data, cooperadoId, mesReferencia, cooperativaId).some(
+    (v) => v.motivo.trim() === CASHBACK_HB_CREDITO_MOTIVO_AVULSO
+  );
+}
+
 function avulsoPertenceCooperado(
   data: AppData,
   avulso: ValorAvulsoReceber,
@@ -84,12 +98,13 @@ export function criarValorAvulsoReceber(
     valor: number;
     responsavel: string;
     dataLancamento?: string;
+    id?: string;
   }
 ): AppData {
   const now = new Date().toISOString();
   const canonico = resolverCooperadoIdCanonico(data, params.cooperadoId, params.cooperativaId);
   const novo: ValorAvulsoReceber = {
-    id: `var_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+    id: params.id ?? `var_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
     cooperativaId: params.cooperativaId,
     cooperadoId: canonico,
     mesReferencia: params.mesReferencia,

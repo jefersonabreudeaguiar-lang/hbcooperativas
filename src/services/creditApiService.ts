@@ -171,6 +171,35 @@ export async function setCreditFinancialPin(cnpj: string, cooperadoId: string, p
   return data;
 }
 
+export async function convertCreditCashbackToReceivable(params: {
+  cnpj: string;
+  cooperadoId: string;
+  mesReferencia: string;
+  valorAvulsoId: string;
+}) {
+  const res = await secureApiFetch("/api/credit/account", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      action: "cashback_to_receivable",
+      cnpj: params.cnpj,
+      cooperadoId: params.cooperadoId,
+      mesReferencia: params.mesReferencia,
+      valorAvulsoId: params.valorAvulsoId,
+    }),
+  });
+  const data = await parseJson<{
+    ok?: boolean;
+    error?: string;
+    amountCents?: number;
+    idempotent?: boolean;
+  }>(res);
+  if (!res.ok || !data.ok) {
+    throw new Error(data.error ?? "Não foi possível somar cashback ao valor a receber.");
+  }
+  return data;
+}
+
 export async function validateCreditQr(cnpj: string, cooperadoId: string, qrPayload: string) {
   const res = await secureApiFetch("/api/credit/payment-intents", {
     method: "POST",

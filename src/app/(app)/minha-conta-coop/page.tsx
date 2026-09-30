@@ -15,6 +15,7 @@ import { useAppData } from "@/hooks/useAppData";
 import { getUserCooperativaId, normalizeCnpj } from "@/utils/cooperativa";
 import {
   authorizeCreditPayment,
+  convertCreditCashbackToReceivable,
   fetchCreditAccount,
   fetchCreditLedger,
   requestCooperadoPinReset,
@@ -22,6 +23,15 @@ import {
   validateCreditQr,
 } from "@/services/creditApiService";
 import { formatCentsBRL } from "@/modules/hb-credit/engine/money";
+import { round2 } from "@/utils/calculations";
+import { getData, updateData } from "@/services/dataStore";
+import { pushOperacionalToCloud } from "@/services/cooperativaSyncCloudService";
+import { resolveCooperativaCnpj } from "@/services/notaPedidoCloudService";
+import {
+  CASHBACK_HB_CREDITO_MOTIVO_AVULSO,
+  criarValorAvulsoReceber,
+  temCashbackHbCreditoPendenteMes,
+} from "@/services/valoresAvulsosReceberService";
 import type { ContaCoopIntent, ContaCoopLedgerEntry, ContaCoopLimiteCooperado } from "@/modules/hb-credit/types";
 import { FINANCIAL_PIN_MIN_LENGTH } from "@/modules/hb-credit/config";
 import { formatLedgerEntryLabel } from "@/lib/hb-credit/ledgerLabels";
@@ -125,6 +135,19 @@ function MinhaContaCoopContent() {
       enabled: true as const,
     };
   }, [auxSyncEnabled, cnpj, cooperadoId, cooperadoNome, data, user]);
+
+  const mesReferenciaReceber = useMemo(() => {
+    if (!data || !cooperadoId || !user) return "";
+    const coopId = getUserCooperativaId(user, data);
+    if (!coopId) return "";
+    return bicCentralMesPrincipalQuantoVouReceber(data, cooperadoId, coopId);
+  }, [data, cooperadoId, user]);
+
+  const cashbackJaNaFicha = useMemo(() => {
+    if (!data || !cooperadoId || !mesReferenciaReceber) return false;
+    const coopId = user ? getUserCooperativaId(user, data) : undefined;
+    return temCashbackHbCreditoPendenteMes(data, cooperadoId, mesReferenciaReceber, coopId);
+  }, [data, cooperadoId, mesReferenciaReceber, user]);
 
   const contaCoopLimiteSync = useMemo(() => {
     if (!contaCoopValorSync) return undefined;
@@ -353,6 +376,54 @@ function MinhaContaCoopContent() {
     }
   };
 
+  const handleCashbackParaReceber = async () => {
+    if (!cnpj || !cooperadoId || !user || !data || !mesReferenciaReceber || busy || isOffline) return;
+    const coopId = getUserCooperativaId(user, data);
+    if (!coopId) return;
+    if (cashbackJaNaFicha) {
+      setError("Este cashback já está no valor a receber deste mês.");
+      return;
+    }
+    const valorAvulsoId = `var_cb_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+    setBusy(true);
+    setError("");
+    setSuccess("");
+    try {
+      const res = await convertCreditCashbackToReceivable({
+        cnpj,
+        cooperadoId,
+        mesReferencia: mesReferenciaReceber,
+        valorAvulsoId,
+      });
+      const amountCents = res.amountCents ?? 0;
+      if (amountCents <= 0) throw new Error("Não há cashback disponível.");
+      updateData((d) =>
+        criarValorAvulsoReceber(d, {
+          id: valorAvulsoId,
+          cooperativaId: coopId,
+          cooperadoId,
+          mesReferencia: mesReferenciaReceber,
+          motivo: CASHBACK_HB_CREDITO_MOTIVO_AVULSO,
+          valor: round2(amountCents / 100),
+          responsavel: cooperadoNome || user.name,
+        })
+      );
+      const d = getData();
+      const cnpjSync = await resolveCooperativaCnpj(d, coopId, user);
+      if (cnpjSync) {
+        await pushOperacionalToCloud(cnpjSync, d, coopId, { authoritative: true });
+      }
+      setSuccess(
+        `${formatCentsBRL(amountCents)} somado ao valor a receber (${mesReferenciaReceber}). Histórico: ${CASHBACK_HB_CREDITO_MOTIVO_AVULSO}.`
+      );
+      await reload({ background: true });
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Não foi possível somar o cashback.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
   if (loading && !account) {
     return (
       <div className="mx-auto max-w-lg space-y-3 pb-8">
@@ -442,6 +513,27 @@ function MinhaContaCoopContent() {
               </p>
             )}
           </div>
+
+          {cashback > 0 && (
+            <Card className="space-y-3 border-emerald-200 bg-emerald-50/50 !p-4">
+              <div>
+                <h3 className="font-semibold text-gray-900">Cashback HB Crédito</h3>
+                <p className="mt-1 text-sm text-gray-600">
+                  Você tem {formatCentsBRL(cashback)} de cashback. Pode somar ao valor a receber do mês{" "}
+                  {mesReferenciaReceber ? `(${mesReferenciaReceber})` : ""} — aparece na ficha como entrada{" "}
+                  <span className="font-medium">{CASHBACK_HB_CREDITO_MOTIVO_AVULSO}</span>.
+                </p>
+              </div>
+              <Button
+                className="w-full"
+                variant="secondary"
+                disabled={busy || isOffline || cashbackJaNaFicha || !mesReferenciaReceber}
+                onClick={() => void handleCashbackParaReceber()}
+              >
+                {cashbackJaNaFicha ? "Cashback já no valor a receber" : "Somar cashback ao valor a receber"}
+              </Button>
+            </Card>
+          )}
 
           <div className="grid grid-cols-2 gap-2">
             <Card className="!p-3 text-center">

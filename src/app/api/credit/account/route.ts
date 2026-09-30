@@ -7,6 +7,7 @@ import {
   listLedgerCooperado,
   requestCooperadoFinancialPinReset,
   setFinancialPin,
+  convertCashbackToReceivable,
 } from "@/lib/supabase/contaCoopStorage";
 import { requireCreditApi, requireCreditCooperado, requireCreditCnpj } from "@/lib/security/creditGuard";
 import { normalizeCnpj } from "@/utils/cooperativa";
@@ -104,6 +105,31 @@ export async function POST(request: Request) {
       message:
         "Solicitação enviada. O responsável da cooperativa resetará o PIN em Conta Coop → Limites.",
       pinResetPending: true,
+    });
+  }
+
+  if (action === "cashback_to_receivable") {
+    const mesReferencia = String(body?.mesReferencia ?? "").trim();
+    const valorAvulsoId = String(body?.valorAvulsoId ?? "").trim();
+    if (!/^\d{4}-\d{2}$/.test(mesReferencia)) {
+      return NextResponse.json({ error: "Mês de referência inválido." }, { status: 400 });
+    }
+    if (!valorAvulsoId) {
+      return NextResponse.json({ error: "Identificador do lançamento inválido." }, { status: 400 });
+    }
+    const result = await convertCashbackToReceivable(
+      gate.ctx.supabase,
+      cnpj,
+      cooperadoId,
+      mesReferencia,
+      gate.ctx.session?.sub ?? cooperadoId,
+      valorAvulsoId
+    );
+    if (!result.ok) return NextResponse.json({ error: result.error }, { status: 400 });
+    return NextResponse.json({
+      ok: true,
+      amountCents: result.amountCents ?? 0,
+      idempotent: result.idempotent ?? false,
     });
   }
 

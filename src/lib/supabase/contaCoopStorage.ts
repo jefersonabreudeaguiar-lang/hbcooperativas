@@ -4071,3 +4071,38 @@ export async function sweepUnusedCashbackToCredit(
     cooperados: Number(result?.cooperados ?? 0),
   };
 }
+
+export async function convertCashbackToReceivable(
+  supabase: SupabaseClient,
+  cnpj: string,
+  cooperadoId: string,
+  mesReferencia: string,
+  actorUserId: string,
+  valorAvulsoId: string
+): Promise<{ ok: boolean; error?: string; amountCents?: number; idempotent?: boolean }> {
+  const { data, error } = await supabase.rpc("hb_credit_cashback_to_receivable", {
+    p_cooperative_cnpj: normalizeCnpj(cnpj),
+    p_cooperado_id: cooperadoId,
+    p_mes_referencia: mesReferencia,
+    p_actor_user_id: actorUserId,
+    p_valor_avulso_id: valorAvulsoId,
+  });
+  if (error) {
+    if (/function.*does not exist/i.test(error.message)) {
+      return { ok: false, error: "Migration cashback → a receber não aplicada na nuvem." };
+    }
+    return { ok: false, error: error.message };
+  }
+  const result = data as { ok?: boolean; error?: string; amount_cents?: number; idempotent?: boolean };
+  if (!result?.ok) {
+    const code = String(result?.error ?? "");
+    if (code === "sem_cashback") return { ok: false, error: "Não há cashback disponível." };
+    if (code === "conta_nao_encontrada") return { ok: false, error: "Conta HB não encontrada." };
+    return { ok: false, error: code || "Não foi possível converter cashback." };
+  }
+  return {
+    ok: true,
+    amountCents: Number(result.amount_cents ?? 0),
+    idempotent: Boolean(result.idempotent),
+  };
+}

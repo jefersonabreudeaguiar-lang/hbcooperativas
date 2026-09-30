@@ -28,7 +28,8 @@ export type LedgerTipo =
   | "PARTNER_BLOCK"
   | "CASHBACK_EARN"
   | "CASHBACK_USE"
-  | "CASHBACK_SWEEP";
+  | "CASHBACK_SWEEP"
+  | "CASHBACK_TO_RECEIVABLE";
 
 export interface ContaCoopTresValores {
   limiteLiberadoCents: number;

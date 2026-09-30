@@ -11,6 +11,7 @@ const LEDGER_LABELS: Record<string, string> = {
   CASHBACK_EARN: `Cashback recebido (${CONTA_COOP_DESCONTO_SPLIT.cooperadoPercent}%)`,
   CASHBACK_USE: "Cashback usado no pagamento",
   CASHBACK_SWEEP: "Cashback convertido em crédito",
+  CASHBACK_TO_RECEIVABLE: "Cashback HB Crédito — valor a receber",
 };
 
 export function labelLedgerTipo(tipo: string): string {
