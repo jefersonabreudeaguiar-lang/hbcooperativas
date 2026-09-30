@@ -28,9 +28,14 @@ import { formatCpfCnpj, formatDateTime, formatMesReferencia, getCurrentMesRefere
 import { Eye } from "lucide-react";
 import { gerarQrDataUrl } from "@/lib/hb-credit/gerarQrDataUrl";
 import {
+  clearHbCreditMercadoCobrancaDraft,
   peekHbCreditMercadoCobrancaDraft,
   storeHbCreditMercadoCobrancaDraft,
 } from "@/lib/hb-credit/hbCreditMercadoCobrancaDraft";
+
+function intentAguardandoPagamento(status: ContaCoopIntent["status"]) {
+  return status === "pendente" || status === "criada";
+}
 
 type MercadoTab = "inicio" | "cobrar" | "vendas" | "mais";
 
@@ -125,6 +130,26 @@ function MercadoParceiroContent() {
   }, [reload]);
 
   const cobrancaAberta = peekHbCreditMercadoCobrancaDraft();
+
+  const cobrancasAguardando = useMemo(
+    () => intents.filter((i) => intentAguardandoPagamento(i.status)),
+    [intents]
+  );
+
+  const cancelarCobrancaAberta = async () => {
+    if (!cobrancaAberta || busy) return;
+    setBusy(true);
+    setError("");
+    try {
+      await cancelCreditIntent(cobrancaAberta.intentId);
+      clearHbCreditMercadoCobrancaDraft();
+      await reload();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Erro ao cancelar cobrança.");
+    } finally {
+      setBusy(false);
+    }
+  };
 
   const criarCobranca = async () => {
     setBusy(true);
@@ -455,6 +480,40 @@ function MercadoParceiroContent() {
             </Card>
           )}
 
+          {ativo && (cobrancaAberta || cobrancasAguardando.length > 0) && (
+            <Card className="space-y-3 border-amber-200 bg-amber-50/60 !p-4">
+              <p className="text-sm font-semibold text-amber-950">Cobrança pendente de pagamento</p>
+              {cobrancaAberta ? (
+                <div className="flex flex-col gap-2">
+                  <p className="text-2xl font-bold tabular-nums text-gray-900">{formatCentsBRL(cobrancaAberta.amountCents)}</p>
+                  <div className="flex flex-col gap-2 sm:flex-row">
+                    <Button className="flex-1" size="sm" onClick={() => router.push("/mercado-parceiro/cobrar")}>
+                      Abrir QR Code
+                    </Button>
+                    <Button
+                      variant="secondary"
+                      className="flex-1"
+                      size="sm"
+                      disabled={busy}
+                      onClick={() => void cancelarCobrancaAberta()}
+                    >
+                      Cancelar
+                    </Button>
+                  </div>
+                </div>
+              ) : (
+                cobrancasAguardando.slice(0, 3).map((intent) => (
+                  <div key={intent.id} className="flex items-center justify-between gap-2">
+                    <span className="font-semibold tabular-nums">{formatCentsBRL(intent.amountCents)}</span>
+                    <Button size="sm" variant="secondary" disabled={busy} onClick={() => void cancelar(intent.id)}>
+                      Cancelar
+                    </Button>
+                  </div>
+                ))
+              )}
+            </Card>
+          )}
+
           <Button size="lg" className="w-full" onClick={() => setTab("cobrar")} disabled={!ativo || needsTermsAcceptance}>
             Cobrar com QR Code
           </Button>
@@ -507,12 +566,36 @@ function MercadoParceiroContent() {
             </div>
           )}
 
-          {cobrancaAberta && !comprovante && (
-            <Card className="border-violet-200 bg-violet-50/50 !p-4">
-              <p className="text-sm text-gray-700">Você tem uma cobrança aberta aguardando pagamento.</p>
-              <Button className="mt-3 w-full" onClick={() => router.push("/mercado-parceiro/cobrar")}>
-                Ver QR Code · {formatCentsBRL(cobrancaAberta.amountCents)}
-              </Button>
+          {(cobrancaAberta || cobrancasAguardando.length > 0) && !comprovante && (
+            <Card className="space-y-3 border-amber-200 bg-amber-50/50 !p-4">
+              <div>
+                <p className="text-sm font-semibold text-amber-950">Compra aguardando pagamento</p>
+                <p className="mt-1 text-xs text-amber-900/80">
+                  Se o cooperado não concluir, cancele para liberar uma nova cobrança.
+                </p>
+              </div>
+              {cobrancaAberta && (
+                <div className="flex flex-col gap-2 sm:flex-row">
+                  <Button className="flex-1" onClick={() => router.push("/mercado-parceiro/cobrar")}>
+                    Ver QR · {formatCentsBRL(cobrancaAberta.amountCents)}
+                  </Button>
+                  <Button variant="secondary" className="flex-1" disabled={busy} onClick={() => void cancelarCobrancaAberta()}>
+                    Cancelar cobrança
+                  </Button>
+                </div>
+              )}
+              {!cobrancaAberta &&
+                cobrancasAguardando.slice(0, 5).map((intent) => (
+                  <div key={intent.id} className="flex items-center justify-between gap-3 rounded-xl bg-white/70 px-3 py-2">
+                    <div className="min-w-0 text-left">
+                      <p className="font-medium tabular-nums text-gray-900">{formatCentsBRL(intent.amountCents)}</p>
+                      <p className="text-xs text-gray-500">{new Date(intent.createdAt).toLocaleString("pt-BR")}</p>
+                    </div>
+                    <Button size="sm" variant="secondary" disabled={busy} onClick={() => void cancelar(intent.id)}>
+                      Cancelar
+                    </Button>
+                  </div>
+                ))}
             </Card>
           )}
 
@@ -653,7 +736,7 @@ function MercadoParceiroContent() {
                   <p className="font-medium">{formatCentsBRL(intent.amountCents)} · {intent.status}</p>
                   <p className="text-xs text-gray-500">{new Date(intent.createdAt).toLocaleString("pt-BR")}</p>
                 </div>
-                {["pendente", "criada"].includes(intent.status) && (
+                {intentAguardandoPagamento(intent.status) && (
                   <Button size="sm" variant="secondary" onClick={() => cancelar(intent.id)} disabled={busy}>
                     Cancelar
                   </Button>

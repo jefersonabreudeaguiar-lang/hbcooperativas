@@ -2400,6 +2400,13 @@ export async function authorizePayment(
     if (/function.*does not exist/i.test(error.message)) {
       return { ok: false, error: "Migration HB Credit não aplicada na nuvem." };
     }
+    if (/financial_limit_sync_state/i.test(error.message ?? "")) {
+      return {
+        ok: false,
+        error:
+          "Pagamento temporariamente indisponível (atualização do servidor). Peça ao responsável HB para aplicar a migration de pagamento ou tente em alguns minutos.",
+      };
+    }
     return { ok: false, error: error.message };
   }
 
