@@ -284,11 +284,14 @@ function cooperadoConferidasSemFicha(
 export function cooperadoFichaValoresDesalinhados(
   data: AppData,
   cooperadoId: string,
-  cooperativaId: string
+  cooperativaId: string,
+  opts?: { fichaOperacionalNaNuvem?: boolean }
 ): boolean {
+  const ignorarDeltaReconciliar = opts?.fichaOperacionalNaNuvem === true;
   return (
     cooperadoTemFichasDuplicadas(data, cooperadoId, cooperativaId) ||
-    cooperadoTotalMudaComReconciliacao(data, cooperadoId, cooperativaId) ||
+    (!ignorarDeltaReconciliar &&
+      cooperadoTotalMudaComReconciliacao(data, cooperadoId, cooperativaId)) ||
     cooperadoConferidasSemFicha(data, cooperadoId, cooperativaId)
   );
 }
@@ -351,7 +354,9 @@ export function cooperadoFinanceiroDesatualizado(
     const sane = aplicarSanidadeFinanceiroCooperadoLocal(data, cooperadoId, cooperativaId);
     return (
       cooperadoFinanceiroLocalAusente(sane, cooperadoId, cooperativaId) ||
-      cooperadoFichaValoresDesalinhados(sane, cooperadoId, cooperativaId)
+      cooperadoFichaValoresDesalinhados(sane, cooperadoId, cooperativaId, {
+        fichaOperacionalNaNuvem: true,
+      })
     );
   }
   const sane = aplicarSanidadeFinanceiroCooperadoLocal(data, cooperadoId, cooperativaId);

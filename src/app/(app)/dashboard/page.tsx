@@ -4,10 +4,13 @@ import { useEffect, useRef } from "react";
 import type { AppData } from "@/types";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useAppDataSelector } from "@/hooks/useAppData";
+import { useAppDataSelector, useAppDataReady } from "@/hooks/useAppData";
 import { useAuth } from "@/modules/auth/AuthProvider";
 import { isCooperadoAppUser, isDiretoriaRole } from "@/permissions";
-import { canAccessPainelResponsavel } from "@/lib/security/responsavelPanelAccess";
+import {
+  canAccessPainelResponsavel,
+  canAccessPainelResponsavelSession,
+} from "@/lib/security/responsavelPanelAccess";
 import { StatCard } from "@/components/ui/Card";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
@@ -286,28 +289,19 @@ function CooperadoDashboard() {
 
       {cooperado && <AssinaturaStatusAviso cooperado={cooperado} />}
 
-      {financeiroAusente && (
-        <AlertBanner
-          variant={lastSyncError ? "error" : "info"}
-          title={syncing ? "Sincronizando sua ficha…" : "Valores ainda não carregaram"}
-        >
-          {syncing
-            ? "Baixando entregas e ficha da nuvem. Aguarde alguns segundos com internet."
-            : lastSyncError
-              ? `${lastSyncError} Toque em atualizar ou saia e entre de novo.`
-              : "Toque em atualizar ou aguarde — seus lançamentos estão guardados na nuvem."}
-          {!syncing && (
-            <button
-              type="button"
-              className="ml-2 font-semibold underline"
-              onClick={() => {
-                recoverySyncRef.current = false;
-                requestAppSyncImmediate();
-              }}
-            >
-              Atualizar agora
-            </button>
-          )}
+      {lastSyncError && (
+        <AlertBanner variant="error" title="Não foi possível sincronizar">
+          {lastSyncError}{" "}
+          <button
+            type="button"
+            className="ml-1 font-semibold underline"
+            onClick={() => {
+              recoverySyncRef.current = false;
+              requestAppSyncImmediate();
+            }}
+          >
+            Tentar novamente
+          </button>
         </AlertBanner>
       )}
 
@@ -543,15 +537,21 @@ function AdminDashboard() {
 export default function DashboardPage() {
   const { user, accountUser } = useAuth();
   const authSubject = accountUser ?? user;
-  const canGestao = useAppDataSelector(
+  const dataReady = useAppDataReady();
+  const canGestaoFromData = useAppDataSelector(
     (data) => (authSubject ? canAccessPainelResponsavel(authSubject, data) : false),
     [authSubject?.id, authSubject?.role, authSubject?.cooperadoId, authSubject?.cooperativaId]
   );
+  const canGestao = dataReady
+    ? canGestaoFromData
+    : authSubject
+      ? canAccessPainelResponsavelSession(authSubject)
+      : false;
 
   if (!user) return null;
-  if (canGestao === null) return <PageSkeleton />;
+  if (dataReady && canGestaoFromData === null) return <PageSkeleton />;
 
-  if (isCooperadoAppUser(user) || !canGestao) {
+  if (isCooperadoAppUser(accountUser ?? user) || !canGestao) {
     return <CooperadoDashboard />;
   }
 

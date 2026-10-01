@@ -6,14 +6,13 @@ import { useAppDataSelector } from "@/hooks/useAppData";
 import { useSyncStatus } from "@/components/sync/CooperativaSyncProvider";
 import {
   cooperadoFinanceiroBloqueiaEntradaApp,
-  cooperadoFinanceiroDesatualizado,
   limparFichaObsoletaCooperado,
 } from "@/services/fichaSyncGuard";
 import { solicitarRecuperacaoFinanceiroCooperado } from "@/services/cooperadoFinanceiroGuard";
 import { requestAppSyncImmediate } from "@/services/syncRequest";
 import { resolverCooperadoIdCanonico } from "@/services/cooperadoCloudService";
 import { getUserCooperativaId } from "@/utils/cooperativa";
-import { getData, saveDataSafe } from "@/services/dataStore";
+import { getData } from "@/services/dataStore";
 import { filtrarInicioCardPersistidoLeituraBic } from "@/lib/cooperadoInicioCardPolicy";
 import {
   inicioCardCacheProntoParaAbertura,
@@ -56,14 +55,6 @@ export function CooperadoFinanceiroGate({ children }: { children: React.ReactNod
     if (!coopId) return true;
     const cooperadoId = resolverCooperadoIdCanonico(data, user.cooperadoId, coopId);
     return cooperadoFinanceiroBloqueiaEntradaApp(data, cooperadoId, coopId);
-  }, [user?.id, user?.cooperadoId, user?.cooperativaId, user?.role]);
-
-  const financeiroDesatualizado = useAppDataSelector((data) => {
-    if (!data || !user?.cooperadoId || user.role !== "cooperado") return false;
-    const coopId = getUserCooperativaId(user, data);
-    if (!coopId) return true;
-    const cooperadoId = resolverCooperadoIdCanonico(data, user.cooperadoId, coopId);
-    return cooperadoFinanceiroDesatualizado(data, cooperadoId, coopId);
   }, [user?.id, user?.cooperadoId, user?.cooperativaId, user?.role]);
 
   useEffect(() => {
@@ -144,23 +135,5 @@ export function CooperadoFinanceiroGate({ children }: { children: React.ReactNod
     );
   }
 
-  const bannerAtualizando =
-    financeiroDesatualizado && (syncing || lastSyncedAt == null || Boolean(lastSyncError));
-
-  return (
-    <>
-      {bannerAtualizando && (
-        <div className="max-w-lg mx-auto px-4 pt-2">
-          <AlertBanner variant="info" title="Atualizando seus dados">
-            {syncing
-              ? "Baixando ficha e entregas da nuvem. Os valores podem ajustar em instantes."
-              : lastSyncError
-                ? "Última sincronização falhou; exibindo o que há no aparelho. Toque em sincronizar se algo faltar."
-                : "Preparando sua ficha e entregas…"}
-          </AlertBanner>
-        </div>
-      )}
-      {children}
-    </>
-  );
+  return <>{children}</>;
 }

@@ -34,6 +34,10 @@ export function canAccessPainelResponsavel(
 
   if (isAppCreator(user) || isBuiltinPainelResponsavelEmail(user.email)) return true;
 
+  /** Mesma regra de canAccessPainelResponsavelSession — não exige equipe local carregada. */
+  if (role === "responsavel" || role === "tesoureiro") return true;
+  if (role === "admin") return isAppCreator(user);
+
   if (data && user.cooperativaId) {
     const emailNorm = normalizeAuthEmail(user.email);
     return listMembrosEquipeIncluindoInativos(data, user.cooperativaId).some(
