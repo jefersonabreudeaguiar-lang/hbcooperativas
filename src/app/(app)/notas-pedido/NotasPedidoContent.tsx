@@ -103,6 +103,8 @@ import { CooperadoMinhaFichaTab } from "@/components/cooperado/CooperadoMinhaFic
 import { useContaCoopDescontosRevision } from "@/hooks/useContaCoopDescontosRevision";
 import { useSyncContaCoopValorReceberPilot } from "@/hooks/useSyncContaCoopValorReceberPilot";
 import { CorrecoesEntregasPanel } from "@/components/notas/CorrecoesEntregasPanel";
+import { LancamentosEmAbertoPainel } from "@/components/notas/LancamentosEmAbertoPainel";
+import { getRelatorioPagarCooperadoEmAbertoReport } from "@/services/dashboardService";
 import { getContratoLabel, getContratosEntrega, resolverContratoEntrega } from "@/utils/contratosEntrega";
 import { cn, formatCurrency, formatDate, formatMesReferencia, getCurrentMesReferencia } from "@/utils/format";
 import { labelUnidade } from "@/utils/unidades";
@@ -286,7 +288,7 @@ export default function NotasPedidoContent() {
   const [abaConferenciaKey, setAbaConferenciaKey] = useState("");
   /** Fila = só nomes pendentes; cooperado = notas daquele; historico = tabela; correcoes = apagar/re-lançar. */
   const [vistaResponsavel, setVistaResponsavel] = useState<
-    "fila" | "cooperado" | "historico" | "correcoes"
+    "fila" | "cooperado" | "historico" | "correcoes" | "aberto"
   >("fila");
   const [abaCooperado, setAbaCooperado] = useState<"entregas" | "ficha">("entregas");
   const [cooperadoAbaEntregasMontada, setCooperadoAbaEntregasMontada] = useState(true);
@@ -1236,6 +1238,12 @@ export default function NotasPedidoContent() {
     setStatusFilter("");
   };
 
+  const abrirLancamentosAbertoResponsavel = () => {
+    setVistaResponsavel("aberto");
+    setAbaConferenciaKey("");
+    setStatusFilter("");
+  };
+
   const abrirCorrecoesResponsavel = () => {
     setVistaResponsavel("correcoes");
     setAbaConferenciaKey("");
@@ -1247,8 +1255,16 @@ export default function NotasPedidoContent() {
   const mostrarTabelaResponsavel =
     !isCooperado && vistaResponsavel !== "correcoes" && vistaResponsavel === "historico";
 
+  const mostrarPainelLancamentosAberto = !isCooperado && vistaResponsavel === "aberto";
+
+  const cooperadosComLancamentoAbertoCount = useMemo(() => {
+    if (!data || !coopId || isCooperado) return 0;
+    return getRelatorioPagarCooperadoEmAbertoReport(data, coopId).length;
+  }, [data, coopId, isCooperado, hbDescontosRevision]);
+
   const notas = useMemo(() => {
     if (!data) return [];
+    if (!isCooperado && vistaResponsavel === "aberto") return [];
     if (!isCooperado && vistaResponsavel === "fila" && pendentesEstaveis.length > 0) {
       return [];
     }
@@ -3181,7 +3197,9 @@ export default function NotasPedidoContent() {
             ? abaCooperado === "ficha"
               ? "Extrato financeiro mensal com valores recebidos e detalhamento de cada entrega"
               : "Toque no botão verde para fotografar sua entrega — histórico por mês abaixo"
-            : pendentesEstaveis.length > 0
+            : vistaResponsavel === "aberto"
+              ? "Relatório de entregas já lançadas, com pagamento ainda em aberto por cooperado"
+              : pendentesEstaveis.length > 0
               ? `${pendentesEstaveis.length} ${pendentesEstaveis.length === 1 ? "nota" : "notas"} aguardando conferência e lançamento`
               : "Nenhuma pendente — use Histórico para entregas já lançadas ou Lançar entrega (avulso)"
         }
@@ -3234,6 +3252,21 @@ export default function NotasPedidoContent() {
             Conferir
             {pendentesEstaveis.length > 0 && (
               <span className="ml-1 text-xs opacity-90">({pendentesEstaveis.length})</span>
+            )}
+          </button>
+          <button
+            type="button"
+            onClick={abrirLancamentosAbertoResponsavel}
+            className={cn(
+              "flex-1 min-w-[7rem] px-3 py-2.5 text-sm font-semibold rounded-lg transition-colors",
+              vistaResponsavel === "aberto"
+                ? "bg-green-600 text-white shadow-sm"
+                : "text-gray-600 hover:bg-gray-100"
+            )}
+          >
+            Em aberto
+            {cooperadosComLancamentoAbertoCount > 0 && (
+              <span className="ml-1 text-xs opacity-90">({cooperadosComLancamentoAbertoCount})</span>
             )}
           </button>
           {isDiretoria && (
@@ -3351,7 +3384,15 @@ export default function NotasPedidoContent() {
             />
           )}
 
-          {!mostrarCorrecoesResponsavel && pendentesEstaveis.length > 0 ? (
+          {mostrarPainelLancamentosAberto && coopId && (
+            <LancamentosEmAbertoPainel
+              data={data}
+              coopId={coopId}
+              cooperadoId={filtroCooperadoId || undefined}
+            />
+          )}
+
+          {!mostrarPainelLancamentosAberto && !mostrarCorrecoesResponsavel && pendentesEstaveis.length > 0 ? (
             <>
               <div className="rounded-2xl border border-amber-200 bg-amber-50 px-5 py-4">
                 <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
@@ -3553,7 +3594,7 @@ export default function NotasPedidoContent() {
                 </div>
               )}
             </>
-          ) : !mostrarCorrecoesResponsavel ? (
+          ) : !mostrarCorrecoesResponsavel && !mostrarPainelLancamentosAberto ? (
             <div className="rounded-2xl border border-green-200 bg-green-50/60 px-5 py-6 text-center">
               <CheckCircle size={32} className="mx-auto text-green-600 mb-2" />
               <p className="text-base font-semibold text-green-900">Tudo em dia</p>
@@ -3632,7 +3673,7 @@ export default function NotasPedidoContent() {
         </button>
       )}
 
-      {(isCooperado || mostrarTabelaResponsavel) && (
+      {(isCooperado || mostrarTabelaResponsavel || mostrarPainelLancamentosAberto) && (
       <FilterBar>
         {isCooperado && abaCooperado === "entregas" && (
           <FormField label="Filtrar entregas">
@@ -3670,7 +3711,7 @@ export default function NotasPedidoContent() {
             </Select>
           </FormField>
         )}
-        {!isCooperado && (
+        {!isCooperado && !mostrarPainelLancamentosAberto && (
         <FormField label="Filtrar">
           <Select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
             <option value="">Todas</option>
