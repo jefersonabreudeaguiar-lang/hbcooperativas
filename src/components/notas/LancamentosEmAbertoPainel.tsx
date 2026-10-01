@@ -1,34 +1,56 @@
 "use client";
 
-import { useMemo } from "react";
-import type { AppData } from "@/types";
+import { memo, useMemo } from "react";
 import { StatCard } from "@/components/ui/Card";
 import { DataTable } from "@/components/ui/Table";
 import { AlertBanner } from "@/components/ui/AlertBanner";
+import { useAppDataSelector } from "@/hooks/useAppData";
+import { getRelatorioLancamentosEmAbertoResponsavel } from "@/services/responsavelPainelIndex";
 import {
-  getRelatorioPagarCooperadoEmAbertoReport,
+  flattenLinhasPagarCooperadoEmAberto,
   getTotalValoresAPagarEmAberto,
-} from "@/services/dashboardService";
-import { flattenLinhasPagarCooperadoEmAberto } from "@/services/relatorioService";
+} from "@/services/relatorioService";
 import { formatCurrency } from "@/utils/format";
 
 type LancamentosEmAbertoPainelProps = {
-  data: AppData;
   coopId: string;
   cooperadoId?: string;
 };
 
 /** Relatório fixo: entregas já lançadas (conferidas) com pagamento ainda em aberto por cooperado/mês. */
-export function LancamentosEmAbertoPainel({ data, coopId, cooperadoId }: LancamentosEmAbertoPainelProps) {
-  const { porCooperado, linhasTabela, detalharPorMes, totalGeral } = useMemo(() => {
-    const porCooperado = getRelatorioPagarCooperadoEmAbertoReport(data, coopId, cooperadoId);
-    const linhasTabela = flattenLinhasPagarCooperadoEmAberto(porCooperado);
-    const detalharPorMes = porCooperado.some((r) => r.porMes.length > 1);
-    const totalGeral = cooperadoId
-      ? porCooperado.reduce((s, r) => s + r.total, 0)
-      : getTotalValoresAPagarEmAberto(data, coopId);
-    return { porCooperado, linhasTabela, detalharPorMes, totalGeral };
-  }, [data, coopId, cooperadoId]);
+function LancamentosEmAbertoPainelInner({ coopId, cooperadoId }: LancamentosEmAbertoPainelProps) {
+  const relatorio = useAppDataSelector(
+    (d) => {
+      const porCooperado = getRelatorioLancamentosEmAbertoResponsavel(d, coopId, cooperadoId);
+      const linhasTabela = flattenLinhasPagarCooperadoEmAberto(porCooperado);
+      const detalharPorMes = porCooperado.some((r) => r.porMes.length > 1);
+      const totalGeral = cooperadoId
+        ? porCooperado.reduce((s, r) => s + r.total, 0)
+        : getTotalValoresAPagarEmAberto(d, coopId);
+      return { porCooperado, linhasTabela, detalharPorMes, totalGeral };
+    },
+    [coopId, cooperadoId]
+  );
+
+  const { porCooperado, linhasTabela, detalharPorMes, totalGeral } = relatorio ?? {
+    porCooperado: [],
+    linhasTabela: [],
+    detalharPorMes: false,
+    totalGeral: 0,
+  };
+
+  const columns = useMemo(
+    () => [
+      { key: "cooperado", label: "Cooperado" },
+      {
+        key: "mesesLabel",
+        label: detalharPorMes ? "Mês" : "Meses em aberto",
+      },
+      { key: "entregas", label: "Entregas lançadas" },
+      { key: "total", label: "Valor total", render: (r: { total: number }) => formatCurrency(r.total) },
+    ],
+    [detalharPorMes]
+  );
 
   return (
     <div className="space-y-4">
@@ -45,15 +67,7 @@ export function LancamentosEmAbertoPainel({ data, coopId, cooperadoId }: Lancame
       <DataTable
         data={linhasTabela}
         keyField="id"
-        columns={[
-          { key: "cooperado", label: "Cooperado" },
-          {
-            key: "mesesLabel",
-            label: detalharPorMes ? "Mês" : "Meses em aberto",
-          },
-          { key: "entregas", label: "Entregas lançadas" },
-          { key: "total", label: "Valor total", render: (r) => formatCurrency(r.total) },
-        ]}
+        columns={columns}
         emptyMessage="Nenhum lançamento em aberto — todos os meses conferidos já foram pagos ou quitados."
       />
 
@@ -64,3 +78,5 @@ export function LancamentosEmAbertoPainel({ data, coopId, cooperadoId }: Lancame
     </div>
   );
 }
+
+export const LancamentosEmAbertoPainel = memo(LancamentosEmAbertoPainelInner);

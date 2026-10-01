@@ -1,12 +1,13 @@
 "use client";
 
-import { useState, useMemo, useEffect, useRef, useCallback, startTransition } from "react";
+import { useState, useMemo, useEffect, useRef, useCallback, startTransition, useTransition, useDeferredValue } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import {
   Camera, CheckCircle, FileText, XCircle, RefreshCw, ChevronRight, Eye, Building2, Pencil, UserPlus, X, ImagePlus, Trash2, FileSignature, BookOpen, Package, Users,
 } from "lucide-react";
 import { useAppData, useAppDataSelector } from "@/hooks/useAppData";
+import { useResponsavelFilaConferencia } from "@/hooks/useResponsavelFilaConferencia";
 import { usePermissions } from "@/hooks/usePermissions";
 import { getUserCooperativaId } from "@/utils/cooperativa";
 import { PageHeader, DataTable, FilterBar, Modal } from "@/components/ui/Table";
@@ -91,7 +92,7 @@ import {
 } from "@/services/conferenciaAprovacaoSyncQueue";
 import { withConferenciaOperacionalPushScope } from "@/services/conferenciaOperacionalPushScope";
 import { getProdutosContrato } from "@/services/catalogoContratosService";
-import { listNotasFilaConferenciaResponsavel } from "@/services/responsavelPainelIndex";
+import { countCooperadosLancamentosEmAbertoResponsavel } from "@/services/responsavelPainelIndex";
 import { listarResumosMensaisEntregas, filtrarResumosEntregasPendentes, filtrarResumosMesesNaoQuitados } from "@/services/cooperadoEntregasService";
 import { listarResumosFichaEmAbertoCooperado } from "@/services/cooperadoFichaTimelineService";
 import {
@@ -104,7 +105,6 @@ import { useContaCoopDescontosRevision } from "@/hooks/useContaCoopDescontosRevi
 import { useSyncContaCoopValorReceberPilot } from "@/hooks/useSyncContaCoopValorReceberPilot";
 import { CorrecoesEntregasPanel } from "@/components/notas/CorrecoesEntregasPanel";
 import { LancamentosEmAbertoPainel } from "@/components/notas/LancamentosEmAbertoPainel";
-import { getRelatorioPagarCooperadoEmAbertoReport } from "@/services/dashboardService";
 import { getContratoLabel, getContratosEntrega, resolverContratoEntrega } from "@/utils/contratosEntrega";
 import { cn, formatCurrency, formatDate, formatMesReferencia, getCurrentMesReferencia } from "@/utils/format";
 import { labelUnidade } from "@/utils/unidades";
@@ -290,6 +290,14 @@ export default function NotasPedidoContent() {
   const [vistaResponsavel, setVistaResponsavel] = useState<
     "fila" | "cooperado" | "historico" | "correcoes" | "aberto"
   >("fila");
+  const [, startVistaTransition] = useTransition();
+  const trocarVistaResponsavel = useCallback(
+    (v: "fila" | "cooperado" | "historico" | "correcoes" | "aberto") => {
+      startVistaTransition(() => setVistaResponsavel(v));
+    },
+    []
+  );
+  const vistaConteudo = useDeferredValue(vistaResponsavel);
   const [abaCooperado, setAbaCooperado] = useState<"entregas" | "ficha">("entregas");
   const [cooperadoAbaEntregasMontada, setCooperadoAbaEntregasMontada] = useState(true);
   const [cooperadoAbaFichaMontada, setCooperadoAbaFichaMontada] = useState(false);
@@ -956,11 +964,11 @@ export default function NotasPedidoContent() {
     if (!isCooperado && !filtroResponsavelIniciado.current) {
       setStatusFilter("aguardando_conferencia");
       if (!searchParams.get("cooperado")) {
-        setVistaResponsavel("fila");
+        trocarVistaResponsavel("fila");
       }
       filtroResponsavelIniciado.current = true;
     }
-  }, [isCooperado, searchParams]);
+  }, [isCooperado, searchParams, trocarVistaResponsavel]);
 
   const resumosMensaisCooperado = useMemo(() => {
     if (!isCooperado || !cooperadoAbaEntregasMontada || !data || !cooperadoId) return [];
@@ -995,127 +1003,20 @@ export default function NotasPedidoContent() {
   }, [data, cooperadoId, user?.name]);
 
 
-  const pendingDeleteIds = useMemo(() => {
-    if (!data || !coopId) return new Set<string>();
-    const cnpj = getCooperativaCnpj(data, coopId);
-    return cnpj ? getPendingNotaDeleteIds(cnpj) : new Set<string>();
-  }, [data, coopId]);
+  const filaDetalhada =
+    !isCooperado && (vistaResponsavel === "fila" || vistaResponsavel === "cooperado");
 
-  const pendentesTodasBase =
-    useAppDataSelector(
-      (d) => {
-        if (isCooperado || !coopId) return [] as NotaPedido[];
-        return listNotasFilaConferenciaResponsavel(d, coopId);
-      },
-      [coopId, isCooperado]
-    ) ?? [];
+  const {
+    pendingDeleteIds,
+    pendentesTodas,
+    pendentesEstaveis,
+    pendentesPorCooperado,
+    filaBadgeCount,
+    removerNotaDaFilaSticky,
+    touchNotaNaFilaSticky,
+  } = useResponsavelFilaConferencia(coopId, isCooperado, filaDetalhada, data);
 
-  const pendentesTodas = useMemo(() => {
-    if (pendingDeleteIds.size === 0) return pendentesTodasBase;
-    return pendentesTodasBase.filter((n) => !pendingDeleteIds.has(n.id));
-  }, [pendentesTodasBase, pendingDeleteIds]);
-
-  // Fila estável durante sync — some assim que sair da fila (lançada/rejeitada/paga).
-  const filaStickyIdsRef = useRef<Set<string>>(new Set());
-  const filaStickySnapshotRef = useRef<Map<string, NotaPedido>>(new Map());
-
-  const removerNotaDaFilaSticky = useCallback((notaId: string) => {
-    filaStickyIdsRef.current.delete(notaId);
-    filaStickySnapshotRef.current.delete(notaId);
-  }, []);
-
-  useEffect(() => {
-    for (const n of pendentesTodas) {
-      if (!notaElegivelParaFilaConferenciaResponsavel(n)) continue;
-      filaStickyIdsRef.current.add(n.id);
-      filaStickySnapshotRef.current.set(n.id, n);
-    }
-  }, [pendentesTodas]);
-
-  const pendentesEstaveis = useMemo(() => {
-    if (!data) return pendentesTodas;
-
-    const notasById = new Map<string, NotaPedido>();
-    for (const n of data.notasPedido) notasById.set(n.id, n);
-
-    for (const id of [...filaStickyIdsRef.current]) {
-      if (coopId && isNotaPedidoExcluida(data, id, coopId)) {
-        filaStickyIdsRef.current.delete(id);
-        filaStickySnapshotRef.current.delete(id);
-        continue;
-      }
-      if (pendingDeleteIds.has(id)) {
-        filaStickyIdsRef.current.delete(id);
-        filaStickySnapshotRef.current.delete(id);
-        continue;
-      }
-      const atual = notasById.get(id);
-      if (atual && isNotaSaiuDaFilaConferencia(atual.status)) {
-        filaStickyIdsRef.current.delete(id);
-        filaStickySnapshotRef.current.delete(id);
-        continue;
-      }
-      if (atual) {
-        const candAtual = sanitizarNotaParaFilaConferencia(atual);
-        if (!notaElegivelParaFilaConferenciaResponsavel(candAtual)) {
-          if (isNotaZombieNaFilaConferencia(atual)) {
-            filaStickySnapshotRef.current.set(id, candAtual);
-          } else {
-            filaStickyIdsRef.current.delete(id);
-            filaStickySnapshotRef.current.delete(id);
-          }
-          continue;
-        }
-      }
-    }
-
-    const byId = new Map<string, NotaPedido>();
-    for (const n of pendentesTodas) byId.set(n.id, n);
-
-    for (const id of filaStickyIdsRef.current) {
-      if (coopId && isNotaPedidoExcluida(data, id, coopId)) continue;
-      if (pendingDeleteIds.has(id)) continue;
-      if (byId.has(id)) continue;
-      const atual = notasById.get(id);
-      if (!atual || (coopId && isNotaPedidoExcluida(data, id, coopId))) {
-        // Excluída localmente — não ressuscitar pelo snapshot da fila sticky.
-        filaStickyIdsRef.current.delete(id);
-        filaStickySnapshotRef.current.delete(id);
-        continue;
-      }
-      if (isNotaSaiuDaFilaConferencia(atual.status)) {
-        filaStickyIdsRef.current.delete(id);
-        filaStickySnapshotRef.current.delete(id);
-        continue;
-      }
-      if (isNotaNaFilaConferenciaResponsavel(atual.status)) {
-        const candidata = sanitizarNotaParaFilaConferencia(atual);
-        if (!notaElegivelParaFilaConferenciaResponsavel(candidata)) {
-          filaStickyIdsRef.current.delete(id);
-          filaStickySnapshotRef.current.delete(id);
-          continue;
-        }
-        byId.set(id, candidata);
-        filaStickySnapshotRef.current.set(id, candidata);
-        continue;
-      }
-    }
-
-    return Array.from(byId.values())
-      .filter((n) => {
-        const live = notasById.get(n.id) ?? n;
-        const candidata = sanitizarNotaParaFilaConferencia(live);
-        return notaElegivelParaFilaConferenciaResponsavel(candidata);
-      })
-      .sort(
-      (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
-    );
-  }, [data, pendentesTodas, pendingDeleteIds, coopId]);
-
-  const pendentesPorCooperado = useMemo(() => {
-    if (!data) return [];
-    return agruparPendentesPorCooperado(data, pendentesEstaveis, coopId);
-  }, [data, pendentesEstaveis, coopId]);
+  const filaNavCount = filaDetalhada ? pendentesEstaveis.length : filaBadgeCount;
 
   useEffect(() => {
     if (isCooperado || vistaResponsavel !== "cooperado" || !filtroCooperadoId) return;
@@ -1152,9 +1053,11 @@ export default function NotasPedidoContent() {
     if (syncing) return;
 
     if (pendentesPorCooperado.length === 0) {
-      setVistaResponsavel("fila");
-      setAbaConferenciaKey("");
-      setFiltroCooperadoId("");
+      startVistaTransition(() => {
+        setVistaResponsavel("fila");
+        setAbaConferenciaKey("");
+        setFiltroCooperadoId("");
+      });
       return;
     }
 
@@ -1165,10 +1068,11 @@ export default function NotasPedidoContent() {
         : false;
 
     if (!aindaNaFila) {
-      // Todas as notas deste cooperado foram lançadas — some da fila.
-      setVistaResponsavel("fila");
-      setAbaConferenciaKey("");
-      setFiltroCooperadoId("");
+      startVistaTransition(() => {
+        setVistaResponsavel("fila");
+        setAbaConferenciaKey("");
+        setFiltroCooperadoId("");
+      });
       return;
     }
 
@@ -1188,7 +1092,7 @@ export default function NotasPedidoContent() {
   const selecionarAbaConferencia = (grupo: (typeof pendentesPorCooperado)[number]) => {
     setAbaConferenciaKey(grupo.chave);
     setFiltroCooperadoId(grupo.cooperadoId);
-    setVistaResponsavel("cooperado");
+    trocarVistaResponsavel("cooperado");
     if (statusFilter !== "aguardando_conferencia") {
       setStatusFilter("aguardando_conferencia");
     }
@@ -1202,7 +1106,7 @@ export default function NotasPedidoContent() {
     }
     setFiltroCooperadoId(cooperadoId);
     setAbaConferenciaKey("");
-    setVistaResponsavel("cooperado");
+    trocarVistaResponsavel("cooperado");
     if (statusFilter !== "aguardando_conferencia") {
       setStatusFilter("aguardando_conferencia");
     }
@@ -1219,33 +1123,33 @@ export default function NotasPedidoContent() {
       setFiltroCooperadoId(cid);
       setAbaConferenciaKey("");
     }
-    setVistaResponsavel("cooperado");
+    trocarVistaResponsavel("cooperado");
     if (statusFilter !== "aguardando_conferencia") {
       setStatusFilter("aguardando_conferencia");
     }
-  }, [searchParams, isCooperado, pendentesPorCooperado, statusFilter]);
+  }, [searchParams, isCooperado, pendentesPorCooperado, statusFilter, trocarVistaResponsavel]);
 
   const voltarFilaResponsavel = () => {
-    setVistaResponsavel("fila");
+    trocarVistaResponsavel("fila");
     setAbaConferenciaKey("");
     setFiltroCooperadoId("");
   };
 
   const abrirHistoricoResponsavel = () => {
-    setVistaResponsavel("historico");
+    trocarVistaResponsavel("historico");
     setAbaConferenciaKey("");
     setFiltroCooperadoId("");
     setStatusFilter("");
   };
 
   const abrirLancamentosAbertoResponsavel = () => {
-    setVistaResponsavel("aberto");
+    trocarVistaResponsavel("aberto");
     setAbaConferenciaKey("");
     setStatusFilter("");
   };
 
   const abrirCorrecoesResponsavel = () => {
-    setVistaResponsavel("correcoes");
+    trocarVistaResponsavel("correcoes");
     setAbaConferenciaKey("");
     setFiltroCooperadoId("");
   };
@@ -1253,24 +1157,27 @@ export default function NotasPedidoContent() {
   const mostrarCorrecoesResponsavel = isDiretoria && vistaResponsavel === "correcoes";
 
   const mostrarTabelaResponsavel =
-    !isCooperado && vistaResponsavel !== "correcoes" && vistaResponsavel === "historico";
+    !isCooperado && vistaConteudo !== "correcoes" && vistaConteudo === "historico";
 
-  const mostrarPainelLancamentosAberto = !isCooperado && vistaResponsavel === "aberto";
+  const mostrarPainelLancamentosAberto = !isCooperado && vistaConteudo === "aberto";
+  const mostrarFilaResponsavelConteudo =
+    !isCooperado && (vistaConteudo === "fila" || vistaConteudo === "cooperado");
 
-  const cooperadosComLancamentoAbertoCount = useMemo(() => {
-    if (!data || !coopId || isCooperado) return 0;
-    return getRelatorioPagarCooperadoEmAbertoReport(data, coopId).length;
-  }, [data, coopId, isCooperado, hbDescontosRevision]);
+  const cooperadosComLancamentoAbertoCount =
+    useAppDataSelector(
+      (d) => (!coopId || isCooperado ? 0 : countCooperadosLancamentosEmAbertoResponsavel(d, coopId)),
+      [coopId, isCooperado, hbDescontosRevision]
+    ) ?? 0;
 
   const notas = useMemo(() => {
     if (!data) return [];
-    if (!isCooperado && vistaResponsavel === "aberto") return [];
-    if (!isCooperado && vistaResponsavel === "fila" && pendentesEstaveis.length > 0) {
+    if (!isCooperado && !mostrarTabelaResponsavel) return [];
+    if (!isCooperado && vistaConteudo === "fila" && pendentesEstaveis.length > 0) {
       return [];
     }
     const filtrarPorGrupoAtivo =
       !isCooperado &&
-      vistaResponsavel === "cooperado" &&
+      vistaConteudo === "cooperado" &&
       pendentesTodas.length > 0 &&
       Boolean(abaConferenciaEfetiva);
 
@@ -1299,7 +1206,8 @@ export default function NotasPedidoContent() {
     abaConferenciaEfetiva,
     pendentesTodas.length,
     pendentesEstaveis.length,
-    vistaResponsavel,
+    vistaConteudo,
+    mostrarTabelaResponsavel,
   ]);
 
   const contratosEntrega = useMemo(() => {
@@ -2852,8 +2760,7 @@ export default function NotasPedidoContent() {
       });
     });
 
-    filaStickyIdsRef.current.delete(alvo.id);
-    filaStickySnapshotRef.current.delete(alvo.id);
+    removerNotaDaFilaSticky(alvo.id);
 
     setViewModal(false);
     setConferirModal(false);
@@ -2903,8 +2810,7 @@ export default function NotasPedidoContent() {
       return;
     }
 
-    filaStickyIdsRef.current.add(notaRelancada.id);
-    filaStickySnapshotRef.current.set(notaRelancada.id, notaRelancada);
+    touchNotaNaFilaSticky(notaRelancada);
 
     voltarFilaResponsavel();
     if (statusFilter !== "aguardando_conferencia") {
@@ -3237,7 +3143,7 @@ export default function NotasPedidoContent() {
           <button
             type="button"
             onClick={() => {
-              setVistaResponsavel("fila");
+              trocarVistaResponsavel("fila");
               setStatusFilter("aguardando_conferencia");
               setAbaConferenciaKey("");
               setFiltroCooperadoId("");
@@ -3250,8 +3156,8 @@ export default function NotasPedidoContent() {
             )}
           >
             Conferir
-            {pendentesEstaveis.length > 0 && (
-              <span className="ml-1 text-xs opacity-90">({pendentesEstaveis.length})</span>
+            {filaNavCount > 0 && (
+              <span className="ml-1 text-xs opacity-90">({filaNavCount})</span>
             )}
           </button>
           <button
@@ -3385,14 +3291,13 @@ export default function NotasPedidoContent() {
           )}
 
           {mostrarPainelLancamentosAberto && coopId && (
-            <LancamentosEmAbertoPainel
-              data={data}
-              coopId={coopId}
-              cooperadoId={filtroCooperadoId || undefined}
-            />
+            <LancamentosEmAbertoPainel coopId={coopId} cooperadoId={filtroCooperadoId || undefined} />
           )}
 
-          {!mostrarPainelLancamentosAberto && !mostrarCorrecoesResponsavel && pendentesEstaveis.length > 0 ? (
+          {!mostrarPainelLancamentosAberto &&
+          !mostrarCorrecoesResponsavel &&
+          mostrarFilaResponsavelConteudo &&
+          pendentesEstaveis.length > 0 ? (
             <>
               <div className="rounded-2xl border border-amber-200 bg-amber-50 px-5 py-4">
                 <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
@@ -3427,7 +3332,7 @@ export default function NotasPedidoContent() {
                       size="sm"
                       className="shrink-0"
                       onClick={() => {
-                        setVistaResponsavel("fila");
+                        trocarVistaResponsavel("fila");
                         setStatusFilter("aguardando_conferencia");
                       }}
                     >
@@ -3437,7 +3342,7 @@ export default function NotasPedidoContent() {
                 </div>
               </div>
 
-              {vistaResponsavel === "fila" && (
+              {vistaConteudo === "fila" && (
                 <div>
                   <h2 className="text-sm font-semibold text-gray-800 mb-2">
                     Cooperados com entrega pendente
@@ -3485,7 +3390,7 @@ export default function NotasPedidoContent() {
                 </div>
               )}
 
-              {vistaResponsavel === "cooperado" && grupoAbaAtiva && (
+              {vistaConteudo === "cooperado" && grupoAbaAtiva && (
                 <div className="max-w-4xl w-full">
                   <button
                     type="button"
@@ -3725,11 +3630,11 @@ export default function NotasPedidoContent() {
         {!isCooperado && pendentesEstaveis.length > 0 && vistaResponsavel === "historico" && (
           <div className="flex items-end">
             <Button type="button" size="sm" onClick={() => {
-              setVistaResponsavel("fila");
+              trocarVistaResponsavel("fila");
               setStatusFilter("aguardando_conferencia");
               setFiltroCooperadoId("");
             }}>
-              Voltar à fila ({pendentesEstaveis.length})
+              Voltar à fila ({filaNavCount})
             </Button>
           </div>
         )}

@@ -9,6 +9,10 @@ import { getDataRevision } from "@/services/dataStore";
 import { idsNotasPedidoExcluidas } from "@/services/notaPedidoService";
 import { notaPertenceCooperativa } from "@/utils/fotoEntrega";
 import { notaElegivelParaFilaConferenciaResponsavel, sanitizarNotaParaFilaConferencia } from "@/utils/notaStatus";
+import {
+  getRelatorioPagarCooperadoEmAberto,
+  type LinhaPagarCooperadoEmAberto,
+} from "@/services/relatorioService";
 
 type PainelCache = {
   revision: number;
@@ -19,6 +23,14 @@ type PainelCache = {
 };
 
 let painelCache: PainelCache | null = null;
+
+type RelatorioAbertoCache = {
+  revision: number;
+  coopId: string;
+  linhas: LinhaPagarCooperadoEmAberto[];
+};
+
+let relatorioAbertoCache: RelatorioAbertoCache | null = null;
 
 function cooperadoIdsDaCooperativa(data: AppData, coopId: string): Set<string> {
   const ids = new Set<string>();
@@ -111,7 +123,33 @@ export function countCooperadosPagamentoPendenteResponsavel(data: AppData, coopI
   return getPainelCache(data, coopId).cooperadosPagarCount;
 }
 
+/** Relatório «Em aberto» cacheado por revisão (evita recomputar a cada clique de aba). */
+export function getRelatorioLancamentosEmAbertoResponsavel(
+  data: AppData,
+  coopId: string,
+  cooperadoId?: string
+): LinhaPagarCooperadoEmAberto[] {
+  if (!coopId) return [];
+  if (cooperadoId) return getRelatorioPagarCooperadoEmAberto(data, coopId, cooperadoId);
+  const revision = getDataRevision();
+  if (
+    relatorioAbertoCache &&
+    relatorioAbertoCache.revision === revision &&
+    relatorioAbertoCache.coopId === coopId
+  ) {
+    return relatorioAbertoCache.linhas;
+  }
+  const linhas = getRelatorioPagarCooperadoEmAberto(data, coopId);
+  relatorioAbertoCache = { revision, coopId, linhas };
+  return linhas;
+}
+
+export function countCooperadosLancamentosEmAbertoResponsavel(data: AppData, coopId: string): number {
+  return getRelatorioLancamentosEmAbertoResponsavel(data, coopId).length;
+}
+
 /** Invalida cache (testes). */
 export function resetResponsavelPainelIndexCache(): void {
   painelCache = null;
+  relatorioAbertoCache = null;
 }
