@@ -29,7 +29,8 @@ function logSyncFailure(notaId: string, err: unknown): void {
 }
 
 /**
- * Enfileira sync (FIFO). Retorna promise da tarefa — UI só avança fila após resolver com sucesso.
+ * Enfileira sync (FIFO). Retorna promise da tarefa (para testes/diagnóstico).
+ * A UI de conferência avança a fila logo após persistir localmente; a nuvem segue nesta fila.
  */
 export function enqueueConferenciaAprovacaoSync(
   notaId: string,

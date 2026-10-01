@@ -1,5 +1,6 @@
 /**
- * Blindagem: fila pós-aprovação propaga falha (UI não deve avançar sem PATCH ok).
+ * Blindagem: fila FIFO pós-aprovação serializa PATCH/push e propaga erro na promise da tarefa.
+ * (A UI avança otimista — ver test-conferencia-fila-ui-optimista-guard.ts)
  * npx tsx scripts/test-conferencia-aprovacao-sync-guard.ts
  */
 import assert from "node:assert/strict";

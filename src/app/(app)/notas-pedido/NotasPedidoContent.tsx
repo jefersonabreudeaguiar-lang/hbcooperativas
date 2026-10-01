@@ -2621,22 +2621,32 @@ export default function NotasPedidoContent() {
     const notaAprovadaRef = selectedNota;
     const proxima = obterProximaNotaConferencia(chaveAtual, notaId);
 
-    const syncNuvem = enqueueConferenciaAprovacaoSync(notaId, async () => {
+    enqueueConferenciaAprovacaoSync(notaId, async () => {
       if (notaPatchSnapshot && coopId) {
         const cnpj = await resolveCooperativaCnpj(getData(), coopId, user);
         if (!cnpj) {
-          throw new Error("CNPJ da cooperativa não resolvido para sincronizar a conferência.");
+          console.warn("[conferencia-aprovacao-sync]", notaId, "CNPJ não resolvido para sync.");
+          requestAppSyncLight();
+          return;
         }
         const patched = await patchNotaPedidoInCloud(cnpj, notaPatchSnapshot);
         if (!patched.ok) {
-          throw new Error(
-            patched.error ?? "Entrega conferida aqui, mas não sincronizou com a nuvem. Verifique a conexão."
+          console.warn(
+            "[conferencia-aprovacao-sync]",
+            notaId,
+            patched.error ?? "patch nota falhou"
           );
+          setSuccessMsg(
+            patched.error ??
+              "Entrega lançada aqui, mas não sincronizou com a nuvem. Verifique a conexão."
+          );
+          return;
         }
         markConferenciaPatchSyncedForOperacionalPush(notaId);
         await withConferenciaOperacionalPushScope(coopId, getConferenciaPatchSyncedSnapshot(), async () => {
           await pushOperacionalToCloud(cnpj, getData(), coopId, { authoritative: true });
         });
+        requestAppSyncLight();
       } else {
         requestAppSyncLight();
       }
@@ -2644,7 +2654,6 @@ export default function NotasPedidoContent() {
 
     void (async () => {
       try {
-        await syncNuvem;
         if (proxima) {
           const mesmoGrupo = filaConferenciaRef.current?.chave === chaveAtual;
           if (filaConferenciaRef.current && mesmoGrupo) {
@@ -2661,6 +2670,7 @@ export default function NotasPedidoContent() {
           setTimeout(() => setLancadoMsg(""), 4000);
           await prepararConferenciaNota(proxima, { transicao: true });
         } else {
+          await aguardarSequenciaLancamentoFotos(notaAprovadaRef, qtdFotosAprovadas);
           fecharConferirModal();
           setLancadoMsg(
             divisaoPreview
@@ -2668,15 +2678,9 @@ export default function NotasPedidoContent() {
               : `Nota aprovada! ${formatCurrency(valorAprovado)} na ficha de ${msgBeneficiarios}. Fila concluída!`
           );
           setTimeout(() => setLancadoMsg(""), 6000);
-          requestAppSyncLight();
         }
-      } catch (e) {
-        const msg =
-          e instanceof Error
-            ? e.message
-            : "Não foi possível sincronizar a conferência com a nuvem.";
-        setSuccessMsg(msg);
-        requestAppSyncLight();
+      } catch {
+        /* ignore — falha ao preparar próxima nota não reverte lançamento local */
       } finally {
         lancandoRef.current = false;
       }
