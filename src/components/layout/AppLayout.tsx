@@ -279,10 +279,10 @@ export function MobileNav() {
               href={item.href}
               prefetch={shouldPrefetchHbCreditNav(item.href)}
               onPointerEnter={() => {
-                if (isCooperadoNav) prefetchNavRoute(item.href);
+                if (isCooperadoNav && item.href !== pathname) prefetchNavRoute(item.href);
               }}
               onTouchStart={() => {
-                if (isCooperadoNav) prefetchNavRoute(item.href);
+                if (isCooperadoNav && item.href !== pathname) prefetchNavRoute(item.href);
               }}
               className={cn(
                 "flex-1 flex flex-col items-center justify-center min-w-0 px-0.5 transition-colors",

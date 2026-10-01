@@ -269,7 +269,6 @@ function persistDataToStorage(
       const serialized = JSON.stringify(candidate);
       if (serialized === lastPersistedSerialized) {
         memoryCache = candidate;
-        if (!options?.skipNotify) notify();
         return { ok: true };
       }
       if (!writeStoragePayload(serialized)) {
@@ -750,6 +749,9 @@ export function updateDataSafe(
 ): { ok: true; data: AppData } | { ok: false; error: string } {
   const current = loadData();
   const updated = updater(current);
+  if (updated === current) {
+    return { ok: true, data: current };
+  }
   memoryCache = updated;
 
   if (saveBatchDepth > 0) {

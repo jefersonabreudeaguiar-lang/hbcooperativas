@@ -659,13 +659,9 @@ export function CooperativaSyncProvider({ children }: { children: React.ReactNod
     const initialDelay = setTimeout(() => {
       if (!document.hidden) {
         markUserActivity();
-        if (user?.role === "cooperado") {
-          void runSync({ force: true });
-        } else {
-          void runSync({ force: true });
-        }
+        void runSync({ force: user?.role === "cooperado" });
       }
-    }, user?.role === "cooperado" ? 0 : 400);
+    }, user?.role === "cooperado" ? 0 : 900);
 
     const unsubIdle = onAppIdleChange((nowIdle) => {
       if (nowIdle) return;
@@ -704,11 +700,20 @@ export function CooperativaSyncProvider({ children }: { children: React.ReactNod
 
   useEffect(() => {
     if (!user?.id || user.role !== "cooperado") return;
-    return subscribe(() => {
+    let debounce: ReturnType<typeof setTimeout> | null = null;
+    const unsub = subscribe(() => {
       const current = userRef.current;
       if (!current || current.role !== "cooperado") return;
-      avaliarIntegridadeFinanceiroCooperado(getData(), current);
+      if (debounce) clearTimeout(debounce);
+      debounce = setTimeout(() => {
+        debounce = null;
+        avaliarIntegridadeFinanceiroCooperado(getData(), current);
+      }, 500);
     });
+    return () => {
+      if (debounce) clearTimeout(debounce);
+      unsub();
+    };
   }, [user?.id, user?.role]);
 
   const status = useMemo(

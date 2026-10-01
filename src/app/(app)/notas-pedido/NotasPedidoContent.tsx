@@ -100,9 +100,21 @@ import {
   bicCentralListarResumosMensaisEntregas,
   bicCentralMesPrincipalQuantoVouReceber,
 } from "@/services/bicLeituraCentralCooperado";
+import dynamic from "next/dynamic";
 import { CooperadoEntregasPorMes } from "@/components/cooperado/CooperadoEntregasPorMes";
-import { CooperadoMinhaFichaTab } from "@/components/cooperado/CooperadoMinhaFichaTab";
 import { useContaCoopDescontosRevision } from "@/hooks/useContaCoopDescontosRevision";
+
+const CooperadoMinhaFichaTab = dynamic(
+  () =>
+    import("@/components/cooperado/CooperadoMinhaFichaTab").then((m) => ({
+      default: m.CooperadoMinhaFichaTab,
+    })),
+  {
+    loading: () => (
+      <div className="py-10 text-center text-sm text-gray-500 bg-white rounded-2xl border">Carregando ficha…</div>
+    ),
+  }
+);
 import { useSyncContaCoopValorReceberPilot } from "@/hooks/useSyncContaCoopValorReceberPilot";
 import { CorrecoesEntregasPanel } from "@/components/notas/CorrecoesEntregasPanel";
 import { LancamentosEmAbertoPainel } from "@/components/notas/LancamentosEmAbertoPainel";
@@ -300,21 +312,12 @@ export default function NotasPedidoContent() {
   );
   const vistaConteudo = useDeferredValue(vistaResponsavel);
   const [abaCooperado, setAbaCooperado] = useState<"entregas" | "ficha">("entregas");
-  const [cooperadoAbaEntregasMontada, setCooperadoAbaEntregasMontada] = useState(true);
-  const [cooperadoAbaFichaMontada, setCooperadoAbaFichaMontada] = useState(false);
 
   const trocarAbaCooperado = useCallback((aba: "entregas" | "ficha") => {
     startTransition(() => {
       setAbaCooperado(aba);
-      if (aba === "entregas") setCooperadoAbaEntregasMontada(true);
-      else setCooperadoAbaFichaMontada(true);
     });
   }, []);
-
-  useEffect(() => {
-    if (abaCooperado === "ficha") setCooperadoAbaFichaMontada(true);
-    if (abaCooperado === "entregas") setCooperadoAbaEntregasMontada(true);
-  }, [abaCooperado]);
   const [contratoInstId, setContratoInstId] = useState("");
   const [anexarSucesso, setAnexarSucesso] = useState(false);
   const [ultimaNotaEnviadaIds, setUltimaNotaEnviadaIds] = useState<string[]>([]);
@@ -972,7 +975,7 @@ export default function NotasPedidoContent() {
   }, [isCooperado, searchParams, trocarVistaResponsavel]);
 
   const resumosMensaisCooperado = useMemo(() => {
-    if (!isCooperado || !cooperadoAbaEntregasMontada || !data || !cooperadoId) return [];
+    if (!isCooperado || abaCooperado !== "entregas" || !data || !cooperadoId) return [];
     const base = filtrarResumosMesesNaoQuitados(
       data,
       cooperadoId,
@@ -986,12 +989,12 @@ export default function NotasPedidoContent() {
         notas: r.notas.filter((n) => n.status === statusFilter),
       }))
       .filter((r) => r.notas.length > 0);
-  }, [data, cooperadoId, coopId, isCooperado, statusFilter, hbDescontosRevision, cooperadoAbaEntregasMontada]);
+  }, [data, cooperadoId, coopId, isCooperado, statusFilter, hbDescontosRevision, abaCooperado]);
 
   const resumosFichaCooperado = useMemo(() => {
-    if (!isCooperado || !cooperadoAbaFichaMontada || !data || !cooperadoId) return [];
+    if (!isCooperado || abaCooperado !== "ficha" || !data || !cooperadoId) return [];
     return listarResumosFichaEmAbertoCooperado(data, cooperadoId, coopId);
-  }, [data, cooperadoId, coopId, isCooperado, hbDescontosRevision, cooperadoAbaFichaMontada]);
+  }, [data, cooperadoId, coopId, isCooperado, hbDescontosRevision, abaCooperado]);
 
   const getEscolaLabelCooperado = useCallback(
     (n: NotaPedido) => getEscolaNotaLabel(n, data?.instituicoes ?? []),
@@ -3662,19 +3665,16 @@ export default function NotasPedidoContent() {
 
       {isCooperado ? (
         <>
-          {cooperadoAbaFichaMontada && (
-            <div className={abaCooperado === "ficha" ? undefined : "hidden"} aria-hidden={abaCooperado !== "ficha"}>
-              <CooperadoMinhaFichaTab
-                cooperadoId={cooperadoId!}
-                cooperativaId={coopId}
-                nomeCooperado={nomeCooperadoExibicao}
-                resumos={resumosFichaCooperado}
-                getEscolaLabel={getEscolaLabelCooperado}
-              />
-            </div>
-          )}
-          {cooperadoAbaEntregasMontada && (
-            <div className={abaCooperado === "entregas" ? undefined : "hidden"} aria-hidden={abaCooperado !== "entregas"}>
+          {abaCooperado === "ficha" ? (
+            <CooperadoMinhaFichaTab
+              cooperadoId={cooperadoId!}
+              cooperativaId={coopId}
+              nomeCooperado={nomeCooperadoExibicao}
+              resumos={resumosFichaCooperado}
+              getEscolaLabel={getEscolaLabelCooperado}
+            />
+          ) : (
+            <>
               {statusFilter && resumosMensaisCooperado.length === 0 ? (
                 <div className="text-center py-12 text-gray-500 bg-white rounded-2xl border">
                   <Camera size={40} className="mx-auto mb-3 text-gray-300" />
@@ -3697,7 +3697,7 @@ export default function NotasPedidoContent() {
                   getEscolaLabel={getEscolaLabelCooperado}
                 />
               )}
-            </div>
+            </>
           )}
         </>
       ) : mostrarTabelaResponsavel ? (

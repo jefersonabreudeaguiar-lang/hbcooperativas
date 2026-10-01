@@ -106,7 +106,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [refresh]);
 
   useEffect(() => {
-    const unsub = subscribe(() => {
+    let pending = false;
+    const flush = () => {
+      pending = false;
       refresh();
       const session = getSession();
       if (!session) return;
@@ -125,6 +127,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         experienceSigRef.current = sig;
         setDataTick((t) => t + 1);
       }
+    };
+    const unsub = subscribe(() => {
+      if (pending) return;
+      pending = true;
+      queueMicrotask(flush);
     });
     return unsub;
   }, [refresh]);
