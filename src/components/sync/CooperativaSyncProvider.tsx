@@ -386,7 +386,12 @@ export function CooperativaSyncProvider({ children }: { children: React.ReactNod
     if (!currentUser || syncingRef.current) return;
     if (typeof navigator !== "undefined" && !navigator.onLine) return;
     if (typeof document !== "undefined" && document.hidden) return;
-    if (!opts?.force && isAppIdle()) return;
+    const isStaffGestao =
+      currentUser.role === "responsavel" ||
+      currentUser.role === "tesoureiro" ||
+      currentUser.role === "admin";
+
+    if (!opts?.force && isAppIdle() && !isStaffGestao) return;
 
     const warm = await waitForAppDataWarm();
     if (!warm) return;
@@ -659,9 +664,13 @@ export function CooperativaSyncProvider({ children }: { children: React.ReactNod
     const initialDelay = setTimeout(() => {
       if (!document.hidden) {
         markUserActivity();
-        void runSync({ force: user?.role === "cooperado" });
+        const staff =
+          user?.role === "responsavel" ||
+          user?.role === "tesoureiro" ||
+          user?.role === "admin";
+        void runSync({ force: staff || user?.role === "cooperado" });
       }
-    }, user?.role === "cooperado" ? 0 : 900);
+    }, user?.role === "cooperado" ? 0 : 400);
 
     const unsubIdle = onAppIdleChange((nowIdle) => {
       if (nowIdle) return;

@@ -1059,8 +1059,11 @@ export default function NotasPedidoContent() {
         ? pendentesPorCooperado.some((g) => g.cooperadoId === filtroCooperadoId)
         : false;
 
-    // Durante sync não volta à fila — evita “sumiu e voltou” ao conferir.
-    if (!syncing) {
+    const bloquearNavegacaoFila =
+      (syncing && (conferirModal || lancandoRef.current)) || lancandoRef.current;
+
+    // Só congela navegação durante sync enquanto conferir/aprovar — não travar a fila inteira.
+    if (!bloquearNavegacaoFila) {
       if (pendentesPorCooperado.length === 0) {
         startVistaTransition(() => {
           setVistaResponsavel("fila");
@@ -1087,6 +1090,7 @@ export default function NotasPedidoContent() {
     isCooperado,
     vistaResponsavel,
     syncing,
+    conferirModal,
     pendentesPorCooperado,
     abaConferenciaEfetiva,
     abaConferenciaKey,
@@ -1119,7 +1123,7 @@ export default function NotasPedidoContent() {
   useEffect(() => {
     const cid = searchParams.get("cooperado");
     if (!cid || isCooperado) return;
-    if (syncing) return;
+    if (syncing && (conferirModal || lancandoRef.current)) return;
 
     const grupo = pendentesPorCooperado.find((g) => g.cooperadoId === cid);
     if (grupo) {
