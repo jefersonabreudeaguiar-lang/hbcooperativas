@@ -245,7 +245,11 @@ export function MobileNav() {
       <header className="lg:hidden flex items-center justify-between gap-2 px-4 py-3 bg-green-900 text-white sticky top-0 z-40">
         <BrandHeader compact />
         <div className="flex items-center gap-1.5 shrink-0">
-          {user.role !== "cooperado" && <SyncStatusChip />}
+          {isCooperadoAppUser(user) ? (
+            <SyncStatusChipLight className="!bg-green-800/80 !text-green-100" />
+          ) : (
+            <SyncStatusChip />
+          )}
           <button onClick={() => setOpen(true)} className="p-2 hover:bg-green-800 rounded-lg" aria-label="Abrir menu">
             <Menu size={22} />
           </button>

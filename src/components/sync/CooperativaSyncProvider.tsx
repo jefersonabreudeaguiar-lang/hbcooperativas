@@ -290,7 +290,7 @@ export function CooperativaSyncProvider({ children }: { children: React.ReactNod
       return;
     }
     if (typeof navigator !== "undefined" && !navigator.onLine) {
-      markCooperadoPagamentosHydrated();
+      /* H204: offline — readiness só via runSync + cooperadoApresentacaoFinanceiraPosRunSync */
       return;
     }
     if (typeof document !== "undefined" && document.hidden) return;
@@ -306,7 +306,6 @@ export function CooperativaSyncProvider({ children }: { children: React.ReactNod
 
     const warm = await waitForAppDataWarm();
     if (!warm) {
-      markCooperadoPagamentosHydrated();
       return;
     }
 
@@ -320,7 +319,6 @@ export function CooperativaSyncProvider({ children }: { children: React.ReactNod
     const data = getData();
     const currentCoopId = getUserCooperativaId(currentUser, data);
     if (!currentCoopId) {
-      markCooperadoPagamentosHydrated();
       return;
     }
 

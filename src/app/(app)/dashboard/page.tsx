@@ -34,9 +34,8 @@ import { resolverCooperadoIdCanonico } from "@/services/cooperadoCloudService";
 import { cooperadoFinanceiroDesatualizado } from "@/services/fichaSyncGuard";
 import { requestAppSyncImmediate, requestVotacaoOperacionalSync } from "@/services/syncRequest";
 import { useSyncStatus } from "@/components/sync/CooperativaSyncProvider";
-import { useCooperadoApresentacaoFinanceiraConsolidada } from "@/hooks/useCooperadoApresentacaoFinanceiraConsolidada";
+import { useCooperadoFluxoPadrao } from "@/hooks/useCooperadoFluxoPadrao";
 import { useCooperadoInicioValorReceberCardState } from "@/hooks/useCooperadoInicioValorReceberCardState";
-import { useCooperadoInicioCardContext } from "@/hooks/useCooperadoInicioCardContext";
 import { getComunicadosInicioCooperado } from "@/services/comunicadoService";
 import {
   bicCentralGetResumoMensalidadesCooperado,
@@ -74,8 +73,8 @@ function CooperadoDashboard() {
   const router = useRouter();
   const hbCredit = useHbCreditEnabled(user);
   const { syncing, lastSyncError } = useSyncStatus();
-  const { apresentacaoConsolidada, carregandoValoresFinanceiros } =
-    useCooperadoApresentacaoFinanceiraConsolidada();
+  const fluxo = useCooperadoFluxoPadrao();
+  const { apresentacaoConsolidada, carregandoValoresFinanceiros } = fluxo;
   const recoverySyncRef = useRef(false);
   const hbDescontosRevision = useContaCoopDescontosRevision();
 
@@ -127,7 +126,14 @@ function CooperadoDashboard() {
     contaCoopSync ? { ...contaCoopSync, user, initialDelayMs: 3_000 } : undefined
   );
 
-  const inicioCardCtx = useCooperadoInicioCardContext(user);
+  const inicioCardCtx = fluxo.cooperadoId
+    ? {
+        data: fluxo.data,
+        cooperadoId: fluxo.cooperadoId,
+        cooperativaId: fluxo.cooperativaId,
+        dataReady: fluxo.dataReady,
+      }
+    : null;
 
   const { snapshot: valorReceberCard, atualizando: cardFinanceiroAtualizando } =
     useCooperadoInicioValorReceberCardState({

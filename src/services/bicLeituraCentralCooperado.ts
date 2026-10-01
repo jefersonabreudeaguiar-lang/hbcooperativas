@@ -44,44 +44,15 @@ export type BicCentralProjecaoOpts = BicProjecaoFinanceiraCooperadoOpts & {
 };
 
 /** LAB B4: enquanto houver pendência financeira, não mascarar valores no sync (H203). */
-function cooperadoTemPendenciaFinanceiraVisivel(
-  data: AppData,
-  cooperadoId: string,
-  cooperativaId: string | undefined
-): boolean {
-  const raw = getValorQuantoVouReceberMotorLegado(data, cooperadoId, cooperativaId);
-  if (isBicCentralReadAuthorityEnabled()) return raw.valor > 0;
-  return raw.valor > 0 || raw.aguardandoAssinatura || raw.valorRecibo > 0;
-}
-
+/** LAB B4 — respeita gate H203/H204; não força apresentação definitiva com sync incompleto. */
 function effectiveApresentacaoConsolidada(
-  data: AppData,
-  cooperadoId: string,
-  cooperativaId: string | undefined,
+  _data: AppData,
+  _cooperadoId: string,
+  _cooperativaId: string | undefined,
   opts?: Pick<BicCentralProjecaoOpts, "apresentacaoConsolidada">
 ): boolean {
-  if (isBicCentralReadAuthorityEnabled() && cooperadoTemPendenciaFinanceiraVisivel(data, cooperadoId, cooperativaId)) {
-    return true;
-  }
   if (opts?.apresentacaoConsolidada === false) return false;
   return opts?.apresentacaoConsolidada ?? true;
-}
-
-function painelOptsComValorPersistente(
-  data: AppData,
-  cooperadoId: string,
-  cooperativaId: string | undefined,
-  opts?: BicCentralProjecaoOpts
-): BicCentralProjecaoOpts | undefined {
-  if (!opts || !isBicCentralReadAuthorityEnabled()) return opts;
-  const raw = getValorQuantoVouReceberMotorLegado(data, cooperadoId, cooperativaId);
-  if (raw.valor <= 0 && !raw.aguardandoAssinatura) return opts;
-  return {
-    ...opts,
-    financeiroSincronizando: false,
-    carregandoNuvem: false,
-    apresentacaoConsolidada: effectiveApresentacaoConsolidada(data, cooperadoId, cooperativaId, opts),
-  };
 }
 
 function apresentacao(opts?: BicCentralProjecaoOpts): boolean {
@@ -258,7 +229,7 @@ export function bicCentralPainelQuantoVouReceberParaExibicao(
   cooperativaId: string | undefined,
   opts?: BicCentralProjecaoOpts
 ): BicExibicaoEnvelope<ReturnType<typeof getResumoQuantoVouReceberCooperado>> {
-  const optsEff = painelOptsComValorPersistente(data, cooperadoId, cooperativaId, opts);
+  const optsEff = opts;
   if (isBicCentralReadAuthorityEnabled()) {
     const proj = getProjecaoFinanceiraCooperadoBIC(data, cooperadoId, cooperativaId, optsEff);
     const value = bicCentralResumoQuantoVouReceberCooperado(data, cooperadoId, cooperativaId, optsEff);

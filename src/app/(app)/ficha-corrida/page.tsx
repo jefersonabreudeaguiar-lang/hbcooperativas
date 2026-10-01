@@ -824,7 +824,7 @@ export default function FichaCorridaPage() {
     syncCooperadoFinanceiro,
     cooperadoPagamentosHydrated,
     user?.role,
-    hbDescontosRevision,
+    apresentacaoConsolidada,
   ]);
 
   const pendentePagamentoResponsavel = useMemo(() => {

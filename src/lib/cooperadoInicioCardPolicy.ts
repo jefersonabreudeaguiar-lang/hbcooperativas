@@ -502,7 +502,9 @@ function resolverCardInicioEndurecidoFinanceiroUiSnapshot(
   input: ResolverCardInicioInput
 ): InicioCardPoliticaResult & { gravarPersistencia: boolean } {
   const persistidoLeitura = filtrarInicioCardPersistidoLeituraBic(input.persistido);
-  const financeiroCarregando = Boolean(input.syncing || input.carregandoFinanceiro);
+  const financeiroCarregando =
+    !input.apresentacaoConsolidada ||
+    Boolean(input.syncing || input.carregandoFinanceiro);
   return aplicarPoliticaCardInicioEndurecidaComMotorOperacional(
     input,
     persistidoLeitura,
@@ -514,7 +516,9 @@ export function resolverCardInicioEndurecido(input: ResolverCardInicioInput): In
   gravarPersistencia: boolean;
 } {
   const persistidoLeitura = filtrarInicioCardPersistidoLeituraBic(input.persistido);
-  const financeiroCarregando = Boolean(input.syncing || input.carregandoFinanceiro);
+  const financeiroCarregando =
+    !input.apresentacaoConsolidada ||
+    Boolean(input.syncing || input.carregandoFinanceiro);
   const vazio: InicioCardMotorSnapshot = {
     mesLabel: "—",
     valor: 0,
