@@ -352,7 +352,16 @@ export function CooperativaSyncProvider({ children }: { children: React.ReactNod
       });
       const msg = mensagemErroPullOperacionalCooperado(result);
       if (msg && !boundLease) {
-        setLastSyncError(msg);
+        const latest = getData();
+        const cooperadoId =
+          currentUser.cooperadoId &&
+          resolverCooperadoIdCanonico(latest, currentUser.cooperadoId, currentCoopId);
+        if (
+          cooperadoId &&
+          cooperadoFinanceiroDesatualizado(latest, cooperadoId, currentCoopId)
+        ) {
+          setLastSyncError(msg);
+        }
       }
     } catch {
       /* offline / retry na próxima abertura */
@@ -514,9 +523,11 @@ export function CooperativaSyncProvider({ children }: { children: React.ReactNod
 
       completed = true;
 
-      const align = await ensureOperacionalAlinhadoComNuvem(cnpj, currentCoopId);
-      if (!align.ok) {
-        setLastSyncError(align.message);
+      if (!cooperadoLogado) {
+        const align = await ensureOperacionalAlinhadoComNuvem(cnpj, currentCoopId);
+        if (!align.ok) {
+          setLastSyncError(align.message);
+        }
       }
 
       if (cooperadoLogado && currentUser.cooperadoId) {
@@ -602,6 +613,15 @@ export function CooperativaSyncProvider({ children }: { children: React.ReactNod
         if (liberaApresentacao) {
           markCooperadoPagamentosHydrated();
           persistirInicioCardValorReceberCooperado(userRef.current);
+          setLastSyncError("");
+        } else if (
+          cooperadoCanonico &&
+          coopIdFinal &&
+          completed &&
+          !cooperadoFinanceiroDesatualizado(getData(), cooperadoCanonico, coopIdFinal)
+        ) {
+          markCooperadoPagamentosHydrated();
+          setLastSyncError("");
         } else {
           setCooperadoPagamentosHydrated(false);
         }

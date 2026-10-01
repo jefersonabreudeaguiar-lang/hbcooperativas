@@ -280,6 +280,11 @@ function CooperadoDashboard() {
     cnpjDigits,
   } = view;
 
+  const mostrarErroSync =
+    Boolean(lastSyncError) &&
+    !syncing &&
+    (financeiroAusente || !apresentacaoConsolidada);
+
   return (
     <div className="space-y-6 max-w-3xl">
       <div>
@@ -289,7 +294,7 @@ function CooperadoDashboard() {
 
       {cooperado && <AssinaturaStatusAviso cooperado={cooperado} />}
 
-      {lastSyncError && (
+      {mostrarErroSync && (
         <AlertBanner variant="error" title="Não foi possível sincronizar">
           {lastSyncError}{" "}
           <button

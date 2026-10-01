@@ -288,11 +288,12 @@ export function cooperadoFichaValoresDesalinhados(
   opts?: { fichaOperacionalNaNuvem?: boolean }
 ): boolean {
   const ignorarDeltaReconciliar = opts?.fichaOperacionalNaNuvem === true;
+  const ignorarConferidasSemFicha = opts?.fichaOperacionalNaNuvem === true;
   return (
     cooperadoTemFichasDuplicadas(data, cooperadoId, cooperativaId) ||
     (!ignorarDeltaReconciliar &&
       cooperadoTotalMudaComReconciliacao(data, cooperadoId, cooperativaId)) ||
-    cooperadoConferidasSemFicha(data, cooperadoId, cooperativaId)
+    (!ignorarConferidasSemFicha && cooperadoConferidasSemFicha(data, cooperadoId, cooperativaId))
   );
 }
 

@@ -106,9 +106,7 @@ export function CooperadoFinanceiroGate({ children }: { children: React.ReactNod
   }
 
   const falhaCarregarFicha =
-    bloqueiaEntrada &&
-    !syncing &&
-    (Boolean(lastSyncError) || lastSyncedAt != null || syncWaitExceeded);
+    bloqueiaEntrada && !syncing && (syncWaitExceeded || lastSyncedAt != null);
 
   if (falhaCarregarFicha) {
     return (
