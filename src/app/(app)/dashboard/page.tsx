@@ -4,9 +4,9 @@ import { useEffect, useRef } from "react";
 import type { AppData } from "@/types";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useAppDataSelector, useAppDataReady } from "@/hooks/useAppData";
+import { useAppDataSelector, useAppDataReady, useAppData } from "@/hooks/useAppData";
 import { useAuth } from "@/modules/auth/AuthProvider";
-import { isCooperadoAppUser, isDiretoriaRole } from "@/permissions";
+import { shouldRenderStaffPainelUi } from "@/lib/staffNavigationUser";
 import {
   canAccessPainelResponsavel,
   canAccessPainelResponsavelSession,
@@ -388,27 +388,30 @@ function CooperadoDashboard() {
 }
 
 function AdminDashboard() {
-  const { user } = useAuth();
+  const { user, accountUser } = useAuth();
+  const data = useAppData();
+  const navUser =
+    (accountUser && shouldRenderStaffPainelUi(accountUser, data) ? accountUser : user) ?? user;
   const { check } = usePermissions();
   const creditFlag = useHbCreditEnabled();
 
   const view = useAppDataSelector((data) => {
-    if (!data || !user) return null;
-    const coopId = getUserCooperativaId(user, data);
+    if (!data || !navUser) return null;
+    const coopId = getUserCooperativaId(navUser, data);
     const stats = getAdminStats(data, coopId ?? undefined);
-    const coopNome = getUserCooperativaNome(user, data);
+    const coopNome = getUserCooperativaNome(navUser, data);
     const mes = getCurrentMesReferencia();
     const fila = getFilaDoDia(data, coopId, mes);
     const instalacao = coopId ? resumoInstalacaoApp(data, coopId) : null;
     const assinatura = coopId ? resumoAssinaturaCadastroApp(data, coopId) : null;
     let cnpj = "";
-    if (user.cooperativaCnpj) cnpj = normalizeCnpj(user.cooperativaCnpj);
+    if (navUser.cooperativaCnpj) cnpj = normalizeCnpj(navUser.cooperativaCnpj);
     else {
       const coop = data.cooperativas.find((c) => c.id === coopId);
       if (coop?.cnpj) cnpj = normalizeCnpj(coop.cnpj);
     }
     return { stats, coopNome, fila, mes, instalacao, assinatura, cnpj, coopId: coopId ?? "" };
-  }, [user?.id, user?.cooperativaId, user?.role]);
+  }, [navUser?.id, navUser?.cooperativaId, navUser?.role]);
 
   if (!view) return <PageSkeleton />;
 
@@ -536,8 +539,12 @@ function AdminDashboard() {
 
 export default function DashboardPage() {
   const { user, accountUser } = useAuth();
+  const data = useAppData();
   const authSubject = accountUser ?? user;
   const dataReady = useAppDataReady();
+  const staffPainelUi = Boolean(
+    accountUser && shouldRenderStaffPainelUi(accountUser, data)
+  );
   const canGestaoFromData = useAppDataSelector(
     (data) => (authSubject ? canAccessPainelResponsavel(authSubject, data) : false),
     [authSubject?.id, authSubject?.role, authSubject?.cooperadoId, authSubject?.cooperativaId]
@@ -551,11 +558,7 @@ export default function DashboardPage() {
   if (!user) return null;
   if (dataReady && canGestaoFromData === null) return <PageSkeleton />;
 
-  if (isCooperadoAppUser(accountUser ?? user) || !canGestao) {
-    return <CooperadoDashboard />;
-  }
-
-  if (isDiretoriaRole(user.role)) {
+  if (canGestao && staffPainelUi) {
     return <AdminDashboard />;
   }
 

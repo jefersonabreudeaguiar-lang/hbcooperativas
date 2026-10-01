@@ -1,13 +1,18 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useTransition } from "react";
 import { FileSignature, ShieldCheck } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { AlertBanner } from "@/components/ui/AlertBanner";
 import { useAuth } from "@/modules/auth/AuthProvider";
 import { useAppData } from "@/hooks/useAppData";
-import { updateData } from "@/services/dataStore";
-import { assinarContratoServicoSaas, precisaAssinarContratoServico } from "@/services/cobrancaSaasService";
+import { updateDataSafe } from "@/services/dataStore";
+import {
+  finalizarCobrancaAposAssinaturaContratoSaas,
+  precisaAssinarContratoServico,
+  registrarAssinaturaContratoServicoSaas,
+} from "@/services/cobrancaSaasService";
+import { pushCobrancaSaasToCloud } from "@/services/cooperativaCloudService";
 import { getUserCooperativaId, getCooperativaById } from "@/utils/cooperativa";
 import {
   CONTRATO_SERVICO_VIGENCIA_INICIO,
@@ -16,33 +21,65 @@ import {
   PROPRIETARIO_APP,
 } from "@/config/contratoServicoApp";
 import { isDiretoriaRole } from "@/permissions";
+import { canAccessPainelResponsavel } from "@/lib/security/responsavelPanelAccess";
+import { isMobileCooperativaApp } from "@/lib/mobileExperience";
+import { preferPainelResponsavelMobile } from "@/lib/mobilePainelPreference";
+
+function agendarPosAssinaturaContrato(coopId: string) {
+  const run = () => {
+    const result = updateDataSafe((d) => finalizarCobrancaAposAssinaturaContratoSaas(d, coopId));
+    if (!result.ok) return;
+    const coop = getCooperativaById(result.data, coopId);
+    if (coop?.cnpj && coop.cobrancaSaas) {
+      void pushCobrancaSaasToCloud(coop.cnpj, coop.cobrancaSaas);
+    }
+  };
+  if (typeof requestIdleCallback !== "undefined") {
+    requestIdleCallback(run, { timeout: 2500 });
+  } else {
+    setTimeout(run, 0);
+  }
+}
 
 export function ContratoServicoAppGate() {
-  const { user } = useAuth();
+  const { user, accountUser } = useAuth();
   const data = useAppData();
+  const gateUser = accountUser ?? user;
   const [aceite, setAceite] = useState(false);
-  const [assinando, setAssinando] = useState(false);
+  const [assinaturaConcluida, setAssinaturaConcluida] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
+  const [, startTransition] = useTransition();
 
-  if (!user || !data || !isDiretoriaRole(user.role)) return null;
+  if (!gateUser || !data || !isDiretoriaRole(gateUser.role)) return null;
+  if (!canAccessPainelResponsavel(gateUser, data)) return null;
+  if (isMobileCooperativaApp() && !preferPainelResponsavelMobile()) return null;
 
-  const coopId = getUserCooperativaId(user, data);
+  const coopId = getUserCooperativaId(gateUser, data);
   const coop = coopId ? getCooperativaById(data, coopId) : undefined;
-  if (!coop || !precisaAssinarContratoServico(coop)) return null;
+  if (!coop || assinaturaConcluida || !precisaAssinarContratoServico(coop)) return null;
 
   const clausulas = getClausulasContratoServicoApp();
 
   const assinar = () => {
     if (!coopId || !aceite) return;
     setErro(null);
-    setAssinando(true);
-    try {
-      updateData((d) => assinarContratoServicoSaas(d, coopId, user.name));
-    } catch (e) {
-      setErro(e instanceof Error ? e.message : "Não foi possível registrar a assinatura.");
-    } finally {
-      setAssinando(false);
-    }
+    setAssinaturaConcluida(true);
+
+    startTransition(() => {
+      const result = updateDataSafe((d) =>
+        registrarAssinaturaContratoServicoSaas(d, coopId, gateUser.name)
+      );
+      if (!result.ok) {
+        setAssinaturaConcluida(false);
+        setErro(result.error);
+        return;
+      }
+      const signed = getCooperativaById(result.data, coopId);
+      if (signed?.cnpj && signed.cobrancaSaas) {
+        void pushCobrancaSaasToCloud(signed.cnpj, signed.cobrancaSaas);
+      }
+      agendarPosAssinaturaContrato(coopId);
+    });
   };
 
   return (
@@ -63,7 +100,7 @@ export function ContratoServicoAppGate() {
             <strong>Cooperativa:</strong> {coop.nome}
           </p>
           <p>
-            <strong>Signatário:</strong> {user.name}
+            <strong>Signatário:</strong> {gateUser.name}
           </p>
           <p>
             <strong>Versão do contrato:</strong> {CONTRATO_SERVICO_VERSAO}
@@ -99,9 +136,9 @@ export function ContratoServicoAppGate() {
           </span>
         </label>
 
-        <Button className="w-full" disabled={!aceite || assinando} onClick={assinar}>
+        <Button className="w-full" disabled={!aceite} onClick={assinar}>
           <FileSignature size={18} />
-          {assinando ? "Registrando assinatura…" : "Assinar contrato eletronicamente"}
+          Assinar contrato eletronicamente
         </Button>
 
         <p className="text-xs text-gray-500 flex items-center gap-1">

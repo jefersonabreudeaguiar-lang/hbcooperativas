@@ -15,6 +15,7 @@ import { useRouter } from "next/navigation";
 import type { User } from "@/types";
 import { normalizeUserRole, resolveAppUserRole } from "@/permissions";
 import { resolveExperienceUser, resolveMobileCooperadoId } from "@/lib/mobileExperience";
+import { PAINEL_MOBILE_PREF_EVENT } from "@/lib/mobilePainelPreference";
 import {
   getSession,
   login as doLogin,
@@ -68,6 +69,7 @@ function enrichAccountSession(session: Omit<User, "password">): Omit<User, "pass
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [accountUser, setAccountUser] = useState<Omit<User, "password"> | null>(null);
   const [viewportTick, setViewportTick] = useState(0);
+  const [painelPrefTick, setPainelPrefTick] = useState(0);
   const [dataTick, setDataTick] = useState(0);
   const [loading, setLoading] = useState(true);
   const router = useRouter();
@@ -75,7 +77,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const user = useMemo(
     () => resolveExperienceUser(accountUser, getData()),
-    [accountUser, viewportTick, dataTick]
+    [accountUser, viewportTick, dataTick, painelPrefTick]
   );
 
   const refresh = useCallback(() => {
@@ -133,6 +135,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const onChange = () => setViewportTick((t) => t + 1);
     mq.addEventListener("change", onChange);
     return () => mq.removeEventListener("change", onChange);
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const onPref = () => setPainelPrefTick((t) => t + 1);
+    window.addEventListener(PAINEL_MOBILE_PREF_EVENT, onPref);
+    return () => window.removeEventListener(PAINEL_MOBILE_PREF_EVENT, onPref);
   }, []);
 
   useEffect(() => {

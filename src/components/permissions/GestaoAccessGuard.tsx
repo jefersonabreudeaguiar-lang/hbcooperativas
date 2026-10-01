@@ -9,6 +9,7 @@ import {
   canAccessPainelResponsavelSession,
   isGestaoOnlyRoute,
 } from "@/lib/security/responsavelPanelAccess";
+import { shouldRenderStaffPainelUi } from "@/lib/staffNavigationUser";
 
 export function GestaoAccessGuard({ children }: { children: React.ReactNode }) {
   const { accountUser } = useAuth();
@@ -26,12 +27,19 @@ export function GestaoAccessGuard({ children }: { children: React.ReactNode }) {
       ? canAccessPainelResponsavelSession(accountUser)
       : false;
 
+  const staffPainelUi = useAppDataSelector(
+    (data) => Boolean(accountUser && shouldRenderStaffPainelUi(accountUser, data)),
+    [accountUser?.id, accountUser?.email, accountUser?.role, accountUser?.cooperadoId]
+  );
+
   useEffect(() => {
     if (!accountUser) return;
     if (!isGestaoOnlyRoute(pathname)) return;
-    if (canGestao === null || canGestao) return;
-    router.replace("/dashboard");
-  }, [accountUser, canGestao, pathname, router]);
+    if (canGestao === null) return;
+    if (!canGestao || !staffPainelUi) {
+      router.replace("/dashboard");
+    }
+  }, [accountUser, canGestao, staffPainelUi, pathname, router]);
 
   return <>{children}</>;
 }

@@ -8,6 +8,7 @@ import {
   canAccessPainelResponsavel,
   resolveCooperadoExperienceId,
 } from "@/lib/security/responsavelPanelAccess";
+import { preferPainelResponsavelMobile } from "@/lib/mobilePainelPreference";
 import { resolverCooperadoIdCanonico } from "@/services/cooperadoCloudService";
 import { getUserCooperativaId } from "@/utils/cooperativa";
 
@@ -60,15 +61,19 @@ export function resolveExperienceUser<T extends Omit<User, "password">>(
 ): T | null {
   if (!user) return null;
 
+  const allowPainel = canAccessPainelResponsavel(user, data);
+  const mobile = isMobileCooperativaApp();
+
+  if (allowPainel && (!mobile || preferPainelResponsavelMobile())) {
+    return user;
+  }
+
   if (isCooperadoAppUser(user)) {
     const cooperadoId = resolveCooperadoExperienceId(user) ?? user.cooperadoId;
     return cooperadoId
       ? asCooperadoExperience(user, cooperadoId, data)
       : { ...user, role: "cooperado" as UserRole };
   }
-
-  const allowPainel = canAccessPainelResponsavel(user, data);
-  const mobile = isMobileCooperativaApp();
 
   if (!allowPainel) {
     const cooperadoId = resolveCooperadoExperienceId(user);

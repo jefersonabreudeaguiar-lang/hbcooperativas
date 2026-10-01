@@ -26,11 +26,14 @@ export function canAccessPainelResponsavel(
 ): boolean {
   if (!user || user.active === false) return false;
 
-  if (user.cooperadoId?.trim()) return false;
-
   const role = normalizeRole(user.role);
   if (role === "cooperado" || role === "parceiro" || role === "contador") return false;
   if (!isStaffRole(role)) return false;
+
+  /** Cooperado puro — não entra no painel. Responsável/tesoureiro podem ter cooperadoId (perfil duplo). */
+  if (user.cooperadoId?.trim() && role !== "responsavel" && role !== "tesoureiro") {
+    return false;
+  }
 
   if (isAppCreator(user) || isBuiltinPainelResponsavelEmail(user.email)) return true;
 
@@ -75,11 +78,14 @@ export function canAccessPainelResponsavelSession(session: {
   cooperadoId?: string | null;
 } | null | undefined): boolean {
   if (!session) return false;
-  if (session.cooperadoId?.trim()) return false;
 
   const role = normalizeRole(session.role ?? "");
   if (role === "cooperado" || role === "parceiro" || role === "contador") return false;
   if (!isStaffRole(role)) return false;
+
+  if (session.cooperadoId?.trim() && role !== "responsavel" && role !== "tesoureiro") {
+    return false;
+  }
 
   if (isAppCreator({ email: session.email ?? "" })) return true;
   if (isBuiltinPainelResponsavelEmail(session.email)) return true;

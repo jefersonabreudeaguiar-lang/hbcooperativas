@@ -1,7 +1,8 @@
 "use client";
 
 import { useAuth } from "@/modules/auth/AuthProvider";
-import { useAppDataSelector } from "@/hooks/useAppData";
+import { useAppData, useAppDataSelector } from "@/hooks/useAppData";
+import { shouldRenderStaffPainelUi } from "@/lib/staffNavigationUser";
 import { canUser, canGerenciarEquipe, getUserFuncaoLabel, isDiretoriaRole, isResponsavelRole } from "@/permissions";
 import { canAccessPainelResponsavel } from "@/lib/security/responsavelPanelAccess";
 import { resolverCooperadoIdCanonico } from "@/services/cooperadoCloudService";
@@ -10,7 +11,10 @@ import type { Action, Resource } from "@/types";
 
 export function usePermissions() {
   const { user, accountUser } = useAuth();
+  const data = useAppData();
   const authSubject = accountUser ?? user;
+  const permUser =
+    user && accountUser && shouldRenderStaffPainelUi(accountUser, data) ? accountUser : user;
 
   const coopId = useAppDataSelector(
     (data) => (user ? getUserCooperativaId(user, data) : undefined),
@@ -26,8 +30,8 @@ export function usePermissions() {
   );
 
   const check = (resource: Resource, action: Action) => {
-    if (!user) return false;
-    return canUser(user, resource, action);
+    if (!permUser) return false;
+    return canUser(permUser, resource, action);
   };
 
   const isCooperado = user?.role === "cooperado";
