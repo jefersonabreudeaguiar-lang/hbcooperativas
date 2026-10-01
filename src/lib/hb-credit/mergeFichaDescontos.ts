@@ -3,6 +3,7 @@ import type { ResumoPagamentoCooperado } from "@/services/notaPedidoService";
 import {
   dedupeIncidenciaHbDescontosContaCoop,
   isEstornoMotivoContaCoop,
+  chaveIncidenciaHbDescontoContaCoop,
   type DescontoContaCoopRemoto,
 } from "@/lib/hb-credit/dedupeIncidenciaHbDesconto";
 
@@ -24,6 +25,39 @@ export function dedupeDescontosContaCoopRemotos(
   descontos: DescontoContaCoopRemoto[]
 ): DescontoContaCoopRemoto[] {
   return dedupeIncidenciaHbDescontosContaCoop(descontos);
+}
+
+/**
+ * SYNC-001/S2 — merge operacional (local × cloud) sem autoridade financeira por timestamp.
+ * hb_credit_transactions → projeção com hbTransactionId sempre entra; legado local preservado;
+ * linha cloud sem hbTransactionId só entra se já existir a mesma incidência local (atualização legada).
+ */
+export function mergeContaCoopDescontosFieldSync(
+  localSide: DescontoContaCoopRemoto[],
+  cloudSide: DescontoContaCoopRemoto[]
+): DescontoContaCoopRemoto[] {
+  const local = dedupeDescontosContaCoopRemotos(localSide);
+  const cloud = dedupeDescontosContaCoopRemotos(cloudSide);
+  if (!local.length && !cloud.length) return [];
+  if (!cloud.length) return local;
+  if (!local.length) {
+    return dedupeDescontosContaCoopRemotos(
+      cloud.filter((d) => Boolean(d.hbTransactionId?.trim()))
+    );
+  }
+
+  const incidenciasLocal = new Set(local.map((d) => chaveIncidenciaHbDescontoContaCoop(d)));
+  const merged: DescontoContaCoopRemoto[] = [...local];
+  for (const c of cloud) {
+    if (c.hbTransactionId?.trim()) {
+      merged.push(c);
+      continue;
+    }
+    if (incidenciasLocal.has(chaveIncidenciaHbDescontoContaCoop(c))) {
+      merged.push(c);
+    }
+  }
+  return dedupeDescontosContaCoopRemotos(merged);
 }
 
 /** Dedupe incidência HB em linhas persistidas no arquivo mensal (somente projeção; não reescreve histórico). */

@@ -33,12 +33,14 @@ import {
   dedupeDescontosExtrasContaCoop,
   filtrarDescontosContaCoopParaMesReferencia,
   mergeDescontosContaCoopNoResumo,
+  mergeContaCoopDescontosFieldSync,
 } from "@/lib/hb-credit/mergeFichaDescontos";
 import {
   getContaCoopDescontosMemoria,
   hasContaCoopDescontosMemoria,
   resolveDescontosContaCoopMesParaCalculo,
 } from "@/lib/hb-credit/contaCoopDescontosMemory";
+import { contaCoopDescontosMesFetchAutoritativo } from "@/lib/hb-credit/contaCoopDescontosSyncHealth";
 import { formatMesesReferenciaRotulo } from "@/utils/format";
 import { fichaPreservarSemNotaLocal, notasSyncProvavelmenteCompleto } from "@/services/fichaSyncGuard";
 import { isCloudSyncInProgress } from "@/services/cloudSyncProgress";
@@ -646,40 +648,37 @@ function contaCoopDescontosHbTime(arquivo: ArquivoMensalCooperado): number {
 }
 
 function mergeContaCoopDescontosField(
-  a: ArquivoMensalCooperado,
-  b: ArquivoMensalCooperado
+  localArquivo: ArquivoMensalCooperado,
+  cloudArquivo: ArquivoMensalCooperado
 ): ArquivoMensalCooperado["contaCoopDescontos"] {
-  const aList = a.contaCoopDescontos ?? [];
-  const bList = b.contaCoopDescontos ?? [];
-  if (!aList.length && !bList.length) return undefined;
-  if (!aList.length) return dedupeArquivoContaCoopDescontos(bList);
-  if (!bList.length) return dedupeArquivoContaCoopDescontos(aList);
+  const localList = localArquivo.contaCoopDescontos ?? [];
+  const cloudList = cloudArquivo.contaCoopDescontos ?? [];
+  if (!localList.length && !cloudList.length) return undefined;
 
-  const ha = contaCoopDescontosHbTime(a);
-  const hb = contaCoopDescontosHbTime(b);
-  if (ha !== hb && (ha > 0 || hb > 0)) {
-    const winner = ha >= hb ? a : b;
-    const winnerList = winner.contaCoopDescontos ?? (ha >= hb ? aList : bList);
-    return dedupeArquivoContaCoopDescontos(winnerList);
-  }
-
-  const ta = arquivoMensalTime(a);
-  const tb = arquivoMensalTime(b);
-  if (ta !== tb) {
-    const newerList = ta > tb ? aList : bList;
-    const olderList = ta > tb ? bList : aList;
-    if (!newerList.length && olderList.length) return dedupeArquivoContaCoopDescontos(olderList);
-    return dedupeArquivoContaCoopDescontos(newerList);
-  }
-
-  return dedupeArquivoContaCoopDescontos([...aList, ...bList]);
+  const merged = mergeContaCoopDescontosFieldSync(
+    descontosContaCoopFromArquivo({ contaCoopDescontos: localList }),
+    descontosContaCoopFromArquivo({ contaCoopDescontos: cloudList })
+  );
+  if (!merged.length) return undefined;
+  return dedupeArquivoContaCoopDescontos(
+    merged.map((d) => ({
+      motivo: d.motivo,
+      valorReais: d.valorReais,
+      tipo: d.motivo.toLowerCase().includes("estorno") ? ("credito_avulso" as const) : ("conta_coop" as const),
+      createdAt: d.createdAt,
+      ...(d.hbTransactionId ? { hbTransactionId: d.hbTransactionId } : {}),
+    }))
+  );
 }
 
 function mergeParArquivoMensal(
   data: AppData,
   a: ArquivoMensalCooperado,
-  b: ArquivoMensalCooperado
+  b: ArquivoMensalCooperado,
+  hbSides?: { local: ArquivoMensalCooperado; cloud: ArquivoMensalCooperado }
 ): ArquivoMensalCooperado {
+  const hbLocal = hbSides?.local ?? a;
+  const hbCloud = hbSides?.cloud ?? b;
   const newer = arquivoMensalTime(a) >= arquivoMensalTime(b) ? a : b;
   const older = newer === a ? b : a;
   const updatedAt =
@@ -693,7 +692,7 @@ function mergeParArquivoMensal(
     descontoAvulso: newer.descontoAvulso ?? older.descontoAvulso,
     descontoAvulsoMotivo: newer.descontoAvulsoMotivo ?? older.descontoAvulsoMotivo,
     cotaIngressoPaga: mergeCotaIngressoPagaField(a, b),
-    contaCoopDescontos: mergeContaCoopDescontosField(a, b),
+    contaCoopDescontos: mergeContaCoopDescontosField(hbLocal, hbCloud),
     contaCoopDescontosUpdatedAt:
       contaCoopDescontosHbTime(a) >= contaCoopDescontosHbTime(b)
         ? a.contaCoopDescontosUpdatedAt ?? b.contaCoopDescontosUpdatedAt
@@ -717,13 +716,13 @@ export function mergeArquivosMensaisFromCloud(
       ...item,
       cooperadoId: resolverCooperadoIdCanonico(data, item.cooperadoId, item.cooperativaId),
     };
-    map.set(key, cur ? mergeParArquivoMensal(data, cur, normalized) : normalized);
+    map.set(key, cur ? mergeParArquivoMensal(data, cur, normalized, { local: cur, cloud: normalized }) : normalized);
   }
 
   for (const item of localCoop) {
     const key = arquivoMensalSyncKey(data, item);
     const cur = map.get(key);
-    map.set(key, cur ? mergeParArquivoMensal(data, cur, item) : item);
+    map.set(key, cur ? mergeParArquivoMensal(data, cur, item, { local: item, cloud: cur }) : item);
   }
 
   return [...map.values()];
@@ -2078,9 +2077,7 @@ export function getResumoValorAPagarRelatorio(
     );
     if (complementares.length > 0 && complementares.length === pendentes.length) {
       const base = getResumoSomenteFichasComplementares(complementares);
-      return getResumoPagamentoParaRegistro(base, data, cooperadoId, mesReferencia, coopId, {
-        omitirDescontosContaCoop: true,
-      });
+      return getResumoPagamentoParaRegistro(base, data, cooperadoId, mesReferencia, coopId);
     }
   }
   const live = getResumoPagamentoCooperado(data, cooperadoId, mesReferencia, coopId);
@@ -2104,9 +2101,7 @@ export function resumoComplementaresPosPagamento(
   const pendentes = listarFichasPendentesPagamento(data, cooperadoId, mesReferencia, coopId);
   if (complementares.length !== pendentes.length) return null;
   const base = getResumoSomenteFichasComplementares(complementares);
-  return getResumoPagamentoParaRegistro(base, data, cooperadoId, mesReferencia, coopId, {
-    omitirDescontosContaCoop: true,
-  });
+  return getResumoPagamentoParaRegistro(base, data, cooperadoId, mesReferencia, coopId);
 }
 
 /** Valor exibido ao cooperado — entregas; menos uso HB Créditos no mercado quando houver compras no mês. */
@@ -2144,7 +2139,8 @@ export function getDescontosContaCoopMesCached(
   return resolveDescontosContaCoopMesParaCalculo(
     fromArquivo,
     fromMemoria,
-    hasContaCoopDescontosMemoria(coopId, canonico, mesReferencia)
+    hasContaCoopDescontosMemoria(coopId, canonico, mesReferencia),
+    contaCoopDescontosMesFetchAutoritativo(coopId, canonico, mesReferencia)
   );
 }
 

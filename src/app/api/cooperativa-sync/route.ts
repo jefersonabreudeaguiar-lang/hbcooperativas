@@ -155,6 +155,22 @@ export async function POST(request: Request) {
     payload = preservacao.payload;
     if (raw.fullReset === true) {
       payload = aplicarPreservacaoFinanceiraFullResetNoOperacional(existing, payload);
+      const completude = avaliarFullResetOperacionalCompletude({
+        fullReset: true,
+        payload,
+        conferidasNotas: mergeNotasSources(
+          (await fetchNotasFromTable(supabase, cnpj)).notas,
+          await fetchNotasFromStorage(supabase, cnpj)
+        ),
+      });
+      if (
+        completude.verdict === "allow" &&
+        (completude.motivo.includes("alinhado") ||
+          completude.motivo.includes("reset legítimo") ||
+          completude.motivo.includes("payload operacional vazio"))
+      ) {
+        payload = { ...payload, operacionalSnapshotComplete: true };
+      }
     }
     if (guard.session) {
       for (const blocked of preservacao.blockedDowngrades) {

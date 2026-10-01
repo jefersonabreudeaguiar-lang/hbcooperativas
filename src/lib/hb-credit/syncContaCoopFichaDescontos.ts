@@ -19,6 +19,7 @@ import { bumpContaCoopDescontosRevision } from "@/lib/hb-credit/contaCoopDescont
 import {
   markContaCoopDescontosFetchFailed,
   markContaCoopDescontosFetchOk,
+  markContaCoopDescontosMesFetchOk,
 } from "@/lib/hb-credit/contaCoopDescontosSyncHealth";
 import { isContaCoopValorReceberPilot } from "@/utils/contaCoopUiVisibility";
 import { isStaffHbCoopBackgroundSyncRoute } from "@/lib/hb-credit/staffHbSyncRoute";
@@ -71,12 +72,13 @@ export async function syncContaCoopDescontosMesLocal(
   try {
     const raw = await fetchFichaDescontosContaCoop(opts.cnpj, titularIds, opts.mesReferencia);
     descontos = dedupeDescontosContaCoopRemotos(raw);
-    markContaCoopDescontosFetchOk(opts.cooperativaId, canonico);
+    markContaCoopDescontosMesFetchOk(opts.cooperativaId, canonico, opts.mesReferencia);
   } catch (e) {
     markContaCoopDescontosFetchFailed(
       opts.cooperativaId,
       canonico,
-      e instanceof Error ? e.message : "ficha_descontos_failed"
+      e instanceof Error ? e.message : "ficha_descontos_failed",
+      opts.mesReferencia
     );
     descontos = getDescontosContaCoopMesCached(data, canonico, opts.mesReferencia, opts.cooperativaId);
     return { data, descontos };

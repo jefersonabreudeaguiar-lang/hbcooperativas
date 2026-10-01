@@ -26,6 +26,9 @@ import {
 export {
   aplicarPreservacaoPagamentosConfirmadosNoOperacional,
   mergePagamentoRegistro,
+  mergePagamentosCooperadoFromCloud,
+  mergePagamentoCooperadoRecord,
+  prepararOperacionalSyncPayloadPagamentosPull,
   pagamentoIdsPotencialmenteRegressivos,
   preservarPagamentosConfirmados,
   type PagamentoDowngradeBloqueado,

@@ -62,6 +62,11 @@ export interface OperacionalSyncPayload {
   notasPedidoExcluidas?: NotaPedidoExcluida[];
   /** Lançamentos da ficha (valor a receber) — sincroniza responsável ↔ cooperado. */
   fichaCorrida?: FichaCorrida[];
+  /**
+   * SYNC-001/S1 — snapshot operacional completo para replace autoritativo de coleções
+   * (mensalidades, descontos, arquivos, …). Ausente/false: merge incremental mesmo com fullReset.
+   */
+  operacionalSnapshotComplete?: boolean;
   votacaoPautas?: VotacaoPauta[];
   votacaoVotos?: VotacaoVoto[];
   pareceresContabeis?: ParecerContabilMensal[];

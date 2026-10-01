@@ -1,4 +1,5 @@
 import type { PagamentoCooperadoRegistro } from "@/types";
+import type { OperacionalSyncPayload } from "@/lib/supabase/cooperativaSyncStorage";
 
 export type OperacionalPagamentosSlice = {
   pagamentosCooperado: PagamentoCooperadoRegistro[];
@@ -87,6 +88,85 @@ export function mergePagamentoRegistro(
   const prevT = new Date(prev.updatedAt ?? prev.createdAt ?? 0).getTime();
   const incT = new Date(incoming.updatedAt ?? incoming.createdAt ?? 0).getTime();
   return incT >= prevT ? incoming : prev;
+}
+
+function pagamentoRecordTime(p: PagamentoCooperadoRegistro): number {
+  const t = new Date(p.updatedAt ?? p.createdAt ?? 0).getTime();
+  return Number.isFinite(t) ? t : 0;
+}
+
+/** Par local × cloud — monotonicidade confirmado (PAY-TMP-001 / SYNC-001/S3). */
+export function mergePagamentoCooperadoRecord(
+  local: PagamentoCooperadoRegistro,
+  cloud: PagamentoCooperadoRegistro
+): PagamentoCooperadoRegistro {
+  if (local.status === "confirmado" && cloud.status !== "confirmado") return local;
+  if (cloud.status === "confirmado" && local.status !== "confirmado") return cloud;
+  const localRank = PAGAMENTO_STATUS_RANK[local.status] ?? 0;
+  const cloudRank = PAGAMENTO_STATUS_RANK[cloud.status] ?? 0;
+  if (localRank > cloudRank) return local;
+  if (cloudRank > localRank) return cloud;
+  if (local.status === "confirmado" && cloud.status === "confirmado") {
+    if (local.reciboHtml && !cloud.reciboHtml) return local;
+    if (cloud.reciboHtml && !local.reciboHtml) return cloud;
+    const localPago = new Date(local.pagoEm).getTime();
+    const cloudPago = new Date(cloud.pagoEm).getTime();
+    if (Number.isFinite(localPago) && Number.isFinite(cloudPago) && localPago !== cloudPago) {
+      return localPago <= cloudPago ? local : cloud;
+    }
+    if (
+      local.valorLiquido !== cloud.valorLiquido ||
+      local.valorBruto !== cloud.valorBruto ||
+      local.descontoCooperativa !== cloud.descontoCooperativa
+    ) {
+      return local;
+    }
+  }
+  return pagamentoRecordTime(local) >= pagamentoRecordTime(cloud) ? local : cloud;
+}
+
+/**
+ * Autoridade única GET/pull × POST/merge — pagamentos cooperativa no sync operacional.
+ */
+export function mergePagamentosCooperadoFromCloud(
+  localCoop: PagamentoCooperadoRegistro[],
+  cloudItems: PagamentoCooperadoRegistro[]
+): PagamentoCooperadoRegistro[] {
+  const map = new Map<string, PagamentoCooperadoRegistro>();
+  for (const item of cloudItems) map.set(item.id, item);
+  for (const local of localCoop) {
+    const cloud = map.get(local.id);
+    if (!cloud) {
+      map.set(local.id, local);
+      continue;
+    }
+    map.set(local.id, mergePagamentoCooperadoRecord(local, cloud));
+  }
+  const pairwise = [...map.values()];
+  let pagamentos = preservarPagamentosConfirmados(cloudItems, pairwise).pagamentos;
+  const localConfirmados = localCoop.filter((p) => p.status === "confirmado");
+  if (localConfirmados.length) {
+    pagamentos = preservarPagamentosConfirmados(localConfirmados, pagamentos).pagamentos;
+  }
+  return pagamentos;
+}
+
+/** Sanitiza slice cloud do GET/pull antes do merge — não propaga aguardando stale sobre confirmado local. */
+export function prepararOperacionalSyncPayloadPagamentosPull(
+  localPagamentosCoop: PagamentoCooperadoRegistro[],
+  operacional: OperacionalSyncPayload,
+  coopId: string
+): OperacionalSyncPayload {
+  const cloudPag = (operacional.pagamentosCooperado ?? []).map((p) => ({
+    ...p,
+    cooperativaId: p.cooperativaId ?? coopId,
+  }));
+  if (!cloudPag.length) return operacional;
+  const sanitizedCloud = cloudPag.map((cloud) => {
+    const local = localPagamentosCoop.find((l) => l.id === cloud.id);
+    return local ? mergePagamentoCooperadoRecord(local, cloud) : cloud;
+  });
+  return { ...operacional, pagamentosCooperado: sanitizedCloud };
 }
 
 export type PagamentoDowngradeBloqueado = {

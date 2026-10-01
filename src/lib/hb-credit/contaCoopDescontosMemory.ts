@@ -55,11 +55,13 @@ export function mergeContaCoopDescontosArquivoEMemoria(
 export function resolveDescontosContaCoopMesParaCalculo(
   fromArquivo: DescontoContaCoopRemoto[],
   fromMemoria: DescontoContaCoopRemoto[],
-  temMemoriaSessao: boolean
+  temMemoriaSessao: boolean,
+  mesFetchAutoritativo?: boolean
 ): DescontoContaCoopRemoto[] {
   const arquivo = dedupeDescontosContaCoopRemotos(fromArquivo);
-  if (!temMemoriaSessao) return arquivo;
   const memoria = dedupeDescontosContaCoopRemotos(fromMemoria);
+  if (mesFetchAutoritativo) return memoria;
+  if (!temMemoriaSessao) return arquivo;
   if (memoria.length > 0) return memoria;
   return arquivo;
 }

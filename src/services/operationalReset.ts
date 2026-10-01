@@ -13,6 +13,28 @@ const OPERACIONAL_PULL_MERGED_AT_PREFIX = "coopeagriplla_operacional_pull_merged
 
 /** Testes H8.14E — watermark de merge sem localStorage. */
 const operacionalPullMergedAtMsTest = new Map<string, number>();
+/** Testes SYNC-001/R1 — versão de reset aplicada sem localStorage. */
+const cloudResetAppliedVersionTest = new Map<string, number>();
+let restoreLegacyBypassWindowForTests = false;
+
+export function setRestoreLegacyBypassWindowForTests(on: boolean): void {
+  restoreLegacyBypassWindowForTests = on;
+}
+
+export function setCloudResetAppliedVersionForTests(cnpj: string, version: number): void {
+  const digits = normalizeCnpj(cnpj);
+  if (digits.length !== 14) return;
+  if (version > 0) cloudResetAppliedVersionTest.set(digits, version);
+  else cloudResetAppliedVersionTest.delete(digits);
+}
+
+export function clearCloudResetAppliedVersionForTests(cnpj: string): void {
+  cloudResetAppliedVersionTest.delete(normalizeCnpj(cnpj));
+}
+
+function restoreLegacyRuntimeActive(): boolean {
+  return typeof window !== "undefined" || restoreLegacyBypassWindowForTests;
+}
 
 /** Restore ativo nesta aba — definido no 1º fetch da nuvem (antes do merge local). */
 let sessionOperacionalRestore: { cnpj: string; version: number } | null = null;
@@ -42,15 +64,22 @@ export function markOperationalResetCloudDone(): void {
 }
 
 export function getCloudResetAppliedVersion(cnpj: string): number {
+  const digits = normalizeCnpj(cnpj);
+  const fromTest = cloudResetAppliedVersionTest.get(digits);
+  if (fromTest != null && fromTest > 0) return fromTest;
   if (typeof window === "undefined") return 0;
-  const raw = localStorage.getItem(`${CLOUD_RESET_APPLIED_PREFIX}${normalizeCnpj(cnpj)}`);
+  const raw = localStorage.getItem(`${CLOUD_RESET_APPLIED_PREFIX}${digits}`);
   const n = Number(raw);
   return Number.isFinite(n) && n > 0 ? n : 0;
 }
 
 function markCloudResetApplied(cnpj: string, version: number): void {
+  const digits = normalizeCnpj(cnpj);
+  if (digits.length === 14 && version > 0) {
+    cloudResetAppliedVersionTest.set(digits, version);
+  }
   if (typeof window === "undefined") return;
-  localStorage.setItem(`${CLOUD_RESET_APPLIED_PREFIX}${normalizeCnpj(cnpj)}`, String(version));
+  localStorage.setItem(`${CLOUD_RESET_APPLIED_PREFIX}${digits}`, String(version));
 }
 
 /** Nuvem publicou operacional autoritativo (fullReset) — não recalcular fila Pagar a partir de notas locais. */
@@ -212,7 +241,7 @@ export function clearOperationalDataForCooperativa(data: AppData, coopId: string
     ajustesFichaMes: (data.ajustesFichaMes ?? []).filter((a) => !belongsToCoop(a)),
     mensalidades: data.mensalidades.filter((m) => !cooperadoIds.has(m.cooperadoId)),
     cotas: data.cotas.filter((c) => !belongsToCoopCooperado(c)),
-    entregas: data.entregas.filter((e) => !belongsToCoopCooperado(e)),
+    entregas: (data.entregas ?? []).filter((e) => !belongsToCoopCooperado(e)),
     descontos: data.descontos.filter((d) => !cooperadoIds.has(d.cooperadoId)),
     valoresAvulsosReceber: (data.valoresAvulsosReceber ?? []).filter((v) => !belongsToCoop(v)),
     pagamentos: data.pagamentos.filter((p) => !belongsToCoopCooperado(p)),
@@ -262,20 +291,30 @@ export interface CloudOperationalResetSignal {
   wipeNotas?: boolean;
 }
 
+export type RestoreLegadoOpts = {
+  /** SYNC-001/R1 — só clear preemptivo com snapshot completo/autoridade S1 ou reset vazio legítimo. */
+  permitirPreemptiveClear?: boolean;
+};
+
 /** Aplica reset publicado na nuvem (fullReset) no aparelho — uma vez por versão/CNPJ. */
 export function applyCloudOperationalResetIfNeeded(
   data: AppData,
   cnpj: string,
   coopId: string,
-  cloud: CloudOperationalResetSignal
+  cloud: CloudOperationalResetSignal,
+  opts?: RestoreLegadoOpts
 ): { data: AppData; changed: boolean } {
-  if (typeof window === "undefined") return { data, changed: false };
+  if (!restoreLegacyRuntimeActive()) return { data, changed: false };
   if (!cloud.fullReset) return { data, changed: false };
 
   const digits = normalizeCnpj(cnpj);
   const cloudVer = cloud.operationalResetVersion ?? 0;
   if (cloudVer <= 0) return { data, changed: false };
   if (getCloudResetAppliedVersion(digits) >= cloudVer) return { data, changed: false };
+
+  if (opts?.permitirPreemptiveClear !== true) {
+    return { data, changed: false };
+  }
 
   markCloudResetApplied(digits, cloudVer);
   markOperacionalCloudAuthoritative(digits, cloudVer);
@@ -288,9 +327,10 @@ export function reapplyCloudOperationalSliceIfStale(
   data: AppData,
   cnpj: string,
   coopId: string,
-  cloud: CloudOperationalResetSignal & { pagamentosCooperado?: { id: string; cooperativaId?: string }[]; fichaCorrida?: { id: string; cooperativaId?: string }[] }
+  cloud: CloudOperationalResetSignal & { pagamentosCooperado?: { id: string; cooperativaId?: string }[]; fichaCorrida?: { id: string; cooperativaId?: string }[] },
+  opts?: RestoreLegadoOpts
 ): { data: AppData; changed: boolean } {
-  if (typeof window === "undefined") return { data, changed: false };
+  if (!restoreLegacyRuntimeActive()) return { data, changed: false };
   if (!cloud.fullReset) return { data, changed: false };
 
   const digits = normalizeCnpj(cnpj);
@@ -322,6 +362,10 @@ export function reapplyCloudOperationalSliceIfStale(
     .join("\n");
 
   if (localPag === cloudPag && localFicha === cloudFicha) return { data, changed: false };
+
+  if (opts?.permitirPreemptiveClear !== true) {
+    return { data, changed: false };
+  }
 
   markOperacionalCloudAuthoritative(digits, cloudVer);
   clearNotasSyncMeta(digits);

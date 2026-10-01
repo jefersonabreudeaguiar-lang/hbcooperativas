@@ -1,4 +1,4 @@
-import type { AppData, Cooperativa, Cooperado, Instituicao, ProdutoInstituicao, Desconto, PrestacaoContasExcluida, NotaPedidoExcluida, InstituicaoExcluida, PagamentoCooperadoRegistro, Comunicado, ComunicadoExcluidoRef, LivroCaixaExcluidoRef, LivroCaixaLancamento, FichaCorrida, NotaPedido, VotacaoPauta, VotacaoVoto, ParecerContabilMensal, FechamentoSnapshot } from "@/types";
+import type { AppData, Cooperativa, Cooperado, Instituicao, ProdutoInstituicao, Desconto, PrestacaoContasExcluida, NotaPedidoExcluida, InstituicaoExcluida, PagamentoCooperadoRegistro, Comunicado, ComunicadoExcluidoRef, LivroCaixaExcluidoRef, LivroCaixaLancamento, FichaCorrida, NotaPedido, VotacaoPauta, VotacaoVoto, ParecerContabilMensal, FechamentoSnapshot, ArquivoMensalCooperado, AjustesFichaMesCooperativa, ValorAvulsoReceber } from "@/types";
 import { normalizeCnpj } from "@/utils/cooperativa";
 import { secureApiFetch } from "@/lib/security/clientSession";
 import type { ContratosSyncPayload, OperacionalSyncPayload } from "@/lib/supabase/cooperativaSyncStorage";
@@ -8,6 +8,10 @@ import { syncNotasPedidoFromCloud, patchNotaPedidoInCloud } from "@/services/not
 import { fetchCooperativaByCnpjFromCloud, mergeCooperativaIntoData } from "@/services/cooperativaCloudService";
 import { mergeArquivosMensaisFromCloud, reconciliarFichaFromNotasConferidas, dedupeFichaCorridaPorNota, aplicarNotasPedidoExcluidas, idsNotasPedidoExcluidas } from "@/services/notaPedidoService";
 import { posProcessarIntegridadePagamentosCooperativa, cooperadoMesTemPagamentoNaLista, type RegistroPagamentoResponsavelPatch } from "@/services/pagamentoIntegridadeService";
+import {
+  mergePagamentosCooperadoFromCloud,
+  prepararOperacionalSyncPayloadPagamentosPull,
+} from "@/services/pagamentoRegistroMerge";
 import { ensureComunicadosAudioUploaded } from "@/services/comunicadoAudioSync";
 import { operacionalPushSeguro, precisaReparoFullSyncNotas, cooperadoFinanceiroDesatualizado, cooperadoFichaValoresDesalinhados, limparFichaObsoletaCooperado } from "@/services/fichaSyncGuard";
 import { beginCloudSync, endCloudSync } from "@/services/cloudSyncProgress";
@@ -15,6 +19,7 @@ import { clearNotasSyncMeta, forceNextFullNotasSync } from "@/services/syncMetaS
 import { sincronizarMensalidadeCooperativa, mensalidadeVisivelNoDispositivo, normalizarMensalidadeCooperadoLocal, mesclarMensalidadesPayloadNuvem, prepararMensalidadesCloud, prepararMensalidadeCloud, reconciliarMensalidadesComCooperadosCloud, mensalidadeCloudEntraNoDispositivo, enriquecerMensalidadeCooperadoSnapshot } from "@/services/mensalidadeService";
 import { aplicarPrestacoesContasExcluidas } from "@/services/prestacaoContasService";
 import { mergeLivroCaixaControleAnualFromCloud } from "@/services/livroCaixaService";
+import { posProcessarFinanceiroLocal } from "@/services/operacionalLocalPostProcess";
 import { aplicarInstituicoesExcluidas } from "@/services/instituicaoContratoService";
 import {
   OPERATIONAL_RESET_VERSION,
@@ -30,8 +35,14 @@ import {
   getLastOperacionalPullMergedUpdatedAtMs,
   noteOperacionalPullMergedUpdatedAt,
   setOperacionalCloudAuthoritativeForTests,
+  setRestoreLegacyBypassWindowForTests,
 } from "@/services/operationalReset";
-import { posProcessarFinanceiroLocal } from "@/services/operacionalLocalPostProcess";
+import {
+  operacionalBlobOperacionalLegado,
+  operacionalColecaoReplaceDominio,
+  operacionalDominioFornecidoNoPayload,
+  operacionalSliceArray,
+} from "@/services/operacionalMergeSemantics";
 import {
   acquireCooperativaSyncSessionLease,
   acquireOperacionalPullLease,
@@ -212,7 +223,11 @@ export function mergeArrayByNewer<T extends WithUpdatedAt>(local: T[], cloud: T[
   return [...map.values()];
 }
 
-/** Nuvem é base; local ganha se for mais recente ou empatar (ação do responsável não reverte). */
+/**
+ * Coleções operacionais sem rank semântico próprio (S5).
+ * Cloud é base; local vence só se `updatedAt` ≥ cloud no mesmo id.
+ * Domínios com regra superior (pagamento, ficha, nota, HB) têm merges dedicados.
+ */
 function mergeOperacionalArrayFromCloud<T extends WithUpdatedAt>(
   localCoop: T[],
   cloudItems: T[],
@@ -345,57 +360,7 @@ function mergeFechamentoSnapshotsFromCloud(
   return [...byMes.values()];
 }
 
-const PAGAMENTO_STATUS_RANK: Record<PagamentoCooperadoRegistro["status"], number> = {
-  aguardando_confirmacao: 0,
-  confirmado: 1,
-};
-
-/** Pagamento confirmado localmente não volta para aguardando assinatura na nuvem. */
-function mergePagamentoCooperadoRecord(
-  local: PagamentoCooperadoRegistro,
-  cloud: PagamentoCooperadoRegistro
-): PagamentoCooperadoRegistro {
-  if (local.status === "confirmado" && cloud.status !== "confirmado") return local;
-  if (cloud.status === "confirmado" && local.status !== "confirmado") return cloud;
-  const localRank = PAGAMENTO_STATUS_RANK[local.status] ?? 0;
-  const cloudRank = PAGAMENTO_STATUS_RANK[cloud.status] ?? 0;
-  if (localRank > cloudRank) return local;
-  if (cloudRank > localRank) return cloud;
-  if (local.status === "confirmado" && cloud.status === "confirmado") {
-    if (local.reciboHtml && !cloud.reciboHtml) return local;
-    if (cloud.reciboHtml && !local.reciboHtml) return cloud;
-    const localPago = new Date(local.pagoEm).getTime();
-    const cloudPago = new Date(cloud.pagoEm).getTime();
-    if (Number.isFinite(localPago) && Number.isFinite(cloudPago) && localPago !== cloudPago) {
-      return localPago <= cloudPago ? local : cloud;
-    }
-    if (
-      local.valorLiquido !== cloud.valorLiquido ||
-      local.valorBruto !== cloud.valorBruto ||
-      local.descontoCooperativa !== cloud.descontoCooperativa
-    ) {
-      return local;
-    }
-  }
-  return itemTime(local) >= itemTime(cloud) ? local : cloud;
-}
-
-export function mergePagamentosCooperadoFromCloud(
-  localCoop: PagamentoCooperadoRegistro[],
-  cloudItems: PagamentoCooperadoRegistro[]
-): PagamentoCooperadoRegistro[] {
-  const map = new Map<string, PagamentoCooperadoRegistro>();
-  for (const item of cloudItems) map.set(item.id, item);
-  for (const local of localCoop) {
-    const cloud = map.get(local.id);
-    if (!cloud) {
-      map.set(local.id, local);
-      continue;
-    }
-    map.set(local.id, mergePagamentoCooperadoRecord(local, cloud));
-  }
-  return [...map.values()];
-}
+export { mergePagamentosCooperadoFromCloud } from "@/services/pagamentoRegistroMerge";
 
 function comunicadosExcluidosIdsCoop(data: AppData, coopId: string): Set<string> {
   return new Set(
@@ -664,6 +629,7 @@ function buildOperacionalPayload(data: AppData, coopId: string): OperacionalSync
     pareceresContabeis: (sanitized.pareceresContabeis ?? []).filter((p) => p.cooperativaId === coopId),
     fechamentoSnapshots: (sanitized.fechamentoSnapshots ?? []).filter((s) => s.cooperativaId === coopId),
     config: { ...sanitized.config },
+    operacionalSnapshotComplete: true,
   };
 }
 
@@ -675,25 +641,8 @@ export function buildOperacionalPayloadForTests(data: AppData, coopId: string): 
 function normalizeCloudOperacional(cloud: OperacionalSyncPayload): OperacionalSyncPayload {
   if (cloud.fullReset === true) return cloud;
   if ((cloud.operationalResetVersion ?? 0) >= OPERATIONAL_RESET_VERSION) return cloud;
-  return {
-    ...cloud,
-    arquivosMensais: [],
-    ajustesFichaMes: [],
-    pagamentosCooperado: [],
-    comunicados: [],
-    mensalidades: [],
-    descontos: [],
-    valoresAvulsosReceber: [],
-    livroCaixa: [],
-    prestacoesContas: [],
-    prestacoesContasExcluidas: [],
-    notasPedidoExcluidas: [],
-    fichaCorrida: [],
-    votacaoPautas: [],
-    votacaoVotos: [],
-    pareceresContabeis: [],
-    fechamentoSnapshots: [],
-  };
+  /** S4 — blob legado: não converter domínios ausentes em [] (merge trata como não fornecido). */
+  return cloud;
 }
 
 function buildEmptyOperacionalResetPayload(data: AppData, coopId: string): OperacionalSyncPayload {
@@ -722,6 +671,7 @@ function buildEmptyOperacionalResetPayload(data: AppData, coopId: string): Opera
     pareceresContabeis: [],
     fechamentoSnapshots: [],
     config: { ...data.config },
+    operacionalSnapshotComplete: true,
   };
 }
 
@@ -1092,6 +1042,68 @@ export type FullResetOperacionalPullSeguro = {
   motivo: string;
 };
 
+/** S1 — replace de coleções operacionais exige snapshot completo ou reset vazio comprovado no pull. */
+export function operacionalColecoesReplaceAutoritativo(
+  cloudAuthoritative: boolean,
+  cloud: OperacionalSyncPayload,
+  pullSeguro?: Pick<FullResetOperacionalPullSeguro, "permitirClearFinanceiro">
+): boolean {
+  if (!cloudAuthoritative) return false;
+  if (cloud.operacionalSnapshotComplete === true) return true;
+  if (pullSeguro?.permitirClearFinanceiro === true && operacionalPayloadVazioLegitimo(cloud)) {
+    return true;
+  }
+  return false;
+}
+
+/** SYNC-001/R1 — clear preemptivo do restore legado só com autoridade S1 (snapshot completo ou reset vazio legítimo). */
+export function operacionalRestorePreemptiveClearPermitido(
+  data: AppData,
+  cloud: OperacionalSyncPayload,
+  coopId: string,
+  cnpj?: string
+): boolean {
+  const pullSeguro = avaliarFullResetOperacionalPullSeguro(data, cloud, coopId, cnpj);
+  const cloudAuthoritative = cloud.fullReset === true && pullSeguro.permitirMergeAutoritativo;
+  return operacionalColecoesReplaceAutoritativo(cloudAuthoritative, cloud, pullSeguro);
+}
+
+/** Testes R1 — trecho restore legado antes do merge (paridade com syncOperacionalFromCloud). */
+export function aplicarRestoreLegadoOperacionalForTests(
+  data: AppData,
+  cloud: OperacionalSyncPayload,
+  coopId: string,
+  cnpj: string
+): AppData {
+  const pullSeguro = avaliarFullResetOperacionalPullSeguro(data, cloud, coopId, cnpj);
+  if (!pullSeguro.permitirAplicarResetLegado) return data;
+  const permitirPreemptiveClear = operacionalRestorePreemptiveClearPermitido(data, cloud, coopId, cnpj);
+  const restoreOpts = { permitirPreemptiveClear };
+  setRestoreLegacyBypassWindowForTests(true);
+  try {
+    let current = data;
+    const stale = reapplyCloudOperationalSliceIfStale(current, cnpj, coopId, cloud, restoreOpts);
+    if (stale.changed) current = stale.data;
+    const reset = applyCloudOperationalResetIfNeeded(current, cnpj, coopId, cloud, restoreOpts);
+    if (reset.changed) current = reset.data;
+    return current;
+  } finally {
+    setRestoreLegacyBypassWindowForTests(false);
+  }
+}
+
+/** Pull operacional in-memory incluindo restore legado + merge canônico. */
+export function syncOperacionalPullPipelineForTests(
+  data: AppData,
+  cloud: OperacionalSyncPayload,
+  coopId: string,
+  cnpj: string,
+  cloudCooperados: Cooperado[] = []
+): { data: AppData; pullSeguro: FullResetOperacionalPullSeguro } {
+  const afterRestore = aplicarRestoreLegadoOperacionalForTests(data, cloud, coopId, cnpj);
+  return aplicarOperacionalPullLocalForTests(afterRestore, cloud, coopId, cnpj, cloudCooperados);
+}
+
 function negarFullResetPullSeguro(motivo: string): FullResetOperacionalPullSeguro {
   return {
     permitirClearFinanceiro: false,
@@ -1189,6 +1201,38 @@ export function avaliarFullResetOperacionalPullSeguro(
   return negarFullResetPullSeguro(`allow não comprovado: ${completude.motivo}`);
 }
 
+export type MergeOperacionalIntoDataOptions = {
+  /** Pagamentos locais capturados antes de clear financeiro no pull (S3). */
+  localPagamentosCoopBaseline?: PagamentoCooperadoRegistro[];
+};
+
+function prepararOperacionalPullPagamentosMonotonicos(
+  pagamentosBaselineCoop: PagamentoCooperadoRegistro[],
+  operacional: OperacionalSyncPayload,
+  coopId: string,
+  pullSeguro: FullResetOperacionalPullSeguro
+): {
+  operacional: OperacionalSyncPayload;
+  mergeOptions?: MergeOperacionalIntoDataOptions;
+} {
+  const cloudAuthoritativePull =
+    operacional.fullReset === true && pullSeguro.permitirMergeAutoritativo;
+  const colecoesReplace = operacionalColecoesReplaceAutoritativo(
+    cloudAuthoritativePull,
+    operacional,
+    pullSeguro
+  );
+  if (colecoesReplace) return { operacional };
+  return {
+    operacional: prepararOperacionalSyncPayloadPagamentosPull(
+      pagamentosBaselineCoop,
+      operacional,
+      coopId
+    ),
+    mergeOptions: { localPagamentosCoopBaseline: pagamentosBaselineCoop },
+  };
+}
+
 /** Testes H8.14E — merge operacional in-memory (sem rede/store). */
 export function aplicarOperacionalPullLocalForTests(
   data: AppData,
@@ -1198,11 +1242,30 @@ export function aplicarOperacionalPullLocalForTests(
   cloudCooperados: Cooperado[] = []
 ): { data: AppData; pullSeguro: FullResetOperacionalPullSeguro } {
   const pullSeguro = avaliarFullResetOperacionalPullSeguro(data, cloud, coopId, cnpj);
+  const pagamentosBaseline = data.pagamentosCooperado.filter((p) => p.cooperativaId === coopId);
   let current = data;
-  if (pullSeguro.permitirClearFinanceiro) {
+  const cloudAuthoritativePull =
+    cloud.fullReset === true && pullSeguro.permitirMergeAutoritativo;
+  if (
+    pullSeguro.permitirClearFinanceiro &&
+    operacionalColecoesReplaceAutoritativo(cloudAuthoritativePull, cloud, pullSeguro)
+  ) {
     current = clearOperacionalFinanceiroForCooperativa(current, coopId);
   }
-  const merged = mergeOperacionalIntoData(current, cloud, coopId, cloudCooperados, pullSeguro);
+  const pullPagamentos = prepararOperacionalPullPagamentosMonotonicos(
+    pagamentosBaseline,
+    cloud,
+    coopId,
+    pullSeguro
+  );
+  const merged = mergeOperacionalIntoData(
+    current,
+    pullPagamentos.operacional,
+    coopId,
+    cloudCooperados,
+    pullSeguro,
+    pullPagamentos.mergeOptions
+  );
   if (pullSeguro.permitirCloudAuthoritative) {
     setOperacionalCloudAuthoritativeForTests(cnpj, cloud.operationalResetVersion ?? 15);
   } else {
@@ -1216,9 +1279,16 @@ export function mergeOperacionalIntoData(
   cloud: OperacionalSyncPayload,
   coopId: string,
   cloudCooperados: Cooperado[] = [],
-  pullSeguro?: FullResetOperacionalPullSeguro
+  pullSeguro?: FullResetOperacionalPullSeguro,
+  mergeOptions?: MergeOperacionalIntoDataOptions
 ): AppData {
+  const rawCloud = cloud;
+  const legacyIgnorarDominios = operacionalBlobOperacionalLegado(rawCloud);
   cloud = normalizeCloudOperacional(cloud);
+  const dominioFornecido = (key: string) =>
+    operacionalDominioFornecidoNoPayload(rawCloud, key, {
+      legacyIgnorarTodosDominios: legacyIgnorarDominios,
+    });
   const cooperadoIds = new Set(data.cooperados.filter((c) => c.cooperativaId === coopId).map((c) => c.id));
 
   const resolvedPullSeguro =
@@ -1227,39 +1297,99 @@ export function mergeOperacionalIntoData(
   const mensalidadesLocaisVisiveis = data.mensalidades
     .filter((m) => mensalidadeVisivelNoDispositivo(data, m, coopId))
     .map((m) => normalizarMensalidadeCooperadoLocal(data, m, coopId));
-  const mensalidadesCloudVisiveis = (cloud.mensalidades ?? [])
-    .filter((raw) => mensalidadeCloudEntraNoDispositivo(data, raw, coopId, cloudCooperados))
-    .map((raw) => prepararMensalidadeCloud(data, raw, coopId, cloudCooperados));
+  const mensalidadesCloudVisiveis = dominioFornecido("mensalidades")
+    ? (cloud.mensalidades ?? [])
+        .filter((raw) => mensalidadeCloudEntraNoDispositivo(data, raw, coopId, cloudCooperados))
+        .map((raw) => prepararMensalidadeCloud(data, raw, coopId, cloudCooperados))
+    : [];
 
-  const cloudArquivos = cloud.arquivosMensais.map((a) => ({ ...a, cooperativaId: coopId }));
-  const cloudAjustes = (cloud.ajustesFichaMes ?? []).map((a) => ({ ...a, cooperativaId: coopId }));
-  const cloudPagamentos = cloud.pagamentosCooperado.map((p) => ({ ...p, cooperativaId: coopId }));
-  const cloudComunicados = cloud.comunicados.map((c) => ({ ...c, cooperativaId: coopId }));
-  const cloudDescontos = (cloud.descontos ?? []).filter((d) => cooperadoIds.has(d.cooperadoId));
-  const cloudAvulsos = (cloud.valoresAvulsosReceber ?? []).map((v) => ({ ...v, cooperativaId: coopId }));
-  const cloudLivro = (cloud.livroCaixa ?? []).map((l) => ({ ...l, cooperativaId: coopId }));
+  const cloudArquivos = operacionalSliceArray<ArquivoMensalCooperado>(
+    rawCloud,
+    "arquivosMensais",
+    cloud,
+    legacyIgnorarDominios
+  ).map((a) => ({ ...a, cooperativaId: coopId }));
+  const cloudAjustes = operacionalSliceArray<AjustesFichaMesCooperativa>(
+    rawCloud,
+    "ajustesFichaMes",
+    cloud,
+    legacyIgnorarDominios
+  ).map((a) => ({ ...a, cooperativaId: coopId }));
+  const cloudPagamentos = (dominioFornecido("pagamentosCooperado")
+    ? cloud.pagamentosCooperado ?? []
+    : []
+  ).map((p) => ({ ...p, cooperativaId: coopId }));
+  const cloudComunicados = operacionalSliceArray<Comunicado>(
+    rawCloud,
+    "comunicados",
+    cloud,
+    legacyIgnorarDominios
+  ).map((c) => ({ ...c, cooperativaId: coopId }));
+  const cloudDescontos = dominioFornecido("descontos")
+    ? (cloud.descontos ?? []).filter((d) => cooperadoIds.has(d.cooperadoId))
+    : [];
+  const cloudAvulsos = operacionalSliceArray<ValorAvulsoReceber>(
+    rawCloud,
+    "valoresAvulsosReceber",
+    cloud,
+    legacyIgnorarDominios
+  ).map((v) => ({ ...v, cooperativaId: coopId }));
+  const cloudLivro = operacionalSliceArray<LivroCaixaLancamento>(
+    rawCloud,
+    "livroCaixa",
+    cloud,
+    legacyIgnorarDominios
+  ).map((l) => ({ ...l, cooperativaId: coopId }));
   const cloudLivroControle = (cloud.livroCaixaControleAnual ?? []).find((c) => c.cooperativaId === coopId);
   const localLivroControle = (data.livroCaixaControleAnual ?? []).find((c) => c.cooperativaId === coopId);
   const mergedLivroControle = mergeLivroCaixaControleAnualFromCloud(localLivroControle, cloudLivroControle);
-  const cloudExcluidasNotas = (cloud.notasPedidoExcluidas ?? []).map((e) => ({ ...e, cooperativaId: coopId }));
+  const cloudExcluidasNotas = operacionalSliceArray<NotaPedidoExcluida>(
+    rawCloud,
+    "notasPedidoExcluidas",
+    cloud,
+    legacyIgnorarDominios
+  ).map((e) => ({ ...e, cooperativaId: coopId }));
   const mergedNotasExcluidasCoop = mergeNotasPedidoExcluidasByNewer(
     (data.notasPedidoExcluidas ?? []).filter((e) => e.cooperativaId === coopId),
     cloudExcluidasNotas
   );
-  const cloudExcluidas = (cloud.prestacoesContasExcluidas ?? []).map((e) => ({ ...e, cooperativaId: coopId }));
-  const cloudFichas = (cloud.fichaCorrida ?? []).map((f) => ({ ...f, cooperativaId: coopId }));
-  const cloudPautas = (cloud.votacaoPautas ?? []).map((p) => ({ ...p, cooperativaId: coopId }));
-  const cloudVotos = (cloud.votacaoVotos ?? []).map((v) => ({ ...v, cooperativaId: coopId }));
-  const cloudPareceres = (cloud.pareceresContabeis ?? []).map((p) => ({ ...p, cooperativaId: coopId }));
-  const cloudSnapshots = (cloud.fechamentoSnapshots ?? []).map((s) => ({ ...s, cooperativaId: coopId }));
+  const cloudExcluidas = operacionalSliceArray<PrestacaoContasExcluida>(
+    rawCloud,
+    "prestacoesContasExcluidas",
+    cloud,
+    legacyIgnorarDominios
+  ).map((e) => ({ ...e, cooperativaId: coopId }));
+  const cloudFichas = dominioFornecido("fichaCorrida")
+    ? (cloud.fichaCorrida ?? []).map((f) => ({ ...f, cooperativaId: coopId }))
+    : [];
+  const cloudPautas = operacionalSliceArray<VotacaoPauta>(rawCloud, "votacaoPautas", cloud, legacyIgnorarDominios).map(
+    (p) => ({ ...p, cooperativaId: coopId })
+  );
+  const cloudVotos = operacionalSliceArray<VotacaoVoto>(rawCloud, "votacaoVotos", cloud, legacyIgnorarDominios).map(
+    (v) => ({ ...v, cooperativaId: coopId })
+  );
+  const cloudPareceres = operacionalSliceArray<ParecerContabilMensal>(
+    rawCloud,
+    "pareceresContabeis",
+    cloud,
+    legacyIgnorarDominios
+  ).map((p) => ({ ...p, cooperativaId: coopId }));
+  const cloudSnapshots = operacionalSliceArray<FechamentoSnapshot>(
+    rawCloud,
+    "fechamentoSnapshots",
+    cloud,
+    legacyIgnorarDominios
+  ).map((s) => ({ ...s, cooperativaId: coopId }));
   const mergedExcluidasCoop = mergePrestacoesExcluidasByNewer(
     (data.prestacoesContasExcluidas ?? []).filter((e) => e.cooperativaId === coopId),
     cloudExcluidas
   );
   const prestacoesExcluidasIds = new Set(mergedExcluidasCoop.map((e) => e.id));
-  const cloudPrest = (cloud.prestacoesContas ?? [])
-    .map((p) => ({ ...p, cooperativaId: coopId }))
-    .filter((p) => !prestacoesExcluidasIds.has(p.id));
+  const cloudPrest = dominioFornecido("prestacoesContas")
+    ? (cloud.prestacoesContas ?? [])
+        .map((p) => ({ ...p, cooperativaId: coopId }))
+        .filter((p) => !prestacoesExcluidasIds.has(p.id))
+    : [];
   const localPrestCoop = (data.prestacoesContas ?? [])
     .filter((p) => p.cooperativaId === coopId && !prestacoesExcluidasIds.has(p.id));
 
@@ -1271,45 +1401,175 @@ export function mergeOperacionalIntoData(
   const cloudSyncTime = cloud.updatedAt;
   const cloudAuthoritative =
     cloud.fullReset === true && resolvedPullSeguro.permitirMergeAutoritativo;
-  const localPagCoop = data.pagamentosCooperado.filter((p) => p.cooperativaId === coopId);
-  const mergedPagamentosCoop = mergePagamentosCooperadoFromCloud(localPagCoop, cloudPagamentos);
+  const colecoesReplace = operacionalColecoesReplaceAutoritativo(
+    cloudAuthoritative,
+    cloud,
+    resolvedPullSeguro
+  );
+  const localPagBaseline =
+    !colecoesReplace && mergeOptions?.localPagamentosCoopBaseline?.length
+      ? mergeOptions.localPagamentosCoopBaseline
+      : undefined;
+  const localPagCoop = (localPagBaseline ?? data.pagamentosCooperado).filter(
+    (p) => p.cooperativaId === coopId
+  );
+  const mergedPagamentosCoop = dominioFornecido("pagamentosCooperado")
+    ? mergePagamentosCooperadoFromCloud(localPagCoop, cloudPagamentos)
+    : localPagCoop;
+
+  const replaceArquivos = operacionalColecaoReplaceDominio(
+    colecoesReplace,
+    rawCloud,
+    "arquivosMensais",
+    legacyIgnorarDominios
+  );
+  const replaceAjustes = operacionalColecaoReplaceDominio(
+    colecoesReplace,
+    rawCloud,
+    "ajustesFichaMes",
+    legacyIgnorarDominios
+  );
+  const replaceComunicados = operacionalColecaoReplaceDominio(
+    colecoesReplace,
+    rawCloud,
+    "comunicados",
+    legacyIgnorarDominios
+  );
+  const replaceMensalidades = operacionalColecaoReplaceDominio(
+    colecoesReplace,
+    rawCloud,
+    "mensalidades",
+    legacyIgnorarDominios
+  );
+  const replaceDescontos = operacionalColecaoReplaceDominio(
+    colecoesReplace,
+    rawCloud,
+    "descontos",
+    legacyIgnorarDominios
+  );
+  const replaceAvulsos = operacionalColecaoReplaceDominio(
+    colecoesReplace,
+    rawCloud,
+    "valoresAvulsosReceber",
+    legacyIgnorarDominios
+  );
+  const replaceLivro = operacionalColecaoReplaceDominio(
+    colecoesReplace,
+    rawCloud,
+    "livroCaixa",
+    legacyIgnorarDominios
+  );
+  const replacePrest = operacionalColecaoReplaceDominio(
+    colecoesReplace,
+    rawCloud,
+    "prestacoesContas",
+    legacyIgnorarDominios
+  );
+  const replacePrestExcl = operacionalColecaoReplaceDominio(
+    colecoesReplace,
+    rawCloud,
+    "prestacoesContasExcluidas",
+    legacyIgnorarDominios
+  );
+  const replaceNotasExcl = operacionalColecaoReplaceDominio(
+    colecoesReplace,
+    rawCloud,
+    "notasPedidoExcluidas",
+    legacyIgnorarDominios
+  );
+  const replacePautas = operacionalColecaoReplaceDominio(
+    colecoesReplace,
+    rawCloud,
+    "votacaoPautas",
+    legacyIgnorarDominios
+  );
+  const replaceVotos = operacionalColecaoReplaceDominio(
+    colecoesReplace,
+    rawCloud,
+    "votacaoVotos",
+    legacyIgnorarDominios
+  );
+  const replacePareceres = operacionalColecaoReplaceDominio(
+    colecoesReplace,
+    rawCloud,
+    "pareceresContabeis",
+    legacyIgnorarDominios
+  );
+  const replaceSnapshots = operacionalColecaoReplaceDominio(
+    colecoesReplace,
+    rawCloud,
+    "fechamentoSnapshots",
+    legacyIgnorarDominios
+  );
 
   const localPautasCoop = (data.votacaoPautas ?? []).filter((p) => p.cooperativaId === coopId);
   const localVotosCoop = (data.votacaoVotos ?? []).filter((v) => v.cooperativaId === coopId);
-  const mergedPautasCoop = cloudAuthoritative
+  const mergedPautasCoop = replacePautas
     ? cloudPautas
-    : mergeVotacaoPautasFromCloud(localPautasCoop, cloudPautas);
-  const mergedVotosCoop = cloudAuthoritative
+    : !dominioFornecido("votacaoPautas")
+      ? localPautasCoop
+      : mergeVotacaoPautasFromCloud(localPautasCoop, cloudPautas);
+  const mergedVotosCoop = replaceVotos
     ? cloudVotos
-    : mergeVotacaoVotosFromCloud(localVotosCoop, cloudVotos, mergedPautasCoop);
+    : !dominioFornecido("votacaoVotos")
+      ? localVotosCoop
+      : mergeVotacaoVotosFromCloud(localVotosCoop, cloudVotos, mergedPautasCoop);
 
-  const cloudComunicadosExcluidos = (cloud.comunicadosExcluidos ?? []).map((e) => ({
+  const cloudComunicadosExcluidos = operacionalSliceArray<ComunicadoExcluidoRef>(
+    rawCloud,
+    "comunicadosExcluidos",
+    cloud,
+    legacyIgnorarDominios
+  ).map((e) => ({
     ...e,
     cooperativaId: e.cooperativaId ?? coopId,
   }));
-  const mergedComunicadosExcluidosCoop = cloudAuthoritative
+  const replaceComunicadosExcl = operacionalColecaoReplaceDominio(
+    colecoesReplace,
+    rawCloud,
+    "comunicadosExcluidos",
+    legacyIgnorarDominios
+  );
+  const mergedComunicadosExcluidosCoop = replaceComunicadosExcl
     ? cloudComunicadosExcluidos
-    : mergeComunicadosExcluidosFromCloud(
-        (data.comunicadosExcluidos ?? []).filter((e) => !e.cooperativaId || e.cooperativaId === coopId),
-        cloudComunicadosExcluidos
-      );
+    : !dominioFornecido("comunicadosExcluidos")
+      ? (data.comunicadosExcluidos ?? []).filter((e) => !e.cooperativaId || e.cooperativaId === coopId)
+      : mergeComunicadosExcluidosFromCloud(
+          (data.comunicadosExcluidos ?? []).filter((e) => !e.cooperativaId || e.cooperativaId === coopId),
+          cloudComunicadosExcluidos
+        );
   const comunicadosExcluidosSet = new Set(mergedComunicadosExcluidosCoop.map((e) => e.id));
 
-  const cloudLivroCaixaExcluidos = (cloud.livroCaixaExcluidos ?? []).map((e) => ({
+  const cloudLivroCaixaExcluidos = operacionalSliceArray<LivroCaixaExcluidoRef>(
+    rawCloud,
+    "livroCaixaExcluidos",
+    cloud,
+    legacyIgnorarDominios
+  ).map((e) => ({
     ...e,
     cooperativaId: e.cooperativaId ?? coopId,
   }));
-  const mergedLivroCaixaExcluidosCoop = cloudAuthoritative
+  const replaceLivroExcl = operacionalColecaoReplaceDominio(
+    colecoesReplace,
+    rawCloud,
+    "livroCaixaExcluidos",
+    legacyIgnorarDominios
+  );
+  const mergedLivroCaixaExcluidosCoop = replaceLivroExcl
     ? cloudLivroCaixaExcluidos
-    : mergeLivroCaixaExcluidosFromCloud(
-        (data.livroCaixaExcluidos ?? []).filter((e) => !e.cooperativaId || e.cooperativaId === coopId),
-        cloudLivroCaixaExcluidos
-      );
+    : !dominioFornecido("livroCaixaExcluidos")
+      ? (data.livroCaixaExcluidos ?? []).filter((e) => !e.cooperativaId || e.cooperativaId === coopId)
+      : mergeLivroCaixaExcluidosFromCloud(
+          (data.livroCaixaExcluidos ?? []).filter((e) => !e.cooperativaId || e.cooperativaId === coopId),
+          cloudLivroCaixaExcluidos
+        );
   const livroCaixaExcluidosSet = new Set(mergedLivroCaixaExcluidosCoop.map((e) => e.id));
 
-  const notasExcluidasCoopEffectivas = cloudAuthoritative
+  const notasExcluidasCoopEffectivas = replaceNotasExcl
     ? cloudExcluidasNotas
-    : mergedNotasExcluidasCoop;
+    : !dominioFornecido("notasPedidoExcluidas")
+      ? (data.notasPedidoExcluidas ?? []).filter((e) => e.cooperativaId === coopId)
+      : mergedNotasExcluidasCoop;
   const idsNotasExcluidasCoopMerge = idsNotasPedidoExcluidas(
     { notasPedidoExcluidas: notasExcluidasCoopEffectivas } as AppData,
     coopId
@@ -1335,23 +1595,27 @@ export function mergeOperacionalIntoData(
     ...data,
     arquivosMensais: [
       ...filterCoop(data.arquivosMensais, (a) => a.cooperativaId === coopId),
-      ...(cloudAuthoritative
+      ...(replaceArquivos
         ? cloudArquivos
-        : mergeArquivosMensaisFromCloud(
-            data,
-            data.arquivosMensais.filter((a) => a.cooperativaId === coopId),
-            cloudArquivos
-          )),
+        : !dominioFornecido("arquivosMensais")
+          ? data.arquivosMensais.filter((a) => a.cooperativaId === coopId)
+          : mergeArquivosMensaisFromCloud(
+              data,
+              data.arquivosMensais.filter((a) => a.cooperativaId === coopId),
+              cloudArquivos
+            )),
     ],
     ajustesFichaMes: [
       ...filterCoop(data.ajustesFichaMes ?? [], (a) => a.cooperativaId === coopId),
-      ...(cloudAuthoritative
+      ...(replaceAjustes
         ? cloudAjustes
-        : mergeOperacionalArrayFromCloud(
-            (data.ajustesFichaMes ?? []).filter((a) => a.cooperativaId === coopId),
-            cloudAjustes,
-            cloudSyncTime
-          )),
+        : !dominioFornecido("ajustesFichaMes")
+          ? (data.ajustesFichaMes ?? []).filter((a) => a.cooperativaId === coopId)
+          : mergeOperacionalArrayFromCloud(
+              (data.ajustesFichaMes ?? []).filter((a) => a.cooperativaId === coopId),
+              cloudAjustes,
+              cloudSyncTime
+            )),
     ],
     pagamentosCooperado: [
       ...filterCoop(data.pagamentosCooperado, (p) => p.cooperativaId === coopId),
@@ -1359,13 +1623,15 @@ export function mergeOperacionalIntoData(
     ],
     comunicados: [
       ...filterCoop(data.comunicados, (c) => c.cooperativaId === coopId),
-      ...(cloudAuthoritative
+      ...(replaceComunicados
         ? cloudComunicados.filter((c) => !comunicadosExcluidosSet.has(c.id))
-        : mergeComunicadosFromCloud(
-            data.comunicados.filter((c) => c.cooperativaId === coopId),
-            cloudComunicados,
-            comunicadosExcluidosSet
-          )),
+        : !dominioFornecido("comunicados")
+          ? data.comunicados.filter((c) => c.cooperativaId === coopId)
+          : mergeComunicadosFromCloud(
+              data.comunicados.filter((c) => c.cooperativaId === coopId),
+              cloudComunicados,
+              comunicadosExcluidosSet
+            )),
     ],
     comunicadosExcluidos: [
       ...(data.comunicadosExcluidos ?? []).filter((e) => e.cooperativaId && e.cooperativaId !== coopId),
@@ -1373,44 +1639,52 @@ export function mergeOperacionalIntoData(
     ],
     mensalidades: [
       ...data.mensalidades.filter((m) => !mensalidadeVisivelNoDispositivo(data, m, coopId)),
-      ...(cloudAuthoritative
+      ...(replaceMensalidades
         ? mensalidadesCloudVisiveis
-        : mergeOperacionalArrayFromCloud(
-            mensalidadesLocaisVisiveis,
-            mensalidadesCloudVisiveis,
-            cloudSyncTime
-          )),
+        : !dominioFornecido("mensalidades")
+          ? mensalidadesLocaisVisiveis
+          : mergeOperacionalArrayFromCloud(
+              mensalidadesLocaisVisiveis,
+              mensalidadesCloudVisiveis,
+              cloudSyncTime
+            )),
     ],
     descontos: [
       ...data.descontos.filter((d) => !cooperadoIds.has(d.cooperadoId)),
-      ...(cloudAuthoritative
+      ...(replaceDescontos
         ? cloudDescontos
-        : mergeOperacionalArrayFromCloud(
-            data.descontos.filter((d) => cooperadoIds.has(d.cooperadoId)),
-            cloudDescontos,
-            cloudSyncTime
-          )),
+        : !dominioFornecido("descontos")
+          ? data.descontos.filter((d) => cooperadoIds.has(d.cooperadoId))
+          : mergeOperacionalArrayFromCloud(
+              data.descontos.filter((d) => cooperadoIds.has(d.cooperadoId)),
+              cloudDescontos,
+              cloudSyncTime
+            )),
     ],
     valoresAvulsosReceber: [
       ...filterCoop(data.valoresAvulsosReceber ?? [], (v) => v.cooperativaId === coopId),
-      ...(cloudAuthoritative
+      ...(replaceAvulsos
         ? cloudAvulsos
-        : mergeOperacionalArrayFromCloud(
-            (data.valoresAvulsosReceber ?? []).filter((v) => v.cooperativaId === coopId),
-            cloudAvulsos,
-            cloudSyncTime
-          )),
+        : !dominioFornecido("valoresAvulsosReceber")
+          ? (data.valoresAvulsosReceber ?? []).filter((v) => v.cooperativaId === coopId)
+          : mergeOperacionalArrayFromCloud(
+              (data.valoresAvulsosReceber ?? []).filter((v) => v.cooperativaId === coopId),
+              cloudAvulsos,
+              cloudSyncTime
+            )),
     ],
     livroCaixa: [
       ...filterCoop(data.livroCaixa ?? [], (l) => l.cooperativaId === coopId),
-      ...(cloudAuthoritative
+      ...(replaceLivro
         ? cloudLivro.filter((l) => !livroCaixaExcluidosSet.has(l.id))
-        : mergeLivroCaixaFromCloud(
-            (data.livroCaixa ?? []).filter((l) => l.cooperativaId === coopId),
-            cloudLivro,
-            cloudSyncTime,
-            livroCaixaExcluidosSet
-          )),
+        : !dominioFornecido("livroCaixa")
+          ? (data.livroCaixa ?? []).filter((l) => l.cooperativaId === coopId)
+          : mergeLivroCaixaFromCloud(
+              (data.livroCaixa ?? []).filter((l) => l.cooperativaId === coopId),
+              cloudLivro,
+              cloudSyncTime,
+              livroCaixaExcluidosSet
+            )),
     ],
     livroCaixaControleAnual: [
       ...(data.livroCaixaControleAnual ?? []).filter((c) => c.cooperativaId !== coopId),
@@ -1422,41 +1696,52 @@ export function mergeOperacionalIntoData(
     ],
     prestacoesContas: [
       ...filterCoop(data.prestacoesContas ?? [], (p) => p.cooperativaId === coopId),
-      ...(cloudAuthoritative
+      ...(replacePrest
         ? cloudPrest.filter((p) => !prestacoesExcluidasIds.has(p.id))
-        : mergeOperacionalArrayFromCloud(localPrestCoop, cloudPrest, cloudSyncTime).filter(
-            (p) => !prestacoesExcluidasIds.has(p.id)
-          )),
+        : !dominioFornecido("prestacoesContas")
+          ? localPrestCoop
+          : mergeOperacionalArrayFromCloud(localPrestCoop, cloudPrest, cloudSyncTime).filter(
+              (p) => !prestacoesExcluidasIds.has(p.id)
+            )),
     ],
     prestacoesContasExcluidas: [
       ...filterCoop(data.prestacoesContasExcluidas ?? [], (e) => e.cooperativaId === coopId),
-      ...(cloudAuthoritative ? cloudExcluidas : mergedExcluidasCoop),
+      ...(replacePrestExcl
+        ? cloudExcluidas
+        : !dominioFornecido("prestacoesContasExcluidas")
+          ? (data.prestacoesContasExcluidas ?? []).filter((e) => e.cooperativaId === coopId)
+          : mergedExcluidasCoop),
     ],
     notasPedidoExcluidas: [
       ...filterCoop(data.notasPedidoExcluidas ?? [], (e) => e.cooperativaId === coopId),
-      ...(cloudAuthoritative ? cloudExcluidasNotas : mergedNotasExcluidasCoop),
+      ...(replaceNotasExcl ? cloudExcluidasNotas : notasExcluidasCoopEffectivas),
     ],
-    fichaCorrida: dedupeFichaCorridaPorNota(
-      [
-        ...filterCoop(data.fichaCorrida ?? [], (f) => f.cooperativaId === coopId),
-        ...(cloudAuthoritative
-          ? mergeFichaCorridaFromCloud(
-              (data.fichaCorrida ?? [])
-                .filter((f) => f.cooperativaId === coopId)
-                .filter(fichaEntraNoMergeOperacional),
-              cloudFichas.filter(fichaEntraNoMergeOperacional),
-              mergedPagamentosCoop
-            )
-          : mergeFichaCorridaFromCloud(
-              (data.fichaCorrida ?? [])
-                .filter((f) => f.cooperativaId === coopId)
-                .filter(fichaEntraNoMergeOperacional),
-              cloudFichas.filter(fichaEntraNoMergeOperacional),
-              [...localPagCoop, ...cloudPagamentos]
-            )),
-      ],
-      data.notasPedido
-    ),
+    fichaCorrida: dominioFornecido("fichaCorrida")
+      ? dedupeFichaCorridaPorNota(
+          [
+            ...filterCoop(data.fichaCorrida ?? [], (f) => f.cooperativaId === coopId),
+            ...(cloudAuthoritative
+              ? mergeFichaCorridaFromCloud(
+                  (data.fichaCorrida ?? [])
+                    .filter((f) => f.cooperativaId === coopId)
+                    .filter(fichaEntraNoMergeOperacional),
+                  cloudFichas.filter(fichaEntraNoMergeOperacional),
+                  mergedPagamentosCoop
+                )
+              : mergeFichaCorridaFromCloud(
+                  (data.fichaCorrida ?? [])
+                    .filter((f) => f.cooperativaId === coopId)
+                    .filter(fichaEntraNoMergeOperacional),
+                  cloudFichas.filter(fichaEntraNoMergeOperacional),
+                  [...localPagCoop, ...cloudPagamentos]
+                )),
+          ],
+          data.notasPedido
+        )
+      : dedupeFichaCorridaPorNota(
+          (data.fichaCorrida ?? []).filter((f) => f.cooperativaId === coopId),
+          data.notasPedido
+        ),
     votacaoPautas: [
       ...filterCoop(data.votacaoPautas ?? [], (p) => p.cooperativaId === coopId),
       ...mergedPautasCoop,
@@ -1467,21 +1752,25 @@ export function mergeOperacionalIntoData(
     ],
     pareceresContabeis: [
       ...filterCoop(data.pareceresContabeis ?? [], (p) => p.cooperativaId === coopId),
-      ...(cloudAuthoritative
+      ...(replacePareceres
         ? cloudPareceres
-        : mergePareceresContabeisFromCloud(
-            (data.pareceresContabeis ?? []).filter((p) => p.cooperativaId === coopId),
-            cloudPareceres
-          )),
+        : !dominioFornecido("pareceresContabeis")
+          ? (data.pareceresContabeis ?? []).filter((p) => p.cooperativaId === coopId)
+          : mergePareceresContabeisFromCloud(
+              (data.pareceresContabeis ?? []).filter((p) => p.cooperativaId === coopId),
+              cloudPareceres
+            )),
     ],
     fechamentoSnapshots: [
       ...filterCoop(data.fechamentoSnapshots ?? [], (s) => s.cooperativaId === coopId),
-      ...(cloudAuthoritative
+      ...(replaceSnapshots
         ? cloudSnapshots
-        : mergeFechamentoSnapshotsFromCloud(
-            (data.fechamentoSnapshots ?? []).filter((s) => s.cooperativaId === coopId),
-            cloudSnapshots
-          )),
+        : !dominioFornecido("fechamentoSnapshots")
+          ? (data.fechamentoSnapshots ?? []).filter((s) => s.cooperativaId === coopId)
+          : mergeFechamentoSnapshotsFromCloud(
+              (data.fechamentoSnapshots ?? []).filter((s) => s.cooperativaId === coopId),
+              cloudSnapshots
+            )),
     ],
   };
 
@@ -1510,7 +1799,7 @@ export function mergeOperacionalIntoData(
 
   const posMergeFinanceiro = (draft: AppData): AppData => {
     const runReconciliar =
-      !cloudAuthoritative || reconciliarGuard.reconciliarApesarFullReset;
+      !colecoesReplace || reconciliarGuard.reconciliarApesarFullReset;
     const pos = runReconciliar
       ? posProcessarIntegridadePagamentosCooperativa(reconciliarFichaFromNotasConferidas(draft))
       : posProcessarIntegridadePagamentosCooperativa(draft);
@@ -1931,25 +2220,63 @@ export async function syncOperacionalFromCloud(
     cnpj
   );
 
+  const pagamentosBaseline = current.pagamentosCooperado.filter((p) => p.cooperativaId === coopId);
+
   if (pullSeguro.permitirAplicarResetLegado) {
-    const stale = reapplyCloudOperationalSliceIfStale(current, cnpj, coopId, bundle.operacional);
+    const permitirPreemptiveClear = operacionalRestorePreemptiveClearPermitido(
+      current,
+      bundle.operacional,
+      coopId,
+      cnpj
+    );
+    const restoreOpts = { permitirPreemptiveClear };
+    const stale = reapplyCloudOperationalSliceIfStale(
+      current,
+      cnpj,
+      coopId,
+      bundle.operacional,
+      restoreOpts
+    );
     if (stale.changed) current = stale.data;
 
-    const reset = applyCloudOperationalResetIfNeeded(current, cnpj, coopId, bundle.operacional);
+    const reset = applyCloudOperationalResetIfNeeded(
+      current,
+      cnpj,
+      coopId,
+      bundle.operacional,
+      restoreOpts
+    );
     if (reset.changed) current = reset.data;
   }
 
-  if (pullSeguro.permitirClearFinanceiro && cloudOperacionalRestoreAtivo(bundle.operacional)) {
+  const cloudAuthoritativePull =
+    bundle.operacional.fullReset === true && pullSeguro.permitirMergeAutoritativo;
+  if (
+    pullSeguro.permitirClearFinanceiro &&
+    cloudOperacionalRestoreAtivo(bundle.operacional) &&
+    operacionalColecoesReplaceAutoritativo(
+      cloudAuthoritativePull,
+      bundle.operacional,
+      pullSeguro
+    )
+  ) {
     current = clearOperacionalFinanceiroForCooperativa(current, coopId);
   }
 
   const cloudCooperados = (await fetchCooperadosFromCloud(cnpj)).cooperados;
-  const merged = mergeOperacionalIntoData(
-    current,
+  const pullPagamentos = prepararOperacionalPullPagamentosMonotonicos(
+    pagamentosBaseline,
     bundle.operacional,
     coopId,
-    cloudCooperados,
     pullSeguro
+  );
+  const merged = mergeOperacionalIntoData(
+    current,
+    pullPagamentos.operacional,
+    coopId,
+    cloudCooperados,
+    pullSeguro,
+    pullPagamentos.mergeOptions
   );
   if (!pullLease.isCurrent()) {
     console.info("[OPERACIONAL_PULL] resultado obsoleto descartado", {
@@ -2060,10 +2387,29 @@ export async function ensureCloudOperationalResetApplied(
   if (!pullSeguro.permitirAplicarResetLegado) return false;
 
   let working = current;
-  const stale = reapplyCloudOperationalSliceIfStale(working, digits, coopId, bundle.operacional);
+  const permitirPreemptiveClear = operacionalRestorePreemptiveClearPermitido(
+    working,
+    bundle.operacional,
+    coopId,
+    digits
+  );
+  const restoreOpts = { permitirPreemptiveClear };
+  const stale = reapplyCloudOperationalSliceIfStale(
+    working,
+    digits,
+    coopId,
+    bundle.operacional,
+    restoreOpts
+  );
   if (stale.changed) working = stale.data;
 
-  const reset = applyCloudOperationalResetIfNeeded(working, digits, coopId, bundle.operacional);
+  const reset = applyCloudOperationalResetIfNeeded(
+    working,
+    digits,
+    coopId,
+    bundle.operacional,
+    restoreOpts
+  );
   if (reset.changed || stale.changed) {
     saveAppDataIfSyncLeaseCurrent(sessionLease, reset.changed ? reset.data : working);
     return true;

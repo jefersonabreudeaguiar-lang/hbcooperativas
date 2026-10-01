@@ -8,6 +8,8 @@ import type { OperacionalSyncPayload } from "../src/lib/supabase/cooperativaSync
 import {
   aplicarOperacionalPullLocalForTests,
   avaliarFullResetOperacionalPullSeguro,
+  buildOperacionalPayloadForTests,
+  operacionalColecoesReplaceAutoritativo,
 } from "../src/services/cooperativaSyncCloudService.ts";
 import { clearOperacionalFinanceiroForCooperativa } from "../src/services/operationalReset.ts";
 import { getTotalAPagarCooperado } from "../src/services/notaPedidoService.ts";
@@ -285,7 +287,7 @@ function run(): void {
     const before = shell(notas123, f123);
     const cloud = mkCloud(
       [mkFicha("F1n", "N1", 11), mkFicha("F2n", "N2", 12), mkFicha("F3n", "N3", 13)],
-      { updatedAt: "2026-09-03T12:00:00.000Z" }
+      { updatedAt: "2026-09-03T12:00:00.000Z", operacionalSnapshotComplete: true }
     );
     const seguro = avaliarFullResetOperacionalPullSeguro(before, cloud, COOP, CNPJ);
     assert.ok(seguro.permitirClearFinanceiro);
