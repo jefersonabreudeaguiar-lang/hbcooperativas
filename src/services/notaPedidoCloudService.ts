@@ -471,6 +471,9 @@ export function mergeCloudNotasIntoData(
           status: local.status === "entregue" ? "entregue" : "aguardando_conferencia",
         });
       }
+      if (isNotaNaFilaConferenciaResponsavel(mergedNota.status)) {
+        mergedNota = sanitizarNotaParaFilaConferencia(mergedNota);
+      }
       byId.set(mergedNota.id, mergedNota);
       changed = true;
     }
@@ -515,7 +518,7 @@ export async function fetchNotasPedidoFromCloud(
     const qs = new URLSearchParams({ cnpj: digits, lite: "1" });
     if (since) qs.set("since", since);
     if (forceFull && typeof sessionStorage !== "undefined") {
-      const repairKey = `hb_repair_fila_done:${digits}`;
+      const repairKey = `hb_repair_fila_done:${digits}:v2`;
       if (!sessionStorage.getItem(repairKey)) {
         qs.set("repairFila", "1");
         sessionStorage.setItem(repairKey, "1");
@@ -689,6 +692,15 @@ export async function resolveCooperativaCnpj(
   }
 
   return undefined;
+}
+
+/** Persiste na nuvem a limpeza de marcas órfãs (conferidaPor) em entregas ainda em análise. */
+export async function pushReparoFilaConferenciaSanitizadoToCloud(
+  cnpj: string,
+  notasCorrigidas: NotaPedido[]
+): Promise<void> {
+  if (notasCorrigidas.length === 0) return;
+  await pushNotasPedidoToCloud(cnpj, notasCorrigidas);
 }
 
 export async function pushNotasPedidoToCloud(
@@ -1366,6 +1378,7 @@ export async function syncNotasPedidoFromCloud(
   const reparo = repararNotasPedidoFilaConferencia(merged, coopId);
   if (reparo.repaired > 0) {
     merged = reparo.data;
+    void pushReparoFilaConferenciaSanitizadoToCloud(digits, reparo.notasCorrigidas);
   }
 
   const reconciled = posProcessarFinanceiroLocal(merged, digits);

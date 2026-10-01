@@ -53,6 +53,7 @@ import {
   getCooperativaCnpj,
   patchNotaPedidoInCloud,
   pushNotasPedidoToCloud,
+  pushReparoFilaConferenciaSanitizadoToCloud,
   syncOfflineDeliveryImages,
   finalizeNotaEntregaNaNuvem,
   deleteFotoRascunhoFromCloud,
@@ -139,6 +140,7 @@ import {
   isNotaNaFilaConferenciaResponsavel,
   isNotaRelancamentoPayload,
   isNotaSaiuDaFilaConferencia,
+  isNotaZombieNaFilaConferencia,
   notaElegivelParaFilaConferenciaResponsavel,
   notaPassaFiltroStatusListaConferencia,
   sanitizarNotaParaFilaConferencia,
@@ -1054,8 +1056,12 @@ export default function NotasPedidoContent() {
       if (atual) {
         const candAtual = sanitizarNotaParaFilaConferencia(atual);
         if (!notaElegivelParaFilaConferenciaResponsavel(candAtual)) {
-          filaStickyIdsRef.current.delete(id);
-          filaStickySnapshotRef.current.delete(id);
+          if (isNotaZombieNaFilaConferencia(atual)) {
+            filaStickySnapshotRef.current.set(id, candAtual);
+          } else {
+            filaStickyIdsRef.current.delete(id);
+            filaStickySnapshotRef.current.delete(id);
+          }
           continue;
         }
       }
@@ -1362,16 +1368,27 @@ export default function NotasPedidoContent() {
     }
   }, [isCooperado, data, coopId]);
 
-  const filaReparoLocalRef = useRef(false);
+  const filaZombieCount = useAppDataSelector(
+    (d) => {
+      if (isCooperado || !coopId) return 0;
+      let count = 0;
+      for (const nota of d.notasPedido) {
+        if (!notaPertenceCooperativa(d, nota, coopId)) continue;
+        if (isNotaZombieNaFilaConferencia(nota)) count += 1;
+      }
+      return count;
+    },
+    [isCooperado, coopId]
+  );
+
   useEffect(() => {
-    if (isCooperado || !coopId || !data) return;
-    if (filaReparoLocalRef.current) return;
-    filaReparoLocalRef.current = true;
+    if (isCooperado || !coopId || !data || filaZombieCount === 0) return;
     const reparo = repararNotasPedidoFilaConferencia(getData() ?? data, coopId);
-    if (reparo.repaired > 0) {
-      updateData(() => reparo.data);
-    }
-  }, [isCooperado, coopId, data]);
+    if (reparo.repaired === 0) return;
+    updateData(() => reparo.data);
+    const cnpj = getCooperativaCnpj(reparo.data, coopId);
+    if (cnpj) void pushReparoFilaConferenciaSanitizadoToCloud(cnpj, reparo.notasCorrigidas);
+  }, [isCooperado, coopId, data, filaZombieCount, updateData]);
 
   useEffect(() => {
     if (searchParams.get("anexar") !== "1" || !isCooperado || !data || anexarParamHandledRef.current) return;
@@ -2252,7 +2269,8 @@ export default function NotasPedidoContent() {
   ) =>
     d.notasPedido
       .filter((n) => {
-        if (!notaElegivelParaFilaConferenciaResponsavel(n)) return false;
+        const candidata = sanitizarNotaParaFilaConferencia(n);
+        if (!notaElegivelParaFilaConferenciaResponsavel(candidata)) return false;
         if (excludeId && n.id === excludeId) return false;
         if (!notaPertenceCooperativa(d, n, coopIdLocal)) return false;
         if (chaveGrupo && getChaveGrupoConferencia(n, d, coopIdLocal) !== chaveGrupo) return false;
@@ -2261,7 +2279,8 @@ export default function NotasPedidoContent() {
       .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
 
   const openConferir = async (nota: NotaPedido) => {
-    const fresh = getData()?.notasPedido.find((n) => n.id === nota.id) ?? nota;
+    const raw = getData()?.notasPedido.find((n) => n.id === nota.id) ?? nota;
+    const fresh = sanitizarNotaParaFilaConferencia(raw);
     if (!notaElegivelParaFilaConferenciaResponsavel(fresh)) {
       removerNotaDaFilaSticky(fresh.id);
       setSuccessMsg("Esta entrega já foi lançada. A lista foi atualizada.");
@@ -3048,7 +3067,7 @@ export default function NotasPedidoContent() {
         onClick={() =>
           isCooperado
             ? openView(n)
-            : notaElegivelParaFilaConferenciaResponsavel(n)
+            : notaElegivelParaFilaConferenciaResponsavel(sanitizarNotaParaFilaConferencia(n))
               ? void openConferir(n)
               : openView(n)
         }
@@ -3743,7 +3762,9 @@ export default function NotasPedidoContent() {
           { key: "status", label: "Status", render: (n) => <NotaStatusBadge status={n.status} /> },
         ]}
         onView={(n) =>
-          notaElegivelParaFilaConferenciaResponsavel(n) ? void openConferir(n) : openView(n)
+          notaElegivelParaFilaConferenciaResponsavel(sanitizarNotaParaFilaConferencia(n))
+            ? void openConferir(n)
+            : openView(n)
         }
         viewLabel="Ver"
         onDelete={
