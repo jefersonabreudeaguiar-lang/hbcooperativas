@@ -656,13 +656,32 @@ export async function listLimitesCooperadosAlinhadosComBase(
       creditosBaseCents[raw.cooperadoId] = authoritative.creditosBaseCents[raw.cooperadoId] ?? 0;
     }
     if (toSync.length) {
-      void syncLimitesCooperadosFromCreditoBase(
+      await syncLimitesCooperadosFromCreditoBase(
         supabase,
         cnpj,
         toSync,
         creditosBaseCents,
         opts.actorUserId
       ).catch(() => {});
+      limitesPosSync = await listLimitesCooperados(supabase, cnpj);
+      const cappedAfter = limitesPosSync.map((limite) => {
+        const canon = resolverCanonico(limite.cooperadoId);
+        const base = Math.max(
+          authoritative.creditosBaseCents[limite.cooperadoId] ?? 0,
+          authoritative.creditosBaseCents[canon] ?? 0
+        );
+        return capContaCoopLimiteToAuthoritativeBase(limite, base, tetoPercent, liberacaoPercent);
+      });
+      limitesParaUi = opts?.authoritativeCooperadoIds?.length
+        ? projetarLimitesListaCooperados(
+            cappedAfter,
+            opts.authoritativeCooperadoIds,
+            authoritative.creditosBaseCents,
+            tetoPercent,
+            resolverCanonico,
+            liberacaoPercent
+          )
+        : cappedAfter;
     }
   }
 
@@ -1523,13 +1542,96 @@ export async function getLimiteCooperado(
   return withUsado;
 }
 
+/**
+ * Grava na nuvem limit_released alinhado à base M6 quando STALE ou inflado acima do teto autoritativo.
+ * Garante paridade entre aba Limites (staff) e Minha Conta HB (cooperado).
+ */
+export async function ensureHbCreditLimiteAutoritativoPersistido(
+  supabase: SupabaseClient,
+  cnpj: string,
+  cooperadoId: string,
+  actorUserId: string
+): Promise<void> {
+  const digits = normalizeCnpj(cnpj);
+  const found = await fetchHbCreditAccountRowForCooperado(supabase, cnpj, cooperadoId);
+  if (!found) return;
+
+  const syncState = String(found.row.financial_limit_sync_state ?? "SYNCED");
+  const cooperados = await fetchCooperadosFromStorage(supabase, digits).catch(() => []);
+  const titularIds = cooperados.length ? titularCooperadoIds(cooperados, cooperadoId) : [cooperadoId];
+  const accountCooperadoId = found.accountCooperadoId;
+
+  await reconcileCooperadosAmountUsedCentsBatch(supabase, digits, titularIds).catch(() => {});
+
+  const limite = await getLimiteCooperado(supabase, cnpj, cooperadoId, {
+    skipAmountUsedReconcile: true,
+  });
+  if (!limite) return;
+
+  const authoritative = await resolveAuthoritativeCreditBase(supabase, cnpj, titularIds);
+  if (!authoritative.ok) {
+    return;
+  }
+
+  const canon = resolverCooperadoIdCanonico(
+    authoritative.creditoBaseAppData,
+    cooperadoId,
+    authoritative.cooperativaId
+  );
+  const creditoBaseCents = Math.max(
+    authoritative.creditosBaseCents[cooperadoId] ?? 0,
+    authoritative.creditosBaseCents[canon] ?? 0
+  );
+  const teto = await resolveTetoGlobal(supabase, cnpj, authoritative.creditosBaseCents);
+  const tetoPercent = teto.configured ? teto.percent : 0;
+  const liberacaoPercent = teto.configured
+    ? (await getCooperativaLiberacaoPercentConfigured(supabase, cnpj)) ?? tetoPercent
+    : null;
+  const capped = capContaCoopLimiteToAuthoritativeBase(
+    limite,
+    creditoBaseCents,
+    tetoPercent,
+    liberacaoPercent
+  );
+
+  const inflated = limite.limiteLiberadoCents > capped.limiteLiberadoCents;
+  if (syncState === "SYNCED" && !inflated) {
+    return;
+  }
+
+  await syncLimitesCooperadosFromCreditoBase(
+    supabase,
+    digits,
+    titularIds,
+    authoritative.creditosBaseCents,
+    actorUserId
+  ).catch(() => {});
+
+  await markHbCreditLimitSyncedBestEffort(supabase, digits, accountCooperadoId, actorUserId);
+}
+
 /** Limite exibido/usado no HB — nunca acima do crédito-base das entregas conferidas na nuvem. */
 export async function getLimiteCooperadoAlinhadoAEntregas(
   supabase: SupabaseClient,
   cnpj: string,
   cooperadoId: string,
-  opts?: { resyncIfInflated?: boolean; awaitResync?: boolean; actorUserId?: string }
+  opts?: {
+    resyncIfInflated?: boolean;
+    awaitResync?: boolean;
+    actorUserId?: string;
+    /** Persiste drift STALE/inflado antes de capar (API cooperado). */
+    ensurePersisted?: boolean;
+  }
 ): Promise<ContaCoopLimiteCooperado | null> {
+  if (opts?.ensurePersisted && opts.actorUserId) {
+    await ensureHbCreditLimiteAutoritativoPersistido(
+      supabase,
+      cnpj,
+      cooperadoId,
+      opts.actorUserId
+    );
+  }
+
   const limite = await getLimiteCooperado(supabase, cnpj, cooperadoId);
   if (!limite) return null;
 
@@ -2371,45 +2473,14 @@ export async function validateIntentForCooperado(
   };
 }
 
-/** Reconcile + sync-limite se STALE — pagamento não trava na fila operacional. */
+/** Reconcile + sync-limite se STALE/inflado — pagamento não trava na fila operacional. */
 export async function prepareHbCreditPaymentAuthorize(
   supabase: SupabaseClient,
   cnpj: string,
   cooperadoId: string,
   actorUserId: string
 ): Promise<void> {
-  const digits = normalizeCnpj(cnpj);
-  const found = await fetchHbCreditAccountRowForCooperado(supabase, cnpj, cooperadoId);
-  if (!found) return;
-
-  const syncState = String(found.row.financial_limit_sync_state ?? "SYNCED");
-  if (syncState === "SYNCED") {
-    return;
-  }
-
-  const cooperados = await fetchCooperadosFromStorage(supabase, digits).catch(() => []);
-  const titularIds = cooperados.length ? titularCooperadoIds(cooperados, cooperadoId) : [cooperadoId];
-  await reconcileCooperadosAmountUsedCentsBatch(supabase, digits, titularIds).catch(() => {});
-
-  const accountCooperadoId = found.accountCooperadoId;
-  if (syncState !== "SYNCED") {
-    const auth = await resolveAuthoritativeCreditBase(supabase, digits, titularIds);
-    if (auth.ok) {
-      await syncLimitesCooperadosFromCreditoBase(
-        supabase,
-        digits,
-        titularIds,
-        auth.creditosBaseCents,
-        actorUserId
-      ).catch(() => {});
-    }
-  }
-
-  await markHbCreditLimitSynced(supabase, {
-    cnpj: digits,
-    cooperadoId: accountCooperadoId,
-    actorUserId,
-  }).catch(() => {});
+  await ensureHbCreditLimiteAutoritativoPersistido(supabase, cnpj, cooperadoId, actorUserId);
 }
 
 export async function authorizePayment(
