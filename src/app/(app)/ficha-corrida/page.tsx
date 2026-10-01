@@ -1069,7 +1069,7 @@ export default function FichaCorridaPage() {
           (p) =>
             p.cooperadoId === cooperadoSelecionado.id &&
             p.cooperativaId === coopId &&
-            p.status === "aguardando_confirmacao"
+            p.status === "confirmado"
         )
         .sort(
           (a, b) =>
@@ -1080,12 +1080,6 @@ export default function FichaCorridaPage() {
         setPagoMsg("Pagamento local registrado, mas não foi possível identificar o registro para enviar à nuvem.");
         return;
       }
-      const comunicado = [...nextData.comunicados]
-        .filter((c) => c.cooperadoId === cooperadoSelecionado.id && c.titulo === "Pagamento realizado")
-        .sort(
-          (a, b) =>
-            new Date(b.createdAt ?? 0).getTime() - new Date(a.createdAt ?? 0).getTime()
-        )[0];
       const arquivosMensais = nextData.arquivosMensais.filter(
         (a) =>
           a.cooperadoId === cooperadoSelecionado.id &&
@@ -1100,7 +1094,6 @@ export default function FichaCorridaPage() {
       );
       const nuvem = await registrarPagamentoCooperadoNaNuvem(cnpj, {
         pagamento,
-        comunicado,
         arquivosMensais: arquivosMensais.length ? arquivosMensais : undefined,
         ajustesFichaMes: ajustesFichaMes.length ? ajustesFichaMes : undefined,
         livroCaixa: livroCaixa.length ? livroCaixa : undefined,
@@ -1135,7 +1128,7 @@ export default function FichaCorridaPage() {
       requestAppSync();
       setPagoMsgVariant("success");
       setPagoMsg(
-        `Pagamento registrado! ${nomeCooperado.split(" ")[0]} foi notificado(a). Aguardando assinatura do recibo — veja a lista abaixo.`
+        `Pagamento confirmado! ${formatCurrency(pagamento.valorLiquido)} registrado para ${nomeCooperado.split(" ")[0]}. O recibo já está disponível na ficha.`
       );
     })();
     setConfirmPagamento(false);
@@ -1635,16 +1628,10 @@ export default function FichaCorridaPage() {
         </AlertBanner>
       )}
 
-      {!isCooperado && aba === "ficha" && cooperadoSelecionadoId && pagamentoAguardando && (
-        <AlertBanner variant="info" className="mb-6" title="Pagamento registrado">
-          {formatCurrency(pagamentoAguardando.valorLiquido)} · aguardando {nomeCooperado.split(" ")[0]} confirmar recebimento e assinar o recibo.
-        </AlertBanner>
-      )}
-
-      {!isCooperado && aba === "ficha" && cooperadoSelecionadoId && pagamentoConfirmadoMes && !pagamentoAguardando && (
+      {!isCooperado && aba === "ficha" && cooperadoSelecionadoId && pagamentoConfirmadoMes && (
         <AlertBanner variant="success" className="mb-6" title="Pagamento confirmado">
-          Recibo assinado por {nomeCooperado.split(" ")[0]} em{" "}
-          {pagamentoConfirmadoMes.assinadoEm ? formatDate(pagamentoConfirmadoMes.assinadoEm.split("T")[0]) : formatMesReferencia(mesAtivo)}.
+          {formatCurrency(pagamentoConfirmadoMes.valorLiquido)} · registrado por {pagamentoConfirmadoMes.pagoPor ?? "cooperativa"} em{" "}
+          {pagamentoConfirmadoMes.pagoEm ? formatDate(pagamentoConfirmadoMes.pagoEm.split("T")[0]) : formatMesReferencia(mesAtivo)}.
         </AlertBanner>
       )}
 

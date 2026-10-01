@@ -49,6 +49,7 @@ import {
   mensagemBloqueioExclusaoEntrega,
   relancarEntregaNota,
   normalizarTotaisNotaDesdeItens,
+  inferirDivisaoEntregaDasFichas,
 } from "@/services/notaPedidoService";
 import {
   getCooperativaCnpj,
@@ -1115,6 +1116,8 @@ export default function NotasPedidoContent() {
   useEffect(() => {
     const cid = searchParams.get("cooperado");
     if (!cid || isCooperado) return;
+    if (syncing) return;
+
     const grupo = pendentesPorCooperado.find((g) => g.cooperadoId === cid);
     if (grupo) {
       setAbaConferenciaKey(grupo.chave);
@@ -1127,7 +1130,7 @@ export default function NotasPedidoContent() {
     if (statusFilter !== "aguardando_conferencia") {
       setStatusFilter("aguardando_conferencia");
     }
-  }, [searchParams, isCooperado, pendentesPorCooperado, statusFilter, trocarVistaResponsavel]);
+  }, [searchParams, isCooperado, pendentesPorCooperado, statusFilter, trocarVistaResponsavel, syncing]);
 
   const voltarFilaResponsavel = () => {
     trocarVistaResponsavel("fila");
@@ -2506,7 +2509,10 @@ export default function NotasPedidoContent() {
         relancadaEm: undefined,
       };
       notaAtualizada = normalizarTotaisNotaDesdeItens(notaAtualizada);
-      const divisao = resolverDivisaoConferencia(d, notaAtualizada);
+      let divisao = resolverDivisaoConferencia(d, notaAtualizada);
+      if (!divisao) {
+        divisao = inferirDivisaoEntregaDasFichas(d, notaAtualizada);
+      }
       if (divisao) {
         notaAtualizada = { ...notaAtualizada, divisaoEntrega: divisao };
       }

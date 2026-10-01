@@ -14,7 +14,7 @@ import {
   fichaPertenceCooperado,
   resolverCooperadoIdCanonico,
 } from "@/services/cooperadoCloudService";
-import { getMesesReferenciaPagamento } from "@/services/notaPedidoService";
+import { getMesesReferenciaPagamento, promoverPagamentosAguardandoConfirmadosPeloResponsavel } from "@/services/notaPedidoService";
 import { completarLancamentosContabeisPagamentos } from "@/services/livroCaixaService";
 import {
   aplicarPreservacaoPagamentosConfirmadosNoOperacional,
@@ -273,7 +273,8 @@ export function alinharFichaComPagamentosCooperativa(data: AppData): AppData {
 
 /** Reparo + alinhamento — evita voltar para pendente após PIX/assinatura. */
 export function posProcessarIntegridadePagamentosCooperativa(data: AppData): AppData {
-  let next = alinharFichaComPagamentosCooperativa(repararIntegridadePagamentosCooperativa(data));
+  let next = promoverPagamentosAguardandoConfirmadosPeloResponsavel(data);
+  next = alinharFichaComPagamentosCooperativa(repararIntegridadePagamentosCooperativa(next));
   const coopIds = [...new Set(next.cooperativas.map((c) => c.id))];
   for (const coopId of coopIds) {
     next = completarLancamentosContabeisPagamentos(next, coopId);
@@ -382,7 +383,9 @@ export function aplicarRegistroPagamentoResponsavelNoOperacional(
   patch: RegistroPagamentoResponsavelPatch
 ): OperacionalSyncPayload {
   const pagamento = patch.pagamento;
-  if (pagamento.status !== "aguardando_confirmacao") return operacional;
+  if (pagamento.status !== "aguardando_confirmacao" && pagamento.status !== "confirmado") {
+    return operacional;
+  }
 
   const pagMap = new Map<string, PagamentoCooperadoRegistro>();
   for (const p of operacional.pagamentosCooperado ?? []) pagMap.set(p.id, p);

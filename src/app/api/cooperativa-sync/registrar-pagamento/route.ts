@@ -30,8 +30,8 @@ export async function POST(request: Request) {
   if (cnpj.length !== 14 || !pagamento?.id) {
     return NextResponse.json({ error: "Corpo inválido." }, { status: 400 });
   }
-  if (pagamento.status !== "aguardando_confirmacao") {
-    return NextResponse.json({ error: "Pagamento deve estar aguardando assinatura." }, { status: 400 });
+  if (pagamento.status !== "aguardando_confirmacao" && pagamento.status !== "confirmado") {
+    return NextResponse.json({ error: "Status de pagamento inválido." }, { status: 400 });
   }
   if ((pagamento.valorLiquido ?? 0) <= 0) {
     return NextResponse.json({ error: "Valor do pagamento inválido." }, { status: 400 });

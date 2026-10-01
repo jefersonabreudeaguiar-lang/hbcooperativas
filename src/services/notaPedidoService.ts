@@ -902,6 +902,41 @@ function calcularItensFatiaRateio(
   };
 }
 
+/**
+ * Recupera divisaoEntrega da nota ou das fichas já lançadas (multi-foto sem metadado na nota).
+ */
+export function inferirDivisaoEntregaDasFichas(
+  data: AppData,
+  nota: NotaPedido,
+  fichasNota?: FichaCorrida[]
+): DivisaoEntregaNota | undefined {
+  if ((nota.divisaoEntrega?.participantes.length ?? 0) > 1) {
+    return nota.divisaoEntrega;
+  }
+  const fichas =
+    fichasNota ?? data.fichaCorrida.filter((f) => f.notaPedidoId === nota.id);
+  if (!fichas.length) return undefined;
+
+  const fromFicha = fichas.find(
+    (f) => (f.divisaoEntrega?.participantes.length ?? 0) > 1
+  )?.divisaoEntrega;
+  if (fromFicha && fromFicha.participantes.length > 1) return fromFicha;
+
+  const coopId = nota.cooperativaId;
+  const ids = [
+    ...new Set(
+      fichas.map((f) => resolverCooperadoIdCanonico(data, f.cooperadoId, coopId))
+    ),
+  ];
+  if (ids.length < 2) return undefined;
+
+  const origemId = resolverCooperadoIdCanonico(data, nota.cooperadoId, coopId);
+  const origemNome =
+    nota.cooperadoNomeSnapshot?.trim() ||
+    getCooperadoNomeResolvido(data, origemId, coopId);
+  return criarDivisaoEntregaFromParticipantes(data, coopId, origemId, origemNome, ids);
+}
+
 /** Monta divisão a partir da lista explícita de cooperados (mín. 2). */
 export function criarDivisaoEntregaFromParticipantes(
   data: AppData,
@@ -1058,7 +1093,21 @@ export function rebuildFichasNota(data: AppData, nota: NotaPedido): AppData {
 
   if (participantes.length > 1) {
     const divisao = nota.divisaoEntrega!;
-    const novasFichas = buildFichasDivisaoFromNota(data, nota, responsavel, divisao, without);
+    const totalFotos = inferirQtdPartesFichaNota(data.fichaCorrida, nota);
+    let novasFichas: FichaCorrida[];
+    if (totalFotos > 1) {
+      novasFichas = [];
+      for (let fotoIdx = 0; fotoIdx < totalFotos; fotoIdx++) {
+        novasFichas.push(
+          ...buildFichasDivisaoFromNota(data, nota, responsavel, divisao, [...without, ...novasFichas], {
+            fotoIndex: fotoIdx,
+            totalFotos,
+          })
+        );
+      }
+    } else {
+      novasFichas = buildFichasDivisaoFromNota(data, nota, responsavel, divisao, without);
+    }
     let fichaCorrida = recalcularSaldosFichaNota([...without, ...novasFichas], nota);
 
     let arquivosMensais = data.arquivosMensais;
@@ -1374,15 +1423,21 @@ export function alinharSomaFichasComNota(
 }
 
 function inferirQtdPartesFichaNota(fichas: FichaCorrida[], nota: NotaPedido): number {
-  const fromNota = contarFotosEnviadasNota(nota);
-  if (fromNota > 1) return fromNota;
   const existing = fichas.filter((f) => f.notaPedidoId === nota.id);
   let maxTotal = 0;
+  let hasFotoPart = false;
   for (const f of existing) {
-    const m = f.descricao.match(/\(foto (\d+)\/(\d+)\)/);
-    if (m) maxTotal = Math.max(maxTotal, parseInt(m[2], 10));
+    const m = f.descricao.match(/\(foto\s+(\d+)\s*\/\s*(\d+)\)/i);
+    if (m) {
+      hasFotoPart = true;
+      maxTotal = Math.max(maxTotal, parseInt(m[2], 10));
+    }
   }
-  return maxTotal > 1 ? maxTotal : 1;
+  if (hasFotoPart && maxTotal > 1) return maxTotal;
+  if (existing.length > 0 && !hasFotoPart) return 1;
+  const fromNota = contarFotosEnviadasNota(nota);
+  if (fromNota > 1) return fromNota;
+  return 1;
 }
 
 /** Divisão N-way: cobertura, soma das fichas e fatia esperada por participante. */
@@ -1454,7 +1509,17 @@ export function dedupeFichaCorridaPorNota(
   for (const [notaId, list] of byNota) {
     const notaRef = notaById.get(notaId);
     const divN = notaRef?.divisaoEntrega?.participantes.length ?? 0;
-    const parts = list.map((f) => ({ f, part: chaveParteFichaCorrida(f) }));
+    const coopIds = new Set(list.map((f) => f.cooperadoId));
+    const multiCoopNaNota = coopIds.size > 1;
+    const parts = list.map((f) => {
+      let part = chaveParteFichaCorrida(f);
+      if (multiCoopNaNota && divN <= 1 && !part.startsWith("div:")) {
+        const m = f.descricao.match(/\(foto\s+(\d+)\s*\/\s*(\d+)\)/i);
+        if (m) part = `div:${f.cooperadoId}:foto:${m[1]}/${m[2]}`;
+        else part = `div:${f.cooperadoId}:full`;
+      }
+      return { f, part };
+    });
     const hasFotoParts = parts.some((p) => p.part.startsWith("foto:"));
     const best = new Map<string, FichaCorrida>();
 
@@ -1767,11 +1832,17 @@ export function reconciliarFichaFromNotasConferidas(data: AppData): AppData {
     (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
   );
 
-  for (const nota of notasOrdenadas) {
+  for (let nota of notasOrdenadas) {
     if (nota.status !== "conferida" && nota.status !== "pago") continue;
     if (nota.valorLiquido <= 0 && (nota.itens ?? []).every((i) => i.quantidade <= 0)) continue;
 
     const fichasDestaNota = fichaCorrida.filter((f) => f.notaPedidoId === nota.id);
+    const divisaoInferida = inferirDivisaoEntregaDasFichas(data, nota, fichasDestaNota);
+    if (divisaoInferida && (nota.divisaoEntrega?.participantes.length ?? 0) <= 1) {
+      nota = { ...nota, divisaoEntrega: divisaoInferida, updatedAt: new Date().toISOString() };
+      notasPedido = notasPedido.map((n) => (n.id === nota.id ? nota : n));
+      changed = true;
+    }
     const qtdParticipantes = nota.divisaoEntrega?.participantes.length ?? 1;
 
     if (nota.divisaoEntrega && qtdParticipantes > 1) {
@@ -1931,6 +2002,24 @@ export function fichasPendentesComplementaresPosPagamento(
   );
 }
 
+/** Entregas conferidas fora do escopo do PIX aguardando assinatura (ex.: setembro após pagamento só de agosto). */
+export function fichasPendentesComplementaresPosPagamentoAguardando(
+  data: AppData,
+  cooperadoId: string,
+  mesReferencia: string,
+  cooperativaId?: string
+): FichaCorrida[] {
+  const coopId = cooperativaId ?? data.cooperados.find((c) => c.id === cooperadoId)?.cooperativaId;
+  const aguardando = getPagamentoAguardandoCooperado(data, cooperadoId, mesReferencia);
+  if (!aguardando) return [];
+  const escopoExplicito =
+    (aguardando.fichaIds?.length ?? 0) > 0 || (aguardando.notaPedidoIds?.length ?? 0) > 0;
+  if (!escopoExplicito) return [];
+  return listarFichasPendentesPagamento(data, cooperadoId, mesReferencia, coopId).filter(
+    (f) => !fichaDentroEscopoPagamentoCooperado(data, aguardando, f)
+  );
+}
+
 function getResumoSomenteFichasComplementares(fichas: FichaCorrida[]): {
   valorBruto: number;
   descontoCooperativa: number;
@@ -2061,6 +2150,19 @@ export function getResumoValorAPagarRelatorio(
   const coopId = cooperativaId ?? data.cooperados.find((c) => c.id === cooperadoId)?.cooperativaId;
   const aguardando = getPagamentoAguardandoCooperado(data, cooperadoId, mesReferencia);
   if (aguardando) {
+    const complementares = fichasPendentesComplementaresPosPagamentoAguardando(
+      data,
+      cooperadoId,
+      mesReferencia,
+      coopId
+    );
+    if (complementares.length > 0) {
+      const pendentes = listarFichasPendentesPagamento(data, cooperadoId, mesReferencia, coopId);
+      if (complementares.length === pendentes.length) {
+        const base = getResumoSomenteFichasComplementares(complementares);
+        return getResumoPagamentoParaRegistro(base, data, cooperadoId, mesReferencia, coopId);
+      }
+    }
     return { ...resumoFromPagamento(aguardando), valorLiquido: 0 };
   }
   const confirmado = getPagamentoConfirmadoCooperadoMes(data, cooperadoId, mesReferencia);
@@ -2482,6 +2584,17 @@ function notaCobertaPorPagamentoCooperadoEspecifico(
   return false;
 }
 
+function fichaDentroEscopoPagamentoCooperado(
+  data: AppData,
+  pagamento: PagamentoCooperadoRegistro,
+  ficha: FichaCorrida
+): boolean {
+  if (pagamento.fichaIds?.includes(ficha.id)) return true;
+  const nota = data.notasPedido.find((n) => n.id === ficha.notaPedidoId);
+  if (!nota) return false;
+  return notaCobertaPorPagamentoCooperadoEspecifico(data, pagamento, nota);
+}
+
 function pagamentoAguardandoTemEscopoEstruturalSuficiente(
   pagamento: PagamentoCooperadoRegistro
 ): boolean {
@@ -2696,7 +2809,6 @@ export function registrarPagamentoCooperado(
   const now = new Date().toISOString();
   const cooperado = data.cooperados.find((c) => c.id === cooperadoCanonico);
   const coopIdResolved = cooperado?.cooperativaId ?? coopId ?? "";
-  const mesLabel = formatMesesReferenciaRotulo(mesesPagamento);
 
   const pagamento: PagamentoCooperadoRegistro = {
     id: `pg_${Date.now()}`,
@@ -2710,7 +2822,7 @@ export function registrarPagamentoCooperado(
     valorLiquido: resumo.valorLiquido,
     fichaIds: resumo.fichaIds,
     notaPedidoIds: resumo.notaPedidoIds,
-    status: "aguardando_confirmacao",
+    status: "confirmado",
     pagoPor: responsavel,
     pagoEm: now,
     createdAt: now,
@@ -2728,25 +2840,9 @@ export function registrarPagamentoCooperado(
     next = marcarValoresAvulsosPagosMes(next, cooperadoCanonico, mes, coopIdResolved);
   }
 
-  const comunicado: Comunicado = {
-    id: `cm_${Date.now()}`,
-    cooperativaId: coopIdResolved,
-    cooperadoId: cooperadoCanonico,
-    titulo: "Pagamento realizado",
-    descricao: `A cooperativa registrou o pagamento de ${resumo.valorLiquido.toFixed(2).replace(".", ",")} referente a ${mesLabel}. Abra Quanto vou receber, confirme o recebimento e assine o recibo.`,
-    data: now.split("T")[0],
-    responsavel,
-    categoria: "financeiro",
-    fixado: true,
-    visivelParaTodos: false,
-    ativo: true,
-    createdAt: now,
-  };
-
   next = {
     ...next,
     pagamentosCooperado: [...next.pagamentosCooperado, pagamento],
-    comunicados: [...next.comunicados, comunicado],
   };
 
   for (const mes of mesesPagamento) {
@@ -2758,27 +2854,39 @@ export function registrarPagamentoCooperado(
     };
   }
 
-  return lancarPagamentoCooperadoNoCaixa(next, pagamento);
+  next = lancarPagamentoCooperadoNoCaixa(next, pagamento);
+  return finalizarPagamentoCooperadoConfirmado(next, pagamento.id);
 }
 
-export function confirmarPagamentoCooperado(
+const TITULO_COMUNICADO_PAGAMENTO = "pagamento realizado";
+
+/** Pagamento confirmado pelo responsável (recibo na hora; assinatura do cooperado opcional). */
+export function finalizarPagamentoCooperadoConfirmado(
   data: AppData,
   pagamentoId: string,
-  assinaturaDataUrl: string
+  opts?: { assinaturaDataUrl?: string }
 ): AppData {
   const pagamento = data.pagamentosCooperado.find((p) => p.id === pagamentoId);
-  if (!pagamento || pagamento.status !== "aguardando_confirmacao") return data;
+  if (!pagamento) return data;
+  if (pagamento.status !== "aguardando_confirmacao" && pagamento.status !== "confirmado") {
+    return data;
+  }
+  if (pagamento.status === "confirmado" && pagamento.reciboHtml?.trim()) {
+    return data;
+  }
 
   const cooperado = data.cooperados.find((c) => c.id === pagamento.cooperadoId);
   if (!cooperado) return data;
 
   const now = new Date().toISOString();
-  const draft = {
+  const assinatura = opts?.assinaturaDataUrl?.trim();
+  const draft: PagamentoCooperadoRegistro = {
     ...pagamento,
-    assinaturaCooperado: assinaturaDataUrl,
-    assinadoEm: now,
-    status: "confirmado" as const,
+    status: "confirmado",
     updatedAt: now,
+    ...(assinatura
+      ? { assinaturaCooperado: assinatura, assinadoEm: now }
+      : { assinaturaCooperado: pagamento.assinaturaCooperado, assinadoEm: pagamento.assinadoEm }),
   };
   const itensMes =
     pagamento.fichaIds.length > 0
@@ -2799,9 +2907,7 @@ export function confirmarPagamentoCooperado(
   );
 
   const pagamentosCooperado = data.pagamentosCooperado.map((p) =>
-    p.id === pagamentoId
-      ? { ...draft, reciboHtml, status: "confirmado" as const, updatedAt: now }
-      : p
+    p.id === pagamentoId ? { ...draft, reciboHtml } : p
   );
 
   let next: AppData = {
@@ -2839,7 +2945,7 @@ export function confirmarPagamentoCooperado(
         !c.cooperadoId || c.cooperadoId === pagamento.cooperadoId || c.cooperadoId === canonico;
       const avisoPagamento =
         c.categoria === "financeiro" &&
-        c.titulo.trim().toLowerCase() === "pagamento realizado";
+        c.titulo.trim().toLowerCase() === TITULO_COMUNICADO_PAGAMENTO;
       if (paraCooperado && avisoPagamento && c.cooperativaId === coopId) {
         return { ...c, ativo: false };
       }
@@ -2850,7 +2956,25 @@ export function confirmarPagamentoCooperado(
   return next;
 }
 
-const TITULO_COMUNICADO_PAGAMENTO = "pagamento realizado";
+/** Legado: pagamentos antigos aguardando assinatura passam a confirmados (sem ação do cooperado). */
+export function promoverPagamentosAguardandoConfirmadosPeloResponsavel(data: AppData): AppData {
+  let next = data;
+  for (const p of data.pagamentosCooperado) {
+    if (p.status !== "aguardando_confirmacao") continue;
+    next = finalizarPagamentoCooperadoConfirmado(next, p.id);
+  }
+  return next;
+}
+
+export function confirmarPagamentoCooperado(
+  data: AppData,
+  pagamentoId: string,
+  assinaturaDataUrl: string
+): AppData {
+  return finalizarPagamentoCooperadoConfirmado(data, pagamentoId, {
+    assinaturaDataUrl,
+  });
+}
 
 function comunicadoAvisoPagamentoCooperado(
   c: { cooperativaId?: string; cooperadoId?: string; categoria?: string; titulo: string },
