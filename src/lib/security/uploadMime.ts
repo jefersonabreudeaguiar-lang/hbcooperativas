@@ -44,6 +44,28 @@ export function validateImageUpload(
   return { ok: true, mime: detected };
 }
 
+const MAX_PDF_BYTES = 15 * 1024 * 1024;
+
+function detectPdfMime(buffer: Buffer): boolean {
+  return buffer.length >= 5 && buffer.subarray(0, 5).toString("utf8") === "%PDF-";
+}
+
+export function validatePdfUpload(
+  buffer: Buffer,
+  declaredMime?: string
+): { ok: true; mime: string } | { ok: false; error: string } {
+  if (buffer.length === 0) {
+    return { ok: false, error: "Arquivo vazio." };
+  }
+  if (buffer.length > MAX_PDF_BYTES) {
+    return { ok: false, error: "PDF excede o tamanho máximo permitido (15 MB)." };
+  }
+  if (!detectPdfMime(buffer)) {
+    return { ok: false, error: "Envie um arquivo PDF válido (nota fiscal)." };
+  }
+  return { ok: true, mime: "application/pdf" };
+}
+
 export function bufferFromDataUrl(dataUrl: string): Buffer | null {
   const match = /^data:([^;]+);base64,(.+)$/i.exec(dataUrl.trim());
   if (!match) return null;

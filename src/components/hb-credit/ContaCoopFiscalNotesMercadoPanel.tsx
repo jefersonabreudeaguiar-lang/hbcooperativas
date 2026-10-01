@@ -1,14 +1,20 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Camera, FileText, Upload } from "lucide-react";
+import { FileText, Upload, UserRound } from "lucide-react";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { AlertBanner } from "@/components/ui/AlertBanner";
+import { Modal } from "@/components/ui/Table";
 import type { ContaCoopFiscalNote } from "@/modules/hb-credit/types";
-import { fetchMercadoFiscalVendas, uploadMercadoFiscalNotePhoto } from "@/services/creditApiService";
+import {
+  fetchMercadoCooperadoDocFiscal,
+  fetchMercadoFiscalVendas,
+  uploadMercadoFiscalNotePhoto,
+  type MercadoCooperadoDocFiscal,
+} from "@/services/creditApiService";
 import { formatCentsBRL } from "@/modules/hb-credit/engine/money";
-import { formatMesReferencia, getCurrentMesReferencia } from "@/utils/format";
+import { formatCPFCNPJ, formatMesReferencia, formatPhone, getCurrentMesReferencia } from "@/utils/format";
 import { cn } from "@/utils/format";
 
 function statusLabel(status: ContaCoopFiscalNote["status"]): string {
@@ -41,6 +47,18 @@ function statusClass(status: ContaCoopFiscalNote["status"]): string {
   }
 }
 
+function docLinha(label: string, valor: string) {
+  const v = valor.trim();
+  return (
+    <div className="py-2 border-b border-gray-100 last:border-0">
+      <p className="text-xs font-medium text-gray-500 uppercase">{label}</p>
+      <p className={cn("mt-0.5 text-sm", v ? "text-gray-900" : "text-amber-700 font-medium")}>
+        {v || "Não informado no cadastro"}
+      </p>
+    </div>
+  );
+}
+
 export function ContaCoopFiscalNotesMercadoPanel() {
   const [mesReferencia, setMesReferencia] = useState(getCurrentMesReferencia());
   const [vendas, setVendas] = useState<ContaCoopFiscalNote[]>([]);
@@ -50,6 +68,13 @@ export function ContaCoopFiscalNotesMercadoPanel() {
   const [success, setSuccess] = useState("");
   const fileRef = useRef<HTMLInputElement>(null);
   const uploadTargetRef = useRef<string | null>(null);
+
+  const [docOpen, setDocOpen] = useState(false);
+  const [docLoading, setDocLoading] = useState(false);
+  const [docError, setDocError] = useState("");
+  const [docAviso, setDocAviso] = useState("");
+  const [docCooperadoNome, setDocCooperadoNome] = useState("");
+  const [doc, setDoc] = useState<MercadoCooperadoDocFiscal | null>(null);
 
   const reload = useCallback(async () => {
     setLoading(true);
@@ -73,7 +98,7 @@ export function ContaCoopFiscalNotesMercadoPanel() {
     (v) => v.status === "pendente_anexo" || v.status === "correcao_pedida"
   ).length;
 
-  const abrirCamera = (transactionId: string) => {
+  const abrirAnexoPdf = (transactionId: string) => {
     uploadTargetRef.current = transactionId;
     fileRef.current?.click();
   };
@@ -83,12 +108,18 @@ export function ContaCoopFiscalNotesMercadoPanel() {
     uploadTargetRef.current = null;
     if (!file || !transactionId) return;
 
+    if (file.type !== "application/pdf" && !file.name.toLowerCase().endsWith(".pdf")) {
+      setError("A nota fiscal deve ser um arquivo PDF.");
+      if (fileRef.current) fileRef.current.value = "";
+      return;
+    }
+
     setBusyId(transactionId);
     setError("");
     setSuccess("");
     try {
       await uploadMercadoFiscalNotePhoto(transactionId, file);
-      setSuccess("Nota fiscal enviada. A cooperativa vai conferir antes do pagamento.");
+      setSuccess("Nota fiscal (PDF) enviada. A cooperativa vai conferir antes do pagamento.");
       await reload();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Erro ao enviar NF.");
@@ -98,13 +129,31 @@ export function ContaCoopFiscalNotesMercadoPanel() {
     }
   };
 
+  const abrirDocCooperado = async (v: ContaCoopFiscalNote) => {
+    setDocOpen(true);
+    setDocLoading(true);
+    setDocError("");
+    setDocAviso("");
+    setDoc(null);
+    setDocCooperadoNome(v.cooperadoNome ?? "Cooperado");
+    try {
+      const { doc: d, aviso } = await fetchMercadoCooperadoDocFiscal(v.transactionId);
+      setDoc(d);
+      if (d.nomeCompleto) setDocCooperadoNome(d.nomeCompleto);
+      if (aviso) setDocAviso(aviso);
+    } catch (e) {
+      setDocError(e instanceof Error ? e.message : "Erro ao carregar cadastro.");
+    } finally {
+      setDocLoading(false);
+    }
+  };
+
   return (
     <Card className="p-5 space-y-4">
       <input
         ref={fileRef}
         type="file"
-        accept="image/*"
-        capture="environment"
+        accept="application/pdf,.pdf"
         className="hidden"
         onChange={(e) => void onFileSelected(e.target.files?.[0])}
       />
@@ -116,7 +165,7 @@ export function ContaCoopFiscalNotesMercadoPanel() {
             Vendas — notas fiscais
           </h3>
           <p className="text-sm text-gray-600 mt-1">
-            Anexe a NF de cada cooperado até o fechamento do mês. Valor da NF = valor da venda.
+            Anexe a NF em PDF de cada cooperado até o fechamento do mês. Valor da NF = valor da venda.
           </p>
         </div>
         <label className="text-sm">
@@ -137,8 +186,7 @@ export function ContaCoopFiscalNotesMercadoPanel() {
       ) : (
         <ul className="space-y-3">
           {vendas.map((v) => {
-            const podeAnexar =
-              v.status === "pendente_anexo" || v.status === "correcao_pedida";
+            const podeAnexar = v.status === "pendente_anexo" || v.status === "correcao_pedida";
             return (
               <li
                 key={v.id}
@@ -152,7 +200,6 @@ export function ContaCoopFiscalNotesMercadoPanel() {
                     {new Date(v.createdAt).toLocaleString("pt-BR")}
                     {v.receiptCode ? ` · Recibo ${v.receiptCode}` : ""}
                   </p>
-                  <p className="text-xs text-gray-500 mt-1 break-all">ID cooperado: {v.cooperadoId}</p>
                   {v.rejectReason && (
                     <p className="text-xs text-red-700 mt-1">Correção: {v.rejectReason}</p>
                   )}
@@ -161,19 +208,30 @@ export function ContaCoopFiscalNotesMercadoPanel() {
                   <span className={cn("text-xs font-semibold px-2.5 py-1 rounded-full w-fit", statusClass(v.status))}>
                     {statusLabel(v.status)}
                   </span>
-                  {podeAnexar && (
+                  <div className="flex flex-wrap gap-2 justify-end">
                     <Button
                       size="sm"
-                      onClick={() => abrirCamera(v.transactionId)}
+                      variant="secondary"
+                      onClick={() => void abrirDocCooperado(v)}
                       disabled={busyId === v.transactionId}
                     >
-                      <Camera size={16} className="mr-1.5" />
-                      {v.status === "correcao_pedida" ? "Reenviar NF" : "Anexar NF"}
+                      <UserRound size={16} className="mr-1.5" />
+                      Doc.
                     </Button>
-                  )}
+                    {podeAnexar && (
+                      <Button
+                        size="sm"
+                        onClick={() => abrirAnexoPdf(v.transactionId)}
+                        disabled={busyId === v.transactionId}
+                      >
+                        <Upload size={16} className="mr-1.5" />
+                        {v.status === "correcao_pedida" ? "Reenviar PDF" : "Anexar PDF"}
+                      </Button>
+                    )}
+                  </div>
                   {v.status === "aguardando_conferencia" && (
                     <span className="text-xs text-gray-500 flex items-center gap-1">
-                      <Upload size={12} /> Enviada — aguardando cooperativa
+                      <Upload size={12} /> PDF enviado — aguardando cooperativa
                     </span>
                   )}
                 </div>
@@ -186,12 +244,45 @@ export function ContaCoopFiscalNotesMercadoPanel() {
       <div className="space-y-3">
         {pendentes > 0 && (
           <AlertBanner variant="warning" title="Notas pendentes">
-            {pendentes} venda(s) sem NF ou com correção pedida. Lance para a cooperativa liberar pagamento.
+            {pendentes} venda(s) sem NF em PDF ou com correção pedida. Lance para a cooperativa liberar pagamento.
           </AlertBanner>
         )}
         {error && <AlertBanner variant="error">{error}</AlertBanner>}
         {success && <AlertBanner variant="info" title="Enviado">{success}</AlertBanner>}
       </div>
+
+      <Modal
+        open={docOpen}
+        onClose={() => setDocOpen(false)}
+        title={`Documentos — ${docCooperadoNome}`}
+      >
+        <p className="text-sm text-gray-600 mb-4">
+          Dados do cadastro do cooperado na cooperativa (para emitir a nota fiscal).
+        </p>
+        {docLoading ? (
+          <p className="text-sm text-gray-500 py-6 text-center">Carregando cadastro…</p>
+        ) : docError ? (
+          <AlertBanner variant="error">{docError}</AlertBanner>
+        ) : doc ? (
+          <div className="rounded-xl border border-gray-200 bg-gray-50/80 p-4">
+            {docAviso && (
+              <AlertBanner variant="warning" className="mb-3">
+                {docAviso}
+              </AlertBanner>
+            )}
+            {docLinha("Nome", doc.nomeCompleto)}
+            {docLinha("CPF", doc.cpf ? formatCPFCNPJ(doc.cpf) : "")}
+            {docLinha("Celular", doc.celular ? formatPhone(doc.celular) : doc.celular)}
+            {docLinha("Endereço", doc.endereco)}
+            {docLinha("RG", doc.rg)}
+          </div>
+        ) : null}
+        <div className="mt-4 flex justify-end">
+          <Button variant="secondary" onClick={() => setDocOpen(false)}>
+            Fechar
+          </Button>
+        </div>
+      </Modal>
     </Card>
   );
 }

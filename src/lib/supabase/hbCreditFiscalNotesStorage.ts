@@ -60,7 +60,7 @@ export async function ensureFiscalNotesBucket(supabase: SupabaseClient): Promise
 }
 
 function fiscalPhotoPath(cnpj: string, transactionId: string): string {
-  return `${normalizeCnpj(cnpj)}/${transactionId}.jpg`;
+  return `${normalizeCnpj(cnpj)}/${transactionId}.pdf`;
 }
 
 async function fetchPaymentTransaction(
@@ -460,7 +460,7 @@ export async function uploadFiscalNotePhoto(
     contentType: mimeType,
     upsert: true,
   });
-  if (uploadError) return { ok: false, error: "Erro ao enviar imagem da NF." };
+  if (uploadError) return { ok: false, error: "Erro ao enviar PDF da NF." };
 
   const now = new Date().toISOString();
   const { data: updated, error } = await supabase

@@ -789,7 +789,7 @@ export async function fetchMercadoFiscalVendas(mesReferencia: string) {
 export async function uploadMercadoFiscalNotePhoto(transactionId: string, file: File) {
   const form = new FormData();
   form.append("foto", file);
-  form.append("mimeType", file.type || "image/jpeg");
+  form.append("mimeType", file.type || "application/pdf");
   const res = await secureApiFetch(`/api/credit/fiscal-notes/${encodeURIComponent(transactionId)}/foto`, {
     method: "POST",
     body: form,
@@ -799,6 +799,28 @@ export async function uploadMercadoFiscalNotePhoto(transactionId: string, file: 
   );
   if (!res.ok || !data.ok) throw new Error(data.error ?? "Erro ao enviar NF.");
   return data.nota!;
+}
+
+export type MercadoCooperadoDocFiscal = {
+  nomeCompleto: string;
+  cpf: string;
+  celular: string;
+  endereco: string;
+  rg: string;
+};
+
+export async function fetchMercadoCooperadoDocFiscal(transactionId: string) {
+  const res = await secureApiFetch(
+    `/api/credit/fiscal-notes/${encodeURIComponent(transactionId)}/cooperado-doc`
+  );
+  const data = await parseJson<{
+    ok?: boolean;
+    error?: string;
+    doc?: MercadoCooperadoDocFiscal;
+    aviso?: string;
+  }>(res);
+  if (!res.ok || !data.ok) throw new Error(data.error ?? "Erro ao carregar dados do cooperado.");
+  return { doc: data.doc!, aviso: data.aviso };
 }
 
 export async function fetchStaffFiscalNotes(input: {

@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { uploadFiscalNotePhoto } from "@/lib/supabase/hbCreditFiscalNotesStorage";
 import { getParceiroByUserId } from "@/lib/supabase/contaCoopStorage";
 import { requireCreditApi } from "@/lib/security/creditGuard";
-import { bufferFromDataUrl, validateImageUpload } from "@/lib/security/uploadMime";
+import { bufferFromDataUrl, validatePdfUpload } from "@/lib/security/uploadMime";
 
 interface RouteParams {
   params: Promise<{ transactionId: string }>;
@@ -33,30 +33,31 @@ export async function POST(request: Request, context: RouteParams) {
 
   const contentType = request.headers.get("content-type") ?? "";
   let buffer: Buffer | undefined;
-  let mimeType = "image/jpeg";
+  let mimeType = "application/pdf";
 
   if (contentType.includes("multipart/form-data")) {
     const form = await request.formData();
-    const file = form.get("foto");
+    const file = form.get("foto") ?? form.get("arquivo");
     if (!(file instanceof Blob) || file.size === 0) {
-      return NextResponse.json({ error: "Foto ausente ou inválida." }, { status: 400 });
+      return NextResponse.json({ error: "PDF ausente ou inválido." }, { status: 400 });
     }
     buffer = Buffer.from(await file.arrayBuffer());
-    mimeType = String(form.get("mimeType") ?? file.type ?? "image/jpeg");
+    mimeType = String(form.get("mimeType") ?? file.type ?? "application/pdf");
   } else {
     const body = await request.json().catch(() => null);
-    const fotoDataUrl = String(body?.foto ?? "");
+    const fotoDataUrl = String(body?.foto ?? body?.pdf ?? "");
     if (!fotoDataUrl) {
-      return NextResponse.json({ error: "Foto ausente." }, { status: 400 });
+      return NextResponse.json({ error: "PDF ausente." }, { status: 400 });
     }
     buffer = bufferFromDataUrl(fotoDataUrl) ?? undefined;
+    mimeType = "application/pdf";
   }
 
   if (!buffer) {
-    return NextResponse.json({ error: "Imagem inválida." }, { status: 400 });
+    return NextResponse.json({ error: "PDF inválido." }, { status: 400 });
   }
 
-  const mimeCheck = validateImageUpload(buffer, mimeType);
+  const mimeCheck = validatePdfUpload(buffer, mimeType);
   if (!mimeCheck.ok) {
     return NextResponse.json({ error: mimeCheck.error }, { status: 400 });
   }

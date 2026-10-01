@@ -33,9 +33,13 @@ export default function MeuCadastroContent() {
   const isNovo = searchParams.get("novo") === "1";
 
   const [chavePix, setChavePix] = useState("");
+  const [rg, setRg] = useState("");
   const [saved, setSaved] = useState(false);
+  const [rgSaved, setRgSaved] = useState(false);
   const [pixError, setPixError] = useState("");
+  const [rgError, setRgError] = useState("");
   const pixDirtyRef = useRef(false);
+  const rgDirtyRef = useRef(false);
   const loadedForCooperadoRef = useRef<string | null>(null);
 
   useEffect(() => {
@@ -51,12 +55,15 @@ export default function MeuCadastroContent() {
       loadedForCooperadoRef.current = user.cooperadoId;
       pixDirtyRef.current = false;
       setChavePix(c.chavePix ?? "");
+      setRg(c.rg ?? "");
       return;
     }
 
     if (pixDirtyRef.current) return;
+    if (rgDirtyRef.current) return;
 
     setChavePix(c.chavePix ?? "");
+    setRg(c.rg ?? "");
   }, [data, user?.cooperadoId]);
 
   const coopId = user && data ? getUserCooperativaId(user, data) : undefined;
@@ -126,6 +133,45 @@ export default function MeuCadastroContent() {
     setTimeout(() => setSaved(false), 3000);
   };
 
+  const handleSaveRg = async () => {
+    const rgTrim = rg.trim();
+    if (!rgTrim) {
+      setRgError("Informe seu RG.");
+      return;
+    }
+    if (!user) return;
+    setRgError("");
+    const now = new Date().toISOString();
+    const cooperadoAtualizado: typeof cooperado = {
+      ...cooperado,
+      rg: rgTrim,
+      updatedAt: now,
+    };
+
+    updateData((d) => {
+      const updated = {
+        ...d,
+        cooperados: d.cooperados.map((c) => (c.id === cooperado.id ? cooperadoAtualizado : c)),
+      };
+      return addAuditEntry(updated, {
+        entityType: "cooperado",
+        entityId: cooperado.id,
+        action: "editar",
+        userId: user.id,
+        userName: user.name,
+        changes: "RG atualizado",
+      });
+    });
+
+    const coopIdSave = getUserCooperativaId(user, data);
+    const cnpj = await resolveCooperativaCnpj(data, coopIdSave, user);
+    if (cnpj) void pushCooperadoToCloud(cnpj, cooperadoAtualizado, user.email);
+
+    rgDirtyRef.current = false;
+    setRgSaved(true);
+    setTimeout(() => setRgSaved(false), 3000);
+  };
+
   return (
     <div className="max-w-2xl">
       <PageHeader title="Meu cadastro" subtitle="Seus dados e chave para receber pagamentos" />
@@ -186,6 +232,26 @@ export default function MeuCadastroContent() {
         </Button>
       </Card>
 
+      <Card title="RG (nota fiscal no mercado)" className="mb-6">
+        <p className="text-sm text-gray-600 mb-3">
+          O mercado parceiro usa estes dados ao emitir a nota fiscal da sua compra com HB Créditos.
+        </p>
+        <FormField label="Número do RG" required error={rgError}>
+          <Input
+            value={rg}
+            onChange={(e) => {
+              rgDirtyRef.current = true;
+              setRg(e.target.value);
+              setRgError("");
+            }}
+            placeholder="Ex: 12.345.678-9"
+          />
+        </FormField>
+        <Button className="mt-4 w-full sm:w-auto" size="lg" variant="secondary" onClick={handleSaveRg}>
+          <Save size={18} /> {rgSaved ? "RG salvo!" : "Salvar RG"}
+        </Button>
+      </Card>
+
       <Card title="Seus dados">
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
           {[
@@ -193,6 +259,8 @@ export default function MeuCadastroContent() {
             ["Nome", cooperado.nomeCompleto],
             ["CPF/CNPJ", formatCPFCNPJ(cooperado.cpfCnpj)],
             ["Telefone", formatPhone(cooperado.telefone)],
+            ["Endereço", cooperado.endereco?.trim() || "—"],
+            ["RG", cooperado.rg?.trim() || "—"],
             ["Comunidade", cooperado.comunidade],
             [
               "Cota de ingresso",

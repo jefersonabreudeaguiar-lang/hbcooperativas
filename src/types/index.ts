@@ -213,6 +213,8 @@ export interface Cooperado {
   assinaturaDevolvidaMotivo?: string;
   produtos: string[];
   observacoes: string;
+  /** RG — usado pelo mercado na emissão de NF (Meu cadastro). */
+  rg?: string;
   createdAt: string;
   updatedAt: string;
 }

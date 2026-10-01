@@ -297,10 +297,18 @@ export function ContaCoopFiscalNotesConferenciaPanel({
             <div className="grid gap-4 lg:grid-cols-2">
               <div className="rounded-xl border bg-gray-50 min-h-[240px] flex items-center justify-center overflow-hidden">
                 {photoUrl ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img src={photoUrl} alt="Nota fiscal" className="max-h-[360px] w-full object-contain" />
+                  selected.photoStoragePath?.toLowerCase().endsWith(".pdf") ? (
+                    <iframe
+                      src={photoUrl}
+                      title="Nota fiscal PDF"
+                      className="w-full min-h-[360px] h-[360px] border-0 bg-white"
+                    />
+                  ) : (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={photoUrl} alt="Nota fiscal" className="max-h-[360px] w-full object-contain" />
+                  )
                 ) : (
-                  <p className="text-sm text-gray-500 p-4 text-center">Carregando foto…</p>
+                  <p className="text-sm text-gray-500 p-4 text-center">Carregando anexo…</p>
                 )}
               </div>
 
