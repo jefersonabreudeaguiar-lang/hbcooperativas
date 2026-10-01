@@ -81,6 +81,26 @@ function valorLiquidoMesesQuantoVouReceber(
   return getResumoPagamentoConsolidadoCooperado(data, cooperadoId, uniq, cooperativaId).valorLiquido;
 }
 
+/** Cooperado: só débito líquido em aberto (ficha/resumo), sem mês só “PIX aguardando assinatura”. */
+function calcularValorEMesesAbertoQuantoVouReceber(
+  data: AppData,
+  cooperadoId: string,
+  cooperativaId?: string
+): { mesesComValor: string[]; valor: number } {
+  const coopId = cooperativaId ?? data.cooperados.find((c) => c.id === cooperadoId)?.cooperativaId;
+  const mesesComValor: string[] = [];
+  for (const mes of listarMesesPendentesFinanceiroCooperado(data, cooperadoId, cooperativaId)) {
+    const aguardando = getPagamentoAguardandoCooperado(data, cooperadoId, mes);
+    const confirmado = getPagamentoConfirmadoMes(data, cooperadoId, mes);
+    if (aguardando && !confirmado) continue;
+    const vl = valorLiquidoMesQuantoVouReceber(data, cooperadoId, mes, cooperativaId);
+    const avulsos = totalValoresAvulsosPendentes(data, cooperadoId, mes, coopId);
+    if (vl > 0 || avulsos > 0) mesesComValor.push(mes);
+  }
+  const valor = round2(valorLiquidoMesesQuantoVouReceber(data, cooperadoId, mesesComValor, cooperativaId));
+  return { mesesComValor, valor };
+}
+
 /** Meses com valor pendente ou aguardando assinatura (ordem cronológica). */
 export function listarMesesPendentesQuantoVouReceber(
   data: AppData,
@@ -128,22 +148,7 @@ export function listarMesesComValorQuantoVouReceber(
   cooperadoId: string,
   cooperativaId?: string
 ): string[] {
-  const out: string[] = [];
-  for (const mes of listarMesesPendentesFinanceiroCooperado(data, cooperadoId, cooperativaId)) {
-    const aguardando = getPagamentoAguardandoCooperado(data, cooperadoId, mes);
-    const confirmado = getPagamentoConfirmadoMes(data, cooperadoId, mes);
-    if (aguardando && !confirmado) {
-      out.push(mes);
-      continue;
-    }
-    if (valorLiquidoMesQuantoVouReceber(data, cooperadoId, mes, cooperativaId) > 0) {
-      out.push(mes);
-      continue;
-    }
-    const coopId = cooperativaId ?? data.cooperados.find((c) => c.id === cooperadoId)?.cooperativaId;
-    if (totalValoresAvulsosPendentes(data, cooperadoId, mes, coopId) > 0) out.push(mes);
-  }
-  return out;
+  return calcularValorEMesesAbertoQuantoVouReceber(data, cooperadoId, cooperativaId).mesesComValor;
 }
 
 /** Valor a receber no início — oculta mês quitado ou sem valor pendente. */
@@ -604,58 +609,28 @@ export function getValorQuantoVouReceberMotorLegado(
   aguardandoAssinatura: boolean;
 } {
   const mesesPendentes = listarMesesPendentesFinanceiroCooperado(data, cooperadoId, cooperativaId);
-  const mesesComValor = listarMesesComValorQuantoVouReceber(data, cooperadoId, cooperativaId);
-  const mes = mesesComValor[mesesComValor.length - 1] ?? mesesPendentes[mesesPendentes.length - 1] ?? getMesQuantoVouReceber(data, cooperadoId, cooperativaId);
-
-  if (isBicCentralReadAuthorityEnabled()) {
-    const valor = round2(getTotalAPagarCooperado(data, cooperadoId, undefined, cooperativaId));
-    const mesesParaRotulo =
-      mesesComValor.length > 0
-        ? mesesComValor
-        : mesesPendentes.length > 0
-          ? mesesPendentes
-          : valor > 0
-            ? listarMesesDebitoAbertoCooperado(data, cooperadoId, cooperativaId)
-            : [];
-    const mesLabelFinal =
-      mesesParaRotulo.length > 0
-        ? formatMesesReferenciaRotulo(mesesParaRotulo)
-        : formatMesReferencia(mes);
-    return {
-      mes,
-      meses: mesesPendentes.length ? mesesPendentes : mesesParaRotulo,
-      mesLabel: mesLabelFinal,
-      valor,
-      valorRecibo: 0,
-      aguardandoAssinatura: false,
-    };
-  }
-
-  const aguardandoAssinatura = mesesPendentes.some((m) =>
-    Boolean(getPagamentoAguardandoCooperado(data, cooperadoId, m))
+  const { mesesComValor, valor: valorAberto } = calcularValorEMesesAbertoQuantoVouReceber(
+    data,
+    cooperadoId,
+    cooperativaId
   );
+  const mes =
+    mesesComValor[mesesComValor.length - 1] ??
+    mesesPendentes[mesesPendentes.length - 1] ??
+    getMesQuantoVouReceber(data, cooperadoId, cooperativaId);
+
   const aguardando = getPagamentoAguardandoCooperado(data, cooperadoId);
-  const mesesAguardandoAssinatura = new Set(
-    aguardando ? getMesesReferenciaPagamento(aguardando) : []
-  );
-  const mesesComValorAReceber = mesesPendentes.filter((m) => !mesesAguardandoAssinatura.has(m));
-  let valor = 0;
-  if (!aguardandoAssinatura) {
-    valor = round2(getTotalAPagarCooperado(data, cooperadoId, undefined, cooperativaId));
-  } else if (mesesComValorAReceber.length > 1) {
-    valor = getResumoPagamentoConsolidadoCooperado(
-      data,
-      cooperadoId,
-      mesesComValorAReceber,
-      cooperativaId
-    ).valorLiquido;
-  } else {
-    valor = mesesComValorAReceber.reduce(
-      (s, m) => s + valorLiquidoMesQuantoVouReceber(data, cooperadoId, m, cooperativaId),
-      0
-    );
-    valor = round2(valor);
-  }
+  const mesesPixAguardando = aguardando ? getMesesReferenciaPagamento(aguardando) : [];
+  const aguardandoAssinatura =
+    mesesPixAguardando.length > 0
+      ? mesesPixAguardando.some((m) => !getPagamentoConfirmadoMes(data, cooperadoId, m))
+      : mesesPendentes.some(
+          (m) =>
+            Boolean(getPagamentoAguardandoCooperado(data, cooperadoId, m)) &&
+            !getPagamentoConfirmadoMes(data, cooperadoId, m)
+        );
+  const valor = valorAberto;
+
   const mesesParaRotulo =
     mesesComValor.length > 0
       ? mesesComValor
@@ -668,10 +643,11 @@ export function getValorQuantoVouReceberMotorLegado(
     mesesParaRotulo.length > 0
       ? formatMesesReferenciaRotulo(mesesParaRotulo)
       : formatMesReferencia(mes);
-  const valorRecibo = aguardando ? round2(aguardando.valorLiquido) : 0;
+  const valorRecibo =
+    aguardandoAssinatura && aguardando ? round2(aguardando.valorLiquido) : 0;
   return {
     mes,
-    meses: mesesPendentes.length ? mesesPendentes : mesesParaRotulo,
+    meses: mesesComValor.length ? mesesComValor : mesesParaRotulo,
     mesLabel: mesLabelFinal,
     valor,
     valorRecibo,

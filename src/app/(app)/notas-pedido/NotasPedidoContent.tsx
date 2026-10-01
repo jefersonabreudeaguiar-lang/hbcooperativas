@@ -1050,31 +1050,31 @@ export default function NotasPedidoContent() {
   useEffect(() => {
     if (isCooperado || vistaResponsavel !== "cooperado") return;
 
-    // Durante sync não esvazia a vista — evita “sumiu e voltou”.
-    if (syncing) return;
-
-    if (pendentesPorCooperado.length === 0) {
-      startVistaTransition(() => {
-        setVistaResponsavel("fila");
-        setAbaConferenciaKey("");
-        setFiltroCooperadoId("");
-      });
-      return;
-    }
-
     const aindaNaFila = abaConferenciaKey
       ? pendentesPorCooperado.some((g) => g.chave === abaConferenciaKey)
       : filtroCooperadoId
         ? pendentesPorCooperado.some((g) => g.cooperadoId === filtroCooperadoId)
         : false;
 
-    if (!aindaNaFila) {
-      startVistaTransition(() => {
-        setVistaResponsavel("fila");
-        setAbaConferenciaKey("");
-        setFiltroCooperadoId("");
-      });
-      return;
+    // Durante sync não volta à fila — evita “sumiu e voltou” ao conferir.
+    if (!syncing) {
+      if (pendentesPorCooperado.length === 0) {
+        startVistaTransition(() => {
+          setVistaResponsavel("fila");
+          setAbaConferenciaKey("");
+          setFiltroCooperadoId("");
+        });
+        return;
+      }
+
+      if (!aindaNaFila) {
+        startVistaTransition(() => {
+          setVistaResponsavel("fila");
+          setAbaConferenciaKey("");
+          setFiltroCooperadoId("");
+        });
+        return;
+      }
     }
 
     if (abaConferenciaEfetiva && abaConferenciaEfetiva !== abaConferenciaKey) {
@@ -2640,7 +2640,7 @@ export default function NotasPedidoContent() {
           await pushOperacionalToCloud(cnpj, getData(), coopId, { authoritative: true });
         });
       } else {
-        requestAppSync();
+        requestAppSyncLight();
       }
     });
 
