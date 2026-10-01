@@ -389,10 +389,16 @@ export function flattenLinhasPagarCooperadoEmAberto(
   }));
 }
 
-/** Total geral a pagar a cooperados (todos os meses em aberto). Fonte única para relatórios consolidados. */
+/** Total geral a pagar a cooperados (todos os meses em aberto). Fonte única = painel admin. */
 export function getTotalValoresAPagarEmAberto(data: AppData, cooperativaId?: string): number {
+  const cooperados = data.cooperados.filter(
+    (c) => c.status === "ativo" && (!cooperativaId || c.cooperativaId === cooperativaId)
+  );
   return round2(
-    getRelatorioPagarCooperadoEmAberto(data, cooperativaId).reduce((s, l) => s + l.total, 0)
+    cooperados.reduce(
+      (s, c) => s + getTotalAPagarCooperado(data, c.id, undefined, cooperativaId ?? c.cooperativaId),
+      0
+    )
   );
 }
 
@@ -425,13 +431,14 @@ export function getRelatorioPagarCooperadoEmAberto(
           total: resumo.valorLiquido,
         });
       }
+      const total = round2(getTotalAPagarCooperado(data, c.id, undefined, cooperativaId));
       return {
         cooperadoId: c.id,
         cooperado: c.nomeCompleto,
         meses,
         mesesLabel: consolidado.mesLabel,
         entregas,
-        total: consolidado.valorLiquido,
+        total,
         porMes,
       };
     })

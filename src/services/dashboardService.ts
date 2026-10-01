@@ -5,6 +5,7 @@ import { getData } from "@/services/dataStore";
 import {
   getTotalAPagarCooperado,
   getTotalRecebidoCooperado,
+  fichaNotaElegivelParaPagamento,
   idsNotasPedidoExcluidas,
   pagamentoCobreMesReferencia,
   pagamentoRegistradoParaRelatorio,
@@ -161,7 +162,10 @@ export function getAdminStats(
   const financeiroMes = d.financeiro.find((f) => f.mesReferencia === mes);
 
   const pagamentosPendentes = d.fichaCorrida.filter(
-    (f) => f.status === "pendente" && pertenceCoop(f.cooperadoId)
+    (f) =>
+      f.status === "pendente" &&
+      pertenceCoop(f.cooperadoId) &&
+      fichaNotaElegivelParaPagamento(d, f)
   );
   const pagamentosPagos = d.fichaCorrida.filter(
     (f) => f.status === "pago" && pertenceCoop(f.cooperadoId)
@@ -183,14 +187,13 @@ export function getAdminStats(
 
   const valoresAPagar = opts?.skipValoresAPagar
     ? 0
-    : round2(
-        cooperadosEscopo.reduce((s, c) => {
-          if (isBicCentralReadAuthorityEnabled()) {
+    : isBicCentralReadAuthorityEnabled()
+      ? round2(
+          cooperadosEscopo.reduce((s, c) => {
             return s + bicCentralValorAReceberAgregado(d, c.id, c.cooperativaId).valor;
-          }
-          return s + getTotalAPagarCooperado(d, c.id, undefined, c.cooperativaId);
-        }, 0)
-      );
+          }, 0)
+        )
+      : getTotalValoresAPagarEmAberto(d, cooperativaId);
 
   return {
     totalVendidoMes: sumBy(entregasMes, (e) => e.valorBruto),
