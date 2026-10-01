@@ -277,8 +277,12 @@ export function resolveAppUserRole(
   data?: AppData | null
 ): UserRole {
   const role = normalizeUserRole(user.role);
+  /** Perfil duplo: diretoria com cooperadoId não perde papel staff na sessão (painel responsável). */
+  if (isDiretoriaRole(role)) {
+    if (!canAccessPainelResponsavel(user, data)) return "cooperado";
+    return role;
+  }
   if (isCooperadoAppUser({ ...user, role })) return "cooperado";
-  if (isDiretoriaRole(role) && !canAccessPainelResponsavel(user, data)) return "cooperado";
   return role;
 }
 

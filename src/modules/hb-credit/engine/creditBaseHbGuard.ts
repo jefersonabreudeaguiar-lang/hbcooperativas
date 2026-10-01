@@ -8,13 +8,14 @@ import {
   purgarFichasInvalidas,
   reconciliarFichaFromNotasConferidas,
 } from "@/services/notaPedidoService";
+import { projetarAppDataFinanceiroParaCreditoBase } from "./projetarAppDataFinanceiroParaCreditoBase";
 import { calcLimiteFromPercentual } from "./creditBaseFromFicha";
 import type { ContaCoopLimiteCooperado } from "../types";
 import { computeDisponivel } from "./money";
 
-/** Remove fichas que não têm nota conferida/paga — crédito HB exige entrega real. */
-export function purgarFichasParaCreditoBaseCloud(data: AppData): AppData {
-  let next = purgarFichasInvalidas(reconciliarFichaFromNotasConferidas(data));
+/** Remove fichas sem nota conferida/paga (após projeção financeira — não reconciliar de novo). */
+function filtrarFichasConferidasCreditoBaseHb(data: AppData): AppData {
+  let next = purgarFichasInvalidas(data);
   const fichaCorrida = next.fichaCorrida.filter((f) => {
     const nota = next.notasPedido.find((n) => n.id === f.notaPedidoId);
     if (!nota) return false;
@@ -25,9 +26,14 @@ export function purgarFichasParaCreditoBaseCloud(data: AppData): AppData {
   return { ...next, fichaCorrida };
 }
 
-/** App local: mesma higiene, sem preservar ficha órfã aguardando nota (evita crédito fantasma). */
-export function prepararAppDataParaCreditoBaseHb(data: AppData): AppData {
-  return purgarFichasParaCreditoBaseCloud(data);
+/** Remove fichas que não têm nota conferida/paga — crédito HB exige entrega real. */
+export function purgarFichasParaCreditoBaseCloud(data: AppData): AppData {
+  return filtrarFichasConferidasCreditoBaseHb(reconciliarFichaFromNotasConferidas(data));
+}
+
+/** App local/servidor: projeção financeira M6 + higiene de ficha para crédito-base HB. */
+export function prepararAppDataParaCreditoBaseHb(data: AppData, cnpj?: string): AppData {
+  return filtrarFichasConferidasCreditoBaseHb(projetarAppDataFinanceiroParaCreditoBase(data, cnpj));
 }
 
 export function cooperadoTemEntregasConferidasParaHb(

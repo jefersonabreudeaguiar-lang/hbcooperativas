@@ -851,7 +851,7 @@ function inferCooperadoFieldsFromLocalData(
   return {
     cooperadoId: match.cooperadoId,
     cooperativaId: match.cooperativaId ?? parsed.cooperativaId,
-    role: "cooperado",
+    role: normalizeUserRole(match.role),
   };
 }
 

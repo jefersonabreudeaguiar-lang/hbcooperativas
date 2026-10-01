@@ -13,6 +13,21 @@ function isStaffRole(role: UserRole): boolean {
   return role === "responsavel" || role === "admin" || role === "tesoureiro";
 }
 
+/** Sessão persistida pode ter role cooperado (legado); users[] local traz o papel staff real. */
+export function resolveAuthoritativePanelRole(
+  user: Pick<User, "id" | "email" | "role">,
+  data?: AppData | null
+): UserRole {
+  const direct = normalizeRole(user.role);
+  if (!data || direct !== "cooperado") return direct;
+  const emailNorm = normalizeAuthEmail(user.email);
+  const local =
+    data.users.find((u) => u.active && u.id === user.id) ??
+    data.users.find((u) => u.active && normalizeAuthEmail(u.email) === emailNorm);
+  if (!local) return direct;
+  return normalizeRole(local.role);
+}
+
 export function isBuiltinPainelResponsavelEmail(email: string | null | undefined): boolean {
   if (!email?.trim()) return false;
   const norm = normalizeAuthEmail(email);
@@ -26,7 +41,7 @@ export function canAccessPainelResponsavel(
 ): boolean {
   if (!user || user.active === false) return false;
 
-  const role = normalizeRole(user.role);
+  const role = resolveAuthoritativePanelRole(user, data);
   if (role === "cooperado" || role === "parceiro" || role === "contador") return false;
   if (!isStaffRole(role)) return false;
 

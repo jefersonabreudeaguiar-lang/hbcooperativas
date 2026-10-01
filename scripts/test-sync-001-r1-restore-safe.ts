@@ -324,6 +324,58 @@ setCloudResetAppliedVersionForTests(CNPJ, VER);
   }
 }
 
+// P1 — reapply stale + preempt: notasPedido preservadas; clear financeiro autorizado
+{
+  const before = richLocal();
+  const notasAntes = before.notasPedido.filter((n) => n.cooperativaId === COOP).length;
+  assert.ok(notasAntes >= 1);
+  const descontosAntes = coopDescontos(before);
+  setCloudResetAppliedVersionForTests(CNPJ, VER);
+  setRestoreLegacyBypassWindowForTests(true);
+  try {
+    const stale = reapplyCloudOperationalSliceIfStale(
+      before,
+      CNPJ,
+      COOP,
+      cloudPartialMisaligned(),
+      { permitirPreemptiveClear: true }
+    );
+    assert.equal(stale.changed, true);
+    assert.equal(
+      stale.data.notasPedido.filter((n) => n.cooperativaId === COOP).length,
+      notasAntes,
+      "P1: notasPedido da cooperativa preservadas após reapply preempt"
+    );
+    assert.equal(coopDescontos(stale.data), 0, "clear financeiro autorizado");
+    assert.notEqual(coopDescontos(stale.data), descontosAntes);
+    const aligned = {
+      ...stale.data,
+      fichaCorrida: (cloudPartialMisaligned().fichaCorrida ?? []).map((f) => ({
+        ...f,
+        cooperativaId: f.cooperativaId ?? COOP,
+      })),
+      pagamentosCooperado: (cloudPartialMisaligned().pagamentosCooperado ?? []).map((p) => ({
+        ...p,
+        cooperativaId: p.cooperativaId ?? COOP,
+      })),
+    };
+    const again = reapplyCloudOperationalSliceIfStale(
+      aligned,
+      CNPJ,
+      COOP,
+      cloudPartialMisaligned(),
+      { permitirPreemptiveClear: true }
+    );
+    assert.equal(again.changed, false, "idempotência quando ficha/pag já alinhados à nuvem");
+    assert.equal(
+      again.data.notasPedido.filter((n) => n.cooperativaId === COOP).length,
+      notasAntes
+    );
+  } finally {
+    setRestoreLegacyBypassWindowForTests(false);
+  }
+}
+
 // reapply com autoridade + primeira aplicação: clear permitido
 {
   clearCloudResetAppliedVersionForTests(CNPJ);
@@ -338,6 +390,11 @@ setCloudResetAppliedVersionForTests(CNPJ, VER);
     });
     assert.equal(reset.changed, true);
     assert.equal(coopDescontos(reset.data), 0);
+    assert.equal(
+      reset.data.notasPedido.filter((n) => n.cooperativaId === COOP).length,
+      before.notasPedido.filter((n) => n.cooperativaId === COOP).length,
+      "P1: applyCloudOperationalResetIfNeeded preempt preserva notasPedido"
+    );
   } finally {
     setRestoreLegacyBypassWindowForTests(false);
   }

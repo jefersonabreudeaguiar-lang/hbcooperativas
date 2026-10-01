@@ -11,16 +11,13 @@ import { fetchNotasFromTable, fetchNotasFromStorage, mergeNotasSources } from "@
 import { fetchOperacionalSync } from "@/lib/supabase/cooperativaSyncStorage";
 import { buildMinimalAppDataForCreditBase } from "@/modules/hb-credit/engine/creditBaseAuthoritative";
 import { buildCreditosBaseMap } from "@/modules/hb-credit/engine/creditBaseFromFicha";
-import { reconciliarFichaFromNotasConferidas } from "@/services/notaPedidoService";
-import {
-  posProcessarIntegridadePagamentosCooperativa,
-  sanitizarOperacionalSyncPayload,
-} from "@/services/pagamentoIntegridadeService";
 import { markHbCreditLimitStale } from "@/modules/hb-credit/engine/hbCreditLimitSyncState";
 import { logServerMutationAudit } from "@/lib/security/serverAudit";
 import type { SessionClaims } from "@/lib/security/jwt";
 import { normalizeCnpj } from "@/utils/cooperativa";
 import { OPERATIONAL_RESET_VERSION } from "@/services/operationalReset";
+import { reconciliarFichaFromNotasConferidas } from "@/services/notaPedidoService";
+import { sanitizarOperacionalSyncPayload } from "@/services/pagamentoIntegridadeService";
 
 const BASE_TOLERANCE_CENTS = 0;
 
@@ -54,8 +51,7 @@ function creditosBaseFromOperacionalForHb(opts: {
     cooperados: opts.cooperados,
     notasPedido: opts.notas,
   });
-  const aligned = posProcessarIntegridadePagamentosCooperativa(data);
-  return buildCreditosBaseMap(aligned, opts.cooperadoIds, opts.cooperativaId);
+  return buildCreditosBaseMap(data, opts.cooperadoIds, opts.cooperativaId);
 }
 
 export function diffAuthoritativeCreditBaseFromOperacional(opts: {

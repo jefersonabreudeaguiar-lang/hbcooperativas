@@ -1204,6 +1204,8 @@ export function avaliarFullResetOperacionalPullSeguro(
 export type MergeOperacionalIntoDataOptions = {
   /** Pagamentos locais capturados antes de clear financeiro no pull (S3). */
   localPagamentosCoopBaseline?: PagamentoCooperadoRegistro[];
+  /** BIC M6 — interpreta coleções presentes no snapshot operacional (sem modo legado S4). */
+  forAuthoritativeCreditBase?: boolean;
 };
 
 function prepararOperacionalPullPagamentosMonotonicos(
@@ -1283,7 +1285,9 @@ export function mergeOperacionalIntoData(
   mergeOptions?: MergeOperacionalIntoDataOptions
 ): AppData {
   const rawCloud = cloud;
-  const legacyIgnorarDominios = operacionalBlobOperacionalLegado(rawCloud);
+  const legacyIgnorarDominios = mergeOptions?.forAuthoritativeCreditBase
+    ? false
+    : operacionalBlobOperacionalLegado(rawCloud);
   cloud = normalizeCloudOperacional(cloud);
   const dominioFornecido = (key: string) =>
     operacionalDominioFornecidoNoPayload(rawCloud, key, {

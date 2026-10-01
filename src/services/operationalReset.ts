@@ -319,7 +319,8 @@ export function applyCloudOperationalResetIfNeeded(
   markCloudResetApplied(digits, cloudVer);
   markOperacionalCloudAuthoritative(digits, cloudVer);
   clearNotasSyncMeta(digits);
-  return { data: clearOperationalDataForCooperativa(data, coopId), changed: true };
+  /** SYNC-001/P1 — mesmo escopo do pull (clearOperacionalFinanceiroForCooperativa): notas vêm da tabela/storage, não do blob operacional. */
+  return { data: clearOperacionalFinanceiroForCooperativa(data, coopId), changed: true };
 }
 
 /** Versão do reset já aplicada, mas operacional local ainda difere da nuvem (PWA/sync parcial). */
@@ -369,7 +370,8 @@ export function reapplyCloudOperationalSliceIfStale(
 
   markOperacionalCloudAuthoritative(digits, cloudVer);
   clearNotasSyncMeta(digits);
-  return { data: clearOperationalDataForCooperativa(data, coopId), changed: true };
+  /** SYNC-001/P1 — stale reapply realinha ficha/pag financeiros; não apagar entregas (notasPedido). */
+  return { data: clearOperacionalFinanceiroForCooperativa(data, coopId), changed: true };
 }
 
 export function applyOperationalResetIfNeeded(data: AppData): { data: AppData; changed: boolean } {

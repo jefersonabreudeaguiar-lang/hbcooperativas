@@ -7,6 +7,25 @@ import {
 } from "./creditBaseHbGuard";
 import { hbCreditCreditoBaseReais } from "@/lib/hb-credit/hbCreditLeituraBic";
 import { resolverCooperadoIdCanonico } from "@/services/cooperadoCloudService";
+import { normalizeCnpj } from "@/utils/cooperativa";
+
+function cnpjParaCreditoBase(data: AppData, cooperativaId?: string): string | undefined {
+  if (cooperativaId) {
+    const coop = data.cooperativas.find((c) => c.id === cooperativaId);
+    if (coop?.cnpj) {
+      const d = normalizeCnpj(coop.cnpj);
+      if (d.length === 14) return d;
+    }
+  }
+  const d = data.cooperativas
+    .map((c) => normalizeCnpj(c.cnpj ?? ""))
+    .find((x) => x.length === 14);
+  return d;
+}
+
+function prepararCreditoBase(data: AppData, cooperativaId?: string): AppData {
+  return prepararAppDataParaCreditoBaseHb(data, cnpjParaCreditoBase(data, cooperativaId));
+}
 
 /** Crédito base HB — valor a receber (M6) em aberto; blindagem anti-fantasma separada. */
 export function getCreditoBaseContaCoopReais(
@@ -14,7 +33,7 @@ export function getCreditoBaseContaCoopReais(
   cooperadoId: string,
   cooperativaId?: string
 ): number {
-  const sane = prepararAppDataParaCreditoBaseHb(data);
+  const sane = prepararCreditoBase(data, cooperativaId);
   const coopId = cooperativaId ?? sane.cooperados.find((c) => c.id === cooperadoId)?.cooperativaId;
   return hbCreditCreditoBaseReais(sane, cooperadoId, coopId);
 }
@@ -28,7 +47,7 @@ export function getCreditoBaseCooperadoCents(
   const reais = getCreditoBaseContaCoopReais(data, cooperadoId, cooperativaId);
   const coopId = cooperativaId ?? data.cooperados.find((c) => c.id === cooperadoId)?.cooperativaId;
   return blindarCreditoBaseCentsHb(
-    prepararAppDataParaCreditoBaseHb(data),
+    prepararCreditoBase(data, cooperativaId),
     cooperadoId,
     coopId,
     reaisToCents(reais)
@@ -40,7 +59,7 @@ export function buildCreditosBaseMap(
   cooperadoIds: string[],
   cooperativaId?: string
 ): Record<string, number> {
-  const sane = prepararAppDataParaCreditoBaseHb(data);
+  const sane = prepararCreditoBase(data, cooperativaId);
   const map: Record<string, number> = {};
   for (const id of cooperadoIds) {
     map[id] = creditoBaseCentsForCooperado(sane, id, cooperativaId);
@@ -131,7 +150,7 @@ export async function buildCreditosBaseMapCachedAsync(
     return creditosBaseCache.map;
   }
 
-  const sane = prepararAppDataParaCreditoBaseHb(data);
+  const sane = prepararCreditoBase(data, cooperativaId);
   const map: Record<string, number> = {};
   const batchSize = Math.max(1, opts?.batchSize ?? DEFAULT_CREDITOS_BASE_BATCH_SIZE);
   const total = cooperadoIds.length;

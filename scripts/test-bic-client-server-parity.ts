@@ -19,14 +19,20 @@ import {
 } from "../src/modules/hb-credit/engine/creditBaseAuthoritative.ts";
 import {
   buildCreditosBaseMap,
+  getCreditoBaseContaCoopReais,
   resetCreditosBaseMapCache,
 } from "../src/modules/hb-credit/engine/creditBaseFromFicha.ts";
-import { hbCreditCreditoBaseReais } from "../src/lib/hb-credit/hbCreditLeituraBic.ts";
 import { posProcessarFinanceiroLocal } from "../src/services/operacionalLocalPostProcess.ts";
-import { syncOperacionalPullPipelineForTests } from "../src/services/cooperativaSyncCloudService.ts";
+import { projetarAppDataFinanceiroParaCreditoBase } from "../src/modules/hb-credit/engine/projetarAppDataFinanceiroParaCreditoBase.ts";
+import {
+  avaliarFullResetOperacionalPullSeguro,
+  aplicarOperacionalPullLocalForTests,
+  syncOperacionalPullPipelineForTests,
+} from "../src/services/cooperativaSyncCloudService.ts";
 import { mergeCloudNotasIntoData } from "../src/services/notaPedidoCloudService.ts";
 import {
   clearCloudResetAppliedVersionForTests,
+  clearOperacionalPullMergedWatermarkForTests,
   setCloudResetAppliedVersionForTests,
   setOperacionalCloudAuthoritativeForTests,
 } from "../src/services/operationalReset.ts";
@@ -42,14 +48,42 @@ const VER = 20;
 type ParityRow = {
   id: string;
   sameFacts: boolean;
+  clientFacts: string;
+  serverFacts: string;
   clientCents: number;
   serverCents: number;
   clientM6: number;
   serverM6: number;
   equal: boolean;
+  divergenceReason: string;
 };
 
 const rows: ParityRow[] = [];
+
+function factsCliente(local: AppData, cloud: OperacionalSyncPayload): string {
+  const pagN = local.pagamentosCooperado?.length ?? 0;
+  const pagC = cloud.pagamentosCooperado?.length ?? 0;
+  const descL = local.descontos?.length ?? 0;
+  const descC = operacionalDominioFornecidoNoPayload(cloud, "descontos")
+    ? String(cloud.descontos?.length ?? 0)
+    : "ausente";
+  return `fichaL=${local.fichaCorrida?.length ?? 0} pagL=${pagN} descL=${descL} cloudPag=${pagC} cloudDesc=${descC} fullReset=${Boolean(cloud.fullReset)}`;
+}
+
+function factsServidor(cloud: OperacionalSyncPayload, notas: NotaPedido[]): string {
+  const descC = operacionalDominioFornecidoNoPayload(cloud, "descontos")
+    ? String(cloud.descontos?.length ?? 0)
+    : "ausente";
+  return `notas=${notas.length} fichaC=${cloud.fichaCorrida?.length ?? 0} pagC=${cloud.pagamentosCooperado?.length ?? 0} descC=${descC} arqC=${cloud.arquivosMensais?.length ?? 0}`;
+}
+
+function divergenceReasonFor(r: Omit<ParityRow, "divergenceReason">): string {
+  if (r.equal) return "—";
+  if (!r.sameFacts) {
+    return "o servidor não possui o mesmo fato que existe no AppData cliente";
+  }
+  return "INACEITÁVEL: divergência com mesmos fatos";
+}
 
 function pag(
   id: string,
@@ -154,6 +188,16 @@ function clientView(local: AppData, cloud: OperacionalSyncPayload, notas: NotaPe
   return data;
 }
 
+/** Pull operacional sem restore legado (evita reapply stale apagar notas conferidas antes do merge). */
+function clientViewPullMergeOnly(
+  local: AppData,
+  cloud: OperacionalSyncPayload,
+  notas: NotaPedido[]
+): AppData {
+  const data = mergeCloudNotasIntoData(local, notas, CNPJ);
+  return aplicarOperacionalPullLocalForTests(data, cloud, COOP, CNPJ).data;
+}
+
 function serverView(cloud: OperacionalSyncPayload, notas: NotaPedido[]): {
   cents: Record<string, number>;
   data: AppData;
@@ -177,22 +221,68 @@ function serverView(cloud: OperacionalSyncPayload, notas: NotaPedido[]): {
   return { cents, data };
 }
 
-function compareCase(id: string, sameFacts: boolean, local: AppData, cloud: OperacionalSyncPayload, notas: NotaPedido[]): void {
+function compareCase(
+  id: string,
+  sameFacts: boolean,
+  local: AppData,
+  cloud: OperacionalSyncPayload,
+  notas: NotaPedido[],
+  opts?: { pullMergeOnly?: boolean }
+): void {
   setOperacionalCloudAuthoritativeForTests(null);
   resetCreditosBaseMapCache();
-  const clientData = clientView(local, cloud, notas);
+  const clientData = opts?.pullMergeOnly
+    ? clientViewPullMergeOnly(local, cloud, notas)
+    : clientView(local, cloud, notas);
   const clientCents = buildCreditosBaseMap(clientData, [COOPERADO], COOP)[COOPERADO] ?? 0;
-  const clientM6 = hbCreditCreditoBaseReais(clientData, COOPERADO, COOP);
+  const clientM6 = getCreditoBaseContaCoopReais(clientData, COOPERADO, COOP);
 
   const { cents: serverMap, data: serverData } = serverView(cloud, notas);
   const serverCents = serverMap[COOPERADO] ?? 0;
-  const serverM6 = hbCreditCreditoBaseReais(serverData, COOPERADO, COOP);
+  const serverM6 = getCreditoBaseContaCoopReais(serverData, COOPERADO, COOP);
 
   const equal = clientCents === serverCents && Math.round(clientM6 * 100) === Math.round(serverM6 * 100);
-  rows.push({ id, sameFacts, clientCents, serverCents, clientM6, serverM6, equal });
+  const base = {
+    id,
+    sameFacts,
+    clientFacts: factsCliente(local, cloud),
+    serverFacts: factsServidor(cloud, notas),
+    clientCents,
+    serverCents,
+    clientM6,
+    serverM6,
+    equal,
+  };
+  rows.push({ ...base, divergenceReason: divergenceReasonFor(base) });
+}
+
+function pushRowManual(
+  id: string,
+  sameFacts: boolean,
+  clientFacts: string,
+  serverFacts: string,
+  clientCents: number,
+  serverCents: number,
+  clientM6: number,
+  serverM6: number
+): void {
+  const equal = clientCents === serverCents && Math.round(clientM6 * 100) === Math.round(serverM6 * 100);
+  const base = {
+    id,
+    sameFacts,
+    clientFacts,
+    serverFacts,
+    clientCents,
+    serverCents,
+    clientM6,
+    serverM6,
+    equal,
+  };
+  rows.push({ ...base, divergenceReason: divergenceReasonFor(base) });
 }
 
 clearCloudResetAppliedVersionForTests(CNPJ);
+clearOperacionalPullMergedWatermarkForTests(CNPJ);
 setCloudResetAppliedVersionForTests(CNPJ, VER);
 
 const notas1 = [mkNota()];
@@ -258,7 +348,33 @@ compareCase(
   notas1
 );
 
-// T3 — após SYNC-001 merge: cliente reconciliado × nuvem (deve coincidir com servidor)
+// T3 — fullReset autorizado (merge pull, sem restore legado que apagaria notas conferidas)
+{
+  clearCloudResetAppliedVersionForTests(CNPJ);
+  const local = shell({
+    notasPedido: notas1,
+    fichaCorrida: [mkFicha("pendente")],
+    pagamentosCooperado: [pag("p_stale", "aguardando_confirmacao", "2026-08-01T10:00:00.000Z")],
+    descontos: [desconto("d_stale")],
+  });
+  const cloudT3 = {
+    ...cloudBase(),
+    fullReset: true,
+    operationalResetVersion: VER,
+    fichaCorrida: [mkFicha("pendente")],
+    pagamentosCooperado: [],
+    descontos: [],
+    operacionalSnapshotComplete: true,
+  } as OperacionalSyncPayload;
+  assert.ok(
+    avaliarFullResetOperacionalPullSeguro(local, cloudT3, COOP, CNPJ).permitirMergeAutoritativo,
+    "T3 H814E allow"
+  );
+  compareCase("T3_fullReset_completo", true, local, cloudT3, notas1, { pullMergeOnly: true });
+  setCloudResetAppliedVersionForTests(CNPJ, VER);
+}
+
+// T3 legado — pós-sync confirmado local × cloud aguardando (mesmos fatos pós-merge)
 compareCase(
   "T3_pos_sync_confirmado_local_cloud_aguardando",
   true,
@@ -274,11 +390,11 @@ compareCase(
   notas1
 );
 
-// T3b — mesmo pagamento confirmado só no AppData local (sem nuvem): servidor não vê → P1
+// T3b — confirmado local × cloud aguardando: mesma projeção M6 (integridade monotônica)
 {
   setOperacionalCloudAuthoritativeForTests(null);
   resetCreditosBaseMapCache();
-  const localOnly = posProcessarFinanceiroLocal(
+  const localOnly = projetarAppDataFinanceiroParaCreditoBase(
     shell({
       notasPedido: notas1,
       fichaCorrida: [mkFicha("pendente")],
@@ -287,7 +403,7 @@ compareCase(
     CNPJ
   );
   const clientCents = buildCreditosBaseMap(localOnly, [COOPERADO], COOP)[COOPERADO] ?? 0;
-  const clientM6 = hbCreditCreditoBaseReais(localOnly, COOPERADO, COOP);
+  const clientM6 = getCreditoBaseContaCoopReais(localOnly, COOPERADO, COOP);
   const cloudAguardando = {
     updatedAt: "2026-09-20T12:00:00.000Z",
     fichaCorrida: [mkFicha("pendente")],
@@ -296,17 +412,43 @@ compareCase(
   } as OperacionalSyncPayload;
   const { cents: serverMap, data: serverData } = serverView(cloudAguardando, notas1);
   const serverCents = serverMap[COOPERADO] ?? 0;
-  const serverM6 = hbCreditCreditoBaseReais(serverData, COOPERADO, COOP);
+  const serverM6 = getCreditoBaseContaCoopReais(serverData, COOPERADO, COOP);
   const equal = clientCents === serverCents && Math.round(clientM6 * 100) === Math.round(serverM6 * 100);
-  rows.push({
-    id: "T3b_confirmado_somente_local",
-    sameFacts: false,
+  pushRowManual(
+    "T3b_confirmado_somente_local",
+    true,
+    factsCliente(
+      shell({
+        notasPedido: notas1,
+        fichaCorrida: [mkFicha("pendente")],
+        pagamentosCooperado: [pag("p1", "confirmado", "2026-09-01T10:00:00.000Z")],
+      }),
+      cloudAguardando
+    ),
+    factsServidor(cloudAguardando, notas1),
     clientCents,
     serverCents,
     clientM6,
-    serverM6,
-    equal,
+    serverM6
+  );
+  assert.ok(equal, "T3b paridade M6");
+}
+
+// T4 — pagamento confirmado não regride após pull (status + M6)
+{
+  const local = shell({
+    notasPedido: notas1,
+    fichaCorrida: [mkFicha("pendente")],
+    pagamentosCooperado: [pag("p1", "confirmado", "2026-09-01T10:00:00.000Z")],
   });
+  const cloud = {
+    ...cloudBase(),
+    pagamentosCooperado: [pag("p1", "aguardando_confirmacao", "2026-09-20T12:00:00.000Z")],
+  } as OperacionalSyncPayload;
+  const after = clientView(local, cloud, notas1);
+  const p = after.pagamentosCooperado?.find((x) => x.id === "p1");
+  assert.equal(p?.status, "confirmado", "T4 status confirmado preservado");
+  compareCase("T4_confirmado_nao_regride", true, local, cloud, notas1);
 }
 
 // Mesmos fatos: pagamento confirmado na nuvem + ficha paga
@@ -326,7 +468,7 @@ compareCase(
   notas1
 );
 
-// HB — mesmos fatos quando operacional traz arquivosMensais
+// T5 — HB no operacional (compra única)
 {
   const arq: ArquivoMensalCooperado = {
     cooperadoId: COOPERADO,
@@ -346,10 +488,60 @@ compareCase(
     ],
   };
   compareCase(
-    "T5_T7_hb_operacional",
+    "T5_hb_operacional_compra",
     true,
     shell({ notasPedido: notas1, fichaCorrida: [mkFicha()], arquivosMensais: [arq] }),
     { ...cloudBase(), arquivosMensais: [arq] } as OperacionalSyncPayload,
+    notas1
+  );
+
+  // T6 — compra + estorno (mesmos fatos cliente/servidor)
+  const arqEstorno: ArquivoMensalCooperado = {
+    ...arq,
+    contaCoopDescontos: [
+      ...(arq.contaCoopDescontos ?? []),
+      {
+        motivo: "Estorno HB",
+        valorReais: 40,
+        tipo: "conta_coop",
+        createdAt: "2026-09-06T00:00:00.000Z",
+        hbTransactionId: "hb1_refund",
+      },
+    ],
+  };
+  compareCase(
+    "T6_hb_compra_estorno",
+    true,
+    shell({ notasPedido: notas1, fichaCorrida: [mkFicha()], arquivosMensais: [arqEstorno] }),
+    { ...cloudBase(), arquivosMensais: [arqEstorno] } as OperacionalSyncPayload,
+    notas1
+  );
+
+  // T7 — múltiplas incidências HB distintas
+  const arqMulti: ArquivoMensalCooperado = {
+    ...arq,
+    contaCoopDescontos: [
+      {
+        motivo: "Compra HB",
+        valorReais: 25,
+        tipo: "conta_coop",
+        createdAt: "2026-09-05T00:00:00.000Z",
+        hbTransactionId: "hb_a",
+      },
+      {
+        motivo: "Compra HB",
+        valorReais: 15,
+        tipo: "conta_coop",
+        createdAt: "2026-09-07T00:00:00.000Z",
+        hbTransactionId: "hb_b",
+      },
+    ],
+  };
+  compareCase(
+    "T7_hb_multiplas_incidencias",
+    true,
+    shell({ notasPedido: notas1, fichaCorrida: [mkFicha()], arquivosMensais: [arqMulti] }),
+    { ...cloudBase(), arquivosMensais: [arqMulti] } as OperacionalSyncPayload,
     notas1
   );
 }
@@ -413,7 +605,15 @@ const diffDiverged = diffFactsRows.filter((r) => !r.equal);
 
 for (const r of rows.filter((x) => !x.equal)) {
   console.log(
-    `DIVERGE ${r.id} sameFacts=${r.sameFacts} client=${r.clientCents} server=${r.serverCents} m6c=${r.clientM6} m6s=${r.serverM6}`
+    `DIVERGE ${r.id} sameFacts=${r.sameFacts} reason=${r.divergenceReason} client=${r.clientCents} server=${r.serverCents} m6c=${r.clientM6} m6s=${r.serverM6}`
+  );
+}
+
+console.log("\nT1–T12 PARITY TABLE");
+console.log("id\tsameFacts\tequal\tclientCents\tserverCents\tclientM6\tserverM6\tdivergenceReason");
+for (const r of rows) {
+  console.log(
+    `${r.id}\t${r.sameFacts}\t${r.equal}\t${r.clientCents}\t${r.serverCents}\t${r.clientM6}\t${r.serverM6}\t${r.divergenceReason}`
   );
 }
 
@@ -425,7 +625,6 @@ for (const r of sameFactsRows) {
   assert.ok(r.equal, `paridade obrigatória (mesmos fatos): ${r.id}`);
 }
 
-// Divergências esperadas quando fatos lógicos diferem (cliente reconciliado × nuvem crua)
 for (const id of [
   "T9_parcial_desconto_so_local",
   "T11_dominio_ausente_cliente_tem_desconto",
@@ -433,12 +632,6 @@ for (const id of [
 ]) {
   const r = rows.find((x) => x.id === id);
   assert.ok(r && !r.equal, `${id} deve divergir (fatos distintos)`);
-}
-
-// T3b — confirmado só local (posProcessar) vs nuvem aguardando
-{
-  const r = rows.find((x) => x.id === "T3b_confirmado_somente_local");
-  assert.ok(r && !r.equal, "T3b deve divergir (posProcessar local vs snapshot servidor)");
 }
 
 console.log("OK — test-bic-client-server-parity");
