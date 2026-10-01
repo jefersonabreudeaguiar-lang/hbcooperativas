@@ -39,6 +39,7 @@ import {
   saveAppDataIfSyncLeaseCurrent,
   type CooperativaSyncSessionLease,
 } from "@/services/operacionalPullLease";
+import { cooperadoApresentacaoFinanceiraPosRunSync } from "@/lib/cooperadoApresentacaoFinanceira";
 import {
   cooperadoFinanceiroBloqueiaEntradaApp,
   cooperadoFinanceiroDesatualizado,
@@ -583,9 +584,29 @@ export function CooperativaSyncProvider({ children }: { children: React.ReactNod
           }, 3000);
         }
       }
-      if (userRef.current?.role === "cooperado") {
-        markCooperadoPagamentosHydrated();
-        persistirInicioCardValorReceberCooperado(userRef.current);
+      if (userRef.current?.role === "cooperado" && userRef.current.cooperadoId) {
+        const latest = getData();
+        const coopIdFinal = getUserCooperativaId(userRef.current, latest);
+        const cooperadoCanonico =
+          coopIdFinal &&
+          resolverCooperadoIdCanonico(latest, userRef.current.cooperadoId, coopIdFinal);
+        const offline = typeof navigator !== "undefined" && !navigator.onLine;
+        const liberaApresentacao =
+          cooperadoCanonico &&
+          coopIdFinal &&
+          cooperadoApresentacaoFinanceiraPosRunSync({
+            syncCompleted: completed,
+            offline,
+            data: latest,
+            cooperadoId: cooperadoCanonico,
+            cooperativaId: coopIdFinal,
+          });
+        if (liberaApresentacao) {
+          markCooperadoPagamentosHydrated();
+          persistirInicioCardValorReceberCooperado(userRef.current);
+        } else {
+          setCooperadoPagamentosHydrated(false);
+        }
       }
     }
   }, [markCooperadoPagamentosHydrated]);

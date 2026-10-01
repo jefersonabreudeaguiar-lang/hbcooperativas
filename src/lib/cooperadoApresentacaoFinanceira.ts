@@ -1,4 +1,8 @@
-import type { UserRole } from "@/types";
+import type { AppData, UserRole } from "@/types";
+import {
+  cooperadoFinanceiroBloqueiaEntradaApp,
+  cooperadoFinanceiroDesatualizado,
+} from "@/services/fichaSyncGuard";
 
 export type CooperadoInicioCardsUi = {
   exibir: boolean;
@@ -27,6 +31,30 @@ export function cooperadoApresentacaoFinanceiraConsolidada(
 export function cooperadoCarregandoValoresFinanceiros(input: CooperadoSyncPresentationInput): boolean {
   if (input.role !== "cooperado") return false;
   return !cooperadoApresentacaoFinanceiraConsolidada(input);
+}
+
+/**
+ * H204 — libera `cooperadoPagamentosHydrated` só quando o runSync terminou bem
+ * ou o aparelho está offline com fatia financeira local utilizável (mesmo critério Orlando).
+ */
+export function cooperadoApresentacaoFinanceiraPosRunSync(input: {
+  syncCompleted: boolean;
+  offline: boolean;
+  data: AppData;
+  cooperadoId: string;
+  cooperativaId: string;
+}): boolean {
+  if (cooperadoFinanceiroDesatualizado(input.data, input.cooperadoId, input.cooperativaId)) {
+    return false;
+  }
+  if (input.syncCompleted) return true;
+  if (
+    input.offline &&
+    !cooperadoFinanceiroBloqueiaEntradaApp(input.data, input.cooperadoId, input.cooperativaId)
+  ) {
+    return true;
+  }
+  return false;
 }
 
 /** Mascara somente apresentação; não altera AppData nem projeção bruta. */

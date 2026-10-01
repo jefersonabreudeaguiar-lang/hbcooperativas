@@ -14,6 +14,7 @@ import { requestAppSyncImmediate } from "@/services/syncRequest";
 import { resolverCooperadoIdCanonico } from "@/services/cooperadoCloudService";
 import { getUserCooperativaId } from "@/utils/cooperativa";
 import { getData, saveDataSafe } from "@/services/dataStore";
+import { filtrarInicioCardPersistidoLeituraBic } from "@/lib/cooperadoInicioCardPolicy";
 import {
   inicioCardCacheProntoParaAbertura,
   lerInicioCardPersistidoFlex,
@@ -44,7 +45,9 @@ export function CooperadoFinanceiroGate({ children }: { children: React.ReactNod
     const coopId = getUserCooperativaId(user, data) ?? user.cooperativaId;
     if (!coopId) return null;
     const cooperadoId = resolverCooperadoIdCanonico(data, user.cooperadoId, coopId);
-    return lerInicioCardPersistidoFlex(cooperadoId, coopId);
+    return filtrarInicioCardPersistidoLeituraBic(
+      lerInicioCardPersistidoFlex(cooperadoId, coopId)
+    );
   }, [user?.id, user?.cooperadoId, user?.cooperativaId, user?.role]);
 
   const bloqueiaEntrada = useAppDataSelector((data) => {

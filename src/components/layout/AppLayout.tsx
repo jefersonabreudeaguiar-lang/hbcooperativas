@@ -340,15 +340,15 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   useHbCreditDescontosWarmup(user);
 
   return (
-    <div className="flex h-screen bg-gray-50">
+    <div className="flex h-[100dvh] max-h-[100dvh] bg-gray-50 overflow-hidden">
       <AppUpdateBanner />
       <Sidebar />
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
         {!mercadoQrImmersive && <MobileNav />}
         <main
           className={cn(
-            "flex-1 overflow-y-auto",
-            mercadoQrImmersive ? "p-0 pb-0" : "p-4 lg:p-6 pb-36 lg:pb-6"
+            "flex-1 overflow-y-auto overflow-x-hidden overscroll-y-contain",
+            mercadoQrImmersive ? "p-0 pb-0" : "p-4 lg:p-6 pb-[max(9rem,env(safe-area-inset-bottom,0px)+5.5rem)] lg:pb-6"
           )}
         >
           {user?.role !== "cooperado" && (

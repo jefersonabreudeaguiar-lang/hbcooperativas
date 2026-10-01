@@ -8,6 +8,8 @@ import {
   canAccessPainelResponsavel,
   resolveCooperadoExperienceId,
 } from "@/lib/security/responsavelPanelAccess";
+import { resolverCooperadoIdCanonico } from "@/services/cooperadoCloudService";
+import { getUserCooperativaId } from "@/utils/cooperativa";
 
 export { resolveMobileCooperadoId, resolveMobileCooperadoIdFromEmail };
 
@@ -27,11 +29,27 @@ export function isMobileCooperativaApp(): boolean {
   return /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent);
 }
 
-function asCooperadoExperience<T extends Omit<User, "password">>(user: T, cooperadoId: string): T {
+function canonicalCooperadoIdForExperience<T extends Omit<User, "password">>(
+  user: T,
+  cooperadoId: string,
+  data?: AppData | null
+): string {
+  if (!data) return cooperadoId;
+  const coopId = getUserCooperativaId(user, data) ?? user.cooperativaId;
+  if (!coopId) return cooperadoId;
+  return resolverCooperadoIdCanonico(data, cooperadoId, coopId);
+}
+
+function asCooperadoExperience<T extends Omit<User, "password">>(
+  user: T,
+  cooperadoId: string,
+  data?: AppData | null
+): T {
+  const canon = canonicalCooperadoIdForExperience(user, cooperadoId, data);
   return {
     ...user,
     role: "cooperado",
-    cooperadoId,
+    cooperadoId: canon,
   };
 }
 
@@ -44,7 +62,9 @@ export function resolveExperienceUser<T extends Omit<User, "password">>(
 
   if (isCooperadoAppUser(user)) {
     const cooperadoId = resolveCooperadoExperienceId(user) ?? user.cooperadoId;
-    return cooperadoId ? asCooperadoExperience(user, cooperadoId) : { ...user, role: "cooperado" as UserRole };
+    return cooperadoId
+      ? asCooperadoExperience(user, cooperadoId, data)
+      : { ...user, role: "cooperado" as UserRole };
   }
 
   const allowPainel = canAccessPainelResponsavel(user, data);
@@ -52,7 +72,7 @@ export function resolveExperienceUser<T extends Omit<User, "password">>(
 
   if (!allowPainel) {
     const cooperadoId = resolveCooperadoExperienceId(user);
-    if (cooperadoId) return asCooperadoExperience(user, cooperadoId);
+    if (cooperadoId) return asCooperadoExperience(user, cooperadoId, data);
     return user;
   }
 
@@ -66,5 +86,5 @@ export function resolveExperienceUser<T extends Omit<User, "password">>(
   const mobileCooperadoId = resolveMobileCooperadoId(user);
   if (!mobileCooperadoId) return user;
 
-  return asCooperadoExperience(user, mobileCooperadoId);
+  return asCooperadoExperience(user, mobileCooperadoId, data);
 }

@@ -9,6 +9,7 @@ import { readFileSync, existsSync, writeFileSync, mkdirSync } from "node:fs";
 import { resolve } from "node:path";
 import type { AppData } from "../src/types/index.ts";
 import { normalizeCnpj } from "../src/utils/cooperativa";
+import { cooperativaFromCloudRow } from "../src/utils/cooperativaCadastro";
 import { fetchOperacionalSync, uploadOperacionalSync } from "../src/lib/supabase/cooperativaSyncStorage";
 import { posProcessarIntegridadePagamentosCooperativa } from "../src/services/pagamentoIntegridadeService";
 import { reconciliarFichaFromNotasConferidas } from "../src/services/notaPedidoService";
@@ -53,8 +54,12 @@ async function main() {
     process.exit(1);
   }
 
+  const { data: coopRows } = await supabase.from("cooperativas").select("*").eq("cnpj", CNPJ);
+  const coop = coopRows?.length ? cooperativaFromCloudRow(coopRows[0] as Record<string, unknown>) : null;
+
   const asApp = {
     ...(before as unknown as AppData),
+    cooperativas: coop ? [coop] : ((before as { cooperativas?: AppData["cooperativas"] }).cooperativas ?? []),
     notasPedido: (before as { notasPedido?: AppData["notasPedido"] }).notasPedido ?? [],
     fichaCorrida: (before as { fichaCorrida?: AppData["fichaCorrida"] }).fichaCorrida ?? [],
     pagamentosCooperado: (before as { pagamentosCooperado?: AppData["pagamentosCooperado"] })
