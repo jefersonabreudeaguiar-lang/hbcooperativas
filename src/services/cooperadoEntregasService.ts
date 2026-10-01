@@ -408,7 +408,7 @@ function listarMesesPendentesPagamentoResponsavelOperacional(
   for (const f of data.fichaCorrida) {
     if (!fichaPertenceCooperado(data, f, cooperadoId, cooperativaId)) continue;
     if (!fichaValidaNoExtrato(data, f)) continue;
-    if (f.status === "pendente" || f.status === "pago") {
+    if (f.status === "pendente") {
       mesesSet.add(f.mesReferencia);
     }
   }

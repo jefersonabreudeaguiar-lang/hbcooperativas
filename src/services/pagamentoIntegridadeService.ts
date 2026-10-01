@@ -160,11 +160,15 @@ export function cooperadoMesComFichaPagaSemPagamentoCooperativa(
     ? resolverCooperadoIdCanonico(data, cooperadoId, coopId)
     : cooperadoId;
   return (data.fichaCorrida ?? []).some(
-    (f) =>
-      fichaPertenceCooperadoSafe(data, f, canonico, coopId) &&
-      f.mesReferencia === mesReferencia &&
-      f.status === "pago" &&
-      !cooperadoMesTemPagamentoRegistrado(data, cooperadoId, mesReferencia)
+    (f) => {
+      if (!fichaPertenceCooperadoSafe(data, f, canonico, coopId)) return false;
+      if (f.mesReferencia !== mesReferencia || f.status !== "pago") return false;
+      if (cooperadoMesTemPagamentoRegistrado(data, cooperadoId, mesReferencia)) return false;
+      const nota = (data.notasPedido ?? []).find((n) => n.id === f.notaPedidoId);
+      /** Nota quitada na operação — ficha paga não exige PIX duplicado na fila Pagar. */
+      if (nota?.status === "pago") return false;
+      return true;
+    }
   );
 }
 
@@ -178,6 +182,8 @@ export function repararIntegridadePagamentosCooperativa(data: AppData): AppData 
   const fichaCorrida = (data.fichaCorrida ?? []).map((f) => {
     if (f.status !== "pago") return f;
     if (cooperadoMesTemPagamentoRegistrado(data, f.cooperadoId, f.mesReferencia)) return f;
+    const nota = (data.notasPedido ?? []).find((n) => n.id === f.notaPedidoId);
+    if (nota?.status === "pago") return f;
     changed = true;
     return { ...f, status: "pendente" as const, updatedAt: now };
   });

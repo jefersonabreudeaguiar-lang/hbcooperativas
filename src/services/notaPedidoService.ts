@@ -1680,11 +1680,18 @@ function listarFichasBaseCalculoPagamento(
 
   const coopId = cooperativaId ?? data.cooperados.find((c) => c.id === cooperadoId)?.cooperativaId;
   const canonico = resolverCooperadoIdCanonico(data, cooperadoId, coopId);
+  const notaById = new Map((data.notasPedido ?? []).map((n) => [n.id, n]));
+  const fichaPagoSemRegistro = (f: FichaCorrida) => {
+    const nota = notaById.get(f.notaPedidoId);
+    if (nota?.status === "pago") return false;
+    return true;
+  };
   const temFantasma = data.fichaCorrida.some(
     (f) =>
       fichaPertenceCooperado(data, f, canonico, coopId) &&
       f.mesReferencia === mesReferencia &&
       f.status === "pago" &&
+      fichaPagoSemRegistro(f) &&
       !mesComPagamentoCooperativaRegistrado(data, cooperadoId, mesReferencia)
   );
   if (!temFantasma) return pendentes;
@@ -1694,6 +1701,7 @@ function listarFichasBaseCalculoPagamento(
       fichaPertenceCooperado(data, f, canonico, coopId) &&
       f.mesReferencia === mesReferencia &&
       f.status === "pago" &&
+      fichaPagoSemRegistro(f) &&
       fichaValidaNoExtrato(data, f)
   );
   return dedupeFichaCorridaPorNota(candidatas, data.notasPedido);
@@ -1776,7 +1784,10 @@ function statusFichaAposConferenciaNota(
   if (notaQuitadaPorPagamentoCooperativaRegistrado(data, nota, cooperadoId)) {
     return "pago";
   }
-  if (nota.status === "pago") return "pendente";
+  /** Nota quitada na operação — não manter “a receber” fantasma (ex.: Cleber vs Ivan na mesma divisão). */
+  if (nota.status === "pago") {
+    return "pago";
+  }
   return "pendente";
 }
 
