@@ -302,7 +302,8 @@ export function precisaAssinarContratoServico(coop: Cooperativa | undefined): bo
   return !contratoServicoAssinado(coop);
 }
 
-export function assinarContratoServicoSaas(
+/** Registra assinatura localmente — leve; ciclo de cobrança pode rodar depois (idle). */
+export function registrarAssinaturaContratoServicoSaas(
   data: AppData,
   cooperativaId: string,
   signatarioNome: string
@@ -317,8 +318,24 @@ export function assinarContratoServicoSaas(
     contratoServicoAssinadoPor: signatarioNome,
     contratoServicoVersao: CONTRATO_SERVICO_VERSAO,
   });
-  next = sincronizarCicloCobrancaSaas(next, cooperativaId);
-  return ensureCobrancaPeriodoAtualSaas(next, cooperativaId).data;
+  return sincronizarCicloCobrancaSaas(next, cooperativaId);
+}
+
+/** Conclui ciclo/cobrança do mês após assinatura (pode ser adiado para não travar a UI). */
+export function finalizarCobrancaAposAssinaturaContratoSaas(
+  data: AppData,
+  cooperativaId: string
+): AppData {
+  return ensureCobrancaPeriodoAtualSaas(data, cooperativaId).data;
+}
+
+export function assinarContratoServicoSaas(
+  data: AppData,
+  cooperativaId: string,
+  signatarioNome: string
+): AppData {
+  const next = registrarAssinaturaContratoServicoSaas(data, cooperativaId, signatarioNome);
+  return finalizarCobrancaAposAssinaturaContratoSaas(next, cooperativaId);
 }
 
 function lancamentoPeriodoAtual(cob: CobrancaSaasCooperativa, periodoId: string): CobrancaSaasLancamento | undefined {
