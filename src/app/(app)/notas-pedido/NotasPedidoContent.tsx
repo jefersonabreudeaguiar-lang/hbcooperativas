@@ -2614,26 +2614,17 @@ export default function NotasPedidoContent() {
     const notaAprovadaRef = selectedNota;
     const proxima = obterProximaNotaConferencia(chaveAtual, notaId);
 
-    enqueueConferenciaAprovacaoSync(notaId, async () => {
+    const syncNuvem = enqueueConferenciaAprovacaoSync(notaId, async () => {
       if (notaPatchSnapshot && coopId) {
         const cnpj = await resolveCooperativaCnpj(getData(), coopId, user);
         if (!cnpj) {
-          console.warn("[conferencia-aprovacao-sync]", notaId, "CNPJ não resolvido para sync.");
-          requestAppSyncLight();
-          return;
+          throw new Error("CNPJ da cooperativa não resolvido para sincronizar a conferência.");
         }
         const patched = await patchNotaPedidoInCloud(cnpj, notaPatchSnapshot);
         if (!patched.ok) {
-          console.warn(
-            "[conferencia-aprovacao-sync]",
-            notaId,
-            patched.error ?? "patch nota falhou"
+          throw new Error(
+            patched.error ?? "Entrega conferida aqui, mas não sincronizou com a nuvem. Verifique a conexão."
           );
-          setSuccessMsg(
-            patched.error ??
-              "Entrega lançada aqui, mas não sincronizou com a nuvem. Verifique a conexão."
-          );
-          return;
         }
         markConferenciaPatchSyncedForOperacionalPush(notaId);
         await withConferenciaOperacionalPushScope(coopId, getConferenciaPatchSyncedSnapshot(), async () => {
@@ -2646,6 +2637,7 @@ export default function NotasPedidoContent() {
 
     void (async () => {
       try {
+        await syncNuvem;
         if (proxima) {
           const mesmoGrupo = filaConferenciaRef.current?.chave === chaveAtual;
           if (filaConferenciaRef.current && mesmoGrupo) {
@@ -2671,8 +2663,13 @@ export default function NotasPedidoContent() {
           setTimeout(() => setLancadoMsg(""), 6000);
           requestAppSyncLight();
         }
-      } catch {
-        /* ignore */
+      } catch (e) {
+        const msg =
+          e instanceof Error
+            ? e.message
+            : "Não foi possível sincronizar a conferência com a nuvem.";
+        setSuccessMsg(msg);
+        requestAppSyncLight();
       } finally {
         lancandoRef.current = false;
       }
@@ -2680,7 +2677,7 @@ export default function NotasPedidoContent() {
   };
 
   const handleRejeitarNota = () => {
-    if (!user || !data || !selectedNota || !motivoRejeicao.trim()) return;
+    if (lancandoRef.current || !user || !data || !selectedNota || !motivoRejeicao.trim()) return;
     const now = new Date().toISOString();
     let notaAtualizada: NotaPedido | null = null;
 
@@ -2701,11 +2698,6 @@ export default function NotasPedidoContent() {
 
     removerNotaDaFilaSticky(selectedNota.id);
 
-    if (notaAtualizada && coopId && data) {
-      const cnpj = getCooperativaCnpj(data, coopId);
-      if (cnpj) void patchNotaPedidoInCloud(cnpj, notaAtualizada);
-    }
-
     const notaId = selectedNota.id;
     const dAtual = getData() ?? data;
     const chaveAtual = getChaveGrupoConferencia(selectedNota, dAtual, coopId);
@@ -2714,22 +2706,43 @@ export default function NotasPedidoContent() {
     setRejectModal(false);
     setMotivoRejeicao("");
 
-    if (proxima) {
-      const mesmoGrupo = filaConferenciaRef.current?.chave === chaveAtual;
-      if (filaConferenciaRef.current && mesmoGrupo) {
-        filaConferenciaRef.current.concluidas += 1;
-        setFilaConferenciaPos(filaConferenciaRef.current.concluidas + 1);
-      } else if (filaConferenciaRef.current) {
-        setFilaConferenciaPos(1);
+    lancandoRef.current = true;
+    void (async () => {
+      try {
+        if (notaAtualizada && coopId) {
+          const cnpj = await resolveCooperativaCnpj(getData() ?? data, coopId, user);
+          if (cnpj) {
+            const patched = await patchNotaPedidoInCloud(cnpj, notaAtualizada);
+            if (!patched.ok) {
+              throw new Error(patched.error ?? "Não foi possível enviar a rejeição para a nuvem.");
+            }
+          }
+        }
+        if (proxima) {
+          const mesmoGrupo = filaConferenciaRef.current?.chave === chaveAtual;
+          if (filaConferenciaRef.current && mesmoGrupo) {
+            filaConferenciaRef.current.concluidas += 1;
+            setFilaConferenciaPos(filaConferenciaRef.current.concluidas + 1);
+          } else if (filaConferenciaRef.current) {
+            setFilaConferenciaPos(1);
+          }
+          setLancadoMsg("Correção enviada ao cooperado. Abrindo a próxima entrega…");
+          setTimeout(() => setLancadoMsg(""), 4000);
+          await prepararConferenciaNota(proxima, { transicao: true });
+        } else {
+          fecharConferirModal();
+          setLancadoMsg("Correção enviada ao cooperado. Fila concluída!");
+          setTimeout(() => setLancadoMsg(""), 5000);
+        }
+      } catch (e) {
+        setSuccessMsg(
+          e instanceof Error ? e.message : "Falha ao sincronizar rejeição. Tente novamente ou verifique a conexão."
+        );
+        requestAppSyncLight();
+      } finally {
+        lancandoRef.current = false;
       }
-      setLancadoMsg("Correção enviada ao cooperado. Abrindo a próxima entrega…");
-      setTimeout(() => setLancadoMsg(""), 4000);
-      void prepararConferenciaNota(proxima, { transicao: true });
-    } else {
-      fecharConferirModal();
-      setLancadoMsg("Correção enviada ao cooperado. Fila concluída!");
-      setTimeout(() => setLancadoMsg(""), 5000);
-    }
+    })();
   };
 
   const executarExclusaoEntregaResponsavel = async (alvo: NotaPedido) => {

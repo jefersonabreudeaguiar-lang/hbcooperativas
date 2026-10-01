@@ -29,14 +29,18 @@ function logSyncFailure(notaId: string, err: unknown): void {
 }
 
 /**
- * Enfileira sync; retorna imediatamente. Execução: uma operação por vez, ordem FIFO.
+ * Enfileira sync (FIFO). Retorna promise da tarefa — UI só avança fila após resolver com sucesso.
  */
-export function enqueueConferenciaAprovacaoSync(notaId: string, task: ConferenciaAprovacaoSyncTask): void {
+export function enqueueConferenciaAprovacaoSync(
+  notaId: string,
+  task: ConferenciaAprovacaoSyncTask
+): Promise<void> {
   const run = tail.then(async () => {
     try {
       await task();
     } catch (err) {
       logSyncFailure(notaId, err);
+      throw err;
     }
   });
 
@@ -44,6 +48,7 @@ export function enqueueConferenciaAprovacaoSync(notaId: string, task: Conferenci
     () => undefined,
     () => undefined
   );
+  return run;
 }
 
 /** Somente testes — aguarda esvaziar a fila. */
