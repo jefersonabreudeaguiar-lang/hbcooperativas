@@ -8,6 +8,8 @@ import { isInlineDataUrl } from "@/utils/mediaHelpers";
 const BUCKET = "hb-entregas";
 export const FOTOS_STORAGE_PARTS = "parts";
 
+let entregasBucketReady: Promise<void> | null = null;
+
 function storagePath(cnpj: string, notaId: string): string {
   return `${cnpj}/${notaId}.json`;
 }
@@ -259,6 +261,12 @@ export async function uploadNotaFotoPartBuffer(
     return { ok: false, error: "Erro ao enviar foto para a nuvem." };
   }
 
+  // Meta JSON completo só na 1ª e na última foto — evita reupload pesado a cada foto intermediária.
+  const writeMetaJson = index === 0 || index >= totalCount - 1;
+  if (!writeMetaJson) {
+    return { ok: true };
+  }
+
   const { error: metaErr } = await supabase.storage
     .from(BUCKET)
     .upload(storagePath(cnpj, nota.id), JSON.stringify(metaPayload), {
@@ -286,9 +294,17 @@ async function removeNotaFotoParts(
 }
 
 export async function ensureEntregasBucket(supabase: SupabaseClient): Promise<void> {
-  const { data: buckets } = await supabase.storage.listBuckets();
-  if (buckets?.some((b) => b.name === BUCKET)) return;
-  await supabase.storage.createBucket(BUCKET, { public: false, fileSizeLimit: 50 * 1024 * 1024 });
+  if (!entregasBucketReady) {
+    entregasBucketReady = (async () => {
+      const { data: buckets } = await supabase.storage.listBuckets();
+      if (buckets?.some((b) => b.name === BUCKET)) return;
+      await supabase.storage.createBucket(BUCKET, { public: false, fileSizeLimit: 50 * 1024 * 1024 });
+    })().catch((err) => {
+      entregasBucketReady = null;
+      throw err;
+    });
+  }
+  await entregasBucketReady;
 }
 
 /** Metadados na tabela SQL — fotos completas ficam no storage JSON. */

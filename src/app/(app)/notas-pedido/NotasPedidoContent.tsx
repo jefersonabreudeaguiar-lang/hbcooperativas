@@ -330,7 +330,10 @@ export default function NotasPedidoContent() {
   const anexarParamHandledRef = useRef(false);
   const fotoProcessandoRef = useRef(false);
   const fotoAbortRef = useRef<AbortController | null>(null);
-  const uploadFilaRef = useRef(Promise.resolve());
+  const uploadPendingRef = useRef<Set<Promise<void>>>(new Set());
+  const uploadSlotsActiveRef = useRef(0);
+  const uploadSlotWaitersRef = useRef<Array<() => void>>([]);
+  const fotoAppSyncTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastFotoFileRef = useRef<File | null>(null);
   const lancandoRef = useRef(false);
   const filaConferenciaRef = useRef<{ total: number; concluidas: number; chave: string } | null>(null);
@@ -1582,10 +1585,51 @@ export default function NotasPedidoContent() {
     }
   };
 
-  const aguardarFilaUpload = () => uploadFilaRef.current;
+  const aguardarFilaUpload = () => {
+    const pending = [...uploadPendingRef.current];
+    return pending.length ? Promise.all(pending).then(() => undefined) : Promise.resolve();
+  };
+
+  const FOTO_UPLOAD_CONCORRENCIA = 2;
+
+  const acquireUploadSlot = async () => {
+    if (uploadSlotsActiveRef.current < FOTO_UPLOAD_CONCORRENCIA) {
+      uploadSlotsActiveRef.current += 1;
+      return;
+    }
+    await new Promise<void>((resolve) => {
+      uploadSlotWaitersRef.current.push(resolve);
+    });
+    uploadSlotsActiveRef.current += 1;
+  };
+
+  const releaseUploadSlot = () => {
+    uploadSlotsActiveRef.current = Math.max(0, uploadSlotsActiveRef.current - 1);
+    const next = uploadSlotWaitersRef.current.shift();
+    if (next) next();
+  };
+
+  const scheduleFotoAppSync = () => {
+    if (fotoAppSyncTimerRef.current) clearTimeout(fotoAppSyncTimerRef.current);
+    fotoAppSyncTimerRef.current = setTimeout(() => {
+      fotoAppSyncTimerRef.current = null;
+      requestAppSync();
+    }, 600);
+  };
 
   const enfileirarUploadFoto = (job: () => Promise<void>) => {
-    uploadFilaRef.current = uploadFilaRef.current.then(job).catch(() => {});
+    const task = (async () => {
+      await acquireUploadSlot();
+      try {
+        await job();
+      } finally {
+        releaseUploadSlot();
+      }
+    })();
+    uploadPendingRef.current.add(task);
+    task.finally(() => {
+      uploadPendingRef.current.delete(task);
+    });
   };
 
   const processarFotoArquivo = async (file: File) => {
@@ -1775,7 +1819,7 @@ export default function NotasPedidoContent() {
           }
 
           setFotosNaNuvemCount(await countFotosUploadedDraft(draftKey));
-          requestAppSync();
+          scheduleFotoAppSync();
         } catch {
           setErroEnvio("Falha ao enviar foto em segundo plano. Toque em tentar novamente.");
         }
