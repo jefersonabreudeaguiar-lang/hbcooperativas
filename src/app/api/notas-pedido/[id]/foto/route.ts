@@ -222,7 +222,9 @@ async function processFotoUpload(id: string, input: FotoUploadInput) {
     return NextResponse.json({ error: uploaded.error }, { status: 500 });
   }
 
-  if (index > 0) {
+  // Alinha com meta JSON no storage (1ª/última foto): fotos intermediárias só sobem o .jpg.
+  const patchTableAfterUpload = index > 0 && index >= totalCount - 1;
+  if (patchTableAfterUpload) {
     const { error } = await supabase
       .from("notas_pedido")
       .update({

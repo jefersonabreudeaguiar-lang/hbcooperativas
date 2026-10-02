@@ -1613,7 +1613,8 @@ export default function NotasPedidoContent() {
     if (fotoAppSyncTimerRef.current) clearTimeout(fotoAppSyncTimerRef.current);
     fotoAppSyncTimerRef.current = setTimeout(() => {
       fotoAppSyncTimerRef.current = null;
-      requestAppSync();
+      // Sync leve após cada foto — evita runSync forçada competindo com uploads em paralelo.
+      requestAppSyncLight();
     }, 600);
   };
 
