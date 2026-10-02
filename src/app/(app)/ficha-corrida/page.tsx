@@ -17,6 +17,7 @@ import {
   getPagamentoAguardandoCooperado,
   getMensalidadeFixaMes,
   getStatusCotaCooperado,
+  setCotaIngressoCooperado,
   getArquivoMensalCooperado,
   upsertArquivoMensal,
   getAjustesCompartilhadosFichaMes,
@@ -526,21 +527,47 @@ export default function FichaCorridaPage() {
     [user, isCooperado, pushOperacional]
   );
 
-  const toggleCotaPaga = () => {
+  const confirmarCotaIngressoPaga = useCallback(() => {
     if (!user || !cooperadoSelecionadoId || !coopId || isCooperado) return;
-    const novo = !arquivoMes?.cotaIngressoPaga;
-    updateData((d) => ({
-      ...d,
-      arquivosMensais: upsertArquivoMensal(d, cooperadoSelecionadoId, coopId, mesAtivo, {
-        cotaIngressoPaga: novo,
-      }),
-    }));
+    if (!check("ficha_corrida", "edit")) return;
+    if (getStatusCotaCooperado(getData(), cooperadoSelecionadoId, mesAtivo) === "paga") return;
+
+    const next = updateData((d) =>
+      addAuditEntry(setCotaIngressoCooperado(d, cooperadoSelecionadoId, coopId, mesAtivo, true), {
+        entityType: "cooperado",
+        entityId: cooperadoSelecionadoId,
+        action: "editar",
+        userId: user.id,
+        userName: user.name,
+        changes: `Cota de ingresso · ${formatMesReferencia(mesAtivo)} · paga`,
+      })
+    );
+
     void (async () => {
-      const d = getData();
-      const cnpj = await resolveCooperativaCnpj(d, coopId, user);
-      if (cnpj) await pushOperacionalToCloud(cnpj, d, coopId, { authoritative: true });
+      const cnpj = await resolveCooperativaCnpj(next, coopId, user);
+      if (cnpj) await pushOperacionalToCloud(cnpj, next, coopId, { authoritative: true });
     })();
-  };
+  }, [user, cooperadoSelecionadoId, coopId, isCooperado, mesAtivo, check]);
+
+  const blocoCotaIngressoResponsavel =
+    !isCooperado && cooperadoSelecionadoId && check("ficha_corrida", "edit") ? (
+      <div className="flex flex-wrap items-center gap-3 mb-4">
+        {statusCota === "paga" ? (
+          <span className="inline-flex items-center gap-1 text-sm font-medium text-green-700 bg-green-50 px-3 py-1 rounded-full">
+            <CheckCircle2 size={14} /> Cota paga · {formatMesReferencia(mesAtivo)}
+          </span>
+        ) : (
+          <>
+            <span className="inline-flex items-center gap-1 text-sm font-bold text-red-600 bg-red-50 px-3 py-1 rounded-full border border-red-200">
+              Cota não paga · {formatMesReferencia(mesAtivo)}
+            </span>
+            <Button size="sm" variant="secondary" onClick={confirmarCotaIngressoPaga}>
+              Confirmar cota paga
+            </Button>
+          </>
+        )}
+      </div>
+    ) : null;
 
   const resumoItensMes = useMemo(() => {
     if (!data || !cooperadoSelecionadoId) return { itens: [], entregas: 0, valorBruto: 0 };
@@ -1498,6 +1525,8 @@ export default function FichaCorridaPage() {
             <PagarStepper currentStep={pagarStep} />
           )}
 
+          {aba === "pagar" && blocoCotaIngressoResponsavel}
+
           {pagamentosAguardandoAssinatura.length > 0 && (
             <Card
               title={`Falta assinar (${pagamentosAguardandoAssinatura.length})`}
@@ -1703,22 +1732,21 @@ export default function FichaCorridaPage() {
             }
             className="mb-6"
           >
-            <div className="flex flex-wrap items-center gap-3 mb-4">
-              {statusCota === "paga" ? (
-                <span className="inline-flex items-center gap-1 text-sm font-medium text-green-700 bg-green-50 px-3 py-1 rounded-full">
-                  <CheckCircle2 size={14} /> Cota paga
-                </span>
-              ) : (
-                <span className="inline-flex items-center gap-1 text-sm font-bold text-red-600 bg-red-50 px-3 py-1 rounded-full border border-red-200">
-                  Cota não paga
-                </span>
-              )}
-              {!isCooperado && check("ficha_corrida", "edit") && statusCota !== "paga" && (
-                <Button size="sm" variant="secondary" onClick={toggleCotaPaga}>
-                  Confirmar cota paga
-                </Button>
-              )}
-            </div>
+            {isCooperado ? (
+              <div className="flex flex-wrap items-center gap-3 mb-4">
+                {statusCota === "paga" ? (
+                  <span className="inline-flex items-center gap-1 text-sm font-medium text-green-700 bg-green-50 px-3 py-1 rounded-full">
+                    <CheckCircle2 size={14} /> Cota paga
+                  </span>
+                ) : (
+                  <span className="inline-flex items-center gap-1 text-sm font-bold text-red-600 bg-red-50 px-3 py-1 rounded-full border border-red-200">
+                    Cota não paga
+                  </span>
+                )}
+              </div>
+            ) : (
+              blocoCotaIngressoResponsavel
+            )}
 
             {isCooperado && resumoExibicao && visualizandoHistorico && (
               <ResumoDescontosMes

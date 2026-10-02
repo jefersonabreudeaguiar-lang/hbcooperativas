@@ -170,9 +170,9 @@ export default function CooperadosPage() {
 
   const handleCota = (c: Cooperado, paga: boolean) => {
     if (!user) return;
-    updateData((d) => {
-      const next = setCotaIngressoCooperado(d, c.id, c.cooperativaId, mesAtual, paga);
-      return addAuditEntry(next, {
+    const next = updateData((d) => {
+      const updated = setCotaIngressoCooperado(d, c.id, c.cooperativaId, mesAtual, paga);
+      return addAuditEntry(updated, {
         entityType: "cooperado",
         entityId: c.id,
         action: "editar",
@@ -182,9 +182,8 @@ export default function CooperadosPage() {
       });
     });
     void (async () => {
-      const d = getData();
-      const cnpj = await resolveCooperativaCnpj(d, c.cooperativaId, user);
-      if (cnpj) await pushOperacionalToCloud(cnpj, d, c.cooperativaId, { authoritative: true });
+      const cnpj = await resolveCooperativaCnpj(next, c.cooperativaId, user);
+      if (cnpj) await pushOperacionalToCloud(cnpj, next, c.cooperativaId, { authoritative: true });
     })();
   };
 

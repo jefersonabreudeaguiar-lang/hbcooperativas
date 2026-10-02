@@ -5,6 +5,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Wallet } from "lucide-react";
 import { usePermissions } from "@/hooks/usePermissions";
 import { formatCentsBRL } from "@/modules/hb-credit/engine/money";
+import { hbCreditEffectiveDisponivelCents } from "@/modules/hb-credit/engine/paymentAffordability";
 import {
   lerHbCreditAccountPersistidoFlex,
   type HbCreditAccountPersistido,
@@ -15,6 +16,12 @@ import {
 } from "@/lib/hb-credit/hbCreditLimiteSyncEvents";
 import { useAuth } from "@/modules/auth/AuthProvider";
 import { persistirHbCreditAccountCooperado } from "@/services/hbCreditAccountPersistenciaService";
+import { fetchCreditAccount } from "@/services/creditApiService";
+import {
+  gravarHbCreditAccountPersistido,
+  HB_CREDIT_ACCOUNT_STORAGE_VERSION,
+} from "@/lib/hb-credit/hbCreditAccountPersistencia";
+import type { ContaCoopLimiteCooperado } from "@/modules/hb-credit/types";
 
 type Props = {
   cnpj: string;
@@ -32,10 +39,37 @@ export function CooperadoHbCreditResumoCard({ cnpj }: Props) {
     }
     const refreshFromCache = () => setSnap(lerHbCreditAccountPersistidoFlex(cooperadoId, cnpj));
     refreshFromCache();
+
+    const syncFromCloud = async () => {
+      if (user?.role === "cooperado") {
+        await persistirHbCreditAccountCooperado(user);
+        refreshFromCache();
+        return;
+      }
+      try {
+        const acc = await fetchCreditAccount(cnpj, cooperadoId);
+        const account = (acc.account as ContaCoopLimiteCooperado | null) ?? null;
+        const payload: HbCreditAccountPersistido = {
+          v: HB_CREDIT_ACCOUNT_STORAGE_VERSION,
+          account,
+          updatedAt: acc.updatedAt ?? null,
+          hasPin: Boolean(acc.hasPin),
+          pinResetPending: Boolean(acc.pinResetPending),
+          savedAt: new Date().toISOString(),
+        };
+        gravarHbCreditAccountPersistido(cnpj, cooperadoId, payload);
+        setSnap(payload);
+      } catch {
+        refreshFromCache();
+      }
+    };
+
+    void syncFromCloud();
+
     const onCache = () => refreshFromCache();
     const onCloud = () => {
       refreshFromCache();
-      if (user?.role === "cooperado") void persistirHbCreditAccountCooperado(user);
+      void syncFromCloud();
     };
     window.addEventListener(HB_CREDIT_ACCOUNT_CACHE_EVENT, onCache);
     window.addEventListener(HB_CREDIT_LIMITE_SYNCED_EVENT, onCloud);
@@ -48,14 +82,18 @@ export function CooperadoHbCreditResumoCard({ cnpj }: Props) {
   const totals = useMemo(() => {
     const acc = snap?.account;
     if (!acc) return null;
-    const credito = acc.valorDisponivelCents ?? 0;
+    const liberado = Math.max(0, acc.limiteLiberadoCents ?? 0);
+    const usado = Math.max(0, acc.valorUsadoCents ?? 0);
+    const creditoEfetivo = hbCreditEffectiveDisponivelCents(liberado, liberado, usado);
+    const creditoInformado = Math.max(0, acc.valorDisponivelCents ?? 0);
+    const credito = Math.min(creditoInformado, creditoEfetivo);
     const cashback = acc.cashbackDisponivelCents ?? 0;
     return {
       paraPagar: credito + cashback,
       credito,
       cashback,
-      limite: acc.limiteLiberadoCents ?? 0,
-      usado: acc.valorUsadoCents ?? 0,
+      limite: liberado,
+      usado,
     };
   }, [snap]);
 
