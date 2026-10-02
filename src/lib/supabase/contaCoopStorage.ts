@@ -1685,9 +1685,29 @@ export async function ensureHbCreditLimiteAutoritativoPersistido(
   if (!found) return { ok: true };
 
   const syncState = String(found.row.financial_limit_sync_state ?? "SYNCED");
+  const accountCooperadoId = found.accountCooperadoId;
+  const snapshotOk = hbCreditAccountRowSnapshotCoherent(found.row);
+
+  /** Pagamento: não bloquear em M6 quando a conta já está coerente na nuvem. */
+  if (syncState === "SYNCED" && snapshotOk) {
+    void reconcileCooperadosAmountUsedCentsBatch(supabase, digits, [accountCooperadoId]).catch(() => {});
+    return { ok: true };
+  }
+
+  if (syncState !== "SYNCED" && snapshotOk) {
+    const markOnly = await markHbCreditLimitSynced(supabase, {
+      cnpj: digits,
+      cooperadoId: accountCooperadoId,
+      actorUserId,
+    });
+    if (markOnly.ok) {
+      void reconcileCooperadosAmountUsedCentsBatch(supabase, digits, [accountCooperadoId]).catch(() => {});
+      return { ok: true };
+    }
+  }
+
   const cooperados = await fetchCooperadosFromStorage(supabase, digits).catch(() => []);
   const titularIds = cooperados.length ? titularCooperadoIds(cooperados, cooperadoId) : [cooperadoId];
-  const accountCooperadoId = found.accountCooperadoId;
 
   await reconcileCooperadosAmountUsedCentsBatch(supabase, digits, titularIds).catch(() => {});
 
@@ -1723,7 +1743,6 @@ export async function ensureHbCreditLimiteAutoritativoPersistido(
   );
 
   const inflated = limite.limiteLiberadoCents > capped.limiteLiberadoCents;
-  const snapshotOk = hbCreditAccountRowSnapshotCoherent(found.row);
   if (syncState === "SYNCED" && !inflated && snapshotOk) {
     return { ok: true };
   }
@@ -2674,38 +2693,27 @@ export async function authorizePayment(
     }
   | { ok: false; error: string; code?: string }
 > {
-  const pinCheck = await verifyFinancialPin(
-    supabase,
-    input.cooperativaCnpj,
-    input.cooperadoId,
-    input.pin,
-    input.actorUserId
-  );
+  const [pinCheck, intentCheck, accountFound] = await Promise.all([
+    verifyFinancialPin(
+      supabase,
+      input.cooperativaCnpj,
+      input.cooperadoId,
+      input.pin,
+      input.actorUserId
+    ),
+    validateIntentForCooperado(
+      supabase,
+      input.intentId,
+      input.nonce,
+      input.cooperadoId,
+      input.cooperativaCnpj,
+      { useCashback: Boolean(input.useCashback), forAuthorize: true, fast: true }
+    ),
+    fetchHbCreditAccountRowForCooperado(supabase, input.cooperativaCnpj, input.cooperadoId),
+  ]);
+
   if (!pinCheck.ok) return { ok: false, error: pinCheck.error };
-
-  const reserve = await reservePaymentIntentForCooperado(
-    supabase,
-    input.intentId,
-    input.cooperadoId,
-    input.cooperativaCnpj
-  );
-  if (!reserve.ok) return { ok: false, error: reserve.error };
-
-  const intentCheck = await validateIntentForCooperado(
-    supabase,
-    input.intentId,
-    input.nonce,
-    input.cooperadoId,
-    input.cooperativaCnpj,
-    { useCashback: Boolean(input.useCashback), forAuthorize: true, fast: true }
-  );
   if (!intentCheck.ok) return { ok: false, error: intentCheck.error };
-
-  const accountFound = await fetchHbCreditAccountRowForCooperado(
-    supabase,
-    input.cooperativaCnpj,
-    input.cooperadoId
-  );
   if (!accountFound) {
     return { ok: false, error: "Cooperado sem limite Conta Coop." };
   }

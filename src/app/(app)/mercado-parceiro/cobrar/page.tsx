@@ -135,13 +135,13 @@ function MercadoCobrarQrContent() {
     };
 
     void verificar(false);
-    const fastTicks = [150, 300, 500, 800];
+    const fastTicks = [80, 160, 280, 450, 700];
     const fastTimers = fastTicks.map((ms) =>
       window.setTimeout(() => {
         if (!cancelled) void verificar(false);
       }, ms)
     );
-    const timer = window.setInterval(() => void verificar(false), 350);
+    const timer = window.setInterval(() => void verificar(false), 250);
     return () => {
       cancelled = true;
       fastTimers.forEach((t) => window.clearTimeout(t));

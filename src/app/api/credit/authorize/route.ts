@@ -5,6 +5,9 @@ import { requireCreditApi, requireCreditCnpj, resolveCreditPaymentCooperadoId } 
 import { normalizeCnpj } from "@/utils/cooperativa";
 import { FINANCIAL_PIN_MIN_LENGTH } from "@/modules/hb-credit/config";
 
+/** Autorização HB — RPC + PIN; precisa de folga acima do default serverless em sync pesado. */
+export const maxDuration = 60;
+
 export async function POST(request: Request) {
   const gate = await requireCreditApi(request, { requireOperations: true });
   if (!gate.ok) return gate.response;

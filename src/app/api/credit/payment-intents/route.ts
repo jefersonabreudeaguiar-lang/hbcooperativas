@@ -5,6 +5,7 @@ import {
   createPaymentIntent,
   getPartnerPaymentIntentStatus,
   parseQrPayload,
+  prepareHbCreditPaymentAuthorize,
   validateIntentForCooperado,
 } from "@/lib/supabase/contaCoopStorage";
 import {
@@ -77,6 +78,14 @@ export async function POST(request: Request) {
 
     const resolved = resolveCreditPaymentCooperadoId(gate.ctx, request, cooperadoId);
     if ("response" in resolved) return resolved.response;
+
+    const actorId = gate.ctx.session?.sub ?? resolved.cooperadoId;
+    void prepareHbCreditPaymentAuthorize(
+      gate.ctx.supabase,
+      cnpj,
+      resolved.cooperadoId,
+      actorId
+    ).catch(() => {});
 
     const result = await validateIntentForCooperado(
       gate.ctx.supabase,

@@ -38,7 +38,6 @@ export function kickHbCreditQrValidation(opts: QrValidateOpts): Promise<HbCredit
       clearHbCreditPendingQrScan();
       return draft;
     })
-    .catch(() => null)
     .finally(() => {
       if (inflightValidate?.key === key) inflightValidate = null;
     });

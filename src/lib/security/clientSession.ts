@@ -407,6 +407,9 @@ export function mensagemErroAuthApi(status: number, error?: string): string {
   if (status === 403) {
     return "Sem permissão para esta cooperativa. Verifique o login ou fale com a diretoria.";
   }
+  if (status === 504 || status === 502) {
+    return "O servidor demorou para responder. Se o PIN estava correto, aguarde alguns segundos e confira o extrato antes de tentar de novo.";
+  }
   return error ?? "Erro ao comunicar com o servidor.";
 }
 

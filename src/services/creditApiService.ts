@@ -341,11 +341,21 @@ export async function authorizeCreditPayment(input: {
   idempotencyKey: string;
   useCashback?: boolean;
 }): Promise<AuthorizeCreditPaymentResult> {
-  const res = await secureApiFetch("/api/credit/authorize", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(input),
-  });
+  const body = JSON.stringify(input);
+  const postAuthorize = () =>
+    secureApiFetch("/api/credit/authorize", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body,
+    });
+
+  let res: Response;
+  try {
+    res = await postAuthorize();
+  } catch {
+    await sleepMs(400);
+    res = await postAuthorize();
+  }
   const data = await parseJson<
     AuthorizeCreditPaymentResult & { ok?: boolean; error?: string }
   >(res);
