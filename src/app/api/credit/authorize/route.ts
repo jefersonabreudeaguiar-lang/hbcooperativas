@@ -40,7 +40,10 @@ export async function POST(request: Request) {
   cooperadoId = resolved.cooperadoId;
 
   const actorId = gate.ctx.session?.sub ?? cooperadoId;
-  void prepareHbCreditPaymentAuthorize(gate.ctx.supabase, cnpj, cooperadoId, actorId);
+  const prepare = await prepareHbCreditPaymentAuthorize(gate.ctx.supabase, cnpj, cooperadoId, actorId);
+  if (!prepare.ok) {
+    return NextResponse.json({ error: prepare.error, code: prepare.code ?? "HB_LIMIT_PREPARE_FAILED" }, { status: 503 });
+  }
 
   const result = await authorizePayment(gate.ctx.supabase, {
     intentId,

@@ -28,7 +28,12 @@ import type {
   SettlementStatus,
   IntentStatus,
 } from "@/modules/hb-credit/types";
-import { mapAuthorizeRpcError, markHbCreditLimitSynced } from "@/modules/hb-credit/engine/hbCreditLimitSyncState";
+import {
+  mapAuthorizeRpcError,
+  markHbCreditLimitStale,
+  markHbCreditLimitSynced,
+} from "@/modules/hb-credit/engine/hbCreditLimitSyncState";
+import { validateHbFinancialLimitRow } from "@/modules/hb-credit/engine/hbCreditFinancialLimitInvariants";
 import { computeDisponivel, formatCentsBRL } from "@/modules/hb-credit/engine/money";
 import { calcLimiteFromPercentual, calcTetoGlobalCents, sumCreditosBaseCents } from "@/modules/hb-credit/engine/creditBaseFromFicha";
 import type { AuthoritativeCreditBaseErrorPayload } from "@/modules/hb-credit/engine/creditBaseAuthoritative";
@@ -825,22 +830,38 @@ async function persistLimiteReleasedAfterCreditoBaseZero(
   const anterior = existing ? Number(existing.limit_released_cents) : 0;
   const now = new Date().toISOString();
 
-  const { data, error } = await supabase
+  const upsertPayload: Record<string, unknown> = {
+    cooperative_cnpj: digits,
+    cooperado_id: cooperadoId,
+    limit_released_cents: alvo,
+    financial_limit_cap_cents: alvo,
+    financial_limit_base_cents: 0,
+    financial_limit_ceiling_cents: alvo,
+    amount_used_cents: usado,
+    status: existing?.status ?? "active",
+    updated_at: now,
+    updated_by: actorUserId,
+  };
+
+  let { data, error } = await supabase
     .from("hb_credit_accounts")
-    .upsert(
-      {
-        cooperative_cnpj: digits,
-        cooperado_id: cooperadoId,
-        limit_released_cents: alvo,
-        amount_used_cents: usado,
-        status: existing?.status ?? "active",
-        updated_at: now,
-        updated_by: actorUserId,
-      },
-      { onConflict: "cooperative_cnpj,cooperado_id" }
-    )
+    .upsert(upsertPayload, { onConflict: "cooperative_cnpj,cooperado_id" })
     .select()
     .single();
+
+  if (error && /financial_limit_(base|ceiling|cap)_cents/i.test(error.message ?? "")) {
+    const {
+      financial_limit_base_cents: _b,
+      financial_limit_ceiling_cents: _c,
+      financial_limit_cap_cents: _cap,
+      ...legacyPayload
+    } = upsertPayload;
+    ({ data, error } = await supabase
+      .from("hb_credit_accounts")
+      .upsert(legacyPayload, { onConflict: "cooperative_cnpj,cooperado_id" })
+      .select()
+      .single());
+  }
 
   if (error) return { ok: false, error: error.message };
 
@@ -852,11 +873,9 @@ async function persistLimiteReleasedAfterCreditoBaseZero(
     resource_id: cooperadoId,
     metadata: {
       anterior: { limiteLiberadoCents: anterior, valorUsadoCents: usado },
-      novo: { limiteLiberadoCents: alvo },
+      novo: { limiteLiberadoCents: alvo, baseSnapshotCents: 0, ceilingSnapshotCents: alvo },
     },
   });
-
-  await markHbCreditLimitSyncedBestEffort(supabase, cnpj, cooperadoId, actorUserId);
 
   return { ok: true, limite: mapLimiteRow(data as Record<string, unknown>) };
 }
@@ -922,9 +941,108 @@ async function writeLimiteCooperadoCents(
     metadata: auditMetadata,
   });
 
-  await markHbCreditLimitSyncedBestEffort(supabase, cnpj, cooperadoId, actorUserId);
+  await markHbCreditLimitStale(supabase, {
+    cnpj,
+    cooperadoId,
+    actorUserId,
+    reason: "manual_limit_write_without_authoritative_snapshot",
+  }).catch(() => {});
 
   return { ok: true, limite: mapLimiteRow(data as Record<string, unknown>) };
+}
+
+/** Sync autoritativo: persiste L + snapshot B/teto sem promover SYNCED (caller valida via RPC). */
+async function writeLimiteCooperadoAuthoritativeSync(
+  supabase: SupabaseClient,
+  cnpj: string,
+  cooperadoId: string,
+  opts: {
+    limitReleasedCents: number;
+    baseSnapshotCents: number;
+    ceilingSnapshotCents: number;
+    actorUserId: string;
+    auditMetadata: Record<string, unknown>;
+  }
+): Promise<{ ok: true; limite: ContaCoopLimiteCooperado } | { ok: false; error: string }> {
+  const digits = normalizeCnpj(cnpj);
+  const novoLimiteCents = Math.max(0, Math.round(opts.limitReleasedCents));
+  const baseSnapshot = Math.max(0, Math.round(opts.baseSnapshotCents));
+  const ceilingSnapshot = Math.max(0, Math.round(opts.ceilingSnapshotCents));
+
+  const { data: existing } = await supabase
+    .from("hb_credit_accounts")
+    .select("*")
+    .eq("cooperative_cnpj", digits)
+    .eq("cooperado_id", cooperadoId)
+    .maybeSingle();
+
+  const usado = existing ? Number(existing.amount_used_cents) : 0;
+  if (novoLimiteCents < usado) {
+    return { ok: false, error: "Novo limite não pode ser menor que o valor já usado." };
+  }
+
+  const now = new Date().toISOString();
+  const upsertPayload: Record<string, unknown> = {
+    cooperative_cnpj: digits,
+    cooperado_id: cooperadoId,
+    limit_released_cents: novoLimiteCents,
+    financial_limit_cap_cents: novoLimiteCents,
+    financial_limit_base_cents: baseSnapshot,
+    financial_limit_ceiling_cents: ceilingSnapshot,
+    amount_used_cents: usado,
+    status: existing?.status ?? "active",
+    updated_at: now,
+    updated_by: opts.actorUserId,
+  };
+
+  let { data, error } = await supabase
+    .from("hb_credit_accounts")
+    .upsert(upsertPayload, { onConflict: "cooperative_cnpj,cooperado_id" })
+    .select()
+    .single();
+
+  if (error && /financial_limit_(base|ceiling|cap)_cents/i.test(error.message ?? "")) {
+    const {
+      financial_limit_base_cents: _b,
+      financial_limit_ceiling_cents: _c,
+      financial_limit_cap_cents: _cap,
+      ...legacyPayload
+    } = upsertPayload;
+    ({ data, error } = await supabase
+      .from("hb_credit_accounts")
+      .upsert(legacyPayload, { onConflict: "cooperative_cnpj,cooperado_id" })
+      .select()
+      .single());
+  }
+
+  if (error) return { ok: false, error: error.message };
+
+  await supabase.from("hb_credit_audit_log").insert({
+    cooperative_cnpj: digits,
+    actor: opts.actorUserId,
+    action: "LIMIT_AUTHORITATIVE_SYNC",
+    resource_type: "account",
+    resource_id: cooperadoId,
+    metadata: opts.auditMetadata,
+  });
+
+  return { ok: true, limite: mapLimiteRow(data as Record<string, unknown>) };
+}
+
+function hbCreditAccountRowSnapshotCoherent(row: Record<string, unknown>): boolean {
+  const capRaw = row.financial_limit_cap_cents;
+  const cap = capRaw == null || capRaw === "" ? null : Number(capRaw);
+  const baseRaw = row.financial_limit_base_cents;
+  const base = baseRaw == null || baseRaw === "" ? null : Number(baseRaw);
+  const ceilingRaw = row.financial_limit_ceiling_cents;
+  const ceiling = ceilingRaw == null || ceilingRaw === "" ? null : Number(ceilingRaw);
+  return validateHbFinancialLimitRow({
+    limitReleasedCents: Number(row.limit_released_cents ?? 0),
+    capCents: cap,
+    amountUsedCents: Number(row.amount_used_cents ?? 0),
+    baseSnapshotCents: base,
+    ceilingSnapshotCents: ceiling,
+  }).ok;
 }
 
 export async function setLimiteCooperado(
@@ -1038,6 +1156,7 @@ export async function syncLimiteCooperadoFromCreditoBase(
 > {
   const base = Math.max(0, Math.round(Number(creditoBaseCents) || 0));
   if (base === 0) {
+    const foundRow = await fetchHbCreditAccountRowForCooperado(supabase, cnpj, cooperadoId);
     const atual = await getLimiteCooperado(supabase, cnpj, cooperadoId);
     if (!atual) {
       const digits = normalizeCnpj(cnpj);
@@ -1060,7 +1179,9 @@ export async function syncLimiteCooperadoFromCreditoBase(
       };
     }
     const alvoCents = Math.max(0, atual.valorUsadoCents);
-    if (atual.limiteLiberadoCents === alvoCents) {
+    const snapshotOk = foundRow ? hbCreditAccountRowSnapshotCoherent(foundRow.row) : false;
+    const limitAlreadyAligned = atual.limiteLiberadoCents === alvoCents;
+    if (limitAlreadyAligned && snapshotOk) {
       return {
         ok: true,
         limite: {
@@ -1078,7 +1199,7 @@ export async function syncLimiteCooperadoFromCreditoBase(
       actorUserId
     );
     if (!tightened.ok) return tightened;
-    return { ...tightened, action: "tightened" as const };
+    return { ...tightened, action: limitAlreadyAligned ? ("unchanged" as const) : ("tightened" as const) };
   }
 
   const teto = await requireConfiguredTeto(supabase, cnpj, creditosBaseCents);
@@ -1097,14 +1218,26 @@ export async function syncLimiteCooperadoFromCreditoBase(
     novoLimiteCents = valorUsadoCents;
   }
 
-  const synced = await setLimiteCooperado(
+  const preview = await previewLimiteAlteracao(
     supabase,
     cnpj,
     cooperadoId,
     novoLimiteCents,
-    actorUserId,
     creditosBaseCents
   );
+  if (!preview.ok) return { ok: false, error: preview.error! };
+
+  const synced = await writeLimiteCooperadoAuthoritativeSync(supabase, cnpj, cooperadoId, {
+    limitReleasedCents: novoLimiteCents,
+    baseSnapshotCents: base,
+    ceilingSnapshotCents: tetoMaxCents,
+    actorUserId,
+    auditMetadata: {
+      anterior: preview.atual,
+      novo: { limiteLiberadoCents: novoLimiteCents, baseSnapshotCents: base, ceilingSnapshotCents: tetoMaxCents },
+      creditoBaseCents: base,
+    },
+  });
   if (!synced.ok) return synced;
   return { ...synced, action: "synced" as const };
 }
@@ -1491,14 +1624,9 @@ export async function getHbCreditLimitesRevision(
   return { revision: parts.join(";"), accountCount: data.length };
 }
 
-async function markHbCreditLimitSyncedBestEffort(
-  supabase: SupabaseClient,
-  cnpj: string,
-  cooperadoId: string,
-  actorUserId: string
-): Promise<void> {
-  await markHbCreditLimitSynced(supabase, { cnpj, cooperadoId, actorUserId }).catch(() => {});
-}
+export type HbCreditPrepareAuthorizeResult =
+  | { ok: true }
+  | { ok: false; error: string; code?: string };
 
 export async function getLimiteCooperado(
   supabase: SupabaseClient,
@@ -1551,10 +1679,10 @@ export async function ensureHbCreditLimiteAutoritativoPersistido(
   cnpj: string,
   cooperadoId: string,
   actorUserId: string
-): Promise<void> {
+): Promise<HbCreditPrepareAuthorizeResult> {
   const digits = normalizeCnpj(cnpj);
   const found = await fetchHbCreditAccountRowForCooperado(supabase, cnpj, cooperadoId);
-  if (!found) return;
+  if (!found) return { ok: true };
 
   const syncState = String(found.row.financial_limit_sync_state ?? "SYNCED");
   const cooperados = await fetchCooperadosFromStorage(supabase, digits).catch(() => []);
@@ -1566,11 +1694,11 @@ export async function ensureHbCreditLimiteAutoritativoPersistido(
   const limite = await getLimiteCooperado(supabase, cnpj, cooperadoId, {
     skipAmountUsedReconcile: true,
   });
-  if (!limite) return;
+  if (!limite) return { ok: true };
 
   const authoritative = await resolveAuthoritativeCreditBase(supabase, cnpj, titularIds);
   if (!authoritative.ok) {
-    return;
+    return { ok: false, error: authoritative.message, code: authoritative.code };
   }
 
   const canon = resolverCooperadoIdCanonico(
@@ -1595,19 +1723,58 @@ export async function ensureHbCreditLimiteAutoritativoPersistido(
   );
 
   const inflated = limite.limiteLiberadoCents > capped.limiteLiberadoCents;
-  if (syncState === "SYNCED" && !inflated) {
-    return;
+  const snapshotOk = hbCreditAccountRowSnapshotCoherent(found.row);
+  if (syncState === "SYNCED" && !inflated && snapshotOk) {
+    return { ok: true };
   }
 
-  await syncLimitesCooperadosFromCreditoBase(
+  const sync = await syncLimitesCooperadosFromCreditoBase(
     supabase,
     digits,
     titularIds,
     authoritative.creditosBaseCents,
     actorUserId
-  ).catch(() => {});
+  );
 
-  await markHbCreditLimitSyncedBestEffort(supabase, digits, accountCooperadoId, actorUserId);
+  if (!sync.ok) {
+    return { ok: false, error: sync.error, code: "HB_LIMIT_SYNC_FAILED" };
+  }
+
+  const titularFailed = sync.errors.some((line) => {
+    const id = line.split(":")[0]?.trim();
+    return id ? titularIds.includes(id) : false;
+  });
+  if (titularFailed) {
+    return {
+      ok: false,
+      error: sync.errors.join("; "),
+      code: "HB_LIMIT_SYNC_PARTIAL_FAILED",
+    };
+  }
+
+  const refreshed = await fetchHbCreditAccountRowForCooperado(supabase, cnpj, cooperadoId);
+  if (!refreshed || !hbCreditAccountRowSnapshotCoherent(refreshed.row)) {
+    return {
+      ok: false,
+      error: "Snapshot de limite HB não persistido após sincronização.",
+      code: "HB_CREDIT_LIMIT_SNAPSHOT_MISSING",
+    };
+  }
+
+  const mark = await markHbCreditLimitSynced(supabase, {
+    cnpj: digits,
+    cooperadoId: accountCooperadoId,
+    actorUserId,
+  });
+  if (!mark.ok) {
+    return {
+      ok: false,
+      error: mark.error,
+      code: mark.code ?? "HB_LIMIT_SYNC_STATE_UPDATE_FAILED",
+    };
+  }
+
+  return { ok: true };
 }
 
 /** Limite exibido/usado no HB — nunca acima do crédito-base das entregas conferidas na nuvem. */
@@ -2479,8 +2646,8 @@ export async function prepareHbCreditPaymentAuthorize(
   cnpj: string,
   cooperadoId: string,
   actorUserId: string
-): Promise<void> {
-  await ensureHbCreditLimiteAutoritativoPersistido(supabase, cnpj, cooperadoId, actorUserId);
+): Promise<HbCreditPrepareAuthorizeResult> {
+  return ensureHbCreditLimiteAutoritativoPersistido(supabase, cnpj, cooperadoId, actorUserId);
 }
 
 export async function authorizePayment(

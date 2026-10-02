@@ -12,6 +12,12 @@ export const HB_CREDIT_STATE_STALE_CODE = "HB_CREDIT_STATE_STALE";
 export const HB_CREDIT_STATE_STALE_MESSAGE =
   "O crédito está sendo atualizado. Aguarde alguns instantes e tente novamente.";
 
+export const HB_CREDIT_LIMIT_DIVERGENT_CODE = "HB_CREDIT_LIMIT_DIVERGENT";
+export const HB_CREDIT_LIMIT_SNAPSHOT_MISSING_CODE = "HB_CREDIT_LIMIT_SNAPSHOT_MISSING";
+
+export const HB_CREDIT_LIMIT_DIVERGENT_MESSAGE =
+  "Limite HB divergente do crédito autorizado. Aguarde a sincronização ou contate a cooperativa.";
+
 export async function markHbCreditLimitStale(
   supabase: SupabaseClient,
   opts: {
@@ -55,7 +61,7 @@ export async function markHbCreditLimitSynced(
     cooperadoId: string;
     actorUserId: string;
   }
-): Promise<{ ok: true; updated: boolean } | { ok: false; error: string }> {
+): Promise<{ ok: true; updated: boolean } | { ok: false; error: string; code?: string }> {
   const digits = normalizeCnpj(opts.cnpj);
   const cooperadoId = String(opts.cooperadoId ?? "").trim();
   if (digits.length !== 14 || !cooperadoId) {
@@ -75,9 +81,17 @@ export async function markHbCreditLimitSynced(
     return { ok: false, error: error.message };
   }
 
-  const result = data as { ok?: boolean; updated?: boolean } | null;
+  const result = data as { ok?: boolean; updated?: boolean; error_code?: string; error?: string } | null;
   if (!result?.ok) {
-    return { ok: false, error: "Falha ao marcar limite HB como sincronizado." };
+    const code = result?.error_code;
+    if (code === HB_CREDIT_LIMIT_DIVERGENT_CODE || code === HB_CREDIT_LIMIT_SNAPSHOT_MISSING_CODE) {
+      return { ok: false, error: result?.error ?? HB_CREDIT_LIMIT_DIVERGENT_MESSAGE, code };
+    }
+    return {
+      ok: false,
+      error: result?.error ?? "Falha ao marcar limite HB como sincronizado.",
+      code,
+    };
   }
   return { ok: true, updated: Boolean(result.updated) };
 }
@@ -89,6 +103,15 @@ export function mapAuthorizeRpcError(result: {
 }): { error: string; code?: string } {
   if (result?.error_code === HB_CREDIT_STATE_STALE_CODE) {
     return { error: HB_CREDIT_STATE_STALE_MESSAGE, code: HB_CREDIT_STATE_STALE_CODE };
+  }
+  if (result?.error_code === HB_CREDIT_LIMIT_DIVERGENT_CODE) {
+    return { error: result?.error ?? HB_CREDIT_LIMIT_DIVERGENT_MESSAGE, code: HB_CREDIT_LIMIT_DIVERGENT_CODE };
+  }
+  if (result?.error_code === HB_CREDIT_LIMIT_SNAPSHOT_MISSING_CODE) {
+    return {
+      error: result?.error ?? "Limite HB aguardando sincronização autoritativa.",
+      code: HB_CREDIT_LIMIT_SNAPSHOT_MISSING_CODE,
+    };
   }
   return { error: result?.error ?? "Pagamento recusado." };
 }

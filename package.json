@@ -62,6 +62,7 @@
     "test:hb-credit-foundation": "npx tsx scripts/test-hb-credit-foundation.ts",
     "test:hb-credit": "npx tsx scripts/test-hb-credit-engine.ts",
     "test:hb-credit-p0": "npx tsx scripts/test-hb-credit-p0-security.ts",
+    "test:hb-credit-fail-closed-p0": "npx tsx scripts/test-hb-credit-fail-closed-p0.ts",
     "test:owner-security": "npx tsx scripts/test-owner-security-foundation.ts",
     "security:health": "npx tsx scripts/security-health-check.ts",
     "apply:hb-credit-migrations": "npx tsx scripts/apply-hb-credit-migrations.ts",
