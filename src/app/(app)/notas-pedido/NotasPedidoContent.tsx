@@ -49,8 +49,8 @@ import {
   mensagemBloqueioExclusaoEntrega,
   relancarEntregaNota,
   normalizarTotaisNotaDesdeItens,
-  inferirDivisaoEntregaDasFichas,
 } from "@/services/notaPedidoService";
+import { isDivisaoEntregaHabilitada } from "@/lib/conferencia/divisaoEntregaPolicy";
 import {
   getCooperativaCnpj,
   patchNotaPedidoInCloud,
@@ -531,7 +531,7 @@ export default function NotasPedidoContent() {
 
   const resolverDivisaoConferencia = useCallback(
     (d: AppData, nota: NotaPedido) => {
-      if (!coopId || conferenciaDivisaoQtd < 2) return undefined;
+      if (!isDivisaoEntregaHabilitada() || !coopId || conferenciaDivisaoQtd < 2) return undefined;
       const ids = conferenciaDivisaoIds.slice(0, conferenciaDivisaoQtd);
       const origemId = resolverCooperadoIdCanonico(
         d,
@@ -568,7 +568,7 @@ export default function NotasPedidoContent() {
       if (!user || !selectedNota) return { ok: false, error: "Entrega não selecionada." };
       if (fotosLancadasConferenciaRef.current.has(fotoIdx)) return { ok: true };
 
-      if (conferenciaDivisaoQtd >= 2) {
+      if (conferenciaDivisaoQtd >= 2 && isDivisaoEntregaHabilitada()) {
         const ids = conferenciaDivisaoIds.slice(0, conferenciaDivisaoQtd);
         if (ids.some((id) => !id)) {
           return { ok: false, error: "Escolha o cooperado em cada parte da divisão." };
@@ -2326,14 +2326,34 @@ export default function NotasPedidoContent() {
 
       return new Promise((resolve) => {
         let idx = 0;
+        let settled = false;
+        const finish = () => {
+          if (settled) return;
+          settled = true;
+          if (lancamentoSequenciaTimerRef.current) {
+            clearTimeout(lancamentoSequenciaTimerRef.current);
+            lancamentoSequenciaTimerRef.current = null;
+          }
+          setLancamentoSequencia(null);
+          resolve();
+        };
+        const hardStopMs = Math.min(8000, Math.max(1800, total * slideMs + 900));
+        const hardStop = setTimeout(finish, hardStopMs);
 
         const mostrar = async () => {
-          const cacheKey = conferenciaFotoCacheKey(nota.id, idx);
-          const url =
-            conferenciaFotoCacheRef.current.get(cacheKey) ??
-            (await loadConferenciaFoto(nota, idx));
-          if (url) {
-            setLancamentoSequencia({ url, displayIdx: idx, total });
+          try {
+            const cacheKey = conferenciaFotoCacheKey(nota.id, idx);
+            const url =
+              conferenciaFotoCacheRef.current.get(cacheKey) ??
+              (await Promise.race([
+                loadConferenciaFoto(nota, idx),
+                new Promise<null>((res) => setTimeout(() => res(null), 4000)),
+              ]));
+            if (url) {
+              setLancamentoSequencia({ url, displayIdx: idx, total });
+            }
+          } catch {
+            /* slideshow opcional — não bloquear fila */
           }
         };
 
@@ -2342,9 +2362,8 @@ export default function NotasPedidoContent() {
         const avancar = () => {
           idx += 1;
           if (idx >= total) {
-            lancamentoSequenciaTimerRef.current = null;
-            setLancamentoSequencia(null);
-            resolve();
+            clearTimeout(hardStop);
+            finish();
             return;
           }
           void mostrar();
@@ -2358,10 +2377,25 @@ export default function NotasPedidoContent() {
   );
 
   const handleLancarNota = () => {
-    if (lancamentoSequencia) return;
     if (lancandoRef.current || !user || !data || !selectedNota) return;
+
+    const qtdFotosAprovadas = contarFotosEnviadasNota(selectedNota);
+    const fotoAtual = conferenciaFotoIdx;
+    const multiFoto = qtdFotosAprovadas > 1;
+    const ultimaFoto = fotoAtual >= qtdFotosAprovadas - 1;
+
+    if (multiFoto && !ultimaFoto) {
+      if (lancamentoSequenciaTimerRef.current) {
+        clearTimeout(lancamentoSequenciaTimerRef.current);
+        lancamentoSequenciaTimerRef.current = null;
+      }
+      setLancamentoSequencia(null);
+    } else if (lancamentoSequencia) {
+      return;
+    }
+
     const errors: typeof conferirErrors = {};
-    if (conferenciaDivisaoQtd >= 2) {
+    if (isDivisaoEntregaHabilitada() && conferenciaDivisaoQtd >= 2) {
       const ids = conferenciaDivisaoIds.slice(0, conferenciaDivisaoQtd);
       if (ids.some((id) => !id)) {
         errors.divisao = "Escolha o cooperado em cada parte da divisão.";
@@ -2376,37 +2410,10 @@ export default function NotasPedidoContent() {
       return;
     }
 
-    const qtdFotosAprovadas = contarFotosEnviadasNota(selectedNota);
-    const fotoAtual = conferenciaFotoIdx;
-    const multiFoto = qtdFotosAprovadas > 1;
-    const ultimaFoto = fotoAtual >= qtdFotosAprovadas - 1;
-
-    if (multiFoto && !ultimaFoto) {
-      if (conferenciaFotoSomenteLeitura) {
-        irParaFotoConferencia(fotoAtual + 1);
-        return;
-      }
-      const lanc = lancarFotoConferenciaAtual(fotoAtual, qtdFotosAprovadas);
-      if (!lanc.ok) {
-        setConferirErrors({ itens: lanc.error });
-        return;
-      }
-      setConferirErrors({});
-      setLancadoMsg(`Foto ${fotoAtual + 1} lançada na ficha. Preencha a foto ${fotoAtual + 2}.`);
-      setTimeout(() => setLancadoMsg(""), 3500);
-      queueMicrotask(() => irParaFotoConferencia(fotoAtual + 1));
-      return;
-    }
-
-    if (conferenciaTotais.liquido <= 0 && !fotosLancadasConferenciaRef.current.has(fotoAtual)) {
-      setConferirErrors({ itens: "Informe a quantidade de pelo menos um produto." });
-      return;
-    }
-
     const numeroNotaManual = conferenciaNumeroNotaManual.trim();
     if (numeroNotaManual && coopId) {
       const cooperadoIdParaNumero =
-        conferenciaDivisaoQtd >= 2
+        isDivisaoEntregaHabilitada() && conferenciaDivisaoQtd >= 2
           ? resolverCooperadoIdCanonico(
               data,
               selectedNota.cooperadoId,
@@ -2425,6 +2432,34 @@ export default function NotasPedidoContent() {
         setConferirErrors({ numeroNota: "Nota já conferida para este cooperado." });
         return;
       }
+    }
+
+    if (multiFoto && !ultimaFoto) {
+      if (conferenciaFotoSomenteLeitura) {
+        irParaFotoConferencia(fotoAtual + 1);
+        return;
+      }
+      if (conferenciaTotais.liquido <= 0 && !fotosLancadasConferenciaRef.current.has(fotoAtual)) {
+        setConferirErrors({ itens: "Informe a quantidade de pelo menos um produto nesta foto." });
+        return;
+      }
+      const lanc = lancarFotoConferenciaAtual(fotoAtual, qtdFotosAprovadas);
+      if (!lanc.ok) {
+        setConferirErrors({ itens: lanc.error });
+        return;
+      }
+      setConferirErrors({});
+      setLancadoMsg(`Foto ${fotoAtual + 1} lançada na ficha. Preencha a foto ${fotoAtual + 2}.`);
+      setTimeout(() => setLancadoMsg(""), 3500);
+      startTransition(() => {
+        irParaFotoConferencia(fotoAtual + 1);
+      });
+      return;
+    }
+
+    if (conferenciaTotais.liquido <= 0 && !fotosLancadasConferenciaRef.current.has(fotoAtual)) {
+      setConferirErrors({ itens: "Informe a quantidade de pelo menos um produto." });
+      return;
     }
 
     if (multiFoto && !fotosLancadasConferenciaRef.current.has(fotoAtual) && !conferenciaFotoSomenteLeitura) {
@@ -2516,10 +2551,10 @@ export default function NotasPedidoContent() {
         relancadaEm: undefined,
       };
       notaAtualizada = normalizarTotaisNotaDesdeItens(notaAtualizada);
-      let divisao = resolverDivisaoConferencia(d, notaAtualizada);
-      if (!divisao) {
-        divisao = inferirDivisaoEntregaDasFichas(d, notaAtualizada);
-      }
+      notaAtualizada = { ...notaAtualizada, divisaoEntrega: undefined };
+      const divisao = isDivisaoEntregaHabilitada()
+        ? resolverDivisaoConferencia(d, notaAtualizada)
+        : undefined;
       if (divisao) {
         notaAtualizada = { ...notaAtualizada, divisaoEntrega: divisao };
       }
@@ -4588,6 +4623,8 @@ export default function NotasPedidoContent() {
                 </FormField>
               </div>
 
+              {isDivisaoEntregaHabilitada() ? (
+                <>
               <FormField
                 label="Dividir entre quantos cooperados?"
                 hint="0 = um cooperado só · 2 a 5 = valor igual para cada um (incluindo quem enviou)"
@@ -4655,6 +4692,25 @@ export default function NotasPedidoContent() {
                   )}
                 </div>
               ) : null}
+                </>
+              ) : (
+                <FormField label="Cooperado" required hint="Quem receberá o valor na ficha">
+                  <Select value={conferenciaCooperadoId} onChange={(e) => setConferenciaCooperadoId(e.target.value)}>
+                    <option value="">Selecione...</option>
+                    {cooperadosConferenciaOptions.map((c) => (
+                      <option key={c.id} value={c.id}>{c.nomeCompleto}{c.avulso ? " (avulso)" : ""}</option>
+                    ))}
+                  </Select>
+                  {cooperadoConferenciaAutoIdentificado && (
+                    <p className="text-xs text-green-700 mt-1">
+                      Identificado automaticamente pelo envio: {selectedNota.cooperadoNomeSnapshot}
+                    </p>
+                  )}
+                  {cooperadosConferenciaOptions.length === 0 && (
+                    <p className="text-xs text-amber-700 mt-1">Carregando cooperados da nuvem…</p>
+                  )}
+                </FormField>
+              )}
 
               <div className="rounded-xl border border-green-200 bg-white p-4">
                 <div className="flex items-start justify-between gap-3">

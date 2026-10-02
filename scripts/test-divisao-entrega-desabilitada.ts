@@ -1,13 +1,19 @@
 /**
- * Nota pago → ficha pago na reconciliação (paridade participantes divisão).
- * npx tsx scripts/test-ficha-status-nota-pago-divisao.ts
+ * Divisão de entrega desligada: valor fica só no cooperado da nota.
+ * npx tsx scripts/test-divisao-entrega-desabilitada.ts
  */
 import assert from "node:assert/strict";
 import type { AppData, FichaCorrida, NotaPedido } from "../src/types";
+import { DIVISAO_ENTREGA_HABILITADA } from "../src/lib/conferencia/divisaoEntregaPolicy";
 import {
   criarDivisaoEntregaFromParticipantes,
+  dividirEntregaEntreCooperados,
+  inferirDivisaoEntregaDasFichas,
+  rebuildFichasNota,
   reconciliarFichaFromNotasConferidas,
 } from "../src/services/notaPedidoService";
+
+assert.equal(DIVISAO_ENTREGA_HABILITADA, false, "flag deve estar desligada neste deploy");
 
 const COOP = "coop-x";
 
@@ -42,7 +48,7 @@ function baseData(): AppData {
 }
 
 const nota: NotaPedido = {
-  id: "np_pago",
+  id: "np1",
   cooperativaId: COOP,
   cooperadoId: "cleito",
   cooperadoNomeSnapshot: "Cleito",
@@ -50,7 +56,7 @@ const nota: NotaPedido = {
   numeroNota: "1",
   dataEntrega: "2026-08-01",
   mesReferencia: "2026-08",
-  status: "pago",
+  status: "conferida",
   conferidaPor: "R",
   dataConferencia: "2026-08-02",
   itens: [{ produtoInstituicaoId: "p", produtoNome: "X", unidade: "un", precoUnitario: 90, quantidade: 1, valorBruto: 90 }],
@@ -85,18 +91,29 @@ const mk = (cooperadoId: string, liq: number): FichaCorrida => ({
   createdAt: "",
   updatedAt: "",
 });
+
 data = {
   ...data,
   notasPedido: [notaDiv],
   fichaCorrida: [mk("ivan", 30), mk("cleber", 30), mk("cleito", 30)],
-  pagamentosCooperado: [],
 };
+
+assert.equal(inferirDivisaoEntregaDasFichas(data, notaDiv), undefined);
+
+const rebuilt = rebuildFichasNota(data, notaDiv);
+const fichasRebuild = rebuilt.fichaCorrida.filter((f) => f.notaPedidoId === notaDiv.id);
+assert.equal(fichasRebuild.length, 1);
+assert.equal(fichasRebuild[0]!.cooperadoId, "cleito");
+assert.equal(fichasRebuild[0]!.valorLiquido, 90);
+
+const noopDiv = dividirEntregaEntreCooperados(data, notaDiv.id, ["ivan"], COOP);
+assert.equal(noopDiv.fichaCorrida.length, data.fichaCorrida.length);
 
 const next = reconciliarFichaFromNotasConferidas(data);
 const fichas = next.fichaCorrida.filter((f) => f.notaPedidoId === notaDiv.id);
 assert.equal(fichas.length, 1);
 assert.equal(fichas[0]!.cooperadoId, "cleito");
 assert.equal(fichas[0]!.valorLiquido, 90);
-assert.equal(fichas[0]!.status, "pago");
+assert.equal(next.notasPedido[0]!.divisaoEntrega, undefined);
 
-console.log("test-ficha-status-nota-pago-divisao: OK (valor consolidado no cooperado da nota)");
+console.log("test-divisao-entrega-desabilitada: OK");

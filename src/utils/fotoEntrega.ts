@@ -764,6 +764,49 @@ const NOTA_STATUS_RANK: Record<NotaPedido["status"], number> = {
   cancelado: 3,
 };
 
+function contagemItensUtilNota(nota: NotaPedido): number {
+  return (nota.itens ?? []).filter((i) => (i.quantidade ?? 0) > 0).length;
+}
+
+/**
+ * Payload financeiro da fonte mais completa — evita que meta recente (ex.: só foto/status)
+ * substitua itens/valores já persistidos na outra fonte.
+ */
+function mesclarPayloadFinanceiroNota(meta: NotaPedido, other: NotaPedido): NotaPedido {
+  if (isNotaRelancamentoIntencional(other, meta) || isNotaRelancamentoIntencional(meta, other)) {
+    return meta;
+  }
+  const metaItens = contagemItensUtilNota(meta);
+  const otherItens = contagemItensUtilNota(other);
+  if (otherItens === 0 && (other.valorLiquido ?? 0) === 0 && (other.valorBruto ?? 0) === 0) {
+    return meta;
+  }
+  if (metaItens > otherItens) return meta;
+  if (metaItens < otherItens) {
+    return {
+      ...meta,
+      itens: other.itens ?? meta.itens,
+      valorBruto: other.valorBruto ?? meta.valorBruto,
+      valorDesconto: other.valorDesconto ?? meta.valorDesconto,
+      valorLiquido: other.valorLiquido ?? meta.valorLiquido,
+      percentualDescontoCooperativa:
+        other.percentualDescontoCooperativa ?? meta.percentualDescontoCooperativa,
+      divisaoEntrega: other.divisaoEntrega ?? meta.divisaoEntrega,
+    };
+  }
+  if ((meta.valorLiquido ?? 0) >= (other.valorLiquido ?? 0)) return meta;
+  return {
+    ...meta,
+    itens: other.itens ?? meta.itens,
+    valorBruto: other.valorBruto ?? meta.valorBruto,
+    valorDesconto: other.valorDesconto ?? meta.valorDesconto,
+    valorLiquido: other.valorLiquido ?? meta.valorLiquido,
+    percentualDescontoCooperativa:
+      other.percentualDescontoCooperativa ?? meta.percentualDescontoCooperativa,
+    divisaoEntrega: other.divisaoEntrega ?? meta.divisaoEntrega,
+  };
+}
+
 /** Status publicado na nuvem nunca perde para rascunho (upload de foto atualiza JSON antes do Enviar). */
 function mergeNotaStatus(a: NotaPedido, b: NotaPedido): NotaPedido["status"] {
   if (isNotaRelancamentoIntencional(b, a)) return a.status;
@@ -808,7 +851,7 @@ export function mergeNotaComFotos(a: NotaPedido, b: NotaPedido): NotaPedido {
       ? meta.fotosMeta ?? other.fotosMeta
       : other.fotosMeta ?? meta.fotosMeta;
 
-  return {
+  const merged: NotaPedido = {
     ...meta,
     status,
     fotoPedido: rich.fotoPedido ?? fotosPedido?.[0] ?? meta.fotoPedido,
@@ -828,4 +871,5 @@ export function mergeNotaComFotos(a: NotaPedido, b: NotaPedido): NotaPedido {
     fotoEnviadaEm: meta.fotoEnviadaEm ?? other.fotoEnviadaEm ?? rich.fotoEnviadaEm,
     fotosMeta,
   };
+  return mesclarPayloadFinanceiroNota(merged, other);
 }

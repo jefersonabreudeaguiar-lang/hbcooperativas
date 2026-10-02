@@ -90,6 +90,7 @@ import {
   dividirEntregaEntreCooperados,
   nomesParticipantesDivisao,
   textoInformativoDivisaoEntrega,
+  isDivisaoEntregaHabilitada,
 } from "@/services/divisaoEntregaService";
 import { descontosDoCooperadoNoMes, TIPO_DESCONTO_LABELS, descontoManualDuplicaContaCoop } from "@/services/descontosService";
 import {
@@ -977,6 +978,7 @@ export default function FichaCorridaPage() {
   };
 
   const abrirDivisaoEntrega = (ficha: FichaCorrida) => {
+    if (!isDivisaoEntregaHabilitada()) return;
     const nota = data?.notasPedido.find((n) => n.id === ficha.notaPedidoId);
     const divisao = ficha.divisaoEntrega ?? nota?.divisaoEntrega;
     const origemId = divisao?.cooperadoOrigemId ?? ficha.cooperadoId;
@@ -993,6 +995,7 @@ export default function FichaCorridaPage() {
   };
 
   const handleConfirmarDivisao = async () => {
+    if (!isDivisaoEntregaHabilitada()) return;
     if (!user || !coopId || !divisaoFicha || divisaoSelecionados.length === 0) return;
     setDivisaoSalvando(true);
     try {
@@ -2053,6 +2056,7 @@ export default function FichaCorridaPage() {
                                     </p>
                                   )}
                                 </div>
+                                {isDivisaoEntregaHabilitada() ? (
                                 <Button
                                   type="button"
                                   variant="secondary"
@@ -2063,6 +2067,7 @@ export default function FichaCorridaPage() {
                                   <Users size={16} />
                                   {dividida ? "Alterar divisão" : "Dividir valor"}
                                 </Button>
+                                ) : null}
                               </div>
                             );
                           })}
@@ -2168,7 +2173,7 @@ export default function FichaCorridaPage() {
       )}
 
       <DivisaoEntregaModal
-        open={Boolean(divisaoFicha)}
+        open={isDivisaoEntregaHabilitada() && Boolean(divisaoFicha)}
         onClose={() => {
           if (divisaoSalvando) return;
           setDivisaoFicha(null);
