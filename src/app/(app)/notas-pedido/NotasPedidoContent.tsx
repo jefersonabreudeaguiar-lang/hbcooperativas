@@ -8,6 +8,7 @@ import {
 } from "lucide-react";
 import { useAppData, useAppDataSelector } from "@/hooks/useAppData";
 import { useResponsavelFilaConferencia } from "@/hooks/useResponsavelFilaConferencia";
+import { ResponsavelFilaCooperadosList } from "@/components/notas/ResponsavelFilaCooperadosList";
 import { usePermissions } from "@/hooks/usePermissions";
 import { getUserCooperativaId } from "@/utils/cooperativa";
 import { PageHeader, DataTable, FilterBar, Modal } from "@/components/ui/Table";
@@ -1024,7 +1025,7 @@ export default function NotasPedidoContent() {
     filaBadgeCount,
     removerNotaDaFilaSticky,
     touchNotaNaFilaSticky,
-  } = useResponsavelFilaConferencia(coopId, isCooperado, filaDetalhada, data);
+  } = useResponsavelFilaConferencia(coopId, isCooperado, filaDetalhada);
 
   const filaNavCount = filaDetalhada ? pendentesEstaveis.length : filaBadgeCount;
 
@@ -3355,43 +3356,10 @@ export default function NotasPedidoContent() {
                   <p className="text-xs text-gray-500 mb-3">
                     Toque no nome para conferir as fotos. Só entram quem enviou entrega.
                   </p>
-                  <ul className="divide-y divide-gray-200 rounded-xl border border-gray-200 bg-white overflow-hidden">
-                    {pendentesPorCooperado.map((grupo) => {
-                      const qtdNotas = grupo.notas.length;
-                      const qtdFotos = contarFotosEnviadasNotas(grupo.notas);
-                      return (
-                        <li key={grupo.chave}>
-                          <button
-                            type="button"
-                            onClick={() => selecionarAbaConferencia(grupo)}
-                            className="w-full flex items-center gap-3 px-4 py-3.5 text-left hover:bg-amber-50/80 transition-colors active:bg-amber-100/60"
-                          >
-                            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-amber-100 text-amber-900 text-sm font-bold">
-                              {grupo.nome.trim().charAt(0).toUpperCase() || "?"}
-                            </span>
-                            <span className="flex-1 min-w-0">
-                              <span className="block font-semibold text-gray-900 truncate">
-                                {grupo.nome}
-                              </span>
-                              <span className="block text-xs text-gray-500 mt-0.5">
-                                {qtdNotas} {qtdNotas === 1 ? "nota" : "notas"}
-                                {qtdFotos !== qtdNotas
-                                  ? ` · ${qtdFotos} ${qtdFotos === 1 ? "foto" : "fotos"}`
-                                  : ""}{" "}
-                                aguardando
-                              </span>
-                            </span>
-                            <span className="shrink-0 inline-flex items-center gap-1.5 text-amber-800 text-sm font-semibold">
-                              <span className="min-w-[1.5rem] h-6 px-1.5 rounded-full bg-amber-100 inline-flex items-center justify-center text-xs font-bold">
-                                {qtdNotas}
-                              </span>
-                              <ChevronRight size={18} className="text-gray-400" />
-                            </span>
-                          </button>
-                        </li>
-                      );
-                    })}
-                  </ul>
+                  <ResponsavelFilaCooperadosList
+                    grupos={pendentesPorCooperado}
+                    onSelect={selecionarAbaConferencia}
+                  />
                 </div>
               )}
 

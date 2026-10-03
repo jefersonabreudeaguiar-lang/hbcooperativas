@@ -1,8 +1,9 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef } from "react";
-import type { AppData, NotaPedido } from "@/types";
+import type { NotaPedido } from "@/types";
 import { useAppDataSelector } from "@/hooks/useAppData";
+import { getData, getDataRevision, isAppDataWarm } from "@/services/dataStore";
 import { listNotasFilaConferenciaResponsavel } from "@/services/responsavelPainelIndex";
 import { getCooperativaCnpj, getPendingNotaDeleteIds } from "@/services/notaPedidoCloudService";
 import { agruparPendentesPorCooperado } from "@/utils/fotoEntrega";
@@ -11,20 +12,23 @@ import { buildPendentesEstaveisConferencia } from "@/utils/filaConferenciaSticky
 
 /**
  * Fila de conferência do responsável — cálculo pesado (sticky) só quando a aba Conferir está ativa.
+ * HX 8.1 — lê AppData via revision (sem prop `data` do pai).
  */
 export function useResponsavelFilaConferencia(
   coopId: string | undefined,
   isCooperado: boolean,
-  filaDetalhada: boolean,
-  data: AppData | null
+  filaDetalhada: boolean
 ) {
   const stickyRef = useRef({ ids: new Set<string>(), snapshot: new Map<string, NotaPedido>() });
 
-  const pendingDeleteIds = useMemo(() => {
-    if (!data || !coopId) return new Set<string>();
-    const cnpj = getCooperativaCnpj(data, coopId);
-    return cnpj ? getPendingNotaDeleteIds(cnpj) : new Set<string>();
-  }, [data, coopId]);
+  const pendingDeleteIds = useAppDataSelector(
+    (d) => {
+      if (!coopId) return new Set<string>();
+      const cnpj = getCooperativaCnpj(d, coopId);
+      return cnpj ? getPendingNotaDeleteIds(cnpj) : new Set<string>();
+    },
+    [coopId]
+  );
 
   const pendentesTodasBase =
     useAppDataSelector(
@@ -36,7 +40,7 @@ export function useResponsavelFilaConferencia(
     ) ?? [];
 
   const pendentesTodas = useMemo(() => {
-    if (pendingDeleteIds.size === 0) return pendentesTodasBase;
+    if (!pendingDeleteIds || pendingDeleteIds.size === 0) return pendentesTodasBase;
     return pendentesTodasBase.filter((n) => !pendingDeleteIds.has(n.id));
   }, [pendentesTodasBase, pendingDeleteIds]);
 
@@ -50,21 +54,25 @@ export function useResponsavelFilaConferencia(
     }
   }, [pendentesTodas, filaDetalhada]);
 
+  const dataRevision = useAppDataSelector(() => getDataRevision(), []);
+
   const pendentesEstaveis = useMemo(() => {
-    if (!filaDetalhada || !data) return pendentesTodas;
+    if (!filaDetalhada || !isAppDataWarm()) return pendentesTodas;
+    const data = getData();
     return buildPendentesEstaveisConferencia(
       data,
       pendentesTodas,
-      pendingDeleteIds,
+      pendingDeleteIds ?? new Set(),
       coopId,
       stickyRef.current
     );
-  }, [data, pendentesTodas, pendingDeleteIds, coopId, filaDetalhada]);
+  }, [dataRevision, pendentesTodas, pendingDeleteIds, coopId, filaDetalhada]);
 
   const pendentesPorCooperado = useMemo(() => {
-    if (!data || !filaDetalhada) return [];
+    if (!filaDetalhada || !isAppDataWarm()) return [];
+    const data = getData();
     return agruparPendentesPorCooperado(data, pendentesEstaveis, coopId);
-  }, [data, pendentesEstaveis, coopId, filaDetalhada]);
+  }, [dataRevision, pendentesEstaveis, coopId, filaDetalhada]);
 
   const touchNotaNaFilaSticky = useCallback((nota: NotaPedido) => {
     stickyRef.current.ids.add(nota.id);
@@ -77,12 +85,12 @@ export function useResponsavelFilaConferencia(
   }, []);
 
   return {
-    pendingDeleteIds,
+    pendingDeleteIds: pendingDeleteIds ?? new Set<string>(),
     pendentesTodas,
     pendentesEstaveis,
     pendentesPorCooperado,
     filaBadgeCount: pendentesTodas.length,
-    removerNotaDaFilaSticky,
     touchNotaNaFilaSticky,
+    removerNotaDaFilaSticky,
   };
 }

@@ -62,9 +62,17 @@ npx tsx scripts/baseline-performance-rql-h80-readonly.ts
 npx tsx scripts/test-app-scheduler-h80.ts
 ```
 
-## Ondas seguintes (não iniciadas em 8.0)
+## Onda 8.1
 
-- **8.1** — `useAppDataSelector` nas telas quentes; virtualizar fila
+- `useAppShellNavigation` — menu mobile/desktop sem `useAppData` no layout
+- Dashboard gestão — sem `useAppData()` na página
+- `ResponsavelFilaCooperadosList` — virtualização a partir de 14 cooperados na fila
+- `useResponsavelFilaConferencia` — lê `getData()` por revision (sem prop do pai)
+
+Teste: `npx tsx scripts/test-render-rql-h81.ts`
+
+## Ondas seguintes
+
 - **8.2** — conferência: draft em memória (7.3)
 - **8.3** — notify por domínio + IDB shard
 - **8.4** — API delta por tier

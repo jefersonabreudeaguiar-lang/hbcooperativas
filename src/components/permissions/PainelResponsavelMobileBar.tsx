@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { Shield, UserCircle } from "lucide-react";
 import { useAuth } from "@/modules/auth/AuthProvider";
-import { useAppData } from "@/hooks/useAppData";
+import { useAppDataSelector } from "@/hooks/useAppData";
 import { canAccessPainelResponsavel } from "@/lib/security/responsavelPanelAccess";
 import { isMobileCooperativaApp } from "@/lib/mobileExperience";
 import {
@@ -17,7 +17,16 @@ import { Button } from "@/components/ui/Button";
 /** Celular: alternar cooperado vinculado × painel da diretoria; desktop gestão = tela larga. */
 export function PainelResponsavelMobileBar() {
   const { accountUser } = useAuth();
-  const data = useAppData();
+  const painelAccess = useAppDataSelector(
+    (data) => {
+      if (!accountUser) return null;
+      return {
+        canGestao: canAccessPainelResponsavel(accountUser, data),
+        staffMode: shouldRenderStaffPainelUi(accountUser, data),
+      };
+    },
+    [accountUser?.id, accountUser?.role]
+  );
   const [painelMobile, setPainelMobile] = useState(false);
 
   useEffect(() => {
@@ -27,11 +36,11 @@ export function PainelResponsavelMobileBar() {
     return () => window.removeEventListener(PAINEL_MOBILE_PREF_EVENT, onPref);
   }, []);
 
-  if (!accountUser || !data) return null;
-  if (!canAccessPainelResponsavel(accountUser, data)) return null;
+  if (!accountUser || !painelAccess) return null;
+  if (!painelAccess.canGestao) return null;
   if (!isMobileCooperativaApp()) return null;
 
-  const staffMode = shouldRenderStaffPainelUi(accountUser, data);
+  const staffMode = painelAccess.staffMode;
 
   return (
     <div className="mb-3 rounded-xl border border-indigo-200 bg-indigo-50 px-3 py-2 text-sm text-indigo-950 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">

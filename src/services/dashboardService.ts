@@ -1,7 +1,9 @@
 import type { AppData, FechamentoMensal, FinanceiroMensal } from "@/types";
 import { bicCentralValorAReceberAgregado } from "@/services/bicLeituraCentralCooperado";
 import { isBicCentralReadAuthorityEnabled } from "@/lib/bic/bicCentralReadAuthority";
-import { getData } from "@/services/dataStore";
+import { projetarAppDataFinanceiroParaCreditoBase } from "@/modules/hb-credit/engine/projetarAppDataFinanceiroParaCreditoBase";
+import { getData, getDataRevision } from "@/services/dataStore";
+import { normalizeCnpj } from "@/utils/cooperativa";
 import {
   getTotalAPagarCooperado,
   getTotalRecebidoCooperado,
@@ -67,6 +69,17 @@ function filterByMes<T>(items: T[], getter: (item: T) => string, mes: string): T
 
 function filterByAno<T>(items: T[], getter: (item: T) => string, ano: string): T[] {
   return items.filter((item) => getter(item).startsWith(ano));
+}
+
+function cnpjDigitsForCooperativa(d: AppData, cooperativaId?: string): string | undefined {
+  if (!cooperativaId) {
+    const d0 = d.cooperativas.map((c) => normalizeCnpj(c.cnpj ?? "")).find((x) => x.length === 14);
+    return d0;
+  }
+  const coop = d.cooperativas.find((c) => c.id === cooperativaId);
+  if (!coop?.cnpj) return undefined;
+  const digits = normalizeCnpj(coop.cnpj);
+  return digits.length === 14 ? digits : undefined;
 }
 
 export function getCooperadoStats(cooperadoId: string, data?: AppData): CooperadoDashboardStats {
@@ -188,11 +201,14 @@ export function getAdminStats(
   const valoresAPagar = opts?.skipValoresAPagar
     ? 0
     : isBicCentralReadAuthorityEnabled()
-      ? round2(
-          cooperadosEscopo.reduce((s, c) => {
-            return s + bicCentralValorAReceberAgregado(d, c.id, c.cooperativaId).valor;
-          }, 0)
-        )
+      ? (() => {
+          const base = projetarAppDataFinanceiroParaCreditoBase(d, cnpjDigitsForCooperativa(d, cooperativaId));
+          return round2(
+            cooperadosEscopo.reduce((s, c) => {
+              return s + bicCentralValorAReceberAgregado(base, c.id, c.cooperativaId).valor;
+            }, 0)
+          );
+        })()
       : getTotalValoresAPagarEmAberto(d, cooperativaId);
 
   return {
@@ -208,6 +224,41 @@ export function getAdminStats(
     entregasPendentes,
     pagamentosPendentes: pagamentosPendentes.length,
   };
+}
+
+type AdminStatsCache = {
+  revision: number;
+  coopKey: string;
+  skipValores: boolean;
+  stats: AdminDashboardStats;
+};
+
+let adminStatsCache: AdminStatsCache | null = null;
+
+/** Cache por revisão AppData — evita recomputar BIC × N cooperados a cada render do painel. */
+export function getAdminStatsCached(
+  data: AppData,
+  cooperativaId?: string,
+  opts?: { skipValoresAPagar?: boolean }
+): AdminDashboardStats {
+  const revision = getDataRevision();
+  const coopKey = cooperativaId ?? "";
+  const skipValores = opts?.skipValoresAPagar === true;
+  if (
+    adminStatsCache &&
+    adminStatsCache.revision === revision &&
+    adminStatsCache.coopKey === coopKey &&
+    adminStatsCache.skipValores === skipValores
+  ) {
+    return adminStatsCache.stats;
+  }
+  const stats = getAdminStats(data, cooperativaId, opts);
+  adminStatsCache = { revision, coopKey, skipValores, stats };
+  return stats;
+}
+
+export function resetAdminStatsCacheForTests(): void {
+  adminStatsCache = null;
 }
 
 export function calcularFechamentoMensal(mesReferencia: string, data?: AppData): Partial<FechamentoMensal> {

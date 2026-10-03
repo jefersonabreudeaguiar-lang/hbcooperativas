@@ -10,23 +10,24 @@ import {
 } from "lucide-react";
 import { useState } from "react";
 import { useAuth } from "@/modules/auth/AuthProvider";
-import { useAppData, useAppDataSelector } from "@/hooks/useAppData";
-import { getMenuItems, getMobileNavItems, getCooperadoDrawerMenuItems, getUserFuncaoLabel, isCooperadoAppUser, isHbCreditCooperadoNavEligible, isHbCreditParceiroNavEligible, isHbCreditStaffNavEligible } from "@/permissions";
+import { useAppDataSelector } from "@/hooks/useAppData";
+import {
+  AppShellNavigationProvider,
+  useAppShellNavigationContext,
+} from "@/components/layout/AppShellNavigationContext";
+import { getUserFuncaoLabel, isCooperadoAppUser } from "@/permissions";
 import { getUserCooperativaNome } from "@/utils/cooperativa";
 import { PLATFORM_NAME, PLATFORM_TAGLINE } from "@/utils/constants";
 import { AppIcon } from "@/components/ui/AppIcon";
 import { SyncStatusChip, SyncStatusChipLight } from "@/components/sync/SyncStatusChip";
 import { CobrancaSaasPainel } from "@/components/payments/CobrancaSaasPainelWrapper";
-import { resolveStaffNavigationUser, shouldRenderStaffPainelUi } from "@/lib/staffNavigationUser";
 import { PainelResponsavelMobileBar } from "@/components/permissions/PainelResponsavelMobileBar";
 import { ContratoServicoAppGate } from "@/components/cobranca/ContratoServicoAppGate";
 import { cn } from "@/utils/format";
 import { useHbCreditEnabled } from "@/hooks/useHbCreditEnabled";
-import { isContaCoopUiVisibleForUser } from "@/utils/contaCoopUiVisibility";
 import { useSyncContaCoopValorReceberCooperativa } from "@/hooks/useSyncContaCoopValorReceberCooperativa";
 import { isStaffHbCoopBackgroundSyncRoute } from "@/lib/hb-credit/staffHbSyncRoute";
 import { AppUpdateBanner } from "@/components/pwa/AppUpdateBanner";
-import { getUserCooperativaId } from "@/utils/cooperativa";
 import { useHbCreditDescontosWarmup } from "@/hooks/useHbCreditDescontosWarmup";
 import { shouldPrefetchHbCreditNav } from "@/lib/hb-credit/hbCreditNavPrefetch";
 import type { Resource } from "@/types";
@@ -115,36 +116,11 @@ function BrandHeader({ compact = false }: { compact?: boolean }) {
 
 export function Sidebar({ mobile = false, onClose }: { mobile?: boolean; onClose?: () => void }) {
   const pathname = usePathname();
-  const { user, accountUser, logout } = useAuth();
-  const data = useAppData();
-  const navUser = resolveStaffNavigationUser(accountUser, user, data) ?? user;
-  const credit = useHbCreditEnabled(navUser);
-  const cooperadoNome = useAppDataSelector(
-    (data) => {
-      if (!navUser) return "";
-      if (navUser.cooperadoId) {
-        return data.cooperados.find((c) => c.id === navUser.cooperadoId)?.nomeCompleto ?? navUser.name ?? "";
-      }
-      return navUser.name ?? "";
-    },
-    [navUser?.id, navUser?.cooperadoId, navUser?.name]
-  );
-  if (!navUser) return null;
-
-  const cooperadoNavEligible = isHbCreditCooperadoNavEligible(
-    navUser,
-    credit.status,
-    credit.serverConfirmed
-  );
-  const staffNavEligible = isHbCreditStaffNavEligible(navUser, credit.status, credit.serverConfirmed);
-  const parceiroNavEligible = isHbCreditParceiroNavEligible(navUser, credit.status, credit.serverConfirmed);
-  const moduleNavEligible = cooperadoNavEligible || staffNavEligible || parceiroNavEligible;
-  const contaCoopUiVisible = isContaCoopUiVisibleForUser(navUser, cooperadoNome || undefined);
-
-  const menuItems =
-    mobile && isCooperadoAppUser(navUser)
-      ? getCooperadoDrawerMenuItems(navUser, credit.enabled, contaCoopUiVisible, data, moduleNavEligible)
-      : getMenuItems(navUser, credit.enabled, contaCoopUiVisible, data, moduleNavEligible);
+  const { logout } = useAuth();
+  const shell = useAppShellNavigationContext();
+  if (!shell) return null;
+  const { navUser, desktopMenu, drawerMenu } = shell;
+  const menuItems = mobile && isCooperadoAppUser(navUser) ? drawerMenu : desktopMenu;
 
   return (
     <aside className={cn(
@@ -211,32 +187,9 @@ export function MobileNav() {
   const [open, setOpen] = useState(false);
   const pathname = usePathname();
   const router = useRouter();
-  const { user, accountUser } = useAuth();
-  const data = useAppData();
-  const navUser = resolveStaffNavigationUser(accountUser, user, data) ?? user;
-  const credit = useHbCreditEnabled(navUser);
-  const cooperadoNome = useAppDataSelector(
-    (data) => {
-      if (!navUser) return "";
-      if (navUser.cooperadoId) {
-        return data.cooperados.find((c) => c.id === navUser.cooperadoId)?.nomeCompleto ?? navUser.name ?? "";
-      }
-      return navUser.name ?? "";
-    },
-    [navUser?.id, navUser?.cooperadoId, navUser?.name]
-  );
-  if (!navUser) return null;
-
-  const cooperadoNavEligible = isHbCreditCooperadoNavEligible(
-    navUser,
-    credit.status,
-    credit.serverConfirmed
-  );
-  const staffNavEligible = isHbCreditStaffNavEligible(navUser, credit.status, credit.serverConfirmed);
-  const parceiroNavEligible = isHbCreditParceiroNavEligible(navUser, credit.status, credit.serverConfirmed);
-  const moduleNavEligible = cooperadoNavEligible || staffNavEligible || parceiroNavEligible;
-  const contaCoopUiVisible = isContaCoopUiVisibleForUser(navUser, cooperadoNome || undefined);
-  const mobileItems = getMobileNavItems(navUser, credit.enabled, contaCoopUiVisible, data, moduleNavEligible);
+  const shell = useAppShellNavigationContext();
+  if (!shell) return null;
+  const { navUser, mobileMenu: mobileItems } = shell;
 
   const prefetchNavRoute = (href: string) => {
     try {
@@ -325,18 +278,14 @@ export function MobileNav() {
   );
 }
 
-export function AppShell({ children }: { children: React.ReactNode }) {
+function AppShellInner({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const mercadoQrImmersive = pathname === "/mercado-parceiro/cobrar";
-  const { user, accountUser } = useAuth();
-  const data = useAppData();
-  const navUser = resolveStaffNavigationUser(accountUser, user, data) ?? user;
-  const coopId = useAppDataSelector(
-    (data) => (navUser ? getUserCooperativaId(navUser, data) : undefined),
-    [navUser?.id, navUser?.cooperativaId, navUser?.role]
-  );
+  const shell = useAppShellNavigationContext();
+  const navUser = shell?.navUser ?? null;
+  const coopId = shell?.coopId;
+  const staffPainelUi = shell?.staffPainelUi ?? false;
   const credit = useHbCreditEnabled(navUser);
-  const staffPainelUi = Boolean(accountUser && shouldRenderStaffPainelUi(accountUser, data));
   const staffHbSync =
     staffPainelUi &&
     navUser &&
@@ -377,5 +326,13 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         </main>
       </div>
     </div>
+  );
+}
+
+export function AppShell({ children }: { children: React.ReactNode }) {
+  return (
+    <AppShellNavigationProvider>
+      <AppShellInner>{children}</AppShellInner>
+    </AppShellNavigationProvider>
   );
 }

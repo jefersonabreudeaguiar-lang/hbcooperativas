@@ -2,6 +2,7 @@ import type { AppData, PagamentoCooperadoRegistro } from "@/types";
 import { contarItensCatalogo } from "@/services/catalogoContratosService";
 import { getCurrentMesReferencia } from "@/utils/format";
 import { pagamentoCobreMesReferencia } from "@/services/notaPedidoService";
+import { getDataRevision } from "@/services/dataStore";
 import {
   countCooperadosPagamentoPendenteResponsavel,
   countNotasFilaConferenciaResponsavel,
@@ -126,6 +127,39 @@ export function getFilaDoDia(data: AppData, coopId: string | undefined, mes = ge
   }
 
   return items;
+}
+
+type FilaDoDiaCache = {
+  revision: number;
+  coopKey: string;
+  mes: string;
+  items: FilaDoDiaItem[];
+};
+
+let filaDoDiaCache: FilaDoDiaCache | null = null;
+
+export function getFilaDoDiaCached(
+  data: AppData,
+  coopId: string | undefined,
+  mes = getCurrentMesReferencia()
+): FilaDoDiaItem[] {
+  const revision = getDataRevision();
+  const coopKey = coopId ?? "";
+  if (
+    filaDoDiaCache &&
+    filaDoDiaCache.revision === revision &&
+    filaDoDiaCache.coopKey === coopKey &&
+    filaDoDiaCache.mes === mes
+  ) {
+    return filaDoDiaCache.items;
+  }
+  const items = getFilaDoDia(data, coopId, mes);
+  filaDoDiaCache = { revision, coopKey, mes, items };
+  return items;
+}
+
+export function resetFilaDoDiaCacheForTests(): void {
+  filaDoDiaCache = null;
 }
 
 export function listarPagamentosAguardandoAssinatura(

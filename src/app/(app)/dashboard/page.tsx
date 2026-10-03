@@ -1,10 +1,11 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useDeferredValue, useEffect, useMemo, useRef } from "react";
 import type { AppData } from "@/types";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useAppDataSelector, useAppDataReady, useAppData } from "@/hooks/useAppData";
+import { useAppDataSelector, useAppDataReady } from "@/hooks/useAppData";
+import { getData, getDataRevision } from "@/services/dataStore";
 import { useAuth } from "@/modules/auth/AuthProvider";
 import { shouldRenderStaffPainelUi } from "@/lib/staffNavigationUser";
 import {
@@ -19,8 +20,8 @@ import { OnboardingChecklist } from "@/components/cooperado/OnboardingChecklist"
 import { AssinaturaStatusAviso } from "@/components/cooperado/AssinaturaStatusAviso";
 import { CooperadoMensalidadesPagarPanel } from "@/components/cooperado/CooperadoMensalidadesPagarPanel";
 import { ValoresAvulsosDashboardCard } from "@/components/ficha/ValoresAvulsosReceberPanel";
-import { getAdminStats } from "@/services/bicLeituraCentralGestao";
-import { getFilaDoDia } from "@/services/filaDoDiaService";
+import { getAdminStatsCached } from "@/services/dashboardService";
+import { getFilaDoDiaCached } from "@/services/filaDoDiaService";
 import { FilaDoDiaPanel } from "@/components/dashboard/FilaDoDiaPanel";
 import { CooperadoHbCreditResumoCard } from "@/components/hb-credit/CooperadoHbCreditResumoCard";
 import { ContaCoopFilaCloudPanel } from "@/components/hb-credit/ContaCoopFilaCloudPanel";
@@ -394,19 +395,23 @@ function CooperadoDashboard() {
 
 function AdminDashboard() {
   const { user, accountUser } = useAuth();
-  const data = useAppData();
-  const navUser =
-    (accountUser && shouldRenderStaffPainelUi(accountUser, data) ? accountUser : user) ?? user;
+  const navUser = useAppDataSelector(
+    (data) => {
+      if (!user) return null;
+      const staff = Boolean(accountUser && shouldRenderStaffPainelUi(accountUser, data));
+      return (staff ? accountUser : user) ?? user;
+    },
+    [user?.id, accountUser?.id, accountUser?.role]
+  );
   const { check } = usePermissions();
-  const creditFlag = useHbCreditEnabled();
+  const creditFlag = useHbCreditEnabled(navUser ?? undefined);
+  const { syncing } = useSyncStatus();
 
-  const view = useAppDataSelector((data) => {
+  const meta = useAppDataSelector((data) => {
     if (!data || !navUser) return null;
     const coopId = getUserCooperativaId(navUser, data);
-    const stats = getAdminStats(data, coopId ?? undefined);
     const coopNome = getUserCooperativaNome(navUser, data);
     const mes = getCurrentMesReferencia();
-    const fila = getFilaDoDia(data, coopId, mes);
     const instalacao = coopId ? resumoInstalacaoApp(data, coopId) : null;
     const assinatura = coopId ? resumoAssinaturaCadastroApp(data, coopId) : null;
     let cnpj = "";
@@ -415,18 +420,42 @@ function AdminDashboard() {
       const coop = data.cooperativas.find((c) => c.id === coopId);
       if (coop?.cnpj) cnpj = normalizeCnpj(coop.cnpj);
     }
-    return { stats, coopNome, fila, mes, instalacao, assinatura, cnpj, coopId: coopId ?? "" };
+    return { coopNome, mes, instalacao, assinatura, cnpj, coopId: coopId ?? "" };
   }, [navUser?.id, navUser?.cooperativaId, navUser?.role]);
 
-  if (!view) return <PageSkeleton />;
+  const dataRevision = useAppDataSelector(() => getDataRevision(), []);
+  const deferredRevision = useDeferredValue(dataRevision ?? -1);
 
-  const { stats, coopNome, fila, mes, instalacao, assinatura, cnpj, coopId } = view;
+  const quickStats = useMemo(() => {
+    if (!meta || dataRevision == null) return null;
+    return getAdminStatsCached(getData(), meta.coopId || undefined, { skipValoresAPagar: true });
+  }, [dataRevision, meta?.coopId]);
+
+  const heavy = useMemo(() => {
+    if (!meta || deferredRevision == null || deferredRevision < 0) return null;
+    const d = getData();
+    const coopScope = meta.coopId || undefined;
+    return {
+      stats: getAdminStatsCached(d, coopScope),
+      fila: getFilaDoDiaCached(d, coopScope, meta.mes),
+    };
+  }, [deferredRevision, meta?.coopId, meta?.mes]);
+
+  if (!navUser || !meta) return <PageSkeleton />;
+
+  const { coopNome, mes, instalacao, assinatura, cnpj, coopId } = meta;
+  const stats = heavy?.stats ?? quickStats;
+  const fila = heavy?.fila ?? [];
+  const totaisFinanceirosPendentes = !heavy?.stats && Boolean(quickStats);
 
   return (
     <div className="space-y-6 max-w-3xl">
       <div>
         <h1 className="text-2xl font-bold text-gray-900">Painel da cooperativa</h1>
         <p className="text-sm text-gray-500 mt-1">{coopNome} · {formatMesReferencia(mes)}</p>
+        {(syncing || totaisFinanceirosPendentes) && (
+          <p className="text-xs text-gray-500 mt-1">Atualizando totais…</p>
+        )}
       </div>
 
       {cnpj.length === 14 && coopId && (
@@ -511,7 +540,11 @@ function AdminDashboard() {
         </Link>
       )}
 
-      <FilaDoDiaPanel items={fila} />
+      {heavy ? (
+        <FilaDoDiaPanel items={fila} />
+      ) : (
+        <div className="rounded-2xl border border-gray-200 bg-gray-50 p-6 animate-pulse min-h-[8rem]" aria-busy="true" />
+      )}
 
       {creditFlag.navEnabled && check("conta_coop", "view") && cnpj.length === 14 && (
         <Link
@@ -533,22 +566,46 @@ function AdminDashboard() {
 
       {creditFlag.enabled && cnpj.length === 14 && <ContaCoopFilaCloudPanel cnpj={cnpj} />}
 
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <StatCard title="A pagar aos cooperados" value={formatCurrency(stats.valoresAPagar)} icon={<Wallet size={24} />} variant="warning" />
-        <StatCard title="Entregas p/ conferir" value={String(stats.entregasPendentes)} icon={<ClipboardList size={24} />} variant="gold" />
-        <StatCard title="Cooperados ativos" value={String(stats.cooperadosAtivos)} icon={<Users size={24} />} />
-      </div>
+      {stats ? (
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          <StatCard
+            title="A pagar aos cooperados"
+            value={
+              totaisFinanceirosPendentes ? "…" : formatCurrency(stats.valoresAPagar)
+            }
+            icon={<Wallet size={24} />}
+            variant="warning"
+          />
+          <StatCard
+            title="Entregas p/ conferir"
+            value={String(stats.entregasPendentes)}
+            icon={<ClipboardList size={24} />}
+            variant="gold"
+          />
+          <StatCard
+            title="Cooperados ativos"
+            value={String(stats.cooperadosAtivos)}
+            icon={<Users size={24} />}
+          />
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 animate-pulse">
+          <div className="h-24 bg-white rounded-xl border border-gray-200" />
+          <div className="h-24 bg-white rounded-xl border border-gray-200" />
+          <div className="h-24 bg-white rounded-xl border border-gray-200" />
+        </div>
+      )}
     </div>
   );
 }
 
 export default function DashboardPage() {
   const { user, accountUser } = useAuth();
-  const data = useAppData();
   const authSubject = accountUser ?? user;
   const dataReady = useAppDataReady();
-  const staffPainelUi = Boolean(
-    accountUser && shouldRenderStaffPainelUi(accountUser, data)
+  const staffPainelUi = useAppDataSelector(
+    (data) => Boolean(accountUser && shouldRenderStaffPainelUi(accountUser, data)),
+    [accountUser?.id, accountUser?.role]
   );
   const canGestaoFromData = useAppDataSelector(
     (data) => (authSubject ? canAccessPainelResponsavel(authSubject, data) : false),
@@ -560,8 +617,7 @@ export default function DashboardPage() {
       ? canAccessPainelResponsavelSession(authSubject)
       : false;
 
-  if (!user) return null;
-  if (dataReady && canGestaoFromData === null) return <PageSkeleton />;
+  if (!user || !dataReady) return <PageSkeleton />;
 
   if (canGestao && staffPainelUi) {
     return <AdminDashboard />;
