@@ -1,48 +1,76 @@
+import {
+  enqueueAppSyncRequest,
+  registerAppSchedulerSyncDispatch,
+  startAppScheduler,
+} from "@/lib/performance/appScheduler";
+import {
+  defaultForceForSyncTier,
+  type SyncTier,
+} from "@/lib/performance/syncTier";
+
 type SyncHandler = (force?: boolean) => void;
 
 let syncHandler: SyncHandler | null = null;
-let debounceTimer: ReturnType<typeof setTimeout> | null = null;
+let schedulerBridgeAttached = false;
 
 const SYNC_DEBOUNCE_MS = 450;
 
 function dispatchSync(force: boolean): void {
-  if (document.hidden) return;
+  if (typeof document !== "undefined" && document.hidden) return;
   if (typeof navigator !== "undefined" && !navigator.onLine) return;
   syncHandler?.(force);
 }
 
+function ensureSchedulerBridge(): void {
+  if (schedulerBridgeAttached) return;
+  schedulerBridgeAttached = true;
+  startAppScheduler();
+  registerAppSchedulerSyncDispatch(dispatchSync);
+}
+
 /** Registra o handler de sync global (CooperativaSyncProvider). */
 export function registerSyncHandler(handler: SyncHandler): () => void {
+  ensureSchedulerBridge();
   syncHandler = handler;
   return () => {
     if (syncHandler === handler) syncHandler = null;
   };
 }
 
+/**
+ * HX 8.0 — pedido de sync por tier (coalescência + debounce no AppScheduler).
+ * `force` explícito prevalece; senão usa default do tier.
+ */
+export function requestSyncTier(
+  tier: SyncTier,
+  options?: { force?: boolean; immediate?: boolean }
+): void {
+  ensureSchedulerBridge();
+  const force = options?.force ?? defaultForceForSyncTier(tier);
+  enqueueAppSyncRequest({
+    tier,
+    force,
+    immediate: options?.immediate,
+  });
+}
+
 /** Sync leve (respeita intervalo mínimo; pull sem push autoritativo na gestão). */
 export function requestAppSyncLight(): void {
-  if (debounceTimer) clearTimeout(debounceTimer);
-  debounceTimer = setTimeout(() => {
-    debounceTimer = null;
-    dispatchSync(false);
-  }, SYNC_DEBOUNCE_MS);
+  requestSyncTier("pulse", { force: false });
 }
 
 /** Dispara sync após ação do usuário (agrupa chamadas rápidas; força atualização). */
 export function requestAppSync(): void {
-  if (debounceTimer) clearTimeout(debounceTimer);
-  debounceTimer = setTimeout(() => {
-    debounceTimer = null;
-    dispatchSync(true);
-  }, SYNC_DEBOUNCE_MS);
+  requestSyncTier("operacional_full", { force: true });
 }
 
 /** Sync imediato — botão “Atualizar agora”. */
 export function requestAppSyncImmediate(): void {
-  if (debounceTimer) clearTimeout(debounceTimer);
-  debounceTimer = null;
-  dispatchSync(true);
+  requestSyncTier("operacional_full", { force: true, immediate: true });
 }
+
+/** @internal — compat com testes que importavam debounce constante */
+export const SYNC_REQUEST_DEBOUNCE_MS = SYNC_DEBOUNCE_MS;
 
 type VotacaoOperacionalHandler = () => void;
 
@@ -58,7 +86,7 @@ export function registerVotacaoOperacionalSyncHandler(handler: VotacaoOperaciona
 
 /** Baixa pautas de votação da nuvem — ignora intervalo de 2 min da sync completa. */
 export function requestVotacaoOperacionalSync(): void {
-  if (document.hidden) return;
+  if (typeof document !== "undefined" && document.hidden) return;
   if (typeof navigator !== "undefined" && !navigator.onLine) return;
   votacaoOperacionalHandler?.();
 }

@@ -1,0 +1,51 @@
+---
+description: Antes de git commit ou push, entregar resumo do impacto no app e aguardar confirmação explícita do usuário.
+alwaysApply: true
+---
+
+# Confirmação obrigatória antes de commit e push
+
+Nunca executar `git commit`, `git push` nem deploy até o usuário confirmar explicitamente (ex.: "pode commitar", "autorizado", "sim, push").
+
+## Antes de commitar
+
+1. Rodar `git status --short` e `git diff --stat` (ou diff dos arquivos que entrarão no commit).
+2. Entregar ao usuário um **resumo simples** no formato abaixo.
+3. **Parar** e aguardar resposta. Não commitar no mesmo turno em que o resumo foi pedido ou gerado, salvo confirmação clara.
+
+## Antes de push (após commit já feito ou planejado)
+
+1. Informar branch, commit SHA e mensagem.
+2. Repetir o **mesmo resumo de impacto no app** (o que o usuário verá em produção após deploy, se aplicável).
+3. Aguardar confirmação explícita para `git push`.
+
+## Formato do resumo (obrigatório)
+
+Usar exatamente estas seções, em linguagem simples (cooperado/responsável, não só nomes de arquivo):
+
+### O que muda para quem usa o app
+- 2–5 bullets: telas, fluxos, velocidade, mensagens, botões.
+
+### O que NÃO muda
+- HB, pagamentos, conferência, sync de dados, Supabase, etc., quando for o caso.
+
+### Risco
+- **Baixo** / **Médio** / **Alto** + uma linha de por quê.
+
+### Arquivos no commit (lista curta)
+- Só os paths incluídos no commit planejado.
+
+### Testes / build
+- O que foi rodado e resultado (ou "não rodado ainda").
+
+Encerrar com: **"Aguardando sua confirmação para commit e/ou push."**
+
+## Escopo do commit
+
+- Nunca `git add -A` salvo pedido explícito.
+- Não incluir WIP, scripts `_once`, backups, `.worktrees`, migrations não relacionadas.
+- Se o diff tiver arquivo fora do escopo pedido, reportar e não commitar até alinhar.
+
+## Deploy
+
+Mesma regra: resumo de impacto + confirmação antes de disparar deploy manual.

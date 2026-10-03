@@ -9,6 +9,7 @@ import { CooperadoFinanceiroGate } from "@/components/cooperado/CooperadoFinance
 import { CooperadoInicioCardPersistBootstrap } from "@/components/cooperado/CooperadoInicioCardPersistBootstrap";
 import { HbCreditAccountPersistBootstrap } from "@/components/hb-credit/HbCreditAccountPersistBootstrap";
 import { HbCreditNavPrefetch } from "@/hooks/useHbCreditNavPrefetch";
+import { AppSchedulerBootstrap } from "@/components/performance/AppSchedulerBootstrap";
 
 import { GestaoAccessGuard } from "@/components/permissions/GestaoAccessGuard";
 
@@ -21,6 +22,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   return (
     <ProtectedRoute>
       <CooperativaSyncProvider>
+        <AppSchedulerBootstrap />
         <CooperadoInicioCardPersistBootstrap />
         <HbCreditNavPrefetch />
         <HbCreditAccountPersistBootstrap />
