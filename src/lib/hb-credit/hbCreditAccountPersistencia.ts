@@ -3,7 +3,7 @@
  */
 import type { ContaCoopLimiteCooperado } from "@/modules/hb-credit/types";
 
-export const HB_CREDIT_ACCOUNT_STORAGE_VERSION = 3;
+export const HB_CREDIT_ACCOUNT_STORAGE_VERSION = 4;
 
 export type HbCreditAccountPersistido = {
   v: number;

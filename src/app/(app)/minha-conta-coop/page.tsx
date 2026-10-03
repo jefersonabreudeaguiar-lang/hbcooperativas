@@ -180,6 +180,14 @@ function MinhaContaCoopContent() {
     try {
       const acc = await fetchCreditAccount(cnpj, hbApiCooperadoId);
       const accObj = (acc.account as ContaCoopLimiteCooperado) ?? null;
+      const emptyShell =
+        accObj &&
+        (accObj.limiteLiberadoCents ?? 0) <= 0 &&
+        (accObj.valorDisponivelCents ?? 0) <= 0 &&
+        !acc.hasPin;
+      if (emptyShell) {
+        throw new Error("Conta HB não encontrada. Saia e entre de novo ou atualize a página.");
+      }
       setAccount(accObj);
       setUpdatedAt(acc.updatedAt ?? null);
       setHasPin(Boolean(acc.hasPin));

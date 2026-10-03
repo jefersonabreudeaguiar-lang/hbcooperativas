@@ -1,4 +1,5 @@
 import type { User } from "@/types";
+import type { CreditAuthOk } from "@/lib/security/creditGuard";
 
 /**
  * ID usado em /api/credit/account — deve bater com JWT (requireCreditCooperado)
@@ -12,4 +13,18 @@ export function resolveHbCreditApiCooperadoId(
   const canon = canonicalCooperadoId?.trim() ?? "";
   if (user?.role === "cooperado" && sessionId) return sessionId;
   return canon || sessionId;
+}
+
+/** Cooperado autenticado: sempre o ID do JWT (ignora ID canônico errado do cliente). */
+export function resolveCreditAccountCooperadoIdForRequest(
+  ctx: CreditAuthOk,
+  requestedCooperadoId: string
+): string {
+  const requested = requestedCooperadoId.trim();
+  if (!ctx.enforced || !ctx.session) return requested;
+  if (ctx.session.role === "cooperado") {
+    const sid = ctx.session.cooperadoId?.trim();
+    if (sid) return sid;
+  }
+  return requested;
 }

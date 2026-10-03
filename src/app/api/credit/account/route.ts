@@ -16,6 +16,7 @@ import {
 } from "@/lib/security/creditGuard";
 import { normalizeCnpj } from "@/utils/cooperativa";
 import { FINANCIAL_PIN_MIN_LENGTH } from "@/modules/hb-credit/config";
+import { resolveCreditAccountCooperadoIdForRequest } from "@/lib/hb-credit/resolveHbCreditApiCooperadoId";
 
 export async function GET(request: Request) {
   const gate = await requireCreditApi(request);
@@ -23,7 +24,10 @@ export async function GET(request: Request) {
 
   const { searchParams } = new URL(request.url);
   const cnpj = normalizeCnpj(searchParams.get("cnpj") ?? gate.ctx.session?.cooperativaCnpj ?? "");
-  const cooperadoId = String(searchParams.get("cooperadoId") ?? gate.ctx.session?.cooperadoId ?? "");
+  const cooperadoId = resolveCreditAccountCooperadoIdForRequest(
+    gate.ctx,
+    String(searchParams.get("cooperadoId") ?? gate.ctx.session?.cooperadoId ?? "")
+  );
   const view = searchParams.get("view");
 
   if (cnpj.length !== 14 || !cooperadoId) {
@@ -57,6 +61,8 @@ export async function GET(request: Request) {
     cooperadoId
   );
 
+  const hasPin = await hasFinancialPin(gate.ctx.supabase, cnpj, cooperadoId);
+
   return NextResponse.json({
     ok: true,
     account: limite ?? {
@@ -67,7 +73,7 @@ export async function GET(request: Request) {
       bloqueado: false,
     },
     updatedAt: limite?.updatedAt ?? null,
-    hasPin: limite ? await hasFinancialPin(gate.ctx.supabase, cnpj, cooperadoId) : false,
+    hasPin,
     pinResetPending,
   });
 }
@@ -79,7 +85,10 @@ export async function POST(request: Request) {
   const body = await request.json().catch(() => null);
   const action = String(body?.action ?? "");
   const cnpj = normalizeCnpj(String(body?.cnpj ?? gate.ctx.session?.cooperativaCnpj ?? ""));
-  const cooperadoId = String(body?.cooperadoId ?? gate.ctx.session?.cooperadoId ?? "");
+  const cooperadoId = resolveCreditAccountCooperadoIdForRequest(
+    gate.ctx,
+    String(body?.cooperadoId ?? gate.ctx.session?.cooperadoId ?? "")
+  );
 
   if (cnpj.length !== 14 || !cooperadoId) {
     return NextResponse.json({ error: "Parâmetros inválidos." }, { status: 400 });
