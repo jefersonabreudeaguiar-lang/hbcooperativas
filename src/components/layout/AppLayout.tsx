@@ -11,7 +11,7 @@ import {
 import { useState } from "react";
 import { useAuth } from "@/modules/auth/AuthProvider";
 import { useAppData, useAppDataSelector } from "@/hooks/useAppData";
-import { getMenuItems, getMobileNavItems, getCooperadoDrawerMenuItems, getUserFuncaoLabel, isCooperadoAppUser, isHbCreditCooperadoNavEligible, isHbCreditStaffNavEligible } from "@/permissions";
+import { getMenuItems, getMobileNavItems, getCooperadoDrawerMenuItems, getUserFuncaoLabel, isCooperadoAppUser, isHbCreditCooperadoNavEligible, isHbCreditParceiroNavEligible, isHbCreditStaffNavEligible } from "@/permissions";
 import { getUserCooperativaNome } from "@/utils/cooperativa";
 import { PLATFORM_NAME, PLATFORM_TAGLINE } from "@/utils/constants";
 import { AppIcon } from "@/components/ui/AppIcon";
@@ -137,7 +137,8 @@ export function Sidebar({ mobile = false, onClose }: { mobile?: boolean; onClose
     credit.serverConfirmed
   );
   const staffNavEligible = isHbCreditStaffNavEligible(navUser, credit.status, credit.serverConfirmed);
-  const moduleNavEligible = cooperadoNavEligible || staffNavEligible;
+  const parceiroNavEligible = isHbCreditParceiroNavEligible(navUser, credit.status, credit.serverConfirmed);
+  const moduleNavEligible = cooperadoNavEligible || staffNavEligible || parceiroNavEligible;
   const contaCoopUiVisible = isContaCoopUiVisibleForUser(navUser, cooperadoNome || undefined);
 
   const menuItems =
@@ -232,7 +233,8 @@ export function MobileNav() {
     credit.serverConfirmed
   );
   const staffNavEligible = isHbCreditStaffNavEligible(navUser, credit.status, credit.serverConfirmed);
-  const moduleNavEligible = cooperadoNavEligible || staffNavEligible;
+  const parceiroNavEligible = isHbCreditParceiroNavEligible(navUser, credit.status, credit.serverConfirmed);
+  const moduleNavEligible = cooperadoNavEligible || staffNavEligible || parceiroNavEligible;
   const contaCoopUiVisible = isContaCoopUiVisibleForUser(navUser, cooperadoNome || undefined);
   const mobileItems = getMobileNavItems(navUser, credit.enabled, contaCoopUiVisible, data, moduleNavEligible);
 

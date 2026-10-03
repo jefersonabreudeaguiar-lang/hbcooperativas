@@ -10,20 +10,23 @@ import { AlertBanner } from "@/components/ui/AlertBanner";
 
 export function CreditFeatureGate({ children }: { children: React.ReactNode }) {
   const { user } = useAuth();
-  const { enabled, navEnabled, loading, status, errorMessage } = useHbCreditEnabled(user);
+  const { enabled, navEnabled, loading, status, errorMessage, parceiroNavEligible } = useHbCreditEnabled(user);
   const router = useRouter();
   const cooperadoExperience = Boolean(user && isCooperadoAppUser(user));
   const parceiroExperience = Boolean(user && isParceiroAppUser(user));
   const canEnterHbArea =
     Boolean(user) &&
     (cooperadoExperience || parceiroExperience || (user ? canAccessTesoureiroArea(user) : false));
-  const pageAllowed = navEnabled && canEnterHbArea;
+  const pageAllowed =
+    canEnterHbArea &&
+    (navEnabled || (parceiroExperience && (loading || status === "loading" || parceiroNavEligible)));
 
   useEffect(() => {
+    if (parceiroExperience) return;
     if (status === "disabled" && !pageAllowed) {
       router.replace("/dashboard");
     }
-  }, [status, router, pageAllowed]);
+  }, [status, router, pageAllowed, parceiroExperience]);
 
   if (loading && !pageAllowed) return <PageSkeleton />;
 

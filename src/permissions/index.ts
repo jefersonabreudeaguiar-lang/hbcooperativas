@@ -422,16 +422,13 @@ export function isParceiroAppUser(
   return normalizeUserRole(user.role) === "parceiro";
 }
 
-/** Mercado parceiro — mesmo critério de resiliência do menu staff (status remoto instável). */
+/** Mercado parceiro — painel dedicado; elegibilidade segue UI pública + status remoto (como cooperado). */
 export function isHbCreditParceiroNavEligible(
   user: Pick<User, "role">,
   creditStatus: "loading" | "enabled" | "disabled" | "error",
   serverConfirmed: boolean
 ): boolean {
-  const clientFlagRaw = (process.env.NEXT_PUBLIC_HB_CREDIT_ENABLED ?? "").trim().toLowerCase();
-  const clientConfigured =
-    typeof window !== "undefined" ? isHbCreditEnabledClient() : clientFlagRaw === "true" || clientFlagRaw === "1";
-  if (!clientConfigured) return false;
+  if (!isContaCoopUiPublic()) return false;
   if (!isParceiroAppUser(user)) return false;
   if (creditStatus === "disabled") return false;
   return serverConfirmed || creditStatus === "loading" || creditStatus === "error" || creditStatus === "enabled";
@@ -507,7 +504,14 @@ export function getMenuItems(
   const navUser = { ...user, role: effectiveRole };
 
   if (effectiveRole === "parceiro") {
-    return filterMenuForUser(PARCEIRO_MENU, navUser);
+    const parceiroItems = filterContaCoopNavItems(PARCEIRO_MENU, contaCoopUiVisible);
+    const showMercado = isHbCreditNavVisible(
+      creditEnabled,
+      canUser(navUser, "conta_coop", "view"),
+      contaCoopUiVisible,
+      cooperadoNavEligible
+    );
+    return showMercado ? filterMenuForUser(parceiroItems, navUser) : [];
   }
 
   if (effectiveRole === "contador") {
@@ -662,7 +666,14 @@ export function getMobileNavItems(
   }
 
   if (effectiveRole === "parceiro") {
-    return filterMenuForUser(PARCEIRO_MENU, navUser);
+    const parceiroItems = filterContaCoopNavItems(PARCEIRO_MENU, contaCoopUiVisible);
+    const showMercado = isHbCreditNavVisible(
+      creditEnabled,
+      canUser(navUser, "conta_coop", "view"),
+      contaCoopUiVisible,
+      cooperadoNavEligible
+    );
+    return showMercado ? filterMenuForUser(parceiroItems, navUser) : [];
   }
 
   return [];
