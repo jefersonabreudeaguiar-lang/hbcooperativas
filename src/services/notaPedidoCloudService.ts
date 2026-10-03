@@ -14,6 +14,10 @@ import { slimNotaDraftForUpload } from "@/services/imagePipelineService";
 import { flushPendingDeliveryImages } from "@/services/offlineImageQueueService";
 import { secureApiFetch } from "@/lib/security/clientSession";
 import {
+  planNotaFotoPartFetch,
+  type NotaFotoPartFetchPlanOptions,
+} from "@/services/notaFotoPartFetchPlan";
+import {
   getLastNotasSyncAt,
   forceNextFullNotasSync,
   clearNotasSyncMeta,
@@ -617,7 +621,7 @@ export async function resolveFotosNotaParaExibicao(
       continue;
     }
     if (cnpjOk) {
-      const cloud = await fetchNotaFotoPartBlobUrl(cnpjOk, nota.id, i);
+      const cloud = await fetchNotaFotoPartBlobUrl(cnpjOk, nota.id, i, { partCount: qtd });
       if (cloud) {
         out.push(cloud);
         continue;
@@ -633,34 +637,26 @@ export async function fetchNotaFotoPartBlobUrl(
   cnpj: string,
   notaId: string,
   index: number,
-  options?: { compact?: boolean }
+  options?: NotaFotoPartFetchPlanOptions
 ): Promise<string | null> {
   const digits = normalizeCnpj(cnpj);
   if (digits.length !== 14) return null;
 
-  const tryIndices: number[] = [index];
-  if (index !== 0) tryIndices.push(0);
-  if (!options?.compact) {
-    for (let i = 0; i < 8; i++) {
-      if (!tryIndices.includes(i)) tryIndices.push(i);
-    }
-  }
+  const plan = planNotaFotoPartFetch(index, options);
+  if (plan.action === "skip") return null;
 
-  for (const idx of tryIndices) {
-    try {
-      const res = await secureApiFetch(
-        `/api/notas-pedido/${encodeURIComponent(notaId)}/foto?cnpj=${digits}&index=${idx}`,
-        { cache: "no-store" }
-      );
-      if (!res.ok) continue;
-      const blob = await res.blob();
-      if (blob.size <= 0) continue;
-      return URL.createObjectURL(blob);
-    } catch {
-      continue;
-    }
+  try {
+    const res = await secureApiFetch(
+      `/api/notas-pedido/${encodeURIComponent(notaId)}/foto?cnpj=${digits}&index=${plan.index}`,
+      { cache: "no-store" }
+    );
+    if (!res.ok) return null;
+    const blob = await res.blob();
+    if (blob.size <= 0) return null;
+    return URL.createObjectURL(blob);
+  } catch {
+    return null;
   }
-  return null;
 }
 
 export function getCooperativaCnpj(data: AppData, cooperativaId?: string): string | undefined {
