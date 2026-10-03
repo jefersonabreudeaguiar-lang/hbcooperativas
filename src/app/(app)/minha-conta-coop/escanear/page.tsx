@@ -12,6 +12,7 @@ import { usePermissions } from "@/hooks/usePermissions";
 import { useAppData } from "@/hooks/useAppData";
 import { getUserCooperativaId, normalizeCnpj } from "@/utils/cooperativa";
 import { prepareAndOpenHbCreditPaymentFromQrScan } from "@/lib/hb-credit/openHbCreditPaymentFromQr";
+import { resolveHbCreditApiCooperadoId } from "@/lib/hb-credit/resolveHbCreditApiCooperadoId";
 
 export default function EscanearQrContaCoopPage() {
   return (
@@ -30,6 +31,11 @@ function EscanearQrContent() {
   const [validating, setValidating] = useState(false);
   const [scanError, setScanError] = useState("");
 
+  const hbApiCooperadoId = useMemo(
+    () => resolveHbCreditApiCooperadoId(user, cooperadoId),
+    [user, cooperadoId]
+  );
+
   const cnpj = useMemo(() => {
     if (!user || !data) return "";
     if (user.cooperativaCnpj) return normalizeCnpj(user.cooperativaCnpj);
@@ -40,16 +46,20 @@ function EscanearQrContent() {
 
   const handleScan = useCallback(
     (payload: string) => {
-      if (validating || !cooperadoId || cnpj.length !== 14) return;
+      if (validating || !hbApiCooperadoId || cnpj.length !== 14) return;
       setScanError("");
       try {
-        prepareAndOpenHbCreditPaymentFromQrScan(router, { cnpj, cooperadoId, qrPayload: payload });
+        prepareAndOpenHbCreditPaymentFromQrScan(router, {
+          cnpj,
+          cooperadoId: hbApiCooperadoId,
+          qrPayload: payload,
+        });
       } catch (e) {
         setScanError(e instanceof Error ? e.message : "Não foi possível usar este QR Code.");
         setValidating(false);
       }
     },
-    [cnpj, cooperadoId, router, validating]
+    [cnpj, hbApiCooperadoId, router, validating]
   );
 
   return (

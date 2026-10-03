@@ -9,7 +9,11 @@ import {
   setFinancialPin,
   convertCashbackToReceivable,
 } from "@/lib/supabase/contaCoopStorage";
-import { requireCreditApi, requireCreditCooperado, requireCreditCnpj } from "@/lib/security/creditGuard";
+import {
+  requireCreditApi,
+  requireCreditCooperadoAccess,
+  requireCreditCnpj,
+} from "@/lib/security/creditGuard";
 import { normalizeCnpj } from "@/utils/cooperativa";
 import { FINANCIAL_PIN_MIN_LENGTH } from "@/modules/hb-credit/config";
 
@@ -28,7 +32,7 @@ export async function GET(request: Request) {
 
   const denyCoop = requireCreditCnpj(gate.ctx, cnpj);
   if (denyCoop) return denyCoop;
-  const denySelf = requireCreditCooperado(gate.ctx, cooperadoId);
+  const denySelf = await requireCreditCooperadoAccess(gate.ctx, cooperadoId, cnpj);
   if (denySelf) return denySelf;
 
   if (view === "ledger") {
@@ -83,7 +87,7 @@ export async function POST(request: Request) {
 
   const denyCoop = requireCreditCnpj(gate.ctx, cnpj);
   if (denyCoop) return denyCoop;
-  const denySelf = requireCreditCooperado(gate.ctx, cooperadoId);
+  const denySelf = await requireCreditCooperadoAccess(gate.ctx, cooperadoId, cnpj);
   if (denySelf) return denySelf;
 
   if (action === "set_pin" || action === "change_pin") {

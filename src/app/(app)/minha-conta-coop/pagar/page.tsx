@@ -38,6 +38,7 @@ import {
   hbCreditDebitFromGrossCents,
 } from "@/modules/hb-credit/engine/paymentAffordability";
 import { cn } from "@/utils/format";
+import { resolveHbCreditApiCooperadoId } from "@/lib/hb-credit/resolveHbCreditApiCooperadoId";
 
 const pageBg = "min-h-[calc(100vh-4rem)] flex flex-col bg-gradient-to-b from-emerald-50 via-green-50/95 to-emerald-100/80 text-gray-900";
 
@@ -66,6 +67,11 @@ function HbCreditPagarContent() {
   const [error, setError] = useState("");
   const [success, setSuccess] = useState<{ receiptCode: string } | null>(null);
 
+  const hbApiCooperadoId = useMemo(
+    () => resolveHbCreditApiCooperadoId(user, cooperadoId),
+    [user, cooperadoId]
+  );
+
   const cnpj = useMemo(() => {
     if (!user || !data) return "";
     if (user.cooperativaCnpj) return normalizeCnpj(user.cooperativaCnpj);
@@ -90,7 +96,7 @@ function HbCreditPagarContent() {
   }, [cnpj, cooperadoId, cooperadoNome, data, user]);
 
   useEffect(() => {
-    if (!cnpj || !cooperadoId) return;
+    if (!cnpj || !hbApiCooperadoId) return;
 
     const ready = peekHbCreditPaymentDraft();
     if (ready) {
@@ -104,7 +110,12 @@ function HbCreditPagarContent() {
       router.replace("/minha-conta-coop");
       return;
     }
-    if (pending.cnpj !== cnpj || pending.cooperadoId !== cooperadoId) {
+    if (
+      pending.cnpj !== cnpj ||
+      (pending.cooperadoId !== hbApiCooperadoId &&
+        pending.cooperadoId !== cooperadoId &&
+        pending.cooperadoId !== user?.cooperadoId)
+    ) {
       clearHbCreditPendingQrScan();
       router.replace("/minha-conta-coop");
       return;
@@ -137,22 +148,22 @@ function HbCreditPagarContent() {
     return () => {
       cancelled = true;
     };
-  }, [cnpj, cooperadoId, router]);
+  }, [cnpj, hbApiCooperadoId, cooperadoId, user?.cooperadoId, router]);
 
   useEffect(() => {
-    if (!cnpj || !cooperadoId) return;
-    const cached = lerHbCreditAccountPersistido(cnpj, cooperadoId);
+    if (!cnpj || !hbApiCooperadoId) return;
+    const cached = lerHbCreditAccountPersistido(cnpj, hbApiCooperadoId);
     if (cached?.hasPin) setHasPin(true);
-  }, [cnpj, cooperadoId]);
+  }, [cnpj, hbApiCooperadoId]);
 
   useEffect(() => {
-    if (!cnpj || !cooperadoId || loadingQr) return;
-    void fetchCreditAccount(cnpj, cooperadoId)
+    if (!cnpj || !hbApiCooperadoId || loadingQr) return;
+    void fetchCreditAccount(cnpj, hbApiCooperadoId)
       .then((acc) => setHasPin(Boolean(acc.hasPin)))
       .catch(() => {
         /* Rede lenta: não assumir “sem PIN” — authorize valida o PIN na nuvem. */
       });
-  }, [cnpj, cooperadoId, loadingQr]);
+  }, [cnpj, hbApiCooperadoId, loadingQr]);
 
   const limite = draft?.limite;
   const intent = draft?.intent;
@@ -170,7 +181,7 @@ function HbCreditPagarContent() {
   }, [router]);
 
   const confirmar = async () => {
-    if (!draft || !cnpj || !cooperadoId || !intent || !limite) return;
+    if (!draft || !cnpj || !hbApiCooperadoId || !intent || !limite) return;
     if (hasPin === false) {
       setError("Cadastre seu PIN de pagamento em HB Créditos → Início antes de continuar.");
       return;
@@ -180,14 +191,14 @@ function HbCreditPagarContent() {
     try {
       const res = await authorizeCreditPayment({
         cnpj,
-        cooperadoId,
+        cooperadoId: hbApiCooperadoId,
         cooperadoNome,
         cooperativaId: contaCoopValorSync?.cooperativaId,
         mesReferencia: contaCoopValorSync?.mesReferencia,
         intentId: intent.id,
         nonce: intent.nonce,
         pin: payPin,
-        idempotencyKey: `pay:${intent.id}:${cooperadoId}`,
+        idempotencyKey: `pay:${intent.id}:${hbApiCooperadoId}`,
         useCashback,
       });
 
@@ -201,7 +212,7 @@ function HbCreditPagarContent() {
             ? Math.max(0, cashback - Math.min(cashback, intent.amountCents))
             : limite.cashbackDisponivelCents,
         };
-        gravarHbCreditAccountPersistido(cnpj, cooperadoId, {
+        gravarHbCreditAccountPersistido(cnpj, hbApiCooperadoId, {
           v: HB_CREDIT_ACCOUNT_STORAGE_VERSION,
           account: nextAccount,
           updatedAt: new Date().toISOString(),

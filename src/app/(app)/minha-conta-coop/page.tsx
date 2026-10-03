@@ -48,6 +48,7 @@ import { useSyncContaCoopValorReceberPilot } from "@/hooks/useSyncContaCoopValor
 import { useHbCreditAccountRevisionPoll } from "@/hooks/useHbCreditAccountRevisionPoll";
 import { PageSkeleton } from "@/components/ui/PageSkeleton";
 import { cn } from "@/utils/format";
+import { resolveHbCreditApiCooperadoId } from "@/lib/hb-credit/resolveHbCreditApiCooperadoId";
 
 type Tab = "inicio" | "pagar" | "extrato";
 
@@ -95,6 +96,11 @@ function MinhaContaCoopContent() {
   const auxEntrySignaledRef = useRef(false);
 
   const VALOR_RECEBER_SYNC_DEFER_MS = 1_500;
+
+  const hbApiCooperadoId = useMemo(
+    () => resolveHbCreditApiCooperadoId(user, cooperadoId),
+    [user, cooperadoId]
+  );
 
   const cnpj = useMemo(() => {
     if (!user || !data) return "";
@@ -151,10 +157,10 @@ function MinhaContaCoopContent() {
   }, []);
 
   const loadLedger = useCallback(async () => {
-    if (!cnpj || !cooperadoId) return;
+    if (!cnpj || !hbApiCooperadoId) return;
     setLedgerLoading(true);
     try {
-      const lg = await fetchCreditLedger(cnpj, cooperadoId);
+      const lg = await fetchCreditLedger(cnpj, hbApiCooperadoId);
       setLedger(lg);
       setLedgerLoaded(true);
     } catch (e) {
@@ -162,23 +168,23 @@ function MinhaContaCoopContent() {
     } finally {
       setLedgerLoading(false);
     }
-  }, [cnpj, cooperadoId]);
+  }, [cnpj, hbApiCooperadoId]);
 
   const reload = useCallback(async (opts?: { background?: boolean }) => {
-    if (!cnpj || !cooperadoId) return;
+    if (!cnpj || !hbApiCooperadoId) return;
     const background = opts?.background ?? false;
     if (!background) setLoading(true);
     else setAccountRefreshing(true);
     if (!background) setLedgerLoaded(false);
     setError("");
     try {
-      const acc = await fetchCreditAccount(cnpj, cooperadoId);
+      const acc = await fetchCreditAccount(cnpj, hbApiCooperadoId);
       const accObj = (acc.account as ContaCoopLimiteCooperado) ?? null;
       setAccount(accObj);
       setUpdatedAt(acc.updatedAt ?? null);
       setHasPin(Boolean(acc.hasPin));
       setPinResetPending(Boolean(acc.pinResetPending));
-      gravarHbCreditAccountPersistido(cnpj, cooperadoId, {
+      gravarHbCreditAccountPersistido(cnpj, hbApiCooperadoId, {
         v: HB_CREDIT_ACCOUNT_STORAGE_VERSION,
         account: accObj,
         updatedAt: acc.updatedAt ?? null,
@@ -200,13 +206,17 @@ function MinhaContaCoopContent() {
         notifyHbCreditAccountLoaded();
       }
     }
-  }, [cnpj, cooperadoId]);
+  }, [cnpj, hbApiCooperadoId]);
 
   useEffect(() => {
-    if (!cnpj || !cooperadoId) return;
+    if (!cnpj || !hbApiCooperadoId) return;
     const snap =
-      lerHbCreditAccountPersistido(cnpj, cooperadoId) ??
-      lerHbCreditAccountPersistidoFlex(cooperadoId, cnpj);
+      lerHbCreditAccountPersistido(cnpj, hbApiCooperadoId) ??
+      lerHbCreditAccountPersistidoFlex(hbApiCooperadoId, cnpj) ??
+      (cooperadoId && cooperadoId !== hbApiCooperadoId
+        ? lerHbCreditAccountPersistido(cnpj, cooperadoId) ??
+          lerHbCreditAccountPersistidoFlex(cooperadoId, cnpj)
+        : null);
     let background = false;
     if (snap?.account) {
       const applied = aplicarHbCreditAccountPersistido(snap);
@@ -223,7 +233,7 @@ function MinhaContaCoopContent() {
       }
     }
     void reload({ background });
-  }, [cnpj, cooperadoId, reload]);
+  }, [cnpj, hbApiCooperadoId, cooperadoId, reload]);
 
   useEffect(() => {
     const onLimiteSynced = () => {
@@ -235,8 +245,8 @@ function MinhaContaCoopContent() {
 
   useHbCreditAccountRevisionPoll({
     cnpj,
-    cooperadoId: cooperadoId ?? "",
-    enabled: auxSyncEnabled && Boolean(cnpj && cooperadoId),
+    cooperadoId: hbApiCooperadoId ?? "",
+    enabled: auxSyncEnabled && Boolean(cnpj && hbApiCooperadoId),
     onRevisionChange: () => {
       void reload({ background: true });
     },
@@ -244,9 +254,9 @@ function MinhaContaCoopContent() {
 
   useEffect(() => {
     if (tab !== "extrato" || ledgerLoaded || ledgerLoading) return;
-    if (!cnpj || !cooperadoId) return;
+    if (!cnpj || !hbApiCooperadoId) return;
     void loadLedger();
-  }, [tab, ledgerLoaded, ledgerLoading, cnpj, cooperadoId, loadLedger]);
+  }, [tab, ledgerLoaded, ledgerLoading, cnpj, hbApiCooperadoId, loadLedger]);
 
   useEffect(() => {
     const onVisible = () => {
@@ -258,28 +268,28 @@ function MinhaContaCoopContent() {
 
   const processarQr = useCallback(
     (payload: string) => {
-      if (!cnpj || !cooperadoId || !payload.trim()) return;
+      if (!cnpj || !hbApiCooperadoId || !payload.trim()) return;
       setError("");
       setSuccess("");
       try {
         prepareAndOpenHbCreditPaymentFromQrScan(router, {
           cnpj,
-          cooperadoId,
+          cooperadoId: hbApiCooperadoId,
           qrPayload: payload.trim(),
         });
       } catch (e) {
         setError(e instanceof Error ? e.message : "Código inválido ou expirado.");
       }
     },
-    [cnpj, cooperadoId, router]
+    [cnpj, hbApiCooperadoId, router]
   );
 
   const salvarPin = async () => {
-    if (!cnpj || !cooperadoId) return;
+    if (!cnpj || !hbApiCooperadoId) return;
     setBusy(true);
     setError("");
     try {
-      await setCreditFinancialPin(cnpj, cooperadoId, pinSetup);
+      await setCreditFinancialPin(cnpj, hbApiCooperadoId, pinSetup);
       setHasPin(true);
       setPinResetPending(false);
       setPinSetup("");
@@ -292,7 +302,7 @@ function MinhaContaCoopContent() {
   };
 
   const solicitarResetPin = async () => {
-    if (!cnpj || !cooperadoId) return;
+    if (!cnpj || !hbApiCooperadoId) return;
     const msg =
       "Solicitar reset do PIN de pagamento?\n\n" +
       "O responsável da cooperativa receberá o pedido em Conta Coop → Limites e precisará confirmar o reset. " +
@@ -303,7 +313,7 @@ function MinhaContaCoopContent() {
     setError("");
     setSuccess("");
     try {
-      const data = await requestCooperadoPinReset(cnpj, cooperadoId);
+      const data = await requestCooperadoPinReset(cnpj, hbApiCooperadoId);
       setPinResetPending(true);
       setSuccess(data.message ?? "Solicitação enviada à cooperativa.");
     } catch (e) {
@@ -314,7 +324,7 @@ function MinhaContaCoopContent() {
   };
 
   const handleCashbackParaReceber = async () => {
-    if (!cnpj || !cooperadoId || !user || !data || !mesReferenciaReceber || busy || isOffline) return;
+    if (!cnpj || !hbApiCooperadoId || !user || !data || !mesReferenciaReceber || busy || isOffline) return;
     const coopId = getUserCooperativaId(user, data);
     if (!coopId) return;
     if (cashbackJaNaFicha) {
@@ -328,7 +338,7 @@ function MinhaContaCoopContent() {
     try {
       const res = await convertCreditCashbackToReceivable({
         cnpj,
-        cooperadoId,
+        cooperadoId: hbApiCooperadoId,
         mesReferencia: mesReferenciaReceber,
         valorAvulsoId,
       });
@@ -339,7 +349,7 @@ function MinhaContaCoopContent() {
           criarValorAvulsoReceber(d, {
             id: valorAvulsoId,
             cooperativaId: coopId,
-            cooperadoId,
+            cooperadoId: cooperadoId ?? hbApiCooperadoId,
             mesReferencia: mesReferenciaReceber,
             motivo: CASHBACK_HB_CREDITO_MOTIVO_AVULSO,
             valor: round2(amountCents / 100),

@@ -9,7 +9,10 @@ import { requireApiAuth, requireCooperativaAccess, requireStaffRole } from "@/li
 import type { SessionClaims } from "@/lib/security/jwt";
 import { getSupabaseAdmin, isSupabaseConfigured } from "@/lib/supabase/admin";
 import { getParceiroByUserId } from "@/lib/supabase/contaCoopStorage";
+import { fetchCooperadosFromStorage } from "@/lib/supabase/cooperadosStorage";
 import type { ContaCoopParceiro } from "@/modules/hb-credit/types";
+import { titularCooperadoIds } from "@/lib/hb-credit/hbCreditLimiteTitularPick";
+import { normalizeCnpj } from "@/utils/cooperativa";
 import {
   isMobileCooperativaUserAgent,
   resolveMobileCooperadoIdFromEmail,
@@ -95,6 +98,28 @@ export function requireCreditCooperado(
     return NextResponse.json({ error: "Ação restrita ao cooperado." }, { status: 403 });
   }
   return null;
+}
+
+/** Cooperado: JWT ou mesmo titular (CPF/nome) — paridade com pick da conta HB na nuvem. */
+export async function requireCreditCooperadoAccess(
+  ctx: CreditAuthOk,
+  cooperadoId: string,
+  cooperativeCnpj: string
+): Promise<NextResponse | null> {
+  const strict = requireCreditCooperado(ctx, cooperadoId);
+  if (!strict) return null;
+  if (!ctx.enforced || !ctx.session || ctx.session.role !== "cooperado") return strict;
+
+  const sessionId = ctx.session.cooperadoId?.trim();
+  if (!sessionId) return strict;
+
+  const cooperados = await fetchCooperadosFromStorage(ctx.supabase, normalizeCnpj(cooperativeCnpj)).catch(
+    () => []
+  );
+  const allowed = titularCooperadoIds(cooperados, sessionId);
+  if (allowed.includes(cooperadoId)) return null;
+
+  return strict;
 }
 
 /** Pagamento QR — cooperado real ou responsável no celular com vínculo fixo. */
