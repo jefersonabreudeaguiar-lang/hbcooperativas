@@ -794,16 +794,66 @@ export async function deleteAllNotasForCnpj(
   return { removed: removed + (count ?? 0), tableMissing: false };
 }
 
+/**
+ * Fotos subiram como rascunho (upload incremental) mas o cooperado não concluiu
+ * "Enviar para o responsável" — invisível na fila até publicar status.
+ */
+async function promoteRascunhosComFotoParaFilaConferencia(
+  supabase: SupabaseClient,
+  cnpj: string
+): Promise<number> {
+  const digits = cnpj.replace(/\D/g, "");
+  if (digits.length !== 14) return 0;
+
+  const { data: rows, error } = await supabase
+    .from("notas_pedido")
+    .select("id, status, payload")
+    .eq("cooperativa_cnpj", digits)
+    .eq("status", "rascunho");
+
+  if (error || !rows?.length) return 0;
+
+  let promoted = 0;
+  for (const row of rows) {
+    const payload = (row.payload ?? {}) as NotaPedido;
+    const id = String(row.id);
+    const esperado = Math.max(payload.fotosEnviadasCount ?? 0, 0);
+    if (!payload.fotoNaNuvem && esperado <= 0) continue;
+
+    const parts = await countUploadedFotoParts(supabase, digits, id);
+    if (parts <= 0) continue;
+    if (esperado > 0 && parts < esperado) continue;
+
+    const now = new Date().toISOString();
+    const publicada: NotaPedido = {
+      ...payload,
+      id,
+      status: "aguardando_conferencia",
+      fotoNaNuvem: true,
+      fotosEnviadasCount: Math.max(esperado, parts),
+      updatedAt: now,
+      fotoEnviadaEm: payload.fotoEnviadaEm ?? now,
+    };
+    const upsert = await upsertNotasInTable(supabase, digits, [notaPayloadForTable(publicada)]);
+    if (upsert.ok) promoted += 1;
+  }
+  return promoted;
+}
+
 /** Repara payloads na tabela SQL (zombies) e replica órfãos do storage → fila. */
 export async function repairFilaConferenciaNotasNaNuvem(
   supabase: SupabaseClient,
   cnpj: string
-): Promise<{ zombiesFixed: number; orphansMerged: number }> {
+): Promise<{ zombiesFixed: number; orphansMerged: number; rascunhosPublicados: number }> {
   const digits = cnpj.replace(/\D/g, "");
-  if (digits.length !== 14) return { zombiesFixed: 0, orphansMerged: 0 };
+  if (digits.length !== 14) return { zombiesFixed: 0, orphansMerged: 0, rascunhosPublicados: 0 };
+
+  const rascunhosPublicados = await promoteRascunhosComFotoParaFilaConferencia(supabase, digits);
 
   const fromTable = await fetchNotasFromTable(supabase, digits);
-  if (fromTable.tableMissing) return { zombiesFixed: 0, orphansMerged: 0 };
+  if (fromTable.tableMissing) {
+    return { zombiesFixed: 0, orphansMerged: 0, rascunhosPublicados };
+  }
 
   let zombiesFixed = 0;
   for (const nota of fromTable.notas) {
@@ -817,5 +867,5 @@ export async function repairFilaConferenciaNotasNaNuvem(
   const merged = await mergeStorageFilaOrphansIntoTableNotas(supabase, digits, fromTable.notas);
   const orphansMerged = Math.max(0, merged.length - beforeOrphans);
 
-  return { zombiesFixed, orphansMerged };
+  return { zombiesFixed, orphansMerged, rascunhosPublicados };
 }
