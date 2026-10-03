@@ -1879,6 +1879,19 @@ export async function getLimiteCooperadoAlinhadoAEntregas(
   return capped;
 }
 
+/**
+ * Limite exibido no app cooperado — mesma fonte da aba Limites do responsável (GET /api/credit/limites?fast=1):
+ * conta `hb_credit_accounts` via titular (`getLimiteCooperado`), sem re-cap M6 que pode zerar disponível indevidamente.
+ * Pagamentos continuam validados em `prepareHbCreditPaymentAuthorize` / `getLimiteCooperadoAlinhadoAEntregas`.
+ */
+export async function getLimiteCooperadoExibicaoParidadeLimites(
+  supabase: SupabaseClient,
+  cnpj: string,
+  cooperadoId: string
+): Promise<ContaCoopLimiteCooperado | null> {
+  return getLimiteCooperado(supabase, cnpj, cooperadoId);
+}
+
 export async function setFinancialPin(
   supabase: SupabaseClient,
   cnpj: string,

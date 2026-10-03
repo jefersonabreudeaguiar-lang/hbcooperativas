@@ -11,8 +11,10 @@ import { scheduleContaCoopAuxSync } from "@/lib/hb-credit/contaCoopAuxSyncSchedu
 import { HB_CREDIT_LIMITE_SYNCED_EVENT } from "@/lib/hb-credit/hbCreditLimiteSyncEvents";
 import { usePathname } from "next/navigation";
 import { useHbCreditAccountRevisionPoll } from "@/hooks/useHbCreditAccountRevisionPoll";
+import { resolveHbCreditApiCooperadoId } from "@/lib/hb-credit/resolveHbCreditApiCooperadoId";
 import { resolveCooperativaCnpj } from "@/services/notaPedidoCloudService";
 import { getUserCooperativaId } from "@/utils/cooperativa";
+import { notifyHbCreditLimiteSynced } from "@/lib/hb-credit/hbCreditLimiteSyncEvents";
 
 /** Cache HB Créditos cooperado após login/sync (abre Minha Conta Coop na hora). */
 export function HbCreditAccountPersistBootstrap() {
@@ -48,8 +50,15 @@ export function HbCreditAccountPersistBootstrap() {
     };
   }, [hbOn, user?.id, user?.cooperativaId, dataRevision, user]);
 
+  const hbApiCooperadoId =
+    user?.role === "cooperado" ? resolveHbCreditApiCooperadoId(user, user.cooperadoId) : "";
+
   const persist = () => {
-    if (user?.role === "cooperado") void persistirHbCreditAccountCooperado(user);
+    if (user?.role === "cooperado") {
+      void persistirHbCreditAccountCooperado(user).then((ok) => {
+        if (ok) notifyHbCreditLimiteSynced({ immediate: true });
+      });
+    }
   };
 
   useEffect(() => {
@@ -82,13 +91,20 @@ export function HbCreditAccountPersistBootstrap() {
     return () => window.removeEventListener(HB_CREDIT_LIMITE_SYNCED_EVENT, onLimiteSynced);
   }, [hbOn, user?.id, user?.role]);
 
+  useEffect(() => {
+    if (!hbOn || user?.role !== "cooperado") return;
+    const onOnline = () => persist();
+    window.addEventListener("online", onOnline);
+    return () => window.removeEventListener("online", onOnline);
+  }, [hbOn, user?.id, user?.role]);
+
   useHbCreditAccountRevisionPoll({
     cnpj: coopCnpj,
-    cooperadoId: user?.cooperadoId ?? "",
+    cooperadoId: hbApiCooperadoId,
     enabled:
       hbOn &&
       user?.role === "cooperado" &&
-      Boolean(coopCnpj && user.cooperadoId) &&
+      Boolean(coopCnpj && hbApiCooperadoId) &&
       !pathname?.includes("minha-conta-coop"),
     onRevisionChange: persist,
   });

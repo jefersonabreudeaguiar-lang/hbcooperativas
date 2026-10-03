@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import {
-  getLimiteCooperadoAlinhadoAEntregas,
+  getLimiteCooperadoExibicaoParidadeLimites,
   getHbCreditAccountRevision,
   hasFinancialPin,
   hasPendingCooperadoPinResetRequest,
@@ -49,12 +49,12 @@ export async function GET(request: Request) {
     return NextResponse.json({ ok: true, revision });
   }
 
-  const actorId = gate.ctx.session?.sub ?? cooperadoId;
-  /** Paridade com Limites do responsável: base M6 + persistência automática de drift. */
-  const limite = await getLimiteCooperadoAlinhadoAEntregas(gate.ctx.supabase, cnpj, cooperadoId, {
-    ensurePersisted: true,
-    actorUserId: actorId,
-  });
+  /** Paridade com aba Limites (lista rápida): saldo/limit_released da conta na nuvem. */
+  const limite = await getLimiteCooperadoExibicaoParidadeLimites(
+    gate.ctx.supabase,
+    cnpj,
+    cooperadoId
+  );
   const pinResetPending = await hasPendingCooperadoPinResetRequest(
     gate.ctx.supabase,
     cnpj,

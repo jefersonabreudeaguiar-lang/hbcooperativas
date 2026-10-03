@@ -3,7 +3,18 @@
  */
 import type { ContaCoopLimiteCooperado } from "@/modules/hb-credit/types";
 
-export const HB_CREDIT_ACCOUNT_STORAGE_VERSION = 4;
+export const HB_CREDIT_ACCOUNT_STORAGE_VERSION = 5;
+
+/** Cache antigo com conta “zerada” sem PIN — não exibir; força refetch na nuvem. */
+export function hbCreditAccountPersistidoEhShellVazio(snap: HbCreditAccountPersistido): boolean {
+  const acc = snap.account;
+  if (!acc) return true;
+  const liberado = Math.max(0, acc.limiteLiberadoCents ?? 0);
+  const disponivel = Math.max(0, acc.valorDisponivelCents ?? 0);
+  const usado = Math.max(0, acc.valorUsadoCents ?? 0);
+  if (liberado > 0 || disponivel > 0 || usado > 0) return false;
+  return !snap.hasPin;
+}
 
 export type HbCreditAccountPersistido = {
   v: number;
@@ -28,6 +39,7 @@ export function lerHbCreditAccountPersistido(
     if (!raw) return null;
     const parsed = JSON.parse(raw) as HbCreditAccountPersistido;
     if (parsed.v !== HB_CREDIT_ACCOUNT_STORAGE_VERSION) return null;
+    if (hbCreditAccountPersistidoEhShellVazio(parsed)) return null;
     return parsed;
   } catch {
     return null;
@@ -52,7 +64,9 @@ export function lerHbCreditAccountPersistidoFlex(
       const raw = localStorage.getItem(key);
       if (!raw) continue;
       const parsed = JSON.parse(raw) as HbCreditAccountPersistido;
-      if (parsed.v === HB_CREDIT_ACCOUNT_STORAGE_VERSION) return parsed;
+      if (parsed.v === HB_CREDIT_ACCOUNT_STORAGE_VERSION && !hbCreditAccountPersistidoEhShellVazio(parsed)) {
+        return parsed;
+      }
     }
   } catch {
     return null;

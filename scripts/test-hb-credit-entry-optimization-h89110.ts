@@ -20,14 +20,22 @@ function assert(cond: boolean, msg: string) {
 
 const accountRoute = read("src/app/api/credit/account/route.ts");
 assert(
-  accountRoute.includes("getLimiteCooperadoAlinhadoAEntregas"),
-  "GET /api/credit/account usa limite alinhado à base M6"
+  accountRoute.includes("getLimiteCooperadoExibicaoParidadeLimites"),
+  "GET /api/credit/account usa limite em paridade com aba Limites (fast)"
 );
 assert(
-  accountRoute.includes("ensurePersisted: true"),
-  "GET /api/credit/account persiste drift STALE/inflado antes de responder"
+  !accountRoute.includes("ensurePersisted: true"),
+  "GET /api/credit/account não dispara persist M6 pesado em cada load"
 );
 assert(!accountRoute.includes("light read"), "account route sem fast/light read adicionado");
+assert(
+  read("src/lib/hb-credit/hbCreditAccountPersistencia.ts").includes("HB_CREDIT_ACCOUNT_STORAGE_VERSION = 5"),
+  "cache HB cooperado v5"
+);
+assert(
+  read("src/components/hb-credit/HbCreditAccountPersistBootstrap.tsx").includes('"online"'),
+  "bootstrap refetch HB ao voltar online"
+);
 
 const cloudGate = read("src/components/hb-credit/CloudSessionGate.tsx");
 assert(cloudGate.includes("initialCloudGateReady"), "CloudSessionGate inicializa ready com isCloudSessionActive");
@@ -42,7 +50,9 @@ const page = read("src/app/(app)/minha-conta-coop/page.tsx");
 assert(page.includes("auxSyncEnabled"), "página defer aux sync até após fetchCreditAccount");
 assert(page.includes("notifyHbCreditAccountLoaded"), "página sinaliza account loaded");
 assert(page.includes("fetchCreditAccount"), "fetchCreditAccount preservado");
-const reloadBlock = page.match(/const reload = useCallback\(async \(\) => \{[\s\S]*?\}, \[cnpj, cooperadoId\]\);/);
+const reloadBlock = page.match(
+  /const reload = useCallback\(async \(opts\?: \{ background\?: boolean \}\) => \{[\s\S]*?\}, \[cnpj, hbApiCooperadoId\]\);/
+);
 assert(Boolean(reloadBlock), "reload() presente");
 assert(
   reloadBlock![0].includes("fetchCreditAccount") && !reloadBlock![0].includes("fetchCreditLedger"),

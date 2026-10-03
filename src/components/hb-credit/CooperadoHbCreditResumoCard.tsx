@@ -18,6 +18,7 @@ import {
 } from "@/lib/hb-credit/hbCreditLimiteSyncEvents";
 import { persistirHbCreditAccountCooperado } from "@/services/hbCreditAccountPersistenciaService";
 import { fetchCreditAccount } from "@/services/creditApiService";
+import { useHbCreditAccountRevisionPoll } from "@/hooks/useHbCreditAccountRevisionPoll";
 import {
   gravarHbCreditAccountPersistido,
   HB_CREDIT_ACCOUNT_STORAGE_VERSION,
@@ -87,6 +88,15 @@ export function CooperadoHbCreditResumoCard({ cnpj }: Props) {
       window.removeEventListener(HB_CREDIT_LIMITE_SYNCED_EVENT, onCloud);
     };
   }, [hbApiCooperadoId, cooperadoId, cnpj, user]);
+
+  useHbCreditAccountRevisionPoll({
+    cnpj,
+    cooperadoId: hbApiCooperadoId ?? "",
+    enabled: Boolean(cnpj.length === 14 && hbApiCooperadoId && user?.role === "cooperado"),
+    onRevisionChange: () => {
+      if (user?.role === "cooperado") void persistirHbCreditAccountCooperado(user);
+    },
+  });
 
   const totals = useMemo(() => {
     const acc = snap?.account;
