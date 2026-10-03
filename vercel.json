@@ -7,6 +7,9 @@
     "NEXT_PUBLIC_BIC_CENTRAL_READ_FULL_OFFICIAL": "true",
     "NEXT_PUBLIC_CONTA_COOP_UI_PUBLIC": "1",
     "NEXT_PUBLIC_CONTA_COOP_VALOR_RECEBER_PUBLIC": "1",
+    "HB_CREDIT_ENABLED": "true",
+    "HB_CREDIT_OPERATIONS_ENABLED": "true",
+    "NEXT_PUBLIC_HB_CREDIT_ENABLED": "true",
     "AUTH_SECRET": "hb-cooperativas-prod-jwt-secret-2026-stable"
   }
 }
