@@ -13,6 +13,12 @@ function formatDataHora(iso: string): string {
   return d.toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" });
 }
 
+function formatDataCurta(iso: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return iso;
+  return d.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" });
+}
+
 function statusLabel(s: HbUtilizacaoResumoLancamento["statusResumo"]): string {
   if (s === "CONFIRMED") return "Confirmado";
   if (s === "REVERSED") return "Compra estornada";
@@ -65,18 +71,28 @@ export function HistoricoHbCreditosResumo({
     };
   }, [cnpj, cooperadoId, mesReferencia, valorEntregas, descontosExtras, titularCooperadoIds]);
 
+  const compacto = variant === "cooperado";
+
   if (carregando) {
     return (
-      <p className="text-sm text-gray-500 mt-4 border-t pt-3">
-        Carregando histórico {HB_CREDIT_PRODUCT_NAME}…
+      <p
+        className={
+          compacto ? "text-[11px] text-gray-500" : "text-sm text-gray-500 mt-4 border-t pt-3"
+        }
+      >
+        Carregando {HB_CREDIT_PRODUCT_NAME}…
       </p>
     );
   }
 
   if (erro) {
     return (
-      <p className="text-sm text-amber-700 mt-4 border-t pt-3">
-        Histórico {HB_CREDIT_PRODUCT_NAME}: {erro}
+      <p
+        className={
+          compacto ? "text-[11px] text-amber-700" : "text-sm text-amber-700 mt-4 border-t pt-3"
+        }
+      >
+        {HB_CREDIT_PRODUCT_NAME}: {erro}
       </p>
     );
   }
@@ -84,32 +100,64 @@ export function HistoricoHbCreditosResumo({
   if (!lancamentos.length) {
     if (variant === "cooperado") {
       return (
-        <p className="text-sm text-gray-500">
-          Nenhuma compra com {HB_CREDIT_PRODUCT_NAME} neste mês.
+        <p className="text-[11px] text-gray-500">
+          Sem compras {HB_CREDIT_PRODUCT_NAME} neste mês.
         </p>
       );
     }
     return null;
   }
 
-  const compacto = variant === "cooperado";
+  if (compacto) {
+    const totalAbatido = lancamentos.reduce(
+      (s, l) => s + (l.valorHbUtilizadoReais || Math.abs(l.valorImpactoAReceberReais)),
+      0
+    );
+    return (
+      <div className="space-y-1.5">
+        <div className="flex flex-wrap items-baseline justify-between gap-x-2 gap-y-0.5">
+          <p className="text-[11px] font-semibold uppercase tracking-wide text-gray-600">
+            {HB_CREDIT_PRODUCT_NAME}
+          </p>
+          <p className="text-[11px] text-gray-600">
+            {lancamentos.length} compra{lancamentos.length === 1 ? "" : "s"} ·{" "}
+            <span className="font-semibold text-red-700">-{formatCurrency(totalAbatido)}</span>
+          </p>
+        </div>
+        <ul className="divide-y divide-gray-100 rounded-md border border-gray-100 bg-gray-50/40">
+          {lancamentos.map((l) => {
+            const valor = l.valorHbUtilizadoReais || Math.abs(l.valorImpactoAReceberReais);
+            const estornado = l.statusResumo !== "CONFIRMED";
+            return (
+              <li
+                key={l.hbTransactionId}
+                className="flex items-center justify-between gap-2 px-2 py-1.5 text-[11px] leading-tight"
+              >
+                <span className="min-w-0 truncate text-gray-800" title={l.partnerNome}>
+                  {l.partnerNome}
+                  <span className="text-gray-400 font-normal"> · {formatDataCurta(l.createdAt)}</span>
+                  {estornado && (
+                    <span className="text-gray-500 font-normal"> · {statusLabel(l.statusResumo)}</span>
+                  )}
+                </span>
+                <span className="shrink-0 font-semibold text-red-700">-{formatCurrency(valor)}</span>
+              </li>
+            );
+          })}
+        </ul>
+      </div>
+    );
+  }
 
   return (
-    <div className={compacto ? "space-y-2" : "mt-3 border-t pt-3 space-y-2"}>
+    <div className="mt-3 border-t pt-3 space-y-2">
       <h4 className="text-xs font-semibold text-gray-900">
         {HB_CREDIT_PRODUCT_NAME} — utilização no mês
       </h4>
-      {!compacto && (
-        <p className="text-xs text-gray-500">
-          Lançamentos confirmados na nuvem (mesma base do abatimento do A receber). Autorização pendente não
-          aparece até a confirmação do pagamento.
-        </p>
-      )}
-      {compacto && (
-        <p className="text-xs text-gray-500">
-          Mesmos lançamentos que o responsável vê no abatimento do pagamento.
-        </p>
-      )}
+      <p className="text-xs text-gray-500">
+        Lançamentos confirmados na nuvem (mesma base do abatimento do A receber). Autorização pendente não
+        aparece até a confirmação do pagamento.
+      </p>
       <ul className="space-y-3">
         {lancamentos.map((l) => (
           <li key={l.hbTransactionId} className="rounded-lg border bg-gray-50/80 p-2.5 text-sm space-y-1">
@@ -117,15 +165,7 @@ export function HistoricoHbCreditosResumo({
               <span>{l.partnerNome}</span>
               <span className="text-gray-600">{formatDataHora(l.createdAt)}</span>
             </div>
-            {compacto ? (
-              <div className="flex flex-wrap justify-between gap-2 text-gray-700 pt-1">
-                <span>Abatido do recebimento</span>
-                <span className="font-medium text-red-700">
-                  - {formatCurrency(l.valorHbUtilizadoReais || l.valorImpactoAReceberReais)}
-                </span>
-              </div>
-            ) : (
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-1 text-gray-700">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-1 text-gray-700">
               <span>Compra (bruto)</span>
               <span className="text-right">{formatCurrency(l.valorCompraReais)}</span>
               {l.valorDescontoReais > 0 && (
@@ -172,8 +212,7 @@ export function HistoricoHbCreditosResumo({
                 {l.hbTransactionId}
               </span>
             </div>
-            )}
-            {!compacto && l.statusResumo !== "CONFIRMED" && (
+            {l.statusResumo !== "CONFIRMED" && (
               <p className="text-xs text-gray-600 pt-1">{statusLabel(l.statusResumo)}</p>
             )}
             {l.observacao && <p className="text-xs text-gray-500 pt-1">{l.observacao}</p>}

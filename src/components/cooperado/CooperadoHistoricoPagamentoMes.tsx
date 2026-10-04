@@ -108,7 +108,7 @@ export function CooperadoHistoricoPagamentoMes({
       </div>
 
       {cnpj && (
-        <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
+        <div className="rounded-lg border border-gray-100 bg-gray-50/40 px-3 py-2">
           <HistoricoHbCreditosResumo
             cnpj={cnpj}
             cooperadoId={cooperadoId}

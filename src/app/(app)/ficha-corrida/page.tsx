@@ -1948,13 +1948,14 @@ export default function FichaCorridaPage() {
                 !mesQuitadoCooperado &&
                 totalExibido > 0 &&
                 descontosExtrasCooperado.some((d) => d.tipo === "conta_coop") && (
-                  <div className="-mt-4 mb-6">
+                  <div className="-mt-2 mb-4 px-1">
                     <HistoricoHbCreditosResumo
                       cnpj={coopCnpjResumo}
                       cooperadoId={cooperadoSelecionadoId}
                       mesReferencia={mesAtivo}
                       valorEntregas={resumoExibicao.valorEntregas}
                       descontosExtras={descontosExtrasCooperado}
+                      variant="cooperado"
                     />
                   </div>
                 )}
