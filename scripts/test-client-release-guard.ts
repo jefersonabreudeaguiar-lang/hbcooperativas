@@ -1,10 +1,11 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import {
   BLOCKED_VERCEL_DEPLOYMENT_IDS,
   evaluateClientReleaseAlignment,
+  runtimeAlreadyOnCanonicalRelease,
   shouldAllowHardReload,
 } from "../src/lib/pwa/clientRelease";
-import { cooperadoRuntimeAlreadyOnCanonicalRelease } from "../src/lib/pwa/fetchOfficialClientRelease";
 
 const CANONICAL = {
   build: 95,
@@ -57,13 +58,22 @@ assert.equal(typeof shouldAllowHardReload("test"), "boolean");
   const canon = { build: 102, deploymentId: "dpl_new", gitCommitSha: "abc" };
   const embedded = { build: 101, deploymentId: "dpl_old", gitCommitSha: "" };
   assert.equal(
-    cooperadoRuntimeAlreadyOnCanonicalRelease(canon, { build: 102, deploymentId: "dpl_new", gitCommitSha: "" }, embedded),
+    runtimeAlreadyOnCanonicalRelease(canon, { build: 102, deploymentId: "dpl_new", gitCommitSha: "" }, embedded),
     true
   );
   assert.equal(
-    cooperadoRuntimeAlreadyOnCanonicalRelease(canon, { build: 101, deploymentId: "dpl_old", gitCommitSha: "" }, embedded),
+    runtimeAlreadyOnCanonicalRelease(canon, { build: 101, deploymentId: "dpl_old", gitCommitSha: "" }, embedded),
     false
   );
+}
+
+{
+  const boot = readFileSync(
+    new URL("../src/lib/pwa/clientRelease.ts", import.meta.url),
+    "utf8"
+  );
+  assert.match(boot, /function pageCanon/);
+  assert.match(boot, /markCurrentRuntimeReleaseSeen/);
 }
 
 console.log("test-client-release-guard: ok");

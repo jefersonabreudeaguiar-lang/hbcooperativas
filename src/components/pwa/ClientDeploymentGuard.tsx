@@ -63,14 +63,16 @@ export function ClientDeploymentGuard() {
       if (document.visibilityState === "visible" && !aligningRef.current) void run();
     };
     document.addEventListener("visibilitychange", onVisible);
-    const interval = window.setInterval(() => {
-      if (!aligningRef.current) void run();
-    }, 4 * 60 * 1000);
+    const interval = cooperadoExperience
+      ? undefined
+      : window.setInterval(() => {
+          if (!aligningRef.current) void run();
+        }, 4 * 60 * 1000);
 
     return () => {
       cancelled = true;
       document.removeEventListener("visibilitychange", onVisible);
-      window.clearInterval(interval);
+      if (interval) window.clearInterval(interval);
       for (const id of timeouts) window.clearTimeout(id);
     };
   }, [cooperadoExperience]);

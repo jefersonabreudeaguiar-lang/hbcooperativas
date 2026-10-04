@@ -4,6 +4,9 @@ import { APP_BUILD_VERSION } from "@/lib/appBuildVersion";
 export const DEPLOYMENT_SEEN_KEY = "hb-coop-app-deployment-seen";
 export const BUILD_SEEN_KEY = "hb-coop-app-build-seen";
 export const RELOAD_BURST_KEY = "hb-coop-release-reload-burst";
+/** Evita rajada de align/reload seguidos (PWA cooperado). */
+export const RELEASE_ALIGN_COOLDOWN_KEY = "hb-coop-release-align-at";
+export const RELEASE_ALIGN_COOLDOWN_MS = 45_000;
 
 /**
  * Deployments com UI cooperado legada (recibo 123,42 / assinar recibo).
@@ -57,6 +60,37 @@ export function collectLoadedDeploymentIdsFromDom(): string[] {
 
 export function getHtmlEmbeddedDeploymentId(): string {
   return getPageEmbeddedReleaseFromDom()?.deploymentId ?? "";
+}
+
+/** HTML/JS embutido já é o release canônico (independe de localStorage antigo). */
+export function runtimeAlreadyOnCanonicalRelease(
+  canonical: ClientReleaseInfo,
+  pageRelease: ClientReleaseInfo | null,
+  embedded: ClientReleaseInfo = getEmbeddedClientRelease()
+): boolean {
+  const pageBuild = pageRelease?.build ?? embedded.build;
+  const pageDpl = (pageRelease?.deploymentId ?? embedded.deploymentId).trim();
+  const canonDpl = canonical.deploymentId.trim();
+  if (pageBuild !== canonical.build) return false;
+  if (!canonDpl) return true;
+  if (!pageDpl) return true;
+  return pageDpl === canonDpl;
+}
+
+/** Após bloquear reload em loop, sincroniza marcadores com o runtime atual. */
+export function markCurrentRuntimeReleaseSeen(): void {
+  if (typeof localStorage === "undefined") return;
+  const page = getPageEmbeddedReleaseFromDom();
+  const embedded = getEmbeddedClientRelease();
+  const build = page?.build ?? embedded.build;
+  const dpl = (page?.deploymentId ?? embedded.deploymentId).trim();
+  try {
+    localStorage.setItem(BUILD_SEEN_KEY, String(build));
+    if (dpl) localStorage.setItem(DEPLOYMENT_SEEN_KEY, dpl);
+    clearReloadBurstCounter();
+  } catch {
+    /* ignore */
+  }
 }
 
 export type DeploymentGuardDecision =
@@ -186,7 +220,26 @@ export async function clearClientRuntimeCaches(): Promise<void> {
 
 /** Limpa caches locais e navega sem query antiga — força HTML novo do CDN/origin. */
 export async function alignClientRuntimeToRelease(reason: string, targetDeploymentId?: string): Promise<boolean> {
-  if (!shouldAllowHardReload(reason)) return false;
+  if (typeof sessionStorage !== "undefined") {
+    try {
+      const last = Number(sessionStorage.getItem(RELEASE_ALIGN_COOLDOWN_KEY) || 0);
+      if (last > 0 && Date.now() - last < RELEASE_ALIGN_COOLDOWN_MS) {
+        markCurrentRuntimeReleaseSeen();
+        return false;
+      }
+    } catch {
+      /* ignore */
+    }
+  }
+  if (!shouldAllowHardReload(reason)) {
+    markCurrentRuntimeReleaseSeen();
+    return false;
+  }
+  try {
+    sessionStorage?.setItem(RELEASE_ALIGN_COOLDOWN_KEY, String(Date.now()));
+  } catch {
+    /* ignore */
+  }
   await clearClientRuntimeCaches();
   const url = new URL(window.location.origin + window.location.pathname);
   url.searchParams.set("_hbRelease", String(Date.now()));
@@ -209,5 +262,7 @@ export function buildInlinePageReleaseBootstrap(pageRelease: ClientReleaseInfo):
 export function buildInlineDeploymentBootScript(pageRelease: ClientReleaseInfo): string {
   const blockedJson = JSON.stringify([...BLOCKED_VERCEL_DEPLOYMENT_IDS]);
   const pageJson = JSON.stringify(pageRelease);
-  return `(function(){var BLOCK=${blockedJson};var PAGE=${pageJson};var BURST_KEY=${JSON.stringify(RELOAD_BURST_KEY)};var MAX=${MAX_RELOADS_PER_MINUTE};window.__HB_PAGE_RELEASE__=PAGE;function collect(){var ids=[];var seen={};document.querySelectorAll('script[src*="dpl="],link[href*="dpl="]').forEach(function(el){var u=el.src||el.href||"";var m=u.match(/[?&]dpl=([^&]+)/);if(m&&m[1]&&!seen[m[1]]){seen[m[1]]=1;ids.push(m[1]);}});return ids;}function blocked(ids){for(var i=0;i<ids.length;i++){if(BLOCK.indexOf(ids[i])>=0)return ids[i];}return null;}function allowReload(reason){try{var now=Date.now();var raw=sessionStorage.getItem(BURST_KEY);var entries=raw?JSON.parse(raw):[];entries=entries.filter(function(e){return now-e.t<60000;});if(entries.length>=MAX)return false;entries.push({t:now,r:reason});sessionStorage.setItem(BURST_KEY,JSON.stringify(entries));return true;}catch(e){return true;}}function hardAlign(reason,targetId){if(!allowReload(reason))return;Promise.resolve().then(function(){if(!("caches" in window))return;return caches.keys().then(function(keys){return Promise.all(keys.map(function(k){return caches.delete(k);}));});}).then(function(){if(!("serviceWorker" in navigator))return;return navigator.serviceWorker.getRegistrations().then(function(regs){return Promise.all(regs.map(function(r){return r.unregister();}));});}).finally(function(){var u=new URL(location.origin+location.pathname);u.searchParams.set("_hbRelease",String(Date.now()));if(targetId)u.searchParams.set("_hbTargetDpl",targetId.slice(4,20));location.replace(u.toString());});}function evaluate(canonical){var targetId=(canonical&&canonical.deploymentId||"").trim()||PAGE.deploymentId;var pageId=(document.documentElement.getAttribute("data-dpl-id")||PAGE.deploymentId||"").trim();var ids=collect();if(blocked(ids)||(pageId&&blocked([pageId])))return hardAlign("blocked",targetId);if(!targetId||!ids.length)return;var i;for(i=0;i<ids.length;i++){if(ids[i]!==targetId)return hardAlign("chunks:"+ids[i],targetId);}if(pageId&&pageId!==targetId)return hardAlign("page:"+pageId,targetId);try{sessionStorage.removeItem(BURST_KEY);}catch(e){}}function pullCanonical(){fetch("/api/client-release",{cache:"no-store",credentials:"same-origin",headers:{Pragma:"no-cache","Cache-Control":"no-cache"}}).then(function(r){return r.ok?r.json():null;}).then(function(j){if(!j)return;var c={build:typeof j.build==="number"?j.build:PAGE.build,deploymentId:(j.deploymentId||"").trim(),gitCommitSha:j.gitCommitSha||""};evaluate(c);setTimeout(function(){evaluate(c);},600);setTimeout(function(){evaluate(c);},2000);}).catch(function(){});}evaluate(PAGE);pullCanonical();})();`;
+  const buildKey = JSON.stringify(BUILD_SEEN_KEY);
+  const dplKey = JSON.stringify(DEPLOYMENT_SEEN_KEY);
+  return `(function(){var BLOCK=${blockedJson};var PAGE=${pageJson};var BURST_KEY=${JSON.stringify(RELOAD_BURST_KEY)};var BUILD_KEY=${buildKey};var DPL_KEY=${dplKey};var MAX=${MAX_RELOADS_PER_MINUTE};window.__HB_PAGE_RELEASE__=PAGE;function collect(){var ids=[];var seen={};document.querySelectorAll('script[src*="dpl="],link[href*="dpl="]').forEach(function(el){var u=el.src||el.href||"";var m=u.match(/[?&]dpl=([^&]+)/);if(m&&m[1]&&!seen[m[1]]){seen[m[1]]=1;ids.push(m[1]);}});return ids;}function blocked(ids){for(var i=0;i<ids.length;i++){if(BLOCK.indexOf(ids[i])>=0)return ids[i];}return null;}function allowReload(reason){try{var now=Date.now();var raw=sessionStorage.getItem(BURST_KEY);var entries=raw?JSON.parse(raw):[];entries=entries.filter(function(e){return now-e.t<60000;});if(entries.length>=MAX)return false;entries.push({t:now,r:reason});sessionStorage.setItem(BURST_KEY,JSON.stringify(entries));return true;}catch(e){return true;}}function markSeen(c){try{var b=c&&c.build?c.build:PAGE.build;var d=(c&&c.deploymentId)||PAGE.deploymentId||"";localStorage.setItem(BUILD_KEY,String(b));if(d)localStorage.setItem(DPL_KEY,d);sessionStorage.removeItem(BURST_KEY);}catch(e){}}function pageCanon(c,targetId){var pageBuild=parseInt(document.documentElement.getAttribute("data-app-build")||String(PAGE.build),10);var pageId=(document.documentElement.getAttribute("data-dpl-id")||PAGE.deploymentId||"").trim();return c&&pageBuild===c.build&&pageId&&targetId&&pageId===targetId;}function hardAlign(reason,targetId){if(!allowReload(reason)){markSeen(PAGE);return;}Promise.resolve().then(function(){if(!("caches" in window))return;return caches.keys().then(function(keys){return Promise.all(keys.map(function(k){return caches.delete(k);}));});}).then(function(){if(!("serviceWorker" in navigator))return;return navigator.serviceWorker.getRegistrations().then(function(regs){return Promise.all(regs.map(function(r){return r.unregister();}));});}).finally(function(){var u=new URL(location.origin+location.pathname);u.searchParams.set("_hbRelease",String(Date.now()));if(targetId)u.searchParams.set("_hbTargetDpl",targetId.slice(4,20));location.replace(u.toString());});}function evaluate(canonical){var targetId=(canonical&&canonical.deploymentId||"").trim()||PAGE.deploymentId;var pageId=(document.documentElement.getAttribute("data-dpl-id")||PAGE.deploymentId||"").trim();if(pageCanon(canonical,targetId)){markSeen(canonical||PAGE);return;}var ids=collect();if(blocked(ids)||(pageId&&blocked([pageId])))return hardAlign("blocked",targetId);if(!targetId||!ids.length)return;var i;for(i=0;i<ids.length;i++){if(ids[i]!==targetId){if(pageCanon(canonical,targetId))return;return hardAlign("chunks:"+ids[i],targetId);}}if(pageId&&pageId!==targetId)return hardAlign("page:"+pageId,targetId);markSeen(canonical||PAGE);}function pullCanonical(){fetch("/api/client-release",{cache:"no-store",credentials:"same-origin",headers:{Pragma:"no-cache","Cache-Control":"no-cache"}}).then(function(r){return r.ok?r.json():null;}).then(function(j){if(!j)return;var c={build:typeof j.build==="number"?j.build:PAGE.build,deploymentId:(j.deploymentId||"").trim(),gitCommitSha:j.gitCommitSha||""};evaluate(c);setTimeout(function(){evaluate(c);},600);setTimeout(function(){evaluate(c);},2000);}).catch(function(){});}evaluate(PAGE);pullCanonical();})();`;
 }

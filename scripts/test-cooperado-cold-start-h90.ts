@@ -32,6 +32,10 @@ assert(cold.includes("markNextCooperadoSyncSilent"), "marcador silent no coordin
 assert(cold.includes("scheduleCooperadoPostInteractiveTask"), "post-interactive deploy defer");
 const deployGuard = read("src/components/pwa/ClientDeploymentGuard.tsx");
 assert(deployGuard.includes("scheduleCooperadoPostInteractiveTask"), "ClientDeploymentGuard defer");
+assert(
+  deployGuard.includes("cooperadoExperience") && deployGuard.includes("? undefined"),
+  "cooperado sem intervalo 4min de align"
+);
 assert(sync.includes("markCooperadoUserSyncVisible"), "sync visível só com ação do usuário");
 assert(
   sync.includes("cooperadoBloqueiaSyncOperacionalAutomatico()") &&
@@ -70,9 +74,11 @@ assert(
 );
 const releaseFetch = read("src/lib/pwa/fetchOfficialClientRelease.ts");
 assert(
-  releaseFetch.includes("cooperadoRuntimeAlreadyOnCanonicalRelease"),
+  releaseFetch.includes("runtimeAlreadyOnCanonicalRelease"),
   "cooperado release evita reload loop localStorage"
 );
+const clientRelease = read("src/lib/pwa/clientRelease.ts");
+assert(clientRelease.includes("markCurrentRuntimeReleaseSeen"), "quiesce loop burst align");
 
 if (process.exitCode !== 1) {
   console.log("\nHX 9.0 cold start smoke OK");

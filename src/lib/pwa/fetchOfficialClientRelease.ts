@@ -7,6 +7,7 @@ import {
   getPageEmbeddedReleaseFromDom,
   alignClientRuntimeToRelease,
   getEmbeddedClientRelease,
+  runtimeAlreadyOnCanonicalRelease,
   type ClientReleaseInfo,
 } from "@/lib/pwa/clientRelease";
 
@@ -40,20 +41,8 @@ export function markClientReleaseSeen(official: ClientReleaseInfo): void {
   }
 }
 
-/** Evita loop de reload: localStorage antigo com HTML/JS já no build canônico. */
-export function cooperadoRuntimeAlreadyOnCanonicalRelease(
-  canonical: ClientReleaseInfo,
-  pageRelease: ClientReleaseInfo | null,
-  embedded: ClientReleaseInfo
-): boolean {
-  const pageBuild = pageRelease?.build ?? embedded.build;
-  const pageDpl = (pageRelease?.deploymentId ?? embedded.deploymentId).trim();
-  const canonDpl = canonical.deploymentId.trim();
-  if (pageBuild !== canonical.build) return false;
-  if (!canonDpl) return true;
-  if (!pageDpl) return true;
-  return pageDpl === canonDpl;
-}
+/** @deprecated use runtimeAlreadyOnCanonicalRelease */
+export const cooperadoRuntimeAlreadyOnCanonicalRelease = runtimeAlreadyOnCanonicalRelease;
 
 export async function ensureCooperadoReleaseUpgrade(isCooperadoExperience: boolean): Promise<"ok" | "aligning"> {
   if (!isCooperadoExperience || typeof window === "undefined") return "ok";
@@ -61,7 +50,7 @@ export async function ensureCooperadoReleaseUpgrade(isCooperadoExperience: boole
   const embedded = getEmbeddedClientRelease();
   const pageRelease = getPageEmbeddedReleaseFromDom();
 
-  if (cooperadoRuntimeAlreadyOnCanonicalRelease(canonical, pageRelease, embedded)) {
+  if (runtimeAlreadyOnCanonicalRelease(canonical, pageRelease, embedded)) {
     markClientReleaseSeen(canonical);
     clearReloadBurstCounter();
     return "ok";
@@ -81,8 +70,15 @@ export async function ensureCooperadoReleaseUpgrade(isCooperadoExperience: boole
 
 export async function runClientReleaseAlignment(): Promise<"ok" | "pending" | "aligning"> {
   const canonical = await fetchOfficialClientRelease();
+  const embedded = getEmbeddedClientRelease();
   const pageRelease = getPageEmbeddedReleaseFromDom();
   const loaded = collectLoadedDeploymentIdsFromDom();
+
+  if (runtimeAlreadyOnCanonicalRelease(canonical, pageRelease, embedded)) {
+    markClientReleaseSeen(canonical);
+    clearReloadBurstCounter();
+    return "ok";
+  }
 
   const decision = evaluateClientReleaseAlignment({
     canonical,
