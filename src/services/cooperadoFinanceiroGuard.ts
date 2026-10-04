@@ -5,6 +5,7 @@ import {
   cooperadoPrecisaFullSyncFinanceiro,
   limparFichaObsoletaCooperado,
 } from "@/services/fichaSyncGuard";
+import { isCooperadoManualOperacionalSync } from "@/lib/performance/cooperadoColdStart";
 import { requestAppSync } from "@/services/syncRequest";
 import { saveDataSafe, getData } from "@/services/dataStore";
 import { getUserCooperativaId } from "@/utils/cooperativa";
@@ -23,6 +24,7 @@ export function cooperadoFinanceiroPronto(
 
 /** Dispara sync de recuperação com antirajada. */
 export function solicitarRecuperacaoFinanceiroCooperado(): void {
+  if (isCooperadoManualOperacionalSync()) return;
   const now = Date.now();
   if (now - lastRecoveryRequestAt < RECOVERY_GAP_MS) return;
   lastRecoveryRequestAt = now;

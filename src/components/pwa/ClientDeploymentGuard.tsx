@@ -3,6 +3,10 @@
 import { useEffect, useRef } from "react";
 import { useAuth } from "@/modules/auth/AuthProvider";
 import { isCooperadoAppUser } from "@/permissions";
+import {
+  isCooperadoInstantResumeEnabled,
+  scheduleCooperadoPostInteractiveTask,
+} from "@/lib/performance/cooperadoColdStart";
 import { ensureCooperadoReleaseUpgrade, runClientReleaseAlignment } from "@/lib/pwa/fetchOfficialClientRelease";
 
 const RETRY_MS = [300, 700, 1400, 2800, 5000];
@@ -36,16 +40,24 @@ export function ClientDeploymentGuard() {
     let cancelled = false;
     const timeouts: number[] = [];
 
-    void run().then((next) => {
-      if (next !== "retry" || cancelled) return;
-      for (const ms of RETRY_MS) {
-        const id = window.setTimeout(() => {
-          if (cancelled || aligningRef.current) return;
-          void run();
-        }, ms);
-        timeouts.push(id);
-      }
-    });
+    const start = () => {
+      void run().then((next) => {
+        if (next !== "retry" || cancelled) return;
+        for (const ms of RETRY_MS) {
+          const id = window.setTimeout(() => {
+            if (cancelled || aligningRef.current) return;
+            void run();
+          }, ms);
+          timeouts.push(id);
+        }
+      });
+    };
+
+    if (cooperadoExperience && isCooperadoInstantResumeEnabled()) {
+      scheduleCooperadoPostInteractiveTask(start);
+    } else {
+      start();
+    }
 
     const onVisible = () => {
       if (document.visibilityState === "visible" && !aligningRef.current) void run();

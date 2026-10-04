@@ -78,15 +78,20 @@ Teste: `npx tsx scripts/test-render-rql-h81.ts`
 - Gate / dashboard — sem skeleton em cascata quando há dados locais ou cache do card
 - Cache início — snapshot recente (45d) libera abertura mesmo sem valor a receber
 
-Flag: `NEXT_PUBLIC_COOPERADO_INSTANT_RESUME=false` desliga (default ligado).
+Flags: `NEXT_PUBLIC_COOPERADO_INSTANT_RESUME=false` desliga resume; `NEXT_PUBLIC_COOPERADO_MANUAL_SYNC=false` volta sync automático (default: só botão **Atualizar**).
 
 Teste: `npx tsx scripts/test-cooperado-cold-start-h90.ts`
 
 Marcas: `performance.mark("rql:cold:*")`
 
+### 9.0.5 (local)
+
+- `scheduleCooperadoPostInteractiveTask` — release/deploy após UI interativa
+- Ficha + conferência — `syncingForUi` na navegação (não trava com sync silencioso cooperado)
+
 ## Ondas seguintes
 
-- **8.2** — conferência: draft em memória (7.3)
+- **8.2** — conferência: draft em memória (7.3) — `responsavelConferenciaNavigateGuard` (início)
 - **8.3** — notify por domínio + IDB shard
 - **8.4** — API delta por tier
 - **8.5** — workers (BIC / admin stats)

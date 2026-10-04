@@ -32,6 +32,10 @@ import { requestAppSync, requestAppSyncLight } from "@/services/syncRequest";
 import { forceNextFullNotasSync, shouldResponsavelForceFullNotasOnEntry } from "@/services/syncMetaService";
 import { useSyncStatus } from "@/components/sync/CooperativaSyncProvider";
 import {
+  responsavelBloquearNavegacaoConferencia,
+  responsavelPreservarAbaDuranteSync,
+} from "@/lib/conferencia/responsavelConferenciaNavigateGuard";
+import {
   calcularItensNota,
   gerarNumeroNota,
   isNumeroNotaJaConferidaParaCooperado,
@@ -237,7 +241,7 @@ function qtyInputClassName(filled: boolean, extra?: string) {
 export default function NotasPedidoContent() {
   const data = useAppData();
   const { check, user, isCooperado, isDiretoria, cooperadoId } = usePermissions();
-  const { syncing } = useSyncStatus();
+  const { syncing, syncingForUi } = useSyncStatus();
   const searchParams = useSearchParams();
   const router = useRouter();
 
@@ -1075,11 +1079,17 @@ export default function NotasPedidoContent() {
         ? pendentesPorCooperado.some((g) => g.cooperadoId === filtroCooperadoId)
         : false;
 
-    const bloquearNavegacaoFila =
-      (syncing && (conferirModal || lancandoRef.current)) || lancandoRef.current;
+    const bloquearNavegacaoFila = responsavelBloquearNavegacaoConferencia({
+      syncingForUi,
+      conferirModal,
+      lancando: lancandoRef.current,
+    });
     /** Evita “pulo” de aba quando a fila oscila durante sync em background. */
-    const preservarCooperadoDuranteSync =
-      syncing && vistaResponsavel === "cooperado" && Boolean(filtroCooperadoId || abaConferenciaKey);
+    const preservarCooperadoDuranteSync = responsavelPreservarAbaDuranteSync({
+      syncingForUi,
+      vistaCooperado: vistaResponsavel === "cooperado",
+      temFiltroOuAba: Boolean(filtroCooperadoId || abaConferenciaKey),
+    });
 
     // Só congela navegação durante sync enquanto conferir/aprovar — não travar a fila inteira.
     if (!bloquearNavegacaoFila && !preservarCooperadoDuranteSync) {
@@ -1108,7 +1118,7 @@ export default function NotasPedidoContent() {
   }, [
     isCooperado,
     vistaResponsavel,
-    syncing,
+    syncingForUi,
     conferirModal,
     pendentesPorCooperado,
     abaConferenciaEfetiva,
@@ -1142,7 +1152,7 @@ export default function NotasPedidoContent() {
   useEffect(() => {
     const cid = searchParams.get("cooperado");
     if (!cid || isCooperado) return;
-    if (syncing && (conferirModal || lancandoRef.current)) return;
+    if (syncingForUi && (conferirModal || lancandoRef.current)) return;
     if (cooperadoUrlParamRef.current === cid && vistaResponsavel === "cooperado") return;
     cooperadoUrlParamRef.current = cid;
 
@@ -1156,7 +1166,7 @@ export default function NotasPedidoContent() {
     }
     trocarVistaResponsavel("cooperado");
     setStatusFilter((prev) => (prev === "aguardando_conferencia" ? prev : "aguardando_conferencia"));
-  }, [searchParams, isCooperado, coopId, pendentesPorCooperado, trocarVistaResponsavel, syncing, conferirModal, vistaResponsavel]);
+  }, [searchParams, isCooperado, coopId, pendentesPorCooperado, trocarVistaResponsavel, syncingForUi, conferirModal, vistaResponsavel]);
 
   const voltarFilaResponsavel = () => {
     trocarVistaResponsavel("fila");

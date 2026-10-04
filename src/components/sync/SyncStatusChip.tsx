@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { RefreshCw, Check } from "lucide-react";
 import { useSyncStatus } from "@/components/sync/CooperativaSyncProvider";
+import { requestAppSyncImmediate } from "@/services/syncRequest";
 import { cn } from "@/utils/format";
 import { APP_BUILD_VERSION } from "@/lib/appBuildVersion";
 
@@ -57,6 +58,29 @@ export function SyncStatusChip({ className }: { className?: string }) {
       <Check size={12} className="shrink-0 opacity-80" aria-hidden />
       Atualizado {label}
     </span>
+  );
+}
+
+/** Cooperado — sync operacional só ao toque (sem chip “Atualizando…” automático). */
+export function CooperadoAtualizarButton({ className }: { className?: string }) {
+  const { syncingForUi } = useSyncStatus();
+
+  return (
+    <button
+      type="button"
+      onClick={() => requestAppSyncImmediate()}
+      disabled={syncingForUi}
+      className={cn(
+        "inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-medium transition-colors",
+        "text-green-100/95 hover:bg-green-800/90 disabled:opacity-70",
+        className
+      )}
+      aria-busy={syncingForUi}
+      aria-label={syncingForUi ? "Atualizando dados" : "Atualizar dados da cooperativa"}
+    >
+      <RefreshCw size={12} className={cn("shrink-0", syncingForUi && "animate-spin")} aria-hidden />
+      Atualizar
+    </button>
   );
 }
 

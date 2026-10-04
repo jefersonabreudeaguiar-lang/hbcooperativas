@@ -72,6 +72,7 @@ import { PageSkeleton } from "@/components/ui/PageSkeleton";
 import {
   cooperadoLocalResumeReady,
   isCooperadoInstantResumeEnabled,
+  isCooperadoManualOperacionalSync,
   shouldSkipCooperadoSecondaryMountSync,
 } from "@/lib/performance/cooperadoColdStart";
 import { RestoreOperacionalPanel } from "@/components/sync/RestoreOperacionalPanel";
@@ -100,12 +101,14 @@ function CooperadoDashboard() {
   }, [user?.id]);
 
   useEffect(() => {
+    if (isCooperadoManualOperacionalSync()) return;
     if (!user?.cooperadoId || typeof navigator === "undefined" || !navigator.onLine) return;
     if (shouldSkipCooperadoSecondaryMountSync()) return;
     requestVotacaoOperacionalSync();
   }, [user?.id, user?.cooperadoId]);
 
   useEffect(() => {
+    if (isCooperadoManualOperacionalSync()) return;
     if (!financeiroAusente || recoverySyncRef.current || typeof navigator === "undefined" || !navigator.onLine) {
       return;
     }

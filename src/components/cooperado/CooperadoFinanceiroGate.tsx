@@ -11,6 +11,7 @@ import {
 import { solicitarRecuperacaoFinanceiroCooperado } from "@/services/cooperadoFinanceiroGuard";
 import {
   cooperadoLocalResumeReady,
+  isCooperadoManualOperacionalSync,
   shouldSkipCooperadoSecondaryMountSync,
 } from "@/lib/performance/cooperadoColdStart";
 import { requestAppSyncImmediate } from "@/services/syncRequest";
@@ -72,9 +73,11 @@ export function CooperadoFinanceiroGate({ children }: { children: React.ReactNod
     if (limpo !== data) {
       saveAppDataIfSyncLeaseCurrent(getCooperadoRunSyncSessionLease() ?? undefined, limpo);
     }
-    solicitarRecuperacaoFinanceiroCooperado();
-    if (!shouldSkipCooperadoSecondaryMountSync()) {
-      requestAppSyncImmediate();
+    if (!isCooperadoManualOperacionalSync()) {
+      solicitarRecuperacaoFinanceiroCooperado();
+      if (!shouldSkipCooperadoSecondaryMountSync()) {
+        requestAppSyncImmediate();
+      }
     }
   }, [user?.id, user?.cooperadoId, user?.role]);
 

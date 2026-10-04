@@ -81,7 +81,9 @@ import {
   cooperadoPreserveHydrationOnSilentSync,
   cooperadoSyncVisibleInUi,
   ensureCooperadoAppDataEagerWarm,
+  cooperadoOperacionalSyncPermitido,
   isCooperadoInstantResumeEnabled,
+  isCooperadoManualOperacionalSync,
   isCooperadoUserSyncVisible,
   scheduleCooperadoColdStartSync,
 } from "@/lib/performance/cooperadoColdStart";
@@ -695,12 +697,18 @@ export function CooperativaSyncProvider({ children }: { children: React.ReactNod
     const stopIdle = startIdleMonitor();
 
     const unregisterVotacao = registerVotacaoOperacionalSyncHandler(() => {
+      if (userRef.current?.role === "cooperado" && !cooperadoOperacionalSyncPermitido()) {
+        return;
+      }
       void pullVotacaoOperacionalCooperado();
     });
 
     const unregister = registerSyncHandler((runOpts) => {
       if (document.hidden) return;
       if (typeof navigator !== "undefined" && !navigator.onLine) return;
+      if (userRef.current?.role === "cooperado" && !cooperadoOperacionalSyncPermitido()) {
+        return;
+      }
       markUserActivity();
       void runSync({
         force: runOpts.force ?? false,
@@ -713,8 +721,12 @@ export function CooperativaSyncProvider({ children }: { children: React.ReactNod
       user?.role === "tesoureiro" ||
       user?.role === "admin";
 
+    const cooperadoSemAutoSync = user?.role === "cooperado" && isCooperadoManualOperacionalSync();
+
     let initialDelay: ReturnType<typeof setTimeout> | undefined;
-    if (user?.role === "cooperado" && isCooperadoInstantResumeEnabled()) {
+    if (cooperadoSemAutoSync) {
+      /* Sync operacional só via botão Atualizar (HB Créditos fora deste fluxo). */
+    } else if (user?.role === "cooperado" && isCooperadoInstantResumeEnabled()) {
       if (!document.hidden) {
         markUserActivity();
         scheduleCooperadoColdStartSync(() => {
@@ -733,12 +745,14 @@ export function CooperativaSyncProvider({ children }: { children: React.ReactNod
     const unsubIdle = onAppIdleChange((nowIdle) => {
       if (nowIdle) return;
       if (document.hidden) return;
+      if (cooperadoSemAutoSync) return;
       if (user?.role === "cooperado") void pullVotacaoOperacionalCooperado();
       void runSync();
     });
 
     const onVisible = () => {
       if (document.visibilityState === "visible") {
+        if (cooperadoSemAutoSync) return;
         markUserActivity();
         if (user?.role === "cooperado") void pullVotacaoOperacionalCooperado();
         void runSync();
@@ -748,6 +762,7 @@ export function CooperativaSyncProvider({ children }: { children: React.ReactNod
 
     const onOnline = () => {
       if (document.hidden) return;
+      if (cooperadoSemAutoSync) return;
       markUserActivity();
       if (user?.role === "cooperado") void pullVotacaoOperacionalCooperado();
       void runSync();

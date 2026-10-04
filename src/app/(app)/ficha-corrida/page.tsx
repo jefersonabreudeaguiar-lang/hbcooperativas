@@ -100,6 +100,7 @@ import {
 import { cooperadoPrecisaCadastrarPix } from "@/utils/pix";
 import { baixarRecibo, resumoReciboFromPagamento, nomeArquivoRecibo } from "@/utils/recibo";
 import { updateData, addAuditEntry, getData } from "@/services/dataStore";
+import { isCooperadoManualOperacionalSync } from "@/lib/performance/cooperadoColdStart";
 import { requestAppSync } from "@/services/syncRequest";
 import { useCooperadoExibirAguardandoAssinatura } from "@/hooks/useCooperadoExibirAguardandoAssinatura";
 import { useCooperadoApresentacaoFinanceiraConsolidada } from "@/hooks/useCooperadoApresentacaoFinanceiraConsolidada";
@@ -182,6 +183,7 @@ export default function FichaCorridaPage() {
   const [pixStepVisited, setPixStepVisited] = useState(false);
 
   useEffect(() => {
+    if (isCooperado && isCooperadoManualOperacionalSync()) return;
     requestAppSync();
   }, [isCooperado]);
 
@@ -627,7 +629,7 @@ export default function FichaCorridaPage() {
 
   const { exibirAguardandoAssinatura, conferindoPagamentoNuvem } =
     useCooperadoExibirAguardandoAssinatura(isCooperado && !!pagamentoAguardando);
-  const { syncing: syncCooperadoFinanceiro, cooperadoPagamentosHydrated } = useSyncStatus();
+  const { syncingForUi: syncCooperadoFinanceiro, cooperadoPagamentosHydrated } = useSyncStatus();
 
   const pagamentoAguardandoExibicao = useMemo(() => {
     if (!fluxoReciboAssinatura) return undefined;

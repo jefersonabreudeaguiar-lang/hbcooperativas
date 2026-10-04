@@ -24,6 +24,21 @@ export function isCooperadoInstantResumeEnabled(): boolean {
   return v !== "0" && v !== "false" && v !== "no";
 }
 
+/**
+ * Cooperado: sync operacional (ficha/notas/votação) só no botão Atualizar.
+ * HB Créditos mantém refresh próprio — não usar isto lá.
+ */
+export function isCooperadoManualOperacionalSync(): boolean {
+  if (typeof process === "undefined") return false;
+  const v = (process.env.NEXT_PUBLIC_COOPERADO_MANUAL_SYNC ?? "true").trim().toLowerCase();
+  return v !== "0" && v !== "false" && v !== "no";
+}
+
+export function cooperadoOperacionalSyncPermitido(): boolean {
+  if (!isCooperadoManualOperacionalSync()) return true;
+  return isCooperadoUserSyncVisible();
+}
+
 let pendingSilentSync = false;
 let coldStartSyncScheduled = false;
 let userVisibleSyncDepth = 0;
@@ -150,4 +165,32 @@ export function resetCooperadoColdStartForTests(): void {
   pendingSilentSync = false;
   coldStartSyncScheduled = false;
   userVisibleSyncDepth = 0;
+}
+
+const POST_INTERACTIVE_DELAY_MS = 2_800;
+
+/**
+ * HX 9.0.5 — alinhamento de deploy / release após UI interativa (evita reload no cold start).
+ */
+export function scheduleCooperadoPostInteractiveTask(run: () => void): void {
+  if (!isCooperadoInstantResumeEnabled()) {
+    run();
+    return;
+  }
+  if (typeof window === "undefined") return;
+
+  const fire = () => {
+    markRqlColdStartPhase("post_interactive_task");
+    run();
+  };
+
+  requestAnimationFrame(() => {
+    requestAnimationFrame(() => {
+      if (typeof requestIdleCallback !== "undefined") {
+        requestIdleCallback(fire, { timeout: POST_INTERACTIVE_DELAY_MS + 1_500 });
+      } else {
+        window.setTimeout(fire, POST_INTERACTIVE_DELAY_MS);
+      }
+    });
+  });
 }

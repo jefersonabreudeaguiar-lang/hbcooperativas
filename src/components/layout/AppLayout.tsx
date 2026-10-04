@@ -19,7 +19,7 @@ import { getUserFuncaoLabel, isCooperadoAppUser } from "@/permissions";
 import { getUserCooperativaNome } from "@/utils/cooperativa";
 import { PLATFORM_NAME, PLATFORM_TAGLINE } from "@/utils/constants";
 import { AppIcon } from "@/components/ui/AppIcon";
-import { SyncStatusChip, SyncStatusChipLight } from "@/components/sync/SyncStatusChip";
+import { CooperadoAtualizarButton, SyncStatusChip, SyncStatusChipLight } from "@/components/sync/SyncStatusChip";
 import { CobrancaSaasPainel } from "@/components/payments/CobrancaSaasPainelWrapper";
 import { PainelResponsavelMobileBar } from "@/components/permissions/PainelResponsavelMobileBar";
 import { ContratoServicoAppGate } from "@/components/cobranca/ContratoServicoAppGate";
@@ -205,7 +205,7 @@ export function MobileNav() {
         <BrandHeader compact />
         <div className="flex items-center gap-1.5 shrink-0">
           {isCooperadoAppUser(navUser) ? (
-            <SyncStatusChipLight className="!bg-green-800/80 !text-green-100" />
+            <CooperadoAtualizarButton />
           ) : (
             <SyncStatusChip />
           )}
@@ -314,9 +314,17 @@ function AppShellInner({ children }: { children: React.ReactNode }) {
             mercadoQrImmersive ? "p-0 pb-0" : "p-4 lg:p-6 pb-[max(9rem,env(safe-area-inset-bottom,0px)+5.5rem)] lg:pb-6"
           )}
         >
-          {navUser && !isCooperadoAppUser(navUser) && (
-            <div className="hidden lg:flex justify-end mb-3">
-              <SyncStatusChipLight />
+          {navUser && (
+            <div className="flex justify-end mb-2 lg:mb-3">
+              {isCooperadoAppUser(navUser) ? (
+                <CooperadoAtualizarButton
+                  className="hidden lg:inline-flex !text-gray-600 hover:!bg-gray-100 border border-gray-200/80 !rounded-lg px-3 py-1.5 text-xs"
+                />
+              ) : (
+                <div className="hidden lg:flex">
+                  <SyncStatusChipLight />
+                </div>
+              )}
             </div>
           )}
           <PainelResponsavelMobileBar />

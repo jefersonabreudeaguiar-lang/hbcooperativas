@@ -29,6 +29,9 @@ const dash = read("src/app/(app)/dashboard/page.tsx");
 
 assert(cold.includes("scheduleCooperadoColdStartSync"), "coordinator cold start");
 assert(cold.includes("markNextCooperadoSyncSilent"), "marcador silent no coordinator");
+assert(cold.includes("scheduleCooperadoPostInteractiveTask"), "post-interactive deploy defer");
+const deployGuard = read("src/components/pwa/ClientDeploymentGuard.tsx");
+assert(deployGuard.includes("scheduleCooperadoPostInteractiveTask"), "ClientDeploymentGuard defer");
 assert(sync.includes("markCooperadoUserSyncVisible"), "sync visível só com ação do usuário");
 assert(sync.includes("takePendingCooperadoSilentSync"), "silent flag no dispatch");
 assert(provider.includes("syncingForUi"), "contexto syncingForUi");
