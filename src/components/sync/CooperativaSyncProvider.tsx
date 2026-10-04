@@ -9,6 +9,7 @@ import {
   useRef,
   useState,
   type MutableRefObject,
+  type SetStateAction,
 } from "react";
 import { useAuth } from "@/modules/auth/AuthProvider";
 import { useAppDataSelector } from "@/hooks/useAppData";
@@ -301,7 +302,14 @@ export function CooperativaSyncProvider({ children }: { children: React.ReactNod
 
   const [syncing, setSyncing] = useState(false);
   const [lastSyncedAt, setLastSyncedAt] = useState<number | null>(null);
-  const [lastSyncError, setLastSyncError] = useState("");
+  const [lastSyncError, setLastSyncErrorRaw] = useState("");
+  const setLastSyncError = useCallback((value: SetStateAction<string>) => {
+    setLastSyncErrorRaw((prev) => {
+      const next = typeof value === "function" ? value(prev) : value;
+      if (next && userRef.current?.role === "cooperado") return "";
+      return next;
+    });
+  }, []);
   const [cooperadoPagamentosHydrated, setCooperadoPagamentosHydrated] = useState(
     () => user?.role !== "cooperado"
   );

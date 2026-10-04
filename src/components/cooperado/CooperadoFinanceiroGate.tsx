@@ -32,8 +32,6 @@ import {
   saveAppDataIfSyncLeaseCurrent,
 } from "@/services/operacionalPullLease";
 import { PageSkeleton } from "@/components/ui/PageSkeleton";
-import { AlertBanner } from "@/components/ui/AlertBanner";
-import { Button } from "@/components/ui/Button";
 
 /** Bloqueio máximo da tela cheia; sync segue em background depois disso. */
 const SYNC_BLOCK_MAX_MS = 18_000;
@@ -43,8 +41,8 @@ const SYNC_BLOCK_MAX_MS = 18_000;
  * Só ocupa a tela inteira quando não há dados locais; caso contrário, banner + navegação.
  */
 export function CooperadoFinanceiroGate({ children }: { children: React.ReactNode }) {
-  const { user, logout } = useAuth();
-  const { syncingForUi, lastSyncError, lastSyncedAt } = useSyncStatus();
+  const { user } = useAuth();
+  const { syncingForUi, lastSyncedAt } = useSyncStatus();
   const [syncWaitExceeded, setSyncWaitExceeded] = useState(false);
 
   const cacheInicioCard = useMemo(() => {
@@ -130,35 +128,13 @@ export function CooperadoFinanceiroGate({ children }: { children: React.ReactNod
     bloqueiaEntrada && !syncingForUi && (syncWaitExceeded || lastSyncedAt != null);
 
   if (falhaCarregarFicha) {
-    if (isCooperadoEventDrivenSync() || abrirComCacheInicio) {
-      solicitarRecuperacaoFinanceiroCooperado();
-      if (!isCooperadoManualOperacionalSync()) {
-        requestAppSyncImmediate();
-      }
-      return <>{children}</>;
+    solicitarRecuperacaoFinanceiroCooperado();
+    if (!isCooperadoManualOperacionalSync()) {
+      requestAppSyncImmediate();
+    } else if (isCooperadoEventDrivenSync()) {
+      requestCooperadoPrimeiraCargaSync();
     }
-    return (
-      <div className="max-w-lg mx-auto py-8 space-y-4">
-        <AlertBanner variant="error" title="Não foi possível carregar sua ficha">
-          {lastSyncError ||
-            "A sincronização demorou demais. Toque em Tentar novamente. Se persistir, saia, limpe o cache do navegador e entre de novo."}
-        </AlertBanner>
-        <div className="flex flex-wrap gap-2">
-          <Button
-            onClick={() => {
-              solicitarRecuperacaoFinanceiroCooperado();
-              requestAppSyncImmediate();
-            }}
-            disabled={syncingForUi}
-          >
-            {syncingForUi ? "Baixando…" : "Tentar novamente"}
-          </Button>
-          <Button variant="secondary" onClick={() => logout()}>
-            Sair e entrar de novo
-          </Button>
-        </div>
-      </div>
-    );
+    return <>{children}</>;
   }
 
   return <>{children}</>;
