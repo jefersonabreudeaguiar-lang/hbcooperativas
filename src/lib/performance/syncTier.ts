@@ -9,6 +9,8 @@ export type SyncTierRequest = {
   /** Igual requestAppSync / requestAppSyncLight quando false/true. */
   force: boolean;
   immediate?: boolean;
+  /** Cooperado com sync manual: só «Atualizar agora». */
+  userInitiated?: boolean;
 };
 
 /** Tier mais “forte” vence ao coalescer pedidos no mesmo debounce. */
@@ -30,6 +32,7 @@ export function mergeSyncTierRequests(
     tier,
     force: current.force || incoming.force,
     immediate: current.immediate || incoming.immediate,
+    userInitiated: Boolean(current.userInitiated || incoming.userInitiated),
   };
 }
 

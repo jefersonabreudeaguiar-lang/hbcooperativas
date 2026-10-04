@@ -15,7 +15,7 @@ import {
   type SyncTier,
 } from "@/lib/performance/syncTier";
 
-export type SyncRunOptions = { force?: boolean; silent?: boolean };
+export type SyncRunOptions = { force?: boolean; silent?: boolean; userInitiated?: boolean };
 
 type SyncHandler = (opts: SyncRunOptions) => void;
 
@@ -24,11 +24,11 @@ let schedulerBridgeAttached = false;
 
 const SYNC_DEBOUNCE_MS = 450;
 
-function dispatchSync(force: boolean): void {
+function dispatchSync(opts: { force: boolean; userInitiated?: boolean }): void {
   if (typeof document !== "undefined" && document.hidden) return;
   if (typeof navigator !== "undefined" && !navigator.onLine) return;
   const silent = takePendingCooperadoSilentSync();
-  syncHandler?.({ force, silent });
+  syncHandler?.({ force: opts.force, silent, userInitiated: opts.userInitiated === true });
 }
 
 function ensureSchedulerBridge(): void {
@@ -69,6 +69,7 @@ export function requestSyncTier(
     tier,
     force,
     immediate: options?.immediate,
+    userInitiated: options?.userInitiated === true,
   });
 }
 

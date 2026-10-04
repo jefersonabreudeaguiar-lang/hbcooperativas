@@ -15,6 +15,7 @@ import { resolveHbCreditApiCooperadoId } from "@/lib/hb-credit/resolveHbCreditAp
 import { resolveCooperativaCnpj } from "@/services/notaPedidoCloudService";
 import { getUserCooperativaId } from "@/utils/cooperativa";
 import { notifyHbCreditAccountCacheUpdated } from "@/lib/hb-credit/hbCreditLimiteSyncEvents";
+import { isCooperadoManualOperacionalSync } from "@/lib/performance/cooperadoColdStart";
 
 /** Cache HB Créditos cooperado após login/sync (abre Minha Conta Coop na hora). */
 export function HbCreditAccountPersistBootstrap() {
@@ -70,24 +71,27 @@ export function HbCreditAccountPersistBootstrap() {
     return () => cancelIdle();
   }, [hbOn, user, syncing, lastSyncedAt, cooperadoPagamentosHydrated]);
 
+  const cooperadoSyncManual = isCooperadoManualOperacionalSync();
+
   useEffect(() => {
-    if (!hbOn || user?.role !== "cooperado") return;
+    if (!hbOn || user?.role !== "cooperado" || cooperadoSyncManual) return;
     const onLimiteSynced = () => persist();
     window.addEventListener(HB_CREDIT_LIMITE_SYNCED_EVENT, onLimiteSynced);
     return () => window.removeEventListener(HB_CREDIT_LIMITE_SYNCED_EVENT, onLimiteSynced);
-  }, [hbOn, user?.id, user?.role]);
+  }, [hbOn, user?.id, user?.role, cooperadoSyncManual]);
 
   useEffect(() => {
-    if (!hbOn || user?.role !== "cooperado") return;
+    if (!hbOn || user?.role !== "cooperado" || cooperadoSyncManual) return;
     const onOnline = () => persist();
     window.addEventListener("online", onOnline);
     return () => window.removeEventListener("online", onOnline);
-  }, [hbOn, user?.id, user?.role]);
+  }, [hbOn, user?.id, user?.role, cooperadoSyncManual]);
 
   useHbCreditAccountRevisionPoll({
     cnpj: coopCnpj,
     cooperadoId: hbApiCooperadoId,
     enabled:
+      !cooperadoSyncManual &&
       hbOn &&
       user?.role === "cooperado" &&
       Boolean(coopCnpj && hbApiCooperadoId) &&

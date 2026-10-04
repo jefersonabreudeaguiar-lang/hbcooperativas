@@ -8,6 +8,7 @@ import { getData } from "@/services/dataStore";
 import { resolveCooperativaCnpj } from "@/services/notaPedidoCloudService";
 import { isContaCoopValorReceberPilot } from "@/utils/contaCoopUiVisibility";
 import { scheduleContaCoopAuxSync } from "@/lib/hb-credit/contaCoopAuxSyncSchedule";
+import { isCooperadoManualOperacionalSync } from "@/lib/performance/cooperadoColdStart";
 
 const SYNC_INTERVAL_MS = 90_000;
 const DEFAULT_INITIAL_DELAY_MS = 8_000;
@@ -54,6 +55,7 @@ export function useSyncContaCoopValorReceberPilot(opts?: HookOpts) {
       : undefined;
 
   useEffect(() => {
+    if (isCooperadoManualOperacionalSync()) return;
     const syncOpts = optsRef.current;
     if (!syncOpts || !isContaCoopValorReceberPilot(syncOpts.cooperadoId, syncOpts.cooperadoNome)) return;
 

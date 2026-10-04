@@ -14,7 +14,7 @@ export type AppScheduledTask = {
   label?: string;
 };
 
-type SyncDispatch = (force: boolean) => void;
+type SyncDispatch = (opts: { force: boolean; userInitiated?: boolean }) => void;
 
 let started = false;
 let syncDispatch: SyncDispatch | null = null;
@@ -95,13 +95,13 @@ function shouldDeferSyncForInteraction(): boolean {
 
 function dispatchPendingSyncNow(): void {
   if (!pendingSync) return;
-  const { force } = pendingSync;
+  const { force, userInitiated } = pendingSync;
   pendingSync = null;
   if (deferTimer) {
     clearTimeout(deferTimer);
     deferTimer = null;
   }
-  syncDispatch?.(force);
+  syncDispatch?.({ force, userInitiated });
 }
 
 function schedulePendingSyncDispatch(): void {

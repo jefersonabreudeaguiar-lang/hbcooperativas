@@ -423,7 +423,7 @@ export function CooperativaSyncProvider({ children }: { children: React.ReactNod
     if (
       currentUser.role === "cooperado" &&
       isCooperadoManualOperacionalSync() &&
-      !isCooperadoUserSyncVisible()
+      opts?.userInitiated !== true
     ) {
       return;
     }
@@ -463,7 +463,7 @@ export function CooperativaSyncProvider({ children }: { children: React.ReactNod
     const cooperadoUiSync =
       !cooperadoLogadoEarly ||
       !isCooperadoManualOperacionalSync() ||
-      isCooperadoUserSyncVisible();
+      opts?.userInitiated === true;
     const silentCooperadoOpen =
       cooperadoLogadoEarly &&
       isCooperadoInstantResumeEnabled() &&
@@ -735,6 +735,7 @@ export function CooperativaSyncProvider({ children }: { children: React.ReactNod
       void runSync({
         force: runOpts.force ?? false,
         silent: runOpts.silent,
+        userInitiated: runOpts.userInitiated === true,
       });
     });
 

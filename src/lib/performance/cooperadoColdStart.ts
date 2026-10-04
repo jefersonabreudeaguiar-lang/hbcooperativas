@@ -29,8 +29,12 @@ export function isCooperadoInstantResumeEnabled(): boolean {
  * HB Créditos mantém refresh próprio — não usar isto lá.
  */
 export function isCooperadoManualOperacionalSync(): boolean {
-  if (typeof process === "undefined") return false;
-  const v = (process.env.NEXT_PUBLIC_COOPERADO_MANUAL_SYNC ?? "true").trim().toLowerCase();
+  /** Fail-closed: sem `process` no cliente, não reativar sync operacional automático. */
+  const raw =
+    typeof process !== "undefined"
+      ? (process.env.NEXT_PUBLIC_COOPERADO_MANUAL_SYNC ?? "true")
+      : "true";
+  const v = raw.trim().toLowerCase();
   return v !== "0" && v !== "false" && v !== "no";
 }
 

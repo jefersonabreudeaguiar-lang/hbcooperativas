@@ -48,7 +48,7 @@ async function testDebounceCoalescesForce() {
   resetAppSchedulerForTests();
   installBrowserShim();
   const calls: boolean[] = [];
-  registerAppSchedulerSyncDispatch((force) => calls.push(force));
+  registerAppSchedulerSyncDispatch((opts) => calls.push(opts.force));
 
   enqueueAppSyncRequest({ tier: "pulse", force: false });
   enqueueAppSyncRequest({ tier: "operacional_full", force: true });
@@ -62,7 +62,7 @@ async function testImmediateBypassesDebounce() {
   resetAppSchedulerForTests();
   installBrowserShim();
   const calls: boolean[] = [];
-  registerAppSchedulerSyncDispatch((force) => calls.push(force));
+  registerAppSchedulerSyncDispatch((opts) => calls.push(opts.force));
 
   enqueueAppSyncRequest({ tier: "pulse", force: false });
   enqueueAppSyncRequest({ tier: "operacional_full", force: true, immediate: true });
