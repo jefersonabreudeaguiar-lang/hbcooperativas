@@ -23,7 +23,7 @@ import { formatCurrency } from "@/utils/format";
 import { isDiretoriaRole } from "@/permissions";
 import { EquipeResponsaveisPanel } from "@/components/equipe/EquipeResponsaveisPanel";
 import { EquipeContadorPanel } from "@/components/equipe/EquipeContadorPanel";
-import { exigeSenhaCadastroCooperado } from "@/utils/cooperativaCadastro";
+import { exigeSenhaCadastroCooperado, mensalidadeConfigSemSenhaCadastro } from "@/utils/cooperativaCadastro";
 import { hashPasswordSync } from "@/lib/security/password";
 import type { Cooperativa, MensalidadeConfig } from "@/types";
 
@@ -182,23 +182,35 @@ export default function MeuPerfilPage() {
     setTimeout(() => setSaved(false), 3000);
   };
 
-  const handleRemoverSenhaCadastro = () => {
-    if (!user || !coopId || !form.nome) return;
+  const handleRemoverSenhaCadastro = async () => {
+    if (!user || !coopId) return;
+    if (
+      !window.confirm(
+        "Remover a senha de acesso ao cadastro? Qualquer pessoa com o CNPJ poderá criar conta no portal."
+      )
+    ) {
+      return;
+    }
     const now = new Date().toISOString();
     setForm((f) => ({ ...f, senhaCadastroCooperado: undefined }));
+
+    let coopParaNuvem: Cooperativa | undefined;
     updateData((d) => {
       let updated = {
         ...d,
-        cooperativas: d.cooperativas.map((c) =>
-          c.id === coopId
-            ? {
-                ...c,
-                senhaCadastroCooperado: "",
-                senhaCadastroCooperadoHash: undefined,
-                updatedAt: now,
-              }
-            : c
-        ),
+        cooperativas: d.cooperativas.map((c) => {
+          if (c.id !== coopId) return c;
+          const mensalidadeConfig = mensalidadeConfigSemSenhaCadastro(c.mensalidadeConfig);
+          const next: Cooperativa = {
+            ...c,
+            senhaCadastroCooperado: "",
+            senhaCadastroCooperadoHash: undefined,
+            mensalidadeConfig,
+            updatedAt: now,
+          };
+          coopParaNuvem = next;
+          return next;
+        }),
       };
       updated = addAuditEntry(updated, {
         entityType: "cooperativa",
@@ -210,7 +222,20 @@ export default function MeuPerfilPage() {
       });
       return updated;
     });
-    void pushPerfilParaNuvem();
+
+    if (coopParaNuvem) {
+      await pushCooperativaProfileToCloud(coopParaNuvem);
+    }
+
+    updateData((d) => ({
+      ...d,
+      cooperativas: d.cooperativas.map((c) => {
+        if (c.id !== coopId) return c;
+        const { senhaCadastroCooperado: _omit, ...rest } = c;
+        return rest;
+      }),
+    }));
+
     setSaved(true);
     setTimeout(() => setSaved(false), 3000);
   };

@@ -1,7 +1,12 @@
 import type { Cooperativa, MensalidadeConfig, CobrancaSaasCooperativa } from "@/types";
 import { normalizeCnpj } from "@/utils/cooperativa";
 import { secureApiFetch } from "@/lib/security/clientSession";
-import { cooperativaFromCloudRow, exigeSenhaCadastroCooperado, mensalidadeConfigComSenhaCadastro } from "@/utils/cooperativaCadastro";
+import {
+  cooperativaFromCloudRow,
+  exigeSenhaCadastroCooperado,
+  mensalidadeConfigComSenhaCadastro,
+  senhaCadastroStoredFromConfig,
+} from "@/utils/cooperativaCadastro";
 
 export type CloudCooperativa = Pick<Cooperativa, "id" | "nome" | "cnpj"> & Partial<Cooperativa>;
 
@@ -295,9 +300,17 @@ export function mergeCooperativaIntoData(
         cur.updatedAt,
         cloudCoop.updatedAt
       ),
-      senhaCadastroCooperado: cur.senhaCadastroCooperado ?? cloudCoop.senhaCadastroCooperado,
-      senhaCadastroCooperadoHash:
-        cloudCoop.senhaCadastroCooperadoHash ?? cur.senhaCadastroCooperadoHash,
+      senhaCadastroCooperado: cur.senhaCadastroCooperado?.trim()
+        ? cur.senhaCadastroCooperado
+        : cloudCoop.senhaCadastroCooperado,
+      senhaCadastroCooperadoHash: (() => {
+        const localSemSenha =
+          !cur.senhaCadastroCooperadoHash?.trim() &&
+          !cur.senhaCadastroCooperado?.trim() &&
+          !senhaCadastroStoredFromConfig(cur.mensalidadeConfig);
+        if (localSemSenha && tLocal >= tCloud) return undefined;
+        return cloudCoop.senhaCadastroCooperadoHash ?? cur.senhaCadastroCooperadoHash;
+      })(),
       senhaAreaAdminHash: cloudCoop.senhaAreaAdminHash ?? cur.senhaAreaAdminHash,
       updatedAt: tCloud > tLocal ? cloudCoop.updatedAt : cur.updatedAt,
     };

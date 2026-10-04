@@ -31,11 +31,12 @@ export function exigeSenhaCadastroCooperado(
     | undefined,
   config?: MensalidadeConfig | Record<string, unknown> | null
 ): boolean {
-  const stored =
-    cooperativa?.senhaCadastroCooperadoHash ??
-    cooperativa?.senhaCadastroCooperado ??
-    senhaCadastroStoredFromConfig(config);
-  return Boolean(stored?.trim());
+  const hash = cooperativa?.senhaCadastroCooperadoHash?.trim();
+  if (hash) return true;
+  const plain = cooperativa?.senhaCadastroCooperado?.trim();
+  if (plain) return true;
+  const cfg = senhaCadastroStoredFromConfig(config)?.trim();
+  return Boolean(cfg);
 }
 
 export function mensalidadeConfigComSenhaCadastro(
