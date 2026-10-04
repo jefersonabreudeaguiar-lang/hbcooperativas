@@ -32,6 +32,7 @@ import { AppUpdateBanner } from "@/components/pwa/AppUpdateBanner";
 import { useHbCreditDescontosWarmup } from "@/hooks/useHbCreditDescontosWarmup";
 import { shouldPrefetchHbCreditNav } from "@/lib/hb-credit/hbCreditNavPrefetch";
 import { scheduleCooperadoNavPrefetchEarly } from "@/lib/performance/cooperadoNavPrefetch";
+import { CooperadoMobileTabKeepAlive } from "@/components/performance/CooperadoMobileTabKeepAlive";
 import type { Resource } from "@/types";
 
 const ICONS: Record<string, React.ReactNode> = {
@@ -328,7 +329,11 @@ function AppShellInner({ children }: { children: React.ReactNode }) {
           <PainelResponsavelMobileBar />
           <ContratoServicoAppGate />
           <CobrancaSaasPainel />
-          {children}
+          {navUser && isCooperadoAppUser(navUser) ? (
+            <CooperadoMobileTabKeepAlive pathname={pathname}>{children}</CooperadoMobileTabKeepAlive>
+          ) : (
+            children
+          )}
         </main>
       </div>
     </div>
