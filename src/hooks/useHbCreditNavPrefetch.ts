@@ -4,7 +4,10 @@ import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/modules/auth/AuthProvider";
 import { useHbCreditEnabled } from "@/hooks/useHbCreditEnabled";
-import { COOPERADO_MOBILE_PREFETCH_HREFS } from "@/lib/hb-credit/hbCreditNavPrefetch";
+import {
+  COOPERADO_FINANCEIRO_TAB_HREF,
+  COOPERADO_MOBILE_PREFETCH_HREFS,
+} from "@/lib/hb-credit/hbCreditNavPrefetch";
 
 const PREFETCH_INICIO = "/dashboard";
 
@@ -16,6 +19,14 @@ export function HbCreditNavPrefetch() {
 
   useEffect(() => {
     if (!user) return;
+
+    if (user.role === "cooperado") {
+      try {
+        router.prefetch(COOPERADO_FINANCEIRO_TAB_HREF);
+      } catch {
+        /* ignore */
+      }
+    }
 
     let cancelled = false;
     const prefetch = () => {

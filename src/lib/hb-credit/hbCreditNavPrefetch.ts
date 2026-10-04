@@ -1,9 +1,12 @@
+/** Aba Financeiro — bundle maior; prefetch prioritário no cooperado. */
+export const COOPERADO_FINANCEIRO_TAB_HREF = "/ficha-corrida";
+
 /** Rotas do cooperado (barra inferior) — prefetch para troca instantânea. */
 export const COOPERADO_MOBILE_PREFETCH_HREFS = [
   "/dashboard",
   "/notas-pedido",
   "/precos",
-  "/ficha-corrida",
+  COOPERADO_FINANCEIRO_TAB_HREF,
   "/mensalidades",
   "/minha-conta-coop",
 ] as const;

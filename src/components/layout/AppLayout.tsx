@@ -8,7 +8,7 @@ import {
   CalendarCheck, LogOut, Menu, X, Building, ClipboardList, Receipt, User, Tag,
   BookOpen, FileCheck, Shield, MessageSquareWarning, Vote, Download, ShoppingCart, Scale,
 } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useAuth } from "@/modules/auth/AuthProvider";
 import { useAppDataSelector } from "@/hooks/useAppData";
 import {
@@ -30,7 +30,10 @@ import { useSyncContaCoopValorReceberCooperativa } from "@/hooks/useSyncContaCoo
 import { isStaffHbCoopBackgroundSyncRoute } from "@/lib/hb-credit/staffHbSyncRoute";
 import { AppUpdateBanner } from "@/components/pwa/AppUpdateBanner";
 import { useHbCreditDescontosWarmup } from "@/hooks/useHbCreditDescontosWarmup";
-import { shouldPrefetchHbCreditNav } from "@/lib/hb-credit/hbCreditNavPrefetch";
+import {
+  COOPERADO_FINANCEIRO_TAB_HREF,
+  shouldPrefetchHbCreditNav,
+} from "@/lib/hb-credit/hbCreditNavPrefetch";
 import type { Resource } from "@/types";
 
 const ICONS: Record<string, React.ReactNode> = {
@@ -191,6 +194,15 @@ export function MobileNav() {
   const shell = useAppShellNavigationContext();
   if (!shell) return null;
   const { navUser, mobileMenu: mobileItems } = shell;
+
+  useEffect(() => {
+    if (!isCooperadoAppUser(navUser)) return;
+    try {
+      router.prefetch(COOPERADO_FINANCEIRO_TAB_HREF);
+    } catch {
+      /* ignore */
+    }
+  }, [navUser?.id, router]);
 
   const prefetchNavRoute = (href: string) => {
     try {
