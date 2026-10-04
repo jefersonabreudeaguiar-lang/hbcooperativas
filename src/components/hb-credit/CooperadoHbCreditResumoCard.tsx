@@ -41,23 +41,19 @@ export function CooperadoHbCreditResumoCard({ cnpj }: Props) {
       setSnap(null);
       return;
     }
-    const refreshFromCache = () =>
-      setSnap(
-        lerHbCreditAccountPersistido(cnpj, hbApiCooperadoId) ??
-          lerHbCreditAccountPersistidoFlex(hbApiCooperadoId, cnpj) ??
-          (cooperadoId && cooperadoId !== hbApiCooperadoId
-            ? lerHbCreditAccountPersistido(cnpj, cooperadoId) ??
-              lerHbCreditAccountPersistidoFlex(cooperadoId, cnpj)
-            : null)
-      );
+    const readCache = (): HbCreditAccountPersistido | null =>
+      lerHbCreditAccountPersistido(cnpj, hbApiCooperadoId) ??
+      lerHbCreditAccountPersistidoFlex(hbApiCooperadoId, cnpj) ??
+      (cooperadoId && cooperadoId !== hbApiCooperadoId
+        ? lerHbCreditAccountPersistido(cnpj, cooperadoId) ??
+          lerHbCreditAccountPersistidoFlex(cooperadoId, cnpj)
+        : null);
+
+    const refreshFromCache = () => setSnap(readCache());
     refreshFromCache();
 
     const syncFromCloud = async () => {
       if (user?.role === "cooperado") {
-        if (cooperadoHbSemPoll) {
-          refreshFromCache();
-          return;
-        }
         await persistirHbCreditAccountCooperado(user);
         refreshFromCache();
         return;
@@ -80,10 +76,11 @@ export function CooperadoHbCreditResumoCard({ cnpj }: Props) {
       }
     };
 
-    if (!cooperadoHbSemPoll) {
-      void syncFromCloud();
+    if (cooperadoHbSemPoll) {
+      /** Uma leitura na nuvem se não há cache — sem poll nem warmup global. */
+      if (!readCache()?.account) void syncFromCloud();
     } else {
-      refreshFromCache();
+      void syncFromCloud();
     }
 
     const onCache = () => refreshFromCache();

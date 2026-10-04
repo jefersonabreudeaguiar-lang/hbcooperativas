@@ -16,6 +16,10 @@ import { resolveCooperativaCnpj } from "@/services/notaPedidoCloudService";
 import { getUserCooperativaId } from "@/utils/cooperativa";
 import { notifyHbCreditAccountCacheUpdated } from "@/lib/hb-credit/hbCreditLimiteSyncEvents";
 import { isCooperadoManualOperacionalSync } from "@/lib/performance/cooperadoColdStart";
+import {
+  lerHbCreditAccountPersistido,
+  lerHbCreditAccountPersistidoFlex,
+} from "@/lib/hb-credit/hbCreditAccountPersistencia";
 
 /** Cache HB Créditos cooperado após login/sync (abre Minha Conta Coop na hora). */
 export function HbCreditAccountPersistBootstrap() {
@@ -72,6 +76,17 @@ export function HbCreditAccountPersistBootstrap() {
   }, [hbOn, user, syncing, lastSyncedAt, cooperadoPagamentosHydrated]);
 
   const cooperadoSyncManual = isCooperadoManualOperacionalSync();
+
+  useEffect(() => {
+    if (!hbOn || user?.role !== "cooperado" || !cooperadoSyncManual) return;
+    if (!coopCnpj || !hbApiCooperadoId) return;
+    const cached =
+      lerHbCreditAccountPersistido(coopCnpj, hbApiCooperadoId) ??
+      lerHbCreditAccountPersistidoFlex(hbApiCooperadoId, coopCnpj);
+    if (cached?.account) return;
+    const cancelIdle = scheduleContaCoopAuxSync(persist, { idleTimeoutMs: 10_000, fallbackMs: 3_000 });
+    return () => cancelIdle();
+  }, [hbOn, user?.id, user?.role, cooperadoSyncManual, coopCnpj, hbApiCooperadoId]);
 
   useEffect(() => {
     if (!hbOn || user?.role !== "cooperado" || cooperadoSyncManual) return;
