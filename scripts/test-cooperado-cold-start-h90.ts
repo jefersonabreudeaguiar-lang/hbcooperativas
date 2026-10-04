@@ -63,6 +63,17 @@ assert(
   "card HB inicio sem poll automatico (manual)"
 );
 
+const appBanner = read("src/components/pwa/AppUpdateBanner.tsx");
+assert(
+  !appBanner.includes("ensureCooperadoReleaseUpgrade"),
+  "PWA banner nao duplica upgrade cooperado (guard unico)"
+);
+const releaseFetch = read("src/lib/pwa/fetchOfficialClientRelease.ts");
+assert(
+  releaseFetch.includes("cooperadoRuntimeAlreadyOnCanonicalRelease"),
+  "cooperado release evita reload loop localStorage"
+);
+
 if (process.exitCode !== 1) {
   console.log("\nHX 9.0 cold start smoke OK");
 }

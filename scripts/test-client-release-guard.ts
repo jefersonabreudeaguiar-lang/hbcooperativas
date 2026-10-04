@@ -4,6 +4,7 @@ import {
   evaluateClientReleaseAlignment,
   shouldAllowHardReload,
 } from "../src/lib/pwa/clientRelease";
+import { cooperadoRuntimeAlreadyOnCanonicalRelease } from "../src/lib/pwa/fetchOfficialClientRelease";
 
 const CANONICAL = {
   build: 95,
@@ -51,5 +52,18 @@ const CANONICAL = {
 
 assert.ok(BLOCKED_VERCEL_DEPLOYMENT_IDS.includes("dpl_Eoe9gz7YBsqYNhY1LMM79ofEDrKZ"));
 assert.equal(typeof shouldAllowHardReload("test"), "boolean");
+
+{
+  const canon = { build: 102, deploymentId: "dpl_new", gitCommitSha: "abc" };
+  const embedded = { build: 101, deploymentId: "dpl_old", gitCommitSha: "" };
+  assert.equal(
+    cooperadoRuntimeAlreadyOnCanonicalRelease(canon, { build: 102, deploymentId: "dpl_new", gitCommitSha: "" }, embedded),
+    true
+  );
+  assert.equal(
+    cooperadoRuntimeAlreadyOnCanonicalRelease(canon, { build: 101, deploymentId: "dpl_old", gitCommitSha: "" }, embedded),
+    false
+  );
+}
 
 console.log("test-client-release-guard: ok");

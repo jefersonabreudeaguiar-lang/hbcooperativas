@@ -40,9 +40,33 @@ export function markClientReleaseSeen(official: ClientReleaseInfo): void {
   }
 }
 
+/** Evita loop de reload: localStorage antigo com HTML/JS já no build canônico. */
+export function cooperadoRuntimeAlreadyOnCanonicalRelease(
+  canonical: ClientReleaseInfo,
+  pageRelease: ClientReleaseInfo | null,
+  embedded: ClientReleaseInfo
+): boolean {
+  const pageBuild = pageRelease?.build ?? embedded.build;
+  const pageDpl = (pageRelease?.deploymentId ?? embedded.deploymentId).trim();
+  const canonDpl = canonical.deploymentId.trim();
+  if (pageBuild !== canonical.build) return false;
+  if (!canonDpl) return true;
+  if (!pageDpl) return true;
+  return pageDpl === canonDpl;
+}
+
 export async function ensureCooperadoReleaseUpgrade(isCooperadoExperience: boolean): Promise<"ok" | "aligning"> {
   if (!isCooperadoExperience || typeof window === "undefined") return "ok";
   const canonical = await fetchOfficialClientRelease();
+  const embedded = getEmbeddedClientRelease();
+  const pageRelease = getPageEmbeddedReleaseFromDom();
+
+  if (cooperadoRuntimeAlreadyOnCanonicalRelease(canonical, pageRelease, embedded)) {
+    markClientReleaseSeen(canonical);
+    clearReloadBurstCounter();
+    return "ok";
+  }
+
   const seenDpl = localStorage.getItem(DEPLOYMENT_SEEN_KEY);
   const seenBuild = localStorage.getItem(BUILD_SEEN_KEY);
   const dplChanged = Boolean(canonical.deploymentId && seenDpl && seenDpl !== canonical.deploymentId);

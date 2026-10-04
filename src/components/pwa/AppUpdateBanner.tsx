@@ -7,7 +7,8 @@ import { APP_BUILD_VERSION } from "@/lib/appBuildVersion";
 import { useAuth } from "@/modules/auth/AuthProvider";
 import { isCooperadoAppUser } from "@/permissions";
 import { BUILD_SEEN_KEY } from "@/lib/pwa/clientRelease";
-import { ensureCooperadoReleaseUpgrade } from "@/lib/pwa/fetchOfficialClientRelease";
+
+const COOP_SW_RELOADED_BUILD_KEY = "hb-coop-sw-reloaded-build";
 
 function activateWaitingWorker(reg: ServiceWorkerRegistration) {
   const worker = reg.waiting ?? reg.installing;
@@ -24,10 +25,6 @@ export function AppUpdateBanner() {
   useEffect(() => {
     if (typeof window === "undefined" || !("serviceWorker" in navigator)) return;
 
-    if (autoUpdate) {
-      void ensureCooperadoReleaseUpgrade(true);
-    }
-
     const seen = localStorage.getItem(BUILD_SEEN_KEY);
     if (seen !== String(APP_BUILD_VERSION) && seen != null && !autoUpdate) {
       setShow(true);
@@ -36,6 +33,9 @@ export function AppUpdateBanner() {
     let reloaded = false;
     const onControllerChange = () => {
       if (!autoUpdate || reloaded) return;
+      const buildKey = String(APP_BUILD_VERSION);
+      if (sessionStorage.getItem(COOP_SW_RELOADED_BUILD_KEY) === buildKey) return;
+      sessionStorage.setItem(COOP_SW_RELOADED_BUILD_KEY, buildKey);
       reloaded = true;
       window.location.reload();
     };
@@ -44,6 +44,7 @@ export function AppUpdateBanner() {
     void navigator.serviceWorker.register(`/sw.js?build=${APP_BUILD_VERSION}`).then((reg) => {
       const onWaiting = () => {
         if (autoUpdate) {
+          if (sessionStorage.getItem(COOP_SW_RELOADED_BUILD_KEY) === String(APP_BUILD_VERSION)) return;
           activateWaitingWorker(reg);
           return;
         }
