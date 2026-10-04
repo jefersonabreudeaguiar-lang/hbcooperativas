@@ -1,15 +1,3 @@
-import { Suspense } from "react";
-import dynamic from "next/dynamic";
-import { PageSkeleton } from "@/components/ui/PageSkeleton";
+import { lazyAppRoute } from "@/lib/performance/appRouteLazy";
 
-const NotasPedidoPage = dynamic(() => import("./NotasPedidoContent"), {
-  loading: () => <PageSkeleton compact />,
-});
-
-export default function Page() {
-  return (
-    <Suspense fallback={<PageSkeleton compact />}>
-      <NotasPedidoPage />
-    </Suspense>
-  );
-}
+export default lazyAppRoute(() => import("./NotasPedidoContent"));

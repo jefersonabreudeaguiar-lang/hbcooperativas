@@ -32,8 +32,10 @@ import { AppUpdateBanner } from "@/components/pwa/AppUpdateBanner";
 import { useHbCreditDescontosWarmup } from "@/hooks/useHbCreditDescontosWarmup";
 import { shouldPrefetchHbCreditNav } from "@/lib/hb-credit/hbCreditNavPrefetch";
 import { scheduleCooperadoNavPrefetchEarly } from "@/lib/performance/cooperadoNavPrefetch";
+import { scheduleStaffNavPrefetchEarly } from "@/lib/performance/staffNavPrefetch";
 import { CooperadoMobileTabKeepAlive } from "@/components/performance/CooperadoMobileTabKeepAlive";
 import { CooperadoMobileReleaseBar } from "@/components/cooperado/CooperadoMobileReleaseBar";
+import { StaffMobileReleaseBar } from "@/components/layout/StaffMobileReleaseBar";
 import type { Resource } from "@/types";
 
 const ICONS: Record<string, React.ReactNode> = {
@@ -196,9 +198,12 @@ export function MobileNav() {
   const { navUser, mobileMenu: mobileItems } = shell;
 
   useEffect(() => {
-    if (!isCooperadoAppUser(navUser)) return;
-    return scheduleCooperadoNavPrefetchEarly(router);
-  }, [navUser?.id, router]);
+    if (!navUser) return;
+    if (isCooperadoAppUser(navUser)) {
+      return scheduleCooperadoNavPrefetchEarly(router);
+    }
+    return scheduleStaffNavPrefetchEarly(router);
+  }, [navUser?.id, navUser?.role, router]);
 
   const prefetchNavRoute = (href: string) => {
     try {
@@ -213,7 +218,7 @@ export function MobileNav() {
       <header className="lg:hidden flex items-center justify-between gap-2 px-4 py-3 bg-green-900 text-white sticky top-0 z-40">
         <BrandHeader compact />
         <div className="flex items-center gap-1.5 shrink-0">
-          {!isCooperadoAppUser(navUser) && <SyncStatusChip />}
+          {!isCooperadoAppUser(navUser) && <SyncStatusChip showBuild />}
           <button onClick={() => setOpen(true)} className="p-2 hover:bg-green-800 rounded-lg" aria-label="Abrir menu">
             <Menu size={22} />
           </button>
@@ -282,6 +287,12 @@ export function MobileNav() {
         })}
         </nav>
       </div>
+
+      {!isCooperadoAppUser(navUser) && (
+        <div className="lg:hidden fixed bottom-0 left-0 right-0 z-40 shadow-[0_-4px_16px_rgba(0,0,0,0.08)]">
+          <StaffMobileReleaseBar />
+        </div>
+      )}
     </>
   );
 }
@@ -326,7 +337,7 @@ function AppShellInner({ children }: { children: React.ReactNode }) {
                   "p-4 lg:p-6 lg:pb-6",
                   navUser && isCooperadoAppUser(navUser)
                     ? "pb-[max(10.5rem,env(safe-area-inset-bottom,0px)+6.75rem)]"
-                    : "pb-[max(9rem,env(safe-area-inset-bottom,0px)+5.5rem)]"
+                    : "pb-[max(6.5rem,env(safe-area-inset-bottom,0px)+4.25rem)] lg:pb-6"
                 )
           )}
         >

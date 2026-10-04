@@ -6,7 +6,7 @@ Estratégia de performance **adaptativa** para o app cooperativa: resposta insta
 
 1. **Preservar fluxos** — nenhuma mudança de regra de negócio, HB, pagamentos, conferência ou Supabase sem fase dedicada.
 2. **Compatibilidade** — `requestAppSync`, `requestAppSyncLight` e `requestAppSyncImmediate` mantêm o mesmo contrato (`force` → `runSync`).
-3. **Opt-in agressivo** — adiar sync durante interação só com `NEXT_PUBLIC_APP_SCHEDULER_DEFER_SYNC=true` (default **false**).
+3. **Defer na navegação** — adiar sync durante troca de aba/rota com `NEXT_PUBLIC_APP_SCHEDULER_DEFER_SYNC` (default **true**; `false` desliga).
 4. **Sync único** — continua em `CooperativaSyncProvider.runSync`; tiers são metadados até a onda 8.4 (delta API).
 5. **Sem `git add -A`** em PRs de performance — commits cirúrgicos por onda.
 
@@ -104,6 +104,15 @@ Teste: `npx tsx scripts/test-conferencia-h82.ts`
 2. Multi-foto: lançar foto 1 → “Lançar e continuar” → foto 2 mostra “Carregando…” e exibe imagem (sem alerta prematuro).
 3. Preencher quantidades, aguardar sync: campos permanecem no modal.
 4. Fechar modal: reabrir mesma nota começa limpo; aprovar/rejeitar não reaproveita rascunho antigo.
+
+## Onda 8.6 (parcial) — lazy routes + prefetch
+
+- `lazyAppRoute` — shell fino + `dynamic()` em rotas pesadas (cooperado e responsável)
+- `cooperadoNavPrefetch` / `staffNavPrefetch` — prefetch em camadas após login (RAM baixa = lote reduzido)
+- `AppMobileReleaseBar` — build + sync no rodapé mobile (cooperado e staff)
+- `loading.tsx` — skeleton imediato nas rotas críticas
+
+Rotas lazy (build 118+): dashboard, notas, ficha, mensalidades, preços, conta HB, minha conta, relatórios, livro-caixa, cooperados, mercado, prestação, comunicados.
 
 ## Ondas seguintes
 

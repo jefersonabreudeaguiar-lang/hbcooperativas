@@ -20,7 +20,13 @@ function formatRelativo(msAgo: number): string {
 }
 
 /** Chip discreto: “Atualizando…” / “Atualizado há…” — reduz ansiedade de sync invisível. */
-export function SyncStatusChip({ className }: { className?: string }) {
+export function SyncStatusChip({
+  className,
+  showBuild = false,
+}: {
+  className?: string;
+  showBuild?: boolean;
+}) {
   const { syncing, lastSyncedAt } = useSyncStatus();
   const [, setTick] = useState(0);
 
@@ -29,6 +35,10 @@ export function SyncStatusChip({ className }: { className?: string }) {
     const id = window.setInterval(() => setTick((t) => t + 1), 15_000);
     return () => window.clearInterval(id);
   }, [syncing, lastSyncedAt]);
+
+  const buildSuffix = showBuild ? (
+    <span className="text-green-200/80 font-normal">· v{APP_BUILD_VERSION}</span>
+  ) : null;
 
   if (syncing) {
     return (
@@ -42,11 +52,25 @@ export function SyncStatusChip({ className }: { className?: string }) {
       >
         <RefreshCw size={12} className="animate-spin shrink-0" aria-hidden />
         Atualizando…
+        {buildSuffix}
       </span>
     );
   }
 
-  if (!lastSyncedAt) return null;
+  if (!lastSyncedAt) {
+    if (!showBuild) return null;
+    return (
+      <span
+        className={cn(
+          "inline-flex items-center gap-1 rounded-full bg-green-800/50 text-green-200 px-2 py-1 text-[11px] font-medium tabular-nums",
+          className
+        )}
+        role="status"
+      >
+        v{APP_BUILD_VERSION}
+      </span>
+    );
+  }
 
   const label = formatRelativo(Date.now() - lastSyncedAt);
 
@@ -61,7 +85,49 @@ export function SyncStatusChip({ className }: { className?: string }) {
     >
       <Check size={12} className="shrink-0 opacity-80" aria-hidden />
       Atualizado {label}
+      {buildSuffix}
     </span>
+  );
+}
+
+/** Responsável / staff — sync completo ao toque. */
+export function StaffAtualizarButton({ className }: { className?: string }) {
+  const { lastSyncedAt, syncing } = useSyncStatus();
+  const [busy, setBusy] = useState(false);
+  const startedAtRef = useRef(0);
+  const spinning = busy || syncing;
+
+  useEffect(() => {
+    if (!busy) return;
+    if (!syncing && lastSyncedAt != null && lastSyncedAt >= startedAtRef.current) {
+      setBusy(false);
+      return;
+    }
+    const id = window.setTimeout(() => setBusy(false), 90_000);
+    return () => window.clearTimeout(id);
+  }, [busy, lastSyncedAt, syncing]);
+
+  return (
+    <button
+      type="button"
+      onClick={() => {
+        if (busy || syncing) return;
+        startedAtRef.current = Date.now();
+        setBusy(true);
+        requestAppSyncImmediate();
+      }}
+      disabled={spinning}
+      className={cn(
+        "inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-medium transition-colors",
+        "disabled:opacity-70",
+        className
+      )}
+      aria-busy={spinning}
+      aria-label={spinning ? "Atualizando dados" : "Atualizar dados da cooperativa"}
+    >
+      <RefreshCw size={12} className={cn("shrink-0", spinning && "animate-spin")} aria-hidden />
+      Atualizar
+    </button>
   );
 }
 

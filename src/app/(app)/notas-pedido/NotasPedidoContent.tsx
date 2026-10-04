@@ -680,6 +680,22 @@ export default function NotasPedidoContent() {
     setConferenciaFotoSomenteLeitura(fotosLancadasConferenciaRef.current.has(draft.fotoIdx));
   }, []);
 
+  const carregarItensParaFotoConferencia = useCallback(
+    (fotoIdx: number) => {
+      const d = getData() ?? data;
+      if (!d || !conferenciaInstId) return;
+      if (fotosLancadasConferenciaRef.current.has(fotoIdx)) {
+        const salvos = lancamentosFotoConferenciaRef.current.get(fotoIdx);
+        setConferenciaItens(loadItensFromInstituicao(d, conferenciaInstId, coopId, salvos));
+        setConferenciaFotoSomenteLeitura(true);
+        return;
+      }
+      setConferenciaItens(loadItensFromInstituicao(d, conferenciaInstId, coopId));
+      setConferenciaFotoSomenteLeitura(false);
+    },
+    [data, conferenciaInstId, coopId]
+  );
+
   const sincronizarFotosLancadasComFicha = useCallback(
     (d: AppData, notaId: string, totalFotos: number) => {
       if (totalFotos <= 1) {
@@ -751,22 +767,6 @@ export default function NotasPedidoContent() {
       return criarDivisaoEntregaFromParticipantes(d, coopId, origemId, origemNome, ids);
     },
     [coopId, conferenciaDivisaoQtd, conferenciaDivisaoIds]
-  );
-
-  const carregarItensParaFotoConferencia = useCallback(
-    (fotoIdx: number) => {
-      const d = getData() ?? data;
-      if (!d || !conferenciaInstId) return;
-      if (fotosLancadasConferenciaRef.current.has(fotoIdx)) {
-        const salvos = lancamentosFotoConferenciaRef.current.get(fotoIdx);
-        setConferenciaItens(loadItensFromInstituicao(d, conferenciaInstId, coopId, salvos));
-        setConferenciaFotoSomenteLeitura(true);
-        return;
-      }
-      setConferenciaItens(loadItensFromInstituicao(d, conferenciaInstId, coopId));
-      setConferenciaFotoSomenteLeitura(false);
-    },
-    [data, conferenciaInstId, coopId]
   );
 
   const lancarFotoConferenciaAtual = useCallback(
