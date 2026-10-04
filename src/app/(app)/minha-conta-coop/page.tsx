@@ -49,6 +49,10 @@ import { useHbCreditAccountRevisionPoll } from "@/hooks/useHbCreditAccountRevisi
 import { PageSkeleton } from "@/components/ui/PageSkeleton";
 import { cn } from "@/utils/format";
 import { resolveHbCreditApiCooperadoId } from "@/lib/hb-credit/resolveHbCreditApiCooperadoId";
+import {
+  gravarHbCreditLedgerPersistido,
+  lerHbCreditLedgerPersistido,
+} from "@/lib/hb-credit/hbCreditLedgerPersistencia";
 
 type Tab = "inicio" | "pagar" | "extrato";
 
@@ -156,19 +160,31 @@ function MinhaContaCoopContent() {
     };
   }, []);
 
-  const loadLedger = useCallback(async () => {
-    if (!cnpj || !hbApiCooperadoId) return;
-    setLedgerLoading(true);
-    try {
-      const lg = await fetchCreditLedger(cnpj, hbApiCooperadoId);
-      setLedger(lg);
-      setLedgerLoaded(true);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Erro ao carregar extrato.");
-    } finally {
-      setLedgerLoading(false);
-    }
-  }, [cnpj, hbApiCooperadoId]);
+  const loadLedger = useCallback(
+    async (opts?: { background?: boolean }) => {
+      if (!cnpj || !hbApiCooperadoId) return;
+      const cached = lerHbCreditLedgerPersistido(cnpj, hbApiCooperadoId);
+      if (cached?.length) {
+        setLedger(cached);
+        setLedgerLoaded(true);
+      }
+      const showBlockingLoader = !cached?.length && !opts?.background;
+      if (showBlockingLoader) setLedgerLoading(true);
+      try {
+        const lg = await fetchCreditLedger(cnpj, hbApiCooperadoId);
+        setLedger(lg);
+        setLedgerLoaded(true);
+        gravarHbCreditLedgerPersistido(cnpj, hbApiCooperadoId, lg);
+      } catch (e) {
+        if (!cached?.length) {
+          setError(e instanceof Error ? e.message : "Erro ao carregar extrato.");
+        }
+      } finally {
+        if (showBlockingLoader) setLedgerLoading(false);
+      }
+    },
+    [cnpj, hbApiCooperadoId]
+  );
 
   const reload = useCallback(async (opts?: { background?: boolean }) => {
     if (!cnpj || !hbApiCooperadoId) return;
@@ -218,6 +234,11 @@ function MinhaContaCoopContent() {
 
   useEffect(() => {
     if (!cnpj || !hbApiCooperadoId) return;
+    const cachedLedger = lerHbCreditLedgerPersistido(cnpj, hbApiCooperadoId);
+    if (cachedLedger?.length) {
+      setLedger(cachedLedger);
+      setLedgerLoaded(true);
+    }
     const snap =
       lerHbCreditAccountPersistido(cnpj, hbApiCooperadoId) ??
       lerHbCreditAccountPersistidoFlex(hbApiCooperadoId, cnpj) ??
@@ -246,10 +267,11 @@ function MinhaContaCoopContent() {
   useEffect(() => {
     const onLimiteSynced = () => {
       void reload({ background: true });
+      void loadLedger({ background: true });
     };
     window.addEventListener(HB_CREDIT_LIMITE_SYNCED_EVENT, onLimiteSynced);
     return () => window.removeEventListener(HB_CREDIT_LIMITE_SYNCED_EVENT, onLimiteSynced);
-  }, [reload]);
+  }, [reload, loadLedger]);
 
   useHbCreditAccountRevisionPoll({
     cnpj,
@@ -259,6 +281,11 @@ function MinhaContaCoopContent() {
       void reload({ background: true });
     },
   });
+
+  useEffect(() => {
+    if (!auxSyncEnabled || !cnpj || !hbApiCooperadoId) return;
+    void loadLedger({ background: true });
+  }, [auxSyncEnabled, cnpj, hbApiCooperadoId, loadLedger]);
 
   useEffect(() => {
     if (tab !== "extrato" || ledgerLoaded || ledgerLoading) return;
@@ -589,7 +616,7 @@ function MinhaContaCoopContent() {
             <h3 className="font-semibold text-gray-900">Movimentações</h3>
             <p className="text-xs text-gray-500">Pagamentos e ajustes do seu crédito</p>
           </div>
-          {ledgerLoading && !ledgerLoaded ? (
+          {ledgerLoading && !ledger.length ? (
             <div className="px-5 py-10">
               <PageSkeleton />
             </div>

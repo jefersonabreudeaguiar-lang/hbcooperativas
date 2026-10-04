@@ -2829,14 +2829,15 @@ export async function listLedgerCooperado(
   cooperadoId: string,
   limit = 30
 ): Promise<ContaCoopLedgerEntry[]> {
-  const account = await getLimiteCooperado(supabase, cnpj, cooperadoId);
-  if (!account) return [];
+  const found = await fetchHbCreditAccountRowForCooperado(supabase, cnpj, cooperadoId);
+  if (!found) return [];
+  const accountId = String(found.row.id);
 
   const { data } = await supabase
     .from("hb_credit_ledger_entries")
     .select("*")
     .eq("cooperative_cnpj", normalizeCnpj(cnpj))
-    .eq("account_id", account.id)
+    .eq("account_id", accountId)
     .order("created_at", { ascending: false })
     .limit(limit);
 
