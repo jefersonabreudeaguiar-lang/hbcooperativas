@@ -14,7 +14,7 @@ import { useHbCreditAccountRevisionPoll } from "@/hooks/useHbCreditAccountRevisi
 import { resolveHbCreditApiCooperadoId } from "@/lib/hb-credit/resolveHbCreditApiCooperadoId";
 import { resolveCooperativaCnpj } from "@/services/notaPedidoCloudService";
 import { getUserCooperativaId } from "@/utils/cooperativa";
-import { notifyHbCreditLimiteSynced } from "@/lib/hb-credit/hbCreditLimiteSyncEvents";
+import { notifyHbCreditAccountCacheUpdated } from "@/lib/hb-credit/hbCreditLimiteSyncEvents";
 
 /** Cache HB Créditos cooperado após login/sync (abre Minha Conta Coop na hora). */
 export function HbCreditAccountPersistBootstrap() {
@@ -56,24 +56,10 @@ export function HbCreditAccountPersistBootstrap() {
   const persist = () => {
     if (user?.role === "cooperado") {
       void persistirHbCreditAccountCooperado(user).then((ok) => {
-        if (ok) notifyHbCreditLimiteSynced({ immediate: true });
+        if (ok) notifyHbCreditAccountCacheUpdated();
       });
     }
   };
-
-  useEffect(() => {
-    if (!hbOn || !user || user.role !== "cooperado" || !isAppDataWarm()) return;
-    if (persistRevisionTimerRef.current) window.clearTimeout(persistRevisionTimerRef.current);
-    persistRevisionTimerRef.current = window.setTimeout(() => {
-      const cancelIdle = scheduleContaCoopAuxSync(persist, { idleTimeoutMs: 20_000, fallbackMs: 6_000 });
-      idleCleanupRef.current = cancelIdle;
-    }, pathname?.includes("minha-conta-coop") ? 800 : 4000);
-    return () => {
-      if (persistRevisionTimerRef.current) window.clearTimeout(persistRevisionTimerRef.current);
-      idleCleanupRef.current?.();
-      idleCleanupRef.current = undefined;
-    };
-  }, [hbOn, user?.id, user?.cooperadoId, user?.cooperativaId, dataRevision, pathname, user]);
 
   useEffect(() => {
     if (!hbOn || !user || user.role !== "cooperado" || syncing) return;

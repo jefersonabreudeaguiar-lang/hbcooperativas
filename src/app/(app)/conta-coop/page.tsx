@@ -51,7 +51,7 @@ import {
 } from "@/lib/hb-credit/hbCreditLabPolicy";
 import { useSyncContaCoopLimiteFromFicha } from "@/hooks/useSyncContaCoopLimiteFromFicha";
 import { scheduleContaCoopAuxSync } from "@/lib/hb-credit/contaCoopAuxSyncSchedule";
-import { HB_CREDIT_LIMITE_SYNCED_EVENT, notifyHbCreditLimiteSynced } from "@/lib/hb-credit/hbCreditLimiteSyncEvents";
+import { HB_CREDIT_LIMITE_SYNCED_EVENT } from "@/lib/hb-credit/hbCreditLimiteSyncEvents";
 import { useHbCreditLimitesRevisionPoll } from "@/hooks/useHbCreditLimitesRevisionPoll";
 
 /** Marcações de performance — dev ou NEXT_PUBLIC_HB_CREDIT_PERF=true */
@@ -666,9 +666,8 @@ function ContaCoopContent() {
   }, [revalidateLimitesLista]);
 
   const refreshHbNuvemEmBackground = useCallback(() => {
-    void reload({ background: true });
     void revalidateLimitesLista({ force: true, background: true });
-  }, [reload, revalidateLimitesLista]);
+  }, [revalidateLimitesLista]);
 
   useEffect(() => {
     const onLimiteSynced = () => refreshHbNuvemEmBackground();
@@ -678,7 +677,7 @@ function ContaCoopContent() {
 
   useHbCreditLimitesRevisionPoll({
     cnpj: cnpj ?? "",
-    enabled: cnpj.length === 14,
+    enabled: cnpj.length === 14 && tab === "limites",
     onRevisionChange: refreshHbNuvemEmBackground,
   });
 

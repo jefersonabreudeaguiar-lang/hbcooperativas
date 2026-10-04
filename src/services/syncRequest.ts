@@ -78,11 +78,13 @@ export function requestAppSyncLight(): void {
   requestSyncTier("pulse", { force: false });
 }
 
-/** Dispara sync após ação do usuário (agrupa chamadas rápidas; força atualização). */
+/**
+ * Sync após mutação local (staff ou fluxos legados). Não conta como toque em «Atualizar» do cooperado.
+ * Cooperado com sync manual: bloqueado aqui — use requestAppSyncImmediate após ação explícita.
+ */
 export function requestAppSync(): void {
   if (cooperadoBloqueiaSyncOperacionalAutomatico()) return;
-  markCooperadoUserSyncVisible();
-  requestSyncTier("operacional_full", { force: true, userInitiated: true });
+  requestSyncTier("operacional_full", { force: true, userInitiated: false });
 }
 
 /** Sync imediato — botão “Atualizar agora”. */

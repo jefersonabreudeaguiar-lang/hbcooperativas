@@ -101,7 +101,7 @@ import { cooperadoPrecisaCadastrarPix } from "@/utils/pix";
 import { baixarRecibo, resumoReciboFromPagamento, nomeArquivoRecibo } from "@/utils/recibo";
 import { updateData, addAuditEntry, getData } from "@/services/dataStore";
 import { isCooperadoManualOperacionalSync } from "@/lib/performance/cooperadoColdStart";
-import { requestAppSync } from "@/services/syncRequest";
+import { requestAppSync, requestAppSyncImmediate } from "@/services/syncRequest";
 import { useCooperadoExibirAguardandoAssinatura } from "@/hooks/useCooperadoExibirAguardandoAssinatura";
 import { useCooperadoApresentacaoFinanceiraConsolidada } from "@/hooks/useCooperadoApresentacaoFinanceiraConsolidada";
 import { cooperadoFluxoPainelProjecaoOpts } from "@/lib/cooperadoFluxoFinanceiroGlobal";
@@ -1204,7 +1204,11 @@ export default function FichaCorridaPage() {
         });
         if (confirmNuvem.ok) await syncOperacionalFromCloud(cnpj);
       }
-      requestAppSync();
+      if (isCooperado && isCooperadoManualOperacionalSync()) {
+        requestAppSyncImmediate();
+      } else {
+        requestAppSync();
+      }
     })();
     setAssinaturaModal(false);
     setAssinatura(null);
