@@ -24,7 +24,7 @@ import { ContaCoopFiscalNotesMercadoPanel } from "@/components/hb-credit/ContaCo
 import { MercadoContaCoopTermosGate } from "@/components/hb-credit/MercadoContaCoopTermosGate";
 import { textoResumoAcordoDescontoMercado, getClausulasTermoMercadoContaCoop, TERMO_MERCADO_CONTA_COOP_VERSAO } from "@/config/termoUsoMercadoContaCoop";
 import { PageSkeleton } from "@/components/ui/PageSkeleton";
-import { formatCpfCnpj, formatDateTime, formatMesReferencia, getCurrentMesReferencia } from "@/utils/format";
+import { cn, formatCpfCnpj, formatDateTime, formatMesReferencia, getCurrentMesReferencia } from "@/utils/format";
 import { Eye } from "lucide-react";
 import {
   clearHbCreditMercadoCobrancaDraft,
@@ -34,6 +34,23 @@ import {
 
 function intentAguardandoPagamento(status: ContaCoopIntent["status"]) {
   return status === "pendente" || status === "criada";
+}
+
+function sanitizarValorMercadoInput(raw: string): string {
+  let s = raw.replace(/[^\d,]/g, "");
+  const commaIdx = s.indexOf(",");
+  if (commaIdx >= 0) {
+    s = s.slice(0, commaIdx + 1) + s.slice(commaIdx + 1).replace(/,/g, "");
+    const [intPart, decPart = ""] = s.split(",");
+    s = intPart + "," + decPart.slice(0, 2);
+  }
+  return s;
+}
+
+function parseValorMercadoReais(raw: string): number {
+  const cleaned = raw.trim().replace(/\./g, "").replace(",", ".");
+  const n = Number(cleaned);
+  return Number.isFinite(n) ? n : NaN;
 }
 
 type MercadoTab = "inicio" | "cobrar" | "vendas" | "mais";
@@ -156,7 +173,7 @@ function MercadoParceiroContent() {
     setError("");
     setComprovante(null);
     try {
-      const amount = Number(valorReais.replace(",", "."));
+      const amount = parseValorMercadoReais(valorReais);
       const idempotencyKey =
         createIntentIdempotencyRef.current ??
         (createIntentIdempotencyRef.current =
@@ -598,22 +615,69 @@ function MercadoParceiroContent() {
           )}
 
           {!comprovante && (
-            <Card className="space-y-4 !p-5">
-              <div>
-                <h3 className="font-semibold text-gray-900">Nova cobrança</h3>
-                <p className="text-sm text-gray-600">Informe o valor e gere o QR para o cooperado pagar.</p>
+            <Card
+              className="space-y-5 !p-6 sm:!p-8 border-2 border-emerald-400/80 bg-gradient-to-br from-white via-emerald-50/90 to-emerald-100/40 shadow-lg ring-2 ring-emerald-500/20"
+            >
+              <div className="text-center sm:text-left">
+                <h3 className="text-xl font-bold text-gray-900">Nova cobrança</h3>
+                <p className="mt-1 text-sm text-gray-700">Informe o valor e a descrição para gerar o QR.</p>
               </div>
-              <div className="grid gap-3 sm:grid-cols-2">
+              <div className="space-y-5">
                 <div>
-                  <Label>Valor (R$)</Label>
-                  <Input value={valorReais} onChange={(e) => setValorReais(e.target.value)} disabled={!ativo} />
+                  <label
+                    htmlFor="mercado-cobrar-valor"
+                    className="mb-2 block text-base font-semibold text-gray-900"
+                  >
+                    Valor
+                  </label>
+                  <div
+                    className={cn(
+                      "flex items-center rounded-2xl border-2 border-emerald-500 bg-white shadow-[inset_0_2px_8px_rgba(5,150,105,0.08)] transition-shadow focus-within:border-emerald-600 focus-within:ring-2 focus-within:ring-emerald-500/30",
+                      !ativo && "pointer-events-none opacity-60"
+                    )}
+                  >
+                    <span
+                      className="shrink-0 pl-4 pr-1 text-2xl font-bold tabular-nums text-emerald-800 sm:pl-5 sm:text-3xl"
+                      aria-hidden
+                    >
+                      R$
+                    </span>
+                    <input
+                      id="mercado-cobrar-valor"
+                      type="text"
+                      inputMode="decimal"
+                      autoComplete="off"
+                      disabled={!ativo}
+                      value={valorReais}
+                      onChange={(e) => setValorReais(sanitizarValorMercadoInput(e.target.value))}
+                      placeholder="0,00"
+                      className="min-w-0 flex-1 border-0 bg-transparent py-4 pr-4 text-3xl font-bold tabular-nums text-gray-900 placeholder:text-gray-300 focus:outline-none focus:ring-0 sm:py-5 sm:text-4xl"
+                    />
+                  </div>
                 </div>
                 <div>
-                  <Label>Descrição</Label>
-                  <Input value={descricao} onChange={(e) => setDescricao(e.target.value)} disabled={!ativo} />
+                  <label
+                    htmlFor="mercado-cobrar-descricao"
+                    className="mb-2 block text-base font-semibold text-gray-900"
+                  >
+                    Descrição
+                  </label>
+                  <Input
+                    id="mercado-cobrar-descricao"
+                    value={descricao}
+                    onChange={(e) => setDescricao(e.target.value)}
+                    disabled={!ativo}
+                    placeholder="Ex.: compra no balcão, hortifruti…"
+                    className="rounded-xl border-2 border-gray-200 py-3 text-base shadow-sm focus:border-emerald-500 focus:ring-emerald-500/30"
+                  />
                 </div>
               </div>
-              <Button onClick={() => void criarCobranca()} disabled={busy || !ativo} size="lg" className="w-full">
+              <Button
+                onClick={() => void criarCobranca()}
+                disabled={busy || !ativo}
+                size="lg"
+                className="h-14 w-full rounded-2xl text-base font-semibold shadow-md"
+              >
                 {busy ? "Gerando QR..." : "Gerar QR Code"}
               </Button>
             </Card>
