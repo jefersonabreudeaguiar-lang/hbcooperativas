@@ -8,6 +8,7 @@ import {
   alignClientRuntimeToRelease,
   getEmbeddedClientRelease,
   runtimeAlreadyOnCanonicalRelease,
+  runtimeBundleBehindCanonical,
   type ClientReleaseInfo,
 } from "@/lib/pwa/clientRelease";
 
@@ -44,28 +45,47 @@ export function markClientReleaseSeen(official: ClientReleaseInfo): void {
 /** @deprecated use runtimeAlreadyOnCanonicalRelease */
 export const cooperadoRuntimeAlreadyOnCanonicalRelease = runtimeAlreadyOnCanonicalRelease;
 
+async function alignToCanonicalIfNeeded(
+  canonical: ClientReleaseInfo,
+  reason: string
+): Promise<"ok" | "aligning"> {
+  const aligned = await alignClientRuntimeToRelease(reason, canonical.deploymentId);
+  return aligned ? "aligning" : "ok";
+}
+
 export async function ensureCooperadoReleaseUpgrade(isCooperadoExperience: boolean): Promise<"ok" | "aligning"> {
   if (!isCooperadoExperience || typeof window === "undefined") return "ok";
   const canonical = await fetchOfficialClientRelease();
   const embedded = getEmbeddedClientRelease();
   const pageRelease = getPageEmbeddedReleaseFromDom();
+  const loaded = collectLoadedDeploymentIdsFromDom();
+
+  if (runtimeBundleBehindCanonical(canonical, embedded)) {
+    return alignToCanonicalIfNeeded(
+      canonical,
+      `cooperado_bundle:${embedded.build}->${canonical.build}`
+    );
+  }
+
+  const decision = evaluateClientReleaseAlignment({
+    canonical,
+    pageRelease,
+    loadedDeploymentIds: loaded,
+  });
+
+  if (decision.action === "align") {
+    return alignToCanonicalIfNeeded(canonical, decision.reason);
+  }
+
+  if (decision.action === "pending") {
+    return "ok";
+  }
 
   if (runtimeAlreadyOnCanonicalRelease(canonical, pageRelease, embedded)) {
     markClientReleaseSeen(canonical);
     clearReloadBurstCounter();
-    return "ok";
   }
-
-  const seenDpl = localStorage.getItem(DEPLOYMENT_SEEN_KEY);
-  const seenBuild = localStorage.getItem(BUILD_SEEN_KEY);
-  const dplChanged = Boolean(canonical.deploymentId && seenDpl && seenDpl !== canonical.deploymentId);
-  const buildChanged = Boolean(seenBuild && String(canonical.build) !== seenBuild);
-  if (!dplChanged && !buildChanged) return "ok";
-  await alignClientRuntimeToRelease(
-    dplChanged ? `cooperado_dpl:${seenDpl}->${canonical.deploymentId}` : `cooperado_build:${seenBuild}->${canonical.build}`,
-    canonical.deploymentId
-  );
-  return "aligning";
+  return "ok";
 }
 
 export async function runClientReleaseAlignment(): Promise<"ok" | "pending" | "aligning"> {
@@ -74,10 +94,12 @@ export async function runClientReleaseAlignment(): Promise<"ok" | "pending" | "a
   const pageRelease = getPageEmbeddedReleaseFromDom();
   const loaded = collectLoadedDeploymentIdsFromDom();
 
-  if (runtimeAlreadyOnCanonicalRelease(canonical, pageRelease, embedded)) {
-    markClientReleaseSeen(canonical);
-    clearReloadBurstCounter();
-    return "ok";
+  if (runtimeBundleBehindCanonical(canonical, embedded)) {
+    const aligned = await alignClientRuntimeToRelease(
+      `bundle:${embedded.build}->${canonical.build}`,
+      canonical.deploymentId
+    );
+    return aligned ? "aligning" : "ok";
   }
 
   const decision = evaluateClientReleaseAlignment({
@@ -89,11 +111,14 @@ export async function runClientReleaseAlignment(): Promise<"ok" | "pending" | "a
   if (decision.action === "pending") return "pending";
 
   if (decision.action === "align") {
-    await alignClientRuntimeToRelease(decision.reason, canonical.deploymentId);
-    return "aligning";
+    const aligned = await alignClientRuntimeToRelease(decision.reason, canonical.deploymentId);
+    return aligned ? "aligning" : "ok";
   }
 
-  if (loaded.length > 0) {
+  if (runtimeAlreadyOnCanonicalRelease(canonical, pageRelease, embedded)) {
+    markClientReleaseSeen(canonical);
+    clearReloadBurstCounter();
+  } else if (loaded.length > 0) {
     markClientReleaseSeen(decision.target);
     clearReloadBurstCounter();
   }

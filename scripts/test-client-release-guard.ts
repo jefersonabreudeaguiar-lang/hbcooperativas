@@ -59,6 +59,14 @@ assert.equal(typeof shouldAllowHardReload("test"), "boolean");
   const embedded = { build: 101, deploymentId: "dpl_old", gitCommitSha: "" };
   assert.equal(
     runtimeAlreadyOnCanonicalRelease(canon, { build: 102, deploymentId: "dpl_new", gitCommitSha: "" }, embedded),
+    false
+  );
+  assert.equal(
+    runtimeAlreadyOnCanonicalRelease(
+      canon,
+      { build: 102, deploymentId: "dpl_new", gitCommitSha: "" },
+      { build: 102, deploymentId: "dpl_new", gitCommitSha: "" }
+    ),
     true
   );
   assert.equal(
@@ -72,7 +80,7 @@ assert.equal(typeof shouldAllowHardReload("test"), "boolean");
     new URL("../src/lib/pwa/clientRelease.ts", import.meta.url),
     "utf8"
   );
-  assert.match(boot, /function pageCanon/);
+  assert.match(boot, /html_build:/);
   assert.match(boot, /markCurrentRuntimeReleaseSeen/);
 }
 

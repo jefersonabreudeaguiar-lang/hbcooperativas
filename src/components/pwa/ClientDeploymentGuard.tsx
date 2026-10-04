@@ -63,11 +63,10 @@ export function ClientDeploymentGuard() {
       if (document.visibilityState === "visible" && !aligningRef.current) void run();
     };
     document.addEventListener("visibilitychange", onVisible);
-    const interval = cooperadoExperience
-      ? undefined
-      : window.setInterval(() => {
-          if (!aligningRef.current) void run();
-        }, 4 * 60 * 1000);
+    const intervalMs = cooperadoExperience ? 2 * 60 * 1000 : 4 * 60 * 1000;
+    const interval = window.setInterval(() => {
+      if (!aligningRef.current) void run();
+    }, intervalMs);
 
     return () => {
       cancelled = true;
