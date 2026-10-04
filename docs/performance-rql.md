@@ -110,7 +110,7 @@ Teste: `npx tsx scripts/test-conferencia-h82.ts`
 - **8.3** — notify por domínio + IDB shard
 - **8.4** — API delta por tier
 - **8.5** — workers (BIC / admin stats)
-- **8.6** — keep-alive abas cooperado + view transitions
+- **8.6** — keep-alive abas cooperado + view transitions (parcial: `cooperadoNavPrefetch` + `loading.tsx` por aba)
 
 ## SLOs alvo (homolog / prod medidos)
 

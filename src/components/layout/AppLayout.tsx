@@ -30,10 +30,8 @@ import { useSyncContaCoopValorReceberCooperativa } from "@/hooks/useSyncContaCoo
 import { isStaffHbCoopBackgroundSyncRoute } from "@/lib/hb-credit/staffHbSyncRoute";
 import { AppUpdateBanner } from "@/components/pwa/AppUpdateBanner";
 import { useHbCreditDescontosWarmup } from "@/hooks/useHbCreditDescontosWarmup";
-import {
-  COOPERADO_FINANCEIRO_TAB_HREF,
-  shouldPrefetchHbCreditNav,
-} from "@/lib/hb-credit/hbCreditNavPrefetch";
+import { shouldPrefetchHbCreditNav } from "@/lib/hb-credit/hbCreditNavPrefetch";
+import { scheduleCooperadoNavPrefetchEarly } from "@/lib/performance/cooperadoNavPrefetch";
 import type { Resource } from "@/types";
 
 const ICONS: Record<string, React.ReactNode> = {
@@ -197,11 +195,7 @@ export function MobileNav() {
 
   useEffect(() => {
     if (!isCooperadoAppUser(navUser)) return;
-    try {
-      router.prefetch(COOPERADO_FINANCEIRO_TAB_HREF);
-    } catch {
-      /* ignore */
-    }
+    return scheduleCooperadoNavPrefetchEarly(router);
   }, [navUser?.id, router]);
 
   const prefetchNavRoute = (href: string) => {

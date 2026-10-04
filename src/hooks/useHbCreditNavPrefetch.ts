@@ -5,13 +5,14 @@ import { useRouter } from "next/navigation";
 import { useAuth } from "@/modules/auth/AuthProvider";
 import { useHbCreditEnabled } from "@/hooks/useHbCreditEnabled";
 import {
-  COOPERADO_FINANCEIRO_TAB_HREF,
-  COOPERADO_MOBILE_PREFETCH_HREFS,
-} from "@/lib/hb-credit/hbCreditNavPrefetch";
+  prefetchCooperadoNavRoutes,
+  scheduleCooperadoNavPrefetchEarly,
+} from "@/lib/performance/cooperadoNavPrefetch";
+import { scheduleCooperadoPostInteractiveTask } from "@/lib/performance/cooperadoColdStart";
 
 const PREFETCH_INICIO = "/dashboard";
 
-/** Prefetch HB + Início após idle — troca de aba quase instantânea (Next.js). */
+/** Prefetch de rotas do cooperado em camadas + staff/HB após idle. */
 export function HbCreditNavPrefetch() {
   const router = useRouter();
   const { user } = useAuth();
@@ -21,22 +22,15 @@ export function HbCreditNavPrefetch() {
     if (!user) return;
 
     if (user.role === "cooperado") {
-      try {
-        router.prefetch(COOPERADO_FINANCEIRO_TAB_HREF);
-      } catch {
-        /* ignore */
-      }
+      const cancelEarly = scheduleCooperadoNavPrefetchEarly(router);
+      scheduleCooperadoPostInteractiveTask(() => prefetchCooperadoNavRoutes(router));
+      return cancelEarly;
     }
 
     let cancelled = false;
     const prefetch = () => {
       if (cancelled) return;
-      const routes =
-        user.role === "cooperado"
-          ? [...COOPERADO_MOBILE_PREFETCH_HREFS]
-          : hbState.enabled
-            ? ["/conta-coop", PREFETCH_INICIO]
-            : [PREFETCH_INICIO];
+      const routes = hbState.enabled ? ["/conta-coop", PREFETCH_INICIO] : [PREFETCH_INICIO];
       for (const href of routes) {
         try {
           router.prefetch(href);
@@ -48,10 +42,10 @@ export function HbCreditNavPrefetch() {
 
     let cancelIdle: (() => void) | undefined;
     if (typeof window.requestIdleCallback === "function") {
-      const id = window.requestIdleCallback(prefetch, { timeout: 8000 });
+      const id = window.requestIdleCallback(prefetch, { timeout: 3000 });
       cancelIdle = () => window.cancelIdleCallback(id);
     } else {
-      const t = window.setTimeout(prefetch, 2500);
+      const t = window.setTimeout(prefetch, 800);
       cancelIdle = () => window.clearTimeout(t);
     }
 
