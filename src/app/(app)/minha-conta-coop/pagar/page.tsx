@@ -33,10 +33,7 @@ import {
   lerHbCreditAccountPersistido,
 } from "@/lib/hb-credit/hbCreditAccountPersistencia";
 import type { ContaCoopLimiteCooperado } from "@/modules/hb-credit/types";
-import {
-  canAffordHbPaymentScanPreview,
-  hbCreditDebitFromGrossCents,
-} from "@/modules/hb-credit/engine/paymentAffordability";
+import { canAffordHbPaymentWithLimite } from "@/modules/hb-credit/engine/paymentAffordability";
 import { cn } from "@/utils/format";
 import { resolveHbCreditApiCooperadoId } from "@/lib/hb-credit/resolveHbCreditApiCooperadoId";
 
@@ -62,7 +59,6 @@ function HbCreditPagarContent() {
   );
   const [hasPin, setHasPin] = useState<boolean | null>(null);
   const [payPin, setPayPin] = useState("");
-  const [useCashback, setUseCashback] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState<{ receiptCode: string } | null>(null);
@@ -167,12 +163,9 @@ function HbCreditPagarContent() {
 
   const limite = draft?.limite;
   const intent = draft?.intent;
-  const cashback = limite?.cashbackDisponivelCents ?? 0;
-  const creditoDisponivel = limite?.valorDisponivelCents ?? 0;
-  const creditDebit = intent
-    ? hbCreditDebitFromGrossCents(intent.amountCents, useCashback, cashback)
-    : 0;
-  const saldoApos = Math.max(0, creditoDisponivel - creditDebit);
+  const saldoDisponivel = limite?.valorDisponivelCents ?? 0;
+  const debito = intent?.amountCents ?? 0;
+  const saldoApos = Math.max(0, saldoDisponivel - debito);
 
   const voltar = useCallback(() => {
     clearHbCreditPaymentDraft();
@@ -199,7 +192,6 @@ function HbCreditPagarContent() {
         nonce: intent.nonce,
         pin: payPin,
         idempotencyKey: `pay:${intent.id}:${hbApiCooperadoId}`,
-        useCashback,
       });
 
       if (typeof res.disponivelAposCents === "number") {
@@ -207,10 +199,7 @@ function HbCreditPagarContent() {
         const nextAccount: ContaCoopLimiteCooperado = {
           ...limite,
           valorDisponivelCents: nextDisponivel,
-          valorUsadoCents: Math.min(limite.limiteLiberadoCents, limite.valorUsadoCents + creditDebit),
-          cashbackDisponivelCents: useCashback
-            ? Math.max(0, cashback - Math.min(cashback, intent.amountCents))
-            : limite.cashbackDisponivelCents,
+          valorUsadoCents: Math.min(limite.limiteLiberadoCents, limite.valorUsadoCents + debito),
         };
         gravarHbCreditAccountPersistido(cnpj, hbApiCooperadoId, {
           v: HB_CREDIT_ACCOUNT_STORAGE_VERSION,
@@ -280,7 +269,7 @@ function HbCreditPagarContent() {
     );
   }
 
-  const affordOk = limite ? canAffordHbPaymentScanPreview(limite, intent.amountCents) : false;
+  const affordOk = limite ? canAffordHbPaymentWithLimite(limite, intent.amountCents, false) : false;
   const podePagar =
     !busy &&
     payPin.length >= FINANCIAL_PIN_MIN_LENGTH &&
@@ -336,41 +325,15 @@ function HbCreditPagarContent() {
 
         <div className="mt-6 space-y-0 divide-y divide-emerald-900/10 rounded-2xl border border-emerald-900/10 bg-white/70 px-4 shadow-sm backdrop-blur-sm">
           <Row label="Forma de pagamento" value="HB Crédito" />
-          <Row label="Seu crédito agora" value={formatCentsBRL(creditoDisponivel)} />
-          {cashback > 0 && (
-            <Row
-              label="Cashback"
-              value={
-                useCashback
-                  ? `Usando ${formatCentsBRL(Math.min(cashback, intent.amountCents))}`
-                  : formatCentsBRL(cashback)
-              }
-            />
-          )}
-          <Row label="Crédito após pagamento" value={formatCentsBRL(saldoApos)} highlight />
+          <Row label="Seu saldo agora" value={formatCentsBRL(saldoDisponivel)} />
+          <Row label="Saldo após pagamento" value={formatCentsBRL(saldoApos)} highlight />
         </div>
 
         {!affordOk && (
-          <p className="mt-4 rounded-2xl bg-amber-50 px-4 py-3 text-sm text-amber-900 border border-amber-200">
-            Limite HB insuficiente para este valor. Peça ao responsável para liberar crédito ou use cashback se
-            disponível.
+          <p className="mt-4 rounded-2xl bg-amber-50 px-4 py-3 text-sm text-amber-900 border border-amber-200" role="alert">
+            Saldo insuficiente para este valor. Aguarde a cooperativa liberar crédito ou pague um valor menor no
+            mercado.
           </p>
-        )}
-
-        {cashback > 0 && (
-          <button
-            type="button"
-            disabled={busy}
-            onClick={() => setUseCashback((v) => !v)}
-            className={cn(
-              "mt-4 w-full rounded-2xl border px-4 py-3 text-left text-sm transition-colors",
-              useCashback
-                ? "border-emerald-600/50 bg-emerald-600/10 text-emerald-950"
-                : "border-emerald-900/15 bg-white/60 text-gray-800"
-            )}
-          >
-            {useCashback ? "Cashback incluído neste pagamento" : "Toque para usar cashback neste pagamento"}
-          </button>
         )}
 
         {hasPin === false && (
@@ -392,7 +355,7 @@ function HbCreditPagarContent() {
           disabled={!podePagar}
           onClick={() => void confirmar()}
         >
-          {busy ? "Processando…" : `Pagar ${formatCentsBRL(intent.amountCents)}`}
+          {busy ? "Processando…" : affordOk ? `Pagar ${formatCentsBRL(intent.amountCents)}` : "Saldo insuficiente"}
         </Button>
       </footer>
     </div>
@@ -401,9 +364,9 @@ function HbCreditPagarContent() {
 
 function Row({ label, value, highlight }: { label: string; value: string; highlight?: boolean }) {
   return (
-    <div className="flex items-center justify-between gap-4 py-3.5 text-sm">
-      <span className="text-gray-600">{label}</span>
-      <span className={cn("font-medium tabular-nums text-right", highlight ? "text-emerald-700" : "text-gray-900")}>
+    <div className="flex items-center justify-between gap-3 py-3.5">
+      <span className="text-sm text-gray-600">{label}</span>
+      <span className={cn("text-sm font-semibold tabular-nums", highlight ? "text-emerald-800" : "text-gray-900")}>
         {value}
       </span>
     </div>

@@ -390,9 +390,8 @@ function MinhaContaCoopContent() {
     );
   }
 
-  const disponivel = account?.valorDisponivelCents ?? 0;
+  const saldoHb = account?.valorDisponivelCents ?? 0;
   const cashback = account?.cashbackDisponivelCents ?? 0;
-  const paraPagar = disponivel + cashback;
   const podeLiberarCashback =
     cashback > 0 && !cashbackJaNaFicha && Boolean(mesReferenciaReceber) && !isOffline && !busy;
   const pagamentoBloqueado = !hasPin || account?.bloqueado || isOffline;
@@ -429,13 +428,8 @@ function MinhaContaCoopContent() {
             Atualizando…
           </span>
         )}
-        <p className="text-sm font-medium text-green-100">Crédito disponível para pagar</p>
-        <p className="mt-1 text-4xl font-bold tracking-tight sm:text-5xl">{formatCentsBRL(paraPagar)}</p>
-        {cashback > 0 && (
-          <p className="mt-2 text-sm text-green-100/90">
-            Inclui cashback {formatCentsBRL(cashback)} · crédito HB {formatCentsBRL(disponivel)}
-          </p>
-        )}
+        <p className="text-sm font-medium text-green-100">Saldo HB para pagar</p>
+        <p className="mt-1 text-4xl font-bold tracking-tight sm:text-5xl">{formatCentsBRL(saldoHb)}</p>
 
         {cashback > 0 && (
           <div className="mt-4 flex flex-wrap items-center gap-2 rounded-2xl border border-white/15 bg-white/10 px-3 py-2.5">

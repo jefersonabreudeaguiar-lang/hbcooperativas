@@ -114,12 +114,9 @@ export function CooperadoHbCreditResumoCard({ cnpj }: Props) {
     const usado = Math.max(0, acc.valorUsadoCents ?? 0);
     const creditoEfetivo = hbCreditEffectiveDisponivelCents(liberado, liberado, usado);
     const creditoInformado = Math.max(0, acc.valorDisponivelCents ?? 0);
-    const credito = Math.min(creditoInformado, creditoEfetivo);
-    const cashback = acc.cashbackDisponivelCents ?? 0;
+    const saldo = Math.min(creditoInformado, creditoEfetivo);
     return {
-      paraPagar: credito + cashback,
-      credito,
-      cashback,
+      saldo,
       limite: liberado,
       usado,
     };
@@ -136,7 +133,7 @@ export function CooperadoHbCreditResumoCard({ cnpj }: Props) {
         </span>
         <span className="min-w-0 flex-1">
           <span className="block font-bold text-gray-900">HB Créditos</span>
-          <span className="block text-sm text-gray-600 mt-0.5">Abrir para ver limite e pagar com QR</span>
+          <span className="block text-sm text-gray-600 mt-0.5">Abrir para ver saldo e pagar com QR</span>
         </span>
         <span className="text-sm font-semibold text-emerald-800 shrink-0">Abrir →</span>
       </Link>
@@ -154,11 +151,8 @@ export function CooperadoHbCreditResumoCard({ cnpj }: Props) {
         </span>
         <div className="min-w-0 flex-1">
           <p className="text-xs font-semibold uppercase tracking-wider text-emerald-100">HB Créditos</p>
-          <p className="mt-1 text-sm text-emerald-50/90">Disponível para pagar nos mercados parceiros</p>
-          <p className="mt-2 text-3xl font-bold tracking-tight sm:text-4xl">{formatCentsBRL(totals.paraPagar)}</p>
-          <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-xs text-emerald-100/90">
-            {totals.cashback > 0 && <span>Cashback {formatCentsBRL(totals.cashback)}</span>}
-          </div>
+          <p className="mt-1 text-sm text-emerald-50/90">Saldo para pagar nos mercados parceiros</p>
+          <p className="mt-2 text-3xl font-bold tracking-tight sm:text-4xl">{formatCentsBRL(totals.saldo)}</p>
         </div>
         <span className="shrink-0 text-sm font-semibold text-white/90 pt-1">Detalhes →</span>
       </div>

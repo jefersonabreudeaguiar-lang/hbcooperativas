@@ -1,5 +1,8 @@
 import type { ContaCoopLimiteCooperado } from "@/modules/hb-credit/types";
 
+export const HB_CREDIT_INSUFFICIENT_CODE = "HB_CREDIT_INSUFFICIENT";
+export const HB_CREDIT_SALDO_INSUFICIENTE_MSG = "Saldo insuficiente.";
+
 /** Espelha hb_credit_effective_disponivel_cents (cap × usado). */
 export function hbCreditEffectiveDisponivelCents(
   limitReleasedCents: number,
@@ -33,10 +36,7 @@ export function canAffordHbPaymentWithLimite(
   return limite.valorDisponivelCents >= creditDebit;
 }
 
-/** QR: aceita se pagar só com crédito ou crédito + cashback (toggle na confirmação). */
+/** QR / pré-pagamento — só saldo HB (cashback não entra no pagamento; liberar na ficha). */
 export function canAffordHbPaymentScanPreview(limite: ContaCoopLimiteCooperado, grossCents: number): boolean {
-  return (
-    canAffordHbPaymentWithLimite(limite, grossCents, false) ||
-    canAffordHbPaymentWithLimite(limite, grossCents, true)
-  );
+  return canAffordHbPaymentWithLimite(limite, grossCents, false);
 }

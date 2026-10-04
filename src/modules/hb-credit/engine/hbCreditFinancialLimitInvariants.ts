@@ -129,7 +129,7 @@ export function authorizeHbFinancialLimitFailClosed(
   }
 
   if (disponivel < debit) {
-    return { ok: false, errorCode: "HB_CREDIT_INSUFFICIENT", error: "Limite insuficiente." };
+    return { ok: false, errorCode: "HB_CREDIT_INSUFFICIENT", error: "Saldo insuficiente." };
   }
 
   return { ok: true, disponivelCents: disponivel };

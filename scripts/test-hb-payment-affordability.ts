@@ -23,9 +23,9 @@ const base: ContaCoopLimiteCooperado = {
 
 assert(hbCreditDebitFromGrossCents(5_000, false, 3_000) === 5_000, "sem cashback debita gross");
 assert(hbCreditDebitFromGrossCents(5_000, true, 3_000) === 2_000, "cashback reduz debito");
-assert(!canAffordHbPaymentWithLimite(base, 12_000, false), "sem cashback acima do credito");
-assert(canAffordHbPaymentWithLimite(base, 12_000, true), "com cashback cobre 12k");
-assert(canAffordHbPaymentScanPreview(base, 12_000), "scan aceita se cashback ajuda");
-assert(!canAffordHbPaymentScanPreview({ ...base, valorDisponivelCents: 1_000, cashbackDisponivelCents: 500 }, 5_000), "scan recusa impossivel");
+assert(!canAffordHbPaymentWithLimite(base, 12_000, false), "acima do saldo HB");
+assert(!canAffordHbPaymentScanPreview(base, 12_000), "scan nao usa cashback para cobrir");
+assert(canAffordHbPaymentScanPreview(base, 8_000), "scan aceita dentro do saldo");
+assert(!canAffordHbPaymentScanPreview({ ...base, valorDisponivelCents: 1_000, cashbackDisponivelCents: 5_000 }, 2_000), "cashback nao aumenta saldo de pagamento");
 
 console.log("test-hb-payment-affordability: OK");

@@ -42,8 +42,9 @@ import { pickCreditosBaseForLimitSync } from "@/modules/hb-credit/engine/creditB
 import { capContaCoopLimiteToAuthoritativeBase, projetarLimitesListaCooperados } from "@/modules/hb-credit/engine/creditBaseHbGuard";
 import { resolverCooperadoIdCanonico } from "@/services/cooperadoCloudService";
 import {
-  canAffordHbPaymentScanPreview,
   canAffordHbPaymentWithLimite,
+  HB_CREDIT_INSUFFICIENT_CODE,
+  HB_CREDIT_SALDO_INSUFICIENTE_MSG,
   hbCreditEffectiveDisponivelCents,
 } from "@/modules/hb-credit/engine/paymentAffordability";
 import { INTENT_EXPIRY_MINUTES } from "@/modules/hb-credit/config";
@@ -1880,16 +1881,14 @@ export async function getLimiteCooperadoAlinhadoAEntregas(
 }
 
 /**
- * Limite exibido no app cooperado — mesma fonte da aba Limites do responsável (GET /api/credit/limites?fast=1):
- * conta `hb_credit_accounts` via titular (`getLimiteCooperado`), sem re-cap M6 que pode zerar disponível indevidamente.
- * Pagamentos continuam validados em `prepareHbCreditPaymentAuthorize` / `getLimiteCooperadoAlinhadoAEntregas`.
+ * Saldo HB exibido no cooperado — limite alinhado à ficha M6 (teto − usado), igual validação de pagamento.
  */
 export async function getLimiteCooperadoExibicaoParidadeLimites(
   supabase: SupabaseClient,
   cnpj: string,
   cooperadoId: string
 ): Promise<ContaCoopLimiteCooperado | null> {
-  return getLimiteCooperado(supabase, cnpj, cooperadoId);
+  return getLimiteCooperadoAlinhadoAEntregas(supabase, cnpj, cooperadoId);
 }
 
 export async function setFinancialPin(
@@ -2608,7 +2607,7 @@ export async function validateIntentForCooperado(
   opts?: { useCashback?: boolean; forAuthorize?: boolean; fast?: boolean }
 ): Promise<
   | { ok: true; intent: ContaCoopIntent; limite: ContaCoopLimiteCooperado; parceiroNome: string }
-  | { ok: false; error: string }
+  | { ok: false; error: string; code?: string }
 > {
   const digits = normalizeCnpj(cooperativaCnpj);
   const { data: intent } = await supabase.from("hb_credit_payment_intents").select("*").eq("id", intentId).maybeSingle();
@@ -2637,21 +2636,28 @@ export async function validateIntentForCooperado(
     .select("name, status")
     .eq("id", intent.partner_id)
     .maybeSingle();
-  const limiteQuery = getLimiteCooperado(supabase, digits, cooperadoId, {
-    skipAmountUsedReconcile: opts?.fast === true,
-    fastPreview: opts?.fast === true,
-  });
+  const limiteQuery = getLimiteCooperadoAlinhadoAEntregas(supabase, digits, cooperadoId).then(
+    async (aligned) => {
+      if (aligned) return aligned;
+      return getLimiteCooperado(supabase, digits, cooperadoId, {
+        skipAmountUsedReconcile: opts?.fast === true,
+        fastPreview: opts?.fast === true,
+      });
+    }
+  );
 
   const [{ data: parceiro }, limite] = await Promise.all([parceiroQuery, limiteQuery]);
   if (!parceiro || parceiro.status !== "ACTIVE") return { ok: false, error: "Mercado bloqueado ou inativo." };
   if (!limite) return { ok: false, error: "Sem limite HB Créditos." };
   if (limite.bloqueado) return { ok: false, error: "Cooperado bloqueado." };
   const gross = Number(intent.amount_cents);
-  const affordOk = opts?.forAuthorize
-    ? canAffordHbPaymentWithLimite(limite, gross, Boolean(opts.useCashback))
-    : canAffordHbPaymentScanPreview(limite, gross);
+  const affordOk = canAffordHbPaymentWithLimite(limite, gross, false);
   if (!affordOk) {
-    return { ok: false, error: "Limite insuficiente." };
+    return {
+      ok: false,
+      error: HB_CREDIT_SALDO_INSUFICIENTE_MSG,
+      code: HB_CREDIT_INSUFFICIENT_CODE,
+    };
   }
 
   return {
@@ -2720,7 +2726,7 @@ export async function authorizePayment(
       input.nonce,
       input.cooperadoId,
       input.cooperativaCnpj,
-      { useCashback: Boolean(input.useCashback), forAuthorize: true, fast: true }
+      { forAuthorize: true, fast: true }
     ),
     fetchHbCreditAccountRowForCooperado(supabase, input.cooperativaCnpj, input.cooperadoId),
   ]);
@@ -2731,11 +2737,6 @@ export async function authorizePayment(
     return { ok: false, error: "Cooperado sem limite Conta Coop." };
   }
   const accountCooperadoId = accountFound.accountCooperadoId;
-
-  let cashbackAppliedCents = 0;
-  if (input.useCashback) {
-    cashbackAppliedCents = intentCheck.limite.cashbackDisponivelCents ?? 0;
-  }
 
   const transacaoId = genId("tx");
   const recebivelId = genId("recv");
@@ -2751,7 +2752,7 @@ export async function authorizePayment(
     p_receivable_id: recebivelId,
     p_receipt_code: receiptCode,
     p_actor_user_id: input.actorUserId,
-    p_cashback_applied_cents: cashbackAppliedCents,
+    p_cashback_applied_cents: 0,
   });
 
   if (error) {

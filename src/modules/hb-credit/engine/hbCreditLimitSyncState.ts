@@ -113,5 +113,11 @@ export function mapAuthorizeRpcError(result: {
       code: HB_CREDIT_LIMIT_SNAPSHOT_MISSING_CODE,
     };
   }
+  if (
+    result?.error_code === "HB_CREDIT_INSUFFICIENT" ||
+    /limite insuficiente/i.test(String(result?.error ?? ""))
+  ) {
+    return { error: "Saldo insuficiente.", code: "HB_CREDIT_INSUFFICIENT" };
+  }
   return { error: result?.error ?? "Pagamento recusado." };
 }
