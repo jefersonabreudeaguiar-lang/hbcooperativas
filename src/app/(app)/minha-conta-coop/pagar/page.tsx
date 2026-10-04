@@ -33,7 +33,11 @@ import {
   lerHbCreditAccountPersistido,
 } from "@/lib/hb-credit/hbCreditAccountPersistencia";
 import type { ContaCoopLimiteCooperado } from "@/modules/hb-credit/types";
-import { canAffordHbPaymentWithLimite } from "@/modules/hb-credit/engine/paymentAffordability";
+import {
+  canAffordHbPaymentScanPreview,
+  canAffordHbPaymentWithLimite,
+  hbCreditDebitFromGrossCents,
+} from "@/modules/hb-credit/engine/paymentAffordability";
 import { cn } from "@/utils/format";
 import { resolveHbCreditApiCooperadoId } from "@/lib/hb-credit/resolveHbCreditApiCooperadoId";
 
@@ -164,7 +168,15 @@ function HbCreditPagarContent() {
   const limite = draft?.limite;
   const intent = draft?.intent;
   const saldoDisponivel = limite?.valorDisponivelCents ?? 0;
-  const debito = intent?.amountCents ?? 0;
+  const cashbackAvail = limite?.cashbackDisponivelCents ?? 0;
+  const useCashbackOnPay = useMemo(() => {
+    if (!limite || !intent) return false;
+    if (canAffordHbPaymentWithLimite(limite, intent.amountCents, false)) return false;
+    return canAffordHbPaymentWithLimite(limite, intent.amountCents, true);
+  }, [limite, intent]);
+  const debito = intent
+    ? hbCreditDebitFromGrossCents(intent.amountCents, useCashbackOnPay, cashbackAvail)
+    : 0;
   const saldoApos = Math.max(0, saldoDisponivel - debito);
 
   const voltar = useCallback(() => {
@@ -192,6 +204,7 @@ function HbCreditPagarContent() {
         nonce: intent.nonce,
         pin: payPin,
         idempotencyKey: `pay:${intent.id}:${hbApiCooperadoId}`,
+        useCashback: useCashbackOnPay,
       });
 
       if (typeof res.disponivelAposCents === "number") {
@@ -200,6 +213,9 @@ function HbCreditPagarContent() {
           ...limite,
           valorDisponivelCents: nextDisponivel,
           valorUsadoCents: Math.min(limite.limiteLiberadoCents, limite.valorUsadoCents + debito),
+          cashbackDisponivelCents: useCashbackOnPay
+            ? Math.max(0, cashbackAvail - Math.min(cashbackAvail, intent.amountCents))
+            : limite.cashbackDisponivelCents,
         };
         gravarHbCreditAccountPersistido(cnpj, hbApiCooperadoId, {
           v: HB_CREDIT_ACCOUNT_STORAGE_VERSION,
@@ -269,7 +285,7 @@ function HbCreditPagarContent() {
     );
   }
 
-  const affordOk = limite ? canAffordHbPaymentWithLimite(limite, intent.amountCents, false) : false;
+  const affordOk = limite ? canAffordHbPaymentScanPreview(limite, intent.amountCents) : false;
   const podePagar =
     !busy &&
     payPin.length >= FINANCIAL_PIN_MIN_LENGTH &&

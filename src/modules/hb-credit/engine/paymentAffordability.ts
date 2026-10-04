@@ -36,7 +36,10 @@ export function canAffordHbPaymentWithLimite(
   return limite.valorDisponivelCents >= creditDebit;
 }
 
-/** QR / pré-pagamento — só saldo HB (cashback não entra no pagamento; liberar na ficha). */
+/** QR: crédito HB ou crédito + cashback (cashback não entra no saldo exibido; uso só na autorização). */
 export function canAffordHbPaymentScanPreview(limite: ContaCoopLimiteCooperado, grossCents: number): boolean {
-  return canAffordHbPaymentWithLimite(limite, grossCents, false);
+  return (
+    canAffordHbPaymentWithLimite(limite, grossCents, false) ||
+    canAffordHbPaymentWithLimite(limite, grossCents, true)
+  );
 }

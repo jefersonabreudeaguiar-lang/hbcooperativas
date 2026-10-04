@@ -96,10 +96,7 @@ export async function POST(request: Request) {
       { fast: body?.fast !== false }
     );
     if (!result.ok) {
-      return NextResponse.json(
-        { ok: false, error: result.error, code: result.code },
-        { status: result.code === "HB_CREDIT_INSUFFICIENT" ? 402 : 400 }
-      );
+      return NextResponse.json({ ok: false, error: result.error, code: result.code }, { status: 400 });
     }
     return NextResponse.json({
       ok: true,

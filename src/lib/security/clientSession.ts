@@ -410,6 +410,9 @@ export function mensagemErroAuthApi(status: number, error?: string): string {
   if (status === 504 || status === 502) {
     return "O servidor demorou para responder. Se o PIN estava correto, aguarde alguns segundos e confira o extrato antes de tentar de novo.";
   }
+  if (status === 402) {
+    return error ?? "Saldo insuficiente.";
+  }
   return error ?? "Erro ao comunicar com o servidor.";
 }
 

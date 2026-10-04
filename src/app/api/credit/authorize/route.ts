@@ -57,7 +57,7 @@ export async function POST(request: Request) {
     pin,
     actorUserId: gate.ctx.session?.sub ?? cooperadoId,
     cooperadoNome: String(body?.cooperadoNome ?? gate.ctx.session?.name ?? ""),
-    useCashback: false,
+    useCashback: Boolean(body?.useCashback),
   });
 
   if (!result.ok) return NextResponse.json({ error: result.error, code: result.code }, { status: 400 });
@@ -69,6 +69,7 @@ export async function POST(request: Request) {
 
   return NextResponse.json({
     ...result,
+    ok: true,
     financeiroConfirmado: true,
     projecaoPendente: true,
   });
