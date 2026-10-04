@@ -45,6 +45,7 @@ import { cooperadoApresentacaoFinanceiraPosRunSync } from "@/lib/cooperadoAprese
 import {
   cooperadoFinanceiroBloqueiaEntradaApp,
   cooperadoFinanceiroDesatualizado,
+  cooperadoFinanceiroStaleRecuperavelEmBackground,
   aplicarSanidadeFinanceiroCooperadoLocal,
 } from "@/services/fichaSyncGuard";
 import { avaliarIntegridadeFinanceiroCooperado } from "@/services/cooperadoFinanceiroGuard";
@@ -53,7 +54,11 @@ import { refreshContaCoopDescontosAfterOperacionalSync } from "@/lib/hb-credit/s
 import { isStaffHbCoopBackgroundSyncRoute } from "@/lib/hb-credit/staffHbSyncRoute";
 import { persistirInicioCardValorReceberCooperado } from "@/services/cooperadoInicioCardPersistenciaService";
 import { pushCooperadoToCloud, resolverCooperadoIdCanonico, flushPendingCooperadoPushes, notaPertenceCooperado } from "@/services/cooperadoCloudService";
-import { registerSyncHandler, registerVotacaoOperacionalSyncHandler } from "@/services/syncRequest";
+import {
+  registerSyncHandler,
+  registerVotacaoOperacionalSyncHandler,
+  requestCooperadoPrimeiraCargaSync,
+} from "@/services/syncRequest";
 import {
   isAppIdle,
   markUserActivity,
@@ -294,6 +299,15 @@ export function CooperativaSyncProvider({ children }: { children: React.ReactNod
 
   const syncingRef = useRef(false);
   const lastSyncStartedAtRef = useRef(0);
+  const cooperadoSilentRetryAtRef = useRef(0);
+  const scheduleCooperadoSilentSyncRetry = useCallback(() => {
+    if (typeof window === "undefined") return;
+    if (!isCooperadoEventDrivenSync()) return;
+    const now = Date.now();
+    if (now - cooperadoSilentRetryAtRef.current < 30_000) return;
+    cooperadoSilentRetryAtRef.current = now;
+    window.setTimeout(() => requestCooperadoPrimeiraCargaSync(), 4_000);
+  }, []);
   const lastCooperadoPushRef = useRef(0);
   const lastVotacaoOperacionalPullRef = useRef(0);
   const votacaoOperacionalPullRef = useRef(false);
@@ -382,10 +396,14 @@ export function CooperativaSyncProvider({ children }: { children: React.ReactNod
 
     const sessionOk = await ensureCloudSessionReady(userToCloudProfile(currentUser));
     if (!sessionOk) {
-      setLastSyncError(
-        getLastCloudSyncError() ||
-          "Não foi possível conectar à nuvem. Saia, entre de novo e aguarde alguns segundos."
-      );
+      if (currentUser.role === "cooperado") {
+        scheduleCooperadoSilentSyncRetry();
+      } else {
+        setLastSyncError(
+          getLastCloudSyncError() ||
+            "Não foi possível conectar à nuvem. Saia, entre de novo e aguarde alguns segundos."
+        );
+      }
       /* H204: readiness financeiro só após runSync completo — não liberar UI aqui. */
       return;
     }
@@ -418,11 +436,17 @@ export function CooperativaSyncProvider({ children }: { children: React.ReactNod
           cooperadoId &&
           cooperadoFinanceiroDesatualizado(latest, cooperadoId, currentCoopId)
         ) {
-          setLastSyncError(msg);
+          if (currentUser.role === "cooperado") {
+            scheduleCooperadoSilentSyncRetry();
+          } else {
+            setLastSyncError(msg);
+          }
         }
       }
     } catch {
-      /* offline / retry na próxima abertura */
+      if (currentUser.role === "cooperado") {
+        scheduleCooperadoSilentSyncRetry();
+      }
     } finally {
       votacaoOperacionalPullRef.current = false;
       if (isH197CaptureEnabled()) {
@@ -433,7 +457,7 @@ export function CooperativaSyncProvider({ children }: { children: React.ReactNod
       }
       /* H204: pull operacional parcial (votação) não marca apresentação pronta — só runSync. */
     }
-  }, [markCooperadoPagamentosHydrated, setLastSyncError]);
+  }, [markCooperadoPagamentosHydrated, scheduleCooperadoSilentSyncRetry, setLastSyncError]);
 
   const pullVotacaoOperacionalCooperado = useCallback(async () => {
     await hydrateCooperadoPagamentosFromCloud();
@@ -473,6 +497,8 @@ export function CooperativaSyncProvider({ children }: { children: React.ReactNod
     const currentCoopId = getUserCooperativaId(currentUser, data);
     if (!currentCoopId) {
       if (currentUser.role === "cooperado") {
+        scheduleCooperadoSilentSyncRetry();
+      } else {
         setLastSyncError("Cadastro da cooperativa não encontrado neste aparelho. Saia e entre de novo.");
       }
       return;
@@ -516,16 +542,22 @@ export function CooperativaSyncProvider({ children }: { children: React.ReactNod
     try {
       const sessionOk = await ensureCloudSessionReady(userToCloudProfile(currentUser));
       if (!sessionOk) {
-        setLastSyncError(
-          getLastCloudSyncError() ||
-            "Não foi possível conectar à nuvem. Saia, entre de novo e aguarde alguns segundos."
-        );
+        if (currentUser.role === "cooperado") {
+          scheduleCooperadoSilentSyncRetry();
+        } else {
+          setLastSyncError(
+            getLastCloudSyncError() ||
+              "Não foi possível conectar à nuvem. Saia, entre de novo e aguarde alguns segundos."
+          );
+        }
         return;
       }
 
       const cnpj = await resolveCooperativaCnpj(data, currentCoopId, currentUser);
       if (!cnpj) {
         if (currentUser.role === "cooperado") {
+          scheduleCooperadoSilentSyncRetry();
+        } else {
           setLastSyncError("CNPJ da cooperativa não encontrado. Saia e entre de novo.");
         }
         return;
@@ -601,10 +633,22 @@ export function CooperativaSyncProvider({ children }: { children: React.ReactNod
                   { sessionLease: cooperadoSyncSession }
                 );
                 if (!recovered && cooperadoFinanceiroDesatualizado(getData(), cooperadoCanonico, currentCoopId)) {
-                  setLastSyncError(
-                    getLastCloudSyncError() ||
-                      "Não foi possível baixar sua ficha. Verifique a internet e toque em Atualizar agora."
-                  );
+                  if (
+                    cooperadoFinanceiroStaleRecuperavelEmBackground(
+                      getData(),
+                      cooperadoCanonico,
+                      currentCoopId
+                    )
+                  ) {
+                    scheduleCooperadoSilentSyncRetry();
+                  } else if (currentUser.role !== "cooperado") {
+                    setLastSyncError(
+                      getLastCloudSyncError() ||
+                        "Não foi possível baixar sua ficha. Verifique a internet e toque em Atualizar agora."
+                    );
+                  } else {
+                    scheduleCooperadoSilentSyncRetry();
+                  }
                 }
               }
             }
@@ -669,11 +713,25 @@ export function CooperativaSyncProvider({ children }: { children: React.ReactNod
           cooperadoCanonico &&
           cooperadoFinanceiroDesatualizado(getData(), cooperadoCanonico, currentCoopId)
         ) {
-          completed = false;
-          setLastSyncError((prev) =>
-            prev ||
-            "Não foi possível baixar sua ficha. Verifique a internet e toque em Atualizar agora."
-          );
+          if (
+            cooperadoFinanceiroStaleRecuperavelEmBackground(
+              getData(),
+              cooperadoCanonico,
+              currentCoopId
+            )
+          ) {
+            scheduleCooperadoSilentSyncRetry();
+          } else {
+            completed = false;
+            if (currentUser.role !== "cooperado") {
+              setLastSyncError((prev) =>
+                prev ||
+                "Não foi possível baixar sua ficha. Verifique a internet e toque em Atualizar agora."
+              );
+            } else {
+              scheduleCooperadoSilentSyncRetry();
+            }
+          }
         }
       }
       const staffUser =
@@ -697,7 +755,11 @@ export function CooperativaSyncProvider({ children }: { children: React.ReactNod
       }
     } catch (e) {
       if (!completed) {
-        setLastSyncError(e instanceof Error ? e.message : "Erro na sincronização.");
+        if (userRef.current?.role === "cooperado") {
+          scheduleCooperadoSilentSyncRetry();
+        } else {
+          setLastSyncError(e instanceof Error ? e.message : "Erro na sincronização.");
+        }
       }
     } finally {
       if (userRef.current?.role === "cooperado" && completed) {
@@ -782,7 +844,7 @@ export function CooperativaSyncProvider({ children }: { children: React.ReactNod
         }
       }
     }
-  }, [markCooperadoPagamentosHydrated]);
+  }, [markCooperadoPagamentosHydrated, scheduleCooperadoSilentSyncRetry]);
 
   useEffect(() => {
     installH197WindowExport();

@@ -306,6 +306,11 @@ export function aplicarSanidadeFinanceiroCooperadoLocal(
   const cnpj = cnpjFromCooperativaId(data, cooperativaId);
   let next = posProcessarFinanceiroLocal(data, cnpj || undefined);
   next = limparFichaObsoletaCooperado(next, cooperadoId, cooperativaId);
+  const fichas = next.fichaCorrida ?? [];
+  const deduped = dedupeFichaCorridaPorNota(fichas, next.notasPedido);
+  if (deduped.length !== fichas.length) {
+    next = { ...next, fichaCorrida: deduped };
+  }
   return next;
 }
 
@@ -345,6 +350,20 @@ export function cooperadoFinanceiroBloqueiaEntradaApp(
 }
 
 /** Ficha/notas ausentes ou valor a receber possivelmente incompleto (sync parcial). */
+/**
+ * Financeiro ainda incompleto na nuvem, mas o cooperado já tem fatia local utilizável —
+ * não tratar como falha de sync (retry silencioso em background).
+ */
+export function cooperadoFinanceiroStaleRecuperavelEmBackground(
+  data: AppData,
+  cooperadoId: string,
+  cooperativaId: string
+): boolean {
+  if (!cooperadoFinanceiroDesatualizado(data, cooperadoId, cooperativaId)) return false;
+  if (cooperadoFinanceiroBloqueiaEntradaApp(data, cooperadoId, cooperativaId)) return false;
+  return cooperadoTemDadosFinanceirosMinimos(data, cooperadoId, cooperativaId);
+}
+
 export function cooperadoFinanceiroDesatualizado(
   data: AppData,
   cooperadoId: string,

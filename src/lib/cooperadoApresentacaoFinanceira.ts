@@ -2,6 +2,7 @@ import type { AppData, UserRole } from "@/types";
 import {
   cooperadoFinanceiroBloqueiaEntradaApp,
   cooperadoFinanceiroDesatualizado,
+  cooperadoFinanceiroStaleRecuperavelEmBackground,
 } from "@/services/fichaSyncGuard";
 
 export type CooperadoInicioCardsUi = {
@@ -45,6 +46,16 @@ export function cooperadoApresentacaoFinanceiraPosRunSync(input: {
   cooperativaId: string;
 }): boolean {
   if (cooperadoFinanceiroDesatualizado(input.data, input.cooperadoId, input.cooperativaId)) {
+    if (
+      input.syncCompleted &&
+      cooperadoFinanceiroStaleRecuperavelEmBackground(
+        input.data,
+        input.cooperadoId,
+        input.cooperativaId
+      )
+    ) {
+      return true;
+    }
     return false;
   }
   if (input.syncCompleted) return true;
