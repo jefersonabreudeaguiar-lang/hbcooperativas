@@ -9,14 +9,14 @@ import {
   requestCooperadoManualRefreshSync,
 } from "@/services/syncRequest";
 import { cn } from "@/utils/format";
-import { APP_BUILD_VERSION } from "@/lib/appBuildVersion";
+import {
+  formatRelativoSync,
+  staffUltimaAtualizacaoTexto,
+  STAFF_APP_BUILD_LABEL,
+} from "@/components/sync/staffSyncStatusText";
 
 function formatRelativo(msAgo: number): string {
-  if (msAgo < 15_000) return "agora";
-  if (msAgo < 60_000) return `há ${Math.floor(msAgo / 1000)}s`;
-  if (msAgo < 3_600_000) return `há ${Math.floor(msAgo / 60_000)} min`;
-  if (msAgo < 86_400_000) return `há ${Math.floor(msAgo / 3_600_000)} h`;
-  return "há mais de 1 dia";
+  return formatRelativoSync(msAgo);
 }
 
 /** Chip discreto: “Atualizando…” / “Atualizado há…” — reduz ansiedade de sync invisível. */
@@ -36,9 +36,32 @@ export function SyncStatusChip({
     return () => window.clearInterval(id);
   }, [syncing, lastSyncedAt]);
 
-  const buildSuffix = showBuild ? (
-    <span className="text-green-200/80 font-normal">· v{APP_BUILD_VERSION}</span>
-  ) : null;
+  if (showBuild) {
+    const texto = staffUltimaAtualizacaoTexto(syncing, lastSyncedAt);
+    return (
+      <span
+        className={cn(
+          "inline-flex max-w-[min(100%,14rem)] items-center gap-1.5 rounded-full bg-green-800/50 text-green-100 px-2.5 py-1 text-[10px] sm:text-[11px] font-medium",
+          syncing && "bg-green-800/80",
+          className
+        )}
+        title={
+          lastSyncedAt
+            ? `Última sincronização: ${new Date(lastSyncedAt).toLocaleString("pt-BR")} · app ${STAFF_APP_BUILD_LABEL}`
+            : `App ${STAFF_APP_BUILD_LABEL}`
+        }
+        role="status"
+        aria-live="polite"
+      >
+        {syncing ? (
+          <RefreshCw size={12} className="animate-spin shrink-0" aria-hidden />
+        ) : (
+          <Check size={12} className="shrink-0 opacity-80" aria-hidden />
+        )}
+        <span className="truncate tabular-nums">{texto}</span>
+      </span>
+    );
+  }
 
   if (syncing) {
     return (
@@ -52,25 +75,11 @@ export function SyncStatusChip({
       >
         <RefreshCw size={12} className="animate-spin shrink-0" aria-hidden />
         Atualizando…
-        {buildSuffix}
       </span>
     );
   }
 
-  if (!lastSyncedAt) {
-    if (!showBuild) return null;
-    return (
-      <span
-        className={cn(
-          "inline-flex items-center gap-1 rounded-full bg-green-800/50 text-green-200 px-2 py-1 text-[11px] font-medium tabular-nums",
-          className
-        )}
-        role="status"
-      >
-        v{APP_BUILD_VERSION}
-      </span>
-    );
-  }
+  if (!lastSyncedAt) return null;
 
   const label = formatRelativo(Date.now() - lastSyncedAt);
 
@@ -85,7 +94,6 @@ export function SyncStatusChip({
     >
       <Check size={12} className="shrink-0 opacity-80" aria-hidden />
       Atualizado {label}
-      {buildSuffix}
     </span>
   );
 }
@@ -176,7 +184,7 @@ export function CooperadoAtualizarButton({ className }: { className?: string }) 
   );
 }
 
-/** Variante para fundo claro (topo do main no desktop). */
+/** Variante para fundo claro (topo do main no desktop — responsável). */
 export function SyncStatusChipLight({ className }: { className?: string }) {
   const { syncing, lastSyncedAt } = useSyncStatus();
   const [, setTick] = useState(0);
@@ -187,38 +195,51 @@ export function SyncStatusChipLight({ className }: { className?: string }) {
     return () => window.clearInterval(id);
   }, [syncing, lastSyncedAt]);
 
-  if (syncing) {
-    return (
-      <span
-        className={cn(
-          "inline-flex items-center gap-1.5 rounded-full bg-amber-50 text-amber-900 border border-amber-200 px-2.5 py-1 text-[11px] font-medium",
-          className
-        )}
-        role="status"
-        aria-live="polite"
-      >
-        <RefreshCw size={12} className="animate-spin shrink-0" aria-hidden />
-        Atualizando dados…
-      </span>
-    );
-  }
-
-  if (!lastSyncedAt) return null;
-
-  const label = formatRelativo(Date.now() - lastSyncedAt);
+  const texto = staffUltimaAtualizacaoTexto(syncing, lastSyncedAt);
 
   return (
     <span
       className={cn(
-        "inline-flex items-center gap-1.5 rounded-full bg-gray-100 text-gray-600 border border-gray-200 px-2.5 py-1 text-[11px] font-medium",
+        "inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-medium max-w-full",
+        syncing
+          ? "bg-amber-50 text-amber-900 border-amber-200"
+          : "bg-gray-100 text-gray-700 border-gray-200",
         className
       )}
-      title={`Última sincronização: ${new Date(lastSyncedAt).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}`}
+      title={
+        lastSyncedAt
+          ? `Última sincronização: ${new Date(lastSyncedAt).toLocaleString("pt-BR")} · app ${STAFF_APP_BUILD_LABEL}`
+          : `App ${STAFF_APP_BUILD_LABEL}`
+      }
       role="status"
+      aria-live="polite"
     >
-      <Check size={12} className="shrink-0 text-green-700" aria-hidden />
-      Atualizado {label}
-      <span className="text-gray-400 font-normal">· v{APP_BUILD_VERSION}</span>
+      {syncing ? (
+        <RefreshCw size={12} className="animate-spin shrink-0" aria-hidden />
+      ) : (
+        <Check size={12} className="shrink-0 text-green-700" aria-hidden />
+      )}
+      <span className="truncate tabular-nums">{texto}</span>
     </span>
+  );
+}
+
+/** Rodapé do menu lateral (responsável — desktop). */
+export function StaffSidebarSyncVersionLine() {
+  const { syncing, lastSyncedAt } = useSyncStatus();
+  const [, setTick] = useState(0);
+
+  useEffect(() => {
+    if (syncing || !lastSyncedAt) return;
+    const id = window.setInterval(() => setTick((t) => t + 1), 20_000);
+    return () => window.clearInterval(id);
+  }, [syncing, lastSyncedAt]);
+
+  const texto = staffUltimaAtualizacaoTexto(syncing, lastSyncedAt);
+
+  return (
+    <p className="px-3 py-2 text-[10px] leading-snug text-green-300/95 tabular-nums" role="status">
+      {texto}
+    </p>
   );
 }

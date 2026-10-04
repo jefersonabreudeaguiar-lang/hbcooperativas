@@ -19,7 +19,11 @@ import { getUserFuncaoLabel, isCooperadoAppUser } from "@/permissions";
 import { getUserCooperativaNome } from "@/utils/cooperativa";
 import { PLATFORM_NAME, PLATFORM_TAGLINE } from "@/utils/constants";
 import { AppIcon } from "@/components/ui/AppIcon";
-import { SyncStatusChip, SyncStatusChipLight } from "@/components/sync/SyncStatusChip";
+import {
+  SyncStatusChip,
+  SyncStatusChipLight,
+  StaffSidebarSyncVersionLine,
+} from "@/components/sync/SyncStatusChip";
 import { CooperadoSubtleUpdateNotice } from "@/components/cooperado/CooperadoSubtleUpdateNotice";
 import { CobrancaSaasPainel } from "@/components/payments/CobrancaSaasPainelWrapper";
 import { PainelResponsavelMobileBar } from "@/components/permissions/PainelResponsavelMobileBar";
@@ -168,6 +172,7 @@ export function Sidebar({ mobile = false, onClose }: { mobile?: boolean; onClose
           <p className="text-sm font-medium truncate">{navUser.name}</p>
           <p className="text-xs text-green-300">{getUserFuncaoLabel(navUser)}</p>
         </div>
+        {!isCooperadoAppUser(navUser) && <StaffSidebarSyncVersionLine />}
         <Link
           href="/baixar-app"
           onClick={onClose}

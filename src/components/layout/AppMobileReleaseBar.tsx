@@ -9,14 +9,10 @@ import {
   StaffAtualizarButton,
 } from "@/components/sync/SyncStatusChip";
 import { cn } from "@/utils/format";
-
-function formatRelativo(msAgo: number): string {
-  if (msAgo < 15_000) return "agora";
-  if (msAgo < 60_000) return `há ${Math.floor(msAgo / 1000)}s`;
-  if (msAgo < 3_600_000) return `há ${Math.floor(msAgo / 60_000)} min`;
-  if (msAgo < 86_400_000) return `há ${Math.floor(msAgo / 3_600_000)} h`;
-  return "há mais de 1 dia";
-}
+import {
+  formatRelativoSync,
+  staffUltimaAtualizacaoTexto,
+} from "@/components/sync/staffSyncStatusText";
 
 type Variant = "cooperado" | "staff";
 
@@ -51,11 +47,13 @@ export function AppMobileReleaseBar({ variant }: { variant: Variant }) {
   }, [syncing, lastSyncedAt]);
 
   const dadosLabel =
-    syncing
-      ? "atualizando dados…"
-      : lastSyncedAt
-        ? `dados ${formatRelativo(Date.now() - lastSyncedAt)}`
-        : "dados ainda não sincronizados";
+    variant === "staff"
+      ? staffUltimaAtualizacaoTexto(syncing, lastSyncedAt)
+      : syncing
+        ? "atualizando dados…"
+        : lastSyncedAt
+          ? `dados ${formatRelativoSync(Date.now() - lastSyncedAt)}`
+          : "dados ainda não sincronizados";
 
   const Atualizar = variant === "cooperado" ? CooperadoAtualizarButton : StaffAtualizarButton;
 
@@ -69,14 +67,16 @@ export function AppMobileReleaseBar({ variant }: { variant: Variant }) {
       aria-live="polite"
     >
       <div className="flex min-w-0 flex-1 items-center gap-1.5 truncate">
-        <span
-          className={cn(
-            "shrink-0 rounded-md px-1.5 py-0.5 font-bold tabular-nums",
-            s.badge
-          )}
-        >
-          v{APP_BUILD_VERSION}
-        </span>
+        {variant === "cooperado" && (
+          <span
+            className={cn(
+              "shrink-0 rounded-md px-1.5 py-0.5 font-bold tabular-nums",
+              s.badge
+            )}
+          >
+            v{APP_BUILD_VERSION}
+          </span>
+        )}
         <span className={cn("truncate", s.text)}>
           {syncing ? (
             <span className="inline-flex items-center gap-1">
@@ -86,7 +86,9 @@ export function AppMobileReleaseBar({ variant }: { variant: Variant }) {
           ) : (
             <span className="inline-flex items-center gap-1">
               <Check size={11} className="shrink-0 opacity-80" aria-hidden />
-              Última atualização · {dadosLabel}
+              {variant === "staff"
+                ? dadosLabel
+                : `Última atualização · ${dadosLabel}`}
             </span>
           )}
         </span>
