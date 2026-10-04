@@ -89,9 +89,24 @@ Marcas: `performance.mark("rql:cold:*")`
 - `scheduleCooperadoPostInteractiveTask` — release/deploy após UI interativa
 - Ficha + conferência — `syncingForUi` na navegação (não trava com sync silencioso cooperado)
 
+## Onda 8.2 — Conferência (draft + navegação estável)
+
+- `responsavelConferenciaNavigateGuard` — não “pula” aba/cooperado na fila durante `syncingForUi`; bloqueia navegação só com modal aberto ou lançamento em andamento
+- `conferenciaDraftMemoria` — rascunho de itens, divisão e progresso multi-foto **só em memória** (sessão do browser)
+- `NotasPedidoContent` — persiste/restaura draft com modal aberto; limpa ao fechar, aprovar ou rejeitar
+- Carga de fotos no modal — `partCount` no fetch; spinner coerente ao trocar foto (evita falso “Foto ainda não carregou”)
+
+Teste: `npx tsx scripts/test-conferencia-h82.ts`
+
+### Homolog 8.2 (responsável — Notas → Conferir)
+
+1. Fila com sync em background: permanecer na aba do cooperado selecionado.
+2. Multi-foto: lançar foto 1 → “Lançar e continuar” → foto 2 mostra “Carregando…” e exibe imagem (sem alerta prematuro).
+3. Preencher quantidades, aguardar sync: campos permanecem no modal.
+4. Fechar modal: reabrir mesma nota começa limpo; aprovar/rejeitar não reaproveita rascunho antigo.
+
 ## Ondas seguintes
 
-- **8.2** — conferência: draft em memória (7.3) — `responsavelConferenciaNavigateGuard` (início)
 - **8.3** — notify por domínio + IDB shard
 - **8.4** — API delta por tier
 - **8.5** — workers (BIC / admin stats)

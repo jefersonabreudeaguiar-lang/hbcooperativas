@@ -36,6 +36,13 @@ import {
   responsavelPreservarAbaDuranteSync,
 } from "@/lib/conferencia/responsavelConferenciaNavigateGuard";
 import {
+  clearConferenciaDraftMemoria,
+  getConferenciaDraftMemoria,
+  restaurarLancamentosPorFoto,
+  serializarLancamentosPorFoto,
+  setConferenciaDraftMemoria,
+} from "@/lib/conferencia/conferenciaDraftMemoria";
+import {
   calcularItensNota,
   gerarNumeroNota,
   isNumeroNotaJaConferidaParaCooperado,
@@ -414,18 +421,21 @@ export default function NotasPedidoContent() {
       const stillActive = () => loadGen === conferenciaFotoLoadGenRef.current;
 
       setConferenciaFotoErro("");
-      /** Limpa spinner de fetch cancelado (loadGen anterior). */
-      setConferenciaFotoCarregando(false);
       const cacheKey = conferenciaFotoCacheKey(nota.id, index);
       const cached = conferenciaFotoCacheRef.current.get(cacheKey);
       if (cached) {
+        if (!stillActive()) return null;
         setConferenciaFotoAtualUrl(cached);
         setConferenciaFotoCarregando(false);
         return cached;
       }
 
+      if (!stillActive()) return null;
+      setConferenciaFotoCarregando(true);
+
       const idbFoto = await readNotaFotoAtIndex(nota, index);
       if (idbFoto) {
+        if (!stillActive()) return null;
         conferenciaFotoCacheRef.current.set(cacheKey, idbFoto);
         setConferenciaFotoAtualUrl(idbFoto);
         setConferenciaFotoCarregando(false);
@@ -434,6 +444,7 @@ export default function NotasPedidoContent() {
 
       const localInline = resolveFotoInlineConferenciaNota(nota, index);
       if (localInline && !isFotoInlineMiniaturaFallback(nota, index, localInline)) {
+        if (!stillActive()) return null;
         conferenciaFotoCacheRef.current.set(cacheKey, localInline);
         setConferenciaFotoAtualUrl(localInline);
         setConferenciaFotoCarregando(false);
@@ -442,11 +453,13 @@ export default function NotasPedidoContent() {
 
       if (!notaTemFotoArmazenadaNaNuvem(nota)) {
         if (localInline) {
+          if (!stillActive()) return null;
           conferenciaFotoCacheRef.current.set(cacheKey, localInline);
           setConferenciaFotoAtualUrl(localInline);
           setConferenciaFotoCarregando(false);
           return localInline;
         }
+        if (!stillActive()) return null;
         setConferenciaFotoAtualUrl(null);
         setConferenciaFotoCarregando(false);
         return null;
@@ -465,7 +478,6 @@ export default function NotasPedidoContent() {
 
       if (!stillActive()) return null;
       setConferenciaFotoAtualUrl(null);
-      setConferenciaFotoCarregando(true);
       try {
         let notaEnriquecida = nota;
         const cachedEnriched = conferenciaNotaEnriquecidaRef.current;
@@ -488,9 +500,11 @@ export default function NotasPedidoContent() {
           return enrichedInline;
         }
 
-        let url = await fetchNotaFotoPartBlobUrl(cnpj, notaEnriquecida.id, index);
-        if (!url && index === 0 && contarFotosEnviadasNota(notaEnriquecida) <= 1) {
-          url = await fetchNotaFotoPartBlobUrl(cnpj, notaEnriquecida.id, 0);
+        const totalFotosNota = contarFotosEnviadasNota(notaEnriquecida);
+        const fetchOpts = { partCount: totalFotosNota };
+        let url = await fetchNotaFotoPartBlobUrl(cnpj, notaEnriquecida.id, index, fetchOpts);
+        if (!url && index === 0 && totalFotosNota <= 1) {
+          url = await fetchNotaFotoPartBlobUrl(cnpj, notaEnriquecida.id, 0, fetchOpts);
         }
         if (!stillActive()) {
           if (url) revokePreviewUrl(url);
@@ -499,10 +513,9 @@ export default function NotasPedidoContent() {
         if (url) {
           conferenciaFotoCacheRef.current.set(cacheKey, url);
           setConferenciaFotoAtualUrl(url);
-          const total = contarFotosEnviadasNota(notaEnriquecida);
           const nextIdx = index + 1;
-          if (nextIdx < total && !conferenciaFotoCacheRef.current.has(conferenciaFotoCacheKey(nota.id, nextIdx))) {
-            void fetchNotaFotoPartBlobUrl(cnpj, notaEnriquecida.id, nextIdx).then((prefetch) => {
+          if (nextIdx < totalFotosNota && !conferenciaFotoCacheRef.current.has(conferenciaFotoCacheKey(nota.id, nextIdx))) {
+            void fetchNotaFotoPartBlobUrl(cnpj, notaEnriquecida.id, nextIdx, fetchOpts).then((prefetch) => {
               if (!prefetch) return;
               const pk = conferenciaFotoCacheKey(nota.id, nextIdx);
               if (!conferenciaFotoCacheRef.current.has(pk)) {
@@ -538,6 +551,64 @@ export default function NotasPedidoContent() {
     lancamentosFotoConferenciaRef.current = new Map();
     setConferenciaFotoSomenteLeitura(false);
     setFotosLancadasUi(new Set());
+  }, []);
+
+  const persistirDraftConferenciaEmMemoria = useCallback(() => {
+    if (!conferirModal || !selectedNota) return;
+    setConferenciaDraftMemoria({
+      notaId: selectedNota.id,
+      updatedAt: Date.now(),
+      instId: conferenciaInstId,
+      local: conferenciaLocal,
+      descontoPct: conferenciaDescontoPct,
+      cooperadoId: conferenciaCooperadoId,
+      divisaoQtd: conferenciaDivisaoQtd,
+      divisaoIds: conferenciaDivisaoIds,
+      escolaAvulsa: conferenciaEscolaAvulsa,
+      numeroNotaManual: conferenciaNumeroNotaManual,
+      fotoIdx: conferenciaFotoIdx,
+      itens: conferenciaItens,
+      fotosLancadas: [...fotosLancadasConferenciaRef.current],
+      lancamentosPorFoto: serializarLancamentosPorFoto(lancamentosFotoConferenciaRef.current),
+    });
+  }, [
+    conferirModal,
+    selectedNota,
+    conferenciaInstId,
+    conferenciaLocal,
+    conferenciaDescontoPct,
+    conferenciaCooperadoId,
+    conferenciaDivisaoQtd,
+    conferenciaDivisaoIds,
+    conferenciaEscolaAvulsa,
+    conferenciaNumeroNotaManual,
+    conferenciaFotoIdx,
+    conferenciaItens,
+  ]);
+
+  useEffect(() => {
+    if (!conferirModal || !selectedNota) return;
+    const id = window.setTimeout(() => persistirDraftConferenciaEmMemoria(), 150);
+    return () => window.clearTimeout(id);
+  }, [conferirModal, selectedNota?.id, persistirDraftConferenciaEmMemoria]);
+
+  const aplicarDraftConferenciaSeExistir = useCallback((notaId: string) => {
+    const draft = getConferenciaDraftMemoria(notaId);
+    if (!draft) return;
+    setConferenciaInstId(draft.instId);
+    setConferenciaLocal(draft.local);
+    setConferenciaDescontoPct(draft.descontoPct);
+    setConferenciaCooperadoId(draft.cooperadoId);
+    setConferenciaDivisaoQtd(draft.divisaoQtd);
+    setConferenciaDivisaoIds(draft.divisaoIds);
+    setConferenciaEscolaAvulsa(draft.escolaAvulsa);
+    setConferenciaNumeroNotaManual(draft.numeroNotaManual);
+    setConferenciaFotoIdx(draft.fotoIdx);
+    setConferenciaItens(draft.itens);
+    fotosLancadasConferenciaRef.current = new Set(draft.fotosLancadas);
+    lancamentosFotoConferenciaRef.current = restaurarLancamentosPorFoto(draft.lancamentosPorFoto);
+    setFotosLancadasUi(new Set(draft.fotosLancadas));
+    setConferenciaFotoSomenteLeitura(fotosLancadasConferenciaRef.current.has(draft.fotoIdx));
   }, []);
 
   const resolverDivisaoConferencia = useCallback(
@@ -760,6 +831,8 @@ export default function NotasPedidoContent() {
       }
 
       setConferirErrors({});
+      setConferenciaFotoErro("");
+      setConferenciaFotoCarregando(true);
       setConferenciaFotoIdx(clamped);
       setLancamentoSequencia(null);
       carregarItensParaFotoConferencia(clamped);
@@ -839,9 +912,11 @@ export default function NotasPedidoContent() {
   };
 
   useEffect(() => {
-    if (!conferirModal || !selectedNota) return;
-    void loadConferenciaFoto(selectedNota, conferenciaFotoIdx);
-  }, [conferirModal, selectedNota, conferenciaFotoIdx, loadConferenciaFoto]);
+    if (!conferirModal || !selectedNota?.id) return;
+    const fresh =
+      getData()?.notasPedido.find((n) => n.id === selectedNota.id) ?? selectedNota;
+    void loadConferenciaFoto(fresh, conferenciaFotoIdx);
+  }, [conferirModal, selectedNota?.id, conferenciaFotoIdx, loadConferenciaFoto, selectedNota]);
 
   useEffect(() => {
     if (!isCooperado) return;
@@ -2122,6 +2197,7 @@ export default function NotasPedidoContent() {
   };
 
   const fecharConferirModal = () => {
+    const notaIdFechada = selectedNota?.id;
     if (lancamentoSequenciaTimerRef.current) {
       clearTimeout(lancamentoSequenciaTimerRef.current);
       lancamentoSequenciaTimerRef.current = null;
@@ -2139,6 +2215,7 @@ export default function NotasPedidoContent() {
     setConferenciaFotoAmpliada(false);
     setConferirModal(false);
     setSelectedNota(null);
+    if (notaIdFechada) clearConferenciaDraftMemoria(notaIdFechada);
   };
 
   const prepararConferenciaNota = async (nota: NotaPedido, opts?: { transicao?: boolean }) => {
@@ -2229,6 +2306,7 @@ export default function NotasPedidoContent() {
       setAbaConferenciaKey(chave);
       setFiltroCooperadoId(coopDonoId);
     }
+    aplicarDraftConferenciaSeExistir(nota.id);
     } finally {
       setConferenciaTransicao(false);
     }
@@ -2512,6 +2590,7 @@ export default function NotasPedidoContent() {
     lancandoRef.current = true;
     let notaAtualizada: NotaPedido | null = null;
     const notaId = selectedNota.id;
+    clearConferenciaDraftMemoria(notaId);
     const chaveAtual = getChaveGrupoConferencia(selectedNota, data, coopId);
     const coopNomeAprovar = getCooperadoNomeResolvido(data, conferenciaCooperadoId, coopId);
 
@@ -2784,6 +2863,7 @@ export default function NotasPedidoContent() {
     removerNotaDaFilaSticky(selectedNota.id);
 
     const notaId = selectedNota.id;
+    clearConferenciaDraftMemoria(notaId);
     const dAtual = getData() ?? data;
     const chaveAtual = getChaveGrupoConferencia(selectedNota, dAtual, coopId);
     const proxima = obterProximaNotaConferencia(chaveAtual, notaId);
