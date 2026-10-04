@@ -5,6 +5,7 @@ import { useSyncExternalStore } from "react";
 import { useAuth } from "@/modules/auth/AuthProvider";
 import { useSyncStatus } from "@/components/sync/CooperativaSyncProvider";
 import { getDataRevision, isAppDataWarm, subscribe } from "@/services/dataStore";
+import { isCooperadoInstantResumeEnabled } from "@/lib/performance/cooperadoColdStart";
 import { persistirInicioCardValorReceberCooperado } from "@/services/cooperadoInicioCardPersistenciaService";
 
 /**
@@ -32,6 +33,16 @@ export function CooperadoInicioCardPersistBootstrap() {
     lastSyncedRef.current = lastSyncedAt;
     persistirInicioCardValorReceberCooperado(user);
   }, [user, syncing, lastSyncedAt, cooperadoPagamentosHydrated]);
+
+  useEffect(() => {
+    if (!user || user.role !== "cooperado" || !isCooperadoInstantResumeEnabled()) return;
+    const onHide = () => {
+      if (document.visibilityState !== "hidden" || !isAppDataWarm()) return;
+      persistirInicioCardValorReceberCooperado(user);
+    };
+    document.addEventListener("visibilitychange", onHide);
+    return () => document.removeEventListener("visibilitychange", onHide);
+  }, [user?.id, user?.cooperadoId, user?.role]);
 
   return null;
 }

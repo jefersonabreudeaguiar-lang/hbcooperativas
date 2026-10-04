@@ -9,6 +9,10 @@ import {
   limparFichaObsoletaCooperado,
 } from "@/services/fichaSyncGuard";
 import { solicitarRecuperacaoFinanceiroCooperado } from "@/services/cooperadoFinanceiroGuard";
+import {
+  cooperadoLocalResumeReady,
+  shouldSkipCooperadoSecondaryMountSync,
+} from "@/lib/performance/cooperadoColdStart";
 import { requestAppSyncImmediate } from "@/services/syncRequest";
 import { resolverCooperadoIdCanonico } from "@/services/cooperadoCloudService";
 import { getUserCooperativaId } from "@/utils/cooperativa";
@@ -35,7 +39,7 @@ const SYNC_BLOCK_MAX_MS = 18_000;
  */
 export function CooperadoFinanceiroGate({ children }: { children: React.ReactNode }) {
   const { user, logout } = useAuth();
-  const { syncing, lastSyncError, lastSyncedAt } = useSyncStatus();
+  const { syncingForUi, lastSyncError, lastSyncedAt } = useSyncStatus();
   const [syncWaitExceeded, setSyncWaitExceeded] = useState(false);
 
   const cacheInicioCard = useMemo(() => {
@@ -69,7 +73,9 @@ export function CooperadoFinanceiroGate({ children }: { children: React.ReactNod
       saveAppDataIfSyncLeaseCurrent(getCooperadoRunSyncSessionLease() ?? undefined, limpo);
     }
     solicitarRecuperacaoFinanceiroCooperado();
-    requestAppSyncImmediate();
+    if (!shouldSkipCooperadoSecondaryMountSync()) {
+      requestAppSyncImmediate();
+    }
   }, [user?.id, user?.cooperadoId, user?.role]);
 
   useEffect(() => {
@@ -89,10 +95,12 @@ export function CooperadoFinanceiroGate({ children }: { children: React.ReactNod
     return <>{children}</>;
   }
 
-  const carregandoFinanceiro =
-    bloqueiaEntrada && (syncing || (lastSyncedAt == null && !syncWaitExceeded));
+  const abrirComCacheInicio =
+    inicioCardCacheProntoParaAbertura(cacheInicioCard) || cooperadoLocalResumeReady(user);
 
-  const abrirComCacheInicio = inicioCardCacheProntoParaAbertura(cacheInicioCard);
+  const carregandoFinanceiro =
+    bloqueiaEntrada &&
+    (syncingForUi || (lastSyncedAt == null && !syncWaitExceeded && !abrirComCacheInicio));
 
   if (carregandoFinanceiro && !abrirComCacheInicio) {
     return (
@@ -106,7 +114,7 @@ export function CooperadoFinanceiroGate({ children }: { children: React.ReactNod
   }
 
   const falhaCarregarFicha =
-    bloqueiaEntrada && !syncing && (syncWaitExceeded || lastSyncedAt != null);
+    bloqueiaEntrada && !syncingForUi && (syncWaitExceeded || lastSyncedAt != null);
 
   if (falhaCarregarFicha) {
     return (
@@ -121,9 +129,9 @@ export function CooperadoFinanceiroGate({ children }: { children: React.ReactNod
               solicitarRecuperacaoFinanceiroCooperado();
               requestAppSyncImmediate();
             }}
-            disabled={syncing}
+            disabled={syncingForUi}
           >
-            {syncing ? "Baixando…" : "Tentar novamente"}
+            {syncingForUi ? "Baixando…" : "Tentar novamente"}
           </Button>
           <Button variant="secondary" onClick={() => logout()}>
             Sair e entrar de novo

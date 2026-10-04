@@ -75,6 +75,18 @@ import {
   isH197CaptureEnabled,
   type H197CaptureContext,
 } from "@/lib/diagnostic/h197PairedCapture";
+import {
+  clearCooperadoUserSyncVisible,
+  cooperadoLocalResumeReady,
+  cooperadoPreserveHydrationOnSilentSync,
+  cooperadoSyncVisibleInUi,
+  ensureCooperadoAppDataEagerWarm,
+  isCooperadoInstantResumeEnabled,
+  isCooperadoUserSyncVisible,
+  scheduleCooperadoColdStartSync,
+} from "@/lib/performance/cooperadoColdStart";
+import { markRqlColdStartPhase } from "@/lib/performance/rqlMarks";
+import type { SyncRunOptions } from "@/services/syncRequest";
 
 const COOPERADO_PUSH_GAP_MS = 5 * 60 * 1000;
 /** Intervalo mínimo entre pulls de operacional só para votação (bem menor que sync completa). */
@@ -221,6 +233,8 @@ async function runCooperadoFotoUploadsInBackground(
 
 export type SyncStatusValue = {
   syncing: boolean;
+  /** HX 9.0 — cooperado: false durante sync silencioso de abertura. */
+  syncingForUi: boolean;
   /** Timestamp da última sync concluída (sucesso ou tentativa com fim). */
   lastSyncedAt: number | null;
   /** Erro da última tentativa (sessão nuvem, permissão, etc.). */
@@ -234,6 +248,7 @@ export type SyncStatusValue = {
 
 const SyncStatusContext = createContext<SyncStatusValue>({
   syncing: false,
+  syncingForUi: false,
   lastSyncedAt: null,
   lastSyncError: "",
   cooperadoPagamentosHydrated: true,
@@ -252,6 +267,14 @@ export function useSyncStatus(): SyncStatusValue {
  */
 export function CooperativaSyncProvider({ children }: { children: React.ReactNode }) {
   const { user } = useAuth();
+
+  useEffect(() => {
+    if (user?.role === "cooperado" && isCooperadoInstantResumeEnabled()) {
+      ensureCooperadoAppDataEagerWarm();
+      markRqlColdStartPhase("eager_warm");
+    }
+  }, [user?.id, user?.role]);
+
   const syncingRef = useRef(false);
   const lastSyncStartedAtRef = useRef(0);
   const lastCooperadoPushRef = useRef(0);
@@ -381,7 +404,7 @@ export function CooperativaSyncProvider({ children }: { children: React.ReactNod
     await hydrateCooperadoPagamentosFromCloud();
   }, [hydrateCooperadoPagamentosFromCloud]);
 
-  const runSync = useCallback(async (opts?: { force?: boolean }) => {
+  const runSync = useCallback(async (opts?: SyncRunOptions) => {
     const currentUser = userRef.current;
     if (!currentUser || syncingRef.current) return;
     if (typeof navigator !== "undefined" && !navigator.onLine) return;
@@ -416,8 +439,17 @@ export function CooperativaSyncProvider({ children }: { children: React.ReactNod
     if (!opts?.force && now - lastSyncStartedAtRef.current < getSyncMinGapMs(currentUser.role)) return;
     lastSyncStartedAtRef.current = now;
 
+    const cooperadoLogadoEarly = currentUser.role === "cooperado";
+    const silentCooperadoOpen =
+      cooperadoLogadoEarly &&
+      isCooperadoInstantResumeEnabled() &&
+      opts?.silent === true &&
+      !isCooperadoUserSyncVisible();
+
     syncingRef.current = true;
-    setSyncing(true);
+    if (!silentCooperadoOpen) {
+      setSyncing(true);
+    }
     setLastSyncError("");
     if (isH197CaptureEnabled()) {
       h197ObserveLifecycleEvent(
@@ -455,8 +487,13 @@ export function CooperativaSyncProvider({ children }: { children: React.ReactNod
         const cooperadoCanonicoHydration =
           currentUser.cooperadoId &&
           resolverCooperadoIdCanonico(getData(), currentUser.cooperadoId, currentCoopId);
+        const forceClearsHydration =
+          Boolean(opts?.force) &&
+          (!isCooperadoInstantResumeEnabled() ||
+            !cooperadoLogado ||
+            isCooperadoUserSyncVisible());
         const mustClearFinancePresentation =
-          Boolean(opts?.force) ||
+          forceClearsHydration ||
           !cooperadoPagamentosHydratedRef.current ||
           (cooperadoCanonicoHydration
             ? cooperadoFinanceiroBloqueiaEntradaApp(
@@ -465,7 +502,11 @@ export function CooperativaSyncProvider({ children }: { children: React.ReactNod
                 currentCoopId
               )
             : true);
-        if (mustClearFinancePresentation) {
+        const preserveHydration = cooperadoPreserveHydrationOnSilentSync(
+          currentUser,
+          cooperadoPagamentosHydratedRef.current
+        );
+        if (mustClearFinancePresentation && !preserveHydration) {
           setCooperadoPagamentosHydrated(false);
         }
       }
@@ -583,6 +624,9 @@ export function CooperativaSyncProvider({ children }: { children: React.ReactNod
       bindCooperadoRunSyncSessionLease(null);
       syncingRef.current = false;
       setSyncing(false);
+      if (isCooperadoUserSyncVisible()) {
+        clearCooperadoUserSyncVisible();
+      }
       setLastSyncedAt(Date.now());
       if (isH197CaptureEnabled()) {
         h197ObserveLifecycleEvent(
@@ -654,23 +698,37 @@ export function CooperativaSyncProvider({ children }: { children: React.ReactNod
       void pullVotacaoOperacionalCooperado();
     });
 
-    const unregister = registerSyncHandler((force) => {
+    const unregister = registerSyncHandler((runOpts) => {
       if (document.hidden) return;
       if (typeof navigator !== "undefined" && !navigator.onLine) return;
       markUserActivity();
-      void runSync({ force: force ?? false });
+      void runSync({
+        force: runOpts.force ?? false,
+        silent: runOpts.silent,
+      });
     });
 
-    const initialDelay = setTimeout(() => {
+    const staff =
+      user?.role === "responsavel" ||
+      user?.role === "tesoureiro" ||
+      user?.role === "admin";
+
+    let initialDelay: ReturnType<typeof setTimeout> | undefined;
+    if (user?.role === "cooperado" && isCooperadoInstantResumeEnabled()) {
       if (!document.hidden) {
         markUserActivity();
-        const staff =
-          user?.role === "responsavel" ||
-          user?.role === "tesoureiro" ||
-          user?.role === "admin";
-        void runSync({ force: staff || user?.role === "cooperado" });
+        scheduleCooperadoColdStartSync(() => {
+          void runSync({ force: true, silent: true });
+        });
       }
-    }, user?.role === "cooperado" ? 0 : 400);
+    } else {
+      initialDelay = setTimeout(() => {
+        if (!document.hidden) {
+          markUserActivity();
+          void runSync({ force: staff || user?.role === "cooperado" });
+        }
+      }, user?.role === "cooperado" ? 0 : 400);
+    }
 
     const unsubIdle = onAppIdleChange((nowIdle) => {
       if (nowIdle) return;
@@ -701,7 +759,7 @@ export function CooperativaSyncProvider({ children }: { children: React.ReactNod
       unregister();
       unsubIdle();
       stopIdle();
-      clearTimeout(initialDelay);
+      if (initialDelay) clearTimeout(initialDelay);
       document.removeEventListener("visibilitychange", onVisible);
       window.removeEventListener("online", onOnline);
     };
@@ -725,9 +783,24 @@ export function CooperativaSyncProvider({ children }: { children: React.ReactNod
     };
   }, [user?.id, user?.role]);
 
+  useEffect(() => {
+    if (user?.role === "cooperado" && cooperadoLocalResumeReady(user)) {
+      markCooperadoPagamentosHydrated();
+      markRqlColdStartPhase("local_resume_ready");
+    }
+  }, [user?.id, user?.role, markCooperadoPagamentosHydrated]);
+
+  const syncingForUi = cooperadoSyncVisibleInUi(user?.role, syncing);
+
   const status = useMemo(
-    () => ({ syncing, lastSyncedAt, lastSyncError, cooperadoPagamentosHydrated }),
-    [syncing, lastSyncedAt, lastSyncError, cooperadoPagamentosHydrated]
+    () => ({
+      syncing,
+      syncingForUi,
+      lastSyncedAt,
+      lastSyncError,
+      cooperadoPagamentosHydrated,
+    }),
+    [syncing, syncingForUi, lastSyncedAt, lastSyncError, cooperadoPagamentosHydrated]
   );
 
   return (

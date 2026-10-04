@@ -47,3 +47,15 @@ export function listRqlRouteMarks(): string[] {
     .map((e) => e.name)
     .filter((n) => n.startsWith(ROUTE_MARK_PREFIX));
 }
+
+const COLD_START_PREFIX = "rql:cold:";
+
+/** HX 9.0 — fases da abertura cooperado (diagnóstico read-only). */
+export function markRqlColdStartPhase(phase: string): void {
+  if (typeof performance === "undefined" || typeof performance.mark !== "function") return;
+  try {
+    performance.mark(`${COLD_START_PREFIX}${phase}`);
+  } catch {
+    /* ignore */
+  }
+}

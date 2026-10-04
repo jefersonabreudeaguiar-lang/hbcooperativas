@@ -12,19 +12,21 @@ export function useCooperadoApresentacaoFinanceiraConsolidada(): {
   apresentacaoConsolidada: boolean;
   carregandoValoresFinanceiros: boolean;
   syncing: boolean;
+  syncingForUi: boolean;
   cooperadoPagamentosHydrated: boolean;
 } {
   const { user } = useAuth();
-  const { syncing, cooperadoPagamentosHydrated } = useSyncStatus();
+  const { syncing, syncingForUi, cooperadoPagamentosHydrated } = useSyncStatus();
   const input = {
     role: user?.role,
-    syncing,
+    syncing: syncingForUi,
     cooperadoPagamentosHydrated,
   };
   return {
     apresentacaoConsolidada: cooperadoApresentacaoFinanceiraConsolidada(input),
     carregandoValoresFinanceiros: cooperadoCarregandoValoresFinanceiros(input),
     syncing,
+    syncingForUi,
     cooperadoPagamentosHydrated,
   };
 }

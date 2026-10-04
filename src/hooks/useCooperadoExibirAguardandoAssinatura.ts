@@ -9,7 +9,7 @@ export function useCooperadoExibirAguardandoAssinatura(temAguardandoLocal: boole
   conferindoPagamentoNuvem: boolean;
 } {
   const { user } = useAuth();
-  const { syncing, cooperadoPagamentosHydrated } = useSyncStatus();
+  const { syncingForUi, cooperadoPagamentosHydrated } = useSyncStatus();
 
   if (user?.role !== "cooperado") {
     return {
@@ -18,7 +18,7 @@ export function useCooperadoExibirAguardandoAssinatura(temAguardandoLocal: boole
     };
   }
 
-  const pronto = cooperadoPagamentosHydrated && !syncing;
+  const pronto = cooperadoPagamentosHydrated && !syncingForUi;
 
   return {
     exibirAguardandoAssinatura: temAguardandoLocal && pronto,

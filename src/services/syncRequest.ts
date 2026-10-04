@@ -4,11 +4,17 @@ import {
   startAppScheduler,
 } from "@/lib/performance/appScheduler";
 import {
+  markCooperadoUserSyncVisible,
+  takePendingCooperadoSilentSync,
+} from "@/lib/performance/cooperadoColdStart";
+import {
   defaultForceForSyncTier,
   type SyncTier,
 } from "@/lib/performance/syncTier";
 
-type SyncHandler = (force?: boolean) => void;
+export type SyncRunOptions = { force?: boolean; silent?: boolean };
+
+type SyncHandler = (opts: SyncRunOptions) => void;
 
 let syncHandler: SyncHandler | null = null;
 let schedulerBridgeAttached = false;
@@ -18,7 +24,8 @@ const SYNC_DEBOUNCE_MS = 450;
 function dispatchSync(force: boolean): void {
   if (typeof document !== "undefined" && document.hidden) return;
   if (typeof navigator !== "undefined" && !navigator.onLine) return;
-  syncHandler?.(force);
+  const silent = takePendingCooperadoSilentSync();
+  syncHandler?.({ force, silent });
 }
 
 function ensureSchedulerBridge(): void {
@@ -61,11 +68,13 @@ export function requestAppSyncLight(): void {
 
 /** Dispara sync após ação do usuário (agrupa chamadas rápidas; força atualização). */
 export function requestAppSync(): void {
+  markCooperadoUserSyncVisible();
   requestSyncTier("operacional_full", { force: true });
 }
 
 /** Sync imediato — botão “Atualizar agora”. */
 export function requestAppSyncImmediate(): void {
+  markCooperadoUserSyncVisible();
   requestSyncTier("operacional_full", { force: true, immediate: true });
 }
 

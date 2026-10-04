@@ -76,7 +76,7 @@ async function testSyncRequestWrappers() {
   resetAppSchedulerForTests();
   installBrowserShim();
   const calls: boolean[] = [];
-  registerSyncHandler((force) => calls.push(Boolean(force)));
+  registerSyncHandler((opts) => calls.push(Boolean(opts.force)));
 
   requestAppSyncLight();
   await delay(500);

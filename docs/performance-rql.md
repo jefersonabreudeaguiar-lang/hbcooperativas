@@ -71,6 +71,19 @@ npx tsx scripts/test-app-scheduler-h80.ts
 
 Teste: `npx tsx scripts/test-render-rql-h81.ts`
 
+## Onda 9.0 — Cold Start Cooperado (instant resume)
+
+- `cooperadoColdStart` — sync silencioso na abertura, dedupe de mount, `syncingForUi`
+- Auth + `preloadAppData({ eager })` — sessão e AppData no primeiro frame
+- Gate / dashboard — sem skeleton em cascata quando há dados locais ou cache do card
+- Cache início — snapshot recente (45d) libera abertura mesmo sem valor a receber
+
+Flag: `NEXT_PUBLIC_COOPERADO_INSTANT_RESUME=false` desliga (default ligado).
+
+Teste: `npx tsx scripts/test-cooperado-cold-start-h90.ts`
+
+Marcas: `performance.mark("rql:cold:*")`
+
 ## Ondas seguintes
 
 - **8.2** — conferência: draft em memória (7.3)

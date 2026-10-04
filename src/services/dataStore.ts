@@ -558,11 +558,13 @@ function scheduleAutomaticTasksIfNeeded(data: AppData): AppData {
   return data;
 }
 
-/** Inicia leitura do localStorage em background — não bloqueia a abertura do app. */
-export function preloadAppData(): void {
-  if (typeof window === "undefined" || memoryCache || dataWarmInFlight) return;
-  dataWarmInFlight = true;
+/** Inicia leitura do localStorage — `eager` sincroniza no primeiro frame (HX 9.0 cooperado). */
+export function preloadAppData(opts?: { eager?: boolean }): void {
+  if (typeof window === "undefined" || memoryCache) return;
+  if (dataWarmInFlight && !opts?.eager) return;
+
   const run = () => {
+    dataWarmInFlight = true;
     try {
       loadData();
       reconcileSessionAfterDataLoad();
@@ -571,6 +573,12 @@ export function preloadAppData(): void {
       dataWarmInFlight = false;
     }
   };
+
+  if (opts?.eager) {
+    run();
+    return;
+  }
+
   queueMicrotask(run);
 }
 

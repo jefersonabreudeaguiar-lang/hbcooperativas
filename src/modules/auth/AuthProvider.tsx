@@ -16,6 +16,7 @@ import type { User } from "@/types";
 import { normalizeUserRole, resolveAppUserRole } from "@/permissions";
 import { resolveExperienceUser, resolveMobileCooperadoId } from "@/lib/mobileExperience";
 import { PAINEL_MOBILE_PREF_EVENT } from "@/lib/mobilePainelPreference";
+import { ensureCooperadoAppDataEagerWarm, isCooperadoInstantResumeEnabled } from "@/lib/performance/cooperadoColdStart";
 import {
   getSession,
   login as doLogin,
@@ -67,11 +68,21 @@ function enrichAccountSession(session: Omit<User, "password">): Omit<User, "pass
 }
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [accountUser, setAccountUser] = useState<Omit<User, "password"> | null>(null);
+  const [accountUser, setAccountUser] = useState<Omit<User, "password"> | null>(() => {
+    if (typeof window === "undefined") return null;
+    const session = getSession();
+    return session ? enrichAccountSession(session) : null;
+  });
   const [viewportTick, setViewportTick] = useState(0);
   const [painelPrefTick, setPainelPrefTick] = useState(0);
   const [dataTick, setDataTick] = useState(0);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(() => {
+    if (typeof window === "undefined") return true;
+    if (isCooperadoInstantResumeEnabled()) {
+      ensureCooperadoAppDataEagerWarm();
+    }
+    return getSession() == null;
+  });
   const router = useRouter();
   const experienceSigRef = useRef("");
 

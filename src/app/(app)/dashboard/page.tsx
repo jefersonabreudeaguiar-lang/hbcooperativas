@@ -69,6 +69,11 @@ import { Camera, Wallet, ClipboardList, Users, Vote, Download, PenLine } from "l
 import { usePermissions } from "@/hooks/usePermissions";
 import { cooperadoTemAppInstalado, isAppStandalone, resumoInstalacaoApp } from "@/services/cooperadoAppInstallService";
 import { PageSkeleton } from "@/components/ui/PageSkeleton";
+import {
+  cooperadoLocalResumeReady,
+  isCooperadoInstantResumeEnabled,
+  shouldSkipCooperadoSecondaryMountSync,
+} from "@/lib/performance/cooperadoColdStart";
 import { RestoreOperacionalPanel } from "@/components/sync/RestoreOperacionalPanel";
 import { CooperadoInicioValorReceberCard } from "@/components/cooperado/CooperadoInicioValorReceberCard";
 
@@ -76,7 +81,7 @@ function CooperadoDashboard() {
   const { user } = useAuth();
   const router = useRouter();
   const hbCredit = useHbCreditEnabled(user);
-  const { syncing, lastSyncError } = useSyncStatus();
+  const { syncingForUi, lastSyncError } = useSyncStatus();
   const fluxo = useCooperadoFluxoPadrao();
   const { apresentacaoConsolidada, carregandoValoresFinanceiros } = fluxo;
   const recoverySyncRef = useRef(false);
@@ -96,6 +101,7 @@ function CooperadoDashboard() {
 
   useEffect(() => {
     if (!user?.cooperadoId || typeof navigator === "undefined" || !navigator.onLine) return;
+    if (shouldSkipCooperadoSecondaryMountSync()) return;
     requestVotacaoOperacionalSync();
   }, [user?.id, user?.cooperadoId]);
 
@@ -145,7 +151,7 @@ function CooperadoDashboard() {
       cooperadoId: inicioCardCtx?.cooperadoId,
       cooperativaId: inicioCardCtx?.cooperativaId,
       dataReady: inicioCardCtx?.dataReady ?? false,
-      syncing,
+      syncing: syncingForUi,
       apresentacaoConsolidada,
       carregandoValoresFinanceiros,
     });
@@ -283,7 +289,7 @@ function CooperadoDashboard() {
 
   const mostrarErroSync =
     Boolean(lastSyncError) &&
-    !syncing &&
+    !syncingForUi &&
     (financeiroAusente || !apresentacaoConsolidada);
 
   return (
@@ -603,6 +609,8 @@ export default function DashboardPage() {
   const { user, accountUser } = useAuth();
   const authSubject = accountUser ?? user;
   const dataReady = useAppDataReady();
+  const cooperadoInstant =
+    isCooperadoInstantResumeEnabled() && user?.role === "cooperado" && cooperadoLocalResumeReady(user);
   const staffPainelUi = useAppDataSelector(
     (data) => Boolean(accountUser && shouldRenderStaffPainelUi(accountUser, data)),
     [accountUser?.id, accountUser?.role]
@@ -617,7 +625,8 @@ export default function DashboardPage() {
       ? canAccessPainelResponsavelSession(authSubject)
       : false;
 
-  if (!user || !dataReady) return <PageSkeleton />;
+  if (!user) return <PageSkeleton />;
+  if (!dataReady && !cooperadoInstant) return <PageSkeleton />;
 
   if (canGestao && staffPainelUi) {
     return <AdminDashboard />;

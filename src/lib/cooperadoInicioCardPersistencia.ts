@@ -81,7 +81,16 @@ export function gravarInicioCardPersistidoFlex(
   if (cooperativaId) gravarInicioCardPersistido(cooperadoId, cooperativaId, payload);
 }
 
+/**
+ * Cache válido para liberar abertura instantânea (HX 9.0).
+ * Antes: só com valor a receber; agora qualquer snapshot da última sessão.
+ */
 export function inicioCardCacheProntoParaAbertura(persistido: InicioCardPersistido | null): boolean {
-  if (!persistido) return false;
-  return cooperadoMotorTemObrigacaoReceber(persistido.display);
+  if (!persistido?.display) return false;
+  if (persistido.v !== INICIO_CARD_STORAGE_VERSION) return false;
+  if (cooperadoMotorTemObrigacaoReceber(persistido.display)) return true;
+  const savedAt = Date.parse(persistido.savedAt);
+  if (!Number.isFinite(savedAt)) return false;
+  const maxAgeMs = 45 * 24 * 60 * 60 * 1000;
+  return Date.now() - savedAt <= maxAgeMs;
 }
