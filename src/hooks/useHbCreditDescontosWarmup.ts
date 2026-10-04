@@ -9,6 +9,7 @@ import { getUserCooperativaId } from "@/utils/cooperativa";
 import { isContaCoopValorReceberPilot } from "@/utils/contaCoopUiVisibility";
 import { scheduleContaCoopAuxSync } from "@/lib/hb-credit/contaCoopAuxSyncSchedule";
 import { isStaffHbCoopWideSyncRoute } from "@/lib/hb-credit/staffHbSyncRoute";
+import { isCooperadoManualOperacionalSync } from "@/lib/performance/cooperadoColdStart";
 
 const WARMUP_INTERVAL_MS = 60_000;
 const HB_PAGE_PREFIX = "/minha-conta-coop";
@@ -21,6 +22,8 @@ export function useHbCreditDescontosWarmup(user: Omit<User, "password"> | null) 
 
   useEffect(() => {
     if (!user || !isContaCoopValorReceberPilot()) return;
+    /** Cooperado manual: HB na nuvem só em Minha Conta Coop / botão Atualizar (operacional). */
+    if (user.role === "cooperado" && isCooperadoManualOperacionalSync()) return;
     const coopId = getUserCooperativaId(user, getData());
     if (!coopId) return;
 

@@ -51,6 +51,18 @@ assert(dash.includes("cooperadoInstant"), "dashboard não bloqueia com resume lo
 const persist = read("src/lib/cooperadoInicioCardPersistencia.ts");
 assert(persist.includes("45 * 24"), "cache abertura ampliado (45d)");
 
+const hbWarmup = read("src/hooks/useHbCreditDescontosWarmup.ts");
+assert(
+  hbWarmup.includes("isCooperadoManualOperacionalSync") &&
+    hbWarmup.includes('user.role === "cooperado"'),
+  "HB warmup desligado para cooperado sync manual"
+);
+const hbResumo = read("src/components/hb-credit/CooperadoHbCreditResumoCard.tsx");
+assert(
+  hbResumo.includes("isCooperadoManualOperacionalSync"),
+  "card HB inicio sem poll automatico (manual)"
+);
+
 if (process.exitCode !== 1) {
   console.log("\nHX 9.0 cold start smoke OK");
 }

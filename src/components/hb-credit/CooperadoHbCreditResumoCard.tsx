@@ -24,6 +24,7 @@ import {
   HB_CREDIT_ACCOUNT_STORAGE_VERSION,
 } from "@/lib/hb-credit/hbCreditAccountPersistencia";
 import type { ContaCoopLimiteCooperado } from "@/modules/hb-credit/types";
+import { isCooperadoManualOperacionalSync } from "@/lib/performance/cooperadoColdStart";
 
 type Props = {
   cnpj: string;
@@ -31,6 +32,7 @@ type Props = {
 
 export function CooperadoHbCreditResumoCard({ cnpj }: Props) {
   const { user, cooperadoId } = usePermissions();
+  const cooperadoHbSemPoll = user?.role === "cooperado" && isCooperadoManualOperacionalSync();
   const hbApiCooperadoId = resolveHbCreditApiCooperadoId(user, cooperadoId);
   const [snap, setSnap] = useState<HbCreditAccountPersistido | null>(null);
 
@@ -52,6 +54,10 @@ export function CooperadoHbCreditResumoCard({ cnpj }: Props) {
 
     const syncFromCloud = async () => {
       if (user?.role === "cooperado") {
+        if (cooperadoHbSemPoll) {
+          refreshFromCache();
+          return;
+        }
         await persistirHbCreditAccountCooperado(user);
         refreshFromCache();
         return;
@@ -74,12 +80,16 @@ export function CooperadoHbCreditResumoCard({ cnpj }: Props) {
       }
     };
 
-    void syncFromCloud();
+    if (!cooperadoHbSemPoll) {
+      void syncFromCloud();
+    } else {
+      refreshFromCache();
+    }
 
     const onCache = () => refreshFromCache();
     const onCloud = () => {
       refreshFromCache();
-      void syncFromCloud();
+      if (!cooperadoHbSemPoll) void syncFromCloud();
     };
     window.addEventListener(HB_CREDIT_ACCOUNT_CACHE_EVENT, onCache);
     window.addEventListener(HB_CREDIT_LIMITE_SYNCED_EVENT, onCloud);
@@ -87,12 +97,14 @@ export function CooperadoHbCreditResumoCard({ cnpj }: Props) {
       window.removeEventListener(HB_CREDIT_ACCOUNT_CACHE_EVENT, onCache);
       window.removeEventListener(HB_CREDIT_LIMITE_SYNCED_EVENT, onCloud);
     };
-  }, [hbApiCooperadoId, cooperadoId, cnpj, user]);
+  }, [hbApiCooperadoId, cooperadoId, cnpj, user, cooperadoHbSemPoll]);
 
   useHbCreditAccountRevisionPoll({
     cnpj,
     cooperadoId: hbApiCooperadoId ?? "",
-    enabled: Boolean(cnpj.length === 14 && hbApiCooperadoId && user?.role === "cooperado"),
+    enabled: Boolean(
+      !cooperadoHbSemPoll && cnpj.length === 14 && hbApiCooperadoId && user?.role === "cooperado"
+    ),
     onRevisionChange: () => {
       if (user?.role === "cooperado") void persistirHbCreditAccountCooperado(user);
     },
