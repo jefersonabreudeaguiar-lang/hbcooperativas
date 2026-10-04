@@ -1638,13 +1638,27 @@ async function validarSenhaCadastroCooperado(
   cooperativa: Cooperativa,
   senhaInformada?: string
 ): Promise<{ ok: true } | { ok: false; error: string }> {
-  const localExige = exigeSenhaCadastroCooperado(cooperativa);
-  const check = await verifyCadastroSenhaCooperado(cnpj, senhaInformada ?? "");
-  const exige = localExige || (check.configured && check.required);
-
-  if (!exige) return { ok: true };
-
   const senha = senhaInformada?.trim() ?? "";
+  const check = await verifyCadastroSenhaCooperado(cnpj, senha);
+
+  /** Nuvem é a fonte da verdade quando disponível (evita hash local desatualizado). */
+  if (check.configured) {
+    if (!check.required) return { ok: true };
+    if (!senha) {
+      return {
+        ok: false,
+        error: "Esta cooperativa exige a senha de acesso ao cadastro. Solicite à diretoria.",
+      };
+    }
+    if (!check.valid) {
+      return { ok: false, error: "Senha de acesso ao cadastro incorreta." };
+    }
+    return { ok: true };
+  }
+
+  const localExige = exigeSenhaCadastroCooperado(cooperativa);
+  if (!localExige) return { ok: true };
+
   if (!senha) {
     return {
       ok: false,
@@ -1652,21 +1666,13 @@ async function validarSenhaCadastroCooperado(
     };
   }
 
-  if (cooperativa.senhaCadastroCooperado?.trim() || cooperativa.senhaCadastroCooperadoHash?.trim()) {
-    const stored =
-      cooperativa.senhaCadastroCooperadoHash?.trim() ||
-      cooperativa.senhaCadastroCooperado?.trim() ||
-      "";
-    if (!verifyPasswordSync(senha, stored)) {
-      return { ok: false, error: "Senha de acesso ao cadastro incorreta." };
-    }
-    return { ok: true };
-  }
-
-  if (check.configured && check.required && !check.valid) {
+  const stored =
+    cooperativa.senhaCadastroCooperadoHash?.trim() ||
+    cooperativa.senhaCadastroCooperado?.trim() ||
+    "";
+  if (!stored || !verifyPasswordSync(senha, stored)) {
     return { ok: false, error: "Senha de acesso ao cadastro incorreta." };
   }
-
   return { ok: true };
 }
 
@@ -1733,9 +1739,13 @@ export async function registerCooperativa(input: RegisterCooperativaInput): Prom
   }
 
   const now = new Date().toISOString();
+  const senhaCadastroPlain = input.senhaCadastroCooperado?.trim();
   const cooperativa = {
     ...cloudResult.cooperativa,
-    senhaCadastroCooperado: input.senhaCadastroCooperado?.trim() || undefined,
+    senhaCadastroCooperado: senhaCadastroPlain || undefined,
+    senhaCadastroCooperadoHash: senhaCadastroPlain
+      ? hashPasswordSync(senhaCadastroPlain)
+      : cloudResult.cooperativa.senhaCadastroCooperadoHash,
     cobrancaSaas: defaultCobrancaSaas({
       termosAceitosEm: now,
       statusMes: "aguardando_primeiro_cooperado",

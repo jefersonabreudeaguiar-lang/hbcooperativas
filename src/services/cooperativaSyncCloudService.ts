@@ -2110,19 +2110,25 @@ export async function pushCooperativaProfileToCloud(cooperativa: Cooperativa): P
   const cnpj = normalizeCnpj(cooperativa.cnpj);
   if (cnpj.length !== 14) return;
   try {
+    const patch: Record<string, unknown> = {
+      nome: cooperativa.nome,
+      endereco: cooperativa.endereco,
+      telefone: cooperativa.telefone,
+      responsavel: cooperativa.responsavel,
+      email: cooperativa.email,
+      mensalidadeConfig: cooperativa.mensalidadeConfig,
+    };
+    /** Só altera senha de cadastro na nuvem quando o perfil enviou texto (nova/remoção); omitir não apaga o hash. */
+    if (typeof cooperativa.senhaCadastroCooperado === "string") {
+      patch.senhaCadastroCooperado = cooperativa.senhaCadastroCooperado.trim();
+    }
+    if (cooperativa.senhaAreaAdminHash?.trim()) {
+      patch.senhaAreaAdminHash = cooperativa.senhaAreaAdminHash.trim();
+    }
     await secureApiFetch(`/api/cooperativas/${cnpj}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        nome: cooperativa.nome,
-        endereco: cooperativa.endereco,
-        telefone: cooperativa.telefone,
-        responsavel: cooperativa.responsavel,
-        email: cooperativa.email,
-        mensalidadeConfig: cooperativa.mensalidadeConfig,
-        senhaCadastroCooperado: cooperativa.senhaCadastroCooperado?.trim() ?? "",
-        senhaAreaAdminHash: cooperativa.senhaAreaAdminHash?.trim() ?? "",
-      }),
+      body: JSON.stringify(patch),
     });
   } catch {
     /* offline */

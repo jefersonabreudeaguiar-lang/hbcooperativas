@@ -24,6 +24,7 @@ import { isDiretoriaRole } from "@/permissions";
 import { EquipeResponsaveisPanel } from "@/components/equipe/EquipeResponsaveisPanel";
 import { EquipeContadorPanel } from "@/components/equipe/EquipeContadorPanel";
 import { exigeSenhaCadastroCooperado } from "@/utils/cooperativaCadastro";
+import { hashPasswordSync } from "@/lib/security/password";
 import type { Cooperativa, MensalidadeConfig } from "@/types";
 
 export default function MeuPerfilPage() {
@@ -122,9 +123,7 @@ export default function MeuPerfilPage() {
   }
 
   const canEdit = check("cooperativas", "edit");
-  const senhaCadastroAtiva = exigeSenhaCadastroCooperado({
-    senhaCadastroCooperado: form.senhaCadastroCooperado ?? cooperativa.senhaCadastroCooperado,
-  });
+  const senhaCadastroAtiva = exigeSenhaCadastroCooperado(cooperativa, cooperativa.mensalidadeConfig);
 
   const pushPerfilParaNuvem = async () => {
     const d = getData();
@@ -139,6 +138,7 @@ export default function MeuPerfilPage() {
   const handleSave = () => {
     if (!user || !coopId || !form.nome) return;
     const now = new Date().toISOString();
+    const senhaCadastroPlain = form.senhaCadastroCooperado?.trim();
     updateData((d) => {
       let updated = {
         ...d,
@@ -151,7 +151,12 @@ export default function MeuPerfilPage() {
                 telefone: form.telefone ?? "",
                 email: form.email ?? "",
                 responsavel: form.responsavel ?? c.responsavel,
-                senhaCadastroCooperado: form.senhaCadastroCooperado?.trim() || undefined,
+                ...(senhaCadastroPlain
+                  ? {
+                      senhaCadastroCooperado: senhaCadastroPlain,
+                      senhaCadastroCooperadoHash: hashPasswordSync(senhaCadastroPlain),
+                    }
+                  : {}),
                 updatedAt: now,
               }
             : c
@@ -188,7 +193,8 @@ export default function MeuPerfilPage() {
           c.id === coopId
             ? {
                 ...c,
-                senhaCadastroCooperado: undefined,
+                senhaCadastroCooperado: "",
+                senhaCadastroCooperadoHash: undefined,
                 updatedAt: now,
               }
             : c
