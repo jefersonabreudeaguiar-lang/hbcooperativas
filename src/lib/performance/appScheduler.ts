@@ -66,11 +66,11 @@ export function getAppSchedulerSnapshot(): AppSchedulerSnapshot {
   };
 }
 
-/** Opt-in via NEXT_PUBLIC_APP_SCHEDULER_DEFER_SYNC=true — default false preserva timing atual. */
+/** Opt-in via NEXT_PUBLIC_APP_SCHEDULER_DEFER_SYNC=false — default true (sync após troca de aba/rota). */
 export function readDeferSyncDuringInteractionFromEnv(): boolean {
-  if (typeof process === "undefined") return false;
-  const v = (process.env.NEXT_PUBLIC_APP_SCHEDULER_DEFER_SYNC ?? "").trim().toLowerCase();
-  return v === "1" || v === "true" || v === "yes";
+  if (typeof process === "undefined") return true;
+  const v = (process.env.NEXT_PUBLIC_APP_SCHEDULER_DEFER_SYNC ?? "true").trim().toLowerCase();
+  return v !== "0" && v !== "false" && v !== "no";
 }
 
 export function setDeferSyncDuringInteraction(enabled: boolean): void {

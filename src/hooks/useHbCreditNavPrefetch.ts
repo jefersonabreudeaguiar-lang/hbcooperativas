@@ -5,10 +5,8 @@ import { useRouter } from "next/navigation";
 import { useAuth } from "@/modules/auth/AuthProvider";
 import { useHbCreditEnabled } from "@/hooks/useHbCreditEnabled";
 import {
-  prefetchCooperadoNavRoutes,
   scheduleCooperadoNavPrefetchEarly,
 } from "@/lib/performance/cooperadoNavPrefetch";
-import { scheduleCooperadoPostInteractiveTask } from "@/lib/performance/cooperadoColdStart";
 
 const PREFETCH_INICIO = "/dashboard";
 
@@ -22,9 +20,7 @@ export function HbCreditNavPrefetch() {
     if (!user) return;
 
     if (user.role === "cooperado") {
-      const cancelEarly = scheduleCooperadoNavPrefetchEarly(router);
-      scheduleCooperadoPostInteractiveTask(() => prefetchCooperadoNavRoutes(router));
-      return cancelEarly;
+      return scheduleCooperadoNavPrefetchEarly(router);
     }
 
     let cancelled = false;

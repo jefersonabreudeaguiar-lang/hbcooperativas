@@ -33,6 +33,7 @@ import { useHbCreditDescontosWarmup } from "@/hooks/useHbCreditDescontosWarmup";
 import { shouldPrefetchHbCreditNav } from "@/lib/hb-credit/hbCreditNavPrefetch";
 import { scheduleCooperadoNavPrefetchEarly } from "@/lib/performance/cooperadoNavPrefetch";
 import { CooperadoMobileTabKeepAlive } from "@/components/performance/CooperadoMobileTabKeepAlive";
+import { CooperadoMobileReleaseBar } from "@/components/cooperado/CooperadoMobileReleaseBar";
 import type { Resource } from "@/types";
 
 const ICONS: Record<string, React.ReactNode> = {
@@ -228,7 +229,9 @@ export function MobileNav() {
         </div>
       )}
 
-      <nav className="lg:hidden fixed bottom-0 left-0 right-0 z-40 flex safe-area-pb bg-white border-t-2 border-green-200 shadow-[0_-6px_24px_rgba(0,0,0,0.12)]">
+      <div className="lg:hidden fixed bottom-0 left-0 right-0 z-40 flex flex-col safe-area-pb shadow-[0_-6px_24px_rgba(0,0,0,0.12)]">
+        {isCooperadoAppUser(navUser) && <CooperadoMobileReleaseBar />}
+        <nav className="flex bg-white border-t-2 border-green-200">
         {mobileItems.map((item) => {
           const active = pathname === item.href || (item.href !== "/dashboard" && pathname.startsWith(item.href));
           const isCooperadoNav = isCooperadoAppUser(navUser);
@@ -277,7 +280,8 @@ export function MobileNav() {
             </Link>
           );
         })}
-      </nav>
+        </nav>
+      </div>
     </>
   );
 }
@@ -316,7 +320,14 @@ function AppShellInner({ children }: { children: React.ReactNode }) {
         <main
           className={cn(
             "flex-1 overflow-y-auto overflow-x-hidden overscroll-y-contain",
-            mercadoQrImmersive ? "p-0 pb-0" : "p-4 lg:p-6 pb-[max(9rem,env(safe-area-inset-bottom,0px)+5.5rem)] lg:pb-6"
+            mercadoQrImmersive
+              ? "p-0 pb-0"
+              : cn(
+                  "p-4 lg:p-6 lg:pb-6",
+                  navUser && isCooperadoAppUser(navUser)
+                    ? "pb-[max(10.5rem,env(safe-area-inset-bottom,0px)+6.75rem)]"
+                    : "pb-[max(9rem,env(safe-area-inset-bottom,0px)+5.5rem)]"
+                )
           )}
         >
           {navUser && !isCooperadoAppUser(navUser) && (

@@ -84,6 +84,7 @@ import {
   ensureNotaComFoto,
   resolveCooperativaCnpj,
   resolveFotosNotaParaExibicao,
+  syncNotasPedidoFromCloud,
 } from "@/services/notaPedidoCloudService";
 import {
   fetchConferenciaFotoPartCached,
@@ -1462,18 +1463,20 @@ export default function NotasPedidoContent() {
 
   const puxarNotasResponsavelDaNuvem = useCallback(
     (opts?: { forceFull?: boolean }) => {
-      if (isCooperado || !data || !coopId) return;
-      const cnpj = getCooperativaCnpj(data, coopId);
+      if (isCooperado || !coopId) return;
+      const d = getData();
+      if (!d) return;
+      const cnpj = getCooperativaCnpj(d, coopId);
       if (!cnpj) return;
       const now = Date.now();
-      if (!opts?.forceFull && now - responsavelNotasPullAtRef.current < 45_000) return;
+      if (!opts?.forceFull && now - responsavelNotasPullAtRef.current < 90_000) return;
       responsavelNotasPullAtRef.current = now;
-      if (opts?.forceFull || shouldResponsavelForceFullNotasOnEntry(cnpj)) {
-        forceNextFullNotasSync(cnpj);
-      }
-      requestAppSyncImmediate();
+      const retryFull =
+        opts?.forceFull === true || shouldResponsavelForceFullNotasOnEntry(cnpj);
+      if (retryFull) forceNextFullNotasSync(cnpj);
+      void syncNotasPedidoFromCloud(cnpj, { retryFull });
     },
-    [isCooperado, data, coopId]
+    [isCooperado, coopId]
   );
 
   useEffect(() => {
@@ -3630,10 +3633,6 @@ export default function NotasPedidoContent() {
                           key={n.id}
                           type="button"
                           onClick={() => void openConferir(n)}
-                          onPointerEnter={() => {
-                            const dWarm = getData() ?? data;
-                            if (dWarm && coopId) scheduleWarmConferenciaNotaFotos(dWarm, coopId, n);
-                          }}
                           className="relative w-full flex items-center gap-2 px-2 py-1.5 sm:px-2.5 sm:py-2 text-left hover:bg-amber-50/90 active:bg-amber-100/70 transition-colors"
                         >
                           {podeExcluirEntregaPorNotaId.get(n.id) && (

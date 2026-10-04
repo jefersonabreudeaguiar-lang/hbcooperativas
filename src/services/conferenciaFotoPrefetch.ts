@@ -105,7 +105,7 @@ export async function warmConferenciaNotaFotos(
   const digits = normalizeCnpj(cnpj);
   if (digits.length !== 14) return;
 
-  const maxParallel = Math.min(opts?.maxParallel ?? 6, partCount);
+  const maxParallel = Math.min(opts?.maxParallel ?? 3, partCount);
   let cursor = 0;
   const indices = Array.from({ length: partCount }, (_, i) => i);
 
@@ -120,6 +120,9 @@ export async function warmConferenciaNotaFotos(
   await Promise.all(Array.from({ length: maxParallel }, () => worker()));
 }
 
+let warmScheduleTimer: ReturnType<typeof setTimeout> | null = null;
+let warmScheduleKey = "";
+
 export function scheduleWarmConferenciaNotaFotos(
   data: AppData,
   coopId: string,
@@ -132,5 +135,12 @@ export function scheduleWarmConferenciaNotaFotos(
   if (cnpj.length !== 14) return;
   const total = contarFotosEnviadasNota(nota);
   if (total <= 0) return;
-  void warmConferenciaNotaFotos(cnpj, nota.id, total);
+  const key = `${cnpj}:${nota.id}:${total}`;
+  if (warmScheduleKey === key && warmScheduleTimer) return;
+  warmScheduleKey = key;
+  if (warmScheduleTimer) clearTimeout(warmScheduleTimer);
+  warmScheduleTimer = setTimeout(() => {
+    warmScheduleTimer = null;
+    void warmConferenciaNotaFotos(cnpj, nota.id, total, { maxParallel: 2 });
+  }, 400);
 }

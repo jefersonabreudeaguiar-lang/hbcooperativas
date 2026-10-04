@@ -939,6 +939,9 @@ export function CooperativaSyncProvider({ children }: { children: React.ReactNod
       if (document.hidden) return;
       if (cooperadoSemAutoSync) return;
       if (user?.role === "cooperado") void pullVotacaoOperacionalCooperado();
+      if (staff && Date.now() - lastSyncStartedAtRef.current < getSyncMinGapMs(user?.role ?? "cooperado")) {
+        return;
+      }
       void runSync();
     });
 
@@ -947,6 +950,9 @@ export function CooperativaSyncProvider({ children }: { children: React.ReactNod
         if (cooperadoSemAutoSync) return;
         markUserActivity();
         if (user?.role === "cooperado") void pullVotacaoOperacionalCooperado();
+        if (staff && Date.now() - lastSyncStartedAtRef.current < getSyncMinGapMs(user?.role ?? "cooperado")) {
+          return;
+        }
         void runSync();
       }
     };

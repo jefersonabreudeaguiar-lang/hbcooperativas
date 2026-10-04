@@ -2,6 +2,7 @@ import {
   COOPERADO_FINANCEIRO_TAB_HREF,
   COOPERADO_MOBILE_PREFETCH_HREFS,
 } from "@/lib/hb-credit/hbCreditNavPrefetch";
+import { isLowMemoryDevice } from "@/services/imagePipelineService";
 
 export type CooperadoNavPrefetchRouter = {
   prefetch: (href: string) => void;
@@ -37,22 +38,32 @@ export function scheduleCooperadoNavPrefetchEarly(router: CooperadoNavPrefetchRo
   const safe = (fn: () => void) => {
     if (!cancelled) fn();
   };
+  const lowMemory = isLowMemoryDevice();
+  const idleHrefs = lowMemory
+    ? (["/dashboard", "/notas-pedido"] as readonly string[])
+    : COOPERADO_MOBILE_PREFETCH_HREFS;
 
   queueMicrotask(() =>
     safe(() => prefetchCooperadoNavRoutes(router, COOPERADO_NAV_PREFETCH_PRIORITY))
   );
 
+  if (lowMemory) {
+    return () => {
+      cancelled = true;
+    };
+  }
+
   const rafId = requestAnimationFrame(() => {
-    requestAnimationFrame(() => safe(() => prefetchCooperadoNavRoutes(router)));
+    requestAnimationFrame(() => safe(() => prefetchCooperadoNavRoutes(router, idleHrefs)));
   });
 
   let idleHandle: number | undefined;
   if (typeof requestIdleCallback === "function") {
-    idleHandle = requestIdleCallback(() => safe(() => prefetchCooperadoNavRoutes(router)), {
-      timeout: 1200,
+    idleHandle = requestIdleCallback(() => safe(() => prefetchCooperadoNavRoutes(router, idleHrefs)), {
+      timeout: 2500,
     });
   } else {
-    idleHandle = window.setTimeout(() => safe(() => prefetchCooperadoNavRoutes(router)), 400);
+    idleHandle = window.setTimeout(() => safe(() => prefetchCooperadoNavRoutes(router, idleHrefs)), 800);
   }
 
   return () => {

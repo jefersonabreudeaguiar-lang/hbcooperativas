@@ -8,6 +8,11 @@ import {
   scheduleCooperadoPostInteractiveTask,
 } from "@/lib/performance/cooperadoColdStart";
 import { ensureCooperadoReleaseUpgrade, runClientReleaseAlignment } from "@/lib/pwa/fetchOfficialClientRelease";
+import {
+  getEmbeddedClientRelease,
+  getPageEmbeddedReleaseFromDom,
+  runtimeAlreadyOnCanonicalRelease,
+} from "@/lib/pwa/clientRelease";
 
 const RETRY_MS = [300, 700, 1400, 2800, 5000];
 
@@ -63,10 +68,16 @@ export function ClientDeploymentGuard() {
       if (document.visibilityState === "visible" && !aligningRef.current) void run();
     };
     document.addEventListener("visibilitychange", onVisible);
-    const intervalMs = cooperadoExperience ? 2 * 60 * 1000 : 4 * 60 * 1000;
-    const interval = window.setInterval(() => {
-      if (!aligningRef.current) void run();
-    }, intervalMs);
+    const embedded = getEmbeddedClientRelease();
+    const page = getPageEmbeddedReleaseFromDom();
+    const skipPeriodic = runtimeAlreadyOnCanonicalRelease(embedded, page);
+    const intervalMs = skipPeriodic ? 0 : cooperadoExperience ? 4 * 60 * 1000 : 6 * 60 * 1000;
+    const interval =
+      intervalMs > 0
+        ? window.setInterval(() => {
+            if (!aligningRef.current) void run();
+          }, intervalMs)
+        : 0;
 
     return () => {
       cancelled = true;

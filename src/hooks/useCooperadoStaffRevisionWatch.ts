@@ -10,8 +10,8 @@ import { markNextCooperadoSyncSilent } from "@/lib/performance/cooperadoColdStar
 import { requestCooperadoStaffRevisionSync } from "@/services/syncRequest";
 import { fetchCooperativaCloudRevision } from "@/services/cooperativaSyncRevisionService";
 
-/** Consulta leve na nuvem — não baixa ficha/notas. */
-const REVISION_POLL_MS = 120_000;
+/** Consulta leve na nuvem — só ao voltar ao app (sem polling contínuo). */
+const REVISION_POLL_MS = 5 * 60_000;
 const MIN_GAP_BETWEEN_CHECKS_MS = 45_000;
 
 type Opts = {

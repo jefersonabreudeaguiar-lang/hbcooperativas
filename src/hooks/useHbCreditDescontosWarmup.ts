@@ -11,7 +11,8 @@ import { scheduleContaCoopAuxSync } from "@/lib/hb-credit/contaCoopAuxSyncSchedu
 import { isStaffHbCoopWideSyncRoute } from "@/lib/hb-credit/staffHbSyncRoute";
 import { isCooperadoManualOperacionalSync } from "@/lib/performance/cooperadoColdStart";
 
-const WARMUP_INTERVAL_MS = 60_000;
+const WARMUP_INITIAL_DELAY_COOPERADO_MS = 10_000;
+const WARMUP_INITIAL_DELAY_STAFF_MS = 15_000;
 const HB_PAGE_PREFIX = "/minha-conta-coop";
 
 /** Carrega compras HB da Supabase ao abrir o app e mantém valor a receber alinhado (todos os perfis). */
@@ -79,21 +80,19 @@ export function useHbCreditDescontosWarmup(user: Omit<User, "password"> | null) 
       window.addEventListener(HB_CREDIT_ACCOUNT_LOADED_EVENT, onAccountLoaded, { once: true });
     }
 
-    const staffDelay = user.role === "cooperado" ? 10_000 : 15_000;
+    const staffDelay = user.role === "cooperado" ? WARMUP_INITIAL_DELAY_COOPERADO_MS : WARMUP_INITIAL_DELAY_STAFF_MS;
     const initialTimer = window.setTimeout(run, staffDelay);
 
     const onVisible = () => {
       if (document.visibilityState === "visible") run();
     };
     document.addEventListener("visibilitychange", onVisible);
-    const interval = window.setInterval(run, WARMUP_INTERVAL_MS);
 
     return () => {
       cancelled = true;
       window.removeEventListener(HB_CREDIT_ACCOUNT_LOADED_EVENT, onAccountLoaded);
       window.clearTimeout(initialTimer);
       document.removeEventListener("visibilitychange", onVisible);
-      window.clearInterval(interval);
       for (const cleanup of idleCleanups) cleanup();
     };
   }, [user?.id, user?.role, user?.cooperadoId, user?.cooperativaId, pathname]);
