@@ -14,6 +14,7 @@ import { Card } from "@/components/ui/Card";
 import { updateData, addAuditEntry, getData } from "@/services/dataStore";
 import { resolveCooperativaCnpj } from "@/services/notaPedidoCloudService";
 import { pushOperacionalToCloud } from "@/services/cooperativaSyncCloudService";
+import { requestAppSyncLight } from "@/services/syncRequest";
 import {
   ensureControleAnualLivroCaixa,
   reconciliarLivroCaixaContabilCooperativa,
@@ -28,6 +29,7 @@ import {
   isLancamentoSemSequenciaLegado,
   isOrigemRetencaoContabil,
   mesesLivroCaixa,
+  mesReferenciaInicialLivroCaixa,
   parseNumeroSequenciaInput,
   podeExcluirLancamentoLivroCaixa,
   resumoLivroCaixa,
@@ -114,31 +116,49 @@ export default function LivroCaixaPage() {
   }, [permUser, router]);
 
   useEffect(() => {
-    if (!data || !coopId) return;
-    let updated = reconciliarLivroCaixaContabilCooperativa(data, coopId);
-    if (updated !== data) updateData(() => updated);
+    requestAppSyncLight();
+  }, []);
+
+  const dataCaixa = useMemo(() => {
+    if (!data || !coopId) return null;
+    return reconciliarLivroCaixaContabilCooperativa(data, coopId);
   }, [data, coopId]);
 
-  const meses = useMemo(() => (data && coopId ? mesesLivroCaixa(data, coopId) : [getCurrentMesReferencia()]), [data, coopId]);
+  useEffect(() => {
+    if (!dataCaixa || !data || !coopId) return;
+    if (dataCaixa !== data) updateData(() => dataCaixa);
+  }, [data, dataCaixa, coopId]);
+
+  const meses = useMemo(
+    () => (dataCaixa && coopId ? mesesLivroCaixa(dataCaixa, coopId) : [getCurrentMesReferencia()]),
+    [dataCaixa, coopId]
+  );
   const resumoMes = useMemo(
     () =>
-      data && coopId
-        ? resumoLivroCaixa(data, coopId, mes)
+      dataCaixa && coopId
+        ? resumoLivroCaixa(dataCaixa, coopId, mes)
         : { saldo: 0, saldoCaixaEfetivo: 0, totalCreditos: 0, totalDebitos: 0, totalCreditosRetencao: 0, lancamentos: [] },
-    [data, coopId, mes]
+    [dataCaixa, coopId, mes]
   );
   const resumoGeral = useMemo(
     () =>
-      data && coopId
-        ? resumoLivroCaixaGeral(data, coopId)
+      dataCaixa && coopId
+        ? resumoLivroCaixaGeral(dataCaixa, coopId)
         : { saldo: 0, saldoCaixaEfetivo: 0, totalCreditos: 0, totalDebitos: 0, totalCreditosRetencao: 0, lancamentos: [] },
-    [data, coopId]
+    [dataCaixa, coopId]
   );
 
   const controleAnual = useMemo(
-    () => (data && coopId ? getControleAnualLivroCaixa(data, coopId) : undefined),
-    [data, coopId]
+    () => (dataCaixa && coopId ? getControleAnualLivroCaixa(dataCaixa, coopId) : undefined),
+    [dataCaixa, coopId]
   );
+
+  useEffect(() => {
+    if (!dataCaixa || !coopId) return;
+    if (resumoMes.lancamentos.length > 0) return;
+    const preferido = mesReferenciaInicialLivroCaixa(dataCaixa, coopId);
+    if (preferido !== mes) setMes(preferido);
+  }, [dataCaixa, coopId, mes, resumoMes.lancamentos.length]);
 
   if (!data || !permUser || !coopId) return null;
 

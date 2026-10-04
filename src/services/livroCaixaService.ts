@@ -653,6 +653,14 @@ export function mesesLivroCaixa(data: AppData, cooperativaId: string): string[] 
   return [...set].sort().reverse();
 }
 
+/** Mês com movimento mais recente — evita abrir em mês corrente vazio. */
+export function mesReferenciaInicialLivroCaixa(data: AppData, cooperativaId: string): string {
+  for (const m of mesesLivroCaixa(data, cooperativaId)) {
+    if (lancamentosLivroCaixa(data, cooperativaId, m).length > 0) return m;
+  }
+  return getCurrentMesReferencia();
+}
+
 const ORIGENS_LANCAMENTO_MANUAL: LivroCaixaOrigem[] = [
   "manual",
   "credito_avulso",

@@ -653,7 +653,7 @@ export async function fetchNotaFotoPartBlobUrl(
   try {
     const res = await secureApiFetch(
       `/api/notas-pedido/${encodeURIComponent(notaId)}/foto?cnpj=${digits}&index=${plan.index}`,
-      { cache: "no-store" }
+      { cache: "default" }
     );
     if (!res.ok) return null;
     const blob = await res.blob();
