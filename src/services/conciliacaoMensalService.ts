@@ -11,7 +11,7 @@ import {
   somaValorPagamentosRegistrados,
 } from "@/services/notaPedidoService";
 import { calcularFechamentoMensalLive, listMesesComLancamentos } from "@/services/relatorioService";
-import { resumoLivroCaixa } from "@/services/livroCaixaService";
+import { reconciliarLivroCaixaContabilCooperativa, resumoLivroCaixa } from "@/services/livroCaixaService";
 import { getUserCooperativaId } from "@/utils/cooperativa";
 
 export type ConciliacaoStatus = "ok" | "divergencia" | "ausente" | "parcial";
@@ -107,21 +107,22 @@ export function calcularConciliacaoMensal(
   cooperativaId?: string
 ): ConciliacaoMensalResult {
   const coopId = cooperativaId ?? data.cooperativas[0]?.id ?? "";
-  const fechamento = data.fechamentos.find((f) => f.mesReferencia === mesReferencia);
-  const calc = calcularFechamentoMensalLive(mesReferencia, data);
+  const fonte = coopId ? reconciliarLivroCaixaContabilCooperativa(data, coopId) : data;
+  const fechamento = fonte.fechamentos.find((f) => f.mesReferencia === mesReferencia);
+  const calc = calcularFechamentoMensalLive(mesReferencia, fonte);
 
-  const notasOk = notasConferidasMes(data, mesReferencia);
+  const notasOk = notasConferidasMes(fonte, mesReferencia);
   const fichasMes = dedupeFichaCorridaPorNota(
-    data.fichaCorrida.filter((f) => f.mesReferencia === mesReferencia && fichaValidaNoExtrato(data, f)),
-    data.notasPedido
+    fonte.fichaCorrida.filter((f) => f.mesReferencia === mesReferencia && fichaValidaNoExtrato(fonte, f)),
+    fonte.notasPedido
   );
   const totalBrutoNotas = round2(sumBy(notasOk, (n) => n.valorBruto));
   const totalBrutoFicha = round2(sumBy(fichasMes, (f) => f.valorBruto));
 
-  const descontoCoopFicha = sumDescontosPorTipo(data, mesReferencia, "cooperativa");
+  const descontoCoopFicha = sumDescontosPorTipo(fonte, mesReferencia, "cooperativa");
   const descontoCoopPagamentos = round2(
     sumBy(
-      data.pagamentosCooperado.filter(
+      fonte.pagamentosCooperado.filter(
         (p) =>
           p.cooperativaId === coopId &&
           pagamentoCobreMesReferencia(p, mesReferencia) &&
@@ -132,31 +133,31 @@ export function calcularConciliacaoMensal(
   );
   const descontoCoopTotal = round2(descontoCoopFicha + descontoCoopPagamentos);
 
-  const ajusteMes = data.ajustesFichaMes?.find(
+  const ajusteMes = fonte.ajustesFichaMes?.find(
     (a) => a.cooperativaId === coopId && a.mesReferencia === mesReferencia
   );
   const descontoAvulsoCoop = ajusteMes?.descontoAvulso ?? 0;
 
-  const descontoMensFicha = sumDescontosPorTipo(data, mesReferencia, "mensalidade");
-  const mensalidadesPagas = data.mensalidades.filter(
+  const descontoMensFicha = sumDescontosPorTipo(fonte, mesReferencia, "mensalidade");
+  const mensalidadesPagas = fonte.mensalidades.filter(
     (m) => m.mesReferencia === mesReferencia && m.status === "paga"
   );
   const totalMensPagas = round2(sumBy(mensalidadesPagas, (m) => m.valor));
 
-  const descontoCotaFicha = sumDescontosPorTipo(data, mesReferencia, "cota");
-  const cotasMes = data.cotas.flatMap((c) =>
+  const descontoCotaFicha = sumDescontosPorTipo(fonte, mesReferencia, "cota");
+  const cotasMes = fonte.cotas.flatMap((c) =>
     c.historicoPagamentos.filter((hp) => hp.data.startsWith(mesReferencia))
   );
   const totalCotas = round2(sumBy(cotasMes, (c) => c.valor));
 
-  const descontoContaCoop = sumDescontosPorTipo(data, mesReferencia, "conta_coop");
+  const descontoContaCoop = sumDescontosPorTipo(fonte, mesReferencia, "conta_coop");
 
-  const pagamentosMes = data.pagamentosCooperado.filter(
+  const pagamentosMes = fonte.pagamentosCooperado.filter(
     (p) => p.cooperativaId === coopId && pagamentoCobreMesReferencia(p, mesReferencia)
   );
   const totalPagoCooperados = somaValorPagamentosRegistrados(pagamentosMes);
 
-  const caixaMes = resumoLivroCaixa(data, coopId, mesReferencia);
+  const caixaMes = resumoLivroCaixa(fonte, coopId, mesReferencia);
   const debitosPagamentoCaixa = round2(
     sumBy(
       caixaMes.lancamentos.filter((l) => l.origem === "pagamento_cooperado" && l.tipo === "debito"),
@@ -200,7 +201,7 @@ export function calcularConciliacaoMensal(
   const descontoMensRetido = round2(Math.max(descontoMensFicha, descontoMensPagamentos));
 
   const totalAPagar = round2(
-    sumBy(data.cooperados, (c) => getTotalAPagarCooperado(data, c.id, mesReferencia))
+    sumBy(fonte.cooperados, (c) => getTotalAPagarCooperado(fonte, c.id, mesReferencia))
   );
 
   const linhas: LinhaConciliacao[] = [
@@ -214,8 +215,8 @@ export function calcularConciliacaoMensal(
       labelB: "Ficha corrida (bruto)",
       diferenca: round2(totalBrutoNotas - totalBrutoFicha),
       status: compare(totalBrutoNotas, totalBrutoFicha),
-      detalhe: countNotasSemFicha(data, mesReferencia) > 0
-        ? `${countNotasSemFicha(data, mesReferencia)} nota(s) conferida(s) sem ficha.`
+      detalhe: countNotasSemFicha(fonte, mesReferencia) > 0
+        ? `${countNotasSemFicha(fonte, mesReferencia)} nota(s) conferida(s) sem ficha.`
         : undefined,
     },
     {
@@ -391,7 +392,7 @@ export function calcularConciliacaoMensal(
     }
   }
 
-  const notasSemFicha = countNotasSemFicha(data, mesReferencia);
+  const notasSemFicha = countNotasSemFicha(fonte, mesReferencia);
   if (notasSemFicha > 0) {
     alertas.push({
       id: "notas_sem_ficha",
@@ -422,7 +423,7 @@ export function calcularConciliacaoMensal(
     });
   }
 
-  const mensAbertas = data.mensalidades.filter(
+  const mensAbertas = fonte.mensalidades.filter(
     (m) => m.mesReferencia === mesReferencia && m.status !== "paga"
   ).length;
   if (mensAbertas > 0) {

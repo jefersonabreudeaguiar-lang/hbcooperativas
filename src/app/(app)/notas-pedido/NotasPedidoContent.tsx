@@ -29,6 +29,10 @@ import {
 } from "@/components/notas/fotoEntregaDisplay";
 import { updateData, updateDataSafe, generateId, addAuditEntry, getData, getDataRevision } from "@/services/dataStore";
 import { requestAppSync, requestAppSyncLight } from "@/services/syncRequest";
+import {
+  COOPERADO_ENTREGA_REMOVIDA_EVENT,
+  type CooperadoEntregaRemovidaDetail,
+} from "@/lib/cooperadoEntregaRemovidaNotify";
 import { forceNextFullNotasSync, shouldResponsavelForceFullNotasOnEntry } from "@/services/syncMetaService";
 import { useSyncStatus } from "@/components/sync/CooperativaSyncProvider";
 import {
@@ -957,6 +961,21 @@ export default function NotasPedidoContent() {
     flush();
     window.addEventListener("online", flush);
     return () => window.removeEventListener("online", flush);
+  }, [isCooperado]);
+
+  useEffect(() => {
+    if (!isCooperado) return;
+    const onRemovida = (ev: Event) => {
+      const count = (ev as CustomEvent<CooperadoEntregaRemovidaDetail>).detail?.count ?? 1;
+      setSuccessMsg(
+        count === 1
+          ? "Uma entrega em análise foi apagada pela cooperativa e saiu da sua lista."
+          : `${count} entregas em análise foram apagadas pela cooperativa e saíram da sua lista.`
+      );
+      setTimeout(() => setSuccessMsg(""), 8000);
+    };
+    window.addEventListener(COOPERADO_ENTREGA_REMOVIDA_EVENT, onRemovida);
+    return () => window.removeEventListener(COOPERADO_ENTREGA_REMOVIDA_EVENT, onRemovida);
   }, [isCooperado]);
 
   useEffect(() => {

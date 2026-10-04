@@ -3314,6 +3314,24 @@ export function aplicarNotasPedidoExcluidas(data: AppData, cooperativaId?: strin
   return { ...data, notasPedido };
 }
 
+/** Cooperado: entrega apagada na nuvem / tombstone da cooperativa — remove da lista local. */
+export function aplicarExclusaoRemotaNotaPedido(
+  data: AppData,
+  notaId: string,
+  cooperativaId: string
+): AppData {
+  if (isNotaPedidoExcluida(data, notaId, cooperativaId)) {
+    return aplicarNotasPedidoExcluidas(data, cooperativaId);
+  }
+  const notasPedido = data.notasPedido.filter((n) => n.id !== notaId);
+  const withTombstone = registrarNotaPedidoExcluida(
+    notasPedido.length === data.notasPedido.length ? data : { ...data, notasPedido },
+    notaId,
+    cooperativaId
+  );
+  return aplicarNotasPedidoExcluidas(withTombstone, cooperativaId);
+}
+
 /** Remove entrega, fichas vinculadas e referências mensais; recalcula saldos afetados. */
 export function excluirEntregaNota(
   data: AppData,

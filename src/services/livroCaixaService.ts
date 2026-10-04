@@ -59,6 +59,7 @@ function compareLancamentoSequencia(a: LivroCaixaLancamento, b: LivroCaixaLancam
   const bSeq = b.numeroSequencia ?? Number.MAX_SAFE_INTEGER;
   if (aSeq !== bSeq) return aSeq - bSeq;
   if (a.numeroSequencia != null && b.numeroSequencia != null && a.numeroSequencia === b.numeroSequencia) {
+    if (a.tipo !== b.tipo) return a.tipo === "debito" ? -1 : 1;
     return a.createdAt.localeCompare(b.createdAt);
   }
   return a.createdAt.localeCompare(b.createdAt);
@@ -118,8 +119,38 @@ export function alocarSequenciaEvento(
 
 function pagamentoIdFromOrigemId(origemId?: string): string | null {
   if (!origemId) return null;
-  const m = origemId.match(/^pg_(?:caixa|taxa|mensficha|desc)_(.+)$/);
-  return m?.[1] ?? null;
+  if (origemId.startsWith("pg_caixa_")) return origemId.slice("pg_caixa_".length);
+  if (origemId.startsWith("pg_taxa_")) return origemId.slice("pg_taxa_".length);
+  if (origemId.startsWith("pg_mensficha_")) {
+    const rest = origemId.slice("pg_mensficha_".length);
+    const detalhe = rest.match(/^(pg_\d+)_m\d+$/);
+    return detalhe ? detalhe[1] : rest;
+  }
+  const desc = origemId.match(/^pg_desc_(pg_\d+)_\d+_/);
+  if (desc) return desc[1];
+  return null;
+}
+
+function mensalidadeFichaOrigemId(pagamentoId: string, index: number, total: number): string {
+  if (total <= 1) return `pg_mensficha_${pagamentoId}`;
+  return `pg_mensficha_${pagamentoId}_m${index}`;
+}
+
+function removerLancamentoSistemaPorOrigemId(data: AppData, origemId: string): AppData {
+  const alvo = (data.livroCaixa ?? []).find((l) => l.origemId === origemId);
+  if (!alvo) return data;
+  return {
+    ...data,
+    livroCaixa: (data.livroCaixa ?? []).filter((l) => l.origemId !== origemId),
+    livroCaixaExcluidos: [
+      ...(data.livroCaixaExcluidos ?? []).filter((e) => e.id !== alvo.id),
+      {
+        id: alvo.id,
+        cooperativaId: alvo.cooperativaId,
+        excluidoEm: new Date().toISOString(),
+      },
+    ],
+  };
 }
 
 function ctxFromPagamentoExistente(data: AppData, pagamentoId: string): SequenciaEventoCtx | undefined {
@@ -361,21 +392,30 @@ export function lancarRetencoesPagamentoNoCaixa(
   }
 
   const mensalidades = (pagamento.descontosExtras ?? []).filter((d) => d.tipo === "mensalidade" && d.valor > 0);
-  const totalMens = round2(mensalidades.reduce((s, d) => s + d.valor, 0));
-  if (totalMens > 0) {
+  const legacyMensId = `pg_mensficha_${pagamento.id}`;
+  let temLegacyAgregado = jaExistePorOrigem(next, legacyMensId);
+  if (mensalidades.length > 1 && temLegacyAgregado) {
+    next = removerLancamentoSistemaPorOrigemId(next, legacyMensId);
+    temLegacyAgregado = false;
+  }
+  mensalidades.forEach((d, i) => {
+    const origemId = mensalidadeFichaOrigemId(pagamento.id, i, mensalidades.length);
+    if (jaExistePorOrigem(next, origemId)) return;
+    if (mensalidades.length === 1 && temLegacyAgregado && origemId === legacyMensId) return;
+    const rotulo = (d.motivo ?? "").trim() || pagamento.mesReferencia;
     next = appendLivroCaixaLancamento(
       next,
       {
         ...base,
         tipo: "credito",
-        valor: totalMens,
-        historico: `Mensalidade retida na ficha · ${nome} · ${pagamento.mesReferencia}`,
+        valor: round2(d.valor),
+        historico: `Mensalidade retida na ficha · ${rotulo} · ${nome}`,
         origem: "mensalidade_ficha",
-        origemId: `pg_mensficha_${pagamento.id}`,
+        origemId,
       },
       ctx
     );
-  }
+  });
 
   const outrosDescontos = (pagamento.descontosExtras ?? []).filter(
     (d) =>
@@ -490,6 +530,121 @@ export function completarLancamentosContabeisPagamentos(data: AppData, cooperati
     next = lancarPagamentoCooperadoNoCaixa(next, pagamento);
   }
   return next;
+}
+
+export function completarMensalidadesPagasNoCaixa(data: AppData, cooperativaId?: string): AppData {
+  let next = data;
+  for (const mensalidade of data.mensalidades) {
+    if (mensalidade.status !== "paga") continue;
+    const cooperado = data.cooperados.find((c) => c.id === mensalidade.cooperadoId);
+    const coopId = cooperado?.cooperativaId;
+    if (!coopId) continue;
+    if (cooperativaId && coopId !== cooperativaId) continue;
+    const origemId = `mens_caixa_${mensalidade.id}`;
+    if (jaExistePorOrigem(next, origemId)) continue;
+    next = lancarMensalidadeNoCaixa(next, mensalidade);
+  }
+  return next;
+}
+
+/** Recompõe livro caixa a partir de pagamentos, mensalidades PIX e sequência anual. */
+export function reconciliarLivroCaixaContabilCooperativa(data: AppData, cooperativaId: string): AppData {
+  let next = ensureControleAnualLivroCaixa(data, cooperativaId);
+  next = atribuirSequenciasAusentes(next, cooperativaId);
+  next = completarLancamentosContabeisPagamentos(next, cooperativaId);
+  next = completarMensalidadesPagasNoCaixa(next, cooperativaId);
+  return next;
+}
+
+export type AuditoriaLivroCaixaContabil = {
+  cooperativaId: string;
+  pagamentosSemDebitoCaixa: string[];
+  pagamentosSemTaxaCoopCaixa: string[];
+  pagamentosSemMensalidadeFichaCaixa: string[];
+  mensalidadesPagasSemCreditoCaixa: string[];
+  totais: {
+    debitosPagamentoEsperados: number;
+    debitosPagamentoCaixa: number;
+    creditosTaxaEsperados: number;
+    creditosTaxaCaixa: number;
+    creditosMensFichaEsperados: number;
+    creditosMensFichaCaixa: number;
+  };
+};
+
+export function auditarLivroCaixaContabilCooperativa(data: AppData, cooperativaId: string): AuditoriaLivroCaixaContabil {
+  const pagamentos = data.pagamentosCooperado.filter(
+    (p) =>
+      p.cooperativaId === cooperativaId &&
+      (p.status === "confirmado" || p.status === "aguardando_confirmacao")
+  );
+  const livro = (data.livroCaixa ?? []).filter((l) => l.cooperativaId === cooperativaId);
+  const pagamentosSemDebitoCaixa: string[] = [];
+  const pagamentosSemTaxaCoopCaixa: string[] = [];
+  const pagamentosSemMensalidadeFichaCaixa: string[] = [];
+  let debitosPagamentoEsperados = 0;
+  let creditosTaxaEsperados = 0;
+  let creditosMensFichaEsperados = 0;
+
+  for (const p of pagamentos) {
+    debitosPagamentoEsperados += p.valorLiquido;
+    if (!livro.some((l) => l.origemId === `pg_caixa_${p.id}` && l.tipo === "debito")) {
+      pagamentosSemDebitoCaixa.push(p.id);
+    }
+    if (p.descontoCooperativa > 0) {
+      creditosTaxaEsperados += p.descontoCooperativa;
+      if (!livro.some((l) => l.origemId === `pg_taxa_${p.id}` && l.tipo === "credito")) {
+        pagamentosSemTaxaCoopCaixa.push(p.id);
+      }
+    }
+    const mens = (p.descontosExtras ?? []).filter((d) => d.tipo === "mensalidade" && d.valor > 0);
+    const totalMens = round2(mens.reduce((s, d) => s + d.valor, 0));
+    if (totalMens > 0) {
+      creditosMensFichaEsperados += totalMens;
+      const temLinha =
+        livro.some((l) => l.origemId === `pg_mensficha_${p.id}` && l.tipo === "credito") ||
+        mens.some((_, i) =>
+          livro.some((l) => l.origemId === mensalidadeFichaOrigemId(p.id, i, mens.length) && l.tipo === "credito")
+        );
+      if (!temLinha) pagamentosSemMensalidadeFichaCaixa.push(p.id);
+    }
+  }
+
+  const mensalidadesPagasSemCreditoCaixa: string[] = [];
+  for (const m of data.mensalidades) {
+    if (m.status !== "paga") continue;
+    const coop = data.cooperados.find((c) => c.id === m.cooperadoId);
+    if (coop?.cooperativaId !== cooperativaId) continue;
+    if (!livro.some((l) => l.origemId === `mens_caixa_${m.id}`)) {
+      mensalidadesPagasSemCreditoCaixa.push(m.id);
+    }
+  }
+
+  const debitosPagamentoCaixa = round2(
+    livro.filter((l) => l.origem === "pagamento_cooperado" && l.tipo === "debito").reduce((s, l) => s + l.valor, 0)
+  );
+  const creditosTaxaCaixa = round2(
+    livro.filter((l) => l.origem === "taxa_cooperativa" && l.tipo === "credito").reduce((s, l) => s + l.valor, 0)
+  );
+  const creditosMensFichaCaixa = round2(
+    livro.filter((l) => l.origem === "mensalidade_ficha" && l.tipo === "credito").reduce((s, l) => s + l.valor, 0)
+  );
+
+  return {
+    cooperativaId,
+    pagamentosSemDebitoCaixa,
+    pagamentosSemTaxaCoopCaixa,
+    pagamentosSemMensalidadeFichaCaixa,
+    mensalidadesPagasSemCreditoCaixa,
+    totais: {
+      debitosPagamentoEsperados: round2(debitosPagamentoEsperados),
+      debitosPagamentoCaixa,
+      creditosTaxaEsperados: round2(creditosTaxaEsperados),
+      creditosTaxaCaixa,
+      creditosMensFichaEsperados: round2(creditosMensFichaEsperados),
+      creditosMensFichaCaixa,
+    },
+  };
 }
 
 export function mesesLivroCaixa(data: AppData, cooperativaId: string): string[] {

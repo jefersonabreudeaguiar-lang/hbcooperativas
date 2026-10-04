@@ -42,6 +42,8 @@ import {
   type CooperativaSyncSessionLease,
 } from "@/services/operacionalPullLease";
 import { cooperadoApresentacaoFinanceiraPosRunSync } from "@/lib/cooperadoApresentacaoFinanceira";
+import { notifyCooperadoEntregasRemovidasPelaCooperativa } from "@/lib/cooperadoEntregaRemovidaNotify";
+import { contarEntregasApagadasCooperadoNoSync } from "@/services/cooperadoEntregasService";
 import {
   cooperadoFinanceiroBloqueiaEntradaApp,
   cooperadoFinanceiroDesatualizado,
@@ -604,10 +606,12 @@ export function CooperativaSyncProvider({ children }: { children: React.ReactNod
 
       await withSyncTimeout(
         (async () => {
+          let antesCooperadoEntregasSync: ReturnType<typeof getData> | null = null;
           if (cooperadoLogado) {
             const cooperadoCanonico =
               currentUser.cooperadoId &&
               resolverCooperadoIdCanonico(getData(), currentUser.cooperadoId, currentCoopId);
+            antesCooperadoEntregasSync = getData();
             cooperadoSyncSession = acquireCooperativaSyncSessionLease(cnpj);
             bindCooperadoRunSyncSessionLease(cooperadoSyncSession);
             if (cooperadoAtualizarRapido && cooperadoCanonico) {
@@ -659,15 +663,31 @@ export function CooperativaSyncProvider({ children }: { children: React.ReactNod
           }
 
           if (currentUser.role === "cooperado" && currentUser.cooperadoId) {
-            const latest = getData();
-            const cooperadoCanonico = resolverCooperadoIdCanonico(latest, currentUser.cooperadoId, currentCoopId);
+            const cooperadoCanonico = resolverCooperadoIdCanonico(
+              getData(),
+              currentUser.cooperadoId,
+              currentCoopId
+            );
             const posSyncCooperado = async () => {
               await refreshCooperadoNotasEmAnalise(cnpj, currentUser.cooperadoId!, currentCoopId, {
                 sessionLease: cooperadoSyncSession,
               });
               await republishLocalAguardandoConferencia(cnpj, currentUser.cooperadoId!, currentCoopId);
 
-              const registro = getData().cooperados.find((c) => c.id === cooperadoCanonico);
+              const depois = getData();
+              if (antesCooperadoEntregasSync && cooperadoCanonico) {
+                const totalApagadas = contarEntregasApagadasCooperadoNoSync(
+                  antesCooperadoEntregasSync,
+                  depois,
+                  cooperadoCanonico,
+                  currentCoopId
+                );
+                if (totalApagadas > 0) {
+                  notifyCooperadoEntregasRemovidasPelaCooperativa(totalApagadas);
+                }
+              }
+
+              const registro = depois.cooperados.find((c) => c.id === cooperadoCanonico);
 
               if (registro && now - lastCooperadoPushRef.current >= COOPERADO_PUSH_GAP_MS) {
                 await pushCooperadoToCloud(cnpj, registro, currentUser.email);

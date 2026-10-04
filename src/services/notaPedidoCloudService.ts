@@ -5,7 +5,12 @@ import { notaPertenceCooperado, resolverCooperadoIdCanonico } from "@/services/c
 import { getNotaCooperativaCnpj, getFotosExibicaoNota, mergeNotaComFotos, contarFotosEnviadasNota, notaTemFotoArmazenadaNaNuvem, FOTOS_UPLOAD_LOTE } from "@/utils/fotoEntrega";
 import { getCooperadoNome } from "@/utils/calculations";
 import { getData, saveDataSafe } from "@/services/dataStore";
-import { reconciliarFichaFromNotasConferidas, idsNotasPedidoExcluidas, aplicarNotasPedidoExcluidas } from "@/services/notaPedidoService";
+import {
+  reconciliarFichaFromNotasConferidas,
+  idsNotasPedidoExcluidas,
+  aplicarNotasPedidoExcluidas,
+  aplicarExclusaoRemotaNotaPedido,
+} from "@/services/notaPedidoService";
 import { posProcessarFinanceiroLocal } from "@/services/operacionalLocalPostProcess";
 import { posProcessarIntegridadePagamentosCooperativa } from "@/services/pagamentoIntegridadeService";
 import { getCloudResetAppliedVersion } from "@/services/operationalReset";
@@ -1085,13 +1090,20 @@ export async function republishLocalAguardandoConferencia(
   for (const nota of pendentes) {
     const cloud = await fetchNotaPedidoFromCloud(digits, nota.id, { metaOnly: true });
     if (!cloud) {
+      if (cooperativaId && (await confirmNotaDeletedFromCloud(digits, nota.id))) {
+        const antes = adopted;
+        adopted = aplicarExclusaoRemotaNotaPedido(adopted, nota.id, cooperativaId);
+        if (adopted !== antes) adoptedChanged = true;
+      }
       continue;
     }
     // Já publicada e visível — não precisa republicar.
     if (cloud.status && cloud.status !== "rascunho") {
       // Nuvem já conferiu/rejeitou — adota localmente (some do mural "em análise").
       if (cloud.status !== "aguardando_conferencia") {
-        adopted = mergeCloudNotasIntoData(adopted, [cloud], digits);
+        adopted = mergeCloudNotasIntoData(adopted, [cloud], digits, {
+          forceTerminalStatus: isCloudTerminalStatusForCooperado(cloud.status),
+        });
         adoptedChanged = true;
       }
       okCount += 1;
@@ -1343,12 +1355,14 @@ export async function syncNotasPedidoFromCloud(
     pruneStaleConferidas: treatAsFull,
   });
 
+  const excluidasCoop = idsNotasPedidoExcluidas(merged, coopId);
+
   // Invariante: sync nunca remove/rebaixa para rascunho uma entrega em análise.
   const afterById = new Map(merged.notasPedido.map((n) => [n.id, n]));
   let notas = [...merged.notasPedido];
   let invariantFixed = false;
   for (const before of beforeAguardando) {
-    if (blocked.has(before.id)) continue;
+    if (blocked.has(before.id) || excluidasCoop.has(before.id)) continue;
     const after = afterById.get(before.id);
     if (!after) {
       // Delta incompleto ou merge falhou — não apagar entrega em análise local.
@@ -1389,32 +1403,52 @@ export async function syncNotasPedidoFromCloud(
  * Atualiza entregas que ainda aparecem "em análise" no aparelho mas já foram
  * conferidas/rejeitadas na nuvem (fallback quando o delta sync perdeu a nota).
  */
+export type RefreshCooperadoNotasEmAnaliseResult = {
+  statusAtualizados: number;
+  removidasPelaCooperativa: number;
+};
+
 export async function refreshCooperadoNotasEmAnalise(
   cnpj: string,
   cooperadoId: string,
   cooperativaId?: string,
   opts?: { sessionLease?: CooperativaSyncSessionLease }
-): Promise<number> {
+): Promise<RefreshCooperadoNotasEmAnaliseResult> {
+  const empty: RefreshCooperadoNotasEmAnaliseResult = {
+    statusAtualizados: 0,
+    removidasPelaCooperativa: 0,
+  };
   const digits = normalizeCnpj(cnpj);
-  if (digits.length !== 14) return 0;
+  if (digits.length !== 14) return empty;
 
   const data = getData();
   const canonico = resolverCooperadoIdCanonico(data, cooperadoId, cooperativaId);
+  const coopId = cooperativaId ?? resolveCoopIdFromCnpj(data, digits);
+  const excluidas = idsNotasPedidoExcluidas(data, coopId);
   const emAnalise = data.notasPedido.filter(
     (n) =>
+      !excluidas.has(n.id) &&
       n.status === "aguardando_conferencia" &&
       n.fotoNaNuvem &&
       notaPertenceCooperado(data, n, canonico, cooperativaId)
   );
 
-  if (emAnalise.length === 0) return 0;
+  if (emAnalise.length === 0) return empty;
 
   let merged = data;
   const atualizadas: NotaPedido[] = [];
+  let removidasPelaCooperativa = 0;
 
   for (const nota of emAnalise) {
     const cloud = await fetchNotaPedidoFromCloud(digits, nota.id);
     if (!cloud) {
+      if (coopId && (await confirmNotaDeletedFromCloud(digits, nota.id))) {
+        const next = aplicarExclusaoRemotaNotaPedido(merged, nota.id, coopId);
+        if (next !== merged) {
+          merged = next;
+          removidasPelaCooperativa += 1;
+        }
+      }
       continue;
     }
     if (cloud.status === nota.status || cloud.status === "rascunho") continue;
@@ -1424,16 +1458,21 @@ export async function refreshCooperadoNotasEmAnalise(
     atualizadas.push(cloud);
   }
 
-  if (atualizadas.length === 0) return 0;
+  if (atualizadas.length === 0 && removidasPelaCooperativa === 0) return empty;
 
   const reconciled = posProcessarFinanceiroLocal(merged, digits);
   if (reconciled !== data) {
     if (!saveAppDataIfSyncLeaseCurrent(opts?.sessionLease, reconciled)) {
-      return 0;
+      return empty;
     }
   }
-  markNotasSyncDone(digits, false, atualizadas);
-  return atualizadas.length;
+  if (atualizadas.length > 0) {
+    markNotasSyncDone(digits, false, atualizadas);
+  }
+  return {
+    statusAtualizados: atualizadas.length,
+    removidasPelaCooperativa,
+  };
 }
 
 export async function ensureNotaComFoto(

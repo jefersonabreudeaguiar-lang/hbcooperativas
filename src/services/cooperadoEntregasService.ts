@@ -23,6 +23,7 @@ import { mesesComValoresAvulsos, totalValoresAvulsosPendentes } from "@/services
 import { contarEntregasNoMes } from "@/services/entregaCooperadoService";
 import { contarFotosEnviadasNota, getFotosExibicaoNota } from "@/utils/fotoEntrega";
 import { cooperadoMesComFichaPagaSemPagamentoCooperativa } from "@/services/pagamentoIntegridadeService";
+import { idsNotasPedidoExcluidas } from "@/services/notaPedidoService";
 import { isOperacionalCloudAuthoritative } from "@/services/operationalReset";
 import { normalizeCnpj } from "@/utils/cooperativa";
 
@@ -273,9 +274,34 @@ export function filtrarResumosMesesNaoQuitados(
 }
 
 function notasDoCooperado(data: AppData, cooperadoId: string, cooperativaId?: string): NotaPedido[] {
+  const excluidas = idsNotasPedidoExcluidas(data, cooperativaId);
   return data.notasPedido
-    .filter((n) => notaPertenceCooperado(data, n, cooperadoId, cooperativaId))
+    .filter(
+      (n) =>
+        !excluidas.has(n.id) && notaPertenceCooperado(data, n, cooperadoId, cooperativaId)
+    )
     .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+}
+
+/** Tombstones novos no sync operacional — entregas que sumiram da lista do cooperado. */
+export function contarEntregasApagadasCooperadoNoSync(
+  antes: AppData,
+  depois: AppData,
+  cooperadoId: string,
+  cooperativaId?: string
+): number {
+  const exclAntes = idsNotasPedidoExcluidas(antes, cooperativaId);
+  const exclDepois = idsNotasPedidoExcluidas(depois, cooperativaId);
+  let count = 0;
+  for (const id of exclDepois) {
+    if (exclAntes.has(id)) continue;
+    const nota = antes.notasPedido.find((n) => n.id === id);
+    if (!nota) continue;
+    if (!notaPertenceCooperado(antes, nota, cooperadoId, cooperativaId)) continue;
+    if (nota.status !== "aguardando_conferencia" && nota.status !== "rejeitada") continue;
+    count += 1;
+  }
+  return count;
 }
 
 export function listarMesesEntregasCooperado(
@@ -408,7 +434,7 @@ function listarMesesPendentesPagamentoResponsavelOperacional(
   for (const f of data.fichaCorrida) {
     if (!fichaPertenceCooperado(data, f, cooperadoId, cooperativaId)) continue;
     if (!fichaValidaNoExtrato(data, f)) continue;
-    if (f.status === "pendente") {
+    if (f.status === "pendente" || f.status === "pago") {
       mesesSet.add(f.mesReferencia);
     }
   }

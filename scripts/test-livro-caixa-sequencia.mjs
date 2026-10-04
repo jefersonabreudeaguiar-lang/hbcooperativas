@@ -45,6 +45,20 @@ const linhasPg = d.livroCaixa.filter((l) => l.grupoEventoId === "evt_pg_pg_999")
 assert.ok(linhasPg.length >= 1);
 assert.ok(linhasPg.every((l) => l.numeroSequencia === 2));
 
+const pgMens = {
+  ...pg,
+  id: "pg_888",
+  descontosExtras: [
+    { tipo: "mensalidade", valor: 30, motivo: "2026-02" },
+    { tipo: "mensalidade", valor: 20, motivo: "2026-03" },
+  ],
+  valorLiquido: 45,
+};
+d = lancarPagamentoCooperadoNoCaixa(d, pgMens);
+const mensLinhas = d.livroCaixa.filter((l) => l.origem === "mensalidade_ficha" && l.origemId?.startsWith("pg_mensficha_pg_888"));
+assert.equal(mensLinhas.length, 2);
+assert.ok(mensLinhas.every((l) => l.tipo === "credito"));
+
 const ano = d.livroCaixaControleAnual?.[0]?.anoLivro ?? new Date().getFullYear();
 const found = findLancamentosPorSequencia(d, coopId, 2, ano);
 assert.ok(found.length >= 1);
