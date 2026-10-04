@@ -61,6 +61,10 @@ export function clearCooperadoUserSyncVisible(): void {
   userVisibleSyncDepth = Math.max(0, userVisibleSyncDepth - 1);
 }
 
+export function resetCooperadoUserSyncVisible(): void {
+  userVisibleSyncDepth = 0;
+}
+
 export function isCooperadoUserSyncVisible(): boolean {
   return userVisibleSyncDepth > 0;
 }
@@ -119,8 +123,16 @@ export function cooperadoLocalResumeReady(user: Omit<User, "password"> | null): 
 export function cooperadoSyncAffectsPresentation(role: string | undefined, syncing: boolean): boolean {
   if (!syncing) return false;
   if (role !== "cooperado") return true;
+  if (isCooperadoManualOperacionalSync()) {
+    return isCooperadoUserSyncVisible();
+  }
   if (!isCooperadoInstantResumeEnabled()) return true;
   return isCooperadoUserSyncVisible();
+}
+
+/** Cooperado manual: UI de “sync operacional” só no botão Atualizar. */
+export function cooperadoOperacionalSyncUiAtivo(syncing: boolean): boolean {
+  return cooperadoSyncAffectsPresentation("cooperado", syncing);
 }
 
 export function cooperadoSyncVisibleInUi(role: string | undefined, syncing: boolean): boolean {

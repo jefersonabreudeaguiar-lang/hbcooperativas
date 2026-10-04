@@ -33,6 +33,13 @@ assert(cold.includes("scheduleCooperadoPostInteractiveTask"), "post-interactive 
 const deployGuard = read("src/components/pwa/ClientDeploymentGuard.tsx");
 assert(deployGuard.includes("scheduleCooperadoPostInteractiveTask"), "ClientDeploymentGuard defer");
 assert(sync.includes("markCooperadoUserSyncVisible"), "sync visível só com ação do usuário");
+assert(
+  sync.includes("cooperadoBloqueiaSyncOperacionalAutomatico()") &&
+    sync.includes("requestAppSync(): void") &&
+    sync.indexOf("cooperadoBloqueiaSyncOperacionalAutomatico()") <
+      sync.indexOf("markCooperadoUserSyncVisible()"),
+  "requestAppSync não marca sync visível quando cooperado manual bloqueia"
+);
 assert(sync.includes("takePendingCooperadoSilentSync"), "silent flag no dispatch");
 assert(provider.includes("syncingForUi"), "contexto syncingForUi");
 assert(provider.includes("scheduleCooperadoColdStartSync"), "provider agenda sync único");

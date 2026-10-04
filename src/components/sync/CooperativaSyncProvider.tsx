@@ -76,7 +76,6 @@ import {
   type H197CaptureContext,
 } from "@/lib/diagnostic/h197PairedCapture";
 import {
-  clearCooperadoUserSyncVisible,
   cooperadoLocalResumeReady,
   cooperadoPreserveHydrationOnSilentSync,
   cooperadoSyncVisibleInUi,
@@ -85,6 +84,7 @@ import {
   isCooperadoInstantResumeEnabled,
   isCooperadoManualOperacionalSync,
   isCooperadoUserSyncVisible,
+  resetCooperadoUserSyncVisible,
   scheduleCooperadoColdStartSync,
 } from "@/lib/performance/cooperadoColdStart";
 import { markRqlColdStartPhase } from "@/lib/performance/rqlMarks";
@@ -300,7 +300,15 @@ export function CooperativaSyncProvider({ children }: { children: React.ReactNod
   );
 
   useEffect(() => {
-    setCooperadoPagamentosHydrated(user?.role !== "cooperado");
+    if (user?.role !== "cooperado") {
+      setCooperadoPagamentosHydrated(true);
+      return;
+    }
+    if (isCooperadoManualOperacionalSync()) {
+      setCooperadoPagamentosHydrated(true);
+      return;
+    }
+    setCooperadoPagamentosHydrated(false);
   }, [user?.id, user?.role]);
 
   const markCooperadoPagamentosHydrated = useCallback(() => {
@@ -312,6 +320,9 @@ export function CooperativaSyncProvider({ children }: { children: React.ReactNod
     const currentUser = userRef.current;
     if (!currentUser || currentUser.role !== "cooperado") {
       markCooperadoPagamentosHydrated();
+      return;
+    }
+    if (isCooperadoManualOperacionalSync()) {
       return;
     }
     if (typeof navigator !== "undefined" && !navigator.onLine) {
@@ -409,6 +420,13 @@ export function CooperativaSyncProvider({ children }: { children: React.ReactNod
   const runSync = useCallback(async (opts?: SyncRunOptions) => {
     const currentUser = userRef.current;
     if (!currentUser || syncingRef.current) return;
+    if (
+      currentUser.role === "cooperado" &&
+      isCooperadoManualOperacionalSync() &&
+      !isCooperadoUserSyncVisible()
+    ) {
+      return;
+    }
     if (typeof navigator !== "undefined" && !navigator.onLine) return;
     if (typeof document !== "undefined" && document.hidden) return;
     const isStaffGestao =
@@ -442,6 +460,10 @@ export function CooperativaSyncProvider({ children }: { children: React.ReactNod
     lastSyncStartedAtRef.current = now;
 
     const cooperadoLogadoEarly = currentUser.role === "cooperado";
+    const cooperadoUiSync =
+      !cooperadoLogadoEarly ||
+      !isCooperadoManualOperacionalSync() ||
+      isCooperadoUserSyncVisible();
     const silentCooperadoOpen =
       cooperadoLogadoEarly &&
       isCooperadoInstantResumeEnabled() &&
@@ -449,7 +471,7 @@ export function CooperativaSyncProvider({ children }: { children: React.ReactNod
       !isCooperadoUserSyncVisible();
 
     syncingRef.current = true;
-    if (!silentCooperadoOpen) {
+    if (cooperadoUiSync && !silentCooperadoOpen) {
       setSyncing(true);
     }
     setLastSyncError("");
@@ -626,8 +648,8 @@ export function CooperativaSyncProvider({ children }: { children: React.ReactNod
       bindCooperadoRunSyncSessionLease(null);
       syncingRef.current = false;
       setSyncing(false);
-      if (isCooperadoUserSyncVisible()) {
-        clearCooperadoUserSyncVisible();
+      if (userRef.current?.role === "cooperado") {
+        resetCooperadoUserSyncVisible();
       }
       setLastSyncedAt(Date.now());
       if (isH197CaptureEnabled()) {
@@ -673,7 +695,7 @@ export function CooperativaSyncProvider({ children }: { children: React.ReactNod
         ) {
           markCooperadoPagamentosHydrated();
           setLastSyncError("");
-        } else {
+        } else if (!isCooperadoManualOperacionalSync()) {
           setCooperadoPagamentosHydrated(false);
         }
       }

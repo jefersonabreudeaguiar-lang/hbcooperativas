@@ -4,9 +4,12 @@ import {
   startAppScheduler,
 } from "@/lib/performance/appScheduler";
 import {
+  cooperadoOperacionalSyncPermitido,
+  isCooperadoManualOperacionalSync,
   markCooperadoUserSyncVisible,
   takePendingCooperadoSilentSync,
 } from "@/lib/performance/cooperadoColdStart";
+import { getSession } from "@/services/dataStore";
 import {
   defaultForceForSyncTier,
   type SyncTier,
@@ -48,10 +51,18 @@ export function registerSyncHandler(handler: SyncHandler): () => void {
  * HX 8.0 — pedido de sync por tier (coalescência + debounce no AppScheduler).
  * `force` explícito prevalece; senão usa default do tier.
  */
+function cooperadoBloqueiaSyncOperacionalAutomatico(): boolean {
+  if (!isCooperadoManualOperacionalSync()) return false;
+  const session = getSession();
+  if (session?.role !== "cooperado") return false;
+  return !cooperadoOperacionalSyncPermitido();
+}
+
 export function requestSyncTier(
   tier: SyncTier,
-  options?: { force?: boolean; immediate?: boolean }
+  options?: { force?: boolean; immediate?: boolean; userInitiated?: boolean }
 ): void {
+  if (!options?.userInitiated && cooperadoBloqueiaSyncOperacionalAutomatico()) return;
   ensureSchedulerBridge();
   const force = options?.force ?? defaultForceForSyncTier(tier);
   enqueueAppSyncRequest({
@@ -63,19 +74,21 @@ export function requestSyncTier(
 
 /** Sync leve (respeita intervalo mínimo; pull sem push autoritativo na gestão). */
 export function requestAppSyncLight(): void {
+  if (cooperadoBloqueiaSyncOperacionalAutomatico()) return;
   requestSyncTier("pulse", { force: false });
 }
 
 /** Dispara sync após ação do usuário (agrupa chamadas rápidas; força atualização). */
 export function requestAppSync(): void {
+  if (cooperadoBloqueiaSyncOperacionalAutomatico()) return;
   markCooperadoUserSyncVisible();
-  requestSyncTier("operacional_full", { force: true });
+  requestSyncTier("operacional_full", { force: true, userInitiated: true });
 }
 
 /** Sync imediato — botão “Atualizar agora”. */
 export function requestAppSyncImmediate(): void {
   markCooperadoUserSyncVisible();
-  requestSyncTier("operacional_full", { force: true, immediate: true });
+  requestSyncTier("operacional_full", { force: true, immediate: true, userInitiated: true });
 }
 
 /** @internal — compat com testes que importavam debounce constante */

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { RefreshCw, Check } from "lucide-react";
 import { useSyncStatus } from "@/components/sync/CooperativaSyncProvider";
 import { requestAppSyncImmediate } from "@/services/syncRequest";
@@ -61,24 +61,40 @@ export function SyncStatusChip({ className }: { className?: string }) {
   );
 }
 
-/** Cooperado — sync operacional só ao toque (sem chip “Atualizando…” automático). */
+/** Cooperado — sync operacional só ao toque; busy local (não pisca com sync em background). */
 export function CooperadoAtualizarButton({ className }: { className?: string }) {
-  const { syncingForUi } = useSyncStatus();
+  const { lastSyncedAt } = useSyncStatus();
+  const [busy, setBusy] = useState(false);
+  const startedAtRef = useRef(0);
+
+  useEffect(() => {
+    if (!busy) return;
+    if (lastSyncedAt != null && lastSyncedAt >= startedAtRef.current) {
+      setBusy(false);
+      return;
+    }
+    const id = window.setTimeout(() => setBusy(false), 95_000);
+    return () => window.clearTimeout(id);
+  }, [busy, lastSyncedAt]);
 
   return (
     <button
       type="button"
-      onClick={() => requestAppSyncImmediate()}
-      disabled={syncingForUi}
+      onClick={() => {
+        startedAtRef.current = Date.now();
+        setBusy(true);
+        requestAppSyncImmediate();
+      }}
+      disabled={busy}
       className={cn(
         "inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-medium transition-colors",
         "text-green-100/95 hover:bg-green-800/90 disabled:opacity-70",
         className
       )}
-      aria-busy={syncingForUi}
-      aria-label={syncingForUi ? "Atualizando dados" : "Atualizar dados da cooperativa"}
+      aria-busy={busy}
+      aria-label={busy ? "Atualizando dados" : "Atualizar dados da cooperativa"}
     >
-      <RefreshCw size={12} className={cn("shrink-0", syncingForUi && "animate-spin")} aria-hidden />
+      <RefreshCw size={12} className={cn("shrink-0", busy && "animate-spin")} aria-hidden />
       Atualizar
     </button>
   );
