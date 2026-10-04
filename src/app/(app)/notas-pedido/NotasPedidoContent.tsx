@@ -28,7 +28,7 @@ import {
   FOTO_ENTREGA_VIEW_MODAL_IMG,
 } from "@/components/notas/fotoEntregaDisplay";
 import { updateData, updateDataSafe, generateId, addAuditEntry, getData, getDataRevision } from "@/services/dataStore";
-import { requestAppSync, requestAppSyncLight } from "@/services/syncRequest";
+import { requestAppSync, requestAppSyncImmediate, requestAppSyncLight } from "@/services/syncRequest";
 import {
   COOPERADO_ENTREGA_REMOVIDA_EVENT,
   type CooperadoEntregaRemovidaDetail,
@@ -1441,6 +1441,23 @@ export default function NotasPedidoContent() {
 
   const cooperadoMountSyncRef = useRef(false);
   const responsavelMountSyncRef = useRef(false);
+  const responsavelNotasPullAtRef = useRef(0);
+
+  const puxarNotasResponsavelDaNuvem = useCallback(
+    (opts?: { forceFull?: boolean }) => {
+      if (isCooperado || !data || !coopId) return;
+      const cnpj = getCooperativaCnpj(data, coopId);
+      if (!cnpj) return;
+      const now = Date.now();
+      if (!opts?.forceFull && now - responsavelNotasPullAtRef.current < 45_000) return;
+      responsavelNotasPullAtRef.current = now;
+      if (opts?.forceFull || shouldResponsavelForceFullNotasOnEntry(cnpj)) {
+        forceNextFullNotasSync(cnpj);
+      }
+      requestAppSyncImmediate();
+    },
+    [isCooperado, data, coopId]
+  );
 
   useEffect(() => {
     if (!isCooperado || !data) return;
@@ -1449,19 +1466,30 @@ export default function NotasPedidoContent() {
     requestAppSyncLight();
   }, [isCooperado, data]);
 
-  // Responsável: full de notas no máximo 1× por sessão; sync leve ao entrar na tela (1× por mount).
+  // Responsável: full de notas na 1ª entrada da sessão; depois pull forçado ao usar Conferir.
   useEffect(() => {
     if (isCooperado || !data || !coopId) return;
     if (responsavelMountSyncRef.current) return;
     responsavelMountSyncRef.current = true;
-    const cnpj = getCooperativaCnpj(data, coopId);
-    if (cnpj && shouldResponsavelForceFullNotasOnEntry(cnpj)) {
-      forceNextFullNotasSync(cnpj);
-      requestAppSync();
-    } else {
-      requestAppSyncLight();
-    }
-  }, [isCooperado, data, coopId]);
+    puxarNotasResponsavelDaNuvem({ forceFull: true });
+  }, [isCooperado, data, coopId, puxarNotasResponsavelDaNuvem]);
+
+  useEffect(() => {
+    if (isCooperado || !coopId) return;
+    if (vistaResponsavel !== "fila" && vistaResponsavel !== "cooperado") return;
+    puxarNotasResponsavelDaNuvem();
+  }, [vistaResponsavel, isCooperado, coopId, puxarNotasResponsavelDaNuvem]);
+
+  useEffect(() => {
+    if (isCooperado || !coopId) return;
+    const onVisible = () => {
+      if (document.hidden) return;
+      if (vistaResponsavel !== "fila" && vistaResponsavel !== "cooperado") return;
+      puxarNotasResponsavelDaNuvem();
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => document.removeEventListener("visibilitychange", onVisible);
+  }, [isCooperado, coopId, vistaResponsavel, puxarNotasResponsavelDaNuvem]);
 
   const filaZombieCount = useAppDataSelector(
     (d) => {
