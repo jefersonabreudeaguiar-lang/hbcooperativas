@@ -4,13 +4,18 @@ import { contarFotosEnviadasNota, notaTemFotoArmazenadaNaNuvem } from "@/utils/f
 import { revokePreviewUrl } from "@/services/imagePipelineService";
 import { fetchNotaFotoPartBlobUrl, getCooperativaCnpj } from "@/services/notaPedidoCloudService";
 
-const MAX_CACHE_ENTRIES = 96;
+const MAX_CACHE_ENTRIES = 128;
 
 const blobCache = new Map<string, string>();
 const inflight = new Map<string, Promise<string | null>>();
 
-function cacheKey(cnpj: string, notaId: string, index: number): string {
-  return `${normalizeCnpj(cnpj)}:${notaId}:${index}`;
+export type ConferenciaFotoFetchOpts = {
+  preview?: boolean;
+  partCount?: number;
+};
+
+function cacheKey(cnpj: string, notaId: string, index: number, preview: boolean): string {
+  return `${normalizeCnpj(cnpj)}:${notaId}:${index}:${preview ? "p" : "f"}`;
 }
 
 function trimCacheIfNeeded(): void {
@@ -26,18 +31,20 @@ function trimCacheIfNeeded(): void {
 export function getConferenciaFotoBlobCached(
   cnpj: string,
   notaId: string,
-  index: number
+  index: number,
+  preview = true
 ): string | undefined {
-  return blobCache.get(cacheKey(cnpj, notaId, index));
+  return blobCache.get(cacheKey(cnpj, notaId, index, preview));
 }
 
 export function rememberConferenciaFotoBlob(
   cnpj: string,
   notaId: string,
   index: number,
-  url: string
+  url: string,
+  preview = true
 ): void {
-  const k = cacheKey(cnpj, notaId, index);
+  const k = cacheKey(cnpj, notaId, index, preview);
   const prev = blobCache.get(k);
   if (prev && prev !== url) revokePreviewUrl(prev);
   blobCache.set(k, url);
@@ -48,22 +55,43 @@ export async function fetchConferenciaFotoPartCached(
   cnpj: string,
   notaId: string,
   index: number,
-  partCount: number
+  partCount: number,
+  opts?: ConferenciaFotoFetchOpts
 ): Promise<string | null> {
-  const k = cacheKey(cnpj, notaId, index);
+  const preview = opts?.preview !== false;
+  const k = cacheKey(cnpj, notaId, index, preview);
   const hit = blobCache.get(k);
   if (hit) return hit;
 
   let pending = inflight.get(k);
   if (!pending) {
-    pending = fetchNotaFotoPartBlobUrl(cnpj, notaId, index, { partCount }).then((url) => {
+    pending = fetchNotaFotoPartBlobUrl(cnpj, notaId, index, {
+      partCount: opts?.partCount ?? partCount,
+      preview,
+    }).then((url) => {
       inflight.delete(k);
-      if (url) rememberConferenciaFotoBlob(cnpj, notaId, index, url);
+      if (url) rememberConferenciaFotoBlob(cnpj, notaId, index, url, preview);
       return url;
     });
     inflight.set(k, pending);
   }
   return pending;
+}
+
+/** Vizinhas da foto atual — troca instantânea ao avançar no lançamento. */
+export function prefetchAdjacentConferenciaFotos(
+  cnpj: string,
+  notaId: string,
+  centerIndex: number,
+  partCount: number
+): void {
+  if (partCount <= 1) return;
+  const digits = normalizeCnpj(cnpj);
+  if (digits.length !== 14) return;
+  for (const i of [centerIndex - 1, centerIndex + 1, centerIndex + 2]) {
+    if (i < 0 || i >= partCount) continue;
+    void fetchConferenciaFotoPartCached(digits, notaId, i, partCount, { preview: true });
+  }
 }
 
 /** Baixa todas as partes em paralelo (pool) — conferência instantânea ao trocar foto. */
@@ -77,15 +105,15 @@ export async function warmConferenciaNotaFotos(
   const digits = normalizeCnpj(cnpj);
   if (digits.length !== 14) return;
 
-  const maxParallel = Math.min(opts?.maxParallel ?? 4, partCount);
+  const maxParallel = Math.min(opts?.maxParallel ?? 6, partCount);
   let cursor = 0;
   const indices = Array.from({ length: partCount }, (_, i) => i);
 
   async function worker(): Promise<void> {
     while (cursor < indices.length) {
       const index = indices[cursor++];
-      if (blobCache.has(cacheKey(digits, notaId, index))) continue;
-      await fetchConferenciaFotoPartCached(digits, notaId, index, partCount);
+      if (blobCache.has(cacheKey(digits, notaId, index, true))) continue;
+      await fetchConferenciaFotoPartCached(digits, notaId, index, partCount, { preview: true });
     }
   }
 

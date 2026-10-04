@@ -14,6 +14,7 @@ import {
   upsertNotasInTable,
 } from "@/lib/supabase/notasStorage";
 import { pickHigherNotaStatus } from "@/utils/notaStatus";
+import { bufferFotoEntregaPreview } from "@/lib/images/fotoEntregaPreview";
 
 interface FotoUploadInput {
   cnpj: string;
@@ -255,6 +256,7 @@ export async function GET(
   const { searchParams } = new URL(request.url);
   const cnpj = normalizeCnpj(searchParams.get("cnpj") ?? "");
   const index = Number(searchParams.get("index"));
+  const preview = searchParams.get("preview") === "1";
 
   if (cnpj.length !== 14 || !Number.isFinite(index) || index < 0) {
     return NextResponse.json({ error: "Parâmetros inválidos." }, { status: 400 });
@@ -273,10 +275,22 @@ export async function GET(
     return NextResponse.json({ error: "Foto não encontrada." }, { status: 404 });
   }
 
-  return new NextResponse(new Uint8Array(part.buffer), {
+  let body = part.buffer;
+  let contentType = part.contentType;
+  if (preview) {
+    try {
+      const resized = await bufferFotoEntregaPreview(part.buffer);
+      body = resized.buffer;
+      contentType = resized.contentType;
+    } catch {
+      /* fallback: original */
+    }
+  }
+
+  return new NextResponse(new Uint8Array(body), {
     headers: {
-      "Content-Type": part.contentType,
-      "Cache-Control": "private, max-age=3600",
+      "Content-Type": contentType,
+      "Cache-Control": preview ? "private, max-age=86400" : "private, max-age=3600",
     },
   });
 }

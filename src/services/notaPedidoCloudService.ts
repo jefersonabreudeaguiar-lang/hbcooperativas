@@ -638,11 +638,16 @@ export async function resolveFotosNotaParaExibicao(
 }
 
 /** Carrega uma foto da nuvem como blob URL (libera com revokePreviewUrl). */
+export type NotaFotoPartFetchOptions = NotaFotoPartFetchPlanOptions & {
+  /** JPEG reduzido (~1280px) — conferência e troca de foto no mobile. */
+  preview?: boolean;
+};
+
 export async function fetchNotaFotoPartBlobUrl(
   cnpj: string,
   notaId: string,
   index: number,
-  options?: NotaFotoPartFetchPlanOptions
+  options?: NotaFotoPartFetchOptions
 ): Promise<string | null> {
   const digits = normalizeCnpj(cnpj);
   if (digits.length !== 14) return null;
@@ -651,8 +656,9 @@ export async function fetchNotaFotoPartBlobUrl(
   if (plan.action === "skip") return null;
 
   try {
+    const previewQ = options?.preview ? "&preview=1" : "";
     const res = await secureApiFetch(
-      `/api/notas-pedido/${encodeURIComponent(notaId)}/foto?cnpj=${digits}&index=${plan.index}`,
+      `/api/notas-pedido/${encodeURIComponent(notaId)}/foto?cnpj=${digits}&index=${plan.index}${previewQ}`,
       { cache: "default" }
     );
     if (!res.ok) return null;

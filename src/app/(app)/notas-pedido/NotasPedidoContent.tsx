@@ -88,6 +88,7 @@ import {
 import {
   fetchConferenciaFotoPartCached,
   getConferenciaFotoBlobCached,
+  prefetchAdjacentConferenciaFotos,
   scheduleWarmConferenciaNotaFotos,
   warmConferenciaNotaFotos,
 } from "@/services/conferenciaFotoPrefetch";
@@ -421,15 +422,22 @@ export default function NotasPedidoContent() {
     setFotoAtualPreview(null);
   }, []);
 
-  const revokeConferenciaFotoCache = useCallback(() => {
-    for (const url of conferenciaFotoCacheRef.current.values()) {
+  const clearConferenciaFotoLocalCache = useCallback((onlyNotaId?: string) => {
+    for (const [key, url] of [...conferenciaFotoCacheRef.current.entries()]) {
+      if (onlyNotaId && !key.startsWith(`${onlyNotaId}:`)) continue;
       revokePreviewUrl(url);
+      conferenciaFotoCacheRef.current.delete(key);
     }
-    conferenciaFotoCacheRef.current.clear();
-    conferenciaNotaEnriquecidaRef.current = null;
-    setConferenciaFotoAtualUrl(null);
-    setConferenciaFotoCarregando(false);
+    if (!onlyNotaId) {
+      conferenciaNotaEnriquecidaRef.current = null;
+      setConferenciaFotoAtualUrl(null);
+      setConferenciaFotoCarregando(false);
+    }
   }, []);
+
+  const revokeConferenciaFotoCache = useCallback(() => {
+    clearConferenciaFotoLocalCache();
+  }, [clearConferenciaFotoLocalCache]);
 
   const loadConferenciaFoto = useCallback(
     async (nota: NotaPedido, index: number): Promise<string | null> => {
@@ -461,18 +469,6 @@ export default function NotasPedidoContent() {
         }
       }
 
-      if (!stillActive()) return null;
-      setConferenciaFotoCarregando(true);
-
-      const idbFoto = await readNotaFotoAtIndex(nota, index);
-      if (idbFoto) {
-        if (!stillActive()) return null;
-        conferenciaFotoCacheRef.current.set(cacheKey, idbFoto);
-        setConferenciaFotoAtualUrl(idbFoto);
-        setConferenciaFotoCarregando(false);
-        return idbFoto;
-      }
-
       const localInline = resolveFotoInlineConferenciaNota(nota, index);
       if (localInline && !isFotoInlineMiniaturaFallback(nota, index, localInline)) {
         if (!stillActive()) return null;
@@ -482,27 +478,46 @@ export default function NotasPedidoContent() {
         return localInline;
       }
 
-      if (!notaTemFotoArmazenadaNaNuvem(nota)) {
+      if (!stillActive()) return null;
+      setConferenciaFotoCarregando(true);
+
+      let cnpj =
+        nota.cooperativaCnpj ??
+        (data && coopId ? getCooperativaCnpj(data, coopId) : undefined) ??
+        conferenciaCnpjRef.current;
+      if (!cnpj && user && coopId && notaTemFotoArmazenadaNaNuvem(nota)) {
+        cnpj = await resolveCooperativaCnpj(data ?? getData(), coopId, user);
+      }
+      if (cnpj) conferenciaCnpjRef.current = cnpj;
+
+      let notaEnriquecida = nota;
+      const cachedEnriched = conferenciaNotaEnriquecidaRef.current;
+      if (cachedEnriched?.notaId === nota.id) {
+        notaEnriquecida = cachedEnriched.nota;
+      }
+      const totalFotosNota = contarFotosEnviadasNota(notaEnriquecida);
+      const needCloud = Boolean(cnpj) && notaTemFotoArmazenadaNaNuvem(notaEnriquecida);
+
+      if (!needCloud) {
+        const idbOnly = await readNotaFotoAtIndex(nota, index);
+        if (!stillActive()) return null;
+        if (idbOnly) {
+          conferenciaFotoCacheRef.current.set(cacheKey, idbOnly);
+          setConferenciaFotoAtualUrl(idbOnly);
+          setConferenciaFotoCarregando(false);
+          return idbOnly;
+        }
         if (localInline) {
-          if (!stillActive()) return null;
           conferenciaFotoCacheRef.current.set(cacheKey, localInline);
           setConferenciaFotoAtualUrl(localInline);
           setConferenciaFotoCarregando(false);
           return localInline;
         }
-        if (!stillActive()) return null;
         setConferenciaFotoAtualUrl(null);
         setConferenciaFotoCarregando(false);
         return null;
       }
-      let cnpj =
-        nota.cooperativaCnpj ??
-        (data && coopId ? getCooperativaCnpj(data, coopId) : undefined) ??
-        conferenciaCnpjRef.current;
-      if (!cnpj && user && coopId) {
-        cnpj = await resolveCooperativaCnpj(data ?? getData(), coopId, user);
-      }
-      if (cnpj) conferenciaCnpjRef.current = cnpj;
+
       if (!cnpj) {
         if (!stillActive()) return null;
         setConferenciaFotoErro("CNPJ da cooperativa não encontrado para carregar fotos.");
@@ -513,14 +528,6 @@ export default function NotasPedidoContent() {
 
       if (!stillActive()) return null;
       try {
-        let notaEnriquecida = nota;
-        const cachedEnriched = conferenciaNotaEnriquecidaRef.current;
-        if (cachedEnriched?.notaId === nota.id) {
-          notaEnriquecida = cachedEnriched.nota;
-        }
-
-        if (!stillActive()) return null;
-
         const enrichedInline = resolveFotoInlineConferenciaNota(notaEnriquecida, index);
         if (enrichedInline && !isFotoInlineMiniaturaFallback(notaEnriquecida, index, enrichedInline)) {
           conferenciaFotoCacheRef.current.set(cacheKey, enrichedInline);
@@ -528,14 +535,22 @@ export default function NotasPedidoContent() {
           return enrichedInline;
         }
 
-        const totalFotosNota = contarFotosEnviadasNota(notaEnriquecida);
-        const url = await fetchConferenciaFotoPartCached(cnpj, notaEnriquecida.id, index, totalFotosNota);
-        if (!stillActive()) {
-          return null;
+        const [idbFoto, url] = await Promise.all([
+          readNotaFotoAtIndex(notaEnriquecida, index),
+          fetchConferenciaFotoPartCached(cnpj, notaEnriquecida.id, index, totalFotosNota, { preview: true }),
+        ]);
+        if (!stillActive()) return null;
+
+        if (idbFoto && !isFotoInlineMiniaturaFallback(notaEnriquecida, index, idbFoto)) {
+          conferenciaFotoCacheRef.current.set(cacheKey, idbFoto);
+          setConferenciaFotoAtualUrl(idbFoto);
+          prefetchAdjacentConferenciaFotos(cnpj, notaEnriquecida.id, index, totalFotosNota);
+          return idbFoto;
         }
         if (url) {
           conferenciaFotoCacheRef.current.set(cacheKey, url);
           setConferenciaFotoAtualUrl(url);
+          prefetchAdjacentConferenciaFotos(cnpj, notaEnriquecida.id, index, totalFotosNota);
           if (totalFotosNota > 1) {
             void warmConferenciaNotaFotos(cnpj, notaEnriquecida.id, totalFotosNota);
           }
@@ -725,6 +740,11 @@ export default function NotasPedidoContent() {
         selectedNota.cooperadoNomeSnapshot?.trim() ||
         getCooperadoNomeResolvido(d0, conferenciaCooperadoId, coopId);
 
+      lancamentosFotoConferenciaRef.current.set(fotoIdx, r.itens);
+      fotosLancadasConferenciaRef.current.add(fotoIdx);
+      setFotosLancadasUi(new Set(fotosLancadasConferenciaRef.current));
+
+      startTransition(() => {
       updateData((d) => {
         const cooperadoIdCanonico = resolverCooperadoIdCanonico(
           d,
@@ -744,9 +764,6 @@ export default function NotasPedidoContent() {
           conferenciaItens.map((i) => ({ ...i, valorBruto: 0 })),
           conferenciaDescontoPct
         );
-        lancamentosFotoConferenciaRef.current.set(fotoIdx, base.itens);
-        fotosLancadasConferenciaRef.current.add(fotoIdx);
-
         const divisao = resolverDivisaoConferencia(d, selectedNota);
         const fotoTag = `foto ${fotoIdx + 1}/`;
 
@@ -821,9 +838,9 @@ export default function NotasPedidoContent() {
           }
         );
       });
-
-      setFotosLancadasUi(new Set(fotosLancadasConferenciaRef.current));
       persistirDraftConferenciaEmMemoria();
+      });
+
       return { ok: true };
     },
     [
@@ -842,6 +859,18 @@ export default function NotasPedidoContent() {
       resolverDivisaoConferencia,
       persistirDraftConferenciaEmMemoria,
     ]
+  );
+
+  const conferenciaFotoJaEmCache = useCallback(
+    (notaId: string, idx: number) => {
+      const k = conferenciaFotoCacheKey(notaId, idx);
+      if (conferenciaFotoCacheRef.current.has(k)) return true;
+      const cnpj =
+        conferenciaCnpjRef.current ??
+        (data && coopId ? getCooperativaCnpj(data, coopId) : undefined);
+      return cnpj ? Boolean(getConferenciaFotoBlobCached(cnpj, notaId, idx)) : false;
+    },
+    [data, coopId]
   );
 
   const irParaFotoConferencia = useCallback(
@@ -879,7 +908,7 @@ export default function NotasPedidoContent() {
 
       setConferirErrors({});
       setConferenciaFotoErro("");
-      setConferenciaFotoCarregando(true);
+      setConferenciaFotoCarregando(!conferenciaFotoJaEmCache(selectedNota.id, clamped));
       setConferenciaFotoIdx(clamped);
       setLancamentoSequencia(null);
       carregarItensParaFotoConferencia(clamped);
@@ -891,6 +920,7 @@ export default function NotasPedidoContent() {
       conferenciaDescontoPct,
       lancarFotoConferenciaAtual,
       carregarItensParaFotoConferencia,
+      conferenciaFotoJaEmCache,
     ]
   );
 
@@ -2289,7 +2319,13 @@ export default function NotasPedidoContent() {
       lancamentoSequenciaTimerRef.current = null;
     }
     setLancamentoSequencia(null);
-    revokeConferenciaFotoCache();
+    const notaAnteriorId = selectedNota?.id;
+    if (notaAnteriorId && notaAnteriorId !== nota.id) {
+      clearConferenciaFotoLocalCache(notaAnteriorId);
+      setConferenciaFotoAtualUrl(null);
+    } else if (!notaAnteriorId) {
+      clearConferenciaFotoLocalCache();
+    }
     setConferenciaFotoErro("");
     setConferenciaFotoIdx(0);
     resetConferenciaPorFoto();
