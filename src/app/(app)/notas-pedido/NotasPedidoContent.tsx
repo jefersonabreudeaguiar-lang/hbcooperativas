@@ -51,6 +51,8 @@ import {
   inferirFotosLancadasNaFicha,
   encontrarPrimeiraFotoPendente,
   encontrarProximaFotoPendenteApos,
+  descricaoFichaCorrespondeFoto,
+  fichaJaTemLancamentoFoto,
 } from "@/lib/conferencia/conferenciaFichaHydrate";
 import {
   calcularItensNota,
@@ -663,24 +665,42 @@ export default function NotasPedidoContent() {
     return () => window.clearTimeout(id);
   }, [conferirModal, selectedNota?.id, persistirDraftConferenciaEmMemoria]);
 
-  const aplicarDraftConferenciaSeExistir = useCallback((notaId: string) => {
-    const draft = getConferenciaDraftMemoria(notaId);
-    if (!draft) return;
-    setConferenciaInstId(draft.instId);
-    setConferenciaLocal(draft.local);
-    setConferenciaDescontoPct(draft.descontoPct);
-    setConferenciaCooperadoId(draft.cooperadoId);
-    setConferenciaDivisaoQtd(draft.divisaoQtd);
-    setConferenciaDivisaoIds(draft.divisaoIds);
-    setConferenciaEscolaAvulsa(draft.escolaAvulsa);
-    setConferenciaNumeroNotaManual(draft.numeroNotaManual);
-    setConferenciaFotoIdx(draft.fotoIdx);
-    setConferenciaItens(draft.itens);
-    fotosLancadasConferenciaRef.current = new Set(draft.fotosLancadas);
-    lancamentosFotoConferenciaRef.current = restaurarLancamentosPorFoto(draft.lancamentosPorFoto);
-    setFotosLancadasUi(new Set(draft.fotosLancadas));
-    setConferenciaFotoSomenteLeitura(fotosLancadasConferenciaRef.current.has(draft.fotoIdx));
-  }, []);
+  const aplicarDraftConferenciaSeExistir = useCallback(
+    (notaId: string, opts?: { preservarProgressoFotosDaFicha?: boolean }) => {
+      const draft = getConferenciaDraftMemoria(notaId);
+      if (!draft) return;
+      setConferenciaInstId(draft.instId);
+      setConferenciaLocal(draft.local);
+      setConferenciaDescontoPct(draft.descontoPct);
+      setConferenciaCooperadoId(draft.cooperadoId);
+      setConferenciaDivisaoQtd(draft.divisaoQtd);
+      setConferenciaDivisaoIds(draft.divisaoIds);
+      setConferenciaEscolaAvulsa(draft.escolaAvulsa);
+      setConferenciaNumeroNotaManual(draft.numeroNotaManual);
+
+      if (opts?.preservarProgressoFotosDaFicha) {
+        const merged = new Set(fotosLancadasConferenciaRef.current);
+        for (const idx of draft.fotosLancadas) merged.add(idx);
+        fotosLancadasConferenciaRef.current = merged;
+        const mapa = restaurarLancamentosPorFoto(draft.lancamentosPorFoto);
+        for (const [idx, itens] of mapa.entries()) {
+          if (!lancamentosFotoConferenciaRef.current.has(idx)) {
+            lancamentosFotoConferenciaRef.current.set(idx, itens);
+          }
+        }
+        setFotosLancadasUi(new Set(fotosLancadasConferenciaRef.current));
+        return;
+      }
+
+      setConferenciaFotoIdx(draft.fotoIdx);
+      setConferenciaItens(draft.itens);
+      fotosLancadasConferenciaRef.current = new Set(draft.fotosLancadas);
+      lancamentosFotoConferenciaRef.current = restaurarLancamentosPorFoto(draft.lancamentosPorFoto);
+      setFotosLancadasUi(new Set(draft.fotosLancadas));
+      setConferenciaFotoSomenteLeitura(fotosLancadasConferenciaRef.current.has(draft.fotoIdx));
+    },
+    []
+  );
 
   const carregarItensParaFotoConferencia = useCallback(
     (fotoIdx: number) => {
@@ -699,14 +719,14 @@ export default function NotasPedidoContent() {
   );
 
   const sincronizarFotosLancadasComFicha = useCallback(
-    (d: AppData, notaId: string, totalFotos: number) => {
+    (
+      d: AppData,
+      notaId: string,
+      totalFotos: number,
+      opts?: { mergeOnly?: boolean; fotoIdxAtual?: number }
+    ) => {
       if (totalFotos <= 1) {
-        setConferenciaRetomadaFichaMsg("");
-        return;
-      }
-      const fromFicha = inferirFotosLancadasNaFicha(d, notaId, totalFotos);
-      if (fromFicha.size === 0) {
-        setConferenciaRetomadaFichaMsg("");
+        if (!opts?.mergeOnly) setConferenciaRetomadaFichaMsg("");
         return;
       }
 
@@ -717,14 +737,41 @@ export default function NotasPedidoContent() {
         const idx = Number(m[1]) - 1;
         const tot = Number(m[2]);
         if (idx < 0 || idx >= totalFotos || tot !== totalFotos) continue;
+        fotosLancadasConferenciaRef.current.add(idx);
         if (f.itens?.length) {
           lancamentosFotoConferenciaRef.current.set(idx, f.itens);
         }
       }
+
+      const fromFicha = inferirFotosLancadasNaFicha(d, notaId, totalFotos);
       for (const idx of fromFicha) {
         fotosLancadasConferenciaRef.current.add(idx);
       }
       setFotosLancadasUi(new Set(fotosLancadasConferenciaRef.current));
+
+      if (fromFicha.size === 0 && fotosLancadasConferenciaRef.current.size === 0) {
+        if (!opts?.mergeOnly) setConferenciaRetomadaFichaMsg("");
+        return;
+      }
+
+      if (opts?.mergeOnly) {
+        const idxAtual = opts.fotoIdxAtual ?? 0;
+        if (
+          fotosLancadasConferenciaRef.current.has(idxAtual) &&
+          !conferenciaParcialPendenteFinalizacao(d, notaId, totalFotos).todasLancadasNaFicha
+        ) {
+          const prox = encontrarProximaFotoPendenteApos(
+            idxAtual,
+            totalFotos,
+            fotosLancadasConferenciaRef.current
+          );
+          if (prox != null) {
+            setConferenciaFotoIdx(prox);
+            carregarItensParaFotoConferencia(prox);
+          }
+        }
+        return;
+      }
 
       const partial = conferenciaParcialPendenteFinalizacao(d, notaId, totalFotos);
       const firstPending = encontrarPrimeiraFotoPendente(
@@ -773,6 +820,16 @@ export default function NotasPedidoContent() {
       if (!user || !selectedNota) return { ok: false, error: "Entrega não selecionada." };
       if (fotosLancadasConferenciaRef.current.has(fotoIdx)) return { ok: true };
 
+      const dCheck = getData() ?? data;
+      if (
+        dCheck &&
+        fichaJaTemLancamentoFoto(dCheck.fichaCorrida, selectedNota.id, fotoIdx, totalFotos)
+      ) {
+        fotosLancadasConferenciaRef.current.add(fotoIdx);
+        setFotosLancadasUi(new Set(fotosLancadasConferenciaRef.current));
+        return { ok: true };
+      }
+
       if (conferenciaDivisaoQtd >= 2 && isDivisaoEntregaHabilitada()) {
         const ids = conferenciaDivisaoIds.slice(0, conferenciaDivisaoQtd);
         if (ids.some((id) => !id)) {
@@ -807,7 +864,6 @@ export default function NotasPedidoContent() {
       fotosLancadasConferenciaRef.current.add(fotoIdx);
       setFotosLancadasUi(new Set(fotosLancadasConferenciaRef.current));
 
-      const persistirFichaParcial = () => {
       updateData((d) => {
         const cooperadoIdCanonico = resolverCooperadoIdCanonico(
           d,
@@ -828,7 +884,6 @@ export default function NotasPedidoContent() {
           conferenciaDescontoPct
         );
         const divisao = resolverDivisaoConferencia(d, selectedNota);
-        const fotoTag = `foto ${fotoIdx + 1}/`;
 
         if (divisao) {
           const jaNaFicha = divisao.participantes.every((p) =>
@@ -836,7 +891,7 @@ export default function NotasPedidoContent() {
               (f) =>
                 f.notaPedidoId === selectedNota.id &&
                 f.cooperadoId === p.cooperadoId &&
-                f.descricao.includes(fotoTag)
+                descricaoFichaCorrespondeFoto(f.descricao, fotoIdx, totalFotos)
             )
           );
           if (jaNaFicha) return d;
@@ -877,10 +932,9 @@ export default function NotasPedidoContent() {
           totalFotos,
         });
 
-        const jaNaFicha = d.fichaCorrida.some(
-          (f) => f.notaPedidoId === selectedNota.id && f.descricao.includes(fotoTag)
-        );
-        if (jaNaFicha) return d;
+        if (fichaJaTemLancamentoFoto(d.fichaCorrida, selectedNota.id, fotoIdx, totalFotos)) {
+          return d;
+        }
 
         const arquivosMensais = upsertArquivoMensal(d, base.cooperadoId, base.cooperativaId, base.mesReferencia, {
           notaPedidoIds: [selectedNota.id],
@@ -902,13 +956,6 @@ export default function NotasPedidoContent() {
         );
       });
       persistirDraftConferenciaEmMemoria();
-      };
-
-      if (typeof queueMicrotask === "function") {
-        queueMicrotask(persistirFichaParcial);
-      } else {
-        setTimeout(persistirFichaParcial, 0);
-      }
 
       return { ok: true };
     },
@@ -982,6 +1029,16 @@ export default function NotasPedidoContent() {
           fotosLancadasConferenciaRef.current
         );
         if (proxPendente != null) clamped = proxPendente;
+      }
+
+      if (
+        fotosLancadasConferenciaRef.current.has(clamped) ||
+        fotosLancadasConferenciaRef.current.has(atual)
+      ) {
+        if (fotosLancadasConferenciaRef.current.has(clamped)) {
+          avancarParaFotoConferencia(clamped);
+          return;
+        }
       }
 
       if (clamped > atual && !fotosLancadasConferenciaRef.current.has(atual)) {
@@ -1087,6 +1144,27 @@ export default function NotasPedidoContent() {
       getData()?.notasPedido.find((n) => n.id === selectedNota.id) ?? selectedNota;
     void loadConferenciaFoto(fresh, conferenciaFotoIdx);
   }, [conferirModal, selectedNota?.id, conferenciaFotoIdx, loadConferenciaFoto, selectedNota]);
+
+  const conferenciaDataRevision = useAppDataSelector(() => getDataRevision(), []);
+
+  useEffect(() => {
+    if (!conferirModal || !selectedNota) return;
+    const total = contarFotosEnviadasNota(selectedNota);
+    if (total <= 1) return;
+    const d = getData();
+    if (!d) return;
+    sincronizarFotosLancadasComFicha(d, selectedNota.id, total, {
+      mergeOnly: true,
+      fotoIdxAtual: conferenciaFotoIdx,
+    });
+  }, [
+    conferirModal,
+    selectedNota?.id,
+    conferenciaDataRevision,
+    conferenciaFotoIdx,
+    selectedNota,
+    sincronizarFotosLancadasComFicha,
+  ]);
 
   useEffect(() => {
     if (!isCooperado) return;
@@ -2543,9 +2621,11 @@ export default function NotasPedidoContent() {
       setAbaConferenciaKey(chave);
       setFiltroCooperadoId(coopDonoId);
     }
-    aplicarDraftConferenciaSeExistir(nota.id);
-    if (d) {
+    if (d && totalFotos > 1) {
       sincronizarFotosLancadasComFicha(d, nota.id, totalFotos);
+      aplicarDraftConferenciaSeExistir(nota.id, { preservarProgressoFotosDaFicha: true });
+    } else {
+      aplicarDraftConferenciaSeExistir(nota.id);
     }
     } finally {
       setConferenciaTransicao(false);

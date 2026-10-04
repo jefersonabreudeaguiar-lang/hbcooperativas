@@ -19,6 +19,10 @@ import {
   responsavelBloquearNavegacaoConferencia,
   responsavelPreservarAbaDuranteSync,
 } from "../src/lib/conferencia/responsavelConferenciaNavigateGuard";
+import {
+  descricaoFichaCorrespondeFoto,
+  fichaJaTemLancamentoFoto,
+} from "../src/lib/conferencia/conferenciaFichaHydrate";
 
 const ROOT = join(import.meta.dirname ?? __dirname, "..");
 
@@ -78,7 +82,36 @@ assert.ok(notas.includes("clearConferenciaDraftMemoria"), "limpeza do draft");
 assert.ok(notas.includes("aplicarDraftConferenciaSeExistir"), "aplica draft ao preparar nota");
 pass("NotasPedido integra draft 8.2");
 
-assert.ok(notas.includes("partCount: totalFotosNota"), "fetch foto conferência com partCount");
+assert.equal(
+  descricaoFichaCorrespondeFoto("Nota 1 — Escola (foto 1/3)", 0, 3),
+  true
+);
+assert.equal(
+  descricaoFichaCorrespondeFoto("Nota 1 — Escola (foto 10/12)", 0, 12),
+  false
+);
+assert.equal(
+  fichaJaTemLancamentoFoto(
+    [
+      {
+        id: "fc1",
+        notaPedidoId: "n1",
+        descricao: "X (foto 10/12)",
+      } as never,
+    ],
+    "n1",
+    0,
+    12
+  ),
+  false
+);
+pass("tag foto na ficha sem falso positivo foto 1 vs 10");
+
+assert.ok(notas.includes("fichaJaTemLancamentoFoto"), "NotasPedido usa match exato de foto na ficha");
+assert.ok(
+  notas.includes("fetchConferenciaFotoPartCached") && notas.includes("totalFotosNota"),
+  "fetch foto conferência com total de partes"
+);
 assert.ok(notas.includes("setConferenciaFotoCarregando(true)"), "spinner ao trocar foto");
 pass("carga de fotos na conferência");
 

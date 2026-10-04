@@ -2,6 +2,31 @@ import type { AppData } from "@/types";
 
 const FOTO_TAG_RE = /\(foto (\d+)\/(\d+)\)/i;
 
+export function descricaoFichaCorrespondeFoto(
+  descricao: string | undefined,
+  fotoIdx: number,
+  totalFotos: number
+): boolean {
+  if (!descricao || totalFotos <= 0 || fotoIdx < 0) return false;
+  const m = descricao.match(FOTO_TAG_RE);
+  if (!m) return false;
+  const idx = Number(m[1]) - 1;
+  const tot = Number(m[2]);
+  return idx === fotoIdx && tot === totalFotos;
+}
+
+/** Evita falso positivo de `includes("foto 1/")` em `(foto 10/3)`. */
+export function fichaJaTemLancamentoFoto(
+  fichas: AppData["fichaCorrida"],
+  notaId: string,
+  fotoIdx: number,
+  totalFotos: number
+): boolean {
+  return fichas.some(
+    (f) => f.notaPedidoId === notaId && descricaoFichaCorrespondeFoto(f.descricao, fotoIdx, totalFotos)
+  );
+}
+
 /** Índices de fotos que já geraram linha na ficha (lançamento parcial multi-foto). */
 export function inferirFotosLancadasNaFicha(
   data: AppData,
