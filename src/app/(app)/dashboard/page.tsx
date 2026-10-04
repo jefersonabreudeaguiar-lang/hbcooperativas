@@ -82,7 +82,7 @@ function CooperadoDashboard() {
   const { user } = useAuth();
   const router = useRouter();
   const hbCredit = useHbCreditEnabled(user);
-  const { syncingForUi, lastSyncError } = useSyncStatus();
+  const { syncingForUi } = useSyncStatus();
   const fluxo = useCooperadoFluxoPadrao();
   const { apresentacaoConsolidada, carregandoValoresFinanceiros } = fluxo;
   const recoverySyncRef = useRef(false);
@@ -290,11 +290,6 @@ function CooperadoDashboard() {
     cnpjDigits,
   } = view;
 
-  const mostrarErroSync =
-    Boolean(lastSyncError) &&
-    !syncingForUi &&
-    (financeiroAusente || !apresentacaoConsolidada);
-
   return (
     <div className="space-y-6 max-w-3xl">
       <div>
@@ -303,13 +298,6 @@ function CooperadoDashboard() {
       </div>
 
       {cooperado && <AssinaturaStatusAviso cooperado={cooperado} />}
-
-      {mostrarErroSync && (
-        <AlertBanner variant="error" title="Não foi possível sincronizar">
-          {lastSyncError} Os dados locais foram mantidos. Verifique a internet — a atualização automática tentará
-          de novo em instantes.
-        </AlertBanner>
-      )}
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <CooperadoInicioValorReceberCard

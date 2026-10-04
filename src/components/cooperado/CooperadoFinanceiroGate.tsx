@@ -130,6 +130,13 @@ export function CooperadoFinanceiroGate({ children }: { children: React.ReactNod
     bloqueiaEntrada && !syncingForUi && (syncWaitExceeded || lastSyncedAt != null);
 
   if (falhaCarregarFicha) {
+    if (isCooperadoEventDrivenSync() || abrirComCacheInicio) {
+      solicitarRecuperacaoFinanceiroCooperado();
+      if (!isCooperadoManualOperacionalSync()) {
+        requestAppSyncImmediate();
+      }
+      return <>{children}</>;
+    }
     return (
       <div className="max-w-lg mx-auto py-8 space-y-4">
         <AlertBanner variant="error" title="Não foi possível carregar sua ficha">

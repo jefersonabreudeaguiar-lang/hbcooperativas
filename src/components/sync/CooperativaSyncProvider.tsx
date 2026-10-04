@@ -930,15 +930,19 @@ export function CooperativaSyncProvider({ children }: { children: React.ReactNod
 
   const syncingForUi = cooperadoSyncVisibleInUi(user?.role, syncing);
 
+  /** Cooperado: sync em silêncio — erros só para staff (banner no início / diagnóstico). */
+  const lastSyncErrorPublic =
+    user?.role === "cooperado" ? "" : lastSyncError;
+
   const status = useMemo(
     () => ({
       syncing,
       syncingForUi,
       lastSyncedAt,
-      lastSyncError,
+      lastSyncError: lastSyncErrorPublic,
       cooperadoPagamentosHydrated,
     }),
-    [syncing, syncingForUi, lastSyncedAt, lastSyncError, cooperadoPagamentosHydrated]
+    [syncing, syncingForUi, lastSyncedAt, lastSyncErrorPublic, cooperadoPagamentosHydrated]
   );
 
   return (
