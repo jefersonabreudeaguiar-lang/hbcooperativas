@@ -99,6 +99,8 @@ import {
   revokePreviewUrl,
   userFacingPipelineError,
   slimNotaDraftForUpload,
+  AVISO_COOPERADO_FOTOS_MEMORIA_INSUFICIENTE,
+  shouldWarnCooperadoFotosUmaPorVez,
   type ImagePipelineStep,
 } from "@/services/imagePipelineService";
 import {
@@ -286,6 +288,7 @@ export default function NotasPedidoContent() {
   const [fotoDuplicadaMsg, setFotoDuplicadaMsg] = useState("");
   const [fotoPipelineStep, setFotoPipelineStep] = useState<ImagePipelineStep | "idle">("idle");
   const [fotoValidationWarning, setFotoValidationWarning] = useState("");
+  const [avisoMemoriaFotosAnexar, setAvisoMemoriaFotosAnexar] = useState(false);
   const [processandoFoto, setProcessandoFoto] = useState(false);
   const [enviando, setEnviando] = useState(false);
   const [erroEnvio, setErroEnvio] = useState("");
@@ -1151,6 +1154,20 @@ export default function NotasPedidoContent() {
       filtroResponsavelIniciado.current = true;
     }
   }, [isCooperado, searchParams, trocarVistaResponsavel]);
+
+  useEffect(() => {
+    if (!anexarModal || !isCooperado) {
+      setAvisoMemoriaFotosAnexar(false);
+      return;
+    }
+    let cancelled = false;
+    void shouldWarnCooperadoFotosUmaPorVez().then((warn) => {
+      if (!cancelled) setAvisoMemoriaFotosAnexar(warn);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [anexarModal, isCooperado]);
 
   const resumosMensaisCooperado = useMemo(() => {
     if (!isCooperado || abaCooperado !== "entregas" || !data || !cooperadoId) return [];
@@ -3963,9 +3980,19 @@ export default function NotasPedidoContent() {
           )}
           <p className="text-sm text-gray-600">
             {reenviarNotaId
-              ? "Tire a nova foto — pode tirar a próxima na hora; o envio roda em segundo plano."
-              : `Tire as fotos do pedido (até ${MAX_FOTOS_POR_SESSAO_ENTREGA} por entrega). O envio para a nuvem é automático em segundo plano.`}
+              ? avisoMemoriaFotosAnexar
+                ? "Tire a nova foto e envie ao responsável antes de outra — neste aparelho, uma por vez."
+                : "Tire a nova foto — pode tirar a próxima na hora; o envio roda em segundo plano."
+              : avisoMemoriaFotosAnexar
+                ? "Tire a foto do pedido assinado. Neste aparelho, envie uma por vez ao responsável antes de fotografar outra."
+                : `Tire as fotos do pedido (até ${MAX_FOTOS_POR_SESSAO_ENTREGA} por entrega). O envio para a nuvem é automático em segundo plano.`}
           </p>
+
+          {avisoMemoriaFotosAnexar && (
+            <AlertBanner variant="warning" title="Pouca memória no celular">
+              {AVISO_COOPERADO_FOTOS_MEMORIA_INSUFICIENTE}
+            </AlertBanner>
+          )}
 
           {!reenviarNotaId && limiteFotosSessaoAtingido && (
             <AlertBanner variant="info" title="Limite desta entrega atingido">

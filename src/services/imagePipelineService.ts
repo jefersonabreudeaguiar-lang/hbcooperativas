@@ -92,6 +92,32 @@ export function isLowMemoryDevice(): boolean {
   return typeof dm === "number" && dm > 0 && dm <= 2;
 }
 
+const MIN_STORAGE_FREE_BYTES = 80 * 1024 * 1024;
+const STORAGE_USAGE_PRESSURE_RATIO = 0.92;
+
+export const AVISO_COOPERADO_FOTOS_MEMORIA_INSUFICIENTE =
+  "Este celular está com pouca memória ou pouco espaço livre. Para evitar falhas, tire uma foto por vez e toque em Enviar para o responsável antes de fotografar o próximo pedido.";
+
+/** Espaço no aparelho (IndexedDB / PWA) quase cheio — risco ao guardar várias fotos. */
+export async function isStoragePressureForPhotos(): Promise<boolean> {
+  if (typeof navigator === "undefined" || !navigator.storage?.estimate) return false;
+  try {
+    const { quota, usage } = await navigator.storage.estimate();
+    if (!quota || quota <= 0) return false;
+    const used = usage ?? 0;
+    if (quota - used < MIN_STORAGE_FREE_BYTES) return true;
+    return used / quota >= STORAGE_USAGE_PRESSURE_RATIO;
+  } catch {
+    return false;
+  }
+}
+
+/** Aviso no fluxo cooperado → responsável (memória RAM ou armazenamento). */
+export async function shouldWarnCooperadoFotosUmaPorVez(): Promise<boolean> {
+  if (isLowMemoryDevice()) return true;
+  return isStoragePressureForPhotos();
+}
+
 export function resolveCompressSettings(_file?: File): CompressSettings {
   const low = isLowMemoryDevice();
   return {
@@ -129,7 +155,7 @@ export function validateImageFile(file: File): ImageValidationResult {
     file.size >= WARN_IMAGE_BYTES
       ? "Foto grande — será comprimida automaticamente para envio."
       : lowMemoryDevice
-        ? "Aparelho com pouca memória — feche outros apps se a foto demorar."
+        ? "Aparelho com pouca memória — envie uma foto por vez ao responsável e feche outros apps se demorar."
         : undefined;
 
   return { ok: true, warning, lowMemoryDevice };
@@ -572,8 +598,8 @@ export function userFacingPipelineError(err: unknown): string {
     return "Envio cancelado.";
   }
   const msg = err instanceof Error ? err.message : String(err);
-  if (/mem[oó]ria|memory|canvas|pesada|grande/i.test(msg)) {
-    return "A foto está muito pesada para este celular. Tente tirar uma nova foto mais próxima ou use uma imagem menor.";
+  if (/mem[oó]ria|memory|canvas|pesada|grande|quota|espaço|espaco/i.test(msg)) {
+    return "Não deu para processar a foto neste celular. Envie uma foto por vez ao responsável, feche outros apps ou libere espaço e tente de novo.";
   }
   return msg || "Não foi possível processar a foto. Tente outra imagem ou feche outros apps.";
 }
