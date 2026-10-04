@@ -80,8 +80,8 @@ export function blindarCreditoBaseCentsHb(
 }
 
 /**
- * Limite HB efetivo para UI/API — alinhado ao valor a receber (base M6).
- * Sem base em aberto, liberado exibido = no máximo o já utilizado (compras HB pendentes de lastro).
+ * Limite HB efetivo para UI/API — percentual sobre o bruto da ficha em aberto.
+ * Sem base em aberto (mês liquidado), liberado exibido = no máximo o já utilizado (compras HB).
  */
 export function resolveLimiteHbCooperadoEfetivo(
   limite: ContaCoopLimiteCooperado,

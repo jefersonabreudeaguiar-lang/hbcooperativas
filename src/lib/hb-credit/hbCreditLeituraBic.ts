@@ -23,6 +23,7 @@ import { listarMesesPendentesPagamentoResponsavel } from "@/services/cooperadoEn
 import {
   getMesesReferenciaPagamento,
   getPagamentoConfirmadoCooperadoMes,
+  getResumoPagamentoCooperado,
   getResumoValorAPagarRelatorio,
 } from "@/services/notaPedidoService";
 
@@ -125,16 +126,48 @@ export function hbCreditCreditoBaseLastroEntregasReais(
   return round2(total);
 }
 
+function mesComBrutoFichaHbAberto(
+  data: AppData,
+  cooperadoId: string,
+  mesReferencia: string,
+  cooperativaId: string
+): boolean {
+  if (cooperadoMesQuitado(data, cooperadoId, mesReferencia)) return false;
+  if (getPagamentoConfirmadoCooperadoMes(data, cooperadoId, mesReferencia)) return false;
+  const resumo = getResumoPagamentoCooperado(data, cooperadoId, mesReferencia, cooperativaId);
+  return resumo.valorBruto > 0;
+}
+
 /**
- * Crédito-base HB (limite/teto) — somente valor a receber em aberto (M6).
- * Após quitação confirmada na ficha, base = 0 até nova entrega gerar pendência.
- * Lastro conferido sem M6 não libera crédito na aba Limites.
+ * Soma do valor bruto da ficha nos meses em aberto (mesma janela de «A receber»).
+ * Zera após liquidação do mês ou quando não há entregas pendentes.
+ */
+export function hbCreditCreditoBaseBrutoFichaAbertoReais(
+  data: AppData,
+  cooperadoId: string,
+  cooperativaId: string | undefined
+): number {
+  const coopId = cooperativaId ?? data.cooperados.find((c) => c.id === cooperadoId)?.cooperativaId;
+  if (!coopId) return 0;
+  const canonico = resolverCooperadoIdCanonico(data, cooperadoId, coopId);
+  const meses = hbCreditMesesReferenciaUnificados(data, canonico, coopId);
+  let total = 0;
+  for (const mes of meses) {
+    if (!mesComBrutoFichaHbAberto(data, canonico, mes, coopId)) continue;
+    total += getResumoPagamentoCooperado(data, canonico, mes, coopId).valorBruto;
+  }
+  return round2(total);
+}
+
+/**
+ * Crédito-base HB (limite/teto) — valor bruto da ficha nos meses em aberto.
+ * Após quitação/liquidação do «A receber», base = 0 até nova entrega gerar pendência.
  */
 export function hbCreditCreditoBaseReais(
   data: AppData,
   cooperadoId: string,
   cooperativaId: string | undefined
 ): number {
-  const m6 = hbCreditValorAReceberAgregado(data, cooperadoId, cooperativaId);
-  return m6.valor > 0 ? round2(m6.valor) : 0;
+  const bruto = hbCreditCreditoBaseBrutoFichaAbertoReais(data, cooperadoId, cooperativaId);
+  return bruto > 0 ? bruto : 0;
 }

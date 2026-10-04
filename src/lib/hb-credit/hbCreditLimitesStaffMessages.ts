@@ -25,6 +25,9 @@ export function mensagemErroListaLimitesStaff(error: unknown): string {
   ) {
     return "Não foi possível atualizar a lista agora (servidor demorou ou resposta incompleta). Os valores em cache continuam visíveis — use «Atualizar limites».";
   }
+  if (/erro ao comunicar com o servidor/i.test(msg)) {
+    return "Não foi possível atualizar a lista agora. Os valores exibidos foram mantidos — use «Atualizar limites» quando a conexão estiver estável.";
+  }
   if (msg.trim()) return msg.trim();
   return "Não foi possível carregar limites da nuvem.";
 }

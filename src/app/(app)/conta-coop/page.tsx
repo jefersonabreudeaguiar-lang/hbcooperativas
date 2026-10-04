@@ -28,7 +28,7 @@ import {
   fetchCooperadoPinResetRequests,
   resetCooperadoFinancialPin,
 } from "@/services/creditApiService";
-import { formatCentsBRL } from "@/modules/hb-credit/engine/money";
+import { computeDisponivel, formatCentsBRL } from "@/modules/hb-credit/engine/money";
 import { buildCreditosBaseMapCached, calcLimiteFromPercentual } from "@/modules/hb-credit/engine/creditBaseFromFicha";
 import { resolveLimiteHbCooperadoEfetivo } from "@/modules/hb-credit/engine/creditBaseHbGuard";
 import type { AuthoritativeCreditBaseErrorPayload } from "@/modules/hb-credit/engine/creditBaseAuthoritative";
@@ -470,21 +470,11 @@ function ContaCoopContent() {
     ) => {
       if (full.authoritativeError) {
         setLimitesListaAviso(mensagemAvisoBaseAuthoritativeLimites(full.authoritativeError));
-        startTransition(() => {
-          setCreditosBaseColetivo((prev) => {
-            const next = { ...prev };
-            for (const id of ids) next[id] = 0;
-            creditosBaseRef.current = next;
-            return next;
-          });
-        });
       } else {
         setLimitesListaAviso("");
         applyCreditosBaseFromServer(full.creditosBaseAuthoritativeCents);
       }
-      const merged = full.authoritativeError
-        ? mergeLimitesCooperado(limitesRef.current, full.limites, ids)
-        : mergeLimitesCooperado([], full.limites, ids);
+      const merged = mergeLimitesCooperado(limitesRef.current, full.limites, ids);
       startTransition(() => {
         setLimites(merged);
       });
@@ -508,7 +498,6 @@ function ContaCoopContent() {
           cooperadoIds: cooperadoIdsAtivos,
         });
         applyLimitesFetchResult(result, cooperadoIdsAtivos);
-        notifyHbCreditLimiteSynced({ immediate: true });
         return limitesRef.current;
       } catch (e) {
         setLimitesListaAviso(mensagemErroListaLimitesStaff(e));
@@ -643,10 +632,38 @@ function ContaCoopContent() {
     }
   }, [cnpj, user?.cooperativaId]);
 
+  const aplicarLimitesColetivoLocal = useCallback(
+    (percentual: number, bases: Record<string, number>, ids: string[]) => {
+      if (!cnpj || !ids.length) return;
+      const tetoPct = dashboard?.teto.tetoGlobalPercent ?? 100;
+      const libPct = Math.min(tetoPct, percentual);
+      setLimites((prev) => {
+        const map = new Map<string, ContaCoopLimiteCooperado>();
+        for (const l of prev) map.set(l.cooperadoId, l);
+        for (const id of ids) {
+          const baseCents = Math.max(0, Math.round(bases[id] ?? 0));
+          const novoLiberado = calcLimiteFromPercentual(baseCents, libPct);
+          const cur = map.get(id) ?? limitePlaceholderCooperado(id, cnpj);
+          const usado = cur.valorUsadoCents;
+          const liberado = Math.max(novoLiberado, usado);
+          map.set(id, {
+            ...cur,
+            cooperadoId: id,
+            limiteLiberadoCents: liberado,
+            valorDisponivelCents: computeDisponivel(liberado, usado),
+          });
+        }
+        const next = ids.map((id) => map.get(id)!).filter(Boolean);
+        limitesRef.current = next;
+        return next;
+      });
+    },
+    [cnpj, dashboard?.teto.tetoGlobalPercent]
+  );
+
   const refreshLimitesAposLiberacao = useCallback(() => {
-    void reload({ background: true });
     void revalidateLimitesLista({ force: true, background: true });
-  }, [reload, revalidateLimitesLista]);
+  }, [revalidateLimitesLista]);
 
   const refreshHbNuvemEmBackground = useCallback(() => {
     void reload({ background: true });
@@ -786,9 +803,9 @@ function ContaCoopContent() {
 
       setPercentualColetivo(String(pct));
       setPreviewColetivo(null);
+      aplicarLimitesColetivoLocal(pct, creditosBaseCents, cooperadoIds);
       gravarHbCreditLimitesPersistidos(cnpj, limitesRef.current, creditosBaseRef.current, pct);
-      setSuccess("Percentual salvo na nuvem. A lista atualiza em segundo plano.");
-      notifyHbCreditLimiteSynced({ immediate: true });
+      setSuccess("Percentual salvo na nuvem.");
       refreshLimitesAposLiberacao();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Erro ao salvar percentual.");
@@ -869,9 +886,10 @@ function ContaCoopContent() {
         creditosBaseCents,
       });
       setPreviewColetivo(null);
+      const ids = cooperadosAtivos.map((c) => c.id);
+      aplicarLimitesColetivoLocal(percentual, creditosBaseCents, ids);
       gravarHbCreditLimitesPersistidos(cnpj, limitesRef.current, creditosBaseRef.current, percentual);
-      setSuccess("Limites liberados na nuvem. A lista atualiza em segundo plano.");
-      notifyHbCreditLimiteSynced({ immediate: true });
+      setSuccess("Limites liberados na nuvem.");
       refreshLimitesAposLiberacao();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Erro ao liberar limites.");
@@ -1268,7 +1286,7 @@ function ContaCoopContent() {
               <h3 className="font-semibold text-gray-900">Percentual de compra HB</h3>
               <p className="text-sm text-gray-600">
                 Salvo na nuvem — aplica o percentual em todos os cooperados (mesmo efeito de «Liberar todos») e
-                limita o crédito HB ao % do valor a receber na ficha.
+                limita o crédito HB ao % do valor bruto da ficha (meses em aberto).
               </p>
             </div>
             <div className="flex flex-wrap gap-2 items-end">
@@ -1336,7 +1354,7 @@ function ContaCoopContent() {
           <Card className="overflow-hidden !p-0">
             <div className="flex flex-wrap items-center justify-between gap-3 border-b bg-gray-50 px-4 py-3 text-sm text-gray-600">
               <p>
-                <strong className="text-gray-900">Crédito (ficha)</strong> = valor a receber em aberto na nuvem
+                <strong className="text-gray-900">Crédito (ficha)</strong> = valor bruto da ficha nos meses em aberto (nuvem)
                 (operacional + notas), mesma base do painel HB e da tela do cooperado após sync.
               </p>
               <Button

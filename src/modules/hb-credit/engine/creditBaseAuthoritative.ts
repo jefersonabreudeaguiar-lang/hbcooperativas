@@ -11,7 +11,7 @@ import { normalizeCnpj } from "@/utils/cooperativa";
 import { buildCreditosBaseMap } from "./creditBaseFromFicha";
 import { blindarMapaCreditoBaseCentsHb, prepararAppDataParaCreditoBaseHb } from "./creditBaseHbGuard";
 
-/** Snapshot operacional + notas — mesma base que responsável/cooperado (valor a receber pendente). */
+/** Snapshot operacional + notas — mesma base que responsável/cooperado (bruto da ficha em aberto). */
 export function buildMinimalAppDataForCreditBase(opts: {
   operacional: OperacionalSyncPayload;
   cooperativaId: string;

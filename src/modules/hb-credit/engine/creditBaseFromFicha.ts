@@ -27,7 +27,7 @@ function prepararCreditoBase(data: AppData, cooperativaId?: string): AppData {
   return prepararAppDataParaCreditoBaseHb(data, cnpjParaCreditoBase(data, cooperativaId));
 }
 
-/** Crédito base HB — valor a receber (M6) em aberto; blindagem anti-fantasma separada. */
+/** Crédito base HB — valor bruto da ficha em meses em aberto; blindagem anti-fantasma separada. */
 export function getCreditoBaseContaCoopReais(
   data: AppData,
   cooperadoId: string,

@@ -129,7 +129,7 @@ function miniData(overrides: Partial<AppData> = {}): AppData {
   const lastro = hbCreditCreditoBaseLastroEntregasReais(data, COOPERADO, COOP);
   assert.equal(lastro, 500, "lastro histórico permanece para diagnóstico");
   const baseReais = hbCreditCreditoBaseReais(data, COOPERADO, COOP);
-  assert.equal(baseReais, 0, "crédito-base HB = só valor a receber em aberto");
+  assert.equal(baseReais, 0, "crédito-base HB = bruto da ficha em meses em aberto (mês quitado zera)");
   const eff = resolveLimiteHbCooperadoEfetivo(limiteRow(50_000, 0), 0, 100);
   assert.equal(eff.limiteLiberadoCents, 0);
   assert.equal(eff.valorDisponivelCents, 0);
