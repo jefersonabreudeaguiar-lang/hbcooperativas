@@ -3057,7 +3057,7 @@ export function reenviarSolicitacaoAssinaturaRecibo(
     pagamento.cooperativaId
   );
   const valorTxt = pagamento.valorLiquido.toFixed(2).replace(".", ",");
-  const descricao = `A cooperativa registrou o pagamento de ${valorTxt} referente a ${mesLabel}. Abra Quanto vou receber, confirme o recebimento e assine o recibo.`;
+  const descricao = `A cooperativa registrou o pagamento de ${valorTxt} referente a ${mesLabel}. Abra Financeiro, confirme o recebimento e assine o recibo.`;
 
   const pagamentosCooperado = data.pagamentosCooperado.map((p) =>
     p.id === pagamentoId

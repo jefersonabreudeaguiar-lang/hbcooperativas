@@ -289,7 +289,7 @@ export default function MeuCadastroContent() {
           <Button variant="secondary" className="w-full" size="lg">Enviar foto da entrega</Button>
         </Link>
         <Link href="/ficha-corrida" className="flex-1">
-          <Button variant="secondary" className="w-full" size="lg"><Wallet size={18} /> Ver quanto vou receber</Button>
+          <Button variant="secondary" className="w-full" size="lg"><Wallet size={18} /> Abrir Financeiro</Button>
         </Link>
       </div>
     </div>

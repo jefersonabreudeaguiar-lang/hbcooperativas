@@ -3216,7 +3216,7 @@ export default function NotasPedidoContent() {
   return (
     <div className="relative pb-20 sm:pb-0">
       <PageHeader
-        title={isCooperado ? "Minhas entregas" : "Conferir entregas"}
+        title={isCooperado ? "Entregas" : "Conferir entregas"}
         subtitle={
           isCooperado
             ? abaCooperado === "ficha"
@@ -3605,7 +3605,7 @@ export default function NotasPedidoContent() {
           ) : (
             <>
               Resumo financeiro por mês. Valores em aberto também em{" "}
-              <Link href="/ficha-corrida" className="text-green-700 font-semibold">Quanto vou receber</Link>.
+              <Link href="/ficha-corrida" className="text-green-700 font-semibold">Financeiro</Link>.
             </>
           )}
         </p>
@@ -3623,7 +3623,7 @@ export default function NotasPedidoContent() {
                 : "border-transparent text-gray-500 hover:text-gray-700"
             )}
           >
-            <Package size={16} /> Minhas entregas
+            <Package size={16} /> Entregas
           </button>
           <button
             type="button"
@@ -3802,7 +3802,7 @@ export default function NotasPedidoContent() {
                 Enviar outra entrega
               </Button>
               <Button type="button" size="lg" onClick={concluirSessaoEntregas}>
-                <CheckCircle size={18} /> Ver minhas entregas
+                <CheckCircle size={18} /> Ver entregas
               </Button>
             </div>
           ) : (

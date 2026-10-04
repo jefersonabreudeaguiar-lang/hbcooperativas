@@ -1328,7 +1328,7 @@ export default function FichaCorridaPage() {
   return (
     <div>
       <PageHeader
-        title={isCooperado ? "Quanto vou receber" : "Pagar cooperados"}
+        title={isCooperado ? "Financeiro" : "Pagar cooperados"}
         subtitle={
           isCooperado
             ? "Mês em aberto com valores pendentes — meses pagos ficam nas abas ao lado"
@@ -1430,11 +1430,11 @@ export default function FichaCorridaPage() {
           <p className="text-gray-600 mt-2 max-w-md mx-auto">
             O mês de {formatMesReferencia(mesAtivo)} já foi quitado. Consulte o histórico na aba{" "}
             <strong>{formatMesReferencia(mesAtivo)}</strong> ou veja entregas em{" "}
-            <strong>Minhas entregas</strong>.
+            <strong>Entregas</strong>.
           </p>
           <Link href="/notas-pedido" className="inline-block mt-6">
             <Button size="lg">
-              <History size={18} /> Ver minhas entregas
+              <History size={18} /> Ver entregas
             </Button>
           </Link>
         </div>
@@ -1467,7 +1467,7 @@ export default function FichaCorridaPage() {
             Quando a cooperativa aprovar suas entregas, os valores aparecem aqui automaticamente.
           </p>
           <Link href="/notas-pedido" className="inline-block mt-4">
-            <Button variant="secondary">Ver minhas entregas</Button>
+            <Button variant="secondary">Ver entregas</Button>
           </Link>
         </div>
       )}

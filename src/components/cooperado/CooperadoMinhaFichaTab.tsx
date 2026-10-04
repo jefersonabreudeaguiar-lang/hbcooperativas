@@ -422,7 +422,7 @@ function MesFichaAccordion({
             {!quitado && resumo.valorAReceber > 0 && (
               <Link href={linkQuantoVouReceber}>
                 <Button size="sm">
-                  <Wallet size={16} /> Quanto vou receber
+                  <Wallet size={16} /> Financeiro
                 </Button>
               </Link>
             )}
@@ -588,7 +588,7 @@ export const CooperadoMinhaFichaTab = memo(function CooperadoMinhaFichaTab({
           <p className="text-3xl font-bold text-green-800 mt-1">{formatCurrency(totalPendente)}</p>
           {totalPendente > 0 && (
             <Link href={linkQuantoVouReceber} className="inline-block mt-3 text-sm font-medium text-green-700 hover:underline">
-              Ver em Quanto vou receber →
+              Ver em Financeiro →
             </Link>
           )}
         </div>
@@ -625,7 +625,7 @@ export const CooperadoMinhaFichaTab = memo(function CooperadoMinhaFichaTab({
         <>
           <p className="text-sm font-semibold text-gray-800 pt-2">Pagamentos realizados</p>
           <p className="text-xs text-gray-500">
-            Valores congelados no momento do PIX confirmado — consulte também em Quanto vou receber (histórico).
+            Valores congelados no momento do PIX confirmado — consulte também em Financeiro (histórico).
           </p>
           <div className="space-y-3">
             {resumosHistorico.map((resumo) => (

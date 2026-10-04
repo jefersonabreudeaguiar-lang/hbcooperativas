@@ -301,9 +301,9 @@ export function isReadOnlyAuditorRole(role: UserRole): boolean {
 
 const COOPERADO_MENU: { href: string; label: string; resource: Resource }[] = [
   { href: "/dashboard", label: "Início", resource: "dashboard" },
-  { href: "/notas-pedido", label: "Minhas entregas", resource: "notas_pedido" },
+  { href: "/notas-pedido", label: "Entregas", resource: "notas_pedido" },
   { href: "/precos", label: "Preços", resource: "instituicoes" },
-  { href: "/ficha-corrida", label: "Quanto vou receber", resource: "ficha_corrida" },
+  { href: "/ficha-corrida", label: "Financeiro", resource: "ficha_corrida" },
   { href: "/mensalidades", label: "Mensalidades", resource: "mensalidades" },
   { href: "/meu-cadastro", label: "Meu cadastro", resource: "dashboard" },
   { href: "/prestacao-contas", label: "Prestação de contas", resource: "prestacao_contas" },
