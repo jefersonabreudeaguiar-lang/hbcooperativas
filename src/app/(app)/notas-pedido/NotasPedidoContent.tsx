@@ -47,6 +47,10 @@ import {
   setConferenciaDraftMemoria,
 } from "@/lib/conferencia/conferenciaDraftMemoria";
 import {
+  conferenciaParcialPendenteFinalizacao,
+  inferirFotosLancadasNaFicha,
+} from "@/lib/conferencia/conferenciaFichaHydrate";
+import {
   calcularItensNota,
   gerarNumeroNota,
   isNumeroNotaJaConferidaParaCooperado,
@@ -275,6 +279,7 @@ export default function NotasPedidoContent() {
   const [viewFotosCarregando, setViewFotosCarregando] = useState(false);
   const [successMsg, setSuccessMsg] = useState("");
   const [lancadoMsg, setLancadoMsg] = useState("");
+  const [conferenciaRetomadaFichaMsg, setConferenciaRetomadaFichaMsg] = useState("");
 
   const [formErrors, setFormErrors] = useState<{ foto?: string; escolaAvulsa?: string; contrato?: string }>({});
   const [usarEscolaAvulsa, setUsarEscolaAvulsa] = useState(false);
@@ -674,6 +679,61 @@ export default function NotasPedidoContent() {
     setFotosLancadasUi(new Set(draft.fotosLancadas));
     setConferenciaFotoSomenteLeitura(fotosLancadasConferenciaRef.current.has(draft.fotoIdx));
   }, []);
+
+  const sincronizarFotosLancadasComFicha = useCallback(
+    (d: AppData, notaId: string, totalFotos: number) => {
+      if (totalFotos <= 1) {
+        setConferenciaRetomadaFichaMsg("");
+        return;
+      }
+      const fromFicha = inferirFotosLancadasNaFicha(d, notaId, totalFotos);
+      if (fromFicha.size === 0) {
+        setConferenciaRetomadaFichaMsg("");
+        return;
+      }
+
+      for (const f of d.fichaCorrida) {
+        if (f.notaPedidoId !== notaId) continue;
+        const m = f.descricao?.match(/\(foto (\d+)\/(\d+)\)/i);
+        if (!m) continue;
+        const idx = Number(m[1]) - 1;
+        const tot = Number(m[2]);
+        if (idx < 0 || idx >= totalFotos || tot !== totalFotos) continue;
+        if (f.itens?.length) {
+          lancamentosFotoConferenciaRef.current.set(idx, f.itens);
+        }
+      }
+      for (const idx of fromFicha) {
+        fotosLancadasConferenciaRef.current.add(idx);
+      }
+      setFotosLancadasUi(new Set(fotosLancadasConferenciaRef.current));
+
+      const partial = conferenciaParcialPendenteFinalizacao(d, notaId, totalFotos);
+      let firstPending = totalFotos - 1;
+      for (let i = 0; i < totalFotos; i++) {
+        if (!fotosLancadasConferenciaRef.current.has(i)) {
+          firstPending = i;
+          break;
+        }
+      }
+
+      if (partial.todasLancadasNaFicha) {
+        setConferenciaRetomadaFichaMsg(
+          `As ${totalFotos} fotos já constam na ficha. Revise os valores e toque em Aprovar para concluir — a entrega só sai da fila após a aprovação final.`
+        );
+        setConferenciaFotoIdx(totalFotos - 1);
+        carregarItensParaFotoConferencia(totalFotos - 1);
+        return;
+      }
+
+      setConferenciaRetomadaFichaMsg(
+        `${partial.lancadas} de ${totalFotos} fotos já foram lançadas na ficha neste aparelho. Continue pela próxima foto pendente.`
+      );
+      setConferenciaFotoIdx(firstPending);
+      carregarItensParaFotoConferencia(firstPending);
+    },
+    [carregarItensParaFotoConferencia]
+  );
 
   const resolverDivisaoConferencia = useCallback(
     (d: AppData, nota: NotaPedido) => {
@@ -2355,6 +2415,7 @@ export default function NotasPedidoContent() {
     setConferenciaFotoAmpliada(false);
     setConferirModal(false);
     setSelectedNota(null);
+    setConferenciaRetomadaFichaMsg("");
     if (notaIdFechada) clearConferenciaDraftMemoria(notaIdFechada);
   };
 
@@ -2451,6 +2512,9 @@ export default function NotasPedidoContent() {
       setFiltroCooperadoId(coopDonoId);
     }
     aplicarDraftConferenciaSeExistir(nota.id);
+    if (d) {
+      sincronizarFotosLancadasComFicha(d, nota.id, totalFotos);
+    }
     } finally {
       setConferenciaTransicao(false);
     }
@@ -4496,6 +4560,11 @@ export default function NotasPedidoContent() {
           <div className="absolute inset-0 z-20 flex items-center justify-center bg-white/80 backdrop-blur-sm">
             <p className="text-sm font-medium text-gray-700">Carregando próxima entrega…</p>
           </div>
+        )}
+        {conferenciaRetomadaFichaMsg && (
+          <AlertBanner variant="info" className="mb-3" onDismiss={() => setConferenciaRetomadaFichaMsg("")}>
+            {conferenciaRetomadaFichaMsg}
+          </AlertBanner>
         )}
         {selectedNota && (
           <div className="flex flex-col lg:flex-row h-[calc(100dvh-8.5rem)] max-h-[calc(100dvh-8.5rem)] min-h-0 overflow-hidden">
