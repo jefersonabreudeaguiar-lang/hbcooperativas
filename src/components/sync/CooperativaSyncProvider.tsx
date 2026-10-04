@@ -100,6 +100,7 @@ import {
 import { markRqlColdStartPhase } from "@/lib/performance/rqlMarks";
 import { useCooperadoStaffRevisionWatch } from "@/hooks/useCooperadoStaffRevisionWatch";
 import { fetchCooperativaCloudRevision } from "@/services/cooperativaSyncRevisionService";
+import { notifyCooperadoSubtleUpdate } from "@/lib/cooperadoSubtleUpdate";
 import { requestCooperadoAppReleaseSync, type SyncRunOptions } from "@/services/syncRequest";
 
 const COOPERADO_PUSH_GAP_MS = 5 * 60 * 1000;
@@ -474,10 +475,15 @@ export function CooperativaSyncProvider({ children }: { children: React.ReactNod
     lastSyncStartedAtRef.current = now;
 
     const cooperadoLogadoEarly = currentUser.role === "cooperado";
+    const cooperadoSyncEmSegundoPlano =
+      cooperadoLogadoEarly &&
+      isCooperadoEventDrivenSync() &&
+      opts?.eventDriven === true &&
+      opts?.userInitiated !== true;
     const cooperadoUiSync =
       !cooperadoLogadoEarly ||
       !isCooperadoManualOperacionalSync() ||
-      opts?.userInitiated === true;
+      (opts?.userInitiated === true && !cooperadoSyncEmSegundoPlano);
     const silentCooperadoOpen =
       cooperadoLogadoEarly &&
       isCooperadoInstantResumeEnabled() &&
@@ -495,6 +501,9 @@ export function CooperativaSyncProvider({ children }: { children: React.ReactNod
         h197PassiveContext(currentUser, cooperadoPagamentosHydratedRef, true)
       );
     }
+    const eventDrivenRun = opts?.eventDriven === true;
+    const cooperadoHadHydrationAtSyncStart =
+      cooperadoLogadoEarly && cooperadoPagamentosHydratedRef.current;
     let completed = false;
     try {
       const sessionOk = await ensureCloudSessionReady(userToCloudProfile(currentUser));
@@ -540,10 +549,9 @@ export function CooperativaSyncProvider({ children }: { children: React.ReactNod
                 currentCoopId
               )
             : true);
-        const preserveHydration = cooperadoPreserveHydrationOnSilentSync(
-          currentUser,
-          cooperadoPagamentosHydratedRef.current
-        );
+        const preserveHydration =
+          cooperadoSyncEmSegundoPlano ||
+          cooperadoPreserveHydrationOnSilentSync(currentUser, cooperadoPagamentosHydratedRef.current);
         if (mustClearFinancePresentation && !preserveHydration) {
           setCooperadoPagamentosHydrated(false);
         }
@@ -702,6 +710,14 @@ export function CooperativaSyncProvider({ children }: { children: React.ReactNod
       }
       if (completed && hasCooperadoEventDrivenGrant()) {
         consumeCooperadoEventDrivenSyncGrant();
+      }
+      if (
+        completed &&
+        eventDrivenRun &&
+        cooperadoHadHydrationAtSyncStart &&
+        userRef.current?.role === "cooperado"
+      ) {
+        notifyCooperadoSubtleUpdate();
       }
       bindCooperadoRunSyncSessionLease(null);
       syncingRef.current = false;

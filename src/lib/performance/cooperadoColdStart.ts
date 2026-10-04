@@ -133,6 +133,9 @@ export function cooperadoLocalResumeReady(user: Omit<User, "password"> | null): 
 export function cooperadoSyncAffectsPresentation(role: string | undefined, syncing: boolean): boolean {
   if (!syncing) return false;
   if (role !== "cooperado") return true;
+  if (isCooperadoEventDrivenSync()) {
+    return isCooperadoUserSyncVisible();
+  }
   if (isCooperadoManualOperacionalSync()) {
     return isCooperadoUserSyncVisible();
   }

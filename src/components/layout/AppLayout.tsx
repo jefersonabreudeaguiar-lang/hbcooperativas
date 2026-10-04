@@ -19,7 +19,8 @@ import { getUserFuncaoLabel, isCooperadoAppUser } from "@/permissions";
 import { getUserCooperativaNome } from "@/utils/cooperativa";
 import { PLATFORM_NAME, PLATFORM_TAGLINE } from "@/utils/constants";
 import { AppIcon } from "@/components/ui/AppIcon";
-import { CooperadoAtualizarButton, SyncStatusChip, SyncStatusChipLight } from "@/components/sync/SyncStatusChip";
+import { SyncStatusChip, SyncStatusChipLight } from "@/components/sync/SyncStatusChip";
+import { CooperadoSubtleUpdateNotice } from "@/components/cooperado/CooperadoSubtleUpdateNotice";
 import { CobrancaSaasPainel } from "@/components/payments/CobrancaSaasPainelWrapper";
 import { PainelResponsavelMobileBar } from "@/components/permissions/PainelResponsavelMobileBar";
 import { ContratoServicoAppGate } from "@/components/cobranca/ContratoServicoAppGate";
@@ -162,11 +163,6 @@ export function Sidebar({ mobile = false, onClose }: { mobile?: boolean; onClose
           <p className="text-sm font-medium truncate">{navUser.name}</p>
           <p className="text-xs text-green-300">{getUserFuncaoLabel(navUser)}</p>
         </div>
-        {!mobile && isCooperadoAppUser(navUser) && (
-          <div className="px-1 pb-2">
-            <CooperadoAtualizarButton className="w-full justify-center !rounded-lg py-2 text-xs" />
-          </div>
-        )}
         <Link
           href="/baixar-app"
           onClick={onClose}
@@ -209,11 +205,7 @@ export function MobileNav() {
       <header className="lg:hidden flex items-center justify-between gap-2 px-4 py-3 bg-green-900 text-white sticky top-0 z-40">
         <BrandHeader compact />
         <div className="flex items-center gap-1.5 shrink-0">
-          {isCooperadoAppUser(navUser) ? (
-            <CooperadoAtualizarButton />
-          ) : (
-            <SyncStatusChip />
-          )}
+          {!isCooperadoAppUser(navUser) && <SyncStatusChip />}
           <button onClick={() => setOpen(true)} className="p-2 hover:bg-green-800 rounded-lg" aria-label="Abrir menu">
             <Menu size={22} />
           </button>
@@ -310,6 +302,7 @@ function AppShellInner({ children }: { children: React.ReactNode }) {
   return (
     <div className="flex h-[100dvh] max-h-[100dvh] bg-gray-50 overflow-hidden">
       <AppUpdateBanner />
+      {navUser && isCooperadoAppUser(navUser) && <CooperadoSubtleUpdateNotice />}
       <Sidebar />
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
         {!mercadoQrImmersive && <MobileNav />}

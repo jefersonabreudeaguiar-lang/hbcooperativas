@@ -57,13 +57,10 @@ assert(syncReq.includes("requestCooperadoAppReleaseSync"), "pedido sync por vers
 assert(provider.includes("COOPERADO_ATUALIZAR_TIMEOUT_MS"), "timeout dedicado atualizar cooperado");
 const appLayout = read("src/components/layout/AppLayout.tsx");
 assert(
-  !appLayout.includes("hidden lg:inline-flex") || !appLayout.includes("CooperadoAtualizarButton"),
-  "um unico CooperadoAtualizarButton no main (sem duplicata desktop)"
+  !appLayout.includes("CooperadoAtualizarButton"),
+  "cooperado sem botao Atualizar na shell"
 );
-assert(
-  appLayout.includes("CooperadoAtualizarButton") && appLayout.includes("!mobile && isCooperadoAppUser"),
-  "cooperado atualizar no sidebar desktop"
-);
+assert(appLayout.includes("CooperadoSubtleUpdateNotice"), "aviso sutil nova atualizacao");
 assert(provider.includes("scheduleCooperadoColdStartSync"), "provider agenda sync único");
 assert(gate.includes("shouldSkipCooperadoSecondaryMountSync"), "gate dedupe sync mount");
 assert(gate.includes("syncingForUi"), "gate usa syncingForUi");

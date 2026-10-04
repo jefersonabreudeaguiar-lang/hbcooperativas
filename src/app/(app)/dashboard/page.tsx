@@ -306,8 +306,8 @@ function CooperadoDashboard() {
 
       {mostrarErroSync && (
         <AlertBanner variant="error" title="Não foi possível sincronizar">
-          {lastSyncError} Use o botão <strong>Atualizar</strong> no topo da tela (celular) ou no menu lateral
-          (computador).
+          {lastSyncError} Os dados locais foram mantidos. Verifique a internet — a atualização automática tentará
+          de novo em instantes.
         </AlertBanner>
       )}
 
