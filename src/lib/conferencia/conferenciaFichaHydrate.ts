@@ -41,3 +41,28 @@ export function conferenciaParcialPendenteFinalizacao(
     todasLancadasNaFicha: totalFotos > 0 && lancadas >= totalFotos,
   };
 }
+
+/** Primeira foto ainda sem lançamento na ficha (multi-foto). */
+export function encontrarPrimeiraFotoPendente(
+  totalFotos: number,
+  lancadas: ReadonlySet<number>
+): number {
+  if (totalFotos <= 0) return 0;
+  for (let i = 0; i < totalFotos; i++) {
+    if (!lancadas.has(i)) return i;
+  }
+  return totalFotos - 1;
+}
+
+/** Próxima foto pendente após `aposIdx`, ou null se só faltam as já lançadas. */
+export function encontrarProximaFotoPendenteApos(
+  aposIdx: number,
+  totalFotos: number,
+  lancadas: ReadonlySet<number>
+): number | null {
+  if (totalFotos <= 0) return null;
+  for (let i = aposIdx + 1; i < totalFotos; i++) {
+    if (!lancadas.has(i)) return i;
+  }
+  return null;
+}

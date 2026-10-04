@@ -49,6 +49,8 @@ import {
 import {
   conferenciaParcialPendenteFinalizacao,
   inferirFotosLancadasNaFicha,
+  encontrarPrimeiraFotoPendente,
+  encontrarProximaFotoPendenteApos,
 } from "@/lib/conferencia/conferenciaFichaHydrate";
 import {
   calcularItensNota,
@@ -725,13 +727,10 @@ export default function NotasPedidoContent() {
       setFotosLancadasUi(new Set(fotosLancadasConferenciaRef.current));
 
       const partial = conferenciaParcialPendenteFinalizacao(d, notaId, totalFotos);
-      let firstPending = totalFotos - 1;
-      for (let i = 0; i < totalFotos; i++) {
-        if (!fotosLancadasConferenciaRef.current.has(i)) {
-          firstPending = i;
-          break;
-        }
-      }
+      const firstPending = encontrarPrimeiraFotoPendente(
+        totalFotos,
+        fotosLancadasConferenciaRef.current
+      );
 
       if (partial.todasLancadasNaFicha) {
         setConferenciaRetomadaFichaMsg(
@@ -808,7 +807,7 @@ export default function NotasPedidoContent() {
       fotosLancadasConferenciaRef.current.add(fotoIdx);
       setFotosLancadasUi(new Set(fotosLancadasConferenciaRef.current));
 
-      startTransition(() => {
+      const persistirFichaParcial = () => {
       updateData((d) => {
         const cooperadoIdCanonico = resolverCooperadoIdCanonico(
           d,
@@ -903,7 +902,13 @@ export default function NotasPedidoContent() {
         );
       });
       persistirDraftConferenciaEmMemoria();
-      });
+      };
+
+      if (typeof queueMicrotask === "function") {
+        queueMicrotask(persistirFichaParcial);
+      } else {
+        setTimeout(persistirFichaParcial, 0);
+      }
 
       return { ok: true };
     },
@@ -937,6 +942,27 @@ export default function NotasPedidoContent() {
     [data, coopId]
   );
 
+  const avancarParaFotoConferencia = useCallback(
+    (destIdx: number) => {
+      if (!selectedNota) return;
+      const total = contarFotosEnviadasNota(selectedNota);
+      const clamped = Math.min(Math.max(0, destIdx), Math.max(0, total - 1));
+      setConferirErrors({});
+      setConferenciaFotoErro("");
+      setConferenciaFotoCarregando(!conferenciaFotoJaEmCache(selectedNota.id, clamped));
+      setConferenciaFotoIdx(clamped);
+      setLancamentoSequencia(null);
+      carregarItensParaFotoConferencia(clamped);
+      void loadConferenciaFoto(selectedNota, clamped);
+    },
+    [
+      selectedNota,
+      carregarItensParaFotoConferencia,
+      conferenciaFotoJaEmCache,
+      loadConferenciaFoto,
+    ]
+  );
+
   const irParaFotoConferencia = useCallback(
     (novoIdx: number) => {
       if (!selectedNota) return;
@@ -946,8 +972,17 @@ export default function NotasPedidoContent() {
         return;
       }
 
-      const clamped = Math.min(Math.max(0, novoIdx), total - 1);
+      let clamped = Math.min(Math.max(0, novoIdx), total - 1);
       const atual = conferenciaFotoIdx;
+
+      if (clamped > atual && clamped === atual + 1) {
+        const proxPendente = encontrarProximaFotoPendenteApos(
+          atual,
+          total,
+          fotosLancadasConferenciaRef.current
+        );
+        if (proxPendente != null) clamped = proxPendente;
+      }
 
       if (clamped > atual && !fotosLancadasConferenciaRef.current.has(atual)) {
         const r = calcularItensNota(
@@ -970,12 +1005,7 @@ export default function NotasPedidoContent() {
         }
       }
 
-      setConferirErrors({});
-      setConferenciaFotoErro("");
-      setConferenciaFotoCarregando(!conferenciaFotoJaEmCache(selectedNota.id, clamped));
-      setConferenciaFotoIdx(clamped);
-      setLancamentoSequencia(null);
-      carregarItensParaFotoConferencia(clamped);
+      avancarParaFotoConferencia(clamped);
     },
     [
       selectedNota,
@@ -983,8 +1013,7 @@ export default function NotasPedidoContent() {
       conferenciaItens,
       conferenciaDescontoPct,
       lancarFotoConferenciaAtual,
-      carregarItensParaFotoConferencia,
-      conferenciaFotoJaEmCache,
+      avancarParaFotoConferencia,
     ]
   );
 
@@ -2436,8 +2465,11 @@ export default function NotasPedidoContent() {
       clearConferenciaFotoLocalCache();
     }
     setConferenciaFotoErro("");
-    setConferenciaFotoIdx(0);
-    resetConferenciaPorFoto();
+    const mesmaNota = notaAnteriorId === nota.id;
+    if (!mesmaNota) {
+      setConferenciaFotoIdx(0);
+      resetConferenciaPorFoto();
+    }
 
     let notaComFoto = nota;
     if (d && coopId) {
@@ -2776,11 +2808,15 @@ export default function NotasPedidoContent() {
         return;
       }
       setConferirErrors({});
-      setLancadoMsg(`Foto ${fotoAtual + 1} lançada na ficha. Preencha a foto ${fotoAtual + 2}.`);
-      setTimeout(() => setLancadoMsg(""), 3500);
-      startTransition(() => {
-        irParaFotoConferencia(fotoAtual + 1);
-      });
+      const proxPendente = encontrarProximaFotoPendenteApos(
+        fotoAtual,
+        qtdFotosAprovadas,
+        fotosLancadasConferenciaRef.current
+      );
+      const proxIdx = proxPendente ?? Math.min(fotoAtual + 1, qtdFotosAprovadas - 1);
+      setLancadoMsg(`Foto ${fotoAtual + 1} lançada na ficha. Preencha a foto ${proxIdx + 1}.`);
+      setTimeout(() => setLancadoMsg(""), 2800);
+      avancarParaFotoConferencia(proxIdx);
       return;
     }
 
@@ -3033,7 +3069,9 @@ export default function NotasPedidoContent() {
           setTimeout(() => setLancadoMsg(""), 4000);
           await prepararConferenciaNota(proxima, { transicao: true });
         } else {
-          await aguardarSequenciaLancamentoFotos(notaAprovadaRef, qtdFotosAprovadas);
+          await aguardarSequenciaLancamentoFotos(notaAprovadaRef, qtdFotosAprovadas, {
+            rapido: qtdFotosAprovadas > 1,
+          });
           fecharConferirModal();
           setLancadoMsg(
             divisaoPreview
