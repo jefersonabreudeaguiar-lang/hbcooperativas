@@ -546,6 +546,37 @@ export default function NotasPedidoContent() {
     [data, coopId, user]
   );
 
+  const tentarRecarregarFotosConferencia = useCallback(async () => {
+    if (!selectedNota || !coopId) return;
+    setConferenciaFotoErro("");
+    setConferenciaTransicao(true);
+    try {
+      const idx = conferenciaFotoIdx;
+      const d = getData() ?? data;
+      let nota = selectedNota;
+      if (d) {
+        nota = await ensureNotaComFoto(d, nota, coopId);
+        conferenciaNotaEnriquecidaRef.current = { notaId: nota.id, nota };
+        setSelectedNota((prev) =>
+          prev && prev.id === nota.id
+            ? prev.status === "aguardando_conferencia"
+              ? { ...nota, status: "aguardando_conferencia" as const }
+              : nota
+            : prev
+        );
+      }
+      for (const [key, url] of conferenciaFotoCacheRef.current.entries()) {
+        if (key.startsWith(`${nota.id}:`)) {
+          revokePreviewUrl(url);
+          conferenciaFotoCacheRef.current.delete(key);
+        }
+      }
+      await loadConferenciaFoto(nota, idx);
+    } finally {
+      setConferenciaTransicao(false);
+    }
+  }, [selectedNota, coopId, data, conferenciaFotoIdx, loadConferenciaFoto]);
+
   const resetConferenciaPorFoto = useCallback(() => {
     fotosLancadasConferenciaRef.current = new Set();
     lancamentosFotoConferenciaRef.current = new Map();
@@ -778,6 +809,7 @@ export default function NotasPedidoContent() {
       });
 
       setFotosLancadasUi(new Set(fotosLancadasConferenciaRef.current));
+      persistirDraftConferenciaEmMemoria();
       return { ok: true };
     },
     [
@@ -794,6 +826,7 @@ export default function NotasPedidoContent() {
       conferenciaDivisaoQtd,
       conferenciaDivisaoIds,
       resolverDivisaoConferencia,
+      persistirDraftConferenciaEmMemoria,
     ]
   );
 
@@ -2234,21 +2267,9 @@ export default function NotasPedidoContent() {
 
     let notaComFoto = nota;
     if (d && coopId) {
-      if (opts?.transicao) {
-        notaComFoto = d.notasPedido.find((n) => n.id === nota.id) ?? nota;
-        void ensureNotaComFoto(d, notaComFoto, coopId).then((enriched) => {
-          conferenciaNotaEnriquecidaRef.current = { notaId: enriched.id, nota: enriched };
-          setSelectedNota((prev) => {
-            if (!prev || prev.id !== enriched.id) return prev;
-            return prev.status === "aguardando_conferencia"
-              ? { ...enriched, status: "aguardando_conferencia" as const }
-              : enriched;
-          });
-        });
-      } else {
-        notaComFoto = await ensureNotaComFoto(d, nota, coopId);
-        conferenciaNotaEnriquecidaRef.current = { notaId: notaComFoto.id, nota: notaComFoto };
-      }
+      const base = d.notasPedido.find((n) => n.id === nota.id) ?? nota;
+      notaComFoto = await ensureNotaComFoto(d, base, coopId);
+      conferenciaNotaEnriquecidaRef.current = { notaId: notaComFoto.id, nota: notaComFoto };
     }
     const totalFotos = contarFotosEnviadasNota(notaComFoto);
     setSelectedNota(
@@ -2912,6 +2933,7 @@ export default function NotasPedidoContent() {
 
   const executarExclusaoEntregaResponsavel = async (alvo: NotaPedido) => {
     if (!isDiretoria || !user || !data || !coopId) return;
+    const permanecerEmCorrecoes = vistaResponsavel === "correcoes";
     const check = podeExcluirEntregaNota(data, alvo.id, coopId);
     if (!check.ok) {
       setSuccessMsg(mensagemBloqueioExclusaoEntrega(check.reason));
@@ -2969,6 +2991,10 @@ export default function NotasPedidoContent() {
     } else {
       requestAppSyncLight();
     }
+
+    if (permanecerEmCorrecoes) {
+      startVistaTransition(() => setVistaResponsavel("correcoes"));
+    }
   };
 
   const executarRelancarEntregaResponsavel = async (alvo: NotaPedido) => {
@@ -2996,13 +3022,10 @@ export default function NotasPedidoContent() {
 
     touchNotaNaFilaSticky(notaRelancada);
 
-    voltarFilaResponsavel();
-    if (statusFilter !== "aguardando_conferencia") {
-      setStatusFilter("aguardando_conferencia");
-    }
+    startVistaTransition(() => setVistaResponsavel("correcoes"));
 
     setSuccessMsg(
-      `Entrega ${alvo.numeroNota} re-lançada. Ela voltou para «Conferir entregas» — você pode re-lançar outra entrega aqui.`
+      `Entrega ${alvo.numeroNota} re-lançada para conferência. Você continua em Correções — pode apagar ou re-lançar outra entrega.`
     );
 
     const notaCloud = notaRelancada;
@@ -4446,7 +4469,7 @@ export default function NotasPedidoContent() {
                           type="button"
                           variant="secondary"
                           size="sm"
-                          onClick={() => selectedNota && void prepararConferenciaNota(selectedNota, { transicao: true })}
+                          onClick={() => void tentarRecarregarFotosConferencia()}
                         >
                           Tentar carregar de novo
                         </Button>
@@ -4466,7 +4489,7 @@ export default function NotasPedidoContent() {
                           type="button"
                           variant="secondary"
                           size="sm"
-                          onClick={() => selectedNota && void prepararConferenciaNota(selectedNota, { transicao: true })}
+                          onClick={() => void tentarRecarregarFotosConferencia()}
                         >
                           Tentar carregar de novo
                         </Button>
