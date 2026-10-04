@@ -798,6 +798,24 @@ export async function deleteAllNotasForCnpj(
  * Fotos subiram como rascunho (upload incremental) mas o cooperado não concluiu
  * "Enviar para o responsável" — invisível na fila até publicar status.
  */
+/** Marca d’água leve para cooperado event-driven (sem baixar notas). */
+export async function fetchNotasMaxUpdatedAt(
+  supabase: SupabaseClient,
+  cnpj: string
+): Promise<string | null> {
+  const digits = cnpj.replace(/\D/g, "");
+  if (digits.length !== 14) return null;
+  const { data, error } = await supabase
+    .from("notas_pedido")
+    .select("updated_at")
+    .eq("cooperativa_cnpj", digits)
+    .order("updated_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (error || !data?.updated_at) return null;
+  return typeof data.updated_at === "string" ? data.updated_at : null;
+}
+
 async function promoteRascunhosComFotoParaFilaConferencia(
   supabase: SupabaseClient,
   cnpj: string

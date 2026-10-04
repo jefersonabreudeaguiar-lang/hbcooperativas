@@ -16,6 +16,10 @@ import {
 } from "@/lib/cooperadoInicioCardPersistencia";
 import { filtrarInicioCardPersistidoLeituraBic } from "@/lib/cooperadoInicioCardPolicy";
 import { markRqlColdStartPhase } from "@/lib/performance/rqlMarks";
+import {
+  hasCooperadoEventDrivenGrant,
+  isCooperadoEventDrivenSync,
+} from "@/lib/performance/cooperadoEventDrivenSync";
 
 /** Fail-closed: desligar com NEXT_PUBLIC_COOPERADO_INSTANT_RESUME=false */
 export function isCooperadoInstantResumeEnabled(): boolean {
@@ -40,7 +44,9 @@ export function isCooperadoManualOperacionalSync(): boolean {
 
 export function cooperadoOperacionalSyncPermitido(): boolean {
   if (!isCooperadoManualOperacionalSync()) return true;
-  return isCooperadoUserSyncVisible();
+  if (isCooperadoUserSyncVisible()) return true;
+  if (isCooperadoEventDrivenSync() && hasCooperadoEventDrivenGrant()) return true;
+  return false;
 }
 
 let pendingSilentSync = false;

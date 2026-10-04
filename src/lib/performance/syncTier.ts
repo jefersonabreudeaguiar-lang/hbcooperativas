@@ -11,6 +11,8 @@ export type SyncTierRequest = {
   immediate?: boolean;
   /** Cooperado com sync manual: só «Atualizar agora». */
   userInitiated?: boolean;
+  /** Cooperado event-driven: lançamento do responsável ou nova versão do app. */
+  eventDriven?: boolean;
 };
 
 /** Tier mais “forte” vence ao coalescer pedidos no mesmo debounce. */
@@ -33,6 +35,7 @@ export function mergeSyncTierRequests(
     force: current.force || incoming.force,
     immediate: current.immediate || incoming.immediate,
     userInitiated: Boolean(current.userInitiated || incoming.userInitiated),
+    eventDriven: Boolean(current.eventDriven || incoming.eventDriven),
   };
 }
 

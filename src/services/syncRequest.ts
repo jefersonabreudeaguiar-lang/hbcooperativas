@@ -7,15 +7,25 @@ import {
   cooperadoOperacionalSyncPermitido,
   isCooperadoManualOperacionalSync,
   markCooperadoUserSyncVisible,
+  markNextCooperadoSyncSilent,
   takePendingCooperadoSilentSync,
 } from "@/lib/performance/cooperadoColdStart";
+import {
+  grantCooperadoEventDrivenSync,
+  isCooperadoEventDrivenSync,
+} from "@/lib/performance/cooperadoEventDrivenSync";
 import { getSession } from "@/services/dataStore";
 import {
   defaultForceForSyncTier,
   type SyncTier,
 } from "@/lib/performance/syncTier";
 
-export type SyncRunOptions = { force?: boolean; silent?: boolean; userInitiated?: boolean };
+export type SyncRunOptions = {
+  force?: boolean;
+  silent?: boolean;
+  userInitiated?: boolean;
+  eventDriven?: boolean;
+};
 
 type SyncHandler = (opts: SyncRunOptions) => void;
 
@@ -24,11 +34,16 @@ let schedulerBridgeAttached = false;
 
 const SYNC_DEBOUNCE_MS = 450;
 
-function dispatchSync(opts: { force: boolean; userInitiated?: boolean }): void {
+function dispatchSync(opts: { force: boolean; userInitiated?: boolean; eventDriven?: boolean }): void {
   if (typeof document !== "undefined" && document.hidden) return;
   if (typeof navigator !== "undefined" && !navigator.onLine) return;
   const silent = takePendingCooperadoSilentSync();
-  syncHandler?.({ force: opts.force, silent, userInitiated: opts.userInitiated === true });
+  syncHandler?.({
+    force: opts.force,
+    silent,
+    userInitiated: opts.userInitiated === true,
+    eventDriven: opts.eventDriven === true,
+  });
 }
 
 function ensureSchedulerBridge(): void {
@@ -51,18 +66,28 @@ export function registerSyncHandler(handler: SyncHandler): () => void {
  * HX 8.0 — pedido de sync por tier (coalescência + debounce no AppScheduler).
  * `force` explícito prevalece; senão usa default do tier.
  */
-function cooperadoBloqueiaSyncOperacionalAutomatico(): boolean {
+function cooperadoBloqueiaSyncOperacionalAutomatico(opts?: {
+  userInitiated?: boolean;
+  eventDriven?: boolean;
+}): boolean {
   if (!isCooperadoManualOperacionalSync()) return false;
   const session = getSession();
   if (session?.role !== "cooperado") return false;
+  if (opts?.userInitiated || opts?.eventDriven) return false;
   return !cooperadoOperacionalSyncPermitido();
 }
 
 export function requestSyncTier(
   tier: SyncTier,
-  options?: { force?: boolean; immediate?: boolean; userInitiated?: boolean }
+  options?: { force?: boolean; immediate?: boolean; userInitiated?: boolean; eventDriven?: boolean }
 ): void {
-  if (!options?.userInitiated && cooperadoBloqueiaSyncOperacionalAutomatico()) return;
+  if (
+    !options?.userInitiated &&
+    !options?.eventDriven &&
+    cooperadoBloqueiaSyncOperacionalAutomatico()
+  ) {
+    return;
+  }
   ensureSchedulerBridge();
   const force = options?.force ?? defaultForceForSyncTier(tier);
   enqueueAppSyncRequest({
@@ -70,13 +95,43 @@ export function requestSyncTier(
     force,
     immediate: options?.immediate,
     userInitiated: options?.userInitiated === true,
+    eventDriven: options?.eventDriven === true,
   });
+}
+
+/** Sync silenciosa após detectar lançamento do responsável na nuvem. */
+export function requestCooperadoStaffRevisionSync(): void {
+  if (!isCooperadoEventDrivenSync()) return;
+  requestSyncTier("operacional_full", { force: true, immediate: true, eventDriven: true });
+}
+
+/** Primeira carga / app novo — uma vez até ter ficha local. */
+export function requestCooperadoPrimeiraCargaSync(): void {
+  if (!isCooperadoEventDrivenSync()) return;
+  grantCooperadoEventDrivenSync();
+  markNextCooperadoSyncSilent();
+  requestSyncTier("operacional_full", { force: true, immediate: true, eventDriven: true });
+}
+
+/** Nova versão do app publicada — sync operacional única. */
+export function requestCooperadoAppReleaseSync(): void {
+  if (!isCooperadoEventDrivenSync()) return;
+  grantCooperadoEventDrivenSync();
+  markNextCooperadoSyncSilent();
+  requestSyncTier("operacional_full", { force: true, immediate: true, eventDriven: true });
 }
 
 /** Sync leve (respeita intervalo mínimo; pull sem push autoritativo na gestão). */
 export function requestAppSyncLight(): void {
   if (cooperadoBloqueiaSyncOperacionalAutomatico()) return;
   requestSyncTier("pulse", { force: false });
+}
+
+/** Botão Atualizar: força checagem + sync (ação explícita do cooperado). */
+export function requestCooperadoManualRefreshSync(): void {
+  markCooperadoUserSyncVisible();
+  grantCooperadoEventDrivenSync();
+  requestSyncTier("operacional_full", { force: true, immediate: true, userInitiated: true });
 }
 
 /**

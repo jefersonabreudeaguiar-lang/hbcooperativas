@@ -46,6 +46,24 @@ assert(
 );
 assert(sync.includes("takePendingCooperadoSilentSync"), "silent flag no dispatch");
 assert(provider.includes("syncingForUi"), "contexto syncingForUi");
+assert(provider.includes("syncCooperadoAtualizarFromCloud"), "cooperado botao usa sync rapido");
+assert(provider.includes("useCooperadoStaffRevisionWatch"), "vigia revisao responsavel");
+assert(provider.includes("isCooperadoEventDrivenSync"), "sync event-driven cooperado");
+const eventDriven = read("src/lib/performance/cooperadoEventDrivenSync.ts");
+assert(eventDriven.includes("fingerprintCooperativaCloudRevision"), "marca dagua nuvem");
+const syncReq = read("src/services/syncRequest.ts");
+assert(syncReq.includes("requestCooperadoStaffRevisionSync"), "pedido sync por lancamento");
+assert(syncReq.includes("requestCooperadoAppReleaseSync"), "pedido sync por versao app");
+assert(provider.includes("COOPERADO_ATUALIZAR_TIMEOUT_MS"), "timeout dedicado atualizar cooperado");
+const appLayout = read("src/components/layout/AppLayout.tsx");
+assert(
+  !appLayout.includes("hidden lg:inline-flex") || !appLayout.includes("CooperadoAtualizarButton"),
+  "um unico CooperadoAtualizarButton no main (sem duplicata desktop)"
+);
+assert(
+  appLayout.includes("CooperadoAtualizarButton") && appLayout.includes("!mobile && isCooperadoAppUser"),
+  "cooperado atualizar no sidebar desktop"
+);
 assert(provider.includes("scheduleCooperadoColdStartSync"), "provider agenda sync único");
 assert(gate.includes("shouldSkipCooperadoSecondaryMountSync"), "gate dedupe sync mount");
 assert(gate.includes("syncingForUi"), "gate usa syncingForUi");

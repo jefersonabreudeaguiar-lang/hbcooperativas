@@ -306,17 +306,8 @@ function CooperadoDashboard() {
 
       {mostrarErroSync && (
         <AlertBanner variant="error" title="Não foi possível sincronizar">
-          {lastSyncError}{" "}
-          <button
-            type="button"
-            className="ml-1 font-semibold underline"
-            onClick={() => {
-              recoverySyncRef.current = false;
-              requestAppSyncImmediate();
-            }}
-          >
-            Tentar novamente
-          </button>
+          {lastSyncError} Use o botão <strong>Atualizar</strong> no topo da tela (celular) ou no menu lateral
+          (computador).
         </AlertBanner>
       )}
 

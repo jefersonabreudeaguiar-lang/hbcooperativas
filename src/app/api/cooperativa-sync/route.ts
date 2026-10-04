@@ -15,6 +15,7 @@ import {
   deleteAllNotasForCnpj,
   fetchNotasFromStorage,
   fetchNotasFromTable,
+  fetchNotasMaxUpdatedAt,
   mergeNotasSources,
 } from "@/lib/supabase/notasStorage";
 import { avaliarFullResetOperacionalCompletude } from "@/services/cooperativaSyncCloudService";
@@ -45,6 +46,22 @@ export async function GET(request: Request) {
   const supabase = getSupabaseAdmin();
   if (!supabase) {
     return NextResponse.json({ configured: false, contratos: null, operacional: null });
+  }
+
+  if (searchParams.get("revisionOnly") === "1") {
+    const [contratos, operacionalRaw, notasUpdatedAt] = await Promise.all([
+      fetchContratosSync(supabase, cnpj),
+      fetchOperacionalSync(supabase, cnpj),
+      fetchNotasMaxUpdatedAt(supabase, cnpj),
+    ]);
+    return NextResponse.json({
+      configured: true,
+      revisionOnly: true,
+      operacionalUpdatedAt: operacionalRaw?.updatedAt ?? null,
+      operationalResetVersion: operacionalRaw?.operationalResetVersion ?? 0,
+      contratosUpdatedAt: contratos?.updatedAt ?? null,
+      notasUpdatedAt,
+    });
   }
 
   const [contratos, operacionalRaw] = await Promise.all([

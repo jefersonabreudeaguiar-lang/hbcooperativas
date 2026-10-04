@@ -28,6 +28,7 @@ import {
   getSyncMinGapMs,
   ensureCooperadoFinanceiroFromCloud,
   syncCooperativaBackground,
+  syncCooperadoAtualizarFromCloud,
   syncCooperativaBidirectional,
   syncOperacionalFromCloud,
   type SyncOperacionalFromCloudResult,
@@ -87,14 +88,26 @@ import {
   resetCooperadoUserSyncVisible,
   scheduleCooperadoColdStartSync,
 } from "@/lib/performance/cooperadoColdStart";
+import {
+  consumeCooperadoEventDrivenSyncGrant,
+  cooperadoAppReleaseNeedsOperacionalSync,
+  fingerprintCooperativaCloudRevision,
+  hasCooperadoEventDrivenGrant,
+  isCooperadoEventDrivenSync,
+  persistAppliedCooperativaCloudRevision,
+  persistOperacionalSyncedAppBuild,
+} from "@/lib/performance/cooperadoEventDrivenSync";
 import { markRqlColdStartPhase } from "@/lib/performance/rqlMarks";
-import type { SyncRunOptions } from "@/services/syncRequest";
+import { useCooperadoStaffRevisionWatch } from "@/hooks/useCooperadoStaffRevisionWatch";
+import { fetchCooperativaCloudRevision } from "@/services/cooperativaSyncRevisionService";
+import { requestCooperadoAppReleaseSync, type SyncRunOptions } from "@/services/syncRequest";
 
 const COOPERADO_PUSH_GAP_MS = 5 * 60 * 1000;
 /** Intervalo mínimo entre pulls de operacional só para votação (bem menor que sync completa). */
 const VOTACAO_OPERACIONAL_PULL_GAP_MS = 45_000;
 /** Evita sync infinita — libera o chip "Atualizando…" mesmo em cooperativas grandes. */
 const SYNC_TIMEOUT_MS = 90_000;
+const COOPERADO_ATUALIZAR_TIMEOUT_MS = 45_000;
 
 function h197PassiveContext(
   user: ReturnType<typeof useAuth>["user"],
@@ -124,13 +137,13 @@ function mensagemErroPullOperacionalCooperado(result: SyncOperacionalFromCloudRe
   }
 }
 
-function withSyncTimeout<T>(promise: Promise<T>, label: string): Promise<T> {
+function withSyncTimeout<T>(promise: Promise<T>, label: string, timeoutMs = SYNC_TIMEOUT_MS): Promise<T> {
   return Promise.race([
     promise,
     new Promise<T>((_, reject) => {
       setTimeout(
         () => reject(new Error(`${label} demorou demais. Tente de novo em instantes.`)),
-        SYNC_TIMEOUT_MS
+        timeoutMs
       );
     }),
   ]);
@@ -423,7 +436,8 @@ export function CooperativaSyncProvider({ children }: { children: React.ReactNod
     if (
       currentUser.role === "cooperado" &&
       isCooperadoManualOperacionalSync() &&
-      opts?.userInitiated !== true
+      opts?.userInitiated !== true &&
+      opts?.eventDriven !== true
     ) {
       return;
     }
@@ -535,6 +549,11 @@ export function CooperativaSyncProvider({ children }: { children: React.ReactNod
         }
       }
 
+      const cooperadoAtualizarRapido =
+        cooperadoLogado &&
+        isCooperadoManualOperacionalSync() &&
+        (opts?.userInitiated === true || opts?.eventDriven === true);
+
       await withSyncTimeout(
         (async () => {
           if (cooperadoLogado) {
@@ -543,24 +562,34 @@ export function CooperativaSyncProvider({ children }: { children: React.ReactNod
               resolverCooperadoIdCanonico(getData(), currentUser.cooperadoId, currentCoopId);
             cooperadoSyncSession = acquireCooperativaSyncSessionLease(cnpj);
             bindCooperadoRunSyncSessionLease(cooperadoSyncSession);
-            await syncCooperativaBackground(cnpj, currentCoopId, cooperadoCanonico || undefined, {
-              sessionLease: cooperadoSyncSession,
-            });
+            if (cooperadoAtualizarRapido && cooperadoCanonico) {
+              await syncCooperadoAtualizarFromCloud(cnpj, currentCoopId, cooperadoCanonico, {
+                sessionLease: cooperadoSyncSession,
+              });
+            } else {
+              await syncCooperativaBackground(cnpj, currentCoopId, cooperadoCanonico || undefined, {
+                sessionLease: cooperadoSyncSession,
+              });
+            }
             if (cooperadoCanonico) {
-              const recovered = await ensureCooperadoFinanceiroFromCloud(
-                cnpj,
-                currentCoopId,
+              const aindaDesatualizado = cooperadoFinanceiroDesatualizado(
+                getData(),
                 cooperadoCanonico,
-                { sessionLease: cooperadoSyncSession }
+                currentCoopId
               );
-              if (
-                !recovered &&
-                cooperadoFinanceiroDesatualizado(getData(), cooperadoCanonico, currentCoopId)
-              ) {
-                setLastSyncError(
-                  getLastCloudSyncError() ||
-                    "Não foi possível baixar sua ficha. Verifique a internet e toque em Atualizar agora."
+              if (aindaDesatualizado) {
+                const recovered = await ensureCooperadoFinanceiroFromCloud(
+                  cnpj,
+                  currentCoopId,
+                  cooperadoCanonico,
+                  { sessionLease: cooperadoSyncSession }
                 );
+                if (!recovered && cooperadoFinanceiroDesatualizado(getData(), cooperadoCanonico, currentCoopId)) {
+                  setLastSyncError(
+                    getLastCloudSyncError() ||
+                      "Não foi possível baixar sua ficha. Verifique a internet e toque em Atualizar agora."
+                  );
+                }
               }
             }
           } else {
@@ -572,23 +601,31 @@ export function CooperativaSyncProvider({ children }: { children: React.ReactNod
           if (currentUser.role === "cooperado" && currentUser.cooperadoId) {
             const latest = getData();
             const cooperadoCanonico = resolverCooperadoIdCanonico(latest, currentUser.cooperadoId, currentCoopId);
-            await refreshCooperadoNotasEmAnalise(cnpj, currentUser.cooperadoId, currentCoopId, {
-              sessionLease: cooperadoSyncSession,
-            });
-            await republishLocalAguardandoConferencia(cnpj, currentUser.cooperadoId, currentCoopId);
+            const posSyncCooperado = async () => {
+              await refreshCooperadoNotasEmAnalise(cnpj, currentUser.cooperadoId!, currentCoopId, {
+                sessionLease: cooperadoSyncSession,
+              });
+              await republishLocalAguardandoConferencia(cnpj, currentUser.cooperadoId!, currentCoopId);
 
-            const registro = latest.cooperados.find((c) => c.id === cooperadoCanonico);
+              const registro = getData().cooperados.find((c) => c.id === cooperadoCanonico);
 
-            if (registro && now - lastCooperadoPushRef.current >= COOPERADO_PUSH_GAP_MS) {
-              await pushCooperadoToCloud(cnpj, registro, currentUser.email);
-              lastCooperadoPushRef.current = Date.now();
+              if (registro && now - lastCooperadoPushRef.current >= COOPERADO_PUSH_GAP_MS) {
+                await pushCooperadoToCloud(cnpj, registro, currentUser.email);
+                lastCooperadoPushRef.current = Date.now();
+              }
+
+              const cooperadoNome = getCooperadoNome(getData().cooperados, cooperadoCanonico);
+              void runCooperadoFotoUploadsInBackground(cnpj, cooperadoCanonico, cooperadoNome, currentCoopId);
+            };
+            if (cooperadoAtualizarRapido) {
+              void posSyncCooperado();
+            } else {
+              await posSyncCooperado();
             }
-
-            const cooperadoNome = getCooperadoNome(latest.cooperados, cooperadoCanonico);
-            void runCooperadoFotoUploadsInBackground(cnpj, cooperadoCanonico, cooperadoNome, currentCoopId);
           }
         })(),
-        "Sincronização"
+        "Sincronização",
+        cooperadoAtualizarRapido ? COOPERADO_ATUALIZAR_TIMEOUT_MS : SYNC_TIMEOUT_MS
       );
 
       completed = true;
@@ -635,7 +672,9 @@ export function CooperativaSyncProvider({ children }: { children: React.ReactNod
           user: currentUser,
         });
       };
-      if (cooperadoLogado || opts?.force) {
+      if (cooperadoAtualizarRapido) {
+        void refreshHb();
+      } else if (cooperadoLogado || opts?.force) {
         await refreshHb();
       } else {
         window.setTimeout(refreshHb, staffUser ? 8_000 : 2_500);
@@ -645,6 +684,25 @@ export function CooperativaSyncProvider({ children }: { children: React.ReactNod
         setLastSyncError(e instanceof Error ? e.message : "Erro na sincronização.");
       }
     } finally {
+      if (userRef.current?.role === "cooperado" && completed) {
+        const coopIdFinal = getUserCooperativaId(userRef.current, getData());
+        if (coopIdFinal) {
+          void resolveCooperativaCnpj(getData(), coopIdFinal, userRef.current).then(async (cnpjDone) => {
+            if (!cnpjDone) return;
+            const remote = await fetchCooperativaCloudRevision(cnpjDone);
+            if (remote) {
+              persistAppliedCooperativaCloudRevision(
+                cnpjDone,
+                fingerprintCooperativaCloudRevision(remote)
+              );
+            }
+            persistOperacionalSyncedAppBuild();
+          });
+        }
+      }
+      if (completed && hasCooperadoEventDrivenGrant()) {
+        consumeCooperadoEventDrivenSyncGrant();
+      }
       bindCooperadoRunSyncSessionLease(null);
       syncingRef.current = false;
       setSyncing(false);
@@ -736,6 +794,7 @@ export function CooperativaSyncProvider({ children }: { children: React.ReactNod
         force: runOpts.force ?? false,
         silent: runOpts.silent,
         userInitiated: runOpts.userInitiated === true,
+        eventDriven: runOpts.eventDriven === true,
       });
     });
 
@@ -744,11 +803,15 @@ export function CooperativaSyncProvider({ children }: { children: React.ReactNod
       user?.role === "tesoureiro" ||
       user?.role === "admin";
 
-    const cooperadoSemAutoSync = user?.role === "cooperado" && isCooperadoManualOperacionalSync();
+    const cooperadoSemAutoSync =
+      user?.role === "cooperado" &&
+      (isCooperadoManualOperacionalSync() || isCooperadoEventDrivenSync());
 
     let initialDelay: ReturnType<typeof setTimeout> | undefined;
     if (cooperadoSemAutoSync) {
-      /* Sync operacional só via botão Atualizar (HB Créditos fora deste fluxo). */
+      if (isCooperadoEventDrivenSync() && cooperadoAppReleaseNeedsOperacionalSync()) {
+        requestCooperadoAppReleaseSync();
+      }
     } else if (user?.role === "cooperado" && isCooperadoInstantResumeEnabled()) {
       if (!document.hidden) {
         markUserActivity();
@@ -827,6 +890,27 @@ export function CooperativaSyncProvider({ children }: { children: React.ReactNod
       markRqlColdStartPhase("local_resume_ready");
     }
   }, [user?.id, user?.role, markCooperadoPagamentosHydrated]);
+
+  const [cooperadoCnpj, setCooperadoCnpj] = useState<string | null>(null);
+  useEffect(() => {
+    if (user?.role !== "cooperado" || !coopId || !user) {
+      setCooperadoCnpj(null);
+      return;
+    }
+    let cancelled = false;
+    void resolveCooperativaCnpj(getData(), coopId, user).then((cnpj) => {
+      if (!cancelled) setCooperadoCnpj(cnpj ?? null);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [user?.id, user?.role, coopId]);
+
+  useCooperadoStaffRevisionWatch({
+    cnpj: cooperadoCnpj,
+    enabled: user?.role === "cooperado" && isCooperadoEventDrivenSync(),
+    syncing,
+  });
 
   const syncingForUi = cooperadoSyncVisibleInUi(user?.role, syncing);
 

@@ -2481,6 +2481,61 @@ export async function syncCooperativaBackground(
 }
 
 /**
+ * Cooperado tocou «Atualizar»: ficha/notas/perfil sem contratos (mais rápido que background completo).
+ */
+export async function syncCooperadoAtualizarFromCloud(
+  cnpj: string,
+  preferredCoopId: string,
+  cooperadoId: string,
+  opts?: SyncCooperativaBackgroundOpts
+): Promise<void> {
+  const digits = normalizeCnpj(cnpj);
+  if (digits.length !== 14) return;
+
+  const session = opts?.sessionLease ?? acquireCooperativaSyncSessionLease(digits);
+
+  beginCloudSync();
+  try {
+    await ensureCloudOperationalResetApplied(digits, preferredCoopId, session);
+
+    const bundleHint = await fetchSyncBundle(digits);
+    const restoreAtivo = cloudOperacionalRestoreAtivo(bundleHint?.operacional);
+
+    await runWithBatchedSaveAsync(
+      async () => {
+        await syncCooperativaProfileFromCloud(digits);
+        await syncCooperadosFromCloud(digits, preferredCoopId);
+        const notasOpts = { sessionLease: session };
+        if (restoreAtivo) {
+          await syncOperacionalFromCloud(digits, { sessionLease: session });
+          await syncNotasPedidoFromCloud(digits, notasOpts);
+        } else {
+          await syncNotasPedidoFromCloud(digits, notasOpts);
+          await syncOperacionalFromCloud(digits, { sessionLease: session });
+        }
+        const operacionalCloud =
+          bundleHint?.operacional ?? (await fetchSyncBundle(digits))?.operacional ?? null;
+        if (!isOperacionalCloudAuthoritative(digits)) {
+          await repararIntegridadeFichaNotas(digits, preferredCoopId, cooperadoId, {
+            sessionLease: session,
+          });
+        }
+        saveAppDataIfSyncLeaseCurrent(
+          session,
+          finalizeOperacionalPullLocalState(getData(), operacionalCloud, digits)
+        );
+        const after = getData();
+        const limpo = limparFichaObsoletaCooperado(after, cooperadoId, preferredCoopId);
+        if (limpo !== after) saveAppDataIfSyncLeaseCurrent(session, limpo);
+      },
+      { shouldPersistBatch: () => session.isCurrent() }
+    );
+  } finally {
+    endCloudSync();
+  }
+}
+
+/**
  * Repara desalinhamento ficha↔notas (delta vazio, relogin no celular) para qualquer cooperado.
  */
 export async function repararIntegridadeFichaNotas(

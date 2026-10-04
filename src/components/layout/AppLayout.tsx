@@ -162,6 +162,11 @@ export function Sidebar({ mobile = false, onClose }: { mobile?: boolean; onClose
           <p className="text-sm font-medium truncate">{navUser.name}</p>
           <p className="text-xs text-green-300">{getUserFuncaoLabel(navUser)}</p>
         </div>
+        {!mobile && isCooperadoAppUser(navUser) && (
+          <div className="px-1 pb-2">
+            <CooperadoAtualizarButton className="w-full justify-center !rounded-lg py-2 text-xs" />
+          </div>
+        )}
         <Link
           href="/baixar-app"
           onClick={onClose}
@@ -314,17 +319,11 @@ function AppShellInner({ children }: { children: React.ReactNode }) {
             mercadoQrImmersive ? "p-0 pb-0" : "p-4 lg:p-6 pb-[max(9rem,env(safe-area-inset-bottom,0px)+5.5rem)] lg:pb-6"
           )}
         >
-          {navUser && (
+          {navUser && !isCooperadoAppUser(navUser) && (
             <div className="flex justify-end mb-2 lg:mb-3">
-              {isCooperadoAppUser(navUser) ? (
-                <CooperadoAtualizarButton
-                  className="hidden lg:inline-flex !text-gray-600 hover:!bg-gray-100 border border-gray-200/80 !rounded-lg px-3 py-1.5 text-xs"
-                />
-              ) : (
-                <div className="hidden lg:flex">
-                  <SyncStatusChipLight />
-                </div>
-              )}
+              <div className="hidden lg:flex">
+                <SyncStatusChipLight />
+              </div>
             </div>
           )}
           <PainelResponsavelMobileBar />
