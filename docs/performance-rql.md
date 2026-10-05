@@ -105,6 +105,14 @@ Marcas: `performance.mark("rql:cold:*")`
 - **8.4** — `syncPlan84.ts` + `syncStaffTieredPullFromCloud`; `requestAppSyncLight` → tier `notas_delta`
 - Gate: `npx tsx scripts/test-fase-d-sync-gate.ts` (incluído em `run-suite-perf-fluxos`)
 
+### Fase E — RQL 8.5 (worker stats gestão + BIC agregado)
+
+- **`adminStatsComputeCore.ts`** — `computeAdminStatsPure` (mesma lógica de `getAdminStats`, flag BIC explícita)
+- **`adminStatsCompute.worker.ts`** + **`adminStatsWorkerClient.ts`** — painel gestão calcula totais fora do main thread
+- **`DashboardContent` (AdminDashboard)** — cards rápidos (`skipValoresAPagar`) + totais completos via worker
+- Flag: `NEXT_PUBLIC_RQL_ADMIN_STATS_WORKER=false` desliga worker (fallback síncrono)
+- Teste: `npx tsx scripts/test-rql-admin-stats-worker-h85.ts`
+
 ### 9.0.5 (local)
 
 - `scheduleCooperadoPostInteractiveTask` — release/deploy após UI interativa
@@ -137,7 +145,6 @@ Rotas lazy (build 118+): dashboard, notas, ficha, mensalidades, preços, conta H
 
 ## Ondas seguintes
 
-- **8.5** — workers (BIC / admin stats)
 - **8.6** — keep-alive abas cooperado (`CooperadoMobileTabKeepAlive` mobile) + prefetch + `loading.tsx` por aba; view transitions opcional futuro
 
 ## SLOs alvo (homolog / prod medidos)

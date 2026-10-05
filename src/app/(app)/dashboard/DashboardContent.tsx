@@ -1,6 +1,6 @@
 "use client";
 
-import { useDeferredValue, useEffect, useMemo, useRef } from "react";
+import { useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
 import type { AppData } from "@/types";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -21,6 +21,10 @@ import { AssinaturaStatusAviso } from "@/components/cooperado/AssinaturaStatusAv
 import { CooperadoMensalidadesPagarPanel } from "@/components/cooperado/CooperadoMensalidadesPagarPanel";
 import { ValoresAvulsosDashboardCard } from "@/components/ficha/ValoresAvulsosReceberPanel";
 import { getAdminStatsCached } from "@/services/dashboardService";
+import { requestAdminStatsFromWorker } from "@/services/adminStatsWorkerClient";
+import { isRqlAdminStatsWorkerEnabled } from "@/lib/performance/rqlAdminStats85";
+import type { AdminDashboardStats } from "@/services/dashboardService";
+import type { FilaDoDiaItem } from "@/services/filaDoDiaService";
 import { getFilaDoDiaCached } from "@/services/filaDoDiaService";
 import { FilaDoDiaPanel } from "@/components/dashboard/FilaDoDiaPanel";
 import { CooperadoHbCreditResumoCard } from "@/components/hb-credit/CooperadoHbCreditResumoCard";
@@ -414,27 +418,51 @@ function AdminDashboard() {
   const dataRevision = useAppDataSelector(() => getDataRevision(), []);
   const deferredRevision = useDeferredValue(dataRevision ?? -1);
 
+  const adminStatsWorker = isRqlAdminStatsWorkerEnabled();
+  const [workerHeavy, setWorkerHeavy] = useState<{
+    stats: AdminDashboardStats;
+    fila: FilaDoDiaItem[];
+  } | null>(null);
+
   const quickStats = useMemo(() => {
     if (!meta || dataRevision == null) return null;
     return getAdminStatsCached(getData(), meta.coopId || undefined, { skipValoresAPagar: true });
   }, [dataRevision, meta?.coopId]);
 
   const heavy = useMemo(() => {
-    if (!meta || deferredRevision == null || deferredRevision < 0) return null;
+    if (adminStatsWorker || !meta || deferredRevision == null || deferredRevision < 0) return null;
     const d = getData();
     const coopScope = meta.coopId || undefined;
     return {
       stats: getAdminStatsCached(d, coopScope),
       fila: getFilaDoDiaCached(d, coopScope, meta.mes),
     };
-  }, [deferredRevision, meta?.coopId, meta?.mes]);
+  }, [adminStatsWorker, deferredRevision, meta?.coopId, meta?.mes]);
+
+  useEffect(() => {
+    if (!adminStatsWorker || !meta || deferredRevision == null || deferredRevision < 0) {
+      setWorkerHeavy(null);
+      return;
+    }
+    let cancelled = false;
+    const d = getData();
+    const coopScope = meta.coopId || undefined;
+    const fila = getFilaDoDiaCached(d, coopScope, meta.mes);
+    void requestAdminStatsFromWorker(d, coopScope, undefined, deferredRevision).then((stats) => {
+      if (!cancelled) setWorkerHeavy({ stats, fila });
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [adminStatsWorker, deferredRevision, meta?.coopId, meta?.mes]);
 
   if (!navUser || !meta) return <PageSkeleton />;
 
   const { coopNome, mes, instalacao, assinatura, cnpj, coopId } = meta;
-  const stats = heavy?.stats ?? quickStats;
-  const fila = heavy?.fila ?? [];
-  const totaisFinanceirosPendentes = !heavy?.stats && Boolean(quickStats);
+  const stats = workerHeavy?.stats ?? heavy?.stats ?? quickStats;
+  const fila = workerHeavy?.fila ?? heavy?.fila ?? [];
+  const totaisFinanceirosPendentes =
+    adminStatsWorker ? !workerHeavy?.stats : !heavy?.stats && Boolean(quickStats);
 
   return (
     <div className="space-y-6 max-w-3xl">
