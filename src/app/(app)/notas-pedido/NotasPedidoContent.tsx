@@ -378,7 +378,10 @@ export default function NotasPedidoContent() {
   const [excluirComoResponsavel, setExcluirComoResponsavel] = useState(false);
   const [excluindo, setExcluindo] = useState(false);
   const [rascunhoFotosCount, setRascunhoFotosCount] = useState(0);
+  const [rascunhoUploadedCount, setRascunhoUploadedCount] = useState(0);
   const [rascunhoContratoId, setRascunhoContratoId] = useState("");
+  const [confirmDescartarRascunho, setConfirmDescartarRascunho] = useState(false);
+  const [descartandoRascunho, setDescartandoRascunho] = useState(false);
 
   const anexarParamHandledRef = useRef(false);
   const fotoProcessandoRef = useRef(false);
@@ -1103,9 +1106,47 @@ export default function NotasPedidoContent() {
   const limparRascunhoAnexar = useCallback(() => {
     if (ANEXAR_DRAFT_KEY) void clearFotoDraft(ANEXAR_DRAFT_KEY);
     setRascunhoFotosCount(0);
+    setRascunhoUploadedCount(0);
     setRascunhoContratoId("");
     resetFotosSessaoUi();
   }, [ANEXAR_DRAFT_KEY, resetFotosSessaoUi]);
+
+  const refreshRascunhoAnexarFromDraft = useCallback(async () => {
+    if (!isCooperado || !ANEXAR_DRAFT_KEY || anexarModal) return;
+    const meta = await loadFotoDraftMeta(ANEXAR_DRAFT_KEY);
+    if (!meta?.count) {
+      setRascunhoFotosCount(0);
+      setRascunhoUploadedCount(0);
+      setRascunhoContratoId("");
+      return;
+    }
+    setRascunhoFotosCount(meta.count);
+    setRascunhoUploadedCount(meta.uploadedCount ?? 0);
+    if (meta.contratoId) setRascunhoContratoId(meta.contratoId);
+  }, [ANEXAR_DRAFT_KEY, anexarModal, isCooperado]);
+
+  const descartarRascunhoEntrega = useCallback(() => {
+    void (async () => {
+      if (!ANEXAR_DRAFT_KEY) {
+        limparRascunhoAnexar();
+        return;
+      }
+      setDescartandoRascunho(true);
+      try {
+        const meta = await loadFotoDraftMeta(ANEXAR_DRAFT_KEY);
+        const notaId = meta?.pendingNotaId;
+        const d = data ?? getData();
+        if (notaId && d && coopId && user) {
+          const cnpj = await resolveCooperativaCnpj(d, coopId, user);
+          if (cnpj) void deleteNotaPedidoFromCloud(cnpj, notaId);
+        }
+        limparRascunhoAnexar();
+        setConfirmDescartarRascunho(false);
+      } finally {
+        setDescartandoRascunho(false);
+      }
+    })();
+  }, [ANEXAR_DRAFT_KEY, coopId, data, limparRascunhoAnexar, user]);
 
   const fecharAnexarModal = (force = false) => {
     if (!force && (enviando || processandoFoto)) return;
@@ -1123,7 +1164,9 @@ export default function NotasPedidoContent() {
 
     if (fotosSessaoCount > 0 && !anexarSucesso) {
       setRascunhoFotosCount(fotosSessaoCount);
+      setRascunhoUploadedCount(fotosNaNuvemCount);
       if (contratoInstId) setRascunhoContratoId(contratoInstId);
+      void refreshRascunhoAnexarFromDraft();
     } else if (fotosSessaoCount === 0) {
       limparRascunhoAnexar();
     }
@@ -1182,9 +1225,10 @@ export default function NotasPedidoContent() {
       if (ANEXAR_DRAFT_KEY) {
         void countFotosUploadedDraft(ANEXAR_DRAFT_KEY).then(setFotosNaNuvemCount);
       }
+      void refreshRascunhoAnexarFromDraft();
     });
     return unsub;
-  }, [isCooperado, refreshCooperadoQueueIndicators, ANEXAR_DRAFT_KEY]);
+  }, [isCooperado, refreshCooperadoQueueIndicators, ANEXAR_DRAFT_KEY, refreshRascunhoAnexarFromDraft]);
 
   useEffect(() => {
     if (!isCooperado) return;
@@ -1202,14 +1246,9 @@ export default function NotasPedidoContent() {
   }, [isCooperado]);
 
   useEffect(() => {
-    if (!ANEXAR_DRAFT_KEY) return;
-    void loadFotoDraftMeta(ANEXAR_DRAFT_KEY).then((meta) => {
-      if (!meta?.count) return;
-      setRascunhoFotosCount(meta.count);
-      if (meta.contratoId) setRascunhoContratoId(meta.contratoId);
-    });
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ANEXAR_DRAFT_KEY]);
+    if (!isCooperado || !ANEXAR_DRAFT_KEY) return;
+    void refreshRascunhoAnexarFromDraft();
+  }, [ANEXAR_DRAFT_KEY, isCooperado, refreshRascunhoAnexarFromDraft]);
 
   const aplicarContratoLocal = useCallback(
     (currentData: NonNullable<ReturnType<typeof getData>>, notaRejeitada?: NotaPedido) => {
@@ -1276,12 +1315,7 @@ export default function NotasPedidoContent() {
     })();
   };
 
-  const openAnexar = (notaRejeitada?: NotaPedido, options?: { abrirCamera?: boolean }) => {
-    if (!notaRejeitada && rascunhoFotosCount > 0) {
-      continuarRascunhoFotos(options?.abrirCamera ?? false);
-      return;
-    }
-
+  const iniciarModalAnexar = (notaRejeitada?: NotaPedido, options?: { abrirCamera?: boolean }) => {
     setFormErrors({});
     setErroEnvio("");
     setAnexarSucesso(false);
@@ -1318,6 +1352,28 @@ export default function NotasPedidoContent() {
     void sincronizarContratosEmBackground(notaRejeitada);
 
     if (options?.abrirCamera) abrirCameraAnexar();
+  };
+
+  const openAnexar = (notaRejeitada?: NotaPedido, options?: { abrirCamera?: boolean }) => {
+    if (!notaRejeitada && rascunhoFotosCount > 0) {
+      continuarRascunhoFotos(options?.abrirCamera ?? false);
+      return;
+    }
+    if (!notaRejeitada && ANEXAR_DRAFT_KEY) {
+      void loadFotoDraftMeta(ANEXAR_DRAFT_KEY).then((meta) => {
+        if (meta?.count) {
+          setRascunhoFotosCount(meta.count);
+          setRascunhoUploadedCount(meta.uploadedCount ?? 0);
+          if (meta.contratoId) setRascunhoContratoId(meta.contratoId);
+          continuarRascunhoFotos(options?.abrirCamera ?? false);
+        } else {
+          iniciarModalAnexar(undefined, options);
+        }
+      });
+      return;
+    }
+
+    iniciarModalAnexar(notaRejeitada, options);
   };
 
   const cooperadosCoop = useMemo(() => {
@@ -2210,6 +2266,7 @@ export default function NotasPedidoContent() {
 
           setFotosNaNuvemCount(await countFotosUploadedDraft(draftKey));
           scheduleFotoAppSync();
+          void refreshRascunhoAnexarFromDraft();
         } catch {
           setErroEnvio("Falha ao enviar foto em segundo plano. Toque em tentar novamente.");
         }
@@ -3688,19 +3745,49 @@ export default function NotasPedidoContent() {
         <AlertBanner variant="success" className="mt-4" onDismiss={() => setLancadoMsg("")}>{lancadoMsg}</AlertBanner>
       )}
 
-      {isCooperado && rascunhoFotosCount > 0 && !anexarModal && (
-        <AlertBanner variant="warning" className="mb-4" title="Fotos não enviadas">
+      {isCooperado && rascunhoFotosCount > 0 && !anexarModal && abaCooperado !== "entregas" && (
+        <AlertBanner variant="warning" className="mb-4" title="Entrega em andamento">
           Você tem {rascunhoFotosCount}{" "}
-          {rascunhoFotosCount === 1 ? "foto na nuvem" : "fotos na nuvem"} de uma sessão anterior.
+          {rascunhoFotosCount === 1 ? "foto" : "fotos"} de uma entrega não concluída
+          {rascunhoUploadedCount < rascunhoFotosCount
+            ? ` (${rascunhoUploadedCount}/${rascunhoFotosCount} na nuvem)`
+            : " (todas na nuvem)"}
+          . Toque em <span className="font-semibold">Continuar entrega</span> na aba Entregas ou abra Entregas abaixo.
           <div className="flex flex-wrap gap-2 mt-3">
-            <Button size="sm" onClick={() => continuarRascunhoFotos(true)}>
-              Continuar envio
-            </Button>
-            <Button size="sm" variant="secondary" onClick={limparRascunhoAnexar}>
-              Descartar fotos
+            <Button size="sm" onClick={() => trocarAbaCooperado("entregas")}>
+              Ir para Entregas
             </Button>
           </div>
         </AlertBanner>
+      )}
+
+      {isCooperado && rascunhoFotosCount > 0 && !anexarModal && abaCooperado === "entregas" && (
+        <Card className="mb-4 border-amber-300 bg-amber-50/90">
+          <div className="flex flex-col sm:flex-row sm:items-center gap-3 sm:justify-between">
+            <div className="min-w-0">
+              <p className="font-semibold text-amber-950">Continuar entrega</p>
+              <p className="text-sm text-amber-900/90 mt-1">
+                {rascunhoFotosCount === 1 ? "1 foto" : `${rascunhoFotosCount} fotos`} guardadas
+                {rascunhoUploadedCount < rascunhoFotosCount
+                  ? ` · ${rascunhoUploadedCount}/${rascunhoFotosCount} já na nuvem`
+                  : " · todas na nuvem"}
+                . Falta enviar ao responsável.
+              </p>
+            </div>
+            <div className="flex flex-wrap gap-2 shrink-0">
+              <Button size="sm" onClick={() => continuarRascunhoFotos(true)}>
+                Continuar
+              </Button>
+              <Button
+                size="sm"
+                variant="secondary"
+                onClick={() => setConfirmDescartarRascunho(true)}
+              >
+                Descartar
+              </Button>
+            </div>
+          </div>
+        </Card>
       )}
 
       {!isCooperado && instituicoes.length > 0 && (
@@ -5362,6 +5449,19 @@ export default function NotasPedidoContent() {
           </div>
         )}
       </Modal>
+
+      <ConfirmDialog
+        open={confirmDescartarRascunho}
+        onClose={() => {
+          if (!descartandoRascunho) setConfirmDescartarRascunho(false);
+        }}
+        title="Descartar entrega em andamento?"
+        message="As fotos desta sessão serão apagadas neste aparelho e o rascunho na nuvem será removido. Você precisará fotografar de novo."
+        confirmLabel="Descartar"
+        onConfirm={descartarRascunhoEntrega}
+        variant="danger"
+        loading={descartandoRascunho}
+      />
 
       <ConfirmDialog
         open={Boolean(excluirNotaTarget)}
