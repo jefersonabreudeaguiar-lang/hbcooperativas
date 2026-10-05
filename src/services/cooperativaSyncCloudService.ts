@@ -2102,7 +2102,12 @@ export async function pushOperacionalToCloudInternal(
     });
     if (!res.ok) {
       const json = (await res.json().catch(() => ({}))) as { error?: string; code?: string };
-      console.warn("[operacional-push]", res.status, json.code ?? json.error ?? res.statusText);
+      console.warn(
+        "[operacional-push]",
+        res.status,
+        json.code ?? "",
+        json.error ?? res.statusText
+      );
       return;
     }
     lastOperacionalPushFingerprint.set(pushKey, fingerprint);

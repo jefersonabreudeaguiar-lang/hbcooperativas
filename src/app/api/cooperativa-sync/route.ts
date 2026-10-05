@@ -29,6 +29,11 @@ import {
 import { reconciliarFichaFromNotasConferidas } from "@/services/notaPedidoService";
 import { markHbStaleBeforeOperacionalUpload } from "@/modules/hb-credit/engine/operationalAuthoritativeCreditBaseChange";
 
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+/** POST operacional: guard HB + upload podem levar dezenas de segundos em cooperativas grandes. */
+export const maxDuration = 120;
+
 export async function GET(request: Request) {
   if (!isSupabaseConfigured()) {
     return NextResponse.json({ configured: false, contratos: null, operacional: null });
@@ -209,6 +214,7 @@ export async function POST(request: Request) {
       actorUserId: guard.session?.sub ?? "operacional_sync",
       staleReason: "pix_operacional_sync_upload",
       auditSession: guard.session,
+      existingOperacional: existing,
     });
     if (!staleGuard.ok) {
       return NextResponse.json(
@@ -221,7 +227,12 @@ export async function POST(request: Request) {
       existingOperacional: existing,
       skipPagamentoConfirmadoProtection: true,
     });
-    if (!uploaded.ok) return NextResponse.json({ error: uploaded.error }, { status: 500 });
+    if (!uploaded.ok) {
+      return NextResponse.json(
+        { error: uploaded.error, code: "OPERACIONAL_UPLOAD_FAILED" },
+        { status: 500 }
+      );
+    }
     if (guard.session) {
       await logServerMutationAudit(supabase, guard.session, cnpj, {
         action: "editar",

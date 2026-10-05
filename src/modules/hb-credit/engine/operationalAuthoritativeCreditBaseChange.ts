@@ -21,6 +21,23 @@ import { sanitizarOperacionalSyncPayload } from "@/services/pagamentoIntegridade
 
 const BASE_TOLERANCE_CENTS = 0;
 
+/** Campos de ficha/pagamento que alteram crédito-base HB — comparação O(n) sem reconciliar notas. */
+export function hbOperacionalCreditBaseFingerprint(op: OperacionalSyncPayload): string {
+  const fichas = (op.fichaCorrida ?? [])
+    .map(
+      (f) =>
+        `f:${f.id}:${f.cooperadoId}:${Math.round((Number(f.valorLiquido) || 0) * 100)}:${f.status ?? ""}:${f.notaPedidoId ?? ""}`
+    )
+    .sort();
+  const pags = (op.pagamentosCooperado ?? [])
+    .map(
+      (p) =>
+        `p:${p.id}:${p.cooperadoId}:${Math.round((Number(p.valorLiquido) || 0) * 100)}:${p.status ?? ""}`
+    )
+    .sort();
+  return `${fichas.join("|")}||${pags.join("|")}`;
+}
+
 export type AuthoritativeCreditBaseDiff = {
   material: boolean;
   changedCooperadoIds: string[];
@@ -142,16 +159,18 @@ async function loadAuthoritativeContext(
 export async function detectMaterialAuthoritativeCreditBaseChange(
   supabase: SupabaseClient,
   cnpj: string,
-  nextOperacionalSanitized: OperacionalSyncPayload
+  nextOperacionalSanitized: OperacionalSyncPayload,
+  options?: { existingOperacional?: OperacionalSyncPayload | null }
 ): Promise<
   | ({ ok: true } & AuthoritativeCreditBaseDiff)
   | { ok: false; error: string }
 > {
   const digits = normalizeCnpj(cnpj);
-  const ctx = await loadAuthoritativeContext(supabase, digits);
-  if (!ctx.ok) return ctx;
+  const current =
+    options?.existingOperacional !== undefined
+      ? options.existingOperacional
+      : await fetchOperacionalSync(supabase, digits);
 
-  const current = await fetchOperacionalSync(supabase, digits);
   const beforeOperacional: OperacionalSyncPayload =
     current ??
     ({
@@ -165,6 +184,22 @@ export async function detectMaterialAuthoritativeCreditBaseChange(
       comunicados: [],
       config: { descontoPadraoCooperativa: 0 },
     } as OperacionalSyncPayload);
+
+  if (
+    hbOperacionalCreditBaseFingerprint(beforeOperacional) ===
+    hbOperacionalCreditBaseFingerprint(nextOperacionalSanitized)
+  ) {
+    return {
+      ok: true,
+      material: false,
+      changedCooperadoIds: [],
+      beforeCents: {},
+      afterCents: {},
+    };
+  }
+
+  const ctx = await loadAuthoritativeContext(supabase, digits);
+  if (!ctx.ok) return ctx;
 
   const diff = diffAuthoritativeCreditBaseFromOperacional({
     beforeOperacional,
@@ -190,6 +225,8 @@ export async function markHbStaleBeforeOperacionalUpload(
     actorUserId: string;
     staleReason?: string;
     auditSession?: SessionClaims | null;
+    /** Evita re-download e permite fast-path quando ficha/pagamentos iguais. */
+    existingOperacional?: OperacionalSyncPayload | null;
   }
 ): Promise<
   | { ok: true; material: boolean; markedCooperadoIds: string[] }
@@ -198,7 +235,8 @@ export async function markHbStaleBeforeOperacionalUpload(
   const detection = await detectMaterialAuthoritativeCreditBaseChange(
     supabase,
     opts.cnpj,
-    opts.nextOperacionalSanitized
+    opts.nextOperacionalSanitized,
+    { existingOperacional: opts.existingOperacional }
   );
   if (!detection.ok) {
     return { ok: false, error: detection.error, code: "AUTHORITATIVE_BASE_DIFF_FAILED" };

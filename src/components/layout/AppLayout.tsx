@@ -8,14 +8,15 @@ import {
   CalendarCheck, LogOut, Menu, X, Building, ClipboardList, Receipt, User, Tag,
   BookOpen, FileCheck, Shield, MessageSquareWarning, Vote, Download, ShoppingCart, Scale,
 } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useLayoutEffect, useState } from "react";
 import { useAuth } from "@/modules/auth/AuthProvider";
 import { useAppDataSelector } from "@/hooks/useAppData";
 import {
   AppShellNavigationProvider,
   useAppShellNavigationContext,
 } from "@/components/layout/AppShellNavigationContext";
-import { getUserFuncaoLabel, isCooperadoAppUser } from "@/permissions";
+import { getUserFuncaoLabel, isCooperadoAppUser, resolveAppUserRole } from "@/permissions";
+import { getData, isAppDataWarm } from "@/services/dataStore";
 import { getUserCooperativaNome } from "@/utils/cooperativa";
 import { PLATFORM_NAME, PLATFORM_TAGLINE } from "@/utils/constants";
 import { AppIcon } from "@/components/ui/AppIcon";
@@ -318,6 +319,31 @@ function AppShellInner({ children }: { children: React.ReactNode }) {
   /** Ficha-descontos em lote — só relatórios; `/conta-coop` usa APIs próprias da página HB. */
   const staffCoopBackgroundSync = isStaffHbCoopBackgroundSyncRoute(pathname);
 
+  const cooperadoKeepAliveShell =
+    Boolean(navUser) &&
+    isCooperadoAppUser(navUser) &&
+    isAppDataWarm() &&
+    resolveAppUserRole(navUser!, getData()) === "cooperado";
+
+  useLayoutEffect(() => {
+    try {
+      if (!navUser) {
+        document.documentElement.setAttribute("data-hb-shell-mode", "loading");
+        return;
+      }
+      const role = isAppDataWarm()
+        ? resolveAppUserRole(navUser, getData())
+        : navUser.role;
+      document.documentElement.setAttribute("data-hb-shell-mode", role);
+      document.documentElement.setAttribute(
+        "data-hb-keep-alive-wrap",
+        cooperadoKeepAliveShell ? "1" : "0"
+      );
+    } catch {
+      /* ignore */
+    }
+  }, [navUser, cooperadoKeepAliveShell]);
+
   useSyncContaCoopValorReceberCooperativa(
     staffHbSync && credit.enabled && staffCoopBackgroundSync
       ? { cooperativaId: coopId, user: navUser, enabled: true }
@@ -356,7 +382,7 @@ function AppShellInner({ children }: { children: React.ReactNode }) {
           <PainelResponsavelMobileBar />
           <ContratoServicoAppGate />
           <CobrancaSaasPainel />
-          {navUser && isCooperadoAppUser(navUser) ? (
+          {cooperadoKeepAliveShell ? (
             <CooperadoMobileTabKeepAlive pathname={pathname}>{children}</CooperadoMobileTabKeepAlive>
           ) : (
             children

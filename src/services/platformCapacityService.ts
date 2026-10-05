@@ -2,7 +2,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { normalizeCnpj } from "@/utils/cooperativa";
 
 /** Limite de upload do operacional.json (cooperativaSyncStorage). */
-export const OPERACIONAL_JSON_LIMIT_BYTES = 5 * 1024 * 1024;
+export const OPERACIONAL_JSON_LIMIT_BYTES = 50 * 1024 * 1024;
 /** Limite usado em fetchCooperadosFromStorage e cobrança HB. */
 export const COOPERADOS_LIST_LIMIT = 500;
 /** Limite conservador do localStorage no navegador (por aparelho). */

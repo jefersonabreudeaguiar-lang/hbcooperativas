@@ -74,10 +74,21 @@ export interface OperacionalSyncPayload {
   config: { descontoPadraoCooperativa: number };
 }
 
+/** Limite do operacional.json — alinhado a notas (50 MB); buckets antigos são elevados via updateBucket. */
+export const COOPERATIVA_SYNC_FILE_SIZE_LIMIT = 50 * 1024 * 1024;
+
 async function ensureBucket(supabase: SupabaseClient): Promise<void> {
+  const limit = COOPERATIVA_SYNC_FILE_SIZE_LIMIT;
   const { data: buckets } = await supabase.storage.listBuckets();
-  if (buckets?.some((b) => b.name === BUCKET)) return;
-  await supabase.storage.createBucket(BUCKET, { public: false, fileSizeLimit: 5 * 1024 * 1024 });
+  const existing = buckets?.find((b) => b.name === BUCKET);
+  if (!existing) {
+    await supabase.storage.createBucket(BUCKET, { public: false, fileSizeLimit: limit });
+    return;
+  }
+  const currentLimit = existing.file_size_limit ?? 0;
+  if (currentLimit < limit) {
+    await supabase.storage.updateBucket(BUCKET, { public: false, fileSizeLimit: limit });
+  }
 }
 
 function path(cnpj: string, file: string): string {
@@ -91,13 +102,21 @@ async function uploadJson(
   payload: unknown
 ): Promise<{ ok: true } | { ok: false; error: string }> {
   await ensureBucket(supabase);
-  const { error } = await supabase.storage.from(BUCKET).upload(path(cnpj, file), JSON.stringify(payload), {
+  const body = JSON.stringify(payload);
+  const bytes = Buffer.byteLength(body, "utf8");
+  if (bytes > COOPERATIVA_SYNC_FILE_SIZE_LIMIT) {
+    return {
+      ok: false,
+      error: `operacional.json excede ${Math.round(COOPERATIVA_SYNC_FILE_SIZE_LIMIT / (1024 * 1024))} MB (${(bytes / (1024 * 1024)).toFixed(1)} MB).`,
+    };
+  }
+  const { error } = await supabase.storage.from(BUCKET).upload(path(cnpj, file), body, {
     contentType: "application/json",
     upsert: true,
   });
   if (error) {
     console.error(`[cooperativa-sync/upload/${file}]`, error.message);
-    return { ok: false, error: "Erro ao sincronizar dados na nuvem." };
+    return { ok: false, error: error.message || "Erro ao sincronizar dados na nuvem." };
   }
   return { ok: true };
 }
