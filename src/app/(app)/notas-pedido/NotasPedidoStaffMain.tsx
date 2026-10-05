@@ -45,6 +45,8 @@ import {
   getDataRevision,
   beginConferenciaDeferLocalPersist,
   endConferenciaDeferLocalPersist,
+  beginConferenciaModalSaveBatch,
+  endConferenciaModalSaveBatch,
 } from "@/services/dataStore";
 import { requestAppSync, requestAppSyncImmediate, requestAppSyncLight } from "@/services/syncRequest";
 import { scheduleCooperadoPostInteractiveTask, scheduleStaffPostInteractiveTask } from "@/lib/performance/cooperadoColdStart";
@@ -1011,7 +1013,9 @@ export default function NotasPedidoStaffMain() {
       setFotosLancadasUi(new Set(fotosLancadasConferenciaRef.current));
 
       const persistirNaFicha = () => {
-        updateData((d) => {
+        beginConferenciaModalSaveBatch();
+        try {
+          updateData((d) => {
         const cooperadoIdCanonico = resolverCooperadoIdCanonico(
           d,
           conferenciaCooperadoId,
@@ -1102,6 +1106,9 @@ export default function NotasPedidoStaffMain() {
           }
         );
       });
+        } finally {
+          endConferenciaModalSaveBatch();
+        }
         persistirDraftConferenciaEmMemoria();
       };
 
@@ -3354,7 +3361,9 @@ export default function NotasPedidoStaffMain() {
         ? valorAprovado / divisaoPreview.participantes.length
         : valorAprovado;
 
-    updateData((d) => {
+    beginConferenciaModalSaveBatch();
+    try {
+      updateData((d) => {
       const now = new Date().toISOString();
       if (coopId && conferenciaInstId) setInstituicaoPadraoId(coopId, conferenciaInstId);
       const coopSel = cooperadosCoop.find((c) => c.id === conferenciaCooperadoId);
@@ -3505,6 +3514,9 @@ export default function NotasPedidoStaffMain() {
         }
       );
     });
+    } finally {
+      endConferenciaModalSaveBatch();
+    }
 
     const truthAposLancar = getDataOperationalTruth();
     const gravada = truthAposLancar.notasPedido.find((n) => n.id === notaId);
@@ -3533,52 +3545,61 @@ export default function NotasPedidoStaffMain() {
     let proxima = obterProximaNotaConferencia(chaveAtual, notaId);
     if (proxima?.id === notaId) proxima = null;
 
-    enqueueConferenciaAprovacaoSync(notaId, async () => {
-      if (notaPatchSnapshot && coopId) {
-        const patched = await patchNotaDecisaoConferenciaNaNuvem({
-          coopId,
-          user,
-          nota: notaPatchSnapshot,
-        });
-        if (!patched.ok) {
-          console.warn("[conferencia-aprovacao-sync]", notaId, patched.error);
-          setSuccessMsg(patched.error);
-          return;
-        }
-        markConferenciaPatchSyncedForOperacionalPush(notaId);
-        await withConferenciaOperacionalPushScope(coopId, getConferenciaPatchSyncedSnapshot(), async () => {
-          const cnpj = await resolveCooperativaCnpj(getData(), coopId, user);
-          if (!cnpj) {
-            console.warn("[conferencia-aprovacao-sync]", notaId, "CNPJ não resolvido para push operacional.");
-            requestAppSyncLight();
+    const runAprovacaoCloudSync = () => {
+      enqueueConferenciaAprovacaoSync(notaId, async () => {
+        if (notaPatchSnapshot && coopId) {
+          const patched = await patchNotaDecisaoConferenciaNaNuvem({
+            coopId,
+            user,
+            nota: notaPatchSnapshot,
+          });
+          if (!patched.ok) {
+            console.warn("[conferencia-aprovacao-sync]", notaId, patched.error);
+            setSuccessMsg(patched.error);
             return;
           }
-          await pushOperacionalToCloud(cnpj, getData(), coopId, STAFF_OPERACIONAL_PUSH);
-        });
-      } else {
-        requestAppSyncLight();
-      }
-    });
-
-    void (async () => {
-      try {
-        if (proxima) {
-          const mesmoGrupo = filaConferenciaRef.current?.chave === chaveAtual;
-          if (filaConferenciaRef.current && mesmoGrupo) {
-            filaConferenciaRef.current.concluidas += 1;
-            setFilaConferenciaPos(filaConferenciaRef.current.concluidas + 1);
-          } else if (filaConferenciaRef.current) {
-            setFilaConferenciaPos(1);
-          }
-          setLancadoMsg(
-            divisaoPreview
-              ? `Nota aprovada! ${formatCurrency(valorPorCooperado)} para cada (${msgBeneficiarios}). Abrindo a próxima entrega…`
-              : `Nota aprovada! ${formatCurrency(valorAprovado)} na ficha de ${msgBeneficiarios}. Abrindo a próxima entrega…`
-          );
-          setTimeout(() => setLancadoMsg(""), 4000);
-          await yieldConferenciaUiFrame();
-          await prepararConferenciaNota(proxima, { transicao: true });
+          markConferenciaPatchSyncedForOperacionalPush(notaId);
+          await withConferenciaOperacionalPushScope(coopId, getConferenciaPatchSyncedSnapshot(), async () => {
+            const cnpj = await resolveCooperativaCnpj(getData(), coopId, user);
+            if (!cnpj) {
+              console.warn("[conferencia-aprovacao-sync]", notaId, "CNPJ não resolvido para push operacional.");
+              requestAppSyncLight();
+              return;
+            }
+            await pushOperacionalToCloud(cnpj, getData(), coopId, STAFF_OPERACIONAL_PUSH);
+          });
         } else {
+          requestAppSyncLight();
+        }
+      });
+    };
+    if (typeof requestIdleCallback !== "undefined") {
+      requestIdleCallback(runAprovacaoCloudSync, { timeout: 2500 });
+    } else {
+      setTimeout(runAprovacaoCloudSync, 0);
+    }
+
+    if (proxima) {
+      const mesmoGrupo = filaConferenciaRef.current?.chave === chaveAtual;
+      startTransition(() => {
+        if (filaConferenciaRef.current && mesmoGrupo) {
+          filaConferenciaRef.current.concluidas += 1;
+          setFilaConferenciaPos(filaConferenciaRef.current.concluidas + 1);
+        } else if (filaConferenciaRef.current) {
+          setFilaConferenciaPos(1);
+        }
+        setLancadoMsg(
+          divisaoPreview
+            ? `Nota aprovada! ${formatCurrency(valorPorCooperado)} para cada (${msgBeneficiarios}). Abrindo a próxima entrega…`
+            : `Nota aprovada! ${formatCurrency(valorAprovado)} na ficha de ${msgBeneficiarios}. Abrindo a próxima entrega…`
+        );
+        setTimeout(() => setLancadoMsg(""), 4000);
+        void prepararConferenciaNota(proxima, { transicao: true });
+      });
+      liberarLancamentoConferencia();
+    } else {
+      void (async () => {
+        try {
           await aguardarSequenciaLancamentoFotos(notaAprovadaRef, qtdFotosAprovadas, {
             rapido: qtdFotosAprovadas > 1,
           });
@@ -3589,13 +3610,13 @@ export default function NotasPedidoStaffMain() {
               : `Nota aprovada! ${formatCurrency(valorAprovado)} na ficha de ${msgBeneficiarios}. Fila concluída!`
           );
           setTimeout(() => setLancadoMsg(""), 6000);
+        } catch {
+          /* ignore */
+        } finally {
+          liberarLancamentoConferencia();
         }
-      } catch {
-        /* ignore — falha ao preparar próxima nota não reverte lançamento local */
-      } finally {
-        liberarLancamentoConferencia();
-      }
-    })();
+      })();
+    }
   };
 
   const handleRejeitarNota = () => {

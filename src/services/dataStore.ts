@@ -230,6 +230,35 @@ export function endSaveBatch(): void {
   }
 }
 
+/** Uma notificação + disco deferido após mutação pesada no modal Conferir (sem JSON síncrono no clique). */
+export function beginConferenciaModalSaveBatch(): void {
+  beginSaveBatch({ shouldPersist: () => false });
+}
+
+export function endConferenciaModalSaveBatch(): void {
+  endSaveBatch();
+  if (isConferenciaDeferLocalPersistActive()) {
+    notify();
+    scheduleConferenciaDeferredLocalPersist();
+    return;
+  }
+  const snapshot = memoryCache;
+  if (!snapshot) {
+    notify();
+    return;
+  }
+  notifyImmediate();
+  let saved = persistDataToStorage(snapshot, { skipNotify: true });
+  if (!saved.ok) {
+    const role = persistRoleFromSession();
+    memoryCache = buildSnapshotEmergenciaPersistencia(snapshot, role);
+    saved = persistDataToStorage(memoryCache, { skipNotify: true });
+  }
+  if (!saved.ok) {
+    notifyImmediate();
+  }
+}
+
 export async function runWithBatchedSaveAsync(
   fn: () => Promise<void>,
   opts?: { shouldPersistBatch?: () => boolean }
