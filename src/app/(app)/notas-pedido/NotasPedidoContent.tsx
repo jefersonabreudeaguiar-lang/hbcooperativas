@@ -40,6 +40,11 @@ import {
   prefetchConferenciaFotoPrefetchModule,
 } from "@/lib/performance/loadConferenciaFotoPrefetch";
 import { notaBloqueadaConferenciaPorExclusaoPendente } from "@/lib/conferencia/conferenciaAbrirGuard";
+import { bloquearAcaoFinalConferencia } from "@/lib/conferencia/conferenciaAprovarGuard";
+import {
+  enriquecerMensagemRetomadaMultiFotoComDraft,
+  fotoIdxAtualAposRetomadaFicha,
+} from "@/lib/conferencia/conferenciaRetomadaMensagens";
 import {
   COOPERADO_ENTREGA_REMOVIDA_EVENT,
   type CooperadoEntregaRemovidaDetail,
@@ -2800,8 +2805,25 @@ export default function NotasPedidoContent() {
     if (d && totalFotos > 1) {
       sincronizarFotosLancadasComFicha(d, nota.id, totalFotos);
       aplicarDraftConferenciaSeExistir(nota.id, { preservarProgressoFotosDaFicha: true });
+      const draftMulti = getConferenciaDraftMemoria(nota.id);
+      const lancadasFicha = new Set(fotosLancadasConferenciaRef.current);
+      setConferenciaRetomadaFichaMsg((prev) =>
+        enriquecerMensagemRetomadaMultiFotoComDraft(
+          prev,
+          draftMulti,
+          lancadasFicha,
+          fotoIdxAtualAposRetomadaFicha(d, nota.id, totalFotos, lancadasFicha),
+          totalFotos
+        )
+      );
     } else {
       aplicarDraftConferenciaSeExistir(nota.id);
+      const draftSingle = getConferenciaDraftMemoria(nota.id);
+      if (draftSingle) {
+        setConferenciaRetomadaFichaMsg(
+          enriquecerMensagemRetomadaMultiFotoComDraft("", draftSingle, new Set(), 0, totalFotos)
+        );
+      }
     }
     } finally {
       setConferenciaTransicao(false);
@@ -3001,6 +3023,16 @@ export default function NotasPedidoContent() {
 
   const handleLancarNota = () => {
     if (lancandoRef.current || !user || !data || !selectedNota) return;
+
+    const guardFinal = bloquearAcaoFinalConferencia({
+      syncingForUi,
+      pendingDeleteIds,
+      notaId: selectedNota.id,
+    });
+    if (guardFinal.blocked) {
+      setConferirErrors({ itens: guardFinal.mensagem });
+      return;
+    }
 
     const qtdFotosAprovadas = contarFotosEnviadasNota(selectedNota);
     const fotoAtual = conferenciaFotoIdx;
@@ -3370,6 +3402,17 @@ export default function NotasPedidoContent() {
 
   const handleRejeitarNota = () => {
     if (lancandoRef.current || !user || !data || !selectedNota || !motivoRejeicao.trim()) return;
+
+    const guardFinal = bloquearAcaoFinalConferencia({
+      syncingForUi,
+      pendingDeleteIds,
+      notaId: selectedNota.id,
+    });
+    if (guardFinal.blocked) {
+      setSuccessMsg(guardFinal.mensagem);
+      return;
+    }
+
     const now = new Date().toISOString();
     let notaAtualizada: NotaPedido | null = null;
 
@@ -4896,7 +4939,7 @@ export default function NotasPedidoContent() {
             <Button variant="danger" onClick={() => { setMotivoRejeicao(""); setRejectModal(true); }} disabled={conferenciaTransicao || Boolean(lancamentoSequencia)}>
               <XCircle size={18} /> Pedir correção
             </Button>
-            <Button size="lg" onClick={handleLancarNota} disabled={conferenciaTransicao || Boolean(lancamentoSequencia)}>
+            <Button size="lg" onClick={handleLancarNota} disabled={conferenciaTransicao || Boolean(lancamentoSequencia) || syncingForUi}>
               <CheckCircle size={18} />
               {(() => {
                 if (lancamentoSequencia) {
