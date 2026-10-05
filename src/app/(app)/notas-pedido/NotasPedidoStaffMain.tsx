@@ -1997,9 +1997,9 @@ export default function NotasPedidoStaffMain() {
     requestAppSyncLight();
   }, [isCooperado, data]);
 
-  // Responsável: full de notas após pintar a fila (1× por sessão); evita travar a 1ª abertura do painel.
+  // Responsável: full de notas após pintar a fila (1× por sessão); pull não depende da aba visível no keep-alive.
   useEffect(() => {
-    if (isCooperado || !data || !coopId || !tabActive) return;
+    if (isCooperado || !data || !coopId) return;
     if (responsavelMountSyncRef.current) return;
     responsavelMountSyncRef.current = true;
     responsavelPrimeiroPullAgendadoRef.current = true;
@@ -2007,25 +2007,30 @@ export default function NotasPedidoStaffMain() {
       puxarNotasResponsavelDaNuvem({ forceFull: true });
       responsavelPrimeiroPullAgendadoRef.current = false;
     });
-  }, [isCooperado, data, coopId, tabActive, puxarNotasResponsavelDaNuvem]);
+  }, [isCooperado, data, coopId, puxarNotasResponsavelDaNuvem]);
 
   useEffect(() => {
-    if (isCooperado || !coopId || !tabActive) return;
+    if (isCooperado || !coopId) return;
     if (responsavelPrimeiroPullAgendadoRef.current) return;
-    if (vistaResponsavel !== "fila" && vistaResponsavel !== "cooperado") return;
     puxarNotasResponsavelDaNuvem();
-  }, [vistaResponsavel, isCooperado, coopId, tabActive, puxarNotasResponsavelDaNuvem]);
+  }, [vistaResponsavel, isCooperado, coopId, puxarNotasResponsavelDaNuvem]);
 
   useEffect(() => {
-    if (isCooperado || !coopId || !tabActive) return;
+    if (isCooperado || !coopId) return;
     const onVisible = () => {
       if (document.hidden) return;
-      if (vistaResponsavel !== "fila" && vistaResponsavel !== "cooperado") return;
       puxarNotasResponsavelDaNuvem();
     };
     document.addEventListener("visibilitychange", onVisible);
-    return () => document.removeEventListener("visibilitychange", onVisible);
-  }, [isCooperado, coopId, vistaResponsavel, tabActive, puxarNotasResponsavelDaNuvem]);
+    const interval = window.setInterval(() => {
+      if (document.hidden) return;
+      puxarNotasResponsavelDaNuvem();
+    }, 120_000);
+    return () => {
+      document.removeEventListener("visibilitychange", onVisible);
+      window.clearInterval(interval);
+    };
+  }, [isCooperado, coopId, puxarNotasResponsavelDaNuvem]);
 
   const filaZombieCount = useAppDataSelector(
     (d) => {

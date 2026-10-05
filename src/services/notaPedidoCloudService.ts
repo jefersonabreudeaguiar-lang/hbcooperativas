@@ -1022,7 +1022,10 @@ export async function finalizeNotaEntregaNaNuvem(
   // Nunca rebaixar se a nuvem já avançou (conferida/pago/rejeitada sem reenvio legítimo).
   const existing = await fetchNotaPedidoFromCloud(digits, nota.id, { metaOnly: true });
   if (existing?.status && shouldFinalizeEntregaSkipCloudPatch(existing, nota)) {
-    return { ok: true };
+    const tableMetaEarly = await fetchNotaPedidoTableMetaFromCloud(digits, nota.id);
+    if (tableMetaEarly?.status && tableMetaEarly.status !== "rascunho") {
+      return { ok: true };
+    }
   }
 
   const reenvioPosRejeicao =
