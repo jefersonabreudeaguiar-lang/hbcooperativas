@@ -1410,27 +1410,37 @@ export default function NotasPedidoContent() {
     };
   }, [anexarModal, isCooperado]);
 
-  const resumosMensaisCooperado = useMemo(() => {
-    if (!isCooperado || abaCooperado !== "entregas" || !data || !cooperadoId) return [];
-    const base = filtrarResumosMesesNaoQuitados(
-      data,
-      cooperadoId,
-      bicCentralListarResumosMensaisEntregas(data, cooperadoId, coopId)
-    );
-    if (statusFilter === "pendentes") return filtrarResumosEntregasPendentes(base);
-    if (!statusFilter) return base;
-    return base
-      .map((r) => ({
-        ...r,
-        notas: r.notas.filter((n) => n.status === statusFilter),
-      }))
-      .filter((r) => r.notas.length > 0);
-  }, [data, cooperadoId, coopId, isCooperado, statusFilter, hbDescontosRevision, abaCooperado]);
+  const deferredStatusFilter = useDeferredValue(statusFilter);
 
-  const resumosFichaCooperado = useMemo(() => {
-    if (!isCooperado || abaCooperado !== "ficha" || !data || !cooperadoId) return [];
-    return listarResumosFichaEmAbertoCooperado(data, cooperadoId, coopId);
-  }, [data, cooperadoId, coopId, isCooperado, hbDescontosRevision, abaCooperado]);
+  const resumosMensaisCooperado =
+    useAppDataSelector(
+      (d) => {
+        if (!cooperadoId || !coopId || abaCooperado !== "entregas") return [];
+        const base = filtrarResumosMesesNaoQuitados(
+          d,
+          cooperadoId,
+          bicCentralListarResumosMensaisEntregas(d, cooperadoId, coopId)
+        );
+        if (deferredStatusFilter === "pendentes") return filtrarResumosEntregasPendentes(base);
+        if (!deferredStatusFilter) return base;
+        return base
+          .map((r) => ({
+            ...r,
+            notas: r.notas.filter((n) => n.status === deferredStatusFilter),
+          }))
+          .filter((r) => r.notas.length > 0);
+      },
+      [cooperadoId, coopId, deferredStatusFilter, hbDescontosRevision, abaCooperado]
+    ) ?? [];
+
+  const resumosFichaCooperado =
+    useAppDataSelector(
+      (d) => {
+        if (!cooperadoId || !coopId || abaCooperado !== "ficha") return [];
+        return listarResumosFichaEmAbertoCooperado(d, cooperadoId, coopId);
+      },
+      [cooperadoId, coopId, hbDescontosRevision, abaCooperado]
+    ) ?? [];
 
   const getEscolaLabelCooperado = useCallback(
     (n: NotaPedido) => getEscolaNotaLabel(n, data?.instituicoes ?? []),
@@ -1467,32 +1477,35 @@ export default function NotasPedidoContent() {
   }, [isCooperado, vistaResponsavel, filtroCooperadoId, abaConferenciaKey, pendentesPorCooperado]);
 
   const { chave: abaConferenciaEfetiva, grupo: grupoAbaAtiva } = useMemo(
-    () => resolverAbaConferenciaAtiva(pendentesPorCooperado, abaConferenciaKey, filtroCooperadoId),
-    [pendentesPorCooperado, abaConferenciaKey, filtroCooperadoId]
+    () =>
+      isCooperado || !filaDetalhada
+        ? { chave: "", grupo: undefined }
+        : resolverAbaConferenciaAtiva(pendentesPorCooperado, abaConferenciaKey, filtroCooperadoId),
+    [isCooperado, filaDetalhada, pendentesPorCooperado, abaConferenciaKey, filtroCooperadoId]
   );
 
   const pendentesAbaAtiva = useMemo(
-    () => grupoAbaAtiva?.notas ?? [],
-    [grupoAbaAtiva]
+    () => (isCooperado || !filaDetalhada ? [] : (grupoAbaAtiva?.notas ?? [])),
+    [isCooperado, filaDetalhada, grupoAbaAtiva]
   );
 
   const podeExcluirEntregaPorNotaId = useMemo(() => {
     const map = new Map<string, boolean>();
-    if (!data || !coopId || !check("notas_pedido", "edit")) return map;
+    if (isCooperado || !filaDetalhada || !data || !coopId || !check("notas_pedido", "edit")) return map;
     for (const n of pendentesAbaAtiva) {
       map.set(n.id, podeExcluirEntregaNota(data, n.id, coopId).ok);
     }
     return map;
-  }, [data, coopId, pendentesAbaAtiva, check]);
+  }, [data, coopId, pendentesAbaAtiva, check, isCooperado, filaDetalhada]);
 
   const totalFotosPendentes = useMemo(
-    () => contarFotosEnviadasNotas(pendentesEstaveis),
-    [pendentesEstaveis]
+    () => (isCooperado || !filaDetalhada ? 0 : contarFotosEnviadasNotas(pendentesEstaveis)),
+    [isCooperado, filaDetalhada, pendentesEstaveis]
   );
 
   const fotosAbaAtiva = useMemo(
-    () => contarFotosEnviadasNotas(pendentesAbaAtiva),
-    [pendentesAbaAtiva]
+    () => (isCooperado || !filaDetalhada ? 0 : contarFotosEnviadasNotas(pendentesAbaAtiva)),
+    [isCooperado, filaDetalhada, pendentesAbaAtiva]
   );
 
   useEffect(() => {
@@ -4258,6 +4271,7 @@ export default function NotasPedidoContent() {
         disabled={processandoFoto || enviando || limiteFotosSessaoAtingido}
       />
 
+      {anexarModal && (
       <Modal
         open={anexarModal}
         onClose={() => fecharAnexarModal()}
@@ -4651,6 +4665,7 @@ export default function NotasPedidoContent() {
           )}
         </div>
       </Modal>
+      )}
 
       <Modal
         open={avulsoModal}
