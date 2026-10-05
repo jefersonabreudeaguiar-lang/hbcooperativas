@@ -19,7 +19,6 @@ import { AlertBanner } from "@/components/ui/AlertBanner";
 import { PromptDialog, ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { Card } from "@/components/ui/Card";
 import { NotaFotoImg } from "@/components/ui/NotaFotoImg";
-import { FotoLightbox } from "@/components/ui/FotoLightbox";
 import {
   FOTO_ENTREGA_CONFERENCIA_IMG,
   FOTO_ENTREGA_CONFERENCIA_PANEL,
@@ -39,6 +38,7 @@ import {
   loadConferenciaFotoPrefetchModule,
   prefetchConferenciaFotoPrefetchModule,
 } from "@/lib/performance/loadConferenciaFotoPrefetch";
+import { prefetchConferenciaModalUiChunks } from "@/lib/performance/prefetchConferenciaModalUi";
 import { notaBloqueadaConferenciaPorExclusaoPendente } from "@/lib/conferencia/conferenciaAbrirGuard";
 import { bloquearAcaoFinalConferencia } from "@/lib/conferencia/conferenciaAprovarGuard";
 import {
@@ -140,9 +140,11 @@ import { listCooperadosDaCooperativa, pushCooperadoToCloud, resolverCooperadoIdC
 import { pushOperacionalToCloud, syncContratosFromCloud } from "@/services/cooperativaSyncCloudService";
 import {
   enqueueConferenciaAprovacaoSync,
+  enqueueConferenciaRejeicaoSync,
   getConferenciaPatchSyncedSnapshot,
   markConferenciaPatchSyncedForOperacionalPush,
 } from "@/services/conferenciaAprovacaoSyncQueue";
+import { patchNotaDecisaoConferenciaNaNuvem } from "@/services/conferenciaPatchCloudTask";
 import { withConferenciaOperacionalPushScope } from "@/services/conferenciaOperacionalPushScope";
 import { getProdutosContrato } from "@/services/catalogoContratosService";
 import { countCooperadosLancamentosEmAbertoResponsavel } from "@/services/responsavelPainelIndex";
@@ -212,6 +214,19 @@ const ResponsavelFilaCooperadosList = dynamic(
       default: m.ResponsavelFilaCooperadosList,
     })),
   { loading: () => <div className="py-6 text-center text-sm text-gray-500">Carregando fila…</div> }
+);
+
+const NotasPedidoConferirItensTable = dynamic(
+  () =>
+    import("@/components/notas/NotasPedidoConferirItensTable").then((m) => ({
+      default: m.NotasPedidoConferirItensTable,
+    })),
+  { loading: () => <div className="py-6 text-center text-sm text-gray-500">Carregando itens…</div> }
+);
+
+const ConferenciaFotoLightbox = dynamic(
+  () => import("@/components/ui/FotoLightbox").then((m) => ({ default: m.FotoLightbox })),
+  { ssr: false }
 );
 import { getContratoLabel, getContratosEntrega, resolverContratoEntrega } from "@/utils/contratosEntrega";
 import { cn, formatCurrency, formatDate, formatMesReferencia, getCurrentMesReferencia } from "@/utils/format";
@@ -1529,6 +1544,7 @@ export default function NotasPedidoContent() {
   useEffect(() => {
     if (!filaDetalhada) return;
     prefetchConferenciaFotoPrefetchModule();
+    prefetchConferenciaModalUiChunks();
   }, [filaDetalhada]);
 
   const filaNavCount = filaDetalhada ? pendentesEstaveis.length : filaBadgeCount;
@@ -2849,6 +2865,7 @@ export default function NotasPedidoContent() {
 
   const openConferir = async (nota: NotaPedido) => {
     prefetchConferenciaFotoPrefetchModule();
+    prefetchConferenciaModalUiChunks();
     const raw = getData()?.notasPedido.find((n) => n.id === nota.id) ?? nota;
     const fresh = sanitizarNotaParaFilaConferencia(raw);
     if (notaBloqueadaConferenciaPorExclusaoPendente(fresh.id, pendingDeleteIds)) {
@@ -3334,27 +3351,24 @@ export default function NotasPedidoContent() {
 
     enqueueConferenciaAprovacaoSync(notaId, async () => {
       if (notaPatchSnapshot && coopId) {
-        const cnpj = await resolveCooperativaCnpj(getData(), coopId, user);
-        if (!cnpj) {
-          console.warn("[conferencia-aprovacao-sync]", notaId, "CNPJ não resolvido para sync.");
-          requestAppSyncLight();
-          return;
-        }
-        const patched = await patchNotaPedidoInCloud(cnpj, notaPatchSnapshot);
+        const patched = await patchNotaDecisaoConferenciaNaNuvem({
+          coopId,
+          user,
+          nota: notaPatchSnapshot,
+        });
         if (!patched.ok) {
-          console.warn(
-            "[conferencia-aprovacao-sync]",
-            notaId,
-            patched.error ?? "patch nota falhou"
-          );
-          setSuccessMsg(
-            patched.error ??
-              "Entrega lançada aqui, mas não sincronizou com a nuvem. Verifique a conexão."
-          );
+          console.warn("[conferencia-aprovacao-sync]", notaId, patched.error);
+          setSuccessMsg(patched.error);
           return;
         }
         markConferenciaPatchSyncedForOperacionalPush(notaId);
         await withConferenciaOperacionalPushScope(coopId, getConferenciaPatchSyncedSnapshot(), async () => {
+          const cnpj = await resolveCooperativaCnpj(getData(), coopId, user);
+          if (!cnpj) {
+            console.warn("[conferencia-aprovacao-sync]", notaId, "CNPJ não resolvido para push operacional.");
+            requestAppSyncLight();
+            return;
+          }
           await pushOperacionalToCloud(cnpj, getData(), coopId, { authoritative: true });
         });
         requestAppSyncLight();
@@ -3442,18 +3456,29 @@ export default function NotasPedidoContent() {
     setRejectModal(false);
     setMotivoRejeicao("");
 
+    const notaPatchSnapshot = notaAtualizada;
+
+    enqueueConferenciaRejeicaoSync(notaId, async () => {
+      if (notaPatchSnapshot && coopId) {
+        const patched = await patchNotaDecisaoConferenciaNaNuvem({
+          coopId,
+          user,
+          nota: notaPatchSnapshot,
+        });
+        if (!patched.ok) {
+          setSuccessMsg(patched.error);
+          requestAppSyncLight();
+          return;
+        }
+        requestAppSyncLight();
+      } else {
+        requestAppSyncLight();
+      }
+    });
+
     lancandoRef.current = true;
     void (async () => {
       try {
-        if (notaAtualizada && coopId) {
-          const cnpj = await resolveCooperativaCnpj(getData() ?? data, coopId, user);
-          if (cnpj) {
-            const patched = await patchNotaPedidoInCloud(cnpj, notaAtualizada);
-            if (!patched.ok) {
-              throw new Error(patched.error ?? "Não foi possível enviar a rejeição para a nuvem.");
-            }
-          }
-        }
         if (proxima) {
           const mesmoGrupo = filaConferenciaRef.current?.chave === chaveAtual;
           if (filaConferenciaRef.current && mesmoGrupo) {
@@ -3470,10 +3495,8 @@ export default function NotasPedidoContent() {
           setLancadoMsg("Correção enviada ao cooperado. Fila concluída!");
           setTimeout(() => setLancadoMsg(""), 5000);
         }
-      } catch (e) {
-        setSuccessMsg(
-          e instanceof Error ? e.message : "Falha ao sincronizar rejeição. Tente novamente ou verifique a conexão."
-        );
+      } catch {
+        setSuccessMsg("Não foi possível abrir a próxima entrega. A correção já foi registrada aqui.");
         requestAppSyncLight();
       } finally {
         lancandoRef.current = false;
@@ -4936,7 +4959,7 @@ export default function NotasPedidoContent() {
       } size="full"
         footer={selectedNota && isNotaNaFilaConferenciaResponsavel(selectedNota.status) && check("notas_pedido", "approve") ? (
           <div className="flex flex-col sm:flex-row gap-2 justify-between">
-            <Button variant="danger" onClick={() => { setMotivoRejeicao(""); setRejectModal(true); }} disabled={conferenciaTransicao || Boolean(lancamentoSequencia)}>
+            <Button variant="danger" onClick={() => { setMotivoRejeicao(""); setRejectModal(true); }} disabled={conferenciaTransicao || Boolean(lancamentoSequencia) || syncingForUi}>
               <XCircle size={18} /> Pedir correção
             </Button>
             <Button size="lg" onClick={handleLancarNota} disabled={conferenciaTransicao || Boolean(lancamentoSequencia) || syncingForUi}>
@@ -5365,94 +5388,23 @@ export default function NotasPedidoContent() {
                 />
               </FormField>
 
-              {conferenciaItens.length === 0 ? (
-                <AlertBanner variant="warning">
-                  Este contrato ainda não tem itens.{" "}
-                  <Link href="/contratos" className="font-semibold underline">Cadastrar em Contratos</Link>
-                </AlertBanner>
-              ) : (
-                <div className="border border-gray-200 rounded-xl overflow-hidden bg-white shadow-sm">
-                  <div className="bg-green-700 text-white px-4 py-3">
-                    <p className="font-semibold">{conferenciaInstNome || "Contrato"}</p>
-                    <p className="text-green-100 text-xs mt-0.5">
-                      {conferenciaFotoSomenteLeitura
-                        ? "Foto já lançada — quantidades bloqueadas"
-                        : contarFotosEnviadasNota(selectedNota) > 1
-                          ? `Foto ${Math.min(conferenciaFotoIdx, contarFotosEnviadasNota(selectedNota) - 1) + 1} — informe só o que aparece nesta foto`
-                          : "Confira a foto ao lado e informe as quantidades entregues"}
-                    </p>
-                  </div>
-                  {conferirErrors.itens && (
-                    <p className="text-sm text-red-600 px-4 pt-3">{conferirErrors.itens}</p>
-                  )}
-                  <div className="overflow-x-auto max-h-[min(50vh,420px)] overflow-y-auto">
-                    <table className="w-full text-sm">
-                      <thead className="bg-amber-50 border-b-2 border-amber-200 sticky top-0 z-10">
-                        <tr>
-                          <th className="text-left px-4 py-2.5 font-semibold text-gray-700">Item</th>
-                          <th className="text-center px-4 py-2.5 font-bold text-amber-800 w-40">
-                            Quantidade
-                          </th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-gray-100">
-                        {conferenciaItens.map((item, idx) => (
-                          <tr
-                            key={item.produtoInstituicaoId}
-                            className={cn(
-                              item.quantidade > 0 ? "bg-green-50/50" : "bg-amber-50/30 hover:bg-amber-50/60"
-                            )}
-                          >
-                            <td className="px-4 py-3 font-medium text-gray-900">{item.produtoNome}</td>
-                            <td className="px-4 py-3">
-                              <div className="mx-auto w-full max-w-[9rem] text-center">
-                                <p className="text-[10px] font-bold uppercase tracking-wide text-amber-700 mb-1">
-                                  Digite aqui
-                                </p>
-                                <Input
-                                  type="number"
-                                  min={0}
-                                  step="0.01"
-                                  inputMode="decimal"
-                                  disabled={conferenciaFotoSomenteLeitura}
-                                  aria-label={`Quantidade de ${item.produtoNome}`}
-                                  placeholder="0"
-                                  className={qtyInputClassName(
-                                    item.quantidade > 0,
-                                    cn("w-full", conferenciaFotoSomenteLeitura && "opacity-70 cursor-not-allowed")
-                                  )}
-                                  value={item.quantidade === 0 ? "" : item.quantidade}
-                                  onChange={(e) => {
-                                    const raw = e.target.value;
-                                    if (raw === "" || raw === ".") {
-                                      updateConferenciaQty(idx, 0);
-                                      return;
-                                    }
-                                    const qty = parseFloat(raw);
-                                    if (!Number.isNaN(qty)) updateConferenciaQty(idx, qty);
-                                  }}
-                                />
-                                <p className="text-[10px] font-medium text-gray-600 mt-1">{labelUnidade(item.unidade)}</p>
-                              </div>
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                  <div className="border-t border-gray-200 bg-gray-50 px-4 py-3 text-sm space-y-1">
-                    <div className="flex justify-between"><span>Total bruto</span><span>{formatCurrency(conferenciaTotais.bruto)}</span></div>
-                    <div className="flex justify-between text-amber-700"><span>Desconto ({conferenciaDescontoPct}%)</span><span>- {formatCurrency(conferenciaTotais.desconto)}</span></div>
-                    <div className="flex justify-between font-bold text-green-700 text-base pt-1 border-t border-gray-200"><span>A receber</span><span>{formatCurrency(conferenciaTotais.liquido)}</span></div>
-                  </div>
-                </div>
-              )}
+              <NotasPedidoConferirItensTable
+                selectedNota={selectedNota}
+                conferenciaInstNome={conferenciaInstNome}
+                conferenciaFotoSomenteLeitura={conferenciaFotoSomenteLeitura}
+                conferenciaFotoIdx={conferenciaFotoIdx}
+                conferenciaDescontoPct={conferenciaDescontoPct}
+                conferenciaItens={conferenciaItens}
+                conferenciaTotais={conferenciaTotais}
+                conferirErrorsItens={conferirErrors.itens}
+                onUpdateQty={updateConferenciaQty}
+              />
             </div>
           </div>
         )}
         </div>
         {conferenciaFotoAmpliada && conferenciaFotoAtualUrl && selectedNota && (
-          <FotoLightbox
+          <ConferenciaFotoLightbox
             open={conferenciaFotoAmpliada}
             items={[
               {

@@ -52,6 +52,9 @@ export function enqueueConferenciaAprovacaoSync(
   return run;
 }
 
+/** Rejeição usa a mesma fila FIFO que aprovação (PATCH serializado). */
+export const enqueueConferenciaRejeicaoSync = enqueueConferenciaAprovacaoSync;
+
 /** Somente testes — aguarda esvaziar a fila. */
 export function awaitConferenciaAprovacaoSyncQueueIdle(): Promise<void> {
   return tail;
