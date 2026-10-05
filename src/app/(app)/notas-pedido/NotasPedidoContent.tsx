@@ -1217,6 +1217,11 @@ export default function NotasPedidoContent() {
   }, [isCooperado, user?.id]);
 
   useEffect(() => {
+    if (isCooperado) return;
+    markRqlColdStartPhase("notas_pedido_responsavel_shell");
+  }, [isCooperado]);
+
+  useEffect(() => {
     if (!isCooperado) return;
     markRqlColdStartPhase("notas_pedido_cooperado_shell");
     ensureCooperadoDeliveryQueueOnlineListener();
@@ -1381,10 +1386,14 @@ export default function NotasPedidoContent() {
     iniciarModalAnexar(notaRejeitada, options);
   };
 
-  const cooperadosCoop = useMemo(() => {
-    if (!data || !coopId) return [];
-    return listCooperadosDaCooperativa(data, coopId);
-  }, [data, coopId]);
+  const cooperadosCoop =
+    useAppDataSelector(
+      (d) => {
+        if (!coopId || isCooperado) return [];
+        return listCooperadosDaCooperativa(d, coopId);
+      },
+      [coopId, isCooperado]
+    ) ?? [];
 
   useEffect(() => {
     if (!isCooperado && !filtroResponsavelIniciado.current) {
@@ -1652,10 +1661,11 @@ export default function NotasPedidoContent() {
       [coopId, isCooperado, hbDescontosRevision]
     ) ?? 0;
 
-  const contratosEntrega = useMemo(() => {
-    if (!data || !coopId) return [];
-    return getContratosEntrega(data, coopId);
-  }, [data, coopId]);
+  const contratosEntrega =
+    useAppDataSelector(
+      (d) => (coopId ? getContratosEntrega(d, coopId) : []),
+      [coopId]
+    ) ?? [];
 
   const instituicoes = contratosEntrega;
 
@@ -1846,22 +1856,22 @@ export default function NotasPedidoContent() {
   }, [avulsoInstId, data, coopId]);
 
   const avulsoTotais = useMemo(() => {
-    if (!data) return { liquido: 0 };
+    if (!avulsoModal || !data) return { liquido: 0 };
     const r = calcularItensNota(
       avulsoItens.map((i) => ({ ...i, valorBruto: i.quantidade * i.precoUnitario })),
       data.config.descontoPadraoCooperativa
     );
     return { liquido: r.valorLiquido };
-  }, [avulsoItens, data]);
+  }, [avulsoItens, data, avulsoModal]);
 
   const conferenciaTotais = useMemo(() => {
-    if (!data) return { liquido: 0, bruto: 0, desconto: 0 };
+    if (!conferirModal || !data) return { liquido: 0, bruto: 0, desconto: 0 };
     const r = calcularItensNota(
       conferenciaItens.map((i) => ({ ...i, valorBruto: i.quantidade * i.precoUnitario })),
       conferenciaDescontoPct
     );
     return { liquido: r.valorLiquido, bruto: r.valorBruto, desconto: r.valorDesconto };
-  }, [conferenciaItens, conferenciaDescontoPct, data]);
+  }, [conferenciaItens, conferenciaDescontoPct, data, conferirModal]);
 
   const openLancarAvulso = (preCooperadoId?: string) => {
     const instId = instituicaoPadraoId || instituicoes[0]?.id || "";
@@ -4667,6 +4677,7 @@ export default function NotasPedidoContent() {
       </Modal>
       )}
 
+      {avulsoModal && (
       <Modal
         open={avulsoModal}
         onClose={() => setAvulsoModal(false)}
@@ -4807,6 +4818,7 @@ export default function NotasPedidoContent() {
           )}
         </div>
       </Modal>
+      )}
 
       {conferirModal && (
       <Modal open={conferirModal} onClose={fecharConferirModal} title={
@@ -5361,6 +5373,7 @@ export default function NotasPedidoContent() {
         onConfirm={handleRejeitarNota}
       />
 
+      {viewModal && (
       <Modal open={viewModal} onClose={fecharViewModal} title="Detalhes da entrega" size="md">
         {selectedNota && (
           <div className="space-y-4">
@@ -5472,6 +5485,7 @@ export default function NotasPedidoContent() {
           </div>
         )}
       </Modal>
+      )}
 
       <ConfirmDialog
         open={confirmDescartarRascunho}
