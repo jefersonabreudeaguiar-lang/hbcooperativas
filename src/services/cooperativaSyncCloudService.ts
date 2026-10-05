@@ -2,7 +2,7 @@ import type { AppData, Cooperativa, Cooperado, Instituicao, ProdutoInstituicao, 
 import { normalizeCnpj } from "@/utils/cooperativa";
 import { secureApiFetch } from "@/lib/security/clientSession";
 import type { ContratosSyncPayload, OperacionalSyncPayload } from "@/lib/supabase/cooperativaSyncStorage";
-import { getData, saveDataSafe, runWithBatchedSaveAsync } from "@/services/dataStore";
+import { getData, getDataOperationalTruth, saveDataSafe, runWithBatchedSaveAsync } from "@/services/dataStore";
 import { syncCooperadosFromCloud, fetchCooperadosFromCloud, pushCooperadoToCloud } from "@/services/cooperadoCloudService";
 import { syncNotasPedidoFromCloud, patchNotaPedidoInCloud } from "@/services/notaPedidoCloudService";
 import { fetchCooperativaByCnpjFromCloud, mergeCooperativaIntoData } from "@/services/cooperativaCloudService";
@@ -1929,6 +1929,16 @@ export async function pushOperacionalToCloud(
   );
 }
 
+/** Push autoritativo pós-conferência: getData() usa view scoped e omitia fichas já conferidas (ex.: após reload). */
+function dataBaselineForOperacionalPush(explicit: AppData | undefined, authoritative: boolean | undefined): AppData {
+  if (authoritative) return getDataOperationalTruth();
+  return explicit ?? getData();
+}
+
+function relreadDataForOperacionalPush(authoritative: boolean | undefined): AppData {
+  return authoritative ? getDataOperationalTruth() : getData();
+}
+
 /** Corpo operacional (POST, dedupe, merge). Não chama a API pública nem `enqueueOperacionalPush`. */
 export async function pushOperacionalToCloudInternal(
   cnpj: string,
@@ -1958,18 +1968,20 @@ export async function pushOperacionalToCloudInternal(
     return;
   }
 
-  // Snapshot inicial só para resolver CNPJ/coop; após awaits sempre reler getData()
-  // para não sobrescrever ações do responsável feitas durante o fetch.
-  const seed = data ?? getData();
+  const authoritativePush = options?.authoritative === true;
+  const readPushData = () => relreadDataForOperacionalPush(authoritativePush);
+
+  // Snapshot inicial só para resolver CNPJ/coop; após awaits reler baseline do push.
+  const seed = dataBaselineForOperacionalPush(data, authoritativePush);
   const cid = coopId ?? resolveCoopId(seed, digits);
   if (!cid) return;
 
-  await ensureComunicadosAudioUploaded(digits, cid, getData()).catch(() => {});
+  await ensureComunicadosAudioUploaded(digits, cid, readPushData()).catch(() => {});
 
   bundle = await fetchSyncBundle(digits);
   let cloudCooperados: Cooperado[] = (await fetchCooperadosFromCloud(digits)).cooperados;
 
-  const fresh = aplicarPrestacoesContasExcluidas(getData());
+  const fresh = aplicarPrestacoesContasExcluidas(readPushData());
   let merged = fresh;
   if (bundle?.operacional) {
     const fromCloud = mergeOperacionalIntoData(fresh, bundle.operacional, cid, cloudCooperados);
@@ -2020,7 +2032,7 @@ export async function pushOperacionalToCloudInternal(
 
   // Após awaits dos cooperados, reler de novo e remontar payload se o responsável
   // salvou algo nesse intervalo — evita last-write-wins com blob antigo.
-  const afterPushCoop = aplicarPrestacoesContasExcluidas(getData());
+  const afterPushCoop = aplicarPrestacoesContasExcluidas(readPushData());
   let dataForPayload = afterPushCoop;
   if (bundle?.operacional) {
     bundle = await fetchSyncBundle(digits);
