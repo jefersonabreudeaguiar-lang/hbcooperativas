@@ -20,8 +20,6 @@ import { PromptDialog, ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { Card } from "@/components/ui/Card";
 import { NotaFotoImg } from "@/components/ui/NotaFotoImg";
 import {
-  FOTO_ENTREGA_CONFERENCIA_IMG,
-  FOTO_ENTREGA_CONFERENCIA_PANEL,
   FOTO_ENTREGA_THUMB_IMG,
   FOTO_ENTREGA_VIEW_MODAL_IMG,
 } from "@/components/notas/fotoEntregaDisplay";
@@ -222,6 +220,14 @@ const NotasPedidoConferirItensTable = dynamic(
       default: m.NotasPedidoConferirItensTable,
     })),
   { loading: () => <div className="py-6 text-center text-sm text-gray-500">Carregando itens…</div> }
+);
+
+const NotasPedidoConferirFotoPainel = dynamic(
+  () =>
+    import("@/components/notas/NotasPedidoConferirFotoPainel").then((m) => ({
+      default: m.NotasPedidoConferirFotoPainel,
+    })),
+  { loading: () => <div className="py-12 text-center text-sm text-white/70 bg-gray-900">Carregando fotos…</div> }
 );
 
 const ConferenciaFotoLightbox = dynamic(
@@ -5004,210 +5010,37 @@ export default function NotasPedidoContent() {
             {conferenciaRetomadaFichaMsg}
           </AlertBanner>
         )}
-        {selectedNota && (
+        {selectedNota && data && (
           <div className="flex flex-col lg:flex-row h-[calc(100dvh-8.5rem)] max-h-[calc(100dvh-8.5rem)] min-h-0 overflow-hidden">
-            <div className="flex flex-col w-full lg:w-[48%] xl:w-1/2 bg-gray-900 shrink-0 lg:h-full lg:min-h-0 min-h-0 border-b border-gray-800 lg:border-b-0">
-              <div className={cn("flex flex-col min-h-0", FOTO_ENTREGA_CONFERENCIA_PANEL)}>
-                <div className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden flex items-center justify-center p-2 sm:p-3">
-                {(() => {
-                  if (lancamentoSequencia) {
-                    const { url, displayIdx, total } = lancamentoSequencia;
-                    return (
-                      <div className="w-full h-full flex flex-col items-center justify-center text-center min-h-0">
-                        <div className="flex-1 min-h-0 w-full flex items-center justify-center">
-                          <div className="inline-block max-w-full max-h-full rounded-xl border-2 border-green-400/40 bg-white/5 p-1.5 shadow-lg ring-4 ring-green-500/50">
-                            {/* eslint-disable-next-line @next/next/no-img-element */}
-                            <img
-                              src={url}
-                              alt={`Lançada ${displayIdx + 1} de ${total}`}
-                              className={FOTO_ENTREGA_CONFERENCIA_IMG}
-                            />
-                          </div>
-                        </div>
-                        <p className="shrink-0 text-green-400 font-semibold text-sm mt-2 px-2">
-                          Foto {displayIdx + 1} de {total} · Lançada na ficha ✓
-                        </p>
-                        <div className="shrink-0 flex flex-wrap items-center justify-center gap-2 py-2 px-2">
-                          {Array.from({ length: total }, (_, i) => (
-                            <span
-                              key={i}
-                              className={cn(
-                                "text-xs font-semibold px-2.5 py-1 rounded-full border",
-                                i <= displayIdx
-                                  ? "bg-green-500/20 border-green-400 text-green-200"
-                                  : "bg-white/10 border-white/20 text-white/50"
-                              )}
-                            >
-                              Foto {i + 1}{i <= displayIdx ? " ✓" : ""}
-                            </span>
-                          ))}
-                        </div>
-                      </div>
-                    );
+            <NotasPedidoConferirFotoPainel
+              selectedNota={selectedNota}
+              data={data}
+              coopId={coopId}
+              lancamentoSequencia={lancamentoSequencia}
+              conferenciaFotoIdx={conferenciaFotoIdx}
+              conferenciaFotoCarregando={conferenciaFotoCarregando}
+              conferenciaFotoAtualUrl={conferenciaFotoAtualUrl}
+              conferenciaFotoErro={conferenciaFotoErro}
+              conferenciaTransicao={conferenciaTransicao}
+              fotosLancadasUi={fotosLancadasUi}
+              onAmpliarFoto={() => setConferenciaFotoAmpliada(true)}
+              onFotoImgError={(idx) => {
+                const key = conferenciaFotoCacheKey(selectedNota.id, idx);
+                conferenciaFotoCacheRef.current.delete(key);
+                if (conferenciaFotoAtualUrl) revokePreviewUrl(conferenciaFotoAtualUrl);
+                setConferenciaFotoErro("A foto não pôde ser exibida neste aparelho. Toque em «Tentar de novo».");
+                setConferenciaFotoAtualUrl(null);
+              }}
+              onRetryFotoAtual={(idx) =>
+                void loadConferenciaFoto(selectedNota, idx).then((url) => {
+                  if (!url && !conferenciaFotoErro) {
+                    setConferenciaFotoErro("Não foi possível carregar a foto da nuvem.");
                   }
-
-                  const totalFotos = contarFotosEnviadasNota(selectedNota);
-                  const idx = Math.min(conferenciaFotoIdx, Math.max(0, totalFotos - 1));
-                  if (totalFotos > 0) {
-                    return conferenciaFotoCarregando && !conferenciaFotoAtualUrl ? (
-                      <p className="text-white/70 text-sm text-center">Carregando foto…</p>
-                    ) : conferenciaFotoAtualUrl ? (
-                      <div className="inline-block max-w-full rounded-xl border-2 border-white/25 bg-white/5 p-1.5 shadow-lg">
-                        {/* eslint-disable-next-line @next/next/no-img-element */}
-                        <button
-                          type="button"
-                          className="block max-w-full cursor-zoom-in focus:outline-none focus-visible:ring-2 focus-visible:ring-green-400 rounded-lg"
-                          onClick={() => setConferenciaFotoAmpliada(true)}
-                          title="Toque para ver a foto em tela cheia"
-                        >
-                          <img
-                            src={conferenciaFotoAtualUrl}
-                            alt={`Pedido ${idx + 1} de ${totalFotos}`}
-                            className={FOTO_ENTREGA_CONFERENCIA_IMG}
-                            onError={() => {
-                            const key = conferenciaFotoCacheKey(selectedNota.id, idx);
-                            conferenciaFotoCacheRef.current.delete(key);
-                            revokePreviewUrl(conferenciaFotoAtualUrl);
-                            setConferenciaFotoErro(
-                              "A foto não pôde ser exibida neste aparelho. Toque em «Tentar de novo»."
-                            );
-                            setConferenciaFotoAtualUrl(null);
-                          }}
-                        />
-                        </button>
-                        <p className="mt-1.5 text-center text-[11px] text-white/60">Toque na foto para ampliar · imagem inteira visível</p>
-                      </div>
-                    ) : (
-                      <div className="text-center py-6 px-4 space-y-3 max-w-md mx-auto">
-                        <p className="text-amber-200 text-sm">
-                          {conferenciaFotoErro ||
-                            "Foto ainda não carregou. Aguarde ou tente de novo."}
-                        </p>
-                        <Button
-                          type="button"
-                          variant="secondary"
-                          size="sm"
-                          onClick={() =>
-                            selectedNota &&
-                            void loadConferenciaFoto(selectedNota, idx).then((url) => {
-                              if (!url && !conferenciaFotoErro) {
-                                setConferenciaFotoErro(
-                                  "Não foi possível carregar a foto da nuvem."
-                                );
-                              }
-                            })
-                          }
-                        >
-                          Tentar de novo
-                        </Button>
-                      </div>
-                    );
-                  }
-                  if (conferenciaFotoErro) {
-                    return (
-                      <div className="text-center py-12 px-4 space-y-3">
-                        <p className="text-red-300 text-sm">{conferenciaFotoErro}</p>
-                        <Button
-                          type="button"
-                          variant="secondary"
-                          size="sm"
-                          onClick={() => void tentarRecarregarFotosConferencia()}
-                        >
-                          Tentar carregar de novo
-                        </Button>
-                      </div>
-                    );
-                  }
-                  if (conferenciaTransicao) {
-                    return <p className="text-gray-400 text-center py-12">Carregando fotos da nuvem...</p>;
-                  }
-                  if (notaTemFotoArmazenadaNaNuvem(selectedNota) && contarFotosEnviadasNota(selectedNota) > 0) {
-                    return (
-                      <div className="text-center py-12 px-4 space-y-3">
-                        <p className="text-red-300 text-sm">
-                          Fotos na nuvem, mas não carregaram neste aparelho. Verifique a conexão.
-                        </p>
-                        <Button
-                          type="button"
-                          variant="secondary"
-                          size="sm"
-                          onClick={() => void tentarRecarregarFotosConferencia()}
-                        >
-                          Tentar carregar de novo
-                        </Button>
-                      </div>
-                    );
-                  }
-                  return <p className="text-gray-400 text-center py-12">Sem foto</p>;
-                })()}
-                </div>
-                {(() => {
-                  const totalFotosNav = contarFotosEnviadasNota(selectedNota);
-                  if (totalFotosNav <= 1) return null;
-                  const idxNav = Math.min(
-                    conferenciaFotoIdx,
-                    Math.max(0, totalFotosNav - 1)
-                  );
-                  return (
-                    <div className="shrink-0 border-t border-white/10 px-2 py-2 space-y-2 bg-gray-900/95">
-                      <div className="flex flex-wrap items-center justify-center gap-2">
-                        {Array.from({ length: totalFotosNav }, (_, i) => (
-                          <button
-                            key={i}
-                            type="button"
-                            onClick={() => irParaFotoConferencia(i)}
-                            className={cn(
-                              "text-xs font-semibold px-3 py-1.5 rounded-full border transition-all",
-                              i === idxNav
-                                ? "border-green-400 bg-green-500/20 text-green-100"
-                                : fotosLancadasUi.has(i)
-                                  ? "border-green-600/60 bg-green-900/30 text-green-200"
-                                  : "border-white/20 text-white/70 hover:border-white/40"
-                            )}
-                          >
-                            Foto {i + 1}
-                            {fotosLancadasUi.has(i) ? " ✓" : ""}
-                          </button>
-                        ))}
-                      </div>
-                      <div className="flex items-center justify-center gap-3 text-white/90 text-sm">
-                        <Button
-                          type="button"
-                          variant="secondary"
-                          size="sm"
-                          disabled={idxNav <= 0}
-                          onClick={() => irParaFotoConferencia(idxNav - 1)}
-                        >
-                          Anterior
-                        </Button>
-                        <span className="font-medium tabular-nums">
-                          Foto {idxNav + 1} de {totalFotosNav}
-                        </span>
-                        <Button
-                          type="button"
-                          variant="secondary"
-                          size="sm"
-                          disabled={idxNav >= totalFotosNav - 1}
-                          onClick={() => irParaFotoConferencia(idxNav + 1)}
-                        >
-                          Próxima foto
-                        </Button>
-                      </div>
-                    </div>
-                  );
-                })()}
-              </div>
-              <div className="shrink-0 px-4 py-3 bg-black/40 text-white text-sm space-y-0.5">
-                <p><strong>{getCooperadoNomeResolvido(data, selectedNota.cooperadoId, coopId)}</strong> · {formatDate(selectedNota.dataEntrega)}</p>
-                <p className="text-white/80">
-                  {getEscolaNotaLabel(selectedNota, data.instituicoes)} · {selectedNota.numeroNota}
-                  {(() => {
-                    const qtd = getFotosExibicaoNota(selectedNota).length;
-                    return qtd > 1 ? ` · ${qtd} fotos` : "";
-                  })()}
-                </p>
-              </div>
-            </div>
+                })
+              }
+              onRecarregarFotos={() => void tentarRecarregarFotosConferencia()}
+              onIrParaFoto={irParaFotoConferencia}
+            />
 
             <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain p-4 lg:p-6 space-y-4 bg-gray-50">
               {filaConferenciaTotal > 1 && (
