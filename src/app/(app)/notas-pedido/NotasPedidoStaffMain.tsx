@@ -6,7 +6,13 @@ import Link from "next/link";
 import {
   Camera, CheckCircle, FileText, XCircle, RefreshCw, ChevronRight, Eye, Building2, Pencil, UserPlus, X, ImagePlus, Trash2, FileSignature, BookOpen, Package, Users,
 } from "lucide-react";
-import { useAppData, useAppDataReady, useAppDataSelector } from "@/hooks/useAppData";
+import {
+  useAppDataReady,
+  useAppDataSelector,
+  useAppDataSnapshotForDomains,
+} from "@/hooks/useAppData";
+import { listarPendentesConferenciaResponsavel } from "@/lib/conferencia/responsavelConferenciaFilaNav";
+import { resolveStaffNotasPedidoNotifyDomains } from "@/lib/performance/staffNotasPedidoNotifyDomains";
 import { useCooperadoTabPanelActive } from "@/hooks/useCooperadoTabPanelActive";
 import { useResponsavelFilaConferencia } from "@/hooks/useResponsavelFilaConferencia";
 import { usePermissions } from "@/hooks/usePermissions";
@@ -340,7 +346,7 @@ function getEscolaNotaLabel(
 }
 
 function loadItensFromInstituicao(
-  data: NonNullable<ReturnType<typeof useAppData>>,
+  data: AppData,
   instituicaoId: string,
   cooperativaId?: string,
   existing?: NotaPedidoItem[]
@@ -371,7 +377,6 @@ function qtyInputClassName(filled: boolean, extra?: string) {
 export default function NotasPedidoStaffMain() {
   const ready = useAppDataReady();
   const tabActive = useCooperadoTabPanelActive("/notas-pedido");
-  const data = useAppData();
   const { check, user, isCooperado, isDiretoria, cooperadoId } = usePermissions();
   const { syncing, syncingForUi } = useSyncStatus();
   const searchParams = useSearchParams();
@@ -470,6 +475,20 @@ export default function NotasPedidoStaffMain() {
       setAbaCooperado(aba);
     });
   }, []);
+
+  const staffNotifyDomains = useMemo(
+    () =>
+      resolveStaffNotasPedidoNotifyDomains({
+        isCooperado,
+        vistaResponsavel,
+        conferirModal,
+        anexarModal,
+        abaCooperado,
+      }),
+    [isCooperado, vistaResponsavel, conferirModal, anexarModal, abaCooperado]
+  );
+  const data = useAppDataSnapshotForDomains(staffNotifyDomains);
+
   const [contratoInstId, setContratoInstId] = useState("");
   const [anexarSucesso, setAnexarSucesso] = useState(false);
   const [ultimaNotaEnviadaIds, setUltimaNotaEnviadaIds] = useState<string[]>([]);
@@ -2935,17 +2954,7 @@ export default function NotasPedidoStaffMain() {
     coopIdLocal: string,
     chaveGrupo?: string,
     excludeId?: string
-  ) =>
-    d.notasPedido
-      .filter((n) => {
-        const candidata = sanitizarNotaParaFilaConferencia(n);
-        if (!notaElegivelParaFilaConferenciaResponsavel(candidata)) return false;
-        if (excludeId && n.id === excludeId) return false;
-        if (!notaPertenceCooperativa(d, n, coopIdLocal)) return false;
-        if (chaveGrupo && getChaveGrupoConferencia(n, d, coopIdLocal) !== chaveGrupo) return false;
-        return true;
-      })
-      .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+  ) => listarPendentesConferenciaResponsavel(d, coopIdLocal, chaveGrupo, excludeId);
 
   const openConferir = async (nota: NotaPedido) => {
     aquecerUiConferencia();
