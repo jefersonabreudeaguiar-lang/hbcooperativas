@@ -23,6 +23,7 @@ const tabs = read("src/lib/performance/cooperadoBottomTabRoutes.ts");
 const keep = read("src/lib/performance/cooperadoMobileTabKeepAlive.ts");
 const prefetch = read("src/lib/hb-credit/hbCreditNavPrefetch.ts");
 const navPrefetch = read("src/lib/performance/cooperadoNavPrefetch.ts");
+const rootLayout = read("src/app/layout.tsx");
 const layout = read("src/components/layout/AppLayout.tsx");
 const panel = read("src/components/performance/CooperadoMobileTabKeepAlive.tsx");
 const perms = read("src/permissions/index.ts");
@@ -34,8 +35,9 @@ assert(
   "keep-alive não desliga fail-closed no browser"
 );
 assert(prefetch.includes("COOPERADO_BOTTOM_TAB_HREFS"), "prefetch usa fonte única de abas");
+assert(rootLayout.includes("data-cooperado-tab-keep-alive"), "html expõe flag keep-alive cooperado");
 assert(layout.includes("CooperadoMobileTabKeepAlive"), "AppLayout keep-alive cooperado");
-assert(panel.includes("CooperadoTabPanelProvider"), "contexto painel ativo P0");
+assert(panel.includes("useSyncExternalStore"), "viewport mobile sync no 1º paint");
 assert(panel.includes("data-cooperado-tab-panel"), "painéis por aba");
 assert(perms.includes("cooperadoBottomTabRoutes"), "menu mobile alinhado às 5 abas");
 

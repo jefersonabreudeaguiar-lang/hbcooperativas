@@ -23,6 +23,10 @@ const pageRelease: ClientReleaseInfo = {
   gitCommitSha: (process.env.VERCEL_GIT_COMMIT_SHA ?? "").trim(),
 };
 
+const cooperadoTabKeepAliveOn = !["false", "0", "no", "off"].includes(
+  (process.env.NEXT_PUBLIC_COOPERADO_TAB_KEEP_ALIVE ?? "true").trim().toLowerCase()
+);
+
 export const metadata: Metadata = {
   title: "HB Cooperativas — Gestão de Cooperativas",
   description: "Plataforma HB Cooperativas — Portal do Cooperado e Painel Administrativo",
@@ -61,6 +65,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       className={`${geist.variable} h-full`}
       data-dpl-id={pageRelease.deploymentId}
       data-app-build={String(pageRelease.build)}
+      data-cooperado-tab-keep-alive={cooperadoTabKeepAliveOn ? "1" : "0"}
     >
       <head>
         <script dangerouslySetInnerHTML={{ __html: buildInlinePageReleaseBootstrap(pageRelease) }} />

@@ -1,6 +1,6 @@
 "use client";
 
-import { useLayoutEffect, useRef, useState, useEffect, type ReactNode } from "react";
+import { useLayoutEffect, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 import { cn } from "@/utils/format";
 import { isLowMemoryDevice } from "@/services/imagePipelineService";
 import { CooperadoTabPanelProvider } from "@/lib/performance/cooperadoTabPanelContext";
@@ -12,22 +12,49 @@ import {
   trimCooperadoTabCacheOrder,
 } from "@/lib/performance/cooperadoMobileTabKeepAlive";
 
+function subscribeCooperadoMobileViewport(onChange: () => void): () => void {
+  const mq = window.matchMedia("(max-width: 1023px)");
+  mq.addEventListener("change", onChange);
+  return () => mq.removeEventListener("change", onChange);
+}
+
+function getCooperadoMobileViewportSnapshot(): boolean {
+  return window.matchMedia("(max-width: 1023px)").matches;
+}
+
+function getCooperadoMobileViewportServerSnapshot(): boolean {
+  return false;
+}
+
 function useCooperadoMobileViewport(): boolean {
-  const [mobile, setMobile] = useState(false);
-  useEffect(() => {
-    const mq = window.matchMedia("(max-width: 1023px)");
-    const apply = () => setMobile(mq.matches);
-    apply();
-    mq.addEventListener("change", apply);
-    return () => mq.removeEventListener("change", apply);
-  }, []);
-  return mobile;
+  return useSyncExternalStore(
+    subscribeCooperadoMobileViewport,
+    getCooperadoMobileViewportSnapshot,
+    getCooperadoMobileViewportServerSnapshot
+  );
 }
 
 type Props = {
   pathname: string;
   children: ReactNode;
 };
+
+function publishKeepAliveDomState(state: {
+  enabled: boolean;
+  mobile: boolean;
+  onTab: boolean;
+  pathname: string;
+  panelCount: number;
+}): void {
+  try {
+    document.documentElement.setAttribute(
+      "data-hb-keep-alive-state",
+      `e${state.enabled ? 1 : 0}m${state.mobile ? 1 : 0}t${state.onTab ? 1 : 0}p${state.panelCount}:${state.pathname}`
+    );
+  } catch {
+    /* ignore */
+  }
+}
 
 /**
  * RQL 8.6 — cache leve das abas do rodapé (LRU): no máximo 2 telas montadas (+ atual).
@@ -45,6 +72,9 @@ export function CooperadoMobileTabKeepAlive({ pathname, children }: Props) {
   const onTab = isCooperadoBottomTabPath(pathname);
 
   useLayoutEffect(() => {
+    const panelCount = document.querySelectorAll("[data-cooperado-tab-panel]").length;
+    publishKeepAliveDomState({ enabled, mobile, onTab, pathname, panelCount });
+
     if (!enabled || !mobile || !onTab) return;
     cacheRef.current[pathname] = children;
     const merged = [pathname, ...orderRef.current.filter((h) => h !== pathname)];
@@ -56,6 +86,12 @@ export function CooperadoMobileTabKeepAlive({ pathname, children }: Props) {
     tick((n) => n + 1);
   }, [enabled, mobile, onTab, pathname, children, cacheLimit, lowMemory]);
 
+  const panelForHref = (href: string, activePath: string | null): ReactNode | undefined => {
+    if (onTab && href === pathname) return children;
+    if (activePath === href && onTab) return children;
+    return cacheRef.current[href];
+  };
+
   if (!enabled || !mobile) {
     return <>{children}</>;
   }
@@ -63,7 +99,7 @@ export function CooperadoMobileTabKeepAlive({ pathname, children }: Props) {
   const renderPanels = (activePath: string | null) =>
     COOPERADO_BOTTOM_TAB_HREFS.map((href) => {
       const active = activePath === href;
-      const panel = active && onTab ? children : cacheRef.current[href];
+      const panel = panelForHref(href, activePath);
       if (!panel) return null;
       return (
         <div
@@ -78,12 +114,14 @@ export function CooperadoMobileTabKeepAlive({ pathname, children }: Props) {
       );
     });
 
+  const panels = onTab ? renderPanels(pathname) : renderPanels(null);
+
   if (!onTab) {
     return (
       <CooperadoTabPanelProvider activeHref={pathname}>
         <>
           <div className="hidden" aria-hidden>
-            {renderPanels(null)}
+            {panels}
           </div>
           {children}
         </>
@@ -93,7 +131,7 @@ export function CooperadoMobileTabKeepAlive({ pathname, children }: Props) {
 
   return (
     <CooperadoTabPanelProvider activeHref={pathname}>
-      <>{renderPanels(pathname)}</>
+      <>{panels}</>
     </CooperadoTabPanelProvider>
   );
 }

@@ -7,14 +7,22 @@ export { COOPERADO_BOTTOM_TAB_HREFS, isCooperadoBottomTabPath };
 
 const OFF = new Set(["false", "0", "no", "off"]);
 
-/** RQL 8.6 — LRU de abas montadas no mobile cooperado. Default **ligado**; `NEXT_PUBLIC_COOPERADO_TAB_KEEP_ALIVE=false` desliga. */
-export function isCooperadoMobileTabKeepAliveEnabled(): boolean {
+function readKeepAliveEnvDefault(): boolean {
   const raw =
     typeof process !== "undefined"
       ? (process.env.NEXT_PUBLIC_COOPERADO_TAB_KEEP_ALIVE ?? "true")
       : "true";
-  const v = raw.trim().toLowerCase();
-  return !OFF.has(v);
+  return !OFF.has(raw.trim().toLowerCase());
+}
+
+/** RQL 8.6 — LRU de abas montadas no mobile cooperado. Default **ligado**; `NEXT_PUBLIC_COOPERADO_TAB_KEEP_ALIVE=false` desliga. */
+export function isCooperadoMobileTabKeepAliveEnabled(): boolean {
+  if (typeof document !== "undefined") {
+    const dom = document.documentElement.getAttribute("data-cooperado-tab-keep-alive");
+    if (dom === "0") return false;
+    if (dom === "1") return true;
+  }
+  return readKeepAliveEnvDefault();
 }
 
 /** Abas inativas mantidas montadas — 2 no padrão, 1 em aparelho com pouca RAM. */
