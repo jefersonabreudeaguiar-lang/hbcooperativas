@@ -17,9 +17,9 @@ import {
 } from "@/lib/conferencia/conferenciaFilaDecisaoLocal";
 import { yieldConferenciaUiFrame } from "@/lib/conferencia/conferenciaUiYield";
 import {
-  flushConferenciaFotoPersistNow,
-  scheduleConferenciaFotoPersist,
-} from "@/lib/conferencia/conferenciaFotoPersistSchedule";
+  delayMs,
+  slideMsConferenciaLancamentoSequencia,
+} from "@/lib/conferencia/conferenciaSequenciaLancamentoFotos";
 import { listarPendentesConferenciaResponsavel } from "@/lib/conferencia/responsavelConferenciaFilaNav";
 import { resolveStaffNotasPedidoNotifyDomains } from "@/lib/performance/staffNotasPedidoNotifyDomains";
 import { useCooperadoTabPanelActive } from "@/hooks/useCooperadoTabPanelActive";
@@ -51,7 +51,6 @@ import {
   endConferenciaDeferLocalPersist,
   beginConferenciaModalSaveBatch,
   endConferenciaModalSaveBatch,
-  endConferenciaModalFotoSaveBatch,
 } from "@/services/dataStore";
 import { requestAppSync, requestAppSyncImmediate, requestAppSyncLight } from "@/services/syncRequest";
 import { scheduleCooperadoPostInteractiveTask, scheduleStaffPostInteractiveTask } from "@/lib/performance/cooperadoColdStart";
@@ -1019,118 +1018,7 @@ export default function NotasPedidoStaffMain() {
       lancamentosFotoConferenciaRef.current.set(fotoIdx, r.itens);
       fotosLancadasConferenciaRef.current.add(fotoIdx);
       setFotosLancadasUi(new Set(fotosLancadasConferenciaRef.current));
-
-      const runPersistNaFicha = () => {
-        beginConferenciaModalSaveBatch();
-        try {
-          updateData((d) => {
-            const cooperadoIdCanonico = resolverCooperadoIdCanonico(
-              d,
-              conferenciaCooperadoId,
-              coopId,
-              nomeCoop
-            );
-            const base = aplicarItensNaNota(
-              {
-                ...selectedNota,
-                cooperadoId: cooperadoIdCanonico,
-                cooperadoNomeSnapshot: nomeCoop,
-                instituicaoId: conferenciaInstId,
-                localEntrega: conferenciaLocal,
-                escolaAvulsaNome: conferenciaEscolaAvulsa.trim() || selectedNota.escolaAvulsaNome,
-              },
-              conferenciaItens.map((i) => ({ ...i, valorBruto: 0 })),
-              conferenciaDescontoPct
-            );
-            const divisao = resolverDivisaoConferencia(d, selectedNota);
-
-            if (divisao) {
-              const jaNaFicha = divisao.participantes.every((p) =>
-                d.fichaCorrida.some(
-                  (f) =>
-                    f.notaPedidoId === selectedNota.id &&
-                    f.cooperadoId === p.cooperadoId &&
-                    descricaoFichaCorrespondeFoto(f.descricao, fotoIdx, totalFotos)
-                )
-              );
-              if (jaNaFicha) return d;
-
-              const fichas = buildFichasDivisaoFromNota(d, base, user.name, divisao, d.fichaCorrida, {
-                fotoIndex: fotoIdx,
-                totalFotos,
-              });
-              let arquivosMensais = d.arquivosMensais;
-              for (const p of divisao.participantes) {
-                arquivosMensais = upsertArquivoMensal(
-                  { ...d, fichaCorrida: [...d.fichaCorrida, ...fichas], arquivosMensais },
-                  p.cooperadoId,
-                  base.cooperativaId,
-                  base.mesReferencia,
-                  { notaPedidoIds: [selectedNota.id] }
-                );
-              }
-              return addAuditEntry(
-                {
-                  ...d,
-                  fichaCorrida: [...d.fichaCorrida, ...fichas],
-                  arquivosMensais,
-                },
-                {
-                  entityType: "nota_pedido",
-                  entityId: selectedNota.id,
-                  action: "aprovar",
-                  userId: user.id,
-                  userName: user.name,
-                  changes: `Foto ${fotoIdx + 1}/${totalFotos} lançada · dividida entre ${divisao.participantes.length} cooperados`,
-                }
-              );
-            }
-
-            const ficha = buildFichaFromNota(base, d, user.name, nomeCoop, {
-              fotoIndex: fotoIdx,
-              totalFotos,
-            });
-
-            if (fichaJaTemLancamentoFoto(d.fichaCorrida, selectedNota.id, fotoIdx, totalFotos)) {
-              return d;
-            }
-
-            const arquivosMensais = upsertArquivoMensal(
-              d,
-              base.cooperadoId,
-              base.cooperativaId,
-              base.mesReferencia,
-              {
-                notaPedidoIds: [selectedNota.id],
-              }
-            );
-            return addAuditEntry(
-              {
-                ...d,
-                fichaCorrida: [...d.fichaCorrida, ficha],
-                arquivosMensais,
-              },
-              {
-                entityType: "nota_pedido",
-                entityId: selectedNota.id,
-                action: "aprovar",
-                userId: user.id,
-                userName: user.name,
-                changes: `Foto ${fotoIdx + 1}/${totalFotos} lançada na ficha`,
-              }
-            );
-          });
-        } finally {
-          endConferenciaModalFotoSaveBatch();
-        }
-        persistirDraftConferenciaEmMemoria();
-      };
-
-      if (opts?.uiFirst) {
-        requestAnimationFrame(() => scheduleConferenciaFotoPersist(runPersistNaFicha));
-      } else {
-        scheduleConferenciaFotoPersist(runPersistNaFicha);
-      }
+      persistirDraftConferenciaEmMemoria();
 
       return { ok: true };
     },
@@ -1150,6 +1038,153 @@ export default function NotasPedidoStaffMain() {
       resolverDivisaoConferencia,
       persistirDraftConferenciaEmMemoria,
     ]
+  );
+
+  const persistirFotoConferenciaNaFicha = useCallback(
+    (fotoIdx: number, totalFotos: number, itensFoto: NotaPedidoItem[]) => {
+      if (!user || !selectedNota) return;
+      updateData((d) => {
+        if (fichaJaTemLancamentoFoto(d.fichaCorrida, selectedNota.id, fotoIdx, totalFotos)) {
+          return d;
+        }
+        const coopSel =
+          coopId && d
+            ? listCooperadosDaCooperativa(d, coopId).find((c) => c.id === conferenciaCooperadoId)
+            : undefined;
+        const nomeCoop =
+          coopSel?.nomeCompleto?.trim() ||
+          selectedNota.cooperadoNomeSnapshot?.trim() ||
+          getCooperadoNomeResolvido(d, conferenciaCooperadoId, coopId);
+        const cooperadoIdCanonico = resolverCooperadoIdCanonico(
+          d,
+          conferenciaCooperadoId,
+          coopId,
+          nomeCoop
+        );
+        const base = aplicarItensNaNota(
+          {
+            ...selectedNota,
+            cooperadoId: cooperadoIdCanonico,
+            cooperadoNomeSnapshot: nomeCoop,
+            instituicaoId: conferenciaInstId,
+            localEntrega: conferenciaLocal,
+            escolaAvulsaNome: conferenciaEscolaAvulsa.trim() || selectedNota.escolaAvulsaNome,
+          },
+          itensFoto.map((i) => ({ ...i, valorBruto: 0 })),
+          conferenciaDescontoPct
+        );
+        const divisao = resolverDivisaoConferencia(d, selectedNota);
+
+        if (divisao) {
+          const jaNaFicha = divisao.participantes.every((p) =>
+            d.fichaCorrida.some(
+              (f) =>
+                f.notaPedidoId === selectedNota.id &&
+                f.cooperadoId === p.cooperadoId &&
+                descricaoFichaCorrespondeFoto(f.descricao, fotoIdx, totalFotos)
+            )
+          );
+          if (jaNaFicha) return d;
+
+          const fichas = buildFichasDivisaoFromNota(d, base, user.name, divisao, d.fichaCorrida, {
+            fotoIndex: fotoIdx,
+            totalFotos,
+          });
+          let arquivosMensais = d.arquivosMensais;
+          for (const p of divisao.participantes) {
+            arquivosMensais = upsertArquivoMensal(
+              { ...d, fichaCorrida: [...d.fichaCorrida, ...fichas], arquivosMensais },
+              p.cooperadoId,
+              base.cooperativaId,
+              base.mesReferencia,
+              { notaPedidoIds: [selectedNota.id] }
+            );
+          }
+          return addAuditEntry(
+            {
+              ...d,
+              fichaCorrida: [...d.fichaCorrida, ...fichas],
+              arquivosMensais,
+            },
+            {
+              entityType: "nota_pedido",
+              entityId: selectedNota.id,
+              action: "aprovar",
+              userId: user.id,
+              userName: user.name,
+              changes: `Foto ${fotoIdx + 1}/${totalFotos} lançada · dividida entre ${divisao.participantes.length} cooperados`,
+            }
+          );
+        }
+
+        const ficha = buildFichaFromNota(base, d, user.name, nomeCoop, {
+          fotoIndex: fotoIdx,
+          totalFotos,
+        });
+        const arquivosMensais = upsertArquivoMensal(
+          d,
+          base.cooperadoId,
+          base.cooperativaId,
+          base.mesReferencia,
+          { notaPedidoIds: [selectedNota.id] }
+        );
+        return addAuditEntry(
+          {
+            ...d,
+            fichaCorrida: [...d.fichaCorrida, ficha],
+            arquivosMensais,
+          },
+          {
+            entityType: "nota_pedido",
+            entityId: selectedNota.id,
+            action: "aprovar",
+            userId: user.id,
+            userName: user.name,
+            changes: `Foto ${fotoIdx + 1}/${totalFotos} lançada na ficha`,
+          }
+        );
+      });
+    },
+    [
+      user,
+      selectedNota,
+      conferenciaDescontoPct,
+      conferenciaCooperadoId,
+      coopId,
+      conferenciaInstId,
+      conferenciaLocal,
+      conferenciaEscolaAvulsa,
+      resolverDivisaoConferencia,
+    ]
+  );
+
+  const executarLancamentoSequencialFichasMultiFoto = useCallback(
+    async (nota: NotaPedido, total: number) => {
+      const slideMs = slideMsConferenciaLancamentoSequencia(total);
+      for (let idx = 0; idx < total; idx++) {
+        try {
+          const cacheKey = conferenciaFotoCacheKey(nota.id, idx);
+          const url =
+            conferenciaFotoCacheRef.current.get(cacheKey) ??
+            (await Promise.race([
+              loadConferenciaFoto(nota, idx),
+              new Promise<null>((res) => setTimeout(() => res(null), 4000)),
+            ]));
+          if (url) {
+            setLancamentoSequencia({ url, displayIdx: idx, total });
+          }
+        } catch {
+          /* slideshow opcional */
+        }
+        const itens = lancamentosFotoConferenciaRef.current.get(idx);
+        if (itens?.length) {
+          persistirFotoConferenciaNaFicha(idx, total, itens);
+        }
+        await delayMs(slideMs);
+      }
+      setLancamentoSequencia(null);
+    },
+    [loadConferenciaFoto, persistirFotoConferenciaNaFicha]
   );
 
   const aquecerUiConferencia = useCallback(() => {
@@ -3307,7 +3342,7 @@ export default function NotasPedidoStaffMain() {
       }
       setConferirErrors({});
       const proxIdx = Math.min(fotoAtual + 1, qtdFotosAprovadas - 1);
-      setLancadoMsg(`Foto ${fotoAtual + 1} de ${qtdFotosAprovadas} lançada. Preencha a foto ${proxIdx + 1}.`);
+      setLancadoMsg(`Foto ${fotoAtual + 1} de ${qtdFotosAprovadas} registrada. Preencha a foto ${proxIdx + 1}.`);
       setTimeout(() => setLancadoMsg(""), 2800);
       avancarParaFotoConferencia(proxIdx);
       return;
@@ -3347,9 +3382,7 @@ export default function NotasPedidoStaffMain() {
       }
     }
 
-    flushConferenciaFotoPersistNow();
-
-    travarLancamentoConferencia();
+    const concluirGravacaoAprovacao = () => {
     let notaAtualizada: NotaPedido | null = null;
     const notaId = selectedNota.id;
     clearConferenciaDraftMemoria(notaId);
@@ -3622,9 +3655,9 @@ export default function NotasPedidoStaffMain() {
     } else {
       void (async () => {
         try {
-          await aguardarSequenciaLancamentoFotos(notaAprovadaRef, qtdFotosAprovadas, {
-            rapido: qtdFotosAprovadas > 1,
-          });
+          if (!multiFoto) {
+            await aguardarSequenciaLancamentoFotos(notaAprovadaRef, qtdFotosAprovadas);
+          }
           fecharConferirModal();
         } catch {
           /* ignore */
@@ -3633,6 +3666,23 @@ export default function NotasPedidoStaffMain() {
         }
       })();
     }
+    };
+
+    if (multiFoto) {
+      travarLancamentoConferencia();
+      void (async () => {
+        try {
+          await executarLancamentoSequencialFichasMultiFoto(selectedNota, qtdFotosAprovadas);
+          concluirGravacaoAprovacao();
+        } catch {
+          liberarLancamentoConferencia();
+        }
+      })();
+      return;
+    }
+
+    travarLancamentoConferencia();
+    concluirGravacaoAprovacao();
   };
 
   const handleRejeitarNota = () => {

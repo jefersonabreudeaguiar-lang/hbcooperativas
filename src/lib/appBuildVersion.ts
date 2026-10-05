@@ -1,2 +1,2 @@
 /** Incrementar a cada release que cooperados precisam receber no PWA (SW + banner). */
-export const APP_BUILD_VERSION = 148;
+export const APP_BUILD_VERSION = 149;
