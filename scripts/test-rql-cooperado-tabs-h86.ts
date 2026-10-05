@@ -29,6 +29,10 @@ const perms = read("src/permissions/index.ts");
 
 assert(tabs.includes('"/dashboard"') && tabs.includes('"/mensalidades"'), "5 rotas bottom tab centralizadas");
 assert(keep.includes('?? "true"'), "keep-alive default ligado (8.6)");
+assert(
+  !keep.match(/isCooperadoMobileTabKeepAliveEnabled[\s\S]*?typeof process === \"undefined\"[\s\S]*?return false/),
+  "keep-alive não desliga fail-closed no browser"
+);
 assert(prefetch.includes("COOPERADO_BOTTOM_TAB_HREFS"), "prefetch usa fonte única de abas");
 assert(layout.includes("CooperadoMobileTabKeepAlive"), "AppLayout keep-alive cooperado");
 assert(panel.includes("CooperadoTabPanelProvider"), "contexto painel ativo P0");
