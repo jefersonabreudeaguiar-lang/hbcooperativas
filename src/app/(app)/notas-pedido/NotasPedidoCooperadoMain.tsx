@@ -25,7 +25,12 @@ import {
   FOTO_ENTREGA_VIEW_MODAL_IMG,
 } from "@/components/notas/fotoEntregaDisplay";
 import { updateData, updateDataSafe, generateId, addAuditEntry, getData, getDataRevision } from "@/services/dataStore";
-import { requestAppSync, requestAppSyncImmediate, requestAppSyncLight } from "@/services/syncRequest";
+import {
+  requestAppSync,
+  requestAppSyncImmediate,
+  requestAppSyncLight,
+  requestCooperadoPostEntregaSync,
+} from "@/services/syncRequest";
 import { scheduleCooperadoPostInteractiveTask } from "@/lib/performance/cooperadoColdStart";
 import { markRqlColdStartPhase } from "@/lib/performance/rqlMarks";
 import {
@@ -1327,19 +1332,8 @@ export default function NotasPedidoCooperadoMain() {
   }, [isCooperado]);
 
   useEffect(() => {
-    if (!isCooperado || !tabActive) return;
-    markRqlColdStartPhase("notas_pedido_cooperado_shell");
+    if (!isCooperado) return;
     ensureCooperadoDeliveryQueueOnlineListener();
-    const runBackgroundMaintenance = () => {
-      void refreshCooperadoQueueIndicators();
-      void refreshRascunhoAnexarFromDraft();
-      void runCooperadoDeliveryQueueMaintenance().then(() => {
-        void refreshCooperadoQueueIndicators();
-        void refreshRascunhoAnexarFromDraft();
-      });
-    };
-    scheduleCooperadoPostInteractiveTask(runBackgroundMaintenance);
-    scheduleCooperadoPostInteractiveTask(() => prefetchCooperadoAnexarPipeline());
     const unsub = subscribeCooperadoDeliveryQueueFlush((detail) => {
       setFotosOfflineFilaCount(detail.offlinePhotosRemaining);
       setPublicacaoLocalPendente(detail.publishRemaining);
@@ -1349,7 +1343,39 @@ export default function NotasPedidoCooperadoMain() {
       void refreshRascunhoAnexarFromDraft();
     });
     return unsub;
-  }, [isCooperado, tabActive, refreshCooperadoQueueIndicators, ANEXAR_DRAFT_KEY, refreshRascunhoAnexarFromDraft]);
+  }, [isCooperado, ANEXAR_DRAFT_KEY, refreshRascunhoAnexarFromDraft]);
+
+  useEffect(() => {
+    if (!isCooperado) return;
+    const runBackgroundMaintenance = () => {
+      void refreshCooperadoQueueIndicators();
+      void refreshRascunhoAnexarFromDraft();
+      void runCooperadoDeliveryQueueMaintenance().then(() => {
+        void refreshCooperadoQueueIndicators();
+        void refreshRascunhoAnexarFromDraft();
+      });
+    };
+    const entregaSessaoAtiva =
+      anexarModal || enviando || fotosSessaoCount > 0 || rascunhoFotosCount > 0 || publicacaoLocalPendente > 0;
+    if (entregaSessaoAtiva) {
+      runBackgroundMaintenance();
+      return;
+    }
+    if (!tabActive) return;
+    markRqlColdStartPhase("notas_pedido_cooperado_shell");
+    scheduleCooperadoPostInteractiveTask(runBackgroundMaintenance);
+    scheduleCooperadoPostInteractiveTask(() => prefetchCooperadoAnexarPipeline());
+  }, [
+    isCooperado,
+    tabActive,
+    anexarModal,
+    enviando,
+    fotosSessaoCount,
+    rascunhoFotosCount,
+    publicacaoLocalPendente,
+    refreshCooperadoQueueIndicators,
+    refreshRascunhoAnexarFromDraft,
+  ]);
 
   useEffect(() => {
     if (!isCooperado) return;
@@ -2546,9 +2572,9 @@ export default function NotasPedidoCooperadoMain() {
     setEnvioProgresso(null);
     setErroEnvio("");
 
+    try {
     const cnpj = await resolveCooperativaCnpj(workingData, coopId, user);
     if (!cnpj) {
-      setEnviando(false);
       setErroEnvio(
         "CNPJ da cooperativa não encontrado. Faça logout e login de novo, ou peça ao responsável para conferir o cadastro."
       );
@@ -2560,7 +2586,6 @@ export default function NotasPedidoCooperadoMain() {
     const uploadedAfterFlush = await countFotosUploadedDraft(ANEXAR_DRAFT_KEY);
     setFotosNaNuvemCount(uploadedAfterFlush);
     if (uploadedAfterFlush < fotosSessaoCount) {
-      setEnviando(false);
       setErroEnvio("Ainda há fotos aguardando conexão para subir. Conecte-se à internet e tente de novo.");
       return;
     }
@@ -2633,7 +2658,6 @@ export default function NotasPedidoCooperadoMain() {
 
     const notaEntrega = await buildNotaEntrega(workingData);
     if (!notaEntrega) {
-      setEnviando(false);
       setErroEnvio("Não foi possível preparar o envio. Tente novamente.");
       return;
     }
@@ -2670,8 +2694,6 @@ export default function NotasPedidoCooperadoMain() {
 
     const cloud = await finalizeNotaEntregaNaNuvem(cnpj, notaEntrega, cooperadoNome);
     if (!cloud.ok) {
-      setEnviando(false);
-      setEnvioProgresso(null);
       setErroEnvio(
         cloud.error ??
           "Falha ao publicar a entrega. As fotos já estão na nuvem — verifique a conexão e toque Enviar de novo."
@@ -2735,8 +2757,6 @@ export default function NotasPedidoCooperadoMain() {
     // Confirma de novo na nuvem ANTES do sync de aba (evita sumir ao ir para Início).
     await finalizeNotaEntregaNaNuvem(cnpj, notaFinalLocal, cooperadoNome);
 
-    setEnviando(false);
-    setEnvioProgresso(null);
     limparRascunhoAnexar();
     resetFotosSessaoUi();
     setFotoDuplicadaMsg("");
@@ -2748,7 +2768,13 @@ export default function NotasPedidoCooperadoMain() {
         : `Entrega enviada com ${qtdFotos} fotos! O responsável já pode conferir.`) +
         (!listaLocalOk ? " Se não constar em Em análise, toque Atualizar." : "")
     );
-    requestAppSync();
+    requestCooperadoPostEntregaSync();
+    } catch {
+      setErroEnvio("Falha inesperada ao enviar a entrega. Verifique a conexão e tente de novo.");
+    } finally {
+      setEnviando(false);
+      setEnvioProgresso(null);
+    }
   };
 
   const fecharConferirModal = () => {

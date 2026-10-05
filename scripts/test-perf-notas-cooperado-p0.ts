@@ -20,6 +20,13 @@ function assert(cond: boolean, msg: string) {
 assert(notas.includes("scheduleCooperadoPostInteractiveTask"), "fila offline após interativo");
 assert(notas.includes("notas_pedido_cooperado_shell"), "marca RQL shell notas");
 assert(
+  notas.includes("ensureCooperadoDeliveryQueueOnlineListener();") &&
+    notas.includes("if (!isCooperado) return;\n    ensureCooperadoDeliveryQueueOnlineListener();"),
+  "listener de fila cooperado sempre ativo (não preso à aba visível)"
+);
+assert(notas.includes("entregaSessaoAtiva"), "manutenção imediata durante envio/rascunho");
+assert(notas.includes("requestCooperadoPostEntregaSync"), "sync pós-envio cooperado");
+assert(
   !notas.includes("void runCooperadoDeliveryQueueMaintenance().then(() => refreshCooperadoQueueIndicators());\n  }, [isCooperado"),
   "não dispara manutenção pesada síncrona no mount"
 );

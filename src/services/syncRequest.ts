@@ -162,6 +162,17 @@ export function requestAppSync(): void {
   requestSyncTier("operacional_full", { force: true, userInitiated: false });
 }
 
+/** Cooperado concluiu envio de entrega — reconcilia fila e puxa status sem exigir «Atualizar». */
+export function requestCooperadoPostEntregaSync(): void {
+  grantCooperadoEventDrivenSync();
+  markNextCooperadoSilentSync();
+  requestSyncTier("operacional_full", {
+    force: true,
+    immediate: true,
+    eventDriven: true,
+  });
+}
+
 /** Sync imediato — botão “Atualizar agora”. */
 export function requestAppSyncImmediate(): void {
   markCooperadoUserSyncVisible();
