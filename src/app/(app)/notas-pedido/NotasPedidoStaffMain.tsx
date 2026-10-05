@@ -2828,6 +2828,13 @@ export default function NotasPedidoStaffMain() {
     fotoAbortRef.current = null;
     setConferirModal(false);
     setSelectedNota(null);
+    if (vistaResponsavel === "cooperado" && filtroCooperadoId) {
+      const aindaTemGrupo = pendentesPorCooperado.some((g) => g.cooperadoId === filtroCooperadoId);
+      if (!aindaTemGrupo) {
+        setFiltroCooperadoId("");
+        setAbaConferenciaKey("");
+      }
+    }
     startTransition(() => {
       if (lancamentoSequenciaTimerRef.current) {
         clearTimeout(lancamentoSequenciaTimerRef.current);

@@ -1,5 +1,9 @@
 import type { AppData } from "@/types";
-import { isNotaSaiuDaFilaConferencia } from "@/utils/notaStatus";
+import {
+  isNotaSaiuDaFilaConferencia,
+  notaElegivelParaFilaConferenciaResponsavel,
+  sanitizarNotaParaFilaConferencia,
+} from "@/utils/notaStatus";
 
 /** Notas já aprovadas/rejeitadas nesta sessão — não voltam à fila até o AppData refletir a decisão. */
 const decididasLocalmente = new Set<string>();
@@ -25,7 +29,16 @@ export function getNotasConferenciaDecididasLocalmente(): ReadonlySet<string> {
 export function reconciliarNotasConferenciaDecididasLocalmente(data: AppData): void {
   for (const id of [...decididasLocalmente]) {
     const nota = data.notasPedido.find((n) => n.id === id);
-    if (nota && isNotaSaiuDaFilaConferencia(nota.status)) {
+    if (!nota) {
+      decididasLocalmente.delete(id);
+      continue;
+    }
+    if (isNotaSaiuDaFilaConferencia(nota.status)) {
+      decididasLocalmente.delete(id);
+      continue;
+    }
+    const candidata = sanitizarNotaParaFilaConferencia(nota);
+    if (notaElegivelParaFilaConferenciaResponsavel(candidata)) {
       decididasLocalmente.delete(id);
     }
   }

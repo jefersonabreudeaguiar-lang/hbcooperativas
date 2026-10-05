@@ -40,11 +40,11 @@ export function isStaffConferenciaSyncTierCapActive(): boolean {
   );
 }
 
-/** Sync automático da gestão não deve competir com aprovar / trocar nota na conferência. */
+/** Sync automático da gestão — bloqueia só com modal aberto ou aprovação em andamento na UI. */
 export function shouldBlockStaffAutoSyncDuringConferencia(userInitiated?: boolean): boolean {
   if (userInitiated) return false;
   if (!staffSessionActive()) return false;
-  return isStaffConferenciaSyncTierCapActive();
+  return conferenciaModalOpen || conferenciaLancamentoDepth > 0;
 }
 
 function staffSessionActive(): boolean {

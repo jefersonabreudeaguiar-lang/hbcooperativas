@@ -375,8 +375,6 @@ export function resolverAbaConferenciaAtiva(
   if (filtroCooperadoId) {
     const porId = grupos.find((g) => g.cooperadoId === filtroCooperadoId);
     if (porId) return { chave: porId.chave, grupo: porId };
-    // Cooperado selecionado sem grupo na fila — não cair no primeiro da lista.
-    return { chave: abaConferenciaKey, grupo: undefined };
   }
   if (abaConferenciaKey) {
     const direta = grupos.find((g) => g.chave === abaConferenciaKey);

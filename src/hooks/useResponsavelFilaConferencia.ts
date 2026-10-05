@@ -62,7 +62,10 @@ export function useResponsavelFilaConferencia(
         if (isCooperado || !coopId || filaDetalhada) return 0;
         const cnpj = getCooperativaCnpj(d, coopId);
         const pending = cnpj ? getPendingNotaDeleteIds(cnpj) : new Set<string>();
-        const fila = listNotasFilaConferenciaResponsavel(d, coopId);
+        reconciliarNotasConferenciaDecididasLocalmente(d);
+        const fila = listNotasFilaConferenciaResponsavel(d, coopId).filter(
+          (n) => !isNotaConferenciaDecididaLocalmente(n.id)
+        );
         if (pending.size === 0) return fila.length;
         let visiveis = 0;
         for (const n of fila) {
