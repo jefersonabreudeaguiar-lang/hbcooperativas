@@ -24,6 +24,7 @@ const SUITE: { category: string; script: string }[] = [
   { category: "PERF", script: "test-rql-browser-instrumentation-h90.ts" },
   { category: "SYNC", script: "test-fase-d-sync-gate.ts" },
   { category: "PERF", script: "test-rql-admin-stats-worker-h85.ts" },
+  { category: "PERF", script: "test-rql-cooperado-tabs-h86.ts" },
   { category: "FLUXO", script: "simulate-entrega-flow.ts" },
   { category: "FLUXO", script: "simulate-sync-flows.ts" },
   { category: "FLUXO", script: "test-pending-entrega-publish-p0.ts" },

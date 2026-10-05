@@ -3,6 +3,7 @@ import { canAccessPainelResponsavel } from "@/lib/security/responsavelPanelAcces
 export { canAccessPainelResponsavel } from "@/lib/security/responsavelPanelAccess";
 import { isHbCreditEnabledClient } from "@/modules/hb-credit/config";
 import { filterContaCoopNavItems, isContaCoopUiPublic } from "@/utils/contaCoopUiVisibility";
+import { COOPERADO_BOTTOM_TAB_HREFS } from "@/lib/performance/cooperadoBottomTabRoutes";
 
 type PermissionMatrix = Record<UserRole, Partial<Record<Resource, Action[]>>>;
 
@@ -567,14 +568,6 @@ export function getCooperadoExtraItems(): { href: string; label: string }[] {
   return [];
 }
 
-const COOPERADO_MOBILE_NAV_HREFS = [
-  "/dashboard",
-  "/notas-pedido",
-  "/precos",
-  "/ficha-corrida",
-  "/mensalidades",
-];
-
 export function getMobileNavItems(
   user: PermissionSubject,
   creditEnabled = false,
@@ -588,7 +581,7 @@ export function getMobileNavItems(
 
   if (effectiveRole === "cooperado") {
     const baseItems = COOPERADO_MENU.filter((i) =>
-      COOPERADO_MOBILE_NAV_HREFS.includes(i.href)
+      (COOPERADO_BOTTOM_TAB_HREFS as readonly string[]).includes(i.href)
     );
     return appendHbCreditMenuItem(
       filterMenuForUser(baseItems, navUser),

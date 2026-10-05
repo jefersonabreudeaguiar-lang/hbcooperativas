@@ -1,5 +1,3 @@
-import { PageSkeleton } from "@/components/ui/PageSkeleton";
+import { CooperadoTabRouteLoading } from "@/components/performance/CooperadoTabRouteLoading";
 
-export default function PrecosLoading() {
-  return <PageSkeleton compact />;
-}
+export default CooperadoTabRouteLoading;

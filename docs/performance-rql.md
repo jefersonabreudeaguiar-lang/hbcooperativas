@@ -113,6 +113,15 @@ Marcas: `performance.mark("rql:cold:*")`
 - Flag: `NEXT_PUBLIC_RQL_ADMIN_STATS_WORKER=false` desliga worker (fallback síncrono)
 - Teste: `npx tsx scripts/test-rql-admin-stats-worker-h85.ts`
 
+### Fase F — RQL 8.6 (abas cooperado mobile)
+
+- **`cooperadoBottomTabRoutes.ts`** — fonte única das 5 rotas do rodapé
+- **`CooperadoMobileTabKeepAlive`** — LRU (default **on**; `NEXT_PUBLIC_COOPERADO_TAB_KEEP_ALIVE=false` desliga)
+- **`CooperadoTabRouteLoading`** + `loading.tsx` nas 5 abas
+- Prefetch alinhado (`cooperadoNavPrefetch` / `hbCreditNavPrefetch` / menu mobile)
+- Homolog: `docs/performance-rql-fase-f-h86-homolog.md`
+- Teste: `npx tsx scripts/test-rql-cooperado-tabs-h86.ts`
+
 ### 9.0.5 (local)
 
 - `scheduleCooperadoPostInteractiveTask` — release/deploy após UI interativa
@@ -134,18 +143,19 @@ Teste: `npx tsx scripts/test-conferencia-h82.ts`
 3. Preencher quantidades, aguardar sync: campos permanecem no modal.
 4. Fechar modal: reabrir mesma nota começa limpo; aprovar/rejeitar não reaproveita rascunho antigo.
 
-## Onda 8.6 (parcial) — lazy routes + prefetch
+## Onda 8.6 — lazy routes + abas cooperado
 
 - `lazyAppRoute` — shell fino + `dynamic()` em rotas pesadas (cooperado e responsável)
-- `cooperadoNavPrefetch` / `staffNavPrefetch` — prefetch em camadas após login (RAM baixa = lote reduzido)
+- `cooperadoNavPrefetch` / `staffNavPrefetch` — prefetch em camadas após login (RAM baixa = lote reduzido no idle)
 - `AppMobileReleaseBar` — build + sync no rodapé mobile (cooperado e staff)
-- `loading.tsx` — skeleton imediato nas rotas críticas
+- `CooperadoTabRouteLoading` — skeleton imediato nas **5 abas** do rodapé cooperado
+- `CooperadoMobileTabKeepAlive` — LRU mobile (Fase F / gate h86)
 
 Rotas lazy (build 118+): dashboard, notas, ficha, mensalidades, preços, conta HB, minha conta, relatórios, livro-caixa, cooperados, mercado, prestação, comunicados.
 
 ## Ondas seguintes
 
-- **8.6** — keep-alive abas cooperado (`CooperadoMobileTabKeepAlive` mobile) + prefetch + `loading.tsx` por aba; view transitions opcional futuro
+- View transitions opcional (cooperado mobile)
 
 ## SLOs alvo (homolog / prod medidos)
 

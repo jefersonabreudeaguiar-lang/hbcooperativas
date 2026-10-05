@@ -2,6 +2,7 @@ import {
   COOPERADO_FINANCEIRO_TAB_HREF,
   COOPERADO_MOBILE_PREFETCH_HREFS,
 } from "@/lib/hb-credit/hbCreditNavPrefetch";
+import { COOPERADO_BOTTOM_TAB_HREFS } from "@/lib/performance/cooperadoBottomTabRoutes";
 import { isLowMemoryDevice } from "@/services/imagePipelineService";
 
 export type CooperadoNavPrefetchRouter = {
@@ -12,9 +13,9 @@ export type CooperadoNavPrefetchRouter = {
 export const COOPERADO_NAV_PREFETCH_PRIORITY: readonly string[] = [
   "/notas-pedido",
   COOPERADO_FINANCEIRO_TAB_HREF,
-  "/dashboard",
-  "/precos",
-  "/mensalidades",
+  ...COOPERADO_BOTTOM_TAB_HREFS.filter(
+    (h) => h !== "/notas-pedido" && h !== COOPERADO_FINANCEIRO_TAB_HREF
+  ),
 ];
 
 export function prefetchCooperadoNavRoutes(
@@ -40,7 +41,7 @@ export function scheduleCooperadoNavPrefetchEarly(router: CooperadoNavPrefetchRo
   };
   const lowMemory = isLowMemoryDevice();
   const idleHrefs = lowMemory
-    ? (["/dashboard", "/notas-pedido"] as readonly string[])
+    ? (COOPERADO_BOTTOM_TAB_HREFS as readonly string[])
     : COOPERADO_MOBILE_PREFETCH_HREFS;
 
   queueMicrotask(() =>

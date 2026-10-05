@@ -1,13 +1,11 @@
+import { COOPERADO_BOTTOM_TAB_HREFS } from "@/lib/performance/cooperadoBottomTabRoutes";
+
 /** Aba Financeiro — bundle maior; prefetch prioritário no cooperado. */
 export const COOPERADO_FINANCEIRO_TAB_HREF = "/ficha-corrida";
 
-/** Rotas do cooperado (barra inferior) — prefetch para troca instantânea. */
+/** Rotas do cooperado (barra inferior + conta HB) — prefetch para troca instantânea. */
 export const COOPERADO_MOBILE_PREFETCH_HREFS = [
-  "/dashboard",
-  "/notas-pedido",
-  "/precos",
-  COOPERADO_FINANCEIRO_TAB_HREF,
-  "/mensalidades",
+  ...COOPERADO_BOTTOM_TAB_HREFS,
   "/minha-conta-coop",
 ] as const;
 
