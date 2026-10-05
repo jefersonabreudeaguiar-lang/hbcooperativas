@@ -772,6 +772,15 @@ export function saveDataSafe(data: AppData): { ok: true } | { ok: false; error: 
   return persistDataToStorage(data);
 }
 
+/** Dados em memória sem view de push pós-conferência (fila/UI não reexibe nota já conferida). */
+export function getDataOperationalTruth(): AppData {
+  if (typeof window === "undefined") return emptyInitialData;
+  attachStorageListener();
+  if (memoryCache) return memoryCache;
+  scheduleDataWarmIfNeeded();
+  return emptyInitialData;
+}
+
 export function getData(): AppData {
   if (typeof window === "undefined") return emptyInitialData;
   attachStorageListener();

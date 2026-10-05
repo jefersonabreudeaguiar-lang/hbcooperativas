@@ -36,6 +36,7 @@ import {
   generateId,
   addAuditEntry,
   getData,
+  getDataOperationalTruth,
   getDataRevision,
   beginConferenciaDeferLocalPersist,
   endConferenciaDeferLocalPersist,
@@ -2959,7 +2960,7 @@ export default function NotasPedidoStaffMain() {
   const openConferir = async (nota: NotaPedido) => {
     aquecerUiConferencia();
     await loadConferenciaFotoPrefetchModule();
-    const raw = getData()?.notasPedido.find((n) => n.id === nota.id) ?? nota;
+    const raw = getDataOperationalTruth()?.notasPedido.find((n) => n.id === nota.id) ?? nota;
     const fresh = sanitizarNotaParaFilaConferencia(raw);
     if (notaBloqueadaConferenciaPorExclusaoPendente(fresh.id, pendingDeleteIds)) {
       removerNotaDaFilaSticky(fresh.id);
@@ -2996,7 +2997,7 @@ export default function NotasPedidoStaffMain() {
 
   const obterProximaNotaConferencia = (chaveGrupo: string, notaConcluidaId: string): NotaPedido | null => {
     if (!coopId) return null;
-    const d = getData();
+    const d = getDataOperationalTruth();
     if (!d) return null;
 
     const mesmaAba = listarPendentesConferencia(d, coopId, chaveGrupo, notaConcluidaId);
@@ -5124,11 +5125,20 @@ export default function NotasPedidoStaffMain() {
               fotosLancadasUi={fotosLancadasUi}
               onAmpliarFoto={() => setConferenciaFotoAmpliada(true)}
               onFotoImgError={(idx) => {
+                if (lancamentoSequencia) return;
+                if (idx !== conferenciaFotoIdx) return;
                 const key = conferenciaFotoCacheKey(selectedNota.id, idx);
                 conferenciaFotoCacheRef.current.delete(key);
-                if (conferenciaFotoAtualUrl) revokePreviewUrl(conferenciaFotoAtualUrl);
-                setConferenciaFotoErro("A foto não pôde ser exibida neste aparelho. Toque em «Tentar de novo».");
-                setConferenciaFotoAtualUrl(null);
+                const loadGen = conferenciaFotoLoadGenRef.current;
+                void loadConferenciaFoto(selectedNota, idx).then((url) => {
+                  if (url) return;
+                  if (loadGen !== conferenciaFotoLoadGenRef.current) return;
+                  if (idx !== conferenciaFotoIdx) return;
+                  setConferenciaFotoErro(
+                    "A foto não pôde ser exibida neste aparelho. Toque em «Tentar de novo»."
+                  );
+                  setConferenciaFotoAtualUrl(null);
+                });
               }}
               onRetryFotoAtual={(idx) =>
                 void loadConferenciaFoto(selectedNota, idx).then((url) => {

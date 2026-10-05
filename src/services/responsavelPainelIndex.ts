@@ -5,7 +5,7 @@
 import type { AppData, Cooperado, NotaPedido } from "@/types";
 import { cooperadoPendentePagamentoResponsavel } from "@/services/cooperadoEntregasService";
 import { listCooperadosDaCooperativa } from "@/services/cooperadoCloudService";
-import { getDataRevision } from "@/services/dataStore";
+import { getDataOperationalTruth, getDataRevision } from "@/services/dataStore";
 import { idsNotasPedidoExcluidas } from "@/services/notaPedidoService";
 import { notaPertenceCooperativa } from "@/utils/fotoEntrega";
 import { notaElegivelParaFilaConferenciaResponsavel, sanitizarNotaParaFilaConferencia } from "@/utils/notaStatus";
@@ -93,34 +93,34 @@ function buildPainelCache(data: AppData, coopId: string): PainelCache {
   };
 }
 
-function getPainelCache(data: AppData, coopId: string): PainelCache {
+function getPainelCache(coopId: string): PainelCache {
   const revision = getDataRevision();
   if (painelCache && painelCache.revision === revision && painelCache.coopId === coopId) {
     return painelCache;
   }
-  painelCache = buildPainelCache(data, coopId);
+  painelCache = buildPainelCache(getDataOperationalTruth(), coopId);
   return painelCache;
 }
 
 /** Notas na fila de conferência do responsável (uma passagem + cache por revisão). */
 export function listNotasFilaConferenciaResponsavel(data: AppData, coopId: string): NotaPedido[] {
   if (!coopId) return [];
-  return getPainelCache(data, coopId).filaNotas;
+  return getPainelCache(coopId).filaNotas;
 }
 
 export function countNotasFilaConferenciaResponsavel(data: AppData, coopId: string): number {
   if (!coopId) return 0;
-  return getPainelCache(data, coopId).filaNotas.length;
+  return getPainelCache(coopId).filaNotas.length;
 }
 
 export function listCooperadosPagamentoPendenteResponsavel(data: AppData, coopId: string): Cooperado[] {
   if (!coopId) return [];
-  return getPainelCache(data, coopId).cooperadosPagar;
+  return getPainelCache(coopId).cooperadosPagar;
 }
 
 export function countCooperadosPagamentoPendenteResponsavel(data: AppData, coopId: string): number {
   if (!coopId) return 0;
-  return getPainelCache(data, coopId).cooperadosPagarCount;
+  return getPainelCache(coopId).cooperadosPagarCount;
 }
 
 /** Relatório «Em aberto» cacheado por revisão (evita recomputar a cada clique de aba). */

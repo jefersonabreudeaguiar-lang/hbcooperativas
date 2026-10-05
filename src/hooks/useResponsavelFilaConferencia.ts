@@ -4,11 +4,14 @@ import { useCallback, useEffect, useMemo, useRef } from "react";
 import type { NotaPedido } from "@/types";
 import { useAppDataSelectorForDomains } from "@/hooks/useAppData";
 import type { AppDataNotifyDomain } from "@/lib/performance/appDataDomainNotify";
-import { getData, isAppDataWarm } from "@/services/dataStore";
+import { getDataOperationalTruth, isAppDataWarm } from "@/services/dataStore";
 import { listNotasFilaConferenciaResponsavel } from "@/services/responsavelPainelIndex";
 import { getCooperativaCnpj, getPendingNotaDeleteIds } from "@/services/notaPedidoCloudService";
 import { agruparPendentesPorCooperado } from "@/utils/fotoEntrega";
-import { notaElegivelParaFilaConferenciaResponsavel } from "@/utils/notaStatus";
+import {
+  isNotaSaiuDaFilaConferencia,
+  notaElegivelParaFilaConferenciaResponsavel,
+} from "@/utils/notaStatus";
 import { buildPendentesEstaveisConferencia } from "@/utils/filaConferenciaSticky";
 
 /**
@@ -70,8 +73,11 @@ export function useResponsavelFilaConferencia(
   useEffect(() => {
     if (!filaDetalhada) return;
     const sticky = stickyRef.current;
+    const truth = isAppDataWarm() ? getDataOperationalTruth() : null;
     for (const n of pendentesTodas) {
       if (!notaElegivelParaFilaConferenciaResponsavel(n)) continue;
+      const live = truth?.notasPedido.find((x) => x.id === n.id);
+      if (live && isNotaSaiuDaFilaConferencia(live.status)) continue;
       sticky.ids.add(n.id);
       sticky.snapshot.set(n.id, n);
     }
@@ -79,7 +85,7 @@ export function useResponsavelFilaConferencia(
 
   const pendentesEstaveis = useMemo(() => {
     if (!filaDetalhada || !isAppDataWarm()) return pendentesTodas;
-    const data = getData();
+    const data = getDataOperationalTruth();
     return buildPendentesEstaveisConferencia(
       data,
       pendentesTodas,
@@ -91,7 +97,7 @@ export function useResponsavelFilaConferencia(
 
   const pendentesPorCooperado = useMemo(() => {
     if (!filaDetalhada || !isAppDataWarm()) return [];
-    const data = getData();
+    const data = getDataOperationalTruth();
     return agruparPendentesPorCooperado(data, pendentesEstaveis, coopId);
   }, [pendentesEstaveis, coopId, filaDetalhada]);
 
