@@ -78,6 +78,10 @@ let notifyFlushScheduled = false;
 let automaticTasksScheduled = false;
 let saveBatchDepth = 0;
 let saveBatchPending: AppData | null = null;
+/** U2 — gravação em localStorage adiada durante conferência (evita JSON.stringify síncrono na aprovação). */
+let conferenciaDeferPersistDepth = 0;
+let conferenciaDeferPersistTimer: ReturnType<typeof setTimeout> | null = null;
+const CONFERENCIA_DEFER_PERSIST_FLUSH_MS = 360;
 let dataRevision = 0;
 let dataWarmScheduled = false;
 let dataWarmInFlight = false;
@@ -146,6 +150,51 @@ export function beginSaveBatch(opts?: { shouldPersist?: () => boolean }): void {
   saveBatchDepth++;
   if (saveBatchDepth === 1 && opts?.shouldPersist) {
     batchPersistGate = opts.shouldPersist;
+  }
+}
+
+function isConferenciaDeferLocalPersistActive(): boolean {
+  return conferenciaDeferPersistDepth > 0;
+}
+
+function flushConferenciaDeferredLocalPersist(): void {
+  if (!memoryCache || typeof window === "undefined") return;
+  const saved = persistDataToStorage(memoryCache, { skipNotify: true });
+  if (saved.ok) notify();
+}
+
+function scheduleConferenciaDeferredLocalPersist(
+  delayMs = CONFERENCIA_DEFER_PERSIST_FLUSH_MS
+): void {
+  if (!isConferenciaDeferLocalPersistActive()) return;
+  if (conferenciaDeferPersistTimer) clearTimeout(conferenciaDeferPersistTimer);
+  conferenciaDeferPersistTimer = setTimeout(() => {
+    conferenciaDeferPersistTimer = null;
+    flushConferenciaDeferredLocalPersist();
+  }, delayMs);
+}
+
+/** Modal / fila de conferência aberta — memória + UI imediata; disco em debounce. */
+export function beginConferenciaDeferLocalPersist(): void {
+  conferenciaDeferPersistDepth += 1;
+}
+
+export function endConferenciaDeferLocalPersist(): void {
+  conferenciaDeferPersistDepth = Math.max(0, conferenciaDeferPersistDepth - 1);
+  if (conferenciaDeferPersistDepth > 0) return;
+  if (conferenciaDeferPersistTimer) {
+    clearTimeout(conferenciaDeferPersistTimer);
+    conferenciaDeferPersistTimer = null;
+  }
+  flushConferenciaDeferredLocalPersist();
+}
+
+/** Somente testes. */
+export function resetConferenciaDeferLocalPersistForTests(): void {
+  conferenciaDeferPersistDepth = 0;
+  if (conferenciaDeferPersistTimer) {
+    clearTimeout(conferenciaDeferPersistTimer);
+    conferenciaDeferPersistTimer = null;
   }
 }
 
@@ -714,6 +763,12 @@ export function saveDataSafe(data: AppData): { ok: true } | { ok: false; error: 
     return { ok: true };
   }
 
+  if (isConferenciaDeferLocalPersistActive()) {
+    memoryCache = data;
+    scheduleConferenciaDeferredLocalPersist();
+    return { ok: true };
+  }
+
   return persistDataToStorage(data);
 }
 
@@ -772,6 +827,10 @@ export function updateDataSafe(
 
   touchAppDataDomains(inferAppDataDomainsTouched(current, updated));
   notifyImmediate();
+  if (isConferenciaDeferLocalPersistActive()) {
+    scheduleConferenciaDeferredLocalPersist();
+    return { ok: true, data: updated };
+  }
   let saved = persistDataToStorage(updated, { skipNotify: true });
   if (!saved.ok) {
     const role = persistRoleFromSession();

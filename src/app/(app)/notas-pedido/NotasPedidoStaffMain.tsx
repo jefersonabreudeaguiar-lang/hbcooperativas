@@ -24,7 +24,16 @@ import {
   FOTO_ENTREGA_THUMB_IMG,
   FOTO_ENTREGA_VIEW_MODAL_IMG,
 } from "@/components/notas/fotoEntregaDisplay";
-import { updateData, updateDataSafe, generateId, addAuditEntry, getData, getDataRevision } from "@/services/dataStore";
+import {
+  updateData,
+  updateDataSafe,
+  generateId,
+  addAuditEntry,
+  getData,
+  getDataRevision,
+  beginConferenciaDeferLocalPersist,
+  endConferenciaDeferLocalPersist,
+} from "@/services/dataStore";
 import { requestAppSync, requestAppSyncImmediate, requestAppSyncLight } from "@/services/syncRequest";
 import { scheduleCooperadoPostInteractiveTask, scheduleStaffPostInteractiveTask } from "@/lib/performance/cooperadoColdStart";
 import { setStaffConferenciaModalOpen } from "@/lib/performance/staffConferenciaSyncTier";
@@ -375,7 +384,12 @@ export default function NotasPedidoStaffMain() {
 
   useEffect(() => {
     setStaffConferenciaModalOpen(conferirModal);
-    return () => setStaffConferenciaModalOpen(false);
+    if (!conferirModal) return;
+    beginConferenciaDeferLocalPersist();
+    return () => {
+      setStaffConferenciaModalOpen(false);
+      endConferenciaDeferLocalPersist();
+    };
   }, [conferirModal]);
   const [rejectModal, setRejectModal] = useState(false);
   const [viewModal, setViewModal] = useState(false);
