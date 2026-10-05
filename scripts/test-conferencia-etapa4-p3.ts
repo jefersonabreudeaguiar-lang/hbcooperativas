@@ -8,7 +8,7 @@ import { join } from "node:path";
 import { conferenciaFilaDecisaoUsaAvancoOtimista } from "../src/lib/conferencia/conferenciaFilaDecisaoOrdem";
 
 const ROOT = join(import.meta.dirname ?? __dirname, "..");
-const notas = readFileSync(join(ROOT, "src/app/(app)/notas-pedido/NotasPedidoContent.tsx"), "utf8");
+const notas = readFileSync(join(ROOT, "src/app/(app)/notas-pedido/NotasPedidoStaffMain.tsx"), "utf8");
 const prefetch = readFileSync(join(ROOT, "src/lib/performance/prefetchConferenciaModalUi.ts"), "utf8");
 
 assert.ok(notas.includes('import("@/components/notas/NotasPedidoConferirFotoPainel")'), "painel foto lazy");

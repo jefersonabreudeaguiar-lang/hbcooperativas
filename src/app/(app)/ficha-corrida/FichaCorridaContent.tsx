@@ -4,7 +4,8 @@ import Link from "next/link";
 import { useMemo, useState, useEffect, useCallback } from "react";
 import { useSearchParams } from "next/navigation";
 import { QrCode, XCircle, Wallet, CheckCircle2, FileDown, PenLine, BookOpen, CreditCard, History, Users, ChevronDown, Pencil, RefreshCw, Eye } from "lucide-react";
-import { useAppData } from "@/hooks/useAppData";
+import { useAppData, useAppDataReady } from "@/hooks/useAppData";
+import { useCooperadoTabPanelActive } from "@/hooks/useCooperadoTabPanelActive";
 import { usePermissions } from "@/hooks/usePermissions";
 import { getUserCooperativaId } from "@/utils/cooperativa";
 import {
@@ -169,6 +170,8 @@ function TabelaResumoItens({
 }
 
 export default function FichaCorridaPage() {
+  const ready = useAppDataReady();
+  const tabActive = useCooperadoTabPanelActive("/ficha-corrida");
   const data = useAppData();
   const hbDescontosRevision = useContaCoopDescontosRevision();
   const { user, isCooperado, cooperadoId, check } = usePermissions();
@@ -187,9 +190,10 @@ export default function FichaCorridaPage() {
   const [pixStepVisited, setPixStepVisited] = useState(false);
 
   useEffect(() => {
+    if (!tabActive) return;
     if (isCooperado && isCooperadoManualOperacionalSync()) return;
     requestAppSync();
-  }, [isCooperado]);
+  }, [isCooperado, tabActive]);
 
   useEffect(() => {
     const c = searchParams.get("cooperado");
@@ -247,7 +251,7 @@ export default function FichaCorridaPage() {
       cooperadoLocalResumeReady(user));
 
   useEffect(() => {
-    if (!data || !coopId || !user) {
+    if (!tabActive || !data || !coopId || !user) {
       setCoopCnpjResumo("");
       return;
     }
@@ -258,7 +262,7 @@ export default function FichaCorridaPage() {
     return () => {
       cancel = true;
     };
-  }, [data, coopId, user?.id]);
+  }, [data, coopId, user?.id, tabActive]);
 
   const mesEmAberto = useMemo(() => {
     if (!data || !cooperadoId) return getCurrentMesReferencia();
@@ -1343,7 +1347,7 @@ export default function FichaCorridaPage() {
     void baixarRecibo(pg.reciboHtml, nomeArquivoRecibo(pg.mesReferencia, nomeCooperado || "cooperado"));
   };
 
-  if (!data) return <PageSkeleton />;
+  if (!ready || !data) return <PageSkeleton />;
 
   const pixOk = cooperadoSelecionado && !cooperadoPrecisaCadastrarPix(cooperadoSelecionado.chavePix, cooperadoSelecionado.pixValido);
   const mostrarPagar = isCooperado || aba === "pagar";

@@ -3,7 +3,8 @@
 import { Suspense, useState, useMemo, useEffect, useRef } from "react";
 import { useSearchParams } from "next/navigation";
 import { QrCode, Copy, CheckCircle2, Info, AlertCircle, Paperclip, ImagePlus, Eye } from "lucide-react";
-import { useAppData } from "@/hooks/useAppData";
+import { useAppDataReady, useAppDataSelector } from "@/hooks/useAppData";
+import { useCooperadoTabPanelActive } from "@/hooks/useCooperadoTabPanelActive";
 import { usePermissions } from "@/hooks/usePermissions";
 import { getUserCooperativaId } from "@/utils/cooperativa";
 import { formatCnpj } from "@/utils/cooperativa";
@@ -37,7 +38,7 @@ import {
 import { compressDataUrl, compressFotoFile } from "@/utils/fotoEntrega";
 import { formatCurrency, formatDate, formatMesReferencia, getCurrentMesReferencia } from "@/utils/format";
 import { getCooperadoNome } from "@/utils/calculations";
-import type { Mensalidade } from "@/types";
+import type { Mensalidade, AppData } from "@/types";
 import { MensalidadeConfigPanel } from "@/components/mensalidade/MensalidadeConfigPanel";
 import { MensalidadeCooperadoCard } from "@/components/mensalidade/MensalidadeCooperadoCard";
 import { MensalidadesVencidasPorMesPanel } from "@/components/mensalidade/MensalidadesVencidasPorMesPanel";
@@ -59,7 +60,8 @@ export default function MensalidadesPage() {
 }
 
 function MensalidadesContent() {
-  const data = useAppData();
+  const ready = useAppDataReady();
+  const tabActive = useCooperadoTabPanelActive("/mensalidades");
   const searchParams = useSearchParams();
   const { check, user, isCooperado, cooperadoId } = usePermissions();
   const [statusFilter, setStatusFilter] = useState("");
@@ -77,9 +79,22 @@ function MensalidadesContent() {
   const comprovanteInputRef = useRef<HTMLInputElement>(null);
   const shareHandledRef = useRef(false);
 
-  const coopId = user && data ? getUserCooperativaId(user, data) : undefined;
-  const cooperativa = coopId ? data?.cooperativas.find((c) => c.id === coopId) : undefined;
-  const chavePixCoop = coopId && data ? getChavePixMensalidadeCooperativa(data, coopId) : null;
+  const coopIdSel = useAppDataSelector(
+    (d) => {
+      if (!user) return undefined;
+      return getUserCooperativaId(user, d) ?? undefined;
+    },
+    [user?.id]
+  );
+  const coopId = coopIdSel ?? undefined;
+  const cooperativa = useAppDataSelector(
+    (d) => (coopId ? d.cooperativas.find((c) => c.id === coopId) : undefined),
+    [coopId]
+  );
+  const chavePixCoop = useAppDataSelector(
+    (d) => (coopId ? getChavePixMensalidadeCooperativa(d, coopId) : null),
+    [coopId]
+  );
 
   const pushOperacional = () => {
     void (async () => {
@@ -90,36 +105,37 @@ function MensalidadesContent() {
     })();
   };
 
-  const mensalidades = useMemo(() => {
-    if (!data) return [];
-    const base = isCooperado && cooperadoId
-      ? listarMensalidadesExibicaoCooperado(data, cooperadoId, coopId)
-      : data.mensalidades.filter((m) => {
-          const c = data.cooperados.find((x) => x.id === m.cooperadoId);
-          if (coopId && c?.cooperativaId !== coopId) return false;
-          return mensalidadeMesEmCobranca(data, m, coopId);
-        });
+  const mensalidades = useAppDataSelector(
+    (data) => {
+      const base = isCooperado && cooperadoId
+        ? listarMensalidadesExibicaoCooperado(data, cooperadoId ?? undefined, coopId)
+        : data.mensalidades.filter((m) => {
+            const c = data.cooperados.find((x) => x.id === m.cooperadoId);
+            if (coopId && c?.cooperativaId !== coopId) return false;
+            return mensalidadeMesEmCobranca(data, m, coopId);
+          });
 
-    return base
-      .filter((m) => {
-        if (!statusFilter && !mensalidadeListagemVisivel(m)) return false;
-        if (statusFilter && statusEfetivoMensalidade(m) !== statusFilter) return false;
-        if (mesFilter && m.mesReferencia !== mesFilter) return false;
-        return true;
-      })
-      .sort((a, b) => b.mesReferencia.localeCompare(a.mesReferencia) || a.vencimento.localeCompare(b.vencimento));
-  }, [data, statusFilter, mesFilter, isCooperado, cooperadoId, coopId]);
+      return base
+        .filter((m) => {
+          if (!statusFilter && !mensalidadeListagemVisivel(m)) return false;
+          if (statusFilter && statusEfetivoMensalidade(m) !== statusFilter) return false;
+          if (mesFilter && m.mesReferencia !== mesFilter) return false;
+          return true;
+        })
+        .sort((a, b) => b.mesReferencia.localeCompare(a.mesReferencia) || a.vencimento.localeCompare(b.vencimento));
+    },
+    [statusFilter, mesFilter, isCooperado, cooperadoId, coopId]
+  ) ?? [];
 
   const mensalidadesPagaveis = useMemo(
     () => mensalidades.filter((m) => mensalidadePodePagarComPix(m)),
     [mensalidades]
   );
 
-  const aguardandoConfirmacao = useMemo(
-    () => {
-      if (!data) return [];
+  const aguardandoConfirmacao = useAppDataSelector(
+    (data) => {
       const base = isCooperado && cooperadoId
-        ? listarMensalidadesCooperado(data, cooperadoId, coopId)
+        ? listarMensalidadesCooperado(data, cooperadoId ?? undefined, coopId)
         : data.mensalidades.filter((m) => {
             const c = data.cooperados.find((x) => x.id === m.cooperadoId);
             if (coopId && c?.cooperativaId !== coopId) return false;
@@ -129,37 +145,45 @@ function MensalidadesContent() {
         .filter((m) => m.status === "aguardando_confirmacao")
         .sort((a, b) => b.mesReferencia.localeCompare(a.mesReferencia));
     },
-    [data, coopId, isCooperado, cooperadoId]
+    [coopId, isCooperado, cooperadoId]
+  ) ?? [];
+
+  const meses = useAppDataSelector(
+    (data) => {
+      const set = new Set<string>();
+      const base = isCooperado && cooperadoId
+        ? listarMensalidadesExibicaoCooperado(data, cooperadoId ?? undefined, coopId)
+        : data.mensalidades.filter((m) => {
+            const c = data.cooperados.find((x) => x.id === m.cooperadoId);
+            if (coopId && c?.cooperativaId !== coopId) return false;
+            return mensalidadeMesEmCobranca(data, m, coopId);
+          });
+      for (const m of base) set.add(m.mesReferencia);
+      const coop = coopId ? data.cooperativas.find((c) => c.id === coopId) : undefined;
+      if (coop?.mensalidadeConfig) {
+        for (const mes of mesesCobrancaEfetivos(coop.mensalidadeConfig)) set.add(mes);
+      }
+      set.add(getCurrentMesReferencia());
+      return [...set].sort().reverse();
+    },
+    [coopId, isCooperado, cooperadoId]
+  ) ?? [getCurrentMesReferencia()];
+
+  const resumoCooperado = useAppDataSelector(
+    (data) => {
+      if (!isCooperado || !cooperadoId) return null;
+      const todas = listarMensalidadesExibicaoCooperado(data, cooperadoId ?? undefined, coopId);
+      return {
+        pagas: todas.filter((m) => m.status === "paga").length,
+        vencidas: todas.filter((m) => mensalidadeCobrancaVisivel(m) && statusEfetivoMensalidade(m) === "atrasada").length,
+        pendentes: 0,
+        aguardando: todas.filter((m) => m.status === "aguardando_confirmacao").length,
+      };
+    },
+    [isCooperado, cooperadoId, coopId]
   );
 
-  const meses = useMemo(() => {
-    if (!data) return [getCurrentMesReferencia()];
-    const set = new Set<string>();
-    const base = isCooperado && cooperadoId
-      ? listarMensalidadesExibicaoCooperado(data, cooperadoId, coopId)
-      : data.mensalidades.filter((m) => {
-          const c = data.cooperados.find((x) => x.id === m.cooperadoId);
-          if (coopId && c?.cooperativaId !== coopId) return false;
-          return mensalidadeMesEmCobranca(data, m, coopId);
-        });
-    for (const m of base) set.add(m.mesReferencia);
-    if (cooperativa?.mensalidadeConfig) {
-      for (const mes of mesesCobrancaEfetivos(cooperativa.mensalidadeConfig)) set.add(mes);
-    }
-    set.add(getCurrentMesReferencia());
-    return [...set].sort().reverse();
-  }, [data, isCooperado, cooperadoId, coopId, cooperativa?.mensalidadeConfig]);
-
-  const resumoCooperado = useMemo(() => {
-    if (!isCooperado || !cooperadoId || !data) return null;
-    const todas = listarMensalidadesExibicaoCooperado(data, cooperadoId, coopId);
-    return {
-      pagas: todas.filter((m) => m.status === "paga").length,
-      vencidas: todas.filter((m) => mensalidadeCobrancaVisivel(m) && statusEfetivoMensalidade(m) === "atrasada").length,
-      pendentes: 0,
-      aguardando: todas.filter((m) => m.status === "aguardando_confirmacao").length,
-    };
-  }, [data, isCooperado, cooperadoId, coopId]);
+  const cooperados = useAppDataSelector((d) => d.cooperados, []) ?? [];
 
   const abrirPix = (m: Mensalidade) => {
     setMensalidadePix(m);
@@ -180,7 +204,7 @@ function MensalidadesContent() {
   };
 
   useEffect(() => {
-    if (!isCooperado || shareHandledRef.current) return;
+    if (!isCooperado || shareHandledRef.current || !tabActive) return;
     if (searchParams.get("comprovante") !== "1") return;
     shareHandledRef.current = true;
 
@@ -206,8 +230,7 @@ function MensalidadesContent() {
     }
 
     abrirComprovante();
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isCooperado, searchParams]);
+  }, [isCooperado, searchParams, tabActive]);
 
   const copiarCnpjPix = async () => {
     if (!chavePixCoop) return;
@@ -280,6 +303,8 @@ function MensalidadesContent() {
     pushOperacional();
   };
 
+  if (!ready) return <PageSkeleton />;
+  const data = getData();
   if (!data) return <PageSkeleton />;
 
   const cfgOk =
@@ -619,7 +644,7 @@ function MensalidadeMobileCard({
   onConfirmar,
 }: {
   m: Mensalidade;
-  data: NonNullable<ReturnType<typeof useAppData>>;
+  data: AppData;
   isCooperado: boolean;
   canConfirm: boolean;
   onPix: () => void;

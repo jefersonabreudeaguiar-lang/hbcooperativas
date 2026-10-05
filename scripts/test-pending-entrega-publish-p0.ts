@@ -22,7 +22,7 @@ function assert(cond: boolean, msg: string) {
 
 const publish = read("src/services/pendingEntregaPublishService.ts");
 const coord = read("src/services/cooperadoDeliveryQueueCoordinator.ts");
-const notas = read("src/app/(app)/notas-pedido/NotasPedidoContent.tsx");
+const notas = read("src/app/(app)/notas-pedido/NotasPedidoCooperadoMain.tsx");
 const provider = read("src/components/sync/CooperativaSyncProvider.tsx");
 
 assert(publish.includes("coopeagriplla_pending_entrega_publish"), "storage key dedicada");

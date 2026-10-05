@@ -31,6 +31,7 @@ assert(tabs.includes('"/dashboard"') && tabs.includes('"/mensalidades"'), "5 rot
 assert(keep.includes('?? "true"'), "keep-alive default ligado (8.6)");
 assert(prefetch.includes("COOPERADO_BOTTOM_TAB_HREFS"), "prefetch usa fonte única de abas");
 assert(layout.includes("CooperadoMobileTabKeepAlive"), "AppLayout keep-alive cooperado");
+assert(panel.includes("CooperadoTabPanelProvider"), "contexto painel ativo P0");
 assert(panel.includes("data-cooperado-tab-panel"), "painéis por aba");
 assert(perms.includes("cooperadoBottomTabRoutes"), "menu mobile alinhado às 5 abas");
 
@@ -41,6 +42,12 @@ for (const route of ["dashboard", "notas-pedido", "precos", "ficha-corrida", "me
   assert(loadingSrc.includes("CooperadoTabRouteLoading"), `loading /${route} usa skeleton 8.6`);
 }
 
+assert(navPrefetch.includes("prefetchCooperadoTabRouteChunks"), "idle prefetch aquece chunks das 5 abas");
+assert(keep.includes("COOPERADO_TAB_PIN_HREF"), "LRU pin início (P1)");
+assert(existsSync(join(ROOT, "src/hooks/useCooperadoTabPanelActive.ts")), "hook painel ativo P0");
+assert(existsSync(join(ROOT, "src/lib/performance/prefetchCooperadoTabRouteChunks.ts")), "prefetch chunks abas P1");
+assert(existsSync(join(ROOT, "src/app/(app)/notas-pedido/NotasPedidoCooperadoMain.tsx")), "chunk notas cooperado P1");
+assert(read("src/app/(app)/notas-pedido/NotasPedidoContent.tsx").includes("NotasPedidoCooperadoMain"), "router notas split cooperado/staff");
 assert(navPrefetch.includes("scheduleCooperadoNavPrefetchEarly"), "prefetch em camadas cooperado");
 assert(navPrefetch.includes("COOPERADO_BOTTOM_TAB_HREFS"), "priority prefetch deriva das 5 abas");
 for (const href of ["/dashboard", "/notas-pedido", "/precos", "/ficha-corrida", "/mensalidades"]) {

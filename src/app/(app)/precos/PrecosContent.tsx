@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { Search, Tag, RefreshCw } from "lucide-react";
-import { useAppData } from "@/hooks/useAppData";
+import { useAppDataReady, useAppDataSelector } from "@/hooks/useAppData";
 import { usePermissions } from "@/hooks/usePermissions";
 import { getUserCooperativaId } from "@/utils/cooperativa";
 import { PageHeader } from "@/components/ui/Table";
@@ -23,9 +23,13 @@ import { getData } from "@/services/dataStore";
 import { PageSkeleton } from "@/components/ui/PageSkeleton";
 
 export default function PrecosPage() {
-  const data = useAppData();
+  const ready = useAppDataReady();
   const { user } = usePermissions();
-  const coopId = user && data ? getUserCooperativaId(user, data) : undefined;
+  const coopIdSel = useAppDataSelector(
+    (d) => (user ? getUserCooperativaId(user, d) ?? undefined : undefined),
+    [user?.id]
+  );
+  const coopId = coopIdSel ?? undefined;
   const [instSelecionada, setInstSelecionada] = useState<string>("");
   const [busca, setBusca] = useState("");
   const [syncing, setSyncing] = useState(false);
@@ -43,15 +47,15 @@ export default function PrecosPage() {
     }
   };
 
-  const instituicoes = useMemo(() => {
-    if (!data || !coopId) return [];
-    return getInstituicoesCatalogo(data, coopId);
-  }, [data, coopId]);
+  const instituicoes = useAppDataSelector(
+    (d) => (coopId ? getInstituicoesCatalogo(d, coopId) : []),
+    [coopId]
+  ) ?? [];
 
-  const produtosDaCoop = useMemo(() => {
-    if (!data || !coopId) return [];
-    return getTodosProdutosCatalogo(data, coopId);
-  }, [data, coopId]);
+  const produtosDaCoop = useAppDataSelector(
+    (d) => (coopId ? getTodosProdutosCatalogo(d, coopId) : []),
+    [coopId]
+  ) ?? [];
 
   const instMap = useMemo(() => new Map(instituicoes.map((i) => [i.id, i.nome])), [instituicoes]);
 
@@ -66,12 +70,12 @@ export default function PrecosPage() {
     );
   }, [instSelecionada, produtosDaCoop, busca]);
 
-  if (!data) return <PageSkeleton />;
+  if (!ready) return <PageSkeleton />;
 
   const instComItens = instituicoes.filter((i) =>
     produtosDaCoop.some((p) => p.instituicaoId === i.id)
   );
-  const totalItens = contarItensCatalogo(data, coopId);
+  const totalItens = coopId && ready ? contarItensCatalogo(getData()!, coopId) : 0;
 
   return (
     <div className="max-w-2xl mx-auto">

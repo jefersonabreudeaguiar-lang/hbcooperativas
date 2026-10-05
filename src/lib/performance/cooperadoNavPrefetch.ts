@@ -4,6 +4,7 @@ import {
 } from "@/lib/hb-credit/hbCreditNavPrefetch";
 import { COOPERADO_BOTTOM_TAB_HREFS } from "@/lib/performance/cooperadoBottomTabRoutes";
 import { isLowMemoryDevice } from "@/services/imagePipelineService";
+import { prefetchCooperadoTabRouteChunks } from "@/lib/performance/prefetchCooperadoTabRouteChunks";
 
 export type CooperadoNavPrefetchRouter = {
   prefetch: (href: string) => void;
@@ -59,12 +60,16 @@ export function scheduleCooperadoNavPrefetchEarly(router: CooperadoNavPrefetchRo
   });
 
   let idleHandle: number | undefined;
+  const idlePrefetch = () => {
+    safe(() => prefetchCooperadoNavRoutes(router, idleHrefs));
+    safe(() => prefetchCooperadoTabRouteChunks());
+  };
   if (typeof requestIdleCallback === "function") {
-    idleHandle = requestIdleCallback(() => safe(() => prefetchCooperadoNavRoutes(router, idleHrefs)), {
+    idleHandle = requestIdleCallback(idlePrefetch, {
       timeout: 2500,
     });
   } else {
-    idleHandle = window.setTimeout(() => safe(() => prefetchCooperadoNavRoutes(router, idleHrefs)), 800);
+    idleHandle = window.setTimeout(idlePrefetch, 800);
   }
 
   return () => {

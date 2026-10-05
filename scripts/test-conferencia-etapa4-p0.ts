@@ -8,7 +8,7 @@ import { join } from "node:path";
 import { notaBloqueadaConferenciaPorExclusaoPendente } from "../src/lib/conferencia/conferenciaAbrirGuard";
 
 const ROOT = join(import.meta.dirname ?? __dirname, "..");
-const notas = readFileSync(join(ROOT, "src/app/(app)/notas-pedido/NotasPedidoContent.tsx"), "utf8");
+const notas = readFileSync(join(ROOT, "src/app/(app)/notas-pedido/NotasPedidoStaffMain.tsx"), "utf8");
 const loader = readFileSync(join(ROOT, "src/lib/performance/loadConferenciaFotoPrefetch.ts"), "utf8");
 
 assert.ok(loader.includes('import("@/services/conferenciaFotoPrefetch")'), "dynamic import conferenciaFotoPrefetch");

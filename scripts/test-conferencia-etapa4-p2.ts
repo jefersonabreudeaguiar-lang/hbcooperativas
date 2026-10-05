@@ -13,7 +13,7 @@ import {
 } from "../src/services/conferenciaAprovacaoSyncQueue";
 
 const ROOT = join(import.meta.dirname ?? __dirname, "..");
-const notas = readFileSync(join(ROOT, "src/app/(app)/notas-pedido/NotasPedidoContent.tsx"), "utf8");
+const notas = readFileSync(join(ROOT, "src/app/(app)/notas-pedido/NotasPedidoStaffMain.tsx"), "utf8");
 const patchTask = readFileSync(join(ROOT, "src/services/conferenciaPatchCloudTask.ts"), "utf8");
 const prefetch = readFileSync(join(ROOT, "src/lib/performance/prefetchConferenciaModalUi.ts"), "utf8");
 

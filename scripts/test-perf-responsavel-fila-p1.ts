@@ -7,7 +7,7 @@ import { join } from "node:path";
 
 const ROOT = join(import.meta.dirname ?? __dirname, "..");
 const hook = readFileSync(join(ROOT, "src/hooks/useResponsavelFilaConferencia.ts"), "utf8");
-const notas = readFileSync(join(ROOT, "src/app/(app)/notas-pedido/NotasPedidoContent.tsx"), "utf8");
+const notas = readFileSync(join(ROOT, "src/app/(app)/notas-pedido/NotasPedidoStaffMain.tsx"), "utf8");
 
 function assert(cond: boolean, msg: string) {
   if (!cond) {

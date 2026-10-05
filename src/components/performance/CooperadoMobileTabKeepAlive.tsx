@@ -3,11 +3,13 @@
 import { useLayoutEffect, useRef, useState, useEffect, type ReactNode } from "react";
 import { cn } from "@/utils/format";
 import { isLowMemoryDevice } from "@/services/imagePipelineService";
+import { CooperadoTabPanelProvider } from "@/lib/performance/cooperadoTabPanelContext";
 import {
   COOPERADO_BOTTOM_TAB_HREFS,
   getCooperadoMobileTabCacheLimit,
   isCooperadoBottomTabPath,
   isCooperadoMobileTabKeepAliveEnabled,
+  trimCooperadoTabCacheOrder,
 } from "@/lib/performance/cooperadoMobileTabKeepAlive";
 
 function useCooperadoMobileViewport(): boolean {
@@ -27,19 +29,6 @@ type Props = {
   children: ReactNode;
 };
 
-function trimTabCache(
-  cache: Partial<Record<string, ReactNode>>,
-  order: string[],
-  limit: number
-): string[] {
-  const next = [...order];
-  while (next.length > limit) {
-    const drop = next.pop();
-    if (drop) delete cache[drop];
-  }
-  return next;
-}
-
 /**
  * RQL 8.6 — cache leve das abas do rodapé (LRU): no máximo 2 telas montadas (+ atual).
  * Reduz pico de JS/RAM vs manter as 5 abas sempre vivas.
@@ -50,16 +39,22 @@ export function CooperadoMobileTabKeepAlive({ pathname, children }: Props) {
   const cacheRef = useRef<Partial<Record<string, ReactNode>>>({});
   const orderRef = useRef<string[]>([]);
   const [, tick] = useState(0);
-  const cacheLimit = getCooperadoMobileTabCacheLimit(isLowMemoryDevice());
+  const lowMemory = isLowMemoryDevice();
+  const cacheLimit = getCooperadoMobileTabCacheLimit(lowMemory);
 
   const onTab = isCooperadoBottomTabPath(pathname);
 
   useLayoutEffect(() => {
     if (!enabled || !mobile || !onTab) return;
     cacheRef.current[pathname] = children;
-    orderRef.current = trimTabCache(cacheRef.current, [pathname, ...orderRef.current.filter((h) => h !== pathname)], cacheLimit);
+    const merged = [pathname, ...orderRef.current.filter((h) => h !== pathname)];
+    const prevOrder = orderRef.current;
+    orderRef.current = trimCooperadoTabCacheOrder(merged, pathname, cacheLimit, lowMemory);
+    for (const href of prevOrder) {
+      if (!orderRef.current.includes(href)) delete cacheRef.current[href];
+    }
     tick((n) => n + 1);
-  }, [enabled, mobile, onTab, pathname, children, cacheLimit]);
+  }, [enabled, mobile, onTab, pathname, children, cacheLimit, lowMemory]);
 
   if (!enabled || !mobile) {
     return <>{children}</>;
@@ -85,14 +80,20 @@ export function CooperadoMobileTabKeepAlive({ pathname, children }: Props) {
 
   if (!onTab) {
     return (
-      <>
-        <div className="hidden" aria-hidden>
-          {renderPanels(null)}
-        </div>
-        {children}
-      </>
+      <CooperadoTabPanelProvider activeHref={pathname}>
+        <>
+          <div className="hidden" aria-hidden>
+            {renderPanels(null)}
+          </div>
+          {children}
+        </>
+      </CooperadoTabPanelProvider>
     );
   }
 
-  return <>{renderPanels(pathname)}</>;
+  return (
+    <CooperadoTabPanelProvider activeHref={pathname}>
+      <>{renderPanels(pathname)}</>
+    </CooperadoTabPanelProvider>
+  );
 }

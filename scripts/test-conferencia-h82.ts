@@ -32,7 +32,7 @@ function pass(msg: string) {
   console.log("PASS:", msg);
 }
 
-const notas = readFileSync(join(ROOT, "src/app/(app)/notas-pedido/NotasPedidoContent.tsx"), "utf8");
+const notas = readFileSync(join(ROOT, "src/app/(app)/notas-pedido/NotasPedidoStaffMain.tsx"), "utf8");
 const guard = readFileSync(join(ROOT, "src/lib/conferencia/responsavelConferenciaNavigateGuard.ts"), "utf8");
 
 assert.ok(guard.includes("syncingForUi"), "guard documenta syncingForUi");

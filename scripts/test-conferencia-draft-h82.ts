@@ -17,7 +17,7 @@ import {
 } from "../src/lib/conferencia/conferenciaDraftMemoria";
 
 const ROOT = join(import.meta.dirname ?? __dirname, "..");
-const notas = readFileSync(join(ROOT, "src/app/(app)/notas-pedido/NotasPedidoContent.tsx"), "utf8");
+const notas = readFileSync(join(ROOT, "src/app/(app)/notas-pedido/NotasPedidoStaffMain.tsx"), "utf8");
 
 assert.ok(notas.includes("conferenciaDraftMemoria"), "NotasPedidoContent integra draft em memória");
 assert.ok(notas.includes("setConferenciaDraftMemoria"), "persistência do draft na conferência");
