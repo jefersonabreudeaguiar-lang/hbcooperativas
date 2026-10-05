@@ -38,6 +38,7 @@ import { useHbCreditDescontosWarmup } from "@/hooks/useHbCreditDescontosWarmup";
 import { shouldPrefetchHbCreditNav } from "@/lib/hb-credit/hbCreditNavPrefetch";
 import { scheduleCooperadoNavPrefetchEarly } from "@/lib/performance/cooperadoNavPrefetch";
 import { scheduleStaffNavPrefetchEarly } from "@/lib/performance/staffNavPrefetch";
+import { prefetchStaffNotasPedidoRouteBundle } from "@/lib/performance/prefetchStaffNotasPedidoUi";
 import { CooperadoMobileTabKeepAlive } from "@/components/performance/CooperadoMobileTabKeepAlive";
 import { CooperadoMobileReleaseBar } from "@/components/cooperado/CooperadoMobileReleaseBar";
 import { StaffMobileReleaseBar } from "@/components/layout/StaffMobileReleaseBar";
@@ -253,9 +254,11 @@ export function MobileNav() {
               prefetch={shouldPrefetchHbCreditNav(item.href)}
               onPointerEnter={() => {
                 if (isCooperadoNav && item.href !== pathname) prefetchNavRoute(item.href);
+                if (!isCooperadoNav && item.href === "/notas-pedido") prefetchStaffNotasPedidoRouteBundle();
               }}
               onTouchStart={() => {
                 if (isCooperadoNav && item.href !== pathname) prefetchNavRoute(item.href);
+                if (!isCooperadoNav && item.href === "/notas-pedido") prefetchStaffNotasPedidoRouteBundle();
               }}
               className={cn(
                 "flex-1 flex flex-col items-center justify-center min-w-0 px-0.5 transition-colors",

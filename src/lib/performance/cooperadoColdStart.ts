@@ -219,3 +219,21 @@ export function scheduleCooperadoPostInteractiveTask(run: () => void): void {
     });
   });
 }
+
+/** Responsável — sync/pull pesado só depois da 1ª pintura (Conferir entregas). */
+export function scheduleStaffPostInteractiveTask(run: () => void): void {
+  if (typeof window === "undefined") return;
+  const fire = () => {
+    markRqlColdStartPhase("staff_post_interactive_task");
+    run();
+  };
+  requestAnimationFrame(() => {
+    requestAnimationFrame(() => {
+      if (typeof requestIdleCallback !== "undefined") {
+        requestIdleCallback(fire, { timeout: 3200 });
+      } else {
+        window.setTimeout(fire, 900);
+      }
+    });
+  });
+}

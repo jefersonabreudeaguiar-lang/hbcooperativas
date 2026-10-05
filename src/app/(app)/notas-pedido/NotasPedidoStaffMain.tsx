@@ -26,7 +26,7 @@ import {
 } from "@/components/notas/fotoEntregaDisplay";
 import { updateData, updateDataSafe, generateId, addAuditEntry, getData, getDataRevision } from "@/services/dataStore";
 import { requestAppSync, requestAppSyncImmediate, requestAppSyncLight } from "@/services/syncRequest";
-import { scheduleCooperadoPostInteractiveTask } from "@/lib/performance/cooperadoColdStart";
+import { scheduleCooperadoPostInteractiveTask, scheduleStaffPostInteractiveTask } from "@/lib/performance/cooperadoColdStart";
 import { markRqlColdStartPhase } from "@/lib/performance/rqlMarks";
 import {
   loadCooperadoAnexarPipeline,
@@ -1853,6 +1853,7 @@ export default function NotasPedidoStaffMain() {
   const cooperadoMountSyncRef = useRef(false);
   const responsavelMountSyncRef = useRef(false);
   const responsavelNotasPullAtRef = useRef(0);
+  const responsavelPrimeiroPullAgendadoRef = useRef(false);
 
   const puxarNotasResponsavelDaNuvem = useCallback(
     (opts?: { forceFull?: boolean }) => {
@@ -1879,16 +1880,21 @@ export default function NotasPedidoStaffMain() {
     requestAppSyncLight();
   }, [isCooperado, data]);
 
-  // Responsável: full de notas na 1ª entrada da sessão; depois pull forçado ao usar Conferir.
+  // Responsável: full de notas após pintar a fila (1× por sessão); evita travar a 1ª abertura do painel.
   useEffect(() => {
     if (isCooperado || !data || !coopId) return;
     if (responsavelMountSyncRef.current) return;
     responsavelMountSyncRef.current = true;
-    puxarNotasResponsavelDaNuvem({ forceFull: true });
+    responsavelPrimeiroPullAgendadoRef.current = true;
+    scheduleStaffPostInteractiveTask(() => {
+      puxarNotasResponsavelDaNuvem({ forceFull: true });
+      responsavelPrimeiroPullAgendadoRef.current = false;
+    });
   }, [isCooperado, data, coopId, puxarNotasResponsavelDaNuvem]);
 
   useEffect(() => {
     if (isCooperado || !coopId) return;
+    if (responsavelPrimeiroPullAgendadoRef.current) return;
     if (vistaResponsavel !== "fila" && vistaResponsavel !== "cooperado") return;
     puxarNotasResponsavelDaNuvem();
   }, [vistaResponsavel, isCooperado, coopId, puxarNotasResponsavelDaNuvem]);

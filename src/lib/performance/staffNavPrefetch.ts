@@ -1,5 +1,6 @@
 import { isLowMemoryDevice } from "@/services/imagePipelineService";
 import type { CooperadoNavPrefetchRouter } from "@/lib/performance/cooperadoNavPrefetch";
+import { prefetchStaffNotasPedidoRouteBundle } from "@/lib/performance/prefetchStaffNotasPedidoUi";
 
 /** Rotas mais abertas pelo responsável no celular — bundles grandes. */
 export const STAFF_NAV_PREFETCH_PRIORITY: readonly string[] = [
@@ -26,6 +27,7 @@ function prefetchStaffNavRoutes(
   for (const href of hrefs) {
     try {
       router.prefetch(href);
+      if (href === "/notas-pedido") prefetchStaffNotasPedidoRouteBundle();
     } catch {
       /* ignore */
     }

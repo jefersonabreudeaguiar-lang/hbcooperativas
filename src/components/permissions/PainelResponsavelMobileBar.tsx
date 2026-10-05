@@ -13,6 +13,7 @@ import {
 } from "@/lib/mobilePainelPreference";
 import { shouldRenderStaffPainelUi } from "@/lib/staffNavigationUser";
 import { Button } from "@/components/ui/Button";
+import { prefetchStaffNotasPedidoRouteBundle } from "@/lib/performance/prefetchStaffNotasPedidoUi";
 
 /** Celular: alternar cooperado vinculado × painel da diretoria; desktop gestão = tela larga. */
 export function PainelResponsavelMobileBar() {
@@ -61,7 +62,11 @@ export function PainelResponsavelMobileBar() {
         size="sm"
         variant={staffMode ? "secondary" : "primary"}
         className="shrink-0"
-        onClick={() => setPreferPainelResponsavelMobile(!painelMobile)}
+        onClick={() => {
+          const next = !painelMobile;
+          setPreferPainelResponsavelMobile(next);
+          if (next) prefetchStaffNotasPedidoRouteBundle();
+        }}
       >
         {staffMode ? (
           <>

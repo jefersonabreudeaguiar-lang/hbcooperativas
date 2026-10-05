@@ -4,8 +4,10 @@
  * COMO USAR
  * 1. https://hbcooperativas.vercel.app — login responsável (perfil duplo → «Abrir painel responsável»)
  * 2. Aba Conferir → /notas-pedido → abra uma entrega (modal «Conferir entrega»)
- * 3. F12 → Console → cole este arquivo → Enter
- * 4. Toque em «Aprovar e próxima» (ou equivalente) e rode: HB_CONFERENCIA_REVER()
+ * 3. F12 → Console → cole este arquivo → Enter (monitor fica ativo)
+ * 4. Abra uma entrega na fila (modal «Conferir entrega»)
+ * 5. Rode HB_CONFERENCIA_REVER() — tabela C05–C08 com modal aberto
+ * 6. Toque Aprovar → HB_CONFERENCIA_REVER() de novo (C08 deve ser 201)
  *
  * Build mínimo recomendado: 132 (sync em background não trava botão no modal)
  * Relacionado: 131 skip bulk cooperados · 130 fast-path operacional
@@ -229,13 +231,14 @@
       msg: "pathname: " + (location.pathname || "/"),
     });
 
+    var modalAberto = modalConferenciaAberto();
     rows.push({
       id: "C05",
       titulo: "Modal «Conferir entrega» aberto",
-      st: modalConferenciaAberto() ? "ok" : "aviso",
-      msg: modalConferenciaAberto()
-        ? "Modal detectado — checks C06+ válidos"
-        : "Abra uma entrega na fila e rode HB_CONFERENCIA_REVER() de novo",
+      st: modalAberto ? "ok" : "pular",
+      msg: modalAberto
+        ? "Modal detectado — C06 vale agora"
+        : "Normal com modal fechado — abra uma entrega e rode HB_CONFERENCIA_REVER()",
     });
 
     var btn = botaoAprovar();
@@ -243,8 +246,12 @@
     rows.push({
       id: "C06",
       titulo: "Botão aprovar / próxima",
-      st: btn && !btn.disabled ? "ok" : btn && btn.disabled ? "falha" : "aviso",
-      msg: btn ? (btn.textContent || "").replace(/\s+/g, " ").trim() + " · " + motivos.join("; ") : motivos[0],
+      st: !modalAberto ? "pular" : btn && !btn.disabled ? "ok" : btn && btn.disabled ? "falha" : "aviso",
+      msg: !modalAberto
+        ? "Rode HB_CONFERENCIA_REVER() com modal aberto"
+        : btn
+          ? rotuloBotao(btn) + " · " + motivos.join("; ")
+          : motivos[0],
     });
 
     rows.push({
@@ -262,10 +269,11 @@
         break;
       }
     }
+    var buildOk132 = build != null && build >= MIN_BUILD;
     rows.push({
       id: "C08",
       titulo: "Último POST cooperativa-sync",
-      st: !lastPost ? "aviso" : lastPost.status === 201 ? "ok" : lastPost.status === 500 ? "falha" : "aviso",
+      st: !lastPost ? "pular" : lastPost.status === 201 ? "ok" : lastPost.status === 500 ? "falha" : "aviso",
       msg: lastPost
         ? lastPost.status +
           " · " +
@@ -273,31 +281,42 @@
           "ms" +
           (lastPost.code ? " · " + lastPost.code : "") +
           (lastPost.error ? " · " + String(lastPost.error).slice(0, 80) : "")
-        : "Aprove uma nota e rode HB_CONFERENCIA_REVER() — build 131 dá 500 lento no HB; 132 corrige",
+        : buildOk132
+          ? "Nenhum POST ainda — aprove uma nota e rode HB_CONFERENCIA_REVER()"
+          : "Atualize para build ≥132 antes de testar aprovação",
     });
 
     return rows;
   }
 
   function rever() {
+    var store = window.__HB_VERIFICACAO_CONFERENCIA__ || {};
+    var buildApi = store.buildApi != null ? store.buildApi : null;
+    var checks = checksEstaticos(parseBuildFromDom(), buildApi);
     var btn = botaoAprovar();
     var rel = {
       quando: new Date().toISOString(),
       pathname: location.pathname,
+      buildApi: buildApi,
       modalAberto: modalConferenciaAberto(),
+      rodapePedirCorrecao: rodapeAprovarPresente(),
       botao: btn
         ? {
-            texto: (btn.textContent || "").replace(/\s+/g, " ").trim(),
+            texto: rotuloBotao(btn),
             disabled: btn.disabled,
             motivos: motivoBotaoDesabilitado(btn),
           }
         : null,
       syncLog: (window.__HB_CONFERENCIA_SYNC_LOG__ || []).slice(-8),
-      consoleRecente: [],
     };
-    console.group("HB · Conferência — rever após clicar Aprovar");
+    console.group("HB · Conferência — HB_CONFERENCIA_REVER()");
+    console.table(checks);
     console.log(rel);
     console.groupEnd();
+    if (store.checks !== undefined) {
+      store.checks = checks;
+      store.ultimaRever = rel.quando;
+    }
     return rel;
   }
 
@@ -310,10 +329,9 @@
     buildDom: parseBuildFromDom(),
     checks: [],
     interpretacao: [
-      "C01 build ≥132: botão aprovar com sync em fila + HB STALE rápido ao conferir (evita POST 500).",
-      "C06 aviso sem botão: confira rodapé «Pedir correção» — senão permissão ou status da nota.",
-      "C08 POST 500 OPERACIONAL_UPLOAD_FAILED ou timeout → atualize PWA; veja Response no Network.",
-      "Fila: após aprovar deve abrir próxima nota ou «Carregando próxima entrega» breve.",
+      "C01 ok = deploy 132+ — ambiente pronto.",
+      "C05/C06/C08 «pular» = normal se modal fechado; abra Conferir e use HB_CONFERENCIA_REVER().",
+      "Com modal: C06 ok + C08 = 201 após aprovar. C08 falha 500 → Network → Response (code/error).",
     ],
     rever: "HB_CONFERENCIA_REVER()",
   };
@@ -333,7 +351,7 @@
     console.table(relatorio.checks);
     console.warn(relatorio.interpretacao.join("\n"));
     console.log("Detalhe → window.__HB_VERIFICACAO_CONFERENCIA__");
-    console.log("Após clicar Aprovar → HB_CONFERENCIA_REVER()");
+    console.log("Com modal aberto → HB_CONFERENCIA_REVER()  ·  após Aprovar → HB_CONFERENCIA_REVER() de novo");
     console.groupEnd();
   });
 })();
