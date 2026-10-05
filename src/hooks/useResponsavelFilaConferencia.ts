@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useRef } from "react";
 import type { NotaPedido } from "@/types";
 import { useAppDataSelector } from "@/hooks/useAppData";
 import { getData, getDataRevision, isAppDataWarm } from "@/services/dataStore";
-import { listNotasFilaConferenciaResponsavel } from "@/services/responsavelPainelIndex";
+import { listNotasFilaConferenciaResponsavel, countNotasFilaConferenciaResponsavel } from "@/services/responsavelPainelIndex";
 import { getCooperativaCnpj, getPendingNotaDeleteIds } from "@/services/notaPedidoCloudService";
 import { agruparPendentesPorCooperado } from "@/utils/fotoEntrega";
 import { notaElegivelParaFilaConferenciaResponsavel } from "@/utils/notaStatus";
@@ -33,11 +33,24 @@ export function useResponsavelFilaConferencia(
   const pendentesTodasBase =
     useAppDataSelector(
       (d) => {
-        if (isCooperado || !coopId) return [] as NotaPedido[];
+        if (isCooperado || !coopId || !filaDetalhada) return [] as NotaPedido[];
         return listNotasFilaConferenciaResponsavel(d, coopId);
       },
-      [coopId, isCooperado]
+      [coopId, isCooperado, filaDetalhada]
     ) ?? [];
+
+  const filaBadgeCount =
+    useAppDataSelector(
+      (d) => {
+        if (isCooperado || !coopId || filaDetalhada) return 0;
+        const cnpj = getCooperativaCnpj(d, coopId);
+        const pending = cnpj ? getPendingNotaDeleteIds(cnpj) : new Set<string>();
+        const count = countNotasFilaConferenciaResponsavel(d, coopId);
+        if (pending.size === 0) return count;
+        return listNotasFilaConferenciaResponsavel(d, coopId).filter((n) => !pending.has(n.id)).length;
+      },
+      [coopId, isCooperado, filaDetalhada]
+    ) ?? 0;
 
   const pendentesTodas = useMemo(() => {
     if (!pendingDeleteIds || pendingDeleteIds.size === 0) return pendentesTodasBase;
@@ -89,7 +102,7 @@ export function useResponsavelFilaConferencia(
     pendentesTodas,
     pendentesEstaveis,
     pendentesPorCooperado,
-    filaBadgeCount: pendentesTodas.length,
+    filaBadgeCount,
     touchNotaNaFilaSticky,
     removerNotaDaFilaSticky,
   };

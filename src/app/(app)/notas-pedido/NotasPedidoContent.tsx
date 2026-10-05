@@ -1754,6 +1754,7 @@ export default function NotasPedidoContent() {
   const filaZombieCount = useAppDataSelector(
     (d) => {
       if (isCooperado || !coopId) return 0;
+      if (vistaResponsavel !== "fila" && vistaResponsavel !== "cooperado") return 0;
       let count = 0;
       for (const nota of d.notasPedido) {
         if (!notaPertenceCooperativa(d, nota, coopId)) continue;
@@ -1761,7 +1762,7 @@ export default function NotasPedidoContent() {
       }
       return count;
     },
-    [isCooperado, coopId]
+    [isCooperado, coopId, vistaResponsavel]
   );
 
   useEffect(() => {
@@ -4792,6 +4793,7 @@ export default function NotasPedidoContent() {
         </div>
       </Modal>
 
+      {conferirModal && (
       <Modal open={conferirModal} onClose={fecharConferirModal} title={
         filaConferenciaTotal > 1
           ? `Conferir entrega (${filaConferenciaPos} de ${filaConferenciaTotal})`
@@ -5329,6 +5331,7 @@ export default function NotasPedidoContent() {
           />
         )}
       </Modal>
+      )}
 
       <PromptDialog
         open={rejectModal}
