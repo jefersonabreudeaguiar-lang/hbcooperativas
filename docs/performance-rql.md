@@ -84,6 +84,21 @@ Teste: `npx tsx scripts/test-cooperado-cold-start-h90.ts`
 
 Marcas: `performance.mark("rql:cold:*")`
 
+### Fase B — homolog browser (Lighthouse + user timing)
+
+- Marcas `rql:route:*` + `rql:route-paint:*` (double rAF após pathname)
+- `summarizeRqlRouteTimings()` — agrega ms transição → paint
+- Checklist: `docs/performance-rql-fase-b-homolog.md`
+- Smoke CI: `npx tsx scripts/test-rql-browser-instrumentation-h90.ts`
+
+### Etapa 18 P5–P7 (Notas perf)
+
+| Patch | Foco | Teste |
+|-------|------|-------|
+| P5 | Prefetch idle fila + histórico (staff) | `test-perf-notas-p5.ts` |
+| P6 | Prefetch abas histórico/correções/aberto | `test-perf-notas-p6.ts` |
+| P7 | Gate suíte perf+fluxos | `test-perf-notas-p7.ts` |
+
 ### 9.0.5 (local)
 
 - `scheduleCooperadoPostInteractiveTask` — release/deploy após UI interativa
@@ -116,6 +131,7 @@ Rotas lazy (build 118+): dashboard, notas, ficha, mensalidades, preços, conta H
 
 ## Ondas seguintes
 
+- **Fase D (próxima macro)** — Sync etapa 6 / contrato BIC + RQL **8.3** (notify por domínio + IDB shard) e **8.4** (API delta por tier). Gate existente: `test-operacional-coordination-h888.ts`, `test-sync-001-s1-fullreset.ts`, `test-h814e-operacional-reset-safe.ts`.
 - **8.3** — notify por domínio + IDB shard
 - **8.4** — API delta por tier
 - **8.5** — workers (BIC / admin stats)

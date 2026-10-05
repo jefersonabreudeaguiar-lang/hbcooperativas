@@ -5,6 +5,7 @@
 export type RqlRouteHop = "dashboard" | "notas-pedido" | "minha-conta-coop" | string;
 
 const ROUTE_MARK_PREFIX = "rql:route:";
+const ROUTE_PAINT_PREFIX = "rql:route-paint:";
 
 export function markRqlRouteTransition(from: RqlRouteHop, to: RqlRouteHop): void {
   if (typeof performance === "undefined" || typeof performance.mark !== "function") return;
@@ -46,6 +47,62 @@ export function listRqlRouteMarks(): string[] {
     .getEntriesByType("mark")
     .map((e) => e.name)
     .filter((n) => n.startsWith(ROUTE_MARK_PREFIX));
+}
+
+/** L1 proxy — primeiro frame pintado após troca de rota (double rAF). */
+export function markRqlRoutePaintReady(hop: RqlRouteHop): void {
+  if (typeof performance === "undefined" || typeof performance.mark !== "function") return;
+  try {
+    performance.mark(`${ROUTE_PAINT_PREFIX}${hop}`);
+  } catch {
+    /* ignore */
+  }
+}
+
+export function scheduleMarkRqlRoutePaintReady(hop: RqlRouteHop): () => void {
+  if (typeof requestAnimationFrame !== "function") return () => undefined;
+  let inner = 0;
+  const outer = requestAnimationFrame(() => {
+    inner = requestAnimationFrame(() => markRqlRoutePaintReady(hop));
+  });
+  return () => {
+    cancelAnimationFrame(outer);
+    if (inner) cancelAnimationFrame(inner);
+  };
+}
+
+export type RqlRouteTimingRow = {
+  transition: string;
+  toHop: string;
+  paintMs: number | null;
+};
+
+/** Diagnóstico homolog — pares transição → paint (ms desde navigation start do mark). */
+export function summarizeRqlRouteTimings(): RqlRouteTimingRow[] {
+  if (typeof performance === "undefined" || typeof performance.getEntriesByType !== "function") {
+    return [];
+  }
+  const marks = performance.getEntriesByType("mark") as PerformanceMark[];
+  const paintByHop = new Map<string, number>();
+  for (const m of marks) {
+    if (m.name.startsWith(ROUTE_PAINT_PREFIX)) {
+      paintByHop.set(m.name.slice(ROUTE_PAINT_PREFIX.length), m.startTime);
+    }
+  }
+  const rows: RqlRouteTimingRow[] = [];
+  for (const m of marks) {
+    if (!m.name.startsWith(ROUTE_MARK_PREFIX)) continue;
+    const arrow = m.name.indexOf("->");
+    if (arrow < 0) continue;
+    const toHop = m.name.slice(arrow + 2);
+    const paintStart = paintByHop.get(toHop);
+    rows.push({
+      transition: m.name.slice(ROUTE_MARK_PREFIX.length),
+      toHop,
+      paintMs: paintStart != null ? Math.round((paintStart - m.startTime) * 10) / 10 : null,
+    });
+  }
+  return rows;
 }
 
 const COLD_START_PREFIX = "rql:cold:";

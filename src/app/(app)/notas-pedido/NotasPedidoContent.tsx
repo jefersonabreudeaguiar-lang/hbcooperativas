@@ -37,6 +37,12 @@ import {
   prefetchConferenciaFotoPrefetchModule,
 } from "@/lib/performance/loadConferenciaFotoPrefetch";
 import { prefetchConferenciaModalUiChunks } from "@/lib/performance/prefetchConferenciaModalUi";
+import {
+  prefetchStaffNotasCorrecoesChunk,
+  prefetchStaffNotasHistoricoChunk,
+  prefetchStaffNotasLancamentosAbertoChunk,
+  prefetchStaffNotasPedidoUiChunks,
+} from "@/lib/performance/prefetchStaffNotasPedidoUi";
 import { notaBloqueadaConferenciaPorExclusaoPendente } from "@/lib/conferencia/conferenciaAbrirGuard";
 import { bloquearAcaoFinalConferencia } from "@/lib/conferencia/conferenciaAprovarGuard";
 import {
@@ -1478,6 +1484,17 @@ export default function NotasPedidoContent() {
   }, [isCooperado, searchParams, trocarVistaResponsavel]);
 
   useEffect(() => {
+    if (isCooperado) return;
+    const run = () => prefetchStaffNotasPedidoUiChunks();
+    if (typeof requestIdleCallback === "function") {
+      const id = requestIdleCallback(run, { timeout: 2000 });
+      return () => cancelIdleCallback(id);
+    }
+    const t = window.setTimeout(run, 400);
+    return () => window.clearTimeout(t);
+  }, [isCooperado]);
+
+  useEffect(() => {
     if (!anexarModal || !isCooperado) {
       setAvisoMemoriaFotosAnexar(false);
       return;
@@ -1700,6 +1717,7 @@ export default function NotasPedidoContent() {
   };
 
   const abrirHistoricoResponsavel = () => {
+    prefetchStaffNotasHistoricoChunk();
     startVistaTransition(() => {
       setVistaResponsavel("historico");
       setAbaConferenciaKey("");
@@ -1709,6 +1727,7 @@ export default function NotasPedidoContent() {
   };
 
   const abrirLancamentosAbertoResponsavel = () => {
+    prefetchStaffNotasLancamentosAbertoChunk();
     startVistaTransition(() => {
       setVistaResponsavel("aberto");
       setAbaConferenciaKey("");
@@ -1717,6 +1736,7 @@ export default function NotasPedidoContent() {
   };
 
   const abrirCorrecoesResponsavel = () => {
+    prefetchStaffNotasCorrecoesChunk();
     startVistaTransition(() => {
       setVistaResponsavel("correcoes");
       setAbaConferenciaKey("");
@@ -3861,6 +3881,7 @@ export default function NotasPedidoContent() {
           <button
             type="button"
             onClick={abrirLancamentosAbertoResponsavel}
+            onPointerEnter={prefetchStaffNotasLancamentosAbertoChunk}
             className={cn(
               "flex-1 min-w-[7rem] px-3 py-2.5 text-sm font-semibold rounded-lg transition-colors",
               vistaResponsavel === "aberto"
@@ -3877,6 +3898,7 @@ export default function NotasPedidoContent() {
             <button
               type="button"
               onClick={abrirCorrecoesResponsavel}
+              onPointerEnter={prefetchStaffNotasCorrecoesChunk}
               className={cn(
                 "flex-1 min-w-[7rem] px-3 py-2.5 text-sm font-semibold rounded-lg transition-colors",
                 vistaResponsavel === "correcoes"
@@ -3890,6 +3912,7 @@ export default function NotasPedidoContent() {
           <button
             type="button"
             onClick={abrirHistoricoResponsavel}
+            onPointerEnter={prefetchStaffNotasHistoricoChunk}
             className={cn(
               "flex-1 min-w-[7rem] px-3 py-2.5 text-sm font-semibold rounded-lg transition-colors",
               vistaResponsavel === "historico"

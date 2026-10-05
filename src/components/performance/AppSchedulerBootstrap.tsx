@@ -3,7 +3,7 @@
 import { useEffect, useRef } from "react";
 import { usePathname } from "next/navigation";
 import { markUserInteraction, startAppScheduler } from "@/lib/performance/appScheduler";
-import { markRqlRouteTransition } from "@/lib/performance/rqlMarks";
+import { markRqlRouteTransition, scheduleMarkRqlRoutePaintReady } from "@/lib/performance/rqlMarks";
 import { markUserActivity } from "@/services/idleActivity";
 
 function routeHopFromPathname(pathname: string): string {
@@ -27,12 +27,17 @@ export function AppSchedulerBootstrap() {
   useEffect(() => {
     const hop = routeHopFromPathname(pathname);
     const prev = prevHopRef.current;
+    let cancelPaint: (() => void) | undefined;
     if (prev && prev !== hop) {
       markRqlRouteTransition(prev, hop);
+      cancelPaint = scheduleMarkRqlRoutePaintReady(hop);
       markUserInteraction();
       markUserActivity();
     }
     prevHopRef.current = hop;
+    return () => {
+      cancelPaint?.();
+    };
   }, [pathname]);
 
   return null;
