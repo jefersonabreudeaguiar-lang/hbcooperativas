@@ -119,6 +119,18 @@ import {
   enqueuePendingDeliveryImage,
   buildPendingImageId,
 } from "@/services/offlineImageQueueService";
+import {
+  countCooperadoOfflinePhotosPending,
+  ensureCooperadoDeliveryQueueOnlineListener,
+  runCooperadoDeliveryQueueMaintenance,
+  subscribeCooperadoDeliveryQueueFlush,
+} from "@/services/cooperadoDeliveryQueueCoordinator";
+import {
+  countPendingEntregaPublish,
+  queuePendingEntregaPublish,
+  reconcilePendingEntregaPublish,
+  unqueuePendingEntregaPublish,
+} from "@/services/pendingEntregaPublishService";
 import { putLocalNotaMedia, readNotaFotoAtIndex } from "@/services/localMediaStore";
 import { listCooperadosDaCooperativa, pushCooperadoToCloud, resolverCooperadoIdCanonico, getCooperadoNomeResolvido, notaPertenceCooperado } from "@/services/cooperadoCloudService";
 import { pushOperacionalToCloud, syncContratosFromCloud } from "@/services/cooperativaSyncCloudService";
@@ -296,6 +308,8 @@ export default function NotasPedidoContent() {
   const [fotosSessaoCount, setFotosSessaoCount] = useState(0);
   const [fotosConfirmadasNaSessao, setFotosConfirmadasNaSessao] = useState(0);
   const [fotosNaNuvemCount, setFotosNaNuvemCount] = useState(0);
+  const [fotosOfflineFilaCount, setFotosOfflineFilaCount] = useState(0);
+  const [publicacaoLocalPendente, setPublicacaoLocalPendente] = useState(0);
   const [fotoAtualPreview, setFotoAtualPreview] = useState<string | null>(null);
   const [envioProgresso, setEnvioProgresso] = useState<{ sent: number; total: number } | null>(null);
   const [fotoDuplicadaMsg, setFotoDuplicadaMsg] = useState("");
@@ -1150,13 +1164,27 @@ export default function NotasPedidoContent() {
     sincronizarFotosLancadasComFicha,
   ]);
 
+  const refreshCooperadoQueueIndicators = useCallback(async () => {
+    if (!isCooperado || !user?.id) return;
+    const offline = await countCooperadoOfflinePhotosPending();
+    setFotosOfflineFilaCount(offline);
+    setPublicacaoLocalPendente(countPendingEntregaPublish({ userId: user.id }));
+  }, [isCooperado, user?.id]);
+
   useEffect(() => {
     if (!isCooperado) return;
-    const flush = () => void syncOfflineDeliveryImages();
-    flush();
-    window.addEventListener("online", flush);
-    return () => window.removeEventListener("online", flush);
-  }, [isCooperado]);
+    ensureCooperadoDeliveryQueueOnlineListener();
+    void refreshCooperadoQueueIndicators();
+    void runCooperadoDeliveryQueueMaintenance().then(() => refreshCooperadoQueueIndicators());
+    const unsub = subscribeCooperadoDeliveryQueueFlush((detail) => {
+      setFotosOfflineFilaCount(detail.offlinePhotosRemaining);
+      setPublicacaoLocalPendente(detail.publishRemaining);
+      if (ANEXAR_DRAFT_KEY) {
+        void countFotosUploadedDraft(ANEXAR_DRAFT_KEY).then(setFotosNaNuvemCount);
+      }
+    });
+    return unsub;
+  }, [isCooperado, refreshCooperadoQueueIndicators, ANEXAR_DRAFT_KEY]);
 
   useEffect(() => {
     if (!isCooperado) return;
@@ -2167,6 +2195,7 @@ export default function NotasPedidoContent() {
               });
               await markFotoDraftUploaded(draftKey, newIndex);
               setFotoValidationWarning("Sem internet — foto guardada e será enviada quando voltar a conexão.");
+              void countCooperadoOfflinePhotosPending().then(setFotosOfflineFilaCount);
             } else {
               await removeFotoDraftAt(draftKey, newIndex);
               const count = await countFotoDraft(draftKey);
@@ -2460,12 +2489,32 @@ export default function NotasPedidoContent() {
     }
 
     if (!saved.ok) {
-      setEnviando(false);
-      setEnvioProgresso(null);
-      setErroEnvio(
-        `${saved.error} Entrega já está na nuvem — aguarde a sincronização ou toque Enviar de novo.`
+      queuePendingEntregaPublish({
+        cnpj,
+        cooperativaId: coopId,
+        userId: user.id,
+        userName: user.name,
+        cooperadoNome,
+        nota: notaFinalLocal,
+        reenvio: Boolean(reenviarNotaId),
+        qtdFotos,
+      });
+      await reconcilePendingEntregaPublish({
+        cnpj,
+        userId: user.id,
+        userName: user.name,
+      });
+      setPublicacaoLocalPendente(countPendingEntregaPublish({ userId: user.id, cnpj }));
+    } else {
+      unqueuePendingEntregaPublish(cnpj, notaFinalLocal.id);
+      setPublicacaoLocalPendente(countPendingEntregaPublish({ userId: user.id, cnpj }));
+    }
+
+    const listaLocalOk = saved.ok;
+    if (!listaLocalOk) {
+      setFotoValidationWarning(
+        "Entrega já publicada para o responsável. A lista neste aparelho será ajustada em instantes — se não aparecer, use Atualizar."
       );
-      return;
     }
 
     // Confirma de novo na nuvem ANTES do sync de aba (evita sumir ao ir para Início).
@@ -2479,11 +2528,11 @@ export default function NotasPedidoContent() {
     setUltimaNotaEnviadaIds([notaFinalLocal.id]);
     setAnexarSucesso(true);
     setSuccessMsg(
-      qtdFotos === 1
+      (qtdFotos === 1
         ? "Entrega enviada! O responsável já pode conferir a foto."
-        : `Entrega enviada com ${qtdFotos} fotos! O responsável já pode conferir.`
+        : `Entrega enviada com ${qtdFotos} fotos! O responsável já pode conferir.`) +
+        (!listaLocalOk ? " Se não constar em Em análise, toque Atualizar." : "")
     );
-    // Sync depois — republicação no provider cobre edge cases.
     requestAppSync();
   };
 
@@ -3945,6 +3994,25 @@ export default function NotasPedidoContent() {
             <BookOpen size={16} /> Minha ficha
           </button>
         </div>
+      )}
+
+      {isCooperado && abaCooperado === "entregas" && (fotosOfflineFilaCount > 0 || publicacaoLocalPendente > 0) && (
+        <AlertBanner variant="warning" title="Envio em andamento" className="mb-4">
+          {fotosOfflineFilaCount > 0 && (
+            <p>
+              {fotosOfflineFilaCount === 1
+                ? "1 foto aguardando conexão para subir à nuvem."
+                : `${fotosOfflineFilaCount} fotos aguardando conexão para subir à nuvem.`}
+              {" "}Assim que a internet voltar, o envio continua sozinho.
+            </p>
+          )}
+          {publicacaoLocalPendente > 0 && (
+            <p className={fotosOfflineFilaCount > 0 ? "mt-2" : undefined}>
+              Entrega já publicada para a cooperativa — ajustando a lista neste aparelho
+              {publicacaoLocalPendente > 1 ? ` (${publicacaoLocalPendente})` : ""}.
+            </p>
+          )}
+        </AlertBanner>
       )}
 
       {isCooperado && abaCooperado === "entregas" && (

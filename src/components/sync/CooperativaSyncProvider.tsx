@@ -23,8 +23,8 @@ import {
   finalizeNotaEntregaNaNuvem,
   refreshCooperadoNotasEmAnalise,
   republishLocalAguardandoConferencia,
-  syncOfflineDeliveryImages,
 } from "@/services/notaPedidoCloudService";
+import { runCooperadoDeliveryQueueMaintenance, ensureCooperadoDeliveryQueueOnlineListener } from "@/services/cooperadoDeliveryQueueCoordinator";
 import {
   getSyncMinGapMs,
   ensureCooperadoFinanceiroFromCloud,
@@ -566,7 +566,7 @@ export function CooperativaSyncProvider({ children }: { children: React.ReactNod
       }
 
       await flushPendingCooperadoPushes(cnpj);
-      await syncOfflineDeliveryImages();
+      await runCooperadoDeliveryQueueMaintenance({ cnpj });
       await flushPendingNotaDeletes(cnpj);
 
       const cooperadoLogado = currentUser.role === "cooperado";
@@ -1017,6 +1017,11 @@ export function CooperativaSyncProvider({ children }: { children: React.ReactNod
       cancelled = true;
     };
   }, [user?.id, user?.role, coopId]);
+
+  useEffect(() => {
+    if (user?.role !== "cooperado") return;
+    ensureCooperadoDeliveryQueueOnlineListener(cooperadoCnpj ?? undefined);
+  }, [user?.role, cooperadoCnpj]);
 
   useCooperadoStaffRevisionWatch({
     cnpj: cooperadoCnpj,
