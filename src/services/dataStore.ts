@@ -179,6 +179,19 @@ export function beginConferenciaDeferLocalPersist(): void {
   conferenciaDeferPersistDepth += 1;
 }
 
+function flushConferenciaDeferredLocalPersistAfterUi(): void {
+  if (typeof window === "undefined") {
+    flushConferenciaDeferredLocalPersist();
+    return;
+  }
+  const run = () => flushConferenciaDeferredLocalPersist();
+  if (typeof requestIdleCallback !== "undefined") {
+    requestIdleCallback(run, { timeout: 400 });
+  } else {
+    setTimeout(run, 0);
+  }
+}
+
 export function endConferenciaDeferLocalPersist(): void {
   conferenciaDeferPersistDepth = Math.max(0, conferenciaDeferPersistDepth - 1);
   if (conferenciaDeferPersistDepth > 0) return;
@@ -186,7 +199,7 @@ export function endConferenciaDeferLocalPersist(): void {
     clearTimeout(conferenciaDeferPersistTimer);
     conferenciaDeferPersistTimer = null;
   }
-  flushConferenciaDeferredLocalPersist();
+  flushConferenciaDeferredLocalPersistAfterUi();
 }
 
 /** Somente testes. */

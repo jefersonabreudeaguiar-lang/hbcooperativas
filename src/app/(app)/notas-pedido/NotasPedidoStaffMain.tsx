@@ -2802,25 +2802,36 @@ export default function NotasPedidoStaffMain() {
 
   const fecharConferirModal = () => {
     const notaIdFechada = selectedNota?.id;
-    if (lancamentoSequenciaTimerRef.current) {
-      clearTimeout(lancamentoSequenciaTimerRef.current);
-      lancamentoSequenciaTimerRef.current = null;
-    }
-    setLancamentoSequencia(null);
-    revokeConferenciaFotoCache();
-    resetConferenciaPorFoto();
-    filaConferenciaRef.current = null;
-    setFilaConferenciaPos(0);
-    setFilaConferenciaTotal(0);
-    setConferenciaTransicao(false);
-    setConferenciaFotoErro("");
-    setConferenciaDivisaoQtd(0);
-    setConferenciaDivisaoIds([]);
-    setConferenciaFotoAmpliada(false);
+    conferenciaFotoLoadGenRef.current += 1;
+    fotoAbortRef.current?.abort();
+    fotoAbortRef.current = null;
     setConferirModal(false);
     setSelectedNota(null);
-    setConferenciaRetomadaFichaMsg("");
-    if (notaIdFechada) clearConferenciaDraftMemoria(notaIdFechada);
+    startTransition(() => {
+      if (lancamentoSequenciaTimerRef.current) {
+        clearTimeout(lancamentoSequenciaTimerRef.current);
+        lancamentoSequenciaTimerRef.current = null;
+      }
+      setLancamentoSequencia(null);
+      setConferenciaTransicao(false);
+      setConferenciaFotoErro("");
+      setConferenciaDivisaoQtd(0);
+      setConferenciaDivisaoIds([]);
+      setConferenciaFotoAmpliada(false);
+      setConferenciaRetomadaFichaMsg("");
+      resetConferenciaPorFoto();
+      filaConferenciaRef.current = null;
+      setFilaConferenciaPos(0);
+      setFilaConferenciaTotal(0);
+    });
+    window.setTimeout(() => {
+      for (const [, url] of conferenciaFotoCacheRef.current.entries()) {
+        revokePreviewUrl(url);
+      }
+      conferenciaFotoCacheRef.current.clear();
+      conferenciaNotaEnriquecidaRef.current = null;
+      if (notaIdFechada) clearConferenciaDraftMemoria(notaIdFechada);
+    }, 0);
   };
 
   const prepararConferenciaNota = async (nota: NotaPedido, opts?: { transicao?: boolean }) => {
