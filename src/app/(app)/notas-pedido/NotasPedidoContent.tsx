@@ -8,7 +8,6 @@ import {
 } from "lucide-react";
 import { useAppData, useAppDataSelector } from "@/hooks/useAppData";
 import { useResponsavelFilaConferencia } from "@/hooks/useResponsavelFilaConferencia";
-import { ResponsavelFilaCooperadosList } from "@/components/notas/ResponsavelFilaCooperadosList";
 import { usePermissions } from "@/hooks/usePermissions";
 import { getUserCooperativaId } from "@/utils/cooperativa";
 import { PageHeader, DataTable, FilterBar, Modal } from "@/components/ui/Table";
@@ -31,6 +30,10 @@ import { updateData, updateDataSafe, generateId, addAuditEntry, getData, getData
 import { requestAppSync, requestAppSyncImmediate, requestAppSyncLight } from "@/services/syncRequest";
 import { scheduleCooperadoPostInteractiveTask } from "@/lib/performance/cooperadoColdStart";
 import { markRqlColdStartPhase } from "@/lib/performance/rqlMarks";
+import {
+  loadCooperadoAnexarPipeline,
+  prefetchCooperadoAnexarPipeline,
+} from "@/lib/performance/prefetchCooperadoAnexarPipeline";
 import {
   COOPERADO_ENTREGA_REMOVIDA_EVENT,
   type CooperadoEntregaRemovidaDetail,
@@ -107,12 +110,7 @@ import {
   warmConferenciaNotaFotos,
 } from "@/services/conferenciaFotoPrefetch";
 import {
-  processDeliveryImage,
-  uploadImageToSupabase,
-  validateImageFile,
   revokePreviewUrl,
-  userFacingPipelineError,
-  slimNotaDraftForUpload,
   AVISO_COOPERADO_FOTOS_MEMORIA_INSUFICIENTE,
   shouldWarnCooperadoFotosUmaPorVez,
   type ImagePipelineStep,
@@ -151,8 +149,21 @@ import {
   bicCentralMesPrincipalQuantoVouReceber,
 } from "@/services/bicLeituraCentralCooperado";
 import dynamic from "next/dynamic";
-import { CooperadoEntregasPorMes } from "@/components/cooperado/CooperadoEntregasPorMes";
 import { useContaCoopDescontosRevision } from "@/hooks/useContaCoopDescontosRevision";
+
+const CooperadoEntregasPorMes = dynamic(
+  () =>
+    import("@/components/cooperado/CooperadoEntregasPorMes").then((m) => ({
+      default: m.CooperadoEntregasPorMes,
+    })),
+  {
+    loading: () => (
+      <div className="py-8 text-center text-sm text-gray-500 bg-white rounded-2xl border border-gray-100">
+        Carregando entregas…
+      </div>
+    ),
+  }
+);
 
 const CooperadoMinhaFichaTab = dynamic(
   () =>
@@ -166,9 +177,38 @@ const CooperadoMinhaFichaTab = dynamic(
   }
 );
 import { useSyncContaCoopValorReceberPilot } from "@/hooks/useSyncContaCoopValorReceberPilot";
-import { CorrecoesEntregasPanel } from "@/components/notas/CorrecoesEntregasPanel";
-import { LancamentosEmAbertoPainel } from "@/components/notas/LancamentosEmAbertoPainel";
-import { NotasPedidoHistoricoResponsavel } from "@/components/notas/NotasPedidoHistoricoResponsavel";
+
+const CorrecoesEntregasPanel = dynamic(
+  () =>
+    import("@/components/notas/CorrecoesEntregasPanel").then((m) => ({
+      default: m.CorrecoesEntregasPanel,
+    })),
+  { loading: () => <div className="py-6 text-center text-sm text-gray-500">Carregando correções…</div> }
+);
+
+const LancamentosEmAbertoPainel = dynamic(
+  () =>
+    import("@/components/notas/LancamentosEmAbertoPainel").then((m) => ({
+      default: m.LancamentosEmAbertoPainel,
+    })),
+  { loading: () => <div className="py-6 text-center text-sm text-gray-500">Carregando lançamentos…</div> }
+);
+
+const NotasPedidoHistoricoResponsavel = dynamic(
+  () =>
+    import("@/components/notas/NotasPedidoHistoricoResponsavel").then((m) => ({
+      default: m.NotasPedidoHistoricoResponsavel,
+    })),
+  { loading: () => <div className="py-8 text-center text-sm text-gray-500">Carregando histórico…</div> }
+);
+
+const ResponsavelFilaCooperadosList = dynamic(
+  () =>
+    import("@/components/notas/ResponsavelFilaCooperadosList").then((m) => ({
+      default: m.ResponsavelFilaCooperadosList,
+    })),
+  { loading: () => <div className="py-6 text-center text-sm text-gray-500">Carregando fila…</div> }
+);
 import { getContratoLabel, getContratosEntrega, resolverContratoEntrega } from "@/utils/contratosEntrega";
 import { cn, formatCurrency, formatDate, formatMesReferencia, getCurrentMesReferencia } from "@/utils/format";
 import { labelUnidade } from "@/utils/unidades";
@@ -1234,6 +1274,7 @@ export default function NotasPedidoContent() {
       });
     };
     scheduleCooperadoPostInteractiveTask(runBackgroundMaintenance);
+    scheduleCooperadoPostInteractiveTask(() => prefetchCooperadoAnexarPipeline());
     const unsub = subscribeCooperadoDeliveryQueueFlush((detail) => {
       setFotosOfflineFilaCount(detail.offlinePhotosRemaining);
       setPublicacaoLocalPendente(detail.publishRemaining);
@@ -1305,6 +1346,7 @@ export default function NotasPedidoContent() {
 
   const continuarRascunhoFotos = (abrirCamera = false) => {
     if (rascunhoFotosCount === 0) return;
+    prefetchCooperadoAnexarPipeline();
     setFormErrors({});
     setErroEnvio("");
     setAnexarSucesso(false);
@@ -1365,6 +1407,7 @@ export default function NotasPedidoContent() {
   };
 
   const openAnexar = (notaRejeitada?: NotaPedido, options?: { abrirCamera?: boolean }) => {
+    if (!notaRejeitada) prefetchCooperadoAnexarPipeline();
     if (!notaRejeitada && rascunhoFotosCount > 0) {
       continuarRascunhoFotos(options?.abrirCamera ?? false);
       return;
@@ -2109,6 +2152,8 @@ export default function NotasPedidoContent() {
   const processarFotoArquivo = async (file: File) => {
     if (!data || !cooperadoId || !ANEXAR_DRAFT_KEY || enviando) return;
 
+    const pipeline = await loadCooperadoAnexarPipeline();
+
     if (fotoProcessandoRef.current) {
       fotoAbortRef.current?.abort();
     }
@@ -2124,7 +2169,7 @@ export default function NotasPedidoContent() {
     setFotoPipelineStep("preparing");
 
     try {
-      const validation = validateImageFile(file);
+      const validation = pipeline.validateImageFile(file);
       if (!validation.ok) {
         setErroEnvio(validation.error ?? "Arquivo inválido.");
         setFotoPipelineStep("error");
@@ -2164,7 +2209,7 @@ export default function NotasPedidoContent() {
       }
 
       setFotoPipelineStep("compressing");
-      const processed = await processDeliveryImage(file, abort.signal);
+      const processed = await pipeline.processDeliveryImage(file, abort.signal);
 
       const cooperadoNome = getCooperadoNome(data.cooperados, cooperadoId);
       const notaId =
@@ -2252,7 +2297,7 @@ export default function NotasPedidoContent() {
             mimeType: processed.mimeType,
           });
 
-          const uploaded = await uploadImageToSupabase({
+          const uploaded = await pipeline.uploadImageToSupabase({
             cnpj,
             nota: draftNota,
             index: newIndex,
@@ -2276,7 +2321,7 @@ export default function NotasPedidoContent() {
                 thumbnailBlob: processed.thumbnail,
                 mimeType: processed.mimeType,
                 cooperadoNome,
-                notaSnapshot: slimNotaDraftForUpload(draftNota),
+                notaSnapshot: pipeline.slimNotaDraftForUpload(draftNota),
               });
               await markFotoDraftUploaded(draftKey, newIndex);
               setFotoValidationWarning("Sem internet — foto guardada e será enviada quando voltar a conexão.");
@@ -2306,7 +2351,7 @@ export default function NotasPedidoContent() {
         return;
       }
       revokeFotoPreview();
-      setErroEnvio(userFacingPipelineError(err));
+      setErroEnvio(pipeline.userFacingPipelineError(err));
       setFotoPipelineStep("error");
     } finally {
       fotoProcessandoRef.current = false;
