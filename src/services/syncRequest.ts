@@ -25,6 +25,7 @@ export type SyncRunOptions = {
   silent?: boolean;
   userInitiated?: boolean;
   eventDriven?: boolean;
+  tier?: SyncTier;
 };
 
 type SyncHandler = (opts: SyncRunOptions) => void;
@@ -34,7 +35,12 @@ let schedulerBridgeAttached = false;
 
 const SYNC_DEBOUNCE_MS = 450;
 
-function dispatchSync(opts: { force: boolean; userInitiated?: boolean; eventDriven?: boolean }): void {
+function dispatchSync(opts: {
+  force: boolean;
+  userInitiated?: boolean;
+  eventDriven?: boolean;
+  tier?: SyncTier;
+}): void {
   if (typeof document !== "undefined" && document.hidden) return;
   if (typeof navigator !== "undefined" && !navigator.onLine) return;
   const silent = takePendingCooperadoSilentSync();
@@ -43,6 +49,7 @@ function dispatchSync(opts: { force: boolean; userInitiated?: boolean; eventDriv
     silent,
     userInitiated: opts.userInitiated === true,
     eventDriven: opts.eventDriven === true,
+    tier: opts.tier,
   });
 }
 
@@ -121,10 +128,10 @@ export function requestCooperadoAppReleaseSync(): void {
   requestSyncTier("operacional_full", { force: true, immediate: true, eventDriven: true });
 }
 
-/** Sync leve (respeita intervalo mínimo; pull sem push autoritativo na gestão). */
+/** Sync leve — HX 8.4: delta de notas (gestão) após conferência/lançamento. */
 export function requestAppSyncLight(): void {
   if (cooperadoBloqueiaSyncOperacionalAutomatico()) return;
-  requestSyncTier("pulse", { force: false });
+  requestSyncTier("notas_delta", { force: false });
 }
 
 /** Botão Atualizar: força checagem + sync (ação explícita do cooperado). */

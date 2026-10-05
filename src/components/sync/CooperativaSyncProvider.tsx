@@ -31,6 +31,7 @@ import {
   syncCooperativaBackground,
   syncCooperadoAtualizarFromCloud,
   syncCooperativaBidirectional,
+  syncStaffTieredPullFromCloud,
   syncOperacionalFromCloud,
   type SyncOperacionalFromCloudResult,
 } from "@/services/cooperativaSyncCloudService";
@@ -106,6 +107,7 @@ import {
   persistOperacionalSyncedAppBuild,
 } from "@/lib/performance/cooperadoEventDrivenSync";
 import { markRqlColdStartPhase } from "@/lib/performance/rqlMarks";
+import { resolveSyncTierPlan84 } from "@/lib/performance/syncPlan84";
 import { useCooperadoStaffRevisionWatch } from "@/hooks/useCooperadoStaffRevisionWatch";
 import { fetchCooperativaCloudRevision } from "@/services/cooperativaSyncRevisionService";
 import { notifyCooperadoSubtleUpdate } from "@/lib/cooperadoSubtleUpdate";
@@ -659,7 +661,13 @@ export function CooperativaSyncProvider({ children }: { children: React.ReactNod
           } else {
             const pushCatalog = isDiretoriaRole(currentUser.role as UserRole);
             const pushMensalidades = isDiretoriaRole(currentUser.role as UserRole);
-            await syncCooperativaBidirectional(cnpj, currentCoopId, { pushCatalog, pushMensalidades });
+            const tier = opts?.tier ?? "operacional_full";
+            const plan = resolveSyncTierPlan84(tier, "staff");
+            if (plan.bidirectionalFull) {
+              await syncCooperativaBidirectional(cnpj, currentCoopId, { pushCatalog, pushMensalidades });
+            } else {
+              await syncStaffTieredPullFromCloud(cnpj, currentCoopId, tier);
+            }
           }
 
           if (currentUser.role === "cooperado" && currentUser.cooperadoId) {
@@ -901,6 +909,7 @@ export function CooperativaSyncProvider({ children }: { children: React.ReactNod
         silent: runOpts.silent,
         userInitiated: runOpts.userInitiated === true,
         eventDriven: runOpts.eventDriven === true,
+        tier: runOpts.tier,
       });
     });
 

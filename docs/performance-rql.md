@@ -99,6 +99,12 @@ Marcas: `performance.mark("rql:cold:*")`
 | P6 | Prefetch abas histórico/correções/aberto | `test-perf-notas-p6.ts` |
 | P7 | Gate suíte perf+fluxos | `test-perf-notas-p7.ts` |
 
+### Fase D — RQL 8.3 / 8.4 (sync tier + domínio)
+
+- **8.3** — `appDataDomainNotify.ts`: revisões `notas` / `financeiro` / `operacional` / `shell` + hint IDB (`localStorage` key `coopeagriplla_domain_rev`)
+- **8.4** — `syncPlan84.ts` + `syncStaffTieredPullFromCloud`; `requestAppSyncLight` → tier `notas_delta`
+- Gate: `npx tsx scripts/test-fase-d-sync-gate.ts` (incluído em `run-suite-perf-fluxos`)
+
 ### 9.0.5 (local)
 
 - `scheduleCooperadoPostInteractiveTask` — release/deploy após UI interativa
@@ -131,9 +137,6 @@ Rotas lazy (build 118+): dashboard, notas, ficha, mensalidades, preços, conta H
 
 ## Ondas seguintes
 
-- **Fase D (próxima macro)** — Sync etapa 6 / contrato BIC + RQL **8.3** (notify por domínio + IDB shard) e **8.4** (API delta por tier). Gate existente: `test-operacional-coordination-h888.ts`, `test-sync-001-s1-fullreset.ts`, `test-h814e-operacional-reset-safe.ts`.
-- **8.3** — notify por domínio + IDB shard
-- **8.4** — API delta por tier
 - **8.5** — workers (BIC / admin stats)
 - **8.6** — keep-alive abas cooperado (`CooperadoMobileTabKeepAlive` mobile) + prefetch + `loading.tsx` por aba; view transitions opcional futuro
 

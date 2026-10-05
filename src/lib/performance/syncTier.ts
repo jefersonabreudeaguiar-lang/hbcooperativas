@@ -1,6 +1,6 @@
 /**
  * HX 8.0 — tiers de sync (contrato RQL). Hoje todos mapeiam para o mesmo runSync;
- * deltas por domínio entram em ondas futuras (8.4).
+ * deltas por domínio — plano 8.4 em syncPlan84 (gestão).
  */
 export type SyncTier = "pulse" | "notas_delta" | "financeiro_delta" | "operacional_full";
 

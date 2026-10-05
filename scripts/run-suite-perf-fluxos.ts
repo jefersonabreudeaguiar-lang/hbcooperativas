@@ -22,6 +22,7 @@ const SUITE: { category: string; script: string }[] = [
   { category: "PERF", script: "test-perf-notas-p6.ts" },
   { category: "PERF", script: "test-perf-notas-p7.ts" },
   { category: "PERF", script: "test-rql-browser-instrumentation-h90.ts" },
+  { category: "SYNC", script: "test-fase-d-sync-gate.ts" },
   { category: "FLUXO", script: "simulate-entrega-flow.ts" },
   { category: "FLUXO", script: "simulate-sync-flows.ts" },
   { category: "FLUXO", script: "test-pending-entrega-publish-p0.ts" },

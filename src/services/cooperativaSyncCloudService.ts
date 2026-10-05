@@ -20,6 +20,8 @@ import { sincronizarMensalidadeCooperativa, mensalidadeVisivelNoDispositivo, nor
 import { aplicarPrestacoesContasExcluidas } from "@/services/prestacaoContasService";
 import { mergeLivroCaixaControleAnualFromCloud } from "@/services/livroCaixaService";
 import { posProcessarFinanceiroLocal } from "@/services/operacionalLocalPostProcess";
+import type { SyncTier } from "@/lib/performance/syncTier";
+import { resolveSyncTierPlan84 } from "@/lib/performance/syncPlan84";
 import { aplicarInstituicoesExcluidas } from "@/services/instituicaoContratoService";
 import {
   OPERATIONAL_RESET_VERSION,
@@ -2659,6 +2661,38 @@ export async function syncAllCooperativaFromCloud(cnpj: string, preferredCoopId?
     await syncNotasPedidoFromCloud(digits);
     const operacionalCloud = (await fetchSyncBundle(digits))?.operacional ?? null;
     saveDataSafe(finalizeOperacionalPullLocalState(getData(), operacionalCloud, digits));
+  });
+}
+
+/**
+ * HX 8.4 — pull parcial da gestão conforme tier (sem push autoritativo).
+ */
+export async function syncStaffTieredPullFromCloud(
+  cnpj: string,
+  coopId: string | undefined,
+  tier: SyncTier
+): Promise<void> {
+  const digits = normalizeCnpj(cnpj);
+  if (digits.length !== 14) return;
+  const plan = resolveSyncTierPlan84(tier, "staff");
+  if (plan.bidirectionalFull) {
+    await syncCooperativaBidirectionalInternal(cnpj, coopId);
+    return;
+  }
+
+  await ensureCloudOperationalResetApplied(digits, coopId);
+
+  await runWithBatchedSaveAsync(async () => {
+    if (plan.pullProfile) await syncCooperativaProfileFromCloud(digits);
+    const cid = coopId ?? resolveCoopId(getData(), digits);
+    if (plan.pullCooperados && cid) await syncCooperadosFromCloud(digits, cid);
+    if (plan.pullOperacional) await syncOperacionalFromCloud(digits);
+    if (plan.pullContratos) await syncContratosFromCloud(digits);
+    if (plan.pullNotas) await syncNotasPedidoFromCloud(digits);
+    if (plan.pullOperacional || plan.pullNotas) {
+      const operacionalCloud = (await fetchSyncBundle(digits))?.operacional ?? null;
+      saveDataSafe(finalizeOperacionalPullLocalState(getData(), operacionalCloud, digits));
+    }
   });
 }
 

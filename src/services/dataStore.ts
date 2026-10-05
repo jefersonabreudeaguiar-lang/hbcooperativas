@@ -36,6 +36,7 @@ import { posProcessarFinanceiroLocal } from "@/services/operacionalLocalPostProc
 import { ajustesFichaMesId } from "@/services/notaPedidoService";
 import { forceNextFullNotasSync, clearNotasSyncMeta } from "@/services/syncMetaService";
 import { requestAppSync } from "@/services/syncRequest";
+import { inferAppDataDomainsTouched, touchAppDataDomains } from "@/lib/performance/appDataDomainNotify";
 import { normalizarPrestacaoContas, aplicarPrestacoesContasExcluidas } from "@/services/prestacaoContasService";
 import { aplicarInstituicoesExcluidas } from "@/services/instituicaoContratoService";
 import { exigeSenhaCadastroCooperado } from "@/utils/cooperativaCadastro";
@@ -765,9 +766,11 @@ export function updateDataSafe(
   if (saveBatchDepth > 0) {
     saveBatchPending = updated;
     memoryCache = updated;
+    touchAppDataDomains(inferAppDataDomainsTouched(current, updated));
     return { ok: true, data: updated };
   }
 
+  touchAppDataDomains(inferAppDataDomainsTouched(current, updated));
   notifyImmediate();
   let saved = persistDataToStorage(updated, { skipNotify: true });
   if (!saved.ok) {
