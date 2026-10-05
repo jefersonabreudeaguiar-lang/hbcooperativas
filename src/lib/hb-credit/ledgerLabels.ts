@@ -31,3 +31,18 @@ export function formatLedgerEntryLabel(
   }
   return labelLedgerTipo(tipo);
 }
+
+const DEBIT_LEDGER_TIPOS = new Set<string>(["PAYMENT", "CASHBACK_USE", "CASHBACK_SWEEP", "PARTNER_BLOCK"]);
+
+/** Extrato cooperado: saída negativa, entrada positiva (tipo manda; direction só em LIMIT_ADJUST). */
+export function signedLedgerAmountCentsForExtrato(
+  entryType: string,
+  direction: string,
+  amountCents: number
+): number {
+  const abs = Math.abs(Math.trunc(Number(amountCents) || 0));
+  if (!abs) return 0;
+  if (DEBIT_LEDGER_TIPOS.has(entryType)) return -abs;
+  if (entryType === "LIMIT_ADJUST") return direction === "debit" ? -abs : abs;
+  return abs;
+}

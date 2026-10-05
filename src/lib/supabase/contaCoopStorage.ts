@@ -35,6 +35,7 @@ import {
 } from "@/modules/hb-credit/engine/hbCreditLimitSyncState";
 import { validateHbFinancialLimitRow } from "@/modules/hb-credit/engine/hbCreditFinancialLimitInvariants";
 import { computeDisponivel, formatCentsBRL } from "@/modules/hb-credit/engine/money";
+import { signedLedgerAmountCentsForExtrato } from "@/lib/hb-credit/ledgerLabels";
 import { calcLimiteFromPercentual, calcTetoGlobalCents, sumCreditosBaseCents } from "@/modules/hb-credit/engine/creditBaseFromFicha";
 import type { AuthoritativeCreditBaseErrorPayload } from "@/modules/hb-credit/engine/creditBaseAuthoritative";
 import { resolveAuthoritativeCreditBase } from "@/modules/hb-credit/engine/creditBaseAuthoritative";
@@ -2874,11 +2875,12 @@ export async function listLedgerCooperado(
 
   return rows.map((r) => {
     const meta = (r.metadata ?? {}) as Record<string, unknown>;
-    const signed = r.direction === "debit" ? -Number(r.amount_cents) : Number(r.amount_cents);
+    const entryType = String(r.entry_type);
+    const signed = signedLedgerAmountCentsForExtrato(entryType, String(r.direction), Number(r.amount_cents));
     const txId = String(r.transaction_id);
     return {
       id: String(r.id),
-      tipo: String(r.entry_type),
+      tipo: entryType,
       amountCents: signed,
       saldoDisponivelAposCents:
         r.balance_reference_cents != null ? Number(r.balance_reference_cents) : null,

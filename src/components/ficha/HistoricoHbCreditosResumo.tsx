@@ -5,6 +5,7 @@ import { HB_CREDIT_PRODUCT_NAME } from "@/config/hbCreditBranding";
 import { fetchHbUtilizacaoResumoCooperado } from "@/services/creditApiService";
 import { saldoAReceberBaseAntesHb, type HbUtilizacaoResumoLancamento } from "@/lib/hb-credit/utilizacaoResumo";
 import { formatCurrency } from "@/utils/format";
+import { cn } from "@/utils/cn";
 import type { FichaCorridaDesconto } from "@/types";
 
 function formatDataHora(iso: string): string {
@@ -109,10 +110,7 @@ export function HistoricoHbCreditosResumo({
   }
 
   if (compacto) {
-    const totalAbatido = lancamentos.reduce(
-      (s, l) => s + (l.valorHbUtilizadoReais || Math.abs(l.valorImpactoAReceberReais)),
-      0
-    );
+    const totalImpacto = lancamentos.reduce((s, l) => s + l.valorImpactoAReceberReais, 0);
     return (
       <div className="space-y-1.5">
         <div className="flex flex-wrap items-baseline justify-between gap-x-2 gap-y-0.5">
@@ -120,14 +118,22 @@ export function HistoricoHbCreditosResumo({
             {HB_CREDIT_PRODUCT_NAME}
           </p>
           <p className="text-[11px] text-gray-600">
-            {lancamentos.length} compra{lancamentos.length === 1 ? "" : "s"} ·{" "}
-            <span className="font-semibold text-red-700">-{formatCurrency(totalAbatido)}</span>
+            {lancamentos.length} movimento{lancamentos.length === 1 ? "" : "s"} ·{" "}
+            <span
+              className={cn(
+                "font-semibold",
+                totalImpacto < 0 ? "text-red-700" : totalImpacto > 0 ? "text-green-700" : "text-gray-700"
+              )}
+            >
+              {totalImpacto >= 0 ? "+ " : "- "}
+              {formatCurrency(Math.abs(totalImpacto))}
+            </span>
           </p>
         </div>
         <ul className="divide-y divide-gray-100 rounded-md border border-gray-100 bg-gray-50/40">
           {lancamentos.map((l) => {
-            const valor = l.valorHbUtilizadoReais || Math.abs(l.valorImpactoAReceberReais);
-            const estornado = l.statusResumo !== "CONFIRMED";
+            const impacto = l.valorImpactoAReceberReais;
+            const saida = impacto < 0;
             return (
               <li
                 key={l.hbTransactionId}
@@ -136,11 +142,19 @@ export function HistoricoHbCreditosResumo({
                 <span className="min-w-0 truncate text-gray-800" title={l.partnerNome}>
                   {l.partnerNome}
                   <span className="text-gray-400 font-normal"> · {formatDataCurta(l.createdAt)}</span>
-                  {estornado && (
+                  {l.statusResumo !== "CONFIRMED" && (
                     <span className="text-gray-500 font-normal"> · {statusLabel(l.statusResumo)}</span>
                   )}
                 </span>
-                <span className="shrink-0 font-semibold text-red-700">-{formatCurrency(valor)}</span>
+                <span
+                  className={cn(
+                    "shrink-0 font-semibold",
+                    saida ? "text-red-700" : impacto > 0 ? "text-green-700" : "text-gray-700"
+                  )}
+                >
+                  {impacto >= 0 ? "+ " : "- "}
+                  {formatCurrency(Math.abs(impacto))}
+                </span>
               </li>
             );
           })}
@@ -180,7 +194,14 @@ export function HistoricoHbCreditosResumo({
               <span>Valor final negociado</span>
               <span className="text-right">{formatCurrency(l.valorFinalCompraReais)}</span>
               <span>Utilizado em HB</span>
-              <span className="text-right">{formatCurrency(l.valorHbUtilizadoReais)}</span>
+              <span
+                className={`text-right font-medium ${
+                  l.statusResumo === "CONFIRMED" ? "text-red-700" : "text-green-700"
+                }`}
+              >
+                {l.statusResumo === "CONFIRMED" ? "- " : "+ "}
+                {formatCurrency(l.valorHbUtilizadoReais)}
+              </span>
               <span>Impacto no A receber</span>
               <span
                 className={`text-right font-medium ${
