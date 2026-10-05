@@ -46,6 +46,7 @@ import { formatMesesReferenciaRotulo } from "@/utils/format";
 import { fichaPreservarSemNotaLocal, notasSyncProvavelmenteCompleto } from "@/services/fichaSyncGuard";
 import { isCloudSyncInProgress } from "@/services/cloudSyncProgress";
 import { contarFotosEnviadasNota } from "@/utils/fotoEntrega";
+import { descricaoFichaCorrespondeFoto } from "@/lib/conferencia/conferenciaFichaHydrate";
 
 export interface ItemResumoFichaMes {
   produtoInstituicaoId: string;
@@ -1086,6 +1087,58 @@ function recalcularSaldosFichaNota(
     }
   }
   return next;
+}
+
+/**
+ * Fechamento multi-foto: preserva cada lançamento parcial (foto i/N) já gravado na ficha.
+ * Evita `buildFichasMultiFotoFromNota`, que rateia o total e distorce quantidades por foto.
+ */
+export function finalizarFichasConferenciaMultiFoto(data: AppData, nota: NotaPedido): AppData {
+  const total = contarFotosEnviadasNota(nota);
+  if (total <= 1) return rebuildFichasNota(data, nota);
+
+  const without = data.fichaCorrida.filter((f) => f.notaPedidoId !== nota.id);
+  const existentes = data.fichaCorrida.filter((f) => f.notaPedidoId === nota.id);
+  const novasFichas: FichaCorrida[] = [];
+  let ctxFicha: FichaCorrida[] = [...without];
+
+  for (let i = 0; i < total; i++) {
+    const hit = existentes.find((f) => descricaoFichaCorrespondeFoto(f.descricao, i, total));
+    if (!hit) return rebuildFichasNota(data, nota);
+
+    const pct = hit.percentualDescontoCooperativa ?? nota.percentualDescontoCooperativa ?? 0;
+    const calc = hit.itens?.length
+      ? calcularItensNota(hit.itens, pct)
+      : {
+          itens: hit.itens ?? [],
+          valorBruto: hit.valorBruto,
+          valorDesconto: hit.descontos,
+          valorLiquido: hit.valorLiquido,
+        };
+    const ctx = { ...data, fichaCorrida: ctxFicha };
+    const saldoAnterior = getSaldoAnteriorFicha(ctx, nota.cooperadoId, nota.mesReferencia, nota.id);
+    novasFichas.push({
+      ...hit,
+      valorBruto: calc.valorBruto,
+      descontos: calc.valorDesconto,
+      valorLiquido: calc.valorLiquido,
+      itens: calc.itens,
+      status: statusFichaAposConferenciaNota(data, nota, nota.cooperadoId),
+      saldoAcumulado: round2(saldoAnterior + calc.valorLiquido),
+      responsavelConferencia: nota.conferidaPor ?? hit.responsavelConferencia,
+    });
+    ctxFicha = [...without, ...novasFichas];
+  }
+
+  const fichaCorrida = recalcularSaldosFichaNota([...without, ...novasFichas], nota);
+  const arquivosMensais = upsertArquivoMensal(
+    { ...data, fichaCorrida: without },
+    nota.cooperadoId,
+    nota.cooperativaId,
+    nota.mesReferencia,
+    { notaPedidoIds: [nota.id] }
+  );
+  return { ...data, fichaCorrida, arquivosMensais };
 }
 
 /** Recria fichas da nota (1 ou N cooperados conforme divisaoEntrega). */

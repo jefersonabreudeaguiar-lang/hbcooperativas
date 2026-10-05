@@ -1,4 +1,4 @@
-import type { AppData } from "@/types";
+import type { AppData, NotaPedidoItem } from "@/types";
 
 const FOTO_TAG_RE = /\(foto (\d+)\/(\d+)\)/i;
 
@@ -90,4 +90,56 @@ export function encontrarProximaFotoPendenteApos(
     if (!lancadas.has(i)) return i;
   }
   return null;
+}
+
+/** Itens já lançados na ficha por índice de foto (0-based). */
+export function extrairLancamentosPorFotoDaFicha(
+  data: AppData,
+  notaId: string,
+  totalFotos: number
+): Map<number, NotaPedidoItem[]> {
+  const map = new Map<number, NotaPedidoItem[]>();
+  if (totalFotos <= 0) return map;
+  for (const f of data.fichaCorrida) {
+    if (f.notaPedidoId !== notaId) continue;
+    const m = f.descricao?.match(FOTO_TAG_RE);
+    if (!m) continue;
+    const idx = Number(m[1]) - 1;
+    const tot = Number(m[2]);
+    if (idx < 0 || idx >= totalFotos || tot !== totalFotos) continue;
+    if (f.itens?.length) map.set(idx, f.itens);
+  }
+  return map;
+}
+
+/** Ficha é a fonte da verdade ao retomar conferência multi-foto. */
+export function reidratarProgressoMultiFotoConferencia(
+  data: AppData,
+  notaId: string,
+  totalFotos: number
+): {
+  lancadas: Set<number>;
+  lancamentosPorFoto: Map<number, NotaPedidoItem[]>;
+} {
+  const lancadas = inferirFotosLancadasNaFicha(data, notaId, totalFotos);
+  const lancamentosPorFoto = extrairLancamentosPorFotoDaFicha(data, notaId, totalFotos);
+  return { lancadas, lancamentosPorFoto };
+}
+
+export function lancamentosOrdenadosPorFoto(
+  map: ReadonlyMap<number, NotaPedidoItem[]>,
+  totalFotos: number
+): NotaPedidoItem[][] {
+  return Array.from({ length: totalFotos }, (_, i) => map.get(i) ?? []);
+}
+
+export function validarTodasFotosLancadasConferencia(
+  lancadas: ReadonlySet<number>,
+  totalFotos: number
+): { ok: true } | { ok: false; primeiraPendente: number } {
+  if (totalFotos <= 1) return { ok: true };
+  for (let i = 0; i < totalFotos; i++) {
+    if (!lancadas.has(i)) return { ok: false, primeiraPendente: i };
+  }
+  return { ok: true };
 }

@@ -22,6 +22,8 @@ import {
 import {
   descricaoFichaCorrespondeFoto,
   fichaJaTemLancamentoFoto,
+  lancamentosOrdenadosPorFoto,
+  validarTodasFotosLancadasConferencia,
 } from "../src/lib/conferencia/conferenciaFichaHydrate";
 
 const ROOT = join(import.meta.dirname ?? __dirname, "..");
@@ -107,7 +109,25 @@ assert.equal(
 );
 pass("tag foto na ficha sem falso positivo foto 1 vs 10");
 
-assert.ok(notas.includes("fichaJaTemLancamentoFoto"), "NotasPedido usa match exato de foto na ficha");
+assert.equal(validarTodasFotosLancadasConferencia(new Set([0, 1, 2]), 3).ok, true);
+assert.equal(
+  validarTodasFotosLancadasConferencia(new Set([0, 2]), 3).ok,
+  false
+);
+const ord = lancamentosOrdenadosPorFoto(
+  new Map([
+    [0, [{ produtoInstituicaoId: "a", quantidade: 1, valorBruto: 1 } as never]],
+    [2, [{ produtoInstituicaoId: "b", quantidade: 2, valorBruto: 2 } as never]],
+  ]),
+  3
+);
+assert.equal(ord.length, 3);
+assert.equal(ord[2]?.[0]?.produtoInstituicaoId, "b");
+pass("progresso multi-foto — ordem e validação de fotos");
+
+assert.ok(notas.includes("finalizarFichasConferenciaMultiFoto"), "fechamento multi-foto preserva lançamentos parciais");
+assert.ok(notas.includes("reidratarProgressoMultiFotoConferencia"), "reidrata progresso da ficha");
+assert.ok(notas.includes("lancamentosOrdenadosPorFoto"), "consolida itens por índice de foto");
 assert.ok(
   notas.includes("fetchConferenciaFotoPartCached") && notas.includes("totalFotosNota"),
   "fetch foto conferência com total de partes"

@@ -48,11 +48,13 @@ import {
 } from "@/lib/conferencia/conferenciaDraftMemoria";
 import {
   conferenciaParcialPendenteFinalizacao,
-  inferirFotosLancadasNaFicha,
   encontrarPrimeiraFotoPendente,
   encontrarProximaFotoPendenteApos,
   descricaoFichaCorrespondeFoto,
   fichaJaTemLancamentoFoto,
+  reidratarProgressoMultiFotoConferencia,
+  lancamentosOrdenadosPorFoto,
+  validarTodasFotosLancadasConferencia,
 } from "@/lib/conferencia/conferenciaFichaHydrate";
 import {
   calcularItensNota,
@@ -65,6 +67,7 @@ import {
   criarDivisaoEntregaFromParticipantes,
   buildFichasDivisaoFromNota,
   rebuildFichasNota,
+  finalizarFichasConferenciaMultiFoto,
   fichasValoresAlinhadosComNota,
   sincronizarTotaisNotaComFichas,
   excluirEntregaNota,
@@ -679,16 +682,7 @@ export default function NotasPedidoContent() {
       setConferenciaNumeroNotaManual(draft.numeroNotaManual);
 
       if (opts?.preservarProgressoFotosDaFicha) {
-        const merged = new Set(fotosLancadasConferenciaRef.current);
-        for (const idx of draft.fotosLancadas) merged.add(idx);
-        fotosLancadasConferenciaRef.current = merged;
-        const mapa = restaurarLancamentosPorFoto(draft.lancamentosPorFoto);
-        for (const [idx, itens] of mapa.entries()) {
-          if (!lancamentosFotoConferenciaRef.current.has(idx)) {
-            lancamentosFotoConferenciaRef.current.set(idx, itens);
-          }
-        }
-        setFotosLancadasUi(new Set(fotosLancadasConferenciaRef.current));
+        /** Progresso multi-foto vem só da ficha (sincronizarFotosLancadasComFicha); draft não sobrescreve. */
         return;
       }
 
@@ -730,26 +724,16 @@ export default function NotasPedidoContent() {
         return;
       }
 
-      for (const f of d.fichaCorrida) {
-        if (f.notaPedidoId !== notaId) continue;
-        const m = f.descricao?.match(/\(foto (\d+)\/(\d+)\)/i);
-        if (!m) continue;
-        const idx = Number(m[1]) - 1;
-        const tot = Number(m[2]);
-        if (idx < 0 || idx >= totalFotos || tot !== totalFotos) continue;
-        fotosLancadasConferenciaRef.current.add(idx);
-        if (f.itens?.length) {
-          lancamentosFotoConferenciaRef.current.set(idx, f.itens);
-        }
-      }
+      const { lancadas, lancamentosPorFoto } = reidratarProgressoMultiFotoConferencia(
+        d,
+        notaId,
+        totalFotos
+      );
+      fotosLancadasConferenciaRef.current = new Set(lancadas);
+      lancamentosFotoConferenciaRef.current = new Map(lancamentosPorFoto);
+      setFotosLancadasUi(new Set(lancadas));
 
-      const fromFicha = inferirFotosLancadasNaFicha(d, notaId, totalFotos);
-      for (const idx of fromFicha) {
-        fotosLancadasConferenciaRef.current.add(idx);
-      }
-      setFotosLancadasUi(new Set(fotosLancadasConferenciaRef.current));
-
-      if (fromFicha.size === 0 && fotosLancadasConferenciaRef.current.size === 0) {
+      if (lancadas.size === 0) {
         if (!opts?.mergeOnly) setConferenciaRetomadaFichaMsg("");
         return;
       }
@@ -2888,16 +2872,32 @@ export default function NotasPedidoContent() {
         return;
       }
       setConferirErrors({});
-      const proxPendente = encontrarProximaFotoPendenteApos(
-        fotoAtual,
-        qtdFotosAprovadas,
-        fotosLancadasConferenciaRef.current
-      );
-      const proxIdx = proxPendente ?? Math.min(fotoAtual + 1, qtdFotosAprovadas - 1);
-      setLancadoMsg(`Foto ${fotoAtual + 1} lançada na ficha. Preencha a foto ${proxIdx + 1}.`);
+      const proxIdx = Math.min(fotoAtual + 1, qtdFotosAprovadas - 1);
+      setLancadoMsg(`Foto ${fotoAtual + 1} de ${qtdFotosAprovadas} lançada. Preencha a foto ${proxIdx + 1}.`);
       setTimeout(() => setLancadoMsg(""), 2800);
       avancarParaFotoConferencia(proxIdx);
       return;
+    }
+
+    if (multiFoto) {
+      const dSync = getData() ?? data;
+      const reid = reidratarProgressoMultiFotoConferencia(dSync, selectedNota.id, qtdFotosAprovadas);
+      for (const idx of reid.lancadas) fotosLancadasConferenciaRef.current.add(idx);
+      for (const [idx, itens] of reid.lancamentosPorFoto.entries()) {
+        lancamentosFotoConferenciaRef.current.set(idx, itens);
+      }
+      setFotosLancadasUi(new Set(fotosLancadasConferenciaRef.current));
+      const gate = validarTodasFotosLancadasConferencia(
+        fotosLancadasConferenciaRef.current,
+        qtdFotosAprovadas
+      );
+      if (!gate.ok) {
+        setConferirErrors({
+          itens: `Lance a foto ${gate.primeiraPendente + 1} de ${qtdFotosAprovadas} antes de concluir a entrega.`,
+        });
+        avancarParaFotoConferencia(gate.primeiraPendente);
+        return;
+      }
     }
 
     if (conferenciaTotais.liquido <= 0 && !fotosLancadasConferenciaRef.current.has(fotoAtual)) {
@@ -2920,9 +2920,11 @@ export default function NotasPedidoContent() {
     const chaveAtual = getChaveGrupoConferencia(selectedNota, data, coopId);
     const coopNomeAprovar = getCooperadoNomeResolvido(data, conferenciaCooperadoId, coopId);
 
-    const itensConsolidados = consolidarItensLancamentoPorFoto(
-      [...lancamentosFotoConferenciaRef.current.values()]
-    );
+    const itensConsolidados = multiFoto
+      ? consolidarItensLancamentoPorFoto(
+          lancamentosOrdenadosPorFoto(lancamentosFotoConferenciaRef.current, qtdFotosAprovadas)
+        )
+      : conferenciaItens.map((i) => ({ ...i, valorBruto: 0 }));
     const calcConsolidado = calcularItensNota(itensConsolidados, conferenciaDescontoPct);
     const valorAprovado = multiFoto
       ? calcConsolidado.valorLiquido
@@ -3014,9 +3016,7 @@ export default function NotasPedidoContent() {
 
       if (multiFoto) {
         const baseData = { ...d, notasPedido };
-        // Sempre reconstrói fichas no fechamento multi-foto: total consolidado da nota
-        // (itens de todas as fotos) deve ir para ficha, app e relatórios — não a soma das fatias parciais.
-        const next = rebuildFichasNota(baseData, notaAtualizada!);
+        const next = finalizarFichasConferenciaMultiFoto(baseData, notaAtualizada!);
         return addAuditEntry(next, {
           entityType: "nota_pedido",
           entityId: selectedNota.id,
@@ -4657,7 +4657,7 @@ export default function NotasPedidoContent() {
                   return "Próxima foto";
                 }
                 if (multiFotoBtn && !ultimaFotoBtn) {
-                  return `Lançar foto ${conferenciaFotoIdx + 1} e continuar`;
+                  return `Lançar foto ${conferenciaFotoIdx + 1} de ${qtdFotosBtn} e continuar`;
                 }
                 if (multiFotoBtn && ultimaFotoBtn) {
                   return filaConferenciaTotal > 1
