@@ -126,7 +126,8 @@ let warmScheduleKey = "";
 export function scheduleWarmConferenciaNotaFotos(
   data: AppData,
   coopId: string,
-  nota: NotaPedido
+  nota: NotaPedido,
+  opts?: { delayMs?: number }
 ): void {
   if (!notaTemFotoArmazenadaNaNuvem(nota)) return;
   const cnpj =
@@ -136,11 +137,25 @@ export function scheduleWarmConferenciaNotaFotos(
   const total = contarFotosEnviadasNota(nota);
   if (total <= 0) return;
   const key = `${cnpj}:${nota.id}:${total}`;
+  primeConferenciaNotaFotos(cnpj, nota.id, total);
   if (warmScheduleKey === key && warmScheduleTimer) return;
   warmScheduleKey = key;
   if (warmScheduleTimer) clearTimeout(warmScheduleTimer);
+  const delayMs = opts?.delayMs ?? 400;
   warmScheduleTimer = setTimeout(() => {
     warmScheduleTimer = null;
     void warmConferenciaNotaFotos(cnpj, nota.id, total, { maxParallel: 2 });
-  }, 400);
+  }, delayMs);
+}
+
+/** Fotos 0 e 1 imediatas — troca «lançar e continuar» sem esperar rede. */
+export function primeConferenciaNotaFotos(cnpj: string, notaId: string, partCount: number): void {
+  if (partCount <= 0) return;
+  const digits = normalizeCnpj(cnpj);
+  if (digits.length !== 14) return;
+  prefetchAdjacentConferenciaFotos(digits, notaId, 0, partCount);
+  void fetchConferenciaFotoPartCached(digits, notaId, 0, partCount, { preview: true });
+  if (partCount > 1) {
+    void fetchConferenciaFotoPartCached(digits, notaId, 1, partCount, { preview: true });
+  }
 }

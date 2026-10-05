@@ -661,9 +661,6 @@ export default function NotasPedidoContent() {
           conferenciaFotoCacheRef.current.set(cacheKey, url);
           setConferenciaFotoAtualUrl(url);
           conferenciaPrefetch.prefetchAdjacentConferenciaFotos(cnpj, notaEnriquecida.id, index, totalFotosNota);
-          if (totalFotosNota > 1) {
-            void conferenciaPrefetch.warmConferenciaNotaFotos(cnpj, notaEnriquecida.id, totalFotosNota);
-          }
           return url;
         }
         conferenciaFotoCacheRef.current.delete(cacheKey);
@@ -894,7 +891,11 @@ export default function NotasPedidoContent() {
   );
 
   const lancarFotoConferenciaAtual = useCallback(
-    (fotoIdx: number, totalFotos: number): { ok: boolean; error?: string } => {
+    (
+      fotoIdx: number,
+      totalFotos: number,
+      opts?: { uiFirst?: boolean }
+    ): { ok: boolean; error?: string } => {
       if (!user || !selectedNota) return { ok: false, error: "Entrega não selecionada." };
       if (fotosLancadasConferenciaRef.current.has(fotoIdx)) return { ok: true };
 
@@ -942,7 +943,8 @@ export default function NotasPedidoContent() {
       fotosLancadasConferenciaRef.current.add(fotoIdx);
       setFotosLancadasUi(new Set(fotosLancadasConferenciaRef.current));
 
-      updateData((d) => {
+      const persistirNaFicha = () => {
+        updateData((d) => {
         const cooperadoIdCanonico = resolverCooperadoIdCanonico(
           d,
           conferenciaCooperadoId,
@@ -1033,7 +1035,14 @@ export default function NotasPedidoContent() {
           }
         );
       });
-      persistirDraftConferenciaEmMemoria();
+        persistirDraftConferenciaEmMemoria();
+      };
+
+      if (opts?.uiFirst) {
+        requestAnimationFrame(() => persistirNaFicha());
+      } else {
+        persistirNaFicha();
+      }
 
       return { ok: true };
     },
@@ -1055,6 +1064,11 @@ export default function NotasPedidoContent() {
     ]
   );
 
+  const aquecerUiConferencia = useCallback(() => {
+    prefetchConferenciaFotoPrefetchModule();
+    prefetchConferenciaModalUiChunks();
+  }, []);
+
   const conferenciaFotoJaEmCache = useCallback(
     (notaId: string, idx: number) => {
       const k = conferenciaFotoCacheKey(notaId, idx);
@@ -1072,11 +1086,24 @@ export default function NotasPedidoContent() {
       if (!selectedNota) return;
       const total = contarFotosEnviadasNota(selectedNota);
       const clamped = Math.min(Math.max(0, destIdx), Math.max(0, total - 1));
+      const cnpj =
+        conferenciaCnpjRef.current ??
+        selectedNota.cooperativaCnpj ??
+        (data && coopId ? getCooperativaCnpj(data, coopId) : undefined);
+      if (cnpj) {
+        void loadConferenciaFotoPrefetchModule().then((m) => {
+          m.prefetchAdjacentConferenciaFotos(cnpj, selectedNota.id, clamped, total);
+          void m.fetchConferenciaFotoPartCached(cnpj, selectedNota.id, clamped, total, { preview: true });
+        });
+      }
       setConferirErrors({});
       setConferenciaFotoErro("");
-      setConferenciaFotoCarregando(!conferenciaFotoJaEmCache(selectedNota.id, clamped));
-      setConferenciaFotoIdx(clamped);
-      setLancamentoSequencia(null);
+      const emCache = conferenciaFotoJaEmCache(selectedNota.id, clamped);
+      startTransition(() => {
+        setConferenciaFotoCarregando(!emCache);
+        setConferenciaFotoIdx(clamped);
+        setLancamentoSequencia(null);
+      });
       carregarItensParaFotoConferencia(clamped);
       void loadConferenciaFoto(selectedNota, clamped);
     },
@@ -1125,7 +1152,7 @@ export default function NotasPedidoContent() {
           conferenciaDescontoPct
         );
         if (r.valorLiquido > 0) {
-          const lanc = lancarFotoConferenciaAtual(atual, total);
+          const lanc = lancarFotoConferenciaAtual(atual, total, { uiFirst: true });
           if (!lanc.ok) {
             setConferirErrors({ itens: lanc.error });
             return;
@@ -1566,9 +1593,8 @@ export default function NotasPedidoContent() {
 
   useEffect(() => {
     if (!filaDetalhada) return;
-    prefetchConferenciaFotoPrefetchModule();
-    prefetchConferenciaModalUiChunks();
-  }, [filaDetalhada]);
+    aquecerUiConferencia();
+  }, [filaDetalhada, aquecerUiConferencia]);
 
   const filaNavCount = filaDetalhada ? pendentesEstaveis.length : filaBadgeCount;
 
@@ -2773,12 +2799,12 @@ export default function NotasPedidoContent() {
       const base = d.notasPedido.find((n) => n.id === nota.id) ?? nota;
       notaComFoto = base;
       void loadConferenciaFotoPrefetchModule().then((m) => {
-        m.scheduleWarmConferenciaNotaFotos(d, coopId, base);
+        m.scheduleWarmConferenciaNotaFotos(d, coopId, base, { delayMs: 0 });
       });
       void ensureNotaComFoto(d, base, coopId).then((enriched) => {
         conferenciaNotaEnriquecidaRef.current = { notaId: enriched.id, nota: enriched };
         void loadConferenciaFotoPrefetchModule().then((m) => {
-          m.scheduleWarmConferenciaNotaFotos(d, coopId, enriched);
+          m.scheduleWarmConferenciaNotaFotos(d, coopId, enriched, { delayMs: 0 });
         });
         setSelectedNota((prev) => {
           if (!prev || prev.id !== enriched.id) return prev;
@@ -2890,8 +2916,8 @@ export default function NotasPedidoContent() {
       .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
 
   const openConferir = async (nota: NotaPedido) => {
-    prefetchConferenciaFotoPrefetchModule();
-    prefetchConferenciaModalUiChunks();
+    aquecerUiConferencia();
+    await loadConferenciaFotoPrefetchModule();
     const raw = getData()?.notasPedido.find((n) => n.id === nota.id) ?? nota;
     const fresh = sanitizarNotaParaFilaConferencia(raw);
     if (notaBloqueadaConferenciaPorExclusaoPendente(fresh.id, pendingDeleteIds)) {
@@ -2919,9 +2945,11 @@ export default function NotasPedidoContent() {
     }
     const d0 = getData() ?? data;
     if (d0 && coopId) {
-      void loadConferenciaFotoPrefetchModule().then((m) => m.scheduleWarmConferenciaNotaFotos(d0, coopId, fresh));
+      void loadConferenciaFotoPrefetchModule().then((m) =>
+        m.scheduleWarmConferenciaNotaFotos(d0, coopId, fresh, { delayMs: 0 })
+      );
     }
-    setConferirModal(true);
+    startTransition(() => setConferirModal(true));
     await prepararConferenciaNota(fresh);
   };
 
@@ -3141,7 +3169,7 @@ export default function NotasPedidoContent() {
         setConferirErrors({ itens: "Informe a quantidade de pelo menos um produto nesta foto." });
         return;
       }
-      const lanc = lancarFotoConferenciaAtual(fotoAtual, qtdFotosAprovadas);
+      const lanc = lancarFotoConferenciaAtual(fotoAtual, qtdFotosAprovadas, { uiFirst: true });
       if (!lanc.ok) {
         setConferirErrors({ itens: lanc.error });
         return;
@@ -4139,6 +4167,7 @@ export default function NotasPedidoContent() {
                         <button
                           key={n.id}
                           type="button"
+                          onPointerDown={aquecerUiConferencia}
                           onClick={() => void openConferir(n)}
                           className="relative w-full flex items-center gap-2 px-2 py-1.5 sm:px-2.5 sm:py-2 text-left hover:bg-amber-50/90 active:bg-amber-100/70 transition-colors"
                         >
@@ -4418,7 +4447,10 @@ export default function NotasPedidoContent() {
           statusFilter={statusFilter}
           canEdit={check("notas_pedido", "edit")}
           onView={openView}
-          onConferir={(n) => void openConferir(n)}
+          onConferir={(n) => {
+            aquecerUiConferencia();
+            void openConferir(n);
+          }}
           onDelete={(n) => solicitarExclusaoNota(n, true)}
         />
       ) : null}
