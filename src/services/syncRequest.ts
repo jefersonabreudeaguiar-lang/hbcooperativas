@@ -165,7 +165,7 @@ export function requestAppSync(): void {
 /** Cooperado concluiu envio de entrega — reconcilia fila e puxa status sem exigir «Atualizar». */
 export function requestCooperadoPostEntregaSync(): void {
   grantCooperadoEventDrivenSync();
-  markNextCooperadoSilentSync();
+  markNextCooperadoSyncSilent();
   requestSyncTier("operacional_full", {
     force: true,
     immediate: true,

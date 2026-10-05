@@ -24,7 +24,9 @@ assert(
     notas.includes("if (!isCooperado) return;\n    ensureCooperadoDeliveryQueueOnlineListener();"),
   "listener de fila cooperado sempre ativo (não preso à aba visível)"
 );
-assert(notas.includes("entregaSessaoAtiva"), "manutenção imediata durante envio/rascunho");
+assert(notas.includes("runCooperadoEntregaMaintenance"), "manutenção de entrega centralizada");
+assert(notas.includes("envioUrgente"), "manutenção imediata só durante envio ativo");
+assert(notas.includes("cooperadoEntregaMaintenanceBusyRef"), "evita loop de manutenção");
 assert(notas.includes("requestCooperadoPostEntregaSync"), "sync pós-envio cooperado");
 assert(
   !notas.includes("void runCooperadoDeliveryQueueMaintenance().then(() => refreshCooperadoQueueIndicators());\n  }, [isCooperado"),

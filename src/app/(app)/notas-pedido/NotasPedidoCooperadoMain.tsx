@@ -1326,6 +1326,23 @@ export default function NotasPedidoCooperadoMain() {
     setPublicacaoLocalPendente(countPendingEntregaPublish({ userId: user.id }));
   }, [isCooperado, user?.id]);
 
+  const cooperadoEntregaMaintenanceBusyRef = useRef(false);
+
+  const runCooperadoEntregaMaintenance = useCallback(() => {
+    if (cooperadoEntregaMaintenanceBusyRef.current) return;
+    cooperadoEntregaMaintenanceBusyRef.current = true;
+    void refreshCooperadoQueueIndicators();
+    void refreshRascunhoAnexarFromDraft();
+    void runCooperadoDeliveryQueueMaintenance()
+      .then(() => {
+        void refreshCooperadoQueueIndicators();
+        void refreshRascunhoAnexarFromDraft();
+      })
+      .finally(() => {
+        cooperadoEntregaMaintenanceBusyRef.current = false;
+      });
+  }, [refreshCooperadoQueueIndicators, refreshRascunhoAnexarFromDraft]);
+
   useEffect(() => {
     if (isCooperado) return;
     markRqlColdStartPhase("notas_pedido_responsavel_shell");
@@ -1347,23 +1364,19 @@ export default function NotasPedidoCooperadoMain() {
 
   useEffect(() => {
     if (!isCooperado) return;
-    const runBackgroundMaintenance = () => {
-      void refreshCooperadoQueueIndicators();
-      void refreshRascunhoAnexarFromDraft();
-      void runCooperadoDeliveryQueueMaintenance().then(() => {
-        void refreshCooperadoQueueIndicators();
-        void refreshRascunhoAnexarFromDraft();
-      });
-    };
-    const entregaSessaoAtiva =
-      anexarModal || enviando || fotosSessaoCount > 0 || rascunhoFotosCount > 0 || publicacaoLocalPendente > 0;
-    if (entregaSessaoAtiva) {
-      runBackgroundMaintenance();
+    runCooperadoEntregaMaintenance();
+  }, [isCooperado, runCooperadoEntregaMaintenance]);
+
+  useEffect(() => {
+    if (!isCooperado) return;
+    const envioUrgente = anexarModal || enviando || fotosSessaoCount > 0;
+    if (envioUrgente) {
+      runCooperadoEntregaMaintenance();
       return;
     }
     if (!tabActive) return;
     markRqlColdStartPhase("notas_pedido_cooperado_shell");
-    scheduleCooperadoPostInteractiveTask(runBackgroundMaintenance);
+    scheduleCooperadoPostInteractiveTask(runCooperadoEntregaMaintenance);
     scheduleCooperadoPostInteractiveTask(() => prefetchCooperadoAnexarPipeline());
   }, [
     isCooperado,
@@ -1371,10 +1384,7 @@ export default function NotasPedidoCooperadoMain() {
     anexarModal,
     enviando,
     fotosSessaoCount,
-    rascunhoFotosCount,
-    publicacaoLocalPendente,
-    refreshCooperadoQueueIndicators,
-    refreshRascunhoAnexarFromDraft,
+    runCooperadoEntregaMaintenance,
   ]);
 
   useEffect(() => {
