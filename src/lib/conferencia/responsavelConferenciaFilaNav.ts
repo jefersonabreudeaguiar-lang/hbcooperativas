@@ -1,4 +1,8 @@
 import type { AppData, NotaPedido } from "@/types";
+import {
+  getNotasConferenciaDecididasLocalmente,
+  reconciliarNotasConferenciaDecididasLocalmente,
+} from "@/lib/conferencia/conferenciaFilaDecisaoLocal";
 import { listNotasFilaConferenciaResponsavel } from "@/services/responsavelPainelIndex";
 import { getChaveGrupoConferencia } from "@/utils/fotoEntrega";
 
@@ -9,10 +13,18 @@ export function listarPendentesConferenciaResponsavel(
   data: AppData,
   coopId: string,
   chaveGrupo?: string,
-  excludeId?: string
+  excludeId?: string,
+  excludeIdsExtra?: ReadonlySet<string>
 ): NotaPedido[] {
+  reconciliarNotasConferenciaDecididasLocalmente(data);
+  const decididas = getNotasConferenciaDecididasLocalmente();
   let out = listNotasFilaConferenciaResponsavel(data, coopId);
-  if (excludeId) out = out.filter((n) => n.id !== excludeId);
+  out = out.filter((n) => {
+    if (excludeId && n.id === excludeId) return false;
+    if (decididas.has(n.id)) return false;
+    if (excludeIdsExtra?.has(n.id)) return false;
+    return true;
+  });
   if (chaveGrupo) {
     out = out.filter((n) => getChaveGrupoConferencia(n, data, coopId) === chaveGrupo);
   }

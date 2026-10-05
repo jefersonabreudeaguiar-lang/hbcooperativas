@@ -15,17 +15,36 @@ const TIER_RANK: Record<SyncTier, number> = {
 const CONFERENCIA_CAP_TIER: SyncTier = "notas_delta";
 
 let conferenciaModalOpen = false;
+let conferenciaLancamentoDepth = 0;
 
 export function setStaffConferenciaModalOpen(open: boolean): void {
   conferenciaModalOpen = open;
+  if (!open) conferenciaLancamentoDepth = 0;
+}
+
+export function setStaffConferenciaLancamentoAtivo(active: boolean): void {
+  if (active) conferenciaLancamentoDepth += 1;
+  else conferenciaLancamentoDepth = Math.max(0, conferenciaLancamentoDepth - 1);
+}
+
+export function isStaffConferenciaModalOpen(): boolean {
+  return conferenciaModalOpen;
 }
 
 export function isStaffConferenciaSyncTierCapActive(): boolean {
   return (
     conferenciaModalOpen ||
+    conferenciaLancamentoDepth > 0 ||
     isConferenciaAprovacaoSyncQueueActive() ||
     isConferenciaOperacionalPushScopeActive()
   );
+}
+
+/** Sync automático da gestão não deve competir com aprovar / trocar nota na conferência. */
+export function shouldBlockStaffAutoSyncDuringConferencia(userInitiated?: boolean): boolean {
+  if (userInitiated) return false;
+  if (!staffSessionActive()) return false;
+  return isStaffConferenciaSyncTierCapActive();
 }
 
 function staffSessionActive(): boolean {
@@ -61,4 +80,5 @@ export function applyStaffConferenciaCapToSyncRequest(req: SyncTierRequest): Syn
 /** Somente testes. */
 export function resetStaffConferenciaSyncTierForTests(): void {
   conferenciaModalOpen = false;
+  conferenciaLancamentoDepth = 0;
 }

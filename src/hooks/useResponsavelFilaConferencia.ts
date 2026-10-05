@@ -5,6 +5,11 @@ import type { NotaPedido } from "@/types";
 import { useAppDataSelectorForDomains } from "@/hooks/useAppData";
 import type { AppDataNotifyDomain } from "@/lib/performance/appDataDomainNotify";
 import { getDataOperationalTruth, isAppDataWarm } from "@/services/dataStore";
+import {
+  isNotaConferenciaDecididaLocalmente,
+  reconciliarNotasConferenciaDecididasLocalmente,
+} from "@/lib/conferencia/conferenciaFilaDecisaoLocal";
+import { isStaffConferenciaModalOpen } from "@/lib/performance/staffConferenciaSyncTier";
 import { listNotasFilaConferenciaResponsavel } from "@/services/responsavelPainelIndex";
 import { getCooperativaCnpj, getPendingNotaDeleteIds } from "@/services/notaPedidoCloudService";
 import { agruparPendentesPorCooperado } from "@/utils/fotoEntrega";
@@ -42,7 +47,10 @@ export function useResponsavelFilaConferencia(
       FILA_CONFERENCIA_DOMAINS,
       (d) => {
         if (isCooperado || !coopId || !filaDetalhada) return [] as NotaPedido[];
-        return listNotasFilaConferenciaResponsavel(d, coopId);
+        reconciliarNotasConferenciaDecididasLocalmente(d);
+        return listNotasFilaConferenciaResponsavel(d, coopId).filter(
+          (n) => !isNotaConferenciaDecididaLocalmente(n.id)
+        );
       },
       [coopId, isCooperado, filaDetalhada]
     ) ?? [];
@@ -85,6 +93,7 @@ export function useResponsavelFilaConferencia(
 
   const pendentesEstaveis = useMemo(() => {
     if (!filaDetalhada || !isAppDataWarm()) return pendentesTodas;
+    if (isStaffConferenciaModalOpen()) return pendentesTodas;
     const data = getDataOperationalTruth();
     return buildPendentesEstaveisConferencia(
       data,

@@ -15,7 +15,10 @@ import {
   isCooperadoEventDrivenSync,
 } from "@/lib/performance/cooperadoEventDrivenSync";
 import { getSession } from "@/services/dataStore";
-import { capStaffConferenciaSyncTierRequest } from "@/lib/performance/staffConferenciaSyncTier";
+import {
+  capStaffConferenciaSyncTierRequest,
+  shouldBlockStaffAutoSyncDuringConferencia,
+} from "@/lib/performance/staffConferenciaSyncTier";
 import {
   defaultForceForSyncTier,
   type SyncTier,
@@ -94,6 +97,9 @@ export function requestSyncTier(
     !options?.eventDriven &&
     cooperadoBloqueiaSyncOperacionalAutomatico()
   ) {
+    return;
+  }
+  if (shouldBlockStaffAutoSyncDuringConferencia(options?.userInitiated)) {
     return;
   }
   ensureSchedulerBridge();

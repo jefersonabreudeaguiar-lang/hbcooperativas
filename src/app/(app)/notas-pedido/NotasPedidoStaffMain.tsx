@@ -11,6 +11,11 @@ import {
   useAppDataSelector,
   useAppDataSnapshotForDomains,
 } from "@/hooks/useAppData";
+import {
+  markNotaConferenciaDecididaLocalmente,
+  isNotaConferenciaDecididaLocalmente,
+} from "@/lib/conferencia/conferenciaFilaDecisaoLocal";
+import { yieldConferenciaUiFrame } from "@/lib/conferencia/conferenciaUiYield";
 import { listarPendentesConferenciaResponsavel } from "@/lib/conferencia/responsavelConferenciaFilaNav";
 import { resolveStaffNotasPedidoNotifyDomains } from "@/lib/performance/staffNotasPedidoNotifyDomains";
 import { useCooperadoTabPanelActive } from "@/hooks/useCooperadoTabPanelActive";
@@ -43,7 +48,10 @@ import {
 } from "@/services/dataStore";
 import { requestAppSync, requestAppSyncImmediate, requestAppSyncLight } from "@/services/syncRequest";
 import { scheduleCooperadoPostInteractiveTask, scheduleStaffPostInteractiveTask } from "@/lib/performance/cooperadoColdStart";
-import { setStaffConferenciaModalOpen } from "@/lib/performance/staffConferenciaSyncTier";
+import {
+  setStaffConferenciaLancamentoAtivo,
+  setStaffConferenciaModalOpen,
+} from "@/lib/performance/staffConferenciaSyncTier";
 import { syncNotasPedidoFromCloudStaffCoalesced } from "@/lib/performance/staffNotasPullCoordinator";
 import { markRqlColdStartPhase } from "@/lib/performance/rqlMarks";
 import {
@@ -511,7 +519,20 @@ export default function NotasPedidoStaffMain() {
   const fotoAppSyncTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastFotoFileRef = useRef<File | null>(null);
   const lancandoRef = useRef(false);
-  const filaConferenciaRef = useRef<{ total: number; concluidas: number; chave: string } | null>(null);
+  const travarLancamentoConferencia = useCallback(() => {
+    lancandoRef.current = true;
+    setStaffConferenciaLancamentoAtivo(true);
+  }, []);
+  const liberarLancamentoConferencia = useCallback(() => {
+    lancandoRef.current = false;
+    setStaffConferenciaLancamentoAtivo(false);
+  }, []);
+  const filaConferenciaRef = useRef<{
+    total: number;
+    concluidas: number;
+    chave: string;
+    ordem: string[];
+  } | null>(null);
   const zombieRepairRevisionRef = useRef(-1);
   const cooperadoUrlParamRef = useRef<string | null>(null);
   const [filaConferenciaPos, setFilaConferenciaPos] = useState(0);
@@ -2835,47 +2856,25 @@ export default function NotasPedidoStaffMain() {
   };
 
   const prepararConferenciaNota = async (nota: NotaPedido, opts?: { transicao?: boolean }) => {
-    if (opts?.transicao) setConferenciaTransicao(true);
-    try {
-    const d = getData() ?? data;
+    const d = getDataOperationalTruth() ?? getData() ?? data;
+    const notaAnteriorId = selectedNota?.id;
+    const aplicarEstado = () => {
     if (lancamentoSequenciaTimerRef.current) {
       clearTimeout(lancamentoSequenciaTimerRef.current);
       lancamentoSequenciaTimerRef.current = null;
     }
     setLancamentoSequencia(null);
-    const notaAnteriorId = selectedNota?.id;
-    if (notaAnteriorId && notaAnteriorId !== nota.id) {
-      clearConferenciaFotoLocalCache(notaAnteriorId);
-      setConferenciaFotoAtualUrl(null);
-    } else if (!notaAnteriorId) {
-      clearConferenciaFotoLocalCache();
-    }
     setConferenciaFotoErro("");
     const mesmaNota = notaAnteriorId === nota.id;
     if (!mesmaNota) {
       setConferenciaFotoIdx(0);
       resetConferenciaPorFoto();
+      setConferenciaFotoAtualUrl(null);
     }
 
     let notaComFoto = nota;
     if (d && coopId) {
-      const base = d.notasPedido.find((n) => n.id === nota.id) ?? nota;
-      notaComFoto = base;
-      void loadConferenciaFotoPrefetchModule().then((m) => {
-        m.scheduleWarmConferenciaNotaFotos(d, coopId, base, { delayMs: 0 });
-      });
-      void ensureNotaComFoto(d, base, coopId).then((enriched) => {
-        conferenciaNotaEnriquecidaRef.current = { notaId: enriched.id, nota: enriched };
-        void loadConferenciaFotoPrefetchModule().then((m) => {
-          m.scheduleWarmConferenciaNotaFotos(d, coopId, enriched, { delayMs: 0 });
-        });
-        setSelectedNota((prev) => {
-          if (!prev || prev.id !== enriched.id) return prev;
-          return prev.status === "aguardando_conferencia"
-            ? { ...enriched, status: "aguardando_conferencia" as const }
-            : enriched;
-        });
-      });
+      notaComFoto = d.notasPedido.find((n) => n.id === nota.id) ?? nota;
     }
     const totalFotos = contarFotosEnviadasNota(notaComFoto);
     setSelectedNota(
@@ -2930,8 +2929,8 @@ export default function NotasPedidoStaffMain() {
     setConferirErrors({});
     if (!isCooperado && d && coopId) {
       const chave = getChaveGrupoConferencia(nota, d, coopId);
-      setAbaConferenciaKey(chave);
-      setFiltroCooperadoId(coopDonoId);
+      if (chave !== abaConferenciaKey) setAbaConferenciaKey(chave);
+      if (coopDonoId !== filtroCooperadoId) setFiltroCooperadoId(coopDonoId);
     }
     if (d && totalFotos > 1) {
       sincronizarFotosLancadasComFicha(d, nota.id, totalFotos);
@@ -2956,8 +2955,30 @@ export default function NotasPedidoStaffMain() {
         );
       }
     }
-    } finally {
-      setConferenciaTransicao(false);
+  };
+
+    startTransition(() => aplicarEstado());
+
+    if (notaAnteriorId && notaAnteriorId !== nota.id) {
+      window.setTimeout(() => clearConferenciaFotoLocalCache(notaAnteriorId), 0);
+    } else if (!notaAnteriorId) {
+      window.setTimeout(() => clearConferenciaFotoLocalCache(), 0);
+    }
+
+    if (d && coopId) {
+      const base = d.notasPedido.find((n) => n.id === nota.id) ?? nota;
+      void loadConferenciaFotoPrefetchModule().then((m) => {
+        m.scheduleWarmConferenciaNotaFotos(d, coopId, base, { delayMs: opts?.transicao ? 120 : 0 });
+      });
+      void ensureNotaComFoto(d, base, coopId).then((enriched) => {
+        conferenciaNotaEnriquecidaRef.current = { notaId: enriched.id, nota: enriched };
+        setSelectedNota((prev) => {
+          if (!prev || prev.id !== enriched.id) return prev;
+          return prev.status === "aguardando_conferencia"
+            ? { ...enriched, status: "aguardando_conferencia" as const }
+            : enriched;
+        });
+      });
     }
   };
 
@@ -2984,11 +3005,16 @@ export default function NotasPedidoStaffMain() {
       requestAppSyncLight();
       return;
     }
-    const d = getData() ?? data;
+    const d = getDataOperationalTruth() ?? data;
     if (!isCooperado && d && coopId) {
       const chave = getChaveGrupoConferencia(fresh, d, coopId);
       const fila = listarPendentesConferencia(d, coopId, chave);
-      filaConferenciaRef.current = { total: fila.length, concluidas: 0, chave };
+      filaConferenciaRef.current = {
+        total: fila.length,
+        concluidas: 0,
+        chave,
+        ordem: fila.map((n) => n.id),
+      };
       setFilaConferenciaPos(1);
       setFilaConferenciaTotal(fila.length);
     } else {
@@ -3011,8 +3037,28 @@ export default function NotasPedidoStaffMain() {
     const d = getDataOperationalTruth();
     if (!d) return null;
 
+    const ref = filaConferenciaRef.current;
+    if (ref?.ordem.length && ref.chave === chaveGrupo) {
+      const pos = ref.ordem.indexOf(notaConcluidaId);
+      const start = pos >= 0 ? pos + 1 : 0;
+      for (let i = start; i < ref.ordem.length; i++) {
+        const id = ref.ordem[i];
+        if (id === notaConcluidaId || isNotaConferenciaDecididaLocalmente(id)) continue;
+        const raw = d.notasPedido.find((n) => n.id === id);
+        if (!raw) continue;
+        const cand = sanitizarNotaParaFilaConferencia(raw);
+        if (
+          notaElegivelParaFilaConferenciaResponsavel(cand) &&
+          getChaveGrupoConferencia(cand, d, coopId) === chaveGrupo
+        ) {
+          return cand;
+        }
+      }
+    }
+
     const mesmaAba = listarPendentesConferencia(d, coopId, chaveGrupo, notaConcluidaId);
-    if (mesmaAba.length > 0) return mesmaAba[0];
+    const proxMesmaAba = mesmaAba.find((n) => n.id !== notaConcluidaId);
+    if (proxMesmaAba) return proxMesmaAba;
 
     const outras = listarPendentesConferencia(d, coopId, undefined, notaConcluidaId);
     if (outras.length > 0) {
@@ -3026,14 +3072,17 @@ export default function NotasPedidoStaffMain() {
           total: filaGrupo.length,
           concluidas: 0,
           chave: proximoGrupo.chave,
+          ordem: filaGrupo.map((n) => n.id),
         };
         setFilaConferenciaPos(1);
         setFilaConferenciaTotal(filaGrupo.length);
-        return filaGrupo[0];
+        const first = filaGrupo.find((n) => n.id !== notaConcluidaId);
+        return first ?? null;
       }
       const fallbackGrupo = agruparPendentesPorCooperado(d, [outras[0]], coopId)[0];
       if (fallbackGrupo) selecionarAbaConferencia(fallbackGrupo);
-      return outras[0];
+      const fallback = outras.find((n) => n.id !== notaConcluidaId);
+      return fallback ?? null;
     }
     return null;
   };
@@ -3270,7 +3319,7 @@ export default function NotasPedidoStaffMain() {
       }
     }
 
-    lancandoRef.current = true;
+    travarLancamentoConferencia();
     let notaAtualizada: NotaPedido | null = null;
     const notaId = selectedNota.id;
     clearConferenciaDraftMemoria(notaId);
@@ -3450,12 +3499,32 @@ export default function NotasPedidoStaffMain() {
       );
     });
 
+    const truthAposLancar = getDataOperationalTruth();
+    const gravada = truthAposLancar.notasPedido.find((n) => n.id === notaId);
+    if (gravada?.status !== "conferida") {
+      liberarLancamentoConferencia();
+      setConferirErrors({
+        itens: "O lançamento não foi gravado. Verifique espaço no aparelho e tente de novo.",
+      });
+      return;
+    }
+    const temFichaNaNota = truthAposLancar.fichaCorrida.some((f) => f.notaPedidoId === notaId);
+    if (!temFichaNaNota) {
+      liberarLancamentoConferencia();
+      setConferirErrors({
+        itens: "A entrega foi conferida mas não entrou na ficha. Toque em aprovar novamente.",
+      });
+      return;
+    }
+
+    markNotaConferenciaDecididaLocalmente(notaId);
     removerNotaDaFilaSticky(notaId);
 
     const notaPatchSnapshot = notaAtualizada;
 
     const notaAprovadaRef = selectedNota;
-    const proxima = obterProximaNotaConferencia(chaveAtual, notaId);
+    let proxima = obterProximaNotaConferencia(chaveAtual, notaId);
+    if (proxima?.id === notaId) proxima = null;
 
     enqueueConferenciaAprovacaoSync(notaId, async () => {
       if (notaPatchSnapshot && coopId) {
@@ -3500,6 +3569,7 @@ export default function NotasPedidoStaffMain() {
               : `Nota aprovada! ${formatCurrency(valorAprovado)} na ficha de ${msgBeneficiarios}. Abrindo a próxima entrega…`
           );
           setTimeout(() => setLancadoMsg(""), 4000);
+          await yieldConferenciaUiFrame();
           await prepararConferenciaNota(proxima, { transicao: true });
         } else {
           await aguardarSequenciaLancamentoFotos(notaAprovadaRef, qtdFotosAprovadas, {
@@ -3516,7 +3586,7 @@ export default function NotasPedidoStaffMain() {
       } catch {
         /* ignore — falha ao preparar próxima nota não reverte lançamento local */
       } finally {
-        lancandoRef.current = false;
+        liberarLancamentoConferencia();
       }
     })();
   };
@@ -3553,13 +3623,20 @@ export default function NotasPedidoStaffMain() {
       );
     });
 
-    removerNotaDaFilaSticky(selectedNota.id);
-
     const notaId = selectedNota.id;
+    const rejeitada = getDataOperationalTruth().notasPedido.find((n) => n.id === notaId);
+    if (rejeitada?.status !== "rejeitada") {
+      setSuccessMsg("Não foi possível registrar a correção. Tente de novo.");
+      return;
+    }
+    markNotaConferenciaDecididaLocalmente(notaId);
+    removerNotaDaFilaSticky(notaId);
+
     clearConferenciaDraftMemoria(notaId);
-    const dAtual = getData() ?? data;
+    const dAtual = getDataOperationalTruth() ?? data;
     const chaveAtual = getChaveGrupoConferencia(selectedNota, dAtual, coopId);
-    const proxima = obterProximaNotaConferencia(chaveAtual, notaId);
+    let proxima = obterProximaNotaConferencia(chaveAtual, notaId);
+    if (proxima?.id === notaId) proxima = null;
 
     setRejectModal(false);
     setMotivoRejeicao("");
@@ -3584,7 +3661,7 @@ export default function NotasPedidoStaffMain() {
       }
     });
 
-    lancandoRef.current = true;
+    travarLancamentoConferencia();
     void (async () => {
       try {
         if (proxima) {
@@ -3597,6 +3674,7 @@ export default function NotasPedidoStaffMain() {
           }
           setLancadoMsg("Correção enviada ao cooperado. Abrindo a próxima entrega…");
           setTimeout(() => setLancadoMsg(""), 4000);
+          await yieldConferenciaUiFrame();
           await prepararConferenciaNota(proxima, { transicao: true });
         } else {
           fecharConferirModal();
@@ -3607,7 +3685,7 @@ export default function NotasPedidoStaffMain() {
         setSuccessMsg("Não foi possível abrir a próxima entrega. A correção já foi registrada aqui.");
         requestAppSyncLight();
       } finally {
-        lancandoRef.current = false;
+        liberarLancamentoConferencia();
       }
     })();
   };

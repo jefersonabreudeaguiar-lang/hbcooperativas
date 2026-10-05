@@ -848,11 +848,12 @@ export function updateDataSafe(
   }
 
   touchAppDataDomains(inferAppDataDomainsTouched(current, updated));
-  notifyImmediate();
   if (isConferenciaDeferLocalPersistActive()) {
+    notify();
     scheduleConferenciaDeferredLocalPersist();
     return { ok: true, data: updated };
   }
+  notifyImmediate();
   let saved = persistDataToStorage(updated, { skipNotify: true });
   if (!saved.ok) {
     const role = persistRoleFromSession();
