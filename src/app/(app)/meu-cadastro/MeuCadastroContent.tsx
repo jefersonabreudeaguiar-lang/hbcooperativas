@@ -11,7 +11,7 @@ import { PageHeader } from "@/components/ui/Table";
 import { Card } from "@/components/ui/Card";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import { Button } from "@/components/ui/Button";
-import { Input, FormField } from "@/components/ui/Form";
+import { Input, FormField, Textarea } from "@/components/ui/Form";
 import { AlertBanner } from "@/components/ui/AlertBanner";
 import { updateData, addAuditEntry } from "@/services/dataStore";
 import { pushCooperadoToCloud } from "@/services/cooperadoCloudService";
@@ -38,9 +38,17 @@ export default function MeuCadastroContent() {
   const [rgSaved, setRgSaved] = useState(false);
   const [pixError, setPixError] = useState("");
   const [rgError, setRgError] = useState("");
+  const [telefone, setTelefone] = useState("");
+  const [endereco, setEndereco] = useState("");
+  const [contatoError, setContatoError] = useState("");
+  const [contatoSaved, setContatoSaved] = useState(false);
+
   const pixDirtyRef = useRef(false);
   const rgDirtyRef = useRef(false);
+  const contatoDirtyRef = useRef(false);
   const loadedForCooperadoRef = useRef<string | null>(null);
+
+  const telefoneDigitos = (value: string) => value.replace(/\D/g, "");
 
   useEffect(() => {
     if (user && (user.role !== "cooperado" || !user.cooperadoId)) router.replace("/dashboard");
@@ -54,16 +62,20 @@ export default function MeuCadastroContent() {
     if (loadedForCooperadoRef.current !== user.cooperadoId) {
       loadedForCooperadoRef.current = user.cooperadoId;
       pixDirtyRef.current = false;
+      contatoDirtyRef.current = false;
       setChavePix(c.chavePix ?? "");
       setRg(c.rg ?? "");
+      setTelefone(c.telefone ?? "");
+      setEndereco(c.endereco ?? "");
       return;
     }
 
-    if (pixDirtyRef.current) return;
-    if (rgDirtyRef.current) return;
-
-    setChavePix(c.chavePix ?? "");
-    setRg(c.rg ?? "");
+    if (!pixDirtyRef.current) setChavePix(c.chavePix ?? "");
+    if (!rgDirtyRef.current) setRg(c.rg ?? "");
+    if (!contatoDirtyRef.current) {
+      setTelefone(c.telefone ?? "");
+      setEndereco(c.endereco ?? "");
+    }
   }, [data, user?.cooperadoId]);
 
   const coopId = user && data ? getUserCooperativaId(user, data) : undefined;
@@ -172,6 +184,52 @@ export default function MeuCadastroContent() {
     setTimeout(() => setRgSaved(false), 3000);
   };
 
+  const handleSaveContato = async () => {
+    const tel = telefone.trim();
+    const end = endereco.trim();
+    const digits = telefoneDigitos(tel);
+    if (digits.length < 10 || digits.length > 11) {
+      setContatoError("Informe um celular válido com DDD (10 ou 11 dígitos).");
+      return;
+    }
+    if (end.length < 5) {
+      setContatoError("Informe seu endereço completo.");
+      return;
+    }
+    if (!user) return;
+    setContatoError("");
+    const now = new Date().toISOString();
+    const cooperadoAtualizado: typeof cooperado = {
+      ...cooperado,
+      telefone: tel,
+      endereco: end,
+      updatedAt: now,
+    };
+
+    updateData((d) => {
+      const updated = {
+        ...d,
+        cooperados: d.cooperados.map((c) => (c.id === cooperado.id ? cooperadoAtualizado : c)),
+      };
+      return addAuditEntry(updated, {
+        entityType: "cooperado",
+        entityId: cooperado.id,
+        action: "editar",
+        userId: user.id,
+        userName: user.name,
+        changes: "Celular e endereço atualizados pelo cooperado",
+      });
+    });
+
+    const coopIdSave = getUserCooperativaId(user, data);
+    const cnpj = await resolveCooperativaCnpj(data, coopIdSave, user);
+    if (cnpj) void pushCooperadoToCloud(cnpj, cooperadoAtualizado, user.email);
+
+    contatoDirtyRef.current = false;
+    setContatoSaved(true);
+    setTimeout(() => setContatoSaved(false), 3000);
+  };
+
   return (
     <div className="max-w-2xl">
       <PageHeader title="Meu cadastro" subtitle="Seus dados e chave para receber pagamentos" />
@@ -229,6 +287,44 @@ export default function MeuCadastroContent() {
         </FormField>
         <Button className="mt-4 w-full sm:w-auto" size="lg" onClick={handleSavePix}>
           <Save size={18} /> {saved ? "Salvo com sucesso!" : "Salvar minha chave PIX"}
+        </Button>
+      </Card>
+
+      <Card title="Celular e endereço" className="mb-6">
+        <p className="text-sm text-gray-600 mb-3">
+          Você pode atualizar apenas estes dados. Nome, CPF e demais informações são alterados pela cooperativa.
+        </p>
+        <div className="space-y-4">
+          <FormField label="Celular (com DDD)" required>
+            <Input
+              value={telefone}
+              onChange={(e) => {
+                contatoDirtyRef.current = true;
+                setTelefone(e.target.value);
+                setContatoError("");
+              }}
+              placeholder="Ex: (11) 99999-8888"
+              inputMode="tel"
+              autoComplete="tel"
+            />
+          </FormField>
+          <FormField label="Endereço" required>
+            <Textarea
+              value={endereco}
+              onChange={(e) => {
+                contatoDirtyRef.current = true;
+                setEndereco(e.target.value);
+                setContatoError("");
+              }}
+              placeholder="Rua, número, bairro, cidade"
+              rows={3}
+              autoComplete="street-address"
+            />
+          </FormField>
+        </div>
+        {contatoError ? <p className="mt-2 text-sm text-red-600">{contatoError}</p> : null}
+        <Button className="mt-4 w-full sm:w-auto" size="lg" variant="secondary" onClick={handleSaveContato}>
+          <Save size={18} /> {contatoSaved ? "Dados salvos!" : "Salvar celular e endereço"}
         </Button>
       </Card>
 
