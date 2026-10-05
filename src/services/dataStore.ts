@@ -157,6 +157,22 @@ function isConferenciaDeferLocalPersistActive(): boolean {
   return conferenciaDeferPersistDepth > 0;
 }
 
+/** Base para mutações: verdade operacional durante conferência ou push scoped (não a view filtrada de getData). */
+function mutationDataBaseline(): AppData {
+  if (typeof window === "undefined") {
+    return memoryCache ?? emptyInitialData;
+  }
+  attachStorageListener();
+  if (
+    isConferenciaDeferLocalPersistActive() ||
+    isConferenciaOperacionalPushScopeActive() ||
+    saveBatchDepth > 0
+  ) {
+    return getDataOperationalTruth();
+  }
+  return loadData();
+}
+
 function flushConferenciaDeferredLocalPersist(): void {
   if (!memoryCache || typeof window === "undefined") return;
   const saved = persistDataToStorage(memoryCache, { skipNotify: true });
@@ -238,7 +254,7 @@ export function beginConferenciaModalSaveBatch(): void {
 export function endConferenciaModalSaveBatch(): void {
   endSaveBatch();
   if (isConferenciaDeferLocalPersistActive()) {
-    notify();
+    notifyImmediate();
     scheduleConferenciaDeferredLocalPersist();
     return;
   }
@@ -862,7 +878,7 @@ export function updateData(updater: (data: AppData) => AppData): AppData {
 export function updateDataSafe(
   updater: (data: AppData) => AppData
 ): { ok: true; data: AppData } | { ok: false; error: string } {
-  const current = loadData();
+  const current = mutationDataBaseline();
   const updated = updater(current);
   if (updated === current) {
     return { ok: true, data: current };

@@ -523,10 +523,12 @@ export default function NotasPedidoStaffMain() {
   const lancandoRef = useRef(false);
   const travarLancamentoConferencia = useCallback(() => {
     lancandoRef.current = true;
+    setConferenciaLancandoUi(true);
     setStaffConferenciaLancamentoAtivo(true);
   }, []);
   const liberarLancamentoConferencia = useCallback(() => {
     lancandoRef.current = false;
+    setConferenciaLancandoUi(false);
     setStaffConferenciaLancamentoAtivo(false);
   }, []);
   const filaConferenciaRef = useRef<{
@@ -540,6 +542,7 @@ export default function NotasPedidoStaffMain() {
   const [filaConferenciaPos, setFilaConferenciaPos] = useState(0);
   const [filaConferenciaTotal, setFilaConferenciaTotal] = useState(0);
   const [conferenciaTransicao, setConferenciaTransicao] = useState(false);
+  const [conferenciaLancandoUi, setConferenciaLancandoUi] = useState(false);
   const [conferenciaFotoErro, setConferenciaFotoErro] = useState("");
   const [conferenciaFotoIdx, setConferenciaFotoIdx] = useState(0);
   const [lancamentoSequencia, setLancamentoSequencia] = useState<{
@@ -3545,6 +3548,16 @@ export default function NotasPedidoStaffMain() {
     let proxima = obterProximaNotaConferencia(chaveAtual, notaId);
     if (proxima?.id === notaId) proxima = null;
 
+    const msgAprovada = divisaoPreview
+      ? `Nota aprovada! ${formatCurrency(valorPorCooperado)} para cada (${msgBeneficiarios}).${
+          proxima ? " Abrindo a próxima entrega…" : " Fila concluída!"
+        }`
+      : `Nota aprovada! ${formatCurrency(valorAprovado)} na ficha de ${msgBeneficiarios}.${
+          proxima ? " Abrindo a próxima entrega…" : " Fila concluída!"
+        }`;
+    setLancadoMsg(msgAprovada);
+    setTimeout(() => setLancadoMsg(""), proxima ? 4000 : 6000);
+
     const runAprovacaoCloudSync = () => {
       enqueueConferenciaAprovacaoSync(notaId, async () => {
         if (notaPatchSnapshot && coopId) {
@@ -3588,15 +3601,11 @@ export default function NotasPedidoStaffMain() {
         } else if (filaConferenciaRef.current) {
           setFilaConferenciaPos(1);
         }
-        setLancadoMsg(
-          divisaoPreview
-            ? `Nota aprovada! ${formatCurrency(valorPorCooperado)} para cada (${msgBeneficiarios}). Abrindo a próxima entrega…`
-            : `Nota aprovada! ${formatCurrency(valorAprovado)} na ficha de ${msgBeneficiarios}. Abrindo a próxima entrega…`
-        );
-        setTimeout(() => setLancadoMsg(""), 4000);
         void prepararConferenciaNota(proxima, { transicao: true });
       });
-      liberarLancamentoConferencia();
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => liberarLancamentoConferencia());
+      });
     } else {
       void (async () => {
         try {
@@ -3604,12 +3613,6 @@ export default function NotasPedidoStaffMain() {
             rapido: qtdFotosAprovadas > 1,
           });
           fecharConferirModal();
-          setLancadoMsg(
-            divisaoPreview
-              ? `Nota aprovada! ${formatCurrency(valorPorCooperado)} para cada (${msgBeneficiarios}). Fila concluída!`
-              : `Nota aprovada! ${formatCurrency(valorAprovado)} na ficha de ${msgBeneficiarios}. Fila concluída!`
-          );
-          setTimeout(() => setLancadoMsg(""), 6000);
         } catch {
           /* ignore */
         } finally {
@@ -5182,12 +5185,13 @@ export default function NotasPedidoStaffMain() {
       } size="full"
         footer={selectedNota && isNotaNaFilaConferenciaResponsavel(selectedNota.status) && check("notas_pedido", "approve") ? (
           <div className="flex flex-col sm:flex-row gap-2 justify-between">
-            <Button variant="danger" onClick={() => { setMotivoRejeicao(""); setRejectModal(true); }} disabled={conferenciaTransicao || Boolean(lancamentoSequencia) || (syncingForUi && !conferirModal)}>
+            <Button variant="danger" onClick={() => { setMotivoRejeicao(""); setRejectModal(true); }} disabled={conferenciaLancandoUi || conferenciaTransicao || Boolean(lancamentoSequencia) || (syncingForUi && !conferirModal)}>
               <XCircle size={18} /> Pedir correção
             </Button>
-            <Button size="lg" onClick={handleLancarNota} disabled={conferenciaTransicao || Boolean(lancamentoSequencia) || (syncingForUi && !conferirModal)}>
+            <Button size="lg" onClick={handleLancarNota} disabled={conferenciaLancandoUi || conferenciaTransicao || Boolean(lancamentoSequencia) || (syncingForUi && !conferirModal)}>
               <CheckCircle size={18} />
               {(() => {
+                if (conferenciaLancandoUi) return "Lançando na ficha…";
                 if (lancamentoSequencia) {
                   return `Lançando foto ${lancamentoSequencia.displayIdx + 1} de ${lancamentoSequencia.total}…`;
                 }

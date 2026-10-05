@@ -4,8 +4,7 @@ import { useEffect, useState } from "react";
 import { HB_CREDIT_PRODUCT_NAME } from "@/config/hbCreditBranding";
 import { fetchHbUtilizacaoResumoCooperado } from "@/services/creditApiService";
 import { saldoAReceberBaseAntesHb, type HbUtilizacaoResumoLancamento } from "@/lib/hb-credit/utilizacaoResumo";
-import { formatCurrency } from "@/utils/format";
-import { cn } from "@/utils/cn";
+import { formatCurrency, cn } from "@/utils/format";
 import type { FichaCorridaDesconto } from "@/types";
 
 function formatDataHora(iso: string): string {
