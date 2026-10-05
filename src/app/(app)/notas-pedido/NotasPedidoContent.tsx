@@ -29,6 +29,8 @@ import {
 } from "@/components/notas/fotoEntregaDisplay";
 import { updateData, updateDataSafe, generateId, addAuditEntry, getData, getDataRevision } from "@/services/dataStore";
 import { requestAppSync, requestAppSyncImmediate, requestAppSyncLight } from "@/services/syncRequest";
+import { scheduleCooperadoPostInteractiveTask } from "@/lib/performance/cooperadoColdStart";
+import { markRqlColdStartPhase } from "@/lib/performance/rqlMarks";
 import {
   COOPERADO_ENTREGA_REMOVIDA_EVENT,
   type CooperadoEntregaRemovidaDetail,
@@ -1216,9 +1218,17 @@ export default function NotasPedidoContent() {
 
   useEffect(() => {
     if (!isCooperado) return;
+    markRqlColdStartPhase("notas_pedido_cooperado_shell");
     ensureCooperadoDeliveryQueueOnlineListener();
-    void refreshCooperadoQueueIndicators();
-    void runCooperadoDeliveryQueueMaintenance().then(() => refreshCooperadoQueueIndicators());
+    const runBackgroundMaintenance = () => {
+      void refreshCooperadoQueueIndicators();
+      void refreshRascunhoAnexarFromDraft();
+      void runCooperadoDeliveryQueueMaintenance().then(() => {
+        void refreshCooperadoQueueIndicators();
+        void refreshRascunhoAnexarFromDraft();
+      });
+    };
+    scheduleCooperadoPostInteractiveTask(runBackgroundMaintenance);
     const unsub = subscribeCooperadoDeliveryQueueFlush((detail) => {
       setFotosOfflineFilaCount(detail.offlinePhotosRemaining);
       setPublicacaoLocalPendente(detail.publishRemaining);
@@ -1244,11 +1254,6 @@ export default function NotasPedidoContent() {
     window.addEventListener(COOPERADO_ENTREGA_REMOVIDA_EVENT, onRemovida);
     return () => window.removeEventListener(COOPERADO_ENTREGA_REMOVIDA_EVENT, onRemovida);
   }, [isCooperado]);
-
-  useEffect(() => {
-    if (!isCooperado || !ANEXAR_DRAFT_KEY) return;
-    void refreshRascunhoAnexarFromDraft();
-  }, [ANEXAR_DRAFT_KEY, isCooperado, refreshRascunhoAnexarFromDraft]);
 
   const aplicarContratoLocal = useCallback(
     (currentData: NonNullable<ReturnType<typeof getData>>, notaRejeitada?: NotaPedido) => {
