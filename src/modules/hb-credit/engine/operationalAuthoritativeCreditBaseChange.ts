@@ -16,8 +16,10 @@ import { logServerMutationAudit } from "@/lib/security/serverAudit";
 import type { SessionClaims } from "@/lib/security/jwt";
 import { normalizeCnpj } from "@/utils/cooperativa";
 import { OPERATIONAL_RESET_VERSION } from "@/services/operationalReset";
+import { listCooperadoIdsMesmoTitular } from "@/services/cooperadoCloudService";
 import { reconciliarFichaFromNotasConferidas } from "@/services/notaPedidoService";
 import { sanitizarOperacionalSyncPayload } from "@/services/pagamentoIntegridadeService";
+import type { AppData } from "@/types";
 
 const BASE_TOLERANCE_CENTS = 0;
 
@@ -26,16 +28,77 @@ export function hbOperacionalCreditBaseFingerprint(op: OperacionalSyncPayload): 
   const fichas = (op.fichaCorrida ?? [])
     .map(
       (f) =>
-        `f:${f.id}:${f.cooperadoId}:${Math.round((Number(f.valorLiquido) || 0) * 100)}:${f.status ?? ""}:${f.notaPedidoId ?? ""}`
+        `f:${f.id}:${f.cooperadoId}:${Math.round((Number(f.valorLiquido ?? (f as { valor?: number }).valor) || 0) * 100)}:${f.status ?? ""}:${f.notaPedidoId ?? ""}`
     )
     .sort();
   const pags = (op.pagamentosCooperado ?? [])
     .map(
       (p) =>
-        `p:${p.id}:${p.cooperadoId}:${Math.round((Number(p.valorLiquido) || 0) * 100)}:${p.status ?? ""}`
+        `p:${p.id}:${p.cooperadoId}:${Math.round((Number(p.valorLiquido ?? (p as { valor?: number }).valor) || 0) * 100)}:${p.status ?? ""}`
     )
     .sort();
   return `${fichas.join("|")}||${pags.join("|")}`;
+}
+
+function fichaCreditBaseLine(f: NonNullable<OperacionalSyncPayload["fichaCorrida"]>[number]): string {
+  const valorCents = Math.round((Number(f.valorLiquido ?? (f as { valor?: number }).valor) || 0) * 100);
+  return `${f.id}:${f.cooperadoId}:${valorCents}:${f.status ?? ""}:${f.notaPedidoId ?? ""}`;
+}
+
+function pagCreditBaseLine(p: NonNullable<OperacionalSyncPayload["pagamentosCooperado"]>[number]): string {
+  const valorCents = Math.round((Number(p.valorLiquido ?? (p as { valor?: number }).valor) || 0) * 100);
+  return `${p.id}:${p.cooperadoId}:${valorCents}:${p.status ?? ""}`;
+}
+
+/** Cooperados com alteração em ficha/pagamento que entram no fingerprint HB (slow-path mais estreito). */
+export function cooperadoIdsWithHbCreditBaseOperacionalDelta(
+  before: OperacionalSyncPayload,
+  after: OperacionalSyncPayload
+): string[] {
+  const ids = new Set<string>();
+  const diffMaps = (
+    beforeMap: Map<string, string>,
+    afterMap: Map<string, string>,
+    cooperadoFromKey: (key: string) => string | undefined
+  ) => {
+    for (const [key, line] of afterMap) {
+      if (beforeMap.get(key) !== line) {
+        const cid = cooperadoFromKey(line);
+        if (cid) ids.add(cid);
+      }
+    }
+    for (const key of beforeMap.keys()) {
+      if (!afterMap.has(key)) {
+        const cid = cooperadoFromKey(beforeMap.get(key)!);
+        if (cid) ids.add(cid);
+      }
+    }
+  };
+
+  const beforeF = new Map((before.fichaCorrida ?? []).map((f) => [f.id, fichaCreditBaseLine(f)]));
+  const afterF = new Map((after.fichaCorrida ?? []).map((f) => [f.id, fichaCreditBaseLine(f)]));
+  diffMaps(beforeF, afterF, (line) => line.split(":")[1]);
+
+  const beforeP = new Map((before.pagamentosCooperado ?? []).map((p) => [p.id, pagCreditBaseLine(p)]));
+  const afterP = new Map((after.pagamentosCooperado ?? []).map((p) => [p.id, pagCreditBaseLine(p)]));
+  diffMaps(beforeP, afterP, (line) => line.split(":")[1]);
+
+  return [...ids].filter(Boolean);
+}
+
+function expandCooperadoIdsForHbTitular(
+  data: AppData,
+  cooperativaId: string,
+  seedIds: string[]
+): string[] {
+  const out = new Set<string>();
+  for (const id of seedIds) {
+    out.add(id);
+    for (const tid of listCooperadoIdsMesmoTitular(data, id, cooperativaId)) {
+      out.add(tid);
+    }
+  }
+  return [...out];
 }
 
 export type AuthoritativeCreditBaseDiff = {
@@ -201,6 +264,22 @@ export async function detectMaterialAuthoritativeCreditBaseChange(
   const ctx = await loadAuthoritativeContext(supabase, digits);
   if (!ctx.ok) return ctx;
 
+  const deltaCooperadoIds = cooperadoIdsWithHbCreditBaseOperacionalDelta(
+    beforeOperacional,
+    nextOperacionalSanitized
+  );
+  const minimalForTitular = buildMinimalAppDataForCreditBase({
+    operacional: nextOperacionalSanitized,
+    cooperativaId: ctx.cooperativaId,
+    cnpj: digits,
+    cooperados: ctx.cooperados,
+    notasPedido: ctx.notas,
+  });
+  const cooperadoIdsForDiff =
+    deltaCooperadoIds.length > 0
+      ? expandCooperadoIdsForHbTitular(minimalForTitular, ctx.cooperativaId, deltaCooperadoIds)
+      : ctx.cooperadoIds;
+
   const diff = diffAuthoritativeCreditBaseFromOperacional({
     beforeOperacional,
     afterOperacional: nextOperacionalSanitized,
@@ -208,7 +287,7 @@ export async function detectMaterialAuthoritativeCreditBaseChange(
     cnpj: digits,
     cooperados: ctx.cooperados,
     notas: ctx.notas,
-    cooperadoIds: ctx.cooperadoIds,
+    cooperadoIds: cooperadoIdsForDiff,
   });
 
   return { ok: true, ...diff };
@@ -249,13 +328,17 @@ export async function markHbStaleBeforeOperacionalUpload(
   const reason = opts.staleReason ?? "operacional_authoritative_credit_base_changed";
   const markedCooperadoIds: string[] = [];
 
-  for (const cooperadoId of detection.changedCooperadoIds) {
-    const mark = await markHbCreditLimitStale(supabase, {
-      cnpj: opts.cnpj,
-      cooperadoId,
-      actorUserId: opts.actorUserId,
-      reason,
-    });
+  const markResults = await Promise.all(
+    detection.changedCooperadoIds.map((cooperadoId) =>
+      markHbCreditLimitStale(supabase, {
+        cnpj: opts.cnpj,
+        cooperadoId,
+        actorUserId: opts.actorUserId,
+        reason,
+      }).then((mark) => ({ cooperadoId, mark }))
+    )
+  );
+  for (const { cooperadoId, mark } of markResults) {
     if (!mark.ok) {
       return { ok: false, error: mark.error, code: "HB_LIMIT_STALE_MARK_FAILED" };
     }

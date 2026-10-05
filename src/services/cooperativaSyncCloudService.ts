@@ -20,6 +20,7 @@ import { sincronizarMensalidadeCooperativa, mensalidadeVisivelNoDispositivo, nor
 import { aplicarPrestacoesContasExcluidas } from "@/services/prestacaoContasService";
 import { mergeLivroCaixaControleAnualFromCloud } from "@/services/livroCaixaService";
 import { posProcessarFinanceiroLocal } from "@/services/operacionalLocalPostProcess";
+import { isConferenciaOperacionalPushScopeActive } from "@/services/conferenciaOperacionalPushScope";
 import type { SyncTier } from "@/lib/performance/syncTier";
 import { resolveSyncTierPlan84 } from "@/lib/performance/syncPlan84";
 import { aplicarInstituicoesExcluidas } from "@/services/instituicaoContratoService";
@@ -1908,7 +1909,13 @@ export async function pushOperacionalToCloud(
   cnpj: string,
   data?: AppData,
   coopId?: string,
-  options?: { authoritative?: boolean; skipOperationalResetPush?: boolean; forceOperacionalPush?: boolean }
+  options?: {
+    authoritative?: boolean;
+    skipOperationalResetPush?: boolean;
+    forceOperacionalPush?: boolean;
+    /** Evita N POST /api/cooperados antes do operacional (conferência / notas). */
+    skipBulkCooperadosCloudPush?: boolean;
+  }
 ): Promise<void> {
   const digits = normalizeCnpj(cnpj);
   if (digits.length !== 14) return;
@@ -1926,7 +1933,12 @@ export async function pushOperacionalToCloudInternal(
   cnpj: string,
   data?: AppData,
   coopId?: string,
-  options?: { authoritative?: boolean; skipOperationalResetPush?: boolean; forceOperacionalPush?: boolean }
+  options?: {
+    authoritative?: boolean;
+    skipOperationalResetPush?: boolean;
+    forceOperacionalPush?: boolean;
+    skipBulkCooperadosCloudPush?: boolean;
+  }
 ): Promise<void> {
   const digits = normalizeCnpj(cnpj);
   if (digits.length !== 14) return;
@@ -1999,7 +2011,11 @@ export async function pushOperacionalToCloudInternal(
   const cooperadosCoop = merged.cooperados.filter(
     (c) => c.cooperativaId === cid && c.status !== "desligado"
   );
-  await Promise.all(cooperadosCoop.map((c) => pushCooperadoToCloud(digits, c)));
+  const skipBulkCooperados =
+    options?.skipBulkCooperadosCloudPush === true || isConferenciaOperacionalPushScopeActive();
+  if (!skipBulkCooperados) {
+    await Promise.all(cooperadosCoop.map((c) => pushCooperadoToCloud(digits, c)));
+  }
 
   // Após awaits dos cooperados, reler de novo e remontar payload se o responsável
   // salvou algo nesse intervalo — evita last-write-wins com blob antigo.

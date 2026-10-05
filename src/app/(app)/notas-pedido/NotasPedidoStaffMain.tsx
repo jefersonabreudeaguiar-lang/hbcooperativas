@@ -162,6 +162,9 @@ import {
 import dynamic from "next/dynamic";
 import { useContaCoopDescontosRevision } from "@/hooks/useContaCoopDescontosRevision";
 
+/** Push operacional do responsável — não republica todos os cooperados (evita travamento na fila). */
+const STAFF_OPERACIONAL_PUSH = { authoritative: true, skipBulkCooperadosCloudPush: true } as const;
+
 const CooperadoEntregasPorMes = dynamic(
   () =>
     import("@/components/cooperado/CooperadoEntregasPorMes").then((m) => ({
@@ -2162,7 +2165,7 @@ export default function NotasPedidoStaffMain() {
       }
       const nota = cloudNotaId ? d.notasPedido.find((n) => n.id === cloudNotaId) : undefined;
       if (nota) await pushNotasPedidoToCloud(cnpj, [nota], cloudCooperadoNome);
-      await pushOperacionalToCloud(cnpj, d, coopId, { authoritative: true });
+      await pushOperacionalToCloud(cnpj, d, coopId, STAFF_OPERACIONAL_PUSH);
     })();
 
     setAvulsoModal(false);
@@ -3426,7 +3429,7 @@ export default function NotasPedidoStaffMain() {
             requestAppSyncLight();
             return;
           }
-          await pushOperacionalToCloud(cnpj, getData(), coopId, { authoritative: true });
+          await pushOperacionalToCloud(cnpj, getData(), coopId, STAFF_OPERACIONAL_PUSH);
         });
         requestAppSyncLight();
       } else {
@@ -3615,7 +3618,7 @@ export default function NotasPedidoStaffMain() {
           unqueueNotaDelete(cnpj, notaId);
         }
         await flushPendingNotaDeletes(cnpj);
-        await pushOperacionalToCloud(cnpj, getData(), coopId, { authoritative: true });
+        await pushOperacionalToCloud(cnpj, getData(), coopId, STAFF_OPERACIONAL_PUSH);
         requestAppSyncLight();
       })();
     } else {
@@ -3669,7 +3672,7 @@ export default function NotasPedidoStaffMain() {
         return;
       }
       await patchNotaPedidoInCloud(cnpj, notaCloud);
-      await pushOperacionalToCloud(cnpj, getData(), coopId, { authoritative: true });
+      await pushOperacionalToCloud(cnpj, getData(), coopId, STAFF_OPERACIONAL_PUSH);
       requestAppSyncLight();
     })();
   };

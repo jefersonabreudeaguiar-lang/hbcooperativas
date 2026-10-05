@@ -155,7 +155,10 @@
     "Network → POST cooperativa-sync → aba Response: leia error e code (ex.: payload grande, restore lock 423)."
   );
   relatorio.interpretacao.push(
-    "Enviar nota dispara pushOperacionalToCloud (vários GET + merge + POST) — UI pode travar alguns segundos."
+    "Enviar nota dispara pushOperacionalToCloud (GET bundle + merge + POST). Build ≥131 não republica todos os cooperados na fila de conferência."
+  );
+  relatorio.interpretacao.push(
+    "Conferir nota (ficha nova) ainda pode levar ~10–30s no POST se o guard HB recarregar notas na nuvem — normal; >120s = timeout."
   );
 
   try {
