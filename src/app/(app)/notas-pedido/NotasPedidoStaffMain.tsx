@@ -1921,7 +1921,7 @@ export default function NotasPedidoStaffMain() {
 
   // Responsável: full de notas após pintar a fila (1× por sessão); evita travar a 1ª abertura do painel.
   useEffect(() => {
-    if (isCooperado || !data || !coopId) return;
+    if (isCooperado || !data || !coopId || !tabActive) return;
     if (responsavelMountSyncRef.current) return;
     responsavelMountSyncRef.current = true;
     responsavelPrimeiroPullAgendadoRef.current = true;
@@ -1929,17 +1929,17 @@ export default function NotasPedidoStaffMain() {
       puxarNotasResponsavelDaNuvem({ forceFull: true });
       responsavelPrimeiroPullAgendadoRef.current = false;
     });
-  }, [isCooperado, data, coopId, puxarNotasResponsavelDaNuvem]);
+  }, [isCooperado, data, coopId, tabActive, puxarNotasResponsavelDaNuvem]);
 
   useEffect(() => {
-    if (isCooperado || !coopId) return;
+    if (isCooperado || !coopId || !tabActive) return;
     if (responsavelPrimeiroPullAgendadoRef.current) return;
     if (vistaResponsavel !== "fila" && vistaResponsavel !== "cooperado") return;
     puxarNotasResponsavelDaNuvem();
-  }, [vistaResponsavel, isCooperado, coopId, puxarNotasResponsavelDaNuvem]);
+  }, [vistaResponsavel, isCooperado, coopId, tabActive, puxarNotasResponsavelDaNuvem]);
 
   useEffect(() => {
-    if (isCooperado || !coopId) return;
+    if (isCooperado || !coopId || !tabActive) return;
     const onVisible = () => {
       if (document.hidden) return;
       if (vistaResponsavel !== "fila" && vistaResponsavel !== "cooperado") return;
@@ -1947,7 +1947,7 @@ export default function NotasPedidoStaffMain() {
     };
     document.addEventListener("visibilitychange", onVisible);
     return () => document.removeEventListener("visibilitychange", onVisible);
-  }, [isCooperado, coopId, vistaResponsavel, puxarNotasResponsavelDaNuvem]);
+  }, [isCooperado, coopId, vistaResponsavel, tabActive, puxarNotasResponsavelDaNuvem]);
 
   const filaZombieCount = useAppDataSelector(
     (d) => {
@@ -1964,7 +1964,7 @@ export default function NotasPedidoStaffMain() {
   );
 
   useEffect(() => {
-    if (isCooperado || !coopId || !data || filaZombieCount === 0) return;
+    if (isCooperado || !coopId || !data || filaZombieCount === 0 || !tabActive) return;
     const revision = getDataRevision();
     if (zombieRepairRevisionRef.current === revision) return;
     const reparo = repararNotasPedidoFilaConferencia(getData() ?? data, coopId);
@@ -1973,7 +1973,7 @@ export default function NotasPedidoStaffMain() {
     updateData(() => reparo.data);
     const cnpj = getCooperativaCnpj(reparo.data, coopId);
     if (cnpj) void pushReparoFilaConferenciaSanitizadoToCloud(cnpj, reparo.notasCorrigidas);
-  }, [isCooperado, coopId, data, filaZombieCount]);
+  }, [isCooperado, coopId, data, filaZombieCount, tabActive]);
 
   useEffect(() => {
     if (searchParams.get("anexar") !== "1" || !isCooperado || !data || anexarParamHandledRef.current) return;

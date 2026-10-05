@@ -27,6 +27,10 @@ const cooperadoTabKeepAliveOn = !["false", "0", "no", "off"].includes(
   (process.env.NEXT_PUBLIC_COOPERADO_TAB_KEEP_ALIVE ?? "true").trim().toLowerCase()
 );
 
+const staffTabKeepAliveOn = !["false", "0", "no", "off"].includes(
+  (process.env.NEXT_PUBLIC_STAFF_TAB_KEEP_ALIVE ?? "true").trim().toLowerCase()
+);
+
 export const metadata: Metadata = {
   title: "HB Cooperativas — Gestão de Cooperativas",
   description: "Plataforma HB Cooperativas — Portal do Cooperado e Painel Administrativo",
@@ -66,6 +70,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       data-dpl-id={pageRelease.deploymentId}
       data-app-build={String(pageRelease.build)}
       data-cooperado-tab-keep-alive={cooperadoTabKeepAliveOn ? "1" : "0"}
+      data-staff-tab-keep-alive={staffTabKeepAliveOn ? "1" : "0"}
     >
       <head>
         <script dangerouslySetInnerHTML={{ __html: buildInlinePageReleaseBootstrap(pageRelease) }} />

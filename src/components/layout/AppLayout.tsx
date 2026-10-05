@@ -40,6 +40,7 @@ import { scheduleCooperadoNavPrefetchEarly } from "@/lib/performance/cooperadoNa
 import { scheduleStaffNavPrefetchEarly } from "@/lib/performance/staffNavPrefetch";
 import { prefetchStaffNotasPedidoRouteBundle } from "@/lib/performance/prefetchStaffNotasPedidoUi";
 import { CooperadoMobileTabKeepAlive } from "@/components/performance/CooperadoMobileTabKeepAlive";
+import { StaffMobileTabKeepAlive } from "@/components/performance/StaffMobileTabKeepAlive";
 import { CooperadoMobileReleaseBar } from "@/components/cooperado/CooperadoMobileReleaseBar";
 import { StaffMobileReleaseBar } from "@/components/layout/StaffMobileReleaseBar";
 import type { Resource } from "@/types";
@@ -328,6 +329,11 @@ function AppShellInner({ children }: { children: React.ReactNode }) {
     isAppDataWarm() &&
     resolveAppUserRole(navUser!, getData()) === "cooperado";
 
+  const staffKeepAliveShell =
+    Boolean(navUser) &&
+    staffPainelUi &&
+    !isCooperadoAppUser(navUser);
+
   useLayoutEffect(() => {
     try {
       if (!navUser) {
@@ -340,12 +346,12 @@ function AppShellInner({ children }: { children: React.ReactNode }) {
       document.documentElement.setAttribute("data-hb-shell-mode", role);
       document.documentElement.setAttribute(
         "data-hb-keep-alive-wrap",
-        cooperadoKeepAliveShell ? "1" : "0"
+        cooperadoKeepAliveShell || staffKeepAliveShell ? "1" : "0"
       );
     } catch {
       /* ignore */
     }
-  }, [navUser, cooperadoKeepAliveShell]);
+  }, [navUser, cooperadoKeepAliveShell, staffKeepAliveShell]);
 
   useSyncContaCoopValorReceberCooperativa(
     staffHbSync && credit.enabled && staffCoopBackgroundSync
@@ -387,6 +393,8 @@ function AppShellInner({ children }: { children: React.ReactNode }) {
           <CobrancaSaasPainel />
           {cooperadoKeepAliveShell ? (
             <CooperadoMobileTabKeepAlive pathname={pathname}>{children}</CooperadoMobileTabKeepAlive>
+          ) : staffKeepAliveShell ? (
+            <StaffMobileTabKeepAlive pathname={pathname}>{children}</StaffMobileTabKeepAlive>
           ) : (
             children
           )}
