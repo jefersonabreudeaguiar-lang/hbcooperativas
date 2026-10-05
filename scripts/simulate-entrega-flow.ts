@@ -603,7 +603,10 @@ function simReconciliarValorAReceber() {
   d = { ...d, notasPedido: [conferida], fichaCorrida: [] };
   d = reconciliarFichaFromNotasConferidas(d);
   assert("ficha criada após conferida", d.fichaCorrida.length === 1);
-  assert("valor ficha > 0", d.fichaCorrida[0].valorLiquido === 120);
+  assert(
+    "valor ficha alinhado aos itens (5%)",
+    d.fichaCorrida[0].valorLiquido === 123.5 && d.notasPedido[0].valorLiquido === 123.5
+  );
 }
 
 function simDedupeFichaNaoDobraValor() {
@@ -650,7 +653,11 @@ function simDedupeFichaNaoDobraValor() {
   d = reconciliarFichaFromNotasConferidas({ ...d, fichaCorrida: [f1, f2] });
   assert("reconciliar remove duplicata", d.fichaCorrida.length === 1);
   const resumo = getResumoPagamentoCooperado(d, COOPERADO_ID, "2026-06", COOP_ID);
-  assert("valor a receber não dobra", resumo.valorEntregas === 100, `got ${resumo.valorEntregas}`);
+  assert(
+    "valor a receber não dobra",
+    resumo.valorEntregas === 99.75,
+    `got ${resumo.valorEntregas}`
+  );
 }
 
 function simFilaConferenciaGrupos() {

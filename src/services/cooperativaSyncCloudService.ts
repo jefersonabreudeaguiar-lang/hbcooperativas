@@ -936,7 +936,10 @@ export function avaliarFullResetOperacionalCompletude(input: {
   const payloadFichaIds = fichaNotaPedidoIds(input.payload.fichaCorrida, input.coopId);
 
   if (contextIds.size === 0) {
-    return { verdict: "allow", motivo: "indeterminate: sem notas conferidas para comparar" };
+    if (operacionalPayloadVazioLegitimo(input.payload)) {
+      return { verdict: "allow", motivo: "reset legítimo — payload operacional vazio" };
+    }
+    return { verdict: "indeterminate", motivo: "indeterminate: sem notas conferidas para comparar" };
   }
 
   if (operacionalPayloadVazioLegitimo(input.payload)) {

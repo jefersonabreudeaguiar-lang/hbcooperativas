@@ -3,9 +3,13 @@
  * Executar: npx tsx scripts/simulate-sync-flows.ts
  */
 import type { AppData, Mensalidade } from "../src/types";
-import { mergeOperacionalIntoData } from "../src/services/cooperativaSyncCloudService";
+import {
+  mergeOperacionalIntoData,
+  syncOperacionalPullPipelineForTests,
+} from "../src/services/cooperativaSyncCloudService";
 import type { OperacionalSyncPayload } from "../src/lib/supabase/cooperativaSyncStorage";
 import { OPERATIONAL_RESET_VERSION } from "../src/services/operationalReset";
+import { clearOperacionalPullMergedWatermarkForTests } from "../src/services/operationalReset";
 import { cooperadoInformouPagamentoMensalidade, confirmarPagamentoMensalidade } from "../src/services/mensalidadeService";
 
 const CNPJ = "62351750000165";
@@ -109,6 +113,7 @@ function cloudResetVazio(): OperacionalSyncPayload {
   return {
     updatedAt: new Date().toISOString(),
     operationalResetVersion: OPERATIONAL_RESET_VERSION,
+    operacionalSnapshotComplete: true,
     fullReset: true,
     wipeNotas: true,
     arquivosMensais: [],
@@ -125,6 +130,8 @@ function cloudResetVazio(): OperacionalSyncPayload {
 }
 
 console.log("=== Simulação sync cooperado ↔ responsável ===\n");
+
+clearOperacionalPullMergedWatermarkForTests(CNPJ);
 
 // 1. Reset na nuvem limpa mensalidades locais do responsável
 {
@@ -144,7 +151,13 @@ console.log("=== Simulação sync cooperado ↔ responsável ===\n");
       },
     ],
   };
-  const merged = mergeOperacionalIntoData(local, cloudResetVazio(), COOP_ID, local.cooperados);
+  const { data: merged } = syncOperacionalPullPipelineForTests(
+    local,
+    cloudResetVazio(),
+    COOP_ID,
+    CNPJ,
+    local.cooperados
+  );
   assert(
     "Reset nuvem zera mensalidades locais",
     merged.mensalidades.filter((m) => m.cooperadoId === COOPERADO_ID).length === 0
@@ -205,9 +218,12 @@ console.log("=== Simulação sync cooperado ↔ responsável ===\n");
   const cloudConfirmado: OperacionalSyncPayload = {
     ...cloudResetVazio(),
     fullReset: false,
-    mensalidades: respData.mensalidades,
+    mensalidades: respData.mensalidades.map((m) => ({
+      ...m,
+      updatedAt: new Date(Date.parse(m.updatedAt) + 2000).toISOString(),
+    })),
     livroCaixa: respData.livroCaixa ?? [],
-    updatedAt: respData.mensalidades[0].updatedAt,
+    updatedAt: new Date(Date.parse(respData.mensalidades[0].updatedAt) + 2000).toISOString(),
   };
   let coopData = data;
   coopData = mergeOperacionalIntoData(coopData, cloudConfirmado, COOP_ID, coopData.cooperados);

@@ -104,6 +104,7 @@ export function isNotaRelancamentoIntencional(
   existing: Pick<NotaPedido, "status"> & Partial<NotaPedido>,
   incoming: NotaPedido
 ): boolean {
+  if (!incoming.relancadaEm?.trim()) return false;
   if (!isNotaRelancamentoPayload(incoming)) return false;
   const wasFinalizada =
     existing.status === "conferida" ||

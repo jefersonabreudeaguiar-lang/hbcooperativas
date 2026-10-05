@@ -25,7 +25,7 @@ const sync = read("src/services/syncRequest.ts");
 const provider = read("src/components/sync/CooperativaSyncProvider.tsx");
 const gate = read("src/components/cooperado/CooperadoFinanceiroGate.tsx");
 const auth = read("src/modules/auth/AuthProvider.tsx");
-const dash = read("src/app/(app)/dashboard/page.tsx");
+const dash = read("src/app/(app)/dashboard/DashboardContent.tsx");
 
 assert(cold.includes("scheduleCooperadoColdStartSync"), "coordinator cold start");
 assert(cold.includes("markNextCooperadoSyncSilent"), "marcador silent no coordinator");
@@ -33,8 +33,10 @@ assert(cold.includes("scheduleCooperadoPostInteractiveTask"), "post-interactive 
 const deployGuard = read("src/components/pwa/ClientDeploymentGuard.tsx");
 assert(deployGuard.includes("scheduleCooperadoPostInteractiveTask"), "ClientDeploymentGuard defer");
 assert(
-  deployGuard.includes("cooperadoExperience") && deployGuard.includes("? undefined"),
-  "cooperado sem intervalo 4min de align"
+  deployGuard.includes("skipPeriodic") &&
+    deployGuard.includes("intervalMs > 0") &&
+    deployGuard.includes("cooperadoExperience ? 4 * 60 * 1000"),
+  "cooperado sem intervalo 4min de align quando skipPeriodic (canonical release)"
 );
 assert(sync.includes("markCooperadoUserSyncVisible"), "sync visível só com ação do usuário");
 assert(

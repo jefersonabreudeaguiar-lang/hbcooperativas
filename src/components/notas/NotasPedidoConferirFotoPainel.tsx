@@ -8,9 +8,9 @@ import {
 } from "@/components/notas/fotoEntregaDisplay";
 import { getCooperadoNomeResolvido } from "@/services/cooperadoCloudService";
 import { cn, formatDate } from "@/utils/format";
+import { getEscolaNotaLabel } from "@/utils/notaEscolaLabel";
 import {
   contarFotosEnviadasNota,
-  getEscolaNotaLabel,
   getFotosExibicaoNota,
   notaTemFotoArmazenadaNaNuvem,
 } from "@/utils/fotoEntrega";
