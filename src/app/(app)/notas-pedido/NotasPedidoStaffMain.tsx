@@ -27,6 +27,8 @@ import {
 import { updateData, updateDataSafe, generateId, addAuditEntry, getData, getDataRevision } from "@/services/dataStore";
 import { requestAppSync, requestAppSyncImmediate, requestAppSyncLight } from "@/services/syncRequest";
 import { scheduleCooperadoPostInteractiveTask, scheduleStaffPostInteractiveTask } from "@/lib/performance/cooperadoColdStart";
+import { setStaffConferenciaModalOpen } from "@/lib/performance/staffConferenciaSyncTier";
+import { syncNotasPedidoFromCloudStaffCoalesced } from "@/lib/performance/staffNotasPullCoordinator";
 import { markRqlColdStartPhase } from "@/lib/performance/rqlMarks";
 import {
   loadCooperadoAnexarPipeline,
@@ -116,7 +118,6 @@ import {
   ensureNotaComFoto,
   resolveCooperativaCnpj,
   resolveFotosNotaParaExibicao,
-  syncNotasPedidoFromCloud,
 } from "@/services/notaPedidoCloudService";
 import {
   revokePreviewUrl,
@@ -371,6 +372,11 @@ export default function NotasPedidoStaffMain() {
   const filtroResponsavelIniciado = useRef(false);
   const [anexarModal, setAnexarModal] = useState(false);
   const [conferirModal, setConferirModal] = useState(false);
+
+  useEffect(() => {
+    setStaffConferenciaModalOpen(conferirModal);
+    return () => setStaffConferenciaModalOpen(false);
+  }, [conferirModal]);
   const [rejectModal, setRejectModal] = useState(false);
   const [viewModal, setViewModal] = useState(false);
   const [viewFotoUrls, setViewFotoUrls] = useState<string[]>([]);
@@ -1868,7 +1874,7 @@ export default function NotasPedidoStaffMain() {
       const retryFull =
         opts?.forceFull === true || shouldResponsavelForceFullNotasOnEntry(cnpj);
       if (retryFull) forceNextFullNotasSync(cnpj);
-      void syncNotasPedidoFromCloud(cnpj, { retryFull });
+      void syncNotasPedidoFromCloudStaffCoalesced(cnpj, { retryFull });
     },
     [isCooperado, coopId]
   );
@@ -3438,7 +3444,6 @@ export default function NotasPedidoStaffMain() {
           }
           await pushOperacionalToCloud(cnpj, getData(), coopId, STAFF_OPERACIONAL_PUSH);
         });
-        requestAppSyncLight();
       } else {
         requestAppSyncLight();
       }
@@ -3627,7 +3632,6 @@ export default function NotasPedidoStaffMain() {
         }
         await flushPendingNotaDeletes(cnpj);
         await pushOperacionalToCloud(cnpj, getData(), coopId, STAFF_OPERACIONAL_PUSH);
-        requestAppSyncLight();
       })();
     } else {
       requestAppSyncLight();
@@ -3681,7 +3685,6 @@ export default function NotasPedidoStaffMain() {
       }
       await patchNotaPedidoInCloud(cnpj, notaCloud);
       await pushOperacionalToCloud(cnpj, getData(), coopId, STAFF_OPERACIONAL_PUSH);
-      requestAppSyncLight();
     })();
   };
 

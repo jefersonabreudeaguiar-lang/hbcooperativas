@@ -15,6 +15,7 @@ import {
   isCooperadoEventDrivenSync,
 } from "@/lib/performance/cooperadoEventDrivenSync";
 import { getSession } from "@/services/dataStore";
+import { capStaffConferenciaSyncTierRequest } from "@/lib/performance/staffConferenciaSyncTier";
 import {
   defaultForceForSyncTier,
   type SyncTier,
@@ -96,10 +97,15 @@ export function requestSyncTier(
     return;
   }
   ensureSchedulerBridge();
-  const force = options?.force ?? defaultForceForSyncTier(tier);
-  enqueueAppSyncRequest({
+  const forceDefault = options?.force ?? defaultForceForSyncTier(tier);
+  const capped = capStaffConferenciaSyncTierRequest(
     tier,
-    force,
+    forceDefault,
+    options?.userInitiated === true
+  );
+  enqueueAppSyncRequest({
+    tier: capped.tier,
+    force: capped.force,
     immediate: options?.immediate,
     userInitiated: options?.userInitiated === true,
     eventDriven: options?.eventDriven === true,

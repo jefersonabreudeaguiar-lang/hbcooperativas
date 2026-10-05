@@ -6,6 +6,11 @@
 export type ConferenciaAprovacaoSyncTask = () => Promise<void>;
 
 let tail: Promise<void> = Promise.resolve();
+let activeTasks = 0;
+
+export function isConferenciaAprovacaoSyncQueueActive(): boolean {
+  return activeTasks > 0;
+}
 
 /** Notas cujo PATCH já concluiu na fila — elegíveis no push operacional scoped. */
 const patchSyncedForOperacionalPush = new Set<string>();
@@ -36,12 +41,15 @@ export function enqueueConferenciaAprovacaoSync(
   notaId: string,
   task: ConferenciaAprovacaoSyncTask
 ): Promise<void> {
+  activeTasks += 1;
   const run = tail.then(async () => {
     try {
       await task();
     } catch (err) {
       logSyncFailure(notaId, err);
       throw err;
+    } finally {
+      activeTasks = Math.max(0, activeTasks - 1);
     }
   });
 
@@ -63,5 +71,6 @@ export function awaitConferenciaAprovacaoSyncQueueIdle(): Promise<void> {
 /** Somente testes — zera fila. */
 export function resetConferenciaAprovacaoSyncQueueForTests(): void {
   tail = Promise.resolve();
+  activeTasks = 0;
   patchSyncedForOperacionalPush.clear();
 }

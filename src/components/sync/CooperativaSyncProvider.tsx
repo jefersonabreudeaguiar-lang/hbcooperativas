@@ -522,6 +522,8 @@ export function CooperativaSyncProvider({ children }: { children: React.ReactNod
       !cooperadoLogadoEarly ||
       !isCooperadoManualOperacionalSync() ||
       (opts?.userInitiated === true && !cooperadoSyncEmSegundoPlano);
+    const staffGestaoUiSync =
+      !isStaffGestao || opts?.userInitiated === true;
     const silentCooperadoOpen =
       cooperadoLogadoEarly &&
       isCooperadoInstantResumeEnabled() &&
@@ -529,7 +531,7 @@ export function CooperativaSyncProvider({ children }: { children: React.ReactNod
       !isCooperadoUserSyncVisible();
 
     syncingRef.current = true;
-    if (cooperadoUiSync && !silentCooperadoOpen) {
+    if (cooperadoUiSync && staffGestaoUiSync && !silentCooperadoOpen) {
       setSyncing(true);
     }
     setLastSyncError("");

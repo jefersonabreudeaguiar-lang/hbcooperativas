@@ -23,6 +23,7 @@ import { posProcessarFinanceiroLocal } from "@/services/operacionalLocalPostProc
 import { isConferenciaOperacionalPushScopeActive } from "@/services/conferenciaOperacionalPushScope";
 import type { SyncTier } from "@/lib/performance/syncTier";
 import { resolveSyncTierPlan84 } from "@/lib/performance/syncPlan84";
+import { syncNotasPedidoFromCloudStaffCoalesced } from "@/lib/performance/staffNotasPullCoordinator";
 import { aplicarInstituicoesExcluidas } from "@/services/instituicaoContratoService";
 import {
   OPERATIONAL_RESET_VERSION,
@@ -2709,7 +2710,7 @@ export async function syncStaffTieredPullFromCloud(
     if (plan.pullCooperados && cid) await syncCooperadosFromCloud(digits, cid);
     if (plan.pullOperacional) await syncOperacionalFromCloud(digits);
     if (plan.pullContratos) await syncContratosFromCloud(digits);
-    if (plan.pullNotas) await syncNotasPedidoFromCloud(digits);
+    if (plan.pullNotas) await syncNotasPedidoFromCloudStaffCoalesced(digits);
     if (plan.pullOperacional || plan.pullNotas) {
       const operacionalCloud = (await fetchSyncBundle(digits))?.operacional ?? null;
       saveDataSafe(finalizeOperacionalPullLocalState(getData(), operacionalCloud, digits));

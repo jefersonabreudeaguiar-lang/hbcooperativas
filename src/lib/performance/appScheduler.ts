@@ -3,6 +3,7 @@
  * sync continua no CooperativaSyncProvider via syncRequest.
  */
 
+import { applyStaffConferenciaCapToSyncRequest } from "@/lib/performance/staffConferenciaSyncTier";
 import { mergeSyncTierRequests, type SyncTierRequest } from "@/lib/performance/syncTier";
 
 export type AppTaskPriority = 0 | 1 | 2 | 3 | 4 | 5;
@@ -128,7 +129,9 @@ function schedulePendingSyncDispatch(): void {
  */
 export function enqueueAppSyncRequest(request: SyncTierRequest): void {
   markUserInteraction();
-  pendingSync = mergeSyncTierRequests(pendingSync, request);
+  pendingSync = applyStaffConferenciaCapToSyncRequest(
+    mergeSyncTierRequests(pendingSync, request)
+  );
 
   if (request.immediate) {
     if (debounceTimer) {
