@@ -16,6 +16,10 @@ import {
   isNotaConferenciaDecididaLocalmente,
 } from "@/lib/conferencia/conferenciaFilaDecisaoLocal";
 import { yieldConferenciaUiFrame } from "@/lib/conferencia/conferenciaUiYield";
+import {
+  flushConferenciaFotoPersistNow,
+  scheduleConferenciaFotoPersist,
+} from "@/lib/conferencia/conferenciaFotoPersistSchedule";
 import { listarPendentesConferenciaResponsavel } from "@/lib/conferencia/responsavelConferenciaFilaNav";
 import { resolveStaffNotasPedidoNotifyDomains } from "@/lib/performance/staffNotasPedidoNotifyDomains";
 import { useCooperadoTabPanelActive } from "@/hooks/useCooperadoTabPanelActive";
@@ -47,6 +51,7 @@ import {
   endConferenciaDeferLocalPersist,
   beginConferenciaModalSaveBatch,
   endConferenciaModalSaveBatch,
+  endConferenciaModalFotoSaveBatch,
 } from "@/services/dataStore";
 import { requestAppSync, requestAppSyncImmediate, requestAppSyncLight } from "@/services/syncRequest";
 import { scheduleCooperadoPostInteractiveTask, scheduleStaffPostInteractiveTask } from "@/lib/performance/cooperadoColdStart";
@@ -971,7 +976,7 @@ export default function NotasPedidoStaffMain() {
       if (!user || !selectedNota) return { ok: false, error: "Entrega não selecionada." };
       if (fotosLancadasConferenciaRef.current.has(fotoIdx)) return { ok: true };
 
-      const dCheck = getData() ?? data;
+      const dCheck = getDataOperationalTruth() ?? getData() ?? data;
       if (
         dCheck &&
         fichaJaTemLancamentoFoto(dCheck.fichaCorrida, selectedNota.id, fotoIdx, totalFotos)
@@ -999,7 +1004,7 @@ export default function NotasPedidoStaffMain() {
         return { ok: false, error: "Informe a quantidade de pelo menos um produto nesta foto." };
       }
 
-      const d0 = getData() ?? data;
+      const d0 = getDataOperationalTruth() ?? getData() ?? data;
       if (!d0) return { ok: false, error: "Dados indisponíveis." };
 
       const coopSel =
@@ -1015,110 +1020,116 @@ export default function NotasPedidoStaffMain() {
       fotosLancadasConferenciaRef.current.add(fotoIdx);
       setFotosLancadasUi(new Set(fotosLancadasConferenciaRef.current));
 
-      const persistirNaFicha = () => {
+      const runPersistNaFicha = () => {
         beginConferenciaModalSaveBatch();
         try {
           updateData((d) => {
-        const cooperadoIdCanonico = resolverCooperadoIdCanonico(
-          d,
-          conferenciaCooperadoId,
-          coopId,
-          nomeCoop
-        );
-        const base = aplicarItensNaNota(
-          {
-            ...selectedNota,
-            cooperadoId: cooperadoIdCanonico,
-            cooperadoNomeSnapshot: nomeCoop,
-            instituicaoId: conferenciaInstId,
-            localEntrega: conferenciaLocal,
-            escolaAvulsaNome: conferenciaEscolaAvulsa.trim() || selectedNota.escolaAvulsaNome,
-          },
-          conferenciaItens.map((i) => ({ ...i, valorBruto: 0 })),
-          conferenciaDescontoPct
-        );
-        const divisao = resolverDivisaoConferencia(d, selectedNota);
+            const cooperadoIdCanonico = resolverCooperadoIdCanonico(
+              d,
+              conferenciaCooperadoId,
+              coopId,
+              nomeCoop
+            );
+            const base = aplicarItensNaNota(
+              {
+                ...selectedNota,
+                cooperadoId: cooperadoIdCanonico,
+                cooperadoNomeSnapshot: nomeCoop,
+                instituicaoId: conferenciaInstId,
+                localEntrega: conferenciaLocal,
+                escolaAvulsaNome: conferenciaEscolaAvulsa.trim() || selectedNota.escolaAvulsaNome,
+              },
+              conferenciaItens.map((i) => ({ ...i, valorBruto: 0 })),
+              conferenciaDescontoPct
+            );
+            const divisao = resolverDivisaoConferencia(d, selectedNota);
 
-        if (divisao) {
-          const jaNaFicha = divisao.participantes.every((p) =>
-            d.fichaCorrida.some(
-              (f) =>
-                f.notaPedidoId === selectedNota.id &&
-                f.cooperadoId === p.cooperadoId &&
-                descricaoFichaCorrespondeFoto(f.descricao, fotoIdx, totalFotos)
-            )
-          );
-          if (jaNaFicha) return d;
+            if (divisao) {
+              const jaNaFicha = divisao.participantes.every((p) =>
+                d.fichaCorrida.some(
+                  (f) =>
+                    f.notaPedidoId === selectedNota.id &&
+                    f.cooperadoId === p.cooperadoId &&
+                    descricaoFichaCorrespondeFoto(f.descricao, fotoIdx, totalFotos)
+                )
+              );
+              if (jaNaFicha) return d;
 
-          const fichas = buildFichasDivisaoFromNota(d, base, user.name, divisao, d.fichaCorrida, {
-            fotoIndex: fotoIdx,
-            totalFotos,
-          });
-          let arquivosMensais = d.arquivosMensais;
-          for (const p of divisao.participantes) {
-            arquivosMensais = upsertArquivoMensal(
-              { ...d, fichaCorrida: [...d.fichaCorrida, ...fichas], arquivosMensais },
-              p.cooperadoId,
+              const fichas = buildFichasDivisaoFromNota(d, base, user.name, divisao, d.fichaCorrida, {
+                fotoIndex: fotoIdx,
+                totalFotos,
+              });
+              let arquivosMensais = d.arquivosMensais;
+              for (const p of divisao.participantes) {
+                arquivosMensais = upsertArquivoMensal(
+                  { ...d, fichaCorrida: [...d.fichaCorrida, ...fichas], arquivosMensais },
+                  p.cooperadoId,
+                  base.cooperativaId,
+                  base.mesReferencia,
+                  { notaPedidoIds: [selectedNota.id] }
+                );
+              }
+              return addAuditEntry(
+                {
+                  ...d,
+                  fichaCorrida: [...d.fichaCorrida, ...fichas],
+                  arquivosMensais,
+                },
+                {
+                  entityType: "nota_pedido",
+                  entityId: selectedNota.id,
+                  action: "aprovar",
+                  userId: user.id,
+                  userName: user.name,
+                  changes: `Foto ${fotoIdx + 1}/${totalFotos} lançada · dividida entre ${divisao.participantes.length} cooperados`,
+                }
+              );
+            }
+
+            const ficha = buildFichaFromNota(base, d, user.name, nomeCoop, {
+              fotoIndex: fotoIdx,
+              totalFotos,
+            });
+
+            if (fichaJaTemLancamentoFoto(d.fichaCorrida, selectedNota.id, fotoIdx, totalFotos)) {
+              return d;
+            }
+
+            const arquivosMensais = upsertArquivoMensal(
+              d,
+              base.cooperadoId,
               base.cooperativaId,
               base.mesReferencia,
-              { notaPedidoIds: [selectedNota.id] }
+              {
+                notaPedidoIds: [selectedNota.id],
+              }
             );
-          }
-          return addAuditEntry(
-            {
-              ...d,
-              fichaCorrida: [...d.fichaCorrida, ...fichas],
-              arquivosMensais,
-            },
-            {
-              entityType: "nota_pedido",
-              entityId: selectedNota.id,
-              action: "aprovar",
-              userId: user.id,
-              userName: user.name,
-              changes: `Foto ${fotoIdx + 1}/${totalFotos} lançada · dividida entre ${divisao.participantes.length} cooperados`,
-            }
-          );
-        }
-
-        const ficha = buildFichaFromNota(base, d, user.name, nomeCoop, {
-          fotoIndex: fotoIdx,
-          totalFotos,
-        });
-
-        if (fichaJaTemLancamentoFoto(d.fichaCorrida, selectedNota.id, fotoIdx, totalFotos)) {
-          return d;
-        }
-
-        const arquivosMensais = upsertArquivoMensal(d, base.cooperadoId, base.cooperativaId, base.mesReferencia, {
-          notaPedidoIds: [selectedNota.id],
-        });
-        return addAuditEntry(
-          {
-            ...d,
-            fichaCorrida: [...d.fichaCorrida, ficha],
-            arquivosMensais,
-          },
-          {
-            entityType: "nota_pedido",
-            entityId: selectedNota.id,
-            action: "aprovar",
-            userId: user.id,
-            userName: user.name,
-            changes: `Foto ${fotoIdx + 1}/${totalFotos} lançada na ficha`,
-          }
-        );
-      });
+            return addAuditEntry(
+              {
+                ...d,
+                fichaCorrida: [...d.fichaCorrida, ficha],
+                arquivosMensais,
+              },
+              {
+                entityType: "nota_pedido",
+                entityId: selectedNota.id,
+                action: "aprovar",
+                userId: user.id,
+                userName: user.name,
+                changes: `Foto ${fotoIdx + 1}/${totalFotos} lançada na ficha`,
+              }
+            );
+          });
         } finally {
-          endConferenciaModalSaveBatch();
+          endConferenciaModalFotoSaveBatch();
         }
         persistirDraftConferenciaEmMemoria();
       };
 
       if (opts?.uiFirst) {
-        requestAnimationFrame(() => persistirNaFicha());
+        requestAnimationFrame(() => scheduleConferenciaFotoPersist(runPersistNaFicha));
       } else {
-        persistirNaFicha();
+        scheduleConferenciaFotoPersist(runPersistNaFicha);
       }
 
       return { ok: true };
@@ -3303,7 +3314,7 @@ export default function NotasPedidoStaffMain() {
     }
 
     if (multiFoto) {
-      const dSync = getData() ?? data;
+      const dSync = getDataOperationalTruth() ?? getData() ?? data;
       const reid = reidratarProgressoMultiFotoConferencia(dSync, selectedNota.id, qtdFotosAprovadas);
       for (const idx of reid.lancadas) fotosLancadasConferenciaRef.current.add(idx);
       for (const [idx, itens] of reid.lancamentosPorFoto.entries()) {
@@ -3335,6 +3346,8 @@ export default function NotasPedidoStaffMain() {
         return;
       }
     }
+
+    flushConferenciaFotoPersistNow();
 
     travarLancamentoConferencia();
     let notaAtualizada: NotaPedido | null = null;

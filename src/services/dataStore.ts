@@ -275,6 +275,26 @@ export function endConferenciaModalSaveBatch(): void {
   }
 }
 
+/** Lançamento foto a foto — uma notificação coalescida (menos re-render que aprovação final). */
+export function endConferenciaModalFotoSaveBatch(): void {
+  endSaveBatch();
+  if (isConferenciaDeferLocalPersistActive()) {
+    notify();
+    scheduleConferenciaDeferredLocalPersist();
+    return;
+  }
+  const snapshot = memoryCache;
+  if (!snapshot) {
+    notify();
+    return;
+  }
+  notify();
+  const saved = persistDataToStorage(snapshot, { skipNotify: true });
+  if (!saved.ok) {
+    notifyImmediate();
+  }
+}
+
 export async function runWithBatchedSaveAsync(
   fn: () => Promise<void>,
   opts?: { shouldPersistBatch?: () => boolean }
@@ -931,12 +951,23 @@ export function addAuditEntry(
     ...entry,
   };
   if (typeof window !== "undefined") {
-    try {
-      const { queueAuditEntryForCloud } = require("@/services/cooperativeAuditCloudService") as typeof import("@/services/cooperativeAuditCloudService");
-      const actor = data.users.find((u) => u.id === entry.userId);
-      queueAuditEntryForCloud(data, auditEntry, actor);
-    } catch {
-      /* cloud audit opcional */
+    const pushCloud = () => {
+      try {
+        const { queueAuditEntryForCloud } = require("@/services/cooperativeAuditCloudService") as typeof import("@/services/cooperativeAuditCloudService");
+        const actor = data.users.find((u) => u.id === entry.userId);
+        queueAuditEntryForCloud(data, auditEntry, actor);
+      } catch {
+        /* cloud audit opcional */
+      }
+    };
+    if (isConferenciaDeferLocalPersistActive()) {
+      if (typeof requestIdleCallback !== "undefined") {
+        requestIdleCallback(pushCloud, { timeout: 4000 });
+      } else {
+        setTimeout(pushCloud, 0);
+      }
+    } else {
+      pushCloud();
     }
   }
   return {
