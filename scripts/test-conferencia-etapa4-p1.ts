@@ -51,13 +51,22 @@ assert.match(enriched, /ficha prevaleceu/);
 
 assert.equal(bloquearAcaoFinalConferencia({ syncingForUi: true, pendingDeleteIds: new Set(), notaId: "n" }).blocked, true);
 assert.equal(
+  bloquearAcaoFinalConferencia({
+    syncingForUi: true,
+    pendingDeleteIds: new Set(),
+    notaId: "n",
+    conferenciaModalAberta: true,
+  }).blocked,
+  false
+);
+assert.equal(
   bloquearAcaoFinalConferencia({ syncingForUi: false, pendingDeleteIds: new Set(["n"]), notaId: "n" }).blocked,
   true
 );
 
 assert.ok(notas.includes("bloquearAcaoFinalConferencia"), "guard na aprovação/rejeição");
 assert.ok(notas.includes("enriquecerMensagemRetomadaMultiFotoComDraft"), "mensagem retomada draft");
-assert.ok(notas.includes("syncingForUi") && notas.includes("handleLancarNota"), "botão respeita sync");
+assert.ok(notas.includes("conferenciaModalAberta"), "guard permite aprovar com sync em modal conferência");
 
 resetConferenciaAprovacaoSyncQueueForTests();
 

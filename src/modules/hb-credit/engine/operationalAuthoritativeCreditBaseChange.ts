@@ -216,6 +216,24 @@ async function loadAuthoritativeContext(
   return { ok: true, cooperativaId, cooperados, notas, cooperadoIds };
 }
 
+async function loadCooperadosOnlyContext(
+  supabase: SupabaseClient,
+  cnpj: string
+): Promise<
+  | { ok: true; cooperativaId: string; cooperados: Cooperado[]; cooperadoIds: string[] }
+  | { ok: false; error: string }
+> {
+  const digits = normalizeCnpj(cnpj);
+  const { data: coopRow } = await supabase.from("cooperativas").select("id").eq("cnpj", digits).maybeSingle();
+  const cooperativaId = coopRow?.id ? String(coopRow.id) : "";
+  if (!cooperativaId) {
+    return { ok: false, error: "Cooperativa não encontrada." };
+  }
+  const cooperados = await fetchCooperadosFromStorage(supabase, digits);
+  const cooperadoIds = cooperados.map((c) => c.id).filter(Boolean);
+  return { ok: true, cooperativaId, cooperados, cooperadoIds };
+}
+
 /**
  * Compara operacional atual na nuvem com o payload sanitizado que será gravado.
  */
@@ -261,13 +279,39 @@ export async function detectMaterialAuthoritativeCreditBaseChange(
     };
   }
 
-  const ctx = await loadAuthoritativeContext(supabase, digits);
-  if (!ctx.ok) return ctx;
-
   const deltaCooperadoIds = cooperadoIdsWithHbCreditBaseOperacionalDelta(
     beforeOperacional,
     nextOperacionalSanitized
   );
+
+  /** Conferência / ficha nova: marca STALE só nos cooperados afetados — evita baixar todas as notas (timeout 500). */
+  if (deltaCooperadoIds.length > 0) {
+    const light = await loadCooperadosOnlyContext(supabase, digits);
+    if (!light.ok) return light;
+    const minimalForTitular = buildMinimalAppDataForCreditBase({
+      operacional: nextOperacionalSanitized,
+      cooperativaId: light.cooperativaId,
+      cnpj: digits,
+      cooperados: light.cooperados,
+      notasPedido: [],
+    });
+    const expanded = expandCooperadoIdsForHbTitular(
+      minimalForTitular,
+      light.cooperativaId,
+      deltaCooperadoIds
+    );
+    return {
+      ok: true,
+      material: true,
+      changedCooperadoIds: expanded,
+      beforeCents: {},
+      afterCents: {},
+    };
+  }
+
+  const ctx = await loadAuthoritativeContext(supabase, digits);
+  if (!ctx.ok) return ctx;
+
   const minimalForTitular = buildMinimalAppDataForCreditBase({
     operacional: nextOperacionalSanitized,
     cooperativaId: ctx.cooperativaId,
@@ -275,10 +319,11 @@ export async function detectMaterialAuthoritativeCreditBaseChange(
     cooperados: ctx.cooperados,
     notasPedido: ctx.notas,
   });
-  const cooperadoIdsForDiff =
-    deltaCooperadoIds.length > 0
-      ? expandCooperadoIdsForHbTitular(minimalForTitular, ctx.cooperativaId, deltaCooperadoIds)
-      : ctx.cooperadoIds;
+  const cooperadoIdsForDiff = expandCooperadoIdsForHbTitular(
+    minimalForTitular,
+    ctx.cooperativaId,
+    ctx.cooperadoIds
+  );
 
   const diff = diffAuthoritativeCreditBaseFromOperacional({
     beforeOperacional,

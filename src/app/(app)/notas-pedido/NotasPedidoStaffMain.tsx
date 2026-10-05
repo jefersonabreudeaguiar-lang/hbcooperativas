@@ -3105,6 +3105,7 @@ export default function NotasPedidoStaffMain() {
       syncingForUi,
       pendingDeleteIds,
       notaId: selectedNota.id,
+      conferenciaModalAberta: conferirModal,
     });
     if (guardFinal.blocked) {
       setConferirErrors({ itens: guardFinal.mensagem });
@@ -3481,6 +3482,7 @@ export default function NotasPedidoStaffMain() {
       syncingForUi,
       pendingDeleteIds,
       notaId: selectedNota.id,
+      conferenciaModalAberta: conferirModal,
     });
     if (guardFinal.blocked) {
       setSuccessMsg(guardFinal.mensagem);
@@ -5030,10 +5032,10 @@ export default function NotasPedidoStaffMain() {
       } size="full"
         footer={selectedNota && isNotaNaFilaConferenciaResponsavel(selectedNota.status) && check("notas_pedido", "approve") ? (
           <div className="flex flex-col sm:flex-row gap-2 justify-between">
-            <Button variant="danger" onClick={() => { setMotivoRejeicao(""); setRejectModal(true); }} disabled={conferenciaTransicao || Boolean(lancamentoSequencia) || syncingForUi}>
+            <Button variant="danger" onClick={() => { setMotivoRejeicao(""); setRejectModal(true); }} disabled={conferenciaTransicao || Boolean(lancamentoSequencia) || (syncingForUi && !conferirModal)}>
               <XCircle size={18} /> Pedir correção
             </Button>
-            <Button size="lg" onClick={handleLancarNota} disabled={conferenciaTransicao || Boolean(lancamentoSequencia) || syncingForUi}>
+            <Button size="lg" onClick={handleLancarNota} disabled={conferenciaTransicao || Boolean(lancamentoSequencia) || (syncingForUi && !conferirModal)}>
               <CheckCircle size={18} />
               {(() => {
                 if (lancamentoSequencia) {

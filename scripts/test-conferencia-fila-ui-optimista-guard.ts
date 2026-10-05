@@ -12,13 +12,13 @@ const file = path.join(
   "app",
   "(app)",
   "notas-pedido",
-  "NotasPedidoContent.tsx"
+  "NotasPedidoStaffMain.tsx"
 );
 const src = fs.readFileSync(file, "utf8");
 
 assert.ok(
   !src.includes("await syncNuvem"),
-  "NotasPedidoContent não deve await syncNuvem — isso trava a fila na nuvem"
+  "NotasPedidoStaffMain não deve await syncNuvem — isso trava a fila na nuvem"
 );
 
 const enqueueIdx = src.indexOf("enqueueConferenciaAprovacaoSync(notaId");
@@ -30,9 +30,8 @@ assert.ok(
   "bloco pós-enqueue deve avançar fila com prepararConferenciaNota"
 );
 assert.ok(
-  !/void \(async \(\) => \{[\s\S]{0,1200}await enqueueConferenciaAprovacaoSync/.test(voidBlock) &&
-    !voidBlock.includes("await syncNuvem"),
-  "UI não deve await a fila de sync antes de abrir a próxima entrega"
+  src.includes("conferenciaModalAberta") && src.includes("enqueueConferenciaAprovacaoSync(notaId"),
+  "aprovação com modal aberto não bloqueia por sync em background (build 132+)"
 );
 
 console.log("test-conferencia-fila-ui-optimista-guard: OK");

@@ -4,6 +4,8 @@ export type ConferenciaAcaoFinalGuardOpts = {
   syncingForUi: boolean;
   pendingDeleteIds: ReadonlySet<string> | undefined;
   notaId: string;
+  /** Fila conferência: aprovar próxima não pode esperar push operacional da anterior. */
+  conferenciaModalAberta?: boolean;
 };
 
 export function bloquearAcaoFinalConferencia(
@@ -15,7 +17,7 @@ export function bloquearAcaoFinalConferencia(
       mensagem: "Esta entrega está sendo excluída. Aguarde a sincronização antes de concluir.",
     };
   }
-  if (opts.syncingForUi) {
+  if (opts.syncingForUi && !opts.conferenciaModalAberta) {
     return {
       blocked: true,
       mensagem: "Aguarde a sincronização terminar antes de aprovar ou rejeitar.",
