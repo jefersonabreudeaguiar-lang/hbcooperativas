@@ -39,6 +39,9 @@ import { shouldPrefetchHbCreditNav } from "@/lib/hb-credit/hbCreditNavPrefetch";
 import { scheduleCooperadoNavPrefetchEarly } from "@/lib/performance/cooperadoNavPrefetch";
 import { scheduleStaffNavPrefetchEarly } from "@/lib/performance/staffNavPrefetch";
 import { prefetchStaffNotasPedidoRouteBundle } from "@/lib/performance/prefetchStaffNotasPedidoUi";
+import { feedbackTrocaAbaMobile } from "@/lib/performance/tabSwitchFeedback";
+import { useMobileTabScrollRestore } from "@/hooks/useMobileTabScrollRestore";
+import type { MobileTabScrollMode } from "@/lib/performance/mobileTabScrollMemory";
 import { CooperadoMobileTabKeepAlive } from "@/components/performance/CooperadoMobileTabKeepAlive";
 import { StaffMobileTabKeepAlive } from "@/components/performance/StaffMobileTabKeepAlive";
 import { CooperadoMobileReleaseBar } from "@/components/cooperado/CooperadoMobileReleaseBar";
@@ -216,9 +219,17 @@ export function MobileNav() {
   const prefetchNavRoute = (href: string) => {
     try {
       router.prefetch(href);
+      if (!isCooperadoAppUser(navUser) && href === "/notas-pedido") {
+        prefetchStaffNotasPedidoRouteBundle();
+      }
     } catch {
       /* ignore */
     }
+  };
+
+  const handleTabPointerPrefetch = (href: string) => {
+    if (href === pathname) return;
+    prefetchNavRoute(href);
   };
 
   return (
@@ -252,17 +263,14 @@ export function MobileNav() {
             <Link
               key={item.href}
               href={item.href}
+              scroll={false}
               prefetch={shouldPrefetchHbCreditNav(item.href)}
-              onPointerEnter={() => {
-                if (isCooperadoNav && item.href !== pathname) prefetchNavRoute(item.href);
-                if (!isCooperadoNav && item.href === "/notas-pedido") prefetchStaffNotasPedidoRouteBundle();
-              }}
-              onTouchStart={() => {
-                if (isCooperadoNav && item.href !== pathname) prefetchNavRoute(item.href);
-                if (!isCooperadoNav && item.href === "/notas-pedido") prefetchStaffNotasPedidoRouteBundle();
-              }}
+              onClick={() => feedbackTrocaAbaMobile(active)}
+              onPointerEnter={() => handleTabPointerPrefetch(item.href)}
+              onTouchStart={() => handleTabPointerPrefetch(item.href)}
               className={cn(
-                "flex-1 flex flex-col items-center justify-center min-w-0 px-0.5 transition-colors",
+                "flex-1 flex flex-col items-center justify-center min-w-0 px-0.5 select-none",
+                "transition-[color,transform] duration-75 ease-out active:scale-[0.96]",
                 isCooperadoNav ? "min-h-[72px] py-2 gap-1" : "py-2 text-[10px] sm:text-xs gap-0.5",
                 active
                   ? isCooperadoNav
@@ -334,6 +342,16 @@ function AppShellInner({ children }: { children: React.ReactNode }) {
     staffPainelUi &&
     !isCooperadoAppUser(navUser);
 
+  const mobileTabScrollMode: MobileTabScrollMode = cooperadoKeepAliveShell
+    ? "cooperado"
+    : staffKeepAliveShell
+      ? "staff"
+      : "none";
+  const mainScrollRef = useMobileTabScrollRestore({
+    pathname,
+    scrollMode: mobileTabScrollMode,
+  });
+
   useLayoutEffect(() => {
     try {
       if (!navUser) {
@@ -369,6 +387,7 @@ function AppShellInner({ children }: { children: React.ReactNode }) {
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
         {!mercadoQrImmersive && <MobileNav />}
         <main
+          ref={mainScrollRef}
           className={cn(
             "flex-1 overflow-y-auto overflow-x-hidden overscroll-y-contain",
             mercadoQrImmersive

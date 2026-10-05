@@ -57,8 +57,7 @@ function publishKeepAliveDomState(state: {
 }
 
 /**
- * RQL 8.6 — cache leve das abas do rodapé (LRU): no máximo 2 telas montadas (+ atual).
- * Reduz pico de JS/RAM vs manter as 5 abas sempre vivas.
+ * RQL 8.6 — cache das abas do rodapé: até 5 montadas no mobile (LRU em aparelhos fracos).
  */
 export function CooperadoMobileTabKeepAlive({ pathname, children }: Props) {
   const mobile = useCooperadoMobileViewport();
