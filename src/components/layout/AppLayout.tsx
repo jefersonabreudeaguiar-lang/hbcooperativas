@@ -38,7 +38,6 @@ import { useHbCreditDescontosWarmup } from "@/hooks/useHbCreditDescontosWarmup";
 import { shouldPrefetchHbCreditNav } from "@/lib/hb-credit/hbCreditNavPrefetch";
 import { scheduleCooperadoNavPrefetchEarly } from "@/lib/performance/cooperadoNavPrefetch";
 import { scheduleStaffNavPrefetchEarly } from "@/lib/performance/staffNavPrefetch";
-import { prefetchStaffNotasPedidoRouteBundle } from "@/lib/performance/prefetchStaffNotasPedidoUi";
 import { feedbackTrocaAbaMobile } from "@/lib/performance/tabSwitchFeedback";
 import { useMobileTabScrollRestore } from "@/hooks/useMobileTabScrollRestore";
 import type { MobileTabScrollMode } from "@/lib/performance/mobileTabScrollMemory";
@@ -216,22 +215,6 @@ export function MobileNav() {
     return scheduleStaffNavPrefetchEarly(router);
   }, [navUser?.id, navUser?.role, router]);
 
-  const prefetchNavRoute = (href: string) => {
-    try {
-      router.prefetch(href);
-      if (!isCooperadoAppUser(navUser) && href === "/notas-pedido") {
-        prefetchStaffNotasPedidoRouteBundle();
-      }
-    } catch {
-      /* ignore */
-    }
-  };
-
-  const handleTabPointerPrefetch = (href: string) => {
-    if (href === pathname) return;
-    prefetchNavRoute(href);
-  };
-
   return (
     <>
       <header className="lg:hidden flex items-center justify-between gap-2 px-4 py-3 bg-green-900 text-white sticky top-0 z-40">
@@ -264,13 +247,10 @@ export function MobileNav() {
               key={item.href}
               href={item.href}
               scroll={false}
-              prefetch={shouldPrefetchHbCreditNav(item.href)}
+              prefetch={false}
               onClick={() => feedbackTrocaAbaMobile(active)}
-              onPointerEnter={() => handleTabPointerPrefetch(item.href)}
-              onTouchStart={() => handleTabPointerPrefetch(item.href)}
               className={cn(
                 "flex-1 flex flex-col items-center justify-center min-w-0 px-0.5 select-none",
-                "transition-[color,transform] duration-75 ease-out active:scale-[0.96]",
                 isCooperadoNav ? "min-h-[72px] py-2 gap-1" : "py-2 text-[10px] sm:text-xs gap-0.5",
                 active
                   ? isCooperadoNav
@@ -283,7 +263,7 @@ export function MobileNav() {
             >
               <span
                 className={cn(
-                  "flex items-center justify-center rounded-xl transition-colors",
+                  "flex items-center justify-center rounded-xl",
                   isCooperadoNav && "w-11 h-11",
                   active && isCooperadoNav ? "bg-green-700 text-white" : active ? "text-green-700" : isCooperadoNav ? "text-green-700" : "text-gray-400"
                 )}

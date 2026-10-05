@@ -27,7 +27,7 @@ export function isStaffMobileTabKeepAliveEnabled(): boolean {
 }
 
 export function getStaffMobileTabCacheLimit(lowMemoryDevice: boolean): number {
-  return lowMemoryDevice ? 2 : 5;
+  return lowMemoryDevice ? 2 : 3;
 }
 
 export const STAFF_TAB_PIN_HREF = "/notas-pedido" as const;

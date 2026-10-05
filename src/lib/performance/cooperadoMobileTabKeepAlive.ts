@@ -25,9 +25,9 @@ export function isCooperadoMobileTabKeepAliveEnabled(): boolean {
   return readKeepAliveEnvDefault();
 }
 
-/** Abas montadas — até as 5 do rodapé no padrão; menos em aparelho com pouca RAM. */
+/** LRU enxuto — 3 abas no padrão (rápido); 2 em aparelho fraco. */
 export function getCooperadoMobileTabCacheLimit(lowMemoryDevice: boolean): number {
-  return lowMemoryDevice ? 2 : COOPERADO_BOTTOM_TAB_HREFS.length;
+  return lowMemoryDevice ? 2 : 3;
 }
 
 /** Início — preferir manter montado no LRU (P1). */

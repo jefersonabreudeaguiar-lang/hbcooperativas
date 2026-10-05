@@ -17,5 +17,5 @@ export function isMobileBottomTabViewport(): boolean {
 export function feedbackTrocaAbaMobile(alvoAtivo: boolean): void {
   if (alvoAtivo) return;
   if (!isMobileBottomTabViewport()) return;
-  vibrarTrocaAba();
+  requestAnimationFrame(() => vibrarTrocaAba());
 }

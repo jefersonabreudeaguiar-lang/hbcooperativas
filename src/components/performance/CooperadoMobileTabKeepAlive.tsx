@@ -1,6 +1,6 @@
 "use client";
 
-import { useLayoutEffect, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
+import { useLayoutEffect, useRef, useState, useSyncExternalStore, useMemo, type ReactNode } from "react";
 import { cn } from "@/utils/format";
 import { isLowMemoryDevice } from "@/services/imagePipelineService";
 import { CooperadoTabPanelProvider } from "@/lib/performance/cooperadoTabPanelContext";
@@ -46,6 +46,19 @@ function publishKeepAliveDomState(state: {
   pathname: string;
   panelCount: number;
 }): void {
+  if (typeof requestIdleCallback === "function") {
+    requestIdleCallback(() => {
+      try {
+        document.documentElement.setAttribute(
+          "data-hb-keep-alive-state",
+          `e${state.enabled ? 1 : 0}m${state.mobile ? 1 : 0}t${state.onTab ? 1 : 0}p${state.panelCount}:${state.pathname}`
+        );
+      } catch {
+        /* ignore */
+      }
+    });
+    return;
+  }
   try {
     document.documentElement.setAttribute(
       "data-hb-keep-alive-state",
@@ -57,33 +70,50 @@ function publishKeepAliveDomState(state: {
 }
 
 /**
- * RQL 8.6 — cache das abas do rodapé: até 5 montadas no mobile (LRU em aparelhos fracos).
+ * RQL 8.6 — cache LRU enxuto (3 abas): só monta painéis visitados + atual.
  */
 export function CooperadoMobileTabKeepAlive({ pathname, children }: Props) {
   const mobile = useCooperadoMobileViewport();
   const enabled = isCooperadoMobileTabKeepAliveEnabled();
   const cacheRef = useRef<Partial<Record<string, ReactNode>>>({});
   const orderRef = useRef<string[]>([]);
-  const [, tick] = useState(0);
+  const [cacheVersion, setCacheVersion] = useState(0);
   const lowMemory = isLowMemoryDevice();
   const cacheLimit = getCooperadoMobileTabCacheLimit(lowMemory);
 
   const onTab = isCooperadoBottomTabPath(pathname);
 
   useLayoutEffect(() => {
-    const panelCount = document.querySelectorAll("[data-cooperado-tab-panel]").length;
-    publishKeepAliveDomState({ enabled, mobile, onTab, pathname, panelCount });
+    publishKeepAliveDomState({
+      enabled,
+      mobile,
+      onTab,
+      pathname,
+      panelCount: orderRef.current.length,
+    });
 
     if (!enabled || !mobile || !onTab) return;
     cacheRef.current[pathname] = children;
     const merged = [pathname, ...orderRef.current.filter((h) => h !== pathname)];
     const prevOrder = orderRef.current;
-    orderRef.current = trimCooperadoTabCacheOrder(merged, pathname, cacheLimit, lowMemory);
+    const nextOrder = trimCooperadoTabCacheOrder(merged, pathname, cacheLimit, lowMemory);
+    const orderChanged =
+      nextOrder.length !== prevOrder.length || nextOrder.some((h, i) => h !== prevOrder[i]);
+    orderRef.current = nextOrder;
     for (const href of prevOrder) {
       if (!orderRef.current.includes(href)) delete cacheRef.current[href];
     }
-    tick((n) => n + 1);
+    if (orderChanged || !prevOrder.includes(pathname)) {
+      setCacheVersion((n) => n + 1);
+    }
   }, [enabled, mobile, onTab, pathname, children, cacheLimit, lowMemory]);
+
+  const hrefsToRender = useMemo(() => {
+    if (onTab && enabled && mobile) {
+      return [...new Set([pathname, ...orderRef.current])];
+    }
+    return [...new Set([...orderRef.current, ...Object.keys(cacheRef.current)])];
+  }, [cacheVersion, onTab, enabled, mobile, pathname]);
 
   const panelForHref = (href: string, activePath: string | null): ReactNode | undefined => {
     if (onTab && href === pathname) return children;
@@ -96,7 +126,7 @@ export function CooperadoMobileTabKeepAlive({ pathname, children }: Props) {
   }
 
   const renderPanels = (activePath: string | null) =>
-    COOPERADO_BOTTOM_TAB_HREFS.map((href) => {
+    hrefsToRender.map((href) => {
       const active = activePath === href;
       const panel = panelForHref(href, activePath);
       if (!panel) return null;

@@ -1,6 +1,6 @@
 "use client";
 
-import { useLayoutEffect, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
+import { useLayoutEffect, useRef, useState, useSyncExternalStore, useMemo, type ReactNode } from "react";
 import { cn } from "@/utils/format";
 import { isLowMemoryDevice } from "@/services/imagePipelineService";
 import { CooperadoTabPanelProvider } from "@/lib/performance/cooperadoTabPanelContext";
@@ -56,7 +56,7 @@ export function StaffMobileTabKeepAlive({ pathname, children }: Props) {
   const enabled = isStaffMobileTabKeepAliveEnabled();
   const cacheRef = useRef<Partial<Record<string, ReactNode>>>({});
   const orderRef = useRef<string[]>([]);
-  const [, tick] = useState(0);
+  const [cacheVersion, setCacheVersion] = useState(0);
   const lowMemory = isLowMemoryDevice();
   const cacheLimit = getStaffMobileTabCacheLimit(lowMemory);
 
@@ -64,18 +64,28 @@ export function StaffMobileTabKeepAlive({ pathname, children }: Props) {
   const onTab = isStaffBottomTabPath(pathname);
 
   useLayoutEffect(() => {
-    const panelCount = document.querySelectorAll("[data-staff-tab-panel]").length;
-    publishStaffKeepAliveDomState({ enabled, mobile, onTab, pathname: tabKey, panelCount });
+    publishStaffKeepAliveDomState({
+      enabled,
+      mobile,
+      onTab,
+      pathname: tabKey,
+      panelCount: orderRef.current.length,
+    });
 
     if (!enabled || !mobile || !onTab) return;
     cacheRef.current[tabKey] = children;
     const merged = [tabKey, ...orderRef.current.filter((h) => h !== tabKey)];
     const prevOrder = orderRef.current;
-    orderRef.current = trimStaffTabCacheOrder(merged, tabKey, cacheLimit, lowMemory);
+    const nextOrder = trimStaffTabCacheOrder(merged, tabKey, cacheLimit, lowMemory);
+    const orderChanged =
+      nextOrder.length !== prevOrder.length || nextOrder.some((h, i) => h !== prevOrder[i]);
+    orderRef.current = nextOrder;
     for (const href of prevOrder) {
       if (!orderRef.current.includes(href)) delete cacheRef.current[href];
     }
-    tick((n) => n + 1);
+    if (orderChanged || !prevOrder.includes(tabKey)) {
+      setCacheVersion((n) => n + 1);
+    }
   }, [enabled, mobile, onTab, tabKey, pathname, children, cacheLimit, lowMemory]);
 
   const panelForKey = (href: string, activeKey: string | null): ReactNode | undefined => {
@@ -88,9 +98,12 @@ export function StaffMobileTabKeepAlive({ pathname, children }: Props) {
     return <>{children}</>;
   }
 
-  const hrefsToRender = onTab
-    ? [...new Set([tabKey, ...orderRef.current])]
-    : [...new Set([...orderRef.current, ...Object.keys(cacheRef.current)])];
+  const hrefsToRender = useMemo(() => {
+    if (onTab) {
+      return [...new Set([tabKey, ...orderRef.current])];
+    }
+    return [...new Set([...orderRef.current, ...Object.keys(cacheRef.current)])];
+  }, [cacheVersion, onTab, tabKey]);
 
   const renderPanels = (activeKey: string | null) =>
     hrefsToRender.map((href) => {

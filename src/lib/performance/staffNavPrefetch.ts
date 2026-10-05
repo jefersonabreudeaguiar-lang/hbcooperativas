@@ -55,10 +55,6 @@ export function scheduleStaffNavPrefetchEarly(router: CooperadoNavPrefetchRouter
     };
   }
 
-  const rafId = requestAnimationFrame(() => {
-    requestAnimationFrame(() => safe(() => prefetchStaffNavRoutes(router, idleHrefs)));
-  });
-
   let idleHandle: number | undefined;
   if (typeof requestIdleCallback === "function") {
     idleHandle = requestIdleCallback(() => safe(() => prefetchStaffNavRoutes(router, idleHrefs)), {
@@ -70,7 +66,6 @@ export function scheduleStaffNavPrefetchEarly(router: CooperadoNavPrefetchRouter
 
   return () => {
     cancelled = true;
-    cancelAnimationFrame(rafId);
     if (typeof requestIdleCallback === "function" && idleHandle !== undefined) {
       cancelIdleCallback(idleHandle);
     } else if (idleHandle !== undefined) {

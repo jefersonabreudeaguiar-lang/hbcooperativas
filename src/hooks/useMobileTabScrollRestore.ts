@@ -14,6 +14,7 @@ type Options = {
   scrollMode: MobileTabScrollMode;
 };
 
+/** Salva scroll na troca; restaura no frame seguinte (não bloqueia a pintura da aba). */
 export function useMobileTabScrollRestore({ pathname, scrollMode }: Options): RefObject<HTMLElement | null> {
   const mainRef = useRef<HTMLElement | null>(null);
   const prevTabKeyRef = useRef<string | null>(null);
@@ -30,8 +31,12 @@ export function useMobileTabScrollRestore({ pathname, scrollMode }: Options): Re
     }
 
     if (nextKey) {
-      restoreMobileTabScroll(nextKey, el);
       prevTabKeyRef.current = nextKey;
+      requestAnimationFrame(() => {
+        if (mainRef.current && prevTabKeyRef.current === nextKey) {
+          restoreMobileTabScroll(nextKey, mainRef.current);
+        }
+      });
       return;
     }
 
