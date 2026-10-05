@@ -35,6 +35,12 @@ import {
   prefetchCooperadoAnexarPipeline,
 } from "@/lib/performance/prefetchCooperadoAnexarPipeline";
 import {
+  getConferenciaFotoBlobCachedIfLoaded,
+  loadConferenciaFotoPrefetchModule,
+  prefetchConferenciaFotoPrefetchModule,
+} from "@/lib/performance/loadConferenciaFotoPrefetch";
+import { notaBloqueadaConferenciaPorExclusaoPendente } from "@/lib/conferencia/conferenciaAbrirGuard";
+import {
   COOPERADO_ENTREGA_REMOVIDA_EVENT,
   type CooperadoEntregaRemovidaDetail,
 } from "@/lib/cooperadoEntregaRemovidaNotify";
@@ -102,13 +108,6 @@ import {
   resolveFotosNotaParaExibicao,
   syncNotasPedidoFromCloud,
 } from "@/services/notaPedidoCloudService";
-import {
-  fetchConferenciaFotoPartCached,
-  getConferenciaFotoBlobCached,
-  prefetchAdjacentConferenciaFotos,
-  scheduleWarmConferenciaNotaFotos,
-  warmConferenciaNotaFotos,
-} from "@/services/conferenciaFotoPrefetch";
 import {
   revokePreviewUrl,
   AVISO_COOPERADO_FOTOS_MEMORIA_INSUFICIENTE,
@@ -516,6 +515,7 @@ export default function NotasPedidoContent() {
 
   const loadConferenciaFoto = useCallback(
     async (nota: NotaPedido, index: number): Promise<string | null> => {
+      prefetchConferenciaFotoPrefetchModule();
       const loadGen = ++conferenciaFotoLoadGenRef.current;
       const stillActive = () => loadGen === conferenciaFotoLoadGenRef.current;
 
@@ -534,7 +534,7 @@ export default function NotasPedidoContent() {
         (data && coopId ? getCooperativaCnpj(data, coopId) : undefined) ??
         conferenciaCnpjRef.current;
       if (cnpjRapido) {
-        const globalHit = getConferenciaFotoBlobCached(cnpjRapido, nota.id, index);
+        const globalHit = getConferenciaFotoBlobCachedIfLoaded(cnpjRapido, nota.id, index);
         if (globalHit) {
           if (!stillActive()) return null;
           conferenciaFotoCacheRef.current.set(cacheKey, globalHit);
@@ -610,24 +610,27 @@ export default function NotasPedidoContent() {
           return enrichedInline;
         }
 
+        const conferenciaPrefetch = await loadConferenciaFotoPrefetchModule();
         const [idbFoto, url] = await Promise.all([
           readNotaFotoAtIndex(notaEnriquecida, index),
-          fetchConferenciaFotoPartCached(cnpj, notaEnriquecida.id, index, totalFotosNota, { preview: true }),
+          conferenciaPrefetch.fetchConferenciaFotoPartCached(cnpj, notaEnriquecida.id, index, totalFotosNota, {
+            preview: true,
+          }),
         ]);
         if (!stillActive()) return null;
 
         if (idbFoto && !isFotoInlineMiniaturaFallback(notaEnriquecida, index, idbFoto)) {
           conferenciaFotoCacheRef.current.set(cacheKey, idbFoto);
           setConferenciaFotoAtualUrl(idbFoto);
-          prefetchAdjacentConferenciaFotos(cnpj, notaEnriquecida.id, index, totalFotosNota);
+          conferenciaPrefetch.prefetchAdjacentConferenciaFotos(cnpj, notaEnriquecida.id, index, totalFotosNota);
           return idbFoto;
         }
         if (url) {
           conferenciaFotoCacheRef.current.set(cacheKey, url);
           setConferenciaFotoAtualUrl(url);
-          prefetchAdjacentConferenciaFotos(cnpj, notaEnriquecida.id, index, totalFotosNota);
+          conferenciaPrefetch.prefetchAdjacentConferenciaFotos(cnpj, notaEnriquecida.id, index, totalFotosNota);
           if (totalFotosNota > 1) {
-            void warmConferenciaNotaFotos(cnpj, notaEnriquecida.id, totalFotosNota);
+            void conferenciaPrefetch.warmConferenciaNotaFotos(cnpj, notaEnriquecida.id, totalFotosNota);
           }
           return url;
         }
@@ -1027,7 +1030,7 @@ export default function NotasPedidoContent() {
       const cnpj =
         conferenciaCnpjRef.current ??
         (data && coopId ? getCooperativaCnpj(data, coopId) : undefined);
-      return cnpj ? Boolean(getConferenciaFotoBlobCached(cnpj, notaId, idx)) : false;
+      return cnpj ? Boolean(getConferenciaFotoBlobCachedIfLoaded(cnpj, notaId, idx)) : false;
     },
     [data, coopId]
   );
@@ -1517,6 +1520,11 @@ export default function NotasPedidoContent() {
     removerNotaDaFilaSticky,
     touchNotaNaFilaSticky,
   } = useResponsavelFilaConferencia(coopId, isCooperado, filaDetalhada);
+
+  useEffect(() => {
+    if (!filaDetalhada) return;
+    prefetchConferenciaFotoPrefetchModule();
+  }, [filaDetalhada]);
 
   const filaNavCount = filaDetalhada ? pendentesEstaveis.length : filaBadgeCount;
 
@@ -2717,10 +2725,14 @@ export default function NotasPedidoContent() {
     if (d && coopId) {
       const base = d.notasPedido.find((n) => n.id === nota.id) ?? nota;
       notaComFoto = base;
-      scheduleWarmConferenciaNotaFotos(d, coopId, base);
+      void loadConferenciaFotoPrefetchModule().then((m) => {
+        m.scheduleWarmConferenciaNotaFotos(d, coopId, base);
+      });
       void ensureNotaComFoto(d, base, coopId).then((enriched) => {
         conferenciaNotaEnriquecidaRef.current = { notaId: enriched.id, nota: enriched };
-        scheduleWarmConferenciaNotaFotos(d, coopId, enriched);
+        void loadConferenciaFotoPrefetchModule().then((m) => {
+          m.scheduleWarmConferenciaNotaFotos(d, coopId, enriched);
+        });
         setSelectedNota((prev) => {
           if (!prev || prev.id !== enriched.id) return prev;
           return prev.status === "aguardando_conferencia"
@@ -2814,8 +2826,14 @@ export default function NotasPedidoContent() {
       .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
 
   const openConferir = async (nota: NotaPedido) => {
+    prefetchConferenciaFotoPrefetchModule();
     const raw = getData()?.notasPedido.find((n) => n.id === nota.id) ?? nota;
     const fresh = sanitizarNotaParaFilaConferencia(raw);
+    if (notaBloqueadaConferenciaPorExclusaoPendente(fresh.id, pendingDeleteIds)) {
+      removerNotaDaFilaSticky(fresh.id);
+      setSuccessMsg("Esta entrega está sendo excluída. Aguarde a sincronização e atualize a fila.");
+      return;
+    }
     if (!notaElegivelParaFilaConferenciaResponsavel(fresh)) {
       removerNotaDaFilaSticky(fresh.id);
       setSuccessMsg("Esta entrega já foi lançada. A lista foi atualizada.");
@@ -2835,7 +2853,9 @@ export default function NotasPedidoContent() {
       setFilaConferenciaTotal(0);
     }
     const d0 = getData() ?? data;
-    if (d0 && coopId) scheduleWarmConferenciaNotaFotos(d0, coopId, fresh);
+    if (d0 && coopId) {
+      void loadConferenciaFotoPrefetchModule().then((m) => m.scheduleWarmConferenciaNotaFotos(d0, coopId, fresh));
+    }
     setConferirModal(true);
     await prepararConferenciaNota(fresh);
   };

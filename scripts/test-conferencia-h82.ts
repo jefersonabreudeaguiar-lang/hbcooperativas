@@ -129,8 +129,8 @@ assert.ok(notas.includes("finalizarFichasConferenciaMultiFoto"), "fechamento mul
 assert.ok(notas.includes("reidratarProgressoMultiFotoConferencia"), "reidrata progresso da ficha");
 assert.ok(notas.includes("lancamentosOrdenadosPorFoto"), "consolida itens por índice de foto");
 assert.ok(
-  notas.includes("fetchConferenciaFotoPartCached") && notas.includes("totalFotosNota"),
-  "fetch foto conferência com total de partes"
+  notas.includes("loadConferenciaFotoPrefetchModule") && notas.includes("totalFotosNota"),
+  "fetch foto conferência com total de partes (chunk lazy)"
 );
 assert.ok(notas.includes("setConferenciaFotoCarregando(true)"), "spinner ao trocar foto");
 pass("carga de fotos na conferência");
