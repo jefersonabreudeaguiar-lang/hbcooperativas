@@ -2935,6 +2935,8 @@ export default function NotasPedidoStaffMain() {
   };
 
   const prepararConferenciaNota = async (nota: NotaPedido, opts?: { transicao?: boolean }) => {
+    if (opts?.transicao) setConferenciaTransicao(true);
+    try {
     const d = getDataOperationalTruth() ?? getData() ?? data;
     const notaAnteriorId = selectedNota?.id;
     const aplicarEstado = () => {
@@ -3036,7 +3038,7 @@ export default function NotasPedidoStaffMain() {
     }
   };
 
-    startTransition(() => aplicarEstado());
+    aplicarEstado();
 
     if (notaAnteriorId && notaAnteriorId !== nota.id) {
       window.setTimeout(() => clearConferenciaFotoLocalCache(notaAnteriorId), 0);
@@ -3058,6 +3060,9 @@ export default function NotasPedidoStaffMain() {
             : enriched;
         });
       });
+    }
+    } finally {
+      if (opts?.transicao) setConferenciaTransicao(false);
     }
   };
 
