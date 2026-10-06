@@ -6,6 +6,7 @@ import { isCooperadoAppUser } from "@/permissions";
 import {
   isCooperadoInstantResumeEnabled,
   scheduleCooperadoPostInteractiveTask,
+  scheduleStaffPostInteractiveTask,
 } from "@/lib/performance/cooperadoColdStart";
 import { ensureCooperadoReleaseUpgrade, runClientReleaseAlignment } from "@/lib/pwa/fetchOfficialClientRelease";
 import {
@@ -14,7 +15,8 @@ import {
   runtimeAlreadyOnCanonicalRelease,
 } from "@/lib/pwa/clientRelease";
 
-const RETRY_MS = [300, 700, 1400, 2800, 5000];
+/** Um retry se chunks ainda não tinham dpl= no DOM. */
+const PENDING_RETRY_MS = 1_500;
 
 export function ClientDeploymentGuard() {
   const aligningRef = useRef(false);
@@ -26,14 +28,16 @@ export function ClientDeploymentGuard() {
 
     const run = async (): Promise<"stop" | "retry"> => {
       if (aligningRef.current) return "stop";
+
       if (cooperadoExperience) {
         const coopUpgrade = await ensureCooperadoReleaseUpgrade(true);
         if (coopUpgrade === "aligning") {
           aligningRef.current = true;
-          return "stop";
         }
+        return "stop";
       }
-      const result = await runClientReleaseAlignment();
+
+      const result = await runClientReleaseAlignment({ staffExperience: true });
       if (result === "aligning") {
         aligningRef.current = true;
         return "stop";
@@ -43,35 +47,39 @@ export function ClientDeploymentGuard() {
     };
 
     let cancelled = false;
-    const timeouts: number[] = [];
+    let pendingRetryId = 0;
 
     const start = () => {
       void run().then((next) => {
-        if (next !== "retry" || cancelled) return;
-        for (const ms of RETRY_MS) {
-          const id = window.setTimeout(() => {
-            if (cancelled || aligningRef.current) return;
-            void run();
-          }, ms);
-          timeouts.push(id);
-        }
+        if (next !== "retry" || cancelled || aligningRef.current) return;
+        pendingRetryId = window.setTimeout(() => {
+          if (cancelled || aligningRef.current) return;
+          void run();
+        }, PENDING_RETRY_MS);
       });
     };
 
     if (cooperadoExperience && isCooperadoInstantResumeEnabled()) {
       scheduleCooperadoPostInteractiveTask(start);
+    } else if (!cooperadoExperience) {
+      scheduleStaffPostInteractiveTask(start);
     } else {
       start();
     }
 
     const onVisible = () => {
-      if (document.visibilityState === "visible" && !aligningRef.current) void run();
+      if (document.visibilityState !== "visible" || aligningRef.current) return;
+      const embedded = getEmbeddedClientRelease();
+      const page = getPageEmbeddedReleaseFromDom();
+      if (runtimeAlreadyOnCanonicalRelease(embedded, page)) return;
+      void run();
     };
     document.addEventListener("visibilitychange", onVisible);
+
     const embedded = getEmbeddedClientRelease();
     const page = getPageEmbeddedReleaseFromDom();
     const skipPeriodic = runtimeAlreadyOnCanonicalRelease(embedded, page);
-    const intervalMs = skipPeriodic ? 0 : cooperadoExperience ? 4 * 60 * 1000 : 6 * 60 * 1000;
+    const intervalMs = skipPeriodic ? 0 : cooperadoExperience ? 4 * 60 * 1000 : 8 * 60 * 1000;
     const interval =
       intervalMs > 0
         ? window.setInterval(() => {
@@ -83,7 +91,7 @@ export function ClientDeploymentGuard() {
       cancelled = true;
       document.removeEventListener("visibilitychange", onVisible);
       if (interval) window.clearInterval(interval);
-      for (const id of timeouts) window.clearTimeout(id);
+      if (pendingRetryId) window.clearTimeout(pendingRetryId);
     };
   }, [cooperadoExperience]);
 

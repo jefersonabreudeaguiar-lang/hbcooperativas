@@ -32,6 +32,8 @@ assert(cold.includes("markNextCooperadoSyncSilent"), "marcador silent no coordin
 assert(cold.includes("scheduleCooperadoPostInteractiveTask"), "post-interactive deploy defer");
 const deployGuard = read("src/components/pwa/ClientDeploymentGuard.tsx");
 assert(deployGuard.includes("scheduleCooperadoPostInteractiveTask"), "ClientDeploymentGuard defer");
+assert(deployGuard.includes("scheduleStaffPostInteractiveTask"), "ClientDeploymentGuard staff defer");
+assert(deployGuard.includes("staffExperience: true"), "staff sem reload automatico");
 assert(
   deployGuard.includes("skipPeriodic") &&
     deployGuard.includes("intervalMs > 0") &&
@@ -91,8 +93,8 @@ assert(
 );
 const releaseFetch = read("src/lib/pwa/fetchOfficialClientRelease.ts");
 assert(
-  releaseFetch.includes("runtimeAlreadyOnCanonicalRelease"),
-  "cooperado release evita reload loop localStorage"
+  releaseFetch.includes("staffExperience") && releaseFetch.includes("markStaffReleasePending"),
+  "staff release banner sem reload loop"
 );
 const clientRelease = read("src/lib/pwa/clientRelease.ts");
 assert(clientRelease.includes("markCurrentRuntimeReleaseSeen"), "quiesce loop burst align");

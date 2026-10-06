@@ -40,6 +40,18 @@ const CANONICAL = {
   });
   assert.equal(d.action, "align");
   assert.match(d.reason, /page_dpl/);
+  assert.equal(d.hard, false);
+}
+
+{
+  const d = evaluateClientReleaseAlignment({
+    canonical: CANONICAL,
+    pageRelease: { ...CANONICAL, build: 94 },
+    loadedDeploymentIds: [CANONICAL.deploymentId],
+  });
+  assert.equal(d.action, "align");
+  assert.match(d.reason, /page_build/);
+  assert.equal(d.hard, false);
 }
 
 {
@@ -80,7 +92,9 @@ assert.equal(typeof shouldAllowHardReload("test"), "boolean");
     new URL("../src/lib/pwa/clientRelease.ts", import.meta.url),
     "utf8"
   );
-  assert.match(boot, /html_build:/);
+  assert.match(boot, /checkBlockedOnly/);
+  assert.doesNotMatch(boot, /pullCanonical/);
+  assert.doesNotMatch(boot, /setTimeout\(function\(\)\{evaluate\(c\);\},600\)/);
   assert.match(boot, /markCurrentRuntimeReleaseSeen/);
 }
 

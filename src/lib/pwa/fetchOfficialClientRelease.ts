@@ -2,11 +2,13 @@ import {
   BUILD_SEEN_KEY,
   DEPLOYMENT_SEEN_KEY,
   clearReloadBurstCounter,
+  clearStaffReleasePendingIfMatches,
   collectLoadedDeploymentIdsFromDom,
   evaluateClientReleaseAlignment,
   getPageEmbeddedReleaseFromDom,
   alignClientRuntimeToRelease,
   getEmbeddedClientRelease,
+  markStaffReleasePending,
   runtimeAlreadyOnCanonicalRelease,
   runtimeBundleBehindCanonical,
   type ClientReleaseInfo,
@@ -40,17 +42,34 @@ export function markClientReleaseSeen(official: ClientReleaseInfo): void {
   if (official.deploymentId) {
     localStorage.setItem(DEPLOYMENT_SEEN_KEY, official.deploymentId);
   }
+  clearStaffReleasePendingIfMatches(official.build);
 }
 
 /** @deprecated use runtimeAlreadyOnCanonicalRelease */
 export const cooperadoRuntimeAlreadyOnCanonicalRelease = runtimeAlreadyOnCanonicalRelease;
 
+type AlignOpts = { hard: boolean; targetBuild: number };
+
 async function alignToCanonicalIfNeeded(
   canonical: ClientReleaseInfo,
-  reason: string
+  reason: string,
+  opts: AlignOpts
 ): Promise<"ok" | "aligning"> {
-  const aligned = await alignClientRuntimeToRelease(reason, canonical.deploymentId);
+  const aligned = await alignClientRuntimeToRelease(reason, canonical.deploymentId, {
+    hard: opts.hard,
+    targetBuild: opts.targetBuild,
+  });
   return aligned ? "aligning" : "ok";
+}
+
+function staffDeferSoftAlign(
+  canonical: ClientReleaseInfo,
+  embedded: ClientReleaseInfo
+): "ok" {
+  if (canonical.build > embedded.build) {
+    markStaffReleasePending(canonical.build);
+  }
+  return "ok";
 }
 
 export async function ensureCooperadoReleaseUpgrade(isCooperadoExperience: boolean): Promise<"ok" | "aligning"> {
@@ -60,10 +79,17 @@ export async function ensureCooperadoReleaseUpgrade(isCooperadoExperience: boole
   const pageRelease = getPageEmbeddedReleaseFromDom();
   const loaded = collectLoadedDeploymentIdsFromDom();
 
+  if (runtimeAlreadyOnCanonicalRelease(canonical, pageRelease, embedded)) {
+    markClientReleaseSeen(canonical);
+    clearReloadBurstCounter();
+    return "ok";
+  }
+
   if (runtimeBundleBehindCanonical(canonical, embedded)) {
     return alignToCanonicalIfNeeded(
       canonical,
-      `cooperado_bundle:${embedded.build}->${canonical.build}`
+      `cooperado_bundle:${embedded.build}->${canonical.build}`,
+      { hard: false, targetBuild: canonical.build }
     );
   }
 
@@ -74,30 +100,50 @@ export async function ensureCooperadoReleaseUpgrade(isCooperadoExperience: boole
   });
 
   if (decision.action === "align") {
-    return alignToCanonicalIfNeeded(canonical, decision.reason);
+    return alignToCanonicalIfNeeded(canonical, decision.reason, {
+      hard: decision.hard,
+      targetBuild: canonical.build,
+    });
   }
 
   if (decision.action === "pending") {
     return "ok";
   }
 
-  if (runtimeAlreadyOnCanonicalRelease(canonical, pageRelease, embedded)) {
-    markClientReleaseSeen(canonical);
-    clearReloadBurstCounter();
-  }
+  markClientReleaseSeen(canonical);
+  clearReloadBurstCounter();
   return "ok";
 }
 
-export async function runClientReleaseAlignment(): Promise<"ok" | "pending" | "aligning"> {
+export type RunClientReleaseAlignmentOptions = {
+  /** Responsável: nunca reload automático por build/chunks — só banner. */
+  staffExperience?: boolean;
+};
+
+export async function runClientReleaseAlignment(
+  options?: RunClientReleaseAlignmentOptions
+): Promise<"ok" | "pending" | "aligning"> {
+  const staffExperience = options?.staffExperience === true;
   const canonical = await fetchOfficialClientRelease();
   const embedded = getEmbeddedClientRelease();
   const pageRelease = getPageEmbeddedReleaseFromDom();
   const loaded = collectLoadedDeploymentIdsFromDom();
 
+  if (runtimeAlreadyOnCanonicalRelease(canonical, pageRelease, embedded)) {
+    markClientReleaseSeen(canonical);
+    clearReloadBurstCounter();
+    return "ok";
+  }
+
   if (runtimeBundleBehindCanonical(canonical, embedded)) {
+    if (staffExperience) {
+      staffDeferSoftAlign(canonical, embedded);
+      return "ok";
+    }
     const aligned = await alignClientRuntimeToRelease(
       `bundle:${embedded.build}->${canonical.build}`,
-      canonical.deploymentId
+      canonical.deploymentId,
+      { hard: false, targetBuild: canonical.build }
     );
     return aligned ? "aligning" : "ok";
   }
@@ -111,14 +157,18 @@ export async function runClientReleaseAlignment(): Promise<"ok" | "pending" | "a
   if (decision.action === "pending") return "pending";
 
   if (decision.action === "align") {
-    const aligned = await alignClientRuntimeToRelease(decision.reason, canonical.deploymentId);
+    if (staffExperience && !decision.hard) {
+      staffDeferSoftAlign(canonical, embedded);
+      return "ok";
+    }
+    const aligned = await alignClientRuntimeToRelease(decision.reason, canonical.deploymentId, {
+      hard: decision.hard,
+      targetBuild: canonical.build,
+    });
     return aligned ? "aligning" : "ok";
   }
 
-  if (runtimeAlreadyOnCanonicalRelease(canonical, pageRelease, embedded)) {
-    markClientReleaseSeen(canonical);
-    clearReloadBurstCounter();
-  } else if (loaded.length > 0) {
+  if (loaded.length > 0) {
     markClientReleaseSeen(decision.target);
     clearReloadBurstCounter();
   }

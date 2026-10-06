@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/Button";
 import { APP_BUILD_VERSION } from "@/lib/appBuildVersion";
 import { useAuth } from "@/modules/auth/AuthProvider";
 import { isCooperadoAppUser } from "@/permissions";
-import { BUILD_SEEN_KEY } from "@/lib/pwa/clientRelease";
+import { BUILD_SEEN_KEY, readStaffReleasePendingBuild } from "@/lib/pwa/clientRelease";
 
 const COOP_SW_RELOADED_BUILD_KEY = "hb-coop-sw-reloaded-build";
 
@@ -26,7 +26,12 @@ export function AppUpdateBanner() {
     if (typeof window === "undefined" || !("serviceWorker" in navigator)) return;
 
     const seen = localStorage.getItem(BUILD_SEEN_KEY);
-    if (seen !== String(APP_BUILD_VERSION) && seen != null && !autoUpdate) {
+    const pendingStaff = readStaffReleasePendingBuild();
+    const needsStaffBanner =
+      !autoUpdate &&
+      (pendingStaff != null ||
+        (seen !== String(APP_BUILD_VERSION) && seen != null));
+    if (needsStaffBanner) {
       setShow(true);
     }
 
@@ -41,28 +46,40 @@ export function AppUpdateBanner() {
     };
     navigator.serviceWorker.addEventListener("controllerchange", onControllerChange);
 
-    void navigator.serviceWorker.register(`/sw.js?build=${APP_BUILD_VERSION}`).then((reg) => {
-      const onWaiting = () => {
-        if (autoUpdate) {
-          if (sessionStorage.getItem(COOP_SW_RELOADED_BUILD_KEY) === String(APP_BUILD_VERSION)) return;
-          activateWaitingWorker(reg);
-          return;
-        }
-        if (navigator.serviceWorker.controller) setShow(true);
-      };
+    const registerSw = () => {
+      void navigator.serviceWorker.register(`/sw.js?build=${APP_BUILD_VERSION}`).then((reg) => {
+        const onWaiting = () => {
+          if (autoUpdate) {
+            if (sessionStorage.getItem(COOP_SW_RELOADED_BUILD_KEY) === String(APP_BUILD_VERSION)) return;
+            activateWaitingWorker(reg);
+            return;
+          }
+          if (navigator.serviceWorker.controller) setShow(true);
+        };
 
-      const onUpdate = () => {
-        const w = reg.installing ?? reg.waiting;
-        if (!w) return;
-        w.addEventListener("statechange", () => {
+        const onUpdate = () => {
+          const w = reg.installing ?? reg.waiting;
+          if (!w) return;
+          w.addEventListener("statechange", () => {
+            if (w.state === "installed" && navigator.serviceWorker.controller) onWaiting();
+          });
           if (w.state === "installed" && navigator.serviceWorker.controller) onWaiting();
-        });
-        if (w.state === "installed" && navigator.serviceWorker.controller) onWaiting();
-      };
+        };
 
-      reg.addEventListener("updatefound", onUpdate);
-      if (reg.waiting && navigator.serviceWorker.controller) onWaiting();
-    });
+        reg.addEventListener("updatefound", onUpdate);
+        if (reg.waiting && navigator.serviceWorker.controller) onWaiting();
+      });
+    };
+
+    if (autoUpdate) {
+      const defer =
+        typeof requestIdleCallback !== "undefined"
+          ? (cb: () => void) => requestIdleCallback(cb, { timeout: 4_000 })
+          : (cb: () => void) => window.setTimeout(cb, 2_500);
+      defer(registerSw);
+    } else {
+      registerSw();
+    }
 
     return () => {
       navigator.serviceWorker.removeEventListener("controllerchange", onControllerChange);
