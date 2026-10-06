@@ -296,7 +296,7 @@ function mergeFichaCorridaFromCloud(
     const chosen = itemTime(local) >= itemTime(cloud) ? local : cloud;
     map.set(local.id, normalizarFichaLocal(chosen));
   }
-  return [...map.values()];
+  return dedupeFichaCorridaPorNota([...map.values()]);
 }
 
 /** posProcessar/reparar rebaixa ficha paga sem pg — restaura status pago decidido no merge (H8.9.184). */

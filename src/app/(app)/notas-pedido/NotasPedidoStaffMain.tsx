@@ -3631,29 +3631,15 @@ export default function NotasPedidoStaffMain() {
         });
       }
 
-      const ficha = buildFichaFromNota(notaAtualizada, d, user.name, nomeCoop);
-      const arquivosMensais = upsertArquivoMensal(
-        d,
-        notaAtualizada.cooperadoId,
-        notaAtualizada.cooperativaId,
-        notaAtualizada.mesReferencia,
-        { notaPedidoIds: [notaAtualizada.id] }
-      );
-      return addAuditEntry(
-        {
-          ...d,
-          notasPedido,
-          fichaCorrida: [...d.fichaCorrida, ficha],
-          arquivosMensais,
-        },
-        {
-          entityType: "nota_pedido",
-          entityId: selectedNota.id,
-          action: "aprovar",
-          userId: user.id,
-          userName: user.name,
-        }
-      );
+      const rebuilt = rebuildFichasNota({ ...d, notasPedido }, notaAtualizada);
+      return addAuditEntry(rebuilt, {
+        entityType: "nota_pedido",
+        entityId: selectedNota.id,
+        action: "aprovar",
+        userId: user.id,
+        userName: user.name,
+        changes: "Entrega conferida",
+      });
     });
     } finally {
       endConferenciaModalSaveBatch();

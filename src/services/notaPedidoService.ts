@@ -795,12 +795,55 @@ export function setCotaIngressoCooperado(
   };
 }
 
+/** Id determinístico — mesma nota/cooperado/fatia → mesma ficha (idempotência). */
+export function idEstavelFichaCorrida(
+  notaPedidoId: string,
+  cooperadoId: string,
+  opts?: { fotoIndex?: number; participanteIndex?: number }
+): string {
+  let id = `fc_np_${notaPedidoId}_co_${cooperadoId}`;
+  if (opts?.participanteIndex != null && opts.participanteIndex >= 0) {
+    id += `_p${opts.participanteIndex}`;
+  }
+  if (opts?.fotoIndex != null && opts.fotoIndex >= 0) {
+    id += `_f${opts.fotoIndex}`;
+  }
+  return id;
+}
+
+function encontrarFichaExistenteParaLancamento(
+  data: AppData,
+  nota: NotaPedido,
+  cooperadoId: string,
+  opts?: { fotoIndex?: number; totalFotos?: number; participanteIndex?: number }
+): FichaCorrida | undefined {
+  const canon = resolverCooperadoIdCanonico(data, cooperadoId, nota.cooperativaId);
+  const candidatas = data.fichaCorrida.filter(
+    (f) =>
+      f.notaPedidoId === nota.id &&
+      resolverCooperadoIdCanonico(data, f.cooperadoId, nota.cooperativaId) === canon
+  );
+  if (!candidatas.length) return undefined;
+  if (opts?.fotoIndex != null && opts.totalFotos != null && opts.totalFotos > 1) {
+    const porFoto = candidatas.find((f) =>
+      descricaoFichaCorrespondeFoto(f.descricao, opts.fotoIndex!, opts.totalFotos!)
+    );
+    if (porFoto) return porFoto;
+  }
+  const estavel = idEstavelFichaCorrida(nota.id, cooperadoId, opts);
+  const porId = candidatas.find((f) => f.id === estavel);
+  if (porId) return porId;
+  if (candidatas.length === 1) return candidatas[0];
+  const semFoto = candidatas.find((f) => !/\(foto\s+\d/i.test(f.descricao));
+  return semFoto ?? candidatas[0];
+}
+
 export function buildFichaFromNota(
   nota: NotaPedido,
   data: AppData,
   responsavel: string,
   cooperadoNome?: string,
-  opts?: { fotoIndex?: number; totalFotos?: number }
+  opts?: { fotoIndex?: number; totalFotos?: number; participanteIndex?: number }
 ): FichaCorrida {
   const saldoAnterior =
     opts?.fotoIndex != null
@@ -820,8 +863,17 @@ export function buildFichaFromNota(
       valor: nota.valorDesconto,
     });
   }
+  const cooperadoCanonico = nota.cooperadoId;
+  const existente = encontrarFichaExistenteParaLancamento(data, nota, cooperadoCanonico, opts);
+  const id =
+    existente?.id ??
+    idEstavelFichaCorrida(nota.id, cooperadoCanonico, {
+      fotoIndex: opts?.fotoIndex,
+      participanteIndex: opts?.participanteIndex,
+    });
+  const createdAt = existente?.createdAt ?? new Date().toISOString();
   return {
-    id: `fc_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+    id,
     cooperativaId: nota.cooperativaId,
     cooperadoId: nota.cooperadoId,
     cooperadoNomeSnapshot:
@@ -842,7 +894,13 @@ export function buildFichaFromNota(
     itens: nota.itens,
     percentualDescontoCooperativa: nota.percentualDescontoCooperativa,
     descontosDetalhe,
-    createdAt: new Date().toISOString(),
+    createdAt,
+    ...(existente?.status === "pago"
+      ? {
+          status: "pago" as const,
+          updatedAt: existente.updatedAt,
+        }
+      : {}),
   };
 }
 
@@ -987,7 +1045,10 @@ export function buildFichasDivisaoFromNota(
       cooperadoId: p.cooperadoId,
       cooperadoNomeSnapshot: p.cooperadoNome,
     };
-    const base = buildFichaFromNota(notaParticipante, ctx, responsavel, p.cooperadoNome, opts);
+    const base = buildFichaFromNota(notaParticipante, ctx, responsavel, p.cooperadoNome, {
+      ...opts,
+      participanteIndex: i,
+    });
     const calc = calcularItensFatiaRateio(
       nota.itens ?? [],
       i,
@@ -1602,6 +1663,20 @@ export function dedupeFichaCorridaPorNota(
         continue;
       }
       if (curMatch && !newMatch) continue;
+      if (f.status === "pago" && cur.status !== "pago") {
+        best.set(part, f);
+        continue;
+      }
+      if (cur.status === "pago" && f.status !== "pago") continue;
+      const score = (x: FichaCorrida) =>
+        (x.id.startsWith("fc_np_") ? 2 : 0) + (x.status === "pago" ? 4 : 0);
+      const sNew = score(f);
+      const sCur = score(cur);
+      if (sNew > sCur) {
+        best.set(part, f);
+        continue;
+      }
+      if (sNew < sCur) continue;
       const tNew = new Date(f.createdAt).getTime();
       const tCur = new Date(cur.createdAt).getTime();
       if (tNew >= tCur) best.set(part, f);
@@ -1994,19 +2069,11 @@ export function reconciliarFichaFromNotasConferidas(data: AppData): AppData {
 
     if (fichaNotaIds.has(nota.id)) continue;
 
-    const ctx = { ...data, fichaCorrida, arquivosMensais };
-    const ficha = buildFichaFromNota(
-      nota,
-      ctx,
-      nota.conferidaPor ?? "Cooperativa",
-      nota.cooperadoNomeSnapshot
-    );
-    ficha.status = statusFichaAposConferenciaNota(data, nota, nota.cooperadoId);
-    fichaCorrida = [...fichaCorrida, ficha];
+    const ctx = { ...data, fichaCorrida, arquivosMensais, notasPedido };
+    const rebuilt = rebuildFichasNota(ctx, nota);
+    fichaCorrida = rebuilt.fichaCorrida;
+    arquivosMensais = rebuilt.arquivosMensais;
     fichaNotaIds.add(nota.id);
-    arquivosMensais = upsertArquivoMensal(ctx, nota.cooperadoId, nota.cooperativaId, nota.mesReferencia, {
-      notaPedidoIds: [nota.id],
-    });
     changed = true;
   }
 
