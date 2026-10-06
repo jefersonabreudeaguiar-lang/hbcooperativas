@@ -106,6 +106,7 @@ import {
   encontrarProximaFotoPendenteApos,
   descricaoFichaCorrespondeFoto,
   fichaJaTemLancamentoFoto,
+  mesclarProgressoMultiFotoSessaoNaFicha,
   reidratarProgressoMultiFotoConferencia,
   lancamentosOrdenadosPorFoto,
   validarTodasFotosLancadasConferencia,
@@ -990,7 +991,17 @@ export default function NotasPedidoStaffMain() {
       setConferenciaNumeroNotaManual(draft.numeroNotaManual);
 
       if (opts?.preservarProgressoFotosDaFicha) {
-        /** Progresso multi-foto vem só da ficha (sincronizarFotosLancadasComFicha); draft não sobrescreve. */
+        const draftLancadas = new Set(draft.fotosLancadas);
+        const draftLancamentos = restaurarLancamentosPorFoto(draft.lancamentosPorFoto);
+        const merged = mesclarProgressoMultiFotoSessaoNaFicha(
+          fotosLancadasConferenciaRef.current,
+          lancamentosFotoConferenciaRef.current,
+          draftLancadas,
+          draftLancamentos
+        );
+        fotosLancadasConferenciaRef.current = merged.lancadas;
+        lancamentosFotoConferenciaRef.current = merged.lancamentosPorFoto;
+        setFotosLancadasUi(new Set(merged.lancadas));
         return;
       }
 
@@ -1032,13 +1043,19 @@ export default function NotasPedidoStaffMain() {
         return;
       }
 
-      const { lancadas, lancamentosPorFoto } = reidratarProgressoMultiFotoConferencia(
-        d,
-        notaId,
-        totalFotos
+      const fromFicha = reidratarProgressoMultiFotoConferencia(d, notaId, totalFotos);
+      const sessaoLancadas = opts?.mergeOnly ? fotosLancadasConferenciaRef.current : new Set<number>();
+      const sessaoLancamentos = opts?.mergeOnly
+        ? lancamentosFotoConferenciaRef.current
+        : new Map<number, NotaPedidoItem[]>();
+      const { lancadas, lancamentosPorFoto } = mesclarProgressoMultiFotoSessaoNaFicha(
+        fromFicha.lancadas,
+        fromFicha.lancamentosPorFoto,
+        sessaoLancadas,
+        sessaoLancamentos
       );
-      fotosLancadasConferenciaRef.current = new Set(lancadas);
-      lancamentosFotoConferenciaRef.current = new Map(lancamentosPorFoto);
+      fotosLancadasConferenciaRef.current = lancadas;
+      lancamentosFotoConferenciaRef.current = lancamentosPorFoto;
       setFotosLancadasUi(new Set(lancadas));
 
       if (lancadas.size === 0) {
@@ -1107,6 +1124,39 @@ export default function NotasPedidoStaffMain() {
     [coopId, conferenciaDivisaoQtd, conferenciaDivisaoIds]
   );
 
+  const persistirFotoConferenciaNaFicha = useCallback(
+    (fotoIdx: number, totalFotos: number, itensFoto: NotaPedidoItem[]) => {
+      if (!user || !selectedNota) return;
+      updateData((d) =>
+        aplicarLancamentoFotoConferenciaEmDados(d, {
+          nota: selectedNota,
+          fotoIdx,
+          totalFotos,
+          itensFoto,
+          user,
+          conferenciaCooperadoId,
+          coopId,
+          conferenciaInstId,
+          conferenciaLocal,
+          conferenciaEscolaAvulsa,
+          conferenciaDescontoPct,
+          resolverDivisaoConferencia,
+        })
+      );
+    },
+    [
+      user,
+      selectedNota,
+      conferenciaDescontoPct,
+      conferenciaCooperadoId,
+      coopId,
+      conferenciaInstId,
+      conferenciaLocal,
+      conferenciaEscolaAvulsa,
+      resolverDivisaoConferencia,
+    ]
+  );
+
   const lancarFotoConferenciaAtual = useCallback(
     (
       fotoIdx: number,
@@ -1159,7 +1209,17 @@ export default function NotasPedidoStaffMain() {
       lancamentosFotoConferenciaRef.current.set(fotoIdx, r.itens);
       fotosLancadasConferenciaRef.current.add(fotoIdx);
       setFotosLancadasUi(new Set(fotosLancadasConferenciaRef.current));
-      persistirDraftConferenciaEmMemoria();
+
+      const persistirNaFicha = () => {
+        persistirFotoConferenciaNaFicha(fotoIdx, totalFotos, r.itens);
+        persistirDraftConferenciaEmMemoria();
+      };
+
+      if (opts?.uiFirst) {
+        requestAnimationFrame(() => persistirNaFicha());
+      } else {
+        persistirNaFicha();
+      }
 
       return { ok: true };
     },
@@ -1178,39 +1238,7 @@ export default function NotasPedidoStaffMain() {
       conferenciaDivisaoIds,
       resolverDivisaoConferencia,
       persistirDraftConferenciaEmMemoria,
-    ]
-  );
-
-  const persistirFotoConferenciaNaFicha = useCallback(
-    (fotoIdx: number, totalFotos: number, itensFoto: NotaPedidoItem[]) => {
-      if (!user || !selectedNota) return;
-      updateData((d) =>
-        aplicarLancamentoFotoConferenciaEmDados(d, {
-          nota: selectedNota,
-          fotoIdx,
-          totalFotos,
-          itensFoto,
-          user,
-          conferenciaCooperadoId,
-          coopId,
-          conferenciaInstId,
-          conferenciaLocal,
-          conferenciaEscolaAvulsa,
-          conferenciaDescontoPct,
-          resolverDivisaoConferencia,
-        })
-      );
-    },
-    [
-      user,
-      selectedNota,
-      conferenciaDescontoPct,
-      conferenciaCooperadoId,
-      coopId,
-      conferenciaInstId,
-      conferenciaLocal,
-      conferenciaEscolaAvulsa,
-      resolverDivisaoConferencia,
+      persistirFotoConferenciaNaFicha,
     ]
   );
 

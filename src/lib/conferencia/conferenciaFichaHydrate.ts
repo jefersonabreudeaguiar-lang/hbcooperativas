@@ -133,6 +133,24 @@ export function lancamentosOrdenadosPorFoto(
   return Array.from({ length: totalFotos }, (_, i) => map.get(i) ?? []);
 }
 
+/** Une progresso já gravado na ficha com índices ainda só na sessão (draft/refs). */
+export function mesclarProgressoMultiFotoSessaoNaFicha(
+  lancadasFicha: ReadonlySet<number>,
+  lancamentosFicha: ReadonlyMap<number, NotaPedidoItem[]>,
+  lancadasSessao: ReadonlySet<number>,
+  lancamentosSessao: ReadonlyMap<number, NotaPedidoItem[]>
+): { lancadas: Set<number>; lancamentosPorFoto: Map<number, NotaPedidoItem[]> } {
+  const lancadas = new Set(lancadasFicha);
+  const lancamentosPorFoto = new Map(lancamentosFicha);
+  for (const idx of lancadasSessao) {
+    if (lancadas.has(idx)) continue;
+    lancadas.add(idx);
+    const itens = lancamentosSessao.get(idx);
+    if (itens?.length) lancamentosPorFoto.set(idx, itens);
+  }
+  return { lancadas, lancamentosPorFoto };
+}
+
 export function validarTodasFotosLancadasConferencia(
   lancadas: ReadonlySet<number>,
   totalFotos: number

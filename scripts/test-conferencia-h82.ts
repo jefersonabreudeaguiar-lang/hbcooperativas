@@ -23,6 +23,7 @@ import {
   descricaoFichaCorrespondeFoto,
   fichaJaTemLancamentoFoto,
   lancamentosOrdenadosPorFoto,
+  mesclarProgressoMultiFotoSessaoNaFicha,
   validarTodasFotosLancadasConferencia,
 } from "../src/lib/conferencia/conferenciaFichaHydrate";
 
@@ -125,10 +126,22 @@ assert.equal(ord.length, 3);
 assert.equal(ord[2]?.[0]?.produtoInstituicaoId, "b");
 pass("progresso multi-foto — ordem e validação de fotos");
 
+const merged = mesclarProgressoMultiFotoSessaoNaFicha(
+  new Set([0]),
+  new Map([[0, [{ produtoInstituicaoId: "a", quantidade: 1, valorBruto: 1 } as never]]]),
+  new Set([0, 1]),
+  new Map([[1, [{ produtoInstituicaoId: "b", quantidade: 2, valorBruto: 2 } as never]]])
+);
+assert.equal(merged.lancadas.size, 2);
+assert.equal(merged.lancamentosPorFoto.get(1)?.[0]?.produtoInstituicaoId, "b");
+pass("progresso multi-foto — mescla ficha e sessão");
+
 assert.ok(notas.includes("finalizarFichasConferenciaMultiFoto"), "fechamento multi-foto preserva lançamentos parciais");
 assert.ok(notas.includes("reidratarProgressoMultiFotoConferencia"), "reidrata progresso da ficha");
 assert.ok(notas.includes("lancamentosOrdenadosPorFoto"), "consolida itens por índice de foto");
 assert.ok(notas.includes("aplicarLancamentoFotoConferenciaEmDados"), "persistência atômica multi-foto na aprovação");
+assert.ok(notas.includes("persistirFotoConferenciaNaFicha(fotoIdx"), "lançamento intermediário grava na ficha");
+assert.ok(notas.includes("mesclarProgressoMultiFotoSessaoNaFicha"), "sync não apaga progresso da sessão");
 assert.ok(notas.includes("executarSlideshowLeveConferenciaMultiFoto"), "slideshow leve sem gate de batch pré-aprovacao");
 assert.ok(notas.includes("conferenciaTemFichaParaNota"), "validação de ficha mono e multi-foto");
 assert.ok(

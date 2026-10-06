@@ -167,14 +167,19 @@ export function NotasPedidoConferirFotoPainel({
         </div>
         {totalFotosNav > 1 ? (
           <div className="shrink-0 border-t border-white/10 px-2 py-2 space-y-2 bg-gray-900/95">
-            <div className="flex flex-wrap items-center justify-center gap-2">
+            <p className="text-center text-xs font-semibold text-green-300/95 tabular-nums">
+              {fotosLancadasUi.size} de {totalFotosNav} foto{fotosLancadasUi.size !== 1 ? "s" : ""} lançada
+              {fotosLancadasUi.size !== 1 ? "s" : ""} na ficha
+              {fotosLancadasUi.size >= totalFotosNav ? " · pronta para aprovar" : ""}
+            </p>
+            <div className="flex flex-nowrap overflow-x-auto gap-2 pb-0.5 justify-start sm:justify-center max-w-full [scrollbar-width:thin]">
               {Array.from({ length: totalFotosNav }, (_, i) => (
                 <button
                   key={i}
                   type="button"
                   onClick={() => onIrParaFoto(i)}
                   className={cn(
-                    "text-xs font-semibold px-3 py-1.5 rounded-full border transition-all",
+                    "text-xs font-semibold px-3 py-1.5 rounded-full border transition-all shrink-0",
                     i === idxNav
                       ? "border-green-400 bg-green-500/20 text-green-100"
                       : fotosLancadasUi.has(i)

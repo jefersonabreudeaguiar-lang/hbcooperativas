@@ -78,6 +78,7 @@ import {
   encontrarProximaFotoPendenteApos,
   descricaoFichaCorrespondeFoto,
   fichaJaTemLancamentoFoto,
+  mesclarProgressoMultiFotoSessaoNaFicha,
   reidratarProgressoMultiFotoConferencia,
   lancamentosOrdenadosPorFoto,
   validarTodasFotosLancadasConferencia,
@@ -778,7 +779,17 @@ export default function NotasPedidoCooperadoMain() {
       setConferenciaNumeroNotaManual(draft.numeroNotaManual);
 
       if (opts?.preservarProgressoFotosDaFicha) {
-        /** Progresso multi-foto vem só da ficha (sincronizarFotosLancadasComFicha); draft não sobrescreve. */
+        const draftLancadas = new Set(draft.fotosLancadas);
+        const draftLancamentos = restaurarLancamentosPorFoto(draft.lancamentosPorFoto);
+        const merged = mesclarProgressoMultiFotoSessaoNaFicha(
+          fotosLancadasConferenciaRef.current,
+          lancamentosFotoConferenciaRef.current,
+          draftLancadas,
+          draftLancamentos
+        );
+        fotosLancadasConferenciaRef.current = merged.lancadas;
+        lancamentosFotoConferenciaRef.current = merged.lancamentosPorFoto;
+        setFotosLancadasUi(new Set(merged.lancadas));
         return;
       }
 
@@ -820,13 +831,19 @@ export default function NotasPedidoCooperadoMain() {
         return;
       }
 
-      const { lancadas, lancamentosPorFoto } = reidratarProgressoMultiFotoConferencia(
-        d,
-        notaId,
-        totalFotos
+      const fromFicha = reidratarProgressoMultiFotoConferencia(d, notaId, totalFotos);
+      const sessaoLancadas = opts?.mergeOnly ? fotosLancadasConferenciaRef.current : new Set<number>();
+      const sessaoLancamentos = opts?.mergeOnly
+        ? lancamentosFotoConferenciaRef.current
+        : new Map<number, NotaPedidoItem[]>();
+      const { lancadas, lancamentosPorFoto } = mesclarProgressoMultiFotoSessaoNaFicha(
+        fromFicha.lancadas,
+        fromFicha.lancamentosPorFoto,
+        sessaoLancadas,
+        sessaoLancamentos
       );
-      fotosLancadasConferenciaRef.current = new Set(lancadas);
-      lancamentosFotoConferenciaRef.current = new Map(lancamentosPorFoto);
+      fotosLancadasConferenciaRef.current = lancadas;
+      lancamentosFotoConferenciaRef.current = lancamentosPorFoto;
       setFotosLancadasUi(new Set(lancadas));
 
       if (lancadas.size === 0) {
