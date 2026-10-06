@@ -14,6 +14,7 @@ import {
 import {
   markNotaConferenciaDecididaLocalmente,
   isNotaConferenciaDecididaLocalmente,
+  reconciliarNotasConferenciaDecididasLocalmente,
 } from "@/lib/conferencia/conferenciaFilaDecisaoLocal";
 import { yieldConferenciaUiFrame } from "@/lib/conferencia/conferenciaUiYield";
 import {
@@ -47,6 +48,7 @@ import {
   getData,
   getDataOperationalTruth,
   getDataRevision,
+  isAppDataWarm,
   beginConferenciaDeferLocalPersist,
   endConferenciaDeferLocalPersist,
   beginConferenciaModalSaveBatch,
@@ -1984,6 +1986,16 @@ export default function NotasPedidoStaffMain() {
       (d) => (!coopId || isCooperado ? 0 : countCooperadosLancamentosEmAbertoResponsavel(d, coopId)),
       [coopId, isCooperado, hbDescontosRevision]
     ) ?? 0;
+
+  const filaIndexCount =
+    useAppDataSelector(
+      (d) => (!coopId || isCooperado ? 0 : countNotasFilaConferenciaResponsavel(d, coopId)),
+      [coopId, isCooperado]
+    ) ?? 0;
+
+  const dadosCarregandoFilaConferencia =
+    mostrarFilaResponsavelConteudo &&
+    (data === null || !isAppDataWarm() || syncingForUi);
 
   const contratosEntrega =
     useAppDataSelector(
@@ -4593,13 +4605,43 @@ export default function NotasPedidoStaffMain() {
               )}
             </>
           ) : !mostrarCorrecoesResponsavel && !mostrarPainelLancamentosAberto ? (
-            <div className="rounded-2xl border border-green-200 bg-green-50/60 px-5 py-6 text-center">
-              <CheckCircle size={32} className="mx-auto text-green-600 mb-2" />
-              <p className="text-base font-semibold text-green-900">Tudo em dia</p>
-              <p className="text-sm text-green-800/80 mt-1 max-w-md mx-auto">
-                Nenhuma nota a conferir. Quando um cooperado enviar fotos, o nome dele aparece aqui.
-              </p>
-            </div>
+            dadosCarregandoFilaConferencia ? (
+              <div className="rounded-2xl border border-amber-200 bg-amber-50/90 px-5 py-6 text-center">
+                <p className="text-base font-semibold text-amber-950">Carregando entregas da cooperativa…</p>
+                <p className="text-sm text-amber-900/80 mt-1 max-w-md mx-auto">
+                  Enquanto aparece «Aguardando sincronização» no rodapé, a fila pode ficar vazia. Aguarde ou use
+                  «Atualizar dados da cooperativa» no menu.
+                </p>
+              </div>
+            ) : filaIndexCount > 0 ? (
+              <div className="rounded-2xl border border-amber-200 bg-amber-50 px-5 py-6 text-center space-y-3">
+                <p className="text-base font-semibold text-amber-950">
+                  {filaIndexCount} {filaIndexCount === 1 ? "entrega" : "entregas"} na cooperativa
+                </p>
+                <p className="text-sm text-amber-900/80 max-w-md mx-auto">
+                  Os dados locais ainda não montaram a lista. Toque abaixo para buscar na nuvem de novo.
+                </p>
+                <Button
+                  type="button"
+                  size="sm"
+                  onClick={() => {
+                    const d = getData();
+                    if (d) reconciliarNotasConferenciaDecididasLocalmente(d);
+                    puxarNotasResponsavelDaNuvem({ forceFull: true });
+                  }}
+                >
+                  Atualizar fila agora
+                </Button>
+              </div>
+            ) : (
+              <div className="rounded-2xl border border-green-200 bg-green-50/60 px-5 py-6 text-center">
+                <CheckCircle size={32} className="mx-auto text-green-600 mb-2" />
+                <p className="text-base font-semibold text-green-900">Tudo em dia</p>
+                <p className="text-sm text-green-800/80 mt-1 max-w-md mx-auto">
+                  Nenhuma nota a conferir. Quando um cooperado enviar fotos, o nome dele aparece aqui.
+                </p>
+              </div>
+            )
           ) : null}
         </div>
       )}
