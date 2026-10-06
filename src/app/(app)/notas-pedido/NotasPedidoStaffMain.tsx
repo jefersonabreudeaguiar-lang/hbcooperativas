@@ -1041,8 +1041,6 @@ export default function NotasPedidoStaffMain() {
   const persistirFotoConferenciaNaFicha = useCallback(
     (fotoIdx: number, totalFotos: number, itensFoto: NotaPedidoItem[]) => {
       if (!user || !selectedNota) return;
-      beginConferenciaModalSaveBatch();
-      try {
       updateData((d) => {
         if (fichaJaTemLancamentoFoto(d.fichaCorrida, selectedNota.id, fotoIdx, totalFotos)) {
           return d;
@@ -1144,9 +1142,6 @@ export default function NotasPedidoStaffMain() {
           }
         );
       });
-      } finally {
-        endConferenciaModalFotoSaveBatch();
-      }
     },
     [
       user,
@@ -1161,53 +1156,64 @@ export default function NotasPedidoStaffMain() {
     ]
   );
 
-  const registrarFotoConferenciaNaFicha = useCallback(
-    (fotoIdx: number, totalFotos: number): boolean => {
-      if (!selectedNota) return false;
-      const itens = lancamentosFotoConferenciaRef.current.get(fotoIdx);
-      if (!itens?.length) return false;
-      persistirFotoConferenciaNaFicha(fotoIdx, totalFotos, itens);
-      const d = getDataOperationalTruth();
-      return fichaJaTemLancamentoFoto(d.fichaCorrida, selectedNota.id, fotoIdx, totalFotos);
+  const persistirFotosPendentesConferenciaNaFicha = useCallback(
+    (nota: NotaPedido, totalFotos: number): boolean => {
+      if (!user || totalFotos <= 0) return false;
+      beginConferenciaModalSaveBatch();
+      try {
+        for (let idx = 0; idx < totalFotos; idx++) {
+          const itens = lancamentosFotoConferenciaRef.current.get(idx);
+          if (!itens?.length) continue;
+          const d = getDataOperationalTruth();
+          if (fichaJaTemLancamentoFoto(d.fichaCorrida, nota.id, idx, totalFotos)) continue;
+          persistirFotoConferenciaNaFicha(idx, totalFotos, itens);
+        }
+      } finally {
+        endConferenciaModalFotoSaveBatch();
+      }
+      const truth = getDataOperationalTruth();
+      for (let idx = 0; idx < totalFotos; idx++) {
+        if (!lancamentosFotoConferenciaRef.current.get(idx)?.length) continue;
+        if (!fichaJaTemLancamentoFoto(truth.fichaCorrida, nota.id, idx, totalFotos)) {
+          console.warn("[conferencia-ficha] foto não persistiu na ficha", nota.id, idx + 1, totalFotos);
+          return false;
+        }
+      }
+      return true;
     },
-    [persistirFotoConferenciaNaFicha, selectedNota]
+    [persistirFotoConferenciaNaFicha, user]
   );
 
   const executarLancamentoSequencialFichasMultiFoto = useCallback(
     async (nota: NotaPedido, total: number) => {
-      const slideMs = slideMsConferenciaLancamentoSequencia(total);
-      for (let idx = 0; idx < total; idx++) {
-        try {
-          const cacheKey = conferenciaFotoCacheKey(nota.id, idx);
-          const url =
-            conferenciaFotoCacheRef.current.get(cacheKey) ??
-            (await Promise.race([
-              loadConferenciaFoto(nota, idx),
-              new Promise<null>((res) => setTimeout(() => res(null), 4000)),
-            ]));
-          if (url) {
-            setLancamentoSequencia({ url, displayIdx: idx, total });
-          }
-        } catch {
-          /* slideshow opcional */
-        }
-        const itens = lancamentosFotoConferenciaRef.current.get(idx);
-        if (itens?.length) {
-          persistirFotoConferenciaNaFicha(idx, total, itens);
-        }
-        await delayMs(slideMs);
+      if (!persistirFotosPendentesConferenciaNaFicha(nota, total)) {
+        throw new Error(
+          "Não foi possível gravar todas as fotos na ficha do cooperado. Verifique espaço no aparelho e tente de novo."
+        );
       }
-      setLancamentoSequencia(null);
+
       const truth = getDataOperationalTruth();
       for (let idx = 0; idx < total; idx++) {
         if (!fichaJaTemLancamentoFoto(truth.fichaCorrida, nota.id, idx, total)) {
+          if (!lancamentosFotoConferenciaRef.current.get(idx)?.length) continue;
           throw new Error(
             `A foto ${idx + 1} de ${total} não entrou na ficha do cooperado. Verifique espaço no aparelho e tente de novo.`
           );
         }
       }
+
+      const slideMs = Math.min(slideMsConferenciaLancamentoSequencia(total), 400);
+      for (let idx = 0; idx < total; idx++) {
+        const cacheKey = conferenciaFotoCacheKey(nota.id, idx);
+        const url = conferenciaFotoCacheRef.current.get(cacheKey);
+        if (url) {
+          setLancamentoSequencia({ url, displayIdx: idx, total });
+          await delayMs(slideMs);
+        }
+      }
+      setLancamentoSequencia(null);
     },
-    [loadConferenciaFoto, persistirFotoConferenciaNaFicha]
+    [persistirFotosPendentesConferenciaNaFicha]
   );
 
   const aquecerUiConferencia = useCallback(() => {
@@ -1303,10 +1309,6 @@ export default function NotasPedidoStaffMain() {
             setConferirErrors({ itens: lanc.error });
             return;
           }
-          if (!registrarFotoConferenciaNaFicha(atual, total)) {
-            setConferirErrors({ itens: "Não foi possível gravar esta foto na ficha do cooperado." });
-            return;
-          }
           setLancadoMsg(`Foto ${atual + 1} lançada na ficha. Preencha a foto ${clamped + 1}.`);
           setTimeout(() => setLancadoMsg(""), 3500);
         } else if (clamped > atual + 1) {
@@ -1325,7 +1327,6 @@ export default function NotasPedidoStaffMain() {
       conferenciaItens,
       conferenciaDescontoPct,
       lancarFotoConferenciaAtual,
-      registrarFotoConferenciaNaFicha,
       avancarParaFotoConferencia,
     ]
   );
@@ -3385,10 +3386,6 @@ export default function NotasPedidoStaffMain() {
         setConferirErrors({ itens: lanc.error });
         return;
       }
-      if (!registrarFotoConferenciaNaFicha(fotoAtual, qtdFotosAprovadas)) {
-        setConferirErrors({ itens: "Não foi possível gravar esta foto na ficha do cooperado." });
-        return;
-      }
       setConferirErrors({});
       const proxIdx = Math.min(fotoAtual + 1, qtdFotosAprovadas - 1);
       setLancadoMsg(`Foto ${fotoAtual + 1} de ${qtdFotosAprovadas} registrada. Preencha a foto ${proxIdx + 1}.`);
@@ -3427,10 +3424,6 @@ export default function NotasPedidoStaffMain() {
       const lanc = lancarFotoConferenciaAtual(fotoAtual, qtdFotosAprovadas);
       if (!lanc.ok) {
         setConferirErrors({ itens: lanc.error });
-        return;
-      }
-      if (!registrarFotoConferenciaNaFicha(fotoAtual, qtdFotosAprovadas)) {
-        setConferirErrors({ itens: "Não foi possível gravar esta foto na ficha do cooperado." });
         return;
       }
     }
@@ -3623,6 +3616,7 @@ export default function NotasPedidoStaffMain() {
     const truthAposLancar = getDataOperationalTruth();
     const gravada = truthAposLancar.notasPedido.find((n) => n.id === notaId);
     if (gravada?.status !== "conferida") {
+      console.warn("[conferencia-aprovacao] nota não ficou conferida após updateData", notaId, gravada?.status);
       liberarLancamentoConferencia();
       setConferirErrors({
         itens: "O lançamento não foi gravado. Verifique espaço no aparelho e tente de novo.",
@@ -3631,6 +3625,7 @@ export default function NotasPedidoStaffMain() {
     }
     const temFichaNaNota = truthAposLancar.fichaCorrida.some((f) => f.notaPedidoId === notaId);
     if (!temFichaNaNota) {
+      console.warn("[conferencia-aprovacao] conferida sem entrada na ficha", notaId);
       liberarLancamentoConferencia();
       setConferirErrors({
         itens: "A entrega foi conferida mas não entrou na ficha. Toque em aprovar novamente.",
@@ -3722,13 +3717,14 @@ export default function NotasPedidoStaffMain() {
           await executarLancamentoSequencialFichasMultiFoto(selectedNota, qtdFotosAprovadas);
           concluirGravacaoAprovacao();
         } catch (err) {
-          liberarLancamentoConferencia();
           setConferirErrors({
             itens:
               err instanceof Error
                 ? err.message
                 : "Falha ao lançar as fotos na ficha do cooperado.",
           });
+        } finally {
+          liberarLancamentoConferencia();
         }
       })();
       return;

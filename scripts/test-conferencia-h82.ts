@@ -128,6 +128,9 @@ pass("progresso multi-foto — ordem e validação de fotos");
 assert.ok(notas.includes("finalizarFichasConferenciaMultiFoto"), "fechamento multi-foto preserva lançamentos parciais");
 assert.ok(notas.includes("reidratarProgressoMultiFotoConferencia"), "reidrata progresso da ficha");
 assert.ok(notas.includes("lancamentosOrdenadosPorFoto"), "consolida itens por índice de foto");
+assert.ok(notas.includes("persistirFotosPendentesConferenciaNaFicha"), "batch ficha multi-foto no aprovar final");
+assert.ok(notas.includes("executarLancamentoSequencialFichasMultiFoto"), "sequência multi-foto sem reload 4s por foto");
+assert.ok(!notas.includes("registrarFotoConferenciaNaFicha"), "sem persist ficha a cada foto intermediária");
 assert.ok(
   notas.includes("loadConferenciaFotoPrefetchModule") && notas.includes("totalFotosNota"),
   "fetch foto conferência com total de partes (chunk lazy)"

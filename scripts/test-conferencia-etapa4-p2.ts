@@ -15,17 +15,19 @@ import {
 const ROOT = join(import.meta.dirname ?? __dirname, "..");
 const notas = readFileSync(join(ROOT, "src/app/(app)/notas-pedido/NotasPedidoStaffMain.tsx"), "utf8");
 const patchTask = readFileSync(join(ROOT, "src/services/conferenciaPatchCloudTask.ts"), "utf8");
+const nuvemSync = readFileSync(join(ROOT, "src/services/conferenciaDecisaoNuvemSync.ts"), "utf8");
 const prefetch = readFileSync(join(ROOT, "src/lib/performance/prefetchConferenciaModalUi.ts"), "utf8");
 
 assert.ok(patchTask.includes("patchNotaDecisaoConferenciaNaNuvem"), "PATCH compartilhado");
-assert.ok(notas.includes("patchNotaDecisaoConferenciaNaNuvem"), "NotasPedido usa PATCH compartilhado");
-assert.ok(notas.includes("enqueueConferenciaRejeicaoSync"), "rejeição enfileirada");
+assert.ok(nuvemSync.includes("patchNotaDecisaoConferenciaNaNuvem"), "sync nuvem usa PATCH compartilhado");
+assert.ok(notas.includes("scheduleConferenciaAprovacaoNuvemSync"), "NotasPedido agenda sync nuvem na aprovação");
+assert.ok(notas.includes("scheduleConferenciaRejeicaoNuvemSync"), "NotasPedido agenda sync nuvem na rejeição");
 assert.ok(notas.includes('import("@/components/notas/NotasPedidoConferirItensTable")'), "tabela itens lazy");
 assert.ok(notas.includes('import("@/components/ui/FotoLightbox")'), "lightbox conferência lazy");
 assert.ok(notas.includes("prefetchConferenciaModalUiChunks"), "prefetch UI conferência");
 assert.ok(prefetch.includes("NotasPedidoConferirItensTable"), "prefetch tabela");
 
-const rejectIdx = notas.indexOf("enqueueConferenciaRejeicaoSync(notaId");
+const rejectIdx = notas.indexOf("scheduleConferenciaRejeicaoNuvemSync({");
 const rejectBlock = notas.slice(rejectIdx, rejectIdx + 2200);
 assert.ok(
   rejectBlock.includes("prepararConferenciaNota(proxima") && !rejectBlock.includes("await patchNotaPedidoInCloud"),

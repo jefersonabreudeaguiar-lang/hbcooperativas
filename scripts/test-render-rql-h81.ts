@@ -24,7 +24,7 @@ assert(!dash.includes("useAppData()"), "dashboard sem useAppData()");
 
 const hook = readFileSync(join(ROOT, "src/hooks/useResponsavelFilaConferencia.ts"), "utf8");
 assert(!hook.includes("data: AppData | null"), "fila conferência sem prop data");
-assert(hook.includes("getDataRevision"), "fila conferência usa revision");
+assert(hook.includes("useAppDataSelectorForDomains"), "fila conferência usa selector por domínio");
 
 const list = readFileSync(join(ROOT, "src/components/notas/ResponsavelFilaCooperadosList.tsx"), "utf8");
 assert(list.includes("VIRTUALIZE_MIN_ROWS"), "lista fila com virtualização");
