@@ -1071,6 +1071,49 @@ export async function finalizeNotaEntregaNaNuvem(
   return { ok: true };
 }
 
+const MSG_ENTREGA_NAO_PUBLICOU =
+  "Entrega não publicou na nuvem. Tente Enviar de novo.";
+
+/** Confirma meta SQL: responsável consegue puxar (status ≠ rascunho). */
+export async function confirmNotaEntregaPublicadaNaNuvem(
+  cnpj: string,
+  notaId: string
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const digits = normalizeCnpj(cnpj);
+  if (digits.length !== 14) return { ok: false, error: "CNPJ inválido." };
+  if (!notaId?.trim()) return { ok: false, error: "ID da entrega inválido." };
+  const tableMeta = await fetchNotaPedidoTableMetaFromCloud(digits, notaId);
+  if (tableMeta?.status && tableMeta.status !== "rascunho") {
+    return { ok: true };
+  }
+  return { ok: false, error: MSG_ENTREGA_NAO_PUBLICOU };
+}
+
+/**
+ * Publica entrega do cooperado na nuvem e confirma SQL antes de considerar enviado.
+ * Idempotente: reutiliza finalizeNotaEntregaNaNuvem + verificação de meta.
+ */
+export async function publicarEntregaCooperadoNaNuvem(
+  cnpj: string,
+  nota: NotaPedido,
+  cooperadoNome?: string
+): Promise<{ ok: boolean; offline?: boolean; error?: string }> {
+  const published = await finalizeNotaEntregaNaNuvem(cnpj, nota, cooperadoNome);
+  if (!published.ok) return published;
+
+  let confirmed = await confirmNotaEntregaPublicadaNaNuvem(cnpj, nota.id);
+  if (confirmed.ok) return { ok: true };
+
+  const republish = await finalizeNotaEntregaNaNuvem(cnpj, nota, cooperadoNome);
+  if (!republish.ok) return republish;
+
+  confirmed = await confirmNotaEntregaPublicadaNaNuvem(cnpj, nota.id);
+  if (!confirmed.ok) {
+    return { ok: false, error: confirmed.error };
+  }
+  return { ok: true };
+}
+
 /** Republica na nuvem todas as entregas locais ainda em análise (cooperado). */
 export async function republishLocalAguardandoConferencia(
   cnpj: string,

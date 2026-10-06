@@ -110,7 +110,8 @@ import {
   pushNotasPedidoToCloud,
   pushReparoFilaConferenciaSanitizadoToCloud,
   syncOfflineDeliveryImages,
-  finalizeNotaEntregaNaNuvem,
+  publicarEntregaCooperadoNaNuvem,
+  confirmNotaEntregaPublicadaNaNuvem,
   deleteFotoRascunhoFromCloud,
   confirmNotaDeletedFromCloud,
   deleteNotaPedidoFromCloud,
@@ -2698,7 +2699,7 @@ export default function NotasPedidoCooperadoMain() {
       });
     };
 
-    const cloud = await finalizeNotaEntregaNaNuvem(cnpj, notaEntrega, cooperadoNome);
+    const cloud = await publicarEntregaCooperadoNaNuvem(cnpj, notaEntrega, cooperadoNome);
     if (!cloud.ok) {
       setErroEnvio(
         cloud.error ??
@@ -2760,8 +2761,34 @@ export default function NotasPedidoCooperadoMain() {
       );
     }
 
-    // Confirma de novo na nuvem ANTES do sync de aba (evita sumir ao ir para Início).
-    await finalizeNotaEntregaNaNuvem(cnpj, notaFinalLocal, cooperadoNome);
+    const confirmadaNuvem = await confirmNotaEntregaPublicadaNaNuvem(cnpj, notaFinalLocal.id);
+    if (!confirmadaNuvem.ok) {
+      const republish = await publicarEntregaCooperadoNaNuvem(cnpj, notaFinalLocal, cooperadoNome);
+      if (!republish.ok) {
+        setErroEnvio(
+          republish.error ??
+            "A entrega não foi confirmada na nuvem. Verifique a conexão e toque Enviar de novo."
+        );
+        if (listaLocalOk) {
+          queuePendingEntregaPublish({
+            cnpj,
+            cooperativaId: coopId,
+            userId: user.id,
+            userName: user.name,
+            cooperadoNome,
+            nota: notaFinalLocal,
+            reenvio: Boolean(reenviarNotaId),
+            qtdFotos,
+          });
+        }
+        return;
+      }
+      const confirmadaDepois = await confirmNotaEntregaPublicadaNaNuvem(cnpj, notaFinalLocal.id);
+      if (!confirmadaDepois.ok) {
+        setErroEnvio(confirmadaDepois.error);
+        return;
+      }
+    }
 
     limparRascunhoAnexar();
     resetFotosSessaoUi();
