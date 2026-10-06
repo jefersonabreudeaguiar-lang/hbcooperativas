@@ -61,6 +61,25 @@ function candidatosCooperadoPagamento(data: AppData, coopId: string): Set<string
   return candidatos;
 }
 
+function mergeNotasPedidoParaPainel(truth: NotaPedido[], react: NotaPedido[]): NotaPedido[] {
+  if (react.length === 0) return truth;
+  if (truth.length === 0) return react;
+  const byId = new Map<string, NotaPedido>();
+  for (const n of truth) byId.set(n.id, n);
+  for (const n of react) byId.set(n.id, n);
+  return [...byId.values()];
+}
+
+function appDataParaPainelResponsavel(data: AppData): AppData {
+  const truth = getDataOperationalTruth();
+  const notasPedido = mergeNotasPedidoParaPainel(truth.notasPedido, data.notasPedido);
+  if (notasPedido === truth.notasPedido) return truth;
+  if (notasPedido === data.notasPedido && truth === getDataOperationalTruth()) {
+    return { ...truth, notasPedido };
+  }
+  return { ...truth, notasPedido };
+}
+
 function buildPainelCache(data: AppData, coopId: string): PainelCache {
   const excluidas = idsNotasPedidoExcluidas(data, coopId);
   const filaNotas: NotaPedido[] = [];
@@ -93,34 +112,34 @@ function buildPainelCache(data: AppData, coopId: string): PainelCache {
   };
 }
 
-function getPainelCache(coopId: string): PainelCache {
+function getPainelCache(data: AppData, coopId: string): PainelCache {
   const revision = getDataRevision();
   if (painelCache && painelCache.revision === revision && painelCache.coopId === coopId) {
     return painelCache;
   }
-  painelCache = buildPainelCache(getDataOperationalTruth(), coopId);
+  painelCache = buildPainelCache(appDataParaPainelResponsavel(data), coopId);
   return painelCache;
 }
 
 /** Notas na fila de conferência do responsável (uma passagem + cache por revisão). */
 export function listNotasFilaConferenciaResponsavel(data: AppData, coopId: string): NotaPedido[] {
   if (!coopId) return [];
-  return getPainelCache(coopId).filaNotas;
+  return getPainelCache(data, coopId).filaNotas;
 }
 
 export function countNotasFilaConferenciaResponsavel(data: AppData, coopId: string): number {
   if (!coopId) return 0;
-  return getPainelCache(coopId).filaNotas.length;
+  return getPainelCache(data, coopId).filaNotas.length;
 }
 
 export function listCooperadosPagamentoPendenteResponsavel(data: AppData, coopId: string): Cooperado[] {
   if (!coopId) return [];
-  return getPainelCache(coopId).cooperadosPagar;
+  return getPainelCache(data, coopId).cooperadosPagar;
 }
 
 export function countCooperadosPagamentoPendenteResponsavel(data: AppData, coopId: string): number {
   if (!coopId) return 0;
-  return getPainelCache(coopId).cooperadosPagarCount;
+  return getPainelCache(data, coopId).cooperadosPagarCount;
 }
 
 /** Relatório «Em aberto» cacheado por revisão (evita recomputar a cada clique de aba). */

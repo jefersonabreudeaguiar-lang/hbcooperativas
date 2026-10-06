@@ -60,6 +60,7 @@ import {
   setStaffConferenciaLancamentoAtivo,
   setStaffConferenciaModalOpen,
 } from "@/lib/performance/staffConferenciaSyncTier";
+import { recuperarFilaConferenciaResponsavelDaNuvem } from "@/lib/conferencia/recuperarFilaConferenciaResponsavel";
 import { syncNotasPedidoFromCloudStaffCoalesced } from "@/lib/performance/staffNotasPullCoordinator";
 import { markRqlColdStartPhase } from "@/lib/performance/rqlMarks";
 import {
@@ -2104,8 +2105,16 @@ export default function NotasPedidoStaffMain() {
       if (!d) return;
       const cnpj = getCooperativaCnpj(d, coopId);
       if (!cnpj) return;
+      const filaLocalVazia =
+        Boolean(d && coopId && countNotasFilaConferenciaResponsavel(d, coopId) === 0);
       const now = Date.now();
-      if (!opts?.forceFull && now - responsavelNotasPullAtRef.current < 90_000) return;
+      if (
+        !opts?.forceFull &&
+        !filaLocalVazia &&
+        now - responsavelNotasPullAtRef.current < 90_000
+      ) {
+        return;
+      }
       responsavelNotasPullAtRef.current = now;
       const retryFull =
         opts?.forceFull === true || shouldResponsavelForceFullNotasOnEntry(cnpj);
@@ -2114,6 +2123,16 @@ export default function NotasPedidoStaffMain() {
     },
     [isCooperado, coopId]
   );
+
+  const recuperarFilaConferencia = useCallback(() => {
+    if (isCooperado || !coopId) return;
+    const d = getData();
+    if (!d) return;
+    const cnpj = getCooperativaCnpj(d, coopId);
+    if (!cnpj) return;
+    reconciliarNotasConferenciaDecididasLocalmente(d);
+    void recuperarFilaConferenciaResponsavelDaNuvem(cnpj);
+  }, [isCooperado, coopId]);
 
   useEffect(() => {
     conferirModalAbertaRef.current = conferirModal;
@@ -2151,8 +2170,40 @@ export default function NotasPedidoStaffMain() {
   useEffect(() => {
     if (isCooperado || !coopId) return;
     if (responsavelPrimeiroPullAgendadoRef.current) return;
-    puxarNotasResponsavelDaNuvem();
+    const d = getData();
+    const filaVazia = !d || countNotasFilaConferenciaResponsavel(d, coopId) === 0;
+    puxarNotasResponsavelDaNuvem({ forceFull: filaVazia });
   }, [vistaResponsavel, isCooperado, coopId, puxarNotasResponsavelDaNuvem]);
+
+  const filaRecuperacaoAutoRef = useRef(false);
+  useEffect(() => {
+    if (isCooperado || !coopId || !mostrarFilaResponsavelConteudo) return;
+    if (data === null || !isAppDataWarm()) return;
+    if (pendentesEstaveis.length > 0 || filaIndexCount > 0) {
+      filaRecuperacaoAutoRef.current = false;
+      return;
+    }
+    if (dadosCarregandoFilaConferencia || conferirModal) return;
+    if (filaRecuperacaoAutoRef.current) return;
+    filaRecuperacaoAutoRef.current = true;
+    const t = window.setTimeout(() => {
+      recuperarFilaConferencia();
+      window.setTimeout(() => {
+        filaRecuperacaoAutoRef.current = false;
+      }, 90_000);
+    }, 1500);
+    return () => window.clearTimeout(t);
+  }, [
+    isCooperado,
+    coopId,
+    mostrarFilaResponsavelConteudo,
+    data,
+    pendentesEstaveis.length,
+    filaIndexCount,
+    dadosCarregandoFilaConferencia,
+    conferirModal,
+    recuperarFilaConferencia,
+  ]);
 
   useEffect(() => {
     if (isCooperado || !coopId) return;
@@ -4671,15 +4722,7 @@ export default function NotasPedidoStaffMain() {
                 <p className="text-sm text-amber-900/80 max-w-md mx-auto">
                   Os dados locais ainda não montaram a lista. Toque abaixo para buscar na nuvem de novo.
                 </p>
-                <Button
-                  type="button"
-                  size="sm"
-                  onClick={() => {
-                    const d = getData();
-                    if (d) reconciliarNotasConferenciaDecididasLocalmente(d);
-                    puxarNotasResponsavelDaNuvem({ forceFull: true });
-                  }}
-                >
+                <Button type="button" size="sm" onClick={recuperarFilaConferencia}>
                   Atualizar fila agora
                 </Button>
               </div>
@@ -4690,6 +4733,15 @@ export default function NotasPedidoStaffMain() {
                 <p className="text-sm text-green-800/80 mt-1 max-w-md mx-auto">
                   Nenhuma nota a conferir. Quando um cooperado enviar fotos, o nome dele aparece aqui.
                 </p>
+                <Button
+                  type="button"
+                  variant="secondary"
+                  size="sm"
+                  className="mt-3"
+                  onClick={recuperarFilaConferencia}
+                >
+                  Buscar entregas na nuvem
+                </Button>
               </div>
             )
           ) : null}

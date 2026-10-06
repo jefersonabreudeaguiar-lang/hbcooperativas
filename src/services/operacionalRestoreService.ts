@@ -100,7 +100,12 @@ export async function ensureOperacionalAlinhadoComNuvem(
   if (!stats.desalinhado) {
     return { ok: true, message: "Aparelho alinhado ao backup na nuvem.", stats };
   }
-  return forceRestoreOperacionalFromCloud(cnpj, coopId);
+  // Não restaurar automaticamente a cada sync — evita apagar/repuxar em loop (use o painel no Início).
+  return {
+    ok: true,
+    message: "Backup na nuvem diverge do aparelho — use «Restaurar da nuvem» no Início se necessário.",
+    stats,
+  };
 }
 
 /** Limpa financeiro local da cooperativa e baixa operacional + notas da nuvem (backup publicado). */

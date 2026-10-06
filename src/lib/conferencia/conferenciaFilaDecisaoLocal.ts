@@ -44,6 +44,11 @@ export function reconciliarNotasConferenciaDecididasLocalmente(data: AppData): v
   }
 }
 
+/** Recuperação da fila — remove marcas que escondem notas após sync/restore. */
+export function limparMarcasConferenciaDecididaLocalmenteParaRecuperacao(): void {
+  decididasLocalmente.clear();
+}
+
 /** Somente testes. */
 export function resetNotasConferenciaDecididasLocalmenteForTests(): void {
   decididasLocalmente.clear();
