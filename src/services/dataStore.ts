@@ -60,6 +60,7 @@ import { generateId } from "@/utils/generateId";
 import {
   applyConferenciaOperacionalPushViewIfActive,
   isConferenciaOperacionalPushScopeActive,
+  preserveConferenciaInProgressOperationalTruth,
   preserveOperationalTruthDuringConferenciaPushSave,
 } from "@/services/conferenciaOperacionalPushScope";
 
@@ -251,28 +252,50 @@ export function beginConferenciaModalSaveBatch(): void {
   beginSaveBatch({ shouldPersist: () => false });
 }
 
-export function endConferenciaModalSaveBatch(): void {
+export function flushConferenciaDeferredLocalPersistSync(): { ok: true } | { ok: false; error: string } {
+  if (!memoryCache || typeof window === "undefined") return { ok: true };
+  if (conferenciaDeferPersistTimer) {
+    clearTimeout(conferenciaDeferPersistTimer);
+    conferenciaDeferPersistTimer = null;
+  }
+  const saved = persistDataToStorage(memoryCache, { skipNotify: true });
+  return saved.ok ? { ok: true } : { ok: false, error: saved.error };
+}
+
+function persistConferenciaModalSnapshotWithFallback(
+  snapshot: AppData
+): { ok: true } | { ok: false; error: string } {
+  let saved = persistDataToStorage(snapshot, { skipNotify: true });
+  if (saved.ok) return saved;
+  const role = persistRoleFromSession();
+  memoryCache = buildSnapshotEmergenciaPersistencia(snapshot, role);
+  saved = persistDataToStorage(memoryCache, { skipNotify: true });
+  if (saved.ok) return saved;
+  const compact = compactarFotosNoArmazenamento(liberarEspacoArmazenamento(snapshot, 2));
+  saved = persistDataToStorage(compact, { skipNotify: true });
+  if (saved.ok) return saved;
+  memoryCache = buildSnapshotEmergenciaPersistencia(compact, role);
+  saved = persistDataToStorage(memoryCache, { skipNotify: true });
+  return saved.ok ? { ok: true } : { ok: false, error: saved.error };
+}
+
+export function endConferenciaModalSaveBatch(): { ok: true } | { ok: false; error: string } {
   endSaveBatch();
   if (isConferenciaDeferLocalPersistActive()) {
     notifyImmediate();
-    scheduleConferenciaDeferredLocalPersist();
-    return;
+    const flushed = flushConferenciaDeferredLocalPersistSync();
+    if (!flushed.ok) scheduleConferenciaDeferredLocalPersist();
+    return flushed;
   }
   const snapshot = memoryCache;
   if (!snapshot) {
     notify();
-    return;
+    return { ok: true };
   }
   notifyImmediate();
-  let saved = persistDataToStorage(snapshot, { skipNotify: true });
-  if (!saved.ok) {
-    const role = persistRoleFromSession();
-    memoryCache = buildSnapshotEmergenciaPersistencia(snapshot, role);
-    saved = persistDataToStorage(memoryCache, { skipNotify: true });
-  }
-  if (!saved.ok) {
-    notifyImmediate();
-  }
+  const saved = persistConferenciaModalSnapshotWithFallback(snapshot);
+  if (!saved.ok) notifyImmediate();
+  return saved;
 }
 
 /** Lançamento foto a foto — uma notificação coalescida (menos re-render que aprovação final). */
@@ -828,12 +851,22 @@ function isStorageQuotaError(e: unknown): boolean {
   );
 }
 
+function shouldPreserveConferenciaInProgressTruth(): boolean {
+  return isConferenciaDeferLocalPersistActive() || saveBatchDepth > 0;
+}
+
+function applyConferenciaInProgressTruthIfNeeded(data: AppData): AppData {
+  if (!memoryCache || !shouldPreserveConferenciaInProgressTruth()) return data;
+  return preserveConferenciaInProgressOperationalTruth(data, memoryCache);
+}
+
 export function saveDataSafe(data: AppData): { ok: true } | { ok: false; error: string } {
   if (typeof window === "undefined") return { ok: true };
 
   if (isConferenciaOperacionalPushScopeActive() && memoryCache) {
     data = preserveOperationalTruthDuringConferenciaPushSave(data, memoryCache);
   }
+  data = applyConferenciaInProgressTruthIfNeeded(data);
 
   if (saveBatchDepth > 0) {
     memoryCache = data;

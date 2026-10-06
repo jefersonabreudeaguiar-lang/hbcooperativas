@@ -1128,9 +1128,13 @@ export default function NotasPedidoStaffMain() {
   );
 
   const persistirFotoConferenciaNaFicha = useCallback(
-    (fotoIdx: number, totalFotos: number, itensFoto: NotaPedidoItem[]) => {
-      if (!user || !selectedNota) return;
-      updateData((d) =>
+    (
+      fotoIdx: number,
+      totalFotos: number,
+      itensFoto: NotaPedidoItem[]
+    ): { ok: true } | { ok: false; error: string } => {
+      if (!user || !selectedNota) return { ok: false, error: "Entrega não selecionada." };
+      const aplicar = (d: AppData) =>
         aplicarLancamentoFotoConferenciaEmDados(d, {
           nota: selectedNota,
           fotoIdx,
@@ -1144,8 +1148,17 @@ export default function NotasPedidoStaffMain() {
           conferenciaEscolaAvulsa,
           conferenciaDescontoPct,
           resolverDivisaoConferencia,
-        })
-      );
+        });
+      let saved = updateDataSafe((d) => aplicar(d));
+      if (!saved.ok) {
+        saved = updateDataSafe((d) => aplicar(liberarEspacoArmazenamento(d, 2)));
+      }
+      if (!saved.ok) {
+        saved = updateDataSafe((d) =>
+          aplicar(compactarFotosNoArmazenamento(liberarEspacoArmazenamento(d, 2)))
+        );
+      }
+      return saved.ok ? { ok: true } : { ok: false, error: saved.error };
     },
     [
       user,
@@ -1209,22 +1222,27 @@ export default function NotasPedidoStaffMain() {
         selectedNota.cooperadoNomeSnapshot?.trim() ||
         getCooperadoNomeResolvido(d0, conferenciaCooperadoId, coopId);
 
-      lancamentosFotoConferenciaRef.current.set(fotoIdx, r.itens);
-      fotosLancadasConferenciaRef.current.add(fotoIdx);
-      setFotosLancadasUi(new Set(fotosLancadasConferenciaRef.current));
-
-      const persistirNaFicha = () => {
-        persistirFotoConferenciaNaFicha(fotoIdx, totalFotos, r.itens);
+      const persistirNaFicha = (): { ok: boolean; error?: string } => {
+        const gravacao = persistirFotoConferenciaNaFicha(fotoIdx, totalFotos, r.itens);
+        if (!gravacao.ok) {
+          lancamentosFotoConferenciaRef.current.delete(fotoIdx);
+          fotosLancadasConferenciaRef.current.delete(fotoIdx);
+          setFotosLancadasUi(new Set(fotosLancadasConferenciaRef.current));
+          return {
+            ok: false,
+            error:
+              gravacao.error ||
+              "Não foi possível gravar esta foto na ficha. Libere espaço no aparelho e tente de novo.",
+          };
+        }
+        lancamentosFotoConferenciaRef.current.set(fotoIdx, r.itens);
+        fotosLancadasConferenciaRef.current.add(fotoIdx);
+        setFotosLancadasUi(new Set(fotosLancadasConferenciaRef.current));
         persistirDraftConferenciaEmMemoria();
+        return { ok: true };
       };
 
-      if (opts?.uiFirst) {
-        requestAnimationFrame(() => persistirNaFicha());
-      } else {
-        persistirNaFicha();
-      }
-
-      return { ok: true };
+      return persistirNaFicha();
     },
     [
       user,
@@ -3530,9 +3548,12 @@ export default function NotasPedidoStaffMain() {
         ? valorAprovado / divisaoPreview.participantes.length
         : valorAprovado;
 
+    let persistAprovacaoErro: string | undefined;
+    let dadosAposAprovacao: AppData | null = null;
+
     beginConferenciaModalSaveBatch();
     try {
-      updateData((d) => {
+      const savedAprovacao = updateDataSafe((d) => {
       const now = new Date().toISOString();
       if (coopId && conferenciaInstId) setInstituicaoPadraoId(coopId, conferenciaInstId);
       const coopSel = cooperadosCoop.find((c) => c.id === conferenciaCooperadoId);
@@ -3688,17 +3709,29 @@ export default function NotasPedidoStaffMain() {
         changes: "Entrega conferida",
       });
     });
+      if (!savedAprovacao.ok) {
+        persistAprovacaoErro = savedAprovacao.error;
+      } else {
+        dadosAposAprovacao = savedAprovacao.data;
+        markNotaConferenciaDecididaLocalmente(notaId);
+      }
     } finally {
-      endConferenciaModalSaveBatch();
+      const batchPersist = endConferenciaModalSaveBatch();
+      if (!batchPersist.ok) persistAprovacaoErro = batchPersist.error;
     }
 
-    const truthAposLancar = getDataOperationalTruth();
-    const gravada = truthAposLancar.notasPedido.find((n) => n.id === notaId);
+    const truthAposLancar = dadosAposAprovacao ?? getDataOperationalTruth();
+    let gravada = truthAposLancar.notasPedido.find((n) => n.id === notaId);
+    if (gravada?.status !== "conferida" && notaAtualizada?.status === "conferida") {
+      gravada = notaAtualizada;
+    }
     if (gravada?.status !== "conferida") {
       console.warn("[conferencia-aprovacao] nota não ficou conferida após updateData", notaId, gravada?.status);
       liberarLancamentoConferencia();
       setConferirErrors({
-        itens: "O lançamento não foi gravado. Verifique espaço no aparelho e tente de novo.",
+        itens: persistAprovacaoErro
+          ? `${persistAprovacaoErro} Libere espaço no aparelho (fotos antigas ou apps) e tente de novo.`
+          : "O lançamento não foi gravado. Verifique espaço no aparelho e tente de novo.",
       });
       return;
     }
@@ -3716,7 +3749,6 @@ export default function NotasPedidoStaffMain() {
       return;
     }
 
-    markNotaConferenciaDecididaLocalmente(notaId);
     removerNotaDaFilaSticky(notaId);
     requestAppSyncLight();
 
@@ -3729,8 +3761,11 @@ export default function NotasPedidoStaffMain() {
     const valorMsg = divisaoPreview
       ? `${formatCurrency(valorPorCooperado)} para cada (${msgBeneficiarios})`
       : `${formatCurrency(valorAprovado)} na ficha de ${msgBeneficiarios}`;
+    const avisoDisco = persistAprovacaoErro
+      ? " Atenção: o aparelho está com pouco espaço — o lançamento está na memória; libere espaço e aguarde a sincronização."
+      : "";
     setLancadoMsg(
-      `Lançamento salvo (${valorMsg}). Sincronizando com a nuvem…${proxima ? " Abrindo a próxima entrega…" : ""}`
+      `Lançamento salvo (${valorMsg}). Sincronizando com a nuvem…${proxima ? " Abrindo a próxima entrega…" : ""}${avisoDisco}`
     );
 
     const runAprovacaoCloudSync = () => {

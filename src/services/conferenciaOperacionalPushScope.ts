@@ -91,3 +91,71 @@ export function preserveOperationalTruthDuringConferenciaPushSave(
     arquivosMensais: truth.arquivosMensais,
   };
 }
+
+const STATUS_RANK: Record<string, number> = {
+  rascunho: 0,
+  entregue: 1,
+  aguardando_conferencia: 2,
+  rejeitada: 3,
+  conferida: 4,
+  pago: 5,
+  cancelado: 6,
+};
+
+function statusRank(status: string | undefined): number {
+  if (!status) return -1;
+  return STATUS_RANK[status] ?? 0;
+}
+
+/**
+ * Durante conferência (modal / batch / lançamento), sync não pode apagar decisão local
+ * nem lançamentos parciais multi-foto ainda não refletidos na nuvem.
+ */
+export function preserveConferenciaInProgressOperationalTruth(
+  incoming: AppData,
+  truth: AppData
+): AppData {
+  const truthNotaById = new Map(truth.notasPedido.map((n) => [n.id, n]));
+  const incomingIds = new Set(incoming.notasPedido.map((n) => n.id));
+
+  const notasPedido = incoming.notasPedido.map((n) => {
+    const t = truthNotaById.get(n.id);
+    if (!t) return n;
+    const rankT = statusRank(t.status);
+    const rankN = statusRank(n.status);
+    if (rankT > rankN) return t;
+    if (rankT === rankN && t.updatedAt && n.updatedAt && t.updatedAt > n.updatedAt) return t;
+    return n;
+  });
+
+  for (const t of truth.notasPedido) {
+    if (!incomingIds.has(t.id) && (t.status === "conferida" || t.status === "rejeitada")) {
+      notasPedido.push(t);
+    }
+  }
+
+  const incomingFichaIds = new Set(incoming.fichaCorrida.map((f) => f.id));
+  const fichasExtra = truth.fichaCorrida.filter((f) => {
+    if (incomingFichaIds.has(f.id)) return false;
+    if (!f.notaPedidoId) return false;
+    const t = truthNotaById.get(f.notaPedidoId);
+    if (!t) return false;
+    return t.status === "aguardando_conferencia" || t.status === "conferida";
+  });
+
+  const fichaCorrida =
+    fichasExtra.length > 0 ? [...incoming.fichaCorrida, ...fichasExtra] : incoming.fichaCorrida;
+
+  const truthArqByKey = new Map(
+    truth.arquivosMensais.map((a) => [`${a.cooperadoId}:${a.mesReferencia}:${a.cooperativaId}`, a])
+  );
+  const arquivosMensais = incoming.arquivosMensais.map((a) => {
+    const key = `${a.cooperadoId}:${a.mesReferencia}:${a.cooperativaId}`;
+    const t = truthArqByKey.get(key);
+    if (!t || t.notaPedidoIds.length <= a.notaPedidoIds.length) return a;
+    const mergedIds = new Set([...a.notaPedidoIds, ...t.notaPedidoIds]);
+    return { ...a, notaPedidoIds: [...mergedIds] };
+  });
+
+  return { ...incoming, notasPedido, fichaCorrida, arquivosMensais };
+}

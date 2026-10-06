@@ -30,6 +30,7 @@ import {
   refFotoUtilizavelNoAparelho,
   resolveFotoInlineConferenciaNota,
 } from "../src/utils/fotoEntrega";
+import { preserveConferenciaInProgressOperationalTruth } from "../src/services/conferenciaOperacionalPushScope";
 
 const ROOT = join(import.meta.dirname ?? __dirname, "..");
 
@@ -153,6 +154,25 @@ assert.equal(
   undefined
 );
 pass("conferência — ignora URL remota expirada no meta");
+
+const preserved = preserveConferenciaInProgressOperationalTruth(
+  {
+    notasPedido: [{ id: "n1", status: "aguardando_conferencia", updatedAt: "2026-01-02T00:00:00Z" } as never],
+    fichaCorrida: [],
+    arquivosMensais: [],
+  } as never,
+  {
+    notasPedido: [{ id: "n1", status: "conferida", updatedAt: "2026-01-03T00:00:00Z" } as never],
+    fichaCorrida: [{ id: "f1", notaPedidoId: "n1" } as never],
+    arquivosMensais: [],
+  } as never
+);
+assert.equal(preserved.notasPedido[0]?.status, "conferida");
+assert.equal(preserved.fichaCorrida.length, 1);
+pass("sync durante conferência — preserva conferida e ficha parcial");
+
+assert.ok(notas.includes("updateDataSafe"), "aprovação usa gravação segura com retry de espaço");
+assert.ok(notas.includes("persistAprovacaoErro"), "aprovação distingue falha de disco vs estado");
 
 const markerUltimaFoto = "lancarFotoConferenciaAtual(fotoAtual, qtdFotosAprovadas, { uiFirst: true })";
 const idxLancUltima = notas.indexOf(markerUltimaFoto);
