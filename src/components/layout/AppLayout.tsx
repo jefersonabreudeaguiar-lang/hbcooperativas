@@ -38,6 +38,7 @@ import { useHbCreditDescontosWarmup } from "@/hooks/useHbCreditDescontosWarmup";
 import { shouldPrefetchHbCreditNav } from "@/lib/hb-credit/hbCreditNavPrefetch";
 import { scheduleCooperadoNavPrefetchEarly } from "@/lib/performance/cooperadoNavPrefetch";
 import { scheduleStaffNavPrefetchEarly } from "@/lib/performance/staffNavPrefetch";
+import { prefetchStaffNotasPedidoRouteBundle } from "@/lib/performance/prefetchStaffNotasPedidoUi";
 import { feedbackTrocaAbaMobile } from "@/lib/performance/tabSwitchFeedback";
 import { useMobileTabScrollRestore } from "@/hooks/useMobileTabScrollRestore";
 import type { MobileTabScrollMode } from "@/lib/performance/mobileTabScrollMemory";
@@ -136,6 +137,7 @@ export function Sidebar({ mobile = false, onClose }: { mobile?: boolean; onClose
   if (!shell) return null;
   const { navUser, desktopMenu, drawerMenu } = shell;
   const menuItems = mobile && isCooperadoAppUser(navUser) ? drawerMenu : desktopMenu;
+  const staffUser = navUser && !isCooperadoAppUser(navUser);
 
   return (
     <aside className={cn(
@@ -159,6 +161,16 @@ export function Sidebar({ mobile = false, onClose }: { mobile?: boolean; onClose
               key={item.href}
               href={item.href}
               prefetch={shouldPrefetchHbCreditNav(item.href)}
+              onPointerEnter={
+                staffUser && item.href === "/notas-pedido"
+                  ? () => prefetchStaffNotasPedidoRouteBundle()
+                  : undefined
+              }
+              onFocus={
+                staffUser && item.href === "/notas-pedido"
+                  ? () => prefetchStaffNotasPedidoRouteBundle()
+                  : undefined
+              }
               onClick={onClose}
               className={cn(
                 "flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors",
@@ -358,6 +370,12 @@ function AppShellInner({ children }: { children: React.ReactNode }) {
   );
 
   useHbCreditDescontosWarmup(navUser);
+
+  const router = useRouter();
+  useEffect(() => {
+    if (!navUser || isCooperadoAppUser(navUser)) return;
+    return scheduleStaffNavPrefetchEarly(router);
+  }, [navUser?.id, navUser?.role, router]);
 
   return (
     <div className="flex h-[100dvh] max-h-[100dvh] bg-gray-50 overflow-hidden">

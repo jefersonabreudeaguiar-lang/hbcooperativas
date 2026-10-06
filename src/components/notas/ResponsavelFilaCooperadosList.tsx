@@ -16,14 +16,18 @@ const MAX_LIST_HEIGHT_PX = 28 * 16;
 type Props = {
   grupos: GrupoConferenciaEntrega[];
   onSelect: (grupo: GrupoConferenciaEntrega) => void;
+  /** Aquece chunks do modal Conferir antes do clique (hover na fila). */
+  onRowWarm?: () => void;
 };
 
 function FilaCooperadoRow({
   grupo,
   onSelect,
+  onRowWarm,
 }: {
   grupo: GrupoConferenciaEntrega;
   onSelect: (g: GrupoConferenciaEntrega) => void;
+  onRowWarm?: () => void;
 }) {
   const qtdNotas = grupo.notas.length;
   const qtdFotos = contarFotosEnviadasNotas(grupo.notas);
@@ -31,6 +35,8 @@ function FilaCooperadoRow({
     <button
       type="button"
       onClick={() => onSelect(grupo)}
+      onPointerEnter={onRowWarm}
+      onFocus={onRowWarm}
       className="w-full flex items-center gap-3 px-4 py-3.5 text-left hover:bg-amber-50/80 transition-colors active:bg-amber-100/60"
       style={{ minHeight: ROW_HEIGHT_PX }}
     >
@@ -56,7 +62,7 @@ function FilaCooperadoRow({
 
 const FilaCooperadoRowMemo = memo(FilaCooperadoRow);
 
-function ResponsavelFilaCooperadosListInner({ grupos, onSelect }: Props) {
+function ResponsavelFilaCooperadosListInner({ grupos, onSelect, onRowWarm }: Props) {
   const [scrollTop, setScrollTop] = useState(0);
   const onScroll = useCallback((e: React.UIEvent<HTMLDivElement>) => {
     setScrollTop(e.currentTarget.scrollTop);
@@ -80,7 +86,7 @@ function ResponsavelFilaCooperadosListInner({ grupos, onSelect }: Props) {
       <ul className="divide-y divide-gray-200 rounded-xl border border-gray-200 bg-white overflow-hidden">
         {grupos.map((grupo) => (
           <li key={grupo.chave}>
-            <FilaCooperadoRowMemo grupo={grupo} onSelect={onSelect} />
+            <FilaCooperadoRowMemo grupo={grupo} onSelect={onSelect} onRowWarm={onRowWarm} />
           </li>
         ))}
       </ul>
@@ -97,7 +103,7 @@ function ResponsavelFilaCooperadosListInner({ grupos, onSelect }: Props) {
         <div style={{ transform: `translateY(${slice!.offsetY}px)` }}>
           {grupos.slice(slice!.start, slice!.end).map((grupo) => (
             <div key={grupo.chave} className="border-b border-gray-200 last:border-b-0">
-              <FilaCooperadoRowMemo grupo={grupo} onSelect={onSelect} />
+              <FilaCooperadoRowMemo grupo={grupo} onSelect={onSelect} onRowWarm={onRowWarm} />
             </div>
           ))}
         </div>

@@ -19,8 +19,15 @@ function assert(cond: boolean, msg: string) {
 }
 
 assert(prefetch.includes("prefetchStaffNotasPedidoUiChunks"), "helper P5");
+assert(prefetch.includes("prefetchStaffNotasPedidoRouteBundle"), "route bundle P5");
+assert(prefetch.includes("prefetchConferenciaModalUi"), "route bundle aquece modal conferir");
 assert(prefetch.includes("ResponsavelFilaCooperadosList"), "prefetch fila");
 assert(prefetch.includes("NotasPedidoHistoricoResponsavel"), "prefetch histórico");
-assert(notas.includes("prefetchStaffNotasPedidoUiChunks"), "Notas agenda prefetch idle");
+assert(notas.includes("prefetchStaffNotasPedidoRouteBundle"), "Notas agenda route bundle idle");
+assert(notas.includes("countNotasFilaConferenciaResponsavel"), "pull inicial evita forceFull com fila local");
+
+const layout = readFileSync(join(ROOT, "src/components/layout/AppLayout.tsx"), "utf8");
+assert(layout.includes("scheduleStaffNavPrefetchEarly"), "AppLayout prefetch staff desktop");
+assert(layout.includes("prefetchStaffNotasPedidoRouteBundle"), "sidebar hover notas-pedido");
 
 console.log("test-perf-notas-p5.ts done.");

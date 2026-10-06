@@ -75,6 +75,7 @@ import {
   prefetchStaffNotasHistoricoChunk,
   prefetchStaffNotasLancamentosAbertoChunk,
   prefetchStaffNotasPedidoUiChunks,
+  prefetchStaffNotasPedidoRouteBundle,
 } from "@/lib/performance/prefetchStaffNotasPedidoUi";
 import { notaBloqueadaConferenciaPorExclusaoPendente } from "@/lib/conferencia/conferenciaAbrirGuard";
 import { bloquearAcaoFinalConferencia } from "@/lib/conferencia/conferenciaAprovarGuard";
@@ -180,7 +181,7 @@ import {
 } from "@/services/conferenciaDecisaoNuvemSync";
 import { ConferenciaNuvemSyncBanner } from "@/components/notas-pedido/ConferenciaNuvemSyncBanner";
 import { getProdutosContrato } from "@/services/catalogoContratosService";
-import { countCooperadosLancamentosEmAbertoResponsavel } from "@/services/responsavelPainelIndex";
+import { countCooperadosLancamentosEmAbertoResponsavel, countNotasFilaConferenciaResponsavel } from "@/services/responsavelPainelIndex";
 import { listarResumosMensaisEntregas, filtrarResumosEntregasPendentes, filtrarResumosMesesNaoQuitados } from "@/services/cooperadoEntregasService";
 import { listarResumosFichaEmAbertoCooperado } from "@/services/cooperadoFichaTimelineService";
 import {
@@ -1677,12 +1678,12 @@ export default function NotasPedidoStaffMain() {
 
   useEffect(() => {
     if (isCooperado) return;
-    const run = () => prefetchStaffNotasPedidoUiChunks();
+    const run = () => prefetchStaffNotasPedidoRouteBundle();
     if (typeof requestIdleCallback === "function") {
-      const id = requestIdleCallback(run, { timeout: 2000 });
+      const id = requestIdleCallback(run, { timeout: 2500 });
       return () => cancelIdleCallback(id);
     }
-    const t = window.setTimeout(run, 400);
+    const t = window.setTimeout(run, 500);
     return () => window.clearTimeout(t);
   }, [isCooperado]);
 
@@ -1758,7 +1759,12 @@ export default function NotasPedidoStaffMain() {
 
   useEffect(() => {
     if (!filaDetalhada) return;
-    aquecerUiConferencia();
+    if (typeof requestIdleCallback === "function") {
+      const id = requestIdleCallback(() => aquecerUiConferencia(), { timeout: 3500 });
+      return () => cancelIdleCallback(id);
+    }
+    const t = window.setTimeout(() => aquecerUiConferencia(), 800);
+    return () => window.clearTimeout(t);
   }, [filaDetalhada, aquecerUiConferencia]);
 
   const filaNavCount = filaDetalhada ? pendentesEstaveis.length : filaBadgeCount;
@@ -2060,7 +2066,13 @@ export default function NotasPedidoStaffMain() {
     responsavelMountSyncRef.current = true;
     responsavelPrimeiroPullAgendadoRef.current = true;
     scheduleStaffPostInteractiveTask(() => {
-      puxarNotasResponsavelDaNuvem({ forceFull: true });
+      const d = getData();
+      const cnpj = d && coopId ? getCooperativaCnpj(d, coopId) : undefined;
+      const filaLocalQuente =
+        Boolean(d && coopId && countNotasFilaConferenciaResponsavel(d, coopId) > 0);
+      const forceFull =
+        Boolean(cnpj && shouldResponsavelForceFullNotasOnEntry(cnpj) && !filaLocalQuente);
+      puxarNotasResponsavelDaNuvem({ forceFull });
       responsavelPrimeiroPullAgendadoRef.current = false;
     });
   }, [isCooperado, data, coopId, puxarNotasResponsavelDaNuvem]);
@@ -3151,7 +3163,9 @@ export default function NotasPedidoStaffMain() {
       setFilaConferenciaTotal(0);
     }
     startTransition(() => setConferirModal(true));
-    void prepararConferenciaNota(fresh);
+    requestAnimationFrame(() => {
+      void prepararConferenciaNota(fresh);
+    });
   };
 
   const obterProximaNotaConferencia = (chaveGrupo: string, notaConcluidaId: string): NotaPedido | null => {
@@ -4447,6 +4461,7 @@ export default function NotasPedidoStaffMain() {
                   <ResponsavelFilaCooperadosList
                     grupos={pendentesPorCooperado}
                     onSelect={selecionarAbaConferencia}
+                    onRowWarm={aquecerUiConferencia}
                   />
                 </div>
               )}
