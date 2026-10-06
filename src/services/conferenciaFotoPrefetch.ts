@@ -37,6 +37,19 @@ export function getConferenciaFotoBlobCached(
   return blobCache.get(cacheKey(cnpj, notaId, index, preview));
 }
 
+export function invalidateConferenciaFotoBlob(
+  cnpj: string,
+  notaId: string,
+  index: number,
+  preview = true
+): void {
+  const k = cacheKey(cnpj, notaId, index, preview);
+  inflight.delete(k);
+  const url = blobCache.get(k);
+  blobCache.delete(k);
+  if (url) revokePreviewUrl(url);
+}
+
 export function rememberConferenciaFotoBlob(
   cnpj: string,
   notaId: string,

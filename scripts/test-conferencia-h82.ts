@@ -26,6 +26,10 @@ import {
   mesclarProgressoMultiFotoSessaoNaFicha,
   validarTodasFotosLancadasConferencia,
 } from "../src/lib/conferencia/conferenciaFichaHydrate";
+import {
+  refFotoUtilizavelNoAparelho,
+  resolveFotoInlineConferenciaNota,
+} from "../src/utils/fotoEntrega";
 
 const ROOT = join(import.meta.dirname ?? __dirname, "..");
 
@@ -135,6 +139,20 @@ const merged = mesclarProgressoMultiFotoSessaoNaFicha(
 assert.equal(merged.lancadas.size, 2);
 assert.equal(merged.lancamentosPorFoto.get(1)?.[0]?.produtoInstituicaoId, "b");
 pass("progresso multi-foto — mescla ficha e sessão");
+
+assert.equal(refFotoUtilizavelNoAparelho("data:image/jpeg;base64,abc"), "data:image/jpeg;base64,abc");
+assert.equal(refFotoUtilizavelNoAparelho("https://x.supabase.co/signed"), undefined);
+assert.equal(
+  resolveFotoInlineConferenciaNota(
+    {
+      id: "n1",
+      fotosMeta: [{ index: 0, url: "https://expired.example/foto.jpg" }],
+    } as never,
+    0
+  ),
+  undefined
+);
+pass("conferência — ignora URL remota expirada no meta");
 
 const markerUltimaFoto = "lancarFotoConferenciaAtual(fotoAtual, qtdFotosAprovadas, { uiFirst: true })";
 const idxLancUltima = notas.indexOf(markerUltimaFoto);

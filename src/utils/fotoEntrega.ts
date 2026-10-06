@@ -194,58 +194,78 @@ function readFileAsDataUrl(file: File): Promise<string> {
   });
 }
 
+/** Só data URL ou ref IDB local — URLs http(s) de storage expiram e quebram o <img>. */
+export function refFotoUtilizavelNoAparelho(ref?: string): string | undefined {
+  if (!ref) return undefined;
+  if (isInlineDataUrl(ref) || isLocalMediaRef(ref)) return ref;
+  return undefined;
+}
+
 export function getFotoExibicaoNota(nota: NotaPedido): string | undefined {
-  if (nota.fotoPedido) return nota.fotoPedido;
-  if (nota.fotosPedido?.length) return nota.fotosPedido[0];
-  if (nota.fotoPedidoMiniatura) return nota.fotoPedidoMiniatura;
-  if (nota.fotosPedidoMiniaturas?.length) return nota.fotosPedidoMiniaturas[0];
+  const fromPedido = refFotoUtilizavelNoAparelho(nota.fotoPedido);
+  if (fromPedido) return fromPedido;
+  const fromArray = nota.fotosPedido?.map(refFotoUtilizavelNoAparelho).find(Boolean);
+  if (fromArray) return fromArray;
+  const fromMini = refFotoUtilizavelNoAparelho(nota.fotoPedidoMiniatura);
+  if (fromMini) return fromMini;
+  const fromMiniArr = nota.fotosPedidoMiniaturas?.map(refFotoUtilizavelNoAparelho).find(Boolean);
+  if (fromMiniArr) return fromMiniArr;
   const meta = nota.fotosMeta?.find((f) => f.url || f.thumbnailUrl);
-  return meta?.url ?? meta?.thumbnailUrl;
+  return (
+    refFotoUtilizavelNoAparelho(meta?.url) ?? refFotoUtilizavelNoAparelho(meta?.thumbnailUrl)
+  );
 }
 
 /** Conferência do responsável — prioriza foto cheia; miniatura só se for a única inline. */
 export function resolveFotoInlineConferenciaNota(nota: NotaPedido, index: number): string | undefined {
   const metas = (nota.fotosMeta ?? []).slice().sort((a, b) => (a.index ?? 0) - (b.index ?? 0));
   const meta = metas.find((f) => (f.index ?? 0) === index) ?? metas[index];
-  if (meta?.url) return meta.url;
+  const fromMeta =
+    refFotoUtilizavelNoAparelho(meta?.url) ?? refFotoUtilizavelNoAparelho(meta?.thumbnailUrl);
+  if (fromMeta) return fromMeta;
 
   const full =
     nota.fotosPedido?.[index] ?? (index === 0 ? nota.fotoPedido : undefined);
-  if (full) return full;
+  const fullUtil = refFotoUtilizavelNoAparelho(full);
+  if (fullUtil) return fullUtil;
 
-  if (meta?.thumbnailUrl) return meta.thumbnailUrl;
-  return (
+  const thumb =
     nota.fotosPedidoMiniaturas?.[index] ??
-    (index === 0 ? nota.fotoPedidoMiniatura : undefined)
-  );
+    (index === 0 ? nota.fotoPedidoMiniatura : undefined);
+  return refFotoUtilizavelNoAparelho(thumb);
 }
 
 /** True quando o ref é só miniatura (conferência deve buscar foto cheia na nuvem/IDB). */
 export function isFotoInlineMiniaturaFallback(nota: NotaPedido, index: number, ref: string): boolean {
   if (!ref) return false;
+  if (ref.startsWith("http://") || ref.startsWith("https://")) return true;
   const metas = (nota.fotosMeta ?? []).slice().sort((a, b) => (a.index ?? 0) - (b.index ?? 0));
   const meta = metas.find((f) => (f.index ?? 0) === index) ?? metas[index];
-  if (meta?.url && ref === meta.url) return false;
+  const metaUrl = refFotoUtilizavelNoAparelho(meta?.url);
+  if (metaUrl && ref === metaUrl) return false;
   const full =
     nota.fotosPedido?.[index] ?? (index === 0 ? nota.fotoPedido : undefined);
-  if (full && ref === full) return false;
+  const fullUtil = refFotoUtilizavelNoAparelho(full);
+  if (fullUtil && ref === fullUtil) return false;
   return true;
 }
 
 export function getFotosExibicaoNota(nota: NotaPedido): string[] {
   const fromMeta = (nota.fotosMeta ?? [])
-    .filter((f) => f.url || f.thumbnailUrl)
+    .slice()
     .sort((a, b) => (a.index ?? 0) - (b.index ?? 0))
-    .map((f) => f.url ?? f.thumbnailUrl!)
-    .filter(Boolean);
+    .map((f) => refFotoUtilizavelNoAparelho(f.url) ?? refFotoUtilizavelNoAparelho(f.thumbnailUrl))
+    .filter((f): f is string => Boolean(f));
   if (fromMeta.length > 0) return fromMeta;
 
   if (nota.fotosPedido?.length) {
     return nota.fotosPedido
-      .map((f, i) => f ?? nota.fotosPedidoMiniaturas?.[i])
+      .map((f, i) => refFotoUtilizavelNoAparelho(f) ?? refFotoUtilizavelNoAparelho(nota.fotosPedidoMiniaturas?.[i]))
       .filter((f): f is string => !!f);
   }
-  if (nota.fotosPedidoMiniaturas?.length) return nota.fotosPedidoMiniaturas;
+  if (nota.fotosPedidoMiniaturas?.length) {
+    return nota.fotosPedidoMiniaturas.map(refFotoUtilizavelNoAparelho).filter((f): f is string => !!f);
+  }
   const single = getFotoExibicaoNota(nota);
   return single ? [single] : [];
 }

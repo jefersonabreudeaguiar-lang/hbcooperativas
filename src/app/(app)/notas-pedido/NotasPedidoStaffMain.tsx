@@ -66,6 +66,7 @@ import {
 } from "@/lib/performance/prefetchCooperadoAnexarPipeline";
 import {
   getConferenciaFotoBlobCachedIfLoaded,
+  invalidateConferenciaFotoBlobIfLoaded,
   loadConferenciaFotoPrefetchModule,
   prefetchConferenciaFotoPrefetchModule,
 } from "@/lib/performance/loadConferenciaFotoPrefetch";
@@ -5439,7 +5440,20 @@ export default function NotasPedidoStaffMain() {
                 if (lancamentoSequencia) return;
                 if (idx !== conferenciaFotoIdx) return;
                 const key = conferenciaFotoCacheKey(selectedNota.id, idx);
+                const prevUrl = conferenciaFotoCacheRef.current.get(key);
                 conferenciaFotoCacheRef.current.delete(key);
+                if (prevUrl?.startsWith("blob:")) {
+                  try {
+                    URL.revokeObjectURL(prevUrl);
+                  } catch {
+                    /* ignore */
+                  }
+                }
+                const cnpjInv =
+                  selectedNota.cooperativaCnpj ??
+                  (data && coopId ? getCooperativaCnpj(data, coopId) : undefined) ??
+                  conferenciaCnpjRef.current;
+                if (cnpjInv) invalidateConferenciaFotoBlobIfLoaded(cnpjInv, selectedNota.id, idx);
                 const loadGen = conferenciaFotoLoadGenRef.current;
                 void loadConferenciaFoto(selectedNota, idx).then((url) => {
                   if (url) return;

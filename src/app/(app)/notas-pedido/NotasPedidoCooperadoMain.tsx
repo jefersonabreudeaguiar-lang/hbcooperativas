@@ -39,6 +39,7 @@ import {
 } from "@/lib/performance/prefetchCooperadoAnexarPipeline";
 import {
   getConferenciaFotoBlobCachedIfLoaded,
+  invalidateConferenciaFotoBlobIfLoaded,
   loadConferenciaFotoPrefetchModule,
   prefetchConferenciaFotoPrefetchModule,
 } from "@/lib/performance/loadConferenciaFotoPrefetch";
@@ -5159,11 +5160,33 @@ export default function NotasPedidoCooperadoMain() {
               fotosLancadasUi={fotosLancadasUi}
               onAmpliarFoto={() => setConferenciaFotoAmpliada(true)}
               onFotoImgError={(idx) => {
+                if (lancamentoSequencia) return;
+                if (idx !== conferenciaFotoIdx) return;
                 const key = conferenciaFotoCacheKey(selectedNota.id, idx);
+                const prevUrl = conferenciaFotoCacheRef.current.get(key);
                 conferenciaFotoCacheRef.current.delete(key);
-                if (conferenciaFotoAtualUrl) revokePreviewUrl(conferenciaFotoAtualUrl);
-                setConferenciaFotoErro("A foto não pôde ser exibida neste aparelho. Toque em «Tentar de novo».");
-                setConferenciaFotoAtualUrl(null);
+                if (prevUrl?.startsWith("blob:")) {
+                  try {
+                    URL.revokeObjectURL(prevUrl);
+                  } catch {
+                    /* ignore */
+                  }
+                } else if (conferenciaFotoAtualUrl) revokePreviewUrl(conferenciaFotoAtualUrl);
+                const cnpjInv =
+                  selectedNota.cooperativaCnpj ??
+                  (data && coopId ? getCooperativaCnpj(data, coopId) : undefined) ??
+                  conferenciaCnpjRef.current;
+                if (cnpjInv) invalidateConferenciaFotoBlobIfLoaded(cnpjInv, selectedNota.id, idx);
+                const loadGen = conferenciaFotoLoadGenRef.current;
+                void loadConferenciaFoto(selectedNota, idx).then((url) => {
+                  if (url) return;
+                  if (loadGen !== conferenciaFotoLoadGenRef.current) return;
+                  if (idx !== conferenciaFotoIdx) return;
+                  setConferenciaFotoErro(
+                    "A foto não pôde ser exibida neste aparelho. Toque em «Tentar de novo»."
+                  );
+                  setConferenciaFotoAtualUrl(null);
+                });
               }}
               onRetryFotoAtual={(idx) =>
                 void loadConferenciaFoto(selectedNota, idx).then((url) => {

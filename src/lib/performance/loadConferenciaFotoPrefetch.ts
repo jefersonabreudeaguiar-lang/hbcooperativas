@@ -35,3 +35,12 @@ export function getConferenciaFotoBlobCachedIfLoaded(
 ): string | undefined {
   return prefetchModuleResolved?.getConferenciaFotoBlobCached(cnpj, notaId, index, preview);
 }
+
+export function invalidateConferenciaFotoBlobIfLoaded(
+  cnpj: string,
+  notaId: string,
+  index: number,
+  preview = true
+): void {
+  prefetchModuleResolved?.invalidateConferenciaFotoBlob(cnpj, notaId, index, preview);
+}
