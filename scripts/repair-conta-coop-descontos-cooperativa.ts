@@ -1,5 +1,7 @@
 /**
  * Reconcilia operacional.json × transações HB (todos os cooperados com ficha/pagamento em aberto).
+ * Preferir o fluxo completo com simulação e relatório financeiro:
+ *   npx tsx scripts/repair-hb-ficha-base-cooperativa.ts
  *
  * npx tsx scripts/repair-conta-coop-descontos-cooperativa.ts
  * npx tsx scripts/repair-conta-coop-descontos-cooperativa.ts --cooperado c_1782263929381_ncp55

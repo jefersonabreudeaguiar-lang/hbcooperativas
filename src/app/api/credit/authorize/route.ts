@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { projectContaCoopDescontosAfterHbAuthorize } from "@/lib/hb-credit/repairOperacionalContaCoopDescontos";
+import { shouldProjectHbFichaBaseOnServer } from "@/lib/hb-credit/hbFichaBaseOperacional";
 import { authorizePayment, parseQrPayload, prepareHbCreditPaymentAuthorize } from "@/lib/supabase/contaCoopStorage";
 import { requireCreditApi, requireCreditCnpj, resolveCreditPaymentCooperadoId } from "@/lib/security/creditGuard";
 import { normalizeCnpj } from "@/utils/cooperativa";
@@ -63,9 +64,11 @@ export async function POST(request: Request) {
   if (!result.ok) return NextResponse.json({ error: result.error, code: result.code }, { status: 400 });
 
   const mesReferencia = String(body?.mesReferencia ?? "").trim() || undefined;
-  void projectContaCoopDescontosAfterHbAuthorize(gate.ctx.supabase, cnpj, cooperadoId, {
-    mesReferencia,
-  }).catch(() => {});
+  if (shouldProjectHbFichaBaseOnServer()) {
+    void projectContaCoopDescontosAfterHbAuthorize(gate.ctx.supabase, cnpj, cooperadoId, {
+      mesReferencia,
+    }).catch(() => {});
+  }
 
   return NextResponse.json({
     ...result,

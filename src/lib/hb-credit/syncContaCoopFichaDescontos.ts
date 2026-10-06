@@ -9,11 +9,11 @@ import {
 import { pushOperacionalToCloud } from "@/services/cooperativaSyncCloudService";
 import { beginSaveBatch, endSaveBatch, getData, notifyAppDataSubscribers, updateData } from "@/services/dataStore";
 import { persistDescontosContaCoopNoArquivo, getDescontosContaCoopMesCached } from "@/services/notaPedidoService";
+import { hbCreditMesPrincipal, hbCreditValorLiquidoMes } from "@/lib/hb-credit/hbCreditLeituraBic";
 import {
-  hbCreditMesPrincipal,
-  hbCreditMesesReferenciaUnificados,
-  hbCreditValorLiquidoMes,
-} from "@/lib/hb-credit/hbCreditLeituraBic";
+  listMesesReferenciaHbFichaBaseSync,
+  shouldSyncHbFichaBaseDescontos,
+} from "@/lib/hb-credit/hbFichaBaseOperacional";
 import { setContaCoopDescontosMemoria } from "@/lib/hb-credit/contaCoopDescontosMemory";
 import { bumpContaCoopDescontosRevision } from "@/lib/hb-credit/contaCoopDescontosNotify";
 import {
@@ -21,7 +21,6 @@ import {
   markContaCoopDescontosFetchOk,
   markContaCoopDescontosMesFetchOk,
 } from "@/lib/hb-credit/contaCoopDescontosSyncHealth";
-import { isContaCoopValorReceberPilot } from "@/utils/contaCoopUiVisibility";
 import { isStaffHbCoopBackgroundSyncRoute } from "@/lib/hb-credit/staffHbSyncRoute";
 import type { User } from "@/types";
 import {
@@ -117,7 +116,7 @@ function mesesReferenciaParaSyncCooperado(
   cooperativaId: string,
   mesFallback: string
 ): string[] {
-  return hbCreditMesesReferenciaUnificados(data, cooperadoId, cooperativaId, mesFallback);
+  return listMesesReferenciaHbFichaBaseSync(data, cooperadoId, cooperativaId, mesFallback);
 }
 
 async function syncContaCoopDescontosMesesLocal(
@@ -215,7 +214,7 @@ export async function refreshContaCoopDescontosCooperativaPendentes(opts: {
 
   const jobs: Array<{ cooperadoId: string; mesReferencia: string }> = [];
   for (const c of cooperados) {
-    for (const mesReferencia of hbCreditMesesReferenciaUnificados(data, c.id, opts.cooperativaId)) {
+    for (const mesReferencia of listMesesReferenciaHbFichaBaseSync(data, c.id, opts.cooperativaId)) {
       if (cooperadoMesQuitado(data, c.id, mesReferencia)) continue;
       jobs.push({ cooperadoId: c.id, mesReferencia });
     }
@@ -330,7 +329,7 @@ export async function refreshContaCoopDescontosAfterOperacionalSync(opts: {
   cooperativaId: string;
   user: Pick<User, "role" | "cooperadoId" | "id">;
 }): Promise<void> {
-  if (!isContaCoopValorReceberPilot()) return;
+  if (!shouldSyncHbFichaBaseDescontos()) return;
 
   const warmupKey = contaCoopAuxSyncKeyWarmupBundle(opts.cnpj, opts.user.id);
 

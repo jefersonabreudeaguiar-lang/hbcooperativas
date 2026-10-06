@@ -1,0 +1,26 @@
+---
+description: Regra operacional HB Créditos × ficha base (todas as cooperativas)
+globs: src/lib/hb-credit/**/*.ts,src/services/notaPedidoService.ts,scripts/repair-hb-ficha-base-cooperativa.ts
+alwaysApply: false
+---
+
+# HB Créditos × ficha base (operacional universal)
+
+Qualquer cooperativa/cooperado/responsável que ingressa no app segue o mesmo fluxo:
+
+1. **Compra HB** → servidor projeta `contaCoopDescontos` no `operacional.json` (se `shouldProjectHbFichaBaseOnServer()`).
+2. **App após sync operacional** → `refreshContaCoopDescontosAfterOperacionalSync` puxa `/api/credit/ficha-descontos` e grava arquivo mensal local.
+3. **Resumo / pagamento / A receber** → `getResumoPagamentoCooperado` + `getDescontosContaCoopMesCached` (meses = `listMesesReferenciaHbFichaBaseSync` = `mesesReferenciaComDebitoAberto` no modo padrão).
+
+## Regressão (formato anterior)
+
+- `NEXT_PUBLIC_HB_FICHA_BASE_LEGACY=1` ou `data-hb-ficha-base-legacy="1"` no `<html>`: meses via `hbCreditMesesReferenciaUnificados`, sem repair servidor (authorize/cron).
+- `NEXT_PUBLIC_HB_FICHA_BASE_PROJECTION=0` ou `data-hb-ficha-base-off="1"`: desliga projeção/sync (emergência).
+
+## Reparo em massa (ops)
+
+1. Dry-run: `npx tsx scripts/repair-hb-ficha-base-cooperativa.ts`
+2. Gravar: `--apply` (backup em `scripts/backups/`)
+3. App: pull operacional com rede
+
+Não alterar regras de negócio de entregas/pagamento ao tocar HB — só projeção `contaCoopDescontos` e escopo de meses.

@@ -2111,7 +2111,7 @@ export function getTotalAPagarCooperado(
 }
 
 /** Meses com ficha/pagamento pendente — sem chamar getResumoValorAPagar (evita recursão). */
-function mesesReferenciaComDebitoAberto(
+export function mesesReferenciaComDebitoAberto(
   data: AppData,
   cooperadoId: string,
   cooperativaId?: string

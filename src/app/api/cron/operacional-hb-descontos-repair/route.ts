@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { repairOperacionalContaCoopDescontosCooperativa } from "@/lib/hb-credit/repairOperacionalContaCoopDescontos";
+import { shouldProjectHbFichaBaseOnServer } from "@/lib/hb-credit/hbFichaBaseOperacional";
 import { getSupabaseAdmin, isSupabaseConfigured } from "@/lib/supabase/admin";
 
 function authorizeCron(request: Request): boolean {
@@ -40,6 +41,16 @@ export async function GET(request: Request) {
   }
 
   try {
+    if (!shouldProjectHbFichaBaseOnServer()) {
+      return NextResponse.json({
+        ok: true,
+        cnpj,
+        skipped: true,
+        reason: "hb_ficha_base_server_projection_disabled",
+        patched: 0,
+        checked: 0,
+      });
+    }
     const result = await repairOperacionalContaCoopDescontosCooperativa(supabase, cnpj);
     return NextResponse.json({ ok: true, cnpj, ...result });
   } catch (e) {

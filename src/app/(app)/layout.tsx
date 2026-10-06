@@ -8,6 +8,7 @@ import { CooperativaSyncProvider } from "@/components/sync/CooperativaSyncProvid
 import { CooperadoFinanceiroGate } from "@/components/cooperado/CooperadoFinanceiroGate";
 import { CooperadoInicioCardPersistBootstrap } from "@/components/cooperado/CooperadoInicioCardPersistBootstrap";
 import { HbCreditAccountPersistBootstrap } from "@/components/hb-credit/HbCreditAccountPersistBootstrap";
+import { HbFichaBaseOperacionalMarker } from "@/components/hb-credit/HbFichaBaseOperacionalMarker";
 import { HbCreditNavPrefetch } from "@/hooks/useHbCreditNavPrefetch";
 import { AppSchedulerBootstrap } from "@/components/performance/AppSchedulerBootstrap";
 
@@ -26,6 +27,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         <CooperadoInicioCardPersistBootstrap />
         <HbCreditNavPrefetch />
         <HbCreditAccountPersistBootstrap />
+        <HbFichaBaseOperacionalMarker />
         <CooperadoFinanceiroGate>
           <GestaoAccessGuard>
             <EntregaAprovadaNotifier />
