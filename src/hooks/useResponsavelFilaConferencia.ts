@@ -9,7 +9,6 @@ import {
   isNotaConferenciaDecididaLocalmente,
   reconciliarNotasConferenciaDecididasLocalmente,
 } from "@/lib/conferencia/conferenciaFilaDecisaoLocal";
-import { isStaffConferenciaModalOpen } from "@/lib/performance/staffConferenciaSyncTier";
 import { listNotasFilaConferenciaResponsavel } from "@/services/responsavelPainelIndex";
 import { getCooperativaCnpj, getPendingNotaDeleteIds } from "@/services/notaPedidoCloudService";
 import { agruparPendentesPorCooperado } from "@/utils/fotoEntrega";
@@ -96,7 +95,6 @@ export function useResponsavelFilaConferencia(
 
   const pendentesEstaveis = useMemo(() => {
     if (!filaDetalhada || !isAppDataWarm()) return pendentesTodas;
-    if (isStaffConferenciaModalOpen()) return pendentesTodas;
     const data = getDataOperationalTruth();
     return buildPendentesEstaveisConferencia(
       data,

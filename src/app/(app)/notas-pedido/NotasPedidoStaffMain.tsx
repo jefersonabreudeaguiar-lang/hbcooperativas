@@ -185,7 +185,11 @@ import {
 } from "@/services/conferenciaDecisaoNuvemSync";
 import { ConferenciaNuvemSyncBanner } from "@/components/notas-pedido/ConferenciaNuvemSyncBanner";
 import { getProdutosContrato } from "@/services/catalogoContratosService";
-import { countCooperadosLancamentosEmAbertoResponsavel, countNotasFilaConferenciaResponsavel } from "@/services/responsavelPainelIndex";
+import {
+  countCooperadosLancamentosEmAbertoResponsavel,
+  countNotasFilaConferenciaResponsavel,
+  listNotasFilaConferenciaResponsavel,
+} from "@/services/responsavelPainelIndex";
 import { listarResumosMensaisEntregas, filtrarResumosEntregasPendentes, filtrarResumosMesesNaoQuitados } from "@/services/cooperadoEntregasService";
 import { listarResumosFichaEmAbertoCooperado } from "@/services/cooperadoFichaTimelineService";
 import {
@@ -2007,13 +2011,21 @@ export default function NotasPedidoStaffMain() {
 
   const filaIndexCount =
     useAppDataSelector(
-      (d) => (!coopId || isCooperado ? 0 : countNotasFilaConferenciaResponsavel(d, coopId)),
+      (d) => {
+        if (!coopId || isCooperado) return 0;
+        reconciliarNotasConferenciaDecididasLocalmente(d);
+        return listNotasFilaConferenciaResponsavel(d, coopId).filter(
+          (n) => !isNotaConferenciaDecididaLocalmente(n.id)
+        ).length;
+      },
       [coopId, isCooperado]
     ) ?? 0;
 
   const dadosCarregandoFilaConferencia =
     mostrarFilaResponsavelConteudo &&
-    (data === null || !isAppDataWarm() || syncingForUi);
+    (data === null ||
+      !isAppDataWarm() ||
+      (syncingForUi && pendentesEstaveis.length === 0 && filaIndexCount === 0));
 
   const contratosEntrega =
     useAppDataSelector(

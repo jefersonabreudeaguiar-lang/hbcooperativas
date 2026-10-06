@@ -3,9 +3,10 @@ import type { OperacionalSyncPayload } from "@/lib/supabase/cooperativaSyncStora
 import { findCooperativaByCnpj, normalizeCnpj } from "@/utils/cooperativa";
 import { secureApiFetch } from "@/lib/security/clientSession";
 import {
-  clearOperationalDataForCooperativa,
+  clearOperacionalFinanceiroForCooperativa,
   resetCloudSyncMarkersForRestore,
 } from "@/services/operationalReset";
+import { syncNotasPedidoFromCloud } from "@/services/notaPedidoCloudService";
 import { getData, saveDataSafe } from "@/services/dataStore";
 import { beginCloudSync, endCloudSync } from "@/services/cloudSyncProgress";
 import { forceNextFullNotasSync } from "@/services/syncMetaService";
@@ -131,10 +132,12 @@ export async function forceRestoreOperacionalFromCloud(
       };
     }
 
-    data = clearOperationalDataForCooperativa(data, cid);
+    // Mantém notasPedido (fila Conferir) — só alinha ficha/pagamentos com o backup operacional.
+    data = clearOperacionalFinanceiroForCooperativa(data, cid);
     saveDataSafe(data);
 
     await syncAllCooperativaFromCloud(digits, cid);
+    await syncNotasPedidoFromCloud(digits, { retryFull: true });
 
     const operacional = await fetchOperacionalFromApi(digits);
     const stats = medirOperacionalLocalVsNuvem(getData(), cid, operacional);

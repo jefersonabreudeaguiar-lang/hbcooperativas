@@ -169,7 +169,17 @@ const preserved = preserveConferenciaInProgressOperationalTruth(
 );
 assert.equal(preserved.notasPedido[0]?.status, "conferida");
 assert.equal(preserved.fichaCorrida.length, 1);
-pass("sync durante conferência — preserva conferida e ficha parcial");
+const preservedFila = preserveConferenciaInProgressOperationalTruth(
+  { notasPedido: [], fichaCorrida: [], arquivosMensais: [] } as never,
+  {
+    notasPedido: [{ id: "n2", status: "aguardando_conferencia", updatedAt: "2026-01-01" } as never],
+    fichaCorrida: [],
+    arquivosMensais: [],
+  } as never
+);
+assert.equal(preservedFila.notasPedido.length, 1);
+assert.equal(preservedFila.notasPedido[0]?.id, "n2");
+pass("sync durante conferência — preserva conferida, fila e ficha parcial");
 
 assert.ok(notas.includes("updateDataSafe"), "aprovação usa gravação segura com retry de espaço");
 assert.ok(notas.includes("persistAprovacaoErro"), "aprovação distingue falha de disco vs estado");

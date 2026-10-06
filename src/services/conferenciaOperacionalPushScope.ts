@@ -129,7 +129,13 @@ export function preserveConferenciaInProgressOperationalTruth(
   });
 
   for (const t of truth.notasPedido) {
-    if (!incomingIds.has(t.id) && (t.status === "conferida" || t.status === "rejeitada")) {
+    if (incomingIds.has(t.id)) continue;
+    if (
+      t.status === "conferida" ||
+      t.status === "rejeitada" ||
+      t.status === "aguardando_conferencia" ||
+      t.status === "entregue"
+    ) {
       notasPedido.push(t);
     }
   }
