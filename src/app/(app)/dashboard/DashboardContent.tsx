@@ -4,7 +4,8 @@ import { useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
 import type { AppData } from "@/types";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useAppDataSelector, useAppDataReady } from "@/hooks/useAppData";
+import { useAppDataSelector, useAppDataReady, useAppDataSelectorForDomains } from "@/hooks/useAppData";
+import type { AppDataNotifyDomain } from "@/lib/performance/appDataDomainNotify";
 import { getData, getDataRevision } from "@/services/dataStore";
 import { useAuth } from "@/modules/auth/AuthProvider";
 import { shouldRenderStaffPainelUi } from "@/lib/staffNavigationUser";
@@ -81,6 +82,8 @@ import {
 } from "@/lib/performance/cooperadoColdStart";
 import { RestoreOperacionalPanel } from "@/components/sync/RestoreOperacionalPanel";
 import { CooperadoInicioValorReceberCard } from "@/components/cooperado/CooperadoInicioValorReceberCard";
+
+const DASHBOARD_INICIO_DOMAINS: AppDataNotifyDomain[] = ["shell", "notas", "financeiro", "operacional"];
 
 function CooperadoDashboard() {
   const { user } = useAuth();
@@ -163,7 +166,9 @@ function CooperadoDashboard() {
       carregandoValoresFinanceiros,
     });
 
-  const view = useAppDataSelector((data) => {
+  const view = useAppDataSelectorForDomains(
+    DASHBOARD_INICIO_DOMAINS,
+    (data) => {
     if (!data || !user?.cooperadoId) return null;
 
     const coopId = getUserCooperativaId(user, data);
@@ -243,7 +248,9 @@ function CooperadoDashboard() {
       precisaAssinatura,
       cnpjDigits,
     };
-  }, [user?.id, user?.cooperadoId, user?.cooperativaId, hbDescontosRevision, apresentacaoConsolidada]);
+  },
+    [user?.id, user?.cooperadoId, user?.cooperativaId, hbDescontosRevision, apresentacaoConsolidada]
+  );
 
   const mesAtual = getCurrentMesReferencia();
   const nomeCurto =

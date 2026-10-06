@@ -1408,7 +1408,7 @@ export default function NotasPedidoStaffMain() {
     const fresh =
       getData()?.notasPedido.find((n) => n.id === selectedNota.id) ?? selectedNota;
     void loadConferenciaFoto(fresh, conferenciaFotoIdx);
-  }, [conferirModal, selectedNota?.id, conferenciaFotoIdx, loadConferenciaFoto, selectedNota]);
+  }, [conferirModal, selectedNota?.id, conferenciaFotoIdx, loadConferenciaFoto]);
 
   const conferenciaDataRevision = useAppDataSelector(() => getDataRevision(), []);
 
@@ -1968,10 +1968,16 @@ export default function NotasPedidoStaffMain() {
   const responsavelMountSyncRef = useRef(false);
   const responsavelNotasPullAtRef = useRef(0);
   const responsavelPrimeiroPullAgendadoRef = useRef(false);
+  const conferirModalAbertaRef = useRef(false);
+  const responsavelPullPendenteAposConferenciaRef = useRef(false);
 
   const puxarNotasResponsavelDaNuvem = useCallback(
-    (opts?: { forceFull?: boolean }) => {
+    (opts?: { forceFull?: boolean; ignoreConferenciaModal?: boolean }) => {
       if (isCooperado || !coopId) return;
+      if (conferirModalAbertaRef.current && !opts?.ignoreConferenciaModal) {
+        responsavelPullPendenteAposConferenciaRef.current = true;
+        return;
+      }
       const d = getData();
       if (!d) return;
       const cnpj = getCooperativaCnpj(d, coopId);
@@ -1986,6 +1992,14 @@ export default function NotasPedidoStaffMain() {
     },
     [isCooperado, coopId]
   );
+
+  useEffect(() => {
+    conferirModalAbertaRef.current = conferirModal;
+    if (conferirModal) return;
+    if (!responsavelPullPendenteAposConferenciaRef.current) return;
+    responsavelPullPendenteAposConferenciaRef.current = false;
+    puxarNotasResponsavelDaNuvem();
+  }, [conferirModal, puxarNotasResponsavelDaNuvem]);
 
   useEffect(() => {
     if (!isCooperado || !data) return;
@@ -3056,7 +3070,6 @@ export default function NotasPedidoStaffMain() {
 
   const openConferir = async (nota: NotaPedido) => {
     aquecerUiConferencia();
-    await loadConferenciaFotoPrefetchModule();
     const raw = getDataOperationalTruth()?.notasPedido.find((n) => n.id === nota.id) ?? nota;
     const fresh = sanitizarNotaParaFilaConferencia(raw);
     if (notaBloqueadaConferenciaPorExclusaoPendente(fresh.id, pendingDeleteIds)) {
@@ -3087,14 +3100,8 @@ export default function NotasPedidoStaffMain() {
       setFilaConferenciaPos(0);
       setFilaConferenciaTotal(0);
     }
-    const d0 = getData() ?? data;
-    if (d0 && coopId) {
-      void loadConferenciaFotoPrefetchModule().then((m) =>
-        m.scheduleWarmConferenciaNotaFotos(d0, coopId, fresh, { delayMs: 0 })
-      );
-    }
     startTransition(() => setConferirModal(true));
-    await prepararConferenciaNota(fresh);
+    void prepararConferenciaNota(fresh);
   };
 
   const obterProximaNotaConferencia = (chaveGrupo: string, notaConcluidaId: string): NotaPedido | null => {

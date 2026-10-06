@@ -19,7 +19,12 @@ function assert(cond: boolean, msg: string) {
 }
 
 assert(hook.includes("!filaDetalhada) return []"), "lista fila só com aba detalhada");
-assert(hook.includes("countNotasFilaConferenciaResponsavel"), "badge usa contagem leve");
+assert(
+  hook.includes("listNotasFilaConferenciaResponsavel") &&
+    hook.includes("filaBadgeCount") &&
+    hook.includes("filaDetalhada) return 0"),
+  "badge usa contagem leve (lista fila sem sticky pesado)"
+);
 assert(notas.includes("{conferirModal && ("), "modal conferir monta só quando aberto");
 assert(notas.includes('vistaResponsavel !== "fila"'), "zombie scan só na fila");
 

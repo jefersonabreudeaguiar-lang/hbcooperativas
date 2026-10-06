@@ -33,6 +33,9 @@ export function getCooperadoMobileTabCacheLimit(lowMemoryDevice: boolean): numbe
 /** Início — preferir manter montado no LRU (P1). */
 export const COOPERADO_TAB_PIN_HREF = "/dashboard" as const;
 
+/** Par leve — preferir expulsar do LRU antes das abas pesadas. */
+export const COOPERADO_TAB_LIGHT_HREFS = ["/precos", "/mensalidades"] as const;
+
 /** Par pesado — evitar os dois juntos em aparelho com pouca RAM. */
 export const COOPERADO_TAB_HEAVY_HREFS = ["/notas-pedido", "/ficha-corrida"] as const;
 
@@ -47,6 +50,13 @@ export function pickCooperadoTabCacheEviction(
 ): string | undefined {
   const candidates = order.filter((h) => h !== activeHref && h !== COOPERADO_TAB_PIN_HREF);
   if (candidates.length === 0) return undefined;
+
+  const lightCached = candidates.filter((h) =>
+    (COOPERADO_TAB_LIGHT_HREFS as readonly string[]).includes(h)
+  );
+  if (lightCached.length > 0) {
+    return lightCached[lightCached.length - 1];
+  }
 
   if (lowMemoryDevice) {
     const heavyCached = candidates.filter((h) =>

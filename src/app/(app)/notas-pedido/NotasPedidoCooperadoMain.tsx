@@ -1324,21 +1324,45 @@ export default function NotasPedidoCooperadoMain() {
   }, [isCooperado, user?.id]);
 
   const cooperadoEntregaMaintenanceBusyRef = useRef(false);
+  const cooperadoAnexarPrefetchSessaoRef = useRef(false);
 
-  const runCooperadoEntregaMaintenance = useCallback(() => {
-    if (cooperadoEntregaMaintenanceBusyRef.current) return;
-    cooperadoEntregaMaintenanceBusyRef.current = true;
-    void refreshCooperadoQueueIndicators();
-    void refreshRascunhoAnexarFromDraft();
-    void runCooperadoDeliveryQueueMaintenance()
-      .then(() => {
-        void refreshCooperadoQueueIndicators();
-        void refreshRascunhoAnexarFromDraft();
-      })
-      .finally(() => {
-        cooperadoEntregaMaintenanceBusyRef.current = false;
-      });
-  }, [refreshCooperadoQueueIndicators, refreshRascunhoAnexarFromDraft]);
+  const runCooperadoEntregaMaintenance = useCallback(
+    (opts?: { forceHeavy?: boolean }) => {
+      if (cooperadoEntregaMaintenanceBusyRef.current) return;
+      cooperadoEntregaMaintenanceBusyRef.current = true;
+
+      const runHeavy = async () => {
+        await runCooperadoDeliveryQueueMaintenance();
+        await refreshCooperadoQueueIndicators();
+        await refreshRascunhoAnexarFromDraft();
+      };
+
+      void (async () => {
+        try {
+          if (opts?.forceHeavy) {
+            await runHeavy();
+            return;
+          }
+          if (!user?.id) {
+            await refreshCooperadoQueueIndicators();
+            return;
+          }
+          const offline = await countCooperadoOfflinePhotosPending();
+          const publishPending = countPendingEntregaPublish({ userId: user.id });
+          void refreshCooperadoQueueIndicators();
+          void refreshRascunhoAnexarFromDraft();
+          if (offline > 0 || publishPending > 0) {
+            await runCooperadoDeliveryQueueMaintenance();
+            await refreshCooperadoQueueIndicators();
+            await refreshRascunhoAnexarFromDraft();
+          }
+        } finally {
+          cooperadoEntregaMaintenanceBusyRef.current = false;
+        }
+      })();
+    },
+    [refreshCooperadoQueueIndicators, refreshRascunhoAnexarFromDraft, user?.id]
+  );
 
   useEffect(() => {
     if (isCooperado) return;
@@ -1361,20 +1385,23 @@ export default function NotasPedidoCooperadoMain() {
 
   useEffect(() => {
     if (!isCooperado) return;
-    runCooperadoEntregaMaintenance();
+    runCooperadoEntregaMaintenance({ forceHeavy: true });
   }, [isCooperado, runCooperadoEntregaMaintenance]);
 
   useEffect(() => {
     if (!isCooperado) return;
     const envioUrgente = anexarModal || enviando || fotosSessaoCount > 0;
     if (envioUrgente) {
-      runCooperadoEntregaMaintenance();
+      runCooperadoEntregaMaintenance({ forceHeavy: true });
       return;
     }
     if (!tabActive) return;
     markRqlColdStartPhase("notas_pedido_cooperado_shell");
-    scheduleCooperadoPostInteractiveTask(runCooperadoEntregaMaintenance);
-    scheduleCooperadoPostInteractiveTask(() => prefetchCooperadoAnexarPipeline());
+    scheduleCooperadoPostInteractiveTask(() => runCooperadoEntregaMaintenance());
+    if (!cooperadoAnexarPrefetchSessaoRef.current) {
+      cooperadoAnexarPrefetchSessaoRef.current = true;
+      scheduleCooperadoPostInteractiveTask(() => prefetchCooperadoAnexarPipeline());
+    }
   }, [
     isCooperado,
     tabActive,
@@ -2979,7 +3006,6 @@ export default function NotasPedidoCooperadoMain() {
 
   const openConferir = async (nota: NotaPedido) => {
     aquecerUiConferencia();
-    await loadConferenciaFotoPrefetchModule();
     const raw = getData()?.notasPedido.find((n) => n.id === nota.id) ?? nota;
     const fresh = sanitizarNotaParaFilaConferencia(raw);
     if (notaBloqueadaConferenciaPorExclusaoPendente(fresh.id, pendingDeleteIds)) {
@@ -3005,14 +3031,8 @@ export default function NotasPedidoCooperadoMain() {
       setFilaConferenciaPos(0);
       setFilaConferenciaTotal(0);
     }
-    const d0 = getData() ?? data;
-    if (d0 && coopId) {
-      void loadConferenciaFotoPrefetchModule().then((m) =>
-        m.scheduleWarmConferenciaNotaFotos(d0, coopId, fresh, { delayMs: 0 })
-      );
-    }
     startTransition(() => setConferirModal(true));
-    await prepararConferenciaNota(fresh);
+    void prepararConferenciaNota(fresh);
   };
 
   const obterProximaNotaConferencia = (chaveGrupo: string, notaConcluidaId: string): NotaPedido | null => {
