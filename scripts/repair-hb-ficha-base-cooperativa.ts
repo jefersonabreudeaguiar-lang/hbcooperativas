@@ -69,8 +69,10 @@ const argv = process.argv.slice(2);
 const APPLY = argv.includes("--apply");
 const JSON_OUT = argv.includes("--json");
 const cnpjArg = argv.find((a) => a.startsWith("--cnpj="))?.split("=")[1];
+const cooperadoEq = argv.find((a) => a.startsWith("--cooperado="))?.split("=")[1];
 const cooperadoFlag = argv.indexOf("--cooperado");
 const cooperadoId =
+  cooperadoEq ??
   argv.find((a) => a.startsWith("c_")) ??
   (cooperadoFlag >= 0 ? argv[cooperadoFlag + 1] : undefined);
 const CNPJ = normalizeCnpj(cnpjArg ?? process.argv.find((a) => /^\d{14}$/.test(a)) ?? "62351750000165");
