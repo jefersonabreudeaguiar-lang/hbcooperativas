@@ -3721,9 +3721,12 @@ export default function NotasPedidoStaffMain() {
     }
 
     const truthAposLancar = dadosAposAprovacao ?? getDataOperationalTruth();
+    const notaSalvaConferida = dadosAposAprovacao?.notasPedido.find(
+      (n) => n.id === notaId && n.status === "conferida"
+    );
     let gravada = truthAposLancar.notasPedido.find((n) => n.id === notaId);
-    if (gravada?.status !== "conferida" && notaAtualizada?.status === "conferida") {
-      gravada = notaAtualizada;
+    if (gravada?.status !== "conferida" && notaSalvaConferida) {
+      gravada = notaSalvaConferida;
     }
     if (gravada?.status !== "conferida") {
       console.warn("[conferencia-aprovacao] nota não ficou conferida após updateData", notaId, gravada?.status);
