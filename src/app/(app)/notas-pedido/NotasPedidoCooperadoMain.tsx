@@ -149,13 +149,9 @@ import { putLocalNotaMedia, readNotaFotoAtIndex } from "@/services/localMediaSto
 import { listCooperadosDaCooperativa, pushCooperadoToCloud, resolverCooperadoIdCanonico, getCooperadoNomeResolvido, notaPertenceCooperado } from "@/services/cooperadoCloudService";
 import { pushOperacionalToCloud, syncContratosFromCloud } from "@/services/cooperativaSyncCloudService";
 import {
-  enqueueConferenciaAprovacaoSync,
-  enqueueConferenciaRejeicaoSync,
-  getConferenciaPatchSyncedSnapshot,
-  markConferenciaPatchSyncedForOperacionalPush,
-} from "@/services/conferenciaAprovacaoSyncQueue";
-import { patchNotaDecisaoConferenciaNaNuvem } from "@/services/conferenciaPatchCloudTask";
-import { withConferenciaOperacionalPushScope } from "@/services/conferenciaOperacionalPushScope";
+  scheduleConferenciaAprovacaoNuvemSync,
+  scheduleConferenciaRejeicaoNuvemSync,
+} from "@/services/conferenciaDecisaoNuvemSync";
 import { getProdutosContrato } from "@/services/catalogoContratosService";
 import { countCooperadosLancamentosEmAbertoResponsavel } from "@/services/responsavelPainelIndex";
 import { listarResumosMensaisEntregas, filtrarResumosEntregasPendentes, filtrarResumosMesesNaoQuitados } from "@/services/cooperadoEntregasService";
@@ -3442,33 +3438,18 @@ export default function NotasPedidoCooperadoMain() {
     const notaAprovadaRef = selectedNota;
     const proxima = obterProximaNotaConferencia(chaveAtual, notaId);
 
-    enqueueConferenciaAprovacaoSync(notaId, async () => {
-      if (notaPatchSnapshot && coopId) {
-        const patched = await patchNotaDecisaoConferenciaNaNuvem({
-          coopId,
-          user,
-          nota: notaPatchSnapshot,
-        });
-        if (!patched.ok) {
-          console.warn("[conferencia-aprovacao-sync]", notaId, patched.error);
-          setSuccessMsg(patched.error);
-          return;
-        }
-        markConferenciaPatchSyncedForOperacionalPush(notaId);
-        await withConferenciaOperacionalPushScope(coopId, getConferenciaPatchSyncedSnapshot(), async () => {
-          const cnpj = await resolveCooperativaCnpj(getData(), coopId, user);
-          if (!cnpj) {
-            console.warn("[conferencia-aprovacao-sync]", notaId, "CNPJ não resolvido para push operacional.");
-            requestAppSyncLight();
-            return;
-          }
-          await pushOperacionalToCloud(cnpj, getData(), coopId, { authoritative: true });
-        });
-        requestAppSyncLight();
-      } else {
-        requestAppSyncLight();
-      }
-    });
+    if (notaPatchSnapshot && coopId) {
+      scheduleConferenciaAprovacaoNuvemSync({
+        notaId,
+        coopId,
+        user,
+        nota: notaPatchSnapshot,
+        operacionalPush: { authoritative: true },
+        onFailed: (error) => setSuccessMsg(error),
+      });
+    } else {
+      requestAppSyncLight();
+    }
 
     void (async () => {
       try {
@@ -3551,23 +3532,17 @@ export default function NotasPedidoCooperadoMain() {
 
     const notaPatchSnapshot = notaAtualizada;
 
-    enqueueConferenciaRejeicaoSync(notaId, async () => {
-      if (notaPatchSnapshot && coopId) {
-        const patched = await patchNotaDecisaoConferenciaNaNuvem({
-          coopId,
-          user,
-          nota: notaPatchSnapshot,
-        });
-        if (!patched.ok) {
-          setSuccessMsg(patched.error);
-          requestAppSyncLight();
-          return;
-        }
-        requestAppSyncLight();
-      } else {
-        requestAppSyncLight();
-      }
-    });
+    if (notaPatchSnapshot && coopId) {
+      scheduleConferenciaRejeicaoNuvemSync({
+        notaId,
+        coopId,
+        user,
+        nota: notaPatchSnapshot,
+        onFailed: (error) => setSuccessMsg(error),
+      });
+    } else {
+      requestAppSyncLight();
+    }
 
     lancandoRef.current = true;
     void (async () => {

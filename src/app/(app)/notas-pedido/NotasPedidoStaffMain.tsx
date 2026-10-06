@@ -175,13 +175,10 @@ import { putLocalNotaMedia, readNotaFotoAtIndex } from "@/services/localMediaSto
 import { listCooperadosDaCooperativa, pushCooperadoToCloud, resolverCooperadoIdCanonico, getCooperadoNomeResolvido, notaPertenceCooperado } from "@/services/cooperadoCloudService";
 import { pushOperacionalToCloud, syncContratosFromCloud } from "@/services/cooperativaSyncCloudService";
 import {
-  enqueueConferenciaAprovacaoSync,
-  enqueueConferenciaRejeicaoSync,
-  getConferenciaPatchSyncedSnapshot,
-  markConferenciaPatchSyncedForOperacionalPush,
-} from "@/services/conferenciaAprovacaoSyncQueue";
-import { patchNotaDecisaoConferenciaNaNuvem } from "@/services/conferenciaPatchCloudTask";
-import { withConferenciaOperacionalPushScope } from "@/services/conferenciaOperacionalPushScope";
+  scheduleConferenciaAprovacaoNuvemSync,
+  scheduleConferenciaRejeicaoNuvemSync,
+} from "@/services/conferenciaDecisaoNuvemSync";
+import { ConferenciaNuvemSyncBanner } from "@/components/notas-pedido/ConferenciaNuvemSyncBanner";
 import { getProdutosContrato } from "@/services/catalogoContratosService";
 import { countCooperadosLancamentosEmAbertoResponsavel } from "@/services/responsavelPainelIndex";
 import { listarResumosMensaisEntregas, filtrarResumosEntregasPendentes, filtrarResumosMesesNaoQuitados } from "@/services/cooperadoEntregasService";
@@ -3599,42 +3596,35 @@ export default function NotasPedidoStaffMain() {
     let proxima = obterProximaNotaConferencia(chaveAtual, notaId);
     if (proxima?.id === notaId) proxima = null;
 
-    const msgAprovada = divisaoPreview
-      ? `Nota aprovada! ${formatCurrency(valorPorCooperado)} para cada (${msgBeneficiarios}).${
-          proxima ? " Abrindo a próxima entrega…" : " Fila concluída!"
-        }`
-      : `Nota aprovada! ${formatCurrency(valorAprovado)} na ficha de ${msgBeneficiarios}.${
-          proxima ? " Abrindo a próxima entrega…" : " Fila concluída!"
-        }`;
-    setLancadoMsg(msgAprovada);
-    setTimeout(() => setLancadoMsg(""), proxima ? 4000 : 6000);
+    const valorMsg = divisaoPreview
+      ? `${formatCurrency(valorPorCooperado)} para cada (${msgBeneficiarios})`
+      : `${formatCurrency(valorAprovado)} na ficha de ${msgBeneficiarios}`;
+    setLancadoMsg(
+      `Lançamento salvo (${valorMsg}). Sincronizando com a nuvem…${proxima ? " Abrindo a próxima entrega…" : ""}`
+    );
 
     const runAprovacaoCloudSync = () => {
-      enqueueConferenciaAprovacaoSync(notaId, async () => {
-        if (notaPatchSnapshot && coopId) {
-          const patched = await patchNotaDecisaoConferenciaNaNuvem({
-            coopId,
-            user,
-            nota: notaPatchSnapshot,
-          });
-          if (!patched.ok) {
-            console.warn("[conferencia-aprovacao-sync]", notaId, patched.error);
-            setSuccessMsg(patched.error);
-            return;
-          }
-          markConferenciaPatchSyncedForOperacionalPush(notaId);
-          await withConferenciaOperacionalPushScope(coopId, getConferenciaPatchSyncedSnapshot(), async () => {
-            const cnpj = await resolveCooperativaCnpj(getData(), coopId, user);
-            if (!cnpj) {
-              console.warn("[conferencia-aprovacao-sync]", notaId, "CNPJ não resolvido para push operacional.");
-              requestAppSyncLight();
-              return;
-            }
-            await pushOperacionalToCloud(cnpj, getData(), coopId, STAFF_OPERACIONAL_PUSH);
-          });
-        } else {
-          requestAppSyncLight();
-        }
+      if (!notaPatchSnapshot || !coopId) {
+        requestAppSyncLight();
+        return;
+      }
+      scheduleConferenciaAprovacaoNuvemSync({
+        notaId,
+        coopId,
+        user,
+        nota: notaPatchSnapshot,
+        operacionalPush: STAFF_OPERACIONAL_PUSH,
+        onSynced: () => {
+          setLancadoMsg(
+            `Conferência confirmada na nuvem (${valorMsg}).${proxima ? "" : " Fila concluída!"}`
+          );
+          setTimeout(() => setLancadoMsg(""), proxima ? 5000 : 7000);
+        },
+        onFailed: (error) => {
+          setSuccessMsg(
+            `Lançamento salvo neste aparelho, mas a nuvem não confirmou: ${error}. Use «Tentar de novo» no aviso amarelo.`
+          );
+        },
       });
     };
     if (typeof requestIdleCallback !== "undefined") {
@@ -3742,23 +3732,25 @@ export default function NotasPedidoStaffMain() {
 
     const notaPatchSnapshot = notaAtualizada;
 
-    enqueueConferenciaRejeicaoSync(notaId, async () => {
-      if (notaPatchSnapshot && coopId) {
-        const patched = await patchNotaDecisaoConferenciaNaNuvem({
-          coopId,
-          user,
-          nota: notaPatchSnapshot,
-        });
-        if (!patched.ok) {
-          setSuccessMsg(patched.error);
-          requestAppSyncLight();
-          return;
-        }
-        requestAppSyncLight();
-      } else {
-        requestAppSyncLight();
-      }
-    });
+    if (notaPatchSnapshot && coopId) {
+      scheduleConferenciaRejeicaoNuvemSync({
+        notaId,
+        coopId,
+        user,
+        nota: notaPatchSnapshot,
+        onSynced: () => {
+          setLancadoMsg("Correção confirmada na nuvem.");
+          setTimeout(() => setLancadoMsg(""), 5000);
+        },
+        onFailed: (error) => {
+          setSuccessMsg(
+            `Correção salva neste aparelho, mas a nuvem não confirmou: ${error}. Use «Tentar de novo» no aviso amarelo.`
+          );
+        },
+      });
+    } else {
+      requestAppSyncLight();
+    }
 
     travarLancamentoConferencia();
     void (async () => {
@@ -3771,13 +3763,13 @@ export default function NotasPedidoStaffMain() {
           } else if (filaConferenciaRef.current) {
             setFilaConferenciaPos(1);
           }
-          setLancadoMsg("Correção enviada ao cooperado. Abrindo a próxima entrega…");
+          setLancadoMsg("Correção registrada. Sincronizando nuvem… Abrindo a próxima entrega…");
           setTimeout(() => setLancadoMsg(""), 4000);
           await yieldConferenciaUiFrame();
           await prepararConferenciaNota(proxima, { transicao: true });
         } else {
           fecharConferirModal();
-          setLancadoMsg("Correção enviada ao cooperado. Fila concluída!");
+          setLancadoMsg("Correção registrada. Sincronizando nuvem…");
           setTimeout(() => setLancadoMsg(""), 5000);
         }
       } catch {
@@ -4194,6 +4186,7 @@ export default function NotasPedidoStaffMain() {
       {lancadoMsg && (
         <AlertBanner variant="success" className="mt-4" onDismiss={() => setLancadoMsg("")}>{lancadoMsg}</AlertBanner>
       )}
+      {!isCooperado && <ConferenciaNuvemSyncBanner />}
 
       {isCooperado && rascunhoFotosCount > 0 && !anexarModal && abaCooperado !== "entregas" && (
         <AlertBanner variant="warning" className="mb-4" title="Entrega em andamento">
