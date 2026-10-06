@@ -3,7 +3,7 @@
  * Não altera gravação local da nota/ficha — só PATCH (+ push operacional na aprovação).
  */
 import type { NotaPedido } from "@/types";
-import { getData } from "@/services/dataStore";
+import { getData, getDataOperationalTruth } from "@/services/dataStore";
 import {
   enqueueConferenciaAprovacaoSync,
   enqueueConferenciaRejeicaoSync,
@@ -105,7 +105,7 @@ async function executarPushOperacionalAposPatch(
 ): Promise<void> {
   markConferenciaPatchSyncedForOperacionalPush(notaId);
   await withConferenciaOperacionalPushScope(coopId, getConferenciaPatchSyncedSnapshot(), async () => {
-    const cnpj = await resolveCooperativaCnpj(getData(), coopId, user);
+    const cnpj = await resolveCooperativaCnpj(getDataOperationalTruth(), coopId, user);
     if (!cnpj) {
       throw new Error("CNPJ da cooperativa não encontrado para sincronizar a ficha na nuvem.");
     }
