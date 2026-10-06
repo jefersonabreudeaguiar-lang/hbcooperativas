@@ -3457,6 +3457,22 @@ export default function NotasPedidoStaffMain() {
         lancamentosFotoConferenciaRef.current.set(idx, itens);
       }
       setFotosLancadasUi(new Set(fotosLancadasConferenciaRef.current));
+
+      if (conferenciaTotais.liquido <= 0 && !fotosLancadasConferenciaRef.current.has(fotoAtual)) {
+        setConferirErrors({ itens: "Informe a quantidade de pelo menos um produto nesta foto." });
+        return;
+      }
+      if (
+        !fotosLancadasConferenciaRef.current.has(fotoAtual) &&
+        !conferenciaFotoSomenteLeitura
+      ) {
+        const lanc = lancarFotoConferenciaAtual(fotoAtual, qtdFotosAprovadas, { uiFirst: true });
+        if (!lanc.ok) {
+          setConferirErrors({ itens: lanc.error });
+          return;
+        }
+      }
+
       const gate = validarTodasFotosLancadasConferencia(
         fotosLancadasConferenciaRef.current,
         qtdFotosAprovadas
@@ -3468,19 +3484,9 @@ export default function NotasPedidoStaffMain() {
         avancarParaFotoConferencia(gate.primeiraPendente);
         return;
       }
-    }
-
-    if (conferenciaTotais.liquido <= 0 && !fotosLancadasConferenciaRef.current.has(fotoAtual)) {
+    } else if (conferenciaTotais.liquido <= 0 && !fotosLancadasConferenciaRef.current.has(fotoAtual)) {
       setConferirErrors({ itens: "Informe a quantidade de pelo menos um produto." });
       return;
-    }
-
-    if (multiFoto && !fotosLancadasConferenciaRef.current.has(fotoAtual) && !conferenciaFotoSomenteLeitura) {
-      const lanc = lancarFotoConferenciaAtual(fotoAtual, qtdFotosAprovadas);
-      if (!lanc.ok) {
-        setConferirErrors({ itens: lanc.error });
-        return;
-      }
     }
 
     const concluirGravacaoAprovacao = () => {
@@ -5386,6 +5392,11 @@ export default function NotasPedidoStaffMain() {
                   return `Lançar foto ${conferenciaFotoIdx + 1} de ${qtdFotosBtn} e continuar`;
                 }
                 if (multiFotoBtn && ultimaFotoBtn) {
+                  const faltaLancarUltima =
+                    !fotosLancadasUi.has(conferenciaFotoIdx) && !conferenciaFotoSomenteLeitura;
+                  if (faltaLancarUltima) {
+                    return `Lançar foto ${conferenciaFotoIdx + 1} de ${qtdFotosBtn} e concluir`;
+                  }
                   return filaConferenciaTotal > 1
                     ? `Concluir entrega · próxima (${filaConferenciaPos}/${filaConferenciaTotal})`
                     : "Concluir entrega (última foto)";

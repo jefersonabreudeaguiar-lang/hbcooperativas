@@ -136,6 +136,12 @@ assert.equal(merged.lancadas.size, 2);
 assert.equal(merged.lancamentosPorFoto.get(1)?.[0]?.produtoInstituicaoId, "b");
 pass("progresso multi-foto — mescla ficha e sessão");
 
+const markerUltimaFoto = "lancarFotoConferenciaAtual(fotoAtual, qtdFotosAprovadas, { uiFirst: true })";
+const idxLancUltima = notas.indexOf(markerUltimaFoto);
+const idxGate = notas.indexOf("validarTodasFotosLancadasConferencia(");
+assert.ok(idxLancUltima > 0 && idxGate > idxLancUltima, "última foto: lança pendente antes do gate de conclusão");
+assert.ok(notas.includes("Lançar foto ${conferenciaFotoIdx + 1} de ${qtdFotosBtn} e concluir"), "rótulo última foto pendente");
+
 assert.ok(notas.includes("finalizarFichasConferenciaMultiFoto"), "fechamento multi-foto preserva lançamentos parciais");
 assert.ok(notas.includes("reidratarProgressoMultiFotoConferencia"), "reidrata progresso da ficha");
 assert.ok(notas.includes("lancamentosOrdenadosPorFoto"), "consolida itens por índice de foto");
