@@ -7,7 +7,7 @@ Objetivo: sensação de app de mensagem (referência **WhatsApp**) no PWA **coop
 | Fase | Troca de aba (paint p75) | Nota média HB (ref.) | Escopo |
 |------|--------------------------|----------------------|--------|
 | **1** (atual) | ≤ 200 ms (SLO interno) | ~7 → 8 | Warmup pointerdown, prefetch idle, haptic+pulso, keep-alive, RQL |
-| **2** | ≤ 120 ms | ~8,5 | Listas leves, menos long tasks em Notas/Financeiro |
+| **2** (191+) | ≤ 120 ms | ~8,5 | `shell_interactive`, boot secundário em idle, warmup de aba adiado |
 | **3** | ≤ 80 ms (faixa WhatsApp) | ≥ 9 | Cold start &lt; 1,5 s, scroll estável, sync silencioso invisível |
 
 Referência WhatsApp (app nativo, celular médio): troca de aba ~30–80 ms, cold start ~0,5–1,5 s.

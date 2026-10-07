@@ -28,8 +28,22 @@ export function AppSchedulerBootstrap() {
   const prevHopRef = useRef<string | null>(null);
 
   useEffect(() => {
-    const stop = startAppScheduler();
-    return stop;
+    let stop: (() => void) | undefined;
+    const start = () => {
+      stop = startAppScheduler();
+    };
+    if (typeof requestIdleCallback !== "undefined") {
+      const id = requestIdleCallback(start, { timeout: 600 });
+      return () => {
+        cancelIdleCallback(id);
+        stop?.();
+      };
+    }
+    const t = window.setTimeout(start, 0);
+    return () => {
+      window.clearTimeout(t);
+      stop?.();
+    };
   }, []);
 
   useEffect(() => {

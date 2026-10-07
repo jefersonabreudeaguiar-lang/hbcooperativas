@@ -45,6 +45,7 @@ import { isStaffBottomTabPath } from "@/lib/performance/staffBottomTabRoutes";
 import { scheduleStaffNavPrefetchEarly } from "@/lib/performance/staffNavPrefetch";
 import { prefetchStaffNotasPedidoRouteBundle } from "@/lib/performance/prefetchStaffNotasPedidoUi";
 import { feedbackTrocaAbaMobile } from "@/lib/performance/tabSwitchFeedback";
+import { markRqlShellInteractive } from "@/lib/performance/rqlMarks";
 import { useMobileTabScrollRestore } from "@/hooks/useMobileTabScrollRestore";
 import type { MobileTabScrollMode } from "@/lib/performance/mobileTabScrollMemory";
 import { CooperadoMobileTabKeepAlive } from "@/components/performance/CooperadoMobileTabKeepAlive";
@@ -396,6 +397,7 @@ function AppShellInner({ children }: { children: React.ReactNode }) {
         "data-hb-keep-alive-wrap",
         cooperadoKeepAliveShell || staffKeepAliveShell ? "1" : "0"
       );
+      markRqlShellInteractive();
     } catch {
       /* ignore */
     }

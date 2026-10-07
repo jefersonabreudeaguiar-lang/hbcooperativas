@@ -2,16 +2,11 @@ import type { Metadata } from "next";
 import { AppShell } from "@/components/layout/AppLayout";
 import { ProtectedRoute } from "@/components/auth/ProtectedRoute";
 import { getPrivateAppRobotsMetadata } from "@/lib/security/crawlerPolicy";
-import { EntregaAprovadaNotifier } from "@/components/cooperado/EntregaAprovadaNotifier";
-import { ComunicadoNotifier } from "@/components/cooperado/ComunicadoNotifier";
 import { CooperativaSyncProvider } from "@/components/sync/CooperativaSyncProvider";
 import { CooperadoFinanceiroGate } from "@/components/cooperado/CooperadoFinanceiroGate";
-import { CooperadoInicioCardPersistBootstrap } from "@/components/cooperado/CooperadoInicioCardPersistBootstrap";
-import { HbCreditAccountPersistBootstrap } from "@/components/hb-credit/HbCreditAccountPersistBootstrap";
-import { HbFichaBaseOperacionalMarker } from "@/components/hb-credit/HbFichaBaseOperacionalMarker";
 import { HbCreditNavPrefetch } from "@/hooks/useHbCreditNavPrefetch";
 import { AppSchedulerBootstrap } from "@/components/performance/AppSchedulerBootstrap";
-import { CooperadoMobilePerfBootstrap } from "@/components/performance/CooperadoMobilePerfBootstrap";
+import { AppIdleSecondaryBootstraps } from "@/components/performance/AppIdleSecondaryBootstraps";
 
 import { GestaoAccessGuard } from "@/components/permissions/GestaoAccessGuard";
 
@@ -25,15 +20,10 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     <ProtectedRoute>
       <CooperativaSyncProvider>
         <AppSchedulerBootstrap />
-        <CooperadoMobilePerfBootstrap />
-        <CooperadoInicioCardPersistBootstrap />
         <HbCreditNavPrefetch />
-        <HbCreditAccountPersistBootstrap />
-        <HbFichaBaseOperacionalMarker />
+        <AppIdleSecondaryBootstraps />
         <CooperadoFinanceiroGate>
           <GestaoAccessGuard>
-            <EntregaAprovadaNotifier />
-            <ComunicadoNotifier />
             <AppShell>{children}</AppShell>
           </GestaoAccessGuard>
         </CooperadoFinanceiroGate>

@@ -2,6 +2,7 @@
  * Aquece o chunk da aba no pointerdown — troca de aba mais rápida (estilo app de mensagem).
  * Não altera dados, sync ou telas financeiras.
  */
+import { deferAfterPointerHandler } from "@/lib/performance/deferMainThreadWork";
 import { warmupCooperadoFinanceiroTabChunk } from "@/lib/performance/cooperadoFinanceiroTabWarmup";
 
 const warmed = new Set<string>();
@@ -12,9 +13,7 @@ function warmOnce(href: string, loader: () => void): void {
   loader();
 }
 
-/** Prefetch de JS da rota alvo antes do click completar. */
-export function cooperadoTabWarmOnPointerDown(href: string): void {
-  if (typeof window === "undefined") return;
+function warmCooperadoTab(href: string): void {
   switch (href) {
     case "/ficha-corrida":
       warmupCooperadoFinanceiroTabChunk();
@@ -34,4 +33,10 @@ export function cooperadoTabWarmOnPointerDown(href: string): void {
     default:
       return;
   }
+}
+
+/** Prefetch de JS da rota alvo — adiado para não gerar long task no pointerdown. */
+export function cooperadoTabWarmOnPointerDown(href: string): void {
+  if (typeof window === "undefined") return;
+  deferAfterPointerHandler(() => warmCooperadoTab(href));
 }

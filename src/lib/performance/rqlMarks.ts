@@ -160,16 +160,22 @@ export function listRqlColdStartMarks(): PerformanceMark[] {
     .sort((a, b) => a.startTime - b.startTime);
 }
 
-/** ms entre primeira e última fase cold start (ou marco interativo se existir). */
+/** ms entre primeira e última fase cold start — prioriza shell utilizável (não sync em background). */
 export function measureRqlColdStartSpanMs(): number | null {
   const marks = listRqlColdStartMarks();
   if (marks.length === 0) return null;
   const first = marks[0].startTime;
   const interactive =
+    marks.find((m) => m.name.endsWith("shell_interactive")) ??
     marks.find((m) => m.name.endsWith("local_resume_ready")) ??
     marks.find((m) => m.name.endsWith("post_interactive_task")) ??
     marks.find((m) => m.name.endsWith("staff_post_interactive_task")) ??
     marks[marks.length - 1];
   const span = interactive.startTime - first;
   return Number.isFinite(span) && span >= 0 ? Math.round(span * 10) / 10 : null;
+}
+
+/** Shell autenticado pintado — fim de cold start UX (responsável + cooperado). */
+export function markRqlShellInteractive(): void {
+  markRqlColdStartPhase("shell_interactive");
 }

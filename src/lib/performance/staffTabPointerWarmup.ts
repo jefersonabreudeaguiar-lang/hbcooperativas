@@ -1,6 +1,7 @@
 /**
  * Aquece chunks das abas mobile do responsável no pointerdown — paridade com cooperado/WhatsApp.
  */
+import { deferAfterPointerHandler } from "@/lib/performance/deferMainThreadWork";
 import { prefetchStaffNotasPedidoRouteBundle } from "@/lib/performance/prefetchStaffNotasPedidoUi";
 import { isStaffBottomTabPath } from "@/lib/performance/staffBottomTabRoutes";
 
@@ -12,8 +13,7 @@ function warmOnce(href: string, loader: () => void): void {
   loader();
 }
 
-export function staffTabWarmOnPointerDown(href: string): void {
-  if (typeof window === "undefined") return;
+function warmStaffTab(href: string): void {
   if (!isStaffBottomTabPath(href) && href !== "/financeiro" && href !== "/relatorios") return;
   switch (href) {
     case "/dashboard":
@@ -43,4 +43,9 @@ export function staffTabWarmOnPointerDown(href: string): void {
     default:
       return;
   }
+}
+
+export function staffTabWarmOnPointerDown(href: string): void {
+  if (typeof window === "undefined") return;
+  deferAfterPointerHandler(() => warmStaffTab(href));
 }

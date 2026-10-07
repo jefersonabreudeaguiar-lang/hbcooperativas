@@ -134,7 +134,10 @@ export function buildMessagingParityReport(rql: RqlPerfRouteReport): MessagingPa
       hbCoopValue: coldMs,
       whatsappScore: WHATSAPP_REFERENCE.scores.coldStart,
       hbCoopScore: coldHb ?? (coldMs == null ? 5.5 : 6),
-      detail: coldMs != null ? `medido ${coldMs}ms` : "Abra o app e rode printWhatsappCompare de novo",
+      detail:
+        coldMs != null
+          ? `medido ${coldMs}ms (até shell_interactive)`
+          : "Abra o app e rode printWhatsappCompare de novo",
     },
     {
       id: "scroll_lists",
