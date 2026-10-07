@@ -8,6 +8,7 @@ import {
   buildValorExibicaoCooperadoOpts,
   getDescontosExtrasExibicaoCooperado,
   getResumoPagamentoCooperado,
+  getResumoPagamentoConsolidadoCooperado,
   getResumoPagamentoExibicao,
   getResumoPagamentoParaRegistro,
   getResumoValorAPagarRelatorio,
@@ -137,6 +138,37 @@ function nota(id: string, status: NotaPedido["status"]): NotaPedido {
     "resumo cooperado deve listar compra HB Créditos"
   );
   assert.equal(exibicao, aReceber.valorLiquido, "valor exibido deve igualar valor a receber");
+}
+
+{
+  const MES_A = "2026-07";
+  const MES_B = "2026-08";
+  let data = baseData({
+    fichaCorrida: [ficha("f1", "n1", MES_A), ficha("f2", "n2", MES_B)],
+    notasPedido: [
+      { ...nota("n1", "conferida"), mesReferencia: MES_A },
+      { ...nota("n2", "conferida"), mesReferencia: MES_B },
+    ],
+  });
+  data = persistDescontosContaCoopNoArquivo(data, COOPERADO, MES_B, COOP, [
+    {
+      motivo: "Compra HB Créditos — mercado consolidado",
+      valorReais: 30,
+      tipo: "conta_coop",
+      createdAt: "2026-08-12T12:00:00.000Z",
+    },
+  ]);
+  const consolidado = getResumoPagamentoConsolidadoCooperado(data, COOPERADO, [MES_A, MES_B], COOP);
+  assert.ok(
+    consolidado.descontosExtras.some((d) => d.tipo === "conta_coop"),
+    "resumo consolidado deve listar HB do mês com compra"
+  );
+  const optsMesA = buildValorExibicaoCooperadoOpts(data, COOPERADO, MES_A, COOP);
+  const linhasAntesMesPrincipal = getDescontosExtrasExibicaoCooperado(consolidado, optsMesA);
+  assert.ok(
+    linhasAntesMesPrincipal.some((d) => d.tipo === "conta_coop"),
+    "exibição cooperado não pode sumir HB ao recalcular sobre resumo consolidado"
+  );
 }
 
 {

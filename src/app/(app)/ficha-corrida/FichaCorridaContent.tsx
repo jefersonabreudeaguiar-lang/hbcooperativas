@@ -854,9 +854,11 @@ export default function FichaCorridaPage() {
     isCooperado && resumoExibicao
       ? visualizandoHistorico
         ? resumoExibicao.descontosExtras
-        : exibicaoOpts
-          ? getDescontosExtrasExibicaoCooperado(resumoExibicao, exibicaoOpts)
-          : resumoExibicao.descontosExtras
+        : !visualizandoHistorico && mesesPendentesQuantoVouReceber.length > 1
+          ? resumoExibicao.descontosExtras
+          : exibicaoOpts
+            ? getDescontosExtrasExibicaoCooperado(resumoExibicao, exibicaoOpts)
+            : resumoExibicao.descontosExtras
       : [];
 
   const pagarStep: 1 | 2 | 3 | 4 = (isCooperado ? pagamentoAguardandoExibicao : pagamentoAguardando)

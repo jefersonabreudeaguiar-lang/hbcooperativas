@@ -2484,12 +2484,15 @@ export function getValorExibicaoCooperado(
   opts?: ValorExibicaoCooperadoOpts
 ): number {
   if (!opts) return resumo.valorEntregas;
+  const coopId =
+    opts.cooperativaId ?? opts.data.cooperados.find((c) => c.id === opts.cooperadoId)?.cooperativaId;
+  const baseMes = getResumoPagamentoCooperado(opts.data, opts.cooperadoId, opts.mesReferencia, coopId);
   return getResumoPagamentoParaRegistro(
-    resumo,
+    baseMes,
     opts.data,
     opts.cooperadoId,
     opts.mesReferencia,
-    opts.cooperativaId
+    coopId
   ).valorLiquido;
 }
 
@@ -2499,13 +2502,23 @@ export function getDescontosExtrasExibicaoCooperado(
   opts?: ValorExibicaoCooperadoOpts
 ): FichaCorridaDesconto[] {
   if (!opts) return resumo.descontosExtras;
-  return getResumoPagamentoParaRegistro(
-    resumo,
+  const coopId =
+    opts.cooperativaId ?? opts.data.cooperados.find((c) => c.id === opts.cooperadoId)?.cooperativaId;
+  const baseMes = getResumoPagamentoCooperado(opts.data, opts.cooperadoId, opts.mesReferencia, coopId);
+  const comHb = getResumoPagamentoParaRegistro(
+    baseMes,
     opts.data,
     opts.cooperadoId,
     opts.mesReferencia,
-    opts.cooperativaId
-  ).descontosExtras;
+    coopId
+  );
+  if (comHb.descontosExtras.some((d) => d.tipo === "conta_coop")) {
+    return comHb.descontosExtras;
+  }
+  if (resumo.descontosExtras.some((d) => d.tipo === "conta_coop")) {
+    return resumo.descontosExtras;
+  }
+  return comHb.descontosExtras;
 }
 
 /** Registro de pagamento pelo responsável — inclui abatimento HB Créditos (mercado). */
