@@ -522,7 +522,7 @@ export function getConsolidadoFinanceiroCooperadoMotorLegado(
 ): ConsolidadoFinanceiroCooperado {
   const meses = listarMesesPendentesFinanceiroCooperado(data, cooperadoId, cooperativaId);
   const mesesComValor = listarMesesComValorQuantoVouReceber(data, cooperadoId, cooperativaId);
-  const { mesLabel, valor, aguardandoAssinatura } = getValorQuantoVouReceberMotorLegado(
+  const { valor: valorAberto } = calcularValorEMesesAbertoQuantoVouReceber(
     data,
     cooperadoId,
     cooperativaId
@@ -530,9 +530,18 @@ export function getConsolidadoFinanceiroCooperadoMotorLegado(
   const coopId = cooperativaId ?? data.cooperados.find((c) => c.id === cooperadoId)?.cooperativaId;
   const mesReferenciaPrincipal = getMesPrincipalQuantoVouReceber(data, cooperadoId, cooperativaId);
   const pagamentoAguardando = getPagamentoAguardandoCooperado(data, cooperadoId);
+  const mesesPixAguardando = pagamentoAguardando ? getMesesReferenciaPagamento(pagamentoAguardando) : [];
+  const aguardandoAssinatura =
+    mesesPixAguardando.length > 0
+      ? mesesPixAguardando.some((m) => !getPagamentoConfirmadoMes(data, cooperadoId, m))
+      : meses.some(
+          (m) =>
+            Boolean(getPagamentoAguardandoCooperado(data, cooperadoId, m)) &&
+            !getPagamentoConfirmadoMes(data, cooperadoId, m)
+        );
 
   let resumo: ConsolidadoFinanceiroCooperado["resumo"];
-  if (aguardandoAssinatura && pagamentoAguardando && valor <= 0) {
+  if (aguardandoAssinatura && pagamentoAguardando && valorAberto <= 0) {
     const mesesPix = getMesesReferenciaPagamento(pagamentoAguardando);
     resumo =
       mesesPix.length === 1
@@ -577,11 +586,19 @@ export function getConsolidadoFinanceiroCooperadoMotorLegado(
   }
 
   const valorLiquidoLinhas = valorLiquidoFromResumoPartes(resumo.valorEntregas, resumo.descontosExtras);
-  const valorLiquidoExibir =
-    mesesComValor.length > 0 || resumo.descontosExtras.length > 0
-      ? valorLiquidoLinhas
-      : round2(valor);
+  let valorLiquidoExibir = valorLiquidoLinhas;
+  if (aguardandoAssinatura && pagamentoAguardando && valorAberto <= 0) {
+    valorLiquidoExibir = 0;
+  }
   resumo = { ...resumo, valorLiquido: valorLiquidoExibir };
+
+  const mesesResumo = listarMesesReferenciaResumoFinanceiroParidade(data, cooperadoId, cooperativaId);
+  const mesLabel =
+    mesesResumo.length > 0
+      ? formatMesesReferenciaRotulo(mesesResumo)
+      : meses.length > 0
+        ? formatMesesReferenciaRotulo(meses)
+        : formatMesReferencia(mesReferenciaPrincipal);
 
   return {
     meses,
@@ -659,50 +676,31 @@ export function getValorQuantoVouReceberMotorLegado(
   valorRecibo: number;
   aguardandoAssinatura: boolean;
 } {
-  const mesesPendentes = listarMesesPendentesFinanceiroCooperado(data, cooperadoId, cooperativaId);
-  const { mesesComValor, valor: valorAberto } = calcularValorEMesesAbertoQuantoVouReceber(
-    data,
-    cooperadoId,
-    cooperativaId
-  );
-  const mes =
-    mesesComValor[mesesComValor.length - 1] ??
-    mesesPendentes[mesesPendentes.length - 1] ??
-    getMesQuantoVouReceber(data, cooperadoId, cooperativaId);
-
-  const aguardando = getPagamentoAguardandoCooperado(data, cooperadoId);
-  const mesesPixAguardando = aguardando ? getMesesReferenciaPagamento(aguardando) : [];
-  const aguardandoAssinatura =
-    mesesPixAguardando.length > 0
-      ? mesesPixAguardando.some((m) => !getPagamentoConfirmadoMes(data, cooperadoId, m))
-      : mesesPendentes.some(
-          (m) =>
-            Boolean(getPagamentoAguardandoCooperado(data, cooperadoId, m)) &&
-            !getPagamentoConfirmadoMes(data, cooperadoId, m)
-        );
-  const valor = valorAberto;
-
-  const mesesParaRotulo =
-    mesesComValor.length > 0
-      ? mesesComValor
-      : mesesPendentes.length > 0
-        ? mesesPendentes
-        : valor > 0
-          ? listarMesesDebitoAbertoCooperado(data, cooperadoId, cooperativaId)
+  const consolidado = getConsolidadoFinanceiroCooperadoMotorLegado(data, cooperadoId, cooperativaId);
+  const mesesResumo = listarMesesReferenciaResumoFinanceiroParidade(data, cooperadoId, cooperativaId);
+  const meses =
+    mesesResumo.length > 0
+      ? mesesResumo
+      : consolidado.meses.length > 0
+        ? consolidado.meses
+        : consolidado.mesReferenciaPrincipal
+          ? [consolidado.mesReferenciaPrincipal]
           : [];
-  const mesLabelFinal =
-    mesesParaRotulo.length > 0
-      ? formatMesesReferenciaRotulo(mesesParaRotulo)
-      : formatMesReferencia(mes);
+  const mes =
+    meses[meses.length - 1] ??
+    getMesQuantoVouReceber(data, cooperadoId, cooperativaId);
+  const aguardando = getPagamentoAguardandoCooperado(data, cooperadoId);
   const valorRecibo =
-    aguardandoAssinatura && aguardando ? round2(aguardando.valorLiquido) : 0;
+    consolidado.aguardandoAssinatura && aguardando ? round2(aguardando.valorLiquido) : 0;
+  const valorExibir =
+    consolidado.aguardandoAssinatura && valorRecibo > 0 ? 0 : consolidado.valorLiquido;
   return {
     mes,
-    meses: mesesComValor.length ? mesesComValor : mesesParaRotulo,
-    mesLabel: mesLabelFinal,
-    valor,
+    meses,
+    mesLabel: consolidado.mesLabel,
+    valor: valorExibir,
     valorRecibo,
-    aguardandoAssinatura,
+    aguardandoAssinatura: consolidado.aguardandoAssinatura,
   };
 }
 

@@ -2,7 +2,7 @@ import type { User } from "@/types";
 
 const DISABLED_VALUES = new Set(["0", "false"]);
 
-/** Orlando Fetisch — referência histórica do piloto inicial (sem restrição de UI). */
+/** Apenas testes/diagnóstico — produção não restringe HB por cooperado. */
 export const CONTA_COOP_PILOT_COOPERADO_ID = "c_1782263929381_ncp55";
 
 export const CONTA_COOP_NAV_HREFS = ["/conta-coop", "/minha-conta-coop", "/mercado-parceiro"] as const;

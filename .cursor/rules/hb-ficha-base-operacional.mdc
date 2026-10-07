@@ -1,7 +1,7 @@
 ---
 description: Regra operacional HB Créditos × ficha base (todas as cooperativas)
 globs: src/lib/hb-credit/**/*.ts,src/services/notaPedidoService.ts,scripts/repair-hb-ficha-base-cooperativa.ts
-alwaysApply: false
+alwaysApply: true
 ---
 
 # HB Créditos × ficha base (operacional universal)

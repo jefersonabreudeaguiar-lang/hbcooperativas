@@ -40,6 +40,7 @@ import {
   listarMesesReferenciaResumoFinanceiroParidade,
 } from "../src/services/cooperadoEntregasService.ts";
 import { bicCentralValorAReceberAgregado } from "../src/services/bicLeituraCentralCooperado.ts";
+import { leituraFinanceiraParidadeCooperado } from "../src/lib/cooperado/cooperadoFinanceiroParidadeUniversal.ts";
 import {
   getCreditoBaseContaCoopReais,
   getCreditoBaseCooperadoCents,
@@ -199,6 +200,61 @@ function nota(id: string, status: NotaPedido["status"]): NotaPedido {
     m6.valor,
     consolidadoMotor.valorLiquido,
     "BIC M6 = consolidado financeiro (responsável ↔ cooperado)"
+  );
+}
+
+{
+  const COOP_B = "coop-nova";
+  const MARIA = "c_maria_universal";
+  const MES = "2026-09";
+  let data = baseData({
+    cooperativas: [
+      { id: COOP_B, nome: "Coop Nova", cnpj: "11222333000181", createdAt: "", updatedAt: "" },
+    ],
+    cooperados: [
+      {
+        id: MARIA,
+        cooperativaId: COOP_B,
+        nomeCompleto: "Maria Universal",
+        cpf: "11111111111",
+        status: "ativo",
+        createdAt: "",
+      },
+    ],
+    fichaCorrida: [
+      {
+        ...ficha("f_m", "n_m", MES),
+        cooperadoId: MARIA,
+        cooperativaId: COOP_B,
+      },
+    ],
+    notasPedido: [
+      {
+        ...nota("n_m", "conferida"),
+        id: "n_m",
+        cooperadoId: MARIA,
+        cooperativaId: COOP_B,
+        mesReferencia: MES,
+      },
+    ],
+  });
+  data = persistDescontosContaCoopNoArquivo(data, MARIA, MES, COOP_B, [
+    {
+      motivo: "Compra HB Créditos — coop nova",
+      valorReais: 25,
+      tipo: "conta_coop",
+      createdAt: "2026-09-10T12:00:00.000Z",
+    },
+  ]);
+  const paridade = leituraFinanceiraParidadeCooperado(data, MARIA, COOP_B);
+  assert.ok(
+    paridade.descontosExtras.some((d) => d.tipo === "conta_coop"),
+    "lei universal: qualquer cooperado lista HB no resumo"
+  );
+  assert.equal(
+    paridade.valorLiquido,
+    getConsolidadoFinanceiroCooperado(data, MARIA, COOP_B).valorLiquido,
+    "lei universal: valor a receber = consolidado"
   );
 }
 

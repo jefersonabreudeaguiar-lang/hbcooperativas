@@ -13,7 +13,6 @@ import { usePermissions } from "@/hooks/usePermissions";
 import { getUserCooperativaId } from "@/utils/cooperativa";
 import {
   resumoFromPagamento,
-  getDescontosExtrasExibicaoCooperadoFinanceiro,
   registrarPagamentoCooperado,
   confirmarPagamentoCooperado,
   reenviarSolicitacaoAssinaturaRecibo,
@@ -63,11 +62,11 @@ import {
   bicCentralResolvePainelParaExibicao,
 } from "@/services/bicLeituraCentralCooperado";
 import { cooperadoUsarFluxoReciboAssinaturaNaUi } from "@/lib/bic/cooperadoBicCentralUi";
+import { leituraFinanceiraParidadeCooperado } from "@/lib/cooperado/cooperadoFinanceiroParidadeUniversal";
 import {
   cooperadoMesQuitado,
   cooperadoPendentePagamentoResponsavel,
   listarMesesPendentesPagamentoResponsavel,
-  listarMesesReferenciaResumoFinanceiroParidade,
   getPagamentoConfirmadoMes,
   getPagamentoRegistradoMes,
   listarMesesComPagamentoRegistradoCooperado,
@@ -845,12 +844,12 @@ export default function FichaCorridaPage() {
     if (!data || !cooperadoSelecionadoId) return [];
     if (visualizandoHistorico && mesAtivo) return [mesAtivo];
     if (isCooperado || aba === "pagar") {
-      const paridade = listarMesesReferenciaResumoFinanceiroParidade(
+      const { mesesResumo } = leituraFinanceiraParidadeCooperado(
         data,
         cooperadoSelecionadoId,
         coopId
       );
-      if (paridade.length > 0) return paridade;
+      if (mesesResumo.length > 0) return mesesResumo;
     }
     return mesAtivo ? [mesAtivo] : [];
   }, [
@@ -882,21 +881,15 @@ export default function FichaCorridaPage() {
       : (financeiroAberto?.valorLiquido ?? 0);
 
   const descontosExtrasResumo = useMemo(() => {
-    if (!data || !cooperadoSelecionadoId || !mesesResumoHbFicha.length) return [];
+    if (!data || !cooperadoSelecionadoId) return [];
     if (visualizandoHistorico && resumoExibicao) {
       return resumoExibicao.descontosExtras;
     }
-    return getDescontosExtrasExibicaoCooperadoFinanceiro(
-      data,
-      cooperadoSelecionadoId,
-      coopId,
-      mesesResumoHbFicha
-    );
+    return leituraFinanceiraParidadeCooperado(data, cooperadoSelecionadoId, coopId).descontosExtras;
   }, [
     data,
     cooperadoSelecionadoId,
     coopId,
-    mesesResumoHbFicha,
     visualizandoHistorico,
     resumoExibicao,
     hbDescontosRevision,
