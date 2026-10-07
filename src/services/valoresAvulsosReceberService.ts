@@ -82,6 +82,28 @@ export function totalValoresAvulsosPendentes(
   );
 }
 
+export function temValoresAvulsosPendentesMes(
+  data: AppData,
+  cooperadoId: string,
+  mesReferencia: string,
+  cooperativaId?: string
+): boolean {
+  return valoresAvulsosPendentesMes(data, cooperadoId, mesReferencia, cooperativaId).length > 0;
+}
+
+/** Saldo líquido de avulsos pendentes (créditos − débitos), alinhado ao resumo do mês. */
+export function saldoValoresAvulsosPendentes(
+  data: AppData,
+  cooperadoId: string,
+  mesReferencia?: string,
+  cooperativaId?: string
+): number {
+  return round2(
+    totalValoresAvulsosPendentes(data, cooperadoId, mesReferencia, cooperativaId) -
+      totalDebitosAvulsosPendentes(data, cooperadoId, mesReferencia, cooperativaId)
+  );
+}
+
 export function totalDebitosAvulsosPendentes(
   data: AppData,
   cooperadoId: string,

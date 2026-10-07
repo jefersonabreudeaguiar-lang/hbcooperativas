@@ -19,7 +19,11 @@ import {
   getCooperadoNomeResolvido,
 } from "@/services/cooperadoCloudService";
 import { descontosDoCooperadoNoMes, descontoManualDuplicaContaCoop } from "@/services/descontosService";
-import { valoresAvulsosPendentesMes, marcarValoresAvulsosPagosMes } from "@/services/valoresAvulsosReceberService";
+import {
+  valoresAvulsosPendentesMes,
+  marcarValoresAvulsosPagosMes,
+  mesesComValoresAvulsos,
+} from "@/services/valoresAvulsosReceberService";
 import { round2 } from "@/utils/calculations";
 import { isDivisaoEntregaHabilitada } from "@/lib/conferencia/divisaoEntregaPolicy";
 import { gerarReciboHtml, resumoReciboFromPagamento } from "@/utils/recibo";
@@ -2146,6 +2150,12 @@ export function mesesReferenciaComDebitoAberto(
       !mesComPagamentoCooperativaRegistrado(data, f.cooperadoId, f.mesReferencia)
     ) {
       meses.add(f.mesReferencia);
+    }
+  }
+
+  for (const mes of mesesComValoresAvulsos(data, cooperadoId, coopId)) {
+    if (valoresAvulsosPendentesMes(data, cooperadoId, mes, coopId).length > 0) {
+      meses.add(mes);
     }
   }
 

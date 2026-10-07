@@ -46,6 +46,7 @@ import {
   posProcessarIntegridadePagamentosCooperativa,
   sanitizarOperacionalSyncPayload,
 } from "../src/services/pagamentoIntegridadeService.ts";
+import { criarValorAvulsoReceber } from "../src/services/valoresAvulsosReceberService.ts";
 import type { AppData, FichaCorrida, NotaPedido } from "../src/types/index.ts";
 
 const COOP = "coop-1";
@@ -1099,6 +1100,69 @@ function round2(n: number): number {
   const card = getValorQuantoVouReceber(data, COOPERADO, COOP);
   assert.equal(card.aguardandoAssinatura, false);
   assert.equal(card.valorRecibo, 0);
+}
+
+{
+  const MES = "2026-10";
+  const ENTREGAS = 1000;
+  let data = baseData({
+    fichaCorrida: [
+      {
+        ...ficha("f_av", "n_av", MES),
+        valorBruto: ENTREGAS,
+        valorLiquido: ENTREGAS,
+        descontos: 0,
+      },
+    ],
+    notasPedido: [{ ...nota("n_av", "conferida"), mesReferencia: MES, valorLiquido: ENTREGAS }],
+  });
+  data = criarValorAvulsoReceber(data, {
+    cooperativaId: COOP,
+    cooperadoId: COOPERADO,
+    mesReferencia: MES,
+    motivo: "Crédito teste",
+    valor: 80,
+    natureza: "credito",
+    responsavel: "Resp",
+  });
+  data = criarValorAvulsoReceber(data, {
+    cooperativaId: COOP,
+    cooperadoId: COOPERADO,
+    mesReferencia: MES,
+    motivo: "Débito teste",
+    valor: 30,
+    natureza: "debito",
+    responsavel: "Resp",
+  });
+  const resumo = getResumoPagamentoCooperado(data, COOPERADO, MES, COOP);
+  const esperado = round2(ENTREGAS - 30 + 80);
+  assert.equal(resumo.valorLiquido, esperado, "avulsos: débito subtrai e crédito soma no líquido");
+  assert.ok(
+    resumo.descontosExtras.some((d) => d.tipo === "credito_avulso" && d.valor === 80),
+    "crédito avulso no resumo"
+  );
+  assert.ok(
+    resumo.descontosExtras.some((d) => d.tipo === "manual" && d.valor === 30 && d.motivo === "Débito teste"),
+    "débito avulso no resumo"
+  );
+  assert.equal(
+    getResumoValorAPagarRelatorio(data, COOPERADO, MES, COOP).valorLiquido,
+    esperado,
+    "relatório alinhado ao resumo"
+  );
+
+  let soCredito = baseData();
+  soCredito = criarValorAvulsoReceber(soCredito, {
+    cooperativaId: COOP,
+    cooperadoId: COOPERADO,
+    mesReferencia: "2026-11",
+    motivo: "Só crédito",
+    valor: 150,
+    natureza: "credito",
+    responsavel: "Resp",
+  });
+  assert.equal(getTotalAPagarCooperado(soCredito, COOPERADO, "2026-11", COOP), 150);
+  assert.equal(getTotalAPagarCooperado(soCredito, COOPERADO, undefined, COOP), 150, "total geral inclui mês só com crédito avulso");
 }
 
 console.log("OK — guard financeiro cooperado");

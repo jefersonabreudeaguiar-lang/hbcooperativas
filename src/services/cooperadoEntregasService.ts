@@ -19,7 +19,11 @@ import {
   type AjustesResumoPagamento,
 } from "@/services/notaPedidoService";
 import { formatMesReferencia, formatMesesReferenciaRotulo, getCurrentMesReferencia } from "@/utils/format";
-import { mesesComValoresAvulsos, totalValoresAvulsosPendentes } from "@/services/valoresAvulsosReceberService";
+import {
+  mesesComValoresAvulsos,
+  temValoresAvulsosPendentesMes,
+  totalValoresAvulsosPendentes,
+} from "@/services/valoresAvulsosReceberService";
 import { contarEntregasNoMes } from "@/services/entregaCooperadoService";
 import { contarFotosEnviadasNota, getFotosExibicaoNota } from "@/utils/fotoEntrega";
 import { cooperadoMesComFichaPagaSemPagamentoCooperativa } from "@/services/pagamentoIntegridadeService";
@@ -125,7 +129,7 @@ export function listarMesesPendentesQuantoVouReceber(
       pendentes.push(mes);
       continue;
     }
-    if (totalValoresAvulsosPendentes(data, cooperadoId, mes, cooperativaId) > 0) {
+    if (temValoresAvulsosPendentesMes(data, cooperadoId, mes, cooperativaId)) {
       pendentes.push(mes);
     }
   }
@@ -376,7 +380,7 @@ export function cooperadoMesQuitado(
     return false;
   }
   if (getTotalAPagarCooperado(data, cooperadoId, mesReferencia) > 0) return false;
-  if (totalValoresAvulsosPendentes(data, cooperadoId, mesReferencia, coopId) > 0) return false;
+  if (temValoresAvulsosPendentesMes(data, cooperadoId, mesReferencia, coopId)) return false;
   return !!getPagamentoConfirmadoMes(data, cooperadoId, mesReferencia);
 }
 
@@ -393,7 +397,7 @@ export function getMesQuantoVouReceber(
     if (cooperadoMesQuitado(data, cooperadoId, mes)) continue;
     if (getPagamentoAguardandoCooperado(data, cooperadoId, mes)) return mes;
     if (getTotalAPagarCooperado(data, cooperadoId, mes) > 0) return mes;
-    if (totalValoresAvulsosPendentes(data, cooperadoId, mes, cooperativaId) > 0) return mes;
+    if (temValoresAvulsosPendentesMes(data, cooperadoId, mes, cooperativaId)) return mes;
   }
 
   return mesAtual;
@@ -463,7 +467,9 @@ function listarMesesPendentesPagamentoResponsavelOperacional(
       pendentes.push(mes);
       continue;
     }
-    if (totalValoresAvulsosPendentes(data, cooperadoId, mes, cooperativaId) > 0) {
+    if (getTotalAPagarCooperado(data, cooperadoId, mes, cooperativaId) > 0) {
+      pendentes.push(mes);
+    } else if (temValoresAvulsosPendentesMes(data, cooperadoId, mes, cooperativaId)) {
       pendentes.push(mes);
     }
   }
