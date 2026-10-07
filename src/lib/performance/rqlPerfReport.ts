@@ -5,6 +5,7 @@
 import {
   listRqlInteractionMarks,
   listRqlRouteMarks,
+  measureRqlColdStartSpanMs,
   summarizeRqlRouteTimings,
   type RqlRouteTimingRow,
 } from "@/lib/performance/rqlMarks";
@@ -27,6 +28,7 @@ export type RqlPerfRouteReport = {
   sloL1PaintP75Ms: number;
   routeTransitions: RqlRouteTimingRow[];
   paintPercentiles: RqlPerfPercentiles;
+  coldStartSpanMs: number | null;
   routeMarks: string[];
   interactionMarks: string[];
   longTasksSample: Array<{ name: string; duration: number; startTime: number }>;
@@ -83,6 +85,7 @@ export function buildRqlPerfRouteReport(sloL1PaintP75Ms = DEFAULT_SLO_L1_P75_MS)
     sloL1PaintP75Ms,
     routeTransitions,
     paintPercentiles,
+    coldStartSpanMs: measureRqlColdStartSpanMs(),
     routeMarks: listRqlRouteMarks(),
     interactionMarks: listRqlInteractionMarks(),
     longTasksSample: collectLongTaskSample(),

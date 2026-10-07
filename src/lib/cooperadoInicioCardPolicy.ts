@@ -473,7 +473,7 @@ function resultadoCardBridgePersistidoBic(
 function resolverCardInicioEndurecidoFinanceiroUiSnapshot(
   input: ResolverCardInicioInput
 ): InicioCardPoliticaResult & { gravarPersistencia: boolean } {
-  const persistidoLeitura = filtrarInicioCardPersistidoLeituraBic(input.persistido);
+  const persistidoLeitura = persistidoLeituraCardInicio(input);
   const financeiroCarregando =
     !input.apresentacaoConsolidada ||
     Boolean(input.syncing || input.carregandoFinanceiro);
@@ -484,10 +484,18 @@ function resolverCardInicioEndurecidoFinanceiroUiSnapshot(
   );
 }
 
+function persistidoLeituraCardInicio(input: ResolverCardInicioInput) {
+  const financeiroCarregando =
+    !input.apresentacaoConsolidada ||
+    Boolean(input.syncing || input.carregandoFinanceiro);
+  if (input.apresentacaoConsolidada && !financeiroCarregando) return null;
+  return filtrarInicioCardPersistidoLeituraBic(input.persistido);
+}
+
 export function resolverCardInicioEndurecido(input: ResolverCardInicioInput): InicioCardPoliticaResult & {
   gravarPersistencia: boolean;
 } {
-  const persistidoLeitura = filtrarInicioCardPersistidoLeituraBic(input.persistido);
+  const persistidoLeitura = persistidoLeituraCardInicio(input);
   const financeiroCarregando =
     !input.apresentacaoConsolidada ||
     Boolean(input.syncing || input.carregandoFinanceiro);

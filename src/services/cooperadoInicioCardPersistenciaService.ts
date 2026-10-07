@@ -13,7 +13,9 @@ import {
   INICIO_CARD_STORAGE_VERSION,
   gravarInicioCardPersistidoFlex,
   lerInicioCardPersistidoFlex,
+  limparInicioCardPersistidoFlex,
 } from "@/lib/cooperadoInicioCardPersistencia";
+import { APP_BUILD_VERSION } from "@/lib/appBuildVersion";
 import { resolverCooperadoIdCanonico } from "@/services/cooperadoCloudService";
 import { getData, isAppDataWarm } from "@/services/dataStore";
 import { getUserCooperativaId } from "@/utils/cooperativa";
@@ -44,9 +46,6 @@ export function persistirInicioCardValorReceberCooperado(
 
   const { cooperadoId, cooperativaId } = tenant;
   const data = getData();
-  const persistido = filtrarInicioCardPersistidoLeituraBic(
-    lerInicioCardPersistidoFlex(cooperadoId, cooperativaId)
-  );
   const resolved = resolverCardInicioEndurecido({
     data,
     cooperadoId,
@@ -54,11 +53,12 @@ export function persistirInicioCardValorReceberCooperado(
     apresentacaoConsolidada: true,
     carregandoFinanceiro: false,
     prevLatch: null,
-    persistido,
+    persistido: null,
   });
 
   gravarInicioCardPersistidoFlex(cooperadoId, cooperativaId, {
     v: INICIO_CARD_STORAGE_VERSION,
+    appBuild: APP_BUILD_VERSION,
     motorRevision: resolved.latch.motorRevision,
     display: sanitizeInicioCardSnapshotParaPersistenciaBic(resolved.display),
     savedAt: new Date().toISOString(),
@@ -77,6 +77,20 @@ export function lerValorReceberMotorBrutoCooperado(user: CooperadoInicioCardPers
     tenant.cooperativaId
   );
   return snap.valor;
+}
+
+/** Limpa cache do card após update do app (evita valor antigo no mobile/PWA). */
+export function purgarInicioCardValorReceberCooperado(
+  user: CooperadoInicioCardPersistUser | null | undefined
+): void {
+  if (!user || user.role !== "cooperado" || !user.cooperadoId) return;
+  const data = isAppDataWarm() ? getData() : null;
+  const cooperativaId = data ? getUserCooperativaId(user, data) : user.cooperativaId;
+  const cooperadoId =
+    data && cooperativaId
+      ? resolverCooperadoIdCanonico(data, user.cooperadoId, cooperativaId)
+      : user.cooperadoId;
+  limparInicioCardPersistidoFlex(cooperadoId, cooperativaId ?? undefined);
 }
 
 export function cooperadoInicioCardRevisionAtual(user: CooperadoInicioCardPersistUser | null | undefined): string {

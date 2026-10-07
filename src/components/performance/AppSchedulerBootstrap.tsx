@@ -5,11 +5,15 @@ import { usePathname } from "next/navigation";
 import { markUserInteraction, startAppScheduler } from "@/lib/performance/appScheduler";
 import { markRqlRouteTransition, scheduleMarkRqlRoutePaintReady } from "@/lib/performance/rqlMarks";
 import { isCooperadoBottomTabPath } from "@/lib/performance/cooperadoBottomTabRoutes";
+import { staffBottomTabCacheKey, isStaffBottomTabPath } from "@/lib/performance/staffBottomTabRoutes";
 import { markUserActivity } from "@/services/idleActivity";
 
 function routeHopFromPathname(pathname: string): string {
   if (isCooperadoBottomTabPath(pathname)) {
     return pathname.replace(/^\//, "");
+  }
+  if (isStaffBottomTabPath(pathname)) {
+    return staffBottomTabCacheKey(pathname).replace(/^\//, "");
   }
   const seg = pathname.split("/").filter(Boolean)[0];
   return seg || "dashboard";

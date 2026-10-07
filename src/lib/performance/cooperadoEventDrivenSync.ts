@@ -90,8 +90,7 @@ export function persistOperacionalSyncedAppBuild(build = APP_BUILD_VERSION): voi
   localStorage.setItem(SYNCED_BUILD_KEY, String(build));
 }
 
-/** Nova versão publicada do app — uma sync operacional após o runtime canônico carregar. */
+/** Nova versão publicada do app — cooperado precisa puxar operacional (PWA/mobile e browser). */
 export function cooperadoAppReleaseNeedsOperacionalSync(): boolean {
-  if (!isCooperadoEventDrivenSync()) return false;
   return getLastOperacionalSyncedAppBuild() !== APP_BUILD_VERSION;
 }

@@ -3,11 +3,14 @@
  */
 import type { InicioCardMotorSnapshot } from "@/lib/cooperadoInicioCardPolicy";
 import { cooperadoMotorTemObrigacaoReceber } from "@/lib/cooperadoInicioCardPolicy";
+import { APP_BUILD_VERSION } from "@/lib/appBuildVersion";
 
-export const INICIO_CARD_STORAGE_VERSION = 7;
+export const INICIO_CARD_STORAGE_VERSION = 8;
 
 export type InicioCardPersistido = {
   v: number;
+  /** Build do app quando o cache foi gravado — invalida snapshot de versão anterior no mobile/PWA. */
+  appBuild: number;
   motorRevision: string;
   display: InicioCardMotorSnapshot;
   savedAt: string;
@@ -27,6 +30,7 @@ export function lerInicioCardPersistido(
     if (!raw) return null;
     const parsed = JSON.parse(raw) as InicioCardPersistido;
     if (parsed.v !== INICIO_CARD_STORAGE_VERSION || !parsed.display) return null;
+    if (parsed.appBuild !== APP_BUILD_VERSION) return null;
     return parsed;
   } catch {
     return null;
@@ -52,7 +56,13 @@ export function lerInicioCardPersistidoFlex(
       const raw = localStorage.getItem(key);
       if (!raw) continue;
       const parsed = JSON.parse(raw) as InicioCardPersistido;
-      if (parsed.v === INICIO_CARD_STORAGE_VERSION && parsed.display) return parsed;
+      if (
+        parsed.v === INICIO_CARD_STORAGE_VERSION &&
+        parsed.appBuild === APP_BUILD_VERSION &&
+        parsed.display
+      ) {
+        return parsed;
+      }
     }
   } catch {
     return null;
@@ -85,9 +95,33 @@ export function gravarInicioCardPersistidoFlex(
  * Cache válido para liberar abertura instantânea (HX 9.0).
  * Antes: só com valor a receber; agora qualquer snapshot da última sessão.
  */
+/** Remove snapshots do card — cooperado mobile após update do app ou sync operacional. */
+export function limparInicioCardPersistidoFlex(
+  cooperadoId: string,
+  cooperativaId?: string
+): void {
+  if (typeof localStorage === "undefined") return;
+  try {
+    if (cooperativaId) {
+      localStorage.removeItem(inicioCardStorageKey(cooperadoId, cooperativaId));
+    }
+    const prefix = `hb.coop.inicioCard.v`;
+    const suffix = `:${cooperadoId}`;
+    const keys: string[] = [];
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i);
+      if (key?.includes("inicioCard") && key.endsWith(suffix)) keys.push(key);
+    }
+    for (const key of keys) localStorage.removeItem(key);
+  } catch {
+    /* ignore */
+  }
+}
+
 export function inicioCardCacheProntoParaAbertura(persistido: InicioCardPersistido | null): boolean {
   if (!persistido?.display) return false;
   if (persistido.v !== INICIO_CARD_STORAGE_VERSION) return false;
+  if (persistido.appBuild !== APP_BUILD_VERSION) return false;
   if (cooperadoMotorTemObrigacaoReceber(persistido.display)) return true;
   const savedAt = Date.parse(persistido.savedAt);
   if (!Number.isFinite(savedAt)) return false;

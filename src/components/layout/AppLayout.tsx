@@ -39,7 +39,9 @@ import { shouldPrefetchHbCreditNav } from "@/lib/hb-credit/hbCreditNavPrefetch";
 import { scheduleCooperadoNavPrefetchEarly } from "@/lib/performance/cooperadoNavPrefetch";
 import { COOPERADO_FINANCEIRO_TAB_HREF } from "@/lib/hb-credit/hbCreditNavPrefetch";
 import { cooperadoTabWarmOnPointerDown } from "@/lib/performance/cooperadoTabPointerWarmup";
+import { staffTabWarmOnPointerDown } from "@/lib/performance/staffTabPointerWarmup";
 import { isCooperadoBottomTabPath } from "@/lib/performance/cooperadoBottomTabRoutes";
+import { isStaffBottomTabPath } from "@/lib/performance/staffBottomTabRoutes";
 import { scheduleStaffNavPrefetchEarly } from "@/lib/performance/staffNavPrefetch";
 import { prefetchStaffNotasPedidoRouteBundle } from "@/lib/performance/prefetchStaffNotasPedidoUi";
 import { feedbackTrocaAbaMobile } from "@/lib/performance/tabSwitchFeedback";
@@ -257,50 +259,65 @@ export function MobileNav() {
         {mobileItems.map((item) => {
           const active = pathname === item.href || (item.href !== "/dashboard" && pathname.startsWith(item.href));
           const isCooperadoNav = isCooperadoAppUser(navUser);
+          const mobileTabUx = isCooperadoNav || isStaffBottomTabPath(item.href);
+          const tabRqlPhase = isCooperadoNav ? "cooperado-tab-switch" : "staff-tab-switch";
           return (
             <Link
               key={item.href}
               href={item.href}
               scroll={false}
               prefetch={
-                isCooperadoNav &&
-                (item.href === COOPERADO_FINANCEIRO_TAB_HREF || isCooperadoBottomTabPath(item.href))
+                isCooperadoNav
+                  ? item.href === COOPERADO_FINANCEIRO_TAB_HREF || isCooperadoBottomTabPath(item.href)
+                  : isStaffBottomTabPath(item.href) || item.href === "/notas-pedido"
               }
               onPointerDown={() => {
                 if (isCooperadoNav && isCooperadoBottomTabPath(item.href)) {
                   cooperadoTabWarmOnPointerDown(item.href);
+                } else if (!isCooperadoNav) {
+                  staffTabWarmOnPointerDown(item.href);
                 }
               }}
               onClick={(e) => {
-                const icon = e.currentTarget.querySelector("[data-cooperado-tab-icon]");
-                feedbackTrocaAbaMobile(active, icon instanceof HTMLElement ? icon : null);
+                const icon = e.currentTarget.querySelector("[data-hb-tab-icon]");
+                feedbackTrocaAbaMobile(
+                  active,
+                  icon instanceof HTMLElement ? icon : null,
+                  tabRqlPhase
+                );
               }}
               className={cn(
-                "flex-1 flex flex-col items-center justify-center min-w-0 px-0.5 select-none",
-                isCooperadoNav ? "min-h-[72px] py-2 gap-1" : "py-2 text-[10px] sm:text-xs gap-0.5",
+                "flex-1 flex flex-col items-center justify-center min-w-0 px-0.5 select-none hb-mobile-tab-link",
+                mobileTabUx ? "min-h-[72px] py-2 gap-1" : "py-2 text-[10px] sm:text-xs gap-0.5",
                 active
-                  ? isCooperadoNav
+                  ? mobileTabUx
                     ? "text-green-800 bg-green-50"
                     : "text-green-700"
-                  : isCooperadoNav
+                  : mobileTabUx
                     ? "text-gray-700"
                     : "text-gray-500"
               )}
             >
               <span
-                data-cooperado-tab-icon={isCooperadoNav ? "" : undefined}
+                data-hb-tab-icon={mobileTabUx ? "" : undefined}
                 className={cn(
                   "flex items-center justify-center rounded-xl",
-                  isCooperadoNav && "w-11 h-11",
-                  active && isCooperadoNav ? "bg-green-700 text-white" : active ? "text-green-700" : isCooperadoNav ? "text-green-700" : "text-gray-400"
+                  mobileTabUx && "w-11 h-11",
+                  active && mobileTabUx
+                    ? "bg-green-700 text-white"
+                    : active
+                      ? "text-green-700"
+                      : mobileTabUx
+                        ? "text-green-700"
+                        : "text-gray-400"
                 )}
               >
-                {navIcon(item.href, item.resource, isCooperadoNav ? 24 : 20)}
+                {navIcon(item.href, item.resource, mobileTabUx ? 24 : 20)}
               </span>
               <span
                 className={cn(
                   "truncate w-full text-center leading-tight",
-                  isCooperadoNav
+                  mobileTabUx
                     ? cn("text-[11px] sm:text-xs px-0.5", active ? "font-bold text-green-900" : "font-semibold")
                     : ""
                 )}

@@ -150,3 +150,26 @@ export function markRqlColdStartPhase(phase: string): void {
     /* ignore */
   }
 }
+
+export function listRqlColdStartMarks(): PerformanceMark[] {
+  if (typeof performance === "undefined" || typeof performance.getEntriesByType !== "function") {
+    return [];
+  }
+  return (performance.getEntriesByType("mark") as PerformanceMark[])
+    .filter((m) => m.name.startsWith(COLD_START_PREFIX))
+    .sort((a, b) => a.startTime - b.startTime);
+}
+
+/** ms entre primeira e última fase cold start (ou marco interativo se existir). */
+export function measureRqlColdStartSpanMs(): number | null {
+  const marks = listRqlColdStartMarks();
+  if (marks.length === 0) return null;
+  const first = marks[0].startTime;
+  const interactive =
+    marks.find((m) => m.name.endsWith("local_resume_ready")) ??
+    marks.find((m) => m.name.endsWith("post_interactive_task")) ??
+    marks.find((m) => m.name.endsWith("staff_post_interactive_task")) ??
+    marks[marks.length - 1];
+  const span = interactive.startTime - first;
+  return Number.isFinite(span) && span >= 0 ? Math.round(span * 10) / 10 : null;
+}

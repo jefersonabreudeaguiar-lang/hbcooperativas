@@ -20,6 +20,18 @@ import {
   hasCooperadoEventDrivenGrant,
   isCooperadoEventDrivenSync,
 } from "@/lib/performance/cooperadoEventDrivenSync";
+import { APP_BUILD_VERSION } from "@/lib/appBuildVersion";
+
+/** Mesma chave que `cooperadoEventDrivenSync` — evita import circular no cold start. */
+const HB_OPERACIONAL_SYNCED_BUILD = "hb-coop-operacional-synced-build";
+
+function cooperadoOperacionalSyncedBuildMismatch(): boolean {
+  if (typeof window === "undefined") return false;
+  const raw = localStorage.getItem(HB_OPERACIONAL_SYNCED_BUILD);
+  const n = Number(raw);
+  const stored = Number.isFinite(n) && n > 0 ? n : 0;
+  return stored !== APP_BUILD_VERSION;
+}
 
 /** Fail-closed: desligar com NEXT_PUBLIC_COOPERADO_INSTANT_RESUME=false */
 export function isCooperadoInstantResumeEnabled(): boolean {
@@ -174,6 +186,7 @@ export function cooperadoPreserveHydrationOnSilentSync(
 ): boolean {
   if (!isCooperadoInstantResumeEnabled() || !user || user.role !== "cooperado") return false;
   if (!alreadyHydrated) return false;
+  if (cooperadoOperacionalSyncedBuildMismatch()) return false;
   return cooperadoLocalResumeReady(user);
 }
 

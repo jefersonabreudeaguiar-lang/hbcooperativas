@@ -17,8 +17,11 @@ import {
 import { isCooperadoEventDrivenSync } from "@/lib/performance/cooperadoEventDrivenSync";
 import {
   requestAppSyncImmediate,
+  requestCooperadoAppReleaseSync,
   requestCooperadoPrimeiraCargaSync,
 } from "@/services/syncRequest";
+import { cooperadoAppReleaseNeedsOperacionalSync } from "@/lib/performance/cooperadoEventDrivenSync";
+import { purgarInicioCardValorReceberCooperado } from "@/services/cooperadoInicioCardPersistenciaService";
 import { resolverCooperadoIdCanonico } from "@/services/cooperadoCloudService";
 import { getUserCooperativaId } from "@/utils/cooperativa";
 import { getData } from "@/services/dataStore";
@@ -71,6 +74,10 @@ export function CooperadoFinanceiroGate({ children }: { children: React.ReactNod
     const coopId = getUserCooperativaId(user, data);
     if (!coopId) return;
     const cooperadoId = resolverCooperadoIdCanonico(data, user.cooperadoId, coopId);
+    if (cooperadoAppReleaseNeedsOperacionalSync()) {
+      purgarInicioCardValorReceberCooperado(user);
+      requestCooperadoAppReleaseSync();
+    }
     const limpo = limparFichaObsoletaCooperado(data, cooperadoId, coopId);
     if (limpo !== data) {
       saveAppDataIfSyncLeaseCurrent(getCooperadoRunSyncSessionLease() ?? undefined, limpo);

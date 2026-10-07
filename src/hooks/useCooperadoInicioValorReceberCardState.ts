@@ -16,6 +16,7 @@ import {
   gravarInicioCardPersistidoFlex,
   lerInicioCardPersistidoFlex,
 } from "@/lib/cooperadoInicioCardPersistencia";
+import { APP_BUILD_VERSION } from "@/lib/appBuildVersion";
 
 const SNAPSHOT_VAZIO: InicioCardMotorSnapshot = {
   mesLabel: "—",
@@ -63,19 +64,28 @@ export function useCooperadoInicioValorReceberCardState(input: {
 
   const hbDescontosRevision = useContaCoopDescontosRevision();
 
+  const apresentacaoConsolidada = input.apresentacaoConsolidada ?? false;
   const carregandoFinanceiro =
     Boolean(input.syncing) ||
     (!input.dataReady && !cooperadoMotorTemObrigacaoReceber(persistido?.display ?? SNAPSHOT_VAZIO));
 
+  useEffect(() => {
+    if (apresentacaoConsolidada && !input.syncing) {
+      latchRef.current = null;
+    }
+  }, [apresentacaoConsolidada, input.syncing, hbDescontosRevision]);
+
   const resolved = useMemo(() => {
+    const omitirPersistido =
+      apresentacaoConsolidada && !input.syncing && !carregandoFinanceiro;
     return resolverCardInicioEndurecido({
       data: input.data,
       cooperadoId: input.cooperadoId,
       cooperativaId: input.cooperativaId,
-      apresentacaoConsolidada: input.apresentacaoConsolidada ?? false,
+      apresentacaoConsolidada,
       carregandoFinanceiro,
-      prevLatch: latchRef.current,
-      persistido,
+      prevLatch: omitirPersistido ? null : latchRef.current,
+      persistido: omitirPersistido ? null : persistido,
       dataReady: input.dataReady,
       syncing: input.syncing,
     });
@@ -97,6 +107,7 @@ export function useCooperadoInicioValorReceberCardState(input: {
     if (!input.cooperadoId || !input.cooperativaId || !resolved.gravarPersistencia) return;
     gravarInicioCardPersistidoFlex(input.cooperadoId, input.cooperativaId, {
       v: INICIO_CARD_STORAGE_VERSION,
+      appBuild: APP_BUILD_VERSION,
       motorRevision: resolved.latch.motorRevision,
       display: sanitizeInicioCardSnapshotParaPersistenciaBic(resolved.display),
       savedAt: new Date().toISOString(),

@@ -1,6 +1,7 @@
 import { isLowMemoryDevice } from "@/services/imagePipelineService";
 import type { CooperadoNavPrefetchRouter } from "@/lib/performance/cooperadoNavPrefetch";
 import { prefetchStaffNotasPedidoRouteBundle } from "@/lib/performance/prefetchStaffNotasPedidoUi";
+import { prefetchStaffTabRouteChunks } from "@/lib/performance/prefetchStaffTabRouteChunks";
 
 /** Rotas mais abertas pelo responsável no celular — bundles grandes. */
 export const STAFF_NAV_PREFETCH_PRIORITY: readonly string[] = [
@@ -45,9 +46,10 @@ export function scheduleStaffNavPrefetchEarly(router: CooperadoNavPrefetchRouter
     ? (["/dashboard", "/notas-pedido"] as readonly string[])
     : STAFF_MOBILE_PREFETCH_HREFS;
 
-  queueMicrotask(() =>
-    safe(() => prefetchStaffNavRoutes(router, STAFF_NAV_PREFETCH_PRIORITY))
-  );
+  queueMicrotask(() => {
+    safe(() => prefetchStaffNavRoutes(router, STAFF_NAV_PREFETCH_PRIORITY));
+    safe(() => prefetchStaffTabRouteChunks());
+  });
 
   if (lowMemory) {
     return () => {
@@ -55,13 +57,18 @@ export function scheduleStaffNavPrefetchEarly(router: CooperadoNavPrefetchRouter
     };
   }
 
+  const idlePrefetch = () => {
+    safe(() => prefetchStaffNavRoutes(router, idleHrefs));
+    safe(() => prefetchStaffTabRouteChunks());
+  };
+
   let idleHandle: number | undefined;
   if (typeof requestIdleCallback === "function") {
-    idleHandle = requestIdleCallback(() => safe(() => prefetchStaffNavRoutes(router, idleHrefs)), {
+    idleHandle = requestIdleCallback(idlePrefetch, {
       timeout: 2800,
     });
   } else {
-    idleHandle = window.setTimeout(() => safe(() => prefetchStaffNavRoutes(router, idleHrefs)), 900);
+    idleHandle = window.setTimeout(idlePrefetch, 900);
   }
 
   return () => {

@@ -1,41 +1,51 @@
 # HB Coop vs WhatsApp — paridade de performance (UX)
 
-Objetivo: comparar a sensação de app de mensagem (referência **WhatsApp**, app nativo) com o PWA cooperado, em **milissegundos** e **notas 0–10**, sem alterar fichas, resumos ou sync de negócio.
+Objetivo: sensação de app de mensagem (referência **WhatsApp**) no PWA **cooperado** e **responsável**, em ms e notas **0–10**, sem alterar fichas, resumos ou sync de negócio.
+
+## Metas por fase
+
+| Fase | Troca de aba (paint p75) | Nota média HB (ref.) | Escopo |
+|------|--------------------------|----------------------|--------|
+| **1** (atual) | ≤ 200 ms (SLO interno) | ~7 → 8 | Warmup pointerdown, prefetch idle, haptic+pulso, keep-alive, RQL |
+| **2** | ≤ 120 ms | ~8,5 | Listas leves, menos long tasks em Notas/Financeiro |
+| **3** | ≤ 80 ms (faixa WhatsApp) | ≥ 9 | Cold start &lt; 1,5 s, scroll estável, sync silencioso invisível |
+
+Referência WhatsApp (app nativo, celular médio): troca de aba ~30–80 ms, cold start ~0,5–1,5 s.
 
 ## SLO interno (HB)
 
-- Troca de aba cooperado (L1): **paint p75 &lt; 200 ms** (`rql:route:*` + `rql:route-paint:*`).
+- Troca de aba L1: **paint p75 &lt; 200 ms** (`rql:route:*` + `rql:route-paint:*`).
+- Meta fase 3: **p75 &lt; 80 ms** (mesma ordem de grandeza do WhatsApp).
 
-## Referência WhatsApp (homolog)
+## Cooperado + responsável (build ≥ 185)
 
-| Dimensão | Faixa típica | Nota ref. |
-|----------|--------------|-----------|
-| Troca de aba | ~30–80 ms | 9,5 |
-| Haptic / feedback | nativo | 9 |
-| Toque → reação | &lt; 50 ms | 9,5 |
-| Cold start | ~0,5–1,5 s | 9 |
-
-## O que o HB já faz (cooperado mobile)
-
-- `vibrate(10)` + **pulso visual** 180 ms na troca de aba (`tabSwitchFeedback.ts`).
-- **Warmup** do chunk da aba no `pointerdown` (`cooperadoTabPointerWarmup.ts`).
-- **Keep-alive** LRU de abas + prefetch Next nas 5 rotas do rodapé.
-- Marcas RQL por rota (`AppSchedulerBootstrap`) com hop por aba (`ficha-corrida`, `notas-pedido`, …).
+- `vibrate(10)` + **pulso visual** 180 ms (`tabSwitchFeedback.ts`) nas abas mobile.
+- **Warmup** do chunk no `pointerdown` — `cooperadoTabPointerWarmup.ts` / `staffTabPointerWarmup.ts`.
+- **Prefetch** em camadas (`cooperadoNavPrefetch` / `staffNavPrefetch` + chunks das rotas).
+- **Keep-alive** LRU (`CooperadoMobileTabKeepAlive` / `StaffMobileTabKeepAlive`).
+- RQL por hop de aba (`AppSchedulerBootstrap` — cooperado e staff bottom tabs).
+- Cold start: marcas `rql:cold:*` → span em `printWhatsappCompare`.
 
 ## Medir no dispositivo
 
-1. Defina `NEXT_PUBLIC_RQL_PERF_DEBUG=1` (homolog) e abra o PWA cooperado.
-2. Troque entre as 5 abas do rodapé várias vezes.
-3. No console do DevTools:
+1. Homolog: `NEXT_PUBLIC_RQL_PERF_DEBUG=1`.
+2. Abra o PWA (cooperado ou responsável no celular).
+3. Troque abas do rodapé; opcional: feche e reabra para cold start.
+4. Console:
 
 ```js
 window.__hbRqlPerf.print();
 window.__hbRqlPerf.printWhatsappCompare();
 ```
 
-A tabela `printWhatsappCompare` traz **whatsappScore** (referência) vs **hbCoopScore** (medido + estimativas onde não há telemetria).
-
 ## Interpretação
 
-- **hbCoopScore** na troca de aba usa o **paint p75** real das marcas RQL.
-- Dimensões sem sensor automático (cold start, scroll) aparecem como referência fixa até medição dedicada (`rql:cold:*`).
+- **hbCoopScore** na troca de aba usa paint p75 real.
+- **cold_start** usa `coldStartSpanMs` quando há marcas `rql:cold:*`.
+- Gap &gt; 1,0 na nota média → priorizar fase 2 (long tasks / bundles).
+
+## Teste unitário
+
+```bash
+npx tsx scripts/test-messaging-perf-parity-unit.ts
+```

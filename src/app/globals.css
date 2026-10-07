@@ -58,6 +58,11 @@ body {
   background: #94a3b8;
 }
 
+.hb-mobile-tab-link {
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+
 @media (prefers-reduced-motion: no-preference) {
   .hb-tab-switch-pulse {
     animation: hb-tab-switch-pulse 0.18s ease-out;

@@ -123,6 +123,7 @@ import { useCooperadoStaffRevisionWatch } from "@/hooks/useCooperadoStaffRevisio
 import { fetchCooperativaCloudRevision } from "@/services/cooperativaSyncRevisionService";
 import { notifyAppSubtleUpdate } from "@/lib/cooperadoSubtleUpdate";
 import { requestCooperadoAppReleaseSync, type SyncRunOptions } from "@/services/syncRequest";
+import { purgarInicioCardValorReceberCooperado } from "@/services/cooperadoInicioCardPersistenciaService";
 
 const COOPERADO_PUSH_GAP_MS = 5 * 60 * 1000;
 /** Intervalo mínimo entre pulls de operacional só para votação (bem menor que sync completa). */
@@ -945,11 +946,15 @@ export function CooperativaSyncProvider({ children }: { children: React.ReactNod
 
     let initialDelay: ReturnType<typeof setTimeout> | undefined;
     if (cooperadoSemAutoSync) {
-      if (isCooperadoEventDrivenSync() && cooperadoAppReleaseNeedsOperacionalSync()) {
+      if (user?.role === "cooperado" && cooperadoAppReleaseNeedsOperacionalSync()) {
+        purgarInicioCardValorReceberCooperado(user);
         requestCooperadoAppReleaseSync();
       }
     } else if (user?.role === "cooperado" && isCooperadoInstantResumeEnabled()) {
-      if (!document.hidden) {
+      if (cooperadoAppReleaseNeedsOperacionalSync()) {
+        purgarInicioCardValorReceberCooperado(user);
+        requestCooperadoAppReleaseSync();
+      } else if (!document.hidden) {
         markUserActivity();
         scheduleCooperadoColdStartSync(() => {
           void runSync({ force: true, silent: true });

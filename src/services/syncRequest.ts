@@ -11,6 +11,7 @@ import {
   takePendingCooperadoSilentSync,
 } from "@/lib/performance/cooperadoColdStart";
 import {
+  cooperadoAppReleaseNeedsOperacionalSync,
   grantCooperadoEventDrivenSync,
   isCooperadoEventDrivenSync,
 } from "@/lib/performance/cooperadoEventDrivenSync";
@@ -132,12 +133,19 @@ export function requestCooperadoPrimeiraCargaSync(): void {
   requestSyncTier("operacional_full", { force: true, immediate: true, eventDriven: true });
 }
 
-/** Nova versão do app publicada — sync operacional única. */
+/** Nova versão do app publicada — sync operacional única (todos os modos cooperado mobile). */
 export function requestCooperadoAppReleaseSync(): void {
-  if (!isCooperadoEventDrivenSync()) return;
-  grantCooperadoEventDrivenSync();
+  if (typeof window === "undefined") return;
+  if (!cooperadoAppReleaseNeedsOperacionalSync()) return;
+  if (isCooperadoEventDrivenSync()) {
+    grantCooperadoEventDrivenSync();
+  }
   markNextCooperadoSyncSilent();
-  requestSyncTier("operacional_full", { force: true, immediate: true, eventDriven: true });
+  requestSyncTier("operacional_full", {
+    force: true,
+    immediate: true,
+    eventDriven: isCooperadoEventDrivenSync(),
+  });
 }
 
 /** Sync leve — HX 8.4: delta de notas (gestão) após conferência/lançamento. */

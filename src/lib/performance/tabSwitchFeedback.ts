@@ -33,15 +33,18 @@ export function pulsoVisualTrocaAba(iconEl: HTMLElement | null | undefined): voi
 }
 
 /** Só vibra quando o toque realmente muda de aba (não re-tap na ativa). */
+export type HbTabSwitchRqlPhase = "cooperado-tab-switch" | "staff-tab-switch";
+
 export function feedbackTrocaAbaMobile(
   alvoAtivo: boolean,
-  iconEl?: HTMLElement | null
+  iconEl?: HTMLElement | null,
+  rqlPhase: HbTabSwitchRqlPhase = "cooperado-tab-switch"
 ): void {
   if (alvoAtivo) return;
   if (!isMobileBottomTabViewport()) return;
   requestAnimationFrame(() => {
     vibrarTrocaAba();
     pulsoVisualTrocaAba(iconEl);
-    markRqlInteractionPhase("cooperado-tab-switch");
+    markRqlInteractionPhase(rqlPhase);
   });
 }

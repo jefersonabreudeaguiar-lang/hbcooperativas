@@ -82,6 +82,8 @@ export function buildMessagingParityReport(rql: RqlPerfRouteReport): MessagingPa
 
   const touchHb = scoreMsLowerIsBetter(longWorst, WHATSAPP_REFERENCE.inpMs, 400);
   const touchWa = WHATSAPP_REFERENCE.scores.touchResponse;
+  const coldMs = rql.coldStartSpanMs;
+  const coldHb = scoreMsLowerIsBetter(coldMs, WHATSAPP_REFERENCE.coldStartMs, 4000);
 
   const dimensions: MessagingParityDimension[] = [
     {
@@ -111,8 +113,8 @@ export function buildMessagingParityReport(rql: RqlPerfRouteReport): MessagingPa
       whatsappValue: null,
       hbCoopValue: null,
       whatsappScore: WHATSAPP_REFERENCE.scores.haptic,
-      hbCoopScore: 8,
-      detail: "HB: vibrate(10ms) + animação 180ms (iOS sem vibrate)",
+      hbCoopScore: 8.5,
+      detail: "HB: vibrate(10ms) + pulso 180ms — cooperado e responsável mobile",
     },
     {
       id: "touch_longtask",
@@ -126,13 +128,13 @@ export function buildMessagingParityReport(rql: RqlPerfRouteReport): MessagingPa
     },
     {
       id: "cold_start",
-      label: "Cold start (referência)",
+      label: "Cold start (span rql:cold:*)",
       unit: "ms",
       whatsappValue: WHATSAPP_REFERENCE.coldStartMs,
-      hbCoopValue: null,
+      hbCoopValue: coldMs,
       whatsappScore: WHATSAPP_REFERENCE.scores.coldStart,
-      hbCoopScore: 5.5,
-      detail: "Medir com marcas rql:cold:* no dispositivo",
+      hbCoopScore: coldHb ?? (coldMs == null ? 5.5 : 6),
+      detail: coldMs != null ? `medido ${coldMs}ms` : "Abra o app e rode printWhatsappCompare de novo",
     },
     {
       id: "scroll_lists",
