@@ -66,6 +66,13 @@ import {
 } from "@/lib/performance/staffConferenciaSyncTier";
 import { recuperarFilaConferenciaResponsavelDaNuvem } from "@/lib/conferencia/recuperarFilaConferenciaResponsavel";
 import { syncNotasPedidoFromCloudStaffCoalesced } from "@/lib/performance/staffNotasPullCoordinator";
+import {
+  isStaffFilaNotasLivePollEnabled,
+  resolveStaffFilaUploadProgressPollMs,
+  resolveStaffNotasPollIntervalMs,
+  resolveStaffNotasPullMinIntervalMs,
+  STAFF_FILA_UPLOAD_PROGRESS_MAX_NOTAS,
+} from "@/lib/performance/staffFilaNotasLivePoll";
 import { markRqlColdStartPhase, markRqlStaffNotasSubviewTransition } from "@/lib/performance/rqlMarks";
 import {
   loadCooperadoAnexarPipeline,
@@ -163,6 +170,7 @@ import {
   ensureNotaComFoto,
   resolveCooperativaCnpj,
   resolveFotosNotaParaExibicao,
+  refreshStaffFilaNotasFromUploadProgress,
 } from "@/services/notaPedidoCloudService";
 import {
   revokePreviewUrl,
@@ -2107,9 +2115,10 @@ export default function NotasPedidoStaffMain() {
   const conferirModalAbertaRef = useRef(false);
   const responsavelPullPendenteAposConferenciaRef = useRef(false);
   const staffVistaResponsavelPrevRef = useRef(vistaResponsavel);
+  const staffFilaUploadProgressInflightRef = useRef(false);
 
   const puxarNotasResponsavelDaNuvem = useCallback(
-    (opts?: { forceFull?: boolean; ignoreConferenciaModal?: boolean }) => {
+    (opts?: { forceFull?: boolean; ignoreConferenciaModal?: boolean; bypassMinGap?: boolean }) => {
       if (isCooperado || !coopId) return;
       if (conferirModalAbertaRef.current && !opts?.ignoreConferenciaModal) {
         responsavelPullPendenteAposConferenciaRef.current = true;
@@ -2121,13 +2130,13 @@ export default function NotasPedidoStaffMain() {
       if (!cnpj) return;
       const filaLocalVazia =
         Boolean(d && coopId && countNotasFilaConferenciaResponsavel(d, coopId) === 0);
+      const filaLive =
+        mostrarFilaResponsavelConteudo && isStaffFilaNotasLivePollEnabled();
       const now = Date.now();
-      if (
-        !opts?.forceFull &&
-        !filaLocalVazia &&
-        now - responsavelNotasPullAtRef.current < 90_000
-      ) {
-        return;
+      if (!opts?.forceFull && !opts?.bypassMinGap) {
+        const minGap = filaLive ? resolveStaffNotasPullMinIntervalMs(true) : 90_000;
+        const gap = filaLocalVazia && filaLive ? Math.min(minGap, 4_000) : minGap;
+        if (now - responsavelNotasPullAtRef.current < gap) return;
       }
       responsavelNotasPullAtRef.current = now;
       const retryFull =
@@ -2135,7 +2144,7 @@ export default function NotasPedidoStaffMain() {
       if (retryFull) forceNextFullNotasSync(cnpj);
       void syncNotasPedidoFromCloudStaffCoalesced(cnpj, { retryFull });
     },
-    [isCooperado, coopId]
+    [isCooperado, coopId, mostrarFilaResponsavelConteudo]
   );
 
   const recuperarFilaConferencia = useCallback(() => {
@@ -2230,21 +2239,70 @@ export default function NotasPedidoStaffMain() {
   ]);
 
   useEffect(() => {
-    if (isCooperado || !coopId) return;
+    if (isCooperado || !coopId || !tabActive) return;
+    const filaLive = mostrarFilaResponsavelConteudo && isStaffFilaNotasLivePollEnabled();
     const onVisible = () => {
       if (document.hidden) return;
-      puxarNotasResponsavelDaNuvem();
+      puxarNotasResponsavelDaNuvem({ bypassMinGap: true });
     };
     document.addEventListener("visibilitychange", onVisible);
     const interval = window.setInterval(() => {
       if (document.hidden) return;
       puxarNotasResponsavelDaNuvem();
-    }, 120_000);
+    }, resolveStaffNotasPollIntervalMs(filaLive));
     return () => {
       document.removeEventListener("visibilitychange", onVisible);
       window.clearInterval(interval);
     };
-  }, [isCooperado, coopId, puxarNotasResponsavelDaNuvem]);
+  }, [
+    isCooperado,
+    coopId,
+    tabActive,
+    mostrarFilaResponsavelConteudo,
+    puxarNotasResponsavelDaNuvem,
+  ]);
+
+  useEffect(() => {
+    if (isCooperado || !coopId || !tabActive || !mostrarFilaResponsavelConteudo) return;
+    if (!isStaffFilaNotasLivePollEnabled()) return;
+    if (conferirModal) return;
+
+    const tickUploadProgress = () => {
+      if (document.hidden || conferirModalAbertaRef.current) return;
+      if (staffFilaUploadProgressInflightRef.current) return;
+      const d = getData();
+      if (!d || !coopId) return;
+      const cnpj = getCooperativaCnpj(d, coopId);
+      if (!cnpj) return;
+      const ids = pendentesEstaveis
+        .slice(0, STAFF_FILA_UPLOAD_PROGRESS_MAX_NOTAS)
+        .map((n) => n.id);
+      if (ids.length === 0) {
+        puxarNotasResponsavelDaNuvem();
+        return;
+      }
+      staffFilaUploadProgressInflightRef.current = true;
+      void refreshStaffFilaNotasFromUploadProgress(cnpj, ids, { onlyIfBehind: true })
+        .finally(() => {
+          staffFilaUploadProgressInflightRef.current = false;
+        });
+    };
+
+    const first = window.setTimeout(tickUploadProgress, 900);
+    const interval = window.setInterval(tickUploadProgress, resolveStaffFilaUploadProgressPollMs());
+    return () => {
+      window.clearTimeout(first);
+      window.clearInterval(interval);
+    };
+  }, [
+    isCooperado,
+    coopId,
+    tabActive,
+    mostrarFilaResponsavelConteudo,
+    conferirModal,
+    pendentesEstaveis,
+    puxarNotasResponsavelDaNuvem,
+  ]);
 
   const filaZombieCount = useAppDataSelector(
     (d) => {
