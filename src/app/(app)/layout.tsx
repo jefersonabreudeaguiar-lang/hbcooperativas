@@ -11,6 +11,7 @@ import { HbCreditAccountPersistBootstrap } from "@/components/hb-credit/HbCredit
 import { HbFichaBaseOperacionalMarker } from "@/components/hb-credit/HbFichaBaseOperacionalMarker";
 import { HbCreditNavPrefetch } from "@/hooks/useHbCreditNavPrefetch";
 import { AppSchedulerBootstrap } from "@/components/performance/AppSchedulerBootstrap";
+import { RqlPerfDebugBootstrap } from "@/components/performance/RqlPerfDebugBootstrap";
 
 import { GestaoAccessGuard } from "@/components/permissions/GestaoAccessGuard";
 
@@ -24,6 +25,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     <ProtectedRoute>
       <CooperativaSyncProvider>
         <AppSchedulerBootstrap />
+        <RqlPerfDebugBootstrap />
         <CooperadoInicioCardPersistBootstrap />
         <HbCreditNavPrefetch />
         <HbCreditAccountPersistBootstrap />

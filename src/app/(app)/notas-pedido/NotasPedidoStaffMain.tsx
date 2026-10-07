@@ -62,7 +62,7 @@ import {
 } from "@/lib/performance/staffConferenciaSyncTier";
 import { recuperarFilaConferenciaResponsavelDaNuvem } from "@/lib/conferencia/recuperarFilaConferenciaResponsavel";
 import { syncNotasPedidoFromCloudStaffCoalesced } from "@/lib/performance/staffNotasPullCoordinator";
-import { markRqlColdStartPhase } from "@/lib/performance/rqlMarks";
+import { markRqlColdStartPhase, markRqlStaffNotasSubviewTransition } from "@/lib/performance/rqlMarks";
 import {
   loadCooperadoAnexarPipeline,
   prefetchCooperadoAnexarPipeline,
@@ -2093,6 +2093,7 @@ export default function NotasPedidoStaffMain() {
   const responsavelPrimeiroPullAgendadoRef = useRef(false);
   const conferirModalAbertaRef = useRef(false);
   const responsavelPullPendenteAposConferenciaRef = useRef(false);
+  const staffVistaResponsavelPrevRef = useRef(vistaResponsavel);
 
   const puxarNotasResponsavelDaNuvem = useCallback(
     (opts?: { forceFull?: boolean; ignoreConferenciaModal?: boolean }) => {
@@ -2141,6 +2142,15 @@ export default function NotasPedidoStaffMain() {
     responsavelPullPendenteAposConferenciaRef.current = false;
     puxarNotasResponsavelDaNuvem();
   }, [conferirModal, puxarNotasResponsavelDaNuvem]);
+
+  useEffect(() => {
+    if (isCooperado) return;
+    const prev = staffVistaResponsavelPrevRef.current;
+    if (prev !== vistaResponsavel) {
+      markRqlStaffNotasSubviewTransition(prev, vistaResponsavel);
+      staffVistaResponsavelPrevRef.current = vistaResponsavel;
+    }
+  }, [isCooperado, vistaResponsavel]);
 
   useEffect(() => {
     if (!isCooperado || !data) return;

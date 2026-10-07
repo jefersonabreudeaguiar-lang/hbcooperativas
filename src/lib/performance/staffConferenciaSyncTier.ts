@@ -2,6 +2,7 @@ import type { SyncTier, SyncTierRequest } from "@/lib/performance/syncTier";
 import { isStaffRole } from "@/lib/security/staffAccessPolicy";
 import { isConferenciaAprovacaoSyncQueueActive } from "@/services/conferenciaAprovacaoSyncQueue";
 import { isConferenciaOperacionalPushScopeActive } from "@/services/conferenciaOperacionalPushScope";
+import { markRqlInteractionPhase } from "@/lib/performance/rqlMarks";
 import { getSession } from "@/services/dataStore";
 import type { UserRole } from "@/types";
 
@@ -18,13 +19,21 @@ let conferenciaModalOpen = false;
 let conferenciaLancamentoDepth = 0;
 
 export function setStaffConferenciaModalOpen(open: boolean): void {
+  const wasOpen = conferenciaModalOpen;
   conferenciaModalOpen = open;
   if (!open) conferenciaLancamentoDepth = 0;
+  if (open && !wasOpen) markRqlInteractionPhase("staff_conferir_modal_open");
+  if (!open && wasOpen) markRqlInteractionPhase("staff_conferir_modal_close");
 }
 
 export function setStaffConferenciaLancamentoAtivo(active: boolean): void {
+  const before = conferenciaLancamentoDepth;
   if (active) conferenciaLancamentoDepth += 1;
   else conferenciaLancamentoDepth = Math.max(0, conferenciaLancamentoDepth - 1);
+  if (active && before === 0) markRqlInteractionPhase("staff_conferir_lancamento_foto_start");
+  if (!active && before > 0 && conferenciaLancamentoDepth === 0) {
+    markRqlInteractionPhase("staff_conferir_lancamento_foto_end");
+  }
 }
 
 export function isStaffConferenciaModalOpen(): boolean {

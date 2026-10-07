@@ -105,6 +105,40 @@ export function summarizeRqlRouteTimings(): RqlRouteTimingRow[] {
   return rows;
 }
 
+const INTERACTION_PREFIX = "rql:interaction:";
+const STAFF_SUBVIEW_PREFIX = "rql:staff-notas:";
+
+/** UX crítica (Conferir, Lançar foto) — só marcas, zero efeito em sync/dados. */
+export function markRqlInteractionPhase(phase: string): void {
+  if (typeof performance === "undefined" || typeof performance.mark !== "function") return;
+  try {
+    performance.mark(`${INTERACTION_PREFIX}${phase}`);
+  } catch {
+    /* ignore */
+  }
+}
+
+/** Responsável em /notas-pedido — troca fila/histórico/cooperado (pathname não muda). */
+export function markRqlStaffNotasSubviewTransition(from: string, to: string): void {
+  if (typeof performance === "undefined" || typeof performance.mark !== "function") return;
+  if (!from || !to || from === to) return;
+  try {
+    performance.mark(`${STAFF_SUBVIEW_PREFIX}${from}->${to}`);
+  } catch {
+    /* ignore */
+  }
+}
+
+export function listRqlInteractionMarks(): string[] {
+  if (typeof performance === "undefined" || typeof performance.getEntriesByType !== "function") {
+    return [];
+  }
+  return performance
+    .getEntriesByType("mark")
+    .map((e) => e.name)
+    .filter((n) => n.startsWith(INTERACTION_PREFIX) || n.startsWith(STAFF_SUBVIEW_PREFIX));
+}
+
 const COLD_START_PREFIX = "rql:cold:";
 
 /** HX 9.0 — fases da abertura cooperado (diagnóstico read-only). */
