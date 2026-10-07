@@ -228,17 +228,16 @@ function nota(id: string, status: NotaPedido["status"]): NotaPedido {
     notasPedido: [nota("n1", "conferida")],
   });
   data = registrarPagamentoCooperado(data, COOPERADO, MES, "Responsável teste");
-  const pg = data.pagamentosCooperado.find((p) => p.status === "aguardando_confirmacao");
+  const pg = data.pagamentosCooperado.find((p) => p.status === "confirmado");
   assert.ok(pg, "registro de pagamento criado");
+  assert.ok(pg!.reciboHtml?.trim(), "recibo gerado na confirmação");
   const inicio = cooperadoExibirValorReceberInicio(data, COOPERADO, COOP);
   assert.equal(inicio.valor, 0, "Início: a receber zero após pagamento registrado");
-  assert.equal(inicio.valorRecibo, pg!.valorLiquido, "Início: mostra valor do recibo");
-  assert.equal(inicio.aguardandoAssinatura, true);
+  assert.equal(inicio.aguardandoAssinatura, false);
   const relatorio = getResumoValorAPagarRelatorio(data, COOPERADO, MES, COOP);
-  assert.equal(relatorio.valorLiquido, 0, "Relatório a receber zera com pagamento aguardando assinatura");
+  assert.equal(relatorio.valorLiquido, 0, "Relatório a receber zera após pagamento confirmado");
   const fin = getConsolidadoFinanceiroCooperado(data, COOPERADO, COOP);
   assert.equal(fin.valorLiquido, 0, "Consolidado a receber zera");
-  assert.equal(fin.resumo.valorLiquido, pg!.valorLiquido, "Resumo congelado no snapshot do pagamento");
 }
 
 {

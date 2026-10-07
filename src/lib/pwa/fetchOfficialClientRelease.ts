@@ -136,10 +136,6 @@ export async function runClientReleaseAlignment(
   }
 
   if (runtimeBundleBehindCanonical(canonical, embedded)) {
-    if (staffExperience) {
-      staffDeferSoftAlign(canonical, embedded);
-      return "ok";
-    }
     const aligned = await alignClientRuntimeToRelease(
       `bundle:${embedded.build}->${canonical.build}`,
       canonical.deploymentId,
@@ -158,8 +154,7 @@ export async function runClientReleaseAlignment(
 
   if (decision.action === "align") {
     if (staffExperience && !decision.hard) {
-      staffDeferSoftAlign(canonical, embedded);
-      return "ok";
+      markStaffReleasePending(canonical.build);
     }
     const aligned = await alignClientRuntimeToRelease(decision.reason, canonical.deploymentId, {
       hard: decision.hard,

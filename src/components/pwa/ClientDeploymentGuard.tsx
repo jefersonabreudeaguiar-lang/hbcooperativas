@@ -79,7 +79,7 @@ export function ClientDeploymentGuard() {
     const embedded = getEmbeddedClientRelease();
     const page = getPageEmbeddedReleaseFromDom();
     const skipPeriodic = runtimeAlreadyOnCanonicalRelease(embedded, page);
-    const intervalMs = skipPeriodic ? 0 : cooperadoExperience ? 4 * 60 * 1000 : 8 * 60 * 1000;
+    const intervalMs = skipPeriodic ? 0 : cooperadoExperience ? 90 * 1000 : 2 * 60 * 1000;
     const interval =
       intervalMs > 0
         ? window.setInterval(() => {

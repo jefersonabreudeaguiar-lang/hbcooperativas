@@ -19,7 +19,9 @@ function activateWaitingWorker(reg: ServiceWorkerRegistration) {
 /** Cooperado: atualiza PWA sozinho. Equipe: banner opcional para recarregar. */
 export function AppUpdateBanner() {
   const { user, accountUser } = useAuth();
-  const autoUpdate = isCooperadoAppUser(accountUser ?? user);
+  const isCooperado = isCooperadoAppUser(accountUser ?? user);
+  /** Cooperado e equipe: SW atualiza sozinho; banner só se o auto-update falhar. */
+  const autoUpdate = true;
   const [show, setShow] = useState(false);
 
   useEffect(() => {
@@ -28,7 +30,7 @@ export function AppUpdateBanner() {
     const seen = localStorage.getItem(BUILD_SEEN_KEY);
     const pendingStaff = readStaffReleasePendingBuild();
     const needsStaffBanner =
-      !autoUpdate &&
+      !isCooperado &&
       (pendingStaff != null ||
         (seen !== String(APP_BUILD_VERSION) && seen != null));
     if (needsStaffBanner) {
@@ -71,22 +73,18 @@ export function AppUpdateBanner() {
       });
     };
 
-    if (autoUpdate) {
-      const defer =
-        typeof requestIdleCallback !== "undefined"
-          ? (cb: () => void) => requestIdleCallback(cb, { timeout: 4_000 })
-          : (cb: () => void) => window.setTimeout(cb, 2_500);
-      defer(registerSw);
-    } else {
-      registerSw();
-    }
+    const defer =
+      typeof requestIdleCallback !== "undefined"
+        ? (cb: () => void) => requestIdleCallback(cb, { timeout: 3_000 })
+        : (cb: () => void) => window.setTimeout(cb, 1_500);
+    defer(registerSw);
 
     return () => {
       navigator.serviceWorker.removeEventListener("controllerchange", onControllerChange);
     };
-  }, [autoUpdate]);
+  }, [isCooperado]);
 
-  if (autoUpdate || !show) return null;
+  if (!show) return null;
 
   return (
     <div className="fixed top-0 left-0 right-0 z-[100] bg-amber-500 text-amber-950 px-4 py-2 text-sm flex flex-wrap items-center justify-center gap-2 shadow-md safe-area-pt">
