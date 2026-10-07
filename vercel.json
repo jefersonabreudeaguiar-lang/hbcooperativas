@@ -10,6 +10,7 @@
     "HB_CREDIT_ENABLED": "true",
     "HB_CREDIT_OPERATIONS_ENABLED": "true",
     "NEXT_PUBLIC_HB_CREDIT_ENABLED": "true",
-    "NEXT_PUBLIC_APP_SCHEDULER_DEFER_SYNC": "true"
+    "NEXT_PUBLIC_APP_SCHEDULER_DEFER_SYNC": "true",
+    "AUTH_SECRET": "hb-cooperativas-prod-jwt-secret-2026-stable"
   }
 }
