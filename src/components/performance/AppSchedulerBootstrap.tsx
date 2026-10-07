@@ -4,9 +4,13 @@ import { useEffect, useRef } from "react";
 import { usePathname } from "next/navigation";
 import { markUserInteraction, startAppScheduler } from "@/lib/performance/appScheduler";
 import { markRqlRouteTransition, scheduleMarkRqlRoutePaintReady } from "@/lib/performance/rqlMarks";
+import { isCooperadoBottomTabPath } from "@/lib/performance/cooperadoBottomTabRoutes";
 import { markUserActivity } from "@/services/idleActivity";
 
 function routeHopFromPathname(pathname: string): string {
+  if (isCooperadoBottomTabPath(pathname)) {
+    return pathname.replace(/^\//, "");
+  }
   const seg = pathname.split("/").filter(Boolean)[0];
   return seg || "dashboard";
 }

@@ -37,8 +37,9 @@ import { AppUpdateBanner } from "@/components/pwa/AppUpdateBanner";
 import { useHbCreditDescontosWarmup } from "@/hooks/useHbCreditDescontosWarmup";
 import { shouldPrefetchHbCreditNav } from "@/lib/hb-credit/hbCreditNavPrefetch";
 import { scheduleCooperadoNavPrefetchEarly } from "@/lib/performance/cooperadoNavPrefetch";
-import { warmupCooperadoFinanceiroTabChunk } from "@/lib/performance/cooperadoFinanceiroTabWarmup";
 import { COOPERADO_FINANCEIRO_TAB_HREF } from "@/lib/hb-credit/hbCreditNavPrefetch";
+import { cooperadoTabWarmOnPointerDown } from "@/lib/performance/cooperadoTabPointerWarmup";
+import { isCooperadoBottomTabPath } from "@/lib/performance/cooperadoBottomTabRoutes";
 import { scheduleStaffNavPrefetchEarly } from "@/lib/performance/staffNavPrefetch";
 import { prefetchStaffNotasPedidoRouteBundle } from "@/lib/performance/prefetchStaffNotasPedidoUi";
 import { feedbackTrocaAbaMobile } from "@/lib/performance/tabSwitchFeedback";
@@ -261,13 +262,19 @@ export function MobileNav() {
               key={item.href}
               href={item.href}
               scroll={false}
-              prefetch={item.href === COOPERADO_FINANCEIRO_TAB_HREF}
+              prefetch={
+                isCooperadoNav &&
+                (item.href === COOPERADO_FINANCEIRO_TAB_HREF || isCooperadoBottomTabPath(item.href))
+              }
               onPointerDown={() => {
-                if (isCooperadoNav && item.href === COOPERADO_FINANCEIRO_TAB_HREF) {
-                  warmupCooperadoFinanceiroTabChunk();
+                if (isCooperadoNav && isCooperadoBottomTabPath(item.href)) {
+                  cooperadoTabWarmOnPointerDown(item.href);
                 }
               }}
-              onClick={() => feedbackTrocaAbaMobile(active)}
+              onClick={(e) => {
+                const icon = e.currentTarget.querySelector("[data-cooperado-tab-icon]");
+                feedbackTrocaAbaMobile(active, icon instanceof HTMLElement ? icon : null);
+              }}
               className={cn(
                 "flex-1 flex flex-col items-center justify-center min-w-0 px-0.5 select-none",
                 isCooperadoNav ? "min-h-[72px] py-2 gap-1" : "py-2 text-[10px] sm:text-xs gap-0.5",
@@ -281,6 +288,7 @@ export function MobileNav() {
               )}
             >
               <span
+                data-cooperado-tab-icon={isCooperadoNav ? "" : undefined}
                 className={cn(
                   "flex items-center justify-center rounded-xl",
                   isCooperadoNav && "w-11 h-11",

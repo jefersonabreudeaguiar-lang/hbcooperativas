@@ -8,6 +8,11 @@ import {
   summarizeRqlRouteTimings,
   type RqlRouteTimingRow,
 } from "@/lib/performance/rqlMarks";
+import {
+  buildMessagingParityReport,
+  formatMessagingParitySummary,
+  type MessagingParityReport,
+} from "@/lib/performance/messagingAppPerfParity";
 
 export type RqlPerfPercentiles = {
   count: number;
@@ -109,6 +114,8 @@ export type RqlPerfDebugHandle = {
   report: () => RqlPerfRouteReport;
   summary: () => string;
   print: () => RqlPerfRouteReport;
+  whatsappCompare: () => MessagingParityReport;
+  printWhatsappCompare: () => MessagingParityReport;
 };
 
 /** Instala `window.__hbRqlPerf` — só quando debug ligado (homolog). */
@@ -125,6 +132,22 @@ export function installRqlPerfDebugGlobal(): () => void {
       console.info(formatRqlPerfReportSummary(r));
       console.table(r.routeTransitions);
       if (r.interactionMarks.length) console.log("interactions", r.interactionMarks);
+      return r;
+    },
+    whatsappCompare: () => buildMessagingParityReport(buildRqlPerfRouteReport()),
+    printWhatsappCompare: () => {
+      const r = buildMessagingParityReport(buildRqlPerfRouteReport());
+      console.info(formatMessagingParitySummary(r));
+      console.table(
+        r.dimensions.map((d) => ({
+          id: d.id,
+          label: d.label,
+          whatsapp: d.whatsappScore,
+          hbCoop: d.hbCoopScore,
+          waMs: d.whatsappValue,
+          hbMs: d.hbCoopValue,
+        }))
+      );
       return r;
     },
   };
