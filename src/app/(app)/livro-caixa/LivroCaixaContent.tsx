@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Plus, TrendingUp, TrendingDown, Wallet, Send, FileText, Search } from "lucide-react";
+import { Plus, TrendingUp, TrendingDown, Wallet, Send, FileText, Search, Download } from "lucide-react";
 import { useAppData } from "@/hooks/useAppData";
 import { useAuth } from "@/modules/auth/AuthProvider";
 import { canUser } from "@/permissions";
@@ -44,6 +44,11 @@ import { buildPlanilhaLinhas, saldoLivroCaixaAntesMes } from "@/services/livroCa
 import { LivroCaixaPlanilhaTable } from "@/components/livro-caixa/LivroCaixaPlanilhaTable";
 import type { LivroCaixaLancamento } from "@/types";
 import { imprimirDocumentoHtml } from "@/utils/relatorioHtml";
+import {
+  buildLivroCaixaPacoteContabil,
+  nomeZipPacoteContabil,
+} from "@/services/livroCaixaExportContabil";
+import { downloadLivroCaixaPacoteContabilZip } from "@/utils/livroCaixaExportDownload";
 import { formatCurrency, formatDate, formatMesReferencia, getCurrentMesReferencia } from "@/utils/format";
 import type { LivroCaixaOrigem, LivroCaixaTipo, Action, Resource } from "@/types";
 
@@ -77,6 +82,7 @@ export default function LivroCaixaPage() {
   const [incluirFichaRelatorio, setIncluirFichaRelatorio] = useState(false);
   const [incluirSobrasRelatorio, setIncluirSobrasRelatorio] = useState(false);
   const [incluirAbertosRelatorio, setIncluirAbertosRelatorio] = useState(false);
+  const [exportandoContabil, setExportandoContabil] = useState(false);
   const [somenteMesAbertoRelatorio, setSomenteMesAbertoRelatorio] = useState(false);
   const [encBackupOk, setEncBackupOk] = useState(false);
   const [encRelatoriosOk, setEncRelatoriosOk] = useState(false);
@@ -275,36 +281,57 @@ export default function LivroCaixaPage() {
     }
   };
 
-  const imprimirRelatorio = () => {
-    const opts: LivroCaixaRelatorioPlanilhaOpts =
-      relatorioModo === "dia"
+  const relatorioOptsAtual = (): LivroCaixaRelatorioPlanilhaOpts =>
+    relatorioModo === "dia"
+      ? {
+          modo: "dia",
+          dataIso: dataRelatorio,
+          incluirExtratoFicha: incluirFichaRelatorio,
+          incluirSobrasPerdas: incluirSobrasRelatorio,
+          mesSobrasPerdas: mes,
+          incluirValoresEmAberto: incluirAbertosRelatorio,
+        }
+      : relatorioModo === "periodo"
         ? {
-            modo: "dia",
-            dataIso: dataRelatorio,
-            incluirExtratoFicha: incluirFichaRelatorio,
+            modo: "periodo",
+            dataDe: relatorioDe,
+            dataAte: relatorioAte,
             incluirSobrasPerdas: incluirSobrasRelatorio,
             mesSobrasPerdas: mes,
             incluirValoresEmAberto: incluirAbertosRelatorio,
           }
-        : relatorioModo === "periodo"
-          ? {
-              modo: "periodo",
-              dataDe: relatorioDe,
-              dataAte: relatorioAte,
-              incluirSobrasPerdas: incluirSobrasRelatorio,
-              mesSobrasPerdas: mes,
-              incluirValoresEmAberto: incluirAbertosRelatorio,
-            }
-          : {
-              modo: "mes",
-              mesReferencia: mes,
-              somenteMesEmAberto: somenteMesAbertoRelatorio,
-              incluirSobrasPerdas: incluirSobrasRelatorio,
-              mesSobrasPerdas: mes,
-              incluirValoresEmAberto: incluirAbertosRelatorio,
-            };
-    const html = gerarRelatorioLivroCaixaPlanilhaHtml(data, coopId, coopNome, opts);
+        : {
+            modo: "mes",
+            mesReferencia: mes,
+            somenteMesEmAberto: somenteMesAbertoRelatorio,
+            incluirSobrasPerdas: incluirSobrasRelatorio,
+            mesSobrasPerdas: mes,
+            incluirValoresEmAberto: incluirAbertosRelatorio,
+          };
+
+  const imprimirRelatorio = () => {
+    const html = gerarRelatorioLivroCaixaPlanilhaHtml(data, coopId, coopNome, relatorioOptsAtual());
     imprimirDocumentoHtml(html);
+  };
+
+  const exportarPacoteContabil = async () => {
+    if (!dataCaixa || !coopId) return;
+    setExportandoContabil(true);
+    try {
+      const opts = relatorioOptsAtual();
+      const cnpj =
+        data.cooperativas.find((c) => c.id === coopId)?.cnpj?.trim() ||
+        (await resolveCooperativaCnpj(dataCaixa, coopId, permUser)) ||
+        "";
+      const pacote = buildLivroCaixaPacoteContabil(dataCaixa, coopId, coopNome, cnpj, opts);
+      const slug = pacote.periodoLabel.replace(/[^\dA-Za-z]+/g, "_").slice(0, 48);
+      await downloadLivroCaixaPacoteContabilZip(pacote, nomeZipPacoteContabil(cnpj, slug));
+    } catch (e) {
+      console.error(e);
+      alert("Não foi possível gerar o pacote contábil. Tente novamente.");
+    } finally {
+      setExportandoContabil(false);
+    }
   };
 
   const solicitarEncerramento = () => {
@@ -501,9 +528,24 @@ export default function LivroCaixaPage() {
               />
               Incluir valores em aberto (a pagar cooperados, todos os meses)
             </label>
-            <Button type="button" variant="secondary" onClick={imprimirRelatorio}>
-              <FileText size={16} /> Gerar PDF / imprimir
-            </Button>
+            <div className="flex flex-wrap gap-2">
+              <Button type="button" variant="secondary" onClick={imprimirRelatorio}>
+                <FileText size={16} /> Gerar PDF / imprimir
+              </Button>
+              <Button
+                type="button"
+                variant="secondary"
+                disabled={exportandoContabil}
+                onClick={() => void exportarPacoteContabil()}
+              >
+                <Download size={16} />
+                {exportandoContabil ? "Gerando ZIP…" : "Exportar pacote contábil (ZIP)"}
+              </Button>
+            </div>
+            <p className="text-xs text-gray-500">
+              O ZIP contém 7 planilhas CSV (CAPA, livro caixa, eventos de pagamento, retenções/HB, conciliação,
+              pendências e mapeamento de contas) para o contador.
+            </p>
           </div>
         </div>
       </Card>

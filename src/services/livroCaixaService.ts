@@ -117,7 +117,7 @@ export function alocarSequenciaEvento(
   };
 }
 
-function pagamentoIdFromOrigemId(origemId?: string): string | null {
+export function pagamentoIdFromOrigemId(origemId?: string): string | null {
   if (!origemId) return null;
   if (origemId.startsWith("pg_caixa_")) return origemId.slice("pg_caixa_".length);
   if (origemId.startsWith("pg_taxa_")) return origemId.slice("pg_taxa_".length);
