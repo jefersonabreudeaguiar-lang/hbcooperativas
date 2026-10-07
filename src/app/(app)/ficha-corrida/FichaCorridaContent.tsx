@@ -13,7 +13,6 @@ import { usePermissions } from "@/hooks/usePermissions";
 import { getUserCooperativaId } from "@/utils/cooperativa";
 import {
   resumoFromPagamento,
-  getDescontosExtrasExibicaoCooperado,
   getDescontosExtrasExibicaoCooperadoFinanceiro,
   registrarPagamentoCooperado,
   confirmarPagamentoCooperado,
@@ -841,13 +840,25 @@ export default function FichaCorridaPage() {
 
   const resumoExibicao = resumo;
 
-  const mesesResumoCooperado = useMemo(() => {
-    if (!isCooperado) return [];
-    const m6 = mesesPendentesQuantoVouReceber;
-    if (m6.length > 0) return m6;
-    if (financeiroAberto?.meses?.length) return financeiroAberto.meses;
+  const mesesResumoHbFicha = useMemo(() => {
+    if (isCooperado) {
+      const m6 = mesesPendentesQuantoVouReceber;
+      if (m6.length > 0) return m6;
+      if (financeiroAberto?.meses?.length) return financeiroAberto.meses;
+      return mesAtivo ? [mesAtivo] : [];
+    }
+    if (aba === "pagar" && mesesPendentesPagamento.length > 0) {
+      return mesesPendentesPagamento;
+    }
     return mesAtivo ? [mesAtivo] : [];
-  }, [isCooperado, mesesPendentesQuantoVouReceber, financeiroAberto?.meses, mesAtivo]);
+  }, [
+    isCooperado,
+    aba,
+    mesesPendentesQuantoVouReceber,
+    mesesPendentesPagamento,
+    financeiroAberto?.meses,
+    mesAtivo,
+  ]);
 
   const totalPendente = isCooperado
     ? visualizandoHistorico
@@ -866,17 +877,26 @@ export default function FichaCorridaPage() {
         : 0
       : (financeiroAberto?.valorLiquido ?? 0);
 
-  const descontosExtrasCooperado =
-    isCooperado && resumoExibicao && data && cooperadoSelecionadoId
-      ? visualizandoHistorico
-        ? resumoExibicao.descontosExtras
-        : getDescontosExtrasExibicaoCooperadoFinanceiro(
-            data,
-            cooperadoSelecionadoId,
-            coopId,
-            mesesResumoCooperado
-          )
-      : [];
+  const descontosExtrasResumo = useMemo(() => {
+    if (!data || !cooperadoSelecionadoId || !mesesResumoHbFicha.length) return [];
+    if (visualizandoHistorico && resumoExibicao) {
+      return resumoExibicao.descontosExtras;
+    }
+    return getDescontosExtrasExibicaoCooperadoFinanceiro(
+      data,
+      cooperadoSelecionadoId,
+      coopId,
+      mesesResumoHbFicha
+    );
+  }, [
+    data,
+    cooperadoSelecionadoId,
+    coopId,
+    mesesResumoHbFicha,
+    visualizandoHistorico,
+    resumoExibicao,
+    hbDescontosRevision,
+  ]);
 
   const pagarStep: 1 | 2 | 3 | 4 = (isCooperado ? pagamentoAguardandoExibicao : pagamentoAguardando)
     ? 4
@@ -1838,7 +1858,7 @@ export default function FichaCorridaPage() {
                 descontoCooperativa={resumoExibicao.descontoCooperativa}
                 descontoPadraoPct={data.config.descontoPadraoCooperativa}
                 valorEntregas={resumoExibicao.valorEntregas}
-                descontosExtras={descontosExtrasCooperado}
+                descontosExtras={descontosExtrasResumo}
                 totalLiquido={
                   visualizandoHistorico
                     ? exibicaoOpts
@@ -1864,7 +1884,7 @@ export default function FichaCorridaPage() {
                   cooperadoId={cooperadoSelecionadoId}
                   mesReferencia={mesAtivo}
                   valorEntregas={resumoExibicao.valorEntregas}
-                  descontosExtras={descontosExtrasCooperado}
+                  descontosExtras={descontosExtrasResumo}
                 />
               )}
 
@@ -1922,11 +1942,25 @@ export default function FichaCorridaPage() {
                 descontoCooperativa={resumoExibicao.descontoCooperativa}
                 descontoPadraoPct={data.config.descontoPadraoCooperativa}
                 valorEntregas={resumoExibicao.valorEntregas}
-                descontosExtras={resumoExibicao.descontosExtras}
+                descontosExtras={descontosExtrasResumo}
                 totalLiquido={totalExibido}
                 rotuloTotal="Total a pagar"
               />
             )}
+
+            {!isCooperado &&
+              resumoExibicao &&
+              cooperadoSelecionadoId &&
+              coopCnpjResumo &&
+              descontosExtrasResumo.some((d) => d.tipo === "conta_coop") && (
+                <HistoricoHbCreditosResumo
+                  cnpj={coopCnpjResumo}
+                  cooperadoId={cooperadoSelecionadoId}
+                  mesReferencia={mesAtivo}
+                  valorEntregas={resumoExibicao.valorEntregas}
+                  descontosExtras={descontosExtrasResumo}
+                />
+              )}
 
             {descontosRegistradosMes.length > 0 && (
               <div className="rounded-xl border border-amber-200 bg-amber-50/50 p-4 text-sm space-y-2 mb-4">
@@ -2006,7 +2040,7 @@ export default function FichaCorridaPage() {
                   resumoExibicao &&
                     (resumoExibicao.valorBruto > 0 ||
                       totalPendente > 0 ||
-                      descontosExtrasCooperado.length > 0)
+                      descontosExtrasResumo.length > 0)
                 )}
                 detalheCalculo={
                   resumoExibicao
@@ -2015,7 +2049,7 @@ export default function FichaCorridaPage() {
                         descontoCooperativa: resumoExibicao.descontoCooperativa,
                         descontoPadraoPct: data.config.descontoPadraoCooperativa,
                         valorEntregas: resumoExibicao.valorEntregas,
-                        descontosExtras: descontosExtrasCooperado,
+                        descontosExtras: descontosExtrasResumo,
                         totalLiquido: totalExibido,
                       }
                     : undefined
@@ -2026,14 +2060,14 @@ export default function FichaCorridaPage() {
                 coopCnpjResumo &&
                 !mesQuitadoCooperado &&
                 totalExibido > 0 &&
-                descontosExtrasCooperado.some((d) => d.tipo === "conta_coop") && (
+                descontosExtrasResumo.some((d) => d.tipo === "conta_coop") && (
                   <div className="-mt-2 mb-4 px-1">
                     <HistoricoHbCreditosResumo
                       cnpj={coopCnpjResumo}
                       cooperadoId={cooperadoSelecionadoId}
                       mesReferencia={mesAtivo}
                       valorEntregas={resumoExibicao.valorEntregas}
-                      descontosExtras={descontosExtrasCooperado}
+                      descontosExtras={descontosExtrasResumo}
                       variant="cooperado"
                     />
                   </div>
@@ -2054,13 +2088,13 @@ export default function FichaCorridaPage() {
               <p className="text-3xl sm:text-4xl font-bold mt-2">{formatCurrency(totalExibido)}</p>
               {nomeCooperado && <p className="text-green-100 text-sm mt-2">{nomeCooperado}</p>}
               {resumoExibicao &&
-                (resumoExibicao.valorBruto > 0 || totalPendente > 0 || descontosExtrasCooperado.length > 0) && (
+                (resumoExibicao.valorBruto > 0 || totalPendente > 0 || descontosExtrasResumo.length > 0) && (
                   <ResumoDescontosMes
                     valorBruto={resumoExibicao.valorBruto}
                     descontoCooperativa={resumoExibicao.descontoCooperativa}
                     descontoPadraoPct={data.config.descontoPadraoCooperativa}
                     valorEntregas={resumoExibicao.valorEntregas}
-                    descontosExtras={resumoExibicao.descontosExtras}
+                    descontosExtras={descontosExtrasResumo}
                     totalLiquido={totalExibido}
                     rotuloTotal="Total líquido a pagar"
                     tema="escuro"

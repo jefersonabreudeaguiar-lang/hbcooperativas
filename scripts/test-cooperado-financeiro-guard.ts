@@ -7,6 +7,7 @@ import { cooperadoFinanceiroLocalAusente, cooperadoFinanceiroBloqueiaEntradaApp,
 import {
   buildValorExibicaoCooperadoOpts,
   getDescontosExtrasExibicaoCooperado,
+  getDescontosExtrasExibicaoCooperadoFinanceiro,
   getResumoPagamentoCooperado,
   getResumoPagamentoConsolidadoCooperado,
   getResumoPagamentoExibicao,
@@ -175,6 +176,19 @@ function nota(id: string, status: NotaPedido["status"]): NotaPedido {
   assert.ok(
     linhasAntesMesPrincipal.some((d) => d.tipo === "conta_coop"),
     "exibição cooperado não pode sumir HB ao recalcular sobre resumo consolidado"
+  );
+  const linhasFinanceiro = getDescontosExtrasExibicaoCooperadoFinanceiro(data, COOPERADO, COOP, [
+    MES_A,
+    MES_B,
+  ]);
+  assert.ok(
+    linhasFinanceiro.some((d) => d.tipo === "conta_coop"),
+    "helper financeiro multi-mês deve listar HB"
+  );
+  assert.equal(
+    linhasFinanceiro.filter((d) => d.tipo === "conta_coop").length,
+    consolidado.descontosExtras.filter((d) => d.tipo === "conta_coop").length,
+    "helper financeiro multi-mês = linhas do consolidado"
   );
 }
 

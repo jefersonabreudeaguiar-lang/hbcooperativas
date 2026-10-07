@@ -10,7 +10,7 @@ import { shouldSyncHbFichaBaseDescontos } from "@/lib/hb-credit/hbFichaBaseOpera
 import { scheduleContaCoopAuxSync } from "@/lib/hb-credit/contaCoopAuxSyncSchedule";
 import { isStaffHbCoopWideSyncRoute } from "@/lib/hb-credit/staffHbSyncRoute";
 
-const WARMUP_INITIAL_DELAY_COOPERADO_MS = 10_000;
+const WARMUP_INITIAL_DELAY_COOPERADO_MS = 3_000;
 const WARMUP_INITIAL_DELAY_STAFF_MS = 15_000;
 const HB_PAGE_PREFIX = "/minha-conta-coop";
 

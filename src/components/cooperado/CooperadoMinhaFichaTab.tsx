@@ -20,7 +20,7 @@ import { NotaStatusBadge } from "@/components/ui/NotaStatusBadge";
 import { ResumoDescontosMes } from "@/components/ficha/ResumoDescontosMes";
 import {
   agregarItensFichaMes,
-  getDescontosExtrasExibicaoCooperado,
+  getDescontosExtrasExibicaoCooperadoFinanceiro,
 } from "@/services/notaPedidoService";
 import {
   bicCentralBuildValorExibicaoCooperadoOpts,
@@ -136,10 +136,15 @@ function MesFichaAccordion({
     return bicCentralBuildValorExibicaoCooperadoOpts(data, cooperadoId, resumo.mesReferencia, cooperativaId);
   }, [data, cooperadoId, resumo.mesReferencia, cooperativaId, precisaDetalhesExpandido]);
 
-  const descontosExtrasExibicao = useMemo(
-    () => (resumoPagamento ? getDescontosExtrasExibicaoCooperado(resumoPagamento, exibicaoOpts) : []),
-    [resumoPagamento, exibicaoOpts]
-  );
+  const descontosExtrasExibicao = useMemo(() => {
+    if (!data || !precisaDetalhesExpandido) return [];
+    return getDescontosExtrasExibicaoCooperadoFinanceiro(
+      data,
+      cooperadoId,
+      cooperativaId,
+      [resumo.mesReferencia]
+    );
+  }, [data, cooperadoId, cooperativaId, resumo.mesReferencia, precisaDetalhesExpandido, hbDescontosRevision]);
 
   if (!data) return null;
 

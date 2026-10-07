@@ -2536,10 +2536,15 @@ export function getDescontosExtrasExibicaoCooperado(
     opts.mesReferencia,
     coopId
   );
-  if (comHb.descontosExtras.some((d) => d.tipo === "conta_coop")) {
+  const hbNoMes = comHb.descontosExtras.some((d) => d.tipo === "conta_coop");
+  const hbNoResumo = resumo.descontosExtras.some((d) => d.tipo === "conta_coop");
+  if (hbNoResumo && resumo.valorEntregas > comHb.valorEntregas + 0.005) {
+    return resumo.descontosExtras;
+  }
+  if (hbNoMes) {
     return comHb.descontosExtras;
   }
-  if (resumo.descontosExtras.some((d) => d.tipo === "conta_coop")) {
+  if (hbNoResumo) {
     return resumo.descontosExtras;
   }
   return comHb.descontosExtras;
@@ -2562,8 +2567,10 @@ export function getDescontosExtrasExibicaoCooperadoFinanceiro(
     meses.length === 1
       ? getResumoPagamentoExibicao(data, cooperadoId, meses[0]!, coopId)
       : getResumoPagamentoConsolidadoCooperado(data, cooperadoId, meses, coopId);
-  const mesOpts = meses[meses.length - 1]!;
-  const opts = buildValorExibicaoCooperadoOpts(data, cooperadoId, mesOpts, coopId);
+  if (meses.length > 1) {
+    return resumo.descontosExtras;
+  }
+  const opts = buildValorExibicaoCooperadoOpts(data, cooperadoId, meses[0]!, coopId);
   return getDescontosExtrasExibicaoCooperado(resumo, opts);
 }
 
