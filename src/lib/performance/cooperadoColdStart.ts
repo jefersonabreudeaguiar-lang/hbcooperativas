@@ -235,7 +235,9 @@ export function scheduleCooperadoPostInteractiveTask(run: () => void): void {
   });
 }
 
-/** Responsável — sync/pull pesado só depois da 1ª pintura (Conferir entregas). */
+const STAFF_POST_INTERACTIVE_DELAY_MS = 4_200;
+
+/** Responsável — tarefas pós-pintura só quando o thread estiver ocioso (evita “página sem resposta”). */
 export function scheduleStaffPostInteractiveTask(run: () => void): void {
   if (typeof window === "undefined") return;
   const fire = () => {
@@ -245,9 +247,9 @@ export function scheduleStaffPostInteractiveTask(run: () => void): void {
   requestAnimationFrame(() => {
     requestAnimationFrame(() => {
       if (typeof requestIdleCallback !== "undefined") {
-        requestIdleCallback(fire, { timeout: 3200 });
+        requestIdleCallback(fire, { timeout: STAFF_POST_INTERACTIVE_DELAY_MS + 2_000 });
       } else {
-        window.setTimeout(fire, 900);
+        window.setTimeout(fire, STAFF_POST_INTERACTIVE_DELAY_MS);
       }
     });
   });

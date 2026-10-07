@@ -956,11 +956,12 @@ export function CooperativaSyncProvider({ children }: { children: React.ReactNod
         });
       }
     } else if (staff && isCooperadoInstantResumeEnabled()) {
+      // HX 9.1.1 — não forçar operacional_full na abertura (trava o painel); delta silencioso + pull de notas na rota.
       if (!document.hidden) {
         markUserActivity();
         scheduleStaffPostInteractiveTask(() => {
           markNextCooperadoSyncSilent();
-          void runSync({ force: true, silent: true });
+          void runSync({ silent: true, tier: "notas_delta" });
         });
       }
     } else {

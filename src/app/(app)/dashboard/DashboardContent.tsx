@@ -433,9 +433,9 @@ function AdminDashboard() {
   } | null>(null);
 
   const quickStats = useMemo(() => {
-    if (!meta || dataRevision == null) return null;
+    if (!meta || deferredRevision == null || deferredRevision < 0) return null;
     return getAdminStatsCached(getData(), meta.coopId || undefined, { skipValoresAPagar: true });
-  }, [dataRevision, meta?.coopId]);
+  }, [deferredRevision, meta?.coopId]);
 
   const heavy = useMemo(() => {
     if (adminStatsWorker || !meta || deferredRevision == null || deferredRevision < 0) return null;
