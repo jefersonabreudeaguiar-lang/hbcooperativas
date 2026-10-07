@@ -390,24 +390,28 @@ export async function authorizeCreditPayment(input: {
       cooperadoNome: input.cooperadoNome,
     };
 
-    const maxAttempts = data.projecaoPendente ? 3 : 1;
+    const maxAttempts = data.projecaoPendente ? 3 : 2;
 
-    void (async () => {
-      for (let attempt = 0; attempt < maxAttempts; attempt++) {
-        if (attempt > 0) {
-          await sleepMs(HB_REFRESH_RETRY_MS);
-        }
-        try {
-          await refreshContaCoopValorReceberAfterHbTransaction(refreshOpts);
-          notifyHbCreditLimiteSynced({ immediate: true });
-          return;
-        } catch {
-          if (attempt === maxAttempts - 1) {
-            /* ficha operacional — pagamento HB já confirmado na nuvem */
-          }
+    let refreshed = false;
+    for (let attempt = 0; attempt < maxAttempts; attempt++) {
+      if (attempt > 0) {
+        await sleepMs(HB_REFRESH_RETRY_MS);
+      }
+      try {
+        await refreshContaCoopValorReceberAfterHbTransaction(refreshOpts);
+        notifyHbCreditLimiteSynced({ immediate: true });
+        refreshed = true;
+        break;
+      } catch {
+        if (attempt === maxAttempts - 1) {
+          /* ficha operacional — pagamento HB já confirmado na nuvem */
         }
       }
-    })();
+    }
+    syncContaCoop = refreshed ? "ok" : "pending";
+    if (!refreshed) {
+      syncContaCoopError = "ficha_descontos_refresh_incomplete";
+    }
   } else {
     syncContaCoop = "pending";
     syncContaCoopError = "refresh_not_executed_missing_cooperativa_or_cnpj";

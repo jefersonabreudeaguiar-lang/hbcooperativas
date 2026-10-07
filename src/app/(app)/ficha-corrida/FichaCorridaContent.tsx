@@ -14,6 +14,7 @@ import { getUserCooperativaId } from "@/utils/cooperativa";
 import {
   resumoFromPagamento,
   getDescontosExtrasExibicaoCooperado,
+  getDescontosExtrasExibicaoCooperadoFinanceiro,
   registrarPagamentoCooperado,
   confirmarPagamentoCooperado,
   reenviarSolicitacaoAssinaturaRecibo,
@@ -752,7 +753,7 @@ export default function FichaCorridaPage() {
           cooperativaId: coopId,
           cooperadoNome: exibicaoOpts.cooperadoNome,
           user,
-          initialDelayMs: 1_500,
+          initialDelayMs: 600,
         }
       : undefined
   );
@@ -772,7 +773,11 @@ export default function FichaCorridaPage() {
       );
     }
     if (isCooperado && !visualizandoHistorico && financeiroAberto) {
-      if ((financeiroAberto.valorLiquido ?? 0) > 0) {
+      const temResumoAberto =
+        (financeiroAberto.valorLiquido ?? 0) > 0 ||
+        (financeiroAberto.resumo.descontosExtras?.length ?? 0) > 0 ||
+        financeiroAberto.resumo.valorEntregas > 0;
+      if (temResumoAberto) {
         return financeiroAberto.resumo;
       }
       if (financeiroAberto.aguardandoAssinatura && pagamentoAguardandoExibicao && fluxoReciboAssinatura) {
@@ -836,6 +841,14 @@ export default function FichaCorridaPage() {
 
   const resumoExibicao = resumo;
 
+  const mesesResumoCooperado = useMemo(() => {
+    if (!isCooperado) return [];
+    const m6 = mesesPendentesQuantoVouReceber;
+    if (m6.length > 0) return m6;
+    if (financeiroAberto?.meses?.length) return financeiroAberto.meses;
+    return mesAtivo ? [mesAtivo] : [];
+  }, [isCooperado, mesesPendentesQuantoVouReceber, financeiroAberto?.meses, mesAtivo]);
+
   const totalPendente = isCooperado
     ? visualizandoHistorico
       ? resumoExibicao && exibicaoOpts
@@ -843,7 +856,10 @@ export default function FichaCorridaPage() {
         : 0
       : !apresentacaoFinanceiroUi
         ? 0
-        : (financeiroAberto?.valorLiquido ?? valorReceberConsolidado?.valor ?? 0)
+        : (financeiroAberto?.resumo?.valorLiquido ??
+          financeiroAberto?.valorLiquido ??
+          valorReceberConsolidado?.valor ??
+          0)
     : visualizandoHistorico
       ? resumoExibicao && exibicaoOpts
         ? bicCentralGetValorExibicaoCooperado(resumoExibicao, exibicaoOpts)
@@ -851,14 +867,15 @@ export default function FichaCorridaPage() {
       : (financeiroAberto?.valorLiquido ?? 0);
 
   const descontosExtrasCooperado =
-    isCooperado && resumoExibicao
+    isCooperado && resumoExibicao && data && cooperadoSelecionadoId
       ? visualizandoHistorico
         ? resumoExibicao.descontosExtras
-        : !visualizandoHistorico && mesesPendentesQuantoVouReceber.length > 1
-          ? resumoExibicao.descontosExtras
-          : exibicaoOpts
-            ? getDescontosExtrasExibicaoCooperado(resumoExibicao, exibicaoOpts)
-            : resumoExibicao.descontosExtras
+        : getDescontosExtrasExibicaoCooperadoFinanceiro(
+            data,
+            cooperadoSelecionadoId,
+            coopId,
+            mesesResumoCooperado
+          )
       : [];
 
   const pagarStep: 1 | 2 | 3 | 4 = (isCooperado ? pagamentoAguardandoExibicao : pagamentoAguardando)

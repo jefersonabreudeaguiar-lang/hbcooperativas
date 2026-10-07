@@ -2314,7 +2314,7 @@ export function getResumoPagamentoCooperado(
   const totalCreditos = round2(
     descontosExtras.filter((d) => d.tipo === "credito_avulso").reduce((s, d) => s + d.valor, 0)
   );
-  const valorLiquido = round2(Math.max(0, valorEntregas - totalDescontos + totalCreditos));
+  const valorLiquido = valorLiquidoFromResumoPartes(valorEntregas, descontosExtras);
   return {
     valorBruto,
     descontoCooperativa,
@@ -2324,6 +2324,20 @@ export function getResumoPagamentoCooperado(
     fichaIds: fichas.map((f) => f.id),
     notaPedidoIds: fichas.map((f) => f.notaPedidoId),
   };
+}
+
+/** Líquido a partir de entregas + linhas do resumo (fonte única para total = soma das linhas). */
+export function valorLiquidoFromResumoPartes(
+  valorEntregas: number,
+  descontosExtras: FichaCorridaDesconto[]
+): number {
+  const totalDescontos = round2(
+    descontosExtras.filter((d) => d.tipo !== "credito_avulso").reduce((s, d) => s + d.valor, 0)
+  );
+  const totalCreditos = round2(
+    descontosExtras.filter((d) => d.tipo === "credito_avulso").reduce((s, d) => s + d.valor, 0)
+  );
+  return round2(Math.max(0, valorEntregas - totalDescontos + totalCreditos));
 }
 
 /** Valor líquido para relatórios e pagamento — inclui abatimento HB Créditos (mesma base da ficha). */
@@ -2531,6 +2545,28 @@ export function getDescontosExtrasExibicaoCooperado(
   return comHb.descontosExtras;
 }
 
+/**
+ * Linhas do resumo cooperado/financeiro — consolidado multi-mês ou mês único com HB atualizado.
+ * Responsável e cooperado mobile usam a mesma base.
+ */
+export function getDescontosExtrasExibicaoCooperadoFinanceiro(
+  data: AppData,
+  cooperadoId: string,
+  cooperativaId: string | undefined,
+  mesesReferencia: string[]
+): FichaCorridaDesconto[] {
+  const meses = [...new Set(mesesReferencia)].filter(Boolean).sort();
+  if (!meses.length) return [];
+  const coopId = cooperativaId ?? data.cooperados.find((c) => c.id === cooperadoId)?.cooperativaId;
+  const resumo =
+    meses.length === 1
+      ? getResumoPagamentoExibicao(data, cooperadoId, meses[0]!, coopId)
+      : getResumoPagamentoConsolidadoCooperado(data, cooperadoId, meses, coopId);
+  const mesOpts = meses[meses.length - 1]!;
+  const opts = buildValorExibicaoCooperadoOpts(data, cooperadoId, mesOpts, coopId);
+  return getDescontosExtrasExibicaoCooperado(resumo, opts);
+}
+
 /** Registro de pagamento pelo responsável — inclui abatimento HB Créditos (mercado). */
 export function getResumoPagamentoParaRegistro(
   resumo: ResumoPagamentoCooperado,
@@ -2636,8 +2672,12 @@ export function persistDescontosContaCoopNoArquivo(
   cooperativaId: string,
   descontos: DescontoContaCoopRemoto[]
 ): AppData {
-  if (getPagamentoConfirmadoCooperadoMes(data, cooperadoId, mesReferencia)) {
-    return data;
+  const confirmado = getPagamentoConfirmadoCooperadoMes(data, cooperadoId, mesReferencia);
+  if (confirmado) {
+    const coopId = cooperativaId;
+    if (listarFichasPendentesPagamento(data, cooperadoId, mesReferencia, coopId).length === 0) {
+      return data;
+    }
   }
   const deduped = dedupeDescontosContaCoopRemotos(descontos);
   const hbSyncedAt = new Date().toISOString();
@@ -2704,7 +2744,6 @@ export function getResumoPagamentoConsolidadoCooperado(
   let valorBruto = 0;
   let descontoCooperativa = 0;
   let valorEntregas = 0;
-  let valorLiquido = 0;
   const descontosExtras: FichaCorridaDesconto[] = [];
   const fichaIds: string[] = [];
   const notaPedidoIds: string[] = [];
@@ -2714,7 +2753,6 @@ export function getResumoPagamentoConsolidadoCooperado(
     valorBruto = round2(valorBruto + r.valorBruto);
     descontoCooperativa = round2(descontoCooperativa + r.descontoCooperativa);
     valorEntregas = round2(valorEntregas + r.valorEntregas);
-    valorLiquido = round2(valorLiquido + r.valorLiquido);
     descontosExtras.push(...r.descontosExtras);
     fichaIds.push(...r.fichaIds);
     for (const id of r.notaPedidoIds) {
@@ -2722,12 +2760,15 @@ export function getResumoPagamentoConsolidadoCooperado(
     }
   }
 
+  const descontosDedup = dedupeDescontosExtrasContaCoop(descontosExtras);
+  const valorLiquidoLinhas = valorLiquidoFromResumoPartes(valorEntregas, descontosDedup);
+
   return {
     valorBruto,
     descontoCooperativa,
-    descontosExtras: dedupeDescontosExtrasContaCoop(descontosExtras),
+    descontosExtras: descontosDedup,
     valorEntregas,
-    valorLiquido,
+    valorLiquido: valorLiquidoLinhas,
     fichaIds,
     notaPedidoIds,
   };

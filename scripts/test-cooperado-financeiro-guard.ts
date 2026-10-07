@@ -21,6 +21,7 @@ import {
   resumoComplementaresPosPagamento,
   getTotalAPagarCooperado,
   getPagamentoAguardandoCooperado,
+  valorLiquidoFromResumoPartes,
 } from "../src/services/notaPedidoService.ts";
 import { setContaCoopDescontosMemoria } from "../src/lib/hb-credit/contaCoopDescontosMemory.ts";
 import {
@@ -163,6 +164,11 @@ function nota(id: string, status: NotaPedido["status"]): NotaPedido {
   assert.ok(
     consolidado.descontosExtras.some((d) => d.tipo === "conta_coop"),
     "resumo consolidado deve listar HB do mês com compra"
+  );
+  assert.equal(
+    consolidado.valorLiquido,
+    valorLiquidoFromResumoPartes(consolidado.valorEntregas, consolidado.descontosExtras),
+    "consolidado: total líquido = entregas − descontos + créditos nas linhas"
   );
   const optsMesA = buildValorExibicaoCooperadoOpts(data, COOPERADO, MES_A, COOP);
   const linhasAntesMesPrincipal = getDescontosExtrasExibicaoCooperado(consolidado, optsMesA);

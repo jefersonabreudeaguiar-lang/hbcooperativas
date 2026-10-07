@@ -31,6 +31,7 @@ import {
 import {
   getResumoPagamentoConsolidadoCooperado,
   getResumoPagamentoExibicao,
+  valorLiquidoFromResumoPartes,
   type AjustesResumoPagamento,
 } from "@/services/notaPedidoService";
 import { formatMesesReferenciaRotulo } from "@/utils/format";
@@ -445,15 +446,17 @@ export function bicCentralGetConsolidadoFinanceiroCooperado(
       ajustesPorMes?.[mesReferenciaPrincipal]
     );
   }
-  if (m6.valor > 0) {
-    resumo = { ...resumo, valorLiquido: m6.valor };
-  }
+
+  const valorLiquidoResumo = valorLiquidoFromResumoPartes(resumo.valorEntregas, resumo.descontosExtras);
+  const valorLiquidoExibir =
+    mesesComValor.length > 0 ? valorLiquidoResumo : m6.valor > 0 ? m6.valor : valorLiquidoResumo;
+  resumo = { ...resumo, valorLiquido: valorLiquidoExibir };
 
   return {
     meses: mesesPendentes.length > 0 ? mesesPendentes : mesesComValor,
     mesReferenciaPrincipal,
     mesLabel: m6.mesLabel,
-    valorLiquido: m6.valor,
+    valorLiquido: valorLiquidoExibir,
     aguardandoAssinatura: false,
     resumo,
   };

@@ -17,6 +17,7 @@ import {
   listarMesesDebitoAbertoCooperado,
   fichasPendentesComplementaresPosPagamentoAguardando,
   type AjustesResumoPagamento,
+  valorLiquidoFromResumoPartes,
 } from "@/services/notaPedidoService";
 import { formatMesReferencia, formatMesesReferenciaRotulo, getCurrentMesReferencia } from "@/utils/format";
 import {
@@ -560,15 +561,18 @@ export function getConsolidadoFinanceiroCooperadoMotorLegado(
     };
   }
 
-  if (!aguardandoAssinatura && round2(resumo.valorLiquido) !== round2(valor)) {
-    resumo = { ...resumo, valorLiquido: round2(valor) };
-  }
+  const valorLiquidoLinhas = valorLiquidoFromResumoPartes(resumo.valorEntregas, resumo.descontosExtras);
+  const valorLiquidoExibir =
+    mesesComValor.length > 0 || resumo.descontosExtras.length > 0
+      ? valorLiquidoLinhas
+      : round2(valor);
+  resumo = { ...resumo, valorLiquido: valorLiquidoExibir };
 
   return {
     meses,
     mesReferenciaPrincipal,
     mesLabel,
-    valorLiquido: round2(valor),
+    valorLiquido: valorLiquidoExibir,
     aguardandoAssinatura,
     resumo,
   };
