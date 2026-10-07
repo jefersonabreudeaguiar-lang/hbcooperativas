@@ -166,22 +166,33 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (!accountUser?.id || loading || typeof navigator === "undefined" || !navigator.onLine) return;
 
     let cancelled = false;
-    void (async () => {
-      const profile = await fetchCloudSessionProfile();
-      if (cancelled || !profile) return;
-      const synced = applyCloudProfileToLocalSession(profile);
-      if (!synced || cancelled) return;
-      if (
-        synced.role !== accountUser.role ||
-        synced.cooperadoId !== accountUser.cooperadoId ||
-        synced.mobileCooperadoId !== accountUser.mobileCooperadoId
-      ) {
-        refresh();
-      }
-    })();
+    const run = () => {
+      void (async () => {
+        const profile = await fetchCloudSessionProfile();
+        if (cancelled || !profile) return;
+        const synced = applyCloudProfileToLocalSession(profile);
+        if (!synced || cancelled) return;
+        if (
+          synced.role !== accountUser.role ||
+          synced.cooperadoId !== accountUser.cooperadoId ||
+          synced.mobileCooperadoId !== accountUser.mobileCooperadoId
+        ) {
+          refresh();
+        }
+      })();
+    };
 
+    if (typeof requestIdleCallback === "function") {
+      const id = requestIdleCallback(run, { timeout: 4_000 });
+      return () => {
+        cancelled = true;
+        cancelIdleCallback(id);
+      };
+    }
+    const t = window.setTimeout(run, 400);
     return () => {
       cancelled = true;
+      window.clearTimeout(t);
     };
   }, [accountUser?.id, accountUser?.role, accountUser?.cooperadoId, accountUser?.mobileCooperadoId, loading, refresh]);
 

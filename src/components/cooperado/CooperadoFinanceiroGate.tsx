@@ -24,7 +24,7 @@ import { cooperadoAppReleaseNeedsOperacionalSync } from "@/lib/performance/coope
 import { purgarInicioCardValorReceberCooperado } from "@/services/cooperadoInicioCardPersistenciaService";
 import { resolverCooperadoIdCanonico } from "@/services/cooperadoCloudService";
 import { getUserCooperativaId } from "@/utils/cooperativa";
-import { getData } from "@/services/dataStore";
+import { getData, isAppDataWarm } from "@/services/dataStore";
 import { filtrarInicioCardPersistidoLeituraBic } from "@/lib/cooperadoInicioCardPolicy";
 import {
   inicioCardCacheProntoParaAbertura,
@@ -120,13 +120,17 @@ export function CooperadoFinanceiroGate({ children }: { children: React.ReactNod
     bloqueiaEntrada &&
     (syncingForUi || (lastSyncedAt == null && !syncWaitExceeded && !abrirComCacheInicio));
 
-  if (carregandoFinanceiro && !abrirComCacheInicio) {
+  const temDadosLocais = isAppDataWarm();
+
+  if (carregandoFinanceiro && !abrirComCacheInicio && !temDadosLocais) {
     return (
-      <div className="max-w-lg mx-auto py-12 space-y-4">
-        <PageSkeleton />
-        <p className="text-center text-sm text-gray-600">
-          Baixando sua ficha e entregas da nuvem…
-        </p>
+      <div className="min-h-screen bg-gray-50">
+        <div className="max-w-lg mx-auto py-12 space-y-4">
+          <PageSkeleton />
+          <p className="text-center text-sm text-gray-600">
+            Baixando sua ficha e entregas da nuvem…
+          </p>
+        </div>
       </div>
     );
   }

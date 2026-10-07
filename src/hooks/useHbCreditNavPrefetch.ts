@@ -4,10 +4,6 @@ import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/modules/auth/AuthProvider";
 import { useHbCreditEnabled } from "@/hooks/useHbCreditEnabled";
-import {
-  scheduleCooperadoNavPrefetchEarly,
-} from "@/lib/performance/cooperadoNavPrefetch";
-
 const PREFETCH_INICIO = "/dashboard";
 
 /** Prefetch de rotas do cooperado em camadas + staff/HB após idle. */
@@ -20,7 +16,7 @@ export function HbCreditNavPrefetch() {
     if (!user) return;
 
     if (user.role === "cooperado") {
-      return scheduleCooperadoNavPrefetchEarly(router);
+      return;
     }
 
     let cancelled = false;

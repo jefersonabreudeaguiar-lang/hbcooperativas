@@ -13,10 +13,14 @@ export type CooperadoNavPrefetchRouter = {
 
 /** Rotas críticas do cooperado (bundles maiores) — primeiro lote após login. */
 export const COOPERADO_NAV_PREFETCH_PRIORITY: readonly string[] = [
-  "/notas-pedido",
   COOPERADO_FINANCEIRO_TAB_HREF,
+  "/dashboard",
+  "/notas-pedido",
   ...COOPERADO_BOTTOM_TAB_HREFS.filter(
-    (h) => h !== "/notas-pedido" && h !== COOPERADO_FINANCEIRO_TAB_HREF
+    (h) =>
+      h !== "/notas-pedido" &&
+      h !== COOPERADO_FINANCEIRO_TAB_HREF &&
+      h !== "/dashboard"
   ),
 ];
 
@@ -47,8 +51,15 @@ export function scheduleCooperadoNavPrefetchEarly(router: CooperadoNavPrefetchRo
     : COOPERADO_MOBILE_PREFETCH_HREFS;
 
   queueMicrotask(() => {
-    safe(() => prefetchCooperadoNavRoutes(router, COOPERADO_NAV_PREFETCH_PRIORITY));
     safe(() => warmupCooperadoFinanceiroTabChunk());
+    safe(() => {
+      try {
+        router.prefetch(COOPERADO_FINANCEIRO_TAB_HREF);
+      } catch {
+        /* ignore */
+      }
+    });
+    safe(() => prefetchCooperadoNavRoutes(router, COOPERADO_NAV_PREFETCH_PRIORITY));
   });
 
   if (lowMemory) {

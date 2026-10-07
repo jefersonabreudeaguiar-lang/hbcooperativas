@@ -81,6 +81,7 @@ import { ConfirmDialog, PromptDialog } from "@/components/ui/ConfirmDialog";
 import { SignaturePad } from "@/components/ui/SignaturePad";
 import { AssinarComCadastroBlock } from "@/components/cooperado/AssinarComCadastroBlock";
 import { PageSkeleton } from "@/components/ui/PageSkeleton";
+import { FinanceiroTabSkeleton } from "@/components/ui/FinanceiroTabSkeleton";
 import { PagarStepper } from "@/components/ficha/PagarStepper";
 import { ReciboResumoView } from "@/components/ficha/ReciboResumoView";
 import { HistoricoHbCreditosResumo } from "@/components/ficha/HistoricoHbCreditosResumo";
@@ -277,25 +278,25 @@ export default function FichaCorridaPage() {
   }, [data, coopId, user?.id, tabActive]);
 
   const mesEmAberto = useMemo(() => {
-    if (!data || !cooperadoId) return getCurrentMesReferencia();
+    if (!tabActive || !data || !cooperadoId) return getCurrentMesReferencia();
     return bicCentralMesPrincipalQuantoVouReceber(data, cooperadoId, coopId, {
       apresentacaoConsolidada: apresentacaoFinanceiroUi,
     });
-  }, [data, cooperadoId, coopId, hbDescontosRevision, apresentacaoFinanceiroUi]);
+  }, [tabActive, data, cooperadoId, coopId, hbDescontosRevision, apresentacaoFinanceiroUi]);
 
   const valorReceberConsolidado = useMemo(() => {
-    if (!data || !cooperadoId) return null;
+    if (!tabActive || !data || !cooperadoId) return null;
     return bicCentralQuantoVouReceberParaExibicao(data, cooperadoId, coopId, {
       apresentacaoConsolidada: apresentacaoFinanceiroUi,
     }).value;
-  }, [data, cooperadoId, coopId, apresentacaoFinanceiroUi, hbDescontosRevision]);
+  }, [tabActive, data, cooperadoId, coopId, apresentacaoFinanceiroUi, hbDescontosRevision]);
 
   const mesesPendentesQuantoVouReceber = useMemo(() => {
-    if (!data || !cooperadoId || !isCooperado) return [];
+    if (!tabActive || !data || !cooperadoId || !isCooperado) return [];
     return bicCentralListarMesesPendentesQuantoVouReceber(data, cooperadoId, coopId, {
       apresentacaoConsolidada: apresentacaoFinanceiroUi,
     });
-  }, [cooperadoId, coopId, data, isCooperado, hbDescontosRevision, apresentacaoFinanceiroUi]);
+  }, [tabActive, cooperadoId, coopId, data, isCooperado, hbDescontosRevision, apresentacaoFinanceiroUi]);
 
   const mesesHistoricoPagamentoCooperado = useMemo(() => {
     if (!data || !cooperadoId) return [];
@@ -389,14 +390,14 @@ export default function FichaCorridaPage() {
   const cooperadoSelecionadoId = isCooperado ? cooperadoId : cooperadoFilter;
 
   const financeiroAberto = useMemo(() => {
-    if (!data || !cooperadoSelecionadoId) return null;
+    if (!tabActive || !data || !cooperadoSelecionadoId) return null;
     return bicCentralGetConsolidadoFinanceiroCooperado(data, cooperadoSelecionadoId, coopId);
-  }, [data, cooperadoSelecionadoId, coopId, hbDescontosRevision]);
+  }, [tabActive, data, cooperadoSelecionadoId, coopId, hbDescontosRevision]);
 
   const paridadeCooperadoMobile = useMemo(() => {
-    if (!isCooperado || !data || !cooperadoSelecionadoId) return null;
+    if (!tabActive || !isCooperado || !data || !cooperadoSelecionadoId) return null;
     return leituraFinanceiraParidadeCooperado(data, cooperadoSelecionadoId, coopId);
-  }, [isCooperado, data, cooperadoSelecionadoId, coopId, hbDescontosRevision]);
+  }, [tabActive, isCooperado, data, cooperadoSelecionadoId, coopId, hbDescontosRevision]);
 
   /** Meses do resumo consolidado — mesma lista que Pagar/responsável (paridade universal). */
   const mesesFinanceiroCooperado = useMemo(() => {
@@ -762,7 +763,7 @@ export default function FichaCorridaPage() {
   }, [data, cooperadoSelecionadoId, mesAtivo, coopId]);
 
   useSyncContaCoopValorReceberPilot(
-    exibicaoOpts && cooperadoSelecionadoId && coopId
+    tabActive && exibicaoOpts && cooperadoSelecionadoId && coopId
       ? {
           cooperadoId: cooperadoSelecionadoId,
           mesReferencia: isCooperado ? mesReferenciaHbCooperado : mesAtivo,
@@ -1431,7 +1432,8 @@ export default function FichaCorridaPage() {
     cooperadoLocalResumeReady(user);
 
   if (!data) {
-    if (!ready && !cooperadoInstant && !isAppDataWarm()) return null;
+    if (isCooperado) return <FinanceiroTabSkeleton />;
+    if (!ready && !cooperadoInstant && !isAppDataWarm()) return <FinanceiroTabSkeleton />;
     return <PageSkeleton compact />;
   }
 

@@ -27,7 +27,7 @@ export function isCooperadoMobileTabKeepAliveEnabled(): boolean {
 
 /** LRU enxuto — 3 abas no padrão (rápido); 2 em aparelho fraco. */
 export function getCooperadoMobileTabCacheLimit(lowMemoryDevice: boolean): number {
-  return lowMemoryDevice ? 2 : 3;
+  return lowMemoryDevice ? 2 : 4;
 }
 
 /** Início — preferir manter montado no LRU (P1). */

@@ -8,7 +8,7 @@ import {
   CalendarCheck, LogOut, Menu, X, Building, ClipboardList, Receipt, User, Tag,
   BookOpen, FileCheck, Shield, MessageSquareWarning, Vote, Download, ShoppingCart, Scale,
 } from "lucide-react";
-import { useEffect, useLayoutEffect, useState } from "react";
+import { useEffect, useLayoutEffect, useState, startTransition } from "react";
 import { useAuth } from "@/modules/auth/AuthProvider";
 import { useAppDataSelector } from "@/hooks/useAppData";
 import {
@@ -285,6 +285,12 @@ export function MobileNav() {
                   icon instanceof HTMLElement ? icon : null,
                   tabRqlPhase
                 );
+                if (!active && mobileTabUx) {
+                  e.preventDefault();
+                  startTransition(() => {
+                    router.push(item.href);
+                  });
+                }
               }}
               className={cn(
                 "flex-1 flex flex-col items-center justify-center min-w-0 px-0.5 select-none hb-mobile-tab-link",
