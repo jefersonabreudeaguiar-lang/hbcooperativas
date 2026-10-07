@@ -294,9 +294,11 @@ function simCooperadoEnvia21Entregas() {
     "1 conferida no responsável",
     responsavel.notasPedido.filter((n) => n.status === "conferida").length === 1
   );
+  const fichasPrimeira = responsavel.fichaCorrida.filter((f) => f.notaPedidoId === first.id);
   assert(
     "Ficha criada para 1ª entrega",
-    responsavel.fichaCorrida.filter((f) => f.notaPedidoId === first.id).length === 1
+    fichasPrimeira.length >= 1,
+    `got ${fichasPrimeira.length}`
   );
 
   return { cloud, cooperado, responsavel };

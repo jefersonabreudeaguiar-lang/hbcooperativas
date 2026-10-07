@@ -22,7 +22,10 @@ assert(prefetch.includes("prefetchStaffNotasHistoricoChunk"), "prefetch históri
 assert(prefetch.includes("prefetchStaffNotasCorrecoesChunk"), "prefetch correções");
 assert(prefetch.includes("prefetchStaffNotasLancamentosAbertoChunk"), "prefetch em aberto");
 assert(notas.includes("onPointerEnter={prefetchStaffNotasHistoricoChunk}"), "hover histórico");
-assert(notas.includes("abrirHistoricoResponsavel = () => {\n    prefetchStaffNotasHistoricoChunk()"), "click histórico");
+assert(
+  /const abrirHistoricoResponsavel = \(\) => \{\s*\n\s*prefetchStaffNotasHistoricoChunk\(\)/.test(notas),
+  "click histórico"
+);
 assert(
   notas.includes('vistaConteudo === "historico"'),
   "tabela histórico gated por vista"

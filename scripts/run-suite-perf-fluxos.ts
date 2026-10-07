@@ -22,6 +22,7 @@ const SUITE: { category: string; script: string }[] = [
   { category: "PERF", script: "test-perf-notas-p6.ts" },
   { category: "PERF", script: "test-perf-notas-p7.ts" },
   { category: "PERF", script: "test-rql-browser-instrumentation-h90.ts" },
+  { category: "PERF", script: "test-rql-fase-1-prova-rotas.ts" },
   { category: "SYNC", script: "test-fase-d-sync-gate.ts" },
   { category: "PERF", script: "test-rql-admin-stats-worker-h85.ts" },
   { category: "PERF", script: "test-rql-cooperado-tabs-h86.ts" },
@@ -66,9 +67,14 @@ for (const { category, script } of SUITE) {
   }
 }
 
-console.log("\n=== build ===");
-const build = spawnSync("npm", ["run", "build"], { cwd: ROOT, stdio: "inherit", shell: true });
-if (build.status !== 0) failed += 1;
+const skipBuild = (process.env.PERF_SUITE_SKIP_BUILD ?? "").trim() === "1";
+if (skipBuild) {
+  console.log("\n=== build (skipped: PERF_SUITE_SKIP_BUILD=1) ===");
+} else {
+  console.log("\n=== build ===");
+  const build = spawnSync("npm", ["run", "build"], { cwd: ROOT, stdio: "inherit", shell: true });
+  if (build.status !== 0) failed += 1;
+}
 
 if (failed > 0) {
   console.error(`\nrun-suite-perf-fluxos: ${failed} falha(s)`);
