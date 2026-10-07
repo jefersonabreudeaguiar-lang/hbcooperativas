@@ -49,6 +49,7 @@ export function ContaCoopFiscalNotesConferenciaPanel({
   const [busy, setBusy] = useState(false);
   const [selected, setSelected] = useState<ContaCoopFiscalNote | null>(null);
   const [photoUrl, setPhotoUrl] = useState<string | null>(null);
+  const [photoLoading, setPhotoLoading] = useState(false);
   const [nfNumber, setNfNumber] = useState("");
   const [nfIssuedToName, setNfIssuedToName] = useState("");
   const [nfDate, setNfDate] = useState("");
@@ -88,6 +89,7 @@ export function ContaCoopFiscalNotesConferenciaPanel({
   const abrirConferencia = async (nota: ContaCoopFiscalNote) => {
     setSelected(nota);
     setPhotoUrl(null);
+    setPhotoLoading(true);
     setNfNumber(nota.nfNumber ?? "");
     setNfIssuedToName(nota.nfIssuedToName ?? nota.cooperadoNome ?? cooperadoNome(nota.cooperadoId));
     setNfDate(nota.nfDate ?? new Date(nota.createdAt).toISOString().slice(0, 10));
@@ -96,9 +98,15 @@ export function ContaCoopFiscalNotesConferenciaPanel({
     setError("");
     try {
       const data = await fetchFiscalNotePhotoUrl(cnpj, nota.transactionId);
-      setPhotoUrl(data.photoUrl ?? null);
+      const url = data.photoUrl ?? null;
+      setPhotoUrl(url);
+      if (!url) {
+        setError("Não foi possível abrir o PDF da NF. Tente Atualizar ou confira o anexo no painel do mercado.");
+      }
     } catch (e) {
       setError(e instanceof Error ? e.message : "Erro ao carregar foto.");
+    } finally {
+      setPhotoLoading(false);
     }
   };
 
@@ -251,7 +259,15 @@ export function ContaCoopFiscalNotesConferenciaPanel({
         {loading ? (
           <p className="text-sm text-gray-500">Carregando…</p>
         ) : fila.length === 0 ? (
-          <p className="text-sm text-gray-500">Nenhuma NF aguardando conferência.</p>
+          <div className="text-sm text-gray-500 space-y-2">
+            <p>Nenhuma NF aguardando conferência neste mês.</p>
+            <p>
+              PDFs enviados pelo mercado não aparecem em{" "}
+              <span className="font-medium text-gray-700">Notas de pedido → Conferir entregas</span> — só aqui, em{" "}
+              <span className="font-medium text-gray-700">HB Créditos → Conferir NFs</span>. Se o mercado acabou de
+              enviar, confira o mesmo mês da venda (vendas no fim do mês podem estar no mês anterior).
+            </p>
+          </div>
         ) : (
           <ul className="space-y-2">
             {fila.map((n) => (
@@ -296,7 +312,9 @@ export function ContaCoopFiscalNotesConferenciaPanel({
 
             <div className="grid gap-4 lg:grid-cols-2">
               <div className="rounded-xl border bg-gray-50 min-h-[240px] flex items-center justify-center overflow-hidden">
-                {photoUrl ? (
+                {photoLoading ? (
+                  <p className="text-sm text-gray-500 p-4 text-center">Carregando anexo…</p>
+                ) : photoUrl ? (
                   selected.photoStoragePath?.toLowerCase().endsWith(".pdf") ? (
                     <iframe
                       src={photoUrl}
@@ -308,7 +326,9 @@ export function ContaCoopFiscalNotesConferenciaPanel({
                     <img src={photoUrl} alt="Nota fiscal" className="max-h-[360px] w-full object-contain" />
                   )
                 ) : (
-                  <p className="text-sm text-gray-500 p-4 text-center">Carregando anexo…</p>
+                  <p className="text-sm text-gray-500 p-4 text-center">
+                    PDF indisponível. Use Atualizar na lista ou peça ao mercado reenviar o arquivo.
+                  </p>
                 )}
               </div>
 

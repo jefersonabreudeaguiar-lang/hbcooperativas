@@ -6,8 +6,10 @@ import {
   chaveIncidenciaHbDescontoContaCoop,
   type DescontoContaCoopRemoto,
 } from "@/lib/hb-credit/dedupeIncidenciaHbDesconto";
+import { mesReferenciaFromIso } from "@/utils/format";
 
 export type { DescontoContaCoopRemoto };
+export { mesReferenciaFromIso };
 
 function isEstornoContaCoop(motivo: string): boolean {
   return isEstornoMotivoContaCoop(motivo);
@@ -15,10 +17,6 @@ function isEstornoContaCoop(motivo: string): boolean {
 
 function round2(value: number): number {
   return Math.round(value * 100) / 100;
-}
-
-export function mesReferenciaFromIso(iso: string): string {
-  return iso.slice(0, 7);
 }
 
 export function dedupeDescontosContaCoopRemotos(

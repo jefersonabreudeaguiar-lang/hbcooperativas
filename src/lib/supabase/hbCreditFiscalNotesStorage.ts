@@ -1,6 +1,7 @@
 import { randomBytes } from "crypto";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { normalizeCnpj } from "@/utils/cooperativa";
+import { mesReferenciaFromIso, mesReferenciaUtcRange } from "@/utils/format";
 import type { ContaCoopFiscalNote, ContaCoopFiscalNotesResumo, FiscalNoteStatus } from "@/modules/hb-credit/types";
 import {
   fiscalNoteStatusFromDb,
@@ -11,20 +12,6 @@ const BUCKET = "hb-conta-coop-nf";
 
 function genId(prefix: string): string {
   return `${prefix}_${Date.now()}_${randomBytes(6).toString("hex")}`;
-}
-
-function mesReferenciaFromIso(iso: string): string {
-  const d = new Date(iso);
-  const y = d.getUTCFullYear();
-  const m = String(d.getUTCMonth() + 1).padStart(2, "0");
-  return `${y}-${m}`;
-}
-
-function mesReferenciaRange(mesReferencia: string): { start: string; end: string } {
-  const [year, month] = mesReferencia.split("-").map(Number);
-  const start = new Date(Date.UTC(year, month - 1, 1)).toISOString();
-  const end = new Date(Date.UTC(year, month, 1)).toISOString();
-  return { start, end };
 }
 
 function mapFiscalNoteRow(row: Record<string, unknown>): ContaCoopFiscalNote {
@@ -325,7 +312,7 @@ async function syncPartnerFiscalNotesForMonth(
   if (!partner) return;
 
   const digits = String(partner.cooperative_cnpj);
-  const { start, end } = mesReferenciaRange(mesReferencia);
+  const { start, end } = mesReferenciaUtcRange(mesReferencia);
 
   const { data: txs } = await supabase
     .from("hb_credit_transactions")

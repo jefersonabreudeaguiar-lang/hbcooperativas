@@ -78,9 +78,40 @@ export function formatMesReferenciaCurto(mes: string): string {
   return `${abrev[idx]}/${ano.slice(-2)}`;
 }
 
+/** Calendário operacional da cooperativa (vendas, NF mercado, fechamento). */
+export const COOPERATIVA_TIME_ZONE = "America/Sao_Paulo";
+
+export function mesReferenciaFromDate(date: Date): string {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: COOPERATIVA_TIME_ZONE,
+    year: "numeric",
+    month: "2-digit",
+  }).formatToParts(date);
+  const year = parts.find((p) => p.type === "year")?.value ?? "1970";
+  const month = parts.find((p) => p.type === "month")?.value ?? "01";
+  return `${year}-${month}`;
+}
+
+export function mesReferenciaFromIso(iso: string): string {
+  return mesReferenciaFromDate(new Date(iso));
+}
+
 export function getCurrentMesReferencia(): string {
-  const now = new Date();
-  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+  return mesReferenciaFromDate(new Date());
+}
+
+/** Intervalo [start, end) em UTC para filtrar `created_at` pelo mês cooperativa. */
+export function mesReferenciaUtcRange(mesReferencia: string): { start: string; end: string } {
+  const [year, month] = mesReferencia.split("-").map(Number);
+  if (!year || !month || month < 1 || month > 12) {
+    return mesReferenciaUtcRange(getCurrentMesReferencia());
+  }
+  const start = new Date(Date.UTC(year, month - 1, 1, 3, 0, 0, 0));
+  const end =
+    month === 12
+      ? new Date(Date.UTC(year + 1, 0, 1, 3, 0, 0, 0))
+      : new Date(Date.UTC(year, month, 1, 3, 0, 0, 0));
+  return { start: start.toISOString(), end: end.toISOString() };
 }
 
 /** Desloca um mês de referência (YYYY-MM) em N meses. */
