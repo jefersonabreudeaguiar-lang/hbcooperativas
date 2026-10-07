@@ -157,6 +157,21 @@ export function listarMesesComValorQuantoVouReceber(
   return calcularValorEMesesAbertoQuantoVouReceber(data, cooperadoId, cooperativaId).mesesComValor;
 }
 
+/**
+ * Meses que compõem resumo consolidado e “a receber” — mesma lista para responsável (Pagar/Financeiro)
+ * e cooperado (Início/Financeiro), após sync operacional + HB.
+ */
+export function listarMesesReferenciaResumoFinanceiroParidade(
+  data: AppData,
+  cooperadoId: string,
+  cooperativaId?: string
+): string[] {
+  const mesesComValor = listarMesesComValorQuantoVouReceber(data, cooperadoId, cooperativaId);
+  if (mesesComValor.length > 0) return [...mesesComValor].sort();
+  const mesesPendentes = listarMesesPendentesFinanceiroCooperado(data, cooperadoId, cooperativaId);
+  return [...mesesPendentes].sort();
+}
+
 /** Valor a receber no início — oculta mês quitado ou sem valor pendente. */
 export function cooperadoExibirValorReceberInicio(
   data: AppData,

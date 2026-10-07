@@ -271,6 +271,7 @@ export async function refreshContaCoopDescontosCooperativaPendentes(opts: {
       return true;
     }
     if (anyDescontos) {
+      bumpContaCoopDescontosRevision();
       notifyAppDataSubscribers();
     }
     return false;

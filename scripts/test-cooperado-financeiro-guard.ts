@@ -37,8 +37,9 @@ import {
   cooperadoPendentePagamentoResponsavel,
   listarMesesPendentesPagamentoResponsavel,
   listarMesesPendentesQuantoVouReceber,
-  getConsolidadoFinanceiroCooperado,
+  listarMesesReferenciaResumoFinanceiroParidade,
 } from "../src/services/cooperadoEntregasService.ts";
+import { bicCentralValorAReceberAgregado } from "../src/services/bicLeituraCentralCooperado.ts";
 import {
   getCreditoBaseContaCoopReais,
   getCreditoBaseCooperadoCents,
@@ -189,6 +190,15 @@ function nota(id: string, status: NotaPedido["status"]): NotaPedido {
     linhasFinanceiro.filter((d) => d.tipo === "conta_coop").length,
     consolidado.descontosExtras.filter((d) => d.tipo === "conta_coop").length,
     "helper financeiro multi-mês = linhas do consolidado"
+  );
+  const mesesParidade = listarMesesReferenciaResumoFinanceiroParidade(data, COOPERADO, COOP);
+  assert.deepEqual(mesesParidade, [MES_A, MES_B], "paridade meses resumo = meses com valor");
+  const consolidadoMotor = getConsolidadoFinanceiroCooperado(data, COOPERADO, COOP);
+  const m6 = bicCentralValorAReceberAgregado(data, COOPERADO, COOP);
+  assert.equal(
+    m6.valor,
+    consolidadoMotor.valorLiquido,
+    "BIC M6 = consolidado financeiro (responsável ↔ cooperado)"
   );
 }
 

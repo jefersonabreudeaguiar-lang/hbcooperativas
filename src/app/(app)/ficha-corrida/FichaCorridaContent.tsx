@@ -67,6 +67,7 @@ import {
   cooperadoMesQuitado,
   cooperadoPendentePagamentoResponsavel,
   listarMesesPendentesPagamentoResponsavel,
+  listarMesesReferenciaResumoFinanceiroParidade,
   getPagamentoConfirmadoMes,
   getPagamentoRegistradoMes,
   listarMesesComPagamentoRegistradoCooperado,
@@ -841,23 +842,26 @@ export default function FichaCorridaPage() {
   const resumoExibicao = resumo;
 
   const mesesResumoHbFicha = useMemo(() => {
-    if (isCooperado) {
-      const m6 = mesesPendentesQuantoVouReceber;
-      if (m6.length > 0) return m6;
-      if (financeiroAberto?.meses?.length) return financeiroAberto.meses;
-      return mesAtivo ? [mesAtivo] : [];
-    }
-    if (aba === "pagar" && mesesPendentesPagamento.length > 0) {
-      return mesesPendentesPagamento;
+    if (!data || !cooperadoSelecionadoId) return [];
+    if (visualizandoHistorico && mesAtivo) return [mesAtivo];
+    if (isCooperado || aba === "pagar") {
+      const paridade = listarMesesReferenciaResumoFinanceiroParidade(
+        data,
+        cooperadoSelecionadoId,
+        coopId
+      );
+      if (paridade.length > 0) return paridade;
     }
     return mesAtivo ? [mesAtivo] : [];
   }, [
+    data,
+    cooperadoSelecionadoId,
+    coopId,
     isCooperado,
     aba,
-    mesesPendentesQuantoVouReceber,
-    mesesPendentesPagamento,
-    financeiroAberto?.meses,
+    visualizandoHistorico,
     mesAtivo,
+    hbDescontosRevision,
   ]);
 
   const totalPendente = isCooperado

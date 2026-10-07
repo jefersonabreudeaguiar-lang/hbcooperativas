@@ -248,6 +248,33 @@ export function bicCentralValorAReceberAgregado(
   cooperativaId: string | undefined,
   opts?: Pick<BicCentralProjecaoOpts, "apresentacaoConsolidada">
 ): ReturnType<typeof getValorQuantoVouReceber> {
+  if (isBicCentralReadAuthorityEnabled()) {
+    const consolidado = bicCentralGetConsolidadoFinanceiroCooperado(data, cooperadoId, cooperativaId);
+    const mesesComValor = listarMesesComValorQuantoVouReceber(data, cooperadoId, cooperativaId);
+    const mesesCanon =
+      mesesComValor.length > 0
+        ? [...mesesComValor].sort()
+        : consolidado.meses.length > 0
+          ? [...consolidado.meses].sort()
+          : consolidado.mesReferenciaPrincipal
+            ? [consolidado.mesReferenciaPrincipal]
+            : [];
+    const mesLabel =
+      mesesCanon.length > 0
+        ? formatMesesReferenciaRotulo(mesesCanon)
+        : consolidado.mesLabel;
+    const mes = mesesCanon[mesesCanon.length - 1] ?? consolidado.mesReferenciaPrincipal ?? "";
+    return bicCentralSincronizarRotuloMeses(
+      bicCentralNormalizarValorM6({
+        mes,
+        meses: mesesCanon,
+        mesLabel,
+        valor: consolidado.valorLiquido,
+        valorRecibo: 0,
+        aguardandoAssinatura: false,
+      })
+    );
+  }
   const envelope = bicCentralQuantoVouReceberParaExibicao(data, cooperadoId, cooperativaId, opts);
   return bicCentralSincronizarRotuloMeses(bicCentralNormalizarValorM6(envelope.value));
 }
@@ -311,20 +338,14 @@ export function bicCentralResolveInicioParaExibicao(
   const m6 = bicCentralValorAReceberAgregado(data, cooperadoId, cooperativaId, optsEff);
 
   if (isBicCentralReadAuthorityEnabled()) {
-    const raw = bicCentralNormalizarValorM6(
-      bicCentralSincronizarRotuloMeses(getValorQuantoVouReceberMotorLegado(data, cooperadoId, cooperativaId))
-    );
-    const valor = raw.valor > 0 ? raw.valor : m6.valor;
-    const mes = raw.valor > 0 ? raw.mes : m6.mes;
-    const meses = raw.valor > 0 ? raw.meses : m6.meses;
-    const mesLabel = raw.valor > 0 ? raw.mesLabel : m6.mesLabel;
+    const valor = m6.valor > 0 ? m6.valor : 0;
     if (valor > 0) {
       return cooperadoInicioParaCardsDefinitivos(
         {
           exibir: true,
-          mes,
-          meses,
-          mesLabel,
+          mes: m6.mes,
+          meses: m6.meses,
+          mesLabel: m6.mesLabel,
           valor,
           valorRecibo: 0,
           aguardandoAssinatura: false,
@@ -335,9 +356,9 @@ export function bicCentralResolveInicioParaExibicao(
     return cooperadoInicioParaCardsDefinitivos(
       {
         exibir: false,
-        mes: m6.mes || raw.mes,
-        meses: m6.meses.length ? m6.meses : raw.meses,
-        mesLabel: m6.mesLabel || raw.mesLabel,
+        mes: m6.mes,
+        meses: m6.meses,
+        mesLabel: m6.mesLabel,
         valor: 0,
         valorRecibo: 0,
         aguardandoAssinatura: false,
