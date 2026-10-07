@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Check, RefreshCw } from "lucide-react";
+import { RqlPerfHomologSheet } from "@/components/performance/RqlPerfHomologSheet";
 import { APP_BUILD_VERSION } from "@/lib/appBuildVersion";
 import { useSyncStatus } from "@/components/sync/CooperativaSyncProvider";
 import {
@@ -35,10 +36,26 @@ const STYLES: Record<
 };
 
 /** Faixa fixa — build do app no navegador + última sync (cooperado ou responsável). */
+const LONG_PRESS_MS = 850;
+
 export function AppMobileReleaseBar({ variant }: { variant: Variant }) {
   const { syncing, lastSyncedAt } = useSyncStatus();
   const [, setTick] = useState(0);
+  const [homologOpen, setHomologOpen] = useState(false);
+  const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const s = STYLES[variant];
+
+  const clearLongPress = () => {
+    if (longPressTimer.current) {
+      clearTimeout(longPressTimer.current);
+      longPressTimer.current = null;
+    }
+  };
+
+  const startLongPress = () => {
+    clearLongPress();
+    longPressTimer.current = setTimeout(() => setHomologOpen(true), LONG_PRESS_MS);
+  };
 
   useEffect(() => {
     if (syncing || !lastSyncedAt) return;
@@ -58,6 +75,7 @@ export function AppMobileReleaseBar({ variant }: { variant: Variant }) {
   const Atualizar = variant === "cooperado" ? CooperadoAtualizarButton : StaffAtualizarButton;
 
   return (
+    <>
     <div
       className={cn(
         "flex items-center justify-between gap-2 px-3 py-1.5 text-[10px] sm:text-[11px] backdrop-blur-sm safe-area-pb",
@@ -67,16 +85,22 @@ export function AppMobileReleaseBar({ variant }: { variant: Variant }) {
       aria-live="polite"
     >
       <div className="flex min-w-0 flex-1 items-center gap-1.5 truncate">
-        {variant === "cooperado" && (
-          <span
-            className={cn(
-              "shrink-0 rounded-md px-1.5 py-0.5 font-bold tabular-nums",
-              s.badge
-            )}
-          >
-            v{APP_BUILD_VERSION}
-          </span>
-        )}
+        <span
+          className={cn(
+            "shrink-0 rounded-md px-1.5 py-0.5 font-bold tabular-nums select-none touch-manipulation",
+            s.badge
+          )}
+          title="Segure ~1s para medição UX (homolog)"
+          onTouchStart={startLongPress}
+          onTouchEnd={clearLongPress}
+          onTouchCancel={clearLongPress}
+          onContextMenu={(e) => {
+            e.preventDefault();
+            setHomologOpen(true);
+          }}
+        >
+          v{APP_BUILD_VERSION}
+        </span>
         <span className={cn("truncate", s.text)}>
           {syncing ? (
             <span className="inline-flex items-center gap-1">
@@ -100,5 +124,7 @@ export function AppMobileReleaseBar({ variant }: { variant: Variant }) {
         )}
       />
     </div>
+    <RqlPerfHomologSheet open={homologOpen} onClose={() => setHomologOpen(false)} />
+    </>
   );
 }

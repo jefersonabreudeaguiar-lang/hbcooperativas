@@ -77,6 +77,20 @@ function collectLongTaskSample(limit = 20): RqlPerfRouteReport["longTasksSample"
   }
 }
 
+/** Texto para copiar no celular (homolog) — sem DevTools. */
+export function buildRqlWhatsappCompareClipboardText(): string {
+  const parity = buildMessagingParityReport(buildRqlPerfRouteReport());
+  const lines = [
+    formatMessagingParitySummary(parity),
+    "",
+    ...parity.dimensions.map((d) => {
+      const hbVal = d.hbCoopValue != null ? (d.unit === "ms" ? `${d.hbCoopValue}ms` : String(d.hbCoopValue)) : "—";
+      return `· ${d.label}: HB ${d.hbCoopScore}/10 | WA ${d.whatsappScore}/10 | HB ${hbVal}`;
+    }),
+  ];
+  return lines.join("\n");
+}
+
 export function buildRqlPerfRouteReport(sloL1PaintP75Ms = DEFAULT_SLO_L1_P75_MS): RqlPerfRouteReport {
   const routeTransitions = summarizeRqlRouteTimings();
   const paintPercentiles = computePaintPercentiles(routeTransitions);
