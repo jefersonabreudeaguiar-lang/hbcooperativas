@@ -68,7 +68,14 @@ import {
   onAppIdleChange,
   startIdleMonitor,
 } from "@/services/idleActivity";
-import { getData, saveDataSafe, subscribe, updateDataSafe, waitForAppDataWarm } from "@/services/dataStore";
+import {
+  getData,
+  isAppDataWarm,
+  saveDataSafe,
+  subscribe,
+  updateDataSafe,
+  waitForAppDataWarm,
+} from "@/services/dataStore";
 import {
   ensureCloudSessionReady,
   getLastCloudSyncError,
@@ -90,12 +97,16 @@ import {
   cooperadoPreserveHydrationOnSilentSync,
   cooperadoSyncVisibleInUi,
   ensureCooperadoAppDataEagerWarm,
+  ensureAppDataEagerWarm,
   cooperadoOperacionalSyncPermitido,
   isCooperadoInstantResumeEnabled,
   isCooperadoManualOperacionalSync,
   isCooperadoUserSyncVisible,
+  isStaffGestaoRole,
+  markNextCooperadoSyncSilent,
   resetCooperadoUserSyncVisible,
   scheduleCooperadoColdStartSync,
+  scheduleStaffPostInteractiveTask,
 } from "@/lib/performance/cooperadoColdStart";
 import {
   consumeCooperadoEventDrivenSyncGrant,
@@ -110,7 +121,7 @@ import { markRqlColdStartPhase } from "@/lib/performance/rqlMarks";
 import { resolveSyncTierPlan84 } from "@/lib/performance/syncPlan84";
 import { useCooperadoStaffRevisionWatch } from "@/hooks/useCooperadoStaffRevisionWatch";
 import { fetchCooperativaCloudRevision } from "@/services/cooperativaSyncRevisionService";
-import { notifyCooperadoSubtleUpdate } from "@/lib/cooperadoSubtleUpdate";
+import { notifyAppSubtleUpdate } from "@/lib/cooperadoSubtleUpdate";
 import { requestCooperadoAppReleaseSync, type SyncRunOptions } from "@/services/syncRequest";
 
 const COOPERADO_PUSH_GAP_MS = 5 * 60 * 1000;
@@ -295,8 +306,8 @@ export function CooperativaSyncProvider({ children }: { children: React.ReactNod
   const { user } = useAuth();
 
   useEffect(() => {
-    if (user?.role === "cooperado" && isCooperadoInstantResumeEnabled()) {
-      ensureCooperadoAppDataEagerWarm();
+    if (user && isCooperadoInstantResumeEnabled()) {
+      ensureAppDataEagerWarm();
       markRqlColdStartPhase("eager_warm");
     }
   }, [user?.id, user?.role]);
@@ -529,9 +540,13 @@ export function CooperativaSyncProvider({ children }: { children: React.ReactNod
       isCooperadoInstantResumeEnabled() &&
       opts?.silent === true &&
       !isCooperadoUserSyncVisible();
+    const silentStaffOpen =
+      isStaffGestaoRole(currentUser.role) &&
+      isCooperadoInstantResumeEnabled() &&
+      opts?.silent === true;
 
     syncingRef.current = true;
-    if (cooperadoUiSync && staffGestaoUiSync && !silentCooperadoOpen) {
+    if (cooperadoUiSync && staffGestaoUiSync && !silentCooperadoOpen && !silentStaffOpen) {
       setSyncing(true);
     }
     setLastSyncError("");
@@ -811,13 +826,17 @@ export function CooperativaSyncProvider({ children }: { children: React.ReactNod
       if (completed && hasCooperadoEventDrivenGrant()) {
         consumeCooperadoEventDrivenSyncGrant();
       }
-      if (
-        completed &&
-        eventDrivenRun &&
-        cooperadoHadHydrationAtSyncStart &&
-        userRef.current?.role === "cooperado"
-      ) {
-        notifyCooperadoSubtleUpdate();
+      if (completed && userRef.current) {
+        const role = userRef.current.role;
+        if (
+          role === "cooperado" &&
+          eventDrivenRun &&
+          cooperadoHadHydrationAtSyncStart
+        ) {
+          notifyAppSubtleUpdate();
+        } else if (silentStaffOpen && isStaffGestaoRole(role) && isAppDataWarm()) {
+          notifyAppSubtleUpdate();
+        }
       }
       bindCooperadoRunSyncSessionLease(null);
       syncingRef.current = false;
@@ -933,6 +952,14 @@ export function CooperativaSyncProvider({ children }: { children: React.ReactNod
       if (!document.hidden) {
         markUserActivity();
         scheduleCooperadoColdStartSync(() => {
+          void runSync({ force: true, silent: true });
+        });
+      }
+    } else if (staff && isCooperadoInstantResumeEnabled()) {
+      if (!document.hidden) {
+        markUserActivity();
+        scheduleStaffPostInteractiveTask(() => {
+          markNextCooperadoSyncSilent();
           void runSync({ force: true, silent: true });
         });
       }

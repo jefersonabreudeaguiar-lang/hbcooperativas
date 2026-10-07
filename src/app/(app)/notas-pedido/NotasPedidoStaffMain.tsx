@@ -7,7 +7,6 @@ import {
   Camera, CheckCircle, FileText, XCircle, RefreshCw, ChevronRight, Eye, Building2, Pencil, UserPlus, X, ImagePlus, Trash2, FileSignature, BookOpen, Package, Users,
 } from "lucide-react";
 import {
-  useAppDataReady,
   useAppDataSelector,
   useAppDataSnapshotForDomains,
 } from "@/hooks/useAppData";
@@ -55,7 +54,12 @@ import {
   endConferenciaModalSaveBatch,
 } from "@/services/dataStore";
 import { requestAppSync, requestAppSyncImmediate, requestAppSyncLight } from "@/services/syncRequest";
-import { scheduleCooperadoPostInteractiveTask, scheduleStaffPostInteractiveTask } from "@/lib/performance/cooperadoColdStart";
+import {
+  isCooperadoManualOperacionalSync,
+  scheduleCooperadoPostInteractiveTask,
+  scheduleStaffPostInteractiveTask,
+} from "@/lib/performance/cooperadoColdStart";
+import { useEnsureAppDataWarm } from "@/hooks/useEnsureAppDataWarm";
 import {
   setStaffConferenciaLancamentoAtivo,
   setStaffConferenciaModalOpen,
@@ -545,7 +549,7 @@ function conferenciaTemFichaParaNota(
 }
 
 export default function NotasPedidoStaffMain() {
-  const ready = useAppDataReady();
+  const ready = useEnsureAppDataWarm();
   const tabActive = useCooperadoTabPanelActive("/notas-pedido");
   const { check, user, isCooperado, isDiretoria, cooperadoId } = usePermissions();
   const { syncing, syncingForUi } = useSyncStatus();
@@ -2035,10 +2039,7 @@ export default function NotasPedidoStaffMain() {
     ) ?? 0;
 
   const dadosCarregandoFilaConferencia =
-    mostrarFilaResponsavelConteudo &&
-    (data === null ||
-      !isAppDataWarm() ||
-      (syncingForUi && pendentesEstaveis.length === 0 && filaIndexCount === 0));
+    mostrarFilaResponsavelConteudo && (data === null || !isAppDataWarm());
 
   const contratosEntrega =
     useAppDataSelector(
@@ -2166,6 +2167,7 @@ export default function NotasPedidoStaffMain() {
 
   useEffect(() => {
     if (!isCooperado || !data) return;
+    if (isCooperadoManualOperacionalSync()) return;
     if (cooperadoMountSyncRef.current) return;
     cooperadoMountSyncRef.current = true;
     requestAppSyncLight();
@@ -4308,10 +4310,11 @@ export default function NotasPedidoStaffMain() {
   }, [selectedNota, data, coopId, conferenciaCooperadoId]);
 
   if (!data) {
-    return ready ? (
-      <div className="flex justify-center py-20"><div className="w-8 h-8 border-4 border-green-600 border-t-transparent rounded-full animate-spin" /></div>
-    ) : (
-      <div className="flex justify-center py-20"><div className="w-8 h-8 border-4 border-green-600 border-t-transparent rounded-full animate-spin" /></div>
+    if (!ready) return null;
+    return (
+      <div className="flex justify-center py-20">
+        <div className="w-8 h-8 border-4 border-green-600 border-t-transparent rounded-full animate-spin" />
+      </div>
     );
   }
 
@@ -4748,10 +4751,10 @@ export default function NotasPedidoStaffMain() {
           ) : !mostrarCorrecoesResponsavel && !mostrarPainelLancamentosAberto ? (
             dadosCarregandoFilaConferencia ? (
               <div className="rounded-2xl border border-amber-200 bg-amber-50/90 px-5 py-6 text-center">
-                <p className="text-base font-semibold text-amber-950">Carregando entregas da cooperativa…</p>
+                <p className="text-base font-semibold text-amber-950">Abrindo dados salvos neste aparelho…</p>
                 <p className="text-sm text-amber-900/80 mt-1 max-w-md mx-auto">
-                  Enquanto aparece «Aguardando sincronização» no rodapé, a fila pode ficar vazia. Aguarde ou use
-                  «Atualizar dados da cooperativa» no menu.
+                  Em instantes você verá a última fila que estava aqui. Novidades da nuvem entram em segundo plano ou
+                  pelo botão Atualizar.
                 </p>
               </div>
             ) : filaIndexCount > 0 ? (

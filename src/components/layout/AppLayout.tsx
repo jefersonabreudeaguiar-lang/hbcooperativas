@@ -380,7 +380,7 @@ function AppShellInner({ children }: { children: React.ReactNode }) {
   return (
     <div className="flex h-[100dvh] max-h-[100dvh] bg-gray-50 overflow-hidden">
       <AppUpdateBanner />
-      {navUser && isCooperadoAppUser(navUser) && <CooperadoSubtleUpdateNotice />}
+      {navUser && <CooperadoSubtleUpdateNotice />}
       <Sidebar />
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
         {!mercadoQrImmersive && <MobileNav />}

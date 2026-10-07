@@ -6,7 +6,8 @@ import Link from "next/link";
 import {
   Camera, CheckCircle, FileText, XCircle, RefreshCw, ChevronRight, Eye, Building2, Pencil, UserPlus, X, ImagePlus, Trash2, FileSignature, BookOpen, Package, Users,
 } from "lucide-react";
-import { useAppData, useAppDataReady, useAppDataSelector } from "@/hooks/useAppData";
+import { useAppData, useAppDataSelector } from "@/hooks/useAppData";
+import { useEnsureAppDataWarm } from "@/hooks/useEnsureAppDataWarm";
 import { useCooperadoTabPanelActive } from "@/hooks/useCooperadoTabPanelActive";
 import { useResponsavelFilaConferencia } from "@/hooks/useResponsavelFilaConferencia";
 import { usePermissions } from "@/hooks/usePermissions";
@@ -31,7 +32,10 @@ import {
   requestAppSyncLight,
   requestCooperadoPostEntregaSync,
 } from "@/services/syncRequest";
-import { scheduleCooperadoPostInteractiveTask } from "@/lib/performance/cooperadoColdStart";
+import {
+  isCooperadoManualOperacionalSync,
+  scheduleCooperadoPostInteractiveTask,
+} from "@/lib/performance/cooperadoColdStart";
 import { markRqlColdStartPhase } from "@/lib/performance/rqlMarks";
 import {
   loadCooperadoAnexarPipeline,
@@ -365,7 +369,7 @@ function qtyInputClassName(filled: boolean, extra?: string) {
 }
 
 export default function NotasPedidoCooperadoMain() {
-  const ready = useAppDataReady();
+  const ready = useEnsureAppDataWarm();
   const tabActive = useCooperadoTabPanelActive("/notas-pedido");
   const data = useAppData();
   const { check, user, isCooperado, isDiretoria, cooperadoId } = usePermissions();
@@ -1964,6 +1968,7 @@ export default function NotasPedidoCooperadoMain() {
 
   useEffect(() => {
     if (!isCooperado || !data) return;
+    if (isCooperadoManualOperacionalSync()) return;
     if (cooperadoMountSyncRef.current) return;
     cooperadoMountSyncRef.current = true;
     requestAppSyncLight();
@@ -3914,10 +3919,11 @@ export default function NotasPedidoCooperadoMain() {
   }, [selectedNota, data, coopId, conferenciaCooperadoId]);
 
   if (!data) {
-    return ready ? (
-      <div className="flex justify-center py-20"><div className="w-8 h-8 border-4 border-green-600 border-t-transparent rounded-full animate-spin" /></div>
-    ) : (
-      <div className="flex justify-center py-20"><div className="w-8 h-8 border-4 border-green-600 border-t-transparent rounded-full animate-spin" /></div>
+    if (!ready) return null;
+    return (
+      <div className="flex justify-center py-20">
+        <div className="w-8 h-8 border-4 border-green-600 border-t-transparent rounded-full animate-spin" />
+      </div>
     );
   }
 

@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { Check } from "lucide-react";
-import { COOPERADO_SUBTLE_UPDATE_EVENT } from "@/lib/cooperadoSubtleUpdate";
+import { APP_SUBTLE_UPDATE_EVENT } from "@/lib/cooperadoSubtleUpdate";
 import { cn } from "@/utils/format";
 
 const VISIBLE_MS = 3_800;
@@ -20,9 +20,9 @@ export function CooperadoSubtleUpdateNotice() {
       if (hideTimerRef.current) clearTimeout(hideTimerRef.current);
       hideTimerRef.current = setTimeout(() => setOpen(false), VISIBLE_MS);
     };
-    window.addEventListener(COOPERADO_SUBTLE_UPDATE_EVENT, onUpdate);
+    window.addEventListener(APP_SUBTLE_UPDATE_EVENT, onUpdate);
     return () => {
-      window.removeEventListener(COOPERADO_SUBTLE_UPDATE_EVENT, onUpdate);
+      window.removeEventListener(APP_SUBTLE_UPDATE_EVENT, onUpdate);
       if (hideTimerRef.current) clearTimeout(hideTimerRef.current);
     };
   }, []);

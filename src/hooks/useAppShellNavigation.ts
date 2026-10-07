@@ -1,12 +1,13 @@
 "use client";
 
 import { useMemo } from "react";
+import { useSyncExternalStore } from "react";
 import type { Resource, User } from "@/types";
 import { useAuth } from "@/modules/auth/AuthProvider";
 
 type NavUser = Omit<User, "password">;
-import { useAppDataSelector } from "@/hooks/useAppData";
-import { getData, isAppDataWarm } from "@/services/dataStore";
+import { useEnsureAppDataWarm } from "@/hooks/useEnsureAppDataWarm";
+import { getData, getDataRevision, isAppDataWarm, subscribe } from "@/services/dataStore";
 import {
   getCooperadoDrawerMenuItems,
   getMenuItems,
@@ -57,23 +58,35 @@ function hbModuleNavEligible(
  */
 export function useAppShellNavigation(): AppShellNavigation | null {
   const { user, accountUser } = useAuth();
-
-  const shellCore = useAppDataSelector(
-    (data) => {
-      if (!user) return null;
-      const navUser = resolveStaffNavigationUser(accountUser, user, data) ?? user;
-      const cooperadoNome = resolveCooperadoNome(navUser, data);
-      const staffPainelUi = Boolean(accountUser && shouldRenderStaffPainelUi(accountUser, data));
-      const coopId = getUserCooperativaId(navUser, data);
-      return { navUser, cooperadoNome, staffPainelUi, coopId };
-    },
-    [user?.id, user?.cooperativaId, user?.role, user?.cooperadoId, accountUser?.id, accountUser?.role]
+  useEnsureAppDataWarm();
+  const dataRevision = useSyncExternalStore(
+    subscribe,
+    () => (isAppDataWarm() ? getDataRevision() : -1),
+    () => 0
   );
+
+  const shellCore = useMemo(() => {
+    if (!user || !isAppDataWarm()) return null;
+    const data = getData();
+    const navUser = resolveStaffNavigationUser(accountUser, user, data) ?? user;
+    const cooperadoNome = resolveCooperadoNome(navUser, data);
+    const staffPainelUi = Boolean(accountUser && shouldRenderStaffPainelUi(accountUser, data));
+    const coopId = getUserCooperativaId(navUser, data);
+    return { navUser, cooperadoNome, staffPainelUi, coopId };
+  }, [
+    user?.id,
+    user?.cooperativaId,
+    user?.role,
+    user?.cooperadoId,
+    accountUser?.id,
+    accountUser?.role,
+    dataRevision,
+  ]);
 
   const credit = useHbCreditEnabled(shellCore?.navUser ?? null);
 
   return useMemo(() => {
-    if (!shellCore || !isAppDataWarm()) return null;
+    if (!shellCore) return null;
     const data = getData();
     const { navUser, cooperadoNome, staffPainelUi, coopId } = shellCore;
     const moduleNavEligible = hbModuleNavEligible(navUser, credit);

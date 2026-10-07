@@ -93,6 +93,21 @@ export function ensureCooperadoAppDataEagerWarm(): void {
   preloadAppData({ eager: true });
 }
 
+/** Mesmo eager warm — cooperado e responsável (HX 9.1). */
+export const ensureAppDataEagerWarm = ensureCooperadoAppDataEagerWarm;
+
+export function isStaffGestaoRole(role: string | undefined): boolean {
+  return role === "responsavel" || role === "tesoureiro" || role === "admin";
+}
+
+/** Sessão + localStorage prontos — pinta a última versão sem esperar a nuvem. */
+export function appLocalResumeReady(user: { role?: string } | null | undefined): boolean {
+  if (!isCooperadoInstantResumeEnabled()) return false;
+  if (!user || !getSession()) return false;
+  ensureAppDataEagerWarm();
+  return isAppDataWarm();
+}
+
 function cooperadoResumeContext(user: Omit<User, "password"> | null): {
   cooperadoId: string;
   cooperativaId: string;

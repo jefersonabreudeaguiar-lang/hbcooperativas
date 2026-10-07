@@ -75,6 +75,7 @@ import { usePermissions } from "@/hooks/usePermissions";
 import { cooperadoTemAppInstalado, isAppStandalone, resumoInstalacaoApp } from "@/services/cooperadoAppInstallService";
 import { PageSkeleton } from "@/components/ui/PageSkeleton";
 import {
+  appLocalResumeReady,
   cooperadoLocalResumeReady,
   isCooperadoInstantResumeEnabled,
   isCooperadoManualOperacionalSync,
@@ -626,8 +627,10 @@ export default function DashboardPage() {
   const { user, accountUser } = useAuth();
   const authSubject = accountUser ?? user;
   const dataReady = useAppDataReady();
-  const cooperadoInstant =
-    isCooperadoInstantResumeEnabled() && user?.role === "cooperado" && cooperadoLocalResumeReady(user);
+  const instantResume =
+    isCooperadoInstantResumeEnabled() &&
+    Boolean(user) &&
+    (user?.role === "cooperado" ? cooperadoLocalResumeReady(user) : appLocalResumeReady(user));
   const staffPainelUi = useAppDataSelector(
     (data) => Boolean(accountUser && shouldRenderStaffPainelUi(accountUser, data)),
     [accountUser?.id, accountUser?.role]
@@ -643,7 +646,7 @@ export default function DashboardPage() {
       : false;
 
   if (!user) return <PageSkeleton />;
-  if (!dataReady && !cooperadoInstant) return <PageSkeleton />;
+  if (!dataReady && !instantResume) return <PageSkeleton />;
 
   if (canGestao && staffPainelUi) {
     return <AdminDashboard />;
