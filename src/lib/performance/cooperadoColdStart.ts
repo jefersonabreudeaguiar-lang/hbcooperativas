@@ -26,7 +26,7 @@ import { APP_BUILD_VERSION } from "@/lib/appBuildVersion";
 const HB_OPERACIONAL_SYNCED_BUILD = "hb-coop-operacional-synced-build";
 
 function cooperadoOperacionalSyncedBuildMismatch(): boolean {
-  if (typeof window === "undefined") return false;
+  if (typeof window === "undefined" || typeof localStorage === "undefined") return false;
   const raw = localStorage.getItem(HB_OPERACIONAL_SYNCED_BUILD);
   const n = Number(raw);
   const stored = Number.isFinite(n) && n > 0 ? n : 0;

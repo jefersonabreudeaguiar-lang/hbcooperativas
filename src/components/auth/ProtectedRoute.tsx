@@ -3,14 +3,10 @@
 import { useLayoutEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/modules/auth/AuthProvider";
-import { getSession } from "@/services/dataStore";
-import { isCooperadoInstantResumeEnabled } from "@/lib/performance/cooperadoColdStart";
 
 export function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth();
   const router = useRouter();
-  const sessionHint =
-    typeof window !== "undefined" && isCooperadoInstantResumeEnabled() ? getSession() : null;
 
   useLayoutEffect(() => {
     if (!loading && !user) {
@@ -18,7 +14,7 @@ export function ProtectedRoute({ children }: { children: React.ReactNode }) {
     }
   }, [user, loading, router]);
 
-  if (loading && !sessionHint) {
+  if (loading) {
     return (
       <div className="min-h-screen flex flex-col bg-gray-50">
         <div className="h-14 bg-green-900/90 animate-pulse shrink-0" />

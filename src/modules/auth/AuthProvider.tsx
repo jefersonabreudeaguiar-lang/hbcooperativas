@@ -68,21 +68,12 @@ function enrichAccountSession(session: Omit<User, "password">): Omit<User, "pass
 }
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [accountUser, setAccountUser] = useState<Omit<User, "password"> | null>(() => {
-    if (typeof window === "undefined") return null;
-    const session = getSession();
-    return session ? enrichAccountSession(session) : null;
-  });
+  /** Igual ao SSR — sessão/localStorage só após hydrate (evita React #418). */
+  const [accountUser, setAccountUser] = useState<Omit<User, "password"> | null>(null);
   const [viewportTick, setViewportTick] = useState(0);
   const [painelPrefTick, setPainelPrefTick] = useState(0);
   const [dataTick, setDataTick] = useState(0);
-  const [loading, setLoading] = useState(() => {
-    if (typeof window === "undefined") return true;
-    if (isCooperadoInstantResumeEnabled()) {
-      ensureCooperadoAppDataEagerWarm();
-    }
-    return getSession() == null;
-  });
+  const [loading, setLoading] = useState(true);
   const router = useRouter();
   const experienceSigRef = useRef("");
 
@@ -112,8 +103,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   useLayoutEffect(() => {
+    if (isCooperadoInstantResumeEnabled()) {
+      ensureCooperadoAppDataEagerWarm();
+    } else {
+      preloadAppData();
+    }
     refresh();
-    preloadAppData();
   }, [refresh]);
 
   useEffect(() => {

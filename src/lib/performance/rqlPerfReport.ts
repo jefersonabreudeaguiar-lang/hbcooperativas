@@ -92,14 +92,119 @@ export function buildRqlPerfRouteReport(sloL1PaintP75Ms = DEFAULT_SLO_L1_P75_MS)
   };
 }
 
-export function isRqlPerfDebugEnabled(): boolean {
-  if (typeof document !== "undefined") {
-    if (document.documentElement.getAttribute("data-rql-perf-debug") === "1") return true;
-  }
+/** Opt-in no aparelho (produção/homolog sem redeploy). */
+export const RQL_PERF_DEBUG_STORAGE_KEY = "hb-rql-perf-debug";
+
+const RQL_PERF_DEBUG_URL_PARAM = "hbRqlPerf";
+
+function envRqlPerfDebugOn(): boolean {
   const raw =
     typeof process !== "undefined" ? (process.env.NEXT_PUBLIC_RQL_PERF_DEBUG ?? "") : "";
   const v = raw.trim().toLowerCase();
   return v === "1" || v === "true" || v === "yes";
+}
+
+function browserRqlPerfDebugOn(): boolean {
+  if (typeof window === "undefined") return false;
+  try {
+    if (localStorage.getItem(RQL_PERF_DEBUG_STORAGE_KEY) === "1") return true;
+    if (sessionStorage.getItem(RQL_PERF_DEBUG_STORAGE_KEY) === "1") return true;
+  } catch {
+    /* modo privado */
+  }
+  try {
+    const q = new URLSearchParams(window.location.search).get(RQL_PERF_DEBUG_URL_PARAM);
+    if (q === "1" || q === "true" || q === "yes") return true;
+  } catch {
+    /* ignore */
+  }
+  return false;
+}
+
+/** `?hbRqlPerf=1` na URL grava flag de sessão antes do bootstrap React. */
+export function ensureRqlPerfDebugOptInFromUrl(): void {
+  if (typeof window === "undefined") return;
+  try {
+    const q = new URLSearchParams(window.location.search).get(RQL_PERF_DEBUG_URL_PARAM);
+    if (q === "1" || q === "true" || q === "yes") {
+      sessionStorage.setItem(RQL_PERF_DEBUG_STORAGE_KEY, "1");
+    }
+  } catch {
+    /* ignore */
+  }
+}
+
+export function isRqlPerfDebugEnabled(): boolean {
+  if (typeof document !== "undefined") {
+    if (document.documentElement.getAttribute("data-rql-perf-debug") === "1") return true;
+  }
+  if (envRqlPerfDebugOn()) return true;
+  return browserRqlPerfDebugOn();
+}
+
+export type RqlPerfDebugHandle = {
+  report: () => RqlPerfRouteReport;
+  summary: () => string;
+  print: () => RqlPerfRouteReport;
+  whatsappCompare: () => MessagingParityReport;
+  printWhatsappCompare: () => MessagingParityReport;
+};
+
+function logRqlPerfDebugOffHint(): void {
+  console.info(
+    `[HB RQL] Medição desligada neste build. Para ativar neste aparelho:
+  localStorage.setItem("${RQL_PERF_DEBUG_STORAGE_KEY}","1"); location.reload();
+  ou abra qualquer rota com ?${RQL_PERF_DEBUG_URL_PARAM}=1
+  ou na Vercel: NEXT_PUBLIC_RQL_PERF_DEBUG=1 e redeploy.`
+  );
+}
+
+function buildRqlPerfDebugHandle(enabled: boolean): RqlPerfDebugHandle {
+  const maybeHint = () => {
+    if (!enabled) logRqlPerfDebugOffHint();
+  };
+  return {
+    report: () => {
+      maybeHint();
+      return buildRqlPerfRouteReport();
+    },
+    summary: () => {
+      maybeHint();
+      return formatRqlPerfReportSummary(buildRqlPerfRouteReport());
+    },
+    print: () => {
+      maybeHint();
+      const r = buildRqlPerfRouteReport();
+      if (enabled) {
+        console.info(formatRqlPerfReportSummary(r));
+        console.table(r.routeTransitions);
+        if (r.interactionMarks.length) console.log("interactions", r.interactionMarks);
+      }
+      return r;
+    },
+    whatsappCompare: () => {
+      maybeHint();
+      return buildMessagingParityReport(buildRqlPerfRouteReport());
+    },
+    printWhatsappCompare: () => {
+      maybeHint();
+      const r = buildMessagingParityReport(buildRqlPerfRouteReport());
+      if (enabled) {
+        console.info(formatMessagingParitySummary(r));
+        console.table(
+          r.dimensions.map((d) => ({
+            id: d.id,
+            label: d.label,
+            whatsapp: d.whatsappScore,
+            hbCoop: d.hbCoopScore,
+            waMs: d.whatsappValue,
+            hbMs: d.hbCoopValue,
+          }))
+        );
+      }
+      return r;
+    },
+  };
 }
 
 export function formatRqlPerfReportSummary(report: RqlPerfRouteReport): string {
@@ -113,52 +218,28 @@ export function formatRqlPerfReportSummary(report: RqlPerfRouteReport): string {
   ].join("\n");
 }
 
-export type RqlPerfDebugHandle = {
-  report: () => RqlPerfRouteReport;
-  summary: () => string;
-  print: () => RqlPerfRouteReport;
-  whatsappCompare: () => MessagingParityReport;
-  printWhatsappCompare: () => MessagingParityReport;
-};
-
-/** Instala `window.__hbRqlPerf` — só quando debug ligado (homolog). */
+/**
+ * Instala `window.__hbRqlPerf` (sempre existe; medição completa só com debug ligado).
+ * Cleanup remove handle e observer.
+ */
 export function installRqlPerfDebugGlobal(): () => void {
-  if (typeof window === "undefined" || !isRqlPerfDebugEnabled()) {
+  if (typeof window === "undefined") {
     return () => undefined;
   }
 
-  const handle: RqlPerfDebugHandle = {
-    report: () => buildRqlPerfRouteReport(),
-    summary: () => formatRqlPerfReportSummary(buildRqlPerfRouteReport()),
-    print: () => {
-      const r = buildRqlPerfRouteReport();
-      console.info(formatRqlPerfReportSummary(r));
-      console.table(r.routeTransitions);
-      if (r.interactionMarks.length) console.log("interactions", r.interactionMarks);
-      return r;
-    },
-    whatsappCompare: () => buildMessagingParityReport(buildRqlPerfRouteReport()),
-    printWhatsappCompare: () => {
-      const r = buildMessagingParityReport(buildRqlPerfRouteReport());
-      console.info(formatMessagingParitySummary(r));
-      console.table(
-        r.dimensions.map((d) => ({
-          id: d.id,
-          label: d.label,
-          whatsapp: d.whatsappScore,
-          hbCoop: d.hbCoopScore,
-          waMs: d.whatsappValue,
-          hbMs: d.hbCoopValue,
-        }))
-      );
-      return r;
-    },
-  };
+  const enabled = isRqlPerfDebugEnabled();
+  const handle = buildRqlPerfDebugHandle(enabled);
 
-  (window as Window & { __hbRqlPerf?: RqlPerfDebugHandle }).__hbRqlPerf = handle;
+  const w = window as Window & {
+    __hbRqlPerf?: RqlPerfDebugHandle;
+    /** Alias legado (typo comum no console: Rq1 em vez de Rql). */
+    __hbRq1Perf?: RqlPerfDebugHandle;
+  };
+  w.__hbRqlPerf = handle;
+  w.__hbRq1Perf = handle;
 
   let obs: PerformanceObserver | null = null;
-  if (typeof PerformanceObserver !== "undefined") {
+  if (enabled && typeof PerformanceObserver !== "undefined") {
     try {
       obs = new PerformanceObserver((list) => {
         for (const e of list.getEntries()) {
@@ -179,6 +260,8 @@ export function installRqlPerfDebugGlobal(): () => void {
 
   return () => {
     obs?.disconnect();
-    delete (window as Window & { __hbRqlPerf?: RqlPerfDebugHandle }).__hbRqlPerf;
+    const w = window as Window & { __hbRqlPerf?: RqlPerfDebugHandle; __hbRq1Perf?: RqlPerfDebugHandle };
+    delete w.__hbRqlPerf;
+    delete w.__hbRq1Perf;
   };
 }

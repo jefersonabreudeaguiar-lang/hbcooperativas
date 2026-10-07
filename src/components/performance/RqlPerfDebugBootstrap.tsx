@@ -1,16 +1,22 @@
 "use client";
 
-import { useEffect } from "react";
-import { installRqlPerfDebugGlobal, isRqlPerfDebugEnabled } from "@/lib/performance/rqlPerfReport";
+import { useLayoutEffect } from "react";
+import {
+  ensureRqlPerfDebugOptInFromUrl,
+  installRqlPerfDebugGlobal,
+  isRqlPerfDebugEnabled,
+} from "@/lib/performance/rqlPerfReport";
 
 /**
- * Homolog Fase 1 — expõe `window.__hbRqlPerf.print()` quando NEXT_PUBLIC_RQL_PERF_DEBUG=1.
- * Zero impacto em produção (default off).
+ * Fase 1 — `window.__hbRqlPerf.printWhatsappCompare()` (alias `__hbRq1Perf`).
+ * Medição completa: NEXT_PUBLIC_RQL_PERF_DEBUG=1, `?hbRqlPerf=1` ou localStorage hb-rql-perf-debug.
  */
 export function RqlPerfDebugBootstrap() {
-  useEffect(() => {
-    if (!isRqlPerfDebugEnabled()) return;
-    document.documentElement.setAttribute("data-rql-perf-debug", "1");
+  useLayoutEffect(() => {
+    ensureRqlPerfDebugOptInFromUrl();
+    if (isRqlPerfDebugEnabled()) {
+      document.documentElement.setAttribute("data-rql-perf-debug", "1");
+    }
     return installRqlPerfDebugGlobal();
   }, []);
   return null;

@@ -28,14 +28,18 @@ Referência WhatsApp (app nativo, celular médio): troca de aba ~30–80 ms, col
 
 ## Medir no dispositivo
 
-1. Homolog: `NEXT_PUBLIC_RQL_PERF_DEBUG=1`.
+1. **Ativar medição** (uma das opções):
+   - Vercel: variável `NEXT_PUBLIC_RQL_PERF_DEBUG=1` e redeploy; ou
+   - Neste aparelho: `localStorage.setItem("hb-rql-perf-debug","1"); location.reload();`; ou
+   - URL: `?hbRqlPerf=1` (flag de sessão; recarregue a página).
 2. Abra o PWA (cooperado ou responsável no celular).
 3. Troque abas do rodapé; opcional: feche e reabra para cold start.
-4. Console:
+4. Console (o objeto existe sempre; tabelas só com debug ligado):
 
 ```js
 window.__hbRqlPerf.print();
 window.__hbRqlPerf.printWhatsappCompare();
+// alias: window.__hbRq1Perf.printWhatsappCompare()
 ```
 
 ## Interpretação

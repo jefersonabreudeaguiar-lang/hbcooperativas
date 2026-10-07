@@ -38,11 +38,16 @@ export async function fetchOfficialClientRelease(): Promise<ClientReleaseInfo> {
 }
 
 export function markClientReleaseSeen(official: ClientReleaseInfo): void {
-  localStorage.setItem(BUILD_SEEN_KEY, String(official.build));
-  if (official.deploymentId) {
-    localStorage.setItem(DEPLOYMENT_SEEN_KEY, official.deploymentId);
+  if (typeof window === "undefined" || typeof localStorage === "undefined") return;
+  try {
+    localStorage.setItem(BUILD_SEEN_KEY, String(official.build));
+    if (official.deploymentId) {
+      localStorage.setItem(DEPLOYMENT_SEEN_KEY, official.deploymentId);
+    }
+    clearStaffReleasePendingIfMatches(official.build);
+  } catch {
+    /* quota / modo privado */
   }
-  clearStaffReleasePendingIfMatches(official.build);
 }
 
 /** @deprecated use runtimeAlreadyOnCanonicalRelease */
