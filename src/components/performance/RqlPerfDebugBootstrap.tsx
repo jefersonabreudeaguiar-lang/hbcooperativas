@@ -1,6 +1,8 @@
 "use client";
 
 import { useLayoutEffect } from "react";
+import { useAuth } from "@/modules/auth/AuthProvider";
+import { canUseRqlPerfHomologPanel } from "@/lib/performance/rqlPerfHomologAccess";
 import {
   ensureRqlPerfDebugOptInFromUrl,
   installRqlPerfDebugGlobal,
@@ -8,16 +10,21 @@ import {
 } from "@/lib/performance/rqlPerfReport";
 
 /**
- * Fase 1 — `window.__hbRqlPerf.printWhatsappCompare()` (alias `__hbRq1Perf`).
- * Medição completa: NEXT_PUBLIC_RQL_PERF_DEBUG=1, `?hbRqlPerf=1` ou localStorage hb-rql-perf-debug.
+ * Medição completa só cooperado Orlando — ver `canUseRqlPerfHomologPanel`.
  */
 export function RqlPerfDebugBootstrap() {
+  const { user } = useAuth();
+
   useLayoutEffect(() => {
     ensureRqlPerfDebugOptInFromUrl();
-    if (isRqlPerfDebugEnabled()) {
+    const orlandoCooperado = canUseRqlPerfHomologPanel(user);
+    const enabled = isRqlPerfDebugEnabled() && orlandoCooperado;
+    if (enabled) {
       document.documentElement.setAttribute("data-rql-perf-debug", "1");
+    } else {
+      document.documentElement.removeAttribute("data-rql-perf-debug");
     }
-    return installRqlPerfDebugGlobal();
-  }, []);
+    return installRqlPerfDebugGlobal(enabled);
+  }, [user?.id, user?.cooperadoId, user?.role, user?.mobileCooperadoId]);
   return null;
 }

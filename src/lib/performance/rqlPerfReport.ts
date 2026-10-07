@@ -246,12 +246,12 @@ export function formatRqlPerfReportSummary(report: RqlPerfRouteReport): string {
  * Instala `window.__hbRqlPerf` (sempre existe; medição completa só com debug ligado).
  * Cleanup remove handle e observer.
  */
-export function installRqlPerfDebugGlobal(): () => void {
+export function installRqlPerfDebugGlobal(measurementEnabled?: boolean): () => void {
   if (typeof window === "undefined") {
     return () => undefined;
   }
 
-  const enabled = isRqlPerfDebugEnabled();
+  const enabled = measurementEnabled ?? isRqlPerfDebugEnabled();
   const handle = buildRqlPerfDebugHandle(enabled);
 
   const w = window as Window & {

@@ -3,7 +3,9 @@
 import { useEffect, useRef, useState } from "react";
 import { Check, RefreshCw } from "lucide-react";
 import { RqlPerfHomologSheet } from "@/components/performance/RqlPerfHomologSheet";
+import { canUseRqlPerfHomologPanel } from "@/lib/performance/rqlPerfHomologAccess";
 import { APP_BUILD_VERSION } from "@/lib/appBuildVersion";
+import { useAuth } from "@/modules/auth/AuthProvider";
 import { useSyncStatus } from "@/components/sync/CooperativaSyncProvider";
 import {
   CooperadoAtualizarButton,
@@ -39,6 +41,8 @@ const STYLES: Record<
 const LONG_PRESS_MS = 850;
 
 export function AppMobileReleaseBar({ variant }: { variant: Variant }) {
+  const { user } = useAuth();
+  const homologOrlando = variant === "cooperado" && canUseRqlPerfHomologPanel(user);
   const { syncing, lastSyncedAt } = useSyncStatus();
   const [, setTick] = useState(0);
   const [homologOpen, setHomologOpen] = useState(false);
@@ -53,6 +57,7 @@ export function AppMobileReleaseBar({ variant }: { variant: Variant }) {
   };
 
   const startLongPress = () => {
+    if (!homologOrlando) return;
     clearLongPress();
     longPressTimer.current = setTimeout(() => setHomologOpen(true), LONG_PRESS_MS);
   };
@@ -85,22 +90,29 @@ export function AppMobileReleaseBar({ variant }: { variant: Variant }) {
       aria-live="polite"
     >
       <div className="flex min-w-0 flex-1 items-center gap-1.5 truncate">
-        <span
-          className={cn(
-            "shrink-0 rounded-md px-1.5 py-0.5 font-bold tabular-nums select-none touch-manipulation",
-            s.badge
-          )}
-          title="Segure ~1s para medição UX (homolog)"
-          onTouchStart={startLongPress}
-          onTouchEnd={clearLongPress}
-          onTouchCancel={clearLongPress}
-          onContextMenu={(e) => {
-            e.preventDefault();
-            setHomologOpen(true);
-          }}
-        >
-          v{APP_BUILD_VERSION}
-        </span>
+        {variant === "cooperado" && (
+          <span
+            className={cn(
+              "shrink-0 rounded-md px-1.5 py-0.5 font-bold tabular-nums",
+              homologOrlando && "select-none touch-manipulation",
+              s.badge
+            )}
+            title={homologOrlando ? "Segure ~1s para medição UX (homolog Orlando)" : undefined}
+            onTouchStart={homologOrlando ? startLongPress : undefined}
+            onTouchEnd={homologOrlando ? clearLongPress : undefined}
+            onTouchCancel={homologOrlando ? clearLongPress : undefined}
+            onContextMenu={
+              homologOrlando
+                ? (e) => {
+                    e.preventDefault();
+                    setHomologOpen(true);
+                  }
+                : undefined
+            }
+          >
+            v{APP_BUILD_VERSION}
+          </span>
+        )}
         <span className={cn("truncate", s.text)}>
           {syncing ? (
             <span className="inline-flex items-center gap-1">
@@ -124,7 +136,9 @@ export function AppMobileReleaseBar({ variant }: { variant: Variant }) {
         )}
       />
     </div>
-    <RqlPerfHomologSheet open={homologOpen} onClose={() => setHomologOpen(false)} />
+    {homologOrlando && (
+      <RqlPerfHomologSheet open={homologOpen} onClose={() => setHomologOpen(false)} />
+    )}
     </>
   );
 }

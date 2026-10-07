@@ -28,7 +28,9 @@ Referência WhatsApp (app nativo, celular médio): troca de aba ~30–80 ms, col
 
 ## Medir no celular (PWA, sem console)
 
-1. Na faixa inferior do app (badge **`v192`** ou superior), **segure ~1 segundo** no número da versão.
+**Somente cooperado Orlando** (conta de referência homolog).
+
+1. Na faixa inferior do app cooperado (badge **`v193`** ou superior), **segure ~1 segundo** no **`v…`**.
 2. Toque **Ativar medição e recarregar**.
 3. Use o app (troque abas; opcional: feche e reabra).
 4. Segure de novo no **`v…`** → **Gerar comparativo WhatsApp** → **Copiar relatório** (cole no WhatsApp/e-mail).
