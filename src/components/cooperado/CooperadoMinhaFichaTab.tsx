@@ -18,15 +18,8 @@ import { useContaCoopDescontosRevision } from "@/hooks/useContaCoopDescontosRevi
 import { Button } from "@/components/ui/Button";
 import { NotaStatusBadge } from "@/components/ui/NotaStatusBadge";
 import { ResumoDescontosMes } from "@/components/ficha/ResumoDescontosMes";
-import {
-  agregarItensFichaMes,
-  getDescontosExtrasExibicaoCooperadoFinanceiro,
-} from "@/services/notaPedidoService";
-import {
-  bicCentralBuildValorExibicaoCooperadoOpts,
-  bicCentralGetResumoPagamentoExibicao,
-  bicCentralGetValorExibicaoCooperado,
-} from "@/services/bicLeituraCentralFicha";
+import { agregarItensFichaMes } from "@/services/notaPedidoService";
+import { leituraFinanceiraParidadeCooperadoMesReferencia } from "@/lib/cooperado/cooperadoFinanceiroParidadeUniversal";
 import type { ResumoMesEntregasCooperado } from "@/services/cooperadoEntregasService";
 import {
   listarResumosFotosCooperado,
@@ -107,10 +100,17 @@ function MesFichaAccordion({
       : `/ficha-corrida?cooperado=${encodeURIComponent(cooperadoId)}`;
   const precisaDetalhesExpandido = expandido && viewInterna === "detalhes";
 
-  const resumoPagamento = useMemo(() => {
-    if (!data || !precisaDetalhesExpandido) return null;
-    return bicCentralGetResumoPagamentoExibicao(data, cooperadoId, resumo.mesReferencia, cooperativaId);
-  }, [data, cooperadoId, resumo.mesReferencia, cooperativaId, hbDescontosRevision, precisaDetalhesExpandido]);
+  const paridadeMes = useMemo(() => {
+    if (!data) return null;
+    return leituraFinanceiraParidadeCooperadoMesReferencia(
+      data,
+      cooperadoId,
+      cooperativaId,
+      resumo.mesReferencia
+    );
+  }, [data, cooperadoId, cooperativaId, resumo.mesReferencia, hbDescontosRevision]);
+
+  const resumoPagamento = precisaDetalhesExpandido ? paridadeMes?.resumo ?? null : null;
 
   const itensMes = useMemo(() => {
     if (!data || !precisaDetalhesExpandido) return { itens: [], entregas: 0, valorBruto: 0 };
@@ -131,20 +131,7 @@ function MesFichaAccordion({
     return bicCentralTotalValoresAvulsosPendentes(data, cooperadoId, resumo.mesReferencia, cooperativaId);
   }, [data, cooperadoId, resumo.mesReferencia, cooperativaId, precisaDetalhesExpandido]);
 
-  const exibicaoOpts = useMemo(() => {
-    if (!data || !precisaDetalhesExpandido) return undefined;
-    return bicCentralBuildValorExibicaoCooperadoOpts(data, cooperadoId, resumo.mesReferencia, cooperativaId);
-  }, [data, cooperadoId, resumo.mesReferencia, cooperativaId, precisaDetalhesExpandido]);
-
-  const descontosExtrasExibicao = useMemo(() => {
-    if (!data || !precisaDetalhesExpandido) return [];
-    return getDescontosExtrasExibicaoCooperadoFinanceiro(
-      data,
-      cooperadoId,
-      cooperativaId,
-      [resumo.mesReferencia]
-    );
-  }, [data, cooperadoId, cooperativaId, resumo.mesReferencia, precisaDetalhesExpandido, hbDescontosRevision]);
+  const descontosExtrasExibicao = paridadeMes?.descontosExtras ?? [];
 
   if (!data) return null;
 
@@ -171,7 +158,9 @@ function MesFichaAccordion({
           <p className="text-sm text-gray-600 mt-0.5">
             {resumo.quantidadeEntregas} entrega{resumo.quantidadeEntregas !== 1 ? "s" : ""}
             {quitado && ` · recebido ${formatCurrency(resumo.valorRecebido)}`}
-            {!quitado && resumo.valorAReceber > 0 && ` · a receber ${formatCurrency(resumo.valorAReceber)}`}
+            {!quitado &&
+              (paridadeMes?.valorLiquido ?? resumo.valorAReceber) > 0 &&
+              ` · a receber ${formatCurrency(paridadeMes?.valorLiquido ?? resumo.valorAReceber)}`}
           </p>
         </div>
         {expandido ? <ChevronDown size={20} className="text-gray-400 shrink-0" /> : <ChevronRight size={20} className="text-gray-400 shrink-0" />}
@@ -259,9 +248,7 @@ function MesFichaAccordion({
                 valorEntregas={resumoPagamento.valorEntregas}
                 descontosExtras={descontosExtrasExibicao}
                 totalLiquido={
-                  quitado
-                    ? resumo.valorRecebido
-                    : bicCentralGetValorExibicaoCooperado(resumoPagamento, exibicaoOpts!)
+                  quitado ? resumo.valorRecebido : (paridadeMes?.valorLiquido ?? resumoPagamento.valorLiquido)
                 }
                 rotuloTotal={quitado ? "Total recebido" : "Total líquido"}
               />

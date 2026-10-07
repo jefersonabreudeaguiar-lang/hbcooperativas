@@ -393,6 +393,11 @@ export default function FichaCorridaPage() {
     return bicCentralGetConsolidadoFinanceiroCooperado(data, cooperadoSelecionadoId, coopId);
   }, [data, cooperadoSelecionadoId, coopId, hbDescontosRevision]);
 
+  const paridadeCooperadoMobile = useMemo(() => {
+    if (!isCooperado || !data || !cooperadoSelecionadoId) return null;
+    return leituraFinanceiraParidadeCooperado(data, cooperadoSelecionadoId, coopId);
+  }, [isCooperado, data, cooperadoSelecionadoId, coopId, hbDescontosRevision]);
+
   const mesesPendentesPagamento = useMemo(() => {
     if (!data || !cooperadoSelecionadoId || isCooperado) return [];
     return listarMesesPendentesPagamentoResponsavel(data, cooperadoSelecionadoId, coopId);
@@ -801,6 +806,17 @@ export default function FichaCorridaPage() {
     if (visualizandoHistorico && pagamentoConfirmadoMes) {
       return resumoFromPagamento(pagamentoConfirmadoMes);
     }
+    if (isCooperado && !visualizandoHistorico && paridadeCooperadoMobile) {
+      if (
+        fluxoReciboAssinatura &&
+        pagamentoAguardandoExibicao &&
+        paridadeCooperadoMobile.consolidado.aguardandoAssinatura &&
+        paridadeCooperadoMobile.valorLiquido <= 0
+      ) {
+        return resumoFromPagamento(pagamentoAguardandoExibicao);
+      }
+      return paridadeCooperadoMobile.resumo;
+    }
     if (!isCooperado && financeiroAberto && !pagamentoAguardando) {
       return financeiroAberto.resumo;
     }
@@ -836,6 +852,8 @@ export default function FichaCorridaPage() {
     hbDescontosRevision,
     valorReceberConsolidado?.valor,
     conferindoPagamentoNuvem,
+    paridadeCooperadoMobile,
+    fluxoReciboAssinatura,
   ]);
 
   const resumoExibicao = resumo;
@@ -868,12 +886,7 @@ export default function FichaCorridaPage() {
       ? resumoExibicao && exibicaoOpts
         ? bicCentralGetValorExibicaoCooperado(resumoExibicao, exibicaoOpts)
         : 0
-      : !apresentacaoFinanceiroUi
-        ? 0
-        : (financeiroAberto?.resumo?.valorLiquido ??
-          financeiroAberto?.valorLiquido ??
-          valorReceberConsolidado?.valor ??
-          0)
+      : (paridadeCooperadoMobile?.valorLiquido ?? financeiroAberto?.valorLiquido ?? 0)
     : visualizandoHistorico
       ? resumoExibicao && exibicaoOpts
         ? bicCentralGetValorExibicaoCooperado(resumoExibicao, exibicaoOpts)
@@ -885,11 +898,16 @@ export default function FichaCorridaPage() {
     if (visualizandoHistorico && resumoExibicao) {
       return resumoExibicao.descontosExtras;
     }
+    if (isCooperado && paridadeCooperadoMobile) {
+      return paridadeCooperadoMobile.descontosExtras;
+    }
     return leituraFinanceiraParidadeCooperado(data, cooperadoSelecionadoId, coopId).descontosExtras;
   }, [
     data,
     cooperadoSelecionadoId,
     coopId,
+    isCooperado,
+    paridadeCooperadoMobile,
     visualizandoHistorico,
     resumoExibicao,
     hbDescontosRevision,
@@ -2017,7 +2035,7 @@ export default function FichaCorridaPage() {
             <>
               <CooperadoQuantoVouReceberPainel
                 estado={resumoQuantoVouReceber.estado}
-                mesLabel={resumoQuantoVouReceber.mesLabel}
+                mesLabel={paridadeCooperadoMobile?.mesLabel ?? resumoQuantoVouReceber.mesLabel}
                 valorDestaque={
                   resumoQuantoVouReceber.estado === "carregando"
                     ? 0

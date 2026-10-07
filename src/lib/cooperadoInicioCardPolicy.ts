@@ -17,6 +17,7 @@ import {
 import { getTotalAPagarCooperado } from "@/services/notaPedidoService";
 import { getContaCoopDescontosRevision } from "@/lib/hb-credit/contaCoopDescontosNotify";
 import { bicCentralResolveInicioParaExibicao, bicCentralSincronizarRotuloMeses, bicCentralValorAReceberAgregado } from "@/services/bicLeituraCentralCooperado";
+import { leituraFinanceiraParidadeCooperado } from "@/lib/cooperado/cooperadoFinanceiroParidadeUniversal";
 import {
   type CooperadoFinanceiroUiSnapshot,
 } from "@/services/cooperadoFinanceiroUiSnapshot";
@@ -150,47 +151,19 @@ export function resolverInicioCardMotorFromAppData(
   cooperativaId: string | undefined,
   opts?: { apresentacaoConsolidada?: boolean }
 ): InicioCardMotorSnapshot {
-  const apresentacaoConsolidada = opts?.apresentacaoConsolidada ?? true;
-
-  if (isBicCentralReadAuthorityEnabled()) {
-    const inicio = bicCentralResolveInicioParaExibicao(data, cooperadoId, cooperativaId, {
-      apresentacaoConsolidada,
-    });
-    const mesFallback = inicio.mes || getCurrentMesReferencia();
-    return sanitizeInicioCardSnapshotFluxoBic({
-      mesLabel: inicio.mesLabel?.trim() || formatMesReferencia(mesFallback),
-      valor: inicio.valor,
-      valorRecibo: inicio.valorRecibo,
-      aguardandoAssinatura: inicio.aguardandoAssinatura,
-    });
-  }
-
-  const raw = bicCentralSincronizarRotuloMeses(
-    bicCentralValorAReceberAgregado(data, cooperadoId, cooperativaId, { apresentacaoConsolidada })
-  );
-  const inicio = bicCentralResolveInicioParaExibicao(data, cooperadoId, cooperativaId, {
-    apresentacaoConsolidada,
-  });
-  const mesFallback = raw.mes || inicio.mes || getCurrentMesReferencia();
-  const mesLabel =
-    raw.mesLabel?.trim() ||
-    inicio.mesLabel?.trim() ||
-    formatMesReferencia(mesFallback);
-
-  const valor =
-    raw.valor > 0
-      ? raw.valor
-      : inicio.aguardandoAssinatura
-        ? 0
-        : inicio.valor;
-  const valorRecibo = raw.valorRecibo > 0 ? raw.valorRecibo : inicio.valorRecibo;
-  const aguardandoAssinatura = raw.aguardandoAssinatura || inicio.aguardandoAssinatura;
+  void opts?.apresentacaoConsolidada;
+  const paridade = leituraFinanceiraParidadeCooperado(data, cooperadoId, cooperativaId);
+  const fluxoPix = getValorQuantoVouReceberMotorLegado(data, cooperadoId, cooperativaId);
+  const mesFallback = paridade.mesesResumo[paridade.mesesResumo.length - 1] ?? getCurrentMesReferencia();
+  const mesLabel = paridade.mesLabel?.trim() || formatMesReferencia(mesFallback);
+  const valorExibir =
+    fluxoPix.aguardandoAssinatura && fluxoPix.valorRecibo > 0 ? 0 : paridade.valorLiquido;
 
   return sanitizeInicioCardSnapshotFluxoBic({
     mesLabel,
-    valor: aguardandoAssinatura && valorRecibo > 0 && valor <= 0 ? 0 : valor,
-    valorRecibo,
-    aguardandoAssinatura,
+    valor: valorExibir,
+    valorRecibo: fluxoPix.valorRecibo,
+    aguardandoAssinatura: fluxoPix.aguardandoAssinatura,
   });
 }
 

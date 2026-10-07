@@ -10,7 +10,11 @@ import {
   listarMesesReferenciaResumoFinanceiroParidade,
   type ConsolidadoFinanceiroCooperado,
 } from "@/services/cooperadoEntregasService";
-import { getDescontosExtrasExibicaoCooperadoFinanceiro } from "@/services/notaPedidoService";
+import {
+  getDescontosExtrasExibicaoCooperadoFinanceiro,
+  getResumoPagamentoExibicao,
+  getResumoPagamentoParaRegistro,
+} from "@/services/notaPedidoService";
 
 export type LeituraFinanceiraParidadeCooperado = {
   consolidado: ConsolidadoFinanceiroCooperado;
@@ -45,5 +49,28 @@ export function leituraFinanceiraParidadeCooperado(
     mesLabel: consolidado.mesLabel,
     resumo: consolidado.resumo,
     descontosExtras,
+  };
+}
+
+/** Mesma leitura do responsável na ficha filtrada por um mês (aba Entregas do cooperado). */
+export function leituraFinanceiraParidadeCooperadoMesReferencia(
+  data: AppData,
+  cooperadoId: string,
+  cooperativaId: string | undefined,
+  mesReferencia: string
+): Pick<LeituraFinanceiraParidadeCooperado, "resumo" | "descontosExtras" | "valorLiquido"> {
+  const coopId = cooperativaId ?? data.cooperados.find((c) => c.id === cooperadoId)?.cooperativaId;
+  const descontosExtras = getDescontosExtrasExibicaoCooperadoFinanceiro(
+    data,
+    cooperadoId,
+    cooperativaId,
+    [mesReferencia]
+  );
+  const base = getResumoPagamentoExibicao(data, cooperadoId, mesReferencia, coopId);
+  const resumo = getResumoPagamentoParaRegistro(base, data, cooperadoId, mesReferencia, coopId);
+  return {
+    resumo,
+    descontosExtras,
+    valorLiquido: resumo.valorLiquido,
   };
 }
