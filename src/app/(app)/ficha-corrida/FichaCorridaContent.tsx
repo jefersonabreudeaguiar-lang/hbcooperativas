@@ -398,6 +398,18 @@ export default function FichaCorridaPage() {
     return leituraFinanceiraParidadeCooperado(data, cooperadoSelecionadoId, coopId);
   }, [isCooperado, data, cooperadoSelecionadoId, coopId, hbDescontosRevision]);
 
+  /** Meses do resumo consolidado — mesma lista que Pagar/responsável (paridade universal). */
+  const mesesFinanceiroCooperado = useMemo(() => {
+    if (!isCooperado) return [];
+    if (paridadeCooperadoMobile?.mesesResumo.length) return paridadeCooperadoMobile.mesesResumo;
+    return mesesPendentesQuantoVouReceber;
+  }, [isCooperado, paridadeCooperadoMobile, mesesPendentesQuantoVouReceber]);
+
+  const mesReferenciaHbCooperado = useMemo(() => {
+    if (!isCooperado) return mesAtivo;
+    return mesesFinanceiroCooperado[0] ?? mesAtivo;
+  }, [isCooperado, mesesFinanceiroCooperado, mesAtivo]);
+
   const mesesPendentesPagamento = useMemo(() => {
     if (!data || !cooperadoSelecionadoId || isCooperado) return [];
     return listarMesesPendentesPagamentoResponsavel(data, cooperadoSelecionadoId, coopId);
@@ -623,8 +635,8 @@ export default function FichaCorridaPage() {
   const fichasPendentesMes = useMemo(() => {
     if (!data || !cooperadoSelecionadoId) return [];
     const meses =
-      isCooperado && !visualizandoHistorico && mesesPendentesQuantoVouReceber.length > 1
-        ? mesesPendentesQuantoVouReceber
+      isCooperado && !visualizandoHistorico && mesesFinanceiroCooperado.length > 1
+        ? mesesFinanceiroCooperado
         : !isCooperado && aba === "pagar" && mesesPendentesPagamento.length
           ? mesesPendentesPagamento
           : [mesAtivo];
@@ -642,7 +654,7 @@ export default function FichaCorridaPage() {
     isCooperado,
     aba,
     mesesPendentesPagamento,
-    mesesPendentesQuantoVouReceber,
+    mesesFinanceiroCooperado,
     visualizandoHistorico,
   ]);
 
@@ -753,7 +765,7 @@ export default function FichaCorridaPage() {
     exibicaoOpts && cooperadoSelecionadoId && coopId
       ? {
           cooperadoId: cooperadoSelecionadoId,
-          mesReferencia: mesAtivo,
+          mesReferencia: isCooperado ? mesReferenciaHbCooperado : mesAtivo,
           cooperativaId: coopId,
           cooperadoNome: exibicaoOpts.cooperadoNome,
           user,
@@ -764,10 +776,28 @@ export default function FichaCorridaPage() {
 
   const resumo = useMemo(() => {
     if (!data || !cooperadoSelecionadoId) return null;
-    if (isCooperado && !visualizandoHistorico && conferindoPagamentoNuvem) {
-      if (financeiroAberto && (financeiroAberto.valorLiquido ?? 0) > 0) {
-        return financeiroAberto.resumo;
+    if (isCooperado && !visualizandoHistorico && paridadeCooperadoMobile) {
+      if (conferindoPagamentoNuvem && paridadeCooperadoMobile.valorLiquido > 0) {
+        return paridadeCooperadoMobile.resumo;
       }
+      if (
+        fluxoReciboAssinatura &&
+        pagamentoAguardandoExibicao &&
+        paridadeCooperadoMobile.consolidado.aguardandoAssinatura &&
+        paridadeCooperadoMobile.valorLiquido <= 0
+      ) {
+        return resumoFromPagamento(pagamentoAguardandoExibicao);
+      }
+      if (
+        !fluxoReciboAssinatura ||
+        paridadeCooperadoMobile.valorLiquido > 0 ||
+        (paridadeCooperadoMobile.resumo.descontosExtras?.length ?? 0) > 0 ||
+        paridadeCooperadoMobile.resumo.valorEntregas > 0
+      ) {
+        return paridadeCooperadoMobile.resumo;
+      }
+    }
+    if (isCooperado && !visualizandoHistorico && conferindoPagamentoNuvem) {
       return bicCentralGetResumoPagamentoExibicao(
         data,
         cooperadoSelecionadoId,
@@ -775,18 +805,6 @@ export default function FichaCorridaPage() {
         coopId,
         ajustesCompartilhadosMes
       );
-    }
-    if (isCooperado && !visualizandoHistorico && financeiroAberto) {
-      const temResumoAberto =
-        (financeiroAberto.valorLiquido ?? 0) > 0 ||
-        (financeiroAberto.resumo.descontosExtras?.length ?? 0) > 0 ||
-        financeiroAberto.resumo.valorEntregas > 0;
-      if (temResumoAberto) {
-        return financeiroAberto.resumo;
-      }
-      if (financeiroAberto.aguardandoAssinatura && pagamentoAguardandoExibicao && fluxoReciboAssinatura) {
-        return resumoFromPagamento(pagamentoAguardandoExibicao);
-      }
     }
     if (pagamentoConfirmado && (!isCooperado || visualizandoHistorico)) {
       return resumoFromPagamento(pagamentoConfirmado);
@@ -800,31 +818,17 @@ export default function FichaCorridaPage() {
       const temEntregaNova =
         isCooperado &&
         !visualizandoHistorico &&
-        (valorReceberConsolidado?.valor ?? 0) > 0;
+        (paridadeCooperadoMobile?.valorLiquido ?? 0) > 0;
       if (!temEntregaNova) return resumoFromPagamento(aguardandoResumo);
     }
     if (visualizandoHistorico && pagamentoConfirmadoMes) {
       return resumoFromPagamento(pagamentoConfirmadoMes);
-    }
-    if (isCooperado && !visualizandoHistorico && paridadeCooperadoMobile) {
-      if (
-        fluxoReciboAssinatura &&
-        pagamentoAguardandoExibicao &&
-        paridadeCooperadoMobile.consolidado.aguardandoAssinatura &&
-        paridadeCooperadoMobile.valorLiquido <= 0
-      ) {
-        return resumoFromPagamento(pagamentoAguardandoExibicao);
-      }
-      return paridadeCooperadoMobile.resumo;
     }
     if (!isCooperado && financeiroAberto && !pagamentoAguardando) {
       return financeiroAberto.resumo;
     }
     if (!isCooperado && resumoPagamentoConsolidado) {
       return resumoPagamentoConsolidado;
-    }
-    if (isCooperado && !visualizandoHistorico && financeiroAberto) {
-      return financeiroAberto.resumo;
     }
     return bicCentralGetResumoPagamentoExibicao(
       data,
@@ -968,10 +972,10 @@ export default function FichaCorridaPage() {
       !visualizandoHistorico &&
       (pendentePagamentoResponsavel ||
         (isCooperado ? pagamentoAguardandoExibicao : pagamentoAguardando) ||
-        (isCooperado && (valorReceberConsolidado?.valor ?? 0) > 0))
+        (isCooperado && (paridadeCooperadoMobile?.valorLiquido ?? 0) > 0))
     ) {
-      if (isCooperado && mesesPendentesQuantoVouReceber.length > 1) {
-        return agregarItensFichaMeses(data, cooperadoSelecionadoId, mesesPendentesQuantoVouReceber, coopId, {
+      if (isCooperado && mesesFinanceiroCooperado.length > 1) {
+        return agregarItensFichaMeses(data, cooperadoSelecionadoId, mesesFinanceiroCooperado, coopId, {
           apenasPendentes: true,
         });
       }
@@ -991,13 +995,13 @@ export default function FichaCorridaPage() {
     isCooperado,
     mesAtivo,
     mesesPendentesPagamento,
-    mesesPendentesQuantoVouReceber,
+    mesesFinanceiroCooperado,
     pagamentoAguardando,
     pagamentoAguardandoExibicao,
     pendentePagamentoResponsavel,
+    paridadeCooperadoMobile,
     resumoItensMes,
     resumoItensPagamento,
-    valorReceberConsolidado?.valor,
     visualizandoHistorico,
   ]);
 
@@ -1386,6 +1390,7 @@ export default function FichaCorridaPage() {
         (fluxoReciboAssinatura && !!pagamentoAguardandoExibicao) ||
         (fluxoReciboAssinatura && conferindoPagamentoNuvem) ||
         !!pagamentoConfirmado ||
+        (paridadeCooperadoMobile?.valorLiquido ?? 0) > 0 ||
         bicCentralCooperadoTemValorPendente(data, cooperadoId, coopId) ||
         (!fluxoReciboAssinatura && (valorReceberConsolidado?.valor ?? 0) > 0)));
 
@@ -1846,7 +1851,7 @@ export default function FichaCorridaPage() {
               isCooperado
                 ? visualizandoHistorico
                   ? `Resumo · ${formatMesReferencia(mesAtivo)}`
-                  : `Resumo · ${valorReceberConsolidado?.mesLabel ?? formatMesReferencia(mesAtivo)}`
+                  : `Resumo · ${paridadeCooperadoMobile?.mesLabel ?? valorReceberConsolidado?.mesLabel ?? formatMesReferencia(mesAtivo)}`
                 : `Ficha — ${nomeCooperado}`
             }
             className="mb-6"
@@ -1879,9 +1884,9 @@ export default function FichaCorridaPage() {
                     ? exibicaoOpts
                       ? bicCentralGetValorExibicaoCooperado(resumoExibicao, exibicaoOpts)
                       : resumoExibicao.valorEntregas
-                    : mesesPendentesQuantoVouReceber.length > 1
+                    : mesesFinanceiroCooperado.length > 1
                       ? resumoExibicao.valorLiquido
-                      : (valorReceberConsolidado?.valor ?? 0)
+                      : (paridadeCooperadoMobile?.valorLiquido ?? valorReceberConsolidado?.valor ?? 0)
                 }
                 rotuloTotal={
                   visualizandoHistorico
@@ -2000,8 +2005,8 @@ export default function FichaCorridaPage() {
 
           <Card
             title={`Resumo das entregas · ${
-              isCooperado && !visualizandoHistorico && mesesPendentesQuantoVouReceber.length > 1
-                ? formatMesesReferenciaRotulo(mesesPendentesQuantoVouReceber)
+              isCooperado && !visualizandoHistorico && mesesFinanceiroCooperado.length > 1
+                ? formatMesesReferenciaRotulo(mesesFinanceiroCooperado)
                 : !isCooperado && mesesPendentesPagamento.length > 1
                   ? formatMesesReferenciaRotulo(mesesPendentesPagamento)
                   : formatMesReferencia(mesAtivo)

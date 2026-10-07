@@ -40,6 +40,7 @@ import {
   bicCentralResolveInicioParaExibicao,
 } from "@/services/bicLeituraCentralCooperado";
 import { resolverCooperadoIdCanonico } from "@/services/cooperadoCloudService";
+import { leituraFinanceiraParidadeCooperado } from "@/lib/cooperado/cooperadoFinanceiroParidadeUniversal";
 import { cooperadoFinanceiroDesatualizado } from "@/services/fichaSyncGuard";
 import { requestAppSyncImmediate, requestVotacaoOperacionalSync } from "@/services/syncRequest";
 import { useSyncStatus } from "@/components/sync/CooperativaSyncProvider";
@@ -134,12 +135,11 @@ function CooperadoDashboard() {
     const coopId = getUserCooperativaId(user, data);
     if (!coopId) return null;
     const cooperadoId = resolverCooperadoIdCanonico(data, user.cooperadoId, coopId);
-    const exibicaoOpts = bicCentralBuildValorExibicaoCooperadoOpts(
-      data,
-      cooperadoId,
-      bicCentralMesPrincipalQuantoVouReceber(data, cooperadoId, coopId, { apresentacaoConsolidada }),
-      coopId
-    );
+    const paridade = leituraFinanceiraParidadeCooperado(data, cooperadoId, coopId);
+    const mesHb =
+      paridade.mesesResumo[0] ??
+      bicCentralMesPrincipalQuantoVouReceber(data, cooperadoId, coopId, { apresentacaoConsolidada });
+    const exibicaoOpts = bicCentralBuildValorExibicaoCooperadoOpts(data, cooperadoId, mesHb, coopId);
     return {
       cooperadoId,
       mesReferencia: exibicaoOpts.mesReferencia,

@@ -10,6 +10,7 @@ import { pushOperacionalToCloud } from "@/services/cooperativaSyncCloudService";
 import { beginSaveBatch, endSaveBatch, getData, notifyAppDataSubscribers, updateData } from "@/services/dataStore";
 import { persistDescontosContaCoopNoArquivo, getDescontosContaCoopMesCached } from "@/services/notaPedidoService";
 import { hbCreditMesPrincipal, hbCreditValorLiquidoMes } from "@/lib/hb-credit/hbCreditLeituraBic";
+import { listarMesesReferenciaResumoFinanceiroParidade } from "@/services/cooperadoEntregasService";
 import {
   listMesesReferenciaHbFichaBaseSync,
   shouldSyncHbFichaBaseDescontos,
@@ -338,7 +339,9 @@ export async function refreshContaCoopDescontosAfterOperacionalSync(opts: {
     const data = getData();
     if (opts.user.role === "cooperado" && opts.user.cooperadoId) {
       const canonico = resolverCooperadoIdCanonico(data, opts.user.cooperadoId, opts.cooperativaId);
-      const mesReferencia = hbCreditMesPrincipal(data, canonico, opts.cooperativaId);
+      const mesesParidade = listarMesesReferenciaResumoFinanceiroParidade(data, canonico, opts.cooperativaId);
+      const mesReferencia =
+        mesesParidade[0] ?? hbCreditMesPrincipal(data, canonico, opts.cooperativaId);
       await refreshContaCoopValorReceberPilot({
         cnpj: opts.cnpj,
         cooperadoId: canonico,

@@ -10,7 +10,6 @@
 import type { AppData } from "@/types";
 import { notaPertenceCooperado, fichaPertenceCooperado, pagamentoCooperadoPertenceCooperado } from "@/services/cooperadoCloudService";
 import {
-  getValorQuantoVouReceber,
   getValorQuantoVouReceberMotorLegado,
   listarMesesComValorQuantoVouReceber,
 } from "@/services/cooperadoEntregasService";
@@ -82,8 +81,8 @@ export function cooperadoBicAutorizaZerarCardInicio(
   cooperativaId: string | undefined,
   opts?: { tinhaValorExibido?: boolean }
 ): boolean {
-  const motor = getValorQuantoVouReceber(data, cooperadoId, cooperativaId);
-  if (motor.valor > 0) return false;
+  const paridadeValor = leituraFinanceiraParidadeCooperado(data, cooperadoId, cooperativaId).valorLiquido;
+  if (paridadeValor > 0) return false;
   if (listarMesesComValorQuantoVouReceber(data, cooperadoId, cooperativaId).length > 0) return false;
   if (getTotalAPagarCooperado(data, cooperadoId, undefined, cooperativaId) > 0) return false;
 
@@ -210,7 +209,7 @@ function aplicarPoliticaCardInicioEndurecidaComMotorOperacional(
     });
   }
 
-  const motor = resolverInicioCardMotorOperacionalFromAppData(data, cooperadoId, cooperativaId);
+  const motor = resolverInicioCardMotorFromAppData(data, cooperadoId, cooperativaId);
   const revision = cooperadoMotorRevisionOperacional(data, cooperadoId, cooperativaId);
 
   if (
