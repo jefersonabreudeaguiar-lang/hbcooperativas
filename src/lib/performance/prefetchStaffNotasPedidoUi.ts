@@ -42,5 +42,8 @@ export function prefetchStaffNotasPedidoRouteBundle(): void {
   staffNotasRouteBundlePrefetchStarted = true;
   prefetchStaffNotasPedidoUiChunks();
   prefetchStaffConferenciaModalChunks();
-  void import("@/app/(app)/notas-pedido/NotasPedidoStaffMain");
+  void import("@/app/(app)/notas-pedido/staff/NotasPedidoStaffResponsavelApp");
+  void import("@/app/(app)/notas-pedido/staff/loadStaffNotasConferirChunk").then((m) =>
+    m.loadStaffNotasConferirChunk()
+  );
 }

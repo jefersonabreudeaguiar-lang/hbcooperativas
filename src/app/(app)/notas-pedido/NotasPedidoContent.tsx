@@ -1,20 +1,20 @@
 "use client";
 
 import dynamic from "next/dynamic";
-import { PageSkeleton } from "@/components/ui/PageSkeleton";
+import { RouteChunkLoadingShell } from "@/lib/performance/appRouteLazy";
 import { usePermissions } from "@/hooks/usePermissions";
 
-const NotasPedidoStaffMain = dynamic(() => import("./NotasPedidoStaffMain"), {
-  loading: () => <PageSkeleton compact />,
+const NotasPedidoStaffMain = dynamic(() => import("./staff/NotasPedidoStaffResponsavelEntry"), {
+  loading: () => <RouteChunkLoadingShell />,
 });
 
 const NotasPedidoCooperadoMain = dynamic(() => import("./NotasPedidoCooperadoMain"), {
-  loading: () => <PageSkeleton compact />,
+  loading: () => <RouteChunkLoadingShell />,
 });
 
 /** RQL 8.6 P1 — chunks separados cooperado vs responsável (conferência). */
 export default function NotasPedidoContent() {
   const { isCooperado, user } = usePermissions();
-  if (!user) return <PageSkeleton compact />;
+  if (!user) return <RouteChunkLoadingShell />;
   return isCooperado ? <NotasPedidoCooperadoMain /> : <NotasPedidoStaffMain />;
 }

@@ -4,7 +4,7 @@ import { PageSkeleton } from "@/components/ui/PageSkeleton";
 
 type RouteModule = { default: ComponentType };
 
-function RouteChunkLoadingShell() {
+export function RouteChunkLoadingShell() {
   return (
     <div className="min-h-[50vh] bg-gray-50">
       <PageSkeleton compact />
