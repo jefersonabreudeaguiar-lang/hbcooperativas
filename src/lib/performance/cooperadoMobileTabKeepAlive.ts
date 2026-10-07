@@ -33,6 +33,18 @@ export function getCooperadoMobileTabCacheLimit(lowMemoryDevice: boolean): numbe
 /** Início — preferir manter montado no LRU (P1). */
 export const COOPERADO_TAB_PIN_HREF = "/dashboard" as const;
 
+/** Financeiro — segunda aba crítica; não expulsar do LRU (troca instantânea). */
+export const COOPERADO_TAB_FINANCEIRO_HREF = "/ficha-corrida" as const;
+
+const COOPERADO_TAB_PINNED: readonly string[] = [
+  COOPERADO_TAB_PIN_HREF,
+  COOPERADO_TAB_FINANCEIRO_HREF,
+];
+
+export function isCooperadoTabPinned(href: string): boolean {
+  return COOPERADO_TAB_PINNED.includes(href);
+}
+
 /** Par leve — preferir expulsar do LRU antes das abas pesadas. */
 export const COOPERADO_TAB_LIGHT_HREFS = ["/precos", "/mensalidades"] as const;
 
@@ -48,7 +60,7 @@ export function pickCooperadoTabCacheEviction(
   activeHref: string,
   lowMemoryDevice: boolean
 ): string | undefined {
-  const candidates = order.filter((h) => h !== activeHref && h !== COOPERADO_TAB_PIN_HREF);
+  const candidates = order.filter((h) => h !== activeHref && !isCooperadoTabPinned(h));
   if (candidates.length === 0) return undefined;
 
   const lightCached = candidates.filter((h) =>

@@ -5,6 +5,7 @@ import {
 import { COOPERADO_BOTTOM_TAB_HREFS } from "@/lib/performance/cooperadoBottomTabRoutes";
 import { isLowMemoryDevice } from "@/services/imagePipelineService";
 import { prefetchCooperadoTabRouteChunks } from "@/lib/performance/prefetchCooperadoTabRouteChunks";
+import { warmupCooperadoFinanceiroTabChunk } from "@/lib/performance/cooperadoFinanceiroTabWarmup";
 
 export type CooperadoNavPrefetchRouter = {
   prefetch: (href: string) => void;
@@ -45,9 +46,10 @@ export function scheduleCooperadoNavPrefetchEarly(router: CooperadoNavPrefetchRo
     ? (COOPERADO_BOTTOM_TAB_HREFS as readonly string[])
     : COOPERADO_MOBILE_PREFETCH_HREFS;
 
-  queueMicrotask(() =>
-    safe(() => prefetchCooperadoNavRoutes(router, COOPERADO_NAV_PREFETCH_PRIORITY))
-  );
+  queueMicrotask(() => {
+    safe(() => prefetchCooperadoNavRoutes(router, COOPERADO_NAV_PREFETCH_PRIORITY));
+    safe(() => warmupCooperadoFinanceiroTabChunk());
+  });
 
   if (lowMemory) {
     return () => {

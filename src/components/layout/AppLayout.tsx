@@ -37,6 +37,8 @@ import { AppUpdateBanner } from "@/components/pwa/AppUpdateBanner";
 import { useHbCreditDescontosWarmup } from "@/hooks/useHbCreditDescontosWarmup";
 import { shouldPrefetchHbCreditNav } from "@/lib/hb-credit/hbCreditNavPrefetch";
 import { scheduleCooperadoNavPrefetchEarly } from "@/lib/performance/cooperadoNavPrefetch";
+import { warmupCooperadoFinanceiroTabChunk } from "@/lib/performance/cooperadoFinanceiroTabWarmup";
+import { COOPERADO_FINANCEIRO_TAB_HREF } from "@/lib/hb-credit/hbCreditNavPrefetch";
 import { scheduleStaffNavPrefetchEarly } from "@/lib/performance/staffNavPrefetch";
 import { prefetchStaffNotasPedidoRouteBundle } from "@/lib/performance/prefetchStaffNotasPedidoUi";
 import { feedbackTrocaAbaMobile } from "@/lib/performance/tabSwitchFeedback";
@@ -259,7 +261,12 @@ export function MobileNav() {
               key={item.href}
               href={item.href}
               scroll={false}
-              prefetch={false}
+              prefetch={item.href === COOPERADO_FINANCEIRO_TAB_HREF}
+              onPointerDown={() => {
+                if (isCooperadoNav && item.href === COOPERADO_FINANCEIRO_TAB_HREF) {
+                  warmupCooperadoFinanceiroTabChunk();
+                }
+              }}
               onClick={() => feedbackTrocaAbaMobile(active)}
               className={cn(
                 "flex-1 flex flex-col items-center justify-center min-w-0 px-0.5 select-none",

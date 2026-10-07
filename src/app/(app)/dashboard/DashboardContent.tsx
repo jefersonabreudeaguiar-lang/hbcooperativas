@@ -81,6 +81,7 @@ import {
   isCooperadoManualOperacionalSync,
   shouldSkipCooperadoSecondaryMountSync,
 } from "@/lib/performance/cooperadoColdStart";
+import { warmupCooperadoFinanceiroTabChunk } from "@/lib/performance/cooperadoFinanceiroTabWarmup";
 import { RestoreOperacionalPanel } from "@/components/sync/RestoreOperacionalPanel";
 import { CooperadoInicioValorReceberCard } from "@/components/cooperado/CooperadoInicioValorReceberCard";
 
@@ -107,6 +108,10 @@ function CooperadoDashboard() {
   useEffect(() => {
     recoverySyncRef.current = false;
   }, [user?.id]);
+
+  useEffect(() => {
+    warmupCooperadoFinanceiroTabChunk();
+  }, []);
 
   useEffect(() => {
     if (isCooperadoManualOperacionalSync()) return;

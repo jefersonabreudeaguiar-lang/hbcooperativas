@@ -4,8 +4,10 @@ import Link from "next/link";
 import { useMemo, useState, useEffect, useCallback } from "react";
 import { useSearchParams } from "next/navigation";
 import { QrCode, XCircle, Wallet, CheckCircle2, FileDown, PenLine, BookOpen, CreditCard, History, Users, ChevronDown, Pencil, RefreshCw, Eye } from "lucide-react";
-import { useAppDataReady, useAppDataSelectorForDomains } from "@/hooks/useAppData";
+import { useAppDataSelectorForDomains } from "@/hooks/useAppData";
+import { useEnsureAppDataWarm } from "@/hooks/useEnsureAppDataWarm";
 import type { AppDataNotifyDomain } from "@/lib/performance/appDataDomainNotify";
+import { isAppDataWarm } from "@/services/dataStore";
 import { useCooperadoTabPanelActive } from "@/hooks/useCooperadoTabPanelActive";
 import { usePermissions } from "@/hooks/usePermissions";
 import { getUserCooperativaId } from "@/utils/cooperativa";
@@ -173,7 +175,7 @@ function TabelaResumoItens({
 const FICHA_APP_DATA_DOMAINS: AppDataNotifyDomain[] = ["financeiro", "shell"];
 
 export default function FichaCorridaPage() {
-  const ready = useAppDataReady();
+  const ready = useEnsureAppDataWarm();
   const tabActive = useCooperadoTabPanelActive("/ficha-corrida");
   const data = useAppDataSelectorForDomains(FICHA_APP_DATA_DOMAINS, (d) => d, []);
   const hbDescontosRevision = useContaCoopDescontosRevision();
@@ -195,7 +197,13 @@ export default function FichaCorridaPage() {
   useEffect(() => {
     if (!tabActive) return;
     if (isCooperado && isCooperadoManualOperacionalSync()) return;
-    requestAppSync();
+    const run = () => requestAppSync();
+    if (typeof requestIdleCallback !== "undefined") {
+      const id = requestIdleCallback(run, { timeout: 2_500 });
+      return () => cancelIdleCallback(id);
+    }
+    const t = window.setTimeout(run, 0);
+    return () => window.clearTimeout(t);
   }, [isCooperado, tabActive]);
 
   useEffect(() => {
@@ -1350,7 +1358,16 @@ export default function FichaCorridaPage() {
     void baixarRecibo(pg.reciboHtml, nomeArquivoRecibo(pg.mesReferencia, nomeCooperado || "cooperado"));
   };
 
-  if (!ready || !data) return <PageSkeleton />;
+  const cooperadoInstant =
+    isCooperado &&
+    isCooperadoInstantResumeEnabled() &&
+    Boolean(user) &&
+    cooperadoLocalResumeReady(user);
+
+  if (!data) {
+    if (!ready && !cooperadoInstant && !isAppDataWarm()) return null;
+    return <PageSkeleton compact />;
+  }
 
   const pixOk = cooperadoSelecionado && !cooperadoPrecisaCadastrarPix(cooperadoSelecionado.chavePix, cooperadoSelecionado.pixValido);
   const mostrarPagar = isCooperado || aba === "pagar";
