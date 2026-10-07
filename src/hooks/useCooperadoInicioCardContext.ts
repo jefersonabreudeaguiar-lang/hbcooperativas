@@ -1,24 +1,39 @@
 "use client";
 
-import { useMemo } from "react";
+import { useCallback, useMemo } from "react";
 import { useSyncExternalStore } from "react";
-import { getData, getDataRevision, isAppDataWarm, subscribe } from "@/services/dataStore";
+import {
+  getAppDataDomainRevision,
+  subscribeAppDataDomain,
+  type AppDataNotifyDomain,
+} from "@/lib/performance/appDataDomainNotify";
+import { getData, isAppDataWarm } from "@/services/dataStore";
 import { resolverCooperadoIdCanonico } from "@/services/cooperadoCloudService";
 import { getUserCooperativaId } from "@/utils/cooperativa";
 import type { AppData, User } from "@/types";
 
-/** Contexto do card — não depende de useAppDataSelector (evita null antes do localStorage). */
+const INICIO_CARD_DOMAINS: AppDataNotifyDomain[] = ["shell", "notas", "financeiro"];
+
+function inicioCardRevisionSnapshot(): string {
+  if (!isAppDataWarm()) return "-1";
+  return INICIO_CARD_DOMAINS.map((d) => getAppDataDomainRevision(d)).join(",");
+}
+
+/** Contexto do card — revisão por domínio (evita re-render em sync operacional irrelevante). */
 export function useCooperadoInicioCardContext(user: Omit<User, "password"> | null | undefined): {
   data: AppData | null;
   cooperadoId: string;
   cooperativaId: string | undefined;
   dataReady: boolean;
 } | null {
-  const revision = useSyncExternalStore(
-    subscribe,
-    () => (isAppDataWarm() ? getDataRevision() : -1),
-    () => -1
-  );
+  const subscribeDomains = useCallback((onChange: () => void) => {
+    const unsubs = INICIO_CARD_DOMAINS.map((d) => subscribeAppDataDomain(d, onChange));
+    return () => {
+      for (const u of unsubs) u();
+    };
+  }, []);
+
+  const revisionKey = useSyncExternalStore(subscribeDomains, inicioCardRevisionSnapshot, () => "-1");
 
   return useMemo(() => {
     if (!user?.cooperadoId) return null;
@@ -33,5 +48,5 @@ export function useCooperadoInicioCardContext(user: Omit<User, "password"> | nul
         ? resolverCooperadoIdCanonico(data, user.cooperadoId, cooperativaId)
         : user.cooperadoId;
     return { data, cooperadoId, cooperativaId, dataReady };
-  }, [user?.id, user?.cooperadoId, user?.cooperativaId, revision]);
+  }, [user?.id, user?.cooperadoId, user?.cooperativaId, revisionKey]);
 }

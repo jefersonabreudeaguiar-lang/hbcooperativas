@@ -239,6 +239,7 @@ export default function FichaCorridaPage() {
   const [avulsoReceberMotivo, setAvulsoReceberMotivo] = useState("");
   const [avulsoReceberValor, setAvulsoReceberValor] = useState("");
   const [avulsoReceberData, setAvulsoReceberData] = useState(() => new Date().toISOString().split("T")[0]);
+  const [avulsoReceberNatureza, setAvulsoReceberNatureza] = useState<"credito" | "debito">("credito");
   const [divisaoFicha, setDivisaoFicha] = useState<FichaCorrida | null>(null);
   const [divisaoSelecionados, setDivisaoSelecionados] = useState<string[]>([]);
   const [divisaoSalvando, setDivisaoSalvando] = useState(false);
@@ -513,8 +514,14 @@ export default function FichaCorridaPage() {
   }, [user, coopId]);
 
   const handleLancarAvulsoReceber = useCallback(
-    (params: { motivo: string; valor: number; dataLancamento: string }) => {
+    (params: {
+      motivo: string;
+      valor: number;
+      dataLancamento: string;
+      natureza: "credito" | "debito";
+    }) => {
       if (!user || !coopId || !cooperadoSelecionadoId || isCooperado) return;
+      const ehDebito = params.natureza === "debito";
       updateData((d) => {
         const next = criarValorAvulsoReceber(d, {
           cooperativaId: coopId,
@@ -522,6 +529,7 @@ export default function FichaCorridaPage() {
           mesReferencia: mesAtivo,
           motivo: params.motivo,
           valor: params.valor,
+          natureza: params.natureza,
           responsavel: user.name,
           dataLancamento: params.dataLancamento,
         });
@@ -531,7 +539,7 @@ export default function FichaCorridaPage() {
           action: "criar",
           userId: user.id,
           userName: user.name,
-          changes: `Valor avulso a receber: ${formatCurrency(params.valor)} · ${params.motivo}`,
+          changes: `${ehDebito ? "Débito avulso" : "Valor avulso a receber"}: ${formatCurrency(params.valor)} · ${params.motivo}`,
         });
       });
       setAvulsoReceberMotivo("");
@@ -744,6 +752,7 @@ export default function FichaCorridaPage() {
           cooperativaId: coopId,
           cooperadoNome: exibicaoOpts.cooperadoNome,
           user,
+          initialDelayMs: 1_500,
         }
       : undefined
   );
@@ -843,13 +852,11 @@ export default function FichaCorridaPage() {
 
   const descontosExtrasCooperado =
     isCooperado && resumoExibicao
-      ? !visualizandoHistorico && financeiroAberto?.resumo
-        ? financeiroAberto.resumo.descontosExtras
-        : visualizandoHistorico
-          ? resumoExibicao.descontosExtras
-          : exibicaoOpts
-            ? getDescontosExtrasExibicaoCooperado(resumoExibicao, exibicaoOpts)
-            : resumoExibicao.descontosExtras
+      ? visualizandoHistorico
+        ? resumoExibicao.descontosExtras
+        : exibicaoOpts
+          ? getDescontosExtrasExibicaoCooperado(resumoExibicao, exibicaoOpts)
+          : resumoExibicao.descontosExtras
       : [];
 
   const pagarStep: 1 | 2 | 3 | 4 = (isCooperado ? pagamentoAguardandoExibicao : pagamentoAguardando)
@@ -1695,6 +1702,8 @@ export default function FichaCorridaPage() {
                   onMotivo: setAvulsoReceberMotivo,
                   onValor: setAvulsoReceberValor,
                   onData: setAvulsoReceberData,
+                  natureza: avulsoReceberNatureza,
+                  onNatureza: setAvulsoReceberNatureza,
                 }
               : undefined
           }

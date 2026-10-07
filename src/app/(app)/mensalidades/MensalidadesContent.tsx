@@ -4,6 +4,8 @@ import { Suspense, useState, useMemo, useEffect, useRef } from "react";
 import { useSearchParams } from "next/navigation";
 import { QrCode, Copy, CheckCircle2, Info, AlertCircle, Paperclip, ImagePlus, Eye } from "lucide-react";
 import { useAppDataReady, useAppDataSelector } from "@/hooks/useAppData";
+import type { AppDataNotifyDomain } from "@/lib/performance/appDataDomainNotify";
+import { useCooperadoPanelAppData } from "@/hooks/useCooperadoPanelAppData";
 import { useCooperadoTabPanelActive } from "@/hooks/useCooperadoTabPanelActive";
 import { usePermissions } from "@/hooks/usePermissions";
 import { getUserCooperativaId } from "@/utils/cooperativa";
@@ -45,6 +47,8 @@ import { MensalidadesVencidasPorMesPanel } from "@/components/mensalidade/Mensal
 
 const SHARE_KEY = "hb_comprovante_mensalidade_share";
 
+const MENSALIDADES_COOP_DOMAINS: AppDataNotifyDomain[] = ["shell", "financeiro", "operacional"];
+
 const INFO_COOPERADO =
   "Pague via PIX para o CNPJ da cooperativa. Depois compartilhe o comprovante do banco para este app (Compartilhar → HB Cooperativas) ou toque em Enviar comprovante. A diretoria confirma ao ver o PIX no extrato.";
 
@@ -79,14 +83,18 @@ function MensalidadesContent() {
   const comprovanteInputRef = useRef<HTMLInputElement>(null);
   const shareHandledRef = useRef(false);
 
-  const coopIdSel = useAppDataSelector(
+  const cooperadoPanelData = useCooperadoPanelAppData(isCooperado && tabActive, MENSALIDADES_COOP_DOMAINS);
+  const coopIdSelStaff = useAppDataSelector(
     (d) => {
       if (!user) return undefined;
       return getUserCooperativaId(user, d) ?? undefined;
     },
     [user?.id]
   );
-  const coopId = coopIdSel ?? undefined;
+  const coopId =
+    (isCooperado && cooperadoPanelData && user
+      ? getUserCooperativaId(user, cooperadoPanelData)
+      : coopIdSelStaff) ?? undefined;
   const cooperativa = useAppDataSelector(
     (d) => (coopId ? d.cooperativas.find((c) => c.id === coopId) : undefined),
     [coopId]

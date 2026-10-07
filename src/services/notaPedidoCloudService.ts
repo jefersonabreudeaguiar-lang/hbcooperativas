@@ -1527,6 +1527,68 @@ export async function refreshCooperadoNotasEmAnalise(
   };
 }
 
+/**
+ * Responsável na fila: meta leve (uploadProgress) para refletir fotos do cooperado sem full sync.
+ */
+export async function refreshStaffFilaNotasFromUploadProgress(
+  cnpj: string,
+  notaIds: string[],
+  options?: { onlyIfBehind?: boolean }
+): Promise<number> {
+  const digits = normalizeCnpj(cnpj);
+  if (digits.length !== 14 || notaIds.length === 0) return 0;
+
+  const clouds: NotaPedido[] = [];
+  const current = getData();
+
+  for (const id of notaIds) {
+    if (!id) continue;
+    try {
+      const res = await secureApiFetch(
+        `/api/notas-pedido/${encodeURIComponent(id)}?cnpj=${digits}&uploadProgress=1`,
+        { cache: "no-store" }
+      );
+      if (!res.ok) continue;
+      const json = await res.json().catch(() => ({}));
+      const meta = json.nota as NotaPedido | undefined;
+      if (!meta?.id) continue;
+      const uploadedParts = Math.max(0, Number(json.uploadedParts ?? 0));
+      const enriched: NotaPedido = {
+        ...meta,
+        fotosEnviadasCount: Math.max(meta.fotosEnviadasCount ?? 0, uploadedParts),
+        fotoNaNuvem: uploadedParts > 0 || meta.fotoNaNuvem === true,
+      };
+
+      if (options?.onlyIfBehind && current) {
+        const local = current.notasPedido.find((n) => n.id === id);
+        if (local) {
+          const localParts = contarFotosEnviadasNota(local);
+          const remoteParts = contarFotosEnviadasNota(enriched);
+          const localTs = parseNotaIsoTime(local.updatedAt) ?? 0;
+          const remoteTs = parseNotaIsoTime(enriched.updatedAt) ?? 0;
+          if (
+            remoteParts <= localParts &&
+            remoteTs <= localTs &&
+            local.status === enriched.status
+          ) {
+            continue;
+          }
+        }
+      }
+      clouds.push(enriched);
+    } catch {
+      continue;
+    }
+  }
+
+  if (clouds.length === 0) return 0;
+
+  const merged = mergeCloudNotasIntoData(current, clouds, digits);
+  if (merged === current) return 0;
+  saveDataSafe(posProcessarFinanceiroLocal(merged, digits));
+  return clouds.length;
+}
+
 export async function ensureNotaComFoto(
   data: AppData,
   nota: NotaPedido,

@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Plus, TrendingUp, TrendingDown, Wallet, Send, Pencil, Trash2, FileText, Search } from "lucide-react";
+import { Plus, TrendingUp, TrendingDown, Wallet, Send, FileText, Search } from "lucide-react";
 import { useAppData } from "@/hooks/useAppData";
 import { useAuth } from "@/modules/auth/AuthProvider";
 import { canUser } from "@/permissions";
@@ -27,7 +27,6 @@ import {
   getControleAnualLivroCaixa,
   isLancamentoManualEditavel,
   isLancamentoSemSequenciaLegado,
-  isOrigemRetencaoContabil,
   mesesLivroCaixa,
   mesReferenciaInicialLivroCaixa,
   parseNumeroSequenciaInput,
@@ -37,27 +36,16 @@ import {
   solicitarEncerramentoAnoLivroCaixa,
 } from "@/services/livroCaixaService";
 import { APP_BUILD_VERSION } from "@/lib/appBuildVersion";
-import { gerarRelatorioLivroCaixaDiaHtml } from "@/utils/livroCaixaRelatorioHtml";
+import {
+  gerarRelatorioLivroCaixaPlanilhaHtml,
+  type LivroCaixaRelatorioPlanilhaOpts,
+} from "@/utils/livroCaixaRelatorioHtml";
+import { buildPlanilhaLinhas, saldoLivroCaixaAntesMes } from "@/services/livroCaixaPlanilha";
+import { LivroCaixaPlanilhaTable } from "@/components/livro-caixa/LivroCaixaPlanilhaTable";
 import type { LivroCaixaLancamento } from "@/types";
 import { imprimirDocumentoHtml } from "@/utils/relatorioHtml";
 import { formatCurrency, formatDate, formatMesReferencia, getCurrentMesReferencia } from "@/utils/format";
-import { CONTA_COOP_DESCONTO_SPLIT } from "@/config/contaCoopEconomia";
 import type { LivroCaixaOrigem, LivroCaixaTipo, Action, Resource } from "@/types";
-
-const ORIGEM_LABELS: Record<LivroCaixaOrigem, string> = {
-  manual: "Manual",
-  mensalidade: "Mensalidade (PIX)",
-  mensalidade_ficha: "Mensalidade na ficha",
-  taxa_cooperativa: "Taxa cooperativa (5%)",
-  desconto_ficha: "Desconto retido na ficha",
-  pagamento_cooperado: "Pagamento cooperado",
-  credito_avulso: "Crédito avulso",
-  debito_avulso: "Débito avulso",
-  pnae: "PNAE / contrato",
-  prestacao_contas: "Prestação de contas",
-  hb_app_repasse: `Repasse HB HB Créditos (${CONTA_COOP_DESCONTO_SPLIT.appPercent}%)`,
-  outro: "Outro",
-};
 
 export default function LivroCaixaPage() {
   const data = useAppData();
@@ -82,8 +70,14 @@ export default function LivroCaixaPage() {
   const [editing, setEditing] = useState<LivroCaixaLancamento | null>(null);
   const [buscaSequencia, setBuscaSequencia] = useState("");
   const [destaqueSeqId, setDestaqueSeqId] = useState<string | null>(null);
+  const [relatorioModo, setRelatorioModo] = useState<LivroCaixaRelatorioPlanilhaOpts["modo"]>("mes");
   const [dataRelatorio, setDataRelatorio] = useState(new Date().toISOString().split("T")[0]);
+  const [relatorioDe, setRelatorioDe] = useState(new Date().toISOString().split("T")[0]);
+  const [relatorioAte, setRelatorioAte] = useState(new Date().toISOString().split("T")[0]);
   const [incluirFichaRelatorio, setIncluirFichaRelatorio] = useState(false);
+  const [incluirSobrasRelatorio, setIncluirSobrasRelatorio] = useState(false);
+  const [incluirAbertosRelatorio, setIncluirAbertosRelatorio] = useState(false);
+  const [somenteMesAbertoRelatorio, setSomenteMesAbertoRelatorio] = useState(false);
   const [encBackupOk, setEncBackupOk] = useState(false);
   const [encRelatoriosOk, setEncRelatoriosOk] = useState(false);
 
@@ -147,6 +141,21 @@ export default function LivroCaixaPage() {
         : { saldo: 0, saldoCaixaEfetivo: 0, totalCreditos: 0, totalDebitos: 0, totalCreditosRetencao: 0, lancamentos: [] },
     [dataCaixa, coopId]
   );
+
+  const saldoInicialMes = useMemo(
+    () => (dataCaixa && coopId ? saldoLivroCaixaAntesMes(dataCaixa, coopId, mes) : 0),
+    [dataCaixa, coopId, mes]
+  );
+
+  const planilhaLinhas = useMemo(
+    () => buildPlanilhaLinhas(resumoMes.lancamentos, saldoInicialMes),
+    [resumoMes.lancamentos, saldoInicialMes]
+  );
+
+  const saldoFinalMes = useMemo(() => {
+    if (planilhaLinhas.length) return planilhaLinhas[planilhaLinhas.length - 1].saldoCorrido;
+    return saldoInicialMes;
+  }, [planilhaLinhas, saldoInicialMes]);
 
   const controleAnual = useMemo(
     () => (dataCaixa && coopId ? getControleAnualLivroCaixa(dataCaixa, coopId) : undefined),
@@ -266,10 +275,35 @@ export default function LivroCaixaPage() {
     }
   };
 
-  const imprimirRelatorioDia = () => {
-    const html = gerarRelatorioLivroCaixaDiaHtml(data, coopId, coopNome, dataRelatorio, {
-      incluirExtratoFicha: incluirFichaRelatorio,
-    });
+  const imprimirRelatorio = () => {
+    const opts: LivroCaixaRelatorioPlanilhaOpts =
+      relatorioModo === "dia"
+        ? {
+            modo: "dia",
+            dataIso: dataRelatorio,
+            incluirExtratoFicha: incluirFichaRelatorio,
+            incluirSobrasPerdas: incluirSobrasRelatorio,
+            mesSobrasPerdas: mes,
+            incluirValoresEmAberto: incluirAbertosRelatorio,
+          }
+        : relatorioModo === "periodo"
+          ? {
+              modo: "periodo",
+              dataDe: relatorioDe,
+              dataAte: relatorioAte,
+              incluirSobrasPerdas: incluirSobrasRelatorio,
+              mesSobrasPerdas: mes,
+              incluirValoresEmAberto: incluirAbertosRelatorio,
+            }
+          : {
+              modo: "mes",
+              mesReferencia: mes,
+              somenteMesEmAberto: somenteMesAbertoRelatorio,
+              incluirSobrasPerdas: incluirSobrasRelatorio,
+              mesSobrasPerdas: mes,
+              incluirValoresEmAberto: incluirAbertosRelatorio,
+            };
+    const html = gerarRelatorioLivroCaixaPlanilhaHtml(data, coopId, coopNome, opts);
     imprimirDocumentoHtml(html);
   };
 
@@ -345,7 +379,7 @@ export default function LivroCaixaPage() {
   };
 
   return (
-    <div className="max-w-4xl space-y-6">
+    <div className="max-w-6xl space-y-6">
       <PageHeader
         title="Livro caixa"
         subtitle={
@@ -367,28 +401,24 @@ export default function LivroCaixaPage() {
         }
       />
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <div className="rounded-2xl bg-gradient-to-br from-emerald-600 to-emerald-800 text-white p-5 shadow-lg">
-          <Wallet size={24} className="opacity-90 mb-2" />
-          <p className="text-emerald-100 text-sm">Saldo caixa efetivo</p>
-          <p className="text-3xl font-bold mt-1">{formatCurrency(resumoGeral.saldoCaixaEfetivo)}</p>
-          <p className="text-xs text-emerald-100/80 mt-2">Exclui retenções contábeis da ficha</p>
-        </div>
-        <div className="rounded-2xl border border-slate-200 bg-slate-50/80 p-5">
-          <Wallet size={22} className="text-slate-600 mb-2" />
-          <p className="text-sm text-slate-700">Saldo contábil geral</p>
-          <p className="text-2xl font-bold text-slate-900">{formatCurrency(resumoGeral.saldo)}</p>
-          <p className="text-xs text-slate-500 mt-2">Inclui taxa 5% e descontos na ficha</p>
-        </div>
-        <div className="rounded-2xl border border-green-200 bg-green-50/80 p-5">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <div className="rounded-2xl border border-green-200 bg-green-50/90 p-5 shadow-sm">
           <TrendingUp size={22} className="text-green-700 mb-2" />
-          <p className="text-sm text-green-800">Entradas · {formatMesReferencia(mes)}</p>
-          <p className="text-2xl font-bold text-green-900">{formatCurrency(resumoMes.totalCreditos)}</p>
+          <p className="text-sm text-green-800 font-medium">Créditos · {formatMesReferencia(mes)}</p>
+          <p className="text-3xl font-bold text-green-900 mt-1">{formatCurrency(resumoMes.totalCreditos)}</p>
         </div>
-        <div className="rounded-2xl border border-red-200 bg-red-50/80 p-5">
+        <div className="rounded-2xl border border-red-200 bg-red-50/90 p-5 shadow-sm">
           <TrendingDown size={22} className="text-red-700 mb-2" />
-          <p className="text-sm text-red-800">Saídas · {formatMesReferencia(mes)}</p>
-          <p className="text-2xl font-bold text-red-900">{formatCurrency(resumoMes.totalDebitos)}</p>
+          <p className="text-sm text-red-800 font-medium">Débitos · {formatMesReferencia(mes)}</p>
+          <p className="text-3xl font-bold text-red-900 mt-1">{formatCurrency(resumoMes.totalDebitos)}</p>
+        </div>
+        <div className="rounded-2xl bg-gradient-to-br from-slate-700 to-slate-900 text-white p-5 shadow-lg">
+          <Wallet size={24} className="opacity-90 mb-2" />
+          <p className="text-slate-200 text-sm">Saldo corrido · {formatMesReferencia(mes)}</p>
+          <p className="text-3xl font-bold mt-1">{formatCurrency(saldoFinalMes)}</p>
+          <p className="text-xs text-slate-300 mt-2">
+            Caixa efetivo geral: {formatCurrency(resumoGeral.saldoCaixaEfetivo)}
+          </p>
         </div>
       </div>
 
@@ -410,19 +440,69 @@ export default function LivroCaixaPage() {
             </FormField>
           </div>
           <div className="space-y-3">
-            <FormField label="Relatório do dia">
-              <Input type="date" value={dataRelatorio} onChange={(e) => setDataRelatorio(e.target.value)} />
+            <FormField label="Relatório PDF / impressão">
+              <Select
+                value={relatorioModo}
+                onChange={(e) => setRelatorioModo(e.target.value as LivroCaixaRelatorioPlanilhaOpts["modo"])}
+              >
+                <option value="mes">Planilha do mês selecionado</option>
+                <option value="dia">Um dia</option>
+                <option value="periodo">Intervalo de datas</option>
+              </Select>
             </FormField>
+            {relatorioModo === "dia" && (
+              <FormField label="Data">
+                <Input type="date" value={dataRelatorio} onChange={(e) => setDataRelatorio(e.target.value)} />
+              </FormField>
+            )}
+            {relatorioModo === "periodo" && (
+              <div className="grid grid-cols-2 gap-2">
+                <FormField label="De">
+                  <Input type="date" value={relatorioDe} onChange={(e) => setRelatorioDe(e.target.value)} />
+                </FormField>
+                <FormField label="Até">
+                  <Input type="date" value={relatorioAte} onChange={(e) => setRelatorioAte(e.target.value)} />
+                </FormField>
+              </div>
+            )}
+            {relatorioModo === "mes" && (
+              <label className="flex items-center gap-2 text-sm text-gray-700">
+                <input
+                  type="checkbox"
+                  checked={somenteMesAbertoRelatorio}
+                  onChange={(e) => setSomenteMesAbertoRelatorio(e.target.checked)}
+                />
+                Filtrar só lançamentos do mês em aberto (operacional)
+              </label>
+            )}
+            {relatorioModo === "dia" && (
+              <label className="flex items-center gap-2 text-sm text-gray-700">
+                <input
+                  type="checkbox"
+                  checked={incluirFichaRelatorio}
+                  onChange={(e) => setIncluirFichaRelatorio(e.target.checked)}
+                />
+                Incluir extrato da ficha (pagamentos do dia)
+              </label>
+            )}
             <label className="flex items-center gap-2 text-sm text-gray-700">
               <input
                 type="checkbox"
-                checked={incluirFichaRelatorio}
-                onChange={(e) => setIncluirFichaRelatorio(e.target.checked)}
+                checked={incluirSobrasRelatorio}
+                onChange={(e) => setIncluirSobrasRelatorio(e.target.checked)}
               />
-              Incluir extrato da ficha corrida (pagamentos do dia)
+              Incluir sobras e perdas do mês
             </label>
-            <Button type="button" variant="secondary" onClick={imprimirRelatorioDia}>
-              <FileText size={16} /> Imprimir / PDF do dia
+            <label className="flex items-center gap-2 text-sm text-gray-700">
+              <input
+                type="checkbox"
+                checked={incluirAbertosRelatorio}
+                onChange={(e) => setIncluirAbertosRelatorio(e.target.checked)}
+              />
+              Incluir valores em aberto (a pagar cooperados, todos os meses)
+            </label>
+            <Button type="button" variant="secondary" onClick={imprimirRelatorio}>
+              <FileText size={16} /> Gerar PDF / imprimir
             </Button>
           </div>
         </div>
@@ -462,99 +542,44 @@ export default function LivroCaixaPage() {
         </Card>
       )}
 
-      <Card title={`Movimentos · ${formatMesReferencia(mes)}`}>
-        <div className="mb-4">
+      <Card title={`Livro caixa · ${formatMesReferencia(mes)}`}>
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
           <Select value={mes} onChange={(e) => setMes(e.target.value)} className="max-w-xs">
             {meses.map((m) => (
               <option key={m} value={m}>{formatMesReferencia(m)}</option>
             ))}
           </Select>
+          <p className="text-xs text-gray-500 sm:text-right max-w-md">
+            Ano-livro {controleAnual?.anoLivro ?? "—"} · sequência por evento. Pagamento ao cooperado = débito (líquido);
+            taxa, mensalidade, cota e descontos na ficha = crédito da cooperativa (retenção).
+          </p>
         </div>
-        <p className="text-sm text-gray-500 mb-4">
-          Ordem por número de sequência (ano-livro {controleAnual?.anoLivro ?? "—"}). Pagamentos a cooperados geram saída (líquido) e créditos contábeis de retenção.
-          Mensalidades confirmadas via PIX entram como entrada efetiva. Lançamentos automáticos são somente leitura. Lançamentos avulsos (criados em &quot;Lançamento&quot;) podem ser editados ou apagados.
-        </p>
-        <div className="space-y-2">
-          {resumoMes.lancamentos.map((l) => (
-            <div
-              key={l.id}
-              id={`lc-row-${l.id}`}
-              className={`flex flex-col sm:flex-row sm:items-center justify-between gap-2 p-4 rounded-xl border ${
-                destaqueSeqId === l.id ? "ring-2 ring-amber-400" : ""
-              } ${
-                l.tipo === "credito"
-                  ? isOrigemRetencaoContabil(l.origem)
-                    ? "border-blue-100 bg-blue-50/40"
-                    : "border-green-100 bg-green-50/40"
-                  : "border-red-100 bg-red-50/40"
-              }`}
-            >
-              <div className="min-w-0 flex gap-3">
-                <div className="shrink-0 w-10 text-center font-mono font-bold text-gray-700 pt-0.5">
-                  {formatNumeroSequenciaExibicao(l.numeroSequencia)}
-                </div>
-                <div>
-                <p className="font-medium text-gray-900">{l.historico}</p>
-                <p className="text-xs text-gray-500 mt-1">
-                  {formatDate(l.data)} · {ORIGEM_LABELS[l.origem]}
-                  {isOrigemRetencaoContabil(l.origem) ? " · retenção contábil" : ""}
-                  {l.responsavel ? ` · ${l.responsavel}` : ""}
-                </p>
-                </div>
-              </div>
-              <div className="flex items-center gap-2 shrink-0">
-                <p
-                  className={`text-lg font-bold ${
-                    l.tipo === "credito"
-                      ? isOrigemRetencaoContabil(l.origem)
-                        ? "text-blue-700"
-                        : "text-green-700"
-                      : "text-red-700"
-                  }`}
-                >
-                  {l.tipo === "credito" ? "+" : "−"} {formatCurrency(l.valor)}
-                </p>
-                {canEditLancamento && isLancamentoManualEditavel(l) && (
-                  <button
-                    type="button"
-                    onClick={() => openEditar(l)}
-                    className="p-2 rounded-lg hover:bg-white/80 text-gray-600"
-                    title="Editar lançamento avulso"
-                  >
-                    <Pencil size={16} />
-                  </button>
-                )}
-                {canDeleteLancamento && isLancamentoManualEditavel(l) && (
-                  <button
-                    type="button"
-                    onClick={() => excluirLancamento(l)}
-                    className="p-2 rounded-lg hover:bg-red-50 text-red-600"
-                    title="Apagar lançamento avulso"
-                  >
-                    <Trash2 size={16} />
-                  </button>
-                )}
-              </div>
-            </div>
-          ))}
-          {resumoMes.lancamentos.length === 0 && (
-            <p className="text-center text-gray-500 py-8">Nenhum lançamento neste mês.</p>
-          )}
-        </div>
-        <div className="mt-4 pt-4 border-t space-y-2 text-sm">
-          <div className="flex justify-between">
-            <span>Retenções contábeis no mês</span>
+        <LivroCaixaPlanilhaTable
+          linhas={planilhaLinhas}
+          saldoInicial={saldoInicialMes}
+          destaqueId={destaqueSeqId}
+          onEditar={openEditar}
+          onExcluir={excluirLancamento}
+          canEdit={canEditLancamento}
+          canDelete={canDeleteLancamento}
+          emptyMessage="Nenhum lançamento neste mês."
+        />
+        <div className="mt-4 pt-4 border-t grid grid-cols-1 sm:grid-cols-3 gap-3 text-sm">
+          <div className="flex justify-between sm:flex-col sm:gap-1">
+            <span className="text-gray-600">Retenções (ficha) no mês</span>
             <span className="text-blue-700 font-semibold">{formatCurrency(resumoMes.totalCreditosRetencao)}</span>
           </div>
-          <div className="flex justify-between font-semibold">
-            <span>Saldo caixa efetivo do mês</span>
-            <span className={resumoMes.saldoCaixaEfetivo >= 0 ? "text-green-700" : "text-red-700"}>
+          <div className="flex justify-between sm:flex-col sm:gap-1">
+            <span className="text-gray-600">Saldo caixa efetivo do mês</span>
+            <span className={resumoMes.saldoCaixaEfetivo >= 0 ? "text-green-700 font-semibold" : "text-red-700 font-semibold"}>
               {formatCurrency(resumoMes.saldoCaixaEfetivo)}
             </span>
           </div>
-          <div className="flex justify-between text-gray-600">
-            <span>Saldo contábil do mês</span>
-            <span className={resumoMes.saldo >= 0 ? "text-green-700" : "text-red-700"}>{formatCurrency(resumoMes.saldo)}</span>
+          <div className="flex justify-between sm:flex-col sm:gap-1">
+            <span className="text-gray-600">Saldo contábil do mês</span>
+            <span className={resumoMes.saldo >= 0 ? "text-green-700 font-semibold" : "text-red-700 font-semibold"}>
+              {formatCurrency(resumoMes.saldo)}
+            </span>
           </div>
         </div>
       </Card>

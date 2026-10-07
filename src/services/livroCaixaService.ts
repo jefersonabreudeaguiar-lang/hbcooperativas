@@ -11,7 +11,7 @@ import type {
 } from "@/types";
 import { CONTA_COOP_DESCONTO_SPLIT } from "@/config/contaCoopEconomia";
 import { round2 } from "@/utils/calculations";
-import { getCurrentMesReferencia } from "@/utils/format";
+import { formatMesReferencia, getCurrentMesReferencia } from "@/utils/format";
 
 export interface ResumoLivroCaixa {
   saldo: number;
@@ -54,7 +54,7 @@ function mesFromData(dataIso: string): string {
   return dataIso.slice(0, 7);
 }
 
-function compareLancamentoSequencia(a: LivroCaixaLancamento, b: LivroCaixaLancamento): number {
+export function compareLancamentoSequencia(a: LivroCaixaLancamento, b: LivroCaixaLancamento): number {
   const aSeq = a.numeroSequencia ?? Number.MAX_SAFE_INTEGER;
   const bSeq = b.numeroSequencia ?? Number.MAX_SAFE_INTEGER;
   if (aSeq !== bSeq) return aSeq - bSeq;
@@ -443,8 +443,28 @@ export function lancarRetencoesPagamentoNoCaixa(
   return next;
 }
 
-export function lancarPagamentoCooperadoNoCaixa(data: AppData, pagamento: PagamentoCooperadoRegistro): AppData {
+export function montarHistoricoPagamentoCooperadoCaixa(
+  data: AppData,
+  pagamento: PagamentoCooperadoRegistro
+): string {
   const cooperado = data.cooperados.find((c) => c.id === pagamento.cooperadoId);
+  const nome = cooperado?.nomeCompleto?.trim() || "Cooperado";
+  const refs =
+    pagamento.mesesReferencia?.length
+      ? pagamento.mesesReferencia.map((m) => formatMesReferencia(m)).join(", ")
+      : formatMesReferencia(pagamento.mesReferencia);
+  const fichas = (data.fichaCorrida ?? []).filter((f) => pagamento.fichaIds.includes(f.id));
+  const resumoEntrega =
+    fichas.length === 1
+      ? fichas[0].descricao?.trim()
+      : fichas.length > 1
+        ? `${fichas.length} entregas na ficha`
+        : "";
+  const detalhe = resumoEntrega ? ` · ${resumoEntrega}` : "";
+  return `Pagamento merenda · ref. ${refs} · ${nome}${detalhe}`;
+}
+
+export function lancarPagamentoCooperadoNoCaixa(data: AppData, pagamento: PagamentoCooperadoRegistro): AppData {
   const dataLanc = pagamento.pagoEm.split("T")[0];
   const existenteCtx = ctxFromPagamentoExistente(data, pagamento.id);
   let next = data;
@@ -464,7 +484,7 @@ export function lancarPagamentoCooperadoNoCaixa(data: AppData, pagamento: Pagame
         mesReferencia: pagamento.mesReferencia,
         tipo: "debito",
         valor: pagamento.valorLiquido,
-        historico: `Pagamento cooperado ${cooperado?.nomeCompleto ?? ""} · ${pagamento.mesReferencia}`,
+        historico: montarHistoricoPagamentoCooperadoCaixa(next, pagamento),
         origem: "pagamento_cooperado",
         origemId: `pg_caixa_${pagamento.id}`,
         responsavel: pagamento.pagoPor,

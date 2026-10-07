@@ -412,24 +412,40 @@ export function bicCentralGetConsolidadoFinanceiroCooperado(
   };
 
   let resumo = resumoVazio;
+  if (mesesComValor.length === 1) {
+    resumo = getResumoPagamentoExibicao(
+      data,
+      cooperadoId,
+      mesesComValor[0]!,
+      coopId,
+      ajustesPorMes?.[mesesComValor[0]!]
+    );
+  } else if (mesesComValor.length > 1) {
+    resumo = getResumoPagamentoConsolidadoCooperado(
+      data,
+      cooperadoId,
+      mesesComValor,
+      coopId,
+      ajustesPorMes
+    );
+  } else if (mesesPendentes.length === 1) {
+    resumo = getResumoPagamentoExibicao(
+      data,
+      cooperadoId,
+      mesesPendentes[0]!,
+      coopId,
+      ajustesPorMes?.[mesesPendentes[0]!]
+    );
+  } else if (mesReferenciaPrincipal) {
+    resumo = getResumoPagamentoExibicao(
+      data,
+      cooperadoId,
+      mesReferenciaPrincipal,
+      coopId,
+      ajustesPorMes?.[mesReferenciaPrincipal]
+    );
+  }
   if (m6.valor > 0) {
-    if (mesesComValor.length === 1) {
-      resumo = getResumoPagamentoExibicao(
-        data,
-        cooperadoId,
-        mesesComValor[0]!,
-        coopId,
-        ajustesPorMes?.[mesesComValor[0]!]
-      );
-    } else if (mesesComValor.length > 1) {
-      resumo = getResumoPagamentoConsolidadoCooperado(
-        data,
-        cooperadoId,
-        mesesComValor,
-        coopId,
-        ajustesPorMes
-      );
-    }
     resumo = { ...resumo, valorLiquido: m6.valor };
   }
 

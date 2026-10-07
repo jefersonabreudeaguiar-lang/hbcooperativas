@@ -12,6 +12,9 @@ import {
   valoresAvulsosHistoricoCooperado,
   valoresAvulsosPendentesMes,
   totalValoresAvulsosPendentes,
+  totalDebitosAvulsosPendentes,
+  naturezaValorAvulso,
+  type NaturezaValorAvulso,
 } from "@/services/valoresAvulsosReceberService";
 import { formatCurrency, formatDate, formatMesReferencia } from "@/utils/format";
 
@@ -22,7 +25,12 @@ interface ValoresAvulsosReceberPanelProps {
   modo: "cooperado" | "responsavel";
   /** Cooperado: filtra histórico pago ao mês exibido (ex.: aba de mês quitado). */
   filtrarHistoricoPorMes?: boolean;
-  onLancar?: (params: { motivo: string; valor: number; dataLancamento: string }) => void;
+  onLancar?: (params: {
+    motivo: string;
+    valor: number;
+    dataLancamento: string;
+    natureza: NaturezaValorAvulso;
+  }) => void;
   onRemover?: (id: string) => void;
   lancamentoForm?: {
     motivo: string;
@@ -31,6 +39,8 @@ interface ValoresAvulsosReceberPanelProps {
     onMotivo: (v: string) => void;
     onValor: (v: string) => void;
     onData: (v: string) => void;
+    natureza: NaturezaValorAvulso;
+    onNatureza: (v: NaturezaValorAvulso) => void;
   };
 }
 
@@ -60,9 +70,12 @@ export function ValoresAvulsosReceberPanel({
     historicoMes
   );
 
-  const totalPendente = mesReferencia
+  const totalCreditoPendente = mesReferencia
     ? totalValoresAvulsosPendentes(data, cooperadoId, mesReferencia, cooperativaId)
     : totalValoresAvulsosPendentes(data, cooperadoId, undefined, cooperativaId);
+  const totalDebitoPendente = mesReferencia
+    ? totalDebitosAvulsosPendentes(data, cooperadoId, mesReferencia, cooperativaId)
+    : totalDebitosAvulsosPendentes(data, cooperadoId, undefined, cooperativaId);
 
   const gerenciaveis =
     modo === "responsavel" && cooperativaId && mesReferencia
@@ -75,37 +88,78 @@ export function ValoresAvulsosReceberPanel({
 
   return (
     <Card
-      title="Créditos avulsos"
+      title="Créditos e débitos avulsos"
       className="mb-6"
     >
       <p className="text-sm text-gray-600 mb-4 -mt-2">
         {modo === "cooperado"
-          ? "Valores extras creditados pela cooperativa — entram no total a receber do mês."
-          : "Lance créditos extras para este cooperado. Somam ao pagamento do mês selecionado."}
+          ? "Ajustes avulsos da cooperativa neste mês — créditos somam ao receber; débitos descontam."
+          : "Lance crédito ou débito avulso para o cooperado selecionado no mês ativo."}
         {mesReferencia && (
           <span className="block mt-1 font-medium text-gray-800">{formatMesReferencia(mesReferencia)}</span>
         )}
       </p>
 
-      {totalPendente > 0 && (
-        <div className="rounded-xl bg-emerald-50 border border-emerald-200 p-4 mb-4">
-          <div className="flex items-start gap-3">
-            <Banknote size={22} className="text-emerald-700 shrink-0 mt-0.5" />
-            <div className="flex-1 min-w-0">
-              <p className="font-semibold text-emerald-900">
-                {modo === "cooperado" ? "Total de créditos pendentes" : "Pendente neste mês"}
-              </p>
-              <p className="text-2xl font-bold text-emerald-800 mt-1">{formatCurrency(totalPendente)}</p>
+      {(totalCreditoPendente > 0 || totalDebitoPendente > 0) && (
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-4">
+          {totalCreditoPendente > 0 && (
+            <div className="rounded-xl bg-emerald-50 border border-emerald-200 p-4">
+              <div className="flex items-start gap-3">
+                <Banknote size={22} className="text-emerald-700 shrink-0 mt-0.5" />
+                <div className="flex-1 min-w-0">
+                  <p className="font-semibold text-emerald-900">
+                    {modo === "cooperado" ? "Créditos pendentes" : "Crédito neste mês"}
+                  </p>
+                  <p className="text-2xl font-bold text-emerald-800 mt-1">{formatCurrency(totalCreditoPendente)}</p>
+                </div>
+              </div>
             </div>
-          </div>
+          )}
+          {totalDebitoPendente > 0 && (
+            <div className="rounded-xl bg-amber-50 border border-amber-200 p-4">
+              <div className="flex items-start gap-3">
+                <Banknote size={22} className="text-amber-800 shrink-0 mt-0.5" />
+                <div className="flex-1 min-w-0">
+                  <p className="font-semibold text-amber-900">
+                    {modo === "cooperado" ? "Débitos pendentes" : "Débito neste mês"}
+                  </p>
+                  <p className="text-2xl font-bold text-amber-900 mt-1">- {formatCurrency(totalDebitoPendente)}</p>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       )}
 
       {modo === "responsavel" && lancamentoForm && onLancar && (
         <div className="rounded-xl border border-blue-200 bg-blue-50/50 p-4 mb-4 space-y-3">
           <p className="text-sm font-semibold text-blue-900 flex items-center gap-2">
-            <Plus size={16} /> Adicionar crédito avulso
+            <Plus size={16} /> Lançar ajuste avulso
           </p>
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              className={`px-3 py-1.5 rounded-lg text-sm font-medium border ${
+                lancamentoForm.natureza === "credito"
+                  ? "bg-emerald-600 text-white border-emerald-600"
+                  : "bg-white text-gray-700 border-gray-300"
+              }`}
+              onClick={() => lancamentoForm.onNatureza("credito")}
+            >
+              Crédito
+            </button>
+            <button
+              type="button"
+              className={`px-3 py-1.5 rounded-lg text-sm font-medium border ${
+                lancamentoForm.natureza === "debito"
+                  ? "bg-amber-600 text-white border-amber-600"
+                  : "bg-white text-gray-700 border-gray-300"
+              }`}
+              onClick={() => lancamentoForm.onNatureza("debito")}
+            >
+              Débito
+            </button>
+          </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <FormField label="Valor (R$)" required>
               <Input
@@ -128,7 +182,11 @@ export function ValoresAvulsosReceberPanel({
                 <Textarea
                   value={lancamentoForm.motivo}
                   onChange={(e) => lancamentoForm.onMotivo(e.target.value)}
-                  placeholder="Ex.: diferença de entrega, bonificação, ajuste acordado"
+                  placeholder={
+                    lancamentoForm.natureza === "debito"
+                      ? "Ex.: devolução, multa, ajuste a descontar"
+                      : "Ex.: diferença de entrega, bonificação, ajuste acordado"
+                  }
                   rows={2}
                 />
               </FormField>
@@ -142,10 +200,11 @@ export function ValoresAvulsosReceberPanel({
                 motivo: lancamentoForm.motivo.trim(),
                 valor,
                 dataLancamento: lancamentoForm.data,
+                natureza: lancamentoForm.natureza,
               });
             }}
           >
-            Lançar crédito avulso
+            {lancamentoForm.natureza === "debito" ? "Lançar débito avulso" : "Lançar crédito avulso"}
           </Button>
         </div>
       )}
@@ -154,17 +213,25 @@ export function ValoresAvulsosReceberPanel({
         <div className="mb-4">
           <p className="text-sm font-semibold text-gray-800 mb-2">Pendentes</p>
           <ul className="divide-y divide-gray-100 rounded-xl border border-gray-200 overflow-hidden">
-            {pendentes.map((v) => (
+            {pendentes.map((v) => {
+              const debito = naturezaValorAvulso(v) === "debito";
+              return (
               <li key={v.id} className="px-4 py-3 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 bg-white">
                 <div>
-                  <p className="font-medium text-gray-900">{v.motivo}</p>
+                  <p className="font-medium text-gray-900">
+                    {debito ? "Débito: " : "Crédito: "}
+                    {v.motivo}
+                  </p>
                   <p className="text-xs text-gray-500 mt-0.5">
                     {formatMesReferencia(v.mesReferencia)} · lançado em {formatDate(v.dataLancamento)}
                     {v.responsavel ? ` · por ${v.responsavel}` : ""}
                   </p>
                 </div>
                 <div className="flex items-center gap-2 shrink-0">
-                  <span className="font-bold text-emerald-700">{formatCurrency(v.valor)}</span>
+                  <span className={`font-bold ${debito ? "text-amber-800" : "text-emerald-700"}`}>
+                    {debito ? "- " : ""}
+                    {formatCurrency(v.valor)}
+                  </span>
                   {modo === "responsavel" && onRemover && (
                     <Button size="sm" variant="secondary" onClick={() => onRemover(v.id)}>
                       Excluir
@@ -172,7 +239,8 @@ export function ValoresAvulsosReceberPanel({
                   )}
                 </div>
               </li>
-            ))}
+            );
+            })}
           </ul>
         </div>
       )}
@@ -186,32 +254,41 @@ export function ValoresAvulsosReceberPanel({
             )}
           </p>
           <ul className="divide-y divide-gray-100 rounded-xl border border-gray-200 overflow-hidden max-h-72 overflow-y-auto">
-            {itensHistorico.map((v) => (
+            {itensHistorico.map((v) => {
+              const debito = naturezaValorAvulso(v) === "debito";
+              return (
               <li key={v.id} className="px-4 py-3 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1 bg-gray-50/80">
                 <div>
-                  <p className="font-medium text-gray-800">{v.motivo}</p>
+                  <p className="font-medium text-gray-800">
+                    {debito ? "Débito: " : "Crédito: "}
+                    {v.motivo}
+                  </p>
                   <p className="text-xs text-gray-500">
                     {formatMesReferencia(v.mesReferencia)}
                     {v.dataPagamento ? ` · pago em ${formatDate(v.dataPagamento)}` : ""}
                     {v.dataLancamento ? ` · lançado em ${formatDate(v.dataLancamento)}` : ""}
                   </p>
                 </div>
-                <span className="font-semibold text-gray-700 shrink-0">{formatCurrency(v.valor)}</span>
+                <span className={`font-semibold shrink-0 ${debito ? "text-amber-900" : "text-gray-700"}`}>
+                  {debito ? "- " : ""}
+                  {formatCurrency(v.valor)}
+                </span>
               </li>
-            ))}
+            );
+            })}
           </ul>
         </div>
       )}
 
       {vazio && modo === "cooperado" && (
         <p className="text-sm text-gray-500 py-2">
-          Nenhum crédito avulso registrado
+          Nenhum crédito ou débito avulso registrado
           {mesReferencia ? ` em ${formatMesReferencia(mesReferencia)}` : ""}.
         </p>
       )}
 
       {vazio && modo === "responsavel" && !onLancar && (
-        <p className="text-sm text-gray-500 py-2">Nenhum crédito avulso neste mês.</p>
+        <p className="text-sm text-gray-500 py-2">Nenhum crédito ou débito avulso neste mês.</p>
       )}
     </Card>
   );

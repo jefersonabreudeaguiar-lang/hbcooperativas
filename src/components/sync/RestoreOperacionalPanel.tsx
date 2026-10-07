@@ -30,10 +30,13 @@ export function RestoreOperacionalPanel({ cnpj, coopId, compact }: Props) {
   const [resultOk, setResultOk] = useState<boolean | null>(null);
 
   const localRevision = useAppDataSelector(
-    (data) =>
-      data
-        ? `${data.pagamentosCooperado.length}-${data.fichaCorrida.length}-${data.pagamentosCooperado.filter((p) => p.cooperativaId === coopId && p.status === "aguardando_confirmacao").length}`
-        : "",
+    (data) => {
+      if (!data) return "";
+      const pag = data.pagamentosCooperado.filter((p) => p.cooperativaId === coopId);
+      const fichas = data.fichaCorrida.filter((f) => f.cooperativaId === coopId);
+      const aguardando = pag.filter((p) => p.status === "aguardando_confirmacao").length;
+      return `${pag.length}-${fichas.length}-${aguardando}`;
+    },
     [coopId]
   );
 
@@ -47,7 +50,10 @@ export function RestoreOperacionalPanel({ cnpj, coopId, compact }: Props) {
   }, [cnpj, coopId]);
 
   useEffect(() => {
-    void refreshCloudStats();
+    const timer = window.setTimeout(() => {
+      void refreshCloudStats();
+    }, 600);
+    return () => window.clearTimeout(timer);
   }, [refreshCloudStats, localRevision]);
 
   const onRestore = async () => {

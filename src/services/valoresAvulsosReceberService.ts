@@ -5,6 +5,12 @@ import { round2 } from "@/utils/calculations";
 /** Motivo fixo quando o cooperado dilui cashback HB no resumo “a receber”. */
 export const CASHBACK_HB_CREDITO_MOTIVO_AVULSO = "Cashback HB Crédito";
 
+export type NaturezaValorAvulso = "credito" | "debito";
+
+export function naturezaValorAvulso(v: ValorAvulsoReceber): NaturezaValorAvulso {
+  return v.natureza === "debito" ? "debito" : "credito";
+}
+
 export function temCashbackHbCreditoPendenteMes(
   data: AppData,
   cooperadoId: string,
@@ -69,7 +75,26 @@ export function totalValoresAvulsosPendentes(
 ): number {
   const lista = valoresAvulsosDoCooperado(data, cooperadoId, cooperativaId).filter((v) => v.status === "pendente");
   const filtrada = mesReferencia ? lista.filter((v) => v.mesReferencia === mesReferencia) : lista;
-  return round2(filtrada.reduce((s, v) => s + v.valor, 0));
+  return round2(
+    filtrada
+      .filter((v) => naturezaValorAvulso(v) === "credito")
+      .reduce((s, v) => s + v.valor, 0)
+  );
+}
+
+export function totalDebitosAvulsosPendentes(
+  data: AppData,
+  cooperadoId: string,
+  mesReferencia?: string,
+  cooperativaId?: string
+): number {
+  const lista = valoresAvulsosDoCooperado(data, cooperadoId, cooperativaId).filter((v) => v.status === "pendente");
+  const filtrada = mesReferencia ? lista.filter((v) => v.mesReferencia === mesReferencia) : lista;
+  return round2(
+    filtrada
+      .filter((v) => naturezaValorAvulso(v) === "debito")
+      .reduce((s, v) => s + v.valor, 0)
+  );
 }
 
 export function valoresAvulsosDaCooperativa(
@@ -96,6 +121,7 @@ export function criarValorAvulsoReceber(
     mesReferencia: string;
     motivo: string;
     valor: number;
+    natureza?: NaturezaValorAvulso;
     responsavel: string;
     dataLancamento?: string;
     id?: string;
@@ -110,6 +136,7 @@ export function criarValorAvulsoReceber(
     mesReferencia: params.mesReferencia,
     motivo: params.motivo.trim(),
     valor: round2(Math.max(0, params.valor)),
+    natureza: params.natureza === "debito" ? "debito" : "credito",
     status: "pendente",
     responsavel: params.responsavel,
     dataLancamento: params.dataLancamento ?? now.split("T")[0],

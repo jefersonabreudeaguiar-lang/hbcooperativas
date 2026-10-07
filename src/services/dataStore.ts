@@ -109,11 +109,16 @@ function invalidateCache(): void {
 function notify(): void {
   if (notifyFlushScheduled) return;
   notifyFlushScheduled = true;
-  queueMicrotask(() => {
+  const flush = () => {
     notifyFlushScheduled = false;
     bumpRevision();
     listeners.forEach((l) => l());
-  });
+  };
+  if (typeof requestAnimationFrame === "function") {
+    requestAnimationFrame(flush);
+  } else {
+    queueMicrotask(flush);
+  }
 }
 
 /** Atualização instantânea da UI — sem esperar microtask nem disco. */
@@ -296,6 +301,11 @@ export function endConferenciaModalSaveBatch(): { ok: true } | { ok: false; erro
   const saved = persistConferenciaModalSnapshotWithFallback(snapshot);
   if (!saved.ok) notifyImmediate();
   return saved;
+}
+
+/** Lançamento foto a foto — mesmo escopo de defer que aprovação (shouldPersist false no batch). */
+export function beginConferenciaModalFotoSaveBatch(): void {
+  beginConferenciaModalSaveBatch();
 }
 
 /** Lançamento foto a foto — uma notificação coalescida (menos re-render que aprovação final). */

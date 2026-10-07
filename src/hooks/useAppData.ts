@@ -95,6 +95,36 @@ export function useAppDataSelector<T>(
   }, [revision, ...deps]);
 }
 
+/** Keep-alive mobile: painel inativo não re-renderiza a cada sync. */
+export function useAppDataSelectorForDomainsWhenActive<T>(
+  panelActive: boolean,
+  domains: readonly AppDataNotifyDomain[],
+  selector: (data: AppData) => T,
+  deps: readonly unknown[] = []
+): T | null {
+  const domainKey = normalizeDomains(domains).join("|");
+  const subscribeDomains = useCallback(
+    (onStoreChange: () => void) => {
+      if (!panelActive) return () => undefined;
+      return subscribeAppDataDomains(domains, onStoreChange);
+    },
+    [panelActive, domainKey]
+  );
+  const domainRevision = useSyncExternalStore(
+    subscribeDomains,
+    () => (panelActive ? getDomainsRevisionSnapshot(domains) : `paused:${domainKey}`),
+    () => ""
+  );
+  const selectorRef = useRef(selector);
+  selectorRef.current = selector;
+
+  return useMemo(() => {
+    if (!isAppDataWarm()) return null;
+    return selectorRef.current(getData());
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- domainRevision + deps
+  }, [domainRevision, ...deps]);
+}
+
 export function useAppDataSelectorForDomains<T>(
   domains: readonly AppDataNotifyDomain[],
   selector: (data: AppData) => T,

@@ -15,7 +15,7 @@ export async function POST(request: Request) {
 
   const body = await request.json().catch(() => null);
   const email = String(body?.email ?? "").trim().toLowerCase();
-  const password = String(body?.password ?? "");
+  const password = String(body?.password ?? "").trim();
 
   if (!email || !password) {
     return NextResponse.json({ error: "E-mail e senha são obrigatórios." }, { status: 400 });

@@ -4,7 +4,9 @@ import { useState, useMemo, useEffect, useCallback, useRef } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { Download, Printer, FileText } from "lucide-react";
-import { useAppData } from "@/hooks/useAppData";
+import { useStaffPanelAppData } from "@/hooks/useCooperadoPanelAppData";
+import { useCooperadoTabPanelActive } from "@/hooks/useCooperadoTabPanelActive";
+import type { AppDataNotifyDomain } from "@/lib/performance/appDataDomainNotify";
 import { useSyncContaCoopValorReceberCooperativa } from "@/hooks/useSyncContaCoopValorReceberCooperativa";
 import { usePermissions } from "@/hooks/usePermissions";
 import { getUserCooperativaId } from "@/utils/cooperativa";
@@ -148,8 +150,11 @@ function relatorioVisivel(role: UserRole | string | undefined, r: ReportDef): bo
   return true;
 }
 
+const RELATORIOS_STAFF_DOMAINS: AppDataNotifyDomain[] = ["shell", "financeiro", "notas", "operacional"];
+
 export default function RelatoriosPage() {
-  const data = useAppData();
+  const tabActive = useCooperadoTabPanelActive("/relatorios");
+  const data = useStaffPanelAppData(tabActive, RELATORIOS_STAFF_DOMAINS);
   const { user, check } = usePermissions();
   const router = useRouter();
   const searchParams = useSearchParams();

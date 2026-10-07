@@ -2281,11 +2281,19 @@ export function getResumoPagamentoCooperado(
   }
   for (const avulso of valoresAvulsosPendentesMes(data, cooperadoCanonico, mesReferencia, coopIdResolved)) {
     if (avulso.valor <= 0) continue;
-    descontosExtras.push({
-      tipo: "credito_avulso",
-      motivo: avulso.motivo.trim() || "Valor avulso a receber",
-      valor: avulso.valor,
-    });
+    if (avulso.natureza === "debito") {
+      descontosExtras.push({
+        tipo: "manual",
+        motivo: avulso.motivo.trim() || "Débito avulso",
+        valor: avulso.valor,
+      });
+    } else {
+      descontosExtras.push({
+        tipo: "credito_avulso",
+        motivo: avulso.motivo.trim() || "Valor avulso a receber",
+        valor: avulso.valor,
+      });
+    }
   }
   for (const line of descontosContaCoopLinhasExibicao(coopMes)) {
     descontosExtras.push(line);

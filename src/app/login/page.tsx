@@ -92,7 +92,7 @@ function LoginForm() {
     setError("");
     setSubmitting(true);
     try {
-      const result = await login(email, password);
+      const result = await login(email.trim(), password.trim());
       if (result.ok) {
         router.push(result.redirectTo ?? redirectTo);
       } else {

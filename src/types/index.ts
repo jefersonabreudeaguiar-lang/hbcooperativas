@@ -383,7 +383,7 @@ export interface DivisaoEntregaNota {
   divididoEm: string;
 }
 
-/** Valor extra a receber, lançado pela cooperativa para cooperado específico. */
+/** Valor extra a receber ou débito avulso, lançado pela cooperativa para cooperado específico. */
 export interface ValorAvulsoReceber {
   id: string;
   cooperativaId: string;
@@ -391,6 +391,8 @@ export interface ValorAvulsoReceber {
   mesReferencia: string;
   motivo: string;
   valor: number;
+  /** Omitido = crédito (compatível com dados antigos). */
+  natureza?: "credito" | "debito";
   status: "pendente" | "pago";
   responsavel: string;
   dataLancamento: string;

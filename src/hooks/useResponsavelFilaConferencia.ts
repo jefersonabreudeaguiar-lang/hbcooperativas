@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef } from "react";
 import type { NotaPedido } from "@/types";
-import { useAppDataSelectorForDomains } from "@/hooks/useAppData";
+import { useAppDataSelectorForDomainsWhenActive } from "@/hooks/useAppData";
 import type { AppDataNotifyDomain } from "@/lib/performance/appDataDomainNotify";
 import { getDataOperationalTruth, isAppDataWarm } from "@/services/dataStore";
 import {
@@ -27,11 +27,14 @@ const FILA_CONFERENCIA_DOMAINS: AppDataNotifyDomain[] = ["shell", "notas"];
 export function useResponsavelFilaConferencia(
   coopId: string | undefined,
   isCooperado: boolean,
-  filaDetalhada: boolean
+  filaDetalhada: boolean,
+  panelActive = true
 ) {
+  const subscribeFila = panelActive && !isCooperado;
   const stickyRef = useRef({ ids: new Set<string>(), snapshot: new Map<string, NotaPedido>() });
 
-  const pendingDeleteIds = useAppDataSelectorForDomains(
+  const pendingDeleteIds = useAppDataSelectorForDomainsWhenActive(
+    subscribeFila,
     FILA_CONFERENCIA_DOMAINS,
     (d) => {
       if (!coopId) return new Set<string>();
@@ -42,7 +45,8 @@ export function useResponsavelFilaConferencia(
   );
 
   const pendentesTodasBase =
-    useAppDataSelectorForDomains(
+    useAppDataSelectorForDomainsWhenActive(
+      subscribeFila,
       FILA_CONFERENCIA_DOMAINS,
       (d) => {
         if (isCooperado || !coopId || !filaDetalhada) return [] as NotaPedido[];
@@ -55,7 +59,8 @@ export function useResponsavelFilaConferencia(
     ) ?? [];
 
   const filaBadgeCount =
-    useAppDataSelectorForDomains(
+    useAppDataSelectorForDomainsWhenActive(
+      subscribeFila,
       FILA_CONFERENCIA_DOMAINS,
       (d) => {
         if (isCooperado || !coopId || filaDetalhada) return 0;
