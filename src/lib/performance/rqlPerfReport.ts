@@ -121,6 +121,16 @@ function browserRqlPerfDebugOn(): boolean {
   return false;
 }
 
+/**
+ * Stub síncrono no <head> — `window.__hbRqlPerf` existe antes do React (evita undefined no console).
+ * O bundle substitui pelo handle completo em `installRqlPerfDebugGlobal`.
+ */
+export function buildInlineRqlPerfStubScript(): string {
+  const key = RQL_PERF_DEBUG_STORAGE_KEY;
+  const param = RQL_PERF_DEBUG_URL_PARAM;
+  return `(function(){var KEY=${JSON.stringify(key)};var PARAM=${JSON.stringify(param)};function applyUrl(){try{var q=new URLSearchParams(location.search).get(PARAM);if(q==="1"||q==="true"||q==="yes")sessionStorage.setItem(KEY,"1");}catch(e){}}applyUrl();function hint(){var b=document.documentElement.getAttribute("data-app-build")||"?";console.info("[HB RQL] build "+b+" — medição completa após o app carregar. Se vazio: localStorage.setItem(\\""+KEY+"\\",\\"1\\"); location.reload(); ou ?"+PARAM+"=1");}var stub={__hbRqlStub:1,printWhatsappCompare:function(){hint();return null;},whatsappCompare:function(){hint();return null;},print:function(){hint();return null;},report:function(){hint();return null;},summary:function(){hint();return "";}};if(!window.__hbRqlPerf||window.__hbRqlPerf.__hbRqlStub)window.__hbRqlPerf=stub;if(!window.__hbRq1Perf||window.__hbRq1Perf.__hbRqlStub)window.__hbRq1Perf=stub;})();`;
+}
+
 /** `?hbRqlPerf=1` na URL grava flag de sessão antes do bootstrap React. */
 export function ensureRqlPerfDebugOptInFromUrl(): void {
   if (typeof window === "undefined") return;
@@ -260,8 +270,5 @@ export function installRqlPerfDebugGlobal(): () => void {
 
   return () => {
     obs?.disconnect();
-    const w = window as Window & { __hbRqlPerf?: RqlPerfDebugHandle; __hbRq1Perf?: RqlPerfDebugHandle };
-    delete w.__hbRqlPerf;
-    delete w.__hbRq1Perf;
   };
 }

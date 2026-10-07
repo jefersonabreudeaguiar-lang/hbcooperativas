@@ -11,6 +11,8 @@ import {
   buildInlinePageReleaseBootstrap,
   type ClientReleaseInfo,
 } from "@/lib/pwa/clientRelease";
+import { buildInlineRqlPerfStubScript } from "@/lib/performance/rqlPerfReport";
+import { RqlPerfDebugBootstrap } from "@/components/performance/RqlPerfDebugBootstrap";
 
 const geist = Geist({
   variable: "--font-geist-sans",
@@ -75,9 +77,11 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <head>
         <script dangerouslySetInnerHTML={{ __html: buildInlinePageReleaseBootstrap(pageRelease) }} />
         <script dangerouslySetInnerHTML={{ __html: buildInlineDeploymentBootScript(pageRelease) }} />
+        <script dangerouslySetInnerHTML={{ __html: buildInlineRqlPerfStubScript() }} />
       </head>
       <body className="min-h-full antialiased">
         <AuthProvider>
+          <RqlPerfDebugBootstrap />
           <ClientDeploymentGuard />
           {children}
           <PwaProvider />
