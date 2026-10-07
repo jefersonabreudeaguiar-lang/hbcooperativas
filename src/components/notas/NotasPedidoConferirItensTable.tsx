@@ -1,18 +1,21 @@
 "use client";
 
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import type { NotaPedido } from "@/types";
 import { AlertBanner } from "@/components/ui/AlertBanner";
-import { Input } from "@/components/ui/Form";
 import { cn, formatCurrency } from "@/utils/format";
 import { labelUnidade } from "@/utils/unidades";
 import { contarFotosEnviadasNota } from "@/utils/fotoEntrega";
+import { calcularTotaisConferenciaItens } from "@/lib/conferencia/conferenciaItensLive";
+import { ConferenciaQuantidadeInput } from "@/components/notas/ConferenciaQuantidadeInput";
 
 export type ConferenciaItemRow = {
   produtoInstituicaoId: string;
   produtoNome: string;
   unidade: string;
   quantidade: number;
+  precoUnitario?: number;
 };
 
 function qtyInputClassName(filled: boolean, extra?: string) {
@@ -33,23 +36,132 @@ export type NotasPedidoConferirItensTableProps = {
   conferenciaFotoIdx: number;
   conferenciaDescontoPct: number;
   conferenciaItens: ConferenciaItemRow[];
-  conferenciaTotais: { bruto: number; desconto: number; liquido: number };
+  /** Troca de nota/foto — reinicia rascunho local. */
+  conferenciaDraftKey: string;
   conferirErrorsItens?: string;
-  onUpdateQty: (idx: number, qty: number) => void;
+  onDraftLiveChange: (items: ConferenciaItemRow[]) => void;
+  onDraftCommit: (items: ConferenciaItemRow[]) => void;
 };
 
-export function NotasPedidoConferirItensTable({
+const ConferenciaItemQtyRow = memo(function ConferenciaItemQtyRow({
+  item,
+  idx,
+  disabled,
+  onLiveQty,
+  onCommitQty,
+}: {
+  item: ConferenciaItemRow;
+  idx: number;
+  disabled: boolean;
+  onLiveQty: (idx: number, qty: number) => void;
+  onCommitQty: (idx: number, qty: number) => void;
+}) {
+  const onLive = useCallback((qty: number) => onLiveQty(idx, qty), [idx, onLiveQty]);
+  const onCommit = useCallback((qty: number) => onCommitQty(idx, qty), [idx, onCommitQty]);
+
+  return (
+    <tr
+      className={cn(item.quantidade > 0 ? "bg-green-50/50" : "bg-amber-50/30 hover:bg-amber-50/60")}
+    >
+      <td className="px-4 py-3 font-medium text-gray-900">{item.produtoNome}</td>
+      <td className="px-4 py-3">
+        <div className="mx-auto w-full max-w-[9rem] text-center">
+          <p className="text-[10px] font-bold uppercase tracking-wide text-amber-700 mb-1">Digite aqui</p>
+          <ConferenciaQuantidadeInput
+            value={item.quantidade}
+            disabled={disabled}
+            ariaLabel={`Quantidade de ${item.produtoNome}`}
+            className={qtyInputClassName(
+              item.quantidade > 0,
+              cn("w-full", disabled && "opacity-70 cursor-not-allowed")
+            )}
+            onLiveQty={onLive}
+            onCommitQty={onCommit}
+          />
+          <p className="text-[10px] font-medium text-gray-600 mt-1">{labelUnidade(item.unidade)}</p>
+        </div>
+      </td>
+    </tr>
+  );
+});
+
+export const NotasPedidoConferirItensTable = memo(function NotasPedidoConferirItensTable({
   selectedNota,
   conferenciaInstNome,
   conferenciaFotoSomenteLeitura,
   conferenciaFotoIdx,
   conferenciaDescontoPct,
   conferenciaItens,
-  conferenciaTotais,
+  conferenciaDraftKey,
   conferirErrorsItens,
-  onUpdateQty,
+  onDraftLiveChange,
+  onDraftCommit,
 }: NotasPedidoConferirItensTableProps) {
-  if (conferenciaItens.length === 0) {
+  const [draft, setDraft] = useState(conferenciaItens);
+  const draftKeyRef = useRef(conferenciaDraftKey);
+  const commitTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    if (draftKeyRef.current === conferenciaDraftKey) return;
+    draftKeyRef.current = conferenciaDraftKey;
+    setDraft(conferenciaItens);
+    onDraftLiveChange(conferenciaItens);
+  }, [conferenciaDraftKey, conferenciaItens, onDraftLiveChange]);
+
+  const scheduleCommit = useCallback(
+    (items: ConferenciaItemRow[]) => {
+      if (commitTimerRef.current) clearTimeout(commitTimerRef.current);
+      commitTimerRef.current = setTimeout(() => {
+        commitTimerRef.current = null;
+        onDraftCommit(items);
+      }, 320);
+    },
+    [onDraftCommit]
+  );
+
+  useEffect(
+    () => () => {
+      if (commitTimerRef.current) clearTimeout(commitTimerRef.current);
+    },
+    []
+  );
+
+  const applyQty = useCallback(
+    (idx: number, qty: number, commitNow: boolean) => {
+      setDraft((prev) => {
+        const next = prev.map((item, i) => (i === idx ? { ...item, quantidade: qty } : item));
+        onDraftLiveChange(next);
+        if (commitNow) {
+          if (commitTimerRef.current) clearTimeout(commitTimerRef.current);
+          onDraftCommit(next);
+        } else {
+          scheduleCommit(next);
+        }
+        return next;
+      });
+    },
+    [onDraftCommit, onDraftLiveChange, scheduleCommit]
+  );
+
+  const onLiveQty = useCallback(
+    (idx: number, qty: number) => applyQty(idx, qty, false),
+    [applyQty]
+  );
+  const onCommitQty = useCallback(
+    (idx: number, qty: number) => applyQty(idx, qty, true),
+    [applyQty]
+  );
+
+  const conferenciaTotais = useMemo(
+    () =>
+      calcularTotaisConferenciaItens(
+        draft.map((i) => ({ ...i, precoUnitario: i.precoUnitario ?? 0 })),
+        conferenciaDescontoPct
+      ),
+    [draft, conferenciaDescontoPct]
+  );
+
+  if (draft.length === 0) {
     return (
       <AlertBanner variant="warning">
         Este contrato ainda não tem itens.{" "}
@@ -85,42 +197,15 @@ export function NotasPedidoConferirItensTable({
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-100">
-            {conferenciaItens.map((item, idx) => (
-              <tr
+            {draft.map((item, idx) => (
+              <ConferenciaItemQtyRow
                 key={item.produtoInstituicaoId}
-                className={cn(item.quantidade > 0 ? "bg-green-50/50" : "bg-amber-50/30 hover:bg-amber-50/60")}
-              >
-                <td className="px-4 py-3 font-medium text-gray-900">{item.produtoNome}</td>
-                <td className="px-4 py-3">
-                  <div className="mx-auto w-full max-w-[9rem] text-center">
-                    <p className="text-[10px] font-bold uppercase tracking-wide text-amber-700 mb-1">Digite aqui</p>
-                    <Input
-                      type="number"
-                      min={0}
-                      step="0.01"
-                      inputMode="decimal"
-                      disabled={conferenciaFotoSomenteLeitura}
-                      aria-label={`Quantidade de ${item.produtoNome}`}
-                      placeholder="0"
-                      className={qtyInputClassName(
-                        item.quantidade > 0,
-                        cn("w-full", conferenciaFotoSomenteLeitura && "opacity-70 cursor-not-allowed")
-                      )}
-                      value={item.quantidade === 0 ? "" : item.quantidade}
-                      onChange={(e) => {
-                        const raw = e.target.value;
-                        if (raw === "" || raw === ".") {
-                          onUpdateQty(idx, 0);
-                          return;
-                        }
-                        const qty = parseFloat(raw);
-                        if (!Number.isNaN(qty)) onUpdateQty(idx, qty);
-                      }}
-                    />
-                    <p className="text-[10px] font-medium text-gray-600 mt-1">{labelUnidade(item.unidade)}</p>
-                  </div>
-                </td>
-              </tr>
+                item={item}
+                idx={idx}
+                disabled={conferenciaFotoSomenteLeitura}
+                onLiveQty={onLiveQty}
+                onCommitQty={onCommitQty}
+              />
             ))}
           </tbody>
         </table>
@@ -141,4 +226,4 @@ export function NotasPedidoConferirItensTable({
       </div>
     </div>
   );
-}
+});

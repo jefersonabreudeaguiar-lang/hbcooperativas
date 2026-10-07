@@ -85,6 +85,11 @@ import {
   validarTodasFotosLancadasConferencia,
 } from "@/lib/conferencia/conferenciaFichaHydrate";
 import {
+  calcularTotaisConferenciaItens,
+  resolveConferenciaItensLive,
+} from "@/lib/conferencia/conferenciaItensLive";
+import type { ConferenciaItemRow } from "@/components/notas/NotasPedidoConferirItensTable";
+import {
   calcularItensNota,
   gerarNumeroNota,
   isNumeroNotaJaConferidaParaCooperado,
@@ -406,6 +411,12 @@ export default function NotasPedidoCooperadoMain() {
 
   const [selectedNota, setSelectedNota] = useState<NotaPedido | null>(null);
   const [conferenciaItens, setConferenciaItens] = useState<ItemForm[]>([]);
+  const conferenciaItensLiveRef = useRef<ItemForm[]>([]);
+  const [conferenciaTotaisUi, setConferenciaTotaisUi] = useState({
+    liquido: 0,
+    bruto: 0,
+    desconto: 0,
+  });
   const [conferenciaCooperadoId, setConferenciaCooperadoId] = useState("");
   /** 0 = não dividir; 1–5 = quantidade de cooperados na divisão. */
   const [conferenciaDivisaoQtd, setConferenciaDivisaoQtd] = useState(0);
@@ -741,7 +752,7 @@ export default function NotasPedidoCooperadoMain() {
       escolaAvulsa: conferenciaEscolaAvulsa,
       numeroNotaManual: conferenciaNumeroNotaManual,
       fotoIdx: conferenciaFotoIdx,
-      itens: conferenciaItens,
+      itens: resolveConferenciaItensLive(conferenciaItensLiveRef, conferenciaItens),
       fotosLancadas: [...fotosLancadasConferenciaRef.current],
       lancamentosPorFoto: serializarLancamentosPorFoto(lancamentosFotoConferenciaRef.current),
     });
@@ -757,7 +768,6 @@ export default function NotasPedidoCooperadoMain() {
     conferenciaEscolaAvulsa,
     conferenciaNumeroNotaManual,
     conferenciaFotoIdx,
-    conferenciaItens,
   ]);
 
   useEffect(() => {
@@ -942,8 +952,9 @@ export default function NotasPedidoCooperadoMain() {
         }
       }
 
+      const itensAtivos = resolveConferenciaItensLive(conferenciaItensLiveRef, conferenciaItens);
       const r = calcularItensNota(
-        conferenciaItens.map((i) => ({ ...i, valorBruto: 0 })),
+        itensAtivos.map((i) => ({ ...i, valorBruto: 0 })),
         conferenciaDescontoPct
       );
       if (r.valorLiquido <= 0) {
@@ -983,7 +994,10 @@ export default function NotasPedidoCooperadoMain() {
             localEntrega: conferenciaLocal,
             escolaAvulsaNome: conferenciaEscolaAvulsa.trim() || selectedNota.escolaAvulsaNome,
           },
-          conferenciaItens.map((i) => ({ ...i, valorBruto: 0 })),
+          resolveConferenciaItensLive(conferenciaItensLiveRef, conferenciaItens).map((i) => ({
+            ...i,
+            valorBruto: 0,
+          })),
           conferenciaDescontoPct
         );
         const divisao = resolverDivisaoConferencia(d, selectedNota);
@@ -1170,8 +1184,9 @@ export default function NotasPedidoCooperadoMain() {
       }
 
       if (clamped > atual && !fotosLancadasConferenciaRef.current.has(atual)) {
+        const itensAtivos = resolveConferenciaItensLive(conferenciaItensLiveRef, conferenciaItens);
         const r = calcularItensNota(
-          conferenciaItens.map((i) => ({ ...i, valorBruto: 0 })),
+          itensAtivos.map((i) => ({ ...i, valorBruto: 0 })),
           conferenciaDescontoPct
         );
         if (r.valorLiquido > 0) {
@@ -2069,14 +2084,11 @@ export default function NotasPedidoCooperadoMain() {
     return { liquido: r.valorLiquido };
   }, [avulsoItens, data, avulsoModal]);
 
-  const conferenciaTotais = useMemo(() => {
-    if (!conferirModal || !data) return { liquido: 0, bruto: 0, desconto: 0 };
-    const r = calcularItensNota(
-      conferenciaItens.map((i) => ({ ...i, valorBruto: i.quantidade * i.precoUnitario })),
-      conferenciaDescontoPct
-    );
-    return { liquido: r.valorLiquido, bruto: r.valorBruto, desconto: r.valorDesconto };
-  }, [conferenciaItens, conferenciaDescontoPct, data, conferirModal]);
+  useEffect(() => {
+    if (!conferirModal || !data) return;
+    const items = resolveConferenciaItensLive(conferenciaItensLiveRef, conferenciaItens);
+    setConferenciaTotaisUi(calcularTotaisConferenciaItens(items, conferenciaDescontoPct));
+  }, [conferirModal, conferenciaItens, conferenciaDescontoPct, data]);
 
   const openLancarAvulso = (preCooperadoId?: string) => {
     const instId = instituicaoPadraoId || instituicoes[0]?.id || "";
@@ -3124,10 +3136,23 @@ export default function NotasPedidoCooperadoMain() {
     setViewModal(false);
   }, [viewFotoUrls]);
 
-  const updateConferenciaQty = (idx: number, qty: number) => {
-    setConferenciaItens((prev) => prev.map((item, i) => (i === idx ? { ...item, quantidade: qty } : item)));
-    setConferirErrors((e) => ({ ...e, itens: undefined }));
-  };
+  const handleConferenciaDraftLive = useCallback((items: ConferenciaItemRow[]) => {
+    conferenciaItensLiveRef.current = items as ItemForm[];
+  }, []);
+
+  const handleConferenciaDraftCommit = useCallback(
+    (items: ConferenciaItemRow[]) => {
+      conferenciaItensLiveRef.current = items as ItemForm[];
+      setConferenciaItens(items as ItemForm[]);
+      setConferirErrors((e) => ({ ...e, itens: undefined }));
+      setConferenciaTotaisUi(calcularTotaisConferenciaItens(items as ItemForm[], conferenciaDescontoPct));
+    },
+    [conferenciaDescontoPct]
+  );
+
+  useEffect(() => {
+    conferenciaItensLiveRef.current = conferenciaItens;
+  }, [conferenciaItens]);
 
   const aguardarSequenciaLancamentoFotos = useCallback(
     async (nota: NotaPedido, total: number, opts?: { rapido?: boolean }): Promise<void> => {
@@ -3209,6 +3234,14 @@ export default function NotasPedidoCooperadoMain() {
     const fotoAtual = conferenciaFotoIdx;
     const multiFoto = qtdFotosAprovadas > 1;
     const ultimaFoto = fotoAtual >= qtdFotosAprovadas - 1;
+    const itensConferenciaAtivos = resolveConferenciaItensLive(
+      conferenciaItensLiveRef,
+      conferenciaItens
+    );
+    const liquidoConferenciaAtual = calcularTotaisConferenciaItens(
+      itensConferenciaAtivos,
+      conferenciaDescontoPct
+    ).liquido;
 
     if (multiFoto && !ultimaFoto) {
       if (lancamentoSequenciaTimerRef.current) {
@@ -3265,7 +3298,7 @@ export default function NotasPedidoCooperadoMain() {
         irParaFotoConferencia(fotoAtual + 1);
         return;
       }
-      if (conferenciaTotais.liquido <= 0 && !fotosLancadasConferenciaRef.current.has(fotoAtual)) {
+      if (liquidoConferenciaAtual <= 0 && !fotosLancadasConferenciaRef.current.has(fotoAtual)) {
         setConferirErrors({ itens: "Informe a quantidade de pelo menos um produto nesta foto." });
         return;
       }
@@ -3291,7 +3324,7 @@ export default function NotasPedidoCooperadoMain() {
       }
       setFotosLancadasUi(new Set(fotosLancadasConferenciaRef.current));
 
-      if (conferenciaTotais.liquido <= 0 && !fotosLancadasConferenciaRef.current.has(fotoAtual)) {
+      if (liquidoConferenciaAtual <= 0 && !fotosLancadasConferenciaRef.current.has(fotoAtual)) {
         setConferirErrors({ itens: "Informe a quantidade de pelo menos um produto nesta foto." });
         return;
       }
@@ -3317,7 +3350,7 @@ export default function NotasPedidoCooperadoMain() {
         avancarParaFotoConferencia(gate.primeiraPendente);
         return;
       }
-    } else if (conferenciaTotais.liquido <= 0 && !fotosLancadasConferenciaRef.current.has(fotoAtual)) {
+    } else if (liquidoConferenciaAtual <= 0 && !fotosLancadasConferenciaRef.current.has(fotoAtual)) {
       setConferirErrors({ itens: "Informe a quantidade de pelo menos um produto." });
       return;
     }
@@ -3333,12 +3366,12 @@ export default function NotasPedidoCooperadoMain() {
       ? consolidarItensLancamentoPorFoto(
           lancamentosOrdenadosPorFoto(lancamentosFotoConferenciaRef.current, qtdFotosAprovadas)
         )
-      : conferenciaItens.map((i) => ({ ...i, valorBruto: 0 }));
+      : itensConferenciaAtivos.map((i) => ({ ...i, valorBruto: 0 }));
     const calcConsolidado = calcularItensNota(itensConsolidados, conferenciaDescontoPct);
     const valorAprovado = multiFoto
       ? calcConsolidado.valorLiquido
       : calcularItensNota(
-          conferenciaItens.map((i) => ({ ...i, valorBruto: 0 })),
+          itensConferenciaAtivos.map((i) => ({ ...i, valorBruto: 0 })),
           conferenciaDescontoPct
         ).valorLiquido;
     const divisaoPreview = resolverDivisaoConferencia(data, selectedNota);
@@ -3393,7 +3426,7 @@ export default function NotasPedidoCooperadoMain() {
               assinaturaRecebedor: selectedNota.assinaturaRecebedor?.trim() || "Assinatura na nota",
               dataAssinatura: selectedNota.dataAssinatura || selectedNota.dataEntrega,
             },
-            conferenciaItens.map((i) => ({ ...i, valorBruto: 0 })),
+            itensConferenciaAtivos.map((i) => ({ ...i, valorBruto: 0 })),
             conferenciaDescontoPct
           );
 
@@ -5300,10 +5333,10 @@ export default function NotasPedidoCooperadoMain() {
                       </Select>
                     </FormField>
                   ))}
-                  {conferenciaTotais.liquido > 0 && (
+                  {conferenciaTotaisUi.liquido > 0 && (
                     <p className="text-xs text-blue-800">
                       Cada cooperado receberá cerca de{" "}
-                      <strong>{formatCurrency(conferenciaTotais.liquido / conferenciaDivisaoQtd)}</strong> nesta
+                      <strong>{formatCurrency(conferenciaTotaisUi.liquido / conferenciaDivisaoQtd)}</strong> nesta
                       entrega.
                     </p>
                   )}
@@ -5385,9 +5418,10 @@ export default function NotasPedidoCooperadoMain() {
                 conferenciaFotoIdx={conferenciaFotoIdx}
                 conferenciaDescontoPct={conferenciaDescontoPct}
                 conferenciaItens={conferenciaItens}
-                conferenciaTotais={conferenciaTotais}
+                conferenciaDraftKey={`${selectedNota.id}:${conferenciaFotoIdx}`}
                 conferirErrorsItens={conferirErrors.itens}
-                onUpdateQty={updateConferenciaQty}
+                onDraftLiveChange={handleConferenciaDraftLive}
+                onDraftCommit={handleConferenciaDraftCommit}
               />
             </div>
           </div>
