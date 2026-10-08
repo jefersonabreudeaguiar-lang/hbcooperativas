@@ -77,32 +77,68 @@ export type RqlRouteTimingRow = {
   paintMs: number | null;
 };
 
-/** Diagnóstico homolog — pares transição → paint (ms desde navigation start do mark). */
+type RqlTransitionMark = { transition: string; toHop: string; startTime: number };
+type RqlPaintMark = { hop: string; startTime: number };
+
+/**
+ * Pareia cada transição com o próximo paint do mesmo hop (cronológico).
+ * Evita inflar p75 ao reutilizar o paint mais recente em transições antigas.
+ */
+export function pairRqlRouteTimingsChronological(
+  transitions: readonly RqlTransitionMark[],
+  paints: readonly RqlPaintMark[]
+): RqlRouteTimingRow[] {
+  const paintsByHop = new Map<string, number[]>();
+  for (const p of paints) {
+    const list = paintsByHop.get(p.hop) ?? [];
+    list.push(p.startTime);
+    paintsByHop.set(p.hop, list);
+  }
+  for (const list of paintsByHop.values()) {
+    list.sort((a, b) => a - b);
+  }
+  const paintCursor = new Map<string, number>();
+  const sorted = [...transitions].sort((a, b) => a.startTime - b.startTime);
+  const rows: RqlRouteTimingRow[] = [];
+  for (const t of sorted) {
+    const hopPaints = paintsByHop.get(t.toHop) ?? [];
+    let idx = paintCursor.get(t.toHop) ?? 0;
+    while (idx < hopPaints.length && hopPaints[idx]! < t.startTime) idx++;
+    paintCursor.set(t.toHop, idx + 1);
+    const paintStart = idx < hopPaints.length ? hopPaints[idx]! : null;
+    rows.push({
+      transition: t.transition,
+      toHop: t.toHop,
+      paintMs: paintStart != null ? Math.round((paintStart - t.startTime) * 10) / 10 : null,
+    });
+  }
+  return rows;
+}
+
+/** Diagnóstico homolog — pares transição → paint (ms desde o mark de transição). */
 export function summarizeRqlRouteTimings(): RqlRouteTimingRow[] {
   if (typeof performance === "undefined" || typeof performance.getEntriesByType !== "function") {
     return [];
   }
   const marks = performance.getEntriesByType("mark") as PerformanceMark[];
-  const paintByHop = new Map<string, number>();
+  const transitions: RqlTransitionMark[] = [];
+  const paints: RqlPaintMark[] = [];
   for (const m of marks) {
     if (m.name.startsWith(ROUTE_PAINT_PREFIX)) {
-      paintByHop.set(m.name.slice(ROUTE_PAINT_PREFIX.length), m.startTime);
+      paints.push({ hop: m.name.slice(ROUTE_PAINT_PREFIX.length), startTime: m.startTime });
+      continue;
     }
-  }
-  const rows: RqlRouteTimingRow[] = [];
-  for (const m of marks) {
     if (!m.name.startsWith(ROUTE_MARK_PREFIX)) continue;
-    const arrow = m.name.indexOf("->");
+    const body = m.name.slice(ROUTE_MARK_PREFIX.length);
+    const arrow = body.indexOf("->");
     if (arrow < 0) continue;
-    const toHop = m.name.slice(arrow + 2);
-    const paintStart = paintByHop.get(toHop);
-    rows.push({
-      transition: m.name.slice(ROUTE_MARK_PREFIX.length),
-      toHop,
-      paintMs: paintStart != null ? Math.round((paintStart - m.startTime) * 10) / 10 : null,
+    transitions.push({
+      transition: body,
+      toHop: body.slice(arrow + 2),
+      startTime: m.startTime,
     });
   }
-  return rows;
+  return pairRqlRouteTimingsChronological(transitions, paints);
 }
 
 const INTERACTION_PREFIX = "rql:interaction:";

@@ -4,3 +4,4 @@ import { PageSkeleton } from "@/components/ui/PageSkeleton";
 export function CooperadoTabRouteLoading() {
   return <PageSkeleton compact />;
 }
+CooperadoTabRouteLoading.displayName = "CooperadoTabRouteLoading";

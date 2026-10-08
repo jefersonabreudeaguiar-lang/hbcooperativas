@@ -60,6 +60,9 @@ export function scheduleCooperadoNavPrefetchEarly(router: CooperadoNavPrefetchRo
       }
     });
     safe(() => prefetchCooperadoNavRoutes(router, COOPERADO_NAV_PREFETCH_PRIORITY));
+    if (!lowMemory) {
+      safe(() => prefetchCooperadoTabRouteChunks());
+    }
   });
 
   if (lowMemory) {

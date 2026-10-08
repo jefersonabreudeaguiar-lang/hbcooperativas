@@ -4,6 +4,7 @@
  */
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import { pairRqlRouteTimingsChronological } from "../src/lib/performance/rqlMarks.ts";
 import { buildRqlPerfRouteReport, computePaintPercentiles } from "../src/lib/performance/rqlPerfReport.ts";
 
 const ROOT = join(import.meta.dirname ?? __dirname, "..");
@@ -28,6 +29,7 @@ const staffNotas = read("src/app/(app)/notas-pedido/NotasPedidoStaffMain.tsx");
 const layout = read("src/app/(app)/layout.tsx");
 const doc = read("docs/performance-rql-fase-1-prova-rotas.md");
 
+assert(marks.includes("pairRqlRouteTimingsChronological"), "pareamento cronológico transição→paint");
 assert(marks.includes("markRqlStaffNotasSubviewTransition"), "marca subview staff notas");
 assert(marks.includes("markRqlInteractionPhase"), "marca interação Conferir");
 assert(report.includes("buildRqlPerfRouteReport"), "relatório agregado");
@@ -45,6 +47,23 @@ const pct = computePaintPercentiles([
   { transition: "b->c", toHop: "c", paintMs: 180 },
 ]);
 assert(pct.count === 2 && pct.p75 === 180, "percentil paint unitário");
+
+const retro = pairRqlRouteTimingsChronological(
+  [
+    { transition: "dashboard->notas-pedido", toHop: "notas-pedido", startTime: 1000 },
+    { transition: "notas-pedido->dashboard", toHop: "dashboard", startTime: 2000 },
+    { transition: "dashboard->notas-pedido", toHop: "notas-pedido", startTime: 3000 },
+  ],
+  [
+    { hop: "notas-pedido", startTime: 1100 },
+    { hop: "dashboard", startTime: 2100 },
+    { hop: "notas-pedido", startTime: 12000 },
+  ]
+);
+assert(
+  retro[0]?.paintMs === 100 && retro[2]?.paintMs === 9000,
+  "paint não reutiliza marca futura em transição antiga"
+);
 
 if (process.exitCode !== 1) {
   console.log("\nFase 1 prova de rotas — smoke OK");

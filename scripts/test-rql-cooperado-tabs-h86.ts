@@ -42,6 +42,8 @@ assert(rootLayout.includes("data-cooperado-tab-keep-alive"), "html expõe flag k
 assert(layout.includes("CooperadoMobileTabKeepAlive"), "AppLayout keep-alive cooperado");
 assert(panel.includes("useSyncExternalStore"), "viewport mobile sync no 1º paint");
 assert(panel.includes("data-cooperado-tab-panel"), "painéis por aba");
+assert(panel.includes("data-cooperado-tab-panel-warm"), "painel warm para paint instantâneo");
+assert(panel.includes("cooperadoTabPanelCache"), "cache não sobrescreve com loading.tsx");
 assert(perms.includes("cooperadoBottomTabRoutes"), "menu mobile alinhado às 4 abas");
 assert(perms.includes('href: "/mensalidades"') && perms.includes("COOPERADO_DRAWER_MENU"), "mensalidades no menu lateral");
 

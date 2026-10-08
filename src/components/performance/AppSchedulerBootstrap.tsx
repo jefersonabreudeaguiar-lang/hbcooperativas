@@ -3,8 +3,13 @@
 import { useEffect, useLayoutEffect, useRef } from "react";
 import { usePathname } from "next/navigation";
 import { markUserInteraction, startAppScheduler } from "@/lib/performance/appScheduler";
-import { markRqlRouteTransition, scheduleMarkRqlRoutePaintReady } from "@/lib/performance/rqlMarks";
+import {
+  markRqlRoutePaintReady,
+  markRqlRouteTransition,
+  scheduleMarkRqlRoutePaintReady,
+} from "@/lib/performance/rqlMarks";
 import { isCooperadoBottomTabPath } from "@/lib/performance/cooperadoBottomTabRoutes";
+import { cooperadoTabWarmPanelPaintReady } from "@/lib/performance/cooperadoMobileTabKeepAlive";
 import { staffBottomTabCacheKey, isStaffBottomTabPath } from "@/lib/performance/staffBottomTabRoutes";
 import { markUserActivity } from "@/services/idleActivity";
 
@@ -52,7 +57,11 @@ export function AppSchedulerBootstrap() {
     let cancelPaint: (() => void) | undefined;
     if (prev && prev !== hop) {
       markRqlRouteTransition(prev, hop);
-      cancelPaint = scheduleMarkRqlRoutePaintReady(hop);
+      if (isCooperadoBottomTabPath(pathname) && cooperadoTabWarmPanelPaintReady(pathname)) {
+        markRqlRoutePaintReady(hop);
+      } else {
+        cancelPaint = scheduleMarkRqlRoutePaintReady(hop);
+      }
       markUserInteraction();
       markUserActivity();
     }

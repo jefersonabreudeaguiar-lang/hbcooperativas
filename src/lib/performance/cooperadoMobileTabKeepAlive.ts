@@ -120,3 +120,12 @@ export function trimCooperadoTabCacheOrder(
   }
   return cache;
 }
+
+/** Painel LRU já montado — paint RQL pode marcar no mesmo frame (revisita de aba). */
+export function cooperadoTabWarmPanelPaintReady(pathname: string): boolean {
+  if (typeof document === "undefined" || !isCooperadoBottomTabPath(pathname)) return false;
+  const el = document.querySelector(
+    `[data-cooperado-tab-panel="${pathname}"][data-cooperado-tab-panel-warm="1"]`
+  );
+  return Boolean(el && !el.classList.contains("hidden"));
+}
