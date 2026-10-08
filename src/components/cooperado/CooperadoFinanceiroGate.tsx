@@ -94,9 +94,6 @@ export function CooperadoFinanceiroGate({ children }: { children: React.ReactNod
       markCooperadoPostShellSyncStarted();
 
       if (isCooperadoPwaMessengerMode()) {
-        if (cooperadoAppReleaseNeedsOperacionalSync()) {
-          requestCooperadoAppReleaseSync();
-        }
         clearCooperadoPostShellSyncStarted();
         return;
       }

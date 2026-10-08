@@ -58,6 +58,7 @@ import { CooperadoMobileTabKeepAlive } from "@/components/performance/CooperadoM
 import { StaffMobileTabKeepAlive } from "@/components/performance/StaffMobileTabKeepAlive";
 import { CooperadoMobileHeaderToolbar } from "@/components/cooperado/CooperadoMobileHeaderToolbar";
 import { CooperadoPwaResumeLifecycle } from "@/components/cooperado/CooperadoPwaResumeLifecycle";
+import { CooperadoPwaMessengerAppDataWarm } from "@/components/cooperado/CooperadoPwaMessengerAppDataWarm";
 import { StaffMobileReleaseBar } from "@/components/layout/StaffMobileReleaseBar";
 import type { Resource } from "@/types";
 
@@ -502,6 +503,7 @@ function AppShellInner({ children }: { children: React.ReactNode }) {
           <ContratoServicoAppGate />
           <CobrancaSaasPainel />
           {navUser && isCooperadoAppUser(navUser) && <CooperadoFinanceiroSyncBanner />}
+          {navUser && isCooperadoAppUser(navUser) && <CooperadoPwaMessengerAppDataWarm />}
           {navUser && isCooperadoAppUser(navUser) && <CooperadoPwaResumeLifecycle />}
           {cooperadoKeepAliveShell ? (
             <CooperadoMobileTabKeepAlive pathname={pathname}>{children}</CooperadoMobileTabKeepAlive>

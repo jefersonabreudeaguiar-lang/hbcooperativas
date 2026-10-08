@@ -991,10 +991,12 @@ export function CooperativaSyncProvider({ children }: { children: React.ReactNod
 
     let initialDelay: ReturnType<typeof setTimeout> | undefined;
     if (cooperadoSemAutoSync) {
-      if (user?.role === "cooperado" && cooperadoAppReleaseNeedsOperacionalSync()) {
-        if (!isCooperadoPwaMessengerMode()) {
-          purgarInicioCardValorReceberCooperado(user);
-        }
+      if (
+        user?.role === "cooperado" &&
+        cooperadoAppReleaseNeedsOperacionalSync() &&
+        !isCooperadoPwaMessengerMode()
+      ) {
+        purgarInicioCardValorReceberCooperado(user);
         requestCooperadoAppReleaseSync();
       } else if (
         user?.role === "cooperado" &&

@@ -646,9 +646,11 @@ export default function DashboardPage() {
     isCooperadoInstantResumeEnabled() &&
     Boolean(user) &&
     (user?.role === "cooperado"
-      ? cooperadoLocalResumeReady(user) ||
-        cooperadoInstantShellReady(user) ||
-        cooperadoPwaInstantPaintReady(user)
+      ? cooperadoInstantShellReady(user) ||
+        cooperadoPwaInstantPaintReady(user) ||
+        (isCooperadoPwaMobileLeveUi()
+          ? false
+          : cooperadoLocalResumeReady(user))
       : appLocalResumeReady(user));
   const staffPainelUi = useAppDataSelector(
     (data) => Boolean(accountUser && shouldRenderStaffPainelUi(accountUser, data)),

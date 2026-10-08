@@ -16,7 +16,10 @@ import type { User } from "@/types";
 import { normalizeUserRole, resolveAppUserRole } from "@/permissions";
 import { resolveExperienceUser, resolveMobileCooperadoId } from "@/lib/mobileExperience";
 import { PAINEL_MOBILE_PREF_EVENT } from "@/lib/mobilePainelPreference";
-import { isCooperadoInstantResumeEnabled } from "@/lib/performance/cooperadoColdStart";
+import {
+  ensureCooperadoAppDataEagerWarm,
+  isCooperadoInstantResumeEnabled,
+} from "@/lib/performance/cooperadoColdStart";
 import {
   getSession,
   login as doLogin,
@@ -105,7 +108,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   useLayoutEffect(() => {
     if (isCooperadoInstantResumeEnabled()) {
-      preloadAppData({ eager: true });
+      ensureCooperadoAppDataEagerWarm();
     }
     refresh();
   }, [refresh]);
@@ -113,7 +116,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     const warm = () => {
       if (isCooperadoInstantResumeEnabled()) {
-        preloadAppData({ eager: true });
+        ensureCooperadoAppDataEagerWarm();
       } else {
         preloadAppData();
       }

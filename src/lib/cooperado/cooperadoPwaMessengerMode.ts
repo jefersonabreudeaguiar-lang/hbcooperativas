@@ -1,7 +1,8 @@
 /**
  * PWA cooperado mobile — modo “mensageiro”:
  * - Telas só leem snapshots/localStorage (sem assinar AppData a cada mudança).
- * - AppData / nuvem só em sync pontual: build do app, revisão na nuvem, botão Atualizar, envio de foto.
+ * - AppData / nuvem só em sync pontual: botão Atualizar, envio de foto (não sync de release na abertura).
+ * - 1º frame: snapshots + sessão; parse do AppData em idle após pintar o shell.
  * - Sem pilot HB periódico nem pull de foreground na abertura (evita travar a UI).
  */
 import type { User } from "@/types";
