@@ -298,12 +298,18 @@ export function MobileNav() {
               onPointerDown={() => {
                 if (isCooperadoNav && isCooperadoBottomTabPath(item.href)) {
                   cooperadoTabWarmOnPointerDown(item.href);
+                  try {
+                    router.prefetch(item.href);
+                  } catch {
+                    /* ignore */
+                  }
                 } else if (!isCooperadoNav) {
                   staffTabWarmOnPointerDown(item.href);
                 }
               }}
               onClick={(e) => {
-                if (!active && mobileTabUx) {
+                // Cooperado: navegação nativa do Link (sem startTransition) — paint mais rápido no PWA.
+                if (!active && mobileTabUx && !isCooperadoNav) {
                   e.preventDefault();
                   startTransition(() => {
                     router.push(item.href);

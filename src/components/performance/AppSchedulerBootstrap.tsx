@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useLayoutEffect, useRef } from "react";
 import { usePathname } from "next/navigation";
 import { markUserInteraction, startAppScheduler } from "@/lib/performance/appScheduler";
 import { markRqlRouteTransition, scheduleMarkRqlRoutePaintReady } from "@/lib/performance/rqlMarks";
@@ -46,7 +46,7 @@ export function AppSchedulerBootstrap() {
     };
   }, []);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     const hop = routeHopFromPathname(pathname);
     const prev = prevHopRef.current;
     let cancelPaint: (() => void) | undefined;
