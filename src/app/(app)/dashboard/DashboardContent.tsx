@@ -251,8 +251,7 @@ function CooperadoDashboard() {
   useEffect(() => {
     if (!inicioPwaLeve) return;
     const onRefresh = () => {
-      // Snapshots já foram gravados pelo sync; só reler cache (evita rebuild pesado do AppData).
-      refreshPwaInicioView();
+      refreshPwaInicioView({ rebuildFromAppData: true });
     };
     window.addEventListener(COOPERADO_PWA_LEVE_UI_SNAPSHOT_REFRESH_EVENT, onRefresh);
     return () => window.removeEventListener(COOPERADO_PWA_LEVE_UI_SNAPSHOT_REFRESH_EVENT, onRefresh);
