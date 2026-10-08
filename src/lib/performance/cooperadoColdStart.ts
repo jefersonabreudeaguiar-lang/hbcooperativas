@@ -108,6 +108,13 @@ export function ensureCooperadoAppDataEagerWarm(): void {
 /** Mesmo eager warm — cooperado e responsável (HX 9.1). */
 export const ensureAppDataEagerWarm = ensureCooperadoAppDataEagerWarm;
 
+/** Cooperado com sessão — pinta shell/início sem esperar sync (AppData pode ainda estar aquecendo). */
+export function cooperadoInstantShellReady(user: { role?: string } | null | undefined): boolean {
+  if (!isCooperadoInstantResumeEnabled()) return false;
+  if (!user || user.role !== "cooperado") return false;
+  return Boolean(getSession());
+}
+
 /** Shell/header/rodapé pintam antes de parse pesado do localStorage ou sync. */
 export function scheduleCooperadoPaintFirst(run: () => void): void {
   if (typeof window === "undefined") {

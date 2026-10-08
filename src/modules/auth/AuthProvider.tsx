@@ -16,10 +16,7 @@ import type { User } from "@/types";
 import { normalizeUserRole, resolveAppUserRole } from "@/permissions";
 import { resolveExperienceUser, resolveMobileCooperadoId } from "@/lib/mobileExperience";
 import { PAINEL_MOBILE_PREF_EVENT } from "@/lib/mobilePainelPreference";
-import {
-  isCooperadoInstantResumeEnabled,
-  scheduleCooperadoPaintFirst,
-} from "@/lib/performance/cooperadoColdStart";
+import { isCooperadoInstantResumeEnabled } from "@/lib/performance/cooperadoColdStart";
 import {
   getSession,
   login as doLogin,
@@ -32,6 +29,7 @@ import {
   preloadAppData,
   applyCloudProfileToLocalSession,
   getData,
+  isAppDataWarm,
   waitForAppDataWarm,
 } from "@/services/dataStore";
 import { persistirInicioCardValorReceberCooperado } from "@/services/cooperadoInicioCardPersistenciaService";
@@ -106,6 +104,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   useLayoutEffect(() => {
+    if (isCooperadoInstantResumeEnabled()) {
+      preloadAppData({ eager: true });
+    }
     refresh();
   }, [refresh]);
 
@@ -118,7 +119,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
     };
     if (isCooperadoInstantResumeEnabled()) {
-      scheduleCooperadoPaintFirst(warm);
+      if (!isAppDataWarm()) warm();
       return;
     }
     if (typeof requestIdleCallback !== "undefined") {

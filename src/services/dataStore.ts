@@ -63,6 +63,7 @@ import {
   preserveConferenciaInProgressOperationalTruth,
   preserveOperationalTruthDuringConferenciaPushSave,
 } from "@/services/conferenciaOperacionalPushScope";
+import { takeInlineParsedAppData } from "@/lib/performance/cooperadoAppDataInlineWarm";
 
 export { generateId };
 
@@ -786,8 +787,9 @@ function loadData(forceReload = false): AppData {
     return memoryCache;
   }
 
-  const stored = localStorage.getItem(STORAGE_KEY);
-  if (!stored) {
+  const inlineRaw = !forceReload ? takeInlineParsedAppData() : null;
+  const stored = inlineRaw == null ? localStorage.getItem(STORAGE_KEY) : null;
+  if (!stored && inlineRaw == null) {
     let data = emptyInitialData;
     const ensured = ensureCreatorAdminAccount(data);
     data = ensured.data;
@@ -799,7 +801,9 @@ function loadData(forceReload = false): AppData {
   }
 
   try {
-    let data = migrateData(JSON.parse(stored));
+    let data = migrateData(
+      inlineRaw != null ? (inlineRaw as AppData) : JSON.parse(stored as string)
+    );
     const ensured = ensureCreatorAdminAccount(data);
     data = ensured.data;
     const reset = applyOperationalResetIfNeeded(data);

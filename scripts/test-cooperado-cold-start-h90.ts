@@ -69,9 +69,11 @@ assert(provider.includes("scheduleCooperadoColdStartSync"), "provider agenda syn
 assert(gate.includes("shouldSkipCooperadoSecondaryMountSync"), "gate dedupe sync mount");
 assert(gate.includes("syncingForUi"), "gate usa syncingForUi");
 assert(
-  auth.includes("preloadAppData") && auth.includes("scheduleCooperadoPaintFirst(warm)"),
-  "auth warm local apos paint (nao bloqueia shell)"
+  auth.includes("preloadAppData({ eager: true })") && auth.includes("useLayoutEffect"),
+  "auth warm local no 1º layout (antes do conteúdo)"
 );
+const rootLayout = read("src/app/layout.tsx");
+assert(rootLayout.includes("buildInlineCooperadoAppDataWarmScript"), "parse AppData inline no head");
 assert(provider.includes("scheduleCooperadoPostShellSync(() =>") && provider.includes("runSync({ force: true, silent: true })"), "sync cold start apos shell");
 assert(gate.includes("CooperadoFinanceiroShellProvider"), "gate shell-first com contexto");
 assert(!gate.includes("min-h-screen bg-gray-50"), "gate sem tela cheia bloqueante");

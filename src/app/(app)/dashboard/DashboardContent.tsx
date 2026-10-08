@@ -85,6 +85,7 @@ import { cooperadoTemAppInstalado, isAppStandalone, resumoInstalacaoApp } from "
 import { PageSkeleton } from "@/components/ui/PageSkeleton";
 import {
   appLocalResumeReady,
+  cooperadoInstantShellReady,
   cooperadoLocalResumeReady,
   isCooperadoInstantResumeEnabled,
   isCooperadoManualOperacionalSync,
@@ -654,7 +655,9 @@ export default function DashboardPage() {
   const instantResume =
     isCooperadoInstantResumeEnabled() &&
     Boolean(user) &&
-    (user?.role === "cooperado" ? cooperadoLocalResumeReady(user) : appLocalResumeReady(user));
+    (user?.role === "cooperado"
+      ? cooperadoLocalResumeReady(user) || cooperadoInstantShellReady(user)
+      : appLocalResumeReady(user));
   const staffPainelUi = useAppDataSelector(
     (data) => Boolean(accountUser && shouldRenderStaffPainelUi(accountUser, data)),
     [accountUser?.id, accountUser?.role]

@@ -12,6 +12,7 @@ import {
   type ClientReleaseInfo,
 } from "@/lib/pwa/clientRelease";
 import { buildInlineRqlPerfStubScript } from "@/lib/performance/rqlPerfReport";
+import { buildInlineCooperadoAppDataWarmScript } from "@/lib/performance/cooperadoAppDataInlineWarm";
 import { RqlPerfDebugBootstrap } from "@/components/performance/RqlPerfDebugBootstrap";
 
 const geist = Geist({
@@ -78,6 +79,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <script dangerouslySetInnerHTML={{ __html: buildInlinePageReleaseBootstrap(pageRelease) }} />
         <script dangerouslySetInnerHTML={{ __html: buildInlineDeploymentBootScript(pageRelease) }} />
         <script dangerouslySetInnerHTML={{ __html: buildInlineRqlPerfStubScript() }} />
+        <script dangerouslySetInnerHTML={{ __html: buildInlineCooperadoAppDataWarmScript() }} />
       </head>
       <body className="min-h-full antialiased">
         <AuthProvider>
