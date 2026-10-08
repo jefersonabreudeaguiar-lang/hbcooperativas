@@ -127,5 +127,5 @@ export function cooperadoTabWarmPanelPaintReady(pathname: string): boolean {
   const el = document.querySelector(
     `[data-cooperado-tab-panel="${pathname}"][data-cooperado-tab-panel-warm="1"]`
   );
-  return Boolean(el && !el.classList.contains("hidden"));
+  return Boolean(el);
 }

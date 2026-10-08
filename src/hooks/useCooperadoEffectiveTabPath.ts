@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect } from "react";
+import { useLayoutEffect } from "react";
 import { useSyncExternalStore } from "react";
 import {
   clearCooperadoOptimisticTab,
@@ -16,7 +16,7 @@ export function useCooperadoEffectiveTabPath(pathname: string): string {
     () => null
   );
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (optimistic && pathname === optimistic) {
       clearCooperadoOptimisticTab(pathname);
     }

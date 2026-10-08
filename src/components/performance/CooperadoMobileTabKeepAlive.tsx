@@ -165,13 +165,17 @@ export function CooperadoMobileTabKeepAlive({ pathname, children }: Props) {
       return (
         <div
           key={href}
-          className={cn(!active && "hidden [content-visibility:hidden]")}
+          className={cn(
+            !active && "hidden [content-visibility:hidden] pointer-events-none",
+            active && "min-h-0"
+          )}
           aria-hidden={!active}
           inert={!active}
           data-cooperado-tab-panel={href}
           data-cooperado-tab-panel-warm={warm ? "1" : undefined}
+          data-cooperado-tab-panel-active={active ? "1" : undefined}
         >
-          {active ? panel : null}
+          {panel}
         </div>
       );
     });
