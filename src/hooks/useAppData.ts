@@ -95,6 +95,37 @@ export function useAppDataSelector<T>(
   }, [revision, ...deps]);
 }
 
+/**
+ * Keep-alive mobile: painel inativo não assina `subscribe` global (cada sync do operacional).
+ * Use em telas pesadas (ex.: Entregas) que ainda montam com a aba ativa.
+ */
+export function useAppDataSelectorWhenActive<T>(
+  panelActive: boolean,
+  selector: (data: AppData) => T,
+  deps: readonly unknown[] = []
+): T | null {
+  const subscribeWhenActive = useCallback(
+    (onStoreChange: () => void) => {
+      if (!panelActive) return () => undefined;
+      return subscribe(onStoreChange);
+    },
+    [panelActive]
+  );
+  const revision = useSyncExternalStore(
+    subscribeWhenActive,
+    () => (panelActive && isAppDataWarm() ? getDataRevision() : -1),
+    getServerRevision
+  );
+  const selectorRef = useRef(selector);
+  selectorRef.current = selector;
+
+  return useMemo(() => {
+    if (!panelActive || !isAppDataWarm()) return null;
+    return selectorRef.current(getData());
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- revision + deps
+  }, [panelActive, revision, ...deps]);
+}
+
 /** Keep-alive mobile: painel inativo não re-renderiza a cada sync. */
 export function useAppDataSelectorForDomainsWhenActive<T>(
   panelActive: boolean,

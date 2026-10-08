@@ -45,8 +45,8 @@ assert(panel.includes("data-cooperado-tab-panel"), "painéis por aba");
 assert(panel.includes("data-cooperado-tab-panel-warm"), "painel warm para paint instantâneo");
 assert(panel.includes("cooperadoTabPanelCache"), "cache não sobrescreve com loading.tsx");
 assert(
-  panel.includes("{panel}") && panel.includes("data-cooperado-tab-panel-active"),
-  "LRU mantém painéis warm montados; sync pausa via useCooperadoTabPanelActive"
+  panel.includes("active ? panel : null"),
+  "só monta painel da aba ativa (evita jank após sync operacional)"
 );
 assert(read("src/app/(app)/notas-pedido/NotasPedidoCooperadoMain.tsx").includes("useCooperadoPanelAppData"), "notas pausa store fora da aba");
 assert(panel.includes("useCooperadoEffectiveTabPath"), "navegação otimista cooperado");

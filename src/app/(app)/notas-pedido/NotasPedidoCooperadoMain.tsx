@@ -6,7 +6,7 @@ import Link from "next/link";
 import {
   Camera, CheckCircle, FileText, XCircle, RefreshCw, ChevronRight, Eye, Building2, Pencil, UserPlus, X, ImagePlus, Trash2, FileSignature, BookOpen, Package, Users,
 } from "lucide-react";
-import { useAppDataSelector } from "@/hooks/useAppData";
+import { useAppDataSelector, useAppDataSelectorWhenActive } from "@/hooks/useAppData";
 import { useEnsureAppDataWarm } from "@/hooks/useEnsureAppDataWarm";
 import { useCooperadoTabPanelActive } from "@/hooks/useCooperadoTabPanelActive";
 import { useCooperadoPanelAppData } from "@/hooks/useCooperadoPanelAppData";
@@ -1333,7 +1333,7 @@ export default function NotasPedidoCooperadoMain() {
     void loadConferenciaFoto(fresh, conferenciaFotoIdx);
   }, [conferirModal, selectedNota?.id, conferenciaFotoIdx, loadConferenciaFoto, selectedNota]);
 
-  const conferenciaDataRevision = useAppDataSelector(() => getDataRevision(), []);
+  const conferenciaDataRevision = useAppDataSelectorWhenActive(tabActive, () => getDataRevision(), []);
 
   useEffect(() => {
     if (!conferirModal || !selectedNota) return;
@@ -1639,7 +1639,8 @@ export default function NotasPedidoCooperadoMain() {
   const deferredStatusFilter = useDeferredValue(statusFilter);
 
   const resumosMensaisCooperado =
-    useAppDataSelector(
+    useAppDataSelectorWhenActive(
+      tabActive,
       (d) => {
         if (!cooperadoId || !coopId || abaCooperado !== "entregas") return [];
         const base = filtrarResumosMesesNaoQuitados(
@@ -1660,7 +1661,8 @@ export default function NotasPedidoCooperadoMain() {
     ) ?? [];
 
   const resumosFichaCooperado =
-    useAppDataSelector(
+    useAppDataSelectorWhenActive(
+      tabActive,
       (d) => {
         if (!cooperadoId || !coopId || abaCooperado !== "ficha") return [];
         return listarResumosFichaEmAbertoCooperado(d, cooperadoId, coopId);

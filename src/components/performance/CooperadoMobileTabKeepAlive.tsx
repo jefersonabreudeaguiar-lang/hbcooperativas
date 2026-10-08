@@ -175,7 +175,8 @@ export function CooperadoMobileTabKeepAlive({ pathname, children }: Props) {
           data-cooperado-tab-panel-warm={warm ? "1" : undefined}
           data-cooperado-tab-panel-active={active ? "1" : undefined}
         >
-          {panel}
+          {/* Só a aba visível monta React — evita 3–4 telas (Entregas/Financeiro) re-renderizando a cada sync. */}
+          {active ? panel : null}
         </div>
       );
     });
