@@ -829,7 +829,9 @@ function loadData(forceReload = false): AppData {
       return memoryCache;
     }
 
-    if (stored.length >= 2_000_000) {
+    const persistedBlobSize =
+      stored != null ? stored.length : JSON.stringify(inlineRaw ?? data).length;
+    if (persistedBlobSize >= 2_000_000) {
       const slim = stripBinaryForPersist(data, { role: persistRoleFromSession() });
       const saved = saveDataSafe(slim);
       if (saved.ok) {
