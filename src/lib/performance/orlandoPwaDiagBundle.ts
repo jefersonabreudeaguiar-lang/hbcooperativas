@@ -71,7 +71,7 @@ export function orlandoPwaDiagRoteiroInstrucoes(appUrl = "https://hbcooperativas
     "",
     "1) Feche o app completamente (não só minimizar).",
     `2) Abra de novo pelo ícone do PWA (build v${APP_BUILD_VERSION} ou mais novo na faixa verde).`,
-    "3) Na faixa verde acima do rodapé: toque «Medir abas» OU segure ~1s no «v…».",
+    "3) No topo ao lado do menu: segure ~1s no «v…» (homolog) ou toque Atualizar.",
     "4) Toque «Ativar medição e recarregar» (só na 1ª vez).",
     "",
     "5) ROTEIRO DE USO (cronometre mentalmente se quiser):",

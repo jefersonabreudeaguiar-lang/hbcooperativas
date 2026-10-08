@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Check, Gauge, RefreshCw } from "lucide-react";
+import { Check, RefreshCw } from "lucide-react";
 import { useAppDataSelector } from "@/hooks/useAppData";
 import { RqlPerfHomologSheet } from "@/components/performance/RqlPerfHomologSheet";
 import { canUseRqlPerfHomologPanel } from "@/lib/performance/rqlPerfHomologAccess";
@@ -101,7 +101,7 @@ export function AppMobileReleaseBar({ variant }: { variant: Variant }) {
               homologOrlando && "select-none touch-manipulation",
               s.badge
             )}
-            title={homologOrlando ? "Toque em Medir abas ou segure aqui ~1s" : undefined}
+            title={homologOrlando ? "Segure ~1s para medição de performance (homolog)" : undefined}
             onPointerDown={homologOrlando ? startLongPress : undefined}
             onPointerUp={homologOrlando ? clearLongPress : undefined}
             onPointerCancel={homologOrlando ? clearLongPress : undefined}
@@ -117,20 +117,6 @@ export function AppMobileReleaseBar({ variant }: { variant: Variant }) {
           >
             v{APP_BUILD_VERSION}
           </span>
-        )}
-        {homologOrlando && (
-          <button
-            type="button"
-            onClick={openHomolog}
-            className={cn(
-              "shrink-0 inline-flex items-center gap-0.5 rounded-md px-1.5 py-0.5 font-semibold text-white touch-manipulation",
-              "bg-green-700 active:bg-green-900"
-            )}
-            aria-label="Medir troca de abas e comparar com WhatsApp"
-          >
-            <Gauge size={11} aria-hidden />
-            Medir abas
-          </button>
         )}
         <span className={cn("truncate", s.text)}>
           {syncing ? (

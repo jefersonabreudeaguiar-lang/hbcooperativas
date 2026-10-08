@@ -56,7 +56,7 @@ import { useMobileTabScrollRestore } from "@/hooks/useMobileTabScrollRestore";
 import type { MobileTabScrollMode } from "@/lib/performance/mobileTabScrollMemory";
 import { CooperadoMobileTabKeepAlive } from "@/components/performance/CooperadoMobileTabKeepAlive";
 import { StaffMobileTabKeepAlive } from "@/components/performance/StaffMobileTabKeepAlive";
-import { CooperadoMobileReleaseBar } from "@/components/cooperado/CooperadoMobileReleaseBar";
+import { CooperadoMobileHeaderToolbar } from "@/components/cooperado/CooperadoMobileHeaderToolbar";
 import { CooperadoPwaResumeLifecycle } from "@/components/cooperado/CooperadoPwaResumeLifecycle";
 import { StaffMobileReleaseBar } from "@/components/layout/StaffMobileReleaseBar";
 import type { Resource } from "@/types";
@@ -264,8 +264,9 @@ export function MobileNav() {
     <>
       <header className="lg:hidden flex items-center justify-between gap-2 px-4 py-3 bg-green-900 text-white sticky top-0 z-40">
         <BrandHeader compact />
-        <div className="flex items-center gap-1.5 shrink-0">
+        <div className="flex items-center gap-1 shrink-0">
           {!isCooperadoAppUser(navUser) && <SyncStatusChip showBuild />}
+          {isCooperadoAppUser(navUser) && <CooperadoMobileHeaderToolbar />}
           <button onClick={() => setOpen(true)} className="p-2 hover:bg-green-800 rounded-lg" aria-label="Abrir menu">
             <Menu size={22} />
           </button>
@@ -282,7 +283,6 @@ export function MobileNav() {
       )}
 
       <div className="lg:hidden fixed bottom-0 left-0 right-0 z-40 flex flex-col safe-area-pb shadow-[0_-6px_24px_rgba(0,0,0,0.12)]">
-        {isCooperadoAppUser(navUser) && <CooperadoMobileReleaseBar />}
         <nav className="flex bg-white border-t-2 border-green-200">
         {mobileItems.map((item) => {
           const tabPath = isCooperadoAppUser(navUser!) ? effectiveTabPath : pathname;
@@ -486,7 +486,7 @@ function AppShellInner({ children }: { children: React.ReactNode }) {
               : cn(
                   "p-4 lg:p-6 lg:pb-6",
                   navUser && isCooperadoAppUser(navUser)
-                    ? "pb-[max(10.5rem,env(safe-area-inset-bottom,0px)+6.75rem)]"
+                    ? "pb-[max(6.5rem,env(safe-area-inset-bottom,0px)+4.25rem)]"
                     : "pb-[max(6.5rem,env(safe-area-inset-bottom,0px)+4.25rem)] lg:pb-6"
                 )
           )}

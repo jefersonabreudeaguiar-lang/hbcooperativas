@@ -103,7 +103,7 @@ function CooperadoDashboard() {
   const { user } = useAuth();
   const router = useRouter();
   const hbCredit = useHbCreditEnabled(user);
-  const { syncingForUi } = useSyncStatus();
+  const { syncingForUi, lastSyncedAt } = useSyncStatus();
   const fluxo = useCooperadoFluxoPadrao();
   const { apresentacaoConsolidada, carregandoValoresFinanceiros } = fluxo;
   const recoverySyncRef = useRef(false);
@@ -182,12 +182,15 @@ function CooperadoDashboard() {
       }
     : null;
 
+  const cooperadoIdCard = inicioCardCtx?.cooperadoId ?? user?.cooperadoId;
+  const cooperativaIdCard = inicioCardCtx?.cooperativaId ?? user?.cooperativaId;
+
   const { snapshot: valorReceberCard, atualizando: cardFinanceiroAtualizando } =
     useCooperadoInicioValorReceberCardState({
       data: inicioCardCtx?.data ?? null,
-      cooperadoId: inicioCardCtx?.cooperadoId,
-      cooperativaId: inicioCardCtx?.cooperativaId,
-      dataReady: inicioCardCtx?.dataReady ?? false,
+      cooperadoId: cooperadoIdCard,
+      cooperativaId: cooperativaIdCard,
+      dataReady: inicioCardCtx?.dataReady ?? isAppDataWarm(),
       syncing: syncingForUi,
       apresentacaoConsolidada,
       carregandoValoresFinanceiros,
@@ -206,12 +209,29 @@ function CooperadoDashboard() {
 
   const refreshPwaInicioView = useCallback(() => {
     if (!inicioPwaLeve || !user?.cooperadoId) return;
-    const coopId = inicioCardCtx?.cooperativaId ?? user.cooperativaId;
-    const cooperadoId = inicioCardCtx?.cooperadoId ?? user.cooperadoId;
-    if (!coopId) return;
-    const view = lerCooperadoPwaInicioDashboardViewForResume(cooperadoId, coopId);
-    if (view) setPwaInicioView(view);
-  }, [inicioPwaLeve, user, inicioCardCtx?.cooperadoId, inicioCardCtx?.cooperativaId]);
+    const coopId = cooperativaIdCard ?? user.cooperativaId;
+    const cooperadoId = cooperadoIdCard ?? user.cooperadoId;
+    if (!coopId || !cooperadoId) return;
+    const fromResume = lerCooperadoPwaInicioDashboardViewForResume(cooperadoId, coopId);
+    if (fromResume) {
+      setPwaInicioView(fromResume);
+      return;
+    }
+    if (!isAppDataWarm()) return;
+    const built = persistirCooperadoPwaInicioDashboardSnapshot(cooperadoId, coopId, user, true);
+    if (built?.view) setPwaInicioView(built.view);
+  }, [inicioPwaLeve, user, cooperadoIdCard, cooperativaIdCard]);
+
+  useEffect(() => {
+    if (!messenger || !user?.cooperadoId) return;
+    refreshPwaInicioView();
+  }, [messenger, user?.id, user?.cooperadoId, cooperativaIdCard, cooperadoIdCard, refreshPwaInicioView]);
+
+  useEffect(() => {
+    if (!messenger || lastSyncedAt == null) return;
+    refreshPwaInicioView();
+    if (user) persistirInicioCardCooperadoNotificarPwaLeve(user);
+  }, [messenger, lastSyncedAt, refreshPwaInicioView, user]);
 
   useEffect(() => {
     if (!inicioPwaLeve) return;
