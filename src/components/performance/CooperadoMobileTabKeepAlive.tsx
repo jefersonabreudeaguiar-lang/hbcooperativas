@@ -1,14 +1,13 @@
 "use client";
 
-import { useLayoutEffect, useRef, useState, useSyncExternalStore, useMemo, type ReactNode } from "react";
-import { cn } from "@/utils/format";
+import { useLayoutEffect, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 import { isLowMemoryDevice } from "@/services/imagePipelineService";
 import { CooperadoTabPanelProvider } from "@/lib/performance/cooperadoTabPanelContext";
 import {
-  COOPERADO_BOTTOM_TAB_HREFS,
   getCooperadoMobileTabCacheLimit,
   isCooperadoBottomTabPath,
   isCooperadoMobileTabKeepAliveEnabled,
+  isCooperadoMobileTabLruCacheEnabled,
   trimCooperadoTabCacheOrder,
 } from "@/lib/performance/cooperadoMobileTabKeepAlive";
 import { isCooperadoTabRouteLoadingElement } from "@/lib/performance/cooperadoTabPanelCache";
@@ -75,10 +74,20 @@ function publishKeepAliveDomState(state: {
 /**
  * RQL 8.6 — cache LRU enxuto (3 abas): só monta painéis visitados + atual.
  */
+function cooperadoTabSwitchInFlight(pathname: string, effectivePath: string): boolean {
+  return (
+    pathname !== effectivePath &&
+    isCooperadoBottomTabPath(pathname) &&
+    isCooperadoBottomTabPath(effectivePath)
+  );
+}
+
 export function CooperadoMobileTabKeepAlive({ pathname, children }: Props) {
   const effectivePath = useCooperadoEffectiveTabPath(pathname);
   const mobile = useCooperadoMobileViewport();
   const enabled = isCooperadoMobileTabKeepAliveEnabled();
+  const lruEnabled = isCooperadoMobileTabLruCacheEnabled();
+  const tabSwitching = cooperadoTabSwitchInFlight(pathname, effectivePath);
   const cacheRef = useRef<Partial<Record<string, ReactNode>>>({});
   const orderRef = useRef<string[]>([]);
   const [cacheVersion, setCacheVersion] = useState(0);
@@ -96,7 +105,7 @@ export function CooperadoMobileTabKeepAlive({ pathname, children }: Props) {
       panelCount: orderRef.current.length,
     });
 
-    if (!enabled || !mobile || !onTab) return;
+    if (!enabled || !mobile || !onTab || !lruEnabled) return;
     const merged = [
       effectivePath,
       pathname,
@@ -113,21 +122,14 @@ export function CooperadoMobileTabKeepAlive({ pathname, children }: Props) {
     if (orderChanged || !prevOrder.includes(effectivePath) || !prevOrder.includes(pathname)) {
       setCacheVersion((n) => n + 1);
     }
-  }, [enabled, mobile, onTab, pathname, effectivePath, cacheLimit, lowMemory]);
+  }, [enabled, mobile, onTab, lruEnabled, pathname, effectivePath, cacheLimit, lowMemory]);
 
   useLayoutEffect(() => {
-    if (!enabled || !mobile || !onTab) return;
+    if (!enabled || !mobile || !onTab || !lruEnabled) return;
     if (!isCooperadoBottomTabPath(pathname)) return;
     if (isCooperadoTabRouteLoadingElement(children)) return;
     cacheRef.current[pathname] = children;
-  }, [enabled, mobile, onTab, pathname, children]);
-
-  const hrefsToRender = useMemo(() => {
-    if (onTab && enabled && mobile) {
-      return [...new Set([effectivePath, pathname, ...orderRef.current])];
-    }
-    return [...new Set([...orderRef.current, ...Object.keys(cacheRef.current)])];
-  }, [cacheVersion, onTab, enabled, mobile, pathname, effectivePath]);
+  }, [enabled, mobile, onTab, lruEnabled, pathname, children]);
 
   const panelForHref = (
     href: string,
@@ -157,31 +159,40 @@ export function CooperadoMobileTabKeepAlive({ pathname, children }: Props) {
     return <>{children}</>;
   }
 
-  const renderPanels = (activePath: string | null) =>
-    hrefsToRender.map((href) => {
-      const active = activePath === href;
-      const { panel, warm } = panelForHref(href, activePath);
-      if (!panel) return null;
-      return (
+  if (!lruEnabled && onTab) {
+    return (
+      <CooperadoTabPanelProvider activeHref={tabSwitching ? effectivePath : pathname}>
         <div
-          key={href}
-          className={cn(
-            !active && "hidden [content-visibility:hidden] pointer-events-none",
-            active && "min-h-0"
-          )}
-          aria-hidden={!active}
-          inert={!active}
-          data-cooperado-tab-panel={href}
-          data-cooperado-tab-panel-warm={warm ? "1" : undefined}
-          data-cooperado-tab-panel-active={active ? "1" : undefined}
+          className="min-h-0"
+          data-cooperado-tab-panel={tabSwitching ? effectivePath : pathname}
+          data-cooperado-tab-panel-active="1"
+          data-cooperado-tab-switching={tabSwitching ? "1" : undefined}
         >
-          {/* Só a aba visível monta React — evita 3–4 telas (Entregas/Financeiro) re-renderizando a cada sync. */}
-          {active ? panel : null}
+          {tabSwitching ? <CooperadoTabRouteLoading /> : children}
         </div>
-      );
-    });
+      </CooperadoTabPanelProvider>
+    );
+  }
 
-  const panels = onTab ? renderPanels(effectivePath) : renderPanels(null);
+  const renderActivePanel = (activePath: string | null) => {
+    if (!activePath) return null;
+    const { panel, warm } = panelForHref(activePath, activePath);
+    if (!panel) return <CooperadoTabRouteLoading />;
+    return (
+      <div
+        key={activePath}
+        className="min-h-0"
+        data-cooperado-tab-panel={activePath}
+        data-cooperado-tab-panel-warm={warm ? "1" : undefined}
+        data-cooperado-tab-panel-active="1"
+        data-cooperado-tab-switching={tabSwitching ? "1" : undefined}
+      >
+        {panel}
+      </div>
+    );
+  };
+
+  const panels = onTab ? renderActivePanel(effectivePath) : renderActivePanel(pathname);
 
   if (!onTab) {
     return (

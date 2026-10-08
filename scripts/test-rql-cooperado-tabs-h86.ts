@@ -45,9 +45,14 @@ assert(panel.includes("data-cooperado-tab-panel"), "painéis por aba");
 assert(panel.includes("data-cooperado-tab-panel-warm"), "painel warm para paint instantâneo");
 assert(panel.includes("cooperadoTabPanelCache"), "cache não sobrescreve com loading.tsx");
 assert(
-  panel.includes("active ? panel : null"),
-  "só monta painel da aba ativa (evita jank após sync operacional)"
+  keep.includes("isCooperadoMobileTabLruCacheEnabled"),
+  "PWA leve desliga LRU multi-painel"
 );
+assert(
+  panel.includes("data-cooperado-tab-switching"),
+  "loader na troca de aba (esconde aba anterior)"
+);
+assert(panel.includes("renderActivePanel"), "só um painel ativo no LRU browser");
 assert(read("src/app/(app)/notas-pedido/NotasPedidoCooperadoMain.tsx").includes("useCooperadoPanelAppData"), "notas pausa store fora da aba");
 assert(
   read("src/lib/cooperado/cooperadoPwaMobileEntregas.ts").includes("isCooperadoPwaMobileEntregasLeve"),
