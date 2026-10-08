@@ -4,6 +4,7 @@
 import type { InicioCardMotorSnapshot } from "@/lib/cooperadoInicioCardPolicy";
 import { cooperadoMotorTemObrigacaoReceber } from "@/lib/cooperadoInicioCardPolicy";
 import { APP_BUILD_VERSION } from "@/lib/appBuildVersion";
+import { cooperadoPwaSnapshotBuildReadable } from "@/lib/cooperado/cooperadoPwaSnapshotBuildPolicy";
 
 export const INICIO_CARD_STORAGE_VERSION = 8;
 
@@ -30,7 +31,7 @@ export function lerInicioCardPersistido(
     if (!raw) return null;
     const parsed = JSON.parse(raw) as InicioCardPersistido;
     if (parsed.v !== INICIO_CARD_STORAGE_VERSION || !parsed.display) return null;
-    if (parsed.appBuild !== APP_BUILD_VERSION) return null;
+    if (!cooperadoPwaSnapshotBuildReadable(parsed.appBuild)) return null;
     return parsed;
   } catch {
     return null;
@@ -58,7 +59,7 @@ export function lerInicioCardPersistidoFlex(
       const parsed = JSON.parse(raw) as InicioCardPersistido;
       if (
         parsed.v === INICIO_CARD_STORAGE_VERSION &&
-        parsed.appBuild === APP_BUILD_VERSION &&
+        cooperadoPwaSnapshotBuildReadable(parsed.appBuild) &&
         parsed.display
       ) {
         return parsed;
@@ -121,7 +122,7 @@ export function limparInicioCardPersistidoFlex(
 export function inicioCardCacheProntoParaAbertura(persistido: InicioCardPersistido | null): boolean {
   if (!persistido?.display) return false;
   if (persistido.v !== INICIO_CARD_STORAGE_VERSION) return false;
-  if (persistido.appBuild !== APP_BUILD_VERSION) return false;
+  if (!cooperadoPwaSnapshotBuildReadable(persistido.appBuild)) return false;
   if (cooperadoMotorTemObrigacaoReceber(persistido.display)) return true;
   const savedAt = Date.parse(persistido.savedAt);
   if (!Number.isFinite(savedAt)) return false;

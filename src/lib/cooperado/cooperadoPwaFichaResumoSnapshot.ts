@@ -3,6 +3,7 @@
  */
 import type { AppData, User } from "@/types";
 import { APP_BUILD_VERSION } from "@/lib/appBuildVersion";
+import { cooperadoPwaSnapshotBuildReadable } from "@/lib/cooperado/cooperadoPwaSnapshotBuildPolicy";
 import { getData, isAppDataWarm } from "@/services/dataStore";
 import { resolverCooperadoIdCanonico } from "@/services/cooperadoCloudService";
 import { listarResumosFichaEmAbertoCooperado } from "@/services/cooperadoFichaTimelineService";
@@ -62,7 +63,7 @@ export function lerCooperadoPwaFichaResumoSnapshot(
     if (parsed.v !== COOPERADO_PWA_FICHA_RESUMO_SNAPSHOT_VERSION || !Array.isArray(parsed.fichaAberto)) {
       return null;
     }
-    if (parsed.appBuild !== APP_BUILD_VERSION) return null;
+    if (!cooperadoPwaSnapshotBuildReadable(parsed.appBuild)) return null;
     return parsed;
   } catch {
     return null;

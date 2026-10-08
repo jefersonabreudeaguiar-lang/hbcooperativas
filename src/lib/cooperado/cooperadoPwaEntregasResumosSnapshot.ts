@@ -11,6 +11,7 @@ import { resolverCooperadoIdCanonico } from "@/services/cooperadoCloudService";
 import { getUserCooperativaId } from "@/utils/cooperativa";
 import { getData, isAppDataWarm } from "@/services/dataStore";
 import { APP_BUILD_VERSION } from "@/lib/appBuildVersion";
+import { cooperadoPwaSnapshotBuildReadable } from "@/lib/cooperado/cooperadoPwaSnapshotBuildPolicy";
 import {
   COOPERADO_PWA_LEVE_UI_SNAPSHOT_REFRESH_EVENT,
   dispatchCooperadoPwaLeveUiSnapshotRefresh,
@@ -66,7 +67,7 @@ export function lerCooperadoPwaEntregasResumosSnapshot(
     if (parsed.v !== COOPERADO_PWA_ENTREGAS_SNAPSHOT_VERSION || !Array.isArray(parsed.entregasBase)) {
       return null;
     }
-    if (parsed.appBuild !== APP_BUILD_VERSION) return null;
+    if (!cooperadoPwaSnapshotBuildReadable(parsed.appBuild)) return null;
     return parsed;
   } catch {
     return null;

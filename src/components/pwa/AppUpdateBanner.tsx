@@ -8,8 +8,6 @@ import { useAuth } from "@/modules/auth/AuthProvider";
 import { isCooperadoAppUser } from "@/permissions";
 import { BUILD_SEEN_KEY, readStaffReleasePendingBuild } from "@/lib/pwa/clientRelease";
 
-const COOP_SW_RELOADED_BUILD_KEY = "hb-coop-sw-reloaded-build";
-
 function activateWaitingWorker(reg: ServiceWorkerRegistration) {
   const worker = reg.waiting ?? reg.installing;
   if (!worker) return;
@@ -41,11 +39,6 @@ export function AppUpdateBanner() {
     const onControllerChange = () => {
       if (!autoUpdate || reloaded) return;
       reloaded = true;
-      try {
-        sessionStorage.removeItem(COOP_SW_RELOADED_BUILD_KEY);
-      } catch {
-        /* ignore */
-      }
       window.location.reload();
     };
     navigator.serviceWorker.addEventListener("controllerchange", onControllerChange);

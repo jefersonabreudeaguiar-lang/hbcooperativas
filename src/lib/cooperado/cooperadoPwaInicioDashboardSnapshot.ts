@@ -3,6 +3,7 @@
  */
 import type { AppData, User } from "@/types";
 import { APP_BUILD_VERSION } from "@/lib/appBuildVersion";
+import { cooperadoPwaSnapshotBuildReadable } from "@/lib/cooperado/cooperadoPwaSnapshotBuildPolicy";
 import { getData, isAppDataWarm } from "@/services/dataStore";
 import { resolverCooperadoIdCanonico } from "@/services/cooperadoCloudService";
 import {
@@ -164,7 +165,7 @@ export function lerCooperadoPwaInicioDashboardSnapshot(
     if (!raw) return null;
     const parsed = JSON.parse(raw) as CooperadoPwaInicioDashboardSnapshot;
     if (parsed.v !== COOPERADO_PWA_INICIO_DASHBOARD_SNAPSHOT_VERSION || !parsed.view) return null;
-    if (parsed.appBuild !== APP_BUILD_VERSION) return null;
+    if (!cooperadoPwaSnapshotBuildReadable(parsed.appBuild)) return null;
     return parsed;
   } catch {
     return null;

@@ -12,6 +12,7 @@ import {
 } from "@/lib/performance/cooperadoMobileTabKeepAlive";
 import { isCooperadoTabRouteLoadingElement } from "@/lib/performance/cooperadoTabPanelCache";
 import { useCooperadoEffectiveTabPath } from "@/hooks/useCooperadoEffectiveTabPath";
+import { useCooperadoReleaseAlignOnTabPath } from "@/hooks/useCooperadoReleaseAlignOnTabPath";
 import { CooperadoTabRouteLoading } from "@/components/performance/CooperadoTabRouteLoading";
 
 function subscribeCooperadoMobileViewport(onChange: () => void): () => void {
@@ -76,6 +77,7 @@ function publishKeepAliveDomState(state: {
  */
 export function CooperadoMobileTabKeepAlive({ pathname, children }: Props) {
   const effectivePath = useCooperadoEffectiveTabPath(pathname);
+  useCooperadoReleaseAlignOnTabPath(effectivePath);
   const mobile = useCooperadoMobileViewport();
   const enabled = isCooperadoMobileTabKeepAliveEnabled();
   const cacheRef = useRef<Partial<Record<string, ReactNode>>>({});

@@ -22,6 +22,7 @@ import {
 import { isCooperadoPwaMobileLeveUi } from "@/lib/cooperado/cooperadoPwaLeveUi";
 import { isCooperadoInstantResumeEnabled, cooperadoInstantShellReady } from "@/lib/performance/cooperadoColdStart";
 import { APP_BUILD_VERSION } from "@/lib/appBuildVersion";
+import { cooperadoPwaSnapshotBuildReadable } from "@/lib/cooperado/cooperadoPwaSnapshotBuildPolicy";
 
 const RESUME_MAX_AGE_MS = 60 * 24 * 60 * 60 * 1000;
 
@@ -77,7 +78,7 @@ function lerPwaInicioDashRaw(
       savedAt?: string;
     };
     if (parsed.v !== COOPERADO_PWA_INICIO_DASHBOARD_SNAPSHOT_VERSION || !parsed.view) return null;
-    if (parsed.appBuild != null && parsed.appBuild !== APP_BUILD_VERSION) return null;
+    if (parsed.appBuild != null && !cooperadoPwaSnapshotBuildReadable(parsed.appBuild)) return null;
     if (!snapshotFreshEnough(parsed.savedAt)) return null;
     return { view: parsed.view, savedAt: parsed.savedAt ?? "" };
   } catch {

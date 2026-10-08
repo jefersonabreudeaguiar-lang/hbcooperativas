@@ -6,7 +6,6 @@ import { X, Download } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { AppIcon } from "@/components/ui/AppIcon";
 import { useAuth } from "@/modules/auth/AuthProvider";
-import { APP_BUILD_VERSION } from "@/lib/appBuildVersion";
 import {
   detectDevicePlatform,
   isIosNonSafari,
@@ -99,12 +98,6 @@ export function PwaProvider() {
 
   useEffect(() => {
     if (loading) return;
-
-    if ("serviceWorker" in navigator) {
-      void navigator.serviceWorker.register(`/sw.js?build=${APP_BUILD_VERSION}`).catch(() => {
-        /* registro opcional em dev sem HTTPS */
-      });
-    }
 
     if (isStandalone()) {
       setVisible(false);

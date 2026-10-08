@@ -197,7 +197,11 @@ export function evaluateDeploymentGuard(input: {
 
 const MAX_RELOADS_PER_MINUTE = 5;
 
-export function shouldAllowHardReload(reason: string): boolean {
+export function shouldAllowHardReload(
+  reason: string,
+  options?: { bypassBurstForBuildUpgrade?: boolean }
+): boolean {
+  if (options?.bypassBurstForBuildUpgrade) return true;
   if (typeof sessionStorage === "undefined") return true;
   try {
     const raw = sessionStorage.getItem(RELOAD_BURST_KEY);
@@ -309,16 +313,16 @@ export async function alignClientRuntimeToRelease(
     hard ? "hard" : "soft",
   ].join(":");
 
-  if (releaseAlignSessionTarget() === sessionTarget) {
-    return false;
-  }
-
   const embedded = getEmbeddedClientRelease();
   const buildBehind =
     options?.targetBuild != null &&
     options.targetBuild > 0 &&
     embedded.build > 0 &&
     options.targetBuild > embedded.build;
+
+  if (!buildBehind && releaseAlignSessionTarget() === sessionTarget) {
+    return false;
+  }
 
   if (!buildBehind && typeof sessionStorage !== "undefined") {
     try {
@@ -330,7 +334,7 @@ export async function alignClientRuntimeToRelease(
       /* ignore */
     }
   }
-  if (!shouldAllowHardReload(reason)) {
+  if (!shouldAllowHardReload(reason, { bypassBurstForBuildUpgrade: buildBehind })) {
     return false;
   }
   try {
