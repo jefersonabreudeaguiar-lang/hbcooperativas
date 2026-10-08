@@ -51,6 +51,7 @@ import {
 } from "@/lib/cooperado/cooperadoPwaMessengerMode";
 import { getSession } from "@/services/dataStore";
 import { markRqlColdStartPhase } from "@/lib/performance/rqlMarks";
+import { cooperadoNotasPendentesListPerfClass } from "@/lib/performance/cooperadoNotasListPerf";
 import {
   loadCooperadoAnexarPipeline,
   prefetchCooperadoAnexarPipeline,
@@ -4409,7 +4410,12 @@ export default function NotasPedidoCooperadoMain() {
                       </p>
                     </div>
                   </div>
-                  <div className="rounded-lg border border-amber-200 bg-white shadow-sm max-h-[min(65vh,28rem)] sm:max-h-[min(72vh,36rem)] overflow-y-auto overscroll-contain divide-y divide-amber-100/90">
+                  <div
+                    className={cn(
+                      "rounded-lg border border-amber-200 bg-white shadow-sm max-h-[min(65vh,28rem)] sm:max-h-[min(72vh,36rem)] overflow-y-auto overscroll-contain divide-y divide-amber-100/90",
+                      cooperadoNotasPendentesListPerfClass(pendentesAbaAtiva.length)
+                    )}
+                  >
                     {pendentesAbaAtiva.map((n) => {
                       const qtdFotosCard = contarFotosEnviadasNota(n);
                       const fotoThumb = getFotoExibicaoNota(n);

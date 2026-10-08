@@ -9,6 +9,11 @@ import { useEnsureAppDataWarm } from "@/hooks/useEnsureAppDataWarm";
 import type { AppDataNotifyDomain } from "@/lib/performance/appDataDomainNotify";
 import { isAppDataWarm } from "@/services/dataStore";
 import { useCooperadoTabPanelActive } from "@/hooks/useCooperadoTabPanelActive";
+import { useCooperadoMessengerReadModelRevision } from "@/hooks/useCooperadoMessengerReadModelRevision";
+import {
+  lerCooperadoPwaFichaResumoSnapshot,
+  type CooperadoPwaFichaResumoSnapshot,
+} from "@/lib/cooperado/cooperadoPwaFichaResumoSnapshot";
 import {
   cooperadoPwaUiSubscribesAppData,
   isCooperadoPwaMessengerMode,
@@ -202,6 +207,18 @@ export default function FichaCorridaPage() {
   const [abaMesPagamentoResponsavel, setAbaMesPagamentoResponsavel] = useState<"pendente" | string>("pendente");
   const [pixStepVisited, setPixStepVisited] = useState(false);
   const coopIdEarly = user && data ? getUserCooperativaId(user, data) : undefined;
+  const readModelsRevision = useCooperadoMessengerReadModelRevision();
+  const [fichaResumoSnap, setFichaResumoSnap] = useState<CooperadoPwaFichaResumoSnapshot | null>(
+    null
+  );
+
+  useEffect(() => {
+    if (!messenger || !cooperadoId || !coopIdEarly) {
+      setFichaResumoSnap(null);
+      return;
+    }
+    setFichaResumoSnap(lerCooperadoPwaFichaResumoSnapshot(cooperadoId, coopIdEarly));
+  }, [messenger, cooperadoId, coopIdEarly, readModelsRevision]);
 
   useEffect(() => {
     if (!tabActive || messenger) return;
@@ -293,11 +310,21 @@ export default function FichaCorridaPage() {
   }, [data, coopId, user?.id, tabActive]);
 
   const mesEmAberto = useMemo(() => {
+    if (messenger && fichaResumoSnap?.mesPrincipal) return fichaResumoSnap.mesPrincipal;
     if (!tabActive || !data || !cooperadoId) return getCurrentMesReferencia();
     return bicCentralMesPrincipalQuantoVouReceber(data, cooperadoId, coopId, {
       apresentacaoConsolidada: apresentacaoFinanceiroUi,
     });
-  }, [tabActive, data, cooperadoId, coopId, hbDescontosRevision, apresentacaoFinanceiroUi]);
+  }, [
+    tabActive,
+    data,
+    cooperadoId,
+    coopId,
+    hbDescontosRevision,
+    apresentacaoFinanceiroUi,
+    messenger,
+    fichaResumoSnap,
+  ]);
 
   const valorReceberConsolidado = useMemo(() => {
     if (!tabActive || !data || !cooperadoId) return null;

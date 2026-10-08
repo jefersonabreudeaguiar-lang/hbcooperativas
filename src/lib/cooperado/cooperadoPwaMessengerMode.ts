@@ -13,6 +13,7 @@ import {
   dispatchCooperadoPwaLeveUiSnapshotRefresh,
   persistirInicioCardCooperadoNotificarPwaLeve,
 } from "@/lib/cooperado/cooperadoPwaLeveUi";
+import { materializeCooperadoScopedReadModels } from "@/lib/cooperado/cooperadoScopedReadModels";
 
 export function isCooperadoPwaMessengerMode(): boolean {
   return isCooperadoPwaMobileLeveUi();
@@ -31,5 +32,6 @@ export function persistirCooperadoPwaMessengerCaches(
   persistirInicioCardCooperadoNotificarPwaLeve(user);
   persistirCooperadoPwaInicioDashboardSnapshotFromUser(user, true);
   persistirCooperadoPwaEntregasResumosSnapshotFromUser(user);
+  materializeCooperadoScopedReadModels(user);
   dispatchCooperadoPwaLeveUiSnapshotRefresh();
 }
