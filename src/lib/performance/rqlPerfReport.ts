@@ -174,6 +174,12 @@ export type RqlPerfDebugHandle = {
   printWhatsappCompare: () => MessagingParityReport;
 };
 
+export function printRqlWhatsappCompareToConsole(): void {
+  if (typeof window === "undefined") return;
+  const w = window as Window & { __hbRqlPerf?: RqlPerfDebugHandle };
+  w.__hbRqlPerf?.printWhatsappCompare?.();
+}
+
 function logRqlPerfDebugOffHint(): void {
   console.info(
     `[HB RQL] Medição desligada neste build. Para ativar neste aparelho:

@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/Button";
 import {
   buildRqlWhatsappCompareClipboardText,
   isRqlPerfDebugEnabled,
+  printRqlWhatsappCompareToConsole,
   RQL_PERF_DEBUG_STORAGE_KEY,
 } from "@/lib/performance/rqlPerfReport";
 import { APP_BUILD_VERSION } from "@/lib/appBuildVersion";
@@ -36,9 +37,7 @@ export function RqlPerfHomologSheet({ open, onClose }: Props) {
     try {
       const text = buildRqlWhatsappCompareClipboardText();
       setReportText(text);
-      if (typeof window !== "undefined" && window.__hbRqlPerf?.printWhatsappCompare) {
-        window.__hbRqlPerf.printWhatsappCompare();
-      }
+      printRqlWhatsappCompareToConsole();
       setStatus("Relatório gerado. Toque em Copiar para enviar.");
     } catch (e) {
       setStatus(e instanceof Error ? e.message : "Erro ao gerar relatório.");
