@@ -19,7 +19,7 @@ function readKeepAliveEnvDefault(): boolean {
 
 /** RQL 8.6 — LRU de abas montadas no mobile cooperado. Default **ligado**; `NEXT_PUBLIC_COOPERADO_TAB_KEEP_ALIVE=false` desliga. */
 export function isCooperadoMobileTabKeepAliveEnabled(): boolean {
-  if (typeof window !== "undefined" && isCooperadoPwaMessengerMode()) return false;
+  if (typeof window !== "undefined" && isCooperadoPwaMessengerMode()) return true;
   if (typeof document !== "undefined") {
     const dom = document.documentElement.getAttribute("data-cooperado-tab-keep-alive");
     if (dom === "0") return false;
@@ -42,6 +42,9 @@ export function isCooperadoMobileBrowserTabKeepAlive(): boolean {
 
 /** LRU enxuto — 3 abas no padrão (rápido); 2 em aparelho fraco; browser mobile cooperado ≈ 1 painel pesado. */
 export function getCooperadoMobileTabCacheLimit(lowMemoryDevice: boolean): number {
+  if (typeof window !== "undefined" && isCooperadoPwaMessengerMode()) {
+    return lowMemoryDevice ? 2 : 3;
+  }
   if (isCooperadoMobileBrowserTabKeepAlive()) {
     return lowMemoryDevice ? 2 : 3;
   }

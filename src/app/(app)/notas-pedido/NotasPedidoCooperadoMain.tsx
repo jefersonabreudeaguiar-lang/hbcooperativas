@@ -44,7 +44,11 @@ import {
   persistirCooperadoPwaEntregasResumosSnapshot,
   type CooperadoPwaEntregasResumosSnapshot,
 } from "@/lib/cooperado/cooperadoPwaEntregasResumosSnapshot";
-import { lerCooperadoPwaEntregasResumosForResume } from "@/lib/cooperado/cooperadoPwaInstantResume";
+import {
+  cooperadoPwaInstantPaintReady,
+  lerCooperadoPwaEntregasResumosForResume,
+} from "@/lib/cooperado/cooperadoPwaInstantResume";
+import { CooperadoTabRouteLoading } from "@/components/performance/CooperadoTabRouteLoading";
 import {
   cooperadoPwaUiSubscribesAppData,
   isCooperadoPwaMessengerMode,
@@ -4051,7 +4055,15 @@ export default function NotasPedidoCooperadoMain() {
   }, [selectedNota, data, coopId, conferenciaCooperadoId]);
 
   if (!data) {
-    if (!ready) return null;
+    if (!ready) {
+      if (
+        isCooperado &&
+        (messenger || entregasPwaLeve || (user && cooperadoPwaInstantPaintReady(user)))
+      ) {
+        return <CooperadoTabRouteLoading />;
+      }
+      return null;
+    }
     return (
       <div className="flex justify-center py-20">
         <div className="w-8 h-8 border-4 border-green-600 border-t-transparent rounded-full animate-spin" />

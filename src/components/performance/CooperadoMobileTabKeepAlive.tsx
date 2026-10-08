@@ -174,7 +174,7 @@ export function CooperadoMobileTabKeepAlive({ pathname, children }: Props) {
           data-cooperado-tab-panel-warm={warm ? "1" : undefined}
           data-cooperado-tab-panel-active={active ? "1" : undefined}
         >
-          {active ? panel : null}
+          {active || warm ? panel : null}
         </div>
       );
     });
