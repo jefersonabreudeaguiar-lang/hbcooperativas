@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useMemo, useState, useEffect, useCallback } from "react";
 import { useSearchParams } from "next/navigation";
 import { QrCode, XCircle, Wallet, CheckCircle2, FileDown, PenLine, BookOpen, CreditCard, History, Users, ChevronDown, Pencil, RefreshCw, Eye } from "lucide-react";
-import { useAppDataSelectorForDomains } from "@/hooks/useAppData";
+import { useAppDataSelectorForDomainsWhenActive } from "@/hooks/useAppData";
 import { useEnsureAppDataWarm } from "@/hooks/useEnsureAppDataWarm";
 import type { AppDataNotifyDomain } from "@/lib/performance/appDataDomainNotify";
 import { isAppDataWarm } from "@/services/dataStore";
@@ -179,7 +179,7 @@ const FICHA_APP_DATA_DOMAINS: AppDataNotifyDomain[] = ["financeiro", "shell"];
 export default function FichaCorridaPage() {
   const ready = useEnsureAppDataWarm();
   const tabActive = useCooperadoTabPanelActive("/ficha-corrida");
-  const data = useAppDataSelectorForDomains(FICHA_APP_DATA_DOMAINS, (d) => d, []);
+  const data = useAppDataSelectorForDomainsWhenActive(tabActive, FICHA_APP_DATA_DOMAINS, (d) => d, []);
   const hbDescontosRevision = useContaCoopDescontosRevision();
   const { user, isCooperado, cooperadoId, check } = usePermissions();
   const searchParams = useSearchParams();

@@ -65,7 +65,9 @@ export function AppSchedulerBootstrap() {
         cancelPaint = scheduleMarkRqlRoutePaintReady(hop);
       }
       markUserInteraction();
-      markUserActivity();
+      if (!isCooperadoBottomTabPath(effectivePath)) {
+        markUserActivity();
+      }
     }
     prevHopRef.current = hop;
     return () => {

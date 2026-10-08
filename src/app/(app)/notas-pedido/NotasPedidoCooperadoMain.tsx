@@ -6,9 +6,10 @@ import Link from "next/link";
 import {
   Camera, CheckCircle, FileText, XCircle, RefreshCw, ChevronRight, Eye, Building2, Pencil, UserPlus, X, ImagePlus, Trash2, FileSignature, BookOpen, Package, Users,
 } from "lucide-react";
-import { useAppData, useAppDataSelector } from "@/hooks/useAppData";
+import { useAppDataSelector } from "@/hooks/useAppData";
 import { useEnsureAppDataWarm } from "@/hooks/useEnsureAppDataWarm";
 import { useCooperadoTabPanelActive } from "@/hooks/useCooperadoTabPanelActive";
+import { useCooperadoPanelAppData } from "@/hooks/useCooperadoPanelAppData";
 import { useResponsavelFilaConferencia } from "@/hooks/useResponsavelFilaConferencia";
 import { usePermissions } from "@/hooks/usePermissions";
 import { getUserCooperativaId } from "@/utils/cooperativa";
@@ -340,7 +341,7 @@ function getEscolaNotaLabel(
 }
 
 function loadItensFromInstituicao(
-  data: NonNullable<ReturnType<typeof useAppData>>,
+  data: AppData,
   instituicaoId: string,
   cooperativaId?: string,
   existing?: NotaPedidoItem[]
@@ -371,7 +372,7 @@ function qtyInputClassName(filled: boolean, extra?: string) {
 export default function NotasPedidoCooperadoMain() {
   const ready = useEnsureAppDataWarm();
   const tabActive = useCooperadoTabPanelActive("/notas-pedido");
-  const data = useAppData();
+  const data = useCooperadoPanelAppData(tabActive, ["notas", "shell", "financeiro", "operacional"]);
   const { check, user, isCooperado, isDiretoria, cooperadoId } = usePermissions();
   const { syncing, syncingForUi } = useSyncStatus();
   const searchParams = useSearchParams();

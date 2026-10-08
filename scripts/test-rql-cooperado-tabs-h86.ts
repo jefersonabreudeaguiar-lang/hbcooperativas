@@ -44,6 +44,8 @@ assert(panel.includes("useSyncExternalStore"), "viewport mobile sync no 1º pain
 assert(panel.includes("data-cooperado-tab-panel"), "painéis por aba");
 assert(panel.includes("data-cooperado-tab-panel-warm"), "painel warm para paint instantâneo");
 assert(panel.includes("cooperadoTabPanelCache"), "cache não sobrescreve com loading.tsx");
+assert(panel.includes("active ? panel : null"), "só monta painel da aba ativa (sem sync em background)");
+assert(read("src/app/(app)/notas-pedido/NotasPedidoCooperadoMain.tsx").includes("useCooperadoPanelAppData"), "notas pausa store fora da aba");
 assert(panel.includes("useCooperadoEffectiveTabPath"), "navegação otimista cooperado");
 assert(layout.includes("setCooperadoOptimisticTab"), "pointerdown otimista no rodapé");
 assert(perms.includes("cooperadoBottomTabRoutes"), "menu mobile alinhado às 4 abas");

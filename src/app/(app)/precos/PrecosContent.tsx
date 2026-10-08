@@ -2,7 +2,9 @@
 
 import { useMemo, useState } from "react";
 import { Search, Tag, RefreshCw } from "lucide-react";
-import { useAppDataReady, useAppDataSelector } from "@/hooks/useAppData";
+import { useAppDataReady, useAppDataSelectorForDomainsWhenActive } from "@/hooks/useAppData";
+import type { AppDataNotifyDomain } from "@/lib/performance/appDataDomainNotify";
+import { useCooperadoTabPanelActive } from "@/hooks/useCooperadoTabPanelActive";
 import { usePermissions } from "@/hooks/usePermissions";
 import { getUserCooperativaId } from "@/utils/cooperativa";
 import { PageHeader } from "@/components/ui/Table";
@@ -22,10 +24,15 @@ import {
 import { getData } from "@/services/dataStore";
 import { PageSkeleton } from "@/components/ui/PageSkeleton";
 
+const PRECOS_APP_DATA_DOMAINS: AppDataNotifyDomain[] = ["operacional", "shell"];
+
 export default function PrecosPage() {
   const ready = useAppDataReady();
+  const tabActive = useCooperadoTabPanelActive("/precos");
   const { user } = usePermissions();
-  const coopIdSel = useAppDataSelector(
+  const coopIdSel = useAppDataSelectorForDomainsWhenActive(
+    tabActive,
+    PRECOS_APP_DATA_DOMAINS,
     (d) => (user ? getUserCooperativaId(user, d) ?? undefined : undefined),
     [user?.id]
   );
@@ -47,15 +54,21 @@ export default function PrecosPage() {
     }
   };
 
-  const instituicoes = useAppDataSelector(
-    (d) => (coopId ? getInstituicoesCatalogo(d, coopId) : []),
-    [coopId]
-  ) ?? [];
+  const instituicoes =
+    useAppDataSelectorForDomainsWhenActive(
+      tabActive,
+      PRECOS_APP_DATA_DOMAINS,
+      (d) => (coopId ? getInstituicoesCatalogo(d, coopId) : []),
+      [coopId]
+    ) ?? [];
 
-  const produtosDaCoop = useAppDataSelector(
-    (d) => (coopId ? getTodosProdutosCatalogo(d, coopId) : []),
-    [coopId]
-  ) ?? [];
+  const produtosDaCoop =
+    useAppDataSelectorForDomainsWhenActive(
+      tabActive,
+      PRECOS_APP_DATA_DOMAINS,
+      (d) => (coopId ? getTodosProdutosCatalogo(d, coopId) : []),
+      [coopId]
+    ) ?? [];
 
   const instMap = useMemo(() => new Map(instituicoes.map((i) => [i.id, i.nome])), [instituicoes]);
 

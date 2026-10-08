@@ -13,6 +13,7 @@ import {
 } from "@/lib/performance/cooperadoMobileTabKeepAlive";
 import { isCooperadoTabRouteLoadingElement } from "@/lib/performance/cooperadoTabPanelCache";
 import { useCooperadoEffectiveTabPath } from "@/hooks/useCooperadoEffectiveTabPath";
+import { CooperadoTabRouteLoading } from "@/components/performance/CooperadoTabRouteLoading";
 
 function subscribeCooperadoMobileViewport(onChange: () => void): () => void {
   const mq = window.matchMedia("(max-width: 1023px)");
@@ -96,9 +97,6 @@ export function CooperadoMobileTabKeepAlive({ pathname, children }: Props) {
     });
 
     if (!enabled || !mobile || !onTab) return;
-    if (!isCooperadoTabRouteLoadingElement(children)) {
-      cacheRef.current[pathname] = children;
-    }
     const merged = [
       effectivePath,
       pathname,
@@ -115,7 +113,14 @@ export function CooperadoMobileTabKeepAlive({ pathname, children }: Props) {
     if (orderChanged || !prevOrder.includes(effectivePath) || !prevOrder.includes(pathname)) {
       setCacheVersion((n) => n + 1);
     }
-  }, [enabled, mobile, onTab, pathname, effectivePath, children, cacheLimit, lowMemory]);
+  }, [enabled, mobile, onTab, pathname, effectivePath, cacheLimit, lowMemory]);
+
+  useLayoutEffect(() => {
+    if (!enabled || !mobile || !onTab) return;
+    if (!isCooperadoBottomTabPath(pathname)) return;
+    if (isCooperadoTabRouteLoadingElement(children)) return;
+    cacheRef.current[pathname] = children;
+  }, [enabled, mobile, onTab, pathname, children]);
 
   const hrefsToRender = useMemo(() => {
     if (onTab && enabled && mobile) {
@@ -138,6 +143,7 @@ export function CooperadoMobileTabKeepAlive({ pathname, children }: Props) {
         return { panel: children, warm: false };
       }
       if (cached !== undefined) return { panel: cached, warm: true };
+      if (pathname !== href) return { panel: <CooperadoTabRouteLoading />, warm: false };
       return { panel: children, warm: false };
     }
     if (activePath === href && onTab) {
@@ -165,7 +171,7 @@ export function CooperadoMobileTabKeepAlive({ pathname, children }: Props) {
           data-cooperado-tab-panel={href}
           data-cooperado-tab-panel-warm={warm ? "1" : undefined}
         >
-          {panel}
+          {active ? panel : null}
         </div>
       );
     });

@@ -408,8 +408,13 @@ function AppShellInner({ children }: { children: React.ReactNode }) {
     : staffKeepAliveShell
       ? "staff"
       : "none";
+  const cooperadoEffectiveTabPath = useCooperadoEffectiveTabPath(pathname);
+  const scrollPathname =
+    mobileTabScrollMode === "cooperado" && cooperadoKeepAliveShell
+      ? cooperadoEffectiveTabPath
+      : pathname;
   const mainScrollRef = useMobileTabScrollRestore({
-    pathname,
+    pathname: scrollPathname,
     scrollMode: mobileTabScrollMode,
   });
 

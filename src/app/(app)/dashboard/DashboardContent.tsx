@@ -4,7 +4,12 @@ import { useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
 import type { AppData } from "@/types";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useAppDataSelector, useAppDataReady, useAppDataSelectorForDomains } from "@/hooks/useAppData";
+import {
+  useAppDataSelector,
+  useAppDataReady,
+  useAppDataSelectorForDomainsWhenActive,
+} from "@/hooks/useAppData";
+import { useCooperadoTabPanelActive } from "@/hooks/useCooperadoTabPanelActive";
 import type { AppDataNotifyDomain } from "@/lib/performance/appDataDomainNotify";
 import { getData, getDataRevision } from "@/services/dataStore";
 import { useAuth } from "@/modules/auth/AuthProvider";
@@ -92,6 +97,7 @@ import { CooperadoInicioValorReceberCard } from "@/components/cooperado/Cooperad
 const DASHBOARD_INICIO_DOMAINS: AppDataNotifyDomain[] = ["shell", "notas", "financeiro", "operacional"];
 
 function CooperadoDashboard() {
+  const tabActive = useCooperadoTabPanelActive("/dashboard");
   const { user } = useAuth();
   const router = useRouter();
   const hbCredit = useHbCreditEnabled(user);
@@ -101,13 +107,18 @@ function CooperadoDashboard() {
   const recoverySyncRef = useRef(false);
   const hbDescontosRevision = useContaCoopDescontosRevision();
 
-  const financeiroAusente = useAppDataSelector((data) => {
-    if (!data || !user?.cooperadoId) return false;
-    const coopId = getUserCooperativaId(user, data);
-    if (!coopId) return false;
-    const cooperadoId = resolverCooperadoIdCanonico(data, user.cooperadoId, coopId);
-    return cooperadoFinanceiroDesatualizado(data, cooperadoId, coopId);
-  }, [user?.id, user?.cooperadoId, user?.cooperativaId, hbDescontosRevision]);
+  const financeiroAusente = useAppDataSelectorForDomainsWhenActive(
+    tabActive,
+    DASHBOARD_INICIO_DOMAINS,
+    (data) => {
+      if (!data || !user?.cooperadoId) return false;
+      const coopId = getUserCooperativaId(user, data);
+      if (!coopId) return false;
+      const cooperadoId = resolverCooperadoIdCanonico(data, user.cooperadoId, coopId);
+      return cooperadoFinanceiroDesatualizado(data, cooperadoId, coopId);
+    },
+    [user?.id, user?.cooperadoId, user?.cooperativaId, hbDescontosRevision]
+  );
 
   useEffect(() => {
     recoverySyncRef.current = false;
@@ -132,23 +143,28 @@ function CooperadoDashboard() {
     requestCooperadoFinanceiroRecoverySync();
   }, [financeiroAusente]);
 
-  const contaCoopSync = useAppDataSelector((data) => {
-    if (!data || !user?.cooperadoId) return null;
-    const coopId = getUserCooperativaId(user, data);
-    if (!coopId) return null;
-    const cooperadoId = resolverCooperadoIdCanonico(data, user.cooperadoId, coopId);
-    const paridade = leituraFinanceiraParidadeCooperado(data, cooperadoId, coopId);
-    const mesHb =
-      paridade.mesesResumo[0] ??
-      bicCentralMesPrincipalQuantoVouReceber(data, cooperadoId, coopId, { apresentacaoConsolidada });
-    const exibicaoOpts = bicCentralBuildValorExibicaoCooperadoOpts(data, cooperadoId, mesHb, coopId);
-    return {
-      cooperadoId,
-      mesReferencia: exibicaoOpts.mesReferencia,
-      cooperativaId: coopId,
-      cooperadoNome: exibicaoOpts.cooperadoNome,
-    };
-  }, [user?.id, user?.cooperadoId, user?.cooperativaId, hbDescontosRevision]);
+  const contaCoopSync = useAppDataSelectorForDomainsWhenActive(
+    tabActive,
+    DASHBOARD_INICIO_DOMAINS,
+    (data) => {
+      if (!data || !user?.cooperadoId) return null;
+      const coopId = getUserCooperativaId(user, data);
+      if (!coopId) return null;
+      const cooperadoId = resolverCooperadoIdCanonico(data, user.cooperadoId, coopId);
+      const paridade = leituraFinanceiraParidadeCooperado(data, cooperadoId, coopId);
+      const mesHb =
+        paridade.mesesResumo[0] ??
+        bicCentralMesPrincipalQuantoVouReceber(data, cooperadoId, coopId, { apresentacaoConsolidada });
+      const exibicaoOpts = bicCentralBuildValorExibicaoCooperadoOpts(data, cooperadoId, mesHb, coopId);
+      return {
+        cooperadoId,
+        mesReferencia: exibicaoOpts.mesReferencia,
+        cooperativaId: coopId,
+        cooperadoNome: exibicaoOpts.cooperadoNome,
+      };
+    },
+    [user?.id, user?.cooperadoId, user?.cooperativaId, hbDescontosRevision, apresentacaoConsolidada]
+  );
 
   useSyncContaCoopValorReceberPilot(
     contaCoopSync ? { ...contaCoopSync, user, initialDelayMs: 3_000 } : undefined
@@ -174,7 +190,8 @@ function CooperadoDashboard() {
       carregandoValoresFinanceiros,
     });
 
-  const view = useAppDataSelectorForDomains(
+  const view = useAppDataSelectorForDomainsWhenActive(
+    tabActive,
     DASHBOARD_INICIO_DOMAINS,
     (data) => {
     if (!data || !user?.cooperadoId) return null;
