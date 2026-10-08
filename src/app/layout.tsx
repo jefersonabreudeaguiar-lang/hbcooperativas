@@ -3,7 +3,7 @@ import { Geist } from "next/font/google";
 import "./globals.css";
 import { AuthProvider } from "@/modules/auth/AuthProvider";
 import { PwaProvider } from "@/components/pwa/PwaProvider";
-import { AppUpdateBanner } from "@/components/pwa/AppUpdateBanner";
+import { PwaSilentServiceWorker } from "@/components/pwa/PwaSilentServiceWorker";
 import { ClientDeploymentGuard } from "@/components/pwa/ClientDeploymentGuard";
 import { getPrivateAppRobotsMetadata } from "@/lib/security/crawlerPolicy";
 import { APP_BUILD_VERSION } from "@/lib/appBuildVersion";
@@ -86,7 +86,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <AuthProvider>
           <RqlPerfDebugBootstrap />
           <ClientDeploymentGuard />
-          <AppUpdateBanner />
+          <PwaSilentServiceWorker />
           {children}
           <PwaProvider />
         </AuthProvider>

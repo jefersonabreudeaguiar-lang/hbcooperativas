@@ -77,11 +77,29 @@ export function runtimeAlreadyOnCanonicalRelease(
   if (pageBuild > 0 && pageBuild !== canonical.build) return false;
   const effectiveBuild = pageBuild > 0 ? pageBuild : embedded.build;
   if (effectiveBuild !== canonical.build) return false;
-  const pageDpl = (pageRelease?.deploymentId ?? embedded.deploymentId).trim();
+
+  const canonSha = canonical.gitCommitSha.trim();
+  const embSha = embedded.gitCommitSha.trim();
+  if (canonSha && embSha && canonSha !== embSha) return false;
+  const pageSha = (pageRelease?.gitCommitSha ?? "").trim();
+  if (canonSha && pageSha && canonSha !== pageSha) return false;
+
   const canonDpl = canonical.deploymentId.trim();
+  const embDpl = embedded.deploymentId.trim();
+  const pageDpl = (pageRelease?.deploymentId ?? "").trim();
+  if (canonDpl && embDpl && embDpl !== canonDpl) return false;
+  if (canonDpl && pageDpl && pageDpl !== canonDpl) return false;
   if (!canonDpl) return true;
-  if (!pageDpl) return true;
-  return pageDpl === canonDpl;
+  if (!pageDpl && !embDpl) return true;
+  return (pageDpl || embDpl) === canonDpl;
+}
+
+export function runtimeNeedsReleaseUpgrade(
+  canonical: ClientReleaseInfo,
+  pageRelease: ClientReleaseInfo | null,
+  embedded: ClientReleaseInfo = getEmbeddedClientRelease()
+): boolean {
+  return !runtimeAlreadyOnCanonicalRelease(canonical, pageRelease, embedded);
 }
 
 export function runtimeBundleBehindCanonical(
@@ -295,18 +313,20 @@ export async function clearClientRuntimeCaches(): Promise<void> {
 }
 
 export type AlignClientRuntimeOptions = {
-  /** Deploy legado bloqueado — limpa SW/cache. Demais casos: um reload discreto. */
+  /** Limpa SW/cache e recarrega (padrão para nova versão na nuvem). */
   hard?: boolean;
   targetBuild?: number;
+  /** Nova versão na Vercel — ignora cooldown/sessão/rajada de reload. */
+  urgentUpgrade?: boolean;
 };
 
-/** Alinha runtime ao release canônico — hard só para deployments bloqueados. */
+/** Alinha runtime ao release canônico. */
 export async function alignClientRuntimeToRelease(
   reason: string,
   targetDeploymentId?: string,
   options?: AlignClientRuntimeOptions
 ): Promise<boolean> {
-  const hard = options?.hard === true;
+  const hard = options?.hard !== false;
   const sessionTarget = [
     options?.targetBuild ?? 0,
     (targetDeploymentId ?? "").trim(),
@@ -319,12 +339,13 @@ export async function alignClientRuntimeToRelease(
     options.targetBuild > 0 &&
     embedded.build > 0 &&
     options.targetBuild > embedded.build;
+  const urgent = options?.urgentUpgrade === true || buildBehind;
 
-  if (!buildBehind && releaseAlignSessionTarget() === sessionTarget) {
+  if (!urgent && releaseAlignSessionTarget() === sessionTarget) {
     return false;
   }
 
-  if (!buildBehind && typeof sessionStorage !== "undefined") {
+  if (!urgent && typeof sessionStorage !== "undefined") {
     try {
       const last = Number(sessionStorage.getItem(RELEASE_ALIGN_COOLDOWN_KEY) || 0);
       if (last > 0 && Date.now() - last < RELEASE_ALIGN_COOLDOWN_MS) {
@@ -334,7 +355,7 @@ export async function alignClientRuntimeToRelease(
       /* ignore */
     }
   }
-  if (!shouldAllowHardReload(reason, { bypassBurstForBuildUpgrade: buildBehind })) {
+  if (!shouldAllowHardReload(reason, { bypassBurstForBuildUpgrade: urgent })) {
     return false;
   }
   try {
@@ -368,11 +389,11 @@ export function buildInlinePageReleaseBootstrap(pageRelease: ClientReleaseInfo):
 }
 
 /**
- * Script inline no <head> — só bloqueia deployments legados perigosos.
- * Alinhamento de build/chunks fica no ClientDeploymentGuard (após UI), sem piscar no boot.
+ * Script inline no <head> — bloqueia deploy legado e alinha HTML cacheado à produção atual.
+ * Só consulta /api/client-release neste carregamento de documento (não faz polling).
  */
 export function buildInlineDeploymentBootScript(pageRelease: ClientReleaseInfo): string {
   const blockedJson = JSON.stringify([...BLOCKED_VERCEL_DEPLOYMENT_IDS]);
   const pageJson = JSON.stringify(pageRelease);
-  return `(function(){var BLOCK=${blockedJson};var PAGE=${pageJson};var BURST_KEY=${JSON.stringify(RELOAD_BURST_KEY)};var MAX=${MAX_RELOADS_PER_MINUTE};function collect(){var ids=[];var seen={};document.querySelectorAll('script[src*="dpl="],link[href*="dpl="]').forEach(function(el){var u=el.src||el.href||"";var m=u.match(/[?&]dpl=([^&]+)/);if(m&&m[1]&&!seen[m[1]]){seen[m[1]]=1;ids.push(m[1]);}});return ids;}function blocked(ids){for(var i=0;i<ids.length;i++){if(BLOCK.indexOf(ids[i])>=0)return ids[i];}return null;}function allowReload(reason){try{var now=Date.now();var raw=sessionStorage.getItem(BURST_KEY);var entries=raw?JSON.parse(raw):[];entries=entries.filter(function(e){return now-e.t<60000;});if(entries.length>=MAX)return false;entries.push({t:now,r:reason});sessionStorage.setItem(BURST_KEY,JSON.stringify(entries));return true;}catch(e){return true;}}function hardAlign(reason){if(!allowReload(reason))return;var targetId=(PAGE.deploymentId||"").trim();Promise.resolve().then(function(){if(!("caches" in window))return;return caches.keys().then(function(keys){return Promise.all(keys.map(function(k){return caches.delete(k);}));});}).then(function(){if(!("serviceWorker" in navigator))return;return navigator.serviceWorker.getRegistrations().then(function(regs){return Promise.all(regs.map(function(r){return r.unregister();}));});}).finally(function(){var u=new URL(location.origin+location.pathname);u.searchParams.set("_hbRelease",String(Date.now()));if(targetId)u.searchParams.set("_hbTargetDpl",targetId.slice(4,20));location.replace(u.toString());});}function checkBlockedOnly(){var pageId=(document.documentElement.getAttribute("data-dpl-id")||PAGE.deploymentId||"").trim();var ids=collect();if(blocked(ids)||(pageId&&blocked([pageId])))hardAlign("blocked");}if(document.readyState==="loading")document.addEventListener("DOMContentLoaded",checkBlockedOnly);else checkBlockedOnly();})();`;
+  return `(function(){var BLOCK=${blockedJson};var PAGE=${pageJson};var BURST_KEY=${JSON.stringify(RELOAD_BURST_KEY)};var MAX=${MAX_RELOADS_PER_MINUTE};function collect(){var ids=[];var seen={};document.querySelectorAll('script[src*="dpl="],link[href*="dpl="]').forEach(function(el){var u=el.src||el.href||"";var m=u.match(/[?&]dpl=([^&]+)/);if(m&&m[1]&&!seen[m[1]]){seen[m[1]]=1;ids.push(m[1]);}});return ids;}function blocked(ids){for(var i=0;i<ids.length;i++){if(BLOCK.indexOf(ids[i])>=0)return ids[i];}return null;}function allowReload(reason){try{var now=Date.now();var raw=sessionStorage.getItem(BURST_KEY);var entries=raw?JSON.parse(raw):[];entries=entries.filter(function(e){return now-e.t<60000;});if(entries.length>=MAX)return false;entries.push({t:now,r:reason});sessionStorage.setItem(BURST_KEY,JSON.stringify(entries));return true;}catch(e){return true;}}function hardAlign(reason,cloud){if(!allowReload(reason))return;var targetId=((cloud&&cloud.deploymentId)||PAGE.deploymentId||"").trim();Promise.resolve().then(function(){if(!("caches" in window))return;return caches.keys().then(function(keys){return Promise.all(keys.map(function(k){return caches.delete(k);}));});}).then(function(){if(!("serviceWorker" in navigator))return;return navigator.serviceWorker.getRegistrations().then(function(regs){return Promise.all(regs.map(function(r){return r.unregister();}));});}).finally(function(){var u=new URL(location.origin+location.pathname);u.searchParams.set("_hbRelease",String(Date.now()));if(targetId)u.searchParams.set("_hbTargetDpl",targetId.slice(4,20));location.replace(u.toString());});}function cloudAhead(){fetch("/api/client-release?_="+Date.now(),{cache:"no-store",credentials:"same-origin",headers:{"Cache-Control":"no-cache",Pragma:"no-cache"}}).then(function(r){return r.ok?r.json():null;}).then(function(cloud){if(!cloud||!cloud.build)return;var pb=PAGE.build||0;var cb=cloud.build||0;var pd=(PAGE.deploymentId||"").trim();var cd=(cloud.deploymentId||"").trim();var ps=(PAGE.gitCommitSha||"").trim();var cs=(cloud.gitCommitSha||"").trim();if(cb>pb)return hardAlign("cloud_build",cloud);if(cd&&pd&&cd!==pd)return hardAlign("cloud_dpl",cloud);if(cs&&ps&&cs!==ps)return hardAlign("cloud_sha",cloud);}).catch(function(){});}function checkBlockedOnly(){var pageId=(document.documentElement.getAttribute("data-dpl-id")||PAGE.deploymentId||"").trim();var ids=collect();if(blocked(ids)||(pageId&&blocked([pageId])))hardAlign("blocked",null);}if(document.readyState==="loading")document.addEventListener("DOMContentLoaded",checkBlockedOnly);else checkBlockedOnly();cloudAhead();})();`;
 }

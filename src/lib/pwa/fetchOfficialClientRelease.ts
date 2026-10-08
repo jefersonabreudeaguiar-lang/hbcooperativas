@@ -8,9 +8,8 @@ import {
   getPageEmbeddedReleaseFromDom,
   alignClientRuntimeToRelease,
   getEmbeddedClientRelease,
-  markStaffReleasePending,
   runtimeAlreadyOnCanonicalRelease,
-  runtimeBundleBehindCanonical,
+  runtimeNeedsReleaseUpgrade,
   type ClientReleaseInfo,
 } from "@/lib/pwa/clientRelease";
 
@@ -42,14 +41,6 @@ export async function fetchOfficialClientRelease(): Promise<ClientReleaseInfo | 
   }
 }
 
-/** Cooperado PWA: limpar SW/cache ao subir de build (reload suave mantinha bundle velho). */
-export function cooperadoAlignHardForBuildUpgrade(
-  canonical: ClientReleaseInfo,
-  embedded: ClientReleaseInfo
-): boolean {
-  return embedded.build > 0 && canonical.build > embedded.build;
-}
-
 export function markClientReleaseSeen(official: ClientReleaseInfo): void {
   if (typeof window === "undefined" || typeof localStorage === "undefined") return;
   try {
@@ -66,107 +57,31 @@ export function markClientReleaseSeen(official: ClientReleaseInfo): void {
 /** @deprecated use runtimeAlreadyOnCanonicalRelease */
 export const cooperadoRuntimeAlreadyOnCanonicalRelease = runtimeAlreadyOnCanonicalRelease;
 
-type AlignOpts = { hard: boolean; targetBuild: number };
-
 async function alignToCanonicalIfNeeded(
   canonical: ClientReleaseInfo,
-  reason: string,
-  opts: AlignOpts
+  reason: string
 ): Promise<"ok" | "aligning"> {
   const aligned = await alignClientRuntimeToRelease(reason, canonical.deploymentId, {
-    hard: opts.hard,
-    targetBuild: opts.targetBuild,
+    hard: true,
+    targetBuild: canonical.build,
+    urgentUpgrade: true,
   });
   return aligned ? "aligning" : "ok";
 }
 
-function staffDeferSoftAlign(
-  canonical: ClientReleaseInfo,
-  embedded: ClientReleaseInfo
-): "ok" {
-  if (canonical.build > embedded.build) {
-    markStaffReleasePending(canonical.build);
-  }
-  return "ok";
-}
-
-export async function ensureCooperadoReleaseUpgrade(
-  isCooperadoExperience: boolean
-): Promise<"ok" | "aligning" | "pending"> {
-  if (!isCooperadoExperience || typeof window === "undefined") return "ok";
+/** Checa release oficial: abertura do app, volta ao foco, ou troca de aba (sem polling). */
+export async function applyOfficialReleaseIfNeeded(): Promise<"ok" | "aligning" | "pending"> {
+  if (typeof window === "undefined") return "ok";
   const canonical = await fetchOfficialClientRelease();
   if (!canonical) return "pending";
   const embedded = getEmbeddedClientRelease();
   const pageRelease = getPageEmbeddedReleaseFromDom();
   const loaded = collectLoadedDeploymentIdsFromDom();
 
-  if (runtimeAlreadyOnCanonicalRelease(canonical, pageRelease, embedded)) {
+  if (!runtimeNeedsReleaseUpgrade(canonical, pageRelease, embedded)) {
     markClientReleaseSeen(canonical);
     clearReloadBurstCounter();
     return "ok";
-  }
-
-  if (runtimeBundleBehindCanonical(canonical, embedded)) {
-    const hard = cooperadoAlignHardForBuildUpgrade(canonical, embedded);
-    return alignToCanonicalIfNeeded(
-      canonical,
-      `cooperado_bundle:${embedded.build}->${canonical.build}`,
-      { hard, targetBuild: canonical.build }
-    );
-  }
-
-  const decision = evaluateClientReleaseAlignment({
-    canonical,
-    pageRelease,
-    loadedDeploymentIds: loaded,
-  });
-
-  if (decision.action === "align") {
-    const hard =
-      decision.hard || cooperadoAlignHardForBuildUpgrade(canonical, embedded);
-    return alignToCanonicalIfNeeded(canonical, decision.reason, {
-      hard,
-      targetBuild: canonical.build,
-    });
-  }
-
-  if (decision.action === "pending") {
-    return "pending";
-  }
-
-  markClientReleaseSeen(canonical);
-  clearReloadBurstCounter();
-  return "ok";
-}
-
-export type RunClientReleaseAlignmentOptions = {
-  /** Responsável: nunca reload automático por build/chunks — só banner. */
-  staffExperience?: boolean;
-};
-
-export async function runClientReleaseAlignment(
-  options?: RunClientReleaseAlignmentOptions
-): Promise<"ok" | "pending" | "aligning"> {
-  const staffExperience = options?.staffExperience === true;
-  const canonical = await fetchOfficialClientRelease();
-  if (!canonical) return "pending";
-  const embedded = getEmbeddedClientRelease();
-  const pageRelease = getPageEmbeddedReleaseFromDom();
-  const loaded = collectLoadedDeploymentIdsFromDom();
-
-  if (runtimeAlreadyOnCanonicalRelease(canonical, pageRelease, embedded)) {
-    markClientReleaseSeen(canonical);
-    clearReloadBurstCounter();
-    return "ok";
-  }
-
-  if (runtimeBundleBehindCanonical(canonical, embedded)) {
-    const aligned = await alignClientRuntimeToRelease(
-      `bundle:${embedded.build}->${canonical.build}`,
-      canonical.deploymentId,
-      { hard: false, targetBuild: canonical.build }
-    );
-    return aligned ? "aligning" : "ok";
   }
 
   const decision = evaluateClientReleaseAlignment({
@@ -178,19 +93,34 @@ export async function runClientReleaseAlignment(
   if (decision.action === "pending") return "pending";
 
   if (decision.action === "align") {
-    if (staffExperience && !decision.hard) {
-      markStaffReleasePending(canonical.build);
-    }
-    const aligned = await alignClientRuntimeToRelease(decision.reason, canonical.deploymentId, {
-      hard: decision.hard,
-      targetBuild: canonical.build,
-    });
-    return aligned ? "aligning" : "ok";
+    return alignToCanonicalIfNeeded(canonical, decision.reason);
   }
 
-  if (loaded.length > 0) {
-    markClientReleaseSeen(decision.target);
-    clearReloadBurstCounter();
+  if (runtimeNeedsReleaseUpgrade(canonical, pageRelease, embedded)) {
+    return alignToCanonicalIfNeeded(
+      canonical,
+      `release_force:${embedded.build}->${canonical.build}`
+    );
   }
+
+  markClientReleaseSeen(canonical);
+  clearReloadBurstCounter();
   return "ok";
+}
+
+export async function ensureCooperadoReleaseUpgrade(
+  isCooperadoExperience: boolean
+): Promise<"ok" | "aligning" | "pending"> {
+  if (!isCooperadoExperience) return "ok";
+  return applyOfficialReleaseIfNeeded();
+}
+
+export type RunClientReleaseAlignmentOptions = {
+  staffExperience?: boolean;
+};
+
+export async function runClientReleaseAlignment(
+  _options?: RunClientReleaseAlignmentOptions
+): Promise<"ok" | "pending" | "aligning"> {
+  return applyOfficialReleaseIfNeeded();
 }

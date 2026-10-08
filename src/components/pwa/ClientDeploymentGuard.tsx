@@ -8,19 +8,15 @@ import {
   scheduleCooperadoPostInteractiveTask,
   scheduleStaffPostInteractiveTask,
 } from "@/lib/performance/cooperadoColdStart";
-import { ensureCooperadoReleaseUpgrade, runClientReleaseAlignment } from "@/lib/pwa/fetchOfficialClientRelease";
-import { fetchOfficialClientRelease } from "@/lib/pwa/fetchOfficialClientRelease";
+import { applyOfficialReleaseIfNeeded } from "@/lib/pwa/fetchOfficialClientRelease";
 import { isCooperadoPwaMessengerMode } from "@/lib/cooperado/cooperadoPwaMessengerMode";
-import {
-  getEmbeddedClientRelease,
-  getPageEmbeddedReleaseFromDom,
-  runtimeAlreadyOnCanonicalRelease,
-} from "@/lib/pwa/clientRelease";
 
 /** Um retry se chunks ainda não tinham dpl= no DOM. */
 const PENDING_RETRY_MS = 1_500;
-const COOPERADO_RELEASE_POLL_MS = 3 * 60 * 1000;
 
+/**
+ * Alinha o app à versão publicada na Vercel — só em eventos (boot / foco), sem polling.
+ */
 export function ClientDeploymentGuard() {
   const aligningRef = useRef(false);
   const { user, accountUser } = useAuth();
@@ -31,17 +27,7 @@ export function ClientDeploymentGuard() {
 
     const run = async (): Promise<"stop" | "retry"> => {
       if (aligningRef.current) return "stop";
-
-      if (cooperadoExperience) {
-        const coopUpgrade = await ensureCooperadoReleaseUpgrade(true);
-        if (coopUpgrade === "aligning") {
-          aligningRef.current = true;
-        }
-        if (coopUpgrade === "pending") return "retry";
-        return "stop";
-      }
-
-      const result = await runClientReleaseAlignment({ staffExperience: true });
+      const result = await applyOfficialReleaseIfNeeded();
       if (result === "aligning") {
         aligningRef.current = true;
         return "stop";
@@ -75,41 +61,13 @@ export function ClientDeploymentGuard() {
 
     const onVisible = () => {
       if (document.visibilityState !== "visible" || aligningRef.current) return;
-      void fetchOfficialClientRelease().then((canonical) => {
-        if (!canonical) return;
-        const embedded = getEmbeddedClientRelease();
-        const page = getPageEmbeddedReleaseFromDom();
-        if (runtimeAlreadyOnCanonicalRelease(canonical, page, embedded)) return;
-        void run();
-      });
+      start();
     };
     document.addEventListener("visibilitychange", onVisible);
-
-    let interval = 0;
-    void fetchOfficialClientRelease().then((canonical) => {
-      if (!canonical) {
-        if (!cancelled && cooperadoExperience) {
-          interval = window.setInterval(() => {
-            if (!aligningRef.current) void run();
-          }, COOPERADO_RELEASE_POLL_MS);
-        }
-        return;
-      }
-      const embedded = getEmbeddedClientRelease();
-      const page = getPageEmbeddedReleaseFromDom();
-      const aligned = runtimeAlreadyOnCanonicalRelease(canonical, page, embedded);
-      const intervalMs = aligned ? 0 : cooperadoExperience ? COOPERADO_RELEASE_POLL_MS : 2 * 60 * 1000;
-      if (intervalMs > 0 && !cancelled) {
-        interval = window.setInterval(() => {
-          if (!aligningRef.current) void run();
-        }, intervalMs);
-      }
-    });
 
     return () => {
       cancelled = true;
       document.removeEventListener("visibilitychange", onVisible);
-      if (interval) window.clearInterval(interval);
       if (pendingRetryId) window.clearTimeout(pendingRetryId);
     };
   }, [cooperadoExperience]);

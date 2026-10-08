@@ -98,15 +98,15 @@ assert(
   "card HB inicio sem poll automatico (manual)"
 );
 
-const appBanner = read("src/components/pwa/AppUpdateBanner.tsx");
+const silentSw = read("src/components/pwa/PwaSilentServiceWorker.tsx");
 assert(
-  !appBanner.includes("ensureCooperadoReleaseUpgrade"),
-  "PWA banner nao duplica upgrade cooperado (guard unico)"
+  silentSw.includes("serviceWorker.register") && !silentSw.includes("Atualizar"),
+  "SW silencioso sem banner manual"
 );
 const releaseFetch = read("src/lib/pwa/fetchOfficialClientRelease.ts");
 assert(
-  releaseFetch.includes("staffExperience") && releaseFetch.includes("markStaffReleasePending"),
-  "staff release banner sem reload loop"
+  releaseFetch.includes("applyOfficialReleaseIfNeeded") && releaseFetch.includes("urgentUpgrade"),
+  "release unificado com align automatico"
 );
 const clientRelease = read("src/lib/pwa/clientRelease.ts");
 assert(clientRelease.includes("markCurrentRuntimeReleaseSeen"), "quiesce loop burst align");
