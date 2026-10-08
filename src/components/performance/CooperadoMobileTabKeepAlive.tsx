@@ -180,6 +180,9 @@ export function CooperadoMobileTabKeepAlive({ pathname, children }: Props) {
     });
 
   const panels = onTab ? renderPanels(effectivePath) : renderPanels(null);
+  const hasActivePanel =
+    onTab &&
+    panels.some((node) => node != null);
 
   if (!onTab) {
     return (
@@ -196,7 +199,11 @@ export function CooperadoMobileTabKeepAlive({ pathname, children }: Props) {
 
   return (
     <CooperadoTabPanelProvider activeHref={effectivePath}>
-      <>{panels}</>
+      {hasActivePanel ? (
+        <>{panels}</>
+      ) : (
+        children ?? <CooperadoTabRouteLoading />
+      )}
     </CooperadoTabPanelProvider>
   );
 }

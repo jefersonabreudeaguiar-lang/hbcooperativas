@@ -259,7 +259,23 @@ export function MobileNav() {
     : null;
   useMobileBottomTabSwitchFeedback(effectiveTabPath, bottomTabProfile);
 
-  if (!shell || !navUser) return null;
+  const { user: authUser } = useAuth();
+  const cooperadoPwaHeaderFallback =
+    Boolean(authUser) &&
+    authUser!.role === "cooperado" &&
+    isCooperadoAppUser(authUser!) &&
+    typeof window !== "undefined" &&
+    window.matchMedia("(max-width: 1023px)").matches;
+
+  if (!shell || !navUser) {
+    if (!cooperadoPwaHeaderFallback) return null;
+    return (
+      <header className="lg:hidden flex items-center justify-between gap-2 px-4 py-3 bg-green-900 text-white sticky top-0 z-40">
+        <BrandHeader compact />
+        <CooperadoMobileHeaderToolbar />
+      </header>
+    );
+  }
 
   return (
     <>

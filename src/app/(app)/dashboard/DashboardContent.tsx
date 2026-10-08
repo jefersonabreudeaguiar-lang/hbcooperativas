@@ -666,8 +666,13 @@ export default function DashboardPage() {
       ? canAccessPainelResponsavelSession(authSubject)
       : false;
 
+  const cooperadoPwaPodeEntrar =
+    user?.role === "cooperado" &&
+    isCooperadoPwaMobileLeveUi() &&
+    Boolean(user.cooperadoId);
+
   if (!user) return <PageSkeleton />;
-  if (!dataReady && !instantResume) return <PageSkeleton />;
+  if (!dataReady && !instantResume && !cooperadoPwaPodeEntrar) return <PageSkeleton />;
 
   if (canGestao && staffPainelUi) {
     return <AdminDashboard />;

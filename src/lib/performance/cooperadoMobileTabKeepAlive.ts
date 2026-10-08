@@ -2,6 +2,7 @@ import {
   COOPERADO_BOTTOM_TAB_HREFS,
   isCooperadoBottomTabPath,
 } from "@/lib/performance/cooperadoBottomTabRoutes";
+import { isCooperadoPwaMessengerMode } from "@/lib/cooperado/cooperadoPwaMessengerMode";
 
 export { COOPERADO_BOTTOM_TAB_HREFS, isCooperadoBottomTabPath };
 
@@ -17,6 +18,7 @@ function readKeepAliveEnvDefault(): boolean {
 
 /** RQL 8.6 — LRU de abas montadas no mobile cooperado. Default **ligado**; `NEXT_PUBLIC_COOPERADO_TAB_KEEP_ALIVE=false` desliga. */
 export function isCooperadoMobileTabKeepAliveEnabled(): boolean {
+  if (typeof window !== "undefined" && isCooperadoPwaMessengerMode()) return false;
   if (typeof document !== "undefined") {
     const dom = document.documentElement.getAttribute("data-cooperado-tab-keep-alive");
     if (dom === "0") return false;
