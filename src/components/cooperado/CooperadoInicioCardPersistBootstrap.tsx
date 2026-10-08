@@ -21,8 +21,10 @@ export function CooperadoInicioCardPersistBootstrap() {
   const { user } = useAuth();
   const { syncing, lastSyncedAt, cooperadoPagamentosHydrated } = useSyncStatus();
   const dataRevision = useSyncExternalStore(
-    subscribe,
-    () => (isAppDataWarm() ? getDataRevision() : -1),
+    (onStoreChange) =>
+      isCooperadoPwaMessengerMode() ? () => {} : subscribe(onStoreChange),
+    () =>
+      isCooperadoPwaMessengerMode() || !isAppDataWarm() ? -1 : getDataRevision(),
     () => -1
   );
   const lastSyncedRef = useRef<number | null>(null);
@@ -42,6 +44,7 @@ export function CooperadoInicioCardPersistBootstrap() {
   }, [user, syncing, lastSyncedAt, cooperadoPagamentosHydrated]);
 
   useEffect(() => {
+    if (isCooperadoPwaMessengerMode()) return;
     if (!user || user.role !== "cooperado" || !isCooperadoInstantResumeEnabled()) return;
     const onHide = () => {
       if (document.visibilityState !== "hidden" || !isAppDataWarm()) return;

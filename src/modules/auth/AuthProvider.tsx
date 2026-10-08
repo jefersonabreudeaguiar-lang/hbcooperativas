@@ -81,6 +81,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
   const router = useRouter();
   const experienceSigRef = useRef("");
+  const appDataWarmRef = useRef(isAppDataWarm());
 
   const user = useMemo(
     () => resolveExperienceUser(accountUser, getData()),
@@ -136,9 +137,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     const unsub = subscribe(() => {
-      refresh();
+      const messenger = isCooperadoPwaMessengerMode();
+      const warm = isAppDataWarm();
+      const justWarmed = warm && !appDataWarmRef.current;
+      appDataWarmRef.current = warm;
+
+      if (!messenger) {
+        refresh();
+      }
+
       const session = getSession();
       if (!session) return;
+      if (messenger && !warm) return;
+
       const data = getData();
       const enriched = enrichAccountSession(session);
       const effective = resolveExperienceUser(enriched, data);
@@ -150,10 +161,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         effective.cooperadoId ?? "",
         effective.role,
       ].join("|");
-      if (sig !== experienceSigRef.current) {
-        experienceSigRef.current = sig;
-        setDataTick((t) => t + 1);
+      const sigChanged = sig !== experienceSigRef.current;
+      if (sigChanged) experienceSigRef.current = sig;
+      if (!messenger) {
+        if (sigChanged) setDataTick((t) => t + 1);
+        return;
       }
+      if (sigChanged || justWarmed) setDataTick((t) => t + 1);
     });
     return unsub;
   }, [refresh]);

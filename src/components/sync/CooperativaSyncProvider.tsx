@@ -1095,6 +1095,7 @@ export function CooperativaSyncProvider({ children }: { children: React.ReactNod
 
   useEffect(() => {
     if (!user?.id || user.role !== "cooperado") return;
+    if (isCooperadoPwaMessengerMode()) return;
     let debounce: ReturnType<typeof setTimeout> | null = null;
     const unsub = subscribe(() => {
       const current = userRef.current;
