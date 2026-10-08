@@ -807,20 +807,23 @@ export function CooperativaSyncProvider({ children }: { children: React.ReactNod
         currentUser.role === "responsavel" ||
         currentUser.role === "tesoureiro" ||
         currentUser.role === "admin";
-      const refreshHb = () => {
-        if (staffUser && !isStaffHbCoopBackgroundSyncRoute()) return;
-        void refreshContaCoopDescontosAfterOperacionalSync({
+      const refreshHb = (): Promise<void> => {
+        if (staffUser && !isStaffHbCoopBackgroundSyncRoute()) return Promise.resolve();
+        return refreshContaCoopDescontosAfterOperacionalSync({
           cnpj,
           cooperativaId: currentCoopId,
           user: currentUser,
         });
       };
-      if (cooperadoAtualizarRapido) {
+      const messengerCooperado = cooperadoLogado && isCooperadoPwaMessengerMode();
+      if (cooperadoAtualizarRapido && !messengerCooperado) {
         void refreshHb();
+      } else if (cooperadoAtualizarRapido && messengerCooperado) {
+        await refreshHb();
       } else if (cooperadoLogado || opts?.force) {
         await refreshHb();
       } else {
-        window.setTimeout(refreshHb, staffUser ? 8_000 : 2_500);
+        window.setTimeout(() => void refreshHb(), staffUser ? 8_000 : 2_500);
       }
     } catch (e) {
       if (!completed) {

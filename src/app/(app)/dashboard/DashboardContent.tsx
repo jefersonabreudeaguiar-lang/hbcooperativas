@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
-import type { AppData } from "@/types";
+import type { AppData, User } from "@/types";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
@@ -95,6 +95,28 @@ import { getSession } from "@/services/dataStore";
 
 const DASHBOARD_INICIO_DOMAINS: AppDataNotifyDomain[] = ["shell", "notas", "financeiro", "operacional"];
 
+function contaCoopValorReceberPilotOptsFromData(
+  data: AppData | null,
+  user: Omit<User, "password"> | null | undefined,
+  apresentacaoConsolidada: boolean
+) {
+  if (!data || !user?.cooperadoId) return null;
+  const coopId = getUserCooperativaId(user, data);
+  if (!coopId) return null;
+  const cooperadoId = resolverCooperadoIdCanonico(data, user.cooperadoId, coopId);
+  const paridade = leituraFinanceiraParidadeCooperado(data, cooperadoId, coopId);
+  const mesHb =
+    paridade.mesesResumo[0] ??
+    bicCentralMesPrincipalQuantoVouReceber(data, cooperadoId, coopId, { apresentacaoConsolidada });
+  const exibicaoOpts = bicCentralBuildValorExibicaoCooperadoOpts(data, cooperadoId, mesHb, coopId);
+  return {
+    cooperadoId,
+    mesReferencia: exibicaoOpts.mesReferencia,
+    cooperativaId: coopId,
+    cooperadoNome: exibicaoOpts.cooperadoNome,
+  };
+}
+
 function CooperadoDashboard() {
   const tabActive = useCooperadoTabPanelActive("/dashboard");
   const messenger = isCooperadoPwaMessengerMode();
@@ -146,31 +168,30 @@ function CooperadoDashboard() {
     requestCooperadoFinanceiroRecoverySync();
   }, [financeiroAusente, inicioPwaLeve]);
 
-  const contaCoopSync = useAppDataSelectorForDomainsWhenActive(
+  const contaCoopSyncLive = useAppDataSelectorForDomainsWhenActive(
     appDataUiOn,
     DASHBOARD_INICIO_DOMAINS,
-    (data) => {
-      if (!data || !user?.cooperadoId) return null;
-      const coopId = getUserCooperativaId(user, data);
-      if (!coopId) return null;
-      const cooperadoId = resolverCooperadoIdCanonico(data, user.cooperadoId, coopId);
-      const paridade = leituraFinanceiraParidadeCooperado(data, cooperadoId, coopId);
-      const mesHb =
-        paridade.mesesResumo[0] ??
-        bicCentralMesPrincipalQuantoVouReceber(data, cooperadoId, coopId, { apresentacaoConsolidada });
-      const exibicaoOpts = bicCentralBuildValorExibicaoCooperadoOpts(data, cooperadoId, mesHb, coopId);
-      return {
-        cooperadoId,
-        mesReferencia: exibicaoOpts.mesReferencia,
-        cooperativaId: coopId,
-        cooperadoNome: exibicaoOpts.cooperadoNome,
-      };
-    },
+    (data) => contaCoopValorReceberPilotOptsFromData(data, user, apresentacaoConsolidada),
     [user?.id, user?.cooperadoId, user?.cooperativaId, hbDescontosRevision, apresentacaoConsolidada]
   );
 
+  const contaCoopSyncMessenger = useMemo(() => {
+    if (!messenger || !isAppDataWarm()) return null;
+    return contaCoopValorReceberPilotOptsFromData(getData(), user, apresentacaoConsolidada);
+  }, [
+    messenger,
+    user?.id,
+    user?.cooperadoId,
+    user?.cooperativaId,
+    hbDescontosRevision,
+    apresentacaoConsolidada,
+    lastSyncedAt,
+  ]);
+
+  const contaCoopSync = messenger ? contaCoopSyncMessenger : contaCoopSyncLive;
+
   useSyncContaCoopValorReceberPilot(
-    !messenger && contaCoopSync ? { ...contaCoopSync, user, initialDelayMs: 3_000 } : undefined
+    contaCoopSync ? { ...contaCoopSync, user, initialDelayMs: messenger ? 1_500 : 3_000 } : undefined
   );
 
   const inicioCardCtx = fluxo.cooperadoId
@@ -234,6 +255,12 @@ function CooperadoDashboard() {
     refreshPwaInicioView();
     if (user) persistirInicioCardCooperadoNotificarPwaLeve(user);
   }, [messenger, lastSyncedAt, refreshPwaInicioView, user]);
+
+  useEffect(() => {
+    if (!messenger || !user?.cooperadoId) return;
+    refreshPwaInicioView();
+    persistirInicioCardCooperadoNotificarPwaLeve(user);
+  }, [messenger, user, hbDescontosRevision, refreshPwaInicioView]);
 
   useEffect(() => {
     if (!inicioPwaLeve) return;
