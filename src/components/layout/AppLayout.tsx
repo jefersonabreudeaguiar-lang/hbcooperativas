@@ -259,20 +259,14 @@ export function MobileNav() {
     : null;
   useMobileBottomTabSwitchFeedback(effectiveTabPath, bottomTabProfile);
 
-  const { user: authUser } = useAuth();
-  const cooperadoPwaHeaderFallback =
-    Boolean(authUser) &&
-    authUser!.role === "cooperado" &&
-    isCooperadoAppUser(authUser!) &&
-    typeof window !== "undefined" &&
-    window.matchMedia("(max-width: 1023px)").matches;
-
   if (!shell || !navUser) {
-    if (!cooperadoPwaHeaderFallback) return null;
     return (
-      <header className="lg:hidden flex items-center justify-between gap-2 px-4 py-3 bg-green-900 text-white sticky top-0 z-40">
-        <BrandHeader compact />
-        <CooperadoMobileHeaderToolbar />
+      <header
+        className="lg:hidden flex items-center justify-between gap-2 px-4 py-3 bg-green-900 text-white sticky top-0 z-40 min-h-[52px]"
+        aria-busy="true"
+      >
+        <div className="h-5 w-36 max-w-[45vw] rounded bg-green-800/70 animate-pulse" />
+        <div className="h-7 w-20 rounded bg-green-800/70 animate-pulse shrink-0" />
       </header>
     );
   }

@@ -91,6 +91,7 @@ import {
   cooperadoPwaUiSubscribesAppData,
   isCooperadoPwaMessengerMode,
 } from "@/lib/cooperado/cooperadoPwaMessengerMode";
+import { isCooperadoAppUser } from "@/permissions";
 import { getSession } from "@/services/dataStore";
 
 const DASHBOARD_INICIO_DOMAINS: AppDataNotifyDomain[] = ["shell", "notas", "financeiro", "operacional"];
@@ -666,13 +667,16 @@ export default function DashboardPage() {
       ? canAccessPainelResponsavelSession(authSubject)
       : false;
 
-  const cooperadoPwaPodeEntrar =
-    user?.role === "cooperado" &&
-    isCooperadoPwaMobileLeveUi() &&
-    Boolean(user.cooperadoId);
+  if (!authSubject) return <PageSkeleton />;
 
-  if (!user) return <PageSkeleton />;
-  if (!dataReady && !instantResume && !cooperadoPwaPodeEntrar) return <PageSkeleton />;
+  if (isCooperadoAppUser(authSubject)) {
+    if (canGestao && staffPainelUi && dataReady) {
+      return <AdminDashboard />;
+    }
+    return <CooperadoDashboard />;
+  }
+
+  if (!dataReady && !instantResume) return <PageSkeleton />;
 
   if (canGestao && staffPainelUi) {
     return <AdminDashboard />;

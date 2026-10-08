@@ -20,6 +20,7 @@ import {
   ensureCooperadoAppDataEagerWarm,
   isCooperadoInstantResumeEnabled,
 } from "@/lib/performance/cooperadoColdStart";
+import { isCooperadoPwaMessengerMode } from "@/lib/cooperado/cooperadoPwaMessengerMode";
 import {
   getSession,
   login as doLogin,
@@ -229,10 +230,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setAccountUser(safeUser);
       setActiveCloudProfile(userToCloudProfile(safeUser));
       await ensureCloudSessionReady(userToCloudProfile(safeUser));
-      await waitForAppDataWarm(4000);
-      if (resolveAppUserRole(safeUser, getData()) === "cooperado") {
+      if (isCooperadoPwaMessengerMode()) {
+        preloadAppData();
+      } else {
+        await waitForAppDataWarm(4000);
+      }
+      if (
+        resolveAppUserRole(safeUser, getData()) === "cooperado" &&
+        !isCooperadoPwaMessengerMode()
+      ) {
         persistirInicioCardValorReceberCooperado(safeUser);
       }
+      setLoading(false);
       const redirectTo = resolveAppUserRole(safeUser, getData()) === "parceiro" ? "/mercado-parceiro" : "/dashboard";
       return { ok: true as const, redirectTo };
     }

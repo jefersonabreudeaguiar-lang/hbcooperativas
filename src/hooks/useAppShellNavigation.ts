@@ -60,6 +60,7 @@ function hbModuleNavEligible(
  */
 export function useAppShellNavigation(): AppShellNavigation | null {
   const { user, accountUser } = useAuth();
+  const subject = user ?? accountUser;
   useEnsureAppDataWarm();
   const dataRevision = useSyncExternalStore(
     subscribe,
@@ -68,29 +69,31 @@ export function useAppShellNavigation(): AppShellNavigation | null {
   );
 
   const shellCore = useMemo(() => {
-    if (!user) return null;
+    if (!subject) return null;
     if (!isAppDataWarm()) {
-      if (!isCooperadoAppUser(user) && user.role !== "cooperado") return null;
-      const navUser: NavUser = { ...user, role: "cooperado" };
+      if (!isCooperadoAppUser(subject) && subject.role !== "cooperado") return null;
+      const navUser: NavUser = isCooperadoAppUser(subject)
+        ? { ...subject, role: "cooperado" as const }
+        : subject;
       return {
         navUser,
-        cooperadoNome: user.name ?? "",
+        cooperadoNome: subject.name ?? "",
         staffPainelUi: false,
-        coopId: user.cooperativaId,
+        coopId: subject.cooperativaId,
         beforeDataWarm: true,
       };
     }
     const data = getData();
-    const navUser = resolveStaffNavigationUser(accountUser, user, data) ?? user;
+    const navUser = resolveStaffNavigationUser(accountUser, subject, data) ?? subject;
     const cooperadoNome = resolveCooperadoNome(navUser, data);
     const staffPainelUi = Boolean(accountUser && shouldRenderStaffPainelUi(accountUser, data));
     const coopId = getUserCooperativaId(navUser, data);
     return { navUser, cooperadoNome, staffPainelUi, coopId, beforeDataWarm: false };
   }, [
-    user?.id,
-    user?.cooperativaId,
-    user?.role,
-    user?.cooperadoId,
+    subject?.id,
+    subject?.cooperativaId,
+    subject?.role,
+    subject?.cooperadoId,
     accountUser?.id,
     accountUser?.role,
     dataRevision,
