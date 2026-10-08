@@ -6,7 +6,8 @@ import {
   readCooperadoClientReleaseDiagnostics,
   shouldPromptCooperadoReleaseReload,
 } from "@/lib/pwa/cooperadoClientReleaseDiagnostics";
-import { alignClientRuntimeToRelease } from "@/lib/pwa/clientRelease";
+import { alignClientRuntimeToRelease, getEmbeddedClientRelease } from "@/lib/pwa/clientRelease";
+import { cooperadoAlignHardForBuildUpgrade } from "@/lib/pwa/fetchOfficialClientRelease";
 
 const MIN_GAP_MS = 12_000;
 
@@ -24,10 +25,19 @@ export function useCooperadoReleaseAlignOnTabPath(pathname: string): void {
 
     void readCooperadoClientReleaseDiagnostics().then((d) => {
       if (!shouldPromptCooperadoReleaseReload(d)) return;
+      const embedded = getEmbeddedClientRelease();
+      const hard = cooperadoAlignHardForBuildUpgrade(
+        {
+          build: d.canonicalBuild,
+          deploymentId: d.canonicalDeploymentId,
+          gitCommitSha: d.canonicalGitSha,
+        },
+        embedded
+      );
       void alignClientRuntimeToRelease(
         `cooperado_tab:${d.embeddedBuild}->${d.canonicalBuild}`,
         d.canonicalDeploymentId,
-        { hard: false, targetBuild: d.canonicalBuild }
+        { hard, targetBuild: d.canonicalBuild }
       );
     });
   }, [pathname]);

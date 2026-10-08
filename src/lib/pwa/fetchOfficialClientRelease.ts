@@ -14,10 +14,13 @@ import {
   type ClientReleaseInfo,
 } from "@/lib/pwa/clientRelease";
 
-export async function fetchOfficialClientRelease(): Promise<ClientReleaseInfo> {
-  const embedded = getEmbeddedClientRelease();
+/**
+ * Release oficial na nuvem. `null` se a rede falhar — nunca devolver o build embutido no JS
+ * (isso fazia o guard pensar que já estava alinhado e o PWA ficava preso em build antigo).
+ */
+export async function fetchOfficialClientRelease(): Promise<ClientReleaseInfo | null> {
   try {
-    const res = await fetch("/api/client-release", {
+    const res = await fetch(`/api/client-release?_=${Date.now()}`, {
       cache: "no-store",
       credentials: "same-origin",
       headers: {
@@ -25,16 +28,26 @@ export async function fetchOfficialClientRelease(): Promise<ClientReleaseInfo> {
         "Cache-Control": "no-cache",
       },
     });
-    if (!res.ok) return embedded;
+    if (!res.ok) return null;
     const json = (await res.json()) as Partial<ClientReleaseInfo>;
+    const build = typeof json.build === "number" ? json.build : 0;
+    if (build <= 0) return null;
     return {
-      build: typeof json.build === "number" ? json.build : embedded.build,
-      deploymentId: (json.deploymentId ?? embedded.deploymentId).trim(),
-      gitCommitSha: (json.gitCommitSha ?? embedded.gitCommitSha).trim(),
+      build,
+      deploymentId: (json.deploymentId ?? "").trim(),
+      gitCommitSha: (json.gitCommitSha ?? "").trim(),
     };
   } catch {
-    return embedded;
+    return null;
   }
+}
+
+/** Cooperado PWA: limpar SW/cache ao subir de build (reload suave mantinha bundle velho). */
+export function cooperadoAlignHardForBuildUpgrade(
+  canonical: ClientReleaseInfo,
+  embedded: ClientReleaseInfo
+): boolean {
+  return embedded.build > 0 && canonical.build > embedded.build;
 }
 
 export function markClientReleaseSeen(official: ClientReleaseInfo): void {
@@ -82,6 +95,7 @@ export async function ensureCooperadoReleaseUpgrade(
 ): Promise<"ok" | "aligning" | "pending"> {
   if (!isCooperadoExperience || typeof window === "undefined") return "ok";
   const canonical = await fetchOfficialClientRelease();
+  if (!canonical) return "pending";
   const embedded = getEmbeddedClientRelease();
   const pageRelease = getPageEmbeddedReleaseFromDom();
   const loaded = collectLoadedDeploymentIdsFromDom();
@@ -93,10 +107,11 @@ export async function ensureCooperadoReleaseUpgrade(
   }
 
   if (runtimeBundleBehindCanonical(canonical, embedded)) {
+    const hard = cooperadoAlignHardForBuildUpgrade(canonical, embedded);
     return alignToCanonicalIfNeeded(
       canonical,
       `cooperado_bundle:${embedded.build}->${canonical.build}`,
-      { hard: false, targetBuild: canonical.build }
+      { hard, targetBuild: canonical.build }
     );
   }
 
@@ -107,8 +122,10 @@ export async function ensureCooperadoReleaseUpgrade(
   });
 
   if (decision.action === "align") {
+    const hard =
+      decision.hard || cooperadoAlignHardForBuildUpgrade(canonical, embedded);
     return alignToCanonicalIfNeeded(canonical, decision.reason, {
-      hard: decision.hard,
+      hard,
       targetBuild: canonical.build,
     });
   }
@@ -132,6 +149,7 @@ export async function runClientReleaseAlignment(
 ): Promise<"ok" | "pending" | "aligning"> {
   const staffExperience = options?.staffExperience === true;
   const canonical = await fetchOfficialClientRelease();
+  if (!canonical) return "pending";
   const embedded = getEmbeddedClientRelease();
   const pageRelease = getPageEmbeddedReleaseFromDom();
   const loaded = collectLoadedDeploymentIdsFromDom();

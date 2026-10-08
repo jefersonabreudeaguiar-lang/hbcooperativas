@@ -10,6 +10,7 @@ import {
 } from "@/lib/performance/cooperadoColdStart";
 import { ensureCooperadoReleaseUpgrade, runClientReleaseAlignment } from "@/lib/pwa/fetchOfficialClientRelease";
 import { fetchOfficialClientRelease } from "@/lib/pwa/fetchOfficialClientRelease";
+import { isCooperadoPwaMessengerMode } from "@/lib/cooperado/cooperadoPwaMessengerMode";
 import {
   getEmbeddedClientRelease,
   getPageEmbeddedReleaseFromDom,
@@ -62,7 +63,9 @@ export function ClientDeploymentGuard() {
       });
     };
 
-    if (cooperadoExperience && isCooperadoInstantResumeEnabled()) {
+    if (cooperadoExperience && isCooperadoPwaMessengerMode()) {
+      queueMicrotask(start);
+    } else if (cooperadoExperience && isCooperadoInstantResumeEnabled()) {
       scheduleCooperadoPostInteractiveTask(start);
     } else if (!cooperadoExperience) {
       scheduleStaffPostInteractiveTask(start);
@@ -73,6 +76,7 @@ export function ClientDeploymentGuard() {
     const onVisible = () => {
       if (document.visibilityState !== "visible" || aligningRef.current) return;
       void fetchOfficialClientRelease().then((canonical) => {
+        if (!canonical) return;
         const embedded = getEmbeddedClientRelease();
         const page = getPageEmbeddedReleaseFromDom();
         if (runtimeAlreadyOnCanonicalRelease(canonical, page, embedded)) return;
@@ -83,6 +87,14 @@ export function ClientDeploymentGuard() {
 
     let interval = 0;
     void fetchOfficialClientRelease().then((canonical) => {
+      if (!canonical) {
+        if (!cancelled && cooperadoExperience) {
+          interval = window.setInterval(() => {
+            if (!aligningRef.current) void run();
+          }, COOPERADO_RELEASE_POLL_MS);
+        }
+        return;
+      }
       const embedded = getEmbeddedClientRelease();
       const page = getPageEmbeddedReleaseFromDom();
       const aligned = runtimeAlreadyOnCanonicalRelease(canonical, page, embedded);

@@ -30,17 +30,21 @@ export async function readCooperadoClientReleaseDiagnostics(): Promise<Cooperado
   const embedded = getEmbeddedClientRelease();
   const page = getPageEmbeddedReleaseFromDom();
   const canonical = await fetchOfficialClientRelease();
+  const canonicalBuild = canonical?.build ?? 0;
+  const runtimeAligned =
+    canonical != null && runtimeAlreadyOnCanonicalRelease(canonical, page, embedded);
   return {
     embeddedBuild: embedded.build || APP_BUILD_VERSION,
     embeddedDeploymentId: embedded.deploymentId,
     pageBuild: page?.build ?? 0,
     pageDeploymentId: page?.deploymentId ?? "",
-    canonicalBuild: canonical.build,
-    canonicalDeploymentId: canonical.deploymentId,
-    canonicalGitSha: canonical.gitCommitSha,
+    canonicalBuild,
+    canonicalDeploymentId: canonical?.deploymentId ?? "",
+    canonicalGitSha: canonical?.gitCommitSha ?? "",
     loadedChunkDeploymentIds: collectLoadedDeploymentIdsFromDom(),
-    bundleBehindCanonical: runtimeBundleBehindCanonical(canonical, embedded),
-    runtimeAligned: runtimeAlreadyOnCanonicalRelease(canonical, page, embedded),
+    bundleBehindCanonical:
+      canonical != null && runtimeBundleBehindCanonical(canonical, embedded),
+    runtimeAligned,
     checkedAt: new Date().toISOString(),
   };
 }
@@ -61,5 +65,8 @@ export function formatCooperadoReleaseDiagnosticsLine(d: CooperadoClientReleaseD
 }
 
 export function shouldPromptCooperadoReleaseReload(d: CooperadoClientReleaseDiagnostics): boolean {
-  return d.bundleBehindCanonical || (d.pageBuild > 0 && d.pageBuild > d.embeddedBuild);
+  if (d.bundleBehindCanonical) return true;
+  if (d.pageBuild > 0 && d.pageBuild > d.embeddedBuild) return true;
+  if (d.canonicalBuild > 0 && d.canonicalBuild > d.embeddedBuild) return true;
+  return !d.runtimeAligned && d.canonicalBuild > 0;
 }
