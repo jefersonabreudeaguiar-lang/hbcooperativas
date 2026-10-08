@@ -44,7 +44,7 @@ import { isCooperadoBottomTabPath } from "@/lib/performance/cooperadoBottomTabRo
 import { isStaffBottomTabPath } from "@/lib/performance/staffBottomTabRoutes";
 import { scheduleStaffNavPrefetchEarly } from "@/lib/performance/staffNavPrefetch";
 import { prefetchStaffNotasPedidoRouteBundle } from "@/lib/performance/prefetchStaffNotasPedidoUi";
-import { feedbackTrocaAbaMobile } from "@/lib/performance/tabSwitchFeedback";
+import { useMobileBottomTabSwitchFeedback } from "@/lib/performance/tabSwitchFeedback";
 import { markRqlShellInteractive } from "@/lib/performance/rqlMarks";
 import { useMobileTabScrollRestore } from "@/hooks/useMobileTabScrollRestore";
 import type { MobileTabScrollMode } from "@/lib/performance/mobileTabScrollMemory";
@@ -222,8 +222,15 @@ export function MobileNav() {
   const pathname = usePathname();
   const router = useRouter();
   const shell = useAppShellNavigationContext();
-  if (!shell) return null;
-  const { navUser, mobileMenu: mobileItems } = shell;
+  const navUser = shell?.navUser;
+  const mobileItems = shell?.mobileMenu ?? [];
+
+  const bottomTabProfile = navUser
+    ? isCooperadoAppUser(navUser)
+      ? "cooperado"
+      : "staff"
+    : null;
+  useMobileBottomTabSwitchFeedback(pathname, bottomTabProfile);
 
   useEffect(() => {
     if (!navUser) return;
@@ -232,6 +239,8 @@ export function MobileNav() {
     }
     return scheduleStaffNavPrefetchEarly(router);
   }, [navUser?.id, navUser?.role, router]);
+
+  if (!shell || !navUser) return null;
 
   return (
     <>
@@ -261,12 +270,12 @@ export function MobileNav() {
           const active = pathname === item.href || (item.href !== "/dashboard" && pathname.startsWith(item.href));
           const isCooperadoNav = isCooperadoAppUser(navUser);
           const mobileTabUx = isCooperadoNav || isStaffBottomTabPath(item.href);
-          const tabRqlPhase = isCooperadoNav ? "cooperado-tab-switch" : "staff-tab-switch";
           return (
             <Link
               key={item.href}
               href={item.href}
               scroll={false}
+              aria-current={active ? "page" : undefined}
               prefetch={
                 isCooperadoNav
                   ? item.href === COOPERADO_FINANCEIRO_TAB_HREF || isCooperadoBottomTabPath(item.href)
@@ -280,12 +289,6 @@ export function MobileNav() {
                 }
               }}
               onClick={(e) => {
-                const icon = e.currentTarget.querySelector("[data-hb-tab-icon]");
-                feedbackTrocaAbaMobile(
-                  active,
-                  icon instanceof HTMLElement ? icon : null,
-                  tabRqlPhase
-                );
                 if (!active && mobileTabUx) {
                   e.preventDefault();
                   startTransition(() => {
