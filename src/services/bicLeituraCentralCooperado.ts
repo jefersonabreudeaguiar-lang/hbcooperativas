@@ -21,6 +21,7 @@ import {
   getValorQuantoVouReceber,
   getValorQuantoVouReceberMotorLegado,
   listarMesesComValorQuantoVouReceber,
+  listarMesesReferenciaResumoFinanceiroParidade,
   listarMesesPendentesQuantoVouReceber,
   listarResumosMensaisEntregas,
   getResumoMesEntregasCooperado,
@@ -31,6 +32,7 @@ import {
 import {
   getResumoPagamentoConsolidadoCooperado,
   getResumoPagamentoExibicao,
+  resumoComplementaresPosPagamento,
   valorLiquidoFromResumoPartes,
   type AjustesResumoPagamento,
 } from "@/services/notaPedidoService";
@@ -249,27 +251,31 @@ export function bicCentralValorAReceberAgregado(
   opts?: Pick<BicCentralProjecaoOpts, "apresentacaoConsolidada">
 ): ReturnType<typeof getValorQuantoVouReceber> {
   if (isBicCentralReadAuthorityEnabled()) {
-    const consolidado = bicCentralGetConsolidadoFinanceiroCooperado(data, cooperadoId, cooperativaId);
-    const mesesComValor = listarMesesComValorQuantoVouReceber(data, cooperadoId, cooperativaId);
-    const mesesCanon =
-      mesesComValor.length > 0
-        ? [...mesesComValor].sort()
-        : consolidado.meses.length > 0
-          ? [...consolidado.meses].sort()
-          : consolidado.mesReferenciaPrincipal
-            ? [consolidado.mesReferenciaPrincipal]
-            : [];
+    const coopId = cooperativaId ?? data.cooperados.find((c) => c.id === cooperadoId)?.cooperativaId;
+    const mesesCanon = listarMesesReferenciaResumoFinanceiroParidade(data, cooperadoId, cooperativaId);
+    const consolidadoLegado = getConsolidadoFinanceiroCooperadoMotorLegado(data, cooperadoId, cooperativaId);
+    let valor = consolidadoLegado.valorLiquido;
+    if (mesesCanon.length === 1) {
+      const resumo =
+        resumoComplementaresPosPagamento(data, cooperadoId, mesesCanon[0]!, coopId) ??
+        getResumoPagamentoExibicao(data, cooperadoId, mesesCanon[0]!, coopId);
+      valor = valorLiquidoFromResumoPartes(resumo.valorEntregas, resumo.descontosExtras);
+    } else if (mesesCanon.length > 1) {
+      const resumo = getResumoPagamentoConsolidadoCooperado(data, cooperadoId, mesesCanon, coopId);
+      valor = valorLiquidoFromResumoPartes(resumo.valorEntregas, resumo.descontosExtras);
+    }
     const mesLabel =
       mesesCanon.length > 0
         ? formatMesesReferenciaRotulo(mesesCanon)
-        : consolidado.mesLabel;
-    const mes = mesesCanon[mesesCanon.length - 1] ?? consolidado.mesReferenciaPrincipal ?? "";
+        : consolidadoLegado.mesLabel;
+    const mes =
+      mesesCanon[mesesCanon.length - 1] ?? consolidadoLegado.mesReferenciaPrincipal ?? "";
     return bicCentralSincronizarRotuloMeses(
       bicCentralNormalizarValorM6({
         mes,
         meses: mesesCanon,
         mesLabel,
-        valor: consolidado.valorLiquido,
+        valor,
         valorRecibo: 0,
         aguardandoAssinatura: false,
       })
@@ -418,10 +424,15 @@ export function bicCentralGetConsolidadoFinanceiroCooperado(
 
   const m6 = bicCentralValorAReceberAgregado(data, cooperadoId, cooperativaId);
   const coopId = cooperativaId ?? data.cooperados.find((c) => c.id === cooperadoId)?.cooperativaId;
-  const mesesPendentes = bicCentralListarMesesPendentesQuantoVouReceber(data, cooperadoId, cooperativaId);
+  const mesesResumo = listarMesesReferenciaResumoFinanceiroParidade(data, cooperadoId, cooperativaId);
   const mesReferenciaPrincipal = bicCentralMesPrincipalQuantoVouReceber(data, cooperadoId, cooperativaId);
   const mesesComValor =
-    m6.meses.length > 0 ? [...m6.meses] : listarMesesComValorQuantoVouReceber(data, cooperadoId, cooperativaId);
+    mesesResumo.length > 0
+      ? [...mesesResumo]
+      : m6.meses.length > 0
+        ? [...m6.meses]
+        : listarMesesComValorQuantoVouReceber(data, cooperadoId, cooperativaId);
+  const mesesPendentes = mesesComValor;
 
   const resumoVazio: ConsolidadoFinanceiroCooperado["resumo"] = {
     valorBruto: 0,

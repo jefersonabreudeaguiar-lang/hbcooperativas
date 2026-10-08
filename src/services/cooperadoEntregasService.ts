@@ -166,7 +166,16 @@ export function listarMesesReferenciaResumoFinanceiroParidade(
   cooperadoId: string,
   cooperativaId?: string
 ): string[] {
+  const cnpj = cooperativaCnpjFromData(data, cooperativaId, cooperadoId);
+  const mesesResponsavel = listarMesesPendentesPagamentoResponsavel(data, cooperadoId, cooperativaId);
   const mesesComValor = listarMesesComValorQuantoVouReceber(data, cooperadoId, cooperativaId);
+  if (cnpj && isOperacionalCloudAuthoritative(cnpj) && mesesResponsavel.length > 0) {
+    const staff = [...mesesResponsavel].sort();
+    const comValor = [...mesesComValor].sort();
+    const mesesAlinhados =
+      staff.length === comValor.length && staff.every((m, i) => m === comValor[i]);
+    if (!mesesAlinhados) return staff;
+  }
   if (mesesComValor.length > 0) return [...mesesComValor].sort();
   const mesesPendentes = listarMesesPendentesFinanceiroCooperado(data, cooperadoId, cooperativaId);
   return [...mesesPendentes].sort();

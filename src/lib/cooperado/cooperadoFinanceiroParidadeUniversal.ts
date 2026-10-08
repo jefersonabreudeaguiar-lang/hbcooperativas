@@ -12,9 +12,13 @@ import {
 } from "@/services/cooperadoEntregasService";
 import {
   getDescontosExtrasExibicaoCooperadoFinanceiro,
+  getResumoPagamentoConsolidadoCooperado,
   getResumoPagamentoExibicao,
   getResumoPagamentoParaRegistro,
+  resumoComplementaresPosPagamento,
+  valorLiquidoFromResumoPartes,
 } from "@/services/notaPedidoService";
+import { formatMesesReferenciaRotulo } from "@/utils/format";
 
 export type LeituraFinanceiraParidadeCooperado = {
   consolidado: ConsolidadoFinanceiroCooperado;
@@ -31,23 +35,53 @@ export function leituraFinanceiraParidadeCooperado(
   cooperadoId: string,
   cooperativaId?: string
 ): LeituraFinanceiraParidadeCooperado {
-  const consolidado = getConsolidadoFinanceiroCooperado(data, cooperadoId, cooperativaId);
   const mesesResumo = listarMesesReferenciaResumoFinanceiroParidade(
     data,
     cooperadoId,
     cooperativaId
   );
+  const consolidado = getConsolidadoFinanceiroCooperado(data, cooperadoId, cooperativaId);
+  const coopId = cooperativaId ?? data.cooperados.find((c) => c.id === cooperadoId)?.cooperativaId;
+  const mesesConsolidadoKey = [...consolidado.meses].sort().join("|");
+  const mesesResumoKey = [...mesesResumo].sort().join("|");
+
+  let resumo = consolidado.resumo;
+  let valorLiquido = consolidado.valorLiquido;
+  let mesLabel = consolidado.mesLabel;
+  let aguardandoAssinatura = consolidado.aguardandoAssinatura;
+
+  if (mesesResumo.length > 0 && mesesConsolidadoKey !== mesesResumoKey) {
+    if (mesesResumo.length > 1) {
+      resumo = getResumoPagamentoConsolidadoCooperado(data, cooperadoId, mesesResumo, coopId);
+    } else {
+      resumo =
+        resumoComplementaresPosPagamento(data, cooperadoId, mesesResumo[0]!, coopId) ??
+        getResumoPagamentoExibicao(data, cooperadoId, mesesResumo[0]!, coopId);
+    }
+    valorLiquido = valorLiquidoFromResumoPartes(resumo.valorEntregas, resumo.descontosExtras);
+    resumo = { ...resumo, valorLiquido };
+    mesLabel = formatMesesReferenciaRotulo(mesesResumo);
+    aguardandoAssinatura = false;
+  }
+
   const mesesHb =
     mesesResumo.length > 0 ? mesesResumo : consolidado.meses.length > 0 ? consolidado.meses : [];
   const descontosExtras = mesesHb.length
     ? getDescontosExtrasExibicaoCooperadoFinanceiro(data, cooperadoId, cooperativaId, mesesHb)
     : [];
   return {
-    consolidado,
+    consolidado: {
+      ...consolidado,
+      meses: mesesHb,
+      mesLabel,
+      valorLiquido,
+      resumo,
+      aguardandoAssinatura,
+    },
     mesesResumo: mesesHb,
-    valorLiquido: consolidado.valorLiquido,
-    mesLabel: consolidado.mesLabel,
-    resumo: consolidado.resumo,
+    valorLiquido,
+    mesLabel,
+    resumo,
     descontosExtras,
   };
 }

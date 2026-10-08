@@ -155,8 +155,11 @@ export function resolverInicioCardMotorFromAppData(
   const fluxoPix = getValorQuantoVouReceberMotorLegado(data, cooperadoId, cooperativaId);
   const mesFallback = paridade.mesesResumo[paridade.mesesResumo.length - 1] ?? getCurrentMesReferencia();
   const mesLabel = paridade.mesLabel?.trim() || formatMesReferencia(mesFallback);
-  const valorExibir =
-    fluxoPix.aguardandoAssinatura && fluxoPix.valorRecibo > 0 ? 0 : paridade.valorLiquido;
+  const valorExibir = isBicCentralReadAuthorityEnabled()
+    ? paridade.valorLiquido
+    : fluxoPix.aguardandoAssinatura && fluxoPix.valorRecibo > 0
+      ? 0
+      : paridade.valorLiquido;
 
   return sanitizeInicioCardSnapshotFluxoBic({
     mesLabel,
