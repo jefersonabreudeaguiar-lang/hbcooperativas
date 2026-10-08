@@ -19,6 +19,8 @@ import {
 import { APP_BUILD_VERSION } from "@/lib/appBuildVersion";
 import { isCooperadoUserSyncVisible } from "@/lib/performance/cooperadoColdStart";
 import { isCooperadoPwaMobileLeveUi } from "@/lib/cooperado/cooperadoPwaLeveUi";
+import { COOPERADO_PWA_LEVE_UI_SNAPSHOT_REFRESH_EVENT } from "@/lib/cooperado/cooperadoPwaLeveUi";
+import { getData, isAppDataWarm } from "@/services/dataStore";
 
 const SNAPSHOT_VAZIO: InicioCardMotorSnapshot = {
   mesLabel: "—",
@@ -50,12 +52,21 @@ export function useCooperadoInicioValorReceberCardState(input: {
     latchRef.current = null;
   }
 
+  const [persistidoTick, setPersistidoTick] = useState(0);
+
   const [bootPersistido] = useState(() => {
     if (!input.cooperadoId) return null;
     return filtrarInicioCardPersistidoLeituraBic(
       lerInicioCardPersistidoFlex(input.cooperadoId, input.cooperativaId)
     );
   });
+
+  useEffect(() => {
+    if (!input.leituraSomentePwa || !isCooperadoPwaMobileLeveUi()) return;
+    const onRefresh = () => setPersistidoTick((n) => n + 1);
+    window.addEventListener(COOPERADO_PWA_LEVE_UI_SNAPSHOT_REFRESH_EVENT, onRefresh);
+    return () => window.removeEventListener(COOPERADO_PWA_LEVE_UI_SNAPSHOT_REFRESH_EVENT, onRefresh);
+  }, [input.leituraSomentePwa]);
 
   const persistido = useMemo(() => {
     if (!input.cooperadoId) return bootPersistido;
@@ -64,7 +75,7 @@ export function useCooperadoInicioValorReceberCardState(input: {
         lerInicioCardPersistidoFlex(input.cooperadoId, input.cooperativaId)
       ) ?? bootPersistido
     );
-  }, [input.cooperadoId, input.cooperativaId, bootPersistido]);
+  }, [input.cooperadoId, input.cooperativaId, bootPersistido, persistidoTick]);
 
   const hbDescontosRevision = useContaCoopDescontosRevision();
   const leituraSomentePwa = Boolean(input.leituraSomentePwa && isCooperadoPwaMobileLeveUi());
@@ -81,16 +92,37 @@ export function useCooperadoInicioValorReceberCardState(input: {
   }, [apresentacaoConsolidada, input.syncing, hbDescontosRevision]);
 
   const resolved = useMemo(() => {
-    if (leituraSomentePwa && persistido?.display) {
-      const display = persistido.display;
-      return {
-        display,
-        latch: {
-          motorRevision: persistido.motorRevision,
+    if (leituraSomentePwa) {
+      if (persistido?.display) {
+        const display = persistido.display;
+        return {
           display,
-          hadPendencia: cooperadoMotorTemObrigacaoReceber(display),
-        },
-        atualizando: Boolean(input.syncing && isCooperadoUserSyncVisible()),
+          latch: {
+            motorRevision: persistido.motorRevision,
+            display,
+            hadPendencia: cooperadoMotorTemObrigacaoReceber(display),
+          },
+          atualizando: Boolean(input.syncing && isCooperadoUserSyncVisible()),
+          gravarPersistencia: false,
+        };
+      }
+      const data =
+        (isAppDataWarm() ? getData() : null) ?? input.data;
+      if (data && input.cooperadoId && input.cooperativaId) {
+        return resolverCardInicioEndurecido({
+          data,
+          cooperadoId: input.cooperadoId,
+          cooperativaId: input.cooperativaId,
+          apresentacaoConsolidada: true,
+          carregandoFinanceiro: false,
+          prevLatch: null,
+          persistido: null,
+        });
+      }
+      return {
+        display: SNAPSHOT_VAZIO,
+        latch: { motorRevision: "", display: SNAPSHOT_VAZIO, hadPendencia: false },
+        atualizando: !input.dataReady,
         gravarPersistencia: false,
       };
     }

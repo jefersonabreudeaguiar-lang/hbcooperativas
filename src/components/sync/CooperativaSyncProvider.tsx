@@ -915,6 +915,7 @@ export function CooperativaSyncProvider({ children }: { children: React.ReactNod
           setCooperadoPagamentosHydrated(false);
         }
         if (completed && userInitiatedRun && isCooperadoPwaMobileLeveUi() && userRef.current) {
+          persistirInicioCardValorReceberCooperado(userRef.current);
           persistirCooperadoPwaEntregasResumosSnapshotFromUser(userRef.current);
           persistirCooperadoPwaInicioDashboardSnapshotFromUser(userRef.current, true);
           dispatchCooperadoPwaLeveUiSnapshotRefresh();

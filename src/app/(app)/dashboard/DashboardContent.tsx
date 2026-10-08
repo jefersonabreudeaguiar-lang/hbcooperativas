@@ -75,8 +75,13 @@ import {
 import { warmupCooperadoFinanceiroTabChunk } from "@/lib/performance/cooperadoFinanceiroTabWarmup";
 import { RestoreOperacionalPanel } from "@/components/sync/RestoreOperacionalPanel";
 import { CooperadoInicioValorReceberCard } from "@/components/cooperado/CooperadoInicioValorReceberCard";
-import { isCooperadoPwaMobileLeveUi } from "@/lib/cooperado/cooperadoPwaLeveUi";
-import { COOPERADO_PWA_LEVE_UI_SNAPSHOT_REFRESH_EVENT } from "@/lib/cooperado/cooperadoPwaLeveUi";
+import {
+  COOPERADO_PWA_LEVE_UI_SNAPSHOT_REFRESH_EVENT,
+  dispatchCooperadoPwaLeveUiSnapshotRefresh,
+  isCooperadoPwaMobileLeveUi,
+} from "@/lib/cooperado/cooperadoPwaLeveUi";
+import { persistirInicioCardValorReceberCooperado } from "@/services/cooperadoInicioCardPersistenciaService";
+import { isAppDataWarm } from "@/services/dataStore";
 import {
   buildCooperadoPwaInicioDashboardView,
   lerCooperadoPwaInicioDashboardSnapshot,
@@ -201,6 +206,9 @@ function CooperadoDashboard() {
 
   useEffect(() => {
     if (!inicioPwaLeve || !user?.cooperadoId) return;
+    if (!isAppDataWarm()) return;
+    persistirInicioCardValorReceberCooperado(user);
+    dispatchCooperadoPwaLeveUiSnapshotRefresh();
     const coopId = inicioCardCtx?.cooperativaId ?? user.cooperativaId;
     const cooperadoId = inicioCardCtx?.cooperadoId ?? user.cooperadoId;
     if (!coopId) return;
