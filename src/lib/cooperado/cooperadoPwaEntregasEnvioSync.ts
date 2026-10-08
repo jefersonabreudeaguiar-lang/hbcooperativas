@@ -3,7 +3,7 @@
  */
 import type { User } from "@/types";
 import type { NotaPedido } from "@/types";
-import { isCooperadoPwaMobileEntregasLeve } from "@/lib/cooperado/cooperadoPwaMobileEntregas";
+import { isCooperadoPwaMobileEntregasSyncDeferUntilEnvio } from "@/lib/cooperado/cooperadoPwaMobileEntregas";
 import { grantCooperadoEventDrivenSync } from "@/lib/performance/cooperadoEventDrivenSync";
 import { getData, isAppDataWarm } from "@/services/dataStore";
 import { resolveCooperativaCnpj, syncNotasPedidoFromCloud } from "@/services/notaPedidoCloudService";
@@ -21,7 +21,7 @@ export async function ensureCooperadoNotasFreshForEnvio(
   coopId: string,
   opts?: { reason?: CooperadoPwaEnvioSyncReason; notaRejeitada?: NotaPedido }
 ): Promise<CooperadoPwaEnvioSyncResult> {
-  if (!isCooperadoPwaMobileEntregasLeve()) return { ok: true };
+  if (!isCooperadoPwaMobileEntregasSyncDeferUntilEnvio()) return { ok: true };
   if (user.role !== "cooperado") return { ok: true };
   if (typeof navigator !== "undefined" && !navigator.onLine) {
     return {

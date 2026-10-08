@@ -45,26 +45,27 @@ assert(panel.includes("data-cooperado-tab-panel"), "painéis por aba");
 assert(panel.includes("data-cooperado-tab-panel-warm"), "painel warm para paint instantâneo");
 assert(panel.includes("cooperadoTabPanelCache"), "cache não sobrescreve com loading.tsx");
 assert(
-  keep.includes("isCooperadoMobileTabLruCacheEnabled"),
-  "PWA leve desliga LRU multi-painel"
+  panel.includes("active ? panel : null"),
+  "só monta painel da aba ativa (evita jank após sync operacional)"
 );
-assert(
-  panel.includes("data-cooperado-tab-switching"),
-  "loader na troca de aba (esconde aba anterior)"
-);
-assert(panel.includes("renderActivePanel"), "só um painel ativo no LRU browser");
 assert(read("src/app/(app)/notas-pedido/NotasPedidoCooperadoMain.tsx").includes("useCooperadoPanelAppData"), "notas pausa store fora da aba");
 assert(
-  read("src/lib/cooperado/cooperadoPwaMobileEntregas.ts").includes("isCooperadoPwaMobileEntregasLeve"),
-  "PWA cooperado mobile: entregas leve isolado do responsável"
+  read("src/lib/cooperado/cooperadoPwaMobileEntregas.ts").includes(
+    "isCooperadoPwaMobileEntregasSyncDeferUntilEnvio"
+  ),
+  "PWA cooperado: sync notas adiado até envio"
 );
 assert(
   read("src/app/(app)/notas-pedido/NotasPedidoCooperadoMain.tsx").includes("ensureCooperadoNotasFreshForEnvio"),
   "sync de notas só no fluxo de envio (PWA cooperado)"
 );
 assert(
-  read("src/app/(app)/dashboard/DashboardContent.tsx").includes("isCooperadoPwaMobileLeveUi"),
-  "Início cooperado PWA em snapshot leve"
+  !read("src/lib/cooperado/cooperadoPwaLeveUi.ts").includes("return isCooperadoPwaMobileEntregasLeve()"),
+  "Início/Entregas PWA: AppData ao vivo (snapshot leve off)"
+);
+assert(
+  read("src/app/(app)/dashboard/DashboardContent.tsx").includes("useAppDataSelectorForDomainsWhenActive"),
+  "Início cooperado reage ao AppData na aba ativa"
 );
 assert(panel.includes("useCooperadoEffectiveTabPath"), "navegação otimista cooperado");
 assert(layout.includes("setCooperadoOptimisticTab"), "pointerdown otimista no rodapé");

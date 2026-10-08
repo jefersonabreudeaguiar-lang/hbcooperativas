@@ -2,7 +2,6 @@ import {
   COOPERADO_BOTTOM_TAB_HREFS,
   isCooperadoBottomTabPath,
 } from "@/lib/performance/cooperadoBottomTabRoutes";
-import { isCooperadoPwaMobileLeveUi } from "@/lib/cooperado/cooperadoPwaLeveUi";
 
 export { COOPERADO_BOTTOM_TAB_HREFS, isCooperadoBottomTabPath };
 
@@ -24,12 +23,6 @@ export function isCooperadoMobileTabKeepAliveEnabled(): boolean {
     if (dom === "1") return true;
   }
   return readKeepAliveEnvDefault();
-}
-
-/** PWA cooperado: LRU multi-painel desliga — troca via rota + loader (evita remount pesado). */
-export function isCooperadoMobileTabLruCacheEnabled(): boolean {
-  if (isCooperadoPwaMobileLeveUi()) return false;
-  return isCooperadoMobileTabKeepAliveEnabled();
 }
 
 /** LRU enxuto — 3 abas no padrão (rápido); 2 em aparelho fraco. */
