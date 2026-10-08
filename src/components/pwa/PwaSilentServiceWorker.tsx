@@ -2,6 +2,7 @@
 
 import { useEffect } from "react";
 import { APP_BUILD_VERSION } from "@/lib/appBuildVersion";
+import { runClientReleaseShield } from "@/lib/pwa/clientReleaseShield";
 
 function activateWaitingWorker(reg: ServiceWorkerRegistration) {
   const worker = reg.waiting ?? reg.installing;
@@ -35,7 +36,10 @@ export function PwaSilentServiceWorker() {
           if (w.state === "installed" && navigator.serviceWorker.controller) onWaiting();
         };
 
-        reg.addEventListener("updatefound", onUpdate);
+        reg.addEventListener("updatefound", () => {
+          onUpdate();
+          void runClientReleaseShield("sw_updatefound");
+        });
         if (reg.waiting && navigator.serviceWorker.controller) onWaiting();
         void reg.update();
       });
@@ -45,7 +49,10 @@ export function PwaSilentServiceWorker() {
 
     const onVisible = () => {
       if (document.visibilityState !== "visible") return;
-      void navigator.serviceWorker.getRegistration().then((reg) => reg?.update());
+      void navigator.serviceWorker.getRegistration().then((reg) => {
+        void reg?.update();
+        void runClientReleaseShield("sw_visibility");
+      });
     };
     document.addEventListener("visibilitychange", onVisible);
 

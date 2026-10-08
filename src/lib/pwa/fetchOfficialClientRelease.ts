@@ -2,12 +2,15 @@ import {
   BUILD_SEEN_KEY,
   DEPLOYMENT_SEEN_KEY,
   clearReloadBurstCounter,
+  clearReleaseShieldExpected,
   clearStaffReleasePendingIfMatches,
   collectLoadedDeploymentIdsFromDom,
   evaluateClientReleaseAlignment,
   getPageEmbeddedReleaseFromDom,
   alignClientRuntimeToRelease,
   getEmbeddedClientRelease,
+  localPersistedBuildBehindCanonical,
+  persistReleaseShieldExpected,
   runtimeAlreadyOnCanonicalRelease,
   runtimeNeedsReleaseUpgrade,
   type ClientReleaseInfo,
@@ -60,13 +63,14 @@ export const cooperadoRuntimeAlreadyOnCanonicalRelease = runtimeAlreadyOnCanonic
 async function alignToCanonicalIfNeeded(
   canonical: ClientReleaseInfo,
   reason: string
-): Promise<"ok" | "aligning"> {
+): Promise<"ok" | "aligning" | "pending"> {
+  persistReleaseShieldExpected(canonical);
   const aligned = await alignClientRuntimeToRelease(reason, canonical.deploymentId, {
     hard: true,
     targetBuild: canonical.build,
     urgentUpgrade: true,
   });
-  return aligned ? "aligning" : "ok";
+  return aligned ? "aligning" : "pending";
 }
 
 /** Checa release oficial: abertura do app, volta ao foco, ou troca de aba (sem polling). */
@@ -78,11 +82,18 @@ export async function applyOfficialReleaseIfNeeded(): Promise<"ok" | "aligning" 
   const pageRelease = getPageEmbeddedReleaseFromDom();
   const loaded = collectLoadedDeploymentIdsFromDom();
 
-  if (!runtimeNeedsReleaseUpgrade(canonical, pageRelease, embedded)) {
+  const needsUpgrade =
+    runtimeNeedsReleaseUpgrade(canonical, pageRelease, embedded) ||
+    localPersistedBuildBehindCanonical(canonical);
+
+  if (!needsUpgrade) {
     markClientReleaseSeen(canonical);
+    clearReleaseShieldExpected();
     clearReloadBurstCounter();
     return "ok";
   }
+
+  persistReleaseShieldExpected(canonical);
 
   const decision = evaluateClientReleaseAlignment({
     canonical,

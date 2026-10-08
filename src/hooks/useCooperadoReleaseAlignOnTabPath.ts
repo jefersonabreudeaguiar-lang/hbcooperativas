@@ -2,7 +2,7 @@
 
 import { useEffect, useRef } from "react";
 import { isCooperadoPwaMessengerMode } from "@/lib/cooperado/cooperadoPwaMessengerMode";
-import { applyOfficialReleaseIfNeeded } from "@/lib/pwa/fetchOfficialClientRelease";
+import { runClientReleaseShield } from "@/lib/pwa/clientReleaseShield";
 
 const MIN_GAP_MS = 8_000;
 
@@ -17,6 +17,6 @@ export function useCooperadoReleaseAlignOnTabPath(pathname: string): void {
     const now = Date.now();
     if (now - lastCheckRef.current < MIN_GAP_MS) return;
     lastCheckRef.current = now;
-    void applyOfficialReleaseIfNeeded();
+    void runClientReleaseShield("cooperado_tab");
   }, [pathname]);
 }

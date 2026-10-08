@@ -105,9 +105,12 @@ assert(
 );
 const releaseFetch = read("src/lib/pwa/fetchOfficialClientRelease.ts");
 assert(
-  releaseFetch.includes("applyOfficialReleaseIfNeeded") && releaseFetch.includes("urgentUpgrade"),
+  releaseFetch.includes("applyOfficialReleaseIfNeeded") &&
+    releaseFetch.includes("persistReleaseShieldExpected"),
   "release unificado com align automatico"
 );
+const shield = read("src/lib/pwa/clientReleaseShield.ts");
+assert(shield.includes("runClientReleaseShield") && shield.includes("MISALIGNED_RETRY"), "shield com retry");
 const clientRelease = read("src/lib/pwa/clientRelease.ts");
 assert(clientRelease.includes("markCurrentRuntimeReleaseSeen"), "quiesce loop burst align");
 

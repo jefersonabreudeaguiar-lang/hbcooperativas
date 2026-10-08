@@ -4,7 +4,7 @@ import "./globals.css";
 import { AuthProvider } from "@/modules/auth/AuthProvider";
 import { PwaProvider } from "@/components/pwa/PwaProvider";
 import { PwaSilentServiceWorker } from "@/components/pwa/PwaSilentServiceWorker";
-import { ClientDeploymentGuard } from "@/components/pwa/ClientDeploymentGuard";
+import { ClientReleaseShieldHost } from "@/components/pwa/ClientReleaseShieldHost";
 import { getPrivateAppRobotsMetadata } from "@/lib/security/crawlerPolicy";
 import { APP_BUILD_VERSION } from "@/lib/appBuildVersion";
 import {
@@ -73,6 +73,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       className={`${geist.variable} h-full`}
       data-dpl-id={pageRelease.deploymentId}
       data-app-build={String(pageRelease.build)}
+      data-git-sha={pageRelease.gitCommitSha}
       data-cooperado-tab-keep-alive={cooperadoTabKeepAliveOn ? "1" : "0"}
       data-staff-tab-keep-alive={staffTabKeepAliveOn ? "1" : "0"}
     >
@@ -85,7 +86,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <body className="min-h-full antialiased">
         <AuthProvider>
           <RqlPerfDebugBootstrap />
-          <ClientDeploymentGuard />
+          <ClientReleaseShieldHost />
           <PwaSilentServiceWorker />
           {children}
           <PwaProvider />
