@@ -46,7 +46,7 @@ export function isCooperadoTabPinned(href: string): boolean {
 }
 
 /** Par leve — preferir expulsar do LRU antes das abas pesadas. */
-export const COOPERADO_TAB_LIGHT_HREFS = ["/precos", "/mensalidades"] as const;
+export const COOPERADO_TAB_LIGHT_HREFS = ["/precos"] as const;
 
 /** Par pesado — evitar os dois juntos em aparelho com pouca RAM. */
 export const COOPERADO_TAB_HEAVY_HREFS = ["/notas-pedido", "/ficha-corrida"] as const;

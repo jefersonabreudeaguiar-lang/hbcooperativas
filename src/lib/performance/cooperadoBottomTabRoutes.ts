@@ -1,10 +1,9 @@
-/** Rotas da barra inferior do cooperado (5 abas) — fonte única RQL 8.6. */
+/** Rotas da barra inferior do cooperado (4 abas) — fonte única RQL 8.6. */
 export const COOPERADO_BOTTOM_TAB_HREFS = [
   "/dashboard",
   "/notas-pedido",
   "/precos",
   "/ficha-corrida",
-  "/mensalidades",
 ] as const;
 
 export type CooperadoBottomTabHref = (typeof COOPERADO_BOTTOM_TAB_HREFS)[number];
