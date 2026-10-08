@@ -142,13 +142,27 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const justWarmed = warm && !appDataWarmRef.current;
       appDataWarmRef.current = warm;
 
-      if (!messenger) {
-        refresh();
+      if (messenger) {
+        const session = getSession();
+        if (!session) return;
+        const enriched = enrichAccountSession(session);
+        const sig = [
+          enriched.role,
+          enriched.cooperadoId ?? "",
+          enriched.mobileCooperadoId ?? "",
+          enriched.cooperativaId ?? "",
+          enriched.id,
+        ].join("|");
+        const sigChanged = sig !== experienceSigRef.current;
+        if (sigChanged) experienceSigRef.current = sig;
+        if (sigChanged || justWarmed) setDataTick((t) => t + 1);
+        return;
       }
+
+      refresh();
 
       const session = getSession();
       if (!session) return;
-      if (messenger && !warm) return;
 
       const data = getData();
       const enriched = enrichAccountSession(session);
@@ -161,13 +175,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         effective.cooperadoId ?? "",
         effective.role,
       ].join("|");
-      const sigChanged = sig !== experienceSigRef.current;
-      if (sigChanged) experienceSigRef.current = sig;
-      if (!messenger) {
-        if (sigChanged) setDataTick((t) => t + 1);
-        return;
+      if (sig !== experienceSigRef.current) {
+        experienceSigRef.current = sig;
+        setDataTick((t) => t + 1);
       }
-      if (sigChanged || justWarmed) setDataTick((t) => t + 1);
     });
     return unsub;
   }, [refresh]);

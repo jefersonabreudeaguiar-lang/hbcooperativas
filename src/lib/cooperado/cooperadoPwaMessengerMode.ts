@@ -24,6 +24,20 @@ export function cooperadoPwaUiSubscribesAppData(): boolean {
   return !isCooperadoPwaMessengerMode();
 }
 
+function scheduleMessengerCacheMaterialization(
+  user: Omit<User, "password">
+): void {
+  const run = () => {
+    materializeCooperadoScopedReadModels(user);
+    dispatchCooperadoPwaLeveUiSnapshotRefresh();
+  };
+  if (typeof requestIdleCallback !== "undefined") {
+    requestIdleCallback(run, { timeout: 2_500 });
+    return;
+  }
+  window.setTimeout(run, 0);
+}
+
 /** Grava todos os snapshots locais após um sync bem-sucedido. */
 export function persistirCooperadoPwaMessengerCaches(
   user: Omit<User, "password"> | null | undefined
@@ -32,6 +46,5 @@ export function persistirCooperadoPwaMessengerCaches(
   persistirInicioCardCooperadoNotificarPwaLeve(user);
   persistirCooperadoPwaInicioDashboardSnapshotFromUser(user, true);
   persistirCooperadoPwaEntregasResumosSnapshotFromUser(user);
-  materializeCooperadoScopedReadModels(user);
-  dispatchCooperadoPwaLeveUiSnapshotRefresh();
+  scheduleMessengerCacheMaterialization(user);
 }
