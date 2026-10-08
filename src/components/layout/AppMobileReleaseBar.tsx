@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Check, RefreshCw } from "lucide-react";
+import { Check, Gauge, RefreshCw } from "lucide-react";
+import { useAppDataSelector } from "@/hooks/useAppData";
 import { RqlPerfHomologSheet } from "@/components/performance/RqlPerfHomologSheet";
 import { canUseRqlPerfHomologPanel } from "@/lib/performance/rqlPerfHomologAccess";
 import { APP_BUILD_VERSION } from "@/lib/appBuildVersion";
@@ -42,6 +43,7 @@ const LONG_PRESS_MS = 850;
 
 export function AppMobileReleaseBar({ variant }: { variant: Variant }) {
   const { user } = useAuth();
+  useAppDataSelector((d) => d?.cooperados?.length ?? 0, [user?.id, user?.cooperadoId]);
   const homologOrlando = variant === "cooperado" && canUseRqlPerfHomologPanel(user);
   const { syncing, lastSyncedAt } = useSyncStatus();
   const [, setTick] = useState(0);
@@ -56,10 +58,12 @@ export function AppMobileReleaseBar({ variant }: { variant: Variant }) {
     }
   };
 
+  const openHomolog = () => setHomologOpen(true);
+
   const startLongPress = () => {
     if (!homologOrlando) return;
     clearLongPress();
-    longPressTimer.current = setTimeout(() => setHomologOpen(true), LONG_PRESS_MS);
+    longPressTimer.current = setTimeout(openHomolog, LONG_PRESS_MS);
   };
 
   useEffect(() => {
@@ -97,21 +101,36 @@ export function AppMobileReleaseBar({ variant }: { variant: Variant }) {
               homologOrlando && "select-none touch-manipulation",
               s.badge
             )}
-            title={homologOrlando ? "Segure ~1s para medição UX (homolog Orlando)" : undefined}
-            onTouchStart={homologOrlando ? startLongPress : undefined}
-            onTouchEnd={homologOrlando ? clearLongPress : undefined}
-            onTouchCancel={homologOrlando ? clearLongPress : undefined}
+            title={homologOrlando ? "Toque em Medir abas ou segure aqui ~1s" : undefined}
+            onPointerDown={homologOrlando ? startLongPress : undefined}
+            onPointerUp={homologOrlando ? clearLongPress : undefined}
+            onPointerCancel={homologOrlando ? clearLongPress : undefined}
+            onPointerLeave={homologOrlando ? clearLongPress : undefined}
             onContextMenu={
               homologOrlando
                 ? (e) => {
                     e.preventDefault();
-                    setHomologOpen(true);
+                    openHomolog();
                   }
                 : undefined
             }
           >
             v{APP_BUILD_VERSION}
           </span>
+        )}
+        {homologOrlando && (
+          <button
+            type="button"
+            onClick={openHomolog}
+            className={cn(
+              "shrink-0 inline-flex items-center gap-0.5 rounded-md px-1.5 py-0.5 font-semibold text-white touch-manipulation",
+              "bg-green-700 active:bg-green-900"
+            )}
+            aria-label="Medir troca de abas e comparar com WhatsApp"
+          >
+            <Gauge size={11} aria-hidden />
+            Medir abas
+          </button>
         )}
         <span className={cn("truncate", s.text)}>
           {syncing ? (

@@ -18,6 +18,8 @@ export function canUseRqlPerfHomologPanel(
   }
   const cooperadoId = effective.cooperadoId;
   if (!cooperadoId) return false;
+  if (cooperadoId === H197_ORLANDO_COOPERADO_ID) return true;
+
   const coopId = (data ? getUserCooperativaId(effective, data) : null) ?? effective.cooperativaId;
   if (!coopId) return false;
   const canon = data ? resolverCooperadoIdCanonico(data, cooperadoId, coopId) : cooperadoId;
