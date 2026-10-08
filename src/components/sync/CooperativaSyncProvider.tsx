@@ -137,6 +137,10 @@ import {
 } from "@/lib/cooperado/cooperadoPwaLeveUi";
 import { persistirCooperadoPwaEntregasResumosSnapshotFromUser } from "@/lib/cooperado/cooperadoPwaEntregasResumosSnapshot";
 import { persistirCooperadoPwaInicioDashboardSnapshotFromUser } from "@/lib/cooperado/cooperadoPwaInicioDashboardSnapshot";
+import {
+  isCooperadoPwaMessengerMode,
+  persistirCooperadoPwaMessengerCaches,
+} from "@/lib/cooperado/cooperadoPwaMessengerMode";
 
 const COOPERADO_PUSH_GAP_MS = 5 * 60 * 1000;
 /** Intervalo mínimo entre pulls de operacional só para votação (bem menor que sync completa). */
@@ -919,11 +923,16 @@ export function CooperativaSyncProvider({ children }: { children: React.ReactNod
         } else if (!isCooperadoManualOperacionalSync()) {
           setCooperadoPagamentosHydrated(false);
         }
-        if (completed && userInitiatedRun && isCooperadoPwaMobileLeveUi() && userRef.current) {
-          persistirInicioCardCooperadoNotificarPwaLeve(userRef.current);
-          persistirCooperadoPwaEntregasResumosSnapshotFromUser(userRef.current);
-          persistirCooperadoPwaInicioDashboardSnapshotFromUser(userRef.current, true);
-          dispatchCooperadoPwaLeveUiSnapshotRefresh();
+        if (completed && userRef.current?.role === "cooperado") {
+          if (isCooperadoPwaMessengerMode()) {
+            persistirCooperadoPwaMessengerCaches(userRef.current);
+            persistOperacionalSyncedAppBuild();
+          } else if (userInitiatedRun && isCooperadoPwaMobileLeveUi()) {
+            persistirInicioCardCooperadoNotificarPwaLeve(userRef.current);
+            persistirCooperadoPwaEntregasResumosSnapshotFromUser(userRef.current);
+            persistirCooperadoPwaInicioDashboardSnapshotFromUser(userRef.current, true);
+            dispatchCooperadoPwaLeveUiSnapshotRefresh();
+          }
         }
       }
     }
@@ -980,9 +989,15 @@ export function CooperativaSyncProvider({ children }: { children: React.ReactNod
     let initialDelay: ReturnType<typeof setTimeout> | undefined;
     if (cooperadoSemAutoSync) {
       if (user?.role === "cooperado" && cooperadoAppReleaseNeedsOperacionalSync()) {
-        purgarInicioCardValorReceberCooperado(user);
+        if (!isCooperadoPwaMessengerMode()) {
+          purgarInicioCardValorReceberCooperado(user);
+        }
         requestCooperadoAppReleaseSync();
-      } else if (user?.role === "cooperado" && !document.hidden) {
+      } else if (
+        user?.role === "cooperado" &&
+        !document.hidden &&
+        !isCooperadoPwaMessengerMode()
+      ) {
         scheduleCooperadoPostShellSync(() => {
           void resolveCooperativaCnpj(getData(), coopId, user).then((cnpjOpen) => {
             if (!cnpjOpen || document.hidden) return;

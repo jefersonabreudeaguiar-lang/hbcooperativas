@@ -11,6 +11,7 @@ import {
   readAppliedCooperativaCloudRevision,
 } from "@/lib/performance/cooperadoEventDrivenSync";
 import { isCooperadoManualOperacionalSync } from "@/lib/performance/cooperadoColdStart";
+import { isCooperadoPwaMessengerMode } from "@/lib/cooperado/cooperadoPwaMessengerMode";
 import {
   requestCooperadoFinanceiroRecoverySync,
   requestCooperadoStaffRevisionSync,
@@ -42,7 +43,9 @@ export async function evaluateCooperadoForegroundOperacionalPull(
       : "never_applied_revision";
   }
 
-  if (cooperadoOperacionalSyncStale()) return "stale_local_sync";
+  if (!isCooperadoPwaMessengerMode() && cooperadoOperacionalSyncStale()) {
+    return "stale_local_sync";
+  }
 
   return null;
 }

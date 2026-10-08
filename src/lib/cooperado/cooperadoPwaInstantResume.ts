@@ -31,7 +31,7 @@ function snapshotFreshEnough(savedAt: string | undefined): boolean {
   return Date.now() - t <= RESUME_MAX_AGE_MS;
 }
 
-function lerInicioCardPersistidoResume(
+export function lerInicioCardPersistidoResume(
   cooperadoId: string,
   cooperativaId: string | undefined
 ): InicioCardPersistido | null {

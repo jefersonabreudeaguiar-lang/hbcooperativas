@@ -12,6 +12,7 @@ import {
   scheduleCooperadoPwaOperacionalParidadePull,
   shouldRunCooperadoPwaParidadeHooks,
 } from "@/lib/cooperado/cooperadoPwaFinanceiroParidadeRefresh";
+import { isCooperadoPwaMessengerMode } from "@/lib/cooperado/cooperadoPwaMessengerMode";
 
 /**
  * Mantém cache do card “A receber” após login/sync e quando AppData local muda.
@@ -27,6 +28,7 @@ export function CooperadoInicioCardPersistBootstrap() {
   const lastSyncedRef = useRef<number | null>(null);
 
   useEffect(() => {
+    if (isCooperadoPwaMessengerMode()) return;
     if (!user || user.role !== "cooperado" || !isAppDataWarm()) return;
     persistirInicioCardCooperadoNotificarPwaLeve(user);
   }, [user?.id, user?.cooperadoId, user?.cooperativaId, dataRevision]);

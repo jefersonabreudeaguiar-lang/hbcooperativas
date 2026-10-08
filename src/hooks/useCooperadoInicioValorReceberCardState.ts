@@ -20,6 +20,7 @@ import { APP_BUILD_VERSION } from "@/lib/appBuildVersion";
 import { isCooperadoUserSyncVisible } from "@/lib/performance/cooperadoColdStart";
 import { isCooperadoPwaMobileLeveUi } from "@/lib/cooperado/cooperadoPwaLeveUi";
 import { COOPERADO_PWA_LEVE_UI_SNAPSHOT_REFRESH_EVENT } from "@/lib/cooperado/cooperadoPwaLeveUi";
+import { lerInicioCardPersistidoResume } from "@/lib/cooperado/cooperadoPwaInstantResume";
 import { getData, isAppDataWarm } from "@/services/dataStore";
 
 const SNAPSHOT_VAZIO: InicioCardMotorSnapshot = {
@@ -72,12 +73,23 @@ export function useCooperadoInicioValorReceberCardState(input: {
 
   const persistido = useMemo(() => {
     if (!input.cooperadoId) return bootPersistido;
+    if (leituraSomentePwa) {
+      return (
+        lerInicioCardPersistidoResume(input.cooperadoId, input.cooperativaId) ?? bootPersistido
+      );
+    }
     return (
       filtrarInicioCardPersistidoLeituraBic(
         lerInicioCardPersistidoFlex(input.cooperadoId, input.cooperativaId)
       ) ?? bootPersistido
     );
-  }, [input.cooperadoId, input.cooperativaId, bootPersistido, persistidoTick]);
+  }, [
+    input.cooperadoId,
+    input.cooperativaId,
+    bootPersistido,
+    persistidoTick,
+    leituraSomentePwa,
+  ]);
 
   const hbDescontosRevision = useContaCoopDescontosRevision();
 

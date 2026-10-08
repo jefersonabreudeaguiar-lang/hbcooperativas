@@ -18,6 +18,7 @@ import { persistirInicioCardCooperadoNotificarPwaLeve } from "@/lib/cooperado/co
 import { resolveCooperativaCnpj } from "@/services/notaPedidoCloudService";
 import { getData, isAppDataWarm } from "@/services/dataStore";
 import { isAppStandalone } from "@/services/cooperadoAppInstallService";
+import { isCooperadoPwaMessengerMode } from "@/lib/cooperado/cooperadoPwaMessengerMode";
 
 let lastForegroundPullAt = 0;
 const FOREGROUND_PULL_GAP_MS = 90_000;
@@ -45,6 +46,7 @@ export function scheduleCooperadoPwaOperacionalParidadePull(
   opts?: { force?: boolean }
 ): void {
   if (!user || user.role !== "cooperado" || !cooperativaId) return;
+  if (isCooperadoPwaMessengerMode()) return;
   if (!cooperadoOperacionalParidadeRefreshAtivo()) return;
 
   refreshCooperadoInicioCardFromMotor(user);
@@ -84,6 +86,7 @@ export function scheduleCooperadoPwaOperacionalParidadePull(
 /** PWA instalado ou viewport mobile — onde a paridade com desktop costuma falhar. */
 export function shouldRunCooperadoPwaParidadeHooks(): boolean {
   if (typeof window === "undefined") return false;
+  if (isCooperadoPwaMessengerMode()) return false;
   if (isAppStandalone()) return true;
   try {
     return window.matchMedia("(max-width: 1023px)").matches;

@@ -1,5 +1,5 @@
 /**
- * PWA cooperado mobile — snapshot local para abertura/troca rápida; AppData atualiza em background e no Atualizar.
+ * PWA cooperado mobile — modo mensageiro: UI lê snapshots locais; ver cooperadoPwaMessengerMode.ts.
  */
 import type { User } from "@/types";
 import { isCooperadoPwaMobileEntregasLeve } from "@/lib/cooperado/cooperadoPwaMobileEntregas";

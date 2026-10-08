@@ -87,13 +87,19 @@ import {
   type CooperadoPwaInicioDashboardView,
 } from "@/lib/cooperado/cooperadoPwaInicioDashboardSnapshot";
 import { cooperadoPwaInstantPaintReady, lerCooperadoPwaInicioDashboardViewForResume } from "@/lib/cooperado/cooperadoPwaInstantResume";
+import {
+  cooperadoPwaUiSubscribesAppData,
+  isCooperadoPwaMessengerMode,
+} from "@/lib/cooperado/cooperadoPwaMessengerMode";
 import { getSession } from "@/services/dataStore";
 
 const DASHBOARD_INICIO_DOMAINS: AppDataNotifyDomain[] = ["shell", "notas", "financeiro", "operacional"];
 
 function CooperadoDashboard() {
   const tabActive = useCooperadoTabPanelActive("/dashboard");
+  const messenger = isCooperadoPwaMessengerMode();
   const inicioPwaLeve = isCooperadoPwaMobileLeveUi();
+  const appDataUiOn = cooperadoPwaUiSubscribesAppData() && tabActive;
   const { user } = useAuth();
   const router = useRouter();
   const hbCredit = useHbCreditEnabled(user);
@@ -104,7 +110,7 @@ function CooperadoDashboard() {
   const hbDescontosRevision = useContaCoopDescontosRevision();
 
   const financeiroAusente = useAppDataSelectorForDomainsWhenActive(
-    tabActive,
+    appDataUiOn,
     DASHBOARD_INICIO_DOMAINS,
     (data) => {
       if (!data || !user?.cooperadoId) return false;
@@ -125,11 +131,11 @@ function CooperadoDashboard() {
   }, []);
 
   useEffect(() => {
-    if (isCooperadoManualOperacionalSync()) return;
+    if (messenger || isCooperadoManualOperacionalSync()) return;
     if (!user?.cooperadoId || typeof navigator === "undefined" || !navigator.onLine) return;
     if (shouldSkipCooperadoSecondaryMountSync()) return;
     requestVotacaoOperacionalSync();
-  }, [user?.id, user?.cooperadoId]);
+  }, [messenger, user?.id, user?.cooperadoId]);
 
   useEffect(() => {
     if (inicioPwaLeve) return;
@@ -141,7 +147,7 @@ function CooperadoDashboard() {
   }, [financeiroAusente, inicioPwaLeve]);
 
   const contaCoopSync = useAppDataSelectorForDomainsWhenActive(
-    tabActive,
+    appDataUiOn,
     DASHBOARD_INICIO_DOMAINS,
     (data) => {
       if (!data || !user?.cooperadoId) return null;
@@ -164,7 +170,7 @@ function CooperadoDashboard() {
   );
 
   useSyncContaCoopValorReceberPilot(
-    contaCoopSync ? { ...contaCoopSync, user, initialDelayMs: 3_000 } : undefined
+    !messenger && contaCoopSync ? { ...contaCoopSync, user, initialDelayMs: 3_000 } : undefined
   );
 
   const inicioCardCtx = fluxo.cooperadoId
@@ -185,7 +191,7 @@ function CooperadoDashboard() {
       syncing: syncingForUi,
       apresentacaoConsolidada,
       carregandoValoresFinanceiros,
-      leituraSomentePwa: inicioPwaLeve && !tabActive,
+      leituraSomentePwa: messenger || inicioPwaLeve,
     });
 
   const [pwaInicioView, setPwaInicioView] = useState<CooperadoPwaInicioDashboardView | null>(() => {
@@ -203,28 +209,9 @@ function CooperadoDashboard() {
     const coopId = inicioCardCtx?.cooperativaId ?? user.cooperativaId;
     const cooperadoId = inicioCardCtx?.cooperadoId ?? user.cooperadoId;
     if (!coopId) return;
-    const built = persistirCooperadoPwaInicioDashboardSnapshot(
-      cooperadoId,
-      coopId,
-      user,
-      true
-    );
-    if (built) setPwaInicioView(built.view);
+    const view = lerCooperadoPwaInicioDashboardViewForResume(cooperadoId, coopId);
+    if (view) setPwaInicioView(view);
   }, [inicioPwaLeve, user, inicioCardCtx?.cooperadoId, inicioCardCtx?.cooperativaId]);
-
-  useEffect(() => {
-    if (!inicioPwaLeve || !user?.cooperadoId) return;
-    if (!isAppDataWarm()) return;
-    persistirInicioCardCooperadoNotificarPwaLeve(user);
-    refreshPwaInicioView();
-  }, [
-    inicioPwaLeve,
-    user?.id,
-    user?.cooperadoId,
-    inicioCardCtx?.cooperadoId,
-    inicioCardCtx?.cooperativaId,
-    refreshPwaInicioView,
-  ]);
 
   useEffect(() => {
     if (!inicioPwaLeve) return;
@@ -236,7 +223,7 @@ function CooperadoDashboard() {
   }, [inicioPwaLeve, refreshPwaInicioView]);
 
   const viewLive = useAppDataSelectorForDomainsWhenActive(
-    tabActive,
+    appDataUiOn,
     DASHBOARD_INICIO_DOMAINS,
     (data) => {
       if (!data || !user?.cooperadoId) return null;
@@ -245,7 +232,7 @@ function CooperadoDashboard() {
     [user?.id, user?.cooperadoId, user?.cooperativaId, hbDescontosRevision, apresentacaoConsolidada]
   );
 
-  const view = inicioPwaLeve ? (viewLive ?? pwaInicioView) : viewLive;
+  const view = messenger || inicioPwaLeve ? pwaInicioView : viewLive;
 
   const mesAtual = getCurrentMesReferencia();
   const nomeCurto =

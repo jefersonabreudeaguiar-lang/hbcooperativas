@@ -45,6 +45,10 @@ import {
   type CooperadoPwaEntregasResumosSnapshot,
 } from "@/lib/cooperado/cooperadoPwaEntregasResumosSnapshot";
 import { lerCooperadoPwaEntregasResumosForResume } from "@/lib/cooperado/cooperadoPwaInstantResume";
+import {
+  cooperadoPwaUiSubscribesAppData,
+  isCooperadoPwaMessengerMode,
+} from "@/lib/cooperado/cooperadoPwaMessengerMode";
 import { getSession } from "@/services/dataStore";
 import { markRqlColdStartPhase } from "@/lib/performance/rqlMarks";
 import {
@@ -381,7 +385,9 @@ function qtyInputClassName(filled: boolean, extra?: string) {
 export default function NotasPedidoCooperadoMain() {
   const ready = useEnsureAppDataWarm();
   const tabActive = useCooperadoTabPanelActive("/notas-pedido");
-  const data = useCooperadoPanelAppData(tabActive, ["notas", "shell", "financeiro", "operacional"]);
+  const messenger = isCooperadoPwaMessengerMode();
+  const appDataUiOn = cooperadoPwaUiSubscribesAppData() && tabActive;
+  const data = useCooperadoPanelAppData(appDataUiOn, ["notas", "shell", "financeiro", "operacional"]);
   const { check, user, isCooperado, isDiretoria, cooperadoId } = usePermissions();
   const entregasPwaLeve = isCooperado && isCooperadoPwaMobileEntregasLeve();
   const { syncing, syncingForUi } = useSyncStatus();
@@ -1715,7 +1721,7 @@ export default function NotasPedidoCooperadoMain() {
 
   const resumosMensaisLive =
     useAppDataSelectorWhenActive(
-      tabActive,
+      appDataUiOn,
       (d) => {
         if (!cooperadoId || !coopId || abaCooperado !== "entregas") return [];
         const base = filtrarResumosMesesNaoQuitados(
@@ -1737,7 +1743,7 @@ export default function NotasPedidoCooperadoMain() {
 
   const resumosFichaLive =
     useAppDataSelectorWhenActive(
-      tabActive,
+      appDataUiOn,
       (d) => {
         if (!cooperadoId || !coopId || abaCooperado !== "ficha") return [];
         return listarResumosFichaEmAbertoCooperado(d, cooperadoId, coopId);
@@ -1746,11 +1752,11 @@ export default function NotasPedidoCooperadoMain() {
     ) ?? [];
 
   const resumosMensaisCooperado = useMemo(() => {
-    if (!entregasPwaLeve || abaCooperado !== "entregas") return resumosMensaisLive;
+    if ((!entregasPwaLeve && !messenger) || abaCooperado !== "entregas") return resumosMensaisLive;
     let base =
-      resumosMensaisLive.length > 0
+      !messenger && resumosMensaisLive.length > 0
         ? resumosMensaisLive
-        : (pwaEntregasResumosSnap?.entregasBase ?? []);
+        : (pwaEntregasResumosSnap?.entregasBase ?? resumosMensaisLive);
     if (deferredStatusFilter === "pendentes") base = filtrarResumosEntregasPendentes(base);
     else if (deferredStatusFilter) {
       base = base
@@ -1770,10 +1776,10 @@ export default function NotasPedidoCooperadoMain() {
   ]);
 
   const resumosFichaCooperado = useMemo(() => {
-    if (!entregasPwaLeve || abaCooperado !== "ficha") return resumosFichaLive;
-    if (resumosFichaLive.length > 0) return resumosFichaLive;
-    return pwaEntregasResumosSnap?.fichaAberto ?? [];
-  }, [entregasPwaLeve, abaCooperado, pwaEntregasResumosSnap, resumosFichaLive]);
+    if ((!entregasPwaLeve && !messenger) || abaCooperado !== "ficha") return resumosFichaLive;
+    if (!messenger && resumosFichaLive.length > 0) return resumosFichaLive;
+    return pwaEntregasResumosSnap?.fichaAberto ?? resumosFichaLive;
+  }, [entregasPwaLeve, messenger, abaCooperado, pwaEntregasResumosSnap, resumosFichaLive]);
 
   const getEscolaLabelCooperado = useCallback(
     (n: NotaPedido) => getEscolaNotaLabel(n, data?.instituicoes ?? []),

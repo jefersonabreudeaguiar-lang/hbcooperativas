@@ -68,6 +68,14 @@ assert(
   "abertura PWA instantanea antes do AppData warm"
 );
 assert(
+  read("src/lib/cooperado/cooperadoPwaMessengerMode.ts").includes("isCooperadoPwaMessengerMode"),
+  "modo mensageiro PWA cooperado"
+);
+assert(
+  read("src/lib/cooperado/cooperadoPwaMessengerMode.ts").includes("persistirCooperadoPwaMessengerCaches"),
+  "snapshots gravados apos sync pontual"
+);
+assert(
   existsSync(join(ROOT, "src/components/cooperado/CooperadoPwaResumeLifecycle.tsx")),
   "persist snapshots ao ir para segundo plano"
 );

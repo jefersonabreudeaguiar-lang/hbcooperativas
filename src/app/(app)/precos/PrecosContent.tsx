@@ -5,6 +5,13 @@ import { Search, Tag, RefreshCw } from "lucide-react";
 import { useAppDataReady, useAppDataSelectorForDomainsWhenActive } from "@/hooks/useAppData";
 import type { AppDataNotifyDomain } from "@/lib/performance/appDataDomainNotify";
 import { useCooperadoTabPanelActive } from "@/hooks/useCooperadoTabPanelActive";
+import {
+  cooperadoPwaInstantPaintReady,
+} from "@/lib/cooperado/cooperadoPwaInstantResume";
+import {
+  cooperadoPwaUiSubscribesAppData,
+  isCooperadoPwaMessengerMode,
+} from "@/lib/cooperado/cooperadoPwaMessengerMode";
 import { usePermissions } from "@/hooks/usePermissions";
 import { getUserCooperativaId } from "@/utils/cooperativa";
 import { PageHeader } from "@/components/ui/Table";
@@ -30,8 +37,10 @@ export default function PrecosPage() {
   const ready = useAppDataReady();
   const tabActive = useCooperadoTabPanelActive("/precos");
   const { user } = usePermissions();
+  const messenger = isCooperadoPwaMessengerMode() && user?.role === "cooperado";
+  const appDataUiOn = cooperadoPwaUiSubscribesAppData() && tabActive;
   const coopIdSel = useAppDataSelectorForDomainsWhenActive(
-    tabActive,
+    appDataUiOn,
     PRECOS_APP_DATA_DOMAINS,
     (d) => (user ? getUserCooperativaId(user, d) ?? undefined : undefined),
     [user?.id]
@@ -56,7 +65,7 @@ export default function PrecosPage() {
 
   const instituicoes =
     useAppDataSelectorForDomainsWhenActive(
-      tabActive,
+      appDataUiOn,
       PRECOS_APP_DATA_DOMAINS,
       (d) => (coopId ? getInstituicoesCatalogo(d, coopId) : []),
       [coopId]
@@ -64,7 +73,7 @@ export default function PrecosPage() {
 
   const produtosDaCoop =
     useAppDataSelectorForDomainsWhenActive(
-      tabActive,
+      appDataUiOn,
       PRECOS_APP_DATA_DOMAINS,
       (d) => (coopId ? getTodosProdutosCatalogo(d, coopId) : []),
       [coopId]
@@ -83,7 +92,9 @@ export default function PrecosPage() {
     );
   }, [instSelecionada, produtosDaCoop, busca]);
 
-  if (!ready) return <PageSkeleton />;
+  if (!ready && !(messenger && user && cooperadoPwaInstantPaintReady(user))) {
+    return <PageSkeleton />;
+  }
 
   const instComItens = instituicoes.filter((i) =>
     produtosDaCoop.some((p) => p.instituicaoId === i.id)

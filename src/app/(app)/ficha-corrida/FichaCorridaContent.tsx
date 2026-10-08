@@ -9,6 +9,10 @@ import { useEnsureAppDataWarm } from "@/hooks/useEnsureAppDataWarm";
 import type { AppDataNotifyDomain } from "@/lib/performance/appDataDomainNotify";
 import { isAppDataWarm } from "@/services/dataStore";
 import { useCooperadoTabPanelActive } from "@/hooks/useCooperadoTabPanelActive";
+import {
+  cooperadoPwaUiSubscribesAppData,
+  isCooperadoPwaMessengerMode,
+} from "@/lib/cooperado/cooperadoPwaMessengerMode";
 import { usePermissions } from "@/hooks/usePermissions";
 import { getUserCooperativaId } from "@/utils/cooperativa";
 import {
@@ -179,7 +183,9 @@ const FICHA_APP_DATA_DOMAINS: AppDataNotifyDomain[] = ["financeiro", "shell"];
 export default function FichaCorridaPage() {
   const ready = useEnsureAppDataWarm();
   const tabActive = useCooperadoTabPanelActive("/ficha-corrida");
-  const data = useAppDataSelectorForDomainsWhenActive(tabActive, FICHA_APP_DATA_DOMAINS, (d) => d, []);
+  const messenger = isCooperadoPwaMessengerMode();
+  const appDataUiOn = cooperadoPwaUiSubscribesAppData() && tabActive;
+  const data = useAppDataSelectorForDomainsWhenActive(appDataUiOn, FICHA_APP_DATA_DOMAINS, (d) => d, []);
   const hbDescontosRevision = useContaCoopDescontosRevision();
   const { user, isCooperado, cooperadoId, check } = usePermissions();
   const searchParams = useSearchParams();
@@ -198,7 +204,7 @@ export default function FichaCorridaPage() {
   const coopIdEarly = user && data ? getUserCooperativaId(user, data) : undefined;
 
   useEffect(() => {
-    if (!tabActive) return;
+    if (!tabActive || messenger) return;
     const run = () => {
       if (isCooperado && isCooperadoManualOperacionalSync() && user && data && coopIdEarly) {
         void resolveCooperativaCnpj(data, coopIdEarly, user).then((cnpj) => {
@@ -214,7 +220,7 @@ export default function FichaCorridaPage() {
     }
     const t = window.setTimeout(run, 0);
     return () => window.clearTimeout(t);
-  }, [isCooperado, tabActive, user, data, coopIdEarly]);
+  }, [messenger, isCooperado, tabActive, user, data, coopIdEarly]);
 
   useEffect(() => {
     const c = searchParams.get("cooperado");
