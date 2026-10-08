@@ -12,8 +12,11 @@ import {
   isIosNonSafari,
   type DevicePlatform,
 } from "@/components/pwa/BaixarAppGuide";
-import { registrarAcessoCooperadoApp } from "@/services/cooperadoAppInstallService";
-import { getData } from "@/services/dataStore";
+import {
+  isAppStandalone,
+  registrarAcessoCooperadoApp,
+} from "@/services/cooperadoAppInstallService";
+import { getData, isAppDataWarm } from "@/services/dataStore";
 import { getUserCooperativaId, normalizeCnpj } from "@/utils/cooperativa";
 
 /** v2 — reexibe o aviso de baixar o app para quem já tinha fechado a versão antiga. */
@@ -30,11 +33,7 @@ type BeforeInstallPromptEvent = Event & {
 };
 
 function isStandalone(): boolean {
-  if (typeof window === "undefined") return false;
-  return (
-    window.matchMedia("(display-mode: standalone)").matches ||
-    (window.navigator as Navigator & { standalone?: boolean }).standalone === true
-  );
+  return isAppStandalone();
 }
 
 function readDismissCount(): number {
@@ -112,10 +111,10 @@ export function PwaProvider() {
       return;
     }
 
-    const data = getData();
-    const registro = user?.cooperadoId
-      ? data.cooperados.find((c) => c.id === user.cooperadoId)
-      : undefined;
+    const registro =
+      user?.cooperadoId && isAppDataWarm()
+        ? getData().cooperados.find((c) => c.id === user.cooperadoId)
+        : undefined;
     const jaMarcadoComApp = Boolean(registro?.appInstaladoEm);
     // Cooperado ativo sem app: reabre o aviso mesmo se já tinha fechado antes.
     const forcarPorFaltaDeApp = Boolean(isCooperado && !jaMarcadoComApp);
@@ -134,6 +133,11 @@ export function PwaProvider() {
     if (detected === "ios" || forcarPorFaltaDeApp) {
       setVisible(true);
       if (detected === "ios") return;
+    }
+
+    // Navegador (desktop ou outro): cooperado sem PWA instalado — guia de instalação.
+    if (isCooperado && !isStandalone() && (forcarPorFaltaDeApp || detected === "other")) {
+      setVisible(true);
     }
 
     // Android/desktop: banner quando o Chrome oferecer instalação; senão mostra fallback.

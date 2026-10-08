@@ -62,7 +62,11 @@ import { formatCurrency, formatMesReferencia, getCurrentMesReferencia } from "@/
 import { getUserCooperativaId, getUserCooperativaNome, normalizeCnpj } from "@/utils/cooperativa";
 import { Camera, Wallet, ClipboardList, Users, Vote, Download, PenLine } from "lucide-react";
 import { usePermissions } from "@/hooks/usePermissions";
-import { resumoInstalacaoApp } from "@/services/cooperadoAppInstallService";
+import {
+  cooperadoTemAppInstalado,
+  isAppStandalone,
+  resumoInstalacaoApp,
+} from "@/services/cooperadoAppInstallService";
 import { PageSkeleton } from "@/components/ui/PageSkeleton";
 import {
   appLocalResumeReady,
@@ -312,12 +316,17 @@ function CooperadoDashboard() {
     resultadoVotacao,
     resolvidos,
     temSecaoPendencias,
-    mostrarBaixarApp,
     coopId: viewCoopId,
     mostrarAssinaturaPilot,
     precisaAssinatura,
     cnpjDigits,
   } = view;
+
+  const mostrarBaixarApp =
+    !isAppStandalone() &&
+    Boolean(cooperado) &&
+    !cooperado!.avulso &&
+    !cooperadoTemAppInstalado(cooperado!);
 
   return (
     <div className="space-y-6 max-w-3xl">
