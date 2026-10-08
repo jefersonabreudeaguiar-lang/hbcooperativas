@@ -1,0 +1,81 @@
+/**
+ * PWA / mobile — alinha card “A receber” e AppData local com a nuvem ao voltar ao app,
+ * sem exigir novo login no desktop (paridade Orlando ↔ celular).
+ */
+import type { User } from "@/types";
+import { isCooperadoEventDrivenSync } from "@/lib/performance/cooperadoEventDrivenSync";
+import {
+  isCooperadoManualOperacionalSync,
+} from "@/lib/performance/cooperadoColdStart";
+import { scheduleCooperadoPostShellSync } from "@/lib/performance/cooperadoPostShellSync";
+import { runCooperadoForegroundOperacionalCheck } from "@/lib/performance/cooperadoForegroundOperacionalSync";
+import { resolverCooperadoIdCanonico } from "@/services/cooperadoCloudService";
+import { cooperadoFinanceiroDesatualizado } from "@/services/fichaSyncGuard";
+import { persistirInicioCardValorReceberCooperado } from "@/services/cooperadoInicioCardPersistenciaService";
+import { resolveCooperativaCnpj } from "@/services/notaPedidoCloudService";
+import { getData, isAppDataWarm } from "@/services/dataStore";
+import { isAppStandalone } from "@/services/cooperadoAppInstallService";
+
+let lastForegroundPullAt = 0;
+const FOREGROUND_PULL_GAP_MS = 45_000;
+
+export function cooperadoOperacionalParidadeRefreshAtivo(): boolean {
+  return isCooperadoManualOperacionalSync() && isCooperadoEventDrivenSync();
+}
+
+/** Atualiza cache local do card a partir do motor (mesma leitura do dashboard). */
+export function refreshCooperadoInicioCardFromMotor(
+  user: Omit<User, "password"> | null | undefined
+): void {
+  if (!user || user.role !== "cooperado") return;
+  persistirInicioCardValorReceberCooperado(user);
+}
+
+/**
+ * Ao reabrir PWA ou voltar à aba: persiste card + checagem leve de revisão na nuvem.
+ * Throttle evita rajada em visibility/pageshow duplicados.
+ */
+export function scheduleCooperadoPwaOperacionalParidadePull(
+  user: Omit<User, "password"> | null | undefined,
+  cooperativaId: string | undefined,
+  opts?: { force?: boolean }
+): void {
+  if (!user || user.role !== "cooperado" || !cooperativaId) return;
+  if (!cooperadoOperacionalParidadeRefreshAtivo()) return;
+
+  refreshCooperadoInicioCardFromMotor(user);
+
+  const now = Date.now();
+  if (!opts?.force && now - lastForegroundPullAt < FOREGROUND_PULL_GAP_MS) return;
+  lastForegroundPullAt = now;
+
+  if (typeof navigator !== "undefined" && !navigator.onLine) return;
+
+  scheduleCooperadoPostShellSync(() => {
+    if (!isAppDataWarm()) return;
+    if (typeof document !== "undefined" && document.hidden) return;
+    const data = getData();
+    if (!user.cooperadoId) return;
+    const cooperadoId = resolverCooperadoIdCanonico(data, user.cooperadoId, cooperativaId);
+    const financeiroDesatualizado = cooperadoFinanceiroDesatualizado(
+      data,
+      cooperadoId,
+      cooperativaId
+    );
+    void resolveCooperativaCnpj(data, cooperativaId, user).then((cnpj) => {
+      if (!cnpj || (typeof document !== "undefined" && document.hidden)) return;
+      void runCooperadoForegroundOperacionalCheck(cnpj, { financeiroDesatualizado });
+    });
+  });
+}
+
+/** PWA instalado ou viewport mobile — onde a paridade com desktop costuma falhar. */
+export function shouldRunCooperadoPwaParidadeHooks(): boolean {
+  if (typeof window === "undefined") return false;
+  if (isAppStandalone()) return true;
+  try {
+    return window.matchMedia("(max-width: 1023px)").matches;
+  } catch {
+    return false;
+  }
+}

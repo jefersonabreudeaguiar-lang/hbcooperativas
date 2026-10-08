@@ -7,6 +7,11 @@ import { useSyncStatus } from "@/components/sync/CooperativaSyncProvider";
 import { getDataRevision, isAppDataWarm, subscribe } from "@/services/dataStore";
 import { isCooperadoInstantResumeEnabled } from "@/lib/performance/cooperadoColdStart";
 import { persistirInicioCardValorReceberCooperado } from "@/services/cooperadoInicioCardPersistenciaService";
+import {
+  refreshCooperadoInicioCardFromMotor,
+  scheduleCooperadoPwaOperacionalParidadePull,
+  shouldRunCooperadoPwaParidadeHooks,
+} from "@/lib/cooperado/cooperadoPwaFinanceiroParidadeRefresh";
 
 /**
  * Mantém cache do card “A receber” após login/sync e quando AppData local muda.
@@ -43,6 +48,29 @@ export function CooperadoInicioCardPersistBootstrap() {
     document.addEventListener("visibilitychange", onHide);
     return () => document.removeEventListener("visibilitychange", onHide);
   }, [user?.id, user?.cooperadoId, user?.role]);
+
+  useEffect(() => {
+    if (!user || user.role !== "cooperado" || !shouldRunCooperadoPwaParidadeHooks()) return;
+
+    const onVisible = () => {
+      if (document.visibilityState !== "visible") return;
+      refreshCooperadoInicioCardFromMotor(user);
+      scheduleCooperadoPwaOperacionalParidadePull(user, user.cooperativaId);
+    };
+
+    const onPageShow = (event: PageTransitionEvent) => {
+      if (!event.persisted && document.visibilityState !== "visible") return;
+      refreshCooperadoInicioCardFromMotor(user);
+      scheduleCooperadoPwaOperacionalParidadePull(user, user.cooperativaId, { force: event.persisted });
+    };
+
+    document.addEventListener("visibilitychange", onVisible);
+    window.addEventListener("pageshow", onPageShow);
+    return () => {
+      document.removeEventListener("visibilitychange", onVisible);
+      window.removeEventListener("pageshow", onPageShow);
+    };
+  }, [user?.id, user?.cooperadoId, user?.cooperativaId, user?.role]);
 
   return null;
 }

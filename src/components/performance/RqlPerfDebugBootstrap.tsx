@@ -8,6 +8,7 @@ import {
   installRqlPerfDebugGlobal,
   isRqlPerfDebugEnabled,
 } from "@/lib/performance/rqlPerfReport";
+import { installCooperadoFinanceiroParidadeProbe } from "@/lib/cooperado/cooperadoFinanceiroParidadeProbe";
 
 /**
  * Medição completa só cooperado Orlando — ver `canUseRqlPerfHomologPanel`.
@@ -24,7 +25,12 @@ export function RqlPerfDebugBootstrap() {
     } else {
       document.documentElement.removeAttribute("data-rql-perf-debug");
     }
-    return installRqlPerfDebugGlobal(enabled);
+    const cleanupRql = installRqlPerfDebugGlobal(enabled);
+    const cleanupParidade = installCooperadoFinanceiroParidadeProbe(user);
+    return () => {
+      cleanupRql();
+      cleanupParidade();
+    };
   }, [user?.id, user?.cooperadoId, user?.role, user?.mobileCooperadoId]);
   return null;
 }

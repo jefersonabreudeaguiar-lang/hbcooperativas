@@ -129,6 +129,7 @@ import { fetchCooperativaCloudRevision } from "@/services/cooperativaSyncRevisio
 import { notifyAppSubtleUpdate } from "@/lib/cooperadoSubtleUpdate";
 import { requestCooperadoAppReleaseSync, type SyncRunOptions } from "@/services/syncRequest";
 import { purgarInicioCardValorReceberCooperado } from "@/services/cooperadoInicioCardPersistenciaService";
+import { scheduleCooperadoPwaOperacionalParidadePull } from "@/lib/cooperado/cooperadoPwaFinanceiroParidadeRefresh";
 
 const COOPERADO_PUSH_GAP_MS = 5 * 60 * 1000;
 /** Intervalo mínimo entre pulls de operacional só para votação (bem menor que sync completa). */
@@ -1011,21 +1012,30 @@ export function CooperativaSyncProvider({ children }: { children: React.ReactNod
     });
 
     const onVisible = () => {
-      if (document.visibilityState === "visible") {
-        if (cooperadoSemAutoSync) return;
-        markUserActivity();
-        if (user?.role === "cooperado") void pullVotacaoOperacionalCooperado();
-        if (staff && Date.now() - lastSyncStartedAtRef.current < getSyncMinGapMs(user?.role ?? "cooperado")) {
-          return;
+      if (document.visibilityState !== "visible") return;
+      if (cooperadoSemAutoSync) {
+        if (user?.role === "cooperado") {
+          scheduleCooperadoPwaOperacionalParidadePull(userRef.current, coopId);
         }
-        void runSync();
+        return;
       }
+      markUserActivity();
+      if (user?.role === "cooperado") void pullVotacaoOperacionalCooperado();
+      if (staff && Date.now() - lastSyncStartedAtRef.current < getSyncMinGapMs(user?.role ?? "cooperado")) {
+        return;
+      }
+      void runSync();
     };
     document.addEventListener("visibilitychange", onVisible);
 
     const onOnline = () => {
       if (document.hidden) return;
-      if (cooperadoSemAutoSync) return;
+      if (cooperadoSemAutoSync) {
+        if (user?.role === "cooperado") {
+          scheduleCooperadoPwaOperacionalParidadePull(userRef.current, coopId, { force: true });
+        }
+        return;
+      }
       markUserActivity();
       if (user?.role === "cooperado") void pullVotacaoOperacionalCooperado();
       void runSync();
