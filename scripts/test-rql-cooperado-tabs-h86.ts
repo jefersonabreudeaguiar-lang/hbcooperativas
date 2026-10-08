@@ -44,6 +44,8 @@ assert(panel.includes("useSyncExternalStore"), "viewport mobile sync no 1º pain
 assert(panel.includes("data-cooperado-tab-panel"), "painéis por aba");
 assert(panel.includes("data-cooperado-tab-panel-warm"), "painel warm para paint instantâneo");
 assert(panel.includes("cooperadoTabPanelCache"), "cache não sobrescreve com loading.tsx");
+assert(panel.includes("useCooperadoEffectiveTabPath"), "navegação otimista cooperado");
+assert(layout.includes("setCooperadoOptimisticTab"), "pointerdown otimista no rodapé");
 assert(perms.includes("cooperadoBottomTabRoutes"), "menu mobile alinhado às 4 abas");
 assert(perms.includes('href: "/mensalidades"') && perms.includes("COOPERADO_DRAWER_MENU"), "mensalidades no menu lateral");
 

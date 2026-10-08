@@ -39,6 +39,8 @@ import { shouldPrefetchHbCreditNav } from "@/lib/hb-credit/hbCreditNavPrefetch";
 import { scheduleCooperadoNavPrefetchEarly } from "@/lib/performance/cooperadoNavPrefetch";
 import { COOPERADO_FINANCEIRO_TAB_HREF } from "@/lib/hb-credit/hbCreditNavPrefetch";
 import { cooperadoTabWarmOnPointerDown } from "@/lib/performance/cooperadoTabPointerWarmup";
+import { setCooperadoOptimisticTab } from "@/lib/performance/cooperadoOptimisticTabNavigation";
+import { useCooperadoEffectiveTabPath } from "@/hooks/useCooperadoEffectiveTabPath";
 import { staffTabWarmOnPointerDown } from "@/lib/performance/staffTabPointerWarmup";
 import { isCooperadoBottomTabPath } from "@/lib/performance/cooperadoBottomTabRoutes";
 import { isStaffBottomTabPath } from "@/lib/performance/staffBottomTabRoutes";
@@ -224,6 +226,7 @@ export function Sidebar({ mobile = false, onClose }: { mobile?: boolean; onClose
 export function MobileNav() {
   const [open, setOpen] = useState(false);
   const pathname = usePathname();
+  const effectiveTabPath = useCooperadoEffectiveTabPath(pathname);
   const router = useRouter();
   const shell = useAppShellNavigationContext();
   const navUser = shell?.navUser;
@@ -252,7 +255,7 @@ export function MobileNav() {
       ? "cooperado"
       : "staff"
     : null;
-  useMobileBottomTabSwitchFeedback(pathname, bottomTabProfile);
+  useMobileBottomTabSwitchFeedback(effectiveTabPath, bottomTabProfile);
 
   if (!shell || !navUser) return null;
 
@@ -281,7 +284,9 @@ export function MobileNav() {
         {isCooperadoAppUser(navUser) && <CooperadoMobileReleaseBar />}
         <nav className="flex bg-white border-t-2 border-green-200">
         {mobileItems.map((item) => {
-          const active = pathname === item.href || (item.href !== "/dashboard" && pathname.startsWith(item.href));
+          const tabPath = isCooperadoAppUser(navUser!) ? effectiveTabPath : pathname;
+          const active =
+            tabPath === item.href || (item.href !== "/dashboard" && tabPath.startsWith(item.href));
           const isCooperadoNav = isCooperadoAppUser(navUser);
           const mobileTabUx = isCooperadoNav || isStaffBottomTabPath(item.href);
           return (
@@ -297,6 +302,7 @@ export function MobileNav() {
               }
               onPointerDown={() => {
                 if (isCooperadoNav && isCooperadoBottomTabPath(item.href)) {
+                  setCooperadoOptimisticTab(item.href);
                   cooperadoTabWarmOnPointerDown(item.href);
                   try {
                     router.prefetch(item.href);
@@ -412,6 +418,16 @@ function AppShellInner({ children }: { children: React.ReactNode }) {
       if (!navUser) {
         document.documentElement.setAttribute("data-hb-shell-mode", "loading");
         return;
+      }
+      const cooperadoMobileShell =
+        isCooperadoAppUser(navUser) &&
+        typeof window !== "undefined" &&
+        window.matchMedia("(max-width: 1023px)").matches;
+      if (cooperadoMobileShell) {
+        markRqlShellVisual();
+        requestAnimationFrame(() => {
+          requestAnimationFrame(() => markRqlShellInteractive());
+        });
       }
       const role = isAppDataWarm()
         ? resolveAppUserRole(navUser, getData())

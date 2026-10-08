@@ -69,9 +69,10 @@ assert(provider.includes("scheduleCooperadoColdStartSync"), "provider agenda syn
 assert(gate.includes("shouldSkipCooperadoSecondaryMountSync"), "gate dedupe sync mount");
 assert(gate.includes("syncingForUi"), "gate usa syncingForUi");
 assert(
-  auth.includes("preloadAppData") && auth.includes("requestIdleCallback"),
-  "auth warm local deferido (nao bloqueia shell)"
+  auth.includes("preloadAppData") && auth.includes("scheduleCooperadoPaintFirst(warm)"),
+  "auth warm local apos paint (nao bloqueia shell)"
 );
+assert(provider.includes("scheduleCooperadoPostShellSync(() =>") && provider.includes("runSync({ force: true, silent: true })"), "sync cold start apos shell");
 assert(gate.includes("CooperadoFinanceiroShellProvider"), "gate shell-first com contexto");
 assert(!gate.includes("min-h-screen bg-gray-50"), "gate sem tela cheia bloqueante");
 assert(appLayout.includes("CooperadoFinanceiroSyncBanner"), "banner discreto no conteudo");

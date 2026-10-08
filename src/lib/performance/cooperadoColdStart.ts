@@ -108,6 +108,17 @@ export function ensureCooperadoAppDataEagerWarm(): void {
 /** Mesmo eager warm — cooperado e responsável (HX 9.1). */
 export const ensureAppDataEagerWarm = ensureCooperadoAppDataEagerWarm;
 
+/** Shell/header/rodapé pintam antes de parse pesado do localStorage ou sync. */
+export function scheduleCooperadoPaintFirst(run: () => void): void {
+  if (typeof window === "undefined") {
+    run();
+    return;
+  }
+  requestAnimationFrame(() => {
+    requestAnimationFrame(run);
+  });
+}
+
 export function isStaffGestaoRole(role: string | undefined): boolean {
   return role === "responsavel" || role === "tesoureiro" || role === "admin";
 }

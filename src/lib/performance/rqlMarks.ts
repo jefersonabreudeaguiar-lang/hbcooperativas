@@ -196,29 +196,59 @@ export function listRqlColdStartMarks(): PerformanceMark[] {
     .sort((a, b) => a.startTime - b.startTime);
 }
 
-/** ms entre primeira e última fase cold start — prioriza shell utilizável (não sync em background). */
+let shellVisualMarked = false;
+let shellInteractiveMarked = false;
+
+/** ms até shell utilizável — visual → interativo (não inclui sync em background). */
 export function measureRqlColdStartSpanMs(): number | null {
   const marks = listRqlColdStartMarks();
   if (marks.length === 0) return null;
-  const first = marks[0].startTime;
   const interactive =
     marks.find((m) => m.name.endsWith("shell_interactive")) ??
     marks.find((m) => m.name.endsWith("local_resume_ready")) ??
     marks.find((m) => m.name.endsWith("post_interactive_task")) ??
     marks.find((m) => m.name.endsWith("staff_post_interactive_task")) ??
     marks[marks.length - 1];
+  const visual = marks.find((m) => m.name.endsWith("shell_visual"));
+  if (visual && interactive && interactive.startTime >= visual.startTime) {
+    const span = interactive.startTime - visual.startTime;
+    return Number.isFinite(span) && span >= 0 ? Math.round(span * 10) / 10 : null;
+  }
+  const first =
+    marks.find((m) => m.name.endsWith("cold_start_scheduled")) ??
+    marks.find((m) => m.name.endsWith("auth_ready")) ??
+    marks[0];
+  const span = interactive.startTime - first.startTime;
+  return Number.isFinite(span) && span >= 0 ? Math.round(span * 10) / 10 : null;
+}
+
+export function measureRqlColdStartFullSpanMs(): number | null {
+  const marks = listRqlColdStartMarks();
+  if (marks.length === 0) return null;
+  const first = marks[0].startTime;
+  const interactive =
+    marks.find((m) => m.name.endsWith("shell_interactive")) ?? marks[marks.length - 1];
   const span = interactive.startTime - first;
   return Number.isFinite(span) && span >= 0 ? Math.round(span * 10) / 10 : null;
 }
 
 /** Header + rodapé cooperado visíveis (antes de dados financeiros). */
 export function markRqlShellVisual(): void {
+  if (shellVisualMarked) return;
+  shellVisualMarked = true;
   markRqlColdStartPhase("shell_visual");
 }
 
 /** Shell autenticado pintado — fim de cold start UX (responsável + cooperado). */
 export function markRqlShellInteractive(): void {
+  if (shellInteractiveMarked) return;
+  shellInteractiveMarked = true;
   markRqlColdStartPhase("shell_interactive");
+}
+
+export function resetRqlShellMarksForTests(): void {
+  shellVisualMarked = false;
+  shellInteractiveMarked = false;
 }
 
 /** AppData warm + cooperado com fatia financeira utilizável localmente. */

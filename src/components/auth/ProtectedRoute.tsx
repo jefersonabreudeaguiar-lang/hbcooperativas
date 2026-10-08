@@ -3,6 +3,7 @@
 import { useLayoutEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/modules/auth/AuthProvider";
+import { markRqlColdStartPhase } from "@/lib/performance/rqlMarks";
 
 export function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth();
@@ -11,6 +12,9 @@ export function ProtectedRoute({ children }: { children: React.ReactNode }) {
   useLayoutEffect(() => {
     if (!loading && !user) {
       router.replace("/login");
+    }
+    if (!loading && user) {
+      markRqlColdStartPhase("auth_ready");
     }
   }, [user, loading, router]);
 

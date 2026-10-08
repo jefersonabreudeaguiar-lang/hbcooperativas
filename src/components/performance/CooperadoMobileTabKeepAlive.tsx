@@ -12,6 +12,7 @@ import {
   trimCooperadoTabCacheOrder,
 } from "@/lib/performance/cooperadoMobileTabKeepAlive";
 import { isCooperadoTabRouteLoadingElement } from "@/lib/performance/cooperadoTabPanelCache";
+import { useCooperadoEffectiveTabPath } from "@/hooks/useCooperadoEffectiveTabPath";
 
 function subscribeCooperadoMobileViewport(onChange: () => void): () => void {
   const mq = window.matchMedia("(max-width: 1023px)");
@@ -74,6 +75,7 @@ function publishKeepAliveDomState(state: {
  * RQL 8.6 — cache LRU enxuto (3 abas): só monta painéis visitados + atual.
  */
 export function CooperadoMobileTabKeepAlive({ pathname, children }: Props) {
+  const effectivePath = useCooperadoEffectiveTabPath(pathname);
   const mobile = useCooperadoMobileViewport();
   const enabled = isCooperadoMobileTabKeepAliveEnabled();
   const cacheRef = useRef<Partial<Record<string, ReactNode>>>({});
@@ -82,14 +84,14 @@ export function CooperadoMobileTabKeepAlive({ pathname, children }: Props) {
   const lowMemory = isLowMemoryDevice();
   const cacheLimit = getCooperadoMobileTabCacheLimit(lowMemory);
 
-  const onTab = isCooperadoBottomTabPath(pathname);
+  const onTab = isCooperadoBottomTabPath(effectivePath);
 
   useLayoutEffect(() => {
     publishKeepAliveDomState({
       enabled,
       mobile,
       onTab,
-      pathname,
+      pathname: effectivePath,
       panelCount: orderRef.current.length,
     });
 
@@ -97,34 +99,42 @@ export function CooperadoMobileTabKeepAlive({ pathname, children }: Props) {
     if (!isCooperadoTabRouteLoadingElement(children)) {
       cacheRef.current[pathname] = children;
     }
-    const merged = [pathname, ...orderRef.current.filter((h) => h !== pathname)];
+    const merged = [
+      effectivePath,
+      pathname,
+      ...orderRef.current.filter((h) => h !== effectivePath && h !== pathname),
+    ];
     const prevOrder = orderRef.current;
-    const nextOrder = trimCooperadoTabCacheOrder(merged, pathname, cacheLimit, lowMemory);
+    const nextOrder = trimCooperadoTabCacheOrder(merged, effectivePath, cacheLimit, lowMemory);
     const orderChanged =
       nextOrder.length !== prevOrder.length || nextOrder.some((h, i) => h !== prevOrder[i]);
     orderRef.current = nextOrder;
     for (const href of prevOrder) {
       if (!orderRef.current.includes(href)) delete cacheRef.current[href];
     }
-    if (orderChanged || !prevOrder.includes(pathname)) {
+    if (orderChanged || !prevOrder.includes(effectivePath) || !prevOrder.includes(pathname)) {
       setCacheVersion((n) => n + 1);
     }
-  }, [enabled, mobile, onTab, pathname, children, cacheLimit, lowMemory]);
+  }, [enabled, mobile, onTab, pathname, effectivePath, children, cacheLimit, lowMemory]);
 
   const hrefsToRender = useMemo(() => {
     if (onTab && enabled && mobile) {
-      return [...new Set([pathname, ...orderRef.current])];
+      return [...new Set([effectivePath, pathname, ...orderRef.current])];
     }
     return [...new Set([...orderRef.current, ...Object.keys(cacheRef.current)])];
-  }, [cacheVersion, onTab, enabled, mobile, pathname]);
+  }, [cacheVersion, onTab, enabled, mobile, pathname, effectivePath]);
 
   const panelForHref = (
     href: string,
     activePath: string | null
   ): { panel: ReactNode | undefined; warm: boolean } => {
     const cached = cacheRef.current[href];
-    if (onTab && href === pathname) {
-      if (!isCooperadoTabRouteLoadingElement(children) && children != null) {
+    if (onTab && href === effectivePath) {
+      if (
+        pathname === href &&
+        !isCooperadoTabRouteLoadingElement(children) &&
+        children != null
+      ) {
         return { panel: children, warm: false };
       }
       if (cached !== undefined) return { panel: cached, warm: true };
@@ -160,7 +170,7 @@ export function CooperadoMobileTabKeepAlive({ pathname, children }: Props) {
       );
     });
 
-  const panels = onTab ? renderPanels(pathname) : renderPanels(null);
+  const panels = onTab ? renderPanels(effectivePath) : renderPanels(null);
 
   if (!onTab) {
     return (
@@ -176,7 +186,7 @@ export function CooperadoMobileTabKeepAlive({ pathname, children }: Props) {
   }
 
   return (
-    <CooperadoTabPanelProvider activeHref={pathname}>
+    <CooperadoTabPanelProvider activeHref={effectivePath}>
       <>{panels}</>
     </CooperadoTabPanelProvider>
   );

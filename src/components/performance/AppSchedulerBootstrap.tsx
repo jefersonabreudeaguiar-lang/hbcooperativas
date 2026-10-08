@@ -12,6 +12,7 @@ import { isCooperadoBottomTabPath } from "@/lib/performance/cooperadoBottomTabRo
 import { cooperadoTabWarmPanelPaintReady } from "@/lib/performance/cooperadoMobileTabKeepAlive";
 import { staffBottomTabCacheKey, isStaffBottomTabPath } from "@/lib/performance/staffBottomTabRoutes";
 import { markUserActivity } from "@/services/idleActivity";
+import { useCooperadoEffectiveTabPath } from "@/hooks/useCooperadoEffectiveTabPath";
 
 function routeHopFromPathname(pathname: string): string {
   if (isCooperadoBottomTabPath(pathname)) {
@@ -30,6 +31,7 @@ function routeHopFromPathname(pathname: string): string {
  */
 export function AppSchedulerBootstrap() {
   const pathname = usePathname();
+  const effectivePath = useCooperadoEffectiveTabPath(pathname);
   const prevHopRef = useRef<string | null>(null);
 
   useEffect(() => {
@@ -52,12 +54,12 @@ export function AppSchedulerBootstrap() {
   }, []);
 
   useLayoutEffect(() => {
-    const hop = routeHopFromPathname(pathname);
+    const hop = routeHopFromPathname(effectivePath);
     const prev = prevHopRef.current;
     let cancelPaint: (() => void) | undefined;
     if (prev && prev !== hop) {
       markRqlRouteTransition(prev, hop);
-      if (isCooperadoBottomTabPath(pathname) && cooperadoTabWarmPanelPaintReady(pathname)) {
+      if (isCooperadoBottomTabPath(effectivePath) && cooperadoTabWarmPanelPaintReady(effectivePath)) {
         markRqlRoutePaintReady(hop);
       } else {
         cancelPaint = scheduleMarkRqlRoutePaintReady(hop);
@@ -69,7 +71,7 @@ export function AppSchedulerBootstrap() {
     return () => {
       cancelPaint?.();
     };
-  }, [pathname]);
+  }, [pathname, effectivePath]);
 
   return null;
 }

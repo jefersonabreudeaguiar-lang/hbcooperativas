@@ -136,7 +136,7 @@ export function buildMessagingParityReport(rql: RqlPerfRouteReport): MessagingPa
       hbCoopScore: coldHb ?? (coldMs == null ? 5.5 : 6),
       detail:
         coldMs != null
-          ? `medido ${coldMs}ms (até shell_interactive)`
+          ? `medido ${coldMs}ms (shell_visual → shell_interactive)`
           : "Abra o app e rode printWhatsappCompare de novo",
     },
     {

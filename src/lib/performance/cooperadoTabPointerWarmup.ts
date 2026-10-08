@@ -40,5 +40,5 @@ function warmCooperadoTab(href: string): void {
  */
 export function cooperadoTabWarmOnPointerDown(href: string): void {
   if (typeof window === "undefined") return;
-  queueMicrotask(() => warmCooperadoTab(href));
+  warmCooperadoTab(href);
 }

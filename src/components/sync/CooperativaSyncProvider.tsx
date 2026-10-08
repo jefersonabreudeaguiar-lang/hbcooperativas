@@ -979,7 +979,9 @@ export function CooperativaSyncProvider({ children }: { children: React.ReactNod
       } else if (!document.hidden) {
         markUserActivity();
         scheduleCooperadoColdStartSync(() => {
-          void runSync({ force: true, silent: true });
+          scheduleCooperadoPostShellSync(() => {
+            void runSync({ force: true, silent: true });
+          });
         });
       }
     } else if (staff && isCooperadoInstantResumeEnabled()) {
