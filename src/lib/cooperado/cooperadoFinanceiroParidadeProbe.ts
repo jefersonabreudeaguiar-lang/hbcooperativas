@@ -11,6 +11,14 @@ import {
 import { lerInicioCardPersistidoFlex } from "@/lib/cooperadoInicioCardPersistencia";
 import { canUseRqlPerfHomologPanel } from "@/lib/performance/rqlPerfHomologAccess";
 import { resolverCooperadoIdCanonico } from "@/services/cooperadoCloudService";
+import {
+  listarMesesPendentesPagamentoResponsavel,
+  listarMesesReferenciaResumoFinanceiroParidade,
+} from "@/services/cooperadoEntregasService";
+import {
+  getResumoPagamentoConsolidadoCooperado,
+  getResumoPagamentoExibicao,
+} from "@/services/notaPedidoService";
 import { getData, isAppDataWarm } from "@/services/dataStore";
 import { getUserCooperativaId } from "@/utils/cooperativa";
 import { isAppStandalone } from "@/services/cooperadoAppInstallService";
@@ -30,6 +38,13 @@ export type CooperadoFinanceiroParidadeProbe = {
   };
   motorCard: { mesLabel: string; valor: number };
   persistido: { mesLabel: string; valor: number; savedAt: string } | null;
+  /** Mesma lista que o responsável usa em Pagar (read-only). */
+  responsavel: {
+    mesesPendentesPagar: string[];
+    mesesParidadeCanon: string[];
+    valorLiquidoResumoStaff: number | null;
+    alinhadoComParidade: boolean;
+  };
 };
 
 export function buildCooperadoFinanceiroParidadeProbe(
@@ -45,6 +60,33 @@ export function buildCooperadoFinanceiroParidadeProbe(
   const rawPersistido = filtrarInicioCardPersistidoLeituraBic(
     lerInicioCardPersistidoFlex(cooperadoId, cooperativaId)
   );
+
+  const mesesStaff = listarMesesPendentesPagamentoResponsavel(data, cooperadoId, cooperativaId);
+  const mesesParidadeCanon = listarMesesReferenciaResumoFinanceiroParidade(
+    data,
+    cooperadoId,
+    cooperativaId
+  );
+  let staffValor: number | null = null;
+  if (mesesStaff.length > 1) {
+    staffValor = getResumoPagamentoConsolidadoCooperado(
+      data,
+      cooperadoId,
+      mesesStaff,
+      cooperativaId
+    ).valorLiquido;
+  } else if (mesesStaff.length === 1) {
+    staffValor = getResumoPagamentoExibicao(
+      data,
+      cooperadoId,
+      mesesStaff[0]!,
+      cooperativaId
+    ).valorLiquido;
+  }
+  const alinhadoComParidade =
+    staffValor == null
+      ? paridade.valorLiquido === 0
+      : Math.abs(staffValor - paridade.valorLiquido) < 0.01;
 
   const w = typeof window !== "undefined" ? (window as Window & { __HB_PAGE_RELEASE__?: unknown }) : null;
   const release = (w?.__HB_PAGE_RELEASE__ ?? null) as CooperadoFinanceiroParidadeProbe["release"];
@@ -70,6 +112,12 @@ export function buildCooperadoFinanceiroParidadeProbe(
           savedAt: rawPersistido.savedAt,
         }
       : null,
+    responsavel: {
+      mesesPendentesPagar: mesesStaff,
+      mesesParidadeCanon: mesesParidadeCanon,
+      valorLiquidoResumoStaff: staffValor,
+      alinhadoComParidade,
+    },
   };
 }
 

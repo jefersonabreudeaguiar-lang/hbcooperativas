@@ -10,6 +10,8 @@ import {
   RQL_PERF_DEBUG_STORAGE_KEY,
 } from "@/lib/performance/rqlPerfReport";
 import { APP_BUILD_VERSION } from "@/lib/appBuildVersion";
+import { useAuth } from "@/modules/auth/AuthProvider";
+import { buildOrlandoFullDiagClipboardText } from "@/lib/performance/orlandoPwaDiagBundle";
 
 type Props = {
   open: boolean;
@@ -17,6 +19,7 @@ type Props = {
 };
 
 export function RqlPerfHomologSheet({ open, onClose }: Props) {
+  const { user } = useAuth();
   const [reportText, setReportText] = useState("");
   const [status, setStatus] = useState<string>("");
   const debugOn = isRqlPerfDebugEnabled();
@@ -44,8 +47,19 @@ export function RqlPerfHomologSheet({ open, onClose }: Props) {
     }
   }, []);
 
+  const gerarPacoteCompleto = useCallback(() => {
+    setStatus("");
+    try {
+      const text = buildOrlandoFullDiagClipboardText(user);
+      setReportText(text);
+      setStatus("Pacote completo (perf + paridade). Copie e envie no WhatsApp.");
+    } catch (e) {
+      setStatus(e instanceof Error ? e.message : "Erro ao gerar pacote.");
+    }
+  }, [user]);
+
   const copiar = useCallback(async () => {
-    const text = reportText || buildRqlWhatsappCompareClipboardText();
+    const text = reportText || buildOrlandoFullDiagClipboardText(user) || buildRqlWhatsappCompareClipboardText();
     try {
       if (navigator.clipboard?.writeText) {
         await navigator.clipboard.writeText(text);
@@ -57,7 +71,7 @@ export function RqlPerfHomologSheet({ open, onClose }: Props) {
     }
     setReportText(text);
     setStatus("Selecione o texto abaixo e copie manualmente.");
-  }, [reportText]);
+  }, [reportText, user]);
 
   if (!open) return null;
 
@@ -110,8 +124,12 @@ export function RqlPerfHomologSheet({ open, onClose }: Props) {
             </Button>
           )}
 
+          <Button type="button" variant="secondary" className="w-full" onClick={gerarPacoteCompleto}>
+            Gerar pacote diagnóstico completo
+          </Button>
+
           <Button type="button" variant="secondary" className="w-full" onClick={gerarRelatorio}>
-            Gerar comparativo WhatsApp
+            Gerar comparativo WhatsApp (só perf)
           </Button>
 
           <Button type="button" variant="secondary" className="w-full" onClick={() => void copiar()}>
