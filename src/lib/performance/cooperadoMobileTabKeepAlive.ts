@@ -3,6 +3,7 @@ import {
   isCooperadoBottomTabPath,
 } from "@/lib/performance/cooperadoBottomTabRoutes";
 import { isCooperadoPwaMessengerMode } from "@/lib/cooperado/cooperadoPwaMessengerMode";
+import { isAppStandalone } from "@/services/cooperadoAppInstallService";
 
 export { COOPERADO_BOTTOM_TAB_HREFS, isCooperadoBottomTabPath };
 
@@ -27,8 +28,23 @@ export function isCooperadoMobileTabKeepAliveEnabled(): boolean {
   return readKeepAliveEnvDefault();
 }
 
-/** LRU enxuto — 3 abas no padrão (rápido); 2 em aparelho fraco. */
+/** Cooperado no browser mobile (não PWA instalado) — LRU mais agressivo (1 slot além dos pins). */
+export function isCooperadoMobileBrowserTabKeepAlive(): boolean {
+  if (typeof window === "undefined") return false;
+  if (isCooperadoPwaMessengerMode()) return false;
+  if (isAppStandalone()) return false;
+  try {
+    return window.matchMedia("(max-width: 1023px)").matches;
+  } catch {
+    return false;
+  }
+}
+
+/** LRU enxuto — 3 abas no padrão (rápido); 2 em aparelho fraco; browser mobile cooperado ≈ 1 painel pesado. */
 export function getCooperadoMobileTabCacheLimit(lowMemoryDevice: boolean): number {
+  if (isCooperadoMobileBrowserTabKeepAlive()) {
+    return lowMemoryDevice ? 2 : 3;
+  }
   return lowMemoryDevice ? 2 : 4;
 }
 
