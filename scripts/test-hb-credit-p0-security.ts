@@ -13,7 +13,7 @@ import {
   isHbCreditOperationsEnabled,
 } from "../src/modules/hb-credit/shared/config";
 import {
-  appendHbCreditMenuItem,
+  getCooperadoDrawerMenuItems,
   getMobileNavItems,
   isHbCreditNavVisible,
 } from "../src/permissions";
@@ -91,13 +91,13 @@ function testVisibility() {
 
   const cooperadoMobileOn = getMobileNavItems(cooperadoUser, true, true);
   ok(
-    "cooperado bottom nav inclui Conta Coop quando habilitado",
-    cooperadoMobileOn.some((i) => i.href === "/minha-conta-coop")
+    "cooperado bottom nav sem aba HB (atalho só no Início)",
+    !cooperadoMobileOn.some((i) => i.href === "/minha-conta-coop")
   );
 
   const cooperadoMobileOff = getMobileNavItems(cooperadoUser, false, true);
   ok(
-    "cooperado bottom nav oculta Conta Coop quando desabilitado",
+    "cooperado bottom nav sem HB quando módulo desligado",
     !cooperadoMobileOff.some((i) => i.href === "/minha-conta-coop")
   );
 
@@ -107,8 +107,8 @@ function testVisibility() {
     respMobileOn.some((i) => i.href === "/conta-coop")
   );
 
-  const drawer = appendHbCreditMenuItem([], cooperadoUser, true, true);
-  ok("drawer cooperado inclui minha-conta-coop", drawer.some((i) => i.href === "/minha-conta-coop"));
+  const drawer = getCooperadoDrawerMenuItems(cooperadoUser, true, true);
+  ok("drawer cooperado sem HB Créditos", !drawer.some((i) => i.href === "/minha-conta-coop"));
 }
 
 function testCreditBaseValidation() {
