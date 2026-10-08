@@ -212,14 +212,16 @@ function CooperadoDashboard() {
     const coopId = cooperativaIdCard ?? user.cooperativaId;
     const cooperadoId = cooperadoIdCard ?? user.cooperadoId;
     if (!coopId || !cooperadoId) return;
-    const fromResume = lerCooperadoPwaInicioDashboardViewForResume(cooperadoId, coopId);
-    if (fromResume) {
-      setPwaInicioView(fromResume);
-      return;
+    // Após sync / Atualizar, AppData quente manda — não reutilizar snapshot de build antigo (valor zerado).
+    if (isAppDataWarm()) {
+      const built = persistirCooperadoPwaInicioDashboardSnapshot(cooperadoId, coopId, user, true);
+      if (built?.view) {
+        setPwaInicioView(built.view);
+        return;
+      }
     }
-    if (!isAppDataWarm()) return;
-    const built = persistirCooperadoPwaInicioDashboardSnapshot(cooperadoId, coopId, user, true);
-    if (built?.view) setPwaInicioView(built.view);
+    const fromResume = lerCooperadoPwaInicioDashboardViewForResume(cooperadoId, coopId);
+    if (fromResume) setPwaInicioView(fromResume);
   }, [inicioPwaLeve, user, cooperadoIdCard, cooperativaIdCard]);
 
   useEffect(() => {

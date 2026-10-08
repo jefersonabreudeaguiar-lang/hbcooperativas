@@ -21,6 +21,7 @@ import {
 } from "@/lib/cooperado/cooperadoPwaEntregasResumosSnapshot";
 import { isCooperadoPwaMobileLeveUi } from "@/lib/cooperado/cooperadoPwaLeveUi";
 import { isCooperadoInstantResumeEnabled, cooperadoInstantShellReady } from "@/lib/performance/cooperadoColdStart";
+import { APP_BUILD_VERSION } from "@/lib/appBuildVersion";
 
 const RESUME_MAX_AGE_MS = 60 * 24 * 60 * 60 * 1000;
 
@@ -71,10 +72,12 @@ function lerPwaInicioDashRaw(
     if (!raw) return null;
     const parsed = JSON.parse(raw) as {
       v: number;
+      appBuild?: number;
       view?: CooperadoPwaInicioDashboardView;
       savedAt?: string;
     };
     if (parsed.v !== COOPERADO_PWA_INICIO_DASHBOARD_SNAPSHOT_VERSION || !parsed.view) return null;
+    if (parsed.appBuild != null && parsed.appBuild !== APP_BUILD_VERSION) return null;
     if (!snapshotFreshEnough(parsed.savedAt)) return null;
     return { view: parsed.view, savedAt: parsed.savedAt ?? "" };
   } catch {

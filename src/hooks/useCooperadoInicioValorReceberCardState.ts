@@ -106,6 +106,42 @@ export function useCooperadoInicioValorReceberCardState(input: {
 
   const resolved = useMemo(() => {
     if (leituraSomentePwa) {
+      const data = (isAppDataWarm() ? getData() : null) ?? input.data;
+      const fromMotor =
+        data && input.cooperadoId && input.cooperativaId
+          ? resolverCardInicioEndurecido({
+              data,
+              cooperadoId: input.cooperadoId,
+              cooperativaId: input.cooperativaId,
+              apresentacaoConsolidada: true,
+              carregandoFinanceiro: false,
+              prevLatch: null,
+              persistido: null,
+            })
+          : null;
+
+      if (fromMotor && cooperadoMotorTemObrigacaoReceber(fromMotor.display)) {
+        return { ...fromMotor, gravarPersistencia: false };
+      }
+
+      if (persistido?.display && cooperadoMotorTemObrigacaoReceber(persistido.display)) {
+        const display = persistido.display;
+        return {
+          display,
+          latch: {
+            motorRevision: persistido.motorRevision,
+            display,
+            hadPendencia: true,
+          },
+          atualizando: Boolean(input.syncing && isCooperadoUserSyncVisible()),
+          gravarPersistencia: false,
+        };
+      }
+
+      if (fromMotor) {
+        return { ...fromMotor, gravarPersistencia: false };
+      }
+
       if (persistido?.display) {
         const display = persistido.display;
         return {
@@ -119,19 +155,7 @@ export function useCooperadoInicioValorReceberCardState(input: {
           gravarPersistencia: false,
         };
       }
-      const data =
-        (isAppDataWarm() ? getData() : null) ?? input.data;
-      if (data && input.cooperadoId && input.cooperativaId) {
-        return resolverCardInicioEndurecido({
-          data,
-          cooperadoId: input.cooperadoId,
-          cooperativaId: input.cooperativaId,
-          apresentacaoConsolidada: true,
-          carregandoFinanceiro: false,
-          prevLatch: null,
-          persistido: null,
-        });
-      }
+
       return {
         display: SNAPSHOT_VAZIO,
         latch: { motorRevision: "", display: SNAPSHOT_VAZIO, hadPendencia: false },

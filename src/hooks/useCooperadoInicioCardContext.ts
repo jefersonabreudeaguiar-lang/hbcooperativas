@@ -1,17 +1,20 @@
 "use client";
 
-import { useCallback, useMemo } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useSyncExternalStore } from "react";
 import {
   getAppDataDomainRevision,
   subscribeAppDataDomain,
   type AppDataNotifyDomain,
 } from "@/lib/performance/appDataDomainNotify";
-import { getData, isAppDataWarm } from "@/services/dataStore";
+import { getData, isAppDataWarm, waitForAppDataWarm } from "@/services/dataStore";
 import { resolverCooperadoIdCanonico } from "@/services/cooperadoCloudService";
 import { getUserCooperativaId } from "@/utils/cooperativa";
 import type { AppData, User } from "@/types";
-import { isCooperadoPwaMobileLeveUi } from "@/lib/cooperado/cooperadoPwaLeveUi";
+import {
+  COOPERADO_PWA_LEVE_UI_SNAPSHOT_REFRESH_EVENT,
+  isCooperadoPwaMobileLeveUi,
+} from "@/lib/cooperado/cooperadoPwaLeveUi";
 
 const INICIO_CARD_DOMAINS: AppDataNotifyDomain[] = ["shell", "notas", "financeiro"];
 
@@ -28,6 +31,19 @@ export function useCooperadoInicioCardContext(user: Omit<User, "password"> | nul
   dataReady: boolean;
 } | null {
   const pwaLeveUi = isCooperadoPwaMobileLeveUi();
+  const [pwaMessengerDataEpoch, setPwaMessengerDataEpoch] = useState(0);
+
+  useEffect(() => {
+    if (!pwaLeveUi) return;
+    const bump = () => setPwaMessengerDataEpoch((n) => n + 1);
+    window.addEventListener(COOPERADO_PWA_LEVE_UI_SNAPSHOT_REFRESH_EVENT, bump);
+    if (!isAppDataWarm()) {
+      void waitForAppDataWarm().then((warm) => {
+        if (warm) bump();
+      });
+    }
+    return () => window.removeEventListener(COOPERADO_PWA_LEVE_UI_SNAPSHOT_REFRESH_EVENT, bump);
+  }, [pwaLeveUi]);
 
   const subscribeDomains = useCallback(
     (onChange: () => void) => {
@@ -59,5 +75,5 @@ export function useCooperadoInicioCardContext(user: Omit<User, "password"> | nul
         ? resolverCooperadoIdCanonico(data, user.cooperadoId, cooperativaId)
         : user.cooperadoId;
     return { data, cooperadoId, cooperativaId, dataReady };
-  }, [user?.id, user?.cooperadoId, user?.cooperativaId, revisionKey]);
+  }, [user?.id, user?.cooperadoId, user?.cooperativaId, revisionKey, pwaMessengerDataEpoch]);
 }
