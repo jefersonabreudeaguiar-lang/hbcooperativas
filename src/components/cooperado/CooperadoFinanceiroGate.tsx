@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useMemo } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useAuth } from "@/modules/auth/AuthProvider";
 import { useAppDataSelector } from "@/hooks/useAppData";
 import { useSyncStatus } from "@/components/sync/CooperativaSyncProvider";
@@ -20,6 +20,12 @@ import {
   cooperadoAppReleaseNeedsOperacionalSync,
   isCooperadoEventDrivenSync,
 } from "@/lib/performance/cooperadoEventDrivenSync";
+import {
+  clearCooperadoPostShellSyncStarted,
+  cooperadoPostShellSyncPermitido,
+  markCooperadoPostShellSyncStarted,
+  scheduleCooperadoPostShellSync,
+} from "@/lib/performance/cooperadoPostShellSync";
 import { resolveCooperativaCnpj } from "@/services/notaPedidoCloudService";
 import {
   requestAppSyncImmediate,
@@ -39,19 +45,24 @@ import {
   getCooperadoRunSyncSessionLease,
   saveAppDataIfSyncLeaseCurrent,
 } from "@/services/operacionalPullLease";
-import { PageSkeleton } from "@/components/ui/PageSkeleton";
+import { markRqlDataReady } from "@/lib/performance/rqlMarks";
+import {
+  CooperadoFinanceiroShellProvider,
+  type CooperadoFinanceiroShellState,
+} from "@/components/cooperado/CooperadoFinanceiroShellContext";
 
-/** Bloqueio máximo da tela cheia; sync segue em background depois disso. */
-const SYNC_BLOCK_MAX_MS = 18_000;
+/** Após este tempo, o conteúdo pode seguir mesmo sem sync (shell já navegável). */
+const SYNC_HINT_MAX_MS = 18_000;
 
 /**
- * Cooperado: sync financeiro na nuvem sem prender o app por minutos.
- * Só ocupa a tela inteira quando não há dados locais; caso contrário, banner + navegação.
+ * Cooperado: estado financeiro + sync em background.
+ * Não bloqueia AppShell — apenas informa o conteúdo via contexto.
  */
 export function CooperadoFinanceiroGate({ children }: { children: React.ReactNode }) {
   const { user } = useAuth();
   const { syncingForUi, lastSyncedAt } = useSyncStatus();
   const [syncWaitExceeded, setSyncWaitExceeded] = useState(false);
+  const dataReadyMarkedRef = useRef(false);
 
   const cacheInicioCard = useMemo(() => {
     if (!user?.cooperadoId || user.role !== "cooperado") return null;
@@ -75,89 +86,129 @@ export function CooperadoFinanceiroGate({ children }: { children: React.ReactNod
   useEffect(() => {
     if (user?.role !== "cooperado" || !user.cooperadoId) return;
     if (typeof navigator !== "undefined" && !navigator.onLine) return;
-    const data = getData();
-    const coopId = getUserCooperativaId(user, data);
-    if (!coopId) return;
-    const cooperadoId = resolverCooperadoIdCanonico(data, user.cooperadoId, coopId);
-    if (cooperadoAppReleaseNeedsOperacionalSync()) {
-      purgarInicioCardValorReceberCooperado(user);
-      requestCooperadoAppReleaseSync();
-    }
-    const limpo = limparFichaObsoletaCooperado(data, cooperadoId, coopId);
-    if (limpo !== data) {
-      saveAppDataIfSyncLeaseCurrent(getCooperadoRunSyncSessionLease() ?? undefined, limpo);
-    }
-    if (isCooperadoEventDrivenSync()) {
-      if (cooperadoFinanceiroBloqueiaEntradaApp(getData(), cooperadoId, coopId)) {
-        requestCooperadoPrimeiraCargaSync();
+
+    const runFinanceBootstrap = () => {
+      if (!cooperadoPostShellSyncPermitido()) return;
+      markCooperadoPostShellSyncStarted();
+
+      const data = getData();
+      const coopId = getUserCooperativaId(user, data);
+      if (!coopId) {
+        clearCooperadoPostShellSyncStarted();
         return;
       }
-      const desatualizado = cooperadoFinanceiroDesatualizado(getData(), cooperadoId, coopId);
-      void resolveCooperativaCnpj(data, coopId, user).then((cnpj) => {
-        if (!cnpj) return;
-        void runCooperadoForegroundOperacionalCheck(cnpj, { financeiroDesatualizado: desatualizado });
-      });
-      return;
-    }
-    if (!isCooperadoManualOperacionalSync()) {
-      solicitarRecuperacaoFinanceiroCooperado();
-      if (!shouldSkipCooperadoSecondaryMountSync()) {
-        requestAppSyncImmediate();
+      const cooperadoId = resolverCooperadoIdCanonico(data, user.cooperadoId!, coopId);
+
+      if (cooperadoAppReleaseNeedsOperacionalSync()) {
+        purgarInicioCardValorReceberCooperado(user);
+        requestCooperadoAppReleaseSync();
       }
-    }
+
+      const limpo = limparFichaObsoletaCooperado(data, cooperadoId, coopId);
+      if (limpo !== data) {
+        saveAppDataIfSyncLeaseCurrent(getCooperadoRunSyncSessionLease() ?? undefined, limpo);
+      }
+
+      if (isCooperadoEventDrivenSync()) {
+        if (cooperadoFinanceiroBloqueiaEntradaApp(getData(), cooperadoId, coopId)) {
+          requestCooperadoPrimeiraCargaSync();
+          clearCooperadoPostShellSyncStarted();
+          return;
+        }
+        const desatualizado = cooperadoFinanceiroDesatualizado(getData(), cooperadoId, coopId);
+        void resolveCooperativaCnpj(data, coopId, user).then((cnpj) => {
+          if (!cnpj) return;
+          void runCooperadoForegroundOperacionalCheck(cnpj, { financeiroDesatualizado: desatualizado });
+        });
+        clearCooperadoPostShellSyncStarted();
+        return;
+      }
+
+      if (!isCooperadoManualOperacionalSync()) {
+        solicitarRecuperacaoFinanceiroCooperado();
+        if (!shouldSkipCooperadoSecondaryMountSync()) {
+          requestAppSyncImmediate();
+        }
+      }
+      clearCooperadoPostShellSyncStarted();
+    };
+
+    scheduleCooperadoPostShellSync(runFinanceBootstrap);
   }, [user?.id, user?.cooperadoId, user?.role]);
 
+  const cooperadoAtivo = user?.role === "cooperado" && Boolean(user?.cooperadoId);
+  const aguardandoSyncInicial =
+    cooperadoAtivo && Boolean(bloqueiaEntrada) && lastSyncedAt == null;
+
   useEffect(() => {
-    if (user?.role !== "cooperado") {
-      setSyncWaitExceeded(false);
-      return;
+    if (!aguardandoSyncInicial) {
+      const resetId = requestAnimationFrame(() => setSyncWaitExceeded(false));
+      return () => cancelAnimationFrame(resetId);
     }
-    if (!bloqueiaEntrada || lastSyncedAt != null) {
-      setSyncWaitExceeded(false);
-      return;
-    }
-    const timer = window.setTimeout(() => setSyncWaitExceeded(true), SYNC_BLOCK_MAX_MS);
+    const timer = window.setTimeout(() => setSyncWaitExceeded(true), SYNC_HINT_MAX_MS);
     return () => window.clearTimeout(timer);
-  }, [user?.role, bloqueiaEntrada, lastSyncedAt, user?.id]);
+  }, [aguardandoSyncInicial]);
+
+  useEffect(() => {
+    if (user?.role !== "cooperado" || dataReadyMarkedRef.current) return;
+    if (!isAppDataWarm()) return;
+    const data = getData();
+    const coopId = getUserCooperativaId(user, data);
+    if (!coopId || !user.cooperadoId) return;
+    const cooperadoId = resolverCooperadoIdCanonico(data, user.cooperadoId, coopId);
+    const pronto =
+      !cooperadoFinanceiroBloqueiaEntradaApp(data, cooperadoId, coopId) || lastSyncedAt != null;
+    if (!pronto) return;
+    dataReadyMarkedRef.current = true;
+    markRqlDataReady();
+  }, [user?.role, user?.cooperadoId, bloqueiaEntrada, lastSyncedAt]);
+
+  const abrirComCacheInicio =
+    cooperadoAtivo &&
+    user &&
+    (inicioCardCacheProntoParaAbertura(cacheInicioCard) || cooperadoLocalResumeReady(user));
+
+  const aguardandoDadosFinanceiros =
+    cooperadoAtivo &&
+    Boolean(bloqueiaEntrada) &&
+    (syncingForUi || (lastSyncedAt == null && !syncWaitExceeded && !abrirComCacheInicio));
+
+  const falhaCarregarFicha =
+    cooperadoAtivo &&
+    Boolean(bloqueiaEntrada) &&
+    !syncingForUi &&
+    (syncWaitExceeded || lastSyncedAt != null);
+
+  useEffect(() => {
+    if (!falhaCarregarFicha) return;
+    solicitarRecuperacaoFinanceiroCooperado();
+    scheduleCooperadoPostShellSync(() => {
+      if (!isCooperadoManualOperacionalSync()) {
+        requestAppSyncImmediate();
+      } else if (isCooperadoEventDrivenSync()) {
+        requestCooperadoPrimeiraCargaSync();
+      }
+    });
+  }, [falhaCarregarFicha]);
 
   if (!user || user.role !== "cooperado") {
     return <>{children}</>;
   }
 
-  const abrirComCacheInicio =
-    inicioCardCacheProntoParaAbertura(cacheInicioCard) || cooperadoLocalResumeReady(user);
-
-  const carregandoFinanceiro =
-    bloqueiaEntrada &&
-    (syncingForUi || (lastSyncedAt == null && !syncWaitExceeded && !abrirComCacheInicio));
-
-  const temDadosLocais = isAppDataWarm();
-
-  if (carregandoFinanceiro && !abrirComCacheInicio && !temDadosLocais) {
-    return (
-      <div className="min-h-screen bg-gray-50">
-        <div className="max-w-lg mx-auto py-12 space-y-4">
-          <PageSkeleton />
-          <p className="text-center text-sm text-gray-600">
-            Baixando sua ficha e entregas da nuvem…
-          </p>
-        </div>
-      </div>
-    );
+  let mensagemStatus: string | null = null;
+  if (aguardandoDadosFinanceiros && !isAppDataWarm()) {
+    mensagemStatus = "Atualizando dados da nuvem… Você já pode usar as abas.";
+  } else if (aguardandoDadosFinanceiros || syncingForUi) {
+    mensagemStatus = "Atualizando dados…";
   }
 
-  const falhaCarregarFicha =
-    bloqueiaEntrada && !syncingForUi && (syncWaitExceeded || lastSyncedAt != null);
+  const shellState: CooperadoFinanceiroShellState = {
+    aguardandoDadosFinanceiros: Boolean(aguardandoDadosFinanceiros),
+    bloqueiaEntrada: Boolean(bloqueiaEntrada),
+    mensagemStatus,
+  };
 
-  if (falhaCarregarFicha) {
-    solicitarRecuperacaoFinanceiroCooperado();
-    if (!isCooperadoManualOperacionalSync()) {
-      requestAppSyncImmediate();
-    } else if (isCooperadoEventDrivenSync()) {
-      requestCooperadoPrimeiraCargaSync();
-    }
-    return <>{children}</>;
-  }
-
-  return <>{children}</>;
+  return (
+    <CooperadoFinanceiroShellProvider value={shellState}>{children}</CooperadoFinanceiroShellProvider>
+  );
 }

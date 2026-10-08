@@ -37,8 +37,8 @@ assert(deployGuard.includes("staffExperience: true"), "staff sem reload automati
 assert(
   deployGuard.includes("skipPeriodic") &&
     deployGuard.includes("intervalMs > 0") &&
-    deployGuard.includes("cooperadoExperience ? 4 * 60 * 1000"),
-  "cooperado sem intervalo 4min de align quando skipPeriodic (canonical release)"
+    deployGuard.includes("cooperadoExperience ? 90 * 1000"),
+  "cooperado sem intervalo periódico quando skipPeriodic (canonical release)"
 );
 assert(sync.includes("markCooperadoUserSyncVisible"), "sync visível só com ação do usuário");
 assert(
@@ -68,8 +68,17 @@ assert(appLayout.includes("CooperadoSubtleUpdateNotice"), "aviso sutil nova atua
 assert(provider.includes("scheduleCooperadoColdStartSync"), "provider agenda sync único");
 assert(gate.includes("shouldSkipCooperadoSecondaryMountSync"), "gate dedupe sync mount");
 assert(gate.includes("syncingForUi"), "gate usa syncingForUi");
-assert(auth.includes("ensureCooperadoAppDataEagerWarm"), "auth eager warm");
-assert(dash.includes("cooperadoInstant"), "dashboard não bloqueia com resume local");
+assert(
+  auth.includes("preloadAppData") && auth.includes("requestIdleCallback"),
+  "auth warm local deferido (nao bloqueia shell)"
+);
+assert(gate.includes("CooperadoFinanceiroShellProvider"), "gate shell-first com contexto");
+assert(!gate.includes("min-h-screen bg-gray-50"), "gate sem tela cheia bloqueante");
+assert(appLayout.includes("CooperadoFinanceiroSyncBanner"), "banner discreto no conteudo");
+assert(
+  dash.includes("instantResume") && dash.includes("cooperadoLocalResumeReady"),
+  "dashboard não bloqueia com resume local"
+);
 
 const persist = read("src/lib/cooperadoInicioCardPersistencia.ts");
 assert(persist.includes("45 * 24"), "cache abertura ampliado (45d)");

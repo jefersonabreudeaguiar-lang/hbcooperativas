@@ -9,6 +9,7 @@ import { getUserCooperativaId } from "@/utils/cooperativa";
 import { shouldSyncHbFichaBaseDescontos } from "@/lib/hb-credit/hbFichaBaseOperacional";
 import { scheduleContaCoopAuxSync } from "@/lib/hb-credit/contaCoopAuxSyncSchedule";
 import { isStaffHbCoopWideSyncRoute } from "@/lib/hb-credit/staffHbSyncRoute";
+import { isCooperadoManualOperacionalSync } from "@/lib/performance/cooperadoColdStart";
 
 const WARMUP_INITIAL_DELAY_COOPERADO_MS = 3_000;
 const WARMUP_INITIAL_DELAY_STAFF_MS = 15_000;
@@ -22,6 +23,7 @@ export function useHbCreditDescontosWarmup(user: Omit<User, "password"> | null) 
 
   useEffect(() => {
     if (!user || !shouldSyncHbFichaBaseDescontos()) return;
+    if (user.role === "cooperado" && isCooperadoManualOperacionalSync()) return;
     const coopId = getUserCooperativaId(user, getData());
     if (!coopId) return;
 

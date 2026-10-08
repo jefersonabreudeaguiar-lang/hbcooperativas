@@ -175,7 +175,17 @@ export function measureRqlColdStartSpanMs(): number | null {
   return Number.isFinite(span) && span >= 0 ? Math.round(span * 10) / 10 : null;
 }
 
+/** Header + rodapé cooperado visíveis (antes de dados financeiros). */
+export function markRqlShellVisual(): void {
+  markRqlColdStartPhase("shell_visual");
+}
+
 /** Shell autenticado pintado — fim de cold start UX (responsável + cooperado). */
 export function markRqlShellInteractive(): void {
   markRqlColdStartPhase("shell_interactive");
+}
+
+/** AppData warm + cooperado com fatia financeira utilizável localmente. */
+export function markRqlDataReady(): void {
+  markRqlColdStartPhase("data_ready");
 }

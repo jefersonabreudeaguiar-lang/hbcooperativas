@@ -16,7 +16,7 @@ import type { User } from "@/types";
 import { normalizeUserRole, resolveAppUserRole } from "@/permissions";
 import { resolveExperienceUser, resolveMobileCooperadoId } from "@/lib/mobileExperience";
 import { PAINEL_MOBILE_PREF_EVENT } from "@/lib/mobilePainelPreference";
-import { ensureCooperadoAppDataEagerWarm, isCooperadoInstantResumeEnabled } from "@/lib/performance/cooperadoColdStart";
+import { isCooperadoInstantResumeEnabled } from "@/lib/performance/cooperadoColdStart";
 import {
   getSession,
   login as doLogin,
@@ -103,13 +103,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   useLayoutEffect(() => {
-    if (isCooperadoInstantResumeEnabled()) {
-      ensureCooperadoAppDataEagerWarm();
-    } else {
-      preloadAppData();
-    }
     refresh();
   }, [refresh]);
+
+  useEffect(() => {
+    const warm = () => {
+      if (isCooperadoInstantResumeEnabled()) {
+        preloadAppData({ eager: true });
+      } else {
+        preloadAppData();
+      }
+    };
+    if (typeof requestIdleCallback !== "undefined") {
+      const id = requestIdleCallback(warm, { timeout: 400 });
+      return () => cancelIdleCallback(id);
+    }
+    const t = window.setTimeout(warm, 0);
+    return () => window.clearTimeout(t);
+  }, []);
 
   useEffect(() => {
     const unsub = subscribe(() => {

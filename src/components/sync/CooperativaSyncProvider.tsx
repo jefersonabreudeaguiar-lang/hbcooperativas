@@ -124,6 +124,7 @@ import { markRqlColdStartPhase } from "@/lib/performance/rqlMarks";
 import { resolveSyncTierPlan84 } from "@/lib/performance/syncPlan84";
 import { useCooperadoStaffRevisionWatch } from "@/hooks/useCooperadoStaffRevisionWatch";
 import { runCooperadoForegroundOperacionalCheck } from "@/lib/performance/cooperadoForegroundOperacionalSync";
+import { scheduleCooperadoPostShellSync } from "@/lib/performance/cooperadoPostShellSync";
 import { fetchCooperativaCloudRevision } from "@/services/cooperativaSyncRevisionService";
 import { notifyAppSubtleUpdate } from "@/lib/cooperadoSubtleUpdate";
 import { requestCooperadoAppReleaseSync, type SyncRunOptions } from "@/services/syncRequest";
@@ -311,10 +312,11 @@ export function CooperativaSyncProvider({ children }: { children: React.ReactNod
   const { user } = useAuth();
 
   useEffect(() => {
-    if (user && isCooperadoInstantResumeEnabled()) {
+    if (!user || !isCooperadoInstantResumeEnabled()) return;
+    scheduleCooperadoPostShellSync(() => {
       ensureAppDataEagerWarm();
       markRqlColdStartPhase("eager_warm");
-    }
+    });
   }, [user?.id, user?.role]);
 
   const syncingRef = useRef(false);
@@ -962,7 +964,7 @@ export function CooperativaSyncProvider({ children }: { children: React.ReactNod
         purgarInicioCardValorReceberCooperado(user);
         requestCooperadoAppReleaseSync();
       } else if (user?.role === "cooperado" && !document.hidden) {
-        scheduleCooperadoPostInteractiveTask(() => {
+        scheduleCooperadoPostShellSync(() => {
           void resolveCooperativaCnpj(getData(), coopId, user).then((cnpjOpen) => {
             if (!cnpjOpen || document.hidden) return;
             void runCooperadoForegroundOperacionalCheck(cnpjOpen);

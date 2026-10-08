@@ -45,7 +45,11 @@ import { isStaffBottomTabPath } from "@/lib/performance/staffBottomTabRoutes";
 import { scheduleStaffNavPrefetchEarly } from "@/lib/performance/staffNavPrefetch";
 import { prefetchStaffNotasPedidoRouteBundle } from "@/lib/performance/prefetchStaffNotasPedidoUi";
 import { useMobileBottomTabSwitchFeedback } from "@/lib/performance/tabSwitchFeedback";
-import { markRqlShellInteractive } from "@/lib/performance/rqlMarks";
+import {
+  markRqlShellInteractive,
+  markRqlShellVisual,
+} from "@/lib/performance/rqlMarks";
+import { CooperadoFinanceiroSyncBanner } from "@/components/cooperado/CooperadoFinanceiroShellContext";
 import { useMobileTabScrollRestore } from "@/hooks/useMobileTabScrollRestore";
 import type { MobileTabScrollMode } from "@/lib/performance/mobileTabScrollMemory";
 import { CooperadoMobileTabKeepAlive } from "@/components/performance/CooperadoMobileTabKeepAlive";
@@ -225,12 +229,15 @@ export function MobileNav() {
   const navUser = shell?.navUser;
   const mobileItems = shell?.mobileMenu ?? [];
 
-  const bottomTabProfile = navUser
-    ? isCooperadoAppUser(navUser)
-      ? "cooperado"
-      : "staff"
-    : null;
-  useMobileBottomTabSwitchFeedback(pathname, bottomTabProfile);
+  useLayoutEffect(() => {
+    if (!navUser || !isCooperadoAppUser(navUser)) return;
+    markRqlShellVisual();
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        markRqlShellInteractive();
+      });
+    });
+  }, [navUser?.id, navUser?.role]);
 
   useEffect(() => {
     if (!navUser) return;
@@ -239,6 +246,13 @@ export function MobileNav() {
     }
     return scheduleStaffNavPrefetchEarly(router);
   }, [navUser?.id, navUser?.role, router]);
+
+  const bottomTabProfile = navUser
+    ? isCooperadoAppUser(navUser)
+      ? "cooperado"
+      : "staff"
+    : null;
+  useMobileBottomTabSwitchFeedback(pathname, bottomTabProfile);
 
   if (!shell || !navUser) return null;
 
@@ -400,7 +414,14 @@ function AppShellInner({ children }: { children: React.ReactNode }) {
         "data-hb-keep-alive-wrap",
         cooperadoKeepAliveShell || staffKeepAliveShell ? "1" : "0"
       );
-      markRqlShellInteractive();
+      const cooperadoMobile =
+        isCooperadoAppUser(navUser) &&
+        typeof window !== "undefined" &&
+        window.matchMedia("(max-width: 1023px)").matches;
+      if (!cooperadoMobile) {
+        markRqlShellVisual();
+        markRqlShellInteractive();
+      }
     } catch {
       /* ignore */
     }
@@ -451,6 +472,7 @@ function AppShellInner({ children }: { children: React.ReactNode }) {
           <PainelResponsavelMobileBar />
           <ContratoServicoAppGate />
           <CobrancaSaasPainel />
+          {navUser && isCooperadoAppUser(navUser) && <CooperadoFinanceiroSyncBanner />}
           {cooperadoKeepAliveShell ? (
             <CooperadoMobileTabKeepAlive pathname={pathname}>{children}</CooperadoMobileTabKeepAlive>
           ) : staffKeepAliveShell ? (

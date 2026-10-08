@@ -22,11 +22,11 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         <AppSchedulerBootstrap />
         <HbCreditNavPrefetch />
         <AppIdleSecondaryBootstraps />
-        <CooperadoFinanceiroGate>
-          <GestaoAccessGuard>
-            <AppShell>{children}</AppShell>
-          </GestaoAccessGuard>
-        </CooperadoFinanceiroGate>
+        <GestaoAccessGuard>
+          <AppShell>
+            <CooperadoFinanceiroGate>{children}</CooperadoFinanceiroGate>
+          </AppShell>
+        </GestaoAccessGuard>
       </CooperativaSyncProvider>
     </ProtectedRoute>
   );
