@@ -14,7 +14,7 @@ import { scheduleCooperadoPostShellSync } from "@/lib/performance/cooperadoPostS
 import { runCooperadoForegroundOperacionalCheck } from "@/lib/performance/cooperadoForegroundOperacionalSync";
 import { resolverCooperadoIdCanonico } from "@/services/cooperadoCloudService";
 import { cooperadoFinanceiroDesatualizado } from "@/services/fichaSyncGuard";
-import { persistirInicioCardValorReceberCooperado } from "@/services/cooperadoInicioCardPersistenciaService";
+import { persistirInicioCardCooperadoNotificarPwaLeve } from "@/lib/cooperado/cooperadoPwaLeveUi";
 import { resolveCooperativaCnpj } from "@/services/notaPedidoCloudService";
 import { getData, isAppDataWarm } from "@/services/dataStore";
 import { isAppStandalone } from "@/services/cooperadoAppInstallService";
@@ -32,7 +32,7 @@ export function refreshCooperadoInicioCardFromMotor(
   user: Omit<User, "password"> | null | undefined
 ): void {
   if (!user || user.role !== "cooperado") return;
-  persistirInicioCardValorReceberCooperado(user);
+  persistirInicioCardCooperadoNotificarPwaLeve(user);
 }
 
 /**

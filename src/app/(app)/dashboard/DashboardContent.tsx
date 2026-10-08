@@ -77,10 +77,9 @@ import { RestoreOperacionalPanel } from "@/components/sync/RestoreOperacionalPan
 import { CooperadoInicioValorReceberCard } from "@/components/cooperado/CooperadoInicioValorReceberCard";
 import {
   COOPERADO_PWA_LEVE_UI_SNAPSHOT_REFRESH_EVENT,
-  dispatchCooperadoPwaLeveUiSnapshotRefresh,
   isCooperadoPwaMobileLeveUi,
 } from "@/lib/cooperado/cooperadoPwaLeveUi";
-import { persistirInicioCardValorReceberCooperado } from "@/services/cooperadoInicioCardPersistenciaService";
+import { persistirInicioCardCooperadoNotificarPwaLeve } from "@/lib/cooperado/cooperadoPwaLeveUi";
 import { isAppDataWarm } from "@/services/dataStore";
 import {
   buildCooperadoPwaInicioDashboardView,
@@ -207,16 +206,7 @@ function CooperadoDashboard() {
   useEffect(() => {
     if (!inicioPwaLeve || !user?.cooperadoId) return;
     if (!isAppDataWarm()) return;
-    persistirInicioCardValorReceberCooperado(user);
-    dispatchCooperadoPwaLeveUiSnapshotRefresh();
-    const coopId = inicioCardCtx?.cooperativaId ?? user.cooperativaId;
-    const cooperadoId = inicioCardCtx?.cooperadoId ?? user.cooperadoId;
-    if (!coopId) return;
-    const stored = lerCooperadoPwaInicioDashboardSnapshot(cooperadoId, coopId);
-    if (stored) {
-      setPwaInicioView(stored.view);
-      return;
-    }
+    persistirInicioCardCooperadoNotificarPwaLeve(user);
     refreshPwaInicioView();
   }, [
     inicioPwaLeve,
@@ -229,7 +219,9 @@ function CooperadoDashboard() {
 
   useEffect(() => {
     if (!inicioPwaLeve) return;
-    const onRefresh = () => refreshPwaInicioView();
+    const onRefresh = () => {
+      refreshPwaInicioView();
+    };
     window.addEventListener(COOPERADO_PWA_LEVE_UI_SNAPSHOT_REFRESH_EVENT, onRefresh);
     return () => window.removeEventListener(COOPERADO_PWA_LEVE_UI_SNAPSHOT_REFRESH_EVENT, onRefresh);
   }, [inicioPwaLeve, refreshPwaInicioView]);

@@ -133,6 +133,7 @@ import { scheduleCooperadoPwaOperacionalParidadePull } from "@/lib/cooperado/coo
 import {
   dispatchCooperadoPwaLeveUiSnapshotRefresh,
   isCooperadoPwaMobileLeveUi,
+  persistirInicioCardCooperadoNotificarPwaLeve,
 } from "@/lib/cooperado/cooperadoPwaLeveUi";
 import { persistirCooperadoPwaEntregasResumosSnapshotFromUser } from "@/lib/cooperado/cooperadoPwaEntregasResumosSnapshot";
 import { persistirCooperadoPwaInicioDashboardSnapshotFromUser } from "@/lib/cooperado/cooperadoPwaInicioDashboardSnapshot";
@@ -901,7 +902,11 @@ export function CooperativaSyncProvider({ children }: { children: React.ReactNod
           });
         if (liberaApresentacao) {
           markCooperadoPagamentosHydrated();
-          persistirInicioCardValorReceberCooperado(userRef.current);
+          if (isCooperadoPwaMobileLeveUi()) {
+            persistirInicioCardCooperadoNotificarPwaLeve(userRef.current);
+          } else {
+            persistirInicioCardValorReceberCooperado(userRef.current);
+          }
           setLastSyncError("");
         } else if (
           cooperadoCanonico &&
@@ -915,7 +920,7 @@ export function CooperativaSyncProvider({ children }: { children: React.ReactNod
           setCooperadoPagamentosHydrated(false);
         }
         if (completed && userInitiatedRun && isCooperadoPwaMobileLeveUi() && userRef.current) {
-          persistirInicioCardValorReceberCooperado(userRef.current);
+          persistirInicioCardCooperadoNotificarPwaLeve(userRef.current);
           persistirCooperadoPwaEntregasResumosSnapshotFromUser(userRef.current);
           persistirCooperadoPwaInicioDashboardSnapshotFromUser(userRef.current, true);
           dispatchCooperadoPwaLeveUiSnapshotRefresh();

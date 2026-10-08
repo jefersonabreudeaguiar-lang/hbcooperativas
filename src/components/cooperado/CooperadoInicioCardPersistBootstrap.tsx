@@ -6,7 +6,7 @@ import { useAuth } from "@/modules/auth/AuthProvider";
 import { useSyncStatus } from "@/components/sync/CooperativaSyncProvider";
 import { getDataRevision, isAppDataWarm, subscribe } from "@/services/dataStore";
 import { isCooperadoInstantResumeEnabled } from "@/lib/performance/cooperadoColdStart";
-import { persistirInicioCardValorReceberCooperado } from "@/services/cooperadoInicioCardPersistenciaService";
+import { persistirInicioCardCooperadoNotificarPwaLeve } from "@/lib/cooperado/cooperadoPwaLeveUi";
 import {
   refreshCooperadoInicioCardFromMotor,
   scheduleCooperadoPwaOperacionalParidadePull,
@@ -28,7 +28,7 @@ export function CooperadoInicioCardPersistBootstrap() {
 
   useEffect(() => {
     if (!user || user.role !== "cooperado" || !isAppDataWarm()) return;
-    persistirInicioCardValorReceberCooperado(user);
+    persistirInicioCardCooperadoNotificarPwaLeve(user);
   }, [user?.id, user?.cooperadoId, user?.cooperativaId, dataRevision]);
 
   useEffect(() => {
@@ -36,14 +36,14 @@ export function CooperadoInicioCardPersistBootstrap() {
     if (!cooperadoPagamentosHydrated || lastSyncedAt == null) return;
     if (lastSyncedRef.current === lastSyncedAt) return;
     lastSyncedRef.current = lastSyncedAt;
-    persistirInicioCardValorReceberCooperado(user);
+    persistirInicioCardCooperadoNotificarPwaLeve(user);
   }, [user, syncing, lastSyncedAt, cooperadoPagamentosHydrated]);
 
   useEffect(() => {
     if (!user || user.role !== "cooperado" || !isCooperadoInstantResumeEnabled()) return;
     const onHide = () => {
       if (document.visibilityState !== "hidden" || !isAppDataWarm()) return;
-      persistirInicioCardValorReceberCooperado(user);
+      persistirInicioCardCooperadoNotificarPwaLeve(user);
     };
     document.addEventListener("visibilitychange", onHide);
     return () => document.removeEventListener("visibilitychange", onHide);

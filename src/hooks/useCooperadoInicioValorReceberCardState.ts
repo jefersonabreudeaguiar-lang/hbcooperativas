@@ -61,12 +61,14 @@ export function useCooperadoInicioValorReceberCardState(input: {
     );
   });
 
+  const leituraSomentePwa = Boolean(input.leituraSomentePwa && isCooperadoPwaMobileLeveUi());
+
   useEffect(() => {
-    if (!input.leituraSomentePwa || !isCooperadoPwaMobileLeveUi()) return;
+    if (!leituraSomentePwa) return;
     const onRefresh = () => setPersistidoTick((n) => n + 1);
     window.addEventListener(COOPERADO_PWA_LEVE_UI_SNAPSHOT_REFRESH_EVENT, onRefresh);
     return () => window.removeEventListener(COOPERADO_PWA_LEVE_UI_SNAPSHOT_REFRESH_EVENT, onRefresh);
-  }, [input.leituraSomentePwa]);
+  }, [leituraSomentePwa]);
 
   const persistido = useMemo(() => {
     if (!input.cooperadoId) return bootPersistido;
@@ -78,7 +80,6 @@ export function useCooperadoInicioValorReceberCardState(input: {
   }, [input.cooperadoId, input.cooperativaId, bootPersistido, persistidoTick]);
 
   const hbDescontosRevision = useContaCoopDescontosRevision();
-  const leituraSomentePwa = Boolean(input.leituraSomentePwa && isCooperadoPwaMobileLeveUi());
 
   const apresentacaoConsolidada = input.apresentacaoConsolidada ?? false;
   const carregandoFinanceiro =
