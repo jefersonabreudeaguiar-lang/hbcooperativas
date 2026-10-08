@@ -168,30 +168,16 @@ function CooperadoDashboard() {
     requestCooperadoFinanceiroRecoverySync();
   }, [financeiroAusente, inicioPwaLeve]);
 
-  const contaCoopSyncLive = useAppDataSelectorForDomainsWhenActive(
+  const contaCoopSync = useAppDataSelectorForDomainsWhenActive(
     appDataUiOn,
     DASHBOARD_INICIO_DOMAINS,
     (data) => contaCoopValorReceberPilotOptsFromData(data, user, apresentacaoConsolidada),
     [user?.id, user?.cooperadoId, user?.cooperativaId, hbDescontosRevision, apresentacaoConsolidada]
   );
 
-  const contaCoopSyncMessenger = useMemo(() => {
-    if (!messenger || !isAppDataWarm()) return null;
-    return contaCoopValorReceberPilotOptsFromData(getData(), user, apresentacaoConsolidada);
-  }, [
-    messenger,
-    user?.id,
-    user?.cooperadoId,
-    user?.cooperativaId,
-    hbDescontosRevision,
-    apresentacaoConsolidada,
-    lastSyncedAt,
-  ]);
-
-  const contaCoopSync = messenger ? contaCoopSyncMessenger : contaCoopSyncLive;
-
+  /** Modo mensageiro: HB só no runSync (Atualizar) — sem pilot periódico na UI. */
   useSyncContaCoopValorReceberPilot(
-    contaCoopSync ? { ...contaCoopSync, user, initialDelayMs: messenger ? 1_500 : 3_000 } : undefined
+    !messenger && contaCoopSync ? { ...contaCoopSync, user, initialDelayMs: 3_000 } : undefined
   );
 
   const inicioCardCtx = fluxo.cooperadoId
@@ -228,22 +214,27 @@ function CooperadoDashboard() {
     );
   });
 
-  const refreshPwaInicioView = useCallback(() => {
-    if (!inicioPwaLeve || !user?.cooperadoId) return;
-    const coopId = cooperativaIdCard ?? user.cooperativaId;
-    const cooperadoId = cooperadoIdCard ?? user.cooperadoId;
-    if (!coopId || !cooperadoId) return;
-    // Após sync / Atualizar, AppData quente manda — não reutilizar snapshot de build antigo (valor zerado).
-    if (isAppDataWarm()) {
-      const built = persistirCooperadoPwaInicioDashboardSnapshot(cooperadoId, coopId, user, true);
-      if (built?.view) {
-        setPwaInicioView(built.view);
-        return;
+  const refreshPwaInicioView = useCallback(
+    (opts?: { rebuildFromAppData?: boolean }) => {
+      if (!inicioPwaLeve || !user?.cooperadoId) return;
+      const coopId = cooperativaIdCard ?? user.cooperativaId;
+      const cooperadoId = cooperadoIdCard ?? user.cooperadoId;
+      if (!coopId || !cooperadoId) return;
+
+      if (!opts?.rebuildFromAppData) {
+        const fromResume = lerCooperadoPwaInicioDashboardViewForResume(cooperadoId, coopId);
+        if (fromResume) {
+          setPwaInicioView(fromResume);
+          return;
+        }
       }
-    }
-    const fromResume = lerCooperadoPwaInicioDashboardViewForResume(cooperadoId, coopId);
-    if (fromResume) setPwaInicioView(fromResume);
-  }, [inicioPwaLeve, user, cooperadoIdCard, cooperativaIdCard]);
+
+      if (!isAppDataWarm()) return;
+      const built = persistirCooperadoPwaInicioDashboardSnapshot(cooperadoId, coopId, user, true);
+      if (built?.view) setPwaInicioView(built.view);
+    },
+    [inicioPwaLeve, user, cooperadoIdCard, cooperativaIdCard]
+  );
 
   useEffect(() => {
     if (!messenger || !user?.cooperadoId) return;
@@ -252,20 +243,14 @@ function CooperadoDashboard() {
 
   useEffect(() => {
     if (!messenger || lastSyncedAt == null) return;
-    refreshPwaInicioView();
+    refreshPwaInicioView({ rebuildFromAppData: true });
     if (user) persistirInicioCardCooperadoNotificarPwaLeve(user);
   }, [messenger, lastSyncedAt, refreshPwaInicioView, user]);
 
   useEffect(() => {
-    if (!messenger || !user?.cooperadoId) return;
-    refreshPwaInicioView();
-    persistirInicioCardCooperadoNotificarPwaLeve(user);
-  }, [messenger, user, hbDescontosRevision, refreshPwaInicioView]);
-
-  useEffect(() => {
     if (!inicioPwaLeve) return;
     const onRefresh = () => {
-      refreshPwaInicioView();
+      refreshPwaInicioView({ rebuildFromAppData: true });
     };
     window.addEventListener(COOPERADO_PWA_LEVE_UI_SNAPSHOT_REFRESH_EVENT, onRefresh);
     return () => window.removeEventListener(COOPERADO_PWA_LEVE_UI_SNAPSHOT_REFRESH_EVENT, onRefresh);

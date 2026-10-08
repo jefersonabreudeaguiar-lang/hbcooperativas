@@ -50,6 +50,8 @@ import {
   CooperadoFinanceiroShellProvider,
   type CooperadoFinanceiroShellState,
 } from "@/components/cooperado/CooperadoFinanceiroShellContext";
+import { isCooperadoPwaMessengerMode } from "@/lib/cooperado/cooperadoPwaMessengerMode";
+import { cooperadoPwaInstantPaintReady } from "@/lib/cooperado/cooperadoPwaInstantResume";
 
 /** Após este tempo, o conteúdo pode seguir mesmo sem sync (shell já navegável). */
 const SYNC_HINT_MAX_MS = 18_000;
@@ -90,6 +92,14 @@ export function CooperadoFinanceiroGate({ children }: { children: React.ReactNod
     const runFinanceBootstrap = () => {
       if (!cooperadoPostShellSyncPermitido()) return;
       markCooperadoPostShellSyncStarted();
+
+      if (isCooperadoPwaMessengerMode()) {
+        if (cooperadoAppReleaseNeedsOperacionalSync()) {
+          requestCooperadoAppReleaseSync();
+        }
+        clearCooperadoPostShellSyncStarted();
+        return;
+      }
 
       const data = getData();
       const coopId = getUserCooperativaId(user, data);
@@ -166,7 +176,9 @@ export function CooperadoFinanceiroGate({ children }: { children: React.ReactNod
   const abrirComCacheInicio =
     cooperadoAtivo &&
     user &&
-    (inicioCardCacheProntoParaAbertura(cacheInicioCard) || cooperadoLocalResumeReady(user));
+    (inicioCardCacheProntoParaAbertura(cacheInicioCard) ||
+      cooperadoLocalResumeReady(user) ||
+      (isCooperadoPwaMessengerMode() && cooperadoPwaInstantPaintReady(user)));
 
   const aguardandoDadosFinanceiros =
     cooperadoAtivo &&

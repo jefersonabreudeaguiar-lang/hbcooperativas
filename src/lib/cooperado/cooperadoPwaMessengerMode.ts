@@ -1,6 +1,8 @@
 /**
- * PWA cooperado mobile — modo “mensageiro”: telas só leem cache local;
- * AppData atualiza em sync pontual (versão do app, revisão na nuvem, Atualizar).
+ * PWA cooperado mobile — modo “mensageiro”:
+ * - Telas só leem snapshots/localStorage (sem assinar AppData a cada mudança).
+ * - AppData / nuvem só em sync pontual: build do app, revisão na nuvem, botão Atualizar, envio de foto.
+ * - Sem pilot HB periódico nem pull de foreground na abertura (evita travar a UI).
  */
 import type { User } from "@/types";
 import { isCooperadoPwaMobileLeveUi } from "@/lib/cooperado/cooperadoPwaLeveUi";
