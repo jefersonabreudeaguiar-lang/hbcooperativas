@@ -130,11 +130,12 @@ import { notifyAppSubtleUpdate } from "@/lib/cooperadoSubtleUpdate";
 import { requestCooperadoAppReleaseSync, type SyncRunOptions } from "@/services/syncRequest";
 import { purgarInicioCardValorReceberCooperado } from "@/services/cooperadoInicioCardPersistenciaService";
 import { scheduleCooperadoPwaOperacionalParidadePull } from "@/lib/cooperado/cooperadoPwaFinanceiroParidadeRefresh";
-import { isCooperadoPwaMobileEntregasLeve } from "@/lib/cooperado/cooperadoPwaMobileEntregas";
 import {
-  dispatchCooperadoPwaEntregasSnapshotRefresh,
-  persistirCooperadoPwaEntregasResumosSnapshotFromUser,
-} from "@/lib/cooperado/cooperadoPwaEntregasResumosSnapshot";
+  dispatchCooperadoPwaLeveUiSnapshotRefresh,
+  isCooperadoPwaMobileLeveUi,
+} from "@/lib/cooperado/cooperadoPwaLeveUi";
+import { persistirCooperadoPwaEntregasResumosSnapshotFromUser } from "@/lib/cooperado/cooperadoPwaEntregasResumosSnapshot";
+import { persistirCooperadoPwaInicioDashboardSnapshotFromUser } from "@/lib/cooperado/cooperadoPwaInicioDashboardSnapshot";
 
 const COOPERADO_PUSH_GAP_MS = 5 * 60 * 1000;
 /** Intervalo mínimo entre pulls de operacional só para votação (bem menor que sync completa). */
@@ -913,14 +914,10 @@ export function CooperativaSyncProvider({ children }: { children: React.ReactNod
         } else if (!isCooperadoManualOperacionalSync()) {
           setCooperadoPagamentosHydrated(false);
         }
-        if (
-          completed &&
-          userInitiatedRun &&
-          isCooperadoPwaMobileEntregasLeve() &&
-          userRef.current
-        ) {
+        if (completed && userInitiatedRun && isCooperadoPwaMobileLeveUi() && userRef.current) {
           persistirCooperadoPwaEntregasResumosSnapshotFromUser(userRef.current);
-          dispatchCooperadoPwaEntregasSnapshotRefresh();
+          persistirCooperadoPwaInicioDashboardSnapshotFromUser(userRef.current, true);
+          dispatchCooperadoPwaLeveUiSnapshotRefresh();
         }
       }
     }

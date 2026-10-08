@@ -11,6 +11,7 @@ import { getData, isAppDataWarm } from "@/services/dataStore";
 import { resolverCooperadoIdCanonico } from "@/services/cooperadoCloudService";
 import { getUserCooperativaId } from "@/utils/cooperativa";
 import type { AppData, User } from "@/types";
+import { isCooperadoPwaMobileLeveUi } from "@/lib/cooperado/cooperadoPwaLeveUi";
 
 const INICIO_CARD_DOMAINS: AppDataNotifyDomain[] = ["shell", "notas", "financeiro"];
 
@@ -26,14 +27,24 @@ export function useCooperadoInicioCardContext(user: Omit<User, "password"> | nul
   cooperativaId: string | undefined;
   dataReady: boolean;
 } | null {
-  const subscribeDomains = useCallback((onChange: () => void) => {
-    const unsubs = INICIO_CARD_DOMAINS.map((d) => subscribeAppDataDomain(d, onChange));
-    return () => {
-      for (const u of unsubs) u();
-    };
-  }, []);
+  const pwaLeveUi = isCooperadoPwaMobileLeveUi();
 
-  const revisionKey = useSyncExternalStore(subscribeDomains, inicioCardRevisionSnapshot, () => "-1");
+  const subscribeDomains = useCallback(
+    (onChange: () => void) => {
+      if (pwaLeveUi) return () => undefined;
+      const unsubs = INICIO_CARD_DOMAINS.map((d) => subscribeAppDataDomain(d, onChange));
+      return () => {
+        for (const u of unsubs) u();
+      };
+    },
+    [pwaLeveUi]
+  );
+
+  const revisionKey = useSyncExternalStore(
+    subscribeDomains,
+    () => (pwaLeveUi ? "pwa-leve-paused" : inicioCardRevisionSnapshot()),
+    () => "-1"
+  );
 
   return useMemo(() => {
     if (!user?.cooperadoId) return null;

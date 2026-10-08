@@ -17,6 +17,8 @@ import {
   lerInicioCardPersistidoFlex,
 } from "@/lib/cooperadoInicioCardPersistencia";
 import { APP_BUILD_VERSION } from "@/lib/appBuildVersion";
+import { isCooperadoUserSyncVisible } from "@/lib/performance/cooperadoColdStart";
+import { isCooperadoPwaMobileLeveUi } from "@/lib/cooperado/cooperadoPwaLeveUi";
 
 const SNAPSHOT_VAZIO: InicioCardMotorSnapshot = {
   mesLabel: "—",
@@ -33,6 +35,8 @@ export function useCooperadoInicioValorReceberCardState(input: {
   syncing: boolean;
   apresentacaoConsolidada?: boolean;
   carregandoValoresFinanceiros?: boolean;
+  /** PWA mobile: só persistido + Atualizar explícito — sem motor ao vivo a cada sync. */
+  leituraSomentePwa?: boolean;
 }): {
   snapshot: InicioCardMotorSnapshot;
   atualizando: boolean;
@@ -63,6 +67,7 @@ export function useCooperadoInicioValorReceberCardState(input: {
   }, [input.cooperadoId, input.cooperativaId, bootPersistido]);
 
   const hbDescontosRevision = useContaCoopDescontosRevision();
+  const leituraSomentePwa = Boolean(input.leituraSomentePwa && isCooperadoPwaMobileLeveUi());
 
   const apresentacaoConsolidada = input.apresentacaoConsolidada ?? false;
   const carregandoFinanceiro =
@@ -76,6 +81,19 @@ export function useCooperadoInicioValorReceberCardState(input: {
   }, [apresentacaoConsolidada, input.syncing, hbDescontosRevision]);
 
   const resolved = useMemo(() => {
+    if (leituraSomentePwa && persistido?.display) {
+      const display = persistido.display;
+      return {
+        display,
+        latch: {
+          motorRevision: persistido.motorRevision,
+          display,
+          hadPendencia: cooperadoMotorTemObrigacaoReceber(display),
+        },
+        atualizando: Boolean(input.syncing && isCooperadoUserSyncVisible()),
+        gravarPersistencia: false,
+      };
+    }
     const omitirPersistido =
       apresentacaoConsolidada && !input.syncing && !carregandoFinanceiro;
     return resolverCardInicioEndurecido({
@@ -99,6 +117,7 @@ export function useCooperadoInicioValorReceberCardState(input: {
     carregandoFinanceiro,
     persistido,
     hbDescontosRevision,
+    leituraSomentePwa,
   ]);
 
   latchRef.current = resolved.latch;

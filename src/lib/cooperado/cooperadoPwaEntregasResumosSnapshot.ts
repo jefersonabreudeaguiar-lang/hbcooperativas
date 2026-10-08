@@ -11,11 +11,15 @@ import { resolverCooperadoIdCanonico } from "@/services/cooperadoCloudService";
 import { getUserCooperativaId } from "@/utils/cooperativa";
 import { getData, isAppDataWarm } from "@/services/dataStore";
 import { APP_BUILD_VERSION } from "@/lib/appBuildVersion";
+import {
+  COOPERADO_PWA_LEVE_UI_SNAPSHOT_REFRESH_EVENT,
+  dispatchCooperadoPwaLeveUiSnapshotRefresh,
+} from "@/lib/cooperado/cooperadoPwaLeveUi";
 
 export const COOPERADO_PWA_ENTREGAS_SNAPSHOT_VERSION = 1;
 
 export const COOPERADO_PWA_ENTREGAS_SNAPSHOT_REFRESH_EVENT =
-  "hb-cooperado-pwa-entregas-snapshot-refresh";
+  COOPERADO_PWA_LEVE_UI_SNAPSHOT_REFRESH_EVENT;
 
 export type CooperadoPwaEntregasResumosSnapshot = {
   v: number;
@@ -106,6 +110,5 @@ export function persistirCooperadoPwaEntregasResumosSnapshotFromUser(
 }
 
 export function dispatchCooperadoPwaEntregasSnapshotRefresh(): void {
-  if (typeof window === "undefined") return;
-  window.dispatchEvent(new CustomEvent(COOPERADO_PWA_ENTREGAS_SNAPSHOT_REFRESH_EVENT));
+  dispatchCooperadoPwaLeveUiSnapshotRefresh();
 }

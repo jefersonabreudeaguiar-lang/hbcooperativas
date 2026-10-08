@@ -1,6 +1,6 @@
 "use client";
 
-import { useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
 import type { AppData } from "@/types";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -36,14 +36,7 @@ import { FilaDoDiaPanel } from "@/components/dashboard/FilaDoDiaPanel";
 import { CooperadoHbCreditResumoCard } from "@/components/hb-credit/CooperadoHbCreditResumoCard";
 import { ContaCoopFilaCloudPanel } from "@/components/hb-credit/ContaCoopFilaCloudPanel";
 import { useHbCreditEnabled } from "@/hooks/useHbCreditEnabled";
-import {
-  contarFotosEmAnaliseCooperado,
-  listarNotasPendentesCooperado,
-} from "@/services/cooperadoEntregasService";
-import {
-  bicCentralMesPrincipalQuantoVouReceber,
-  bicCentralResolveInicioParaExibicao,
-} from "@/services/bicLeituraCentralCooperado";
+import { bicCentralMesPrincipalQuantoVouReceber } from "@/services/bicLeituraCentralCooperado";
 import { resolverCooperadoIdCanonico } from "@/services/cooperadoCloudService";
 import { leituraFinanceiraParidadeCooperado } from "@/lib/cooperado/cooperadoFinanceiroParidadeUniversal";
 import { cooperadoFinanceiroDesatualizado } from "@/services/fichaSyncGuard";
@@ -54,26 +47,14 @@ import {
 import { useSyncStatus } from "@/components/sync/CooperativaSyncProvider";
 import { useCooperadoFluxoPadrao } from "@/hooks/useCooperadoFluxoPadrao";
 import { useCooperadoInicioValorReceberCardState } from "@/hooks/useCooperadoInicioValorReceberCardState";
-import { getComunicadosInicioCooperado } from "@/services/comunicadoService";
-import {
-  bicCentralGetResumoMensalidadesCooperado,
-  bicCentralTotalValoresAvulsosPendentes,
-} from "@/services/bicLeituraCentralDominios";
-import { prestacaoPrincipalCooperado, prestacaoExigeAtencaoCooperado } from "@/services/prestacaoContasService";
 import { AvisosInicioSection } from "@/components/comunicado/AvisosInicioSection";
 import { PrestacaoContasDashboardBanner } from "@/components/prestacao/PrestacaoContasDashboardBanner";
 import { InicioResolvidosPanel } from "@/components/cooperado/InicioResolvidosPanel";
-import { listarResolvidosInicioCooperado } from "@/services/cooperadoInicioResolvidosService";
-import { cooperadoPrecisaCadastrarPix } from "@/utils/pix";
-import { cooperadoUsaAssinaturaCadastroPilot } from "@/config/assinaturaCadastroPilot";
 import {
-  cooperadoPrecisaCadastrarAssinatura,
   resumoAssinaturaCadastroApp,
 } from "@/services/cooperadoAssinaturaService";
-import { listPautasAbertasCooperado, resultadoVisivelCooperado } from "@/services/votacaoService";
 import { VotacaoPautasInicioPanel } from "@/components/votacao/VotacaoPautasInicioPanel";
 import { VotacaoResultadoPanel } from "@/components/votacao/VotacaoResultadoPanel";
-import { getCooperativaCnpj, getPendingNotaDeleteIds } from "@/services/notaPedidoCloudService";
 import { bicCentralBuildValorExibicaoCooperadoOpts } from "@/services/bicLeituraCentralFicha";
 import { useSyncContaCoopValorReceberPilot } from "@/hooks/useSyncContaCoopValorReceberPilot";
 import { useContaCoopDescontosRevision } from "@/hooks/useContaCoopDescontosRevision";
@@ -81,7 +62,7 @@ import { formatCurrency, formatMesReferencia, getCurrentMesReferencia } from "@/
 import { getUserCooperativaId, getUserCooperativaNome, normalizeCnpj } from "@/utils/cooperativa";
 import { Camera, Wallet, ClipboardList, Users, Vote, Download, PenLine } from "lucide-react";
 import { usePermissions } from "@/hooks/usePermissions";
-import { cooperadoTemAppInstalado, isAppStandalone, resumoInstalacaoApp } from "@/services/cooperadoAppInstallService";
+import { resumoInstalacaoApp } from "@/services/cooperadoAppInstallService";
 import { PageSkeleton } from "@/components/ui/PageSkeleton";
 import {
   appLocalResumeReady,
@@ -94,11 +75,20 @@ import {
 import { warmupCooperadoFinanceiroTabChunk } from "@/lib/performance/cooperadoFinanceiroTabWarmup";
 import { RestoreOperacionalPanel } from "@/components/sync/RestoreOperacionalPanel";
 import { CooperadoInicioValorReceberCard } from "@/components/cooperado/CooperadoInicioValorReceberCard";
+import { isCooperadoPwaMobileLeveUi } from "@/lib/cooperado/cooperadoPwaLeveUi";
+import { COOPERADO_PWA_LEVE_UI_SNAPSHOT_REFRESH_EVENT } from "@/lib/cooperado/cooperadoPwaLeveUi";
+import {
+  buildCooperadoPwaInicioDashboardView,
+  lerCooperadoPwaInicioDashboardSnapshot,
+  persistirCooperadoPwaInicioDashboardSnapshot,
+  type CooperadoPwaInicioDashboardView,
+} from "@/lib/cooperado/cooperadoPwaInicioDashboardSnapshot";
 
 const DASHBOARD_INICIO_DOMAINS: AppDataNotifyDomain[] = ["shell", "notas", "financeiro", "operacional"];
 
 function CooperadoDashboard() {
   const tabActive = useCooperadoTabPanelActive("/dashboard");
+  const inicioPwaLeve = isCooperadoPwaMobileLeveUi();
   const { user } = useAuth();
   const router = useRouter();
   const hbCredit = useHbCreditEnabled(user);
@@ -109,7 +99,7 @@ function CooperadoDashboard() {
   const hbDescontosRevision = useContaCoopDescontosRevision();
 
   const financeiroAusente = useAppDataSelectorForDomainsWhenActive(
-    tabActive,
+    inicioPwaLeve ? false : tabActive,
     DASHBOARD_INICIO_DOMAINS,
     (data) => {
       if (!data || !user?.cooperadoId) return false;
@@ -137,15 +127,16 @@ function CooperadoDashboard() {
   }, [user?.id, user?.cooperadoId]);
 
   useEffect(() => {
+    if (inicioPwaLeve) return;
     if (!financeiroAusente || recoverySyncRef.current || typeof navigator === "undefined" || !navigator.onLine) {
       return;
     }
     recoverySyncRef.current = true;
     requestCooperadoFinanceiroRecoverySync();
-  }, [financeiroAusente]);
+  }, [financeiroAusente, inicioPwaLeve]);
 
   const contaCoopSync = useAppDataSelectorForDomainsWhenActive(
-    tabActive,
+    inicioPwaLeve ? false : tabActive,
     DASHBOARD_INICIO_DOMAINS,
     (data) => {
       if (!data || !user?.cooperadoId) return null;
@@ -189,94 +180,63 @@ function CooperadoDashboard() {
       syncing: syncingForUi,
       apresentacaoConsolidada,
       carregandoValoresFinanceiros,
+      leituraSomentePwa: inicioPwaLeve,
     });
 
-  const view = useAppDataSelectorForDomainsWhenActive(
-    tabActive,
+  const [pwaInicioView, setPwaInicioView] = useState<CooperadoPwaInicioDashboardView | null>(null);
+
+  const refreshPwaInicioView = useCallback(() => {
+    if (!inicioPwaLeve || !user?.cooperadoId) return;
+    const coopId = inicioCardCtx?.cooperativaId ?? user.cooperativaId;
+    const cooperadoId = inicioCardCtx?.cooperadoId ?? user.cooperadoId;
+    if (!coopId) return;
+    const built = persistirCooperadoPwaInicioDashboardSnapshot(
+      cooperadoId,
+      coopId,
+      user,
+      true
+    );
+    if (built) setPwaInicioView(built.view);
+  }, [inicioPwaLeve, user, inicioCardCtx?.cooperadoId, inicioCardCtx?.cooperativaId]);
+
+  useEffect(() => {
+    if (!inicioPwaLeve || !user?.cooperadoId) return;
+    const coopId = inicioCardCtx?.cooperativaId ?? user.cooperativaId;
+    const cooperadoId = inicioCardCtx?.cooperadoId ?? user.cooperadoId;
+    if (!coopId) return;
+    const stored = lerCooperadoPwaInicioDashboardSnapshot(cooperadoId, coopId);
+    if (stored) {
+      setPwaInicioView(stored.view);
+      return;
+    }
+    refreshPwaInicioView();
+  }, [
+    inicioPwaLeve,
+    user?.id,
+    user?.cooperadoId,
+    inicioCardCtx?.cooperadoId,
+    inicioCardCtx?.cooperativaId,
+    refreshPwaInicioView,
+  ]);
+
+  useEffect(() => {
+    if (!inicioPwaLeve) return;
+    const onRefresh = () => refreshPwaInicioView();
+    window.addEventListener(COOPERADO_PWA_LEVE_UI_SNAPSHOT_REFRESH_EVENT, onRefresh);
+    return () => window.removeEventListener(COOPERADO_PWA_LEVE_UI_SNAPSHOT_REFRESH_EVENT, onRefresh);
+  }, [inicioPwaLeve, refreshPwaInicioView]);
+
+  const viewLive = useAppDataSelectorForDomainsWhenActive(
+    inicioPwaLeve ? false : tabActive,
     DASHBOARD_INICIO_DOMAINS,
     (data) => {
-    if (!data || !user?.cooperadoId) return null;
-
-    const coopId = getUserCooperativaId(user, data);
-    const cooperadoId = resolverCooperadoIdCanonico(data, user.cooperadoId, coopId);
-    const mes = getCurrentMesReferencia();
-    const cooperado = data.cooperados.find((c) => c.id === cooperadoId);
-    const coopNome = getUserCooperativaNome(user, data);
-    const valorReceber = bicCentralResolveInicioParaExibicao(data, cooperadoId, coopId, {
-      apresentacaoConsolidada,
-    });
-    const precisaPix = cooperado ? cooperadoPrecisaCadastrarPix(cooperado.chavePix, cooperado.pixValido) : false;
-    const notasPendentes = listarNotasPendentesCooperado(data, cooperadoId, coopId);
-    const rejeitadas = notasPendentes.filter((n) => n.status === "rejeitada");
-    const cnpj = coopId ? getCooperativaCnpj(data, coopId) : undefined;
-    const pendingDeletes = cnpj ? getPendingNotaDeleteIds(cnpj) : new Set<string>();
-    const notasEmAnalise = notasPendentes.filter(
-      (n) => n.status === "aguardando_conferencia" && !pendingDeletes.has(n.id)
-    );
-    const fotosEmAnalise = contarFotosEmAnaliseCooperado(notasEmAnalise);
-    const resumoMens = bicCentralGetResumoMensalidadesCooperado(data, cooperadoId, coopId);
-    const mensalidadeAberta = resumoMens.situacao === "atrasada";
-    const prestacao = coopId ? prestacaoPrincipalCooperado(data, cooperadoId, coopId) : undefined;
-    const prestacaoAberta = prestacao ? prestacaoExigeAtencaoCooperado(prestacao) : false;
-    const avulsosPendentesTotal = bicCentralTotalValoresAvulsosPendentes(data, cooperadoId, undefined, coopId);
-    const avulsosJaNoCardPrincipal =
-      valorReceber.exibir &&
-      (valorReceber.meses.length > 0
-        ? valorReceber.meses.some((m) => bicCentralTotalValoresAvulsosPendentes(data, cooperadoId, m, coopId) > 0)
-        : bicCentralTotalValoresAvulsosPendentes(data, cooperadoId, valorReceber.mes, coopId) > 0);
-    const exibirCardAvulsosSeparado = avulsosPendentesTotal > 0 && !avulsosJaNoCardPrincipal;
-    const comunicados = coopId ? getComunicadosInicioCooperado(data, coopId, cooperadoId) : [];
-    const pautasAbertas = coopId ? listPautasAbertasCooperado(data, coopId, cooperadoId) : [];
-    const resultadoVotacao = coopId ? resultadoVisivelCooperado(data, coopId) : null;
-    const resolvidos = listarResolvidosInicioCooperado(data, cooperadoId, coopId);
-    const mostrarAssinaturaPilot = cooperadoUsaAssinaturaCadastroPilot(cooperadoId);
-    const precisaAssinatura =
-      mostrarAssinaturaPilot && cooperadoPrecisaCadastrarAssinatura(cooperadoId, cooperado);
-    const temSecaoPendencias =
-      rejeitadas.length > 0 ||
-      fotosEmAnalise > 0 ||
-      valorReceber.exibir ||
-      valorReceber.valor > 0 ||
-      precisaPix ||
-      precisaAssinatura ||
-      mensalidadeAberta ||
-      prestacaoAberta ||
-      exibirCardAvulsosSeparado;
-    const mostrarBaixarApp =
-      Boolean(cooperado) &&
-      !cooperado!.avulso &&
-      !isAppStandalone() &&
-      !cooperadoTemAppInstalado(cooperado!);
-
-    const cnpjDigits = cnpj ? normalizeCnpj(cnpj) : "";
-
-    return {
-      cooperadoId,
-      mes,
-      cooperado,
-      coopNome,
-      valorReceber,
-      precisaPix,
-      rejeitadas,
-      fotosEmAnalise,
-      mensalidadeAberta,
-      prestacao,
-      prestacaoAberta,
-      exibirCardAvulsosSeparado,
-      comunicados,
-      pautasAbertas,
-      resultadoVotacao,
-      resolvidos,
-      temSecaoPendencias,
-      mostrarBaixarApp,
-      coopId,
-      mostrarAssinaturaPilot,
-      precisaAssinatura,
-      cnpjDigits,
-    };
-  },
-    [user?.id, user?.cooperadoId, user?.cooperativaId, hbDescontosRevision, apresentacaoConsolidada]
+      if (!data || !user?.cooperadoId) return null;
+      return buildCooperadoPwaInicioDashboardView(data, user, apresentacaoConsolidada);
+    },
+    [user?.id, user?.cooperadoId, user?.cooperativaId, hbDescontosRevision, apresentacaoConsolidada, inicioPwaLeve]
   );
+
+  const view = inicioPwaLeve ? pwaInicioView : viewLive;
 
   const mesAtual = getCurrentMesReferencia();
   const nomeCurto =

@@ -57,6 +57,10 @@ assert(
   read("src/app/(app)/notas-pedido/NotasPedidoCooperadoMain.tsx").includes("ensureCooperadoNotasFreshForEnvio"),
   "sync de notas só no fluxo de envio (PWA cooperado)"
 );
+assert(
+  read("src/app/(app)/dashboard/DashboardContent.tsx").includes("isCooperadoPwaMobileLeveUi"),
+  "Início cooperado PWA em snapshot leve"
+);
 assert(panel.includes("useCooperadoEffectiveTabPath"), "navegação otimista cooperado");
 assert(layout.includes("setCooperadoOptimisticTab"), "pointerdown otimista no rodapé");
 assert(perms.includes("cooperadoBottomTabRoutes"), "menu mobile alinhado às 4 abas");
