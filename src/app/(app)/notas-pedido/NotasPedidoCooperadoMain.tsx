@@ -37,6 +37,14 @@ import {
   isCooperadoManualOperacionalSync,
   scheduleCooperadoPostInteractiveTask,
 } from "@/lib/performance/cooperadoColdStart";
+import { isCooperadoPwaMobileEntregasLeve } from "@/lib/cooperado/cooperadoPwaMobileEntregas";
+import { ensureCooperadoNotasFreshForEnvio } from "@/lib/cooperado/cooperadoPwaEntregasEnvioSync";
+import {
+  COOPERADO_PWA_ENTREGAS_SNAPSHOT_REFRESH_EVENT,
+  lerCooperadoPwaEntregasResumosSnapshot,
+  persistirCooperadoPwaEntregasResumosSnapshot,
+  type CooperadoPwaEntregasResumosSnapshot,
+} from "@/lib/cooperado/cooperadoPwaEntregasResumosSnapshot";
 import { markRqlColdStartPhase } from "@/lib/performance/rqlMarks";
 import {
   loadCooperadoAnexarPipeline,
@@ -374,6 +382,7 @@ export default function NotasPedidoCooperadoMain() {
   const tabActive = useCooperadoTabPanelActive("/notas-pedido");
   const data = useCooperadoPanelAppData(tabActive, ["notas", "shell", "financeiro", "operacional"]);
   const { check, user, isCooperado, isDiretoria, cooperadoId } = usePermissions();
+  const entregasPwaLeve = isCooperado && isCooperadoPwaMobileEntregasLeve();
   const { syncing, syncingForUi } = useSyncStatus();
   const searchParams = useSearchParams();
   const router = useRouter();
@@ -381,6 +390,9 @@ export default function NotasPedidoCooperadoMain() {
   const [statusFilter, setStatusFilter] = useState(isCooperado ? "pendentes" : "");
   const filtroResponsavelIniciado = useRef(false);
   const [anexarModal, setAnexarModal] = useState(false);
+  const [pwaPreparandoEnvio, setPwaPreparandoEnvio] = useState(false);
+  const [pwaEntregasResumosSnap, setPwaEntregasResumosSnap] =
+    useState<CooperadoPwaEntregasResumosSnapshot | null>(null);
   const [conferirModal, setConferirModal] = useState(false);
   const [rejectModal, setRejectModal] = useState(false);
   const [viewModal, setViewModal] = useState(false);
@@ -522,6 +534,29 @@ export default function NotasPedidoCooperadoMain() {
     isCooperado && data && cooperadoId && coopId
       ? resolverCooperadoIdCanonico(data, cooperadoId, coopId)
       : undefined;
+
+  const refreshPwaEntregasResumosSnap = useCallback(() => {
+    if (!entregasPwaLeve || !cooperadoCanonico || !coopId) return;
+    const built = persistirCooperadoPwaEntregasResumosSnapshot(cooperadoCanonico, coopId);
+    if (built) setPwaEntregasResumosSnap(built);
+  }, [entregasPwaLeve, cooperadoCanonico, coopId]);
+
+  useEffect(() => {
+    if (!entregasPwaLeve || !cooperadoCanonico || !coopId) return;
+    const stored = lerCooperadoPwaEntregasResumosSnapshot(cooperadoCanonico, coopId);
+    if (stored) {
+      setPwaEntregasResumosSnap(stored);
+      return;
+    }
+    refreshPwaEntregasResumosSnap();
+  }, [entregasPwaLeve, cooperadoCanonico, coopId, refreshPwaEntregasResumosSnap]);
+
+  useEffect(() => {
+    if (!entregasPwaLeve) return;
+    const onRefresh = () => refreshPwaEntregasResumosSnap();
+    window.addEventListener(COOPERADO_PWA_ENTREGAS_SNAPSHOT_REFRESH_EVENT, onRefresh);
+    return () => window.removeEventListener(COOPERADO_PWA_ENTREGAS_SNAPSHOT_REFRESH_EVENT, onRefresh);
+  }, [entregasPwaLeve, refreshPwaEntregasResumosSnap]);
   const mesHbSync =
     data && cooperadoCanonico && coopId
       ? bicCentralMesPrincipalQuantoVouReceber(data, cooperadoCanonico, coopId)
@@ -1422,9 +1457,9 @@ export default function NotasPedidoCooperadoMain() {
   }, [isCooperado, ANEXAR_DRAFT_KEY, refreshRascunhoAnexarFromDraft]);
 
   useEffect(() => {
-    if (!isCooperado) return;
+    if (!isCooperado || entregasPwaLeve) return;
     runCooperadoEntregaMaintenance({ forceHeavy: true });
-  }, [isCooperado, runCooperadoEntregaMaintenance]);
+  }, [isCooperado, entregasPwaLeve, runCooperadoEntregaMaintenance]);
 
   useEffect(() => {
     if (!isCooperado) return;
@@ -1433,6 +1468,7 @@ export default function NotasPedidoCooperadoMain() {
       runCooperadoEntregaMaintenance({ forceHeavy: true });
       return;
     }
+    if (entregasPwaLeve) return;
     if (!tabActive) return;
     markRqlColdStartPhase("notas_pedido_cooperado_shell");
     scheduleCooperadoPostInteractiveTask(() => runCooperadoEntregaMaintenance());
@@ -1442,6 +1478,7 @@ export default function NotasPedidoCooperadoMain() {
     }
   }, [
     isCooperado,
+    entregasPwaLeve,
     tabActive,
     anexarModal,
     enviando,
@@ -1510,18 +1547,29 @@ export default function NotasPedidoCooperadoMain() {
   const continuarRascunhoFotos = (abrirCamera = false) => {
     if (rascunhoFotosCount === 0) return;
     prefetchCooperadoAnexarPipeline();
-    setFormErrors({});
-    setErroEnvio("");
-    setAnexarSucesso(false);
-    setReenviarNotaId(null);
-    setFotoDuplicadaMsg("");
-    if (rascunhoContratoId) {
-      setContratoInstId(rascunhoContratoId);
-      if (coopId) setInstituicaoPadraoId(coopId, rascunhoContratoId);
-    }
-    setRascunhoFotosCount(0);
-    setAnexarModal(true);
     void (async () => {
+      if (entregasPwaLeve && user && coopId) {
+        setPwaPreparandoEnvio(true);
+        const pull = await ensureCooperadoNotasFreshForEnvio(user, coopId, { reason: "anexar" });
+        setPwaPreparandoEnvio(false);
+        if (!pull.ok) {
+          setSuccessMsg(pull.error ?? "Não foi possível atualizar antes de continuar o envio.");
+          setTimeout(() => setSuccessMsg(""), 8000);
+          return;
+        }
+        refreshPwaEntregasResumosSnap();
+      }
+      setFormErrors({});
+      setErroEnvio("");
+      setAnexarSucesso(false);
+      setReenviarNotaId(null);
+      setFotoDuplicadaMsg("");
+      if (rascunhoContratoId) {
+        setContratoInstId(rascunhoContratoId);
+        if (coopId) setInstituicaoPadraoId(coopId, rascunhoContratoId);
+      }
+      setRascunhoFotosCount(0);
+      setAnexarModal(true);
       await syncFotosSessaoFromDraft();
       if (abrirCamera) {
         const count = await countFotoDraft(ANEXAR_DRAFT_KEY);
@@ -1569,6 +1617,27 @@ export default function NotasPedidoCooperadoMain() {
     if (options?.abrirCamera) abrirCameraAnexar();
   };
 
+  const openAnexarPwaThen = async (
+    notaRejeitada?: NotaPedido,
+    options?: { abrirCamera?: boolean }
+  ) => {
+    if (entregasPwaLeve && user && coopId) {
+      setPwaPreparandoEnvio(true);
+      const pull = await ensureCooperadoNotasFreshForEnvio(user, coopId, {
+        reason: "anexar",
+        notaRejeitada,
+      });
+      setPwaPreparandoEnvio(false);
+      if (!pull.ok) {
+        setSuccessMsg(pull.error ?? "Não foi possível atualizar antes de enviar fotos.");
+        setTimeout(() => setSuccessMsg(""), 8000);
+        return;
+      }
+      refreshPwaEntregasResumosSnap();
+    }
+    iniciarModalAnexar(notaRejeitada, options);
+  };
+
   const openAnexar = (notaRejeitada?: NotaPedido, options?: { abrirCamera?: boolean }) => {
     if (!notaRejeitada) prefetchCooperadoAnexarPipeline();
     if (!notaRejeitada && rascunhoFotosCount > 0) {
@@ -1583,13 +1652,13 @@ export default function NotasPedidoCooperadoMain() {
           if (meta.contratoId) setRascunhoContratoId(meta.contratoId);
           continuarRascunhoFotos(options?.abrirCamera ?? false);
         } else {
-          iniciarModalAnexar(undefined, options);
+          void openAnexarPwaThen(undefined, options);
         }
       });
       return;
     }
 
-    iniciarModalAnexar(notaRejeitada, options);
+    void openAnexarPwaThen(notaRejeitada, options);
   };
 
   const cooperadosCoop =
@@ -1638,9 +1707,9 @@ export default function NotasPedidoCooperadoMain() {
 
   const deferredStatusFilter = useDeferredValue(statusFilter);
 
-  const resumosMensaisCooperado =
+  const resumosMensaisLive =
     useAppDataSelectorWhenActive(
-      tabActive,
+      entregasPwaLeve ? false : tabActive,
       (d) => {
         if (!cooperadoId || !coopId || abaCooperado !== "entregas") return [];
         const base = filtrarResumosMesesNaoQuitados(
@@ -1657,18 +1726,44 @@ export default function NotasPedidoCooperadoMain() {
           }))
           .filter((r) => r.notas.length > 0);
       },
-      [cooperadoId, coopId, deferredStatusFilter, hbDescontosRevision, abaCooperado]
+      [cooperadoId, coopId, deferredStatusFilter, hbDescontosRevision, abaCooperado, entregasPwaLeve]
     ) ?? [];
 
-  const resumosFichaCooperado =
+  const resumosFichaLive =
     useAppDataSelectorWhenActive(
-      tabActive,
+      entregasPwaLeve ? false : tabActive,
       (d) => {
         if (!cooperadoId || !coopId || abaCooperado !== "ficha") return [];
         return listarResumosFichaEmAbertoCooperado(d, cooperadoId, coopId);
       },
-      [cooperadoId, coopId, hbDescontosRevision, abaCooperado]
+      [cooperadoId, coopId, hbDescontosRevision, abaCooperado, entregasPwaLeve]
     ) ?? [];
+
+  const resumosMensaisCooperado = useMemo(() => {
+    if (!entregasPwaLeve || abaCooperado !== "entregas") return resumosMensaisLive;
+    let base = pwaEntregasResumosSnap?.entregasBase ?? [];
+    if (deferredStatusFilter === "pendentes") base = filtrarResumosEntregasPendentes(base);
+    else if (deferredStatusFilter) {
+      base = base
+        .map((r) => ({
+          ...r,
+          notas: r.notas.filter((n) => n.status === deferredStatusFilter),
+        }))
+        .filter((r) => r.notas.length > 0);
+    }
+    return base;
+  }, [
+    entregasPwaLeve,
+    abaCooperado,
+    pwaEntregasResumosSnap,
+    deferredStatusFilter,
+    resumosMensaisLive,
+  ]);
+
+  const resumosFichaCooperado = useMemo(() => {
+    if (!entregasPwaLeve || abaCooperado !== "ficha") return resumosFichaLive;
+    return pwaEntregasResumosSnap?.fichaAberto ?? [];
+  }, [entregasPwaLeve, abaCooperado, pwaEntregasResumosSnap, resumosFichaLive]);
 
   const getEscolaLabelCooperado = useCallback(
     (n: NotaPedido) => getEscolaNotaLabel(n, data?.instituicoes ?? []),
@@ -2308,6 +2403,7 @@ export default function NotasPedidoCooperadoMain() {
   };
 
   const scheduleFotoAppSync = () => {
+    if (entregasPwaLeve) return;
     if (fotoAppSyncTimerRef.current) clearTimeout(fotoAppSyncTimerRef.current);
     fotoAppSyncTimerRef.current = setTimeout(() => {
       fotoAppSyncTimerRef.current = null;
@@ -2597,13 +2693,28 @@ export default function NotasPedidoCooperadoMain() {
       return;
     }
 
+    if (entregasPwaLeve) {
+      setPwaPreparandoEnvio(true);
+      const pull = await ensureCooperadoNotasFreshForEnvio(user, coopId, {
+        reason: "submit",
+        notaRejeitada: reenviarNotaId
+          ? data.notasPedido.find((n) => n.id === reenviarNotaId)
+          : undefined,
+      });
+      setPwaPreparandoEnvio(false);
+      if (!pull.ok) {
+        setErroEnvio(pull.error ?? "Atualize a internet e tente enviar de novo.");
+        return;
+      }
+    }
+
     const preferId = reenviarNotaId
       ? data.notasPedido.find((n) => n.id === reenviarNotaId)?.instituicaoId
       : contratoInstId || undefined;
     const resolved = resolverContratoEntrega(data, coopId, preferId, {
       criarPadraoSeVazio: !isCooperado,
     });
-    let workingData = data;
+    let workingData = getData() ?? data;
     if (resolved.criou) {
       updateData(() => resolved.data);
       workingData = resolved.data;
@@ -2867,6 +2978,7 @@ export default function NotasPedidoCooperadoMain() {
         (!listaLocalOk ? " Se não constar em Em análise, toque Atualizar." : "")
     );
     requestCooperadoPostEntregaSync();
+    refreshPwaEntregasResumosSnap();
     } catch {
       setErroEnvio("Falha inesperada ao enviar a entrega. Verifique a conexão e tente de novo.");
     } finally {
@@ -4068,6 +4180,12 @@ export default function NotasPedidoCooperadoMain() {
             Histórico
           </button>
         </nav>
+      )}
+
+      {isCooperado && pwaPreparandoEnvio && (
+        <AlertBanner variant="info" className="mb-4" title="Preparando envio">
+          Atualizando suas entregas na nuvem antes de enviar as fotos…
+        </AlertBanner>
       )}
 
       {successMsg && (

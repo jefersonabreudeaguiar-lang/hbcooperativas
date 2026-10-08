@@ -49,6 +49,14 @@ assert(
   "só monta painel da aba ativa (evita jank após sync operacional)"
 );
 assert(read("src/app/(app)/notas-pedido/NotasPedidoCooperadoMain.tsx").includes("useCooperadoPanelAppData"), "notas pausa store fora da aba");
+assert(
+  read("src/lib/cooperado/cooperadoPwaMobileEntregas.ts").includes("isCooperadoPwaMobileEntregasLeve"),
+  "PWA cooperado mobile: entregas leve isolado do responsável"
+);
+assert(
+  read("src/app/(app)/notas-pedido/NotasPedidoCooperadoMain.tsx").includes("ensureCooperadoNotasFreshForEnvio"),
+  "sync de notas só no fluxo de envio (PWA cooperado)"
+);
 assert(panel.includes("useCooperadoEffectiveTabPath"), "navegação otimista cooperado");
 assert(layout.includes("setCooperadoOptimisticTab"), "pointerdown otimista no rodapé");
 assert(perms.includes("cooperadoBottomTabRoutes"), "menu mobile alinhado às 4 abas");

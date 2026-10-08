@@ -130,6 +130,11 @@ import { notifyAppSubtleUpdate } from "@/lib/cooperadoSubtleUpdate";
 import { requestCooperadoAppReleaseSync, type SyncRunOptions } from "@/services/syncRequest";
 import { purgarInicioCardValorReceberCooperado } from "@/services/cooperadoInicioCardPersistenciaService";
 import { scheduleCooperadoPwaOperacionalParidadePull } from "@/lib/cooperado/cooperadoPwaFinanceiroParidadeRefresh";
+import { isCooperadoPwaMobileEntregasLeve } from "@/lib/cooperado/cooperadoPwaMobileEntregas";
+import {
+  dispatchCooperadoPwaEntregasSnapshotRefresh,
+  persistirCooperadoPwaEntregasResumosSnapshotFromUser,
+} from "@/lib/cooperado/cooperadoPwaEntregasResumosSnapshot";
 
 const COOPERADO_PUSH_GAP_MS = 5 * 60 * 1000;
 /** Intervalo mínimo entre pulls de operacional só para votação (bem menor que sync completa). */
@@ -491,6 +496,7 @@ export function CooperativaSyncProvider({ children }: { children: React.ReactNod
   }, [hydrateCooperadoPagamentosFromCloud]);
 
   const runSync = useCallback(async (opts?: SyncRunOptions) => {
+    const userInitiatedRun = opts?.userInitiated === true;
     const currentUser = userRef.current;
     if (!currentUser || syncingRef.current) return;
     if (
@@ -906,6 +912,15 @@ export function CooperativaSyncProvider({ children }: { children: React.ReactNod
           setLastSyncError("");
         } else if (!isCooperadoManualOperacionalSync()) {
           setCooperadoPagamentosHydrated(false);
+        }
+        if (
+          completed &&
+          userInitiatedRun &&
+          isCooperadoPwaMobileEntregasLeve() &&
+          userRef.current
+        ) {
+          persistirCooperadoPwaEntregasResumosSnapshotFromUser(userRef.current);
+          dispatchCooperadoPwaEntregasSnapshotRefresh();
         }
       }
     }
