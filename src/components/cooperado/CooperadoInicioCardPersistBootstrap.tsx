@@ -55,13 +55,13 @@ export function CooperadoInicioCardPersistBootstrap() {
     const onVisible = () => {
       if (document.visibilityState !== "visible") return;
       refreshCooperadoInicioCardFromMotor(user);
-      scheduleCooperadoPwaOperacionalParidadePull(user, user.cooperativaId);
     };
 
     const onPageShow = (event: PageTransitionEvent) => {
-      if (!event.persisted && document.visibilityState !== "visible") return;
       refreshCooperadoInicioCardFromMotor(user);
-      scheduleCooperadoPwaOperacionalParidadePull(user, user.cooperativaId, { force: event.persisted });
+      if (event.persisted) {
+        scheduleCooperadoPwaOperacionalParidadePull(user, user.cooperativaId, { force: true });
+      }
     };
 
     document.addEventListener("visibilitychange", onVisible);

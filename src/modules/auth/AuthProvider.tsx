@@ -104,6 +104,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   useLayoutEffect(() => {
     refresh();
+    if (isCooperadoInstantResumeEnabled()) {
+      preloadAppData({ eager: true });
+    }
   }, [refresh]);
 
   useEffect(() => {

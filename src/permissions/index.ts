@@ -558,6 +558,25 @@ export function getCooperadoExtraItems(): { href: string; label: string }[] {
   return [];
 }
 
+/** Rodapé + drawer antes do JSON local estar warm — shell utilizável no 1º frame (PWA). */
+export function getCooperadoShellMenusBeforeDataWarm(
+  user: PermissionSubject
+): {
+  desktopMenu: { href: string; label: string; resource: Resource }[];
+  mobileMenu: { href: string; label: string; resource: Resource }[];
+  drawerMenu: { href: string; label: string; resource: Resource }[];
+} {
+  const navUser = { ...user, role: "cooperado" as UserRole };
+  const mobileBase = COOPERADO_MENU.filter((i) =>
+    (COOPERADO_BOTTOM_TAB_HREFS as readonly string[]).includes(i.href)
+  );
+  return {
+    desktopMenu: filterMenuForUser(COOPERADO_MENU, navUser),
+    mobileMenu: filterMenuForUser(mobileBase, navUser),
+    drawerMenu: filterMenuForUser(COOPERADO_DRAWER_MENU, navUser),
+  };
+}
+
 export function getMobileNavItems(
   user: PermissionSubject,
   creditEnabled = false,

@@ -3,7 +3,10 @@
  * sem exigir novo login no desktop (paridade Orlando ↔ celular).
  */
 import type { User } from "@/types";
-import { isCooperadoEventDrivenSync } from "@/lib/performance/cooperadoEventDrivenSync";
+import {
+  isCooperadoEventDrivenSync,
+  readCooperadoLastOperacionalSyncAt,
+} from "@/lib/performance/cooperadoEventDrivenSync";
 import {
   isCooperadoManualOperacionalSync,
 } from "@/lib/performance/cooperadoColdStart";
@@ -17,7 +20,8 @@ import { getData, isAppDataWarm } from "@/services/dataStore";
 import { isAppStandalone } from "@/services/cooperadoAppInstallService";
 
 let lastForegroundPullAt = 0;
-const FOREGROUND_PULL_GAP_MS = 45_000;
+const FOREGROUND_PULL_GAP_MS = 90_000;
+const RECENT_OPERACIONAL_SYNC_SKIP_MS = 2 * 60_000;
 
 export function cooperadoOperacionalParidadeRefreshAtivo(): boolean {
   return isCooperadoManualOperacionalSync() && isCooperadoEventDrivenSync();
@@ -46,6 +50,14 @@ export function scheduleCooperadoPwaOperacionalParidadePull(
   refreshCooperadoInicioCardFromMotor(user);
 
   const now = Date.now();
+  const lastSync = readCooperadoLastOperacionalSyncAt();
+  if (
+    !opts?.force &&
+    lastSync != null &&
+    now - lastSync < RECENT_OPERACIONAL_SYNC_SKIP_MS
+  ) {
+    return;
+  }
   if (!opts?.force && now - lastForegroundPullAt < FOREGROUND_PULL_GAP_MS) return;
   lastForegroundPullAt = now;
 

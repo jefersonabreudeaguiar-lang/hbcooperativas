@@ -10,8 +10,10 @@ import { useEnsureAppDataWarm } from "@/hooks/useEnsureAppDataWarm";
 import { getData, getDataRevision, isAppDataWarm, subscribe } from "@/services/dataStore";
 import {
   getCooperadoDrawerMenuItems,
+  getCooperadoShellMenusBeforeDataWarm,
   getMenuItems,
   getMobileNavItems,
+  isCooperadoAppUser,
   isHbCreditCooperadoNavEligible,
   isHbCreditParceiroNavEligible,
   isHbCreditStaffNavEligible,
@@ -66,13 +68,24 @@ export function useAppShellNavigation(): AppShellNavigation | null {
   );
 
   const shellCore = useMemo(() => {
-    if (!user || !isAppDataWarm()) return null;
+    if (!user) return null;
+    if (!isAppDataWarm()) {
+      if (!isCooperadoAppUser(user) && user.role !== "cooperado") return null;
+      const navUser: NavUser = { ...user, role: "cooperado" };
+      return {
+        navUser,
+        cooperadoNome: user.name ?? "",
+        staffPainelUi: false,
+        coopId: user.cooperativaId,
+        beforeDataWarm: true,
+      };
+    }
     const data = getData();
     const navUser = resolveStaffNavigationUser(accountUser, user, data) ?? user;
     const cooperadoNome = resolveCooperadoNome(navUser, data);
     const staffPainelUi = Boolean(accountUser && shouldRenderStaffPainelUi(accountUser, data));
     const coopId = getUserCooperativaId(navUser, data);
-    return { navUser, cooperadoNome, staffPainelUi, coopId };
+    return { navUser, cooperadoNome, staffPainelUi, coopId, beforeDataWarm: false };
   }, [
     user?.id,
     user?.cooperativaId,
@@ -87,8 +100,22 @@ export function useAppShellNavigation(): AppShellNavigation | null {
 
   return useMemo(() => {
     if (!shellCore) return null;
+    const { navUser, cooperadoNome, staffPainelUi, coopId, beforeDataWarm } = shellCore;
+    if (beforeDataWarm) {
+      const menus = getCooperadoShellMenusBeforeDataWarm(navUser);
+      return {
+        navUser,
+        cooperadoNome,
+        staffPainelUi,
+        coopId,
+        contaCoopUiVisible: false,
+        moduleNavEligible: false,
+        desktopMenu: menus.desktopMenu,
+        mobileMenu: menus.mobileMenu,
+        drawerMenu: menus.drawerMenu,
+      };
+    }
     const data = getData();
-    const { navUser, cooperadoNome, staffPainelUi, coopId } = shellCore;
     const moduleNavEligible = hbModuleNavEligible(navUser, credit);
     const contaCoopUiVisible = isContaCoopUiVisibleForUser(navUser, cooperadoNome || undefined);
 
