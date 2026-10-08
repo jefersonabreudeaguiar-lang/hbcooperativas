@@ -75,7 +75,7 @@ export function AppMobileReleaseBar({ variant }: { variant: Variant }) {
         ? "atualizando dados…"
         : lastSyncedAt
           ? `dados ${formatRelativoSync(Date.now() - lastSyncedAt)}`
-          : "dados ainda não sincronizados";
+          : "busque dados da nuvem — toque Atualizar";
 
   const Atualizar = variant === "cooperado" ? CooperadoAtualizarButton : StaffAtualizarButton;
 

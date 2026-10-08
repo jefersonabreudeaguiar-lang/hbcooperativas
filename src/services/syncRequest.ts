@@ -122,7 +122,25 @@ export function requestSyncTier(
 /** Sync silenciosa após detectar lançamento do responsável na nuvem. */
 export function requestCooperadoStaffRevisionSync(): void {
   if (!isCooperadoEventDrivenSync()) return;
+  grantCooperadoEventDrivenSync();
+  markNextCooperadoSyncSilent();
   requestSyncTier("operacional_full", { force: true, immediate: true, eventDriven: true });
+}
+
+/**
+ * Cooperado com dados locais inconsistentes ou desatualizados — sync silenciosa
+ * (manual sync ON) ou imediata visível (modo legado).
+ */
+export function requestCooperadoFinanceiroRecoverySync(): void {
+  if (typeof navigator !== "undefined" && !navigator.onLine) return;
+  if (isCooperadoManualOperacionalSync() && isCooperadoEventDrivenSync()) {
+    grantCooperadoEventDrivenSync();
+    markNextCooperadoSyncSilent();
+    requestSyncTier("operacional_full", { force: true, immediate: true, eventDriven: true });
+    return;
+  }
+  markCooperadoUserSyncVisible();
+  requestSyncTier("operacional_full", { force: true, immediate: true, userInitiated: true });
 }
 
 /** Primeira carga / app novo — uma vez até ter ficha local. */

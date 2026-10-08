@@ -111,6 +111,7 @@ import {
   isCooperadoManualOperacionalSync,
 } from "@/lib/performance/cooperadoColdStart";
 import { requestAppSync, requestAppSyncImmediate } from "@/services/syncRequest";
+import { runCooperadoForegroundOperacionalCheck } from "@/lib/performance/cooperadoForegroundOperacionalSync";
 import { useCooperadoExibirAguardandoAssinatura } from "@/hooks/useCooperadoExibirAguardandoAssinatura";
 import { useCooperadoApresentacaoFinanceiraConsolidada } from "@/hooks/useCooperadoApresentacaoFinanceiraConsolidada";
 import { cooperadoFluxoPainelProjecaoOpts } from "@/lib/cooperadoFluxoFinanceiroGlobal";
@@ -194,18 +195,26 @@ export default function FichaCorridaPage() {
   const [abaMesCooperado, setAbaMesCooperado] = useState<"aberto" | string>("aberto");
   const [abaMesPagamentoResponsavel, setAbaMesPagamentoResponsavel] = useState<"pendente" | string>("pendente");
   const [pixStepVisited, setPixStepVisited] = useState(false);
+  const coopIdEarly = user && data ? getUserCooperativaId(user, data) : undefined;
 
   useEffect(() => {
     if (!tabActive) return;
-    if (isCooperado && isCooperadoManualOperacionalSync()) return;
-    const run = () => requestAppSync();
+    const run = () => {
+      if (isCooperado && isCooperadoManualOperacionalSync() && user && data && coopIdEarly) {
+        void resolveCooperativaCnpj(data, coopIdEarly, user).then((cnpj) => {
+          if (cnpj) void runCooperadoForegroundOperacionalCheck(cnpj);
+        });
+        return;
+      }
+      requestAppSync();
+    };
     if (typeof requestIdleCallback !== "undefined") {
       const id = requestIdleCallback(run, { timeout: 2_500 });
       return () => cancelIdleCallback(id);
     }
     const t = window.setTimeout(run, 0);
     return () => window.clearTimeout(t);
-  }, [isCooperado, tabActive]);
+  }, [isCooperado, tabActive, user, data, coopIdEarly]);
 
   useEffect(() => {
     const c = searchParams.get("cooperado");

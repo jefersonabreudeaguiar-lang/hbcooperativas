@@ -9,6 +9,10 @@ import { isCooperadoManualOperacionalSync } from "@/lib/performance/cooperadoCol
 
 const APPLIED_REV_PREFIX = "hb-coop-applied-cloud-rev:";
 const SYNCED_BUILD_KEY = "hb-coop-operacional-synced-build";
+const LAST_OPERACIONAL_SYNC_AT_KEY = "hb-coop-operacional-last-sync-at";
+
+/** Após este intervalo, cooperado puxa operacional ao voltar ao app (sync silencioso). */
+export const COOPERADO_FOREGROUND_STALE_MS = 12 * 60_000;
 
 export type CooperativaCloudRevision = {
   operacionalUpdatedAt: string | null;
@@ -93,4 +97,22 @@ export function persistOperacionalSyncedAppBuild(build = APP_BUILD_VERSION): voi
 /** Nova versão publicada do app — cooperado precisa puxar operacional (PWA/mobile e browser). */
 export function cooperadoAppReleaseNeedsOperacionalSync(): boolean {
   return getLastOperacionalSyncedAppBuild() !== APP_BUILD_VERSION;
+}
+
+export function readCooperadoLastOperacionalSyncAt(): number | null {
+  if (typeof window === "undefined") return null;
+  const raw = localStorage.getItem(LAST_OPERACIONAL_SYNC_AT_KEY);
+  const n = Number(raw);
+  return Number.isFinite(n) && n > 0 ? n : null;
+}
+
+export function persistCooperadoLastOperacionalSyncAt(at = Date.now()): void {
+  if (typeof window === "undefined") return;
+  localStorage.setItem(LAST_OPERACIONAL_SYNC_AT_KEY, String(at));
+}
+
+export function cooperadoOperacionalSyncStale(maxAgeMs = COOPERADO_FOREGROUND_STALE_MS): boolean {
+  const last = readCooperadoLastOperacionalSyncAt();
+  if (last == null) return true;
+  return Date.now() - last > maxAgeMs;
 }

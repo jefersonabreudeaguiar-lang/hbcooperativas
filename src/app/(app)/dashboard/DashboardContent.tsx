@@ -42,7 +42,10 @@ import {
 import { resolverCooperadoIdCanonico } from "@/services/cooperadoCloudService";
 import { leituraFinanceiraParidadeCooperado } from "@/lib/cooperado/cooperadoFinanceiroParidadeUniversal";
 import { cooperadoFinanceiroDesatualizado } from "@/services/fichaSyncGuard";
-import { requestAppSyncImmediate, requestVotacaoOperacionalSync } from "@/services/syncRequest";
+import {
+  requestCooperadoFinanceiroRecoverySync,
+  requestVotacaoOperacionalSync,
+} from "@/services/syncRequest";
 import { useSyncStatus } from "@/components/sync/CooperativaSyncProvider";
 import { useCooperadoFluxoPadrao } from "@/hooks/useCooperadoFluxoPadrao";
 import { useCooperadoInicioValorReceberCardState } from "@/hooks/useCooperadoInicioValorReceberCardState";
@@ -122,12 +125,11 @@ function CooperadoDashboard() {
   }, [user?.id, user?.cooperadoId]);
 
   useEffect(() => {
-    if (isCooperadoManualOperacionalSync()) return;
     if (!financeiroAusente || recoverySyncRef.current || typeof navigator === "undefined" || !navigator.onLine) {
       return;
     }
     recoverySyncRef.current = true;
-    requestAppSyncImmediate();
+    requestCooperadoFinanceiroRecoverySync();
   }, [financeiroAusente]);
 
   const contaCoopSync = useAppDataSelector((data) => {

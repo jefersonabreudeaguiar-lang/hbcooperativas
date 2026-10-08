@@ -6,6 +6,7 @@ import { useAppDataSelector } from "@/hooks/useAppData";
 import { useSyncStatus } from "@/components/sync/CooperativaSyncProvider";
 import {
   cooperadoFinanceiroBloqueiaEntradaApp,
+  cooperadoFinanceiroDesatualizado,
   limparFichaObsoletaCooperado,
 } from "@/services/fichaSyncGuard";
 import { solicitarRecuperacaoFinanceiroCooperado } from "@/services/cooperadoFinanceiroGuard";
@@ -14,13 +15,17 @@ import {
   isCooperadoManualOperacionalSync,
   shouldSkipCooperadoSecondaryMountSync,
 } from "@/lib/performance/cooperadoColdStart";
-import { isCooperadoEventDrivenSync } from "@/lib/performance/cooperadoEventDrivenSync";
+import { runCooperadoForegroundOperacionalCheck } from "@/lib/performance/cooperadoForegroundOperacionalSync";
+import {
+  cooperadoAppReleaseNeedsOperacionalSync,
+  isCooperadoEventDrivenSync,
+} from "@/lib/performance/cooperadoEventDrivenSync";
+import { resolveCooperativaCnpj } from "@/services/notaPedidoCloudService";
 import {
   requestAppSyncImmediate,
   requestCooperadoAppReleaseSync,
   requestCooperadoPrimeiraCargaSync,
 } from "@/services/syncRequest";
-import { cooperadoAppReleaseNeedsOperacionalSync } from "@/lib/performance/cooperadoEventDrivenSync";
 import { purgarInicioCardValorReceberCooperado } from "@/services/cooperadoInicioCardPersistenciaService";
 import { resolverCooperadoIdCanonico } from "@/services/cooperadoCloudService";
 import { getUserCooperativaId } from "@/utils/cooperativa";
@@ -85,7 +90,13 @@ export function CooperadoFinanceiroGate({ children }: { children: React.ReactNod
     if (isCooperadoEventDrivenSync()) {
       if (cooperadoFinanceiroBloqueiaEntradaApp(getData(), cooperadoId, coopId)) {
         requestCooperadoPrimeiraCargaSync();
+        return;
       }
+      const desatualizado = cooperadoFinanceiroDesatualizado(getData(), cooperadoId, coopId);
+      void resolveCooperativaCnpj(data, coopId, user).then((cnpj) => {
+        if (!cnpj) return;
+        void runCooperadoForegroundOperacionalCheck(cnpj, { financeiroDesatualizado: desatualizado });
+      });
       return;
     }
     if (!isCooperadoManualOperacionalSync()) {

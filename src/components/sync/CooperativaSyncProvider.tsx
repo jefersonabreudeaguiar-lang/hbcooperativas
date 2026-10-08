@@ -106,6 +106,7 @@ import {
   markNextCooperadoSyncSilent,
   resetCooperadoUserSyncVisible,
   scheduleCooperadoColdStartSync,
+  scheduleCooperadoPostInteractiveTask,
   scheduleStaffPostInteractiveTask,
 } from "@/lib/performance/cooperadoColdStart";
 import {
@@ -115,11 +116,14 @@ import {
   hasCooperadoEventDrivenGrant,
   isCooperadoEventDrivenSync,
   persistAppliedCooperativaCloudRevision,
+  persistCooperadoLastOperacionalSyncAt,
   persistOperacionalSyncedAppBuild,
+  readCooperadoLastOperacionalSyncAt,
 } from "@/lib/performance/cooperadoEventDrivenSync";
 import { markRqlColdStartPhase } from "@/lib/performance/rqlMarks";
 import { resolveSyncTierPlan84 } from "@/lib/performance/syncPlan84";
 import { useCooperadoStaffRevisionWatch } from "@/hooks/useCooperadoStaffRevisionWatch";
+import { runCooperadoForegroundOperacionalCheck } from "@/lib/performance/cooperadoForegroundOperacionalSync";
 import { fetchCooperativaCloudRevision } from "@/services/cooperativaSyncRevisionService";
 import { notifyAppSubtleUpdate } from "@/lib/cooperadoSubtleUpdate";
 import { requestCooperadoAppReleaseSync, type SyncRunOptions } from "@/services/syncRequest";
@@ -331,7 +335,11 @@ export function CooperativaSyncProvider({ children }: { children: React.ReactNod
   userRef.current = user;
 
   const [syncing, setSyncing] = useState(false);
-  const [lastSyncedAt, setLastSyncedAt] = useState<number | null>(null);
+  const [lastSyncedAt, setLastSyncedAt] = useState<number | null>(() =>
+    typeof window !== "undefined" && user?.role === "cooperado"
+      ? readCooperadoLastOperacionalSyncAt()
+      : null
+  );
   const [lastSyncError, setLastSyncErrorRaw] = useState("");
   const setLastSyncError = useCallback((value: SetStateAction<string>) => {
     setLastSyncErrorRaw((prev) => {
@@ -845,7 +853,11 @@ export function CooperativaSyncProvider({ children }: { children: React.ReactNod
       if (userRef.current?.role === "cooperado") {
         resetCooperadoUserSyncVisible();
       }
-      setLastSyncedAt(Date.now());
+      const syncedAt = Date.now();
+      setLastSyncedAt(syncedAt);
+      if (userRef.current?.role === "cooperado" && completed) {
+        persistCooperadoLastOperacionalSyncAt(syncedAt);
+      }
       if (isH197CaptureEnabled()) {
         h197ObserveLifecycleEvent(
           "run_sync_end",
@@ -949,6 +961,13 @@ export function CooperativaSyncProvider({ children }: { children: React.ReactNod
       if (user?.role === "cooperado" && cooperadoAppReleaseNeedsOperacionalSync()) {
         purgarInicioCardValorReceberCooperado(user);
         requestCooperadoAppReleaseSync();
+      } else if (user?.role === "cooperado" && !document.hidden) {
+        scheduleCooperadoPostInteractiveTask(() => {
+          void resolveCooperativaCnpj(getData(), coopId, user).then((cnpjOpen) => {
+            if (!cnpjOpen || document.hidden) return;
+            void runCooperadoForegroundOperacionalCheck(cnpjOpen);
+          });
+        });
       }
     } else if (user?.role === "cooperado" && isCooperadoInstantResumeEnabled()) {
       if (cooperadoAppReleaseNeedsOperacionalSync()) {
