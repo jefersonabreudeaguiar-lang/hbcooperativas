@@ -83,10 +83,11 @@ import { persistirInicioCardCooperadoNotificarPwaLeve } from "@/lib/cooperado/co
 import { isAppDataWarm } from "@/services/dataStore";
 import {
   buildCooperadoPwaInicioDashboardView,
-  lerCooperadoPwaInicioDashboardSnapshot,
   persistirCooperadoPwaInicioDashboardSnapshot,
   type CooperadoPwaInicioDashboardView,
 } from "@/lib/cooperado/cooperadoPwaInicioDashboardSnapshot";
+import { cooperadoPwaInstantPaintReady, lerCooperadoPwaInicioDashboardViewForResume } from "@/lib/cooperado/cooperadoPwaInstantResume";
+import { getSession } from "@/services/dataStore";
 
 const DASHBOARD_INICIO_DOMAINS: AppDataNotifyDomain[] = ["shell", "notas", "financeiro", "operacional"];
 
@@ -103,7 +104,7 @@ function CooperadoDashboard() {
   const hbDescontosRevision = useContaCoopDescontosRevision();
 
   const financeiroAusente = useAppDataSelectorForDomainsWhenActive(
-    inicioPwaLeve ? false : tabActive,
+    tabActive,
     DASHBOARD_INICIO_DOMAINS,
     (data) => {
       if (!data || !user?.cooperadoId) return false;
@@ -140,7 +141,7 @@ function CooperadoDashboard() {
   }, [financeiroAusente, inicioPwaLeve]);
 
   const contaCoopSync = useAppDataSelectorForDomainsWhenActive(
-    inicioPwaLeve ? false : tabActive,
+    tabActive,
     DASHBOARD_INICIO_DOMAINS,
     (data) => {
       if (!data || !user?.cooperadoId) return null;
@@ -184,10 +185,18 @@ function CooperadoDashboard() {
       syncing: syncingForUi,
       apresentacaoConsolidada,
       carregandoValoresFinanceiros,
-      leituraSomentePwa: inicioPwaLeve,
+      leituraSomentePwa: inicioPwaLeve && !tabActive,
     });
 
-  const [pwaInicioView, setPwaInicioView] = useState<CooperadoPwaInicioDashboardView | null>(null);
+  const [pwaInicioView, setPwaInicioView] = useState<CooperadoPwaInicioDashboardView | null>(() => {
+    if (typeof window === "undefined" || !isCooperadoPwaMobileLeveUi()) return null;
+    const session = getSession();
+    if (!session?.cooperadoId) return null;
+    return lerCooperadoPwaInicioDashboardViewForResume(
+      session.cooperadoId,
+      session.cooperativaId
+    );
+  });
 
   const refreshPwaInicioView = useCallback(() => {
     if (!inicioPwaLeve || !user?.cooperadoId) return;
@@ -227,16 +236,16 @@ function CooperadoDashboard() {
   }, [inicioPwaLeve, refreshPwaInicioView]);
 
   const viewLive = useAppDataSelectorForDomainsWhenActive(
-    inicioPwaLeve ? false : tabActive,
+    tabActive,
     DASHBOARD_INICIO_DOMAINS,
     (data) => {
       if (!data || !user?.cooperadoId) return null;
       return buildCooperadoPwaInicioDashboardView(data, user, apresentacaoConsolidada);
     },
-    [user?.id, user?.cooperadoId, user?.cooperativaId, hbDescontosRevision, apresentacaoConsolidada, inicioPwaLeve]
+    [user?.id, user?.cooperadoId, user?.cooperativaId, hbDescontosRevision, apresentacaoConsolidada]
   );
 
-  const view = inicioPwaLeve ? pwaInicioView : viewLive;
+  const view = inicioPwaLeve ? (viewLive ?? pwaInicioView) : viewLive;
 
   const mesAtual = getCurrentMesReferencia();
   const nomeCurto =
@@ -616,7 +625,9 @@ export default function DashboardPage() {
     isCooperadoInstantResumeEnabled() &&
     Boolean(user) &&
     (user?.role === "cooperado"
-      ? cooperadoLocalResumeReady(user) || cooperadoInstantShellReady(user)
+      ? cooperadoLocalResumeReady(user) ||
+        cooperadoInstantShellReady(user) ||
+        cooperadoPwaInstantPaintReady(user)
       : appLocalResumeReady(user));
   const staffPainelUi = useAppDataSelector(
     (data) => Boolean(accountUser && shouldRenderStaffPainelUi(accountUser, data)),

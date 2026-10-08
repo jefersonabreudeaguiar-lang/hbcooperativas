@@ -41,10 +41,11 @@ import { isCooperadoPwaMobileEntregasLeve } from "@/lib/cooperado/cooperadoPwaMo
 import { ensureCooperadoNotasFreshForEnvio } from "@/lib/cooperado/cooperadoPwaEntregasEnvioSync";
 import {
   COOPERADO_PWA_ENTREGAS_SNAPSHOT_REFRESH_EVENT,
-  lerCooperadoPwaEntregasResumosSnapshot,
   persistirCooperadoPwaEntregasResumosSnapshot,
   type CooperadoPwaEntregasResumosSnapshot,
 } from "@/lib/cooperado/cooperadoPwaEntregasResumosSnapshot";
+import { lerCooperadoPwaEntregasResumosForResume } from "@/lib/cooperado/cooperadoPwaInstantResume";
+import { getSession } from "@/services/dataStore";
 import { markRqlColdStartPhase } from "@/lib/performance/rqlMarks";
 import {
   loadCooperadoAnexarPipeline,
@@ -392,7 +393,12 @@ export default function NotasPedidoCooperadoMain() {
   const [anexarModal, setAnexarModal] = useState(false);
   const [pwaPreparandoEnvio, setPwaPreparandoEnvio] = useState(false);
   const [pwaEntregasResumosSnap, setPwaEntregasResumosSnap] =
-    useState<CooperadoPwaEntregasResumosSnapshot | null>(null);
+    useState<CooperadoPwaEntregasResumosSnapshot | null>(() => {
+      if (typeof window === "undefined" || !isCooperadoPwaMobileEntregasLeve()) return null;
+      const session = getSession();
+      if (!session?.cooperadoId) return null;
+      return lerCooperadoPwaEntregasResumosForResume(session.cooperadoId, session.cooperativaId);
+    });
   const [conferirModal, setConferirModal] = useState(false);
   const [rejectModal, setRejectModal] = useState(false);
   const [viewModal, setViewModal] = useState(false);
@@ -543,7 +549,7 @@ export default function NotasPedidoCooperadoMain() {
 
   useEffect(() => {
     if (!entregasPwaLeve || !cooperadoCanonico || !coopId) return;
-    const stored = lerCooperadoPwaEntregasResumosSnapshot(cooperadoCanonico, coopId);
+    const stored = lerCooperadoPwaEntregasResumosForResume(cooperadoCanonico, coopId);
     if (stored) {
       setPwaEntregasResumosSnap(stored);
       return;
@@ -1709,7 +1715,7 @@ export default function NotasPedidoCooperadoMain() {
 
   const resumosMensaisLive =
     useAppDataSelectorWhenActive(
-      entregasPwaLeve ? false : tabActive,
+      tabActive,
       (d) => {
         if (!cooperadoId || !coopId || abaCooperado !== "entregas") return [];
         const base = filtrarResumosMesesNaoQuitados(
@@ -1731,7 +1737,7 @@ export default function NotasPedidoCooperadoMain() {
 
   const resumosFichaLive =
     useAppDataSelectorWhenActive(
-      entregasPwaLeve ? false : tabActive,
+      tabActive,
       (d) => {
         if (!cooperadoId || !coopId || abaCooperado !== "ficha") return [];
         return listarResumosFichaEmAbertoCooperado(d, cooperadoId, coopId);
@@ -1741,7 +1747,10 @@ export default function NotasPedidoCooperadoMain() {
 
   const resumosMensaisCooperado = useMemo(() => {
     if (!entregasPwaLeve || abaCooperado !== "entregas") return resumosMensaisLive;
-    let base = pwaEntregasResumosSnap?.entregasBase ?? [];
+    let base =
+      resumosMensaisLive.length > 0
+        ? resumosMensaisLive
+        : (pwaEntregasResumosSnap?.entregasBase ?? []);
     if (deferredStatusFilter === "pendentes") base = filtrarResumosEntregasPendentes(base);
     else if (deferredStatusFilter) {
       base = base
@@ -1762,6 +1771,7 @@ export default function NotasPedidoCooperadoMain() {
 
   const resumosFichaCooperado = useMemo(() => {
     if (!entregasPwaLeve || abaCooperado !== "ficha") return resumosFichaLive;
+    if (resumosFichaLive.length > 0) return resumosFichaLive;
     return pwaEntregasResumosSnap?.fichaAberto ?? [];
   }, [entregasPwaLeve, abaCooperado, pwaEntregasResumosSnap, resumosFichaLive]);
 

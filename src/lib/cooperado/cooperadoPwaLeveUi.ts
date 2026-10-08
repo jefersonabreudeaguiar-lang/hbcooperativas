@@ -1,13 +1,12 @@
 /**
- * PWA cooperado mobile — snapshots de UI (Início/Entregas) desligados em favor de AppData ao vivo.
- * Mantém helpers de persistência do card e eventos para compatibilidade.
+ * PWA cooperado mobile — snapshot local para abertura/troca rápida; AppData atualiza em background e no Atualizar.
  */
 import type { User } from "@/types";
+import { isCooperadoPwaMobileEntregasLeve } from "@/lib/cooperado/cooperadoPwaMobileEntregas";
 import { persistirInicioCardValorReceberCooperado } from "@/services/cooperadoInicioCardPersistenciaService";
 
-/** Snapshot leve desligado — telas cooperado leem AppData quando a aba está ativa. */
 export function isCooperadoPwaMobileLeveUi(): boolean {
-  return false;
+  return isCooperadoPwaMobileEntregasLeve();
 }
 
 export const COOPERADO_PWA_LEVE_UI_SNAPSHOT_REFRESH_EVENT =
@@ -22,10 +21,14 @@ export function dispatchCooperadoPwaLeveUiSnapshotRefresh(): void {
   window.dispatchEvent(new CustomEvent(COOPERADO_PWA_LEVE_UI_SNAPSHOT_REFRESH_EVENT));
 }
 
-/** Grava card “A receber” (cache local); não troca Início para modo somente persistido. */
+/** Grava card “A receber” e avisa Início/Entregas PWA para reler localStorage. */
 export function persistirInicioCardCooperadoNotificarPwaLeve(
   user: Omit<User, "password"> | null | undefined
 ): boolean {
   if (!user || user.role !== "cooperado") return false;
-  return persistirInicioCardValorReceberCooperado(user);
+  const ok = persistirInicioCardValorReceberCooperado(user);
+  if (isCooperadoPwaMobileLeveUi()) {
+    dispatchCooperadoPwaLeveUiSnapshotRefresh();
+  }
+  return ok;
 }

@@ -57,6 +57,7 @@ import type { MobileTabScrollMode } from "@/lib/performance/mobileTabScrollMemor
 import { CooperadoMobileTabKeepAlive } from "@/components/performance/CooperadoMobileTabKeepAlive";
 import { StaffMobileTabKeepAlive } from "@/components/performance/StaffMobileTabKeepAlive";
 import { CooperadoMobileReleaseBar } from "@/components/cooperado/CooperadoMobileReleaseBar";
+import { CooperadoPwaResumeLifecycle } from "@/components/cooperado/CooperadoPwaResumeLifecycle";
 import { StaffMobileReleaseBar } from "@/components/layout/StaffMobileReleaseBar";
 import type { Resource } from "@/types";
 
@@ -501,6 +502,7 @@ function AppShellInner({ children }: { children: React.ReactNode }) {
           <ContratoServicoAppGate />
           <CobrancaSaasPainel />
           {navUser && isCooperadoAppUser(navUser) && <CooperadoFinanceiroSyncBanner />}
+          {navUser && isCooperadoAppUser(navUser) && <CooperadoPwaResumeLifecycle />}
           {cooperadoKeepAliveShell ? (
             <CooperadoMobileTabKeepAlive pathname={pathname}>{children}</CooperadoMobileTabKeepAlive>
           ) : staffKeepAliveShell ? (

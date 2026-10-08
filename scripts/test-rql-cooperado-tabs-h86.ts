@@ -60,12 +60,16 @@ assert(
   "sync de notas só no fluxo de envio (PWA cooperado)"
 );
 assert(
-  !read("src/lib/cooperado/cooperadoPwaLeveUi.ts").includes("return isCooperadoPwaMobileEntregasLeve()"),
-  "Início/Entregas PWA: AppData ao vivo (snapshot leve off)"
+  read("src/lib/cooperado/cooperadoPwaLeveUi.ts").includes("isCooperadoPwaMobileEntregasLeve"),
+  "PWA leve: snapshot + AppData na aba ativa"
 );
 assert(
-  read("src/app/(app)/dashboard/DashboardContent.tsx").includes("useAppDataSelectorForDomainsWhenActive"),
-  "Início cooperado reage ao AppData na aba ativa"
+  read("src/lib/cooperado/cooperadoPwaInstantResume.ts").includes("cooperadoPwaInstantPaintReady"),
+  "abertura PWA instantanea antes do AppData warm"
+);
+assert(
+  existsSync(join(ROOT, "src/components/cooperado/CooperadoPwaResumeLifecycle.tsx")),
+  "persist snapshots ao ir para segundo plano"
 );
 assert(panel.includes("useCooperadoEffectiveTabPath"), "navegação otimista cooperado");
 assert(layout.includes("setCooperadoOptimisticTab"), "pointerdown otimista no rodapé");
