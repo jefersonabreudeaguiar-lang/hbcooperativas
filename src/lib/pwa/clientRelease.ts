@@ -313,7 +313,14 @@ export async function alignClientRuntimeToRelease(
     return false;
   }
 
-  if (typeof sessionStorage !== "undefined") {
+  const embedded = getEmbeddedClientRelease();
+  const buildBehind =
+    options?.targetBuild != null &&
+    options.targetBuild > 0 &&
+    embedded.build > 0 &&
+    options.targetBuild > embedded.build;
+
+  if (!buildBehind && typeof sessionStorage !== "undefined") {
     try {
       const last = Number(sessionStorage.getItem(RELEASE_ALIGN_COOLDOWN_KEY) || 0);
       if (last > 0 && Date.now() - last < RELEASE_ALIGN_COOLDOWN_MS) {

@@ -40,10 +40,12 @@ export function AppUpdateBanner() {
     let reloaded = false;
     const onControllerChange = () => {
       if (!autoUpdate || reloaded) return;
-      const buildKey = String(APP_BUILD_VERSION);
-      if (sessionStorage.getItem(COOP_SW_RELOADED_BUILD_KEY) === buildKey) return;
-      sessionStorage.setItem(COOP_SW_RELOADED_BUILD_KEY, buildKey);
       reloaded = true;
+      try {
+        sessionStorage.removeItem(COOP_SW_RELOADED_BUILD_KEY);
+      } catch {
+        /* ignore */
+      }
       window.location.reload();
     };
     navigator.serviceWorker.addEventListener("controllerchange", onControllerChange);
@@ -52,7 +54,6 @@ export function AppUpdateBanner() {
       void navigator.serviceWorker.register(`/sw.js?build=${APP_BUILD_VERSION}`).then((reg) => {
         const onWaiting = () => {
           if (autoUpdate) {
-            if (sessionStorage.getItem(COOP_SW_RELOADED_BUILD_KEY) === String(APP_BUILD_VERSION)) return;
             activateWaitingWorker(reg);
             return;
           }

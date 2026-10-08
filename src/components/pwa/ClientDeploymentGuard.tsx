@@ -9,6 +9,7 @@ import {
   scheduleStaffPostInteractiveTask,
 } from "@/lib/performance/cooperadoColdStart";
 import { ensureCooperadoReleaseUpgrade, runClientReleaseAlignment } from "@/lib/pwa/fetchOfficialClientRelease";
+import { fetchOfficialClientRelease } from "@/lib/pwa/fetchOfficialClientRelease";
 import {
   getEmbeddedClientRelease,
   getPageEmbeddedReleaseFromDom,
@@ -17,6 +18,7 @@ import {
 
 /** Um retry se chunks ainda não tinham dpl= no DOM. */
 const PENDING_RETRY_MS = 1_500;
+const COOPERADO_RELEASE_POLL_MS = 3 * 60 * 1000;
 
 export function ClientDeploymentGuard() {
   const aligningRef = useRef(false);
@@ -34,6 +36,7 @@ export function ClientDeploymentGuard() {
         if (coopUpgrade === "aligning") {
           aligningRef.current = true;
         }
+        if (coopUpgrade === "pending") return "retry";
         return "stop";
       }
 
@@ -69,23 +72,27 @@ export function ClientDeploymentGuard() {
 
     const onVisible = () => {
       if (document.visibilityState !== "visible" || aligningRef.current) return;
-      const embedded = getEmbeddedClientRelease();
-      const page = getPageEmbeddedReleaseFromDom();
-      if (runtimeAlreadyOnCanonicalRelease(embedded, page)) return;
-      void run();
+      void fetchOfficialClientRelease().then((canonical) => {
+        const embedded = getEmbeddedClientRelease();
+        const page = getPageEmbeddedReleaseFromDom();
+        if (runtimeAlreadyOnCanonicalRelease(canonical, page, embedded)) return;
+        void run();
+      });
     };
     document.addEventListener("visibilitychange", onVisible);
 
-    const embedded = getEmbeddedClientRelease();
-    const page = getPageEmbeddedReleaseFromDom();
-    const skipPeriodic = runtimeAlreadyOnCanonicalRelease(embedded, page);
-    const intervalMs = skipPeriodic ? 0 : cooperadoExperience ? 0 : 2 * 60 * 1000;
-    const interval =
-      intervalMs > 0
-        ? window.setInterval(() => {
-            if (!aligningRef.current) void run();
-          }, intervalMs)
-        : 0;
+    let interval = 0;
+    void fetchOfficialClientRelease().then((canonical) => {
+      const embedded = getEmbeddedClientRelease();
+      const page = getPageEmbeddedReleaseFromDom();
+      const aligned = runtimeAlreadyOnCanonicalRelease(canonical, page, embedded);
+      const intervalMs = aligned ? 0 : cooperadoExperience ? COOPERADO_RELEASE_POLL_MS : 2 * 60 * 1000;
+      if (intervalMs > 0 && !cancelled) {
+        interval = window.setInterval(() => {
+          if (!aligningRef.current) void run();
+        }, intervalMs);
+      }
+    });
 
     return () => {
       cancelled = true;

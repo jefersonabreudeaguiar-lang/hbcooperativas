@@ -77,7 +77,9 @@ function staffDeferSoftAlign(
   return "ok";
 }
 
-export async function ensureCooperadoReleaseUpgrade(isCooperadoExperience: boolean): Promise<"ok" | "aligning"> {
+export async function ensureCooperadoReleaseUpgrade(
+  isCooperadoExperience: boolean
+): Promise<"ok" | "aligning" | "pending"> {
   if (!isCooperadoExperience || typeof window === "undefined") return "ok";
   const canonical = await fetchOfficialClientRelease();
   const embedded = getEmbeddedClientRelease();
@@ -112,7 +114,7 @@ export async function ensureCooperadoReleaseUpgrade(isCooperadoExperience: boole
   }
 
   if (decision.action === "pending") {
-    return "ok";
+    return "pending";
   }
 
   markClientReleaseSeen(canonical);
