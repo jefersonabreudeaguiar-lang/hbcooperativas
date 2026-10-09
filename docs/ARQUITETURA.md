@@ -39,7 +39,7 @@ Em produção oficial, flags em `.env.production-official.example` e `verify:off
 
 Sem alterar o app no dia a dia; usar com `.env.local` e service role:
 
-- Integridade pagamentos + livro caixa: `repair-operacional-pagamentos-integridade.ts` (preferir payload completo com livro caixa).
+- Integridade pagamentos + livro caixa: `repair-operacional-pagamentos-integridade.ts` (upload completo: pagamentos, livro caixa, arquivos mensais).
 - HB limites: `sync-hb-credit-limites-cooperativa.ts`.
 - Auditorias: `audit-contadores-alinhamento-once.ts`, `audit-a-receber-vs-ficha-once.ts`, `audit-hb-limites-ghost.ts`.
 

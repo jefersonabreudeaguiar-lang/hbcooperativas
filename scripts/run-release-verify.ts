@@ -102,6 +102,12 @@ const PHASE_HB: Step[] = [
   },
   {
     phase: "2",
+    title: "Recibo confirmado → assinatura cooperado",
+    cmd: "npx",
+    stepArgs: ["tsx", "scripts/test-cooperado-recibo-assinatura-apos-confirmado.ts"],
+  },
+  {
+    phase: "2",
     title: "Ficha pagamento guard H8935",
     cmd: "npx",
     stepArgs: ["tsx", "scripts/test-ficha-corrida-pagamento-guard-h8935.ts"],

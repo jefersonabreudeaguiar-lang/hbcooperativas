@@ -10,10 +10,11 @@ Pré-requisitos: `.env.local` com `NEXT_PUBLIC_SUPABASE_URL` e `SUPABASE_SERVICE
    - `npx tsx scripts/audit-contadores-alinhamento-once.ts`
    - `npx tsx scripts/audit-a-receber-vs-ficha-once.ts`
 
-2. **Integridade operacional + livro caixa**
-   - `npx tsx scripts/_once-sync-pos-pagamentos-cooperativa-once.ts [cnpj]`  
-     (ou `repair-operacional-pagamentos-integridade.ts` se o repair oficial já incluir `livroCaixa` no upload)
-   - Verificar saída: `Pagamentos confirmados sem débito livro caixa: 0 → 0`
+2. **Integridade operacional + livro caixa (oficial)**
+   - `npx tsx scripts/repair-operacional-pagamentos-integridade.ts [cnpj]`  
+     Sobe `fichaCorrida`, `pagamentosCooperado`, `livroCaixa`, `arquivosMensais` e `notasPedido` quando houver diff.
+   - Alternativa pontual (legado): `npx tsx scripts/_once-sync-pos-pagamentos-cooperativa-once.ts [cnpj]`
+   - Verificar saída: `Pagamentos confirmados sem débito livro caixa: 0 → 0` (auditoria ou script `_once-sync`)
 
 3. **HB Créditos**
    - `npx tsx scripts/audit-hb-limites-ghost.ts` (limites fantasma)
