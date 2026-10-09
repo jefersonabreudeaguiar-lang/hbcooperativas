@@ -3,7 +3,14 @@
  * Uso: npm run test:cooperado-financeiro
  */
 import assert from "node:assert/strict";
-import { cooperadoFinanceiroLocalAusente, cooperadoFinanceiroBloqueiaEntradaApp, notasSyncProvavelmenteCompleto } from "../src/services/fichaSyncGuard.ts";
+import {
+  cooperadoFinanceiroDesatualizado,
+  cooperadoFinanceiroLocalAusente,
+  cooperadoFinanceiroBloqueiaEntradaApp,
+  notasSyncProvavelmenteCompleto,
+} from "../src/services/fichaSyncGuard.ts";
+import { projetarAppDataFinanceiroParaCreditoBase } from "../src/modules/hb-credit/engine/projetarAppDataFinanceiroParaCreditoBase.ts";
+import { setOperacionalCloudAuthoritativeForTests } from "../src/services/operationalReset.ts";
 import {
   buildValorExibicaoCooperadoOpts,
   getDescontosExtrasExibicaoCooperado,
@@ -114,6 +121,27 @@ function nota(id: string, status: NotaPedido["status"]): NotaPedido {
     createdAt: "2026-08-01T00:00:00.000Z",
     updatedAt: "2026-08-01T00:00:00.000Z",
   };
+}
+
+{
+  setOperacionalCloudAuthoritativeForTests("62351750000165", 15);
+  const data = baseData({
+    notasPedido: [{ ...nota("n_sem_ficha", "conferida"), mesReferencia: "2026-10" }],
+    fichaCorrida: [],
+  });
+  assert.equal(
+    getTotalAPagarCooperado(data, COOPERADO, "2026-10", COOP),
+    0,
+    "sem reconciliar: operacional autoritativo não projeta valor só das notas"
+  );
+  const proj = projetarAppDataFinanceiroParaCreditoBase(data);
+  assert.ok(
+    getTotalAPagarCooperado(proj, COOPERADO, "2026-10", COOP) > 0,
+    "operacional autoritativo: reconcilia notas conferidas sem ficha local"
+  );
+  assert.equal(cooperadoFinanceiroLocalAusente(proj, COOPERADO, COOP), false);
+  assert.equal(cooperadoFinanceiroDesatualizado(proj, COOPERADO, COOP), false);
+  setOperacionalCloudAuthoritativeForTests(null);
 }
 
 // HB Créditos — regressão: total abatido e linhas visíveis no resumo cooperado (executar antes dos demais)

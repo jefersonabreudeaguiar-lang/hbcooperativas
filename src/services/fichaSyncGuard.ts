@@ -174,6 +174,11 @@ export function cooperadoFinanceiroLocalAusente(
 
   // Conferidas locais: incompleto só se alguma nota ainda não tem ficha (pendente ou pago).
   if (conferidas > 0) {
+    const cnpj = cnpjFromCooperativaId(data, cooperativaId);
+    if (cnpj.length === 14 && isOperacionalCloudAuthoritative(cnpj)) {
+      // Operacional na nuvem pode não trazer ficha de todo cooperado; valor vem das notas após reconciliar.
+      return false;
+    }
     return cooperadoConferidasSemFicha(data, canonico, cooperativaId);
   }
 
@@ -251,6 +256,18 @@ function cooperadoTotalMudaComReconciliacao(
     cooperativaId
   );
   return Math.abs(antes - depois) > TOL_VALOR;
+}
+
+/** Algum cooperado com nota conferida/paga local sem lançamento na ficha (valor some no app). */
+export function cooperativaTemNotasConferidasSemFichaLocal(
+  data: AppData,
+  cooperativaId: string
+): boolean {
+  for (const c of data.cooperados ?? []) {
+    if (c.cooperativaId !== cooperativaId || c.status === "desligado") continue;
+    if (cooperadoConferidasSemFicha(data, c.id, cooperativaId)) return true;
+  }
+  return false;
 }
 
 function cooperadoConferidasSemFicha(

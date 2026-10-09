@@ -1,6 +1,7 @@
 import type { AppData } from "@/types";
 import { normalizeCnpj } from "@/utils/cooperativa";
 import { isOperacionalCloudAuthoritative } from "@/services/operationalReset";
+import { cooperativaTemNotasConferidasSemFichaLocal } from "@/services/fichaSyncGuard";
 import { reconciliarFichaFromNotasConferidas } from "@/services/notaPedidoService";
 import { posProcessarIntegridadePagamentosCooperativa } from "@/services/pagamentoIntegridadeService";
 
@@ -19,13 +20,15 @@ function resolveCnpjDigits(data: AppData, cnpj?: string): string {
 /**
  * Projeção financeira in-memory para crédito-base M6 (cliente e servidor).
  * Mesma regra que posProcessarFinanceiroLocal: integridade monotônica de pagamentos;
- * reconcilia ficha×notas só quando o operacional na nuvem não é autoritativo.
+ * reconcilia ficha×notas quando o operacional não é autoritativo ou há notas conferidas sem ficha local.
  */
 export function projetarAppDataFinanceiroParaCreditoBase(data: AppData, cnpj?: string): AppData {
   const digits = resolveCnpjDigits(data, cnpj);
-  const base =
-    digits && isOperacionalCloudAuthoritative(digits)
-      ? data
-      : reconciliarFichaFromNotasConferidas(data);
+  const coopId = data.cooperativas.find((c) => normalizeCnpj(c.cnpj ?? "") === digits)?.id;
+  const operacionalAutoritativo = Boolean(digits && isOperacionalCloudAuthoritative(digits));
+  const precisaReconciliarNotas =
+    !operacionalAutoritativo ||
+    (coopId != null && cooperativaTemNotasConferidasSemFichaLocal(data, coopId));
+  const base = precisaReconciliarNotas ? reconciliarFichaFromNotasConferidas(data) : data;
   return posProcessarIntegridadePagamentosCooperativa(base);
 }

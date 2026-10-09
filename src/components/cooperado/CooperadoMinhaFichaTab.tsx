@@ -157,6 +157,9 @@ function MesFichaAccordion({
 
   const quitado = !!resumo.pagamentoConfirmado;
   const aguardando = !!resumo.pagamentoAguardando;
+  const valorLiquidoExibir = quitado
+    ? resumo.valorRecebido
+    : paridadeMes?.valorLiquido ?? resumo.valorAReceber;
 
   return (
     <div className="rounded-2xl border border-gray-200 bg-white overflow-hidden shadow-sm">
@@ -178,9 +181,7 @@ function MesFichaAccordion({
           <p className="text-sm text-gray-600 mt-0.5">
             {resumo.quantidadeEntregas} entrega{resumo.quantidadeEntregas !== 1 ? "s" : ""}
             {quitado && ` · recebido ${formatCurrency(resumo.valorRecebido)}`}
-            {!quitado &&
-              (paridadeMes?.valorLiquido ?? resumo.valorAReceber) > 0 &&
-              ` · a receber ${formatCurrency(paridadeMes?.valorLiquido ?? resumo.valorAReceber)}`}
+            {!quitado && valorLiquidoExibir > 0 && ` · a receber ${formatCurrency(valorLiquidoExibir)}`}
           </p>
         </div>
         {expandido ? <ChevronDown size={20} className="text-gray-400 shrink-0" /> : <ChevronRight size={20} className="text-gray-400 shrink-0" />}
@@ -250,7 +251,7 @@ function MesFichaAccordion({
                   <span className="text-emerald-700">Quitado</span>
                 ) : aguardando ? (
                   <span className="text-amber-700">Aguardando assinatura</span>
-                ) : resumo.valorAReceber > 0 ? (
+                ) : valorLiquidoExibir > 0 ? (
                   <span className="text-green-700">A receber</span>
                 ) : (
                   <span className="text-gray-600">Em conferência</span>
@@ -259,7 +260,7 @@ function MesFichaAccordion({
             </div>
           </div>
 
-          {(resumoPagamento.valorBruto > 0 || resumo.valorAReceber > 0 || quitado) && (
+          {(resumoPagamento.valorBruto > 0 || valorLiquidoExibir > 0 || quitado) && (
             <div className="rounded-xl overflow-hidden">
               <ResumoDescontosMes
                 valorBruto={resumoPagamento.valorBruto}
@@ -267,9 +268,7 @@ function MesFichaAccordion({
                 descontoPadraoPct={data.config.descontoPadraoCooperativa}
                 valorEntregas={resumoPagamento.valorEntregas}
                 descontosExtras={descontosExtrasExibicao}
-                totalLiquido={
-                  quitado ? resumo.valorRecebido : (paridadeMes?.valorLiquido ?? resumoPagamento.valorLiquido)
-                }
+                totalLiquido={quitado ? resumo.valorRecebido : valorLiquidoExibir}
                 rotuloTotal={quitado ? "Total recebido" : "Total líquido"}
               />
             </div>
