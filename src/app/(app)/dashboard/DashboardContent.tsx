@@ -289,6 +289,7 @@ function CooperadoDashboard() {
           <CooperadoInicioValorReceberCard
             snapshot={valorReceberCard}
             atualizando={cardFinanceiroAtualizando}
+            exibirReciboAssinatura
           />
           <div className="rounded-2xl border border-gray-200 bg-gray-50 p-6 animate-pulse min-h-[12rem]" />
         </div>
@@ -335,6 +336,7 @@ function CooperadoDashboard() {
         <CooperadoInicioValorReceberCard
           snapshot={valorReceberCard}
           atualizando={cardFinanceiroAtualizando}
+          exibirReciboAssinatura
         />
 
         <div className="bg-white border-2 border-green-200 rounded-2xl p-6 flex flex-col justify-between">

@@ -14,6 +14,7 @@ import {
   type InicioCardMotorSnapshot,
 } from "../src/lib/cooperadoInicioCardPolicy";
 import { buildCooperadoFinanceiroUiSnapshot } from "../src/services/cooperadoFinanceiroUiSnapshot";
+import { getValorQuantoVouReceberMotorLegado } from "../src/services/cooperadoEntregasService";
 import type { InicioCardPersistido } from "../src/lib/cooperadoInicioCardPersistencia";
 import { resolveCooperadoInicioValorReceberCardModos } from "../src/components/cooperado/CooperadoInicioValorReceberCard";
 
@@ -113,7 +114,7 @@ withBicOfficial(() => {
     cooperadoId: COOPERADO,
     cooperativaId: COOP,
     apresentacaoConsolidada: true,
-    carregandoFinanceiro: false,
+    carregandoFinanceiro: true,
     prevLatch: null,
     persistido: snap,
   });
@@ -162,7 +163,7 @@ withBicOfficial(() => {
   assertSemReciboNaUi(result.display);
 });
 
-// CASO E — fluxo recibo desligado na UI do cooperado (BIC OFF ou ON)
+// CASO E — motor com recibo pendente (fluxo cooperado ativo)
 withBicOff(() => {
   const legacy = {
     mesLabel: "Set/2026",
@@ -171,8 +172,8 @@ withBicOff(() => {
     aguardandoAssinatura: true,
   };
   const modos = resolveCooperadoInicioValorReceberCardModos(legacy, true);
-  assert.equal(modos.modoRecibo, false);
-  assert.equal(modos.acao, "Ver detalhes");
+  assert.equal(modos.modoRecibo, true);
+  assert.equal(modos.acao, "Assinar recibo");
   const filtrado = filtrarInicioCardPersistidoLeituraBic(persistido(legacy));
   assert.ok(filtrado);
   assert.deepEqual(filtrado!.display, legacy);
@@ -227,7 +228,7 @@ withBicOfficial(() => {
     cooperadoId: COOPERADO,
     cooperativaId: COOP,
     apresentacaoConsolidada: true,
-    carregandoFinanceiro: false,
+    carregandoFinanceiro: true,
     prevLatch: null,
     persistido: snap,
     dataReady: false,
@@ -251,7 +252,7 @@ withBicOfficial(() => {
   assert.equal(result.display.valor, 0, "INCONSISTENTE sem fallback legado");
 });
 
-withBicOfficial(() => {
+withBicOff(() => {
   const data = miniDataMotorZero();
   data.pagamentosCooperado = [
     {
@@ -260,32 +261,29 @@ withBicOfficial(() => {
       cooperativaId: COOP,
       mesReferencia: MES,
       valorLiquido: 123.42,
-      status: "aguardando_confirmacao",
+      valorBruto: 123.42,
+      status: "confirmado",
       mesesReferencia: [MES],
+      fichaIds: [],
+      notaPedidoIds: [],
+      pagoEm: "2026-09-29T00:00:00.000Z",
+      createdAt: "2026-09-29T00:00:00.000Z",
     },
   ] as AppData["pagamentosCooperado"];
-  const financeiro = buildCooperadoFinanceiroUiSnapshot({
-    data,
-    cooperadoId: COOPERADO,
-    cooperativaId: COOP,
-    opts: { dataReady: true },
-  });
-  const motor = inicioCardMotorFromFinanceiroUiSnapshot(financeiro);
-  assertSemReciboNaUi(motor);
-  const result = resolverCardInicioEndurecido({
-    data,
-    cooperadoId: COOPERADO,
-    cooperativaId: COOP,
-    apresentacaoConsolidada: true,
-    carregandoFinanceiro: false,
-    prevLatch: null,
-    persistido: null,
-    dataReady: true,
-  });
-  assertSemReciboNaUi(result.display);
-  assert.equal(result.display.valor, 0);
-  const modos = resolveCooperadoInicioValorReceberCardModos(result.display, true);
-  assert.equal(modos.acao, "Ver detalhes");
+  const motorOperacional = getValorQuantoVouReceberMotorLegado(data, COOPERADO, COOP);
+  assert.equal(motorOperacional.valorRecibo, 123.42);
+  assert.equal(motorOperacional.aguardandoAssinatura, true);
+  const modos = resolveCooperadoInicioValorReceberCardModos(
+    {
+      mesLabel: motorOperacional.mesLabel,
+      valor: motorOperacional.valor,
+      valorRecibo: motorOperacional.valorRecibo,
+      aguardandoAssinatura: motorOperacional.aguardandoAssinatura,
+    },
+    true
+  );
+  assert.equal(modos.modoRecibo, true);
+  assert.equal(modos.acao, "Assinar recibo");
 });
 
 withBicOfficial(() => {

@@ -3,6 +3,7 @@ import { isBicCentralReadAuthorityEnabled } from "@/lib/bic/bicCentralReadAuthor
 import { notaPertenceCooperado, fichaPertenceCooperado, resolverCooperadoIdCanonico } from "@/services/cooperadoCloudService";
 import {
   getPagamentoAguardandoCooperado,
+  getPagamentoPendenteAssinaturaReciboCooperado,
   getTotalAPagarCooperado,
   getResumoPagamentoCooperado,
   getResumoValorAPagarRelatorio,
@@ -561,36 +562,43 @@ export function getConsolidadoFinanceiroCooperadoMotorLegado(
   );
   const coopId = cooperativaId ?? data.cooperados.find((c) => c.id === cooperadoId)?.cooperativaId;
   const mesReferenciaPrincipal = getMesPrincipalQuantoVouReceber(data, cooperadoId, cooperativaId);
-  const pagamentoAguardando = getPagamentoAguardandoCooperado(data, cooperadoId);
+  const pagamentoPendenteAssinatura = getPagamentoPendenteAssinaturaReciboCooperado(data, cooperadoId);
+  const pagamentoAguardando = pagamentoPendenteAssinatura ?? getPagamentoAguardandoCooperado(data, cooperadoId);
   const mesesPixAguardando = pagamentoAguardando ? getMesesReferenciaPagamento(pagamentoAguardando) : [];
   const aguardandoAssinatura =
-    mesesPixAguardando.length > 0
-      ? mesesPixAguardando.some((m) => !getPagamentoConfirmadoMes(data, cooperadoId, m))
-      : meses.some(
-          (m) =>
-            Boolean(getPagamentoAguardandoCooperado(data, cooperadoId, m)) &&
-            !getPagamentoConfirmadoMes(data, cooperadoId, m)
-        );
+    pagamentoPendenteAssinatura?.status === "confirmado"
+      ? true
+      : mesesPixAguardando.length > 0
+        ? mesesPixAguardando.some((m) => !getPagamentoConfirmadoMes(data, cooperadoId, m))
+        : meses.some(
+            (m) =>
+              Boolean(getPagamentoAguardandoCooperado(data, cooperadoId, m)) &&
+              !getPagamentoConfirmadoMes(data, cooperadoId, m)
+          );
 
   let resumo: ConsolidadoFinanceiroCooperado["resumo"];
   if (aguardandoAssinatura && pagamentoAguardando && valorAberto <= 0) {
-    const mesesPix = getMesesReferenciaPagamento(pagamentoAguardando);
-    resumo =
-      mesesPix.length === 1
-        ? getResumoPagamentoExibicao(
-            data,
-            cooperadoId,
-            mesesPix[0],
-            coopId,
-            ajustesPorMes?.[mesesPix[0]]
-          )
-        : getResumoPagamentoConsolidadoCooperado(
-            data,
-            cooperadoId,
-            mesesPix,
-            coopId,
-            ajustesPorMes
-          );
+    if (pagamentoPendenteAssinatura?.status === "confirmado") {
+      resumo = resumoFromPagamento(pagamentoAguardando);
+    } else {
+      const mesesPix = getMesesReferenciaPagamento(pagamentoAguardando);
+      resumo =
+        mesesPix.length === 1
+          ? getResumoPagamentoExibicao(
+              data,
+              cooperadoId,
+              mesesPix[0],
+              coopId,
+              ajustesPorMes?.[mesesPix[0]]
+            )
+          : getResumoPagamentoConsolidadoCooperado(
+              data,
+              cooperadoId,
+              mesesPix,
+              coopId,
+              ajustesPorMes
+            );
+    }
   } else if (mesesComValor.length === 1) {
     resumo =
       resumoComplementaresPosPagamento(data, cooperadoId, mesesComValor[0], coopId) ??
@@ -721,7 +729,7 @@ export function getValorQuantoVouReceberMotorLegado(
   const mes =
     meses[meses.length - 1] ??
     getMesQuantoVouReceber(data, cooperadoId, cooperativaId);
-  const aguardando = getPagamentoAguardandoCooperado(data, cooperadoId);
+  const aguardando = getPagamentoPendenteAssinaturaReciboCooperado(data, cooperadoId);
   const valorRecibo =
     consolidado.aguardandoAssinatura && aguardando ? round2(aguardando.valorLiquido) : 0;
   const valorExibir =

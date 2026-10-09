@@ -5,7 +5,7 @@ export function isCooperadoBicCentralUiEnabled(): boolean {
   return isBicCentralReadAuthorityEnabled();
 }
 
-/** Fluxo “PIX registrado / assinar recibo” — desligado para o cooperado (pagamento sem assinatura na UI). */
+/** Fluxo “PIX registrado / assinar recibo” — pagamento confirmado pelo responsável; cooperado só assina. */
 export function cooperadoUsarFluxoReciboAssinaturaNaUi(): boolean {
-  return false;
+  return true;
 }

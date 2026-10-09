@@ -27,6 +27,7 @@ import {
   reenviarSolicitacaoAssinaturaRecibo,
   marcarReciboPagamentoVerificadoResponsavel,
   getPagamentoAguardandoCooperado,
+  getPagamentoPendenteAssinaturaReciboCooperado,
   getMensalidadeFixaMes,
   getStatusCotaCooperado,
   setCotaIngressoCooperado,
@@ -722,8 +723,10 @@ export default function FichaCorridaPage() {
 
   const pagamentoAguardando = useMemo(() => {
     if (!data || !cooperadoSelecionadoId) return undefined;
-    return getPagamentoAguardandoCooperado(data, cooperadoSelecionadoId);
-  }, [data, cooperadoSelecionadoId]);
+    return isCooperado
+      ? getPagamentoPendenteAssinaturaReciboCooperado(data, cooperadoSelecionadoId)
+      : getPagamentoAguardandoCooperado(data, cooperadoSelecionadoId);
+  }, [data, cooperadoSelecionadoId, isCooperado]);
 
   const { exibirAguardandoAssinatura, conferindoPagamentoNuvem } =
     useCooperadoExibirAguardandoAssinatura(isCooperado && !!pagamentoAguardando);

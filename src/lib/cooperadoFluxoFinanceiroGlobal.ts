@@ -16,7 +16,7 @@ import {
 } from "@/services/bicLeituraCentralCooperado";
 import { isBicCentralReadAuthorityEnabled } from "@/lib/bic/bicCentralReadAuthority";
 import { getValorQuantoVouReceber } from "@/services/cooperadoEntregasService";
-import { getPagamentoAguardandoCooperado } from "@/services/notaPedidoService";
+import { getPagamentoPendenteAssinaturaReciboCooperado } from "@/services/notaPedidoService";
 
 export type CooperadoFluxoReadiness = CooperadoSyncPresentationInput;
 
@@ -91,7 +91,7 @@ export function projetarCooperadoFluxoFinanceiroGlobal(
   const motorValor = isBicCentralReadAuthorityEnabled()
     ? m6.valor
     : getValorQuantoVouReceber(data, cooperadoId, cooperativaId).valor;
-  const pg = getPagamentoAguardandoCooperado(data, cooperadoId);
+  const pg = getPagamentoPendenteAssinaturaReciboCooperado(data, cooperadoId);
   return {
     apresentacaoConsolidada,
     carregando: cooperadoFluxoCarregandoFinanceiro(readiness),

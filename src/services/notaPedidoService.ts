@@ -25,6 +25,7 @@ import {
   mesesComValoresAvulsos,
 } from "@/services/valoresAvulsosReceberService";
 import { round2 } from "@/utils/calculations";
+import { cooperadoUsarFluxoReciboAssinaturaNaUi } from "@/lib/bic/cooperadoBicCentralUi";
 import { isDivisaoEntregaHabilitada } from "@/lib/conferencia/divisaoEntregaPolicy";
 import { gerarReciboHtml, resumoReciboFromPagamento } from "@/utils/recibo";
 import { lancarPagamentoCooperadoNoCaixa } from "@/services/livroCaixaService";
@@ -2592,11 +2593,14 @@ export function getResumoPagamentoParaRegistro(
 export type ResumoPagamentoCooperado = ReturnType<typeof getResumoPagamentoCooperado>;
 
 export function resumoFromPagamento(pagamento: PagamentoCooperadoRegistro): ResumoPagamentoCooperado {
+  const descontosExtras = pagamento.descontosExtras ?? [];
+  const descontoCooperativa = pagamento.descontoCooperativa ?? 0;
+  const valorBruto = pagamento.valorBruto ?? pagamento.valorLiquido;
   return {
-    valorBruto: pagamento.valorBruto,
-    descontoCooperativa: pagamento.descontoCooperativa,
-    descontosExtras: pagamento.descontosExtras,
-    valorEntregas: round2(pagamento.valorBruto - pagamento.descontoCooperativa),
+    valorBruto,
+    descontoCooperativa,
+    descontosExtras,
+    valorEntregas: round2(valorBruto - descontoCooperativa),
     valorLiquido: pagamento.valorLiquido,
     fichaIds: pagamento.fichaIds,
     notaPedidoIds: pagamento.notaPedidoIds,
@@ -2958,6 +2962,38 @@ export function getPagamentoAguardandoCooperado(
   );
 }
 
+function pagamentoElegivelPendenciaAssinaturaRecibo(p: PagamentoCooperadoRegistro): boolean {
+  if (p.status === "aguardando_confirmacao") return true;
+  return p.status === "confirmado" && !p.assinaturaCooperado?.trim();
+}
+
+/**
+ * Pagamento que exige assinatura do recibo na UI do cooperado.
+ * Inclui legado `aguardando_confirmacao` e confirmado pelo responsável sem assinatura.
+ */
+export function getPagamentoPendenteAssinaturaReciboCooperado(
+  data: AppData,
+  cooperadoId: string,
+  mesReferencia?: string
+): PagamentoCooperadoRegistro | undefined {
+  if (!cooperadoUsarFluxoReciboAssinaturaNaUi()) {
+    return getPagamentoAguardandoCooperado(data, cooperadoId, mesReferencia);
+  }
+  const coopId = data.cooperados.find((c) => c.id === cooperadoId)?.cooperativaId;
+  const canonico = resolverCooperadoIdCanonico(data, cooperadoId, coopId);
+  return data.pagamentosCooperado.find(
+    (p) =>
+      (p.cooperadoId === cooperadoId ||
+        p.cooperadoId === canonico ||
+        resolverCooperadoIdCanonico(data, p.cooperadoId, coopId ?? p.cooperativaId) === canonico) &&
+      pagamentoElegivelPendenciaAssinaturaRecibo(p) &&
+      (!mesReferencia || pagamentoCobreMesReferencia(p, mesReferencia)) &&
+      (p.status !== "aguardando_confirmacao" ||
+        !pagamentoAguardandoSupersedidoPorConfirmado(data, cooperadoId, p)) &&
+      !pagamentoAguardandoObsoletoPorNovaEntregaForaDoEscopo(data, cooperadoId, p)
+  );
+}
+
 export function aplicarItensNaNota(
   nota: NotaPedido,
   itensForm: NotaPedidoItem[],
@@ -3121,12 +3157,16 @@ export function finalizarPagamentoCooperadoConfirmado(
     return data;
   }
   if (pagamento.status === "confirmado" && pagamento.reciboHtml?.trim()) {
-    const jaNoCaixa = (data.livroCaixa ?? []).some(
-      (l) => l.origemId === `pg_caixa_${pagamentoId}` && l.tipo === "debito"
-    );
-    if (jaNoCaixa) return data;
-    const confirmado = data.pagamentosCooperado.find((p) => p.id === pagamentoId);
-    return confirmado ? lancarPagamentoCooperadoNoCaixa(data, confirmado) : data;
+    const assinaturaNova = opts?.assinaturaDataUrl?.trim();
+    const faltaAssinatura = !pagamento.assinaturaCooperado?.trim();
+    if (!(assinaturaNova && faltaAssinatura)) {
+      const jaNoCaixa = (data.livroCaixa ?? []).some(
+        (l) => l.origemId === `pg_caixa_${pagamentoId}` && l.tipo === "debito"
+      );
+      if (jaNoCaixa) return data;
+      const confirmado = data.pagamentosCooperado.find((p) => p.id === pagamentoId);
+      return confirmado ? lancarPagamentoCooperadoNoCaixa(data, confirmado) : data;
+    }
   }
 
   const cooperado = data.cooperados.find((c) => c.id === pagamento.cooperadoId);

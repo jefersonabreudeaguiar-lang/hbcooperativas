@@ -8,8 +8,10 @@ import {
   registrarPagamentoCooperado,
   promoverPagamentosAguardandoConfirmadosPeloResponsavel,
   getPagamentoAguardandoCooperado,
+  getPagamentoPendenteAssinaturaReciboCooperado,
   getPagamentoConfirmadoCooperadoMes,
 } from "../src/services/notaPedidoService.ts";
+import { getValorQuantoVouReceberMotorLegado } from "../src/services/cooperadoEntregasService.ts";
 
 const COOP = "coop-pay";
 
@@ -65,6 +67,12 @@ function base(): AppData {
   assert.ok(pg.reciboHtml?.includes("Recibo"));
   assert.equal(getPagamentoAguardandoCooperado(out, "c1", "2026-09"), undefined);
   assert.ok(getPagamentoConfirmadoCooperadoMes(out, "c1", "2026-09"));
+  const pendente = getPagamentoPendenteAssinaturaReciboCooperado(out, "c1", "2026-09");
+  assert.ok(pendente);
+  assert.equal(pendente!.status, "confirmado");
+  const m6 = getValorQuantoVouReceberMotorLegado(out, "c1", COOP);
+  assert.equal(m6.aguardandoAssinatura, true);
+  assert.equal(m6.valorRecibo, pg.valorLiquido);
 }
 
 {

@@ -21,6 +21,7 @@ import {
   type CooperadoFinanceiroUiSnapshot,
 } from "@/services/cooperadoFinanceiroUiSnapshot";
 import { isBicCentralReadAuthorityEnabled } from "@/lib/bic/bicCentralReadAuthority";
+import { cooperadoUsarFluxoReciboAssinaturaNaUi } from "@/lib/bic/cooperadoBicCentralUi";
 import { formatMesReferencia, getCurrentMesReferencia } from "@/utils/format";
 
 /** Snapshot de localStorage contém fluxo legado “assinar recibo” (não é autoridade BIC). */
@@ -155,11 +156,17 @@ export function resolverInicioCardMotorFromAppData(
   const fluxoPix = getValorQuantoVouReceberMotorLegado(data, cooperadoId, cooperativaId);
   const mesFallback = paridade.mesesResumo[paridade.mesesResumo.length - 1] ?? getCurrentMesReferencia();
   const mesLabel = paridade.mesLabel?.trim() || formatMesReferencia(mesFallback);
-  const valorExibir = isBicCentralReadAuthorityEnabled()
-    ? paridade.valorLiquido
-    : fluxoPix.aguardandoAssinatura && fluxoPix.valorRecibo > 0
+  const valorExibir =
+    cooperadoUsarFluxoReciboAssinaturaNaUi() &&
+    fluxoPix.aguardandoAssinatura &&
+    fluxoPix.valorRecibo > 0 &&
+    fluxoPix.valor <= 0
       ? 0
-      : paridade.valorLiquido;
+      : isBicCentralReadAuthorityEnabled()
+        ? paridade.valorLiquido
+        : fluxoPix.aguardandoAssinatura && fluxoPix.valorRecibo > 0
+          ? 0
+          : paridade.valorLiquido;
 
   return sanitizeInicioCardSnapshotFluxoBic({
     mesLabel,
@@ -182,8 +189,8 @@ export function resolverInicioCardMotorOperacionalFromAppData(
   return sanitizeInicioCardSnapshotFluxoBic({
     mesLabel: raw.mesLabel?.trim() || formatMesReferencia(mesFallback),
     valor: raw.valor > 0 ? raw.valor : 0,
-    valorRecibo: 0,
-    aguardandoAssinatura: false,
+    valorRecibo: raw.valorRecibo > 0 ? raw.valorRecibo : 0,
+    aguardandoAssinatura: raw.aguardandoAssinatura,
   });
 }
 
@@ -289,8 +296,17 @@ function aplicarPoliticaCardInicioEndurecidaComMotorOperacional(
   });
 }
 
-/** Card início — nunca exibir fluxo PIX registrado / assinar recibo. */
+/** Card início — mascara recibo/assinatura só quando o fluxo cooperado está desligado. */
 export function sanitizeInicioCardSnapshotFluxoBic(motor: InicioCardMotorSnapshot): InicioCardMotorSnapshot {
+  if (cooperadoUsarFluxoReciboAssinaturaNaUi()) {
+    const aguardando = motor.aguardandoAssinatura && motor.valorRecibo > 0;
+    return {
+      ...motor,
+      valor: motor.valor > 0 ? motor.valor : 0,
+      valorRecibo: aguardando ? motor.valorRecibo : 0,
+      aguardandoAssinatura: aguardando,
+    };
+  }
   return {
     ...motor,
     valor: motor.valor > 0 ? motor.valor : 0,
@@ -299,10 +315,18 @@ export function sanitizeInicioCardSnapshotFluxoBic(motor: InicioCardMotorSnapsho
   };
 }
 
-/** Gravação localStorage v7 — nunca persistir estado de recibo legado com BIC ON. */
+/** Gravação localStorage v7 — nunca persistir estado de recibo (evita cache legado; motor reidrata na UI). */
 export function sanitizeInicioCardSnapshotParaPersistenciaBic(
   motor: InicioCardMotorSnapshot
 ): InicioCardMotorSnapshot {
+  if (isBicCentralReadAuthorityEnabled()) {
+    return {
+      ...motor,
+      valor: motor.valor > 0 ? motor.valor : 0,
+      valorRecibo: 0,
+      aguardandoAssinatura: false,
+    };
+  }
   return sanitizeInicioCardSnapshotFluxoBic(motor);
 }
 

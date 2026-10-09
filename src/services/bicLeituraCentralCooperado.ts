@@ -41,6 +41,7 @@ import {
   cooperadoInicioParaCardsDefinitivos,
   cooperadoQuantoVouReceberParaApresentacao,
 } from "@/lib/cooperadoApresentacaoFinanceira";
+import { cooperadoUsarFluxoReciboAssinaturaNaUi } from "@/lib/bic/cooperadoBicCentralUi";
 
 export type BicCentralProjecaoOpts = BicProjecaoFinanceiraCooperadoOpts & {
   apresentacaoConsolidada?: boolean;
@@ -104,7 +105,12 @@ export function bicCentralInicioParaExibicao(
   const raw = bicCentralNormalizarValorM6(
     bicCentralSincronizarRotuloMeses(getValorQuantoVouReceberMotorLegado(data, cooperadoId, cooperativaId))
   );
-  if (raw.valor > 0) {
+  const modoRecibo =
+    cooperadoUsarFluxoReciboAssinaturaNaUi() &&
+    raw.aguardandoAssinatura &&
+    raw.valorRecibo > 0 &&
+    raw.valor <= 0;
+  if (raw.valor > 0 || modoRecibo) {
     return {
       value: cooperadoInicioParaCardsDefinitivos(
         {
@@ -113,8 +119,8 @@ export function bicCentralInicioParaExibicao(
           meses: raw.meses,
           mesLabel: raw.mesLabel,
           valor: raw.valor,
-          valorRecibo: 0,
-          aguardandoAssinatura: false,
+          valorRecibo: modoRecibo ? raw.valorRecibo : 0,
+          aguardandoAssinatura: modoRecibo,
         },
         consolidated
       ),
@@ -163,12 +169,13 @@ function bicCentralNormalizarValorM6(
   raw: ReturnType<typeof getValorQuantoVouReceber>
 ): ReturnType<typeof getValorQuantoVouReceber> {
   if (!isBicCentralReadAuthorityEnabled()) return raw;
-  /** Só valor líquido pendente na ficha — nunca valorRecibo (PIX já registrado / recibo). */
+  const fluxoRecibo = cooperadoUsarFluxoReciboAssinaturaNaUi();
+  const aguardando = fluxoRecibo && raw.aguardandoAssinatura && raw.valorRecibo > 0;
   return {
     ...raw,
     valor: raw.valor > 0 ? raw.valor : 0,
-    valorRecibo: 0,
-    aguardandoAssinatura: false,
+    valorRecibo: aguardando ? raw.valorRecibo : 0,
+    aguardandoAssinatura: aguardando,
   };
 }
 
@@ -195,6 +202,24 @@ export function bicCentralResumoQuantoVouReceberCooperado(
       tituloValor: "Atualizando",
       subtitulo: "Baixando pagamentos e valores da cooperativa…",
       acaoRotulo: null,
+    };
+  }
+
+  if (
+    cooperadoUsarFluxoReciboAssinaturaNaUi() &&
+    m6.aguardandoAssinatura &&
+    m6.valorRecibo > 0
+  ) {
+    return {
+      estado: "aguardando_assinatura",
+      mesLabel: m6.mesLabel,
+      valorDestaque: m6.valorRecibo,
+      valorRecibo: m6.valorRecibo,
+      aguardandoAssinatura: true,
+      valorAberto: m6.valor,
+      tituloValor: "PIX registrado — falta assinar",
+      subtitulo: "Confira o valor e confirme o recebimento assinando o recibo.",
+      acaoRotulo: "Confirmar recebimento",
     };
   }
 
@@ -270,14 +295,15 @@ export function bicCentralValorAReceberAgregado(
         : consolidadoLegado.mesLabel;
     const mes =
       mesesCanon[mesesCanon.length - 1] ?? consolidadoLegado.mesReferenciaPrincipal ?? "";
+    const reciboMotor = getValorQuantoVouReceberMotorLegado(data, cooperadoId, cooperativaId);
     return bicCentralSincronizarRotuloMeses(
       bicCentralNormalizarValorM6({
         mes,
         meses: mesesCanon,
         mesLabel,
         valor,
-        valorRecibo: 0,
-        aguardandoAssinatura: false,
+        valorRecibo: reciboMotor.valorRecibo,
+        aguardandoAssinatura: reciboMotor.aguardandoAssinatura,
       })
     );
   }
@@ -345,7 +371,12 @@ export function bicCentralResolveInicioParaExibicao(
 
   if (isBicCentralReadAuthorityEnabled()) {
     const valor = m6.valor > 0 ? m6.valor : 0;
-    if (valor > 0) {
+    const modoRecibo =
+      cooperadoUsarFluxoReciboAssinaturaNaUi() &&
+      m6.aguardandoAssinatura &&
+      m6.valorRecibo > 0 &&
+      valor <= 0;
+    if (valor > 0 || modoRecibo) {
       return cooperadoInicioParaCardsDefinitivos(
         {
           exibir: true,
@@ -353,8 +384,8 @@ export function bicCentralResolveInicioParaExibicao(
           meses: m6.meses,
           mesLabel: m6.mesLabel,
           valor,
-          valorRecibo: 0,
-          aguardandoAssinatura: false,
+          valorRecibo: modoRecibo ? m6.valorRecibo : m6.aguardandoAssinatura ? m6.valorRecibo : 0,
+          aguardandoAssinatura: Boolean(m6.aguardandoAssinatura && m6.valorRecibo > 0),
         },
         consolidated
       );
