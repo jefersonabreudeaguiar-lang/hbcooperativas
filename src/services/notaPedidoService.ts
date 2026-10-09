@@ -3119,7 +3119,12 @@ export function finalizarPagamentoCooperadoConfirmado(
     return data;
   }
   if (pagamento.status === "confirmado" && pagamento.reciboHtml?.trim()) {
-    return data;
+    const jaNoCaixa = (data.livroCaixa ?? []).some(
+      (l) => l.origemId === `pg_caixa_${pagamentoId}` && l.tipo === "debito"
+    );
+    if (jaNoCaixa) return data;
+    const confirmado = data.pagamentosCooperado.find((p) => p.id === pagamentoId);
+    return confirmado ? lancarPagamentoCooperadoNoCaixa(data, confirmado) : data;
   }
 
   const cooperado = data.cooperados.find((c) => c.id === pagamento.cooperadoId);

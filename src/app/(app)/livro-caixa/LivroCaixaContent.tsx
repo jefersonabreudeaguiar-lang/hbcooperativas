@@ -490,28 +490,28 @@ export default function LivroCaixaPage() {
           )}
         </div>
         <p className="text-xs text-gray-500 mt-3">
-          Crédito = taxa da cooperativa + mensalidades. Débito = pagamentos confirmados pelo responsável (líquido ao
-          cooperado). Lançamentos avulsos e outros movimentos aparecem na planilha detalhada abaixo.
+          Os três totais acima somam todo o livro caixa no período escolhido (automáticos e avulsos). Saldo = créditos
+          − débitos. A tabela por cooperado detalha taxa, mensalidade e PIX; a planilha abaixo mostra o saldo corrido.
         </p>
       </Card>
 
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <div className="rounded-2xl border border-green-200 bg-green-50/90 p-5 shadow-sm">
           <TrendingUp size={22} className="text-green-700 mb-2" />
-          <p className="text-sm text-green-800 font-medium">Créditos (taxa + mensalidades)</p>
+          <p className="text-sm text-green-800 font-medium">Créditos (total do período)</p>
           <p className="text-3xl font-bold text-green-900 mt-1">{formatCurrency(resumoOperacional.totalCreditos)}</p>
         </div>
         <div className="rounded-2xl border border-red-200 bg-red-50/90 p-5 shadow-sm">
           <TrendingDown size={22} className="text-red-700 mb-2" />
-          <p className="text-sm text-red-800 font-medium">Débitos (pagamentos confirmados)</p>
+          <p className="text-sm text-red-800 font-medium">Débitos (total do período)</p>
           <p className="text-3xl font-bold text-red-900 mt-1">{formatCurrency(resumoOperacional.totalDebitos)}</p>
         </div>
         <div className="rounded-2xl bg-gradient-to-br from-slate-700 to-slate-900 text-white p-5 shadow-lg">
           <Wallet size={24} className="opacity-90 mb-2" />
-          <p className="text-slate-200 text-sm">Saldo do período</p>
+          <p className="text-slate-200 text-sm">Saldo (créditos − débitos)</p>
           <p className="text-3xl font-bold mt-1">{formatCurrency(resumoOperacional.saldo)}</p>
           <p className="text-xs text-slate-300 mt-2">
-            Planilha completa (saldo corrido): {formatCurrency(saldoFinalMes)}
+            Saldo corrido na planilha (com saldo anterior): {formatCurrency(saldoFinalMes)}
           </p>
         </div>
       </div>

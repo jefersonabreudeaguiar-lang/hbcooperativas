@@ -1,18 +1,13 @@
-import type { AppData, LivroCaixaLancamento, LivroCaixaOrigem } from "@/types";
+import type { AppData, LivroCaixaLancamento } from "@/types";
 import { round2 } from "@/utils/calculations";
 import { pagamentoIdFromOrigemId } from "@/services/livroCaixaService";
 
-const ORIGENS_CREDITO_OPERACIONAL: LivroCaixaOrigem[] = [
-  "taxa_cooperativa",
-  "mensalidade_ficha",
-  "mensalidade",
-];
-
 export interface ResumoOperacionalLivroCaixa {
-  /** Taxa % cooperativa + mensalidades retidas / PIX */
+  /** Soma de todos os créditos do livro no período da visão */
   totalCreditos: number;
-  /** Pagamentos confirmados ao cooperado (líquido) */
+  /** Soma de todos os débitos do livro no período da visão */
   totalDebitos: number;
+  /** Créditos − débitos (mesmo período) */
   saldo: number;
 }
 
@@ -44,12 +39,8 @@ export function calcularResumoOperacionalLivroCaixa(
   let totalCreditos = 0;
   let totalDebitos = 0;
   for (const l of lancamentos) {
-    if (l.tipo === "credito" && ORIGENS_CREDITO_OPERACIONAL.includes(l.origem)) {
-      totalCreditos += l.valor;
-    }
-    if (l.tipo === "debito" && l.origem === "pagamento_cooperado") {
-      totalDebitos += l.valor;
-    }
+    if (l.tipo === "credito") totalCreditos += l.valor;
+    else totalDebitos += l.valor;
   }
   totalCreditos = round2(totalCreditos);
   totalDebitos = round2(totalDebitos);
@@ -85,7 +76,10 @@ export function calcularResumoPorCooperadoLivroCaixa(
     if (l.tipo === "credito" && l.origem === "taxa_cooperativa") {
       row.creditoTaxa = round2(row.creditoTaxa + l.valor);
     }
-    if (l.tipo === "credito" && (l.origem === "mensalidade_ficha" || l.origem === "mensalidade")) {
+    if (
+      l.tipo === "credito" &&
+      (l.origem === "mensalidade_ficha" || l.origem === "mensalidade" || l.origem === "desconto_ficha")
+    ) {
       row.creditoMensalidade = round2(row.creditoMensalidade + l.valor);
     }
     if (l.tipo === "debito" && l.origem === "pagamento_cooperado") {

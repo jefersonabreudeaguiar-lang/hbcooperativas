@@ -54,6 +54,32 @@ function mesFromData(dataIso: string): string {
   return dataIso.slice(0, 7);
 }
 
+function dataLancamentoPagamento(pagamento: PagamentoCooperadoRegistro): string {
+  const raw = pagamento.pagoEm || pagamento.createdAt || "";
+  const dia = raw.split("T")[0];
+  return dia && /^\d{4}-\d{2}-\d{2}$/.test(dia) ? dia : new Date().toISOString().split("T")[0];
+}
+
+function mesesReferenciaPagamento(p: PagamentoCooperadoRegistro): string[] {
+  if (p.mesesReferencia?.length) return [...new Set(p.mesesReferencia)].sort();
+  return [p.mesReferencia];
+}
+
+/** PIX confirmado aparece no mês da ref., da data do pagamento ou de qualquer mês coberto pelo PIX. */
+export function lancamentoVisivelNoMesReferencia(
+  data: AppData,
+  l: LivroCaixaLancamento,
+  mesReferencia: string
+): boolean {
+  if (l.mesReferencia === mesReferencia) return true;
+  if (l.data.startsWith(`${mesReferencia}-`)) return true;
+  const pgId = pagamentoIdFromOrigemId(l.origemId);
+  if (!pgId) return false;
+  const p = data.pagamentosCooperado.find((x) => x.id === pgId);
+  if (!p || p.status !== "confirmado") return false;
+  return mesesReferenciaPagamento(p).includes(mesReferencia);
+}
+
 export function compareLancamentoSequencia(a: LivroCaixaLancamento, b: LivroCaixaLancamento): number {
   const aSeq = a.numeroSequencia ?? Number.MAX_SAFE_INTEGER;
   const bSeq = b.numeroSequencia ?? Number.MAX_SAFE_INTEGER;
@@ -168,7 +194,9 @@ function ctxFromPagamentoExistente(data: AppData, pagamentoId: string): Sequenci
 
 export function lancamentosLivroCaixa(data: AppData, cooperativaId: string, mesReferencia?: string): LivroCaixaLancamento[] {
   let items = (data.livroCaixa ?? []).filter((l) => l.cooperativaId === cooperativaId);
-  if (mesReferencia) items = items.filter((l) => l.mesReferencia === mesReferencia);
+  if (mesReferencia) {
+    items = items.filter((l) => lancamentoVisivelNoMesReferencia(data, l, mesReferencia));
+  }
   return items.sort(compareLancamentoSequencia);
 }
 
@@ -365,7 +393,7 @@ export function lancarRetencoesPagamentoNoCaixa(
 ): AppData {
   const cooperado = data.cooperados.find((c) => c.id === pagamento.cooperadoId);
   const nome = cooperado?.nomeCompleto?.trim() || "Cooperado";
-  const dataLanc = pagamento.pagoEm.split("T")[0];
+  const dataLanc = dataLancamentoPagamento(pagamento);
   const ctx = seqCtx ?? ctxFromPagamentoExistente(data, pagamento.id);
   const base = {
     cooperativaId: pagamento.cooperativaId,
@@ -465,7 +493,8 @@ export function montarHistoricoPagamentoCooperadoCaixa(
 }
 
 export function lancarPagamentoCooperadoNoCaixa(data: AppData, pagamento: PagamentoCooperadoRegistro): AppData {
-  const dataLanc = pagamento.pagoEm.split("T")[0];
+  if (pagamento.status !== "confirmado") return data;
+  const dataLanc = dataLancamentoPagamento(pagamento);
   const existenteCtx = ctxFromPagamentoExistente(data, pagamento.id);
   let next = data;
   let ctx = existenteCtx;
@@ -689,7 +718,18 @@ export function auditarLivroCaixaContabilCooperativa(data: AppData, cooperativaI
 }
 
 export function mesesLivroCaixa(data: AppData, cooperativaId: string): string[] {
-  const set = new Set((data.livroCaixa ?? []).filter((l) => l.cooperativaId === cooperativaId).map((l) => l.mesReferencia));
+  const set = new Set(
+    (data.livroCaixa ?? []).filter((l) => l.cooperativaId === cooperativaId).map((l) => l.mesReferencia)
+  );
+  for (const l of (data.livroCaixa ?? []).filter((x) => x.cooperativaId === cooperativaId)) {
+    if (l.data.length >= 7) set.add(l.data.slice(0, 7));
+  }
+  for (const p of data.pagamentosCooperado) {
+    if (p.cooperativaId !== cooperativaId || p.status !== "confirmado") continue;
+    for (const m of mesesReferenciaPagamento(p)) set.add(m);
+    const dl = dataLancamentoPagamento(p);
+    if (dl.length >= 7) set.add(dl.slice(0, 7));
+  }
   set.add(getCurrentMesReferencia());
   return [...set].sort().reverse();
 }

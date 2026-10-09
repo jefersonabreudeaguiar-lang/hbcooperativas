@@ -34,7 +34,10 @@ export function buildPlanilhaLinhas(
 
 /** Saldo acumulado antes do primeiro lançamento do mês (YYYY-MM). */
 export function saldoLivroCaixaAntesMes(data: AppData, cooperativaId: string, mesReferencia: string): number {
-  const anteriores = lancamentosLivroCaixa(data, cooperativaId).filter((l) => l.mesReferencia < mesReferencia);
+  const primeiroDia = `${mesReferencia}-01`;
+  const anteriores = ordenarLancamentosPlanilha(
+    lancamentosLivroCaixa(data, cooperativaId).filter((l) => l.data < primeiroDia)
+  );
   const linhas = buildPlanilhaLinhas(anteriores);
   return linhas.length ? linhas[linhas.length - 1].saldoCorrido : 0;
 }
