@@ -339,7 +339,14 @@ export function MobileNav() {
                 }
               }}
               onClick={(e) => {
-                // Cooperado: navegação nativa do Link (sem startTransition) — paint mais rápido no PWA.
+                if (!active && isCooperadoNav && isCooperadoBottomTabPath(item.href)) {
+                  e.preventDefault();
+                  setCooperadoOptimisticTab(item.href);
+                  startTransition(() => {
+                    router.push(item.href);
+                  });
+                  return;
+                }
                 if (!active && mobileTabUx && !isCooperadoNav) {
                   e.preventDefault();
                   startTransition(() => {

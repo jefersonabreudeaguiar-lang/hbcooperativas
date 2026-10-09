@@ -22,6 +22,14 @@ export function clearCooperadoOptimisticTab(expected?: string): void {
   notify();
 }
 
+/** Limpa otimista só quando o Next confirmou a mesma aba. */
+export function reconcileCooperadoOptimisticTab(pathname: string): void {
+  if (optimisticHref == null) return;
+  if (pathname === optimisticHref) {
+    clearCooperadoOptimisticTab(pathname);
+  }
+}
+
 export function getCooperadoOptimisticTabSnapshot(): string | null {
   return optimisticHref;
 }

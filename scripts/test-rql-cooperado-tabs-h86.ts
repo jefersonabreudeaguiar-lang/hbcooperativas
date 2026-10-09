@@ -45,9 +45,10 @@ assert(panel.includes("data-cooperado-tab-panel"), "painéis por aba");
 assert(panel.includes("data-cooperado-tab-panel-warm"), "painel warm para paint instantâneo");
 assert(panel.includes("cooperadoTabPanelCache"), "cache não sobrescreve com loading.tsx");
 assert(
-  panel.includes("active || warm ? panel : null"),
-  "monta aba ativa + painéis warm no LRU (troca instantânea)"
+  panel.includes("relative z-[1]") && panel.includes("renderPanels(effectivePath)"),
+  "só pinta a aba ativa (sem fantasma da aba anterior)"
 );
+assert(layout.includes("router.push(item.href)"), "cooperado força push na troca de aba");
 assert(read("src/app/(app)/notas-pedido/NotasPedidoCooperadoMain.tsx").includes("useCooperadoPanelAppData"), "notas pausa store fora da aba");
 assert(
   read("src/lib/cooperado/cooperadoPwaMobileEntregas.ts").includes(

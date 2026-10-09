@@ -3,8 +3,8 @@
 import { useLayoutEffect } from "react";
 import { useSyncExternalStore } from "react";
 import {
-  clearCooperadoOptimisticTab,
   getCooperadoOptimisticTabSnapshot,
+  reconcileCooperadoOptimisticTab,
   resolveCooperadoEffectiveTabPath,
   subscribeCooperadoOptimisticTab,
 } from "@/lib/performance/cooperadoOptimisticTabNavigation";
@@ -17,10 +17,8 @@ export function useCooperadoEffectiveTabPath(pathname: string): string {
   );
 
   useLayoutEffect(() => {
-    if (optimistic && pathname === optimistic) {
-      clearCooperadoOptimisticTab(pathname);
-    }
-  }, [pathname, optimistic]);
+    reconcileCooperadoOptimisticTab(pathname);
+  }, [pathname]);
 
   return resolveCooperadoEffectiveTabPath(pathname);
 }

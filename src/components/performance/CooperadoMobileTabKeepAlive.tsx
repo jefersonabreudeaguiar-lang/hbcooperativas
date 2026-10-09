@@ -1,7 +1,6 @@
 "use client";
 
 import { useLayoutEffect, useRef, useState, useSyncExternalStore, useMemo, type ReactNode } from "react";
-import { cn } from "@/utils/format";
 import { isLowMemoryDevice } from "@/services/imagePipelineService";
 import { CooperadoTabPanelProvider } from "@/lib/performance/cooperadoTabPanelContext";
 import {
@@ -134,6 +133,11 @@ export function CooperadoMobileTabKeepAlive({ pathname, children }: Props) {
     href: string,
     activePath: string | null
   ): { panel: ReactNode | undefined; warm: boolean } => {
+    const active = activePath === href;
+    if (!active) {
+      return { panel: undefined, warm: false };
+    }
+
     const cached = cacheRef.current[href];
     if (onTab && href === effectivePath) {
       if (
@@ -144,47 +148,40 @@ export function CooperadoMobileTabKeepAlive({ pathname, children }: Props) {
         return { panel: children, warm: false };
       }
       if (cached !== undefined) return { panel: cached, warm: true };
-      if (pathname !== href) return { panel: <CooperadoTabRouteLoading />, warm: false };
-      return { panel: children, warm: false };
-    }
-    if (activePath === href && onTab) {
-      return { panel: children, warm: false };
+      return { panel: <CooperadoTabRouteLoading />, warm: false };
     }
     if (cached !== undefined) return { panel: cached, warm: true };
-    return { panel: undefined, warm: false };
+    if (!isCooperadoTabRouteLoadingElement(children) && children != null) {
+      return { panel: children, warm: false };
+    }
+    return { panel: <CooperadoTabRouteLoading />, warm: false };
   };
 
   if (!enabled || !mobile) {
     return <>{children}</>;
   }
 
-  const renderPanels = (activePath: string | null) =>
-    hrefsToRender.map((href) => {
-      const active = activePath === href;
-      const { panel, warm } = panelForHref(href, activePath);
-      if (!panel) return null;
-      return (
-        <div
-          key={href}
-          className={cn(
-            !active && "hidden [content-visibility:hidden] pointer-events-none",
-            active && "min-h-0"
-          )}
-          aria-hidden={!active}
-          inert={!active}
-          data-cooperado-tab-panel={href}
-          data-cooperado-tab-panel-warm={warm ? "1" : undefined}
-          data-cooperado-tab-panel-active={active ? "1" : undefined}
-        >
-          {active || warm ? panel : null}
-        </div>
-      );
-    });
+  const renderPanels = (activePath: string | null) => {
+    if (!activePath) return null;
+    const { panel, warm } = panelForHref(activePath, activePath);
+    if (!panel) {
+      return <CooperadoTabRouteLoading />;
+    }
+    return (
+      <div
+        key={activePath}
+        className="relative z-[1] w-full min-h-0"
+        data-cooperado-tab-panel={activePath}
+        data-cooperado-tab-panel-warm={warm ? "1" : undefined}
+        data-cooperado-tab-panel-active="1"
+      >
+        {panel}
+      </div>
+    );
+  };
 
-  const panels = onTab ? renderPanels(effectivePath) : renderPanels(null);
-  const hasActivePanel =
-    onTab &&
-    panels.some((node) => node != null);
+  const panels = onTab ? renderPanels(effectivePath) : renderPanels(pathname);
+  const hasActivePanel = onTab && panels != null;
 
   if (!onTab) {
     return (
