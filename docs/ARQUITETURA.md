@@ -42,8 +42,9 @@ Sem alterar o app no dia a dia; usar com `.env.local` e service role:
 - Integridade pagamentos + livro caixa: `repair-operacional-pagamentos-integridade.ts` (upload completo: pagamentos, livro caixa, arquivos mensais).
 - HB limites: `sync-hb-credit-limites-cooperativa.ts`.
 - Auditorias: `audit-contadores-alinhamento-once.ts`, `audit-a-receber-vs-ficha-once.ts`, `audit-hb-limites-ghost.ts`.
+- Pacote semanal (relatórios em `scripts/reports/`): `npm run audit:weekly`.
 
-Ver `docs/RUNBOOK-POS-PAGAMENTOS.md`.
+Ver `docs/RUNBOOK-POS-PAGAMENTOS.md` e `docs/FILA-RESPONSAVEL-VS-FINANCEIRO.md`.
 
 ## O que não fazer
 

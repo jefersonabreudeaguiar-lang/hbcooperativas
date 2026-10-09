@@ -7,8 +7,10 @@ Pré-requisitos: `.env.local` com `NEXT_PUBLIC_SUPABASE_URL` e `SUPABASE_SERVICE
 ## Ordem recomendada
 
 1. **Auditoria (somente leitura)**
+   - `npm run audit:weekly` (grava resumo em `scripts/reports/`), ou:
    - `npx tsx scripts/audit-contadores-alinhamento-once.ts`
    - `npx tsx scripts/audit-a-receber-vs-ficha-once.ts`
+   - Fila conferência vs financeiro: ver `docs/FILA-RESPONSAVEL-VS-FINANCEIRO.md`
 
 2. **Integridade operacional + livro caixa (oficial)**
    - `npx tsx scripts/repair-operacional-pagamentos-integridade.ts [cnpj]`  

@@ -380,7 +380,8 @@ function nota(id: string, status: NotaPedido["status"]): NotaPedido {
   assert.ok(pg!.reciboHtml?.trim(), "recibo gerado na confirmação");
   const inicio = cooperadoExibirValorReceberInicio(data, COOPERADO, COOP);
   assert.equal(inicio.valor, 0, "Início: a receber zero após pagamento registrado");
-  assert.equal(inicio.aguardandoAssinatura, false);
+  assert.equal(inicio.aguardandoAssinatura, true, "Recibo confirmado aguarda assinatura do cooperado");
+  assert.ok(inicio.valorRecibo > 0, "Valor permanece no recibo até assinar");
   const relatorio = getResumoValorAPagarRelatorio(data, COOPERADO, MES, COOP);
   assert.equal(relatorio.valorLiquido, 0, "Relatório a receber zera após pagamento confirmado");
   const fin = getConsolidadoFinanceiroCooperado(data, COOPERADO, COOP);
@@ -784,9 +785,9 @@ function nota(id: string, status: NotaPedido["status"]): NotaPedido {
   });
   const fin = getConsolidadoFinanceiroCooperado(data, COOPERADO, COOP);
   const baseReais = getCreditoBaseContaCoopReais(data, COOPERADO, COOP);
-  assert.equal(baseReais, fin.valorLiquido, "crédito base HB = valor a receber (não entregas brutas)");
-  assert.equal(baseReais, 40, "mensalidade R$60 sobre entrega R$100 → base R$40");
-  assert.equal(getCreditoBaseCooperadoCents(data, COOPERADO, COOP), 4000);
+  assert.equal(fin.valorLiquido, 40, "a receber do cooperado desconta mensalidade do arquivo mensal");
+  assert.equal(baseReais, 100, "crédito base HB = ficha líquida em aberto (sem descontar mensalidade do arquivo)");
+  assert.equal(getCreditoBaseCooperadoCents(data, COOPERADO, COOP), 10000);
 }
 
 {
@@ -815,10 +816,13 @@ function nota(id: string, status: NotaPedido["status"]): NotaPedido {
     notasPedido: [{ ...nota("n1", "pago"), cooperadoId: CLEBER }],
     pagamentosCooperado: [],
   });
-  const aPagar = getResumoValorAPagarRelatorio(data, CLEBER, MES, COOP).valorLiquido;
+  const dataReparada = posProcessarIntegridadePagamentosCooperativa(
+    reconciliarFichaFromNotasConferidas(data)
+  );
+  const aPagar = getResumoValorAPagarRelatorio(dataReparada, CLEBER, MES, COOP).valorLiquido;
   assert.ok(aPagar > 0, "Cleber: ficha paga sem pagamentoCooperado deve aparecer com valor");
   assert.equal(
-    cooperadoPendentePagamentoResponsavel(data, CLEBER, undefined, COOP),
+    cooperadoPendentePagamentoResponsavel(dataReparada, CLEBER, undefined, COOP),
     true,
     "Cleber: deve constar na fila Pagar"
   );

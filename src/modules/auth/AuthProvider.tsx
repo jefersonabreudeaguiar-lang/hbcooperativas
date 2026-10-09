@@ -159,7 +159,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return;
       }
 
-      refresh();
+      /** Sync AppData não precisa re-parsear sessão — só atualiza `user` via dataTick. */
+      setDataTick((t) => t + 1);
+      if (justWarmed) refresh();
 
       const session = getSession();
       if (!session) return;
@@ -177,7 +179,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       ].join("|");
       if (sig !== experienceSigRef.current) {
         experienceSigRef.current = sig;
-        setDataTick((t) => t + 1);
+        refresh();
       }
     });
     return unsub;

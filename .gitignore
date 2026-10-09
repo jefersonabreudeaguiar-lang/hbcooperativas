@@ -42,3 +42,7 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# relatórios locais de auditoria semanal
+/scripts/reports/*
+!/scripts/reports/.gitkeep
