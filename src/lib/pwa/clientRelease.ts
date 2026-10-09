@@ -20,6 +20,21 @@ export const URGENT_RELEASE_ALIGN_DEDUP_MS = 90_000;
 export const RELEASE_NAV_MARK_KEY = "hb-coop-release-nav";
 export const RELEASE_NAV_MARK_GRACE_MS = 20_000;
 
+/** Remove query de align da URL sem recarregar (evita re-checks e histórico poluído). */
+export function stripReleaseAlignQueryFromUrl(): void {
+  if (typeof window === "undefined") return;
+  try {
+    const u = new URL(window.location.href);
+    if (!u.searchParams.has("_hbRelease") && !u.searchParams.has("_hbTargetDpl")) return;
+    u.searchParams.delete("_hbRelease");
+    u.searchParams.delete("_hbTargetDpl");
+    const next = u.pathname + u.search + u.hash;
+    window.history.replaceState(window.history.state, "", next);
+  } catch {
+    /* ignore */
+  }
+}
+
 export function shouldSkipServiceWorkerActivationReload(): boolean {
   if (typeof window === "undefined") return false;
   try {

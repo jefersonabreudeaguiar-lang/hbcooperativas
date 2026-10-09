@@ -9,6 +9,7 @@ import { isCooperadoInstantResumeEnabled } from "@/lib/performance/cooperadoCold
 import { persistirInicioCardCooperadoNotificarPwaLeve } from "@/lib/cooperado/cooperadoPwaLeveUi";
 import {
   refreshCooperadoInicioCardFromMotor,
+  scheduleCooperadoMessengerBicHbUiParidadeRefresh,
   scheduleCooperadoPwaOperacionalParidadePull,
   shouldRunCooperadoPwaParidadeHooks,
 } from "@/lib/cooperado/cooperadoPwaFinanceiroParidadeRefresh";
@@ -55,7 +56,35 @@ export function CooperadoInicioCardPersistBootstrap() {
   }, [user?.id, user?.cooperadoId, user?.role]);
 
   useEffect(() => {
+    if (!user || user.role !== "cooperado" || !isCooperadoPwaMessengerMode()) return;
+
+    scheduleCooperadoMessengerBicHbUiParidadeRefresh(user);
+
+    const onVisible = () => {
+      if (document.visibilityState !== "visible") return;
+      scheduleCooperadoMessengerBicHbUiParidadeRefresh(user);
+    };
+    const onPageShow = (event: PageTransitionEvent) => {
+      scheduleCooperadoMessengerBicHbUiParidadeRefresh(user, { force: event.persisted });
+    };
+    const onHide = () => {
+      if (document.visibilityState !== "hidden" || !isAppDataWarm()) return;
+      refreshCooperadoInicioCardFromMotor(user);
+    };
+
+    document.addEventListener("visibilitychange", onVisible);
+    document.addEventListener("visibilitychange", onHide);
+    window.addEventListener("pageshow", onPageShow);
+    return () => {
+      document.removeEventListener("visibilitychange", onVisible);
+      document.removeEventListener("visibilitychange", onHide);
+      window.removeEventListener("pageshow", onPageShow);
+    };
+  }, [user?.id, user?.cooperadoId, user?.cooperativaId, user?.role]);
+
+  useEffect(() => {
     if (!user || user.role !== "cooperado" || !shouldRunCooperadoPwaParidadeHooks()) return;
+    if (isCooperadoPwaMessengerMode()) return;
 
     const onVisible = () => {
       if (document.visibilityState !== "visible") return;

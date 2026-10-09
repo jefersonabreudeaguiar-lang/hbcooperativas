@@ -13,6 +13,7 @@ import {
   bindClientReleaseShieldEvents,
   runClientReleaseShield,
 } from "@/lib/pwa/clientReleaseShield";
+import { stripReleaseAlignQueryFromUrl } from "@/lib/pwa/clientRelease";
 
 /**
  * Blindagem de release — garante que toda publicação na Vercel chegue ao runtime
@@ -26,6 +27,7 @@ export function ClientReleaseShieldHost() {
   useEffect(() => {
     if (typeof window === "undefined" || startedRef.current) return;
     startedRef.current = true;
+    stripReleaseAlignQueryFromUrl();
 
     const kick = (trigger: string) => {
       void runClientReleaseShield(trigger);

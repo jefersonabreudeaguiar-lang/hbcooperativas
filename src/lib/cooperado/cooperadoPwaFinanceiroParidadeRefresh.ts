@@ -9,6 +9,7 @@ import {
 } from "@/lib/performance/cooperadoEventDrivenSync";
 import {
   isCooperadoManualOperacionalSync,
+  scheduleCooperadoPostInteractiveTask,
 } from "@/lib/performance/cooperadoColdStart";
 import { scheduleCooperadoPostShellSync } from "@/lib/performance/cooperadoPostShellSync";
 import { runCooperadoForegroundOperacionalCheck } from "@/lib/performance/cooperadoForegroundOperacionalSync";
@@ -21,8 +22,10 @@ import { isAppStandalone } from "@/services/cooperadoAppInstallService";
 import { isCooperadoPwaMessengerMode } from "@/lib/cooperado/cooperadoPwaMessengerMode";
 
 let lastForegroundPullAt = 0;
+let lastMessengerUiParidadeAt = 0;
 const FOREGROUND_PULL_GAP_MS = 90_000;
 const RECENT_OPERACIONAL_SYNC_SKIP_MS = 2 * 60_000;
+const MESSENGER_UI_PARIDADE_GAP_MS = 60_000;
 
 export function cooperadoOperacionalParidadeRefreshAtivo(): boolean {
   return isCooperadoManualOperacionalSync() && isCooperadoEventDrivenSync();
@@ -34,6 +37,29 @@ export function refreshCooperadoInicioCardFromMotor(
 ): void {
   if (!user || user.role !== "cooperado") return;
   persistirInicioCardCooperadoNotificarPwaLeve(user);
+}
+
+/**
+ * PWA mensageiro — atualiza card “A receber” + snapshot HB no idle (sem sync operacional na abertura).
+ */
+export function scheduleCooperadoMessengerBicHbUiParidadeRefresh(
+  user: Omit<User, "password"> | null | undefined,
+  opts?: { force?: boolean }
+): void {
+  if (!user || user.role !== "cooperado" || !isCooperadoPwaMessengerMode()) return;
+  const now = Date.now();
+  if (!opts?.force && now - lastMessengerUiParidadeAt < MESSENGER_UI_PARIDADE_GAP_MS) return;
+  lastMessengerUiParidadeAt = now;
+
+  scheduleCooperadoPostInteractiveTask(() => {
+    if (typeof document !== "undefined" && document.hidden) return;
+    refreshCooperadoInicioCardFromMotor(user);
+    void import("@/services/hbCreditAccountPersistenciaService").then(
+      ({ persistirHbCreditAccountCooperado }) => {
+        void persistirHbCreditAccountCooperado(user);
+      }
+    );
+  });
 }
 
 /**

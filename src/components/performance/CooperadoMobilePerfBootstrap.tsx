@@ -8,6 +8,7 @@ import { warmupCooperadoFinanceiroTabChunk } from "@/lib/performance/cooperadoFi
 import { scheduleCooperadoNavPrefetchEarly } from "@/lib/performance/cooperadoNavPrefetch";
 import { scheduleStaffNavPrefetchEarly } from "@/lib/performance/staffNavPrefetch";
 import { isStaffGestaoRole } from "@/lib/performance/cooperadoColdStart";
+import { isCooperadoPwaMessengerMode } from "@/lib/cooperado/cooperadoPwaMessengerMode";
 
 /**
  * Aquecimento agressivo após login — Financeiro cooperado e rotas staff no celular.
@@ -21,6 +22,9 @@ export function CooperadoMobilePerfBootstrap() {
     if (!user) return;
 
     if (user.role === "cooperado") {
+      if (isCooperadoPwaMessengerMode()) {
+        return undefined;
+      }
       warmupCooperadoFinanceiroTabChunk();
       try {
         router.prefetch(COOPERADO_FINANCEIRO_TAB_HREF);

@@ -47,4 +47,7 @@ export function persistirCooperadoPwaMessengerCaches(
   persistirCooperadoPwaInicioDashboardSnapshotFromUser(user, true);
   persistirCooperadoPwaEntregasResumosSnapshotFromUser(user);
   scheduleMessengerCacheMaterialization(user);
+  void import("@/services/hbCreditAccountPersistenciaService").then(({ persistirHbCreditAccountCooperado }) => {
+    void persistirHbCreditAccountCooperado(user);
+  });
 }

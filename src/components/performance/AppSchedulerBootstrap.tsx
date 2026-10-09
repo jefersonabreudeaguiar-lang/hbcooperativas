@@ -10,6 +10,7 @@ import {
 } from "@/lib/performance/rqlMarks";
 import { isCooperadoBottomTabPath } from "@/lib/performance/cooperadoBottomTabRoutes";
 import { cooperadoTabWarmPanelPaintReady } from "@/lib/performance/cooperadoMobileTabKeepAlive";
+import { warmCooperadoAdjacentTabRouteChunks } from "@/lib/performance/prefetchCooperadoTabRouteChunks";
 import { staffBottomTabCacheKey, isStaffBottomTabPath } from "@/lib/performance/staffBottomTabRoutes";
 import { markUserActivity } from "@/services/idleActivity";
 import { useCooperadoEffectiveTabPath } from "@/hooks/useCooperadoEffectiveTabPath";
@@ -63,6 +64,14 @@ export function AppSchedulerBootstrap() {
         markRqlRoutePaintReady(hop);
       } else {
         cancelPaint = scheduleMarkRqlRoutePaintReady(hop);
+      }
+      if (isCooperadoBottomTabPath(effectivePath)) {
+        const warmNeighbors = () => warmCooperadoAdjacentTabRouteChunks(effectivePath);
+        if (typeof requestIdleCallback !== "undefined") {
+          requestIdleCallback(warmNeighbors, { timeout: 1_500 });
+        } else {
+          window.setTimeout(warmNeighbors, 0);
+        }
       }
       markUserInteraction();
       if (!isCooperadoBottomTabPath(effectivePath)) {

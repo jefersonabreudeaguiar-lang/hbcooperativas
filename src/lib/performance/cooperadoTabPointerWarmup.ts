@@ -1,43 +1,27 @@
 /**
- * Aquece o chunk da aba no pointerdown — troca de aba mais rápida (estilo app de mensagem).
+ * Aquece o chunk da aba no toque — troca de aba mais rápida (estilo app de mensagem).
  * Não altera dados, sync ou telas financeiras.
  */
-import { warmupCooperadoFinanceiroTabChunk } from "@/lib/performance/cooperadoFinanceiroTabWarmup";
+import { warmCooperadoTabRouteChunk } from "@/lib/performance/prefetchCooperadoTabRouteChunks";
 
 const warmed = new Set<string>();
 
-function warmOnce(href: string, loader: () => void): void {
-  if (warmed.has(href)) return;
-  warmed.add(href);
-  loader();
-}
-
 function warmCooperadoTab(href: string): void {
-  switch (href) {
-    case "/ficha-corrida":
-      warmupCooperadoFinanceiroTabChunk();
-      return;
-    case "/dashboard":
-      warmOnce(href, () => void import("@/app/(app)/dashboard/DashboardContent"));
-      return;
-    case "/notas-pedido":
-      warmOnce(href, () => void import("@/app/(app)/notas-pedido/NotasPedidoCooperadoMain"));
-      return;
-    case "/precos":
-      warmOnce(href, () => void import("@/app/(app)/precos/PrecosContent"));
-      return;
-    case "/mensalidades":
-      warmOnce(href, () => void import("@/app/(app)/mensalidades/MensalidadesContent"));
-      return;
-    default:
-      return;
+  if (warmed.has(href)) {
+    warmCooperadoTabRouteChunk(href);
+    return;
   }
+  warmed.add(href);
+  warmCooperadoTabRouteChunk(href);
 }
 
-/**
- * Prefetch de JS da rota alvo no pointerdown.
- * Microtask (não idle) para o chunk estar pronto quando o Link navegar.
- */
+/** touchstart no mobile dispara antes do pointerdown — começa o download do chunk mais cedo. */
+export function cooperadoTabWarmOnTouchStart(href: string): void {
+  if (typeof window === "undefined") return;
+  warmCooperadoTab(href);
+}
+
+/** Prefetch de JS da rota alvo no pointerdown (fallback desktop / após touch). */
 export function cooperadoTabWarmOnPointerDown(href: string): void {
   if (typeof window === "undefined") return;
   warmCooperadoTab(href);

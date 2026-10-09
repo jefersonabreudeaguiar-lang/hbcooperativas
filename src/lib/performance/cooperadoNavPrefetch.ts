@@ -3,6 +3,8 @@ import {
   COOPERADO_MOBILE_PREFETCH_HREFS,
 } from "@/lib/hb-credit/hbCreditNavPrefetch";
 import { COOPERADO_BOTTOM_TAB_HREFS } from "@/lib/performance/cooperadoBottomTabRoutes";
+import { scheduleCooperadoPostInteractiveTask } from "@/lib/performance/cooperadoColdStart";
+import { isCooperadoPwaMessengerMode } from "@/lib/cooperado/cooperadoPwaMessengerMode";
 import { isLowMemoryDevice } from "@/services/imagePipelineService";
 import { prefetchCooperadoTabRouteChunks } from "@/lib/performance/prefetchCooperadoTabRouteChunks";
 import { warmupCooperadoFinanceiroTabChunk } from "@/lib/performance/cooperadoFinanceiroTabWarmup";
@@ -37,10 +39,7 @@ export function prefetchCooperadoNavRoutes(
   }
 }
 
-/**
- * Prefetch em camadas (microtask → paint → idle) — troca de aba estilo app nativo.
- */
-export function scheduleCooperadoNavPrefetchEarly(router: CooperadoNavPrefetchRouter): () => void {
+function runCooperadoNavPrefetchEarly(router: CooperadoNavPrefetchRouter): () => void {
   let cancelled = false;
   const safe = (fn: () => void) => {
     if (!cancelled) fn();
@@ -92,4 +91,21 @@ export function scheduleCooperadoNavPrefetchEarly(router: CooperadoNavPrefetchRo
       window.clearTimeout(idleHandle);
     }
   };
+}
+
+/**
+ * Prefetch em camadas (microtask → paint → idle) — troca de aba estilo app nativo.
+ * PWA mensageiro: adia o lote inicial até após UI interativa (fase 2 paridade WhatsApp).
+ */
+export function scheduleCooperadoNavPrefetchEarly(router: CooperadoNavPrefetchRouter): () => void {
+  if (typeof window !== "undefined" && isCooperadoPwaMessengerMode()) {
+    let cancelInner: (() => void) | undefined;
+    scheduleCooperadoPostInteractiveTask(() => {
+      cancelInner = runCooperadoNavPrefetchEarly(router);
+    });
+    return () => {
+      cancelInner?.();
+    };
+  }
+  return runCooperadoNavPrefetchEarly(router);
 }

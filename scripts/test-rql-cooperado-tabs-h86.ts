@@ -45,8 +45,8 @@ assert(panel.includes("data-cooperado-tab-panel"), "painéis por aba");
 assert(panel.includes("data-cooperado-tab-panel-warm"), "painel warm para paint instantâneo");
 assert(panel.includes("cooperadoTabPanelCache"), "cache não sobrescreve com loading.tsx");
 assert(
-  panel.includes("active ? panel : null"),
-  "só monta painel da aba ativa (evita jank após sync operacional)"
+  panel.includes("active || warm ? panel : null"),
+  "monta aba ativa + painéis warm no LRU (troca instantânea)"
 );
 assert(read("src/app/(app)/notas-pedido/NotasPedidoCooperadoMain.tsx").includes("useCooperadoPanelAppData"), "notas pausa store fora da aba");
 assert(
@@ -81,6 +81,14 @@ assert(
 );
 assert(panel.includes("useCooperadoEffectiveTabPath"), "navegação otimista cooperado");
 assert(layout.includes("setCooperadoOptimisticTab"), "pointerdown otimista no rodapé");
+assert(layout.includes("cooperadoTabWarmOnTouchStart"), "touchstart aquece chunk no rodapé");
+assert(keep.includes("COOPERADO_BOTTOM_TAB_HREFS.length"), "PWA mensageiro mantém 4 abas no LRU");
+assert(
+  read("src/lib/performance/prefetchCooperadoTabRouteChunks.ts").includes(
+    "warmCooperadoAdjacentTabRouteChunks"
+  ),
+  "aquecimento de abas vizinhas após troca"
+);
 assert(perms.includes("cooperadoBottomTabRoutes"), "menu mobile alinhado às 4 abas");
 assert(perms.includes('href: "/mensalidades"') && perms.includes("COOPERADO_DRAWER_MENU"), "mensalidades no menu lateral");
 

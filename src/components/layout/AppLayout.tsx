@@ -37,7 +37,10 @@ import { useHbCreditDescontosWarmup } from "@/hooks/useHbCreditDescontosWarmup";
 import { shouldPrefetchHbCreditNav } from "@/lib/hb-credit/hbCreditNavPrefetch";
 import { scheduleCooperadoNavPrefetchEarly } from "@/lib/performance/cooperadoNavPrefetch";
 import { COOPERADO_FINANCEIRO_TAB_HREF } from "@/lib/hb-credit/hbCreditNavPrefetch";
-import { cooperadoTabWarmOnPointerDown } from "@/lib/performance/cooperadoTabPointerWarmup";
+import {
+  cooperadoTabWarmOnPointerDown,
+  cooperadoTabWarmOnTouchStart,
+} from "@/lib/performance/cooperadoTabPointerWarmup";
 import { setCooperadoOptimisticTab } from "@/lib/performance/cooperadoOptimisticTabNavigation";
 import { useCooperadoEffectiveTabPath } from "@/hooks/useCooperadoEffectiveTabPath";
 import { staffTabWarmOnPointerDown } from "@/lib/performance/staffTabPointerWarmup";
@@ -311,6 +314,17 @@ export function MobileNav() {
                   ? item.href === COOPERADO_FINANCEIRO_TAB_HREF || isCooperadoBottomTabPath(item.href)
                   : isStaffBottomTabPath(item.href) || item.href === "/notas-pedido"
               }
+              onTouchStart={() => {
+                if (isCooperadoNav && isCooperadoBottomTabPath(item.href)) {
+                  setCooperadoOptimisticTab(item.href);
+                  cooperadoTabWarmOnTouchStart(item.href);
+                  try {
+                    router.prefetch(item.href);
+                  } catch {
+                    /* ignore */
+                  }
+                }
+              }}
               onPointerDown={() => {
                 if (isCooperadoNav && isCooperadoBottomTabPath(item.href)) {
                   setCooperadoOptimisticTab(item.href);
