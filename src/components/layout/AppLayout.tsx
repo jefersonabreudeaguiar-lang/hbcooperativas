@@ -36,6 +36,7 @@ import { isStaffHbCoopBackgroundSyncRoute } from "@/lib/hb-credit/staffHbSyncRou
 import { useHbCreditDescontosWarmup } from "@/hooks/useHbCreditDescontosWarmup";
 import { shouldPrefetchHbCreditNav } from "@/lib/hb-credit/hbCreditNavPrefetch";
 import { scheduleCooperadoNavPrefetchEarly } from "@/lib/performance/cooperadoNavPrefetch";
+import { scheduleCooperadoPinnedTabsEagerWarm } from "@/lib/performance/cooperadoPinnedTabFastPath";
 import { COOPERADO_FINANCEIRO_TAB_HREF } from "@/lib/hb-credit/hbCreditNavPrefetch";
 import {
   cooperadoTabWarmOnPointerDown,
@@ -249,6 +250,7 @@ export function MobileNav() {
   useEffect(() => {
     if (!navUser) return;
     if (isCooperadoAppUser(navUser)) {
+      scheduleCooperadoPinnedTabsEagerWarm(router);
       return scheduleCooperadoNavPrefetchEarly(router);
     }
     return scheduleStaffNavPrefetchEarly(router);

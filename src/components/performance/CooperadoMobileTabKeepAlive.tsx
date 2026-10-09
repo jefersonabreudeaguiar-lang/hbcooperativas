@@ -4,11 +4,18 @@ import { useLayoutEffect, useRef, useState, useSyncExternalStore, useMemo, type 
 import { isLowMemoryDevice } from "@/services/imagePipelineService";
 import { CooperadoTabPanelProvider } from "@/lib/performance/cooperadoTabPanelContext";
 import {
+  COOPERADO_TAB_FINANCEIRO_HREF,
+  COOPERADO_TAB_PIN_HREF,
   getCooperadoMobileTabCacheLimit,
   isCooperadoBottomTabPath,
   isCooperadoMobileTabKeepAliveEnabled,
+  isCooperadoTabPinned,
   trimCooperadoTabCacheOrder,
 } from "@/lib/performance/cooperadoMobileTabKeepAlive";
+import {
+  COOPERADO_PINNED_TAB_HREFS,
+  isCooperadoPinnedDualMountEnabled,
+} from "@/lib/performance/cooperadoPinnedTabFastPath";
 import { isCooperadoTabRouteLoadingElement } from "@/lib/performance/cooperadoTabPanelCache";
 import { useCooperadoEffectiveTabPath } from "@/hooks/useCooperadoEffectiveTabPath";
 import { useCooperadoReleaseAlignOnTabPath } from "@/hooks/useCooperadoReleaseAlignOnTabPath";
@@ -129,32 +136,47 @@ export function CooperadoMobileTabKeepAlive({ pathname, children }: Props) {
     return [...new Set([...orderRef.current, ...Object.keys(cacheRef.current)])];
   }, [cacheVersion, onTab, enabled, mobile, pathname, effectivePath]);
 
+  const pinnedDualReady =
+    isCooperadoPinnedDualMountEnabled() &&
+    Boolean(cacheRef.current[COOPERADO_TAB_PIN_HREF]) &&
+    Boolean(cacheRef.current[COOPERADO_TAB_FINANCEIRO_HREF]);
+
+  const resolvePanel = (
+    href: string,
+    activePath: string
+  ): { panel: ReactNode | undefined; warm: boolean } => {
+    const active = activePath === href;
+    const cached = cacheRef.current[href];
+    const liveForHref =
+      pathname === href &&
+      !isCooperadoTabRouteLoadingElement(children) &&
+      children != null;
+
+    if (active && liveForHref) {
+      return { panel: children, warm: false };
+    }
+    if (cached !== undefined) {
+      return { panel: cached, warm: !active || pathname !== href };
+    }
+    if (active) {
+      return { panel: <CooperadoTabRouteLoading />, warm: false };
+    }
+    return { panel: undefined, warm: false };
+  };
+
   const panelForHref = (
     href: string,
     activePath: string | null
   ): { panel: ReactNode | undefined; warm: boolean } => {
+    if (!activePath) return { panel: undefined, warm: false };
     const active = activePath === href;
-    if (!active) {
+    if (
+      !active &&
+      !(pinnedDualReady && isCooperadoTabPinned(href) && isCooperadoTabPinned(activePath))
+    ) {
       return { panel: undefined, warm: false };
     }
-
-    const cached = cacheRef.current[href];
-    if (onTab && href === effectivePath) {
-      if (
-        pathname === href &&
-        !isCooperadoTabRouteLoadingElement(children) &&
-        children != null
-      ) {
-        return { panel: children, warm: false };
-      }
-      if (cached !== undefined) return { panel: cached, warm: true };
-      return { panel: <CooperadoTabRouteLoading />, warm: false };
-    }
-    if (cached !== undefined) return { panel: cached, warm: true };
-    if (!isCooperadoTabRouteLoadingElement(children) && children != null) {
-      return { panel: children, warm: false };
-    }
-    return { panel: <CooperadoTabRouteLoading />, warm: false };
+    return resolvePanel(href, activePath);
   };
 
   if (!enabled || !mobile) {
@@ -163,6 +185,34 @@ export function CooperadoMobileTabKeepAlive({ pathname, children }: Props) {
 
   const renderPanels = (activePath: string | null) => {
     if (!activePath) return null;
+
+    if (pinnedDualReady && isCooperadoTabPinned(activePath)) {
+      return (
+        <>
+          {COOPERADO_PINNED_TAB_HREFS.map((href) => {
+            const active = href === activePath;
+            const { panel, warm } = resolvePanel(href, activePath);
+            if (!panel) return null;
+            return (
+              <div
+                key={href}
+                className={active ? "relative z-[1] w-full min-h-0" : "hidden"}
+                style={active ? undefined : { display: "none" }}
+                aria-hidden={!active}
+                inert={!active}
+                data-cooperado-tab-panel={href}
+                data-cooperado-tab-panel-warm={warm ? "1" : undefined}
+                data-cooperado-tab-panel-active={active ? "1" : undefined}
+                data-cooperado-pinned-dual-mount="1"
+              >
+                {panel}
+              </div>
+            );
+          })}
+        </>
+      );
+    }
+
     const { panel, warm } = panelForHref(activePath, activePath);
     if (!panel) {
       return <CooperadoTabRouteLoading />;

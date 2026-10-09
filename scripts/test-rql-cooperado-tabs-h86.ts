@@ -49,6 +49,13 @@ assert(
   "só pinta a aba ativa (sem fantasma da aba anterior)"
 );
 assert(layout.includes("router.push(item.href)"), "cooperado força push na troca de aba");
+assert(
+  read("src/lib/performance/cooperadoPinnedTabFastPath.ts").includes(
+    "NEXT_PUBLIC_COOPERADO_PINNED_DUAL_MOUNT"
+  ),
+  "rollback env Início+Financeiro dual mount"
+);
+assert(layout.includes("scheduleCooperadoPinnedTabsEagerWarm"), "warm antecipado Início+Financeiro");
 assert(read("src/app/(app)/notas-pedido/NotasPedidoCooperadoMain.tsx").includes("useCooperadoPanelAppData"), "notas pausa store fora da aba");
 assert(
   read("src/lib/cooperado/cooperadoPwaMobileEntregas.ts").includes(
