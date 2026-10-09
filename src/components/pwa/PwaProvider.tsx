@@ -15,7 +15,7 @@ import {
   isAppStandalone,
   registrarAcessoCooperadoApp,
 } from "@/services/cooperadoAppInstallService";
-import { getData, isAppDataWarm } from "@/services/dataStore";
+import { getData } from "@/services/dataStore";
 import { getUserCooperativaId, normalizeCnpj } from "@/utils/cooperativa";
 
 /** v2 — reexibe o aviso de baixar o app para quem já tinha fechado a versão antiga. */
@@ -104,13 +104,8 @@ export function PwaProvider() {
       return;
     }
 
-    const registro =
-      user?.cooperadoId && isAppDataWarm()
-        ? getData().cooperados.find((c) => c.id === user.cooperadoId)
-        : undefined;
-    const jaMarcadoComApp = Boolean(registro?.appInstaladoEm);
-    // Cooperado ativo sem app: reabre o aviso mesmo se já tinha fechado antes.
-    const forcarPorFaltaDeApp = Boolean(isCooperado && !jaMarcadoComApp);
+    // Cooperado no navegador (não no atalho): sempre pode reinstalar — não esconder por appInstaladoEm antigo.
+    const forcarPorFaltaDeApp = Boolean(isCooperado && !isStandalone());
 
     if (!shouldShowPrompt(isCooperado, forcarPorFaltaDeApp)) {
       setVisible(false);
