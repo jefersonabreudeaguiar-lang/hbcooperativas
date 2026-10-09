@@ -13,6 +13,9 @@ export const RELEASE_PENDING_STAFF_KEY = "hb-coop-release-pending-staff-build";
 export const RELEASE_ALIGN_SESSION_KEY = "hb-coop-release-align-target";
 /** Alvo de release que o shield deve alcançar antes de considerar o app atualizado. */
 export const RELEASE_SHIELD_EXPECTED_KEY = "hb-coop-release-shield-expected";
+/** Uma tentativa de align urgente por fingerprint (inline + shield). */
+export const RELEASE_URGENT_ALIGN_FP_KEY = "hb-coop-release-urgent-align-fp";
+export const URGENT_RELEASE_ALIGN_DEDUP_MS = 90_000;
 
 /**
  * Deployments com UI cooperado legada (recibo 123,42 / assinar recibo).
@@ -149,6 +152,47 @@ export function releaseShieldSatisfied(
   const expected = readReleaseShieldExpected();
   if (!expected) return true;
   return releaseFingerprint(canonical) === expected;
+}
+
+/** Evita loop: no máximo um hardAlign urgente por fingerprint / 90s. */
+export function allowUrgentReleaseAlignForFingerprint(fingerprint: string): boolean {
+  const fp = fingerprint.trim();
+  if (!fp) return true;
+  if (typeof sessionStorage === "undefined") return true;
+  try {
+    const raw = sessionStorage.getItem(RELEASE_URGENT_ALIGN_FP_KEY);
+    const now = Date.now();
+    const prev = raw ? (JSON.parse(raw) as { fp: string; t: number }) : null;
+    if (prev && prev.fp === fp && now - prev.t < URGENT_RELEASE_ALIGN_DEDUP_MS) {
+      return false;
+    }
+    sessionStorage.setItem(RELEASE_URGENT_ALIGN_FP_KEY, JSON.stringify({ fp, t: now }));
+    return true;
+  } catch {
+    return true;
+  }
+}
+
+export function clearUrgentReleaseAlignDedup(): void {
+  try {
+    sessionStorage?.removeItem(RELEASE_URGENT_ALIGN_FP_KEY);
+  } catch {
+    /* ignore */
+  }
+}
+
+/** Build confirmado no localStorage só se bater com o bundle em execução. */
+export function readConfirmedClientReleaseBuild(): number | null {
+  if (typeof localStorage === "undefined") return null;
+  const embeddedBuild = getEmbeddedClientRelease().build;
+  try {
+    const raw = localStorage.getItem(BUILD_SEEN_KEY);
+    const n = raw != null ? parseInt(raw, 10) : 0;
+    if (!Number.isFinite(n) || n <= 0 || n !== embeddedBuild) return null;
+    return n;
+  } catch {
+    return null;
+  }
 }
 
 export function localPersistedBuildBehindCanonical(canonical: ClientReleaseInfo): boolean {
@@ -379,6 +423,8 @@ export type AlignClientRuntimeOptions = {
   targetBuild?: number;
   /** Nova versão na Vercel — ignora cooldown/sessão/rajada de reload. */
   urgentUpgrade?: boolean;
+  /** build:sha:dpl — deduplica align urgente (anti-loop). */
+  targetFingerprint?: string;
 };
 
 /** Alinha runtime ao release canônico. */
@@ -401,6 +447,11 @@ export async function alignClientRuntimeToRelease(
     embedded.build > 0 &&
     options.targetBuild > embedded.build;
   const urgent = options?.urgentUpgrade === true || buildBehind;
+  const targetFp = (options?.targetFingerprint ?? "").trim();
+
+  if (urgent && targetFp && !allowUrgentReleaseAlignForFingerprint(targetFp)) {
+    return false;
+  }
 
   if (!urgent && releaseAlignSessionTarget() === sessionTarget) {
     return false;
@@ -456,5 +507,6 @@ export function buildInlinePageReleaseBootstrap(pageRelease: ClientReleaseInfo):
 export function buildInlineDeploymentBootScript(pageRelease: ClientReleaseInfo): string {
   const blockedJson = JSON.stringify([...BLOCKED_VERCEL_DEPLOYMENT_IDS]);
   const pageJson = JSON.stringify(pageRelease);
-  return `(function(){var BLOCK=${blockedJson};var PAGE=${pageJson};var BURST_KEY=${JSON.stringify(RELOAD_BURST_KEY)};var MAX=${MAX_RELOADS_PER_MINUTE};function collect(){var ids=[];var seen={};document.querySelectorAll('script[src*="dpl="],link[href*="dpl="]').forEach(function(el){var u=el.src||el.href||"";var m=u.match(/[?&]dpl=([^&]+)/);if(m&&m[1]&&!seen[m[1]]){seen[m[1]]=1;ids.push(m[1]);}});return ids;}function blocked(ids){for(var i=0;i<ids.length;i++){if(BLOCK.indexOf(ids[i])>=0)return ids[i];}return null;}function allowReload(reason){try{var now=Date.now();var raw=sessionStorage.getItem(BURST_KEY);var entries=raw?JSON.parse(raw):[];entries=entries.filter(function(e){return now-e.t<60000;});if(entries.length>=MAX)return false;entries.push({t:now,r:reason});sessionStorage.setItem(BURST_KEY,JSON.stringify(entries));return true;}catch(e){return true;}}function hardAlign(reason,cloud){if(!allowReload(reason))return;var targetId=((cloud&&cloud.deploymentId)||PAGE.deploymentId||"").trim();Promise.resolve().then(function(){if(!("caches" in window))return;return caches.keys().then(function(keys){return Promise.all(keys.map(function(k){return caches.delete(k);}));});}).then(function(){if(!("serviceWorker" in navigator))return;return navigator.serviceWorker.getRegistrations().then(function(regs){return Promise.all(regs.map(function(r){return r.unregister();}));});}).finally(function(){var u=new URL(location.origin+location.pathname);u.searchParams.set("_hbRelease",String(Date.now()));if(targetId)u.searchParams.set("_hbTargetDpl",targetId.slice(4,20));location.replace(u.toString());});}function ahead(cloud){if(!cloud||!cloud.build)return false;var pb=PAGE.build||0;var cb=cloud.build||0;var pd=(PAGE.deploymentId||"").trim();var cd=(cloud.deploymentId||"").trim();var ps=(PAGE.gitCommitSha||"").trim();var cs=(cloud.gitCommitSha||"").trim();return cb>pb||(cd&&pd&&cd!==pd)||(cs&&ps&&cs!==ps);}function rememberExpected(cloud){try{sessionStorage.setItem(${JSON.stringify(RELEASE_SHIELD_EXPECTED_KEY)},String(cloud.build)+":"+(cloud.gitCommitSha||"").trim()+":"+(cloud.deploymentId||"").trim());}catch(e){}}function cloudAhead(tag){fetch("/api/client-release?_="+Date.now(),{cache:"no-store",credentials:"same-origin",headers:{"Cache-Control":"no-cache",Pragma:"no-cache"}}).then(function(r){return r.ok?r.json():null;}).then(function(cloud){if(!cloud||!cloud.build)return;if(ahead(cloud)){rememberExpected(cloud);hardAlign("cloud_"+(tag||"boot"),cloud);}}).catch(function(){});}function checkBlockedOnly(){var pageId=(document.documentElement.getAttribute("data-dpl-id")||PAGE.deploymentId||"").trim();var ids=collect();if(blocked(ids)||(pageId&&blocked([pageId])))hardAlign("blocked",null);}if(document.readyState==="loading")document.addEventListener("DOMContentLoaded",checkBlockedOnly);else checkBlockedOnly();cloudAhead("boot");window.addEventListener("load",function(){cloudAhead("load");});window.addEventListener("pageshow",function(ev){if(ev.persisted)cloudAhead("pageshow");});})();`;
+  const urgentDedupMs = URGENT_RELEASE_ALIGN_DEDUP_MS;
+  return `(function(){var BLOCK=${blockedJson};var PAGE=${pageJson};var BURST_KEY=${JSON.stringify(RELOAD_BURST_KEY)};var EXPECTED_KEY=${JSON.stringify(RELEASE_SHIELD_EXPECTED_KEY)};var URGENT_FP_KEY=${JSON.stringify(RELEASE_URGENT_ALIGN_FP_KEY)};var MAX=${MAX_RELOADS_PER_MINUTE};var URGENT_DEDUP_MS=${urgentDedupMs};function collect(){var ids=[];var seen={};document.querySelectorAll('script[src*="dpl="],link[href*="dpl="]').forEach(function(el){var u=el.src||el.href||"";var m=u.match(/[?&]dpl=([^&]+)/);if(m&&m[1]&&!seen[m[1]]){seen[m[1]]=1;ids.push(m[1]);}});return ids;}function blocked(ids){for(var i=0;i<ids.length;i++){if(BLOCK.indexOf(ids[i])>=0)return ids[i];}return null;}function cloudFp(cloud){return String(cloud.build)+":"+(cloud.gitCommitSha||"").trim()+":"+(cloud.deploymentId||"").trim();}function allowUrgentFp(fp){try{var raw=sessionStorage.getItem(URGENT_FP_KEY);var now=Date.now();var prev=raw?JSON.parse(raw):null;if(prev&&prev.fp===fp&&now-prev.t<URGENT_DEDUP_MS)return false;sessionStorage.setItem(URGENT_FP_KEY,JSON.stringify({fp:fp,t:now}));return true;}catch(e){return true;}}function allowReload(reason,urgent){if(urgent)return true;try{var now=Date.now();var raw=sessionStorage.getItem(BURST_KEY);var entries=raw?JSON.parse(raw):[];entries=entries.filter(function(e){return now-e.t<60000;});if(entries.length>=MAX)return false;entries.push({t:now,r:reason});sessionStorage.setItem(BURST_KEY,JSON.stringify(entries));return true;}catch(e){return true;}}function hardAlign(reason,cloud,urgent){var fp=cloud?cloudFp(cloud):"";if(urgent){if(fp&&!allowUrgentFp(fp))return;}else if(!allowReload(reason,false))return;if(!allowReload(reason,urgent))return;var targetId=((cloud&&cloud.deploymentId)||PAGE.deploymentId||"").trim();Promise.resolve().then(function(){if(!("caches" in window))return;return caches.keys().then(function(keys){return Promise.all(keys.map(function(k){return caches.delete(k);}));});}).then(function(){if(!("serviceWorker" in navigator))return;return navigator.serviceWorker.getRegistrations().then(function(regs){return Promise.all(regs.map(function(r){return r.unregister();}));});}).finally(function(){var u=new URL(location.origin+location.pathname);u.searchParams.set("_hbRelease",String(Date.now()));if(targetId)u.searchParams.set("_hbTargetDpl",targetId.slice(4,20));location.replace(u.toString());});}function ahead(cloud){if(!cloud||!cloud.build)return false;var pb=PAGE.build||0;var cb=cloud.build||0;var pd=(PAGE.deploymentId||"").trim();var cd=(cloud.deploymentId||"").trim();var ps=(PAGE.gitCommitSha||"").trim();var cs=(cloud.gitCommitSha||"").trim();return cb>pb||(cd&&pd&&cd!==pd)||(cs&&ps&&cs!==ps);}function rememberExpected(cloud){try{sessionStorage.setItem(EXPECTED_KEY,cloudFp(cloud));}catch(e){}}function cloudAhead(tag){fetch("/api/client-release?_="+Date.now(),{cache:"no-store",credentials:"same-origin",headers:{"Cache-Control":"no-cache",Pragma:"no-cache"}}).then(function(r){return r.ok?r.json():null;}).then(function(cloud){if(!cloud||!cloud.build)return;if(ahead(cloud)){rememberExpected(cloud);hardAlign("cloud_"+(tag||"boot"),cloud,true);}}).catch(function(){});}function checkBlockedOnly(){var pageId=(document.documentElement.getAttribute("data-dpl-id")||PAGE.deploymentId||"").trim();var ids=collect();if(blocked(ids)||(pageId&&blocked([pageId])))hardAlign("blocked",null,false);}if(document.readyState==="loading")document.addEventListener("DOMContentLoaded",checkBlockedOnly);else checkBlockedOnly();cloudAhead("boot");window.addEventListener("load",function(){cloudAhead("load");});window.addEventListener("pageshow",function(ev){if(ev.persisted)cloudAhead("pageshow");});})();`;
 }

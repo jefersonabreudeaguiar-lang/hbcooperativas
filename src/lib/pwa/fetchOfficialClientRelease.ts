@@ -3,6 +3,7 @@ import {
   DEPLOYMENT_SEEN_KEY,
   clearReloadBurstCounter,
   clearReleaseShieldExpected,
+  clearUrgentReleaseAlignDedup,
   clearStaffReleasePendingIfMatches,
   collectLoadedDeploymentIdsFromDom,
   evaluateClientReleaseAlignment,
@@ -11,6 +12,8 @@ import {
   getEmbeddedClientRelease,
   localPersistedBuildBehindCanonical,
   persistReleaseShieldExpected,
+  releaseFingerprint,
+  releaseShieldSatisfied,
   runtimeAlreadyOnCanonicalRelease,
   runtimeNeedsReleaseUpgrade,
   type ClientReleaseInfo,
@@ -69,6 +72,7 @@ async function alignToCanonicalIfNeeded(
     hard: true,
     targetBuild: canonical.build,
     urgentUpgrade: true,
+    targetFingerprint: releaseFingerprint(canonical),
   });
   return aligned ? "aligning" : "pending";
 }
@@ -87,9 +91,12 @@ export async function applyOfficialReleaseIfNeeded(): Promise<"ok" | "aligning" 
     localPersistedBuildBehindCanonical(canonical);
 
   if (!needsUpgrade) {
-    markClientReleaseSeen(canonical);
-    clearReleaseShieldExpected();
-    clearReloadBurstCounter();
+    if (releaseShieldSatisfied(canonical, pageRelease, embedded)) {
+      markClientReleaseSeen(canonical);
+      clearReleaseShieldExpected();
+      clearReloadBurstCounter();
+      clearUrgentReleaseAlignDedup();
+    }
     return "ok";
   }
 
@@ -114,8 +121,12 @@ export async function applyOfficialReleaseIfNeeded(): Promise<"ok" | "aligning" 
     );
   }
 
-  markClientReleaseSeen(canonical);
-  clearReloadBurstCounter();
+  if (releaseShieldSatisfied(canonical, pageRelease, embedded)) {
+    markClientReleaseSeen(canonical);
+    clearReleaseShieldExpected();
+    clearReloadBurstCounter();
+    clearUrgentReleaseAlignDedup();
+  }
   return "ok";
 }
 

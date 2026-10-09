@@ -30,15 +30,18 @@ const dash = read("src/app/(app)/dashboard/DashboardContent.tsx");
 assert(cold.includes("scheduleCooperadoColdStartSync"), "coordinator cold start");
 assert(cold.includes("markNextCooperadoSyncSilent"), "marcador silent no coordinator");
 assert(cold.includes("scheduleCooperadoPostInteractiveTask"), "post-interactive deploy defer");
-const deployGuard = read("src/components/pwa/ClientDeploymentGuard.tsx");
-assert(deployGuard.includes("scheduleCooperadoPostInteractiveTask"), "ClientDeploymentGuard defer");
-assert(deployGuard.includes("scheduleStaffPostInteractiveTask"), "ClientDeploymentGuard staff defer");
-assert(deployGuard.includes("staffExperience: true"), "staff sem reload automatico");
+const releaseHost = read("src/components/pwa/ClientReleaseShieldHost.tsx");
+assert(releaseHost.includes("scheduleCooperadoPostInteractiveTask"), "ClientReleaseShieldHost defer cooperado");
+assert(releaseHost.includes("scheduleStaffPostInteractiveTask"), "ClientReleaseShieldHost defer staff");
+const releaseFetchEarly = read("src/lib/pwa/fetchOfficialClientRelease.ts");
 assert(
-  deployGuard.includes("skipPeriodic") &&
-    deployGuard.includes("intervalMs > 0") &&
-    deployGuard.includes("cooperadoExperience ? 90 * 1000"),
-  "cooperado sem intervalo periódico quando skipPeriodic (canonical release)"
+  releaseFetchEarly.includes("applyOfficialReleaseIfNeeded") &&
+    !releaseFetchEarly.includes("markStaffReleasePending("),
+  "align unificado sem defer staff por banner"
+);
+assert(
+  !releaseHost.includes("COOPERADO_RELEASE_POLL_MS") && !releaseHost.includes("setInterval"),
+  "release host sem polling periodico de versao"
 );
 assert(sync.includes("markCooperadoUserSyncVisible"), "sync visível só com ação do usuário");
 assert(
@@ -113,6 +116,11 @@ const shield = read("src/lib/pwa/clientReleaseShield.ts");
 assert(shield.includes("runClientReleaseShield") && shield.includes("MISALIGNED_RETRY"), "shield com retry");
 const clientRelease = read("src/lib/pwa/clientRelease.ts");
 assert(clientRelease.includes("markCurrentRuntimeReleaseSeen"), "quiesce loop burst align");
+assert(
+  clientRelease.includes("allowUrgentReleaseAlignForFingerprint") &&
+    clientRelease.includes("URGENT_FP_KEY"),
+  "inline cloud_ahead com bypass de burst e dedup por fingerprint"
+);
 
 if (process.exitCode !== 1) {
   console.log("\nHX 9.0 cold start smoke OK");
