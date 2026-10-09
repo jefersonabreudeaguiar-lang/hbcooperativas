@@ -542,11 +542,33 @@ export function lancarRepasseHbContaCoopNoCaixa(
   });
 }
 
+/** Remove lançamentos automáticos de pagamentos ainda não confirmados pelo responsável. */
+export function removerLancamentosCaixaPagamentoAguardando(
+  data: AppData,
+  cooperativaId: string
+): AppData {
+  const aguardandoIds = new Set(
+    data.pagamentosCooperado
+      .filter((p) => p.cooperativaId === cooperativaId && p.status === "aguardando_confirmacao")
+      .map((p) => p.id)
+  );
+  if (aguardandoIds.size === 0) return data;
+  return {
+    ...data,
+    livroCaixa: (data.livroCaixa ?? []).filter((l) => {
+      if (l.cooperativaId !== cooperativaId) return true;
+      const pgId = pagamentoIdFromOrigemId(l.origemId);
+      if (!pgId) return true;
+      return !aguardandoIds.has(pgId);
+    }),
+  };
+}
+
 export function completarLancamentosContabeisPagamentos(data: AppData, cooperativaId?: string): AppData {
   let next = data;
   const pagamentos = data.pagamentosCooperado.filter((p) => !cooperativaId || p.cooperativaId === cooperativaId);
   for (const pagamento of pagamentos) {
-    if (pagamento.status !== "confirmado" && pagamento.status !== "aguardando_confirmacao") continue;
+    if (pagamento.status !== "confirmado") continue;
     next = lancarPagamentoCooperadoNoCaixa(next, pagamento);
   }
   return next;
@@ -571,6 +593,7 @@ export function completarMensalidadesPagasNoCaixa(data: AppData, cooperativaId?:
 export function reconciliarLivroCaixaContabilCooperativa(data: AppData, cooperativaId: string): AppData {
   let next = ensureControleAnualLivroCaixa(data, cooperativaId);
   next = atribuirSequenciasAusentes(next, cooperativaId);
+  next = removerLancamentosCaixaPagamentoAguardando(next, cooperativaId);
   next = completarLancamentosContabeisPagamentos(next, cooperativaId);
   next = completarMensalidadesPagasNoCaixa(next, cooperativaId);
   return next;
@@ -594,9 +617,7 @@ export type AuditoriaLivroCaixaContabil = {
 
 export function auditarLivroCaixaContabilCooperativa(data: AppData, cooperativaId: string): AuditoriaLivroCaixaContabil {
   const pagamentos = data.pagamentosCooperado.filter(
-    (p) =>
-      p.cooperativaId === cooperativaId &&
-      (p.status === "confirmado" || p.status === "aguardando_confirmacao")
+    (p) => p.cooperativaId === cooperativaId && p.status === "confirmado"
   );
   const livro = (data.livroCaixa ?? []).filter((l) => l.cooperativaId === cooperativaId);
   const pagamentosSemDebitoCaixa: string[] = [];

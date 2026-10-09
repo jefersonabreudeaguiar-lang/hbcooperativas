@@ -3185,6 +3185,11 @@ export function finalizarPagamentoCooperadoConfirmado(
 
   const coopId = pagamento.cooperativaId;
   const canonico = resolverCooperadoIdCanonico(next, pagamento.cooperadoId, coopId);
+  const confirmado = next.pagamentosCooperado.find((p) => p.id === pagamentoId);
+  if (confirmado?.status === "confirmado") {
+    next = lancarPagamentoCooperadoNoCaixa(next, confirmado);
+  }
+
   next = {
     ...next,
     comunicados: next.comunicados.map((c) => {

@@ -32,7 +32,6 @@ import {
   parseNumeroSequenciaInput,
   podeExcluirLancamentoLivroCaixa,
   resumoLivroCaixa,
-  resumoLivroCaixaGeral,
   solicitarEncerramentoAnoLivroCaixa,
 } from "@/services/livroCaixaService";
 import { APP_BUILD_VERSION } from "@/lib/appBuildVersion";
@@ -40,8 +39,18 @@ import {
   gerarRelatorioLivroCaixaPlanilhaHtml,
   type LivroCaixaRelatorioPlanilhaOpts,
 } from "@/utils/livroCaixaRelatorioHtml";
-import { buildPlanilhaLinhas, saldoLivroCaixaAntesMes } from "@/services/livroCaixaPlanilha";
+import {
+  buildPlanilhaLinhas,
+  lancamentosLivroCaixaPeriodo,
+  saldoLivroCaixaAntesData,
+  saldoLivroCaixaAntesMes,
+} from "@/services/livroCaixaPlanilha";
 import { LivroCaixaPlanilhaTable } from "@/components/livro-caixa/LivroCaixaPlanilhaTable";
+import { LivroCaixaResumoCooperadosTable } from "@/components/livro-caixa/LivroCaixaResumoCooperadosTable";
+import {
+  calcularResumoOperacionalLivroCaixa,
+  calcularResumoPorCooperadoLivroCaixa,
+} from "@/services/livroCaixaResumoCooperado";
 import type { LivroCaixaLancamento } from "@/types";
 import { imprimirDocumentoHtml } from "@/utils/relatorioHtml";
 import {
@@ -75,10 +84,15 @@ export default function LivroCaixaPage() {
   const [editing, setEditing] = useState<LivroCaixaLancamento | null>(null);
   const [buscaSequencia, setBuscaSequencia] = useState("");
   const [destaqueSeqId, setDestaqueSeqId] = useState<string | null>(null);
-  const [relatorioModo, setRelatorioModo] = useState<LivroCaixaRelatorioPlanilhaOpts["modo"]>("mes");
-  const [dataRelatorio, setDataRelatorio] = useState(new Date().toISOString().split("T")[0]);
-  const [relatorioDe, setRelatorioDe] = useState(new Date().toISOString().split("T")[0]);
-  const [relatorioAte, setRelatorioAte] = useState(new Date().toISOString().split("T")[0]);
+  const hojeIso = new Date().toISOString().split("T")[0];
+  const inicioMesIso = `${hojeIso.slice(0, 8)}01`;
+  const [modoVisualizacao, setModoVisualizacao] = useState<"mes" | "periodo">("mes");
+  const [filtroDe, setFiltroDe] = useState(inicioMesIso);
+  const [filtroAte, setFiltroAte] = useState(hojeIso);
+  const [relatorioModo, setRelatorioModo] = useState<LivroCaixaRelatorioPlanilhaOpts["modo"]>("periodo");
+  const [dataRelatorio, setDataRelatorio] = useState(hojeIso);
+  const [relatorioDe, setRelatorioDe] = useState(inicioMesIso);
+  const [relatorioAte, setRelatorioAte] = useState(hojeIso);
   const [incluirFichaRelatorio, setIncluirFichaRelatorio] = useState(false);
   const [incluirSobrasRelatorio, setIncluirSobrasRelatorio] = useState(false);
   const [incluirAbertosRelatorio, setIncluirAbertosRelatorio] = useState(false);
@@ -140,22 +154,38 @@ export default function LivroCaixaPage() {
         : { saldo: 0, saldoCaixaEfetivo: 0, totalCreditos: 0, totalDebitos: 0, totalCreditosRetencao: 0, lancamentos: [] },
     [dataCaixa, coopId, mes]
   );
-  const resumoGeral = useMemo(
-    () =>
-      dataCaixa && coopId
-        ? resumoLivroCaixaGeral(dataCaixa, coopId)
-        : { saldo: 0, saldoCaixaEfetivo: 0, totalCreditos: 0, totalDebitos: 0, totalCreditosRetencao: 0, lancamentos: [] },
-    [dataCaixa, coopId]
+  const lancamentosVisao = useMemo(() => {
+    if (!dataCaixa || !coopId) return [];
+    if (modoVisualizacao === "periodo") {
+      return lancamentosLivroCaixaPeriodo(dataCaixa, coopId, filtroDe, filtroAte);
+    }
+    return resumoMes.lancamentos;
+  }, [dataCaixa, coopId, modoVisualizacao, filtroDe, filtroAte, resumoMes.lancamentos]);
+
+  const resumoOperacional = useMemo(
+    () => calcularResumoOperacionalLivroCaixa(lancamentosVisao),
+    [lancamentosVisao]
   );
+
+  const resumoPorCooperado = useMemo(() => {
+    if (!dataCaixa) return [];
+    return calcularResumoPorCooperadoLivroCaixa(dataCaixa, lancamentosVisao);
+  }, [dataCaixa, lancamentosVisao]);
 
   const saldoInicialMes = useMemo(
     () => (dataCaixa && coopId ? saldoLivroCaixaAntesMes(dataCaixa, coopId, mes) : 0),
     [dataCaixa, coopId, mes]
   );
 
+  const saldoInicialVisao = useMemo(() => {
+    if (!dataCaixa || !coopId) return 0;
+    if (modoVisualizacao === "periodo") return saldoLivroCaixaAntesData(dataCaixa, coopId, filtroDe);
+    return saldoInicialMes;
+  }, [dataCaixa, coopId, modoVisualizacao, filtroDe, saldoInicialMes]);
+
   const planilhaLinhas = useMemo(
-    () => buildPlanilhaLinhas(resumoMes.lancamentos, saldoInicialMes),
-    [resumoMes.lancamentos, saldoInicialMes]
+    () => buildPlanilhaLinhas(lancamentosVisao, saldoInicialVisao),
+    [lancamentosVisao, saldoInicialVisao]
   );
 
   const saldoFinalMes = useMemo(() => {
@@ -428,26 +458,67 @@ export default function LivroCaixaPage() {
         }
       />
 
+      <Card title="Período da visão">
+        <div className="flex flex-col sm:flex-row sm:items-end gap-4">
+          <FormField label="Exibir totais e cooperados">
+            <Select
+              value={modoVisualizacao}
+              onChange={(e) => setModoVisualizacao(e.target.value as "mes" | "periodo")}
+              className="max-w-xs"
+            >
+              <option value="mes">Mês de referência</option>
+              <option value="periodo">Data início e fim</option>
+            </Select>
+          </FormField>
+          {modoVisualizacao === "mes" ? (
+            <FormField label="Mês">
+              <Select value={mes} onChange={(e) => setMes(e.target.value)} className="max-w-xs">
+                {meses.map((m) => (
+                  <option key={m} value={m}>{formatMesReferencia(m)}</option>
+                ))}
+              </Select>
+            </FormField>
+          ) : (
+            <div className="grid grid-cols-2 gap-3 flex-1 max-w-md">
+              <FormField label="Início">
+                <Input type="date" value={filtroDe} onChange={(e) => setFiltroDe(e.target.value)} />
+              </FormField>
+              <FormField label="Fim">
+                <Input type="date" value={filtroAte} onChange={(e) => setFiltroAte(e.target.value)} />
+              </FormField>
+            </div>
+          )}
+        </div>
+        <p className="text-xs text-gray-500 mt-3">
+          Crédito = taxa da cooperativa + mensalidades. Débito = pagamentos confirmados pelo responsável (líquido ao
+          cooperado). Lançamentos avulsos e outros movimentos aparecem na planilha detalhada abaixo.
+        </p>
+      </Card>
+
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <div className="rounded-2xl border border-green-200 bg-green-50/90 p-5 shadow-sm">
           <TrendingUp size={22} className="text-green-700 mb-2" />
-          <p className="text-sm text-green-800 font-medium">Créditos · {formatMesReferencia(mes)}</p>
-          <p className="text-3xl font-bold text-green-900 mt-1">{formatCurrency(resumoMes.totalCreditos)}</p>
+          <p className="text-sm text-green-800 font-medium">Créditos (taxa + mensalidades)</p>
+          <p className="text-3xl font-bold text-green-900 mt-1">{formatCurrency(resumoOperacional.totalCreditos)}</p>
         </div>
         <div className="rounded-2xl border border-red-200 bg-red-50/90 p-5 shadow-sm">
           <TrendingDown size={22} className="text-red-700 mb-2" />
-          <p className="text-sm text-red-800 font-medium">Débitos · {formatMesReferencia(mes)}</p>
-          <p className="text-3xl font-bold text-red-900 mt-1">{formatCurrency(resumoMes.totalDebitos)}</p>
+          <p className="text-sm text-red-800 font-medium">Débitos (pagamentos confirmados)</p>
+          <p className="text-3xl font-bold text-red-900 mt-1">{formatCurrency(resumoOperacional.totalDebitos)}</p>
         </div>
         <div className="rounded-2xl bg-gradient-to-br from-slate-700 to-slate-900 text-white p-5 shadow-lg">
           <Wallet size={24} className="opacity-90 mb-2" />
-          <p className="text-slate-200 text-sm">Saldo corrido · {formatMesReferencia(mes)}</p>
-          <p className="text-3xl font-bold mt-1">{formatCurrency(saldoFinalMes)}</p>
+          <p className="text-slate-200 text-sm">Saldo do período</p>
+          <p className="text-3xl font-bold mt-1">{formatCurrency(resumoOperacional.saldo)}</p>
           <p className="text-xs text-slate-300 mt-2">
-            Caixa efetivo geral: {formatCurrency(resumoGeral.saldoCaixaEfetivo)}
+            Planilha completa (saldo corrido): {formatCurrency(saldoFinalMes)}
           </p>
         </div>
       </div>
+
+      <Card title="Resumo por cooperado">
+        <LivroCaixaResumoCooperadosTable linhas={resumoPorCooperado} />
+      </Card>
 
       <Card title="Conferência rápida">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -467,16 +538,29 @@ export default function LivroCaixaPage() {
             </FormField>
           </div>
           <div className="space-y-3">
-            <FormField label="Relatório PDF / impressão">
+            <FormField label="Emissão do relatório (PDF / ZIP)">
               <Select
                 value={relatorioModo}
                 onChange={(e) => setRelatorioModo(e.target.value as LivroCaixaRelatorioPlanilhaOpts["modo"])}
               >
+                <option value="periodo">Intervalo — data início e fim</option>
                 <option value="mes">Planilha do mês selecionado</option>
                 <option value="dia">Um dia</option>
-                <option value="periodo">Intervalo de datas</option>
               </Select>
             </FormField>
+            {relatorioModo === "periodo" && (
+              <Button
+                type="button"
+                variant="secondary"
+                className="text-xs"
+                onClick={() => {
+                  setRelatorioDe(filtroDe);
+                  setRelatorioAte(filtroAte);
+                }}
+              >
+                Usar mesmo período da visão acima
+              </Button>
+            )}
             {relatorioModo === "dia" && (
               <FormField label="Data">
                 <Input type="date" value={dataRelatorio} onChange={(e) => setDataRelatorio(e.target.value)} />
@@ -584,46 +668,27 @@ export default function LivroCaixaPage() {
         </Card>
       )}
 
-      <Card title={`Livro caixa · ${formatMesReferencia(mes)}`}>
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
-          <Select value={mes} onChange={(e) => setMes(e.target.value)} className="max-w-xs">
-            {meses.map((m) => (
-              <option key={m} value={m}>{formatMesReferencia(m)}</option>
-            ))}
-          </Select>
-          <p className="text-xs text-gray-500 sm:text-right max-w-md">
-            Ano-livro {controleAnual?.anoLivro ?? "—"} · sequência por evento. Pagamento ao cooperado = débito (líquido);
-            taxa, mensalidade, cota e descontos na ficha = crédito da cooperativa (retenção).
-          </p>
-        </div>
+      <Card
+        title={
+          modoVisualizacao === "periodo"
+            ? `Livro caixa · ${formatDate(filtroDe)} a ${formatDate(filtroAte)}`
+            : `Livro caixa · ${formatMesReferencia(mes)}`
+        }
+      >
+        <p className="text-xs text-gray-500 mb-4 max-w-3xl">
+          Ano-livro {controleAnual?.anoLivro ?? "—"} · sequência por evento. Todo pagamento confirmado pelo responsável
+          gera débito automático; taxa e mensalidades na ficha entram como crédito.
+        </p>
         <LivroCaixaPlanilhaTable
           linhas={planilhaLinhas}
-          saldoInicial={saldoInicialMes}
+          saldoInicial={saldoInicialVisao}
           destaqueId={destaqueSeqId}
           onEditar={openEditar}
           onExcluir={excluirLancamento}
           canEdit={canEditLancamento}
           canDelete={canDeleteLancamento}
-          emptyMessage="Nenhum lançamento neste mês."
+          emptyMessage="Nenhum lançamento neste período."
         />
-        <div className="mt-4 pt-4 border-t grid grid-cols-1 sm:grid-cols-3 gap-3 text-sm">
-          <div className="flex justify-between sm:flex-col sm:gap-1">
-            <span className="text-gray-600">Retenções (ficha) no mês</span>
-            <span className="text-blue-700 font-semibold">{formatCurrency(resumoMes.totalCreditosRetencao)}</span>
-          </div>
-          <div className="flex justify-between sm:flex-col sm:gap-1">
-            <span className="text-gray-600">Saldo caixa efetivo do mês</span>
-            <span className={resumoMes.saldoCaixaEfetivo >= 0 ? "text-green-700 font-semibold" : "text-red-700 font-semibold"}>
-              {formatCurrency(resumoMes.saldoCaixaEfetivo)}
-            </span>
-          </div>
-          <div className="flex justify-between sm:flex-col sm:gap-1">
-            <span className="text-gray-600">Saldo contábil do mês</span>
-            <span className={resumoMes.saldo >= 0 ? "text-green-700 font-semibold" : "text-red-700 font-semibold"}>
-              {formatCurrency(resumoMes.saldo)}
-            </span>
-          </div>
-        </div>
       </Card>
 
       <Modal
