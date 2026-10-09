@@ -293,13 +293,36 @@ export function filtrarResumosEntregasPendentes(
     .filter((r) => r.notas.length > 0);
 }
 
+/** Sem débito nem ficha pendente elegível — não exibir em “em aberto” (só notas já pagas na operação). */
+export function cooperadoMesSemRecebimentoPendenteNaFicha(
+  data: AppData,
+  cooperadoId: string,
+  mesReferencia: string,
+  cooperativaId?: string
+): boolean {
+  const coopId = cooperativaId ?? data.cooperados.find((c) => c.id === cooperadoId)?.cooperativaId;
+  if (getPagamentoAguardandoCooperado(data, cooperadoId, mesReferencia)) return false;
+  if (getTotalAPagarCooperado(data, cooperadoId, mesReferencia, coopId) > 0) return false;
+  if (temValoresAvulsosPendentesMes(data, cooperadoId, mesReferencia, coopId)) return false;
+  if (listarFichasPendentesPagamento(data, cooperadoId, mesReferencia, coopId).length > 0) {
+    return false;
+  }
+  return true;
+}
+
 /** Remove meses já quitados (PIX confirmado, sem débito) — Início, entregas e HB operacional. */
 export function filtrarResumosMesesNaoQuitados(
   data: AppData,
   cooperadoId: string,
-  resumos: ResumoMesEntregasCooperado[]
+  resumos: ResumoMesEntregasCooperado[],
+  cooperativaId?: string
 ): ResumoMesEntregasCooperado[] {
-  return resumos.filter((r) => !cooperadoMesQuitado(data, cooperadoId, r.mesReferencia));
+  const coopId = cooperativaId ?? data.cooperados.find((c) => c.id === cooperadoId)?.cooperativaId;
+  return resumos.filter(
+    (r) =>
+      !cooperadoMesQuitado(data, cooperadoId, r.mesReferencia) &&
+      !cooperadoMesSemRecebimentoPendenteNaFicha(data, cooperadoId, r.mesReferencia, coopId)
+  );
 }
 
 function notasDoCooperado(data: AppData, cooperadoId: string, cooperativaId?: string): NotaPedido[] {

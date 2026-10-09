@@ -1698,7 +1698,9 @@ export function fichaNotaElegivelParaPagamento(data: AppData, ficha: FichaCorrid
   const nota = data.notasPedido.find((n) => n.id === ficha.notaPedidoId);
   if (!nota) return false;
   if (nota.status === "rejeitada" || nota.status === "rascunho") return false;
-  if (nota.status === "conferida" || nota.status === "pago") {
+  /** Nota já quitada na operação — não entra no “a receber” (evita fantasma ficha pendente + nota pago). */
+  if (nota.status === "pago") return false;
+  if (nota.status === "conferida") {
     return !notaQuitadaPorPagamentoCooperativaRegistrado(data, nota, ficha.cooperadoId);
   }
   return false;
