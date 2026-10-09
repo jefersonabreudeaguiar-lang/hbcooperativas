@@ -3,7 +3,7 @@
 import { useEffect } from "react";
 import { useAuth } from "@/modules/auth/AuthProvider";
 import { isCooperadoPwaMessengerMode } from "@/lib/cooperado/cooperadoPwaMessengerMode";
-import { scheduleCooperadoPostInteractiveTask } from "@/lib/performance/cooperadoColdStart";
+import { scheduleCooperadoPaintFirst } from "@/lib/performance/cooperadoColdStart";
 import { isAppDataWarm, preloadAppData } from "@/services/dataStore";
 
 /** Após o shell pintar, carrega AppData em idle (sync/Atualizar precisa disso). */
@@ -21,11 +21,11 @@ export function CooperadoPwaMessengerAppDataWarm() {
       if (!isAppDataWarm()) preloadAppData({ eager: true });
     };
 
-    scheduleCooperadoPostInteractiveTask(() => {
+    scheduleCooperadoPaintFirst(() => {
       if (typeof requestIdleCallback !== "undefined") {
-        idleId = requestIdleCallback(run, { timeout: 3000 });
+        idleId = requestIdleCallback(run, { timeout: 900 });
       } else {
-        timeoutId = window.setTimeout(run, 600);
+        timeoutId = window.setTimeout(run, 80);
       }
     });
 

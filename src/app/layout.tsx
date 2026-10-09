@@ -14,6 +14,9 @@ import {
 } from "@/lib/pwa/clientRelease";
 import { buildInlineRqlPerfStubScript } from "@/lib/performance/rqlPerfReport";
 import { buildInlineCooperadoAppDataWarmScript } from "@/lib/performance/cooperadoAppDataInlineWarm";
+import {
+  buildInlineCooperadoBootShellScript,
+} from "@/lib/performance/cooperadoBootShell";
 import { RqlPerfDebugBootstrap } from "@/components/performance/RqlPerfDebugBootstrap";
 
 const geist = Geist({
@@ -82,8 +85,21 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <script dangerouslySetInnerHTML={{ __html: buildInlineDeploymentBootScript(pageRelease) }} />
         <script dangerouslySetInnerHTML={{ __html: buildInlineRqlPerfStubScript() }} />
         <script dangerouslySetInnerHTML={{ __html: buildInlineCooperadoAppDataWarmScript() }} />
+        <script dangerouslySetInnerHTML={{ __html: buildInlineCooperadoBootShellScript() }} />
       </head>
       <body className="min-h-full antialiased">
+        <div
+          id="hb-coop-boot-shell"
+          className="fixed inset-0 z-[9999] flex flex-col bg-gray-50"
+          aria-hidden="true"
+        >
+          <div className="h-14 bg-green-900/90 animate-pulse shrink-0" />
+          <div className="flex-1 p-4 space-y-3 max-w-lg mx-auto w-full pt-6">
+            <div className="h-8 w-48 bg-gray-200 rounded-lg animate-pulse" />
+            <div className="h-24 bg-white rounded-xl border border-gray-200 animate-pulse" />
+            <div className="h-24 bg-white rounded-xl border border-gray-200 animate-pulse" />
+          </div>
+        </div>
         <AuthProvider>
           <RqlPerfDebugBootstrap />
           <ClientReleaseShieldHost />

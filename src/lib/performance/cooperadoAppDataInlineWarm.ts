@@ -6,7 +6,7 @@ const STORAGE_KEY = "coopeagriplla_data";
 const SESSION_KEY = "coopeagriplla_session";
 
 export function buildInlineCooperadoAppDataWarmScript(): string {
-  return `(function(){try{if(typeof localStorage==="undefined")return;if(!localStorage.getItem("${SESSION_KEY}"))return;try{var standalone=window.matchMedia&&window.matchMedia("(display-mode: standalone)").matches;var mobile=window.matchMedia&&window.matchMedia("(max-width: 1023px)").matches;if(standalone&&mobile)return;}catch(x){}var s=localStorage.getItem("${STORAGE_KEY}");if(!s)return;var w=window;w.__hbCoopParsedAppData=JSON.parse(s);}catch(e){try{delete window.__hbCoopParsedAppData;}catch(x){}}})();`;
+  return `(function(){try{if(typeof localStorage==="undefined")return;if(!localStorage.getItem("${SESSION_KEY}"))return;var parse=function(){try{var s=localStorage.getItem("${STORAGE_KEY}");if(!s)return;var w=window;w.__hbCoopParsedAppData=JSON.parse(s);}catch(e){try{delete window.__hbCoopParsedAppData;}catch(x){}}};try{var standalone=window.matchMedia&&window.matchMedia("(display-mode: standalone)").matches;var mobile=window.matchMedia&&window.matchMedia("(max-width: 1023px)").matches;if(standalone&&mobile){if(typeof requestIdleCallback!=="undefined"){requestIdleCallback(parse,{timeout:900});}else{setTimeout(parse,0);}return;}}catch(x){}parse();}catch(e){try{delete window.__hbCoopParsedAppData;}catch(x){}}})();`;
 }
 
 export function takeInlineParsedAppData(): unknown | null {

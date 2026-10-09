@@ -77,6 +77,14 @@ assert(
 );
 const rootLayout = read("src/app/layout.tsx");
 assert(rootLayout.includes("buildInlineCooperadoAppDataWarmScript"), "parse AppData inline no head");
+assert(rootLayout.includes("hb-coop-boot-shell"), "boot shell estático antes do React");
+assert(rootLayout.includes("buildInlineCooperadoBootShellScript"), "boot shell cooperado no layout");
+assert(
+  read("src/components/cooperado/CooperadoPwaMessengerAppDataWarm.tsx").includes(
+    "scheduleCooperadoPaintFirst"
+  ),
+  "AppData PWA mensageiro após 1º paint (não post-interactive 2.8s)"
+);
 assert(provider.includes("scheduleCooperadoPostShellSync(() =>") && provider.includes("runSync({ force: true, silent: true })"), "sync cold start apos shell");
 assert(gate.includes("CooperadoFinanceiroShellProvider"), "gate shell-first com contexto");
 assert(!gate.includes("min-h-screen bg-gray-50"), "gate sem tela cheia bloqueante");

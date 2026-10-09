@@ -41,6 +41,7 @@ export function lerInicioCardPersistidoResume(
     lerInicioCardPersistidoFlex(cooperadoId, cooperativaId)
   );
   if (direct) return direct;
+  if (cooperativaId) return null;
 
   if (typeof localStorage === "undefined") return null;
   const prefix = `hb.coop.inicioCard.v${INICIO_CARD_STORAGE_VERSION}:`;

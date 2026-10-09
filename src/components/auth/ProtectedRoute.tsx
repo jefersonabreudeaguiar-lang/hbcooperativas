@@ -4,6 +4,7 @@ import { useLayoutEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/modules/auth/AuthProvider";
 import { cooperadoInstantShellReady } from "@/lib/performance/cooperadoColdStart";
+import { dismissCooperadoBootShell } from "@/lib/performance/cooperadoBootShell";
 import { markRqlColdStartPhase } from "@/lib/performance/rqlMarks";
 import { getSession } from "@/services/dataStore";
 
@@ -17,6 +18,9 @@ export function ProtectedRoute({ children }: { children: React.ReactNode }) {
     }
     if (!loading && user) {
       markRqlColdStartPhase("auth_ready");
+    }
+    if (!loading || cooperadoInstantShellReady(getSession())) {
+      dismissCooperadoBootShell();
     }
   }, [user, loading, router]);
 
