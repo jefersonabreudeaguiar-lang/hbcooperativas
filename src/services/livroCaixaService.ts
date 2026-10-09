@@ -54,7 +54,7 @@ function mesFromData(dataIso: string): string {
   return dataIso.slice(0, 7);
 }
 
-function dataLancamentoPagamento(pagamento: PagamentoCooperadoRegistro): string {
+export function dataLancamentoPagamento(pagamento: PagamentoCooperadoRegistro): string {
   const raw = pagamento.pagoEm || pagamento.createdAt || "";
   const dia = raw.split("T")[0];
   return dia && /^\d{4}-\d{2}-\d{2}$/.test(dia) ? dia : new Date().toISOString().split("T")[0];
@@ -735,6 +735,21 @@ export function mesesLivroCaixa(data: AppData, cooperativaId: string): string[] 
 }
 
 /** Mês com movimento mais recente — evita abrir em mês corrente vazio. */
+/** Primeira data com movimento (lançamento ou PIX confirmado) — período padrão da planilha. */
+export function dataInicioMovimentoLivroCaixa(data: AppData, cooperativaId: string): string {
+  const datas: string[] = [];
+  for (const l of (data.livroCaixa ?? []).filter((x) => x.cooperativaId === cooperativaId)) {
+    if (l.data) datas.push(l.data);
+  }
+  for (const p of data.pagamentosCooperado) {
+    if (p.cooperativaId !== cooperativaId || p.status !== "confirmado") continue;
+    datas.push(dataLancamentoPagamento(p));
+  }
+  datas.sort();
+  if (datas.length) return datas[0];
+  return `${getCurrentMesReferencia()}-01`;
+}
+
 export function mesReferenciaInicialLivroCaixa(data: AppData, cooperativaId: string): string {
   for (const m of mesesLivroCaixa(data, cooperativaId)) {
     if (lancamentosLivroCaixa(data, cooperativaId, m).length > 0) return m;

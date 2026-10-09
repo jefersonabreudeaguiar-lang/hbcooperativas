@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Plus, TrendingUp, TrendingDown, Wallet, Send, FileText, Search, Download } from "lucide-react";
 import { useAppData } from "@/hooks/useAppData";
@@ -29,6 +29,7 @@ import {
   isLancamentoSemSequenciaLegado,
   mesesLivroCaixa,
   mesReferenciaInicialLivroCaixa,
+  dataInicioMovimentoLivroCaixa,
   parseNumeroSequenciaInput,
   podeExcluirLancamentoLivroCaixa,
   resumoLivroCaixa,
@@ -41,6 +42,7 @@ import {
 } from "@/utils/livroCaixaRelatorioHtml";
 import {
   buildPlanilhaLinhas,
+  LIVRO_CAIXA_LINHAS_POR_PAGINA,
   lancamentosLivroCaixaPeriodo,
   saldoLivroCaixaAntesData,
   saldoLivroCaixaAntesMes,
@@ -86,7 +88,9 @@ export default function LivroCaixaPage() {
   const [destaqueSeqId, setDestaqueSeqId] = useState<string | null>(null);
   const hojeIso = new Date().toISOString().split("T")[0];
   const inicioMesIso = `${hojeIso.slice(0, 8)}01`;
-  const [modoVisualizacao, setModoVisualizacao] = useState<"mes" | "periodo">("mes");
+  const [modoVisualizacao, setModoVisualizacao] = useState<"mes" | "periodo">("periodo");
+  const [paginaPlanilha, setPaginaPlanilha] = useState(1);
+  const periodoInicializadoRef = useRef(false);
   const [filtroDe, setFiltroDe] = useState(inicioMesIso);
   const [filtroAte, setFiltroAte] = useState(hojeIso);
   const [relatorioModo, setRelatorioModo] = useState<LivroCaixaRelatorioPlanilhaOpts["modo"]>("periodo");
@@ -142,6 +146,16 @@ export default function LivroCaixaPage() {
     if (!dataCaixa || !data || !coopId) return;
     if (dataCaixa !== data) updateData(() => dataCaixa);
   }, [data, dataCaixa, coopId]);
+
+  useEffect(() => {
+    if (!dataCaixa || !coopId || periodoInicializadoRef.current) return;
+    setFiltroDe(dataInicioMovimentoLivroCaixa(dataCaixa, coopId));
+    periodoInicializadoRef.current = true;
+  }, [dataCaixa, coopId]);
+
+  useEffect(() => {
+    setPaginaPlanilha(1);
+  }, [mes, modoVisualizacao, filtroDe, filtroAte]);
 
   const meses = useMemo(
     () => (dataCaixa && coopId ? mesesLivroCaixa(dataCaixa, coopId) : [getCurrentMesReferencia()]),
@@ -301,6 +315,24 @@ export default function LivroCaixaPage() {
       linhas.find((l) => l.origem === "pagamento_cooperado") ??
       linhas[0];
     if (principal.mesReferencia !== mes) setMes(principal.mesReferencia);
+    const de =
+      modoVisualizacao === "periodo" && principal.data >= filtroDe ? filtroDe : principal.data;
+    const ate =
+      modoVisualizacao === "periodo" && principal.data <= filtroAte ? filtroAte : principal.data;
+    const deAjustado = principal.data < de ? principal.data : de;
+    const ateAjustado = principal.data > ate ? principal.data : ate;
+    if (modoVisualizacao !== "periodo" || deAjustado !== filtroDe || ateAjustado !== filtroAte) {
+      setModoVisualizacao("periodo");
+      setFiltroDe(deAjustado);
+      setFiltroAte(ateAjustado);
+    }
+    const base = dataCaixa ?? getData();
+    const visao = lancamentosLivroCaixaPeriodo(base, coopId, deAjustado, ateAjustado);
+    const linhasCalc = buildPlanilhaLinhas(visao, saldoLivroCaixaAntesData(base, coopId, deAjustado));
+    const idx = linhasCalc.findIndex((row) => row.lancamento.id === principal.id);
+    if (idx >= 0) {
+      setPaginaPlanilha(Math.floor(idx / LIVRO_CAIXA_LINHAS_POR_PAGINA) + 1);
+    }
     setDestaqueSeqId(principal.id);
     if (isLancamentoManualEditavel(principal) && canEditLancamento) {
       openEditar(principal);
@@ -676,8 +708,9 @@ export default function LivroCaixaPage() {
         }
       >
         <p className="text-xs text-gray-500 mb-4 max-w-3xl">
-          Ano-livro {controleAnual?.anoLivro ?? "—"} · sequência por evento. Todo pagamento confirmado pelo responsável
-          gera débito automático; taxa e mensalidades na ficha entram como crédito.
+          Ano-livro {controleAnual?.anoLivro ?? "—"} · sequência por evento. Cada PIX confirmado na ficha corrida gera
+          débito (pagamento) e créditos de taxa/mensalidade/descontos na mesma sequência. Use Anterior/Próxima quando houver
+          muitas linhas.
         </p>
         <LivroCaixaPlanilhaTable
           linhas={planilhaLinhas}
@@ -687,7 +720,9 @@ export default function LivroCaixaPage() {
           onExcluir={excluirLancamento}
           canEdit={canEditLancamento}
           canDelete={canDeleteLancamento}
-          emptyMessage="Nenhum lançamento neste período."
+          emptyMessage="Nenhum lançamento neste período. Amplie o intervalo de datas ou confira se o PIX está confirmado na ficha."
+          pagina={paginaPlanilha}
+          onPaginaChange={setPaginaPlanilha}
         />
       </Card>
 

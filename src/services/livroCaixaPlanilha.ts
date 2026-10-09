@@ -2,6 +2,9 @@ import type { AppData, LivroCaixaLancamento } from "@/types";
 import { round2 } from "@/utils/calculations";
 import { compareLancamentoSequencia, lancamentosLivroCaixa } from "@/services/livroCaixaService";
 
+/** Linhas por página na planilha do livro caixa (tela do responsável). */
+export const LIVRO_CAIXA_LINHAS_POR_PAGINA = 40;
+
 export interface LivroCaixaPlanilhaLinha {
   lancamento: LivroCaixaLancamento;
   credito: number | null;

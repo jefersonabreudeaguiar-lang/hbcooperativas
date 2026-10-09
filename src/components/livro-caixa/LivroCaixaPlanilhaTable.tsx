@@ -1,6 +1,9 @@
 "use client";
 
-import { Pencil, Trash2 } from "lucide-react";
+import { useEffect, useMemo } from "react";
+import { ChevronLeft, ChevronRight, Pencil, Trash2 } from "lucide-react";
+import { LIVRO_CAIXA_LINHAS_POR_PAGINA } from "@/services/livroCaixaPlanilha";
+import { Button } from "@/components/ui/Button";
 import type { LivroCaixaOrigem, LivroCaixaLancamento } from "@/types";
 import { formatCurrency, formatDate } from "@/utils/format";
 import {
@@ -34,6 +37,9 @@ export interface LivroCaixaPlanilhaTableProps {
   canEdit?: boolean;
   canDelete?: boolean;
   emptyMessage?: string;
+  pagina?: number;
+  onPaginaChange?: (pagina: number) => void;
+  linhasPorPagina?: number;
 }
 
 export function LivroCaixaPlanilhaTable({
@@ -45,8 +51,29 @@ export function LivroCaixaPlanilhaTable({
   canEdit,
   canDelete,
   emptyMessage = "Nenhum lançamento no período.",
+  pagina = 1,
+  onPaginaChange,
+  linhasPorPagina = LIVRO_CAIXA_LINHAS_POR_PAGINA,
 }: LivroCaixaPlanilhaTableProps) {
   const mostrarSaldoAnterior = Math.abs(saldoInicial) > 0.0001;
+
+  const totalPaginas = useMemo(
+    () => Math.max(1, Math.ceil(linhas.length / linhasPorPagina)),
+    [linhas.length, linhasPorPagina]
+  );
+
+  const paginaAtual = Math.min(Math.max(1, pagina), totalPaginas);
+
+  useEffect(() => {
+    if (pagina > totalPaginas && onPaginaChange) onPaginaChange(totalPaginas);
+  }, [pagina, totalPaginas, onPaginaChange]);
+
+  const linhasPagina = useMemo(() => {
+    const inicio = (paginaAtual - 1) * linhasPorPagina;
+    return linhas.slice(inicio, inicio + linhasPorPagina);
+  }, [linhas, paginaAtual, linhasPorPagina]);
+
+  const mostrarSaldoAnteriorPagina = paginaAtual === 1 && mostrarSaldoAnterior;
 
   return (
     <div className="rounded-xl border border-slate-200 overflow-hidden bg-white shadow-sm">
@@ -66,7 +93,7 @@ export function LivroCaixaPlanilhaTable({
             </tr>
           </thead>
           <tbody>
-            {mostrarSaldoAnterior && (
+            {mostrarSaldoAnteriorPagina && (
               <tr className="bg-slate-50/90 text-slate-600 italic">
                 <td className="px-3 py-2 border-b border-slate-100" colSpan={3}>Saldo anterior</td>
                 <td className="px-3 py-2 border-b border-slate-100" />
@@ -77,7 +104,7 @@ export function LivroCaixaPlanilhaTable({
                 {(canEdit || canDelete) && <td className="border-b border-slate-100" />}
               </tr>
             )}
-            {linhas.map(({ lancamento: l, credito, debito, saldoCorrido }) => {
+            {linhasPagina.map(({ lancamento: l, credito, debito, saldoCorrido }) => {
               const retencao = isOrigemRetencaoContabil(l.origem);
               const destacado = destaqueId === l.id;
               return (
@@ -149,6 +176,36 @@ export function LivroCaixaPlanilhaTable({
       </div>
       {linhas.length === 0 && !mostrarSaldoAnterior && (
         <p className="text-center text-slate-500 py-10 text-sm">{emptyMessage}</p>
+      )}
+      {linhas.length > 0 && onPaginaChange && totalPaginas > 1 && (
+        <div className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-200 bg-slate-50/80 px-4 py-3 text-sm">
+          <p className="text-slate-600">
+            {linhas.length} lançamento{linhas.length === 1 ? "" : "s"} no período
+          </p>
+          <div className="flex items-center gap-2">
+            <Button
+              type="button"
+              variant="secondary"
+              size="sm"
+              disabled={paginaAtual <= 1}
+              onClick={() => onPaginaChange(paginaAtual - 1)}
+            >
+              <ChevronLeft size={16} /> Anterior
+            </Button>
+            <span className="text-slate-700 font-medium tabular-nums px-1">
+              Página {paginaAtual} de {totalPaginas}
+            </span>
+            <Button
+              type="button"
+              variant="secondary"
+              size="sm"
+              disabled={paginaAtual >= totalPaginas}
+              onClick={() => onPaginaChange(paginaAtual + 1)}
+            >
+              Próxima <ChevronRight size={16} />
+            </Button>
+          </div>
+        </div>
       )}
     </div>
   );
