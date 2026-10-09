@@ -5,6 +5,7 @@ import Link from "next/link";
 import { CheckCircle2, Clock, PenLine } from "lucide-react";
 import type { Cooperado, User } from "@/types";
 import { Card } from "@/components/ui/Card";
+import { Button } from "@/components/ui/Button";
 import { AlertBanner } from "@/components/ui/AlertBanner";
 import { AssinaturaPapelCapture } from "@/components/cooperado/AssinaturaPapelCapture";
 import { AssinaturaStatusAviso } from "@/components/cooperado/AssinaturaStatusAviso";
@@ -14,6 +15,7 @@ import { resolveCooperativaCnpj } from "@/services/notaPedidoCloudService";
 import {
   cooperadoAssinaturaDevolvida,
   cooperadoAssinaturaEmAnalise,
+  cooperadoPodeReenviarAssinaturaCadastro,
   cooperadoPrecisaCadastrarAssinatura,
   cooperadoTemAssinaturaCadastrada,
   getAssinaturaCadastroDataUrl,
@@ -33,6 +35,7 @@ export function AssinaturaCadastroPanel({ data, user, cooperado }: AssinaturaCad
   const [salvando, setSalvando] = useState(false);
   const [okMsg, setOkMsg] = useState("");
   const [erro, setErro] = useState("");
+  const [modoAtualizar, setModoAtualizar] = useState(false);
 
   if (!cooperadoUsaAssinaturaCadastroPilot(cooperado.id)) return null;
 
@@ -40,8 +43,10 @@ export function AssinaturaCadastroPanel({ data, user, cooperado }: AssinaturaCad
   const emAnalise = cooperadoAssinaturaEmAnalise(cooperado);
   const devolvida = cooperadoAssinaturaDevolvida(cooperado);
   const precisa = cooperadoPrecisaCadastrarAssinatura(cooperado.id, cooperado);
+  const podeReenviar = cooperadoPodeReenviarAssinaturaCadastro(cooperado.id, cooperado);
   const previewUrl = getAssinaturaCadastroDataUrl(cooperado);
   const podeEnviar = precisa && !emAnalise;
+  const mostrarCaptura = podeEnviar || (modoAtualizar && podeReenviar);
 
   useEffect(() => {
     if (!cooperadoAssinaturaEmAnalise(cooperado) || !getAssinaturaCadastroDataUrl(cooperado)) return;
@@ -61,6 +66,8 @@ export function AssinaturaCadastroPanel({ data, user, cooperado }: AssinaturaCad
   ]);
 
   const salvar = async (payload: { dataUrl: string; hash: string }) => {
+    const reenvioAtualizacao =
+      modoAtualizar || cooperadoTemAssinaturaCadastrada(cooperado) || cooperadoAssinaturaDevolvida(cooperado);
     setErro("");
     setOkMsg("");
     setSalvando(true);
@@ -91,7 +98,12 @@ export function AssinaturaCadastroPanel({ data, user, cooperado }: AssinaturaCad
         }
       }
 
-      setOkMsg("Assinatura enviada! Já pode usar em recibos e votações. A diretoria também vai conferir e confirmar.");
+      setOkMsg(
+        reenvioAtualizacao
+          ? "Nova foto enviada! A diretoria vai conferir antes de substituir a assinatura anterior nos documentos."
+          : "Assinatura enviada! Já pode usar em recibos e votações. A diretoria também vai conferir e confirmar."
+      );
+      setModoAtualizar(false);
     } finally {
       setSalvando(false);
     }
@@ -135,9 +147,27 @@ export function AssinaturaCadastroPanel({ data, user, cooperado }: AssinaturaCad
               {cooperado.assinaturaConfirmadaPorNome ? ` · ${cooperado.assinaturaConfirmadaPorNome}` : ""}
             </p>
           )}
-          <p className="text-xs text-gray-600 mt-2">
-            Para trocar, peça à diretoria devolver a assinatura ou envie nova foto após devolução.
-          </p>
+          {podeReenviar && !modoAtualizar && (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="mt-3"
+              onClick={() => {
+                setOkMsg("");
+                setErro("");
+                setModoAtualizar(true);
+              }}
+            >
+              Atualizar assinatura
+            </Button>
+          )}
+          {podeReenviar && (
+            <p className="text-xs text-gray-600 mt-2">
+              Envie uma nova foto no papel quando quiser; a diretoria confere antes de trocar a assinatura nos
+              documentos.
+            </p>
+          )}
         </div>
       )}
 
@@ -158,7 +188,29 @@ export function AssinaturaCadastroPanel({ data, user, cooperado }: AssinaturaCad
         </div>
       )}
 
-      {podeEnviar && <AssinaturaPapelCapture onConfirm={salvar} disabled={salvando} />}
+      {modoAtualizar && podeReenviar && !podeEnviar && (
+        <AlertBanner variant="info" title="Nova foto da assinatura" className="mb-4">
+          A assinatura atual continua valendo até a diretoria confirmar a nova imagem.
+        </AlertBanner>
+      )}
+
+      {mostrarCaptura && (
+        <>
+          {modoAtualizar && podeReenviar && (
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="mb-2"
+              disabled={salvando}
+              onClick={() => setModoAtualizar(false)}
+            >
+              Cancelar atualização
+            </Button>
+          )}
+          <AssinaturaPapelCapture onConfirm={salvar} disabled={salvando} />
+        </>
+      )}
 
       {emAnalise && (
         <p className="text-xs text-gray-500 mt-3">

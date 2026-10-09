@@ -9,6 +9,7 @@ import { useEnsureAppDataWarm } from "@/hooks/useEnsureAppDataWarm";
 import type { AppDataNotifyDomain } from "@/lib/performance/appDataDomainNotify";
 import { isAppDataWarm } from "@/services/dataStore";
 import { useCooperadoTabPanelActive } from "@/hooks/useCooperadoTabPanelActive";
+import { useCooperadoFinanceiroUiSnapshot } from "@/hooks/useCooperadoFinanceiroUiSnapshot";
 import { useCooperadoMessengerReadModelRevision } from "@/hooks/useCooperadoMessengerReadModelRevision";
 import {
   lerCooperadoPwaFichaResumoSnapshot,
@@ -222,25 +223,6 @@ export default function FichaCorridaPage() {
   }, [messenger, cooperadoId, coopIdEarly, readModelsRevision]);
 
   useEffect(() => {
-    if (!tabActive || messenger) return;
-    const run = () => {
-      if (isCooperado && isCooperadoManualOperacionalSync() && user && data && coopIdEarly) {
-        void resolveCooperativaCnpj(data, coopIdEarly, user).then((cnpj) => {
-          if (cnpj) void runCooperadoForegroundOperacionalCheck(cnpj);
-        });
-        return;
-      }
-      requestAppSync();
-    };
-    if (typeof requestIdleCallback !== "undefined") {
-      const id = requestIdleCallback(run, { timeout: 2_500 });
-      return () => cancelIdleCallback(id);
-    }
-    const t = window.setTimeout(run, 0);
-    return () => window.clearTimeout(t);
-  }, [messenger, isCooperado, tabActive, user, data, coopIdEarly]);
-
-  useEffect(() => {
     const c = searchParams.get("cooperado");
     const m = searchParams.get("mes");
     const a = searchParams.get("aba");
@@ -297,6 +279,27 @@ export default function FichaCorridaPage() {
       cooperadoLocalResumeReady(user));
 
   useEffect(() => {
+    if (!tabActive || messenger) return;
+    const run = () => {
+      if (isCooperado && isCooperadoManualOperacionalSync() && user && data && coopIdEarly) {
+        void resolveCooperativaCnpj(data, coopIdEarly, user).then((cnpj) => {
+          if (cnpj) void runCooperadoForegroundOperacionalCheck(cnpj);
+        });
+        return;
+      }
+      requestAppSync();
+    };
+    const idleTimeout =
+      isCooperado && apresentacaoFinanceiroUi && isAppDataWarm() ? 6_000 : 2_500;
+    if (typeof requestIdleCallback !== "undefined") {
+      const id = requestIdleCallback(run, { timeout: idleTimeout });
+      return () => cancelIdleCallback(id);
+    }
+    const t = window.setTimeout(run, idleTimeout > 3_000 ? 400 : 0);
+    return () => window.clearTimeout(t);
+  }, [messenger, isCooperado, tabActive, user, data, coopIdEarly, apresentacaoFinanceiroUi]);
+
+  useEffect(() => {
     if (!tabActive || !data || !coopId || !user) {
       setCoopCnpjResumo("");
       return;
@@ -310,9 +313,18 @@ export default function FichaCorridaPage() {
     };
   }, [data, coopId, user?.id, tabActive]);
 
+  /** Uma leitura paridade por revisão — evita BIC/consolidado repetido no cooperado. */
+  const paridadeCooperadoMobile = useMemo(() => {
+    if (!tabActive || !isCooperado || !data || !cooperadoId) return null;
+    return leituraFinanceiraParidadeCooperado(data, cooperadoId, coopId);
+  }, [tabActive, isCooperado, data, cooperadoId, coopId, hbDescontosRevision]);
+
   const mesEmAberto = useMemo(() => {
     if (messenger && fichaResumoSnap?.mesPrincipal) return fichaResumoSnap.mesPrincipal;
     if (!tabActive || !data || !cooperadoId) return getCurrentMesReferencia();
+    if (isCooperado && paridadeCooperadoMobile?.mesesResumo[0]) {
+      return paridadeCooperadoMobile.mesesResumo[0];
+    }
     return bicCentralMesPrincipalQuantoVouReceber(data, cooperadoId, coopId, {
       apresentacaoConsolidada: apresentacaoFinanceiroUi,
     });
@@ -321,6 +333,8 @@ export default function FichaCorridaPage() {
     data,
     cooperadoId,
     coopId,
+    isCooperado,
+    paridadeCooperadoMobile,
     hbDescontosRevision,
     apresentacaoFinanceiroUi,
     messenger,
@@ -329,17 +343,48 @@ export default function FichaCorridaPage() {
 
   const valorReceberConsolidado = useMemo(() => {
     if (!tabActive || !data || !cooperadoId) return null;
+    if (isCooperado && paridadeCooperadoMobile) {
+      const meses = paridadeCooperadoMobile.mesesResumo;
+      const mes = meses[0] ?? "";
+      return {
+        mes,
+        meses,
+        mesLabel: paridadeCooperadoMobile.mesLabel,
+        valor: paridadeCooperadoMobile.valorLiquido,
+        valorRecibo: paridadeCooperadoMobile.valorLiquido,
+        aguardandoAssinatura: paridadeCooperadoMobile.consolidado.aguardandoAssinatura,
+      };
+    }
     return bicCentralQuantoVouReceberParaExibicao(data, cooperadoId, coopId, {
       apresentacaoConsolidada: apresentacaoFinanceiroUi,
     }).value;
-  }, [tabActive, data, cooperadoId, coopId, apresentacaoFinanceiroUi, hbDescontosRevision]);
+  }, [
+    tabActive,
+    data,
+    cooperadoId,
+    coopId,
+    isCooperado,
+    paridadeCooperadoMobile,
+    apresentacaoFinanceiroUi,
+    hbDescontosRevision,
+  ]);
 
   const mesesPendentesQuantoVouReceber = useMemo(() => {
     if (!tabActive || !data || !cooperadoId || !isCooperado) return [];
+    if (paridadeCooperadoMobile?.mesesResumo.length) return paridadeCooperadoMobile.mesesResumo;
     return bicCentralListarMesesPendentesQuantoVouReceber(data, cooperadoId, coopId, {
       apresentacaoConsolidada: apresentacaoFinanceiroUi,
     });
-  }, [tabActive, cooperadoId, coopId, data, isCooperado, hbDescontosRevision, apresentacaoFinanceiroUi]);
+  }, [
+    tabActive,
+    cooperadoId,
+    coopId,
+    data,
+    isCooperado,
+    paridadeCooperadoMobile,
+    hbDescontosRevision,
+    apresentacaoFinanceiroUi,
+  ]);
 
   const mesesHistoricoPagamentoCooperado = useMemo(() => {
     if (!data || !cooperadoId) return [];
@@ -434,13 +479,17 @@ export default function FichaCorridaPage() {
 
   const financeiroAberto = useMemo(() => {
     if (!tabActive || !data || !cooperadoSelecionadoId) return null;
+    if (isCooperado) return paridadeCooperadoMobile?.consolidado ?? null;
     return bicCentralGetConsolidadoFinanceiroCooperado(data, cooperadoSelecionadoId, coopId);
-  }, [tabActive, data, cooperadoSelecionadoId, coopId, hbDescontosRevision]);
-
-  const paridadeCooperadoMobile = useMemo(() => {
-    if (!tabActive || !isCooperado || !data || !cooperadoSelecionadoId) return null;
-    return leituraFinanceiraParidadeCooperado(data, cooperadoSelecionadoId, coopId);
-  }, [tabActive, isCooperado, data, cooperadoSelecionadoId, coopId, hbDescontosRevision]);
+  }, [
+    tabActive,
+    data,
+    cooperadoSelecionadoId,
+    coopId,
+    isCooperado,
+    paridadeCooperadoMobile,
+    hbDescontosRevision,
+  ]);
 
   /** Meses do resumo consolidado — mesma lista que Pagar/responsável (paridade universal). */
   const mesesFinanceiroCooperado = useMemo(() => {
@@ -732,6 +781,20 @@ export default function FichaCorridaPage() {
     useCooperadoExibirAguardandoAssinatura(isCooperado && !!pagamentoAguardando);
   const { syncingForUi: syncCooperadoFinanceiro, cooperadoPagamentosHydrated } = useSyncStatus();
 
+  const financeiroUiSnapshot = useCooperadoFinanceiroUiSnapshot({
+    active: tabActive && isCooperado,
+    data,
+    cooperadoId,
+    cooperativaId: coopId,
+    opts: {
+      apresentacaoConsolidada: apresentacaoFinanceiroUi,
+      carregandoNuvem: !apresentacaoFinanceiroUi && syncCooperadoFinanceiro,
+      financeiroSincronizando: !apresentacaoFinanceiroUi && syncCooperadoFinanceiro,
+      dataReady: apresentacaoFinanceiroUi || cooperadoPagamentosHydrated,
+      conferindoPagamentoNuvem,
+    },
+  });
+
   const pagamentoAguardandoExibicao = useMemo(() => {
     if (!fluxoReciboAssinatura) return undefined;
     if (!isCooperado) {
@@ -911,7 +974,10 @@ export default function FichaCorridaPage() {
   const mesesResumoHbFicha = useMemo(() => {
     if (!data || !cooperadoSelecionadoId) return [];
     if (visualizandoHistorico && mesAtivo) return [mesAtivo];
-    if (isCooperado || aba === "pagar") {
+    if (isCooperado && paridadeCooperadoMobile?.mesesResumo.length) {
+      return paridadeCooperadoMobile.mesesResumo;
+    }
+    if (aba === "pagar") {
       const { mesesResumo } = leituraFinanceiraParidadeCooperado(
         data,
         cooperadoSelecionadoId,
@@ -925,6 +991,7 @@ export default function FichaCorridaPage() {
     cooperadoSelecionadoId,
     coopId,
     isCooperado,
+    paridadeCooperadoMobile,
     aba,
     visualizandoHistorico,
     mesAtivo,
@@ -951,13 +1018,17 @@ export default function FichaCorridaPage() {
     if (isCooperado && paridadeCooperadoMobile) {
       return paridadeCooperadoMobile.descontosExtras;
     }
-    return leituraFinanceiraParidadeCooperado(data, cooperadoSelecionadoId, coopId).descontosExtras;
+    if (aba === "pagar") {
+      return leituraFinanceiraParidadeCooperado(data, cooperadoSelecionadoId, coopId).descontosExtras;
+    }
+    return [];
   }, [
     data,
     cooperadoSelecionadoId,
     coopId,
     isCooperado,
     paridadeCooperadoMobile,
+    aba,
     visualizandoHistorico,
     resumoExibicao,
     hbDescontosRevision,
@@ -976,7 +1047,27 @@ export default function FichaCorridaPage() {
       : totalPendente;
 
   const resumoQuantoVouReceber = useMemo(() => {
-    if (!data || !cooperadoId || !isCooperado) return null;
+    if (!isCooperado) return null;
+    if (financeiroUiSnapshot?.painelParaExibicao) {
+      const p = financeiroUiSnapshot.painelParaExibicao;
+      const mesLabel =
+        paridadeCooperadoMobile?.mesLabel?.trim() || financeiroUiSnapshot.mesLabel || p.mesLabel;
+      return { ...p, mesLabel };
+    }
+    if (financeiroUiSnapshot?.status === "AGUARDANDO_BIC") {
+      return {
+        estado: "carregando" as const,
+        mesLabel: financeiroUiSnapshot.mesLabel ?? "—",
+        valorDestaque: 0,
+        valorRecibo: 0,
+        aguardandoAssinatura: false,
+        valorAberto: 0,
+        tituloValor: "Atualizando",
+        subtitulo: "Baixando pagamentos e valores da cooperativa…",
+        acaoRotulo: null,
+      };
+    }
+    if (!data || !cooperadoId) return null;
     const readinessPainel = apresentacaoFinanceiroUi
       ? {
           role: user?.role,
@@ -995,10 +1086,12 @@ export default function FichaCorridaPage() {
       apresentacaoConsolidada: apresentacaoFinanceiroUi,
     });
   }, [
+    financeiroUiSnapshot,
+    isCooperado,
+    paridadeCooperadoMobile,
     data,
     cooperadoId,
     coopId,
-    isCooperado,
     conferindoPagamentoNuvem,
     syncCooperadoFinanceiro,
     cooperadoPagamentosHydrated,
@@ -1457,7 +1550,7 @@ export default function FichaCorridaPage() {
         (fluxoReciboAssinatura && conferindoPagamentoNuvem) ||
         !!pagamentoConfirmado ||
         (paridadeCooperadoMobile?.valorLiquido ?? 0) > 0 ||
-        bicCentralCooperadoTemValorPendente(data, cooperadoId, coopId) ||
+        Boolean(paridadeCooperadoMobile?.consolidado.aguardandoAssinatura) ||
         (!fluxoReciboAssinatura && (valorReceberConsolidado?.valor ?? 0) > 0)));
 
   const exibirRelatorioMes =

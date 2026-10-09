@@ -7,11 +7,12 @@ import { useRouter } from "next/navigation";
 import {
   useAppDataSelector,
   useAppDataReady,
+  useAppDataDomainsRevisionWhenActive,
   useAppDataSelectorForDomainsWhenActive,
 } from "@/hooks/useAppData";
 import { useCooperadoTabPanelActive } from "@/hooks/useCooperadoTabPanelActive";
 import type { AppDataNotifyDomain } from "@/lib/performance/appDataDomainNotify";
-import { getData, getDataRevision } from "@/services/dataStore";
+import { getData, getDataRevision, isAppDataWarm } from "@/services/dataStore";
 import { useAuth } from "@/modules/auth/AuthProvider";
 import { shouldRenderStaffPainelUi } from "@/lib/staffNavigationUser";
 import {
@@ -80,7 +81,6 @@ import {
   isCooperadoPwaMobileLeveUi,
 } from "@/lib/cooperado/cooperadoPwaLeveUi";
 import { persistirInicioCardCooperadoNotificarPwaLeve } from "@/lib/cooperado/cooperadoPwaLeveUi";
-import { isAppDataWarm } from "@/services/dataStore";
 import {
   buildCooperadoPwaInicioDashboardView,
   persistirCooperadoPwaInicioDashboardSnapshot,
@@ -170,10 +170,10 @@ function CooperadoDashboard() {
   }, [financeiroAusente, inicioPwaLeve]);
 
   const contaCoopSync = useAppDataSelectorForDomainsWhenActive(
-    appDataUiOn,
+    appDataUiOn && hbCredit.navEnabled,
     DASHBOARD_INICIO_DOMAINS,
     (data) => contaCoopValorReceberPilotOptsFromData(data, user, apresentacaoConsolidada),
-    [user?.id, user?.cooperadoId, user?.cooperativaId, hbDescontosRevision, apresentacaoConsolidada]
+    [hbCredit.navEnabled, user?.id, user?.cooperadoId, user?.cooperativaId, hbDescontosRevision, apresentacaoConsolidada]
   );
 
   /** Modo mensageiro: HB só no runSync (Atualizar) — sem pilot periódico na UI. */
@@ -258,15 +258,21 @@ function CooperadoDashboard() {
     return () => window.removeEventListener(COOPERADO_PWA_LEVE_UI_SNAPSHOT_REFRESH_EVENT, onRefresh);
   }, [inicioPwaLeve, refreshPwaInicioView]);
 
-  const viewLive = useAppDataSelectorForDomainsWhenActive(
+  const inicioDomainsRevision = useAppDataDomainsRevisionWhenActive(appDataUiOn, DASHBOARD_INICIO_DOMAINS);
+  const deferredInicioRevision = useDeferredValue(inicioDomainsRevision);
+
+  const viewLive = useMemo(() => {
+    if (!appDataUiOn || !deferredInicioRevision || !isAppDataWarm() || !user?.cooperadoId) return null;
+    return buildCooperadoPwaInicioDashboardView(getData(), user, apresentacaoConsolidada);
+  }, [
     appDataUiOn,
-    DASHBOARD_INICIO_DOMAINS,
-    (data) => {
-      if (!data || !user?.cooperadoId) return null;
-      return buildCooperadoPwaInicioDashboardView(data, user, apresentacaoConsolidada);
-    },
-    [user?.id, user?.cooperadoId, user?.cooperativaId, hbDescontosRevision, apresentacaoConsolidada]
-  );
+    deferredInicioRevision,
+    user?.id,
+    user?.cooperadoId,
+    user?.cooperativaId,
+    hbDescontosRevision,
+    apresentacaoConsolidada,
+  ]);
 
   const view = messenger || inicioPwaLeve ? pwaInicioView : viewLive;
 

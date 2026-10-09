@@ -8,6 +8,7 @@ import {
   type BicExibicaoFallbackReason,
 } from "@/types/bic";
 import { isBicCentralReadAuthorityEnabled } from "@/lib/bic/bicCentralReadAuthority";
+import { leituraFinanceiraParidadeCooperado } from "@/lib/cooperado/cooperadoFinanceiroParidadeUniversal";
 import { cooperadoMotorRevisionOperacional } from "@/lib/cooperadoInicioCardPolicy";
 import { validateBicTenantContext } from "@/services/bicTenantGuard";
 import {
@@ -20,6 +21,10 @@ import {
   getValorQuantoVouReceberMotorLegado,
   type EstadoQuantoVouReceberCooperado,
 } from "@/services/cooperadoEntregasService";
+
+export type CooperadoFinanceiroPainelParaExibicao = ReturnType<
+  typeof getResumoQuantoVouReceberCooperadoMotorLegado
+>;
 
 export type CooperadoFinanceiroUiSnapshotStatus =
   | "CONFIRMADO"
@@ -56,6 +61,9 @@ export type CooperadoFinanceiroUiSnapshot = {
     motorRevision?: string;
     tenantStatus?: "valid" | "invalid" | "unknown";
   };
+
+  /** Painel “Quanto vou receber” — uma única projeção BIC/legado por build do snapshot. */
+  painelParaExibicao?: CooperadoFinanceiroPainelParaExibicao;
 };
 
 export type BuildCooperadoFinanceiroUiSnapshotOpts = {
@@ -165,7 +173,7 @@ function buildLegadoSnapshot(
     financeiroSincronizando: opts?.financeiroSincronizando,
   });
 
-  const reciboAtivo = false;
+  const reciboAtivo = Boolean(inicio.aguardandoAssinatura && inicio.valorRecibo > 0);
   const revision = cooperadoMotorRevisionOperacional(data, cooperadoId, cooperativaId);
 
   return {
@@ -189,6 +197,7 @@ function buildLegadoSnapshot(
       motorRevision: revision,
       tenantStatus: "unknown",
     },
+    painelParaExibicao: painel,
   };
 }
 
@@ -259,7 +268,11 @@ export function buildCooperadoFinanceiroUiSnapshot(
 
   const m6 = bicCentralValorAReceberAgregado(data, coopadoId, coopId, { apresentacaoConsolidada });
   const motorFicha = getValorQuantoVouReceberMotorLegado(data, coopadoId, coopId);
-  const valorAReceber = motorFicha.valor > 0 ? motorFicha.valor : m6.valor;
+  const paridade = leituraFinanceiraParidadeCooperado(data, coopadoId, coopId);
+  const fichaPendenteAberta = (data.fichaCorrida ?? []).some(
+    (f) => f.cooperadoId === coopadoId && f.status === "pendente"
+  );
+  const valorAReceber = fichaPendenteAberta ? paridade.valorLiquido : 0;
   const mesLabel = motorFicha.mesLabel?.trim() || m6.mesLabel || null;
   const mesPrincipal = motorFicha.mes || m6.mes || null;
   const mesesReferencia =
@@ -295,5 +308,6 @@ export function buildCooperadoFinanceiroUiSnapshot(
       motorRevision: revision,
       tenantStatus: "valid",
     },
+    painelParaExibicao: painel,
   };
 }

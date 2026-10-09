@@ -76,15 +76,24 @@ async function main() {
     ...before,
     fichaCorrida: next.fichaCorrida,
     notasPedido: next.notasPedido?.length ? next.notasPedido : before.notasPedido,
+    pagamentosCooperado: next.pagamentosCooperado ?? before.pagamentosCooperado,
+    livroCaixa: next.livroCaixa ?? before.livroCaixa,
+    arquivosMensais: next.arquivosMensais ?? before.arquivosMensais,
     updatedAt: new Date().toISOString(),
   };
 
   console.log(`CNPJ ${CNPJ}`);
   console.log(`Fichas pago: ${pagoAntes} → ${pagoDepois}`);
-  console.log(`Pagamentos: ${(before.pagamentosCooperado ?? []).length} (inalterados)`);
+  console.log(`Pagamentos: ${(before.pagamentosCooperado ?? []).length} → ${(next.pagamentosCooperado ?? []).length}`);
 
-  if (JSON.stringify(before.fichaCorrida) === JSON.stringify(next.fichaCorrida)) {
-    console.log("✓ Nenhuma ficha orphan — nuvem já ok");
+  const changed =
+    JSON.stringify(before.fichaCorrida) !== JSON.stringify(next.fichaCorrida) ||
+    JSON.stringify(before.pagamentosCooperado ?? []) !== JSON.stringify(next.pagamentosCooperado ?? []) ||
+    JSON.stringify(before.livroCaixa ?? []) !== JSON.stringify(next.livroCaixa ?? []) ||
+    JSON.stringify(before.notasPedido) !== JSON.stringify(next.notasPedido);
+
+  if (!changed) {
+    console.log("✓ Operacional já alinhado (ficha, pagamentos, livro caixa)");
     return;
   }
 

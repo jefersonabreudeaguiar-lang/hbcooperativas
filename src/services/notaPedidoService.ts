@@ -2630,7 +2630,7 @@ export function getResumoPagamentoExibicao(
     const snap = resumoFromPagamento(pagamento);
     const live = getResumoPagamentoCooperado(data, cooperadoId, mesReferencia, coopId, ajustes);
     if (live.valorEntregas <= 0) {
-      const fichasSnap = snap.fichaIds
+      const fichasSnap = (snap.fichaIds ?? [])
         .map((id) => data.fichaCorrida.find((f) => f.id === id))
         .filter((f): f is FichaCorrida => f != null);
       if (fichasSnap.some((f) => f.status === "pago")) {

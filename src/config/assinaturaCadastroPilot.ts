@@ -5,3 +5,8 @@ export function cooperadoUsaAssinaturaCadastro(cooperadoId: string | undefined |
 
 /** Alias mantido nos imports existentes. */
 export const cooperadoUsaAssinaturaCadastroPilot = cooperadoUsaAssinaturaCadastro;
+
+/** Meu cadastro — cooperado pode enviar nova foto mesmo com assinatura já confirmada. */
+export function cooperadoPodeEditarAssinaturaCadastroNoMeuCadastro(): boolean {
+  return true;
+}

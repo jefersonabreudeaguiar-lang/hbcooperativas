@@ -126,6 +126,26 @@ export function useAppDataSelectorWhenActive<T>(
   }, [panelActive, revision, ...deps]);
 }
 
+/** Revisão por domínio — painel inativo pausa (keep-alive mobile). */
+export function useAppDataDomainsRevisionWhenActive(
+  panelActive: boolean,
+  domains: readonly AppDataNotifyDomain[]
+): string {
+  const domainKey = normalizeDomains(domains).join("|");
+  const subscribeDomains = useCallback(
+    (onStoreChange: () => void) => {
+      if (!panelActive) return () => undefined;
+      return subscribeAppDataDomains(domains, onStoreChange);
+    },
+    [panelActive, domainKey]
+  );
+  return useSyncExternalStore(
+    subscribeDomains,
+    () => (panelActive ? getDomainsRevisionSnapshot(domains) : `paused:${domainKey}`),
+    () => ""
+  );
+}
+
 /** Keep-alive mobile: painel inativo não re-renderiza a cada sync. */
 export function useAppDataSelectorForDomainsWhenActive<T>(
   panelActive: boolean,

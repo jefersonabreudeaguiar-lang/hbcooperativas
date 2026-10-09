@@ -9,7 +9,9 @@ Plataforma web para gestão de cooperativas de agricultura familiar. Portal do C
 - **Next.js 16** (App Router)
 - **TypeScript**
 - **Tailwind CSS**
-- Dados mockados com **localStorage**
+- **Supabase** (notas, operacional na nuvem, HB Créditos) + cache local no cliente (`AppData`)
+
+Arquitetura e release: **[docs/ARQUITETURA.md](./docs/ARQUITETURA.md)** · Gate pré-deploy: `npm run release:verify`
 
 ## Como Executar
 

@@ -42,6 +42,8 @@
     "lab:check-homolog": "npx tsx scripts/lab/check-homolog-readiness.ts",
     "lab:provision-jeferson": "npx tsx scripts/lab/provision-jeferson-login.ts",
     "verify:official-rollout": "npx tsx scripts/verify-official-rollout-env.ts",
+    "release:verify": "npx tsx scripts/run-release-verify.ts",
+    "release:verify:fast": "npx tsx scripts/run-release-verify.ts --fast",
     "lab:bic-mirror-sync": "npx tsx scripts/lab/sync-bic-mirror-to-lab-build.ts",
     "test:preservar-pagamentos-confirmados": "npx tsx scripts/test-preservar-pagamentos-confirmados.ts",
     "test:operacional-cloud-write-h8923": "npx tsx scripts/test-operacional-cloud-write-h8923.ts",

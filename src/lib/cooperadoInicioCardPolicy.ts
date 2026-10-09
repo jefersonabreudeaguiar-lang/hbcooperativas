@@ -18,6 +18,7 @@ import { getContaCoopDescontosRevision } from "@/lib/hb-credit/contaCoopDesconto
 import { bicCentralResolveInicioParaExibicao, bicCentralSincronizarRotuloMeses, bicCentralValorAReceberAgregado } from "@/services/bicLeituraCentralCooperado";
 import { leituraFinanceiraParidadeCooperado } from "@/lib/cooperado/cooperadoFinanceiroParidadeUniversal";
 import {
+  buildCooperadoFinanceiroUiSnapshot,
   type CooperadoFinanceiroUiSnapshot,
 } from "@/services/cooperadoFinanceiroUiSnapshot";
 import { isBicCentralReadAuthorityEnabled } from "@/lib/bic/bicCentralReadAuthority";
@@ -194,33 +195,77 @@ export function resolverInicioCardMotorOperacionalFromAppData(
   });
 }
 
-function aplicarPoliticaCardInicioEndurecidaComMotorOperacional(
-  input: ResolverCardInicioInput,
-  persistidoLeitura: ReturnType<typeof filtrarInicioCardPersistidoLeituraBic>,
-  financeiroCarregando: boolean
-): InicioCardPoliticaResult & { gravarPersistencia: boolean } {
-  const { data, cooperadoId, cooperativaId } = input;
-  const vazio: InicioCardMotorSnapshot = {
-    mesLabel: "—",
-    valor: 0,
-    valorRecibo: 0,
-    aguardandoAssinatura: false,
-  };
+function motorInicioCardComReciboBic(
+  data: AppData,
+  cooperadoId: string,
+  cooperativaId: string | undefined,
+  motorBase: InicioCardMotorSnapshot
+): InicioCardMotorSnapshot {
+  const fluxoPix = getValorQuantoVouReceberMotorLegado(data, cooperadoId, cooperativaId);
+  const paridade = leituraFinanceiraParidadeCooperado(data, cooperadoId, cooperativaId);
+  const valorExibir =
+    cooperadoUsarFluxoReciboAssinaturaNaUi() &&
+    fluxoPix.aguardandoAssinatura &&
+    fluxoPix.valorRecibo > 0 &&
+    fluxoPix.valor <= 0
+      ? 0
+      : isBicCentralReadAuthorityEnabled()
+        ? paridade.valorLiquido
+        : fluxoPix.aguardandoAssinatura && fluxoPix.valorRecibo > 0
+          ? 0
+          : paridade.valorLiquido;
+  return sanitizeInicioCardSnapshotFluxoBic({
+    mesLabel: motorBase.mesLabel,
+    valor: valorExibir > 0 ? valorExibir : motorBase.valor,
+    valorRecibo: fluxoPix.valorRecibo,
+    aguardandoAssinatura: fluxoPix.aguardandoAssinatura,
+  });
+}
 
-  if (!data || !cooperadoId) {
-    if (persistidoLeitura && cooperadoMotorTemObrigacaoReceber(persistidoLeitura.display)) {
-      return resultadoCardBridgePersistidoBic(persistidoLeitura, { gravarPersistencia: false });
-    }
-    return finalizarResultadoCardBic({
-      display: vazio,
-      latch: { motorRevision: "", display: vazio, hadPendencia: false },
-      atualizando: financeiroCarregando,
-      gravarPersistencia: false,
-    });
+function resolverMotorCardInicioViaFinanceiroUiSnapshot(
+  input: ResolverCardInicioInput,
+  financeiroCarregando: boolean
+): { motor: InicioCardMotorSnapshot; revision: string } | "aguardando" | "inconsistente" {
+  const { data, cooperadoId, cooperativaId } = input;
+  if (!data || !cooperadoId) return "aguardando";
+
+  const financeiro = buildCooperadoFinanceiroUiSnapshot({
+    data,
+    cooperadoId,
+    cooperativaId,
+    opts: {
+      apresentacaoConsolidada: input.apresentacaoConsolidada,
+      carregandoNuvem: financeiroCarregando,
+      financeiroSincronizando: Boolean(input.syncing || financeiroCarregando),
+      dataReady: input.dataReady ?? true,
+      conferindoPagamentoNuvem: false,
+    },
+  });
+
+  if (financeiro.status === "INCONSISTENTE") return "inconsistente";
+  if (financeiro.status === "AGUARDANDO_BIC") return "aguardando";
+
+  let motor = inicioCardMotorFromFinanceiroUiSnapshot(financeiro);
+  if (cooperadoUsarFluxoReciboAssinaturaNaUi()) {
+    motor = motorInicioCardComReciboBic(data, cooperadoId, cooperativaId, motor);
+  } else {
+    motor = sanitizeInicioCardSnapshotFluxoBic(motor);
   }
 
-  const motor = resolverInicioCardMotorFromAppData(data, cooperadoId, cooperativaId);
-  const revision = cooperadoMotorRevisionOperacional(data, cooperadoId, cooperativaId);
+  const revision =
+    financeiro.observability.motorRevision ??
+    cooperadoMotorRevisionOperacional(data, cooperadoId, cooperativaId);
+  return { motor, revision };
+}
+
+function aplicarPoliticaCardInicioEndurecidaComMotor(
+  input: ResolverCardInicioInput,
+  persistidoLeitura: ReturnType<typeof filtrarInicioCardPersistidoLeituraBic>,
+  financeiroCarregando: boolean,
+  motor: InicioCardMotorSnapshot,
+  revision: string
+): InicioCardPoliticaResult & { gravarPersistencia: boolean } {
+  const { data, cooperadoId, cooperativaId } = input;
 
   if (
     persistidoLeitura &&
@@ -294,6 +339,42 @@ function aplicarPoliticaCardInicioEndurecidaComMotorOperacional(
     ...applied,
     gravarPersistencia: Boolean(cooperativaId),
   });
+}
+
+function aplicarPoliticaCardInicioEndurecidaComMotorOperacional(
+  input: ResolverCardInicioInput,
+  persistidoLeitura: ReturnType<typeof filtrarInicioCardPersistidoLeituraBic>,
+  financeiroCarregando: boolean
+): InicioCardPoliticaResult & { gravarPersistencia: boolean } {
+  const { data, cooperadoId, cooperativaId } = input;
+  const vazio: InicioCardMotorSnapshot = {
+    mesLabel: "—",
+    valor: 0,
+    valorRecibo: 0,
+    aguardandoAssinatura: false,
+  };
+
+  if (!data || !cooperadoId) {
+    if (persistidoLeitura && cooperadoMotorTemObrigacaoReceber(persistidoLeitura.display)) {
+      return resultadoCardBridgePersistidoBic(persistidoLeitura, { gravarPersistencia: false });
+    }
+    return finalizarResultadoCardBic({
+      display: vazio,
+      latch: { motorRevision: "", display: vazio, hadPendencia: false },
+      atualizando: financeiroCarregando,
+      gravarPersistencia: false,
+    });
+  }
+
+  const motor = resolverInicioCardMotorFromAppData(data, cooperadoId, cooperativaId);
+  const revision = cooperadoMotorRevisionOperacional(data, cooperadoId, cooperativaId);
+  return aplicarPoliticaCardInicioEndurecidaComMotor(
+    input,
+    persistidoLeitura,
+    financeiroCarregando,
+    motor,
+    revision
+  );
 }
 
 /** Card início — mascara recibo/assinatura só quando o fluxo cooperado está desligado. */
@@ -504,10 +585,64 @@ function resolverCardInicioEndurecidoFinanceiroUiSnapshot(
   const financeiroCarregando =
     !input.apresentacaoConsolidada ||
     Boolean(input.syncing || input.carregandoFinanceiro);
-  return aplicarPoliticaCardInicioEndurecidaComMotorOperacional(
+  const vazio: InicioCardMotorSnapshot = {
+    mesLabel: "—",
+    valor: 0,
+    valorRecibo: 0,
+    aguardandoAssinatura: false,
+  };
+
+  if (!input.cooperadoId) {
+    return finalizarResultadoCardBic({
+      display: vazio,
+      latch: { motorRevision: "", display: vazio, hadPendencia: false },
+      atualizando: financeiroCarregando,
+      gravarPersistencia: false,
+    });
+  }
+
+  const resolved = resolverMotorCardInicioViaFinanceiroUiSnapshot(input, financeiroCarregando);
+  if (resolved === "aguardando") {
+    if (persistidoLeitura && cooperadoMotorTemObrigacaoReceber(persistidoLeitura.display)) {
+      return resultadoCardBridgePersistidoBic(persistidoLeitura, {
+        gravarPersistencia: false,
+        atualizando: true,
+      });
+    }
+    return finalizarResultadoCardBic({
+      display: vazio,
+      latch: { motorRevision: "", display: vazio, hadPendencia: false },
+      atualizando: financeiroCarregando,
+      gravarPersistencia: false,
+    });
+  }
+  if (resolved === "inconsistente") {
+    return finalizarResultadoCardBic({
+      display: vazio,
+      latch: { motorRevision: "", display: vazio, hadPendencia: false },
+      atualizando: false,
+      gravarPersistencia: false,
+    });
+  }
+
+  if (!input.data || !input.cooperadoId) {
+    if (persistidoLeitura && cooperadoMotorTemObrigacaoReceber(persistidoLeitura.display)) {
+      return resultadoCardBridgePersistidoBic(persistidoLeitura, { gravarPersistencia: false });
+    }
+    return finalizarResultadoCardBic({
+      display: vazio,
+      latch: { motorRevision: "", display: vazio, hadPendencia: false },
+      atualizando: financeiroCarregando,
+      gravarPersistencia: false,
+    });
+  }
+
+  return aplicarPoliticaCardInicioEndurecidaComMotor(
     input,
     persistidoLeitura,
-    financeiroCarregando
+    financeiroCarregando,
+    resolved.motor,
+    resolved.revision
   );
 }
 

@@ -1,5 +1,8 @@
 import type { AppData, AssinaturaCadastroStatus, Cooperado, User } from "@/types";
-import { cooperadoUsaAssinaturaCadastroPilot } from "@/config/assinaturaCadastroPilot";
+import {
+  cooperadoPodeEditarAssinaturaCadastroNoMeuCadastro,
+  cooperadoUsaAssinaturaCadastroPilot,
+} from "@/config/assinaturaCadastroPilot";
 import { addAuditEntry } from "@/services/dataStore";
 import {
   listarCooperadosComApp,
@@ -225,6 +228,20 @@ export function cooperadoPrecisaCadastrarAssinatura(
   if (status === "em_analise") return false;
   if (status === "confirmada") return false;
   return status === "pendente" || status === "devolvida" || !getAssinaturaCadastroDataUrl(cooperado);
+}
+
+/** Assinatura confirmada (ou devolvida com foto) — cooperado pode reenviar foto atualizada no Meu cadastro. */
+export function cooperadoPodeReenviarAssinaturaCadastro(
+  cooperadoId: string | undefined | null,
+  cooperado: CooperadoAssinaturaFields | null | undefined
+): boolean {
+  if (!cooperadoPodeEditarAssinaturaCadastroNoMeuCadastro()) return false;
+  if (!cooperadoUsaAssinaturaCadastroPilot(cooperadoId)) return false;
+  if (cooperadoAssinaturaEmAnalise(cooperado)) return false;
+  const status = getAssinaturaCadastroStatus(cooperado);
+  if (status === "confirmada" && getAssinaturaCadastroDataUrl(cooperado)) return true;
+  if (status === "devolvida" && getAssinaturaCadastroDataUrl(cooperado)) return true;
+  return false;
 }
 
 export function cooperadoMostrarAvisoAssinaturaConfirmada(
