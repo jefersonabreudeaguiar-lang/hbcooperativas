@@ -1191,6 +1191,12 @@ export default function FichaCorridaPage() {
       descontoAvulsoMotivo: descontoAvulsoMotivo.trim() || undefined,
     };
     const ajustesPorMes = Object.fromEntries(mesesPagar.map((mes) => [mes, patch]));
+    const pendenteAntes = cooperadoPendentePagamentoResponsavel(
+      data,
+      cooperadoSelecionado.id,
+      undefined,
+      coopId
+    );
     const nextData = updateData((d) => {
       let comAjustes = d;
       for (const mes of mesesPagar) {
@@ -1236,6 +1242,20 @@ export default function FichaCorridaPage() {
         }
       );
     });
+    const pendenteDepois = cooperadoPendentePagamentoResponsavel(
+      nextData,
+      cooperadoSelecionado.id,
+      undefined,
+      coopId
+    );
+    if (pendenteAntes && pendenteDepois) {
+      setPagoMsgVariant("error");
+      setPagoMsg(
+        "Não foi possível concluir o pagamento neste aparelho. Atualize os dados (sync) e tente de novo; se persistir, fale com o suporte."
+      );
+      setConfirmPagamento(false);
+      return;
+    }
     void (async () => {
       const cnpj = await resolveCooperativaCnpj(nextData, coopId, user);
       if (!cnpj) {

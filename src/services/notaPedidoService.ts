@@ -3076,19 +3076,47 @@ export function registrarPagamentoCooperado(
     ? [...opts.mesesReferencia].sort()
     : [mesReferencia];
   for (const mes of mesesPagamento) {
-    if (
-      getPagamentoConfirmadoCooperadoMes(data, cooperadoId, mes) ||
-      getPagamentoAguardandoCooperado(data, cooperadoId, mes)
-    ) {
+    if (getPagamentoAguardandoCooperado(data, cooperadoId, mes)) {
       return data;
     }
   }
-  const mesPrincipal = mesesPagamento[0] ?? mesReferencia;
+
+  let next = data;
+  for (const mes of mesesPagamento) {
+    const confirmado = getPagamentoConfirmadoCooperadoMes(next, cooperadoId, mes);
+    if (!confirmado) continue;
+    const pendentes = listarFichasPendentesPagamento(next, cooperadoId, mes, coopId);
+    if (!pendentes.length) continue;
+    const escopoReparo =
+      (confirmado.fichaIds?.length ?? 0) > 0 || (confirmado.notaPedidoIds?.length ?? 0) > 0
+        ? { fichaIds: confirmado.fichaIds ?? [], notaPedidoIds: confirmado.notaPedidoIds ?? [] }
+        : undefined;
+    const coopIdResolved =
+      next.cooperados.find((c) => c.id === cooperadoCanonico)?.cooperativaId ?? coopId ?? "";
+    next = marcarFichaComoPaga(next, cooperadoCanonico, mes, responsavel, escopoReparo);
+    next = marcarValoresAvulsosPagosMes(next, cooperadoCanonico, mes, coopIdResolved);
+  }
+
+  const mesesPrecisamNovoPagamento = mesesPagamento.filter((mes) => {
+    const confirmado = getPagamentoConfirmadoCooperadoMes(next, cooperadoId, mes);
+    if (!confirmado) return true;
+    return listarFichasPendentesPagamento(next, cooperadoId, mes, coopId).length > 0;
+  });
+  if (mesesPrecisamNovoPagamento.length === 0) {
+    return next;
+  }
+
+  const mesPrincipal = mesesPrecisamNovoPagamento[0] ?? mesReferencia;
   const resumo =
     resumoOverride ??
-    (mesesPagamento.length > 1
-      ? getResumoPagamentoConsolidadoCooperado(data, cooperadoCanonico, mesesPagamento, coopId)
-      : getResumoPagamentoCooperado(data, cooperadoCanonico, mesPrincipal, coopId));
+    (mesesPrecisamNovoPagamento.length > 1
+      ? getResumoPagamentoConsolidadoCooperado(
+          next,
+          cooperadoCanonico,
+          mesesPrecisamNovoPagamento,
+          coopId
+        )
+      : getResumoPagamentoCooperado(next, cooperadoCanonico, mesPrincipal, coopId));
   if (resumo.valorLiquido <= 0 || resumo.fichaIds.length === 0) return data;
 
   const now = new Date().toISOString();
@@ -3100,7 +3128,7 @@ export function registrarPagamentoCooperado(
     cooperativaId: coopIdResolved,
     cooperadoId: cooperadoCanonico,
     mesReferencia: mesPrincipal,
-    mesesReferencia: mesesPagamento.length > 1 ? mesesPagamento : undefined,
+    mesesReferencia: mesesPrecisamNovoPagamento.length > 1 ? mesesPrecisamNovoPagamento : undefined,
     valorBruto: resumo.valorBruto,
     descontoCooperativa: resumo.descontoCooperativa,
     descontosExtras: resumo.descontosExtras,
@@ -3119,8 +3147,7 @@ export function registrarPagamentoCooperado(
       ? { fichaIds: resumo.fichaIds, notaPedidoIds: resumo.notaPedidoIds }
       : undefined;
 
-  let next = data;
-  for (const mes of mesesPagamento) {
+  for (const mes of mesesPrecisamNovoPagamento) {
     next = marcarFichaComoPaga(next, cooperadoCanonico, mes, responsavel, escopoMarcacao);
     next = marcarValoresAvulsosPagosMes(next, cooperadoCanonico, mes, coopIdResolved);
   }
@@ -3130,7 +3157,7 @@ export function registrarPagamentoCooperado(
     pagamentosCooperado: [...next.pagamentosCooperado, pagamento],
   };
 
-  for (const mes of mesesPagamento) {
+  for (const mes of mesesPrecisamNovoPagamento) {
     next = {
       ...next,
       arquivosMensais: upsertArquivoMensal(next, cooperadoCanonico, coopIdResolved, mes, {
