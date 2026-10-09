@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { HB_CREDIT_PRODUCT_NAME } from "@/config/hbCreditBranding";
 import { fetchHbUtilizacaoResumoCooperado } from "@/services/creditApiService";
 import { saldoAReceberBaseAntesHb, type HbUtilizacaoResumoLancamento } from "@/lib/hb-credit/utilizacaoResumo";
-import { formatCurrency, cn } from "@/utils/format";
+import { formatCurrency, cn, mesReferenciaFromIso } from "@/utils/format";
 import type { FichaCorridaDesconto } from "@/types";
 
 function formatDataHora(iso: string): string {
@@ -35,6 +35,8 @@ type Props = {
   titularCooperadoIds?: string[];
   /** Vista enxuta na aba de mês pago do cooperado. */
   variant?: "default" | "cooperado";
+  /** Mês quitado / histórico — não mistura compras de meses posteriores (API abate ficha aberta até hoje). */
+  somenteMesReferencia?: boolean;
 };
 
 export function HistoricoHbCreditosResumo({
@@ -45,6 +47,7 @@ export function HistoricoHbCreditosResumo({
   descontosExtras,
   titularCooperadoIds,
   variant = "default",
+  somenteMesReferencia = false,
 }: Props) {
   const [lancamentos, setLancamentos] = useState<HbUtilizacaoResumoLancamento[]>([]);
   const [erro, setErro] = useState<string | null>(null);
@@ -58,7 +61,13 @@ export function HistoricoHbCreditosResumo({
     const ids = titularCooperadoIds?.length ? titularCooperadoIds : [cooperadoId];
     fetchHbUtilizacaoResumoCooperado(cnpj, ids, mesReferencia, saldoBase)
       .then((rows) => {
-        if (!cancel) setLancamentos(rows);
+        if (!cancel) {
+          const filtradas =
+            somenteMesReferencia
+              ? rows.filter((l) => mesReferenciaFromIso(l.createdAt) === mesReferencia)
+              : rows;
+          setLancamentos(filtradas);
+        }
       })
       .catch((e) => {
         if (!cancel) setErro(e instanceof Error ? e.message : "Erro ao carregar HB Créditos.");
@@ -69,7 +78,15 @@ export function HistoricoHbCreditosResumo({
     return () => {
       cancel = true;
     };
-  }, [cnpj, cooperadoId, mesReferencia, valorEntregas, descontosExtras, titularCooperadoIds]);
+  }, [
+    cnpj,
+    cooperadoId,
+    mesReferencia,
+    valorEntregas,
+    descontosExtras,
+    titularCooperadoIds,
+    somenteMesReferencia,
+  ]);
 
   const compacto = variant === "cooperado";
 

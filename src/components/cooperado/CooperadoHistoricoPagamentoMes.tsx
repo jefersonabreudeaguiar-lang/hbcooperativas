@@ -116,6 +116,7 @@ export function CooperadoHistoricoPagamentoMes({
             valorEntregas={resumo.valorEntregas}
             descontosExtras={resumo.descontosExtras}
             variant="cooperado"
+            somenteMesReferencia
           />
         </div>
       )}

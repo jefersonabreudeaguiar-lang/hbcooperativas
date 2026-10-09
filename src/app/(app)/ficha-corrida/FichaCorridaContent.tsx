@@ -1946,9 +1946,10 @@ export default function FichaCorridaPage() {
                 <HistoricoHbCreditosResumo
                   cnpj={coopCnpjResumo}
                   cooperadoId={cooperadoSelecionadoId}
-                  mesReferencia={mesAtivo}
+                  mesReferencia={mesAtivoExibicao}
                   valorEntregas={resumoExibicao.valorEntregas}
                   descontosExtras={descontosExtrasResumo}
+                  somenteMesReferencia
                 />
               )}
 

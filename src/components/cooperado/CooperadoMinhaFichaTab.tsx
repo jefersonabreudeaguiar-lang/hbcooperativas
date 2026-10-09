@@ -18,7 +18,9 @@ import { useContaCoopDescontosRevision } from "@/hooks/useContaCoopDescontosRevi
 import { Button } from "@/components/ui/Button";
 import { NotaStatusBadge } from "@/components/ui/NotaStatusBadge";
 import { ResumoDescontosMes } from "@/components/ficha/ResumoDescontosMes";
-import { agregarItensFichaMes } from "@/services/notaPedidoService";
+import { agregarItensFichaMes, resumoFromPagamento } from "@/services/notaPedidoService";
+import { HistoricoHbCreditosResumo } from "@/components/ficha/HistoricoHbCreditosResumo";
+import { normalizeCnpj } from "@/utils/cooperativa";
 import { leituraFinanceiraParidadeCooperadoMesReferencia } from "@/lib/cooperado/cooperadoFinanceiroParidadeUniversal";
 import type { ResumoMesEntregasCooperado } from "@/services/cooperadoEntregasService";
 import {
@@ -110,7 +112,27 @@ function MesFichaAccordion({
     );
   }, [data, cooperadoId, cooperativaId, resumo.mesReferencia, hbDescontosRevision]);
 
-  const resumoPagamento = precisaDetalhesExpandido ? paridadeMes?.resumo ?? null : null;
+  const resumoCongeladoQuitado = useMemo(() => {
+    if (!resumo.pagamentoConfirmado) return null;
+    return resumoFromPagamento(resumo.pagamentoConfirmado);
+  }, [resumo.pagamentoConfirmado]);
+
+  const resumoPagamento = useMemo(() => {
+    if (!precisaDetalhesExpandido) return null;
+    if (resumo.pagamentoConfirmado && resumoCongeladoQuitado) return resumoCongeladoQuitado;
+    return paridadeMes?.resumo ?? null;
+  }, [precisaDetalhesExpandido, resumo.pagamentoConfirmado, resumoCongeladoQuitado, paridadeMes?.resumo]);
+
+  const descontosExtrasExibicao =
+    resumo.pagamentoConfirmado && resumoCongeladoQuitado
+      ? resumoCongeladoQuitado.descontosExtras
+      : paridadeMes?.descontosExtras ?? [];
+
+  const coopCnpjResumo = useMemo(() => {
+    if (!data || !cooperativaId) return "";
+    const coop = data.cooperativas.find((c) => c.id === cooperativaId);
+    return normalizeCnpj(coop?.cnpj ?? "");
+  }, [data, cooperativaId]);
 
   const itensMes = useMemo(() => {
     if (!data || !precisaDetalhesExpandido) return { itens: [], entregas: 0, valorBruto: 0 };
@@ -130,8 +152,6 @@ function MesFichaAccordion({
     if (!data || !precisaDetalhesExpandido) return 0;
     return bicCentralTotalValoresAvulsosPendentes(data, cooperadoId, resumo.mesReferencia, cooperativaId);
   }, [data, cooperadoId, resumo.mesReferencia, cooperativaId, precisaDetalhesExpandido]);
-
-  const descontosExtrasExibicao = paridadeMes?.descontosExtras ?? [];
 
   if (!data) return null;
 
@@ -251,6 +271,20 @@ function MesFichaAccordion({
                   quitado ? resumo.valorRecebido : (paridadeMes?.valorLiquido ?? resumoPagamento.valorLiquido)
                 }
                 rotuloTotal={quitado ? "Total recebido" : "Total líquido"}
+              />
+            </div>
+          )}
+
+          {quitado && coopCnpjResumo.length === 14 && resumoPagamento && (
+            <div className="rounded-lg border border-gray-100 bg-gray-50/40 px-3 py-2">
+              <HistoricoHbCreditosResumo
+                cnpj={coopCnpjResumo}
+                cooperadoId={cooperadoId}
+                mesReferencia={resumo.mesReferencia}
+                valorEntregas={resumoPagamento.valorEntregas}
+                descontosExtras={descontosExtrasExibicao}
+                variant="cooperado"
+                somenteMesReferencia
               />
             </div>
           )}
@@ -439,7 +473,7 @@ export const CooperadoMinhaFichaTab = memo(function CooperadoMinhaFichaTab({
 }: CooperadoMinhaFichaTabProps) {
   const data = useAppData();
   const [mesExpandido, setMesExpandido] = useState<string | null>(resumos[0]?.mesReferencia ?? null);
-  const [mesExpandidoHistorico, setMesExpandidoHistorico] = useState<string | null>(null);
+  const [mesHistoricoAtivo, setMesHistoricoAtivo] = useState<string | null>(null);
   const [subAba, setSubAba] = useState<"extrato" | "fotos">("extrato");
   const [fotosMesFocus, setFotosMesFocus] = useState<string | null>(null);
 
@@ -473,6 +507,21 @@ export const CooperadoMinhaFichaTab = memo(function CooperadoMinhaFichaTab({
     if (!data) return [];
     return listarResumosFotosCooperado(data, cooperadoId, cooperativaId);
   }, [data, cooperadoId, cooperativaId]);
+
+  useEffect(() => {
+    if (!resumosHistorico.length) {
+      setMesHistoricoAtivo(null);
+      return;
+    }
+    if (!mesHistoricoAtivo || !resumosHistorico.some((r) => r.mesReferencia === mesHistoricoAtivo)) {
+      setMesHistoricoAtivo(resumosHistorico[0]!.mesReferencia);
+    }
+  }, [resumosHistorico, mesHistoricoAtivo]);
+
+  const resumoHistoricoAtivo = useMemo(
+    () => resumosHistorico.find((r) => r.mesReferencia === mesHistoricoAtivo) ?? null,
+    [resumosHistorico, mesHistoricoAtivo]
+  );
 
   if (resumos.length === 0 && resumosHistorico.length === 0) {
     return (
@@ -619,26 +668,37 @@ export const CooperadoMinhaFichaTab = memo(function CooperadoMinhaFichaTab({
           <p className="text-xs text-gray-500">
             Valores congelados no momento do PIX confirmado — consulte também em Financeiro (histórico).
           </p>
-          <div className="space-y-3">
-            {resumosHistorico.map((resumo) => (
-              <MesFichaAccordion
-                key={`hist-${resumo.mesReferencia}`}
-                resumo={resumo}
-                cooperadoId={cooperadoId}
-                cooperativaId={cooperativaId}
-                nomeCooperado={nomeCooperado}
-                getEscolaLabel={getEscolaLabel}
-                expandido={mesExpandidoHistorico === resumo.mesReferencia}
-                onToggle={() =>
-                  setMesExpandidoHistorico((cur) =>
-                    cur === resumo.mesReferencia ? null : resumo.mesReferencia
-                  )
-                }
-                onVerFotosMes={abrirFotosDoMes}
-                modo={modo}
-              />
+          <div className="flex flex-wrap gap-2 border-b border-gray-200 pb-2">
+            {resumosHistorico.map((r) => (
+              <button
+                key={`tab-hist-${r.mesReferencia}`}
+                type="button"
+                onClick={() => setMesHistoricoAtivo(r.mesReferencia)}
+                className={cn(
+                  "px-3 py-2 text-sm font-medium rounded-lg border transition-colors",
+                  mesHistoricoAtivo === r.mesReferencia
+                    ? "border-green-600 bg-green-50 text-green-800"
+                    : "border-transparent text-gray-600 hover:bg-gray-100"
+                )}
+              >
+                {formatMesReferencia(r.mesReferencia)}
+              </button>
             ))}
           </div>
+          {resumoHistoricoAtivo && (
+            <MesFichaAccordion
+              key={`hist-${resumoHistoricoAtivo.mesReferencia}`}
+              resumo={resumoHistoricoAtivo}
+              cooperadoId={cooperadoId}
+              cooperativaId={cooperativaId}
+              nomeCooperado={nomeCooperado}
+              getEscolaLabel={getEscolaLabel}
+              expandido
+              onToggle={() => undefined}
+              onVerFotosMes={abrirFotosDoMes}
+              modo={modo}
+            />
+          )}
         </>
       )}
 
