@@ -213,8 +213,9 @@ run("TESTE E — recibo legado não atravessa snapshot BIC", () => {
     });
     assert.equal(snap.status, "CONFIRMADO");
     assert.equal(snap.autoridade, "BIC");
-    assert.equal(snap.podeAssinarRecibo, false);
-    assert.equal(snap.podeExibirBannerRecibo, false);
+    assert.equal(snap.podeAssinarRecibo, true);
+    assert.equal(snap.aguardandoAssinaturaRecibo, true);
+    assert.equal(snap.valorReciboPendente, legado.valorRecibo);
     assert.equal(snap.valorAReceber, 0);
     assert.notEqual(snap.valorAReceber, legado.valorRecibo);
   });

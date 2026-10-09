@@ -70,7 +70,15 @@ export type InicioCardPoliticaResult = {
 };
 
 export function cooperadoMotorTemObrigacaoReceber(motor: InicioCardMotorSnapshot): boolean {
-  return motor.valor > 0;
+  if (motor.valor > 0) return true;
+  if (
+    cooperadoUsarFluxoReciboAssinaturaNaUi() &&
+    motor.aguardandoAssinatura &&
+    motor.valorRecibo > 0
+  ) {
+    return true;
+  }
+  return false;
 }
 
 /**
@@ -105,6 +113,13 @@ export function aplicarMotorCardComGateZeroBic(
 ): InicioCardMotorSnapshot {
   const sanitized = sanitizeInicioCardSnapshotFluxoBic(motor);
   if (sanitized.valor > 0) return sanitized;
+  if (
+    cooperadoUsarFluxoReciboAssinaturaNaUi() &&
+    sanitized.aguardandoAssinatura &&
+    sanitized.valorRecibo > 0
+  ) {
+    return sanitized;
+  }
   if (anterior && anterior.valor > 0 && !autorizaZerar) {
     return sanitizeInicioCardSnapshotFluxoBic({
       ...sanitized,
@@ -547,6 +562,10 @@ export function inicioCardMotorFromFinanceiroUiSnapshot(
       aguardandoAssinatura: false,
     };
   }
+  const reciboPendente =
+    cooperadoUsarFluxoReciboAssinaturaNaUi() &&
+    financeiro.podeExibirBannerRecibo &&
+    financeiro.valorReciboPendente > 0;
   const valor =
     financeiro.valorAReceber > 0
       ? financeiro.valorAReceber
@@ -555,9 +574,9 @@ export function inicioCardMotorFromFinanceiroUiSnapshot(
         : 0;
   return {
     mesLabel,
-    valor,
-    valorRecibo: 0,
-    aguardandoAssinatura: false,
+    valor: reciboPendente && valor <= 0 ? 0 : valor,
+    valorRecibo: reciboPendente ? financeiro.valorReciboPendente : 0,
+    aguardandoAssinatura: reciboPendente,
   };
 }
 

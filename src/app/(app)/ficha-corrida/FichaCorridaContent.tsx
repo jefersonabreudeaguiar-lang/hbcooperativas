@@ -817,8 +817,23 @@ export default function FichaCorridaPage() {
 
   useEffect(() => {
     if (!isCooperado || !fluxoReciboAssinatura || searchParams.get("assinar") !== "1") return;
-    if (pagamentoAguardandoExibicao) setAssinaturaModal(true);
-  }, [isCooperado, fluxoReciboAssinatura, searchParams, pagamentoAguardandoExibicao]);
+    if (!pagamentoAguardando || !exibirAguardandoAssinatura) return;
+    const mesesPg = getMesesReferenciaPagamento(pagamentoAguardando);
+    const mesAlvo = mesesPg[0];
+    if (!mesAlvo) return;
+    if (abaMesCooperado !== mesAlvo) {
+      setAbaMesCooperado(mesAlvo);
+      return;
+    }
+    setAssinaturaModal(true);
+  }, [
+    isCooperado,
+    fluxoReciboAssinatura,
+    searchParams,
+    pagamentoAguardando,
+    exibirAguardandoAssinatura,
+    abaMesCooperado,
+  ]);
 
   const resumoItensPagamento = useMemo(() => {
     if (!data || !cooperadoSelecionadoId) return resumoItensMes;

@@ -15,6 +15,7 @@ import {
   bicCentralResolvePainelParaExibicao,
   bicCentralValorAReceberAgregado,
 } from "@/services/bicLeituraCentralCooperado";
+import { cooperadoUsarFluxoReciboAssinaturaNaUi } from "@/lib/bic/cooperadoBicCentralUi";
 import {
   cooperadoExibirValorReceberInicio,
   getResumoQuantoVouReceberCooperadoMotorLegado,
@@ -49,6 +50,9 @@ export type CooperadoFinanceiroUiSnapshot = {
 
   podeAssinarRecibo: boolean;
   podeExibirBannerRecibo: boolean;
+  /** Motor legado — recibo confirmado aguardando assinatura cooperado. */
+  valorReciboPendente: number;
+  aguardandoAssinaturaRecibo: boolean;
   conferindoPagamentoNuvem: boolean;
 
   painelEstado: "carregando" | "a_receber" | "nada_pendente" | "indeterminado";
@@ -110,6 +114,8 @@ function aguardandoBicSnapshot(conferindo: boolean, painelEstado: CooperadoFinan
     cardAtualizando: true,
     podeAssinarRecibo: false,
     podeExibirBannerRecibo: false,
+    valorReciboPendente: 0,
+    aguardandoAssinaturaRecibo: false,
     conferindoPagamentoNuvem: conferindo,
     painelEstado,
     painelValorDestaque: 0,
@@ -138,6 +144,8 @@ function inconsistenteBicSnapshot(
     cardAtualizando: false,
     podeAssinarRecibo: false,
     podeExibirBannerRecibo: false,
+    valorReciboPendente: 0,
+    aguardandoAssinaturaRecibo: false,
     conferindoPagamentoNuvem: conferindo,
     painelEstado: "indeterminado",
     painelValorDestaque: 0,
@@ -188,6 +196,8 @@ function buildLegadoSnapshot(
     cardAtualizando: carregando,
     podeAssinarRecibo: reciboAtivo,
     podeExibirBannerRecibo: reciboAtivo,
+    valorReciboPendente: reciboAtivo ? motor.valorRecibo : 0,
+    aguardandoAssinaturaRecibo: reciboAtivo,
     conferindoPagamentoNuvem: conferindo,
     painelEstado: mapPainelEstado(painel.estado),
     painelValorDestaque: painel.valorDestaque,
@@ -224,6 +234,8 @@ export function buildCooperadoFinanceiroUiSnapshot(
         cardAtualizando: Boolean(opts?.carregandoNuvem || opts?.financeiroSincronizando),
         podeAssinarRecibo: false,
         podeExibirBannerRecibo: false,
+        valorReciboPendente: 0,
+        aguardandoAssinaturaRecibo: false,
         conferindoPagamentoNuvem: conferindo,
         painelEstado: "indeterminado",
         painelValorDestaque: 0,
@@ -272,7 +284,16 @@ export function buildCooperadoFinanceiroUiSnapshot(
   const fichaPendenteAberta = (data.fichaCorrida ?? []).some(
     (f) => f.cooperadoId === coopadoId && f.status === "pendente"
   );
-  const valorAReceber = fichaPendenteAberta ? paridade.valorLiquido : 0;
+  const aguardandoAssinaturaRecibo = Boolean(
+    cooperadoUsarFluxoReciboAssinaturaNaUi() &&
+      motorFicha.aguardandoAssinatura &&
+      motorFicha.valorRecibo > 0
+  );
+  const valorReciboPendente = aguardandoAssinaturaRecibo ? motorFicha.valorRecibo : 0;
+  let valorAReceber = fichaPendenteAberta ? paridade.valorLiquido : 0;
+  if (aguardandoAssinaturaRecibo && motorFicha.valor <= 0) {
+    valorAReceber = 0;
+  }
   const mesLabel = motorFicha.mesLabel?.trim() || m6.mesLabel || null;
   const mesPrincipal = motorFicha.mes || m6.mes || null;
   const mesesReferencia =
@@ -295,10 +316,12 @@ export function buildCooperadoFinanceiroUiSnapshot(
     mesPrincipal,
     mesLabel,
     mesesReferencia,
-    exibirValorNoCard: valorAReceber > 0,
+    exibirValorNoCard: valorAReceber > 0 || aguardandoAssinaturaRecibo,
     cardAtualizando: carregando,
-    podeAssinarRecibo: false,
-    podeExibirBannerRecibo: false,
+    podeAssinarRecibo: aguardandoAssinaturaRecibo,
+    podeExibirBannerRecibo: aguardandoAssinaturaRecibo,
+    valorReciboPendente,
+    aguardandoAssinaturaRecibo,
     conferindoPagamentoNuvem: conferindo,
     painelEstado: mapPainelEstado(painel.estado),
     painelValorDestaque: valorAReceber > 0 ? valorAReceber : painel.valorDestaque,
