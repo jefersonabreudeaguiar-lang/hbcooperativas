@@ -33,9 +33,10 @@ export function ClientReleaseShieldHost() {
 
     const startBoot = () => kick("boot");
 
-    if (cooperadoExperience && isCooperadoPwaMessengerMode()) {
-      queueMicrotask(startBoot);
-    } else if (cooperadoExperience && isCooperadoInstantResumeEnabled()) {
+    if (
+      cooperadoExperience &&
+      (isCooperadoPwaMessengerMode() || isCooperadoInstantResumeEnabled())
+    ) {
       scheduleCooperadoPostInteractiveTask(startBoot);
     } else if (!cooperadoExperience) {
       scheduleStaffPostInteractiveTask(startBoot);

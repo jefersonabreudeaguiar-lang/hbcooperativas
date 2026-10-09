@@ -3,9 +3,10 @@
  * Fail-closed: se JSON inválido, o app carrega pelo fluxo normal.
  */
 const STORAGE_KEY = "coopeagriplla_data";
+const SESSION_KEY = "coopeagriplla_session";
 
 export function buildInlineCooperadoAppDataWarmScript(): string {
-  return `(function(){try{if(typeof localStorage==="undefined")return;var s=localStorage.getItem("${STORAGE_KEY}");if(!s)return;var w=window;w.__hbCoopParsedAppData=JSON.parse(s);}catch(e){try{delete window.__hbCoopParsedAppData;}catch(x){}}})();`;
+  return `(function(){try{if(typeof localStorage==="undefined")return;if(!localStorage.getItem("${SESSION_KEY}"))return;var s=localStorage.getItem("${STORAGE_KEY}");if(!s)return;var w=window;w.__hbCoopParsedAppData=JSON.parse(s);}catch(e){try{delete window.__hbCoopParsedAppData;}catch(x){}}})();`;
 }
 
 export function takeInlineParsedAppData(): unknown | null {

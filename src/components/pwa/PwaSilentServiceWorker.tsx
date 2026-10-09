@@ -2,6 +2,9 @@
 
 import { useEffect } from "react";
 import { APP_BUILD_VERSION } from "@/lib/appBuildVersion";
+import { scheduleCooperadoPostInteractiveTask } from "@/lib/performance/cooperadoColdStart";
+import { isCooperadoPwaMessengerMode } from "@/lib/cooperado/cooperadoPwaMessengerMode";
+import { shouldSkipServiceWorkerActivationReload } from "@/lib/pwa/clientRelease";
 import { runClientReleaseShield } from "@/lib/pwa/clientReleaseShield";
 
 function activateWaitingWorker(reg: ServiceWorkerRegistration) {
@@ -18,6 +21,7 @@ export function PwaSilentServiceWorker() {
     let reloaded = false;
     const onControllerChange = () => {
       if (reloaded) return;
+      if (shouldSkipServiceWorkerActivationReload()) return;
       reloaded = true;
       window.location.reload();
     };
@@ -45,7 +49,11 @@ export function PwaSilentServiceWorker() {
       });
     };
 
-    registerSw();
+    if (isCooperadoPwaMessengerMode()) {
+      scheduleCooperadoPostInteractiveTask(registerSw);
+    } else {
+      registerSw();
+    }
 
     const onVisible = () => {
       if (document.visibilityState !== "visible") return;
