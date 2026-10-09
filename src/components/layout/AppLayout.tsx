@@ -36,7 +36,10 @@ import { isStaffHbCoopBackgroundSyncRoute } from "@/lib/hb-credit/staffHbSyncRou
 import { useHbCreditDescontosWarmup } from "@/hooks/useHbCreditDescontosWarmup";
 import { shouldPrefetchHbCreditNav } from "@/lib/hb-credit/hbCreditNavPrefetch";
 import { scheduleCooperadoNavPrefetchEarly } from "@/lib/performance/cooperadoNavPrefetch";
-import { scheduleCooperadoPinnedTabsEagerWarm } from "@/lib/performance/cooperadoPinnedTabFastPath";
+import {
+  scheduleCooperadoPinnedTabsEagerWarm,
+  tryCooperadoPinnedInstantTabSwitch,
+} from "@/lib/performance/cooperadoPinnedTabFastPath";
 import { COOPERADO_FINANCEIRO_TAB_HREF } from "@/lib/hb-credit/hbCreditNavPrefetch";
 import {
   cooperadoTabWarmOnPointerDown,
@@ -343,6 +346,9 @@ export function MobileNav() {
               onClick={(e) => {
                 if (!active && isCooperadoNav && isCooperadoBottomTabPath(item.href)) {
                   e.preventDefault();
+                  if (tryCooperadoPinnedInstantTabSwitch(tabPath, item.href)) {
+                    return;
+                  }
                   setCooperadoOptimisticTab(item.href);
                   startTransition(() => {
                     router.push(item.href);

@@ -15,6 +15,7 @@ import {
 import {
   COOPERADO_PINNED_TAB_HREFS,
   isCooperadoPinnedDualMountEnabled,
+  setCooperadoPinnedPairCachesReady,
 } from "@/lib/performance/cooperadoPinnedTabFastPath";
 import { isCooperadoTabRouteLoadingElement } from "@/lib/performance/cooperadoTabPanelCache";
 import { useCooperadoEffectiveTabPath } from "@/hooks/useCooperadoEffectiveTabPath";
@@ -128,6 +129,14 @@ export function CooperadoMobileTabKeepAlive({ pathname, children }: Props) {
     if (isCooperadoTabRouteLoadingElement(children)) return;
     cacheRef.current[pathname] = children;
   }, [enabled, mobile, onTab, pathname, children]);
+
+  useLayoutEffect(() => {
+    const ready =
+      isCooperadoPinnedDualMountEnabled() &&
+      Boolean(cacheRef.current[COOPERADO_TAB_PIN_HREF]) &&
+      Boolean(cacheRef.current[COOPERADO_TAB_FINANCEIRO_HREF]);
+    setCooperadoPinnedPairCachesReady(ready);
+  }, [enabled, mobile, onTab, pathname, children, cacheVersion, effectivePath]);
 
   const hrefsToRender = useMemo(() => {
     if (onTab && enabled && mobile) {

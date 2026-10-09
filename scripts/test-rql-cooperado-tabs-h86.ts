@@ -56,6 +56,12 @@ assert(
   "rollback env Início+Financeiro dual mount"
 );
 assert(layout.includes("scheduleCooperadoPinnedTabsEagerWarm"), "warm antecipado Início+Financeiro");
+assert(
+  read("src/lib/performance/cooperadoPinnedTabFastPath.ts").includes(
+    "tryCooperadoPinnedInstantTabSwitch"
+  ),
+  "troca Início↔Financeiro sem router.push quando cache pronto"
+);
 assert(read("src/app/(app)/notas-pedido/NotasPedidoCooperadoMain.tsx").includes("useCooperadoPanelAppData"), "notas pausa store fora da aba");
 assert(
   read("src/lib/cooperado/cooperadoPwaMobileEntregas.ts").includes(
