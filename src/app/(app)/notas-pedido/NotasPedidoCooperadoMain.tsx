@@ -193,6 +193,7 @@ import {
 } from "@/services/bicLeituraCentralCooperado";
 import dynamic from "next/dynamic";
 import { useContaCoopDescontosRevision } from "@/hooks/useContaCoopDescontosRevision";
+import { loadCooperadoNotasSecondaryChunks } from "@/lib/performance/loadCooperadoNotasSecondaryChunks";
 
 const CooperadoEntregasPorMes = dynamic(
   () =>
@@ -490,6 +491,17 @@ export default function NotasPedidoCooperadoMain() {
   );
   const vistaConteudo = useDeferredValue(vistaResponsavel);
   const [abaCooperado, setAbaCooperado] = useState<"entregas" | "ficha">("entregas");
+
+  useEffect(() => {
+    if (!tabActive) return;
+    if (!isCooperado) {
+      loadCooperadoNotasSecondaryChunks(vistaConteudo);
+      return;
+    }
+    if (abaCooperado === "ficha") {
+      loadCooperadoNotasSecondaryChunks("fila", { cooperadoFichaTab: true });
+    }
+  }, [tabActive, isCooperado, vistaConteudo, abaCooperado]);
 
   const trocarAbaCooperado = useCallback((aba: "entregas" | "ficha") => {
     startTransition(() => {

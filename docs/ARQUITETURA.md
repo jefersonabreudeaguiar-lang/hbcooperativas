@@ -1,5 +1,7 @@
 # HB Cooperativas — arquitetura (marco zero)
 
+**Filosofia de produção (obrigatória em todo commit/push):** [`FILOSOFIA-PRODUCAO.md`](./FILOSOFIA-PRODUCAO.md)
+
 Aplicação **Next.js** (App Router) para gestão de cooperativas agrícolas: cooperados no celular (PWA), responsável/tesoureiro na conferência e pagamentos, plataforma HB para administração e **HB Créditos**.
 
 ## Fontes de verdade

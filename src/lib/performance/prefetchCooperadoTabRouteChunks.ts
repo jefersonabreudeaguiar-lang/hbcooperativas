@@ -3,6 +3,7 @@ import {
   type CooperadoBottomTabHref,
 } from "@/lib/performance/cooperadoBottomTabRoutes";
 import { warmupCooperadoFinanceiroTabChunk } from "@/lib/performance/cooperadoFinanceiroTabWarmup";
+import { loadCooperadoNotasHeavyChunk } from "@/lib/performance/loadCooperadoNotasHeavyChunk";
 
 /** Um chunk de aba — usado no pointerdown/touchstart e prefetch de vizinhos. */
 export function warmCooperadoTabRouteChunk(href: string): void {
@@ -15,7 +16,7 @@ export function warmCooperadoTabRouteChunk(href: string): void {
       void import("@/app/(app)/dashboard/DashboardContent");
       return;
     case "/notas-pedido":
-      void import("@/app/(app)/notas-pedido/NotasPedidoCooperadoMain");
+      loadCooperadoNotasHeavyChunk();
       return;
     case "/precos":
       void import("@/app/(app)/precos/PrecosContent");
@@ -41,10 +42,18 @@ export function warmCooperadoAdjacentTabRouteChunks(activeHref: string): void {
 /**
  * RQL 8.6 P1 — aquece chunks das abas cooperado (além do prefetch de rotas Next).
  */
+/** Lote pós-login — não puxa o monólito de notas (2.2); Entregas aquece no pointerdown ou ao abrir a aba. */
 export function prefetchCooperadoTabRouteChunks(): void {
   if (typeof window === "undefined") return;
   for (const href of COOPERADO_BOTTOM_TAB_HREFS) {
+    if (href === "/notas-pedido") continue;
     warmCooperadoTabRouteChunk(href);
   }
   void import("@/app/(app)/mensalidades/MensalidadesContent");
+}
+
+/** Só a casca da rota (chunk leve) — prefetch Next sem o Main de ~5k linhas. */
+export function warmCooperadoNotasRouteShell(): void {
+  if (typeof window === "undefined") return;
+  void import("@/app/(app)/notas-pedido/NotasPedidoContent");
 }

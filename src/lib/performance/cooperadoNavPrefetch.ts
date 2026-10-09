@@ -6,7 +6,10 @@ import { COOPERADO_BOTTOM_TAB_HREFS } from "@/lib/performance/cooperadoBottomTab
 import { scheduleCooperadoPostInteractiveTask } from "@/lib/performance/cooperadoColdStart";
 import { isCooperadoPwaMessengerMode } from "@/lib/cooperado/cooperadoPwaMessengerMode";
 import { isLowMemoryDevice } from "@/services/imagePipelineService";
-import { prefetchCooperadoTabRouteChunks } from "@/lib/performance/prefetchCooperadoTabRouteChunks";
+import {
+  prefetchCooperadoTabRouteChunks,
+  warmCooperadoNotasRouteShell,
+} from "@/lib/performance/prefetchCooperadoTabRouteChunks";
 import { warmupCooperadoFinanceiroTabChunk } from "@/lib/performance/cooperadoFinanceiroTabWarmup";
 
 export type CooperadoNavPrefetchRouter = {
@@ -17,7 +20,6 @@ export type CooperadoNavPrefetchRouter = {
 export const COOPERADO_NAV_PREFETCH_PRIORITY: readonly string[] = [
   COOPERADO_FINANCEIRO_TAB_HREF,
   "/dashboard",
-  "/notas-pedido",
   ...COOPERADO_BOTTOM_TAB_HREFS.filter(
     (h) =>
       h !== "/notas-pedido" &&
@@ -59,6 +61,7 @@ function runCooperadoNavPrefetchEarly(router: CooperadoNavPrefetchRouter): () =>
       }
     });
     safe(() => prefetchCooperadoNavRoutes(router, COOPERADO_NAV_PREFETCH_PRIORITY));
+    safe(() => warmCooperadoNotasRouteShell());
     if (!lowMemory) {
       safe(() => prefetchCooperadoTabRouteChunks());
     }

@@ -11,7 +11,7 @@ Plataforma web para gestão de cooperativas de agricultura familiar. Portal do C
 - **Tailwind CSS**
 - **Supabase** (notas, operacional na nuvem, HB Créditos) + cache local no cliente (`AppData`)
 
-Arquitetura e release: **[docs/ARQUITETURA.md](./docs/ARQUITETURA.md)** · Gate pré-deploy: `npm run release:verify`
+Arquitetura: **[docs/ARQUITETURA.md](./docs/ARQUITETURA.md)** · Filosofia produção: **[docs/FILOSOFIA-PRODUCAO.md](./docs/FILOSOFIA-PRODUCAO.md)** · Gate: `npm run release:verify`
 
 ## Como Executar
 

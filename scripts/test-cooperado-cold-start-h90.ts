@@ -72,8 +72,13 @@ assert(provider.includes("scheduleCooperadoColdStartSync"), "provider agenda syn
 assert(gate.includes("shouldSkipCooperadoSecondaryMountSync"), "gate dedupe sync mount");
 assert(gate.includes("syncingForUi"), "gate usa syncingForUi");
 assert(
-  auth.includes("preloadAppData({ eager: true })") && auth.includes("useLayoutEffect"),
+  auth.includes("useLayoutEffect") &&
+    (auth.includes("ensureCooperadoAppDataEagerWarm") || auth.includes("preloadAppData")),
   "auth warm local no 1º layout (antes do conteúdo)"
+);
+assert(
+  auth.includes("Sync AppData não precisa re-parsear sessão"),
+  "auth: dataTick no subscribe sem refresh em todo sync"
 );
 const rootLayout = read("src/app/layout.tsx");
 assert(rootLayout.includes("buildInlineCooperadoAppDataWarmScript"), "parse AppData inline no head");
@@ -128,6 +133,19 @@ assert(
   clientRelease.includes("allowUrgentReleaseAlignForFingerprint") &&
     clientRelease.includes("URGENT_FP_KEY"),
   "inline cloud_ahead com bypass de burst e dedup por fingerprint"
+);
+
+const tabChunks = read("src/lib/performance/prefetchCooperadoTabRouteChunks.ts");
+assert(
+  tabChunks.includes('href === "/notas-pedido"') && tabChunks.includes("continue"),
+  "prefetch em lote não puxa monólito de notas"
+);
+assert(tabChunks.includes("loadCooperadoNotasHeavyChunk"), "notas pesado só via loader dedicado");
+const navPrefetch = read("src/lib/performance/cooperadoNavPrefetch.ts");
+assert(
+  !navPrefetch.includes('"/notas-pedido",\n  ...COOPERADO_BOTTOM_TAB_HREFS') &&
+    navPrefetch.includes("warmCooperadoNotasRouteShell"),
+  "nav prefetch prioridade sem notas pesado + shell leve"
 );
 
 if (process.exitCode !== 1) {
