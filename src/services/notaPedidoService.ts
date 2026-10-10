@@ -26,6 +26,7 @@ import {
 } from "@/services/valoresAvulsosReceberService";
 import { round2 } from "@/utils/calculations";
 import { cooperadoUsarFluxoReciboAssinaturaNaUi } from "@/lib/bic/cooperadoBicCentralUi";
+import { pagamentoSuprimidoPorReciboAssinadoLocal } from "@/lib/cooperado/cooperadoReciboAssinaturaLocalLatch";
 import { isDivisaoEntregaHabilitada } from "@/lib/conferencia/divisaoEntregaPolicy";
 import { gerarReciboHtml, resumoReciboFromPagamento } from "@/utils/recibo";
 import { lancarPagamentoCooperadoNoCaixa } from "@/services/livroCaixaService";
@@ -2990,7 +2991,8 @@ export function getPagamentoPendenteAssinaturaReciboCooperado(
       (!mesReferencia || pagamentoCobreMesReferencia(p, mesReferencia)) &&
       (p.status !== "aguardando_confirmacao" ||
         !pagamentoAguardandoSupersedidoPorConfirmado(data, cooperadoId, p)) &&
-      !pagamentoAguardandoObsoletoPorNovaEntregaForaDoEscopo(data, cooperadoId, p)
+      !pagamentoAguardandoObsoletoPorNovaEntregaForaDoEscopo(data, cooperadoId, p) &&
+      !pagamentoSuprimidoPorReciboAssinadoLocal(data, cooperadoId, coopId, p)
   );
 }
 

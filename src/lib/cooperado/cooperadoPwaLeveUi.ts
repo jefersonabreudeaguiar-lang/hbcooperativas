@@ -3,12 +3,13 @@
  */
 import type { User } from "@/types";
 import { isCooperadoPwaMobileEntregasLeve } from "@/lib/cooperado/cooperadoPwaMobileEntregas";
-import { persistirCooperadoPwaInicioDashboardSnapshot } from "@/lib/cooperado/cooperadoPwaInicioDashboardSnapshot";
+import { persistirCooperadoPwaInicioDashboardSnapshotFromUser } from "@/lib/cooperado/cooperadoPwaInicioDashboardSnapshot";
 import { persistirCooperadoPwaFichaResumoSnapshotFromUser } from "@/lib/cooperado/cooperadoPwaFichaResumoSnapshot";
 import { resolverCooperadoIdCanonico } from "@/services/cooperadoCloudService";
 import { getData, isAppDataWarm } from "@/services/dataStore";
 import { persistirInicioCardValorReceberCooperado } from "@/services/cooperadoInicioCardPersistenciaService";
 import { getUserCooperativaId } from "@/utils/cooperativa";
+import { gravarReciboAssinadoLocalLatch } from "@/lib/cooperado/cooperadoReciboAssinaturaLocalLatch";
 
 export function isCooperadoPwaMobileLeveUi(): boolean {
   return isCooperadoPwaMobileEntregasLeve();
@@ -26,38 +27,43 @@ export function dispatchCooperadoPwaLeveUiSnapshotRefresh(): void {
   window.dispatchEvent(new CustomEvent(COOPERADO_PWA_LEVE_UI_SNAPSHOT_REFRESH_EVENT));
 }
 
-/** Grava card “A receber” e avisa Início/Entregas PWA para reler localStorage. */
-export function persistirInicioCardCooperadoNotificarPwaLeve(
-  user: Omit<User, "password"> | null | undefined
+/** Card + snapshot do painel Início (mesma leitura do motor). */
+export function refreshCooperadoPwaInicioCachesFromMotor(
+  user: Omit<User, "password"> | null | undefined,
+  apresentacaoConsolidada = true
 ): boolean {
   if (!user || user.role !== "cooperado") return false;
   const ok = persistirInicioCardValorReceberCooperado(user);
+  if (isAppDataWarm()) {
+    persistirCooperadoPwaInicioDashboardSnapshotFromUser(user, apresentacaoConsolidada);
+  }
   if (isCooperadoPwaMobileLeveUi()) {
     dispatchCooperadoPwaLeveUiSnapshotRefresh();
   }
   return ok;
 }
 
+/** Grava card “A receber” e avisa Início/Entregas PWA para reler localStorage. */
+export function persistirInicioCardCooperadoNotificarPwaLeve(
+  user: Omit<User, "password"> | null | undefined
+): boolean {
+  return refreshCooperadoPwaInicioCachesFromMotor(user, true);
+}
+
 /** Após assinar recibo localmente — evita Início/Ficha reler snapshot antigo com recibo pendente. */
 export function materializarCooperadoPwaAposAssinaturaReciboLocal(
   user: Omit<User, "password">,
-  apresentacaoConsolidada: boolean
+  apresentacaoConsolidada: boolean,
+  pagamentoId?: string
 ): void {
   if (user.role !== "cooperado" || !user.cooperadoId || !isAppDataWarm()) return;
-  persistirInicioCardValorReceberCooperado(user);
   const data = getData();
   const coopId = getUserCooperativaId(user, data) ?? user.cooperativaId;
   if (!coopId) return;
   const cooperadoId = resolverCooperadoIdCanonico(data, user.cooperadoId, coopId);
-  persistirCooperadoPwaInicioDashboardSnapshot(
-    cooperadoId,
-    coopId,
-    user,
-    apresentacaoConsolidada,
-    data
-  );
-  persistirCooperadoPwaFichaResumoSnapshotFromUser(user, apresentacaoConsolidada);
-  if (isCooperadoPwaMobileLeveUi()) {
-    dispatchCooperadoPwaLeveUiSnapshotRefresh();
+  if (pagamentoId) {
+    gravarReciboAssinadoLocalLatch(cooperadoId, coopId, pagamentoId);
   }
+  refreshCooperadoPwaInicioCachesFromMotor(user, apresentacaoConsolidada);
+  persistirCooperadoPwaFichaResumoSnapshotFromUser(user, apresentacaoConsolidada);
 }

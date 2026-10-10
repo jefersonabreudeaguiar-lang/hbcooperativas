@@ -1484,7 +1484,7 @@ export default function FichaCorridaPage() {
       });
     });
     if (isCooperado) {
-      materializarCooperadoPwaAposAssinaturaReciboLocal(user, apresentacaoFinanceiroUi);
+      materializarCooperadoPwaAposAssinaturaReciboLocal(user, apresentacaoFinanceiroUi, pgAssinar.id);
     }
     void (async () => {
       const pg = pagamentoConfirmadoLocal ?? getData().pagamentosCooperado.find((p) => p.id === pgAssinar.id);

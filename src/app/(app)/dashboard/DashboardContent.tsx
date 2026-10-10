@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useDeferredValue, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { AppData, User } from "@/types";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -214,6 +214,8 @@ function CooperadoDashboard() {
       session.cooperativaId
     );
   });
+  const pwaInicioViewStickyRef = useRef<CooperadoPwaInicioDashboardView | null>(pwaInicioView);
+  if (pwaInicioView) pwaInicioViewStickyRef.current = pwaInicioView;
 
   const refreshPwaInicioView = useCallback(
     (opts?: { rebuildFromAppData?: boolean }) => {
@@ -258,6 +260,11 @@ function CooperadoDashboard() {
     return () => window.removeEventListener(COOPERADO_PWA_LEVE_UI_SNAPSHOT_REFRESH_EVENT, onRefresh);
   }, [inicioPwaLeve, refreshPwaInicioView]);
 
+  useLayoutEffect(() => {
+    if (!inicioPwaLeve || !tabActive) return;
+    refreshPwaInicioView();
+  }, [inicioPwaLeve, tabActive, refreshPwaInicioView]);
+
   const inicioDomainsRevision = useAppDataDomainsRevisionWhenActive(appDataUiOn, DASHBOARD_INICIO_DOMAINS);
   const deferredInicioRevision = useDeferredValue(inicioDomainsRevision);
 
@@ -274,7 +281,8 @@ function CooperadoDashboard() {
     apresentacaoConsolidada,
   ]);
 
-  const view = messenger || inicioPwaLeve ? pwaInicioView : viewLive;
+  const view =
+    messenger || inicioPwaLeve ? pwaInicioView ?? pwaInicioViewStickyRef.current : viewLive;
 
   const mesAtual = getCurrentMesReferencia();
   const nomeCurto =

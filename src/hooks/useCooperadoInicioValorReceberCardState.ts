@@ -21,6 +21,7 @@ import { APP_BUILD_VERSION } from "@/lib/appBuildVersion";
 import { isCooperadoUserSyncVisible } from "@/lib/performance/cooperadoColdStart";
 import { isCooperadoPwaMobileLeveUi } from "@/lib/cooperado/cooperadoPwaLeveUi";
 import { COOPERADO_PWA_LEVE_UI_SNAPSHOT_REFRESH_EVENT } from "@/lib/cooperado/cooperadoPwaLeveUi";
+import { cooperadoTemReciboAssinadoLocalSemPendenciaUi } from "@/lib/cooperado/cooperadoReciboAssinaturaLocalLatch";
 import { lerInicioCardPersistidoResume } from "@/lib/cooperado/cooperadoPwaInstantResume";
 import { getData, isAppDataWarm } from "@/services/dataStore";
 
@@ -121,6 +122,24 @@ export function useCooperadoInicioValorReceberCardState(input: {
             })
           : null;
 
+      if (
+        data &&
+        input.cooperadoId &&
+        input.cooperativaId &&
+        cooperadoTemReciboAssinadoLocalSemPendenciaUi(data, input.cooperadoId, input.cooperativaId)
+      ) {
+        return {
+          display: SNAPSHOT_VAZIO,
+          latch: {
+            motorRevision: fromMotor?.latch.motorRevision ?? "",
+            display: SNAPSHOT_VAZIO,
+            hadPendencia: false,
+          },
+          atualizando: Boolean(input.syncing && isCooperadoUserSyncVisible()),
+          gravarPersistencia: false,
+        };
+      }
+
       if (fromMotor && cooperadoMotorTemObrigacaoReceber(fromMotor.display)) {
         return { ...fromMotor, gravarPersistencia: false };
       }
@@ -138,9 +157,10 @@ export function useCooperadoInicioValorReceberCardState(input: {
         data &&
         input.cooperadoId &&
         input.cooperativaId &&
-        cooperadoBicAutorizaZerarCardInicio(data, input.cooperadoId, input.cooperativaId, {
-          tinhaValorExibido: persistidoComObrigacao,
-        });
+        (cooperadoTemReciboAssinadoLocalSemPendenciaUi(data, input.cooperadoId, input.cooperativaId) ||
+          cooperadoBicAutorizaZerarCardInicio(data, input.cooperadoId, input.cooperativaId, {
+            tinhaValorExibido: persistidoComObrigacao,
+          }));
 
       if (motorZeradoComProva && fromMotor) {
         return { ...fromMotor, gravarPersistencia: false };
