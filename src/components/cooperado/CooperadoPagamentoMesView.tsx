@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { Camera, ChevronDown } from "lucide-react";
-import { useAppData } from "@/hooks/useAppData";
+import { useAppDataSnapshotForDomains } from "@/hooks/useAppData";
 import { Button } from "@/components/ui/Button";
 import { CooperadoHistoricoPagamentoMes } from "@/components/cooperado/CooperadoHistoricoPagamentoMes";
 import { CooperadoMesEntregasDetalhe } from "@/components/cooperado/CooperadoMesEntregasDetalhe";
@@ -31,7 +31,7 @@ export function CooperadoPagamentoMesView({
   getEscolaLabel,
   onVerFotosMes,
 }: Props) {
-  const data = useAppData();
+  const data = useAppDataSnapshotForDomains(["financeiro", "notas"]);
   const [entregasAbertas, setEntregasAbertas] = useState(false);
   const [itensAbertos, setItensAbertos] = useState(false);
 

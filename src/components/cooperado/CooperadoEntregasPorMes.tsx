@@ -26,7 +26,8 @@ import {
   type EntregaCooperadoView,
 } from "@/services/entregaCooperadoService";
 import { textoInformativoDivisaoEntrega, nomesParticipantesDivisao } from "@/services/divisaoEntregaService";
-import { useAppData } from "@/hooks/useAppData";
+import { useAppDataSnapshotForDomainsWhenActive } from "@/hooks/useAppData";
+import { isCooperadoPwaMobileEntregasLeve } from "@/lib/cooperado/cooperadoPwaMobileEntregas";
 import { NotaStatusBadge } from "@/components/ui/NotaStatusBadge";
 import { NotaStatusTimeline } from "@/components/notas/NotaStatusTimeline";
 import { Button } from "@/components/ui/Button";
@@ -38,6 +39,7 @@ interface CooperadoEntregasPorMesProps {
   resumos: ResumoMesEntregasCooperado[];
   nomeCooperado: string;
   ultimaNotaEnviadaIds?: string[];
+  painelRotaAtiva?: boolean;
   onReenviar: (nota: NotaPedido) => void;
   onExcluir: (nota: NotaPedido) => void;
   getEscolaLabel: (nota: NotaPedido) => string;
@@ -51,34 +53,48 @@ function ResumoMesCard({
   resumo,
   nomeCooperado,
   qtdEntregas,
+  colapsavel,
+  aberto,
+  onToggle,
 }: {
   resumo: ResumoMesEntregasCooperado;
   nomeCooperado: string;
   qtdEntregas: number;
+  colapsavel?: boolean;
+  aberto?: boolean;
+  onToggle?: () => void;
 }) {
   const quitado = resumo.pagamentoConfirmado != null;
   const aguardandoPix = resumo.pagamentoAguardando != null;
 
-  return (
-    <div
-      className={cn(
-        "rounded-2xl border p-4 mb-4",
-        quitado
-          ? "bg-emerald-50/80 border-emerald-200"
-          : aguardandoPix
-            ? "bg-amber-50/80 border-amber-200"
-            : resumo.valorAReceber > 0
-              ? "bg-green-50/80 border-green-200"
-              : "bg-white border-gray-200"
-      )}
-    >
+  const shellClass = cn(
+    "rounded-2xl border p-4 mb-4 w-full text-left",
+    quitado
+      ? "bg-emerald-50/80 border-emerald-200"
+      : aguardandoPix
+        ? "bg-amber-50/80 border-amber-200"
+        : resumo.valorAReceber > 0
+          ? "bg-green-50/80 border-green-200"
+          : "bg-white border-gray-200",
+    colapsavel && "cursor-pointer active:opacity-90"
+  );
+
+  const inner = (
+    <>
       <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
+        <div className="flex items-start gap-2 min-w-0 flex-1">
+          {colapsavel && (
+            <span className="mt-1 text-gray-500 shrink-0" aria-hidden>
+              {aberto ? <ChevronDown size={20} /> : <ChevronRight size={20} />}
+            </span>
+          )}
+          <div>
           <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">Mês</p>
           <p className="text-lg font-bold text-gray-900 mt-0.5">{formatMesReferencia(resumo.mesReferencia)}</p>
           <p className="text-sm text-gray-600 mt-1">
             {qtdEntregas} {qtdEntregas === 1 ? "entrega" : "entregas"} no mês
           </p>
+          </div>
         </div>
         <div className="text-right space-y-1">
           {quitado && (
@@ -127,18 +143,28 @@ function ResumoMesCard({
           size="sm"
           variant="secondary"
           className="mt-3"
-          onClick={() =>
+          onClick={(e) => {
+            e.stopPropagation();
             void baixarRecibo(
               resumo.pagamentoConfirmado!.reciboHtml!,
               nomeArquivoRecibo(resumo.mesReferencia, nomeCooperado)
-            )
-          }
+            );
+          }}
         >
           <FileDown size={16} /> Baixar recibo do mês
         </Button>
       )}
-    </div>
+    </>
   );
+
+  if (colapsavel && onToggle) {
+    return (
+      <button type="button" className={shellClass} onClick={onToggle} aria-expanded={aberto}>
+        {inner}
+      </button>
+    );
+  }
+  return <div className={shellClass}>{inner}</div>;
 }
 
 function EntregaSemanaItem({
@@ -334,12 +360,23 @@ export const CooperadoEntregasPorMes = memo(function CooperadoEntregasPorMes({
   resumos,
   nomeCooperado,
   ultimaNotaEnviadaIds = [],
+  painelRotaAtiva = true,
   onReenviar,
   onExcluir,
   getEscolaLabel,
 }: CooperadoEntregasPorMesProps) {
-  const data = useAppData();
+  const entregasLeve = isCooperadoPwaMobileEntregasLeve();
+  const data = useAppDataSnapshotForDomainsWhenActive(painelRotaAtiva, ["notas"]);
   const [expandidaId, setExpandidaId] = useState<string | null>(null);
+  const [mesAberto, setMesAberto] = useState<string | null>(() => resumos[0]?.mesReferencia ?? null);
+
+  useEffect(() => {
+    if (!entregasLeve) return;
+    setMesAberto((atual) => {
+      if (atual && resumos.some((r) => r.mesReferencia === atual)) return atual;
+      return resumos[0]?.mesReferencia ?? null;
+    });
+  }, [entregasLeve, resumos]);
 
   useEffect(() => {
     const nova = ultimaNotaEnviadaIds[0];
@@ -363,12 +400,27 @@ export const CooperadoEntregasPorMes = memo(function CooperadoEntregasPorMes({
       {resumos.map((resumo) => {
         const entregas = agruparNotasEmEntregas(resumo.notas);
         const semanas = agruparEntregasPorSemanaNoMes(entregas, resumo.mesReferencia);
+        const mesExpandido = !entregasLeve || mesAberto === resumo.mesReferencia;
 
         return (
           <section key={resumo.mesReferencia} id={`mes-${resumo.mesReferencia}`}>
-            <ResumoMesCard resumo={resumo} nomeCooperado={nomeCooperado} qtdEntregas={entregas.length} />
+            <ResumoMesCard
+              resumo={resumo}
+              nomeCooperado={nomeCooperado}
+              qtdEntregas={entregas.length}
+              colapsavel={entregasLeve}
+              aberto={mesExpandido}
+              onToggle={
+                entregasLeve
+                  ? () =>
+                      setMesAberto((cur) =>
+                        cur === resumo.mesReferencia ? null : resumo.mesReferencia
+                      )
+                  : undefined
+              }
+            />
 
-            {entregas.length > 0 && (
+            {mesExpandido && entregas.length > 0 && (
               <div className="space-y-6">
                 {semanas.map((semana) => (
                   <div key={`${resumo.mesReferencia}-s${semana.indice}`}>
@@ -401,7 +453,7 @@ export const CooperadoEntregasPorMes = memo(function CooperadoEntregasPorMes({
               </div>
             )}
 
-            {!resumo.pagamentoConfirmado && resumo.valorAReceber > 0 && (
+            {mesExpandido && !resumo.pagamentoConfirmado && resumo.valorAReceber > 0 && (
               <div className="mt-4 rounded-xl bg-gray-50 border border-gray-200 px-4 py-3 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
                 <p className="text-sm text-gray-600">
                   Totais aprovados deste mês estão em <strong>Minha ficha</strong> e em{" "}

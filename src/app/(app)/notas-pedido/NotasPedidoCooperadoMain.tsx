@@ -26,7 +26,15 @@ import {
   FOTO_ENTREGA_THUMB_IMG,
   FOTO_ENTREGA_VIEW_MODAL_IMG,
 } from "@/components/notas/fotoEntregaDisplay";
-import { updateData, updateDataSafe, generateId, addAuditEntry, getData, getDataRevision } from "@/services/dataStore";
+import {
+  updateData,
+  updateDataSafe,
+  generateId,
+  addAuditEntry,
+  getData,
+  getDataRevision,
+  isAppDataWarm,
+} from "@/services/dataStore";
 import {
   requestAppSync,
   requestAppSyncImmediate,
@@ -569,22 +577,41 @@ export default function NotasPedidoCooperadoMain() {
       : undefined;
 
   const refreshPwaEntregasIdleRef = useRef<number | null>(null);
+  const pwaEntregasResumosSnapRef = useRef(pwaEntregasResumosSnap);
+  pwaEntregasResumosSnapRef.current = pwaEntregasResumosSnap;
+
   const refreshPwaEntregasResumosSnap = useCallback(() => {
     if (!entregasPwaLeve || !cooperadoCanonico || !coopId) return;
-    const run = () => {
+    const cancelIdle = () => {
+      if (refreshPwaEntregasIdleRef.current != null && typeof cancelIdleCallback !== "undefined") {
+        cancelIdleCallback(refreshPwaEntregasIdleRef.current);
+        refreshPwaEntregasIdleRef.current = null;
+      }
+    };
+    const runFull = () => {
       refreshPwaEntregasIdleRef.current = null;
       const built = persistirCooperadoPwaEntregasResumosSnapshot(cooperadoCanonico, coopId);
       if (built) setPwaEntregasResumosSnap(built);
     };
-    if (refreshPwaEntregasIdleRef.current != null && typeof cancelIdleCallback !== "undefined") {
-      cancelIdleCallback(refreshPwaEntregasIdleRef.current);
-      refreshPwaEntregasIdleRef.current = null;
+    cancelIdle();
+    if (isAppDataWarm()) {
+      const prevHist = pwaEntregasResumosSnapRef.current?.pagamentosRealizados;
+      const builtLight = persistirCooperadoPwaEntregasResumosSnapshot(
+        cooperadoCanonico,
+        coopId,
+        getData(),
+        {
+          omitirPagamentosHistorico: true,
+          pagamentosRealizadosAnteriores: prevHist,
+        }
+      );
+      if (builtLight) setPwaEntregasResumosSnap(builtLight);
     }
     if (typeof requestIdleCallback !== "undefined") {
-      refreshPwaEntregasIdleRef.current = requestIdleCallback(run, { timeout: 2_500 });
+      refreshPwaEntregasIdleRef.current = requestIdleCallback(runFull, { timeout: 2_500 });
       return;
     }
-    run();
+    runFull();
   }, [entregasPwaLeve, cooperadoCanonico, coopId]);
 
   useEffect(() => {
@@ -4734,6 +4761,7 @@ export default function NotasPedidoCooperadoMain() {
               cooperativaId={coopId}
               nomeCooperado={nomeCooperadoExibicao}
               resumos={resumosFichaCooperado}
+              painelRotaAtiva={tabActive && abaCooperado === "ficha"}
               pagamentosRealizadosCache={
                 entregasPwaLeve || (messenger && !data)
                   ? pwaEntregasResumosSnap?.pagamentosRealizados
@@ -4760,6 +4788,7 @@ export default function NotasPedidoCooperadoMain() {
                   resumos={resumosMensaisCooperado}
                   nomeCooperado={nomeCooperadoExibicao}
                   ultimaNotaEnviadaIds={ultimaNotaEnviadaIds}
+                  painelRotaAtiva={tabActive && abaCooperado === "entregas"}
                   onReenviar={(n) => openAnexar(n, { abrirCamera: true })}
                   onExcluir={(n) => solicitarExclusaoNota(n, false)}
                   getEscolaLabel={getEscolaLabelCooperado}

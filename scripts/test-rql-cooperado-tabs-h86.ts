@@ -96,7 +96,7 @@ assert(
 assert(panel.includes("useCooperadoEffectiveTabPath"), "navegação otimista cooperado");
 assert(layout.includes("setCooperadoOptimisticTab"), "pointerdown otimista no rodapé");
 assert(layout.includes("cooperadoTabWarmOnTouchStart"), "touchstart aquece chunk no rodapé");
-assert(keep.includes("COOPERADO_BOTTOM_TAB_HREFS.length"), "PWA mensageiro mantém 4 abas no LRU");
+assert(keep.includes("lowMemoryDevice ? 2 : 3"), "PWA mensageiro limita LRU a 2–3 painéis");
 assert(
   read("src/lib/performance/prefetchCooperadoTabRouteChunks.ts").includes(
     "warmCooperadoAdjacentTabRouteChunks"

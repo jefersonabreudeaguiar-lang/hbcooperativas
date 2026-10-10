@@ -42,17 +42,28 @@ function subscribeAppDataDomains(
 export function useAppDataSnapshotForDomains(
   domains: readonly AppDataNotifyDomain[]
 ): AppData | null {
+  return useAppDataSnapshotForDomainsWhenActive(true, domains);
+}
+
+/** Keep-alive / PWA mensageiro: não assina domínios quando o painel está oculto. */
+export function useAppDataSnapshotForDomainsWhenActive(
+  panelActive: boolean,
+  domains: readonly AppDataNotifyDomain[]
+): AppData | null {
   const domainKey = normalizeDomains(domains).join("|");
   const subscribeDomains = useCallback(
-    (onStoreChange: () => void) => subscribeAppDataDomains(domains, onStoreChange),
-    [domainKey]
+    (onStoreChange: () => void) => {
+      if (!panelActive) return () => undefined;
+      return subscribeAppDataDomains(domains, onStoreChange);
+    },
+    [panelActive, domainKey]
   );
   useSyncExternalStore(
     subscribeDomains,
-    () => getDomainsRevisionSnapshot(domains),
+    () => (panelActive ? getDomainsRevisionSnapshot(domains) : `paused:${domainKey}`),
     () => ""
   );
-  if (!isAppDataWarm()) return null;
+  if (!panelActive || !isAppDataWarm()) return null;
   return getData();
 }
 

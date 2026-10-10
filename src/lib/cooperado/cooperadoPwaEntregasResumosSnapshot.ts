@@ -39,10 +39,17 @@ function storageKey(cooperadoId: string, cooperativaId: string): string {
   return `hb.coop.pwaEntregasResumos.v${COOPERADO_PWA_ENTREGAS_SNAPSHOT_VERSION}:${cooperativaId}:${cooperadoId}`;
 }
 
+export type BuildCooperadoPwaEntregasSnapshotOpts = {
+  /** Fase rápida após sync — histórico PIX completo fica para idle. */
+  omitirPagamentosHistorico?: boolean;
+  pagamentosRealizadosAnteriores?: ResumoMesEntregasCooperado[];
+};
+
 export function buildCooperadoPwaEntregasResumosSnapshot(
   data: AppData,
   cooperadoId: string,
-  cooperativaId: string
+  cooperativaId: string,
+  opts?: BuildCooperadoPwaEntregasSnapshotOpts
 ): CooperadoPwaEntregasResumosSnapshot {
   const entregasBase = filtrarResumosMesesNaoQuitados(
     data,
@@ -50,11 +57,9 @@ export function buildCooperadoPwaEntregasResumosSnapshot(
     bicCentralListarResumosMensaisEntregas(data, cooperadoId, cooperativaId)
   );
   const fichaAberto = listarResumosFichaEmAbertoCooperado(data, cooperadoId, cooperativaId);
-  const pagamentosRealizados = listarResumosExtratoHistoricoCooperado(
-    data,
-    cooperadoId,
-    cooperativaId
-  );
+  const pagamentosRealizados = opts?.omitirPagamentosHistorico
+    ? (opts.pagamentosRealizadosAnteriores ?? [])
+    : listarResumosExtratoHistoricoCooperado(data, cooperadoId, cooperativaId);
   return {
     v: COOPERADO_PWA_ENTREGAS_SNAPSHOT_VERSION,
     appBuild: APP_BUILD_VERSION,
@@ -105,12 +110,13 @@ export function gravarCooperadoPwaEntregasResumosSnapshot(
 export function persistirCooperadoPwaEntregasResumosSnapshot(
   cooperadoId: string,
   cooperativaId: string,
-  data?: AppData | null
+  data?: AppData | null,
+  opts?: BuildCooperadoPwaEntregasSnapshotOpts
 ): CooperadoPwaEntregasResumosSnapshot | null {
   const d = data ?? (isAppDataWarm() ? getData() : null);
   if (!d) return null;
   const canon = resolverCooperadoIdCanonico(d, cooperadoId, cooperativaId);
-  const built = buildCooperadoPwaEntregasResumosSnapshot(d, canon, cooperativaId);
+  const built = buildCooperadoPwaEntregasResumosSnapshot(d, canon, cooperativaId, opts);
   gravarCooperadoPwaEntregasResumosSnapshot(canon, cooperativaId, built);
   return built;
 }

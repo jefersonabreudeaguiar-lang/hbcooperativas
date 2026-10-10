@@ -14,7 +14,7 @@ import {
   BookOpen,
 } from "lucide-react";
 import {
-  useAppDataSnapshotForDomains,
+  useAppDataSnapshotForDomainsWhenActive,
   useAppDataSelectorWhenActive,
 } from "@/hooks/useAppData";
 import { HB_CREDIT_PRODUCT_NAME } from "@/config/hbCreditBranding";
@@ -65,6 +65,8 @@ interface CooperadoMinhaFichaTabProps {
   resumos: ResumoMesEntregasCooperado[];
   /** PWA mensageiro: histórico materializado pós-sync (evita lista vazia sem AppData ao vivo). */
   pagamentosRealizadosCache?: ResumoMesEntregasCooperado[];
+  /** PWA keep-alive: painel montado mas aba de rota oculta — não assina AppData. */
+  painelRotaAtiva?: boolean;
   getEscolaLabel: (nota: import("@/types").NotaPedido) => string;
   modo?: ModoFichaExtrato;
 }
@@ -509,6 +511,7 @@ export const CooperadoMinhaFichaTab = memo(function CooperadoMinhaFichaTab({
   nomeCooperado,
   resumos,
   pagamentosRealizadosCache,
+  painelRotaAtiva = true,
   getEscolaLabel,
   modo = "cooperado",
 }: CooperadoMinhaFichaTabProps) {
@@ -521,7 +524,8 @@ export const CooperadoMinhaFichaTab = memo(function CooperadoMinhaFichaTab({
   const abaExtratoAtiva = subAba === "extrato";
   const abaFotosAtiva = subAba === "fotos";
 
-  const data = useAppDataSnapshotForDomains(
+  const data = useAppDataSnapshotForDomainsWhenActive(
+    painelRotaAtiva,
     abaFotosAtiva ? (["notas"] as const) : (["financeiro", "notas"] as const)
   );
 
