@@ -590,6 +590,7 @@ export default function NotasPedidoStaffMain() {
   const [observacoes, setObservacoes] = useState("");
   const [reenviarNotaId, setReenviarNotaId] = useState<string | null>(null);
   const fotoInputRef = useRef<HTMLInputElement>(null);
+  const pendingCameraOnAnexarRef = useRef(false);
   const fotoPreviewUrlRef = useRef<string | null>(null);
 
   const [selectedNota, setSelectedNota] = useState<NotaPedido | null>(null);
@@ -1630,6 +1631,20 @@ export default function NotasPedidoStaffMain() {
     fotoInputRef.current?.click();
   }, [enviando, fotosSessaoCount, processandoFoto]);
 
+  const scheduleAbrirCameraAnexar = useCallback(() => {
+    pendingCameraOnAnexarRef.current = true;
+  }, []);
+
+  useEffect(() => {
+    if (!anexarModal || !pendingCameraOnAnexarRef.current) return;
+    if (processandoFoto || enviando) return;
+    pendingCameraOnAnexarRef.current = false;
+    const raf1 = requestAnimationFrame(() => {
+      requestAnimationFrame(() => abrirCameraAnexar());
+    });
+    return () => cancelAnimationFrame(raf1);
+  }, [anexarModal, abrirCameraAnexar, enviando, processandoFoto]);
+
   const limiteFotosSessaoAtingido = fotosSessaoAtingiuLimite(fotosSessaoCount);
   const proximoDoLimiteFotos = fotosSessaoCount >= AVISO_FOTOS_SESSAO_EM && !limiteFotosSessaoAtingido;
 
@@ -1647,13 +1662,8 @@ export default function NotasPedidoStaffMain() {
     }
     setRascunhoFotosCount(0);
     setAnexarModal(true);
-    void (async () => {
-      await syncFotosSessaoFromDraft();
-      if (abrirCamera) {
-        const count = await countFotoDraft(ANEXAR_DRAFT_KEY);
-        if (!fotosSessaoAtingiuLimite(count)) abrirCameraAnexar();
-      }
-    })();
+    if (abrirCamera) scheduleAbrirCameraAnexar();
+    void syncFotosSessaoFromDraft();
   };
 
   const iniciarModalAnexar = (notaRejeitada?: NotaPedido, options?: { abrirCamera?: boolean }) => {
@@ -1692,7 +1702,7 @@ export default function NotasPedidoStaffMain() {
     }
     void sincronizarContratosEmBackground(notaRejeitada);
 
-    if (options?.abrirCamera) abrirCameraAnexar();
+    if (options?.abrirCamera) scheduleAbrirCameraAnexar();
   };
 
   const openAnexar = (notaRejeitada?: NotaPedido, options?: { abrirCamera?: boolean }) => {
@@ -1702,7 +1712,16 @@ export default function NotasPedidoStaffMain() {
       return;
     }
     if (!notaRejeitada && ANEXAR_DRAFT_KEY) {
+      let settled = false;
+      const fallbackTimer = window.setTimeout(() => {
+        if (settled) return;
+        settled = true;
+        iniciarModalAnexar(undefined, options);
+      }, 200);
       void loadFotoDraftMeta(ANEXAR_DRAFT_KEY).then((meta) => {
+        if (settled) return;
+        settled = true;
+        window.clearTimeout(fallbackTimer);
         if (meta?.count) {
           setRascunhoFotosCount(meta.count);
           setRascunhoUploadedCount(meta.uploadedCount ?? 0);

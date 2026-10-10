@@ -442,6 +442,7 @@ export default function NotasPedidoCooperadoMain() {
   const [observacoes, setObservacoes] = useState("");
   const [reenviarNotaId, setReenviarNotaId] = useState<string | null>(null);
   const fotoInputRef = useRef<HTMLInputElement>(null);
+  const pendingCameraOnAnexarRef = useRef(false);
   const fotoPreviewUrlRef = useRef<string | null>(null);
 
   const [selectedNota, setSelectedNota] = useState<NotaPedido | null>(null);
@@ -1570,40 +1571,48 @@ export default function NotasPedidoCooperadoMain() {
     fotoInputRef.current?.click();
   }, [enviando, fotosSessaoCount, processandoFoto]);
 
+  const scheduleAbrirCameraAnexar = useCallback(() => {
+    pendingCameraOnAnexarRef.current = true;
+  }, []);
+
+  useEffect(() => {
+    if (!anexarModal || !pendingCameraOnAnexarRef.current) return;
+    if (processandoFoto || enviando) return;
+    pendingCameraOnAnexarRef.current = false;
+    const raf1 = requestAnimationFrame(() => {
+      requestAnimationFrame(() => abrirCameraAnexar());
+    });
+    return () => cancelAnimationFrame(raf1);
+  }, [anexarModal, abrirCameraAnexar, enviando, processandoFoto]);
+
   const limiteFotosSessaoAtingido = fotosSessaoAtingiuLimite(fotosSessaoCount);
   const proximoDoLimiteFotos = fotosSessaoCount >= AVISO_FOTOS_SESSAO_EM && !limiteFotosSessaoAtingido;
 
   const continuarRascunhoFotos = (abrirCamera = false) => {
     if (rascunhoFotosCount === 0) return;
     prefetchCooperadoAnexarPipeline();
+    setFormErrors({});
+    setErroEnvio("");
+    setAnexarSucesso(false);
+    setReenviarNotaId(null);
+    setFotoDuplicadaMsg("");
+    if (rascunhoContratoId) {
+      setContratoInstId(rascunhoContratoId);
+      if (coopId) setInstituicaoPadraoId(coopId, rascunhoContratoId);
+    }
+    setRascunhoFotosCount(0);
+    setAnexarModal(true);
+    if (abrirCamera) scheduleAbrirCameraAnexar();
     void (async () => {
       if (entregasPwaLeve && user && coopId) {
-        setPwaPreparandoEnvio(true);
         const pull = await ensureCooperadoNotasFreshForEnvio(user, coopId, { reason: "anexar" });
-        setPwaPreparandoEnvio(false);
         if (!pull.ok) {
-          setSuccessMsg(pull.error ?? "Não foi possível atualizar antes de continuar o envio.");
-          setTimeout(() => setSuccessMsg(""), 8000);
+          setErroEnvio(pull.error ?? "Não foi possível atualizar antes de continuar o envio.");
           return;
         }
         refreshPwaEntregasResumosSnap();
       }
-      setFormErrors({});
-      setErroEnvio("");
-      setAnexarSucesso(false);
-      setReenviarNotaId(null);
-      setFotoDuplicadaMsg("");
-      if (rascunhoContratoId) {
-        setContratoInstId(rascunhoContratoId);
-        if (coopId) setInstituicaoPadraoId(coopId, rascunhoContratoId);
-      }
-      setRascunhoFotosCount(0);
-      setAnexarModal(true);
       await syncFotosSessaoFromDraft();
-      if (abrirCamera) {
-        const count = await countFotoDraft(ANEXAR_DRAFT_KEY);
-        if (!fotosSessaoAtingiuLimite(count)) abrirCameraAnexar();
-      }
     })();
   };
 
@@ -1643,28 +1652,30 @@ export default function NotasPedidoCooperadoMain() {
     }
     void sincronizarContratosEmBackground(notaRejeitada);
 
-    if (options?.abrirCamera) abrirCameraAnexar();
+    if (options?.abrirCamera) scheduleAbrirCameraAnexar();
   };
 
-  const openAnexarPwaThen = async (
+  const openAnexarPwaThen = (
     notaRejeitada?: NotaPedido,
     options?: { abrirCamera?: boolean }
   ) => {
-    if (entregasPwaLeve && user && coopId) {
-      setPwaPreparandoEnvio(true);
-      const pull = await ensureCooperadoNotasFreshForEnvio(user, coopId, {
-        reason: "anexar",
-        notaRejeitada,
-      });
-      setPwaPreparandoEnvio(false);
-      if (!pull.ok) {
-        setSuccessMsg(pull.error ?? "Não foi possível atualizar antes de enviar fotos.");
-        setTimeout(() => setSuccessMsg(""), 8000);
-        return;
-      }
-      refreshPwaEntregasResumosSnap();
-    }
     iniciarModalAnexar(notaRejeitada, options);
+    if (entregasPwaLeve && user && coopId) {
+      void (async () => {
+        const slow = window.setTimeout(() => setPwaPreparandoEnvio(true), 500);
+        const pull = await ensureCooperadoNotasFreshForEnvio(user, coopId, {
+          reason: "anexar",
+          notaRejeitada,
+        });
+        window.clearTimeout(slow);
+        setPwaPreparandoEnvio(false);
+        if (!pull.ok) {
+          setErroEnvio(pull.error ?? "Não foi possível atualizar antes de enviar fotos.");
+          return;
+        }
+        refreshPwaEntregasResumosSnap();
+      })();
+    }
   };
 
   const openAnexar = (notaRejeitada?: NotaPedido, options?: { abrirCamera?: boolean }) => {
@@ -1674,20 +1685,29 @@ export default function NotasPedidoCooperadoMain() {
       return;
     }
     if (!notaRejeitada && ANEXAR_DRAFT_KEY) {
+      let settled = false;
+      const fallbackTimer = window.setTimeout(() => {
+        if (settled) return;
+        settled = true;
+        openAnexarPwaThen(undefined, options);
+      }, 200);
       void loadFotoDraftMeta(ANEXAR_DRAFT_KEY).then((meta) => {
+        if (settled) return;
+        settled = true;
+        window.clearTimeout(fallbackTimer);
         if (meta?.count) {
           setRascunhoFotosCount(meta.count);
           setRascunhoUploadedCount(meta.uploadedCount ?? 0);
           if (meta.contratoId) setRascunhoContratoId(meta.contratoId);
           continuarRascunhoFotos(options?.abrirCamera ?? false);
         } else {
-          void openAnexarPwaThen(undefined, options);
+          openAnexarPwaThen(undefined, options);
         }
       });
       return;
     }
 
-    void openAnexarPwaThen(notaRejeitada, options);
+    openAnexarPwaThen(notaRejeitada, options);
   };
 
   const cooperadosCoop =

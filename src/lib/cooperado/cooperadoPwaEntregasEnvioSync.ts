@@ -46,6 +46,22 @@ export async function ensureCooperadoNotasFreshForEnvio(
     };
   }
 
+  if (opts?.reason === "anexar" && !opts?.notaRejeitada?.id) {
+    void (async () => {
+      try {
+        await syncNotasPedidoFromCloud(cnpj, { retryFull: false });
+        try {
+          await syncContratosFromCloud(cnpj);
+        } catch {
+          /* contratos locais */
+        }
+      } catch {
+        /* não bloqueia abertura da câmera — submit ainda exige sync completo */
+      }
+    })();
+    return { ok: true };
+  }
+
   const retryFull = opts?.reason === "submit" || Boolean(opts?.notaRejeitada?.id);
   try {
     await syncNotasPedidoFromCloud(cnpj, { retryFull });
