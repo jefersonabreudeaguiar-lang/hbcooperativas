@@ -68,7 +68,7 @@ export function AppSchedulerBootstrap() {
       if (isCooperadoBottomTabPath(pathname)) {
         const warmNeighbors = () => warmCooperadoAdjacentTabRouteChunks(pathname);
         if (typeof requestIdleCallback !== "undefined") {
-          requestIdleCallback(warmNeighbors, { timeout: 1_500 });
+          requestIdleCallback(warmNeighbors, { timeout: 5_000 });
         } else {
           window.setTimeout(warmNeighbors, 0);
         }

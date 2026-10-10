@@ -43,8 +43,8 @@ export function isCooperadoMobileBrowserTabKeepAlive(): boolean {
 /** LRU enxuto — 3 abas no padrão (rápido); 2 em aparelho fraco; browser mobile cooperado ≈ 1 painel pesado. */
 export function getCooperadoMobileTabCacheLimit(lowMemoryDevice: boolean): number {
   if (typeof window !== "undefined" && isCooperadoPwaMessengerMode()) {
-    /** PWA: no máximo 3 painéis montados (Início + Financeiro pin + 1 visitado) — evita 4 abas pesadas. */
-    return lowMemoryDevice ? 2 : 3;
+    /** PWA: LRU 2 — DOM monta só o necessário (ver cooperadoMobileTabDomPolicy). */
+    return 2;
   }
   if (isCooperadoMobileBrowserTabKeepAlive()) {
     return lowMemoryDevice ? 2 : 3;

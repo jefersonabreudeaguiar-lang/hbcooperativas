@@ -7,6 +7,7 @@ import { PwaSilentServiceWorker } from "@/components/pwa/PwaSilentServiceWorker"
 import { ClientReleaseShieldHost } from "@/components/pwa/ClientReleaseShieldHost";
 import { getPrivateAppRobotsMetadata } from "@/lib/security/crawlerPolicy";
 import { APP_BUILD_VERSION } from "@/lib/appBuildVersion";
+import { COOPERADO_MOBILE_TAB_DOM_POLICY } from "@/lib/performance/cooperadoMobileTabDomPolicy";
 import {
   buildInlineDeploymentBootScript,
   buildInlinePageReleaseBootstrap,
@@ -79,6 +80,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       data-app-build={String(pageRelease.build)}
       data-git-sha={pageRelease.gitCommitSha}
       data-cooperado-tab-keep-alive={cooperadoTabKeepAliveOn ? "1" : "0"}
+      data-cooperado-tab-dom-policy={COOPERADO_MOBILE_TAB_DOM_POLICY}
       data-staff-tab-keep-alive={staffTabKeepAliveOn ? "1" : "0"}
     >
       <head>

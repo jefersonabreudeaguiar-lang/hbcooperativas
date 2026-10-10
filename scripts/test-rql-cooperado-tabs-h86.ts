@@ -39,6 +39,7 @@ assert(
 );
 assert(prefetch.includes("COOPERADO_BOTTOM_TAB_HREFS"), "prefetch usa fonte única de abas");
 assert(rootLayout.includes("data-cooperado-tab-keep-alive"), "html expõe flag keep-alive cooperado");
+assert(rootLayout.includes("data-cooperado-tab-dom-policy"), "html expõe política DOM abas cooperado");
 assert(layout.includes("CooperadoMobileTabKeepAlive"), "AppLayout keep-alive cooperado");
 assert(panel.includes("useSyncExternalStore"), "viewport mobile sync no 1º paint");
 assert(panel.includes("data-cooperado-tab-panel"), "painéis por aba");
@@ -100,7 +101,11 @@ assert(
 assert(panel.includes("useCooperadoEffectiveTabPath"), "navegação otimista cooperado");
 assert(layout.includes("setCooperadoOptimisticTab"), "pointerdown otimista no rodapé");
 assert(layout.includes("cooperadoTabWarmOnTouchStart"), "touchstart aquece chunk no rodapé");
-assert(keep.includes("lowMemoryDevice ? 2 : 3"), "PWA mensageiro limita LRU a 2–3 painéis");
+assert(keep.includes("return 2") && keep.includes("PWA: LRU 2"), "PWA mensageiro LRU 2 slots");
+assert(
+  read("src/lib/performance/cooperadoMobileTabDomPolicy.ts").includes("278-single-heavy"),
+  "política DOM cooperado versionada"
+);
 assert(
   read("src/lib/performance/prefetchCooperadoTabRouteChunks.ts").includes(
     "warmCooperadoAdjacentTabRouteChunks"

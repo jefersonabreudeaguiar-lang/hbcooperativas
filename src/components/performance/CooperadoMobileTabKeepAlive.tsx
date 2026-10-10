@@ -1,8 +1,17 @@
 "use client";
 
-import { useLayoutEffect, useRef, useState, useSyncExternalStore, useMemo, type ReactNode } from "react";
-import { cn } from "@/utils/format";
+import {
+  useDeferredValue,
+  useLayoutEffect,
+  useRef,
+  useState,
+  useSyncExternalStore,
+  useMemo,
+  type ReactNode,
+} from "react";
 import { isLowMemoryDevice } from "@/services/imagePipelineService";
+import { COOPERADO_MOBILE_TAB_DOM_POLICY } from "@/lib/performance/cooperadoMobileTabDomPolicy";
+import { cn } from "@/utils/format";
 import { CooperadoTabPanelProvider } from "@/lib/performance/cooperadoTabPanelContext";
 import {
   COOPERADO_TAB_FINANCEIRO_HREF,
@@ -21,7 +30,6 @@ import {
 } from "@/lib/performance/cooperadoPinnedTabFastPath";
 import { isCooperadoTabRouteLoadingElement } from "@/lib/performance/cooperadoTabPanelCache";
 import { useCooperadoEffectiveTabPath } from "@/hooks/useCooperadoEffectiveTabPath";
-import { useCooperadoReleaseAlignOnTabPath } from "@/hooks/useCooperadoReleaseAlignOnTabPath";
 import { CooperadoTabRouteLoading } from "@/components/performance/CooperadoTabRouteLoading";
 
 function subscribeCooperadoMobileViewport(onChange: () => void): () => void {
@@ -65,6 +73,10 @@ function publishKeepAliveDomState(state: {
           "data-hb-keep-alive-state",
           `e${state.enabled ? 1 : 0}m${state.mobile ? 1 : 0}t${state.onTab ? 1 : 0}p${state.panelCount}:${state.pathname}`
         );
+        document.documentElement.setAttribute(
+          "data-cooperado-tab-dom-policy",
+          COOPERADO_MOBILE_TAB_DOM_POLICY
+        );
       } catch {
         /* ignore */
       }
@@ -76,6 +88,10 @@ function publishKeepAliveDomState(state: {
       "data-hb-keep-alive-state",
       `e${state.enabled ? 1 : 0}m${state.mobile ? 1 : 0}t${state.onTab ? 1 : 0}p${state.panelCount}:${state.pathname}`
     );
+    document.documentElement.setAttribute(
+      "data-cooperado-tab-dom-policy",
+      COOPERADO_MOBILE_TAB_DOM_POLICY
+    );
   } catch {
     /* ignore */
   }
@@ -86,7 +102,7 @@ function publishKeepAliveDomState(state: {
  */
 export function CooperadoMobileTabKeepAlive({ pathname, children }: Props) {
   const effectivePath = useCooperadoEffectiveTabPath(pathname);
-  useCooperadoReleaseAlignOnTabPath(effectivePath);
+  const deferredChildren = useDeferredValue(children);
   const mobile = useCooperadoMobileViewport();
   const enabled = isCooperadoMobileTabKeepAliveEnabled();
   const cacheRef = useRef<Partial<Record<string, ReactNode>>>({});
@@ -128,9 +144,9 @@ export function CooperadoMobileTabKeepAlive({ pathname, children }: Props) {
   useLayoutEffect(() => {
     if (!enabled || !mobile || !onTab) return;
     if (!isCooperadoBottomTabPath(pathname)) return;
-    if (isCooperadoTabRouteLoadingElement(children)) return;
-    cacheRef.current[pathname] = children;
-  }, [enabled, mobile, onTab, pathname, children]);
+    if (isCooperadoTabRouteLoadingElement(deferredChildren)) return;
+    cacheRef.current[pathname] = deferredChildren;
+  }, [enabled, mobile, onTab, pathname, deferredChildren]);
 
   useLayoutEffect(() => {
     const ready =
@@ -138,7 +154,7 @@ export function CooperadoMobileTabKeepAlive({ pathname, children }: Props) {
       Boolean(cacheRef.current[COOPERADO_TAB_PIN_HREF]) &&
       Boolean(cacheRef.current[COOPERADO_TAB_FINANCEIRO_HREF]);
     setCooperadoPinnedPairCachesReady(ready);
-  }, [enabled, mobile, onTab, pathname, children, cacheVersion, effectivePath]);
+  }, [enabled, mobile, onTab, pathname, deferredChildren, cacheVersion, effectivePath]);
 
   const pinnedDualReady =
     isCooperadoPinnedDualMountEnabled() &&
@@ -162,7 +178,12 @@ export function CooperadoMobileTabKeepAlive({ pathname, children }: Props) {
     if (active === "/notas-pedido") {
       return [active];
     }
-    if (pinnedDualReady && isCooperadoPinnedDualMountEnabled() && isCooperadoTabPinned(active)) {
+    if (
+      !lowMemory &&
+      pinnedDualReady &&
+      isCooperadoPinnedDualMountEnabled() &&
+      isCooperadoTabPinned(active)
+    ) {
       return [...COOPERADO_PINNED_TAB_HREFS];
     }
     const mounted = new Set<string>([active]);
@@ -172,7 +193,7 @@ export function CooperadoMobileTabKeepAlive({ pathname, children }: Props) {
       }
     }
     return [...mounted];
-  }, [cacheVersion, onTab, enabled, mobile, effectivePath, pinnedDualReady]);
+  }, [cacheVersion, onTab, enabled, mobile, effectivePath, pinnedDualReady, lowMemory]);
 
   const resolvePanel = (
     href: string,
@@ -182,11 +203,11 @@ export function CooperadoMobileTabKeepAlive({ pathname, children }: Props) {
     const cached = cacheRef.current[href];
     const liveForHref =
       pathname === href &&
-      !isCooperadoTabRouteLoadingElement(children) &&
-      children != null;
+      !isCooperadoTabRouteLoadingElement(deferredChildren) &&
+      deferredChildren != null;
 
     if (active && liveForHref) {
-      return { panel: children, warm: false };
+      return { panel: deferredChildren, warm: false };
     }
     if (cached !== undefined) {
       return { panel: cached, warm: !active || pathname !== href };
