@@ -1968,7 +1968,7 @@ export function getPagamentoConfirmadoCooperadoMes(
       (p.cooperadoId === cooperadoId ||
         p.cooperadoId === canonico ||
         resolverCooperadoIdCanonico(data, p.cooperadoId, p.cooperativaId ?? coopId) === canonico) &&
-      pagamentoCobreMesReferencia(p, mesReferencia) &&
+      pagamentoCobreMesReferenciaComEscopo(data, p, mesReferencia) &&
       p.status === "confirmado"
   );
 }
@@ -2727,6 +2727,40 @@ export function pagamentoCobreMesReferencia(
   return getMesesReferenciaPagamento(pagamento).includes(mesReferencia);
 }
 
+/** Mês coberto pelo PIX — campos mesReferencia/mesesReferencia ou escopo explícito (fichas/notas). */
+export function pagamentoCobreMesReferenciaComEscopo(
+  data: AppData,
+  pagamento: PagamentoCooperadoRegistro,
+  mesReferencia: string
+): boolean {
+  if (pagamentoCobreMesReferencia(pagamento, mesReferencia)) return true;
+  for (const fid of pagamento.fichaIds ?? []) {
+    const f = data.fichaCorrida.find((x) => x.id === fid);
+    if (f?.mesReferencia === mesReferencia) return true;
+  }
+  for (const nid of pagamento.notaPedidoIds ?? []) {
+    const n = data.notasPedido.find((x) => x.id === nid);
+    if (n?.mesReferencia === mesReferencia) return true;
+  }
+  return false;
+}
+
+export function mesesReferenciaInferidosDoEscopoPagamento(
+  data: AppData,
+  pagamento: PagamentoCooperadoRegistro
+): string[] {
+  const meses = new Set(getMesesReferenciaPagamento(pagamento));
+  for (const fid of pagamento.fichaIds ?? []) {
+    const f = data.fichaCorrida.find((x) => x.id === fid);
+    if (f?.mesReferencia) meses.add(f.mesReferencia);
+  }
+  for (const nid of pagamento.notaPedidoIds ?? []) {
+    const n = data.notasPedido.find((x) => x.id === nid);
+    if (n?.mesReferencia) meses.add(n.mesReferencia);
+  }
+  return [...meses].sort();
+}
+
 /** Soma resumos de todos os meses pendentes (PIX único). */
 export function getResumoPagamentoConsolidadoCooperado(
   data: AppData,
@@ -2961,7 +2995,7 @@ export function getPagamentoAguardandoCooperado(
         p.cooperadoId === canonico ||
         resolverCooperadoIdCanonico(data, p.cooperadoId, coopId ?? p.cooperativaId) === canonico) &&
       p.status === "aguardando_confirmacao" &&
-      (!mesReferencia || pagamentoCobreMesReferencia(p, mesReferencia)) &&
+      (!mesReferencia || pagamentoCobreMesReferenciaComEscopo(data, p, mesReferencia)) &&
       !pagamentoAguardandoSupersedidoPorConfirmado(data, cooperadoId, p) &&
       !pagamentoAguardandoObsoletoPorNovaEntregaForaDoEscopo(data, cooperadoId, p)
   );
@@ -2993,7 +3027,7 @@ export function getPagamentoPendenteAssinaturaReciboCooperado(
         p.cooperadoId === canonico ||
         resolverCooperadoIdCanonico(data, p.cooperadoId, coopId ?? p.cooperativaId) === canonico) &&
       pagamentoElegivelPendenciaAssinaturaRecibo(p) &&
-      (!mesReferencia || pagamentoCobreMesReferencia(p, mesReferencia)) &&
+      (!mesReferencia || pagamentoCobreMesReferenciaComEscopo(data, p, mesReferencia)) &&
       (p.status !== "aguardando_confirmacao" ||
         !pagamentoAguardandoSupersedidoPorConfirmado(data, cooperadoId, p)) &&
       !pagamentoAguardandoObsoletoPorNovaEntregaForaDoEscopo(data, cooperadoId, p) &&

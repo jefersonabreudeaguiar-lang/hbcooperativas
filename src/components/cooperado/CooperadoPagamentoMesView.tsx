@@ -35,7 +35,10 @@ export function CooperadoPagamentoMesView({
   const [entregasAbertas, setEntregasAbertas] = useState(true);
   const [itensAbertos, setItensAbertos] = useState(true);
 
-  const pagamento = resumo.pagamentoConfirmado;
+  const pagamento = resumo.pagamentoConfirmado ?? resumo.pagamentoAguardando;
+  const aguardandoAssinatura =
+    pagamento?.status === "aguardando_confirmacao" ||
+    (pagamento?.status === "confirmado" && !pagamento.assinaturaCooperado?.trim());
   const coopCnpj = useMemo(() => {
     if (!data || !cooperativaId) return "";
     const coop = data.cooperativas.find((c) => c.id === cooperativaId);
@@ -64,6 +67,7 @@ export function CooperadoPagamentoMesView({
           cooperadoId={cooperadoId}
           cooperadoNome={nomeCooperado}
           hbDetalhado
+          aguardandoAssinatura={aguardandoAssinatura}
           onBaixarRecibo={
             pagamento.reciboHtml
               ? () =>

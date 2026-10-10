@@ -45,6 +45,7 @@ import {
   listarMesesPendentesPagamentoResponsavel,
   listarMesesPendentesQuantoVouReceber,
   listarMesesReferenciaResumoFinanceiroParidade,
+  listarResumosExtratoHistoricoCooperado,
 } from "../src/services/cooperadoEntregasService.ts";
 import { bicCentralValorAReceberAgregado } from "../src/services/bicLeituraCentralCooperado.ts";
 import { leituraFinanceiraParidadeCooperado } from "../src/lib/cooperado/cooperadoFinanceiroParidadeUniversal.ts";
@@ -1284,6 +1285,38 @@ function round2(n: number): number {
   });
   assert.equal(getTotalAPagarCooperado(soCredito, COOPERADO, "2026-11", COOP), 150);
   assert.equal(getTotalAPagarCooperado(soCredito, COOPERADO, undefined, COOP), 150, "total geral inclui mês só com crédito avulso");
+}
+
+{
+  const MES = "2026-10";
+  const data = baseData({
+    notasPedido: [{ ...nota("n_out", "pago"), mesReferencia: MES, cooperadoId: COOPERADO }],
+    fichaCorrida: [{ ...ficha("f_out", "n_out", MES), cooperadoId: COOPERADO, status: "pago" }],
+    pagamentosCooperado: [
+      {
+        id: "pg_out",
+        cooperativaId: COOP,
+        cooperadoId: COOPERADO,
+        mesReferencia: "2026-09",
+        valorBruto: 200,
+        descontoCooperativa: 0,
+        descontosExtras: [],
+        valorLiquido: 200,
+        fichaIds: ["f_out"],
+        notaPedidoIds: ["n_out"],
+        status: "aguardando_confirmacao",
+        pagoPor: "resp",
+        pagoEm: "2026-10-10T12:00:00.000Z",
+        createdAt: "2026-10-10T12:00:00.000Z",
+        updatedAt: "2026-10-10T12:00:00.000Z",
+      },
+    ],
+  });
+  const hist = listarResumosExtratoHistoricoCooperado(data, COOPERADO, COOP);
+  assert.ok(
+    hist.some((r) => r.mesReferencia === MES && (r.pagamentoAguardando || r.pagamentoConfirmado)),
+    "outubro: PIX aguardando com escopo em ficha deve aparecer no histórico"
+  );
 }
 
 console.log("OK — guard financeiro cooperado");

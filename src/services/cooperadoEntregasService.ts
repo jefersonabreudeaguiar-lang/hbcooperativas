@@ -11,6 +11,8 @@ import {
   getResumoPagamentoExibicao,
   pagamentoCobreMesReferencia,
   getMesesReferenciaPagamento,
+  mesesReferenciaInferidosDoEscopoPagamento,
+  pagamentoCobreMesReferenciaComEscopo,
   resumoFromPagamento,
   resumoComplementaresPosPagamento,
   fichaValidaNoExtrato,
@@ -440,7 +442,7 @@ export function getPagamentoConfirmadoMes(
       (p.cooperadoId === cooperadoId ||
         p.cooperadoId === canonico ||
         resolverCooperadoIdCanonico(data, p.cooperadoId, coopId ?? p.cooperativaId) === canonico) &&
-      pagamentoCobreMesReferencia(p, mesReferencia) &&
+      pagamentoCobreMesReferenciaComEscopo(data, p, mesReferencia) &&
       p.status === "confirmado"
   );
 }
@@ -961,7 +963,7 @@ export function listarMesesPagosCooperado(
     ) {
       continue;
     }
-    for (const mes of getMesesReferenciaPagamento(p)) {
+    for (const mes of mesesReferenciaInferidosDoEscopoPagamento(data, p)) {
       meses.add(mes);
     }
   }
@@ -970,8 +972,8 @@ export function listarMesesPagosCooperado(
 }
 
 /**
- * Extrato histórico na Minha ficha — meses com pagamento confirmado.
- * Valores vêm do registro PIX (`pagamentoConfirmado`), sem recalcular M6/BIC.
+ * Extrato histórico na Minha ficha — meses com PIX registrado (confirmado ou aguardando assinatura).
+ * Valores vêm do registro PIX, sem recalcular M6/BIC.
  */
 export function listarResumosExtratoHistoricoCooperado(
   data: AppData,
@@ -979,9 +981,9 @@ export function listarResumosExtratoHistoricoCooperado(
   cooperativaId?: string
 ): ResumoMesEntregasCooperado[] {
   const coopId = resolverCooperativaIdReciboLatch(data, cooperadoId, cooperativaId);
-  return listarMesesPagosCooperado(data, cooperadoId, coopId)
+  return listarMesesComPagamentoRegistradoCooperado(data, cooperadoId, coopId)
     .map((mes) => getResumoMesEntregasCooperado(data, cooperadoId, mes, coopId))
-    .filter((r) => r.pagamentoConfirmado != null);
+    .filter((r) => r.pagamentoConfirmado != null || r.pagamentoAguardando != null);
 }
 
 /** Total recebido — soma pagamentos confirmados (sem duplicar PIX que cobre vários meses). */
@@ -1025,7 +1027,7 @@ export function listarMesesComPagamentoRegistradoCooperado(
     ) {
       continue;
     }
-    for (const mes of getMesesReferenciaPagamento(p)) {
+    for (const mes of mesesReferenciaInferidosDoEscopoPagamento(data, p)) {
       meses.add(mes);
     }
   }
@@ -1037,11 +1039,13 @@ export function listarMesesComPagamentoRegistradoCooperado(
 export function getPagamentoRegistradoMes(
   data: AppData,
   cooperadoId: string,
-  mesReferencia: string
+  mesReferencia: string,
+  cooperativaId?: string
 ): PagamentoCooperadoRegistro | undefined {
+  const coopId = resolverCooperativaIdReciboLatch(data, cooperadoId, cooperativaId);
   return (
-    getPagamentoConfirmadoMes(data, cooperadoId, mesReferencia) ??
-    getPagamentoAguardandoCooperado(data, cooperadoId, mesReferencia)
+    getPagamentoConfirmadoMes(data, cooperadoId, mesReferencia, coopId) ??
+    getPagamentoAguardandoCooperado(data, cooperadoId, mesReferencia, coopId)
   );
 }
 

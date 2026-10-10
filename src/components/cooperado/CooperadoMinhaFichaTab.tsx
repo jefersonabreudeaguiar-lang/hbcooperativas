@@ -24,7 +24,7 @@ import { normalizeCnpj } from "@/utils/cooperativa";
 import { leituraFinanceiraParidadeCooperadoMesReferencia } from "@/lib/cooperado/cooperadoFinanceiroParidadeUniversal";
 import type { ResumoMesEntregasCooperado } from "@/services/cooperadoEntregasService";
 import {
-  getPagamentoConfirmadoMes,
+  getPagamentoRegistradoMes,
   listarResumosFotosCooperado,
   listarResumosExtratoHistoricoCooperado,
   somarTotalRecebidoConfirmadoCooperado,
@@ -491,7 +491,7 @@ export const CooperadoMinhaFichaTab = memo(function CooperadoMinhaFichaTab({
   const resumosHistorico = useMemo(() => {
     const byMes = new Map<string, ResumoMesEntregasCooperado>();
     for (const r of pagamentosRealizadosCache ?? []) {
-      if (!r.pagamentoConfirmado && r.valorRecebido <= 0) continue;
+      if (!r.pagamentoConfirmado && !r.pagamentoAguardando && r.valorRecebido <= 0) continue;
       byMes.set(r.mesReferencia, r);
     }
     for (const r of resumosHistoricoLive) {
@@ -548,17 +548,21 @@ export const CooperadoMinhaFichaTab = memo(function CooperadoMinhaFichaTab({
 
   const resumoHistoricoAtivoEnriquecido = useMemo(() => {
     if (!resumoHistoricoAtivo || !data) return resumoHistoricoAtivo;
-    if (resumoHistoricoAtivo.pagamentoConfirmado) return resumoHistoricoAtivo;
-    const pagamento = getPagamentoConfirmadoMes(
+    if (resumoHistoricoAtivo.pagamentoConfirmado || resumoHistoricoAtivo.pagamentoAguardando) {
+      return resumoHistoricoAtivo;
+    }
+    const pagamento = getPagamentoRegistradoMes(
       data,
       cooperadoId,
       resumoHistoricoAtivo.mesReferencia,
       cooperativaId
     );
     if (!pagamento) return resumoHistoricoAtivo;
+    const confirmado = pagamento.status === "confirmado";
     return {
       ...resumoHistoricoAtivo,
-      pagamentoConfirmado: pagamento,
+      pagamentoConfirmado: confirmado ? pagamento : resumoHistoricoAtivo.pagamentoConfirmado,
+      pagamentoAguardando: confirmado ? resumoHistoricoAtivo.pagamentoAguardando : pagamento,
       valorRecebido: pagamento.valorLiquido ?? resumoHistoricoAtivo.valorRecebido,
     };
   }, [resumoHistoricoAtivo, data, cooperadoId, cooperativaId]);
@@ -707,6 +711,7 @@ export const CooperadoMinhaFichaTab = memo(function CooperadoMinhaFichaTab({
               </div>
               {resumoHistoricoAtivoEnriquecido &&
               (resumoHistoricoAtivoEnriquecido.pagamentoConfirmado ||
+                resumoHistoricoAtivoEnriquecido.pagamentoAguardando ||
                 resumoHistoricoAtivoEnriquecido.valorRecebido > 0) ? (
                 <CooperadoPagamentoMesView
                   key={`hist-pg-${resumoHistoricoAtivoEnriquecido.mesReferencia}`}
