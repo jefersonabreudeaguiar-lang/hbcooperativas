@@ -1,0 +1,24 @@
+{
+  "label": "master-plan-linha-base",
+  "createdAt": "2026-10-09T23:50:00-03:00",
+  "purpose": "Ponto de restauração de código idêntico à produção antes do Plano Mestre (Fase 0). Não altera dados Supabase.",
+  "git": {
+    "branch": "main",
+    "commit": "3a8ac34671d8fc5c2210caa3a1d7f494fac54afe",
+    "commitShort": "3a8ac34",
+    "message": "fix(notas-pedido): botão enviar ao responsável visível no celular (build 248)"
+  },
+  "production": {
+    "url": "https://hbcooperativas.vercel.app",
+    "build": 248,
+    "deploymentId": "dpl_6kQfqfb34TNAa8JtBjxoJfCidqem",
+    "verifiedAt": "2026-10-09T23:40:36-03:00"
+  },
+  "restoreCode": [
+    "git fetch origin",
+    "git checkout 3a8ac34671d8fc5c2210caa3a1d7f494fac54afe",
+    "git push origin HEAD:main  # somente com autorização explícita",
+    "Ou: Vercel → Deployments → Promote/Rollback para deployment dpl_6kQfqfb34TNAa8JtBjxoJfCidqem"
+  ],
+  "restoreData": "Dados reais não estão neste manifest. Backup opcional: npm run backup:cloud (requer .env.local, grava em backups/)."
+}

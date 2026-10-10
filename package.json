@@ -42,6 +42,7 @@
     "lab:check-homolog": "npx tsx scripts/lab/check-homolog-readiness.ts",
     "lab:provision-jeferson": "npx tsx scripts/lab/provision-jeferson-login.ts",
     "verify:official-rollout": "npx tsx scripts/verify-official-rollout-env.ts",
+    "verify:production-identity": "npx tsx scripts/verify-production-identity.ts",
     "release:verify": "npx tsx scripts/run-release-verify.ts",
     "release:verify:fast": "npx tsx scripts/run-release-verify.ts --fast",
     "audit:weekly": "npx tsx scripts/run-weekly-audits.ts",
