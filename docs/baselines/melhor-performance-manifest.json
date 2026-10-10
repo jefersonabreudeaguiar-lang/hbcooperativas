@@ -6,7 +6,9 @@
   "git": {
     "tag": "baseline/melhor-performance-build-283",
     "branch": "main",
-    "commitNote": "Após push, use: git rev-parse baseline/melhor-performance-build-283"
+    "commit": "a83214aae69bc23803cf0391fba6606badf7e99",
+    "commitShort": "a83214a",
+    "message": "build 283: recibo assinado na nuvem e baseline melhor-performance."
   },
   "production": {
     "url": "https://hbcooperativas.vercel.app",
