@@ -197,8 +197,15 @@ export default function FichaCorridaPage() {
   const ready = useEnsureAppDataWarm();
   const tabActive = useCooperadoTabPanelActive("/ficha-corrida");
   const messenger = isCooperadoPwaMessengerMode();
+  const readModelsRevision = useCooperadoMessengerReadModelRevision();
   const appDataUiOn = cooperadoPwaUiSubscribesAppData() && tabActive;
-  const data = useAppDataSelectorForDomainsWhenActive(appDataUiOn, FICHA_APP_DATA_DOMAINS, (d) => d, []);
+  const dataFinanceiroOn = tabActive && (appDataUiOn || messenger);
+  const data = useAppDataSelectorForDomainsWhenActive(
+    dataFinanceiroOn,
+    FICHA_APP_DATA_DOMAINS,
+    (d) => d,
+    [messenger ? readModelsRevision : 0]
+  );
   const hbDescontosRevision = useContaCoopDescontosRevision();
   const { user, isCooperado, cooperadoId, check } = usePermissions();
   const searchParams = useSearchParams();
@@ -215,7 +222,6 @@ export default function FichaCorridaPage() {
   const [abaMesPagamentoResponsavel, setAbaMesPagamentoResponsavel] = useState<"pendente" | string>("pendente");
   const [pixStepVisited, setPixStepVisited] = useState(false);
   const coopIdEarly = user && data ? getUserCooperativaId(user, data) : undefined;
-  const readModelsRevision = useCooperadoMessengerReadModelRevision();
   const [fichaResumoSnap, setFichaResumoSnap] = useState<CooperadoPwaFichaResumoSnapshot | null>(
     null
   );

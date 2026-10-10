@@ -4,7 +4,10 @@
 import type { User } from "@/types";
 import type { AppData } from "@/types";
 import type { ResumoMesEntregasCooperado } from "@/services/cooperadoEntregasService";
-import { filtrarResumosMesesNaoQuitados } from "@/services/cooperadoEntregasService";
+import {
+  filtrarResumosMesesNaoQuitados,
+  listarResumosExtratoHistoricoCooperado,
+} from "@/services/cooperadoEntregasService";
 import { listarResumosFichaEmAbertoCooperado } from "@/services/cooperadoFichaTimelineService";
 import { bicCentralListarResumosMensaisEntregas } from "@/services/bicLeituraCentralCooperado";
 import { resolverCooperadoIdCanonico } from "@/services/cooperadoCloudService";
@@ -29,6 +32,7 @@ export type CooperadoPwaEntregasResumosSnapshot = {
   /** Base mensal (antes do filtro de status na UI). */
   entregasBase: ResumoMesEntregasCooperado[];
   fichaAberto: ResumoMesEntregasCooperado[];
+  pagamentosRealizados: ResumoMesEntregasCooperado[];
 };
 
 function storageKey(cooperadoId: string, cooperativaId: string): string {
@@ -46,12 +50,18 @@ export function buildCooperadoPwaEntregasResumosSnapshot(
     bicCentralListarResumosMensaisEntregas(data, cooperadoId, cooperativaId)
   );
   const fichaAberto = listarResumosFichaEmAbertoCooperado(data, cooperadoId, cooperativaId);
+  const pagamentosRealizados = listarResumosExtratoHistoricoCooperado(
+    data,
+    cooperadoId,
+    cooperativaId
+  );
   return {
     v: COOPERADO_PWA_ENTREGAS_SNAPSHOT_VERSION,
     appBuild: APP_BUILD_VERSION,
     savedAt: new Date().toISOString(),
     entregasBase,
     fichaAberto,
+    pagamentosRealizados,
   };
 }
 
@@ -68,7 +78,12 @@ export function lerCooperadoPwaEntregasResumosSnapshot(
       return null;
     }
     if (!cooperadoPwaSnapshotBuildReadable(parsed.appBuild)) return null;
-    return parsed;
+    return {
+      ...parsed,
+      pagamentosRealizados: Array.isArray(parsed.pagamentosRealizados)
+        ? parsed.pagamentosRealizados
+        : [],
+    };
   } catch {
     return null;
   }

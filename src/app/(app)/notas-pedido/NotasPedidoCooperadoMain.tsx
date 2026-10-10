@@ -4721,6 +4721,9 @@ export default function NotasPedidoCooperadoMain() {
               cooperativaId={coopId}
               nomeCooperado={nomeCooperadoExibicao}
               resumos={resumosFichaCooperado}
+              pagamentosRealizadosCache={
+                messenger ? pwaEntregasResumosSnap?.pagamentosRealizados : undefined
+              }
               getEscolaLabel={getEscolaLabelCooperado}
             />
           ) : (

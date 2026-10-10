@@ -51,6 +51,8 @@ interface CooperadoMinhaFichaTabProps {
   cooperativaId?: string;
   nomeCooperado: string;
   resumos: ResumoMesEntregasCooperado[];
+  /** PWA mensageiro: histórico materializado pós-sync (evita lista vazia sem AppData ao vivo). */
+  pagamentosRealizadosCache?: ResumoMesEntregasCooperado[];
   getEscolaLabel: (nota: import("@/types").NotaPedido) => string;
   modo?: ModoFichaExtrato;
 }
@@ -467,20 +469,32 @@ export const CooperadoMinhaFichaTab = memo(function CooperadoMinhaFichaTab({
   cooperativaId,
   nomeCooperado,
   resumos,
+  pagamentosRealizadosCache,
   getEscolaLabel,
   modo = "cooperado",
 }: CooperadoMinhaFichaTabProps) {
   const data = useAppData();
   const [mesExpandido, setMesExpandido] = useState<string | null>(resumos[0]?.mesReferencia ?? null);
   const [mesHistoricoAtivo, setMesHistoricoAtivo] = useState<string | null>(null);
-  const [subAba, setSubAba] = useState<"extrato" | "fotos">("extrato");
+  const [subAba, setSubAba] = useState<"extrato" | "pagamentos" | "fotos">("extrato");
   const [fotosMesFocus, setFotosMesFocus] = useState<string | null>(null);
 
-  const resumosHistorico =
+  const resumosHistoricoLive =
     useAppDataSelector(
       (d) => listarResumosExtratoHistoricoCooperado(d, cooperadoId, cooperativaId),
       [cooperadoId, cooperativaId]
     ) ?? [];
+
+  const resumosHistorico = useMemo(() => {
+    const byMes = new Map<string, ResumoMesEntregasCooperado>();
+    for (const r of pagamentosRealizadosCache ?? []) {
+      byMes.set(r.mesReferencia, r);
+    }
+    for (const r of resumosHistoricoLive) {
+      byMes.set(r.mesReferencia, r);
+    }
+    return [...byMes.values()].sort((a, b) => b.mesReferencia.localeCompare(a.mesReferencia));
+  }, [pagamentosRealizadosCache, resumosHistoricoLive]);
 
   const totalRecebido = useAppDataSelector(
     (d) => somarTotalRecebidoConfirmadoCooperado(d, cooperadoId, cooperativaId),
@@ -516,6 +530,12 @@ export const CooperadoMinhaFichaTab = memo(function CooperadoMinhaFichaTab({
       setMesHistoricoAtivo(resumosHistorico[0]!.mesReferencia);
     }
   }, [resumosHistorico, mesHistoricoAtivo]);
+
+  useEffect(() => {
+    if (!resumos.length && resumosHistorico.length > 0 && subAba === "extrato") {
+      setSubAba("pagamentos");
+    }
+  }, [resumos.length, resumosHistorico.length, subAba]);
 
   const resumoHistoricoAtivo = useMemo(
     () => resumosHistorico.find((r) => r.mesReferencia === mesHistoricoAtivo) ?? null,
@@ -594,6 +614,20 @@ export const CooperadoMinhaFichaTab = memo(function CooperadoMinhaFichaTab({
         >
           <BookOpen size={16} /> Extrato
         </button>
+        {modo === "cooperado" && (
+          <button
+            type="button"
+            onClick={() => setSubAba("pagamentos")}
+            className={cn(
+              "px-4 py-2.5 text-sm font-medium border-b-2 -mb-px flex items-center gap-2",
+              subAba === "pagamentos"
+                ? "border-green-600 text-green-700"
+                : "border-transparent text-gray-500 hover:text-gray-700"
+            )}
+          >
+            <CheckCircle2 size={16} /> Pagamentos realizados
+          </button>
+        )}
         <button
           type="button"
           onClick={() => setSubAba("fotos")}
@@ -615,104 +649,110 @@ export const CooperadoMinhaFichaTab = memo(function CooperadoMinhaFichaTab({
           cooperativaId={cooperativaId}
           mesReferenciaInicial={fotosMesFocus}
         />
+      ) : subAba === "pagamentos" ? (
+        <>
+          <div className="rounded-2xl bg-gradient-to-br from-emerald-700 to-emerald-800 text-white p-5">
+            <p className="text-emerald-100 text-sm">Total já recebido</p>
+            <p className="text-3xl font-bold mt-1">{formatCurrency(totalRecebido)}</p>
+            <p className="text-emerald-100/90 text-xs mt-2">Pagamentos confirmados pela cooperativa</p>
+          </div>
+          {resumosHistorico.length > 0 ? (
+            <>
+              <p className="text-sm text-gray-600">
+                Resumo de cada mês quitado — valores congelados no momento do pagamento.
+              </p>
+              <div className="flex flex-wrap gap-2 border-b border-gray-200 pb-2">
+                {resumosHistorico.map((r) => (
+                  <button
+                    key={`tab-hist-${r.mesReferencia}`}
+                    type="button"
+                    onClick={() => setMesHistoricoAtivo(r.mesReferencia)}
+                    className={cn(
+                      "px-3 py-2 text-sm font-medium rounded-lg border transition-colors",
+                      mesHistoricoAtivo === r.mesReferencia
+                        ? "border-green-600 bg-green-50 text-green-800"
+                        : "border-transparent text-gray-600 hover:bg-gray-100"
+                    )}
+                  >
+                    {formatMesReferencia(r.mesReferencia)}
+                  </button>
+                ))}
+              </div>
+              {resumoHistoricoAtivo && (
+                <MesFichaAccordion
+                  key={`hist-${resumoHistoricoAtivo.mesReferencia}`}
+                  resumo={resumoHistoricoAtivo}
+                  cooperadoId={cooperadoId}
+                  cooperativaId={cooperativaId}
+                  nomeCooperado={nomeCooperado}
+                  getEscolaLabel={getEscolaLabel}
+                  expandido
+                  onToggle={() => undefined}
+                  onVerFotosMes={abrirFotosDoMes}
+                  modo={modo}
+                />
+              )}
+            </>
+          ) : (
+            <div className="text-center py-10 text-gray-500 bg-white rounded-2xl border border-dashed">
+              <CheckCircle2 size={40} className="mx-auto mb-3 text-gray-300" />
+              <p className="font-medium text-gray-800">Nenhum pagamento registrado ainda</p>
+              <p className="text-sm mt-2">Após a cooperativa confirmar o PIX, o resumo aparece aqui.</p>
+            </div>
+          )}
+        </>
       ) : (
         <>
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-        <div className="rounded-2xl bg-gradient-to-br from-emerald-700 to-emerald-800 text-white p-5">
-          <p className="text-emerald-100 text-sm">Total já recebido</p>
-          <p className="text-3xl font-bold mt-1">{formatCurrency(totalRecebido)}</p>
-          <p className="text-emerald-100/90 text-xs mt-2">Pagamentos confirmados pela cooperativa</p>
-        </div>
-        <div className="rounded-2xl bg-white border-2 border-green-200 p-5">
-          <p className="text-gray-500 text-sm">Pendente de recebimento</p>
-          <p className="text-3xl font-bold text-green-800 mt-1">{formatCurrency(totalPendente)}</p>
-          {totalPendente > 0 && (
-            <Link href={linkQuantoVouReceber} className="inline-block mt-3 text-sm font-medium text-green-700 hover:underline">
-              Ver em Financeiro →
-            </Link>
-          )}
-        </div>
-      </div>
-
-      <p className="text-sm text-gray-600">
-        Extrato por mês com valores, descontos e cada entrega listada separadamente. Toque no mês para expandir.
-      </p>
-
-      {resumos.length > 0 && (
-        <>
-          <p className="text-sm font-semibold text-gray-800">Em aberto e a receber</p>
-          <div className="space-y-3">
-            {resumos.map((resumo) => (
-              <MesFichaAccordion
-                key={resumo.mesReferencia}
-                resumo={resumo}
-                cooperadoId={cooperadoId}
-                cooperativaId={cooperativaId}
-                nomeCooperado={nomeCooperado}
-                getEscolaLabel={getEscolaLabel}
-                expandido={mesExpandido === resumo.mesReferencia}
-                onToggle={() =>
-                  setMesExpandido((cur) => (cur === resumo.mesReferencia ? null : resumo.mesReferencia))
-                }
-                modo={modo}
-              />
-            ))}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div className="rounded-2xl bg-white border-2 border-green-200 p-5 sm:col-span-2">
+              <p className="text-gray-500 text-sm">Pendente de recebimento</p>
+              <p className="text-3xl font-bold text-green-800 mt-1">{formatCurrency(totalPendente)}</p>
+              {totalPendente > 0 && (
+                <Link
+                  href={linkQuantoVouReceber}
+                  className="inline-block mt-3 text-sm font-medium text-green-700 hover:underline"
+                >
+                  Ver em Financeiro →
+                </Link>
+              )}
+            </div>
           </div>
-        </>
-      )}
 
-      {resumosHistorico.length > 0 && (
-        <>
-          <p className="text-sm font-semibold text-gray-800 pt-2">Pagamentos realizados</p>
-          <p className="text-xs text-gray-500">
-            Valores congelados no momento do PIX confirmado — consulte também em Financeiro (histórico).
+          <p className="text-sm text-gray-600">
+            Somente valores novos ainda não pagos. Meses quitados ficam em{" "}
+            <strong>Pagamentos realizados</strong>.
           </p>
-          <div className="flex flex-wrap gap-2 border-b border-gray-200 pb-2">
-            {resumosHistorico.map((r) => (
-              <button
-                key={`tab-hist-${r.mesReferencia}`}
-                type="button"
-                onClick={() => setMesHistoricoAtivo(r.mesReferencia)}
-                className={cn(
-                  "px-3 py-2 text-sm font-medium rounded-lg border transition-colors",
-                  mesHistoricoAtivo === r.mesReferencia
-                    ? "border-green-600 bg-green-50 text-green-800"
-                    : "border-transparent text-gray-600 hover:bg-gray-100"
-                )}
-              >
-                {formatMesReferencia(r.mesReferencia)}
-              </button>
-            ))}
-          </div>
-          {resumoHistoricoAtivo && (
-            <MesFichaAccordion
-              key={`hist-${resumoHistoricoAtivo.mesReferencia}`}
-              resumo={resumoHistoricoAtivo}
-              cooperadoId={cooperadoId}
-              cooperativaId={cooperativaId}
-              nomeCooperado={nomeCooperado}
-              getEscolaLabel={getEscolaLabel}
-              expandido
-              onToggle={() => undefined}
-              onVerFotosMes={abrirFotosDoMes}
-              modo={modo}
-            />
+
+          {resumos.length > 0 ? (
+            <div className="space-y-3">
+              {resumos.map((resumo) => (
+                <MesFichaAccordion
+                  key={resumo.mesReferencia}
+                  resumo={resumo}
+                  cooperadoId={cooperadoId}
+                  cooperativaId={cooperativaId}
+                  nomeCooperado={nomeCooperado}
+                  getEscolaLabel={getEscolaLabel}
+                  expandido={mesExpandido === resumo.mesReferencia}
+                  onToggle={() =>
+                    setMesExpandido((cur) => (cur === resumo.mesReferencia ? null : resumo.mesReferencia))
+                  }
+                  modo={modo}
+                />
+              ))}
+            </div>
+          ) : (
+            <div className="text-center py-8 text-gray-500 bg-white rounded-2xl border border-dashed">
+              <Wallet size={40} className="mx-auto mb-3 text-gray-300" />
+              <p className="font-medium text-gray-800">Nenhum valor em aberto</p>
+            </div>
           )}
-        </>
-      )}
 
-      {resumos.length === 0 && resumosHistorico.length === 0 && (
-        <div className="text-center py-8 text-gray-500 bg-white rounded-2xl border border-dashed">
-          <Wallet size={40} className="mx-auto mb-3 text-gray-300" />
-          <p className="font-medium text-gray-800">Nenhum lançamento em aberto</p>
-        </div>
-      )}
-
-      <ValoresAvulsosReceberPanel
-        cooperadoId={cooperadoId}
-        cooperativaId={cooperativaId}
-        modo={modo === "responsavel" ? "responsavel" : "cooperado"}
-      />
+          <ValoresAvulsosReceberPanel
+            cooperadoId={cooperadoId}
+            cooperativaId={cooperativaId}
+            modo={modo === "responsavel" ? "responsavel" : "cooperado"}
+          />
         </>
       )}
     </div>

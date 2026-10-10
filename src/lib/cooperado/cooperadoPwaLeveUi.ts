@@ -5,6 +5,7 @@ import type { User } from "@/types";
 import { isCooperadoPwaMobileEntregasLeve } from "@/lib/cooperado/cooperadoPwaMobileEntregas";
 import { persistirCooperadoPwaInicioDashboardSnapshotFromUser } from "@/lib/cooperado/cooperadoPwaInicioDashboardSnapshot";
 import { persistirCooperadoPwaFichaResumoSnapshotFromUser } from "@/lib/cooperado/cooperadoPwaFichaResumoSnapshot";
+import { persistirCooperadoPwaEntregasResumosSnapshotFromUser } from "@/lib/cooperado/cooperadoPwaEntregasResumosSnapshot";
 import { resolverCooperadoIdCanonico } from "@/services/cooperadoCloudService";
 import { getData, isAppDataWarm } from "@/services/dataStore";
 import { persistirInicioCardValorReceberCooperado } from "@/services/cooperadoInicioCardPersistenciaService";
@@ -66,4 +67,5 @@ export function materializarCooperadoPwaAposAssinaturaReciboLocal(
   }
   refreshCooperadoPwaInicioCachesFromMotor(user, apresentacaoConsolidada);
   persistirCooperadoPwaFichaResumoSnapshotFromUser(user, apresentacaoConsolidada);
+  persistirCooperadoPwaEntregasResumosSnapshotFromUser(user);
 }
