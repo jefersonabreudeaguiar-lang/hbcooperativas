@@ -2573,7 +2573,7 @@ export default function NotasPedidoStaffMain() {
     return pending.length ? Promise.all(pending).then(() => undefined) : Promise.resolve();
   };
 
-  const FOTO_UPLOAD_CONCORRENCIA = 2;
+  const FOTO_UPLOAD_CONCORRENCIA = 3;
 
   const acquireUploadSlot = async () => {
     if (uploadSlotsActiveRef.current < FOTO_UPLOAD_CONCORRENCIA) {
@@ -5046,7 +5046,7 @@ export default function NotasPedidoStaffMain() {
               </Button>
             </div>
           ) : (
-            <div className="flex flex-col-reverse sm:flex-row justify-end gap-2">
+            <div className="hidden sm:flex flex-col-reverse sm:flex-row justify-end gap-2">
               <Button type="button" variant="secondary" disabled={enviando} onClick={() => fecharAnexarModal()}>
                 Cancelar
               </Button>
@@ -5194,6 +5194,42 @@ export default function NotasPedidoStaffMain() {
                           : "Todas sincronizadas. Tire mais fotos ou envie ao responsável."
                         : "Pode tirar a próxima foto — sincronização em segundo plano."}
               </p>
+            </div>
+          )}
+
+          {!anexarSucesso && fotosSessaoCount > 0 && (
+            <div className="sm:hidden space-y-2 rounded-xl border border-green-300 bg-green-50 p-3 shadow-sm">
+              {fotosNaNuvemCount < fotosSessaoCount && (
+                <p className="text-xs font-medium text-amber-900">
+                  Enviando fotos para a nuvem ({fotosNaNuvemCount}/{fotosSessaoCount})… O botão libera quando todas
+                  estiverem sincronizadas.
+                </p>
+              )}
+              <Button
+                type="button"
+                size="lg"
+                className="w-full"
+                onClick={() => void handleAnexarEntrega()}
+                disabled={
+                  fotosNaNuvemCount < fotosSessaoCount || enviando || processandoFoto
+                }
+              >
+                <FileText size={18} />{" "}
+                {enviando
+                  ? "Publicando para o responsável…"
+                  : processandoFoto
+                    ? "Preparando foto…"
+                    : `Enviar para o responsável${fotosSessaoCount > 1 ? ` (${fotosSessaoCount})` : ""}`}
+              </Button>
+              <Button
+                type="button"
+                variant="secondary"
+                className="w-full"
+                disabled={enviando}
+                onClick={() => fecharAnexarModal()}
+              >
+                Cancelar
+              </Button>
             </div>
           )}
 
