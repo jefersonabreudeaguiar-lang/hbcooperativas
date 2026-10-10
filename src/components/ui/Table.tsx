@@ -1,6 +1,7 @@
 "use client";
 
-import { type ReactNode, useCallback, useMemo, useState } from "react";
+import { type ReactNode, useCallback, useEffect, useMemo, useState } from "react";
+import { createPortal } from "react-dom";
 import { X } from "lucide-react";
 import { Button } from "./Button";
 
@@ -22,35 +23,47 @@ const SIZES = {
 };
 
 export function Modal({ open, onClose, title, children, size = "md", footer }: ModalProps) {
-  if (!open) return null;
+  const [portalReady, setPortalReady] = useState(false);
+  useEffect(() => {
+    setPortalReady(true);
+  }, []);
+
+  if (!open || !portalReady) return null;
 
   const isFull = size === "full";
 
-  return (
-    <div className={`fixed inset-0 z-50 flex ${isFull ? "items-stretch" : "items-end sm:items-center"} justify-center ${isFull ? "p-0" : "sm:p-4"}`}>
+  const node = (
+    <div
+      className={`fixed inset-0 z-[100] flex ${isFull ? "items-stretch" : "items-end sm:items-center"} justify-center ${isFull ? "p-0" : "sm:p-4"}`}
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="hb-modal-title"
+    >
       <div className="absolute inset-0 bg-black/50" onClick={onClose} />
       <div
         className={`relative bg-white shadow-xl w-full overflow-hidden flex flex-col min-h-0 ${
           isFull
-            ? SIZES.full
-            : `${SIZES[size]} max-h-[min(88dvh,calc(100dvh-env(safe-area-inset-bottom,0px)-0.25rem))] sm:max-h-[min(90dvh,92vh)] rounded-t-2xl sm:rounded-xl`
+            ? "max-w-none w-full max-lg:h-[calc(100dvh-var(--hb-mobile-tab-bar-height))] max-lg:max-h-[calc(100dvh-var(--hb-mobile-tab-bar-height))] lg:h-[100dvh] lg:max-h-[100dvh] rounded-none sm:rounded-none"
+            : `${SIZES[size]} max-lg:mb-[var(--hb-mobile-tab-bar-height)] max-lg:max-h-[min(78dvh,calc(100dvh-var(--hb-mobile-tab-bar-height)-0.5rem))] sm:max-h-[min(90dvh,92vh)] rounded-t-2xl sm:rounded-xl`
         }`}
       >
         <div className="flex items-center justify-between px-5 py-4 border-b border-gray-200 shrink-0">
-          <h2 className="text-lg font-semibold text-gray-900 pr-4">{title}</h2>
+          <h2 id="hb-modal-title" className="text-lg font-semibold text-gray-900 pr-4">{title}</h2>
           <button onClick={onClose} className="text-gray-400 hover:text-gray-600 p-1 rounded-lg hover:bg-gray-100 shrink-0">
             <X size={20} />
           </button>
         </div>
         <div className={`overflow-y-auto flex-1 min-h-0 ${isFull ? "p-0" : "p-5"}`}>{children}</div>
         {footer && (
-          <div className="shrink-0 px-5 py-3 sm:py-4 border-t border-gray-200 bg-gray-50 safe-area-pb pb-[max(0.75rem,calc(env(safe-area-inset-bottom,0px)+0.5rem))]">
+          <div className="shrink-0 px-5 py-3 sm:py-4 border-t border-gray-200 bg-gray-50 shadow-[0_-4px_12px_rgba(0,0,0,0.06)] safe-area-pb pb-[max(0.75rem,calc(env(safe-area-inset-bottom,0px)+0.5rem))]">
             {footer}
           </div>
         )}
       </div>
     </div>
   );
+
+  return createPortal(node, document.body);
 }
 
 interface DataTableProps<T> {

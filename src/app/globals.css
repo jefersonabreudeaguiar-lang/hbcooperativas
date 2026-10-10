@@ -6,6 +6,8 @@
   --green-primary: #15803d;
   --green-dark: #14532d;
   --gold: #f59e0b;
+  /** Altura da barra de abas mobile (cooperado) — modais devem ficar acima. */
+  --hb-mobile-tab-bar-height: max(4.75rem, calc(env(safe-area-inset-bottom, 0px) + 4.25rem));
 }
 
 @theme inline {

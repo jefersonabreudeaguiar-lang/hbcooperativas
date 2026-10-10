@@ -93,6 +93,7 @@ import { SignaturePad } from "@/components/ui/SignaturePad";
 import { AssinarComCadastroBlock } from "@/components/cooperado/AssinarComCadastroBlock";
 import {
   cooperadoPodeUsarAssinaturaEmDocumentos,
+  cooperadoPrecisaCadastrarAssinatura,
   getAssinaturaCadastroDataUrl,
 } from "@/services/cooperadoAssinaturaService";
 import { PageSkeleton } from "@/components/ui/PageSkeleton";
@@ -841,12 +842,11 @@ export default function FichaCorridaPage() {
 
   useEffect(() => {
     if (!assinaturaModal || !isCooperado || !cooperadoSelecionado) return;
-    if (assinatura) return;
     const url = getAssinaturaCadastroDataUrl(cooperadoSelecionado);
     if (url && cooperadoPodeUsarAssinaturaEmDocumentos(cooperadoSelecionado)) {
-      setAssinatura(url);
+      setAssinatura((prev) => prev ?? url);
     }
-  }, [assinaturaModal, isCooperado, cooperadoSelecionado, assinatura]);
+  }, [assinaturaModal, isCooperado, cooperadoSelecionado]);
 
   const resumoItensPagamento = useMemo(() => {
     if (!data || !cooperadoSelecionadoId) return resumoItensMes;
@@ -1460,11 +1460,12 @@ export default function FichaCorridaPage() {
   };
 
   const handleEnviarAssinatura = () => {
-    if (!pagamentoAguardando || !assinatura || !user) return;
+    const pgAssinar = pagamentoAguardandoExibicao ?? pagamentoAguardando;
+    if (!pgAssinar || !assinatura || !user) return;
     let pagamentoConfirmadoLocal: PagamentoCooperadoRegistro | undefined;
     updateData((d) => {
-      const next = confirmarPagamentoCooperado(d, pagamentoAguardando.id, assinatura);
-      const pg = next.pagamentosCooperado.find((p) => p.id === pagamentoAguardando.id);
+      const next = confirmarPagamentoCooperado(d, pgAssinar.id, assinatura);
+      const pg = next.pagamentosCooperado.find((p) => p.id === pgAssinar.id);
       if (pg) {
         pagamentoConfirmadoLocal = pg;
         const mesesPg = getMesesReferenciaPagamento(pg);
@@ -1477,12 +1478,12 @@ export default function FichaCorridaPage() {
         }
       }
       return addAuditEntry(next, {
-        entityType: "pagamento", entityId: pagamentoAguardando.id, action: "aprovar",
+        entityType: "pagamento", entityId: pgAssinar.id, action: "aprovar",
         userId: user.id, userName: user.name, changes: "Cooperado confirmou pagamento com assinatura",
       });
     });
     void (async () => {
-      const pg = pagamentoConfirmadoLocal ?? getData().pagamentosCooperado.find((p) => p.id === pagamentoAguardando.id);
+      const pg = pagamentoConfirmadoLocal ?? getData().pagamentosCooperado.find((p) => p.id === pgAssinar.id);
       const cnpj = await resolveCooperativaCnpj(getData(), coopId, user);
       if (cnpj && pg?.status === "confirmado") {
         const confirmNuvem = await confirmarPagamentoCooperadoNaNuvem(cnpj, pg);
@@ -1625,6 +1626,10 @@ export default function FichaCorridaPage() {
 
   const pixOk = cooperadoSelecionado && !cooperadoPrecisaCadastrarPix(cooperadoSelecionado.chavePix, cooperadoSelecionado.pixValido);
   const mostrarPagar = isCooperado || aba === "pagar";
+  const precisaCadastroAssinaturaRecibo =
+    isCooperado &&
+    cooperadoSelecionado &&
+    cooperadoPrecisaCadastrarAssinatura(cooperadoSelecionado.id, cooperadoSelecionado);
 
   return (
     <div>
@@ -2561,14 +2566,29 @@ export default function FichaCorridaPage() {
         size="md"
         footer={
           <div className="flex flex-col gap-2 w-full">
-            {!assinatura && (
-              <p className="text-sm text-amber-900 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 text-center">
-                Toque em <strong>Assinar com minha assinatura</strong> (ou desenhe acima) para liberar o envio.
-              </p>
+            {precisaCadastroAssinaturaRecibo ? (
+              <>
+                <p className="text-sm text-amber-900 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 text-center">
+                  Cadastre sua assinatura em <strong>Meu cadastro</strong> para finalizar o recibo.
+                </p>
+                <Link href="/meu-cadastro" className="w-full" onClick={() => setAssinaturaModal(false)}>
+                  <Button size="lg" className="w-full" type="button">
+                    Ir para Meu cadastro
+                  </Button>
+                </Link>
+              </>
+            ) : (
+              <>
+                {!assinatura && (
+                  <p className="text-sm text-amber-900 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 text-center">
+                    Toque em <strong>Assinar com minha assinatura</strong> (ou desenhe acima) para liberar o envio.
+                  </p>
+                )}
+                <Button size="lg" className="w-full" disabled={!assinatura} onClick={handleEnviarAssinatura}>
+                  <PenLine size={18} /> Confirmar assinatura e enviar recibo
+                </Button>
+              </>
             )}
-            <Button size="lg" className="w-full" disabled={!assinatura} onClick={handleEnviarAssinatura}>
-              <PenLine size={18} /> Confirmar assinatura e enviar recibo
-            </Button>
           </div>
         }
       >
@@ -2577,7 +2597,7 @@ export default function FichaCorridaPage() {
             Confira se os valores abaixo estão corretos. Em seguida, assine para confirmar que recebeu o pagamento.
           </p>
           {resumoReciboPagamento && (pagamentoAguardandoExibicao ?? pagamentoAguardando) && (
-            <div className="max-h-[min(40vh,16rem)] overflow-y-auto overscroll-contain rounded-xl border border-gray-100 p-1">
+            <div className="max-h-[min(32vh,14rem)] overflow-y-auto overscroll-contain rounded-xl border border-gray-100 p-1">
               <ReciboResumoView
                 resumo={resumoReciboPagamento}
                 mesReferencia={(pagamentoAguardandoExibicao ?? pagamentoAguardando)!.mesReferencia}
@@ -2586,8 +2606,8 @@ export default function FichaCorridaPage() {
               />
             </div>
           )}
-          <div className="bg-green-50 border border-green-200 rounded-xl p-3">
-            <p className="text-center text-green-900 font-semibold mb-3">Assinatura do cooperado</p>
+          <div className="bg-green-50 border border-green-200 rounded-xl p-3 space-y-3">
+            <p className="text-center text-green-900 font-semibold">Assinatura do cooperado</p>
             {isCooperado && cooperadoSelecionado ? (
               <AssinarComCadastroBlock
                 cooperadoId={cooperadoSelecionado.id}
@@ -2598,6 +2618,11 @@ export default function FichaCorridaPage() {
               />
             ) : (
               <SignaturePad onChange={setAssinatura} />
+            )}
+            {!precisaCadastroAssinaturaRecibo && assinatura && (
+              <Button size="lg" className="w-full lg:hidden" onClick={handleEnviarAssinatura}>
+                <PenLine size={18} /> Finalizar e enviar recibo
+              </Button>
             )}
           </div>
         </div>
