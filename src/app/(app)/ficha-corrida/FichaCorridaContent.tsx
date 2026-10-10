@@ -91,6 +91,10 @@ import { PixQrModal } from "@/components/pix/PixQrModal";
 import { ConfirmDialog, PromptDialog } from "@/components/ui/ConfirmDialog";
 import { SignaturePad } from "@/components/ui/SignaturePad";
 import { AssinarComCadastroBlock } from "@/components/cooperado/AssinarComCadastroBlock";
+import {
+  cooperadoPodeUsarAssinaturaEmDocumentos,
+  getAssinaturaCadastroDataUrl,
+} from "@/services/cooperadoAssinaturaService";
 import { PageSkeleton } from "@/components/ui/PageSkeleton";
 import { FinanceiroTabSkeleton } from "@/components/ui/FinanceiroTabSkeleton";
 import { PagarStepper } from "@/components/ficha/PagarStepper";
@@ -834,6 +838,15 @@ export default function FichaCorridaPage() {
     exibirAguardandoAssinatura,
     abaMesCooperado,
   ]);
+
+  useEffect(() => {
+    if (!assinaturaModal || !isCooperado || !cooperadoSelecionado) return;
+    if (assinatura) return;
+    const url = getAssinaturaCadastroDataUrl(cooperadoSelecionado);
+    if (url && cooperadoPodeUsarAssinaturaEmDocumentos(cooperadoSelecionado)) {
+      setAssinatura(url);
+    }
+  }, [assinaturaModal, isCooperado, cooperadoSelecionado, assinatura]);
 
   const resumoItensPagamento = useMemo(() => {
     if (!data || !cooperadoSelecionadoId) return resumoItensMes;
@@ -2543,13 +2556,8 @@ export default function FichaCorridaPage() {
         onClose={() => setAssinaturaModal(false)}
         title="Confirmar recebimento"
         size="md"
-        footer={
-          <Button size="lg" className="w-full" disabled={!assinatura} onClick={handleEnviarAssinatura}>
-            <PenLine size={18} /> Confirmar assinatura e enviar recibo
-          </Button>
-        }
       >
-        <div className="space-y-5">
+        <div className="space-y-5 pb-2">
           <p className="text-sm text-gray-600">
             Confira se os valores abaixo estão corretos. Em seguida, assine para confirmar que recebeu o pagamento.
           </p>
@@ -2574,6 +2582,16 @@ export default function FichaCorridaPage() {
             ) : (
               <SignaturePad onChange={setAssinatura} />
             )}
+          </div>
+          <div className="sticky bottom-0 -mx-1 space-y-2 bg-white pt-3 border-t border-gray-100 safe-area-pb">
+            {!assinatura && (
+              <p className="text-sm text-amber-900 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 text-center">
+                Toque em <strong>Assinar com minha assinatura</strong> (ou desenhe acima) para liberar o envio.
+              </p>
+            )}
+            <Button size="lg" className="w-full" disabled={!assinatura} onClick={handleEnviarAssinatura}>
+              <PenLine size={18} /> Confirmar assinatura e enviar recibo
+            </Button>
           </div>
         </div>
       </Modal>

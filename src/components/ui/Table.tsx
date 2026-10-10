@@ -36,9 +36,9 @@ export function Modal({ open, onClose, title, children, size = "md", footer }: M
             <X size={20} />
           </button>
         </div>
-        <div className={`overflow-y-auto flex-1 ${isFull ? "p-0" : "p-5"}`}>{children}</div>
+        <div className={`overflow-y-auto flex-1 min-h-0 ${isFull ? "p-0" : "p-5"}`}>{children}</div>
         {footer && (
-          <div className="shrink-0 px-5 py-4 border-t border-gray-200 bg-gray-50">{footer}</div>
+          <div className="shrink-0 px-5 py-4 border-t border-gray-200 bg-gray-50 safe-area-pb">{footer}</div>
         )}
       </div>
     </div>
