@@ -11,6 +11,7 @@ import { isAppDataWarm } from "@/services/dataStore";
 import { useCooperadoTabPanelActive } from "@/hooks/useCooperadoTabPanelActive";
 import { useCooperadoFinanceiroUiSnapshot } from "@/hooks/useCooperadoFinanceiroUiSnapshot";
 import { useCooperadoMessengerReadModelRevision } from "@/hooks/useCooperadoMessengerReadModelRevision";
+import { useCooperadoDormantAppData } from "@/hooks/useCooperadoDormantAppData";
 import {
   lerCooperadoPwaFichaResumoSnapshot,
   type CooperadoPwaFichaResumoSnapshot,
@@ -53,7 +54,7 @@ import { isOperacionalCloudAuthoritative } from "@/services/operationalReset";
 import { listCooperadosComFichaNoMes, getCooperadoNomeResolvido, resolverCooperadoParaPagamento, fichaPertenceCooperado, listCooperadosDaCooperativa } from "@/services/cooperadoCloudService";
 import { resolveCooperativaCnpj, patchNotaPedidoInCloud } from "@/services/notaPedidoCloudService";
 import { useSyncContaCoopValorReceberPilot } from "@/hooks/useSyncContaCoopValorReceberPilot";
-import { useContaCoopDescontosRevision } from "@/hooks/useContaCoopDescontosRevision";
+import { useContaCoopDescontosRevisionWhenLive } from "@/hooks/useContaCoopDescontosRevision";
 import { refreshContaCoopLimiteFromFicha } from "@/lib/hb-credit/syncContaCoopLimiteFromFicha";
 import {
   pushOperacionalToCloud,
@@ -196,18 +197,25 @@ const FICHA_APP_DATA_DOMAINS: AppDataNotifyDomain[] = ["financeiro", "shell"];
 export default function FichaCorridaPage() {
   const ready = useEnsureAppDataWarm();
   const tabActive = useCooperadoTabPanelActive("/ficha-corrida");
+  const { user, isCooperado, cooperadoId, check } = usePermissions();
   const messenger = isCooperadoPwaMessengerMode();
   const readModelsRevision = useCooperadoMessengerReadModelRevision();
+  /** Cooperado PWA: financeiro só relê após sync (responsável); entregas permanecem no fluxo atual. */
+  const financeiroDormant = messenger && isCooperado;
   const appDataUiOn = cooperadoPwaUiSubscribesAppData() && tabActive;
-  const dataFinanceiroOn = tabActive && (appDataUiOn || messenger);
-  const data = useAppDataSelectorForDomainsWhenActive(
-    dataFinanceiroOn,
+  const dataLive = useAppDataSelectorForDomainsWhenActive(
+    tabActive && appDataUiOn,
     FICHA_APP_DATA_DOMAINS,
     (d) => d,
-    [messenger ? readModelsRevision : 0]
+    []
   );
-  const hbDescontosRevision = useContaCoopDescontosRevision();
-  const { user, isCooperado, cooperadoId, check } = usePermissions();
+  const dataDormant = useCooperadoDormantAppData(
+    tabActive && financeiroDormant,
+    readModelsRevision
+  );
+  const data = financeiroDormant ? dataDormant : dataLive;
+  const hbDescontosRevision = useContaCoopDescontosRevisionWhenLive(!financeiroDormant);
+  const financeiroUiEpoch = financeiroDormant ? readModelsRevision : hbDescontosRevision;
   const searchParams = useSearchParams();
   const [mesFilter, setMesFilter] = useState(searchParams.get("mes") ?? getCurrentMesReferencia());
   const [cooperadoFilter, setCooperadoFilter] = useState(searchParams.get("cooperado") ?? "");
@@ -329,7 +337,7 @@ export default function FichaCorridaPage() {
   const paridadeCooperadoMobile = useMemo(() => {
     if (!tabActive || !isCooperado || !data || !cooperadoId) return null;
     return leituraFinanceiraParidadeCooperado(data, cooperadoId, coopId);
-  }, [tabActive, isCooperado, data, cooperadoId, coopId, hbDescontosRevision]);
+  }, [tabActive, isCooperado, data, cooperadoId, coopId, financeiroUiEpoch]);
 
   const mesEmAberto = useMemo(() => {
     if (messenger && fichaResumoSnap?.mesPrincipal) return fichaResumoSnap.mesPrincipal;
@@ -347,7 +355,7 @@ export default function FichaCorridaPage() {
     coopId,
     isCooperado,
     paridadeCooperadoMobile,
-    hbDescontosRevision,
+    financeiroUiEpoch,
     apresentacaoFinanceiroUi,
     messenger,
     fichaResumoSnap,
@@ -378,7 +386,7 @@ export default function FichaCorridaPage() {
     isCooperado,
     paridadeCooperadoMobile,
     apresentacaoFinanceiroUi,
-    hbDescontosRevision,
+    financeiroUiEpoch,
   ]);
 
   const mesesPendentesQuantoVouReceber = useMemo(() => {
@@ -394,7 +402,7 @@ export default function FichaCorridaPage() {
     data,
     isCooperado,
     paridadeCooperadoMobile,
-    hbDescontosRevision,
+    financeiroUiEpoch,
     apresentacaoFinanceiroUi,
   ]);
 
@@ -500,7 +508,7 @@ export default function FichaCorridaPage() {
     coopId,
     isCooperado,
     paridadeCooperadoMobile,
-    hbDescontosRevision,
+    financeiroUiEpoch,
   ]);
 
   /** Meses do resumo consolidado — mesma lista que Pagar/responsável (paridade universal). */
@@ -798,6 +806,7 @@ export default function FichaCorridaPage() {
     data,
     cooperadoId: cooperadoId ?? undefined,
     cooperativaId: coopId,
+    frozenFinanceiroEpoch: financeiroDormant ? readModelsRevision : undefined,
     opts: {
       apresentacaoConsolidada: apresentacaoFinanceiroUi,
       carregandoNuvem: !apresentacaoFinanceiroUi && syncCooperadoFinanceiro,
@@ -906,7 +915,7 @@ export default function FichaCorridaPage() {
   }, [data, cooperadoSelecionadoId, mesAtivo, coopId]);
 
   useSyncContaCoopValorReceberPilot(
-    tabActive && exibicaoOpts && cooperadoSelecionadoId && coopId
+    !financeiroDormant && tabActive && exibicaoOpts && cooperadoSelecionadoId && coopId
       ? {
           cooperadoId: cooperadoSelecionadoId,
           mesReferencia: isCooperado ? mesReferenciaHbCooperado : mesAtivo,
@@ -997,7 +1006,7 @@ export default function FichaCorridaPage() {
     resumoPagamentoConsolidado,
     mesesPendentesQuantoVouReceber,
     financeiroAberto,
-    hbDescontosRevision,
+    financeiroUiEpoch,
     valorReceberConsolidado?.valor,
     conferindoPagamentoNuvem,
     paridadeCooperadoMobile,
@@ -1030,7 +1039,7 @@ export default function FichaCorridaPage() {
     aba,
     visualizandoHistorico,
     mesAtivo,
-    hbDescontosRevision,
+    financeiroUiEpoch,
   ]);
 
   const totalPendente = isCooperado
@@ -1066,7 +1075,7 @@ export default function FichaCorridaPage() {
     aba,
     visualizandoHistorico,
     resumoExibicao,
-    hbDescontosRevision,
+    financeiroUiEpoch,
   ]);
 
   const pagarStep: 1 | 2 | 3 | 4 = (isCooperado ? pagamentoAguardandoExibicao : pagamentoAguardando)

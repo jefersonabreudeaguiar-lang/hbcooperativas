@@ -7,7 +7,7 @@ import {
   type BuildCooperadoFinanceiroUiSnapshotOpts,
   type CooperadoFinanceiroUiSnapshot,
 } from "@/services/cooperadoFinanceiroUiSnapshot";
-import { useContaCoopDescontosRevision } from "@/hooks/useContaCoopDescontosRevision";
+import { useContaCoopDescontosRevisionWhenLive } from "@/hooks/useContaCoopDescontosRevision";
 
 /**
  * Uma projeção financeira cooperado por revisão (BIC + painel embutido no snapshot).
@@ -18,8 +18,13 @@ export function useCooperadoFinanceiroUiSnapshot(input: {
   cooperadoId: string | undefined;
   cooperativaId: string | undefined;
   opts?: BuildCooperadoFinanceiroUiSnapshotOpts;
+  /** PWA adormecido: recalcula só quando read model materializa (sem subscribe HB). */
+  frozenFinanceiroEpoch?: number;
 }): CooperadoFinanceiroUiSnapshot | null {
-  const hbDescontosRevision = useContaCoopDescontosRevision();
+  const hbDescontosRevision = useContaCoopDescontosRevisionWhenLive(
+    input.frozenFinanceiroEpoch == null
+  );
+  const financeiroEpoch = input.frozenFinanceiroEpoch ?? hbDescontosRevision;
   const { active, data, cooperadoId, cooperativaId, opts } = input;
 
   return useMemo(() => {
@@ -35,7 +40,7 @@ export function useCooperadoFinanceiroUiSnapshot(input: {
     data,
     cooperadoId,
     cooperativaId,
-    hbDescontosRevision,
+    financeiroEpoch,
     opts?.apresentacaoConsolidada,
     opts?.carregandoNuvem,
     opts?.financeiroSincronizando,

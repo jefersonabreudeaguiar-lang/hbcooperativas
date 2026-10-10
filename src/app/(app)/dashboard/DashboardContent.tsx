@@ -58,7 +58,7 @@ import { VotacaoPautasInicioPanel } from "@/components/votacao/VotacaoPautasInic
 import { VotacaoResultadoPanel } from "@/components/votacao/VotacaoResultadoPanel";
 import { bicCentralBuildValorExibicaoCooperadoOpts } from "@/services/bicLeituraCentralFicha";
 import { useSyncContaCoopValorReceberPilot } from "@/hooks/useSyncContaCoopValorReceberPilot";
-import { useContaCoopDescontosRevision } from "@/hooks/useContaCoopDescontosRevision";
+import { useContaCoopDescontosRevisionWhenLive } from "@/hooks/useContaCoopDescontosRevision";
 import { formatCurrency, formatMesReferencia, getCurrentMesReferencia } from "@/utils/format";
 import { getUserCooperativaId, getUserCooperativaNome, normalizeCnpj } from "@/utils/cooperativa";
 import { Camera, Wallet, ClipboardList, Users, Vote, Download, PenLine } from "lucide-react";
@@ -129,7 +129,7 @@ function CooperadoDashboard() {
   const fluxo = useCooperadoFluxoPadrao();
   const { apresentacaoConsolidada, carregandoValoresFinanceiros } = fluxo;
   const recoverySyncRef = useRef(false);
-  const hbDescontosRevision = useContaCoopDescontosRevision();
+  const hbDescontosRevision = useContaCoopDescontosRevisionWhenLive(appDataUiOn);
 
   const financeiroAusente = useAppDataSelectorForDomainsWhenActive(
     appDataUiOn,
@@ -149,8 +149,9 @@ function CooperadoDashboard() {
   }, [user?.id]);
 
   useEffect(() => {
+    if (inicioPwaLeve) return;
     warmupCooperadoFinanceiroTabChunk();
-  }, []);
+  }, [inicioPwaLeve]);
 
   useEffect(() => {
     if (messenger || isCooperadoManualOperacionalSync()) return;

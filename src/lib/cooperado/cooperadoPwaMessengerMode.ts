@@ -4,6 +4,7 @@
  * - AppData / nuvem só em sync pontual: botão Atualizar, envio de foto (não sync de release na abertura).
  * - 1º frame: snapshots + sessão; parse do AppData em idle após pintar o shell.
  * - Sem pilot HB periódico nem pull de foreground na abertura (evita travar a UI).
+ * - Início + Financeiro: UI adormecida (snapshots); acorda só após sync operacional (responsável).
  */
 import type { User } from "@/types";
 import { isCooperadoPwaMobileLeveUi } from "@/lib/cooperado/cooperadoPwaLeveUi";
