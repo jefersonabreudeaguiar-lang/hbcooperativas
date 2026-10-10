@@ -62,7 +62,6 @@ import { useMobileTabScrollRestore } from "@/hooks/useMobileTabScrollRestore";
 import type { MobileTabScrollMode } from "@/lib/performance/mobileTabScrollMemory";
 import { CooperadoMobileTabKeepAlive } from "@/components/performance/CooperadoMobileTabKeepAlive";
 import { StaffMobileTabKeepAlive } from "@/components/performance/StaffMobileTabKeepAlive";
-import { CooperadoMobileHeaderToolbar } from "@/components/cooperado/CooperadoMobileHeaderToolbar";
 import { CooperadoPwaResumeLifecycle } from "@/components/cooperado/CooperadoPwaResumeLifecycle";
 import { CooperadoPwaMessengerAppDataWarm } from "@/components/cooperado/CooperadoPwaMessengerAppDataWarm";
 import { StaffMobileReleaseBar } from "@/components/layout/StaffMobileReleaseBar";
@@ -210,12 +209,6 @@ export function Sidebar({ mobile = false, onClose }: { mobile?: boolean; onClose
           <p className="text-xs text-green-300">{getUserFuncaoLabel(navUser)}</p>
         </div>
         {!isCooperadoAppUser(navUser) && <StaffSidebarSyncVersionLine />}
-        {mobile && isCooperadoAppUser(navUser) && (
-          <div className="px-3 py-2 flex items-center justify-between gap-2">
-            <span className="text-xs text-green-300">Versão do app</span>
-            <CooperadoMobileHeaderToolbar />
-          </div>
-        )}
         <Link
           href="/baixar-app"
           onClick={onClose}
@@ -290,7 +283,6 @@ export function MobileNav() {
         <BrandHeader compact />
         <div className="flex items-center gap-1 shrink-0">
           {!isCooperadoAppUser(navUser) && <SyncStatusChip showBuild />}
-          {isCooperadoAppUser(navUser) && <CooperadoMobileHeaderToolbar />}
           <button onClick={() => setOpen(true)} className="p-2 hover:bg-green-800 rounded-lg" aria-label="Abrir menu">
             <Menu size={22} />
           </button>
