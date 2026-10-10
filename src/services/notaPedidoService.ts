@@ -3001,6 +3001,26 @@ export function getPagamentoAguardandoCooperado(
   );
 }
 
+/** Histórico de PIX na Minha ficha — mantém registro visível mesmo se nova entrega tornou o aguardando obsoleto no fluxo ativo. */
+export function getPagamentoAguardandoCooperadoParaHistorico(
+  data: AppData,
+  cooperadoId: string,
+  mesReferencia?: string,
+  cooperativaId?: string
+): PagamentoCooperadoRegistro | undefined {
+  const coopId = resolverCooperativaIdReciboLatch(data, cooperadoId, cooperativaId);
+  const canonico = resolverCooperadoIdCanonico(data, cooperadoId, coopId);
+  return data.pagamentosCooperado.find(
+    (p) =>
+      (p.cooperadoId === cooperadoId ||
+        p.cooperadoId === canonico ||
+        resolverCooperadoIdCanonico(data, p.cooperadoId, coopId ?? p.cooperativaId) === canonico) &&
+      p.status === "aguardando_confirmacao" &&
+      (!mesReferencia || pagamentoCobreMesReferenciaComEscopo(data, p, mesReferencia)) &&
+      !pagamentoAguardandoSupersedidoPorConfirmado(data, cooperadoId, p)
+  );
+}
+
 function pagamentoElegivelPendenciaAssinaturaRecibo(p: PagamentoCooperadoRegistro): boolean {
   if (p.status === "aguardando_confirmacao") return true;
   return p.status === "confirmado" && !p.assinaturaCooperado?.trim();

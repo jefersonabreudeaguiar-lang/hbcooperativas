@@ -3,6 +3,7 @@ import { isBicCentralReadAuthorityEnabled } from "@/lib/bic/bicCentralReadAuthor
 import { notaPertenceCooperado, fichaPertenceCooperado, resolverCooperadoIdCanonico } from "@/services/cooperadoCloudService";
 import {
   getPagamentoAguardandoCooperado,
+  getPagamentoAguardandoCooperadoParaHistorico,
   getPagamentoPendenteAssinaturaReciboCooperado,
   getTotalAPagarCooperado,
   getResumoPagamentoCooperado,
@@ -975,6 +976,25 @@ export function listarMesesPagosCooperado(
  * Extrato histórico na Minha ficha — meses com PIX registrado (confirmado ou aguardando assinatura).
  * Valores vêm do registro PIX, sem recalcular M6/BIC.
  */
+function enriquecerResumoMesComPagamentoHistorico(
+  data: AppData,
+  cooperadoId: string,
+  mesReferencia: string,
+  cooperativaId?: string,
+  base?: ResumoMesEntregasCooperado
+): ResumoMesEntregasCooperado {
+  const resumo = base ?? getResumoMesEntregasCooperado(data, cooperadoId, mesReferencia, cooperativaId);
+  const pagamento = getPagamentoRegistradoMesParaHistorico(data, cooperadoId, mesReferencia, cooperativaId);
+  if (!pagamento) return resumo;
+  const confirmado = pagamento.status === "confirmado";
+  return {
+    ...resumo,
+    pagamentoConfirmado: confirmado ? pagamento : resumo.pagamentoConfirmado,
+    pagamentoAguardando: confirmado ? resumo.pagamentoAguardando : pagamento,
+    valorRecebido: confirmado ? pagamento.valorLiquido ?? 0 : resumo.valorRecebido,
+  };
+}
+
 export function listarResumosExtratoHistoricoCooperado(
   data: AppData,
   cooperadoId: string,
@@ -982,7 +1002,7 @@ export function listarResumosExtratoHistoricoCooperado(
 ): ResumoMesEntregasCooperado[] {
   const coopId = resolverCooperativaIdReciboLatch(data, cooperadoId, cooperativaId);
   return listarMesesComPagamentoRegistradoCooperado(data, cooperadoId, coopId)
-    .map((mes) => getResumoMesEntregasCooperado(data, cooperadoId, mes, coopId))
+    .map((mes) => enriquecerResumoMesComPagamentoHistorico(data, cooperadoId, mes, coopId))
     .filter((r) => r.pagamentoConfirmado != null || r.pagamentoAguardando != null);
 }
 
@@ -1046,6 +1066,20 @@ export function getPagamentoRegistradoMes(
   return (
     getPagamentoConfirmadoMes(data, cooperadoId, mesReferencia, coopId) ??
     getPagamentoAguardandoCooperado(data, cooperadoId, mesReferencia, coopId)
+  );
+}
+
+/** Igual a getPagamentoRegistradoMes, mas inclui PIX aguardando obsoleto no fluxo ativo (aba Pagamentos realizados). */
+export function getPagamentoRegistradoMesParaHistorico(
+  data: AppData,
+  cooperadoId: string,
+  mesReferencia: string,
+  cooperativaId?: string
+): PagamentoCooperadoRegistro | undefined {
+  const coopId = resolverCooperativaIdReciboLatch(data, cooperadoId, cooperativaId);
+  return (
+    getPagamentoConfirmadoMes(data, cooperadoId, mesReferencia, coopId) ??
+    getPagamentoAguardandoCooperadoParaHistorico(data, cooperadoId, mesReferencia, coopId)
   );
 }
 

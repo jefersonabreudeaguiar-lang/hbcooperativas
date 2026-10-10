@@ -1,13 +1,14 @@
 "use client";
 
-import type { ReactNode } from "react";
-import { CheckCircle2, FileDown } from "lucide-react";
+import { useState, type ReactNode } from "react";
+import { CheckCircle2, ChevronDown, FileDown } from "lucide-react";
+import { HB_CREDIT_PRODUCT_NAME } from "@/config/hbCreditBranding";
 import type { PagamentoCooperadoRegistro } from "@/types";
 import { resumoFromPagamento, getMesesReferenciaPagamento } from "@/services/notaPedidoService";
 import { ResumoDescontosMes } from "@/components/ficha/ResumoDescontosMes";
 import { HistoricoHbCreditosResumo } from "@/components/ficha/HistoricoHbCreditosResumo";
 import { Button } from "@/components/ui/Button";
-import { formatCurrency, formatDate, formatMesReferencia, formatMesesReferenciaRotulo } from "@/utils/format";
+import { cn, formatCurrency, formatDate, formatMesReferencia, formatMesesReferenciaRotulo } from "@/utils/format";
 
 type Props = {
   pagamento: PagamentoCooperadoRegistro;
@@ -21,8 +22,6 @@ type Props = {
   /** Cooperado: PIX já enviado, falta assinar recibo nesta aba do mês. */
   aguardandoAssinatura?: boolean;
   onAssinarRecibo?: () => void;
-  /** Lista completa de compras HB (aba Pagamentos realizados). */
-  hbDetalhado?: boolean;
 };
 
 export function CooperadoHistoricoPagamentoMes({
@@ -36,8 +35,8 @@ export function CooperadoHistoricoPagamentoMes({
   detalheEntregas,
   aguardandoAssinatura,
   onAssinarRecibo,
-  hbDetalhado = false,
 }: Props) {
+  const [hbAberto, setHbAberto] = useState(false);
   const resumo = resumoFromPagamento(pagamento);
   const mesesPg = getMesesReferenciaPagamento(pagamento);
   const rotuloPeriodo =
@@ -111,17 +110,38 @@ export function CooperadoHistoricoPagamentoMes({
       </div>
 
       {cnpj && (
-        <div className="rounded-lg border border-gray-100 bg-gray-50/40 px-3 py-2">
-          <HistoricoHbCreditosResumo
-            cnpj={cnpj}
-            cooperadoId={cooperadoId}
-            mesReferencia={mesReferencia}
-            valorEntregas={resumo.valorEntregas}
-            descontosExtras={resumo.descontosExtras}
-            variant={hbDetalhado ? "default" : "cooperado"}
-            somenteMesReferencia
-          />
-        </div>
+        <section className="rounded-2xl border border-gray-200 bg-white overflow-hidden shadow-sm">
+          <button
+            type="button"
+            onClick={() => setHbAberto((v) => !v)}
+            className="w-full flex items-center justify-between gap-3 px-4 py-3 text-left hover:bg-gray-50 transition-colors"
+            aria-expanded={hbAberto}
+          >
+            <div>
+              <p className="text-sm font-semibold text-gray-900">{HB_CREDIT_PRODUCT_NAME}</p>
+              <p className="text-xs text-gray-500 mt-0.5">
+                {hbAberto ? "Resumo das compras no mês" : "Toque para ver o resumo das compras"}
+              </p>
+            </div>
+            <ChevronDown
+              size={18}
+              className={cn("text-gray-400 shrink-0 transition-transform", hbAberto && "rotate-180")}
+            />
+          </button>
+          {hbAberto && (
+            <div className="border-t border-gray-100 px-3 py-2 bg-gray-50/40">
+              <HistoricoHbCreditosResumo
+                cnpj={cnpj}
+                cooperadoId={cooperadoId}
+                mesReferencia={mesReferencia}
+                valorEntregas={resumo.valorEntregas}
+                descontosExtras={resumo.descontosExtras}
+                variant="cooperado"
+                somenteMesReferencia
+              />
+            </div>
+          )}
+        </section>
       )}
 
       {detalheEntregas}

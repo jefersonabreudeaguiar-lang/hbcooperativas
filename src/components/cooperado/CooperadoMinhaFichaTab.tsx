@@ -24,7 +24,7 @@ import { normalizeCnpj } from "@/utils/cooperativa";
 import { leituraFinanceiraParidadeCooperadoMesReferencia } from "@/lib/cooperado/cooperadoFinanceiroParidadeUniversal";
 import type { ResumoMesEntregasCooperado } from "@/services/cooperadoEntregasService";
 import {
-  getPagamentoRegistradoMes,
+  getPagamentoRegistradoMesParaHistorico,
   listarResumosFotosCooperado,
   listarResumosExtratoHistoricoCooperado,
   somarTotalRecebidoConfirmadoCooperado,
@@ -551,7 +551,7 @@ export const CooperadoMinhaFichaTab = memo(function CooperadoMinhaFichaTab({
     if (resumoHistoricoAtivo.pagamentoConfirmado || resumoHistoricoAtivo.pagamentoAguardando) {
       return resumoHistoricoAtivo;
     }
-    const pagamento = getPagamentoRegistradoMes(
+    const pagamento = getPagamentoRegistradoMesParaHistorico(
       data,
       cooperadoId,
       resumoHistoricoAtivo.mesReferencia,

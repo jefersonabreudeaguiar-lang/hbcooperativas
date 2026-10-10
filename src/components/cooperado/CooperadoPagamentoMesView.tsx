@@ -66,7 +66,6 @@ export function CooperadoPagamentoMesView({
           cnpj={coopCnpj}
           cooperadoId={cooperadoId}
           cooperadoNome={nomeCooperado}
-          hbDetalhado
           aguardandoAssinatura={aguardandoAssinatura}
           onBaixarRecibo={
             pagamento.reciboHtml

@@ -1319,4 +1319,40 @@ function round2(n: number): number {
   );
 }
 
+{
+  const MES = "2026-10";
+  const data = baseData({
+    notasPedido: [
+      { ...nota("n_out", "pago"), mesReferencia: MES, cooperadoId: COOPERADO },
+      { ...nota("n_nova", "conferida"), mesReferencia: MES, cooperadoId: COOPERADO },
+    ],
+    fichaCorrida: [
+      { ...ficha("f_out", "n_out", MES), cooperadoId: COOPERADO, status: "pago" },
+      { ...ficha("f_nova", "n_nova", MES), cooperadoId: COOPERADO, status: "pendente" },
+    ],
+    pagamentosCooperado: [
+      {
+        id: "pg_out_obs",
+        cooperativaId: COOP,
+        cooperadoId: COOPERADO,
+        mesReferencia: MES,
+        valorBruto: 200,
+        descontoCooperativa: 0,
+        descontosExtras: [],
+        valorLiquido: 200,
+        fichaIds: ["f_out"],
+        notaPedidoIds: ["n_out"],
+        status: "aguardando_confirmacao",
+        pagoPor: "resp",
+        pagoEm: "2026-10-10T12:00:00.000Z",
+        createdAt: "2026-10-10T12:00:00.000Z",
+        updatedAt: "2026-10-10T12:00:00.000Z",
+      },
+    ],
+  });
+  const hist = listarResumosExtratoHistoricoCooperado(data, COOPERADO, COOP);
+  const out = hist.find((r) => r.mesReferencia === MES);
+  assert.ok(out?.pagamentoAguardando?.id === "pg_out_obs", "histórico mantém PIX aguardando obsoleto no fluxo ativo");
+}
+
 console.log("OK — guard financeiro cooperado");
