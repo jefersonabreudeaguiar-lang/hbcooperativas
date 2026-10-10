@@ -11,6 +11,7 @@
     "test:entregas": "npx tsx scripts/simulate-entrega-flow.ts",
     "test:perf-fluxos": "npx tsx scripts/run-suite-perf-fluxos.ts",
     "test:image-pipeline": "npx tsx scripts/test-image-pipeline.ts",
+    "test:staff-mobile-tab-keep-alive-u4": "npx tsx scripts/test-staff-mobile-tab-keep-alive-u4.ts",
     "generate:pwa-icons": "node scripts/generate-pwa-icons.mjs",
     "reset:operacional": "npx tsx scripts/reset-operacional-cloud.mjs",
     "wipe:cooperados-teste": "node scripts/wipe-cooperado-test-data.mjs",
