@@ -10,7 +10,8 @@ import { getData, isAppDataWarm } from "@/services/dataStore";
  */
 export function useCooperadoDormantAppData(active: boolean, revision: number): AppData | null {
   return useMemo(() => {
-    if (!active || revision < 0 || !isAppDataWarm()) return null;
+    if (!active || !isAppDataWarm()) return null;
+    /** `revision` só força releitura pós-sync; não bloqueia pintura com AppData já warm. */
     return getData();
   }, [active, revision]);
 }

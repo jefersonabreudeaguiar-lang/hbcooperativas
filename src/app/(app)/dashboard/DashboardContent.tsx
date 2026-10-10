@@ -149,8 +149,17 @@ function CooperadoDashboard() {
   }, [user?.id]);
 
   useEffect(() => {
-    if (inicioPwaLeve) return;
-    warmupCooperadoFinanceiroTabChunk();
+    if (!inicioPwaLeve) {
+      warmupCooperadoFinanceiroTabChunk();
+      return;
+    }
+    const warm = () => warmupCooperadoFinanceiroTabChunk();
+    if (typeof requestIdleCallback === "function") {
+      const id = requestIdleCallback(warm, { timeout: 1_500 });
+      return () => cancelIdleCallback(id);
+    }
+    const t = window.setTimeout(warm, 200);
+    return () => window.clearTimeout(t);
   }, [inicioPwaLeve]);
 
   useEffect(() => {

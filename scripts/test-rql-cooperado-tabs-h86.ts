@@ -103,7 +103,7 @@ assert(layout.includes("setCooperadoOptimisticTab"), "pointerdown otimista no ro
 assert(layout.includes("cooperadoTabWarmOnTouchStart"), "touchstart aquece chunk no rodapé");
 assert(keep.includes("return 2") && keep.includes("PWA: LRU 2"), "PWA mensageiro LRU 2 slots");
 assert(
-  read("src/lib/performance/cooperadoMobileTabDomPolicy.ts").includes("278-single-heavy"),
+  read("src/lib/performance/cooperadoMobileTabDomPolicy.ts").includes("279-financeiro-paint"),
   "política DOM cooperado versionada"
 );
 assert(

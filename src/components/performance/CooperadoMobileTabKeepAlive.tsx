@@ -201,13 +201,16 @@ export function CooperadoMobileTabKeepAlive({ pathname, children }: Props) {
   ): { panel: ReactNode | undefined; warm: boolean } => {
     const active = activePath === href;
     const cached = cacheRef.current[href];
+    /** Aba visível: sem defer — evita skeleton extra no Financeiro. */
+    const liveNode =
+      active && pathname === href ? children : deferredChildren;
     const liveForHref =
       pathname === href &&
-      !isCooperadoTabRouteLoadingElement(deferredChildren) &&
-      deferredChildren != null;
+      !isCooperadoTabRouteLoadingElement(liveNode) &&
+      liveNode != null;
 
     if (active && liveForHref) {
-      return { panel: deferredChildren, warm: false };
+      return { panel: liveNode, warm: false };
     }
     if (cached !== undefined) {
       return { panel: cached, warm: !active || pathname !== href };

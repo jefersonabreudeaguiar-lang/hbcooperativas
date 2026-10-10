@@ -23,7 +23,13 @@ export function CooperadoMobilePerfBootstrap() {
 
     if (user.role === "cooperado") {
       if (isCooperadoPwaMessengerMode()) {
-        return undefined;
+        const warm = () => warmupCooperadoFinanceiroTabChunk();
+        if (typeof requestIdleCallback === "function") {
+          const id = requestIdleCallback(warm, { timeout: 1_200 });
+          return () => cancelIdleCallback(id);
+        }
+        const t = window.setTimeout(warm, 150);
+        return () => window.clearTimeout(t);
       }
       warmupCooperadoFinanceiroTabChunk();
       try {
