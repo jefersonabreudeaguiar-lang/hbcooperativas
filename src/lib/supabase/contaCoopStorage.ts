@@ -50,7 +50,7 @@ import {
   hbCreditEffectiveDisponivelCents,
 } from "@/modules/hb-credit/engine/paymentAffordability";
 import { INTENT_EXPIRY_MINUTES } from "@/modules/hb-credit/config";
-import { getCurrentMesReferencia } from "@/utils/format";
+import { getCurrentMesReferencia, mesReferenciaUtcRange } from "@/utils/format";
 import {
   impactoAReceberReais,
   statusResumoFromTx,
@@ -4161,7 +4161,7 @@ async function listSettlementTransactions(
   mesReferencia: string
 ): Promise<SettlementTxRow[]> {
   const digits = normalizeCnpj(cnpj);
-  const { start, end } = mesReferenciaRange(mesReferencia);
+  const { start, end } = mesReferenciaUtcRange(mesReferencia);
 
   const { data: txs } = await supabase
     .from("hb_credit_transactions")
@@ -4276,15 +4276,22 @@ export async function previewPartnerSettlement(
     (tx) => tx.tipo === "PAYMENT" && tx.recebivelStatus === "ELIGIBLE"
   );
   const totalCents = eligibleRecebiveis.reduce((sum, tx) => sum + tx.amountCents, 0);
+  const eligibleTransactionIds = eligibleRecebiveis.map((tx) => tx.id);
 
   let fiscalResumo;
   let pagamentoAprovado = false;
   let bloqueioPagamento: string | null = null;
   try {
-    const { summarizeFiscalNotesMonth, evaluatePartnerFiscalSettlementGate } = await import(
+    const { summarizeFiscalNotesForSettlement, evaluatePartnerFiscalSettlementGate } = await import(
       "@/lib/supabase/hbCreditFiscalNotesStorage"
     );
-    fiscalResumo = await summarizeFiscalNotesMonth(supabase, digits, mesReferencia, partnerId);
+    fiscalResumo = await summarizeFiscalNotesForSettlement(
+      supabase,
+      digits,
+      partnerId,
+      mesReferencia,
+      eligibleTransactionIds
+    );
     const gate = evaluatePartnerFiscalSettlementGate(fiscalResumo);
     pagamentoAprovado = gate.ready && totalCents > 0;
     bloqueioPagamento = gate.message;

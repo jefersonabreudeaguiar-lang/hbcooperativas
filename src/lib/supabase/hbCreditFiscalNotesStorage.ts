@@ -384,13 +384,11 @@ export async function listStaffFiscalNotes(
   return enrichFiscalNotes(supabase, activeRows);
 }
 
-export async function summarizeFiscalNotesMonth(
-  supabase: SupabaseClient,
-  cnpj: string,
+function buildFiscalResumoFromNotas(
+  notas: ContaCoopFiscalNote[],
   mesReferencia: string,
   partnerId?: string
-): Promise<ContaCoopFiscalNotesResumo> {
-  const notas = await listStaffFiscalNotes(supabase, cnpj, mesReferencia, { partnerId });
+): ContaCoopFiscalNotesResumo {
   const active = notas.filter((n) => n.status !== "cancelada");
 
   return {
@@ -406,6 +404,67 @@ export async function summarizeFiscalNotesMonth(
     conferidas: active.filter((n) => n.status === "conferida").length,
     totalVendas: active.length,
   };
+}
+
+export async function summarizeFiscalNotesMonth(
+  supabase: SupabaseClient,
+  cnpj: string,
+  mesReferencia: string,
+  partnerId?: string
+): Promise<ContaCoopFiscalNotesResumo> {
+  const notas = await listStaffFiscalNotes(supabase, cnpj, mesReferencia, { partnerId });
+  return buildFiscalResumoFromNotas(notas, mesReferencia, partnerId);
+}
+
+/** Resumo fiscal só das vendas elegíveis para liquidação (evita trava por NF de mês já pago ou fora do lote). */
+export async function summarizeFiscalNotesForSettlement(
+  supabase: SupabaseClient,
+  cnpj: string,
+  partnerId: string,
+  mesReferencia: string,
+  eligibleTransactionIds: string[]
+): Promise<ContaCoopFiscalNotesResumo> {
+  const digits = normalizeCnpj(cnpj);
+  const txIds = [...new Set(eligibleTransactionIds.filter(Boolean))];
+  await syncPartnerFiscalNotesForMonth(supabase, partnerId, mesReferencia);
+
+  const notas: ContaCoopFiscalNote[] = [];
+  for (const txId of txIds) {
+    await ensureFiscalNoteForTransaction(supabase, txId);
+    const { data } = await supabase
+      .from("hb_credit_fiscal_notes")
+      .select("*")
+      .eq("cooperative_cnpj", digits)
+      .eq("transaction_id", txId)
+      .neq("status", "CANCELLED")
+      .maybeSingle();
+
+    if (!data) {
+      const tx = await fetchPaymentTransaction(supabase, txId, digits);
+      if (!tx) continue;
+      notas.push(
+        mapFiscalNoteRow({
+          id: `missing_${txId}`,
+          transaction_id: txId,
+          partner_id: partnerId,
+          cooperado_id: tx.cooperado_id,
+          mes_referencia: mesReferencia,
+          sale_amount_cents: Number(tx.amount_cents),
+          status: "PENDING_UPLOAD",
+          created_at: String(tx.created_at),
+          updated_at: String(tx.created_at),
+        })
+      );
+      continue;
+    }
+
+    const activeRows = await filterFiscalNotesForActiveSales(supabase, [data as Record<string, unknown>]);
+    if (!activeRows.length) continue;
+    const enriched = await enrichFiscalNotes(supabase, activeRows);
+    if (enriched[0]) notas.push(enriched[0]);
+  }
+
+  return buildFiscalResumoFromNotas(notas, mesReferencia, partnerId);
 }
 
 export async function uploadFiscalNotePhoto(
