@@ -16,6 +16,9 @@ import {
   releaseShieldSatisfied,
   runtimeAlreadyOnCanonicalRelease,
   runtimeNeedsReleaseUpgrade,
+  runtimeBundleBehindCanonical,
+  RELEASE_ALIGN_COOLDOWN_KEY,
+  RELEASE_ALIGN_SESSION_KEY,
   type ClientReleaseInfo,
 } from "@/lib/pwa/clientRelease";
 
@@ -102,6 +105,21 @@ export async function applyOfficialReleaseIfNeeded(): Promise<"ok" | "aligning" 
 
   persistReleaseShieldExpected(canonical);
 
+  const pageBuild = pageRelease?.build ?? 0;
+  const bundleBuild = embedded.build;
+  const buildBehindCloud =
+    runtimeBundleBehindCanonical(canonical, embedded) ||
+    (pageBuild > 0 && pageBuild !== canonical.build) ||
+    localPersistedBuildBehindCanonical(canonical);
+
+  /** Build novo na nuvem: não esperar `dpl=` nos chunks (keep-alive pode ficar preso em pending). */
+  if (buildBehindCloud) {
+    return alignToCanonicalIfNeeded(
+      canonical,
+      `build_behind:${bundleBuild || pageBuild}->${canonical.build}`
+    );
+  }
+
   const decision = evaluateClientReleaseAlignment({
     canonical,
     pageRelease,
@@ -145,4 +163,28 @@ export async function runClientReleaseAlignment(
   _options?: RunClientReleaseAlignmentOptions
 ): Promise<"ok" | "pending" | "aligning"> {
   return applyOfficialReleaseIfNeeded();
+}
+
+/** Botão «Atualizar app» — ignora cooldown/rajada e força hard align com a nuvem. */
+export async function requestManualCooperadoReleaseUpgrade(): Promise<boolean> {
+  if (typeof window === "undefined") return false;
+  const canonical = await fetchOfficialClientRelease();
+  if (!canonical) return false;
+
+  clearUrgentReleaseAlignDedup();
+  clearReloadBurstCounter();
+  try {
+    sessionStorage.removeItem(RELEASE_ALIGN_COOLDOWN_KEY);
+    sessionStorage.removeItem(RELEASE_ALIGN_SESSION_KEY);
+  } catch {
+    /* ignore */
+  }
+
+  persistReleaseShieldExpected(canonical);
+  return alignClientRuntimeToRelease("manual_cooperado", canonical.deploymentId, {
+    hard: true,
+    targetBuild: canonical.build,
+    urgentUpgrade: true,
+    targetFingerprint: releaseFingerprint(canonical),
+  });
 }
