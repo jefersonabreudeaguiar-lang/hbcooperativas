@@ -31,6 +31,7 @@ import {
   getPagamentoRegistradoMesParaHistorico,
   listarResumosFotosCooperado,
   listarResumosExtratoHistoricoCooperado,
+  ordenarResumosExtratoHistoricoPorDataPagamento,
   somarTotalRecebidoConfirmadoCooperado,
   notaTemFotoEnviadaCooperado,
 } from "@/services/cooperadoEntregasService";
@@ -519,20 +520,16 @@ export const CooperadoMinhaFichaTab = memo(function CooperadoMinhaFichaTab({
   const abaExtratoAtiva = subAba === "extrato";
   const abaFotosAtiva = subAba === "fotos";
 
-  const data = useAppDataSnapshotForDomains(
-    abaFotosAtiva ? (["notas"] as const) : (["financeiro", "notas"] as const)
-  );
+  const data = useAppDataSnapshotForDomains(["financeiro", "notas"] as const);
 
   const trocarSubAba = (aba: "extrato" | "pagamentos" | "fotos") => {
     startTransition(() => setSubAba(aba));
   };
 
-  const resumosHistoricoLive =
-    useAppDataSelectorWhenActive(
-      abaPagamentosAtiva,
-      (d) => listarResumosExtratoHistoricoCooperado(d, cooperadoId, cooperativaId),
-      [cooperadoId, cooperativaId]
-    ) ?? [];
+  const resumosHistoricoLive = useMemo(() => {
+    if (!data) return [];
+    return listarResumosExtratoHistoricoCooperado(data, cooperadoId, cooperativaId);
+  }, [data, cooperadoId, cooperativaId]);
 
   const resumosHistorico = useMemo(() => {
     const byMes = new Map<string, ResumoMesEntregasCooperado>();
@@ -543,7 +540,7 @@ export const CooperadoMinhaFichaTab = memo(function CooperadoMinhaFichaTab({
     for (const r of resumosHistoricoLive) {
       byMes.set(r.mesReferencia, r);
     }
-    return [...byMes.values()].sort((a, b) => b.mesReferencia.localeCompare(a.mesReferencia));
+    return ordenarResumosExtratoHistoricoPorDataPagamento([...byMes.values()]);
   }, [pagamentosRealizadosCache, resumosHistoricoLive]);
 
   const totalRecebido = useAppDataSelectorWhenActive(

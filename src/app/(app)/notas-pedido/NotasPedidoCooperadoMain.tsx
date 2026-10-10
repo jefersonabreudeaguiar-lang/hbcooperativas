@@ -4722,7 +4722,9 @@ export default function NotasPedidoCooperadoMain() {
               nomeCooperado={nomeCooperadoExibicao}
               resumos={resumosFichaCooperado}
               pagamentosRealizadosCache={
-                messenger && !data ? pwaEntregasResumosSnap?.pagamentosRealizados : undefined
+                entregasPwaLeve || (messenger && !data)
+                  ? pwaEntregasResumosSnap?.pagamentosRealizados
+                  : undefined
               }
               getEscolaLabel={getEscolaLabelCooperado}
             />

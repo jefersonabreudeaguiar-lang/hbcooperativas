@@ -987,12 +987,29 @@ function enriquecerResumoMesComPagamentoHistorico(
   const pagamento = getPagamentoRegistradoMesParaHistorico(data, cooperadoId, mesReferencia, cooperativaId);
   if (!pagamento) return resumo;
   const confirmado = pagamento.status === "confirmado";
+  const valorPix = pagamento.valorLiquido ?? 0;
   return {
     ...resumo,
     pagamentoConfirmado: confirmado ? pagamento : resumo.pagamentoConfirmado,
     pagamentoAguardando: confirmado ? resumo.pagamentoAguardando : pagamento,
-    valorRecebido: confirmado ? pagamento.valorLiquido ?? 0 : resumo.valorRecebido,
+    valorRecebido: valorPix > 0 ? valorPix : resumo.valorRecebido,
   };
+}
+
+function instantePagamentoResumoHistorico(r: ResumoMesEntregasCooperado): string {
+  const pg = r.pagamentoConfirmado ?? r.pagamentoAguardando;
+  return pg?.pagoEm ?? pg?.assinadoEm ?? pg?.createdAt ?? r.mesReferencia;
+}
+
+/** Ordem cronológica do PIX (mais recente primeiro), depois mês de referência. */
+export function ordenarResumosExtratoHistoricoPorDataPagamento(
+  resumos: ResumoMesEntregasCooperado[]
+): ResumoMesEntregasCooperado[] {
+  return [...resumos].sort((a, b) => {
+    const cmp = instantePagamentoResumoHistorico(b).localeCompare(instantePagamentoResumoHistorico(a));
+    if (cmp !== 0) return cmp;
+    return b.mesReferencia.localeCompare(a.mesReferencia);
+  });
 }
 
 export function listarResumosExtratoHistoricoCooperado(
@@ -1001,9 +1018,10 @@ export function listarResumosExtratoHistoricoCooperado(
   cooperativaId?: string
 ): ResumoMesEntregasCooperado[] {
   const coopId = resolverCooperativaIdReciboLatch(data, cooperadoId, cooperativaId);
-  return listarMesesComPagamentoRegistradoCooperado(data, cooperadoId, coopId)
+  const resumos = listarMesesComPagamentoRegistradoCooperado(data, cooperadoId, coopId)
     .map((mes) => enriquecerResumoMesComPagamentoHistorico(data, cooperadoId, mes, coopId))
     .filter((r) => r.pagamentoConfirmado != null || r.pagamentoAguardando != null);
+  return ordenarResumosExtratoHistoricoPorDataPagamento(resumos);
 }
 
 /** Total recebido — soma pagamentos confirmados (sem duplicar PIX que cobre vários meses). */
@@ -1049,6 +1067,14 @@ export function listarMesesComPagamentoRegistradoCooperado(
     }
     for (const mes of mesesReferenciaInferidosDoEscopoPagamento(data, p)) {
       meses.add(mes);
+    }
+  }
+
+  for (const f of data.fichaCorrida) {
+    if (!fichaPertenceCooperado(data, f, canonico, coopId)) continue;
+    if (f.status !== "pago") continue;
+    if (getPagamentoRegistradoMesParaHistorico(data, cooperadoId, f.mesReferencia, coopId)) {
+      meses.add(f.mesReferencia);
     }
   }
 

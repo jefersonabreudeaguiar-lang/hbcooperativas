@@ -1355,4 +1355,56 @@ function round2(n: number): number {
   assert.ok(out?.pagamentoAguardando?.id === "pg_out_obs", "histórico mantém PIX aguardando obsoleto no fluxo ativo");
 }
 
+{
+  const data = baseData({
+    notasPedido: [
+      { ...nota("n_set", "pago"), mesReferencia: "2026-09", cooperadoId: COOPERADO },
+      { ...nota("n_out2", "pago"), mesReferencia: "2026-10", cooperadoId: COOPERADO },
+    ],
+    fichaCorrida: [
+      { ...ficha("f_set", "n_set", "2026-09"), cooperadoId: COOPERADO, status: "pago" },
+      { ...ficha("f_out2", "n_out2", "2026-10"), cooperadoId: COOPERADO, status: "pago" },
+    ],
+    pagamentosCooperado: [
+      {
+        id: "pg_set",
+        cooperativaId: COOP,
+        cooperadoId: COOPERADO,
+        mesReferencia: "2026-09",
+        valorBruto: 100,
+        descontoCooperativa: 0,
+        descontosExtras: [],
+        valorLiquido: 100,
+        fichaIds: ["f_set"],
+        notaPedidoIds: ["n_set"],
+        status: "confirmado",
+        pagoPor: "resp",
+        pagoEm: "2026-09-20T12:00:00.000Z",
+        createdAt: "2026-09-20T12:00:00.000Z",
+        updatedAt: "2026-09-20T12:00:00.000Z",
+      },
+      {
+        id: "pg_out2",
+        cooperativaId: COOP,
+        cooperadoId: COOPERADO,
+        mesReferencia: "2026-10",
+        valorBruto: 150,
+        descontoCooperativa: 0,
+        descontosExtras: [],
+        valorLiquido: 150,
+        fichaIds: ["f_out2"],
+        notaPedidoIds: ["n_out2"],
+        status: "confirmado",
+        pagoPor: "resp",
+        pagoEm: "2026-10-15T12:00:00.000Z",
+        createdAt: "2026-10-15T12:00:00.000Z",
+        updatedAt: "2026-10-15T12:00:00.000Z",
+      },
+    ],
+  });
+  const hist = listarResumosExtratoHistoricoCooperado(data, COOPERADO, COOP);
+  assert.equal(hist.length, 2, "setembro e outubro confirmados");
+  assert.equal(hist[0]?.mesReferencia, "2026-10", "ordem por data do PIX — outubro primeiro");
+}
+
 console.log("OK — guard financeiro cooperado");
