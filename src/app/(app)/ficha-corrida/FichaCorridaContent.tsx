@@ -784,7 +784,7 @@ export default function FichaCorridaPage() {
   const financeiroUiSnapshot = useCooperadoFinanceiroUiSnapshot({
     active: tabActive && isCooperado,
     data,
-    cooperadoId,
+    cooperadoId: cooperadoId ?? undefined,
     cooperativaId: coopId,
     opts: {
       apresentacaoConsolidada: apresentacaoFinanceiroUi,

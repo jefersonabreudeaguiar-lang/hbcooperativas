@@ -150,7 +150,7 @@ export function AssinaturaCadastroPanel({ data, user, cooperado }: AssinaturaCad
           {podeReenviar && !modoAtualizar && (
             <Button
               type="button"
-              variant="outline"
+              variant="secondary"
               size="sm"
               className="mt-3"
               onClick={() => {
