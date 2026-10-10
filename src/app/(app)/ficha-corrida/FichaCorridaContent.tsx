@@ -2553,21 +2553,38 @@ export default function FichaCorridaPage() {
 
       <Modal
         open={assinaturaModal}
-        onClose={() => setAssinaturaModal(false)}
+        onClose={() => {
+          setAssinaturaModal(false);
+          setAssinatura(null);
+        }}
         title="Confirmar recebimento"
         size="md"
+        footer={
+          <div className="flex flex-col gap-2 w-full">
+            {!assinatura && (
+              <p className="text-sm text-amber-900 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 text-center">
+                Toque em <strong>Assinar com minha assinatura</strong> (ou desenhe acima) para liberar o envio.
+              </p>
+            )}
+            <Button size="lg" className="w-full" disabled={!assinatura} onClick={handleEnviarAssinatura}>
+              <PenLine size={18} /> Confirmar assinatura e enviar recibo
+            </Button>
+          </div>
+        }
       >
-        <div className="space-y-5 pb-2">
+        <div className="space-y-4">
           <p className="text-sm text-gray-600">
             Confira se os valores abaixo estão corretos. Em seguida, assine para confirmar que recebeu o pagamento.
           </p>
           {resumoReciboPagamento && (pagamentoAguardandoExibicao ?? pagamentoAguardando) && (
-            <ReciboResumoView
-              resumo={resumoReciboPagamento}
-              mesReferencia={(pagamentoAguardandoExibicao ?? pagamentoAguardando)!.mesReferencia}
-              descontoPadraoPct={data.config.descontoPadraoCooperativa}
-              compact
-            />
+            <div className="max-h-[min(40vh,16rem)] overflow-y-auto overscroll-contain rounded-xl border border-gray-100 p-1">
+              <ReciboResumoView
+                resumo={resumoReciboPagamento}
+                mesReferencia={(pagamentoAguardandoExibicao ?? pagamentoAguardando)!.mesReferencia}
+                descontoPadraoPct={data.config.descontoPadraoCooperativa}
+                compact
+              />
+            </div>
           )}
           <div className="bg-green-50 border border-green-200 rounded-xl p-3">
             <p className="text-center text-green-900 font-semibold mb-3">Assinatura do cooperado</p>
@@ -2582,16 +2599,6 @@ export default function FichaCorridaPage() {
             ) : (
               <SignaturePad onChange={setAssinatura} />
             )}
-          </div>
-          <div className="sticky bottom-0 -mx-1 space-y-2 bg-white pt-3 border-t border-gray-100 safe-area-pb">
-            {!assinatura && (
-              <p className="text-sm text-amber-900 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 text-center">
-                Toque em <strong>Assinar com minha assinatura</strong> (ou desenhe acima) para liberar o envio.
-              </p>
-            )}
-            <Button size="lg" className="w-full" disabled={!assinatura} onClick={handleEnviarAssinatura}>
-              <PenLine size={18} /> Confirmar assinatura e enviar recibo
-            </Button>
           </div>
         </div>
       </Modal>
