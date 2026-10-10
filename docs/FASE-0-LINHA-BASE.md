@@ -7,9 +7,10 @@ Gerado no início do Plano Mestre. **Não altera dados de produção.**
 | Controle | Evidência |
 |----------|-----------|
 | URL | https://hbcooperativas.vercel.app |
-| Build PWA | 248 (`src/lib/appBuildVersion.ts`, `public/sw.js`) |
-| Commit publicado | `3a8ac34671d8fc5c2210caa3a1d7f494fac54afe` |
-| Deployment | `dpl_6kQfqfb34TNAa8JtBjxoJfCidqem` |
+| Build PWA | 251 (`src/lib/appBuildVersion.ts`, `public/sw.js`) |
+| Commit publicado | `ce9ae8291761c5ed6fe8fcc7ba2352519d3d4a9a` |
+| Deployment | `dpl_BfrJdhu6Xi5oMbMeURps1yscNfLB` |
+| Tag rollback (código) | `baseline/build-248` → commit `3a8ac34` (não é o deploy atual) |
 | API identidade | `GET /api/client-release` |
 
 ## 2. Git
@@ -57,14 +58,14 @@ Gerado no início do Plano Mestre. **Não altera dados de produção.**
 ## 7. Performance — linha de base qualitativa
 
 - Documentação: `docs/performance-rql.md`, ondas 2.x em `docs/performance-*`.
-- Medição formal RQL: registrar na Fase 4; hoje baseline = build 248 + percepção campo (fotos/sync).
+- Medição formal RQL: registrar na Fase 4; hoje baseline operacional = build **251** (PWA boot shell + entregas anexar); tag **248** mantida só para rollback de código.
 
 ## 8. Critério de aprovação Fase 0
 
 - [x] Commit e deploy de produção identificados e reproduzíveis.
 - [x] Backup de código (tag + branch + manifest).
 - [x] Inventário inicial e riscos documentados.
-- [ ] AUTH_SECRET removido do Git com env Vercel (0.2B).
+- [ ] AUTH_SECRET removido do Git com env Vercel (0.2B) — **adiado** pelo operador.
 - [ ] Backup nuvem opcional executado pelo operador (`npm run backup:cloud`) se desejado.
 
 Quando todos os itens estiverem marcados, Fase 0 pode ser declarada **concluída** em `MASTER-PLAN-CONTINUIDADE.md`.

@@ -10,22 +10,24 @@ Profissionalizar o HB Coop para expansão multicooperativa sem perder integridad
 
 | Fase | Nome | Estado | Evidência |
 |------|------|--------|-----------|
-| 0 | Diagnóstico e proteção | **Em andamento** (~40% Fase 0) | Este doc, `FASE-0-LINHA-BASE.md`, tag `baseline/build-248`, build 248 em prod |
-| 0.2 | AUTH_SECRET fora do Git | **Pendente** | Diagnóstico 0.2A; Vercel sem `AUTH_SECRET` na lista informada |
+| 0 | Diagnóstico e proteção | **Em andamento** (~45% Fase 0) | Este doc, `FASE-0-LINHA-BASE.md`, tag `baseline/build-248`, build **251** em prod |
+| 0.2 | AUTH_SECRET fora do Git | **Adiado** (decisão operador) | Risco documentado; segredo permanece em `vercel.json` até retomar |
 | 1 | Pipeline commit → produção | **Iniciado** (~10%) | `verify-production-identity`, `PROTOCOLO-LIBERACAO-PRODUCAO.md` |
 | 2–7 | SSOT, conformidade, perf, segurança, resiliência, expansão | **Não iniciado** | — |
 
 **PROGRESSO global estimado do plano mestre:** ~8% (Fase 0 parcial + ferramentas Fase 1).
 
-## Estado comprovado (2026-10-09)
+## Estado comprovado (2026-10-10)
 
 | Item | Valor |
 |------|--------|
 | Repositório | `jefersonabreudeaguiar-lang/hbcooperativas` |
 | Branch | `main` |
-| `HEAD` / `origin/main` | `3a8ac34671d8fc5c2210caa3a1d7f494fac54afe` |
-| Produção `client-release` | build **248**, SHA `3a8ac34…`, `dpl_6kQfqfb34TNAa8JtBjxoJfCidqem` |
+| `HEAD` / `origin/main` | `ce9ae8291761c5ed6fe8fcc7ba2352519d3d4a9a` |
+| Produção `client-release` | build **251**, SHA `ce9ae82…`, `dpl_BfrJdhu6Xi5oMbMeURps1yscNfLB` |
+| Rollback de código (tag) | `baseline/build-248` → `3a8ac34` (anterior a PWA/entregas 249–251) |
 | Smoke browser | `/login` OK (formulário Entrar) |
+| `verify:production-identity` | OK (build repo = build live) |
 
 ## Proteção do trabalho local (não commitar sem decisão)
 
@@ -43,13 +45,16 @@ Profissionalizar o HB Coop para expansão multicooperativa sem perder integridad
 
 ## Histórico recente (código em produção)
 
+- **251** — Entregas: atalho **Anexar foto** abre modal/câmera antes do sync PWA; sync de envio em background (`ce9ae82`).
+- **250** — PWA: failsafe do boot shell no preview (`a12dbe0`).
+- **249** — PWA: remove boot shell preso na tela branca ao carregar (`dad45a0`).
 - **248** — Modal fotos / enviar ao responsável no celular (`3a8ac34`).
 - **247** — Liquidação mercado / recebíveis elegíveis (`27e31aa`).
 
 ## Próxima ação autorizada (ao acordar)
 
 1. **Fase 0 (restante):** inventário módulos em `FASE-0-LINHA-BASE.md` — revisar com humano.
-2. **Fase 0.2B:** `AUTH_SECRET` no Vercel → remover de `vercel.json` → deploy → smoke login.
+2. **Fase 0.2:** retomar só quando operador autorizar (AUTH_SECRET fora do Git).
 3. **Fase 1:** integrar `npm run verify:production-identity` no checklist pós-push (e opcionalmente GitHub Action read-only).
 
 ## Comandos úteis
