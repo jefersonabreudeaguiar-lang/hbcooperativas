@@ -49,3 +49,11 @@ Encerrar com: **"Aguardando sua confirmação para commit e/ou push."**
 ## Deploy
 
 Mesma regra: resumo de impacto + confirmação antes de disparar deploy manual.
+
+## Após push no main (obrigatório)
+
+1. Rodar `npm run confirm:production:wait` (ou `npm run push:main` no lugar de `git push` sozinho).
+2. Repassar ao usuário o relatório: OK ou não, build/SHA/deploymentId e **por quê**.
+3. Não declarar “em produção” sem SHA e build alinhados em `https://hbcooperativas.vercel.app/api/client-release`.
+
+Ver também a rule `production-deploy-verify.mdc`.

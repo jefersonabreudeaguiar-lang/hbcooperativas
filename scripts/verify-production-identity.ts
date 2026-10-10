@@ -1,23 +1,13 @@
 /**
- * Anti-deploy fantasma — somente leitura HTTP.
- * Compara APP_BUILD_VERSION do repo com /api/client-release em produção.
- *
- * Uso:
- *   npm run verify:production-identity
- *   npm run verify:production-identity -- --url https://hbcooperativas.vercel.app
- *   npm run verify:production-identity -- --expect-sha <git-sha>
+ * Anti-deploy fantasma — somente leitura HTTP (uma tentativa, sem esperar).
+ * Para polling após push: npm run confirm:production:wait
  */
-import { readFileSync } from "node:fs";
-import { resolve } from "node:path";
-
-const root = resolve(import.meta.dirname ?? __dirname, "..");
-
-function readRepoBuild(): number {
-  const src = readFileSync(resolve(root, "src/lib/appBuildVersion.ts"), "utf8");
-  const m = src.match(/APP_BUILD_VERSION\s*=\s*(\d+)/);
-  if (!m) throw new Error("APP_BUILD_VERSION não encontrado em appBuildVersion.ts");
-  return Number(m[1]);
-}
+import {
+  compareRelease,
+  fetchProductionRelease,
+  readRepoBuildVersion,
+  readRepoHeadSha,
+} from "./lib/productionReleaseProbe.ts";
 
 function argValue(flag: string): string | undefined {
   const i = process.argv.indexOf(flag);
@@ -30,63 +20,48 @@ async function main() {
     /\/$/,
     ""
   );
-  const expectSha = (argValue("--expect-sha") ?? process.env.GITHUB_SHA ?? "").trim().toLowerCase();
-  const repoBuild = readRepoBuild();
+  const expectSha = (argValue("--expect-sha") ?? process.env.GITHUB_SHA ?? readRepoHeadSha()).trim().toLowerCase();
+  const repoBuild = readRepoBuildVersion();
 
-  const res = await fetch(`${baseUrl}/api/client-release`, {
-    cache: "no-store",
-    headers: { "Cache-Control": "no-cache" },
-  });
-  if (!res.ok) {
-    console.error(`FAIL: client-release HTTP ${res.status}`);
+  const prod = await fetchProductionRelease(baseUrl);
+  if (!prod.ok) {
+    console.error(`FAIL: ${prod.error}`);
     process.exit(1);
   }
 
-  const cloud = (await res.json()) as {
-    build?: number;
-    gitCommitSha?: string;
-    deploymentId?: string;
-    fingerprint?: string;
-  };
-
-  const cloudBuild = cloud.build ?? 0;
-  const cloudSha = (cloud.gitCommitSha ?? "").trim().toLowerCase();
+  const cloud = prod.data;
+  const repo = { build: repoBuild, headSha: expectSha, branch: "" };
+  const verdict = compareRelease(repo, cloud, expectSha);
 
   console.log("=== HB production identity (read-only) ===");
   console.log("url:", baseUrl);
   console.log("repo APP_BUILD_VERSION:", repoBuild);
-  console.log("live build:", cloudBuild);
-  console.log("live gitCommitSha:", cloud.gitCommitSha ?? "(missing)");
-  console.log("live deploymentId:", cloud.deploymentId ?? "(missing)");
-  console.log("live fingerprint:", cloud.fingerprint ?? "(missing)");
+  console.log("live build:", cloud.build);
+  console.log("live gitCommitSha:", cloud.gitCommitSha || "(missing)");
+  console.log("live deploymentId:", cloud.deploymentId || "(missing)");
+  console.log("live fingerprint:", cloud.fingerprint || "(missing)");
 
-  let ok = true;
-
-  if (cloudBuild !== repoBuild) {
-    console.error(`FAIL: build live (${cloudBuild}) ≠ repo (${repoBuild}).`);
-    console.error("     Produção pode estar atrás do main ou o repo não foi bumpado após deploy.");
-    ok = false;
-  }
-
-  if (expectSha && cloudSha && !cloudSha.startsWith(expectSha.slice(0, 12))) {
-    console.error(`FAIL: SHA live não corresponde a --expect-sha (${expectSha}).`);
-    ok = false;
-  }
-
-  if (!cloudSha) {
-    console.warn("WARN: gitCommitSha ausente na resposta — não foi possível validar commit.");
+  if (verdict !== "aligned") {
+    if (verdict === "build_drift" || verdict === "both_drift") {
+      console.error(`FAIL: build live (${cloud.build}) ≠ repo (${repoBuild}).`);
+    }
+    if (verdict === "sha_drift" || verdict === "both_drift") {
+      console.error(`FAIL: SHA live não corresponde ao esperado (${expectSha.slice(0, 12)}).`);
+    }
+    if (verdict === "unknown") {
+      console.warn("WARN: gitCommitSha ausente — não foi possível validar commit.");
+    }
+    console.error("     Rode npm run confirm:production:wait após push para aguardar a Vercel.");
+    process.exit(1);
   }
 
   const loginProbe = await fetch(`${baseUrl}/login`, { method: "GET", redirect: "manual" });
   if (loginProbe.status !== 200 && loginProbe.status !== 307 && loginProbe.status !== 308) {
     console.error(`FAIL: /login retornou HTTP ${loginProbe.status}`);
-    ok = false;
-  } else {
-    console.log("OK: /login responde (smoke HTML).");
+    process.exit(1);
   }
-
-  if (!ok) process.exit(1);
-  console.log("OK: identidade de produção alinhada ao repositório (build).");
+  console.log("OK: /login responde (smoke HTML).");
+  console.log("OK: identidade de produção alinhada ao repositório.");
 }
 
 main().catch((e) => {

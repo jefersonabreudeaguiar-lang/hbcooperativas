@@ -1,0 +1,43 @@
+---
+description: Após commit/push no main, confirmar deploy em produção com relatório (build + SHA + por quê).
+alwaysApply: true
+---
+
+# Confirmação de deploy em produção (obrigatório)
+
+Depois de **qualquer `git push` para `main`** (ou quando o usuário pedir commit/push com deploy), o agente deve **confirmar de fato** se a Vercel refletiu o commit — não assumir que “subiu” só porque o push passou.
+
+## Comandos
+
+| Momento | Comando |
+|--------|---------|
+| Checagem rápida (1 tentativa) | `npm run verify:production-identity` |
+| Após push (esperar deploy) | `npm run confirm:production:wait` |
+| Push + confirmação (Windows) | `powershell -File scripts/push-main-with-confirm.ps1` |
+| Push + confirmação (npm) | `npm run push:main` |
+
+Opcional: `npm run confirm:production:wait -- --expect-sha <sha>` quando o HEAD local não for o commit publicado.
+
+## O que o agente deve entregar ao usuário
+
+Copiar ou resumir o relatório do script, sempre com:
+
+1. **Status**: OK alinhado / NÃO alinhado / não foi possível ler produção
+2. **Números**: build repo vs build live, SHA esperado vs SHA live, `deploymentId`
+3. **Por quê** (uma frase clara): deploy concluído, ainda propagando, build não bumpado, push não foi main, falha Vercel, etc.
+4. **Próximo passo** se falhou (Vercel dashboard, rodar de novo `confirm:production:wait`)
+
+## Commit sem push
+
+Após commit no `main`, avisar que **produção só muda após push** e que a confirmação roda no push. Pode rodar `verify:production-identity` para mostrar drift atual.
+
+## Hooks locais (opcional)
+
+Para disparar confirmação automática após push do main:
+
+`git config core.hooksPath .githooks` (uma vez por clone)
+
+## Não confundir
+
+- CI vermelho no GitHub **não bloqueia** necessariamente a Vercel — sempre usar `/api/client-release`.
+- PWA no celular pode atrasar UI mesmo com produção alinhada (build no `client-release` é a fonte de verdade do servidor).
