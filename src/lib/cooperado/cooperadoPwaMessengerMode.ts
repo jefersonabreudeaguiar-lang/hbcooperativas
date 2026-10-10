@@ -8,6 +8,7 @@
  */
 import type { User } from "@/types";
 import { isCooperadoPwaMobileLeveUi } from "@/lib/cooperado/cooperadoPwaLeveUi";
+import { getSession } from "@/services/dataStore";
 import { persistirCooperadoPwaInicioDashboardSnapshotFromUser } from "@/lib/cooperado/cooperadoPwaInicioDashboardSnapshot";
 import { persistirCooperadoPwaEntregasResumosSnapshotFromUser } from "@/lib/cooperado/cooperadoPwaEntregasResumosSnapshot";
 import {
@@ -17,7 +18,10 @@ import {
 import { materializeCooperadoScopedReadModels } from "@/lib/cooperado/cooperadoScopedReadModels";
 
 export function isCooperadoPwaMessengerMode(): boolean {
-  return isCooperadoPwaMobileLeveUi();
+  if (!isCooperadoPwaMobileLeveUi()) return false;
+  const session = getSession();
+  if (session && session.role !== "cooperado") return false;
+  return true;
 }
 
 /** Painéis cooperado PWA não assinam domínios do AppData (evita re-render a cada sync). */

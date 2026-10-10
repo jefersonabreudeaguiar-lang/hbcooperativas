@@ -101,6 +101,7 @@ export async function fetchCooperadosFromStorage(
   if (error || !files?.length) return [];
 
   const cooperados: Cooperado[] = [];
+  let processed = 0;
   for (const file of files) {
     if (!file.name.endsWith(".json")) continue;
     const { data: blob, error: dlErr } = await supabase.storage
@@ -112,6 +113,10 @@ export async function fetchCooperadosFromStorage(
       if (parsed?.cooperado?.id) cooperados.push(parsed.cooperado);
     } catch {
       /* ignore corrupt file */
+    }
+    processed += 1;
+    if (processed % 3 === 0) {
+      await new Promise<void>((resolve) => setTimeout(resolve, 0));
     }
   }
   return mergeDuplicatasAssinaturaNaLista(cooperados)

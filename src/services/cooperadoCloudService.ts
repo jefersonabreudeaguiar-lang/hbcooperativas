@@ -489,18 +489,36 @@ export async function ensureCooperativaLocalForCnpj(cnpj: string): Promise<strin
   return resolveCooperativaForCloudMerge(merged, digits)?.id;
 }
 
+let syncCooperadosInflight: Promise<number> | null = null;
+let syncCooperadosInflightKey: string | null = null;
+
 export async function syncCooperadosFromCloud(cnpj: string, preferredCoopId?: string): Promise<number> {
-  await flushPendingCooperadoPushes(cnpj);
-  const coopId = preferredCoopId ?? (await ensureCooperativaLocalForCnpj(cnpj));
-  const { ok, cooperados: cloudCooperados } = await fetchCooperadosFromCloud(cnpj);
-  if (!ok) return 0;
-  if (cloudCooperados.length === 0) return 0;
-  const current = getData();
-  const merged = mergeCloudCooperadosIntoData(current, cloudCooperados, cnpj, coopId);
-  if (merged === current) return cloudCooperados.length;
-  saveDataSafe(merged);
-  refreshStoredSession();
-  return cloudCooperados.length;
+  const key = `${normalizeCnpj(cnpj)}:${preferredCoopId ?? ""}`;
+  if (syncCooperadosInflight && syncCooperadosInflightKey === key) {
+    return syncCooperadosInflight;
+  }
+  syncCooperadosInflightKey = key;
+  syncCooperadosInflight = (async () => {
+    try {
+      await flushPendingCooperadoPushes(cnpj);
+      const coopId = preferredCoopId ?? (await ensureCooperativaLocalForCnpj(cnpj));
+      const { ok, cooperados: cloudCooperados } = await fetchCooperadosFromCloud(cnpj);
+      if (!ok) return 0;
+      if (cloudCooperados.length === 0) return 0;
+      const current = getData();
+      const merged = mergeCloudCooperadosIntoData(current, cloudCooperados, cnpj, coopId);
+      if (merged === current) return cloudCooperados.length;
+      saveDataSafe(merged);
+      refreshStoredSession();
+      return cloudCooperados.length;
+    } finally {
+      if (syncCooperadosInflightKey === key) {
+        syncCooperadosInflight = null;
+        syncCooperadosInflightKey = null;
+      }
+    }
+  })();
+  return syncCooperadosInflight;
 }
 
 /** Lista cooperados da cooperativa para selects (cadastrados localmente + nuvem + envios). */

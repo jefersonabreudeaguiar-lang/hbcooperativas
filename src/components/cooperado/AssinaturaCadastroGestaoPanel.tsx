@@ -90,19 +90,6 @@ export function AssinaturaCadastroGestaoPanel({ data, user, cooperativaId }: Ass
     setAssinaturaEditada(null);
   }, [verAssinatura?.id]);
 
-  useEffect(() => {
-    let cancelled = false;
-    void (async () => {
-      const d = getData();
-      const cnpj = await resolveCooperativaCnpj(d, cooperativaId, user);
-      if (cancelled || !cnpj) return;
-      await syncCooperadosFromCloud(cnpj, cooperativaId);
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [cooperativaId, user.id, user.cooperativaCnpj]);
-
   const previewVerAssinatura = verAssinatura ? previewCooperado(verAssinatura) : null;
 
   const syncCooperado = async (cooperado: Cooperado) => {

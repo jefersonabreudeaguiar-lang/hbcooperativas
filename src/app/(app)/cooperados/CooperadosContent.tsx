@@ -73,11 +73,19 @@ export default function CooperadosPage() {
 
   useEffect(() => {
     if (!user) return;
-    const d = getData();
-    const coopId = getUserCooperativaId(user, d);
-    const coop = d.cooperativas.find((c) => c.id === coopId);
-    const cnpj = normalizeCnpj(coop?.cnpj ?? user.cooperativaCnpj ?? "");
-    if (cnpj.length === 14 && coopId) void syncCooperadosFromCloud(cnpj, coopId);
+    const run = () => {
+      const d = getData();
+      const coopId = getUserCooperativaId(user, d);
+      const coop = d.cooperativas.find((c) => c.id === coopId);
+      const cnpj = normalizeCnpj(coop?.cnpj ?? user.cooperativaCnpj ?? "");
+      if (cnpj.length === 14 && coopId) void syncCooperadosFromCloud(cnpj, coopId);
+    };
+    if (typeof requestIdleCallback !== "undefined") {
+      const id = requestIdleCallback(run, { timeout: 2_500 });
+      return () => cancelIdleCallback(id);
+    }
+    const t = window.setTimeout(run, 150);
+    return () => window.clearTimeout(t);
   }, [user?.id]);
 
   const openNew = () => {
