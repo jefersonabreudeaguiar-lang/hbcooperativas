@@ -202,9 +202,11 @@ export default function FichaCorridaPage() {
   const readModelsRevision = useCooperadoMessengerReadModelRevision();
   /** Cooperado PWA: financeiro só relê após sync (responsável); entregas permanecem no fluxo atual. */
   const financeiroDormant = messenger && isCooperado;
-  const appDataUiOn = cooperadoPwaUiSubscribesAppData() && tabActive;
+  /** PWA leve só desliga subscribe do AppData para cooperado; responsável continua com dados ao vivo. */
+  const appDataPanelActive =
+    tabActive && (isCooperado ? cooperadoPwaUiSubscribesAppData() : true);
   const dataLive = useAppDataSelectorForDomainsWhenActive(
-    tabActive && appDataUiOn,
+    appDataPanelActive,
     FICHA_APP_DATA_DOMAINS,
     (d) => d,
     []

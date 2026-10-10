@@ -12,7 +12,8 @@ import { Input, Select, Textarea, FormField } from "@/components/ui/Form";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import { Card } from "@/components/ui/Card";
 import { AlertBanner } from "@/components/ui/AlertBanner";
-import { updateData, generateId, addAuditEntry, getData } from "@/services/dataStore";
+import { updateData, updateDataSafe, generateId, addAuditEntry, getData } from "@/services/dataStore";
+import { resolverCooperadoIdCanonico } from "@/services/cooperadoCloudService";
 import { formatCPFCNPJ, formatPhone, formatMesReferencia, getCurrentMesReferencia, formatDate } from "@/utils/format";
 import { getUserCooperativaId, normalizeCnpj } from "@/utils/cooperativa";
 import { pushCooperadoToCloud, syncCooperadosFromCloud } from "@/services/cooperadoCloudService";
@@ -170,17 +171,23 @@ export default function CooperadosPage() {
 
   const handleCota = (c: Cooperado, paga: boolean) => {
     if (!user) return;
-    const next = updateData((d) => {
-      const updated = setCotaIngressoCooperado(d, c.id, c.cooperativaId, mesAtual, paga);
+    const cooperadoId = resolverCooperadoIdCanonico(getData(), c.id, c.cooperativaId);
+    const saved = updateDataSafe((d) => {
+      const updated = setCotaIngressoCooperado(d, cooperadoId, c.cooperativaId, mesAtual, paga);
       return addAuditEntry(updated, {
         entityType: "cooperado",
-        entityId: c.id,
+        entityId: cooperadoId,
         action: "editar",
         userId: user.id,
         userName: user.name,
         changes: `Cota de ingresso · ${formatMesReferencia(mesAtual)} · ${paga ? "paga" : "não paga"}`,
       });
     });
+    if (!saved.ok) {
+      window.alert(saved.error);
+      return;
+    }
+    const next = saved.data;
     void (async () => {
       const cnpj = await resolveCooperativaCnpj(next, c.cooperativaId, user);
       if (cnpj) await pushOperacionalToCloud(cnpj, next, c.cooperativaId, { authoritative: true });
@@ -428,6 +435,7 @@ export default function CooperadosPage() {
                   {check("cooperados", "edit") && (
                     <div className="flex gap-1">
                       <Button
+                        type="button"
                         size="sm"
                         variant={paga ? "primary" : "secondary"}
                         className="px-2 text-xs"
@@ -436,6 +444,7 @@ export default function CooperadosPage() {
                         Paga
                       </Button>
                       <Button
+                        type="button"
                         size="sm"
                         variant={!paga ? "primary" : "secondary"}
                         className="px-2 text-xs"

@@ -9,7 +9,7 @@ import { Modal } from "@/components/ui/Table";
 import { AlertBanner } from "@/components/ui/AlertBanner";
 import { Textarea, FormField } from "@/components/ui/Form";
 import { StatusBadge } from "@/components/ui/StatusBadge";
-import { updateData, getData } from "@/services/dataStore";
+import { updateData, updateDataSafe, getData } from "@/services/dataStore";
 import { pushCooperadoToCloud, queueCooperadoPush, syncCooperadosFromCloud, encontrarCooperadoLocalEquivalente } from "@/services/cooperadoCloudService";
 import { resolveCooperativaCnpj } from "@/services/notaPedidoCloudService";
 import {
@@ -115,25 +115,35 @@ export function AssinaturaCadastroGestaoPanel({ data, user, cooperativaId }: Ass
     ref: Cooperado,
     imagemAjustada?: { dataUrl: string; hash: string } | null
   ): Promise<boolean> => {
-    const localId = cooperadoIdLocal(ref);
     setErro("");
     setBusyId(ref.id);
     try {
-      let atualizado: Cooperado | null = null;
-      updateData((d) => {
-        const idx = d.cooperados.findIndex((c) => c.id === localId);
-        let base = d;
-        if (idx >= 0) {
-          const fields = mergeAssinaturaCadastroFields(d.cooperados[idx], ref);
-          base = {
-            ...d,
-            cooperados: d.cooperados.map((c, i) =>
-              i === idx ? { ...c, ...fields, id: localId } : c
-            ),
-          };
-        }
+      let local = encontrarCooperadoLocalEquivalente(getData(), cooperativaId, ref);
+      if (!local) {
+        setErro("Cooperado não encontrado no aparelho.");
+        return false;
+      }
+      if (!getAssinaturaCadastroDataUrl(local) && !imagemAjustada?.dataUrl) {
+        await sincronizarNuvem();
+        local = encontrarCooperadoLocalEquivalente(getData(), cooperativaId, ref);
+      }
+      const localId = local?.id ?? cooperadoIdLocal(ref);
+      if (!local || getAssinaturaCadastroStatus(local) !== "em_analise") {
+        setErro(
+          !local
+            ? "Cooperado não encontrado no aparelho."
+            : "Esta assinatura não está aguardando análise."
+        );
+        return false;
+      }
+      if (!getAssinaturaCadastroDataUrl(local) && !imagemAjustada?.dataUrl) {
+        setErro("Foto da assinatura ainda não carregou — toque em Atualizar da nuvem e tente de novo.");
+        return false;
+      }
+
+      const saved = updateDataSafe((d) => {
         const result = confirmarAssinaturaCadastroCooperado(
-          base,
+          d,
           localId,
           user,
           imagemAjustada ?? undefined
@@ -142,11 +152,15 @@ export function AssinaturaCadastroGestaoPanel({ data, user, cooperativaId }: Ass
           setErro(result.error);
           return d;
         }
-        atualizado = result.cooperado;
         return result.data;
       });
+      if (!saved.ok) {
+        setErro(saved.error);
+        return false;
+      }
+      const atualizado = saved.data.cooperados.find((c) => c.id === localId) ?? null;
       if (!atualizado) return false;
-      const salvo = getData().cooperados.find((c) => c.id === localId) ?? null;
+      const salvo = atualizado;
       if (!salvo) return false;
       const push = await syncCooperado(salvo);
       if (!push.ok) {
@@ -342,9 +356,10 @@ export function AssinaturaCadastroGestaoPanel({ data, user, cooperativaId }: Ass
 
                 <div className="flex flex-wrap gap-2">
                   <Button
+                    type="button"
                     size="sm"
                     onClick={() => void confirmar(c, imagemAjustadaPara(c))}
-                    disabled={busy || !preview}
+                    disabled={busy}
                   >
                     <CheckCircle2 size={16} />
                     Confirmar assinatura
