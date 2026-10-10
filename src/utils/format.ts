@@ -100,9 +100,21 @@ export function getCurrentMesReferencia(): string {
   return mesReferenciaFromDate(new Date());
 }
 
+/** Normaliza entrada de mês (YYYY-M ou YYYY-MM) para o calendário cooperativa. */
+export function normalizeMesReferencia(mesReferencia: string): string {
+  const trimmed = mesReferencia.trim();
+  const match = trimmed.match(/^(\d{4})-(\d{1,2})$/);
+  if (!match) return trimmed;
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  if (!year || month < 1 || month > 12) return getCurrentMesReferencia();
+  return `${year}-${String(month).padStart(2, "0")}`;
+}
+
 /** Intervalo [start, end) em UTC para filtrar `created_at` pelo mês cooperativa. */
 export function mesReferenciaUtcRange(mesReferencia: string): { start: string; end: string } {
-  const [year, month] = mesReferencia.split("-").map(Number);
+  const normalized = normalizeMesReferencia(mesReferencia);
+  const [year, month] = normalized.split("-").map(Number);
   if (!year || !month || month < 1 || month > 12) {
     return mesReferenciaUtcRange(getCurrentMesReferencia());
   }

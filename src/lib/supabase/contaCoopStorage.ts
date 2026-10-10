@@ -50,7 +50,7 @@ import {
   hbCreditEffectiveDisponivelCents,
 } from "@/modules/hb-credit/engine/paymentAffordability";
 import { INTENT_EXPIRY_MINUTES } from "@/modules/hb-credit/config";
-import { getCurrentMesReferencia, mesReferenciaUtcRange } from "@/utils/format";
+import { getCurrentMesReferencia, mesReferenciaUtcRange, normalizeMesReferencia } from "@/utils/format";
 import {
   impactoAReceberReais,
   statusResumoFromTx,
@@ -4224,6 +4224,74 @@ async function listSettlementTransactions(
 
 const SETTLEMENT_RECEIVABLE_CLOSED = new Set(["PROCESSING", "SETTLED"]);
 
+/** Promove recebíveis com NF aprovada e desbloqueia PROCESSING órfão antes da liquidação. */
+async function repairReceivablesForPartnerSettlement(
+  supabase: SupabaseClient,
+  cnpj: string,
+  partnerId: string,
+  paymentTxIds: string[]
+): Promise<void> {
+  if (!paymentTxIds.length) return;
+  const digits = normalizeCnpj(cnpj);
+  const now = new Date().toISOString();
+
+  const { data: notes } = await supabase
+    .from("hb_credit_fiscal_notes")
+    .select("transaction_id, status")
+    .eq("cooperative_cnpj", digits)
+    .in("transaction_id", paymentTxIds)
+    .neq("status", "CANCELLED");
+
+  const nfApproved = new Set<string>();
+  for (const row of notes ?? []) {
+    if (String(row.status) === "APPROVED") nfApproved.add(String(row.transaction_id));
+  }
+  if (!nfApproved.size) return;
+
+  await supabase
+    .from("hb_credit_receivables")
+    .update({ status: "ELIGIBLE", updated_at: now })
+    .eq("cooperative_cnpj", digits)
+    .eq("partner_id", partnerId)
+    .in("transaction_id", [...nfApproved])
+    .in("status", ["OPEN", "BLOCKED_FOR_REVIEW"]);
+
+  const { data: processingRows } = await supabase
+    .from("hb_credit_receivables")
+    .select("id, transaction_id, settlement_id")
+    .eq("cooperative_cnpj", digits)
+    .eq("partner_id", partnerId)
+    .in("transaction_id", paymentTxIds)
+    .eq("status", "PROCESSING");
+
+  for (const row of processingRows ?? []) {
+    const txId = String(row.transaction_id);
+    if (!nfApproved.has(txId)) continue;
+
+    const settlementId = row.settlement_id ? String(row.settlement_id) : "";
+    if (!settlementId) {
+      await supabase
+        .from("hb_credit_receivables")
+        .update({ status: "ELIGIBLE", settlement_id: null, updated_at: now })
+        .eq("id", String(row.id));
+      continue;
+    }
+
+    const { data: settlement } = await supabase
+      .from("hb_credit_settlements")
+      .select("status")
+      .eq("id", settlementId)
+      .maybeSingle();
+    const st = settlement ? String(settlement.status) : "";
+    if (!settlement || st === "CANCELLED") {
+      await supabase
+        .from("hb_credit_receivables")
+        .update({ status: "ELIGIBLE", settlement_id: null, updated_at: now })
+        .eq("id", String(row.id));
+    }
+  }
+}
+
 /** NF conferida mas recebível ainda OPEN — libera para liquidação (repara dados antigos). */
 async function resolveLiquidatableSettlementPayments(
   supabase: SupabaseClient,
@@ -4259,12 +4327,14 @@ async function resolveLiquidatableSettlementPayments(
       continue;
     }
 
-    if (nfApproved.has(tx.id) && (st === "OPEN" || st === "BLOCKED_FOR_REVIEW")) {
-      await supabase
-        .from("hb_credit_receivables")
-        .update({ status: "ELIGIBLE", updated_at: now })
-        .eq("transaction_id", tx.id)
-        .in("status", ["OPEN", "BLOCKED_FOR_REVIEW"]);
+    if (nfApproved.has(tx.id) && (st === "OPEN" || st === "BLOCKED_FOR_REVIEW" || !st)) {
+      if (st) {
+        await supabase
+          .from("hb_credit_receivables")
+          .update({ status: "ELIGIBLE", updated_at: now })
+          .eq("transaction_id", tx.id)
+          .in("status", ["OPEN", "BLOCKED_FOR_REVIEW"]);
+      }
       liquidatable.push({ ...tx, recebivelStatus: "ELIGIBLE" });
     }
   }
@@ -4312,6 +4382,7 @@ export async function previewPartnerSettlement(
   mesReferencia: string
 ): Promise<ContaCoopLiquidacaoPreview | null> {
   const digits = normalizeCnpj(cnpj);
+  const mesNorm = normalizeMesReferencia(mesReferencia);
   const { data: partnerRow } = await supabase
     .from("hb_credit_partners")
     .select("*")
@@ -4320,11 +4391,23 @@ export async function previewPartnerSettlement(
     .maybeSingle();
   if (!partnerRow) return null;
 
-  const transacoes = await listSettlementTransactions(supabase, digits, partnerId, mesReferencia);
+  const { data: pendingSettlement } = await supabase
+    .from("hb_credit_settlements")
+    .select("id, total_cents, transacoes_count")
+    .eq("cooperative_cnpj", digits)
+    .eq("partner_id", partnerId)
+    .eq("mes_referencia", mesNorm)
+    .eq("status", "AWAITING_PARTNER")
+    .maybeSingle();
+
+  const transacoes = await listSettlementTransactions(supabase, digits, partnerId, mesNorm);
   const cooperados = buildCooperadoLiquidacao(transacoes);
+  const paymentTxIds = transacoes.filter((tx) => tx.tipo === "PAYMENT").map((tx) => tx.id);
+
+  await repairReceivablesForPartnerSettlement(supabase, digits, partnerId, paymentTxIds);
+
   const eligibleRecebiveis = await resolveLiquidatableSettlementPayments(supabase, digits, transacoes);
   const totalCents = eligibleRecebiveis.reduce((sum, tx) => sum + tx.amountCents, 0);
-  const eligibleTransactionIds = eligibleRecebiveis.map((tx) => tx.id);
 
   let fiscalResumo;
   let pagamentoAprovado = false;
@@ -4337,28 +4420,50 @@ export async function previewPartnerSettlement(
       supabase,
       digits,
       partnerId,
-      mesReferencia,
-      eligibleTransactionIds
+      mesNorm,
+      paymentTxIds
     );
     const gate = evaluatePartnerFiscalSettlementGate(fiscalResumo);
     pagamentoAprovado = gate.ready && totalCents > 0;
     bloqueioPagamento =
       gate.message ??
       (gate.ready && totalCents <= 0
-        ? "NFs conferidas, mas o valor elegível ainda está zerado — toque em Atualizar resumo."
+        ? paymentTxIds.length > 0
+          ? "Há vendas no mês com NF conferida, mas o recebível ainda não liberou — toque em Atualizar resumo."
+          : "Nenhuma venda HB Créditos neste mês para este mercado."
         : null);
   } catch {
     bloqueioPagamento = "Módulo fiscal indisponível — aplique a migration de NFs HB Créditos.";
   }
 
+  let totalExibirCents = totalCents;
+  let transacoesExibir = eligibleRecebiveis.length;
+
+  if (pendingSettlement) {
+    pagamentoAprovado = false;
+    totalExibirCents = Number(pendingSettlement.total_cents);
+    transacoesExibir = Number(pendingSettlement.transacoes_count);
+    bloqueioPagamento =
+      "Comprovante já enviado neste mês — aguardando o mercado confirmar no app. Não é necessário pagar de novo.";
+  }
+
+  if (!pendingSettlement && totalCents <= 0 && paymentTxIds.length > 0 && !bloqueioPagamento) {
+    const allSettled = transacoes
+      .filter((tx) => tx.tipo === "PAYMENT")
+      .every((tx) => tx.recebivelStatus === "SETTLED");
+    bloqueioPagamento = allSettled
+      ? "Este mês já foi liquidado para o mercado."
+      : "Não há recebíveis elegíveis neste mês — confira NFs conferidas e atualize o resumo.";
+  }
+
   return {
     partnerId,
     partnerNome: String(partnerRow.name),
-    mesReferencia,
+    mesReferencia: mesNorm,
     pixKey: readStoredField(partnerRow.pix_key as string | undefined),
     pixHolderName: readStoredField(partnerRow.pix_holder_name as string | undefined),
-    totalCents,
-    transacoesCount: eligibleRecebiveis.length,
+    totalCents: totalExibirCents,
+    transacoesCount: transacoesExibir,
     cooperados,
     fiscalResumo,
     pagamentoAprovado,
@@ -4379,7 +4484,8 @@ export async function registerPartnerSettlementPayment(
     relatorioHtml: string;
   }
 ): Promise<{ ok: boolean; error?: string; settlement?: ContaCoopSettlement }> {
-  const preview = await previewPartnerSettlement(supabase, params.cnpj, params.partnerId, params.mesReferencia);
+  const mesNorm = normalizeMesReferencia(params.mesReferencia);
+  const preview = await previewPartnerSettlement(supabase, params.cnpj, params.partnerId, mesNorm);
   if (!preview) return { ok: false, error: "Mercado não encontrado." };
   if (preview.totalCents <= 0) {
     return {
@@ -4400,19 +4506,14 @@ export async function registerPartnerSettlementPayment(
     .select("id")
     .eq("cooperative_cnpj", normalizeCnpj(params.cnpj))
     .eq("partner_id", params.partnerId)
-    .eq("mes_referencia", params.mesReferencia)
+    .eq("mes_referencia", mesNorm)
     .eq("status", "AWAITING_PARTNER")
     .maybeSingle();
   if (existing) return { ok: false, error: "Já existe um pagamento aguardando confirmação do mercado neste mês." };
 
   const settlementId = genId("settle");
   const now = new Date().toISOString();
-  const settlementTxs = await listSettlementTransactions(
-    supabase,
-    params.cnpj,
-    params.partnerId,
-    params.mesReferencia
-  );
+  const settlementTxs = await listSettlementTransactions(supabase, params.cnpj, params.partnerId, mesNorm);
   const liquidatableTxs = await resolveLiquidatableSettlementPayments(
     supabase,
     normalizeCnpj(params.cnpj),
@@ -4424,7 +4525,7 @@ export async function registerPartnerSettlementPayment(
     id: settlementId,
     cooperative_cnpj: normalizeCnpj(params.cnpj),
     partner_id: params.partnerId,
-    mes_referencia: params.mesReferencia,
+    mes_referencia: mesNorm,
     total_cents: preview.totalCents,
     transacoes_count: preview.transacoesCount,
     status: "AWAITING_PARTNER",

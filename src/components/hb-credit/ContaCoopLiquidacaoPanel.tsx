@@ -199,7 +199,12 @@ export function ContaCoopLiquidacaoPanel({
           </div>
           <div>
             <Label>Mês de referência</Label>
-            <Input className="mt-1" value={mesReferencia} onChange={(e) => setMesReferencia(e.target.value)} placeholder="2026-08" />
+            <input
+              type="month"
+              className="mt-1 w-full rounded-lg border px-3 py-2 text-sm"
+              value={mesReferencia}
+              onChange={(e) => setMesReferencia(e.target.value)}
+            />
           </div>
           <div className="flex items-end">
             <Button variant="secondary" className="w-full" onClick={() => void carregarPreview()} disabled={busy || !partnerId}>
