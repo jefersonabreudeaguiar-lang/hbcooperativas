@@ -16,6 +16,7 @@ import {
   limparInicioCardPersistidoFlex,
 } from "@/lib/cooperadoInicioCardPersistencia";
 import { APP_BUILD_VERSION } from "@/lib/appBuildVersion";
+import { cooperadoTemReciboAssinadoLocalSemPendenciaUi } from "@/lib/cooperado/cooperadoReciboAssinaturaLocalLatch";
 import { resolverCooperadoIdCanonico } from "@/services/cooperadoCloudService";
 import { getData, isAppDataWarm } from "@/services/dataStore";
 import { getUserCooperativaId } from "@/utils/cooperativa";
@@ -56,15 +57,24 @@ export function persistirInicioCardValorReceberCooperado(
     persistido: null,
   });
 
+  let display = resolved.display;
+  if (cooperadoTemReciboAssinadoLocalSemPendenciaUi(data, cooperadoId, cooperativaId)) {
+    display = {
+      ...display,
+      valorRecibo: 0,
+      aguardandoAssinatura: false,
+    };
+  }
+
   gravarInicioCardPersistidoFlex(cooperadoId, cooperativaId, {
     v: INICIO_CARD_STORAGE_VERSION,
     appBuild: APP_BUILD_VERSION,
     motorRevision: resolved.latch.motorRevision,
-    display: sanitizeInicioCardSnapshotParaPersistenciaBic(resolved.display),
+    display: sanitizeInicioCardSnapshotParaPersistenciaBic(display),
     savedAt: new Date().toISOString(),
   });
 
-  return cooperadoMotorTemObrigacaoReceber(resolved.display);
+  return cooperadoMotorTemObrigacaoReceber(display);
 }
 
 /** Leitura rápida só M6 — útil para debug; card usa política completa acima. */

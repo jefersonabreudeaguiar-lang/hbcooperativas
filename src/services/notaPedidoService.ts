@@ -26,7 +26,10 @@ import {
 } from "@/services/valoresAvulsosReceberService";
 import { round2 } from "@/utils/calculations";
 import { cooperadoUsarFluxoReciboAssinaturaNaUi } from "@/lib/bic/cooperadoBicCentralUi";
-import { pagamentoSuprimidoPorReciboAssinadoLocal } from "@/lib/cooperado/cooperadoReciboAssinaturaLocalLatch";
+import {
+  pagamentoSuprimidoPorReciboAssinadoLocal,
+  resolverCooperativaIdReciboLatch,
+} from "@/lib/cooperado/cooperadoReciboAssinaturaLocalLatch";
 import { isDivisaoEntregaHabilitada } from "@/lib/conferencia/divisaoEntregaPolicy";
 import { gerarReciboHtml, resumoReciboFromPagamento } from "@/utils/recibo";
 import { lancarPagamentoCooperadoNoCaixa } from "@/services/livroCaixaService";
@@ -2947,9 +2950,10 @@ function pagamentoAguardandoObsoletoPorNovaEntregaForaDoEscopo(
 export function getPagamentoAguardandoCooperado(
   data: AppData,
   cooperadoId: string,
-  mesReferencia?: string
+  mesReferencia?: string,
+  cooperativaId?: string
 ): PagamentoCooperadoRegistro | undefined {
-  const coopId = data.cooperados.find((c) => c.id === cooperadoId)?.cooperativaId;
+  const coopId = resolverCooperativaIdReciboLatch(data, cooperadoId, cooperativaId);
   const canonico = resolverCooperadoIdCanonico(data, cooperadoId, coopId);
   return data.pagamentosCooperado.find(
     (p) =>
@@ -2975,12 +2979,13 @@ function pagamentoElegivelPendenciaAssinaturaRecibo(p: PagamentoCooperadoRegistr
 export function getPagamentoPendenteAssinaturaReciboCooperado(
   data: AppData,
   cooperadoId: string,
-  mesReferencia?: string
+  mesReferencia?: string,
+  cooperativaId?: string
 ): PagamentoCooperadoRegistro | undefined {
   if (!cooperadoUsarFluxoReciboAssinaturaNaUi()) {
-    return getPagamentoAguardandoCooperado(data, cooperadoId, mesReferencia);
+    return getPagamentoAguardandoCooperado(data, cooperadoId, mesReferencia, cooperativaId);
   }
-  const coopId = data.cooperados.find((c) => c.id === cooperadoId)?.cooperativaId;
+  const coopId = resolverCooperativaIdReciboLatch(data, cooperadoId, cooperativaId);
   const canonico = resolverCooperadoIdCanonico(data, cooperadoId, coopId);
   return data.pagamentosCooperado.find(
     (p) =>

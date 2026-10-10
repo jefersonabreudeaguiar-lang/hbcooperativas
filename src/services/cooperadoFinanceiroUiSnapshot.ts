@@ -16,6 +16,7 @@ import {
   bicCentralValorAReceberAgregado,
 } from "@/services/bicLeituraCentralCooperado";
 import { cooperadoUsarFluxoReciboAssinaturaNaUi } from "@/lib/bic/cooperadoBicCentralUi";
+import { cooperadoTemReciboAssinadoLocalSemPendenciaUi } from "@/lib/cooperado/cooperadoReciboAssinaturaLocalLatch";
 import {
   cooperadoExibirValorReceberInicio,
   getResumoQuantoVouReceberCooperadoMotorLegado,
@@ -181,7 +182,13 @@ function buildLegadoSnapshot(
     financeiroSincronizando: opts?.financeiroSincronizando,
   });
 
-  const reciboAtivo = Boolean(inicio.aguardandoAssinatura && inicio.valorRecibo > 0);
+  const reciboAssinadoLocal = cooperadoTemReciboAssinadoLocalSemPendenciaUi(
+    data,
+    cooperadoId,
+    cooperativaId
+  );
+  const reciboAtivo =
+    !reciboAssinadoLocal && Boolean(inicio.aguardandoAssinatura && inicio.valorRecibo > 0);
   const revision = cooperadoMotorRevisionOperacional(data, cooperadoId, cooperativaId);
 
   return {
@@ -284,11 +291,14 @@ export function buildCooperadoFinanceiroUiSnapshot(
   const fichaPendenteAberta = (data.fichaCorrida ?? []).some(
     (f) => f.cooperadoId === coopadoId && f.status === "pendente"
   );
-  const aguardandoAssinaturaRecibo = Boolean(
-    cooperadoUsarFluxoReciboAssinaturaNaUi() &&
-      motorFicha.aguardandoAssinatura &&
-      motorFicha.valorRecibo > 0
-  );
+  const reciboAssinadoLocal = cooperadoTemReciboAssinadoLocalSemPendenciaUi(data, coopadoId, coopId);
+  const aguardandoAssinaturaRecibo =
+    !reciboAssinadoLocal &&
+    Boolean(
+      cooperadoUsarFluxoReciboAssinaturaNaUi() &&
+        motorFicha.aguardandoAssinatura &&
+        motorFicha.valorRecibo > 0
+    );
   const valorReciboPendente = aguardandoAssinaturaRecibo ? motorFicha.valorRecibo : 0;
   let valorAReceber = fichaPendenteAberta ? paridade.valorLiquido : 0;
   if (aguardandoAssinaturaRecibo && motorFicha.valor <= 0) {

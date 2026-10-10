@@ -21,7 +21,10 @@ import { APP_BUILD_VERSION } from "@/lib/appBuildVersion";
 import { isCooperadoUserSyncVisible } from "@/lib/performance/cooperadoColdStart";
 import { isCooperadoPwaMobileLeveUi } from "@/lib/cooperado/cooperadoPwaLeveUi";
 import { COOPERADO_PWA_LEVE_UI_SNAPSHOT_REFRESH_EVENT } from "@/lib/cooperado/cooperadoPwaLeveUi";
-import { cooperadoTemReciboAssinadoLocalSemPendenciaUi } from "@/lib/cooperado/cooperadoReciboAssinaturaLocalLatch";
+import {
+  cooperadoTemReciboAssinadoLocalSemPendenciaUi,
+  resolverCooperativaIdReciboLatch,
+} from "@/lib/cooperado/cooperadoReciboAssinaturaLocalLatch";
 import { lerInicioCardPersistidoResume } from "@/lib/cooperado/cooperadoPwaInstantResume";
 import { getData, isAppDataWarm } from "@/services/dataStore";
 
@@ -109,12 +112,21 @@ export function useCooperadoInicioValorReceberCardState(input: {
   const resolved = useMemo(() => {
     if (leituraSomentePwa) {
       const data = (isAppDataWarm() ? getData() : null) ?? input.data;
+      const cooperativaIdCard =
+        data && input.cooperadoId
+          ? resolverCooperativaIdReciboLatch(data, input.cooperadoId, input.cooperativaId)
+          : input.cooperativaId;
+      const reciboAssinadoLocal =
+        data &&
+        input.cooperadoId &&
+        cooperadoTemReciboAssinadoLocalSemPendenciaUi(data, input.cooperadoId, cooperativaIdCard);
+
       const fromMotor =
-        data && input.cooperadoId && input.cooperativaId
+        data && input.cooperadoId && cooperativaIdCard
           ? resolverCardInicioEndurecido({
               data,
               cooperadoId: input.cooperadoId,
-              cooperativaId: input.cooperativaId,
+              cooperativaId: cooperativaIdCard,
               apresentacaoConsolidada: true,
               carregandoFinanceiro: false,
               prevLatch: null,
@@ -122,12 +134,7 @@ export function useCooperadoInicioValorReceberCardState(input: {
             })
           : null;
 
-      if (
-        data &&
-        input.cooperadoId &&
-        input.cooperativaId &&
-        cooperadoTemReciboAssinadoLocalSemPendenciaUi(data, input.cooperadoId, input.cooperativaId)
-      ) {
+      if (reciboAssinadoLocal) {
         return {
           display: SNAPSHOT_VAZIO,
           latch: {
@@ -140,7 +147,11 @@ export function useCooperadoInicioValorReceberCardState(input: {
         };
       }
 
-      if (fromMotor && cooperadoMotorTemObrigacaoReceber(fromMotor.display)) {
+      if (
+        fromMotor &&
+        cooperadoMotorTemObrigacaoReceber(fromMotor.display) &&
+        !reciboAssinadoLocal
+      ) {
         return { ...fromMotor, gravarPersistencia: false };
       }
 
@@ -156,9 +167,9 @@ export function useCooperadoInicioValorReceberCardState(input: {
         !cooperadoMotorTemObrigacaoReceber(fromMotor.display) &&
         data &&
         input.cooperadoId &&
-        input.cooperativaId &&
-        (cooperadoTemReciboAssinadoLocalSemPendenciaUi(data, input.cooperadoId, input.cooperativaId) ||
-          cooperadoBicAutorizaZerarCardInicio(data, input.cooperadoId, input.cooperativaId, {
+        cooperativaIdCard &&
+        (reciboAssinadoLocal ||
+          cooperadoBicAutorizaZerarCardInicio(data, input.cooperadoId, cooperativaIdCard, {
             tinhaValorExibido: persistidoComObrigacao,
           }));
 
@@ -168,7 +179,8 @@ export function useCooperadoInicioValorReceberCardState(input: {
 
       if (
         persistidoMesmoBuild?.display &&
-        cooperadoMotorTemObrigacaoReceber(persistidoMesmoBuild.display)
+        cooperadoMotorTemObrigacaoReceber(persistidoMesmoBuild.display) &&
+        !reciboAssinadoLocal
       ) {
         const display = persistidoMesmoBuild.display;
         return {

@@ -562,8 +562,15 @@ export function getConsolidadoFinanceiroCooperadoMotorLegado(
   );
   const coopId = cooperativaId ?? data.cooperados.find((c) => c.id === cooperadoId)?.cooperativaId;
   const mesReferenciaPrincipal = getMesPrincipalQuantoVouReceber(data, cooperadoId, cooperativaId);
-  const pagamentoPendenteAssinatura = getPagamentoPendenteAssinaturaReciboCooperado(data, cooperadoId);
-  const pagamentoAguardando = pagamentoPendenteAssinatura ?? getPagamentoAguardandoCooperado(data, cooperadoId);
+  const pagamentoPendenteAssinatura = getPagamentoPendenteAssinaturaReciboCooperado(
+    data,
+    cooperadoId,
+    undefined,
+    coopId
+  );
+  const pagamentoAguardando =
+    pagamentoPendenteAssinatura ??
+    getPagamentoAguardandoCooperado(data, cooperadoId, undefined, coopId);
   const mesesPixAguardando = pagamentoAguardando ? getMesesReferenciaPagamento(pagamentoAguardando) : [];
   const aguardandoAssinatura =
     pagamentoPendenteAssinatura?.status === "confirmado"
@@ -729,7 +736,12 @@ export function getValorQuantoVouReceberMotorLegado(
   const mes =
     meses[meses.length - 1] ??
     getMesQuantoVouReceber(data, cooperadoId, cooperativaId);
-  const aguardando = getPagamentoPendenteAssinaturaReciboCooperado(data, cooperadoId);
+  const aguardando = getPagamentoPendenteAssinaturaReciboCooperado(
+    data,
+    cooperadoId,
+    undefined,
+    cooperativaId
+  );
   const aguardandoRecibo = Boolean(consolidado.aguardandoAssinatura && aguardando);
   const valorRecibo = aguardandoRecibo ? round2(aguardando!.valorLiquido) : 0;
   const valorExibir = aguardandoRecibo && valorRecibo > 0 ? 0 : consolidado.valorLiquido;

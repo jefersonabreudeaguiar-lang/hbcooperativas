@@ -20,6 +20,7 @@ import {
 } from "@/services/bicLeituraCentralDominios";
 import { getComunicadosInicioCooperado } from "@/services/comunicadoService";
 import { getPagamentoPendenteAssinaturaReciboCooperado } from "@/services/notaPedidoService";
+import { cooperadoTemReciboAssinadoLocalSemPendenciaUi } from "@/lib/cooperado/cooperadoReciboAssinaturaLocalLatch";
 import { listarResolvidosInicioCooperado } from "@/services/cooperadoInicioResolvidosService";
 import { cooperadoTemAppInstalado, isAppStandalone } from "@/services/cooperadoAppInstallService";
 import { cooperadoUsaAssinaturaCadastroPilot } from "@/config/assinaturaCadastroPilot";
@@ -86,8 +87,24 @@ export function buildCooperadoPwaInicioDashboardView(
   let valorReceber = bicCentralResolveInicioParaExibicao(data, cooperadoId, coopId, {
     apresentacaoConsolidada,
   });
-  const reciboPendente = getPagamentoPendenteAssinaturaReciboCooperado(data, cooperadoId);
-  if (!reciboPendente && valorReceber.valor <= 0) {
+  const reciboPendente = getPagamentoPendenteAssinaturaReciboCooperado(
+    data,
+    cooperadoId,
+    undefined,
+    coopId
+  );
+  if (
+    cooperadoTemReciboAssinadoLocalSemPendenciaUi(data, cooperadoId, coopId) &&
+    valorReceber.valor <= 0
+  ) {
+    valorReceber = {
+      ...valorReceber,
+      exibir: false,
+      valor: 0,
+      valorRecibo: 0,
+      aguardandoAssinatura: false,
+    };
+  } else if (!reciboPendente && valorReceber.valor <= 0) {
     valorReceber = {
       ...valorReceber,
       exibir: false,

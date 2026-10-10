@@ -23,6 +23,7 @@ import {
 } from "@/services/cooperadoFinanceiroUiSnapshot";
 import { isBicCentralReadAuthorityEnabled } from "@/lib/bic/bicCentralReadAuthority";
 import { cooperadoUsarFluxoReciboAssinaturaNaUi } from "@/lib/bic/cooperadoBicCentralUi";
+import { cooperadoTemReciboAssinadoLocalSemPendenciaUi } from "@/lib/cooperado/cooperadoReciboAssinaturaLocalLatch";
 import { formatMesReferencia, getCurrentMesReferencia } from "@/utils/format";
 
 /** Snapshot de localStorage contém fluxo legado “assinar recibo” (não é autoridade BIC). */
@@ -184,12 +185,20 @@ export function resolverInicioCardMotorFromAppData(
           ? 0
           : paridade.valorLiquido;
 
-  return sanitizeInicioCardSnapshotFluxoBic({
+  const motor = sanitizeInicioCardSnapshotFluxoBic({
     mesLabel,
     valor: valorExibir,
     valorRecibo: fluxoPix.valorRecibo,
     aguardandoAssinatura: fluxoPix.aguardandoAssinatura,
   });
+  if (cooperadoTemReciboAssinadoLocalSemPendenciaUi(data, cooperadoId, cooperativaId)) {
+    return sanitizeInicioCardSnapshotFluxoBic({
+      ...motor,
+      valorRecibo: 0,
+      aguardandoAssinatura: false,
+    });
+  }
+  return motor;
 }
 
 /** Card início — motor operacional da ficha (ignora máscara H203 / snapshot BIC zerado). */
