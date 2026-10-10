@@ -45,8 +45,15 @@ export function persistirCooperadoPwaMessengerCaches(
   if (!user || user.role !== "cooperado" || !isCooperadoPwaMessengerMode()) return;
   persistirInicioCardCooperadoNotificarPwaLeve(user);
   persistirCooperadoPwaInicioDashboardSnapshotFromUser(user, true);
-  persistirCooperadoPwaEntregasResumosSnapshotFromUser(user);
-  scheduleMessengerCacheMaterialization(user);
+  const runEntregasSnapshotPesado = () => {
+    persistirCooperadoPwaEntregasResumosSnapshotFromUser(user);
+    scheduleMessengerCacheMaterialization(user);
+  };
+  if (typeof requestIdleCallback !== "undefined") {
+    requestIdleCallback(runEntregasSnapshotPesado, { timeout: 3_500 });
+  } else {
+    window.setTimeout(runEntregasSnapshotPesado, 0);
+  }
   void import("@/services/hbCreditAccountPersistenciaService").then(({ persistirHbCreditAccountCooperado }) => {
     void persistirHbCreditAccountCooperado(user);
   });

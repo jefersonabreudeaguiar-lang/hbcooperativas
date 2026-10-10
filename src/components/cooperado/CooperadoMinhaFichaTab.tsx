@@ -29,6 +29,7 @@ import { leituraFinanceiraParidadeCooperadoMesReferencia } from "@/lib/cooperado
 import type { ResumoMesEntregasCooperado } from "@/services/cooperadoEntregasService";
 import {
   getPagamentoRegistradoMesParaHistorico,
+  listarMesesComPagamentoRegistradoCooperado,
   listarResumosFotosCooperado,
   listarResumosExtratoHistoricoCooperado,
   ordenarResumosExtratoHistoricoPorDataPagamento,
@@ -520,16 +521,26 @@ export const CooperadoMinhaFichaTab = memo(function CooperadoMinhaFichaTab({
   const abaExtratoAtiva = subAba === "extrato";
   const abaFotosAtiva = subAba === "fotos";
 
-  const data = useAppDataSnapshotForDomains(["financeiro", "notas"] as const);
+  const data = useAppDataSnapshotForDomains(
+    abaFotosAtiva ? (["notas"] as const) : (["financeiro", "notas"] as const)
+  );
 
   const trocarSubAba = (aba: "extrato" | "pagamentos" | "fotos") => {
     startTransition(() => setSubAba(aba));
   };
 
   const resumosHistoricoLive = useMemo(() => {
-    if (!data) return [];
+    if (!data || !abaPagamentosAtiva) return [];
     return listarResumosExtratoHistoricoCooperado(data, cooperadoId, cooperativaId);
-  }, [data, cooperadoId, cooperativaId]);
+  }, [data, cooperadoId, cooperativaId, abaPagamentosAtiva]);
+
+  const temHistoricoPixRegistrado = useMemo(() => {
+    if ((pagamentosRealizadosCache?.length ?? 0) > 0) return true;
+    if (!data) return false;
+    return (
+      listarMesesComPagamentoRegistradoCooperado(data, cooperadoId, cooperativaId).length > 0
+    );
+  }, [data, cooperadoId, cooperativaId, pagamentosRealizadosCache]);
 
   const resumosHistorico = useMemo(() => {
     const byMes = new Map<string, ResumoMesEntregasCooperado>();
@@ -591,11 +602,11 @@ export const CooperadoMinhaFichaTab = memo(function CooperadoMinhaFichaTab({
       aplicouAbaInicialRef.current = true;
       return;
     }
-    if (resumosHistorico.length > 0) {
+    if (temHistoricoPixRegistrado) {
       startTransition(() => setSubAba("pagamentos"));
       aplicouAbaInicialRef.current = true;
     }
-  }, [resumos.length, resumosHistorico.length]);
+  }, [resumos.length, temHistoricoPixRegistrado]);
 
   const resumoHistoricoAtivo = useMemo(
     () => resumosHistorico.find((r) => r.mesReferencia === mesHistoricoAtivo) ?? null,

@@ -568,10 +568,23 @@ export default function NotasPedidoCooperadoMain() {
       ? resolverCooperadoIdCanonico(data, cooperadoId, coopId)
       : undefined;
 
+  const refreshPwaEntregasIdleRef = useRef<number | null>(null);
   const refreshPwaEntregasResumosSnap = useCallback(() => {
     if (!entregasPwaLeve || !cooperadoCanonico || !coopId) return;
-    const built = persistirCooperadoPwaEntregasResumosSnapshot(cooperadoCanonico, coopId);
-    if (built) setPwaEntregasResumosSnap(built);
+    const run = () => {
+      refreshPwaEntregasIdleRef.current = null;
+      const built = persistirCooperadoPwaEntregasResumosSnapshot(cooperadoCanonico, coopId);
+      if (built) setPwaEntregasResumosSnap(built);
+    };
+    if (refreshPwaEntregasIdleRef.current != null && typeof cancelIdleCallback !== "undefined") {
+      cancelIdleCallback(refreshPwaEntregasIdleRef.current);
+      refreshPwaEntregasIdleRef.current = null;
+    }
+    if (typeof requestIdleCallback !== "undefined") {
+      refreshPwaEntregasIdleRef.current = requestIdleCallback(run, { timeout: 2_500 });
+      return;
+    }
+    run();
   }, [entregasPwaLeve, cooperadoCanonico, coopId]);
 
   useEffect(() => {
