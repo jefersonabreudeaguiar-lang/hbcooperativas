@@ -3,6 +3,7 @@
 import { useLayoutEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/modules/auth/AuthProvider";
+import { dismissCooperadoBootShell } from "@/lib/performance/cooperadoBootShell";
 
 /** Redireciona usuários já autenticados (login/cadastro). */
 export function GuestRoute({
@@ -17,6 +18,7 @@ export function GuestRoute({
   const router = useRouter();
 
   useLayoutEffect(() => {
+    dismissCooperadoBootShell();
     if (!loading && user && authenticatedRedirect) {
       router.replace(authenticatedRedirect);
     }

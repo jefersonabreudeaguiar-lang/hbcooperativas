@@ -20,6 +20,7 @@ import {
   ensureCooperadoAppDataEagerWarm,
   isCooperadoInstantResumeEnabled,
 } from "@/lib/performance/cooperadoColdStart";
+import { dismissCooperadoBootShell } from "@/lib/performance/cooperadoBootShell";
 import { isCooperadoPwaMessengerMode } from "@/lib/cooperado/cooperadoPwaMessengerMode";
 import {
   getSession,
@@ -114,6 +115,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
     refresh();
   }, [refresh]);
+
+  useLayoutEffect(() => {
+    if (!loading) dismissCooperadoBootShell();
+  }, [loading]);
 
   useEffect(() => {
     const warm = () => {
