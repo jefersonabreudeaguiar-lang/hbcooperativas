@@ -15,11 +15,16 @@ import { useAppData } from "@/hooks/useAppData";
 import { getUserCooperativaId, normalizeCnpj } from "@/utils/cooperativa";
 import {
   convertCreditCashbackToReceivable,
+  createCooperadoReceberIntent,
   fetchCreditAccount,
   fetchCreditLedger,
   requestCooperadoPinReset,
   setCreditFinancialPin,
 } from "@/services/creditApiService";
+import { isCooperadoTransferenciaCreditoEnabled } from "@/config/cooperadoTransferenciaCredito";
+import {
+  storeHbCreditCooperadoReceberDraft,
+} from "@/lib/hb-credit/hbCreditCooperadoReceberDraft";
 import { formatCentsBRL } from "@/modules/hb-credit/engine/money";
 import { round2 } from "@/utils/calculations";
 import { getData, updateData } from "@/services/dataStore";
@@ -54,7 +59,13 @@ import {
   lerHbCreditLedgerPersistido,
 } from "@/lib/hb-credit/hbCreditLedgerPersistencia";
 
-type Tab = "inicio" | "pagar" | "extrato";
+type Tab = "inicio" | "pagar" | "receber" | "extrato";
+
+function parseValorHbReais(raw: string): number {
+  const cleaned = raw.trim().replace(/\./g, "").replace(",", ".");
+  const n = Number(cleaned);
+  return Number.isFinite(n) ? n : NaN;
+}
 
 export default function MinhaContaCoopPage() {
   return (
@@ -98,6 +109,11 @@ function MinhaContaCoopContent() {
   /** Aux syncs (ficha) só após o primeiro fetchCreditAccount — limite vem da nuvem + poll (aba Limites do responsável). */
   const [auxSyncEnabled, setAuxSyncEnabled] = useState(false);
   const auxEntrySignaledRef = useRef(false);
+  const createReceberIdempotencyRef = useRef<string | null>(null);
+  const [valorReceberReais, setValorReceberReais] = useState("");
+  const [descricaoReceber, setDescricaoReceber] = useState("");
+
+  const transferenciaCooperadoAtiva = isCooperadoTransferenciaCreditoEnabled();
 
   const VALOR_RECEBER_SYNC_DEFER_MS = 1_500;
 
@@ -144,6 +160,18 @@ function MinhaContaCoopContent() {
     const coopId = user ? getUserCooperativaId(user, data) : undefined;
     return temCashbackHbCreditoPendenteMes(data, cooperadoId, mesReferenciaReceber, coopId);
   }, [data, cooperadoId, mesReferenciaReceber, user]);
+
+  const segmentTabs = useMemo(() => {
+    const tabs: { id: Tab; label: string }[] = [
+      { id: "inicio", label: "Início" },
+      { id: "pagar", label: "Pagar" },
+    ];
+    if (transferenciaCooperadoAtiva) {
+      tabs.push({ id: "receber", label: "Receber" });
+    }
+    tabs.push({ id: "extrato", label: "Extrato" });
+    return tabs;
+  }, [transferenciaCooperadoAtiva]);
 
   useSyncContaCoopValorReceberPilot(
     contaCoopValorSync ? { ...contaCoopValorSync, initialDelayMs: VALOR_RECEBER_SYNC_DEFER_MS } : undefined
@@ -423,12 +451,58 @@ function MinhaContaCoopContent() {
     cashback > 0 && !cashbackJaNaFicha && Boolean(mesReferenciaReceber) && !isOffline && !busy;
   const pagamentoBloqueado = !hasPin || account?.bloqueado || isOffline;
 
+  const criarCobrancaCooperado = async () => {
+    if (!cnpj || !hbApiCooperadoId) return;
+    const amount = parseValorHbReais(valorReceberReais);
+    if (!Number.isFinite(amount) || amount <= 0) {
+      setError("Informe um valor válido.");
+      return;
+    }
+    setBusy(true);
+    setError("");
+    try {
+      const idempotencyKey =
+        createReceberIdempotencyRef.current ??
+        (createReceberIdempotencyRef.current =
+          typeof crypto !== "undefined" && crypto.randomUUID
+            ? `cr_${crypto.randomUUID()}`
+            : `cr_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`);
+      const res = await createCooperadoReceberIntent(amount, descricaoReceber.trim() || undefined, {
+        idempotencyKey,
+        receiverNome: cooperadoNome,
+        cnpj,
+        cooperadoId: hbApiCooperadoId,
+      });
+      createReceberIdempotencyRef.current = null;
+      if (res.qrPayload && res.intent) {
+        storeHbCreditCooperadoReceberDraft({
+          v: 1,
+          qrPayload: res.qrPayload,
+          amountCents: res.intent.amountCents,
+          descricao: res.intent.descricao,
+          intentId: res.intent.id,
+          expiresAt: res.intent.expiresAt,
+          receiverNome: cooperadoNome,
+        });
+        setValorReceberReais("");
+        setDescricaoReceber("");
+        router.push("/minha-conta-coop/receber");
+      }
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Erro ao criar cobrança.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
   return (
     <div className="mx-auto max-w-lg space-y-5 pb-8">
       <header className="space-y-1">
         <p className="text-xs font-semibold uppercase tracking-wider text-green-700">HB Créditos</p>
-        <h1 className="text-2xl font-bold text-gray-900">Pagar nas lojas parceiras</h1>
-        <p className="text-sm text-gray-500">Escaneie o QR do mercado e confirme com seu PIN</p>
+        <h1 className="text-2xl font-bold text-gray-900">Conta cooperado</h1>
+        <p className="text-sm text-gray-500">
+          Pague no mercado parceiro{transferenciaCooperadoAtiva ? " ou receba de outro cooperado" : ""} com QR e PIN
+        </p>
       </header>
 
       {error && <AlertBanner variant="error">{error}</AlertBanner>}
@@ -491,15 +565,7 @@ function MinhaContaCoopContent() {
         )}
       </div>
 
-      <ContaCoopSegmentTabs
-        tabs={[
-          { id: "inicio", label: "Início" },
-          { id: "pagar", label: "Pagar" },
-          { id: "extrato", label: "Extrato" },
-        ]}
-        active={tab}
-        onChange={handleTabChange}
-      />
+      <ContaCoopSegmentTabs tabs={segmentTabs} active={tab} onChange={handleTabChange} />
 
       {tabEverOpened.inicio && (
         <div className={cn("space-y-4", tabPanelHidden("inicio"))}>
@@ -553,6 +619,50 @@ function MinhaContaCoopContent() {
               )}
             </>
           )}
+        </div>
+      )}
+
+      {transferenciaCooperadoAtiva && tabEverOpened.receber && (
+        <div className={cn("space-y-4", tabPanelHidden("receber"))}>
+          <Card className="space-y-4 !p-5">
+            <div>
+              <h3 className="font-semibold text-gray-900">Receber de outro cooperado</h3>
+              <p className="mt-1 text-sm text-gray-600">
+                Gere um QR para outro cooperado transferir saldo HB para você.
+              </p>
+            </div>
+            <div>
+              <Label htmlFor="coop-receber-valor">Valor (R$)</Label>
+              <Input
+                id="coop-receber-valor"
+                inputMode="decimal"
+                placeholder="0,00"
+                value={valorReceberReais}
+                onChange={(e) => setValorReceberReais(e.target.value)}
+                className="mt-1 text-lg"
+                disabled={busy || isOffline || account?.bloqueado}
+              />
+            </div>
+            <div>
+              <Label htmlFor="coop-receber-descricao">Descrição (opcional)</Label>
+              <Input
+                id="coop-receber-descricao"
+                value={descricaoReceber}
+                onChange={(e) => setDescricaoReceber(e.target.value)}
+                maxLength={120}
+                className="mt-1"
+                disabled={busy || isOffline || account?.bloqueado}
+              />
+            </div>
+            <Button
+              className="w-full"
+              size="lg"
+              onClick={() => void criarCobrancaCooperado()}
+              disabled={busy || isOffline || account?.bloqueado || !valorReceberReais.trim()}
+            >
+              Gerar QR para receber
+            </Button>
+          </Card>
         </div>
       )}
 

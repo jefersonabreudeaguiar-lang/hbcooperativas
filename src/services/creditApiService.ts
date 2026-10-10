@@ -20,6 +20,7 @@ import { notifyHbCreditLimiteSynced } from "@/lib/hb-credit/hbCreditLimiteSyncEv
 import { bicCentralMesPrincipalQuantoVouReceber } from "@/services/bicLeituraCentralCooperado";
 import { getData } from "@/services/dataStore";
 import { resolverCooperadoIdCanonico } from "@/services/cooperadoCloudService";
+import { isCooperadoTransferIntentId } from "@/config/cooperadoTransferenciaCredito";
 
 async function parseJson<T>(res: Response): Promise<T & { error?: string }> {
   const raw = await res.text();
@@ -318,6 +319,7 @@ export type AuthorizeCreditPaymentResult = {
   financeiroConfirmado?: boolean;
   projecaoPendente?: boolean;
   projecaoAReceber?: HbAuthorizeProjecaoAReceberResult;
+  cooperadoTransfer?: boolean;
   /** Propagação AppData pós-compra HB — não altera validade da autorização. */
   syncContaCoop?: "ok" | "pending";
   syncContaCoopError?: string;
@@ -363,6 +365,9 @@ export async function authorizeCreditPayment(input: {
 
   notifyHbCreditLimiteSynced({ immediate: true });
 
+  const isCooperadoTransfer =
+    Boolean(data.cooperadoTransfer) || isCooperadoTransferIntentId(input.intentId);
+
   const local = getData();
   const coopId =
     input.cooperativaId ??
@@ -370,6 +375,14 @@ export async function authorizeCreditPayment(input: {
 
   let syncContaCoop: AuthorizeCreditPaymentResult["syncContaCoop"];
   let syncContaCoopError: string | undefined;
+
+  if (isCooperadoTransfer) {
+    return {
+      ...data,
+      cooperadoTransfer: true,
+      syncContaCoop: "ok",
+    };
+  }
 
   if (coopId && input.cnpj) {
     syncContaCoop = "pending";
@@ -452,6 +465,70 @@ export async function cancelCreditIntent(intentId: string) {
   });
   const data = await parseJson<{ ok?: boolean; error?: string }>(res);
   if (!res.ok || !data.ok) throw new Error(data.error ?? "Erro ao cancelar.");
+  return data;
+}
+
+export type CooperadoReceberIntent = {
+  id: string;
+  amountCents: number;
+  descricao?: string;
+  status: string;
+  expiresAt: string;
+  createdAt: string;
+};
+
+export async function createCooperadoReceberIntent(
+  amountReais: number,
+  descricao?: string,
+  opts?: { idempotencyKey?: string; receiverNome?: string; cnpj?: string; cooperadoId?: string }
+) {
+  const res = await secureApiFetch("/api/credit/cooperado-receber", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      action: "create",
+      amountReais,
+      descricao,
+      idempotencyKey: opts?.idempotencyKey?.trim() || undefined,
+      receiverNome: opts?.receiverNome,
+      cnpj: opts?.cnpj,
+      cooperadoId: opts?.cooperadoId,
+    }),
+  });
+  const data = await parseJson<{
+    ok?: boolean;
+    error?: string;
+    intent?: CooperadoReceberIntent;
+    qrPayload?: string;
+  }>(res);
+  if (!res.ok || !data.ok) throw new Error(data.error ?? "Erro ao criar cobrança.");
+  return data;
+}
+
+export async function cancelCooperadoReceberIntent(intentId: string) {
+  const res = await secureApiFetch("/api/credit/cooperado-receber", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ action: "cancel", intentId }),
+  });
+  const data = await parseJson<{ ok?: boolean; error?: string }>(res);
+  if (!res.ok || !data.ok) throw new Error(data.error ?? "Erro ao cancelar.");
+  return data;
+}
+
+export async function pollCooperadoReceberPayment(
+  intentId: string,
+  opts?: { lite?: boolean; full?: boolean }
+): Promise<CreditIntentPaymentPoll> {
+  const params = new URLSearchParams({ intentId });
+  if (opts?.full) {
+    params.delete("lite");
+  } else {
+    params.set("lite", "1");
+  }
+  const res = await secureApiFetch(`/api/credit/cooperado-receber?${params.toString()}`);
+  const data = await parseJson<CreditIntentPaymentPoll & { ok?: boolean; error?: string }>(res);
+  if (!res.ok || !data.ok) throw new Error(data.error ?? "Erro ao consultar cobrança.");
   return data;
 }
 

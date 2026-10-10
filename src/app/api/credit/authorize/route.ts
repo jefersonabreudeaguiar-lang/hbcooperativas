@@ -5,6 +5,8 @@ import { authorizePayment, parseQrPayload, prepareHbCreditPaymentAuthorize } fro
 import { requireCreditApi, requireCreditCnpj, resolveCreditPaymentCooperadoId } from "@/lib/security/creditGuard";
 import { normalizeCnpj } from "@/utils/cooperativa";
 import { FINANCIAL_PIN_MIN_LENGTH } from "@/modules/hb-credit/config";
+import { isCooperadoTransferIntentId } from "@/config/cooperadoTransferenciaCredito";
+import { authorizeCooperadoTransferPayment } from "@/lib/supabase/cooperadoTransferenciaCreditoStorage";
 
 /** Autorização HB — RPC + PIN; precisa de folga acima do default serverless em sync pesado. */
 export const maxDuration = 60;
@@ -47,6 +49,27 @@ export async function POST(request: Request) {
   const prepare = await prepareHbCreditPaymentAuthorize(gate.ctx.supabase, cnpj, cooperadoId, actorId);
   if (!prepare.ok) {
     return NextResponse.json({ error: prepare.error, code: prepare.code ?? "HB_LIMIT_PREPARE_FAILED" }, { status: 503 });
+  }
+
+  if (isCooperadoTransferIntentId(intentId)) {
+    const result = await authorizeCooperadoTransferPayment(gate.ctx.supabase, {
+      intentId,
+      nonce,
+      payerCooperadoId: cooperadoId,
+      cooperativeCnpj: cnpj,
+      idempotencyKey,
+      pin,
+      actorUserId: gate.ctx.session?.sub ?? cooperadoId,
+    });
+    if (!result.ok) {
+      return NextResponse.json({ error: result.error, code: result.code }, { status: 400 });
+    }
+    return NextResponse.json({
+      ...result,
+      ok: true,
+      financeiroConfirmado: true,
+      cooperadoTransfer: true,
+    });
   }
 
   const result = await authorizePayment(gate.ctx.supabase, {

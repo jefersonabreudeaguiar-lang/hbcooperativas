@@ -17,6 +17,11 @@ import {
 import { normalizeCnpj } from "@/utils/cooperativa";
 import { reaisToCents } from "@/modules/hb-credit/engine/money";
 import { INTENT_MAX_CENTS } from "@/modules/hb-credit/config";
+import { isCooperadoTransferIntentId } from "@/config/cooperadoTransferenciaCredito";
+import {
+  resolveCooperadoNomeForTransfer,
+  validateCooperadoTransferForPayer,
+} from "@/lib/supabase/cooperadoTransferenciaCreditoStorage";
 
 export async function GET(request: Request) {
   const gate = await requireCreditApi(request);
@@ -86,6 +91,40 @@ export async function POST(request: Request) {
       resolved.cooperadoId,
       actorId
     ).catch(() => {});
+
+    if (isCooperadoTransferIntentId(parsed.intentId)) {
+      const { data: intentRow } = await gate.ctx.supabase
+        .from("hb_credit_cooperado_transfer_intents")
+        .select("receiver_cooperado_id")
+        .eq("id", parsed.intentId)
+        .maybeSingle();
+      const receiverId = intentRow ? String(intentRow.receiver_cooperado_id) : "";
+      const nome = receiverId
+        ? await resolveCooperadoNomeForTransfer(gate.ctx.supabase, cnpj, receiverId)
+        : "Cooperado";
+
+      const transferResult = await validateCooperadoTransferForPayer(gate.ctx.supabase, {
+        intentId: parsed.intentId,
+        nonce: parsed.nonce,
+        payerCooperadoId: resolved.cooperadoId,
+        cooperativeCnpj: cnpj,
+        receiverNome: nome,
+      });
+      if (!transferResult.ok) {
+        return NextResponse.json(
+          { ok: false, error: transferResult.error, code: transferResult.code },
+          { status: 400 }
+        );
+      }
+      return NextResponse.json({
+        ok: true,
+        valid: true,
+        intent: transferResult.intent,
+        parceiroNome: transferResult.parceiroNome,
+        limite: transferResult.limite,
+        cooperadoTransfer: true,
+      });
+    }
 
     const result = await validateIntentForCooperado(
       gate.ctx.supabase,

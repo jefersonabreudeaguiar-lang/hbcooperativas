@@ -2,7 +2,8 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, CheckCircle2, Loader2, Store } from "lucide-react";
+import { ArrowLeft, CheckCircle2, Loader2, Store, Users } from "lucide-react";
+import { isCooperadoTransferIntentId } from "@/config/cooperadoTransferenciaCredito";
 import { CreditFeatureGate } from "@/components/hb-credit/CreditFeatureGate";
 import { CloudSessionGate } from "@/components/hb-credit/CloudSessionGate";
 import { HbCreditPinDotsInput } from "@/components/hb-credit/HbCreditPinDotsInput";
@@ -167,13 +168,14 @@ function HbCreditPagarContent() {
 
   const limite = draft?.limite;
   const intent = draft?.intent;
+  const pagamentoCooperado = intent ? isCooperadoTransferIntentId(intent.id) : false;
   const saldoDisponivel = limite?.valorDisponivelCents ?? 0;
   const cashbackAvail = limite?.cashbackDisponivelCents ?? 0;
   const useCashbackOnPay = useMemo(() => {
-    if (!limite || !intent) return false;
+    if (!limite || !intent || pagamentoCooperado) return false;
     if (canAffordHbPaymentWithLimite(limite, intent.amountCents, false)) return false;
     return canAffordHbPaymentWithLimite(limite, intent.amountCents, true);
-  }, [limite, intent]);
+  }, [limite, intent, pagamentoCooperado]);
   const debito = intent
     ? hbCreditDebitFromGrossCents(intent.amountCents, useCashbackOnPay, cashbackAvail)
     : 0;
@@ -204,7 +206,7 @@ function HbCreditPagarContent() {
         nonce: intent.nonce,
         pin: payPin,
         idempotencyKey: `pay:${intent.id}:${hbApiCooperadoId}`,
-        useCashback: useCashbackOnPay,
+        useCashback: pagamentoCooperado ? false : useCashbackOnPay,
       });
 
       if (typeof res.disponivelAposCents === "number") {
@@ -313,7 +315,11 @@ function HbCreditPagarContent() {
         <p className="text-sm text-gray-600">Você está pagando</p>
         <div className="mt-2 flex items-start gap-3">
           <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-emerald-600 shadow-sm">
-            <Store size={24} className="text-white" />
+            {pagamentoCooperado ? (
+              <Users size={24} className="text-white" />
+            ) : (
+              <Store size={24} className="text-white" />
+            )}
           </span>
           <div className="min-w-0">
             <p className="text-lg font-semibold leading-snug text-gray-900">{draft.parceiroNome}</p>
