@@ -210,7 +210,13 @@ export async function createCooperadoTransferIntent(
     .single();
 
   if (error || !data) {
-    throw new Error(error?.message ?? "Não foi possível criar a cobrança.");
+    const raw = error?.message ?? "";
+    if (/could not find the table|relation.*does not exist|hb_credit_cooperado_transfer_intents/i.test(raw)) {
+      throw new Error(
+        "Receber entre cooperados ainda não está ativo na nuvem. A cooperativa precisa aplicar a migration HB (tabela de transferência)."
+      );
+    }
+    throw new Error(raw || "Não foi possível criar a cobrança.");
   }
 
   const intent = mapRow(data as Record<string, unknown>, input.receiverNome);
