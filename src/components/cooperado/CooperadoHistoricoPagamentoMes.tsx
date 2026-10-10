@@ -21,6 +21,8 @@ type Props = {
   /** Cooperado: PIX já enviado, falta assinar recibo nesta aba do mês. */
   aguardandoAssinatura?: boolean;
   onAssinarRecibo?: () => void;
+  /** Lista completa de compras HB (aba Pagamentos realizados). */
+  hbDetalhado?: boolean;
 };
 
 export function CooperadoHistoricoPagamentoMes({
@@ -34,6 +36,7 @@ export function CooperadoHistoricoPagamentoMes({
   detalheEntregas,
   aguardandoAssinatura,
   onAssinarRecibo,
+  hbDetalhado = false,
 }: Props) {
   const resumo = resumoFromPagamento(pagamento);
   const mesesPg = getMesesReferenciaPagamento(pagamento);
@@ -115,7 +118,7 @@ export function CooperadoHistoricoPagamentoMes({
             mesReferencia={mesReferencia}
             valorEntregas={resumo.valorEntregas}
             descontosExtras={resumo.descontosExtras}
-            variant="cooperado"
+            variant={hbDetalhado ? "default" : "cooperado"}
             somenteMesReferencia
           />
         </div>

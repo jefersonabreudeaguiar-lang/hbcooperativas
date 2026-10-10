@@ -43,6 +43,7 @@ import { formatCurrency, formatDate, formatMesReferencia } from "@/utils/format"
 import { cn } from "@/utils/format";
 import { valorPendenteRecebimentoFichaCooperado } from "@/services/cooperadoFichaTimelineService";
 import { baixarRecibo, nomeArquivoRecibo } from "@/utils/recibo";
+import { CooperadoPagamentoMesView } from "@/components/cooperado/CooperadoPagamentoMesView";
 
 export type ModoFichaExtrato = "cooperado" | "responsavel";
 
@@ -659,7 +660,8 @@ export const CooperadoMinhaFichaTab = memo(function CooperadoMinhaFichaTab({
           {resumosHistorico.length > 0 ? (
             <>
               <p className="text-sm text-gray-600">
-                Resumo de cada mês quitado — valores congelados no momento do pagamento.
+                Escolha o mês para ver o PIX recebido, descontos, compras HB Créditos, entregas e itens —
+                tudo como ficou no momento do pagamento.
               </p>
               <div className="flex flex-wrap gap-2 border-b border-gray-200 pb-2">
                 {resumosHistorico.map((r) => (
@@ -668,17 +670,32 @@ export const CooperadoMinhaFichaTab = memo(function CooperadoMinhaFichaTab({
                     type="button"
                     onClick={() => setMesHistoricoAtivo(r.mesReferencia)}
                     className={cn(
-                      "px-3 py-2 text-sm font-medium rounded-lg border transition-colors",
+                      "px-3 py-2 text-sm font-medium rounded-lg border transition-colors text-left",
                       mesHistoricoAtivo === r.mesReferencia
                         ? "border-green-600 bg-green-50 text-green-800"
                         : "border-transparent text-gray-600 hover:bg-gray-100"
                     )}
                   >
-                    {formatMesReferencia(r.mesReferencia)}
+                    <span className="block">{formatMesReferencia(r.mesReferencia)}</span>
+                    {r.valorRecebido > 0 && (
+                      <span className="block text-xs font-semibold text-emerald-700 mt-0.5">
+                        {formatCurrency(r.valorRecebido)}
+                      </span>
+                    )}
                   </button>
                 ))}
               </div>
-              {resumoHistoricoAtivo && (
+              {resumoHistoricoAtivo?.pagamentoConfirmado ? (
+                <CooperadoPagamentoMesView
+                  key={`hist-pg-${resumoHistoricoAtivo.mesReferencia}`}
+                  resumo={resumoHistoricoAtivo}
+                  cooperadoId={cooperadoId}
+                  cooperativaId={cooperativaId}
+                  nomeCooperado={nomeCooperado}
+                  getEscolaLabel={getEscolaLabel}
+                  onVerFotosMes={abrirFotosDoMes}
+                />
+              ) : resumoHistoricoAtivo ? (
                 <MesFichaAccordion
                   key={`hist-${resumoHistoricoAtivo.mesReferencia}`}
                   resumo={resumoHistoricoAtivo}
@@ -691,7 +708,7 @@ export const CooperadoMinhaFichaTab = memo(function CooperadoMinhaFichaTab({
                   onVerFotosMes={abrirFotosDoMes}
                   modo={modo}
                 />
-              )}
+              ) : null}
             </>
           ) : (
             <div className="text-center py-10 text-gray-500 bg-white rounded-2xl border border-dashed">
