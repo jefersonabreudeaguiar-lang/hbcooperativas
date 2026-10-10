@@ -6,7 +6,8 @@ import { isCooperadoPwaMobileLeveUi } from "@/lib/cooperado/cooperadoPwaLeveUi";
 import { isCooperadoPwaMessengerMode } from "@/lib/cooperado/cooperadoPwaMessengerMode";
 import { runClientReleaseShield } from "@/lib/pwa/clientReleaseShield";
 
-const MIN_GAP_MS = 8_000;
+/** Evita fetch de release a cada hop de aba durante uso intenso. */
+const MIN_GAP_MS = 45_000;
 
 /**
  * Keep-alive mantém o mesmo documento/JS — ao trocar aba, checa se já saiu release novo (sem polling).

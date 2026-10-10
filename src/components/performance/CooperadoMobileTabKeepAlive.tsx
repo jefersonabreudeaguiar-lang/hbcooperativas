@@ -6,6 +6,7 @@ import { isLowMemoryDevice } from "@/services/imagePipelineService";
 import { CooperadoTabPanelProvider } from "@/lib/performance/cooperadoTabPanelContext";
 import {
   COOPERADO_TAB_FINANCEIRO_HREF,
+  COOPERADO_TAB_LIGHT_HREFS,
   COOPERADO_TAB_PIN_HREF,
   getCooperadoMobileTabCacheLimit,
   isCooperadoBottomTabPath,
@@ -14,6 +15,7 @@ import {
   trimCooperadoTabCacheOrder,
 } from "@/lib/performance/cooperadoMobileTabKeepAlive";
 import {
+  COOPERADO_PINNED_TAB_HREFS,
   isCooperadoPinnedDualMountEnabled,
   setCooperadoPinnedPairCachesReady,
 } from "@/lib/performance/cooperadoPinnedTabFastPath";
@@ -138,17 +140,39 @@ export function CooperadoMobileTabKeepAlive({ pathname, children }: Props) {
     setCooperadoPinnedPairCachesReady(ready);
   }, [enabled, mobile, onTab, pathname, children, cacheVersion, effectivePath]);
 
-  const hrefsToRender = useMemo(() => {
-    if (onTab && enabled && mobile) {
-      return [...new Set([effectivePath, pathname, ...orderRef.current])];
-    }
-    return [...new Set([...orderRef.current, ...Object.keys(cacheRef.current)])];
-  }, [cacheVersion, onTab, enabled, mobile, pathname, effectivePath]);
-
   const pinnedDualReady =
     isCooperadoPinnedDualMountEnabled() &&
     Boolean(cacheRef.current[COOPERADO_TAB_PIN_HREF]) &&
     Boolean(cacheRef.current[COOPERADO_TAB_FINANCEIRO_HREF]);
+
+  const isLightTab = (href: string) =>
+    (COOPERADO_TAB_LIGHT_HREFS as readonly string[]).includes(href);
+
+  /**
+   * LRU guarda ReactNode em memória, mas só monta no DOM o necessário:
+   * - Notas: 1 painel (evita Início+Financeiro+Notas = 3 árvores pesadas).
+   * - Início↔Financeiro: dual-mount quando ambos em cache.
+   * - Preços: pode ficar montado junto (leve).
+   */
+  const hrefsMountedInDom = useMemo(() => {
+    if (!onTab || !enabled || !mobile) {
+      return [...new Set([...orderRef.current, ...Object.keys(cacheRef.current)])];
+    }
+    const active = effectivePath;
+    if (active === "/notas-pedido") {
+      return [active];
+    }
+    if (pinnedDualReady && isCooperadoPinnedDualMountEnabled() && isCooperadoTabPinned(active)) {
+      return [...COOPERADO_PINNED_TAB_HREFS];
+    }
+    const mounted = new Set<string>([active]);
+    if (isLightTab(active)) {
+      for (const h of orderRef.current) {
+        if (isLightTab(h)) mounted.add(h);
+      }
+    }
+    return [...mounted];
+  }, [cacheVersion, onTab, enabled, mobile, effectivePath, pinnedDualReady]);
 
   const resolvePanel = (
     href: string,
@@ -180,7 +204,7 @@ export function CooperadoMobileTabKeepAlive({ pathname, children }: Props) {
   const renderPanels = (activePath: string | null) => {
     if (!activePath) return null;
 
-    const nodes = hrefsToRender.map((href) => {
+    const nodes = hrefsMountedInDom.map((href) => {
       const active = activePath === href;
       const { panel, warm } = resolvePanel(href, activePath);
       if (!panel) return null;
@@ -214,7 +238,7 @@ export function CooperadoMobileTabKeepAlive({ pathname, children }: Props) {
   const panels = onTab ? renderPanels(effectivePath) : renderPanels(pathname);
   const hasActivePanel =
     onTab &&
-    hrefsToRender.some((href) => {
+    hrefsMountedInDom.some((href) => {
       if (href !== effectivePath) return false;
       const { panel } = resolvePanel(href, effectivePath);
       return panel != null;

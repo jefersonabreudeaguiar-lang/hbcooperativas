@@ -45,8 +45,12 @@ assert(panel.includes("data-cooperado-tab-panel"), "painéis por aba");
 assert(panel.includes("data-cooperado-tab-panel-warm"), "painel warm para paint instantâneo");
 assert(panel.includes("cooperadoTabPanelCache"), "cache não sobrescreve com loading.tsx");
 assert(
-  panel.includes("[content-visibility:hidden]") && panel.includes("hrefsToRender.map"),
-  "LRU mantém painéis visitados montados (inert)"
+  panel.includes("[content-visibility:hidden]") && panel.includes("hrefsMountedInDom.map"),
+  "keep-alive monta só painéis necessários no DOM (inert)"
+);
+assert(
+  panel.includes('active === "/notas-pedido"') && panel.includes("COOPERADO_PINNED_TAB_HREFS"),
+  "notas isolada; início+financeiro dual-mount"
 );
 assert(layout.includes("router.push(item.href)"), "cooperado força push na troca de aba");
 assert(
