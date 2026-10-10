@@ -25,6 +25,7 @@ import {
   SyncStatusChipLight,
   StaffSidebarSyncVersionLine,
 } from "@/components/sync/SyncStatusChip";
+import { CooperadoParidadeVersaoBanner } from "@/components/cooperado/CooperadoParidadeVersaoBanner";
 import { CooperadoSubtleUpdateNotice } from "@/components/cooperado/CooperadoSubtleUpdateNotice";
 import { CobrancaSaasPainel } from "@/components/payments/CobrancaSaasPainelWrapper";
 import { PainelResponsavelMobileBar } from "@/components/permissions/PainelResponsavelMobileBar";
@@ -512,6 +513,7 @@ function AppShellInner({ children }: { children: React.ReactNode }) {
   return (
     <div className="flex h-[100dvh] max-h-[100dvh] bg-gray-50 overflow-hidden">
       {navUser && <CooperadoSubtleUpdateNotice />}
+      {navUser && isCooperadoAppUser(navUser) && <CooperadoParidadeVersaoBanner />}
       <Sidebar />
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
         {!mercadoQrImmersive && <MobileNav />}

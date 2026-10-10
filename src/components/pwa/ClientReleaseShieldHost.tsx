@@ -13,6 +13,7 @@ import {
   bindClientReleaseShieldEvents,
   runClientReleaseShield,
 } from "@/lib/pwa/clientReleaseShield";
+import { materializeCooperadoPwaSnapshotsForCurrentBuild } from "@/lib/cooperado/cooperadoPwaSnapshotBuildPolicy";
 import { stripReleaseAlignQueryFromUrl } from "@/lib/pwa/clientRelease";
 
 /**
@@ -30,10 +31,14 @@ export function ClientReleaseShieldHost() {
     stripReleaseAlignQueryFromUrl();
 
     const kick = (trigger: string) => {
+      if (cooperadoExperience) materializeCooperadoPwaSnapshotsForCurrentBuild();
       void runClientReleaseShield(trigger);
     };
 
-    const startBoot = () => kick("boot");
+    const startBoot = () => {
+      if (cooperadoExperience) materializeCooperadoPwaSnapshotsForCurrentBuild();
+      kick("boot");
+    };
 
     if (
       cooperadoExperience &&

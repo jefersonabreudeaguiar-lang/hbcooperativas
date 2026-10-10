@@ -124,12 +124,18 @@ export function useCooperadoInicioValorReceberCardState(input: {
         return { ...fromMotor, gravarPersistencia: false };
       }
 
-      if (persistido?.display && cooperadoMotorTemObrigacaoReceber(persistido.display)) {
-        const display = persistido.display;
+      const persistidoMesmoBuild =
+        persistido?.appBuild === APP_BUILD_VERSION ? persistido : null;
+
+      if (
+        persistidoMesmoBuild?.display &&
+        cooperadoMotorTemObrigacaoReceber(persistidoMesmoBuild.display)
+      ) {
+        const display = persistidoMesmoBuild.display;
         return {
           display,
           latch: {
-            motorRevision: persistido.motorRevision,
+            motorRevision: persistidoMesmoBuild.motorRevision,
             display,
             hadPendencia: true,
           },
@@ -142,12 +148,12 @@ export function useCooperadoInicioValorReceberCardState(input: {
         return { ...fromMotor, gravarPersistencia: false };
       }
 
-      if (persistido?.display) {
-        const display = persistido.display;
+      if (persistidoMesmoBuild?.display) {
+        const display = persistidoMesmoBuild.display;
         return {
           display,
           latch: {
-            motorRevision: persistido.motorRevision,
+            motorRevision: persistidoMesmoBuild.motorRevision,
             display,
             hadPendencia: cooperadoMotorTemObrigacaoReceber(display),
           },
