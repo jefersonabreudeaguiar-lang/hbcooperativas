@@ -136,6 +136,12 @@ const PHASE_HB: Step[] = [
 const PHASE_PERF: Step[] = [
   {
     phase: "3",
+    title: "Staff mobile tab keep-alive contract",
+    cmd: "npm",
+    stepArgs: ["run", "test:staff-mobile-tab-keep-alive-u4"],
+  },
+  {
+    phase: "3",
     title: "Perf + fluxos notas/sync + build",
     cmd: "npm",
     stepArgs: ["run", "test:perf-fluxos"],

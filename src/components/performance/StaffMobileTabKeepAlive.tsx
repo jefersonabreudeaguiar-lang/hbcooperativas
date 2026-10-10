@@ -2,6 +2,7 @@
 
 import { useLayoutEffect, useRef, useState, useSyncExternalStore, useMemo, type ReactNode } from "react";
 import { cn } from "@/utils/format";
+import { useStaffEffectiveTabPath } from "@/hooks/useStaffEffectiveTabPath";
 import { isLowMemoryDevice } from "@/services/imagePipelineService";
 import { CooperadoTabPanelProvider } from "@/lib/performance/cooperadoTabPanelContext";
 import {
@@ -54,14 +55,19 @@ function publishStaffKeepAliveDomState(state: {
 export function StaffMobileTabKeepAlive({ pathname, children }: Props) {
   const mobile = useMobileViewport();
   const enabled = isStaffMobileTabKeepAliveEnabled();
+  const effectivePath = useStaffEffectiveTabPath(pathname);
   const cacheRef = useRef<Partial<Record<string, ReactNode>>>({});
+  const cachePathRef = useRef<Partial<Record<string, string>>>({});
   const orderRef = useRef<string[]>([]);
   const [cacheVersion, setCacheVersion] = useState(0);
   const lowMemory = isLowMemoryDevice();
   const cacheLimit = getStaffMobileTabCacheLimit(lowMemory);
 
-  const tabKey = staffBottomTabCacheKey(pathname);
-  const onTab = isStaffBottomTabPath(pathname);
+  const tabKey = staffBottomTabCacheKey(effectivePath);
+  const actualTabKey = staffBottomTabCacheKey(pathname);
+  const onTab = isStaffBottomTabPath(effectivePath);
+  const actualOnTab = isStaffBottomTabPath(pathname);
+  const optimisticTabSwitch = effectivePath !== pathname;
 
   useLayoutEffect(() => {
     publishStaffKeepAliveDomState({
@@ -72,25 +78,31 @@ export function StaffMobileTabKeepAlive({ pathname, children }: Props) {
       panelCount: orderRef.current.length,
     });
 
-    if (!enabled || !mobile || !onTab) return;
-    cacheRef.current[tabKey] = children;
-    const merged = [tabKey, ...orderRef.current.filter((h) => h !== tabKey)];
+    if (!enabled || !mobile || !actualOnTab) return;
+    cacheRef.current[actualTabKey] = children;
+    cachePathRef.current[actualTabKey] = pathname;
+    const merged = [actualTabKey, ...orderRef.current.filter((h) => h !== actualTabKey)];
     const prevOrder = orderRef.current;
-    const nextOrder = trimStaffTabCacheOrder(merged, tabKey, cacheLimit, lowMemory);
+    const nextOrder = trimStaffTabCacheOrder(merged, actualTabKey, cacheLimit, lowMemory);
     const orderChanged =
       nextOrder.length !== prevOrder.length || nextOrder.some((h, i) => h !== prevOrder[i]);
     orderRef.current = nextOrder;
     for (const href of prevOrder) {
-      if (!orderRef.current.includes(href)) delete cacheRef.current[href];
+      if (!orderRef.current.includes(href)) {
+        delete cacheRef.current[href];
+        delete cachePathRef.current[href];
+      }
     }
-    if (orderChanged || !prevOrder.includes(tabKey)) {
+    if (orderChanged || !prevOrder.includes(actualTabKey)) {
       setCacheVersion((n) => n + 1);
     }
-  }, [enabled, mobile, onTab, tabKey, pathname, children, cacheLimit, lowMemory]);
+  }, [enabled, mobile, onTab, tabKey, actualOnTab, actualTabKey, pathname, children, cacheLimit, lowMemory]);
 
   const panelForKey = (href: string, activeKey: string | null): ReactNode | undefined => {
-    if (onTab && href === tabKey) return children;
-    if (activeKey === href && onTab) return children;
+    if (optimisticTabSwitch && activeKey === href) {
+      return cachePathRef.current[href] === effectivePath ? cacheRef.current[href] : undefined;
+    }
+    if (actualOnTab && href === actualTabKey) return children;
     return cacheRef.current[href];
   };
 
@@ -100,10 +112,10 @@ export function StaffMobileTabKeepAlive({ pathname, children }: Props) {
 
   const hrefsToRender = useMemo(() => {
     if (onTab) {
-      return [...new Set([tabKey, ...orderRef.current])];
+      return [...new Set([tabKey, actualTabKey, ...orderRef.current])];
     }
     return [...new Set([...orderRef.current, ...Object.keys(cacheRef.current)])];
-  }, [cacheVersion, onTab, tabKey]);
+  }, [cacheVersion, onTab, tabKey, actualTabKey]);
 
   const renderPanels = (activeKey: string | null) =>
     hrefsToRender.map((href) => {
@@ -117,6 +129,9 @@ export function StaffMobileTabKeepAlive({ pathname, children }: Props) {
           aria-hidden={!active}
           inert={!active}
           data-staff-tab-panel={href}
+          data-staff-tab-panel-path={
+            actualOnTab && actualTabKey === href ? pathname : cachePathRef.current[href]
+          }
         >
           {panel}
         </div>

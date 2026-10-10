@@ -48,6 +48,8 @@ import {
 import { setCooperadoOptimisticTab } from "@/lib/performance/cooperadoOptimisticTabNavigation";
 import { useCooperadoEffectiveTabPath } from "@/hooks/useCooperadoEffectiveTabPath";
 import { staffTabWarmOnPointerDown } from "@/lib/performance/staffTabPointerWarmup";
+import { tryStaffOptimisticTabSwitch } from "@/lib/performance/staffOptimisticTabNavigation";
+import { useStaffEffectiveTabPath } from "@/hooks/useStaffEffectiveTabPath";
 import { isCooperadoBottomTabPath } from "@/lib/performance/cooperadoBottomTabRoutes";
 import { isStaffBottomTabPath } from "@/lib/performance/staffBottomTabRoutes";
 import { scheduleStaffNavPrefetchEarly } from "@/lib/performance/staffNavPrefetch";
@@ -235,6 +237,7 @@ export function MobileNav() {
   const [open, setOpen] = useState(false);
   const pathname = usePathname();
   const effectiveTabPath = useCooperadoEffectiveTabPath(pathname);
+  const effectiveStaffTabPath = useStaffEffectiveTabPath(pathname);
   const router = useRouter();
   const shell = useAppShellNavigationContext();
   const navUser = shell?.navUser;
@@ -264,7 +267,10 @@ export function MobileNav() {
       ? "cooperado"
       : "staff"
     : null;
-  useMobileBottomTabSwitchFeedback(effectiveTabPath, bottomTabProfile);
+  useMobileBottomTabSwitchFeedback(
+    bottomTabProfile === "cooperado" ? effectiveTabPath : effectiveStaffTabPath,
+    bottomTabProfile
+  );
 
   if (!shell || !navUser) {
     return (
@@ -303,7 +309,7 @@ export function MobileNav() {
       <div className="lg:hidden fixed bottom-0 left-0 right-0 z-40 flex flex-col safe-area-pb shadow-[0_-6px_24px_rgba(0,0,0,0.12)]">
         <nav className="flex bg-white border-t-2 border-green-200">
         {mobileItems.map((item) => {
-          const tabPath = isCooperadoAppUser(navUser!) ? effectiveTabPath : pathname;
+          const tabPath = isCooperadoAppUser(navUser!) ? effectiveTabPath : effectiveStaffTabPath;
           const active =
             tabPath === item.href || (item.href !== "/dashboard" && tabPath.startsWith(item.href));
           const isCooperadoNav = isCooperadoAppUser(navUser);
@@ -357,6 +363,7 @@ export function MobileNav() {
                 }
                 if (!active && mobileTabUx && !isCooperadoNav) {
                   e.preventDefault();
+                  tryStaffOptimisticTabSwitch(pathname, item.href);
                   startTransition(() => {
                     router.push(item.href);
                   });
@@ -449,10 +456,13 @@ function AppShellInner({ children }: { children: React.ReactNode }) {
       ? "staff"
       : "none";
   const cooperadoEffectiveTabPath = useCooperadoEffectiveTabPath(pathname);
+  const staffEffectiveTabPath = useStaffEffectiveTabPath(pathname);
   const scrollPathname =
     mobileTabScrollMode === "cooperado" && cooperadoKeepAliveShell
       ? cooperadoEffectiveTabPath
-      : pathname;
+      : mobileTabScrollMode === "staff" && staffKeepAliveShell
+        ? staffEffectiveTabPath
+        : pathname;
   const mainScrollRef = useMobileTabScrollRestore({
     pathname: scrollPathname,
     scrollMode: mobileTabScrollMode,
