@@ -24,11 +24,13 @@ import { normalizeCnpj } from "@/utils/cooperativa";
 import { leituraFinanceiraParidadeCooperadoMesReferencia } from "@/lib/cooperado/cooperadoFinanceiroParidadeUniversal";
 import type { ResumoMesEntregasCooperado } from "@/services/cooperadoEntregasService";
 import {
+  getPagamentoConfirmadoMes,
   listarResumosFotosCooperado,
   listarResumosExtratoHistoricoCooperado,
   somarTotalRecebidoConfirmadoCooperado,
   notaTemFotoEnviadaCooperado,
 } from "@/services/cooperadoEntregasService";
+import { APP_BUILD_VERSION } from "@/lib/appBuildVersion";
 import {
   agruparEntregasPorSemanaNoMes,
   agruparNotasEmEntregas,
@@ -489,6 +491,7 @@ export const CooperadoMinhaFichaTab = memo(function CooperadoMinhaFichaTab({
   const resumosHistorico = useMemo(() => {
     const byMes = new Map<string, ResumoMesEntregasCooperado>();
     for (const r of pagamentosRealizadosCache ?? []) {
+      if (!r.pagamentoConfirmado && r.valorRecebido <= 0) continue;
       byMes.set(r.mesReferencia, r);
     }
     for (const r of resumosHistoricoLive) {
@@ -542,6 +545,23 @@ export const CooperadoMinhaFichaTab = memo(function CooperadoMinhaFichaTab({
     () => resumosHistorico.find((r) => r.mesReferencia === mesHistoricoAtivo) ?? null,
     [resumosHistorico, mesHistoricoAtivo]
   );
+
+  const resumoHistoricoAtivoEnriquecido = useMemo(() => {
+    if (!resumoHistoricoAtivo || !data) return resumoHistoricoAtivo;
+    if (resumoHistoricoAtivo.pagamentoConfirmado) return resumoHistoricoAtivo;
+    const pagamento = getPagamentoConfirmadoMes(
+      data,
+      cooperadoId,
+      resumoHistoricoAtivo.mesReferencia,
+      cooperativaId
+    );
+    if (!pagamento) return resumoHistoricoAtivo;
+    return {
+      ...resumoHistoricoAtivo,
+      pagamentoConfirmado: pagamento,
+      valorRecebido: pagamento.valorLiquido ?? resumoHistoricoAtivo.valorRecebido,
+    };
+  }, [resumoHistoricoAtivo, data, cooperadoId, cooperativaId]);
 
   if (resumos.length === 0 && resumosHistorico.length === 0) {
     return (
@@ -615,20 +635,18 @@ export const CooperadoMinhaFichaTab = memo(function CooperadoMinhaFichaTab({
         >
           <BookOpen size={16} /> Extrato
         </button>
-        {modo === "cooperado" && (
-          <button
-            type="button"
-            onClick={() => setSubAba("pagamentos")}
-            className={cn(
-              "px-4 py-2.5 text-sm font-medium border-b-2 -mb-px flex items-center gap-2",
-              subAba === "pagamentos"
-                ? "border-green-600 text-green-700"
-                : "border-transparent text-gray-500 hover:text-gray-700"
-            )}
-          >
-            <CheckCircle2 size={16} /> Pagamentos realizados
-          </button>
-        )}
+        <button
+          type="button"
+          onClick={() => setSubAba("pagamentos")}
+          className={cn(
+            "px-4 py-2.5 text-sm font-medium border-b-2 -mb-px flex items-center gap-2",
+            subAba === "pagamentos"
+              ? "border-green-600 text-green-700"
+              : "border-transparent text-gray-500 hover:text-gray-700"
+          )}
+        >
+          <CheckCircle2 size={16} /> Pagamentos realizados
+        </button>
         <button
           type="button"
           onClick={() => setSubAba("fotos")}
@@ -655,7 +673,9 @@ export const CooperadoMinhaFichaTab = memo(function CooperadoMinhaFichaTab({
           <div className="rounded-2xl bg-gradient-to-br from-emerald-700 to-emerald-800 text-white p-5">
             <p className="text-emerald-100 text-sm">Total já recebido</p>
             <p className="text-3xl font-bold mt-1">{formatCurrency(totalRecebido)}</p>
-            <p className="text-emerald-100/90 text-xs mt-2">Pagamentos confirmados pela cooperativa</p>
+            <p className="text-emerald-100/90 text-xs mt-2">
+              Pagamentos confirmados pela cooperativa · painel build {APP_BUILD_VERSION}
+            </p>
           </div>
           {resumosHistorico.length > 0 ? (
             <>
@@ -685,20 +705,22 @@ export const CooperadoMinhaFichaTab = memo(function CooperadoMinhaFichaTab({
                   </button>
                 ))}
               </div>
-              {resumoHistoricoAtivo?.pagamentoConfirmado ? (
+              {resumoHistoricoAtivoEnriquecido &&
+              (resumoHistoricoAtivoEnriquecido.pagamentoConfirmado ||
+                resumoHistoricoAtivoEnriquecido.valorRecebido > 0) ? (
                 <CooperadoPagamentoMesView
-                  key={`hist-pg-${resumoHistoricoAtivo.mesReferencia}`}
-                  resumo={resumoHistoricoAtivo}
+                  key={`hist-pg-${resumoHistoricoAtivoEnriquecido.mesReferencia}`}
+                  resumo={resumoHistoricoAtivoEnriquecido}
                   cooperadoId={cooperadoId}
                   cooperativaId={cooperativaId}
                   nomeCooperado={nomeCooperado}
                   getEscolaLabel={getEscolaLabel}
                   onVerFotosMes={abrirFotosDoMes}
                 />
-              ) : resumoHistoricoAtivo ? (
+              ) : resumoHistoricoAtivoEnriquecido ? (
                 <MesFichaAccordion
-                  key={`hist-${resumoHistoricoAtivo.mesReferencia}`}
-                  resumo={resumoHistoricoAtivo}
+                  key={`hist-${resumoHistoricoAtivoEnriquecido.mesReferencia}`}
+                  resumo={resumoHistoricoAtivoEnriquecido}
                   cooperadoId={cooperadoId}
                   cooperativaId={cooperativaId}
                   nomeCooperado={nomeCooperado}

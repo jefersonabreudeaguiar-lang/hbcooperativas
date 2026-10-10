@@ -611,11 +611,12 @@ export async function approveFiscalNote(
 
   if (error || !updated) return { ok: false, error: "Erro ao conferir NF." };
 
-  await supabase
-    .from("hb_credit_receivables")
-    .update({ status: "ELIGIBLE", updated_at: now })
-    .eq("transaction_id", params.transactionId)
-    .in("status", ["OPEN", "BLOCKED_FOR_REVIEW"]);
+  const { ensurePartnerReceivableForTransaction } = await import(
+    "@/lib/supabase/hbCreditReceivableStorage"
+  );
+  await ensurePartnerReceivableForTransaction(supabase, params.transactionId, {
+    promoteEligible: true,
+  });
 
   await supabase.from("hb_credit_audit_log").insert({
     cooperative_cnpj: digits,

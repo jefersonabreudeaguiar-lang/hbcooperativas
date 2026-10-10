@@ -4248,13 +4248,12 @@ async function repairReceivablesForPartnerSettlement(
   }
   if (!nfApproved.size) return;
 
-  await supabase
-    .from("hb_credit_receivables")
-    .update({ status: "ELIGIBLE", updated_at: now })
-    .eq("cooperative_cnpj", digits)
-    .eq("partner_id", partnerId)
-    .in("transaction_id", [...nfApproved])
-    .in("status", ["OPEN", "BLOCKED_FOR_REVIEW"]);
+  const { ensurePartnerReceivableForTransaction } = await import(
+    "@/lib/supabase/hbCreditReceivableStorage"
+  );
+  for (const txId of nfApproved) {
+    await ensurePartnerReceivableForTransaction(supabase, txId, { promoteEligible: true });
+  }
 
   const { data: processingRows } = await supabase
     .from("hb_credit_receivables")
@@ -4328,14 +4327,19 @@ async function resolveLiquidatableSettlementPayments(
     }
 
     if (nfApproved.has(tx.id) && (st === "OPEN" || st === "BLOCKED_FOR_REVIEW" || !st)) {
-      if (st) {
-        await supabase
-          .from("hb_credit_receivables")
-          .update({ status: "ELIGIBLE", updated_at: now })
-          .eq("transaction_id", tx.id)
-          .in("status", ["OPEN", "BLOCKED_FOR_REVIEW"]);
+      const { ensurePartnerReceivableForTransaction } = await import(
+        "@/lib/supabase/hbCreditReceivableStorage"
+      );
+      const recebivel = await ensurePartnerReceivableForTransaction(supabase, tx.id, {
+        promoteEligible: true,
+      });
+      if (recebivel?.status === "ELIGIBLE") {
+        liquidatable.push({
+          ...tx,
+          recebivelId: recebivel.id,
+          recebivelStatus: "ELIGIBLE",
+        });
       }
-      liquidatable.push({ ...tx, recebivelStatus: "ELIGIBLE" });
     }
   }
 
@@ -4391,14 +4395,24 @@ export async function previewPartnerSettlement(
     .maybeSingle();
   if (!partnerRow) return null;
 
-  const { data: pendingSettlement } = await supabase
+  let { data: pendingSettlement } = await supabase
     .from("hb_credit_settlements")
-    .select("id, total_cents, transacoes_count")
+    .select("id, total_cents, transacoes_count, comprovante_storage_path")
     .eq("cooperative_cnpj", digits)
     .eq("partner_id", partnerId)
     .eq("mes_referencia", mesNorm)
     .eq("status", "AWAITING_PARTNER")
     .maybeSingle();
+
+  if (pendingSettlement?.comprovante_storage_path) {
+    const repaired = await finalizePartnerSettlementPayment(
+      supabase,
+      String(pendingSettlement.id),
+      partnerId,
+      "system:settlement_comprovante"
+    );
+    if (repaired.ok) pendingSettlement = null;
+  }
 
   const transacoes = await listSettlementTransactions(supabase, digits, partnerId, mesNorm);
   const cooperados = buildCooperadoLiquidacao(transacoes);
@@ -4444,7 +4458,7 @@ export async function previewPartnerSettlement(
     totalExibirCents = Number(pendingSettlement.total_cents);
     transacoesExibir = Number(pendingSettlement.transacoes_count);
     bloqueioPagamento =
-      "Comprovante já enviado neste mês — aguardando o mercado confirmar no app. Não é necessário pagar de novo.";
+      "Comprovante enviado, mas a liquidação ainda não foi finalizada — toque em Atualizar resumo.";
   }
 
   if (!pendingSettlement && totalCents <= 0 && paymentTxIds.length > 0 && !bloqueioPagamento) {
@@ -4500,6 +4514,9 @@ export async function registerPartnerSettlementPayment(
     };
   }
   if (!preview.pixKey?.trim()) return { ok: false, error: "Mercado ainda não cadastrou chave PIX." };
+  if (!params.comprovanteBuffer?.length) {
+    return { ok: false, error: "Anexe o comprovante PIX para concluir a liquidação." };
+  }
 
   const { data: existing } = await supabase
     .from("hb_credit_settlements")
@@ -4594,39 +4611,63 @@ export async function registerPartnerSettlementPayment(
     comprovanteStoragePath = upload.path;
   }
 
-  return {
-    ok: true,
-    settlement: {
-      id: settlementId,
-      partnerId: params.partnerId,
-      partnerNome: preview.partnerNome,
-      mesReferencia: params.mesReferencia,
-      totalCents: preview.totalCents,
-      transacoesCount: preview.transacoesCount,
-      status: "aguardando_mercado",
-      responsavelNome: params.responsavelNome,
-      pagoEm: now,
-      comprovanteMemo: params.comprovanteMemo ?? null,
-      comprovanteStoragePath,
-      relatorioHtml: params.relatorioHtml,
-      createdAt: now,
-    },
-  };
-}
+  const finalized = await finalizePartnerSettlementPayment(
+    supabase,
+    settlementId,
+    params.partnerId,
+    params.responsavelUserId
+  );
+  if (!finalized.ok) {
+    return { ok: false, error: finalized.error ?? "Erro ao finalizar liquidação." };
+  }
 
-export async function confirmPartnerSettlement(
-  supabase: SupabaseClient,
-  settlementId: string,
-  parceiroId: string
-): Promise<{ ok: boolean; error?: string; settlement?: ContaCoopSettlement }> {
-  const { data: row } = await supabase
+  const { data: confirmedRow } = await supabase
     .from("hb_credit_settlements")
     .select("*")
     .eq("id", settlementId)
-    .eq("partner_id", parceiroId)
+    .maybeSingle();
+
+  return {
+    ok: true,
+    settlement: mapSettlementRow(
+      (confirmedRow ?? {
+        id: settlementId,
+        partner_id: params.partnerId,
+        mes_referencia: mesNorm,
+        total_cents: preview.totalCents,
+        transacoes_count: preview.transacoesCount,
+        status: "CONFIRMED",
+        responsavel_nome: params.responsavelNome,
+        pago_em: now,
+        comprovante_memo: params.comprovanteMemo ?? null,
+        comprovante_storage_path: comprovanteStoragePath,
+        relatorio_html: protectStoredField(params.relatorioHtml),
+        created_at: now,
+        updated_at: now,
+      }) as Record<string, unknown>,
+      preview.partnerNome
+    ),
+  };
+}
+
+/** Comprovante anexado = liquidação concluída (recebíveis SETTLED, crédito cooperados zerado). */
+async function finalizePartnerSettlementPayment(
+  supabase: SupabaseClient,
+  settlementId: string,
+  partnerId: string,
+  actorUserId: string
+): Promise<{ ok: boolean; error?: string }> {
+  const { data: row } = await supabase
+    .from("hb_credit_settlements")
+    .select("id, status, partner_id, cooperative_cnpj")
+    .eq("id", settlementId)
     .maybeSingle();
   if (!row) return { ok: false, error: "Liquidação não encontrada." };
-  if (String(row.status) !== "AWAITING_PARTNER") return { ok: false, error: "Esta liquidação já foi processada." };
+  if (String(row.partner_id) !== partnerId) return { ok: false, error: "Liquidação não pertence a este mercado." };
+  if (String(row.status) === "CONFIRMED") return { ok: true };
+  if (String(row.status) !== "AWAITING_PARTNER") {
+    return { ok: false, error: "Esta liquidação não pode ser finalizada." };
+  }
 
   const now = new Date().toISOString();
   const { error: updateError } = await supabase
@@ -4644,7 +4685,61 @@ export async function confirmPartnerSettlement(
     .update({ status: "SETTLED", updated_at: now })
     .eq("settlement_id", settlementId);
 
-  await resetContaCoopCooperadosFromSettlement(supabase, settlementId, parceiroId);
+  await resetContaCoopCooperadosFromSettlement(supabase, settlementId, actorUserId);
+
+  await supabase.from("hb_credit_audit_log").insert({
+    cooperative_cnpj: normalizeCnpj(String(row.cooperative_cnpj ?? "")),
+    actor: actorUserId,
+    action: "SETTLEMENT_CONFIRMED",
+    resource_type: "settlement",
+    resource_id: settlementId,
+    metadata: { partnerId, via: "comprovante" },
+  });
+
+  return { ok: true };
+}
+
+export async function confirmPartnerSettlement(
+  supabase: SupabaseClient,
+  settlementId: string,
+  parceiroId: string
+): Promise<{ ok: boolean; error?: string; settlement?: ContaCoopSettlement }> {
+  const { data: row } = await supabase
+    .from("hb_credit_settlements")
+    .select("*")
+    .eq("id", settlementId)
+    .eq("partner_id", parceiroId)
+    .maybeSingle();
+  if (!row) return { ok: false, error: "Liquidação não encontrada." };
+  if (String(row.status) === "CONFIRMED") {
+    const { data: partnerRow } = await supabase
+      .from("hb_credit_partners")
+      .select("name")
+      .eq("id", parceiroId)
+      .maybeSingle();
+    return {
+      ok: true,
+      settlement: mapSettlementRow(
+        row as Record<string, unknown>,
+        partnerRow?.name ? String(partnerRow.name) : undefined
+      ),
+    };
+  }
+
+  const finalized = await finalizePartnerSettlementPayment(
+    supabase,
+    settlementId,
+    parceiroId,
+    parceiroId
+  );
+  if (!finalized.ok) return { ok: false, error: finalized.error };
+
+  const { data: updated } = await supabase
+    .from("hb_credit_settlements")
+    .select("*")
+    .eq("id", settlementId)
+    .maybeSingle();
+  if (!updated) return { ok: false, error: "Liquidação não encontrada." };
 
   const { data: partnerRow } = await supabase
     .from("hb_credit_partners")
@@ -4652,17 +4747,10 @@ export async function confirmPartnerSettlement(
     .eq("id", parceiroId)
     .maybeSingle();
 
-  const updatedRow = {
-    ...(row as Record<string, unknown>),
-    status: "CONFIRMED",
-    partner_confirmado_em: now,
-    updated_at: now,
-  };
-
   return {
     ok: true,
     settlement: mapSettlementRow(
-      updatedRow,
+      updated as Record<string, unknown>,
       partnerRow?.name ? String(partnerRow.name) : undefined
     ),
   };

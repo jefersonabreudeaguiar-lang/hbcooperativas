@@ -1929,8 +1929,8 @@ function statusFichaAposConferenciaNota(
   if (notaQuitadaPorPagamentoCooperativaRegistrado(data, nota, cooperadoId)) {
     return "pago";
   }
-  /** Nota quitada na operação — não manter “a receber” fantasma (ex.: Cleber vs Ivan na mesma divisão). */
-  if (nota.status === "pago") {
+  const participantesDivisao = nota.divisaoEntrega?.participantes.length ?? 0;
+  if (nota.status === "pago" && participantesDivisao <= 1) {
     return "pago";
   }
   return "pendente";

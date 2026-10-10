@@ -51,28 +51,35 @@ export function CooperadoPagamentoMesView({
 
   const temFotos = resumo.notas.some((n) => notaTemFotoEnviadaCooperado(n));
 
-  if (!data || !pagamento) return null;
+  if (!data) return null;
 
   return (
     <div className="space-y-6">
-      <CooperadoHistoricoPagamentoMes
-        pagamento={pagamento}
-        mesReferencia={resumo.mesReferencia}
-        descontoPadraoPct={data.config.descontoPadraoCooperativa}
-        cnpj={coopCnpj}
-        cooperadoId={cooperadoId}
-        cooperadoNome={nomeCooperado}
-        hbDetalhado
-        onBaixarRecibo={
-          pagamento.reciboHtml
-            ? () =>
-                void baixarRecibo(
-                  pagamento.reciboHtml!,
-                  nomeArquivoRecibo(resumo.mesReferencia, nomeCooperado)
-                )
-            : undefined
-        }
-      />
+      {pagamento ? (
+        <CooperadoHistoricoPagamentoMes
+          pagamento={pagamento}
+          mesReferencia={resumo.mesReferencia}
+          descontoPadraoPct={data.config.descontoPadraoCooperativa}
+          cnpj={coopCnpj}
+          cooperadoId={cooperadoId}
+          cooperadoNome={nomeCooperado}
+          hbDetalhado
+          onBaixarRecibo={
+            pagamento.reciboHtml
+              ? () =>
+                  void baixarRecibo(
+                    pagamento.reciboHtml!,
+                    nomeArquivoRecibo(resumo.mesReferencia, nomeCooperado)
+                  )
+              : undefined
+          }
+        />
+      ) : (
+        <p className="text-sm text-gray-600 rounded-xl border border-dashed p-4 bg-white">
+          Resumo do PIX ainda não disponível neste dispositivo — sincronize e abra de novo. As entregas e itens do mês
+          estão abaixo.
+        </p>
+      )}
 
       <section className="rounded-2xl border border-gray-200 bg-white overflow-hidden shadow-sm">
         <button

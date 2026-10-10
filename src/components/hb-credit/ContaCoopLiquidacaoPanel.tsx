@@ -85,7 +85,12 @@ export function ContaCoopLiquidacaoPanel({
 
   const motivoPagamentoBloqueado = useMemo(() => {
     if (!preview) return null;
-    if (preview.totalCents <= 0) return "Não há recebíveis elegíveis neste mês para pagar.";
+    if (preview.totalCents <= 0) {
+      return (
+        preview.bloqueioPagamento ??
+        "Não há recebíveis elegíveis neste mês para pagar."
+      );
+    }
     if (!preview.pixKey?.trim()) {
       return "O mercado ainda não cadastrou a chave PIX (aba Mais no app do mercado).";
     }
@@ -152,7 +157,7 @@ export function ContaCoopLiquidacaoPanel({
         comprovanteMemo: comprovanteMemo.trim() || undefined,
         comprovanteDataUrl: comprovantePreview,
       });
-      setSuccess("Pagamento registrado com comprovante. O mercado receberá aviso para conferir e confirmar.");
+      setSuccess("Pagamento registrado e liquidação concluída. O valor a receber do mercado neste mês foi zerado.");
       setComprovanteMemo("");
       setComprovantePreview(null);
       setComprovanteModalOpen(false);
@@ -178,7 +183,7 @@ export function ContaCoopLiquidacaoPanel({
         <div>
           <h3 className="font-semibold text-gray-900">Liquidar mercado parceiro</h3>
           <p className="mt-1 text-sm text-gray-600">
-            Confira as NFs, pague via PIX (QR Code), anexe o comprovante e envie ao mercado para confirmação.
+            Confira as NFs, pague via PIX (QR Code) e anexe o comprovante para concluir a liquidação do mês.
           </p>
         </div>
         <div className="grid gap-3 md:grid-cols-3">
@@ -221,6 +226,13 @@ export function ContaCoopLiquidacaoPanel({
         <AlertBanner variant="info" title="Selecione um mercado">
           Escolha o mercado e o mês acima para ver o valor e pagar via PIX.
         </AlertBanner>
+      )}
+
+      {partnerId && (
+        <p className="text-xs text-gray-500">
+          Liquidação HB Créditos usa as <strong>notas fiscais (NF)</strong> conferidas na aba{" "}
+          <strong>Conferir NFs</strong> — não confundir com notas de entrega do PNAE ou do pedido.
+        </p>
       )}
 
       {preview && (
@@ -421,7 +433,7 @@ export function ContaCoopLiquidacaoPanel({
       >
         <div className="space-y-4">
           <p className="text-sm text-gray-600">
-            Anexe o print ou PDF do comprovante do PIX enviado ao mercado. O mercado poderá visualizar antes de confirmar.
+            Anexe o print ou PDF do comprovante do PIX enviado ao mercado. Isso conclui a liquidação do mês.
           </p>
           <div>
             <Label>Observação (opcional)</Label>

@@ -59,6 +59,7 @@ import {
 } from "../src/services/pagamentoIntegridadeService.ts";
 import { criarValorAvulsoReceber } from "../src/services/valoresAvulsosReceberService.ts";
 import type { AppData, FichaCorrida, NotaPedido } from "../src/types/index.ts";
+import { isDivisaoEntregaHabilitada } from "../src/lib/conferencia/divisaoEntregaPolicy.ts";
 
 const COOP = "coop-1";
 const COOPERADO = "c_orlando";
@@ -828,7 +829,7 @@ function nota(id: string, status: NotaPedido["status"]): NotaPedido {
   );
 }
 
-{
+if (isDivisaoEntregaHabilitada()) {
   const CLEITO = "c_cleito_div";
   const IVAN = "c_ivan_div";
   const NOTA = "n_div";
@@ -899,7 +900,7 @@ function nota(id: string, status: NotaPedido["status"]): NotaPedido {
       },
     ],
   });
-  const fixed = reconciliarFichaFromNotasConferidas(data);
+  const fixed = posProcessarIntegridadePagamentosCooperativa(reconciliarFichaFromNotasConferidas(data));
   const ivanFicha = fixed.fichaCorrida.find((f) => f.cooperadoId === IVAN && f.notaPedidoId === NOTA);
   assert.equal(
     ivanFicha?.status,
@@ -911,6 +912,8 @@ function nota(id: string, status: NotaPedido["status"]): NotaPedido {
     true,
     "Ivan divisão: fila Pagar"
   );
+} else {
+  console.log("SKIP — divisão de entrega desligada (DIVISAO_ENTREGA_HABILITADA=false)");
 }
 
 {
