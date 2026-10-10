@@ -129,6 +129,7 @@ import {
 import { requestAppSync, requestAppSyncImmediate } from "@/services/syncRequest";
 import { runCooperadoForegroundOperacionalCheck } from "@/lib/performance/cooperadoForegroundOperacionalSync";
 import { useCooperadoExibirAguardandoAssinatura } from "@/hooks/useCooperadoExibirAguardandoAssinatura";
+import { materializarCooperadoPwaAposAssinaturaReciboLocal } from "@/lib/cooperado/cooperadoPwaLeveUi";
 import { useCooperadoApresentacaoFinanceiraConsolidada } from "@/hooks/useCooperadoApresentacaoFinanceiraConsolidada";
 import { cooperadoFluxoPainelProjecaoOpts } from "@/lib/cooperadoFluxoFinanceiroGlobal";
 import { formatCurrency, formatDate, formatMesReferencia, formatMesesReferenciaRotulo, getCurrentMesReferencia, cn } from "@/utils/format";
@@ -1482,6 +1483,9 @@ export default function FichaCorridaPage() {
         userId: user.id, userName: user.name, changes: "Cooperado confirmou pagamento com assinatura",
       });
     });
+    if (isCooperado) {
+      materializarCooperadoPwaAposAssinaturaReciboLocal(user, apresentacaoFinanceiroUi);
+    }
     void (async () => {
       const pg = pagamentoConfirmadoLocal ?? getData().pagamentosCooperado.find((p) => p.id === pgAssinar.id);
       const cnpj = await resolveCooperativaCnpj(getData(), coopId, user);

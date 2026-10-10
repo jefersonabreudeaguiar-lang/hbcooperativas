@@ -730,17 +730,16 @@ export function getValorQuantoVouReceberMotorLegado(
     meses[meses.length - 1] ??
     getMesQuantoVouReceber(data, cooperadoId, cooperativaId);
   const aguardando = getPagamentoPendenteAssinaturaReciboCooperado(data, cooperadoId);
-  const valorRecibo =
-    consolidado.aguardandoAssinatura && aguardando ? round2(aguardando.valorLiquido) : 0;
-  const valorExibir =
-    consolidado.aguardandoAssinatura && valorRecibo > 0 ? 0 : consolidado.valorLiquido;
+  const aguardandoRecibo = Boolean(consolidado.aguardandoAssinatura && aguardando);
+  const valorRecibo = aguardandoRecibo ? round2(aguardando!.valorLiquido) : 0;
+  const valorExibir = aguardandoRecibo && valorRecibo > 0 ? 0 : consolidado.valorLiquido;
   return {
     mes,
     meses,
     mesLabel: consolidado.mesLabel,
     valor: valorExibir,
     valorRecibo,
-    aguardandoAssinatura: consolidado.aguardandoAssinatura,
+    aguardandoAssinatura: aguardandoRecibo,
   };
 }
 

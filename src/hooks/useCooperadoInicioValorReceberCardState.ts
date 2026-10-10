@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { AppData } from "@/types";
 import {
+  cooperadoBicAutorizaZerarCardInicio,
   cooperadoMotorTemObrigacaoReceber,
   filtrarInicioCardPersistidoLeituraBic,
   resolverCardInicioEndurecido,
@@ -126,6 +127,24 @@ export function useCooperadoInicioValorReceberCardState(input: {
 
       const persistidoMesmoBuild =
         persistido?.appBuild === APP_BUILD_VERSION ? persistido : null;
+
+      const persistidoComObrigacao = Boolean(
+        persistidoMesmoBuild?.display &&
+          cooperadoMotorTemObrigacaoReceber(persistidoMesmoBuild.display)
+      );
+      const motorZeradoComProva =
+        fromMotor &&
+        !cooperadoMotorTemObrigacaoReceber(fromMotor.display) &&
+        data &&
+        input.cooperadoId &&
+        input.cooperativaId &&
+        cooperadoBicAutorizaZerarCardInicio(data, input.cooperadoId, input.cooperativaId, {
+          tinhaValorExibido: persistidoComObrigacao,
+        });
+
+      if (motorZeradoComProva && fromMotor) {
+        return { ...fromMotor, gravarPersistencia: false };
+      }
 
       if (
         persistidoMesmoBuild?.display &&
