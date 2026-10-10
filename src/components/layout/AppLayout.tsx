@@ -210,6 +210,12 @@ export function Sidebar({ mobile = false, onClose }: { mobile?: boolean; onClose
           <p className="text-xs text-green-300">{getUserFuncaoLabel(navUser)}</p>
         </div>
         {!isCooperadoAppUser(navUser) && <StaffSidebarSyncVersionLine />}
+        {mobile && isCooperadoAppUser(navUser) && (
+          <div className="px-3 py-2 flex items-center justify-between gap-2">
+            <span className="text-xs text-green-300">Versão do app</span>
+            <CooperadoMobileHeaderToolbar />
+          </div>
+        )}
         <Link
           href="/baixar-app"
           onClick={onClose}

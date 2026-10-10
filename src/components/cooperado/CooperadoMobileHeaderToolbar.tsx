@@ -108,24 +108,24 @@ export function CooperadoMobileHeaderToolbar() {
         onClick={() => void onUpgrade()}
         disabled={upgrading}
         className={cn(
-          "shrink-0 rounded-md bg-amber-500 px-2 py-0.5 text-[10px] font-bold tabular-nums text-white shadow-sm",
+          "shrink-0 rounded-md border border-amber-200 bg-amber-500 px-2 py-1 text-[11px] font-bold tabular-nums text-white shadow-md",
           "animate-pulse hover:bg-amber-600 disabled:opacity-70"
         )}
         aria-label={`Atualizar app para versão ${cloudBuild}`}
         title={title}
       >
-        {upgrading ? "…" : `v${bundleBuild} → v${cloudBuild}`}
+        {upgrading ? "Atualizando…" : `Atualizar v${bundleBuild}→${cloudBuild}`}
       </button>
     );
   }
 
   return (
     <span
-      className="shrink-0 rounded-md bg-green-800 px-1.5 py-0.5 text-[10px] font-bold tabular-nums text-white"
+      className="shrink-0 rounded-md border border-white/30 bg-white/95 px-2 py-1 text-[11px] font-bold tabular-nums text-green-900 shadow-sm"
       aria-label={`Versão do app v${bundleBuild}`}
       title={title}
     >
-      v{bundleBuild}
+      Build {bundleBuild}
     </span>
   );
 }
