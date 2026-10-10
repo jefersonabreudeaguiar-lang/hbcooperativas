@@ -129,7 +129,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
     };
     if (isCooperadoInstantResumeEnabled()) {
-      if (!isAppDataWarm()) warm();
+      if (!isAppDataWarm() && !isCooperadoPwaMessengerMode()) warm();
       return;
     }
     if (typeof requestIdleCallback !== "undefined") {

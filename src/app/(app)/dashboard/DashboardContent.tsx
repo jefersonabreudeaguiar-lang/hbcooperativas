@@ -80,7 +80,6 @@ import {
   COOPERADO_PWA_LEVE_UI_SNAPSHOT_REFRESH_EVENT,
   isCooperadoPwaMobileLeveUi,
 } from "@/lib/cooperado/cooperadoPwaLeveUi";
-import { persistirInicioCardCooperadoNotificarPwaLeve } from "@/lib/cooperado/cooperadoPwaLeveUi";
 import {
   buildCooperadoPwaInicioDashboardView,
   persistirCooperadoPwaInicioDashboardSnapshot,
@@ -178,7 +177,9 @@ function CooperadoDashboard() {
 
   /** Modo mensageiro: HB só no runSync (Atualizar) — sem pilot periódico na UI. */
   useSyncContaCoopValorReceberPilot(
-    !messenger && contaCoopSync ? { ...contaCoopSync, user, initialDelayMs: 3_000 } : undefined
+    !messenger && !inicioPwaLeve && contaCoopSync
+      ? { ...contaCoopSync, user, initialDelayMs: 3_000 }
+      : undefined
   );
 
   const inicioCardCtx = fluxo.cooperadoId
@@ -246,9 +247,9 @@ function CooperadoDashboard() {
 
   useEffect(() => {
     if (!messenger || lastSyncedAt == null) return;
-    refreshPwaInicioView({ rebuildFromAppData: true });
-    if (user) persistirInicioCardCooperadoNotificarPwaLeve(user);
-  }, [messenger, lastSyncedAt, refreshPwaInicioView, user]);
+    // Sync provider já materializa snapshots; só reler cache local (evita rebuild duplo).
+    refreshPwaInicioView();
+  }, [messenger, lastSyncedAt, refreshPwaInicioView]);
 
   useEffect(() => {
     if (!inicioPwaLeve) return;

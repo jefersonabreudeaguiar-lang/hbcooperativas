@@ -130,13 +130,7 @@ import { notifyAppSubtleUpdate } from "@/lib/cooperadoSubtleUpdate";
 import { requestCooperadoAppReleaseSync, type SyncRunOptions } from "@/services/syncRequest";
 import { purgarInicioCardValorReceberCooperado } from "@/services/cooperadoInicioCardPersistenciaService";
 import { scheduleCooperadoPwaOperacionalParidadePull } from "@/lib/cooperado/cooperadoPwaFinanceiroParidadeRefresh";
-import {
-  dispatchCooperadoPwaLeveUiSnapshotRefresh,
-  isCooperadoPwaMobileLeveUi,
-  persistirInicioCardCooperadoNotificarPwaLeve,
-} from "@/lib/cooperado/cooperadoPwaLeveUi";
-import { persistirCooperadoPwaEntregasResumosSnapshotFromUser } from "@/lib/cooperado/cooperadoPwaEntregasResumosSnapshot";
-import { persistirCooperadoPwaInicioDashboardSnapshotFromUser } from "@/lib/cooperado/cooperadoPwaInicioDashboardSnapshot";
+import { isCooperadoPwaMobileLeveUi } from "@/lib/cooperado/cooperadoPwaLeveUi";
 import {
   isCooperadoPwaMessengerMode,
   persistirCooperadoPwaMessengerCaches,
@@ -909,9 +903,7 @@ export function CooperativaSyncProvider({ children }: { children: React.ReactNod
           });
         if (liberaApresentacao) {
           markCooperadoPagamentosHydrated();
-          if (isCooperadoPwaMobileLeveUi()) {
-            persistirInicioCardCooperadoNotificarPwaLeve(userRef.current);
-          } else {
+          if (!isCooperadoPwaMobileLeveUi()) {
             persistirInicioCardValorReceberCooperado(userRef.current);
           }
           setLastSyncError("");
@@ -926,16 +918,9 @@ export function CooperativaSyncProvider({ children }: { children: React.ReactNod
         } else if (!isCooperadoManualOperacionalSync()) {
           setCooperadoPagamentosHydrated(false);
         }
-        if (completed && userRef.current?.role === "cooperado") {
-          if (isCooperadoPwaMessengerMode()) {
-            persistirCooperadoPwaMessengerCaches(userRef.current);
-            persistOperacionalSyncedAppBuild();
-          } else if (userInitiatedRun && isCooperadoPwaMobileLeveUi()) {
-            persistirInicioCardCooperadoNotificarPwaLeve(userRef.current);
-            persistirCooperadoPwaEntregasResumosSnapshotFromUser(userRef.current);
-            persistirCooperadoPwaInicioDashboardSnapshotFromUser(userRef.current, true);
-            dispatchCooperadoPwaLeveUiSnapshotRefresh();
-          }
+        if (completed && userRef.current?.role === "cooperado" && isCooperadoPwaMobileLeveUi()) {
+          persistirCooperadoPwaMessengerCaches(userRef.current);
+          persistOperacionalSyncedAppBuild();
         }
       }
     }

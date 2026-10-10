@@ -75,7 +75,9 @@ export function scheduleCooperadoPwaOperacionalParidadePull(
   if (isCooperadoPwaMessengerMode()) return;
   if (!cooperadoOperacionalParidadeRefreshAtivo()) return;
 
-  refreshCooperadoInicioCardFromMotor(user);
+  scheduleCooperadoPostInteractiveTask(() => {
+    refreshCooperadoInicioCardFromMotor(user);
+  });
 
   const now = Date.now();
   const lastSync = readCooperadoLastOperacionalSyncAt();

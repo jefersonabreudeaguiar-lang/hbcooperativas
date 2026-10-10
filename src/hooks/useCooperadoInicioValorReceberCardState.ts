@@ -111,18 +111,39 @@ export function useCooperadoInicioValorReceberCardState(input: {
 
   const resolved = useMemo(() => {
     if (leituraSomentePwa) {
-      const data = (isAppDataWarm() ? getData() : null) ?? input.data;
+      const persistidoMesmoBuildEarly =
+        persistido?.appBuild === APP_BUILD_VERSION ? persistido : null;
+      const syncMotorPass = Boolean(input.syncing && isCooperadoUserSyncVisible());
+      const needsMotor =
+        syncMotorPass ||
+        persistidoTick > 0 ||
+        !persistidoMesmoBuildEarly?.display;
+
+      const data =
+        needsMotor || !persistidoMesmoBuildEarly?.display
+          ? (isAppDataWarm() ? getData() : null) ?? input.data
+          : null;
       const cooperativaIdCard =
         data && input.cooperadoId
           ? resolverCooperativaIdReciboLatch(data, input.cooperadoId, input.cooperativaId)
           : input.cooperativaId;
+      const dataLatch =
+        data ?? ((isAppDataWarm() ? getData() : null) ?? input.data);
+      const cooperativaIdLatch =
+        dataLatch && input.cooperadoId
+          ? resolverCooperativaIdReciboLatch(dataLatch, input.cooperadoId, input.cooperativaId)
+          : cooperativaIdCard;
       const reciboAssinadoLocal =
-        data &&
+        dataLatch &&
         input.cooperadoId &&
-        cooperadoTemReciboAssinadoLocalSemPendenciaUi(data, input.cooperadoId, cooperativaIdCard);
+        cooperadoTemReciboAssinadoLocalSemPendenciaUi(
+          dataLatch,
+          input.cooperadoId,
+          cooperativaIdLatch
+        );
 
       const fromMotor =
-        data && input.cooperadoId && cooperativaIdCard
+        needsMotor && data && input.cooperadoId && cooperativaIdCard
           ? resolverCardInicioEndurecido({
               data,
               cooperadoId: input.cooperadoId,
@@ -155,8 +176,7 @@ export function useCooperadoInicioValorReceberCardState(input: {
         return { ...fromMotor, gravarPersistencia: false };
       }
 
-      const persistidoMesmoBuild =
-        persistido?.appBuild === APP_BUILD_VERSION ? persistido : null;
+      const persistidoMesmoBuild = persistidoMesmoBuildEarly;
 
       const persistidoComObrigacao = Boolean(
         persistidoMesmoBuild?.display &&
@@ -242,8 +262,9 @@ export function useCooperadoInicioValorReceberCardState(input: {
     input.apresentacaoConsolidada,
     carregandoFinanceiro,
     persistido,
-    hbDescontosRevision,
+    persistidoTick,
     leituraSomentePwa,
+    ...(leituraSomentePwa ? [] : [hbDescontosRevision]),
   ]);
 
   latchRef.current = resolved.latch;
