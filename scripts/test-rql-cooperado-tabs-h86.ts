@@ -45,8 +45,8 @@ assert(panel.includes("data-cooperado-tab-panel"), "painéis por aba");
 assert(panel.includes("data-cooperado-tab-panel-warm"), "painel warm para paint instantâneo");
 assert(panel.includes("cooperadoTabPanelCache"), "cache não sobrescreve com loading.tsx");
 assert(
-  panel.includes("relative z-[1]") && panel.includes("renderPanels(effectivePath)"),
-  "só pinta a aba ativa (sem fantasma da aba anterior)"
+  panel.includes("[content-visibility:hidden]") && panel.includes("hrefsToRender.map"),
+  "LRU mantém painéis visitados montados (inert)"
 );
 assert(layout.includes("router.push(item.href)"), "cooperado força push na troca de aba");
 assert(

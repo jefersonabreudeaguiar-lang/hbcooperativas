@@ -65,8 +65,8 @@ export function AppSchedulerBootstrap() {
       } else {
         cancelPaint = scheduleMarkRqlRoutePaintReady(hop);
       }
-      if (isCooperadoBottomTabPath(effectivePath)) {
-        const warmNeighbors = () => warmCooperadoAdjacentTabRouteChunks(effectivePath);
+      if (isCooperadoBottomTabPath(pathname)) {
+        const warmNeighbors = () => warmCooperadoAdjacentTabRouteChunks(pathname);
         if (typeof requestIdleCallback !== "undefined") {
           requestIdleCallback(warmNeighbors, { timeout: 1_500 });
         } else {

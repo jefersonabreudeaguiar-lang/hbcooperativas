@@ -330,8 +330,9 @@ export function MobileNav() {
                   }
                 }
               }}
-              onPointerDown={() => {
+              onPointerDown={(e) => {
                 if (isCooperadoNav && isCooperadoBottomTabPath(item.href)) {
+                  if (e.pointerType === "touch") return;
                   setCooperadoOptimisticTab(item.href);
                   cooperadoTabWarmOnPointerDown(item.href);
                   try {

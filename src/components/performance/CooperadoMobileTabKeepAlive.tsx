@@ -1,6 +1,7 @@
 "use client";
 
 import { useLayoutEffect, useRef, useState, useSyncExternalStore, useMemo, type ReactNode } from "react";
+import { cn } from "@/utils/format";
 import { isLowMemoryDevice } from "@/services/imagePipelineService";
 import { CooperadoTabPanelProvider } from "@/lib/performance/cooperadoTabPanelContext";
 import {
@@ -13,7 +14,6 @@ import {
   trimCooperadoTabCacheOrder,
 } from "@/lib/performance/cooperadoMobileTabKeepAlive";
 import {
-  COOPERADO_PINNED_TAB_HREFS,
   isCooperadoPinnedDualMountEnabled,
   setCooperadoPinnedPairCachesReady,
 } from "@/lib/performance/cooperadoPinnedTabFastPath";
@@ -173,21 +173,6 @@ export function CooperadoMobileTabKeepAlive({ pathname, children }: Props) {
     return { panel: undefined, warm: false };
   };
 
-  const panelForHref = (
-    href: string,
-    activePath: string | null
-  ): { panel: ReactNode | undefined; warm: boolean } => {
-    if (!activePath) return { panel: undefined, warm: false };
-    const active = activePath === href;
-    if (
-      !active &&
-      !(pinnedDualReady && isCooperadoTabPinned(href) && isCooperadoTabPinned(activePath))
-    ) {
-      return { panel: undefined, warm: false };
-    }
-    return resolvePanel(href, activePath);
-  };
-
   if (!enabled || !mobile) {
     return <>{children}</>;
   }
@@ -195,52 +180,45 @@ export function CooperadoMobileTabKeepAlive({ pathname, children }: Props) {
   const renderPanels = (activePath: string | null) => {
     if (!activePath) return null;
 
-    if (pinnedDualReady && isCooperadoTabPinned(activePath)) {
+    const nodes = hrefsToRender.map((href) => {
+      const active = activePath === href;
+      const { panel, warm } = resolvePanel(href, activePath);
+      if (!panel) return null;
+      const pinnedPair =
+        pinnedDualReady && isCooperadoTabPinned(href) && isCooperadoTabPinned(activePath);
       return (
-        <>
-          {COOPERADO_PINNED_TAB_HREFS.map((href) => {
-            const active = href === activePath;
-            const { panel, warm } = resolvePanel(href, activePath);
-            if (!panel) return null;
-            return (
-              <div
-                key={href}
-                className={active ? "relative z-[1] w-full min-h-0" : "hidden"}
-                style={active ? undefined : { display: "none" }}
-                aria-hidden={!active}
-                inert={!active}
-                data-cooperado-tab-panel={href}
-                data-cooperado-tab-panel-warm={warm ? "1" : undefined}
-                data-cooperado-tab-panel-active={active ? "1" : undefined}
-                data-cooperado-pinned-dual-mount="1"
-              >
-                {panel}
-              </div>
-            );
-          })}
-        </>
+        <div
+          key={href}
+          className={cn(
+            active ? "relative z-[1] w-full min-h-0" : "hidden [content-visibility:hidden]"
+          )}
+          aria-hidden={!active}
+          inert={!active}
+          data-cooperado-tab-panel={href}
+          data-cooperado-tab-panel-warm={warm ? "1" : undefined}
+          data-cooperado-tab-panel-active={active ? "1" : undefined}
+          data-cooperado-pinned-dual-mount={pinnedPair ? "1" : undefined}
+        >
+          {panel}
+        </div>
       );
-    }
+    });
 
-    const { panel, warm } = panelForHref(activePath, activePath);
-    if (!panel) {
+    const hasActive = nodes.some((n) => n != null);
+    if (!hasActive) {
       return <CooperadoTabRouteLoading />;
     }
-    return (
-      <div
-        key={activePath}
-        className="relative z-[1] w-full min-h-0"
-        data-cooperado-tab-panel={activePath}
-        data-cooperado-tab-panel-warm={warm ? "1" : undefined}
-        data-cooperado-tab-panel-active="1"
-      >
-        {panel}
-      </div>
-    );
+    return <>{nodes}</>;
   };
 
   const panels = onTab ? renderPanels(effectivePath) : renderPanels(pathname);
-  const hasActivePanel = onTab && panels != null;
+  const hasActivePanel =
+    onTab &&
+    hrefsToRender.some((href) => {
+      if (href !== effectivePath) return false;
+      const { panel } = resolvePanel(href, effectivePath);
+      return panel != null;
+    });
 
   if (!onTab) {
     return (
