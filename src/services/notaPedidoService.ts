@@ -2596,8 +2596,10 @@ export function getResumoPagamentoParaRegistro(
 
 export type ResumoPagamentoCooperado = ReturnType<typeof getResumoPagamentoCooperado>;
 
+const DESCONTOS_EXTRAS_VAZIOS: FichaCorridaDesconto[] = [];
+
 export function resumoFromPagamento(pagamento: PagamentoCooperadoRegistro): ResumoPagamentoCooperado {
-  const descontosExtras = pagamento.descontosExtras ?? [];
+  const descontosExtras = pagamento.descontosExtras ?? DESCONTOS_EXTRAS_VAZIOS;
   const descontoCooperativa = pagamento.descontoCooperativa ?? 0;
   const valorBruto = pagamento.valorBruto ?? pagamento.valorLiquido;
   return {

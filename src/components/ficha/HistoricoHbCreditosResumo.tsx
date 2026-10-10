@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { HB_CREDIT_PRODUCT_NAME } from "@/config/hbCreditBranding";
 import { fetchHbUtilizacaoResumoCooperado } from "@/services/creditApiService";
 import { saldoAReceberBaseAntesHb, type HbUtilizacaoResumoLancamento } from "@/lib/hb-credit/utilizacaoResumo";
@@ -53,11 +53,27 @@ export function HistoricoHbCreditosResumo({
   const [erro, setErro] = useState<string | null>(null);
   const [carregando, setCarregando] = useState(true);
 
+  const descontosExtrasKey = useMemo(
+    () =>
+      descontosExtras
+        .map((d) => `${d.tipo}:${d.valor}:${d.motivo}`)
+        .join("|"),
+    [descontosExtras]
+  );
+  const titularIdsKey = titularCooperadoIds?.join(",") ?? "";
+  const saldoBase = useMemo(
+    () => saldoAReceberBaseAntesHb(valorEntregas, descontosExtras),
+    [valorEntregas, descontosExtrasKey]
+  );
+
   useEffect(() => {
+    if (!cnpj || cnpj.length !== 14) {
+      setCarregando(false);
+      return;
+    }
     let cancel = false;
     setCarregando(true);
     setErro(null);
-    const saldoBase = saldoAReceberBaseAntesHb(valorEntregas, descontosExtras);
     const ids = titularCooperadoIds?.length ? titularCooperadoIds : [cooperadoId];
     fetchHbUtilizacaoResumoCooperado(cnpj, ids, mesReferencia, saldoBase)
       .then((rows) => {
@@ -82,9 +98,9 @@ export function HistoricoHbCreditosResumo({
     cnpj,
     cooperadoId,
     mesReferencia,
-    valorEntregas,
-    descontosExtras,
-    titularCooperadoIds,
+    saldoBase,
+    descontosExtrasKey,
+    titularIdsKey,
     somenteMesReferencia,
   ]);
 

@@ -32,8 +32,8 @@ export function CooperadoPagamentoMesView({
   onVerFotosMes,
 }: Props) {
   const data = useAppData();
-  const [entregasAbertas, setEntregasAbertas] = useState(true);
-  const [itensAbertos, setItensAbertos] = useState(true);
+  const [entregasAbertas, setEntregasAbertas] = useState(false);
+  const [itensAbertos, setItensAbertos] = useState(false);
 
   const pagamento = resumo.pagamentoConfirmado ?? resumo.pagamentoAguardando;
   const aguardandoAssinatura =
