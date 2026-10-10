@@ -38,7 +38,10 @@ import {
   scheduleCooperadoPostInteractiveTask,
 } from "@/lib/performance/cooperadoColdStart";
 import { isCooperadoPwaMobileEntregasLeve } from "@/lib/cooperado/cooperadoPwaMobileEntregas";
-import { ensureCooperadoNotasFreshForEnvio } from "@/lib/cooperado/cooperadoPwaEntregasEnvioSync";
+import {
+  ensureCooperadoNotasFreshForEnvio,
+  type CooperadoPwaEnvioSyncResult,
+} from "@/lib/cooperado/cooperadoPwaEntregasEnvioSync";
 import {
   COOPERADO_PWA_ENTREGAS_SNAPSHOT_REFRESH_EVENT,
   persistirCooperadoPwaEntregasResumosSnapshot,
@@ -1603,17 +1606,16 @@ export default function NotasPedidoCooperadoMain() {
     setRascunhoFotosCount(0);
     setAnexarModal(true);
     if (abrirCamera) scheduleAbrirCameraAnexar();
-    void (async () => {
-      if (entregasPwaLeve && user && coopId) {
-        const pull = await ensureCooperadoNotasFreshForEnvio(user, coopId, { reason: "anexar" });
+    void syncFotosSessaoFromDraft();
+    if (entregasPwaLeve && user && coopId) {
+      void ensureCooperadoNotasFreshForEnvio(user, coopId, { reason: "anexar" }).then((pull) => {
         if (!pull.ok) {
           setErroEnvio(pull.error ?? "Não foi possível atualizar antes de continuar o envio.");
           return;
         }
         refreshPwaEntregasResumosSnap();
-      }
-      await syncFotosSessaoFromDraft();
-    })();
+      });
+    }
   };
 
   const iniciarModalAnexar = (notaRejeitada?: NotaPedido, options?: { abrirCamera?: boolean }) => {
@@ -1690,7 +1692,7 @@ export default function NotasPedidoCooperadoMain() {
         if (settled) return;
         settled = true;
         openAnexarPwaThen(undefined, options);
-      }, 200);
+      }, 80);
       void loadFotoDraftMeta(ANEXAR_DRAFT_KEY).then((meta) => {
         if (settled) return;
         settled = true;
@@ -2515,14 +2517,6 @@ export default function NotasPedidoCooperadoMain() {
         return;
       }
 
-      const fileFingerprint = await fingerprintFotoFile(file);
-
-      if (await isFotoDraftDuplicadaByFingerprint(ANEXAR_DRAFT_KEY, fileFingerprint)) {
-        setFotoDuplicadaMsg("Imagem repetida — esta foto já foi adicionada ou já foi enviada antes.");
-        setFotoPipelineStep("idle");
-        return;
-      }
-
       if (reenviarNotaId && qtdAtual === 0) {
         await clearFotoDraft(ANEXAR_DRAFT_KEY);
         await getOrCreatePendingNotaId(ANEXAR_DRAFT_KEY, () => reenviarNotaId);
@@ -2540,7 +2534,16 @@ export default function NotasPedidoCooperadoMain() {
       }
 
       setFotoPipelineStep("compressing");
-      const processed = await pipeline.processDeliveryImage(file, abort.signal);
+      const [fileFingerprint, processed] = await Promise.all([
+        fingerprintFotoFile(file),
+        pipeline.processDeliveryImage(file, abort.signal),
+      ]);
+
+      if (await isFotoDraftDuplicadaByFingerprint(ANEXAR_DRAFT_KEY, fileFingerprint)) {
+        setFotoDuplicadaMsg("Imagem repetida — esta foto já foi adicionada ou já foi enviada antes.");
+        setFotoPipelineStep("idle");
+        return;
+      }
 
       const cooperadoNome = getCooperadoNome(data.cooperados, cooperadoId);
       const notaId =
@@ -2746,21 +2749,6 @@ export default function NotasPedidoCooperadoMain() {
       return;
     }
 
-    if (entregasPwaLeve) {
-      setPwaPreparandoEnvio(true);
-      const pull = await ensureCooperadoNotasFreshForEnvio(user, coopId, {
-        reason: "submit",
-        notaRejeitada: reenviarNotaId
-          ? data.notasPedido.find((n) => n.id === reenviarNotaId)
-          : undefined,
-      });
-      setPwaPreparandoEnvio(false);
-      if (!pull.ok) {
-        setErroEnvio(pull.error ?? "Atualize a internet e tente enviar de novo.");
-        return;
-      }
-    }
-
     const preferId = reenviarNotaId
       ? data.notasPedido.find((n) => n.id === reenviarNotaId)?.instituicaoId
       : contratoInstId || undefined;
@@ -2809,6 +2797,31 @@ export default function NotasPedidoCooperadoMain() {
     setErroEnvio("");
 
     try {
+    const notaRejeitadaSubmit = reenviarNotaId
+      ? workingData.notasPedido.find((n) => n.id === reenviarNotaId)
+      : undefined;
+
+    if (entregasPwaLeve) setPwaPreparandoEnvio(true);
+
+    const [pull] = await Promise.all([
+      entregasPwaLeve
+        ? ensureCooperadoNotasFreshForEnvio(user, coopId, {
+            reason: "submit",
+            notaRejeitada: notaRejeitadaSubmit,
+          })
+        : Promise.resolve({ ok: true } as CooperadoPwaEnvioSyncResult),
+      aguardarFilaUpload().then(() => syncOfflineDeliveryImages()),
+    ]);
+
+    if (entregasPwaLeve) setPwaPreparandoEnvio(false);
+
+    if (!pull.ok) {
+      setErroEnvio(pull.error ?? "Atualize a internet e tente enviar de novo.");
+      return;
+    }
+
+    workingData = getData() ?? workingData;
+
     const cnpj = await resolveCooperativaCnpj(workingData, coopId, user);
     if (!cnpj) {
       setErroEnvio(
@@ -2816,9 +2829,6 @@ export default function NotasPedidoCooperadoMain() {
       );
       return;
     }
-
-    await aguardarFilaUpload();
-    await syncOfflineDeliveryImages();
     const uploadedAfterFlush = await countFotosUploadedDraft(ANEXAR_DRAFT_KEY);
     setFotosNaNuvemCount(uploadedAfterFlush);
     if (uploadedAfterFlush < fotosSessaoCount) {

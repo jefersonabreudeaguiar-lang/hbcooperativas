@@ -46,7 +46,7 @@ export async function ensureCooperadoNotasFreshForEnvio(
     };
   }
 
-  if (opts?.reason === "anexar" && !opts?.notaRejeitada?.id) {
+  if (opts?.reason === "anexar") {
     void (async () => {
       try {
         await syncNotasPedidoFromCloud(cnpj, { retryFull: false });
@@ -56,13 +56,14 @@ export async function ensureCooperadoNotasFreshForEnvio(
           /* contratos locais */
         }
       } catch {
-        /* não bloqueia abertura da câmera — submit ainda exige sync completo */
+        /* não bloqueia abertura da câmera — submit valida de novo */
       }
     })();
     return { ok: true };
   }
 
-  const retryFull = opts?.reason === "submit" || Boolean(opts?.notaRejeitada?.id);
+  /** Sync incremental no envio normal; full só em reenvio após rejeição. */
+  const retryFull = Boolean(opts?.notaRejeitada?.id);
   try {
     await syncNotasPedidoFromCloud(cnpj, { retryFull });
     try {

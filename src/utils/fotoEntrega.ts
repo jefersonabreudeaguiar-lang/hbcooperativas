@@ -697,7 +697,7 @@ export async function gerarMiniaturasSequencial(fotos: string[]): Promise<string
 }
 
 /** Tamanho de cada lote legado (upload monolítico — preferir streaming). */
-export const FOTOS_UPLOAD_LOTE = 2;
+export const FOTOS_UPLOAD_LOTE = 3;
 
 /** Máximo de fotos por entrega antes de enviar ao responsável. */
 export const MAX_FOTOS_POR_SESSAO_ENTREGA = 30;

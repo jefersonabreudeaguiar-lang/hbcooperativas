@@ -2670,14 +2670,6 @@ export default function NotasPedidoStaffMain() {
         return;
       }
 
-      const fileFingerprint = await fingerprintFotoFile(file);
-
-      if (await isFotoDraftDuplicadaByFingerprint(ANEXAR_DRAFT_KEY, fileFingerprint)) {
-        setFotoDuplicadaMsg("Imagem repetida — esta foto já foi adicionada ou já foi enviada antes.");
-        setFotoPipelineStep("idle");
-        return;
-      }
-
       if (reenviarNotaId && qtdAtual === 0) {
         await clearFotoDraft(ANEXAR_DRAFT_KEY);
         await getOrCreatePendingNotaId(ANEXAR_DRAFT_KEY, () => reenviarNotaId);
@@ -2695,7 +2687,16 @@ export default function NotasPedidoStaffMain() {
       }
 
       setFotoPipelineStep("compressing");
-      const processed = await pipeline.processDeliveryImage(file, abort.signal);
+      const [fileFingerprint, processed] = await Promise.all([
+        fingerprintFotoFile(file),
+        pipeline.processDeliveryImage(file, abort.signal),
+      ]);
+
+      if (await isFotoDraftDuplicadaByFingerprint(ANEXAR_DRAFT_KEY, fileFingerprint)) {
+        setFotoDuplicadaMsg("Imagem repetida — esta foto já foi adicionada ou já foi enviada antes.");
+        setFotoPipelineStep("idle");
+        return;
+      }
 
       const cooperadoNome = getCooperadoNome(data.cooperados, cooperadoId);
       const notaId =
