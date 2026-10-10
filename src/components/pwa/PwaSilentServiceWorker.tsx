@@ -4,7 +4,7 @@ import { useEffect } from "react";
 import { APP_BUILD_VERSION } from "@/lib/appBuildVersion";
 import { scheduleCooperadoPostInteractiveTask } from "@/lib/performance/cooperadoColdStart";
 import { isCooperadoPwaMessengerMode } from "@/lib/cooperado/cooperadoPwaMessengerMode";
-import { shouldSkipServiceWorkerActivationReload } from "@/lib/pwa/clientRelease";
+import { shouldAutoAlignClientRelease, shouldSkipServiceWorkerActivationReload } from "@/lib/pwa/clientRelease";
 import { runClientReleaseShield } from "@/lib/pwa/clientReleaseShield";
 
 function activateWaitingWorker(reg: ServiceWorkerRegistration) {
@@ -17,6 +17,7 @@ function activateWaitingWorker(reg: ServiceWorkerRegistration) {
 export function PwaSilentServiceWorker() {
   useEffect(() => {
     if (typeof window === "undefined" || !("serviceWorker" in navigator)) return;
+    if (!shouldAutoAlignClientRelease()) return;
 
     let reloaded = false;
     const onControllerChange = () => {

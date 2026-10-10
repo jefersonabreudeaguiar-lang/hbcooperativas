@@ -107,6 +107,10 @@ export function mergePagamentoCooperadoRecord(
   if (localRank > cloudRank) return local;
   if (cloudRank > localRank) return cloud;
   if (local.status === "confirmado" && cloud.status === "confirmado") {
+    const localAssinado = Boolean(local.assinaturaCooperado?.trim());
+    const cloudAssinado = Boolean(cloud.assinaturaCooperado?.trim());
+    if (localAssinado && !cloudAssinado) return local;
+    if (cloudAssinado && !localAssinado) return cloud;
     if (local.reciboHtml && !cloud.reciboHtml) return local;
     if (cloud.reciboHtml && !local.reciboHtml) return cloud;
     const localPago = new Date(local.pagoEm).getTime();

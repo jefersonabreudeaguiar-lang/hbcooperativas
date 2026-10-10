@@ -11,8 +11,10 @@ import {
   alignClientRuntimeToRelease,
   getEmbeddedClientRelease,
   localPersistedBuildBehindCanonical,
+  markStaffReleasePending,
   persistReleaseShieldExpected,
   releaseFingerprint,
+  shouldAutoAlignClientRelease,
   releaseShieldSatisfied,
   runtimeAlreadyOnCanonicalRelease,
   runtimeNeedsReleaseUpgrade,
@@ -100,6 +102,11 @@ export async function applyOfficialReleaseIfNeeded(): Promise<"ok" | "aligning" 
       clearReloadBurstCounter();
       clearUrgentReleaseAlignDedup();
     }
+    return "ok";
+  }
+
+  if (!shouldAutoAlignClientRelease()) {
+    markStaffReleasePending(canonical.build);
     return "ok";
   }
 

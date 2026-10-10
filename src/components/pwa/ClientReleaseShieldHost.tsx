@@ -14,7 +14,7 @@ import {
   runClientReleaseShield,
 } from "@/lib/pwa/clientReleaseShield";
 import { materializeCooperadoPwaSnapshotsForCurrentBuild } from "@/lib/cooperado/cooperadoPwaSnapshotBuildPolicy";
-import { stripReleaseAlignQueryFromUrl } from "@/lib/pwa/clientRelease";
+import { shouldAutoAlignClientRelease, stripReleaseAlignQueryFromUrl } from "@/lib/pwa/clientRelease";
 
 /**
  * Blindagem de release — garante que toda publicação na Vercel chegue ao runtime
@@ -29,6 +29,7 @@ export function ClientReleaseShieldHost() {
     if (typeof window === "undefined" || startedRef.current) return;
     startedRef.current = true;
     stripReleaseAlignQueryFromUrl();
+    if (!shouldAutoAlignClientRelease()) return;
 
     const kick = (trigger: string) => {
       if (cooperadoExperience) materializeCooperadoPwaSnapshotsForCurrentBuild();

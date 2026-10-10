@@ -1,0 +1,73 @@
+{
+  "label": "melhor-performance",
+  "createdAt": "2026-10-10T20:20:00-03:00",
+  "purpose": "Referência quando cooperado (todas as cooperativas) e responsável estavam com performance aceitável e recibo assinado persistia na nuvem. Não altera Supabase.",
+  "referenceBuild": 283,
+  "git": {
+    "tag": "baseline/melhor-performance-build-283",
+    "branch": "main",
+    "commitNote": "Após push, use: git rev-parse baseline/melhor-performance-build-283"
+  },
+  "production": {
+    "url": "https://hbcooperativas.vercel.app",
+    "expectedBuild": 283,
+    "verify": "npm run confirm:production:wait"
+  },
+  "localVerify": [
+    "npm run baseline:melhor-performance"
+  ],
+  "rqlBaselineReadonly": {
+    "capturedAt": "2026-10-10T20:18:00-03:00",
+    "machineNote": "dev agent; re-run baseline-performance-rql-h80-readonly.ts to compare",
+    "metricsMs": {
+      "jsonStringifyAppDataShell": { "p50": 0.013, "p95": 0.019 },
+      "jsonParseAppDataShell": { "p50": 0.025, "p95": 0.03 },
+      "simNav5xDashboardNotas": { "p50": 0.093, "p95": 0.158 },
+      "mergeSyncTierRequests1000": { "p50": 0.269, "p95": 0.893 }
+    },
+    "reactSubscriptionCounts": {
+      "useAppData": 49,
+      "useAppDataSelector": 47
+    }
+  },
+  "cooperadoPerformancePolicy": {
+    "tabs": [
+      "CooperadoMobileTabKeepAlive + cooperadoMobileTabDomPolicy (sem release align ao trocar aba)",
+      "Financeiro: dormant AppData + messenger read revision (build 279)"
+    ],
+    "sync": [
+      "Cooperado: sync operacional manual / event-driven — sem polling agressivo de release na abertura",
+      "PWA messenger mode só role cooperado (build 281)"
+    ],
+    "pwa": [
+      "Início card: latch recibo assinado + snapshot PWA leve",
+      "Idle sync dedup + yield downloads cooperados storage (281)"
+    ]
+  },
+  "responsavelStabilityPolicy": {
+    "browser": [
+      "shouldAutoAlignClientRelease: auto-reload/SW só PWA instalado (build 282)",
+      "Cooperados: sync idle + sem messenger mode no staff browser (281)"
+    ]
+  },
+  "reciboAssinaturaContract": {
+    "build": 283,
+    "api": "confirmar-pagamento mescla assinatura quando pagamento já confirmado na nuvem",
+    "merge": "mergePagamentoCooperadoRecord prefere registro com assinaturaCooperado",
+    "tests": [
+      "scripts/test-cooperado-recibo-assinatura-apos-confirmado.ts"
+    ]
+  },
+  "anchorFiles": [
+    "src/lib/performance/cooperadoMobileTabKeepAlive.ts",
+    "src/lib/cooperado/cooperadoPwaMessengerMode.ts",
+    "src/lib/pwa/clientRelease.ts",
+    "src/services/pagamentoRegistroMerge.ts",
+    "src/app/api/cooperativa-sync/confirmar-pagamento/route.ts"
+  ],
+  "restoreCode": [
+    "git fetch origin",
+    "git checkout baseline/melhor-performance-build-283",
+    "Redeploy main a partir deste commit (autorização explícita)"
+  ]
+}

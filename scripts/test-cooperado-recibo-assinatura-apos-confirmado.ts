@@ -11,6 +11,8 @@ import {
 } from "../src/services/notaPedidoService.ts";
 import { getValorQuantoVouReceberMotorLegado } from "../src/services/cooperadoEntregasService.ts";
 import { buildCooperadoFinanceiroUiSnapshot } from "../src/services/cooperadoFinanceiroUiSnapshot.ts";
+import { mesclarAssinaturaReciboPagamentoConfirmado } from "../src/services/pagamentoIntegridadeService.ts";
+import { mergePagamentoCooperadoRecord } from "../src/services/pagamentoRegistroMerge.ts";
 
 const COOP = "coop-recibo-assin";
 const COOPERADO = "c_recibo";
@@ -83,7 +85,7 @@ withBicOfficial(() => {
     cooperativaId: COOP,
     opts: { dataReady: true },
   });
-  assert.equal(snapAntes.podeAssinarRecibo, false, "BIC não expõe assinar só por recibo legado");
+  assert.equal(snapAntes.podeAssinarRecibo, true, "BIC: pagamento confirmado sem assinatura → pode assinar");
 });
 
 data = finalizarPagamentoCooperadoConfirmado(data, pg.id, {
@@ -108,5 +110,18 @@ withBicOfficial(() => {
   assert.equal(snapDepois.podeAssinarRecibo, false);
   assert.equal(snapDepois.podeExibirBannerRecibo, false);
 });
+
+const cloudSemAssinatura = { ...pgDepois, assinaturaCooperado: undefined, assinadoEm: undefined, updatedAt: "2099-01-01T00:00:00.000Z" };
+const localComAssinatura = pgDepois;
+assert.ok(
+  mergePagamentoCooperadoRecord(localComAssinatura, cloudSemAssinatura).assinaturaCooperado?.includes("base64"),
+  "merge pull preserva assinatura local"
+);
+
+const mescladoNuvem = mesclarAssinaturaReciboPagamentoConfirmado(
+  { ...pgDepois, assinaturaCooperado: undefined, assinadoEm: undefined },
+  pgDepois
+);
+assert.ok(mescladoNuvem?.assinaturaCooperado?.includes("base64"), "mescla assinatura em pagamento já confirmado");
 
 console.log("test-cooperado-recibo-assinatura-apos-confirmado: OK");

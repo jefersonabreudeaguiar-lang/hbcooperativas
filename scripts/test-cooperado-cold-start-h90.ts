@@ -36,8 +36,13 @@ assert(releaseHost.includes("scheduleStaffPostInteractiveTask"), "ClientReleaseS
 const releaseFetchEarly = read("src/lib/pwa/fetchOfficialClientRelease.ts");
 assert(
   releaseFetchEarly.includes("applyOfficialReleaseIfNeeded") &&
-    !releaseFetchEarly.includes("markStaffReleasePending("),
-  "align unificado sem defer staff por banner"
+    releaseFetchEarly.includes("shouldAutoAlignClientRelease") &&
+    releaseFetchEarly.includes("markStaffReleasePending("),
+  "browser staff: release pendente sem reload automatico"
+);
+assert(
+  releaseHost.includes("shouldAutoAlignClientRelease"),
+  "release shield so no PWA instalado"
 );
 assert(
   !releaseHost.includes("COOPERADO_RELEASE_POLL_MS") && !releaseHost.includes("setInterval"),

@@ -337,6 +337,26 @@ function marcarFichasOperacionalPagamento(
   });
 }
 
+/** Responsável já confirmou na nuvem — cooperado só envia assinatura/recibo assinado. */
+export function mesclarAssinaturaReciboPagamentoConfirmado(
+  existente: PagamentoCooperadoRegistro,
+  incoming: PagamentoCooperadoRegistro
+): PagamentoCooperadoRegistro | null {
+  if (existente.id !== incoming.id || existente.status !== "confirmado" || incoming.status !== "confirmado") {
+    return null;
+  }
+  if (existente.assinaturaCooperado?.trim()) return null;
+  if (!incoming.assinaturaCooperado?.trim()) return null;
+  const now = new Date().toISOString();
+  return {
+    ...existente,
+    assinaturaCooperado: incoming.assinaturaCooperado,
+    assinadoEm: incoming.assinadoEm?.trim() ? incoming.assinadoEm : now,
+    reciboHtml: incoming.reciboHtml?.trim() ? incoming.reciboHtml : existente.reciboHtml,
+    updatedAt: incoming.updatedAt?.trim() ? incoming.updatedAt : now,
+  };
+}
+
 /** Publica confirmação do cooperado no operacional.json (servidor). */
 export function aplicarPagamentoConfirmadoNoOperacional(
   operacional: OperacionalSyncPayload,

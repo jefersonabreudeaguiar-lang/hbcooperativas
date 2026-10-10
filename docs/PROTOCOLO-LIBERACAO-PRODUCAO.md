@@ -39,4 +39,4 @@ Se mudou UI/fluxo/cache percebido pelo cooperado:
 
 ## Referência
 
-Manifesto do baseline atual: `docs/baselines/build-248-manifest.json`.
+Manifestos de baseline: `docs/baselines/build-248-manifest.json` (rollback legado); **`docs/baselines/melhor-performance-manifest.json`** (performance + recibo cooperado, build 283, tag `baseline/melhor-performance-build-283`).

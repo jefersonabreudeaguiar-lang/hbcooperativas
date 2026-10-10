@@ -5,7 +5,10 @@ import { guardCooperativaApi } from "@/lib/security/apiGuard";
 import { logServerMutationAudit } from "@/lib/security/serverAudit";
 import { fetchOperacionalSync, uploadOperacionalSync } from "@/lib/supabase/cooperativaSyncStorage";
 import type { PagamentoCooperadoRegistro } from "@/types";
-import { aplicarPagamentoConfirmadoNoOperacional } from "@/services/pagamentoIntegridadeService";
+import {
+  aplicarPagamentoConfirmadoNoOperacional,
+  mesclarAssinaturaReciboPagamentoConfirmado,
+} from "@/services/pagamentoIntegridadeService";
 import { resolveAuthoritativeCreditBase } from "@/modules/hb-credit/engine/creditBaseAuthoritative";
 import { syncHbLimitAfterCooperadoPayment } from "@/modules/hb-credit/engine/syncHbLimitAfterCooperadoPayment";
 import { markHbCreditLimitStale } from "@/modules/hb-credit/engine/hbCreditLimitSyncState";
@@ -64,7 +67,28 @@ export async function POST(request: Request) {
 
   if (existente.status === "confirmado") {
     alreadyConfirmed = true;
-    paymentPersisted = true;
+    const comAssinatura = mesclarAssinaturaReciboPagamentoConfirmado(existente, pagamento);
+    if (comAssinatura) {
+      const next = {
+        ...aplicarPagamentoConfirmadoNoOperacional(operacional, comAssinatura),
+        operationalResetVersion: OPERATIONAL_RESET_VERSION,
+      };
+      const uploaded = await uploadOperacionalSync(supabase, cnpj, next);
+      if (!uploaded.ok) {
+        return NextResponse.json({ error: uploaded.error }, { status: 500 });
+      }
+      paymentPersisted = true;
+      if (guard.session) {
+        await logServerMutationAudit(supabase, guard.session, cnpj, {
+          action: "editar",
+          entityType: "pagamento",
+          entityId: pagamento.id,
+          summary: "Cooperado assinou recibo (pagamento já confirmado na nuvem).",
+        });
+      }
+    } else {
+      paymentPersisted = true;
+    }
   } else {
     const staleMark = await markHbCreditLimitStale(supabase, {
       cnpj,
