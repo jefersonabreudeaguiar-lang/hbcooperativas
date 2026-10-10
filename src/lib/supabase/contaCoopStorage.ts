@@ -4222,6 +4222,56 @@ async function listSettlementTransactions(
   });
 }
 
+const SETTLEMENT_RECEIVABLE_CLOSED = new Set(["PROCESSING", "SETTLED"]);
+
+/** NF conferida mas recebível ainda OPEN — libera para liquidação (repara dados antigos). */
+async function resolveLiquidatableSettlementPayments(
+  supabase: SupabaseClient,
+  cnpj: string,
+  transacoes: SettlementTxRow[]
+): Promise<SettlementTxRow[]> {
+  const digits = normalizeCnpj(cnpj);
+  const payments = transacoes.filter((tx) => tx.tipo === "PAYMENT");
+  const txIds = payments.map((tx) => tx.id);
+  if (!txIds.length) return [];
+
+  const { data: notes } = await supabase
+    .from("hb_credit_fiscal_notes")
+    .select("transaction_id, status")
+    .eq("cooperative_cnpj", digits)
+    .in("transaction_id", txIds)
+    .neq("status", "CANCELLED");
+
+  const nfApproved = new Set<string>();
+  for (const row of notes ?? []) {
+    if (String(row.status) === "APPROVED") nfApproved.add(String(row.transaction_id));
+  }
+
+  const now = new Date().toISOString();
+  const liquidatable: SettlementTxRow[] = [];
+
+  for (const tx of payments) {
+    const st = tx.recebivelStatus ?? "";
+    if (SETTLEMENT_RECEIVABLE_CLOSED.has(st)) continue;
+
+    if (st === "ELIGIBLE") {
+      liquidatable.push(tx);
+      continue;
+    }
+
+    if (nfApproved.has(tx.id) && (st === "OPEN" || st === "BLOCKED_FOR_REVIEW")) {
+      await supabase
+        .from("hb_credit_receivables")
+        .update({ status: "ELIGIBLE", updated_at: now })
+        .eq("transaction_id", tx.id)
+        .in("status", ["OPEN", "BLOCKED_FOR_REVIEW"]);
+      liquidatable.push({ ...tx, recebivelStatus: "ELIGIBLE" });
+    }
+  }
+
+  return liquidatable;
+}
+
 function buildCooperadoLiquidacao(transacoes: SettlementTxRow[]): ContaCoopCooperadoLiquidacao[] {
   const byCooperado = new Map<string, ContaCoopCooperadoLiquidacao>();
   for (const tx of transacoes) {
@@ -4272,9 +4322,7 @@ export async function previewPartnerSettlement(
 
   const transacoes = await listSettlementTransactions(supabase, digits, partnerId, mesReferencia);
   const cooperados = buildCooperadoLiquidacao(transacoes);
-  const eligibleRecebiveis = transacoes.filter(
-    (tx) => tx.tipo === "PAYMENT" && tx.recebivelStatus === "ELIGIBLE"
-  );
+  const eligibleRecebiveis = await resolveLiquidatableSettlementPayments(supabase, digits, transacoes);
   const totalCents = eligibleRecebiveis.reduce((sum, tx) => sum + tx.amountCents, 0);
   const eligibleTransactionIds = eligibleRecebiveis.map((tx) => tx.id);
 
@@ -4294,7 +4342,11 @@ export async function previewPartnerSettlement(
     );
     const gate = evaluatePartnerFiscalSettlementGate(fiscalResumo);
     pagamentoAprovado = gate.ready && totalCents > 0;
-    bloqueioPagamento = gate.message;
+    bloqueioPagamento =
+      gate.message ??
+      (gate.ready && totalCents <= 0
+        ? "NFs conferidas, mas o valor elegível ainda está zerado — toque em Atualizar resumo."
+        : null);
   } catch {
     bloqueioPagamento = "Módulo fiscal indisponível — aplique a migration de NFs HB Créditos.";
   }
@@ -4355,9 +4407,18 @@ export async function registerPartnerSettlementPayment(
 
   const settlementId = genId("settle");
   const now = new Date().toISOString();
-  const openRecebivelIds = (await listSettlementTransactions(supabase, params.cnpj, params.partnerId, params.mesReferencia))
-    .filter((tx) => tx.tipo === "PAYMENT" && tx.recebivelStatus === "ELIGIBLE" && tx.recebivelId)
-    .map((tx) => tx.recebivelId);
+  const settlementTxs = await listSettlementTransactions(
+    supabase,
+    params.cnpj,
+    params.partnerId,
+    params.mesReferencia
+  );
+  const liquidatableTxs = await resolveLiquidatableSettlementPayments(
+    supabase,
+    normalizeCnpj(params.cnpj),
+    settlementTxs
+  );
+  const openRecebivelIds = liquidatableTxs.filter((tx) => tx.recebivelId).map((tx) => tx.recebivelId);
 
   const { error: insertError } = await supabase.from("hb_credit_settlements").insert({
     id: settlementId,
