@@ -18,6 +18,7 @@ import {
   buildInlineCooperadoBootShellScript,
 } from "@/lib/performance/cooperadoBootShell";
 import { RqlPerfDebugBootstrap } from "@/components/performance/RqlPerfDebugBootstrap";
+import { CooperadoBootShellDismiss } from "@/components/performance/CooperadoBootShellDismiss";
 
 const geist = Geist({
   variable: "--font-geist-sans",
@@ -101,6 +102,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           </div>
         </div>
         <AuthProvider>
+          <CooperadoBootShellDismiss />
           <RqlPerfDebugBootstrap />
           <ClientReleaseShieldHost />
           <PwaSilentServiceWorker />
