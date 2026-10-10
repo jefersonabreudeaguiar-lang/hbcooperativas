@@ -2562,7 +2562,7 @@ export default function FichaCorridaPage() {
           setAssinaturaModal(false);
           setAssinatura(null);
         }}
-        title="Confirmar recebimento"
+        title="Assinar recibo"
         size="md"
         footer={
           <div className="flex flex-col gap-2 w-full">
@@ -2578,53 +2578,40 @@ export default function FichaCorridaPage() {
                 </Link>
               </>
             ) : (
-              <>
-                {!assinatura && (
-                  <p className="text-sm text-amber-900 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 text-center">
-                    Toque em <strong>Assinar com minha assinatura</strong> (ou desenhe acima) para liberar o envio.
-                  </p>
-                )}
-                <Button size="lg" className="w-full" disabled={!assinatura} onClick={handleEnviarAssinatura}>
-                  <PenLine size={18} /> Confirmar assinatura e enviar recibo
-                </Button>
-              </>
+              <Button size="lg" className="w-full" disabled={!assinatura} onClick={handleEnviarAssinatura}>
+                <PenLine size={18} /> Finalizar e enviar recibo
+              </Button>
             )}
           </div>
         }
       >
         <div className="space-y-4">
-          <p className="text-sm text-gray-600">
-            Confira se os valores abaixo estão corretos. Em seguida, assine para confirmar que recebeu o pagamento.
-          </p>
-          {resumoReciboPagamento && (pagamentoAguardandoExibicao ?? pagamentoAguardando) && (
-            <div className="max-h-[min(32vh,14rem)] overflow-y-auto overscroll-contain rounded-xl border border-gray-100 p-1">
-              <ReciboResumoView
-                resumo={resumoReciboPagamento}
-                mesReferencia={(pagamentoAguardandoExibicao ?? pagamentoAguardando)!.mesReferencia}
-                descontoPadraoPct={data.config.descontoPadraoCooperativa}
-                compact
-              />
-            </div>
+          {!assinatura && !precisaCadastroAssinaturaRecibo && (
+            <>
+              <p className="text-sm text-gray-600">
+                O resumo do pagamento continua na tela de trás. Assine abaixo para confirmar o recebimento.
+              </p>
+              <div className="bg-green-50 border border-green-200 rounded-xl p-3">
+                <p className="text-center text-green-900 font-semibold mb-3">Sua assinatura</p>
+                {isCooperado && cooperadoSelecionado ? (
+                  <AssinarComCadastroBlock
+                    cooperadoId={cooperadoSelecionado.id}
+                    cooperado={cooperadoSelecionado}
+                    assinatura={assinatura}
+                    onAssinaturaChange={setAssinatura}
+                    contexto="este recibo de pagamento"
+                  />
+                ) : (
+                  <SignaturePad onChange={setAssinatura} />
+                )}
+              </div>
+            </>
           )}
-          <div className="bg-green-50 border border-green-200 rounded-xl p-3 space-y-3">
-            <p className="text-center text-green-900 font-semibold">Assinatura do cooperado</p>
-            {isCooperado && cooperadoSelecionado ? (
-              <AssinarComCadastroBlock
-                cooperadoId={cooperadoSelecionado.id}
-                cooperado={cooperadoSelecionado}
-                assinatura={assinatura}
-                onAssinaturaChange={setAssinatura}
-                contexto="este recibo de pagamento"
-              />
-            ) : (
-              <SignaturePad onChange={setAssinatura} />
-            )}
-            {!precisaCadastroAssinaturaRecibo && assinatura && (
-              <Button size="lg" className="w-full lg:hidden" onClick={handleEnviarAssinatura}>
-                <PenLine size={18} /> Finalizar e enviar recibo
-              </Button>
-            )}
-          </div>
+          {assinatura && !precisaCadastroAssinaturaRecibo && (
+            <p className="text-sm text-center text-green-800 font-medium py-2">
+              Assinatura pronta. Use o botão abaixo para enviar o recibo à cooperativa.
+            </p>
+          )}
         </div>
       </Modal>
 

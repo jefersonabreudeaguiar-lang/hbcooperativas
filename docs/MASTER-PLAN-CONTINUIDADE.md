@@ -13,7 +13,7 @@ Profissionalizar o HB Coop para expansão multicooperativa sem perder integridad
 | 0 | Diagnóstico e proteção | **Em andamento** (~45% Fase 0) | Este doc, `FASE-0-LINHA-BASE.md`, tag `baseline/build-248`, build **251** em prod |
 | 0.2 | AUTH_SECRET fora do Git | **Adiado** (decisão operador) | Risco documentado; segredo permanece em `vercel.json` até retomar |
 | 1 | Pipeline commit → produção | **Iniciado** (~10%) | `verify-production-identity`, `PROTOCOLO-LIBERACAO-PRODUCAO.md` |
-| P | **Paridade cooperado** (mesmo build + mesmos valores) | **Em andamento** | Build 255: snapshots estritos, banner atualização, shield em todas abas PWA |
+| P | **Paridade cooperado** (mesmo build + mesmos valores) | **Em andamento** | Build 255+: snapshots estritos, shield automático (sem banner manual) |
 | 2–7 | SSOT, conformidade, perf, segurança, resiliência, expansão | **Não iniciado** | — |
 
 **PROGRESSO global estimado do plano mestre:** ~8% (Fase 0 parcial + ferramentas Fase 1).
@@ -54,7 +54,7 @@ Profissionalizar o HB Coop para expansão multicooperativa sem perder integridad
 
 ## Paridade cooperado (ordem de correção)
 
-1. **Início** — build único, card “A receber” sem snapshot de build antigo; banner “Atualizar agora”.
+1. **Início** — build único, card “A receber” sem snapshot de build antigo; atualização automática (release shield).
 2. **Financeiro / recibo** — mesma regra de snapshot + UI (modal assinatura build 254+).
 3. **Entregas** — performance + mesma versão (build 252+).
 4. **Dados** — operacional/BIC: uma fonte na nuvem; `Atualizar` obrigatório após deploy (manual sync já ativo).
