@@ -33,7 +33,10 @@ export function CooperadoMobileHeaderToolbar() {
     const official = await fetchOfficialClientRelease();
     setCloudBuild(official?.build ?? null);
 
-    if (official && official.build > bundleBuild) {
+    const pageRaw = document.documentElement.getAttribute("data-app-build") ?? "";
+    const pageN = parseInt(pageRaw, 10);
+    const pageAhead = Number.isFinite(pageN) && pageN > bundleBuild;
+    if (official && (official.build > bundleBuild || pageAhead)) {
       void runClientReleaseShield("header_cloud_ahead");
     }
   }, [bundleBuild]);
@@ -53,8 +56,10 @@ export function CooperadoMobileHeaderToolbar() {
     };
   }, [refreshMeta]);
 
+  /** HTML da Vercel pode ser 273 enquanto o JS em cache ainda é 270 — chip verde enganava. */
   const behind =
-    cloudBuild != null && cloudBuild > bundleBuild;
+    (cloudBuild != null && cloudBuild > bundleBuild) ||
+    (pageBuild > 0 && pageBuild > bundleBuild);
 
   useEffect(() => {
     if (pollRef.current) {
