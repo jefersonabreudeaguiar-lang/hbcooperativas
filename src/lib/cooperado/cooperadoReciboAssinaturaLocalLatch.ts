@@ -36,17 +36,40 @@ export function resolverCooperativaIdReciboLatch(
   return pg?.cooperativaId;
 }
 
+function readLatchRaw(cooperadoId: string, cooperativaId: string): string | null {
+  if (typeof localStorage === "undefined") return null;
+  const key = storageKey(cooperadoId, cooperativaId);
+  try {
+    const fromLocal = localStorage.getItem(key);
+    if (fromLocal) return fromLocal;
+    if (typeof sessionStorage !== "undefined") {
+      const legacy = sessionStorage.getItem(key);
+      if (legacy) {
+        localStorage.setItem(key, legacy);
+        sessionStorage.removeItem(key);
+        return legacy;
+      }
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
 export function gravarReciboAssinadoLocalLatch(
   cooperadoId: string,
   cooperativaId: string,
   pagamentoId: string
 ): void {
-  if (typeof sessionStorage === "undefined") return;
+  if (typeof localStorage === "undefined") return;
   try {
-    sessionStorage.setItem(
+    localStorage.setItem(
       storageKey(cooperadoId, cooperativaId),
       JSON.stringify({ pagamentoId, at: Date.now() })
     );
+    if (typeof sessionStorage !== "undefined") {
+      sessionStorage.removeItem(storageKey(cooperadoId, cooperativaId));
+    }
   } catch {
     /* private mode */
   }
@@ -56,14 +79,15 @@ export function lerReciboAssinadoLocalLatch(
   cooperadoId: string,
   cooperativaId: string
 ): LatchPayload | null {
-  if (typeof sessionStorage === "undefined") return null;
   try {
-    const raw = sessionStorage.getItem(storageKey(cooperadoId, cooperativaId));
+    const raw = readLatchRaw(cooperadoId, cooperativaId);
     if (!raw) return null;
     const parsed = JSON.parse(raw) as LatchPayload;
     if (!parsed?.pagamentoId || !Number.isFinite(parsed.at)) return null;
     if (Date.now() - parsed.at > LATCH_MAX_MS) {
-      sessionStorage.removeItem(storageKey(cooperadoId, cooperativaId));
+      if (typeof localStorage !== "undefined") {
+        localStorage.removeItem(storageKey(cooperadoId, cooperativaId));
+      }
       return null;
     }
     return parsed;

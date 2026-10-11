@@ -608,16 +608,7 @@ export function getConsolidadoFinanceiroCooperadoMotorLegado(
     pagamentoPendenteAssinatura ??
     getPagamentoAguardandoCooperado(data, cooperadoId, undefined, coopId);
   const mesesPixAguardando = pagamentoAguardando ? getMesesReferenciaPagamento(pagamentoAguardando) : [];
-  const aguardandoAssinatura =
-    pagamentoPendenteAssinatura?.status === "confirmado"
-      ? true
-      : mesesPixAguardando.length > 0
-        ? mesesPixAguardando.some((m) => !getPagamentoConfirmadoMes(data, cooperadoId, m))
-        : meses.some(
-            (m) =>
-              Boolean(getPagamentoAguardandoCooperado(data, cooperadoId, m)) &&
-              !getPagamentoConfirmadoMes(data, cooperadoId, m)
-          );
+  const aguardandoAssinatura = Boolean(pagamentoPendenteAssinatura);
 
   let resumo: ConsolidadoFinanceiroCooperado["resumo"];
   if (aguardandoAssinatura && pagamentoAguardando && valorAberto <= 0) {
@@ -778,7 +769,7 @@ export function getValorQuantoVouReceberMotorLegado(
     undefined,
     cooperativaId
   );
-  const aguardandoRecibo = Boolean(consolidado.aguardandoAssinatura && aguardando);
+  const aguardandoRecibo = Boolean(aguardando);
   const valorRecibo = aguardandoRecibo ? round2(aguardando!.valorLiquido) : 0;
   /** Só zera o valor “a receber” quando só há recibo pendente; ficha em aberto mantém paridade com consolidado/fichas. */
   const valorExibir =
@@ -849,20 +840,6 @@ export function getResumoQuantoVouReceberCooperadoMotorLegado(
     };
   }
 
-  if (base.aguardandoAssinatura && base.valorRecibo > 0) {
-    return {
-      estado: "aguardando_assinatura",
-      mesLabel: base.mesLabel,
-      valorDestaque: base.valorRecibo,
-      valorRecibo: base.valorRecibo,
-      aguardandoAssinatura: true,
-      valorAberto: base.valor,
-      tituloValor: "PIX registrado — falta assinar",
-      subtitulo: "Confira o valor e confirme o recebimento assinando o recibo.",
-      acaoRotulo: "Confirmar recebimento",
-    };
-  }
-
   if (base.valor > 0) {
     return {
       estado: "a_receber",
@@ -874,6 +851,20 @@ export function getResumoQuantoVouReceberCooperadoMotorLegado(
       tituloValor: "Total a receber",
       subtitulo: "Valor líquido das entregas conferidas (antes do pagamento da cooperativa).",
       acaoRotulo: null,
+    };
+  }
+
+  if (base.aguardandoAssinatura && base.valorRecibo > 0) {
+    return {
+      estado: "aguardando_assinatura",
+      mesLabel: base.mesLabel,
+      valorDestaque: base.valorRecibo,
+      valorRecibo: base.valorRecibo,
+      aguardandoAssinatura: true,
+      valorAberto: base.valor,
+      tituloValor: "PIX registrado — falta assinar",
+      subtitulo: "Confira o valor e confirme o recebimento assinando o recibo.",
+      acaoRotulo: "Confirmar recebimento",
     };
   }
 

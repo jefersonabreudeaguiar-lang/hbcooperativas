@@ -5,9 +5,10 @@
 import type { AppData } from "@/types";
 import {
   cooperadoMesQuitado,
+  getMesPrincipalQuantoVouReceber,
+  listarMesesPendentesQuantoVouReceber,
 } from "@/services/cooperadoEntregasService";
 import {
-  bicCentralListarMesesPendentesQuantoVouReceber,
   bicCentralMesPrincipalQuantoVouReceber,
   bicCentralResolveInicioParaExibicao,
   bicCentralValorAReceberAgregado,
@@ -28,6 +29,37 @@ import {
 } from "@/services/notaPedidoService";
 
 const HB_CREDIT_APRESENTACAO: { apresentacaoConsolidada: true } = { apresentacaoConsolidada: true };
+
+/** Evita spread de export ainda indefinido (ciclo creditBaseFromFicha ↔ BIC no client). */
+function hbCreditMesesPendentesQuantoVouReceber(
+  data: AppData,
+  cooperadoId: string,
+  cooperativaId: string | undefined
+): string[] {
+  const bicListar = (
+    require("@/services/bicLeituraCentralCooperado") as typeof import("@/services/bicLeituraCentralCooperado")
+  ).bicCentralListarMesesPendentesQuantoVouReceber;
+  if (typeof bicListar === "function") {
+    const meses = bicListar(data, cooperadoId, cooperativaId, HB_CREDIT_APRESENTACAO);
+    if (Array.isArray(meses)) return meses;
+  }
+  return listarMesesPendentesQuantoVouReceber(data, cooperadoId, cooperativaId);
+}
+
+function hbCreditMesPrincipalFallback(
+  data: AppData,
+  cooperadoId: string,
+  cooperativaId: string | undefined
+): string {
+  const bicMes = (
+    require("@/services/bicLeituraCentralCooperado") as typeof import("@/services/bicLeituraCentralCooperado")
+  ).bicCentralMesPrincipalQuantoVouReceber;
+  if (typeof bicMes === "function") {
+    const mes = bicMes(data, cooperadoId, cooperativaId, HB_CREDIT_APRESENTACAO);
+    if (mes?.trim()) return mes;
+  }
+  return getMesPrincipalQuantoVouReceber(data, cooperadoId, cooperativaId);
+}
 
 /** Início “A receber” — mesma projeção BIC usada na UI (consolidada = valores definitivos para limite). */
 export function hbCreditInicioParaBase(
@@ -56,7 +88,7 @@ export function hbCreditMesesReferenciaUnificados(
 ): string[] {
   const canonico = resolverCooperadoIdCanonico(data, cooperadoId, cooperativaId);
   const meses = new Set<string>([
-    ...bicCentralListarMesesPendentesQuantoVouReceber(data, canonico, cooperativaId, HB_CREDIT_APRESENTACAO),
+    ...hbCreditMesesPendentesQuantoVouReceber(data, canonico, cooperativaId),
     ...listarMesesPendentesPagamentoResponsavel(data, canonico, cooperativaId),
   ]);
 
@@ -78,8 +110,7 @@ export function hbCreditMesesReferenciaUnificados(
   if (abertos.length) return abertos;
 
   const fallback =
-    mesFallback?.trim() ||
-    bicCentralMesPrincipalQuantoVouReceber(data, canonico, cooperativaId, HB_CREDIT_APRESENTACAO);
+    mesFallback?.trim() || hbCreditMesPrincipalFallback(data, canonico, cooperativaId);
   return fallback ? [fallback] : [];
 }
 

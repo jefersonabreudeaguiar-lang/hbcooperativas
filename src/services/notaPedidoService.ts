@@ -3024,8 +3024,9 @@ export function getPagamentoAguardandoCooperadoParaHistorico(
 }
 
 function pagamentoElegivelPendenciaAssinaturaRecibo(p: PagamentoCooperadoRegistro): boolean {
+  if (p.assinaturaCooperado?.trim()) return false;
   if (p.status === "aguardando_confirmacao") return true;
-  return p.status === "confirmado" && !p.assinaturaCooperado?.trim();
+  return p.status === "confirmado";
 }
 
 /**

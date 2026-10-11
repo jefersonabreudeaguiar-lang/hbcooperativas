@@ -205,6 +205,21 @@ export function bicCentralResumoQuantoVouReceberCooperado(
     };
   }
 
+  const valorDestaque = m6.valor > 0 ? m6.valor : 0;
+  if (valorDestaque > 0) {
+    return {
+      estado: "a_receber",
+      mesLabel: m6.mesLabel,
+      valorDestaque,
+      valorRecibo: 0,
+      aguardandoAssinatura: false,
+      valorAberto: m6.valor,
+      tituloValor: "Total a receber",
+      subtitulo: "Valor líquido das entregas conferidas (antes do pagamento da cooperativa).",
+      acaoRotulo: null,
+    };
+  }
+
   if (
     cooperadoUsarFluxoReciboAssinaturaNaUi() &&
     m6.aguardandoAssinatura &&
@@ -220,21 +235,6 @@ export function bicCentralResumoQuantoVouReceberCooperado(
       tituloValor: "PIX registrado — falta assinar",
       subtitulo: "Confira o valor e confirme o recebimento assinando o recibo.",
       acaoRotulo: "Confirmar recebimento",
-    };
-  }
-
-  const valorDestaque = m6.valor > 0 ? m6.valor : 0;
-  if (valorDestaque > 0) {
-    return {
-      estado: "a_receber",
-      mesLabel: m6.mesLabel,
-      valorDestaque,
-      valorRecibo: 0,
-      aguardandoAssinatura: false,
-      valorAberto: m6.valor,
-      tituloValor: "Total a receber",
-      subtitulo: "Valor líquido das entregas conferidas (antes do pagamento da cooperativa).",
-      acaoRotulo: null,
     };
   }
 
@@ -384,8 +384,8 @@ export function bicCentralResolveInicioParaExibicao(
           meses: m6.meses,
           mesLabel: m6.mesLabel,
           valor,
-          valorRecibo: modoRecibo ? m6.valorRecibo : m6.aguardandoAssinatura ? m6.valorRecibo : 0,
-          aguardandoAssinatura: Boolean(m6.aguardandoAssinatura && m6.valorRecibo > 0),
+          valorRecibo: modoRecibo ? m6.valorRecibo : 0,
+          aguardandoAssinatura: modoRecibo,
         },
         consolidated
       );
@@ -415,7 +415,7 @@ export function bicCentralResolveInicioParaExibicao(
     ...merged,
     valorRecibo: 0,
     aguardandoAssinatura: m6.aguardandoAssinatura,
-    exibir: valorM6 > 0 && !m6.aguardandoAssinatura,
+    exibir: valorM6 > 0,
     valor: valorM6,
   };
 }
