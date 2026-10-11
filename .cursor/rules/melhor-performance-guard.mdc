@@ -1,52 +1,61 @@
 ---
-description: Blindagem melhor-performance (build 283+) — mudanças em sync/PWA/abas não podem piorar resposta do app.
+description: Blindagem melhor-performance (referência build 292+) — sync/PWA/abas cooperado não podem regredir.
 alwaysApply: true
 ---
 
 # Melhor-performance — não regredir
 
-Referência: `docs/baselines/melhor-performance-manifest.json` e tag `baseline/melhor-performance-build-283`.
+Referência: `docs/baselines/melhor-performance-manifest.json` (**referenceBuild 292**, alias HB Cooperado Mobile Standard).  
+Changelog suporte: `docs/changelog/cooperado-por-build.md`.  
+Marco legado recibo: tag `baseline/melhor-performance-build-283` (não é o modelo cooperado atual).
+
+## Release (obrigatório)
+
+1. **Merge em `main`:** CI `melhor-performance-gate.yml` + local `npm run gate:melhor-performance` devem passar.
+2. **Deploy:** após push, confirmar com `npm run confirm:production:wait -- --expect-sha <sha>` até `/api/client-release` alinhar build + commit.
+3. Todo deploy de app: bump `APP_BUILD_VERSION` + `public/sw.js` + entrada no changelog cooperado (3 bullets).
 
 ## Princípio
 
-Qualquer alteração que possa afetar **tempo de resposta, travamento, abertura, troca de abas, sync ou release** deve ser **cirúrgica**: mesmo comportamento funcional, **mesma ou melhor** percepção de velocidade — **nunca pior**.
+Alterações em **tempo de resposta, abertura, abas, sync, release ou entregas** devem ser **cirúrgicas**: mesma ou melhor percepção de velocidade — **nunca pior**.
 
-## Antes de editar (checklist mental)
+## Proibido reintroduzir (regressões conhecidas)
 
-1. Ler o manifesto: `cooperadoPerformancePolicy`, `responsavelStabilityPolicy`, `anchorFiles`.
-2. Perguntar: isso adiciona sync/poll no mount, `useAppData` amplo, `operacional_full` automático, reload de release no browser staff, ou bloqueio de tela cheia?
-3. Se sim → **não** sem medida compensatória (defer, silent, dedupe, event-driven grant, keep-alive de aba).
+- **`CooperadoMobileReleaseBar`** ou botão **Atualizar na shell** do cooperado mobile (usar **`CooperadoMobileBuildBadge`** apenas).
+- **Financeiro / Início / Entregas** no **modo mensageiro** com `useAppData` / subscribe amplo ao vivo (`cooperadoPwaUiSubscribesAppData()` deve permanecer `false` no mensageiro).
+- **Financeiro “vivo”** no PWA cooperado sem **dormant AppData** + snapshot/revision.
+- **Polling** de release na abertura do cooperado; reload automático no **browser** do responsável.
+- **Snapshots PWA** válidos em builds antigos (paridade entre cooperados exige `savedBuild === APP_BUILD_VERSION`).
+- Merge ou deploy **sem** gate + confirmação de produção quando o diff toca zona vermelha.
+
+## Antes de editar (checklist)
+
+1. Ler manifesto: `cooperadoPerformancePolicy`, `prohibitedRegressions`, `anchorFiles`.
+2. Perguntar: adiciona sync/poll no mount, `operacional_full` automático, reload de release, ou tela cheia bloqueante?
+3. Se sim → compensar (defer, silent, dedupe, event-driven, idle, entrega flow guard).
 
 ## Arquivos âncora (diff exige gate)
 
-Tratar como **zona vermelha** (qualquer mudança → rodar gate antes de commit):
+Zona vermelha — rodar `npm run gate:melhor-performance` antes de commit:
 
 - `src/lib/performance/**`, `src/components/performance/**`
-- `src/lib/cooperado/cooperadoPwa*.ts`, `src/lib/cooperadoInicioCard*.ts`
+- `src/lib/cooperado/cooperadoPwa*.ts`, `cooperadoFinanceiroParidade*.ts`, `cooperadoEntregaFlowGuard.ts`, `cooperadoInicioCard*.ts`
 - `src/lib/pwa/**`, `public/sw.js`, `src/lib/appBuildVersion.ts`
 - `src/components/sync/CooperativaSyncProvider.tsx`, `src/services/syncRequest.ts`, `src/services/dataStore.ts`
-- `src/components/cooperado/CooperadoFinanceiroGate.tsx`
+- `src/components/cooperado/CooperadoFinanceiroGate.tsx`, `CooperadoMobileBuildBadge.tsx`
 - `src/hooks/useCooperadoInicioValorReceberCardState.ts`
-- `src/components/layout/AppLayout.tsx`, `src/app/(app)/dashboard/**`
-- `src/lib/performance/cooperadoEventDrivenSync.ts`
-
-## Obrigatório antes de commit que toque zona vermelha
-
-```bash
-npm run gate:melhor-performance
-```
-
-Se falhar, **reverter ou otimizar** — não commitar regressão.
+- `src/components/layout/AppLayout.tsx`, `src/app/(app)/dashboard/**`, `NotasPedidoCooperadoMain.tsx`
+- `docs/baselines/melhor-performance-manifest.json`, `docs/changelog/cooperado-por-build.md`
 
 ## Padrões que devem permanecer
 
-- Cooperado: sync operacional **manual / event-driven**; sem polling agressivo de release na abertura.
-- Staff browser: `shouldAutoAlignClientRelease` só PWA instalado; sem reload automático no Cooperados.
-- Abas cooperado: keep-alive + política DOM; **sem** release align ao trocar aba.
-- PWA leve: messenger read revision; AppData após 1º paint quando aplicável.
-- Sync: `runWithBatchedSave`, silent por padrão, `syncingForUi` só com ação visível do usuário.
+- Cooperado: sync operacional **manual / event-driven**; materializar caches após sync (`persistirCooperadoPwaMessengerCaches`).
+- PWA leve: leitura por snapshot; paridade v2; badge `v{build}` no header.
+- Entregas mobile: sync de notas no anexar/enviar; guard contra reload na câmera; pós-envio em idle.
+- Staff browser: release align automático **só** PWA instalado.
+- Abas cooperado: keep-alive; **sem** release align ao trocar aba.
 
 ## Escopo mínimo
 
-- Um problema → um diff pequeno nos arquivos necessários.
-- Não misturar refactor, HB, conferência ou migrations no mesmo commit que mexe em perf.
+- Um problema → um diff pequeno.
+- Não misturar HB Créditos, migrations ou refactor amplo no mesmo commit que mexe em perf cooperado.
