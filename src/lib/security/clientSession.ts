@@ -439,6 +439,26 @@ export function setSecureApiFetchTestOverrideForTests(
   secureApiFetchTestOverride = fn;
 }
 
+let authRecoveryRedirectScheduled = false;
+
+/** Evita dashboard quebrado com rajada de 401 após sair/entrar. */
+function scheduleClientAuthRecoveryRedirect(): void {
+  if (authRecoveryRedirectScheduled || typeof window === "undefined") return;
+  const path = window.location.pathname || "";
+  if (path === "/login" || path.startsWith("/register") || path.startsWith("/esqueci-senha")) {
+    return;
+  }
+  authRecoveryRedirectScheduled = true;
+  void import("@/services/dataStore")
+    .then((mod) => mod.logoutAndClearSession())
+    .catch(() => {
+      clearAccessToken();
+    })
+    .finally(() => {
+      window.location.replace("/login?sessao=expirada");
+    });
+}
+
 export async function secureApiFetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
   if (secureApiFetchTestOverride) {
     return secureApiFetchTestOverride(input, init);
@@ -476,7 +496,20 @@ export async function secureApiFetch(input: RequestInfo | URL, init?: RequestIni
       "Sem permissão para esta cooperativa. Verifique o login ou fale com a diretoria.";
   }
 
+  if (res.status === 401 && profile && !isAuthRecoveryGracePeriod()) {
+    scheduleClientAuthRecoveryRedirect();
+  }
+
   return res;
+}
+
+function isAuthRecoveryGracePeriod(): boolean {
+  if (typeof window === "undefined") return false;
+  try {
+    return performance.now() < 20_000;
+  } catch {
+    return false;
+  }
 }
 
 export async function logoutCloudSession(): Promise<void> {
