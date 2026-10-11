@@ -24,6 +24,7 @@ import { cooperadoTemAppInstalado, isAppStandalone } from "@/services/cooperadoA
 import { cooperadoUsaAssinaturaCadastroPilot } from "@/config/assinaturaCadastroPilot";
 import {
   cooperadoPrecisaCadastrarAssinatura,
+  normalizarAssinaturaLegadoCooperado,
 } from "@/services/cooperadoAssinaturaService";
 import { listPautasAbertasCooperado, resultadoVisivelCooperado } from "@/services/votacaoService";
 import { getCooperativaCnpj, getPendingNotaDeleteIds } from "@/services/notaPedidoCloudService";
@@ -138,9 +139,12 @@ export function buildCooperadoPwaInicioDashboardView(
   const pautasAbertas = coopId ? listPautasAbertasCooperado(data, coopId, cooperadoId) : [];
   const resultadoVotacao = coopId ? resultadoVisivelCooperado(data, coopId) : null;
   const resolvidos = listarResolvidosInicioCooperado(data, cooperadoId, coopId);
+  const cooperadoNorm = cooperado ? normalizarAssinaturaLegadoCooperado(cooperado) : undefined;
   const mostrarAssinaturaPilot = cooperadoUsaAssinaturaCadastroPilot(cooperadoId);
   const precisaAssinatura =
-    mostrarAssinaturaPilot && cooperadoPrecisaCadastrarAssinatura(cooperadoId, cooperado);
+    Boolean(cooperadoNorm) &&
+    mostrarAssinaturaPilot &&
+    cooperadoPrecisaCadastrarAssinatura(cooperadoId, cooperadoNorm);
   const temSecaoPendencias =
     rejeitadas.length > 0 ||
     fotosEmAnalise > 0 ||

@@ -224,10 +224,16 @@ export function cooperadoPrecisaCadastrarAssinatura(
   cooperado: CooperadoAssinaturaFields | null | undefined
 ): boolean {
   if (!cooperadoUsaAssinaturaCadastroPilot(cooperadoId)) return false;
-  const status = getAssinaturaCadastroStatus(cooperado);
+  if (!cooperado) return false;
+  const normalizado = normalizarAssinaturaLegadoCooperado(cooperado as Cooperado);
+  const status = getAssinaturaCadastroStatus(normalizado);
   if (status === "em_analise") return false;
   if (status === "confirmada") return false;
-  return status === "pendente" || status === "devolvida" || !getAssinaturaCadastroDataUrl(cooperado);
+  return (
+    status === "pendente" ||
+    status === "devolvida" ||
+    !getAssinaturaCadastroDataUrl(normalizado)
+  );
 }
 
 /** Assinatura confirmada (ou devolvida com foto) — cooperado pode reenviar foto atualizada no Meu cadastro. */

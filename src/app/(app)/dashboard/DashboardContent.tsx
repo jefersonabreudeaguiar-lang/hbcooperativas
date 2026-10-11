@@ -85,6 +85,12 @@ import {
   persistirCooperadoPwaInicioDashboardSnapshot,
   type CooperadoPwaInicioDashboardView,
 } from "@/lib/cooperado/cooperadoPwaInicioDashboardSnapshot";
+import { cooperadoPwaMaterializarSnapshotsFinanceirosPosSync } from "@/lib/cooperado/cooperadoPwaFinanceiroSnapshotRefresh";
+import {
+  cooperadoPrecisaCadastrarAssinatura,
+  normalizarAssinaturaLegadoCooperado,
+} from "@/services/cooperadoAssinaturaService";
+import { cooperadoUsaAssinaturaCadastroPilot } from "@/config/assinaturaCadastroPilot";
 import { cooperadoPwaInstantPaintReady, lerCooperadoPwaInicioDashboardViewForResume } from "@/lib/cooperado/cooperadoPwaInstantResume";
 import {
   cooperadoPwaUiSubscribesAppData,
@@ -262,6 +268,20 @@ function CooperadoDashboard() {
   }, [messenger, lastSyncedAt, refreshPwaInicioView]);
 
   useEffect(() => {
+    if (!inicioPwaLeve || !user?.cooperadoId) return;
+    if (!apresentacaoConsolidada || lastSyncedAt == null) return;
+    cooperadoPwaMaterializarSnapshotsFinanceirosPosSync(user);
+    refreshPwaInicioView({ rebuildFromAppData: true });
+  }, [
+    inicioPwaLeve,
+    apresentacaoConsolidada,
+    lastSyncedAt,
+    user?.id,
+    user?.cooperadoId,
+    refreshPwaInicioView,
+  ]);
+
+  useEffect(() => {
     if (!inicioPwaLeve) return;
     const onRefresh = () => {
       // Snapshots já foram gravados pelo sync; só reler cache (evita rebuild pesado do AppData).
@@ -296,9 +316,22 @@ function CooperadoDashboard() {
     messenger || inicioPwaLeve ? pwaInicioView ?? pwaInicioViewStickyRef.current : viewLive;
 
   const mesAtual = getCurrentMesReferencia();
+  const cooperadoLive = useAppDataSelector(
+    (data) => {
+      if (!data || !cooperadoIdCard) return undefined;
+      const coopId = cooperativaIdCard ?? (user ? getUserCooperativaId(user, data) : undefined);
+      const id = resolverCooperadoIdCanonico(data, cooperadoIdCard, coopId);
+      return data.cooperados.find((c) => c.id === id);
+    },
+    [cooperadoIdCard, cooperativaIdCard, user?.id, user?.cooperativaId]
+  );
   const nomeCurto =
-    view?.cooperado?.nomeCompleto.split(" ")[0] ?? user?.name?.split(" ")[0] ?? "Cooperado";
-  const coopNomeEarly = view?.coopNome ?? "";
+    view?.cooperado?.nomeCompleto.split(" ")[0] ??
+    cooperadoLive?.nomeCompleto.split(" ")[0] ??
+    user?.name?.split(" ")[0] ??
+    "Cooperado";
+  const coopNomeEarly =
+    view?.coopNome ?? (user && isAppDataWarm() ? getUserCooperativaNome(user, getData()) : "");
 
   if (!view) {
     return (
@@ -340,9 +373,18 @@ function CooperadoDashboard() {
     temSecaoPendencias,
     coopId: viewCoopId,
     mostrarAssinaturaPilot,
-    precisaAssinatura,
     cnpjDigits,
   } = view;
+
+  const cooperadoExibicao = cooperado ?? cooperadoLive;
+  const precisaAssinatura = Boolean(
+    cooperadoExibicao &&
+      cooperadoUsaAssinaturaCadastroPilot(cooperadoId) &&
+      cooperadoPrecisaCadastrarAssinatura(
+        cooperadoId,
+        normalizarAssinaturaLegadoCooperado(cooperadoExibicao)
+      )
+  );
 
   /** Mostra enquanto não estiver no atalho instalado — appInstaladoEm só indica uso passado no app. */
   const mostrarBaixarApp =
@@ -351,11 +393,13 @@ function CooperadoDashboard() {
   return (
     <div className="space-y-6 max-w-3xl">
       <div>
-        <h1 className="text-2xl font-bold text-gray-900">Olá, {cooperado?.nomeCompleto.split(" ")[0]}!</h1>
+        <h1 className="text-2xl font-bold text-gray-900">
+          Olá, {(cooperadoExibicao ?? cooperado)?.nomeCompleto.split(" ")[0] ?? nomeCurto}!
+        </h1>
         <p className="text-sm text-gray-500 mt-1">{coopNome} · {formatMesReferencia(mes)}</p>
       </div>
 
-      {cooperado && <AssinaturaStatusAviso cooperado={cooperado} />}
+      {cooperadoExibicao && <AssinaturaStatusAviso cooperado={cooperadoExibicao} />}
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <CooperadoInicioValorReceberCard
