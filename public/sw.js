@@ -1,19 +1,16 @@
 /** Bump junto com APP_BUILD_VERSION quando mudar estratégia de cache offline. */
-const CACHE_VERSION = "hb-coop-build-308";
-/** Shell HTML não vai para precache — evita mobile preso em deployment antigo (dpl_Eoe9…). */
-const PRECACHE = ["/manifest.webmanifest", "/icons/icon-192.png", "/icons/icon-512.png"];
+const CACHE_VERSION = "hb-coop-build-309";
 
 self.addEventListener("install", (event) => {
-  event.waitUntil(
-    caches.open(CACHE_VERSION).then((cache) => cache.addAll(PRECACHE)).then(() => self.skipWaiting())
-  );
+  event.waitUntil(self.skipWaiting());
 });
 
 self.addEventListener("activate", (event) => {
   event.waitUntil(
-    caches.keys().then((keys) =>
-      Promise.all(keys.filter((k) => k !== CACHE_VERSION).map((k) => caches.delete(k)))
-    ).then(() => self.clients.claim())
+    caches
+      .keys()
+      .then((keys) => Promise.all(keys.filter((k) => k !== CACHE_VERSION).map((k) => caches.delete(k))))
+      .then(() => self.clients.claim())
   );
 });
 
@@ -23,29 +20,4 @@ self.addEventListener("message", (event) => {
   }
 });
 
-self.addEventListener("fetch", (event) => {
-  if (event.request.method !== "GET") return;
-
-  const url = new URL(event.request.url);
-  if (url.origin !== self.location.origin) return;
-
-  if (url.pathname.startsWith("/_next/") || url.pathname.startsWith("/api/")) {
-    return;
-  }
-
-  // Navegação (HTML): não interceptar — fetch com Response.error() no catch gerava
-  // "This page couldn't load" no cold start do PWA; o Next já serve a página na rede.
-  if (event.request.mode === "navigate") {
-    return;
-  }
-
-  if (url.pathname.startsWith("/icons/") || url.pathname.endsWith(".webmanifest")) {
-    event.respondWith(
-      caches.match(event.request).then((cached) => cached || fetch(event.request).then((response) => {
-        const copy = response.clone();
-        caches.open(CACHE_VERSION).then((cache) => cache.put(event.request, copy));
-        return response;
-      }))
-    );
-  }
-});
+/** Sem listener "fetch" — evita "This page couldn't load" no cold start do PWA. */

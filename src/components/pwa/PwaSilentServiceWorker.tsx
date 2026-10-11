@@ -1,16 +1,34 @@
 "use client";
 
 import { useEffect } from "react";
-import { APP_BUILD_VERSION } from "@/lib/appBuildVersion";
 import { scheduleCooperadoPostInteractiveTask } from "@/lib/performance/cooperadoColdStart";
 import { isCooperadoPwaMessengerMode } from "@/lib/cooperado/cooperadoPwaMessengerMode";
-import { shouldAutoAlignClientRelease, shouldSkipServiceWorkerActivationReload } from "@/lib/pwa/clientRelease";
+import {
+  isPwaColdStartWindow,
+  shouldAutoAlignClientRelease,
+  shouldSkipServiceWorkerActivationReload,
+} from "@/lib/pwa/clientRelease";
 import { runClientReleaseShield } from "@/lib/pwa/clientReleaseShield";
+import { registerHbServiceWorker } from "@/lib/pwa/registerHbServiceWorker";
 
 function activateWaitingWorker(reg: ServiceWorkerRegistration) {
+  if (shouldSkipServiceWorkerActivationReload() || isPwaColdStartWindow()) return;
   const worker = reg.waiting ?? reg.installing;
   if (!worker) return;
   worker.postMessage({ type: "SKIP_WAITING" });
+}
+
+function scheduleActivateWaitingWorker(reg: ServiceWorkerRegistration) {
+  if (shouldSkipServiceWorkerActivationReload() || isPwaColdStartWindow()) {
+    const delay = Math.max(500, 18_000 - performance.now());
+    window.setTimeout(() => {
+      if (!shouldSkipServiceWorkerActivationReload() && !isPwaColdStartWindow()) {
+        activateWaitingWorker(reg);
+      }
+    }, delay);
+    return;
+  }
+  activateWaitingWorker(reg);
 }
 
 /** Registra SW e recarrega sozinho quando uma nova versão é publicada (sem banner/botão). */
@@ -34,8 +52,9 @@ export function PwaSilentServiceWorker() {
     navigator.serviceWorker.addEventListener("controllerchange", onControllerChange);
 
     const registerSw = () => {
-      void navigator.serviceWorker.register(`/sw.js?build=${APP_BUILD_VERSION}`).then((reg) => {
-        const onWaiting = () => activateWaitingWorker(reg);
+      void registerHbServiceWorker().then((reg) => {
+        if (!reg) return;
+        const onWaiting = () => scheduleActivateWaitingWorker(reg);
 
         const onUpdate = () => {
           const w = reg.installing ?? reg.waiting;

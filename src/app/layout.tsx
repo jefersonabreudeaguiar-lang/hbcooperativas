@@ -11,6 +11,7 @@ import { COOPERADO_MOBILE_TAB_DOM_POLICY } from "@/lib/performance/cooperadoMobi
 import {
   buildInlineDeploymentBootScript,
   buildInlinePageReleaseBootstrap,
+  buildInlineServiceWorkerMigrationScript,
   type ClientReleaseInfo,
 } from "@/lib/pwa/clientRelease";
 import { buildInlineRqlPerfStubScript } from "@/lib/performance/rqlPerfReport";
@@ -84,6 +85,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       data-staff-tab-keep-alive={staffTabKeepAliveOn ? "1" : "0"}
     >
       <head>
+        <script dangerouslySetInnerHTML={{ __html: buildInlineServiceWorkerMigrationScript() }} />
         <script dangerouslySetInnerHTML={{ __html: buildInlinePageReleaseBootstrap(pageRelease) }} />
         <script dangerouslySetInnerHTML={{ __html: buildInlineDeploymentBootScript(pageRelease) }} />
         <script dangerouslySetInnerHTML={{ __html: buildInlineRqlPerfStubScript() }} />

@@ -20,6 +20,21 @@ export const URGENT_RELEASE_ALIGN_DEDUP_MS = 90_000;
 /** Navegação recente por align de release — evita reload duplo do service worker. */
 export const RELEASE_NAV_MARK_KEY = "hb-coop-release-nav";
 export const RELEASE_NAV_MARK_GRACE_MS = 20_000;
+/** PWA: não recarregar por troca de SW nos primeiros segundos após abrir o app. */
+export const PWA_COLD_START_SW_RELOAD_GRACE_MS = 18_000;
+
+export function isPwaColdStartWindow(): boolean {
+  if (typeof window === "undefined") return false;
+  try {
+    const nav = performance.getEntriesByType("navigation")[0] as PerformanceNavigationTiming | undefined;
+    const elapsed = performance.now();
+    if (elapsed >= PWA_COLD_START_SW_RELOAD_GRACE_MS) return false;
+    if (!nav) return elapsed < PWA_COLD_START_SW_RELOAD_GRACE_MS;
+    return nav.type !== "reload";
+  } catch {
+    return true;
+  }
+}
 
 /** Remove query de align da URL sem recarregar (evita re-checks e histórico poluído). */
 export function stripReleaseAlignQueryFromUrl(): void {
@@ -38,6 +53,7 @@ export function stripReleaseAlignQueryFromUrl(): void {
 
 export function shouldSkipServiceWorkerActivationReload(): boolean {
   if (typeof window === "undefined") return false;
+  if (isPwaColdStartWindow()) return true;
   if (isCooperadoEntregaFlowActive()) return true;
   try {
     const now = Date.now();
@@ -552,6 +568,12 @@ export function hardReloadForNewRelease(reason = "guard"): void {
 
 export function buildInlinePageReleaseBootstrap(pageRelease: ClientReleaseInfo): string {
   return `window.__HB_PAGE_RELEASE__=${JSON.stringify(pageRelease)};`;
+}
+
+/** Uma vez por aparelho: remove SW antigo com fetch quebrado e recarrega uma vez. */
+export function buildInlineServiceWorkerMigrationScript(): string {
+  const migrateKey = "hb-sw-nofetch-v309";
+  return `(function(){if(!("serviceWorker"in navigator))return;var K=${JSON.stringify(migrateKey)};try{if(localStorage.getItem(K))return;}catch(e){}navigator.serviceWorker.getRegistrations().then(function(regs){if(!regs.length){try{localStorage.setItem(K,"1");}catch(e){}return;}return Promise.all(regs.map(function(r){return r.unregister();})).then(function(){try{localStorage.setItem(K,"1");}catch(e){}location.reload();});}).catch(function(){});})();`;
 }
 
 /**
