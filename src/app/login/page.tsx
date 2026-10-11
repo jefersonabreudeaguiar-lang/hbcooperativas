@@ -200,9 +200,12 @@ function LoginForm() {
                 </Link>
               </p>
 
-              <p className="text-center text-xs mt-3">
-                <Link href="/pwa-rescue.html?next=%2Flogin" className="text-gray-500 underline hover:text-gray-700">
-                  Atalho não abre (“couldn&apos;t load”)? Reparar cache do app
+              <p className="text-center text-xs mt-3 space-y-1">
+                <Link href="/pwa-rescue.html?next=%2Flogin" className="text-gray-500 underline hover:text-gray-700 block">
+                  Atalho não abre (tela preta)? Reparar cache do app
+                </Link>
+                <Link href="/pwa-diag.html" className="text-gray-500 underline hover:text-gray-700 block">
+                  Diagnóstico do atalho no celular (sem console)
                 </Link>
               </p>
 

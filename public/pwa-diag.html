@@ -1,0 +1,330 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content="#15803d" />
+    <title>Diagnóstico — HB Cooperativas</title>
+    <style>
+      body {
+        margin: 0;
+        font-family: system-ui, sans-serif;
+        background: #f9fafb;
+        color: #111827;
+        padding: 1rem 1rem 2rem;
+        box-sizing: border-box;
+        line-height: 1.45;
+      }
+      h1 {
+        font-size: 1.15rem;
+        margin: 0 0 0.5rem;
+        color: #14532d;
+      }
+      .card {
+        background: #fff;
+        border: 1px solid #e5e7eb;
+        border-radius: 0.75rem;
+        padding: 1rem;
+        margin: 0.75rem 0;
+      }
+      .ok { color: #15803d; font-weight: 600; }
+      .warn { color: #b45309; font-weight: 600; }
+      .bad { color: #b91c1c; font-weight: 600; }
+      ul { margin: 0.5rem 0 0; padding-left: 1.2rem; }
+      li { margin: 0.35rem 0; font-size: 0.9rem; }
+      textarea {
+        width: 100%;
+        min-height: 8rem;
+        font-size: 0.7rem;
+        font-family: ui-monospace, monospace;
+        border-radius: 0.5rem;
+        border: 1px solid #d1d5db;
+        padding: 0.5rem;
+        box-sizing: border-box;
+      }
+      .row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.5rem;
+        margin-top: 0.75rem;
+      }
+      .btn {
+        flex: 1 1 auto;
+        min-width: 8rem;
+        padding: 0.65rem 0.75rem;
+        border: none;
+        border-radius: 0.5rem;
+        font-size: 0.9rem;
+        font-weight: 600;
+        cursor: pointer;
+      }
+      .btn-primary { background: #15803d; color: #fff; }
+      .btn-secondary { background: #e5e7eb; color: #111827; }
+      .muted { font-size: 0.8rem; color: #6b7280; }
+      #toast {
+        position: fixed;
+        bottom: 1rem;
+        left: 50%;
+        transform: translateX(-50%);
+        background: #111827;
+        color: #fff;
+        padding: 0.5rem 1rem;
+        border-radius: 999px;
+        font-size: 0.85rem;
+        opacity: 0;
+        transition: opacity 0.2s;
+        pointer-events: none;
+      }
+      #toast.show { opacity: 1; }
+    </style>
+  </head>
+  <body>
+    <h1>Diagnóstico do atalho (celular)</h1>
+    <p class="muted">
+      Use no <strong>Chrome</strong> (barra de endereço), não precisa de console. Se o ícone do app abre tela
+      preta, cole este endereço no Chrome:
+      <strong>hbcooperativas.vercel.app/pwa-diag.html</strong>
+    </p>
+
+    <div class="card" id="resumo">
+      <p>Coletando dados…</p>
+    </div>
+
+    <div class="card">
+      <p class="muted" style="margin: 0 0 0.5rem">Relatório técnico (envie ao suporte):</p>
+      <textarea id="json" readonly></textarea>
+      <div class="row">
+        <button type="button" class="btn btn-primary" id="copy">Copiar relatório</button>
+        <button type="button" class="btn btn-secondary" id="share">Compartilhar</button>
+        <button type="button" class="btn btn-secondary" id="again">Atualizar</button>
+      </div>
+    </div>
+
+    <div class="row">
+      <button type="button" class="btn btn-primary" id="repair">Reparar atalho</button>
+      <button type="button" class="btn btn-secondary" id="login">Ir para login</button>
+    </div>
+
+    <div id="toast"></div>
+
+    <script>
+      (function () {
+        function toast(msg) {
+          var el = document.getElementById("toast");
+          if (!el) return;
+          el.textContent = msg;
+          el.classList.add("show");
+          window.setTimeout(function () {
+            el.classList.remove("show");
+          }, 2200);
+        }
+
+        function swUrl(reg) {
+          return (
+            (reg.active && reg.active.scriptURL) ||
+            (reg.waiting && reg.waiting.scriptURL) ||
+            (reg.installing && reg.installing.scriptURL) ||
+            ""
+          );
+        }
+
+        function standalone() {
+          try {
+            return (
+              window.matchMedia("(display-mode: standalone)").matches ||
+              window.navigator.standalone === true
+            );
+          } catch (e) {
+            return false;
+          }
+        }
+
+        async function collect() {
+          var diag = {
+            quando: new Date().toISOString(),
+            url: location.href,
+            standalone: standalone(),
+            online: navigator.onLine,
+            userAgent: navigator.userAgent,
+            buildHtml: document.documentElement.getAttribute("data-app-build"),
+            dplHtml: document.documentElement.getAttribute("data-dpl-id"),
+            temSessao: false,
+            serviceWorker: { controller: null, registrations: [] },
+            caches: [],
+            clientReleaseApi: null,
+            manifestStartUrl: null,
+            recomendacoes: [],
+          };
+
+          try {
+            diag.temSessao = !!localStorage.getItem("coopeagriplla_session");
+          } catch (e) {
+            diag.temSessao = "erro";
+          }
+
+          if ("serviceWorker" in navigator) {
+            diag.serviceWorker.controller = navigator.serviceWorker.controller
+              ? navigator.serviceWorker.controller.scriptURL
+              : null;
+            var regs = await navigator.serviceWorker.getRegistrations();
+            diag.serviceWorker.registrations = regs.map(function (r) {
+              var u = swUrl(r);
+              return {
+                scope: r.scope,
+                script: u,
+                legadoComQuery: u.indexOf("sw.js?") >= 0,
+              };
+            });
+          }
+
+          if ("caches" in window) {
+            try {
+              diag.caches = await caches.keys();
+            } catch (e) {
+              diag.caches = ["erro"];
+            }
+          }
+
+          try {
+            var cr = await fetch("/api/client-release?_=" + Date.now(), {
+              cache: "no-store",
+              credentials: "same-origin",
+            });
+            diag.clientReleaseApi = cr.ok ? await cr.json() : { http: cr.status };
+          } catch (e) {
+            diag.clientReleaseApi = { erro: String(e) };
+          }
+
+          try {
+            var mf = await fetch("/manifest.webmanifest", { cache: "no-store" });
+            if (mf.ok) {
+              var man = await mf.json();
+              diag.manifestStartUrl = man.start_url;
+            }
+          } catch (e) {
+            diag.manifestStartUrl = "erro";
+          }
+
+          if (diag.serviceWorker.registrations.some(function (r) {
+            return r.legadoComQuery;
+          })) {
+            diag.recomendacoes.push("Service worker antigo detectado — toque em Reparar atalho.");
+          }
+          if (!diag.online) {
+            diag.recomendacoes.push("Sem internet — conecte Wi‑fi ou dados móveis.");
+          }
+          var build = Number(diag.buildHtml || 0);
+          var cloudBuild =
+            diag.clientReleaseApi && diag.clientReleaseApi.build
+              ? Number(diag.clientReleaseApi.build)
+              : 0;
+          if (cloudBuild >= 320 && build > 0 && build < 320) {
+            diag.recomendacoes.push(
+              "Página antiga em cache — use Reparar atalho ou Limpar dados do site no Chrome."
+            );
+          }
+          if (diag.standalone && diag.recomendacoes.length === 0) {
+            diag.recomendacoes.push("Atalho parece OK. Se ainda falhar, remova o ícone e instale de novo em Baixar app.");
+          }
+          if (!diag.standalone) {
+            diag.recomendacoes.push(
+              "Você está no navegador (normal). O erro de tela preta só aparece no ícone instalado — após reparar, teste o ícone."
+            );
+          }
+
+          return diag;
+        }
+
+        function renderResumo(diag) {
+          var lines = [];
+          lines.push(
+            "<p><strong>Modo:</strong> " +
+              (diag.standalone ? '<span class="warn">atalho instalado</span>' : '<span class="ok">Chrome/navegador</span>') +
+              "</p>"
+          );
+          lines.push(
+            "<p><strong>Internet:</strong> " +
+              (diag.online ? '<span class="ok">online</span>' : '<span class="bad">offline</span>') +
+              "</p>"
+          );
+          lines.push(
+            "<p><strong>Build desta página:</strong> " +
+              (diag.buildHtml || "—") +
+              " · <strong>nuvem:</strong> " +
+              (diag.clientReleaseApi && diag.clientReleaseApi.build ? diag.clientReleaseApi.build : "—") +
+              "</p>"
+          );
+          lines.push(
+            "<p><strong>Service worker:</strong> " +
+              (diag.serviceWorker.controller
+                ? diag.serviceWorker.controller.split("/").pop()
+                : "nenhum controlando") +
+              " · registros: " +
+              diag.serviceWorker.registrations.length +
+              "</p>"
+          );
+          lines.push("<p><strong>O que fazer:</strong></p><ul>");
+          for (var i = 0; i < diag.recomendacoes.length; i++) {
+            lines.push("<li>" + diag.recomendacoes[i] + "</li>");
+          }
+          lines.push("</ul>");
+          document.getElementById("resumo").innerHTML = lines.join("");
+          document.getElementById("json").value = JSON.stringify(diag, null, 2);
+          window.__HB_PWA_DIAG__ = diag;
+        }
+
+        async function run() {
+          document.getElementById("resumo").innerHTML = "<p>Coletando dados…</p>";
+          var diag = await collect();
+          renderResumo(diag);
+        }
+
+        document.getElementById("copy").addEventListener("click", function () {
+          var text = document.getElementById("json").value;
+          if (navigator.clipboard && navigator.clipboard.writeText) {
+            navigator.clipboard.writeText(text).then(
+              function () {
+                toast("Copiado!");
+              },
+              function () {
+                toast("Selecione o texto e copie manualmente");
+              }
+            );
+          } else {
+            document.getElementById("json").select();
+            try {
+              document.execCommand("copy");
+              toast("Copiado!");
+            } catch (e) {
+              toast("Copie o texto manualmente");
+            }
+          }
+        });
+
+        document.getElementById("share").addEventListener("click", function () {
+          var text = document.getElementById("json").value;
+          if (navigator.share) {
+            navigator
+              .share({
+                title: "Diagnóstico HB Cooperativas",
+                text: text.slice(0, 12000),
+              })
+              .catch(function () {});
+          } else {
+            document.getElementById("copy").click();
+          }
+        });
+
+        document.getElementById("again").addEventListener("click", run);
+        document.getElementById("repair").addEventListener("click", function () {
+          location.href = "/pwa-rescue.html?next=%2Fpwa-diag.html";
+        });
+        document.getElementById("login").addEventListener("click", function () {
+          location.href = "/login";
+        });
+
+        run();
+      })();
+    </script>
+  </body>
+</html>
