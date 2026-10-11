@@ -19,7 +19,15 @@
     </style>
     <script>
       (function () {
-        var target = "/dashboard" + (location.search || "") + (location.hash || "");
+        function resolveTarget() {
+          var params = new URLSearchParams(location.search);
+          var next = params.get("next");
+          if (next && next.charAt(0) === "/") {
+            return next + (location.hash || "");
+          }
+          return "/dashboard" + (location.search || "") + (location.hash || "");
+        }
+        var target = resolveTarget();
         function go() {
           location.replace(target);
         }
@@ -30,9 +38,11 @@
         var purgeCaches =
           "caches" in window
             ? caches.keys().then(function (keys) {
-                return Promise.all(keys.map(function (k) {
-                  return caches.delete(k);
-                }));
+                return Promise.all(
+                  keys.map(function (k) {
+                    return caches.delete(k);
+                  })
+                );
               })
             : Promise.resolve();
         var purgeSw = navigator.serviceWorker.getRegistrations().then(function (regs) {
@@ -42,16 +52,8 @@
             })
           );
         });
-        Promise.all([purgeCaches, purgeSw])
-          .catch(function () {})
-          .then(function () {
-            return navigator.serviceWorker.register("/sw.js", {
-              scope: "/",
-              updateViaCache: "none",
-            });
-          })
-          .catch(function () {})
-          .finally(go);
+        /* Sem registrar SW aqui — primeira carga após purge vai direto à rede; o app registra /sw.js depois. */
+        Promise.all([purgeCaches, purgeSw]).catch(function () {}).finally(go);
       })();
     </script>
   </head>

@@ -1,5 +1,5 @@
 /** Bump junto com APP_BUILD_VERSION — SW só para navegação segura (sem Response.error). */
-const CACHE_VERSION = "hb-coop-build-314";
+const CACHE_VERSION = "hb-coop-build-315";
 
 self.addEventListener("install", (event) => {
   event.waitUntil(self.skipWaiting());
@@ -33,14 +33,23 @@ self.addEventListener("fetch", (event) => {
     '<!DOCTYPE html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><script>location.replace("/pwa-boot.html")</script></head><body></body></html>';
 
   event.respondWith(
-    fetch(event.request).catch(() =>
-      fetch(bootUrl).catch(
-        () =>
-          new Response(rescueHtml, {
-            status: 200,
-            headers: { "Content-Type": "text/html; charset=utf-8" },
-          })
-      )
-    )
+    (async () => {
+      try {
+        const response = await fetch(event.request, { cache: "no-store" });
+        if (response && response.ok) return response;
+      } catch {
+        /* rede */
+      }
+      try {
+        const boot = await fetch(bootUrl, { cache: "no-store" });
+        if (boot && boot.ok) return boot;
+      } catch {
+        /* offline */
+      }
+      return new Response(rescueHtml, {
+        status: 200,
+        headers: { "Content-Type": "text/html; charset=utf-8" },
+      });
+    })()
   );
 });

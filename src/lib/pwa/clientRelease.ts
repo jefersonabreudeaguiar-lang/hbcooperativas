@@ -577,9 +577,9 @@ export function buildInlinePageReleaseBootstrap(pageRelease: ClientReleaseInfo):
   return `window.__HB_PAGE_RELEASE__=${JSON.stringify(pageRelease)};`;
 }
 
-/** PWA: remove SW legado em todo carregamento (idempotente, sem reload). */
+/** PWA: remove só SW legado (sw.js?build=) e registra /sw.js estável — não desregistra o SW seguro a cada load. */
 export function buildInlineServiceWorkerMigrationScript(): string {
-  return `(function(){if(!("serviceWorker"in navigator))return;function isPwa(){try{return window.matchMedia("(display-mode: standalone)").matches||navigator.standalone===true;}catch(e){return false;}}if(!isPwa())return;var purgeCaches=("caches"in window)?caches.keys().then(function(keys){return Promise.all(keys.map(function(k){return caches.delete(k);}));}):Promise.resolve();var purgeSw=navigator.serviceWorker.getRegistrations().then(function(regs){return Promise.all(regs.map(function(r){return r.unregister();}));});var registerSafe=navigator.serviceWorker.register("/sw.js",{scope:"/",updateViaCache:"none"});void Promise.all([purgeCaches,purgeSw]).then(function(){return registerSafe;}).catch(function(){});})();`;
+  return `(function(){if(!("serviceWorker"in navigator))return;function isPwa(){try{return window.matchMedia("(display-mode: standalone)").matches||navigator.standalone===true;}catch(e){return false;}}if(!isPwa())return;function scriptUrl(reg){try{return(reg.active&&reg.active.scriptURL)||(reg.waiting&&reg.waiting.scriptURL)||(reg.installing&&reg.installing.scriptURL)||"";}catch(e){return"";}}function isLegacy(url){return url.indexOf("sw.js?")>=0||url.indexOf("sw.js%3F")>=0;}void navigator.serviceWorker.getRegistrations().then(function(regs){var legacy=regs.filter(function(r){return isLegacy(scriptUrl(r));});var step=legacy.length?Promise.all(legacy.map(function(r){return r.unregister();})):Promise.resolve();return step.then(function(){return navigator.serviceWorker.register("/sw.js",{scope:"/",updateViaCache:"none"});});}).catch(function(){});})();`;
 }
 
 /**
