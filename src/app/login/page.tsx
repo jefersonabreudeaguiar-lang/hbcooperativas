@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, Suspense } from "react";
+import { useState, Suspense, useEffect } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { Eye, EyeOff } from "lucide-react";
@@ -13,6 +13,7 @@ import { Input, Label } from "@/components/ui/Form";
 import { PLATFORM_NAME, PLATFORM_TAGLINE } from "@/utils/constants";
 import { AVISO_ACESSO_AUTOMATIZADO_RESUMO } from "@/config/politicaAcessoAutomatizado";
 import { isBicLabEnabledClient } from "@/lib/lab/bicLabGate";
+import { repairBrowserProfileIfStale } from "@/lib/pwa/browserProfileRepair";
 
 const SEGMENTOS_ATENDIDOS = [
   "Agrícola e agroindustrial",
@@ -85,6 +86,11 @@ function LoginForm() {
   const redirectTo =
     nextPath && nextPath.startsWith("/") && !nextPath.startsWith("//") ? nextPath : "/dashboard";
   const bicLabLogin = isBicLabEnabledClient();
+  const sessaoExpirada = searchParams.get("sessao") === "expirada";
+
+  useEffect(() => {
+    void repairBrowserProfileIfStale();
+  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -135,6 +141,13 @@ function LoginForm() {
               {senhaRedefinida && (
                 <p className="text-sm text-green-800 bg-green-50 border border-green-200 rounded-lg px-3 py-2 mb-4">
                   Senha redefinida com sucesso. Faça login com a nova senha.
+                </p>
+              )}
+
+              {sessaoExpirada && (
+                <p className="text-sm text-amber-900 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 mb-4">
+                  Sessão encerrada ou desatualizada. Entre de novo — se o erro continuar no Chrome normal, use{" "}
+                  <strong>Limpar dados do site</strong> (cadeado na barra) ou abra em aba anônima para testar.
                 </p>
               )}
 
