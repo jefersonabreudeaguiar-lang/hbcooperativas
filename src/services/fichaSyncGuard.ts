@@ -16,8 +16,13 @@ import { normalizeCnpj } from "@/utils/cooperativa";
 import { getCurrentMesReferencia } from "@/utils/format";
 import { cooperadoTemDadosFinanceirosMinimos } from "@/lib/cooperado/cooperadoTemDadosFinanceirosMinimos";
 import { readCooperadoLastOperacionalSyncAt } from "@/lib/performance/cooperadoOperacionalSyncAtStorage";
+import {
+  fichaPreservarSemNotaLocal,
+  notasSyncProvavelmenteCompleto,
+} from "@/services/fichaSyncNotaPullGuards";
 
 export { cooperadoTemDadosFinanceirosMinimos };
+export { fichaPreservarSemNotaLocal, notasSyncProvavelmenteCompleto } from "@/services/fichaSyncNotaPullGuards";
 
 const SYNC_COMPLETO_RATIO = 0.75;
 const TOL_VALOR = 0.02;
@@ -51,22 +56,6 @@ function fichasDaCooperativa(data: AppData, cooperativaId: string, cooperadoId?:
     if (!cooperadoId) return true;
     return fichaPertenceCooperado(data, f, cooperadoId, cooperativaId);
   });
-}
-
-/** Indica se a maior parte das fichas locais já tem nota conferida/paga (sync de notas concluído). */
-export function notasSyncProvavelmenteCompleto(data: AppData, cooperativaId: string): boolean {
-  const fichasCoop = fichasDaCooperativa(data, cooperativaId);
-  if (fichasCoop.length === 0) {
-    // Vazio local ≠ sync ok — evita delta vazio eterno após relogin no celular.
-    return false;
-  }
-  const notasElegiveis = new Set(
-    (data.notasPedido ?? [])
-      .filter((n) => n.status === "conferida" || n.status === "pago")
-      .map((n) => n.id)
-  );
-  const comNotaConferida = fichasCoop.filter((f) => notasElegiveis.has(f.notaPedidoId)).length;
-  return comNotaConferida / fichasCoop.length >= SYNC_COMPLETO_RATIO;
 }
 
 function fichaObsoletaPosTransferencia(
@@ -393,15 +382,6 @@ export function cooperadoFinanceiroDesatualizado(
     cooperadoPrecisaFullSyncFinanceiro(sane, cooperadoId, cooperativaId) ||
     cooperadoFichaValoresDesalinhados(sane, cooperadoId, cooperativaId)
   );
-}
-
-/**
- * Mantém ficha sem nota local enquanto o sync de notas parece incompleto.
- * Evita apagar ficha recém-puxada da nuvem antes das notas chegarem (celular pós-login).
- */
-export function fichaPreservarSemNotaLocal(data: AppData, ficha: FichaCorrida): boolean {
-  if (notaExcluidaLocal(data, ficha.notaPedidoId, ficha.cooperativaId)) return false;
-  return !notasSyncProvavelmenteCompleto(data, ficha.cooperativaId ?? "");
 }
 
 /** Fichas locais que referenciam notas ainda não baixadas neste aparelho. */

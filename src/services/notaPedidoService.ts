@@ -52,7 +52,7 @@ import {
 } from "@/lib/hb-credit/contaCoopDescontosMemory";
 import { contaCoopDescontosMesFetchAutoritativo } from "@/lib/hb-credit/contaCoopDescontosSyncHealth";
 import { formatMesesReferenciaRotulo } from "@/utils/format";
-import { fichaPreservarSemNotaLocal, notasSyncProvavelmenteCompleto } from "@/services/fichaSyncGuard";
+import { fichaPreservarSemNotaLocal, notasSyncProvavelmenteCompleto } from "@/services/fichaSyncNotaPullGuards";
 import { isCloudSyncInProgress } from "@/services/cloudSyncProgress";
 import { contarFotosEnviadasNota } from "@/utils/fotoEntrega";
 import { descricaoFichaCorrespondeFoto } from "@/lib/conferencia/conferenciaFichaHydrate";

@@ -9,7 +9,7 @@ import {
 } from "@/types/bic";
 import { isBicCentralReadAuthorityEnabled } from "@/lib/bic/bicCentralReadAuthority";
 import { leituraFinanceiraParidadeCooperado } from "@/lib/cooperado/cooperadoFinanceiroParidadeUniversal";
-import { cooperadoMotorRevisionOperacional } from "@/lib/cooperadoInicioCardPolicy";
+import { cooperadoMotorRevisionOperacional } from "@/lib/cooperado/cooperadoMotorRevisionOperacional";
 import { validateBicTenantContext } from "@/services/bicTenantGuard";
 import {
   bicCentralResolveInicioParaExibicao,

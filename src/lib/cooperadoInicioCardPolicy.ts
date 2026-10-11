@@ -14,7 +14,7 @@ import {
   listarMesesComValorQuantoVouReceber,
 } from "@/services/cooperadoEntregasService";
 import { getTotalAPagarCooperado } from "@/services/notaPedidoService";
-import { getContaCoopDescontosRevision } from "@/lib/hb-credit/contaCoopDescontosNotify";
+import { cooperadoMotorRevisionOperacional } from "@/lib/cooperado/cooperadoMotorRevisionOperacional";
 import { bicCentralResolveInicioParaExibicao, bicCentralSincronizarRotuloMeses, bicCentralValorAReceberAgregado } from "@/services/bicLeituraCentralCooperado";
 import { leituraFinanceiraParidadeCooperado } from "@/lib/cooperado/cooperadoFinanceiroParidadeUniversal";
 import { resolverMotorCardInicioParidadeFinanceiro } from "@/lib/cooperado/cooperadoFinanceiroParidadeInicioBridge";
@@ -133,35 +133,7 @@ export function aplicarMotorCardComGateZeroBic(
   return sanitized;
 }
 
-/** Revisão só de dados operacionais — não depende de máscara H203 de apresentação. */
-export function cooperadoMotorRevisionOperacional(
-  data: AppData,
-  cooperadoId: string,
-  cooperativaId: string | undefined
-): string {
-  const chunks: string[] = [];
-
-  for (const p of data.pagamentosCooperado) {
-    if (!pagamentoCooperadoPertenceCooperado(data, p, cooperadoId, cooperativaId)) continue;
-    chunks.push(
-      `p:${p.id}:${p.status}:${p.mesReferencia}:${p.valorLiquido}:${p.updatedAt ?? ""}:${(p.mesesReferencia ?? []).join("+")}:sig:${p.assinaturaCooperado?.trim() ? "1" : "0"}`
-    );
-  }
-
-  for (const f of data.fichaCorrida) {
-    if (!fichaPertenceCooperado(data, f, cooperadoId, cooperativaId)) continue;
-    chunks.push(`f:${f.id}:${f.mesReferencia}:${f.updatedAt ?? ""}:${f.valorLiquido ?? 0}`);
-  }
-
-  for (const n of data.notasPedido) {
-    if (!notaPertenceCooperado(data, n, cooperadoId, cooperativaId)) continue;
-    chunks.push(`n:${n.id}:${n.status}:${n.mesReferencia}:${n.updatedAt ?? ""}`);
-  }
-
-  chunks.sort();
-  const hbDescontosRev = getContaCoopDescontosRevision();
-  return `${chunks.join("|")}|hbDescontosRev:${hbDescontosRev}`;
-}
+export { cooperadoMotorRevisionOperacional } from "@/lib/cooperado/cooperadoMotorRevisionOperacional";
 
 function valorLiquidoCardInicioCooperado(
   data: AppData,
