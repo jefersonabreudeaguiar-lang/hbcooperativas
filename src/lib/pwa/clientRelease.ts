@@ -582,7 +582,7 @@ export function buildInlinePageReleaseBootstrap(pageRelease: ClientReleaseInfo):
 }
 
 export const PWA_REPAIR_SESSION_KEY = "hb-coop-pwa-repair-done";
-export const PWA_REPAIR_SESSION_VERSION = "341";
+export const PWA_REPAIR_SESSION_VERSION = String(APP_BUILD_VERSION);
 
 /**
  * Ícone instalado (WebAPK): antes do React, manda para pwa-rescue se cache/build desalinhado.
@@ -593,7 +593,7 @@ export function buildInlinePwaStandaloneLaunchGuardScript(): string {
   const repairVer = PWA_REPAIR_SESSION_VERSION;
   const buildSeenKey = BUILD_SEEN_KEY;
   const appBuild = APP_BUILD_VERSION;
-  return `(function(){try{var standalone=window.matchMedia("(display-mode: standalone)").matches||window.navigator.standalone===true;if(!standalone)return;var path=location.pathname||"";if(path.indexOf("pwa-rescue")>=0||path.indexOf("pwa-launch")>=0||path.indexOf("pwa-diag")>=0)return;var repairKey="${repairKey}";var repairVer="${repairVer}";var buildSeenKey="${buildSeenKey}";var pageBuild=parseInt(document.documentElement.getAttribute("data-app-build")||"0",10)||${appBuild};var seen=0;try{seen=parseInt(localStorage.getItem(buildSeenKey)||"0",10);}catch(e){}var repairOk=sessionStorage.getItem(repairKey)===repairVer;var buildOk=!seen||seen===pageBuild;if(repairOk&&buildOk)return;var next=location.pathname+location.search;if(!next||next==="/")next="/login?hb-pwa="+pageBuild;location.replace("/pwa-rescue.html?auto=1&next="+encodeURIComponent(next));}catch(e){}})();`;
+  return `(function(){try{var standalone=window.matchMedia("(display-mode: standalone)").matches||window.navigator.standalone===true;if(!standalone)return;var path=location.pathname||"";if(path.indexOf("pwa-rescue")>=0||path.indexOf("pwa-launch")>=0||path.indexOf("pwa-diag")>=0)return;var repairKey="${repairKey}";var repairVer="${repairVer}";var buildSeenKey="${buildSeenKey}";var pageBuild=parseInt(document.documentElement.getAttribute("data-app-build")||"0",10)||${appBuild};var seen=0;try{seen=parseInt(localStorage.getItem(buildSeenKey)||"0",10);}catch(e){}var repairOk=sessionStorage.getItem(repairKey)===repairVer;var buildOk=!seen||seen===pageBuild;function toRescue(next){if(!next||next==="/")next="/login?hb-pwa="+pageBuild;location.replace("/pwa-rescue.html?auto=1&next="+encodeURIComponent(next));}if(repairOk&&buildOk){fetch("/api/client-release?_="+Date.now(),{cache:"no-store",credentials:"same-origin"}).then(function(r){return r.ok?r.json():null;}).then(function(c){var cb=c&&c.build?Number(c.build):0;if(cb&&pageBuild&&cb>pageBuild)toRescue(location.pathname+location.search);}).catch(function(){});return;}toRescue(location.pathname+location.search);}catch(e){}})();`;
 }
 
 /** 1º paint: no atalho remove todo SW legado; registra /sw.js passthrough. */

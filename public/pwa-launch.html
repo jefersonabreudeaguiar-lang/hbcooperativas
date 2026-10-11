@@ -42,9 +42,8 @@
     <script>
       (function () {
         var REPAIR_KEY = "hb-coop-pwa-repair-done";
-        var REPAIR_VER = "341";
         var BUILD_SEEN_KEY = "hb-coop-app-build-seen";
-        var PAGE_BUILD = 341;
+        var FALLBACK_BUILD = 342;
         var params = new URLSearchParams(location.search);
         var next = params.get("next");
         var hasSession = false;
@@ -53,17 +52,28 @@
         } catch (e) {
           hasSession = false;
         }
-        var target = "/login?hb-pwa=" + PAGE_BUILD;
-        if (next && next.charAt(0) === "/") {
-          target = next.indexOf("hb-pwa=") >= 0 ? next : next + (next.indexOf("?") >= 0 ? "&" : "?") + "hb-pwa=" + PAGE_BUILD;
-        } else if (hasSession) {
-          target = "/login?hb-pwa=" + PAGE_BUILD + "&next=" + encodeURIComponent("/dashboard");
+
+        function resolveTarget(pageBuild) {
+          var target = "/login?hb-pwa=" + pageBuild;
+          if (next && next.charAt(0) === "/") {
+            target =
+              next.indexOf("hb-pwa=") >= 0
+                ? next
+                : next + (next.indexOf("?") >= 0 ? "&" : "?") + "hb-pwa=" + pageBuild;
+          } else if (hasSession) {
+            target =
+              "/login?hb-pwa=" +
+              pageBuild +
+              "&next=" +
+              encodeURIComponent("/dashboard");
+          }
+          return target;
         }
 
-        function go() {
+        function go(pageBuild, target) {
           try {
-            sessionStorage.setItem(REPAIR_KEY, REPAIR_VER);
-            localStorage.setItem(BUILD_SEEN_KEY, String(PAGE_BUILD));
+            sessionStorage.setItem(REPAIR_KEY, String(pageBuild));
+            localStorage.setItem(BUILD_SEEN_KEY, String(pageBuild));
           } catch (e) {
             /* ignore */
           }
@@ -73,18 +83,22 @@
         function purgeCaches() {
           if (!("caches" in window)) return Promise.resolve();
           return caches.keys().then(function (keys) {
-            return Promise.all(keys.map(function (k) {
-              return caches.delete(k);
-            }));
+            return Promise.all(
+              keys.map(function (k) {
+                return caches.delete(k);
+              })
+            );
           });
         }
 
         function purgeServiceWorkers() {
           if (!("serviceWorker" in navigator)) return Promise.resolve();
           return navigator.serviceWorker.getRegistrations().then(function (regs) {
-            return Promise.all(regs.map(function (r) {
-              return r.unregister();
-            }));
+            return Promise.all(
+              regs.map(function (r) {
+                return r.unregister();
+              })
+            );
           });
         }
 
@@ -106,17 +120,36 @@
           ]);
         }
 
-        purgeCaches()
-          .catch(function () {})
-          .then(purgeServiceWorkers)
-          .catch(function () {})
-          .then(registerPassthrough)
-          .catch(function () {})
-          .then(function () {
-            return waitReady(2500);
+        function runLaunch(pageBuild) {
+          var target = resolveTarget(pageBuild);
+          purgeCaches()
+            .catch(function () {})
+            .then(purgeServiceWorkers)
+            .catch(function () {})
+            .then(registerPassthrough)
+            .catch(function () {})
+            .then(function () {
+              return waitReady(2500);
+            })
+            .finally(function () {
+              window.setTimeout(function () {
+                go(pageBuild, target);
+              }, 200);
+            });
+        }
+
+        fetch("/api/client-release?_=" + Date.now(), { cache: "no-store", credentials: "same-origin" })
+          .then(function (r) {
+            return r.ok ? r.json() : null;
           })
-          .finally(function () {
-            window.setTimeout(go, 200);
+          .then(function (cloud) {
+            var pageBuild =
+              cloud && cloud.build ? Number(cloud.build) : FALLBACK_BUILD;
+            if (!pageBuild || pageBuild < 1) pageBuild = FALLBACK_BUILD;
+            runLaunch(pageBuild);
+          })
+          .catch(function () {
+            runLaunch(FALLBACK_BUILD);
           });
       })();
     </script>

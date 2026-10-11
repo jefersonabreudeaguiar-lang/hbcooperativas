@@ -16,6 +16,7 @@ import {
   registrarAcessoCooperadoApp,
 } from "@/services/cooperadoAppInstallService";
 import { getData } from "@/services/dataStore";
+import { prepareBrowserProfileForPwaInstall } from "@/lib/pwa/cooperadoPwaInstallPrepare";
 import { getUserCooperativaId, normalizeCnpj } from "@/utils/cooperativa";
 
 /** v2 — reexibe o aviso de baixar o app para quem já tinha fechado a versão antiga. */
@@ -160,6 +161,7 @@ export function PwaProvider() {
 
   const install = async () => {
     if (!deferredPrompt) return;
+    await prepareBrowserProfileForPwaInstall("install");
     await deferredPrompt.prompt();
     const choice = await deferredPrompt.userChoice;
     setDeferredPrompt(null);

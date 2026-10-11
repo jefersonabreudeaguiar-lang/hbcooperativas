@@ -2,7 +2,7 @@
 
 import { useState, Suspense, useEffect } from "react";
 import Link from "next/link";
-import { useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Eye, EyeOff } from "lucide-react";
 import { useAuth } from "@/modules/auth/AuthProvider";
 import { GuestRoute } from "@/components/auth/GuestRoute";
@@ -14,6 +14,8 @@ import { PLATFORM_NAME, PLATFORM_TAGLINE } from "@/utils/constants";
 import { AVISO_ACESSO_AUTOMATIZADO_RESUMO } from "@/config/politicaAcessoAutomatizado";
 import { isBicLabEnabledClient } from "@/lib/lab/bicLabGate";
 import { repairBrowserProfileIfStale } from "@/lib/pwa/browserProfileRepair";
+import { APP_BUILD_VERSION } from "@/lib/appBuildVersion";
+import { prepareBrowserProfileForPwaInstall } from "@/lib/pwa/cooperadoPwaInstallPrepare";
 
 const SEGMENTOS_ATENDIDOS = [
   "Agrícola e agroindustrial",
@@ -80,6 +82,7 @@ function LoginForm() {
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const { login } = useAuth();
+  const router = useRouter();
   const searchParams = useSearchParams();
   const nextPath = searchParams.get("next");
   const senhaRedefinida = searchParams.get("senha") === "redefinida";
@@ -89,8 +92,16 @@ function LoginForm() {
   const sessaoExpirada = searchParams.get("sessao") === "expirada";
 
   useEffect(() => {
-    void repairBrowserProfileIfStale({ includeStandalone: true });
-  }, []);
+    if (!searchParams.has("hb-pwa")) {
+      const q = new URLSearchParams(searchParams.toString());
+      q.set("hb-pwa", String(APP_BUILD_VERSION));
+      router.replace(`/login?${q.toString()}`);
+      return;
+    }
+    void repairBrowserProfileIfStale({ includeStandalone: true }).then((reloaded) => {
+      if (!reloaded) void prepareBrowserProfileForPwaInstall("login-canonical");
+    });
+  }, [router, searchParams]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -215,7 +226,10 @@ function LoginForm() {
               </p>
 
               <p className="text-center text-xs mt-3 space-y-1">
-                <Link href="/pwa-rescue.html?next=%2Flogin" className="text-gray-500 underline hover:text-gray-700 block">
+                <Link
+                  href={`/pwa-rescue.html?auto=1&next=${encodeURIComponent(`/login?hb-pwa=${APP_BUILD_VERSION}`)}`}
+                  className="text-gray-500 underline hover:text-gray-700 block"
+                >
                   Atalho não abre (tela preta)? Reparar cache do app
                 </Link>
                 <Link href="/pwa-diag.html" className="text-gray-500 underline hover:text-gray-700 block">
