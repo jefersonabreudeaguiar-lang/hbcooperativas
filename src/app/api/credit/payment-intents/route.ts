@@ -85,12 +85,13 @@ export async function POST(request: Request) {
     if ("response" in resolved) return resolved.response;
 
     const actorId = gate.ctx.session?.sub ?? resolved.cooperadoId;
-    void prepareHbCreditPaymentAuthorize(
+    /** Em paralelo à validação — tempo do PIN; authorize reutiliza conta já SYNCED. */
+    const prepareLimitePromise = prepareHbCreditPaymentAuthorize(
       gate.ctx.supabase,
       cnpj,
       resolved.cooperadoId,
       actorId
-    ).catch(() => {});
+    );
 
     if (isCooperadoTransferIntentId(parsed.intentId)) {
       const { data: intentRow } = await gate.ctx.supabase
@@ -111,9 +112,17 @@ export async function POST(request: Request) {
         receiverNome: nome,
       });
       if (!transferResult.ok) {
+        void prepareLimitePromise.catch(() => {});
         return NextResponse.json(
           { ok: false, error: transferResult.error, code: transferResult.code },
           { status: 400 }
+        );
+      }
+      const prepareTransfer = await prepareLimitePromise;
+      if (!prepareTransfer.ok) {
+        return NextResponse.json(
+          { ok: false, error: prepareTransfer.error, code: prepareTransfer.code ?? "HB_LIMIT_PREPARE_FAILED" },
+          { status: 503 }
         );
       }
       return NextResponse.json({
@@ -135,7 +144,15 @@ export async function POST(request: Request) {
       { fast: body?.fast !== false }
     );
     if (!result.ok) {
+      void prepareLimitePromise.catch(() => {});
       return NextResponse.json({ ok: false, error: result.error, code: result.code }, { status: 400 });
+    }
+    const prepare = await prepareLimitePromise;
+    if (!prepare.ok) {
+      return NextResponse.json(
+        { ok: false, error: prepare.error, code: prepare.code ?? "HB_LIMIT_PREPARE_FAILED" },
+        { status: 503 }
+      );
     }
     return NextResponse.json({
       ok: true,
