@@ -16,6 +16,7 @@ import { isBicLabEnabledClient } from "@/lib/lab/bicLabGate";
 import { repairBrowserProfileIfStale } from "@/lib/pwa/browserProfileRepair";
 import { APP_BUILD_VERSION } from "@/lib/appBuildVersion";
 import { prepareBrowserProfileForPwaInstall } from "@/lib/pwa/cooperadoPwaInstallPrepare";
+import { PwaRepararAtalhoPanel } from "@/components/pwa/PwaRepararAtalhoPanel";
 
 const SEGMENTOS_ATENDIDOS = [
   "Agrícola e agroindustrial",
@@ -225,17 +226,7 @@ function LoginForm() {
                 </Link>
               </p>
 
-              <p className="text-center text-xs mt-3 space-y-1">
-                <Link
-                  href={`/pwa-rescue.html?auto=1&next=${encodeURIComponent(`/login?hb-pwa=${APP_BUILD_VERSION}`)}`}
-                  className="text-gray-500 underline hover:text-gray-700 block"
-                >
-                  Atalho não abre (tela preta)? Reparar cache do app
-                </Link>
-                <Link href="/pwa-diag.html" className="text-gray-500 underline hover:text-gray-700 block">
-                  Diagnóstico do atalho no celular (sem console)
-                </Link>
-              </p>
+              <PwaRepararAtalhoPanel />
 
               <p className="text-xs text-gray-400 mt-6 text-center leading-relaxed px-2">
                 {AVISO_ACESSO_AUTOMATIZADO_RESUMO}

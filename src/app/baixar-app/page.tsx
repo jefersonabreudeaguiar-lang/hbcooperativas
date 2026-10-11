@@ -8,6 +8,7 @@ import { BaixarAppGuide, detectDevicePlatform } from "@/components/pwa/BaixarApp
 import { PLATFORM_NAME } from "@/utils/constants";
 import { useAuth } from "@/modules/auth/AuthProvider";
 import { APP_BUILD_VERSION } from "@/lib/appBuildVersion";
+import { PwaRepararAtalhoPanel } from "@/components/pwa/PwaRepararAtalhoPanel";
 
 export default function BaixarAppPage() {
   const { user } = useAuth();
@@ -42,6 +43,8 @@ export default function BaixarAppPage() {
 
         <BaixarAppGuide highlight={platform} />
 
+        <PwaRepararAtalhoPanel variant="compact" />
+
         <p className="text-center text-sm text-gray-600">
           {user ? null : (
             <>
@@ -53,7 +56,7 @@ export default function BaixarAppPage() {
             </>
           )}
           <Link href="/pwa-diag.html" className="font-semibold text-green-700 hover:text-green-900">
-            Ícone com tela preta?
+            Diagnóstico do atalho
           </Link>
         </p>
       </div>
