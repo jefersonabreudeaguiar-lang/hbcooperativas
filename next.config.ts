@@ -86,6 +86,10 @@ const nextConfig: NextConfig = {
         headers: [{ key: "Cache-Control", value: "no-cache, no-store, must-revalidate" }],
       },
       {
+        source: "/pwa-launch.html",
+        headers: [{ key: "Cache-Control", value: "no-cache, no-store, must-revalidate" }],
+      },
+      {
         source: "/pwa-rescue.html",
         headers: [{ key: "Cache-Control", value: "no-cache, no-store, must-revalidate" }],
       },

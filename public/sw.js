@@ -1,7 +1,7 @@
 /**
  * Substitui SW legado que falhava em navigate. Mantém-se ativo só com passthrough (sem cache).
  */
-const CACHE_VERSION = "hb-coop-build-323-nav-pass";
+const CACHE_VERSION = "hb-coop-build-324-nav-pass";
 
 self.addEventListener("install", (event) => {
   event.waitUntil(self.skipWaiting());

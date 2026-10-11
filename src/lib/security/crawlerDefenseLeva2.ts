@@ -51,6 +51,7 @@ export function isStaticOrFrameworkPath(pathname: string): boolean {
   if (pathname === "/favicon.ico" || pathname === "/robots.txt" || pathname === "/sitemap.xml") return true;
   if (
     pathname === "/pwa-boot.html" ||
+    pathname === "/pwa-launch.html" ||
     pathname === "/pwa-rescue.html" ||
     pathname === "/pwa-diag.html" ||
     pathname === "/sw.js"

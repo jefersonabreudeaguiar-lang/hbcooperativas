@@ -5,6 +5,14 @@ import { useRouter } from "next/navigation";
 import { useAuth } from "@/modules/auth/AuthProvider";
 import { dismissCooperadoBootShell } from "@/lib/performance/cooperadoBootShell";
 
+function isStandalonePwa(): boolean {
+  if (typeof window === "undefined") return false;
+  return (
+    window.matchMedia("(display-mode: standalone)").matches ||
+    (window.navigator as Navigator & { standalone?: boolean }).standalone === true
+  );
+}
+
 /** Redireciona usuários já autenticados (login/cadastro). */
 export function GuestRoute({
   children,
@@ -20,7 +28,14 @@ export function GuestRoute({
   useLayoutEffect(() => {
     dismissCooperadoBootShell();
     if (!loading && user && authenticatedRedirect) {
-      router.replace(authenticatedRedirect);
+      if (isStandalonePwa()) {
+        const path = authenticatedRedirect;
+        if (window.location.pathname !== path) {
+          window.location.replace(path);
+        }
+      } else {
+        router.replace(authenticatedRedirect);
+      }
     }
   }, [user, loading, router, authenticatedRedirect]);
 

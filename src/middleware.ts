@@ -67,6 +67,6 @@ export async function middleware(request: NextRequest) {
 export const config = {
   matcher: [
     "/api/:path*",
-    "/((?!_next/static|_next/image|favicon.ico|pwa-boot\\.html|pwa-rescue\\.html|pwa-diag\\.html|sw\\.js|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico|woff2?|webmanifest)$).*)",
+    "/((?!_next/static|_next/image|favicon.ico|pwa-boot\\.html|pwa-launch\\.html|pwa-rescue\\.html|pwa-diag\\.html|sw\\.js|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico|woff2?|webmanifest)$).*)",
   ],
 };
