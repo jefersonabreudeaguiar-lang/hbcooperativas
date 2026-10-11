@@ -11,6 +11,7 @@
     "test:entregas": "npx tsx scripts/simulate-entrega-flow.ts",
     "test:perf-fluxos": "npx tsx scripts/run-suite-perf-fluxos.ts",
     "baseline:melhor-performance": "npx tsx scripts/capture-melhor-performance-baseline.ts",
+    "gate:melhor-performance": "npm run baseline:melhor-performance",
     "test:image-pipeline": "npx tsx scripts/test-image-pipeline.ts",
     "generate:pwa-icons": "node scripts/generate-pwa-icons.mjs",
     "reset:operacional": "npx tsx scripts/reset-operacional-cloud.mjs",

@@ -18,6 +18,11 @@
   "localVerify": [
     "npm run baseline:melhor-performance"
   ],
+  "guard": {
+    "cursorRule": ".cursor/rules/melhor-performance-guard.mdc",
+    "ciWorkflow": ".github/workflows/melhor-performance-gate.yml",
+    "localCommand": "npm run gate:melhor-performance"
+  },
   "rqlBaselineReadonly": {
     "capturedAt": "2026-10-10T20:18:00-03:00",
     "machineNote": "dev agent; re-run baseline-performance-rql-h80-readonly.ts to compare",

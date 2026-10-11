@@ -18,6 +18,12 @@ npm run baseline:melhor-performance
 
 Inclui métricas HX 8.0 read-only, smoke cold-start/release e contrato recibo+assinatura.
 
+## Blindagem (não regredir)
+
+- **Agente (Cursor):** rule `.cursor/rules/melhor-performance-guard.mdc` — mudanças em sync/PWA/abas devem ser cirúrgicas; só melhorar ou manter a resposta, nunca piorar.
+- **Antes de commit** em paths sensíveis (ver rule + `anchorFiles` no manifesto): `npm run gate:melhor-performance`
+- **CI (GitHub):** workflow `melhor-performance-gate.yml` roda o mesmo gate quando esses paths mudam em PR/push no `main`.
+
 ## Se a performance “bagunçar” de novo
 
 1. `git fetch origin && git show baseline/melhor-performance-build-283 --no-patch`

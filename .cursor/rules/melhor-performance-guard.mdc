@@ -1,0 +1,52 @@
+---
+description: Blindagem melhor-performance (build 283+) — mudanças em sync/PWA/abas não podem piorar resposta do app.
+alwaysApply: true
+---
+
+# Melhor-performance — não regredir
+
+Referência: `docs/baselines/melhor-performance-manifest.json` e tag `baseline/melhor-performance-build-283`.
+
+## Princípio
+
+Qualquer alteração que possa afetar **tempo de resposta, travamento, abertura, troca de abas, sync ou release** deve ser **cirúrgica**: mesmo comportamento funcional, **mesma ou melhor** percepção de velocidade — **nunca pior**.
+
+## Antes de editar (checklist mental)
+
+1. Ler o manifesto: `cooperadoPerformancePolicy`, `responsavelStabilityPolicy`, `anchorFiles`.
+2. Perguntar: isso adiciona sync/poll no mount, `useAppData` amplo, `operacional_full` automático, reload de release no browser staff, ou bloqueio de tela cheia?
+3. Se sim → **não** sem medida compensatória (defer, silent, dedupe, event-driven grant, keep-alive de aba).
+
+## Arquivos âncora (diff exige gate)
+
+Tratar como **zona vermelha** (qualquer mudança → rodar gate antes de commit):
+
+- `src/lib/performance/**`, `src/components/performance/**`
+- `src/lib/cooperado/cooperadoPwa*.ts`, `src/lib/cooperadoInicioCard*.ts`
+- `src/lib/pwa/**`, `public/sw.js`, `src/lib/appBuildVersion.ts`
+- `src/components/sync/CooperativaSyncProvider.tsx`, `src/services/syncRequest.ts`, `src/services/dataStore.ts`
+- `src/components/cooperado/CooperadoFinanceiroGate.tsx`
+- `src/hooks/useCooperadoInicioValorReceberCardState.ts`
+- `src/components/layout/AppLayout.tsx`, `src/app/(app)/dashboard/**`
+- `src/lib/performance/cooperadoEventDrivenSync.ts`
+
+## Obrigatório antes de commit que toque zona vermelha
+
+```bash
+npm run gate:melhor-performance
+```
+
+Se falhar, **reverter ou otimizar** — não commitar regressão.
+
+## Padrões que devem permanecer
+
+- Cooperado: sync operacional **manual / event-driven**; sem polling agressivo de release na abertura.
+- Staff browser: `shouldAutoAlignClientRelease` só PWA instalado; sem reload automático no Cooperados.
+- Abas cooperado: keep-alive + política DOM; **sem** release align ao trocar aba.
+- PWA leve: messenger read revision; AppData após 1º paint quando aplicável.
+- Sync: `runWithBatchedSave`, silent por padrão, `syncingForUi` só com ação visível do usuário.
+
+## Escopo mínimo
+
+- Um problema → um diff pequeno nos arquivos necessários.
+- Não misturar refactor, HB, conferência ou migrations no mesmo commit que mexe em perf.
