@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content="#15803d" />
+    <title>Console forensics — HB</title>
+    <style>
+      body {
+        margin: 0;
+        font-family: system-ui, sans-serif;
+        background: #0f172a;
+        color: #e2e8f0;
+        padding: 1rem;
+        line-height: 1.45;
+      }
+      h1 { font-size: 1.1rem; color: #86efac; margin: 0 0 0.5rem; }
+      p { font-size: 0.9rem; color: #94a3b8; }
+      button, a.btn {
+        display: block;
+        width: 100%;
+        margin: 0.5rem 0;
+        padding: 0.85rem;
+        border: none;
+        border-radius: 0.5rem;
+        font-size: 1rem;
+        font-weight: 600;
+        cursor: pointer;
+        text-align: center;
+        text-decoration: none;
+        box-sizing: border-box;
+      }
+      .primary { background: #15803d; color: #fff; }
+      .secondary { background: #334155; color: #f8fafc; }
+      textarea {
+        width: 100%;
+        min-height: 12rem;
+        margin-top: 0.75rem;
+        font-size: 10px;
+        font-family: ui-monospace, monospace;
+        background: #020617;
+        color: #cbd5e1;
+        border: 1px solid #475569;
+        border-radius: 0.5rem;
+        padding: 0.5rem;
+        box-sizing: border-box;
+      }
+      #status { font-size: 0.85rem; margin: 0.5rem 0; color: #fbbf24; }
+      code { font-size: 0.75rem; word-break: break-all; color: #7dd3fc; }
+    </style>
+  </head>
+  <body>
+    <h1>Diagnóstico completo (celular)</h1>
+    <p>Use no <strong>Chrome</strong> do celular. Toque em rodar — não precisa de USB. Envie o JSON ao suporte.</p>
+    <p id="status">Aguardando…</p>
+    <button type="button" class="primary" id="run">Rodar diagnóstico completo</button>
+    <button type="button" class="secondary" id="copy" hidden>Copiar relatório</button>
+    <a class="btn secondary" id="repair" href="/pwa-rescue.html?auto=1&next=%2Flogin%3Fhb-pwa%3D344">Reparar atalho (auto)</a>
+    <p class="secondary" style="font-size: 0.8rem">
+      Console (PC + USB): cole <code>await HB_COOP_RUN_FORENSICS()</code> após carregar
+      <code>/hb-console-forensics-paste.js</code>
+    </p>
+    <textarea id="out" readonly hidden></textarea>
+
+    <script>
+      (function () {
+        var status = document.getElementById("status");
+        var out = document.getElementById("out");
+        var copyBtn = document.getElementById("copy");
+        var repair = document.getElementById("repair");
+
+        fetch("/api/client-release?_=" + Date.now(), { cache: "no-store" })
+          .then(function (r) { return r.ok ? r.json() : { build: 344 }; })
+          .then(function (c) {
+            var b = c.build || 344;
+            repair.href =
+              "/pwa-rescue.html?auto=1&next=" + encodeURIComponent("/login?hb-pwa=" + b);
+          })
+          .catch(function () {});
+
+        function loadAndRun() {
+          return new Promise(function (resolve, reject) {
+            var s = document.createElement("script");
+            s.src = "/hb-console-forensics-paste.js?_=" + Date.now();
+            s.onload = function () {
+              if (!window.HB_COOP_RUN_FORENSICS) {
+                reject(new Error("HB_COOP_RUN_FORENSICS nao carregou"));
+                return;
+              }
+              window.HB_COOP_RUN_FORENSICS().then(resolve).catch(reject);
+            };
+            s.onerror = function () {
+              reject(new Error("Falha ao carregar script"));
+            };
+            document.body.appendChild(s);
+          });
+        }
+
+        document.getElementById("run").addEventListener("click", function () {
+          status.textContent = "Rodando… aguarde até 15s";
+          loadAndRun()
+            .then(function (report) {
+              var text = JSON.stringify(report, null, 2);
+              out.value = text;
+              out.hidden = false;
+              copyBtn.hidden = false;
+              status.textContent = "Pronto. Copie e envie (causas: " + (report.causasProvaveis[0] || "—") + ")";
+            })
+            .catch(function (e) {
+              status.textContent = "Erro: " + e;
+            });
+        });
+
+        copyBtn.addEventListener("click", function () {
+          navigator.clipboard.writeText(out.value).then(
+            function () { status.textContent = "Copiado!"; },
+            function () {
+              out.select();
+              status.textContent = "Selecione o texto e copie manualmente.";
+            }
+          );
+        });
+      })();
+    </script>
+  </body>
+</html>
