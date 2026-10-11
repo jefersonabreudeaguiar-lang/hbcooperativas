@@ -72,27 +72,28 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
-  const gate = await requireCreditApi(request, { requireOperations: true });
-  if (!gate.ok) return gate.response;
+  try {
+    const gate = await requireCreditApi(request, { requireOperations: true });
+    if (!gate.ok) return gate.response;
 
-  const body = await request.json().catch(() => null);
-  const action = String(body?.action ?? "");
-  const cnpj = normalizeCnpj(String(body?.cnpj ?? gate.ctx.session?.cooperativaCnpj ?? ""));
-  if (cnpj.length !== 14) return NextResponse.json({ error: "CNPJ inválido." }, { status: 400 });
+    const body = await request.json().catch(() => null);
+    const action = String(body?.action ?? "");
+    const cnpj = normalizeCnpj(String(body?.cnpj ?? gate.ctx.session?.cooperativaCnpj ?? ""));
+    if (cnpj.length !== 14) return NextResponse.json({ error: "CNPJ inválido." }, { status: 400 });
 
-  const denyCoop = requireCreditCnpj(gate.ctx, cnpj);
-  if (denyCoop) return denyCoop;
-  const denyStaff = requireCreditStaff(gate.ctx);
-  if (denyStaff) return denyStaff;
+    const denyCoop = requireCreditCnpj(gate.ctx, cnpj);
+    if (denyCoop) return denyCoop;
+    const denyStaff = requireCreditStaff(gate.ctx);
+    if (denyStaff) return denyStaff;
 
-  const actorId = gate.ctx.session?.sub ?? "system";
-  const creditosValidation = validateCreditosBaseCents(body?.creditosBaseCents ?? {});
-  if (!creditosValidation.ok) {
-    return NextResponse.json({ error: creditosValidation.error, code: creditosValidation.code }, { status: 400 });
-  }
-  const creditosBaseCents = creditosValidation.sanitized;
+    const actorId = gate.ctx.session?.sub ?? "system";
+    const creditosValidation = validateCreditosBaseCents(body?.creditosBaseCents ?? {});
+    if (!creditosValidation.ok) {
+      return NextResponse.json({ error: creditosValidation.error, code: creditosValidation.code }, { status: 400 });
+    }
+    const creditosBaseCents = creditosValidation.sanitized;
 
-  if (action === "set_teto") {
+    if (action === "set_teto") {
     const tetoPercent = Number(body?.tetoPercentual ?? body?.tetoPercent ?? 0);
     const result = await setTetoGlobalPercent(
       gate.ctx.supabase,
@@ -208,5 +209,10 @@ export async function POST(request: Request) {
     return NextResponse.json({ ok: true });
   }
 
-  return NextResponse.json({ error: "Ação inválida." }, { status: 400 });
+    return NextResponse.json({ error: "Ação inválida." }, { status: 400 });
+  } catch (e) {
+    console.error("[POST /api/credit/limites]", e);
+    const message = e instanceof Error ? e.message : "Erro ao processar limites.";
+    return NextResponse.json({ ok: false, error: message }, { status: 503 });
+  }
 }

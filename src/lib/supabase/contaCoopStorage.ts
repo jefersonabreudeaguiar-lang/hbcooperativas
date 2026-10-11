@@ -3367,27 +3367,29 @@ export async function setLimiteColetivoPercentual(
   );
   if (!preview.ok) return { ok: false, error: preview.error ?? "Prévia recusada." };
 
-  let updated = 0;
-  for (const item of preview.itens) {
-    const result = await writeLimiteCooperadoCents(
-      supabase,
-      cnpj,
-      item.cooperadoId,
-      item.novoLimiteCents,
-      actorUserId,
-      {
-        anterior: {
-          limiteLiberadoCents: item.limiteAtualCents,
-          valorUsadoCents: item.valorUsadoCents,
-          valorDisponivelCents: computeDisponivel(item.limiteAtualCents, item.valorUsadoCents),
+  const writeResults = await Promise.all(
+    preview.itens.map((item) =>
+      writeLimiteCooperadoCents(
+        supabase,
+        cnpj,
+        item.cooperadoId,
+        item.novoLimiteCents,
+        actorUserId,
+        {
+          anterior: {
+            limiteLiberadoCents: item.limiteAtualCents,
+            valorUsadoCents: item.valorUsadoCents,
+            valorDisponivelCents: computeDisponivel(item.limiteAtualCents, item.valorUsadoCents),
+          },
+          novo: { limiteLiberadoCents: item.novoLimiteCents },
         },
-        novo: { limiteLiberadoCents: item.novoLimiteCents },
-      },
-      "LIMIT_COLLECTIVE"
-    );
-    if (!result.ok) return result;
-    updated++;
-  }
+        "LIMIT_COLLECTIVE"
+      )
+    )
+  );
+  const failed = writeResults.find((r) => !r.ok);
+  if (failed && !failed.ok) return failed;
+  const updated = writeResults.length;
   const persisted = await persistCooperativaLiberacaoPercent(supabase, cnpj, percentual, actorUserId);
   if (!persisted.ok) return persisted;
   return { ok: true, updated };

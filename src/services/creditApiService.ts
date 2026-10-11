@@ -41,7 +41,9 @@ async function parseJson<T>(res: Response): Promise<T & { error?: string }> {
     );
   }
   if (!res.ok) {
-    throw new Error(mensagemErroAuthApi(res.status, data.error));
+    const extra = data as { error?: string; message?: string };
+    const serverMsg = extra.error ?? extra.message;
+    throw new Error(mensagemErroAuthApi(res.status, serverMsg));
   }
   return data;
 }

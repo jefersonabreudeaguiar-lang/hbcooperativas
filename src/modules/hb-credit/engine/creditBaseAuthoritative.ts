@@ -146,10 +146,9 @@ export async function resolveAuthoritativeCreditBase(
   }
 
   const cooperados = await fetchCooperadosFromStorage(supabase, digits);
-  const [tableResult, storageNotas] = await Promise.all([
-    fetchNotasFromTable(supabase, digits),
-    fetchNotasFromStorage(supabase, digits),
-  ]);
+  const tableResult = await fetchNotasFromTable(supabase, digits);
+  // Com tabela SQL, evita N downloads no bucket (timeout na liberação coletiva de limites).
+  const storageNotas = tableResult.tableMissing ? await fetchNotasFromStorage(supabase, digits) : [];
   const notas = mergeNotasSources(tableResult.notas, storageNotas).map((n) => ({
     ...n,
     cooperativaId: n.cooperativaId ?? cooperativaId,

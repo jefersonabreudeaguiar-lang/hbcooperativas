@@ -204,10 +204,8 @@ async function loadAuthoritativeContext(
 
   const cooperados = await fetchCooperadosFromStorage(supabase, digits);
   const cooperadoIds = cooperados.map((c) => c.id).filter(Boolean);
-  const [tableResult, storageNotas] = await Promise.all([
-    fetchNotasFromTable(supabase, digits),
-    fetchNotasFromStorage(supabase, digits),
-  ]);
+  const tableResult = await fetchNotasFromTable(supabase, digits);
+  const storageNotas = tableResult.tableMissing ? await fetchNotasFromStorage(supabase, digits) : [];
   const notas = mergeNotasSources(tableResult.notas, storageNotas).map((n) => ({
     ...n,
     cooperativaId: n.cooperativaId ?? cooperativaId,
