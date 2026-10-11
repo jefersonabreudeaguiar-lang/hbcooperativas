@@ -85,7 +85,8 @@ export async function POST(request: Request) {
     if ("response" in resolved) return resolved.response;
 
     const actorId = gate.ctx.session?.sub ?? resolved.cooperadoId;
-    /** Em paralelo à validação — tempo do PIN; authorize reutiliza conta já SYNCED. */
+    const fastValidate = body?.fast !== false;
+    /** Em paralelo à validação — no scan rápido não bloqueia a tela PIN; authorize prepara de novo. */
     const prepareLimitePromise = prepareHbCreditPaymentAuthorize(
       gate.ctx.supabase,
       cnpj,
@@ -118,6 +119,17 @@ export async function POST(request: Request) {
           { status: 400 }
         );
       }
+      if (fastValidate) {
+        void prepareLimitePromise.catch(() => {});
+        return NextResponse.json({
+          ok: true,
+          valid: true,
+          intent: transferResult.intent,
+          parceiroNome: transferResult.parceiroNome,
+          limite: transferResult.limite,
+          cooperadoTransfer: true,
+        });
+      }
       const prepareTransfer = await prepareLimitePromise;
       if (!prepareTransfer.ok) {
         return NextResponse.json(
@@ -141,11 +153,21 @@ export async function POST(request: Request) {
       parsed.nonce,
       resolved.cooperadoId,
       cnpj,
-      { fast: body?.fast !== false }
+      { fast: fastValidate }
     );
     if (!result.ok) {
       void prepareLimitePromise.catch(() => {});
       return NextResponse.json({ ok: false, error: result.error, code: result.code }, { status: 400 });
+    }
+    if (fastValidate) {
+      void prepareLimitePromise.catch(() => {});
+      return NextResponse.json({
+        ok: true,
+        valid: true,
+        intent: result.intent,
+        parceiroNome: result.parceiroNome,
+        limite: result.limite,
+      });
     }
     const prepare = await prepareLimitePromise;
     if (!prepare.ok) {

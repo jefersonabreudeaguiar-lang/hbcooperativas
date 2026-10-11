@@ -48,6 +48,7 @@ function EscanearQrContent() {
     (payload: string) => {
       if (validating || !hbApiCooperadoId || cnpj.length !== 14) return;
       setScanError("");
+      setValidating(true);
       try {
         prepareAndOpenHbCreditPaymentFromQrScan(router, {
           cnpj,

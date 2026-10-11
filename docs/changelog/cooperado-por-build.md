@@ -6,7 +6,11 @@ Produção: https://hbcooperativas.vercel.app
 
 ---
 
-## v305 (atual)
+## v306 (atual)
+
+- **HB Créditos / QR mercado:** validação do QR não espera mais o sync pesado de limite — tela de PIN abre bem mais rápido; o alinhamento de limite roda em paralelo e na confirmação do PIN.
+
+## v305
 
 - **Dados:** badge “desatualizado” no header quando snapshots faltam ou a nuvem está à frente; após lançamento do responsável, pull só operacional (sem notas) e rematerializa A receber/Financeiro.
 - **UX:** faixa inferior “busque dados — Atualizar” só com cache financeiro vazio (ex.: limpar dados do PWA).

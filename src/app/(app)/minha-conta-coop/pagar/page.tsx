@@ -155,16 +155,12 @@ function HbCreditPagarContent() {
     if (!cnpj || !hbApiCooperadoId) return;
     const cached = lerHbCreditAccountPersistido(cnpj, hbApiCooperadoId);
     if (cached?.hasPin) setHasPin(true);
-  }, [cnpj, hbApiCooperadoId]);
-
-  useEffect(() => {
-    if (!cnpj || !hbApiCooperadoId || loadingQr) return;
     void fetchCreditAccount(cnpj, hbApiCooperadoId)
       .then((acc) => setHasPin(Boolean(acc.hasPin)))
       .catch(() => {
         /* Rede lenta: não assumir “sem PIN” — authorize valida o PIN na nuvem. */
       });
-  }, [cnpj, hbApiCooperadoId, loadingQr]);
+  }, [cnpj, hbApiCooperadoId]);
 
   const limite = draft?.limite;
   const intent = draft?.intent;
