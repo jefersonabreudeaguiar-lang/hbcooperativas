@@ -245,7 +245,9 @@ export function ContaCoopFiscalNotesConferenciaPanel({
 
         {resumo && resumo.pendentesAnexo + resumo.aguardandoConferencia + resumo.correcaoPedida > 0 && (
           <AlertBanner variant="warning" title="Notas pendentes">
-            Mercado ainda precisa anexar ou corrigir NFs antes do pagamento total.
+            {partnerId
+              ? "Mercado ainda precisa anexar ou corrigir NFs antes do pagamento total."
+              : "Há pendências em algum mercado — selecione o mercado acima para ver a fila e conferir cada NF."}
           </AlertBanner>
         )}
       </Card>

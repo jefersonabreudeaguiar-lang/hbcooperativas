@@ -4363,7 +4363,8 @@ async function repairReceivablesForPartnerSettlement(
   supabase: SupabaseClient,
   cnpj: string,
   partnerId: string,
-  paymentTxIds: string[]
+  paymentTxIds: string[],
+  mesReferencia?: string
 ): Promise<void> {
   if (!paymentTxIds.length) return;
   const digits = normalizeCnpj(cnpj);
@@ -4412,7 +4413,7 @@ async function repairReceivablesForPartnerSettlement(
 
     const { data: settlement } = await supabase
       .from("hb_credit_settlements")
-      .select("status")
+      .select("status, mes_referencia, comprovante_storage_path")
       .eq("id", settlementId)
       .maybeSingle();
     const st = settlement ? String(settlement.status) : "";
@@ -4421,7 +4422,50 @@ async function repairReceivablesForPartnerSettlement(
         .from("hb_credit_receivables")
         .update({ status: "ELIGIBLE", settlement_id: null, updated_at: now })
         .eq("id", String(row.id));
+      continue;
     }
+    if (st === "AWAITING_PARTNER" && mesReferencia) {
+      const settleMes = normalizeMesReferencia(String(settlement.mes_referencia ?? ""));
+      const previewMes = normalizeMesReferencia(mesReferencia);
+      if (
+        settleMes !== previewMes &&
+        !settlement.comprovante_storage_path
+      ) {
+        await supabase
+          .from("hb_credit_receivables")
+          .update({ status: "ELIGIBLE", settlement_id: null, updated_at: now })
+          .eq("id", String(row.id));
+        await supabase
+          .from("hb_credit_settlements")
+          .update({ status: "CANCELLED", updated_at: now })
+          .eq("id", settlementId);
+        continue;
+      }
+    }
+    if (st === "CONFIRMED") {
+      await supabase
+        .from("hb_credit_receivables")
+        .update({ status: "SETTLED", updated_at: now })
+        .eq("id", String(row.id));
+    }
+  }
+
+  const { data: processingOrphans } = await supabase
+    .from("hb_credit_receivables")
+    .select("id, transaction_id")
+    .eq("cooperative_cnpj", digits)
+    .eq("partner_id", partnerId)
+    .in("transaction_id", paymentTxIds)
+    .eq("status", "PROCESSING")
+    .is("settlement_id", null);
+
+  for (const row of processingOrphans ?? []) {
+    const txId = String(row.transaction_id);
+    if (!nfApproved.has(txId)) continue;
+    await supabase
+      .from("hb_credit_receivables")
+      .update({ status: "ELIGIBLE", updated_at: now })
+      .eq("id", String(row.id));
   }
 }
 
@@ -4435,6 +4479,18 @@ async function resolveLiquidatableSettlementPayments(
   const payments = transacoes.filter((tx) => tx.tipo === "PAYMENT");
   const txIds = payments.map((tx) => tx.id);
   if (!txIds.length) return [];
+
+  const receivableStatusByTx = new Map<string, { id: string; status: string }>();
+  const { data: receivableRows } = await supabase
+    .from("hb_credit_receivables")
+    .select("id, transaction_id, status")
+    .in("transaction_id", txIds);
+  for (const row of receivableRows ?? []) {
+    receivableStatusByTx.set(String(row.transaction_id), {
+      id: String(row.id),
+      status: String(row.status),
+    });
+  }
 
   const { data: notes } = await supabase
     .from("hb_credit_fiscal_notes")
@@ -4452,11 +4508,16 @@ async function resolveLiquidatableSettlementPayments(
   const liquidatable: SettlementTxRow[] = [];
 
   for (const tx of payments) {
-    const st = tx.recebivelStatus ?? "";
+    const fresh = receivableStatusByTx.get(tx.id);
+    const st = fresh?.status ?? tx.recebivelStatus ?? "";
     if (SETTLEMENT_RECEIVABLE_CLOSED.has(st)) continue;
 
     if (st === "ELIGIBLE") {
-      liquidatable.push(tx);
+      liquidatable.push({
+        ...tx,
+        recebivelId: fresh?.id ?? tx.recebivelId,
+        recebivelStatus: "ELIGIBLE",
+      });
       continue;
     }
 
@@ -4555,17 +4616,19 @@ export async function previewPartnerSettlement(
           await listSettlementTransactions(supabase, digits, partnerId, mesNorm)
         )
           .filter((tx) => tx.tipo === "PAYMENT")
-          .map((tx) => tx.id)
+          .map((tx) => tx.id),
+        mesNorm
       );
     }
   }
 
-  const transacoes = await listSettlementTransactions(supabase, digits, partnerId, mesNorm);
-  const cooperados = buildCooperadoLiquidacao(transacoes);
+  let transacoes = await listSettlementTransactions(supabase, digits, partnerId, mesNorm);
   const paymentTxIds = transacoes.filter((tx) => tx.tipo === "PAYMENT").map((tx) => tx.id);
 
-  await repairReceivablesForPartnerSettlement(supabase, digits, partnerId, paymentTxIds);
+  await repairReceivablesForPartnerSettlement(supabase, digits, partnerId, paymentTxIds, mesNorm);
+  transacoes = await listSettlementTransactions(supabase, digits, partnerId, mesNorm);
 
+  const cooperados = buildCooperadoLiquidacao(transacoes);
   const eligibleRecebiveis = await resolveLiquidatableSettlementPayments(supabase, digits, transacoes);
   const totalCents = eligibleRecebiveis.reduce((sum, tx) => sum + tx.amountCents, 0);
   const fiscalTxIds =
@@ -4587,13 +4650,23 @@ export async function previewPartnerSettlement(
     );
     const gate = evaluatePartnerFiscalSettlementGate(fiscalResumo, { minPayableCents: totalCents });
     pagamentoAprovado = gate.ready && totalCents > 0;
-    bloqueioPagamento =
-      gate.message ??
-      (gate.ready && totalCents <= 0
-        ? paymentTxIds.length > 0
-          ? "Há vendas no mês com NF conferida, mas o recebível ainda não liberou — toque em Atualizar resumo."
-          : "Nenhuma venda HB Créditos neste mês para este mercado."
-        : null);
+    bloqueioPagamento = gate.message;
+    if (!bloqueioPagamento && gate.ready && totalCents <= 0 && paymentTxIds.length > 0) {
+      const paymentRows = transacoes.filter((tx) => tx.tipo === "PAYMENT");
+      const allSettled = paymentRows.every((tx) => tx.recebivelStatus === "SETTLED");
+      const anyProcessing = paymentRows.some((tx) => tx.recebivelStatus === "PROCESSING");
+      if (allSettled) {
+        bloqueioPagamento = "Este mês já foi liquidado para o mercado.";
+      } else if (anyProcessing) {
+        bloqueioPagamento =
+          "Liquidação em andamento nos recebíveis — toque em Atualizar resumo. Se travou, confira comprovante na aba Liquidar.";
+      } else {
+        bloqueioPagamento =
+          "NFs conferidas, mas o recebível não está elegível — toque em Atualizar resumo (repara vínculo NF → recebível).";
+      }
+    } else if (!bloqueioPagamento && gate.ready && totalCents <= 0) {
+      bloqueioPagamento = "Nenhuma venda HB Créditos neste mês para este mercado.";
+    }
   } catch {
     bloqueioPagamento = "Módulo fiscal indisponível — aplique a migration de NFs HB Créditos.";
   }
@@ -4611,12 +4684,8 @@ export async function previewPartnerSettlement(
   }
 
   if (!pendingSettlement && totalCents <= 0 && paymentTxIds.length > 0 && !bloqueioPagamento) {
-    const allSettled = transacoes
-      .filter((tx) => tx.tipo === "PAYMENT")
-      .every((tx) => tx.recebivelStatus === "SETTLED");
-    bloqueioPagamento = allSettled
-      ? "Este mês já foi liquidado para o mercado."
-      : "Não há recebíveis elegíveis neste mês — confira NFs conferidas e atualize o resumo.";
+    bloqueioPagamento =
+      "Não há recebíveis elegíveis neste mês — confira NFs na aba Conferir NFs e toque em Atualizar resumo.";
   }
 
   return {

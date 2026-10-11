@@ -164,14 +164,23 @@ export async function ensureFiscalNoteForTransaction(
 
   if (existing) {
     if (String(existing.status) === "CANCELLED") return null;
+    const now = new Date().toISOString();
+    const expectedMes = mesReferenciaFromIso(String(tx.created_at));
+    const patch: Record<string, unknown> = { updated_at: now };
     if (cooperadoNome?.trim() && !existing.cooperado_nome_snapshot) {
-      await supabase
+      patch.cooperado_nome_snapshot = cooperadoNome.trim();
+    }
+    if (String(existing.mes_referencia) !== expectedMes) {
+      patch.mes_referencia = expectedMes;
+    }
+    if (Object.keys(patch).length > 1) {
+      await supabase.from("hb_credit_fiscal_notes").update(patch).eq("id", String(existing.id));
+      const { data: refreshed } = await supabase
         .from("hb_credit_fiscal_notes")
-        .update({
-          cooperado_nome_snapshot: cooperadoNome.trim(),
-          updated_at: new Date().toISOString(),
-        })
-        .eq("id", String(existing.id));
+        .select("*")
+        .eq("id", String(existing.id))
+        .maybeSingle();
+      if (refreshed) return mapFiscalNoteRow(refreshed as Record<string, unknown>);
     }
     return mapFiscalNoteRow(existing as Record<string, unknown>);
   }
@@ -299,6 +308,47 @@ async function enrichFiscalNotes(
   });
 }
 
+/** Vendas postadas no mês operacional (mesmo critério da liquidação HB). */
+async function listPartnerPaymentTxIdsForOperativeMonth(
+  supabase: SupabaseClient,
+  cooperativeCnpj: string,
+  mesReferencia: string,
+  partnerId?: string
+): Promise<string[]> {
+  const digits = normalizeCnpj(cooperativeCnpj);
+  const { start, end } = mesReferenciaUtcRange(mesReferencia);
+
+  let partnerIds: string[];
+  if (partnerId) {
+    partnerIds = [partnerId];
+  } else {
+    const { data: partners } = await supabase
+      .from("hb_credit_partners")
+      .select("id")
+      .eq("cooperative_cnpj", digits);
+    partnerIds = (partners ?? []).map((p) => String(p.id));
+  }
+
+  const txIds: string[] = [];
+  for (const pid of partnerIds) {
+    const { data: txs } = await supabase
+      .from("hb_credit_transactions")
+      .select("id")
+      .eq("cooperative_cnpj", digits)
+      .eq("partner_id", pid)
+      .eq("event_type", "PAYMENT")
+      .eq("status", "posted")
+      .gte("created_at", start)
+      .lt("created_at", end);
+    for (const tx of txs ?? []) txIds.push(String(tx.id));
+  }
+
+  const unique = [...new Set(txIds)];
+  if (!unique.length) return [];
+  const blocked = await fetchNonFiscalTransactionIds(supabase, unique);
+  return unique.filter((id) => !blocked.has(id));
+}
+
 async function syncPartnerFiscalNotesForMonth(
   supabase: SupabaseClient,
   partnerId: string,
@@ -340,11 +390,27 @@ export async function listPartnerFiscalNotes(
 ): Promise<ContaCoopFiscalNote[]> {
   await syncPartnerFiscalNotesForMonth(supabase, partnerId, mesReferencia);
 
+  const { data: partner } = await supabase
+    .from("hb_credit_partners")
+    .select("cooperative_cnpj")
+    .eq("id", partnerId)
+    .maybeSingle();
+  if (!partner) return [];
+
+  const digits = normalizeCnpj(String(partner.cooperative_cnpj));
+  const txIds = await listPartnerPaymentTxIdsForOperativeMonth(
+    supabase,
+    digits,
+    mesReferencia,
+    partnerId
+  );
+  if (!txIds.length) return [];
+
   const { data } = await supabase
     .from("hb_credit_fiscal_notes")
     .select("*")
     .eq("partner_id", partnerId)
-    .eq("mes_referencia", mesReferencia)
+    .in("transaction_id", txIds)
     .neq("status", "CANCELLED")
     .order("created_at", { ascending: false });
 
@@ -368,11 +434,19 @@ export async function listStaffFiscalNotes(
     await syncPartnerFiscalNotesForMonth(supabase, String(p.id), mesReferencia);
   }
 
+  const txIds = await listPartnerPaymentTxIdsForOperativeMonth(
+    supabase,
+    digits,
+    mesReferencia,
+    options?.partnerId
+  );
+  if (!txIds.length) return [];
+
   let query = supabase
     .from("hb_credit_fiscal_notes")
     .select("*")
     .eq("cooperative_cnpj", digits)
-    .eq("mes_referencia", mesReferencia)
+    .in("transaction_id", txIds)
     .neq("status", "CANCELLED")
     .order("created_at", { ascending: true });
 
