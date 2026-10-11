@@ -578,11 +578,10 @@ export function buildInlinePageReleaseBootstrap(pageRelease: ClientReleaseInfo):
 }
 
 /**
- * PWA: remove SW legado (sw.js?build=) e registra /sw.js seguro.
- * Navegador (aba Chrome): remove todo SW — evita "couldn't load" ao instalar/clicar com SW ≤307 ativo.
+ * Todo carregamento: remove SW legado e aplica sw.js tombstone (sem fetch) para expulsar ≤307 no aparelho.
  */
 export function buildInlineServiceWorkerMigrationScript(): string {
-  return `(function(){if(!("serviceWorker"in navigator))return;function isPwa(){try{return window.matchMedia("(display-mode: standalone)").matches||navigator.standalone===true;}catch(e){return false;}}function scriptUrl(reg){try{return(reg.active&&reg.active.scriptURL)||(reg.waiting&&reg.waiting.scriptURL)||(reg.installing&&reg.installing.scriptURL)||"";}catch(e){return"";}}function isLegacy(url){return url.indexOf("sw.js?")>=0||url.indexOf("sw.js%3F")>=0;}void navigator.serviceWorker.getRegistrations().then(function(regs){if(!regs.length)return;if(!isPwa()){return Promise.all(regs.map(function(r){return r.unregister();}));}var legacy=regs.filter(function(r){return isLegacy(scriptUrl(r));});var step=legacy.length?Promise.all(legacy.map(function(r){return r.unregister();})):Promise.resolve();return step.then(function(){return navigator.serviceWorker.register("/sw.js",{scope:"/",updateViaCache:"none"});});}).catch(function(){});})();`;
+  return `(function(){if(!("serviceWorker"in navigator))return;function purgeCaches(){return("caches"in window)?caches.keys().then(function(keys){return Promise.all(keys.map(function(k){return caches.delete(k);}));}):Promise.resolve();}function tombstone(){return navigator.serviceWorker.register("/sw.js",{scope:"/",updateViaCache:"none"}).catch(function(){});}void navigator.serviceWorker.getRegistrations().then(function(regs){var step=regs.length?Promise.all(regs.map(function(r){return r.unregister();})):Promise.resolve();return step.then(purgeCaches).then(tombstone);}).catch(function(){});})();`;
 }
 
 /**
