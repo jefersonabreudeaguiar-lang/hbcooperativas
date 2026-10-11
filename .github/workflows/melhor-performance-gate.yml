@@ -1,0 +1,57 @@
+# Gate rápido: baseline melhor-performance quando paths sensíveis mudam.
+name: Melhor performance gate
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "src/lib/performance/**"
+      - "src/components/performance/**"
+      - "src/lib/cooperado/cooperadoPwa*.ts"
+      - "src/lib/cooperado/cooperadoInicio*.ts"
+      - "src/lib/cooperado/cooperadoRecibo*.ts"
+      - "src/lib/pwa/**"
+      - "src/components/pwa/**"
+      - "src/components/sync/**"
+      - "src/components/cooperado/CooperadoFinanceiroGate.tsx"
+      - "src/hooks/useCooperado*.ts"
+      - "src/services/syncRequest.ts"
+      - "src/services/dataStore.ts"
+      - "src/services/cooperadoInicioCard*.ts"
+      - "public/sw.js"
+      - "src/lib/appBuildVersion.ts"
+      - "src/app/(app)/dashboard/**"
+      - "docs/baselines/melhor-performance-manifest.json"
+  push:
+    branches: [main]
+    paths:
+      - "src/lib/performance/**"
+      - "src/components/performance/**"
+      - "src/lib/cooperado/cooperadoPwa*.ts"
+      - "src/lib/cooperado/cooperadoInicio*.ts"
+      - "src/lib/cooperado/cooperadoRecibo*.ts"
+      - "src/lib/pwa/**"
+      - "src/components/pwa/**"
+      - "src/components/sync/**"
+      - "src/components/cooperado/CooperadoFinanceiroGate.tsx"
+      - "src/hooks/useCooperado*.ts"
+      - "src/services/syncRequest.ts"
+      - "src/services/dataStore.ts"
+      - "src/services/cooperadoInicioCard*.ts"
+      - "public/sw.js"
+      - "src/lib/appBuildVersion.ts"
+      - "src/app/(app)/dashboard/**"
+      - "docs/baselines/melhor-performance-manifest.json"
+
+jobs:
+  melhor-performance:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+      - run: npm ci
+      - run: npm run gate:melhor-performance
