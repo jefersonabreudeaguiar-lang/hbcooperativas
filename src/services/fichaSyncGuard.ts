@@ -14,6 +14,9 @@ import { posProcessarFinanceiroLocal } from "@/services/operacionalLocalPostProc
 import { isOperacionalCloudAuthoritative } from "@/services/operationalReset";
 import { normalizeCnpj } from "@/utils/cooperativa";
 import { getCurrentMesReferencia } from "@/utils/format";
+import { cooperadoTemDadosFinanceirosMinimos } from "@/lib/cooperado/cooperadoTemDadosFinanceirosMinimos";
+
+export { cooperadoTemDadosFinanceirosMinimos };
 
 const SYNC_COMPLETO_RATIO = 0.75;
 const TOL_VALOR = 0.02;
@@ -329,27 +332,6 @@ export function aplicarSanidadeFinanceiroCooperadoLocal(
     next = { ...next, fichaCorrida: deduped };
   }
   return next;
-}
-
-/** Cooperado já tem algo local para exibir enquanto a nuvem termina de baixar. */
-export function cooperadoTemDadosFinanceirosMinimos(
-  data: AppData,
-  cooperadoId: string,
-  cooperativaId: string
-): boolean {
-  const canonico = resolverCooperadoIdCanonico(data, cooperadoId, cooperativaId);
-  const temNotas = (data.notasPedido ?? []).some((n) =>
-    notaPertenceCooperado(data, n, canonico, cooperativaId)
-  );
-  if (temNotas) return true;
-  const temPagamentos = (data.pagamentosCooperado ?? []).some((p) =>
-    pagamentoCooperadoPertenceCooperado(data, p, canonico, cooperativaId)
-  );
-  if (temPagamentos) return true;
-  if (fichasDaCooperativa(data, cooperativaId, canonico).length > 0) return true;
-  return (data.arquivosMensais ?? []).some(
-    (a) => a.cooperadoId === canonico && a.cooperativaId === cooperativaId
-  );
 }
 
 /**

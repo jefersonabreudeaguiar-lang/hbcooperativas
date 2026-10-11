@@ -18,7 +18,7 @@ import {
 } from "@/services/bicLeituraCentralCooperado";
 import { cooperadoUsarFluxoReciboAssinaturaNaUi } from "@/lib/bic/cooperadoBicCentralUi";
 import { cooperadoTemReciboAssinadoLocalSemPendenciaUi } from "@/lib/cooperado/cooperadoReciboAssinaturaLocalLatch";
-import { cooperadoTemDadosFinanceirosMinimos } from "@/services/fichaSyncGuard";
+import { cooperadoTemDadosFinanceirosMinimos } from "@/lib/cooperado/cooperadoTemDadosFinanceirosMinimos";
 import {
   cooperadoExibirValorReceberInicio,
   getResumoQuantoVouReceberCooperadoMotorLegado,

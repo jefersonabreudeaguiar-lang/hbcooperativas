@@ -1,9 +1,9 @@
 {
-  "id": "/?hb-pwa=327",
+  "id": "/?hb-pwa=328",
   "name": "HB Cooperativas",
   "short_name": "HB Coop",
   "description": "Gestão de cooperativas — entregas, mensalidades e ficha corrida",
-  "start_url": "/pwa-launch.html?v=327",
+  "start_url": "/login?hb-pwa=328",
   "scope": "/",
   "display": "standalone",
   "display_override": ["standalone", "minimal-ui"],
@@ -36,25 +36,25 @@
     {
       "name": "Início",
       "short_name": "Início",
-      "url": "/pwa-launch.html?next=%2Fdashboard",
+      "url": "/dashboard",
       "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192", "type": "image/png" }]
     },
     {
       "name": "Entregas",
       "short_name": "Entregas",
-      "url": "/pwa-launch.html?next=%2Fnotas-pedido",
+      "url": "/notas-pedido",
       "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192", "type": "image/png" }]
     },
     {
       "name": "Financeiro",
       "short_name": "Financeiro",
-      "url": "/pwa-launch.html?next=%2Fficha-corrida",
+      "url": "/ficha-corrida",
       "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192", "type": "image/png" }]
     },
     {
       "name": "Preços",
       "short_name": "Preços",
-      "url": "/pwa-launch.html?next=%2Fprecos",
+      "url": "/precos",
       "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192", "type": "image/png" }]
     }
   ],

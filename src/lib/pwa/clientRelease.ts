@@ -582,18 +582,18 @@ export function buildInlinePageReleaseBootstrap(pageRelease: ClientReleaseInfo):
 }
 
 export const PWA_REPAIR_SESSION_KEY = "hb-coop-pwa-repair-done";
-export const PWA_REPAIR_SESSION_VERSION = "327";
+export const PWA_REPAIR_SESSION_VERSION = "328";
 
-/** Atalho: 1ª navegação da sessão passa por pwa-launch (repara SW antes do React). */
+/** Atalho: marca sessão reparada sem redirecionar (WebAPK falha em cadeia pwa-launch). */
 export function buildInlinePwaStandaloneLaunchGuardScript(): string {
-  return `(function(){try{if(!window.matchMedia("(display-mode: standalone)").matches&&window.navigator.standalone!==true)return;var path=location.pathname||"";if(path.indexOf("/pwa-")===0||path==="/sw.js")return;if(sessionStorage.getItem("${PWA_REPAIR_SESSION_KEY}")==="${PWA_REPAIR_SESSION_VERSION}")return;var dest=path+(location.search||"")+(location.hash||"");location.replace("/pwa-launch.html?next="+encodeURIComponent(dest));}catch(e){}})();`;
+  return `(function(){try{if(!window.matchMedia("(display-mode: standalone)").matches&&window.navigator.standalone!==true)return;if(sessionStorage.getItem("${PWA_REPAIR_SESSION_KEY}")==="${PWA_REPAIR_SESSION_VERSION}")return;sessionStorage.setItem("${PWA_REPAIR_SESSION_KEY}","${PWA_REPAIR_SESSION_VERSION}");}catch(e){}})();`;
 }
 
 /** 1º paint: no atalho remove todo SW legado; registra /sw.js passthrough. */
 export function buildInlineServiceWorkerMigrationScript(): string {
   const repairKey = PWA_REPAIR_SESSION_KEY;
   const repairVer = PWA_REPAIR_SESSION_VERSION;
-  return `(function(){if(!("serviceWorker"in navigator))return;function leg(u){return u&&(u.indexOf("sw.js?")>=0||u.indexOf("sw.js%3F")>=0);}function standalone(){try{return window.matchMedia("(display-mode: standalone)").matches||window.navigator.standalone===true;}catch(e){return false;}}function repaired(){try{return sessionStorage.getItem("${repairKey}")===${JSON.stringify(repairVer)};}catch(e){return false;}}function scriptUrl(r){return(r.active&&r.active.scriptURL)||(r.waiting&&r.waiting.scriptURL)||(r.installing&&r.installing.scriptURL)||"";}function isPassthroughSw(u){return u&&u.indexOf("/sw.js")>=0&&!leg(u);}void navigator.serviceWorker.getRegistrations().then(function(regs){if(standalone()&&repaired()){var ok=regs.some(function(r){return isPassthroughSw(scriptUrl(r));});if(ok)return;return navigator.serviceWorker.register("/sw.js",{scope:"/",updateViaCache:"none"});}if(standalone()){return Promise.all(regs.map(function(r){return r.unregister();}));}return Promise.all(regs.filter(function(r){return leg(scriptUrl(r));}).map(function(r){return r.unregister();}));}).then(function(done){if(standalone()&&repaired())return;if(standalone())return;return navigator.serviceWorker.register("/sw.js",{scope:"/",updateViaCache:"none"});}).catch(function(){});})();`;
+  return `(function(){if(!("serviceWorker"in navigator))return;function leg(u){return u&&(u.indexOf("sw.js?")>=0||u.indexOf("sw.js%3F")>=0);}function scriptUrl(r){return(r.active&&r.active.scriptURL)||(r.waiting&&r.waiting.scriptURL)||(r.installing&&r.installing.scriptURL)||"";}function isPassthroughSw(u){return u&&u.indexOf("/sw.js")>=0&&!leg(u);}void navigator.serviceWorker.getRegistrations().then(function(regs){return Promise.all(regs.filter(function(r){return leg(scriptUrl(r));}).map(function(r){return r.unregister();}));}).then(function(){return navigator.serviceWorker.getRegistrations();}).then(function(regs){var ok=regs.some(function(r){return isPassthroughSw(scriptUrl(r));});if(ok)return;return navigator.serviceWorker.register("/sw.js",{scope:"/",updateViaCache:"none"});}).catch(function(){});})();`;
 }
 
 /**
