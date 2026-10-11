@@ -15,6 +15,7 @@ import {
   persistReleaseShieldExpected,
   releaseFingerprint,
   shouldAutoAlignClientRelease,
+  isPwaColdStartWindow,
   releaseShieldSatisfied,
   runtimeAlreadyOnCanonicalRelease,
   runtimeNeedsReleaseUpgrade,
@@ -85,6 +86,9 @@ async function alignToCanonicalIfNeeded(
 /** Checa release oficial: abertura do app, volta ao foco, ou troca de aba (sem polling). */
 export async function applyOfficialReleaseIfNeeded(): Promise<"ok" | "aligning" | "pending"> {
   if (typeof window === "undefined") return "ok";
+  if (shouldAutoAlignClientRelease() && isPwaColdStartWindow()) {
+    return "pending";
+  }
   const canonical = await fetchOfficialClientRelease();
   if (!canonical) return "pending";
   const embedded = getEmbeddedClientRelease();

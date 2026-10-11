@@ -1,5 +1,5 @@
 /** Bump junto com APP_BUILD_VERSION quando mudar estratégia de cache offline. */
-const CACHE_VERSION = "hb-coop-build-309";
+const CACHE_VERSION = "hb-coop-build-310";
 
 self.addEventListener("install", (event) => {
   event.waitUntil(self.skipWaiting());

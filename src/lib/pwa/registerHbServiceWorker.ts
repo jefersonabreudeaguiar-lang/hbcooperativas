@@ -1,6 +1,9 @@
 /** URL estável — não usar ?build= (criava vários SW e mantinha versões antigas ativas). */
 export const HB_SERVICE_WORKER_URL = "/sw.js";
 
+/** PWA cooperado: SW desligado — evita cold start com navigate interceptado / reload por controllerchange. */
+export const PWA_SERVICE_WORKER_REGISTRATION_ENABLED = false;
+
 export async function purgeLegacyHbServiceWorkers(): Promise<void> {
   if (typeof navigator === "undefined" || !("serviceWorker" in navigator)) return;
   const regs = await navigator.serviceWorker.getRegistrations();
@@ -16,7 +19,12 @@ export function registerHbServiceWorker(): Promise<ServiceWorkerRegistration | n
   if (typeof navigator === "undefined" || !("serviceWorker" in navigator)) {
     return Promise.resolve(null);
   }
-  return purgeLegacyHbServiceWorkers().then(() =>
-    navigator.serviceWorker.register(HB_SERVICE_WORKER_URL, { scope: "/" })
-  );
+  return purgeLegacyHbServiceWorkers().then(() => {
+    if (!PWA_SERVICE_WORKER_REGISTRATION_ENABLED) {
+      return navigator.serviceWorker.getRegistrations().then((regs) =>
+        Promise.all(regs.map((r) => r.unregister())).then(() => null)
+      );
+    }
+    return navigator.serviceWorker.register(HB_SERVICE_WORKER_URL, { scope: "/" });
+  });
 }

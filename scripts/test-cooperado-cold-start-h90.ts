@@ -120,9 +120,15 @@ assert(
 );
 
 const silentSw = read("src/components/pwa/PwaSilentServiceWorker.tsx");
+const registerSw = read("src/lib/pwa/registerHbServiceWorker.ts");
 assert(
-  silentSw.includes("serviceWorker.register") && !silentSw.includes("Atualizar"),
-  "SW silencioso sem banner manual"
+  silentSw.includes("registerHbServiceWorker") && !silentSw.includes("Atualizar"),
+  "PWA sem registro ativo de SW no cold start"
+);
+assert(
+  registerSw.includes("PWA_SERVICE_WORKER_REGISTRATION_ENABLED") &&
+    registerSw.includes("false"),
+  "registro de SW desligado no PWA"
 );
 const releaseFetch = read("src/lib/pwa/fetchOfficialClientRelease.ts");
 assert(
