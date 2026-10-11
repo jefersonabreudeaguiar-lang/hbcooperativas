@@ -3,14 +3,20 @@
 import { useEffect, useRef } from "react";
 import { isCooperadoEventDrivenSync } from "@/lib/performance/cooperadoEventDrivenSync";
 import { runCooperadoForegroundOperacionalCheck } from "@/lib/performance/cooperadoForegroundOperacionalSync";
+import { isCooperadoPwaMessengerMode } from "@/lib/cooperado/cooperadoPwaMessengerMode";
 
 /** Consulta leve na nuvem enquanto o app está em uso. */
 const REVISION_POLL_MS = 2 * 60_000;
+const REVISION_POLL_MESSENGER_MS = 45_000;
 const MIN_GAP_BETWEEN_CHECKS_MS = 20_000;
+const MIN_GAP_BETWEEN_CHECKS_MESSENGER_MS = 12_000;
 const MIN_GAP_FOREGROUND_MS = 8_000;
+const MIN_GAP_FOREGROUND_MESSENGER_MS = 5_000;
 
 type Opts = {
   cnpj: string | null | undefined;
+  cooperadoId?: string | null;
+  cooperativaId?: string | null;
   enabled: boolean;
   syncing: boolean;
 };
@@ -19,7 +25,13 @@ type Opts = {
  * Cooperado event-driven: detecta lançamentos do responsável (operacional/notas)
  * e dispara uma sync — sem polling agressivo nem sync em idle/online genérico.
  */
-export function useCooperadoStaffRevisionWatch({ cnpj, enabled, syncing }: Opts) {
+export function useCooperadoStaffRevisionWatch({
+  cnpj,
+  cooperadoId,
+  cooperativaId,
+  enabled,
+  syncing,
+}: Opts) {
   const lastCheckAtRef = useRef(0);
   const lastForegroundAtRef = useRef(0);
   const syncingRef = useRef(syncing);
@@ -33,18 +45,26 @@ export function useCooperadoStaffRevisionWatch({ cnpj, enabled, syncing }: Opts)
     let cancelled = false;
     let intervalId = 0;
 
+    const messenger = isCooperadoPwaMessengerMode();
+    const pollMs = messenger ? REVISION_POLL_MESSENGER_MS : REVISION_POLL_MS;
+    const gapBg = messenger ? MIN_GAP_BETWEEN_CHECKS_MESSENGER_MS : MIN_GAP_BETWEEN_CHECKS_MS;
+    const gapFg = messenger ? MIN_GAP_FOREGROUND_MESSENGER_MS : MIN_GAP_FOREGROUND_MS;
+
     const check = async (foreground: boolean) => {
       if (cancelled || syncingRef.current) return;
       if (typeof navigator !== "undefined" && !navigator.onLine) return;
       if (typeof document !== "undefined" && document.hidden) return;
       const now = Date.now();
-      const minGap = foreground ? MIN_GAP_FOREGROUND_MS : MIN_GAP_BETWEEN_CHECKS_MS;
+      const minGap = foreground ? gapFg : gapBg;
       if (now - lastCheckAtRef.current < minGap) return;
-      if (foreground && now - lastForegroundAtRef.current < MIN_GAP_FOREGROUND_MS) return;
+      if (foreground && now - lastForegroundAtRef.current < gapFg) return;
       lastCheckAtRef.current = now;
       if (foreground) lastForegroundAtRef.current = now;
 
-      await runCooperadoForegroundOperacionalCheck(digits);
+      await runCooperadoForegroundOperacionalCheck(digits, {
+        cooperadoId: cooperadoId ?? undefined,
+        cooperativaId: cooperativaId ?? undefined,
+      });
     };
 
     const onVisible = () => {
@@ -52,7 +72,7 @@ export function useCooperadoStaffRevisionWatch({ cnpj, enabled, syncing }: Opts)
     };
 
     void check(true);
-    intervalId = window.setInterval(() => void check(false), REVISION_POLL_MS);
+    intervalId = window.setInterval(() => void check(false), pollMs);
     document.addEventListener("visibilitychange", onVisible);
 
     return () => {
@@ -60,5 +80,5 @@ export function useCooperadoStaffRevisionWatch({ cnpj, enabled, syncing }: Opts)
       document.removeEventListener("visibilitychange", onVisible);
       if (intervalId) window.clearInterval(intervalId);
     };
-  }, [cnpj, enabled, syncing]);
+  }, [cnpj, cooperadoId, cooperativaId, enabled, syncing]);
 }

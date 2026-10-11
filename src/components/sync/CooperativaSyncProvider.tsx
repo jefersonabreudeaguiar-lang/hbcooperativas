@@ -131,11 +131,12 @@ import { notifyAppSubtleUpdate } from "@/lib/cooperadoSubtleUpdate";
 import { requestCooperadoAppReleaseSync, type SyncRunOptions } from "@/services/syncRequest";
 import { purgarInicioCardValorReceberCooperado } from "@/services/cooperadoInicioCardPersistenciaService";
 import { scheduleCooperadoPwaOperacionalParidadePull } from "@/lib/cooperado/cooperadoPwaFinanceiroParidadeRefresh";
-import { isCooperadoPwaMobileLeveUi } from "@/lib/cooperado/cooperadoPwaLeveUi";
 import {
-  isCooperadoPwaMessengerMode,
-  persistirCooperadoPwaMessengerCaches,
-} from "@/lib/cooperado/cooperadoPwaMessengerMode";
+  cooperadoPwaMaterializarSnapshotsFinanceirosPosSync,
+  scheduleCooperadoMessengerStaffRevisionPull,
+} from "@/lib/cooperado/cooperadoPwaFinanceiroSnapshotRefresh";
+import { isCooperadoPwaMobileLeveUi } from "@/lib/cooperado/cooperadoPwaLeveUi";
+import { isCooperadoPwaMessengerMode } from "@/lib/cooperado/cooperadoPwaMessengerMode";
 import { cooperadoPwaMessengerPrecisaSyncOperacionalInicial } from "@/lib/cooperado/cooperadoPwaMessengerSnapshotHydrate";
 
 const COOPERADO_PUSH_GAP_MS = 5 * 60 * 1000;
@@ -921,7 +922,7 @@ export function CooperativaSyncProvider({ children }: { children: React.ReactNod
           setCooperadoPagamentosHydrated(false);
         }
         if (completed && userRef.current?.role === "cooperado" && isCooperadoPwaMobileLeveUi()) {
-          persistirCooperadoPwaMessengerCaches(userRef.current);
+          cooperadoPwaMaterializarSnapshotsFinanceirosPosSync(userRef.current);
           persistOperacionalSyncedAppBuild();
         }
       }
@@ -993,12 +994,12 @@ export function CooperativaSyncProvider({ children }: { children: React.ReactNod
           purgarInicioCardValorReceberCooperado(user);
           requestCooperadoAppReleaseSync();
         }
-      } else if (
-        user?.role === "cooperado" &&
-        !document.hidden &&
-        !isCooperadoPwaMessengerMode()
-      ) {
+      } else if (user?.role === "cooperado" && !document.hidden) {
         scheduleCooperadoPostShellSync(() => {
+          if (isCooperadoPwaMessengerMode()) {
+            scheduleCooperadoMessengerStaffRevisionPull(user, coopId);
+            return;
+          }
           void resolveCooperativaCnpj(getData(), coopId, user).then((cnpjOpen) => {
             if (!cnpjOpen || document.hidden) return;
             void runCooperadoForegroundOperacionalCheck(cnpjOpen);
@@ -1051,6 +1052,7 @@ export function CooperativaSyncProvider({ children }: { children: React.ReactNod
       if (cooperadoSemAutoSync) {
         if (user?.role === "cooperado") {
           scheduleCooperadoPwaOperacionalParidadePull(userRef.current, coopId);
+          scheduleCooperadoMessengerStaffRevisionPull(userRef.current, coopId);
         }
         return;
       }
@@ -1068,6 +1070,7 @@ export function CooperativaSyncProvider({ children }: { children: React.ReactNod
       if (cooperadoSemAutoSync) {
         if (user?.role === "cooperado") {
           scheduleCooperadoPwaOperacionalParidadePull(userRef.current, coopId, { force: true });
+          scheduleCooperadoMessengerStaffRevisionPull(userRef.current, coopId);
         }
         return;
       }
@@ -1136,6 +1139,8 @@ export function CooperativaSyncProvider({ children }: { children: React.ReactNod
 
   useCooperadoStaffRevisionWatch({
     cnpj: cooperadoCnpj,
+    cooperadoId: user?.cooperadoId,
+    cooperativaId: coopId,
     enabled: user?.role === "cooperado" && isCooperadoEventDrivenSync(),
     syncing,
   });

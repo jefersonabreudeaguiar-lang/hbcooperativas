@@ -3,9 +3,9 @@
  * - Telas só leem snapshots/localStorage (sem assinar AppData a cada mudança).
  * - AppData / nuvem só em sync pontual: botão Atualizar, envio de foto (não sync de release na abertura).
  * - 1º frame: snapshots + sessão; parse do AppData em idle após pintar o shell.
- * - Sem pilot HB periódico nem pull de foreground na abertura (evita travar a UI).
- * - Início + Financeiro: leitura somente (snapshots da paridade Financeiro); atualiza só no sync manual.
- * - Versão + Atualizar no header mobile (`CooperadoMobileBuildBadge`) — snapshots só após sync explícito ou automático.
+ * - Sem pilot HB periódico na abertura (evita travar a UI).
+ * - Início + Financeiro: leitura somente (snapshots); atualiza após sync (manual, release ou revisão do responsável).
+ * - Versão + Atualizar no header mobile (`CooperadoMobileBuildBadge`) — escape hatch manual.
  */
 import type { User } from "@/types";
 import { isCooperadoPwaMobileLeveUi } from "@/lib/cooperado/cooperadoPwaLeveUi";
