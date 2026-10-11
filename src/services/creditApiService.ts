@@ -396,7 +396,12 @@ export async function authorizeCreditPayment(input: {
     });
 
   let res: Response | null = null;
-  let data: AuthorizeCreditPaymentResult & { ok?: boolean; error?: string; code?: string } = {};
+  let data: AuthorizeCreditPaymentResult & {
+    ok?: boolean;
+    error?: string;
+    code?: string;
+    message?: string;
+  } = {};
 
   const maxAuthorizeAttempts = 3;
   for (let attempt = 0; attempt < maxAuthorizeAttempts; attempt++) {
