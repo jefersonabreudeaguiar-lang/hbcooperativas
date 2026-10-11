@@ -21,6 +21,7 @@ import { resolverCooperadoIdCanonico } from "@/services/cooperadoCloudService";
 import { getData, isAppDataWarm } from "@/services/dataStore";
 import { getUserCooperativaId } from "@/utils/cooperativa";
 import type { User } from "@/types";
+import { cooperadoFinanceiroDesatualizado } from "@/services/fichaSyncGuard";
 
 export type CooperadoInicioCardPersistUser = Omit<User, "password">;
 
@@ -47,6 +48,9 @@ export function persistirInicioCardValorReceberCooperado(
 
   const { cooperadoId, cooperativaId } = tenant;
   const data = getData();
+  if (cooperadoFinanceiroDesatualizado(data, cooperadoId, cooperativaId)) {
+    return false;
+  }
   const resolved = resolverCardInicioEndurecido({
     data,
     cooperadoId,
@@ -66,6 +70,10 @@ export function persistirInicioCardValorReceberCooperado(
     };
   }
 
+  if (!cooperadoMotorTemObrigacaoReceber(display)) {
+    return false;
+  }
+
   gravarInicioCardPersistidoFlex(cooperadoId, cooperativaId, {
     v: INICIO_CARD_STORAGE_VERSION,
     appBuild: APP_BUILD_VERSION,
@@ -74,7 +82,7 @@ export function persistirInicioCardValorReceberCooperado(
     savedAt: new Date().toISOString(),
   });
 
-  return cooperadoMotorTemObrigacaoReceber(display);
+  return true;
 }
 
 /** Leitura rápida só M6 — útil para debug; card usa política completa acima. */

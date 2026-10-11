@@ -184,6 +184,7 @@ function cooperadoPodeExibirFinanceiroLocalmente(
   cooperativaId: string
 ): boolean {
   if (cooperadoFinanceiroBloqueiaEntradaApp(data, cooperadoId, cooperativaId)) return false;
+  if (cooperadoFinanceiroDesatualizado(data, cooperadoId, cooperativaId)) return false;
   return cooperadoTemDadosFinanceirosMinimos(data, cooperadoId, cooperativaId);
 }
 

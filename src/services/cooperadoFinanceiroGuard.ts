@@ -1,14 +1,17 @@
 import type { AppData, User } from "@/types";
 import { resolverCooperadoIdCanonico } from "@/services/cooperadoCloudService";
 import {
+  cooperadoFinanceiroBloqueiaEntradaApp,
+  cooperadoFinanceiroDesatualizado,
   cooperadoFinanceiroLocalAusente,
   cooperadoPrecisaFullSyncFinanceiro,
   limparFichaObsoletaCooperado,
 } from "@/services/fichaSyncGuard";
 import { isCooperadoManualOperacionalSync } from "@/lib/performance/cooperadoColdStart";
-import { requestAppSync } from "@/services/syncRequest";
+import { requestAppSync, requestCooperadoFinanceiroRecoverySync } from "@/services/syncRequest";
 import { saveDataSafe, getData } from "@/services/dataStore";
 import { getUserCooperativaId } from "@/utils/cooperativa";
+import { cooperadoTemDadosFinanceirosMinimos } from "@/lib/cooperado/cooperadoTemDadosFinanceirosMinimos";
 
 const RECOVERY_GAP_MS = 30_000;
 let lastRecoveryRequestAt = 0;
@@ -22,12 +25,30 @@ export function cooperadoFinanceiroPronto(
   return !cooperadoFinanceiroLocalAusente(data, cooperadoId, cooperativaId);
 }
 
+/** Nuvem e AppData alinhados — valores na UI podem ser tratados como definitivos. */
+export function cooperadoDadosFinanceirosConsistentesParaApresentacao(
+  data: AppData | null | undefined,
+  cooperadoId: string | undefined,
+  cooperativaId: string | undefined,
+  opts?: { offline?: boolean }
+): boolean {
+  if (!data || !cooperadoId || !cooperativaId) return false;
+  if (cooperadoFinanceiroBloqueiaEntradaApp(data, cooperadoId, cooperativaId)) return false;
+  if (opts?.offline) {
+    return cooperadoTemDadosFinanceirosMinimos(data, cooperadoId, cooperativaId);
+  }
+  return !cooperadoFinanceiroDesatualizado(data, cooperadoId, cooperativaId);
+}
+
 /** Dispara sync de recuperação com antirajada. */
 export function solicitarRecuperacaoFinanceiroCooperado(): void {
-  if (isCooperadoManualOperacionalSync()) return;
   const now = Date.now();
   if (now - lastRecoveryRequestAt < RECOVERY_GAP_MS) return;
   lastRecoveryRequestAt = now;
+  if (isCooperadoManualOperacionalSync()) {
+    requestCooperadoFinanceiroRecoverySync();
+    return;
+  }
   requestAppSync();
 }
 

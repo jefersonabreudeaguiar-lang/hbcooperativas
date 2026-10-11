@@ -30,8 +30,11 @@ import { resolveCooperativaCnpj } from "@/services/notaPedidoCloudService";
 import {
   requestAppSyncImmediate,
   requestCooperadoAppReleaseSync,
+  requestCooperadoFinanceiroRecoverySync,
   requestCooperadoPrimeiraCargaSync,
 } from "@/services/syncRequest";
+import { consumeCooperadoPostLoginFinanceSync } from "@/lib/cooperado/cooperadoPostLoginFinanceSync";
+import { markCooperadoUserSyncVisible } from "@/lib/performance/cooperadoColdStart";
 import { purgarInicioCardValorReceberCooperado } from "@/services/cooperadoInicioCardPersistenciaService";
 import { cooperadoRematerializarFinanceiroLocalSePossivel } from "@/lib/cooperado/cooperadoPwaFinanceiroSnapshotRefresh";
 import { resolverCooperadoIdCanonico } from "@/services/cooperadoCloudService";
@@ -93,6 +96,12 @@ export function CooperadoFinanceiroGate({ children }: { children: React.ReactNod
     const runFinanceBootstrap = () => {
       if (!cooperadoPostShellSyncPermitido()) return;
       markCooperadoPostShellSyncStarted();
+
+      if (consumeCooperadoPostLoginFinanceSync()) {
+        markCooperadoUserSyncVisible();
+        requestCooperadoFinanceiroRecoverySync();
+        requestCooperadoPrimeiraCargaSync();
+      }
 
       if (isCooperadoPwaMessengerMode()) {
         clearCooperadoPostShellSyncStarted();

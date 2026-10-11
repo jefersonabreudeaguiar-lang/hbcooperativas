@@ -21,6 +21,11 @@ export type CooperadoSyncPresentationInput = {
   cooperadoPagamentosHydrated: boolean;
   /** PWA/browser com AppData local utilizável — não zerar card/ficha durante sync silencioso. */
   exibirComDadosLocais?: boolean;
+  /**
+   * false = ficha/notas ainda incompletas (ex.: cache limpo) — UI não trata R$ 0 como definitivo.
+   * Omitido = legado/testes (não bloqueia).
+   */
+  dadosFinanceirosConsistentes?: boolean;
 };
 
 /** H203 — cooperado só apresenta valores financeiros definitivos após hydration + fim de sync ativo. */
@@ -28,6 +33,7 @@ export function cooperadoApresentacaoFinanceiraConsolidada(
   input: CooperadoSyncPresentationInput
 ): boolean {
   if (input.role !== "cooperado") return true;
+  if (input.dadosFinanceirosConsistentes === false) return false;
   if (input.exibirComDadosLocais) return !input.syncing;
   return input.cooperadoPagamentosHydrated && !input.syncing;
 }

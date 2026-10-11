@@ -97,6 +97,15 @@ assert.equal(
   true
 );
 assert.equal(
+  cooperadoApresentacaoFinanceiraConsolidada({
+    role: "cooperado",
+    syncing: false,
+    cooperadoPagamentosHydrated: true,
+    dadosFinanceirosConsistentes: false,
+  }),
+  false
+);
+assert.equal(
   cooperadoCarregandoValoresFinanceiros({
     role: "cooperado",
     syncing: true,

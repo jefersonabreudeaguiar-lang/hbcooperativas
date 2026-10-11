@@ -37,7 +37,11 @@ import {
   isAppDataWarm,
   waitForAppDataWarm,
 } from "@/services/dataStore";
-import { persistirInicioCardValorReceberCooperado } from "@/services/cooperadoInicioCardPersistenciaService";
+import {
+  persistirInicioCardValorReceberCooperado,
+  purgarInicioCardValorReceberCooperado,
+} from "@/services/cooperadoInicioCardPersistenciaService";
+import { markCooperadoPostLoginFinanceSync } from "@/lib/cooperado/cooperadoPostLoginFinanceSync";
 import {
   ensureCloudSessionReady,
   setActiveCloudProfile,
@@ -285,7 +289,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         await waitForAppDataWarm(4000);
       }
       if (role === "cooperado" && !isCooperadoPwaMessengerMode()) {
-        persistirInicioCardValorReceberCooperado(safeUser);
+        markCooperadoPostLoginFinanceSync();
+        if (!persistirInicioCardValorReceberCooperado(safeUser)) {
+          purgarInicioCardValorReceberCooperado(safeUser);
+        }
       }
       const redirectTo = role === "parceiro" ? "/mercado-parceiro" : "/dashboard";
       if (typeof window !== "undefined") {
