@@ -1,5 +1,5 @@
 /** Bump junto com APP_BUILD_VERSION — SW só para navegação segura (sem Response.error). */
-const CACHE_VERSION = "hb-coop-build-315";
+const CACHE_VERSION = "hb-coop-build-316";
 
 self.addEventListener("install", (event) => {
   event.waitUntil(self.skipWaiting());
@@ -35,14 +35,13 @@ self.addEventListener("fetch", (event) => {
   event.respondWith(
     (async () => {
       try {
-        const response = await fetch(event.request, { cache: "no-store" });
-        if (response && response.ok) return response;
+        return await fetch(event.request, { cache: "no-store" });
       } catch {
-        /* rede */
+        /* rede ou navegação abortada (vários cliques) — nunca Response.error() */
       }
       try {
         const boot = await fetch(bootUrl, { cache: "no-store" });
-        if (boot && boot.ok) return boot;
+        if (boot) return boot;
       } catch {
         /* offline */
       }
