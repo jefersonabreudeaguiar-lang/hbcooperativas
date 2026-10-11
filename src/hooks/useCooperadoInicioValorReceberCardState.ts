@@ -273,8 +273,23 @@ export function useCooperadoInicioValorReceberCardState(input: {
             hadPendencia: cooperadoMotorTemObrigacaoReceber(display),
           },
           atualizando: Boolean(input.syncing && isCooperadoUserSyncVisible()),
-          gravarPersistencia: false,
+          gravarPersistencia: true,
         };
+      }
+
+      if (dataLatch && input.cooperadoId && cooperativaIdLatch) {
+        const motorLocal = resolverCardInicioEndurecido({
+          data: dataLatch,
+          cooperadoId: input.cooperadoId,
+          cooperativaId: cooperativaIdLatch,
+          apresentacaoConsolidada: true,
+          carregandoFinanceiro: false,
+          prevLatch: null,
+          persistido: null,
+        });
+        if (cooperadoMotorTemObrigacaoReceber(motorLocal.display)) {
+          return { ...motorLocal, gravarPersistencia: true };
+        }
       }
 
       return {

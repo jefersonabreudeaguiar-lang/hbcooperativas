@@ -210,8 +210,9 @@ export function cooperadoPreserveHydrationOnSilentSync(
 ): boolean {
   if (!isCooperadoInstantResumeEnabled() || !user || user.role !== "cooperado") return false;
   if (!alreadyHydrated) return false;
+  if (cooperadoLocalResumeReady(user)) return true;
   if (cooperadoOperacionalSyncedBuildMismatch()) return false;
-  return cooperadoLocalResumeReady(user);
+  return false;
 }
 
 /**

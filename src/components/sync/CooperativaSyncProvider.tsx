@@ -86,7 +86,7 @@ import { getCooperadoNome } from "@/utils/calculations";
 import { readNotaFotoAtIndex, resolveNotaFotosForUpload } from "@/services/localMediaStore";
 import { compactarFotosNoArmazenamento, contarFotosEnviadasNota } from "@/utils/fotoEntrega";
 import { isDiretoriaRole } from "@/permissions";
-import type { UserRole } from "@/types";
+import type { User, UserRole } from "@/types";
 import {
   h197ObserveLifecycleEvent,
   installH197WindowExport,
@@ -134,6 +134,7 @@ import { purgarInicioCardValorReceberCooperado } from "@/services/cooperadoInici
 import { scheduleCooperadoPwaOperacionalParidadePull } from "@/lib/cooperado/cooperadoPwaFinanceiroParidadeRefresh";
 import {
   cooperadoPwaMaterializarSnapshotsFinanceirosPosSync,
+  cooperadoRematerializarFinanceiroLocalSePossivel,
   scheduleCooperadoMessengerStaffRevisionPull,
 } from "@/lib/cooperado/cooperadoPwaFinanceiroSnapshotRefresh";
 import { isCooperadoPwaMobileLeveUi } from "@/lib/cooperado/cooperadoPwaLeveUi";
@@ -397,6 +398,33 @@ export function CooperativaSyncProvider({ children }: { children: React.ReactNod
   const markCooperadoPagamentosHydrated = useCallback(() => {
     setCooperadoPagamentosHydrated(true);
   }, []);
+
+  const prepararFinanceiroLocalCooperado = useCallback(
+    (currentUser: Omit<User, "password">) => {
+      if (cooperadoRematerializarFinanceiroLocalSePossivel(currentUser)) {
+        markCooperadoPagamentosHydrated();
+        return;
+      }
+      purgarInicioCardValorReceberCooperado(currentUser);
+    },
+    [markCooperadoPagamentosHydrated]
+  );
+
+  useEffect(() => {
+    if (user?.role !== "cooperado" || !coopId) return;
+    const run = () => {
+      if (!user || !cooperadoLocalResumeReady(user)) return;
+      markCooperadoPagamentosHydrated();
+      if (isCooperadoPwaMobileLeveUi() || isCooperadoPwaMessengerMode()) {
+        cooperadoRematerializarFinanceiroLocalSePossivel(user);
+      } else {
+        persistirInicioCardValorReceberCooperado(user);
+      }
+    };
+    ensureCooperadoAppDataEagerWarm();
+    if (isAppDataWarm()) run();
+    else scheduleCooperadoPostInteractiveTask(run);
+  }, [user, coopId, markCooperadoPagamentosHydrated]);
 
   /** Pull operacional cedo — alinha status confirmado/aguardando antes da UI financeira. */
   const hydrateCooperadoPagamentosFromCloud = useCallback(async (opts?: { ignoreGap?: boolean }) => {
@@ -1045,7 +1073,7 @@ export function CooperativaSyncProvider({ children }: { children: React.ReactNod
             requestCooperadoAppReleaseSync();
           });
         } else {
-          purgarInicioCardValorReceberCooperado(user);
+          prepararFinanceiroLocalCooperado(user);
           requestCooperadoAppReleaseSync();
         }
       } else if (user?.role === "cooperado" && !document.hidden) {
@@ -1062,7 +1090,7 @@ export function CooperativaSyncProvider({ children }: { children: React.ReactNod
       }
     } else if (user?.role === "cooperado" && isCooperadoInstantResumeEnabled()) {
       if (cooperadoAppReleaseNeedsOperacionalSync()) {
-        purgarInicioCardValorReceberCooperado(user);
+        prepararFinanceiroLocalCooperado(user);
         requestCooperadoAppReleaseSync();
       } else if (!document.hidden) {
         markUserActivity();

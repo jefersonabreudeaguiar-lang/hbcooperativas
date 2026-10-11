@@ -6,6 +6,10 @@ import {
   cooperadoApresentacaoFinanceiraConsolidada,
   cooperadoCarregandoValoresFinanceiros,
 } from "@/lib/cooperadoApresentacaoFinanceira";
+import {
+  cooperadoLocalResumeReady,
+  isCooperadoManualOperacionalSync,
+} from "@/lib/performance/cooperadoColdStart";
 
 /** Gate global H203 — quando apresentar projeção financeira cooperado como definitiva na UI. */
 export function useCooperadoApresentacaoFinanceiraConsolidada(): {
@@ -17,10 +21,16 @@ export function useCooperadoApresentacaoFinanceiraConsolidada(): {
 } {
   const { user } = useAuth();
   const { syncing, syncingForUi, cooperadoPagamentosHydrated } = useSyncStatus();
+  const exibirComDadosLocais =
+    user?.role === "cooperado" &&
+    isCooperadoManualOperacionalSync() &&
+    cooperadoLocalResumeReady(user);
+
   const input = {
     role: user?.role,
     syncing: syncingForUi,
     cooperadoPagamentosHydrated,
+    exibirComDadosLocais,
   };
   return {
     apresentacaoConsolidada: cooperadoApresentacaoFinanceiraConsolidada(input),
