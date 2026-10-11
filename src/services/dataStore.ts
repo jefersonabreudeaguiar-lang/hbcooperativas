@@ -1427,22 +1427,26 @@ export async function login(email: string, password: string): Promise<User | nul
   return null;
 }
 
-export function logout(): void {
-  if (typeof window !== "undefined") {
-    const session = readStoredSessionRaw();
-    if (session?.role === "cooperado") {
-      const cnpj = session.cooperativaCnpj ? normalizeCnpj(session.cooperativaCnpj) : "";
-      if (cnpj.length === 14) {
-        clearNotasSyncMeta(cnpj);
-        forceNextFullNotasSync(cnpj);
-      }
+/** Limpa cookie httpOnly e depois sessão local — evita 401 no dashboard após sair/entrar. */
+export async function logoutAndClearSession(): Promise<void> {
+  if (typeof window === "undefined") return;
+  const session = readStoredSessionRaw();
+  if (session?.role === "cooperado") {
+    const cnpj = session.cooperativaCnpj ? normalizeCnpj(session.cooperativaCnpj) : "";
+    if (cnpj.length === 14) {
+      clearNotasSyncMeta(cnpj);
+      forceNextFullNotasSync(cnpj);
     }
-    localStorage.removeItem(SESSION_KEY);
-    sessionStorage.removeItem(SESSION_KEY);
-    void logoutCloudSession();
-    clearCloudBootstrapCredentials();
-    notify();
   }
+  await logoutCloudSession();
+  localStorage.removeItem(SESSION_KEY);
+  sessionStorage.removeItem(SESSION_KEY);
+  clearCloudBootstrapCredentials();
+  notify();
+}
+
+export function logout(): void {
+  void logoutAndClearSession();
 }
 
 function readStoredSessionRaw(): Omit<User, "password"> | null {

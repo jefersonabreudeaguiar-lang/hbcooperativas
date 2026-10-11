@@ -24,7 +24,7 @@ export function ProtectedRoute({ children }: { children: React.ReactNode }) {
     }
   }, [user, loading, router]);
 
-  if (loading && cooperadoInstantShellReady(getSession())) {
+  if (loading && user && cooperadoInstantShellReady(getSession())) {
     return <>{children}</>;
   }
 

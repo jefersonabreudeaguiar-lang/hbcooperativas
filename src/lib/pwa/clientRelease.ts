@@ -582,7 +582,7 @@ export function buildInlinePageReleaseBootstrap(pageRelease: ClientReleaseInfo):
 }
 
 export const PWA_REPAIR_SESSION_KEY = "hb-coop-pwa-repair-done";
-export const PWA_REPAIR_SESSION_VERSION = "330";
+export const PWA_REPAIR_SESSION_VERSION = "331";
 
 /** Atalho: marca sessão reparada sem redirecionar (WebAPK falha em cadeia pwa-launch). */
 export function buildInlinePwaStandaloneLaunchGuardScript(): string {

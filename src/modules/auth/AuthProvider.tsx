@@ -26,7 +26,7 @@ import {
   getSession,
   login as doLogin,
   loginCreatorAdminPortal,
-  logout as doLogout,
+  logoutAndClearSession,
   registerCooperado,
   registerCooperativa,
   subscribe,
@@ -57,7 +57,7 @@ interface AuthContextType {
   loginCreatorAdmin: (email: string, password: string) => Promise<boolean>;
   register: (input: RegisterCooperadoInput) => Promise<{ success: boolean; error?: string }>;
   registerCooperativa: (input: RegisterCooperativaInput) => Promise<{ success: boolean; error?: string }>;
-  logout: () => void;
+  logout: () => Promise<void>;
   refresh: () => void;
 }
 
@@ -313,10 +313,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return { success: false, error: result.error };
   };
 
-  const logout = () => {
-    doLogout();
+  const logout = async () => {
+    setLoading(true);
     setAccountUser(null);
+    await logoutAndClearSession();
+    if (typeof window !== "undefined") {
+      window.location.replace("/login");
+      return;
+    }
     router.replace("/login");
+    setLoading(false);
   };
 
   return (
