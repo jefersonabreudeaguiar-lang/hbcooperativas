@@ -11,17 +11,41 @@ const ASAAS_SANDBOX_BASE = "https://api-sandbox.asaas.com/v3";
 /** Normaliza ASAAS_API_KEY (trim, aspas, $ perdido em .env sem aspas). */
 export function normalizeAsaasApiKey(raw: string | undefined | null): string | null {
   if (!raw) return null;
-  let key = raw.trim();
+  let key = raw.replace(/\r/g, "").trim();
   if (
     (key.startsWith('"') && key.endsWith('"')) ||
     (key.startsWith("'") && key.endsWith("'"))
   ) {
     key = key.slice(1, -1).trim();
   }
+  key = key.replace(/[\u200B-\u200D\uFEFF]/g, "");
   if (/^aact_(prod|hmlg)_/i.test(key)) {
     key = `$${key}`;
   }
   return key.length > 0 ? key : null;
+}
+
+export function getAsaasKeyDiagnostics(config: AsaasConfig | null): {
+  keyLength: number;
+  keyPreview: string | null;
+  baseUrl: string | null;
+  placeholderSuspect: boolean;
+  tooShort: boolean;
+} {
+  if (!config) {
+    return { keyLength: 0, keyPreview: null, baseUrl: null, placeholderSuspect: false, tooShort: true };
+  }
+  const key = config.apiKey;
+  const lower = key.toLowerCase();
+  const placeholderSuspect =
+    /sua_chave|placeholder|exemplo|your_api|xxx|teste123/i.test(lower) || lower === "$aact_prod_sua_chave";
+  return {
+    keyLength: key.length,
+    keyPreview: key.length >= 12 ? `${key.slice(0, 16)}…` : key,
+    baseUrl: config.baseUrl,
+    placeholderSuspect,
+    tooShort: key.length < 40,
+  };
 }
 
 function detectAsaasSandbox(apiKey: string, env: NodeJS.ProcessEnv = process.env): boolean {

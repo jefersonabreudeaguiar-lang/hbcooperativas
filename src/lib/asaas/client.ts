@@ -1,4 +1,7 @@
 import type { AsaasConfig } from "@/lib/asaas/config";
+
+const ASAAS_PRODUCTION_BASE = "https://api.asaas.com/v3";
+const ASAAS_SANDBOX_BASE = "https://api-sandbox.asaas.com/v3";
 import type {
   AsaasCustomer,
   AsaasCustomerInput,
@@ -124,11 +127,60 @@ export async function getAsaasPayment(
   return { ok: true, payment: result.data };
 }
 
-/** Teste leve de autenticação (admin) — não expõe a chave. */
+function rawAsaasErrorMessage(result: { ok: false; error: string; status: number }): string {
+  if (result.status !== 401) return result.error;
+  return result.error.replace(
+    /^Chave ou ambiente Asaas inválido[^.]*\.\s*/i,
+    ""
+  ).trim() || result.error;
+}
+
+/** Teste leve de autenticação (admin) — não expõe a chave completa. */
 export async function probeAsaasApiConnection(
   config: AsaasConfig
-): Promise<{ ok: true } | { ok: false; status: number; error: string }> {
+): Promise<
+  | { ok: true; environment: "production" | "sandbox" }
+  | {
+      ok: false;
+      status: number;
+      error: string;
+      asaasMessage?: string;
+      environmentTried: "production" | "sandbox";
+      alternateEnvironmentOk?: boolean;
+      hint?: string;
+    }
+> {
+  const environmentTried = config.sandbox ? "sandbox" : "production";
   const result = await asaasRequest<unknown>(config, "/customers?limit=1", { method: "GET" });
-  if (result.ok) return { ok: true };
-  return { ok: false, status: result.status, error: result.error };
+  if (result.ok) return { ok: true, environment: environmentTried };
+
+  let alternateEnvironmentOk = false;
+  let hint: string | undefined;
+  if (result.status === 401) {
+    const altConfig: AsaasConfig = {
+      ...config,
+      sandbox: !config.sandbox,
+      baseUrl: config.sandbox ? ASAAS_PRODUCTION_BASE : ASAAS_SANDBOX_BASE,
+    };
+    const alt = await asaasRequest<unknown>(altConfig, "/customers?limit=1", { method: "GET" });
+    if (alt.ok) {
+      alternateEnvironmentOk = true;
+      hint = config.sandbox
+        ? "A chave na Vercel é de PRODUÇÃO ($aact_prod_), mas o app está em modo sandbox. Apague ASAAS_SANDBOX ou use chave _hmlg_ só em testes."
+        : "A chave na Vercel é de SANDBOX ($aact_hmlg_). Para PIX real, gere chave em asaas.com (produção) com prefixo $aact_prod_.";
+    } else if (config.apiKey.length < 40) {
+      hint =
+        "A chave no servidor parece incompleta (muito curta). Cole a chave inteira na Vercel — ela só aparece uma vez ao gerar no Asaas.";
+    }
+  }
+
+  return {
+    ok: false,
+    status: result.status,
+    error: result.error,
+    asaasMessage: rawAsaasErrorMessage(result),
+    environmentTried,
+    alternateEnvironmentOk,
+    hint,
+  };
 }

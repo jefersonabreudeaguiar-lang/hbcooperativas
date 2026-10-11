@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { requireAdminRole, requireApiAuth } from "@/lib/security/apiGuard";
-import { getAsaasConfig, getAsaasSetupInfo } from "@/lib/asaas/config";
+import { getAsaasConfig, getAsaasKeyDiagnostics, getAsaasSetupInfo } from "@/lib/asaas/config";
 import { probeAsaasApiConnection } from "@/lib/asaas/client";
 
 export async function GET(request: Request) {
@@ -16,10 +16,12 @@ export async function GET(request: Request) {
   }
 
   const config = getAsaasConfig();
+  const keyDiagnostics = getAsaasKeyDiagnostics(config);
   if (!config) {
     return NextResponse.json({
       ok: true,
       setup,
+      keyDiagnostics,
       apiProbe: { ok: false, status: 0, error: "ASAAS_API_KEY não definida no servidor." },
     });
   }
@@ -28,8 +30,7 @@ export async function GET(request: Request) {
   return NextResponse.json({
     ok: true,
     setup,
-    apiProbe: apiProbe.ok
-      ? { ok: true as const }
-      : { ok: false as const, status: apiProbe.status, error: apiProbe.error },
+    keyDiagnostics,
+    apiProbe,
   });
 }

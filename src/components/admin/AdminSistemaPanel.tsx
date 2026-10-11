@@ -61,6 +61,17 @@ export function AdminSistemaPanel({ user }: AdminSistemaPanelProps) {
     ok: boolean;
     status?: number;
     error?: string;
+    asaasMessage?: string;
+    hint?: string;
+    alternateEnvironmentOk?: boolean;
+    environmentTried?: string;
+  } | null>(null);
+  const [asaasKeyDiagnostics, setAsaasKeyDiagnostics] = useState<{
+    keyLength: number;
+    keyPreview: string | null;
+    baseUrl: string | null;
+    placeholderSuspect: boolean;
+    tooShort: boolean;
   } | null>(null);
   const [asaasLoading, setAsaasLoading] = useState(true);
   const [webhookCopied, setWebhookCopied] = useState(false);
@@ -104,22 +115,26 @@ export function AdminSistemaPanel({ user }: AdminSistemaPanelProps) {
   const reloadAsaasSetup = () => {
     setAsaasLoading(true);
     setAsaasApiProbe(null);
+    setAsaasKeyDiagnostics(null);
     secureApiFetch("/api/admin/asaas-setup?probe=1", { cache: "no-store" })
       .then((r) => r.json())
       .then(
         (json: {
           ok?: boolean;
           setup?: typeof asaasSetup;
-          apiProbe?: { ok: boolean; status?: number; error?: string };
+          keyDiagnostics?: typeof asaasKeyDiagnostics;
+          apiProbe?: typeof asaasApiProbe;
         }) => {
           if (json.ok && json.setup) setAsaasSetup(json.setup);
           else setAsaasSetup(null);
+          if (json.keyDiagnostics) setAsaasKeyDiagnostics(json.keyDiagnostics);
           if (json.apiProbe) setAsaasApiProbe(json.apiProbe);
         }
       )
       .catch(() => {
         setAsaasSetup(null);
         setAsaasApiProbe(null);
+        setAsaasKeyDiagnostics(null);
       })
       .finally(() => setAsaasLoading(false));
   };
@@ -444,15 +459,38 @@ export function AdminSistemaPanel({ user }: AdminSistemaPanelProps) {
                   : "Inválido — use $aact_prod_ ou $aact_hmlg_ com aspas no .env"}
               </dd>
             </div>
-            <div className="flex justify-between py-2 border-b border-gray-100 sm:col-span-2">
-              <dt className="text-gray-500">Teste na API Asaas</dt>
+            {asaasKeyDiagnostics && asaasSetup?.configured && (
+              <div className="sm:col-span-2 py-2 border-b border-gray-100 text-xs text-gray-600 space-y-1">
+                <p>
+                  Servidor: <code className="text-[11px]">{asaasKeyDiagnostics.baseUrl ?? "—"}</code>
+                  {" · "}
+                  {asaasKeyDiagnostics.keyLength} caracteres
+                  {asaasKeyDiagnostics.keyPreview ? (
+                    <>
+                      {" · "}
+                      início <code className="text-[11px]">{asaasKeyDiagnostics.keyPreview}</code>
+                    </>
+                  ) : null}
+                </p>
+                {asaasKeyDiagnostics.placeholderSuspect && (
+                  <p className="text-red-700 font-medium">
+                    A chave parece de exemplo (placeholder), não a chave real copiada do Asaas.
+                  </p>
+                )}
+                {asaasKeyDiagnostics.tooShort && !asaasKeyDiagnostics.placeholderSuspect && (
+                  <p className="text-red-700 font-medium">Chave curta — provável cópia incompleta na Vercel.</p>
+                )}
+              </div>
+            )}
+            <div className="flex justify-between py-2 border-b border-gray-100 sm:col-span-2 gap-3">
+              <dt className="text-gray-500 shrink-0">Teste na API Asaas</dt>
               <dd
                 className={
                   asaasApiProbe?.ok
-                    ? "text-green-700 font-medium"
+                    ? "text-green-700 font-medium text-right"
                     : asaasApiProbe
-                      ? "text-red-700 font-medium text-right max-w-[min(100%,20rem)]"
-                      : "text-gray-500"
+                      ? "text-red-700 text-right max-w-[min(100%,22rem)] space-y-1"
+                      : "text-gray-500 text-right"
                 }
               >
                 {asaasLoading && !asaasApiProbe
@@ -460,7 +498,28 @@ export function AdminSistemaPanel({ user }: AdminSistemaPanelProps) {
                   : asaasApiProbe?.ok
                     ? "Autenticação OK"
                     : asaasApiProbe
-                      ? `Falhou (HTTP ${asaasApiProbe.status ?? "?"}). Atualize a chave na Vercel e faça redeploy.`
+                      ? (
+                        <>
+                          <span className="font-medium block">
+                            Falhou (HTTP {asaasApiProbe.status ?? "?"}
+                            {asaasApiProbe.environmentTried ? ` · ${asaasApiProbe.environmentTried}` : ""})
+                          </span>
+                          {asaasApiProbe.asaasMessage && (
+                            <span className="block text-[11px] text-red-800/90">{asaasApiProbe.asaasMessage}</span>
+                          )}
+                          {asaasApiProbe.hint && (
+                            <span className="block text-[11px] text-amber-900 font-medium">{asaasApiProbe.hint}</span>
+                          )}
+                          {asaasApiProbe.alternateEnvironmentOk && (
+                            <span className="block text-[11px] text-amber-900">
+                              A mesma chave autentica no outro ambiente Asaas — ajuste produção/sandbox na Vercel.
+                            </span>
+                          )}
+                          <span className="block text-[11px] text-gray-600">
+                            Depois de alterar ASAAS_API_KEY: salvar na Vercel e Redeploy em Production.
+                          </span>
+                        </>
+                        )
                       : "—"}
               </dd>
             </div>
