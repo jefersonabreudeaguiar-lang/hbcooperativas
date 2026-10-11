@@ -42,7 +42,9 @@
     <script>
       (function () {
         var REPAIR_KEY = "hb-coop-pwa-repair-done";
-        var REPAIR_VER = "328";
+        var REPAIR_VER = "341";
+        var BUILD_SEEN_KEY = "hb-coop-app-build-seen";
+        var PAGE_BUILD = 341;
         var params = new URLSearchParams(location.search);
         var next = params.get("next");
         var hasSession = false;
@@ -51,16 +53,17 @@
         } catch (e) {
           hasSession = false;
         }
-        var target = "/login";
+        var target = "/login?hb-pwa=" + PAGE_BUILD;
         if (next && next.charAt(0) === "/") {
-          target = next;
+          target = next.indexOf("hb-pwa=") >= 0 ? next : next + (next.indexOf("?") >= 0 ? "&" : "?") + "hb-pwa=" + PAGE_BUILD;
         } else if (hasSession) {
-          target = "/dashboard";
+          target = "/login?hb-pwa=" + PAGE_BUILD + "&next=" + encodeURIComponent("/dashboard");
         }
 
         function go() {
           try {
             sessionStorage.setItem(REPAIR_KEY, REPAIR_VER);
+            localStorage.setItem(BUILD_SEEN_KEY, String(PAGE_BUILD));
           } catch (e) {
             /* ignore */
           }

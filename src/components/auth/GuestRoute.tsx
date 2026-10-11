@@ -4,6 +4,7 @@ import { useLayoutEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/modules/auth/AuthProvider";
 import { dismissCooperadoBootShell } from "@/lib/performance/cooperadoBootShell";
+import { repairBrowserProfileIfStale } from "@/lib/pwa/browserProfileRepair";
 
 function isStandalonePwa(): boolean {
   if (typeof window === "undefined") return false;
@@ -28,13 +29,33 @@ export function GuestRoute({
   useLayoutEffect(() => {
     dismissCooperadoBootShell();
     if (!loading && user && authenticatedRedirect) {
+      const params = new URLSearchParams(window.location.search);
+      const next = params.get("next");
+      const dest =
+        next && next.startsWith("/") && !next.startsWith("//") ? next : authenticatedRedirect;
+      const onLoginWithPwaRepair =
+        window.location.pathname === "/login" && params.has("hb-pwa");
+
+      if (onLoginWithPwaRepair) {
+        void repairBrowserProfileIfStale({ includeStandalone: true }).then((reloaded) => {
+          if (reloaded) return;
+          const pathOnly = dest.split("?")[0];
+          if (window.location.pathname === pathOnly) return;
+          if (isStandalonePwa()) {
+            window.location.replace(dest);
+          } else {
+            router.replace(dest);
+          }
+        });
+        return;
+      }
+
       if (isStandalonePwa()) {
-        const path = authenticatedRedirect;
-        if (window.location.pathname !== path) {
-          window.location.replace(path);
+        if (window.location.pathname !== dest.split("?")[0]) {
+          window.location.replace(dest);
         }
       } else {
-        router.replace(authenticatedRedirect);
+        router.replace(dest);
       }
     }
   }, [user, loading, router, authenticatedRedirect]);

@@ -582,11 +582,18 @@ export function buildInlinePageReleaseBootstrap(pageRelease: ClientReleaseInfo):
 }
 
 export const PWA_REPAIR_SESSION_KEY = "hb-coop-pwa-repair-done";
-export const PWA_REPAIR_SESSION_VERSION = "340";
+export const PWA_REPAIR_SESSION_VERSION = "341";
 
-/** Atalho: marca sessão reparada sem redirecionar (WebAPK falha em cadeia pwa-launch). */
+/**
+ * Ícone instalado (WebAPK): antes do React, manda para pwa-rescue se cache/build desalinhado.
+ * O guard antigo só marcava “reparado” sem limpar — causava “This page couldn’t load”.
+ */
 export function buildInlinePwaStandaloneLaunchGuardScript(): string {
-  return `(function(){try{if(!window.matchMedia("(display-mode: standalone)").matches&&window.navigator.standalone!==true)return;if(sessionStorage.getItem("${PWA_REPAIR_SESSION_KEY}")==="${PWA_REPAIR_SESSION_VERSION}")return;sessionStorage.setItem("${PWA_REPAIR_SESSION_KEY}","${PWA_REPAIR_SESSION_VERSION}");}catch(e){}})();`;
+  const repairKey = PWA_REPAIR_SESSION_KEY;
+  const repairVer = PWA_REPAIR_SESSION_VERSION;
+  const buildSeenKey = BUILD_SEEN_KEY;
+  const appBuild = APP_BUILD_VERSION;
+  return `(function(){try{var standalone=window.matchMedia("(display-mode: standalone)").matches||window.navigator.standalone===true;if(!standalone)return;var path=location.pathname||"";if(path.indexOf("pwa-rescue")>=0||path.indexOf("pwa-launch")>=0||path.indexOf("pwa-diag")>=0)return;var repairKey="${repairKey}";var repairVer="${repairVer}";var buildSeenKey="${buildSeenKey}";var pageBuild=parseInt(document.documentElement.getAttribute("data-app-build")||"0",10)||${appBuild};var seen=0;try{seen=parseInt(localStorage.getItem(buildSeenKey)||"0",10);}catch(e){}var repairOk=sessionStorage.getItem(repairKey)===repairVer;var buildOk=!seen||seen===pageBuild;if(repairOk&&buildOk)return;var next=location.pathname+location.search;if(!next||next==="/")next="/login?hb-pwa="+pageBuild;location.replace("/pwa-rescue.html?auto=1&next="+encodeURIComponent(next));}catch(e){}})();`;
 }
 
 /** 1º paint: no atalho remove todo SW legado; registra /sw.js passthrough. */
