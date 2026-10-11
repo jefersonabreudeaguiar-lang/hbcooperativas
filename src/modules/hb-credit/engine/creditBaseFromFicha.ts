@@ -8,6 +8,9 @@ import {
 import { hbCreditCreditoBaseReais } from "@/lib/hb-credit/hbCreditLeituraBic";
 import { resolverCooperadoIdCanonico } from "@/services/cooperadoCloudService";
 import { normalizeCnpj } from "@/utils/cooperativa";
+import { calcLimiteFromPercentual } from "./creditBaseLimitePercentual";
+
+export { calcLimiteFromPercentual } from "./creditBaseLimitePercentual";
 
 function cnpjParaCreditoBase(data: AppData, cooperativaId?: string): string | undefined {
   if (cooperativaId) {
@@ -179,13 +182,6 @@ export async function buildCreditosBaseMapCachedAsync(
 /** Invalida cache (testes). */
 export function resetCreditosBaseMapCache(): void {
   creditosBaseCache = null;
-}
-
-export function calcLimiteFromPercentual(creditoBaseCents: number, percentual: number): number {
-  if (!Number.isFinite(percentual) || percentual < 0 || percentual > 100) {
-    throw new Error("Percentual inválido (use 0 a 100).");
-  }
-  return Math.round(Math.max(0, creditoBaseCents) * (percentual / 100));
 }
 
 export function sumCreditosBaseCents(creditosBaseCents: Record<string, number>): number {

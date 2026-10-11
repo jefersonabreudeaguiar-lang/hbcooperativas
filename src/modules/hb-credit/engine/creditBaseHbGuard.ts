@@ -9,7 +9,7 @@ import {
   reconciliarFichaFromNotasConferidas,
 } from "@/services/notaPedidoService";
 import { projetarAppDataFinanceiroParaCreditoBase } from "./projetarAppDataFinanceiroParaCreditoBase";
-import { calcLimiteFromPercentual } from "./creditBaseFromFicha";
+import { calcLimiteFromPercentual } from "./creditBaseLimitePercentual";
 import type { ContaCoopLimiteCooperado } from "../types";
 import { computeDisponivel } from "./money";
 
