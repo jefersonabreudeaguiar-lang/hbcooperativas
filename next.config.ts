@@ -81,6 +81,10 @@ const nextConfig: NextConfig = {
         source: "/manifest.webmanifest",
         headers: [{ key: "Cache-Control", value: "no-cache, must-revalidate" }],
       },
+      {
+        source: "/pwa-boot.html",
+        headers: [{ key: "Cache-Control", value: "no-cache, no-store, must-revalidate" }],
+      },
     ];
   },
 };

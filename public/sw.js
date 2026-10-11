@@ -1,5 +1,5 @@
-/** Bump junto com APP_BUILD_VERSION quando mudar estratégia de cache offline. */
-const CACHE_VERSION = "hb-coop-build-312";
+/** Service worker legado — autodestruição: sem fetch, sem claim (evita "This page couldn't load"). */
+const CACHE_VERSION = "hb-coop-build-313";
 
 self.addEventListener("install", (event) => {
   event.waitUntil(self.skipWaiting());
@@ -9,8 +9,9 @@ self.addEventListener("activate", (event) => {
   event.waitUntil(
     caches
       .keys()
-      .then((keys) => Promise.all(keys.filter((k) => k !== CACHE_VERSION).map((k) => caches.delete(k))))
-      .then(() => self.clients.claim())
+      .then((keys) => Promise.all(keys.map((k) => caches.delete(k))))
+      .then(() => self.registration.unregister())
+      .catch(() => self.registration.unregister())
   );
 });
 
@@ -19,5 +20,3 @@ self.addEventListener("message", (event) => {
     self.skipWaiting();
   }
 });
-
-/** Sem listener "fetch" — evita "This page couldn't load" no cold start do PWA. */

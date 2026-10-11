@@ -129,6 +129,18 @@ export function resolveCompressSettings(_file?: File): CompressSettings {
   };
 }
 
+/** Cooperado entregas — compressão mais rápida (menor resolução, WebP). */
+export function resolveFastEntregaCompressSettings(): CompressSettings {
+  const low = isLowMemoryDevice();
+  return {
+    maxWidth: low ? 800 : 960,
+    quality: low ? 0.55 : 0.58,
+    thumbWidth: 200,
+    thumbQuality: 0.45,
+    preferWebP: true,
+  };
+}
+
 export function validateImageFile(file: File): ImageValidationResult {
   if (!file || file.size === 0) {
     return { ok: false, error: "Arquivo vazio ou inválido." };
@@ -409,14 +421,17 @@ export async function createThumbnailFromBlob(
 
 export async function processDeliveryImage(
   file: File,
-  signal?: AbortSignal
+  signal?: AbortSignal,
+  options?: { fastEntrega?: boolean }
 ): Promise<ProcessedDeliveryImage> {
   const validation = validateImageFile(file);
   if (!validation.ok) {
     throw new Error(validation.error ?? "Arquivo inválido.");
   }
 
-  const settings = resolveCompressSettings(file);
+  const settings = options?.fastEntrega
+    ? resolveFastEntregaCompressSettings()
+    : resolveCompressSettings(file);
   const useWebP = settings.preferWebP && (await detectWebPSupport());
   const mimeType: "image/webp" | "image/jpeg" = useWebP ? "image/webp" : "image/jpeg";
   const started = performance.now();

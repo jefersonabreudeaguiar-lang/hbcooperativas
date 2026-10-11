@@ -48,7 +48,6 @@ import {
 import { isCooperadoPwaMobileEntregasLeve } from "@/lib/cooperado/cooperadoPwaMobileEntregas";
 import {
   ensureCooperadoNotasFreshForEnvio,
-  shouldSkipCooperadoEnvioSyncOnSubmit,
   type CooperadoPwaEnvioSyncResult,
 } from "@/lib/cooperado/cooperadoPwaEntregasEnvioSync";
 import {
@@ -1680,9 +1679,21 @@ export default function NotasPedidoCooperadoMain() {
     setInstituicaoId(notaRejeitada?.instituicaoId ?? "");
     setUsarEscolaAvulsa(Boolean(notaRejeitada?.escolaAvulsaNome?.trim()));
     setEscolaAvulsaNome(notaRejeitada?.escolaAvulsaNome ?? "");
-    resetFotosSessaoUi();
     setFotoDuplicadaMsg("");
     setObservacoes(notaRejeitada?.observacoes ?? "");
+
+    if (options?.abrirCamera) {
+      resetFotosSessaoUi();
+      if (!notaRejeitada) limparRascunhoAnexar();
+      const currentData = data ?? getData();
+      if (currentData) aplicarContratoLocal(currentData, notaRejeitada);
+      setAnexarModal(true);
+      scheduleAbrirCameraAnexar();
+      void sincronizarContratosEmBackground(notaRejeitada);
+      return;
+    }
+
+    resetFotosSessaoUi();
     if (!notaRejeitada) {
       limparRascunhoAnexar();
     } else {
@@ -1690,7 +1701,7 @@ export default function NotasPedidoCooperadoMain() {
     }
 
     let currentData = data ?? getData();
-    if (isCooperado && currentData && !options?.abrirCamera) {
+    if (isCooperado && currentData) {
       const compactar = () => updateDataSafe((d) => compactarFotosNoArmazenamento(d));
       if (typeof requestIdleCallback !== "undefined") {
         requestIdleCallback(compactar, { timeout: 8000 });
@@ -1707,8 +1718,6 @@ export default function NotasPedidoCooperadoMain() {
       void syncFotosSessaoFromDraft();
     }
     void sincronizarContratosEmBackground(notaRejeitada);
-
-    if (options?.abrirCamera) scheduleAbrirCameraAnexar();
   };
 
   const openAnexarPwaThen = (
@@ -1721,11 +1730,7 @@ export default function NotasPedidoCooperadoMain() {
         reason: "anexar",
         notaRejeitada,
       }).then((pull) => {
-        if (!pull.ok) {
-          setErroEnvio(pull.error ?? "Não foi possível atualizar antes de enviar fotos.");
-          return;
-        }
-        refreshPwaEntregasResumosSnap();
+        if (pull.ok) refreshPwaEntregasResumosSnap();
       });
     }
   };
@@ -2480,7 +2485,7 @@ export default function NotasPedidoCooperadoMain() {
     return pending.length ? Promise.all(pending).then(() => undefined) : Promise.resolve();
   };
 
-  const FOTO_UPLOAD_CONCORRENCIA = 4;
+  const FOTO_UPLOAD_CONCORRENCIA = 6;
 
   const acquireUploadSlot = async () => {
     if (uploadSlotsActiveRef.current < FOTO_UPLOAD_CONCORRENCIA) {
@@ -2568,18 +2573,19 @@ export default function NotasPedidoCooperadoMain() {
         criarPadraoSeVazio: false,
       });
       const contratoId = resolved.instituicaoId || contratoInstId;
-      const cnpj = await resolveCooperativaCnpj(data, coopId, user);
+      const cnpjPromise = resolveCooperativaCnpj(data, coopId, user);
+
+      setFotoPipelineStep("compressing");
+      const [cnpj, fileFingerprint, processed] = await Promise.all([
+        cnpjPromise,
+        fingerprintFotoFile(file),
+        pipeline.processDeliveryImage(file, abort.signal, { fastEntrega: true }),
+      ]);
       if (!cnpj) {
         setErroEnvio("CNPJ da cooperativa não encontrado. Verifique a conexão.");
         setFotoPipelineStep("error");
         return;
       }
-
-      setFotoPipelineStep("compressing");
-      const [fileFingerprint, processed] = await Promise.all([
-        fingerprintFotoFile(file),
-        pipeline.processDeliveryImage(file, abort.signal),
-      ]);
 
       if (await isFotoDraftDuplicadaByFingerprint(ANEXAR_DRAFT_KEY, fileFingerprint)) {
         setFotoDuplicadaMsg("Imagem repetida — esta foto já foi adicionada ou já foi enviada antes.");
@@ -2844,28 +2850,23 @@ export default function NotasPedidoCooperadoMain() {
     if (entregasPwaLeve) setPwaPreparandoEnvio(true);
 
     const uploadsPendentes = fotosNaNuvemCount < fotosSessaoCount;
-    const skipPull =
-      entregasPwaLeve &&
-      shouldSkipCooperadoEnvioSyncOnSubmit(notaRejeitadaSubmit);
+    const skipPull = entregasPwaLeve && !notaRejeitadaSubmit?.id;
 
-    const [pull] = await Promise.all([
-      entregasPwaLeve && !skipPull
-        ? ensureCooperadoNotasFreshForEnvio(user, coopId, {
-            reason: "submit",
-            notaRejeitada: notaRejeitadaSubmit,
-          })
-        : Promise.resolve({ ok: true } as CooperadoPwaEnvioSyncResult),
-      (uploadsPendentes ? aguardarFilaUpload() : Promise.resolve()).then(() =>
-        syncOfflineDeliveryImages()
-      ),
-    ]);
+    if (uploadsPendentes) await aguardarFilaUpload();
+    void syncOfflineDeliveryImages();
+
+    if (entregasPwaLeve && !skipPull) {
+      const pull = await ensureCooperadoNotasFreshForEnvio(user, coopId, {
+        reason: "submit",
+        notaRejeitada: notaRejeitadaSubmit,
+      });
+      if (!pull.ok) {
+        setErroEnvio(pull.error ?? "Atualize a internet e tente enviar de novo.");
+        return;
+      }
+    }
 
     if (entregasPwaLeve) setPwaPreparandoEnvio(false);
-
-    if (!pull.ok) {
-      setErroEnvio(pull.error ?? "Atualize a internet e tente enviar de novo.");
-      return;
-    }
 
     workingData = getData() ?? workingData;
 
@@ -2987,19 +2988,10 @@ export default function NotasPedidoCooperadoMain() {
       });
     };
 
-    const cloud = await publicarEntregaCooperadoNaNuvem(cnpj, notaEntrega, cooperadoNome);
-    if (!cloud.ok) {
-      setErroEnvio(
-        cloud.error ??
-          "Falha ao publicar a entrega. As fotos já estão na nuvem — verifique a conexão e toque Enviar de novo."
-      );
-      return;
-    }
-
     const notaFinalLocal: NotaPedido = {
       ...notaEntrega,
       status: "aguardando_conferencia",
-      fotoNaNuvem: true,
+      fotoNaNuvem: false,
       fotoPedido: undefined,
       fotosPedido: undefined,
       fotoPedidoMiniatura: undefined,
@@ -3026,34 +3018,7 @@ export default function NotasPedidoCooperadoMain() {
       window.setTimeout(compactarDepois, 2500);
     }
 
-    if (!saved.ok) {
-      queuePendingEntregaPublish({
-        cnpj,
-        cooperativaId: coopId,
-        userId: user.id,
-        userName: user.name,
-        cooperadoNome,
-        nota: notaFinalLocal,
-        reenvio: Boolean(reenviarNotaId),
-        qtdFotos,
-      });
-      await reconcilePendingEntregaPublish({
-        cnpj,
-        userId: user.id,
-        userName: user.name,
-      });
-      setPublicacaoLocalPendente(countPendingEntregaPublish({ userId: user.id, cnpj }));
-    } else {
-      unqueuePendingEntregaPublish(cnpj, notaFinalLocal.id);
-      setPublicacaoLocalPendente(countPendingEntregaPublish({ userId: user.id, cnpj }));
-    }
-
     const listaLocalOk = saved.ok;
-    if (!listaLocalOk) {
-      setFotoValidationWarning(
-        "Entrega já publicada para o responsável. A lista neste aparelho será ajustada em instantes — se não aparecer, use Atualizar."
-      );
-    }
 
     limparRascunhoAnexar();
     resetFotosSessaoUi();
@@ -3061,17 +3026,58 @@ export default function NotasPedidoCooperadoMain() {
     setUltimaNotaEnviadaIds([notaFinalLocal.id]);
     setAnexarSucesso(true);
     setSuccessMsg(
-      (qtdFotos === 1
+      qtdFotos === 1
         ? "Entrega enviada! O responsável já pode conferir a foto."
-        : `Entrega enviada com ${qtdFotos} fotos! O responsável já pode conferir.`) +
-        (!listaLocalOk ? " Se não constar em Em análise, toque Atualizar." : "")
+        : `Entrega enviada com ${qtdFotos} fotos! O responsável já pode conferir.`
     );
-    refreshPwaEntregasResumosSnap();
-    const schedulePostEntregaSync = () => requestCooperadoPostEntregaSync();
-    if (typeof requestIdleCallback !== "undefined") {
-      requestIdleCallback(schedulePostEntregaSync, { timeout: 4_000 });
-    } else {
-      window.setTimeout(schedulePostEntregaSync, 0);
+
+    const notaPublicar = { ...notaEntrega };
+    void (async () => {
+      const cloud = await publicarEntregaCooperadoNaNuvem(cnpj, notaPublicar, cooperadoNome);
+      if (!cloud.ok) {
+        queuePendingEntregaPublish({
+          cnpj,
+          cooperativaId: coopId,
+          userId: user.id,
+          userName: user.name,
+          cooperadoNome,
+          nota: { ...notaFinalLocal, fotoNaNuvem: true },
+          reenvio: Boolean(reenviarNotaId),
+          qtdFotos,
+        });
+        await reconcilePendingEntregaPublish({
+          cnpj,
+          userId: user.id,
+          userName: user.name,
+        });
+        setPublicacaoLocalPendente(countPendingEntregaPublish({ userId: user.id, cnpj }));
+        setFotoValidationWarning(
+          cloud.error ??
+            "Entrega salva no aparelho — publicando para o responsável em segundo plano. Se não aparecer na fila, toque Enviar de novo."
+        );
+        return;
+      }
+
+      const notaNuvem: NotaPedido = {
+        ...notaFinalLocal,
+        fotoNaNuvem: true,
+      };
+      updateDataSafe((d) => persistirLocal(d, notaNuvem, false));
+      unqueuePendingEntregaPublish(cnpj, notaFinalLocal.id);
+      setPublicacaoLocalPendente(countPendingEntregaPublish({ userId: user.id, cnpj }));
+      refreshPwaEntregasResumosSnap();
+      const schedulePostEntregaSync = () => requestCooperadoPostEntregaSync();
+      if (typeof requestIdleCallback !== "undefined") {
+        requestIdleCallback(schedulePostEntregaSync, { timeout: 4_000 });
+      } else {
+        window.setTimeout(schedulePostEntregaSync, 0);
+      }
+    })();
+
+    if (!listaLocalOk) {
+      setFotoValidationWarning(
+        "Entrega registrada. Se não constar em Em análise, use Atualizar."
+      );
     }
     } catch {
       setErroEnvio("Falha inesperada ao enviar a entrega. Verifique a conexão e tente de novo.");
