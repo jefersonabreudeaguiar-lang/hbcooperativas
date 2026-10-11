@@ -16,6 +16,7 @@ import {
   type ClientReleaseInfo,
 } from "@/lib/pwa/clientRelease";
 import { buildInlineRuntimeCrashRecorderScript } from "@/lib/pwa/runtimeCrashForensics";
+import { buildInlineStaleProfileGuardScript } from "@/lib/pwa/staleProfileGuard";
 import { buildInlineRqlPerfStubScript } from "@/lib/performance/rqlPerfReport";
 import { buildInlineCooperadoAppDataWarmScript } from "@/lib/performance/cooperadoAppDataInlineWarm";
 import {
@@ -88,6 +89,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     >
       <head>
         <script dangerouslySetInnerHTML={{ __html: buildInlineRuntimeCrashRecorderScript() }} />
+        <script dangerouslySetInnerHTML={{ __html: buildInlineStaleProfileGuardScript() }} />
         <script dangerouslySetInnerHTML={{ __html: buildInlinePwaStandaloneLaunchGuardScript() }} />
         <script dangerouslySetInnerHTML={{ __html: buildInlineServiceWorkerMigrationScript() }} />
         <script dangerouslySetInnerHTML={{ __html: buildInlinePageReleaseBootstrap(pageRelease) }} />

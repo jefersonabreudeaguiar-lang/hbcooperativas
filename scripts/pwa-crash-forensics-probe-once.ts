@@ -21,16 +21,29 @@ function extractMeta(html: string, attr: string): string {
   return m?.[1]?.trim() ?? "";
 }
 
-function extractDeploymentIds(html: string): string[] {
-  const seen = new Set<string>();
-  const re = /[?&]dpl=([^&"'\\s]+)/g;
-  let m: RegExpExecArray | null;
-  while ((m = re.exec(html)) !== null) {
+const DPL_RE = /^dpl_[A-Za-z0-9]{20,}$/;
+
+function parseDplFromAssetUrl(url: string): string | null {
+  const m = url.match(/[?&]dpl=([^&]+)/);
+  if (!m?.[1]) return null;
+  try {
     const id = decodeURIComponent(m[1]).trim();
-    if (id.startsWith("dpl_")) seen.add(id);
+    return DPL_RE.test(id) ? id : null;
+  } catch {
+    return null;
+  }
+}
+
+function extractDeploymentIdsFromAssetTags(html: string): string[] {
+  const seen = new Set<string>();
+  const tagRe = /<(script|link)[^>]+(?:src|href)="([^"]+)"/gi;
+  let m: RegExpExecArray | null;
+  while ((m = tagRe.exec(html)) !== null) {
+    const id = parseDplFromAssetUrl(m[2]);
+    if (id) seen.add(id);
   }
   const pageDpl = extractMeta(html, "data-dpl-id");
-  if (pageDpl) seen.add(pageDpl);
+  if (pageDpl && DPL_RE.test(pageDpl)) seen.add(pageDpl);
   return [...seen];
 }
 
@@ -70,7 +83,7 @@ type RouteReport = {
 
 async function probeRoute(base: string, path: string): Promise<RouteReport> {
   const { status, html } = await fetchHtml(path, base);
-  const deploymentIds = extractDeploymentIds(html);
+  const deploymentIds = extractDeploymentIdsFromAssetTags(html);
   const pageDpl = extractMeta(html, "data-dpl-id");
   const build = extractMeta(html, "data-app-build");
   const unique = new Set(deploymentIds);
