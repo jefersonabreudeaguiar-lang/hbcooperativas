@@ -40,14 +40,20 @@ export default function BaixarAppPage() {
 
         <BaixarAppGuide highlight={platform} />
 
-        {!user && (
-          <p className="text-center text-sm text-gray-600">
-            Já instalou?{" "}
-            <Link href="/login" className="font-semibold text-green-700 hover:text-green-900">
-              Fazer login
-            </Link>
-          </p>
-        )}
+        <p className="text-center text-sm text-gray-600">
+          {user ? null : (
+            <>
+              Já instalou?{" "}
+              <Link href="/login" className="font-semibold text-green-700 hover:text-green-900">
+                Fazer login
+              </Link>
+              {" · "}
+            </>
+          )}
+          <Link href="/pwa-diag.html" className="font-semibold text-green-700 hover:text-green-900">
+            Ícone com tela preta?
+          </Link>
+        </p>
       </div>
     </div>
   );

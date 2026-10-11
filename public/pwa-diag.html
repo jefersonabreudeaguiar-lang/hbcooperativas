@@ -76,15 +76,25 @@
         pointer-events: none;
       }
       #toast.show { opacity: 1; }
+      .alert {
+        background: #fff7ed;
+        border: 1px solid #fdba74;
+        border-radius: 0.75rem;
+        padding: 0.85rem 1rem;
+        margin: 0.75rem 0;
+        font-size: 0.88rem;
+      }
+      #openChromeRow { display: none; }
     </style>
   </head>
   <body>
     <h1>Diagnóstico do atalho (celular)</h1>
     <p class="muted">
-      Use no <strong>Chrome</strong> (barra de endereço), não precisa de console. Se o ícone do app abre tela
-      preta, cole este endereço no Chrome:
-      <strong>hbcooperativas.vercel.app/pwa-diag.html</strong>
+      O ícone da tela inicial usa o <strong>Google Chrome</strong> (WebAPK). O Edge e o Chrome não compartilham
+      cache — reparar no Edge <strong>não</strong> conserta o ícone.
     </p>
+
+    <div class="alert" id="browserAlert" hidden></div>
 
     <div class="card" id="resumo">
       <p>Coletando dados…</p>
@@ -100,8 +110,17 @@
       </div>
     </div>
 
+    <div class="row" id="openChromeRow">
+      <a
+        class="btn btn-primary"
+        id="openChrome"
+        href="intent://hbcooperativas.vercel.app/pwa-rescue.html?next=%2Flogin#Intent;scheme=https;package=com.android.chrome;S.browser_fallback_url=https%3A%2F%2Fhbcooperativas.vercel.app%2Fpwa-rescue.html%3Fnext%3D%252Flogin;end"
+        >Abrir reparo no Google Chrome</a
+      >
+    </div>
+
     <div class="row">
-      <button type="button" class="btn btn-primary" id="repair">Reparar atalho</button>
+      <button type="button" class="btn btn-primary" id="repair">Reparar neste navegador</button>
       <button type="button" class="btn btn-secondary" id="login">Ir para login</button>
     </div>
 
@@ -139,11 +158,22 @@
           }
         }
 
+        function detectBrowser() {
+          var ua = navigator.userAgent || "";
+          if (/EdgA|EdgiOS|Edg\//i.test(ua)) return "edge";
+          if (/SamsungBrowser/i.test(ua)) return "samsung";
+          if (/CriOS/i.test(ua)) return "chrome_ios";
+          if (/Chrome\//i.test(ua)) return "chrome";
+          if (/Firefox/i.test(ua)) return "firefox";
+          return "outro";
+        }
+
         async function collect() {
           var diag = {
             quando: new Date().toISOString(),
             url: location.href,
             standalone: standalone(),
+            navegador: detectBrowser(),
             online: navigator.onLine,
             userAgent: navigator.userAgent,
             buildHtml: document.documentElement.getAttribute("data-app-build"),
@@ -226,20 +256,42 @@
           if (diag.standalone && diag.recomendacoes.length === 0) {
             diag.recomendacoes.push("Atalho parece OK. Se ainda falhar, remova o ícone e instale de novo em Baixar app.");
           }
-          if (!diag.standalone) {
+          if (diag.navegador === "edge" && !diag.standalone) {
             diag.recomendacoes.push(
-              "Você está no navegador (normal). O erro de tela preta só aparece no ícone instalado — após reparar, teste o ícone."
+              "Você está no Microsoft Edge — este relatório NÃO reflete o ícone instalado pelo Chrome."
             );
+            diag.recomendacoes.push(
+              "Toque em «Abrir reparo no Google Chrome», depois remova o ícone antigo e instale de novo pelo Chrome (Baixar app)."
+            );
+          } else if (diag.navegador !== "chrome" && diag.navegador !== "chrome_ios" && !diag.standalone) {
+            diag.recomendacoes.push(
+              "Use o Google Chrome para reparar e instalar o atalho — outros navegadores têm armazenamento separado."
+            );
+          } else if (!diag.standalone) {
+            diag.recomendacoes.push(
+              "No Chrome: toque em Reparar, faça login, remova o ícone da tela inicial e instale de novo."
+            );
+            diag.recomendacoes.push("Depois teste abrindo pelo ícone (não pela barra de endereço).");
           }
 
           return diag;
         }
 
         function renderResumo(diag) {
+          var navLabel = {
+            edge: "Microsoft Edge",
+            chrome: "Google Chrome",
+            chrome_ios: "Chrome (iOS)",
+            samsung: "Samsung Internet",
+            firefox: "Firefox",
+            outro: "outro navegador",
+          };
           var lines = [];
           lines.push(
             "<p><strong>Modo:</strong> " +
-              (diag.standalone ? '<span class="warn">atalho instalado</span>' : '<span class="ok">Chrome/navegador</span>') +
+              (diag.standalone ? '<span class="warn">ícone instalado</span>' : '<span class="ok">navegador</span>') +
+              " · <strong>Navegador:</strong> " +
+              (navLabel[diag.navegador] || diag.navegador) +
               "</p>"
           );
           lines.push(
@@ -271,6 +323,22 @@
           document.getElementById("resumo").innerHTML = lines.join("");
           document.getElementById("json").value = JSON.stringify(diag, null, 2);
           window.__HB_PWA_DIAG__ = diag;
+
+          var alertEl = document.getElementById("browserAlert");
+          var chromeRow = document.getElementById("openChromeRow");
+          if (alertEl && diag.navegador === "edge" && !diag.standalone) {
+            alertEl.hidden = false;
+            alertEl.innerHTML =
+              "<strong>Edge ≠ ícone do Chrome.</strong> Seu relatório está limpo aqui, mas o ícone na tela inicial pode continuar quebrado até reparar <strong>no Google Chrome</strong>.";
+          } else if (alertEl) {
+            alertEl.hidden = true;
+          }
+          if (chromeRow) {
+            chromeRow.style.display =
+              diag.navegador !== "chrome" && diag.navegador !== "chrome_ios" && !diag.standalone
+                ? "flex"
+                : "none";
+          }
         }
 
         async function run() {
