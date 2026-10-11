@@ -48,6 +48,7 @@ import {
 import { isCooperadoPwaMobileEntregasLeve } from "@/lib/cooperado/cooperadoPwaMobileEntregas";
 import {
   ensureCooperadoNotasFreshForEnvio,
+  shouldSkipCooperadoEnvioSyncOnSubmit,
   type CooperadoPwaEnvioSyncResult,
 } from "@/lib/cooperado/cooperadoPwaEntregasEnvioSync";
 import {
@@ -2479,7 +2480,7 @@ export default function NotasPedidoCooperadoMain() {
     return pending.length ? Promise.all(pending).then(() => undefined) : Promise.resolve();
   };
 
-  const FOTO_UPLOAD_CONCORRENCIA = 3;
+  const FOTO_UPLOAD_CONCORRENCIA = 4;
 
   const acquireUploadSlot = async () => {
     if (uploadSlotsActiveRef.current < FOTO_UPLOAD_CONCORRENCIA) {
@@ -2667,20 +2668,21 @@ export default function NotasPedidoCooperadoMain() {
       const draftKey = ANEXAR_DRAFT_KEY;
       enfileirarUploadFoto(async () => {
         try {
-          await putLocalNotaMedia(notaId, newIndex, processed.compressed, {
-            thumbnailBlob: processed.thumbnail,
-            mimeType: processed.mimeType,
-          });
-
-          const uploaded = await pipeline.uploadImageToSupabase({
-            cnpj,
-            nota: draftNota,
-            index: newIndex,
-            totalCount,
-            blob: processed.compressed,
-            mimeType: processed.mimeType,
-            cooperadoNome,
-          });
+          const [, uploaded] = await Promise.all([
+            putLocalNotaMedia(notaId, newIndex, processed.compressed, {
+              thumbnailBlob: processed.thumbnail,
+              mimeType: processed.mimeType,
+            }),
+            pipeline.uploadImageToSupabase({
+              cnpj,
+              nota: draftNota,
+              index: newIndex,
+              totalCount,
+              blob: processed.compressed,
+              mimeType: processed.mimeType,
+              cooperadoNome,
+            }),
+          ]);
 
           if (!uploaded.ok) {
             if (uploaded.offline) {
@@ -2814,9 +2816,6 @@ export default function NotasPedidoCooperadoMain() {
       errors.escolaAvulsa = "Informe o nome da escola.";
     }
     if (fotosSessaoCount === 0) errors.foto = "Tire ou escolha pelo menos uma foto do pedido assinado.";
-    if (fotosSessaoCount > 0 && fotosNaNuvemCount < fotosSessaoCount) {
-      errors.foto = "Aguarde a sincronização das fotos (alguns segundos) ou verifique a internet.";
-    }
     if (processandoFoto) {
       errors.foto = "Aguarde a compressão da foto atual.";
     }
@@ -2844,14 +2843,21 @@ export default function NotasPedidoCooperadoMain() {
 
     if (entregasPwaLeve) setPwaPreparandoEnvio(true);
 
+    const uploadsPendentes = fotosNaNuvemCount < fotosSessaoCount;
+    const skipPull =
+      entregasPwaLeve &&
+      shouldSkipCooperadoEnvioSyncOnSubmit(notaRejeitadaSubmit);
+
     const [pull] = await Promise.all([
-      entregasPwaLeve
+      entregasPwaLeve && !skipPull
         ? ensureCooperadoNotasFreshForEnvio(user, coopId, {
             reason: "submit",
             notaRejeitada: notaRejeitadaSubmit,
           })
         : Promise.resolve({ ok: true } as CooperadoPwaEnvioSyncResult),
-      aguardarFilaUpload().then(() => syncOfflineDeliveryImages()),
+      (uploadsPendentes ? aguardarFilaUpload() : Promise.resolve()).then(() =>
+        syncOfflineDeliveryImages()
+      ),
     ]);
 
     if (entregasPwaLeve) setPwaPreparandoEnvio(false);
@@ -2949,8 +2955,10 @@ export default function NotasPedidoCooperadoMain() {
       return;
     }
 
-    const persistirLocal = (d: AppData, notaFinal: NotaPedido) => {
-      const base = compactarFotosNoArmazenamento(liberarEspacoArmazenamento(d, 1));
+    const persistirLocal = (d: AppData, notaFinal: NotaPedido, compactar = false) => {
+      const base = compactar
+        ? compactarFotosNoArmazenamento(liberarEspacoArmazenamento(d, 1))
+        : liberarEspacoArmazenamento(d, 1);
 
       if (reenviarNotaId) {
         const updated = base.notasPedido.map((n) => (n.id === reenviarNotaId ? notaFinal : n));
@@ -2998,18 +3006,24 @@ export default function NotasPedidoCooperadoMain() {
       fotosPedidoMiniaturas: undefined,
     };
 
-    let saved = updateDataSafe((d) => persistirLocal(d, notaFinalLocal));
+    let saved = updateDataSafe((d) => persistirLocal(d, notaFinalLocal, false));
     if (!saved.ok) {
-      saved = updateDataSafe((d) => persistirLocal(liberarEspacoArmazenamento(d, 2), notaFinalLocal));
+      saved = updateDataSafe((d) => persistirLocal(liberarEspacoArmazenamento(d, 2), notaFinalLocal, false));
     }
 
     if (!saved.ok) {
       saved = updateDataSafe((d) =>
-        persistirLocal(
-          liberarEspacoArmazenamento(compactarFotosNoArmazenamento(d), 2),
-          notaFinalLocal
-        )
+        persistirLocal(liberarEspacoArmazenamento(compactarFotosNoArmazenamento(d), 2), notaFinalLocal, true)
       );
+    }
+
+    const compactarDepois = () => {
+      updateDataSafe((d) => compactarFotosNoArmazenamento(d));
+    };
+    if (typeof requestIdleCallback !== "undefined") {
+      requestIdleCallback(compactarDepois, { timeout: 12_000 });
+    } else {
+      window.setTimeout(compactarDepois, 2500);
     }
 
     if (!saved.ok) {
@@ -4826,10 +4840,10 @@ export default function NotasPedidoCooperadoMain() {
             </div>
           ) : (
             <div className="flex flex-col gap-2 w-full">
-              {fotosSessaoCount > 0 && fotosNaNuvemCount < fotosSessaoCount && (
-                <p className="text-xs font-medium text-amber-900 sm:text-right">
-                  Enviando fotos para a nuvem ({fotosNaNuvemCount}/{fotosSessaoCount})… O botão libera quando
-                  todas estiverem sincronizadas.
+              {fotosSessaoCount > 0 && fotosNaNuvemCount < fotosSessaoCount && !enviando && (
+                <p className="text-xs font-medium text-gray-600 sm:text-right">
+                  Fotos subindo em segundo plano ({fotosNaNuvemCount}/{fotosSessaoCount}) — já pode tocar{" "}
+                  <span className="font-semibold">Enviar para o responsável</span>.
                 </p>
               )}
               <div className="flex flex-col-reverse sm:flex-row justify-end gap-2">
@@ -4853,16 +4867,13 @@ export default function NotasPedidoCooperadoMain() {
                       "ring-2 ring-amber-400 ring-offset-2 shadow-md"
                   )}
                   onClick={() => void handleAnexarEntrega()}
-                  disabled={
-                    fotosSessaoCount === 0 ||
-                    fotosNaNuvemCount < fotosSessaoCount ||
-                    enviando ||
-                    processandoFoto
-                  }
+                  disabled={fotosSessaoCount === 0 || enviando || processandoFoto}
                 >
                   <FileText size={18} />{" "}
                   {enviando
-                    ? "Publicando para o responsável…"
+                    ? fotosNaNuvemCount < fotosSessaoCount
+                      ? `Sincronizando fotos (${fotosNaNuvemCount}/${fotosSessaoCount})…`
+                      : "Publicando para o responsável…"
                     : processandoFoto
                       ? "Preparando foto…"
                       : fotosSessaoCount > 0

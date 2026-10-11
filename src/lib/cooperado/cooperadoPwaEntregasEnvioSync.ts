@@ -16,6 +16,20 @@ export type CooperadoPwaEnvioSyncResult = {
   error?: string;
 };
 
+/** Após sync em background ao abrir anexar — evita pull pesado de novo no botão Enviar. */
+const ENVIO_SYNC_FRESH_TTL_MS = 120_000;
+let lastCooperadoEnvioSyncFreshAt = 0;
+
+export function markCooperadoEnvioSyncFresh(): void {
+  lastCooperadoEnvioSyncFreshAt = Date.now();
+}
+
+export function shouldSkipCooperadoEnvioSyncOnSubmit(notaRejeitada?: NotaPedido): boolean {
+  if (notaRejeitada?.id) return false;
+  if (lastCooperadoEnvioSyncFreshAt <= 0) return false;
+  return Date.now() - lastCooperadoEnvioSyncFreshAt < ENVIO_SYNC_FRESH_TTL_MS;
+}
+
 export async function ensureCooperadoNotasFreshForEnvio(
   user: Omit<User, "password">,
   coopId: string,
@@ -55,10 +69,15 @@ export async function ensureCooperadoNotasFreshForEnvio(
         } catch {
           /* contratos locais */
         }
+        markCooperadoEnvioSyncFresh();
       } catch {
         /* não bloqueia abertura da câmera — submit valida de novo */
       }
     })();
+    return { ok: true };
+  }
+
+  if (opts?.reason === "submit" && shouldSkipCooperadoEnvioSyncOnSubmit(opts.notaRejeitada)) {
     return { ok: true };
   }
 
@@ -71,6 +90,7 @@ export async function ensureCooperadoNotasFreshForEnvio(
     } catch {
       /* offline — contratos locais */
     }
+    markCooperadoEnvioSyncFresh();
     return { ok: true };
   } catch {
     return {
