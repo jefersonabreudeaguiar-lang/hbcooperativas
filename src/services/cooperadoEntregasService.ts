@@ -780,7 +780,11 @@ export function getValorQuantoVouReceberMotorLegado(
   );
   const aguardandoRecibo = Boolean(consolidado.aguardandoAssinatura && aguardando);
   const valorRecibo = aguardandoRecibo ? round2(aguardando!.valorLiquido) : 0;
-  const valorExibir = aguardandoRecibo && valorRecibo > 0 ? 0 : consolidado.valorLiquido;
+  /** Só zera o valor “a receber” quando só há recibo pendente; ficha em aberto mantém paridade com consolidado/fichas. */
+  const valorExibir =
+    aguardandoRecibo && valorRecibo > 0 && consolidado.valorLiquido <= 0
+      ? 0
+      : consolidado.valorLiquido;
   return {
     mes,
     meses,
