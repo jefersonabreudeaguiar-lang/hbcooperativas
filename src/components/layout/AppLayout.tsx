@@ -64,7 +64,6 @@ import { CooperadoMobileTabKeepAlive } from "@/components/performance/CooperadoM
 import { StaffMobileTabKeepAlive } from "@/components/performance/StaffMobileTabKeepAlive";
 import { CooperadoPwaResumeLifecycle } from "@/components/cooperado/CooperadoPwaResumeLifecycle";
 import { CooperadoPwaMessengerAppDataWarm } from "@/components/cooperado/CooperadoPwaMessengerAppDataWarm";
-import { CooperadoMobileReleaseBar } from "@/components/cooperado/CooperadoMobileReleaseBar";
 import { StaffMobileReleaseBar } from "@/components/layout/StaffMobileReleaseBar";
 import type { Resource } from "@/types";
 
@@ -300,7 +299,6 @@ export function MobileNav() {
       )}
 
       <div className="lg:hidden fixed bottom-0 left-0 right-0 z-40 flex flex-col safe-area-pb shadow-[0_-6px_24px_rgba(0,0,0,0.12)]">
-        {isCooperadoAppUser(navUser) && <CooperadoMobileReleaseBar />}
         <nav className="flex bg-white border-t-2 border-green-200">
         {mobileItems.map((item) => {
           const tabPath = isCooperadoAppUser(navUser!) ? effectiveTabPath : pathname;
@@ -525,7 +523,7 @@ function AppShellInner({ children }: { children: React.ReactNode }) {
               : cn(
                   "p-4 lg:p-6 lg:pb-6",
                   navUser && isCooperadoAppUser(navUser)
-                    ? "pb-[max(8rem,env(safe-area-inset-bottom,0px)+5.75rem)]"
+                    ? "pb-[max(6.5rem,env(safe-area-inset-bottom,0px)+4.25rem)]"
                     : "pb-[max(6.5rem,env(safe-area-inset-bottom,0px)+4.25rem)] lg:pb-6"
                 )
           )}

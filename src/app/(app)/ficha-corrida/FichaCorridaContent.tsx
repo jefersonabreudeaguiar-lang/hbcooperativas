@@ -11,11 +11,15 @@ import { isAppDataWarm } from "@/services/dataStore";
 import { useCooperadoTabPanelActive } from "@/hooks/useCooperadoTabPanelActive";
 import { useCooperadoFinanceiroUiSnapshot } from "@/hooks/useCooperadoFinanceiroUiSnapshot";
 import { useCooperadoMessengerReadModelRevision } from "@/hooks/useCooperadoMessengerReadModelRevision";
+import { useCooperadoDormantAppData } from "@/hooks/useCooperadoDormantAppData";
 import {
   lerCooperadoPwaFichaResumoSnapshot,
   type CooperadoPwaFichaResumoSnapshot,
 } from "@/lib/cooperado/cooperadoPwaFichaResumoSnapshot";
-import { isCooperadoPwaMessengerMode } from "@/lib/cooperado/cooperadoPwaMessengerMode";
+import {
+  cooperadoPwaUiSubscribesAppData,
+  isCooperadoPwaMessengerMode,
+} from "@/lib/cooperado/cooperadoPwaMessengerMode";
 import { usePermissions } from "@/hooks/usePermissions";
 import { getUserCooperativaId } from "@/utils/cooperativa";
 import {
@@ -196,14 +200,24 @@ export default function FichaCorridaPage() {
   const { user, isCooperado, cooperadoId, check } = usePermissions();
   const messenger = isCooperadoPwaMessengerMode();
   const readModelsRevision = useCooperadoMessengerReadModelRevision();
-  const data = useAppDataSelectorForDomainsWhenActive(
-    tabActive,
+  /** Cooperado PWA: financeiro só relê após sync (responsável); entregas permanecem no fluxo atual. */
+  const financeiroDormant = messenger && isCooperado;
+  /** PWA leve só desliga subscribe do AppData para cooperado; responsável continua com dados ao vivo. */
+  const appDataPanelActive =
+    tabActive && (isCooperado ? cooperadoPwaUiSubscribesAppData() : true);
+  const dataLive = useAppDataSelectorForDomainsWhenActive(
+    appDataPanelActive,
     FICHA_APP_DATA_DOMAINS,
     (d) => d,
     []
   );
-  const hbDescontosRevision = useContaCoopDescontosRevisionWhenLive(tabActive);
-  const financeiroUiEpoch = hbDescontosRevision;
+  const dataDormant = useCooperadoDormantAppData(
+    tabActive && financeiroDormant,
+    readModelsRevision
+  );
+  const data = financeiroDormant ? dataDormant : dataLive;
+  const hbDescontosRevision = useContaCoopDescontosRevisionWhenLive(!financeiroDormant);
+  const financeiroUiEpoch = financeiroDormant ? readModelsRevision : hbDescontosRevision;
   const searchParams = useSearchParams();
   const [mesFilter, setMesFilter] = useState(searchParams.get("mes") ?? getCurrentMesReferencia());
   const [cooperadoFilter, setCooperadoFilter] = useState(searchParams.get("cooperado") ?? "");
@@ -794,7 +808,7 @@ export default function FichaCorridaPage() {
     data,
     cooperadoId: cooperadoId ?? undefined,
     cooperativaId: coopId,
-    frozenFinanceiroEpoch: undefined,
+    frozenFinanceiroEpoch: financeiroDormant ? readModelsRevision : undefined,
     opts: {
       apresentacaoConsolidada: apresentacaoFinanceiroUi,
       carregandoNuvem: !apresentacaoFinanceiroUi && syncCooperadoFinanceiro,
@@ -903,7 +917,7 @@ export default function FichaCorridaPage() {
   }, [data, cooperadoSelecionadoId, mesAtivo, coopId]);
 
   useSyncContaCoopValorReceberPilot(
-    tabActive && exibicaoOpts && cooperadoSelecionadoId && coopId
+    !financeiroDormant && tabActive && exibicaoOpts && cooperadoSelecionadoId && coopId
       ? {
           cooperadoId: cooperadoSelecionadoId,
           mesReferencia: isCooperado ? mesReferenciaHbCooperado : mesAtivo,
