@@ -176,6 +176,16 @@ function mensagemErroPullOperacionalCooperado(result: SyncOperacionalFromCloudRe
   }
 }
 
+/** Cooperado com fatia local utilizável — pode exibir valor a receber / ficha sem esperar reconciliação total. */
+function cooperadoPodeExibirFinanceiroLocalmente(
+  data: ReturnType<typeof getData>,
+  cooperadoId: string,
+  cooperativaId: string
+): boolean {
+  if (cooperadoFinanceiroBloqueiaEntradaApp(data, cooperadoId, cooperativaId)) return false;
+  return cooperadoTemDadosFinanceirosMinimos(data, cooperadoId, cooperativaId);
+}
+
 function withSyncTimeout<T>(promise: Promise<T>, label: string, timeoutMs = SYNC_TIMEOUT_MS): Promise<T> {
   return Promise.race([
     promise,
@@ -362,7 +372,7 @@ export function CooperativaSyncProvider({ children }: { children: React.ReactNod
     });
   }, []);
   const [cooperadoPagamentosHydrated, setCooperadoPagamentosHydrated] = useState(
-    () => user?.role !== "cooperado"
+    () => user?.role !== "cooperado" || isCooperadoManualOperacionalSync()
   );
   const cooperadoPagamentosHydratedRef = useRef(cooperadoPagamentosHydrated);
   cooperadoPagamentosHydratedRef.current = cooperadoPagamentosHydrated;
@@ -636,7 +646,11 @@ export function CooperativaSyncProvider({ children }: { children: React.ReactNod
         const preserveHydration =
           cooperadoSyncEmSegundoPlano ||
           cooperadoPreserveHydrationOnSilentSync(currentUser, cooperadoPagamentosHydratedRef.current);
-        if (mustClearFinancePresentation && !preserveHydration) {
+        const limparHydrationFinanceira =
+          mustClearFinancePresentation &&
+          !preserveHydration &&
+          (!isCooperadoManualOperacionalSync() || opts?.userInitiated === true);
+        if (limparHydrationFinanceira) {
           setCooperadoPagamentosHydrated(false);
         }
       }
@@ -917,35 +931,50 @@ export function CooperativaSyncProvider({ children }: { children: React.ReactNod
             cooperadoId: cooperadoCanonico,
             cooperativaId: coopIdFinal,
           });
-        if (liberaApresentacao) {
+        let apresentacaoFinanceiraRestaurada = false;
+        const restaurarApresentacaoCooperado = () => {
+          if (!userRef.current || userRef.current.role !== "cooperado") return;
           markCooperadoPagamentosHydrated();
-          if (!isCooperadoPwaMobileLeveUi()) {
-            persistirInicioCardValorReceberCooperado(userRef.current);
-          }
+          persistirInicioCardValorReceberCooperado(userRef.current);
+          apresentacaoFinanceiraRestaurada = true;
           setLastSyncError("");
+        };
+
+        if (liberaApresentacao) {
+          restaurarApresentacaoCooperado();
         } else if (
           cooperadoCanonico &&
           coopIdFinal &&
           completed &&
           !cooperadoFinanceiroDesatualizado(getData(), cooperadoCanonico, coopIdFinal)
         ) {
-          markCooperadoPagamentosHydrated();
-          setLastSyncError("");
+          restaurarApresentacaoCooperado();
         } else if (
           cooperadoCanonico &&
           coopIdFinal &&
           isCooperadoManualOperacionalSync() &&
-          (opts?.userInitiated === true || opts?.eventDriven === true) &&
-          !cooperadoFinanceiroBloqueiaEntradaApp(latest, cooperadoCanonico, coopIdFinal)
+          cooperadoPodeExibirFinanceiroLocalmente(latest, cooperadoCanonico, coopIdFinal)
         ) {
-          markCooperadoPagamentosHydrated();
-          setLastSyncError("");
+          restaurarApresentacaoCooperado();
+        } else if (
+          cooperadoCanonico &&
+          coopIdFinal &&
+          cooperadoFinanceiroStaleRecuperavelEmBackground(latest, cooperadoCanonico, coopIdFinal)
+        ) {
+          restaurarApresentacaoCooperado();
         } else if (!isCooperadoManualOperacionalSync()) {
           setCooperadoPagamentosHydrated(false);
         }
-        if (completed && userRef.current?.role === "cooperado" && isCooperadoPwaMobileLeveUi()) {
+
+        if (
+          userRef.current?.role === "cooperado" &&
+          isCooperadoPwaMobileLeveUi() &&
+          (completed || apresentacaoFinanceiraRestaurada)
+        ) {
           cooperadoPwaMaterializarSnapshotsFinanceirosPosSync(userRef.current);
-          persistOperacionalSyncedAppBuild();
+          if (completed) {
+            persistOperacionalSyncedAppBuild();
+          }
           if (isCooperadoPwaMessengerMode()) {
             clearCooperadoPwaDadosDesatualizados();
           }
