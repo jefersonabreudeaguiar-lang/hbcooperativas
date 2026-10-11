@@ -37,10 +37,12 @@
     <div>
       <div class="spin" aria-hidden="true"></div>
       <p><strong>Abrindo HB Cooperativas…</strong></p>
-      <p id="hint" style="font-size: 0.8rem; color: #4b5563">Aguarde um instante</p>
+      <p id="hint" style="font-size: 0.8rem; color: #4b5563">Preparando atalho…</p>
     </div>
     <script>
       (function () {
+        var REPAIR_KEY = "hb-coop-pwa-repair-done";
+        var REPAIR_VER = "326";
         var params = new URLSearchParams(location.search);
         var next = params.get("next");
         var hasSession = false;
@@ -57,19 +59,61 @@
         }
 
         function go() {
+          try {
+            sessionStorage.setItem(REPAIR_KEY, REPAIR_VER);
+          } catch (e) {
+            /* ignore */
+          }
           location.replace(target);
         }
 
-        if (!("serviceWorker" in navigator)) {
-          window.setTimeout(go, 200);
-          return;
+        function purgeCaches() {
+          if (!("caches" in window)) return Promise.resolve();
+          return caches.keys().then(function (keys) {
+            return Promise.all(keys.map(function (k) {
+              return caches.delete(k);
+            }));
+          });
         }
 
-        navigator.serviceWorker
-          .register("/sw.js", { scope: "/", updateViaCache: "none" })
+        function purgeServiceWorkers() {
+          if (!("serviceWorker" in navigator)) return Promise.resolve();
+          return navigator.serviceWorker.getRegistrations().then(function (regs) {
+            return Promise.all(regs.map(function (r) {
+              return r.unregister();
+            }));
+          });
+        }
+
+        function registerPassthrough() {
+          if (!("serviceWorker" in navigator)) return Promise.resolve();
+          return navigator.serviceWorker.register("/sw.js", {
+            scope: "/",
+            updateViaCache: "none",
+          });
+        }
+
+        function waitReady(ms) {
+          if (!("serviceWorker" in navigator)) return Promise.resolve();
+          return Promise.race([
+            navigator.serviceWorker.ready,
+            new Promise(function (resolve) {
+              window.setTimeout(resolve, ms);
+            }),
+          ]);
+        }
+
+        purgeCaches()
           .catch(function () {})
+          .then(purgeServiceWorkers)
+          .catch(function () {})
+          .then(registerPassthrough)
+          .catch(function () {})
+          .then(function () {
+            return waitReady(2500);
+          })
           .finally(function () {
-            window.setTimeout(go, 450);
+            window.setTimeout(go, 200);
           });
       })();
     </script>

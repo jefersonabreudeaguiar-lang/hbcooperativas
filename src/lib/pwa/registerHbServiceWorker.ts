@@ -38,7 +38,12 @@ export function registerHbServiceWorker(): Promise<ServiceWorkerRegistration | n
   if (!PWA_SERVICE_WORKER_REGISTRATION_ENABLED) {
     return purgeAllHbServiceWorkers().then(() => null);
   }
-  return purgeLegacyHbServiceWorkers()
+  const standalone =
+    typeof window !== "undefined" &&
+    (window.matchMedia("(display-mode: standalone)").matches ||
+      (window.navigator as Navigator & { standalone?: boolean }).standalone === true);
+  const purge = standalone ? purgeAllHbServiceWorkers() : purgeLegacyHbServiceWorkers();
+  return purge
     .then(() =>
       navigator.serviceWorker.register(HB_SERVICE_WORKER_URL, {
         scope: "/",
