@@ -50,6 +50,7 @@ import {
   cooperadoFinanceiroDesatualizado,
   cooperadoFinanceiroStaleRecuperavelEmBackground,
   aplicarSanidadeFinanceiroCooperadoLocal,
+  cooperadoTemDadosFinanceirosMinimos,
 } from "@/services/fichaSyncGuard";
 import { avaliarIntegridadeFinanceiroCooperado } from "@/services/cooperadoFinanceiroGuard";
 import { ensureOperacionalAlinhadoComNuvem } from "@/services/operacionalRestoreService";
@@ -788,6 +789,13 @@ export function CooperativaSyncProvider({ children }: { children: React.ReactNod
             )
           ) {
             scheduleCooperadoSilentSyncRetry();
+          } else if (
+            currentUser.role === "cooperado" &&
+            (opts?.userInitiated === true || opts?.eventDriven === true) &&
+            cooperadoTemDadosFinanceirosMinimos(getData(), cooperadoCanonico, currentCoopId)
+          ) {
+            /* Toque em Atualizar: mostrar o que já baixou; reconciliação continua em background. */
+            scheduleCooperadoSilentSyncRetry();
           } else {
             completed = false;
             if (currentUser.role !== "cooperado") {
@@ -920,6 +928,15 @@ export function CooperativaSyncProvider({ children }: { children: React.ReactNod
           coopIdFinal &&
           completed &&
           !cooperadoFinanceiroDesatualizado(getData(), cooperadoCanonico, coopIdFinal)
+        ) {
+          markCooperadoPagamentosHydrated();
+          setLastSyncError("");
+        } else if (
+          cooperadoCanonico &&
+          coopIdFinal &&
+          isCooperadoManualOperacionalSync() &&
+          (opts?.userInitiated === true || opts?.eventDriven === true) &&
+          !cooperadoFinanceiroBloqueiaEntradaApp(latest, cooperadoCanonico, coopIdFinal)
         ) {
           markCooperadoPagamentosHydrated();
           setLastSyncError("");
