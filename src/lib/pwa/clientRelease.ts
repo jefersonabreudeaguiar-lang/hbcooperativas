@@ -1,4 +1,5 @@
 import { APP_BUILD_VERSION } from "@/lib/appBuildVersion";
+import { isCooperadoEntregaFlowActive } from "@/lib/cooperado/cooperadoEntregaFlowGuard";
 
 /** Persistido após confirmar que o bundle carregado bate com o release oficial. */
 export const DEPLOYMENT_SEEN_KEY = "hb-coop-app-deployment-seen";
@@ -37,6 +38,7 @@ export function stripReleaseAlignQueryFromUrl(): void {
 
 export function shouldSkipServiceWorkerActivationReload(): boolean {
   if (typeof window === "undefined") return false;
+  if (isCooperadoEntregaFlowActive()) return true;
   try {
     const now = Date.now();
     const nav = Number(sessionStorage.getItem(RELEASE_NAV_MARK_KEY) || 0);
@@ -357,6 +359,7 @@ export function shouldAllowHardReload(
   reason: string,
   options?: { bypassBurstForBuildUpgrade?: boolean }
 ): boolean {
+  if (isCooperadoEntregaFlowActive()) return false;
   if (options?.bypassBurstForBuildUpgrade) return true;
   if (typeof sessionStorage === "undefined") return true;
   try {

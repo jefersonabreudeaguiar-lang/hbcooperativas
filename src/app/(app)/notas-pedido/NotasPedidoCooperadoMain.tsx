@@ -51,6 +51,10 @@ import {
   type CooperadoPwaEnvioSyncResult,
 } from "@/lib/cooperado/cooperadoPwaEntregasEnvioSync";
 import {
+  clearCooperadoEntregaFlowActive,
+  markCooperadoEntregaFlowActive,
+} from "@/lib/cooperado/cooperadoEntregaFlowGuard";
+import {
   COOPERADO_PWA_ENTREGAS_SNAPSHOT_REFRESH_EVENT,
   persistirCooperadoPwaEntregasResumosSnapshot,
   type CooperadoPwaEntregasResumosSnapshot,
@@ -152,7 +156,6 @@ import {
   pushReparoFilaConferenciaSanitizadoToCloud,
   syncOfflineDeliveryImages,
   publicarEntregaCooperadoNaNuvem,
-  confirmNotaEntregaPublicadaNaNuvem,
   deleteFotoRascunhoFromCloud,
   confirmNotaDeletedFromCloud,
   deleteNotaPedidoFromCloud,
@@ -1538,7 +1541,9 @@ export default function NotasPedidoCooperadoMain() {
     if (!isCooperado) return;
     const envioUrgente = anexarModal || enviando || fotosSessaoCount > 0;
     if (envioUrgente) {
-      runCooperadoEntregaMaintenance({ forceHeavy: true });
+      if (!entregasPwaLeve) {
+        runCooperadoEntregaMaintenance({ forceHeavy: true });
+      }
       return;
     }
     if (entregasPwaLeve) return;
@@ -1558,6 +1563,17 @@ export default function NotasPedidoCooperadoMain() {
     fotosSessaoCount,
     runCooperadoEntregaMaintenance,
   ]);
+
+  useEffect(() => {
+    if (!isCooperado) return;
+    const fluxoAtivo = anexarModal || enviando || processandoFoto;
+    if (fluxoAtivo) {
+      markCooperadoEntregaFlowActive();
+      return () => clearCooperadoEntregaFlowActive();
+    }
+    clearCooperadoEntregaFlowActive();
+    return undefined;
+  }, [isCooperado, anexarModal, enviando, processandoFoto]);
 
   useEffect(() => {
     if (!isCooperado) return;
@@ -3040,35 +3056,6 @@ export default function NotasPedidoCooperadoMain() {
       );
     }
 
-    const confirmadaNuvem = await confirmNotaEntregaPublicadaNaNuvem(cnpj, notaFinalLocal.id);
-    if (!confirmadaNuvem.ok) {
-      const republish = await publicarEntregaCooperadoNaNuvem(cnpj, notaFinalLocal, cooperadoNome);
-      if (!republish.ok) {
-        setErroEnvio(
-          republish.error ??
-            "A entrega não foi confirmada na nuvem. Verifique a conexão e toque Enviar de novo."
-        );
-        if (listaLocalOk) {
-          queuePendingEntregaPublish({
-            cnpj,
-            cooperativaId: coopId,
-            userId: user.id,
-            userName: user.name,
-            cooperadoNome,
-            nota: notaFinalLocal,
-            reenvio: Boolean(reenviarNotaId),
-            qtdFotos,
-          });
-        }
-        return;
-      }
-      const confirmadaDepois = await confirmNotaEntregaPublicadaNaNuvem(cnpj, notaFinalLocal.id);
-      if (!confirmadaDepois.ok) {
-        setErroEnvio(confirmadaDepois.error);
-        return;
-      }
-    }
-
     limparRascunhoAnexar();
     resetFotosSessaoUi();
     setFotoDuplicadaMsg("");
@@ -3080,8 +3067,13 @@ export default function NotasPedidoCooperadoMain() {
         : `Entrega enviada com ${qtdFotos} fotos! O responsável já pode conferir.`) +
         (!listaLocalOk ? " Se não constar em Em análise, toque Atualizar." : "")
     );
-    requestCooperadoPostEntregaSync();
     refreshPwaEntregasResumosSnap();
+    const schedulePostEntregaSync = () => requestCooperadoPostEntregaSync();
+    if (typeof requestIdleCallback !== "undefined") {
+      requestIdleCallback(schedulePostEntregaSync, { timeout: 4_000 });
+    } else {
+      window.setTimeout(schedulePostEntregaSync, 0);
+    }
     } catch {
       setErroEnvio("Falha inesperada ao enviar a entrega. Verifique a conexão e tente de novo.");
     } finally {
