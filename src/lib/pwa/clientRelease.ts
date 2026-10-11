@@ -581,8 +581,8 @@ export function buildInlinePageReleaseBootstrap(pageRelease: ClientReleaseInfo):
   return `window.__HB_PAGE_RELEASE__=${JSON.stringify(pageRelease)};`;
 }
 
-const PWA_REPAIR_SESSION_KEY = "hb-coop-pwa-repair-done";
-const PWA_REPAIR_SESSION_VERSION = "326";
+export const PWA_REPAIR_SESSION_KEY = "hb-coop-pwa-repair-done";
+export const PWA_REPAIR_SESSION_VERSION = "327";
 
 /** Atalho: 1ª navegação da sessão passa por pwa-launch (repara SW antes do React). */
 export function buildInlinePwaStandaloneLaunchGuardScript(): string {
@@ -591,7 +591,9 @@ export function buildInlinePwaStandaloneLaunchGuardScript(): string {
 
 /** 1º paint: no atalho remove todo SW legado; registra /sw.js passthrough. */
 export function buildInlineServiceWorkerMigrationScript(): string {
-  return `(function(){if(!("serviceWorker"in navigator))return;function leg(u){return u&&(u.indexOf("sw.js?")>=0||u.indexOf("sw.js%3F")>=0);}function standalone(){try{return window.matchMedia("(display-mode: standalone)").matches||window.navigator.standalone===true;}catch(e){return false;}}void navigator.serviceWorker.getRegistrations().then(function(regs){if(standalone()){return Promise.all(regs.map(function(r){return r.unregister();}));}return Promise.all(regs.filter(function(r){var u=(r.active&&r.active.scriptURL)||(r.waiting&&r.waiting.scriptURL)||(r.installing&&r.installing.scriptURL)||"";return leg(u);}).map(function(r){return r.unregister();}));}).then(function(){return navigator.serviceWorker.register("/sw.js",{scope:"/",updateViaCache:"none"});}).catch(function(){});})();`;
+  const repairKey = PWA_REPAIR_SESSION_KEY;
+  const repairVer = PWA_REPAIR_SESSION_VERSION;
+  return `(function(){if(!("serviceWorker"in navigator))return;function leg(u){return u&&(u.indexOf("sw.js?")>=0||u.indexOf("sw.js%3F")>=0);}function standalone(){try{return window.matchMedia("(display-mode: standalone)").matches||window.navigator.standalone===true;}catch(e){return false;}}function repaired(){try{return sessionStorage.getItem("${repairKey}")===${JSON.stringify(repairVer)};}catch(e){return false;}}function scriptUrl(r){return(r.active&&r.active.scriptURL)||(r.waiting&&r.waiting.scriptURL)||(r.installing&&r.installing.scriptURL)||"";}function isPassthroughSw(u){return u&&u.indexOf("/sw.js")>=0&&!leg(u);}void navigator.serviceWorker.getRegistrations().then(function(regs){if(standalone()&&repaired()){var ok=regs.some(function(r){return isPassthroughSw(scriptUrl(r));});if(ok)return;return navigator.serviceWorker.register("/sw.js",{scope:"/",updateViaCache:"none"});}if(standalone()){return Promise.all(regs.map(function(r){return r.unregister();}));}return Promise.all(regs.filter(function(r){return leg(scriptUrl(r));}).map(function(r){return r.unregister();}));}).then(function(done){if(standalone()&&repaired())return;if(standalone())return;return navigator.serviceWorker.register("/sw.js",{scope:"/",updateViaCache:"none"});}).catch(function(){});})();`;
 }
 
 /**

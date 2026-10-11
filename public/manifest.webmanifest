@@ -1,9 +1,9 @@
 {
-  "id": "/?hb-pwa=326",
+  "id": "/?hb-pwa=327",
   "name": "HB Cooperativas",
   "short_name": "HB Coop",
   "description": "Gestão de cooperativas — entregas, mensalidades e ficha corrida",
-  "start_url": "/pwa-launch.html?v=326",
+  "start_url": "/pwa-launch.html?v=327",
   "scope": "/",
   "display": "standalone",
   "display_override": ["standalone", "minimal-ui"],

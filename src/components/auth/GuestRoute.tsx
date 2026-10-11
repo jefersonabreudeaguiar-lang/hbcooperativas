@@ -50,7 +50,16 @@ export function GuestRoute({
     );
   }
 
-  if (user) return null;
+  if (user) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+        <div className="w-full max-w-md px-6 space-y-4 animate-pulse">
+          <div className="h-10 bg-gray-200 rounded-lg mx-auto w-40" />
+          <div className="h-64 bg-white rounded-2xl border border-gray-200" />
+        </div>
+      </div>
+    );
+  }
 
   return <>{children}</>;
 }

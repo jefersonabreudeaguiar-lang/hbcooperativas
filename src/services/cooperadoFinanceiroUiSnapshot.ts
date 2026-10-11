@@ -18,6 +18,7 @@ import {
 } from "@/services/bicLeituraCentralCooperado";
 import { cooperadoUsarFluxoReciboAssinaturaNaUi } from "@/lib/bic/cooperadoBicCentralUi";
 import { cooperadoTemReciboAssinadoLocalSemPendenciaUi } from "@/lib/cooperado/cooperadoReciboAssinaturaLocalLatch";
+import { cooperadoTemDadosFinanceirosMinimos } from "@/services/fichaSyncGuard";
 import {
   cooperadoExibirValorReceberInicio,
   getResumoQuantoVouReceberCooperadoMotorLegado,
@@ -276,6 +277,19 @@ export function buildCooperadoFinanceiroUiSnapshot(
 
   if (validation.status !== "valid") {
     const revision = cooperadoMotorRevisionOperacional(data, coopadoId, coopId);
+    if (cooperadoTemDadosFinanceirosMinimos(data, coopadoId, coopId)) {
+      const legado = buildLegadoSnapshot(data, coopadoId, coopId, opts);
+      return {
+        ...legado,
+        observability: {
+          ...legado.observability,
+          fallback: true,
+          fallbackReason: validation.status,
+          motorRevision: revision,
+          tenantStatus: tenantStatusObservabilidadeSnapshot(validation.status),
+        },
+      };
+    }
     return inconsistenteBicSnapshot(validation.status, conferindo, revision);
   }
 
