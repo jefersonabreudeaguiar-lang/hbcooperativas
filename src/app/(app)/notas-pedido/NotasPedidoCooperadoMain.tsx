@@ -1665,11 +1665,8 @@ export default function NotasPedidoCooperadoMain() {
     void syncFotosSessaoFromDraft();
     if (entregasPwaLeve && user && coopId) {
       void ensureCooperadoNotasFreshForEnvio(user, coopId, { reason: "anexar" }).then((pull) => {
-        if (!pull.ok) {
-          setErroEnvio(pull.error ?? "Não foi possível atualizar antes de continuar o envio.");
-          return;
-        }
-        refreshPwaEntregasResumosSnap();
+        if (!pull.ok) setErroEnvio(pull.error ?? "Não foi possível atualizar antes de continuar o envio.");
+        else refreshPwaEntregasResumosSnap();
       });
     }
   };
@@ -1692,12 +1689,12 @@ export default function NotasPedidoCooperadoMain() {
     }
 
     let currentData = data ?? getData();
-    if (isCooperado && currentData) {
+    if (isCooperado && currentData && !options?.abrirCamera) {
       const compactar = () => updateDataSafe((d) => compactarFotosNoArmazenamento(d));
       if (typeof requestIdleCallback !== "undefined") {
-        requestIdleCallback(compactar, { timeout: 2500 });
+        requestIdleCallback(compactar, { timeout: 8000 });
       } else {
-        setTimeout(compactar, 0);
+        setTimeout(compactar, 2000);
       }
       currentData = getData() ?? currentData;
     }
@@ -1719,20 +1716,16 @@ export default function NotasPedidoCooperadoMain() {
   ) => {
     iniciarModalAnexar(notaRejeitada, options);
     if (entregasPwaLeve && user && coopId) {
-      void (async () => {
-        const slow = window.setTimeout(() => setPwaPreparandoEnvio(true), 500);
-        const pull = await ensureCooperadoNotasFreshForEnvio(user, coopId, {
-          reason: "anexar",
-          notaRejeitada,
-        });
-        window.clearTimeout(slow);
-        setPwaPreparandoEnvio(false);
+      void ensureCooperadoNotasFreshForEnvio(user, coopId, {
+        reason: "anexar",
+        notaRejeitada,
+      }).then((pull) => {
         if (!pull.ok) {
           setErroEnvio(pull.error ?? "Não foi possível atualizar antes de enviar fotos.");
           return;
         }
         refreshPwaEntregasResumosSnap();
-      })();
+      });
     }
   };
 
@@ -1742,30 +1735,20 @@ export default function NotasPedidoCooperadoMain() {
       continuarRascunhoFotos(options?.abrirCamera ?? false);
       return;
     }
-    if (!notaRejeitada && ANEXAR_DRAFT_KEY) {
-      let settled = false;
-      const fallbackTimer = window.setTimeout(() => {
-        if (settled) return;
-        settled = true;
-        openAnexarPwaThen(undefined, options);
-      }, 80);
-      void loadFotoDraftMeta(ANEXAR_DRAFT_KEY).then((meta) => {
-        if (settled) return;
-        settled = true;
-        window.clearTimeout(fallbackTimer);
-        if (meta?.count) {
-          setRascunhoFotosCount(meta.count);
-          setRascunhoUploadedCount(meta.uploadedCount ?? 0);
-          if (meta.contratoId) setRascunhoContratoId(meta.contratoId);
-          continuarRascunhoFotos(options?.abrirCamera ?? false);
-        } else {
-          openAnexarPwaThen(undefined, options);
-        }
-      });
-      return;
-    }
-
     openAnexarPwaThen(notaRejeitada, options);
+    if (!notaRejeitada && ANEXAR_DRAFT_KEY) {
+      void loadFotoDraftMeta(ANEXAR_DRAFT_KEY).then((meta) => {
+        if (!meta?.count) return;
+        setRascunhoFotosCount(meta.count);
+        setRascunhoUploadedCount(meta.uploadedCount ?? 0);
+        if (meta.contratoId) {
+          setRascunhoContratoId(meta.contratoId);
+          setContratoInstId(meta.contratoId);
+          if (coopId) setInstituicaoPadraoId(coopId, meta.contratoId);
+        }
+        void syncFotosSessaoFromDraft();
+      });
+    }
   };
 
   const cooperadosCoop =
@@ -1803,6 +1786,8 @@ export default function NotasPedidoCooperadoMain() {
       setAvisoMemoriaFotosAnexar(false);
       return;
     }
+    prefetchCooperadoAnexarPipeline();
+    void loadCooperadoAnexarPipeline();
     let cancelled = false;
     void shouldWarnCooperadoFotosUmaPorVez().then((warn) => {
       if (!cancelled) setAvisoMemoriaFotosAnexar(warn);
@@ -4840,36 +4825,51 @@ export default function NotasPedidoCooperadoMain() {
               </Button>
             </div>
           ) : (
-            <div className="hidden sm:flex flex-col-reverse sm:flex-row justify-end gap-2">
-              <Button type="button" variant="secondary" disabled={enviando} onClick={() => fecharAnexarModal()}>
-                Cancelar
-              </Button>
-              <Button
-                type="button"
-                size="lg"
-                onClick={() => void handleAnexarEntrega()}
-                disabled={
-                  fotosSessaoCount === 0 ||
-                  fotosNaNuvemCount < fotosSessaoCount ||
-                  enviando ||
-                  processandoFoto
-                }
-                className={cn(
-                  limiteFotosSessaoAtingido &&
-                    fotosSessaoCount > 0 &&
-                    fotosNaNuvemCount >= fotosSessaoCount &&
-                    "ring-2 ring-amber-400 ring-offset-2 shadow-md"
-                )}
-              >
-                <FileText size={18} />{" "}
-                {enviando
-                  ? "Publicando para o responsável…"
-                  : processandoFoto
-                    ? "Enviando foto para a nuvem…"
-                  : fotosSessaoCount > 0
-                    ? `Enviar para o responsável${fotosSessaoCount > 1 ? ` (${fotosSessaoCount} fotos)` : ""}`
-                    : "Tire uma foto primeiro"}
-              </Button>
+            <div className="flex flex-col gap-2 w-full">
+              {fotosSessaoCount > 0 && fotosNaNuvemCount < fotosSessaoCount && (
+                <p className="text-xs font-medium text-amber-900 sm:text-right">
+                  Enviando fotos para a nuvem ({fotosNaNuvemCount}/{fotosSessaoCount})… O botão libera quando
+                  todas estiverem sincronizadas.
+                </p>
+              )}
+              <div className="flex flex-col-reverse sm:flex-row justify-end gap-2">
+                <Button
+                  type="button"
+                  variant="secondary"
+                  className="w-full sm:w-auto"
+                  disabled={enviando}
+                  onClick={() => fecharAnexarModal()}
+                >
+                  Cancelar
+                </Button>
+                <Button
+                  type="button"
+                  size="lg"
+                  className={cn(
+                    "w-full sm:w-auto",
+                    limiteFotosSessaoAtingido &&
+                      fotosSessaoCount > 0 &&
+                      fotosNaNuvemCount >= fotosSessaoCount &&
+                      "ring-2 ring-amber-400 ring-offset-2 shadow-md"
+                  )}
+                  onClick={() => void handleAnexarEntrega()}
+                  disabled={
+                    fotosSessaoCount === 0 ||
+                    fotosNaNuvemCount < fotosSessaoCount ||
+                    enviando ||
+                    processandoFoto
+                  }
+                >
+                  <FileText size={18} />{" "}
+                  {enviando
+                    ? "Publicando para o responsável…"
+                    : processandoFoto
+                      ? "Preparando foto…"
+                      : fotosSessaoCount > 0
+                        ? `Enviar para o responsável${fotosSessaoCount > 1 ? ` (${fotosSessaoCount} fotos)` : ""}`
+                        : "Tire uma foto primeiro"}
+                </Button>
+              </div>
             </div>
           )
         }
@@ -4988,42 +4988,6 @@ export default function NotasPedidoCooperadoMain() {
                           : "Todas sincronizadas. Tire mais fotos ou envie ao responsável."
                         : "Pode tirar a próxima foto — sincronização em segundo plano."}
               </p>
-            </div>
-          )}
-
-          {!anexarSucesso && fotosSessaoCount > 0 && (
-            <div className="sm:hidden space-y-2 rounded-xl border border-green-300 bg-green-50 p-3 shadow-sm">
-              {fotosNaNuvemCount < fotosSessaoCount && (
-                <p className="text-xs font-medium text-amber-900">
-                  Enviando fotos para a nuvem ({fotosNaNuvemCount}/{fotosSessaoCount})… O botão libera quando todas
-                  estiverem sincronizadas.
-                </p>
-              )}
-              <Button
-                type="button"
-                size="lg"
-                className="w-full"
-                onClick={() => void handleAnexarEntrega()}
-                disabled={
-                  fotosNaNuvemCount < fotosSessaoCount || enviando || processandoFoto
-                }
-              >
-                <FileText size={18} />{" "}
-                {enviando
-                  ? "Publicando para o responsável…"
-                  : processandoFoto
-                    ? "Preparando foto…"
-                    : `Enviar para o responsável${fotosSessaoCount > 1 ? ` (${fotosSessaoCount})` : ""}`}
-              </Button>
-              <Button
-                type="button"
-                variant="secondary"
-                className="w-full"
-                disabled={enviando}
-                onClick={() => fecharAnexarModal()}
-              >
-                Cancelar
-              </Button>
             </div>
           )}
 
