@@ -5,27 +5,68 @@ export interface AsaasConfig {
   sandbox: boolean;
 }
 
+const ASAAS_PRODUCTION_BASE = "https://api.asaas.com/v3";
+const ASAAS_SANDBOX_BASE = "https://api-sandbox.asaas.com/v3";
+
+/** Normaliza ASAAS_API_KEY (trim, aspas, $ perdido em .env sem aspas). */
+export function normalizeAsaasApiKey(raw: string | undefined | null): string | null {
+  if (!raw) return null;
+  let key = raw.trim();
+  if (
+    (key.startsWith('"') && key.endsWith('"')) ||
+    (key.startsWith("'") && key.endsWith("'"))
+  ) {
+    key = key.slice(1, -1).trim();
+  }
+  if (/^aact_(prod|hmlg)_/i.test(key)) {
+    key = `$${key}`;
+  }
+  return key.length > 0 ? key : null;
+}
+
 function detectAsaasSandbox(apiKey: string, env: NodeJS.ProcessEnv = process.env): boolean {
+  // Prefixo da chave prevalece sobre ASAAS_SANDBOX (evita prod + sandbox URL → HTTP 401).
+  if (apiKey.includes("_hmlg_") || apiKey.includes("_sandbox")) return true;
+  if (apiKey.includes("_prod_")) return false;
+
   const explicit = env.ASAAS_SANDBOX?.trim().toLowerCase();
   if (explicit === "true" || explicit === "1" || explicit === "yes") return true;
   if (explicit === "false" || explicit === "0" || explicit === "no") return false;
-  if (apiKey.includes("_hmlg_") || apiKey.includes("_sandbox")) return true;
-  if (apiKey.includes("_prod_")) return false;
   return false;
 }
 
+function normalizeAsaasBaseUrl(url: string): string {
+  return url.replace(/\/$/, "");
+}
+
+function urlLooksSandbox(baseUrl: string): boolean {
+  const lower = baseUrl.toLowerCase();
+  return lower.includes("sandbox") || lower.includes("hmlg");
+}
+
+function resolveAsaasBaseUrl(sandbox: boolean, env: NodeJS.ProcessEnv = process.env): string {
+  const defaultUrl = sandbox ? ASAAS_SANDBOX_BASE : ASAAS_PRODUCTION_BASE;
+  const custom = env.ASAAS_API_URL?.trim();
+  if (!custom) return defaultUrl;
+
+  const normalized = normalizeAsaasBaseUrl(custom);
+  const customSandbox = urlLooksSandbox(normalized);
+  if (customSandbox !== sandbox) {
+    return defaultUrl;
+  }
+  return normalized;
+}
+
 export function isAsaasConfigured(): boolean {
-  return Boolean(process.env.ASAAS_API_KEY?.trim());
+  return Boolean(normalizeAsaasApiKey(process.env.ASAAS_API_KEY));
 }
 
 export function getAsaasConfig(): AsaasConfig | null {
-  const apiKey = process.env.ASAAS_API_KEY?.trim();
+  const apiKey = normalizeAsaasApiKey(process.env.ASAAS_API_KEY);
   if (!apiKey) return null;
 
   const sandbox = detectAsaasSandbox(apiKey);
-  const baseUrl =
-    process.env.ASAAS_API_URL?.trim() ||
-    (sandbox ? "https://api-sandbox.asaas.com/v3" : "https://api.asaas.com/v3");
+  const baseUrl = resolveAsaasBaseUrl(sandbox);
 
   return {
     apiKey,
@@ -38,6 +79,7 @@ export function getAsaasConfig(): AsaasConfig | null {
 export function getAsaasSetupInfo(): {
   configured: boolean;
   sandbox: boolean;
+  apiKeyFormatOk: boolean;
   webhookUrl: string;
   webhookTokenConfigured: boolean;
 } {
@@ -46,6 +88,7 @@ export function getAsaasSetupInfo(): {
   return {
     configured: Boolean(config),
     sandbox: config?.sandbox ?? false,
+    apiKeyFormatOk: Boolean(config?.apiKey.startsWith("$aact_")),
     webhookUrl: appUrl ? `${appUrl}/api/webhooks/asaas` : "/api/webhooks/asaas",
     webhookTokenConfigured: Boolean(config?.webhookToken),
   };

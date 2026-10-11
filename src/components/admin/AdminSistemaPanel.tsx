@@ -52,6 +52,7 @@ export function AdminSistemaPanel({ user }: AdminSistemaPanelProps) {
   const [asaasSetup, setAsaasSetup] = useState<{
     configured: boolean;
     sandbox: boolean;
+    apiKeyFormatOk: boolean;
     webhookUrl: string;
     webhookTokenConfigured: boolean;
   } | null>(null);
@@ -413,6 +414,18 @@ export function AdminSistemaPanel({ user }: AdminSistemaPanelProps) {
             <div className="flex justify-between py-2 border-b border-gray-100">
               <dt className="text-gray-500">Ambiente</dt>
               <dd className="text-gray-800">{asaasSetup?.sandbox ? "Sandbox" : "Produção"}</dd>
+            </div>
+            <div className="flex justify-between py-2 border-b border-gray-100">
+              <dt className="text-gray-500">Formato da chave</dt>
+              <dd
+                className={
+                  asaasSetup?.apiKeyFormatOk ? "text-green-700 font-medium" : "text-red-700 font-medium"
+                }
+              >
+                {asaasSetup?.apiKeyFormatOk
+                  ? "OK ($aact_…)"
+                  : "Inválido — use $aact_prod_ ou $aact_hmlg_ com aspas no .env"}
+              </dd>
             </div>
             <div className="flex justify-between py-2 border-b border-gray-100">
               <dt className="text-gray-500">Token webhook</dt>

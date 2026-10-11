@@ -7,6 +7,21 @@ import type {
   AsaasPixQrCode,
 } from "@/lib/asaas/types";
 
+const ASAAS_USER_AGENT = "HB-Cooperativas/1.0";
+
+function formatAsaasHttpError(status: number, msg: string, config: AsaasConfig): string {
+  if (status !== 401) return msg;
+  const envHint = config.sandbox ? "sandbox (api-sandbox.asaas.com)" : "produção (api.asaas.com)";
+  const keyOk = config.apiKey.startsWith("$aact_");
+  const prefix = keyOk
+    ? `Chave ou ambiente Asaas inválido (${envHint}).`
+    : `ASAAS_API_KEY sem o prefixo "$" (use aspas no .env: ASAAS_API_KEY="$aact_prod_..."). Ambiente: ${envHint}.`;
+  if (msg && !msg.startsWith("Erro Asaas HTTP")) {
+    return `${prefix} ${msg}`;
+  }
+  return `${prefix} Verifique ASAAS_API_KEY e se ASAAS_SANDBOX/ASAAS_API_URL correspondem à chave.`;
+}
+
 async function asaasRequest<T>(
   config: AsaasConfig,
   path: string,
@@ -16,9 +31,10 @@ async function asaasRequest<T>(
   const res = await fetch(url, {
     ...init,
     headers: {
-      "Content-Type": "application/json",
-      access_token: config.apiKey,
       ...(init?.headers ?? {}),
+      "Content-Type": "application/json",
+      "User-Agent": ASAAS_USER_AGENT,
+      access_token: config.apiKey,
     },
   });
 
@@ -32,11 +48,12 @@ async function asaasRequest<T>(
 
   if (!res.ok) {
     const errObj = json as { errors?: Array<{ description?: string }>; message?: string } | null;
-    const msg =
+    const rawMsg =
       errObj?.errors?.map((e) => e.description).filter(Boolean).join("; ") ||
       errObj?.message ||
       text ||
       `Erro Asaas HTTP ${res.status}`;
+    const msg = formatAsaasHttpError(res.status, rawMsg, config);
     return { ok: false, error: msg, status: res.status };
   }
 
