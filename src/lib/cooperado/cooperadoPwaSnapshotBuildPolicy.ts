@@ -7,6 +7,7 @@ const PWA_SNAPSHOT_KEY_MARKERS = [
   "hb.coop.pwaInicioDash",
   "hb.coop.pwaEntregasResumos",
   "hb.coop.pwaFichaResumo",
+  "hb.coop.readModels",
 ] as const;
 
 /**

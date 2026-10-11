@@ -16,6 +16,11 @@ import {
 import { materializeCooperadoPwaSnapshotsForCurrentBuild } from "@/lib/cooperado/cooperadoPwaSnapshotBuildPolicy";
 import { shouldAutoAlignClientRelease, stripReleaseAlignQueryFromUrl } from "@/lib/pwa/clientRelease";
 
+/** 1ª linha do bundle do shield: descarta snapshots PWA só quando `APP_BUILD_VERSION` mudou (O(1) se igual). */
+if (typeof window !== "undefined") {
+  materializeCooperadoPwaSnapshotsForCurrentBuild();
+}
+
 /**
  * Blindagem de release — garante que toda publicação na Vercel chegue ao runtime
  * (boot, foco, rede, BFCache, troca de aba via hook separado).
