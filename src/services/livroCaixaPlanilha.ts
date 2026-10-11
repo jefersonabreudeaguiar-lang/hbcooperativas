@@ -12,6 +12,7 @@ export interface LivroCaixaPlanilhaLinha {
   saldoCorrido: number;
 }
 
+/** Ordem cronológica (mais antigo → mais novo) para saldo corrido. */
 export function ordenarLancamentosPlanilha(lancamentos: LivroCaixaLancamento[]): LivroCaixaLancamento[] {
   return [...lancamentos].sort((a, b) => {
     const byData = a.data.localeCompare(b.data);
@@ -20,7 +21,7 @@ export function ordenarLancamentosPlanilha(lancamentos: LivroCaixaLancamento[]):
   });
 }
 
-export function buildPlanilhaLinhas(
+function buildPlanilhaLinhasCronologico(
   lancamentos: LivroCaixaLancamento[],
   saldoInicial = 0
 ): LivroCaixaPlanilhaLinha[] {
@@ -35,13 +36,33 @@ export function buildPlanilhaLinhas(
   });
 }
 
+/** Planilha na tela/relatório: lançamentos mais novos no topo; saldo corrido de cada linha permanece contábil. */
+export function buildPlanilhaLinhas(
+  lancamentos: LivroCaixaLancamento[],
+  saldoInicial = 0
+): LivroCaixaPlanilhaLinha[] {
+  const cronologico = buildPlanilhaLinhasCronologico(lancamentos, saldoInicial);
+  return [...cronologico].reverse();
+}
+
+/** Saldo após o último lançamento do período (independente da ordem de exibição). */
+export function saldoCorridoFinalPlanilha(linhas: LivroCaixaPlanilhaLinha[], saldoInicial = 0): number {
+  if (!linhas.length) return round2(saldoInicial);
+  const cronologico = [...linhas].sort((a, b) => {
+    const byData = a.lancamento.data.localeCompare(b.lancamento.data);
+    if (byData !== 0) return byData;
+    return compareLancamentoSequencia(a.lancamento, b.lancamento);
+  });
+  return cronologico[cronologico.length - 1].saldoCorrido;
+}
+
 /** Saldo acumulado antes do primeiro lançamento do mês (YYYY-MM). */
 export function saldoLivroCaixaAntesMes(data: AppData, cooperativaId: string, mesReferencia: string): number {
   const primeiroDia = `${mesReferencia}-01`;
   const anteriores = ordenarLancamentosPlanilha(
     lancamentosLivroCaixa(data, cooperativaId).filter((l) => l.data < primeiroDia)
   );
-  const linhas = buildPlanilhaLinhas(anteriores);
+  const linhas = buildPlanilhaLinhasCronologico(anteriores);
   return linhas.length ? linhas[linhas.length - 1].saldoCorrido : 0;
 }
 
@@ -58,6 +79,6 @@ export function lancamentosLivroCaixaPeriodo(
 
 export function saldoLivroCaixaAntesData(data: AppData, cooperativaId: string, dataIso: string): number {
   const anteriores = lancamentosLivroCaixa(data, cooperativaId).filter((l) => l.data < dataIso);
-  const linhas = buildPlanilhaLinhas(anteriores);
+  const linhas = buildPlanilhaLinhasCronologico(anteriores);
   return linhas.length ? linhas[linhas.length - 1].saldoCorrido : 0;
 }

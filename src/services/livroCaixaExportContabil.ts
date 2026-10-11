@@ -12,6 +12,7 @@ import {
 } from "@/services/livroCaixaService";
 import {
   buildPlanilhaLinhas,
+  saldoCorridoFinalPlanilha,
   lancamentosLivroCaixaPeriodo,
   saldoLivroCaixaAntesData,
   saldoLivroCaixaAntesMes,
@@ -246,7 +247,7 @@ export function buildLivroCaixaPacoteContabil(
 
   const resumoMes = resumoLivroCaixa(data, cooperativaId, opts.modo === "mes" ? opts.mesReferencia : undefined);
   const linhasPlan = buildPlanilhaLinhas(lancamentos, saldoInicial);
-  const saldoFinal = linhasPlan.length ? linhasPlan[linhasPlan.length - 1].saldoCorrido : saldoInicial;
+  const saldoFinal = saldoCorridoFinalPlanilha(linhasPlan, saldoInicial);
 
   const creditosPeriodo = round2(lancamentos.filter((l) => l.tipo === "credito").reduce((s, l) => s + l.valor, 0));
   const debitosPeriodo = round2(lancamentos.filter((l) => l.tipo === "debito").reduce((s, l) => s + l.valor, 0));

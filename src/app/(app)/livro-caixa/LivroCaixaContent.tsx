@@ -42,6 +42,7 @@ import {
 } from "@/utils/livroCaixaRelatorioHtml";
 import {
   buildPlanilhaLinhas,
+  saldoCorridoFinalPlanilha,
   LIVRO_CAIXA_LINHAS_POR_PAGINA,
   lancamentosLivroCaixaPeriodo,
   saldoLivroCaixaAntesData,
@@ -203,9 +204,9 @@ export default function LivroCaixaPage() {
   );
 
   const saldoFinalMes = useMemo(() => {
-    if (planilhaLinhas.length) return planilhaLinhas[planilhaLinhas.length - 1].saldoCorrido;
-    return saldoInicialMes;
-  }, [planilhaLinhas, saldoInicialMes]);
+    if (planilhaLinhas.length) return saldoCorridoFinalPlanilha(planilhaLinhas, saldoInicialVisao);
+    return modoVisualizacao === "periodo" ? saldoInicialVisao : saldoInicialMes;
+  }, [planilhaLinhas, saldoInicialMes, saldoInicialVisao, modoVisualizacao]);
 
   const controleAnual = useMemo(
     () => (dataCaixa && coopId ? getControleAnualLivroCaixa(dataCaixa, coopId) : undefined),

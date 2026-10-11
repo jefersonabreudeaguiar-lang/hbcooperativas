@@ -4,6 +4,7 @@ import { getTotalAPagarCooperado } from "@/services/notaPedidoService";
 import {
   buildPlanilhaLinhas,
   lancamentosLivroCaixaPeriodo,
+  saldoCorridoFinalPlanilha,
   saldoLivroCaixaAntesData,
   saldoLivroCaixaAntesMes,
 } from "@/services/livroCaixaPlanilha";
@@ -225,7 +226,7 @@ export function gerarRelatorioLivroCaixaPlanilhaHtml(
   const creditosPeriodo = lancamentos.filter((l) => l.tipo === "credito").reduce((s, l) => s + l.valor, 0);
   const debitosPeriodo = lancamentos.filter((l) => l.tipo === "debito").reduce((s, l) => s + l.valor, 0);
   const linhasPlan = buildPlanilhaLinhas(lancamentos, saldoInicial);
-  const saldoFinal = linhasPlan.length ? linhasPlan[linhasPlan.length - 1].saldoCorrido : saldoInicial;
+  const saldoFinal = saldoCorridoFinalPlanilha(linhasPlan, saldoInicial);
 
   return `<!DOCTYPE html><html lang="pt-BR"><head><meta charset="utf-8"/>
     <title>Livro caixa · ${escapeHtml(cooperativaNome)}</title>
