@@ -29,7 +29,7 @@ export function ContaCoopSegmentTabs<T extends string>({
     <div
       className={cn(
         "flex rounded-2xl p-1 gap-1",
-        cooperado ? "bg-black/[0.04]" : "bg-gray-100",
+        cooperado ? "bg-emerald-900/[0.06]" : "bg-gray-100",
         className
       )}
       role="tablist"
@@ -45,7 +45,7 @@ export function ContaCoopSegmentTabs<T extends string>({
             "flex-1 rounded-xl px-3 py-2.5 text-sm font-semibold transition-all",
             active === tab.id
               ? cooperado
-                ? "bg-white text-[#1a0b2e] shadow-sm"
+                ? "bg-white text-emerald-900 shadow-sm"
                 : "bg-white text-green-900 shadow-sm"
               : "text-gray-600 hover:text-gray-900"
           )}

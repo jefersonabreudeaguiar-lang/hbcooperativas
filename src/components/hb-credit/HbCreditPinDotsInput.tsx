@@ -38,7 +38,7 @@ export function HbCreditPinDotsInput({
       className={cn(
         "w-full rounded-3xl border-2 p-5 shadow-md",
         light
-          ? "border-black/[0.06] bg-white shadow-sm"
+          ? "border-emerald-200/80 bg-white shadow-sm"
           : "border-white/20 bg-white/[0.06] p-4 shadow-none"
       )}
     >
@@ -46,7 +46,7 @@ export function HbCreditPinDotsInput({
         <span
           className={cn(
             "flex h-10 w-10 items-center justify-center rounded-full",
-            light ? "bg-gradient-to-br from-[#2a1545] to-[#0d3d2a] text-white" : "bg-white/15 text-white"
+            light ? "bg-gradient-to-br from-emerald-600 to-green-700 text-white" : "bg-white/15 text-white"
           )}
         >
           <Lock size={20} strokeWidth={2.25} />

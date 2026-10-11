@@ -1,29 +1,35 @@
-/** Tokens visuais HB Créditos (cooperado) — simples, premium (referência Nubank + Brasil Card). */
+/** Tokens visuais HB Créditos (cooperado) — verde alinhado ao app / Início. */
 
 export const hbCooperadoHubPage = "mx-auto max-w-lg space-y-5 pb-10 px-1";
 
 export const hbCooperadoFlowPage =
-  "min-h-[100dvh] flex flex-col bg-[#f4f4f7] text-gray-900 antialiased";
+  "min-h-[100dvh] flex flex-col bg-gradient-to-b from-emerald-50 via-green-50/95 to-white text-gray-900 antialiased";
 
 export const hbCooperadoHeroCard =
-  "relative overflow-hidden rounded-[28px] bg-gradient-to-br from-[#12081f] via-[#2a1545] to-[#0d3d2a] p-6 text-white shadow-[0_20px_50px_-12px_rgba(18,8,31,0.45)] ring-1 ring-white/10";
+  "relative overflow-hidden rounded-[28px] bg-gradient-to-br from-emerald-800 via-green-700 to-teal-700 p-6 text-white shadow-lg ring-1 ring-emerald-900/10";
 
 export const hbCooperadoHeroGlow =
-  "pointer-events-none absolute -right-16 -top-20 h-56 w-56 rounded-full bg-[#00a868]/25 blur-3xl";
+  "pointer-events-none absolute -right-12 -top-16 h-48 w-48 rounded-full bg-white/10 blur-3xl";
 
 export const hbCooperadoPrimaryBtn =
-  "h-14 w-full rounded-2xl bg-[#00a868] text-base font-semibold text-white shadow-lg shadow-emerald-900/15 hover:bg-[#00925c] active:scale-[0.99] transition-transform";
+  "h-14 w-full rounded-2xl bg-emerald-600 text-base font-semibold text-white shadow-md shadow-emerald-900/10 hover:bg-emerald-700 active:scale-[0.99] transition-transform";
 
 export const hbCooperadoSecondaryBtn =
-  "h-12 w-full rounded-2xl border border-gray-200/80 bg-white text-sm font-semibold text-gray-800 shadow-sm hover:bg-gray-50";
+  "h-12 w-full rounded-2xl border border-emerald-200/80 bg-white text-sm font-semibold text-emerald-900 shadow-sm hover:bg-emerald-50";
 
-export const hbCooperadoSegmentWrap = "flex rounded-2xl bg-black/[0.04] p-1 gap-1";
+export const hbCooperadoSegmentWrap = "flex rounded-2xl bg-emerald-900/[0.06] p-1 gap-1";
 
 export const hbCooperadoSegmentActive =
-  "flex-1 rounded-xl px-3 py-2.5 text-sm font-semibold bg-white text-[#1a0b2e] shadow-sm";
+  "flex-1 rounded-xl px-3 py-2.5 text-sm font-semibold bg-white text-emerald-900 shadow-sm";
 
 export const hbCooperadoSegmentIdle =
-  "flex-1 rounded-xl px-3 py-2.5 text-sm font-semibold text-gray-600 hover:text-gray-900 transition-colors";
+  "flex-1 rounded-xl px-3 py-2.5 text-sm font-semibold text-gray-600 hover:text-emerald-900 transition-colors";
 
 export const hbCooperadoSurfaceCard =
-  "rounded-3xl border border-black/[0.06] bg-white/90 shadow-sm backdrop-blur-sm";
+  "rounded-3xl border border-emerald-100 bg-white shadow-sm";
+
+export const hbCooperadoValueBox =
+  "rounded-2xl border border-emerald-100 bg-emerald-50/50 px-4 py-3";
+
+export const hbCooperadoIconTile =
+  "flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-emerald-600 to-green-700 text-white shadow-sm";

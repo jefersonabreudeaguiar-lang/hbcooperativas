@@ -64,12 +64,14 @@ export async function POST(request: Request) {
     return { ok: true };
   }
 
-  const prepare = await ensureLimitePronto();
-  if (!prepare.ok) {
-    return NextResponse.json({ error: prepare.error, code: prepare.code }, { status: 503 });
-  }
-
   if (isCooperadoTransferIntentId(intentId)) {
+    const prepareTransfer = await ensureLimitePronto();
+    if (!prepareTransfer.ok) {
+      return NextResponse.json(
+        { error: prepareTransfer.error, code: prepareTransfer.code },
+        { status: 503 }
+      );
+    }
     const result = await authorizeCooperadoTransferPayment(supabase, {
       intentId,
       nonce,
@@ -106,11 +108,19 @@ export async function POST(request: Request) {
 
   const retryable =
     !result.ok &&
-    (result.code === HB_CREDIT_STATE_STALE_CODE || result.code === HB_CREDIT_LIMIT_DIVERGENT_CODE);
+    (result.code === HB_CREDIT_STATE_STALE_CODE ||
+      result.code === HB_CREDIT_LIMIT_DIVERGENT_CODE ||
+      result.code === "HB_LIMIT_PREPARE_FAILED" ||
+      result.code === "HB_CREDIT_LIMIT_SNAPSHOT_MISSING");
   if (retryable) {
     const prepAgain = await ensureLimitePronto();
     if (prepAgain.ok) {
       result = await authorizePayment(supabase, payInput);
+    } else if (!result.ok) {
+      return NextResponse.json(
+        { error: prepAgain.error, code: prepAgain.code ?? "HB_LIMIT_PREPARE_FAILED" },
+        { status: 503 }
+      );
     }
   }
 

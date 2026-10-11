@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { Wallet } from "lucide-react";
 import { usePermissions } from "@/hooks/usePermissions";
@@ -31,10 +32,19 @@ type Props = {
 };
 
 export function CooperadoHbCreditResumoCard({ cnpj }: Props) {
+  const router = useRouter();
   const { user, cooperadoId } = usePermissions();
   const cooperadoHbSemPoll = user?.role === "cooperado" && isCooperadoManualOperacionalSync();
   const hbApiCooperadoId = resolveHbCreditApiCooperadoId(user, cooperadoId);
   const [snap, setSnap] = useState<HbCreditAccountPersistido | null>(null);
+
+  useEffect(() => {
+    try {
+      router.prefetch("/minha-conta-coop");
+    } catch {
+      /* ignore */
+    }
+  }, [router]);
 
   useEffect(() => {
     if (!hbApiCooperadoId || cnpj.length !== 14) {

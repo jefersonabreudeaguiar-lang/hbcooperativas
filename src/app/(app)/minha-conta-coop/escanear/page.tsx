@@ -72,7 +72,7 @@ function EscanearQrContent() {
           <ArrowLeft size={18} />
         </Button>
         <div>
-          <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[#00a868]">HB Créditos</p>
+          <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-emerald-700">HB Créditos</p>
           <h1 className="text-xl font-bold tracking-tight text-gray-900">Escanear QR</h1>
         </div>
       </div>
@@ -80,7 +80,7 @@ function EscanearQrContent() {
       <div className="relative">
         {validating && (
           <div className="absolute inset-0 z-20 flex flex-col items-center justify-center rounded-[28px] bg-white/92 text-gray-900 backdrop-blur-sm">
-            <div className="h-10 w-10 animate-spin rounded-full border-2 border-gray-200 border-t-[#00a868]" />
+            <div className="h-10 w-10 animate-spin rounded-full border-2 border-emerald-100 border-t-emerald-600" />
             <p className="mt-4 text-sm font-medium">Lendo cobrança…</p>
           </div>
         )}

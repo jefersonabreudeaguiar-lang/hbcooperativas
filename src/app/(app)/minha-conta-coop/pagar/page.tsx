@@ -43,8 +43,10 @@ import { cn } from "@/utils/format";
 import { resolveHbCreditApiCooperadoId } from "@/lib/hb-credit/resolveHbCreditApiCooperadoId";
 import {
   hbCooperadoFlowPage,
+  hbCooperadoIconTile,
   hbCooperadoPrimaryBtn,
   hbCooperadoSurfaceCard,
+  hbCooperadoValueBox,
 } from "@/lib/hb-credit/hbCreditCooperadoUi";
 
 export default function HbCreditPagarPage() {
@@ -154,6 +156,20 @@ function HbCreditPagarContent() {
       cancelled = true;
     };
   }, [cnpj, hbApiCooperadoId, cooperadoId, user?.cooperadoId, router]);
+
+  useEffect(() => {
+    if (!loadingQr || draft) return;
+    const tick = () => {
+      const ready = peekHbCreditPaymentDraft();
+      if (ready) {
+        setDraft(ready);
+        setLoadingQr(false);
+      }
+    };
+    tick();
+    const id = window.setInterval(tick, 100);
+    return () => window.clearInterval(id);
+  }, [draft, loadingQr]);
 
   useEffect(() => {
     if (!cnpj || !hbApiCooperadoId) return;
@@ -278,11 +294,62 @@ function HbCreditPagarContent() {
     void confirmar();
   }, [affordOk, busy, confirmar, draft, hasPin, intent, limite, payPin, success]);
 
-  if (loadingQr || (!draft && !error)) {
+  const aguardandoCobranca = loadingQr && !draft && !error;
+
+  if (!draft && !error && !aguardandoCobranca) {
+    return null;
+  }
+
+  if (!draft && !aguardandoCobranca) {
     return (
-      <div className={cn(hbCooperadoFlowPage, "items-center justify-center gap-4 px-6")}>
-        <Loader2 className="h-10 w-10 animate-spin text-[#00a868]" />
-        <p className="text-center text-sm font-medium text-gray-700">Abrindo cobrança…</p>
+      <div className={cn(hbCooperadoFlowPage, "items-center justify-center px-6")}>
+        <p className="text-center text-sm text-red-800" role="alert">
+          {error || "Não foi possível abrir esta cobrança."}
+        </p>
+        <Button className="mt-6" variant="secondary" onClick={() => router.replace("/minha-conta-coop")}>
+          Voltar
+        </Button>
+      </div>
+    );
+  }
+
+  if (aguardandoCobranca) {
+    return (
+      <div className={hbCooperadoFlowPage}>
+        <header className="flex items-center gap-3 px-4 py-3">
+          <button
+            type="button"
+            onClick={voltar}
+            className="flex h-10 w-10 items-center justify-center rounded-full bg-white text-emerald-900 shadow-sm ring-1 ring-emerald-100"
+            aria-label="Voltar"
+          >
+            <ArrowLeft size={20} />
+          </button>
+          <div>
+            <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-emerald-700">HB Créditos</p>
+            <h1 className="text-lg font-semibold tracking-tight text-gray-900">Confirmar</h1>
+          </div>
+        </header>
+        <main className="flex-1 px-5 pb-4 pt-2">
+          <p className="text-sm text-gray-600">Validando cobrança do mercado…</p>
+          <div className={cn("mt-6 flex items-center gap-3", hbCooperadoValueBox)}>
+            <Loader2 className="h-8 w-8 animate-spin text-emerald-600" />
+            <div>
+              <p className="text-sm font-medium text-emerald-900">Quase lá</p>
+              <p className="text-xs text-gray-600">Em instantes você digita o PIN</p>
+            </div>
+          </div>
+          <div className="mt-8 opacity-60 pointer-events-none">
+            <HbCreditPinDotsInput
+              variant="light"
+              value=""
+              onChange={() => {}}
+              disabled
+              label="Digite seu PIN"
+              hint="Aguardando valor da cobrança…"
+            />
+          </div>
+        </main>
       </div>
     );
   }
@@ -304,13 +371,13 @@ function HbCreditPagarContent() {
     return (
       <div className={hbCooperadoFlowPage}>
         <div className="flex flex-1 flex-col items-center justify-center px-8 text-center">
-          <CheckCircle2 className="h-16 w-16 text-[#00a868]" strokeWidth={1.5} />
+          <CheckCircle2 className="h-16 w-16 text-emerald-600" strokeWidth={1.5} />
           <h1 className="mt-6 text-2xl font-semibold tracking-tight text-gray-900">Pagamento confirmado</h1>
           <p className="mt-2 text-4xl font-bold tabular-nums text-gray-900">
             {formatCentsBRL(intent.amountCents)}
           </p>
           <p className="mt-1 text-sm text-gray-600">{draft.parceiroNome}</p>
-          <p className="mt-6 rounded-full bg-[#00a868]/12 px-4 py-2 text-sm font-medium text-[#0d3d2a]">
+          <p className="mt-6 rounded-full bg-emerald-100 px-4 py-2 text-sm font-medium text-emerald-900">
             Comprovante {success.receiptCode}
           </p>
           <p className="mt-3 text-xs text-gray-500">O mercado já foi avisado na hora.</p>
@@ -336,13 +403,13 @@ function HbCreditPagarContent() {
         <button
           type="button"
           onClick={voltar}
-          className="flex h-10 w-10 items-center justify-center rounded-full bg-white text-gray-800 shadow-sm ring-1 ring-black/5"
+          className="flex h-10 w-10 items-center justify-center rounded-full bg-white text-emerald-900 shadow-sm ring-1 ring-emerald-100"
           aria-label="Voltar"
         >
           <ArrowLeft size={20} />
         </button>
         <div>
-          <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[#00a868]">HB Créditos</p>
+          <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-emerald-700">HB Créditos</p>
           <h1 className="text-lg font-semibold tracking-tight text-gray-900">Confirmar</h1>
         </div>
       </header>
@@ -350,7 +417,7 @@ function HbCreditPagarContent() {
       <main className="flex-1 px-5 pb-4 pt-2">
         <p className="text-sm text-gray-500">Pagando para</p>
         <div className="mt-2 flex items-start gap-3">
-          <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-[#2a1545] to-[#0d3d2a] shadow-md">
+          <span className={hbCooperadoIconTile}>
             {pagamentoCooperado ? (
               <Users size={24} className="text-white" />
             ) : (
@@ -381,7 +448,7 @@ function HbCreditPagarContent() {
           />
         </div>
 
-        <div className={cn("mt-6 space-y-0 divide-y divide-gray-100 px-4", hbCooperadoSurfaceCard)}>
+        <div className={cn("mt-6 space-y-0 divide-y divide-emerald-100/80 px-4", hbCooperadoSurfaceCard)}>
           <Row label="Forma de pagamento" value="HB Crédito" />
           <Row label="Seu saldo agora" value={formatCentsBRL(saldoDisponivel)} />
           <Row label="Saldo após pagamento" value={formatCentsBRL(saldoApos)} highlight />
@@ -407,7 +474,7 @@ function HbCreditPagarContent() {
         )}
       </main>
 
-      <footer className="border-t border-black/[0.06] bg-white/80 px-5 pb-10 pt-5 backdrop-blur-md">
+      <footer className="border-t border-emerald-100 bg-white/90 px-5 pb-10 pt-5 backdrop-blur-md">
         <Button
           className={cn(hbCooperadoPrimaryBtn, "disabled:opacity-40")}
           disabled={!podePagar}
@@ -424,7 +491,7 @@ function Row({ label, value, highlight }: { label: string; value: string; highli
   return (
     <div className="flex items-center justify-between gap-3 py-3.5">
       <span className="text-sm text-gray-600">{label}</span>
-      <span className={cn("text-sm font-semibold tabular-nums", highlight ? "text-emerald-800" : "text-gray-900")}>
+      <span className={cn("text-sm font-semibold tabular-nums", highlight ? "text-emerald-800" : "text-emerald-950")}>
         {value}
       </span>
     </div>

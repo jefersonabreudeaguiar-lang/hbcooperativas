@@ -230,15 +230,13 @@ function MinhaContaCoopContent() {
     setError("");
     try {
       if (!background) {
-        try {
-          await syncCreditLimiteFromFicha({
-            cnpj,
-            cooperadoId: hbApiCooperadoId,
-            creditosBaseCents: {},
-          });
-        } catch {
-          /* offline ou operacional indisponível — segue com leitura da conta */
-        }
+        void syncCreditLimiteFromFicha({
+          cnpj,
+          cooperadoId: hbApiCooperadoId,
+          creditosBaseCents: {},
+        }).catch(() => {
+          /* offline ou operacional indisponível — não bloqueia abertura da tela */
+        });
       }
       const acc = await fetchCreditAccount(cnpj, hbApiCooperadoId);
       const accObj = (acc.account as ContaCoopLimiteCooperado) ?? null;
@@ -508,7 +506,7 @@ function MinhaContaCoopContent() {
   return (
     <div className={cn(hbCooperadoHubPage, "px-4")}>
       <header className="space-y-1 pt-1">
-        <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-[#00a868]">HB Créditos</p>
+        <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-emerald-600">HB Créditos</p>
         <h1 className="text-2xl font-bold tracking-tight text-gray-900">Sua conta</h1>
         <p className="text-sm text-gray-500 leading-relaxed">
           Pague no mercado com QR e PIN{transferenciaCooperadoAtiva ? ", ou receba de outro cooperado" : ""}.

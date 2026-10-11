@@ -16,7 +16,29 @@ export function HbCreditNavPrefetch() {
     if (!user) return;
 
     if (user.role === "cooperado") {
-      return;
+      const routes = ["/minha-conta-coop", "/minha-conta-coop/escanear", "/minha-conta-coop/pagar"];
+      const prefetchCoop = () => {
+        if (cancelled) return;
+        for (const href of routes) {
+          try {
+            router.prefetch(href);
+          } catch {
+            /* ignore */
+          }
+        }
+      };
+      if (typeof window.requestIdleCallback === "function") {
+        const id = window.requestIdleCallback(prefetchCoop, { timeout: 1500 });
+        return () => {
+          cancelled = true;
+          window.cancelIdleCallback(id);
+        };
+      }
+      const t = window.setTimeout(prefetchCoop, 400);
+      return () => {
+        cancelled = true;
+        window.clearTimeout(t);
+      };
     }
 
     let cancelled = false;

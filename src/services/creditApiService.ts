@@ -36,6 +36,12 @@ async function parseJson<T>(res: Response): Promise<T & { error?: string }> {
   try {
     data = JSON.parse(raw) as T & { error?: string };
   } catch {
+    const trimmed = raw.trim();
+    if (trimmed.startsWith("<") || /<!doctype/i.test(trimmed)) {
+      throw new Error(
+        "O servidor demorou para responder. Aguarde alguns segundos e tente confirmar de novo."
+      );
+    }
     throw new Error(
       "Resposta inválida do servidor. Tente de novo; se persistir, use «Atualizar limites»."
     );
@@ -364,25 +370,33 @@ export async function authorizeCreditPayment(input: {
   let res: Response | null = null;
   let data: AuthorizeCreditPaymentResult & { ok?: boolean; error?: string; code?: string } = {};
 
-  for (let attempt = 0; attempt < 3; attempt++) {
+  for (let attempt = 0; attempt < 2; attempt++) {
     try {
       res = await postAuthorize();
     } catch {
-      if (attempt < 2) {
-        await sleepMs(attempt === 0 ? 250 : 500);
+      if (attempt < 1) {
+        await sleepMs(280);
         continue;
       }
       throw new Error("Sem conexão para confirmar o pagamento.");
     }
-    data = await parseJson<
-      AuthorizeCreditPaymentResult & { ok?: boolean; error?: string; code?: string }
-    >(res);
+    try {
+      data = await parseJson<
+        AuthorizeCreditPaymentResult & { ok?: boolean; error?: string; code?: string }
+      >(res);
+    } catch (e) {
+      if (attempt < 1 && (res.status >= 500 || res.status === 0)) {
+        await sleepMs(350);
+        continue;
+      }
+      throw e;
+    }
     if (res.ok && data.ok) break;
     const retryable =
-      attempt < 2 &&
+      attempt < 1 &&
       (res.status === 503 || (data.code && AUTHORIZE_RETRY_CODES.has(data.code)));
     if (!retryable) break;
-    await sleepMs(attempt === 0 ? 200 : 450);
+    await sleepMs(280);
   }
 
   if (!res || !res.ok || !data.ok) throw new Error(data.error ?? "Pagamento recusado.");
