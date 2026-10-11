@@ -16,6 +16,8 @@ import {
   type RegistroPagamentoResponsavelPatch,
 } from "@/services/pagamentoIntegridadeService";
 import { markHbStaleBeforeOperacionalUpload } from "@/modules/hb-credit/engine/operationalAuthoritativeCreditBaseChange";
+import { resolveAuthoritativeCreditBase } from "@/modules/hb-credit/engine/creditBaseAuthoritative";
+import { syncHbLimitAfterCooperadoPayment } from "@/modules/hb-credit/engine/syncHbLimitAfterCooperadoPayment";
 import { OPERATIONAL_RESET_VERSION } from "@/services/operationalReset";
 
 export async function POST(request: Request) {
@@ -54,6 +56,11 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Operacional não encontrado." }, { status: 404 });
   }
 
+  const cooperadoId = String(pagamento.cooperadoId ?? "").trim();
+  const actorId = guard.session?.sub ?? "registrar_pagamento";
+  const beforeBase = await resolveAuthoritativeCreditBase(supabase, cnpj, [cooperadoId]);
+  const creditoBaseBeforeCents = beforeBase.ok ? beforeBase.creditosBaseCents[cooperadoId] ?? 0 : null;
+
   const patch: RegistroPagamentoResponsavelPatch = {
     pagamento,
     comunicado: body?.comunicado as Comunicado | undefined,
@@ -65,7 +72,7 @@ export async function POST(request: Request) {
   const staleGuard = await markHbStaleBeforeOperacionalUpload(supabase, {
     cnpj,
     nextOperacionalSanitized: operacional,
-    actorUserId: guard.session?.sub ?? "registrar_pagamento",
+    actorUserId: actorId,
     staleReason: "responsavel_registrar_pagamento",
     auditSession: guard.session,
   });
@@ -94,5 +101,26 @@ export async function POST(request: Request) {
     });
   }
 
-  return NextResponse.json({ success: true, pagamentoId: pagamento.id }, { status: 201 });
+  const hbLimitSync = await syncHbLimitAfterCooperadoPayment(supabase, {
+    cnpj,
+    cooperadoId,
+    paymentId: pagamento.id,
+    actorUserId: actorId,
+    creditoBaseBeforeCents,
+  });
+
+  return NextResponse.json(
+    {
+      success: true,
+      pagamentoId: pagamento.id,
+      hbLimitSync: {
+        status: hbLimitSync.status,
+        reconciliationStatus: hbLimitSync.reconciliationStatus,
+        limiteAfterCents: hbLimitSync.limiteAfterCents,
+        errorCode: hbLimitSync.errorCode,
+        errorMessage: hbLimitSync.errorMessage,
+      },
+    },
+    { status: 201 }
+  );
 }

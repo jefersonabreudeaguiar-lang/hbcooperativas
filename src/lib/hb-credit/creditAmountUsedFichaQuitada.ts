@@ -33,7 +33,7 @@ function pagamentoQuitadoAteMs(p: { assinadoEm?: string; updatedAt?: string; pag
   return Number.isFinite(t) ? t : Date.now();
 }
 
-/** Meses com pagamento confirmado (recibo assinado) — compras HB desses períodos não entram no “utilizado”. */
+/** Meses com pagamento confirmado pelo responsável/cooperado — HB abatido no PIX não entra no “utilizado”. */
 export function buildFichaQuitadaWindowsForTitularIds(
   operacional: OperacionalSyncPayload,
   titularIds: string[]
@@ -47,6 +47,11 @@ export function buildFichaQuitadaWindowsForTitularIds(
     if (p.status !== "confirmado") continue;
     if (!titular.has(p.cooperadoId)) continue;
     const quitadoAteMs = pagamentoQuitadoAteMs(p);
+    for (const d of p.descontosExtras ?? []) {
+      if (d.tipo !== "conta_coop") continue;
+      const id = (d as { hbTransactionId?: string }).hbTransactionId?.trim();
+      if (id) explicitTransactionIds.add(id);
+    }
     for (const mes of getMesesReferenciaPagamento(p)) {
       mesConfirmado.add(`${p.cooperadoId}|${mes}`);
       const { startMs, endMs } = mesReferenciaRangeUtc(mes);

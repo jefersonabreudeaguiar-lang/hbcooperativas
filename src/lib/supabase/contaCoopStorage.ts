@@ -558,7 +558,14 @@ export async function listLimitesCooperadosAlinhadosComBase(
   const digits = normalizeCnpj(cnpj);
   const limitesRaw = await listLimitesCooperados(supabase, cnpj);
   if (opts?.fast) {
-    return { limites: limitesRaw, creditosBaseCents: {} };
+    const actor = opts?.actorUserId ?? "system:hb_limites_fast_heal";
+    const withSaldo = limitesRaw.filter((l) => l.limiteLiberadoCents > 0 || l.valorUsadoCents > 0);
+    for (const l of withSaldo) {
+      await healHbCreditNovoCicloQuandoBaseZero(supabase, cnpj, l.cooperadoId, actor).catch(() => {});
+    }
+    const limites =
+      withSaldo.length > 0 ? await listLimitesCooperados(supabase, cnpj) : limitesRaw;
+    return { limites, creditosBaseCents: {} };
   }
 
   const persistFichaSync = opts?.persistFichaSync === true;
@@ -1118,6 +1125,52 @@ export async function resetContaCoopCooperadoCredit(
   return { ok: true, limite: mapLimiteRow(data as Record<string, unknown>) };
 }
 
+/**
+ * Sem crédito-base na ficha (a receber quitado) e HB já reconciliado como quitado → zera liberado/usado (novo ciclo).
+ */
+export async function healHbCreditNovoCicloQuandoBaseZero(
+  supabase: SupabaseClient,
+  cnpj: string,
+  cooperadoId: string,
+  actorUserId: string
+): Promise<{ healed: boolean }> {
+  const digits = normalizeCnpj(cnpj);
+  if (!cooperadoId) return { healed: false };
+
+  const authoritative = await resolveAuthoritativeCreditBase(supabase, digits, [cooperadoId]);
+  if (!authoritative.ok) return { healed: false };
+
+  const canon = resolverCooperadoIdCanonico(
+    authoritative.creditoBaseAppData,
+    cooperadoId,
+    authoritative.cooperativaId
+  );
+  const base = Math.max(
+    authoritative.creditosBaseCents[cooperadoId] ?? 0,
+    authoritative.creditosBaseCents[canon] ?? 0
+  );
+  if (base > 0) return { healed: false };
+
+  await reconcileCooperadoAmountUsedCents(supabase, digits, cooperadoId, actorUserId).catch(() => {});
+
+  const found = await fetchHbCreditAccountRowForCooperado(supabase, cnpj, cooperadoId);
+  if (!found) return { healed: false };
+
+  const lim = Math.max(0, Math.round(Number(found.row.limit_released_cents ?? 0)));
+  const used = Math.max(0, Math.round(Number(found.row.amount_used_cents ?? 0)));
+  if (lim === 0 && used === 0) return { healed: false };
+
+  const reset = await resetContaCoopCooperadoCredit(
+    supabase,
+    cnpj,
+    found.accountCooperadoId,
+    actorUserId,
+    { motivo: "novo_ciclo_a_receber_quitado" }
+  );
+  if (!reset.ok) return { healed: false };
+  return { healed: true };
+}
+
 async function cooperadoTemComprasContaCoopAtivas(
   supabase: SupabaseClient,
   cnpj: string,
@@ -1159,8 +1212,23 @@ export async function syncLimiteCooperadoFromCreditoBase(
 > {
   const base = Math.max(0, Math.round(Number(creditoBaseCents) || 0));
   if (base === 0) {
+    const ciclo = await healHbCreditNovoCicloQuandoBaseZero(supabase, cnpj, cooperadoId, actorUserId);
+    if (ciclo.healed) {
+      const limite = await getLimiteCooperado(supabase, cnpj, cooperadoId, {
+        skipAmountUsedReconcile: true,
+        fastPreview: true,
+      });
+      if (limite) return { ok: true, limite, action: "reset" };
+    }
+
+    await reconcileCooperadoAmountUsedCents(supabase, cnpj, cooperadoId, actorUserId).catch(() => {});
+    const expectedUsado = await resolveExpectedAmountUsedCentsForCooperado(supabase, cnpj, cooperadoId);
+
     const foundRow = await fetchHbCreditAccountRowForCooperado(supabase, cnpj, cooperadoId);
-    const atual = await getLimiteCooperado(supabase, cnpj, cooperadoId);
+    const atual = await getLimiteCooperado(supabase, cnpj, cooperadoId, {
+      skipAmountUsedReconcile: true,
+      fastPreview: true,
+    });
     if (!atual) {
       const digits = normalizeCnpj(cnpj);
       return {
@@ -1181,7 +1249,7 @@ export async function syncLimiteCooperadoFromCreditoBase(
         action: "unchanged",
       };
     }
-    const alvoCents = Math.max(0, atual.valorUsadoCents);
+    const alvoCents = Math.max(0, expectedUsado);
     const snapshotOk = foundRow ? hbCreditAccountRowSnapshotCoherent(foundRow.row) : false;
     const limitAlreadyAligned = atual.limiteLiberadoCents === alvoCents;
     if (limitAlreadyAligned && snapshotOk) {
@@ -1635,9 +1703,14 @@ export async function getLimiteCooperado(
   supabase: SupabaseClient,
   cnpj: string,
   cooperadoId: string,
-  opts?: { skipAmountUsedReconcile?: boolean; fastPreview?: boolean }
+  opts?: { skipAmountUsedReconcile?: boolean; fastPreview?: boolean; skipCycleHeal?: boolean }
 ): Promise<ContaCoopLimiteCooperado | null> {
   const digits = normalizeCnpj(cnpj);
+  if (!opts?.fastPreview && !opts?.skipCycleHeal) {
+    await healHbCreditNovoCicloQuandoBaseZero(supabase, digits, cooperadoId, "system:hb_limite_read").catch(
+      () => {}
+    );
+  }
   let titularIds = [cooperadoId];
   if (!opts?.fastPreview) {
     const cooperados = await fetchCooperadosFromStorage(supabase, digits).catch(() => []);
@@ -1890,9 +1963,11 @@ export async function getLimiteCooperadoExibicaoParidadeLimites(
   cnpj: string,
   cooperadoId: string
 ): Promise<ContaCoopLimiteCooperado | null> {
+  await healHbCreditNovoCicloQuandoBaseZero(supabase, cnpj, cooperadoId, "system:hb_exibicao_paridade").catch(
+    () => {}
+  );
   const limite = await getLimiteCooperado(supabase, cnpj, cooperadoId, {
-    fastPreview: true,
-    skipAmountUsedReconcile: true,
+    skipCycleHeal: true,
   });
   if (!limite) return null;
 

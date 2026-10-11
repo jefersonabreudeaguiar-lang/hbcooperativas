@@ -11,7 +11,13 @@ import {
   runOperationalLimitReconciliation,
   type OperationalLimitReconciliationIssue,
 } from "@/modules/hb-credit/engine/creditOperationalReconciliation";
-import { getLimiteCooperado, resolveTetoGlobal, syncLimitesCooperadosFromCreditoBase } from "@/lib/supabase/contaCoopStorage";
+import { reconcileCooperadoAmountUsedCents } from "@/lib/supabase/creditAmountUsedReconcile";
+import {
+  getLimiteCooperado,
+  healHbCreditNovoCicloQuandoBaseZero,
+  resolveTetoGlobal,
+  syncLimitesCooperadosFromCreditoBase,
+} from "@/lib/supabase/contaCoopStorage";
 import { recordPostPaymentHbSyncAudit } from "@/lib/security/platformSecurityEvents";
 import { normalizeCnpj } from "@/utils/cooperativa";
 import { markHbCreditLimitSynced } from "@/modules/hb-credit/engine/hbCreditLimitSyncState";
@@ -89,7 +95,14 @@ export async function syncHbLimitAfterCooperadoPayment(
     };
   }
 
-  const limiteBefore = await getLimiteCooperado(supabase, digits, cooperadoId);
+  /** Operacional já persistido — compras HB quitadas na ficha saem do “utilizado” (novo ciclo). */
+  await reconcileCooperadoAmountUsedCents(supabase, digits, cooperadoId, opts.actorUserId).catch(() => {});
+  await healHbCreditNovoCicloQuandoBaseZero(supabase, digits, cooperadoId, opts.actorUserId).catch(() => {});
+
+  const limiteBefore = await getLimiteCooperado(supabase, digits, cooperadoId, {
+    skipAmountUsedReconcile: true,
+    skipCycleHeal: true,
+  });
   baseResult.limiteBeforeCents = limiteBefore?.limiteLiberadoCents ?? 0;
 
   const authoritative = await resolveAuthoritativeCreditBase(supabase, digits, [cooperadoId]);

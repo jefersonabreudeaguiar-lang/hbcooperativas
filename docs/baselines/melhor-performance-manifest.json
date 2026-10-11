@@ -4,7 +4,7 @@
   "createdAt": "2026-10-10T20:20:00-03:00",
   "updatedAt": "2026-10-11T01:15:00-03:00",
   "purpose": "Baseline de governança: cooperado (todas as cooperativas) no modelo PWA mensageiro + paridade Financeiro/Início + entregas leves. Não altera Supabase.",
-  "referenceBuild": 292,
+  "referenceBuild": 293,
   "legacyPerformanceBaseline": {
     "build": 283,
     "tag": "baseline/melhor-performance-build-283",
@@ -19,7 +19,7 @@
   },
   "production": {
     "url": "https://hbcooperativas.vercel.app",
-    "expectedBuild": 292,
+    "expectedBuild": 293,
     "verify": "npm run confirm:production:wait -- --expect-sha <commit-short>"
   },
   "releasePolicy": {
