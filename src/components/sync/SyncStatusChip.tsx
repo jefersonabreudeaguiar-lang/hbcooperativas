@@ -8,6 +8,8 @@ import {
   requestAppSyncImmediate,
   requestCooperadoManualRefreshSync,
 } from "@/services/syncRequest";
+import { useAuth } from "@/modules/auth/AuthProvider";
+import { cooperadoPwaMaterializarSnapshotsFinanceirosPosSync } from "@/lib/cooperado/cooperadoPwaFinanceiroSnapshotRefresh";
 import { cn } from "@/utils/format";
 import {
   formatRelativoSync,
@@ -140,21 +142,31 @@ export function StaffAtualizarButton({ className }: { className?: string }) {
 }
 
 /** Cooperado — sync operacional só ao toque; busy local (não pisca com sync em background). */
-export function CooperadoAtualizarButton({ className }: { className?: string }) {
+export function CooperadoAtualizarButton({
+  className,
+  variant = "default",
+}: {
+  className?: string;
+  /** Header mobile: compacto ao lado da versão do app. */
+  variant?: "default" | "header";
+}) {
+  const { user } = useAuth();
   const { lastSyncedAt, syncing } = useSyncStatus();
   const [busy, setBusy] = useState(false);
   const startedAtRef = useRef(0);
   const spinning = busy || syncing;
+  const header = variant === "header";
 
   useEffect(() => {
     if (!busy) return;
     if (!syncing && lastSyncedAt != null && lastSyncedAt >= startedAtRef.current) {
+      cooperadoPwaMaterializarSnapshotsFinanceirosPosSync(user);
       setBusy(false);
       return;
     }
     const id = window.setTimeout(() => setBusy(false), 50_000);
     return () => window.clearTimeout(id);
-  }, [busy, lastSyncedAt, syncing]);
+  }, [busy, lastSyncedAt, syncing, user]);
 
   return (
     <button
@@ -171,15 +183,21 @@ export function CooperadoAtualizarButton({ className }: { className?: string }) 
       }}
       disabled={spinning}
       className={cn(
-        "inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-medium transition-colors",
-        "text-green-100/95 hover:bg-green-800/90 disabled:opacity-70",
+        header
+          ? "inline-flex items-center gap-0.5 rounded-md bg-green-800/80 px-1.5 py-0.5 text-[10px] font-semibold text-green-50 transition-colors hover:bg-green-700/90 disabled:opacity-60"
+          : "inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-medium transition-colors text-green-100/95 hover:bg-green-800/90 disabled:opacity-70",
         className
       )}
       aria-busy={spinning}
-      aria-label={spinning ? "Atualizando dados" : "Atualizar dados da cooperativa"}
+      aria-label={
+        spinning
+          ? "Atualizando a receber e financeiro"
+          : "Atualizar a receber e financeiro da cooperativa"
+      }
+      title={spinning ? "Atualizando…" : "Atualizar a receber e financeiro"}
     >
-      <RefreshCw size={12} className={cn("shrink-0", spinning && "animate-spin")} aria-hidden />
-      Atualizar
+      <RefreshCw size={header ? 11 : 12} className={cn("shrink-0", spinning && "animate-spin")} aria-hidden />
+      {header ? null : "Atualizar"}
     </button>
   );
 }

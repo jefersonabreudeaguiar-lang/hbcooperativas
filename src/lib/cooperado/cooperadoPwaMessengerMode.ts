@@ -5,7 +5,7 @@
  * - 1º frame: snapshots + sessão; parse do AppData em idle após pintar o shell.
  * - Sem pilot HB periódico nem pull de foreground na abertura (evita travar a UI).
  * - Início + Financeiro: leitura somente (snapshots da paridade Financeiro); atualiza só no sync manual.
- * - Versão visível no header mobile (`CooperadoMobileBuildBadge`) — só APP_BUILD_VERSION, sem subscribe AppData.
+ * - Versão + Atualizar no header mobile (`CooperadoMobileBuildBadge`) — snapshots só após sync explícito ou automático.
  */
 import type { User } from "@/types";
 import { isCooperadoPwaMobileLeveUi } from "@/lib/cooperado/cooperadoPwaLeveUi";
