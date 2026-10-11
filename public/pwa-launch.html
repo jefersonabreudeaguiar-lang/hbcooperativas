@@ -43,7 +43,7 @@
       (function () {
         var REPAIR_KEY = "hb-coop-pwa-repair-done";
         var BUILD_SEEN_KEY = "hb-coop-app-build-seen";
-        var FALLBACK_BUILD = 345;
+        var FALLBACK_BUILD = 346;
         var params = new URLSearchParams(location.search);
         var next = params.get("next");
         var hasSession = false;
@@ -74,6 +74,7 @@
           try {
             sessionStorage.setItem(REPAIR_KEY, String(pageBuild));
             localStorage.setItem(BUILD_SEEN_KEY, String(pageBuild));
+            localStorage.setItem("hb-coop-pwa-repair-done-build", String(pageBuild));
           } catch (e) {
             /* ignore */
           }

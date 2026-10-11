@@ -2,7 +2,7 @@
  * Passthrough de documentos — substitui SW legado que gerava “This page couldn’t load”.
  * Sem cache de app; só navigate → rede.
  */
-const CACHE_VERSION = "hb-coop-build-345-chunk-network";
+const CACHE_VERSION = "hb-coop-build-346-chunk-network";
 
 self.addEventListener("install", (event) => {
   event.waitUntil(self.skipWaiting());

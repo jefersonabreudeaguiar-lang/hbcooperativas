@@ -69,16 +69,16 @@
         Chrome → cadeado → <strong>Limpar dados do site</strong> → abra este link de novo.
       </p>
       <button type="button" class="btn" id="go" hidden>Continuar para o login</button>
-      <a class="btn secondary" id="launch" href="/login?hb-pwa=345" hidden>Continuar para instalar ícone</a>
+      <a class="btn secondary" id="launch" href="/login?hb-pwa=346" hidden>Continuar para instalar ícone</a>
       <a class="btn secondary" href="/pwa-diag.html" style="margin-top: 0.5rem">Diagnóstico (copiar para suporte)</a>
     </main>
     <script>
       (function () {
         var REPAIR_KEY = "hb-coop-pwa-repair-done";
-        var REPAIR_VER = "345";
-        var BUILD_FALLBACK = 345;
+        var REPAIR_VER = "346";
+        var BUILD_FALLBACK = 346;
         var BUILD_SEEN_KEY = "hb-coop-app-build-seen";
-        var target = "/login?hb-pwa=345";
+        var target = "/login?hb-pwa=346";
         var params = new URLSearchParams(location.search);
         var next = params.get("next");
         var auto = params.get("auto") === "1";
@@ -139,6 +139,7 @@
             var ver = String(cloudBuild || BUILD_FALLBACK);
             sessionStorage.setItem(REPAIR_KEY, ver);
             localStorage.setItem(BUILD_SEEN_KEY, ver);
+            localStorage.setItem("hb-coop-pwa-repair-done-build", ver);
           } catch (e) {
             /* ignore */
           }

@@ -4,6 +4,7 @@ import {
   PWA_REPAIR_SESSION_KEY,
   clearClientRuntimeCaches,
 } from "@/lib/pwa/clientRelease";
+import { PWA_REPAIR_LOCAL_BUILD_KEY } from "@/lib/pwa/staleProfileGuard";
 
 /** Cooperado passou pela URL canônica de instalação (`/login?hb-pwa=`). */
 export const PWA_INSTALL_READY_KEY = "hb-coop-pwa-install-ready-build";
@@ -14,6 +15,7 @@ export function markPwaRepairSessionForBuild(build = APP_BUILD_VERSION): void {
     sessionStorage.setItem(PWA_REPAIR_SESSION_KEY, ver);
     localStorage.setItem(BUILD_SEEN_KEY, ver);
     localStorage.setItem(PWA_INSTALL_READY_KEY, ver);
+    localStorage.setItem(PWA_REPAIR_LOCAL_BUILD_KEY, ver);
   } catch {
     /* ignore */
   }
