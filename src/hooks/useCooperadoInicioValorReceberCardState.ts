@@ -242,7 +242,7 @@ export function useCooperadoInicioValorReceberCardState(input: {
         return {
           display: SNAPSHOT_VAZIO,
           latch: {
-            motorRevision: fromMotor?.latch.motorRevision ?? "",
+            motorRevision: "",
             display: SNAPSHOT_VAZIO,
             hadPendencia: false,
           },
@@ -258,7 +258,7 @@ export function useCooperadoInicioValorReceberCardState(input: {
       const paridadeSnap = fichaSnap ? resolveParidadeFromFichaResumoSnapshot(fichaSnap) : null;
       const dataParidade =
         dataLatch ?? (paridadeSnap && isAppDataWarm() ? getData() : null);
-      if (paridadeSnap && dataParidade && input.cooperadoId) {
+      if (paridadeSnap && dataParidade && input.cooperadoId && fichaSnap) {
         const display = inicioCardMotorFromParidadeFinanceiro(
           dataParidade,
           input.cooperadoId,
