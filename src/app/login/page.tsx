@@ -2,7 +2,7 @@
 
 import { useState, Suspense } from "react";
 import Link from "next/link";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useSearchParams } from "next/navigation";
 import { Eye, EyeOff } from "lucide-react";
 import { useAuth } from "@/modules/auth/AuthProvider";
 import { GuestRoute } from "@/components/auth/GuestRoute";
@@ -79,7 +79,6 @@ function LoginForm() {
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const { login } = useAuth();
-  const router = useRouter();
   const searchParams = useSearchParams();
   const nextPath = searchParams.get("next");
   const senhaRedefinida = searchParams.get("senha") === "redefinida";
@@ -94,7 +93,9 @@ function LoginForm() {
     try {
       const result = await login(email.trim(), password.trim());
       if (result.ok) {
-        router.push(result.redirectTo ?? redirectTo);
+        if (!result.navigated) {
+          window.location.assign(result.redirectTo ?? redirectTo);
+        }
       } else {
         setError(
           result.error?.trim() ||

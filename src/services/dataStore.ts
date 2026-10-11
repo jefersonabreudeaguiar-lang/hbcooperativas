@@ -1225,7 +1225,11 @@ async function finishLoginSession(user: User, data: AppData, plainPassword: stri
   if (user.role === "cooperado" && cooperativaCnpj?.length === 14) {
     clearNotasSyncMeta(cooperativaCnpj);
     forceNextFullNotasSync(cooperativaCnpj);
-    queueMicrotask(() => requestAppSync());
+    queueMicrotask(() => {
+      window.setTimeout(() => {
+        if (readStoredSessionRaw()) requestAppSync();
+      }, 1_200);
+    });
   }
 
   return user;

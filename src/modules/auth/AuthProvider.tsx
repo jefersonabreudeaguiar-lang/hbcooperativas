@@ -53,7 +53,10 @@ interface AuthContextType {
   /** Conta real na nuvem (responsável, cooperado, etc.). */
   accountUser: Omit<User, "password"> | null;
   loading: boolean;
-  login: (email: string, password: string) => Promise<{ ok: boolean; error?: string; redirectTo?: string }>;
+  login: (
+    email: string,
+    password: string
+  ) => Promise<{ ok: boolean; error?: string; redirectTo?: string; navigated?: boolean }>;
   loginCreatorAdmin: (email: string, password: string) => Promise<boolean>;
   register: (input: RegisterCooperadoInput) => Promise<{ success: boolean; error?: string }>;
   registerCooperativa: (input: RegisterCooperativaInput) => Promise<{ success: boolean; error?: string }>;
@@ -247,6 +250,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [accountUser?.id, accountUser?.role, accountUser?.cooperadoId, accountUser?.mobileCooperadoId, loading, refresh]);
 
   const login = async (email: string, password: string) => {
+    setLoading(true);
     const result = await doLogin(email, password);
     if (result) {
       const cloudProfile = await fetchCloudSessionProfile();
@@ -261,22 +265,37 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       );
       setAccountUser(safeUser);
       setActiveCloudProfile(userToCloudProfile(safeUser));
-      await ensureCloudSessionReady(userToCloudProfile(safeUser));
+      const role = resolveAppUserRole(safeUser, getData());
+      const sessionReady =
+        role === "parceiro" || (await ensureCloudSessionReady(userToCloudProfile(safeUser)));
+      if (!sessionReady) {
+        await logoutAndClearSession();
+        setAccountUser(null);
+        setLoading(false);
+        return {
+          ok: false as const,
+          error:
+            getLastCloudSyncError() ||
+            "Não foi possível abrir sua sessão na nuvem. Aguarde alguns segundos e tente de novo.",
+        };
+      }
       if (isCooperadoPwaMessengerMode()) {
         preloadAppData();
       } else {
         await waitForAppDataWarm(4000);
       }
-      if (
-        resolveAppUserRole(safeUser, getData()) === "cooperado" &&
-        !isCooperadoPwaMessengerMode()
-      ) {
+      if (role === "cooperado" && !isCooperadoPwaMessengerMode()) {
         persistirInicioCardValorReceberCooperado(safeUser);
       }
+      const redirectTo = role === "parceiro" ? "/mercado-parceiro" : "/dashboard";
+      if (typeof window !== "undefined") {
+        window.location.assign(redirectTo);
+        return { ok: true as const, redirectTo, navigated: true as const };
+      }
       setLoading(false);
-      const redirectTo = resolveAppUserRole(safeUser, getData()) === "parceiro" ? "/mercado-parceiro" : "/dashboard";
       return { ok: true as const, redirectTo };
     }
+    setLoading(false);
     return {
       ok: false as const,
       error:
