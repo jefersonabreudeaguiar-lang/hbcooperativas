@@ -40,6 +40,7 @@ import { cooperadoRematerializarFinanceiroLocalSePossivel } from "@/lib/cooperad
 import { resolverCooperadoIdCanonico } from "@/services/cooperadoCloudService";
 import { getUserCooperativaId } from "@/utils/cooperativa";
 import { getData, isAppDataWarm } from "@/services/dataStore";
+import { cooperadoTemDadosFinanceirosMinimos } from "@/lib/cooperado/cooperadoTemDadosFinanceirosMinimos";
 import { filtrarInicioCardPersistidoLeituraBic } from "@/lib/cooperadoInicioCardPolicy";
 import {
   inicioCardCacheProntoParaAbertura,
@@ -93,15 +94,32 @@ export function CooperadoFinanceiroGate({ children }: { children: React.ReactNod
     if (user?.role !== "cooperado" || !user.cooperadoId) return;
     if (typeof navigator !== "undefined" && !navigator.onLine) return;
 
+    const pullFinanceiroImediato = () => {
+      markCooperadoUserSyncVisible();
+      requestCooperadoFinanceiroRecoverySync();
+      requestCooperadoPrimeiraCargaSync();
+    };
+
+    if (consumeCooperadoPostLoginFinanceSync()) {
+      pullFinanceiroImediato();
+    } else if (isAppDataWarm()) {
+      const data = getData();
+      const coopId = getUserCooperativaId(user, data) ?? user.cooperativaId;
+      if (coopId) {
+        const cooperadoId = resolverCooperadoIdCanonico(data, user.cooperadoId, coopId);
+        if (
+          !cooperadoTemDadosFinanceirosMinimos(data, cooperadoId, coopId) &&
+          lastSyncedAt == null &&
+          !syncingForUi
+        ) {
+          pullFinanceiroImediato();
+        }
+      }
+    }
+
     const runFinanceBootstrap = () => {
       if (!cooperadoPostShellSyncPermitido()) return;
       markCooperadoPostShellSyncStarted();
-
-      if (consumeCooperadoPostLoginFinanceSync()) {
-        markCooperadoUserSyncVisible();
-        requestCooperadoFinanceiroRecoverySync();
-        requestCooperadoPrimeiraCargaSync();
-      }
 
       if (isCooperadoPwaMessengerMode()) {
         clearCooperadoPostShellSyncStarted();
@@ -153,7 +171,7 @@ export function CooperadoFinanceiroGate({ children }: { children: React.ReactNod
     };
 
     scheduleCooperadoPostShellSync(runFinanceBootstrap);
-  }, [user?.id, user?.cooperadoId, user?.role]);
+  }, [user?.id, user?.cooperadoId, user?.role, lastSyncedAt, syncingForUi]);
 
   const cooperadoAtivo = user?.role === "cooperado" && Boolean(user?.cooperadoId);
   const aguardandoSyncInicial =

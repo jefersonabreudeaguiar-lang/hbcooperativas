@@ -25,6 +25,22 @@ export function cooperadoFinanceiroPronto(
   return !cooperadoFinanceiroLocalAusente(data, cooperadoId, cooperativaId);
 }
 
+/** Cache limpo / primeira abertura: ainda não baixou ficha e notas do cooperado. */
+export function cooperadoAguardandoPrimeiraFatiaFinanceira(
+  data: AppData | null | undefined,
+  cooperadoId: string | undefined,
+  cooperativaId: string | undefined,
+  opts: { syncing: boolean; lastSyncedAt: number | null; offline?: boolean }
+): boolean {
+  if (opts.offline) return false;
+  if (!cooperadoId || !cooperativaId) return true;
+  if (!data) return true;
+  if (cooperadoTemDadosFinanceirosMinimos(data, cooperadoId, cooperativaId)) return false;
+  if (opts.syncing) return true;
+  if (opts.lastSyncedAt == null) return true;
+  return cooperadoFinanceiroDesatualizado(data, cooperadoId, cooperativaId);
+}
+
 /** Nuvem e AppData alinhados — valores na UI podem ser tratados como definitivos. */
 export function cooperadoDadosFinanceirosConsistentesParaApresentacao(
   data: AppData | null | undefined,

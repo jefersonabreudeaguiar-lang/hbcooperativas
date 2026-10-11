@@ -15,6 +15,7 @@ import { isOperacionalCloudAuthoritative } from "@/services/operationalReset";
 import { normalizeCnpj } from "@/utils/cooperativa";
 import { getCurrentMesReferencia } from "@/utils/format";
 import { cooperadoTemDadosFinanceirosMinimos } from "@/lib/cooperado/cooperadoTemDadosFinanceirosMinimos";
+import { readCooperadoLastOperacionalSyncAt } from "@/lib/performance/cooperadoEventDrivenSync";
 
 export { cooperadoTemDadosFinanceirosMinimos };
 
@@ -146,8 +147,16 @@ export function cooperadoFinanceiroLocalAusente(
   );
   const conferidas = notasConferidasCooperado(data, canonico, cooperativaId);
 
-  // Sem ficha e sem entrega conferida = cooperado novo ou só com rascunho — estado válido.
-  if (fichasPendentes.length === 0 && conferidas === 0) return false;
+  // Sem ficha e sem nota conferida local.
+  if (fichasPendentes.length === 0 && conferidas === 0) {
+    if (!cooperadoTemDadosFinanceirosMinimos(data, cooperadoId, cooperativaId)) {
+      if (typeof window !== "undefined" && readCooperadoLastOperacionalSyncAt() == null) {
+        return true;
+      }
+      return false;
+    }
+    return false;
+  }
 
   // Ficha local obsoleta (notas transferidas para outro cooperado na nuvem).
   if (

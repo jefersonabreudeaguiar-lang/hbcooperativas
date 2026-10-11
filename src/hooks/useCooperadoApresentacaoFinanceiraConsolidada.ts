@@ -12,7 +12,10 @@ import {
 } from "@/lib/performance/cooperadoColdStart";
 import { useAppDataSelector } from "@/hooks/useAppData";
 import { resolverCooperadoIdCanonico } from "@/services/cooperadoCloudService";
-import { cooperadoDadosFinanceirosConsistentesParaApresentacao } from "@/services/cooperadoFinanceiroGuard";
+import {
+  cooperadoAguardandoPrimeiraFatiaFinanceira,
+  cooperadoDadosFinanceirosConsistentesParaApresentacao,
+} from "@/services/cooperadoFinanceiroGuard";
 import { getUserCooperativaId } from "@/utils/cooperativa";
 import { isAppDataWarm } from "@/services/dataStore";
 
@@ -25,28 +28,42 @@ export function useCooperadoApresentacaoFinanceiraConsolidada(): {
   cooperadoPagamentosHydrated: boolean;
 } {
   const { user } = useAuth();
-  const { syncing, syncingForUi, cooperadoPagamentosHydrated } = useSyncStatus();
+  const { syncing, syncingForUi, cooperadoPagamentosHydrated, lastSyncedAt } = useSyncStatus();
   const exibirComDadosLocais =
     user?.role === "cooperado" &&
     isCooperadoManualOperacionalSync() &&
     cooperadoLocalResumeReady(user);
 
-  const dadosFinanceirosConsistentes = useAppDataSelector(
+  const offline = typeof navigator !== "undefined" && !navigator.onLine;
+
+  const financeiroUiGate = useAppDataSelector(
     (data) => {
-      if (user?.role !== "cooperado" || !user.cooperadoId) return true;
-      if (!isAppDataWarm()) return false;
+      if (user?.role !== "cooperado" || !user.cooperadoId) {
+        return { aguardandoFatia: false, consistentes: true };
+      }
+      if (!isAppDataWarm()) {
+        return { aguardandoFatia: true, consistentes: false };
+      }
       const coopId = getUserCooperativaId(user, data) ?? user.cooperativaId;
-      if (!coopId) return false;
+      if (!coopId) {
+        return { aguardandoFatia: true, consistentes: false };
+      }
       const cooperadoId = resolverCooperadoIdCanonico(data, user.cooperadoId, coopId);
-      const offline = typeof navigator !== "undefined" && !navigator.onLine;
-      return cooperadoDadosFinanceirosConsistentesParaApresentacao(
+      const aguardandoFatia = cooperadoAguardandoPrimeiraFatiaFinanceira(
+        data,
+        cooperadoId,
+        coopId,
+        { syncing: syncingForUi, lastSyncedAt, offline }
+      );
+      const consistentes = cooperadoDadosFinanceirosConsistentesParaApresentacao(
         data,
         cooperadoId,
         coopId,
         { offline }
       );
+      return { aguardandoFatia, consistentes };
     },
-    [user?.id, user?.role, user?.cooperadoId, user?.cooperativaId]
+    [user?.id, user?.role, user?.cooperadoId, user?.cooperativaId, syncingForUi, lastSyncedAt, offline]
   );
 
   const input = {
@@ -55,7 +72,11 @@ export function useCooperadoApresentacaoFinanceiraConsolidada(): {
     cooperadoPagamentosHydrated,
     exibirComDadosLocais,
     dadosFinanceirosConsistentes:
-      user?.role === "cooperado" ? Boolean(dadosFinanceirosConsistentes) : undefined,
+      user?.role === "cooperado"
+        ? financeiroUiGate
+          ? !financeiroUiGate.aguardandoFatia && financeiroUiGate.consistentes
+          : false
+        : undefined,
   };
   return {
     apresentacaoConsolidada: cooperadoApresentacaoFinanceiraConsolidada(input),
