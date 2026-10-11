@@ -2,7 +2,7 @@ import { APP_BUILD_VERSION } from "@/lib/appBuildVersion";
 
 const PWA_SNAPSHOTS_BUILD_KEY = "hb-coop-pwa-snapshots-materialized-build";
 /** Incrementar só quando precisar forçar purge de snapshots PWA cooperado na mesma faixa de build. */
-const PWA_SNAPSHOT_PURGE_EPOCH = 1;
+const PWA_SNAPSHOT_PURGE_EPOCH = 2;
 const PWA_SNAPSHOT_PURGE_EPOCH_KEY = "hb-coop-pwa-snapshots-purge-epoch";
 
 const PWA_SNAPSHOT_KEY_MARKERS = [

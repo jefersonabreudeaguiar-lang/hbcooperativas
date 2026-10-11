@@ -144,7 +144,7 @@ export function cooperadoMotorRevisionOperacional(
   for (const p of data.pagamentosCooperado) {
     if (!pagamentoCooperadoPertenceCooperado(data, p, cooperadoId, cooperativaId)) continue;
     chunks.push(
-      `p:${p.id}:${p.status}:${p.mesReferencia}:${p.valorLiquido}:${p.updatedAt ?? ""}:${(p.mesesReferencia ?? []).join("+")}`
+      `p:${p.id}:${p.status}:${p.mesReferencia}:${p.valorLiquido}:${p.updatedAt ?? ""}:${(p.mesesReferencia ?? []).join("+")}:sig:${p.assinaturaCooperado?.trim() ? "1" : "0"}`
     );
   }
 
@@ -163,6 +163,44 @@ export function cooperadoMotorRevisionOperacional(
   return `${chunks.join("|")}|hbDescontosRev:${hbDescontosRev}`;
 }
 
+function valorLiquidoCardInicioCooperado(
+  data: AppData,
+  cooperadoId: string,
+  cooperativaId: string | undefined,
+  paridade: ReturnType<typeof leituraFinanceiraParidadeCooperado>,
+  fluxoPix: ReturnType<typeof getValorQuantoVouReceberMotorLegado>
+): number {
+  const valorParidade = paridade.valorLiquido > 0 ? paridade.valorLiquido : 0;
+  const inicioBic = isBicCentralReadAuthorityEnabled()
+    ? bicCentralResolveInicioParaExibicao(data, cooperadoId, cooperativaId, {
+        apresentacaoConsolidada: true,
+      })
+    : null;
+  const valorBicInicio =
+    inicioBic && (inicioBic.exibir || inicioBic.valor > 0) ? Math.max(0, inicioBic.valor) : 0;
+  const valorBase = isBicCentralReadAuthorityEnabled()
+    ? Math.max(valorBicInicio, valorParidade)
+    : valorParidade;
+  if (
+    cooperadoUsarFluxoReciboAssinaturaNaUi() &&
+    fluxoPix.aguardandoAssinatura &&
+    fluxoPix.valorRecibo > 0 &&
+    fluxoPix.valor <= 0 &&
+    valorBicInicio <= 0 &&
+    valorParidade <= 0
+  ) {
+    return 0;
+  }
+  if (
+    !isBicCentralReadAuthorityEnabled() &&
+    fluxoPix.aguardandoAssinatura &&
+    fluxoPix.valorRecibo > 0
+  ) {
+    return 0;
+  }
+  return valorBase;
+}
+
 export function resolverInicioCardMotorFromAppData(
   data: AppData,
   cooperadoId: string,
@@ -174,17 +212,13 @@ export function resolverInicioCardMotorFromAppData(
   const fluxoPix = getValorQuantoVouReceberMotorLegado(data, cooperadoId, cooperativaId);
   const mesFallback = paridade.mesesResumo[paridade.mesesResumo.length - 1] ?? getCurrentMesReferencia();
   const mesLabel = paridade.mesLabel?.trim() || formatMesReferencia(mesFallback);
-  const valorExibir =
-    cooperadoUsarFluxoReciboAssinaturaNaUi() &&
-    fluxoPix.aguardandoAssinatura &&
-    fluxoPix.valorRecibo > 0 &&
-    fluxoPix.valor <= 0
-      ? 0
-      : isBicCentralReadAuthorityEnabled()
-        ? paridade.valorLiquido
-        : fluxoPix.aguardandoAssinatura && fluxoPix.valorRecibo > 0
-          ? 0
-          : paridade.valorLiquido;
+  const valorExibir = valorLiquidoCardInicioCooperado(
+    data,
+    cooperadoId,
+    cooperativaId,
+    paridade,
+    fluxoPix
+  );
 
   const motor = sanitizeInicioCardSnapshotFluxoBic({
     mesLabel,
@@ -228,17 +262,13 @@ function motorInicioCardComReciboBic(
 ): InicioCardMotorSnapshot {
   const fluxoPix = getValorQuantoVouReceberMotorLegado(data, cooperadoId, cooperativaId);
   const paridade = leituraFinanceiraParidadeCooperado(data, cooperadoId, cooperativaId);
-  const valorExibir =
-    cooperadoUsarFluxoReciboAssinaturaNaUi() &&
-    fluxoPix.aguardandoAssinatura &&
-    fluxoPix.valorRecibo > 0 &&
-    fluxoPix.valor <= 0
-      ? 0
-      : isBicCentralReadAuthorityEnabled()
-        ? paridade.valorLiquido
-        : fluxoPix.aguardandoAssinatura && fluxoPix.valorRecibo > 0
-          ? 0
-          : paridade.valorLiquido;
+  const valorExibir = valorLiquidoCardInicioCooperado(
+    data,
+    cooperadoId,
+    cooperativaId,
+    paridade,
+    fluxoPix
+  );
   return sanitizeInicioCardSnapshotFluxoBic({
     mesLabel: motorBase.mesLabel,
     valor: valorExibir > 0 ? valorExibir : motorBase.valor,
@@ -528,9 +558,19 @@ export function aplicarSubstituicaoMonotonaDisplay(
 ): InicioCardMotorSnapshot {
   const autorizaZerar = opts?.autorizaZerarValor ?? true;
   if (isBicCentralReadAuthorityEnabled()) {
-    if (!revisionChanged) return anterior;
-    if (motor.valor > anterior.valor) {
-      return sanitizeInicioCardSnapshotFluxoBic(motor);
+    const sanitized = sanitizeInicioCardSnapshotFluxoBic(motor);
+    if (!revisionChanged) {
+      const displayMudou =
+        sanitized.valor !== anterior.valor ||
+        sanitized.valorRecibo !== anterior.valorRecibo ||
+        sanitized.aguardandoAssinatura !== anterior.aguardandoAssinatura;
+      if (displayMudou && (sanitized.valor > 0 || !cooperadoMotorTemObrigacaoReceber(anterior))) {
+        return sanitized;
+      }
+      return anterior;
+    }
+    if (sanitized.valor > anterior.valor) {
+      return sanitized;
     }
     return aplicarMotorCardComGateZeroBic(anterior, motor, autorizaZerar);
   }

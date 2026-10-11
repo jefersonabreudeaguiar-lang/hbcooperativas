@@ -12,6 +12,7 @@ import { leituraFinanceiraParidadeCooperado } from "@/lib/cooperado/cooperadoFin
 import { cooperadoMotorRevisionOperacional } from "@/lib/cooperadoInicioCardPolicy";
 import { validateBicTenantContext } from "@/services/bicTenantGuard";
 import {
+  bicCentralResolveInicioParaExibicao,
   bicCentralResolvePainelParaExibicao,
   bicCentralValorAReceberAgregado,
 } from "@/services/bicLeituraCentralCooperado";
@@ -297,8 +298,12 @@ export function buildCooperadoFinanceiroUiSnapshot(
         motorFicha.valorRecibo > 0
     );
   const valorReciboPendente = aguardandoAssinaturaRecibo ? motorFicha.valorRecibo : 0;
-  let valorAReceber = paridade.valorLiquido > 0.005 ? paridade.valorLiquido : 0;
-  if (aguardandoAssinaturaRecibo && motorFicha.valor <= 0) {
+  const inicioBic = bicCentralResolveInicioParaExibicao(data, coopadoId, coopId, bicOpts);
+  const valorParidade = paridade.valorLiquido > 0.005 ? paridade.valorLiquido : 0;
+  const valorInicioBic =
+    inicioBic.exibir || inicioBic.valor > 0.005 ? Math.max(0, inicioBic.valor) : 0;
+  let valorAReceber = Math.max(valorParidade, valorInicioBic, m6.valor > 0.005 ? m6.valor : 0);
+  if (aguardandoAssinaturaRecibo && motorFicha.valor <= 0 && valorInicioBic <= 0 && valorParidade <= 0) {
     valorAReceber = 0;
   }
   const mesLabel = motorFicha.mesLabel?.trim() || m6.mesLabel || null;
