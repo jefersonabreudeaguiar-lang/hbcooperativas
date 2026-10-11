@@ -2527,6 +2527,7 @@ export async function syncCooperativaBackground(
 
 /**
  * Cooperado tocou «Atualizar»: ficha/notas/perfil sem contratos (mais rápido que background completo).
+ * Notas: sempre full no toque manual — poda conferidas apagadas na nuvem (delta em background inalterado).
  */
 export async function syncCooperadoAtualizarFromCloud(
   cnpj: string,
@@ -2550,7 +2551,7 @@ export async function syncCooperadoAtualizarFromCloud(
       async () => {
         await syncCooperativaProfileFromCloud(digits);
         await syncCooperadosFromCloud(digits, preferredCoopId);
-        const notasOpts = { sessionLease: session };
+        const notasOpts = { sessionLease: session, retryFull: true };
         if (restoreAtivo) {
           await syncOperacionalFromCloud(digits, { sessionLease: session });
           await syncNotasPedidoFromCloud(digits, notasOpts);
