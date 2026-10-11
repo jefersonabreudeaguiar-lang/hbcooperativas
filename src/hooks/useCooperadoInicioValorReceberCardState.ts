@@ -26,6 +26,8 @@ import {
   resolverCooperativaIdReciboLatch,
 } from "@/lib/cooperado/cooperadoReciboAssinaturaLocalLatch";
 import { lerInicioCardPersistidoResume } from "@/lib/cooperado/cooperadoPwaInstantResume";
+import { inicioCardMotorFromParidadeFinanceiro } from "@/lib/cooperado/cooperadoFinanceiroParidadeInicioBridge";
+import { lerCooperadoPwaFichaResumoSnapshot } from "@/lib/cooperado/cooperadoPwaFichaResumoSnapshot";
 import { getData, isAppDataWarm } from "@/services/dataStore";
 
 const SNAPSHOT_VAZIO: InicioCardMotorSnapshot = {
@@ -155,23 +157,9 @@ export function useCooperadoInicioValorReceberCardState(input: {
             })
           : null;
 
-      if (reciboAssinadoLocal) {
-        return {
-          display: SNAPSHOT_VAZIO,
-          latch: {
-            motorRevision: fromMotor?.latch.motorRevision ?? "",
-            display: SNAPSHOT_VAZIO,
-            hadPendencia: false,
-          },
-          atualizando: Boolean(input.syncing && isCooperadoUserSyncVisible()),
-          gravarPersistencia: false,
-        };
-      }
-
       if (
         fromMotor &&
-        cooperadoMotorTemObrigacaoReceber(fromMotor.display) &&
-        !reciboAssinadoLocal
+        cooperadoMotorTemObrigacaoReceber(fromMotor.display)
       ) {
         return { ...fromMotor, gravarPersistencia: false };
       }
@@ -199,8 +187,7 @@ export function useCooperadoInicioValorReceberCardState(input: {
 
       if (
         persistidoMesmoBuild?.display &&
-        cooperadoMotorTemObrigacaoReceber(persistidoMesmoBuild.display) &&
-        !reciboAssinadoLocal
+        cooperadoMotorTemObrigacaoReceber(persistidoMesmoBuild.display)
       ) {
         const display = persistidoMesmoBuild.display;
         return {
@@ -221,10 +208,61 @@ export function useCooperadoInicioValorReceberCardState(input: {
 
       if (persistidoMesmoBuild?.display) {
         const display = persistidoMesmoBuild.display;
+        if (
+          reciboAssinadoLocal &&
+          !cooperadoMotorTemObrigacaoReceber(display)
+        ) {
+          return {
+            display: SNAPSHOT_VAZIO,
+            latch: {
+              motorRevision: persistidoMesmoBuild.motorRevision,
+              display: SNAPSHOT_VAZIO,
+              hadPendencia: false,
+            },
+            atualizando: Boolean(input.syncing && isCooperadoUserSyncVisible()),
+            gravarPersistencia: false,
+          };
+        }
         return {
           display,
           latch: {
             motorRevision: persistidoMesmoBuild.motorRevision,
+            display,
+            hadPendencia: cooperadoMotorTemObrigacaoReceber(display),
+          },
+          atualizando: Boolean(input.syncing && isCooperadoUserSyncVisible()),
+          gravarPersistencia: false,
+        };
+      }
+
+      if (reciboAssinadoLocal) {
+        return {
+          display: SNAPSHOT_VAZIO,
+          latch: {
+            motorRevision: fromMotor?.latch.motorRevision ?? "",
+            display: SNAPSHOT_VAZIO,
+            hadPendencia: false,
+          },
+          atualizando: Boolean(input.syncing && isCooperadoUserSyncVisible()),
+          gravarPersistencia: false,
+        };
+      }
+
+      const fichaSnap =
+        input.cooperadoId && cooperativaIdLatch
+          ? lerCooperadoPwaFichaResumoSnapshot(input.cooperadoId, cooperativaIdLatch)
+          : null;
+      if (fichaSnap?.paridade && dataLatch && input.cooperadoId) {
+        const display = inicioCardMotorFromParidadeFinanceiro(
+          dataLatch,
+          input.cooperadoId,
+          cooperativaIdLatch,
+          fichaSnap.paridade
+        );
+        return {
+          display,
+          latch: {
+            motorRevision: `fichaSnap:${fichaSnap.savedAt}`,
             display,
             hadPendencia: cooperadoMotorTemObrigacaoReceber(display),
           },

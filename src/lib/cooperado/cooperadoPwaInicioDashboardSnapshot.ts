@@ -10,10 +10,8 @@ import {
   contarFotosEmAnaliseCooperado,
   listarNotasPendentesCooperado,
 } from "@/services/cooperadoEntregasService";
-import {
-  bicCentralMesPrincipalQuantoVouReceber,
-  bicCentralResolveInicioParaExibicao,
-} from "@/services/bicLeituraCentralCooperado";
+import { inicioValorReceberViewFromParidadeFinanceiro } from "@/lib/cooperado/cooperadoFinanceiroParidadeInicioBridge";
+import { bicCentralMesPrincipalQuantoVouReceber } from "@/services/bicLeituraCentralCooperado";
 import {
   bicCentralGetResumoMensalidadesCooperado,
   bicCentralTotalValoresAvulsosPendentes,
@@ -41,7 +39,7 @@ export type CooperadoPwaInicioDashboardView = {
   mes: string;
   cooperado: AppData["cooperados"][number] | undefined;
   coopNome: string;
-  valorReceber: ReturnType<typeof bicCentralResolveInicioParaExibicao>;
+  valorReceber: ReturnType<typeof inicioValorReceberViewFromParidadeFinanceiro>;
   precisaPix: boolean;
   rejeitadas: ReturnType<typeof listarNotasPendentesCooperado>;
   fotosEmAnalise: number;
@@ -84,9 +82,12 @@ export function buildCooperadoPwaInicioDashboardView(
   const mes = getCurrentMesReferencia();
   const cooperado = data.cooperados.find((c) => c.id === cooperadoId);
   const coopNome = getUserCooperativaNome(user, data);
-  let valorReceber = bicCentralResolveInicioParaExibicao(data, cooperadoId, coopId, {
-    apresentacaoConsolidada,
-  });
+  let valorReceber = inicioValorReceberViewFromParidadeFinanceiro(
+    data,
+    cooperadoId,
+    coopId,
+    apresentacaoConsolidada
+  );
   const reciboPendente = getPagamentoPendenteAssinaturaReciboCooperado(
     data,
     cooperadoId,

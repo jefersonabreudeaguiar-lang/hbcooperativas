@@ -337,9 +337,20 @@ export default function FichaCorridaPage() {
 
   /** Uma leitura paridade por revisão — evita BIC/consolidado repetido no cooperado. */
   const paridadeCooperadoMobile = useMemo(() => {
-    if (!tabActive || !isCooperado || !data || !cooperadoId) return null;
+    if (!tabActive || !isCooperado || !cooperadoId) return null;
+    if (financeiroDormant && fichaResumoSnap?.paridade) return fichaResumoSnap.paridade;
+    if (!data) return null;
     return leituraFinanceiraParidadeCooperado(data, cooperadoId, coopId);
-  }, [tabActive, isCooperado, data, cooperadoId, coopId, financeiroUiEpoch]);
+  }, [
+    tabActive,
+    isCooperado,
+    data,
+    cooperadoId,
+    coopId,
+    financeiroUiEpoch,
+    financeiroDormant,
+    fichaResumoSnap,
+  ]);
 
   const mesEmAberto = useMemo(() => {
     if (messenger && fichaResumoSnap?.mesPrincipal) return fichaResumoSnap.mesPrincipal;

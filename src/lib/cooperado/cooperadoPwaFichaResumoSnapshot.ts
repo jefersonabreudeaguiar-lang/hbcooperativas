@@ -6,6 +6,7 @@ import { APP_BUILD_VERSION } from "@/lib/appBuildVersion";
 import { cooperadoPwaSnapshotBuildReadable } from "@/lib/cooperado/cooperadoPwaSnapshotBuildPolicy";
 import { getData, isAppDataWarm } from "@/services/dataStore";
 import { resolverCooperadoIdCanonico } from "@/services/cooperadoCloudService";
+import { leituraFinanceiraParidadeCooperado } from "@/lib/cooperado/cooperadoFinanceiroParidadeUniversal";
 import { listarResumosFichaEmAbertoCooperado } from "@/services/cooperadoFichaTimelineService";
 import {
   bicCentralGetConsolidadoFinanceiroCooperado,
@@ -14,7 +15,7 @@ import {
 import { getUserCooperativaId } from "@/utils/cooperativa";
 import type { ResumoMesEntregasCooperado } from "@/services/cooperadoEntregasService";
 
-export const COOPERADO_PWA_FICHA_RESUMO_SNAPSHOT_VERSION = 1;
+export const COOPERADO_PWA_FICHA_RESUMO_SNAPSHOT_VERSION = 2;
 
 export type CooperadoPwaFichaResumoSnapshot = {
   v: number;
@@ -23,6 +24,8 @@ export type CooperadoPwaFichaResumoSnapshot = {
   fichaAberto: ResumoMesEntregasCooperado[];
   mesPrincipal: ReturnType<typeof bicCentralMesPrincipalQuantoVouReceber>;
   consolidado: ReturnType<typeof bicCentralGetConsolidadoFinanceiroCooperado>;
+  /** Paridade Financeiro (líquido por mês, HB/descontos no resumo) — leitura somente nas abas. */
+  paridade: ReturnType<typeof leituraFinanceiraParidadeCooperado>;
 };
 
 function storageKey(cooperadoId: string, cooperativaId: string): string {
@@ -41,6 +44,7 @@ export function buildCooperadoPwaFichaResumoSnapshot(
     apresentacaoConsolidada,
   });
   const consolidado = bicCentralGetConsolidadoFinanceiroCooperado(data, canon, cooperativaId);
+  const paridade = leituraFinanceiraParidadeCooperado(data, canon, cooperativaId);
   return {
     v: COOPERADO_PWA_FICHA_RESUMO_SNAPSHOT_VERSION,
     appBuild: APP_BUILD_VERSION,
@@ -48,6 +52,7 @@ export function buildCooperadoPwaFichaResumoSnapshot(
     fichaAberto,
     mesPrincipal,
     consolidado,
+    paridade,
   };
 }
 
@@ -60,7 +65,10 @@ export function lerCooperadoPwaFichaResumoSnapshot(
     const raw = localStorage.getItem(storageKey(cooperadoId, cooperativaId));
     if (!raw) return null;
     const parsed = JSON.parse(raw) as CooperadoPwaFichaResumoSnapshot;
-    if (parsed.v !== COOPERADO_PWA_FICHA_RESUMO_SNAPSHOT_VERSION || !Array.isArray(parsed.fichaAberto)) {
+    if (
+      (parsed.v !== COOPERADO_PWA_FICHA_RESUMO_SNAPSHOT_VERSION && parsed.v !== 1) ||
+      !Array.isArray(parsed.fichaAberto)
+    ) {
       return null;
     }
     if (!cooperadoPwaSnapshotBuildReadable(parsed.appBuild)) return null;

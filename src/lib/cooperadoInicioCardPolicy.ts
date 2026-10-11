@@ -17,6 +17,7 @@ import { getTotalAPagarCooperado } from "@/services/notaPedidoService";
 import { getContaCoopDescontosRevision } from "@/lib/hb-credit/contaCoopDescontosNotify";
 import { bicCentralResolveInicioParaExibicao, bicCentralSincronizarRotuloMeses, bicCentralValorAReceberAgregado } from "@/services/bicLeituraCentralCooperado";
 import { leituraFinanceiraParidadeCooperado } from "@/lib/cooperado/cooperadoFinanceiroParidadeUniversal";
+import { resolverMotorCardInicioParidadeFinanceiro } from "@/lib/cooperado/cooperadoFinanceiroParidadeInicioBridge";
 import {
   buildCooperadoFinanceiroUiSnapshot,
   type CooperadoFinanceiroUiSnapshot,
@@ -629,31 +630,7 @@ function resolverCardInicioEndurecidoFinanceiroUiSnapshot(
     });
   }
 
-  const resolved = resolverMotorCardInicioViaFinanceiroUiSnapshot(input, financeiroCarregando);
-  if (resolved === "aguardando") {
-    if (persistidoLeitura && cooperadoMotorTemObrigacaoReceber(persistidoLeitura.display)) {
-      return resultadoCardBridgePersistidoBic(persistidoLeitura, {
-        gravarPersistencia: false,
-        atualizando: true,
-      });
-    }
-    return finalizarResultadoCardBic({
-      display: vazio,
-      latch: { motorRevision: "", display: vazio, hadPendencia: false },
-      atualizando: financeiroCarregando,
-      gravarPersistencia: false,
-    });
-  }
-  if (resolved === "inconsistente") {
-    return finalizarResultadoCardBic({
-      display: vazio,
-      latch: { motorRevision: "", display: vazio, hadPendencia: false },
-      atualizando: false,
-      gravarPersistencia: false,
-    });
-  }
-
-  if (!input.data || !input.cooperadoId) {
+  if (!input.data) {
     if (persistidoLeitura && cooperadoMotorTemObrigacaoReceber(persistidoLeitura.display)) {
       return resultadoCardBridgePersistidoBic(persistidoLeitura, { gravarPersistencia: false });
     }
@@ -665,12 +642,18 @@ function resolverCardInicioEndurecidoFinanceiroUiSnapshot(
     });
   }
 
+  const { motor, revision } = resolverMotorCardInicioParidadeFinanceiro(
+    input.data,
+    input.cooperadoId,
+    input.cooperativaId
+  );
+
   return aplicarPoliticaCardInicioEndurecidaComMotor(
     input,
     persistidoLeitura,
     financeiroCarregando,
-    resolved.motor,
-    resolved.revision
+    motor,
+    revision
   );
 }
 

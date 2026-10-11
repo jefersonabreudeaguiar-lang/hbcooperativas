@@ -288,9 +288,6 @@ export function buildCooperadoFinanceiroUiSnapshot(
   const m6 = bicCentralValorAReceberAgregado(data, coopadoId, coopId, { apresentacaoConsolidada });
   const motorFicha = getValorQuantoVouReceberMotorLegado(data, coopadoId, coopId);
   const paridade = leituraFinanceiraParidadeCooperado(data, coopadoId, coopId);
-  const fichaPendenteAberta = (data.fichaCorrida ?? []).some(
-    (f) => f.cooperadoId === coopadoId && f.status === "pendente"
-  );
   const reciboAssinadoLocal = cooperadoTemReciboAssinadoLocalSemPendenciaUi(data, coopadoId, coopId);
   const aguardandoAssinaturaRecibo =
     !reciboAssinadoLocal &&
@@ -300,7 +297,7 @@ export function buildCooperadoFinanceiroUiSnapshot(
         motorFicha.valorRecibo > 0
     );
   const valorReciboPendente = aguardandoAssinaturaRecibo ? motorFicha.valorRecibo : 0;
-  let valorAReceber = fichaPendenteAberta ? paridade.valorLiquido : 0;
+  let valorAReceber = paridade.valorLiquido > 0.005 ? paridade.valorLiquido : 0;
   if (aguardandoAssinaturaRecibo && motorFicha.valor <= 0) {
     valorAReceber = 0;
   }

@@ -4,11 +4,12 @@
  * - AppData / nuvem só em sync pontual: botão Atualizar, envio de foto (não sync de release na abertura).
  * - 1º frame: snapshots + sessão; parse do AppData em idle após pintar o shell.
  * - Sem pilot HB periódico nem pull de foreground na abertura (evita travar a UI).
- * - Início + Financeiro: UI adormecida (snapshots); acorda só após sync operacional (responsável).
+ * - Início + Financeiro: leitura somente (snapshots da paridade Financeiro); atualiza só no sync manual.
  */
 import type { User } from "@/types";
 import { isCooperadoPwaMobileLeveUi } from "@/lib/cooperado/cooperadoPwaLeveUi";
 import { getSession } from "@/services/dataStore";
+import { persistirCooperadoPwaFichaResumoSnapshotFromUser } from "@/lib/cooperado/cooperadoPwaFichaResumoSnapshot";
 import { persistirCooperadoPwaInicioDashboardSnapshotFromUser } from "@/lib/cooperado/cooperadoPwaInicioDashboardSnapshot";
 import { persistirCooperadoPwaEntregasResumosSnapshotFromUser } from "@/lib/cooperado/cooperadoPwaEntregasResumosSnapshot";
 import {
@@ -48,6 +49,7 @@ export function persistirCooperadoPwaMessengerCaches(
   user: Omit<User, "password"> | null | undefined
 ): void {
   if (!user || user.role !== "cooperado" || !isCooperadoPwaMessengerMode()) return;
+  persistirCooperadoPwaFichaResumoSnapshotFromUser(user, true);
   persistirInicioCardCooperadoNotificarPwaLeve(user);
   persistirCooperadoPwaInicioDashboardSnapshotFromUser(user, true);
   const runEntregasSnapshotPesado = () => {
